@@ -502,6 +502,7 @@ SmpApiLoop(IN PVOID Parameter)
 
             /* An actual API message */
             default:
+            {
                 if (!ClientContext)
                 {
                     ReplyMsg = NULL;
@@ -527,15 +528,25 @@ SmpApiLoop(IN PVOID Parameter)
                 else
                 {
                     /* It's totally okay, so call the dispatcher for it */
-                    Status = SmpApiDispatch[RequestMsg.ApiNumber](&RequestMsg,
-                                                                  ClientContext,
-                                                                  SmApiPort);
+                    _SEH2_TRY
+                    {
+                        Status = SmpApiDispatch[RequestMsg.ApiNumber](&RequestMsg,
+                                                                      ClientContext,
+                                                                      SmApiPort);
+                    }
+                    _SEH2_EXCEPT(SmpUnhandledExceptionFilter(_SEH2_GetExceptionInformation()))
+                    {
+                        ReplyMsg = NULL;
+                        _SEH2_YIELD(break);
+                    }
+                    _SEH2_END;
                 }
 
                 /* Write the result value and return the message back */
                 RequestMsg.ReturnValue = Status;
                 ReplyMsg = &RequestMsg;
                 break;
+            }
         }
     }
     return STATUS_SUCCESS;
