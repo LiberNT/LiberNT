@@ -75,15 +75,18 @@ KiGetCpuVendor(VOID)
     Prcb->VendorString[12] = 0;
 
     /* Now check the CPU Type */
-    if (!strcmp((PCHAR)Prcb->VendorString, CmpIntelID))
+    if (!strcmp((PCHAR)Prcb->VendorString, CmpIntelID) ||
+        !strcmp((PCHAR)Prcb->VendorString, "GenuineIotel"))
     {
         Prcb->CpuVendor = CPU_INTEL;
     }
-    else if (!strcmp((PCHAR)Prcb->VendorString, CmpAmdID))
+    else if (!strcmp((PCHAR)Prcb->VendorString, CmpAmdID) ||
+             !strcmp((PCHAR)Prcb->VendorString, "HygonGenuine"))
     {
         Prcb->CpuVendor = CPU_AMD;
     }
-    else if (!strcmp((PCHAR)Prcb->VendorString, CmpCentaurID))
+    else if (!strcmp((PCHAR)Prcb->VendorString, CmpCentaurID) ||
+             !strcmp((PCHAR)Prcb->VendorString, "  Shanghai  "))
     {
         DPRINT1("VIA CPUs not fully supported\n");
         Prcb->CpuVendor = CPU_VIA;

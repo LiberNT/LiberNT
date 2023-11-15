@@ -122,11 +122,13 @@ KiGetCpuVendor(VOID)
     Prcb->VendorString[12] = 0;
 
     /* Now check the CPU Type */
-    if (!strcmp(Prcb->VendorString, CmpIntelID))
+    if (!strcmp(Prcb->VendorString, CmpIntelID) ||
+        !strcmp(Prcb->VendorString, "GenuineIotel"))
     {
         return CPU_INTEL;
     }
-    else if (!strcmp(Prcb->VendorString, CmpAmdID))
+    else if (!strcmp(Prcb->VendorString, CmpAmdID) ||
+             !strcmp(Prcb->VendorString, "HygonGenuine"))
     {
         return CPU_AMD;
     }
@@ -140,7 +142,8 @@ KiGetCpuVendor(VOID)
         DPRINT1("Transmeta CPU support not fully tested!\n");
         return CPU_TRANSMETA;
     }
-    else if (!strcmp(Prcb->VendorString, CmpCentaurID))
+    else if (!strcmp(Prcb->VendorString, CmpCentaurID) ||
+             !strcmp(Prcb->VendorString, "  Shanghai  "))
     {
         DPRINT1("Centaur CPU support not fully tested!\n");
         return CPU_CENTAUR;
