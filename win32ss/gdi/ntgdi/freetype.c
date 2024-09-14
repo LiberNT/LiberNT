@@ -6355,6 +6355,9 @@ ftGetFontUnicodeRanges(PFONTGDI Font, PGLYPHSET glyphset)
         return 0;
     }
 
+    /* Lock FreeType for face lookup */
+    IntLockFreeType();
+
     if (face->charmap->encoding == FT_ENCODING_UNICODE)
     {
         FT_UInt glyph_code = 0;
@@ -6365,7 +6368,8 @@ ftGetFontUnicodeRanges(PFONTGDI Font, PGLYPHSET glyphset)
         DPRINT("Face encoding FT_ENCODING_UNICODE, number of glyphs %ld, first glyph %u, first char %04lx\n",
                face->num_glyphs, glyph_code, char_code);
 
-        if (!glyph_code) return 0;
+        if (!glyph_code)
+            goto Quit;
 
         if (glyphset)
         {
@@ -6380,7 +6384,7 @@ ftGetFontUnicodeRanges(PFONTGDI Font, PGLYPHSET glyphset)
             if (char_code < char_code_prev)
             {
                 DPRINT1("Expected increasing char code from FT_Get_Next_Char\n");
-                return 0;
+                goto Quit;
             }
             if (char_code - char_code_prev > 1)
             {
@@ -6411,6 +6415,11 @@ ftGetFontUnicodeRanges(PFONTGDI Font, PGLYPHSET glyphset)
         glyphset->cRanges = num_ranges;
         glyphset->flAccel = 0;
     }
+
+Quit:
+    /* Unlock FreeType */
+    IntUnLockFreeType();
+
     return size;
 }
 
