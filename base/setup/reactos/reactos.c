@@ -37,6 +37,7 @@ PPARTENTRY SystemPartition = NULL;
 
 /* UI elements */
 UI_CONTEXT UiContext;
+HCURSOR hWaitCursor;
 
 
 /* FUNCTIONS ****************************************************************/
@@ -2177,7 +2178,7 @@ FileCopyCallback(PVOID Context,
     PCWSTR SrcFileName, DstFileName;
 
     WaitForSingleObject(CopyContext->pSetupData->hHaltInstallEvent, INFINITE);
-    if (CopyContext->pSetupData->bStopInstall)
+    if (CopyContext->pSetupData->bAbortInstall)
         return FILEOP_ABORT; // Stop committing files
 
     switch (Notification)
@@ -2526,6 +2527,9 @@ ConfigureInstalledSystem(
     return Error;
 }
 
+#define PM_INSTALL_START    (WM_APP + 1)
+#define PM_INSTALL_DONE     (WM_APP + 2)
+
 static DWORD
 WINAPI
 PrepareAndDoCopyThread(
@@ -2593,13 +2597,7 @@ PrepareAndDoCopyThread(
 
         /* Re-enable the Close/Cancel buttons */
         PropSheet_SetCloseCancel(GetParent(hwndDlg), TRUE);
-
-        /*
-         * We failed due to an unexpected error, keep on the copy page to view the current state,
-         * but enable the "Next" button to allow the user to continue to the Abort page.
-         */
-        PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_NEXT);
-        return 1;
+        goto Quit;
     }
 
 
@@ -2622,13 +2620,7 @@ PrepareAndDoCopyThread(
 
         /* Re-enable the Close/Cancel buttons */
         PropSheet_SetCloseCancel(GetParent(hwndDlg), TRUE);
-
-        /*
-         * We failed due to an unexpected error, keep on the copy page to view the current state,
-         * but enable the "Next" button to allow the user to continue to the Abort page.
-         */
-        PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_NEXT);
-        return 1;
+        goto Quit;
     }
 
 
@@ -2645,13 +2637,8 @@ PrepareAndDoCopyThread(
     if (!NT_SUCCESS(Status))
     {
         DisplayMessage(GetParent(hwndDlg), MB_ICONERROR, L"Error", L"InitDestinationPaths() failed with status 0x%08lx\n", Status);
-
-        /*
-         * We failed due to an unexpected error, keep on the copy page to view the current state,
-         * but enable the "Next" button to allow the user to continue to the Abort page.
-         */
-        PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_NEXT);
-        return 1;
+        Success = FALSE;
+        goto Quit;
     }
 
 
@@ -2681,17 +2668,9 @@ PrepareAndDoCopyThread(
     if (/*ErrorNumber != ERROR_SUCCESS*/ !Success)
     {
         /* Display an error only if an unexpected failure happened, and not because the user cancelled the installation */
-        if (!pSetupData->bStopInstall)
+        if (!pSetupData->bAbortInstall)
             MessageBoxW(GetParent(hwndDlg), L"Failed to prepare the list of files!", L"Error", MB_ICONERROR);
-
-        /*
-         * If we failed due to an unexpected error, keep on the copy page to view the current state,
-         * but enable the "Next" button to allow the user to continue to the Abort page.
-         * Otherwise we have been cancelled by the user, who has already switched to the Abort page.
-         */
-        if (!pSetupData->bStopInstall)
-            PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_NEXT);
-        return 1;
+        goto Quit;
     }
 
 
@@ -2711,21 +2690,17 @@ PrepareAndDoCopyThread(
     CopyContext.CompletedOperations = 0;
 
     /* Do the file copying - The callback handles whether or not we should stop file copying */
-    if (!DoFileCopy(&pSetupData->USetupData, FileCopyCallback, &CopyContext))
+    Success = DoFileCopy(&pSetupData->USetupData, FileCopyCallback, &CopyContext);
+    if (!Success)
     {
         /* Display an error only if an unexpected failure happened, and not because the user cancelled the installation */
-        if (!pSetupData->bStopInstall)
+        if (!pSetupData->bAbortInstall)
             MessageBoxW(GetParent(hwndDlg), L"Failed to copy the files!", L"Error", MB_ICONERROR);
-
-        /*
-         * If we failed due to an unexpected error, keep on the copy page to view the current state,
-         * but enable the "Next" button to allow the user to continue to the Abort page.
-         * Otherwise we have been cancelled by the user, who has already switched to the Abort page.
-         */
-        if (!pSetupData->bStopInstall)
-            PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_NEXT);
-        return 1;
+        goto Quit;
     }
+
+    /* The remaining steps cannot be cancelled */
+    PropSheet_SetCloseCancel(GetParent(hwndDlg), FALSE);
 
     // /* Set status text */
     // SetWindowResTextW(GetDlgItem(hwndDlg, IDC_ACTIVITY),
@@ -2764,9 +2739,8 @@ PrepareAndDoCopyThread(
     if (ErrorNumber != NOT_AN_ERROR)
     {
         DisplayMessage(GetParent(hwndDlg), MB_ICONERROR, L"Error", L"Setup failed to update the registry (error %lu).\n", (ULONG)ErrorNumber);
-
-        PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_NEXT);
-        return 1;
+        Success = FALSE;
+        goto Quit;
     }
     SendMessageW(UiContext.hWndProgress, PBM_SETPOS, 100, 0);
 
@@ -2786,8 +2760,8 @@ PrepareAndDoCopyThread(
         if (Error != ERROR_SUCCESS)
         {
             DisplayError(GetParent(hwndDlg), 0, IDS_ERROR_CONFIGURE, Error);
-            PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_NEXT);
-            return 1;
+            Success = FALSE;
+            goto Quit;
         }
     }
 
@@ -2917,7 +2891,8 @@ PrepareAndDoCopyThread(
                              IDS_ERROR_BOOTLDR_FAILED,
                              Status);
             }
-            break;
+            Success = FALSE;
+            goto Quit;
         }
 
         /* Skip installation */
@@ -2927,9 +2902,10 @@ PrepareAndDoCopyThread(
     }
 
 
-    /* We are done! Switch to the Finish page */
-    PropSheet_SetCurSelByID(GetParent(hwndDlg), IDD_FINISHPAGE);
-    return 0;
+Quit:
+    /* Signal the wizard page that we have succeeded or failed */
+    PostMessageW(hwndDlg, PM_INSTALL_DONE, Success, 0);
+    return Success;
 }
 
 
@@ -2959,6 +2935,15 @@ ProcessDlgProc(
             break;
         }
 
+        case WM_SETCURSOR:
+        {
+            if (!hWaitCursor)
+                break;
+            SetCursor(hWaitCursor);
+            SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, TRUE);
+            return TRUE;
+        }
+
         case WM_NOTIFY:
         {
             LPNMHDR lpnm = (LPNMHDR)lParam;
@@ -2967,71 +2952,95 @@ ProcessDlgProc(
             {
                 case PSN_SETACTIVE:
                 {
-                    /* Create the file-copy halt (manual-reset) event */
-                    pSetupData->hHaltInstallEvent = CreateEventW(NULL, TRUE, TRUE, NULL);
-                    if (!pSetupData->hHaltInstallEvent)
-                        break;
-                    pSetupData->bStopInstall = FALSE;
+                    HWND hWndParent = GetParent(hwndDlg);
 
-                    /* Start the prepare-and-copy files thread */
-                    pSetupData->hInstallThread =
-                        CreateThread(NULL, 0,
-                                     PrepareAndDoCopyThread,
-                                     (PVOID)hwndDlg,
-                                     CREATE_SUSPENDED,
-                                     NULL);
-                    if (!pSetupData->hInstallThread)
+                    SendMessageW(hWndParent, PSM_SETWIZBUTTONS, 0, 0);
+                    ShowDlgItem(hWndParent, ID_WIZBACK, SW_HIDE);
+                    ShowDlgItem(hWndParent, ID_WIZNEXT, SW_HIDE);
+
+                    PostMessageW(hwndDlg, PM_INSTALL_START, 0, 0);
+                    break;
+                }
+
+                case PSN_KILLACTIVE:
+                {
+                    DWORD dwStatus;
+
+                    if (InterlockedFlagsTestAndSet8(&pSetupData->bStopInstall,
+                                                    SETUP_PAGE_SWITCHING))
                     {
-                        CloseHandle(pSetupData->hHaltInstallEvent);
-                        pSetupData->hHaltInstallEvent = NULL;
-
-                        MessageBoxW(GetParent(hwndDlg), L"Cannot create the prepare-and-copy files thread!", L"Error", MB_ICONERROR);
-                        break;
+                        SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, TRUE);
+                        return TRUE;
                     }
 
-                    /* Disable all buttons during installation, they will be
-                     * re-enabled by the installation thread; hide "Back" */
-                    PropSheet_SetWizButtons(GetParent(hwndDlg), 0);
-                    // PropSheet_ShowWizButtons(GetParent(hwndDlg), 0, PSWIZB_BACK);
-                    ShowDlgItem(GetParent(hwndDlg), ID_WIZBACK, SW_HIDE);
+                    if (!pSetupData->hInstallThread)
+                        break;
 
-                    /* Resume the installation thread */
-                    ResumeThread(pSetupData->hInstallThread);
+                    dwStatus = WaitForSingleObject(pSetupData->hInstallThread, 0);
+                    if (dwStatus == WAIT_TIMEOUT)
+                    {
+                        HCURSOR hOldCursor;
+
+                        hWaitCursor = LoadCursor(NULL, IDC_WAIT);
+                        hOldCursor = SetCursor(hWaitCursor);
+                        ShowCursor(TRUE);
+
+                        for (;;)
+                        {
+                            MSG msg;
+
+                            dwStatus = MsgWaitForMultipleObjects(1, &pSetupData->hInstallThread,
+                                                                 FALSE, INFINITE,
+                                                                 QS_ALLINPUT | QS_ALLPOSTMESSAGE);
+                            if (dwStatus != (WAIT_OBJECT_0 + 1))
+                                break;
+
+                            while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+                            {
+                                TranslateMessage(&msg);
+                                DispatchMessageW(&msg);
+                            }
+                        }
+
+                        ShowCursor(FALSE);
+                        SetCursor(hOldCursor);
+                        hWaitCursor = NULL;
+                    }
+
+                    CloseHandle(pSetupData->hInstallThread);
+                    pSetupData->hInstallThread = NULL;
+                    CloseHandle(pSetupData->hHaltInstallEvent);
+                    pSetupData->hHaltInstallEvent = NULL;
                     break;
                 }
 
                 case PSN_QUERYCANCEL:
                 {
-                    /* Halt the on-going file copy */
-                    ResetEvent(pSetupData->hHaltInstallEvent);
+                    INT nRet;
 
-                    if (DisplayMessage(GetParent(hwndDlg),
-                                       MB_YESNO | MB_ICONQUESTION,
-                                       MAKEINTRESOURCEW(IDS_ABORTSETUP2),
-                                       MAKEINTRESOURCEW(IDS_ABORTSETUP)) == IDYES)
+                    if (pSetupData->bStopInstall)
                     {
-                        /* Stop the file copy thread */
-                        pSetupData->bStopInstall = TRUE;
-                        SetEvent(pSetupData->hHaltInstallEvent);
-
-#if 0
-                        /* Wait for any pending installation */
-                        WaitForSingleObject(pSetupData->hInstallThread, INFINITE);
-                        CloseHandle(pSetupData->hInstallThread);
-                        pSetupData->hInstallThread = NULL;
-                        CloseHandle(pSetupData->hHaltInstallEvent);
-                        pSetupData->hHaltInstallEvent = NULL;
-#endif
-
-                        // TODO: Unwind installation?!
-
-                        /* Go to the Abort page */
-                        PropSheet_SetCurSelByID(GetParent(hwndDlg), IDD_ABORTPAGE);
+                        nRet = IDYES;
                     }
                     else
                     {
-                        /* We don't stop installation, resume file copy */
+                        /* Halt the on-going file copy */
+                        ResetEvent(pSetupData->hHaltInstallEvent);
+
+                        nRet = DisplayMessage(GetParent(hwndDlg),
+                                              MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2,
+                                              MAKEINTRESOURCEW(IDS_ABORTSETUP2),
+                                              MAKEINTRESOURCEW(IDS_ABORTSETUP));
+                        if (nRet == IDYES)
+                            InterlockedOr8((PCHAR)&pSetupData->bStopInstall, SETUP_ABORT_INSTALL);
                         SetEvent(pSetupData->hHaltInstallEvent);
+                    }
+
+                    if ((nRet == IDYES) && !pSetupData->bPageSwitching &&
+                        !InterlockedFlagsTestAndSet8(&pSetupData->bStopInstall,
+                                                     SETUP_IS_CANCELLING))
+                    {
+                        PostMessageW(hwndDlg, PM_INSTALL_DONE, FALSE, 0);
                     }
 
                     /* Do not close the wizard too soon */
@@ -3039,9 +3048,78 @@ ProcessDlgProc(
                     return TRUE;
                 }
 
+                case PSN_WIZBACK:
+                case PSN_WIZNEXT:
+                    SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, -1);
+                    return TRUE;
+
                 default:
                     break;
             }
+            break;
+        }
+
+        case PM_INSTALL_START:
+        {
+            HWND hWndParent = GetParent(hwndDlg);
+
+            ASSERT(pSetupData->hInstallThread == NULL);
+
+            InvalidateRect(hWndParent, NULL, FALSE);
+            UpdateWindow(hWndParent);
+
+            /* Create the file-copy halt (manual-reset) event */
+            pSetupData->hHaltInstallEvent = CreateEventW(NULL, TRUE, TRUE, NULL);
+            if (!pSetupData->hHaltInstallEvent)
+            {
+                DisplayMessage(hWndParent, MB_ICONERROR, NULL,
+                               L"Cannot create the install event, error %lu\n", GetLastError());
+                goto Fail;
+            }
+
+            /* Start the installation thread */
+            pSetupData->bStopInstall = FALSE;
+            pSetupData->hInstallThread = CreateThread(NULL, 0,
+                                                      PrepareAndDoCopyThread,
+                                                      (PVOID)hwndDlg,
+                                                      0, NULL);
+            if (!pSetupData->hInstallThread)
+            {
+                DisplayMessage(hWndParent, MB_ICONERROR, NULL,
+                               L"Cannot create the installation thread, error %lu\n", GetLastError());
+                CloseHandle(pSetupData->hHaltInstallEvent);
+                pSetupData->hHaltInstallEvent = NULL;
+        Fail:
+                InterlockedOr8((PCHAR)&pSetupData->bStopInstall, SETUP_ABORT_INSTALL);
+                SendMessageW(hwndDlg, PM_INSTALL_DONE, FALSE, 0);
+            }
+            break;
+        }
+
+        case PM_INSTALL_DONE:
+        {
+            HWND hWndParent = GetParent(hwndDlg);
+            BOOL Success = !!wParam;
+
+            /* After an unexpected failure, stay on this page with Close/Cancel enabled,
+             * so that the user sees the current state and goes to the Abort page. */
+            if (!Success && !pSetupData->bStopInstall)
+            {
+                PropSheet_SetCloseCancel(hWndParent, TRUE);
+                InterlockedOr8((PCHAR)&pSetupData->bStopInstall, SETUP_ABORT_INSTALL);
+                break;
+            }
+
+            PropSheet_SetCloseCancel(hWndParent, FALSE);
+
+            if (!Success)
+                InterlockedOr8((PCHAR)&pSetupData->bStopInstall, SETUP_ABORT_INSTALL);
+            else if (pSetupData->bAbortInstall)
+                Success = FALSE;
+
+            if (!Success)
+                InterlockedOr8((PCHAR)&pSetupData->bStopInstall, SETUP_IS_CANCELLING);
+            PropSheet_SetCurSelByID(hWndParent, Success ? IDD_FINISHPAGE : IDD_ABORTPAGE);
             break;
         }
 
@@ -3270,6 +3348,9 @@ FinishDlgProc(
                     SetWindowResTextW(GetDlgItem(hWndParent, ID_WIZFINISH),
                                       pSetupData->hInstance,
                                       IDS_RESTARTBTN);
+
+                    if (!pSetupData->bMustReboot)
+                        PropSheet_SetCloseCancel(hWndParent, TRUE);
 
                     if (pSetupData->bMustReboot)
                     {
@@ -4150,13 +4231,6 @@ _tWinMain(HINSTANCE hInst,
 
     /* Display the wizard */
     PropertySheet(&psh);
-
-    /* Wait for any pending installation */
-    WaitForSingleObject(SetupData.hInstallThread, INFINITE);
-    CloseHandle(SetupData.hInstallThread);
-    SetupData.hInstallThread = NULL;
-    CloseHandle(SetupData.hHaltInstallEvent);
-    SetupData.hHaltInstallEvent = NULL;
 
     if (SetupData.hBoldFont)
         DeleteFont(SetupData.hBoldFont);
