@@ -109,6 +109,7 @@ typedef struct _CONTEXT_ENTRY
     GUID Guid;
     HMODULE hModule;
     ULONG ulPriority;
+    DWORD dwFlags;
     PNS_CONTEXT_COMMIT_FN pfnCommitFn;
     PNS_CONTEXT_DUMP_FN pfnDumpFn;
     PNS_CONTEXT_CONNECT_FN pfnConnectFn;
@@ -133,7 +134,8 @@ extern PCONTEXT_ENTRY pCurrentContext;
 extern PHELPER_ENTRY pHelperListHead;
 
 extern HMODULE g_hModule;
-extern PWSTR pszMachine;
+extern PWSTR g_pszMachine;
+extern BOOL g_bOnline;
 
 extern UINT  VersionInfoArchitecture;
 extern UINT  VersionInfoOsProductSuite;
