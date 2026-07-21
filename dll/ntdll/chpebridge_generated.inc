@@ -5581,6 +5581,16 @@ BOOLEAN NTAPI ChpeAutoRtlIsGenericTableEmptyAvl(PRTL_AVL_TABLE a0)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlIsGenericTableEmptyAvl), __typeof__(&RtlIsGenericTableEmptyAvl)), "RtlIsGenericTableEmptyAvl bridge signature mismatch");
 
+/* Native definition: sdk/lib/rtl/name.c */
+#ifdef RtlIsNameInExpression
+#undef RtlIsNameInExpression
+#endif
+BOOLEAN NTAPI RtlIsNameInExpression(PVOID a0, PVOID a1, BOOLEAN a2, PVOID a3);
+BOOLEAN NTAPI ChpeAutoRtlIsNameInExpression(PVOID a0, PVOID a1, BOOLEAN a2, PVOID a3)
+{
+    return RtlIsNameInExpression(a0, a1, a2, a3);
+}
+
 BOOLEAN NTAPI ChpeAutoRtlIsNameLegalDOS8Dot3(PCUNICODE_STRING a0, POEM_STRING a1, PBOOLEAN a2)
 {
     return RtlIsNameLegalDOS8Dot3(a0, a1, a2);
