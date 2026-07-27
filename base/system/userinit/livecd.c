@@ -17,6 +17,8 @@ typedef struct _LIVECD_UNATTEND
     LCID LocaleID;
 } LIVECD_UNATTEND;
 
+static WCHAR Installer[MAX_PATH];
+
 
 /*
  * Taken and adapted from dll/cpl/sysdm/general.c
@@ -768,8 +770,6 @@ StartDlgProc(
     {
         case WM_INITDIALOG:
         {
-            WCHAR Installer[MAX_PATH];
-
             /* Save pointer to the state */
             pState = (PSTATE)lParam;
             SetWindowLongPtrW(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pState);
@@ -779,14 +779,16 @@ StartDlgProc(
 
             /* Check whether we can find the ReactOS installer. If not,
              * disable the "Install" button and directly start the LiveCD. */
-            *Installer = UNICODE_NULL;
-            if (!ExpandInstallerPath(L"reactos.exe", Installer, ARRAYSIZE(Installer)))
+            if (*Installer == UNICODE_NULL)
+            {
                 EnableWindow(GetDlgItem(hwndDlg, IDC_INSTALL), FALSE);
 
-            if (pState->Unattend->bEnabled || (*Installer == UNICODE_NULL))
-            {
                 /* Click on the 'Run' button */
                 PostMessageW(hwndDlg, WM_COMMAND, MAKEWPARAM(IDC_RUN, BN_CLICKED), 0L);
+            }
+            else if (pState->Unattend->bEnabled)
+            {
+                PostMessageW(hwndDlg, WM_COMMAND, MAKEWPARAM(IDC_INSTALL, BN_CLICKED), 0L);
             }
             return FALSE;
         }
@@ -878,6 +880,12 @@ VOID ParseUnattend(LPCWSTR UnattendInf, LIVECD_UNATTEND* pUnattend)
         return;
     }
 
+    if ((GetKeyState(VK_CONTROL) & GetKeyState(VK_SHIFT) & GetKeyState(VK_F10)) < 0)
+    {
+        WARN("Unattended setup is disabled by keypress\n");
+        return;
+    }
+
     pUnattend->bEnabled = TRUE;
     pUnattend->LocaleID = 0;
 
@@ -893,11 +901,20 @@ RunLiveCD(
 {
     LIVECD_UNATTEND Unattend = {0};
     WCHAR UnattendInf[MAX_PATH];
+    PWCHAR ptr;
 
     InitLogo(&pState->ImageInfo, NULL);
 
-    GetWindowsDirectoryW(UnattendInf, _countof(UnattendInf));
-    wcscat(UnattendInf, L"\\unattend.inf");
+    if (!ExpandInstallerPath(L"reactos.exe", Installer, _countof(Installer)))
+        *Installer = UNICODE_NULL;
+
+    StringCchCopyW(UnattendInf, _countof(UnattendInf), Installer);
+    ptr = wcsrchr(UnattendInf, L'\\');
+    if (ptr)
+        *ptr = UNICODE_NULL;
+    else
+        GetWindowsDirectoryW(UnattendInf, _countof(UnattendInf));
+    StringCchCatW(UnattendInf, _countof(UnattendInf), L"\\unattend.inf");
     ParseUnattend(UnattendInf, &Unattend);
     pState->Unattend = &Unattend;
 
