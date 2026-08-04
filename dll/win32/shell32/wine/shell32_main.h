@@ -194,10 +194,11 @@ HGLOBAL RenderSHELLIDLIST(const ITEMIDLIST *root_pidl, const ITEMIDLIST **pidls,
 HGLOBAL RenderFILENAMEA(const ITEMIDLIST *root_pidl, const ITEMIDLIST **pidls, unsigned int count) DECLSPEC_HIDDEN;
 HGLOBAL RenderFILENAMEW(const ITEMIDLIST *root_pidl, const ITEMIDLIST **pidls, unsigned int count) DECLSPEC_HIDDEN;
 
-HRESULT SHELL_GetShellExtensionRegCLSID(
-    HKEY hKey,
-    LPCWSTR KeyName,
-    CLSID *pClsId);
+EXTERN_C HRESULT
+SHELL_GetShellExtensionRegCLSID(HKEY hKey, LPCWSTR KeyName, CLSID *pClsId);
+EXTERN_C HRESULT
+SHELL_InitializeExtension(REFCLSID clsid, PCIDLIST_ABSOLUTE pidlFolder, IDataObject *pDO,
+                          HKEY hkeyProgID, REFIID riid, void **ppv);
 
 static inline WCHAR *strdupAtoW(const char *str)
 {

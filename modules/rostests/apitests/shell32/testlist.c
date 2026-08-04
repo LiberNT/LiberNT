@@ -122,7 +122,7 @@ const struct test winetest_testlist[] =
     { "She", func_She },
     //{ "ShellExec_RunDLL", func_ShellExec_RunDLL }, Broke on Windows
     //{ "ShellExecCmdLine", func_ShellExecCmdLine }, Broke on Windows
-    //{ "ShellExecuteEx", func_ShellExecuteEx }, Broke on Windows
+    { "ShellExecuteEx", func_ShellExecuteEx }, // Mostly broken on Windows, only simple tests enabled
     //{ "ShellExecuteW", func_ShellExecuteW }, Broke on Windows
     { "ShellHook", func_ShellHook },
     { "Shell_NotifyIconGetRect", func_Shell_NotifyIconGetRect },
