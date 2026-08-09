@@ -336,14 +336,22 @@ SmpConfigureObjectDirectories(IN PWSTR ValueName,
 
 NTSTATUS
 NTAPI
-SmpConfigureMemoryMgmt(IN PWSTR ValueName,
-                       IN ULONG ValueType,
-                       IN PVOID ValueData,
-                       IN ULONG ValueLength,
-                       IN PVOID Context,
-                       IN PVOID EntryContext)
+SmpConfigureExecute(IN PWSTR ValueName,
+                    IN ULONG ValueType,
+                    IN PVOID ValueData,
+                    IN ULONG ValueLength,
+                    IN PVOID Context,
+                    IN PVOID EntryContext)
 {
-    /* Save this is into a list */
+    NTSTATUS Status;
+    size_t StrLength;
+
+    /* If the value is invalid or empty, skip it */
+    Status = RtlStringCbLengthW(ValueData, ValueLength, &StrLength);
+    if (!NT_SUCCESS(Status) || (StrLength < sizeof(WCHAR)))
+        return STATUS_SUCCESS;
+
+    /* Save the value into the list */
     return SmpSaveRegistryValue(EntryContext, ValueData, NULL, TRUE);
 }
 
@@ -415,6 +423,19 @@ SmpConfigureExcludeKnownDlls(IN PWSTR ValueName,
 
 NTSTATUS
 NTAPI
+SmpConfigureMemoryMgmt(IN PWSTR ValueName,
+                       IN ULONG ValueType,
+                       IN PVOID ValueData,
+                       IN ULONG ValueLength,
+                       IN PVOID Context,
+                       IN PVOID EntryContext)
+{
+    /* Save the value into the list */
+    return SmpSaveRegistryValue(EntryContext, ValueData, NULL, TRUE);
+}
+
+NTSTATUS
+NTAPI
 SmpConfigureDosDevices(IN PWSTR ValueName,
                        IN ULONG ValueType,
                        IN PVOID ValueData,
@@ -422,7 +443,7 @@ SmpConfigureDosDevices(IN PWSTR ValueName,
                        IN PVOID Context,
                        IN PVOID EntryContext)
 {
-    /* Save into linked list */
+    /* Save the data into the list */
     return SmpSaveRegistryValue(EntryContext, ValueName, ValueData, TRUE);
 }
 
@@ -635,7 +656,7 @@ SmpRegistryConfigurationTable[] =
     },
 
     {
-        SmpConfigureMemoryMgmt,
+        SmpConfigureExecute,
         0,
         L"BootExecute",
         &SmpBootExecuteList,
@@ -645,7 +666,7 @@ SmpRegistryConfigurationTable[] =
     },
 
     {
-        SmpConfigureMemoryMgmt,
+        SmpConfigureExecute,
         RTL_QUERY_REGISTRY_TOPKEY,
         L"SetupExecute",
         &SmpSetupExecuteList,
@@ -793,7 +814,7 @@ SmpRegistryConfigurationTable[] =
     },
 
     {
-        SmpConfigureMemoryMgmt,
+        SmpConfigureExecute,
         RTL_QUERY_REGISTRY_TOPKEY,
         L"Execute",
         &SmpExecuteList,
