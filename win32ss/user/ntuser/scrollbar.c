@@ -1231,9 +1231,11 @@ NtUserSBGetParms(
 
    _SEH2_TRY
    {
+      ProbeForWrite(lpsi, sizeof(SCROLLINFO), 1);      
+      ProbeForRead(pSBData, sizeof(SBDATA), 1);
+
       RtlCopyMemory(&psi, lpsi, sizeof(SCROLLINFO));
-      if (pSBData)
-         RtlCopyMemory(&SBDataSafe, pSBData, sizeof(SBDATA));
+      RtlCopyMemory(&SBDataSafe, pSBData, sizeof(SBDATA));
    }
    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
    {
@@ -1282,8 +1284,8 @@ NtUserSBGetParms(
    _SEH2_END
 
 Exit:
-   TRACE("Leave NtUserGetScrollInfo, ret=%i\n", Ret);
    UserLeave();
+   TRACE("Leave NtUserGetScrollInfo, ret=%i\n", Ret);   
    return Ret;
 }
 
