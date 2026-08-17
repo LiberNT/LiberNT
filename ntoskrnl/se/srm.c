@@ -4,7 +4,7 @@
  * PURPOSE:     Security Reference Monitor Server
  * COPYRIGHT:   Copyright Timo Kreuzer <timo.kreuzer@reactos.org>
  *              Copyright Pierre Schweitzer <pierre@reactos.org>
- *              Copyright 2021 George Bișoc <george.bisoc@reactos.org>
+ *              Copyright 2021-2026 George Bișoc <george.bisoc@reactos.org>
  */
 
 /* INCLUDES *******************************************************************/
@@ -56,8 +56,19 @@ ULONG SepAdtMaxListLength = 0x3000;
 UCHAR SeAuditingState[POLICY_AUDIT_EVENT_TYPE_COUNT];
 
 KGUARDED_MUTEX SepRmDbLock;
-PSEP_LOGON_SESSION_REFERENCES SepLogonSessions = NULL;
 PSEP_LOGON_SESSION_TERMINATED_NOTIFICATION SepLogonNotifications = NULL;
+
+/*
+ * The logon session database is a hash table comprised of 16 hash buckets.
+ * Each bucket is a single-list of SEP_LOGON_SESSION_REFERENCES structures,
+ * that is simply indexed by a session logon ID modulo the number of buckets.
+ *
+ * !logonsession command extension from WinDBG strictly expects nt!SepLogonSessions
+ * symbol to follow this mechanism.
+ */
+#define MAX_LOGON_SESSION_LISTS_IN_ARRAY      16
+static PSEP_LOGON_SESSION_REFERENCES _SepLogonSessions[MAX_LOGON_SESSION_LISTS_IN_ARRAY] = {NULL};
+PSEP_LOGON_SESSION_REFERENCES* const SepLogonSessions = _SepLogonSessions;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -376,7 +387,8 @@ SepRmInsertLogonSessionIntoToken(
     /* Acquire the database lock */
     KeAcquireGuardedMutex(&SepRmDbLock);
 
-    for (LogonSession = SepLogonSessions;
+    /* Retrieve the hash bucket and loop over it */
+    for (LogonSession = SepLogonSessions[Token->AuthenticationId.LowPart % MAX_LOGON_SESSION_LISTS_IN_ARRAY];
          LogonSession != NULL;
          LogonSession = LogonSession->Next)
     {
@@ -457,7 +469,8 @@ SepRmRemoveLogonSessionFromToken(
     /* Acquire the database lock */
     KeAcquireGuardedMutex(&SepRmDbLock);
 
-    for (LogonSession = SepLogonSessions;
+    /* Retrieve the hash bucket and loop over it */
+    for (LogonSession = SepLogonSessions[Token->AuthenticationId.LowPart % MAX_LOGON_SESSION_LISTS_IN_ARRAY];
          LogonSession != NULL;
          LogonSession = LogonSession->Next)
     {
@@ -511,7 +524,7 @@ NTSTATUS
 SepRmCreateLogonSession(
     _In_ PLUID LogonLuid)
 {
-    PSEP_LOGON_SESSION_REFERENCES CurrentSession, NewSession;
+    PSEP_LOGON_SESSION_REFERENCES *LogonSession, CurrentSession, NewSession;
     NTSTATUS Status;
     PAGED_CODE();
 
@@ -537,8 +550,15 @@ SepRmCreateLogonSession(
     /* Acquire the database lock */
     KeAcquireGuardedMutex(&SepRmDbLock);
 
+    /*
+     * Cache the previous session from the hash bucket, the newly created
+     * session will keep hold of the previous session and the hash bucket
+     * gets a new assigned session.
+     */
+    LogonSession = &SepLogonSessions[LogonLuid->LowPart % MAX_LOGON_SESSION_LISTS_IN_ARRAY];
+
     /* Loop all existing sessions */
-    for (CurrentSession = SepLogonSessions;
+    for (CurrentSession = *LogonSession;
          CurrentSession != NULL;
          CurrentSession = CurrentSession->Next)
     {
@@ -551,8 +571,8 @@ SepRmCreateLogonSession(
     }
 
     /* Insert the new session */
-    NewSession->Next = SepLogonSessions;
-    SepLogonSessions = NewSession;
+    NewSession->Next = *LogonSession;
+    *LogonSession = NewSession;
 
     Status = STATUS_SUCCESS;
 
@@ -589,7 +609,7 @@ NTSTATUS
 SepRmDeleteLogonSession(
     _In_ PLUID LogonLuid)
 {
-    PSEP_LOGON_SESSION_REFERENCES SessionToDelete;
+    PSEP_LOGON_SESSION_REFERENCES SessionToDelete, *LogonSession;
     NTSTATUS Status;
     PAGED_CODE();
 
@@ -599,8 +619,11 @@ SepRmDeleteLogonSession(
     /* Acquire the database lock */
     KeAcquireGuardedMutex(&SepRmDbLock);
 
+    /* Retrieve the hash bucket, the database will have this session pulled away down below */
+    LogonSession = &SepLogonSessions[LogonLuid->LowPart % MAX_LOGON_SESSION_LISTS_IN_ARRAY];
+
     /* Loop over the existing logon sessions */
-    for (SessionToDelete = SepLogonSessions;
+    for (SessionToDelete = *LogonSession;
          SessionToDelete != NULL;
          SessionToDelete = SessionToDelete->Next)
     {
@@ -666,6 +689,11 @@ SepRmDeleteLogonSession(
         ObfDereferenceDeviceMap(SessionToDelete->pDeviceMap);
     }
 
+    /* Unlink the session from the bucket list */
+    while (*LogonSession != SessionToDelete)
+        LogonSession = &(*LogonSession)->Next;
+    *LogonSession = SessionToDelete->Next;
+
     /* If we're here then we've deleted the logon session successfully */
     DPRINT("SepRmDeleteLogonSession(): Logon session deleted with success!\n");
     Status = STATUS_SUCCESS;
@@ -704,8 +732,8 @@ SepRmReferenceLogonSession(
     /* Acquire the database lock */
     KeAcquireGuardedMutex(&SepRmDbLock);
 
-    /* Loop all existing sessions */
-    for (CurrentSession = SepLogonSessions;
+    /* Retrieve the hash bucket and loop over it */
+    for (CurrentSession = SepLogonSessions[LogonLuid->LowPart % MAX_LOGON_SESSION_LISTS_IN_ARRAY];
          CurrentSession != NULL;
          CurrentSession = CurrentSession->Next)
     {
@@ -1017,8 +1045,8 @@ SepRmDereferenceLogonSession(
     /* Acquire the database lock */
     KeAcquireGuardedMutex(&SepRmDbLock);
 
-    /* Loop all existing sessions */
-    for (CurrentSession = SepLogonSessions;
+    /* Retrieve the hash bucket and walk over it */
+    for (CurrentSession = SepLogonSessions[LogonLuid->LowPart % MAX_LOGON_SESSION_LISTS_IN_ARRAY];
          CurrentSession != NULL;
          CurrentSession = CurrentSession->Next)
     {
@@ -1346,8 +1374,8 @@ SeGetLogonIdDeviceMap(
     /* Acquire the database lock */
     KeAcquireGuardedMutex(&SepRmDbLock);
 
-    /* Loop all existing sessions */
-    for (CurrentSession = SepLogonSessions;
+    /* Retrieve the hash bucket and loop over it */
+    for (CurrentSession = SepLogonSessions[LogonId->LowPart % MAX_LOGON_SESSION_LISTS_IN_ARRAY];
          CurrentSession != NULL;
          CurrentSession = CurrentSession->Next)
     {
@@ -1498,8 +1526,8 @@ SeMarkLogonSessionForTerminationNotification(
     /* Acquire the database lock */
     KeAcquireGuardedMutex(&SepRmDbLock);
 
-    /* Loop over the existing logon sessions */
-    for (SessionToMark = SepLogonSessions;
+    /* Retrieve the hash bucket and loop over it */
+    for (SessionToMark = SepLogonSessions[LogonId->LowPart % MAX_LOGON_SESSION_LISTS_IN_ARRAY];
          SessionToMark != NULL;
          SessionToMark = SessionToMark->Next)
     {
