@@ -426,15 +426,15 @@ unsigned int __stdcall CDeviceView::RefreshThread(void *Param)
     // Empty the treeview
     This->EmptyDeviceView();
 
+    // Refresh the devices only if requested
+    if (ThreadData->ScanForChanges)
+    {
+        This->RefreshDeviceList();
+    }
+
     // Re-add the root node to the tree
     if (This->AddRootDevice() != false)
     {
-        // Refresh the devices only if requested
-        if (ThreadData->ScanForChanges)
-        {
-            This->RefreshDeviceList();
-        }
-
         // display the type of view the user wants
         switch (This->m_ViewType)
         {
