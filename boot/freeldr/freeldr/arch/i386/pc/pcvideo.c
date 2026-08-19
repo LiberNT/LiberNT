@@ -333,7 +333,7 @@ PcVideoVesaGetCurrentSVGAMode(
 static BOOLEAN
 PcVideoGetBiosMode(
     _Out_ PUSHORT Mode,
-    _Out_opt_ PUSHORT WidthInChars)
+    _Out_ PUSHORT WidthInChars)
 {
     REGS Regs;
 
