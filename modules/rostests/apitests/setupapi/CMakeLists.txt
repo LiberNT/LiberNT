@@ -3,6 +3,7 @@ list(APPEND SOURCE
     devclass.c
     InvalidDeviceInfoSet.c
     SetupDiInstallClassExA.c
+    SetupDiGetActualModelsSection.c
     SetupInstallFile.c
     SetupInstallServicesFromInfSectionEx.c
     testlist.c)
