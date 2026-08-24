@@ -1245,6 +1245,9 @@ error:
         L"Failed to load LiveCD! You can shutdown your computer, or press ENTER to reboot.",
         L"LiberNT LiveCD",
         MB_OK);
+    if (!pSetupEnablePrivilege(SE_SHUTDOWN_NAME, TRUE))
+        DPRINT1("pSetupEnablePrivilege(SE_SHUTDOWN_NAME) failed (Error %lu)\n", GetLastError());
+    ExitWindowsEx(EWX_REBOOT, 0);
     return 0;
 }
 
@@ -1601,7 +1604,8 @@ SaveDefaultUserHive(VOID)
         return dwError;
     }
 
-    pSetupEnablePrivilege(L"SeBackupPrivilege", TRUE);
+    if (!pSetupEnablePrivilege(SE_BACKUP_NAME, TRUE))
+        DPRINT1("pSetupEnablePrivilege(SE_BACKUP_NAME) failed (Error %lu)\n", GetLastError());
 
     /* Save the Default hive */
     dwError = RegSaveKeyExW(hUserKey,
@@ -1639,7 +1643,7 @@ SaveDefaultUserHive(VOID)
         DPRINT1("RegSaveKeyExW() failed (Error %lu)\n", dwError);
     }
 
-    pSetupEnablePrivilege(L"SeBackupPrivilege", FALSE);
+    pSetupEnablePrivilege(SE_BACKUP_NAME, FALSE);
 
     RegCloseKey(hUserKey);
 
