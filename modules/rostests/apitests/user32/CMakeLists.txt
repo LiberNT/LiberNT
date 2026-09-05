@@ -60,6 +60,7 @@ list(APPEND SOURCE
     MinimizedPosition.c
     ModernUser32.c
     NestedWindowPos.c
+    NcPaintRgn.c
     NextDlgItem.c
     NonClientPaint.c
     PhysicalPoint.c

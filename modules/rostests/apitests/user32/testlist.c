@@ -60,6 +60,7 @@ extern void func_MessageStateAnalyzer(void);
 extern void func_MinimizedPosition(void);
 extern void func_ModernUser32(void);
 extern void func_NestedWindowPos(void);
+extern void func_NcPaintRgn(void);
 extern void func_NextDlgItem(void);
 extern void func_NonClientPaint(void);
 extern void func_PhysicalPoint(void);
@@ -158,6 +159,7 @@ const struct test winetest_testlist[] =
     { "MinimizedPosition", func_MinimizedPosition },
     { "ModernUser32", func_ModernUser32 },
     { "NestedWindowPos", func_NestedWindowPos },
+    { "NcPaintRgn", func_NcPaintRgn },
     { "NextDlgItem", func_NextDlgItem },
     { "NonClientPaint", func_NonClientPaint },
     { "PhysicalPoint", func_PhysicalPoint },
