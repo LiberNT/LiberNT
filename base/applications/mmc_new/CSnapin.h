@@ -3,6 +3,7 @@
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Retrieve / store information about a snapin
  * COPYRIGHT:   Copyright 2017-2019 Mark Jansen (mark.jansen@reactos.org)
+ *              Copyright 2026 Eric Kohl (eric.kohl@reactos.org)
  */
 
 #pragma once
@@ -22,73 +23,67 @@
 class CSnapin
 {
 private:
-    GUID m_Guid;
-    CAtlString m_Name;
-    CAtlString m_Provider;
-    CAtlString m_Description;
-    int m_ImageIndex;
-
-
-    CComPtr<ISnapinAbout> m_SnapinAbout;
-    //CComPtr<CImageList> m_Imagelist;
-
-    CSnapin(const GUID& guid, const CAtlString& name, const CAtlString& provider, const CAtlString& about)
-        :m_Guid(guid), m_Name(name), m_Provider(provider), m_ImageIndex(-1)
-    {
-        GUID aboutGuid;
-        if (!about.IsEmpty() &&
-            !FAILED_UNEXPECTEDLY(::CLSIDFromString(about, &aboutGuid)))
-        {
-            HRESULT hr = CoCreateInstance(aboutGuid, NULL, CLSCTX_INPROC, IID_PPV_ARG(ISnapinAbout, &m_SnapinAbout));
-            if (!FAILED_UNEXPECTEDLY(hr))
-            {
-                CComHeapPtr<WCHAR> ProviderName;
-                if (!FAILED_UNEXPECTEDLY(m_SnapinAbout->GetProvider(&ProviderName)))
-                {
-                    m_Provider = ProviderName;
-                }
-            }
-        }
-    }
+    CSnapinCacheEntry *m_CacheEntry;
+    CAtlString m_DisplayName;
 
 public:
+    CSnapin(CSnapinCacheEntry *CacheEntry, PWSTR displayName = NULL)
+        :m_CacheEntry(CacheEntry)
+    {
+        if (displayName)
+            m_DisplayName = displayName;
+        else
+            m_DisplayName = m_CacheEntry->Name();
+    }
 
     ~CSnapin()
     {
     }
 
-    const CAtlString& Name() const { return m_Name; }
-    const CAtlString& Provider() const { return m_Provider; }
-    int ImageIndex() const { return m_ImageIndex; }
-    const CAtlString& Description()
+    const CAtlString& Name() const { return m_CacheEntry->Name(); }
+    const CAtlString& Provider() const { return m_CacheEntry->Provider(); }
+    const CAtlString& Description() const { return m_CacheEntry->Description(); }
+    const CAtlString& Version() const { return m_CacheEntry->Version(); }
+    const CAtlString& DisplayName() const { return m_DisplayName; }
+
+    CSnapinCacheEntry *GetCacheEntry()
     {
-        if (m_Description.IsEmpty() && m_SnapinAbout)
-        {
-            CComHeapPtr<WCHAR> Description;
-            if (!FAILED_UNEXPECTEDLY(m_SnapinAbout->GetSnapinDescription(&Description)))
-            {
-                m_Description = Description;
-            }
-        }
-        return m_Description;
+        return m_CacheEntry;
     }
 
+//    const CAtlString& Name() const { return m_Name; }
+//    const CAtlString& Provider() const { return m_Provider; }
+//    int ImageIndex() const { return m_ImageIndex; }
+//    const CAtlString& Description()
+//    {
+//        if (m_Description.IsEmpty() && m_SnapinAbout)
+//        {
+//            CComHeapPtr<WCHAR> Description;
+//            if (!FAILED_UNEXPECTEDLY(m_SnapinAbout->GetSnapinDescription(&Description)))
+//            {
+//                m_Description = Description;
+//            }
+//        }
+//        return m_Description;
+//    }
 
-    void SetImageIndex(int index)
-    {
-        m_ImageIndex = index;
-    }
 
-    HRESULT GetIcon(HICON* hAppIcon)
-    {
-        if (!m_SnapinAbout)
-            return E_NOINTERFACE;
+//    void SetImageIndex(int index)
+//    {
+//        m_ImageIndex = index;
+//    }
 
-        return m_SnapinAbout->GetSnapinImage(hAppIcon);
-    }
+//    HRESULT GetIcon(HICON* hAppIcon)
+//    {
+//        if (!m_SnapinAbout)
+//            return E_NOINTERFACE;
+
+//        return m_SnapinAbout->GetSnapinImage(hAppIcon);
+//    }
 
     void OnAdd(IConsole* console)
     {
+#if 0
         CComPtr<IComponentData> spComponentData;
         HRESULT hr = CoCreateInstance(m_Guid, NULL, CLSCTX_INPROC, IID_PPV_ARG(IComponentData, &spComponentData));
 
@@ -96,13 +91,13 @@ public:
         {
             //CComPtr<IExtendPropertySheet> spPropertySheet;
         }
-
+#endif
     }
 
 
     void OnAccept(IConsole* console)
     {
-
+#if 0
         CComPtr<IComponentData> spComponentData;
         HRESULT hr = CoCreateInstance(m_Guid, NULL, CLSCTX_INPROC, IID_PPV_ARG(IComponentData, &spComponentData));
 
@@ -130,9 +125,10 @@ public:
                 }
             }
         }
+#endif
     }
 
-
+#if 0
     static CSnapin* Create(CRegKey& key, PCWSTR guidString)
     {
         GUID guid;
@@ -190,5 +186,6 @@ public:
             Value = Buffer;
         }
     }
+#endif
 };
 

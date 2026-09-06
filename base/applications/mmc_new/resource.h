@@ -12,6 +12,7 @@
 #define IDS_CONSOLETITLE 102
 #define IDS_MODULE       103
 #define IDS_VENDOR       104
+#define IDS_ABOUTTITLE   105
 
 #define IDI_MAINAPP 101
 #define IDI_FOLDERICON 102
