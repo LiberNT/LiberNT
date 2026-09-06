@@ -104,6 +104,7 @@ list(APPEND SOURCE
     mimeinfo.idl
     mimeole.idl
     mlang.idl
+    mmc.idl
     mmdeviceapi.idl
     msaatext.idl
     mscoree.idl
@@ -343,6 +344,7 @@ add_idl_headers(d3d_idl_headers
 add_dependencies(psdk d3d_idl_headers)
 
 add_iid_library(adsiid iads.idl)
+add_iid_library(mmc_uuids mmc.idl)
 add_iid_library(wuguid wuapi.idl)
 add_iid_library(xml_uuids msxml2.idl)
 
