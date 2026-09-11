@@ -90,6 +90,7 @@ list(APPEND SOURCE
     NtMapViewOfSection.c
     NtMapViewOfSection_ImageZeroBits.c
     NtMutant.c
+    NtNotifyChangeMultipleKeys.c
     NtOpenKey.c
     NtOpenKeyEx.c
     NtOpenProcessToken.c
