@@ -115,6 +115,7 @@ CmpInitializeHive(
     /* Clear file names */
     RtlInitEmptyUnicodeString(&Hive->FileUserName, NULL, 0);
     RtlInitEmptyUnicodeString(&Hive->FileFullPath, NULL, 0);
+    RtlInitEmptyUnicodeString(&Hive->HiveRootPath, NULL, 0);
 
     /* Initialize the view list */
     CmpInitHiveViewList(Hive);
