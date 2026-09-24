@@ -4,6 +4,7 @@
 
 extern void func_MulticastInterface(void);
 extern void func_bind(void);
+extern void func_broadcast(void);
 extern void func_close(void);
 extern void func_connect_select(void);
 extern void func_getaddrinfo(void);
@@ -29,6 +30,7 @@ const struct test winetest_testlist[] =
 {
     { "MulticastInterface", func_MulticastInterface },
     { "bind", func_bind },
+    { "broadcast", func_broadcast },
     { "close", func_close },
     { "connect_select", func_connect_select },
     { "getaddrinfo", func_getaddrinfo },

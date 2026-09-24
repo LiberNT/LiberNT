@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     MulticastInterface.c
     bind.c
+    broadcast.c
     close.c
     connect_select.c
     getaddrinfo.c
