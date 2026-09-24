@@ -195,6 +195,36 @@ static BOOLEAN UDPClassify(
     return WfpShimClassifyDatagram(&Datagram);
 }
 
+static
+BOOLEAN
+UDPIsBroadcastAddress(
+    _In_ PIP_ADDRESS Address)
+{
+    BOOLEAN IsBroadcast = FALSE;
+    KIRQL OldIrql;
+    IF_LIST_ITER(CurrentIF);
+
+    if (Address->Type != IP_ADDRESS_V4)
+        return FALSE;
+
+    if (Address->Address.IPv4Address == 0xFFFFFFFF)
+        return TRUE;
+
+    TcpipAcquireSpinLock(&InterfaceListLock, &OldIrql);
+
+    ForEachInterface(CurrentIF) {
+        if (CurrentIF != Loopback && AddrIsEqual(&CurrentIF->Broadcast, Address))
+        {
+            IsBroadcast = TRUE;
+            break;
+        }
+    } EndFor(CurrentIF);
+
+    TcpipReleaseSpinLock(&InterfaceListLock, OldIrql);
+
+    return IsBroadcast;
+}
+
 static NTSTATUS UDPSendToAddress(
     PADDRESS_FILE AddrFile,
     IP_ADDRESS RemoteAddress,
@@ -204,10 +234,15 @@ static NTSTATUS UDPSendToAddress(
     const WFP_SHIM_TAG *Tag)
 {
     IP_PACKET Packet;
+    IP_PACKET LoopPacket;
     IP_ADDRESS LocalAddress;
     USHORT LocalPort;
     NTSTATUS Status;
     PNEIGHBOR_CACHE_ENTRY NCE;
+    PNEIGHBOR_CACHE_ENTRY LoopNCE = NULL;
+    BOOLEAN IsBroadcast;
+
+    IsBroadcast = UDPIsBroadcastAddress(&RemoteAddress);
 
     LockObject(AddrFile);
 
@@ -276,6 +311,24 @@ static NTSTATUS UDPSendToAddress(
 							 BufferData,
 							 DataSize );
 
+    if (NT_SUCCESS(Status) && IsBroadcast && Loopback != NULL && NCE->Interface != Loopback)
+    {
+        LoopNCE = NBLocateNeighbor(&Loopback->Unicast, Loopback);
+        if (LoopNCE != NULL &&
+            !NT_SUCCESS(BuildUDPPacket(AddrFile,
+                                       &LoopPacket,
+                                       &RemoteAddress,
+                                       RemotePort,
+                                       &LocalAddress,
+                                       LocalPort,
+                                       BufferData,
+                                       DataSize)))
+        {
+            NBDereferenceNeighbor(LoopNCE);
+            LoopNCE = NULL;
+        }
+    }
+
     UnlockObject(AddrFile);
 
     if( !NT_SUCCESS(Status) ) {
@@ -286,6 +339,14 @@ static NTSTATUS UDPSendToAddress(
     Packet.WfpTag = *Tag;
     Status = IPSendDatagram(&Packet, NCE);
     NBDereferenceNeighbor(NCE);
+
+    if (LoopNCE != NULL)
+    {
+        LoopPacket.WfpTag = *Tag;
+        IPSendDatagram(&LoopPacket, LoopNCE);
+        NBDereferenceNeighbor(LoopNCE);
+    }
+
     return Status;
 }
 
