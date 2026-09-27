@@ -44,6 +44,7 @@ HRESULT TrayWindowCtxMenuCreator(ITrayWindow * TrayWnd, IN HWND hWndOwner, ICont
 #define IDHK_SYS_PROPERTIES 0x1fd
 #define IDHK_DESKTOP 0x1fe
 #define IDHK_PAGER 0x1ff
+#define IDHK_ACTIVATE_TASK 0x209
 
 enum { NONE, TILED, CASCADED } g_Arrangement = NONE;
 
@@ -2725,12 +2726,22 @@ ChangePos:
             MAKELONG(IDHK_DESKTOP,        MAKEWORD('D', MOD_WIN)),
             MAKELONG(IDHK_PAGER,          MAKEWORD('B', MOD_WIN)),
         };
+        static const UINT taskmods[] =
+        {
+            MOD_WIN, MOD_WIN | MOD_SHIFT, MOD_WIN | MOD_CONTROL, MOD_WIN | MOD_ALT,
+            MOD_WIN | MOD_CONTROL | MOD_SHIFT,
+        };
         if (!SHRestricted(REST_NOWINKEYS))
         {
             for (UINT i = 0; i < _countof(winkeys); ++i)
             {
                 UINT mod = HIBYTE(HIWORD(winkeys[i])), key = LOBYTE(HIWORD(winkeys[i]));
                 RegisterHotKey(m_hWnd, LOWORD(winkeys[i]), mod, key);
+            }
+            for (UINT i = 0; i < _countof(taskmods); ++i)
+            {
+                for (UINT key = '0'; key <= '9'; ++key)
+                    RegisterHotKey(m_hWnd, IDHK_ACTIVATE_TASK, taskmods[i], key);
             }
         }
 
@@ -3479,6 +3490,17 @@ HandleTrayContextMenu:
 
     LRESULT OnHotkey(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
+        if (wParam == IDHK_ACTIVATE_TASK)
+        {
+            UINT key = HIWORD(lParam);
+            UINT index = (key == '0') ? 9 : key - '1';
+            if (key < '0' || key > '9' || !m_TaskSwitch)
+                return 0;
+            HideStartMenu();
+            ::SendMessageW(m_TaskSwitch, TSWM_ACTIVATETASKINDEX,
+                           MAKEWPARAM(index, LOWORD(lParam) & ~MOD_WIN), 0);
+            return 0;
+        }
         return HandleHotKey(wParam);
     }
 

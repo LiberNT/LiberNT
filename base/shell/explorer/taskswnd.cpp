@@ -3579,6 +3579,69 @@ public:
         ::PostMessageW(hwnd, WM_NULL, 0, 0);
     }
 
+    INT NthVisibleButtonIndex(IN UINT n)
+    {
+        INT Count = m_TaskBar.GetButtonCount();
+
+        for (INT i = 0; i < Count; ++i)
+        {
+            if (m_TaskBar.SendMessageW(TB_GETSTATE, i, 0) & TBSTATE_HIDDEN)
+                continue;
+            if (n-- == 0)
+                return i;
+        }
+        return -1;
+    }
+
+    HWND LastActiveGroupWindow(IN PTASK_GROUP TaskGroup)
+    {
+        HWND ahWnd[16];
+        UINT cWindows = CollectGroupWindows(TaskGroup, ahWnd, _countof(ahWnd));
+
+        for (HWND hWnd = ::GetTopWindow(NULL); hWnd && cWindows; hWnd = ::GetWindow(hWnd, GW_HWNDNEXT))
+        {
+            for (UINT i = 0; i < cWindows; ++i)
+            {
+                if (ahWnd[i] == hWnd)
+                    return hWnd;
+            }
+        }
+        return cWindows ? ahWnd[0] : NULL;
+    }
+
+    LRESULT OnActivateTaskIndex(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        INT Index = NthVisibleButtonIndex(LOWORD(wParam));
+        UINT Mods = HIWORD(wParam) & (MOD_ALT | MOD_CONTROL | MOD_SHIFT);
+        PTASK_GROUP TaskGroup;
+        HWND hWnd;
+
+        if (Index < 0)
+            return FALSE;
+
+        switch (Mods)
+        {
+            case 0:
+                return HandleButtonClick((WORD)Index);
+            case MOD_SHIFT:
+                LaunchNewInstance(GroupOfIndex(Index));
+                return TRUE;
+            case MOD_SHIFT | MOD_CONTROL:
+                TaskGroup = GroupOfIndex(Index);
+                if (TaskGroup && TaskGroup->szExePath[0])
+                    ShellExecuteW(NULL, L"runas", TaskGroup->szExePath, NULL, NULL, SW_SHOWNORMAL);
+                return TRUE;
+            case MOD_CONTROL:
+                hWnd = LastActiveGroupWindow(GroupOfIndex(Index));
+                if (hWnd)
+                    ::SwitchToThisWindow(hWnd, TRUE);
+                return TRUE;
+            case MOD_ALT:
+                return HandleButtonRightClick((WORD)Index);
+        }
+        return FALSE;
+    }
+
     VOID HandleTaskItemRightClick(IN OUT PTASK_ITEM TaskItem)
     {
         POINT pt;
@@ -4818,6 +4881,7 @@ public:
         MESSAGE_HANDLER(WM_COMMAND, OnCommand)
         MESSAGE_HANDLER(WM_NOTIFY, OnNotify)
         MESSAGE_HANDLER(TSWM_UPDATETASKBARPOS, OnUpdateTaskbarPos)
+        MESSAGE_HANDLER(TSWM_ACTIVATETASKINDEX, OnActivateTaskIndex)
         MESSAGE_HANDLER(TWM_SETTINGSCHANGED, OnTaskbarSettingsChanged)
         MESSAGE_HANDLER(WM_CONTEXTMENU, OnContextMenu)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)
