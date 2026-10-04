@@ -1570,6 +1570,15 @@ LoadAndBootWindows(
     }
 #endif
 
+    ArgValue = strchr(BootPath, ')');
+    if (StartupSkipsRamDisk() && ArgValue && _strnicmp(BootPath, "ramdisk(", 8) == 0)
+    {
+        RtlStringCbCopyA(FilePath, sizeof(FilePath), ArgValue + 1);
+        RtlStringCbCopyA(BootPath, sizeof(BootPath), SystemPartition);
+        RtlStringCbCatA(BootPath, sizeof(BootPath), FilePath);
+        TRACE("BootPath without RAM disk: '%s'\n", BootPath);
+    }
+
     /* Check if a RAM disk is needed: either an explicit RDPATH= file,
      * a writable ramdisk size request (RDRAMSIZE=), or the boot path
      * itself targets the ramdisk device. */

@@ -19,6 +19,7 @@ static const struct
     PCSTR Name;
     PCSTR Options;
     PCSTR Remove;
+    BOOLEAN NoRamDisk;
 } StartupProfiles[] =
 {
     {"Boot normally", NULL, NULL},
@@ -26,7 +27,9 @@ static const struct
     {"Boot with file logging", "DEBUG DEBUGPORT=FILE", "/NODEBUG/DEBUGPORT="},
     {"Boot with screen debugging", "DEBUG DEBUGPORT=SCREEN SOS", "/NODEBUG/DEBUGPORT="},
     {"Boot with one processor", "NUMPROC=1", "/NUMPROC=/ONECPU"},
-    {"Boot with processor diagnostics", "DEBUG DEBUGPORT=COM1 BAUDRATE=115200 SMPDIAG", "/NODEBUG/DEBUGPORT=/BAUDRATE=/NUMPROC=/ONECPU"}
+    {"Boot with processor diagnostics", "DEBUG DEBUGPORT=COM1 BAUDRATE=115200 SMPDIAG", "/NODEBUG/DEBUGPORT=/BAUDRATE=/NUMPROC=/ONECPU"},
+    {"Boot without RAM disk", NULL, "/RDPATH=/RDRAMSIZE=/RDIMAGEOFFSET=/RDIMAGELENGTH=", TRUE},
+    {"Boot without RAM disk with screen debugging", "DEBUG DEBUGPORT=SCREEN SOS", "/NODEBUG/DEBUGPORT=/RDPATH=/RDRAMSIZE=/RDIMAGEOFFSET=/RDIMAGELENGTH=", TRUE}
 };
 
 static PCSTR StartupModes[] =
@@ -136,6 +139,12 @@ MenuNTOptions(OperatingSystemItem* OperatingSystem)
         OperatingSystem->StartupProfile = 0;
         return;
     }
+}
+
+BOOLEAN
+StartupSkipsRamDisk(VOID)
+{
+    return StartupProfiles[StartupProfile].NoRamDisk;
 }
 
 VOID

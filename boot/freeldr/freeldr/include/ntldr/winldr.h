@@ -82,6 +82,9 @@ AppendBootTimeOptions(
          PSTR BootOptions,
     _In_ SIZE_T BootOptionsSize);
 
+BOOLEAN
+StartupSkipsRamDisk(VOID);
+
 
 ARC_STATUS
 LoadAndBootWindows(
