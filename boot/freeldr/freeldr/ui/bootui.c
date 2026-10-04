@@ -478,7 +478,7 @@ BootUiDialog(PCSTR Message, PCHAR Edit, ULONG Length)
     BOOLEAN Extended;
     BOOLEAN KeepFirmwareScreen = UiKeepFirmwareScreen;
     BOOLEAN ShowProgress = UiProgressBar.Show;
-    BOOLEAN Accept = !Edit, Timer = FALSE;
+    BOOLEAN Accept = FALSE, Timer = FALSE, Footer = FALSE;
     LONG Remaining = -1, PressedButton = -1;
     ULONG Second = ArcGetTime()->Second;
     MACH_POINTER_STATE Previous;
@@ -495,17 +495,33 @@ BootUiDialog(PCSTR Message, PCHAR Edit, ULONG Length)
     }
     UiKeepFirmwareScreen = FALSE;
     UiProgressBar.Show = FALSE;
+    Timer = MachSetInputTimer(300);
+    while (Timer && !MachInputTimerExpired())
+    {
+        if (MachConsKbHit())
+        {
+            MachConsGetCh();
+            Timer = MachSetInputTimer(300);
+        }
+        else
+            MachHwIdle();
+    }
+    MachSetInputTimer(0);
+    Timer = FALSE;
+    while (MachConsKbHit())
+        MachConsGetCh();
+    BootUiReadPointer(&Previous);
     Lines = BootUiParagraph(Message, 0, 0, Width - 48, 0, 0);
     Visible = min(Lines, MaxLines);
-    PanelHeight = Visible * LineHeight + (Edit ? 152 : 112);
-    Top = (BootUiHeight - min(PanelHeight, BootUiHeight)) / 2;
     for (;;)
     {
-        ULONG EditY = Top + 40 + Visible * LineHeight;
-        ULONG ButtonY = Top + PanelHeight - 56;
-        ULONG ButtonWidth = (Width - 64) / 2;
-        BootUiBackground(BootUiHeight);
-        BootUiRect(Left, Top, Width, PanelHeight, 14, BOOTUI_PANEL, 245);
+        ULONG EditY, ButtonY, ButtonWidth = (Width - 64) / 2;
+        Footer = Footer || Lines > Visible || Remaining > 0;
+        PanelHeight = Visible * LineHeight + (Footer ? LineHeight : 0) + (Edit ? 152 : 112);
+        Top = (BootUiHeight - min(PanelHeight, BootUiHeight)) / 2;
+        EditY = Top + 40 + Visible * LineHeight;
+        ButtonY = Top + PanelHeight - 56;
+        BootUiRect(Left, Top, Width, PanelHeight, 14, BOOTUI_PANEL, 255);
         BootUiParagraph(Message, Left + 24, Top + 24, Width - 48, Visible, Offset);
         if (Edit)
         {
@@ -521,22 +537,26 @@ BootUiDialog(PCSTR Message, PCHAR Edit, ULONG Length)
         }
         BootUiInputLabel();
         BootUiRect(Left + 24, ButtonY, ButtonWidth, 40, 6, BOOTUI_TEXT, Accept ? 14 : 40);
-        BootUiRect(Left + 40 + ButtonWidth, ButtonY, ButtonWidth, 40, 6, BOOTUI_TEXT, Accept ? 40 : 14);
         BootUiText(Left + 40, ButtonY + 8, Edit ? "Cancel" : "Back", Size,
                    BOOTUI_TEXT, ButtonWidth - 32, MAXULONG);
-        BootUiText(Left + 56 + ButtonWidth, ButtonY + 8, Edit ? "Save" : "Continue", Size,
-                   BOOTUI_TEXT, ButtonWidth - 32, MAXULONG);
+        if (Edit)
+        {
+            BootUiRect(Left + 40 + ButtonWidth, ButtonY, ButtonWidth, 40, 6, BOOTUI_TEXT, Accept ? 40 : 14);
+            BootUiText(Left + 56 + ButtonWidth, ButtonY + 8, "Save", Size,
+                       BOOTUI_TEXT, ButtonWidth - 32, MAXULONG);
+        }
         if (Remaining > 0)
         {
             CHAR Countdown[80];
             RtlStringCbPrintfA(Countdown, sizeof(Countdown), "%s in %ld seconds",
-                               Accept ? (Edit ? "Save" : "Continue") : "Back", Remaining);
-            BootUiCentered(BootUiHeight - 62, Countdown, Size, BOOTUI_ACCENT);
+                               Accept ? "Save" : (Edit ? "Cancel" : "Back"), Remaining);
+            BootUiCentered(ButtonY - LineHeight - 4, Countdown, Size, BOOTUI_ACCENT);
         }
-        if (Lines > Visible)
-            BootUiCentered(BootUiHeight - 28, "Up / Down  Scroll message", Size, BOOTUI_MUTED);
+        else if (Lines > Visible)
+            BootUiCentered(ButtonY - LineHeight - 4, "Up / Down  Scroll message", Size, BOOTUI_MUTED);
         BootUiCursor();
-        BootUiPresent();
+        VidFbPresent(BootUiPixels, Left, Top, Width, PanelHeight);
+        MachVideoSync();
         Key = 0;
         Extended = FALSE;
         for (;;)
@@ -547,7 +567,7 @@ BootUiDialog(PCSTR Message, PCHAR Edit, ULONG Length)
                 if (Extended && (Key == KEY_VOLUME_UP || Key == KEY_VOLUME_DOWN))
                 {
                     BootUiTabletMode = TRUE;
-                    Accept = !Accept;
+                    Accept = Edit && !Accept;
                     Remaining = 5;
                     Timer = MachSetInputTimer(1000);
                     Second = ArcGetTime()->Second;
@@ -570,7 +590,7 @@ BootUiDialog(PCSTR Message, PCHAR Edit, ULONG Length)
                 {
                     if (BootUiPointer.X >= Left + 24 && BootUiPointer.X < Left + 24 + ButtonWidth)
                         Button = 0;
-                    if (BootUiPointer.X >= Left + 40 + ButtonWidth && BootUiPointer.X < Left + Width - 24)
+                    if (Edit && BootUiPointer.X >= Left + 40 + ButtonWidth && BootUiPointer.X < Left + Width - 24)
                         Button = 1;
                 }
                 if (Button >= 0)
@@ -617,8 +637,10 @@ BootUiDialog(PCSTR Message, PCHAR Edit, ULONG Length)
             MachSetInputTimer(0);
             UiKeepFirmwareScreen = KeepFirmwareScreen;
             UiProgressBar.Show = ShowProgress;
-            BootUiBackground(BootUiHeight);
-            BootUiPresent();
+            BootUiRect(Left, Top, Width, PanelHeight, 0,
+                       (UiKeepFirmwareScreen || UiProgressBar.Show) ? 0 : BOOTUI_BACKGROUND, 255);
+            VidFbPresent(BootUiPixels, Left, Top, Width, PanelHeight);
+            MachVideoSync();
             return Key == KEY_ENTER;
         }
         if (Extended)
