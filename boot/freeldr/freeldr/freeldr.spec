@@ -112,6 +112,7 @@
 @ extern MachVtbl
 @ cdecl PxeCallApi()
 @ cdecl RamDiskInitialize()
+@ cdecl RamDiskGetFailureText()
 @ cdecl Reboot()
 @ cdecl Relocator16Boot()
 @ stdcall RtlAssert(ptr ptr long ptr)

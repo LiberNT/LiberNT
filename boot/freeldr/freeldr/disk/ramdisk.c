@@ -126,6 +126,7 @@ static ULONGLONG RamDiskVolumeLength; // Length of the exposed FAT volume
 static ULONGLONG RamDiskOffset;      // Current position in the Ramdisk.
 static ULONGLONG RamDiskRequestedSize = 0;
 static BOOLEAN   RamDiskErrorShown = FALSE;
+static CHAR      RamDiskFailureText[512];
 
 #if defined(_WIN64)
 #ifndef MM_MAX_PAGE_LOADER_MAPPED
@@ -242,6 +243,32 @@ RamDiskRegisterArcDevice(VOID)
 }
 
 static BOOLEAN RamDiskReserveWritableBuffer(ULONGLONG RequestedSize, ULONGLONG AllocationLimit, BOOLEAN OptionalRamDisk, PVOID *BaseAddress, PULONGLONG ActualSize);
+
+static VOID
+RamDiskSetFailure(
+    _In_ PCSTR Format,
+    ...)
+{
+    va_list Args;
+    PCSTR LastError;
+
+    va_start(Args, Format);
+    RtlStringCbVPrintfA(RamDiskFailureText, sizeof(RamDiskFailureText), Format, Args);
+    va_end(Args);
+
+    LastError = DebugGetLastError();
+    if (*LastError)
+    {
+        RtlStringCbCatA(RamDiskFailureText, sizeof(RamDiskFailureText), "\n");
+        RtlStringCbCatA(RamDiskFailureText, sizeof(RamDiskFailureText), LastError);
+    }
+}
+
+PCSTR
+RamDiskGetFailureText(VOID)
+{
+    return RamDiskFailureText;
+}
 
 static VOID
 RamDiskReportError(PCSTR Message, BOOLEAN OptionalRamDisk)
@@ -2455,8 +2482,7 @@ static const DEVVTBL RamDiskVtbl =
 static ARC_STATUS
 RamDiskLoadVirtualFile(
     IN PCSTR FileName,
-    IN PCSTR DefaultPath OPTIONAL,
-    IN BOOLEAN OptionalRamDisk)
+    IN PCSTR DefaultPath OPTIONAL)
 {
     ARC_STATUS Status;
     ULONG RamFileId;
@@ -2509,15 +2535,25 @@ RamDiskLoadVirtualFile(
         }
     }
 
+    if (!FileName)
+    {
+        RamDiskSetFailure("No RAM disk image or boot device was given.");
+        return EINVAL;
+    }
+
     /* Try opening the Ramdisk file */
     Status = FsOpenFile(FileName, DefaultPath, OpenReadOnly, &RamFileId);
     if (Status != ESUCCESS)
+    {
+        RamDiskSetFailure("Cannot open '%s' (ARC status %lu).", FileName, Status);
         return Status;
+    }
 
     /* Get the file size */
     Status = ArcGetFileInformation(RamFileId, &Information);
     if (Status != ESUCCESS)
     {
+        RamDiskSetFailure("Cannot get the size of '%s' (ARC status %lu).", FileName, Status);
         ArcClose(RamFileId);
         return Status;
     }
@@ -2548,9 +2584,9 @@ RamDiskLoadVirtualFile(
 #if !defined(_WIN64)
     if (RamDiskFileSize >= 0x100000000ULL)
     {
+        RamDiskSetFailure("'%s' is %llu MB; a 32-bit loader limits the RAM disk to 4096 MB.",
+                          FileName, RamDiskFileSize >> 20);
         ArcClose(RamFileId);
-        if (!OptionalRamDisk)
-            UiMessageBox("RAM disk too big.");
         return ENOMEM;
     }
 #endif
@@ -2564,8 +2600,8 @@ RamDiskLoadVirtualFile(
         WARN("RamDiskLoadVirtualFile: source %llu exceeds free-memory budget %llu\n",
              RamDiskFileSize,
              AllocationLimit);
-        if (!OptionalRamDisk)
-            UiMessageBox("RAM disk image is larger than available memory.");
+        RamDiskSetFailure("'%s' is %llu MB but only %llu MB of contiguous memory is free for it.",
+                          FileName, RamDiskFileSize >> 20, AllocationLimit >> 20);
         RamDiskFileSize = 0;
         ArcClose(RamFileId);
         return ENOMEM;
@@ -2592,10 +2628,10 @@ RamDiskLoadVirtualFile(
     RamDiskBase = MmAllocateMemoryWithType(RamDiskFileSize, LoaderXIPRom);
     if (!RamDiskBase)
     {
+        RamDiskSetFailure("Cannot allocate %llu MB of memory for '%s'.",
+                          RamDiskFileSize >> 20, FileName);
         RamDiskFileSize = 0;
         ArcClose(RamFileId);
-        if (!OptionalRamDisk)
-            UiMessageBox("Failed to allocate memory for RAM disk.");
         return ENOMEM;
     }
 #else
@@ -2608,10 +2644,10 @@ RamDiskLoadVirtualFile(
                                                           LoaderXIPRom);
         if (!RamDiskBase)
         {
+            RamDiskSetFailure("Cannot allocate %llu MB of memory below %llu MB for '%s'.",
+                              RamDiskFileSize >> 20, AddressLimit >> 20, FileName);
             RamDiskFileSize = 0;
             ArcClose(RamFileId);
-            if (!OptionalRamDisk)
-                UiMessageBox("Failed to allocate low memory for RAM disk.");
             return ENOMEM;
         }
     }
@@ -2621,12 +2657,11 @@ RamDiskLoadVirtualFile(
     Status = ArcSeek(RamFileId, &Position, SeekAbsolute);
     if (Status != ESUCCESS)
     {
+        RamDiskSetFailure("Cannot seek to the start of '%s' (ARC status %lu).", FileName, Status);
         MmFreeMemory(RamDiskBase);
         RamDiskBase = NULL;
         RamDiskFileSize = 0;
         ArcClose(RamFileId);
-        if (!OptionalRamDisk)
-            UiMessageBox("Failed to read RAM disk.");
         return Status;
     }
 
@@ -2665,6 +2700,7 @@ RamDiskLoadVirtualFile(
         }
 
         /* Copy the contents */
+        Count = 0;
         Status = ArcRead(RamFileId,
                          (PVOID)((ULONG_PTR)RamDiskBase + (ULONG_PTR)TotalRead),
                          CurrentChunk,
@@ -2673,12 +2709,12 @@ RamDiskLoadVirtualFile(
         /* Check for success */
         if ((Status != ESUCCESS) || (Count != CurrentChunk))
         {
+            RamDiskSetFailure("Read failed at byte %llu of %llu (%lu%%) on '%s': ARC status %lu, %lu of %lu bytes read.",
+                              TotalRead, RamDiskFileSize, LastPercent, FileName, Status, Count, CurrentChunk);
             MmFreeMemory(RamDiskBase);
             RamDiskBase = NULL;
             RamDiskFileSize = 0;
             ArcClose(RamFileId);
-            if (!OptionalRamDisk)
-                UiMessageBox("Failed to read RAM disk.");
             return ((Status != ESUCCESS) ? Status : EIO);
         }
 
@@ -2700,6 +2736,8 @@ RamDiskInitialize(
     IN PCSTR DefaultPath OPTIONAL)
 {
     RamDiskErrorShown = FALSE;
+    RamDiskFailureText[0] = ANSI_NULL;
+    DebugClearLastError();
 
     TRACE("RamDiskInitialize: Begin (Init=%s)\n", InitRamDisk ? "true" : "false");
 
@@ -2722,7 +2760,10 @@ RamDiskInitialize(
     {
         /* We initialize the initial Ramdisk: it should be present in memory */
         if (!gInitRamDiskBase || gInitRamDiskSize == 0)
+        {
+            RamDiskSetFailure("No RAM disk image was loaded by the firmware.");
             return ENODEV;
+        }
 
         // TODO: Handle SDI image.
 
@@ -2899,9 +2940,9 @@ RamDiskInitialize(
         }
 
         if (*FileName)
-            Status = RamDiskLoadVirtualFile(FileName, DefaultPath, OptionalRamDisk);
+            Status = RamDiskLoadVirtualFile(FileName, DefaultPath);
         else
-            Status = RamDiskLoadVirtualFile(DefaultPath, NULL, OptionalRamDisk);
+            Status = RamDiskLoadVirtualFile(DefaultPath, NULL);
         if (Status != ESUCCESS)
             return Status;
 

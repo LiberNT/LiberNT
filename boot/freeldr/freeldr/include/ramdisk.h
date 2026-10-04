@@ -29,6 +29,9 @@ RamDiskInitialize(
     IN PCSTR LoadOptions OPTIONAL,
     IN PCSTR DefaultPath OPTIONAL);
 
+PCSTR
+RamDiskGetFailureText(VOID);
+
 ULONGLONG
 RamDiskGetRequestedSize(VOID);
 

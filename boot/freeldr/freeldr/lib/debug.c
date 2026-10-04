@@ -57,6 +57,9 @@ ULONG ComPortBaudRate = DEFAULT_DEBUG_BAUD_RATE;
 PUCHAR ComPortAddress = NULL;
 
 BOOLEAN DebugStartOfLine = TRUE;
+static BOOLEAN DebugForceScreen = FALSE;
+static BOOLEAN DebugScreenDisabled = FALSE;
+static CHAR DebugLastError[256];
 
 #if defined(UEFIBOOT) && (defined(_M_ARM64) || defined(_M_RISCV64))
 static VOID
@@ -247,7 +250,7 @@ VOID DebugPrintChar(UCHAR Character)
     {
         WRITE_PORT_UCHAR((PUCHAR)BOCHS_OUTPUT_PORT, Character);
     }
-    if (DebugPort & SCREEN)
+    if ((DebugPort & SCREEN) || DebugForceScreen)
     {
         MachConsPutChar(Character);
     }
@@ -295,6 +298,8 @@ DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, .
         return;
     }
 
+    DebugForceScreen = (Level == ERR_LEVEL) && !DebugScreenDisabled && MachVtbl.ConsPutChar;
+
     /* Print the header if we have started a new line */
     if (DebugStartOfLine)
     {
@@ -327,6 +332,30 @@ DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, .
     {
         DebugPrintChar(*ptr++);
     }
+
+    DebugForceScreen = FALSE;
+
+    if (Level == ERR_LEVEL)
+    {
+        SIZE_T Length;
+
+        RtlStringCbCopyA(DebugLastError, sizeof(DebugLastError), Buffer);
+        Length = strlen(DebugLastError);
+        while (Length && (DebugLastError[Length - 1] == '\n' || DebugLastError[Length - 1] == '\r'))
+            DebugLastError[--Length] = ANSI_NULL;
+    }
+}
+
+PCSTR
+DebugGetLastError(VOID)
+{
+    return DebugLastError;
+}
+
+VOID
+DebugClearLastError(VOID)
+{
+    DebugLastError[0] = ANSI_NULL;
 }
 
 VOID
@@ -366,6 +395,7 @@ VOID
 DebugDisableScreenPort(VOID)
 {
     DebugPort &= ~SCREEN;
+    DebugScreenDisabled = TRUE;
 }
 
 static BOOLEAN

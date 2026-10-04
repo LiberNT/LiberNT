@@ -48,6 +48,8 @@
     VOID    DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, ...);
     VOID    DebugDumpBuffer(ULONG Mask, PVOID Buffer, ULONG Length);
     VOID    DebugDisableScreenPort(VOID);
+    PCSTR   DebugGetLastError(VOID);
+    VOID    DebugClearLastError(VOID);
     VOID    DbgParseDebugChannels(PCHAR Value);
 
     #define ERR_LEVEL      0x1
@@ -121,6 +123,8 @@ void    MEMORY_WRITE_BREAKPOINT4(unsigned long addr);
     #define BugCheck(fmt, ...)
     #define DbgDumpBuffer(mask, buf, len)
     #define DebugDisableScreenPort()
+    #define DebugGetLastError() ""
+    #define DebugClearLastError()
     #define DbgParseDebugChannels(val)
 
 #endif // DBG

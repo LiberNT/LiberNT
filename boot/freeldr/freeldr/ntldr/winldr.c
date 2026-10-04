@@ -1583,15 +1583,16 @@ LoadAndBootWindows(
         Status = RamDiskInitialize(FALSE, BootOptions, SystemPartition);
         if (Status != ESUCCESS)
         {
-            if (FileName && (FileNameLength >= 7))
+            if (FileName && (FileNameLength > 7))
             {
                 FileName += 7; FileNameLength -= 7;
-                UiMessageBox("Failed to load RAM disk file '%.*s'",
-                             FileNameLength, FileName);
+                UiMessageBox("Failed to load RAM disk file '%.*s'.\n%s",
+                             FileNameLength, FileName, RamDiskGetFailureText());
             }
             else
             {
-                UiMessageBox("Failed to initialize RAM disk");
+                UiMessageBox("Failed to load the RAM disk from '%s'.\n%s",
+                             SystemPartition, RamDiskGetFailureText());
             }
             return Status;
         }
