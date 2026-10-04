@@ -612,9 +612,9 @@ i8042PnpStartDevice(
         WARN_(I8042PRT, "Some required resources were not found in allocated resources list\n");
         return STATUS_INSUFFICIENT_RESOURCES;
     }
-    else if (DeviceExtension->Type == Mouse && (FoundDataPort || FoundControlPort))
+    else if (DeviceExtension->Type == Mouse && FoundDataPort != FoundControlPort)
     {
-        WARN_(I8042PRT, "Too much resources were provided in allocated resources list\n");
+        WARN_(I8042PRT, "Mouse was given only one of the controller ports\n");
         return STATUS_INVALID_PARAMETER;
     }
 
@@ -636,6 +636,11 @@ i8042PnpStartDevice(
         }
         case Mouse:
         {
+            if (FoundDataPort && FoundControlPort && PortDeviceExtension->DataPort == NULL)
+            {
+                PortDeviceExtension->DataPort = DataPort;
+                PortDeviceExtension->ControlPort = ControlPort;
+            }
             RtlCopyMemory(
                 &PortDeviceExtension->MouseInterrupt,
                 &InterruptData,
