@@ -227,7 +227,7 @@ RhReparseToController(
         return STATUS_OBJECT_NAME_NOT_FOUND;
     }
 
-    NewLength = NameInfo->Name.Length + RESOURCE_HUB_CONNECTION_FILE_SIZE;
+    NewLength = NameInfo->Name.Length + sizeof(WCHAR) + RESOURCE_HUB_CONNECTION_FILE_SIZE;
     NewBuffer = ExAllocatePoolWithTag(PagedPool, NewLength, RH_TAG);
     if (!NewBuffer)
     {
