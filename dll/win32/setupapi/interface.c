@@ -146,7 +146,7 @@ SETUP_CreateInterfaceList(
         if (DeviceInstanceW)
         {
             /* Check if device enumerator is not the right one */
-            if (strcmpW(DeviceInstanceW, InstancePath) != 0)
+            if (strcmpiW(DeviceInstanceW, InstancePath) != 0)
                 continue;
         }
 
@@ -173,14 +173,23 @@ SETUP_CreateInterfaceList(
         dwLength = sizeof(KeyBuffer) - sizeof(WCHAR);
         rc = RegQueryValueExW(hKey, ClassGUID, NULL, NULL, (LPBYTE)KeyBuffer, &dwLength);
         RegCloseKey(hKey);
-        if (rc != ERROR_SUCCESS)
-            goto cleanup;
-        KeyBuffer[dwLength / sizeof(WCHAR)] = '\0';
-        KeyBuffer[37] = '\0'; /* Replace the } by a NULL character */
-        if (UuidFromStringW(&KeyBuffer[1], &ClassGuid) != RPC_S_OK)
+        if (rc == ERROR_FILE_NOT_FOUND)
         {
-            rc = ERROR_GEN_FAILURE;
+            ClassGuid = GUID_NULL;
+        }
+        else if (rc != ERROR_SUCCESS)
+        {
             goto cleanup;
+        }
+        else
+        {
+            KeyBuffer[dwLength / sizeof(WCHAR)] = '\0';
+            KeyBuffer[37] = '\0'; /* Replace the } by a NULL character */
+            if (UuidFromStringW(&KeyBuffer[1], &ClassGuid) != RPC_S_OK)
+            {
+                rc = ERROR_GEN_FAILURE;
+                goto cleanup;
+            }
         }
         TRACE("ClassGUID %s\n", debugstr_guid(&ClassGuid));
 
