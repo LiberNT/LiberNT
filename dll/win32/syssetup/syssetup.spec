@@ -12,7 +12,6 @@
 @ stub CreateLocalAdminAccount
 @ stub CreateLocalAdminAccountEx
 @ stub CreateLocalUserAccount
-@ stdcall CriticalDeviceCoInstaller(long ptr ptr ptr)
 @ stub DevInstallW
 @ stdcall DeviceBayClassInstaller(long ptr ptr)
 @ stdcall DiskPropPageProvider(ptr ptr long)
