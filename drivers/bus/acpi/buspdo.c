@@ -679,7 +679,6 @@ BuspRegisterConnectionResource(
     _In_ UCHAR ConnectionClass,
     _In_ UCHAR ConnectionType);
 
-#ifdef _M_ARM64
 static
 ULONG
 BuspGpioInterruptCount(
@@ -738,10 +737,6 @@ BuspGpioInterruptVector(
                                    CM_RESOURCE_CONNECTION_CLASS_GPIO, CM_RESOURCE_CONNECTION_TYPE_GPIO_IO);
     return TRUE;
 }
-#else
-#define BuspGpioInterruptCount(DeviceData, Resource) 0
-#define BuspGpioInterruptVector(DeviceData, Resource, ResourceIndex, PinIndex, Gsiv) FALSE
-#endif
 
 
 static
@@ -1734,6 +1729,13 @@ BuspCreateRequirementsListFromAcpiResources(
             BuspRecordPciRootBusRange(DeviceData, RootBusNumber, RootBusNumber);
     }
 
+    RequirementsList->List[0].Count = (ULONG)(RequirementDescriptor - RequirementsList->List[0].Descriptors);
+    if (RequirementsList->List[0].Count == 0)
+    {
+        ExFreePoolWithTag(RequirementsList, 'RpcA');
+        return STATUS_SUCCESS;
+    }
+
     *RequirementsListOut = RequirementsList;
     return STATUS_SUCCESS;
 }
@@ -2398,6 +2400,14 @@ BuspCreateResourceListFromAcpiResources(
         ResourceDescriptor++;
         if (!DeviceData->HasPciRootBusRange)
             BuspRecordPciRootBusRange(DeviceData, RootBusNumber, RootBusNumber);
+    }
+
+    ResourceList->List[0].PartialResourceList.Count =
+        (ULONG)(ResourceDescriptor - ResourceList->List[0].PartialResourceList.PartialDescriptors);
+    if (ResourceList->List[0].PartialResourceList.Count == 0)
+    {
+        ExFreePoolWithTag(ResourceList, 'RpcA');
+        return STATUS_SUCCESS;
     }
 
     *ResourceListOut = ResourceList;

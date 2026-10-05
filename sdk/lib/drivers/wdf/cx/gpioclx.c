@@ -9,10 +9,8 @@
 #include <gpio.h>
 #include <gpioclx.h>
 #include <acpiioct.h>
-#ifdef _M_ARM64
-#include <ndk/haltypes.h>
 #include <reactos/drivers/reshubio.h>
-#endif
+#include <ndk/haltypes.h>
 
 #define GPIOCLX_MAX_CONNECTION_PINS 64
 #define GPIOCLX_CLIENT_VERSION_MAX 4
@@ -59,7 +57,6 @@ typedef struct _GPIOCLX_DEVICE_CONTEXT
     UCHAR LineMode[GPIOCLX_MAX_LINES];
     UCHAR LinePolarity[GPIOCLX_MAX_LINES];
     ULONG LineGsiv[GPIOCLX_MAX_LINES];
-#ifdef _M_ARM64
     HAL_SECONDARY_INTERRUPT_INFORMATION HalInfo;
     CHAR OwnerName[64];
     USHORT OwnerNameLength;
@@ -68,7 +65,6 @@ typedef struct _GPIOCLX_DEVICE_CONTEXT
     BOOLEAN WorkQueued;
     ULONG PendingCount;
     struct { ULONG Gsiv; KINTERRUPT_MODE Mode; KINTERRUPT_POLARITY Polarity; BOOLEAN Enable; } Pending[64];
-#endif
     PGPIO_CLIENT_REGISTRATION_PACKET Packet;
     PGPIOCLX_CONTROLLER Controller;
     CLIENT_CONTROLLER_BASIC_INFORMATION Info;
@@ -133,6 +129,10 @@ static NTSTATUS GpioCxParseDescriptor(_In_ PGPIOCLX_DEVICE_CONTEXT Device,
 #define GPIOCLX_ACPI_IO_RESTRICTION_MASK 0x03
 #define GPIOCLX_ACPI_IO_RESTRICTION_INPUT 0x01
 #define GPIOCLX_ACPI_IO_RESTRICTION_OUTPUT 0x02
+#define GPIOCLX_ACPI_INT_EDGE 0x0001
+#define GPIOCLX_ACPI_INT_POLARITY_MASK 0x0006
+#define GPIOCLX_ACPI_INT_POLARITY_LOW 0x0002
+#define GPIOCLX_ACPI_INT_POLARITY_BOTH 0x0004
 
 static
 PGPIOCLX_DEVICE_CONTEXT
@@ -240,7 +240,6 @@ GpioCxEvtInterruptIsr(
         Packet->CLIENT_ClearActiveInterrupts(Context, &Clear);
     }
 
-#ifdef _M_ARM64
     {
         ULONG64 Active = Query.ActiveMask;
 
@@ -266,23 +265,24 @@ GpioCxEvtInterruptIsr(
             }
         }
     }
-#endif
 
     Bank->PendingMask |= Query.ActiveMask;
     WdfInterruptQueueDpcForIsr(Interrupt);
     return TRUE;
 }
 
-#ifdef _M_ARM64
 static
 NTSTATUS
 GpioCxResolveInterruptLine(
     _In_ PGPIOCLX_DEVICE_CONTEXT Device,
     _In_ ULONG Gsiv,
-    _Out_ PGPIOCLX_FILE_CONTEXT Line)
+    _Out_ PGPIOCLX_FILE_CONTEXT Line,
+    _Out_ KINTERRUPT_MODE *Mode,
+    _Out_ KINTERRUPT_POLARITY *Polarity)
 {
     PRH_QUERY_CONNECTION_PROPERTIES_OUTPUT_BUFFER Properties;
     LARGE_INTEGER ConnectionId;
+    USHORT Flags;
     NTSTATUS Status;
 
     ConnectionId.QuadPart = (LONGLONG)RH_SECONDARY_INTERRUPT_CONNECTION_ID(Gsiv);
@@ -291,6 +291,17 @@ GpioCxResolveInterruptLine(
         return Status;
     RtlZeroMemory(Line, sizeof(*Line));
     Status = GpioCxParseDescriptor(Device, Properties, GPIOCLX_ACPI_GPIO_CONNECTION_INT, Line);
+    if (NT_SUCCESS(Status))
+    {
+        Flags = ((PGPIOCLX_ACPI_GPIO_DESCRIPTOR)Properties->ConnectionProperties)->InterruptIoFlags;
+        *Mode = (Flags & GPIOCLX_ACPI_INT_EDGE) ? Latched : LevelSensitive;
+        if ((Flags & GPIOCLX_ACPI_INT_POLARITY_MASK) == GPIOCLX_ACPI_INT_POLARITY_LOW)
+            *Polarity = InterruptActiveLow;
+        else if ((Flags & GPIOCLX_ACPI_INT_POLARITY_MASK) == GPIOCLX_ACPI_INT_POLARITY_BOTH)
+            *Polarity = InterruptActiveBoth;
+        else
+            *Polarity = InterruptActiveHigh;
+    }
     ExFreePoolWithTag(Properties, WDFCX_TAG);
     if (NT_SUCCESS(Status) && Line->PinCount != 1)
         Status = STATUS_NOT_SUPPORTED;
@@ -314,7 +325,7 @@ GpioCxApplyInterruptLine(
 
     if (PinsPerBank == 0 || !Device->Started)
         return;
-    if (!NT_SUCCESS(GpioCxResolveInterruptLine(Device, Gsiv, &Line)) || Line.BankId >= Device->BankCount)
+    if (!NT_SUCCESS(GpioCxResolveInterruptLine(Device, Gsiv, &Line, &Mode, &Polarity)) || Line.BankId >= Device->BankCount)
         return;
     Bank = &Device->Banks[Line.BankId];
     LineNumber = (ULONG)Line.BankId * PinsPerBank + Line.Pins[0];
@@ -545,10 +556,6 @@ GpioCxUnregisterSecondaryController(
     Device->PendingCount = 0;
     KeReleaseSpinLock(&Device->PendingLock, OldIrql);
 }
-#else
-#define GpioCxRegisterSecondaryController(DeviceHandle, Device) ((void)0)
-#define GpioCxUnregisterSecondaryController(Device) ((void)0)
-#endif
 
 static
 VOID
@@ -719,13 +726,11 @@ GpioCxEvtPostReleaseHardware(
     for (Index = 0; Index < Device->BankCount; Index++)
         Device->Banks[Index].Interrupt = NULL;
     GpioCxFreeBanks(Device);
-#ifdef _M_ARM64
     if (Device->WorkItem != NULL)
     {
         IoFreeWorkItem(Device->WorkItem);
         Device->WorkItem = NULL;
     }
-#endif
 
     return STATUS_SUCCESS;
 }
