@@ -1043,6 +1043,44 @@ PspExitNormalApc(IN PVOID NormalContext,
     Thread->Tcb.ApcState.UserApcPending = TRUE;
 }
 
+static
+NTSTATUS
+PspTakePendingExitStatus(IN PETHREAD Thread,
+                         IN NTSTATUS ExitStatus)
+{
+    PKAPC_STATE ApcState = Thread->Tcb.ApcStatePointer[OriginalApcEnvironment];
+    KLOCK_QUEUE_HANDLE ApcLock;
+    PLIST_ENTRY Entry;
+    PKAPC Apc, ExitApc = NULL;
+    KIRQL OldIrql;
+    ULONG Mode;
+
+    KeRaiseIrql(APC_LEVEL, &OldIrql);
+    KiAcquireApcLockRaiseToSynch(&Thread->Tcb, &ApcLock);
+    for (Mode = KernelMode; (Mode <= UserMode) && !ExitApc; Mode++)
+    {
+        for (Entry = ApcState->ApcListHead[Mode].Flink;
+             Entry != &ApcState->ApcListHead[Mode];
+             Entry = Entry->Flink)
+        {
+            Apc = CONTAINING_RECORD(Entry, KAPC, ApcListEntry);
+            if (Apc->KernelRoutine == PsExitSpecialApc)
+            {
+                ExitApc = Apc;
+                ExitStatus = PtrToUlong(Apc->NormalContext);
+                break;
+            }
+        }
+    }
+    KiReleaseApcLock(&ApcLock);
+
+    if (ExitApc && !KeRemoveQueueApc(ExitApc)) ExitApc = NULL;
+    KeLowerIrql(OldIrql);
+
+    if (ExitApc) PspExitApcRundown(ExitApc);
+    return ExitStatus;
+}
+
 /*
  * See "Windows Internals" - Chapter 13, Page 49
  */
@@ -1075,7 +1113,8 @@ PspTerminateThreadByPointer(IN PETHREAD Thread,
         ASSERT_IRQL_EQUAL(PASSIVE_LEVEL);
 
         /* Mark it as terminated */
-        PspSetCrossThreadFlag(Thread, CT_TERMINATED_BIT);
+        if (PspSetCrossThreadFlag(Thread, CT_TERMINATED_BIT) & CT_TERMINATED_BIT)
+            ExitStatus = PspTakePendingExitStatus(Thread, ExitStatus);
 
         /* Directly terminate the thread */
         PspExitThread(ExitStatus);
