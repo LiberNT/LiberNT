@@ -118,6 +118,7 @@ typedef struct _FDO_DEVICE_EXTENSION
     MINIPORT Miniport;
     PDMA_ADAPTER DmaAdapter;
     PDMA_ADAPTER CommonBufferAdapter;
+    BOOLEAN DataDma64;
     KSPIN_LOCK DmaBufferLock;
     LIST_ENTRY DmaBuffers;
     SLIST_HEADER FreeSrbExtensions;
@@ -242,6 +243,12 @@ typedef struct _STOR_SRB_CONTEXT
     ULONG SglAllocationSize;
     ULONG SrbExtensionSize;
     struct _FDO_DEVICE_EXTENSION* FdoExtension;
+    PMDL BouncePages;
+    PMDL BounceMdl;
+    PVOID BounceVa;
+    PVOID OriginalDataBuffer;
+    PVOID OriginalSystemVa;
+    ULONG BounceLength;
 } STOR_SRB_CONTEXT, *PSTOR_SRB_CONTEXT;
 
 #define PortGetSrbContext(Irp)  ((PSTOR_SRB_CONTEXT)((Irp)->Tail.Overlay.DriverContext[0]))

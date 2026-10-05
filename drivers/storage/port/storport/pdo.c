@@ -522,6 +522,99 @@ static NTSTATUS PortBuildExtendedSrb(_In_ PFDO_DEVICE_EXTENSION FdoExtension, _I
     return STATUS_SUCCESS;
 }
 
+static BOOLEAN
+PortNeedsDoubleBuffer(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension,
+    _In_ PMDL Mdl,
+    _In_ ULONG Length)
+{
+    PPFN_NUMBER Pages;
+    ULONG Count, Index;
+
+    if (FdoExtension->DataDma64)
+        return FALSE;
+
+    Pages = MmGetMdlPfnArray(Mdl);
+    Count = ADDRESS_AND_SIZE_TO_SPAN_PAGES(MmGetMdlVirtualAddress(Mdl), Length);
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Pages[Index] >= (PFN_NUMBER)(0x100000000ULL >> PAGE_SHIFT))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static NTSTATUS
+PortAllocateDoubleBuffer(
+    _Inout_ PSTOR_SRB_CONTEXT SrbContext,
+    _In_ PMDL Mdl,
+    _In_ PSCSI_REQUEST_BLOCK Srb)
+{
+    PHYSICAL_ADDRESS Low, High, Skip;
+    ULONG Length = Srb->DataTransferLength;
+    BOOLEAN DataOut = !!(Srb->SrbFlags & SRB_FLAGS_DATA_OUT);
+
+    SrbContext->OriginalSystemVa = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
+    if (SrbContext->OriginalSystemVa == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Low.QuadPart = 0;
+    High.QuadPart = 0xFFFFFFFF;
+    Skip.QuadPart = 0;
+    SrbContext->BouncePages = MmAllocatePagesForMdlEx(Low, High, Skip, ROUND_TO_PAGES(Length), MmCached,
+        MM_ALLOCATE_FULLY_REQUIRED | (DataOut ? MM_DONT_ZERO_ALLOCATION : 0));
+    if (SrbContext->BouncePages == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    SrbContext->BounceVa = MmMapLockedPagesSpecifyCache(SrbContext->BouncePages, KernelMode, MmCached,
+                                                        NULL, FALSE, NormalPagePriority);
+    if (SrbContext->BounceVa != NULL)
+    {
+        SrbContext->BounceMdl = IoAllocateMdl(SrbContext->BounceVa, Length, FALSE, FALSE, NULL);
+        if (SrbContext->BounceMdl != NULL)
+        {
+            MmBuildMdlForNonPagedPool(SrbContext->BounceMdl);
+            SrbContext->BounceLength = Length;
+            SrbContext->OriginalDataBuffer = Srb->DataBuffer;
+            if (DataOut)
+                RtlCopyMemory(SrbContext->BounceVa, SrbContext->OriginalSystemVa, Length);
+            Srb->DataBuffer = SrbContext->BounceVa;
+            return STATUS_SUCCESS;
+        }
+        MmUnmapLockedPages(SrbContext->BounceVa, SrbContext->BouncePages);
+        SrbContext->BounceVa = NULL;
+    }
+
+    MmFreePagesFromMdl(SrbContext->BouncePages);
+    ExFreePool(SrbContext->BouncePages);
+    SrbContext->BouncePages = NULL;
+    return STATUS_INSUFFICIENT_RESOURCES;
+}
+
+static VOID
+PortFreeDoubleBuffer(
+    _Inout_ PSTOR_SRB_CONTEXT SrbContext)
+{
+    PSCSI_REQUEST_BLOCK Srb = SrbContext->LegacySrb;
+    UCHAR SrbStatus = SRB_STATUS(Srb->SrbStatus);
+
+    if (!SrbContext->WriteToDevice &&
+        ((SrbStatus == SRB_STATUS_SUCCESS) || (SrbStatus == SRB_STATUS_DATA_OVERRUN)))
+    {
+        RtlCopyMemory(SrbContext->OriginalSystemVa, SrbContext->BounceVa,
+                      min(Srb->DataTransferLength, SrbContext->BounceLength));
+    }
+    Srb->DataBuffer = SrbContext->OriginalDataBuffer;
+
+    IoFreeMdl(SrbContext->BounceMdl);
+    MmUnmapLockedPages(SrbContext->BounceVa, SrbContext->BouncePages);
+    MmFreePagesFromMdl(SrbContext->BouncePages);
+    ExFreePool(SrbContext->BouncePages);
+    SrbContext->BounceMdl = NULL;
+    SrbContext->BounceVa = NULL;
+    SrbContext->BouncePages = NULL;
+}
+
 VOID PortFreeSrbContext(_In_ PIRP Irp)
 {
     PSTOR_SRB_CONTEXT SrbContext;
@@ -543,6 +636,9 @@ VOID PortFreeSrbContext(_In_ PIRP Irp)
             FdoExtension->DmaAdapter, SrbContext->DmaList, SrbContext->WriteToDevice);
         KeLowerIrql(OldIrql);
     }
+
+    if (SrbContext->BounceVa != NULL)
+        PortFreeDoubleBuffer(SrbContext);
 
     if (SrbContext->Sgl != NULL)
     {
@@ -665,6 +761,7 @@ PortSubmitSrb(
 {
     PSTOR_SRB_CONTEXT SrbContext;
     PVOID MiniportSrb;
+    PMDL DmaMdl;
     ULONG SrbExtensionSize;
     NTSTATUS Status;
     KIRQL Irql;
@@ -746,9 +843,19 @@ PortSubmitSrb(
             goto Fail;
         }
         SrbContext->WriteToDevice = !!(Srb->SrbFlags & SRB_FLAGS_DATA_OUT);
+        DmaMdl = Irp->MdlAddress;
+        if (PortNeedsDoubleBuffer(FdoExtension, Irp->MdlAddress, Srb->DataTransferLength))
+        {
+            Status = PortAllocateDoubleBuffer(SrbContext, Irp->MdlAddress, Srb);
+            if (!NT_SUCCESS(Status))
+                goto Fail;
+            if (MiniportSrb != Srb)
+                ((PSTORAGE_REQUEST_BLOCK)MiniportSrb)->DataBuffer = SrbContext->BounceVa;
+            DmaMdl = SrbContext->BounceMdl;
+        }
         KeRaiseIrql(DISPATCH_LEVEL, &Irql);
         Status = Adapter->DmaOperations->GetScatterGatherList(Adapter, DeviceObject,
-            Irp->MdlAddress, MmGetMdlVirtualAddress(Irp->MdlAddress),
+            DmaMdl, MmGetMdlVirtualAddress(DmaMdl),
             Srb->DataTransferLength, PortDmaListControl, Irp, SrbContext->WriteToDevice);
         KeLowerIrql(Irql);
         if (!NT_SUCCESS(Status))

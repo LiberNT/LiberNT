@@ -72,6 +72,7 @@ PortInitializeDma(
     if (!FdoExtension->DmaAdapter)
         return STATUS_NOT_SUPPORTED;
 
+    FdoExtension->DataDma64 = Data64;
     FdoExtension->CommonBufferAdapter = FdoExtension->DmaAdapter;
     if (Data64 && !Common64)
     {
