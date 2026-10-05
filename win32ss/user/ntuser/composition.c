@@ -4179,12 +4179,18 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
                 return STATUS_NOT_FOUND;
             if (Request.Window != Entry->Redirect.DxWindow ||
                 (Entry->Redirect.DxFlags & DWM_DX_PUBLISH_LAYER) ||
-                !IntCompositionUpdateDxPlacement(SourceWnd, TopWnd,
-                                                 &Entry->Redirect) ||
                 Request.UpdateId == 0 ||
                 Request.UpdateId != Entry->Redirect.DxIssuedUpdateId)
             {
                 return STATUS_INVALID_PARAMETER;
+            }
+            if (!IntCompositionUpdateDxPlacement(SourceWnd, TopWnd, &Entry->Redirect))
+            {
+                if (Request.UpdateId > Entry->Redirect.DxConsumedUpdateId)
+                    Entry->Redirect.DxConsumedUpdateId = Request.UpdateId;
+                if (Entry->Redirect.DxReadyEvent != NULL)
+                    KeSetEvent(Entry->Redirect.DxReadyEvent, IO_NO_INCREMENT, FALSE);
+                return STATUS_NOT_FOUND;
             }
 
             if (Request.Flags & DWM_DX_UPDATE_CANCEL)
@@ -4206,15 +4212,22 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
             /* The ICD update rectangle addresses the client-sized shared
              * allocation. The compositor applies rcClient when placing that
              * allocation in the top-level window backing store. */
-            if ((Request.Flags & ~1u) != 0 ||
-                Request.UpdateRect.left < 0 ||
-                Request.UpdateRect.top < 0 ||
-                Request.UpdateRect.right <= Request.UpdateRect.left ||
-                Request.UpdateRect.bottom <= Request.UpdateRect.top ||
-                (ULONG)Request.UpdateRect.right > Entry->Redirect.DxInfo.Width ||
-                (ULONG)Request.UpdateRect.bottom > Entry->Redirect.DxInfo.Height)
-            {
+            if ((Request.Flags & ~1u) != 0)
                 return STATUS_INVALID_PARAMETER;
+            RECTL_vOffsetRect(&Request.UpdateRect,
+                              SourceWnd->rcWindow.left - SourceWnd->rcClient.left,
+                              SourceWnd->rcWindow.top - SourceWnd->rcClient.top);
+            Request.UpdateRect.left = max(Request.UpdateRect.left, 0);
+            Request.UpdateRect.top = max(Request.UpdateRect.top, 0);
+            Request.UpdateRect.right = min(Request.UpdateRect.right, (LONG)Entry->Redirect.DxInfo.Width);
+            Request.UpdateRect.bottom = min(Request.UpdateRect.bottom, (LONG)Entry->Redirect.DxInfo.Height);
+            if (Request.UpdateRect.right <= Request.UpdateRect.left ||
+                Request.UpdateRect.bottom <= Request.UpdateRect.top)
+            {
+                Request.UpdateRect.left = 0;
+                Request.UpdateRect.top = 0;
+                Request.UpdateRect.right = (LONG)Entry->Redirect.DxInfo.Width;
+                Request.UpdateRect.bottom = (LONG)Entry->Redirect.DxInfo.Height;
             }
 
             Entry->Redirect.DxPublishedUpdateId = Request.UpdateId;
