@@ -653,13 +653,145 @@ PortSendInquiry(
 
 
 
+#define PORT_REPORT_LUNS_LENGTH (8 + 8 * 256)
+
+static
+NTSTATUS
+PortReportLuns(
+    _In_ PPDO_DEVICE_EXTENSION PdoExtension,
+    _In_ ULONG MaximumLuns,
+    _Out_writes_(MaximumLuns) PBOOLEAN Present)
+{
+    IO_STATUS_BLOCK IoStatusBlock;
+    SCSI_REQUEST_BLOCK Srb;
+    KEVENT Event;
+    PUCHAR Buffer, Entry;
+    PCDB Cdb;
+    PIRP Irp;
+    ULONG Length, Offset, Lun;
+    UCHAR SrbStatus;
+    NTSTATUS Status = STATUS_UNSUCCESSFUL;
+
+    Buffer = ExAllocatePoolWithTag(NonPagedPool, PORT_REPORT_LUNS_LENGTH + SENSE_BUFFER_SIZE, TAG_INQUIRY_DATA);
+    if (Buffer == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(Buffer, PORT_REPORT_LUNS_LENGTH + SENSE_BUFFER_SIZE);
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_SCSI_EXECUTE_IN,
+                                        PdoExtension->Device,
+                                        NULL,
+                                        0,
+                                        Buffer,
+                                        PORT_REPORT_LUNS_LENGTH,
+                                        TRUE,
+                                        &Event,
+                                        &IoStatusBlock);
+    if (Irp == NULL)
+    {
+        ExFreePoolWithTag(Buffer, TAG_INQUIRY_DATA);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    RtlZeroMemory(&Srb, sizeof(SCSI_REQUEST_BLOCK));
+    Srb.Length = sizeof(SCSI_REQUEST_BLOCK);
+    Srb.OriginalRequest = Irp;
+    Srb.PathId = PdoExtension->Bus;
+    Srb.TargetId = PdoExtension->Target;
+    Srb.Lun = PdoExtension->Lun;
+    Srb.Function = SRB_FUNCTION_EXECUTE_SCSI;
+    Srb.SrbFlags = SRB_FLAGS_DATA_IN | SRB_FLAGS_DISABLE_SYNCH_TRANSFER | SRB_FLAGS_NO_QUEUE_FREEZE;
+    Srb.TimeOutValue = 4;
+    Srb.CdbLength = 12;
+    Srb.SenseInfoBuffer = Buffer + PORT_REPORT_LUNS_LENGTH;
+    Srb.SenseInfoBufferLength = SENSE_BUFFER_SIZE;
+    Srb.DataBuffer = Buffer;
+    Srb.DataTransferLength = PORT_REPORT_LUNS_LENGTH;
+    IoGetNextIrpStackLocation(Irp)->Parameters.Scsi.Srb = &Srb;
+
+    Cdb = (PCDB)Srb.Cdb;
+    Cdb->REPORT_LUNS.OperationCode = SCSIOP_REPORT_LUNS;
+    Cdb->REPORT_LUNS.AllocationLength[0] = (UCHAR)(PORT_REPORT_LUNS_LENGTH >> 24);
+    Cdb->REPORT_LUNS.AllocationLength[1] = (UCHAR)(PORT_REPORT_LUNS_LENGTH >> 16);
+    Cdb->REPORT_LUNS.AllocationLength[2] = (UCHAR)(PORT_REPORT_LUNS_LENGTH >> 8);
+    Cdb->REPORT_LUNS.AllocationLength[3] = (UCHAR)PORT_REPORT_LUNS_LENGTH;
+
+    if (IoCallDriver(PdoExtension->Device, Irp) == STATUS_PENDING)
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+
+    SrbStatus = SRB_STATUS(Srb.SrbStatus);
+    if (((SrbStatus == SRB_STATUS_SUCCESS) || (SrbStatus == SRB_STATUS_DATA_OVERRUN)) &&
+        (Srb.DataTransferLength >= 8))
+    {
+        Length = ((ULONG)Buffer[0] << 24) | ((ULONG)Buffer[1] << 16) | ((ULONG)Buffer[2] << 8) | Buffer[3];
+        Length = min(Length, Srb.DataTransferLength - 8);
+        for (Offset = 0; Offset + 8 <= Length; Offset += 8)
+        {
+            Entry = Buffer + 8 + Offset;
+            if ((Entry[0] >> 6) == 0)
+            {
+                if (Entry[0] != 0)
+                    continue;
+                Lun = Entry[1];
+            }
+            else if ((Entry[0] >> 6) == 1)
+            {
+                Lun = ((ULONG)(Entry[0] & 0x3F) << 8) | Entry[1];
+            }
+            else
+            {
+                continue;
+            }
+
+            if (Lun < MaximumLuns)
+                Present[Lun] = TRUE;
+        }
+        Status = STATUS_SUCCESS;
+    }
+
+    ExFreePoolWithTag(Buffer, TAG_INQUIRY_DATA);
+    return Status;
+}
+
+
+static
+BOOLEAN
+PortScanLun(
+    _In_ PPDO_DEVICE_EXTENSION PdoExtension)
+{
+    NTSTATUS Status;
+
+    Status = PortSendInquiry(PdoExtension);
+    if (NT_SUCCESS(Status) &&
+        (PdoExtension->InquiryBuffer->DeviceTypeQualifier == DEVICE_QUALIFIER_NOT_SUPPORTED))
+    {
+        Status = STATUS_NO_SUCH_DEVICE;
+    }
+    DPRINT("PortSendInquiry returned 0x%08lx\n", Status);
+    if (!NT_SUCCESS(Status))
+    {
+        PortDeletePdo(PdoExtension);
+        return FALSE;
+    }
+
+    PortReadSerialNumber(PdoExtension);
+    DPRINT("VendorId: %.8s\n", PdoExtension->InquiryBuffer->VendorId);
+    DPRINT("ProductId: %.16s\n", PdoExtension->InquiryBuffer->ProductId);
+    DPRINT("ProductRevisionLevel: %.4s\n", PdoExtension->InquiryBuffer->ProductRevisionLevel);
+    DPRINT("VendorSpecific: %.20s\n", PdoExtension->InquiryBuffer->VendorSpecific);
+    return TRUE;
+}
+
+
 static
 NTSTATUS
 PortFdoScanBus(
     _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
 {
     PPDO_DEVICE_EXTENSION PdoExtension;
-    ULONG Bus, Target; //, Lun;
+    BOOLEAN Present[256];
+    BOOLEAN Reported;
+    ULONG Bus, Target, Lun, MaximumLuns;
     NTSTATUS Status;
 
     DPRINT("PortFdoScanBus(%p)\n", DeviceExtension);
@@ -667,6 +799,8 @@ PortFdoScanBus(
     DPRINT("NumberOfBuses: %lu\n", DeviceExtension->Miniport.PortConfig.NumberOfBuses);
     DPRINT("MaximumNumberOfTargets: %lu\n", DeviceExtension->Miniport.PortConfig.MaximumNumberOfTargets);
     DPRINT("MaximumNumberOfLogicalUnits: %lu\n", DeviceExtension->Miniport.PortConfig.MaximumNumberOfLogicalUnits);
+
+    MaximumLuns = DeviceExtension->Miniport.PortConfig.MaximumNumberOfLogicalUnits;
 
     /* Scan all buses */
     for (Bus = 0; Bus < DeviceExtension->Miniport.PortConfig.NumberOfBuses; Bus++)
@@ -678,38 +812,30 @@ PortFdoScanBus(
         {
             DPRINT("  Scanning target %ld:%ld\n", Bus, Target);
 
-            DPRINT("    Scanning logical unit %ld:%ld:%ld\n", Bus, Target, 0);
             Status = PortCreatePdo(DeviceExtension, Bus, Target, 0, &PdoExtension);
-            if (NT_SUCCESS(Status))
+            if (!NT_SUCCESS(Status))
+                continue;
+
+            RtlZeroMemory(Present, sizeof(Present));
+            Reported = NT_SUCCESS(PortReportLuns(PdoExtension, MaximumLuns, Present));
+            if (!Reported)
             {
-                /* Scan LUN 0 */
-                Status = PortSendInquiry(PdoExtension);
-                DPRINT("PortSendInquiry returned 0x%08lx\n", Status);
-                if (!NT_SUCCESS(Status))
-                {
-                    PortDeletePdo(PdoExtension);
-                }
-                else
-                {
-                    PortReadSerialNumber(PdoExtension);
-                    DPRINT("VendorId: %.8s\n", PdoExtension->InquiryBuffer->VendorId);
-                    DPRINT("ProductId: %.16s\n", PdoExtension->InquiryBuffer->ProductId);
-                    DPRINT("ProductRevisionLevel: %.4s\n", PdoExtension->InquiryBuffer->ProductRevisionLevel);
-                    DPRINT("VendorSpecific: %.20s\n", PdoExtension->InquiryBuffer->VendorSpecific);
-                }
+                for (Lun = 1; Lun < MaximumLuns; Lun++)
+                    Present[Lun] = TRUE;
             }
 
-#if 0
-            /* Scan all logical units */
-            for (Lun = 1; Lun < DeviceExtension->Miniport.PortConfig.MaximumNumberOfLogicalUnits; Lun++)
+            if (!PortScanLun(PdoExtension) && !Reported)
+                continue;
+
+            for (Lun = 1; Lun < MaximumLuns; Lun++)
             {
+                if (!Present[Lun])
+                    continue;
+
                 DPRINT("    Scanning logical unit %ld:%ld:%ld\n", Bus, Target, Lun);
-                Status = PortSendInquiry(DeviceExtension->Device, Bus, Target, Lun);
-                DPRINT("PortSendInquiry returned 0x%08lx\n", Status);
-                if (!NT_SUCCESS(Status))
-                    break;
+                if (NT_SUCCESS(PortCreatePdo(DeviceExtension, Bus, Target, Lun, &PdoExtension)))
+                    PortScanLun(PdoExtension);
             }
-#endif
         }
     }
 
