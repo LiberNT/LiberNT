@@ -2718,7 +2718,8 @@ static LONG
 SETUPDI_OpenInterfaceReferenceKey(
         struct DeviceInterface *DevItf,
         REGSAM samDesired,
-        HKEY *phRefKey);
+        HKEY *phRefKey,
+        HKEY *phDevKey);
 
 BOOL WINAPI SetupDiCreateDeviceInterfaceW(
         HDEVINFO DeviceInfoSet,
@@ -2792,7 +2793,7 @@ BOOL WINAPI SetupDiCreateDeviceInterfaceW(
     }
     HeapFree(GetProcessHeap(), 0, Path);
 
-    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, KEY_ALL_ACCESS, &hRefKey);
+    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, KEY_ALL_ACCESS, &hRefKey, NULL);
     if (rc != ERROR_SUCCESS)
     {
         SetLastError(rc);
@@ -2854,7 +2855,8 @@ static LONG
 SETUPDI_OpenInterfaceReferenceKey(
         struct DeviceInterface *DevItf,
         REGSAM samDesired,
-        HKEY *phRefKey)
+        HKEY *phRefKey,
+        HKEY *phDevKey)
 {
     HKEY hKey, hDevKey;
     LPWSTR SymbolicLink;
@@ -2926,7 +2928,10 @@ SETUPDI_OpenInterfaceReferenceKey(
     {
         rc = RegCreateKeyExW(hDevKey, ReferenceString, 0, NULL, 0, samDesired | KEY_QUERY_VALUE | KEY_SET_VALUE, NULL, phRefKey, NULL);
     }
-    RegCloseKey(hDevKey);
+    if (rc == ERROR_SUCCESS && phDevKey)
+        *phDevKey = hDevKey;
+    else
+        RegCloseKey(hDevKey);
     if (rc != ERROR_SUCCESS)
         return rc;
 
@@ -2977,7 +2982,7 @@ HKEY WINAPI SetupDiCreateDeviceInterfaceRegKeyW(
     }
 
     DevItf = (struct DeviceInterface *)DeviceInterfaceData->Reserved;
-    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, samDesired, &hRefKey);
+    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, samDesired, &hRefKey, NULL);
     if (rc != ERROR_SUCCESS)
     {
         SetLastError(rc);
@@ -3024,6 +3029,8 @@ BOOL WINAPI SetupDiDeleteDeviceInterfaceRegKey(
         DWORD Reserved)
 {
     struct DeviceInfoSet *set = (struct DeviceInfoSet *)DeviceInfoSet;
+    HKEY hRefKey;
+    LONG rc;
     BOOL ret = FALSE;
 
     TRACE("%s(%p %p %d)\n", __FUNCTION__, DeviceInfoSet, DeviceInterfaceData, Reserved);
@@ -3042,8 +3049,17 @@ BOOL WINAPI SetupDiDeleteDeviceInterfaceRegKey(
         return FALSE;
     }
 
-    FIXME("%p %p %d\n", DeviceInfoSet, DeviceInterfaceData, Reserved);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    rc = SETUPDI_OpenInterfaceReferenceKey((struct DeviceInterface *)DeviceInterfaceData->Reserved,
+                                           KEY_ALL_ACCESS, &hRefKey, NULL);
+    if (rc == ERROR_SUCCESS)
+    {
+        rc = RegDeleteKeyW(hRefKey, L"Device Parameters");
+        RegCloseKey(hRefKey);
+    }
+    if (rc != ERROR_SUCCESS)
+        SetLastError(rc);
+    else
+        ret = TRUE;
     return ret;
 }
 
@@ -3500,6 +3516,57 @@ static struct DeviceInterface *get_device_interface(HDEVINFO devinfo, SP_DEVICE_
         return NULL;
     }
     return iface;
+}
+
+/***********************************************************************
+ *              SetupDiRemoveDeviceInterface (SETUPAPI.@)
+ */
+BOOL WINAPI SetupDiRemoveDeviceInterface(HDEVINFO DeviceInfoSet, PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData)
+{
+    struct DeviceInterface *DevItf;
+    HKEY hRefKey, hDevKey;
+    LONG rc;
+
+    TRACE("%s(%p %p)\n", __FUNCTION__, DeviceInfoSet, DeviceInterfaceData);
+
+    if (!(DevItf = get_device_interface(DeviceInfoSet, DeviceInterfaceData)))
+        return FALSE;
+
+    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, KEY_ALL_ACCESS, &hRefKey, &hDevKey);
+    if (rc != ERROR_SUCCESS)
+    {
+        SetLastError(rc);
+        return FALSE;
+    }
+    RegDeleteTreeW(hRefKey, NULL);
+    rc = RegDeleteKeyW(hRefKey, L"");
+    RegCloseKey(hRefKey);
+    RegDeleteKeyW(hDevKey, L"");
+    RegCloseKey(hDevKey);
+    if (rc != ERROR_SUCCESS)
+    {
+        SetLastError(rc);
+        return FALSE;
+    }
+
+    DevItf->Flags |= SPINT_REMOVED;
+    return TRUE;
+}
+
+/***********************************************************************
+ *		SetupDiDeleteDeviceInterfaceData (SETUPAPI.@)
+ */
+BOOL WINAPI SetupDiDeleteDeviceInterfaceData(HDEVINFO DeviceInfoSet, PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData)
+{
+    struct DeviceInterface *DevItf;
+
+    TRACE("%s(%p %p)\n", __FUNCTION__, DeviceInfoSet, DeviceInterfaceData);
+
+    if (!(DevItf = get_device_interface(DeviceInfoSet, DeviceInterfaceData)))
+        return FALSE;
+
+    RemoveEntryList(&DevItf->ListEntry);
+    return DestroyDeviceInterface(DevItf);
 }
 
 static DWORD get_device_reg_properties(HKEY base_key, DEVPROPKEY *buf, DWORD buf_len, DWORD *req_len)
