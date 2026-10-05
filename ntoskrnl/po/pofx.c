@@ -156,6 +156,7 @@ PopFxNextAction(
     BOOLEAN Managed = FxHandle->Started && FxHandle->PnpStarted;
     ULONGLONG Now = KeQueryInterruptTime();
     ULONGLONG Wait = 0;
+    ULONGLONG LastIdle = 0;
 
     for (Index = 0; Index < FxHandle->ComponentCount; Index++)
     {
@@ -202,6 +203,8 @@ PopFxNextAction(
                 State->IdleConditionPending = TRUE;
                 return PopFxIdleCondition;
             }
+            if (State->IdleSince > LastIdle)
+                LastIdle = State->IdleSince;
             *IdleState = PopFxSelectIdleState(FxHandle, Index);
             if (State->CurrentIdleState != *IdleState)
             {
@@ -235,8 +238,15 @@ PopFxNextAction(
     if (Managed && AllIdle && FxHandle->DevicePoweredOn &&
         !FxHandle->DevicePowerNotRequiredPending && !FxHandle->DevicePowerRequiredPending)
     {
-        FxHandle->DevicePowerNotRequiredPending = TRUE;
-        return PopFxPowerNotRequired;
+        ULONGLONG Elapsed = Now - LastIdle;
+
+        if (Elapsed >= FxHandle->IdleTimeout)
+        {
+            FxHandle->DevicePowerNotRequiredPending = TRUE;
+            return PopFxPowerNotRequired;
+        }
+        if (Wait == 0 || FxHandle->IdleTimeout - Elapsed < Wait)
+            Wait = FxHandle->IdleTimeout - Elapsed;
     }
 
     if (Wait != 0)
@@ -870,6 +880,7 @@ PoFxSetDeviceIdleTimeout(
     if (!FxHandle->Unregistering)
         FxHandle->IdleTimeout = IdleTimeout;
     KeReleaseSpinLock(&FxHandle->StateLock, OldIrql);
+    PopFxDispatchTransitions(FxHandle);
     ExReleaseRundownProtection(&FxHandle->Rundown);
 }
 
