@@ -244,6 +244,7 @@ DestroyDriverInfoElement(struct DriverInfoElement* driverInfo)
 {
     DereferenceInfFile(driverInfo->InfFileDetails);
     HeapFree(GetProcessHeap(), 0, driverInfo->MatchingId);
+    HeapFree(GetProcessHeap(), 0, driverInfo->InfIds);
     HeapFree(GetProcessHeap(), 0, driverInfo);
     return TRUE;
 }
@@ -251,6 +252,29 @@ DestroyDriverInfoElement(struct DriverInfoElement* driverInfo)
 /***********************************************************************
  *		Helper functions for SetupDiBuildDriverInfoList
  */
+static BOOL
+IsManufacturerCompatible(
+    IN PINFCONTEXT ContextManufacturer)
+{
+    WCHAR TargetOSVersion[LINE_LEN];
+    DWORD FieldCount, i;
+
+    FieldCount = SetupGetFieldCount(ContextManufacturer);
+    if (FieldCount < 2)
+        return TRUE;
+
+    for (i = 2; i <= FieldCount; i++)
+    {
+        if (SetupGetStringFieldW(ContextManufacturer, i, TargetOSVersion, LINE_LEN, NULL) &&
+            SETUPAPI_IsTargetOSVersionCompatible(TargetOSVersion))
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 static BOOL
 AddKnownDriverToList(
     IN PLIST_ENTRY DriverListHead,
@@ -265,12 +289,12 @@ AddKnownDriverToList(
     IN LPCWSTR MatchingId,
     IN FILETIME DriverDate,
     IN DWORDLONG DriverVersion,
-    IN DWORD Rank)
+    IN DWORD Rank,
+    IN LPWSTR InfIds OPTIONAL)
 {
     struct DriverInfoElement *driverInfo = NULL;
     HANDLE hFile = INVALID_HANDLE_VALUE;
     BOOL Result = FALSE;
-    PLIST_ENTRY PreviousEntry;
     BOOL ret = FALSE;
 
     driverInfo = HeapAlloc(GetProcessHeap(), 0, sizeof(struct DriverInfoElement));
@@ -344,29 +368,11 @@ AddKnownDriverToList(
         driverInfo->Info.ProviderName[0] = '\0';
     driverInfo->Info.DriverDate = DriverDate;
     driverInfo->Info.DriverVersion = DriverVersion;
+    driverInfo->InfIds = InfIds;
     ReferenceInfFile(InfFileDetails);
     driverInfo->InfFileDetails = InfFileDetails;
 
-    /* Insert current driver in driver list, according to its rank */
-    PreviousEntry = DriverListHead->Flink;
-    while (PreviousEntry != DriverListHead)
-    {
-        struct DriverInfoElement *CurrentDriver;
-        CurrentDriver = CONTAINING_RECORD(PreviousEntry, struct DriverInfoElement, ListEntry);
-        if (CurrentDriver->Params.Rank > Rank ||
-            (CurrentDriver->Params.Rank == Rank && CurrentDriver->DriverDate.QuadPart < driverInfo->DriverDate.QuadPart))
-        {
-            /* Insert before the current item */
-            InsertHeadList(PreviousEntry->Blink, &driverInfo->ListEntry);
-            break;
-        }
-        PreviousEntry = PreviousEntry->Flink;
-    }
-    if (PreviousEntry == DriverListHead)
-    {
-        /* Insert at the end of the list */
-        InsertTailList(DriverListHead, &driverInfo->ListEntry);
-    }
+    InsertTailList(DriverListHead, &driverInfo->ListEntry);
 
     ret = TRUE;
 
@@ -400,8 +406,32 @@ AddDriverToList(
 {
     LPWSTR SectionName = NULL;
     LPWSTR DriverDescription = NULL;
+    LPWSTR InfIds = NULL;
+    LPWSTR pId;
+    DWORD FieldCount, Length, RequiredSize, i;
     BOOL Result;
     BOOL ret = FALSE;
+
+    FieldCount = SetupGetFieldCount(&ContextDevice);
+    for (i = 2, Length = 1; i <= FieldCount; i++)
+    {
+        if (!SetupGetStringFieldW(&ContextDevice, i, NULL, 0, &RequiredSize))
+            goto cleanup;
+        Length += RequiredSize;
+    }
+    InfIds = HeapAlloc(GetProcessHeap(), 0, Length * sizeof(WCHAR));
+    if (!InfIds)
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        goto cleanup;
+    }
+    for (i = 2, pId = InfIds; i <= FieldCount; i++)
+    {
+        if (!SetupGetStringFieldW(&ContextDevice, i, pId, Length - (DWORD)(pId - InfIds), &RequiredSize))
+            goto cleanup;
+        pId += RequiredSize;
+    }
+    *pId = UNICODE_NULL;
 
     /* Read SectionName */
     SectionName = MyMalloc(LINE_LEN);
@@ -447,11 +477,15 @@ AddDriverToList(
         MatchingId,
         DriverDate,
         DriverVersion,
-        Rank);
+        Rank,
+        InfIds);
+    if (ret)
+        InfIds = NULL;
 
 cleanup:
     MyFree(SectionName);
     MyFree(DriverDescription);
+    HeapFree(GetProcessHeap(), 0, InfIds);
 
     return ret;
 }
@@ -511,9 +545,9 @@ GetVersionInformationFromInfFile(
             hInf, Version, INF_PROVIDER,
             ProviderName, RequiredSize,
             &RequiredSize);
+        if (!Result)
+            goto cleanup;
     }
-    if (!Result)
-        goto cleanup;
     *pProviderName = ProviderName;
 
     /* Read the "DriverVer" value */
@@ -866,7 +900,8 @@ SetupDiBuildDriverInfoList(
                 L"MatchingId", /* FIXME */
                 DriverDate,
                 0, /* FIXME: DriverVersion */
-                0);
+                0,
+                NULL);
             if (!ret)
                 DereferenceInfFile(infFileDetails);
             Result = FALSE;
@@ -1037,6 +1072,8 @@ SetupDiBuildDriverInfoList(
                         ManufacturerSection, LINE_LEN,
                         &RequiredSize);
                     if (Result)
+                        Result = IsManufacturerCompatible(&ContextManufacturer);
+                    if (Result)
                     {
                         ManufacturerSection[RequiredSize] = 0; /* Final NULL char */
                         /* Add (possible) extension to manufacturer section name */
@@ -1074,9 +1111,10 @@ SetupDiBuildDriverInfoList(
                             /* 1. Get all fields */
                             DWORD FieldCount = SetupGetFieldCount(&ContextDevice);
                             DWORD DriverRank;
+                            DWORD BestRank = 0;
                             DWORD i;
                             LPCWSTR currentId;
-                            BOOL DriverAlreadyAdded;
+                            LPCWSTR BestId = NULL;
 
                             for (i = 2; i <= FieldCount; i++)
                             {
@@ -1105,52 +1143,54 @@ SetupDiBuildDriverInfoList(
                                     goto done;
                                 }
                                 /* FIXME: Check ExcludeFromSelect list */
-                                DriverAlreadyAdded = FALSE;
                                 if (HardwareIDs)
                                 {
-                                    for (DriverRank = 0, currentId = (LPCWSTR)HardwareIDs; !DriverAlreadyAdded && *currentId; currentId += strlenW(currentId) + 1, DriverRank++)
+                                    for (DriverRank = 0, currentId = (LPCWSTR)HardwareIDs; *currentId; currentId += strlenW(currentId) + 1, DriverRank++)
                                     {
                                         if (strcmpiW(DeviceId, currentId) == 0)
                                         {
-                                            AddDriverToList(
-                                                pDriverListHead,
-                                                DriverType,
-                                                &ClassGuid,
-                                                ContextDevice,
-                                                currentInfFileDetails,
-                                                FullInfFileName,
-                                                ProviderName,
-                                                ManufacturerName,
-                                                currentId,
-                                                DriverDate, DriverVersion,
-                                                DriverRank  + (i == 2 ? 0 : 0x1000 + i - 3));
-                                            DriverAlreadyAdded = TRUE;
+                                            DriverRank += (i == 2 ? 0 : 0x1000 + i - 3);
+                                            if (!BestId || DriverRank < BestRank)
+                                            {
+                                                BestId = currentId;
+                                                BestRank = DriverRank;
+                                            }
+                                            break;
                                         }
                                     }
                                 }
                                 if (CompatibleIDs)
                                 {
-                                    for (DriverRank = 0, currentId = (LPCWSTR)CompatibleIDs; !DriverAlreadyAdded && *currentId; currentId += strlenW(currentId) + 1, DriverRank++)
+                                    for (DriverRank = 0, currentId = (LPCWSTR)CompatibleIDs; *currentId; currentId += strlenW(currentId) + 1, DriverRank++)
                                     {
                                         if (strcmpiW(DeviceId, currentId) == 0)
                                         {
-                                            AddDriverToList(
-                                                pDriverListHead,
-                                                DriverType,
-                                                &ClassGuid,
-                                                ContextDevice,
-                                                currentInfFileDetails,
-                                                FullInfFileName,
-                                                ProviderName,
-                                                ManufacturerName,
-                                                currentId,
-                                                DriverDate, DriverVersion,
-                                                DriverRank + (i == 2 ? 0x2000 : 0x3000 + i - 3));
-                                            DriverAlreadyAdded = TRUE;
+                                            DriverRank += (i == 2 ? 0x2000 : 0x3000 + i - 3);
+                                            if (!BestId || DriverRank < BestRank)
+                                            {
+                                                BestId = currentId;
+                                                BestRank = DriverRank;
+                                            }
+                                            break;
                                         }
                                     }
                                 }
                                 HeapFree(GetProcessHeap(), 0, DeviceId);
+                            }
+                            if (BestId)
+                            {
+                                AddDriverToList(
+                                    pDriverListHead,
+                                    DriverType,
+                                    &ClassGuid,
+                                    ContextDevice,
+                                    currentInfFileDetails,
+                                    FullInfFileName,
+                                    ProviderName,
+                                    ManufacturerName,
+                                    BestId,
+                                    DriverDate, DriverVersion,
+                                    BestRank);
                             }
                         }
                         Result = SetupFindNextLine(&ContextDevice, &ContextDevice);
@@ -1686,192 +1726,81 @@ SetupDiGetDriverInfoDetailA(
     OUT PDWORD RequiredSize OPTIONAL)
 {
     SP_DRVINFO_DATA_V2_W DriverInfoDataW;
-    PSP_DRVINFO_DETAIL_DATA_W DriverInfoDetailDataW = NULL;
-    DWORD BufSize = 0;
-    DWORD HardwareIDLen = 0;
-    BOOL ret = FALSE;
+    struct DriverInfoElement *driverInfoElement;
+    LPCWSTR Id;
+    LPSTR pId;
+    DWORD IdsLength = 1, sizeNeeded;
 
-    /* do some sanity checks, the unicode version might do more thorough checks */
-    if (DriverInfoData == NULL ||
-        (DriverInfoDetailData == NULL && DriverInfoDetailDataSize != 0) ||
-        (DriverInfoDetailData != NULL &&
-         (DriverInfoDetailDataSize < FIELD_OFFSET(SP_DRVINFO_DETAIL_DATA_A, HardwareID) + sizeof(CHAR) ||
-          DriverInfoDetailData->cbSize != sizeof(SP_DRVINFO_DETAIL_DATA_A))))
+    if (DriverInfoData == NULL)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
-        goto Cleanup;
+        return FALSE;
     }
-
-    /* make sure we support both versions of the SP_DRVINFO_DATA structure */
-    if (DriverInfoData->cbSize == sizeof(SP_DRVINFO_DATA_V1_A))
+    if ((DriverInfoDetailData || DriverInfoDetailDataSize) &&
+        DriverInfoDetailDataSize < sizeof(SP_DRVINFO_DETAIL_DATA_A))
     {
-        DriverInfoDataW.cbSize = sizeof(SP_DRVINFO_DATA_V1_W);
+        SetLastError(ERROR_INVALID_USER_BUFFER);
+        return FALSE;
     }
-    else if (DriverInfoData->cbSize == sizeof(SP_DRVINFO_DATA_V2_A))
+    if (DriverInfoDetailData && DriverInfoDetailData->cbSize != sizeof(SP_DRVINFO_DETAIL_DATA_A))
     {
-        DriverInfoDataW.cbSize = sizeof(SP_DRVINFO_DATA_V2_W);
+        SetLastError(ERROR_INVALID_USER_BUFFER);
+        return FALSE;
     }
-    else
+    if (DriverInfoData->cbSize != sizeof(SP_DRVINFO_DATA_V1_A) &&
+        DriverInfoData->cbSize != sizeof(SP_DRVINFO_DATA_V2_A))
     {
         SetLastError(ERROR_INVALID_PARAMETER);
-        goto Cleanup;
+        return FALSE;
     }
+
+    DriverInfoDataW.cbSize = sizeof(SP_DRVINFO_DATA_V2_W);
     DriverInfoDataW.DriverType = DriverInfoData->DriverType;
     DriverInfoDataW.Reserved = DriverInfoData->Reserved;
+    if (!SetupDiGetDriverInfoDetailW(DeviceInfoSet, DeviceInfoData, &DriverInfoDataW, NULL, 0, NULL))
+        return FALSE;
 
-    /* convert the strings to unicode */
-    if (MultiByteToWideChar(CP_ACP,
-                            0,
-                            DriverInfoData->Description,
-                            LINE_LEN,
-                            DriverInfoDataW.Description,
-                            LINE_LEN) &&
-        MultiByteToWideChar(CP_ACP,
-                            0,
-                            DriverInfoData->MfgName,
-                            LINE_LEN,
-                            DriverInfoDataW.MfgName,
-                            LINE_LEN) &&
-        MultiByteToWideChar(CP_ACP,
-                            0,
-                            DriverInfoData->ProviderName,
-                            LINE_LEN,
-                            DriverInfoDataW.ProviderName,
-                            LINE_LEN))
+    driverInfoElement = (struct DriverInfoElement *)DriverInfoData->Reserved;
+    for (Id = driverInfoElement->InfIds; Id && *Id; Id += strlenW(Id) + 1)
+        IdsLength += WideCharToMultiByte(CP_ACP, 0, Id, -1, NULL, 0, NULL, NULL);
+
+    sizeNeeded = FIELD_OFFSET(SP_DRVINFO_DETAIL_DATA_A, HardwareID[IdsLength]);
+    if (RequiredSize)
+        *RequiredSize = sizeNeeded;
+    if (!DriverInfoDetailData)
+        return TRUE;
+
+    DriverInfoDetailData->InfDate = driverInfoElement->Details.InfDate;
+    DriverInfoDetailData->CompatIDsOffset = 0;
+    DriverInfoDetailData->CompatIDsLength = 0;
+    DriverInfoDetailData->Reserved = driverInfoElement->Details.Reserved;
+    WideCharToMultiByte(CP_ACP, 0, driverInfoElement->Details.SectionName, -1,
+                        DriverInfoDetailData->SectionName, LINE_LEN, NULL, NULL);
+    WideCharToMultiByte(CP_ACP, 0, driverInfoElement->Details.InfFileName, -1,
+                        DriverInfoDetailData->InfFileName, MAX_PATH, NULL, NULL);
+    WideCharToMultiByte(CP_ACP, 0, driverInfoElement->Details.DrvDescription, -1,
+                        DriverInfoDetailData->DrvDescription, LINE_LEN, NULL, NULL);
+    DriverInfoDetailData->HardwareID[0] = '\0';
+
+    if (DriverInfoDetailDataSize < sizeNeeded)
     {
-        if (DriverInfoDataW.cbSize == sizeof(SP_DRVINFO_DATA_V2_W))
-        {
-            DriverInfoDataW.DriverDate = ((PSP_DRVINFO_DATA_V2_A)DriverInfoData)->DriverDate;
-            DriverInfoDataW.DriverVersion = ((PSP_DRVINFO_DATA_V2_A)DriverInfoData)->DriverVersion;
-        }
-
-        if (DriverInfoDetailData != NULL)
-        {
-            /* calculate the unicode buffer size from the ansi buffer size */
-            HardwareIDLen = DriverInfoDetailDataSize - FIELD_OFFSET(SP_DRVINFO_DETAIL_DATA_A, HardwareID);
-            BufSize = FIELD_OFFSET(SP_DRVINFO_DETAIL_DATA_W, HardwareID) +
-                      (HardwareIDLen * sizeof(WCHAR));
-
-            DriverInfoDetailDataW = MyMalloc(BufSize);
-            if (DriverInfoDetailDataW == NULL)
-            {
-                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-                goto Cleanup;
-            }
-
-            /* initialize the buffer */
-            ZeroMemory(DriverInfoDetailDataW,
-                       BufSize);
-            DriverInfoDetailDataW->cbSize = sizeof(SP_DRVINFO_DETAIL_DATA_W);
-        }
-
-        /* call the unicode version */
-        ret = SetupDiGetDriverInfoDetailW(DeviceInfoSet,
-                                          DeviceInfoData,
-                                          &DriverInfoDataW,
-                                          DriverInfoDetailDataW,
-                                          BufSize,
-                                          RequiredSize);
-
-        if (ret)
-        {
-            if (DriverInfoDetailDataW != NULL)
-            {
-                /* convert the SP_DRVINFO_DETAIL_DATA_W structure to ansi */
-                DriverInfoDetailData->cbSize = sizeof(SP_DRVINFO_DETAIL_DATA_A);
-                DriverInfoDetailData->InfDate = DriverInfoDetailDataW->InfDate;
-                DriverInfoDetailData->Reserved = DriverInfoDetailDataW->Reserved;
-                if (WideCharToMultiByte(CP_ACP,
-                                        0,
-                                        DriverInfoDetailDataW->SectionName,
-                                        LINE_LEN,
-                                        DriverInfoDetailData->SectionName,
-                                        LINE_LEN,
-                                        NULL,
-                                        NULL) &&
-                    WideCharToMultiByte(CP_ACP,
-                                        0,
-                                        DriverInfoDetailDataW->InfFileName,
-                                        MAX_PATH,
-                                        DriverInfoDetailData->InfFileName,
-                                        MAX_PATH,
-                                        NULL,
-                                        NULL) &&
-                    WideCharToMultiByte(CP_ACP,
-                                        0,
-                                        DriverInfoDetailDataW->DrvDescription,
-                                        LINE_LEN,
-                                        DriverInfoDetailData->DrvDescription,
-                                        LINE_LEN,
-                                        NULL,
-                                        NULL) &&
-                    WideCharToMultiByte(CP_ACP,
-                                        0,
-                                        DriverInfoDetailDataW->HardwareID,
-                                        HardwareIDLen,
-                                        DriverInfoDetailData->HardwareID,
-                                        HardwareIDLen,
-                                        NULL,
-                                        NULL))
-                {
-                    DWORD len, cnt = 0;
-                    DWORD hwidlen = HardwareIDLen;
-                    CHAR *s = DriverInfoDetailData->HardwareID;
-
-                    /* count the strings in the list */
-                    while (*s != '\0')
-                    {
-                        len = lstrlenA(s) + 1;
-                        if (hwidlen > len)
-                        {
-                            cnt++;
-                            s += len;
-                            hwidlen -= len;
-                        }
-                        else
-                        {
-                            /* looks like the string list wasn't terminated... */
-                            SetLastError(ERROR_INVALID_USER_BUFFER);
-                            ret = FALSE;
-                            break;
-                        }
-                    }
-
-                    /* make sure CompatIDsOffset points to the second string in the
-                       list, if present */
-                    if (cnt > 1)
-                    {
-                        DriverInfoDetailData->CompatIDsOffset = lstrlenA(DriverInfoDetailData->HardwareID) + 1;
-                        DriverInfoDetailData->CompatIDsLength = (DWORD)(s - DriverInfoDetailData->HardwareID) -
-                                                                DriverInfoDetailData->CompatIDsOffset + 1;
-                    }
-                    else
-                    {
-                        DriverInfoDetailData->CompatIDsOffset = 0;
-                        DriverInfoDetailData->CompatIDsLength = 0;
-                    }
-                }
-                else
-                {
-                    ret = FALSE;
-                }
-            }
-
-            if (RequiredSize != NULL)
-            {
-                *RequiredSize = FIELD_OFFSET(SP_DRVINFO_DETAIL_DATA_A, HardwareID) +
-                                (((*RequiredSize) - FIELD_OFFSET(SP_DRVINFO_DETAIL_DATA_W, HardwareID)) / sizeof(WCHAR));
-            }
-        }
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
     }
 
-Cleanup:
-    if (DriverInfoDetailDataW != NULL)
+    pId = DriverInfoDetailData->HardwareID;
+    for (Id = driverInfoElement->InfIds; Id && *Id; Id += strlenW(Id) + 1)
     {
-        MyFree(DriverInfoDetailDataW);
+        if (Id != driverInfoElement->InfIds && !DriverInfoDetailData->CompatIDsOffset)
+            DriverInfoDetailData->CompatIDsOffset = (DWORD)(pId - DriverInfoDetailData->HardwareID);
+        pId += WideCharToMultiByte(CP_ACP, 0, Id, -1, pId,
+                                   IdsLength - (DWORD)(pId - DriverInfoDetailData->HardwareID), NULL, NULL);
     }
-
-    return ret;
+    *pId++ = '\0';
+    if (DriverInfoDetailData->CompatIDsOffset)
+        DriverInfoDetailData->CompatIDsLength = (DWORD)(pId - DriverInfoDetailData->HardwareID) -
+                                                DriverInfoDetailData->CompatIDsOffset;
+    return TRUE;
 }
 
 /***********************************************************************
@@ -1902,10 +1831,9 @@ SetupDiGetDriverInfoDetailW(
         SetLastError(ERROR_INVALID_USER_BUFFER);
     else if (!DriverInfoData)
         SetLastError(ERROR_INVALID_PARAMETER);
-    else if (!DriverInfoDetailData && DriverInfoDetailDataSize != 0)
-        SetLastError(ERROR_INVALID_PARAMETER);
-    else if (DriverInfoDetailData && DriverInfoDetailDataSize < sizeof(SP_DRVINFO_DETAIL_DATA_W))
-        SetLastError(ERROR_INVALID_PARAMETER);
+    else if ((DriverInfoDetailData || DriverInfoDetailDataSize) &&
+             DriverInfoDetailDataSize < sizeof(SP_DRVINFO_DETAIL_DATA_W))
+        SetLastError(ERROR_INVALID_USER_BUFFER);
     else if (DriverInfoDetailData && DriverInfoDetailData->cbSize != sizeof(SP_DRVINFO_DETAIL_DATA_W))
         SetLastError(ERROR_INVALID_USER_BUFFER);
     else if (DriverInfoData->Reserved == 0)
@@ -1913,88 +1841,48 @@ SetupDiGetDriverInfoDetailW(
     else
     {
         struct DriverInfoElement *driverInfoElement;
-        LPWSTR HardwareIDs = NULL;
-        LPWSTR CompatibleIDs = NULL;
-        LPWSTR pBuffer = NULL;
-        LPCWSTR DeviceID = NULL;
-        ULONG HardwareIDsSize, CompatibleIDsSize;
-        ULONG sizeNeeded, sizeLeft, size;
-        BOOL Result;
+        LPCWSTR Id;
+        DWORD IdsLength = 1, sizeNeeded;
 
         driverInfoElement = (struct DriverInfoElement *)DriverInfoData->Reserved;
+        for (Id = driverInfoElement->InfIds; Id && *Id; Id += strlenW(Id) + 1)
+            IdsLength += strlenW(Id) + 1;
 
-        /* Get hardware and compatible IDs lists */
-        Result = GetHardwareAndCompatibleIDsLists(
-            DeviceInfoSet,
-            DeviceInfoData,
-            &HardwareIDs, &HardwareIDsSize,
-            &CompatibleIDs, &CompatibleIDsSize);
-        if (!Result)
-            goto done;
-
-        sizeNeeded = FIELD_OFFSET(SP_DRVINFO_DETAIL_DATA_W, HardwareID)
-            + HardwareIDsSize + CompatibleIDsSize;
+        sizeNeeded = FIELD_OFFSET(SP_DRVINFO_DETAIL_DATA_W, HardwareID[IdsLength]);
         if (RequiredSize)
             *RequiredSize = sizeNeeded;
 
         if (!DriverInfoDetailData)
         {
             ret = TRUE;
-            goto done;
         }
-
-        memcpy(
-            DriverInfoDetailData,
-            &driverInfoElement->Details,
-            driverInfoElement->Details.cbSize);
-        DriverInfoDetailData->CompatIDsOffset = 0;
-        DriverInfoDetailData->CompatIDsLength = 0;
-
-        sizeLeft = (DriverInfoDetailDataSize - FIELD_OFFSET(SP_DRVINFO_DETAIL_DATA_W, HardwareID)) / sizeof(WCHAR);
-        pBuffer = DriverInfoDetailData->HardwareID;
-        /* Add as many as possible HardwareIDs in the list */
-        DeviceID = HardwareIDs;
-        while (DeviceID && *DeviceID && (size = wcslen(DeviceID)) + 1 < sizeLeft)
-        {
-            TRACE("Adding %s to list\n", debugstr_w(DeviceID));
-            wcscpy(pBuffer, DeviceID);
-            DeviceID += size + 1;
-            pBuffer += size + 1;
-            sizeLeft -= size + 1;
-            DriverInfoDetailData->CompatIDsOffset += size + 1;
-        }
-        if (sizeLeft > 0)
-        {
-            *pBuffer = UNICODE_NULL;
-            sizeLeft--;
-            DriverInfoDetailData->CompatIDsOffset++;
-        }
-        /* Add as many as possible CompatibleIDs in the list */
-        DeviceID = CompatibleIDs;
-        while (DeviceID && *DeviceID && (size = wcslen(DeviceID)) + 1 < sizeLeft)
-        {
-            TRACE("Adding %s to list\n", debugstr_w(DeviceID));
-            wcscpy(pBuffer, DeviceID);
-            DeviceID += size + 1;
-            pBuffer += size + 1;
-            sizeLeft -= size + 1;
-            DriverInfoDetailData->CompatIDsLength += size + 1;
-        }
-        if (sizeLeft > 0)
-        {
-            *pBuffer = UNICODE_NULL;
-            sizeLeft--;
-            DriverInfoDetailData->CompatIDsLength++;
-        }
-
-        if (sizeNeeded > DriverInfoDetailDataSize)
-            SetLastError(ERROR_INSUFFICIENT_BUFFER);
         else
-            ret = TRUE;
+        {
+            memcpy(DriverInfoDetailData, &driverInfoElement->Details,
+                   FIELD_OFFSET(SP_DRVINFO_DETAIL_DATA_W, HardwareID));
+            DriverInfoDetailData->CompatIDsOffset = 0;
+            DriverInfoDetailData->CompatIDsLength = 0;
+            DriverInfoDetailData->HardwareID[0] = UNICODE_NULL;
 
-done:
-        MyFree(HardwareIDs);
-        MyFree(CompatibleIDs);
+            if (sizeNeeded > DriverInfoDetailDataSize)
+            {
+                SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            }
+            else
+            {
+                if (driverInfoElement->InfIds)
+                {
+                    memcpy(DriverInfoDetailData->HardwareID, driverInfoElement->InfIds, IdsLength * sizeof(WCHAR));
+                    Id = driverInfoElement->InfIds + strlenW(driverInfoElement->InfIds) + 1;
+                    if (*driverInfoElement->InfIds && *Id)
+                    {
+                        DriverInfoDetailData->CompatIDsOffset = (DWORD)(Id - driverInfoElement->InfIds);
+                        DriverInfoDetailData->CompatIDsLength = IdsLength - DriverInfoDetailData->CompatIDsOffset;
+                    }
+                }
+                ret = TRUE;
+            }
+        }
     }
 
     TRACE("Returning %d\n", ret);
@@ -2064,20 +1952,38 @@ SetupDiSelectBestCompatDrv(
     IN OUT PSP_DEVINFO_DATA DeviceInfoData OPTIONAL)
 {
     SP_DRVINFO_DATA_W drvInfoData;
-    BOOL ret;
+    struct DriverInfoElement *BestDriver = NULL;
+    struct DriverInfoElement *Driver;
+    DWORD Index, BestIndex = 0;
+    BOOL ret = FALSE;
 
     TRACE("%p %p\n", DeviceInfoSet, DeviceInfoData);
 
-    /* Drivers are sorted by rank in the driver list, so
-     * the first driver in the list is the best one.
-     */
     drvInfoData.cbSize = sizeof(SP_DRVINFO_DATA_W);
-    ret = SetupDiEnumDriverInfoW(
-        DeviceInfoSet,
-        DeviceInfoData,
-        SPDIT_COMPATDRIVER,
-        0, /* Member index */
-        &drvInfoData);
+    for (Index = 0;
+         SetupDiEnumDriverInfoW(DeviceInfoSet, DeviceInfoData, SPDIT_COMPATDRIVER, Index, &drvInfoData);
+         Index++)
+    {
+        Driver = (struct DriverInfoElement *)drvInfoData.Reserved;
+        if (!BestDriver ||
+            Driver->Params.Rank < BestDriver->Params.Rank ||
+            (Driver->Params.Rank == BestDriver->Params.Rank &&
+             Driver->DriverDate.QuadPart > BestDriver->DriverDate.QuadPart))
+        {
+            BestDriver = Driver;
+            BestIndex = Index;
+        }
+    }
+
+    if (BestDriver)
+    {
+        ret = SetupDiEnumDriverInfoW(
+            DeviceInfoSet,
+            DeviceInfoData,
+            SPDIT_COMPATDRIVER,
+            BestIndex,
+            &drvInfoData);
+    }
 
     if (ret)
     {

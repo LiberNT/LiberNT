@@ -140,6 +140,7 @@ struct DriverInfoElement /* Element of DeviceInfoSet.DriverListHead and DeviceIn
     SP_DRVINFO_DETAIL_DATA_W Details;
     GUID ClassGuid;
     LPWSTR MatchingId;
+    LPWSTR InfIds;
     struct InfFileDetails *InfFileDetails;
 };
 
@@ -329,6 +330,10 @@ UINT CALLBACK QUEUE_callback_WtoA( void *context, UINT notification, UINT_PTR, U
 
 DWORD
 GetErrorCodeFromCrCode(const IN CONFIGRET cr);
+
+BOOL
+SETUPAPI_IsTargetOSVersionCompatible(
+    IN PCWSTR TargetOSVersion);
 
 BOOL
 CreateDeviceInfo(

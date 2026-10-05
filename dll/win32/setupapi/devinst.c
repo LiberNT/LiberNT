@@ -479,6 +479,22 @@ InitCurrentPlatform(
     return TRUE;
 }
 
+BOOL
+SETUPAPI_IsTargetOSVersionCompatible(
+    IN PCWSTR TargetOSVersion)
+{
+    WCHAR Extension[LINE_LEN + 1];
+    DWORD Score1, Score2, Score3, Score4, Score5;
+
+    if (!InitOnceExecuteOnce(&CurrentPlatformInitOnce, InitCurrentPlatform, NULL, NULL))
+        return FALSE;
+
+    Extension[0] = '.';
+    lstrcpynW(&Extension[1], TargetOSVersion, sizeof(Extension) / sizeof(Extension[0]) - 1);
+    return CheckSectionValid(Extension, &CurrentPlatform, CurrentProductType, CurrentSuiteMask,
+                             &Score1, &Score2, &Score3, &Score4, &Score5);
+}
+
 /***********************************************************************
  *		SetupDiGetActualSectionToInstallExW (SETUPAPI.@)
  */
