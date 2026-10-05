@@ -3768,6 +3768,37 @@ PdoQueryInterface(
         }
     }
     else if (RtlCompareMemory(IrpSp->Parameters.QueryInterface.InterfaceType,
+                              &GUID_ACPI_INTERFACE_STANDARD2, sizeof(GUID)) == sizeof(GUID))
+    {
+        /*
+         * ACPI notifications on this function's own namespace node.  On
+         * Windows acpi.sys answers this as a filter beneath the device; here
+         * it is fetched from acpi.sys for the PDO's location.
+         */
+        if (IrpSp->Parameters.QueryInterface.Version < 1)
+            Status = STATUS_NOT_SUPPORTED;
+        else if (IrpSp->Parameters.QueryInterface.Size < sizeof(ACPI_INTERFACE_STANDARD2))
+            Status = STATUS_BUFFER_TOO_SMALL;
+        else
+        {
+            PPDO_DEVICE_EXTENSION PdoExtension = (PPDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
+            ULONG Segment = 0;
+
+            if (PdoExtension->Fdo)
+                Segment = ((PFDO_DEVICE_EXTENSION)PdoExtension->Fdo->DeviceExtension)->BusSegment;
+            Status = PciAcpiQueryNotifyInterface(
+                         Segment,
+                         PdoExtension->PciDevice->BusNumber,
+                         PdoExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
+                         PdoExtension->PciDevice->SlotNumber.u.bits.FunctionNumber,
+                         (PACPI_INTERFACE_STANDARD2)IrpSp->Parameters.QueryInterface.Interface);
+            /* No namespace node means no notifications: not this bus's
+             * interface to give. */
+            if (Status == STATUS_NOT_FOUND)
+                Status = STATUS_NOT_SUPPORTED;
+        }
+    }
+    else if (RtlCompareMemory(IrpSp->Parameters.QueryInterface.InterfaceType,
                               &GUID_PCI_DEVICE_PRESENT_INTERFACE, sizeof(GUID)) == sizeof(GUID))
     {
         /* PCI_DEVICE_PRESENT_INTERFACE */

@@ -345,6 +345,14 @@ PciAcpiEvalMethodForChild(
 NTSTATUS
 PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State);
 
+NTSTATUS
+PciAcpiQueryNotifyInterface(
+    _In_ ULONG Segment,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _Out_ PACPI_INTERFACE_STANDARD2 Interface);
+
 /* pci.c - State transition helpers */
 
 NTSTATUS

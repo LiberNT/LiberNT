@@ -463,6 +463,68 @@ PciAcpiEvalMethodForChild(
     return PciAcpiEvalMethodInternal(Segment, Bus, Device, Function, TRUE, ChildAcpiUid, InputBuffer, InputBufferSize, OutputBuffer, OutputBufferSize, BytesReturned);
 }
 
+/*
+ * PciAcpiQueryNotifyInterface
+ *
+ * Fetches, from acpi.sys, the notify interface for the ACPI namespace node of
+ * a PCI function -- the GUID_ACPI_INTERFACE_STANDARD2 that acpi.sys answers
+ * itself on Windows as a filter beneath the device.  Sent as internal device
+ * control: the interface carries kernel entry points.
+ */
+NTSTATUS
+PciAcpiQueryNotifyInterface(
+    _In_ ULONG Segment,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _Out_ PACPI_INTERFACE_STANDARD2 Interface)
+{
+    union
+    {
+        ACPI_PCI_NOTIFY_INTERFACE_INPUT Input;
+        ACPI_INTERFACE_STANDARD2 Output;
+    } Buffer;
+    KEVENT Event;
+    IO_STATUS_BLOCK IoStatusBlock;
+    PIRP Irp;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = PciOpenAcpiInterface();
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&Buffer, sizeof(Buffer));
+    Buffer.Input.Signature = ACPI_PCI_NOTIFY_INTERFACE_INPUT_SIGNATURE;
+    Buffer.Input.Segment = Segment;
+    Buffer.Input.Bus = Bus;
+    Buffer.Input.Device = Device;
+    Buffer.Input.Function = Function;
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_ACPI_QUERY_PCI_NOTIFY_INTERFACE,
+                                        AcpiInterfaceDeviceObject,
+                                        &Buffer, sizeof(Buffer.Input),
+                                        &Buffer, sizeof(Buffer.Output),
+                                        TRUE, &Event, &IoStatusBlock);
+    if (!Irp)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = IoCallDriver(AcpiInterfaceDeviceObject, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatusBlock.Status;
+    }
+    if (NT_SUCCESS(Status))
+    {
+        if (IoStatusBlock.Information < sizeof(Buffer.Output))
+            return STATUS_INVALID_BUFFER_SIZE;
+        *Interface = Buffer.Output;
+    }
+    return Status;
+}
+
 NTSTATUS
 PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State)
 {
