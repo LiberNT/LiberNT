@@ -44,6 +44,6 @@ typedef struct _NTPPACKET
   TIMEPACKET TransmitTimestamp;
 }NTPPACKET, *PNTPPACKET;
 
-ULONGLONG GetServerTime(LPWSTR lpAddress);
+DWORD GetServerTime(LPWSTR lpAddress, PULONGLONG pullTime);
 
 #endif /* _W32TIME_H */

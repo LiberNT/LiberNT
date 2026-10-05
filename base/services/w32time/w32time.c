@@ -7,6 +7,7 @@
  */
 
 #include "w32time.h"
+#define NDEBUG
 #include <debug.h>
 #include <strsafe.h>
 
@@ -290,7 +291,9 @@ SetTime(BOOL bAllowSlew)
         return ERROR_INVALID_DATA;
     }
 
-    ulTime = GetServerTime(szData);
+    lRet = GetServerTime(szData, &ulTime);
+    if (lRet != ERROR_SUCCESS)
+        return lRet;
 
     if (ulTime != 0)
     {
