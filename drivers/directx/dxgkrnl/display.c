@@ -1417,6 +1417,11 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
      * Send one exact per-target record for this single-path implementation,
      * including a removal record when the functional topology is empty.
      */
+    /* Whichever DDI commits it, the path carries the source's gamma; a mode
+     * set without it resets the source to identity. */
+    if (!TopologyEmpty)
+        DxgkpLoadSourceGamma(Adapter, ActiveSourceId, &VidPn->Paths[0].GammaRamp);
+
     if (!ForceDodPresentOnlyPath && UseSetTimings)
     {
         DXGKARG_SETTIMINGSFROMVIDPN TimingArgs;

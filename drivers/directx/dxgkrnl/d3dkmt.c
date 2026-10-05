@@ -6940,15 +6940,265 @@ DxgkSetDisplayPrivateDriverFormat(
     return DxgkUnsupportedDeviceCall(pData->hDevice);
 }
 
+/*
+ * Gamma ramps (D3DKMTSetGammaRamp).
+ *
+ * The ramp reaches the driver through DxgkDdiUpdateActiveVidPnPresentPath,
+ * as the GammaRamp of the source's active path, and is kept per source so
+ * every later mode set hands it over again.  A type is accepted only when
+ * the driver advertises it in its colour transform caps; DEFAULT restores
+ * identity.
+ */
+static SIZE_T
+DxgkpGammaRampSize(
+    _In_ D3DDDI_GAMMARAMP_TYPE Type)
+{
+    switch (Type)
+    {
+        case D3DDDI_GAMMARAMP_RGB256x3x16:
+            return sizeof(D3DDDI_GAMMA_RAMP_RGB256x3x16);
+        case D3DDDI_GAMMARAMP_DXGI_1:
+            return sizeof(D3DDDI_GAMMA_RAMP_DXGI_1);
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_3)
+        case D3DDDI_GAMMARAMP_MATRIX_3x4:
+            return sizeof(D3DKMDT_3x4_COLORSPACE_TRANSFORM);
+#endif
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_6)
+        case D3DDDI_GAMMARAMP_MATRIX_V2:
+            return sizeof(D3DKMDT_COLORSPACE_TRANSFORM_MATRIX_V2);
+#endif
+        default:
+            return 0;
+    }
+}
+
+/* The largest ramp any supported type needs; one buffer per source. */
+static SIZE_T
+DxgkpGammaRampMaxSize(VOID)
+{
+    SIZE_T Max = sizeof(D3DDDI_GAMMA_RAMP_RGB256x3x16);
+
+    if (sizeof(D3DDDI_GAMMA_RAMP_DXGI_1) > Max)
+        Max = sizeof(D3DDDI_GAMMA_RAMP_DXGI_1);
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_3)
+    if (sizeof(D3DKMDT_3x4_COLORSPACE_TRANSFORM) > Max)
+        Max = sizeof(D3DKMDT_3x4_COLORSPACE_TRANSFORM);
+#endif
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_6)
+    if (sizeof(D3DKMDT_COLORSPACE_TRANSFORM_MATRIX_V2) > Max)
+        Max = sizeof(D3DKMDT_COLORSPACE_TRANSFORM_MATRIX_V2);
+#endif
+    return Max;
+}
+
+static BOOLEAN
+DxgkpGammaTypeSupported(
+    _In_ CONST DXGK_DRIVERCAPS *Caps,
+    _In_ D3DDDI_GAMMARAMP_TYPE Type)
+{
+    switch (Type)
+    {
+        case D3DDDI_GAMMARAMP_DEFAULT:
+            return Caps->GammaRampCaps.Value != 0;
+        case D3DDDI_GAMMARAMP_RGB256x3x16:
+            return Caps->GammaRampCaps.Gamma_Rgb256x3x16 != 0;
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_2)
+        case D3DDDI_GAMMARAMP_DXGI_1:
+            return Caps->ColorTransformCaps.Gamma_Dxgi1 != 0;
+#endif
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_3)
+        case D3DDDI_GAMMARAMP_MATRIX_3x4:
+            return Caps->ColorTransformCaps.Transform_3x4Matrix != 0;
+#endif
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_6)
+        case D3DDDI_GAMMARAMP_MATRIX_V2:
+            return Caps->ColorTransformCaps.Transform_Matrix_V2 != 0;
+#endif
+        default:
+            return FALSE;
+    }
+}
+
+VOID
+DxgkpLoadSourceGamma(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId,
+    _Out_ D3DKMDT_GAMMA_RAMP *GammaRamp)
+{
+    RtlZeroMemory(GammaRamp, sizeof(*GammaRamp));
+    if (SourceId >= DXGKP_GAMMA_SOURCES ||
+        Adapter->SourceGammaType[SourceId] == D3DDDI_GAMMARAMP_UNINITIALIZED)
+    {
+        return;
+    }
+    GammaRamp->Type = Adapter->SourceGammaType[SourceId];
+    if (GammaRamp->Type != D3DDDI_GAMMARAMP_DEFAULT)
+    {
+        GammaRamp->DataSize = Adapter->SourceGammaSize[SourceId];
+        GammaRamp->Data.pRaw = Adapter->SourceGammaBuffer[SourceId];
+    }
+}
+
+static NTSTATUS
+DxgkpSetGammaRampCore(
+    _In_ CONST D3DKMT_SETGAMMARAMP *pData,
+    _In_ KPROCESSOR_MODE BufferMode)
+{
+    PDXGKDDI_UPDATE_ACTIVE_VIDPN_PRESENT_PATH UpdatePath;
+    DXGKARG_UPDATEACTIVEVIDPNPRESENTPATH UpdateArgs;
+    PDXGKRNL_ADAPTER Adapter;
+    PDXGKRNL_DEVICE Device;
+    PDXGK_DRIVERCAPS Caps = NULL;
+    PVOID Ramp = NULL;
+    PDXGKP_VIDPN VidPn;
+    SIZE_T RampSize = 0;
+    SIZE_T Index;
+    BOOLEAN Found = FALSE;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (pData == NULL)
+        return STATUS_INVALID_PARAMETER;
+    Status = DxgkpValidateDeviceHandleForIoctl(pData->hDevice, &Adapter, &Device);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (pData->VidPnSourceId >= Adapter->NumberOfVideoPresentSources ||
+        pData->VidPnSourceId >= DXGKP_GAMMA_SOURCES)
+    {
+        Status = STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE;
+        goto Done;
+    }
+    UpdatePath = Adapter->MiniportContext != NULL ?
+                     DXGK_CB_FULL(Adapter, DxgkDdiUpdateActiveVidPnPresentPath) : NULL;
+    if (UpdatePath == NULL)
+    {
+        Status = STATUS_GRAPHICS_GAMMA_RAMP_NOT_SUPPORTED;
+        goto Done;
+    }
+
+    /* The ramp must be one the driver says it can apply. */
+    Caps = ExAllocatePoolWithTag(PagedPool, DXGKP_DRIVERCAPS_QUERY_SIZE, TAG_DXGK_CAPTURE);
+    if (Caps == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Done;
+    }
+    RtlZeroMemory(Caps, DXGKP_DRIVERCAPS_QUERY_SIZE);
+    Status = DxgkpQueryDriverCaps(Adapter, Caps);
+    if (!NT_SUCCESS(Status))
+        goto Done;
+    if (!DxgkpGammaTypeSupported(Caps, pData->Type))
+    {
+        Status = pData->Type == D3DDDI_GAMMARAMP_DEFAULT ||
+                 DxgkpGammaRampSize(pData->Type) != 0 ?
+                     STATUS_GRAPHICS_GAMMA_RAMP_NOT_SUPPORTED : STATUS_INVALID_PARAMETER;
+        goto Done;
+    }
+
+    /* Capture the ramp before taking any lock: the copy may fault. */
+    if (pData->Type != D3DDDI_GAMMARAMP_DEFAULT)
+    {
+        RampSize = DxgkpGammaRampSize(pData->Type);
+        if (RampSize == 0 || pData->Size != RampSize || pData->pGammaRampRgb256x3x16 == NULL)
+        {
+            Status = STATUS_INVALID_PARAMETER;
+            goto Done;
+        }
+        Ramp = ExAllocatePoolWithTag(PagedPool, RampSize, TAG_DXGK_CAPTURE);
+        if (Ramp == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto Done;
+        }
+        Status = DxgkpCopyFromUserBuffer(Ramp, pData->pGammaRampRgb256x3x16, RampSize, BufferMode);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+    }
+
+    (VOID)KeWaitForSingleObject(&Adapter->VidPnMutex, Executive, KernelMode, FALSE, NULL);
+    VidPn = (PDXGKP_VIDPN)Adapter->VidPn;
+    RtlZeroMemory(&UpdateArgs, sizeof(UpdateArgs));
+    if (VidPn != NULL && Adapter->VidPnCommitted)
+    {
+        for (Index = 0; Index < VidPn->NumPaths; Index++)
+        {
+            if (VidPn->Paths[Index].VidPnSourceId == pData->VidPnSourceId)
+            {
+                UpdateArgs.VidPnPresentPathInfo = VidPn->Paths[Index];
+                Found = TRUE;
+                break;
+            }
+        }
+    }
+    if (!Found)
+    {
+        KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
+        Status = STATUS_GRAPHICS_SOURCE_NOT_IN_TOPOLOGY;
+        goto Done;
+    }
+    /* The persistent buffer exists before the call, so success can be
+     * recorded without a failure path after the driver applied it. */
+    if (pData->Type != D3DDDI_GAMMARAMP_DEFAULT &&
+        Adapter->SourceGammaBuffer[pData->VidPnSourceId] == NULL)
+    {
+        Adapter->SourceGammaBuffer[pData->VidPnSourceId] =
+            ExAllocatePoolWithTag(PagedPool, DxgkpGammaRampMaxSize(), TAG_DXGK_ADAPTER);
+        if (Adapter->SourceGammaBuffer[pData->VidPnSourceId] == NULL)
+        {
+            KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto Done;
+        }
+    }
+    UpdateArgs.VidPnPresentPathInfo.GammaRamp.Type = pData->Type;
+    UpdateArgs.VidPnPresentPathInfo.GammaRamp.DataSize = RampSize;
+    UpdateArgs.VidPnPresentPathInfo.GammaRamp.Data.pRaw = Ramp;
+
+    if (!DxgkAcquireKmdCall(Adapter))
+    {
+        KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
+        Status = STATUS_DELETE_PENDING;
+        goto Done;
+    }
+    _SEH2_TRY
+    {
+        Status = UpdatePath(Adapter->MiniportDeviceContext, &UpdateArgs);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    DxgkReleaseKmdCall(Adapter);
+
+    if (NT_SUCCESS(Status))
+    {
+        /* Keep it for every later mode set, and on the committed path. */
+        if (Ramp != NULL)
+            RtlCopyMemory(Adapter->SourceGammaBuffer[pData->VidPnSourceId], Ramp, RampSize);
+        Adapter->SourceGammaType[pData->VidPnSourceId] = pData->Type;
+        Adapter->SourceGammaSize[pData->VidPnSourceId] = RampSize;
+        DxgkpLoadSourceGamma(Adapter, pData->VidPnSourceId, &VidPn->Paths[Index].GammaRamp);
+    }
+    KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
+
+Done:
+    if (Ramp != NULL)
+        ExFreePoolWithTag(Ramp, TAG_DXGK_CAPTURE);
+    if (Caps != NULL)
+        ExFreePoolWithTag(Caps, TAG_DXGK_CAPTURE);
+    DxgkDereferenceDevice(Device);
+    return Status;
+}
+
 static NTSTATUS
 NTAPI
 DxgkSetGammaRamp(
     _In_ CONST D3DKMT_SETGAMMARAMP *pData)
 {
-    if (pData == NULL)
-        return STATUS_INVALID_PARAMETER;
-
-    return DxgkUnsupportedDeviceCall(pData->hDevice);
+    return DxgkpSetGammaRampCore(pData, KernelMode);
 }
 
 static NTSTATUS
@@ -12113,13 +12363,7 @@ DxgkpDispatchBufferedIoctlWorker(
                 return STATUS_BUFFER_TOO_SMALL;
 
             pGammaRamp = (D3DKMT_SETGAMMARAMP *)SystemBuffer;
-            Status = DxgkpValidateDeviceHandleForIoctl(pGammaRamp->hDevice,
-                                                       NULL,
-                                                       NULL);
-            if (!NT_SUCCESS(Status))
-                return Status;
-
-            return STATUS_NOT_SUPPORTED;
+            return DxgkpSetGammaRampCore(pGammaRamp, EmbeddedBufferMode);
         }
 
         case IOCTL_D3DKMT_GETMULTISAMPLEMETHODLIST:

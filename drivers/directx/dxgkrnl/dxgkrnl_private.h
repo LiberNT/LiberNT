@@ -598,6 +598,9 @@ typedef struct _DXGKRNL_POWER_COMPONENT
  * adapter rather than allocated, so a source that calls back late still
  * finds valid memory and is turned away by Rundown.
  * ====================================================================== */
+/* VidPN sources whose gamma is tracked (matches DXGKP_MAX_SOURCES). */
+#define DXGKP_GAMMA_SOURCES 16
+
 typedef struct _DXGKP_ACPI_EVENTS
 {
     BOOLEAN                     Subscribed;
@@ -1133,6 +1136,17 @@ struct _DXGKRNL_ADAPTER
      */
     volatile LONG               LinkRetrainAttempts;
     volatile LONG               LinkRetrainPending;
+
+    /*
+     * Gamma per VidPN source, as last applied through D3DKMTSetGammaRamp.
+     * The buffer is allocated once, at the largest ramp size, and overwritten
+     * in place: committed VidPN paths point at it, so it must stay valid for
+     * the adapter's life.  It is handed to the driver with every mode set,
+     * which would otherwise reset the source to identity.
+     */
+    PVOID                       SourceGammaBuffer[DXGKP_GAMMA_SOURCES];
+    D3DDDI_GAMMARAMP_TYPE       SourceGammaType[DXGKP_GAMMA_SOURCES];
+    SIZE_T                      SourceGammaSize[DXGKP_GAMMA_SOURCES];
 
     /* Timing firmware left running, as the driver described it in answer to
      * DXGK_RFVR_FIRMWARE at start.  Used only by the first commit. */
@@ -3367,6 +3381,14 @@ DxgkpMiniportQueryInterface(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ ULONG DeviceUid,
     _In_ PIO_STACK_LOCATION Stack);
+
+/* d3dkmt.c: stored gamma for a source, as the path of a VidPN being committed
+ * should carry it. */
+VOID
+DxgkpLoadSourceGamma(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId,
+    _Out_ D3DKMDT_GAMMA_RAMP *GammaRamp);
 
 /* acpievent.c */
 VOID

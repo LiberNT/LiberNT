@@ -14819,6 +14819,19 @@ DxgkAdapterRemove(
     InitializeListHead(&Adapter->MiniportAdapterListEntry);
     KeReleaseSpinLock(&Adapter->MiniportContext->AdapterListLock, OldIrql);
 
+    {
+        ULONG GammaSource;
+
+        for (GammaSource = 0; GammaSource < DXGKP_GAMMA_SOURCES; GammaSource++)
+        {
+            if (Adapter->SourceGammaBuffer[GammaSource] != NULL)
+            {
+                ExFreePoolWithTag(Adapter->SourceGammaBuffer[GammaSource], TAG_DXGK_ADAPTER);
+                Adapter->SourceGammaBuffer[GammaSource] = NULL;
+            }
+        }
+    }
+
     /* Unlink from global adapter list. */
     KeAcquireSpinLock(&DxgkAdapterGlobalListLock, &OldIrql);
     RemoveEntryList(&Adapter->GlobalAdapterListEntry);
