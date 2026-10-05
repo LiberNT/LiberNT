@@ -102,6 +102,28 @@ Dxgmms2VidMmReservePlacement(
 
 static NTSTATUS
 NTAPI
+Dxgmms2VidMmReserveFixedPlacement(
+    _In_ DXGMMS2_VIDMM_HANDLE VidMm,
+    _In_ ULONG SegmentIndex,
+    _In_ ULONGLONG Offset,
+    _In_ const DXGMMS2_VIDMM_RESERVE_INFO_V1 *Info)
+{
+    PDXGMMS2_ADAPTER_CONTEXT Context = Dxgmms2VidMmContext(VidMm);
+    KIRQL OldIrql;
+    NTSTATUS Status;
+
+    if (Context == NULL)
+        return STATUS_INVALID_HANDLE;
+    if (Info == NULL)
+        return STATUS_INVALID_PARAMETER;
+    KeAcquireSpinLock(&Context->VidMmLock, &OldIrql);
+    Status = Dxgmms2VidMmCoreReserveFixed(&Context->VidMmCore, SegmentIndex, Offset, Info);
+    KeReleaseSpinLock(&Context->VidMmLock, OldIrql);
+    return Status;
+}
+
+static NTSTATUS
+NTAPI
 Dxgmms2VidMmReleasePlacement(
     _In_ DXGMMS2_VIDMM_HANDLE VidMm,
     _In_ ULONG SegmentIndex,
@@ -235,6 +257,7 @@ Dxgmms2QueryVidMmInterface(
     VidMmInterface->QuerySegmentStatus = Dxgmms2VidMmQuerySegmentStatus;
     VidMmInterface->FindEvictionCandidate = Dxgmms2VidMmFindEvictionCandidate;
     VidMmInterface->ReleaseAllPlacements = Dxgmms2VidMmReleaseAllPlacements;
+    VidMmInterface->ReserveFixedPlacement = Dxgmms2VidMmReserveFixedPlacement;
 
     Dxgmms2DereferenceAdapterContext(Context);
     return STATUS_SUCCESS;

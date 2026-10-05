@@ -321,6 +321,75 @@ Dxgmms2VidMmCoreReserve(
     return STATUS_SUCCESS;
 }
 
+/*
+ * Dxgmms2VidMmCoreReserveFixed
+ *
+ * Records a placement at a caller-chosen offset.  The bump cursor only ever
+ * looks forward, so it is moved past the range; the space below stays
+ * reachable through the first-fit gap search.
+ */
+NTSTATUS
+Dxgmms2VidMmCoreReserveFixed(
+    _Inout_ PDXGMMS2_VIDMM_CORE Core,
+    _In_ ULONG SegmentIndex,
+    _In_ ULONGLONG Offset,
+    _In_ const DXGMMS2_VIDMM_RESERVE_INFO_V1 *Info)
+{
+    PDXGMMS2_VIDMM_SEGMENT Segment;
+    PDXGMMS2_VIDMM_RANGE Range;
+    PLIST_ENTRY Entry;
+    PLIST_ENTRY InsertBefore;
+    ULONGLONG Limit;
+    ULONGLONG End;
+
+    Segment = Dxgmms2VidMmSegment(Core, SegmentIndex);
+    if (Segment == NULL)
+        return STATUS_INVALID_PARAMETER;
+    if (Info->Size == 0 || Info->OwnerCookie == 0)
+        return STATUS_INVALID_PARAMETER;
+    Limit = Dxgmms2VidMmPlacementLimit(Segment);
+    if (Offset > Limit || Info->Size > Limit - Offset)
+        return STATUS_INVALID_PARAMETER;
+    End = Offset + Info->Size;
+
+    /* Sorted list: find the first range at or past Offset, refusing any
+     * overlap on the way. */
+    InsertBefore = &Segment->RangeList;
+    for (Entry = Segment->RangeList.Flink; Entry != &Segment->RangeList; Entry = Entry->Flink)
+    {
+        PDXGMMS2_VIDMM_RANGE Existing = CONTAINING_RECORD(Entry, DXGMMS2_VIDMM_RANGE, Entry);
+
+        if (Existing->Offset < End &&
+            Offset < Existing->Offset + Existing->AlignedSize)
+        {
+            return STATUS_CONFLICTING_ADDRESSES;
+        }
+        if (Existing->Offset >= End)
+        {
+            InsertBefore = Entry;
+            break;
+        }
+    }
+
+    Range = Dxgmms2VidMmAcquireRange(Core);
+    if (Range == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Range->Offset = Offset;
+    Range->AlignedSize = Info->Size;
+    Range->OwnerCookie = Info->OwnerCookie;
+    Range->SegmentIndex = SegmentIndex;
+    Range->Priority = Info->Priority;
+    Range->Flags = Info->Flags;
+    InsertTailList(InsertBefore, &Range->Entry);
+
+    if (Segment->BumpOffset < End)
+        Segment->BumpOffset = End;
+    Segment->UsedSize += Info->Size;
+    Segment->RangeCount++;
+    Core->LiveRangeCount++;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 Dxgmms2VidMmCoreRelease(
     _Inout_ PDXGMMS2_VIDMM_CORE Core,
