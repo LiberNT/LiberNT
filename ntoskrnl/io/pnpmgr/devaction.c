@@ -3384,6 +3384,12 @@ PipRunDeviceActionRequest(
             {
                 PiDevNodeStateMachine(deviceNode);
             }
+            else if (deviceNode->State >= DeviceNodeDriversAdded &&
+                     deviceNode->State <= DeviceNodeEnumerateCompletion &&
+                     !(deviceNode->Flags & DNF_HAS_PROBLEM))
+            {
+                status = STATUS_SUCCESS;
+            }
             else
             {
                 DPRINT1("NOTE: attempt to start an already started/uninitialized device %wZ\n",
