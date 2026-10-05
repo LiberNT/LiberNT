@@ -5238,6 +5238,302 @@ Monitor_ReleaseMonitorSourceModeSet(
     return STATUS_SUCCESS;
 }
 
+/* ---- Monitor descriptor and frequency-range sets ----------------------
+ *
+ * Built from the child's cached EDID: the base block, then each extension
+ * block -- a block map as BLOCKMAP, anything else (CTA-861, DisplayID) as
+ * OTHER.  The sets live in the child extension (see pnp.h): the monitor
+ * interface has no call to release them.
+ */
+
+/* Finds the present video-output child for a target id.  ChildListLock. */
+static PDXGK_CHILD_PDO_EXTENSION
+DxgkpMonitorChildLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = Adapter->ChildListHead.Flink;
+         Entry != &Adapter->ChildListHead;
+         Entry = Entry->Flink)
+    {
+        PDXGK_CHILD_PDO_EXTENSION Child =
+            CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry);
+
+        if (Child->Present &&
+            Child->Descriptor.ChildDeviceType == TypeVideoOutput &&
+            Child->Descriptor.ChildUid == TargetId)
+        {
+            return Child;
+        }
+    }
+    return NULL;
+}
+
+/*
+ * Locates the monitor on a target and checks one is attached.  On success
+ * ChildListLock is held; the caller releases it with *OldIrql.
+ */
+static NTSTATUS
+DxgkpLockMonitorChild(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _Out_ PDXGK_CHILD_PDO_EXTENSION *OutChild,
+    _Out_ PKIRQL OldIrql)
+{
+    PDXGK_CHILD_PDO_EXTENSION Child;
+
+    *OutChild = NULL;
+    if (Adapter == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    KeAcquireSpinLock(&Adapter->ChildListLock, OldIrql);
+    Child = DxgkpMonitorChildLocked(Adapter, TargetId);
+    if (Child == NULL)
+    {
+        KeReleaseSpinLock(&Adapter->ChildListLock, *OldIrql);
+        return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET;
+    }
+    if (!Child->Connected)
+    {
+        KeReleaseSpinLock(&Adapter->ChildListLock, *OldIrql);
+        return STATUS_GRAPHICS_MONITOR_NOT_CONNECTED;
+    }
+    *OutChild = Child;
+    return STATUS_SUCCESS;
+}
+
+static PDXGKP_MONITOR_DESCRIPTOR_SET
+DxgkpDescriptorSetFromHandle(
+    _In_ D3DKMDT_HMONITORDESCRIPTORSET hSet)
+{
+    PDXGKP_MONITOR_DESCRIPTOR_SET Set = (PDXGKP_MONITOR_DESCRIPTOR_SET)hSet;
+
+    return (Set != NULL && Set->Signature == DXGKP_DESCRIPTOR_SET_SIGNATURE) ? Set : NULL;
+}
+
+static PDXGKP_MONITOR_FREQUENCY_RANGE_SET
+DxgkpFrequencyRangeSetFromHandle(
+    _In_ D3DKMDT_HMONITORFREQUENCYRANGESET hSet)
+{
+    PDXGKP_MONITOR_FREQUENCY_RANGE_SET Set = (PDXGKP_MONITOR_FREQUENCY_RANGE_SET)hSet;
+
+    return (Set != NULL && Set->Signature == DXGKP_FREQUENCY_RANGE_SET_SIGNATURE) ? Set : NULL;
+}
+
+static NTSTATUS APIENTRY
+DescriptorSet_GetNumDescriptors(
+    IN_CONST_D3DKMDT_HMONITORDESCRIPTORSET hMonitorDescriptorSet,
+    OUT_PSIZE_T_CONST pNumMonitorDescriptors)
+{
+    PDXGKP_MONITOR_DESCRIPTOR_SET Set = DxgkpDescriptorSetFromHandle(hMonitorDescriptorSet);
+
+    if (Set == NULL || pNumMonitorDescriptors == NULL)
+        return STATUS_INVALID_PARAMETER;
+    *pNumMonitorDescriptors = Set->NumDescriptors;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS APIENTRY
+DescriptorSet_AcquireFirstDescriptorInfo(
+    IN_CONST_D3DKMDT_HMONITORDESCRIPTORSET hMonitorDescriptorSet,
+    DEREF_OUT_CONST_PPD3DKMDT_MONITOR_DESCRIPTOR ppFirstMonitorDescriptorInfo)
+{
+    PDXGKP_MONITOR_DESCRIPTOR_SET Set = DxgkpDescriptorSetFromHandle(hMonitorDescriptorSet);
+
+    if (Set == NULL || ppFirstMonitorDescriptorInfo == NULL)
+        return STATUS_INVALID_PARAMETER;
+    *ppFirstMonitorDescriptorInfo = NULL;
+    if (Set->NumDescriptors == 0)
+        return STATUS_GRAPHICS_DATASET_IS_EMPTY;
+    *ppFirstMonitorDescriptorInfo = &Set->Descriptors[0];
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS APIENTRY
+DescriptorSet_AcquireNextDescriptorInfo(
+    IN_CONST_D3DKMDT_HMONITORDESCRIPTORSET hMonitorDescriptorSet,
+    IN_CONST_PD3DKMDT_MONITOR_DESCRIPTOR_CONST pMonitorDescriptorInfo,
+    DEREF_OUT_CONST_PPD3DKMDT_MONITOR_DESCRIPTOR ppNextMonitorDescriptorInfo)
+{
+    PDXGKP_MONITOR_DESCRIPTOR_SET Set = DxgkpDescriptorSetFromHandle(hMonitorDescriptorSet);
+    SIZE_T Index;
+
+    if (Set == NULL || pMonitorDescriptorInfo == NULL || ppNextMonitorDescriptorInfo == NULL)
+        return STATUS_INVALID_PARAMETER;
+    *ppNextMonitorDescriptorInfo = NULL;
+    if (pMonitorDescriptorInfo < &Set->Descriptors[0] ||
+        pMonitorDescriptorInfo >= &Set->Descriptors[Set->NumDescriptors])
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Index = (SIZE_T)(pMonitorDescriptorInfo - &Set->Descriptors[0]) + 1;
+    if (Index >= Set->NumDescriptors)
+        return STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET;
+    *ppNextMonitorDescriptorInfo = &Set->Descriptors[Index];
+    return STATUS_SUCCESS;
+}
+
+/* Descriptors belong to the set, which belongs to the monitor; releasing
+ * one only ends the caller's use of it. */
+static NTSTATUS APIENTRY
+DescriptorSet_ReleaseDescriptorInfo(
+    IN_CONST_D3DKMDT_HMONITORDESCRIPTORSET hMonitorDescriptorSet,
+    IN_CONST_PD3DKMDT_MONITOR_DESCRIPTOR_CONST pMonitorDescriptorInfo)
+{
+    PDXGKP_MONITOR_DESCRIPTOR_SET Set = DxgkpDescriptorSetFromHandle(hMonitorDescriptorSet);
+
+    if (Set == NULL || pMonitorDescriptorInfo == NULL ||
+        pMonitorDescriptorInfo < &Set->Descriptors[0] ||
+        pMonitorDescriptorInfo >= &Set->Descriptors[Set->NumDescriptors])
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    return STATUS_SUCCESS;
+}
+
+static CONST DXGK_MONITORDESCRIPTORSET_INTERFACE g_MonitorDescriptorSetInterface =
+{
+    DescriptorSet_GetNumDescriptors,
+    DescriptorSet_AcquireFirstDescriptorInfo,
+    DescriptorSet_AcquireNextDescriptorInfo,
+    DescriptorSet_ReleaseDescriptorInfo
+};
+
+static NTSTATUS APIENTRY
+FrequencyRangeSet_GetNumFrequencyRanges(
+    IN_CONST_D3DKMDT_HMONITORFREQUENCYRANGESET hMonitorFrequencyRangeSet,
+    OUT_PSIZE_T_CONST pNumMonitorFrequencyRanges)
+{
+    PDXGKP_MONITOR_FREQUENCY_RANGE_SET Set = DxgkpFrequencyRangeSetFromHandle(hMonitorFrequencyRangeSet);
+
+    if (Set == NULL || pNumMonitorFrequencyRanges == NULL)
+        return STATUS_INVALID_PARAMETER;
+    *pNumMonitorFrequencyRanges = Set->NumRanges;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS APIENTRY
+FrequencyRangeSet_AcquireFirstFrequencyRangeInfo(
+    IN_CONST_D3DKMDT_HMONITORFREQUENCYRANGESET hMonitorFrequencyRangeSet,
+    DEREF_OUT_CONST_PPD3DKMDT_MONITOR_FREQUENCY_RANGE ppFirstMonitorFrequencyRangeInfo)
+{
+    PDXGKP_MONITOR_FREQUENCY_RANGE_SET Set = DxgkpFrequencyRangeSetFromHandle(hMonitorFrequencyRangeSet);
+
+    if (Set == NULL || ppFirstMonitorFrequencyRangeInfo == NULL)
+        return STATUS_INVALID_PARAMETER;
+    *ppFirstMonitorFrequencyRangeInfo = NULL;
+    if (Set->NumRanges == 0)
+        return STATUS_GRAPHICS_DATASET_IS_EMPTY;
+    *ppFirstMonitorFrequencyRangeInfo = &Set->Ranges[0];
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS APIENTRY
+FrequencyRangeSet_AcquireNextFrequencyRangeInfo(
+    IN_CONST_D3DKMDT_HMONITORFREQUENCYRANGESET hMonitorFrequencyRangeSet,
+    IN_CONST_PD3DKMDT_MONITOR_FREQUENCY_RANGE_CONST pMonitorFrequencyRangeInfo,
+    DEREF_OUT_CONST_PPD3DKMDT_MONITOR_FREQUENCY_RANGE ppNextMonitorFrequencyRangeInfo)
+{
+    PDXGKP_MONITOR_FREQUENCY_RANGE_SET Set = DxgkpFrequencyRangeSetFromHandle(hMonitorFrequencyRangeSet);
+    SIZE_T Index;
+
+    if (Set == NULL || pMonitorFrequencyRangeInfo == NULL || ppNextMonitorFrequencyRangeInfo == NULL)
+        return STATUS_INVALID_PARAMETER;
+    *ppNextMonitorFrequencyRangeInfo = NULL;
+    if (pMonitorFrequencyRangeInfo < &Set->Ranges[0] ||
+        pMonitorFrequencyRangeInfo >= &Set->Ranges[Set->NumRanges])
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Index = (SIZE_T)(pMonitorFrequencyRangeInfo - &Set->Ranges[0]) + 1;
+    if (Index >= Set->NumRanges)
+        return STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET;
+    *ppNextMonitorFrequencyRangeInfo = &Set->Ranges[Index];
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS APIENTRY
+FrequencyRangeSet_ReleaseFrequencyRangeInfo(
+    IN_CONST_D3DKMDT_HMONITORFREQUENCYRANGESET hMonitorFrequencyRangeSet,
+    IN_CONST_PD3DKMDT_MONITOR_FREQUENCY_RANGE_CONST pMonitorFrequencyRangeInfo)
+{
+    PDXGKP_MONITOR_FREQUENCY_RANGE_SET Set = DxgkpFrequencyRangeSetFromHandle(hMonitorFrequencyRangeSet);
+
+    if (Set == NULL || pMonitorFrequencyRangeInfo == NULL ||
+        pMonitorFrequencyRangeInfo < &Set->Ranges[0] ||
+        pMonitorFrequencyRangeInfo >= &Set->Ranges[Set->NumRanges])
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    return STATUS_SUCCESS;
+}
+
+static CONST DXGK_MONITORFREQUENCYRANGESET_INTERFACE g_MonitorFrequencyRangeSetInterface =
+{
+    FrequencyRangeSet_GetNumFrequencyRanges,
+    FrequencyRangeSet_AcquireFirstFrequencyRangeInfo,
+    FrequencyRangeSet_AcquireNextFrequencyRangeInfo,
+    FrequencyRangeSet_ReleaseFrequencyRangeInfo
+};
+
+/*
+ * Reads the Display Range Limits descriptor (tag 0xFD) from an EDID base
+ * block.  EDID 1.4 byte 4 adds 255 to a rate when its offset bits say so:
+ * bits 1:0 for vertical, 3:2 for horizontal (binary 10 = maximum only,
+ * 11 = minimum and maximum).
+ */
+static BOOLEAN
+DxgkpEdidRangeLimits(
+    _In_reads_bytes_(128) CONST UCHAR *Edid,
+    _Out_ D3DKMDT_MONITOR_FREQUENCY_RANGE *Range)
+{
+    static CONST ULONG DescriptorOffsets[] = { 54, 72, 90, 108 };
+    ULONG i;
+
+    RtlZeroMemory(Range, sizeof(*Range));
+    for (i = 0; i < RTL_NUMBER_OF(DescriptorOffsets); i++)
+    {
+        CONST UCHAR *D = Edid + DescriptorOffsets[i];
+        ULONG MinV, MaxV, MinH, MaxH;
+
+        if (D[0] != 0 || D[1] != 0 || D[2] != 0 || D[3] != 0xFD)
+            continue;
+
+        MinV = D[5];
+        MaxV = D[6];
+        MinH = D[7];
+        MaxH = D[8];
+        if ((D[4] & 0x03) == 0x02 || (D[4] & 0x03) == 0x03)
+            MaxV += 255;
+        if ((D[4] & 0x03) == 0x03)
+            MinV += 255;
+        if ((D[4] & 0x0C) == 0x08 || (D[4] & 0x0C) == 0x0C)
+            MaxH += 255;
+        if ((D[4] & 0x0C) == 0x0C)
+            MinH += 255;
+
+        /* A range no monitor can have constrains nothing. */
+        if (MinV == 0 || MinV > MaxV || MinH == 0 || MinH > MaxH || D[9] == 0)
+            return FALSE;
+
+        Range->Origin = D3DKMDT_MCO_MONITORDESCRIPTOR;
+        Range->RangeLimits.MinVSyncFreq.Numerator = MinV;
+        Range->RangeLimits.MinVSyncFreq.Denominator = 1;
+        Range->RangeLimits.MaxVSyncFreq.Numerator = MaxV;
+        Range->RangeLimits.MaxVSyncFreq.Denominator = 1;
+        Range->RangeLimits.MinHSyncFreq.Numerator = MinH * 1000;
+        Range->RangeLimits.MinHSyncFreq.Denominator = 1;
+        Range->RangeLimits.MaxHSyncFreq.Numerator = MaxH * 1000;
+        Range->RangeLimits.MaxHSyncFreq.Denominator = 1;
+        Range->ConstraintType = D3DKMDT_MFRC_MAXPIXELRATE;
+        Range->Constraint.MaxPixelRate = (SIZE_T)D[9] * 10000000;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static NTSTATUS APIENTRY
 Monitor_GetMonitorFrequencyRangeSet(
     _In_ D3DKMDT_ADAPTER hAdapter,
@@ -5246,18 +5542,35 @@ Monitor_GetMonitorFrequencyRangeSet(
     _Out_ CONST DXGK_MONITORFREQUENCYRANGESET_INTERFACE
         **ppMonitorFrequencyRangeSetInterface)
 {
-    UNREFERENCED_PARAMETER(hAdapter);
-    UNREFERENCED_PARAMETER(VideoPresentTargetId);
+    PDXGKRNL_ADAPTER Adapter = (PDXGKRNL_ADAPTER)hAdapter;
+    PDXGK_CHILD_PDO_EXTENSION Child;
+    PDXGKP_MONITOR_FREQUENCY_RANGE_SET Set;
+    KIRQL OldIrql;
+    NTSTATUS Status;
 
     if (phMonitorFrequencyRangeSet == NULL ||
         ppMonitorFrequencyRangeSetInterface == NULL)
     {
         return STATUS_INVALID_PARAMETER;
     }
-
     *phMonitorFrequencyRangeSet = NULL;
     *ppMonitorFrequencyRangeSetInterface = NULL;
-    return STATUS_NOT_SUPPORTED;
+
+    Status = DxgkpLockMonitorChild(Adapter, VideoPresentTargetId, &Child, &OldIrql);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    /* A monitor without a range descriptor -- or without an EDID -- has an
+     * empty set, not a missing one. */
+    Set = &Child->FrequencyRangeSet;
+    Set->Signature = DXGKP_FREQUENCY_RANGE_SET_SIGNATURE;
+    Set->NumRanges = (Child->EdidValid &&
+                      DxgkpEdidRangeLimits(Child->Edid, &Set->Ranges[0])) ? 1 : 0;
+    KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+
+    *phMonitorFrequencyRangeSet = (D3DKMDT_HMONITORFREQUENCYRANGESET)Set;
+    *ppMonitorFrequencyRangeSetInterface = &g_MonitorFrequencyRangeSetInterface;
+    return STATUS_SUCCESS;
 }
 
 static NTSTATUS APIENTRY
@@ -5268,20 +5581,67 @@ Monitor_GetMonitorDescriptorSet(
     _Out_ CONST DXGK_MONITORDESCRIPTORSET_INTERFACE
         **ppMonitorDescriptorSetInterface)
 {
-    UNREFERENCED_PARAMETER(hAdapter);
-    UNREFERENCED_PARAMETER(VideoPresentTargetId);
+    PDXGKRNL_ADAPTER Adapter = (PDXGKRNL_ADAPTER)hAdapter;
+    PDXGK_CHILD_PDO_EXTENSION Child;
+    PDXGKP_MONITOR_DESCRIPTOR_SET Set;
+    KIRQL OldIrql;
+    NTSTATUS Status;
+    UCHAR Block;
 
     if (phMonitorDescriptorSet == NULL ||
         ppMonitorDescriptorSetInterface == NULL)
     {
         return STATUS_INVALID_PARAMETER;
     }
-
     *phMonitorDescriptorSet = NULL;
     *ppMonitorDescriptorSetInterface = NULL;
-    return STATUS_NOT_SUPPORTED;
+
+    Status = DxgkpLockMonitorChild(Adapter, VideoPresentTargetId, &Child, &OldIrql);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Set = &Child->DescriptorSet;
+    RtlZeroMemory(Set, sizeof(*Set));
+    Set->Signature = DXGKP_DESCRIPTOR_SET_SIGNATURE;
+    if (Child->EdidValid)
+    {
+        RtlCopyMemory(Set->Data[0], Child->Edid, 128);
+        Set->Descriptors[0].Id = 0;
+        Set->Descriptors[0].Type = D3DKMDT_MDT_VESA_EDID_V1_BASEBLOCK;
+        Set->Descriptors[0].DataSize = 128;
+        Set->Descriptors[0].pData = Set->Data[0];
+        Set->Descriptors[0].Origin = D3DKMDT_MCO_MONITORDESCRIPTOR;
+        Set->NumDescriptors = 1;
+
+        for (Block = 0;
+             Block < Child->EdidExtensionCount && Block < DXGKP_EDID_MAX_EXTENSIONS;
+             Block++)
+        {
+            SIZE_T Slot = Set->NumDescriptors;
+
+            RtlCopyMemory(Set->Data[Slot], Child->EdidExtensions[Block], 128);
+            Set->Descriptors[Slot].Id = (D3DKMDT_MONITOR_DESCRIPTOR_ID)Slot;
+            Set->Descriptors[Slot].Type = Set->Data[Slot][0] == 0xF0 ?
+                                              D3DKMDT_MDT_VESA_EDID_V1_BLOCKMAP :
+                                              D3DKMDT_MDT_OTHER;
+            Set->Descriptors[Slot].DataSize = 128;
+            Set->Descriptors[Slot].pData = Set->Data[Slot];
+            Set->Descriptors[Slot].Origin = D3DKMDT_MCO_MONITORDESCRIPTOR;
+            Set->NumDescriptors++;
+        }
+    }
+    KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+
+    *phMonitorDescriptorSet = (D3DKMDT_HMONITORDESCRIPTORSET)Set;
+    *ppMonitorDescriptorSetInterface = &g_MonitorDescriptorSetInterface;
+    return STATUS_SUCCESS;
 }
 
+/*
+ * Additional monitor modes.  Nothing in this stack sources modes beyond the
+ * monitor's descriptor -- there is no override database -- so the set is
+ * empty, which is an answer rather than a failure.
+ */
 static NTSTATUS APIENTRY
 Monitor_GetAdditionalMonitorModeSet(
     _In_ D3DKMDT_ADAPTER hAdapter,
@@ -5289,15 +5649,21 @@ Monitor_GetAdditionalMonitorModeSet(
     _Out_ UINT *pNumberModes,
     _Out_ DXGK_TARGETMODE_DETAIL_TIMING **ppAdditionalModesSet)
 {
-    UNREFERENCED_PARAMETER(hAdapter);
-    UNREFERENCED_PARAMETER(VideoPresentTargetId);
+    PDXGKRNL_ADAPTER Adapter = (PDXGKRNL_ADAPTER)hAdapter;
+    PDXGK_CHILD_PDO_EXTENSION Child;
+    KIRQL OldIrql;
+    NTSTATUS Status;
 
     if (pNumberModes == NULL || ppAdditionalModesSet == NULL)
         return STATUS_INVALID_PARAMETER;
-
     *pNumberModes = 0;
     *ppAdditionalModesSet = NULL;
-    return STATUS_NOT_SUPPORTED;
+
+    Status = DxgkpLockMonitorChild(Adapter, VideoPresentTargetId, &Child, &OldIrql);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+    return STATUS_SUCCESS;
 }
 
 static NTSTATUS APIENTRY
@@ -5309,10 +5675,8 @@ Monitor_ReleaseAdditionalMonitorModeSet(
     UNREFERENCED_PARAMETER(hAdapter);
     UNREFERENCED_PARAMETER(VideoPresentTargetId);
 
-    if (pAdditionalModesSet == NULL)
-        return STATUS_INVALID_PARAMETER;
-
-    return STATUS_NOT_SUPPORTED;
+    /* The only set ever handed out is the empty one, whose pointer is NULL. */
+    return pAdditionalModesSet == NULL ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
 }
 
 /* ========================================================================

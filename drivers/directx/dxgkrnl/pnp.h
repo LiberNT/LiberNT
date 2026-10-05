@@ -27,6 +27,24 @@
  * carry more than a CTA-861 block and a DisplayID or block map. */
 #define DXGKP_EDID_MAX_EXTENSIONS   3
 
+#define DXGKP_DESCRIPTOR_SET_SIGNATURE      'SDxD'
+#define DXGKP_FREQUENCY_RANGE_SET_SIGNATURE 'SFxD'
+
+typedef struct _DXGKP_MONITOR_DESCRIPTOR_SET
+{
+    ULONG                       Signature;
+    SIZE_T                      NumDescriptors;
+    D3DKMDT_MONITOR_DESCRIPTOR  Descriptors[1 + DXGKP_EDID_MAX_EXTENSIONS];
+    UCHAR                       Data[1 + DXGKP_EDID_MAX_EXTENSIONS][128];
+} DXGKP_MONITOR_DESCRIPTOR_SET, *PDXGKP_MONITOR_DESCRIPTOR_SET;
+
+typedef struct _DXGKP_MONITOR_FREQUENCY_RANGE_SET
+{
+    ULONG                           Signature;
+    SIZE_T                          NumRanges;
+    D3DKMDT_MONITOR_FREQUENCY_RANGE Ranges[1];
+} DXGKP_MONITOR_FREQUENCY_RANGE_SET, *PDXGKP_MONITOR_FREQUENCY_RANGE_SET;
+
 typedef struct _DXGK_CHILD_PDO_EXTENSION
 {
     /* Signature / type tag — must be first field */
@@ -70,6 +88,13 @@ typedef struct _DXGK_CHILD_PDO_EXTENSION
      * only while EdidValid is set. */
     UCHAR                   EdidExtensions[DXGKP_EDID_MAX_EXTENSIONS][128];
     UCHAR                   EdidExtensionCount;
+
+    /* Sets handed to the miniport through DXGK_MONITOR_INTERFACE.  The
+     * interface has no call to release them, so -- like the monitor objects
+     * Windows keeps -- they belong to the monitor and live with this child.
+     * Built from the cached EDID; never by calling back into the miniport. */
+    DXGKP_MONITOR_DESCRIPTOR_SET      DescriptorSet;
+    DXGKP_MONITOR_FREQUENCY_RANGE_SET FrequencyRangeSet;
 
 } DXGK_CHILD_PDO_EXTENSION, *PDXGK_CHILD_PDO_EXTENSION;
 
