@@ -11041,6 +11041,7 @@ DxgkpTimedOperationDelay(
     _In_ const LARGE_INTEGER *Interval)
 {
     LARGE_INTEGER Bounded;
+    LONGLONG Requested;
     LONGLONG Remaining;
     NTSTATUS Status;
 
@@ -11051,10 +11052,12 @@ DxgkpTimedOperationDelay(
     if (Remaining == 0)
         return DxgkpTimedOperationExpire(Op);
 
-    /* Never sleep past the deadline, whatever interval the caller picked. */
-    Bounded = *Interval;
-    if (Bounded.QuadPart < 0 && -Bounded.QuadPart > Remaining)
-        Bounded.QuadPart = -Remaining;
+    /* The interval is relative and its sign is ignored (the contract says
+     * so); handed through as a positive value it would be an absolute time
+     * already in the past, and the caller would not wait at all.  Never
+     * sleep past the operation's deadline either. */
+    Requested = Interval->QuadPart < 0 ? -Interval->QuadPart : Interval->QuadPart;
+    Bounded.QuadPart = -min(Requested, Remaining);
     Status = KeDelayExecutionThread(WaitMode, Alertable, &Bounded);
     if (NT_SUCCESS(Status) && DxgkpTimedOperationRemaining(Op) == 0)
         return DxgkpTimedOperationExpire(Op);
@@ -11071,7 +11074,6 @@ DxgkpTimedOperationWaitForSingleObject(
     _In_opt_ const LARGE_INTEGER *Timeout)
 {
     LARGE_INTEGER Bounded;
-    LARGE_INTEGER Now;
     LONGLONG Requested;
     LONGLONG Remaining;
     NTSTATUS Status;
@@ -11083,22 +11085,12 @@ DxgkpTimedOperationWaitForSingleObject(
     if (Remaining == 0)
         return DxgkpTimedOperationExpire(Op);
 
-    /* The caller's own timeout still applies when it is the shorter one; an
-     * absolute time is measured against the system clock first. */
+    /* The caller's own timeout still applies when it is the shorter one.  It
+     * is relative and its sign is ignored, as the contract states; it is
+     * never an absolute system time. */
     Requested = Remaining;
     if (Timeout != NULL)
-    {
-        if (Timeout->QuadPart <= 0)
-        {
-            Requested = -Timeout->QuadPart;
-        }
-        else
-        {
-            KeQuerySystemTime(&Now);
-            Requested = Timeout->QuadPart > Now.QuadPart ?
-                        Timeout->QuadPart - Now.QuadPart : 0;
-        }
-    }
+        Requested = Timeout->QuadPart < 0 ? -Timeout->QuadPart : Timeout->QuadPart;
     Bounded.QuadPart = -min(Requested, Remaining);
     Status = KeWaitForSingleObject(Object,
                                    WaitReason,
