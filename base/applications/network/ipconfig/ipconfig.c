@@ -410,7 +410,7 @@ PrintAdapterDescription(PSTR lpClass)
         else
             continue;
 
-        if (!strcmp(lpClass, lpKeyClass))
+        if (!_stricmp(lpClass, lpKeyClass))
         {
             HeapFree(ProcessHeap, 0, lpKeyClass);
             lpKeyClass = NULL;
