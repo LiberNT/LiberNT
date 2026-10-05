@@ -458,12 +458,6 @@ NtfsReportFileChange(_In_ PVolumeContextBlock VolCB,
                      _In_ ULONG FilterMatch,
                      _In_ ULONG Action);
 
-/* Exported by ntoskrnl, but not declared by the DDK headers. */
-NTKERNELAPI VOID FASTCALL
-ExfAcquirePushLockExclusive(_Inout_ PEX_PUSH_LOCK PushLock);
-NTKERNELAPI VOID FASTCALL
-ExfReleasePushLockExclusive(_Inout_ PEX_PUSH_LOCK PushLock);
-
 static inline
 VOID
 NtfsAcquireMetadata(_In_ PVolumeContextBlock VolCB)
