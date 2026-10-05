@@ -21,6 +21,12 @@ HKCU,"Keyboard Layout\Toggle","Layout Hotkey",0x00000000,"2"
 ; Cdrom class driver
 HKLM,"SYSTEM\CurrentControlSet\Services\Cdrom","Start",0x00010001,0x00000000
 
+; Writable RAM drive
+HKLM,"SYSTEM\CurrentControlSet\Services\RamDrv","ErrorControl",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\RamDrv","ImagePath",0x00020000,"system32\drivers\ramdrv.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\RamDrv","Start",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\RamDrv","Type",0x00010001,0x00000001
+
 ; Reset BootExecute to an empty value: AutoChk should not start in MiniNT mode
 HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager","BootExecute",0x00010000,""
 
