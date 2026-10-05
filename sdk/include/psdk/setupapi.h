@@ -190,6 +190,7 @@ extern "C" {
 #define DIRID_WINDOWS	10
 #define DIRID_SYSTEM	11
 #define DIRID_DRIVERS	12
+#define DIRID_DRIVER_STORE	13
 #define DIRID_INF	17
 #define DIRID_HELP	18
 #define DIRID_FONTS	20

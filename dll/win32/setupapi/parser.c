@@ -73,6 +73,8 @@ struct inf_file
     struct field    *fields;
     int              strings_section; /* index of [Strings] section or -1 if none */
     WCHAR           *filename;        /* filename of the INF */
+    WCHAR           *driver_store_dir;
+    BOOL             driver_store_checked;
 };
 
 /* parser definitions */
@@ -292,12 +294,34 @@ static struct field *add_field( struct inf_file *file, const WCHAR *text )
 }
 
 
+static const WCHAR *get_driver_store_dir( const struct inf_file *file, unsigned int *len )
+{
+    struct inf_file *inf = (struct inf_file *)file;
+    WCHAR store_inf[MAX_PATH], *p;
+
+    if (!inf->driver_store_checked)
+    {
+        inf->driver_store_checked = TRUE;
+        if (inf->filename && SETUPAPI_FindDriverStoreInf( inf->filename, store_inf ) &&
+            (p = strrchrW( store_inf, '\\' )))
+        {
+            *p = 0;
+            if ((inf->driver_store_dir = HeapAlloc( GetProcessHeap(), 0, (p - store_inf + 1) * sizeof(WCHAR) )))
+                strcpyW( inf->driver_store_dir, store_inf );
+        }
+    }
+    if (!inf->driver_store_dir) return NULL;
+    *len = strlenW( inf->driver_store_dir );
+    return inf->driver_store_dir;
+}
+
 /* retrieve the string substitution for a directory id */
 static const WCHAR *get_dirid_subst( const struct inf_file *file, int dirid, unsigned int *len )
 {
     const WCHAR *ret;
 
     if (dirid == DIRID_SRCPATH) return get_inf_dir( file, len );
+    if (dirid == DIRID_DRIVER_STORE && (ret = get_driver_store_dir( file, len ))) return ret;
     ret = DIRID_get_string( dirid );
     if (ret) *len = strlenW(ret);
     return ret;
@@ -900,6 +924,7 @@ static void free_inf_file( struct inf_file *file )
 
     for (i = 0; i < file->nb_sections; i++) HeapFree( GetProcessHeap(), 0, file->sections[i] );
     HeapFree( GetProcessHeap(), 0, file->filename );
+    HeapFree( GetProcessHeap(), 0, file->driver_store_dir );
     HeapFree( GetProcessHeap(), 0, file->sections );
     HeapFree( GetProcessHeap(), 0, file->fields );
     HeapFree( GetProcessHeap(), 0, file->strings );
