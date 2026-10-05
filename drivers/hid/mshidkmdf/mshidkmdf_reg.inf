@@ -1,0 +1,10 @@
+; PROJECT:     LiberNT
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Register the HID KMDF pass-through service
+; COPYRIGHT:   Copyright 2026 Ahmed Arif <arif193@gmail.com>
+
+[AddReg]
+HKLM,"SYSTEM\CurrentControlSet\Services\mshidkmdf","ErrorControl",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Services\mshidkmdf","ImagePath",0x00020000,"system32\drivers\mshidkmdf.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\mshidkmdf","Start",0x00010001,3
+HKLM,"SYSTEM\CurrentControlSet\Services\mshidkmdf","Type",0x00010001,1
