@@ -12,6 +12,7 @@
 #include <reactos/drivers/intelgpio.h>
 #include <reactos/drivers/inteli2c.h>
 #include <ntstrsafe.h>
+#include <pseh/pseh2.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -1126,6 +1127,186 @@ RhAccessGpioConnection(
 
 static
 NTSTATUS
+RhExecuteUserSpbTransfers(
+    _Inout_ PRH_FILE_CONTEXT Context,
+    _In_reads_(TransferCount) PSPB_TRANSFER_LIST_ENTRY UserTransfers,
+    _In_ ULONG TransferCount,
+    _Out_ PULONG BytesTransferred)
+{
+    PSPB_TRANSFER_LIST_ENTRY Transfers;
+    PSPB_TRANSFER_BUFFER_LIST_ENTRY *Lists;
+    PUCHAR Data = NULL;
+    ULONG TotalLength = 0;
+    ULONG Offset;
+    ULONG Index;
+    ULONG Entry;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    *BytesTransferred = 0;
+    Transfers = ExAllocatePoolWithTag(NonPagedPool, TransferCount * (sizeof(*Transfers) + sizeof(*Lists)), RH_TAG);
+    if (!Transfers)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlCopyMemory(Transfers, UserTransfers, TransferCount * sizeof(*Transfers));
+    Lists = (PSPB_TRANSFER_BUFFER_LIST_ENTRY *)&Transfers[TransferCount];
+    RtlZeroMemory(Lists, TransferCount * sizeof(*Lists));
+
+    _SEH2_TRY
+    {
+        for (Index = 0; Index < TransferCount && NT_SUCCESS(Status); Index++)
+        {
+            PSPB_TRANSFER_LIST_ENTRY Transfer = &Transfers[Index];
+            BOOLEAN ToDevice = Transfer->Direction == SpbTransferDirectionToDevice;
+            ULONG Length = 0;
+
+            if (!ToDevice && Transfer->Direction != SpbTransferDirectionFromDevice)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+
+            if (Transfer->Buffer.Format == SpbTransferBufferFormatSimple)
+            {
+                Length = Transfer->Buffer.Simple.BufferCb;
+                if (ToDevice)
+                    ProbeForRead(Transfer->Buffer.Simple.Buffer, Length, sizeof(UCHAR));
+                else
+                    ProbeForWrite(Transfer->Buffer.Simple.Buffer, Length, sizeof(UCHAR));
+            }
+            else if (Transfer->Buffer.Format == SpbTransferBufferFormatList &&
+                     Transfer->Buffer.BufferList.ListCe != 0 &&
+                     Transfer->Buffer.BufferList.ListCe <= RH_SPB_MAXIMUM_BUFFER_LIST_ENTRIES)
+            {
+                ULONG ListBytes = Transfer->Buffer.BufferList.ListCe * sizeof(SPB_TRANSFER_BUFFER_LIST_ENTRY);
+
+                ProbeForRead(Transfer->Buffer.BufferList.List, ListBytes, TYPE_ALIGNMENT(SPB_TRANSFER_BUFFER_LIST_ENTRY));
+                Lists[Index] = ExAllocatePoolWithTag(NonPagedPool, ListBytes, RH_TAG);
+                if (!Lists[Index])
+                {
+                    Status = STATUS_INSUFFICIENT_RESOURCES;
+                    break;
+                }
+                RtlCopyMemory(Lists[Index], Transfer->Buffer.BufferList.List, ListBytes);
+                for (Entry = 0; Entry < Transfer->Buffer.BufferList.ListCe; Entry++)
+                {
+                    ULONG EntryLength = Lists[Index][Entry].BufferCb;
+
+                    if (EntryLength > RH_SPB_MAXIMUM_REQUEST_LENGTH - Length)
+                    {
+                        Status = STATUS_INVALID_BUFFER_SIZE;
+                        break;
+                    }
+                    if (ToDevice)
+                        ProbeForRead(Lists[Index][Entry].Buffer, EntryLength, sizeof(UCHAR));
+                    else
+                        ProbeForWrite(Lists[Index][Entry].Buffer, EntryLength, sizeof(UCHAR));
+                    Length += EntryLength;
+                }
+            }
+            else
+            {
+                Status = STATUS_INVALID_PARAMETER;
+            }
+
+            if (NT_SUCCESS(Status) && (!Length || Length > RH_SPB_MAXIMUM_REQUEST_LENGTH - TotalLength))
+                Status = STATUS_INVALID_BUFFER_SIZE;
+            if (NT_SUCCESS(Status))
+                TotalLength += Length;
+            Transfer->Buffer.Simple.BufferCb = Length;
+        }
+
+        if (NT_SUCCESS(Status))
+        {
+            Data = ExAllocatePoolWithTag(NonPagedPool, TotalLength, RH_TAG);
+            if (!Data)
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        if (NT_SUCCESS(Status))
+        {
+            RtlZeroMemory(Data, TotalLength);
+            for (Index = 0, Offset = 0; Index < TransferCount; Index++)
+            {
+                PSPB_TRANSFER_LIST_ENTRY Transfer = &Transfers[Index];
+                ULONG Length = Transfer->Buffer.Simple.BufferCb;
+
+                if (Transfer->Direction == SpbTransferDirectionToDevice)
+                {
+                    if (Lists[Index])
+                    {
+                        ULONG Copied = 0;
+
+                        for (Entry = 0; Entry < UserTransfers[Index].Buffer.BufferList.ListCe; Entry++)
+                        {
+                            RtlCopyMemory(Data + Offset + Copied, Lists[Index][Entry].Buffer, Lists[Index][Entry].BufferCb);
+                            Copied += Lists[Index][Entry].BufferCb;
+                        }
+                    }
+                    else
+                    {
+                        RtlCopyMemory(Data + Offset, UserTransfers[Index].Buffer.Simple.Buffer, Length);
+                    }
+                }
+                Transfer->Buffer.Format = SpbTransferBufferFormatSimpleNonPaged;
+                Transfer->Buffer.Simple.Buffer = Data + Offset;
+                Offset += Length;
+            }
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (NT_SUCCESS(Status))
+        Status = RhExecuteSpbTransfers(Context, Transfers, TransferCount, BytesTransferred);
+
+    if (NT_SUCCESS(Status))
+    {
+        _SEH2_TRY
+        {
+            for (Index = 0; Index < TransferCount; Index++)
+            {
+                PSPB_TRANSFER_LIST_ENTRY Transfer = &Transfers[Index];
+
+                if (Transfer->Direction != SpbTransferDirectionFromDevice)
+                    continue;
+                if (Lists[Index])
+                {
+                    ULONG Copied = 0;
+
+                    for (Entry = 0; Entry < UserTransfers[Index].Buffer.BufferList.ListCe; Entry++)
+                    {
+                        RtlCopyMemory(Lists[Index][Entry].Buffer, (PUCHAR)Transfer->Buffer.Simple.Buffer + Copied, Lists[Index][Entry].BufferCb);
+                        Copied += Lists[Index][Entry].BufferCb;
+                    }
+                }
+                else
+                {
+                    RtlCopyMemory(UserTransfers[Index].Buffer.Simple.Buffer, Transfer->Buffer.Simple.Buffer, Transfer->Buffer.Simple.BufferCb);
+                }
+            }
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
+
+    for (Index = 0; Index < TransferCount; Index++)
+    {
+        if (Lists[Index])
+            ExFreePoolWithTag(Lists[Index], RH_TAG);
+    }
+    if (Data)
+        ExFreePoolWithTag(Data, RH_TAG);
+    ExFreePoolWithTag(Transfers, RH_TAG);
+    return Status;
+}
+
+static
+NTSTATUS
 RhAccessSpbConnection(
     _Inout_ PRH_FILE_CONTEXT Context,
     _Inout_ PIRP Irp,
@@ -1134,6 +1315,8 @@ RhAccessSpbConnection(
     PSPB_TRANSFER_LIST TransferList = Irp->AssociatedIrp.SystemBuffer;
     ULONG InputLength = IrpStack->Parameters.DeviceIoControl.InputBufferLength;
     ULONG RequiredLength;
+    ULONG BytesTransferred = 0;
+    NTSTATUS Status;
 
     switch (IrpStack->Parameters.DeviceIoControl.IoControlCode)
     {
@@ -1146,8 +1329,6 @@ RhAccessSpbConnection(
             return RhReleaseI2cLock(Context);
 
         case IOCTL_SPB_EXECUTE_SEQUENCE:
-            if (Irp->RequestorMode != KernelMode)
-                return STATUS_ACCESS_DENIED;
             if (!TransferList || InputLength < sizeof(SPB_TRANSFER_LIST) || TransferList->Size != sizeof(SPB_TRANSFER_LIST) || TransferList->Reserved || !TransferList->TransferCount || TransferList->TransferCount > RH_SPB_MAXIMUM_TRANSFERS)
                 return STATUS_INVALID_PARAMETER;
             if (TransferList->TransferCount > (MAXULONG - FIELD_OFFSET(SPB_TRANSFER_LIST, Transfers)) / sizeof(SPB_TRANSFER_LIST_ENTRY))
@@ -1155,7 +1336,13 @@ RhAccessSpbConnection(
             RequiredLength = FIELD_OFFSET(SPB_TRANSFER_LIST, Transfers) + TransferList->TransferCount * sizeof(SPB_TRANSFER_LIST_ENTRY);
             if (InputLength < RequiredLength)
                 return STATUS_BUFFER_TOO_SMALL;
-            return RhExecuteSpbTransfers(Context, TransferList->Transfers, TransferList->TransferCount, NULL);
+            if (Irp->RequestorMode != KernelMode)
+                Status = RhExecuteUserSpbTransfers(Context, TransferList->Transfers, TransferList->TransferCount, &BytesTransferred);
+            else
+                Status = RhExecuteSpbTransfers(Context, TransferList->Transfers, TransferList->TransferCount, &BytesTransferred);
+            if (NT_SUCCESS(Status))
+                Irp->IoStatus.Information = BytesTransferred;
+            return Status;
 
         default:
             return STATUS_INVALID_DEVICE_REQUEST;

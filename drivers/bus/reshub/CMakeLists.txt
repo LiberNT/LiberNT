@@ -1,5 +1,6 @@
 add_library(reshub MODULE reshub.c reshub.rc)
 set_module_type(reshub kernelmodedriver)
+target_link_libraries(reshub ${PSEH_LIB})
 add_importlibs(reshub ntoskrnl hal)
 add_cd_file(TARGET reshub DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_registry_inf(reshub_reg.inf)
