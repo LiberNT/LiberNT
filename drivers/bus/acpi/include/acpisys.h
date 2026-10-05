@@ -69,6 +69,7 @@ typedef struct _PDO_DEVICE_DATA
     struct { ULONGLONG Start; ULONGLONG End; } PciRootIoWindows[ACPI_PCI_MAX_WINDOWS];
     ULONG PciRootMemWindowCount;
     struct { ULONGLONG Start; ULONGLONG End; BOOLEAN Prefetchable; } PciRootMemWindows[ACPI_PCI_MAX_WINDOWS];
+    BOOLEAN Reported;
     LIST_ENTRY NotificationList;
     KSPIN_LOCK NotificationLock;
     ULONG NotificationRegistrationCount;
@@ -124,6 +125,8 @@ typedef struct _FDO_DEVICE_DATA
     UNICODE_STRING  SystemInterfaceName;
     BOOLEAN         SystemInterfaceRegistered;
     BOOLEAN         SystemInterfaceEnabled;
+
+    PVOID           ControllerNotificationEntries[3];
 
 } FDO_DEVICE_DATA, *PFDO_DEVICE_DATA;
 
@@ -272,6 +275,10 @@ NTSTATUS
 Bus_StartFdo (
       PFDO_DEVICE_DATA            FdoData,
       PIRP   Irp );
+
+BOOLEAN
+BuspAreConnectionControllersReady(
+    PPDO_DEVICE_DATA DeviceData);
 
 PCHAR
 DbgDeviceIDString(

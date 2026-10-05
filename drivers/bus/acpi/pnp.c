@@ -1,5 +1,9 @@
 #include "precomp.h"
 
+#include <reactos/drivers/reshubio.h>
+#include <reactos/drivers/inteli2c.h>
+#include <reactos/drivers/intelgpio.h>
+
 #define NDEBUG
 #include <debug.h>
 
@@ -8,6 +12,162 @@ Bus_PlugInDevice (
     struct acpi_device *Device,
     PFDO_DEVICE_DATA    FdoData
     );
+
+static const GUID *Bus_ControllerInterfaces[] =
+{
+    &GUID_DEVINTERFACE_RESOURCE_HUB_CONTROLLER,
+    &GUID_DEVINTERFACE_INTEL_I2C,
+    &GUID_DEVINTERFACE_INTEL_GPIO,
+};
+
+C_ASSERT(RTL_NUMBER_OF(Bus_ControllerInterfaces) ==
+         RTL_NUMBER_OF(((PFDO_DEVICE_DATA)NULL)->ControllerNotificationEntries));
+
+static
+BOOLEAN
+Bus_HasUnreportedPdos(
+    PFDO_DEVICE_DATA FdoData)
+{
+    PLIST_ENTRY Entry;
+    BOOLEAN Pending = FALSE;
+
+    ExAcquireFastMutex(&FdoData->Mutex);
+    for (Entry = FdoData->ListOfPDOs.Flink; Entry != &FdoData->ListOfPDOs; Entry = Entry->Flink)
+    {
+        if (!CONTAINING_RECORD(Entry, PDO_DEVICE_DATA, Link)->Reported)
+        {
+            Pending = TRUE;
+            break;
+        }
+    }
+    ExReleaseFastMutex(&FdoData->Mutex);
+
+    return Pending;
+}
+
+static
+VOID
+Bus_UpdateReportedPdos(
+    PFDO_DEVICE_DATA FdoData)
+{
+    PLIST_ENTRY Entry;
+    PPDO_DEVICE_DATA *Pending;
+    PBOOLEAN Ready;
+    ULONG Count = 0;
+    ULONG Index;
+
+    ExAcquireFastMutex(&FdoData->Mutex);
+    for (Entry = FdoData->ListOfPDOs.Flink; Entry != &FdoData->ListOfPDOs; Entry = Entry->Flink)
+    {
+        if (!CONTAINING_RECORD(Entry, PDO_DEVICE_DATA, Link)->Reported)
+            Count++;
+    }
+
+    if (Count == 0)
+    {
+        ExReleaseFastMutex(&FdoData->Mutex);
+        return;
+    }
+
+    Pending = ExAllocatePoolWithTag(PagedPool, Count * (sizeof(*Pending) + sizeof(*Ready)), 'IpcA');
+    if (!Pending)
+    {
+        for (Entry = FdoData->ListOfPDOs.Flink; Entry != &FdoData->ListOfPDOs; Entry = Entry->Flink)
+            CONTAINING_RECORD(Entry, PDO_DEVICE_DATA, Link)->Reported = TRUE;
+        ExReleaseFastMutex(&FdoData->Mutex);
+        return;
+    }
+    Ready = (PBOOLEAN)&Pending[Count];
+
+    Index = 0;
+    for (Entry = FdoData->ListOfPDOs.Flink; Entry != &FdoData->ListOfPDOs && Index < Count; Entry = Entry->Flink)
+    {
+        PPDO_DEVICE_DATA PdoData = CONTAINING_RECORD(Entry, PDO_DEVICE_DATA, Link);
+
+        if (!PdoData->Reported)
+            Pending[Index++] = PdoData;
+    }
+    Count = Index;
+    ExReleaseFastMutex(&FdoData->Mutex);
+
+    for (Index = 0; Index < Count; Index++)
+        Ready[Index] = BuspAreConnectionControllersReady(Pending[Index]);
+
+    ExAcquireFastMutex(&FdoData->Mutex);
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Ready[Index])
+            Pending[Index]->Reported = TRUE;
+    }
+    ExReleaseFastMutex(&FdoData->Mutex);
+
+    ExFreePoolWithTag(Pending, 'IpcA');
+}
+
+static
+NTSTATUS
+NTAPI
+Bus_ControllerInterfaceChange(
+    PVOID NotificationStructure,
+    PVOID Context)
+{
+    PDEVICE_INTERFACE_CHANGE_NOTIFICATION Notification = NotificationStructure;
+    PFDO_DEVICE_DATA FdoData = Context;
+
+    if (IsEqualGUID(&Notification->Event, &GUID_DEVICE_INTERFACE_ARRIVAL) &&
+        Bus_HasUnreportedPdos(FdoData))
+    {
+        IoInvalidateDeviceRelations(FdoData->UnderlyingPDO, BusRelations);
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+Bus_RegisterControllerNotifications(
+    PFDO_DEVICE_DATA FdoData)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Bus_ControllerInterfaces); Index++)
+    {
+        NTSTATUS Status;
+
+        if (FdoData->ControllerNotificationEntries[Index])
+            continue;
+
+        Status = IoRegisterPlugPlayNotification(EventCategoryDeviceInterfaceChange,
+                                                0,
+                                                (PVOID)Bus_ControllerInterfaces[Index],
+                                                FdoData->Common.Self->DriverObject,
+                                                Bus_ControllerInterfaceChange,
+                                                FdoData,
+                                                &FdoData->ControllerNotificationEntries[Index]);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("ACPI: Failed to register controller notification (0x%08lx)\n", Status);
+            FdoData->ControllerNotificationEntries[Index] = NULL;
+        }
+    }
+}
+
+static
+VOID
+Bus_UnregisterControllerNotifications(
+    PFDO_DEVICE_DATA FdoData)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(FdoData->ControllerNotificationEntries); Index++)
+    {
+        if (FdoData->ControllerNotificationEntries[Index])
+        {
+            IoUnregisterPlugPlayNotification(FdoData->ControllerNotificationEntries[Index]);
+            FdoData->ControllerNotificationEntries[Index] = NULL;
+        }
+    }
+}
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (PAGE, Bus_PnP)
@@ -137,6 +297,8 @@ Bus_FDO_PnP (
         break;
 
     case IRP_MN_REMOVE_DEVICE:
+        Bus_UnregisterControllerNotifications(DeviceData);
+
         //
         // Clean up the PCI device interface.
         //
@@ -192,6 +354,8 @@ Bus_FDO_PnP (
             break;
         }
 
+        Bus_UpdateReportedPdos(DeviceData);
+
         //
         // Build the bus's child list and complete locally.
         //
@@ -214,7 +378,8 @@ Bus_FDO_PnP (
              entry = entry->Flink)
         {
             pdoData = CONTAINING_RECORD(entry, PDO_DEVICE_DATA, Link);
-            numPdosPresent++;
+            if (pdoData->Reported)
+                numPdosPresent++;
         }
 
         // If nothing to add and something already there, just return success with what was there
@@ -254,6 +419,8 @@ Bus_FDO_PnP (
              entry = entry->Flink)
         {
             pdoData = CONTAINING_RECORD(entry, PDO_DEVICE_DATA, Link);
+            if (!pdoData->Reported)
+                continue;
             relations->Objects[prevcount] = pdoData->Common.Self;
             ObReferenceObject(pdoData->Common.Self);
             prevcount++;
@@ -427,6 +594,8 @@ Bus_StartFdo (
         AcpiTerminate();
         return STATUS_UNSUCCESSFUL;
     }
+
+    Bus_RegisterControllerNotifications(FdoData);
 
     DPRINT("Bus_StartFdo: Calling ACPIEnumerateDevices\n");
     status = ACPIEnumerateDevices(FdoData);

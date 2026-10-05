@@ -5,12 +5,24 @@
 #include <devpkey.h>
 #include <poclass.h>
 #include <reactos/drivers/reshubio.h>
+#include <reactos/drivers/inteli2c.h>
+#include <reactos/drivers/intelgpio.h>
 #include <wdmguid.h>
 
 #define NDEBUG
 #include <debug.h>
 
 ACPI_STATUS AcpiRsCreateAmlResources(ACPI_BUFFER *ResourceList, ACPI_BUFFER *OutputBuffer);
+
+NTKERNELAPI
+NTSTATUS
+NTAPI
+IoEnumerateDeviceObjectList(
+    _In_ PDRIVER_OBJECT DriverObject,
+    _Out_writes_bytes_to_opt_(DeviceObjectListSize, (*ActualNumberDeviceObjects) * sizeof(PDEVICE_OBJECT))
+        PDEVICE_OBJECT *DeviceObjectList,
+    _In_ ULONG DeviceObjectListSize,
+    _Out_ PULONG ActualNumberDeviceObjects);
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (PAGE, Bus_PDO_PnP)
@@ -631,6 +643,209 @@ BuspGetConnectionId(
 
 #ifndef UNIT_TEST
 static
+PPDO_DEVICE_DATA
+BuspFindAcpiPdoByHandle(
+    _In_ PFDO_DEVICE_DATA FdoData,
+    _In_ ACPI_HANDLE Handle)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = FdoData->ListOfPDOs.Flink; Entry != &FdoData->ListOfPDOs; Entry = Entry->Flink)
+    {
+        PPDO_DEVICE_DATA Candidate = CONTAINING_RECORD(Entry, PDO_DEVICE_DATA, Link);
+
+        if (Candidate->AcpiHandle == Handle)
+            return Candidate;
+    }
+
+    return NULL;
+}
+
+static
+PDEVICE_OBJECT
+BuspLookupPciPdo(
+    _In_ PDEVICE_OBJECT PciRootPdo,
+    _In_ ULONG BusNumber,
+    _In_ ULONG Address)
+{
+    PDEVICE_OBJECT PciFdo;
+    PDEVICE_OBJECT *Devices;
+    PDEVICE_OBJECT Found = NULL;
+    ULONG Count = 0;
+    ULONG Index;
+    NTSTATUS Status;
+
+    PciFdo = IoGetAttachedDeviceReference(PciRootPdo);
+    if (PciFdo == PciRootPdo)
+    {
+        ObDereferenceObject(PciFdo);
+        return NULL;
+    }
+
+    Status = IoEnumerateDeviceObjectList(PciFdo->DriverObject, NULL, 0, &Count);
+    if (Status != STATUS_BUFFER_TOO_SMALL || Count == 0)
+    {
+        ObDereferenceObject(PciFdo);
+        return NULL;
+    }
+
+    Devices = ExAllocatePoolWithTag(NonPagedPool, Count * sizeof(PDEVICE_OBJECT), 'pPcA');
+    if (!Devices)
+    {
+        ObDereferenceObject(PciFdo);
+        return NULL;
+    }
+
+    Status = IoEnumerateDeviceObjectList(PciFdo->DriverObject, Devices, Count * sizeof(PDEVICE_OBJECT), &Count);
+    ObDereferenceObject(PciFdo);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Devices, 'pPcA');
+        return NULL;
+    }
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        ULONG DeviceBus;
+        ULONG DeviceAddress;
+        ULONG Length;
+
+        if (Found == NULL &&
+            NT_SUCCESS(IoGetDeviceProperty(Devices[Index], DevicePropertyBusNumber, sizeof(DeviceBus), &DeviceBus, &Length)) &&
+            NT_SUCCESS(IoGetDeviceProperty(Devices[Index], DevicePropertyAddress, sizeof(DeviceAddress), &DeviceAddress, &Length)) &&
+            DeviceBus == BusNumber &&
+            DeviceAddress == Address)
+        {
+            Found = Devices[Index];
+            continue;
+        }
+
+        ObDereferenceObject(Devices[Index]);
+    }
+
+    ExFreePoolWithTag(Devices, 'pPcA');
+    return Found;
+}
+
+static
+BOOLEAN
+BuspGetPciDeviceLocation(
+    _In_ PFDO_DEVICE_DATA FdoData,
+    _In_ ACPI_HANDLE Handle,
+    _Out_ PPDO_DEVICE_DATA *Root,
+    _Out_ PULONG Address)
+{
+    ACPI_HANDLE ParentHandle;
+    ULONGLONG Value;
+
+    if (ACPI_FAILURE(AcpiGetParent(Handle, &ParentHandle)))
+        return FALSE;
+
+    *Root = BuspFindAcpiPdoByHandle(FdoData, ParentHandle);
+    if (!*Root || !BuspIsPciRootDevice(*Root))
+        return FALSE;
+
+    if (ACPI_FAILURE(acpi_evaluate_integer(Handle, "_ADR", NULL, &Value)))
+        return FALSE;
+
+    *Address = (ULONG)Value;
+    return TRUE;
+}
+
+static
+PDEVICE_OBJECT
+BuspFindPciDevicePdo(
+    _In_ PFDO_DEVICE_DATA FdoData,
+    _In_ ACPI_HANDLE Handle)
+{
+    PPDO_DEVICE_DATA Root;
+    ULONG Address;
+
+    if (!BuspGetPciDeviceLocation(FdoData, Handle, &Root, &Address))
+        return NULL;
+
+    return BuspLookupPciPdo(Root->Common.Self, BuspEnsurePciRootBusNumber(Root), Address);
+}
+
+static
+BOOLEAN
+BuspControllerHasInterface(
+    _In_ PDEVICE_OBJECT ControllerPdo,
+    _In_ const GUID *InterfaceGuid)
+{
+    PWCHAR InterfaceList = NULL;
+    BOOLEAN Present;
+
+    if (!NT_SUCCESS(IoGetDeviceInterfaces(InterfaceGuid, ControllerPdo, 0, &InterfaceList)))
+        return FALSE;
+    Present = InterfaceList[0] != UNICODE_NULL;
+    ExFreePool(InterfaceList);
+    return Present;
+}
+
+static
+BOOLEAN
+BuspIsControllerReady(
+    _In_ PDEVICE_OBJECT ControllerPdo)
+{
+    return BuspControllerHasInterface(ControllerPdo, &GUID_DEVINTERFACE_RESOURCE_HUB_CONTROLLER) ||
+           BuspControllerHasInterface(ControllerPdo, &GUID_DEVINTERFACE_INTEL_I2C) ||
+           BuspControllerHasInterface(ControllerPdo, &GUID_DEVINTERFACE_INTEL_GPIO);
+}
+
+BOOLEAN
+BuspAreConnectionControllersReady(
+    _In_ PPDO_DEVICE_DATA DeviceData)
+{
+    ACPI_BUFFER Buffer = {ACPI_ALLOCATE_BUFFER, NULL};
+    ACPI_RESOURCE *Resource;
+    PFDO_DEVICE_DATA FdoData;
+    BOOLEAN Ready = TRUE;
+
+    if (!DeviceData->AcpiHandle || !DeviceData->ParentFdo)
+        return TRUE;
+    if (ACPI_FAILURE(AcpiGetCurrentResources(DeviceData->AcpiHandle, &Buffer)))
+        return TRUE;
+
+    FdoData = DeviceData->ParentFdo->DeviceExtension;
+    for (Resource = Buffer.Pointer;
+         Resource->Type != ACPI_RESOURCE_TYPE_END_TAG;
+         Resource = ACPI_NEXT_RESOURCE(Resource))
+    {
+        PCSTR SourcePath;
+        ACPI_HANDLE Handle;
+        PPDO_DEVICE_DATA Root;
+        ULONG Address;
+        PDEVICE_OBJECT ControllerPdo;
+
+        if (Resource->Type != ACPI_RESOURCE_TYPE_SERIAL_BUS)
+            continue;
+        SourcePath = Resource->Data.CommonSerialBus.ResourceSource.StringPtr;
+        if (!SourcePath || !SourcePath[0] ||
+            ACPI_FAILURE(AcpiGetHandle(NULL, (ACPI_STRING)SourcePath, &Handle)) ||
+            BuspFindAcpiPdoByHandle(FdoData, Handle) ||
+            !BuspGetPciDeviceLocation(FdoData, Handle, &Root, &Address))
+        {
+            continue;
+        }
+
+        ControllerPdo = BuspLookupPciPdo(Root->Common.Self, BuspEnsurePciRootBusNumber(Root), Address);
+        if (!ControllerPdo)
+        {
+            Ready = FALSE;
+            break;
+        }
+        Ready = BuspIsControllerReady(ControllerPdo);
+        ObDereferenceObject(ControllerPdo);
+        if (!Ready)
+            break;
+    }
+
+    ACPI_FREE(Buffer.Pointer);
+    return Ready;
+}
+
+static
 PDEVICE_OBJECT
 BuspFindControllerPdo(
     _In_ PPDO_DEVICE_DATA DeviceData,
@@ -638,7 +853,8 @@ BuspFindControllerPdo(
 {
     ACPI_HANDLE Handle;
     PFDO_DEVICE_DATA FdoData;
-    PLIST_ENTRY Entry;
+    PPDO_DEVICE_DATA Controller;
+    PDEVICE_OBJECT ControllerPdo;
 
     if (!SourcePath || !SourcePath[0] || !DeviceData->ParentFdo)
         return NULL;
@@ -646,15 +862,14 @@ BuspFindControllerPdo(
         return NULL;
 
     FdoData = DeviceData->ParentFdo->DeviceExtension;
-    for (Entry = FdoData->ListOfPDOs.Flink; Entry != &FdoData->ListOfPDOs; Entry = Entry->Flink)
-    {
-        PPDO_DEVICE_DATA Candidate = CONTAINING_RECORD(Entry, PDO_DEVICE_DATA, Link);
+    Controller = BuspFindAcpiPdoByHandle(FdoData, Handle);
+    if (Controller)
+        return Controller->Common.Self;
 
-        if (Candidate->AcpiHandle == Handle)
-            return Candidate->Common.Self;
-    }
-
-    return NULL;
+    ControllerPdo = BuspFindPciDevicePdo(FdoData, Handle);
+    if (ControllerPdo)
+        ObDereferenceObject(ControllerPdo);
+    return ControllerPdo;
 }
 
 static
