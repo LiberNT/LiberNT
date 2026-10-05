@@ -106,6 +106,7 @@ HKR, , SilentInstall,  0, 1
 %Intel_APL_SD.DeviceDesc% = sdbus_Inst, ACPI\80865ACA
 %Intel_GLK_SD.DeviceDesc% = sdbus_Inst, ACPI\80864B47
 %Broadcom_BCM2712_SD.DeviceDesc% = sdbus_Inst, ACPI\BRCM5D12
+%Broadcom_BCM2711_EMMC2.DeviceDesc% = sdbus_Inst, ACPI\BRCME88C
 %Broadcom_BCM2835_SDHOST.DeviceDesc% = sdbus_Inst, ACPI\BCM2855
 %Broadcom_BCM2836_ARASAN.DeviceDesc% = sdbus_Inst, ACPI\BCM2847
 %SpacemiT_K1_SD.DeviceDesc% = sdbus_Inst, FDT\spacemit_k1-x-sdhci
@@ -161,6 +162,7 @@ Intel_BYT_SD.DeviceDesc = "Intel Bay Trail SD/SDIO Host Controller"
 Intel_APL_SD.DeviceDesc = "Intel Apollo Lake SD Host Controller"
 Intel_GLK_SD.DeviceDesc = "Intel Gemini Lake SD Host Controller"
 Broadcom_BCM2712_SD.DeviceDesc = "Broadcom BCM2712 SD Host Controller"
+Broadcom_BCM2711_EMMC2.DeviceDesc = "Broadcom BCM2711 eMMC2 Host Controller"
 Broadcom_BCM2835_SDHOST.DeviceDesc = "Broadcom BCM2835 SDHost Controller"
 Broadcom_BCM2836_ARASAN.DeviceDesc = "Broadcom BCM2836 Arasan SD Host Controller"
 SpacemiT_K1_SD.DeviceDesc = "SpacemiT K1 SD Host Controller"
