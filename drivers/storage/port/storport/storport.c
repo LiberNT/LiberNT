@@ -137,6 +137,12 @@ PortAcquireSpinLock(
             else
                 LockHandle->Context.OldIrql = KeAcquireInterruptSpinLock(DeviceExtension->Interrupt);
             break;
+
+        case InvalidLock:
+        case ThreadedDpcLock:
+        case DpcLevelLock:
+            DPRINT1("Unsupported spin lock type %lu\n", SpinLock);
+            break;
     }
 }
 
@@ -167,6 +173,12 @@ PortReleaseSpinLock(
             else
                 KeReleaseInterruptSpinLock(DeviceExtension->Interrupt,
                                            LockHandle->Context.OldIrql);
+            break;
+
+        case InvalidLock:
+        case ThreadedDpcLock:
+        case DpcLevelLock:
+            DPRINT1("Unsupported spin lock type %lu\n", LockHandle->Lock);
             break;
     }
 }
@@ -1926,9 +1938,17 @@ StorPortExtendedFunction(
             PSTOR_LOCK_HANDLE LockHandle = va_arg(Args, PSTOR_LOCK_HANDLE);
             PMINIPORT_DEVICE_EXTENSION MiniportExtension;
 
-            if (!HwDeviceExtension || !LockHandle)
+            if (!HwDeviceExtension || !LockHandle ||
+                (SpinLock != DpcLock && SpinLock != StartIoLock &&
+                 SpinLock != InterruptLock && SpinLock != ThreadedDpcLock &&
+                 SpinLock != DpcLevelLock))
             {
                 Status = STOR_STATUS_INVALID_PARAMETER;
+                break;
+            }
+            if (SpinLock == ThreadedDpcLock || SpinLock == DpcLevelLock)
+            {
+                Status = STOR_STATUS_NOT_IMPLEMENTED;
                 break;
             }
             MiniportExtension = CONTAINING_RECORD(HwDeviceExtension, MINIPORT_DEVICE_EXTENSION, HwDeviceExtension);
