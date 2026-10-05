@@ -8829,8 +8829,7 @@ DxgkpCreateAllocationCaptured(
     if (NT_SUCCESS(Status) &&
         InfoVersion == DxgkpAllocationInfoVersion2 &&
         Device->ProcessRecord != NULL &&
-        Adapter->GpuMmuCapsValid &&
-        Adapter->GpuMmuCaps.PageTableUpdateMode == DXGK_PAGETABLEUPDATE_CPU_VIRTUAL)
+        DxgkGpuVaCpuUpdatable(Adapter))
     {
         D3DDDIGPUVIRTUALADDRESS_PROTECTION_TYPE Protection;
 
@@ -9226,8 +9225,7 @@ DxgkpCreateAllocationWithAccessModeVariant(
             goto Rollback;
         }
         /* Paging retirement must not hold the creation transaction or resource lock. */
-        if (Device->ProcessRecord != NULL && Adapter->GpuMmuCapsValid &&
-            Adapter->GpuMmuCaps.PageTableUpdateMode == DXGK_PAGETABLEUPDATE_CPU_VIRTUAL)
+        if (Device->ProcessRecord != NULL && DxgkGpuVaCpuUpdatable(Adapter))
         {
             Status = DxgkGpuVaFlushPageTableUpdates(Device->ProcessRecord);
         }
@@ -13219,6 +13217,167 @@ ReleasePlacement:
                                   SegmentId - 1,
                                   OwnerCookie);
     return Status;
+}
+
+BOOLEAN
+DxgkVidMmPageTableSegmentCpuReachable(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId)
+{
+    PDXGKRNL_SEGMENT Segment;
+
+    if (SegmentId == 0)
+        return TRUE;
+    if (Adapter == NULL || Adapter->Segments == NULL || SegmentId > Adapter->SegmentCount)
+        return FALSE;
+    Segment = &ADAPTER_SEGMENTS(Adapter)[SegmentId - 1];
+    if (VidMmSegmentIsAperture(Segment))
+        return TRUE;
+    return VidMmSegmentIsCpuVisible(Segment) && Segment->CpuTranslatedAddress.QuadPart != 0;
+}
+
+NTSTATUS
+DxgkVidMmPlaceLocalPageTable(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _In_ ULONG Size,
+    _In_ ULONG Alignment,
+    _In_ ULONGLONG OwnerCookie,
+    _Out_ PULONGLONG OutSegmentOffset,
+    _Out_ PVOID *OutCpuVa)
+{
+    PDXGMMS2_VIDMM_INTERFACE_V1 VidMm;
+    PDXGKRNL_SEGMENT Segment;
+    DXGMMS2_VIDMM_RESERVE_INFO_V1 Info;
+    PHYSICAL_ADDRESS Physical;
+    ULONGLONG Offset = 0;
+    PVOID CpuVa;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (OutSegmentOffset == NULL || OutCpuVa == NULL)
+        return STATUS_INVALID_PARAMETER;
+    *OutSegmentOffset = 0;
+    *OutCpuVa = NULL;
+    if (Adapter == NULL || Size == 0 || (Size & (PAGE_SIZE - 1)) != 0 ||
+        SegmentId == 0 || SegmentId > Adapter->SegmentCount ||
+        Adapter->Segments == NULL || OwnerCookie == 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Segment = &ADAPTER_SEGMENTS(Adapter)[SegmentId - 1];
+    if (VidMmSegmentIsAperture(Segment) || !VidMmSegmentIsCpuVisible(Segment) ||
+        Segment->CpuTranslatedAddress.QuadPart == 0)
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    VidMm = DxgkpVidMmOwner(Adapter);
+    if (VidMm == NULL)
+        return STATUS_DEVICE_NOT_READY;
+
+    Alignment = max(Alignment, (ULONG)PAGE_SIZE);
+    if ((Alignment & (Alignment - 1)) != 0)
+        return STATUS_INVALID_PARAMETER;
+
+    RtlZeroMemory(&Info, sizeof(Info));
+    Info.Size = Size;
+    Info.Alignment = Alignment;
+    Info.OwnerCookie = OwnerCookie;
+    Status = VidMm->ReservePlacement(VidMm->VidMmHandle, SegmentId - 1, &Info, &Offset);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if ((Offset & (PAGE_SIZE - 1)) != 0 ||
+        Offset > Segment->Size || Size > Segment->Size - Offset)
+    {
+        Status = STATUS_DEVICE_CONFIGURATION_ERROR;
+        goto ReleasePlacement;
+    }
+
+    Physical.QuadPart = Segment->CpuTranslatedAddress.QuadPart + (LONGLONG)Offset;
+    CpuVa = MmMapIoSpace(Physical, Size, MmNonCached);
+    if (CpuVa == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto ReleasePlacement;
+    }
+
+    *OutSegmentOffset = Offset;
+    *OutCpuVa = CpuVa;
+    return STATUS_SUCCESS;
+
+ReleasePlacement:
+    (VOID)VidMm->ReleasePlacement(VidMm->VidMmHandle, SegmentId - 1, OwnerCookie);
+    return Status;
+}
+
+NTSTATUS
+DxgkVidMmReserveSegmentRange(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _In_ ULONGLONG Size,
+    _In_ ULONGLONG Alignment,
+    _In_ ULONGLONG OwnerCookie,
+    _Out_ PULONGLONG OutSegmentOffset)
+{
+    PDXGMMS2_VIDMM_INTERFACE_V1 VidMm;
+    PDXGKRNL_SEGMENT Segment;
+    DXGMMS2_VIDMM_RESERVE_INFO_V1 Info;
+    ULONGLONG Offset = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (OutSegmentOffset == NULL)
+        return STATUS_INVALID_PARAMETER;
+    *OutSegmentOffset = 0;
+    if (Adapter == NULL || Size == 0 || (Size & (PAGE_SIZE - 1)) != 0 ||
+        Alignment < PAGE_SIZE || (Alignment & (Alignment - 1)) != 0 ||
+        SegmentId == 0 || SegmentId > Adapter->SegmentCount ||
+        Adapter->Segments == NULL || OwnerCookie == 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Segment = &ADAPTER_SEGMENTS(Adapter)[SegmentId - 1];
+    if (VidMmSegmentIsAperture(Segment))
+        return STATUS_NOT_SUPPORTED;
+    VidMm = DxgkpVidMmOwner(Adapter);
+    if (VidMm == NULL)
+        return STATUS_DEVICE_NOT_READY;
+
+    RtlZeroMemory(&Info, sizeof(Info));
+    Info.Size = Size;
+    Info.Alignment = Alignment;
+    Info.OwnerCookie = OwnerCookie;
+    Status = VidMm->ReservePlacement(VidMm->VidMmHandle, SegmentId - 1, &Info, &Offset);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if ((Offset & (Alignment - 1)) != 0 ||
+        Offset > Segment->Size || Size > Segment->Size - Offset)
+    {
+        (VOID)VidMm->ReleasePlacement(VidMm->VidMmHandle, SegmentId - 1, OwnerCookie);
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+    *OutSegmentOffset = Offset;
+    return STATUS_SUCCESS;
+}
+
+VOID
+DxgkVidMmReleaseSegmentRange(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _In_ ULONGLONG OwnerCookie)
+{
+    PDXGMMS2_VIDMM_INTERFACE_V1 VidMm;
+
+    PAGED_CODE();
+
+    if (Adapter == NULL || SegmentId == 0 || SegmentId > Adapter->SegmentCount)
+        return;
+    VidMm = DxgkpVidMmOwner(Adapter);
+    if (VidMm != NULL)
+        (VOID)VidMm->ReleasePlacement(VidMm->VidMmHandle, SegmentId - 1, OwnerCookie);
 }
 
 VOID

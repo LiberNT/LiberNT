@@ -1129,6 +1129,36 @@ DxgkVidMmMapPageTableSegment(
     _Out_ PULONGLONG OutSegmentOffset,
     _Out_ PMDL *OutMdl);
 
+NTSTATUS
+DxgkVidMmPlaceLocalPageTable(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _In_ ULONG Size,
+    _In_ ULONG Alignment,
+    _In_ ULONGLONG OwnerCookie,
+    _Out_ PULONGLONG OutSegmentOffset,
+    _Out_ PVOID *OutCpuVa);
+
+BOOLEAN
+DxgkVidMmPageTableSegmentCpuReachable(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId);
+
+NTSTATUS
+DxgkVidMmReserveSegmentRange(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _In_ ULONGLONG Size,
+    _In_ ULONGLONG Alignment,
+    _In_ ULONGLONG OwnerCookie,
+    _Out_ PULONGLONG OutSegmentOffset);
+
+VOID
+DxgkVidMmReleaseSegmentRange(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _In_ ULONGLONG OwnerCookie);
+
 VOID
 DxgkVidMmUnmapPageTableSegment(
     _In_ PDXGKRNL_ADAPTER Adapter,

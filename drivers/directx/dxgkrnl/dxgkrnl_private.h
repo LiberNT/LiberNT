@@ -283,6 +283,7 @@ typedef struct _DXGKRNL_DMA_BUFFER
     PVOID                       PrivateData;
     ULONG                       PrivateDataSize;
     ULONG                       PrivateDataUsed;
+    BOOLEAN                     PagingPoolOwned;
 } DXGKRNL_DMA_BUFFER, *PDXGKRNL_DMA_BUFFER;
 
 /*
@@ -1266,6 +1267,19 @@ struct _DXGKRNL_ADAPTER
     PDXGKRNL_DEVICE             PagingSystemDevice;
     PDXGKRNL_CONTEXT            PagingSystemContext;
 
+    FAST_MUTEX                  PageTablePoolLock;
+    RTL_BITMAP                  PageTablePoolBitmap;
+    PULONG                      PageTablePoolBitmapBuffer;
+    ULONG                       PageTablePoolSegmentId;
+    ULONGLONG                   PageTablePoolOffset;
+    ULONGLONG                   PageTablePoolSize;
+    D3DGPU_VIRTUAL_ADDRESS      PageTablePoolVa;
+    BOOLEAN                     PagingProcessInitializing;
+    volatile LONG               PagingVirtualReady;
+    KSPIN_LOCK                  PagingBufferPoolLock;
+    LIST_ENTRY                  PagingBufferPoolList;
+    KEVENT                      PagingBufferPoolEvent;
+
     /*
      * GUID_DISPLAY_DEVICE_ARRIVAL device interface.
      * Registered in DxgkpAddDevice, enabled in DxgkAdapterStart,
@@ -1730,6 +1744,8 @@ typedef struct _DXGKRNL_GPUVA_PAGE_TABLE
     PMDL                        SegmentMdl;
     HANDLE                      MiniportDeviceHandle;
 
+    PVOID                       ShadowVa;
+
     /* Portable update descriptors; not overlaid on native table storage. */
     DXGK_PTE                    *Entries;
 
@@ -1748,6 +1764,8 @@ typedef struct _DXGKRNL_GPUVA_PAGE_TABLE
 
     /* The first KMD update must initialize the complete implicit table. */
     BOOLEAN                     InitialUpdatePending;
+
+    D3DGPU_VIRTUAL_ADDRESS      PagingVa;
 
     /* Child table pointers (non-leaf only, EntryCount entries), else NULL. */
     struct _DXGKRNL_GPUVA_PAGE_TABLE **Children;
@@ -2767,6 +2785,29 @@ DxgkGpuVaRootPageTableNeedsUpdate(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ PDXGKRNL_PROCESS Process,
     _In_ PDXGKRNL_CONTEXT Context);
+
+NTSTATUS
+DxgkGpuVaInitializePageTablePool(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkGpuVaReleasePageTablePool(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+NTSTATUS
+DxgkGpuVaQueryNodeGpuMmuSupport(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ UINT NodeOrdinal,
+    _Out_ PBOOLEAN Supported);
+
+NTSTATUS
+DxgkAcquirePagingDmaBuffer(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Out_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer);
+
+VOID
+DxgkQueueEngineKick(
+    _In_ PDXGKRNL_ADAPTER Adapter);
 
 NTSTATUS
 DxgkGpuVaSetRootPageTable(
@@ -4245,6 +4286,7 @@ BOOLEAN DxgkVidMmApertureWindow(_In_ PDXGKRNL_ADAPTER Adapter, _Out_ PHYSICAL_AD
 ULONG DxgkVidMmPagingBufferPrivateDataSize(_In_ PDXGKRNL_ADAPTER Adapter);
 VOID DxgkGpuVaVerifyProcessTables(_In_ PDXGKRNL_ADAPTER Adapter, _In_opt_ struct _DXGKRNL_PROCESS *Process);
 NTSTATUS DxgkGpuVaPlacePendingPageTables(_In_ PDXGKRNL_ADAPTER Adapter, _In_ struct _DXGKRNL_PROCESS *Process, _In_ HANDLE MiniportDeviceHandle);
+BOOLEAN DxgkGpuVaCpuUpdatable(_In_opt_ PDXGKRNL_ADAPTER Adapter);
 VOID DxgkGpuVaDumpTranslation(_In_ PDXGKRNL_ADAPTER Adapter, _In_opt_ struct _DXGKRNL_PROCESS *Process, _In_ D3DGPU_VIRTUAL_ADDRESS Va);
 VOID DxgkGpuVaAuditMappings(_In_ PDXGKRNL_ADAPTER Adapter, _In_opt_ struct _DXGKRNL_PROCESS *Process);
 

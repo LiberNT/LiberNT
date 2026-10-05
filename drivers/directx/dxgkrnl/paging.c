@@ -141,6 +141,8 @@ DxgkpPagingMonitoredFenceSignalSupported(
     return Adapter != NULL &&
            Adapter->MiniportContext != NULL &&
            !Adapter->MiniportContext->UseDodLayout &&
+           (!Adapter->GpuMmuCapsValid ||
+            Adapter->GpuMmuCaps.PageTableUpdateMode == DXGK_PAGETABLEUPDATE_CPU_VIRTUAL) &&
            DxgkPagingCoreShouldAppendMonitoredSignal(
                REACTOS_WDDM_TARGET_LEVEL,
                DxgkCapsCoreInterfaceVersionToLevel(
@@ -282,6 +284,65 @@ DxgkpPagingFillBuildArgs(
         default:
             break;
     }
+}
+
+static NTSTATUS
+DxgkpPagingAllocateDmaBuffer(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG Bytes,
+    _Out_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer)
+{
+    if (InterlockedCompareExchange(&Adapter->PagingVirtualReady, 0, 0) != 0)
+        return DxgkAcquirePagingDmaBuffer(Adapter, OutDmaBuffer);
+    return DxgkAllocateDmaBufferWithPrivateData(Adapter,
+                                                Bytes,
+                                                DxgkVidMmPagingBufferPrivateDataSize(Adapter),
+                                                OutDmaBuffer);
+}
+
+static BOOLEAN
+DxgkpPagingOperationIsImmediate(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ CONST DXGKRNL_PAGING_OP *Op)
+{
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_0)
+    return Op->Type == DxgkPagingOpUpdatePageTable &&
+           Op->UpdateMode == DXGK_PAGETABLEUPDATE_CPU_VIRTUAL &&
+           Adapter->GpuMmuCapsValid &&
+           Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
+#else
+    UNREFERENCED_PARAMETER(Adapter);
+    UNREFERENCED_PARAMETER(Op);
+    return FALSE;
+#endif
+}
+
+static NTSTATUS
+DxgkpPagingBuildImmediate(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ CONST DXGKRNL_PAGING_OP *Op)
+{
+    DXGKARG_BUILDPAGINGBUFFER BuildArgs;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
+    BuildArgs.hSystemContext = Adapter->PagingSystemContext->hMiniportContext;
+    DxgkpPagingFillBuildArgs(Op, TRUE, &BuildArgs);
+    if (!DxgkAcquireKmdCall(Adapter))
+        return STATUS_DELETE_PENDING;
+    DxgkEnterSchedulerClass(Adapter);
+    _SEH2_TRY
+    {
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    DxgkLeaveSchedulerClass(Adapter);
+    DxgkReleaseKmdCall(Adapter);
+    return Status;
 }
 
 BOOLEAN
@@ -496,11 +557,7 @@ DxgkPagingExecuteBatch(
         PUCHAR End;
         BOOLEAN RetryLarger = FALSE;
 
-        Status = DxgkAllocateDmaBufferWithPrivateData(
-                     Adapter,
-                     BufferBytes,
-                     DxgkVidMmPagingBufferPrivateDataSize(Adapter),
-                     &DmaBuffer);
+        Status = DxgkpPagingAllocateDmaBuffer(Adapter, BufferBytes, &DmaBuffer);
         if (!NT_SUCCESS(Status))
             goto Cleanup;
         Cursor = (PUCHAR)DmaBuffer->VirtualAddress;
@@ -513,6 +570,14 @@ DxgkPagingExecuteBatch(
             ULONG MultipassOffset = 0;
             ULONG Pass;
             BOOLEAN Complete = FALSE;
+
+            if (DxgkpPagingOperationIsImmediate(Adapter, &Operations[OperationIndex]))
+            {
+                Status = DxgkpPagingBuildImmediate(Adapter, &Operations[OperationIndex]);
+                if (!NT_SUCCESS(Status))
+                    goto Cleanup;
+                continue;
+            }
 
             for (Pass = 0; Pass < DXGKP_PAGING_MAX_PASSES; ++Pass)
             {
@@ -921,6 +986,8 @@ DxgkPagingExecute(
     {
         return STATUS_DEVICE_NOT_READY;
     }
+    if (hSignalSyncObject == 0 && DxgkpPagingOperationIsImmediate(Adapter, Op))
+        return DxgkpPagingBuildImmediate(Adapter, Op);
 
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
     if (hSignalSyncObject != 0 &&
@@ -949,11 +1016,7 @@ DxgkPagingExecute(
         ULONG PreviousMultipassOffset = MultipassOffset;
         ULONG BytesUsed;
 
-        Status = DxgkAllocateDmaBufferWithPrivateData(
-                     Adapter,
-                     BufferBytes,
-                     DxgkVidMmPagingBufferPrivateDataSize(Adapter),
-                     &DmaBuffer);
+        Status = DxgkpPagingAllocateDmaBuffer(Adapter, BufferBytes, &DmaBuffer);
         if (!NT_SUCCESS(Status))
             goto Cleanup;
 

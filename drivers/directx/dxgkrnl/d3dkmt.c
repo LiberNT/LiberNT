@@ -11244,7 +11244,7 @@ DxgkpDispatchBufferedIoctlWorker(
             else
                 return Status;
 
-            if (!Adapter->GpuMmuCapsValid || Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL)
+            if (!DxgkGpuVaCpuUpdatable(Adapter))
                 Status = STATUS_NOT_SUPPORTED;
             else if (ProcessRecord == NULL)
                 Status = STATUS_NOT_SUPPORTED;
@@ -11290,7 +11290,7 @@ DxgkpDispatchBufferedIoctlWorker(
             Adapter = DxgkLookupAdapterByHandle(pFree->hAdapter);
             if (Adapter == NULL)
                 return STATUS_INVALID_PARAMETER;
-            if (!Adapter->GpuMmuCapsValid || Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL)
+            if (!DxgkGpuVaCpuUpdatable(Adapter))
             {
                 DxgkDereferenceAdapter(Adapter);
                 return STATUS_NOT_SUPPORTED;

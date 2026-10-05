@@ -2516,6 +2516,15 @@ DxgkFreeDmaBuffer(
     Adapter = DmaBuffer->OwnerAdapter;
     DmaBuffer->SubmissionStartOffset = 0;
     DmaBuffer->SubmissionEndOffset = 0;
+    if (DmaBuffer->PagingPoolOwned && Adapter != NULL)
+    {
+        DmaBuffer->PrivateDataUsed = 0;
+        KeAcquireSpinLock(&Adapter->PagingBufferPoolLock, &OldIrql);
+        InsertTailList(&Adapter->PagingBufferPoolList, &DmaBuffer->CacheListEntry);
+        KeReleaseSpinLock(&Adapter->PagingBufferPoolLock, OldIrql);
+        KeSetEvent(&Adapter->PagingBufferPoolEvent, IO_NO_INCREMENT, FALSE);
+        return;
+    }
     VirtualMappingsReusable = DmaBuffer->VirtualBacking == NULL;
     if (DmaBuffer->VirtualBacking != NULL &&
         DmaBuffer->OwnerDevice != NULL &&
@@ -12179,7 +12188,10 @@ DxgkpCompleteAdapterStart(
     KeReleaseMutex(&Adapter->AdapterMutex, FALSE);
     DxgkpCompletePostDisplayHandoff(Adapter, Status, Restartable);
     if (QueueHotPlug)
+    {
+        (VOID)DxgkGpuVaInitializePageTablePool(Adapter);
         (VOID)DxgkVidPnQueueHotPlugRebuild(Adapter);
+    }
 }
 
 typedef struct _DXGKP_ADAPTER_START_PROGRESS
@@ -13750,6 +13762,49 @@ DxgkpQueueSchedulerClassKick(
         return;
     }
     ExQueueWorkItem(&Adapter->SchedulerClassKickWorkItem, DelayedWorkQueue);
+}
+
+VOID
+DxgkQueueEngineKick(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    DxgkpQueueSchedulerClassKick(Adapter);
+}
+
+NTSTATUS
+DxgkAcquirePagingDmaBuffer(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Out_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer)
+{
+    LARGE_INTEGER Timeout;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    *OutDmaBuffer = NULL;
+    Timeout.QuadPart = -10000LL * 2000;
+    for (;;)
+    {
+        KeAcquireSpinLock(&Adapter->PagingBufferPoolLock, &OldIrql);
+        if (!IsListEmpty(&Adapter->PagingBufferPoolList))
+        {
+            PLIST_ENTRY Link = RemoveHeadList(&Adapter->PagingBufferPoolList);
+            PDXGKRNL_DMA_BUFFER DmaBuffer = CONTAINING_RECORD(Link, DXGKRNL_DMA_BUFFER, CacheListEntry);
+
+            KeReleaseSpinLock(&Adapter->PagingBufferPoolLock, OldIrql);
+            InitializeListHead(&DmaBuffer->CacheListEntry);
+            DmaBuffer->SubmissionStartOffset = 0;
+            DmaBuffer->SubmissionEndOffset = 0;
+            DmaBuffer->PrivateDataUsed = 0;
+            if (DmaBuffer->PrivateData != NULL)
+                RtlZeroMemory(DmaBuffer->PrivateData, DmaBuffer->PrivateDataSize);
+            *OutDmaBuffer = DmaBuffer;
+            return STATUS_SUCCESS;
+        }
+        KeReleaseSpinLock(&Adapter->PagingBufferPoolLock, OldIrql);
+        if (KeWaitForSingleObject(&Adapter->PagingBufferPoolEvent, Executive, KernelMode, FALSE, &Timeout) == STATUS_TIMEOUT)
+            return STATUS_IO_TIMEOUT;
+    }
 }
 
 VOID
@@ -15608,6 +15663,11 @@ DxgkpAddDeviceRegistered(
     KeInitializeEvent(&Adapter->SchedulerClassAvailable, SynchronizationEvent, FALSE);
     Adapter->SchedulerClassKickQueued = 0;
     ExInitializeWorkItem(&Adapter->SchedulerClassKickWorkItem, DxgkpSchedulerClassKickWorker, Adapter);
+    ExInitializeFastMutex(&Adapter->PageTablePoolLock);
+    KeInitializeSpinLock(&Adapter->PagingBufferPoolLock);
+    InitializeListHead(&Adapter->PagingBufferPoolList);
+    KeInitializeEvent(&Adapter->PagingBufferPoolEvent, SynchronizationEvent, FALSE);
+    Adapter->PagingVirtualReady = 0;
     Adapter->InterruptCallbacksBlocked = 1;
     Adapter->InterruptActiveCalls = 0;
     KeInitializeMutex(&Adapter->SharedPrimaryMutex, 0);

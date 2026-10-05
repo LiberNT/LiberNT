@@ -1658,6 +1658,17 @@ DxgkCreatePagingSystemContext(
     CreateContextArg.Flags.SystemContext = 1;
     if (ContextSchedulingSupported)
         CreateContextArg.Flags.HwQueueSupported = 1;
+    if (Adapter->GpuMmuCapsValid &&
+        Adapter->GpuMmuCaps.PageTableUpdateMode == DXGK_PAGETABLEUPDATE_GPU_VIRTUAL)
+    {
+        BOOLEAN PagingNodeGpuMmu = FALSE;
+
+        if (NT_SUCCESS(DxgkGpuVaQueryNodeGpuMmuSupport(Adapter, PagingNode, &PagingNodeGpuMmu)) &&
+            PagingNodeGpuMmu)
+        {
+            CreateContextArg.Flags.VirtualAddressing = 1;
+        }
+    }
     DXGKRNL_TRACE("DxgkCreatePagingSystemContext: creating paging context "
                  "node=%lu context-scheduling=%u runtime=%p flags=0x%08x\n",
                  PagingNode,
@@ -1729,6 +1740,7 @@ DxgkDestroyPagingSystemContext(
     if (Adapter == NULL)
         return STATUS_INVALID_PARAMETER;
 
+    DxgkGpuVaReleasePageTablePool(Adapter);
     Context = Adapter->PagingSystemContext;
     Device = Adapter->PagingSystemDevice;
     if (Context != NULL)

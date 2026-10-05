@@ -83,6 +83,30 @@ GpuVaPteAddress(
  */
 #define GPUVA_START_ADDRESS         (64ULL * 1024ULL)
 
+#define GPUVA_PAGE_TABLE_POOL_BYTES     (64ULL * 1024ULL * 1024ULL)
+#define GPUVA_PAGE_TABLE_POOL_ALIGNMENT (2ULL * 1024ULL * 1024ULL)
+#define GPUVA_PAGING_BUFFER_COUNT       4
+#define GPUVA_PAGING_BUFFER_BYTES       (1024UL * 1024UL)
+
+static BOOLEAN
+GpuVaPageTablesGpuWritten(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_PROCESS Process);
+
+static NTSTATUS
+GpuVaPoolAllocate(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG Bytes,
+    _In_ ULONG Alignment,
+    _Out_ PULONGLONG OutSegmentOffset,
+    _Out_ D3DGPU_VIRTUAL_ADDRESS *OutPagingVa);
+
+static VOID
+GpuVaPoolFree(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONGLONG SegmentOffset,
+    _In_ ULONG Bytes);
+
 /* Snapshot of a mapped range taken under GpuVaLock for leaf page-table
  * updates that must name their allocation to the miniport. */
 typedef struct _DXGKP_GPUVA_MAP_SPAN
@@ -1400,7 +1424,11 @@ GpuVaFreePageTables(
             CONTAINING_RECORD(RemoveHeadList(&Process->GpuVaPageTableList),
                               DXGKRNL_GPUVA_PAGE_TABLE, PageTableListEntry);
 
-        if (Table->SegmentId != 0 && !Table->PlacementPending)
+        if (Table->PagingVa != 0)
+        {
+            GpuVaPoolFree(Process->Adapter, Table->SegmentOffset, Table->Bytes);
+        }
+        else if (Table->SegmentId != 0 && !Table->PlacementPending)
         {
             DxgkVidMmUnmapPageTableSegment(Process->Adapter,
                                            Table->MiniportDeviceHandle,
@@ -1413,7 +1441,15 @@ GpuVaFreePageTables(
         if (Table->Children != NULL)
             ExFreePoolWithTag(Table->Children, TAG_DXGK_GPUVA_PT);
         ExFreePoolWithTag(Table->Entries, TAG_DXGK_GPUVA_PT);
-        MmFreeContiguousMemorySpecifyCache(Table->KernelVa, Table->Bytes, Table->CacheType);
+        if (Table->ShadowVa != NULL)
+        {
+            MmUnmapIoSpace(Table->KernelVa, Table->Bytes);
+            MmFreeContiguousMemorySpecifyCache(Table->ShadowVa, Table->Bytes, Table->CacheType);
+        }
+        else
+        {
+            MmFreeContiguousMemorySpecifyCache(Table->KernelVa, Table->Bytes, Table->CacheType);
+        }
         ExFreePoolWithTag(Table, TAG_DXGK_GPUVA_PT);
     }
     Process->GpuVaPageTableCount = 0;
@@ -1423,6 +1459,26 @@ GpuVaFreePageTables(
     Process->RootPageTableProgrammed = FALSE;
     RtlZeroMemory(&Process->RootPageTableAddress,
                   sizeof(Process->RootPageTableAddress));
+}
+
+BOOLEAN
+DxgkGpuVaCpuUpdatable(
+    _In_opt_ PDXGKRNL_ADAPTER Adapter)
+{
+    ULONG Level;
+
+    if (Adapter == NULL || !Adapter->GpuMmuCapsValid || !Adapter->PageTableLevelsValid)
+        return FALSE;
+    if (Adapter->GpuMmuCaps.PageTableUpdateMode == DXGK_PAGETABLEUPDATE_CPU_VIRTUAL)
+        return TRUE;
+    if (Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_GPU_VIRTUAL)
+        return FALSE;
+    for (Level = 0; Level < GpuVaLevelCount(Adapter); ++Level)
+    {
+        if (!DxgkVidMmPageTableSegmentCpuReachable(Adapter, GpuVaLevelDesc(Adapter, Level)->PageTableSegmentId))
+            return FALSE;
+    }
+    return TRUE;
 }
 
 /*
@@ -1447,7 +1503,7 @@ GpuVaEnsureRootPageTable(
 
     if (Adapter == NULL || !Adapter->GpuMmuCapsValid || !Adapter->PageTableLevelsValid)
         return STATUS_NOT_SUPPORTED;
-    if (Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL)
+    if (!DxgkGpuVaCpuUpdatable(Adapter))
         return STATUS_NOT_SUPPORTED;
 
     RootLevel = GpuVaLevelCount(Adapter) - 1;
@@ -1725,6 +1781,8 @@ DxgkGpuVaPlacePendingPageTables(
         ULONG Bytes;
         ULONG Alignment;
         PVOID KernelVa;
+        PVOID LocalVa;
+        D3DGPU_VIRTUAL_ADDRESS PagingVa;
         ULONGLONG SegmentOffset = 0;
         PMDL Mdl = NULL;
 
@@ -1753,15 +1811,36 @@ DxgkGpuVaPlacePendingPageTables(
         Alignment = GpuVaLevelDesc(Adapter, Table->Level)->PageTableAlignmentInBytes;
         ExReleaseFastMutex(&Process->GpuVaLock);
 
-        Status = DxgkVidMmMapPageTableSegment(Adapter,
-                                              MiniportDeviceHandle,
-                                              SegmentId,
-                                              KernelVa,
-                                              Bytes,
-                                              Alignment,
-                                              (ULONGLONG)(ULONG_PTR)Table,
-                                              &SegmentOffset,
-                                              &Mdl);
+        LocalVa = NULL;
+        PagingVa = 0;
+        Status = STATUS_NOT_FOUND;
+        if (GpuVaPageTablesGpuWritten(Adapter, Process) &&
+            SegmentId == Adapter->PageTablePoolSegmentId)
+        {
+            Status = GpuVaPoolAllocate(Adapter, Bytes, Alignment, &SegmentOffset, &PagingVa);
+        }
+        if (!NT_SUCCESS(Status))
+        {
+            Status = DxgkVidMmPlaceLocalPageTable(Adapter,
+                                                  SegmentId,
+                                                  Bytes,
+                                                  Alignment,
+                                                  (ULONGLONG)(ULONG_PTR)Table,
+                                                  &SegmentOffset,
+                                                  &LocalVa);
+        }
+        if (Status == STATUS_NOT_SUPPORTED)
+        {
+            Status = DxgkVidMmMapPageTableSegment(Adapter,
+                                                  MiniportDeviceHandle,
+                                                  SegmentId,
+                                                  KernelVa,
+                                                  Bytes,
+                                                  Alignment,
+                                                  (ULONGLONG)(ULONG_PTR)Table,
+                                                  &SegmentOffset,
+                                                  &Mdl);
+        }
         if (!NT_SUCCESS(Status))
         {
             DXGKRNL_ERR("DxgkGpuVa: page table level %lu placement in segment %lu failed 0x%08lX\n",
@@ -1769,9 +1848,16 @@ DxgkGpuVaPlacePendingPageTables(
             return Status;
         }
         ExAcquireFastMutex(&Process->GpuVaLock);
+        if (LocalVa != NULL)
+        {
+            RtlCopyMemory(LocalVa, Table->KernelVa, Bytes);
+            Table->ShadowVa = Table->KernelVa;
+            Table->KernelVa = LocalVa;
+        }
         Table->SegmentOffset = SegmentOffset;
         Table->SegmentMdl = Mdl;
         Table->MiniportDeviceHandle = MiniportDeviceHandle;
+        Table->PagingVa = PagingVa;
         Table->PlacementPending = FALSE;
         if (Table->Parent != NULL)
         {
@@ -2133,8 +2219,16 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
         Op.hMiniportDevice = PagingMiniportDevice;
         Op.hMiniportProcess = Process->hMiniportProcess;
         Op.PageTableLevel = Table->Level;
-        Op.PageTableAddress.CpuVirtual = Table->KernelVa;
-        Op.UpdateMode = DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
+        if (Table->PagingVa != 0)
+        {
+            Op.PageTableAddress.GpuVirtual = Table->PagingVa;
+            Op.UpdateMode = DXGK_PAGETABLEUPDATE_GPU_VIRTUAL;
+        }
+        else
+        {
+            Op.PageTableAddress.CpuVirtual = Table->KernelVa;
+            Op.UpdateMode = DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
+        }
         if (Snapshot->InitialUpdatePending)
         {
             /* InitialUpdate describes the whole implicit table and cannot
@@ -2222,25 +2316,29 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
     /* UpdateGpuVirtualAddressSystemCommand always calls FlushGpuVaTlb for the
      * changed process range. MustFlushTlbOnValidTransition belongs to the
      * separate scratch/paging helpers and must not suppress this operation. */
-    RtlZeroMemory(&Op, sizeof(Op));
-    Op.Type = DxgkPagingOpFlushTlb;
-    Op.hMiniportDevice = PagingMiniportDevice;
-    Op.hMiniportProcess = Process->hMiniportProcess;
-    Op.RootPageTableAddress = Process->RootPageTableAddress;
-    Op.StartVirtualAddress = Start;
-    Op.EndVirtualAddress = End;
-    if (!Adapter->GpuMmuCaps.InvalidTlbEntriesNotCached)
+    if (!Adapter->PagingProcessInitializing ||
+        Adapter->PagingSystemDevice == NULL ||
+        Adapter->PagingSystemDevice->ProcessRecord != Process)
     {
-        /* A zero range asks the miniport to invalidate the entire address space. */
-        Op.StartVirtualAddress = 0;
-        Op.EndVirtualAddress = 0;
+        RtlZeroMemory(&Op, sizeof(Op));
+        Op.Type = DxgkPagingOpFlushTlb;
+        Op.hMiniportDevice = PagingMiniportDevice;
+        Op.hMiniportProcess = Process->hMiniportProcess;
+        Op.RootPageTableAddress = Process->RootPageTableAddress;
+        Op.StartVirtualAddress = Start;
+        Op.EndVirtualAddress = End;
+        if (!Adapter->GpuMmuCaps.InvalidTlbEntriesNotCached)
+        {
+            Op.StartVirtualAddress = 0;
+            Op.EndVirtualAddress = 0;
+        }
+        Status = GpuVaAppendPagingOperation(&Operations,
+                                             &OperationCount,
+                                             &OperationCapacity,
+                                             &Op);
+        if (!NT_SUCCESS(Status))
+            goto Requeue;
     }
-    Status = GpuVaAppendPagingOperation(&Operations,
-                                         &OperationCount,
-                                         &OperationCapacity,
-                                         &Op);
-    if (!NT_SUCCESS(Status))
-        goto Requeue;
     if (OperationCount == 0)
     {
         Status = STATUS_DATA_ERROR;
@@ -3068,7 +3166,7 @@ DxgkGpuVaPlanMap(_In_ PDXGKRNL_ADAPTER Adapter, _In_ PDXGKRNL_PROCESS Process, _
         return STATUS_INVALID_PARAMETER;
     if ((Protection.Zero || Protection.NoAccess) != (Allocation == NULL))
         return STATUS_INVALID_PARAMETER;
-    if (Adapter == NULL || !Adapter->GpuMmuCapsValid || Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL)
+    if (!DxgkGpuVaCpuUpdatable(Adapter))
         return STATUS_NOT_SUPPORTED;
     if (Allocation != NULL && Allocation->SystemMemory == NULL && !Allocation->Resident)
         return STATUS_NOT_SUPPORTED;
@@ -3303,6 +3401,304 @@ DxgkGpuVaReserve(
     return STATUS_SUCCESS;
 }
 
+
+static BOOLEAN
+GpuVaPageTablesGpuWritten(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_PROCESS Process)
+{
+    return Adapter != NULL &&
+           Adapter->PageTablePoolVa != 0 &&
+           Adapter->PagingSystemDevice != NULL &&
+           Adapter->PagingSystemDevice->ProcessRecord != Process;
+}
+
+static NTSTATUS
+GpuVaPoolAllocate(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG Bytes,
+    _In_ ULONG Alignment,
+    _Out_ PULONGLONG OutSegmentOffset,
+    _Out_ D3DGPU_VIRTUAL_ADDRESS *OutPagingVa)
+{
+    ULONG Pages = (ULONG)(ROUND_TO_PAGES(Bytes) >> PAGE_SHIFT);
+    ULONG Step = max(Alignment, (ULONG)PAGE_SIZE) >> PAGE_SHIFT;
+    ULONG Total;
+    ULONG Index;
+    NTSTATUS Status = STATUS_NO_MEMORY;
+
+    *OutSegmentOffset = 0;
+    *OutPagingVa = 0;
+    if (Pages == 0 || (Step & (Step - 1)) != 0)
+        return STATUS_INVALID_PARAMETER;
+
+    ExAcquireFastMutex(&Adapter->PageTablePoolLock);
+    Total = Adapter->PageTablePoolBitmap.SizeOfBitMap;
+    for (Index = 0; Index + Pages <= Total; Index += Step)
+    {
+        if (RtlAreBitsClear(&Adapter->PageTablePoolBitmap, Index, Pages))
+        {
+            RtlSetBits(&Adapter->PageTablePoolBitmap, Index, Pages);
+            *OutSegmentOffset = Adapter->PageTablePoolOffset + ((ULONGLONG)Index << PAGE_SHIFT);
+            *OutPagingVa = Adapter->PageTablePoolVa + ((ULONGLONG)Index << PAGE_SHIFT);
+            Status = STATUS_SUCCESS;
+            break;
+        }
+    }
+    ExReleaseFastMutex(&Adapter->PageTablePoolLock);
+    if (!NT_SUCCESS(Status))
+        DXGKRNL_WARN("DxgkGpuVa: page-table pool exhausted for %lu bytes\n", Bytes);
+    return Status;
+}
+
+static VOID
+GpuVaPoolFree(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONGLONG SegmentOffset,
+    _In_ ULONG Bytes)
+{
+    ULONG Pages = (ULONG)(ROUND_TO_PAGES(Bytes) >> PAGE_SHIFT);
+
+    if (Adapter == NULL || Adapter->PageTablePoolBitmapBuffer == NULL ||
+        SegmentOffset < Adapter->PageTablePoolOffset)
+        return;
+    ExAcquireFastMutex(&Adapter->PageTablePoolLock);
+    RtlClearBits(&Adapter->PageTablePoolBitmap,
+                 (ULONG)((SegmentOffset - Adapter->PageTablePoolOffset) >> PAGE_SHIFT),
+                 Pages);
+    ExReleaseFastMutex(&Adapter->PageTablePoolLock);
+}
+
+static NTSTATUS
+GpuVaMapSegmentWindow(
+    _In_ PDXGKRNL_PROCESS Process,
+    _In_ ULONG SegmentId,
+    _In_ ULONGLONG SegmentOffset,
+    _In_ ULONGLONG MapBytes,
+    _In_ ULONGLONG SizeInBytes,
+    _Out_ D3DGPU_VIRTUAL_ADDRESS *OutAddress)
+{
+    PDXGKRNL_GPUVA_RANGE Range;
+    D3DGPU_VIRTUAL_ADDRESS Address = 0;
+    ULONGLONG Offset = 0;
+    NTSTATUS Status;
+
+    *OutAddress = 0;
+    Range = GpuVaAllocRange();
+    if (Range == NULL)
+        return STATUS_NO_MEMORY;
+
+    ExAcquireFastMutex(&Process->GpuVaLock);
+    Status = GpuVaEnsureRootPageTable(Process);
+    if (NT_SUCCESS(Status))
+    {
+        Address = GpuVaFindFreeRegion(Process,
+                                      GPUVA_START_ADDRESS,
+                                      GpuVaAddressSpaceEnd(Process),
+                                      SizeInBytes,
+                                      GPUVA_RESERVATION_ALIGNMENT);
+        if (Address == 0)
+            Status = STATUS_NO_MEMORY;
+    }
+    for (; NT_SUCCESS(Status) && Offset < MapBytes; Offset += GPUVA_PAGE_SIZE)
+    {
+        PDXGKRNL_GPUVA_PAGE_TABLE Leaf = GpuVaGetLeafTable(Process, Address + Offset, TRUE);
+        ULONG Index;
+
+        if (Leaf == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+        Index = GpuVaPteIndexFor(Process->Adapter, Address + Offset, 0);
+        RtlZeroMemory(&Leaf->Entries[Index], sizeof(Leaf->Entries[Index]));
+        Leaf->Entries[Index].Valid = 1;
+        Leaf->Entries[Index].CacheCoherent =
+            SegmentId == 0 && Process->Adapter->GpuMmuCaps.CacheCoherentMemorySupported ? 1 : 0;
+        Leaf->Entries[Index].Segment = SegmentId;
+        Leaf->Entries[Index].PageAddress = GpuVaPteAddress(SegmentOffset + Offset);
+        Status = GpuVaNotifyPageTableUpdate(Process, Leaf, Index, 1, Address + Offset);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        if (Address != 0 && Offset != 0)
+            GpuVaClearPteSpan(Process, Address, Offset);
+        ExReleaseFastMutex(&Process->GpuVaLock);
+        GpuVaFreeRange(Range);
+        return Status;
+    }
+
+    Range->GpuVirtualAddress = Address;
+    Range->SizeInBytes = SizeInBytes;
+    Range->State = GpuVaStateReserved;
+    Range->hAllocation = NULL;
+    Range->AllocationOffset = 0;
+    Range->Protection.Value = 0;
+    Range->Protection.SystemUseOnly = 1;
+    Range->DriverProtection = 0;
+    Range->ReservationBase = Address;
+    Range->ReservationSize = SizeInBytes;
+    GpuVaInsertRange(Process, Range);
+    Process->GpuVaRangeCount++;
+    Process->GpuVaTotalReserved += SizeInBytes;
+    ExReleaseFastMutex(&Process->GpuVaLock);
+
+    DxgkGpuVaRecordEvent('R', Address, SizeInBytes, 0);
+    *OutAddress = Address;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+DxgkGpuVaInitializePageTablePool(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PDXGKRNL_PROCESS PagingProcess;
+    PDXGKRNL_CONTEXT PagingContext;
+    PULONG Buffer;
+    ULONGLONG PoolOffset = 0;
+    D3DGPU_VIRTUAL_ADDRESS PoolVa = 0;
+    ULONG SegmentId;
+    ULONG Level;
+    ULONG Pages = (ULONG)(GPUVA_PAGE_TABLE_POOL_BYTES >> PAGE_SHIFT);
+    BOOLEAN Reserved = FALSE;
+    PDXGKRNL_DMA_BUFFER PagingBuffers[GPUVA_PAGING_BUFFER_COUNT] = { NULL };
+    ULONG Index;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Adapter == NULL || !Adapter->GpuMmuCapsValid || !Adapter->PageTableLevelsValid ||
+        Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_GPU_VIRTUAL ||
+        Adapter->PagingSystemDevice == NULL || Adapter->PagingSystemContext == NULL ||
+        Adapter->PageTablePoolVa != 0 || !DxgkGpuVaCpuUpdatable(Adapter))
+    {
+        return STATUS_SUCCESS;
+    }
+    PagingProcess = Adapter->PagingSystemDevice->ProcessRecord;
+    PagingContext = Adapter->PagingSystemContext;
+    SegmentId = GpuVaLevelDesc(Adapter, 0)->PageTableSegmentId;
+    if (PagingProcess == NULL || SegmentId == 0)
+        return STATUS_SUCCESS;
+    for (Level = 1; Level < GpuVaLevelCount(Adapter); ++Level)
+    {
+        if (GpuVaLevelDesc(Adapter, Level)->PageTableSegmentId != SegmentId)
+            return STATUS_SUCCESS;
+    }
+
+    Buffer = ExAllocatePoolWithTag(NonPagedPool, ((Pages + 31) / 32) * sizeof(ULONG), TAG_DXGK_GPUVA_PT);
+    if (Buffer == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Status = DxgkVidMmReserveSegmentRange(Adapter,
+                                          SegmentId,
+                                          GPUVA_PAGE_TABLE_POOL_BYTES,
+                                          GPUVA_PAGE_TABLE_POOL_ALIGNMENT,
+                                          (ULONGLONG)(ULONG_PTR)&Adapter->PageTablePoolBitmap,
+                                          &PoolOffset);
+    Reserved = NT_SUCCESS(Status);
+    Adapter->PagingProcessInitializing = TRUE;
+    if (NT_SUCCESS(Status))
+        Status = GpuVaMapSegmentWindow(PagingProcess, SegmentId, PoolOffset, GPUVA_PAGE_TABLE_POOL_BYTES, GPUVA_PAGE_TABLE_POOL_BYTES, &PoolVa);
+    for (Index = 0; NT_SUCCESS(Status) && Index < GPUVA_PAGING_BUFFER_COUNT; ++Index)
+    {
+        Status = DxgkAllocateDmaBufferWithPrivateData(Adapter,
+                                                     GPUVA_PAGING_BUFFER_BYTES,
+                                                     DxgkVidMmPagingBufferPrivateDataSize(Adapter),
+                                                     &PagingBuffers[Index]);
+        if (NT_SUCCESS(Status) &&
+            (PagingBuffers[Index]->BackingKind != DxgkDmaBackingContiguousMemory ||
+             PagingBuffers[Index]->Capacity < GPUVA_PAGING_BUFFER_BYTES))
+        {
+            Status = STATUS_DEVICE_CONFIGURATION_ERROR;
+        }
+        if (NT_SUCCESS(Status))
+            Status = GpuVaMapSegmentWindow(PagingProcess,
+                                           0,
+                                           (ULONGLONG)PagingBuffers[Index]->SegmentAddress.QuadPart,
+                                           ROUND_TO_PAGES((ULONGLONG)PagingBuffers[Index]->Capacity),
+                                           (ROUND_TO_PAGES((ULONGLONG)PagingBuffers[Index]->Capacity) + GPUVA_RESERVATION_ALIGNMENT - 1) & ~(GPUVA_RESERVATION_ALIGNMENT - 1),
+                                           &PagingBuffers[Index]->GpuVirtualAddress);
+    }
+    if (NT_SUCCESS(Status))
+        Status = DxgkGpuVaFlushPageTableUpdatesForDevice(PagingProcess, Adapter->PagingSystemDevice);
+    Adapter->PagingProcessInitializing = FALSE;
+    if (NT_SUCCESS(Status))
+        Status = DxgkGpuVaSetRootPageTable(Adapter, PagingProcess, PagingContext);
+    if (NT_SUCCESS(Status) && !PagingContext->RootPageTablePublished)
+        Status = STATUS_NOT_SUPPORTED;
+    if (!NT_SUCCESS(Status))
+    {
+        DXGKRNL_WARN("DxgkGpuVa: GPU_VIRTUAL page-table pool unavailable 0x%08lX; page tables stay CPU-updated\n", Status);
+        if (Reserved)
+            DxgkVidMmReleaseSegmentRange(Adapter, SegmentId, (ULONGLONG)(ULONG_PTR)&Adapter->PageTablePoolBitmap);
+        for (Index = 0; Index < GPUVA_PAGING_BUFFER_COUNT; ++Index)
+        {
+            if (PagingBuffers[Index] != NULL)
+            {
+                PagingBuffers[Index]->GpuVirtualAddress = 0;
+                DxgkFreeDmaBuffer(PagingBuffers[Index]);
+            }
+        }
+        ExFreePoolWithTag(Buffer, TAG_DXGK_GPUVA_PT);
+        return STATUS_SUCCESS;
+    }
+
+    for (Index = 0; Index < GPUVA_PAGING_BUFFER_COUNT; ++Index)
+    {
+        PagingBuffers[Index]->PagingPoolOwned = TRUE;
+        DxgkFreeDmaBuffer(PagingBuffers[Index]);
+    }
+
+    RtlInitializeBitMap(&Adapter->PageTablePoolBitmap, Buffer, Pages);
+    RtlClearAllBits(&Adapter->PageTablePoolBitmap);
+    Adapter->PageTablePoolBitmapBuffer = Buffer;
+    Adapter->PageTablePoolSegmentId = SegmentId;
+    Adapter->PageTablePoolOffset = PoolOffset;
+    Adapter->PageTablePoolSize = GPUVA_PAGE_TABLE_POOL_BYTES;
+    KeMemoryBarrier();
+    Adapter->PageTablePoolVa = PoolVa;
+    InterlockedExchange(&Adapter->PagingVirtualReady, 1);
+    DXGKRNL_TRACE("DxgkGpuVa: page-table pool segment=%lu offset=0x%I64x size=0x%I64x paging-va=0x%I64x\n",
+                  SegmentId, PoolOffset, (ULONGLONG)GPUVA_PAGE_TABLE_POOL_BYTES, PoolVa);
+    return STATUS_SUCCESS;
+}
+
+VOID
+DxgkGpuVaReleasePageTablePool(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PAGED_CODE();
+
+    if (Adapter == NULL || Adapter->PageTablePoolBitmapBuffer == NULL)
+        return;
+    InterlockedExchange(&Adapter->PagingVirtualReady, 0);
+    Adapter->PageTablePoolVa = 0;
+    KeMemoryBarrier();
+    for (;;)
+    {
+        PDXGKRNL_DMA_BUFFER PagingBuffer;
+        KIRQL OldIrql;
+
+        KeAcquireSpinLock(&Adapter->PagingBufferPoolLock, &OldIrql);
+        if (IsListEmpty(&Adapter->PagingBufferPoolList))
+        {
+            KeReleaseSpinLock(&Adapter->PagingBufferPoolLock, OldIrql);
+            break;
+        }
+        PagingBuffer = CONTAINING_RECORD(RemoveHeadList(&Adapter->PagingBufferPoolList), DXGKRNL_DMA_BUFFER, CacheListEntry);
+        KeReleaseSpinLock(&Adapter->PagingBufferPoolLock, OldIrql);
+        PagingBuffer->PagingPoolOwned = FALSE;
+        PagingBuffer->GpuVirtualAddress = 0;
+        DxgkFreeDmaBuffer(PagingBuffer);
+    }
+    DxgkVidMmReleaseSegmentRange(Adapter,
+                                 Adapter->PageTablePoolSegmentId,
+                                 (ULONGLONG)(ULONG_PTR)&Adapter->PageTablePoolBitmap);
+    ExFreePoolWithTag(Adapter->PageTablePoolBitmapBuffer, TAG_DXGK_GPUVA_PT);
+    Adapter->PageTablePoolBitmapBuffer = NULL;
+    Adapter->PageTablePoolSegmentId = 0;
+    Adapter->PageTablePoolOffset = 0;
+    Adapter->PageTablePoolSize = 0;
+}
 
 /*
  * DxgkGpuVaFree
@@ -3568,8 +3964,7 @@ DxgkGpuVaMap(
         return STATUS_INVALID_PARAMETER;
     if ((Protection.Zero || Protection.NoAccess) != (Allocation == NULL))
         return STATUS_INVALID_PARAMETER;
-    if (Adapter == NULL || !Adapter->GpuMmuCapsValid ||
-        Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL)
+    if (!DxgkGpuVaCpuUpdatable(Adapter))
         return STATUS_NOT_SUPPORTED;
     if (Allocation != NULL && Allocation->SystemMemory == NULL && !Allocation->Resident)
         return STATUS_NOT_SUPPORTED;
@@ -3887,8 +4282,7 @@ DxgkGpuVaMapFencePage(
     if (Adapter == NULL || Process == NULL || KernelVa == NULL || OutAddress == NULL)
         return STATUS_INVALID_PARAMETER;
     *OutAddress = 0;
-    if (!Adapter->GpuMmuCapsValid ||
-        Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL)
+    if (!DxgkGpuVaCpuUpdatable(Adapter))
         return STATUS_NOT_SUPPORTED;
 
     Range = GpuVaAllocRange();
@@ -4342,7 +4736,7 @@ DxgkpGpuVaUpdateWorker(
 
     if (Adapter == NULL || Process == NULL || Process->Adapter != Adapter || Operations == NULL || NumOperations == 0)
         return STATUS_INVALID_PARAMETER;
-    if (Commit && (!Adapter->GpuMmuCapsValid || Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL))
+    if (Commit && !DxgkGpuVaCpuUpdatable(Adapter))
         return STATUS_NOT_SUPPORTED;
     ExAcquireFastMutex(&Process->GpuVaLock);
     if (Commit)
@@ -4610,8 +5004,8 @@ DxgkGpuVaApplyUpdate(
  *
  * IRQL: PASSIVE_LEVEL.
  */
-static NTSTATUS
-GpuVaQueryNodeGpuMmuSupport(
+NTSTATUS
+DxgkGpuVaQueryNodeGpuMmuSupport(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ UINT NodeOrdinal,
     _Out_ PBOOLEAN Supported)
@@ -4708,7 +5102,7 @@ DxgkGpuVaSetRootPageTable(
      * walker an address space dxgkrnl does not own. */
     if (!Context->GpuMmuNodeKnown)
     {
-        NTSTATUS Status = GpuVaQueryNodeGpuMmuSupport(Adapter,
+        NTSTATUS Status = DxgkGpuVaQueryNodeGpuMmuSupport(Adapter,
                                                      Context->NodeOrdinal,
                                                      &Context->GpuMmuNode);
         if (!NT_SUCCESS(Status))

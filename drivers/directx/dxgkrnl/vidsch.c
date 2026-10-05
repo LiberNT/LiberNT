@@ -2601,6 +2601,7 @@ VidSchpKickEngine(
         KIRQL OldIrql;
         NTSTATUS Status = STATUS_NOT_SUPPORTED;
         BOOLEAN KmdCallAcquired = FALSE;
+        BOOLEAN PagingVirtual;
         BOOLEAN KickNext = FALSE;
 
         /* dxgmms2 hands out the next runnable packet and, by issuing the
@@ -2722,8 +2723,19 @@ VidSchpKickEngine(
             return TRUE;
         }
 
+        PagingVirtual = (Packet->SubmitFlags & VIDSCH_SUBMITFLAG_PAGING) != 0 &&
+                        Packet->DmaBuffer != NULL &&
+                        Packet->DmaBuffer->GpuVirtualAddress != 0 &&
+                        InterlockedCompareExchange(&Adapter->PagingVirtualReady, 0, 0) != 0 &&
+                        DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommandVirtual) != NULL;
+        if (PagingVirtual && KeGetCurrentIrql() >= DISPATCH_LEVEL)
+        {
+            (VOID)Sched->CompleteDispatch(Sched->SchedulerHandle, Engine->SchedulerOrdinal, ClaimToken, STATUS_SUCCESS);
+            DxgkQueueEngineKick(Adapter);
+            return DispatchedAny;
+        }
         InterlockedIncrement(&Packet->ReferenceCount);
-        if (DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand) != NULL)
+        if (DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand) != NULL || PagingVirtual)
             KmdCallAcquired = DxgkAcquireKmdCall(Adapter);
         if (KmdCallAcquired)
         {
@@ -2786,22 +2798,52 @@ VidSchpKickEngine(
             VidSchpRecordDispatch(Engine, Packet);
             /* Same publication requirement as the virtual submission path. */
             KeMemoryBarrier();
-            KeRaiseIrql(DISPATCH_LEVEL, &CallIrql);
+            if (PagingVirtual)
             {
-                DPT_SCOPE DdiTrace = DptBegin(&g_DxgPresentTrace, DPT_KMD_SUBMIT);
+                DXGKARG_SUBMITCOMMANDVIRTUAL VirtualArgs;
+
+                RtlZeroMemory(&VirtualArgs, sizeof(VirtualArgs));
+                VirtualArgs.hContext = SubmitArgs.hContext;
+                VirtualArgs.DmaBufferVirtualAddress = Packet->DmaBuffer->GpuVirtualAddress + SubmitArgs.DmaBufferSubmissionStartOffset;
+                VirtualArgs.DmaBufferSize = SubmitArgs.DmaBufferSubmissionEndOffset - SubmitArgs.DmaBufferSubmissionStartOffset;
+                VirtualArgs.pDmaBufferPrivateData = SubmitArgs.pDmaBufferPrivateData;
+                VirtualArgs.DmaBufferPrivateDataSize = SubmitArgs.DmaBufferPrivateDataSize;
+                VirtualArgs.SubmissionFenceId = SubmitArgs.SubmissionFenceId;
+                VirtualArgs.VidPnSourceId = SubmitArgs.VidPnSourceId;
+                VirtualArgs.FlipInterval = SubmitArgs.FlipInterval;
+                VirtualArgs.Flags = SubmitArgs.Flags;
+                VirtualArgs.EngineOrdinal = SubmitArgs.EngineOrdinal;
+                VirtualArgs.NodeOrdinal = SubmitArgs.NodeOrdinal;
                 _SEH2_TRY
                 {
-                    Status = DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand)(Adapter->MiniportDeviceContext, &SubmitArgs);
+                    Status = DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommandVirtual)(Adapter->MiniportDeviceContext, &VirtualArgs);
                 }
                 _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
                 {
                     Status = _SEH2_GetExceptionCode();
                 }
                 _SEH2_END;
-                DptEnd(&g_DxgPresentTrace, DdiTrace, NT_SUCCESS(Status), 0);
+                DxgkLeaveSchedulerClass(Adapter);
             }
-            DxgkLeaveSchedulerClass(Adapter);
-            KeLowerIrql(CallIrql);
+            else
+            {
+                KeRaiseIrql(DISPATCH_LEVEL, &CallIrql);
+                {
+                    DPT_SCOPE DdiTrace = DptBegin(&g_DxgPresentTrace, DPT_KMD_SUBMIT);
+                    _SEH2_TRY
+                    {
+                        Status = DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand)(Adapter->MiniportDeviceContext, &SubmitArgs);
+                    }
+                    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                    {
+                        Status = _SEH2_GetExceptionCode();
+                    }
+                    _SEH2_END;
+                    DptEnd(&g_DxgPresentTrace, DdiTrace, NT_SUCCESS(Status), 0);
+                }
+                DxgkLeaveSchedulerClass(Adapter);
+                KeLowerIrql(CallIrql);
+            }
 
             if (!NT_SUCCESS(Status))
                 KeBugCheckEx(0x119, 0x2, (ULONG_PTR)Status, (ULONG_PTR)&SubmitArgs, (ULONG_PTR)Engine);
