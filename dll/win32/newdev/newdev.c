@@ -147,7 +147,7 @@ GetDeviceMultiSzProperty(
     }
 
     Error = GetLastError();
-    if (Error == ERROR_FILE_NOT_FOUND)
+    if (Error == ERROR_INVALID_DATA)
         return TRUE;
     if (Error != ERROR_INSUFFICIENT_BUFFER || RequiredSize == 0)
     {
