@@ -148,7 +148,7 @@
 @ stdcall WintrustGetRegPolicyFlags(ptr)
 @ stdcall WintrustLoadFunctionPointers(ptr ptr)
 @ stdcall WintrustRemoveActionID(ptr)
-#@ stub WintrustSetDefaultIncludePEPageHashes
+@ stdcall WintrustSetDefaultIncludePEPageHashes(long)
 @ stdcall WintrustSetRegPolicyFlags(long)
 @ stdcall mscat32DllRegisterServer()
 @ stdcall mscat32DllUnregisterServer()

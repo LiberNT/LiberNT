@@ -464,6 +464,7 @@ BOOL      WINAPI WintrustLoadFunctionPointers(GUID*,CRYPT_PROVIDER_FUNCTIONS*);
 BOOL      WINAPI WintrustAddDefaultForUsage(const char*,CRYPT_PROVIDER_REGDEFUSAGE*);
 void      WINAPI WintrustGetRegPolicyFlags(DWORD*);
 BOOL      WINAPI WintrustSetRegPolicyFlags(DWORD);
+void      WINAPI WintrustSetDefaultIncludePEPageHashes(BOOL);
 LONG      WINAPI WinVerifyTrust(HWND,GUID*,LPVOID);
 HRESULT   WINAPI WinVerifyTrustEx(HWND,GUID*,WINTRUST_DATA*);
 
@@ -494,6 +495,9 @@ CRYPT_PROVIDER_PRIVDATA * WINAPI WTHelperGetProvPrivateDataFromChain(CRYPT_PROVI
 #define SPC_FINANCIAL_CRITERIA_OBJID "1.3.6.1.4.1.311.2.1.27"
 #define SPC_LINK_OBJID               "1.3.6.1.4.1.311.2.1.28"
 #define SPC_SIGINFO_OBJID            "1.3.6.1.4.1.311.2.1.30"
+#define SPC_PE_IMAGE_PAGE_HASHES_V1_OBJID "1.3.6.1.4.1.311.2.3.1"
+#define SPC_PE_IMAGE_PAGE_HASHES_V2_OBJID "1.3.6.1.4.1.311.2.3.2"
+#define szOID_ENHANCED_HASH          "1.3.6.1.4.1.311.2.5.1"
 #define CAT_NAMEVALUE_OBJID          "1.3.6.1.4.1.311.12.2.1"
 #define CAT_MEMBERINFO_OBJID         "1.3.6.1.4.1.311.12.2.2"
 #define CAT_MEMBERINFO2_OBJID        "1.3.6.1.4.1.311.12.2.3"
@@ -514,6 +518,11 @@ CRYPT_PROVIDER_PRIVDATA * WINAPI WTHelperGetProvPrivateDataFromChain(CRYPT_PROVI
 
 #define SPC_UUID_LENGTH 16
 typedef BYTE SPC_UUID[SPC_UUID_LENGTH];
+
+#define SpcSerializedObjectAttributesClassId {0xA6, 0xB5, 0x86, 0xD5, \
+                                              0xB4, 0xA1, 0x24, 0x66, \
+                                              0xAE, 0x05, 0xA2, 0x17, \
+                                              0xDA, 0x8E, 0x60, 0xD6}
 
 typedef struct _SPC_SERIALIZED_OBJECT
 {

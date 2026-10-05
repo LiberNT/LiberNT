@@ -996,6 +996,14 @@ CRYPTCATMEMBER * WINAPI CryptCATEnumerateMember(HANDLE hCatalog, CRYPTCATMEMBER 
         goto error;
     }
 
+#ifdef __REACTOS__
+    if (cc->inner->SubjectAlgorithm.pszObjId &&
+        !strcmp(cc->inner->SubjectAlgorithm.pszObjId, szOID_CATALOG_LIST_MEMBER2))
+    {
+        SetLastError(CRYPT_E_ASN1_EOD);
+        goto error;
+    }
+#endif
     /* list them backwards, like native */
     entry = &cc->inner->rgCTLEntry[cc->inner->cCTLEntry - member->dwReserved - 1];
 
@@ -1673,20 +1681,302 @@ HANDLE WINAPI CryptCATOpen(WCHAR *filename, DWORD flags, HCRYPTPROV hProv,
 }
 
 #ifdef __REACTOS__
-static BOOL sip_hash_flat_file(HANDLE file, HCRYPTHASH hash)
-{
-    HANDLE mapping;
-    BYTE *view;
-    BOOL ret = FALSE;
+BOOL WINAPI WVTAsn1SpcLinkEncode(DWORD, LPCSTR, const void *, BYTE *, DWORD *);
 
-    if (!(mapping = CreateFileMappingW(file, NULL, PAGE_READONLY, 0, 0, NULL))) return FALSE;
-    if ((view = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0)))
+static BOOL include_pe_page_hashes;
+
+struct cab_layout
+{
+    DWORD cabinet_size;
+    DWORD shift;
+    DWORD reserve_size;
+    DWORD folders;
+    DWORD strings_offset;
+    DWORD strings_size;
+    DWORD folders_offset;
+    DWORD folder_size;
+    DWORD rest_offset;
+    BOOL  has_reserve;
+};
+
+static DWORD sip_get32(const BYTE *p)
+{
+    return p[0] | (p[1] << 8) | (p[2] << 16) | ((DWORD)p[3] << 24);
+}
+
+static void sip_put32(BYTE *p, DWORD v)
+{
+    p[0] = v;
+    p[1] = v >> 8;
+    p[2] = v >> 16;
+    p[3] = v >> 24;
+}
+
+static BOOL sip_cab_layout(const BYTE *data, DWORD size, struct cab_layout *cab)
+{
+    DWORD folder_reserve = 0, strings = 0, offset;
+
+    if (size < 36 || memcmp(data, "MSCF", 4)) goto bad;
+    cab->cabinet_size = sip_get32(data + 8);
+    if (cab->cabinet_size < 36 || cab->cabinet_size > size) goto bad;
+    cab->folders = data[26] | (data[27] << 8);
+    cab->has_reserve = (data[30] & 4) != 0;
+    if (cab->has_reserve)
     {
-        ret = CryptHashData(hash, view, GetFileSize(file, NULL), 0);
-        UnmapViewOfFile(view);
+        if (cab->cabinet_size < 40) goto bad;
+        cab->reserve_size = data[36] | (data[37] << 8);
+        folder_reserve = data[38];
+        cab->folders_offset = 40 + cab->reserve_size;
+        cab->shift = cab->reserve_size < 20 ? 20 - cab->reserve_size : 0;
     }
-    CloseHandle(mapping);
+    else
+    {
+        cab->reserve_size = 0;
+        cab->folders_offset = 36;
+        cab->shift = 24;
+    }
+    if (data[30] & 1) strings += 2;
+    if (data[30] & 2) strings += 2;
+    cab->strings_offset = cab->folders_offset;
+    for (offset = cab->strings_offset; strings; strings--)
+    {
+        while (offset < cab->cabinet_size && data[offset]) offset++;
+        if (offset++ >= cab->cabinet_size) goto bad;
+    }
+    cab->strings_size = offset - cab->strings_offset;
+    cab->folders_offset = offset;
+    cab->folder_size = 8 + folder_reserve;
+    cab->rest_offset = cab->folders_offset + cab->folders * cab->folder_size;
+    if (cab->rest_offset > cab->cabinet_size) goto bad;
+    return TRUE;
+
+bad:
+    SetLastError(ERROR_BAD_FORMAT);
+    return FALSE;
+}
+
+static void sip_cab_header(const BYTE *data, const struct cab_layout *cab, BYTE *header)
+{
+    memcpy(header, data, 36);
+    sip_put32(header + 8, cab->cabinet_size + cab->shift);
+    sip_put32(header + 16, sip_get32(data + 16) + cab->shift);
+    header[30] |= 4;
+}
+
+static BOOL sip_hash_cab(const BYTE *data, const struct cab_layout *cab, HCRYPTHASH hash)
+{
+    BYTE header[36], tail[2] = { 0, 0 }, folder[4];
+    DWORD i;
+
+    sip_cab_header(data, cab, header);
+    if (cab->has_reserve)
+    {
+        tail[0] = data[38];
+        tail[1] = data[39];
+    }
+    if (!CryptHashData(hash, header, 4, 0) || !CryptHashData(hash, header + 8, 28, 0) ||
+        !CryptHashData(hash, tail, sizeof(tail), 0) ||
+        !CryptHashData(hash, data + cab->strings_offset, cab->strings_size, 0))
+        return FALSE;
+    for (i = 0; i < cab->folders; i++)
+    {
+        const BYTE *entry = data + cab->folders_offset + i * cab->folder_size;
+
+        sip_put32(folder, sip_get32(entry) + cab->shift);
+        if (!CryptHashData(hash, folder, sizeof(folder), 0) ||
+            !CryptHashData(hash, entry + 4, cab->folder_size - 4, 0))
+            return FALSE;
+    }
+    return CryptHashData(hash, data + cab->rest_offset, cab->cabinet_size - cab->rest_offset, 0);
+}
+
+static BYTE *sip_der(BYTE tag, const BYTE *data, DWORD len, DWORD *out_len)
+{
+    DWORD len_bytes = len < 0x80 ? 1 : len < 0x100 ? 2 : len < 0x10000 ? 3 : len < 0x1000000 ? 4 : 5, i;
+    BYTE *out;
+
+    if (!(out = malloc(1 + len_bytes + len)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return NULL;
+    }
+    out[0] = tag;
+    if (len_bytes == 1)
+        out[1] = len;
+    else
+    {
+        out[1] = 0x80 | (len_bytes - 1);
+        for (i = 0; i < len_bytes - 1; i++)
+            out[2 + i] = len >> (8 * (len_bytes - 2 - i));
+    }
+    memcpy(out + 1 + len_bytes, data, len);
+    *out_len = 1 + len_bytes + len;
+    return out;
+}
+
+static BYTE *sip_moniker(const char *oid, const BYTE *octets, DWORD octets_len, DWORD *out_len)
+{
+    static const BYTE class_id[] = SpcSerializedObjectAttributesClassId;
+    CRYPT_DATA_BLOB octet_string = { octets_len, (BYTE *)octets };
+    CRYPT_ATTR_BLOB value = { 0, NULL };
+    CRYPT_ATTRIBUTE attr = { (char *)oid, 1, &value };
+    CRYPT_ATTRIBUTES attrs = { 1, &attr };
+    SPC_LINK link = { SPC_MONIKER_LINK_CHOICE };
+    BYTE *serialized = NULL, *out = NULL;
+    DWORD serialized_len;
+
+    if (!CryptEncodeObjectEx(X509_ASN_ENCODING, X509_OCTET_STRING, &octet_string, CRYPT_ENCODE_ALLOC_FLAG, NULL,
+                             &value.pbData, &value.cbData))
+        return NULL;
+    if (!CryptEncodeObjectEx(X509_ASN_ENCODING, PKCS_ATTRIBUTES, &attrs, CRYPT_ENCODE_ALLOC_FLAG, NULL,
+                             &serialized, &serialized_len))
+        goto done;
+    memcpy(link.Moniker.ClassId, class_id, sizeof(class_id));
+    link.Moniker.SerializedData.cbData = serialized_len;
+    link.Moniker.SerializedData.pbData = serialized;
+    if (!WVTAsn1SpcLinkEncode(X509_ASN_ENCODING, SPC_LINK_STRUCT, &link, NULL, out_len)) goto done;
+    if (!(out = malloc(*out_len)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        goto done;
+    }
+    if (!WVTAsn1SpcLinkEncode(X509_ASN_ENCODING, SPC_LINK_STRUCT, &link, out, out_len))
+    {
+        free(out);
+        out = NULL;
+    }
+
+done:
+    LocalFree(serialized);
+    LocalFree(value.pbData);
+    return out;
+}
+
+static BOOL sip_hash_page(HCRYPTPROV prov, ALG_ID alg, const BYTE *data, DWORD len, DWORD page_len, BYTE *out,
+                          DWORD hash_len)
+{
+    HCRYPTHASH hash;
+    BYTE *page;
+    BOOL ret;
+
+    if (!(page = calloc(1, page_len)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+    memcpy(page, data, len);
+    ret = CryptCreateHash(prov, alg, 0, 0, &hash);
+    if (ret)
+    {
+        ret = CryptHashData(hash, page, page_len, 0) && CryptGetHashParam(hash, HP_HASHVAL, out, &hash_len, 0);
+        CryptDestroyHash(hash);
+    }
+    free(page);
     return ret;
+}
+
+static BYTE *sip_pe_page_hashes(const BYTE *view, DWORD file_size, HCRYPTPROV prov, ALG_ID alg, DWORD hash_len,
+                                DWORD *table_len)
+{
+    const IMAGE_NT_HEADERS *nt;
+    const IMAGE_SECTION_HEADER *section;
+    DWORD checksum, security, headers, count = 2, entry = 4 + hash_len, i, offset, end = 0, len, header_len;
+    BYTE *table, *p, *header;
+
+    if (!(nt = ImageNtHeader((void *)view))) goto bad;
+    if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC)
+    {
+        const IMAGE_NT_HEADERS64 *nt64 = (const IMAGE_NT_HEADERS64 *)nt;
+
+        checksum = (const BYTE *)&nt64->OptionalHeader.CheckSum - view;
+        security = (const BYTE *)&nt64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_SECURITY] - view;
+        headers = nt64->OptionalHeader.SizeOfHeaders;
+    }
+    else if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC)
+    {
+        const IMAGE_NT_HEADERS32 *nt32 = (const IMAGE_NT_HEADERS32 *)nt;
+
+        checksum = (const BYTE *)&nt32->OptionalHeader.CheckSum - view;
+        security = (const BYTE *)&nt32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_SECURITY] - view;
+        headers = nt32->OptionalHeader.SizeOfHeaders;
+    }
+    else goto bad;
+    if (headers > file_size || security + sizeof(IMAGE_DATA_DIRECTORY) > headers) goto bad;
+
+    section = IMAGE_FIRST_SECTION(nt);
+    for (i = 0; i < nt->FileHeader.NumberOfSections; i++)
+    {
+        if (!section[i].SizeOfRawData) continue;
+        if (section[i].PointerToRawData > file_size) goto bad;
+        count += (section[i].SizeOfRawData + 0xfff) / 0x1000;
+    }
+
+    *table_len = count * entry;
+    if (!(table = calloc(1, *table_len)) || !(header = malloc(headers)))
+    {
+        free(table);
+        SetLastError(ERROR_OUTOFMEMORY);
+        return NULL;
+    }
+    header_len = 0;
+    memcpy(header, view, checksum);
+    header_len += checksum;
+    memcpy(header + header_len, view + checksum + sizeof(DWORD), security - checksum - sizeof(DWORD));
+    header_len += security - checksum - sizeof(DWORD);
+    memcpy(header + header_len, view + security + sizeof(IMAGE_DATA_DIRECTORY), headers - security - sizeof(IMAGE_DATA_DIRECTORY));
+    header_len += headers - security - sizeof(IMAGE_DATA_DIRECTORY);
+    p = table;
+    sip_put32(p, 0);
+    if (!sip_hash_page(prov, alg, header, header_len,
+                       ((headers + 0xfff) & ~0xfff) - sizeof(DWORD) - sizeof(IMAGE_DATA_DIRECTORY), p + 4, hash_len))
+        goto fail;
+    p += entry;
+    for (i = 0; i < nt->FileHeader.NumberOfSections; i++)
+    {
+        if (!section[i].SizeOfRawData) continue;
+        end = section[i].PointerToRawData + section[i].SizeOfRawData;
+        for (offset = section[i].PointerToRawData; offset < end; offset += 0x1000)
+        {
+            len = min(0x1000, end - offset);
+            if (offset + len > file_size) len = offset < file_size ? file_size - offset : 0;
+            sip_put32(p, offset);
+            if (!sip_hash_page(prov, alg, view + offset, len, 0x1000, p + 4, hash_len)) goto fail;
+            p += entry;
+        }
+    }
+    sip_put32(p, end);
+    free(header);
+    return table;
+
+fail:
+    free(header);
+    free(table);
+    return NULL;
+
+bad:
+    SetLastError(ERROR_BAD_FORMAT);
+    return NULL;
+}
+
+static BYTE *sip_pe_image_value(const BYTE *link, DWORD link_len, DWORD *out_len)
+{
+    static const BYTE flags[] = { 0x03, 0x01, 0x00 };
+    BYTE *file, *seq, *body;
+    DWORD file_len;
+
+    if (!(file = sip_der(0xa0, link, link_len, &file_len))) return NULL;
+    if (!(body = malloc(sizeof(flags) + file_len)))
+    {
+        free(file);
+        SetLastError(ERROR_OUTOFMEMORY);
+        return NULL;
+    }
+    memcpy(body, flags, sizeof(flags));
+    memcpy(body + sizeof(flags), file, file_len);
+    seq = sip_der(0x30, body, sizeof(flags) + file_len, out_len);
+    free(body);
+    free(file);
+    return seq;
 }
 
 #endif
@@ -1698,17 +1988,20 @@ BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcb
 {
 #ifdef __REACTOS__
     static const GUID peGUID = { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
+    static const GUID cabGUID = { 0xC689AABA, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
     static const GUID flatGUID = { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
     static const BYTE flat_value[] = { 0xa2, 0x02, 0x80, 0x00 };
     static const BYTE pe_value[] = { 0x30, 0x09, 0x03, 0x01, 0x00, 0xa0, 0x04, 0xa2, 0x02, 0x80, 0x00 };
-    DWORD value_len, data_oid_len, alg_oid_len, hash_len, len, size;
-    HANDLE file = INVALID_HANDLE_VALUE;
+    enum { SUBJECT_FLAT, SUBJECT_PE, SUBJECT_CAB } kind;
+    DWORD value_len = 0, data_oid_len, alg_oid_len, hash_len, len, size, file_size = 0, table_len;
+    HANDLE file = INVALID_HANDLE_VALUE, mapping = NULL;
+    BYTE *value = NULL, *table = NULL, *link = NULL, *enhanced = NULL, *p;
+    const BYTE *view = NULL;
+    struct cab_layout cab;
+    BOOL ret = FALSE, page_hashes = FALSE;
     HCRYPTPROV prov = 0;
     HCRYPTHASH hash = 0;
     const char *data_oid;
-    const BYTE *value;
-    BOOL ret, is_pe;
-    BYTE *p;
     ALG_ID alg;
 
     TRACE("(%p %p %p)\n", pSubjectInfo, pcbIndirectData, pIndirectData);
@@ -1722,17 +2015,24 @@ BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcb
 
     if (IsEqualGUID(pSubjectInfo->pgSubjectType, &flatGUID))
     {
-        is_pe = FALSE;
+        kind = SUBJECT_FLAT;
         data_oid = SPC_CAB_DATA_OBJID;
-        value = flat_value;
-        value_len = sizeof(flat_value);
     }
     else if (IsEqualGUID(pSubjectInfo->pgSubjectType, &peGUID))
     {
-        is_pe = TRUE;
+        kind = SUBJECT_PE;
         data_oid = SPC_PE_IMAGE_DATA_OBJID;
-        value = pe_value;
-        value_len = sizeof(pe_value);
+        if (pSubjectInfo->dwFlags & SPC_EXC_PE_PAGE_HASHES_FLAG)
+            page_hashes = FALSE;
+        else if (pSubjectInfo->dwFlags & SPC_INC_PE_PAGE_HASHES_FLAG)
+            page_hashes = TRUE;
+        else
+            page_hashes = include_pe_page_hashes;
+    }
+    else if (IsEqualGUID(pSubjectInfo->pgSubjectType, &cabGUID))
+    {
+        kind = SUBJECT_CAB;
+        data_oid = SPC_LINK_OBJID;
     }
     else
     {
@@ -1748,10 +2048,67 @@ BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcb
         prov = pSubjectInfo->hProv;
     else if (!CryptAcquireContextW(&prov, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT))
         return FALSE;
-    ret = FALSE;
     if (!CryptCreateHash(prov, alg, 0, 0, &hash)) goto done;
     len = sizeof(hash_len);
     if (!CryptGetHashParam(hash, HP_HASHSIZE, (BYTE *)&hash_len, &len, 0)) goto done;
+
+    if (pIndirectData || page_hashes)
+    {
+        if (pSubjectInfo->hFile && pSubjectInfo->hFile != INVALID_HANDLE_VALUE)
+            file = pSubjectInfo->hFile;
+        else if ((file = CreateFileW(pSubjectInfo->pwsFileName, GENERIC_READ, FILE_SHARE_READ, NULL,
+                                     OPEN_EXISTING, 0, NULL)) == INVALID_HANDLE_VALUE)
+            goto done;
+        file_size = GetFileSize(file, NULL);
+        if (!(mapping = CreateFileMappingW(file, NULL, PAGE_READONLY, 0, 0, NULL))) goto done;
+        if (!(view = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0))) goto done;
+    }
+
+    if (kind == SUBJECT_CAB)
+    {
+        BYTE cabinet_size[4] = { 0 };
+        HCRYPTHASH enhanced_hash;
+
+        if (!(enhanced = calloc(1, hash_len)))
+        {
+            SetLastError(ERROR_OUTOFMEMORY);
+            goto done;
+        }
+        if (view)
+        {
+            if (!sip_cab_layout(view, file_size, &cab)) goto done;
+            sip_put32(cabinet_size, cab.cabinet_size + cab.shift);
+            if (!CryptCreateHash(prov, alg, 0, 0, &enhanced_hash)) goto done;
+            len = hash_len;
+            ret = CryptHashData(enhanced_hash, cabinet_size, sizeof(cabinet_size), 0) &&
+                  CryptGetHashParam(enhanced_hash, HP_HASHVAL, enhanced, &len, 0);
+            CryptDestroyHash(enhanced_hash);
+            if (!ret) goto done;
+            ret = FALSE;
+        }
+        if (!(value = sip_moniker(szOID_ENHANCED_HASH, enhanced, hash_len, &value_len))) goto done;
+    }
+    else if (page_hashes)
+    {
+        SetLastError(ERROR_BAD_FORMAT);
+        if (!(table = sip_pe_page_hashes(view, file_size, prov, alg, hash_len, &table_len))) goto done;
+        if (!(link = sip_moniker(alg == CALG_SHA1 ? SPC_PE_IMAGE_PAGE_HASHES_V1_OBJID :
+                                 SPC_PE_IMAGE_PAGE_HASHES_V2_OBJID, table, table_len, &len)))
+            goto done;
+        if (!(value = sip_pe_image_value(link, len, &value_len))) goto done;
+    }
+    else
+    {
+        const BYTE *fixed = kind == SUBJECT_PE ? pe_value : flat_value;
+
+        value_len = kind == SUBJECT_PE ? sizeof(pe_value) : sizeof(flat_value);
+        if (!(value = malloc(value_len)))
+        {
+            SetLastError(ERROR_OUTOFMEMORY);
+            goto done;
+        }
+        memcpy(value, fixed, value_len);
+    }
 
     data_oid_len = strlen(data_oid) + 1;
     alg_oid_len = strlen(pSubjectInfo->DigestAlgorithm.pszObjId) + 1;
@@ -1765,17 +2122,16 @@ BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcb
     if (*pcbIndirectData < size)
         goto done;
 
-    if (pSubjectInfo->hFile && pSubjectInfo->hFile != INVALID_HANDLE_VALUE)
-        file = pSubjectInfo->hFile;
-    else if ((file = CreateFileW(pSubjectInfo->pwsFileName, GENERIC_READ, FILE_SHARE_READ, NULL,
-                                 OPEN_EXISTING, 0, NULL)) == INVALID_HANDLE_VALUE)
-        goto done;
-    if (is_pe)
+    if (kind == SUBJECT_PE)
     {
         SetLastError(ERROR_BAD_FORMAT);
         if (!pe_image_hash(file, hash)) goto done;
     }
-    else if (!sip_hash_flat_file(file, hash))
+    else if (kind == SUBJECT_CAB)
+    {
+        if (!sip_hash_cab(view, &cab, hash)) goto done;
+    }
+    else if (!CryptHashData(hash, view, file_size, 0))
         goto done;
 
     p = (BYTE *)(pIndirectData + 1);
@@ -1797,6 +2153,12 @@ BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcb
     ret = TRUE;
 
 done:
+    free(value);
+    free(link);
+    free(table);
+    free(enhanced);
+    if (view) UnmapViewOfFile(view);
+    if (mapping) CloseHandle(mapping);
     if (file != INVALID_HANDLE_VALUE && file != pSubjectInfo->hFile) CloseHandle(file);
     if (hash) CryptDestroyHash(hash);
     if (prov != pSubjectInfo->hProv) CryptReleaseContext(prov, 0);
@@ -1809,6 +2171,14 @@ done:
 }
 
 
+#ifdef __REACTOS__
+void WINAPI WintrustSetDefaultIncludePEPageHashes(BOOL fIncludePEPageHashes)
+{
+    TRACE("(%d)\n", fIncludePEPageHashes);
+    include_pe_page_hashes = fIncludePEPageHashes;
+}
+
+#endif
 /***********************************************************************
  *      CryptCATCDFClose  (WINTRUST.@)
  */
@@ -1966,7 +2336,11 @@ static BOOL WINTRUST_PutSignedMsgToPEFile(SIP_SUBJECTINFO* pSubjectInfo, DWORD p
     }
 
     /* int aligned WIN_CERTIFICATE structure with cbSignedDataMsg+1 bytes of data */
+#ifdef __REACTOS__
+    size = (FIELD_OFFSET(WIN_CERTIFICATE, bCertificate[cbSignedDataMsg]) + 7) & ~7;
+#else
     size = FIELD_OFFSET(WIN_CERTIFICATE, bCertificate[cbSignedDataMsg+4]) & (~3);
+#endif
     cert = calloc(1, size);
     if(!cert)
         return FALSE;
@@ -2193,6 +2567,107 @@ static BOOL WINTRUST_GetSignedMsgFromCatFile(SIP_SUBJECTINFO *pSubjectInfo,
 }
 
 #ifdef __REACTOS__
+static BOOL WINTRUST_PutSignedMsgToCabFile(SIP_SUBJECTINFO *pSubjectInfo,
+ DWORD *pdwIndex, DWORD cbSignedDataMsg, BYTE *pbSignedDataMsg)
+{
+    static const BYTE reserve_magic[] = { 0x00, 0x00, 0x10, 0x00 };
+    struct cab_layout cab;
+    DWORD size, read, written, reserve, out_len, i;
+    BYTE *data = NULL, *out = NULL, *p;
+    HANDLE file;
+    BOOL ret = FALSE;
+
+    if (pSubjectInfo->hFile && pSubjectInfo->hFile != INVALID_HANDLE_VALUE)
+        file = pSubjectInfo->hFile;
+    else
+    {
+        file = CreateFileW(pSubjectInfo->pwsFileName, GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+        if (file == INVALID_HANDLE_VALUE)
+            return FALSE;
+    }
+
+    size = GetFileSize(file, NULL);
+    if (size == INVALID_FILE_SIZE) goto done;
+    if (!(data = malloc(size)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        goto done;
+    }
+    if (SetFilePointer(file, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER ||
+        !ReadFile(file, data, size, &read, NULL) || read != size)
+        goto done;
+    if (!sip_cab_layout(data, size, &cab)) goto done;
+
+    reserve = cab.reserve_size + cab.shift - (cab.has_reserve ? 0 : 4);
+    out_len = cab.cabinet_size + cab.shift + cbSignedDataMsg;
+    if (!(out = calloc(1, out_len)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        goto done;
+    }
+    sip_cab_header(data, &cab, out);
+    p = out + 36;
+    p[0] = reserve;
+    p[1] = reserve >> 8;
+    if (cab.has_reserve)
+    {
+        p[2] = data[38];
+        p[3] = data[39];
+        memcpy(p + 4, data + 40, cab.reserve_size);
+    }
+    memcpy(p + 4, reserve_magic, sizeof(reserve_magic));
+    sip_put32(p + 8, cab.cabinet_size + cab.shift);
+    sip_put32(p + 12, cbSignedDataMsg);
+    p += 4 + reserve;
+    memcpy(p, data + cab.strings_offset, cab.strings_size);
+    p += cab.strings_size;
+    for (i = 0; i < cab.folders; i++)
+    {
+        const BYTE *entry = data + cab.folders_offset + i * cab.folder_size;
+
+        sip_put32(p, sip_get32(entry) + cab.shift);
+        memcpy(p + 4, entry + 4, cab.folder_size - 4);
+        p += cab.folder_size;
+    }
+    memcpy(p, data + cab.rest_offset, cab.cabinet_size - cab.rest_offset);
+    p += cab.cabinet_size - cab.rest_offset;
+    memcpy(p, pbSignedDataMsg, cbSignedDataMsg);
+
+    ret = SetFilePointer(file, 0, NULL, FILE_BEGIN) != INVALID_SET_FILE_POINTER &&
+          WriteFile(file, out, out_len, &written, NULL) && written == out_len && SetEndOfFile(file);
+    if (ret && pdwIndex)
+        *pdwIndex = 0;
+
+done:
+    free(out);
+    free(data);
+    if (file != pSubjectInfo->hFile)
+        CloseHandle(file);
+    return ret;
+}
+
+static BOOL WINTRUST_RemoveSignedMsgFromPEFile(SIP_SUBJECTINFO *pSubjectInfo, DWORD dwIndex)
+{
+    HANDLE file;
+    BOOL ret;
+
+    if (pSubjectInfo->hFile && pSubjectInfo->hFile != INVALID_HANDLE_VALUE)
+        file = pSubjectInfo->hFile;
+    else
+    {
+        file = CreateFileW(pSubjectInfo->pwsFileName, GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+        if (file == INVALID_HANDLE_VALUE)
+            return FALSE;
+    }
+    if (!(ret = ImageRemoveCertificate(file, dwIndex)))
+        SetLastError(ERROR_INVALID_PARAMETER);
+    if (file != pSubjectInfo->hFile)
+        CloseHandle(file);
+    return ret;
+}
+
 static BOOL WINTRUST_PutSignedMsgToCatFile(SIP_SUBJECTINFO *pSubjectInfo,
  DWORD *pdwIndex, DWORD cbSignedDataMsg, BYTE *pbSignedDataMsg)
 {
@@ -2288,6 +2763,9 @@ BOOL WINAPI CryptSIPPutSignedDataMsg(SIP_SUBJECTINFO* pSubjectInfo, DWORD pdwEnc
     else if (!memcmp(pSubjectInfo->pgSubjectType, &catGUID, sizeof(catGUID)))
         return WINTRUST_PutSignedMsgToCatFile(pSubjectInfo, pdwIndex,
                 cbSignedDataMsg, pbSignedDataMsg);
+    else if (!memcmp(pSubjectInfo->pgSubjectType, &cabGUID, sizeof(cabGUID)))
+        return WINTRUST_PutSignedMsgToCabFile(pSubjectInfo, pdwIndex,
+                cbSignedDataMsg, pbSignedDataMsg);
 #endif
     else
         FIXME("unimplemented for subject type %s\n",
@@ -2302,9 +2780,26 @@ BOOL WINAPI CryptSIPPutSignedDataMsg(SIP_SUBJECTINFO* pSubjectInfo, DWORD pdwEnc
 BOOL WINAPI CryptSIPRemoveSignedDataMsg(SIP_SUBJECTINFO* pSubjectInfo,
                                        DWORD dwIndex)
 {
+#ifdef __REACTOS__
+    TRACE("(%p %ld)\n", pSubjectInfo, dwIndex);
+
+    if (!pSubjectInfo || !pSubjectInfo->pgSubjectType)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!memcmp(pSubjectInfo->pgSubjectType, &unknown, sizeof(unknown)))
+        return WINTRUST_RemoveSignedMsgFromPEFile(pSubjectInfo, dwIndex);
+    if (!memcmp(pSubjectInfo->pgSubjectType, &cabGUID, sizeof(cabGUID)))
+        SetLastError(ERROR_SUCCESS);
+    else if (memcmp(pSubjectInfo->pgSubjectType, &catGUID, sizeof(catGUID)))
+        FIXME("unimplemented for subject type %s\n", debugstr_guid(pSubjectInfo->pgSubjectType));
+    return FALSE;
+#else
     FIXME("(%p %ld) stub\n", pSubjectInfo, dwIndex);
  
     return FALSE;
+#endif
 }
 
 /***********************************************************************
