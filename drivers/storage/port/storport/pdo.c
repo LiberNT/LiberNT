@@ -1201,7 +1201,7 @@ PortPdoQueryId(
 
         case BusQueryInstanceID:
             sprintf(InstanceId,
-                    "%lx.%lx.%lx",
+                    "%02lX%02lX%02lX",
                     PdoExtension->Bus,
                     PdoExtension->Target,
                     PdoExtension->Lun);
@@ -1212,6 +1212,79 @@ PortPdoQueryId(
             return STATUS_NOT_SUPPORTED;
     }
 
+    if (Buffer == NULL)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    *Information = (ULONG_PTR)Buffer;
+    return STATUS_SUCCESS;
+}
+
+
+static
+VOID
+PortPdoCopyTextField(
+    _Out_writes_(Length + 1) PCHAR Destination,
+    _In_reads_(Length) PUCHAR Source,
+    _In_ ULONG Length)
+{
+    RtlCopyMemory(Destination, Source, Length);
+    while ((Length > 0) && (Destination[Length - 1] == ' '))
+    {
+        Length--;
+    }
+
+    Destination[Length] = ANSI_NULL;
+}
+
+
+static
+NTSTATUS
+PortPdoQueryDeviceText(
+    _In_ PPDO_DEVICE_EXTENSION PdoExtension,
+    _In_ DEVICE_TEXT_TYPE TextType,
+    _Out_ PULONG_PTR Information)
+{
+    CHAR Text[64];
+    CHAR Product[17];
+    CHAR Vendor[9];
+    PWSTR Buffer;
+
+    switch (TextType)
+    {
+        case DeviceTextDescription:
+            if (PdoExtension->InquiryBuffer == NULL)
+            {
+                return STATUS_NOT_SUPPORTED;
+            }
+
+            PortPdoCopyTextField(Vendor,
+                                 PdoExtension->InquiryBuffer->VendorId,
+                                 sizeof(PdoExtension->InquiryBuffer->VendorId));
+            PortPdoCopyTextField(Product,
+                                 PdoExtension->InquiryBuffer->ProductId,
+                                 sizeof(PdoExtension->InquiryBuffer->ProductId));
+            sprintf(Text,
+                    "%s %s SCSI %s Device",
+                    Vendor,
+                    Product,
+                    PortPdoGetDeviceType(PdoExtension->InquiryBuffer));
+            break;
+
+        case DeviceTextLocationInformation:
+            sprintf(Text,
+                    "Bus Number %lu, Target Id %lu, LUN %lu",
+                    PdoExtension->Bus,
+                    PdoExtension->Target,
+                    PdoExtension->Lun);
+            break;
+
+        default:
+            return STATUS_NOT_SUPPORTED;
+    }
+
+    Buffer = PortPdoAllocateId(Text, NULL, FALSE);
     if (Buffer == NULL)
     {
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -1335,6 +1408,20 @@ PortPdoPnp(
             Information = 0;
             Status = STATUS_SUCCESS;
             break;
+
+        case IRP_MN_QUERY_DEVICE_TEXT:
+        {
+            NTSTATUS TextStatus;
+
+            TextStatus = PortPdoQueryDeviceText(PdoExtension,
+                                                Stack->Parameters.QueryDeviceText.DeviceTextType,
+                                                &Information);
+            if (TextStatus != STATUS_NOT_SUPPORTED)
+            {
+                Status = TextStatus;
+            }
+            break;
+        }
 
         default:
             break;
