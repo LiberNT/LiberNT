@@ -681,6 +681,10 @@ IopAssignDeviceResources(
     IN PDEVICE_NODE DeviceNode
 );
 
+NTSTATUS
+IopFilterResourceRequirements(
+    IN PDEVICE_NODE DeviceNode);
+
 VOID
 NTAPI
 IopInitializeSystemResourceMap(

@@ -1380,7 +1380,6 @@ IopUpdateControlKeyWithResources(
     return STATUS_SUCCESS;
 }
 
-static
 NTSTATUS
 IopFilterResourceRequirements(
     IN PDEVICE_NODE DeviceNode)

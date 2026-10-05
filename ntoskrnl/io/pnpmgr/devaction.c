@@ -1986,10 +1986,6 @@ PiUpdateDeviceState(
     }
     else if (PnPFlags & PNP_DEVICE_RESOURCE_REQUIREMENTS_CHANGED)
     {
-        /* ReactOS does not implement a true non-stopped rebalance yet.
-         * Route resource requirement changes through a full query-stop /
-         * stop / reassign / start cycle instead of pretending the live
-         * resource list was refreshed in place. */
         PiClearDevNodeFlag(DeviceNode, DNF_NON_STOPPED_REBALANCE);
 
         // Clear DNF_NO_RESOURCE_REQUIRED just in case (will be set back if needed)
@@ -3150,18 +3146,16 @@ PiDevNodeStateMachine(
                 }
                 else if (currentNode->Flags & DNF_RESOURCE_REQUIREMENTS_CHANGED)
                 {
-                    if (currentNode->Flags & DNF_NON_STOPPED_REBALANCE)
+                    PiClearDevNodeFlag(currentNode, DNF_RESOURCE_REQUIREMENTS_CHANGED);
+                    PiRequeryDevNodeRequirements(currentNode);
+                    IopFilterResourceRequirements(currentNode);
+                    status = PiIrpStartDevice(currentNode);
+                    if (!NT_SUCCESS(status))
                     {
-                        PiFakeResourceRebalance(currentNode);
-                        PiClearDevNodeFlag(currentNode, DNF_NON_STOPPED_REBALANCE);
+                        PiSetDevNodeProblem(currentNode, CM_PROB_FAILED_START);
+                        PiSetDevNodeState(currentNode, DeviceNodeAwaitingQueuedRemoval);
+                        doProcessAgain = TRUE;
                     }
-                    else
-                    {
-                        PiIrpQueryStopDevice(currentNode);
-                        PiSetDevNodeState(currentNode, DeviceNodeQueryStopped);
-                    }
-
-                    doProcessAgain = TRUE;
                 }
                 break;
             case DeviceNodeQueryStopped:

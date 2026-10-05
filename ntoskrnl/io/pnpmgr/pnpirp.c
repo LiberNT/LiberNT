@@ -90,7 +90,8 @@ PiIrpStartDevice(
     PAGED_CODE();
 
     ASSERT(DeviceNode);
-    ASSERT(DeviceNode->State == DeviceNodeResourcesAssigned);
+    ASSERT(DeviceNode->State == DeviceNodeResourcesAssigned ||
+           DeviceNode->State == DeviceNodeStarted);
 
     PVOID info;
     IO_STACK_LOCATION stack = {
