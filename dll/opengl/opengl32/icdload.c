@@ -38,6 +38,14 @@ static struct ICD_Data* ICD_Data_List = NULL;
 static DWORD IcdLoadingThreadId;
 static const WCHAR OpenGLDrivers_Key[] = L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\OpenGLDrivers";
 static const WCHAR CustomDrivers_Key[] = L"SOFTWARE\\ReactOS\\OpenGL";
+static const WCHAR GpuPreferences_Key[] = L"Software\\Microsoft\\DirectX\\UserGpuPreferences";
+
+typedef enum _WGL_GPU_PREFERENCE
+{
+    WglGpuPreferenceUnspecified = 0,
+    WglGpuPreferenceMinimumPower = 1,
+    WglGpuPreferenceHighPerformance = 2,
+} WGL_GPU_PREFERENCE;
 static Drv_Opengl_Info CustomDrvInfo;
 static CUSTOM_DRIVER_STATE CustomDriverState = OGL_CD_NOT_QUERIED;
 
@@ -578,11 +586,72 @@ IntQueryWddmOpenGlInfo(
     return NT_SUCCESS(Status) && OpenGlInfo->UmdOpenGlIcdFileName[0] != UNICODE_NULL;
 }
 
+static ULONGLONG
+IntQueryDedicatedVideoMemory(D3DKMT_HANDLE Adapter)
+{
+    D3DKMT_SEGMENTSIZEINFO SegmentInfo;
+    D3DKMT_QUERYADAPTERINFO QueryInfo;
+
+    RtlZeroMemory(&SegmentInfo, sizeof(SegmentInfo));
+    RtlZeroMemory(&QueryInfo, sizeof(QueryInfo));
+    QueryInfo.hAdapter = Adapter;
+    QueryInfo.Type = KMTQAITYPE_GETSEGMENTSIZE;
+    QueryInfo.pPrivateDriverData = &SegmentInfo;
+    QueryInfo.PrivateDriverDataSize = sizeof(SegmentInfo);
+    if (!NT_SUCCESS(D3DKMTQueryAdapterInfo(&QueryInfo)))
+        return 0;
+    return SegmentInfo.DedicatedVideoMemorySize;
+}
+
+static WGL_GPU_PREFERENCE
+IntQueryGpuPreference(void)
+{
+    WCHAR ImagePath[MAX_PATH];
+    WCHAR Value[64];
+    DWORD Size = sizeof(Value) - sizeof(WCHAR);
+    DWORD Type;
+    HKEY Key;
+    PCWSTR Setting;
+    LONG Error;
+
+    if (GetModuleFileNameW(NULL, ImagePath, ARRAYSIZE(ImagePath)) - 1 >= ARRAYSIZE(ImagePath) - 1)
+        return WglGpuPreferenceUnspecified;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, GpuPreferences_Key, 0, KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
+        return WglGpuPreferenceUnspecified;
+    Error = RegQueryValueExW(Key, ImagePath, NULL, &Type, (LPBYTE)Value, &Size);
+    RegCloseKey(Key);
+    if (Error != ERROR_SUCCESS || Type != REG_SZ)
+        return WglGpuPreferenceUnspecified;
+    Value[Size / sizeof(WCHAR)] = UNICODE_NULL;
+
+    for (Setting = Value; Setting != NULL && *Setting != UNICODE_NULL; )
+    {
+        if (_wcsnicmp(Setting, L"GpuPreference=", 14) == 0)
+        {
+            switch (wcstoul(Setting + 14, NULL, 10))
+            {
+                case WglGpuPreferenceMinimumPower:
+                    return WglGpuPreferenceMinimumPower;
+                case WglGpuPreferenceHighPerformance:
+                    return WglGpuPreferenceHighPerformance;
+                default:
+                    return WglGpuPreferenceUnspecified;
+            }
+        }
+        Setting = wcschr(Setting, L';');
+        if (Setting != NULL)
+            ++Setting;
+    }
+    return WglGpuPreferenceUnspecified;
+}
+
 static BOOL
 IntFindWddmRenderIcd(
     D3DKMT_OPENGLINFO *OpenGlInfo,
-    LUID *AdapterLuid)
+    LUID *AdapterLuid,
+    BOOL HighPerformance)
 {
+    ULONGLONG BestMemory = 0;
     D3DKMT_ENUMADAPTERS2 Enumeration;
     D3DKMT_ADAPTERINFO *Adapters = NULL;
     D3DKMT_QUERYADAPTERINFO QueryInfo;
@@ -646,7 +715,19 @@ IntFindWddmRenderIcd(
          * into a software renderer.
          */
         ++FoundCount;
-        if (FoundCount == 1)
+        if (HighPerformance)
+        {
+            ULONGLONG Memory = IntQueryDedicatedVideoMemory(Adapters[Index].hAdapter);
+
+            if (FoundCount == 1 || Memory > BestMemory)
+            {
+                BestMemory = Memory;
+                *OpenGlInfo = CandidateInfo;
+                if (AdapterLuid != NULL)
+                    *AdapterLuid = Adapters[Index].AdapterLuid;
+            }
+        }
+        else if (FoundCount == 1)
         {
             *OpenGlInfo = CandidateInfo;
             if (AdapterLuid != NULL)
@@ -1030,17 +1111,23 @@ IntGetWddmIcdInfo(
     SelectedLuid.LowPart = 0;
     SelectedLuid.HighPart = 0;
 
-    memset(&OpenAdapter, 0, sizeof(OpenAdapter));
-    OpenAdapter.hDc = hdc;
-    Status = D3DKMTOpenAdapterFromHdc(&OpenAdapter);
-    if (NT_SUCCESS(Status) && OpenAdapter.hAdapter != 0)
-    {
-        Adapter = OpenAdapter.hAdapter;
-        SelectedLuid = OpenAdapter.AdapterLuid;
-    }
+    if (IntQueryGpuPreference() == WglGpuPreferenceHighPerformance)
+        Found = IntFindWddmRenderIcd(&OpenGlInfo, &SelectedLuid, TRUE);
 
-    Found = IntQueryWddmOpenGlInfo(Adapter, &OpenGlInfo);
-    IntCloseAdapter(Adapter);
+    if (!Found)
+    {
+        memset(&OpenAdapter, 0, sizeof(OpenAdapter));
+        OpenAdapter.hDc = hdc;
+        Status = D3DKMTOpenAdapterFromHdc(&OpenAdapter);
+        if (NT_SUCCESS(Status) && OpenAdapter.hAdapter != 0)
+        {
+            Adapter = OpenAdapter.hAdapter;
+            SelectedLuid = OpenAdapter.AdapterLuid;
+        }
+
+        Found = IntQueryWddmOpenGlInfo(Adapter, &OpenGlInfo);
+        IntCloseAdapter(Adapter);
+    }
 
     /* A redirected window DC is backed by a DIB, not by the scan-out PDEV.
      * Resolve that window's monitor when the HDC-selected adapter does not
@@ -1061,7 +1148,7 @@ IntGetWddmIcdInfo(
      * to that software adapter.  A separately started hardware render adapter
      * can still publish the ICD that should service windowed OpenGL. */
     if (!Found)
-        Found = IntFindWddmRenderIcd(&OpenGlInfo, &SelectedLuid);
+        Found = IntFindWddmRenderIcd(&OpenGlInfo, &SelectedLuid, FALSE);
 
     if (!Found)
         return FALSE;
