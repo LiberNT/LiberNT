@@ -1,0 +1,12 @@
+@ stdcall RmAddFilter(long wstr ptr wstr long)
+@ stdcall RmCancelCurrentTask(long)
+@ stdcall RmEndSession(long)
+@ stdcall RmGetFilterList(long ptr long ptr)
+@ stdcall RmGetList(long ptr ptr ptr ptr)
+@ stdcall RmJoinSession(ptr wstr)
+@ stdcall RmRegisterResources(long long ptr long ptr long ptr)
+@ stdcall RmRemoveFilter(long wstr ptr wstr)
+@ stub RmReserveHeap
+@ stdcall RmRestart(long long ptr)
+@ stdcall RmShutdown(long long ptr)
+@ stdcall RmStartSession(ptr long ptr)

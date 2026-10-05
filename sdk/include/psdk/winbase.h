@@ -3015,6 +3015,12 @@ VOID WINAPI RecoveryFinished(BOOL);
 HRESULT WINAPI RecoveryInProgress(OUT PBOOL);
 HRESULT WINAPI RegisterApplicationRecoveryCallback(_In_ APPLICATION_RECOVERY_CALLBACK, _In_opt_ PVOID, _In_ DWORD, _In_ DWORD);
 HRESULT WINAPI RegisterApplicationRestart(_In_opt_ PCWSTR, _In_ DWORD);
+HRESULT WINAPI GetApplicationRestartSettings(_In_ HANDLE, _Out_writes_opt_(*pcchSize) PWSTR, _Inout_ PDWORD pcchSize, _Out_opt_ PDWORD);
+#define RESTART_MAX_CMD_LINE 1024
+#define RESTART_NO_CRASH 1
+#define RESTART_NO_HANG 2
+#define RESTART_NO_PATCH 4
+#define RESTART_NO_REBOOT 8
 #endif
 HANDLE WINAPI RegisterEventSourceA(_In_opt_ LPCSTR, _In_ LPCSTR);
 HANDLE WINAPI RegisterEventSourceW(_In_opt_ LPCWSTR, _In_ LPCWSTR);
