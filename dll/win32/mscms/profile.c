@@ -1460,6 +1460,125 @@ BOOL WINAPI WcsEnumColorProfilesSize( WCS_PROFILE_MANAGEMENT_SCOPE scope, ENUMTY
 /******************************************************************************
  * WcsGetDefaultColorProfile         [MSCMS.@]
  */
+#ifdef __REACTOS__
+static HKEY wcs_open_default_key( WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR device_name, BOOL create )
+{
+    WCHAR path[MAX_PATH];
+    HKEY key = NULL;
+    size_t len;
+    int i;
+
+    if (scope != WCS_PROFILE_MANAGEMENT_SCOPE_SYSTEM_WIDE && scope != WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return NULL;
+    }
+    lstrcpyW( path, L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\DefaultProfiles\\" );
+    len = lstrlenW( path );
+    if (device_name && lstrlenW( device_name ) >= ARRAY_SIZE(path) - len)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return NULL;
+    }
+    lstrcpyW( path + len, device_name ? device_name : L"*" );
+    for (i = len; path[i]; i++) if (path[i] == '\\') path[i] = '#';
+
+    if (create)
+        SetLastError( RegCreateKeyExW( scope == WCS_PROFILE_MANAGEMENT_SCOPE_SYSTEM_WIDE ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER,
+                                       path, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL ) );
+    else
+        SetLastError( RegOpenKeyExW( scope == WCS_PROFILE_MANAGEMENT_SCOPE_SYSTEM_WIDE ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER,
+                                     path, 0, KEY_QUERY_VALUE, &key ) );
+    return GetLastError() == ERROR_SUCCESS ? key : NULL;
+}
+
+static void wcs_default_value_name( WCHAR name[32], COLORPROFILETYPE type, COLORPROFILESUBTYPE subtype, DWORD profile_id )
+{
+    swprintf( name, 32, L"%u.%u.%lu", type, subtype, profile_id );
+}
+
+static BOOL wcs_query_default( WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR device_name, COLORPROFILETYPE type,
+                               COLORPROFILESUBTYPE subtype, DWORD profile_id, BYTE *data, DWORD *size )
+{
+    WCHAR value_name[32];
+    DWORD value_type, err;
+    HKEY key;
+
+    if (!(key = wcs_open_default_key( scope, device_name, FALSE ))) return FALSE;
+    wcs_default_value_name( value_name, type, subtype, profile_id );
+    err = RegQueryValueExW( key, value_name, NULL, &value_type, data, size );
+    RegCloseKey( key );
+    if (err == ERROR_SUCCESS && value_type != REG_SZ) err = ERROR_FILE_NOT_FOUND;
+    if (err != ERROR_SUCCESS)
+    {
+        SetLastError( err == ERROR_MORE_DATA ? ERROR_INSUFFICIENT_BUFFER : err );
+        return FALSE;
+    }
+    return TRUE;
+}
+
+BOOL WINAPI WcsGetDefaultColorProfile( WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR device_name,
+                                       COLORPROFILETYPE type, COLORPROFILESUBTYPE subtype,
+                                       DWORD profile_id, DWORD size, LPWSTR name )
+{
+    TRACE( "%d, %s, %d, %d, %lu, %lu, %p\n", scope, debugstr_w(device_name), type, subtype, profile_id, size, name );
+
+    if (!name || !size)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return FALSE;
+    }
+    return wcs_query_default( scope, device_name, type, subtype, profile_id, (BYTE *)name, &size );
+}
+
+BOOL WINAPI WcsSetDefaultColorProfile( WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR device_name,
+                                       COLORPROFILETYPE type, COLORPROFILESUBTYPE subtype,
+                                       DWORD profile_id, PCWSTR name )
+{
+    WCHAR value_name[32];
+    DWORD err;
+    HKEY key;
+
+    TRACE( "%d, %s, %d, %d, %lu, %s\n", scope, debugstr_w(device_name), type, subtype, profile_id, debugstr_w(name) );
+
+    if (!(key = wcs_open_default_key( scope, device_name, TRUE ))) return FALSE;
+    wcs_default_value_name( value_name, type, subtype, profile_id );
+    if (name)
+        err = RegSetValueExW( key, value_name, 0, REG_SZ, (const BYTE *)name, (lstrlenW( name ) + 1) * sizeof(WCHAR) );
+    else
+    {
+        err = RegDeleteValueW( key, value_name );
+        if (err == ERROR_FILE_NOT_FOUND) err = ERROR_SUCCESS;
+    }
+    RegCloseKey( key );
+    SetLastError( err );
+    return err == ERROR_SUCCESS;
+}
+
+BOOL WINAPI WcsAssociateColorProfileWithDevice( WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR profile, PCWSTR device )
+{
+    TRACE( "%d, %s, %s\n", scope, debugstr_w(profile), debugstr_w(device) );
+
+    if (scope != WCS_PROFILE_MANAGEMENT_SCOPE_SYSTEM_WIDE && scope != WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return FALSE;
+    }
+    return AssociateColorProfileWithDeviceW( NULL, profile, device );
+}
+
+BOOL WINAPI WcsDisassociateColorProfileFromDevice( WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR profile, PCWSTR device )
+{
+    TRACE( "%d, %s, %s\n", scope, debugstr_w(profile), debugstr_w(device) );
+
+    if (scope != WCS_PROFILE_MANAGEMENT_SCOPE_SYSTEM_WIDE && scope != WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return FALSE;
+    }
+    return DisassociateColorProfileFromDeviceW( NULL, profile, device );
+}
+#else
 BOOL WINAPI WcsGetDefaultColorProfile( WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR device_name,
                                        COLORPROFILETYPE type, COLORPROFILESUBTYPE subtype,
                                        DWORD profile_id, DWORD size, LPWSTR name )
@@ -1468,10 +1587,27 @@ BOOL WINAPI WcsGetDefaultColorProfile( WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWST
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return FALSE;
 }
+#endif
 
 /******************************************************************************
  * WcsGetDefaultColorProfileSize     [MSCMS.@]
  */
+#ifdef __REACTOS__
+BOOL WINAPI WcsGetDefaultColorProfileSize( WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR device_name,
+                                           COLORPROFILETYPE type, COLORPROFILESUBTYPE subtype,
+                                           DWORD profile_id, PDWORD profile_size)
+{
+    TRACE( "%d, %s, %d, %d, %lu, %p\n", scope, debugstr_w(device_name), type, subtype, profile_id, profile_size );
+
+    if (!profile_size)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return FALSE;
+    }
+    *profile_size = 0;
+    return wcs_query_default( scope, device_name, type, subtype, profile_id, NULL, profile_size );
+}
+#else
 BOOL WINAPI WcsGetDefaultColorProfileSize( WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR device_name,
                                            COLORPROFILETYPE type, COLORPROFILESUBTYPE subtype,
                                            DWORD profile_id, PDWORD profile_size)
@@ -1480,6 +1616,7 @@ BOOL WINAPI WcsGetDefaultColorProfileSize( WCS_PROFILE_MANAGEMENT_SCOPE scope, P
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return FALSE;
 }
+#endif
 
 /******************************************************************************
  * WcsGetDefaultRednderingIntent      [MSCMS.@]
