@@ -1316,15 +1316,140 @@ HANDLE WINAPI CryptCATOpen(WCHAR *filename, DWORD flags, HCRYPTPROV hProv,
     return INVALID_HANDLE_VALUE;
 }
 
+#ifdef __REACTOS__
+static BOOL sip_hash_flat_file(HANDLE file, HCRYPTHASH hash)
+{
+    HANDLE mapping;
+    BYTE *view;
+    BOOL ret = FALSE;
+
+    if (!(mapping = CreateFileMappingW(file, NULL, PAGE_READONLY, 0, 0, NULL))) return FALSE;
+    if ((view = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0)))
+    {
+        ret = CryptHashData(hash, view, GetFileSize(file, NULL), 0);
+        UnmapViewOfFile(view);
+    }
+    CloseHandle(mapping);
+    return ret;
+}
+
+#endif
 /***********************************************************************
  *      CryptSIPCreateIndirectData  (WINTRUST.@)
  */
 BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcbIndirectData,
                                        SIP_INDIRECT_DATA* pIndirectData)
 {
+#ifdef __REACTOS__
+    static const GUID peGUID = { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
+    static const GUID flatGUID = { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
+    static const BYTE flat_value[] = { 0xa2, 0x02, 0x80, 0x00 };
+    static const BYTE pe_value[] = { 0x30, 0x09, 0x03, 0x01, 0x00, 0xa0, 0x04, 0xa2, 0x02, 0x80, 0x00 };
+    DWORD value_len, data_oid_len, alg_oid_len, hash_len, len, size;
+    HANDLE file = INVALID_HANDLE_VALUE;
+    HCRYPTPROV prov = 0;
+    HCRYPTHASH hash = 0;
+    const char *data_oid;
+    const BYTE *value;
+    BOOL ret, is_pe;
+    BYTE *p;
+    ALG_ID alg;
+
+    TRACE("(%p %p %p)\n", pSubjectInfo, pcbIndirectData, pIndirectData);
+
+    if (!pSubjectInfo || !pSubjectInfo->pgSubjectType || !pcbIndirectData ||
+        !pSubjectInfo->DigestAlgorithm.pszObjId)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (IsEqualGUID(pSubjectInfo->pgSubjectType, &flatGUID))
+    {
+        is_pe = FALSE;
+        data_oid = SPC_CAB_DATA_OBJID;
+        value = flat_value;
+        value_len = sizeof(flat_value);
+    }
+    else if (IsEqualGUID(pSubjectInfo->pgSubjectType, &peGUID))
+    {
+        is_pe = TRUE;
+        data_oid = SPC_PE_IMAGE_DATA_OBJID;
+        value = pe_value;
+        value_len = sizeof(pe_value);
+    }
+    else
+    {
+        FIXME("unimplemented for subject type %s\n", debugstr_guid(pSubjectInfo->pgSubjectType));
+        SetLastError(TRUST_E_SUBJECT_FORM_UNKNOWN);
+        return FALSE;
+    }
+
+    SetLastError(ERROR_SUCCESS);
+    if (!(alg = CertOIDToAlgId(pSubjectInfo->DigestAlgorithm.pszObjId)) || GET_ALG_CLASS(alg) != ALG_CLASS_HASH)
+        return FALSE;
+    if (pSubjectInfo->hProv)
+        prov = pSubjectInfo->hProv;
+    else if (!CryptAcquireContextW(&prov, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT))
+        return FALSE;
+    ret = FALSE;
+    if (!CryptCreateHash(prov, alg, 0, 0, &hash)) goto done;
+    len = sizeof(hash_len);
+    if (!CryptGetHashParam(hash, HP_HASHSIZE, (BYTE *)&hash_len, &len, 0)) goto done;
+
+    data_oid_len = strlen(data_oid) + 1;
+    alg_oid_len = strlen(pSubjectInfo->DigestAlgorithm.pszObjId) + 1;
+    size = sizeof(*pIndirectData) + data_oid_len + value_len + alg_oid_len + hash_len;
+    if (!pIndirectData)
+    {
+        *pcbIndirectData = size;
+        ret = TRUE;
+        goto done;
+    }
+    if (*pcbIndirectData < size)
+        goto done;
+
+    if (pSubjectInfo->hFile && pSubjectInfo->hFile != INVALID_HANDLE_VALUE)
+        file = pSubjectInfo->hFile;
+    else if ((file = CreateFileW(pSubjectInfo->pwsFileName, GENERIC_READ, FILE_SHARE_READ, NULL,
+                                 OPEN_EXISTING, 0, NULL)) == INVALID_HANDLE_VALUE)
+        goto done;
+    if (is_pe)
+    {
+        SetLastError(ERROR_BAD_FORMAT);
+        if (!pe_image_hash(file, hash)) goto done;
+    }
+    else if (!sip_hash_flat_file(file, hash))
+        goto done;
+
+    p = (BYTE *)(pIndirectData + 1);
+    pIndirectData->Data.pszObjId = (char *)p;
+    memcpy(p, data_oid, data_oid_len);
+    p += data_oid_len;
+    pIndirectData->Data.Value.cbData = value_len;
+    pIndirectData->Data.Value.pbData = p;
+    memcpy(p, value, value_len);
+    p += value_len;
+    pIndirectData->DigestAlgorithm.pszObjId = (char *)p;
+    memcpy(p, pSubjectInfo->DigestAlgorithm.pszObjId, alg_oid_len);
+    p += alg_oid_len;
+    pIndirectData->DigestAlgorithm.Parameters.cbData = 0;
+    pIndirectData->DigestAlgorithm.Parameters.pbData = NULL;
+    pIndirectData->Digest.cbData = hash_len;
+    pIndirectData->Digest.pbData = p;
+    if (!CryptGetHashParam(hash, HP_HASHVAL, p, &hash_len, 0)) goto done;
+    ret = TRUE;
+
+done:
+    if (file != INVALID_HANDLE_VALUE && file != pSubjectInfo->hFile) CloseHandle(file);
+    if (hash) CryptDestroyHash(hash);
+    if (prov != pSubjectInfo->hProv) CryptReleaseContext(prov, 0);
+    return ret;
+#else
     FIXME("(%p %p %p) stub\n", pSubjectInfo, pcbIndirectData, pIndirectData);
  
     return FALSE;
+#endif
 }
 
 
@@ -1711,6 +1836,36 @@ static BOOL WINTRUST_GetSignedMsgFromCatFile(SIP_SUBJECTINFO *pSubjectInfo,
     return ret;
 }
 
+#ifdef __REACTOS__
+static BOOL WINTRUST_PutSignedMsgToCatFile(SIP_SUBJECTINFO *pSubjectInfo,
+ DWORD *pdwIndex, DWORD cbSignedDataMsg, BYTE *pbSignedDataMsg)
+{
+    HANDLE file;
+    DWORD written;
+    BOOL ret;
+
+    if (pSubjectInfo->hFile && pSubjectInfo->hFile != INVALID_HANDLE_VALUE)
+        file = pSubjectInfo->hFile;
+    else
+    {
+        file = CreateFileW(pSubjectInfo->pwsFileName, GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+        if (file == INVALID_HANDLE_VALUE)
+            return FALSE;
+    }
+
+    ret = SetFilePointer(file, 0, NULL, FILE_BEGIN) != INVALID_SET_FILE_POINTER &&
+          WriteFile(file, pbSignedDataMsg, cbSignedDataMsg, &written, NULL) &&
+          written == cbSignedDataMsg && SetEndOfFile(file);
+    if (ret && pdwIndex)
+        *pdwIndex = 0;
+
+    if (file != pSubjectInfo->hFile)
+        CloseHandle(file);
+    return ret;
+}
+
+#endif
 /* GUIDs used by CryptSIPGetSignedDataMsg and CryptSIPPutSignedDataMsg */
 static const GUID unknown = { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,
     0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
@@ -1773,6 +1928,11 @@ BOOL WINAPI CryptSIPPutSignedDataMsg(SIP_SUBJECTINFO* pSubjectInfo, DWORD pdwEnc
     if(!memcmp(pSubjectInfo->pgSubjectType, &unknown, sizeof(unknown)))
         return WINTRUST_PutSignedMsgToPEFile(pSubjectInfo, pdwEncodingType,
                 pdwIndex, cbSignedDataMsg, pbSignedDataMsg);
+#ifdef __REACTOS__
+    else if (!memcmp(pSubjectInfo->pgSubjectType, &catGUID, sizeof(catGUID)))
+        return WINTRUST_PutSignedMsgToCatFile(pSubjectInfo, pdwIndex,
+                cbSignedDataMsg, pbSignedDataMsg);
+#endif
     else
         FIXME("unimplemented for subject type %s\n",
                 debugstr_guid(pSubjectInfo->pgSubjectType));
