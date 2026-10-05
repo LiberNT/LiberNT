@@ -4867,7 +4867,7 @@ D3DKMTCreateContextVirtual(
      * to make that decision. The narrower check belongs to the kernel.
      */
     if ((Captured.Flags.Value & ~RXGK_CREATECONTEXTVIRTUAL_SUPPORTED_FLAGS) != 0)
-        return STATUS_NOT_SUPPORTED;
+        return STATUS_INVALID_PARAMETER;
 
     if (Captured.hDevice == 0 ||
         Captured.PrivateDriverDataSize > RXGK_WDDM_MAX_PRIVATE_DRIVER_DATA ||
@@ -4967,14 +4967,12 @@ D3DKMTSubmitCommand(
      */
     if (Captured.BroadcastContextCount != 1 ||
         Captured.NumHistoryBuffers != 0 ||
-        Captured.PresentHistoryToken != 0 ||
         (FlagsValue & ~RXGK_SUBMITCOMMAND_SUPPORTED_FLAGS) != 0)
     {
         return STATUS_NOT_SUPPORTED;
     }
 
     if (Captured.BroadcastContext[0] == 0 ||
-        Captured.Commands == 0 ||
         Captured.CommandLength == 0 ||
         Captured.Commands > MAXULONGLONG - Captured.CommandLength ||
         Captured.PrivateDriverDataSize > RXGK_WDDM_MAX_PRIVATE_DRIVER_DATA ||

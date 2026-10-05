@@ -458,6 +458,7 @@ typedef struct _DXGKRNL_SUBMIT_DMA_BUFFER
     ULONG64                     SharedSurfaceGeneration;
     BOOLEAN                     SourceIsSharedPrimary;
     BOOLEAN                     SourceIsSharedShadow;
+    BOOLEAN                     TimeoutExempt;
     ULONG                       SourceWidth;
     ULONG                       SourceHeight;
     ULONG                       SourcePitch;

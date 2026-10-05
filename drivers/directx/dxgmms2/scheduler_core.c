@@ -700,7 +700,7 @@ Dxgmms2SchedCoreGetOldestDispatched(
         {
             PDXGMMS2_SCHED_PACKET Packet = CONTAINING_RECORD(Engine->RunQueue.Flink, DXGMMS2_SCHED_PACKET, Entry);
 
-            if (!Packet->Dispatched)
+            if (!Packet->Dispatched || (Packet->Flags & DXGMMS2_SCHEDULER_ADMIT_NO_TIMEOUT) != 0)
                 continue;
             if (OldestDispatchSequence == 0 || Packet->DispatchSequence < OldestDispatchSequence)
             {

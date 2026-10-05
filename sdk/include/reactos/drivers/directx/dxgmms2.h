@@ -405,7 +405,8 @@ typedef PVOID DXGMMS2_SCHEDULER_HANDLE;
 /* The reserved fence is unbound until dispatch. No patched command or caller
  * may retain it; claims and retirement records carry the final identity. */
 #define DXGMMS2_SCHEDULER_ADMIT_UNBOUND_FENCE         0x00000020UL
-#define DXGMMS2_SCHEDULER_ADMIT_VALID_MASK            0x0000003FUL
+#define DXGMMS2_SCHEDULER_ADMIT_NO_TIMEOUT            0x00000040UL
+#define DXGMMS2_SCHEDULER_ADMIT_VALID_MASK            0x0000007FUL
 
 typedef enum _DXGMMS2_SCHEDULER_ENGINE_STATE
 {

@@ -2829,6 +2829,26 @@ DxgkCreateCddContext(
     return Status;
 }
 
+static BOOLEAN
+DxgkpNodeSupportsContextScheduling(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG NodeOrdinal)
+{
+    DXGKARG_GETNODEMETADATA NodeMetadata;
+
+    PAGED_CODE();
+    if (DXGK_CB_FULL(Adapter, DxgkDdiGetNodeMetadata) == NULL)
+        return FALSE;
+    RtlZeroMemory(&NodeMetadata, sizeof(NodeMetadata));
+    if (!NT_SUCCESS(DXGK_CB_FULL(Adapter, DxgkDdiGetNodeMetadata)(Adapter->MiniportDeviceContext,
+                                                                  NodeOrdinal,
+                                                                  &NodeMetadata)))
+    {
+        return FALSE;
+    }
+    return NodeMetadata.Flags.ContextSchedulingSupported != 0;
+}
+
 /*
  * D3DKMTCreateContextVirtual is a thunk-layer entry point, not a distinct
  * miniport DDI. The WDDM 2.0 contract uses DxgkDdiCreateContext with the
@@ -2874,7 +2894,8 @@ DxgkCreateContextVirtual(
         DxgkpDereferenceDevice(Device);
         return STATUS_NOT_SUPPORTED;
     }
-    if (!pCreateContext->Flags.NullRendering)
+    if (!pCreateContext->Flags.NullRendering &&
+        !pCreateContext->Flags.SynchronizationOnly)
     {
         Status = DxgkGpuVaPreparePageTable(Adapter,
                                            Device->ProcessRecord,
@@ -2920,6 +2941,12 @@ DxgkCreateContextVirtual(
     CreateContextArg.Flags.Value = 0;
     CreateContextArg.Flags.VirtualAddressing = 1;
     CreateContextArg.Flags.GdiContext = Device->GdiDevice;
+    if (pCreateContext->Flags.TestContext &&
+        DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version,
+                                            DXGK_CAPS_CORE_LEVEL_WDDM_3_2))
+    {
+        CreateContextArg.Flags.TestContext = 1;
+    }
     CreateContextArg.pPrivateDriverData = pCreateContext->pPrivateDriverData;
     CreateContextArg.PrivateDriverDataSize = pCreateContext->PrivateDriverDataSize;
 
@@ -2944,6 +2971,18 @@ DxgkCreateContextVirtual(
         ExFreePoolWithTag(Context, TAG_DXGK_CONTEXT);
         DxgkpDereferenceDevice(Device);
         return STATUS_DEVICE_REMOVED;
+    }
+    if (pCreateContext->Flags.HwQueueSupported)
+    {
+        if (!DxgkpNodeSupportsContextScheduling(Adapter, pCreateContext->NodeOrdinal))
+        {
+            DxgkEndKmdTransaction(Adapter);
+            DxgkDereferenceAdapter(Adapter);
+            ExFreePoolWithTag(Context, TAG_DXGK_CONTEXT);
+            DxgkpDereferenceDevice(Device);
+            return STATUS_UNSUCCESSFUL;
+        }
+        CreateContextArg.Flags.HwQueueSupported = 1;
     }
     Status = DXGK_CB_FULL(Adapter, DxgkDdiCreateContext)(Device->hMiniportDevice, &CreateContextArg);
     if (!NT_SUCCESS(Status))

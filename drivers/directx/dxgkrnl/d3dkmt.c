@@ -9439,7 +9439,7 @@ DxgkSubmitCommand(
         return STATUS_INVALID_PARAMETER;
 
     RtlCopyMemory(&FlagsValue, &SubmitCommand->Flags, sizeof(FlagsValue));
-    if (SubmitCommand->BroadcastContextCount != 1 || SubmitCommand->BroadcastContext[0] == 0 || SubmitCommand->Commands == 0 || SubmitCommand->CommandLength == 0 || SubmitCommand->PrivateDriverDataSize > RXGK_WDDM_MAX_PRIVATE_DRIVER_DATA || (SubmitCommand->PrivateDriverDataSize != 0 && SubmitCommand->pPrivateDriverData == NULL))
+    if (SubmitCommand->BroadcastContextCount != 1 || SubmitCommand->BroadcastContext[0] == 0 || SubmitCommand->CommandLength == 0 || SubmitCommand->PrivateDriverDataSize > RXGK_WDDM_MAX_PRIVATE_DRIVER_DATA || (SubmitCommand->PrivateDriverDataSize != 0 && SubmitCommand->pPrivateDriverData == NULL))
     {
         DXGKRNL_ERR("DxgkSubmitCommand: malformed request contexts=%lu context=0x%08x commands=0x%I64x length=%lu private=%lu data=%p\n",
                     SubmitCommand->BroadcastContextCount,
@@ -9453,7 +9453,7 @@ DxgkSubmitCommand(
     if (SubmitCommand->NumPrimaries > D3DDDI_MAX_WRITTEN_PRIMARIES ||
         SubmitCommand->Commands > MAXULONGLONG - SubmitCommand->CommandLength)
         return STATUS_INVALID_PARAMETER;
-    if (SubmitCommand->NumHistoryBuffers != 0 || SubmitCommand->PresentHistoryToken != 0 || (FlagsValue & ~RXGK_SUBMITCOMMAND_SUPPORTED_FLAGS) != 0)
+    if (SubmitCommand->NumHistoryBuffers != 0 || (FlagsValue & ~RXGK_SUBMITCOMMAND_SUPPORTED_FLAGS) != 0)
         return STATUS_NOT_SUPPORTED;
 
     Status = DxgkReferenceVirtualContextByHandle(SubmitCommand->BroadcastContext[0], PsGetCurrentProcess(), &Adapter, &Device, &Context);
@@ -9477,6 +9477,16 @@ DxgkSubmitCommand(
     {
         DxgkDereferenceContext(Context);
         return STATUS_NOT_SUPPORTED;
+    }
+    if (Context->UserModeCreateFlags.SynchronizationOnly)
+    {
+        DxgkDereferenceContext(Context);
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (SubmitCommand->Commands == 0)
+    {
+        DxgkDereferenceContext(Context);
+        return STATUS_INVALID_USER_BUFFER;
     }
     if (Context->UserModeCreateFlags.NullRendering && !SubmitCommand->Flags.NullRendering)
     {
@@ -9523,7 +9533,7 @@ DxgkSubmitCommand(
 
         for (;;)
         {
-            Status = VidSchSubmitCommandVirtual(Adapter, Context, SubmitCommand->Commands, SubmitCommand->CommandLength, SubmitCommand->pPrivateDriverData, SubmitCommand->PrivateDriverDataSize, SubmitCommand->Flags.NullRendering != 0, SubmitCommand->NumPrimaries, SubmitCommand->WrittenPrimaries);
+            Status = VidSchSubmitCommandVirtual(Adapter, Context, SubmitCommand->Commands, SubmitCommand->CommandLength, SubmitCommand->pPrivateDriverData, SubmitCommand->PrivateDriverDataSize, SubmitCommand->Flags.NullRendering != 0, SubmitCommand->Flags.PresentRedirected != 0, SubmitCommand->NumPrimaries, SubmitCommand->WrittenPrimaries);
             if (Status == STATUS_RETRY)
             {
                 Status = DxgkYieldKmdTransactionForContextRoom(
@@ -10837,7 +10847,7 @@ DxgkpDispatchBufferedIoctlWorker(
 
             if ((Packet->Flags & ~RXGK_CREATECONTEXTVIRTUAL_SUPPORTED_FLAGS) != 0)
             {
-                return STATUS_NOT_SUPPORTED;
+                return STATUS_INVALID_PARAMETER;
             }
 
             RtlZeroMemory(&Request, sizeof(Request));
@@ -10899,7 +10909,7 @@ DxgkpDispatchBufferedIoctlWorker(
                 return Status;
             }
 
-            if (Packet->Reserved != 0 || Packet->ContextHandle == 0 || Packet->Commands == 0 || Packet->CommandLength == 0)
+            if (Packet->Reserved != 0 || Packet->ContextHandle == 0 || Packet->CommandLength == 0)
             {
                 DXGKRNL_ERR("D3DKMTSubmitCommand: invalid packet context=0x%08lx commands=0x%I64x length=%lu reserved=0x%08lx\n",
                             Packet->ContextHandle, Packet->Commands,
@@ -10907,7 +10917,7 @@ DxgkpDispatchBufferedIoctlWorker(
                 return STATUS_INVALID_PARAMETER;
             }
 
-            if (Packet->PresentHistoryToken != 0 || (Packet->Flags & ~RXGK_SUBMITCOMMAND_SUPPORTED_FLAGS) != 0)
+            if ((Packet->Flags & ~RXGK_SUBMITCOMMAND_SUPPORTED_FLAGS) != 0)
             {
                 return STATUS_NOT_SUPPORTED;
             }
@@ -10916,6 +10926,8 @@ DxgkpDispatchBufferedIoctlWorker(
             Request.Commands = Packet->Commands;
             Request.CommandLength = Packet->CommandLength;
             Request.Flags.NullRendering = ((Packet->Flags & RXGK_SUBMITCOMMAND_FLAG_NULL_RENDERING) != 0);
+            Request.Flags.PresentRedirected = ((Packet->Flags & RXGK_SUBMITCOMMAND_FLAG_PRESENT_REDIRECTED) != 0);
+            Request.PresentHistoryToken = Packet->PresentHistoryToken;
             Request.BroadcastContextCount = 1;
             Request.BroadcastContext[0] = Packet->ContextHandle;
             if (PacketV2 != NULL)

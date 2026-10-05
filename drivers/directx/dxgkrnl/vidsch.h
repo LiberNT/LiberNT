@@ -94,6 +94,7 @@ typedef enum _VIDSCH_SCHEDULER_STATE
 /* VIDSCH_DMA_PACKET.SubmitFlags uses the DXGK_SUBMITCOMMANDFLAGS layout. */
 #define VIDSCH_SUBMITFLAG_PAGING        0x00000001u
 #define VIDSCH_SUBMITFLAG_PRESENT       0x00000002u
+#define VIDSCH_SUBMITFLAG_REDIRECTEDPRESENT 0x00000004u
 #define VIDSCH_SUBMITFLAG_NULLRENDERING 0x00000008u
 #define VIDSCH_SUBMITFLAG_RESUBMISSION  0x00000080u
 
@@ -503,6 +504,7 @@ VidSchSubmitCommandVirtual(
     _In_reads_bytes_opt_(DriverPrivateDataSize) PVOID DriverPrivateData,
     _In_ ULONG DriverPrivateDataSize,
     _In_ BOOLEAN NullRendering,
+    _In_ BOOLEAN RedirectedPresent,
     _In_ ULONG NumPrimaries,
     _In_reads_(NumPrimaries) CONST D3DKMT_HANDLE *WrittenPrimaries);
 

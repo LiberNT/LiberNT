@@ -417,7 +417,11 @@ VidSchpAdmitPacket(
      * escapes and GPU-VA submissions must not silently become priority zero
      * just because their caller did not fill the packet's default priority. */
     if (Packet->Context != NULL)
+    {
         Packet->Priority = DxgkContextSchedulingPriority((PDXGKRNL_CONTEXT)Packet->Context);
+        if (((PDXGKRNL_CONTEXT)Packet->Context)->UserModeCreateFlags.DisableGpuTimeout)
+            Info.Flags |= DXGMMS2_SCHEDULER_ADMIT_NO_TIMEOUT;
+    }
     Info.Priority = Packet->Priority;
     Info.PacketCookie = (ULONGLONG)(ULONG_PTR)Packet;
     Info.OwnerCookie = (ULONGLONG)(ULONG_PTR)
@@ -3289,6 +3293,7 @@ VidSchSubmitCommandVirtual(
     _In_reads_bytes_opt_(DriverPrivateDataSize) PVOID DriverPrivateData,
     _In_ ULONG DriverPrivateDataSize,
     _In_ BOOLEAN NullRendering,
+    _In_ BOOLEAN RedirectedPresent,
     _In_ ULONG NumPrimaries,
     _In_reads_(NumPrimaries) CONST D3DKMT_HANDLE *WrittenPrimaries)
 {
@@ -3441,7 +3446,8 @@ VidSchSubmitCommandVirtual(
     Packet->Context = Context;
     Packet->VirtualAddressing = TRUE;
     Packet->UnboundFence = TRUE;
-    Packet->SubmitFlags = NullRendering ? VIDSCH_SUBMITFLAG_NULLRENDERING : 0u;
+    Packet->SubmitFlags = (NullRendering ? VIDSCH_SUBMITFLAG_NULLRENDERING : 0u) |
+                          (RedirectedPresent ? VIDSCH_SUBMITFLAG_REDIRECTEDPRESENT : 0u);
     Status = DxgkDeviceWorkCreate(Context->Device, &Packet->DeviceWork);
     if (!NT_SUCCESS(Status))
     {

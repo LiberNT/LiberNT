@@ -1200,7 +1200,7 @@ DxgkpTdrDpcRoutine(
         HeadFence = Head->SubmissionFenceId;
         HeadNode = Head->NodeOrdinal;
         HeadEngine = Head->EngineOrdinal;
-        Outstanding = TRUE;
+        Outstanding = !Head->TimeoutExempt;
     }
     KeReleaseSpinLockFromDpcLevel(&Adapter->SubmitDmaLock);
 
@@ -3274,6 +3274,7 @@ DxgkCommitTrackedDmaBuffer(
     }
     else
     {
+        Entry->TimeoutExempt = Entry->Context != NULL && Entry->Context->UserModeCreateFlags.DisableGpuTimeout;
         InsertTailList(&Adapter->SubmitDmaListHead, &Entry->ListEntry);
     }
     if (InterlockedExchange(&Entry->ReservationActive, 0) != 0)

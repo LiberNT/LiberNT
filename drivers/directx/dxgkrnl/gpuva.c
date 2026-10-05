@@ -4256,7 +4256,7 @@ DxgkGpuVaPinCommandStart(
     _In_ D3DGPU_VIRTUAL_ADDRESS Address,
     _Out_ PBOOLEAN Pinned)
 {
-    return DxgkpGpuVaPinRange(Adapter, Process, Address, 1, TRUE, TRUE, Pinned);
+    return DxgkpGpuVaPinRange(Adapter, Process, Address, 1, FALSE, TRUE, Pinned);
 }
 
 BOOLEAN
