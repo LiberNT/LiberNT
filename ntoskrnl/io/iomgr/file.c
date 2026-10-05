@@ -502,7 +502,7 @@ IopParseDevice(IN PVOID ParseObject,
                                        UserMode,
                                        &AccessState->GenerateOnClose);
             }
-            else if (!DesiredAccess)
+            else if (!AccessState->OriginalDesiredAccess)
             {
                 AccessGranted = FALSE;
             }
@@ -692,7 +692,7 @@ IopParseDevice(IN PVOID ParseObject,
             AccessGranted = SeAccessCheck(OriginalDeviceObject->SecurityDescriptor,
                                           &AccessState->SubjectSecurityContext,
                                           TRUE,
-                                          DesiredAccess,
+                                          DesiredAccess ? DesiredAccess : AccessState->OriginalDesiredAccess,
                                           0,
                                           &Privileges,
                                           &IoFileObjectType->TypeInfo.GenericMapping,
