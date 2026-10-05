@@ -3796,9 +3796,12 @@ BOOL WINAPI SetupDiGetDeviceInterfacePropertyKeys(HDEVINFO devinfo, SP_DEVICE_IN
         return FALSE;
     }
 
-    key = SetupDiOpenDeviceInterfaceRegKey(devinfo, iface_data, 0, KEY_QUERY_VALUE);
-    if (key == INVALID_HANDLE_VALUE)
+    error = SETUPDI_OpenInterfaceReferenceKey(iface, KEY_QUERY_VALUE, &key, NULL);
+    if (error != ERROR_SUCCESS)
+    {
+        SetLastError(error);
         return FALSE;
+    }
     error = get_device_reg_properties(key, buf, buf_len, &required);
     RegCloseKey(key);
     if (!error || error == ERROR_INSUFFICIENT_BUFFER)
@@ -3875,11 +3878,12 @@ BOOL WINAPI SetupDiGetDeviceInterfacePropertyW(HDEVINFO devinfo, SP_DEVICE_INTER
     }
     else
     {
-        reg_key = SetupDiOpenDeviceInterfaceRegKey(devinfo, iface_data, 0, KEY_QUERY_VALUE);
-        if (reg_key == INVALID_HANDLE_VALUE)
-            return FALSE;
-        error = get_device_reg_property(reg_key, key, type, buf, buf_size, req_size, flags);
-        RegCloseKey(reg_key);
+        error = SETUPDI_OpenInterfaceReferenceKey(iface, KEY_QUERY_VALUE, &reg_key, NULL);
+        if (error == ERROR_SUCCESS)
+        {
+            error = get_device_reg_property(reg_key, key, type, buf, buf_size, req_size, flags);
+            RegCloseKey(reg_key);
+        }
     }
 
     SetLastError(error);
@@ -3934,11 +3938,12 @@ BOOL WINAPI SetupDiSetDeviceInterfacePropertyW(HDEVINFO devinfo, SP_DEVICE_INTER
         return !error;
     }
 
-    reg_key = SetupDiOpenDeviceInterfaceRegKey(devinfo, iface_data, 0, KEY_READ | KEY_WRITE);
-    if (reg_key == INVALID_HANDLE_VALUE)
-        return FALSE;
-    error = set_device_reg_property(reg_key, key, type, buf, buf_size);
-    RegCloseKey(reg_key);
+    error = SETUPDI_OpenInterfaceReferenceKey(iface, KEY_READ | KEY_WRITE, &reg_key, NULL);
+    if (error == ERROR_SUCCESS)
+    {
+        error = set_device_reg_property(reg_key, key, type, buf, buf_size);
+        RegCloseKey(reg_key);
+    }
     SetLastError(error);
     return !error;
 }
