@@ -3842,6 +3842,20 @@ PNP_UninstallDevInst(
             return CR_REGISTRY_ERROR;
     }
     Error = SHDeleteKeyW(hEnumKey, pDeviceID);
+    if (Error == ERROR_SUCCESS)
+    {
+        WCHAR szParent[MAX_DEVICE_ID_LEN];
+        PWSTR pSeparator;
+
+        wcsncpy(szParent, pDeviceID, ARRAYSIZE(szParent) - 1);
+        szParent[ARRAYSIZE(szParent) - 1] = UNICODE_NULL;
+        pSeparator = wcsrchr(szParent, L'\\');
+        if (pSeparator)
+        {
+            *pSeparator = UNICODE_NULL;
+            RegDeleteKeyW(hEnumKey, szParent);
+        }
+    }
     return Error == ERROR_SUCCESS ? CR_SUCCESS : CR_REGISTRY_ERROR;
 }
 
