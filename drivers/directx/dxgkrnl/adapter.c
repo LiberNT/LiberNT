@@ -848,6 +848,10 @@ DxgkpRecordTdrRecovery(
 }
 
 static VOID
+DxgkpRequestAdapterTimeoutRecovery(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+static VOID
 NTAPI
 DxgkpTdrWorker(
     _In_ PVOID Context)
@@ -865,6 +869,7 @@ DxgkpTdrWorker(
     BOOLEAN Level3Transition = FALSE;
     BOOLEAN PresentResetStarted = FALSE;
     BOOLEAN SchedulerPrepared = FALSE;
+    BOOLEAN ForcedReset;
     NTSTATUS Status;
 
     if (Adapter == NULL)
@@ -874,6 +879,9 @@ DxgkpTdrWorker(
     DdiDeadlineArmed = TRUE;
     DxgkAcquireLevel3Transition(Adapter);
     Level3Transition = TRUE;
+    /* Taken once per pass: under a TDR policy of "off" the request is
+     * consumed with nothing done, as for a hung submission. */
+    ForcedReset = InterlockedExchange(&Adapter->TdrResetRequested, 0) != 0;
     if (Adapter->State != DxgkAdapterStateStarted || InterlockedCompareExchange(&Adapter->TdrTimerActive, 0, 0) == 0)
         goto Exit;
     if (Adapter->TdrConfig.TdrLevel == DXGKP_TDR_LEVEL_OFF)
@@ -891,6 +899,11 @@ DxgkpTdrWorker(
     WorkNode = Adapter->TdrWorkNode;
     WorkEngine = Adapter->TdrWorkEngine;
 
+    if (ForcedReset)
+    {
+        DXGKRNL_ERR("DxgkpTdrWorker: a timed operation the miniport left to the "
+                    "OS expired on adapter %p; resetting the adapter\n", Adapter);
+    }
     DXGKRNL_ERR("DxgkpTdrWorker: GPU timeout — fence %lu stuck on adapter %p "
                 "irq=%ld queue=%ld dpc=%ld last-dma=%ld\n",
                 WorkFence,
@@ -955,30 +968,35 @@ DxgkpTdrWorker(
     /* Attempt engine preemption first and give the miniport a short window to
      * report DMA_PREEMPTED progress. A preempted but incomplete packet is not
      * completion: until resubmission exists, it must continue into TDR reset. */
-    if (WorkNode >= Adapter->NodeCount || WorkNode >= DXGK_MAX_TRACKED_NODES)
-        DxgkpBugCheckTdrFailure(Adapter, STATUS_INVALID_PARAMETER);
-    if (!DxgkIsSubmittedFenceIdentity(Adapter, WorkNode, WorkFence))
-        goto Exit;
-    CompletedBeforePreempt = Adapter->NodeLastCompletedFenceId[WorkNode];
-    if ((LONG)(CompletedBeforePreempt - WorkFence) >= 0)
+    /* An OS-handled timeout names no submission: there is no fence to
+     * check and nothing to preempt, only the adapter to reset. */
+    if (!ForcedReset)
     {
-        Adapter->TdrStuckTicks = 0;
-        goto Exit;
-    }
-    Status = VidSchPreemptEngine(Adapter, WorkNode, WorkEngine, &PreemptionFenceId);
-    if (NT_SUCCESS(Status))
-    {
-        if (PreemptionFenceId != 0)
-            (VOID)VidSchWaitForPreemption(Adapter, WorkNode, WorkEngine, PreemptionFenceId, 100);
-        CompletedAfterPreempt = Adapter->NodeLastCompletedFenceId[WorkNode];
-        if ((LONG)(CompletedAfterPreempt - WorkFence) >= 0)
+        if (WorkNode >= Adapter->NodeCount || WorkNode >= DXGK_MAX_TRACKED_NODES)
+            DxgkpBugCheckTdrFailure(Adapter, STATUS_INVALID_PARAMETER);
+        if (!DxgkIsSubmittedFenceIdentity(Adapter, WorkNode, WorkFence))
+            goto Exit;
+        CompletedBeforePreempt = Adapter->NodeLastCompletedFenceId[WorkNode];
+        if ((LONG)(CompletedBeforePreempt - WorkFence) >= 0)
         {
-            DXGKRNL_ERR("DxgkpTdrWorker: preemption recovered adapter %p (fence %lu -> %lu), skipping reset\n", Adapter, CompletedBeforePreempt, CompletedAfterPreempt);
             Adapter->TdrStuckTicks = 0;
             goto Exit;
         }
-    }
+        Status = VidSchPreemptEngine(Adapter, WorkNode, WorkEngine, &PreemptionFenceId);
+        if (NT_SUCCESS(Status))
+        {
+            if (PreemptionFenceId != 0)
+                (VOID)VidSchWaitForPreemption(Adapter, WorkNode, WorkEngine, PreemptionFenceId, 100);
+            CompletedAfterPreempt = Adapter->NodeLastCompletedFenceId[WorkNode];
+            if ((LONG)(CompletedAfterPreempt - WorkFence) >= 0)
+            {
+                DXGKRNL_ERR("DxgkpTdrWorker: preemption recovered adapter %p (fence %lu -> %lu), skipping reset\n", Adapter, CompletedBeforePreempt, CompletedAfterPreempt);
+                Adapter->TdrStuckTicks = 0;
+                goto Exit;
+            }
+        }
 
+    }
     DXGKRNL_ERR("DxgkpTdrWorker: preemption did not recover — resetting "
                 "adapter %p\n", Adapter);
 
@@ -1161,6 +1179,43 @@ Exit:
     InterlockedExchange(&Adapter->TdrWorkQueued, 0);
     if (Level3Transition)
         DxgkReleaseLevel3Transition(Adapter);
+
+    /* A request that arrived while this pass ran gets a pass of its own. */
+    if (InterlockedCompareExchange(&Adapter->TdrResetRequested, 0, 0) != 0)
+        DxgkpRequestAdapterTimeoutRecovery(Adapter);
+}
+
+/*
+ * DxgkpRequestAdapterTimeoutRecovery
+ *
+ * Queues a TDR pass that resets the adapter although no stuck fence names
+ * it: the OS's handling of a timed operation the miniport declared
+ * OS-handled.  The pass applies the configured TDR policy -- off, recover,
+ * or bugcheck -- exactly as for a hung submission.  A pass already queued
+ * picks the request up; one that finished first re-queues it.
+ */
+static VOID
+DxgkpRequestAdapterTimeoutRecovery(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    InterlockedExchange(&Adapter->TdrResetRequested, 1);
+    if (InterlockedCompareExchange(&Adapter->RundownStarted, 0, 0) != 0 ||
+        !ExAcquireRundownProtection(&Adapter->RundownRef))
+    {
+        return;
+    }
+    if (InterlockedCompareExchange(&Adapter->RundownStarted, 0, 0) != 0 ||
+        InterlockedCompareExchange(&Adapter->TdrTimerActive, 0, 0) == 0 ||
+        InterlockedCompareExchange(&Adapter->TdrWorkQueued, 1, 0) != 0)
+    {
+        ExReleaseRundownProtection(&Adapter->RundownRef);
+        return;
+    }
+    Adapter->TdrWorkFence = 0;
+    Adapter->TdrWorkNode = 0;
+    Adapter->TdrWorkEngine = 0;
+    KeMemoryBarrier();
+    ExQueueWorkItem(&Adapter->TdrWorkItem, DelayedWorkQueue);
 }
 
 static VOID
@@ -10754,11 +10809,160 @@ DxgkpServicesInterfaceReferenceNop(
     UNREFERENCED_PARAMETER(Context);
 }
 
+/*
+ * Timed operations and their adapter.
+ *
+ * The interface calls carry no context, yet an OS-handled timeout must reach
+ * the adapter that timed out.  Each adapter that asks for the interface gets
+ * one of a fixed set of Start entry points; Start stamps that adapter's slot
+ * and a generation into OwnerTag, which the OS owns, and Delay and
+ * WaitForSingleObject read it back from the operation itself.  The
+ * generation keeps a slot reused after removal from naming the new adapter.
+ * An adapter that finds no free slot gets the plain Start, whose timeouts are
+ * logged only.
+ */
+#define DXGKP_TIMED_OPERATION_SLOTS 8
+
+static KSPIN_LOCK g_TimedOperationSlotLock;
+static PDXGKRNL_ADAPTER g_TimedOperationSlotAdapter[DXGKP_TIMED_OPERATION_SLOTS];
+static ULONG g_TimedOperationSlotGeneration[DXGKP_TIMED_OPERATION_SLOTS];
+
+#define DXGKP_TIMED_OPERATION_TAG(Slot, Generation) \
+    ((((ULONG_PTR)(Generation) & 0xFFFFFF) << 8) | ((ULONG_PTR)(Slot) + 1))
+
+static NTSTATUS
+DxgkpTimedOperationStartTagged(
+    _Inout_ DXGK_TIMED_OPERATION *Op,
+    _In_ const LARGE_INTEGER *Timeout,
+    _In_ BOOLEAN OsHandled,
+    _In_ ULONG_PTR OwnerTag);
+
 static NTSTATUS
 DxgkpTimedOperationStart(
     _Inout_ DXGK_TIMED_OPERATION *Op,
     _In_ const LARGE_INTEGER *Timeout,
     _In_ BOOLEAN OsHandled)
+{
+    return DxgkpTimedOperationStartTagged(Op, Timeout, OsHandled, 0);
+}
+
+static NTSTATUS
+DxgkpTimedOperationStartSlot(
+    _Inout_ DXGK_TIMED_OPERATION *Op,
+    _In_ const LARGE_INTEGER *Timeout,
+    _In_ BOOLEAN OsHandled,
+    _In_ ULONG Slot)
+{
+    ULONG Generation = (ULONG)InterlockedCompareExchange(
+        (volatile LONG *)&g_TimedOperationSlotGeneration[Slot], 0, 0);
+
+    return DxgkpTimedOperationStartTagged(Op, Timeout, OsHandled,
+                                          DXGKP_TIMED_OPERATION_TAG(Slot, Generation));
+}
+
+#define DXGKP_TIMED_START_FOR_SLOT(n)                                         \
+static NTSTATUS                                                               \
+DxgkpTimedOperationStart##n(                                                  \
+    _Inout_ DXGK_TIMED_OPERATION *Op,                                         \
+    _In_ const LARGE_INTEGER *Timeout,                                        \
+    _In_ BOOLEAN OsHandled)                                                   \
+{                                                                             \
+    return DxgkpTimedOperationStartSlot(Op, Timeout, OsHandled, n);          \
+}
+DXGKP_TIMED_START_FOR_SLOT(0)
+DXGKP_TIMED_START_FOR_SLOT(1)
+DXGKP_TIMED_START_FOR_SLOT(2)
+DXGKP_TIMED_START_FOR_SLOT(3)
+DXGKP_TIMED_START_FOR_SLOT(4)
+DXGKP_TIMED_START_FOR_SLOT(5)
+DXGKP_TIMED_START_FOR_SLOT(6)
+DXGKP_TIMED_START_FOR_SLOT(7)
+
+static NTSTATUS (* CONST g_TimedOperationStartForSlot[DXGKP_TIMED_OPERATION_SLOTS])(
+    DXGK_TIMED_OPERATION *, const LARGE_INTEGER *, BOOLEAN) =
+{
+    DxgkpTimedOperationStart0, DxgkpTimedOperationStart1,
+    DxgkpTimedOperationStart2, DxgkpTimedOperationStart3,
+    DxgkpTimedOperationStart4, DxgkpTimedOperationStart5,
+    DxgkpTimedOperationStart6, DxgkpTimedOperationStart7
+};
+
+/* The adapter's slot, assigning a free one on first use; -1 when full. */
+static LONG
+DxgkpTimedOperationBindSlot(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    KIRQL OldIrql;
+    LONG Free = -1;
+    LONG Slot;
+
+    KeAcquireSpinLock(&g_TimedOperationSlotLock, &OldIrql);
+    for (Slot = 0; Slot < DXGKP_TIMED_OPERATION_SLOTS; Slot++)
+    {
+        if (g_TimedOperationSlotAdapter[Slot] == Adapter)
+        {
+            KeReleaseSpinLock(&g_TimedOperationSlotLock, OldIrql);
+            return Slot;
+        }
+        if (Free < 0 && g_TimedOperationSlotAdapter[Slot] == NULL)
+            Free = Slot;
+    }
+    if (Free >= 0)
+    {
+        g_TimedOperationSlotAdapter[Free] = Adapter;
+        g_TimedOperationSlotGeneration[Free]++;
+    }
+    KeReleaseSpinLock(&g_TimedOperationSlotLock, OldIrql);
+    return Free;
+}
+
+/* Called as the adapter is removed; its tags stop resolving. */
+static VOID
+DxgkpTimedOperationUnbindSlot(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    KIRQL OldIrql;
+    ULONG Slot;
+
+    KeAcquireSpinLock(&g_TimedOperationSlotLock, &OldIrql);
+    for (Slot = 0; Slot < DXGKP_TIMED_OPERATION_SLOTS; Slot++)
+    {
+        if (g_TimedOperationSlotAdapter[Slot] == Adapter)
+            g_TimedOperationSlotAdapter[Slot] = NULL;
+    }
+    KeReleaseSpinLock(&g_TimedOperationSlotLock, OldIrql);
+}
+
+/* A referenced, started adapter for an OwnerTag, or NULL. */
+static PDXGKRNL_ADAPTER
+DxgkpTimedOperationReferenceAdapter(
+    _In_ ULONG_PTR OwnerTag)
+{
+    PDXGKRNL_ADAPTER Adapter = NULL;
+    KIRQL OldIrql;
+    ULONG Slot;
+
+    if ((OwnerTag & 0xFF) == 0 || (OwnerTag & 0xFF) > DXGKP_TIMED_OPERATION_SLOTS)
+        return NULL;
+    Slot = (ULONG)(OwnerTag & 0xFF) - 1;
+
+    KeAcquireSpinLock(&g_TimedOperationSlotLock, &OldIrql);
+    if (g_TimedOperationSlotAdapter[Slot] != NULL &&
+        ((g_TimedOperationSlotGeneration[Slot] & 0xFFFFFF) == ((OwnerTag >> 8) & 0xFFFFFF)) &&
+        DxgkReferenceAdapter(g_TimedOperationSlotAdapter[Slot]))
+    {
+        Adapter = g_TimedOperationSlotAdapter[Slot];
+    }
+    KeReleaseSpinLock(&g_TimedOperationSlotLock, OldIrql);
+    return Adapter;
+}
+
+static NTSTATUS
+DxgkpTimedOperationStartTagged(
+    _Inout_ DXGK_TIMED_OPERATION *Op,
+    _In_ const LARGE_INTEGER *Timeout,
+    _In_ BOOLEAN OsHandled,
+    _In_ ULONG_PTR OwnerTag)
 {
     LONGLONG Limit;
 
@@ -10773,7 +10977,7 @@ DxgkpTimedOperationStart(
 
     RtlZeroMemory(Op, sizeof(*Op));
     Op->Size = sizeof(*Op);
-    Op->OwnerTag = (ULONG_PTR)PsGetCurrentThread();
+    Op->OwnerTag = OwnerTag;
     Op->OsHandled = OsHandled;
     Op->Timeout.QuadPart = Limit;
     Op->StartTick.QuadPart = (LONGLONG)KeQueryInterruptTime();
@@ -10799,12 +11003,32 @@ DxgkpTimedOperationExpire(
 {
     if (!Op->TimeoutTriggered)
     {
+        PDXGKRNL_ADAPTER Adapter;
+
         Op->TimeoutTriggered = TRUE;
         DXGKRNL_ERR("DxgkServicesTimedOperation: thread %p exceeded its "
                     "%I64u ms deadline (OsHandled=%u)\n",
-                    (PVOID)Op->OwnerTag,
+                    PsGetCurrentThread(),
                     Op->Timeout.QuadPart / 10000,
                     Op->OsHandled);
+
+        /* The miniport has no way to handle this one and left it to the OS:
+         * reset the adapter under the TDR policy.  The request is queued; the
+         * reset waits for the miniport call this expiry returns into. */
+        if (Op->OsHandled)
+        {
+            Adapter = DxgkpTimedOperationReferenceAdapter(Op->OwnerTag);
+            if (Adapter != NULL)
+            {
+                DxgkpRequestAdapterTimeoutRecovery(Adapter);
+                DxgkDereferenceAdapter(Adapter);
+            }
+            else
+            {
+                DXGKRNL_ERR("DxgkServicesTimedOperation: the expired operation "
+                            "names no live adapter; nothing to recover\n");
+            }
+        }
     }
     return STATUS_TIMEOUT;
 }
@@ -11024,7 +11248,13 @@ DxgkCbQueryServices(
             DxgkpServicesInterfaceReferenceNop;
         ReturnedInterface.InterfaceDereference =
             DxgkpServicesInterfaceReferenceNop;
-        ReturnedInterface.TimedOperationStart = DxgkpTimedOperationStart;
+        {
+            LONG Slot = DxgkpTimedOperationBindSlot(Adapter);
+
+            ReturnedInterface.TimedOperationStart =
+                Slot >= 0 ? g_TimedOperationStartForSlot[Slot] :
+                            DxgkpTimedOperationStart;
+        }
         ReturnedInterface.TimedOperationDelay = DxgkpTimedOperationDelay;
         ReturnedInterface.TimedOperationWaitForSingleObject =
             DxgkpTimedOperationWaitForSingleObject;
@@ -14821,6 +15051,7 @@ DxgkAdapterRemove(
     InitializeListHead(&Adapter->MiniportAdapterListEntry);
     KeReleaseSpinLock(&Adapter->MiniportContext->AdapterListLock, OldIrql);
 
+    DxgkpTimedOperationUnbindSlot(Adapter);
     {
         ULONG GammaSource;
 

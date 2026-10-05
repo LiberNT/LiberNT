@@ -1217,6 +1217,9 @@ struct _DXGKRNL_ADAPTER
     ULONG                       TdrWorkFence;
     ULONG                       TdrWorkNode;
     ULONG                       TdrWorkEngine;
+    /* Set when an OS-handled timed operation expires: the next TDR pass
+     * resets the adapter whether or not a submission is stuck. */
+    volatile LONG               TdrResetRequested;
     ULONG                       TdrLastObservedFence;
     ULONG                       TdrLastObservedNode;
     ULONG                       TdrLastObservedEngine;
