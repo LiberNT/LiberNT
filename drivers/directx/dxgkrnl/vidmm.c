@@ -4591,8 +4591,8 @@ Cleanup:
  * For every segment whose descriptor reported firmware framebuffer ranges,
  * asks the miniport for them through DXGKQAITYPE_UEFIFRAMEBUFFERRANGES and
  * records them as blocked until the miniport releases them through
- * DxgkCbUnblockUEFIFrameBufferRanges.  dxgmms2 placement does not consult
- * the record yet; see DXGKRNL_SEGMENT.
+ * DxgkCbUnblockUEFIFrameBufferRanges.  DxgkVidMmPublishSegments then holds
+ * each one in dxgmms2 as a fixed placement.
  *
  * This keeps the boot image on screen across the hand-off from the firmware
  * GOP framebuffer to driver-programmed scanout.  Note that
@@ -5370,6 +5370,27 @@ DxgkpVidMmRetireOwnerLedger(
 
     if (VidMm == NULL)
         return;
+    /* A firmware framebuffer the miniport never released is ours to give
+     * back; the ledger reports any survivor as a disagreement. */
+    if (Adapter->Segments != NULL)
+    {
+        PDXGKRNL_SEGMENT Segments = ADAPTER_SEGMENTS(Adapter);
+        ULONG i;
+
+        for (i = 0; i < Adapter->SegmentCount; i++)
+        {
+            UINT Range;
+
+            for (Range = 0; Range < DXGKP_MAX_UEFI_FB_RANGES; Range++)
+            {
+                if (Segments[i].UEFIFrameBufferCookies[Range] == 0)
+                    continue;
+                (VOID)VidMm->ReleasePlacement(VidMm->VidMmHandle, i,
+                                              Segments[i].UEFIFrameBufferCookies[Range]);
+                Segments[i].UEFIFrameBufferCookies[Range] = 0;
+            }
+        }
+    }
     /* Clear validity first so nothing can place into a ledger being retired. */
     InterlockedExchange(&Adapter->Mms2VidMmValid, 0);
     VidMm->Stop(VidMm->VidMmHandle);
@@ -16712,6 +16733,45 @@ DxgkVidMmPublishSegments(
         {
             DPRINT1("DxgkVidMmPublishSegments: segment %lu rejected 0x%08lX\n", i, Status);
             return Status;
+        }
+
+        /*
+         * Keep the firmware framebuffer out of the allocator until the
+         * miniport releases it: each blocked range becomes a fixed, pinned
+         * placement, which eviction never picks.  The cookie is the address
+         * of its own slot -- unique, and never an allocation's.
+         */
+        if (Seg->UEFIFrameBufferRangesBlocked && VidMm->ReserveFixedPlacement != NULL)
+        {
+            UINT Range;
+
+            ExAcquireFastMutex(&Seg->Lock);
+            for (Range = 0; Range < Seg->NumUEFIFrameBufferRanges; Range++)
+            {
+                DXGMMS2_VIDMM_RESERVE_INFO_V1 Info;
+
+                RtlZeroMemory(&Info, sizeof(Info));
+                Info.Size = Seg->UEFIFrameBufferRanges[Range].SizeInBytes;
+                Info.Alignment = 1;
+                Info.OwnerCookie = (ULONGLONG)(ULONG_PTR)&Seg->UEFIFrameBufferCookies[Range];
+                Info.Flags = DXGMMS2_VIDMM_RANGE_PINNED;
+                Status = VidMm->ReserveFixedPlacement(VidMm->VidMmHandle, i,
+                                                      Seg->UEFIFrameBufferRanges[Range].SegmentOffset,
+                                                      &Info);
+                if (NT_SUCCESS(Status))
+                {
+                    Seg->UEFIFrameBufferCookies[Range] = Info.OwnerCookie;
+                }
+                else
+                {
+                    Seg->UEFIFrameBufferCookies[Range] = 0;
+                    DPRINT1("DxgkVidMmPublishSegments: segment %lu UEFI range "
+                            "[%I64x,+%I64x) not withheld 0x%08lX\n", i,
+                            Seg->UEFIFrameBufferRanges[Range].SegmentOffset,
+                            Seg->UEFIFrameBufferRanges[Range].SizeInBytes, Status);
+                }
+            }
+            ExReleaseFastMutex(&Seg->Lock);
         }
     }
     return STATUS_SUCCESS;

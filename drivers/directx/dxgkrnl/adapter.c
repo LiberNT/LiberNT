@@ -6156,6 +6156,8 @@ DxgkCbUnblockUEFIFrameBufferRanges(
     NTSTATUS          Status = STATUS_SUCCESS;
     UINT              Named, Blocked;
     ULONG             SegmentId;
+    ULONGLONG         Released[DXGKP_MAX_UEFI_FB_RANGES];
+    UINT              ReleasedCount = 0;
 
     if (SegmentMemoryState == NULL ||
         (SegmentMemoryState->NumUEFIFrameBufferRanges != 0 &&
@@ -6203,8 +6205,15 @@ DxgkCbUnblockUEFIFrameBufferRanges(
         DXGKRNL_TRACE("DxgkCbUnblockUEFIFrameBufferRanges: segment %lu "
                       "releasing all %u range(s)\n",
                       SegmentId, Segment->NumUEFIFrameBufferRanges);
+        for (Blocked = 0; Blocked < Segment->NumUEFIFrameBufferRanges; Blocked++)
+        {
+            if (Segment->UEFIFrameBufferCookies[Blocked] != 0)
+                Released[ReleasedCount++] = Segment->UEFIFrameBufferCookies[Blocked];
+        }
         RtlZeroMemory(Segment->UEFIFrameBufferRanges,
                       sizeof(Segment->UEFIFrameBufferRanges));
+        RtlZeroMemory(Segment->UEFIFrameBufferCookies,
+                      sizeof(Segment->UEFIFrameBufferCookies));
         Segment->NumUEFIFrameBufferRanges     = 0;
         Segment->UEFIFrameBufferRangesBlocked = FALSE;
         goto Done;
@@ -6266,16 +6275,25 @@ DxgkCbUnblockUEFIFrameBufferRanges(
                 continue;
             }
 
-            /* Compact the tail down over the released entry. */
+            if (Segment->UEFIFrameBufferCookies[Blocked] != 0)
+                Released[ReleasedCount++] = Segment->UEFIFrameBufferCookies[Blocked];
+
+            /* Compact the tail down over the released entry; each cookie
+             * moves with its range. */
             RtlMoveMemory(&Segment->UEFIFrameBufferRanges[Blocked],
                           &Segment->UEFIFrameBufferRanges[Blocked + 1],
                           (Segment->NumUEFIFrameBufferRanges - Blocked - 1) *
                               sizeof(DXGK_MEMORYRANGE));
+            RtlMoveMemory(&Segment->UEFIFrameBufferCookies[Blocked],
+                          &Segment->UEFIFrameBufferCookies[Blocked + 1],
+                          (Segment->NumUEFIFrameBufferRanges - Blocked - 1) *
+                              sizeof(ULONGLONG));
             Segment->NumUEFIFrameBufferRanges--;
             RtlZeroMemory(
                 &Segment->UEFIFrameBufferRanges
                      [Segment->NumUEFIFrameBufferRanges],
                 sizeof(DXGK_MEMORYRANGE));
+            Segment->UEFIFrameBufferCookies[Segment->NumUEFIFrameBufferRanges] = 0;
             break;
         }
     }
@@ -6290,6 +6308,17 @@ DxgkCbUnblockUEFIFrameBufferRanges(
 
 Done:
     ExReleaseFastMutex(&Segment->Lock);
+
+    /* Hand the released framebuffer back to the allocator. */
+    if (ReleasedCount != 0 &&
+        InterlockedCompareExchange(&Adapter->Mms2VidMmValid, 0, 0) != 0)
+    {
+        for (Named = 0; Named < ReleasedCount; Named++)
+        {
+            (VOID)Adapter->Mms2VidMmInterface.ReleasePlacement(
+                Adapter->Mms2VidMmInterface.VidMmHandle, SegmentId - 1, Released[Named]);
+        }
+    }
     ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
     return Status;
 }

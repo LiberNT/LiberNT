@@ -136,9 +136,9 @@ typedef struct _DXGKRNL_SEGMENT
      * transition that releases them -- and only the owner that blocked a
      * range may release it.
      *
-     * TODO: placement belongs to dxgmms2, which does not yet consult this
-     * list, so a blocked range is recorded and released correctly but not
-     * yet kept free of allocations.
+     * Each blocked range is held in dxgmms2 as a fixed, pinned placement
+     * (DxgkVidMmPublishSegments), so the allocator cannot place over it; the
+     * placement is released with the range.
      *
      * Entries [0..NumUEFIFrameBufferRanges-1] are valid.  Protected by Lock.
      */
@@ -150,7 +150,11 @@ typedef struct _DXGKRNL_SEGMENT
      * many ranges DXGKQAITYPE_UEFIFRAMEBUFFERRANGES is asked to return. */
     UINT                ReportedUEFIFrameBufferRanges;
 
-    /* TRUE while the ranges above are blocked (see the TODO above). */
+    /* Placement cookie each range is held under in dxgmms2; 0 when the
+     * range could not be reserved.  Moves with its range. */
+    ULONGLONG           UEFIFrameBufferCookies[DXGKP_MAX_UEFI_FB_RANGES];
+
+    /* TRUE while the ranges above are blocked. */
     BOOLEAN             UEFIFrameBufferRangesBlocked;
 
 } DXGKRNL_SEGMENT, *PDXGKRNL_SEGMENT;
