@@ -1761,6 +1761,23 @@ DxgkpChildPdoPnpDispatch(
             return Status;
         }
 
+        case IRP_MN_QUERY_INTERFACE:
+        {
+            /*
+             * A child's driver asks for an interface the display miniport
+             * provides for that child, named by its UID.  A PDO has nothing
+             * below it, so an unanswered query completes as it arrived.
+             */
+            Status = DxgkpMiniportQueryInterface(ChildExt->ParentAdapter,
+                                                 ChildExt->Descriptor.ChildUid,
+                                                 Stack);
+            if (Status == STATUS_NOT_SUPPORTED)
+                Status = Irp->IoStatus.Status;
+            Irp->IoStatus.Status = Status;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return Status;
+        }
+
         default:
         {
             /*

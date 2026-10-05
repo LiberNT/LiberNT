@@ -3361,6 +3361,13 @@ DxgkVidPnQueryFirmwareTiming(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ D3DKMDT_HVIDPN hVidPn);
 
+/* adapter.c: IRP_MN_QUERY_INTERFACE offered to DxgkDdiQueryInterface. */
+NTSTATUS
+DxgkpMiniportQueryInterface(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG DeviceUid,
+    _In_ PIO_STACK_LOCATION Stack);
+
 /* acpievent.c */
 VOID
 DxgkAcpiEventsStart(

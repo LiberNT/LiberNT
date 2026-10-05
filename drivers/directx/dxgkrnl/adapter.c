@@ -15250,6 +15250,18 @@ DxgkpMiniportPnpDispatch(
             return DxgkpForwardIrp(Adapter, Irp);
         }
 
+        case IRP_MN_QUERY_INTERFACE:
+            /* The miniport answers first; one that does not provide the
+             * interface hands the query to the drivers below. */
+            Status = DxgkpMiniportQueryInterface(Adapter, DISPLAY_ADAPTER_HW_ID, Stack);
+            if (Status != STATUS_NOT_SUPPORTED)
+            {
+                Irp->IoStatus.Status = Status;
+                IoCompleteRequest(Irp, IO_NO_INCREMENT);
+                return Status;
+            }
+            /* Fall through: forwarded like any request we do not answer. */
+
         default:
             return DxgkpForwardIrp(Adapter, Irp);
     }
@@ -15460,6 +15472,85 @@ DxgkpChildPowerDispatch(
     Irp->IoStatus.Status = STATUS_SUCCESS;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return STATUS_SUCCESS;
+}
+
+/*
+ * DxgkpMiniportQueryInterface
+ *
+ * Offers an IRP_MN_QUERY_INTERFACE to the miniport through
+ * DxgkDdiQueryInterface, for the adapter (DISPLAY_ADAPTER_HW_ID) or one of
+ * its children.  This is how a child device's driver -- an audio function
+ * behind HDMI, a capture device -- obtains an interface the display miniport
+ * implements.
+ *
+ * Returns STATUS_NOT_SUPPORTED when the miniport does not provide the
+ * interface, which the contract defines as "pass the query on", and also
+ * when it cannot be asked: no such DDI, the adapter not started, or a child
+ * query to a miniport older than WDDM 1.3, whose QUERY_INTERFACE has no
+ * DeviceUid to say which child is meant.
+ */
+NTSTATUS
+DxgkpMiniportQueryInterface(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG DeviceUid,
+    _In_ PIO_STACK_LOCATION Stack)
+{
+    PDXGKDDI_QUERY_INTERFACE QueryInterface;
+    QUERY_INTERFACE Query;
+    ULONG Version;
+    NTSTATUS Status = STATUS_NOT_SUPPORTED;
+
+    PAGED_CODE();
+
+    if (Adapter == NULL || Adapter->MiniportContext == NULL)
+        return STATUS_NOT_SUPPORTED;
+    if (InterlockedCompareExchange(&Adapter->RemoveRundownStarted, 0, 0) != 0 ||
+        !ExAcquireRundownProtection(&Adapter->RemoveRundownRef))
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    QueryInterface = DXGK_CB(Adapter, DxgkDdiQueryInterface);
+    Version = Adapter->MiniportContext->UseDodLayout ?
+                  Adapter->MiniportContext->InitData.dod.Version :
+                  Adapter->MiniportContext->InitData.s.Version;
+    if (QueryInterface == NULL ||
+        Adapter->State != DxgkAdapterStateStarted ||
+        Adapter->MiniportDeviceContext == NULL ||
+        (DeviceUid != DISPLAY_ADAPTER_HW_ID &&
+         !DxgkCapsCoreInterfaceVersionAtLeast(Version, DXGK_CAPS_CORE_LEVEL_WDDM_1_3)))
+    {
+        goto Done;
+    }
+
+    RtlZeroMemory(&Query, sizeof(Query));
+    Query.InterfaceType = Stack->Parameters.QueryInterface.InterfaceType;
+    Query.Size = Stack->Parameters.QueryInterface.Size;
+    Query.Version = Stack->Parameters.QueryInterface.Version;
+    Query.Interface = Stack->Parameters.QueryInterface.Interface;
+    Query.InterfaceSpecificData = Stack->Parameters.QueryInterface.InterfaceSpecificData;
+    Query.DeviceUid = DeviceUid;
+
+    /* An adapter that is not taking calls cannot answer; pass the query on. */
+    if (!DxgkAcquireKmdCall(Adapter))
+        goto Done;
+    _SEH2_TRY
+    {
+        Status = QueryInterface(Adapter->MiniportDeviceContext, &Query);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    DxgkReleaseKmdCall(Adapter);
+
+    DXGKRNL_TRACE("DxgkpMiniportQueryInterface: uid=0x%lx version=%u -> 0x%08lX\n",
+                  DeviceUid, Query.Version, Status);
+
+Done:
+    ExReleaseRundownProtection(&Adapter->RemoveRundownRef);
+    return Status;
 }
 
 /*
