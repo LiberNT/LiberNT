@@ -30,6 +30,7 @@ static const WCHAR DateFormat[]  = {'%','u','-','%','u','-','%','u',0};
 static const WCHAR DotCoInstallers[]  = {'.','C','o','I','n','s','t','a','l','l','e','r','s',0};
 static const WCHAR DotHW[]  = {'.','H','W',0};
 static const WCHAR DotServices[]  = {'.','S','e','r','v','i','c','e','s',0};
+static const WCHAR DotSoftware[]  = {'.','S','o','f','t','w','a','r','e',0};
 static const WCHAR InfDirectory[] = {'i','n','f','\\',0};
 static const WCHAR InstanceKeyFormat[] = {'%','0','4','l','u',0};
 static const WCHAR Version[]  = {'V','e','r','s','i','o','n',0};
@@ -6858,6 +6859,138 @@ InfIsFromOEMLocation(
     return TRUE;
 }
 
+static BOOL
+GetSoftwareValue(
+    IN HINF hInf,
+    IN PCWSTR Section,
+    IN PCWSTR Key,
+    OUT PWSTR Buffer,
+    IN DWORD BufferSize)
+{
+    INFCONTEXT Context;
+    DWORD Field, Count, Length, Used = 0;
+
+    Buffer[0] = UNICODE_NULL;
+    if (!SetupFindFirstLineW(hInf, Section, Key, &Context))
+        return FALSE;
+
+    Count = SetupGetFieldCount(&Context);
+    for (Field = 1; Field <= Count; Field++)
+    {
+        if (Used && Used + 1 < BufferSize)
+            Buffer[Used++] = L' ';
+        if (!SetupGetStringFieldW(&Context, Field, &Buffer[Used], BufferSize - Used, &Length) || !Length)
+            return FALSE;
+        Used += Length - 1;
+    }
+    return TRUE;
+}
+
+static VOID
+InstallDeviceSoftware(
+    IN HINF hInf,
+    IN PCWSTR SectionName,
+    IN HDEVINFO DeviceInfoSet,
+    IN PSP_DEVINFO_DATA DeviceInfoData)
+{
+    static const WCHAR InstanceIdMarker[] = L"<<DeviceInstanceID>>";
+    WCHAR SoftwareName[LINE_LEN], InstallSection[LINE_LEN], Binary[MAX_PATH];
+    WCHAR Arguments[MAX_INF_STRING_LENGTH], Version[LINE_LEN], Installed[LINE_LEN];
+    WCHAR InstanceId[MAX_DEVICE_ID_LEN];
+    PWSTR CommandLine, Marker, Out;
+    PCWSTR In;
+    INFCONTEXT Context;
+    STARTUPINFOW StartupInfo;
+    PROCESS_INFORMATION ProcessInformation;
+    HKEY DriverKey = INVALID_HANDLE_VALUE, SoftwareKey;
+    DWORD Size, Type, Markers;
+    INT SoftwareType;
+    SIZE_T Length;
+
+    if (!SetupFindFirstLineW(hInf, SectionName, L"AddSoftware", &Context))
+        return;
+    if (!SetupDiGetDeviceInstanceIdW(DeviceInfoSet, DeviceInfoData, InstanceId, ARRAYSIZE(InstanceId), NULL))
+        return;
+    DriverKey = SetupDiOpenDevRegKey(DeviceInfoSet, DeviceInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_READ | KEY_WRITE);
+
+    do
+    {
+        if (!SetupGetStringFieldW(&Context, 1, SoftwareName, ARRAYSIZE(SoftwareName), NULL) ||
+            !SetupGetStringFieldW(&Context, 3, InstallSection, ARRAYSIZE(InstallSection), NULL))
+        {
+            continue;
+        }
+
+        if (!GetSoftwareValue(hInf, InstallSection, L"SoftwareType", Arguments, ARRAYSIZE(Arguments)))
+            continue;
+        SoftwareType = strtolW(Arguments, NULL, 0);
+        if (SoftwareType != 1)
+        {
+            WARN("AddSoftware %s: SoftwareType %d is not supported\n", debugstr_w(SoftwareName), SoftwareType);
+            continue;
+        }
+        if (!GetSoftwareValue(hInf, InstallSection, L"SoftwareBinary", Binary, ARRAYSIZE(Binary)))
+            continue;
+        GetSoftwareValue(hInf, InstallSection, L"SoftwareArguments", Arguments, ARRAYSIZE(Arguments));
+        GetSoftwareValue(hInf, InstallSection, L"SoftwareVersion", Version, ARRAYSIZE(Version));
+
+        SoftwareKey = NULL;
+        if (DriverKey != INVALID_HANDLE_VALUE &&
+            RegCreateKeyExW(DriverKey, L"Software", 0, NULL, 0, KEY_READ | KEY_WRITE, NULL, &SoftwareKey, NULL) == ERROR_SUCCESS)
+        {
+            Size = sizeof(Installed);
+            if (Version[0] &&
+                RegQueryValueExW(SoftwareKey, SoftwareName, NULL, &Type, (LPBYTE)Installed, &Size) == ERROR_SUCCESS &&
+                Type == REG_SZ && !strcmpiW(Installed, Version))
+            {
+                RegCloseKey(SoftwareKey);
+                continue;
+            }
+        }
+
+        Markers = 0;
+        for (In = Arguments; (In = strstrW(In, InstanceIdMarker)); In += ARRAYSIZE(InstanceIdMarker) - 1)
+            Markers++;
+        Length = strlenW(Binary) + strlenW(Arguments) + 4 +
+                 Markers * strlenW(InstanceId);
+        CommandLine = MyMalloc(Length * sizeof(WCHAR));
+        if (CommandLine)
+        {
+            Out = CommandLine;
+            Out += sprintfW(Out, L"\"%s\" ", Binary);
+            for (In = Arguments; (Marker = strstrW(In, InstanceIdMarker)); In = Marker + ARRAYSIZE(InstanceIdMarker) - 1)
+            {
+                memcpy(Out, In, (Marker - In) * sizeof(WCHAR));
+                Out += Marker - In;
+                strcpyW(Out, InstanceId);
+                Out += strlenW(InstanceId);
+            }
+            strcpyW(Out, In);
+
+            ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+            StartupInfo.cb = sizeof(StartupInfo);
+            if (CreateProcessW(Binary, CommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL,
+                               &StartupInfo, &ProcessInformation))
+            {
+                CloseHandle(ProcessInformation.hThread);
+                CloseHandle(ProcessInformation.hProcess);
+                if (SoftwareKey && Version[0])
+                    RegSetValueExW(SoftwareKey, SoftwareName, 0, REG_SZ, (const BYTE *)Version, (strlenW(Version) + 1) * sizeof(WCHAR));
+            }
+            else
+            {
+                WARN("AddSoftware %s: CreateProcess(%s) failed %lu\n", debugstr_w(SoftwareName), debugstr_w(Binary), GetLastError());
+            }
+            MyFree(CommandLine);
+        }
+        if (SoftwareKey)
+            RegCloseKey(SoftwareKey);
+    } while (SetupFindNextMatchLineW(&Context, L"AddSoftware", &Context));
+
+    if (DriverKey != INVALID_HANDLE_VALUE)
+        RegCloseKey(DriverKey);
+}
+
 /***********************************************************************
  *		SetupDiInstallDevice (SETUPAPI.@)
  */
@@ -7201,6 +7334,12 @@ SetupDiInstallDevice(
     else
     {
         ret = TRUE;
+    }
+
+    if (ret)
+    {
+        strcpyW(pSectionName, DotSoftware);
+        InstallDeviceSoftware(SelectedDriver->InfFileDetails->hInf, SectionName, DeviceInfoSet, DeviceInfoData);
     }
 
 cleanup:
