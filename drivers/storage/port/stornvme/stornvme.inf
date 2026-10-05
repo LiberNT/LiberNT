@@ -1,0 +1,81 @@
+;
+; PROJECT:     LiberNT StorPort NVMe Miniport
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Installs the StorPort NVMe miniport on NVM Express controllers
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+;
+
+[Version]
+Signature  = "$Windows NT$"
+Class      = SCSIAdapter
+ClassGuid  = {4D36E97B-E325-11CE-BFC1-08002BE10318}
+Provider   = %ROS%
+DriverVer  = 10/05/2026,10.0.0.1
+
+[SourceDisksNames]
+1 = %DeviceDesc%,,,
+
+[SourceDisksFiles]
+stornvme.sys = 1
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%ROS% = STORNVME
+
+[STORNVME]
+%NVME.DeviceDesc% = stornvme_Inst, PCI\CC_010802
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[stornvme_Inst]
+CopyFiles = stornvme_CopyFiles
+
+[stornvme_Inst.HW]
+AddReg = stornvme_HW_AddReg
+
+[stornvme_HW_AddReg]
+HKR, "Interrupt Management",, 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties",, 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", "MSISupported", %REG_DWORD%, 0x00000001
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", "MessageNumberLimit", %REG_DWORD%, 0x00000800
+
+[stornvme_Inst.Services]
+AddService = stornvme, %SPSVCINST_ASSOCSERVICE%, stornvme_Service_Inst, Miniport_EventLog_Inst
+
+[stornvme_Service_Inst]
+DisplayName    = %DeviceDesc%
+ServiceType    = %SERVICE_KERNEL_DRIVER%
+StartType      = %SERVICE_BOOT_START%
+ErrorControl   = %SERVICE_ERROR_CRITICAL%
+ServiceBinary  = %12%\stornvme.sys
+LoadOrderGroup = SCSI Miniport
+AddReg         = stornvme_Service_AddReg
+
+[stornvme_CopyFiles]
+stornvme.sys,,,1
+
+[stornvme_Service_AddReg]
+HKR, "Parameters\PnpInterface", "5", %REG_DWORD%, 0x00000001
+HKR, "Parameters", "BusType", %REG_DWORD%, 0x00000011
+
+[Miniport_EventLog_Inst]
+AddReg = Miniport_EventLog_AddReg
+
+[Miniport_EventLog_AddReg]
+HKR,,EventMessageFile,%REG_EXPAND_SZ%,"%%SystemRoot%%\System32\IoLogMsg.dll"
+HKR,,TypesSupported,%REG_DWORD%,7
+
+[Strings]
+ROS                     = "LiberNT"
+DeviceDesc              = "NVM Express Driver"
+NVME.DeviceDesc         = "Standard NVM Express Controller"
+
+SPSVCINST_ASSOCSERVICE = 0x00000002
+SERVICE_KERNEL_DRIVER  = 1
+SERVICE_BOOT_START     = 0
+SERVICE_ERROR_CRITICAL = 3
+REG_EXPAND_SZ          = 0x00020000
+REG_DWORD              = 0x00010001
