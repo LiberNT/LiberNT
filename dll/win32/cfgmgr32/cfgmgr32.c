@@ -2104,7 +2104,9 @@ CONFIGRET WINAPI CM_Get_DevNode_Registry_Property_ExW( DEVINST node, ULONG prope
     LSTATUS err;
 
     TRACE( "node %#lx, property %#lx, type %p, buffer %p, len %p, flags %#lx, machine %p\n", node, property, type, buffer, len, flags, machine );
+#ifndef __REACTOS__
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
 #ifdef __REACTOS__
