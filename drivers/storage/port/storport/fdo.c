@@ -69,6 +69,8 @@ PortFdoConnectMessageInterrupts(
     Parameters.MessageBased.MessageServiceRoutine = PortFdoMessageInterruptRoutine;
     Parameters.MessageBased.ServiceContext = DeviceExtension;
     Parameters.MessageBased.FallBackServiceRoutine = PortFdoInterruptRoutine;
+    if (DeviceExtension->Miniport.PortConfig.InterruptSynchronizationMode != InterruptSynchronizePerMessage)
+        Parameters.MessageBased.SpinLock = &DeviceExtension->MessageInterruptLock;
 
     Status = IoConnectInterruptEx(&Parameters);
     if (!NT_SUCCESS(Status))

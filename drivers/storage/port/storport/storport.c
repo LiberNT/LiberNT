@@ -105,6 +105,16 @@ PortGetDriverInitData(
 }
 
 
+static
+BOOLEAN
+PortHasSharedMessageLock(
+    PFDO_DEVICE_EXTENSION DeviceExtension)
+{
+    return (DeviceExtension->MessageInfo != NULL) &&
+           (DeviceExtension->MessageInfo->MessageCount != 0) &&
+           (DeviceExtension->Miniport.PortConfig.InterruptSynchronizationMode != InterruptSynchronizePerMessage);
+}
+
 C_ASSERT(RTL_FIELD_SIZE(STOR_LOCK_HANDLE, Context) == sizeof(KLOCK_QUEUE_HANDLE));
 C_ASSERT(FIELD_OFFSET(STOR_LOCK_HANDLE, Context.OldIrql) - FIELD_OFFSET(STOR_LOCK_HANDLE, Context) ==
          FIELD_OFFSET(KLOCK_QUEUE_HANDLE, OldIrql));
@@ -155,10 +165,12 @@ PortAcquireSpinLock(
 
         case InterruptLock: /* 3 */
             DPRINT("InterruptLock\n");
-            if (DeviceExtension->Interrupt == NULL)
-                KeAcquireSpinLock(&DeviceExtension->MiniportExLock, &LockHandle->Context.OldIrql);
-            else
+            if (DeviceExtension->Interrupt != NULL)
                 LockHandle->Context.OldIrql = KeAcquireInterruptSpinLock(DeviceExtension->Interrupt);
+            else if (PortHasSharedMessageLock(DeviceExtension))
+                LockHandle->Context.OldIrql = KeAcquireInterruptSpinLock(DeviceExtension->MessageInfo->MessageInfo[0].InterruptObject);
+            else
+                KeAcquireSpinLock(&DeviceExtension->NoInterruptLock, &LockHandle->Context.OldIrql);
             break;
 
         case ThreadedDpcLock:
@@ -201,11 +213,14 @@ PortReleaseSpinLock(
 
         case InterruptLock: /* 3 */
             DPRINT("InterruptLock\n");
-            if (DeviceExtension->Interrupt == NULL)
-                KeReleaseSpinLock(&DeviceExtension->MiniportExLock, LockHandle->Context.OldIrql);
-            else
+            if (DeviceExtension->Interrupt != NULL)
                 KeReleaseInterruptSpinLock(DeviceExtension->Interrupt,
                                            LockHandle->Context.OldIrql);
+            else if (PortHasSharedMessageLock(DeviceExtension))
+                KeReleaseInterruptSpinLock(DeviceExtension->MessageInfo->MessageInfo[0].InterruptObject,
+                                           LockHandle->Context.OldIrql);
+            else
+                KeReleaseSpinLock(&DeviceExtension->NoInterruptLock, LockHandle->Context.OldIrql);
             break;
 
         case ThreadedDpcLock:
@@ -530,6 +545,8 @@ PortAddDevice(
                     DeviceExtension);
     KeInitializeSpinLock(&DeviceExtension->MiniportTimerLock);
     KeInitializeSpinLock(&DeviceExtension->MiniportExLock);
+    KeInitializeSpinLock(&DeviceExtension->MessageInterruptLock);
+    KeInitializeSpinLock(&DeviceExtension->NoInterruptLock);
     KeInitializeSpinLock(&DeviceExtension->CompletionLock);
     InitializeListHead(&DeviceExtension->CompletionListHead);
     KeInitializeDpc(&DeviceExtension->CompletionDpc,
@@ -3211,9 +3228,18 @@ StorPortSynchronizeAccess(
     _In_ PSTOR_SYNCHRONIZED_ACCESS SynchronizedAccessRoutine,
     _In_opt_ PVOID Context)
 {
-    DPRINT1("StorPortSynchronizeAccess()\n");
-    UNIMPLEMENTED;
-    return FALSE;
+    PMINIPORT_DEVICE_EXTENSION MiniportExtension;
+    PFDO_DEVICE_EXTENSION DeviceExtension;
+    STOR_LOCK_HANDLE LockHandle;
+    BOOLEAN Result;
+
+    MiniportExtension = CONTAINING_RECORD(HwDeviceExtension, MINIPORT_DEVICE_EXTENSION, HwDeviceExtension);
+    DeviceExtension = MiniportExtension->Miniport->DeviceExtension;
+
+    PortAcquireSpinLock(DeviceExtension, InterruptLock, NULL, &LockHandle);
+    Result = SynchronizedAccessRoutine(HwDeviceExtension, Context);
+    PortReleaseSpinLock(DeviceExtension, &LockHandle);
+    return Result;
 }
 
 
