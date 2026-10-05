@@ -3387,28 +3387,28 @@ BOOL WINAPI SetupDiGetDeviceInterfaceDetailW(
     {
         struct DeviceInterface *deviceInterface = (struct DeviceInterface *)DeviceInterfaceData->Reserved;
         LPCWSTR devName = deviceInterface->SymbolicLink;
-        DWORD sizeRequired = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W) +
+        DWORD sizeRequired = FIELD_OFFSET(SP_DEVICE_INTERFACE_DETAIL_DATA_W, DevicePath) +
             (lstrlenW(devName) + 1) * sizeof(WCHAR);
 
+        if (RequiredSize)
+            *RequiredSize = sizeRequired;
         if (sizeRequired > DeviceInterfaceDetailDataSize)
         {
             SetLastError(ERROR_INSUFFICIENT_BUFFER);
-            if (RequiredSize)
-                *RequiredSize = sizeRequired;
         }
         else
         {
             strcpyW(DeviceInterfaceDetailData->DevicePath, devName);
             TRACE("DevicePath is %s\n", debugstr_w(DeviceInterfaceDetailData->DevicePath));
-            if (DeviceInfoData)
-            {
-                memcpy(&DeviceInfoData->ClassGuid,
-                    &deviceInterface->DeviceInfo->ClassGuid,
-                    sizeof(GUID));
-                DeviceInfoData->DevInst = deviceInterface->DeviceInfo->dnDevInst;
-                DeviceInfoData->Reserved = (ULONG_PTR)deviceInterface->DeviceInfo;
-            }
             ret = TRUE;
+        }
+        if (DeviceInfoData)
+        {
+            memcpy(&DeviceInfoData->ClassGuid,
+                &deviceInterface->DeviceInfo->ClassGuid,
+                sizeof(GUID));
+            DeviceInfoData->DevInst = deviceInterface->DeviceInfo->dnDevInst;
+            DeviceInfoData->Reserved = (ULONG_PTR)deviceInterface->DeviceInfo;
         }
     }
     return ret;
