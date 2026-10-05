@@ -3094,8 +3094,8 @@
 @ stdcall RtlIntersectBitMaps(ptr ptr)
 @ stdcall -arch=win64 RtlIntersectBitMapsEx(ptr ptr) RtlIntersectBitMaps64
 @ stub -arch=win64 RtlInvertRangeListEx
-@ stub -arch=win64 RtlIoDecodeMemIoResource
-@ stub -arch=win64 RtlIoEncodeMemIoResource
+@ stdcall RtlIoDecodeMemIoResource(ptr ptr ptr ptr)
+@ stdcall RtlIoEncodeMemIoResource(ptr long int64 int64 int64 int64)
 @ stdcall RtlIsApiSetImplemented(str)
 @ stub -arch=win64 RtlIsCloudFilesPlaceholder
 @ stub -arch=win64 RtlIsElevatedRid
