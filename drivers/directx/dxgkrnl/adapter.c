@@ -13521,6 +13521,7 @@ DxgkAdapterStart(
         StepStart100ns = DxgkpTraceNow100ns();
         InterlockedExchange(&Adapter->LinkRetrainAttempts, 0);
         InterlockedExchange(&Adapter->LinkRetrainPending, 0);
+        InterlockedExchange(&Adapter->LinkConfiguringSources, 0);
         Adapter->ReportedColorimetryValid = FALSE;
         Status = DxgkVidPnCreateForAdapter(Adapter, &hVidPn);
         VidPnUs = DxgkpTraceElapsedUs(StepStart100ns);

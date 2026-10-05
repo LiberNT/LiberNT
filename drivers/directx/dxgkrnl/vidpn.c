@@ -2438,6 +2438,23 @@ DxgkpRefreshConnectedChildEdids(
 static NTSTATUS DxgkpVidPnRebuildForHotPlugGeneration(_In_ PDXGKRNL_ADAPTER Adapter, _In_ LONG64 ExpectedGeneration);
 
 
+/* Marks or clears a target's source as mid link-configuration. */
+static VOID
+DxgkpSetLinkConfiguring(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _In_ BOOLEAN Configuring)
+{
+    ULONG SourceId = DxgkVidPnVsyncSourceFromTarget(Adapter, TargetId);
+
+    if (SourceId >= 32)
+        return;
+    if (Configuring)
+        InterlockedOr(&Adapter->LinkConfiguringSources, (LONG)(1UL << SourceId));
+    else
+        InterlockedAnd(&Adapter->LinkConfiguringSources, ~(LONG)(1UL << SourceId));
+}
+
 static VOID
 DxgkpDrainConnectionChanges(
     _In_ PDXGKRNL_ADAPTER Adapter)
@@ -2497,6 +2514,7 @@ DxgkpDrainConnectionChanges(
                  * co-functional timings and commits again, which is the
                  * documented response; a failure on that commit's own
                  * SetTimingsFromVidPn result is retried there, bounded. */
+                DxgkpSetLinkConfiguring(Adapter, Args.ConnectionChange.TargetId, FALSE);
                 DXGKRNL_WARN("CONNECTOR_CHANGE: adapter %p target %u link "
                              "training failed; the rebuild retries with "
                              "re-enumerated timings\n",
@@ -2505,9 +2523,12 @@ DxgkpDrainConnectionChanges(
 
             case LinkConfigurationStarted:
             case LinkConfigurationSucceeded:
-                /* TODO: Started stops scan-out and loses pending v-blanks,
-                 * and Succeeded resumes them; the present path does not yet
-                 * suspend v-blank waits across the window. */
+                /* Started stops scan-out on the target until Succeeded
+                 * resumes it; flips waiting there are held rather than
+                 * timed out across the window (see DxgkpWaitForMmioScanout). */
+                DxgkpSetLinkConfiguring(Adapter, Args.ConnectionChange.TargetId,
+                                        Args.ConnectionChange.ConnectionStatus ==
+                                            LinkConfigurationStarted);
                 DXGKRNL_TRACE("CONNECTOR_CHANGE: adapter %p target %u link "
                               "configuration %s\n",
                               Adapter, (UINT)Args.ConnectionChange.TargetId,

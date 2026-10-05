@@ -59,6 +59,8 @@
 #define DXGK_PRESENT_TRACE_BURST     8
 #define DXGK_PRESENT_TRACE_PERIOD    128
 #define DXGK_MMIO_FLIP_TIMEOUT_100NS  (2000ULL * 10000ULL)
+/* Longest a flip deadline is held while its link is being configured. */
+#define DXGK_MMIO_LINK_CONFIG_GRACE_100NS  (10000ULL * 10000ULL)
 #define DXGK_VBLANK_WAIT_TIMEOUT_100NS (2000ULL * 10000ULL)
 
 static volatile LONG g_DodPresentTraceCount = 0;
@@ -3913,6 +3915,7 @@ DxgkpWaitForMmioScanout(
     PDXGKRNL_ADAPTER Adapter = Queue->Adapter;
     ULONG SourceId = Queue->VidPnSourceId;
     ULONGLONG Start = KeQueryInterruptTime();
+    ULONGLONG Began = Start;
     LARGE_INTEGER Timeout;
     LONG64 Sequence;
     LONG64 EffectiveAddress;
@@ -3967,6 +3970,15 @@ DxgkpWaitForMmioScanout(
                 *ObservedSequence = Sequence;
                 return STATUS_SUCCESS;
             }
+        }
+        /* While the link is being configured, scan-out is stopped and no
+         * v-sync can come; the deadline restarts until configuration ends,
+         * within a bounded grace for a driver that never reports the end. */
+        if (SourceId < 32 &&
+            (InterlockedCompareExchange(&Adapter->LinkConfiguringSources, 0, 0) & (LONG)(1UL << SourceId)) != 0 &&
+            KeQueryInterruptTime() - Began < DXGK_MMIO_LINK_CONFIG_GRACE_100NS)
+        {
+            Start = KeQueryInterruptTime();
         }
         if (KeQueryInterruptTime() - Start >= DXGK_MMIO_FLIP_TIMEOUT_100NS)
             return STATUS_IO_TIMEOUT;

@@ -1136,6 +1136,10 @@ struct _DXGKRNL_ADAPTER
      */
     volatile LONG               LinkRetrainAttempts;
     volatile LONG               LinkRetrainPending;
+    /* Sources (bit per VidPN source) whose link is being configured: the
+     * driver reported LinkConfigurationStarted and not yet Succeeded or
+     * Failed.  Scan-out is stopped there, so flips cannot complete. */
+    volatile LONG               LinkConfiguringSources;
 
     /*
      * Gamma per VidPN source, as last applied through D3DKMTSetGammaRamp.
