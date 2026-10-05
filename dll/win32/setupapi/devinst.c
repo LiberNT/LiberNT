@@ -74,7 +74,7 @@ struct GetSectionCallbackInfo
     WORD SuiteMask;
     DWORD PrefixLength;
     WCHAR BestSection[LINE_LEN + 1];
-    DWORD BestScore1, BestScore2, BestScore3, BestScore4, BestScore5;
+    DWORD BestScore1, BestScore2, BestScore3, BestScore4, BestScore5, BestScore6;
 };
 
 static INIT_ONCE CurrentPlatformInitOnce = INIT_ONCE_STATIC_INIT;
@@ -156,7 +156,7 @@ GetErrorCodeFromCrCode(const IN CONFIGRET cr)
 
 /* Lower scores are best ones */
 static BOOL
-CheckSectionValid(
+CheckSectionValidEx(
     IN LPCWSTR SectionName,
     IN PSP_ALTPLATFORM_INFO PlatformInfo,
     IN BYTE ProductType,
@@ -165,12 +165,13 @@ CheckSectionValid(
     OUT PDWORD ScoreMajorVersion,
     OUT PDWORD ScoreMinorVersion,
     OUT PDWORD ScoreProductType,
-    OUT PDWORD ScoreSuiteMask)
+    OUT PDWORD ScoreSuiteMask,
+    OUT PDWORD ScoreBuildNumber)
 {
     LPWSTR Section = NULL;
     //LPCWSTR pExtensionPlatform;
     LPCWSTR pExtensionArchitecture;
-    LPWSTR Fields[6];
+    LPWSTR Fields[7];
     DWORD i;
     BOOL ret = FALSE;
 
@@ -193,6 +194,7 @@ CheckSectionValid(
         __FUNCTION__, debugstr_w(SectionName), PlatformInfo, ProductType, SuiteMask);
 
     *ScorePlatform = *ScoreMajorVersion = *ScoreMinorVersion = *ScoreProductType = *ScoreSuiteMask = 0;
+    *ScoreBuildNumber = OsVersionInfo.dwBuildNumber;
 
     Section = pSetupDuplicateString(SectionName);
     if (!Section)
@@ -264,13 +266,13 @@ CheckSectionValid(
     if (Fields[0] == NULL)
     {
         TRACE("No extension found\n");
-        *ScorePlatform = *ScoreMajorVersion = *ScoreMinorVersion = *ScoreProductType = *ScoreSuiteMask = ULONG_MAX;
+        *ScorePlatform = *ScoreMajorVersion = *ScoreMinorVersion = *ScoreProductType = *ScoreSuiteMask = *ScoreBuildNumber = ULONG_MAX;
         ret = TRUE;
         goto cleanup;
     }
     Fields[1] = Fields[0] + 1;
-    Fields[2] = Fields[3] = Fields[4] = Fields[5] = NULL;
-    for (i = 2; Fields[i - 1] != NULL && i < 6; i++)
+    Fields[2] = Fields[3] = Fields[4] = Fields[5] = Fields[6] = NULL;
+    for (i = 2; Fields[i - 1] != NULL && i < 7; i++)
     {
         Fields[i] = wcschr(Fields[i - 1], '.');
         if (Fields[i])
@@ -401,6 +403,25 @@ CheckSectionValid(
     else
         *ScoreSuiteMask = SuiteMask;
 
+    if (Fields[6] && *Fields[6])
+    {
+        DWORD BuildNumber;
+        LPWSTR End;
+
+        BuildNumber = strtoulW(Fields[6], &End, 10);
+        if (End == Fields[6] || *End != UNICODE_NULL || !Fields[2] || !*Fields[2])
+        {
+            TRACE("Wrong BuildNumber ('%s')\n", debugstr_w(Fields[6]));
+            goto cleanup;
+        }
+        if (OsVersionInfo.dwBuildNumber < BuildNumber)
+        {
+            TRACE("Mismatch on build number (%lu and %lu)\n", BuildNumber, OsVersionInfo.dwBuildNumber);
+            goto cleanup;
+        }
+        *ScoreBuildNumber = OsVersionInfo.dwBuildNumber - BuildNumber;
+    }
+
     ret = TRUE;
 
 cleanup:
@@ -409,23 +430,42 @@ cleanup:
 }
 
 static BOOL
+CheckSectionValid(
+    IN LPCWSTR SectionName,
+    IN PSP_ALTPLATFORM_INFO PlatformInfo,
+    IN BYTE ProductType,
+    IN WORD SuiteMask,
+    OUT PDWORD ScorePlatform,
+    OUT PDWORD ScoreMajorVersion,
+    OUT PDWORD ScoreMinorVersion,
+    OUT PDWORD ScoreProductType,
+    OUT PDWORD ScoreSuiteMask)
+{
+    DWORD ScoreBuildNumber;
+
+    return CheckSectionValidEx(SectionName, PlatformInfo, ProductType, SuiteMask,
+                               ScorePlatform, ScoreMajorVersion, ScoreMinorVersion,
+                               ScoreProductType, ScoreSuiteMask, &ScoreBuildNumber);
+}
+
+static BOOL
 GetSectionCallback(
     IN LPCWSTR SectionName,
     IN PVOID Context)
 {
     struct GetSectionCallbackInfo *info = Context;
-    DWORD Score1, Score2, Score3, Score4, Score5;
+    DWORD Score1, Score2, Score3, Score4, Score5, Score6;
     BOOL ret;
 
     if (SectionName[info->PrefixLength] != '.')
         return TRUE;
 
-    ret = CheckSectionValid(
+    ret = CheckSectionValidEx(
         &SectionName[info->PrefixLength],
         info->PlatformInfo,
         info->ProductType,
         info->SuiteMask,
-        &Score1, &Score2, &Score3, &Score4, &Score5);
+        &Score1, &Score2, &Score3, &Score4, &Score5, &Score6);
     if (!ret)
     {
         TRACE("Section %s not compatible\n", debugstr_w(SectionName));
@@ -437,6 +477,8 @@ GetSectionCallback(
     if (Score2 < info->BestScore2) goto bettersection;
     if (Score3 > info->BestScore3) goto done;
     if (Score3 < info->BestScore3) goto bettersection;
+    if (Score6 > info->BestScore6) goto done;
+    if (Score6 < info->BestScore6) goto bettersection;
     if (Score4 > info->BestScore4) goto done;
     if (Score4 < info->BestScore4) goto bettersection;
     if (Score5 > info->BestScore5) goto done;
@@ -450,6 +492,7 @@ bettersection:
     info->BestScore3 = Score3;
     info->BestScore4 = Score4;
     info->BestScore5 = Score5;
+    info->BestScore6 = Score6;
 
 done:
     return TRUE;
@@ -558,6 +601,7 @@ SetupDiGetActualSectionToInstallExW(
         CallbackInfo.BestScore3 = ULONG_MAX;
         CallbackInfo.BestScore4 = ULONG_MAX;
         CallbackInfo.BestScore5 = ULONG_MAX;
+        CallbackInfo.BestScore6 = ULONG_MAX;
         strcpyW(CallbackInfo.BestSection, InfSectionName);
         TRACE("EnumerateSectionsStartingWith(InfSectionName = %S)\n", InfSectionName);
         if (!EnumerateSectionsStartingWith(
