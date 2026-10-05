@@ -4135,6 +4135,13 @@ VidPnTopology_UpdatePathSupportInfo(
             VidPn->Paths[i].VidPnTargetColorCoeffDynamicRanges =
                 pVidPnPresentPathInfo->VidPnTargetColorCoeffDynamicRanges;
             VidPn->Paths[i].Content = pVidPnPresentPathInfo->Content;
+
+            /* This call reports what the path supports, so take the copy
+             * protection support level -- but not CopyProtectionType or the
+             * APS trigger bits, which are the active controls and are not
+             * the miniport's to change through a support update. */
+            VidPn->Paths[i].CopyProtection.CopyProtectionSupport =
+                pVidPnPresentPathInfo->CopyProtection.CopyProtectionSupport;
             return STATUS_SUCCESS;
         }
     }
