@@ -4156,6 +4156,46 @@ static DWORD get_device_property(struct DeviceInfo *device, HDEVINFO devinfo,
         return error;
     }
 #ifdef __REACTOS__
+    if (IsEqualGUID(&prop_key->fmtid, &DEVPKEY_Device_DriverDate.fmtid) &&
+        prop_key->pid >= DEVPKEY_Device_DriverDate.pid && prop_key->pid <= DEVPKEY_Device_DriverCoInstallers.pid)
+    {
+        static const struct
+        {
+            LPCWSTR Name;
+            DEVPROPTYPE Type;
+        } DriverValues[] =
+        {
+            { REGSTR_DRIVER_DATE_DATA, DEVPROP_TYPE_FILETIME },
+            { REGSTR_DRIVER_VERSION, DEVPROP_TYPE_STRING },
+            { REGSTR_VAL_DRVDESC, DEVPROP_TYPE_STRING },
+            { REGSTR_VAL_INFPATH, DEVPROP_TYPE_STRING },
+            { REGSTR_VAL_INFSECTION, DEVPROP_TYPE_STRING },
+            { REGSTR_VAL_INFSECTIONEXT, DEVPROP_TYPE_STRING },
+            { REGSTR_VAL_MATCHINGDEVID, DEVPROP_TYPE_STRING },
+            { REGSTR_VAL_PROVIDER_NAME, DEVPROP_TYPE_STRING },
+            { REGSTR_VAL_ENUMPROPPAGES_32, DEVPROP_TYPE_STRING },
+            { REGSTR_VAL_COINSTALLERS_32, DEVPROP_TYPE_STRING_LIST },
+        };
+        DWORD Index = prop_key->pid - DEVPKEY_Device_DriverDate.pid;
+        DWORD size = buf_size;
+
+        key = SETUPDI_OpenDrvKey(set->HKLM, device, KEY_QUERY_VALUE);
+        if (key == INVALID_HANDLE_VALUE)
+            return ERROR_NOT_FOUND;
+        error = RegQueryValueExW(key, DriverValues[Index].Name, NULL, NULL, buf, &size);
+        RegCloseKey(key);
+        if (error == ERROR_FILE_NOT_FOUND)
+            return ERROR_NOT_FOUND;
+        if (error == ERROR_MORE_DATA || (error == ERROR_SUCCESS && !buf && size))
+            error = ERROR_INSUFFICIENT_BUFFER;
+        if (error == ERROR_SUCCESS || error == ERROR_INSUFFICIENT_BUFFER)
+        {
+            *prop_type = DriverValues[Index].Type;
+            if (req_size)
+                *req_size = size;
+        }
+        return error;
+    }
     if (IsEqualDevPropKey(*prop_key, DEVPKEY_Device_ContainerId))
     {
         error = get_device_property(device, devinfo, device_data, &DEVPKEY_Device_BaseContainerId,
