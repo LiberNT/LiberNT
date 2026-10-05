@@ -1063,21 +1063,76 @@ static UINT STDMETHODCALLTYPE d3d11_swapchain_GetCurrentBackBufferIndex(IDXGISwa
     return 0;
 }
 
+#ifdef __REACTOS__
+/* Validates HDR metadata as IDXGISwapChain4::SetHDRMetaData does.  The
+ * outputs this swapchain presents to are SDR, so accepted metadata has
+ * nothing to act on: it is checked, then has no effect -- as on an SDR
+ * display under Windows. */
+static HRESULT dxgi_validate_hdr_metadata(DXGI_HDR_METADATA_TYPE type, UINT size, const void *metadata)
+{
+    switch (type)
+    {
+        case DXGI_HDR_METADATA_TYPE_NONE:
+            return S_OK;
+        case DXGI_HDR_METADATA_TYPE_HDR10:
+            if (size != sizeof(DXGI_HDR_METADATA_HDR10) || !metadata)
+                return E_INVALIDARG;
+            return S_OK;
+        case DXGI_HDR_METADATA_TYPE_HDR10PLUS:
+            if (!size || !metadata)
+                return E_INVALIDARG;
+            return S_OK;
+        default:
+            return E_INVALIDARG;
+    }
+}
+
+#endif
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_CheckColorSpaceSupport(IDXGISwapChain4 *iface,
         DXGI_COLOR_SPACE_TYPE colour_space, UINT *colour_space_support)
 {
+#ifdef __REACTOS__
+    UINT support_flags = 0;
+
+    FIXME("iface %p, colour_space %#x, colour_space_support %p semi-stub!\n",
+            iface, colour_space, colour_space_support);
+
+    if (!colour_space_support)
+        return E_INVALIDARG;
+
+    /* Outputs are driven in SDR; advertising an HDR colour space would let
+     * an application render content nothing downstream can show. */
+    if (colour_space == DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709)
+        support_flags |= DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT;
+
+    *colour_space_support = support_flags;
+    return S_OK;
+#else
     FIXME("iface %p, colour_space %#x, colour_space_support %p stub!\n",
             iface, colour_space, colour_space_support);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_SetColorSpace1(IDXGISwapChain4 *iface,
         DXGI_COLOR_SPACE_TYPE colour_space)
 {
+#ifdef __REACTOS__
+    FIXME("iface %p, colour_space %#x semi-stub!\n", iface, colour_space);
+
+    if (colour_space != DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709)
+    {
+        WARN("Colour space %u not supported.\n", colour_space);
+        return E_INVALIDARG;
+    }
+
+    return S_OK;
+#else
     FIXME("iface %p, colour_space %#x stub!\n", iface, colour_space);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_ResizeBuffers1(IDXGISwapChain4 *iface,
@@ -1116,9 +1171,15 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_ResizeBuffers1(IDXGISwapChain4 
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_SetHDRMetaData(IDXGISwapChain4 *iface,
         DXGI_HDR_METADATA_TYPE type, UINT size, void *metadata)
 {
+#ifdef __REACTOS__
+    TRACE("iface %p, type %#x, size %#x, metadata %p.\n", iface, type, size, metadata);
+
+    return dxgi_validate_hdr_metadata(type, size, metadata);
+#else
     FIXME("iface %p, type %#x, size %#x, metadata %p stub!\n", iface, type, size, metadata);
 
     return E_NOTIMPL;
+#endif
 }
 
 static const struct IDXGISwapChain4Vtbl d3d11_swapchain_vtbl =
@@ -3316,9 +3377,15 @@ static HRESULT STDMETHODCALLTYPE d3d12_swapchain_ResizeBuffers1(IDXGISwapChain4 
 static HRESULT STDMETHODCALLTYPE d3d12_swapchain_SetHDRMetaData(IDXGISwapChain4 *iface,
         DXGI_HDR_METADATA_TYPE type, UINT size, void *metadata)
 {
+#ifdef __REACTOS__
+    TRACE("iface %p, type %#x, size %#x, metadata %p.\n", iface, type, size, metadata);
+
+    return dxgi_validate_hdr_metadata(type, size, metadata);
+#else
     FIXME("iface %p, type %#x, size %#x, metadata %p stub!\n", iface, type, size, metadata);
 
     return E_NOTIMPL;
+#endif
 }
 
 static const struct IDXGISwapChain4Vtbl d3d12_swapchain_vtbl =
