@@ -182,6 +182,10 @@ NvmeFindAdapter(_In_ PVOID DeviceExtension,
                    Device->IoQueueCount * (SqBytes + CqBytes) +
                    PAGE_SIZE +                                  /* identify/scratch */
                    PAGE_SIZE;                                   /* SMART log */
+    ConfigInfo->ScatterGather = TRUE;
+    ConfigInfo->Master = TRUE;
+    if (ConfigInfo->Dma64BitAddresses & SCSI_DMA64_SYSTEM_SUPPORTED)
+        ConfigInfo->Dma64BitAddresses = SCSI_DMA64_MINIPORT_FULL64BIT_NO_BOUNDARY_REQ_SUPPORTED;
     Uncached = (PUCHAR)StorPortGetUncachedExtension(Device, ConfigInfo, UncachedSize);
     if (Uncached == NULL)
         return SP_RETURN_ERROR;
@@ -231,14 +235,11 @@ NvmeFindAdapter(_In_ PVOID DeviceExtension,
     ConfigInfo->MaximumTransferLength = Device->MaximumTransferLength;
     ConfigInfo->NumberOfPhysicalBreaks = ((Device->MaximumTransferLength + PAGE_SIZE - 1) / PAGE_SIZE) + 1;
     ConfigInfo->AlignmentMask = 0x3;
-    ConfigInfo->ScatterGather = TRUE;
-    ConfigInfo->Master = TRUE;
     ConfigInfo->CachesData = Device->VolatileWriteCache;
     ConfigInfo->MaximumNumberOfTargets = 1;
     ConfigInfo->MaximumNumberOfLogicalUnits = NVME_MAX_NAMESPACES;
     ConfigInfo->NumberOfBuses = 1;
     ConfigInfo->SynchronizationModel = StorSynchronizeFullDuplex;
-    ConfigInfo->Dma64BitAddresses = SCSI_DMA64_SYSTEM_SUPPORTED;
     ConfigInfo->HwMSInterruptRoutine = NvmeHwMSInterrupt;
     ConfigInfo->InterruptSynchronizationMode = InterruptSynchronizeAll;
 
