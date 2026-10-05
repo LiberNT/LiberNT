@@ -5,6 +5,7 @@
 #include "dxgi_private.h"
 
 #include <d3dkmthk.h>
+#include <reactos/rddm/rxgkadvcolor.h>
 
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(status) ((NTSTATUS)(status) >= 0)
@@ -238,6 +239,62 @@ done:
     }
     free(adapters);
     return hr;
+}
+
+/* The colour description of a display output, from dxgkrnl: the monitor's
+ * primaries and luminance from its EDID, and the colour space and depth of
+ * the signal it is driven with.  Left as SDR defaults when unknown. */
+void dxgi_get_wddm_output_color(const WCHAR *device_name, DXGI_OUTPUT_DESC1 *desc)
+{
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME open_adapter;
+    D3DKMT_CLOSEADAPTER close_adapter;
+    RXGK_ADVANCED_COLOR_PACKET color;
+    D3DKMT_ESCAPE escape;
+    NTSTATUS status;
+
+    memset(&open_adapter, 0, sizeof(open_adapter));
+    lstrcpynW(open_adapter.DeviceName, device_name, ARRAY_SIZE(open_adapter.DeviceName));
+    if (!NT_SUCCESS(D3DKMTOpenAdapterFromGdiDisplayName(&open_adapter)))
+        return;
+
+    memset(&color, 0, sizeof(color));
+    color.Size = sizeof(color);
+    color.Version = RXGK_ADVANCED_COLOR_VERSION_1;
+    color.Operation = RXGK_ADVANCED_COLOR_GET;
+    color.VidPnSourceId = open_adapter.VidPnSourceId;
+    memset(&escape, 0, sizeof(escape));
+    escape.hAdapter = open_adapter.hAdapter;
+    escape.Type = (D3DKMT_ESCAPETYPE)RXGK_ESCAPE_ADVANCED_COLOR;
+    escape.pPrivateDriverData = &color;
+    escape.PrivateDriverDataSize = sizeof(color);
+    status = D3DKMTEscape(&escape);
+
+    close_adapter.hAdapter = open_adapter.hAdapter;
+    D3DKMTCloseAdapter(&close_adapter);
+    if (!NT_SUCCESS(status))
+    {
+        WARN("No colour description for %s, status %#lx.\n", debugstr_w(device_name), status);
+        return;
+    }
+
+    desc->BitsPerColor = color.BitsPerColorChannel;
+    desc->ColorSpace = (color.Flags & RXGK_ADVANCED_COLOR_ENABLED)
+            ? DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 : DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+    /* Chromaticity in 1/1024, luminance in 1/10000 nit. */
+    desc->RedPrimary[0] = color.RedPrimary[0] / 1024.0f;
+    desc->RedPrimary[1] = color.RedPrimary[1] / 1024.0f;
+    desc->GreenPrimary[0] = color.GreenPrimary[0] / 1024.0f;
+    desc->GreenPrimary[1] = color.GreenPrimary[1] / 1024.0f;
+    desc->BluePrimary[0] = color.BluePrimary[0] / 1024.0f;
+    desc->BluePrimary[1] = color.BluePrimary[1] / 1024.0f;
+    desc->WhitePoint[0] = color.WhitePoint[0] / 1024.0f;
+    desc->WhitePoint[1] = color.WhitePoint[1] / 1024.0f;
+    if (color.Flags & RXGK_ADVANCED_COLOR_EDID_LUMINANCE)
+    {
+        desc->MinLuminance = color.MinLuminance / 10000.0f;
+        desc->MaxLuminance = color.MaxLuminance / 10000.0f;
+        desc->MaxFullFrameLuminance = color.MaxFullFrameLuminance / 10000.0f;
+    }
 }
 
 #endif /* __REACTOS__ */

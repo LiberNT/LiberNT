@@ -710,6 +710,9 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_GetDesc1(IDXGIOutput6 *iface,
     desc->MinLuminance = 0.f;
     desc->MaxLuminance = 0.f;
     desc->MaxFullFrameLuminance = 0.f;
+#if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
+    dxgi_get_wddm_output_color(wined3d_desc.device_name, desc);
+#endif
 
     return S_OK;
 }
