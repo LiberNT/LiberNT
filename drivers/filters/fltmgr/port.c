@@ -25,6 +25,7 @@ typedef struct _FLTP_SERVER_PORT
 typedef struct _FLTP_CLIENT_PORT
 {
     LIST_ENTRY FilterLink;
+    HANDLE Handle;
     PFLTP_SERVER_PORT ServerPort;
     PFLT_FILTER Filter;
     PVOID Cookie;
@@ -110,8 +111,27 @@ FltpDeleteClientPort(
 {
     PFLTP_CLIENT_PORT Port = Object;
 
-    ObDereferenceObject(Port->ServerPort);
-    FltpDereferencePointer(&Port->Filter->Base);
+    if (Port->ServerPort != NULL)
+    {
+        ObDereferenceObject(Port->ServerPort);
+    }
+    if (Port->Filter != NULL)
+    {
+        FltpDereferencePointer(&Port->Filter->Base);
+    }
+}
+
+static
+VOID
+FltpCloseClientPortHandle(
+    _In_ PFLTP_CLIENT_PORT Port)
+{
+    HANDLE Handle = InterlockedExchangePointer(&Port->Handle, NULL);
+
+    if (Handle != NULL)
+    {
+        ObCloseHandle(Handle, KernelMode);
+    }
 }
 
 static
@@ -355,6 +375,24 @@ FltpNotifyDisconnect(
     }
 }
 
+static
+VOID
+NTAPI
+FltpCloseClientPort(
+    _In_opt_ PEPROCESS Process,
+    _In_ PVOID Object,
+    _In_ ULONG_PTR ProcessHandleCount,
+    _In_ ULONG_PTR SystemHandleCount)
+{
+    UNREFERENCED_PARAMETER(Process);
+    UNREFERENCED_PARAMETER(ProcessHandleCount);
+
+    if (SystemHandleCount == 1)
+    {
+        FltpDisconnectClientPort(Object);
+    }
+}
+
 NTSTATUS
 FltpInitializePorts(
     _In_ PDRIVER_OBJECT DriverObject)
@@ -385,7 +423,7 @@ FltpInitializePorts(
     }
 
     Initializer.SecurityRequired = FALSE;
-    Initializer.CloseProcedure = NULL;
+    Initializer.CloseProcedure = FltpCloseClientPort;
     Initializer.DeleteProcedure = FltpDeleteClientPort;
 
     return ObCreateObjectType(&ClientTypeName, &Initializer, NULL, &FltGlobals.ClientPortType);
@@ -516,8 +554,7 @@ FltCloseClientPort(
     }
 
     InterlockedExchange(&Port->DisconnectNotified, TRUE);
-    FltpDisconnectClientPort(Port);
-    FltpDereferenceClientPort(Port);
+    FltpCloseClientPortHandle(Port);
 }
 
 NTSTATUS
@@ -741,6 +778,8 @@ FltpConnectPort(
     PFILTER_PORT_DATA PortData;
     PFLTP_SERVER_PORT ServerPort;
     PFLTP_CLIENT_PORT Port;
+    OBJECT_ATTRIBUTES PortAttributes;
+    HANDLE PortHandle;
     UNICODE_STRING PortName;
     PVOID Context = NULL;
     ULONG ValueLength;
@@ -831,15 +870,21 @@ FltpConnectPort(
                       PortData->ContextSize);
     }
 
+    InitializeObjectAttributes(&PortAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
     Status = ObCreateObject(KernelMode,
                             FltGlobals.ClientPortType,
-                            NULL,
+                            &PortAttributes,
                             KernelMode,
                             NULL,
                             sizeof(FLTP_CLIENT_PORT),
                             0,
                             0,
                             (PVOID *)&Port);
+    if (NT_SUCCESS(Status))
+    {
+        RtlZeroMemory(Port, sizeof(*Port));
+        Status = ObInsertObject(Port, NULL, FLT_PORT_ALL_ACCESS, 0, NULL, &PortHandle);
+    }
     if (!NT_SUCCESS(Status))
     {
         if (Context != NULL)
@@ -849,8 +894,8 @@ FltpConnectPort(
         goto Fail;
     }
 
-    RtlZeroMemory(Port, sizeof(*Port));
     ObReferenceObject(Port);
+    Port->Handle = PortHandle;
     Port->ServerPort = ServerPort;
     Port->Filter = Filter;
     ExInitializeRundownProtection(&Port->Rundown);
@@ -885,8 +930,7 @@ FltpConnectPort(
     if (!NT_SUCCESS(Status))
     {
         InterlockedExchange(&Port->DisconnectNotified, TRUE);
-        FltpDisconnectClientPort(Port);
-        FltpDereferenceClientPort(Port);
+        FltpCloseClientPortHandle(Port);
         FltpDereferenceClientPort(Port);
         ExReleaseRundownProtection(&Filter->Base.RundownRef);
         return Status;
