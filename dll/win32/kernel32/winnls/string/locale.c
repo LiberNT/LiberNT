@@ -1789,7 +1789,13 @@ INT WINAPI GetLocaleInfoW( LCID lcid, LCTYPE lctype, LPWSTR buffer, INT len )
     if (!(hrsrc = FindResourceExW( kernel32_handle, (LPWSTR)RT_STRING,
                                    ULongToPtr((lctype >> 4) + 1), lang_id )))
     {
+#ifdef __REACTOS__
+        SetLastError( FindResourceExW( kernel32_handle, (LPWSTR)RT_STRING,
+                                       ULongToPtr((LOCALE_ILANGUAGE >> 4) + 1), lang_id ) ?
+                      ERROR_INVALID_FLAGS : ERROR_INVALID_PARAMETER );
+#else
         SetLastError( ERROR_INVALID_FLAGS );  /* no such lctype */
+#endif
         return 0;
     }
     if (!(hmem = LoadResource( kernel32_handle, hrsrc )))
