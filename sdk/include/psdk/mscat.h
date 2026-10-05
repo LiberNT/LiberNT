@@ -37,6 +37,10 @@ extern "C" {
 #define CRYPTCAT_ATTR_AUTHENTICATED         0x10000000
 #define CRYPTCAT_ATTR_UNAUTHENTICATED       0x20000000
 
+#define szOID_CATALOG_LIST                  "1.3.6.1.4.1.311.12.1.1"
+#define szOID_CATALOG_LIST_MEMBER           "1.3.6.1.4.1.311.12.1.2"
+#define szOID_CATALOG_LIST_MEMBER2          "1.3.6.1.4.1.311.12.1.3"
+
 #define CRYPTCAT_OPEN_CREATENEW             0x00000001
 #define CRYPTCAT_OPEN_ALWAYS                0x00000002
 #define CRYPTCAT_OPEN_EXISTING              0x00000004
