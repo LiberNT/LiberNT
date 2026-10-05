@@ -18,6 +18,10 @@
 #define NTFS_ACL_REVISION_DS 4
 #define NTFS_MAX_SID_SUB_AUTHORITIES 15
 #define NTFS_INDEX_HEADER_LARGE 1
+#define NTFS_SDS_BLOCK_SIZE 0x80000
+#define NTFS_SDS_ALIGNMENT 16
+#define NTFS_SDH_PADDING 0x00490049
+#define NTFS_FIRST_SECURITY_ID 0x100
 
 typedef struct _NTFS_SECURITY_LOCATION
 {
@@ -29,6 +33,7 @@ typedef struct _NTFS_SECURITY_LOCATION
 
 static const WCHAR NtfsSiiName[] = L"$SII";
 static const WCHAR NtfsSdsName[] = L"$SDS";
+static const WCHAR NtfsSdhName[] = L"$SDH";
 
 static USHORT
 ReadUnalignedU16(_In_ const UCHAR* Data)
@@ -198,15 +203,347 @@ ValidateSecurityDescriptor(_In_ const UCHAR* Descriptor,
     return TRUE;
 }
 
-/*
- * Replace the file's security with a validated self-relative descriptor
- * stored in the legacy per-file $SECURITY_DESCRIPTOR attribute. Clearing
- * SecurityId makes the local value authoritative for every reader
- * (including NTFS-3G and this library's own lookup order), because the
- * volume-wide $Secure reference only applies while the id is nonzero.
- * Maintaining the NTFS 3.x $Secure SDS/SII/SDH indexes for a canonical
- * shared descriptor remains future work.
- */
+NTSTATUS
+FileRecord::ApplySecurityId(
+    _In_ ULONG SecurityId)
+{
+    PAttribute SecurityAttribute;
+    PAttribute StandardAttribute;
+    PStandardInformationEx Standard;
+    PUCHAR RecordBackup;
+    BOOLEAN WriteAttempted = FALSE;
+    NTSTATUS Status;
+
+    if (SecurityId == 0 || !Header || !Data || !DiskVolume)
+        return STATUS_INVALID_PARAMETER;
+    if (FindAttributeInRecord(TypeAttributeList, NULL, NULL))
+        return ApplyListedSecurityId(SecurityId);
+
+    RecordBackup =
+        new(PagedPool, TAG_FILE_RECORD) UCHAR[RecordBufferSize];
+    if (!RecordBackup)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlCopyMemory(RecordBackup, Data, RecordBufferSize);
+
+    SecurityAttribute = FindAttributeInRecord(
+        TypeSecurityDescriptor,
+        NULL,
+        NULL);
+    if (SecurityAttribute)
+    {
+        Status = RemoveAttributeRecord(SecurityAttribute);
+        if (!NT_SUCCESS(Status))
+            goto Restore;
+    }
+
+    Status = GetStandardInformationForUpdate(
+        &StandardAttribute,
+        &Standard);
+    if (!NT_SUCCESS(Status))
+        goto Restore;
+    if (StandardAttribute->Resident.DataLength <
+        sizeof(StandardInformationEx))
+    {
+        Status = ResizeResidentData(
+            StandardAttribute,
+            sizeof(StandardInformationEx));
+        if (!NT_SUCCESS(Status))
+            goto Restore;
+        Status = GetStandardInformationForUpdate(
+            &StandardAttribute,
+            &Standard);
+        if (!NT_SUCCESS(Status))
+            goto Restore;
+    }
+    Standard->SecurityId = SecurityId;
+
+    Status = PrepareAutomaticTimestamps(
+        NTFS_BASIC_INFO_CHANGE_TIME,
+        NULL);
+    if (!NT_SUCCESS(Status))
+        goto Restore;
+    WriteAttempted = TRUE;
+    Status = DiskVolume->MFT->WriteFileRecordToMFT(this);
+
+Restore:
+    if (!NT_SUCCESS(Status))
+    {
+        RtlCopyMemory(Data, RecordBackup, RecordBufferSize);
+        Header = reinterpret_cast<PFileRecordHeader>(Data);
+        ClearDataRunCache();
+        if (WriteAttempted)
+        {
+            NTSTATUS RestoreStatus =
+                DiskVolume->MFT->WriteFileRecordToMFT(this);
+            if (!NT_SUCCESS(RestoreStatus))
+                Status = RestoreStatus;
+        }
+    }
+    delete[] RecordBackup;
+    return Status;
+}
+
+NTSTATUS
+FileRecord::ApplyListedSecurityId(
+    _In_ ULONG SecurityId)
+{
+    const ULONG MinimumEntryLength = 0x1a;
+    PAttribute ListAttribute;
+    PAttribute SecurityAttribute;
+    PAttribute StandardAttribute;
+    PStandardInformationEx Standard;
+    PFileRecord Owner = NULL;
+    PUCHAR BaseBackup = NULL;
+    PUCHAR OwnerBackup = NULL;
+    PUCHAR OldList = NULL;
+    PUCHAR NewList = NULL;
+    LARGE_INTEGER ListOffset;
+    ULONG OldListLength = 0;
+    ULONG NewListLength = 0;
+    ULONG WrittenLength;
+    ULONG Offset;
+    BOOLEAN Found = FALSE;
+    BOOLEAN ListWriteAttempted = FALSE;
+    BOOLEAN BaseWriteAttempted = FALSE;
+    NTSTATUS Status;
+
+    if (SecurityId == 0 || !Header || !Data || !DiskVolume ||
+        Header->BaseFileRecord != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Status = LoadAttributeList();
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!AttributeListData || AttributeListLength == 0)
+        return STATUS_FILE_CORRUPT_ERROR;
+
+    SecurityAttribute = GetAttribute(TypeSecurityDescriptor, NULL);
+    if (SecurityAttribute)
+    {
+        Owner = GetAttributeOwner(SecurityAttribute);
+        if (!Owner || SecurityAttribute->NameLength != 0)
+            return STATUS_FILE_CORRUPT_ERROR;
+        if (SecurityAttribute->IsNonResident)
+            return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    OldListLength = AttributeListLength;
+    OldList = new(PagedPool, TAG_NTFS) UCHAR[OldListLength];
+    NewList = new(PagedPool, TAG_NTFS) UCHAR[OldListLength];
+    BaseBackup = new(PagedPool, TAG_FILE_RECORD) UCHAR[RecordBufferSize];
+    if (Owner && Owner != this)
+        OwnerBackup = new(PagedPool, TAG_FILE_RECORD) UCHAR[Owner->RecordBufferSize];
+    if (!OldList || !NewList || !BaseBackup ||
+        (Owner && Owner != this && !OwnerBackup))
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Done;
+    }
+    RtlCopyMemory(OldList, AttributeListData, OldListLength);
+
+    for (Offset = 0; Offset < OldListLength;)
+    {
+        PAttributeListEx Entry =
+            reinterpret_cast<PAttributeListEx>(OldList + Offset);
+
+        if (OldListLength - Offset < MinimumEntryLength ||
+            Entry->RecordLength < MinimumEntryLength ||
+            Entry->RecordLength > OldListLength - Offset)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Done;
+        }
+        if (SecurityAttribute && !Found &&
+            Entry->Type == TypeSecurityDescriptor &&
+            Entry->NameLength == 0 &&
+            Entry->FirstVCN == 0 &&
+            GetFRNFromFileRef(Entry->BaseFileRef) ==
+                Owner->Header->MFTRecordNumber &&
+            Entry->AttributeId == SecurityAttribute->AttributeID)
+        {
+            Found = TRUE;
+        }
+        else
+        {
+            RtlCopyMemory(NewList + NewListLength, Entry, Entry->RecordLength);
+            NewListLength += Entry->RecordLength;
+        }
+        Offset += Entry->RecordLength;
+    }
+    if (SecurityAttribute && !Found)
+    {
+        Status = STATUS_FILE_CORRUPT_ERROR;
+        goto Done;
+    }
+
+    RtlCopyMemory(BaseBackup, Data, RecordBufferSize);
+    if (OwnerBackup)
+        RtlCopyMemory(OwnerBackup, Owner->Data, Owner->RecordBufferSize);
+
+    ListAttribute = FindAttributeInRecord(TypeAttributeList, NULL, NULL);
+    if (!ListAttribute)
+    {
+        Status = STATUS_FILE_CORRUPT_ERROR;
+        goto Restore;
+    }
+    if (SecurityAttribute && ListAttribute->IsNonResident)
+    {
+        if (ListAttribute->NonResident.DataSize != OldListLength)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Restore;
+        }
+        ListWriteAttempted = TRUE;
+        WrittenLength = NewListLength;
+        ListOffset.QuadPart = 0;
+        Status = WriteFileData(TypeAttributeList,
+                               NULL,
+                               NewList,
+                               &WrittenLength,
+                               &ListOffset);
+        if (NT_SUCCESS(Status) && WrittenLength != NewListLength)
+            Status = STATUS_END_OF_FILE;
+        if (!NT_SUCCESS(Status))
+            goto Restore;
+        RtlCopyMemory(Data, BaseBackup, RecordBufferSize);
+        Header = reinterpret_cast<PFileRecordHeader>(Data);
+        ClearDataRunCache();
+        SecurityAttribute = GetAttribute(TypeSecurityDescriptor, NULL);
+        if (!SecurityAttribute || GetAttributeOwner(SecurityAttribute) != Owner)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Restore;
+        }
+    }
+
+    if (SecurityAttribute)
+    {
+        Status = Owner->RemoveAttributeRecord(SecurityAttribute);
+        if (!NT_SUCCESS(Status))
+            goto Restore;
+    }
+
+    Status = GetStandardInformationForUpdate(&StandardAttribute, &Standard);
+    if (!NT_SUCCESS(Status))
+        goto Restore;
+    if (GetAttributeOwner(StandardAttribute) != this)
+    {
+        Status = STATUS_FILE_CORRUPT_ERROR;
+        goto Restore;
+    }
+    if (StandardAttribute->Resident.DataLength < sizeof(StandardInformationEx))
+    {
+        Status = ResizeResidentData(StandardAttribute, sizeof(StandardInformationEx));
+        if (!NT_SUCCESS(Status))
+            goto Restore;
+        Status = GetStandardInformationForUpdate(&StandardAttribute, &Standard);
+        if (!NT_SUCCESS(Status))
+            goto Restore;
+    }
+    Standard->SecurityId = SecurityId;
+
+    if (SecurityAttribute)
+    {
+        ListAttribute = FindAttributeInRecord(TypeAttributeList, NULL, NULL);
+        if (!ListAttribute)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Restore;
+        }
+        if (!ListAttribute->IsNonResident)
+        {
+            Status = ReplaceResidentData(ListAttribute, NewList, NewListLength);
+            if (!NT_SUCCESS(Status))
+                goto Restore;
+        }
+        else
+        {
+            ListAttribute->NonResident.DataSize = NewListLength;
+            ListAttribute->NonResident.InitalizedDataSize = NewListLength;
+        }
+    }
+
+    Status = PrepareAutomaticTimestamps(NTFS_BASIC_INFO_CHANGE_TIME, NULL);
+    if (!NT_SUCCESS(Status))
+        goto Restore;
+    BaseWriteAttempted = TRUE;
+    Status = DiskVolume->MFT->WriteFileRecordToMFT(this);
+    if (!NT_SUCCESS(Status))
+        goto Restore;
+
+    delete[] AttributeListData;
+    AttributeListData = NULL;
+    AttributeListLength = 0;
+
+    if (Owner && Owner != this)
+    {
+        PAttribute First = reinterpret_cast<PAttribute>(
+            Owner->Data + Owner->Header->AttributeOffset);
+        NTSTATUS CleanupStatus;
+
+        if (First->AttributeType == TypeAttributeEndMarker)
+            CleanupStatus = DiskVolume->MFT->DeallocateExtensionFileRecord(Owner);
+        else
+            CleanupStatus = DiskVolume->MFT->WriteFileRecordToMFT(Owner);
+        if (!NT_SUCCESS(CleanupStatus))
+        {
+            DPRINT1("Extension record %lu was not updated after its "
+                    "security descriptor moved to $Secure: 0x%lx.\n",
+                    Owner->Header->MFTRecordNumber,
+                    CleanupStatus);
+        }
+        ClearExtentCacheExcept(NULL);
+    }
+    goto Done;
+
+Restore:
+    RtlCopyMemory(Data, BaseBackup, RecordBufferSize);
+    Header = reinterpret_cast<PFileRecordHeader>(Data);
+    ClearDataRunCache();
+    if (OwnerBackup)
+    {
+        RtlCopyMemory(Owner->Data, OwnerBackup, Owner->RecordBufferSize);
+        Owner->Header = reinterpret_cast<PFileRecordHeader>(Owner->Data);
+        Owner->ClearDataRunCache();
+    }
+    if (ListWriteAttempted)
+    {
+        NTSTATUS RestoreStatus;
+
+        WrittenLength = OldListLength;
+        ListOffset.QuadPart = 0;
+        RestoreStatus = WriteFileData(TypeAttributeList,
+                                      NULL,
+                                      OldList,
+                                      &WrittenLength,
+                                      &ListOffset);
+        if (!NT_SUCCESS(RestoreStatus))
+            Status = RestoreStatus;
+        RtlCopyMemory(Data, BaseBackup, RecordBufferSize);
+        Header = reinterpret_cast<PFileRecordHeader>(Data);
+        ClearDataRunCache();
+    }
+    if (BaseWriteAttempted || ListWriteAttempted)
+    {
+        NTSTATUS RestoreStatus = DiskVolume->MFT->WriteFileRecordToMFT(this);
+
+        if (!NT_SUCCESS(RestoreStatus))
+            Status = RestoreStatus;
+    }
+    delete[] AttributeListData;
+    AttributeListData = NULL;
+    AttributeListLength = 0;
+
+Done:
+    delete[] OwnerBackup;
+    delete[] BaseBackup;
+    delete[] NewList;
+    delete[] OldList;
+    return Status;
+}
+
 NTSTATUS
 FileRecord::SetSecurityDescriptor(
     _In_reads_bytes_(BufferLength) const UCHAR* Buffer,
@@ -216,6 +553,7 @@ FileRecord::SetSecurityDescriptor(
     PAttribute StandardAttribute;
     PStandardInformationEx Standard;
     PUCHAR RecordBackup = NULL;
+    ULONG SecurityId;
     BOOLEAN Committed = FALSE;
     BOOLEAN WriteAttempted = FALSE;
     NTSTATUS Status;
@@ -228,6 +566,18 @@ FileRecord::SetSecurityDescriptor(
         return STATUS_ACCESS_DENIED;
     if (!ValidateSecurityDescriptor(Buffer, BufferLength))
         return STATUS_INVALID_PARAMETER;
+
+    Status = DiskVolume->AssignSecurityId(Buffer, BufferLength, &SecurityId);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ApplySecurityId(SecurityId);
+        if (Status != STATUS_BUFFER_TOO_SMALL)
+            return Status;
+    }
+    else if (Status != STATUS_NOT_IMPLEMENTED)
+    {
+        return Status;
+    }
     if (FindAttributeInRecord(TypeAttributeList, NULL, NULL))
         return ReplaceSecurityDescriptorData(Buffer, BufferLength);
 
@@ -897,6 +1247,697 @@ Volume::ReadSecurityDescriptorById(
     }
 
 Done:
+    delete SecureFile;
+    return Status;
+}
+
+typedef struct _NTFS_SECURE_INDEX
+{
+    PFileRecord SecureFile;
+    PAttribute Allocation;
+    PAttribute Bitmap;
+    ULONG RecordSize;
+    ULONGLONG AllocationUnit;
+} NTFS_SECURE_INDEX, *PNTFS_SECURE_INDEX;
+
+static NTSTATUS
+LoadSecureIndex(
+    _In_ PVolume DiskVolume,
+    _In_ PFileRecord SecureFile,
+    _In_ PCWSTR Name,
+    _In_ ULONG CollationRule,
+    _Out_ PIndexNodeHeader* RootHeader,
+    _Out_ PULONG RootHeaderBytes,
+    _Out_ PNTFS_SECURE_INDEX Index)
+{
+    PAttribute RootAttribute;
+    PIndexRootEx Root;
+
+    RootAttribute = SecureFile->GetAttribute(
+        TypeIndexRoot,
+        const_cast<PWSTR>(Name));
+    if (!RootAttribute)
+        return STATUS_NOT_IMPLEMENTED;
+    if (RootAttribute->IsNonResident ||
+        RootAttribute->Resident.DataLength <
+            FIELD_OFFSET(IndexRootEx, Header) +
+                sizeof(IndexNodeHeader))
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+
+    Root = reinterpret_cast<PIndexRootEx>(
+        GetResidentDataPointer(RootAttribute));
+    Index->SecureFile = SecureFile;
+    Index->RecordSize = Root->BytesPerIndexRec;
+    if (Root->AttributeType != 0 ||
+        Root->CollationRule != CollationRule ||
+        Index->RecordSize != BytesPerIndexRecord(DiskVolume) ||
+        Index->RecordSize < sizeof(IndexBuffer) ||
+        Index->RecordSize % DiskVolume->BytesPerSector != 0 ||
+        Root->ClusPerIndexRec !=
+            (UCHAR)DiskVolume->ClustersPerIndexRecord)
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+
+    Index->AllocationUnit =
+        Index->RecordSize < BytesPerCluster(DiskVolume)
+            ? DiskVolume->BytesPerSector
+            : BytesPerCluster(DiskVolume);
+    Index->Allocation = SecureFile->GetAttribute(
+        TypeIndexAllocation,
+        const_cast<PWSTR>(Name));
+    Index->Bitmap = SecureFile->GetAttribute(
+        TypeBitmap,
+        const_cast<PWSTR>(Name));
+    *RootHeader = &Root->Header;
+    *RootHeaderBytes =
+        RootAttribute->Resident.DataLength -
+        FIELD_OFFSET(IndexRootEx, Header);
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+ReadSecureIndexNode(
+    _In_ PVolume DiskVolume,
+    _In_ PNTFS_SECURE_INDEX Index,
+    _In_ ULONGLONG Vcn,
+    _Out_writes_bytes_(Index->RecordSize) PUCHAR Buffer)
+{
+    PIndexBuffer NodeBuffer;
+    ULONGLONG AllocationOffset;
+    ULONGLONG RecordNumber;
+    ULONG BytesRemaining;
+    UCHAR BitmapValue;
+    NTSTATUS Status;
+
+    if (!Index->Allocation ||
+        !Index->Allocation->IsNonResident ||
+        !Index->Bitmap ||
+        Vcn > ~(ULONGLONG)0 / Index->AllocationUnit)
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+
+    AllocationOffset = Vcn * Index->AllocationUnit;
+    if (AllocationOffset % Index->RecordSize != 0)
+        return STATUS_FILE_CORRUPT_ERROR;
+    RecordNumber = AllocationOffset / Index->RecordSize;
+    if ((RecordNumber >> 3) >=
+        GetAttributeDataSize(Index->Bitmap))
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+
+    BytesRemaining = sizeof(BitmapValue);
+    Status = Index->SecureFile->CopyData(
+        Index->Bitmap,
+        &BitmapValue,
+        &BytesRemaining,
+        RecordNumber >> 3);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (BytesRemaining != 0 ||
+        !(BitmapValue & (1u << (RecordNumber & 7))))
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+
+    BytesRemaining = Index->RecordSize;
+    Status = Index->SecureFile->CopyData(
+        Index->Allocation,
+        Buffer,
+        &BytesRemaining,
+        AllocationOffset);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (BytesRemaining != 0)
+        return STATUS_END_OF_FILE;
+
+    NodeBuffer = reinterpret_cast<PIndexBuffer>(Buffer);
+    Status = NtfsApplyFixup(
+        &NodeBuffer->RecordHeader,
+        Index->RecordSize,
+        DiskVolume->BytesPerSector);
+    if (!NT_SUCCESS(Status) ||
+        RtlCompareMemory(NodeBuffer->RecordHeader.TypeID,
+                         "INDX",
+                         4) != 4 ||
+        NodeBuffer->VCN != Vcn)
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+    return STATUS_SUCCESS;
+}
+
+static BOOLEAN
+IsSecureIndexEntryValid(
+    _In_ PIndexEntry Entry,
+    _In_ ULONG Remaining,
+    _In_ ULONG KeyLength,
+    _Out_ PULONG EffectiveLength)
+{
+    ULONG Length;
+
+    if (Remaining < FIELD_OFFSET(IndexEntry, IndexStream) ||
+        Entry->EntryLength < FIELD_OFFSET(IndexEntry, IndexStream) ||
+        (Entry->EntryLength & (sizeof(ULONGLONG) - 1)) != 0 ||
+        Entry->EntryLength > Remaining ||
+        (Entry->Flags & ~(INDEX_ENTRY_NODE | INDEX_ENTRY_END)) != 0)
+    {
+        return FALSE;
+    }
+
+    Length = Entry->EntryLength;
+    if (Entry->Flags & INDEX_ENTRY_NODE)
+    {
+        if (Length < FIELD_OFFSET(IndexEntry, IndexStream) +
+                         sizeof(ULONGLONG))
+        {
+            return FALSE;
+        }
+        Length -= sizeof(ULONGLONG);
+    }
+    *EffectiveLength = Length;
+
+    if (Entry->Flags & INDEX_ENTRY_END)
+    {
+        return Entry->StreamLength == 0 &&
+               Entry->Data.ViewIndex.DataLength == 0;
+    }
+    return Entry->StreamLength == KeyLength &&
+           Entry->Data.ViewIndex.DataLength ==
+               NTFS_SECURITY_DESCRIPTOR_HEADER_SIZE &&
+           Entry->Data.ViewIndex.DataOffset >=
+               FIELD_OFFSET(IndexEntry, IndexStream) + KeyLength &&
+           Entry->Data.ViewIndex.DataOffset <= Length &&
+           Entry->Data.ViewIndex.DataLength <=
+               Length - Entry->Data.ViewIndex.DataOffset;
+}
+
+static NTSTATUS
+FindSecurityByHashInNode(
+    _In_ PVolume DiskVolume,
+    _In_ PNTFS_SECURE_INDEX Index,
+    _In_ PAttribute SdsAttribute,
+    _In_ PIndexNodeHeader Header,
+    _In_ ULONG HeaderBytes,
+    _In_ ULONG Hash,
+    _In_reads_bytes_(DescriptorLength) const UCHAR* Descriptor,
+    _In_ ULONG DescriptorLength,
+    _Inout_updates_bytes_(DescriptorLength) PUCHAR Scratch,
+    _In_ ULONG Depth,
+    _Out_ PULONG SecurityId)
+{
+    PIndexEntry Entry;
+    PUCHAR NodeData = NULL;
+    ULONG_PTR End;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    *SecurityId = 0;
+    if (Depth > 32 ||
+        HeaderBytes < sizeof(*Header) ||
+        Header->IndexOffset < sizeof(*Header) ||
+        Header->IndexOffset > Header->TotalIndexSize ||
+        Header->TotalIndexSize > HeaderBytes)
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+
+    Entry = reinterpret_cast<PIndexEntry>(
+        reinterpret_cast<PUCHAR>(Header) + Header->IndexOffset);
+    End = reinterpret_cast<ULONG_PTR>(Header) + Header->TotalIndexSize;
+
+    while (reinterpret_cast<ULONG_PTR>(Entry) < End)
+    {
+        NTFS_SECURITY_LOCATION Location;
+        ULONG EffectiveLength;
+        ULONG EntryHash = 0;
+
+        if (!IsSecureIndexEntryValid(
+                Entry,
+                (ULONG)(End - reinterpret_cast<ULONG_PTR>(Entry)),
+                2 * sizeof(ULONG),
+                &EffectiveLength))
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Done;
+        }
+        if (!(Entry->Flags & INDEX_ENTRY_END))
+            EntryHash = ReadUnalignedU32(Entry->IndexStream);
+
+        if ((Entry->Flags & INDEX_ENTRY_NODE) &&
+            ((Entry->Flags & INDEX_ENTRY_END) || EntryHash >= Hash))
+        {
+            PIndexBuffer Node;
+
+            if (!NodeData)
+            {
+                NodeData = new(PagedPool, TAG_NTFS) UCHAR[Index->RecordSize];
+                if (!NodeData)
+                {
+                    Status = STATUS_INSUFFICIENT_RESOURCES;
+                    goto Done;
+                }
+            }
+            Status = ReadSecureIndexNode(
+                DiskVolume,
+                Index,
+                ReadUnalignedU64(reinterpret_cast<PUCHAR>(Entry) +
+                                 Entry->EntryLength - sizeof(ULONGLONG)),
+                NodeData);
+            if (!NT_SUCCESS(Status))
+                goto Done;
+            Node = reinterpret_cast<PIndexBuffer>(NodeData);
+            Status = FindSecurityByHashInNode(
+                DiskVolume,
+                Index,
+                SdsAttribute,
+                &Node->IndexHeader,
+                Index->RecordSize - FIELD_OFFSET(IndexBuffer, IndexHeader),
+                Hash,
+                Descriptor,
+                DescriptorLength,
+                Scratch,
+                Depth + 1,
+                SecurityId);
+            if (!NT_SUCCESS(Status) || *SecurityId != 0)
+                goto Done;
+        }
+
+        if ((Entry->Flags & INDEX_ENTRY_END) || EntryHash > Hash)
+            break;
+
+        ReadSecurityLocation(
+            reinterpret_cast<PUCHAR>(Entry) +
+                Entry->Data.ViewIndex.DataOffset,
+            &Location);
+        if (EntryHash == Hash &&
+            Location.Hash == Hash &&
+            Location.Length ==
+                NTFS_SECURITY_DESCRIPTOR_HEADER_SIZE + DescriptorLength)
+        {
+            NTSTATUS ReadStatus;
+
+            ReadStatus = ReadAndValidateSdsDescriptor(
+                Index->SecureFile,
+                SdsAttribute,
+                &Location,
+                Location.Offset,
+                Scratch);
+            if (!NT_SUCCESS(ReadStatus) &&
+                Location.Offset <=
+                    ~(ULONGLONG)0 - NTFS_SDS_DUPLICATE_OFFSET)
+            {
+                ReadStatus = ReadAndValidateSdsDescriptor(
+                    Index->SecureFile,
+                    SdsAttribute,
+                    &Location,
+                    Location.Offset + NTFS_SDS_DUPLICATE_OFFSET,
+                    Scratch);
+            }
+            if (NT_SUCCESS(ReadStatus) &&
+                RtlCompareMemory(Scratch,
+                                 Descriptor,
+                                 DescriptorLength) == DescriptorLength)
+            {
+                *SecurityId = Location.SecurityId;
+                goto Done;
+            }
+        }
+
+        Entry = reinterpret_cast<PIndexEntry>(
+            reinterpret_cast<PUCHAR>(Entry) + Entry->EntryLength);
+    }
+
+Done:
+    delete[] NodeData;
+    return Status;
+}
+
+static NTSTATUS
+FindLastSecurityLocation(
+    _In_ PVolume DiskVolume,
+    _In_ PNTFS_SECURE_INDEX Index,
+    _In_ PIndexNodeHeader RootHeader,
+    _In_ ULONG RootHeaderBytes,
+    _Out_ PNTFS_SECURITY_LOCATION Last,
+    _Out_ PBOOLEAN Found)
+{
+    PIndexNodeHeader Header = RootHeader;
+    ULONG HeaderBytes = RootHeaderBytes;
+    PUCHAR NodeData = NULL;
+    ULONG Depth;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    RtlZeroMemory(Last, sizeof(*Last));
+    *Found = FALSE;
+
+    for (Depth = 0; ; Depth++)
+    {
+        PIndexEntry Entry;
+        ULONG_PTR End;
+        BOOLEAN Descend = FALSE;
+        ULONGLONG ChildVcn = 0;
+
+        if (Depth > 32 ||
+            HeaderBytes < sizeof(*Header) ||
+            Header->IndexOffset < sizeof(*Header) ||
+            Header->IndexOffset > Header->TotalIndexSize ||
+            Header->TotalIndexSize > HeaderBytes)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            break;
+        }
+
+        Entry = reinterpret_cast<PIndexEntry>(
+            reinterpret_cast<PUCHAR>(Header) + Header->IndexOffset);
+        End = reinterpret_cast<ULONG_PTR>(Header) + Header->TotalIndexSize;
+        while (reinterpret_cast<ULONG_PTR>(Entry) < End)
+        {
+            ULONG EffectiveLength;
+
+            if (!IsSecureIndexEntryValid(
+                    Entry,
+                    (ULONG)(End - reinterpret_cast<ULONG_PTR>(Entry)),
+                    sizeof(ULONG),
+                    &EffectiveLength))
+            {
+                Status = STATUS_FILE_CORRUPT_ERROR;
+                goto Done;
+            }
+            if (Entry->Flags & INDEX_ENTRY_END)
+            {
+                if (Entry->Flags & INDEX_ENTRY_NODE)
+                {
+                    ChildVcn = ReadUnalignedU64(
+                        reinterpret_cast<PUCHAR>(Entry) +
+                        Entry->EntryLength - sizeof(ULONGLONG));
+                    Descend = TRUE;
+                }
+                break;
+            }
+            ReadSecurityLocation(
+                reinterpret_cast<PUCHAR>(Entry) +
+                    Entry->Data.ViewIndex.DataOffset,
+                Last);
+            *Found = TRUE;
+            Entry = reinterpret_cast<PIndexEntry>(
+                reinterpret_cast<PUCHAR>(Entry) + Entry->EntryLength);
+        }
+        if (!Descend)
+            break;
+
+        if (!NodeData)
+        {
+            NodeData = new(PagedPool, TAG_NTFS) UCHAR[Index->RecordSize];
+            if (!NodeData)
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                break;
+            }
+        }
+        Status = ReadSecureIndexNode(DiskVolume, Index, ChildVcn, NodeData);
+        if (!NT_SUCCESS(Status))
+            break;
+        Header = &reinterpret_cast<PIndexBuffer>(NodeData)->IndexHeader;
+        HeaderBytes = Index->RecordSize - FIELD_OFFSET(IndexBuffer, IndexHeader);
+    }
+
+Done:
+    delete[] NodeData;
+    return Status;
+}
+
+static NTSTATUS
+WriteSdsRange(
+    _In_ PFileRecord SecureFile,
+    _In_ ULONGLONG Offset,
+    _In_reads_bytes_(Length) const UCHAR* Buffer,
+    _In_ ULONG Length)
+{
+    static const UCHAR Zeroes[4096] = {};
+    PAttribute SdsAttribute;
+    LARGE_INTEGER WriteOffset;
+    ULONGLONG Size;
+    ULONG WriteLength;
+    NTSTATUS Status;
+
+    SdsAttribute = SecureFile->GetAttribute(
+        TypeData,
+        const_cast<PWSTR>(NtfsSdsName));
+    if (!SdsAttribute)
+        return STATUS_FILE_CORRUPT_ERROR;
+    Size = GetAttributeDataSize(SdsAttribute);
+
+    while (Size < Offset)
+    {
+        WriteLength = (ULONG)min(Offset - Size, (ULONGLONG)sizeof(Zeroes));
+        WriteOffset.QuadPart = (LONGLONG)Size;
+        Status = SecureFile->WriteFileData(
+            TypeData,
+            const_cast<PWSTR>(NtfsSdsName),
+            const_cast<PUCHAR>(Zeroes),
+            &WriteLength,
+            &WriteOffset);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Size += WriteLength;
+    }
+
+    WriteLength = Length;
+    WriteOffset.QuadPart = (LONGLONG)Offset;
+    Status = SecureFile->WriteFileData(
+        TypeData,
+        const_cast<PWSTR>(NtfsSdsName),
+        const_cast<PUCHAR>(Buffer),
+        &WriteLength,
+        &WriteOffset);
+    if (NT_SUCCESS(Status) && WriteLength != Length)
+        Status = STATUS_END_OF_FILE;
+    return Status;
+}
+
+static void
+WriteSecurityLocation(
+    _Out_writes_bytes_(NTFS_SECURITY_DESCRIPTOR_HEADER_SIZE) PUCHAR Data,
+    _In_ PNTFS_SECURITY_LOCATION Location)
+{
+    RtlCopyMemory(Data, &Location->Hash, sizeof(ULONG));
+    RtlCopyMemory(Data + sizeof(ULONG), &Location->SecurityId, sizeof(ULONG));
+    RtlCopyMemory(Data + 2 * sizeof(ULONG), &Location->Offset, sizeof(ULONGLONG));
+    RtlCopyMemory(Data + 2 * sizeof(ULONG) + sizeof(ULONGLONG),
+                  &Location->Length,
+                  sizeof(ULONG));
+}
+
+NTSTATUS
+Volume::AssignSecurityId(
+    _In_reads_bytes_(DescriptorLength) const UCHAR* Descriptor,
+    _In_ ULONG DescriptorLength,
+    _Out_ PULONG SecurityId)
+{
+    const ULONG SiiEntryLength = 40;
+    const ULONG SdhEntryLength = 48;
+    const ULONG SdhPadding = NTFS_SDH_PADDING;
+    NTFS_SECURE_INDEX SdhIndex;
+    NTFS_SECURE_INDEX SiiIndex;
+    NTFS_SECURITY_LOCATION Last;
+    NTFS_SECURITY_LOCATION Location;
+    PIndexNodeHeader SdhRoot;
+    PIndexNodeHeader SiiRoot;
+    PFileRecord SecureFile = NULL;
+    PAttribute SdsAttribute;
+    PIndexEntry SiiEntry = NULL;
+    PIndexEntry SdhEntry = NULL;
+    PUCHAR Scratch = NULL;
+    PUCHAR Record = NULL;
+    IndexSearchKey Key;
+    UCHAR KeyValue[2 * sizeof(ULONG)];
+    ULONGLONG SdsSize;
+    ULONGLONG NextOffset;
+    ULONG SdhRootBytes;
+    ULONG SiiRootBytes;
+    ULONG RecordLength;
+    ULONG Hash;
+    BOOLEAN HaveLast;
+    NTSTATUS Status;
+
+    if (!Descriptor || !SecurityId)
+        return STATUS_INVALID_PARAMETER;
+    *SecurityId = 0;
+    if (IsReadOnly)
+        return STATUS_ACCESS_DENIED;
+    if (DescriptorLength >
+            NTFS_SDS_DUPLICATE_OFFSET - NTFS_SECURITY_DESCRIPTOR_HEADER_SIZE ||
+        !ValidateSecurityDescriptor(Descriptor, DescriptorLength))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Hash = SecurityDescriptorHash(Descriptor, DescriptorLength);
+    RecordLength = NTFS_SECURITY_DESCRIPTOR_HEADER_SIZE + DescriptorLength;
+
+    Status = MFT->GetFileRecord(_Secure, &SecureFile);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    SdsAttribute = SecureFile->GetAttribute(
+        TypeData,
+        const_cast<PWSTR>(NtfsSdsName));
+    if (!SdsAttribute)
+    {
+        Status = STATUS_NOT_IMPLEMENTED;
+        goto Done;
+    }
+    Status = LoadSecureIndex(this, SecureFile, NtfsSdhName,
+                             ATTRDEF_COLLATION_SEC_HASH,
+                             &SdhRoot, &SdhRootBytes, &SdhIndex);
+    if (!NT_SUCCESS(Status))
+        goto Done;
+    Status = LoadSecureIndex(this, SecureFile, NtfsSiiName,
+                             ATTRDEF_COLLATION_ULONG,
+                             &SiiRoot, &SiiRootBytes, &SiiIndex);
+    if (!NT_SUCCESS(Status))
+        goto Done;
+
+    Scratch = new(PagedPool, TAG_NTFS) UCHAR[DescriptorLength];
+    if (!Scratch)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Done;
+    }
+    Status = FindSecurityByHashInNode(this, &SdhIndex, SdsAttribute,
+                                      SdhRoot, SdhRootBytes, Hash,
+                                      Descriptor, DescriptorLength,
+                                      Scratch, 0, SecurityId);
+    if (!NT_SUCCESS(Status) || *SecurityId != 0)
+        goto Done;
+
+    Status = FindLastSecurityLocation(this, &SiiIndex, SiiRoot,
+                                      SiiRootBytes, &Last, &HaveLast);
+    if (!NT_SUCCESS(Status))
+        goto Done;
+
+    RtlZeroMemory(&Location, sizeof(Location));
+    Location.Hash = Hash;
+    Location.SecurityId = NTFS_FIRST_SECURITY_ID;
+    Location.Length = RecordLength;
+    NextOffset = 0;
+    if (HaveLast)
+    {
+        if (Last.SecurityId == MAXULONG ||
+            Last.Offset > ~(ULONGLONG)0 - Last.Length - NTFS_SDS_ALIGNMENT)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Done;
+        }
+        if (Last.SecurityId >= NTFS_FIRST_SECURITY_ID)
+            Location.SecurityId = Last.SecurityId + 1;
+        NextOffset = ALIGN_UP_BY(Last.Offset + Last.Length, NTFS_SDS_ALIGNMENT);
+    }
+
+    SdsSize = GetAttributeDataSize(SdsAttribute);
+    if (SdsSize != 0)
+    {
+        ULONGLONG BlockBase = ((SdsSize - 1) / NTFS_SDS_BLOCK_SIZE) * NTFS_SDS_BLOCK_SIZE;
+        ULONGLONG SizeOffset;
+
+        if (SdsSize > BlockBase + NTFS_SDS_DUPLICATE_OFFSET)
+            SizeOffset = SdsSize - NTFS_SDS_DUPLICATE_OFFSET;
+        else
+            SizeOffset = SdsSize;
+        SizeOffset = ALIGN_UP_BY(SizeOffset, NTFS_SDS_ALIGNMENT);
+        if (SizeOffset > NextOffset)
+            NextOffset = SizeOffset;
+    }
+    if (NextOffset % NTFS_SDS_BLOCK_SIZE + RecordLength > NTFS_SDS_DUPLICATE_OFFSET)
+        NextOffset = ALIGN_UP_BY(NextOffset + 1, NTFS_SDS_BLOCK_SIZE);
+    Location.Offset = NextOffset;
+
+    Record = new(PagedPool, TAG_NTFS) UCHAR[RecordLength];
+    SiiEntry = reinterpret_cast<PIndexEntry>(new(PagedPool, TAG_NTFS) UCHAR[SiiEntryLength]);
+    SdhEntry = reinterpret_cast<PIndexEntry>(new(PagedPool, TAG_NTFS) UCHAR[SdhEntryLength]);
+    if (!Record || !SiiEntry || !SdhEntry)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Done;
+    }
+    WriteSecurityLocation(Record, &Location);
+    RtlCopyMemory(Record + NTFS_SECURITY_DESCRIPTOR_HEADER_SIZE,
+                  Descriptor,
+                  DescriptorLength);
+
+    Status = WriteSdsRange(SecureFile, Location.Offset, Record, RecordLength);
+    if (NT_SUCCESS(Status))
+    {
+        Status = WriteSdsRange(SecureFile,
+                               Location.Offset + NTFS_SDS_DUPLICATE_OFFSET,
+                               Record,
+                               RecordLength);
+    }
+    if (!NT_SUCCESS(Status))
+        goto Done;
+
+    RtlZeroMemory(SiiEntry, SiiEntryLength);
+    SiiEntry->Data.ViewIndex.DataOffset =
+        (USHORT)(FIELD_OFFSET(IndexEntry, IndexStream) + sizeof(ULONG));
+    SiiEntry->Data.ViewIndex.DataLength = NTFS_SECURITY_DESCRIPTOR_HEADER_SIZE;
+    SiiEntry->EntryLength = (UINT16)SiiEntryLength;
+    SiiEntry->StreamLength = sizeof(ULONG);
+    RtlCopyMemory(SiiEntry->IndexStream, &Location.SecurityId, sizeof(ULONG));
+    WriteSecurityLocation(reinterpret_cast<PUCHAR>(SiiEntry) +
+                              SiiEntry->Data.ViewIndex.DataOffset,
+                          &Location);
+
+    RtlZeroMemory(SdhEntry, SdhEntryLength);
+    SdhEntry->Data.ViewIndex.DataOffset =
+        (USHORT)(FIELD_OFFSET(IndexEntry, IndexStream) + 2 * sizeof(ULONG));
+    SdhEntry->Data.ViewIndex.DataLength = NTFS_SECURITY_DESCRIPTOR_HEADER_SIZE;
+    SdhEntry->EntryLength = (UINT16)SdhEntryLength;
+    SdhEntry->StreamLength = 2 * sizeof(ULONG);
+    RtlCopyMemory(SdhEntry->IndexStream, &Location.Hash, sizeof(ULONG));
+    RtlCopyMemory(SdhEntry->IndexStream + sizeof(ULONG),
+                  &Location.SecurityId,
+                  sizeof(ULONG));
+    WriteSecurityLocation(reinterpret_cast<PUCHAR>(SdhEntry) +
+                              SdhEntry->Data.ViewIndex.DataOffset,
+                          &Location);
+    RtlCopyMemory(reinterpret_cast<PUCHAR>(SdhEntry) + SdhEntryLength - sizeof(ULONG),
+                  &SdhPadding,
+                  sizeof(ULONG));
+
+    {
+        Directory SecureIndex(this);
+
+        RtlCopyMemory(KeyValue, &Location.SecurityId, sizeof(ULONG));
+        Key.CollationRule = ATTRDEF_COLLATION_ULONG;
+        Key.Name = NULL;
+        Key.Value = KeyValue;
+        Key.ValueLength = sizeof(ULONG);
+        Status = SecureIndex.AddIndexEntry(SecureFile, NtfsSiiName, 0,
+                                           &Key, SiiEntry, SiiEntryLength);
+        if (NT_SUCCESS(Status))
+        {
+            RtlCopyMemory(KeyValue, &Location.Hash, sizeof(ULONG));
+            RtlCopyMemory(KeyValue + sizeof(ULONG),
+                          &Location.SecurityId,
+                          sizeof(ULONG));
+            Key.CollationRule = ATTRDEF_COLLATION_SEC_HASH;
+            Key.ValueLength = 2 * sizeof(ULONG);
+            Status = SecureIndex.AddIndexEntry(SecureFile, NtfsSdhName, 0,
+                                               &Key, SdhEntry, SdhEntryLength);
+        }
+    }
+    if (NT_SUCCESS(Status))
+        *SecurityId = Location.SecurityId;
+
+Done:
+    delete[] reinterpret_cast<PUCHAR>(SdhEntry);
+    delete[] reinterpret_cast<PUCHAR>(SiiEntry);
+    delete[] Record;
+    delete[] Scratch;
     delete SecureFile;
     return Status;
 }

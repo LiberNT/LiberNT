@@ -20,14 +20,17 @@ FileRecord::InitializeNewFileRecord(
         FIELD_OFFSET(StandardInformationEx, OwnerId);
     PAttribute Attribute;
     PAttribute ParentSecurity;
+    PAttribute ParentStandard;
     PFileNameEx FileName;
-    PStandardInformationEx Standard;
+    StandardInformationEx Standard;
     PIndexRootEx IndexRoot;
     PIndexEntry EndEntry;
     PUCHAR FileNameData = NULL;
+    PUCHAR ParentDescriptor = NULL;
     ULONG FileNameDataLength;
     ULONG NameBytes;
     ULONG SecurityLength;
+    ULONG SecurityId = 0;
     ULONG RootDataLength;
     ULONG NormalizedAttributes;
     ULONGLONG CurrentTime;
@@ -87,24 +90,74 @@ FileRecord::InitializeNewFileRecord(
     ParentReference =
         MakeFileReference(Parent->Header);
 
+    ParentSecurity = Parent->GetAttribute(
+        TypeSecurityDescriptor,
+        NULL);
+    SecurityLength = 0;
+    if (ParentSecurity &&
+        Parent->ReadSecurityDescriptor(NULL, &SecurityLength) ==
+            STATUS_BUFFER_TOO_SMALL &&
+        SecurityLength != 0)
+    {
+        ParentDescriptor =
+            new(PagedPool, TAG_FILE_RECORD)
+                UCHAR[SecurityLength];
+        if (!ParentDescriptor)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto Done;
+        }
+        Status = Parent->ReadSecurityDescriptor(
+            ParentDescriptor,
+            &SecurityLength);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        Status = DiskVolume->AssignSecurityId(
+            ParentDescriptor,
+            SecurityLength,
+            &SecurityId);
+        if (Status == STATUS_NOT_IMPLEMENTED)
+            SecurityId = 0;
+        else if (!NT_SUCCESS(Status))
+            goto Done;
+    }
+    else if (!ParentSecurity)
+    {
+        ParentStandard = Parent->GetAttribute(
+            TypeStandardInformation,
+            NULL);
+        if (ParentStandard &&
+            !ParentStandard->IsNonResident &&
+            ParentStandard->Resident.DataLength >=
+                FIELD_OFFSET(StandardInformationEx, SecurityId) +
+                    sizeof(ULONG))
+        {
+            SecurityId =
+                reinterpret_cast<PStandardInformationEx>(
+                    GetResidentDataPointer(ParentStandard))->
+                        SecurityId;
+        }
+    }
+
     Status = InsertResidentAttribute(
         TypeStandardInformation,
         NULL,
         &Attribute);
     if (!NT_SUCCESS(Status))
         goto Done;
-    Standard =
-        reinterpret_cast<PStandardInformationEx>(
-            FileNameData);
-    Standard->CreationTime = CurrentTime;
-    Standard->LastWriteTime = CurrentTime;
-    Standard->ChangeTime = CurrentTime;
-    Standard->LastAccessTime = CurrentTime;
-    Standard->FilePermissions = NormalizedAttributes;
+    RtlZeroMemory(&Standard, sizeof(Standard));
+    Standard.CreationTime = CurrentTime;
+    Standard.LastWriteTime = CurrentTime;
+    Standard.ChangeTime = CurrentTime;
+    Standard.LastAccessTime = CurrentTime;
+    Standard.FilePermissions = NormalizedAttributes;
+    Standard.SecurityId = SecurityId;
     Status = ReplaceResidentData(
         Attribute,
-        FileNameData,
-        StandardInformationV1Length);
+        reinterpret_cast<const UCHAR*>(&Standard),
+        SecurityId != 0
+            ? sizeof(Standard)
+            : StandardInformationV1Length);
     if (!NT_SUCCESS(Status))
         goto Done;
 
@@ -141,40 +194,12 @@ FileRecord::InitializeNewFileRecord(
         goto Done;
     Attribute->Resident.IndexedFlag = 1;
 
-    /*
-     * Legacy NTFS volumes keep a per-file descriptor. Preserve a compact
-     * resident parent descriptor when one is present; NTFS 3.x SecurityId
-     * inheritance and nonresident legacy descriptors are handled by the
-     * dedicated $Secure mutation work.
-     */
-    ParentSecurity = Parent->GetAttribute(
-        TypeSecurityDescriptor,
-        NULL);
-    SecurityLength = 0;
-    if (ParentSecurity &&
-        Parent->ReadSecurityDescriptor(NULL, &SecurityLength) ==
-            STATUS_BUFFER_TOO_SMALL &&
-        SecurityLength != 0)
+    if (SecurityId == 0 && ParentDescriptor)
     {
-        PUCHAR ParentDescriptor =
-            new(PagedPool, TAG_FILE_RECORD)
-                UCHAR[SecurityLength];
-
-        if (!ParentDescriptor)
-        {
-            Status = STATUS_INSUFFICIENT_RESOURCES;
-            goto Done;
-        }
-        Status = Parent->ReadSecurityDescriptor(
-            ParentDescriptor,
-            &SecurityLength);
-        if (NT_SUCCESS(Status))
-        {
-            Status = InsertResidentAttribute(
-                TypeSecurityDescriptor,
-                NULL,
-                &Attribute);
-        }
+        Status = InsertResidentAttribute(
+            TypeSecurityDescriptor,
+            NULL,
+            &Attribute);
         if (NT_SUCCESS(Status))
         {
             Status = ReplaceResidentData(
@@ -182,7 +207,6 @@ FileRecord::InitializeNewFileRecord(
                 ParentDescriptor,
                 SecurityLength);
         }
-        delete[] ParentDescriptor;
         if (!NT_SUCCESS(Status))
             goto Done;
     }
@@ -286,6 +310,7 @@ FileRecord::InitializeNewFileRecord(
     Status = STATUS_SUCCESS;
 
 Done:
+    delete[] ParentDescriptor;
     delete[] FileNameData;
     return Status;
 }

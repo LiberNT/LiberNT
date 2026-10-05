@@ -17,6 +17,125 @@
  * sequence still requires the future LFS transaction work.
  */
 
+static BOOLEAN
+IsIndexEntryValid(
+    _In_ PIndexEntry Entry,
+    _In_ ULONG Remaining,
+    _In_ BOOLEAN ViewIndex)
+{
+    ULONG HeaderSize = FIELD_OFFSET(IndexEntry, IndexStream);
+    ULONG PayloadEnd;
+
+    if (!ViewIndex)
+        return NtfsIsDirectoryIndexEntryValid(Entry, Remaining);
+
+    if (Remaining < HeaderSize ||
+        Entry->EntryLength < HeaderSize ||
+        (Entry->EntryLength & 7) != 0 ||
+        Entry->EntryLength > Remaining ||
+        (Entry->Flags & ~(INDEX_ENTRY_NODE | INDEX_ENTRY_END)) != 0)
+    {
+        return FALSE;
+    }
+
+    PayloadEnd = Entry->EntryLength;
+    if (Entry->Flags & INDEX_ENTRY_NODE)
+    {
+        if (PayloadEnd < HeaderSize + sizeof(ULONGLONG))
+            return FALSE;
+        PayloadEnd -= sizeof(ULONGLONG);
+    }
+    if (Entry->StreamLength > PayloadEnd - HeaderSize)
+        return FALSE;
+    if (Entry->Flags & INDEX_ENTRY_END)
+        return Entry->StreamLength == 0;
+
+    if (Entry->Data.ViewIndex.DataLength == 0)
+        return TRUE;
+    return Entry->Data.ViewIndex.DataOffset >=
+               HeaderSize + Entry->StreamLength &&
+           Entry->Data.ViewIndex.DataOffset <= PayloadEnd &&
+           Entry->Data.ViewIndex.DataLength <=
+               PayloadEnd - Entry->Data.ViewIndex.DataOffset;
+}
+
+static ULONG
+ReadIndexKeyUlong(
+    _In_reads_bytes_(sizeof(ULONG)) const UCHAR* Value)
+{
+    return (ULONG)Value[0] |
+           ((ULONG)Value[1] << 8) |
+           ((ULONG)Value[2] << 16) |
+           ((ULONG)Value[3] << 24);
+}
+
+static LONG
+CompareIndexUlongs(
+    _In_ ULONG Left,
+    _In_ ULONG Right)
+{
+    return Left < Right ? -1 : (Left > Right ? 1 : 0);
+}
+
+static NTSTATUS
+CompareIndexKey(
+    _In_ PVolume DiskVolume,
+    _In_ const IndexSearchKey* Key,
+    _In_ PIndexEntry Entry,
+    _Out_ LONG* Comparison)
+{
+    PFileNameEx IndexedName;
+    UNICODE_STRING IndexedString;
+
+    switch (Key->CollationRule)
+    {
+    case ATTRDEF_COLLATION_FILENAME:
+        IndexedName =
+            reinterpret_cast<PFileNameEx>(
+                Entry->IndexStream);
+        IndexedString =
+            NtfsMakeCountedUnicodeString(
+                IndexedName->Name,
+                IndexedName->NameLength *
+                    sizeof(WCHAR));
+        return DiskVolume->CompareFileNames(
+            Key->Name,
+            &IndexedString,
+            Comparison);
+
+    case ATTRDEF_COLLATION_ULONG:
+        if (Key->ValueLength != sizeof(ULONG) ||
+            Entry->StreamLength != sizeof(ULONG))
+        {
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        *Comparison = CompareIndexUlongs(
+            ReadIndexKeyUlong(Key->Value),
+            ReadIndexKeyUlong(Entry->IndexStream));
+        return STATUS_SUCCESS;
+
+    case ATTRDEF_COLLATION_SEC_HASH:
+        if (Key->ValueLength != 2 * sizeof(ULONG) ||
+            Entry->StreamLength != 2 * sizeof(ULONG))
+        {
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        *Comparison = CompareIndexUlongs(
+            ReadIndexKeyUlong(Key->Value),
+            ReadIndexKeyUlong(Entry->IndexStream));
+        if (*Comparison == 0)
+        {
+            *Comparison = CompareIndexUlongs(
+                ReadIndexKeyUlong(Key->Value + sizeof(ULONG)),
+                ReadIndexKeyUlong(Entry->IndexStream + sizeof(ULONG)));
+        }
+        return STATUS_SUCCESS;
+
+    default:
+        return STATUS_NOT_IMPLEMENTED;
+    }
+}
+
 /*
  * Locates where Name belongs in one index node. Insertion callers leave
  * FoundExact NULL and receive STATUS_OBJECT_NAME_COLLISION for an exact
@@ -27,7 +146,7 @@ FindIndexInsertionPoint(
     _In_ PVolume DiskVolume,
     _In_ PIndexNodeHeader Header,
     _In_ ULONG HeaderBytes,
-    _In_ PUNICODE_STRING Name,
+    _In_ const IndexSearchKey* Key,
     _Out_ PULONG InsertionOffset,
     _Out_ PULONGLONG ChildVcn,
     _Out_ PBOOLEAN Descend,
@@ -40,7 +159,7 @@ FindIndexInsertionPoint(
     BOOLEAN FoundEnd = FALSE;
     NTSTATUS Status;
 
-    if (!DiskVolume || !Header || !Name ||
+    if (!DiskVolume || !Header || !Key ||
         !InsertionOffset || !ChildVcn ||
         !Descend)
     {
@@ -79,15 +198,15 @@ FindIndexInsertionPoint(
     while (reinterpret_cast<ULONG_PTR>(Entry) <
            End)
     {
-        PFileNameEx IndexedName;
-        UNICODE_STRING IndexedString;
         BOOLEAN HasChild;
 
-        if (!NtfsIsDirectoryIndexEntryValid(
+        if (!IsIndexEntryValid(
                 Entry,
                 (ULONG)(End -
                     reinterpret_cast<ULONG_PTR>(
-                        Entry))))
+                        Entry)),
+                Key->CollationRule !=
+                    ATTRDEF_COLLATION_FILENAME))
         {
             return STATUS_FILE_CORRUPT_ERROR;
         }
@@ -122,17 +241,10 @@ FindIndexInsertionPoint(
             break;
         }
 
-        IndexedName =
-            reinterpret_cast<PFileNameEx>(
-                Entry->IndexStream);
-        IndexedString =
-            NtfsMakeCountedUnicodeString(
-                IndexedName->Name,
-                IndexedName->NameLength *
-                    sizeof(WCHAR));
-        Status = DiskVolume->CompareFileNames(
-            Name,
-            &IndexedString,
+        Status = CompareIndexKey(
+            DiskVolume,
+            Key,
+            Entry,
             &Comparison);
         if (!NT_SUCCESS(Status))
             return Status;
@@ -184,7 +296,8 @@ static NTSTATUS
 FindChildLinkOffset(
     _In_ PIndexNodeHeader Header,
     _In_ ULONGLONG ChildVcn,
-    _Out_ PULONG LinkOffset)
+    _Out_ PULONG LinkOffset,
+    _In_ BOOLEAN ViewIndex)
 {
     PIndexEntry Entry;
     ULONG_PTR End;
@@ -206,11 +319,12 @@ FindChildLinkOffset(
     while (reinterpret_cast<ULONG_PTR>(Entry) <
            End)
     {
-        if (!NtfsIsDirectoryIndexEntryValid(
+        if (!IsIndexEntryValid(
                 Entry,
                 (ULONG)(End -
                     reinterpret_cast<ULONG_PTR>(
-                        Entry))) ||
+                        Entry)),
+                ViewIndex) ||
             !(Entry->Flags & INDEX_ENTRY_NODE))
         {
             return STATUS_FILE_CORRUPT_ERROR;
@@ -374,7 +488,8 @@ SplitEntryList(
     _In_ ULONG ListBytes,
     _Out_ PULONG LeftBytes,
     _Out_ PULONG MedianOffset,
-    _Out_ PULONG MedianLength)
+    _Out_ PULONG MedianLength,
+    _In_ BOOLEAN ViewIndex)
 {
     PIndexEntry Entry;
     ULONG Offset = 0;
@@ -390,9 +505,10 @@ SplitEntryList(
         Entry =
             reinterpret_cast<PIndexEntry>(
                 List + Offset);
-        if (!NtfsIsDirectoryIndexEntryValid(
+        if (!IsIndexEntryValid(
                 Entry,
-                ListBytes - Offset))
+                ListBytes - Offset,
+                ViewIndex))
         {
             return STATUS_FILE_CORRUPT_ERROR;
         }
@@ -553,6 +669,7 @@ static NTSTATUS
 WriteIndexNode(
     _In_ PVolume DiskVolume,
     _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
     _In_ ULONGLONG Vcn,
     _In_ ULONGLONG AllocationUnit,
     _In_ ULONG RecordSize,
@@ -585,7 +702,7 @@ WriteIndexNode(
         (LONGLONG)AllocationOffset;
     Status = DirectoryFile->WriteFileData(
         TypeIndexAllocation,
-        const_cast<PWSTR>(NtfsI30Name),
+        const_cast<PWSTR>(IndexName),
         Image,
         &WriteLength,
         &WriteOffset);
@@ -600,6 +717,7 @@ WriteIndexNode(
 static NTSTATUS
 SetIndexRecordBitmapBit(
     _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
     _In_ ULONGLONG RecordOrdinal,
     _In_ BOOLEAN Value)
 {
@@ -621,7 +739,7 @@ SetIndexRecordBitmapBit(
     BitmapAttribute =
         DirectoryFile->GetAttribute(
             TypeBitmap,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     if (!BitmapAttribute)
         return STATUS_FILE_CORRUPT_ERROR;
     BitmapLength =
@@ -641,7 +759,7 @@ SetIndexRecordBitmapBit(
             (LONGLONG)BitmapLength;
         Status = DirectoryFile->WriteFileData(
             TypeBitmap,
-            const_cast<PWSTR>(NtfsI30Name),
+            const_cast<PWSTR>(IndexName),
             GrowthChunk,
             &WriteLength,
             &WriteOffset);
@@ -652,7 +770,7 @@ SetIndexRecordBitmapBit(
         BitmapAttribute =
             DirectoryFile->GetAttribute(
                 TypeBitmap,
-                const_cast<PWSTR>(NtfsI30Name));
+                const_cast<PWSTR>(IndexName));
         if (!BitmapAttribute)
             return STATUS_FILE_CORRUPT_ERROR;
     }
@@ -683,7 +801,7 @@ SetIndexRecordBitmapBit(
     WriteOffset.QuadPart = (LONGLONG)ByteOffset;
     Status = DirectoryFile->WriteFileData(
         TypeBitmap,
-        const_cast<PWSTR>(NtfsI30Name),
+        const_cast<PWSTR>(IndexName),
         &BitmapByte,
         &WriteLength,
         &WriteOffset);
@@ -701,6 +819,7 @@ SetIndexRecordBitmapBit(
 static NTSTATUS
 SelectIndexRecordSlot(
     _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
     _In_ ULONG RecordSize,
     _In_ ULONGLONG AllocationUnit,
     _Out_ PULONGLONG Vcn,
@@ -722,11 +841,11 @@ SelectIndexRecordSlot(
     IndexAllocationAttribute =
         DirectoryFile->GetAttribute(
             TypeIndexAllocation,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     BitmapAttribute =
         DirectoryFile->GetAttribute(
             TypeBitmap,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     if (!IndexAllocationAttribute ||
         !IndexAllocationAttribute->
             IsNonResident ||
@@ -803,6 +922,7 @@ NTSTATUS
 Directory::ReplaceIndexRootValue(
     _In_ PVolume DiskVolume,
     _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
     _In_reads_bytes_(ValueLength) PUCHAR Value,
     _In_ ULONG ValueLength)
 {
@@ -814,7 +934,7 @@ Directory::ReplaceIndexRootValue(
     IndexRootAttribute =
         DirectoryFile->GetAttribute(
             TypeIndexRoot,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     if (!IndexRootAttribute ||
         IndexRootAttribute->IsNonResident)
     {
@@ -929,6 +1049,7 @@ NTSTATUS
 Directory::PushDownRoot(
     _In_ PVolume DiskVolume,
     _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
     _In_ const IndexRootEx* OldRoot,
     _In_reads_bytes_(ListBytes) PUCHAR List,
     _In_ ULONG ListBytes,
@@ -967,11 +1088,11 @@ Directory::PushDownRoot(
     IndexAllocationAttribute =
         DirectoryFile->GetAttribute(
             TypeIndexAllocation,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     BitmapAttribute =
         DirectoryFile->GetAttribute(
             TypeBitmap,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     if (!IndexAllocationAttribute !=
         !BitmapAttribute)
     {
@@ -1037,7 +1158,7 @@ Directory::PushDownRoot(
         IndexRootAttribute =
             DirectoryFile->GetAttribute(
                 TypeIndexRoot,
-                const_cast<PWSTR>(NtfsI30Name));
+                const_cast<PWSTR>(IndexName));
         if (!IndexRootAttribute ||
             IndexRootAttribute->IsNonResident)
         {
@@ -1097,7 +1218,7 @@ Directory::PushDownRoot(
                     InsertResidentAttribute(
                         TypeBitmap,
                         const_cast<PWSTR>(
-                            NtfsI30Name),
+                            IndexName),
                         &NewAttribute);
         }
         if (NT_SUCCESS(Status))
@@ -1116,7 +1237,7 @@ Directory::PushDownRoot(
                     InsertResidentAttribute(
                         TypeIndexAllocation,
                         const_cast<PWSTR>(
-                            NtfsI30Name),
+                            IndexName),
                         &NewAttribute);
         }
         if (NT_SUCCESS(Status))
@@ -1140,7 +1261,7 @@ Directory::PushDownRoot(
                         EnsureAttributeListForMappingGrowth(
                             TypeIndexAllocation,
                             const_cast<PWSTR>(
-                                NtfsI30Name),
+                                IndexName),
                             &NewAttribute,
                             &AllocationOwner,
                             &ListCreated);
@@ -1208,6 +1329,7 @@ Directory::PushDownRoot(
     {
         Status = SelectIndexRecordSlot(
             DirectoryFile,
+            IndexName,
             RecordSize,
             AllocationUnit,
             &Vcn,
@@ -1229,6 +1351,7 @@ Directory::PushDownRoot(
         Status = WriteIndexNode(
             DiskVolume,
             DirectoryFile,
+            IndexName,
             Vcn,
             AllocationUnit,
             RecordSize,
@@ -1237,6 +1360,7 @@ Directory::PushDownRoot(
             goto Done;
         Status = SetIndexRecordBitmapBit(
             DirectoryFile,
+            IndexName,
             RecordOrdinal,
             TRUE);
         if (!NT_SUCCESS(Status))
@@ -1264,6 +1388,7 @@ Directory::PushDownRoot(
     Status = ReplaceIndexRootValue(
         DiskVolume,
         DirectoryFile,
+        IndexName,
         RootValue,
         RootValueLength);
     if (!NT_SUCCESS(Status))
@@ -1271,6 +1396,7 @@ Directory::PushDownRoot(
         NTSTATUS CleanupStatus =
             SetIndexRecordBitmapBit(
                 DirectoryFile,
+                IndexName,
                 RecordOrdinal,
                 FALSE);
         if (!NT_SUCCESS(CleanupStatus))
@@ -1339,6 +1465,7 @@ static NTSTATUS
 ReadIndexNode(
     _In_ PVolume DiskVolume,
     _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
     _In_ ULONG RecordSize,
     _In_ ULONGLONG AllocationUnit,
     _In_ ULONGLONG Vcn,
@@ -1360,11 +1487,11 @@ ReadIndexNode(
     IndexAllocationAttribute =
         DirectoryFile->GetAttribute(
             TypeIndexAllocation,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     BitmapAttribute =
         DirectoryFile->GetAttribute(
             TypeBitmap,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     if (!IndexAllocationAttribute ||
         !IndexAllocationAttribute->
             IsNonResident ||
@@ -1448,6 +1575,8 @@ NTSTATUS
 Directory::SplitAndPromote(
     _In_ PVolume DiskVolume,
     _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
+    _In_ BOOLEAN ViewIndex,
     _In_ ULONG RecordSize,
     _In_ ULONGLONG AllocationUnit,
     _In_reads_(PathDepth)
@@ -1541,6 +1670,7 @@ Directory::SplitAndPromote(
             Status = WriteIndexNode(
                 DiskVolume,
                 DirectoryFile,
+                IndexName,
                 NodeVcn,
                 AllocationUnit,
                 RecordSize,
@@ -1553,12 +1683,14 @@ Directory::SplitAndPromote(
             ListBytes,
             &LeftBytes,
             &MedianOffset,
-            &MedianLength);
+            &MedianLength,
+            ViewIndex);
         if (!NT_SUCCESS(Status))
             goto Done;
 
         Status = SelectIndexRecordSlot(
             DirectoryFile,
+            IndexName,
             RecordSize,
             AllocationUnit,
             &NewVcn,
@@ -1587,6 +1719,7 @@ Directory::SplitAndPromote(
         Status = WriteIndexNode(
             DiskVolume,
             DirectoryFile,
+            IndexName,
             NewVcn,
             AllocationUnit,
             RecordSize,
@@ -1595,6 +1728,7 @@ Directory::SplitAndPromote(
             goto Done;
         Status = SetIndexRecordBitmapBit(
             DirectoryFile,
+            IndexName,
             NewOrdinal,
             TRUE);
         if (!NT_SUCCESS(Status))
@@ -1631,6 +1765,7 @@ Directory::SplitAndPromote(
         Status = WriteIndexNode(
             DiskVolume,
             DirectoryFile,
+            IndexName,
             NodeVcn,
             AllocationUnit,
             RecordSize,
@@ -1653,6 +1788,7 @@ Directory::SplitAndPromote(
             Status = ReadIndexNode(
                 DiskVolume,
                 DirectoryFile,
+                IndexName,
                 RecordSize,
                 AllocationUnit,
                 PathVcns[Level - 1],
@@ -1665,7 +1801,8 @@ Directory::SplitAndPromote(
             Status = FindChildLinkOffset(
                 ParentHeader,
                 PathVcns[Level],
-                &InsertionOffset);
+                &InsertionOffset,
+                ViewIndex);
             if (!NT_SUCCESS(Status))
                 goto Done;
         }
@@ -1682,7 +1819,7 @@ Directory::SplitAndPromote(
         IndexRootAttribute =
             DirectoryFile->GetAttribute(
                 TypeIndexRoot,
-                const_cast<PWSTR>(NtfsI30Name));
+                const_cast<PWSTR>(IndexName));
         if (!IndexRootAttribute ||
             IndexRootAttribute->IsNonResident ||
             IndexRootAttribute->
@@ -1701,7 +1838,8 @@ Directory::SplitAndPromote(
         Status = FindChildLinkOffset(
             &IndexRoot->Header,
             PathVcns[0],
-            &InsertionOffset);
+            &InsertionOffset,
+            ViewIndex);
         if (!NT_SUCCESS(Status))
             goto Done;
         if (IndexRoot->Header.TotalIndexSize -
@@ -1735,6 +1873,7 @@ Directory::SplitAndPromote(
         Status = ReplaceIndexRootValue(
             DiskVolume,
             DirectoryFile,
+            IndexName,
             RootValue,
             RootValueLength);
         delete[] RootValue;
@@ -1747,6 +1886,7 @@ Directory::SplitAndPromote(
             Status = PushDownRoot(
                 DiskVolume,
                 DirectoryFile,
+                IndexName,
                 IndexRoot,
                 Scratch,
                 ListBytes,
@@ -1906,6 +2046,7 @@ Directory::PushDownResidentRoot(
     Status = PushDownRoot(
         DiskVolume,
         DirectoryFile,
+        NtfsI30Name,
         IndexRoot,
         List,
         ListBytes,
@@ -1917,68 +2058,45 @@ Directory::PushDownResidentRoot(
 }
 
 NTSTATUS
-Directory::AddFileToDirectory(
+Directory::AddIndexEntry(
     _In_ PFileRecord DirectoryFile,
-    _In_ ULONGLONG FileReference,
-    _In_ PFileNameEx FileToAdd)
+    _In_ PCWSTR IndexName,
+    _In_ ULONG IndexedAttributeType,
+    _In_ const IndexSearchKey* Key,
+    _In_ PIndexEntry NewEntry,
+    _In_ ULONG EntryLength)
 {
     PAttribute IndexRootAttribute;
     PAttribute IndexAllocationAttribute;
     PAttribute BitmapAttribute;
     PIndexRootEx IndexRoot;
-    PIndexEntry NewEntry = NULL;
     PUCHAR NewRootData = NULL;
     PUCHAR IndexBufferData = NULL;
-    ULONG EntryLength;
     ULONG InsertionOffset;
     ULONG NewRootDataLength;
     ULONG IndexRecordSize;
     ULONG VisitedCount = 0;
     ULONGLONG ChildVcn;
     ULONGLONG VisitedVcns[64];
-    ULONGLONG ParentReference;
     ULONGLONG AllocationUnit;
-    UNICODE_STRING Name;
     BOOLEAN Descend;
-    BOOLEAN EntryCommitted = FALSE;
-    NTSTATUS TimestampStatus;
     NTSTATUS Status;
 
     if (!DiskVolume || !DirectoryFile ||
         !DirectoryFile->Header ||
         !DirectoryFile->Data ||
-        !FileToAdd ||
-        !(DirectoryFile->Header->Flags &
-          FR_IS_DIRECTORY) ||
+        !IndexName || !Key || !NewEntry ||
         DirectoryFile->Header->SequenceNumber == 0 ||
         DiskVolume->IsReadOnly)
     {
         return STATUS_INVALID_PARAMETER;
     }
-    ParentReference =
-        MakeFileReference(DirectoryFile->Header);
-    if (FileToAdd->ParentFileReference !=
-            ParentReference)
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
     DiskVolume->IndexWorkBufferValid = FALSE;
-
-    Status = BuildIndexEntry(
-        FileReference,
-        FileToAdd,
-        &NewEntry,
-        &EntryLength);
-    if (!NT_SUCCESS(Status))
-        goto Done;
-    Name = NtfsMakeCountedUnicodeString(
-        FileToAdd->Name,
-        FileToAdd->NameLength * sizeof(WCHAR));
 
     IndexRootAttribute =
         DirectoryFile->GetAttribute(
             TypeIndexRoot,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     if (!IndexRootAttribute ||
         IndexRootAttribute->IsNonResident ||
         IndexRootAttribute->
@@ -2008,9 +2126,9 @@ Directory::AddFileToDirectory(
         BytesPerIndexRecord(DiskVolume);
     if (IndexRecordSize == 0 ||
         IndexRoot->AttributeType !=
-            TypeFileName ||
+            IndexedAttributeType ||
         IndexRoot->CollationRule !=
-            ATTRDEF_COLLATION_FILENAME ||
+            Key->CollationRule ||
         IndexRoot->BytesPerIndexRec !=
             IndexRecordSize ||
         IndexRoot->ClusPerIndexRec !=
@@ -2040,7 +2158,7 @@ Directory::AddFileToDirectory(
             Resident.DataLength -
             FIELD_OFFSET(IndexRootEx,
                          Header),
-        &Name,
+        Key,
         &InsertionOffset,
         &ChildVcn,
         &Descend);
@@ -2094,6 +2212,7 @@ Directory::AddFileToDirectory(
         Status = ReplaceIndexRootValue(
             DiskVolume,
             DirectoryFile,
+            IndexName,
             NewRootData,
             NewRootDataLength);
         if (Status == STATUS_BUFFER_TOO_SMALL)
@@ -2105,6 +2224,7 @@ Directory::AddFileToDirectory(
             Status = PushDownRoot(
                 DiskVolume,
                 DirectoryFile,
+                IndexName,
                 IndexRoot,
                 reinterpret_cast<PUCHAR>(
                     NewHeader) +
@@ -2117,18 +2237,17 @@ Directory::AddFileToDirectory(
         }
         if (!NT_SUCCESS(Status))
             goto Done;
-        EntryCommitted = TRUE;
-        goto TouchDirectory;
+        goto Done;
     }
 
     IndexAllocationAttribute =
         DirectoryFile->GetAttribute(
             TypeIndexAllocation,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     BitmapAttribute =
         DirectoryFile->GetAttribute(
             TypeBitmap,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     if (!IndexAllocationAttribute ||
         !IndexAllocationAttribute->
             IsNonResident ||
@@ -2183,6 +2302,7 @@ Directory::AddFileToDirectory(
         Status = ReadIndexNode(
             DiskVolume,
             DirectoryFile,
+            IndexName,
             IndexRecordSize,
             AllocationUnit,
             ChildVcn,
@@ -2200,7 +2320,7 @@ Directory::AddFileToDirectory(
             IndexRecordSize -
                 FIELD_OFFSET(IndexBuffer,
                              IndexHeader),
-            &Name,
+            Key,
             &InsertionOffset,
             &ChildVcn,
             &Descend);
@@ -2229,6 +2349,8 @@ Directory::AddFileToDirectory(
             Status = SplitAndPromote(
                 DiskVolume,
                 DirectoryFile,
+                IndexName,
+                Key->CollationRule != ATTRDEF_COLLATION_FILENAME,
                 IndexRecordSize,
                 AllocationUnit,
                 VisitedVcns,
@@ -2239,7 +2361,6 @@ Directory::AddFileToDirectory(
                 EntryLength);
             if (!NT_SUCCESS(Status))
                 goto Done;
-            EntryCommitted = TRUE;
             break;
         }
         SpliceEntryIntoHeader(
@@ -2251,37 +2372,82 @@ Directory::AddFileToDirectory(
         Status = WriteIndexNode(
             DiskVolume,
             DirectoryFile,
+            IndexName,
             VisitedVcns[VisitedCount - 1],
             AllocationUnit,
             IndexRecordSize,
             IndexBufferData);
         if (!NT_SUCCESS(Status))
             goto Done;
-        EntryCommitted = TRUE;
         break;
-    }
-
-TouchDirectory:
-    if (EntryCommitted)
-    {
-        TimestampStatus =
-            DirectoryFile->TouchDirectory();
-        if (!NT_SUCCESS(TimestampStatus))
-        {
-            DPRINT1(
-                "Directory entry was committed but "
-                "timestamp update failed: 0x%lx.\n",
-                TimestampStatus);
-        }
-        Status = STATUS_SUCCESS;
     }
 
 Done:
     /* Volume-owned scratch. */
     delete[] NewRootData;
-    if (NewEntry)
-        NtfsFreePool(NewEntry);
     return Status;
+}
+
+NTSTATUS
+Directory::AddFileToDirectory(
+    _In_ PFileRecord DirectoryFile,
+    _In_ ULONGLONG FileReference,
+    _In_ PFileNameEx FileToAdd)
+{
+    IndexSearchKey Key;
+    UNICODE_STRING Name;
+    PIndexEntry NewEntry = NULL;
+    ULONG EntryLength;
+    NTSTATUS TimestampStatus;
+    NTSTATUS Status;
+
+    if (!DiskVolume || !DirectoryFile ||
+        !DirectoryFile->Header ||
+        !FileToAdd ||
+        !(DirectoryFile->Header->Flags &
+          FR_IS_DIRECTORY) ||
+        FileToAdd->ParentFileReference !=
+            MakeFileReference(DirectoryFile->Header))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Status = BuildIndexEntry(
+        FileReference,
+        FileToAdd,
+        &NewEntry,
+        &EntryLength);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Name = NtfsMakeCountedUnicodeString(
+        FileToAdd->Name,
+        FileToAdd->NameLength * sizeof(WCHAR));
+    Key.CollationRule = ATTRDEF_COLLATION_FILENAME;
+    Key.Name = &Name;
+    Key.Value = NULL;
+    Key.ValueLength = 0;
+
+    Status = AddIndexEntry(
+        DirectoryFile,
+        NtfsI30Name,
+        TypeFileName,
+        &Key,
+        NewEntry,
+        EntryLength);
+    NtfsFreePool(NewEntry);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    TimestampStatus =
+        DirectoryFile->TouchDirectory();
+    if (!NT_SUCCESS(TimestampStatus))
+    {
+        DPRINT1(
+            "Directory entry was committed but "
+            "timestamp update failed: 0x%lx.\n",
+            TimestampStatus);
+    }
+    return STATUS_SUCCESS;
 }
 
 static void
@@ -2380,6 +2546,7 @@ ReleaseEndOnlyChain(
         Status = ReadIndexNode(
             DiskVolume,
             DirectoryFile,
+            NtfsI30Name,
             RecordSize,
             AllocationUnit,
             ChainVcn,
@@ -2410,6 +2577,7 @@ ReleaseEndOnlyChain(
 
         Status = SetIndexRecordBitmapBit(
             DirectoryFile,
+            NtfsI30Name,
             (ChainVcn * AllocationUnit) /
                 RecordSize,
             FALSE);
@@ -2468,6 +2636,7 @@ RemoveMaxFromSubtree(
     Status = ReadIndexNode(
         DiskVolume,
         DirectoryFile,
+        NtfsI30Name,
         RecordSize,
         AllocationUnit,
         Vcn,
@@ -2593,6 +2762,7 @@ RemoveMaxFromSubtree(
         Status = WriteIndexNode(
             DiskVolume,
             DirectoryFile,
+            NtfsI30Name,
             Vcn,
             AllocationUnit,
             RecordSize,
@@ -2617,6 +2787,7 @@ RemoveMaxFromSubtree(
     Status = WriteIndexNode(
         DiskVolume,
         DirectoryFile,
+        NtfsI30Name,
         Vcn,
         AllocationUnit,
         RecordSize,
@@ -2644,6 +2815,7 @@ Directory::RemoveFileFromDirectory(
     _In_ ULONGLONG FileReference,
     _In_ PUNICODE_STRING Name)
 {
+    IndexSearchKey Key = { ATTRDEF_COLLATION_FILENAME, Name, NULL, 0 };
     PAttribute IndexRootAttribute;
     PIndexRootEx IndexRoot;
     PIndexEntry Matched;
@@ -2727,7 +2899,7 @@ Directory::RemoveFileFromDirectory(
         IndexRootAttribute->
             Resident.DataLength -
             FIELD_OFFSET(IndexRootEx, Header),
-        Name,
+        &Key,
         &MatchOffset,
         &ChildVcn,
         &Descend,
@@ -2773,6 +2945,7 @@ Directory::RemoveFileFromDirectory(
         Status = ReadIndexNode(
             DiskVolume,
             DirectoryFile,
+            NtfsI30Name,
             IndexRecordSize,
             AllocationUnit,
             ChildVcn,
@@ -2789,7 +2962,7 @@ Directory::RemoveFileFromDirectory(
             IndexRecordSize -
                 FIELD_OFFSET(IndexBuffer,
                              IndexHeader),
-            Name,
+            &Key,
             &MatchOffset,
             &ChildVcn,
             &Descend,
@@ -2859,6 +3032,7 @@ Directory::RemoveFileFromDirectory(
             Status = ReplaceIndexRootValue(
                 DiskVolume,
                 DirectoryFile,
+                NtfsI30Name,
                 RootValue,
                 RootPrefix +
                     reinterpret_cast<
@@ -2879,6 +3053,7 @@ Directory::RemoveFileFromDirectory(
             Status = WriteIndexNode(
                 DiskVolume,
                 DirectoryFile,
+                NtfsI30Name,
                 VisitedVcns[VisitedCount - 1],
                 AllocationUnit,
                 IndexRecordSize,
@@ -2958,7 +3133,8 @@ Directory::RemoveFileFromDirectory(
         Status = FindChildLinkOffset(
             &IndexRoot->Header,
             RemovedChild,
-            &MatchOffset);
+            &MatchOffset,
+            FALSE);
         if (!NT_SUCCESS(Status))
             goto Done;
         Matched =
@@ -3034,6 +3210,7 @@ Directory::RemoveFileFromDirectory(
         Status = ReplaceIndexRootValue(
             DiskVolume,
             DirectoryFile,
+            NtfsI30Name,
             RootValue,
             ReplacementLength);
         if (Status == STATUS_BUFFER_TOO_SMALL)
@@ -3041,6 +3218,7 @@ Directory::RemoveFileFromDirectory(
             Status = PushDownRoot(
                 DiskVolume,
                 DirectoryFile,
+                NtfsI30Name,
                 IndexRoot,
                 Scratch,
                 ListBytes,
@@ -3066,6 +3244,8 @@ Directory::RemoveFileFromDirectory(
             Status = SplitAndPromote(
                 DiskVolume,
                 DirectoryFile,
+                NtfsI30Name,
+                FALSE,
                 IndexRecordSize,
                 AllocationUnit,
                 VisitedVcns,
@@ -3080,6 +3260,7 @@ Directory::RemoveFileFromDirectory(
             Status = WriteIndexNode(
                 DiskVolume,
                 DirectoryFile,
+                NtfsI30Name,
                 VisitedVcns[VisitedCount - 1],
                 AllocationUnit,
                 IndexRecordSize,

@@ -705,6 +705,12 @@ public:
         _In_opt_ PUCHAR Buffer,
         _Inout_ PULONG BufferLength);
 
+    NTSTATUS
+    AssignSecurityId(
+        _In_reads_bytes_(DescriptorLength) const UCHAR* Descriptor,
+        _In_ ULONG DescriptorLength,
+        _Out_ PULONG SecurityId);
+
 private:
     PAttrDefCacheEntry AttrDefCache = NULL;
     ULONG AttrDefCacheCount = 0;
@@ -1014,6 +1020,12 @@ private:
         _In_ ULONG FinalLength);
 
     NTSTATUS
+    ApplySecurityId(_In_ ULONG SecurityId);
+
+    NTSTATUS
+    ApplyListedSecurityId(_In_ ULONG SecurityId);
+
+    NTSTATUS
     ReplaceSecurityDescriptorData(
         _In_reads_bytes_(BufferLength) const UCHAR* Buffer,
         _In_ ULONG BufferLength);
@@ -1230,6 +1242,14 @@ protected:
     PBTreeKey CurrentKey;
 };
 
+typedef struct IndexSearchKey
+{
+    ULONG CollationRule;
+    PUNICODE_STRING Name;
+    const UCHAR* Value;
+    ULONG ValueLength;
+} IndexSearchKey, *PIndexSearchKey;
+
 typedef class Directory : BTree
 {
 public:
@@ -1261,6 +1281,15 @@ public:
                  _Out_ PNtfsDirectoryEntry Entry);
 
     // ./editdir.cpp
+    NTSTATUS
+    AddIndexEntry(
+        _In_ PFileRecord DirectoryFile,
+        _In_ PCWSTR IndexName,
+        _In_ ULONG IndexedAttributeType,
+        _In_ const IndexSearchKey* Key,
+        _In_ PIndexEntry NewEntry,
+        _In_ ULONG EntryLength);
+
     NTSTATUS
     AddFileToDirectory(
         _In_ PFileRecord DirectoryFile,
@@ -1316,6 +1345,7 @@ private:
     ReplaceIndexRootValue(
         _In_ PVolume DiskVolume,
         _In_ PFileRecord DirectoryFile,
+        _In_ PCWSTR IndexName,
         _In_reads_bytes_(ValueLength) PUCHAR Value,
         _In_ ULONG ValueLength);
 
@@ -1323,6 +1353,7 @@ private:
     PushDownRoot(
         _In_ PVolume DiskVolume,
         _In_ PFileRecord DirectoryFile,
+        _In_ PCWSTR IndexName,
         _In_ const IndexRootEx* OldRoot,
         _In_reads_bytes_(ListBytes) PUCHAR List,
         _In_ ULONG ListBytes,
@@ -1334,6 +1365,8 @@ private:
     SplitAndPromote(
         _In_ PVolume DiskVolume,
         _In_ PFileRecord DirectoryFile,
+        _In_ PCWSTR IndexName,
+        _In_ BOOLEAN ViewIndex,
         _In_ ULONG RecordSize,
         _In_ ULONGLONG AllocationUnit,
         _In_reads_(PathDepth) const ULONGLONG* PathVcns,
