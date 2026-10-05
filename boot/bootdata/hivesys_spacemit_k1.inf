@@ -5,35 +5,21 @@
 
 [AddReg]
 
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_k1-x-dwc3","Service",0x00000000,"k1xdwc3"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_k1-x-dwc3","ClassGUID",0x00000000,"{36FC9E60-C465-11CF-8056-444553540000}"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#snps_dwc3","Service",0x00000000,"usbxhci"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#snps_dwc3","ClassGUID",0x00000000,"{36FC9E60-C465-11CF-8056-444553540000}"
-
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_k1-x-sdhci","Service",0x00000000,"sdbus"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_k1-x-sdhci","ClassGUID",0x00000000,"{a0a588a4-c46f-4b37-b7ea-c82fe89870c6}"
-
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xdwc3","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xdwc3","Group",0x00000000,"Boot Bus Extender"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xdwc3","ImagePath",0x00020000,"system32\drivers\k1xdwc3.sys"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xdwc3","Start",0x00010001,0x00000000
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xdwc3","Type",0x00010001,0x00000001
 
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_i2c","Service",0x00000000,"k1xpmic"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_i2c","ClassGUID",0x00000000,"{4D36E97D-E325-11CE-BFC1-08002BE10318}"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xpmic","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xpmic","ImagePath",0x00020000,"system32\drivers\k1xpmic.sys"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xpmic","Start",0x00010001,0x00000003
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xpmic","Type",0x00010001,0x00000001
 
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_k1x-tsensor","Service",0x00000000,"k1xthermal"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_k1x-tsensor","ClassGUID",0x00000000,"{4D36E97D-E325-11CE-BFC1-08002BE10318}"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xthermal","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xthermal","ImagePath",0x00020000,"system32\drivers\k1xthermal.sys"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xthermal","Start",0x00010001,0x00000003
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xthermal","Type",0x00010001,0x00000001
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_k1x-wdt","Service",0x00000000,"k1xwdt"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_k1x-wdt","ClassGUID",0x00000000,"{4D36E97D-E325-11CE-BFC1-08002BE10318}"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xwdt","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xwdt","ImagePath",0x00020000,"system32\drivers\k1xwdt.sys"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xwdt","Start",0x00010001,0x00000003

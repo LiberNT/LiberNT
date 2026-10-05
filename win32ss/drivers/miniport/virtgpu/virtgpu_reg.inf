@@ -1,10 +1,6 @@
 ; VirtIO GPU miniport service registration
 
 [AddReg]
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#VEN_1AF4&DEV_1050","ClassGUID",0x00000000,"{4D36E968-E325-11CE-BFC1-08002BE10318}"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#VEN_1AF4&DEV_1050","Service",0x00000000,"virtgpu"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#VEN_1AF4&DEV_1000&SUBSYS_00101AF4","ClassGUID",0x00000000,"{4D36E968-E325-11CE-BFC1-08002BE10318}"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#VEN_1AF4&DEV_1000&SUBSYS_00101AF4","Service",0x00000000,"virtgpu"
 
 HKLM,"SYSTEM\CurrentControlSet\Services\virtgpu","ErrorControl",0x00010001,0x00000000
 HKLM,"SYSTEM\CurrentControlSet\Services\virtgpu","Group",0x00000000,"Video"

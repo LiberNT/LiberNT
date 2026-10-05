@@ -6,25 +6,6 @@
 
 [AddReg]
 
-; The RPi3 UEFI publishes VC4 V3D, HVS, PixelValve and HDMI resources under
-; the physical display adapter ACPI\BCM2850. Bind the profile-owned WDDM
-; miniport to that device.
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\ACPI#BCM2850","Service",0x00000000,"rpi3vc4"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\ACPI#BCM2850","ClassGUID",0x00000000,"{4D36E968-E325-11CE-BFC1-08002BE10318}"
-
-; The RPi3 UEFI ACPI tables expose the Arasan SDHCI controller as BCM2847.
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\ACPI#BCM2847","Service",0x00000000,"sdbus"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\ACPI#BCM2847","ClassGUID",0x00000000,"{a0a588a4-c46f-4b37-b7ea-c82fe89870c6}"
-
-; The RPi3 firmware can route the boot SD slot to the BCM2835 SDHost.
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\ACPI#BCM2855","Service",0x00000000,"sdbus"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\ACPI#BCM2855","ClassGUID",0x00000000,"{a0a588a4-c46f-4b37-b7ea-c82fe89870c6}"
-
-; Start DWC2 early enough for USB mass storage and the onboard LAN951x path.
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\ACPI#BCM2848","Service",0x00000000,"usbdwc2"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\ACPI#BCM2848","ClassGUID",0x00000000,"{36FC9E60-C465-11CF-8056-444553540000}"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\ACPI#DWC_OTG","Service",0x00000000,"usbdwc2"
-HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\ACPI#DWC_OTG","ClassGUID",0x00000000,"{36FC9E60-C465-11CF-8056-444553540000}"
 HKLM,"SYSTEM\CurrentControlSet\Services\usbdwc2","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\usbdwc2","Group",0x00000000,"Boot Bus Extender"
 HKLM,"SYSTEM\CurrentControlSet\Services\usbdwc2","ImagePath",0x00020000,"system32\drivers\usbdwc2.sys"

@@ -2,8 +2,8 @@
 ;
 ; rpi5vc4 is a demand-started WDDM miniport bound to the real GPU hardware.
 ; The Pi5 UEFI firmware exposes the VideoCore VII GPU + HVS/PixelValve pipeline
-; as ACPI device _HID "BCM2712"; the CriticalDeviceDatabase seed in
-; hivesys_rpi5.inf binds that Pi 5-specific ID to this service via dxgkrnl; no
+; as ACPI device _HID "BCM2712"; the driver database entry from rpi5vc4.inf
+; binds that Pi 5-specific ID to this service via dxgkrnl; no
 ; synthetic root devnode is created.
 ; rpi5vc4.sys therefore loads only when Pi 5 firmware publishes the GPU node.
 
@@ -40,4 +40,4 @@ HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\Rpi5Vc4","Flags
 ; synchronously, keeping automated shutdown behind the visible result prompt.
 HKLM,"SOFTWARE\ReactOS\BootDiagnostics","Direct3D78",0x00010001,0x00000001
 ; No synthetic Root devnode: PnP enumerates the real ACPI\BCM2712 GPU node and
-; the CriticalDeviceDatabase seed (hivesys_rpi5.inf) binds it to this service.
+; the driver database entry from rpi5vc4.inf binds it to this service.
