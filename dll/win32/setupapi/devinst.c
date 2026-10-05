@@ -1813,18 +1813,32 @@ BOOL WINAPI SetupDiCreateDeviceInfoW(
         deviceInfo->Phantom = TRUE;
         InsertTailList(&set->ListHead, &deviceInfo->ListEntry);
 
+        SP_DEVINFO_DATA ClassData;
+
+        ClassData.cbSize = sizeof(ClassData);
+        ClassData.ClassGuid = *ClassGuid;
+        ClassData.DevInst = deviceInfo->dnDevInst;
+        ClassData.Reserved = (ULONG_PTR)deviceInfo;
+
         if (!IsEqualGUID(ClassGuid, &GUID_NULL))
         {
-            SP_DEVINFO_DATA ClassData;
             WCHAR ClassGuidString[39];
+            WCHAR ClassName[MAX_CLASS_NAME_LEN];
 
-            ClassData.cbSize = sizeof(ClassData);
-            ClassData.ClassGuid = *ClassGuid;
-            ClassData.DevInst = deviceInfo->dnDevInst;
-            ClassData.Reserved = (ULONG_PTR)deviceInfo;
             SETUPDI_GuidToString(ClassGuid, ClassGuidString);
             SetupDiSetDeviceRegistryPropertyW(set, &ClassData, SPDRP_CLASSGUID, (const BYTE *)ClassGuidString,
                                               sizeof(ClassGuidString));
+            if (SetupDiClassNameFromGuidW(ClassGuid, ClassName, ARRAYSIZE(ClassName), NULL))
+            {
+                SetupDiSetDeviceRegistryPropertyW(set, &ClassData, SPDRP_CLASS, (const BYTE *)ClassName,
+                                                  (strlenW(ClassName) + 1) * sizeof(WCHAR));
+            }
+        }
+
+        if (DeviceDescription)
+        {
+            SetupDiSetDeviceRegistryPropertyW(set, &ClassData, SPDRP_DEVICEDESC, (const BYTE *)DeviceDescription,
+                                              (strlenW(DeviceDescription) + 1) * sizeof(WCHAR));
         }
 
         if (!DeviceInfoData)
