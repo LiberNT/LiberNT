@@ -50,6 +50,12 @@
 /* Maximum paths in the topology. */
 #define DXGKP_MAX_PATHS     16
 
+/* Upper bound on multisampling methods recorded per VidPN source through
+ * pfnAssignMultisamplingMethodSet.  D3D exposes sample counts 1..16 with a
+ * quality range each, so 32 entries covers every method a miniport can
+ * legitimately report. */
+#define DXGKP_MAX_MULTISAMPLING_METHODS 32
+
 /* ========================================================================
  * DXGKP_VIDPN_SOURCE_MODESET - Internal source mode set object
  *
@@ -247,6 +253,17 @@ typedef struct _DXGKP_VIDPN
 
     /* ---- Per-target monitor source mode sets ---- */
     PDXGKP_MONITOR_SOURCE_MODESET   MonitorModeSets[DXGKP_MAX_TARGETS];
+
+    /* ---- Per-source multisampling method sets ---- */
+    /* Recorded by pfnAssignMultisamplingMethodSet.  For source i, entries
+     * [0..NumMultisamplingMethods[i]-1] of MultisamplingMethods[i] are the
+     * methods the miniport reported as supported.  A count of zero means the
+     * source supports no multisampling, which is distinct from never having
+     * been assigned -- MultisamplingMethodsAssigned[i] records that. */
+    D3DDDI_MULTISAMPLINGMETHOD      MultisamplingMethods[DXGKP_MAX_SOURCES]
+                                                        [DXGKP_MAX_MULTISAMPLING_METHODS];
+    SIZE_T                          NumMultisamplingMethods[DXGKP_MAX_SOURCES];
+    BOOLEAN                         MultisamplingMethodsAssigned[DXGKP_MAX_SOURCES];
 
     /* ---- Scratch storage for newly created objects ---- */
 

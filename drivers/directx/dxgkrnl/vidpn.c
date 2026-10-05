@@ -95,7 +95,7 @@ static NTSTATUS APIENTRY VidPn_AcquireSourceModeSet(D3DKMDT_HVIDPN, D3DDDI_VIDEO
 static NTSTATUS APIENTRY VidPn_ReleaseSourceModeSet(D3DKMDT_HVIDPN, D3DKMDT_HVIDPNSOURCEMODESET);
 static NTSTATUS APIENTRY VidPn_CreateNewSourceModeSet(D3DKMDT_HVIDPN, D3DDDI_VIDEO_PRESENT_SOURCE_ID, D3DKMDT_HVIDPNSOURCEMODESET*, CONST DXGK_VIDPNSOURCEMODESET_INTERFACE**);
 static NTSTATUS APIENTRY VidPn_AssignSourceModeSet(D3DKMDT_HVIDPN, D3DDDI_VIDEO_PRESENT_SOURCE_ID, D3DKMDT_HVIDPNSOURCEMODESET);
-static NTSTATUS APIENTRY VidPn_AssignMultisamplingMethodSet(D3DKMDT_HVIDPN, D3DDDI_VIDEO_PRESENT_SOURCE_ID, CONST D3DDDI_MULTISAMPLINGMETHOD*);
+static NTSTATUS APIENTRY VidPn_AssignMultisamplingMethodSet(D3DKMDT_HVIDPN, D3DDDI_VIDEO_PRESENT_SOURCE_ID, CONST SIZE_T, CONST D3DDDI_MULTISAMPLINGMETHOD*);
 static NTSTATUS APIENTRY VidPn_AcquireTargetModeSet(D3DKMDT_HVIDPN, D3DDDI_VIDEO_PRESENT_TARGET_ID, D3DKMDT_HVIDPNTARGETMODESET*, CONST DXGK_VIDPNTARGETMODESET_INTERFACE**);
 static NTSTATUS APIENTRY VidPn_ReleaseTargetModeSet(D3DKMDT_HVIDPN, D3DKMDT_HVIDPNTARGETMODESET);
 static NTSTATUS APIENTRY VidPn_CreateNewTargetModeSet(D3DKMDT_HVIDPN, D3DDDI_VIDEO_PRESENT_TARGET_ID, D3DKMDT_HVIDPNTARGETMODESET*, CONST DXGK_VIDPNTARGETMODESET_INTERFACE**);
@@ -3482,14 +3482,27 @@ VidPn_AssignSourceModeSet(
     return STATUS_SUCCESS;
 }
 
+/*
+ * VidPn_AssignMultisamplingMethodSet
+ *
+ * Records the multisampling methods a miniport reports as supported for one
+ * VidPN source.  The set replaces any previously assigned set for that
+ * source; a count of zero clears it, meaning the source supports no
+ * multisampling at all.
+ *
+ * Takes NumMethods as its third argument, matching
+ * DXGKDDI_VIDPN_ASSIGNMULTISAMPLINGMETHODSET in the Windows WDK.  Omitting it
+ * left the method array unreadable, because the count is what bounds it.
+ */
 static NTSTATUS APIENTRY
 VidPn_AssignMultisamplingMethodSet(
     _In_ D3DKMDT_HVIDPN                               hVidPn,
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID                VidPnSourceId,
-    _In_ CONST D3DDDI_MULTISAMPLINGMETHOD*            pMultisamplingMethod)
+    _In_ CONST SIZE_T                                  NumMethods,
+    _In_reads_(NumMethods) CONST D3DDDI_MULTISAMPLINGMETHOD* pSupportedMethodSet)
 {
     PDXGKP_VIDPN VidPn;
-    UNREFERENCED_PARAMETER(pMultisamplingMethod);
+    SIZE_T       Index;
 
     VidPn = DxgkpVidPnFromHandle(hVidPn);
     if (VidPn == NULL)
@@ -3498,6 +3511,50 @@ VidPn_AssignMultisamplingMethodSet(
     if (VidPnSourceId >= VidPn->NumSources)
         return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE;
 
+    /* A non-empty set must come with the array that holds it. */
+    if (NumMethods != 0 && pSupportedMethodSet == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    if (NumMethods > DXGKP_MAX_MULTISAMPLING_METHODS)
+    {
+        DXGKRNL_WARN("VidPn_AssignMultisamplingMethodSet: source %lu reported "
+                     "%Iu methods, only %u can be recorded\n",
+                     VidPnSourceId, NumMethods,
+                     DXGKP_MAX_MULTISAMPLING_METHODS);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* Every method must describe at least one sample, and the quality range
+     * starts at 0 and is inclusive, so a level count of 0 is meaningless. */
+    for (Index = 0; Index < NumMethods; Index++)
+    {
+        if (pSupportedMethodSet[Index].NumSamples == 0 ||
+            pSupportedMethodSet[Index].NumQualityLevels == 0)
+        {
+            DXGKRNL_WARN("VidPn_AssignMultisamplingMethodSet: source %lu "
+                         "method %Iu invalid (samples=%u quality=%u)\n",
+                         VidPnSourceId, Index,
+                         pSupportedMethodSet[Index].NumSamples,
+                         pSupportedMethodSet[Index].NumQualityLevels);
+            return STATUS_INVALID_PARAMETER;
+        }
+    }
+
+    if (NumMethods != 0)
+    {
+        RtlCopyMemory(VidPn->MultisamplingMethods[VidPnSourceId],
+                      pSupportedMethodSet,
+                      NumMethods * sizeof(D3DDDI_MULTISAMPLINGMETHOD));
+    }
+    RtlZeroMemory(&VidPn->MultisamplingMethods[VidPnSourceId][NumMethods],
+                  (DXGKP_MAX_MULTISAMPLING_METHODS - NumMethods) *
+                      sizeof(D3DDDI_MULTISAMPLINGMETHOD));
+
+    VidPn->NumMultisamplingMethods[VidPnSourceId]      = NumMethods;
+    VidPn->MultisamplingMethodsAssigned[VidPnSourceId] = TRUE;
+
+    DXGKRNL_TRACE("VidPn_AssignMultisamplingMethodSet: source %lu recorded "
+                  "%Iu method(s)\n", VidPnSourceId, NumMethods);
     return STATUS_SUCCESS;
 }
 
