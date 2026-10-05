@@ -12886,7 +12886,7 @@ DxgkAdapterStart(
             ConnectParams.MessageBased.MessageServiceRoutine =
                 DxgkpMessageIsrTrampoline;
             ConnectParams.MessageBased.ServiceContext = Adapter;
-            ConnectParams.MessageBased.SpinLock = NULL;
+            ConnectParams.MessageBased.SpinLock = &Adapter->InterruptMessageLock;
             ConnectParams.MessageBased.SynchronizeIrql =
                 Adapter->InterruptLevel;
             ConnectParams.MessageBased.FloatingSave = FALSE;
@@ -15665,6 +15665,7 @@ DxgkpAddDeviceRegistered(
     ExInitializeWorkItem(&Adapter->SchedulerClassKickWorkItem, DxgkpSchedulerClassKickWorker, Adapter);
     ExInitializeFastMutex(&Adapter->PageTablePoolLock);
     KeInitializeSpinLock(&Adapter->PagingBufferPoolLock);
+    KeInitializeSpinLock(&Adapter->InterruptMessageLock);
     InitializeListHead(&Adapter->PagingBufferPoolList);
     KeInitializeEvent(&Adapter->PagingBufferPoolEvent, SynchronizationEvent, FALSE);
     Adapter->PagingVirtualReady = 0;

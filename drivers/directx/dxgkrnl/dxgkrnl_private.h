@@ -875,6 +875,7 @@ struct _DXGKRNL_ADAPTER
      */
     PKINTERRUPT                 InterruptObject;
     PIO_INTERRUPT_MESSAGE_INFO  InterruptMessageTable;
+    KSPIN_LOCK                  InterruptMessageLock;
     BOOLEAN                     InterruptMessageBased;
     ULONG                       InterruptMessageCount;
 
