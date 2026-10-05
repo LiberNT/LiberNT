@@ -1046,6 +1046,7 @@ SpbCxDdiDeviceInitialize(
 
     WDF_IO_QUEUE_CONFIG_INIT(&QueueConfig, WdfIoQueueDispatchManual);
     QueueConfig.PowerManaged = WdfFalse;
+    QueueConfig.Driver = WdfGetDriver();
     Status = WdfIoQueueCreate(DeviceHandle, &QueueConfig, WDF_NO_OBJECT_ATTRIBUTES, &Device->WaitQueue);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -1058,6 +1059,7 @@ SpbCxDdiDeviceInitialize(
     QueueConfig.EvtIoInternalDeviceControl = SpbCxEvtIoDeviceControl;
     QueueConfig.EvtIoDefault = SpbCxEvtIoDefault;
     QueueConfig.EvtIoStop = SpbCxEvtIoStop;
+    QueueConfig.Driver = WdfGetDriver();
 
     Status = WdfIoQueueCreate(DeviceHandle, &QueueConfig, WDF_NO_OBJECT_ATTRIBUTES, &Device->Queue);
     if (!NT_SUCCESS(Status))
