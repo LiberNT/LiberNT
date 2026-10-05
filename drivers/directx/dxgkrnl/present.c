@@ -4021,6 +4021,42 @@ DxgkpSetMmioOverlays(
     return NT_SUCCESS(Call->Status);
 }
 
+/* Flip offers re-made after a pending-flip STATUS_RETRY, one per v-sync. */
+#define DXGKP_MMIO_FLIP_RETRY_LIMIT        4
+/* Longest wait for the v-sync that retires pending flips (50 ms). */
+#define DXGKP_MMIO_FLIP_RETRY_WAIT_100NS   (50 * 10000LL)
+
+/*
+ * DxgkpWaitForNextMmioVsync
+ *
+ * Waits, bounded, for the next v-sync on the queue's source: the point at
+ * which a driver's pending flips retire and its flip queue has room again.
+ */
+static NTSTATUS
+DxgkpWaitForNextMmioVsync(
+    _In_ PDXGKRNL_PRESENT_QUEUE Queue)
+{
+    PDXGKRNL_ADAPTER Adapter = Queue->Adapter;
+    ULONG SourceId = Queue->VidPnSourceId;
+    LONG64 Start = InterlockedCompareExchange64(&Adapter->VsyncScanoutSequence[SourceId], 0, 0);
+    ULONGLONG Began = KeQueryInterruptTime();
+    LARGE_INTEGER Timeout;
+
+    Timeout.QuadPart = -(10 * 10000LL);
+    while (InterlockedCompareExchange64(&Adapter->VsyncScanoutSequence[SourceId], 0, 0) == Start)
+    {
+        if (InterlockedCompareExchange(&Adapter->PresentQueueStopping, 0, 0) != 0 ||
+            InterlockedCompareExchange(&Adapter->VBlankResetActive, 0, 0) != 0)
+        {
+            return STATUS_DEVICE_REMOVED;
+        }
+        if (KeQueryInterruptTime() - Began >= DXGKP_MMIO_FLIP_RETRY_WAIT_100NS)
+            return STATUS_IO_TIMEOUT;
+        (VOID)KeWaitForSingleObject(&Queue->MmioVSyncEvent, Executive, KernelMode, FALSE, &Timeout);
+    }
+    return STATUS_SUCCESS;
+}
+
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)
 typedef struct _DXGKP_MMIO_MPO3_CALL
 {
@@ -4093,6 +4129,7 @@ DxgkpExecuteMmioFlip(
     BOOLEAN DriverCalled = FALSE;
     BOOLEAN ScanoutLease = FALSE;
     BOOLEAN Synchronized;
+    ULONG FlipRetry;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -4297,6 +4334,43 @@ DxgkpExecuteMmioFlip(
             }
             _SEH2_END;
         }
+        /*
+         * STATUS_RETRY without PrePresentNeeded means the driver could not
+         * queue the flip behind ones still pending.  Those retire at v-sync,
+         * so offer the flip again after the next one, a bounded number of
+         * times.  A driver that asked for PASSIVE_LEVEL keeps being called
+         * there.
+         */
+        for (FlipRetry = 0;
+             Status == STATUS_RETRY && !Mpo3Call.Args.OutputFlags.PrePresentNeeded &&
+             FlipRetry < DXGKP_MMIO_FLIP_RETRY_LIMIT;
+             FlipRetry++)
+        {
+            if (!NT_SUCCESS(DxgkpWaitForNextMmioVsync(Queue)))
+                break;
+            Mpo3Call.Args.OutputFlags.Value = 0;
+            Mpo3Call.Plane.OutputFlags.Value = 0;
+            if (Mpo3Call.Args.InputFlags.RetryAtLowerIrql)
+            {
+                Mpo3Call.ArmSequence = InterlockedCompareExchange64(&Adapter->VsyncScanoutSequence[Entry->VidPnSourceId], 0, 0);
+                _SEH2_TRY
+                {
+                    Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3)(
+                                 Adapter->MiniportDeviceContext, &Mpo3Call.Args);
+                }
+                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                {
+                    Status = _SEH2_GetExceptionCode();
+                }
+                _SEH2_END;
+            }
+            else
+            {
+                Status = DxgkSynchronizeScanoutExecution(Adapter, DxgkpSetMmioMpo3, &Mpo3Call, &Synchronized);
+                if (NT_SUCCESS(Status))
+                    Status = Mpo3Call.Status;
+            }
+        }
         FlipCall.ArmSequence = Mpo3Call.ArmSequence;
         WaitPresentId = Entry->PresentId;
         Mpo3CompleteOnReturn =
@@ -4392,7 +4466,10 @@ Cleanup:
         DxgkEndKmdTransaction(Adapter);
     if (!NT_SUCCESS(Status) && DriverCalled)
     {
-        Queue->MmioFailureStatus = Status;
+        /* STATUS_RETRY is the driver saying "not now"; this present fails,
+         * but the queue stays open for the next one. */
+        if (Status != STATUS_RETRY)
+            Queue->MmioFailureStatus = Status;
         DxgkDeviceCompletePresent(Entry->Device, Entry->DeviceWork, Status);
         DXGKRNL_WARN("DxgkpExecuteMmioFlip: PresentId=%llu failed 0x%08lX "
                      "source=0x%X address=0x%I64x observed=0x%I64x "
