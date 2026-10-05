@@ -2923,6 +2923,133 @@ DxgkpWaitForPresentWrites(
     return Status;
 }
 
+/* Passes one present may take before translation is deemed stuck. */
+#define DXGKP_PRESENT_MAX_PASSES 64
+
+/*
+ * DxgkpPresentAcquireDmaPass
+ *
+ * Takes a fresh DMA buffer for one DxgkDdiPresent pass and points the present
+ * arguments at it.  A present whose sub-rectangles outgrow one buffer is
+ * translated over several: the driver returns
+ * STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER, the written part is submitted, and
+ * the driver is called again with a new buffer and the same rectangles.  Each
+ * pass needs its own buffer and private data, a clean patch list and, for a
+ * GPU-VA present, the source and destination mapped into that buffer's own
+ * virtual backing.  MultipassOffset is left alone: it is the driver's.
+ *
+ * On failure *OutDmaBuffer may still be set; the caller's cleanup frees it.
+ */
+static NTSTATUS
+DxgkpPresentAcquireDmaPass(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_DEVICE Device,
+    _In_ PDXGKRNL_PRESENT_ENTRY Entry,
+    _In_ BOOLEAN VirtualPresent,
+    _In_ CONST DXGK_PRESENT_DMA_GEOMETRY *Geometry,
+    _In_ ULONG PrivateDataSize,
+    _In_opt_ PDXGKVMM_ALLOCATION SourcePresentBinding,
+    _In_opt_ PDXGKVMM_ALLOCATION DestinationPresentBinding,
+    _In_opt_ HANDLE SourceDeviceSpecificHandle,
+    _In_opt_ HANDLE DestinationDeviceSpecificHandle,
+    _In_ PDXGK_ALLOCATIONLIST PresentAllocationList,
+    _Out_writes_(DXGK_PRESENT_MAX_INDEX + 1) DXGK_PRESENTALLOCATIONINFO *PresentAllocationInfo,
+    _Out_writes_(VIDSCH_INLINE_PATCHES) D3DDDI_PATCHLOCATIONLIST *PatchLocationList,
+    _Inout_ DXGKARG_PRESENT *PresentArgs,
+    _Out_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer,
+    _Out_ PVOID *OutPrivateData,
+    _Out_ PBOOLEAN OutOwnsPrivateData)
+{
+    PDXGKRNL_DMA_BUFFER DmaBuffer = NULL;
+    NTSTATUS Status;
+
+    *OutDmaBuffer = NULL;
+    *OutPrivateData = NULL;
+    *OutOwnsPrivateData = FALSE;
+
+    if (VirtualPresent)
+    {
+        Status = DxgkAllocateVirtualDmaBufferWithPrivateData(
+                     Device,
+                     Geometry->DmaBufferSize,
+                     Geometry->DmaBufferSegmentSet,
+                     PrivateDataSize,
+                     &DmaBuffer);
+    }
+    else
+    {
+        Status = DxgkAllocateDmaBufferInSegmentSetWithPrivateData(
+                     Adapter,
+                     Geometry->DmaBufferSize,
+                     Geometry->DmaBufferSegmentSet,
+                     PrivateDataSize,
+                     &DmaBuffer);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        DXGKRNL_WARN("DxgkpExecuteFullPresent: DMA buffer alloc failed\n");
+        return Status;
+    }
+
+    *OutDmaBuffer = DmaBuffer;
+    *OutPrivateData = DmaBuffer->PrivateData;
+    *OutOwnsPrivateData = DmaBuffer->PrivateData != NULL;
+    Status = DxgkPresentDmaCoreInitializePrivateData(
+                 DmaBuffer->PrivateData,
+                 PrivateDataSize);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(PatchLocationList,
+                  sizeof(D3DDDI_PATCHLOCATIONLIST) * VIDSCH_INLINE_PATCHES);
+
+    PresentArgs->pDmaBuffer            = DmaBuffer->VirtualAddress;
+    PresentArgs->DmaSize               = Geometry->DmaBufferSize;
+    PresentArgs->pDmaBufferPrivateData = DmaBuffer->PrivateData;
+    PresentArgs->DmaBufferPrivateDataSize = PrivateDataSize;
+    PresentArgs->pAllocationList       = PresentAllocationList;
+    PresentArgs->pPatchLocationListOut = PatchLocationList;
+    PresentArgs->PatchLocationListOutSize = Geometry->PatchLocationListSize;
+    PresentArgs->DmaBufferSegmentId    = DmaBuffer->SegmentId;
+    PresentArgs->DmaBufferPhysicalAddress = DmaBuffer->SegmentAddress;
+
+    if (VirtualPresent)
+    {
+        /* GPUVA Present uses a different union member and entry stride from
+         * the legacy patch allocation list retained by the scheduler. */
+        RtlZeroMemory(PresentAllocationInfo,
+                      sizeof(DXGK_PRESENTALLOCATIONINFO) * (DXGK_PRESENT_MAX_INDEX + 1));
+        PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation = SourceDeviceSpecificHandle;
+        PresentAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX].hDeviceSpecificAllocation = DestinationDeviceSpecificHandle;
+        if (SourcePresentBinding != NULL)
+        {
+            Status = DxgkVidMmMapVirtualPresentAllocation(DmaBuffer->VirtualBacking, SourcePresentBinding, Entry->SourceAllocation, (HANDLE)(ULONG_PTR)Entry->hSource, Entry->hSource == Entry->hDestination, &PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].AllocationVirtualAddress);
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+        if (DestinationPresentBinding == SourcePresentBinding)
+        {
+            PresentAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX].AllocationVirtualAddress = PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].AllocationVirtualAddress;
+        }
+        else if (DestinationPresentBinding != NULL)
+        {
+            Status = DxgkVidMmMapVirtualPresentAllocation(DmaBuffer->VirtualBacking, DestinationPresentBinding, Entry->DestinationAllocation, (HANDLE)(ULONG_PTR)Entry->hDestination, TRUE, &PresentAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX].AllocationVirtualAddress);
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+        if (Entry->Type == DxgkPresentTypeFlip)
+        {
+            PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress = PresentAllocationList[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress;
+            PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].SegmentId = PresentAllocationList[DXGK_PRESENT_SOURCE_INDEX].SegmentId;
+        }
+        PresentArgs->pAllocationInfo = PresentAllocationInfo;
+        PresentArgs->pPatchLocationListOut = NULL;
+        PresentArgs->PatchLocationListOutSize = 0;
+        PresentArgs->DmaBufferGpuVirtualAddress = DmaBuffer->GpuVirtualAddress;
+    }
+    return STATUS_SUCCESS;
+}
+
 /* ========================================================================
  * DxgkpExecuteFullPresent  (private)
  *
@@ -2972,6 +3099,7 @@ DxgkpExecuteFullPresentMeasured(
     ULONG SubmissionFenceId = 0;
     UINT DmaBytesUsed = 0;
     BOOLEAN PresentBindingsTracked = FALSE;
+    UINT PresentPass;
     BOOLEAN RefreshSharedPrimaryOnRetire = FALSE;
     ULONGLONG BackpressureDeadline = 0;
     ULONG PresentNode;
@@ -3268,91 +3396,26 @@ DxgkpExecuteFullPresentMeasured(
     }
 
     DmaBufferPrivateDataSize = DmaGeometry.DmaBufferPrivateDataSize;
-    if (VirtualPresent)
-    {
-        Status = DxgkAllocateVirtualDmaBufferWithPrivateData(
-                     Device,
-                     DmaGeometry.DmaBufferSize,
-                     DmaGeometry.DmaBufferSegmentSet,
-                     DmaBufferPrivateDataSize,
-                     &DmaBuffer);
-    }
-    else
-    {
-        Status = DxgkAllocateDmaBufferInSegmentSetWithPrivateData(
-                     Adapter,
-                     DmaGeometry.DmaBufferSize,
-                     DmaGeometry.DmaBufferSegmentSet,
-                     DmaBufferPrivateDataSize,
-                     &DmaBuffer);
-    }
-    if (!NT_SUCCESS(Status))
-    {
-        DXGKRNL_WARN("DxgkpExecuteFullPresent: DMA buffer alloc failed\n");
-        goto PresentCleanup;
-    }
-
-    DmaBufferPrivateData = DmaBuffer->PrivateData;
-    DmaBufferOwnsPrivateData = DmaBufferPrivateData != NULL;
-    Status = DxgkPresentDmaCoreInitializePrivateData(
-                 DmaBufferPrivateData,
-                 DmaBufferPrivateDataSize);
-    if (!NT_SUCCESS(Status))
-        goto PresentCleanup;
-
-    RtlZeroMemory(PatchLocationList, sizeof(PatchLocationList));
     if (Entry->DstSubRectCount == 0)
         DstSubRect = Entry->DstRect;
 
-    PresentArgs.pDmaBuffer            = DmaBuffer->VirtualAddress;
-    PresentArgs.DmaSize               = DmaGeometry.DmaBufferSize;
-    PresentArgs.pDmaBufferPrivateData = DmaBufferPrivateData;
-    PresentArgs.DmaBufferPrivateDataSize = DmaBufferPrivateDataSize;
-    PresentArgs.pAllocationList       = PresentAllocationList;
-    PresentArgs.pPatchLocationListOut = PatchLocationList;
-    PresentArgs.PatchLocationListOutSize = DmaGeometry.PatchLocationListSize;
     PresentArgs.MultipassOffset       = 0;
-    PresentArgs.DmaBufferSegmentId    = DmaBuffer->SegmentId;
-    PresentArgs.DmaBufferPhysicalAddress = DmaBuffer->SegmentAddress;
     PresentArgs.Reserved              = 0;
     PresentArgs.NumSrcAllocations     = (SourceDeviceSpecificHandle != NULL) ? 1 : 0;
     PresentArgs.NumDstAllocations     = (DestinationDeviceSpecificHandle != NULL) ? 1 : 0;
     PresentArgs.PrivateDriverDataSize = 0;
     PresentArgs.pPrivateDriverData    = NULL;
 
-    if (VirtualPresent)
-    {
-        /* GPUVA Present uses a different union member and entry stride from
-         * the legacy patch allocation list retained by the scheduler. */
-        RtlZeroMemory(PresentAllocationInfo, sizeof(PresentAllocationInfo));
-        PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation = SourceDeviceSpecificHandle;
-        PresentAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX].hDeviceSpecificAllocation = DestinationDeviceSpecificHandle;
-        if (SourcePresentBinding != NULL)
-        {
-            Status = DxgkVidMmMapVirtualPresentAllocation(DmaBuffer->VirtualBacking, SourcePresentBinding, Entry->SourceAllocation, (HANDLE)(ULONG_PTR)Entry->hSource, Entry->hSource == Entry->hDestination, &PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].AllocationVirtualAddress);
-            if (!NT_SUCCESS(Status))
-                goto PresentCleanup;
-        }
-        if (DestinationPresentBinding == SourcePresentBinding)
-        {
-            PresentAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX].AllocationVirtualAddress = PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].AllocationVirtualAddress;
-        }
-        else if (DestinationPresentBinding != NULL)
-        {
-            Status = DxgkVidMmMapVirtualPresentAllocation(DmaBuffer->VirtualBacking, DestinationPresentBinding, Entry->DestinationAllocation, (HANDLE)(ULONG_PTR)Entry->hDestination, TRUE, &PresentAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX].AllocationVirtualAddress);
-            if (!NT_SUCCESS(Status))
-                goto PresentCleanup;
-        }
-        if (Entry->Type == DxgkPresentTypeFlip)
-        {
-            PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress = PresentAllocationList[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress;
-            PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].SegmentId = PresentAllocationList[DXGK_PRESENT_SOURCE_INDEX].SegmentId;
-        }
-        PresentArgs.pAllocationInfo = PresentAllocationInfo;
-        PresentArgs.pPatchLocationListOut = NULL;
-        PresentArgs.PatchLocationListOutSize = 0;
-        PresentArgs.DmaBufferGpuVirtualAddress = DmaBuffer->GpuVirtualAddress;
-    }
+    Status = DxgkpPresentAcquireDmaPass(Adapter, Device, Entry, VirtualPresent,
+                                        &DmaGeometry, DmaBufferPrivateDataSize,
+                                        SourcePresentBinding, DestinationPresentBinding,
+                                        SourceDeviceSpecificHandle, DestinationDeviceSpecificHandle,
+                                        PresentAllocationList, PresentAllocationInfo,
+                                        PatchLocationList, &PresentArgs,
+                                        &DmaBuffer, &DmaBufferPrivateData,
+                                        &DmaBufferOwnsPrivateData);
+    if (!NT_SUCCESS(Status))
+        goto PresentCleanup;
 
     /* Source and destination rectangles. */
     PresentArgs.SrcRect      = Entry->SrcRect;
@@ -3403,23 +3466,178 @@ DxgkpExecuteFullPresentMeasured(
         Status = STATUS_DEVICE_REMOVED;
         goto PresentCleanup;
     }
-    if (!DxgkAcquireKmdCall(Adapter))
+    /*
+     * Sub-rectangles can need more DMA than one buffer holds.  The driver then
+     * returns STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER; the part it wrote is
+     * submitted as plain present work, a new buffer is taken, and the driver
+     * is called again with the same rectangles, resuming from the
+     * MultipassOffset it recorded.  Only the final pass carries the present's
+     * completion -- its id, device work and scanout retirement -- through
+     * the submission below, so the present completes once.
+     */
+    for (PresentPass = 0;; ++PresentPass)
     {
-        Status = STATUS_DELETE_PENDING;
-        goto PresentCleanup;
+        UINT PreviousOffset = PresentArgs.MultipassOffset;
+        ULONG_PTR PassStart;
+        ULONG_PTR PassNext;
+        UINT PassBytes;
+        UINT PassPatches = 0;
+        UINT PassPatch;
+
+        if (!DxgkAcquireKmdCall(Adapter))
+        {
+            Status = STATUS_DELETE_PENDING;
+            goto PresentCleanup;
+        }
+        _SEH2_TRY
+        {
+            Status = DXGK_CB_FULL(Adapter, DxgkDdiPresent)(MiniportPresentContext, &PresentArgs);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+            DXGKRNL_ERR("DxgkpExecuteFullPresent: DxgkDdiPresent FAULTED "
+                        "0x%08lX\n", Status);
+        }
+        _SEH2_END;
+        DxgkReleaseKmdCall(Adapter);
+        if (Status != STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER)
+            break;
+
+        /* ---- A partial pass: check what the driver wrote ---- */
+        if (PresentArgs.pDmaBufferPrivateData != DmaBufferPrivateData ||
+            PresentArgs.DmaBufferPrivateDataSize != DmaBufferPrivateDataSize)
+        {
+            Status = STATUS_INVALID_PARAMETER;
+            goto PresentCleanup;
+        }
+        PassStart = (ULONG_PTR)DmaBuffer->VirtualAddress;
+        PassNext = (ULONG_PTR)PresentArgs.pDmaBuffer;
+        if (PresentArgs.pDmaBuffer == NULL || PassNext < PassStart ||
+            PassNext - PassStart > DmaBuffer->Capacity)
+        {
+            Status = STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+            goto PresentCleanup;
+        }
+        PassBytes = (UINT)(PassNext - PassStart);
+        if (PresentArgs.pPatchLocationListOut != NULL)
+        {
+            ULONG_PTR PatchStart = (ULONG_PTR)PatchLocationList;
+            ULONG_PTR PatchNext = (ULONG_PTR)PresentArgs.pPatchLocationListOut;
+            SIZE_T PatchBytes = (SIZE_T)DmaGeometry.PatchLocationListSize *
+                                sizeof(PatchLocationList[0]);
+
+            if (PatchNext < PatchStart || PatchNext - PatchStart > PatchBytes ||
+                ((PatchNext - PatchStart) % sizeof(PatchLocationList[0])) != 0)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                goto PresentCleanup;
+            }
+            PassPatches = (UINT)((PatchNext - PatchStart) / sizeof(PatchLocationList[0]));
+        }
+        for (PassPatch = 0; PassPatch < PassPatches; ++PassPatch)
+        {
+            UINT AllocationIndex = PatchLocationList[PassPatch].AllocationIndex;
+
+            if (AllocationIndex == 0 ||
+                AllocationIndex > DXGK_PRESENT_MAX_INDEX ||
+                (AllocationIndex == DXGK_PRESENT_SOURCE_INDEX &&
+                 SourceDeviceSpecificHandle == NULL) ||
+                (AllocationIndex == DXGK_PRESENT_DESTINATION_INDEX &&
+                 DestinationDeviceSpecificHandle == NULL))
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                goto PresentCleanup;
+            }
+        }
+
+        /* A pass that wrote nothing and recorded no progress would ask for
+         * the same buffer forever; so would a list that never ends. */
+        if ((PassBytes == 0 && PresentArgs.MultipassOffset == PreviousOffset) ||
+            PresentPass + 1 >= DXGKP_PRESENT_MAX_PASSES)
+        {
+            DXGKRNL_WARN("DxgkpExecuteFullPresent: multipass present stalled at "
+                         "pass %u (offset %u, %u bytes)\n",
+                         PresentPass, PresentArgs.MultipassOffset, PassBytes);
+            Status = STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+            goto PresentCleanup;
+        }
+
+        /* ---- Submit it as plain present work ---- */
+        if (PassBytes != 0)
+        {
+            DXGKRNL_TRACK_DMA_ARGS PassTrack;
+            DXGK_SUBMITCOMMANDFLAGS PassFlags;
+            ULONG PassFence = 0;
+
+            DmaBuffer->SubmissionStartOffset = 0;
+            DmaBuffer->SubmissionEndOffset = PassBytes;
+            PassFlags.Value = 0;
+            PassFlags.Present = 1;
+
+            RtlZeroMemory(&PassTrack, sizeof(PassTrack));
+            PassTrack.Device = Device;
+            PassTrack.Context = Context;
+            PassTrack.PresentBindingReferences = PresentBindingReferences;
+            PassTrack.PresentBindingReferenceCount = PresentBindingReferenceCount;
+            PassTrack.AllocationReferences = SubmissionAllocations;
+            PassTrack.AllocationReferenceCount = SubmissionAllocationCount;
+            PassTrack.AllocationCpuDirty = SubmissionAllocationCpuDirty;
+RetryPassSubmit:
+            Status = VidSchSubmitCommandTracked(Adapter, PresentNode, PresentEngine, DmaBuffer, DmaBufferPrivateData, DmaBufferPrivateDataSize, PresentAllocationList, DXGK_PRESENT_MAX_INDEX + 1, PatchLocationList, PassPatches, Adapter->SchedulingCaps.MultiEngineAware ? NULL : MiniportDeviceHandle, Adapter->SchedulingCaps.MultiEngineAware ? MiniportContextHandle : NULL, PresentPriority, &PassTrack, PassFlags.Value, Entry->VidPnSourceId, &PassFence);
+            if (Status == STATUS_RETRY && Context != NULL)
+            {
+                if (BackpressureDeadline == 0)
+                {
+                    BackpressureDeadline =
+                        KeQueryInterruptTime() +
+                        (ULONGLONG)VIDSCH_CONTEXT_BACKPRESSURE_MS * 10000ULL;
+                }
+                Status = DxgkYieldKmdTransactionForContextRoom(
+                             Adapter, Context, BackpressureDeadline, &KmdTransaction);
+                if (!NT_SUCCESS(Status))
+                    goto PresentCleanup;
+                if (InterlockedCompareExchange(&Device->ExecutionState, 0, 0) !=
+                        D3DKMT_DEVICEEXECUTION_ACTIVE ||
+                    InterlockedCompareExchange(&Context->Destroying, 0, 0) != 0)
+                {
+                    Status = STATUS_DEVICE_REMOVED;
+                    goto PresentCleanup;
+                }
+                goto RetryPassSubmit;
+            }
+            if (!NT_SUCCESS(Status))
+            {
+                /* TODO: an adapter with no scheduler yet submits directly;
+                 * that path handles a single pass only. */
+                DXGKRNL_WARN("DxgkpExecuteFullPresent: partial pass %u not "
+                             "submitted 0x%08lX\n", PresentPass, Status);
+                goto PresentCleanup;
+            }
+            /* The submission owns this buffer and its private data now, and
+             * holds its own binding references; cleanup must only drop
+             * ours, never destroy a binding the partial still uses. */
+            PresentBindingsTracked = TRUE;
+        }
+        else
+        {
+            DxgkFreeDmaBuffer(DmaBuffer);
+        }
+        DmaBuffer = NULL;
+        DmaBufferPrivateData = NULL;
+        DmaBufferOwnsPrivateData = FALSE;
+
+        Status = DxgkpPresentAcquireDmaPass(Adapter, Device, Entry, VirtualPresent,
+                                            &DmaGeometry, DmaBufferPrivateDataSize,
+                                            SourcePresentBinding, DestinationPresentBinding,
+                                            SourceDeviceSpecificHandle, DestinationDeviceSpecificHandle,
+                                            PresentAllocationList, PresentAllocationInfo,
+                                            PatchLocationList, &PresentArgs,
+                                            &DmaBuffer, &DmaBufferPrivateData,
+                                            &DmaBufferOwnsPrivateData);
+        if (!NT_SUCCESS(Status))
+            goto PresentCleanup;
     }
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiPresent)(MiniportPresentContext, &PresentArgs);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-        DXGKRNL_ERR("DxgkpExecuteFullPresent: DxgkDdiPresent FAULTED "
-                    "0x%08lX\n", Status);
-    }
-    _SEH2_END;
-    DxgkReleaseKmdCall(Adapter);
 
     /* The miniport no longer recognises the device-specific handles of the
      * persistent CDD bindings (seen as INVALID_ALLOCATION_USAGE after an
