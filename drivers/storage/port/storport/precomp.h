@@ -177,6 +177,7 @@ typedef struct _FDO_DEVICE_EXTENSION
     KSPIN_LOCK NoInterruptLock;
     KSPIN_LOCK MiniportTimerListLock;
     LIST_ENTRY MiniportTimerList;
+    volatile ULONG StartIoOwner;
 
     KSPIN_LOCK CompletionLock;
     LIST_ENTRY CompletionListHead;

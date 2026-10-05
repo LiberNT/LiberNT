@@ -160,6 +160,7 @@ PortAcquireSpinLock(
 
         case StartIoLock: /* 2 */
             KeAcquireSpinLock(&DeviceExtension->MiniportExLock, &LockHandle->Context.OldIrql);
+            DeviceExtension->StartIoOwner = KeGetCurrentProcessorNumberEx(NULL);
             break;
 
         case InterruptLock: /* 3 */
@@ -206,6 +207,7 @@ PortReleaseSpinLock(
             break;
 
         case StartIoLock: /* 2 */
+            DeviceExtension->StartIoOwner = MAXULONG;
             KeReleaseSpinLock(&DeviceExtension->MiniportExLock, LockHandle->Context.OldIrql);
             break;
 
@@ -547,6 +549,7 @@ PortAddDevice(
     KeInitializeSpinLock(&DeviceExtension->NoInterruptLock);
     KeInitializeSpinLock(&DeviceExtension->MiniportTimerListLock);
     InitializeListHead(&DeviceExtension->MiniportTimerList);
+    DeviceExtension->StartIoOwner = MAXULONG;
     KeInitializeSpinLock(&DeviceExtension->CompletionLock);
     InitializeListHead(&DeviceExtension->CompletionListHead);
     KeInitializeDpc(&DeviceExtension->CompletionDpc,
@@ -2803,7 +2806,9 @@ StorPortNotification(
             Irp = Srb != NULL ? PortGetOriginalRequestFromSrb(Srb) : NULL;
             if (Irp != NULL)
             {
-                if ((DeviceExtension != NULL) && !DeviceExtension->DumpMode && KeGetCurrentIrql() > DISPATCH_LEVEL)
+                if ((DeviceExtension != NULL) && !DeviceExtension->DumpMode &&
+                    ((KeGetCurrentIrql() > DISPATCH_LEVEL) ||
+                     (DeviceExtension->StartIoOwner == KeGetCurrentProcessorNumberEx(NULL))))
                 {
                     Irp->Tail.Overlay.DriverContext[1] = Srb;
                     ExInterlockedInsertTailList(&DeviceExtension->CompletionListHead,

@@ -484,11 +484,18 @@ MiniportStartIo(
     _In_ PMINIPORT Miniport,
     _In_ PSCSI_REQUEST_BLOCK Srb)
 {
+    STOR_LOCK_HANDLE LockHandle;
+    BOOLEAN Serialize;
     BOOLEAN Result;
 
     DPRINT("StorPort: HwStartIo request %p function 0x%02x length %u status 0x%02x\n", Srb, Srb->Function, Srb->Length, Srb->SrbStatus);
 
+    Serialize = (Miniport->DeviceExtension->PerfConcurrentChannels <= 1);
+    if (Serialize)
+        PortAcquireSpinLock(Miniport->DeviceExtension, StartIoLock, NULL, &LockHandle);
     Result = Miniport->InitData->HwStartIo(&Miniport->MiniportExtension->HwDeviceExtension, Srb);
+    if (Serialize)
+        PortReleaseSpinLock(Miniport->DeviceExtension, &LockHandle);
     DPRINT("StorPort: HwStartIo returned %u, status 0x%02x\n", Result, Srb->SrbStatus);
 
     return Result;
