@@ -621,6 +621,24 @@ DxgkpSelectTimingWireFormat(
     return Selected;
 }
 
+/* Same timing, compared field by field (the structure has padding). */
+static BOOLEAN
+DxgkpSignalInfoEqual(
+    _In_ CONST D3DKMDT_VIDEO_SIGNAL_INFO *A,
+    _In_ CONST D3DKMDT_VIDEO_SIGNAL_INFO *B)
+{
+    return A->ActiveSize.cx == B->ActiveSize.cx &&
+           A->ActiveSize.cy == B->ActiveSize.cy &&
+           A->TotalSize.cx == B->TotalSize.cx &&
+           A->TotalSize.cy == B->TotalSize.cy &&
+           A->PixelRate == B->PixelRate &&
+           A->ScanLineOrdering == B->ScanLineOrdering &&
+           (ULONGLONG)A->VSyncFreq.Numerator * B->VSyncFreq.Denominator ==
+               (ULONGLONG)B->VSyncFreq.Numerator * A->VSyncFreq.Denominator &&
+           (ULONGLONG)A->HSyncFreq.Numerator * B->HSyncFreq.Denominator ==
+               (ULONGLONG)B->HSyncFreq.Numerator * A->HSyncFreq.Denominator;
+}
+
 NTSTATUS
 DxgkpDisplayCommitVidPnCandidateWithTarget(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -643,6 +661,7 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
     D3DDDI_VIDEO_PRESENT_SOURCE_ID ActiveSourceId = 0;
     D3DDDI_VIDEO_PRESENT_TARGET_ID ActiveTargetId = 0;
     ULONG ActiveTargetIndex = 0;
+    BOOLEAN InheritedTimingPinned = FALSE;
     BOOLEAN VidPnAccepted = TRUE;
     BOOLEAN FullMiniportNegotiatesModes;
 
@@ -976,7 +995,29 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
                 }
             }
 
-            for (i = 0; RequestedTarget == NULL && i < TgtSet->NumModes; i++)
+            /*
+             * At the hand-off from firmware, keep the timing firmware left
+             * running if the driver offers it, so the driver can be asked to
+             * preserve that configuration instead of retraining the link.
+             */
+            if (RequestedTarget == NULL && !Adapter->VidPnCommitted &&
+                Adapter->FirmwareTimingValid &&
+                ActiveTargetId == Adapter->FirmwareTargetId)
+            {
+                for (i = 0; i < TgtSet->NumModes; i++)
+                {
+                    if (DxgkpSignalInfoEqual(&TgtSet->Modes[i].VideoSignalInfo,
+                                             &Adapter->FirmwareTargetTiming))
+                    {
+                        TargetIndex = i;
+                        FoundPreferredTarget = TRUE;
+                        InheritedTimingPinned = TRUE;
+                        break;
+                    }
+                }
+            }
+            for (i = 0; RequestedTarget == NULL && !FoundPreferredTarget &&
+                        i < TgtSet->NumModes; i++)
             {
                 if (TgtSet->Modes[i].Preference == D3DKMDT_MP_PREFERRED)
                 {
@@ -1361,10 +1402,10 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
                     : DXGK_PATH_UPDATE_ADDED);
         TimingPath.Input.Active = TopologyEmpty ? 0 : 1;
         TimingPath.Input.IgnoreConnectivity = 1;
-        TimingPath.Input.PreserveInherited =
-            (!Adapter->VidPnCommitted &&
-             Adapter->PostDisplayWidth != 0 &&
-             Adapter->PostDisplayHeight != 0) ? 1 : 0;
+        /* Only when the path carries the very timing the driver described
+         * as inherited from firmware: asking it to preserve anything else
+         * would leave it guessing what "inherited" means. */
+        TimingPath.Input.PreserveInherited = InheritedTimingPinned ? 1 : 0;
 
         TimingArgs.hFunctionalVidPn = (D3DKMDT_HVIDPN)VidPn;
         TimingArgs.SetFlags.Value = 0;

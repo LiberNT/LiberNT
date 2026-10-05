@@ -13499,6 +13499,10 @@ DxgkAdapterStart(
             KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
             Progress.VidPnCreated = TRUE;
             DXGKRNL_TRACE("DxgkAdapterStart: VidPN created %p\n", hVidPn);
+
+            /* Before the first commit: learn what firmware left running, so
+             * that commit can keep it instead of retraining the link. */
+            DxgkVidPnQueryFirmwareTiming(Adapter, hVidPn);
         }
         else
         {

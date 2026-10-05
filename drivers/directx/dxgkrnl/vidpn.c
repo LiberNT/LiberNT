@@ -3161,6 +3161,112 @@ DxgkpRecommendHotPlugCandidate(
     return DxgkpValidateRecommendedTopology(VidPn);
 }
 
+/*
+ * DxgkVidPnQueryFirmwareTiming
+ *
+ * Called at start, before the first commit, when firmware left a display
+ * running.  Asks the driver with DXGK_RFVR_FIRMWARE to describe the topology
+ * and timing it inherited, and records the target and exact timing.  The
+ * first commit pins that timing out of the driver's own enumerated modes,
+ * and only then asks the driver to preserve the inherited configuration.
+ *
+ * DXGK_RFVR_FIRMWARE carries no version gate in the WDK, so a driver that
+ * does not know it is expected to refuse; any refusal simply leaves nothing
+ * recorded, and the first commit programs the display afresh.
+ */
+VOID
+DxgkVidPnQueryFirmwareTiming(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DKMDT_HVIDPN hVidPn)
+{
+    PDXGKDDI_RECOMMEND_FUNCTIONAL_VIDPN RecommendFunctionalVidPn;
+    DXGKARG_RECOMMENDFUNCTIONALVIDPN RecommendArgs;
+    D3DKMDT_HVIDPN Scratch = NULL;
+    PDXGKP_VIDPN ScratchObject;
+    PDXGKP_VIDPN_TARGET_MODESET TargetSet;
+    D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId;
+    ULONG TargetIndex;
+    NTSTATUS Status;
+    SIZE_T i;
+
+    PAGED_CODE();
+
+    Adapter->FirmwareTimingValid = FALSE;
+
+    if (Adapter->MiniportContext == NULL ||
+        Adapter->PostDisplayWidth == 0 || Adapter->PostDisplayHeight == 0)
+    {
+        return;
+    }
+    RecommendFunctionalVidPn = DXGK_CB(Adapter, DxgkDdiRecommendFunctionalVidPn);
+    if (RecommendFunctionalVidPn == NULL)
+        return;
+
+    Status = DxgkVidPnClone(hVidPn, &Scratch);
+    if (!NT_SUCCESS(Status))
+        return;
+    ScratchObject = (PDXGKP_VIDPN)Scratch;
+    DxgkpPrepareVidPnForRecommendation(ScratchObject);
+
+    RtlZeroMemory(&RecommendArgs, sizeof(RecommendArgs));
+    RecommendArgs.hRecommendedFunctionalVidPn = Scratch;
+    RecommendArgs.RequestReason = DXGK_RFVR_FIRMWARE;
+
+    Status = STATUS_DELETE_PENDING;
+    if (DxgkAcquireKmdCall(Adapter))
+    {
+        _SEH2_TRY
+        {
+            Status = RecommendFunctionalVidPn(Adapter->MiniportDeviceContext,
+                                              &RecommendArgs);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+        DxgkReleaseKmdCall(Adapter);
+    }
+
+    if (NT_SUCCESS(Status))
+        Status = DxgkpValidateRecommendedTopology(ScratchObject);
+    if (!NT_SUCCESS(Status) || ScratchObject->NumPaths == 0)
+    {
+        DXGKRNL_TRACE("DxgkVidPnQueryFirmwareTiming: driver did not describe the "
+                      "firmware configuration (0x%08lX); nothing to preserve\n",
+                      Status);
+        goto Done;
+    }
+
+    TargetId = ScratchObject->Paths[0].VidPnTargetId;
+    TargetIndex = DxgkVidPnTargetIndexFromId(ScratchObject, TargetId);
+    TargetSet = TargetIndex != MAXULONG ?
+                    ScratchObject->TargetModeSets[TargetIndex] : NULL;
+    if (TargetSet == NULL || TargetSet->PinnedModeId == (UINT)-1)
+    {
+        DXGKRNL_TRACE("DxgkVidPnQueryFirmwareTiming: firmware path to target %u "
+                      "names no pinned timing; nothing to preserve\n", TargetId);
+        goto Done;
+    }
+    for (i = 0; i < TargetSet->NumModes; i++)
+    {
+        if (TargetSet->Modes[i].Id == TargetSet->PinnedModeId)
+        {
+            Adapter->FirmwareTargetId = TargetId;
+            Adapter->FirmwareTargetTiming = TargetSet->Modes[i].VideoSignalInfo;
+            Adapter->FirmwareTimingValid = TRUE;
+            DXGKRNL_TRACE("DxgkVidPnQueryFirmwareTiming: firmware drives target "
+                          "%u at %ux%u\n", TargetId,
+                          Adapter->FirmwareTargetTiming.ActiveSize.cx,
+                          Adapter->FirmwareTargetTiming.ActiveSize.cy);
+            break;
+        }
+    }
+
+Done:
+    DxgkVidPnDestroy(Scratch);
+}
+
 static NTSTATUS
 DxgkpRecoverFailedHotPlugRollback(
     _In_ PDXGKRNL_ADAPTER Adapter)

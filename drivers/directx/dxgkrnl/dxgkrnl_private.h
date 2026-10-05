@@ -1124,6 +1124,12 @@ struct _DXGKRNL_ADAPTER
     volatile LONG               HotPlugWorkActive;
     WORK_QUEUE_ITEM             HotPlugWorkItem;
     volatile LONG               ConnectorChangePending;
+
+    /* Timing firmware left running, as the driver described it in answer to
+     * DXGK_RFVR_FIRMWARE at start.  Used only by the first commit. */
+    BOOLEAN                     FirmwareTimingValid;
+    D3DDDI_VIDEO_PRESENT_TARGET_ID FirmwareTargetId;
+    D3DKMDT_VIDEO_SIGNAL_INFO   FirmwareTargetTiming;
     BOOLEAN                     SystemDisplayEnabled;
     D3DDDIFORMAT                SystemDisplayColorFormat;
 
@@ -3340,6 +3346,11 @@ DxgkVidPnRebuildForHotPlug(
 NTSTATUS
 DxgkVidPnQueueHotPlugRebuild(
     _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkVidPnQueryFirmwareTiming(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DKMDT_HVIDPN hVidPn);
 
 /* acpievent.c */
 VOID
