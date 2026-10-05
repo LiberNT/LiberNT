@@ -3080,7 +3080,7 @@
 @ stub -arch=win64 RtlIncrementCorrelationVector
 @ stub -arch=win64 RtlInitStringEx
 @ stub -arch=win64 RtlInitStrongEnumerationHashTable
-@ stub -arch=win64 RtlInitUTF8String
+@ stdcall RtlInitUTF8String(ptr str)
 @ stub -arch=win64 RtlInitUTF8StringEx
 @ stdcall -arch=win64 RtlInitializeBitMapEx(ptr ptr int64) RtlInitializeBitMap64
 @ stub -arch=win64 RtlInitializeCorrelationVector
@@ -3186,7 +3186,7 @@
 @ stub -arch=win64 RtlStronglyEnumerateEntryHashTable
 @ stdcall RtlSuffixUnicodeString(ptr ptr long)
 @ stub -arch=win64 RtlTestBitEx
-@ stub -arch=win64 RtlUTF8StringToUnicodeString
+@ stdcall RtlUTF8StringToUnicodeString(ptr ptr long)
 @ stub -arch=arm64 RtlUdiv128
 @ stub -arch=win64 RtlUnicodeStringToInt64
 @ stub -arch=win64 RtlUnicodeStringToUTF8String

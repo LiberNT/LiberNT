@@ -2797,6 +2797,28 @@ RtlInitAnsiStringEx(
     _In_opt_z_ __drv_aliasesMem PCSZ SourceString
 );
 
+_IRQL_requires_max_(DISPATCH_LEVEL)
+NTSYSAPI
+VOID
+NTAPI
+RtlInitUTF8String(
+    _Out_ PUTF8_STRING DestinationString,
+    _In_opt_z_ __drv_aliasesMem PCSZ SourceString
+);
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+_Must_inspect_result_
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlUTF8StringToUnicodeString(
+    _When_(AllocateDestinationString, _Out_ _At_(DestinationString->Buffer, __drv_allocatesMem(Mem)))
+    _When_(!AllocateDestinationString, _Inout_)
+        PUNICODE_STRING DestinationString,
+    _In_ PUTF8_STRING SourceString,
+    _In_ BOOLEAN AllocateDestinationString
+);
+
 //
 // OEM String Functions
 //

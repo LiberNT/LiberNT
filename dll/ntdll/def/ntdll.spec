@@ -1031,6 +1031,7 @@
 @ stdcall -stub -version=0x600+ RtlImpersonateSelfEx(long long ptr)
 @ stdcall RtlInitAnsiString(ptr str)
 @ stdcall RtlInitAnsiStringEx(ptr str)
+@ stdcall -version=0xA00+ RtlInitUTF8String(ptr str)
 @ stdcall -stub -version=0x600+ RtlInitBarrier(long long)
 @ stdcall RtlInitCodePageTable(ptr ptr)
 @ stdcall RtlInitMemoryStream(ptr)
@@ -1336,6 +1337,7 @@
 @ stdcall RtlUnhandledExceptionFilter(ptr)
 @ stdcall RtlUnicodeStringToAnsiSize(ptr) RtlxUnicodeStringToAnsiSize
 @ stdcall -version=0x601+ RtlUnicodeToUTF8N(ptr long ptr wstr long)
+@ stdcall -version=0xA00+ RtlUTF8StringToUnicodeString(ptr ptr long)
 @ stdcall -version=0x601+ RtlUTF8ToUnicodeN(ptr long ptr str long)
 @ stdcall RtlUnicodeStringToAnsiString(ptr ptr long)
 @ stdcall RtlUnicodeStringToCountedOemString(ptr ptr long)

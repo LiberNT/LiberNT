@@ -177,6 +177,8 @@ typedef struct _STRING {
 typedef CONST STRING* PCOEM_STRING;
 typedef STRING CANSI_STRING;
 typedef PSTRING PCANSI_STRING;
+typedef STRING UTF8_STRING;
+typedef PSTRING PUTF8_STRING;
 
 typedef struct _STRING32 {
   USHORT   Length;

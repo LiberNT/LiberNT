@@ -219,6 +219,7 @@ list(APPEND SOURCE_VISTA
     threadpool.c
     unicode_vista.c
     utf8.c
+    utf8string.c
     waitaddr.c)
 
 if(ARCH STREQUAL "riscv64")
