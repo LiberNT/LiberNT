@@ -21,6 +21,22 @@
 
 typedef PVOID PWMI_LOGGER_INFORMATION; // FIXME
 
+typedef struct _WMIP_EVENT_DELIVERY
+{
+    WORK_QUEUE_ITEM WorkItem;
+    PWNODE_HEADER Wnode;
+} WMIP_EVENT_DELIVERY, *PWMIP_EVENT_DELIVERY;
+
+typedef struct _WMIP_EVENT_TARGET
+{
+    PWMIP_GUID_OBJECT GuidObject;
+    WMI_NOTIFICATION_CALLBACK Callback;
+    PVOID Context;
+} WMIP_EVENT_TARGET, *PWMIP_EVENT_TARGET;
+
+EX_PUSH_LOCK WmipNotificationLock;
+LIST_ENTRY WmipNotificationList = { &WmipNotificationList, &WmipNotificationList };
+
 typedef enum _WMI_CLOCK_TYPE
 {
     WMICT_DEFAULT,
@@ -104,6 +120,60 @@ IoWMISuggestInstanceName(IN PDEVICE_OBJECT PhysicalDeviceObject OPTIONAL,
     return STATUS_NOT_IMPLEMENTED;
 }
 
+static
+VOID
+NTAPI
+WmipDeliverEvent(
+    _In_ PVOID Context)
+{
+    PWMIP_EVENT_DELIVERY Delivery = Context;
+    PWMIP_GUID_OBJECT GuidObject;
+    PWMIP_EVENT_TARGET Targets = NULL;
+    PLIST_ENTRY Entry;
+    ULONG Count = 0, Index;
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockShared(&WmipNotificationLock);
+    for (Entry = WmipNotificationList.Flink; Entry != &WmipNotificationList; Entry = Entry->Flink)
+    {
+        GuidObject = CONTAINING_RECORD(Entry, WMIP_GUID_OBJECT, NotificationLink);
+        if (IsEqualGUID(&GuidObject->Guid, &Delivery->Wnode->Guid))
+            Count++;
+    }
+    if (Count)
+        Targets = ExAllocatePoolWithTag(PagedPool, Count * sizeof(*Targets), 'eimW');
+    Count = 0;
+    if (Targets)
+    {
+        for (Entry = WmipNotificationList.Flink; Entry != &WmipNotificationList; Entry = Entry->Flink)
+        {
+            GuidObject = CONTAINING_RECORD(Entry, WMIP_GUID_OBJECT, NotificationLink);
+            if (IsEqualGUID(&GuidObject->Guid, &Delivery->Wnode->Guid) &&
+                ObReferenceObjectSafe(GuidObject))
+            {
+                Targets[Count].GuidObject = GuidObject;
+                Targets[Count].Callback = GuidObject->NotificationCallback;
+                Targets[Count].Context = GuidObject->NotificationContext;
+                Count++;
+            }
+        }
+    }
+    ExReleasePushLockShared(&WmipNotificationLock);
+    KeLeaveCriticalRegion();
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Targets[Index].Callback)
+            Targets[Index].Callback(Delivery->Wnode, Targets[Index].Context);
+        ObDereferenceObject(Targets[Index].GuidObject);
+    }
+
+    if (Targets)
+        ExFreePoolWithTag(Targets, 'eimW');
+    ExFreePool(Delivery->Wnode);
+    ExFreePoolWithTag(Delivery, 'eimW');
+}
+
 /*
  * @unimplemented
  */
@@ -112,6 +182,7 @@ NTAPI
 IoWMIWriteEvent(_Inout_ PVOID WnodeEventItem)
 {
     PWNODE_HEADER Header = WnodeEventItem;
+    PWMIP_EVENT_DELIVERY Delivery;
 
     if(!Header)
     {
@@ -129,9 +200,13 @@ IoWMIWriteEvent(_Inout_ PVOID WnodeEventItem)
         return STATUS_SUCCESS;
     }
 
-    /* Free the buffer if we are returning success */
-    ExFreePool(WnodeEventItem);
+    Delivery = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*Delivery), 'eimW');
+    if (!Delivery)
+        return STATUS_INSUFFICIENT_RESOURCES;
 
+    Delivery->Wnode = Header;
+    ExInitializeWorkItem(&Delivery->WorkItem, WmipDeliverEvent, Delivery);
+    ExQueueWorkItem(&Delivery->WorkItem, DelayedWorkQueue);
     return STATUS_SUCCESS;
 }
 
@@ -290,8 +365,20 @@ IoWMIExecuteMethod(IN PVOID DataBlockObject,
                    IN OUT PULONG OutBufferSize,
                    IN OUT PUCHAR InOutBuffer)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    NTSTATUS Status;
+
+    if (!InstanceName || !OutBufferSize)
+        return STATUS_INVALID_PARAMETER;
+
+    Status = ObReferenceObjectByPointer(DataBlockObject,
+                                        WMIGUID_EXECUTE,
+                                        WmipGuidObjectType,
+                                        KernelMode);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    ObDereferenceObject(DataBlockObject);
+    return STATUS_WMI_GUID_NOT_FOUND;
 }
 
 /*
@@ -303,8 +390,36 @@ IoWMISetNotificationCallback(IN PVOID Object,
                              IN WMI_NOTIFICATION_CALLBACK Callback,
                              IN PVOID Context)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    PWMIP_GUID_OBJECT GuidObject = Object;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = ObReferenceObjectByPointer(Object,
+                                        WMIGUID_NOTIFICATION,
+                                        WmipGuidObjectType,
+                                        KernelMode);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&WmipNotificationLock);
+    GuidObject->NotificationCallback = Callback;
+    GuidObject->NotificationContext = Context;
+    if (Callback && IsListEmpty(&GuidObject->NotificationLink))
+    {
+        InsertTailList(&WmipNotificationList, &GuidObject->NotificationLink);
+    }
+    else if (!Callback && !IsListEmpty(&GuidObject->NotificationLink))
+    {
+        RemoveEntryList(&GuidObject->NotificationLink);
+        InitializeListHead(&GuidObject->NotificationLink);
+    }
+    ExReleasePushLockExclusive(&WmipNotificationLock);
+    KeLeaveCriticalRegion();
+
+    ObDereferenceObject(Object);
+    return STATUS_SUCCESS;
 }
 
 /*

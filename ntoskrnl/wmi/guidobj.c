@@ -91,6 +91,15 @@ WmipDeleteMethod(
 {
     PWMIP_GUID_OBJECT GuidObject = Object;
 
+    if (!IsListEmpty(&GuidObject->NotificationLink))
+    {
+        KeEnterCriticalRegion();
+        ExAcquirePushLockExclusive(&WmipNotificationLock);
+        RemoveEntryList(&GuidObject->NotificationLink);
+        ExReleasePushLockExclusive(&WmipNotificationLock);
+        KeLeaveCriticalRegion();
+    }
+
     /* Check if the object is attached to an IRP */
     if (GuidObject->Irp != NULL)
     {
@@ -207,6 +216,7 @@ WmipCreateGuidObject(
 
     RtlZeroMemory(GuidObject, sizeof(*GuidObject));
     KeInitializeEvent(&GuidObject->Event, NotificationEvent, FALSE);
+    InitializeListHead(&GuidObject->NotificationLink);
     GuidObject->Guid = *Guid;
 
     *OutGuidObject = GuidObject;

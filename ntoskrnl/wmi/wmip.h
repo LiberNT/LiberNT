@@ -16,7 +16,13 @@ typedef struct _WMIP_GUID_OBJECT
     GUID Guid;
     PIRP Irp;
     LIST_ENTRY IrpLink;
+    LIST_ENTRY NotificationLink;
+    WMI_NOTIFICATION_CALLBACK NotificationCallback;
+    PVOID NotificationContext;
 } WMIP_GUID_OBJECT, *PWMIP_GUID_OBJECT;
+
+extern EX_PUSH_LOCK WmipNotificationLock;
+extern LIST_ENTRY WmipNotificationList;
 
 
 _Function_class_(DRIVER_INITIALIZE)
