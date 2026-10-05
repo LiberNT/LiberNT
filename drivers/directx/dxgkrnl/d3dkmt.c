@@ -2648,6 +2648,7 @@ DxgkpQueryAdapterInfoMinimumLevel(
 
         case KMTQAITYPE_QUERYREGISTRY:
         case KMTQAITYPE_ADAPTERREGISTRYINFO_RENDER:
+        case KMTQAITYPE_ADAPTERTYPE_RENDER:
         case KMTQAITYPE_WDDM_1_2_CAPS_RENDER:
         case KMTQAITYPE_WDDM_1_3_CAPS_RENDER:
         case KMTQAITYPE_NODEPERFDATA:
@@ -3444,7 +3445,8 @@ DxgkpQueryAdapterInfoCaptured(
             DXGKP_QUERY_RETURN(Status);
         }
 
-        case 15: /* KMTQAITYPE_ADAPTERTYPE (Win8+, not in Vista-level enum) */
+        case KMTQAITYPE_ADAPTERTYPE:
+        case KMTQAITYPE_ADAPTERTYPE_RENDER:
         {
             /*
              * Report only paths backed by this adapter's topology and
