@@ -15,6 +15,8 @@
 #define INTELI2C_INPUT_CLOCK_HZ 133000000UL
 #define INTELI2C_DEFAULT_SPEED 400000UL
 #define INTELI2C_DEFAULT_TIMEOUT_MS 1000UL
+#define INTELI2C_TARGET_SPIN_TIME 20000ULL
+#define INTELI2C_TARGET_IDLE_INTERVAL 10000LL
 
 #define LPSS_PRIV_RESETS 0x204
 #define LPSS_PRIV_RESETS_FUNC 0x00000003
@@ -27,6 +29,7 @@
 
 #define DW_IC_CON 0x00
 #define DW_IC_TAR 0x04
+#define DW_IC_SAR 0x08
 #define DW_IC_DATA_CMD 0x10
 #define DW_IC_SS_SCL_HCNT 0x14
 #define DW_IC_SS_SCL_LCNT 0x18
@@ -37,7 +40,12 @@
 #define DW_IC_RX_TL 0x38
 #define DW_IC_TX_TL 0x3c
 #define DW_IC_CLR_INTR 0x40
+#define DW_IC_CLR_RX_UNDER 0x44
+#define DW_IC_CLR_RX_OVER 0x48
+#define DW_IC_CLR_TX_OVER 0x4c
+#define DW_IC_CLR_RD_REQ 0x50
 #define DW_IC_CLR_TX_ABRT 0x54
+#define DW_IC_CLR_RX_DONE 0x58
 #define DW_IC_CLR_STOP_DET 0x60
 #define DW_IC_ENABLE 0x6c
 #define DW_IC_STATUS 0x70
@@ -56,23 +64,35 @@
 #define DW_IC_CON_MASTER 0x00000001
 #define DW_IC_CON_SPEED_STANDARD 0x00000002
 #define DW_IC_CON_SPEED_FAST 0x00000004
+#define DW_IC_CON_10BITADDR_SLAVE 0x00000008
 #define DW_IC_CON_10BITADDR_MASTER 0x00000010
 #define DW_IC_CON_RESTART_EN 0x00000020
 #define DW_IC_CON_SLAVE_DISABLE 0x00000040
+#define DW_IC_CON_STOP_DET_IFADDRESSED 0x00000080
+#define DW_IC_CON_RX_FIFO_FULL_HLD_CTRL 0x00000200
 
 #define DW_IC_TAR_10BITADDR_MASTER 0x00001000
 #define DW_IC_DATA_CMD_READ 0x00000100
 #define DW_IC_DATA_CMD_STOP 0x00000200
 #define DW_IC_DATA_CMD_RESTART 0x00000400
 
+#define DW_IC_INTR_RX_UNDER 0x00000001
+#define DW_IC_INTR_RX_OVER 0x00000002
+#define DW_IC_INTR_TX_OVER 0x00000008
+#define DW_IC_INTR_RD_REQ 0x00000020
 #define DW_IC_INTR_TX_ABRT 0x00000040
+#define DW_IC_INTR_RX_DONE 0x00000080
 #define DW_IC_INTR_STOP_DET 0x00000200
+#define DW_IC_INTR_TARGET_ERRORS (DW_IC_INTR_RX_UNDER | DW_IC_INTR_RX_OVER | DW_IC_INTR_TX_OVER)
 
 #define DW_IC_STATUS_MASTER_ACTIVITY 0x00000020
 
 #define DW_IC_TX_ABRT_7B_ADDR_NOACK 0x00000001
 #define DW_IC_TX_ABRT_10ADDR1_NOACK 0x00000002
 #define DW_IC_TX_ABRT_10ADDR2_NOACK 0x00000004
+#define DW_IC_TX_ABRT_SLVFLUSH_TXFIFO 0x00002000
+#define DW_IC_TX_ABRT_SLV_ARBLOST 0x00004000
+#define DW_IC_TX_ABRT_SLVRD_INTX 0x00008000
 
 typedef struct _INTELI2C_PCI_ID
 {
@@ -88,6 +108,10 @@ typedef struct _INTELI2C_DEVICE_EXTENSION
     PDEVICE_OBJECT LowerDevice;
     IO_REMOVE_LOCK RemoveLock;
     FAST_MUTEX TransferLock;
+    KMUTEX TargetLock;
+    KEVENT TargetStopEvent;
+    PKTHREAD TargetThread;
+    PFILE_OBJECT TargetOwner;
     UNICODE_STRING InterfaceName;
     PVOID Registers;
     PHYSICAL_ADDRESS RegisterAddress;
@@ -96,7 +120,12 @@ typedef struct _INTELI2C_DEVICE_EXTENSION
     ULONG PciDeviceId;
     ULONG TxFifoDepth;
     ULONG RxFifoDepth;
+    ULONG TargetResponseLength;
+    ULONG TargetResponseOffset;
     BOOLEAN Started;
+    BOOLEAN TargetActive;
+    INTELI2C_TARGET_STATUS TargetStatus;
+    UCHAR TargetResponse[INTELI2C_TARGET_BUFFER_SIZE];
 } INTELI2C_DEVICE_EXTENSION, *PINTELI2C_DEVICE_EXTENSION;
 
 static const INTELI2C_PCI_ID IntelI2cPciIds[] =
@@ -460,6 +489,11 @@ IntelI2cExecuteTransfer(
         ExReleaseFastMutex(&DeviceExtension->TransferLock);
         return STATUS_DEVICE_NOT_READY;
     }
+    if (DeviceExtension->TargetActive)
+    {
+        ExReleaseFastMutex(&DeviceExtension->TransferLock);
+        return STATUS_INVALID_DEVICE_STATE;
+    }
     Status = IntelI2cConfigureTransfer(DeviceExtension, Request, Deadline);
     if (!NT_SUCCESS(Status))
         goto Finish;
@@ -507,10 +541,327 @@ Finish:
 }
 
 static
+BOOLEAN
+IntelI2cDrainTarget(
+    _Inout_ PINTELI2C_DEVICE_EXTENSION DeviceExtension)
+{
+    PINTELI2C_TARGET_STATUS TargetStatus = &DeviceExtension->TargetStatus;
+    ULONG Count;
+
+    Count = min(IntelI2cRead32(DeviceExtension, DW_IC_RXFLR), DeviceExtension->RxFifoDepth);
+    if (!Count)
+        return FALSE;
+    while (Count--)
+    {
+        UCHAR Data = (UCHAR)IntelI2cRead32(DeviceExtension, DW_IC_DATA_CMD);
+
+        if (TargetStatus->ReceivedLength < INTELI2C_TARGET_BUFFER_SIZE)
+            TargetStatus->Received[TargetStatus->ReceivedLength++] = Data;
+        TargetStatus->ReceivedTotal++;
+    }
+    return TRUE;
+}
+
+static
+VOID
+IntelI2cFeedTarget(
+    _Inout_ PINTELI2C_DEVICE_EXTENSION DeviceExtension)
+{
+    ULONG Level;
+    ULONG Count;
+
+    Level = IntelI2cRead32(DeviceExtension, DW_IC_TXFLR);
+    if (Level >= DeviceExtension->TxFifoDepth)
+        return;
+    Count = DeviceExtension->TxFifoDepth - Level;
+    if (DeviceExtension->TargetResponseOffset < DeviceExtension->TargetResponseLength)
+        Count = min(Count, DeviceExtension->TargetResponseLength - DeviceExtension->TargetResponseOffset);
+    else
+        Count = 1;
+    while (Count--)
+    {
+        UCHAR Data = 0xff;
+
+        if (DeviceExtension->TargetResponseOffset < DeviceExtension->TargetResponseLength)
+            Data = DeviceExtension->TargetResponse[DeviceExtension->TargetResponseOffset++];
+        IntelI2cWrite32(DeviceExtension, DW_IC_DATA_CMD, Data);
+        DeviceExtension->TargetStatus.ResponseQueued++;
+    }
+}
+
+static
+BOOLEAN
+IntelI2cServiceTarget(
+    _Inout_ PINTELI2C_DEVICE_EXTENSION DeviceExtension)
+{
+    PINTELI2C_TARGET_STATUS TargetStatus = &DeviceExtension->TargetStatus;
+    ULONG Interrupts;
+    BOOLEAN Serviced = FALSE;
+
+    if (!DeviceExtension->TargetActive)
+        return FALSE;
+    Interrupts = IntelI2cRead32(DeviceExtension, DW_IC_RAW_INTR_STAT);
+    if (Interrupts & DW_IC_INTR_TARGET_ERRORS)
+    {
+        TargetStatus->Errors++;
+        TargetStatus->LastErrorInterrupts = Interrupts & DW_IC_INTR_TARGET_ERRORS;
+        if (Interrupts & DW_IC_INTR_RX_UNDER)
+            IntelI2cRead32(DeviceExtension, DW_IC_CLR_RX_UNDER);
+        if (Interrupts & DW_IC_INTR_RX_OVER)
+            IntelI2cRead32(DeviceExtension, DW_IC_CLR_RX_OVER);
+        if (Interrupts & DW_IC_INTR_TX_OVER)
+            IntelI2cRead32(DeviceExtension, DW_IC_CLR_TX_OVER);
+        Serviced = TRUE;
+    }
+    if (Interrupts & DW_IC_INTR_TX_ABRT)
+    {
+        TargetStatus->LastAbortSource = IntelI2cRead32(DeviceExtension, DW_IC_TX_ABRT_SOURCE);
+        IntelI2cRead32(DeviceExtension, DW_IC_CLR_TX_ABRT);
+        if (!(TargetStatus->LastAbortSource & DW_IC_TX_ABRT_SLVFLUSH_TXFIFO) || (TargetStatus->LastAbortSource & (DW_IC_TX_ABRT_SLV_ARBLOST | DW_IC_TX_ABRT_SLVRD_INTX)))
+            TargetStatus->Errors++;
+        else
+            TargetStatus->TransmitFlushes++;
+        Serviced = TRUE;
+    }
+    if (IntelI2cDrainTarget(DeviceExtension))
+        Serviced = TRUE;
+    if (Interrupts & DW_IC_INTR_RX_DONE)
+    {
+        IntelI2cRead32(DeviceExtension, DW_IC_CLR_RX_DONE);
+        TargetStatus->ReadCompletions++;
+        Serviced = TRUE;
+    }
+    if (Interrupts & DW_IC_INTR_STOP_DET)
+    {
+        IntelI2cRead32(DeviceExtension, DW_IC_CLR_STOP_DET);
+        IntelI2cDrainTarget(DeviceExtension);
+        DeviceExtension->TargetResponseOffset = 0;
+        TargetStatus->StopConditions++;
+        Serviced = TRUE;
+    }
+    if (Interrupts & DW_IC_INTR_RD_REQ)
+    {
+        IntelI2cRead32(DeviceExtension, DW_IC_CLR_RD_REQ);
+        TargetStatus->ReadRequests++;
+        IntelI2cFeedTarget(DeviceExtension);
+        Serviced = TRUE;
+    }
+    return Serviced;
+}
+
+static
+VOID
+IntelI2cRestoreMaster(
+    _Inout_ PINTELI2C_DEVICE_EXTENSION DeviceExtension)
+{
+    if (!NT_SUCCESS(IntelI2cDisable(DeviceExtension, IntelI2cDeadline(100))))
+        DPRINT1("INTELI2C%lu: controller did not disable after target mode\n", DeviceExtension->ControllerIndex);
+    IntelI2cWrite32(DeviceExtension, DW_IC_CON, DW_IC_CON_MASTER | DW_IC_CON_RESTART_EN | DW_IC_CON_SLAVE_DISABLE | DW_IC_CON_SPEED_FAST);
+    IntelI2cWrite32(DeviceExtension, DW_IC_INTR_MASK, 0);
+    IntelI2cRead32(DeviceExtension, DW_IC_CLR_INTR);
+}
+
+static
+NTSTATUS
+IntelI2cConfigureTarget(
+    _Inout_ PINTELI2C_DEVICE_EXTENSION DeviceExtension,
+    _In_ PINTELI2C_TARGET_CONFIGURATION Configuration)
+{
+    ULONGLONG Deadline = IntelI2cDeadline(100);
+    ULONG Control;
+    NTSTATUS Status;
+
+    Status = IntelI2cWaitForRegister(DeviceExtension, DW_IC_STATUS, DW_IC_STATUS_MASTER_ACTIVITY, 0, Deadline);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = IntelI2cDisable(DeviceExtension, Deadline);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Control = DW_IC_CON_SPEED_FAST | DW_IC_CON_STOP_DET_IFADDRESSED | DW_IC_CON_RX_FIFO_FULL_HLD_CTRL;
+    if (Configuration->AddressMode == INTELI2C_ADDRESS_MODE_10BIT)
+        Control |= DW_IC_CON_10BITADDR_SLAVE;
+    IntelI2cProgramTiming(DeviceExtension, INTELI2C_DEFAULT_SPEED);
+    IntelI2cWrite32(DeviceExtension, DW_IC_SAR, Configuration->TargetAddress);
+    IntelI2cWrite32(DeviceExtension, DW_IC_CON, Control);
+    IntelI2cWrite32(DeviceExtension, DW_IC_RX_TL, 0);
+    IntelI2cWrite32(DeviceExtension, DW_IC_TX_TL, 0);
+    IntelI2cWrite32(DeviceExtension, DW_IC_INTR_MASK, 0);
+    IntelI2cRead32(DeviceExtension, DW_IC_CLR_INTR);
+    DeviceExtension->TargetStatus.Control = IntelI2cRead32(DeviceExtension, DW_IC_CON);
+    if (DeviceExtension->TargetStatus.Control & (DW_IC_CON_MASTER | DW_IC_CON_SLAVE_DISABLE))
+        return STATUS_NOT_SUPPORTED;
+    IntelI2cWrite32(DeviceExtension, DW_IC_ENABLE, 1);
+    return IntelI2cWaitForRegister(DeviceExtension, DW_IC_ENABLE_STATUS, 1, 1, Deadline);
+}
+
+static
+VOID
+NTAPI
+IntelI2cTargetThread(
+    _In_ PVOID Context)
+{
+    PINTELI2C_DEVICE_EXTENSION DeviceExtension = Context;
+    ULONGLONG LastActivity = KeQueryInterruptTime();
+    LARGE_INTEGER Timeout;
+
+    KeSetPriorityThread(KeGetCurrentThread(), LOW_REALTIME_PRIORITY);
+    for (;;)
+    {
+        ExAcquireFastMutex(&DeviceExtension->TransferLock);
+        if (IntelI2cServiceTarget(DeviceExtension))
+            LastActivity = KeQueryInterruptTime();
+        ExReleaseFastMutex(&DeviceExtension->TransferLock);
+        if (KeQueryInterruptTime() - LastActivity < INTELI2C_TARGET_SPIN_TIME)
+        {
+            KeStallExecutionProcessor(5);
+            Timeout.QuadPart = 0;
+        }
+        else
+        {
+            Timeout.QuadPart = -INTELI2C_TARGET_IDLE_INTERVAL;
+        }
+        if (KeWaitForSingleObject(&DeviceExtension->TargetStopEvent, Executive, KernelMode, FALSE, &Timeout) == STATUS_SUCCESS)
+            break;
+    }
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+static
+NTSTATUS
+IntelI2cTargetStop(
+    _Inout_ PINTELI2C_DEVICE_EXTENSION DeviceExtension,
+    _In_opt_ PFILE_OBJECT Owner,
+    _Out_opt_ PINTELI2C_TARGET_STATUS FinalStatus)
+{
+    PKTHREAD Thread = NULL;
+    NTSTATUS Status = STATUS_INVALID_DEVICE_STATE;
+
+    KeWaitForSingleObject(&DeviceExtension->TargetLock, Executive, KernelMode, FALSE, NULL);
+    if (Owner && DeviceExtension->TargetOwner != Owner)
+    {
+        KeReleaseMutex(&DeviceExtension->TargetLock, FALSE);
+        return STATUS_INVALID_DEVICE_STATE;
+    }
+    ExAcquireFastMutex(&DeviceExtension->TransferLock);
+    if (DeviceExtension->TargetActive)
+    {
+        IntelI2cServiceTarget(DeviceExtension);
+        DeviceExtension->TargetActive = FALSE;
+        DeviceExtension->TargetStatus.Active = FALSE;
+        IntelI2cRestoreMaster(DeviceExtension);
+        Thread = DeviceExtension->TargetThread;
+        DeviceExtension->TargetThread = NULL;
+        DeviceExtension->TargetOwner = NULL;
+        DPRINT("INTELI2C%lu: target 0x%x stopped, received=%lu reads=%lu stops=%lu errors=%lu\n", DeviceExtension->ControllerIndex, DeviceExtension->TargetStatus.TargetAddress, DeviceExtension->TargetStatus.ReceivedTotal, DeviceExtension->TargetStatus.ReadRequests, DeviceExtension->TargetStatus.StopConditions, DeviceExtension->TargetStatus.Errors);
+        Status = STATUS_SUCCESS;
+    }
+    if (FinalStatus)
+        RtlCopyMemory(FinalStatus, &DeviceExtension->TargetStatus, sizeof(*FinalStatus));
+    ExReleaseFastMutex(&DeviceExtension->TransferLock);
+    if (Thread)
+    {
+        KeSetEvent(&DeviceExtension->TargetStopEvent, IO_NO_INCREMENT, FALSE);
+        KeWaitForSingleObject(Thread, Executive, KernelMode, FALSE, NULL);
+        ObDereferenceObject(Thread);
+    }
+    KeReleaseMutex(&DeviceExtension->TargetLock, FALSE);
+    return Status;
+}
+
+static
+NTSTATUS
+IntelI2cTargetStart(
+    _Inout_ PINTELI2C_DEVICE_EXTENSION DeviceExtension,
+    _In_ PINTELI2C_TARGET_CONFIGURATION Configuration,
+    _In_opt_ PFILE_OBJECT Owner)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE ThreadHandle;
+    PKTHREAD Thread = NULL;
+    NTSTATUS Status;
+
+    if (Configuration->Version != INTELI2C_INTERFACE_VERSION)
+        return STATUS_REVISION_MISMATCH;
+    if (Configuration->ControllerIndex != DeviceExtension->ControllerIndex)
+        return STATUS_NO_SUCH_DEVICE;
+    if (Configuration->ResponseLength > INTELI2C_TARGET_BUFFER_SIZE)
+        return STATUS_INVALID_PARAMETER;
+    if ((Configuration->AddressMode == INTELI2C_ADDRESS_MODE_7BIT && (Configuration->TargetAddress < 0x08 || Configuration->TargetAddress > 0x77)) || (Configuration->AddressMode == INTELI2C_ADDRESS_MODE_10BIT && Configuration->TargetAddress > 0x3ff) || Configuration->AddressMode > INTELI2C_ADDRESS_MODE_10BIT)
+        return STATUS_INVALID_PARAMETER;
+
+    KeWaitForSingleObject(&DeviceExtension->TargetLock, Executive, KernelMode, FALSE, NULL);
+    ExAcquireFastMutex(&DeviceExtension->TransferLock);
+    if (!DeviceExtension->Started)
+    {
+        Status = STATUS_DEVICE_NOT_READY;
+    }
+    else if (DeviceExtension->TargetActive)
+    {
+        Status = STATUS_DEVICE_BUSY;
+    }
+    else
+    {
+        RtlZeroMemory(&DeviceExtension->TargetStatus, sizeof(DeviceExtension->TargetStatus));
+        DeviceExtension->TargetStatus.Version = INTELI2C_INTERFACE_VERSION;
+        DeviceExtension->TargetStatus.ControllerIndex = DeviceExtension->ControllerIndex;
+        DeviceExtension->TargetStatus.TargetAddress = Configuration->TargetAddress;
+        DeviceExtension->TargetStatus.AddressMode = Configuration->AddressMode;
+        RtlCopyMemory(DeviceExtension->TargetResponse, Configuration->Response, Configuration->ResponseLength);
+        DeviceExtension->TargetResponseLength = Configuration->ResponseLength;
+        DeviceExtension->TargetResponseOffset = 0;
+        Status = IntelI2cConfigureTarget(DeviceExtension, Configuration);
+        if (NT_SUCCESS(Status))
+        {
+            DeviceExtension->TargetActive = TRUE;
+            DeviceExtension->TargetStatus.Active = TRUE;
+        }
+        else
+        {
+            IntelI2cRestoreMaster(DeviceExtension);
+        }
+    }
+    ExReleaseFastMutex(&DeviceExtension->TransferLock);
+    if (!NT_SUCCESS(Status))
+    {
+        KeReleaseMutex(&DeviceExtension->TargetLock, FALSE);
+        DPRINT1("INTELI2C%lu: target mode at 0x%x failed, status=0x%08lx control=0x%08lx\n", DeviceExtension->ControllerIndex, Configuration->TargetAddress, Status, DeviceExtension->TargetStatus.Control);
+        return Status;
+    }
+
+    KeClearEvent(&DeviceExtension->TargetStopEvent);
+    InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = PsCreateSystemThread(&ThreadHandle, THREAD_ALL_ACCESS, &ObjectAttributes, NULL, NULL, IntelI2cTargetThread, DeviceExtension);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ObReferenceObjectByHandle(ThreadHandle, SYNCHRONIZE, *PsThreadType, KernelMode, (PVOID *)&Thread, NULL);
+        if (!NT_SUCCESS(Status))
+            KeSetEvent(&DeviceExtension->TargetStopEvent, IO_NO_INCREMENT, FALSE);
+        ZwClose(ThreadHandle);
+    }
+    ExAcquireFastMutex(&DeviceExtension->TransferLock);
+    if (NT_SUCCESS(Status))
+    {
+        DeviceExtension->TargetThread = Thread;
+        DeviceExtension->TargetOwner = Owner;
+        DPRINT("INTELI2C%lu: target mode at 0x%x, control=0x%08lx\n", DeviceExtension->ControllerIndex, Configuration->TargetAddress, DeviceExtension->TargetStatus.Control);
+    }
+    else
+    {
+        DeviceExtension->TargetActive = FALSE;
+        DeviceExtension->TargetStatus.Active = FALSE;
+        IntelI2cRestoreMaster(DeviceExtension);
+    }
+    ExReleaseFastMutex(&DeviceExtension->TransferLock);
+    KeReleaseMutex(&DeviceExtension->TargetLock, FALSE);
+    return Status;
+}
+
+static
 VOID
 IntelI2cStopHardware(
     _Inout_ PINTELI2C_DEVICE_EXTENSION DeviceExtension)
 {
+    IntelI2cTargetStop(DeviceExtension, NULL, NULL);
     ExAcquireFastMutex(&DeviceExtension->TransferLock);
     DeviceExtension->Started = FALSE;
     if (DeviceExtension->Registers)
@@ -635,6 +986,27 @@ IntelI2cCreateClose(
 static
 NTSTATUS
 NTAPI
+IntelI2cCleanup(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PINTELI2C_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    PIO_STACK_LOCATION IrpStack = IoGetCurrentIrpStackLocation(Irp);
+
+    if (NT_SUCCESS(IoAcquireRemoveLock(&DeviceExtension->RemoveLock, Irp)))
+    {
+        IntelI2cTargetStop(DeviceExtension, IrpStack->FileObject, NULL);
+        IoReleaseRemoveLock(&DeviceExtension->RemoveLock, Irp);
+    }
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
 IntelI2cDeviceControl(
     _In_ PDEVICE_OBJECT DeviceObject,
     _Inout_ PIRP Irp)
@@ -679,6 +1051,40 @@ IntelI2cDeviceControl(
             {
                 Status = IntelI2cExecuteTransfer(DeviceExtension, Buffer, InputLength);
                 Irp->IoStatus.Information = InputLength;
+            }
+            break;
+
+        case IOCTL_INTELI2C_TARGET_START:
+            if (!Buffer || InputLength < sizeof(INTELI2C_TARGET_CONFIGURATION))
+                Status = STATUS_BUFFER_TOO_SMALL;
+            else
+                Status = IntelI2cTargetStart(DeviceExtension, Buffer, IrpStack->FileObject);
+            break;
+
+        case IOCTL_INTELI2C_TARGET_STOP:
+            if (OutputLength && (!Buffer || OutputLength < sizeof(INTELI2C_TARGET_STATUS)))
+                Status = STATUS_BUFFER_TOO_SMALL;
+            else
+            {
+                Status = IntelI2cTargetStop(DeviceExtension, NULL, OutputLength ? Buffer : NULL);
+                if (NT_SUCCESS(Status) && OutputLength)
+                    Irp->IoStatus.Information = sizeof(INTELI2C_TARGET_STATUS);
+            }
+            break;
+
+        case IOCTL_INTELI2C_TARGET_QUERY:
+            if (!Buffer || OutputLength < sizeof(INTELI2C_TARGET_STATUS))
+                Status = STATUS_BUFFER_TOO_SMALL;
+            else
+            {
+                ExAcquireFastMutex(&DeviceExtension->TransferLock);
+                IntelI2cServiceTarget(DeviceExtension);
+                RtlCopyMemory(Buffer, &DeviceExtension->TargetStatus, sizeof(INTELI2C_TARGET_STATUS));
+                ExReleaseFastMutex(&DeviceExtension->TransferLock);
+                ((PINTELI2C_TARGET_STATUS)Buffer)->Version = INTELI2C_INTERFACE_VERSION;
+                ((PINTELI2C_TARGET_STATUS)Buffer)->ControllerIndex = DeviceExtension->ControllerIndex;
+                Irp->IoStatus.Information = sizeof(INTELI2C_TARGET_STATUS);
+                Status = STATUS_SUCCESS;
             }
             break;
 
@@ -791,6 +1197,8 @@ IntelI2cAddDevice(
     }
     IoInitializeRemoveLock(&DeviceExtension->RemoveLock, INTELI2C_TAG, 0, 0);
     ExInitializeFastMutex(&DeviceExtension->TransferLock);
+    KeInitializeMutex(&DeviceExtension->TargetLock, 0);
+    KeInitializeEvent(&DeviceExtension->TargetStopEvent, NotificationEvent, FALSE);
     Status = IoRegisterDeviceInterface(PhysicalDeviceObject, &GUID_DEVINTERFACE_INTEL_I2C, NULL, &DeviceExtension->InterfaceName);
     if (!NT_SUCCESS(Status))
     {
@@ -813,6 +1221,7 @@ DriverEntry(
     DriverObject->DriverExtension->AddDevice = IntelI2cAddDevice;
     DriverObject->MajorFunction[IRP_MJ_CREATE] = IntelI2cCreateClose;
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = IntelI2cCreateClose;
+    DriverObject->MajorFunction[IRP_MJ_CLEANUP] = IntelI2cCleanup;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = IntelI2cDeviceControl;
     DriverObject->MajorFunction[IRP_MJ_PNP] = IntelI2cPnp;
     DriverObject->MajorFunction[IRP_MJ_POWER] = IntelI2cPower;
