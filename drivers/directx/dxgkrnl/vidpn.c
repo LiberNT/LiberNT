@@ -3529,6 +3529,145 @@ VidPn_CreateNewSourceModeSet(
     return STATUS_SUCCESS;
 }
 
+/*
+ * Pinned-mode preservation for mode-set replacement.
+ *
+ * When a miniport replaces a source or target mode set, the mode pinned in
+ * the old set must still be offered by the new one; otherwise the
+ * replacement would silently drop a constraint the VidPN was built around.
+ * Assignment fails with STATUS_GRAPHICS_PINNED_MODE_MUST_REMAIN_IN_SET, and
+ * the caller keeps ownership of the rejected set and releases it.
+ *
+ * Mode ids are per-set, so "the same mode" means the same format or timing,
+ * never the same id.  Fields are compared one by one: these structures carry
+ * padding (D3DKMDT_VIDEO_SIGNAL_INFO has 4 bytes before PixelRate on 64-bit)
+ * that a byte compare would read.
+ */
+static BOOLEAN
+DxgkpSourceModesMatch(
+    _In_ CONST D3DKMDT_VIDPN_SOURCE_MODE *A,
+    _In_ CONST D3DKMDT_VIDPN_SOURCE_MODE *B)
+{
+    if (A->Type != B->Type)
+        return FALSE;
+
+    if (A->Type == D3DKMDT_RMT_GRAPHICS)
+    {
+        CONST D3DKMDT_GRAPHICS_RENDERING_FORMAT *Ga = &A->Format.Graphics;
+        CONST D3DKMDT_GRAPHICS_RENDERING_FORMAT *Gb = &B->Format.Graphics;
+
+        return Ga->PrimSurfSize.cx      == Gb->PrimSurfSize.cx &&
+               Ga->PrimSurfSize.cy      == Gb->PrimSurfSize.cy &&
+               Ga->VisibleRegionSize.cx == Gb->VisibleRegionSize.cx &&
+               Ga->VisibleRegionSize.cy == Gb->VisibleRegionSize.cy &&
+               Ga->Stride               == Gb->Stride &&
+               Ga->PixelFormat          == Gb->PixelFormat &&
+               Ga->ColorBasis           == Gb->ColorBasis &&
+               Ga->PixelValueAccessMode == Gb->PixelValueAccessMode;
+    }
+
+    /* Text modes are rare and carry no padding-sensitive members. */
+    return RtlCompareMemory(&A->Format, &B->Format, sizeof(A->Format)) ==
+           sizeof(A->Format);
+}
+
+static BOOLEAN
+DxgkpTargetModesMatch(
+    _In_ CONST D3DKMDT_VIDPN_TARGET_MODE *A,
+    _In_ CONST D3DKMDT_VIDPN_TARGET_MODE *B)
+{
+    CONST D3DKMDT_VIDEO_SIGNAL_INFO *Sa = &A->VideoSignalInfo;
+    CONST D3DKMDT_VIDEO_SIGNAL_INFO *Sb = &B->VideoSignalInfo;
+
+    /* ScanLineOrdering is read as the whole union word, so on WDDM 1.3+ it
+     * also covers VSyncFreqDivider -- a different divider is a different
+     * effective refresh rate, hence a different mode. */
+    return Sa->VideoStandard         == Sb->VideoStandard &&
+           Sa->TotalSize.cx          == Sb->TotalSize.cx &&
+           Sa->TotalSize.cy          == Sb->TotalSize.cy &&
+           Sa->ActiveSize.cx         == Sb->ActiveSize.cx &&
+           Sa->ActiveSize.cy         == Sb->ActiveSize.cy &&
+           Sa->VSyncFreq.Numerator   == Sb->VSyncFreq.Numerator &&
+           Sa->VSyncFreq.Denominator == Sb->VSyncFreq.Denominator &&
+           Sa->HSyncFreq.Numerator   == Sb->HSyncFreq.Numerator &&
+           Sa->HSyncFreq.Denominator == Sb->HSyncFreq.Denominator &&
+           Sa->PixelRate             == Sb->PixelRate &&
+           Sa->ScanLineOrdering      == Sb->ScanLineOrdering;
+}
+
+/*
+ * Checks that the old set's pinned source mode survives in the new set, and
+ * carries the pin across when the new set has none of its own.
+ */
+static NTSTATUS
+DxgkpCarrySourcePin(
+    _In_    CONST DXGKP_VIDPN_SOURCE_MODESET *Old,
+    _Inout_ PDXGKP_VIDPN_SOURCE_MODESET       New)
+{
+    CONST D3DKMDT_VIDPN_SOURCE_MODE *Pinned = NULL;
+    SIZE_T i;
+
+    if (Old == NULL || Old->PinnedModeId == (UINT)-1)
+        return STATUS_SUCCESS;
+
+    for (i = 0; i < Old->NumModes; i++)
+    {
+        if (Old->Modes[i].Id == Old->PinnedModeId)
+        {
+            Pinned = &Old->Modes[i];
+            break;
+        }
+    }
+    /* A pin naming no mode in its own set constrains nothing. */
+    if (Pinned == NULL)
+        return STATUS_SUCCESS;
+
+    for (i = 0; i < New->NumModes; i++)
+    {
+        if (DxgkpSourceModesMatch(&New->Modes[i], Pinned))
+        {
+            if (New->PinnedModeId == (UINT)-1)
+                New->PinnedModeId = New->Modes[i].Id;
+            return STATUS_SUCCESS;
+        }
+    }
+    return STATUS_GRAPHICS_PINNED_MODE_MUST_REMAIN_IN_SET;
+}
+
+static NTSTATUS
+DxgkpCarryTargetPin(
+    _In_    CONST DXGKP_VIDPN_TARGET_MODESET *Old,
+    _Inout_ PDXGKP_VIDPN_TARGET_MODESET       New)
+{
+    CONST D3DKMDT_VIDPN_TARGET_MODE *Pinned = NULL;
+    SIZE_T i;
+
+    if (Old == NULL || Old->PinnedModeId == (UINT)-1)
+        return STATUS_SUCCESS;
+
+    for (i = 0; i < Old->NumModes; i++)
+    {
+        if (Old->Modes[i].Id == Old->PinnedModeId)
+        {
+            Pinned = &Old->Modes[i];
+            break;
+        }
+    }
+    if (Pinned == NULL)
+        return STATUS_SUCCESS;
+
+    for (i = 0; i < New->NumModes; i++)
+    {
+        if (DxgkpTargetModesMatch(&New->Modes[i], Pinned))
+        {
+            if (New->PinnedModeId == (UINT)-1)
+                New->PinnedModeId = New->Modes[i].Id;
+            return STATUS_SUCCESS;
+        }
+    }
+    return STATUS_GRAPHICS_PINNED_MODE_MUST_REMAIN_IN_SET;
+}
+
 static NTSTATUS APIENTRY
 VidPn_AssignSourceModeSet(
     _In_ D3DKMDT_HVIDPN                               hVidPn,
@@ -3538,6 +3677,7 @@ VidPn_AssignSourceModeSet(
     PDXGKP_VIDPN VidPn;
     PDXGKP_VIDPN_SOURCE_MODESET ModeSet = DxgkpSourceModeSetFromHandle(hVidPnSourceModeSet);
     PDXGKP_VIDPN_SOURCE_MODESET Old;
+    NTSTATUS Status;
 
     VidPn = DxgkpVidPnFromHandle(hVidPn);
     if (VidPn == NULL || ModeSet == NULL || ModeSet->Owner != VidPn)
@@ -3549,6 +3689,13 @@ VidPn_AssignSourceModeSet(
     Old = VidPn->SourceModeSets[VidPnSourceId];
     if (Old == ModeSet)
         return STATUS_SUCCESS;
+
+    /* Reject before touching any state: on failure the caller still owns
+     * the new set and releases it through pfnReleaseSourceModeSet. */
+    Status = DxgkpCarrySourcePin(Old, ModeSet);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
     VidPn->SourceModeSets[VidPnSourceId] = ModeSet;
     InterlockedExchange(&ModeSet->References, 0);
     if (Old != NULL && InterlockedCompareExchange(&Old->References, 0, 0) <= 0)
@@ -3723,6 +3870,7 @@ VidPn_AssignTargetModeSet(
     PDXGKP_VIDPN_TARGET_MODESET ModeSet = DxgkpTargetModeSetFromHandle(hVidPnTargetModeSet);
     PDXGKP_VIDPN_TARGET_MODESET Old;
     ULONG TargetIndex;
+    NTSTATUS Status;
 
     VidPn = DxgkpVidPnFromHandle(hVidPn);
     if (VidPn == NULL || ModeSet == NULL || ModeSet->Owner != VidPn)
@@ -3735,6 +3883,13 @@ VidPn_AssignTargetModeSet(
     Old = VidPn->TargetModeSets[TargetIndex];
     if (Old == ModeSet)
         return STATUS_SUCCESS;
+
+    /* Reject before touching any state: on failure the caller still owns
+     * the new set and releases it through pfnReleaseTargetModeSet. */
+    Status = DxgkpCarryTargetPin(Old, ModeSet);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
     VidPn->TargetModeSets[TargetIndex] = ModeSet;
     InterlockedExchange(&ModeSet->References, 0);
     if (Old != NULL && InterlockedCompareExchange(&Old->References, 0, 0) <= 0)
