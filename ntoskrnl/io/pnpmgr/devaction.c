@@ -2065,6 +2065,14 @@ PiStartDeviceFinal(
     PiSetDevNodeState(DeviceNode, DeviceNodeStarted);
     PopFxNotifyDeviceStarted(DeviceNode->PhysicalDeviceObject);
 
+    /* A started dock device means the machine has docked: the hardware
+     * profile has changed. */
+    if (DeviceNode->CapabilityFlags & 0x00000008) // CM_DEVCAP_DOCKDEVICE
+    {
+        DPRINT("Dock device %wZ started; hardware profile changed\n", &DeviceNode->InstancePath);
+        PiNotifyHardwareProfileChange(&GUID_HWPROFILE_CHANGE_COMPLETE);
+    }
+
     return STATUS_SUCCESS;
 }
 
@@ -2152,6 +2160,9 @@ IopSendRemoveDevice(IN PDEVICE_OBJECT DeviceObject)
 {
     PDEVICE_NODE DeviceNode = IopGetDeviceNode(DeviceObject);
     BOOLEAN Notified = DeviceNode->PreviousState == DeviceNodeRemovePendingCloses;
+    /* Removing a dock device undocks the machine; a surprise-removed dock
+     * was announced when it went. */
+    BOOLEAN Undocked = !Notified && (DeviceNode->CapabilityFlags & 0x00000008) != 0; // CM_DEVCAP_DOCKDEVICE
 
     ASSERT(DeviceNode->State == DeviceNodeAwaitingQueuedRemoval);
 
@@ -2172,6 +2183,11 @@ IopSendRemoveDevice(IN PDEVICE_OBJECT DeviceObject)
     PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
     if (!Notified)
         PiNotifyTargetDeviceChange(&GUID_TARGET_DEVICE_REMOVE_COMPLETE, DeviceObject, NULL);
+    if (Undocked)
+    {
+        DPRINT("Dock device %wZ removed; hardware profile changed\n", &DeviceNode->InstancePath);
+        PiNotifyHardwareProfileChange(&GUID_HWPROFILE_CHANGE_COMPLETE);
+    }
     LONG_PTR refCount = ObDereferenceObject(DeviceObject);
     if (refCount != 0)
     {
@@ -2595,6 +2611,9 @@ IopRemoveDevice(PDEVICE_NODE DeviceNode)
         if (NT_SUCCESS(Status))
         {
             PiNotifyTargetDeviceChange(&GUID_TARGET_DEVICE_REMOVE_COMPLETE, DeviceNode->PhysicalDeviceObject, NULL);
+            /* The dock is gone now, whenever its last handle closes. */
+            if (DeviceNode->CapabilityFlags & 0x00000008) // CM_DEVCAP_DOCKDEVICE
+                PiNotifyHardwareProfileChange(&GUID_HWPROFILE_CHANGE_COMPLETE);
             InterlockedIncrement(&PiRemovePendingCloses);
             PiSetDevNodeState(DeviceNode, DeviceNodeRemovePendingCloses);
             KeMemoryBarrier();
