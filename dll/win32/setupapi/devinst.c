@@ -5506,6 +5506,7 @@ BOOL WINAPI SetupDiGetDeviceInstallParamsA(
                 DeviceInstallParams,
                 &deviceInstallParamsW,
                 FIELD_OFFSET(SP_DEVINSTALL_PARAMS_W, DriverPath));
+            DeviceInstallParams->cbSize = sizeof(SP_DEVINSTALL_PARAMS_A);
             if (WideCharToMultiByte(CP_ACP, 0, deviceInstallParamsW.DriverPath, -1,
                 DeviceInstallParams->DriverPath, MAX_PATH, NULL, NULL) == 0)
             {
@@ -5612,6 +5613,7 @@ CheckDeviceInstallParameters(
         DI_NEEDREBOOT |                       /* 0x00000100 */
         DI_RESOURCEPAGE_ADDED |               /* 0x00002000 */
         DI_PROPERTIES_CHANGE |                /* 0x00004000 */
+        DI_INF_IS_SORTED |                    /* 0x00008000 */
         DI_ENUMSINGLEINF |                    /* 0x00010000 */
         DI_DONOTCALLCONFIGMG |                /* 0x00020000 */
         DI_CLASSINSTALLPARAMS |               /* 0x00100000 */
@@ -5713,7 +5715,7 @@ SetupDiSetDeviceInstallParamsA(
 
     if (DeviceInstallParams == NULL)
         SetLastError(ERROR_INVALID_PARAMETER);
-    else if (DeviceInstallParams->cbSize < sizeof(SP_DEVINSTALL_PARAMS_A))
+    else if (DeviceInstallParams->cbSize != sizeof(SP_DEVINSTALL_PARAMS_A))
         SetLastError(ERROR_INVALID_USER_BUFFER);
     else
     {
