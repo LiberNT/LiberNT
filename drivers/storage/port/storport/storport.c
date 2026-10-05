@@ -547,6 +547,8 @@ PortAddDevice(
     KeInitializeSpinLock(&DeviceExtension->MiniportExLock);
     KeInitializeSpinLock(&DeviceExtension->MessageInterruptLock);
     KeInitializeSpinLock(&DeviceExtension->NoInterruptLock);
+    KeInitializeSpinLock(&DeviceExtension->MiniportTimerListLock);
+    InitializeListHead(&DeviceExtension->MiniportTimerList);
     KeInitializeSpinLock(&DeviceExtension->CompletionLock);
     InitializeListHead(&DeviceExtension->CompletionListHead);
     KeInitializeDpc(&DeviceExtension->CompletionDpc,
@@ -1201,6 +1203,8 @@ StorPortDeviceReady(
 
 typedef struct _STORPORT_MINIPORT_TIMER
 {
+    LIST_ENTRY ListEntry;
+    PFDO_DEVICE_EXTENSION DeviceExtension;
     KTIMER Timer;
     KDPC Dpc;
     PHW_TIMER_EX Callback;
@@ -1228,6 +1232,35 @@ C_ASSERT(sizeof(STORPORT_STARTIO_PERFORMANCE_PARAMETERS_V2) == 20);
 C_ASSERT(sizeof(STOR_EVENT) == sizeof(KEVENT));
 C_ASSERT(FIELD_OFFSET(STOR_EVENT, Header.SignalState) == FIELD_OFFSET(KEVENT, Header.SignalState));
 C_ASSERT(FIELD_OFFSET(STOR_EVENT, Header.WaitListHead) == FIELD_OFFSET(KEVENT, Header.WaitListHead));
+
+VOID
+PortFreeMiniportTimers(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
+{
+    PSTORPORT_MINIPORT_TIMER MiniportTimer;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&DeviceExtension->MiniportTimerListLock, &OldIrql);
+    for (Entry = DeviceExtension->MiniportTimerList.Flink;
+         Entry != &DeviceExtension->MiniportTimerList;
+         Entry = Entry->Flink)
+    {
+        MiniportTimer = CONTAINING_RECORD(Entry, STORPORT_MINIPORT_TIMER, ListEntry);
+        KeCancelTimer(&MiniportTimer->Timer);
+    }
+    KeReleaseSpinLock(&DeviceExtension->MiniportTimerListLock, OldIrql);
+
+    KeFlushQueuedDpcs();
+
+    while (!IsListEmpty(&DeviceExtension->MiniportTimerList))
+    {
+        MiniportTimer = CONTAINING_RECORD(RemoveHeadList(&DeviceExtension->MiniportTimerList),
+                                          STORPORT_MINIPORT_TIMER, ListEntry);
+        KeCancelTimer(&MiniportTimer->Timer);
+        ExFreePoolWithTag(MiniportTimer, TAG_MINIPORT_DATA);
+    }
+}
 
 static
 VOID
@@ -1631,8 +1664,10 @@ StorPortExtendedFunction(
         {
             PVOID *TimerHandle = va_arg(Args, PVOID *);
             PSTORPORT_MINIPORT_TIMER MiniportTimer;
+            PMINIPORT_DEVICE_EXTENSION MiniportExtension;
+            KIRQL OldIrql;
 
-            if (!TimerHandle)
+            if (!HwDeviceExtension || !TimerHandle)
             {
                 Status = STOR_STATUS_INVALID_PARAMETER;
                 break;
@@ -1646,6 +1681,11 @@ StorPortExtendedFunction(
             RtlZeroMemory(MiniportTimer, sizeof(*MiniportTimer));
             KeInitializeTimerEx(&MiniportTimer->Timer, NotificationTimer);
             KeInitializeDpc(&MiniportTimer->Dpc, PortMiniportTimerExDpc, MiniportTimer);
+            MiniportExtension = CONTAINING_RECORD(HwDeviceExtension, MINIPORT_DEVICE_EXTENSION, HwDeviceExtension);
+            MiniportTimer->DeviceExtension = MiniportExtension->Miniport->DeviceExtension;
+            KeAcquireSpinLock(&MiniportTimer->DeviceExtension->MiniportTimerListLock, &OldIrql);
+            InsertTailList(&MiniportTimer->DeviceExtension->MiniportTimerList, &MiniportTimer->ListEntry);
+            KeReleaseSpinLock(&MiniportTimer->DeviceExtension->MiniportTimerListLock, OldIrql);
             *TimerHandle = MiniportTimer;
             Status = STOR_STATUS_SUCCESS;
             break;
@@ -1685,12 +1725,16 @@ StorPortExtendedFunction(
         case ExtFunctionFreeTimer:
         {
             PSTORPORT_MINIPORT_TIMER MiniportTimer = va_arg(Args, PVOID);
+            KIRQL OldIrql;
 
             if (!MiniportTimer)
             {
                 Status = STOR_STATUS_INVALID_PARAMETER;
                 break;
             }
+            KeAcquireSpinLock(&MiniportTimer->DeviceExtension->MiniportTimerListLock, &OldIrql);
+            RemoveEntryList(&MiniportTimer->ListEntry);
+            KeReleaseSpinLock(&MiniportTimer->DeviceExtension->MiniportTimerListLock, OldIrql);
             KeCancelTimer(&MiniportTimer->Timer);
             KeRemoveQueueDpc(&MiniportTimer->Dpc);
             ExFreePoolWithTag(MiniportTimer, TAG_MINIPORT_DATA);

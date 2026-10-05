@@ -394,6 +394,51 @@ MiniportHwInitialize(
 }
 
 
+VOID
+MiniportQuerySupportedControlTypes(
+    _In_ PMINIPORT Miniport)
+{
+    ULONG Buffer[(FIELD_OFFSET(SCSI_SUPPORTED_CONTROL_TYPE_LIST, SupportedTypeList) +
+                  ScsiAdapterQueryFruId * sizeof(BOOLEAN) + sizeof(ULONG) - 1) / sizeof(ULONG)];
+    PSCSI_SUPPORTED_CONTROL_TYPE_LIST List = (PSCSI_SUPPORTED_CONTROL_TYPE_LIST)Buffer;
+    ULONG Type;
+
+    Miniport->SupportedControlTypes = 0;
+    if (Miniport->InitData->HwAdapterControl == NULL)
+        return;
+
+    RtlZeroMemory(Buffer, sizeof(Buffer));
+    List->MaxControlType = ScsiAdapterQueryFruId;
+    if (Miniport->InitData->HwAdapterControl(&Miniport->MiniportExtension->HwDeviceExtension,
+                                             ScsiQuerySupportedControlTypes,
+                                             List) != ScsiAdapterControlSuccess)
+        return;
+
+    for (Type = 0; Type < ScsiAdapterQueryFruId; Type++)
+    {
+        if (List->SupportedTypeList[Type])
+            Miniport->SupportedControlTypes |= 1UL << Type;
+    }
+}
+
+SCSI_ADAPTER_CONTROL_STATUS
+MiniportAdapterControl(
+    _In_ PMINIPORT Miniport,
+    _In_ SCSI_ADAPTER_CONTROL_TYPE ControlType,
+    _In_opt_ PVOID Parameters)
+{
+    if ((Miniport->MiniportExtension == NULL) ||
+        (Miniport->InitData == NULL) ||
+        (Miniport->InitData->HwAdapterControl == NULL) ||
+        (ControlType >= ScsiAdapterQueryFruId) ||
+        !(Miniport->SupportedControlTypes & (1UL << ControlType)))
+        return ScsiAdapterControlUnsuccessful;
+
+    return Miniport->InitData->HwAdapterControl(&Miniport->MiniportExtension->HwDeviceExtension,
+                                                ControlType,
+                                                Parameters);
+}
+
 BOOLEAN
 MiniportHwMSInterrupt(
     _In_ PMINIPORT Miniport,

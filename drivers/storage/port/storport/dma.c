@@ -91,6 +91,33 @@ PortInitializeDma(
     return STATUS_SUCCESS;
 }
 
+VOID
+PortReleaseDma(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension)
+{
+    PDMA_ADAPTER Adapter = FdoExtension->CommonBufferAdapter;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    if (!FdoExtension->DmaAdapter)
+        return;
+
+    while (!IsListEmpty(&FdoExtension->DmaBuffers))
+    {
+        PPORT_DMA_BUFFER Buffer = CONTAINING_RECORD(RemoveHeadList(&FdoExtension->DmaBuffers),
+                                                    PORT_DMA_BUFFER, Entry);
+
+        Adapter->DmaOperations->FreeCommonBuffer(Adapter, Buffer->Length,
+            Buffer->LogicalAddress, Buffer->VirtualAddress, Buffer->CacheEnabled);
+        ExFreePoolWithTag(Buffer, TAG_DMA_BUFFER);
+    }
+
+    if (FdoExtension->CommonBufferAdapter != FdoExtension->DmaAdapter)
+        Adapter->DmaOperations->PutDmaAdapter(Adapter);
+    FdoExtension->DmaAdapter->DmaOperations->PutDmaAdapter(FdoExtension->DmaAdapter);
+    FdoExtension->CommonBufferAdapter = NULL;
+    FdoExtension->DmaAdapter = NULL;
+}
+
 PVOID
 PortAllocateDmaBuffer(
     _In_ PFDO_DEVICE_EXTENSION FdoExtension,

@@ -85,6 +85,7 @@ PortFdoConnectMessageInterrupts(
     {
         /* The kernel connected the fallback line interrupt instead. */
         DeviceExtension->Interrupt = (PKINTERRUPT)DeviceExtension->MessageInfo;
+        DeviceExtension->InterruptConnectedEx = TRUE;
         DeviceExtension->MessageInfo = NULL;
         DPRINT1("Storport: message connect fell back to a line interrupt\n");
     }
@@ -208,6 +209,8 @@ PortFdoStartMiniport(
         DPRINT1("MiniportFindAdapter() failed (Status 0x%08lx)\n", Status);
         return Status;
     }
+
+    MiniportQuerySupportedControlTypes(&DeviceExtension->Miniport);
 
     Status = PortInitializeDma(DeviceExtension, &DeviceExtension->Miniport.PortConfig);
     if (!NT_SUCCESS(Status))
@@ -834,6 +837,153 @@ PortFdoScsi(
 }
 
 
+static
+VOID
+PortFdoDisconnectInterrupt(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
+{
+    IO_DISCONNECT_INTERRUPT_PARAMETERS Parameters;
+
+    RtlZeroMemory(&Parameters, sizeof(Parameters));
+    if (DeviceExtension->MessageInfo != NULL)
+    {
+        Parameters.Version = CONNECT_MESSAGE_BASED;
+        Parameters.ConnectionContext.InterruptMessageTable = DeviceExtension->MessageInfo;
+        IoDisconnectInterruptEx(&Parameters);
+        DeviceExtension->MessageInfo = NULL;
+    }
+    else if (DeviceExtension->Interrupt != NULL)
+    {
+        if (DeviceExtension->InterruptConnectedEx)
+        {
+            Parameters.Version = CONNECT_LINE_BASED;
+            Parameters.ConnectionContext.InterruptObject = DeviceExtension->Interrupt;
+            IoDisconnectInterruptEx(&Parameters);
+        }
+        else
+        {
+            IoDisconnectInterrupt(DeviceExtension->Interrupt);
+        }
+    }
+
+    DeviceExtension->Interrupt = NULL;
+    DeviceExtension->InterruptConnectedEx = FALSE;
+    DeviceExtension->InterruptIrql = 0;
+}
+
+
+static
+VOID
+PortFdoStopAdapter(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
+{
+    if ((DeviceExtension->PnpState != dsStarted) &&
+        (DeviceExtension->PnpState != dsSurpriseRemoved))
+        return;
+
+    MiniportAdapterControl(&DeviceExtension->Miniport, ScsiStopAdapter, NULL);
+    MiniportAdapterControl(&DeviceExtension->Miniport, ScsiSetBootConfig, NULL);
+    PortFdoDisconnectInterrupt(DeviceExtension);
+    DeviceExtension->PnpState = dsStopped;
+}
+
+
+static
+VOID
+PortFdoReleaseAdapter(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
+{
+    KLOCK_QUEUE_HANDLE LockHandle;
+    PMAPPED_ADDRESS Mapping;
+    PLIST_ENTRY Entry;
+
+    for (;;)
+    {
+        KeAcquireInStackQueuedSpinLock(&DeviceExtension->PdoListLock, &LockHandle);
+        Entry = IsListEmpty(&DeviceExtension->PdoListHead) ? NULL : DeviceExtension->PdoListHead.Flink;
+        KeReleaseInStackQueuedSpinLock(&LockHandle);
+        if (Entry == NULL)
+            break;
+        PortDeletePdo(CONTAINING_RECORD(Entry, PDO_DEVICE_EXTENSION, PdoListEntry));
+    }
+
+    KeCancelTimer(&DeviceExtension->MiniportTimer);
+    PortFreeMiniportTimers(DeviceExtension);
+    KeCancelTimer(&DeviceExtension->MiniportTimer);
+
+    PortReleaseDma(DeviceExtension);
+    DeviceExtension->UncachedExtensionVirtualBase = NULL;
+    DeviceExtension->SrbExtensionPool = NULL;
+    InitializeSListHead(&DeviceExtension->FreeSrbExtensions);
+
+    if (DeviceExtension->RequestPoolsReady)
+    {
+        ExDeleteNPagedLookasideList(&DeviceExtension->SrbContextLookaside);
+        ExDeleteNPagedLookasideList(&DeviceExtension->MiniportSrbLookaside);
+        ExDeleteNPagedLookasideList(&DeviceExtension->SglLookaside);
+        DeviceExtension->RequestPoolsReady = FALSE;
+    }
+
+    while ((Mapping = DeviceExtension->MappedAddressList) != NULL)
+    {
+        DeviceExtension->MappedAddressList = Mapping->NextMappedAddress;
+        if (Mapping->MappedAddress != NULL)
+            MmUnmapIoSpace(Mapping->MappedAddress, Mapping->NumberOfBytes);
+        ExFreePoolWithTag(Mapping, TAG_ADDRESS_MAPPING);
+    }
+
+    if (DeviceExtension->BusInitialized && DeviceExtension->BusInterface.InterfaceDereference != NULL)
+        DeviceExtension->BusInterface.InterfaceDereference(DeviceExtension->BusInterface.Context);
+    DeviceExtension->BusInitialized = FALSE;
+
+    if (DeviceExtension->AllocatedResources != NULL)
+        ExFreePoolWithTag(DeviceExtension->AllocatedResources, TAG_RESOURCE_LIST);
+    if (DeviceExtension->TranslatedResources != NULL)
+        ExFreePoolWithTag(DeviceExtension->TranslatedResources, TAG_RESOURCE_LIST);
+    DeviceExtension->AllocatedResources = NULL;
+    DeviceExtension->TranslatedResources = NULL;
+
+    if (DeviceExtension->Miniport.PortConfig.AccessRanges != NULL)
+        ExFreePoolWithTag(DeviceExtension->Miniport.PortConfig.AccessRanges, TAG_ACCRESS_RANGE);
+    DeviceExtension->Miniport.PortConfig.AccessRanges = NULL;
+
+    if (DeviceExtension->Miniport.MiniportExtension != NULL)
+        ExFreePoolWithTag(DeviceExtension->Miniport.MiniportExtension, TAG_MINIPORT_DATA);
+    DeviceExtension->Miniport.MiniportExtension = NULL;
+
+    if (DeviceExtension->DriverExtension != NULL)
+    {
+        KeAcquireInStackQueuedSpinLock(&DeviceExtension->DriverExtension->AdapterListLock, &LockHandle);
+        RemoveEntryList(&DeviceExtension->AdapterListEntry);
+        DeviceExtension->DriverExtension->AdapterCount--;
+        KeReleaseInStackQueuedSpinLock(&LockHandle);
+    }
+}
+
+
+static
+NTSTATUS
+PortFdoRemoveDevice(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ PIRP Irp)
+{
+    PDEVICE_OBJECT LowerDevice = DeviceExtension->LowerDevice;
+    NTSTATUS Status;
+
+    PortFdoStopAdapter(DeviceExtension);
+    DeviceExtension->PnpState = dsRemoved;
+    PortFdoReleaseAdapter(DeviceExtension);
+
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    IoSkipCurrentIrpStackLocation(Irp);
+    Status = IoCallDriver(LowerDevice, Irp);
+
+    IoDetachDevice(LowerDevice);
+    IoDeleteDevice(DeviceExtension->Device);
+    return Status;
+}
+
+
 NTSTATUS
 NTAPI
 PortFdoPnp(
@@ -863,15 +1013,17 @@ PortFdoPnp(
 
         case IRP_MN_QUERY_REMOVE_DEVICE: /* 0x01 */
             DPRINT1("IRP_MJ_PNP / IRP_MN_QUERY_REMOVE_DEVICE\n");
-            break;
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            return ForwardIrpAndForget(DeviceExtension->LowerDevice, Irp);
 
         case IRP_MN_REMOVE_DEVICE: /* 0x02 */
             DPRINT1("IRP_MJ_PNP / IRP_MN_REMOVE_DEVICE\n");
-            break;
+            return PortFdoRemoveDevice(DeviceExtension, Irp);
 
         case IRP_MN_CANCEL_REMOVE_DEVICE: /* 0x03 */
             DPRINT1("IRP_MJ_PNP / IRP_MN_CANCEL_REMOVE_DEVICE\n");
-            break;
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            return ForwardIrpAndForget(DeviceExtension->LowerDevice, Irp);
 
         case IRP_MN_STOP_DEVICE: /* 0x04 */
             DPRINT1("IRP_MJ_PNP / IRP_MN_STOP_DEVICE\n");
@@ -924,7 +1076,13 @@ PortFdoPnp(
 
         case IRP_MN_SURPRISE_REMOVAL: /* 0x17 */
             DPRINT1("IRP_MJ_PNP / IRP_MN_SURPRISE_REMOVAL\n");
-            break;
+            if (DeviceExtension->PnpState == dsStarted)
+            {
+                MiniportAdapterControl(&DeviceExtension->Miniport, ScsiAdapterSurpriseRemoval, NULL);
+                DeviceExtension->PnpState = dsSurpriseRemoved;
+            }
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            return ForwardIrpAndForget(DeviceExtension->LowerDevice, Irp);
 
         default:
             DPRINT1("IRP_MJ_PNP / Unknown IOCTL 0x%lx\n", Stack->MinorFunction);

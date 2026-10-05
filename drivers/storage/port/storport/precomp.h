@@ -89,6 +89,7 @@ typedef struct _MINIPORT
     PHW_INITIALIZATION_DATA InitData;
     PORT_CONFIGURATION_INFORMATION PortConfig;
     PMINIPORT_DEVICE_EXTENSION MiniportExtension;
+    ULONG SupportedControlTypes;
 } MINIPORT, *PMINIPORT;
 
 typedef struct _UNIT_DATA
@@ -134,6 +135,7 @@ typedef struct _FDO_DEVICE_EXTENSION
     ULONG UncachedExtensionSize;
     PHW_PASSIVE_INITIALIZE_ROUTINE HwPassiveInitRoutine;
     PKINTERRUPT Interrupt;
+    BOOLEAN InterruptConnectedEx;
     ULONG InterruptIrql;
     /* Non-NULL when the adapter is connected message-based; each entry owns
      * the KINTERRUPT whose lock serializes that message. */
@@ -173,6 +175,8 @@ typedef struct _FDO_DEVICE_EXTENSION
     KSPIN_LOCK MiniportExLock;
     KSPIN_LOCK MessageInterruptLock;
     KSPIN_LOCK NoInterruptLock;
+    KSPIN_LOCK MiniportTimerListLock;
+    LIST_ENTRY MiniportTimerList;
 
     KSPIN_LOCK CompletionLock;
     LIST_ENTRY CompletionListHead;
@@ -193,6 +197,7 @@ PVOID PortAllocateDmaBuffer(_In_ PFDO_DEVICE_EXTENSION FdoExtension,
                            _Out_ PPHYSICAL_ADDRESS LogicalAddress);
 VOID PortFreeDmaBuffer(_In_ PFDO_DEVICE_EXTENSION FdoExtension,
                       _In_ PVOID Buffer);
+VOID PortReleaseDma(_In_ PFDO_DEVICE_EXTENSION FdoExtension);
 BOOLEAN PortGetDmaAddress(_In_ PFDO_DEVICE_EXTENSION FdoExtension,
                           _In_ PVOID Buffer,
                           _Out_ PPHYSICAL_ADDRESS LogicalAddress,
@@ -330,6 +335,20 @@ MiniportAdapterControlPreFind(
 NTSTATUS
 MiniportHwInitialize(
     _In_ PMINIPORT Miniport);
+
+VOID
+PortFreeMiniportTimers(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension);
+
+VOID
+MiniportQuerySupportedControlTypes(
+    _In_ PMINIPORT Miniport);
+
+SCSI_ADAPTER_CONTROL_STATUS
+MiniportAdapterControl(
+    _In_ PMINIPORT Miniport,
+    _In_ SCSI_ADAPTER_CONTROL_TYPE ControlType,
+    _In_opt_ PVOID Parameters);
 
 BOOLEAN
 MiniportHwMSInterrupt(
