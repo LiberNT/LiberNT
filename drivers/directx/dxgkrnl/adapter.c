@@ -13083,6 +13083,8 @@ DxgkAdapterStart(
                 Adapter->ApertureSegmentCommitLimit = Caps->ApertureSegmentCommitLimit;
                 if (DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
                     Adapter->SupportSurpriseRemoval = Caps->SupportSurpriseRemoval;
+                Adapter->HybridDiscrete = Caps->HybridDiscrete;
+                Adapter->HybridIntegrated = Caps->HybridIntegrated;
                 if (!Adapter->MiniportContext->IsDisplayOnlyDriver)
                 {
                     /* The topology count is defined only for multi-engine miniports. */

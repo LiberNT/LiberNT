@@ -3467,6 +3467,8 @@ DxgkpQueryAdapterInfoCaptured(
             AdapterType.RenderSupported = DxgkpAdapterSupportsRender(Adapter);
             AdapterType.DisplaySupported = Adapter->NumberOfVideoPresentSources != 0;
             AdapterType.SoftwareDevice = Adapter->MiniportContext != NULL && Adapter->MiniportContext->IsBasicDisplayFallback;
+            AdapterType.HybridDiscrete = Adapter->HybridDiscrete ? 1 : 0;
+            AdapterType.HybridIntegrated = Adapter->HybridIntegrated ? 1 : 0;
             _SEH2_TRY
             {
                 *pAdapterType = AdapterType;

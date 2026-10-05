@@ -854,6 +854,8 @@ struct _DXGKRNL_ADAPTER
     /* Cached while hardware is present.  A running-device surprise-removal
      * IRP must not query capabilities after the adapter has disappeared. */
     BOOLEAN                     SupportSurpriseRemoval;
+    BOOLEAN                     HybridDiscrete;
+    BOOLEAN                     HybridIntegrated;
     BOOLEAN                     SurpriseRemovalHandled;
 
     /*
