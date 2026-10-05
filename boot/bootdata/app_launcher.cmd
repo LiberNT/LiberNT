@@ -40,7 +40,7 @@ exit /b 0
 
 :shortcuts
 if not exist "!APPDRIVE!\shortcuts\" exit /b 0
-set DESK=%ALLUSERSPROFILE%\Desktop
+set DESK=%PUBLIC%\Desktop
 if not exist "!DESK!\" set DESK=%USERPROFILE%\Desktop
 if not exist "!DESK!\" exit /b 0
 for %%F in ("!APPDRIVE!\shortcuts\*") do (
