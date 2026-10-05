@@ -2050,12 +2050,22 @@ NTAPI
 ExSetResourceOwnerPointer(IN PERESOURCE Resource,
                           IN PVOID OwnerPointer)
 {
+    ExSetResourceOwnerPointerEx(Resource, OwnerPointer, 0);
+}
+
+VOID
+NTAPI
+ExSetResourceOwnerPointerEx(IN PERESOURCE Resource,
+                            IN PVOID OwnerPointer,
+                            IN ULONG Flags)
+{
     ERESOURCE_THREAD Thread;
     KLOCK_QUEUE_HANDLE LockHandle;
     POWNER_ENTRY Owner, ThisOwner;
 
     /* Sanity check */
-    ASSERT((OwnerPointer != 0) && (((ULONG_PTR)OwnerPointer & 3) == 3));
+    ASSERT(OwnerPointer != 0);
+    ASSERT((Flags & FLAG_OWNER_POINTER_IS_THREAD) || (((ULONG_PTR)OwnerPointer & 3) == 3));
 
     /* Get the thread */
     Thread = ExGetCurrentResourceThread();
