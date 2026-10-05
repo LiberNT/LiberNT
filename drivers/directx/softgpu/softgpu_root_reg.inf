@@ -31,3 +31,9 @@ HKLM,"SYSTEM\CurrentControlSet\Enum\Root\BASICDISPLAY\0000","ConfigFlags",0x0001
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E968-E325-11CE-BFC1-08002BE10318}\BasicDisplay","InstalledDisplayDrivers",0x00010000,"framebuf"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E968-E325-11CE-BFC1-08002BE10318}\BasicDisplay","Device Description",0x00000000,"LiberNT Basic Display Adapter"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E968-E325-11CE-BFC1-08002BE10318}\BasicDisplay","VgaCompatible",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E968-E325-11CE-BFC1-08002BE10318}\BasicDisplay","DriverDesc",0x00000000,"LiberNT Basic Display Adapter"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E968-E325-11CE-BFC1-08002BE10318}\BasicDisplay","ProviderName",0x00000000,"Ahmed ARIF"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E968-E325-11CE-BFC1-08002BE10318}\BasicDisplay","DriverDate",0x00000000,"4-14-2026"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E968-E325-11CE-BFC1-08002BE10318}\BasicDisplay","DriverDateData",0x00000001,00,40,0d,a3,a1,cb,dc,01
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E968-E325-11CE-BFC1-08002BE10318}\BasicDisplay","DriverVersion",0x00000000,"1.0.0.0"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E968-E325-11CE-BFC1-08002BE10318}\BasicDisplay","MatchingDeviceId",0x00000000,"root\basicdisplay"
