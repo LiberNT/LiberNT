@@ -130,7 +130,11 @@ typedef struct _PORT_SRBEX_REQUEST
 {
     STORAGE_REQUEST_BLOCK Srb;
     STOR_ADDR_BTL8 Address;
-    SRBEX_DATA_SCSI_CDB16 Scsi;
+    union
+    {
+        SRBEX_DATA_SCSI_CDB16 Scsi;
+        SRBEX_DATA_PNP Pnp;
+    };
 } PORT_SRBEX_REQUEST, *PPORT_SRBEX_REQUEST;
 
 NTSTATUS PortFdoInitializeRequestPools(_In_ PFDO_DEVICE_EXTENSION FdoExtension)
@@ -452,6 +456,7 @@ C_ASSERT(sizeof(STOR_ADDR_BTL8) == 16);
 C_ASSERT(sizeof(SRBEX_DATA_SCSI_CDB16) == 40);
 C_ASSERT(FIELD_OFFSET(PORT_SRBEX_REQUEST, Address) == 128);
 C_ASSERT(FIELD_OFFSET(PORT_SRBEX_REQUEST, Scsi) == 144);
+C_ASSERT(FIELD_OFFSET(PORT_SRBEX_REQUEST, Pnp) + sizeof(SRBEX_DATA_PNP) == 168);
 #else
 C_ASSERT(FIELD_OFFSET(STORAGE_REQUEST_BLOCK, SrbExDataOffset) == 92);
 C_ASSERT(sizeof(STORAGE_REQUEST_BLOCK) == 96);
@@ -512,6 +517,19 @@ static NTSTATUS PortBuildExtendedSrb(_In_ PFDO_DEVICE_EXTENSION FdoExtension, _I
         Request->Scsi.CdbLength = LegacySrb->CdbLength;
         Request->Scsi.SenseInfoBuffer = LegacySrb->SenseInfoBuffer;
         RtlCopyMemory(Request->Scsi.Cdb, LegacySrb->Cdb, LegacySrb->CdbLength);
+    }
+    else if (LegacySrb->Function == SRB_FUNCTION_PNP)
+    {
+        PSCSI_PNP_REQUEST_BLOCK PnpSrb = (PSCSI_PNP_REQUEST_BLOCK)LegacySrb;
+
+        Request->Srb.NumSrbExData = 1;
+        Request->Srb.SrbExDataOffset[0] = FIELD_OFFSET(PORT_SRBEX_REQUEST, Pnp);
+        Request->Srb.SrbLength = FIELD_OFFSET(PORT_SRBEX_REQUEST, Pnp) + sizeof(SRBEX_DATA_PNP);
+        Request->Pnp.Type = SrbExDataTypePnP;
+        Request->Pnp.Length = SRBEX_DATA_PNP_LENGTH;
+        Request->Pnp.PnPSubFunction = PnpSrb->PnPSubFunction;
+        Request->Pnp.PnPAction = PnpSrb->PnPAction;
+        Request->Pnp.SrbPnPFlags = PnpSrb->SrbPnPFlags;
     }
     else
     {
@@ -908,8 +926,7 @@ PortPdoQueryMiniportCapabilities(
     KEVENT Event;
     PIRP Irp;
 
-    if ((FdoExtension->PnpState != dsStarted) ||
-        (FdoExtension->Miniport.PortConfig.SrbType != SRB_TYPE_SCSI_REQUEST_BLOCK))
+    if (FdoExtension->PnpState != dsStarted)
         return;
 
     RtlZeroMemory(&Capabilities, sizeof(Capabilities));

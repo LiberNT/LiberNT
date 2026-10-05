@@ -1084,8 +1084,7 @@ PortFdoSendAdapterPnp(
     KEVENT Event;
     PIRP Irp;
 
-    if ((DeviceExtension->PnpState != dsStarted) ||
-        (DeviceExtension->Miniport.PortConfig.SrbType != SRB_TYPE_SCSI_REQUEST_BLOCK))
+    if (DeviceExtension->PnpState != dsStarted)
         return;
 
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
