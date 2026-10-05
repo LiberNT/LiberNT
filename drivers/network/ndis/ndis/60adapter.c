@@ -579,15 +579,11 @@ Ndis6InitializeLogicalAdapter(
     {
         NDIS_STATUS PoolStatus;
         NdisAllocateBufferPool(&PoolStatus, &Ext->RxLegacyBufferPool, 64);
-        DbgPrint("NDIS6-INIT: NdisAllocateBufferPool -> 0x%08lx, handle=%p\n",
-                 (ULONG)PoolStatus, Ext->RxLegacyBufferPool);
         if (PoolStatus != NDIS_STATUS_SUCCESS)
             Ext->RxLegacyBufferPool = NULL;
 
         NdisAllocatePacketPool(&PoolStatus, &Ext->RxLegacyPacketPool, 64,
                                sizeof(PVOID) * 4);
-        DbgPrint("NDIS6-INIT: NdisAllocatePacketPool -> 0x%08lx, handle=%p\n",
-                 (ULONG)PoolStatus, Ext->RxLegacyPacketPool);
         if (PoolStatus != NDIS_STATUS_SUCCESS)
             Ext->RxLegacyPacketPool = NULL;
     }
