@@ -120,7 +120,6 @@ C_ASSERT(FIELD_OFFSET(STOR_LOCK_HANDLE, Context.OldIrql) - FIELD_OFFSET(STOR_LOC
          FIELD_OFFSET(KLOCK_QUEUE_HANDLE, OldIrql));
 C_ASSERT(RTL_FIELD_SIZE(STOR_DPC, Lock) == sizeof(KSPIN_LOCK));
 
-static
 ULONG
 PortAcquireSpinLock(
     PFDO_DEVICE_EXTENSION DeviceExtension,
@@ -189,7 +188,6 @@ PortAcquireSpinLock(
 }
 
 
-static
 VOID
 PortReleaseSpinLock(
     PFDO_DEVICE_EXTENSION DeviceExtension,

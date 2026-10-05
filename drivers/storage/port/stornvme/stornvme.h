@@ -135,6 +135,7 @@ typedef struct _NVME_DEVICE_EXTENSION
     BOOLEAN MessageInterrupts;
     ULONG MessageCount;
     BOOLEAN InterruptsLive;
+    BOOLEAN InHwInitialize;
     BOOLEAN ControllerStarted;
     BOOLEAN AdminReady;
     /* Power and thermal capability, from Identify. */

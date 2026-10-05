@@ -336,6 +336,18 @@ NTSTATUS
 MiniportHwInitialize(
     _In_ PMINIPORT Miniport);
 
+ULONG
+PortAcquireSpinLock(
+    PFDO_DEVICE_EXTENSION DeviceExtension,
+    STOR_SPINLOCK SpinLock,
+    PVOID LockContext,
+    PSTOR_LOCK_HANDLE LockHandle);
+
+VOID
+PortReleaseSpinLock(
+    PFDO_DEVICE_EXTENSION DeviceExtension,
+    PSTOR_LOCK_HANDLE LockHandle);
+
 VOID
 PortFreeMiniportTimers(
     _In_ PFDO_DEVICE_EXTENSION DeviceExtension);

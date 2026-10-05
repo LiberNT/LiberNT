@@ -54,7 +54,7 @@ VOID
 NvmeAcquireLock(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG MessageId, _Out_ PNVME_LOCK Lock)
 {
     RtlZeroMemory(Lock, sizeof(*Lock));
-    if (!Device->InterruptsLive)
+    if (!Device->InterruptsLive || Device->InHwInitialize)
         return;
     if (Device->MessageInterrupts &&
         StorPortAcquireMSISpinLock(Device, MessageId, &Lock->OldIrql) == STOR_STATUS_SUCCESS)

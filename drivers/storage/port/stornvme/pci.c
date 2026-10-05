@@ -259,6 +259,8 @@ NvmeHwInitialize(_In_ PVOID DeviceExtension)
     if (!Device->ControllerStarted)
         return FALSE;
 
+    Device->InHwInitialize = TRUE;
+
     Device->MessageCount = 0;
     for (MessageId = 0; MessageId < NVME_MAX_IO_QUEUES + 1; MessageId++)
     {
@@ -277,6 +279,7 @@ NvmeHwInitialize(_In_ PVOID DeviceExtension)
     if (!NvmeCreateIoQueues(Device))
     {
         Device->InterruptsLive = FALSE;
+        Device->InHwInitialize = FALSE;
         NvmeMaskDeviceInterrupts(Device, TRUE);
         return FALSE;
     }
@@ -288,6 +291,7 @@ NvmeHwInitialize(_In_ PVOID DeviceExtension)
     NvmeArmAerLocked(Device);
     NvmeKickSmartLocked(Device);
     NvmeReleaseLock(Device, &Lock);
+    Device->InHwInitialize = FALSE;
     return TRUE;
 }
 

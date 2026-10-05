@@ -191,6 +191,7 @@ NTSTATUS
 PortFdoStartMiniport(
     _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
 {
+    STOR_LOCK_HANDLE LockHandle;
     NTSTATUS Status;
 
     DPRINT("PortFdoStartDevice(%p)\n", DeviceExtension);
@@ -230,7 +231,9 @@ PortFdoStartMiniport(
     }
 
     /* Call the miniports HwInitialize function */
+    PortAcquireSpinLock(DeviceExtension, InterruptLock, NULL, &LockHandle);
     Status = MiniportHwInitialize(&DeviceExtension->Miniport);
+    PortReleaseSpinLock(DeviceExtension, &LockHandle);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("MiniportHwInitialize() failed (Status 0x%08lx)\n", Status);
