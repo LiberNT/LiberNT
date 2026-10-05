@@ -3979,6 +3979,14 @@ typedef struct _DXGKRNL_PAGING_OP
     ULONG                       FillPattern;
     SIZE_T                      FillSize;
     BOOLEAN                     AllocationIsIdle;
+    /* A transfer op is one sub-transfer of an allocation; zero for both
+     * means the whole allocation (TransferStart and TransferEnd). */
+    BOOLEAN                     ContinuesTransfer;      /* not the first */
+    BOOLEAN                     TransferContinues;      /* not the last */
+    /* The allocation a transfer or discard moves: a build the miniport
+     * refuses with STATUS_GRAPHICS_ALLOCATION_BUSY is retried once it is
+     * idle.  Without it that status fails the operation. */
+    PDXGKVMM_ALLOCATION         Allocation;
 
     /* Aperture map/unmap. */
     SIZE_T                      OffsetInPages;

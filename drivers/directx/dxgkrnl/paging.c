@@ -152,20 +152,26 @@ DxgkpPagingMonitoredFenceSignalSupported(
 }
 #endif
 
+/*
+ * Idle: the allocation was made idle for this one build call after the
+ * miniport refused it with STATUS_GRAPHICS_ALLOCATION_BUSY.
+ */
 static VOID
 DxgkpPagingFillBuildArgs(
     _In_ CONST DXGKRNL_PAGING_OP *Op,
-    _In_ BOOLEAN FirstPass,
+    _In_ BOOLEAN Idle,
     _Inout_ DXGKARG_BUILDPAGINGBUFFER *BuildArgs)
 {
     switch (Op->Type)
     {
         case DxgkPagingOpTransfer:
             BuildArgs->Operation = DXGK_OPERATION_TRANSFER;
-            /* The first pass of a multipass transfer is its start boundary;
-             * the miniport reports the end by completing the build. */
-            BuildArgs->Transfer.Flags.TransferStart = FirstPass ? 1 : 0;
-            BuildArgs->Transfer.Flags.AllocationIsIdle = Op->AllocationIsIdle ? 1 : 0;
+            /* Sub-transfer boundaries, not DMA-buffer passes: a sub-transfer
+             * that takes several buffers carries the same flags in each
+             * call, and a whole-allocation transfer carries both. */
+            BuildArgs->Transfer.Flags.TransferStart = Op->ContinuesTransfer ? 0 : 1;
+            BuildArgs->Transfer.Flags.TransferEnd = Op->TransferContinues ? 0 : 1;
+            BuildArgs->Transfer.Flags.AllocationIsIdle = (Idle || Op->AllocationIsIdle) ? 1 : 0;
             BuildArgs->Transfer.hAllocation = Op->hMiniportAllocation;
             BuildArgs->Transfer.TransferOffset = Op->TransferOffset;
             BuildArgs->Transfer.TransferSize = Op->TransferSize;
@@ -194,7 +200,7 @@ DxgkpPagingFillBuildArgs(
         case DxgkPagingOpDiscardContent:
             BuildArgs->Operation = DXGK_OPERATION_DISCARD_CONTENT;
             BuildArgs->DiscardContent.hAllocation = Op->hMiniportAllocation;
-            BuildArgs->DiscardContent.Flags.AllocationIsIdle = Op->AllocationIsIdle ? 1 : 0;
+            BuildArgs->DiscardContent.Flags.AllocationIsIdle = (Idle || Op->AllocationIsIdle) ? 1 : 0;
             BuildArgs->DiscardContent.SegmentId = Op->DestinationSegmentId;
             BuildArgs->DiscardContent.SegmentAddress.QuadPart = Op->DestinationSegmentAddress.QuadPart;
             break;
@@ -286,6 +292,48 @@ DxgkpPagingFillBuildArgs(
     }
 }
 
+/* Operations whose build the miniport may refuse until the allocation is
+ * idle, and which take the AllocationIsIdle retry. */
+static BOOLEAN
+DxgkpPagingOpRetriesWhenIdle(
+    _In_ CONST DXGKRNL_PAGING_OP *Op)
+{
+    return Op->Allocation != NULL &&
+           (Op->Type == DxgkPagingOpTransfer || Op->Type == DxgkPagingOpDiscardContent);
+}
+
+/*
+ * DxgkpPagingWaitAllocationIdle
+ *
+ * The miniport refused to build an operation while the GPU may still use
+ * the allocation (STATUS_GRAPHICS_ALLOCATION_BUSY).  Every paging caller
+ * holds the allocation's residency transaction, which keeps new submission
+ * pins -- and so new GPU use -- out until it ends.  Idle therefore means:
+ * every command that referenced the allocation, the paging packet that last
+ * moved it, and the passes of this operation already submitted
+ * (SubmittedFenceId) have retired.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+static NTSTATUS
+DxgkpPagingWaitAllocationIdle(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ CONST DXGKRNL_PAGING_OP *Op,
+    _In_ ULONG SubmittedFenceId)
+{
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    Status = DxgkVidMmWaitForTrackedSubmissions(Op->Allocation, FALSE);
+    if (NT_SUCCESS(Status))
+        Status = DxgkPagingWaitForFence(Adapter, Op->Allocation->PagingFenceId, DXGKP_PAGING_SYNC_TIMEOUT_MS);
+    if (NT_SUCCESS(Status))
+        Status = DxgkPagingWaitForFence(Adapter, SubmittedFenceId, DXGKP_PAGING_SYNC_TIMEOUT_MS);
+    if (Status == STATUS_IO_TIMEOUT)
+        Status = STATUS_GRAPHICS_ALLOCATION_BUSY;
+    return Status;
+}
+
 static NTSTATUS
 DxgkpPagingAllocateDmaBuffer(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -327,7 +375,7 @@ DxgkpPagingBuildImmediate(
 
     RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
     BuildArgs.hSystemContext = Adapter->PagingSystemContext->hMiniportContext;
-    DxgkpPagingFillBuildArgs(Op, TRUE, &BuildArgs);
+    DxgkpPagingFillBuildArgs(Op, FALSE, &BuildArgs);
     if (!DxgkAcquireKmdCall(Adapter))
         return STATUS_DELETE_PENDING;
     DxgkEnterSchedulerClass(Adapter);
@@ -570,6 +618,7 @@ DxgkPagingExecuteBatch(
             ULONG MultipassOffset = 0;
             ULONG Pass;
             BOOLEAN Complete = FALSE;
+            BOOLEAN Idle;
 
             if (DxgkpPagingOperationIsImmediate(Adapter, &Operations[OperationIndex]))
             {
@@ -586,39 +635,52 @@ DxgkPagingExecuteBatch(
                 PUCHAR PreviousCursor = Cursor;
                 NTSTATUS BuildStatus = STATUS_UNSUCCESSFUL;
 
-                RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
-                DxgkpPagingPrepareBuildBuffer(Adapter,
-                                              DmaBuffer,
-                                              Cursor,
-                                              &BuildArgs);
-                BuildArgs.MultipassOffset = MultipassOffset;
-                DxgkpPagingFillBuildArgs(&Operations[OperationIndex],
-                                         Pass == 0,
-                                         &BuildArgs);
+                for (Idle = FALSE;;)
+                {
+                    RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
+                    DxgkpPagingPrepareBuildBuffer(Adapter,
+                                                  DmaBuffer,
+                                                  Cursor,
+                                                  &BuildArgs);
+                    BuildArgs.MultipassOffset = MultipassOffset;
+                    DxgkpPagingFillBuildArgs(&Operations[OperationIndex],
+                                             Idle,
+                                             &BuildArgs);
 
-                if (!DxgkAcquireKmdCall(Adapter))
-                {
-                    Status = STATUS_DELETE_PENDING;
-                    goto Cleanup;
+                    if (!DxgkAcquireKmdCall(Adapter))
+                    {
+                        Status = STATUS_DELETE_PENDING;
+                        goto Cleanup;
+                    }
+                    DxgkEnterSchedulerClass(Adapter);
+                    _SEH2_TRY
+                    {
+                        BuildStatus =
+                            DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(
+                                Adapter->MiniportDeviceContext,
+                                &BuildArgs);
+                    }
+                    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                    {
+                        BuildStatus = _SEH2_GetExceptionCode();
+                    }
+                    _SEH2_END;
+                    DxgkLeaveSchedulerClass(Adapter);
+                    DxgkReleaseKmdCall(Adapter);
+                    Status = DxgkpPagingFinishPrivateData(DmaBuffer, &BuildArgs);
+                    if (!NT_SUCCESS(Status))
+                        goto Cleanup;
+                    if (BuildStatus != STATUS_GRAPHICS_ALLOCATION_BUSY || Idle ||
+                        !DxgkpPagingOpRetriesWhenIdle(&Operations[OperationIndex]))
+                    {
+                        break;
+                    }
+                    /* Nothing of this batch is queued yet. */
+                    Status = DxgkpPagingWaitAllocationIdle(Adapter, &Operations[OperationIndex], 0);
+                    if (!NT_SUCCESS(Status))
+                        goto Cleanup;
+                    Idle = TRUE;
                 }
-                DxgkEnterSchedulerClass(Adapter);
-                _SEH2_TRY
-                {
-                    BuildStatus =
-                        DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(
-                            Adapter->MiniportDeviceContext,
-                            &BuildArgs);
-                }
-                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-                {
-                    BuildStatus = _SEH2_GetExceptionCode();
-                }
-                _SEH2_END;
-                DxgkLeaveSchedulerClass(Adapter);
-                DxgkReleaseKmdCall(Adapter);
-                Status = DxgkpPagingFinishPrivateData(DmaBuffer, &BuildArgs);
-                if (!NT_SUCCESS(Status))
-                    goto Cleanup;
 
                 if (!NT_SUCCESS(BuildStatus) &&
                     BuildStatus != STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER)
@@ -970,6 +1032,7 @@ DxgkPagingExecute(
     NTSTATUS Status;
     NTSTATUS BuildStatus = STATUS_UNSUCCESSFUL;
     BOOLEAN Complete = FALSE;
+    BOOLEAN Idle;
 
     PAGED_CODE();
 
@@ -1020,34 +1083,48 @@ DxgkPagingExecute(
         if (!NT_SUCCESS(Status))
             goto Cleanup;
 
-        RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
-        DxgkpPagingPrepareBuildBuffer(Adapter,
-                                      DmaBuffer,
-                                      DmaBuffer->VirtualAddress,
-                                      &BuildArgs);
-        BuildArgs.MultipassOffset = MultipassOffset;
-        DxgkpPagingFillBuildArgs(Op, Pass == 0, &BuildArgs);
+        for (Idle = FALSE;;)
+        {
+            RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
+            DxgkpPagingPrepareBuildBuffer(Adapter,
+                                          DmaBuffer,
+                                          DmaBuffer->VirtualAddress,
+                                          &BuildArgs);
+            BuildArgs.MultipassOffset = MultipassOffset;
+            DxgkpPagingFillBuildArgs(Op, Idle, &BuildArgs);
 
-        if (!DxgkAcquireKmdCall(Adapter))
-        {
-            Status = STATUS_DELETE_PENDING;
-            goto Cleanup;
+            if (!DxgkAcquireKmdCall(Adapter))
+            {
+                Status = STATUS_DELETE_PENDING;
+                goto Cleanup;
+            }
+            DxgkEnterSchedulerClass(Adapter);
+            _SEH2_TRY
+            {
+                BuildStatus = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                BuildStatus = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+            DxgkLeaveSchedulerClass(Adapter);
+            DxgkReleaseKmdCall(Adapter);
+            Status = DxgkpPagingFinishPrivateData(DmaBuffer, &BuildArgs);
+            if (!NT_SUCCESS(Status))
+                goto Cleanup;
+            if (BuildStatus != STATUS_GRAPHICS_ALLOCATION_BUSY || Idle ||
+                !DxgkpPagingOpRetriesWhenIdle(Op))
+            {
+                break;
+            }
+            /* The held-back pass is not queued yet, so it is no GPU use;
+             * the passes already submitted are. */
+            Status = DxgkpPagingWaitAllocationIdle(Adapter, Op, LastFenceId);
+            if (!NT_SUCCESS(Status))
+                goto Cleanup;
+            Idle = TRUE;
         }
-        DxgkEnterSchedulerClass(Adapter);
-        _SEH2_TRY
-        {
-            BuildStatus = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            BuildStatus = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
-        DxgkLeaveSchedulerClass(Adapter);
-        DxgkReleaseKmdCall(Adapter);
-        Status = DxgkpPagingFinishPrivateData(DmaBuffer, &BuildArgs);
-        if (!NT_SUCCESS(Status))
-            goto Cleanup;
 
         if (!NT_SUCCESS(BuildStatus) && BuildStatus != STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER)
         {

@@ -13662,6 +13662,7 @@ DxgkpVidMmSubmitTransferPagingPacket(
 
     RtlZeroMemory(&Op, sizeof(Op));
     Op.Type = DxgkPagingOpTransfer;
+    Op.Allocation = Allocation;
     Op.hMiniportDevice = Allocation->MiniportDeviceHandle;
     Op.hMiniportAllocation = Allocation->MiniportHandle;
     Op.TransferOffset = 0;
