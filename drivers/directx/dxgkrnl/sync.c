@@ -1843,6 +1843,14 @@ DxgkpCreateSynchronizationObjectInternal(
         return Status;
     }
     InsertTailList(&Device->SyncObjListHead, &SyncObj->DeviceSyncObjListEntry);
+    /*
+     * Once DeviceMutex drops, device teardown can claim the object and
+     * release its base reference.  The creator still reads it, and may
+     * publish its share, so it holds a reference of its own to the end of
+     * creation.  The final release unpublishes any share made here, so a
+     * share can never outlive the object in the global list.
+     */
+    InterlockedIncrement(&SyncObj->RefCount);
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3000)
     if (SyncObj->PublicType == D3DDDI_CPU_NOTIFICATION &&
         SyncObj->Flags.SignalByKmd)
@@ -1898,7 +1906,9 @@ DxgkpCreateSynchronizationObjectInternal(
                 DxgkHandleTypeSynchronizationObject, SyncObj);
             if (OwnsTeardown)
                 DxgkpDereferenceSyncObject(SyncObj);
-            /* Release the in-flight CreateCpuEvent reference last. */
+            /* Release the creator and in-flight CreateCpuEvent references
+             * last. */
+            DxgkpDereferenceSyncObject(SyncObj);
             DxgkpDereferenceSyncObject(SyncObj);
             return Status;
         }
@@ -1906,10 +1916,18 @@ DxgkpCreateSynchronizationObjectInternal(
         DxgkpDereferenceSyncObject(SyncObj);
     }
 #endif
+    /* Creation that lost the race to teardown says so, rather than returning
+     * a handle teardown has already removed or sharing a dying object. */
+    if (InterlockedCompareExchange(&SyncObj->Destroying, 0, 0) != 0)
+    {
+        DxgkpDereferenceSyncObject(SyncObj);
+        return STATUS_DELETE_PENDING;
+    }
     if (SyncObj->Flags.Shared)
         (VOID)DxgkpSyncPublishShare(SyncObj);
     *SyncObjectHandle = SyncObj->Handle;
     DXGKRNL_TRACE("DxgkCreateSynchronizationObject: handle=0x%X type=%d shared=0x%X\n", SyncObj->Handle, SyncObj->Info.Type, SyncObj->GlobalShareHandle);
+    DxgkpDereferenceSyncObject(SyncObj);
     return STATUS_SUCCESS;
 }
 
@@ -1956,6 +1974,7 @@ DxgkOpenSynchronizationObject(
     PDXGKRNL_DEVICE Device;
     PDXGKRNL_SYNC_OBJECT Backing = NULL;
     PDXGKRNL_SYNC_OBJECT Alias;
+    D3DKMT_HANDLE AliasHandle;
     PLIST_ENTRY Entry;
     NTSTATUS Status;
     UINT Index;
@@ -2070,9 +2089,12 @@ DxgkOpenSynchronizationObject(
         return Status;
     }
     InsertTailList(&Device->SyncObjListHead, &Alias->DeviceSyncObjListEntry);
+    /* Device teardown may free the alias as soon as this mutex drops, so
+     * take what is returned while it is still held. */
+    AliasHandle = Alias->Handle;
     ExReleaseFastMutex(&Device->DeviceMutex);
 
-    pData->hSyncObject = Alias->Handle;
+    pData->hSyncObject = AliasHandle;
     return STATUS_SUCCESS;
 }
 
