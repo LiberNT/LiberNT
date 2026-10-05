@@ -1141,6 +1141,25 @@ KiChainedDispatch(
     IN PKINTERRUPT Interrupt
 );
 
+BOOLEAN
+KiConnectPassiveInterrupt(
+    _Inout_ PKINTERRUPT Interrupt);
+
+BOOLEAN
+KiDisconnectPassiveInterrupt(
+    _Inout_ PKINTERRUPT Interrupt);
+
+BOOLEAN
+KiSynchronizePassiveInterrupt(
+    _Inout_ PKINTERRUPT Interrupt,
+    _In_ PKSYNCHRONIZE_ROUTINE SynchronizeRoutine,
+    _In_opt_ PVOID SynchronizeContext);
+
+BOOLEAN
+KiDispatchPassiveInterrupt(
+    _In_ ULONG Vector,
+    _Out_opt_ PBOOLEAN IsLevel);
+
 CODE_SEG("INIT")
 VOID
 NTAPI

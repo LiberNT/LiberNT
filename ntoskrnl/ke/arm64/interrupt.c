@@ -912,12 +912,15 @@ KeDispatchSecondaryInterrupt(
     KIRQL OldIrql;
     PKINTERRUPT Head;
     BOOLEAN Connected;
+    BOOLEAN IsLevel;
 
     UNREFERENCED_PARAMETER(Flags);
     UNREFERENCED_PARAMETER(Reserved);
 
     if (!KiSecondaryInterruptServicesEnabled || Vector >= ARM64_MAX_INTID)
         return FALSE;
+    if (KiDispatchPassiveInterrupt(Vector, &IsLevel))
+        return !IsLevel;
 
     OldIrql = KfRaiseIrql(DISPATCH_LEVEL);
     Cpu = KeGetCurrentProcessorNumber();
@@ -1268,6 +1271,7 @@ KeConnectInterrupt(IN PKINTERRUPT Interrupt)
     BOOLEAN Connected;
 
     if (Vector >= ARM64_MAX_INTID || Cpu >= MAXIMUM_PROCESSORS) return FALSE;
+    if (Interrupt->Irql == PASSIVE_LEVEL) return KiConnectPassiveInterrupt(Interrupt);
     Table = KiArm64IntTables[Cpu];
     if (!Table) return FALSE;
 
@@ -1332,6 +1336,7 @@ KeDisconnectInterrupt(IN PKINTERRUPT Interrupt)
     BOOLEAN Connected;
 
     if (Vector >= ARM64_MAX_INTID || Cpu >= MAXIMUM_PROCESSORS) return FALSE;
+    if (Interrupt->Irql == PASSIVE_LEVEL) return KiDisconnectPassiveInterrupt(Interrupt);
     if (!KiArm64IntTables[Cpu]) return FALSE;
     /* Wait for the owning CPU at the caller's IRQL, before taking the lock. */
     if (KeGetCurrentIrql() < DISPATCH_LEVEL)
@@ -1372,6 +1377,8 @@ KeSynchronizeExecution(IN OUT PKINTERRUPT Interrupt,
 {
     BOOLEAN Success;
     KIRQL OldIrql;
+    if (Interrupt->Irql == PASSIVE_LEVEL)
+        return KiSynchronizePassiveInterrupt(Interrupt, SynchronizeRoutine, SynchronizeContext);
     OldIrql = KfRaiseIrql(Interrupt->SynchronizeIrql);
     KeAcquireSpinLockAtDpcLevel(Interrupt->ActualLock);
     Success = SynchronizeRoutine(SynchronizeContext);

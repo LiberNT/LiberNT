@@ -728,6 +728,7 @@ NTSYSAPI
 NTSTATUS
 NTAPI
 KeInitializeSecondaryInterruptServices(VOID);
+#endif
 
 NTSYSAPI
 BOOLEAN
@@ -736,7 +737,6 @@ KeDispatchSecondaryInterrupt(
     _In_ ULONG Vector,
     _In_ ULONG_PTR Flags,
     _In_opt_ PVOID Reserved);
-#endif
 
 FORCEINLINE
 VOID

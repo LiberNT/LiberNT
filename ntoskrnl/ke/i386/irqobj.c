@@ -413,6 +413,9 @@ KeConnectInterrupt(IN PKINTERRUPT Interrupt)
         return FALSE;
     }
 
+    if (Irql == PASSIVE_LEVEL)
+        return KiConnectPassiveInterrupt(Interrupt);
+
     /* Set defaults */
     Connected = FALSE;
     Error = FALSE;
@@ -503,6 +506,9 @@ KeDisconnectInterrupt(IN PKINTERRUPT Interrupt)
     PKINTERRUPT NextInterrupt;
     BOOLEAN State;
 
+    if (Interrupt->Irql == PASSIVE_LEVEL)
+        return KiDisconnectPassiveInterrupt(Interrupt);
+
     /* Set the affinity */
     KeSetSystemAffinityThread(1 << Interrupt->Number);
 
@@ -588,6 +594,9 @@ KeSynchronizeExecution(IN OUT PKINTERRUPT Interrupt,
     BOOLEAN Success;
     KIRQL OldIrql;
 
+    if (Interrupt->Irql == PASSIVE_LEVEL)
+        return KiSynchronizePassiveInterrupt(Interrupt, SynchronizeRoutine, SynchronizeContext);
+
     /* Raise IRQL */
     KeRaiseIrql(Interrupt->SynchronizeIrql,
                 &OldIrql);
@@ -606,6 +615,18 @@ KeSynchronizeExecution(IN OUT PKINTERRUPT Interrupt,
 
     /* Return status */
     return Success;
+}
+
+BOOLEAN
+NTAPI
+KeDispatchSecondaryInterrupt(
+    _In_ ULONG Vector,
+    _In_ ULONG_PTR Flags,
+    _In_opt_ PVOID Reserved)
+{
+    UNREFERENCED_PARAMETER(Flags);
+    UNREFERENCED_PARAMETER(Reserved);
+    return KiDispatchPassiveInterrupt(Vector, NULL);
 }
 
 /* EOF */

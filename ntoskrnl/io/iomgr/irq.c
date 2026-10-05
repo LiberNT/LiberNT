@@ -49,6 +49,12 @@ IoConnectInterrupt(OUT PKINTERRUPT *InterruptObject,
 
     PAGED_CODE();
 
+    if (Irql == PASSIVE_LEVEL)
+    {
+        Affinity = ProcessorEnableMask & KeActiveProcessors;
+        ProcessorEnableMask = Affinity & (~Affinity + 1);
+    }
+
     /* Get the affinity */
     Affinity = ProcessorEnableMask & KeActiveProcessors;
     while (Affinity)

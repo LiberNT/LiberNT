@@ -2591,7 +2591,7 @@
 @ stdcall -arch=win64 KeCountSetBitsAffinityEx(ptr)
 @ stdcall -arch=win64 KeCountSetBitsGroupAffinity(ptr)
 @ stdcall -arch=win64 KeDeregisterProcessorChangeCallback(ptr)
-@ stdcall -arch=arm64 KeDispatchSecondaryInterrupt(long long ptr)
+@ stdcall KeDispatchSecondaryInterrupt(long long ptr)
 @ stdcall -arch=win64 KeEnumerateNextProcessor(ptr ptr)
 @ stdcall -arch=win64 KeFindFirstSetLeftAffinityEx(ptr)
 @ stdcall -arch=win64 KeFindFirstSetLeftGroupAffinity(ptr)

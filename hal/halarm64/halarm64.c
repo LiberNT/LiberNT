@@ -3648,6 +3648,8 @@ HalEnableSystemInterrupt(
 
     if (HalpSecondaryIsIntId(Vector))
         return HalpSecondaryEnable(Vector, InterruptMode);
+    if (Irql == PASSIVE_LEVEL)
+        return FALSE;
 
     /* Calculate GIC priority from IRQL */
     priority = HalpIrqlToGicPriority(Irql);
