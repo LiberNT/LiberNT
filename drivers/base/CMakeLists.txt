@@ -4,6 +4,7 @@ if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
 endif()
 add_subdirectory(bootvid)
 add_subdirectory(condrv)
+add_subdirectory(dbgcap)
 
 if(_WINKD_)
     add_subdirectory(kdcom)

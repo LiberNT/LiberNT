@@ -1,0 +1,11 @@
+; PROJECT:     LiberNT Debug Output Capture
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Demand-start service for the debug output capture driver
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[AddReg]
+HKLM,"SYSTEM\CurrentControlSet\Services\DbgCap","DisplayName",0x00000000,"Debug Output Capture"
+HKLM,"SYSTEM\CurrentControlSet\Services\DbgCap","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\DbgCap","ImagePath",0x00020000,"system32\drivers\dbgcap.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\DbgCap","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\DbgCap","Type",0x00010001,0x00000001
