@@ -539,6 +539,88 @@ DxgkpPrepareHeadlessDesktop(
 }
 
 
+/*
+ * DxgkpSelectTimingWireFormat
+ *
+ * Chooses the single wire-format bit SetTimingsFromVidPn sends.  In a target
+ * mode the five fields list every encoding and depth the target supports; in
+ * DXGK_SET_TIMING_PATH_INFO exactly one bit is set, and it has to be one the
+ * pinned mode offers -- a mode that is only valid at 10 bpc cannot be driven
+ * at 8.
+ *
+ * This path drives SDR (G22_P709), so RGB is preferred, then YCbCr 4:4:4,
+ * 4:2:2, 4:2:0 and intensity.  Within an encoding 8 bpc comes first, being
+ * what this path has always sent, then the higher depths, then 6 bpc.
+ * Choosing deeper formats for HDR belongs with the output colour space.
+ *
+ * A mode that lists no formats -- a driver below WDDM 2.2 leaves the field
+ * zero -- keeps RGB at 8 bpc.
+ */
+static D3DKMDT_WIRE_FORMAT_AND_PREFERENCE
+DxgkpSelectTimingWireFormat(
+    _In_ PDXGKP_VIDPN VidPn,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
+{
+    static CONST UINT DepthOrder[] =
+    {
+        D3DKMDT_BITS_PER_COMPONENT_08, D3DKMDT_BITS_PER_COMPONENT_10,
+        D3DKMDT_BITS_PER_COMPONENT_12, D3DKMDT_BITS_PER_COMPONENT_14,
+        D3DKMDT_BITS_PER_COMPONENT_16, D3DKMDT_BITS_PER_COMPONENT_06
+    };
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Supported;
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Selected;
+    PDXGKP_VIDPN_TARGET_MODESET TargetSet = NULL;
+    ULONG TargetIndex;
+    SIZE_T i;
+    UINT Encoding, Depth;
+
+    Selected.Value = 0;
+    Supported.Value = 0;
+
+    TargetIndex = DxgkVidPnTargetIndexFromId(VidPn, TargetId);
+    if (TargetIndex != MAXULONG)
+        TargetSet = VidPn->TargetModeSets[TargetIndex];
+    if (TargetSet != NULL && TargetSet->PinnedModeId != (UINT)-1)
+    {
+        for (i = 0; i < TargetSet->NumModes; i++)
+        {
+            if (TargetSet->Modes[i].Id == TargetSet->PinnedModeId)
+            {
+                Supported = TargetSet->Modes[i].WireFormatAndPreference;
+                break;
+            }
+        }
+    }
+    Supported.Preference = 0;
+
+    for (Encoding = 0; Encoding < 5; Encoding++)
+    {
+        UINT Mask = Encoding == 0 ? Supported.Rgb :
+                    Encoding == 1 ? Supported.YCbCr444 :
+                    Encoding == 2 ? Supported.YCbCr422 :
+                    Encoding == 3 ? Supported.YCbCr420 :
+                                    Supported.Intensity;
+
+        for (Depth = 0; Depth < RTL_NUMBER_OF(DepthOrder); Depth++)
+        {
+            if ((Mask & DepthOrder[Depth]) == 0)
+                continue;
+            switch (Encoding)
+            {
+                case 0: Selected.Rgb       = DepthOrder[Depth]; break;
+                case 1: Selected.YCbCr444  = DepthOrder[Depth]; break;
+                case 2: Selected.YCbCr422  = DepthOrder[Depth]; break;
+                case 3: Selected.YCbCr420  = DepthOrder[Depth]; break;
+                default: Selected.Intensity = DepthOrder[Depth]; break;
+            }
+            return Selected;
+        }
+    }
+
+    Selected.Rgb = D3DKMDT_BITS_PER_COMPONENT_08;
+    return Selected;
+}
+
 NTSTATUS
 DxgkpDisplayCommitVidPnCandidateWithTarget(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -1265,8 +1347,12 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
         TimingPath.VidPnTargetId = ActiveTargetId;
         TimingPath.OutputWireColorSpace =
             D3DDDI_OUTPUT_WIRE_COLOR_SPACE_G22_P709;
-        TimingPath.SelectedWireFormat.Rgb =
-            D3DKMDT_BITS_PER_COMPONENT_08;
+        /* A removal record carries no timing, so its format is moot. */
+        if (TopologyEmpty)
+            TimingPath.SelectedWireFormat.Rgb = D3DKMDT_BITS_PER_COMPONENT_08;
+        else
+            TimingPath.SelectedWireFormat =
+                DxgkpSelectTimingWireFormat(VidPn, ActiveTargetId);
         TimingPath.Input.VidPnPathUpdates =
             TopologyEmpty
                 ? DXGK_PATH_UPDATE_REMOVED
