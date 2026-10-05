@@ -683,7 +683,7 @@ GetHardwareAndCompatibleIDsLists(
     }
     if (!Result)
     {
-        if (GetLastError() == ERROR_FILE_NOT_FOUND)
+        if (GetLastError() == ERROR_INVALID_DATA)
         {
             /* No hardware ID for this device */
             MyFree(HardwareIDs);
@@ -722,7 +722,7 @@ GetHardwareAndCompatibleIDsLists(
     }
     if (!Result)
     {
-        if (GetLastError() == ERROR_FILE_NOT_FOUND)
+        if (GetLastError() == ERROR_INVALID_DATA)
         {
             /* No compatible ID for this device */
             MyFree(CompatibleIDs);

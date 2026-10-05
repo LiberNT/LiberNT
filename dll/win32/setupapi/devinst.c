@@ -4409,6 +4409,37 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(
 
     devInfo = (struct DeviceInfo *)DeviceInfoData->Reserved;
 
+    if (Property == SPDRP_ENUMERATOR_NAME)
+    {
+        LPCWSTR Separator = strchrW(devInfo->instanceId, '\\');
+        DWORD Length = Separator ? (DWORD)(Separator - devInfo->instanceId) : strlenW(devInfo->instanceId);
+
+        if (!Length)
+        {
+            SetLastError(ERROR_INVALID_DATA);
+            return FALSE;
+        }
+        size = (Length + 1) * sizeof(WCHAR);
+        if (PropertyRegDataType)
+            *PropertyRegDataType = REG_SZ;
+        if (RequiredSize)
+            *RequiredSize = size;
+        if (!PropertyBuffer || PropertyBufferSize < size)
+        {
+            SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            return FALSE;
+        }
+        memcpy(PropertyBuffer, devInfo->instanceId, Length * sizeof(WCHAR));
+        ((LPWSTR)PropertyBuffer)[Length] = UNICODE_NULL;
+        return TRUE;
+    }
+
+    if (Property == SPDRP_UNUSED0 || Property == SPDRP_UNUSED1 || Property == SPDRP_UNUSED2)
+    {
+        SetLastError(ERROR_INVALID_DATA);
+        return FALSE;
+    }
+
     if (Property < sizeof(PropertyMap) / sizeof(PropertyMap[0])
         && PropertyMap[Property].nameW)
     {
@@ -4432,6 +4463,9 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(
                 break;
             case ERROR_MORE_DATA:
                 lError = ERROR_INSUFFICIENT_BUFFER;
+                break;
+            case ERROR_FILE_NOT_FOUND:
+                lError = ERROR_INVALID_DATA;
                 break;
             default:
                 break;
@@ -4557,7 +4591,7 @@ BOOL WINAPI IntSetupDiSetDeviceRegistryPropertyAW(
 #ifdef __REACTOS__
     if (SETUPDI_GetReadOnlyRegistryPropertyError(Property) != ERROR_SUCCESS)
     {
-        SetLastError(SETUPDI_GetReadOnlyRegistryPropertyError(Property));
+        SetLastError(ERROR_INVALID_REG_PROPERTY);
         return FALSE;
     }
 
@@ -4572,7 +4606,11 @@ BOOL WINAPI IntSetupDiSetDeviceRegistryPropertyAW(
         if (hKey == INVALID_HANDLE_VALUE)
             return FALSE;
         /* Write new data */
-        if (isAnsi)
+        if (!PropertyBuffer && !PropertyBufferSize)
+        {
+            l = RegDeleteValueW(hKey, PropertyMap[Property].nameW);
+        }
+        else if (isAnsi)
         {
             l = RegSetValueExA(
                 hKey, PropertyMap[Property].nameA, 0,
@@ -4595,7 +4633,7 @@ BOOL WINAPI IntSetupDiSetDeviceRegistryPropertyAW(
     else
     {
         ERR("Property 0x%lx not implemented\n", Property);
-        SetLastError(ERROR_NOT_SUPPORTED);
+        SetLastError(ERROR_INVALID_REG_PROPERTY);
     }
 
     TRACE("Returning %d\n", ret);

@@ -264,7 +264,7 @@ UpdateDriverForPlugAndPlayDevicesW(
                                                       BufferSize,
                                                       &BufferSize))
             {
-                if (GetLastError() == ERROR_FILE_NOT_FOUND)
+                if (GetLastError() == ERROR_INVALID_DATA)
                 {
                     break;
                 }

@@ -142,7 +142,7 @@ CriticalDeviceCoInstaller(
         if (Context->PostProcessing)
         {
             dwError = GetLastError();
-            if (dwError != ERROR_FILE_NOT_FOUND)
+            if (dwError != ERROR_INVALID_DATA)
             {
                 DPRINT1("Failed to read the Service name! (Error %lu)\n", dwError);
                 goto done;

@@ -897,7 +897,7 @@ DisplayDevicePropertyText(IN PDEVADVPROP_INFO dap,
                                      &dwSize);
     if (dwSize == 0)
     {
-        if (GetLastError() != ERROR_FILE_NOT_FOUND)
+        if (GetLastError() != ERROR_INVALID_DATA)
         {
             _swprintf(dap->szTemp, L"Error: Getting the size failed! (Error: %ld)", GetLastError());
             SetListViewText(hwndListView, 0, dap->szTemp);

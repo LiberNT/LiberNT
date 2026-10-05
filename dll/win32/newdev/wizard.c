@@ -84,7 +84,7 @@ NewDevSetFailedInstall(
                                           dwSize,
                                           &dwSize))
     {
-        if (!Set || GetLastError() != ERROR_FILE_NOT_FOUND)
+        if (!Set || GetLastError() != ERROR_INVALID_DATA)
             return FALSE;
 
         dwFlags = 0;
