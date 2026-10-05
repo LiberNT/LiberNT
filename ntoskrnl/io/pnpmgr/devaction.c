@@ -1569,6 +1569,21 @@ PiQueryDevNodeResources(
 
 static
 VOID
+PiRequeryDevNodeRequirements(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PIO_RESOURCE_REQUIREMENTS_LIST Requirements = NULL;
+
+    if (!NT_SUCCESS(PiIrpQueryResourceRequirements(DeviceNode, &Requirements)))
+        Requirements = NULL;
+
+    if (DeviceNode->ResourceRequirements)
+        ExFreePool(DeviceNode->ResourceRequirements);
+    DeviceNode->ResourceRequirements = Requirements;
+}
+
+static
+VOID
 PiResetRemovedDevNode(
     _In_ PDEVICE_NODE DeviceNode)
 {
@@ -3382,6 +3397,7 @@ PipRunDeviceActionRequest(
             if (deviceNode->State == DeviceNodeInitialized &&
                 !(deviceNode->Flags & DNF_HAS_PROBLEM))
             {
+                PiRequeryDevNodeRequirements(deviceNode);
                 PiDevNodeStateMachine(deviceNode);
             }
             else if (deviceNode->State >= DeviceNodeDriversAdded &&
