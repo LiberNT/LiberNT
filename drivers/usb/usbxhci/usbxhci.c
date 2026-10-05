@@ -1475,12 +1475,16 @@ XHCI_SetPortLpmTimeouts(
     NewValue = Value;
 
     NewValue &= ~(XHCI_PORTPMSC_U1_TIMEOUT_MASK |
-                  XHCI_PORTPMSC_U2_TIMEOUT_MASK);
+                  XHCI_PORTPMSC_U2_TIMEOUT_MASK |
+                  XHCI_PORTPMSC_FLA);
 
-    if (U1Timeout != 0)
-        NewValue |= (U1Timeout << XHCI_PORTPMSC_U1_TIMEOUT_SHIFT);
-    if (U2Timeout != 0)
-        NewValue |= (U2Timeout << XHCI_PORTPMSC_U2_TIMEOUT_SHIFT);
+    if (U1Timeout > 0x7F)
+        U1Timeout = 0x7F;
+    if (U2Timeout > 0xFE)
+        U2Timeout = 0xFE;
+
+    NewValue |= (U1Timeout << XHCI_PORTPMSC_U1_TIMEOUT_SHIFT) & XHCI_PORTPMSC_U1_TIMEOUT_MASK;
+    NewValue |= (U2Timeout << XHCI_PORTPMSC_U2_TIMEOUT_SHIFT) & XHCI_PORTPMSC_U2_TIMEOUT_MASK;
 
     if (NewValue != Value)
         XHCI_WRITE_REGISTER_ULONG(PortPmReg, NewValue);
