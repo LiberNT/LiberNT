@@ -963,6 +963,9 @@ typedef struct _CSignerHandles
 {
     HCRYPTHASH contentHash;
     HCRYPTHASH authAttrHash;
+#ifdef __REACTOS__
+    HCRYPTPROV hashProv;
+#endif
 } CSignerHandles;
 
 typedef struct _CSignedMsgData
@@ -975,6 +978,34 @@ typedef struct _CSignedMsgData
 #endif
 } CSignedMsgData;
 
+#ifdef __REACTOS__
+static HCRYPTPROV CRYPT_AcquireAesProvForContainer(HCRYPTPROV prov)
+{
+    DWORD type, keyset = 0, size, error = GetLastError();
+    HCRYPTPROV aes = 0;
+    char *container;
+
+    size = sizeof(type);
+    if (CryptGetProvParam(prov, PP_PROVTYPE, (BYTE *)&type, &size, 0) && type == PROV_RSA_FULL &&
+        CryptGetProvParam(prov, PP_CONTAINER, NULL, &size, 0) && (container = CryptMemAlloc(size)))
+    {
+        if (CryptGetProvParam(prov, PP_CONTAINER, (BYTE *)container, &size, 0))
+        {
+            size = sizeof(keyset);
+            if (!CryptGetProvParam(prov, PP_KEYSET_TYPE, (BYTE *)&keyset, &size, 0))
+                keyset = 0;
+            if (!CryptAcquireContextA(&aes, container, MS_ENH_RSA_AES_PROV_A, PROV_RSA_AES,
+             keyset & CRYPT_MACHINE_KEYSET))
+                aes = 0;
+        }
+        CryptMemFree(container);
+    }
+    if (!aes)
+        SetLastError(error);
+    return aes;
+}
+
+#endif
 /* Constructs the signer handles for the signerIndex'th signer of msg_data.
  * Assumes signerIndex is a valid index, and that msg_data's info has already
  * been constructed.
@@ -997,9 +1028,21 @@ static BOOL CSignedMsgData_ConstructSignerHandles(CSignedMsgData *msg_data,
 
     ret = CryptCreateHash(*crypt_prov, algID, 0, 0,
      &msg_data->signerHandles[signerIndex].contentHash);
+#ifdef __REACTOS__
+    if (!ret && GetLastError() == NTE_BAD_ALGID &&
+     (msg_data->signerHandles[signerIndex].hashProv =
+     CRYPT_AcquireAesProvForContainer(*crypt_prov)))
+        ret = CryptCreateHash(msg_data->signerHandles[signerIndex].hashProv,
+         algID, 0, 0, &msg_data->signerHandles[signerIndex].contentHash);
+    if (ret && msg_data->info->rgSignerInfo[signerIndex].AuthAttrs.cAttr > 0)
+        ret = CryptCreateHash(msg_data->signerHandles[signerIndex].hashProv ?
+         msg_data->signerHandles[signerIndex].hashProv : *crypt_prov, algID, 0, 0,
+         &msg_data->signerHandles[signerIndex].authAttrHash);
+#else
     if (ret && msg_data->info->rgSignerInfo[signerIndex].AuthAttrs.cAttr > 0)
         ret = CryptCreateHash(*crypt_prov, algID, 0, 0,
          &msg_data->signerHandles[signerIndex].authAttrHash);
+#endif
     return ret;
 }
 
@@ -1044,6 +1087,10 @@ static void CSignedMsgData_CloseHandles(CSignedMsgData *msg_data)
             CryptDestroyHash(msg_data->signerHandles[i].contentHash);
         if (msg_data->signerHandles[i].authAttrHash)
             CryptDestroyHash(msg_data->signerHandles[i].authAttrHash);
+#ifdef __REACTOS__
+        if (msg_data->signerHandles[i].hashProv)
+            CryptReleaseContext(msg_data->signerHandles[i].hashProv, 0);
+#endif
     }
     CryptMemFree(msg_data->signerHandles);
     msg_data->signerHandles = NULL;
