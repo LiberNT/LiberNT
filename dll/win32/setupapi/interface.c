@@ -88,6 +88,7 @@ SETUP_CreateInterfaceList(
     DWORD LinkedValue;
     GUID ClassGuid;
     struct DeviceInfo *deviceInfo;
+    PLIST_ENTRY ItemList;
 
     hInterfaceKey = INVALID_HANDLE_VALUE;
     hDeviceInstanceKey = NULL;
@@ -237,13 +238,22 @@ SETUP_CreateInterfaceList(
 
             /* We have found a device */
             /* Step 1. Create a device info element */
-            if (!CreateDeviceInfo(list, InstancePath, &ClassGuid, &deviceInfo))
+            for (ItemList = list->ListHead.Flink; ItemList != &list->ListHead; ItemList = ItemList->Flink)
             {
-                rc = GetLastError();
-                goto cleanup;
+                deviceInfo = CONTAINING_RECORD(ItemList, struct DeviceInfo, ListEntry);
+                if (!strcmpiW(deviceInfo->instanceId, InstancePath))
+                    break;
             }
-            TRACE("Adding device %s to list\n", debugstr_w(InstancePath));
-            InsertTailList(&list->ListHead, &deviceInfo->ListEntry);
+            if (ItemList == &list->ListHead)
+            {
+                if (!CreateDeviceInfo(list, InstancePath, &ClassGuid, &deviceInfo))
+                {
+                    rc = GetLastError();
+                    goto cleanup;
+                }
+                TRACE("Adding device %s to list\n", debugstr_w(InstancePath));
+                InsertTailList(&list->ListHead, &deviceInfo->ListEntry);
+            }
 
             /* Step 2. Create an interface list for this element */
             HeapFree(GetProcessHeap(), 0, pSymbolicLink);
