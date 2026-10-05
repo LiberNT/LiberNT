@@ -2502,6 +2502,71 @@ XHCI_UpdateRingDequeueFromTransfer(
     XHCI_UpdateRingDequeueFromPointer(Ring, Transfer->CompletionTrbPointer);
 }
 
+static
+ULONG
+XHCI_GetTrbDataLength(
+    _In_ const XHCI_TRB *Trb)
+{
+    switch ((Trb->Control & XHCI_TRB_TYPE_MASK) >> XHCI_TRB_TYPE_SHIFT)
+    {
+        case XHCI_TRB_TYPE_NORMAL:
+        case XHCI_TRB_TYPE_DATA_STAGE:
+        case XHCI_TRB_TYPE_ISOCH:
+            return Trb->Status & XHCI_TRB_LEN_MASK;
+        default:
+            return 0;
+    }
+}
+
+static
+BOOLEAN
+XHCI_GetTdBytesThroughEvent(
+    _In_ const XHCI_RING *Ring,
+    _In_ const XHCI_TRANSFER *Transfer,
+    _In_ ULONGLONG EventTrbPointer,
+    _In_ ULONG EventResidual,
+    _Out_ PULONG BytesTransferred)
+{
+    ULONG Index;
+    ULONG EventIndex;
+    ULONG LastIndex;
+    ULONG Visited = 0;
+    ULONG Bytes = 0;
+    ULONG TrbLength;
+
+    if (!Ring ||
+        !Transfer->TdFirstTrbPointer ||
+        !XHCI_RingPointerToIndex(Ring, Transfer->TdFirstTrbPointer, &Index) ||
+        !XHCI_RingPointerToIndex(Ring, EventTrbPointer, &EventIndex) ||
+        !XHCI_RingPointerToIndex(Ring, Transfer->CompletionTrbPointer, &LastIndex) ||
+        EventIndex >= Ring->TrbCount - 1)
+    {
+        return FALSE;
+    }
+
+    while (Index != EventIndex)
+    {
+        if (Index >= Ring->TrbCount - 1)
+        {
+            Index = 0;
+            continue;
+        }
+
+        if (Index == LastIndex || ++Visited >= Ring->TrbCount)
+            return FALSE;
+
+        Bytes += XHCI_GetTrbDataLength(&Ring->Base[Index]);
+        Index++;
+    }
+
+    TrbLength = XHCI_GetTrbDataLength(&Ring->Base[EventIndex]);
+    if (EventResidual > TrbLength)
+        EventResidual = TrbLength;
+
+    *BytesTransferred = Bytes + TrbLength - EventResidual;
+    return TRUE;
+}
+
 /**
  * @brief Calculate available space in a transfer ring.
  *
@@ -7238,6 +7303,8 @@ XHCI_HandleTransferEvent(
     BOOLEAN TraceBos = FALSE;
     BOOLEAN TraceDevDesc = FALSE;
     BOOLEAN DeviceGone = FALSE;
+    ULONG TdEventBytes = 0;
+    BOOLEAN TdEventBytesValid = FALSE;
 
     if (!Extension || !EventTrb || Extension->FatalError)
         return;
@@ -7322,6 +7389,16 @@ XHCI_HandleTransferEvent(
     if (RequestedLength < Remaining)
         Remaining = RequestedLength;
     BytesTransferred = RequestedLength - Remaining;
+    if (!Transfer->IsIsochronous)
+    {
+        TdEventBytesValid = XHCI_GetTdBytesThroughEvent(Ring,
+                                                        Transfer,
+                                                        TrbPointer,
+                                                        EventTrb->Status & XHCI_TRB_LEN_MASK,
+                                                        &TdEventBytes);
+        if (TdEventBytesValid)
+            BytesTransferred = TdEventBytes;
+    }
 
     if (Slot && (Slot->DisablePending || !Slot->InUse))
         DeviceGone = TRUE;
@@ -7583,7 +7660,8 @@ XHCI_HandleTransferEvent(
     }
     else
     {
-        BytesTransferred = RequestedLength - Remaining;
+        BytesTransferred = TdEventBytesValid ? TdEventBytes :
+                                               RequestedLength - Remaining;
         if (Transfer->IsControl && RequestedLength > 0)
         {
             /*
