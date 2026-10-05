@@ -4586,6 +4586,111 @@ Cleanup:
 /* SEGMENT INITIALISATION *****************************************************/
 
 /*
+ * DxgkVidMmQueryUEFIFrameBufferRanges
+ *
+ * For every segment whose descriptor reported firmware framebuffer ranges,
+ * asks the miniport for them through DXGKQAITYPE_UEFIFRAMEBUFFERRANGES and
+ * records them as blocked until the miniport releases them through
+ * DxgkCbUnblockUEFIFrameBufferRanges.  dxgmms2 placement does not consult
+ * the record yet; see DXGKRNL_SEGMENT.
+ *
+ * This keeps the boot image on screen across the hand-off from the firmware
+ * GOP framebuffer to driver-programmed scanout.  Note that
+ * DXGKQAITYPE_SEGMENTMEMORYSTATE is a different query: it returns invalid
+ * (unusable) memory ranges, not framebuffer ranges.
+ *
+ * The miniport fills the array through DXGK_SEGMENTMEMORYSTATE.pMemoryRanges.
+ * pOutputData points at the same array, so a miniport that writes through
+ * either lands in the one buffer.  Any failure leaves the segment unblocked,
+ * because a miniport that cannot report its framebuffer has nothing it
+ * needs withheld.
+ */
+static VOID
+DxgkVidMmQueryUEFIFrameBufferRanges(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PDXGKRNL_SEGMENT Segments = (PDXGKRNL_SEGMENT)Adapter->Segments;
+    ULONG            Index;
+
+    PAGED_CODE();
+
+    if (Segments == NULL || Adapter->MiniportContext == NULL ||
+        Adapter->MiniportContext->InitData.s.DxgkDdiQueryAdapterInfo == NULL)
+    {
+        return;
+    }
+
+    for (Index = 0; Index < Adapter->SegmentCount; Index++)
+    {
+        PDXGKRNL_SEGMENT            Seg = &Segments[Index];
+        DXGKARG_QUERYADAPTERINFO    QueryInfo;
+        DXGK_SEGMENTMEMORYSTATE     MemoryState;
+        DXGK_MEMORYRANGE            Ranges[DXGKP_MAX_UEFI_FB_RANGES];
+        NTSTATUS                    Status;
+        UINT                        Count, Range;
+
+        Count = Seg->ReportedUEFIFrameBufferRanges;
+        if (Count == 0)
+            continue;
+
+        if (Count > DXGKP_MAX_UEFI_FB_RANGES)
+        {
+            /* Withholding only some ranges would let the allocator place
+             * data over the rest of a live framebuffer, so withhold none. */
+            DPRINT1("VidMm: segment %lu reports %u UEFI framebuffer ranges, "
+                    "more than the %u that can be withheld\n",
+                    Seg->SegmentId, Count, DXGKP_MAX_UEFI_FB_RANGES);
+            continue;
+        }
+
+        RtlZeroMemory(&MemoryState, sizeof(MemoryState));
+        RtlZeroMemory(Ranges, sizeof(Ranges));
+        MemoryState.DriverSegmentId          = (WORD)Seg->SegmentId;
+        MemoryState.PhysicalAdapterIndex     = 0;
+        MemoryState.NumUEFIFrameBufferRanges = Count;
+        MemoryState.pMemoryRanges            = Ranges;
+
+        RtlZeroMemory(&QueryInfo, sizeof(QueryInfo));
+        QueryInfo.Type           = DXGKQAITYPE_UEFIFRAMEBUFFERRANGES;
+        QueryInfo.pInputData     = &MemoryState;
+        QueryInfo.InputDataSize  = sizeof(MemoryState);
+        QueryInfo.pOutputData    = Ranges;
+        QueryInfo.OutputDataSize = Count * sizeof(DXGK_MEMORYRANGE);
+
+        Status =
+            Adapter->MiniportContext->InitData.s.DxgkDdiQueryAdapterInfo(
+                Adapter->MiniportDeviceContext, &QueryInfo);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("VidMm: segment %lu reported %u UEFI framebuffer ranges "
+                    "but the range query failed (0x%08lx)\n",
+                    Seg->SegmentId, Count, Status);
+            continue;
+        }
+
+        ExAcquireFastMutex(&Seg->Lock);
+        Seg->NumUEFIFrameBufferRanges = 0;
+        for (Range = 0; Range < Count; Range++)
+        {
+            /* A zero-length range withholds nothing; skip it rather than
+             * recording an entry that can never be matched on release. */
+            if (Ranges[Range].SizeInBytes == 0)
+                continue;
+
+            Seg->UEFIFrameBufferRanges[Seg->NumUEFIFrameBufferRanges++] =
+                Ranges[Range];
+        }
+        Seg->UEFIFrameBufferRangesBlocked =
+            (Seg->NumUEFIFrameBufferRanges != 0);
+        ExReleaseFastMutex(&Seg->Lock);
+
+        DPRINT("VidMm: segment %lu recorded %u blocked UEFI framebuffer "
+               "range(s)\n",
+               Seg->SegmentId, Seg->NumUEFIFrameBufferRanges);
+    }
+}
+
+/*
  * DxgkVidMmInitializeAdapter
  *
  * Queries the miniport for segment descriptors and builds the in-memory
@@ -4888,7 +4993,24 @@ DxgkVidMmInitializeAdapter(
         Seg->CpuBase      = NULL;   /* mapped lazily on first CPU access */
 
         if (UsingSeg4)
+        {
             VIDMM_READ_SEGMENT_DESC(DXGK_SEGMENTDESCRIPTOR4);
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_2)
+            /* The stride is the miniport's, and a WDDM 2.0/2.1 descriptor
+             * ends before NumUEFIFrameBufferRanges.  Read the field only when
+             * this descriptor is long enough to contain it; otherwise it
+             * would come from the next segment's descriptor. */
+            if (DescStride >=
+                FIELD_OFFSET(DXGK_SEGMENTDESCRIPTOR4,
+                             NumUEFIFrameBufferRanges) + sizeof(UINT))
+            {
+                Seg->ReportedUEFIFrameBufferRanges =
+                    ((DXGK_SEGMENTDESCRIPTOR4 *)
+                         (DescBuffer + i * DescStride))
+                        ->NumUEFIFrameBufferRanges;
+            }
+#endif
+        }
         else if (UsingSeg3)
             VIDMM_READ_SEGMENT_DESC(DXGK_SEGMENTDESCRIPTOR3);
         else
@@ -4973,6 +5095,16 @@ DxgkVidMmInitializeAdapter(
     KeMemoryBarrier();
 
     ExFreePoolWithTag(DescBuffer, TAG_VIDMM_SEGMENT);
+
+    /* -----------------------------------------------------------------------
+     * Step 7: Learn which ranges hold the firmware framebuffer.
+     *
+     * The segment table has to be published first, because this query is
+     * per-segment and the miniport may touch segment state while answering.
+     * A miniport that does not implement the query simply has nothing to
+     * withhold, so a failure here is not an adapter-start failure.
+     * --------------------------------------------------------------------- */
+    DxgkVidMmQueryUEFIFrameBufferRanges(Adapter);
 
     DPRINT("DxgkVidMmInitializeAdapter: %lu segments initialised for "
            "adapter %p\n", SegmentCount, Adapter);

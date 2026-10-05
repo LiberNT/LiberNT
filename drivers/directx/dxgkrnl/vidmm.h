@@ -58,6 +58,13 @@ typedef struct _DXGKVMM_TRACKED_SUBMISSION
  * segment ID, stored in Adapter->Segments (typed PVOID in the adapter struct
  * to avoid a circular header dependency).
  * ========================================================================= */
+/*
+ * Upper bound on UEFI framebuffer ranges recorded per segment.  Firmware
+ * publishes one contiguous GOP framebuffer in practice; the slack covers a
+ * miniport that splits it across banks.
+ */
+#define DXGKP_MAX_UEFI_FB_RANGES 8
+
 typedef struct _DXGKRNL_SEGMENT
 {
     /* 1-based segment ID, matching the WDDM convention. */
@@ -118,6 +125,33 @@ typedef struct _DXGKRNL_SEGMENT
     /* Page to which UNMAP_APERTURE_SEGMENT redirects a retired aperture. */
     PVOID               DummyPageVa;
     PHYSICAL_ADDRESS    DummyPage;
+
+    /*
+     * ---- UEFI framebuffer ranges reported by the miniport ----
+     *
+     * A miniport reports these through DXGKQAITYPE_UEFIFRAMEBUFFERRANGES so
+     * that the firmware framebuffer keeps displaying the boot image until the
+     * driver has programmed its own scanout.  They stay blocked until the
+     * miniport calls DxgkCbUnblockUEFIFrameBufferRanges, which is the only
+     * transition that releases them -- and only the owner that blocked a
+     * range may release it.
+     *
+     * TODO: placement belongs to dxgmms2, which does not yet consult this
+     * list, so a blocked range is recorded and released correctly but not
+     * yet kept free of allocations.
+     *
+     * Entries [0..NumUEFIFrameBufferRanges-1] are valid.  Protected by Lock.
+     */
+    DXGK_MEMORYRANGE    UEFIFrameBufferRanges[DXGKP_MAX_UEFI_FB_RANGES];
+    UINT                NumUEFIFrameBufferRanges;
+
+    /* Range count the segment's DXGK_SEGMENTDESCRIPTOR4 reported (WDDM 2.2+).
+     * Zero for older descriptors, which carry no such field.  This is how
+     * many ranges DXGKQAITYPE_UEFIFRAMEBUFFERRANGES is asked to return. */
+    UINT                ReportedUEFIFrameBufferRanges;
+
+    /* TRUE while the ranges above are blocked (see the TODO above). */
+    BOOLEAN             UEFIFrameBufferRangesBlocked;
 
 } DXGKRNL_SEGMENT, *PDXGKRNL_SEGMENT;
 

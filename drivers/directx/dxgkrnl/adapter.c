@@ -6134,17 +6134,28 @@ DxgkCbIndicateConnectorChange(
 }
 
 /*
- * UEFI framebuffer ranges can be unblocked only by the owner that first
- * blocked the exact segment ranges.  ReactOS records no such ownership, so
- * accept no transition and leave the caller's range array untouched.
+ * DxgkCbUnblockUEFIFrameBufferRanges
+ *
+ * Releases the firmware framebuffer ranges a miniport previously reported
+ * through DXGKQAITYPE_SEGMENTMEMORYSTATE, once it has taken over scanout and
+ * the boot image no longer needs preserving.
+ *
+ * Only the owner that blocked a range may release it, so each range the
+ * caller names must match one that is currently blocked on the addressed
+ * segment.  A caller that names nothing releases every blocked range on that
+ * segment, which is how a miniport hands the whole firmware framebuffer back.
  */
 static NTSTATUS
 APIENTRY
-DxgkCbUnblockUEFIFrameBufferRangesNotSupported(
+DxgkCbUnblockUEFIFrameBufferRanges(
     IN_CONST_HANDLE DeviceHandle,
     IN_CONST_PDXGK_SEGMENTMEMORYSTATE SegmentMemoryState)
 {
-    PDXGKRNL_ADAPTER Adapter;
+    PDXGKRNL_ADAPTER  Adapter;
+    PDXGKRNL_SEGMENT  Segment;
+    NTSTATUS          Status = STATUS_SUCCESS;
+    UINT              Named, Blocked;
+    ULONG             SegmentId;
 
     if (SegmentMemoryState == NULL ||
         (SegmentMemoryState->NumUEFIFrameBufferRanges != 0 &&
@@ -6156,8 +6167,131 @@ DxgkCbUnblockUEFIFrameBufferRangesNotSupported(
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter == NULL)
         return STATUS_INVALID_HANDLE;
+
+    /* Only the single physical adapter is modelled. */
+    if (SegmentMemoryState->PhysicalAdapterIndex != 0)
+    {
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* DriverSegmentId is the miniport's 1-based segment id. */
+    SegmentId = SegmentMemoryState->DriverSegmentId;
+    if (Adapter->Segments == NULL ||
+        SegmentId == 0 || SegmentId > Adapter->SegmentCount)
+    {
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_INVALID_PARAMETER;
+    }
+    Segment = &((PDXGKRNL_SEGMENT)Adapter->Segments)[SegmentId - 1];
+
+    ExAcquireFastMutex(&Segment->Lock);
+
+    if (!Segment->UEFIFrameBufferRangesBlocked)
+    {
+        /* Nothing is withheld, so there is no transition to make.  Releasing
+         * twice is a driver bug, not a condition to bugcheck over. */
+        DXGKRNL_WARN("DxgkCbUnblockUEFIFrameBufferRanges: segment %lu has no "
+                     "blocked UEFI ranges\n", SegmentId);
+        Status = STATUS_INVALID_DEVICE_REQUEST;
+        goto Done;
+    }
+
+    if (SegmentMemoryState->NumUEFIFrameBufferRanges == 0)
+    {
+        /* Release the whole blocked set. */
+        DXGKRNL_TRACE("DxgkCbUnblockUEFIFrameBufferRanges: segment %lu "
+                      "releasing all %u range(s)\n",
+                      SegmentId, Segment->NumUEFIFrameBufferRanges);
+        RtlZeroMemory(Segment->UEFIFrameBufferRanges,
+                      sizeof(Segment->UEFIFrameBufferRanges));
+        Segment->NumUEFIFrameBufferRanges     = 0;
+        Segment->UEFIFrameBufferRangesBlocked = FALSE;
+        goto Done;
+    }
+
+    /* Every named range must be one that is currently blocked here. */
+    for (Named = 0; Named < SegmentMemoryState->NumUEFIFrameBufferRanges;
+         Named++)
+    {
+        CONST DXGK_MEMORYRANGE *Want =
+            &SegmentMemoryState->pMemoryRanges[Named];
+        BOOLEAN Match = FALSE;
+
+        if (Want->SizeInBytes == 0)
+        {
+            Status = STATUS_INVALID_PARAMETER;
+            goto Done;
+        }
+
+        for (Blocked = 0; Blocked < Segment->NumUEFIFrameBufferRanges;
+             Blocked++)
+        {
+            if (Segment->UEFIFrameBufferRanges[Blocked].SegmentOffset ==
+                    Want->SegmentOffset &&
+                Segment->UEFIFrameBufferRanges[Blocked].SizeInBytes ==
+                    Want->SizeInBytes)
+            {
+                Match = TRUE;
+                break;
+            }
+        }
+
+        if (!Match)
+        {
+            DXGKRNL_WARN("DxgkCbUnblockUEFIFrameBufferRanges: segment %lu "
+                         "range [%I64x,+%I64x) is not blocked here\n",
+                         SegmentId, Want->SegmentOffset, Want->SizeInBytes);
+            Status = STATUS_INVALID_PARAMETER;
+            goto Done;
+        }
+    }
+
+    /* Validation passed for the whole request, so apply it as one step --
+     * a partially released set would leave the segment inconsistent. */
+    for (Named = 0; Named < SegmentMemoryState->NumUEFIFrameBufferRanges;
+         Named++)
+    {
+        CONST DXGK_MEMORYRANGE *Want =
+            &SegmentMemoryState->pMemoryRanges[Named];
+
+        for (Blocked = 0; Blocked < Segment->NumUEFIFrameBufferRanges;
+             Blocked++)
+        {
+            if (Segment->UEFIFrameBufferRanges[Blocked].SegmentOffset !=
+                    Want->SegmentOffset ||
+                Segment->UEFIFrameBufferRanges[Blocked].SizeInBytes !=
+                    Want->SizeInBytes)
+            {
+                continue;
+            }
+
+            /* Compact the tail down over the released entry. */
+            RtlMoveMemory(&Segment->UEFIFrameBufferRanges[Blocked],
+                          &Segment->UEFIFrameBufferRanges[Blocked + 1],
+                          (Segment->NumUEFIFrameBufferRanges - Blocked - 1) *
+                              sizeof(DXGK_MEMORYRANGE));
+            Segment->NumUEFIFrameBufferRanges--;
+            RtlZeroMemory(
+                &Segment->UEFIFrameBufferRanges
+                     [Segment->NumUEFIFrameBufferRanges],
+                sizeof(DXGK_MEMORYRANGE));
+            break;
+        }
+    }
+
+    if (Segment->NumUEFIFrameBufferRanges == 0)
+        Segment->UEFIFrameBufferRangesBlocked = FALSE;
+
+    DXGKRNL_TRACE("DxgkCbUnblockUEFIFrameBufferRanges: segment %lu released "
+                  "%u range(s), %u still blocked\n",
+                  SegmentId, SegmentMemoryState->NumUEFIFrameBufferRanges,
+                  Segment->NumUEFIFrameBufferRanges);
+
+Done:
+    ExReleaseFastMutex(&Segment->Lock);
     ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-    return STATUS_NOT_SUPPORTED;
+    return Status;
 }
 
 /* Protected-session objects and their status state machine remain off. */
@@ -7012,7 +7146,7 @@ DxgkpFillInterface(
         Interface->DxgkCbIndicateConnectorChange =
             DxgkCbIndicateConnectorChange; /* 0x150 */
         Interface->DxgkCbUnblockUEFIFrameBufferRanges =
-            DxgkCbUnblockUEFIFrameBufferRangesNotSupported; /* 0x158 */
+            DxgkCbUnblockUEFIFrameBufferRanges; /* 0x158 */
         Interface->DxgkCbAcquirePostDisplayOwnership2 =
             DxgkCbAcquirePostDisplayOwnership2; /* 0x160 */
     }
