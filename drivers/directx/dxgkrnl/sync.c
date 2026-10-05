@@ -2094,6 +2094,33 @@ DxgkpSyncResolveShared(
     return SyncObj;
 }
 
+/*
+ * DxgkSyncObjectIsMonitoredFence
+ *
+ * TRUE when the handle names, in the calling process, a monitored fence the
+ * CPU may wait on and signal.  A periodic monitored fence advances on
+ * v-blank and is never signalled, so it does not qualify.
+ */
+BOOLEAN
+DxgkSyncObjectIsMonitoredFence(
+    _In_ D3DKMT_HANDLE hSyncObject)
+{
+    PDXGKRNL_SYNC_OBJECT SyncObj;
+    PDXGKRNL_SYNC_OBJECT Resolved;
+    BOOLEAN Result;
+    PVOID Object;
+
+    if (!NT_SUCCESS(DxgkReferenceOwnedHandle(hSyncObject, DxgkHandleTypeSynchronizationObject, PsGetCurrentProcess(), DxgkpReferenceSyncObject, &Object)))
+        return FALSE;
+    SyncObj = Object;
+    Resolved = DxgkpSyncResolveShared(SyncObj);
+    Result = Resolved != NULL &&
+             Resolved->Info.Type == D3DDDI_MONITORED_FENCE &&
+             !Resolved->Periodic;
+    DxgkpDereferenceSyncObject(SyncObj);
+    return Result;
+}
+
 NTSTATUS
 NTAPI
 DxgkCreateSynchronizationObject2Core(

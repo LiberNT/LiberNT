@@ -4058,6 +4058,10 @@ D3DKMT_HANDLE
 DxgkSyncObjectQueryShareHandle(
     _In_ D3DKMT_HANDLE hSyncObject);
 
+BOOLEAN
+DxgkSyncObjectIsMonitoredFence(
+    _In_ D3DKMT_HANDLE hSyncObject);
+
 NTSTATUS
 NTAPI
 DxgkOpenSynchronizationObject(

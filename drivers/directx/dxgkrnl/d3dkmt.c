@@ -11621,15 +11621,45 @@ DxgkpDispatchBufferedIoctlWorker(
                 DxgkDereferenceContext(VirtualContext);
                 return STATUS_INVALID_PARAMETER;
             }
-            if (pUpdate->hFenceObject != 0)
-            {
-                DxgkDereferenceContext(VirtualContext);
-                return STATUS_NOT_SUPPORTED;
-            }
-            if (pUpdate->FenceValue != 0)
+            /*
+             * hFenceObject orders the update against the context's work: it
+             * runs once the fence reaches FenceValue (unless DoNotWait), and
+             * on completion the fence is signalled with FenceValue + 1.  The
+             * update is applied on the CPU here, so the wait and the signal
+             * are made on the CPU timeline as well.  A FenceValue with no
+             * fence names nothing to wait on or signal.
+             */
+            if (pUpdate->hFenceObject == 0 && pUpdate->FenceValue != 0)
             {
                 DxgkDereferenceContext(VirtualContext);
                 return STATUS_INVALID_PARAMETER;
+            }
+            if (pUpdate->hFenceObject != 0)
+            {
+                if (!DxgkSyncObjectIsMonitoredFence(pUpdate->hFenceObject) ||
+                    pUpdate->FenceValue == MAXULONGLONG)
+                {
+                    DxgkDereferenceContext(VirtualContext);
+                    return STATUS_INVALID_PARAMETER;
+                }
+                if (!pUpdate->Flags.DoNotWait)
+                {
+                    D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMCPU Wait;
+                    D3DKMT_HANDLE WaitHandle = pUpdate->hFenceObject;
+                    UINT64 WaitValue = pUpdate->FenceValue;
+
+                    RtlZeroMemory(&Wait, sizeof(Wait));
+                    Wait.hDevice = pUpdate->hDevice;
+                    Wait.ObjectCount = 1;
+                    Wait.ObjectHandleArray = &WaitHandle;
+                    Wait.FenceValueArray = &WaitValue;
+                    Status = DxgkWaitForSynchronizationObjectFromCpu(&Wait, KernelMode);
+                    if (!NT_SUCCESS(Status))
+                    {
+                        DxgkDereferenceContext(VirtualContext);
+                        return Status;
+                    }
+                }
             }
 
             OperationsSize = sizeof(*Operations) * (SIZE_T)pUpdate->NumOperations;
@@ -11651,6 +11681,20 @@ DxgkpDispatchBufferedIoctlWorker(
                     if (NT_SUCCESS(Status) && !NT_SUCCESS(FlushStatus))
                         Status = FlushStatus;
                 }
+            }
+            /* The mappings are in place; tell the fence. */
+            if (NT_SUCCESS(Status) && pUpdate->hFenceObject != 0)
+            {
+                D3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMCPU Signal;
+                D3DKMT_HANDLE SignalHandle = pUpdate->hFenceObject;
+                UINT64 SignalValue = pUpdate->FenceValue + 1;
+
+                RtlZeroMemory(&Signal, sizeof(Signal));
+                Signal.hDevice = pUpdate->hDevice;
+                Signal.ObjectCount = 1;
+                Signal.ObjectHandleArray = &SignalHandle;
+                Signal.FenceValueArray = &SignalValue;
+                Status = DxgkSignalSynchronizationObjectFromCpu(&Signal, KernelMode);
             }
             ExFreePoolWithTag(Operations, TAG_DXGK_GPUVA);
             DxgkDereferenceContext(VirtualContext);
