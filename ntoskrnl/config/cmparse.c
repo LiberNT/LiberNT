@@ -1685,6 +1685,15 @@ CmpLookInCache(
                             break;
                         }
 
+                        if (!LockKcbsExclusive &&
+                            (CurrentKcb->RefCount == 0 || CurrentKcb->DelayedCloseIndex == 0) &&
+                            GET_HASH_INDEX(CurrentKcb->ConvKey) != LockedKcbs[LockedKcbs[0]])
+                        {
+                            CmpUnLockKcbArray(LockedKcbs);
+                            CmpDereferenceKeyControlBlock(*Kcb);
+                            return STATUS_RETRY;
+                        }
+
                         /* We finally found the key in cache, acknowledge it */
                         KeyFoundInCache = TRUE;
 

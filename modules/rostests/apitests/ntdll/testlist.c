@@ -54,6 +54,7 @@ extern void func_SyscallStub(void);
 #endif
 extern void func_NtCreateFile(void);
 extern void func_NtCreateKey(void);
+extern void func_NtCreateKeyCached(void);
 extern void func_NtCreateProfile(void);
 extern void func_NtCreateSection(void);
 extern void func_NtCreateThread(void);
@@ -220,6 +221,7 @@ const struct test winetest_testlist[] =
 #endif
     { "NtCreateFile",                   func_NtCreateFile },
     { "NtCreateKey",                    func_NtCreateKey },
+    { "NtCreateKeyCached",              func_NtCreateKeyCached },
     { "NtCreateProfile",                func_NtCreateProfile },
     { "NtCreateSection",                func_NtCreateSection },
     { "NtCreateThread",                 func_NtCreateThread },

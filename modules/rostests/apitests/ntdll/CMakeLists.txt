@@ -75,6 +75,7 @@ list(APPEND SOURCE
     NtCompareTokens.c
     NtCreateFile.c
     NtCreateKey.c
+    NtCreateKeyCached.c
     NtCreateProfile.c
     NtCreateSection.c
     NtCreateThread.c
