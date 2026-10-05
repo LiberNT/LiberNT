@@ -390,6 +390,14 @@ ObReferenceObjectEx(
 );
 
 BOOLEAN
+NTAPI
+ObpQueryProcessGrantedAccess(
+    IN PEPROCESS Process,
+    IN PVOID Object,
+    OUT PACCESS_MASK GrantedAccess
+);
+
+BOOLEAN
 FASTCALL
 ObReferenceObjectSafe(
     IN PVOID Object

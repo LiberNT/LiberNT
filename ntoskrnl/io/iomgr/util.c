@@ -311,8 +311,36 @@ NTAPI
 IoValidateDeviceIoControlAccess(IN PIRP Irp,
                                 IN ULONG RequiredAccess)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    PIO_STACK_LOCATION StackLocation;
+    PFILE_OBJECT FileObject;
+    ACCESS_MASK GrantedAccess;
+
+    PAGED_CODE();
+
+    if (RequiredAccess & ~(FILE_READ_ACCESS | FILE_WRITE_ACCESS))
+        return STATUS_INVALID_PARAMETER;
+
+    StackLocation = IoGetCurrentIrpStackLocation(Irp);
+    if (StackLocation->MajorFunction != IRP_MJ_DEVICE_CONTROL &&
+        StackLocation->MajorFunction != IRP_MJ_FILE_SYSTEM_CONTROL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (Irp->RequestorMode == KernelMode || RequiredAccess == FILE_ANY_ACCESS)
+        return STATUS_SUCCESS;
+
+    FileObject = Irp->Tail.Overlay.OriginalFileObject ? Irp->Tail.Overlay.OriginalFileObject : StackLocation->FileObject;
+    if (!FileObject || !Irp->Tail.Overlay.Thread ||
+        !ObpQueryProcessGrantedAccess(IoThreadToProcess(Irp->Tail.Overlay.Thread), FileObject, &GrantedAccess))
+    {
+        return STATUS_ACCESS_DENIED;
+    }
+
+    if ((GrantedAccess & RequiredAccess) != RequiredAccess)
+        return STATUS_ACCESS_DENIED;
+
+    return STATUS_SUCCESS;
 }
 
 /*

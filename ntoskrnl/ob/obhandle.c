@@ -3342,6 +3342,56 @@ ObFindHandleForObject(IN PEPROCESS Process,
     return Result;
 }
 
+typedef struct _OBP_GRANTED_ACCESS_DATA
+{
+    POBJECT_HEADER ObjectHeader;
+    ACCESS_MASK GrantedAccess;
+    BOOLEAN Found;
+} OBP_GRANTED_ACCESS_DATA, *POBP_GRANTED_ACCESS_DATA;
+
+static
+BOOLEAN
+NTAPI
+ObpEnumGrantedAccessProcedure(IN PHANDLE_TABLE_ENTRY HandleEntry,
+                              IN HANDLE Handle,
+                              IN PVOID Context)
+{
+    POBP_GRANTED_ACCESS_DATA Data = Context;
+
+    if (ObpGetHandleObject(HandleEntry) == Data->ObjectHeader)
+    {
+        Data->GrantedAccess |= HandleEntry->GrantedAccess & ~ObpAccessProtectCloseBit;
+        Data->Found = TRUE;
+    }
+    return FALSE;
+}
+
+BOOLEAN
+NTAPI
+ObpQueryProcessGrantedAccess(IN PEPROCESS Process,
+                             IN PVOID Object,
+                             OUT PACCESS_MASK GrantedAccess)
+{
+    OBP_GRANTED_ACCESS_DATA Data;
+    PHANDLE_TABLE ObjectTable;
+
+    PAGED_CODE();
+
+    Data.ObjectHeader = OBJECT_TO_OBJECT_HEADER(Object);
+    Data.GrantedAccess = 0;
+    Data.Found = FALSE;
+
+    ObjectTable = ObReferenceProcessHandleTable(Process);
+    if (ObjectTable)
+    {
+        ExEnumHandleTable(ObjectTable, ObpEnumGrantedAccessProcedure, &Data, NULL);
+        ObDereferenceProcessHandleTable(Process);
+    }
+
+    *GrantedAccess = Data.GrantedAccess;
+    return Data.Found;
+}
+
 /*++
 * @name ObInsertObject
 * @implemented NT4
