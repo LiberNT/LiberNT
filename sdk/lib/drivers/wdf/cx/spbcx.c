@@ -7,6 +7,8 @@
 
 #include "classlibrary.h"
 #include <spbcx.h>
+#include <initguid.h>
+#include <reactos/drivers/reshubio.h>
 
 typedef struct _SPBCX_TRANSFER
 {
@@ -1062,6 +1064,10 @@ SpbCxDdiDeviceInitialize(
     QueueConfig.Driver = WdfGetDriver();
 
     Status = WdfIoQueueCreate(DeviceHandle, &QueueConfig, WDF_NO_OBJECT_ATTRIBUTES, &Device->Queue);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = WdfDeviceCreateDeviceInterface(DeviceHandle, &GUID_DEVINTERFACE_RESOURCE_HUB_CONTROLLER, NULL);
     if (!NT_SUCCESS(Status))
         return Status;
 

@@ -9,6 +9,7 @@
 #include <gpio.h>
 #include <gpioclx.h>
 #include <acpiioct.h>
+#include <initguid.h>
 #include <reactos/drivers/reshubio.h>
 #include <ndk/haltypes.h>
 
@@ -1330,6 +1331,10 @@ GpioCxDdiProcessAddDevicePostDeviceCreate(
     WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&QueueConfig, WdfIoQueueDispatchSequential);
     QueueConfig.EvtIoDeviceControl = GpioCxEvtIoDeviceControl;
     Status = WdfIoQueueCreate(DeviceHandle, &QueueConfig, WDF_NO_OBJECT_ATTRIBUTES, &Device->Queue);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = WdfDeviceCreateDeviceInterface(DeviceHandle, &GUID_DEVINTERFACE_RESOURCE_HUB_CONTROLLER, NULL);
     if (!NT_SUCCESS(Status))
         return Status;
 

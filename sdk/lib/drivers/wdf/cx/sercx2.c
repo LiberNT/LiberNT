@@ -8,6 +8,8 @@
 #include "classlibrary.h"
 #include <ntddser.h>
 #include <SerCx.h>
+#include <initguid.h>
+#include <reactos/drivers/reshubio.h>
 
 typedef struct _SERCX2_PIO_TRANSMIT_CONTEXT
 {
@@ -1832,6 +1834,10 @@ SerCx2DdiInitializeDevice(
     QueueConfig.EvtIoDeviceControl = SerCx2EvtIoDeviceControl;
     QueueConfig.EvtIoStop = SerCx2EvtIoStop;
     Status = WdfIoQueueCreate(DeviceHandle, &QueueConfig, WDF_NO_OBJECT_ATTRIBUTES, &Device->Queue);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = WdfDeviceCreateDeviceInterface(DeviceHandle, &GUID_DEVINTERFACE_RESOURCE_HUB_CONTROLLER, NULL);
     if (!NT_SUCCESS(Status))
         return Status;
 
