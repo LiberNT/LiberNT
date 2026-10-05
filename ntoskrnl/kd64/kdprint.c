@@ -18,6 +18,8 @@
 #define KD_100NS_PER_SECOND 10000000ULL
 #define KD_100NS_PER_MICROSECOND 10ULL
 
+static PVOID volatile KdpPrintOpenLine;
+
 /* FUNCTIONS *****************************************************************/
 
 static
@@ -25,28 +27,47 @@ USHORT
 NTAPI
 KdpBuildTimestampPrefix(
     _Out_writes_bytes_(BufferSize) PCHAR Buffer,
-    _In_ SIZE_T BufferSize)
+    _In_ SIZE_T BufferSize,
+    _In_reads_bytes_(TextLength) PCHAR Text,
+    _In_ USHORT TextLength,
+    _In_ BOOLEAN UserText)
 {
     ULONGLONG InterruptTime;
     ULONGLONG Seconds;
     ULONGLONG Microseconds;
     LONG Length;
+    ULONG_PTR Line;
+    ULONG_PTR OpenLine;
+    SIZE_T NewLine = 0;
 
-    if (BufferSize == 0)
+    if (BufferSize < 2)
         return 0;
+
+    Line = (ULONG_PTR)KeGetCurrentThread() | 1 | (UserText ? 2 : 0);
+    OpenLine = (ULONG_PTR)InterlockedExchangePointer(&KdpPrintOpenLine,
+                                                     ((TextLength != 0) && (Text[TextLength - 1] == '\n')) ?
+                                                     NULL : (PVOID)Line);
+    if (OpenLine != 0)
+    {
+        if (!UserText && (OpenLine == Line))
+            return 0;
+
+        Buffer[0] = '\n';
+        NewLine = 1;
+    }
 
     InterruptTime = KdpQueryDebugTimestamp();
     Seconds = InterruptTime / KD_100NS_PER_SECOND;
     Microseconds = (InterruptTime % KD_100NS_PER_SECOND) / KD_100NS_PER_MICROSECOND;
 
-    Length = _snprintf(Buffer, BufferSize, "[%5I64u.%06I64u] ", Seconds, Microseconds);
+    Length = _snprintf(Buffer + NewLine, BufferSize - NewLine, "[%5I64u.%06I64u] ", Seconds, Microseconds);
     if (Length < 0)
     {
         /* Keep logging functional even if formatting fails. */
-        return 0;
+        return (USHORT)NewLine;
     }
 
-    return (USHORT)min((SIZE_T)Length, BufferSize - 1);
+    return (USHORT)(NewLine + min((SIZE_T)Length, BufferSize - NewLine - 1));
 }
 
 KIRQL
@@ -500,6 +521,15 @@ KdpPrompt(
 static
 NTSTATUS
 NTAPI
+KdpPrintCaptured(
+    _In_reads_bytes_(Length) PCHAR String,
+    _In_ USHORT Length,
+    _In_ BOOLEAN UserString,
+    _Out_ PBOOLEAN Handled);
+
+static
+NTSTATUS
+NTAPI
 KdpPrintFromUser(
     _In_ ULONG ComponentId,
     _In_ ULONG Level,
@@ -531,14 +561,7 @@ KdpPrintFromUser(
     _SEH2_END;
 
     /* Now go through the kernel-mode code path */
-    return KdpPrint(ComponentId,
-                    Level,
-                    String,
-                    Length,
-                    KernelMode,
-                    TrapFrame,
-                    ExceptionFrame,
-                    Handled);
+    return KdpPrintCaptured(String, Length, TRUE, Handled);
 }
 
 NTSTATUS
@@ -553,12 +576,6 @@ KdpPrint(
     _In_ PKEXCEPTION_FRAME ExceptionFrame,
     _Out_ PBOOLEAN Handled)
 {
-    NTSTATUS Status;
-    KIRQL PrintIrql;
-    STRING OutputString;
-    CHAR OutputBuffer[KD_PRINT_MAX_BYTES + KD_PRINT_PREFIX_BYTES];
-    USHORT PrefixLength, OutputLength;
-
     if (NtQueryDebugFilterState(ComponentId, Level) == (NTSTATUS)FALSE)
     {
         /* Mask validation failed */
@@ -590,8 +607,26 @@ KdpPrint(
                                 Handled);
     }
 
+    return KdpPrintCaptured(String, Length, FALSE, Handled);
+}
+
+static
+NTSTATUS
+NTAPI
+KdpPrintCaptured(
+    _In_reads_bytes_(Length) PCHAR String,
+    _In_ USHORT Length,
+    _In_ BOOLEAN UserString,
+    _Out_ PBOOLEAN Handled)
+{
+    NTSTATUS Status;
+    KIRQL PrintIrql;
+    STRING OutputString;
+    CHAR OutputBuffer[KD_PRINT_MAX_BYTES + KD_PRINT_PREFIX_BYTES];
+    USHORT PrefixLength, OutputLength;
+
     /* Build the timestamp prefix directly into the output buffer */
-    PrefixLength = KdpBuildTimestampPrefix(OutputBuffer, KD_PRINT_PREFIX_BYTES);
+    PrefixLength = KdpBuildTimestampPrefix(OutputBuffer, KD_PRINT_PREFIX_BYTES, String, Length, UserString);
 
     /* Keep the complete entry in the fixed-size KD print buffer. */
     OutputLength = Length;
@@ -677,29 +712,31 @@ KdpDprintf(
     USHORT PrefixLength;
     INT FormatLength;
     va_list ap;
-    CHAR Buffer[512];
+    PCHAR Text;
+    CHAR Buffer[KD_PRINT_PREFIX_BYTES + KD_PRINT_MAX_BYTES];
 
-    /* Build the timestamp prefix directly into the output buffer */
-    PrefixLength = KdpBuildTimestampPrefix(Buffer, sizeof(Buffer));
+    Text = Buffer + KD_PRINT_PREFIX_BYTES;
 
-    /* Format the string after the timestamp prefix */
     va_start(ap, Format);
-    FormatLength = _vsnprintf(Buffer + PrefixLength, sizeof(Buffer) - PrefixLength, Format, ap);
+    FormatLength = _vsnprintf(Text, KD_PRINT_MAX_BYTES, Format, ap);
     va_end(ap);
 
     if (FormatLength < 0)
     {
         /* _vsnprintf reports truncation with -1. */
-        Length = sizeof(Buffer) - 1;
+        Length = KD_PRINT_MAX_BYTES - 1;
     }
     else
     {
-        Length = PrefixLength + (USHORT)FormatLength;
+        Length = (USHORT)FormatLength;
     }
 
+    PrefixLength = KdpBuildTimestampPrefix(Buffer, KD_PRINT_PREFIX_BYTES, Text, Length, FALSE);
+    RtlMoveMemory(Text - PrefixLength, Buffer, PrefixLength);
+
     /* Set it up */
-    String.Buffer = Buffer;
-    String.Length = String.MaximumLength = Length;
+    String.Buffer = Text - PrefixLength;
+    String.Length = String.MaximumLength = PrefixLength + Length;
 
     /* Preserve direct KD output in the same crash-boot log as DbgPrint. */
     KdLogDbgPrint(&String);
