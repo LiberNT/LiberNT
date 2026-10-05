@@ -5255,11 +5255,12 @@ BOOL WINAPI SetupDiOpenDeviceInterfaceW(
                             DeviceInterfaceData->Flags = deviceInterface->Flags;
                             CopyMemory(&DeviceInterfaceData->InterfaceClassGuid, &ClassId, sizeof(GUID));
                         }
-                        else
-                        {
-                            Ret = FALSE;
-                            SetLastError(ERROR_INVALID_USER_BUFFER);
-                        }
+                    }
+                    else
+                    {
+                        HeapFree(GetProcessHeap(), 0, deviceInfo);
+                        Ret = FALSE;
+                        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
                     }
                 }
                 else
@@ -6117,6 +6118,8 @@ SetupDiOpenDeviceInfoW(
         SetLastError(ERROR_INVALID_HANDLE);
     else if (!DeviceInstanceId)
         SetLastError(ERROR_INVALID_PARAMETER);
+    else if (!strchrW(DeviceInstanceId, '\\'))
+        SetLastError(ERROR_INVALID_DEVINST_NAME);
     else if (OpenFlags & ~(DIOD_CANCEL_REMOVE | DIOD_INHERIT_CLASSDRVS))
     {
         TRACE("Unknown flags: 0x%08lx\n", OpenFlags & ~(DIOD_CANCEL_REMOVE | DIOD_INHERIT_CLASSDRVS));
