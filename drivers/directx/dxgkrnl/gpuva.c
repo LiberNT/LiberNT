@@ -2678,8 +2678,8 @@ GpuVaWritePteSpan(
             }
             Pte.Valid = 1;
             Pte.CacheCoherent =
-                Process->Adapter->GpuMmuCaps.CacheCoherentMemorySupported ?
-                    1 : 0;
+                Process->Adapter->GpuMmuCaps.CacheCoherentMemorySupported &&
+                Allocation->Cached ? 1 : 0;
             /* Protection bits are only valid when the miniport advertised
              * support for them in DXGK_GPUMMUCAPS.  Intel's N100 node reports
              * neither capability; emitting ReadOnly/NoExecute there creates
