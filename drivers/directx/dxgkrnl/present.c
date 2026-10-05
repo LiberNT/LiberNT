@@ -3687,6 +3687,7 @@ RetryTrackedSubmit:
                 Status = STATUS_DELETE_PENDING;
                 goto PresentSubmissionDone;
             }
+            DxgkEnterSchedulerClass(Adapter);
             _SEH2_TRY
             {
                 Status = DXGK_CB_FULL(Adapter, DxgkDdiPatch)(Adapter->MiniportDeviceContext, &PatchArgs);
@@ -3696,6 +3697,7 @@ RetryTrackedSubmit:
                 Status = _SEH2_GetExceptionCode();
             }
             _SEH2_END;
+            DxgkLeaveSchedulerClass(Adapter);
             DxgkReleaseKmdCall(Adapter);
             if (!NT_SUCCESS(Status))
                 goto PresentSubmissionDone;
@@ -3747,7 +3749,9 @@ RetryTrackedSubmit:
         DxgkPublishSubmittedFence(Adapter, PresentNode, SubmissionFenceId);
         {
             DPT_SCOPE DdiTrace = DptBegin(&g_DxgPresentTrace, DPT_KMD_SUBMIT);
+            DxgkEnterSchedulerClass(Adapter);
             Status = DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand)(Adapter->MiniportDeviceContext, &SubmitArgs);
+            DxgkLeaveSchedulerClass(Adapter);
             DptEnd(&g_DxgPresentTrace, DdiTrace, NT_SUCCESS(Status), 0);
         }
         DxgkReleaseKmdCall(Adapter);

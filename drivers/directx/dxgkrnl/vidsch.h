@@ -688,6 +688,10 @@ NTSTATUS
 VidSchResumeScheduler(
     _In_ struct _DXGKRNL_ADAPTER *Adapter);
 
+VOID
+VidSchKickEngines(
+    _In_ struct _DXGKRNL_ADAPTER *Adapter);
+
 NTSTATUS
 VidSchResetEngine(
     _In_ struct _DXGKRNL_ADAPTER *Adapter,

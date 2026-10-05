@@ -2462,6 +2462,7 @@ VidSchpSubmitVirtualPacket(
         KeMemoryBarrier();
         {
             DPT_SCOPE DdiTrace = DptBegin(&g_DxgPresentTrace, DPT_KMD_SUBMIT);
+            DxgkEnterSchedulerClass(Adapter);
             _SEH2_TRY
             {
                 Status = DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommandVirtual)(Adapter->MiniportDeviceContext, &SubmitArgs);
@@ -2471,6 +2472,7 @@ VidSchpSubmitVirtualPacket(
                 Status = _SEH2_GetExceptionCode();
             }
             _SEH2_END;
+            DxgkLeaveSchedulerClass(Adapter);
             DptEnd(&g_DxgPresentTrace, DdiTrace, NT_SUCCESS(Status), 0);
         }
         if (!NT_SUCCESS(Status))
@@ -2720,10 +2722,28 @@ VidSchpKickEngine(
             return TRUE;
         }
 
+        InterlockedIncrement(&Packet->ReferenceCount);
+        if (DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand) != NULL)
+            KmdCallAcquired = DxgkAcquireKmdCall(Adapter);
+        if (KmdCallAcquired)
+        {
+            if (KeGetCurrentIrql() < DISPATCH_LEVEL)
+            {
+                DxgkEnterSchedulerClass(Adapter);
+            }
+            else if (!DxgkTryEnterSchedulerClassAtDpc(Adapter))
+            {
+                DxgkReleaseKmdCall(Adapter);
+                (VOID)Sched->CompleteDispatch(Sched->SchedulerHandle, Engine->SchedulerOrdinal, ClaimToken, STATUS_SUCCESS);
+                VidSchpDereferencePacket(Packet);
+                if (DxgkDeferSchedulerClassKick(Adapter))
+                    return DispatchedAny;
+                continue;
+            }
+        }
         if (Packet->SubmissionFenceId == 0)
             Packet->SubmissionFenceId = DxgkAllocateSubmissionFenceId(Adapter);
         Packet->Kicked = TRUE;
-        InterlockedIncrement(&Packet->ReferenceCount);
 
         /* The packet's DMA-buffer and tracker fields are still mutable by
          * completion paths; snapshot them under the engine lock. */
@@ -2755,9 +2775,6 @@ VidSchpKickEngine(
             SubmitArgs.Flags.Present = 1;
         KeReleaseSpinLock(&Engine->QueueLock, OldIrql);
 
-        if (DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand) != NULL)
-            KmdCallAcquired = DxgkAcquireKmdCall(Adapter);
-
         if (KmdCallAcquired)
         {
             (VOID)Sched->PublishDispatch(Sched->SchedulerHandle, Engine->SchedulerOrdinal, ClaimToken);
@@ -2783,6 +2800,7 @@ VidSchpKickEngine(
                 _SEH2_END;
                 DptEnd(&g_DxgPresentTrace, DdiTrace, NT_SUCCESS(Status), 0);
             }
+            DxgkLeaveSchedulerClass(Adapter);
             KeLowerIrql(CallIrql);
 
             if (!NT_SUCCESS(Status))
@@ -3793,6 +3811,7 @@ VidSchSubmitCommandTrackedMeasured(
         }
 
         Trace = DptBegin(&g_DxgPresentTrace, DPT_KERNEL_PATCH);
+        DxgkEnterSchedulerClass(Adapter);
         _SEH2_TRY
         {
             Status = DXGK_CB_FULL(Adapter, DxgkDdiPatch)(Adapter->MiniportDeviceContext, &PatchArgs);
@@ -3802,6 +3821,7 @@ VidSchSubmitCommandTrackedMeasured(
             Status = _SEH2_GetExceptionCode();
         }
         _SEH2_END;
+        DxgkLeaveSchedulerClass(Adapter);
         DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Status), 0);
         DxgkReleaseKmdCall(Adapter);
 
@@ -4538,6 +4558,7 @@ VidSchPreemptEngine(
     }
     KeReleaseSpinLock(&Engine->QueueLock, OldIrql);
 
+    DxgkEnterSchedulerClass(Adapter);
     KeRaiseIrql(DISPATCH_LEVEL, &CallIrql);
     _SEH2_TRY
     {
@@ -4548,6 +4569,7 @@ VidSchPreemptEngine(
         Status = _SEH2_GetExceptionCode();
     }
     _SEH2_END;
+    DxgkLeaveSchedulerClass(Adapter);
     KeLowerIrql(CallIrql);
     DXGKRNL_VERBOSE("VidSch: DxgkDdiPreemptCommand node=%lu engine=%lu -> 0x%08lX seq=#%I64d\n",
                  NodeOrdinal, EngineOrdinal, Status, DxgkDiagSequence());
@@ -4792,6 +4814,24 @@ VidSchResumeScheduler(
     return STATUS_SUCCESS;
 }
 
+VOID
+VidSchKickEngines(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PVIDSCH_CONTEXT Ctx;
+    ULONG Index;
+
+    if (!VidSchpAcquireCall(Adapter))
+        return;
+    Ctx = (PVIDSCH_CONTEXT)Adapter->VidSchContext;
+    if (Ctx != NULL && Ctx->Initialized)
+    {
+        for (Index = 0; Index < Ctx->EngineCount; ++Index)
+            (VOID)VidSchpKickEngine(&Ctx->Engines[Index], NULL);
+    }
+    VidSchpReleaseCall(Adapter);
+}
+
 NTSTATUS
 VidSchResetEngine(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -4909,6 +4949,7 @@ VidSchResetEngine(
         PreemptArgs.EngineOrdinal = 0;
         PreemptArgs.PreemptionFenceId = (UINT)Engine->LastCompletedFence;
 
+        DxgkEnterSchedulerClass(Adapter);
         _SEH2_TRY
         {
             PreemptStatus = DXGK_CB_FULL(Adapter, DxgkDdiPreemptCommand)(Adapter->MiniportDeviceContext, &PreemptArgs);
@@ -4918,6 +4959,7 @@ VidSchResetEngine(
             PreemptStatus = _SEH2_GetExceptionCode();
         }
         _SEH2_END;
+        DxgkLeaveSchedulerClass(Adapter);
         if (!NT_SUCCESS(PreemptStatus))
             DXGKRNL_TRACE("TDR: preemption declined 0x%08lX, resetting engine %u\n", PreemptStatus, EngineOrdinal);
     }
@@ -4926,6 +4968,7 @@ VidSchResetEngine(
     ResetArgs.NodeOrdinal = EngineOrdinal;
     ResetArgs.EngineOrdinal = 0;
 
+    DxgkEnterSchedulerClass(Adapter);
     _SEH2_TRY
     {
         Status = DXGK_CB_FULL(Adapter, DxgkDdiResetEngine)(Adapter->MiniportDeviceContext, &ResetArgs);
@@ -4935,6 +4978,7 @@ VidSchResetEngine(
         Status = _SEH2_GetExceptionCode();
     }
     _SEH2_END;
+    DxgkLeaveSchedulerClass(Adapter);
     DxgkReleaseKmdCall(Adapter);
     KmdCallAcquired = FALSE;
 

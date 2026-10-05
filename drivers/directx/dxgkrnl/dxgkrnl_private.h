@@ -670,6 +670,14 @@ struct _DXGKRNL_ADAPTER
     volatile LONG               InterruptCallbacksBlocked;
     volatile LONG               InterruptActiveCalls;
 
+    KSPIN_LOCK                  SchedulerClassLock;
+    PVOID                       SchedulerClassOwner;
+    ULONG                       SchedulerClassDepth;
+    BOOLEAN                     SchedulerClassKickPending;
+    KEVENT                      SchedulerClassAvailable;
+    volatile LONG               SchedulerClassKickQueued;
+    WORK_QUEUE_ITEM             SchedulerClassKickWorkItem;
+
     /* Counts physically live VidMm allocations/resources, including deferred shared backings. */
     volatile LONG               VidMmBackingCount;
     KEVENT                      VidMmBackingsDrainedEvent;
@@ -2310,6 +2318,22 @@ DxgkAcquireMiniportCallbackFromReservedKmdCall(
 
 VOID
 DxgkReleaseMiniportCallback(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkEnterSchedulerClass(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+BOOLEAN
+DxgkTryEnterSchedulerClassAtDpc(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+BOOLEAN
+DxgkDeferSchedulerClassKick(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkLeaveSchedulerClass(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
 BOOLEAN

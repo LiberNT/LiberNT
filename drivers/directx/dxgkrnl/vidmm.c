@@ -12903,7 +12903,9 @@ DxgkpVidMmReleaseApertureMapping(
             BuildArgs.UnmapApertureSegment.DummyPage = Segment->DummyPage;
             DxgkVidMmNoteApertureOp(FALSE, Allocation->SegmentId, BuildArgs.UnmapApertureSegment.OffsetInPages,
                                     BuildArgs.UnmapApertureSegment.NumberOfPages, Allocation->MiniportHandle, Allocation);
+            DxgkEnterSchedulerClass(Adapter);
             Status = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
+            DxgkLeaveSchedulerClass(Adapter);
             DxgkReleaseMiniportCallback(Adapter);
         }
     }
@@ -13453,7 +13455,9 @@ DxgkpVidMmNotifyLostMemoryPlacement(
     BuildArgs.DiscardContent.Flags.AllocationIsIdle = 1;
     BuildArgs.DiscardContent.SegmentId = Allocation->SegmentId;
     BuildArgs.DiscardContent.SegmentAddress.QuadPart = (LONGLONG)Allocation->SegmentOffset;
+    DxgkEnterSchedulerClass(Adapter);
     Status = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
+    DxgkLeaveSchedulerClass(Adapter);
     DxgkReleaseMiniportCallback(Adapter);
     return Status;
 }
@@ -15947,7 +15951,9 @@ DxgkVidMmSubmitAperturePagingPacket(
         Status = STATUS_DELETE_PENDING;
         goto Cleanup;
     }
+    DxgkEnterSchedulerClass(Adapter);
     Status = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
+    DxgkLeaveSchedulerClass(Adapter);
     DxgkReleaseKmdCall(Adapter);
     if (!NT_SUCCESS(Status))
         goto Cleanup;

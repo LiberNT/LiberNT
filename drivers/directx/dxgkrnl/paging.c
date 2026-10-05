@@ -536,6 +536,7 @@ DxgkPagingExecuteBatch(
                     Status = STATUS_DELETE_PENDING;
                     goto Cleanup;
                 }
+                DxgkEnterSchedulerClass(Adapter);
                 _SEH2_TRY
                 {
                     BuildStatus =
@@ -548,6 +549,7 @@ DxgkPagingExecuteBatch(
                     BuildStatus = _SEH2_GetExceptionCode();
                 }
                 _SEH2_END;
+                DxgkLeaveSchedulerClass(Adapter);
                 DxgkReleaseKmdCall(Adapter);
                 Status = DxgkpPagingFinishPrivateData(DmaBuffer, &BuildArgs);
                 if (!NT_SUCCESS(Status))
@@ -627,6 +629,7 @@ DxgkPagingExecuteBatch(
                     Status = STATUS_DELETE_PENDING;
                     goto Cleanup;
                 }
+                DxgkEnterSchedulerClass(Adapter);
                 _SEH2_TRY
                 {
                     BuildStatus =
@@ -639,6 +642,7 @@ DxgkPagingExecuteBatch(
                     BuildStatus = _SEH2_GetExceptionCode();
                 }
                 _SEH2_END;
+                DxgkLeaveSchedulerClass(Adapter);
                 DxgkReleaseKmdCall(Adapter);
                 Status = DxgkpPagingFinishPrivateData(DmaBuffer, &BuildArgs);
                 if (!NT_SUCCESS(Status))
@@ -966,6 +970,7 @@ DxgkPagingExecute(
             Status = STATUS_DELETE_PENDING;
             goto Cleanup;
         }
+        DxgkEnterSchedulerClass(Adapter);
         _SEH2_TRY
         {
             BuildStatus = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
@@ -975,6 +980,7 @@ DxgkPagingExecute(
             BuildStatus = _SEH2_GetExceptionCode();
         }
         _SEH2_END;
+        DxgkLeaveSchedulerClass(Adapter);
         DxgkReleaseKmdCall(Adapter);
         Status = DxgkpPagingFinishPrivateData(DmaBuffer, &BuildArgs);
         if (!NT_SUCCESS(Status))

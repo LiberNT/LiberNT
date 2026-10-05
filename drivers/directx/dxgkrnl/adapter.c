@@ -13723,6 +13723,117 @@ DxgkReleaseMiniportCallback(
     DxgkReleaseKmdCall(Adapter);
 }
 
+#define DXGKP_SCHEDULER_CLASS_DPC_OWNER ((PVOID)(ULONG_PTR)1)
+
+static VOID
+NTAPI
+DxgkpSchedulerClassKickWorker(
+    _In_ PVOID Context)
+{
+    PDXGKRNL_ADAPTER Adapter = Context;
+
+    InterlockedExchange(&Adapter->SchedulerClassKickQueued, 0);
+    VidSchKickEngines(Adapter);
+    ExReleaseRundownProtection(&Adapter->RundownRef);
+}
+
+static VOID
+DxgkpQueueSchedulerClassKick(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    if (InterlockedCompareExchange(&Adapter->SchedulerClassKickQueued, 1, 0) != 0)
+        return;
+    if (InterlockedCompareExchange(&Adapter->RundownStarted, 0, 0) != 0 ||
+        !ExAcquireRundownProtection(&Adapter->RundownRef))
+    {
+        InterlockedExchange(&Adapter->SchedulerClassKickQueued, 0);
+        return;
+    }
+    ExQueueWorkItem(&Adapter->SchedulerClassKickWorkItem, DelayedWorkQueue);
+}
+
+VOID
+DxgkEnterSchedulerClass(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PVOID CurrentThread = PsGetCurrentThread();
+    KIRQL OldIrql;
+
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+    for (;;)
+    {
+        KeAcquireSpinLock(&Adapter->SchedulerClassLock, &OldIrql);
+        if (Adapter->SchedulerClassOwner == NULL ||
+            Adapter->SchedulerClassOwner == CurrentThread)
+        {
+            Adapter->SchedulerClassOwner = CurrentThread;
+            Adapter->SchedulerClassDepth++;
+            KeReleaseSpinLock(&Adapter->SchedulerClassLock, OldIrql);
+            return;
+        }
+        KeReleaseSpinLock(&Adapter->SchedulerClassLock, OldIrql);
+        (VOID)KeWaitForSingleObject(&Adapter->SchedulerClassAvailable, Executive, KernelMode, FALSE, NULL);
+    }
+}
+
+BOOLEAN
+DxgkTryEnterSchedulerClassAtDpc(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    BOOLEAN Entered;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    KeAcquireSpinLockAtDpcLevel(&Adapter->SchedulerClassLock);
+    Entered = Adapter->SchedulerClassOwner == NULL;
+    if (Entered)
+    {
+        Adapter->SchedulerClassOwner = DXGKP_SCHEDULER_CLASS_DPC_OWNER;
+        Adapter->SchedulerClassDepth = 1;
+    }
+    KeReleaseSpinLockFromDpcLevel(&Adapter->SchedulerClassLock);
+    return Entered;
+}
+
+BOOLEAN
+DxgkDeferSchedulerClassKick(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    BOOLEAN Deferred;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Adapter->SchedulerClassLock, &OldIrql);
+    Deferred = Adapter->SchedulerClassOwner != NULL;
+    if (Deferred)
+        Adapter->SchedulerClassKickPending = TRUE;
+    KeReleaseSpinLock(&Adapter->SchedulerClassLock, OldIrql);
+    return Deferred;
+}
+
+VOID
+DxgkLeaveSchedulerClass(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    BOOLEAN Released = FALSE;
+    BOOLEAN KickPending = FALSE;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Adapter->SchedulerClassLock, &OldIrql);
+    ASSERT(Adapter->SchedulerClassDepth != 0);
+    if (--Adapter->SchedulerClassDepth == 0)
+    {
+        Adapter->SchedulerClassOwner = NULL;
+        KickPending = Adapter->SchedulerClassKickPending;
+        Adapter->SchedulerClassKickPending = FALSE;
+        Released = TRUE;
+    }
+    KeReleaseSpinLock(&Adapter->SchedulerClassLock, OldIrql);
+    if (!Released)
+        return;
+    KeSetEvent(&Adapter->SchedulerClassAvailable, IO_NO_INCREMENT, FALSE);
+    if (KickPending)
+        DxgkpQueueSchedulerClassKick(Adapter);
+}
+
 BOOLEAN
 DxgkAcquireKmdCall(
     _In_ PDXGKRNL_ADAPTER Adapter)
@@ -15490,6 +15601,13 @@ DxgkpAddDeviceRegistered(
     Adapter->KmdTransactionDepth = 0;
     Adapter->Level3TransitionOwnerThread = NULL;
     Adapter->Level3TransitionDepth = 0;
+    KeInitializeSpinLock(&Adapter->SchedulerClassLock);
+    Adapter->SchedulerClassOwner = NULL;
+    Adapter->SchedulerClassDepth = 0;
+    Adapter->SchedulerClassKickPending = FALSE;
+    KeInitializeEvent(&Adapter->SchedulerClassAvailable, SynchronizationEvent, FALSE);
+    Adapter->SchedulerClassKickQueued = 0;
+    ExInitializeWorkItem(&Adapter->SchedulerClassKickWorkItem, DxgkpSchedulerClassKickWorker, Adapter);
     Adapter->InterruptCallbacksBlocked = 1;
     Adapter->InterruptActiveCalls = 0;
     KeInitializeMutex(&Adapter->SharedPrimaryMutex, 0);
