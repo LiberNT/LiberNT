@@ -6501,7 +6501,10 @@ DxgkpVidMmDestroyBatchWorker(
     KeResetEvent(&Batch->WorkerIdleEvent);
     if (Resource != NULL)
         (VOID)KeWaitForSingleObject(&Resource->MiniportResourceLock, Executive, KernelMode, FALSE, NULL);
-    if (!Batch->ForceLocalRelease && (Batch->MiniportHandleCount != 0 || Batch->DestroyResource))
+    if (!Batch->ForceLocalRelease &&
+        (Batch->MiniportHandleCount != 0 ||
+         (Batch->DestroyResource &&
+          (Resource != NULL ? Resource->MiniportHandle : Batch->MiniportResourceHandle) != NULL)))
     {
         if (DXGK_CB_FULL(Adapter, DxgkDdiDestroyAllocation) == NULL)
         {
