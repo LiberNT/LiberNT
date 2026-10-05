@@ -70,6 +70,10 @@
 
 #define DW_IC_STATUS_MASTER_ACTIVITY 0x00000020
 
+#define DW_IC_TX_ABRT_7B_ADDR_NOACK 0x00000001
+#define DW_IC_TX_ABRT_10ADDR1_NOACK 0x00000002
+#define DW_IC_TX_ABRT_10ADDR2_NOACK 0x00000004
+
 typedef struct _INTELI2C_PCI_ID
 {
     PCWSTR Token;
@@ -218,7 +222,9 @@ IntelI2cCheckAbort(
         return STATUS_SUCCESS;
     AbortSource = IntelI2cRead32(DeviceExtension, DW_IC_TX_ABRT_SOURCE);
     IntelI2cRead32(DeviceExtension, DW_IC_CLR_TX_ABRT);
-    DPRINT1("INTELI2C%lu: transfer aborted, source=0x%08lx\n", DeviceExtension->ControllerIndex, AbortSource);
+    DPRINT("INTELI2C%lu: transfer aborted, source=0x%08lx\n", DeviceExtension->ControllerIndex, AbortSource);
+    if (AbortSource & (DW_IC_TX_ABRT_7B_ADDR_NOACK | DW_IC_TX_ABRT_10ADDR1_NOACK | DW_IC_TX_ABRT_10ADDR2_NOACK))
+        return STATUS_NO_SUCH_DEVICE;
     return STATUS_IO_DEVICE_ERROR;
 }
 
