@@ -694,7 +694,14 @@ BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcb
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
+#ifdef __REACTOS__
+    if (!(sip = CRYPT_GetCachedSIP(pSubjectInfo->pgSubjectType)) &&
+        CRYPT_LoadSIP(pSubjectInfo->pgSubjectType))
+        sip = CRYPT_GetCachedSIP(pSubjectInfo->pgSubjectType);
+    if (sip)
+#else
     if ((sip = CRYPT_GetCachedSIP(pSubjectInfo->pgSubjectType)))
+#endif
         ret = sip->info.pfCreate(pSubjectInfo, pcbIndirectData, pIndirectData);
     TRACE("returning %d\n", ret);
     return ret;
@@ -777,7 +784,63 @@ BOOL WINAPI CryptSIPVerifyIndirectData(SIP_SUBJECTINFO* pSubjectInfo,
  */
 BOOL WINAPI CryptSIPRetrieveSubjectGuidForCatalogFile(LPCWSTR filename, HANDLE handle, GUID *subject)
 {
+#ifdef __REACTOS__
+    static const GUID peGUID = { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE }};
+    static const GUID cabGUID = { 0xC689AABA, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE }};
+    static const GUID flatGUID = { 0xDE351A42, 0x8E59, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE }};
+    static const BYTE cabHdr[] = { 'M','S','C','F' };
+    LARGE_INTEGER zero, oldPos;
+    IMAGE_DOS_HEADER dos;
+    DWORD count = 0, signature = 0, sigCount = 0;
+    HANDLE file;
+    BOOL ret;
+
+    TRACE("(%s %p %p)\n", debugstr_w(filename), handle, subject);
+
+    if (!subject)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    memset(subject, 0, sizeof(*subject));
+    if (!filename && !handle)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (handle)
+        file = handle;
+    else
+    {
+        file = CreateFileW(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (file == INVALID_HANDLE_VALUE) return FALSE;
+    }
+
+    zero.QuadPart = 0;
+    SetFilePointerEx(file, zero, &oldPos, FILE_CURRENT);
+    SetFilePointer(file, 0, NULL, FILE_BEGIN);
+    ret = ReadFile(file, &dos, sizeof(dos), &count, NULL);
+    if (ret && count == sizeof(dos) && dos.e_magic == IMAGE_DOS_SIGNATURE &&
+        SetFilePointer(file, dos.e_lfanew, NULL, FILE_BEGIN) != INVALID_SET_FILE_POINTER)
+        ret = ReadFile(file, &signature, sizeof(signature), &sigCount, NULL);
+    if (handle)
+        SetFilePointerEx(file, oldPos, NULL, FILE_BEGIN);
+    else
+        CloseHandle(file);
+    if (!ret) return FALSE;
+
+    if (sigCount == sizeof(signature) && signature == IMAGE_NT_SIGNATURE)
+        *subject = peGUID;
+    else if (count >= sizeof(cabHdr) && !memcmp(&dos, cabHdr, sizeof(cabHdr)))
+        *subject = cabGUID;
+    else
+        *subject = flatGUID;
+    SetLastError(ERROR_SUCCESS);
+    return TRUE;
+#else
     FIXME("(%s %p %p)\n", debugstr_w(filename), handle, subject);
     SetLastError(ERROR_INVALID_PARAMETER);
     return FALSE;
+#endif
 }
