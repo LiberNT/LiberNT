@@ -668,6 +668,7 @@ VOID PortFreeSrbContext(_In_ PIRP Irp)
         ExFreePoolWithTag(SrbContext, TAG_SRB_CONTEXT);
 
     Irp->Tail.Overlay.DriverContext[0] = NULL;
+    PortFdoEndRequest(FdoExtension);
 }
 
 
@@ -748,6 +749,9 @@ PortPdoScsi(
         return Status;
     }
 
+    if (!PortFdoStartRequest(FdoExtension, Irp, FALSE))
+        return STATUS_PENDING;
+
     return PortSubmitSrb(FdoExtension, DeviceObject, Irp, Srb);
 }
 
@@ -773,6 +777,7 @@ PortSubmitSrb(
         SrbContext = ExAllocatePoolWithTag(NonPagedPool, sizeof(STOR_SRB_CONTEXT), TAG_SRB_CONTEXT);
     if (SrbContext == NULL)
     {
+        PortFdoEndRequest(FdoExtension);
         Status = STATUS_INSUFFICIENT_RESOURCES;
         goto Fail;
     }

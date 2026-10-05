@@ -558,6 +558,9 @@ PortAddDevice(
 
     KeInitializeSpinLock(&DeviceExtension->PdoListLock);
     InitializeListHead(&DeviceExtension->PdoListHead);
+    KeInitializeSpinLock(&DeviceExtension->RequestHoldLock);
+    InitializeListHead(&DeviceExtension->HeldRequests);
+    KeInitializeEvent(&DeviceExtension->RequestsDrained, NotificationEvent, TRUE);
 
     /* Attach the FDO to the device stack */
     Status = IoAttachDeviceToDeviceStackSafe(Fdo,

@@ -273,6 +273,13 @@ PortFdoStartDevice(
     /* Get the current stack location */
     Stack = IoGetCurrentIrpStackLocation(Irp);
 
+    if (DeviceExtension->PnpState == dsStarted)
+    {
+        if (!IoForwardIrpSynchronously(DeviceExtension->LowerDevice, Irp))
+            return STATUS_UNSUCCESSFUL;
+        return Irp->IoStatus.Status;
+    }
+
     /* Start the lower device if the FDO is in 'stopped' state */
     if (DeviceExtension->PnpState == dsStopped)
     {
@@ -893,39 +900,12 @@ PortFdoStopAdapter(
 
 static
 VOID
-PortFdoReleaseAdapter(
+PortFdoReleaseHardware(
     _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
 {
-    KLOCK_QUEUE_HANDLE LockHandle;
     PMAPPED_ADDRESS Mapping;
-    PLIST_ENTRY Entry;
-
-    for (;;)
-    {
-        KeAcquireInStackQueuedSpinLock(&DeviceExtension->PdoListLock, &LockHandle);
-        Entry = IsListEmpty(&DeviceExtension->PdoListHead) ? NULL : DeviceExtension->PdoListHead.Flink;
-        KeReleaseInStackQueuedSpinLock(&LockHandle);
-        if (Entry == NULL)
-            break;
-        PortDeletePdo(CONTAINING_RECORD(Entry, PDO_DEVICE_EXTENSION, PdoListEntry));
-    }
 
     KeCancelTimer(&DeviceExtension->MiniportTimer);
-    PortFreeMiniportTimers(DeviceExtension);
-    KeCancelTimer(&DeviceExtension->MiniportTimer);
-
-    PortReleaseDma(DeviceExtension);
-    DeviceExtension->UncachedExtensionVirtualBase = NULL;
-    DeviceExtension->SrbExtensionPool = NULL;
-    InitializeSListHead(&DeviceExtension->FreeSrbExtensions);
-
-    if (DeviceExtension->RequestPoolsReady)
-    {
-        ExDeleteNPagedLookasideList(&DeviceExtension->SrbContextLookaside);
-        ExDeleteNPagedLookasideList(&DeviceExtension->MiniportSrbLookaside);
-        ExDeleteNPagedLookasideList(&DeviceExtension->SglLookaside);
-        DeviceExtension->RequestPoolsReady = FALSE;
-    }
 
     while ((Mapping = DeviceExtension->MappedAddressList) != NULL)
     {
@@ -945,6 +925,43 @@ PortFdoReleaseAdapter(
         ExFreePoolWithTag(DeviceExtension->TranslatedResources, TAG_RESOURCE_LIST);
     DeviceExtension->AllocatedResources = NULL;
     DeviceExtension->TranslatedResources = NULL;
+}
+
+
+static
+VOID
+PortFdoReleaseAdapter(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
+{
+    KLOCK_QUEUE_HANDLE LockHandle;
+    PLIST_ENTRY Entry;
+
+    for (;;)
+    {
+        KeAcquireInStackQueuedSpinLock(&DeviceExtension->PdoListLock, &LockHandle);
+        Entry = IsListEmpty(&DeviceExtension->PdoListHead) ? NULL : DeviceExtension->PdoListHead.Flink;
+        KeReleaseInStackQueuedSpinLock(&LockHandle);
+        if (Entry == NULL)
+            break;
+        PortDeletePdo(CONTAINING_RECORD(Entry, PDO_DEVICE_EXTENSION, PdoListEntry));
+    }
+
+    KeCancelTimer(&DeviceExtension->MiniportTimer);
+    PortFreeMiniportTimers(DeviceExtension);
+    PortFdoReleaseHardware(DeviceExtension);
+
+    PortReleaseDma(DeviceExtension);
+    DeviceExtension->UncachedExtensionVirtualBase = NULL;
+    DeviceExtension->SrbExtensionPool = NULL;
+    InitializeSListHead(&DeviceExtension->FreeSrbExtensions);
+
+    if (DeviceExtension->RequestPoolsReady)
+    {
+        ExDeleteNPagedLookasideList(&DeviceExtension->SrbContextLookaside);
+        ExDeleteNPagedLookasideList(&DeviceExtension->MiniportSrbLookaside);
+        ExDeleteNPagedLookasideList(&DeviceExtension->SglLookaside);
+        DeviceExtension->RequestPoolsReady = FALSE;
+    }
 
     if (DeviceExtension->Miniport.PortConfig.AccessRanges != NULL)
         ExFreePoolWithTag(DeviceExtension->Miniport.PortConfig.AccessRanges, TAG_ACCRESS_RANGE);
@@ -960,6 +977,97 @@ PortFdoReleaseAdapter(
         RemoveEntryList(&DeviceExtension->AdapterListEntry);
         DeviceExtension->DriverExtension->AdapterCount--;
         KeReleaseInStackQueuedSpinLock(&LockHandle);
+    }
+}
+
+
+BOOLEAN
+PortFdoStartRequest(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ PIRP Irp,
+    _In_ BOOLEAN PortRequest)
+{
+    KIRQL OldIrql;
+    BOOLEAN Started = TRUE;
+
+    KeAcquireSpinLock(&DeviceExtension->RequestHoldLock, &OldIrql);
+    if (DeviceExtension->HoldRequests && !PortRequest)
+    {
+        IoMarkIrpPending(Irp);
+        InsertTailList(&DeviceExtension->HeldRequests, &Irp->Tail.Overlay.ListEntry);
+        Started = FALSE;
+    }
+    else
+    {
+        InterlockedIncrement(&DeviceExtension->OutstandingRequests);
+    }
+    KeReleaseSpinLock(&DeviceExtension->RequestHoldLock, OldIrql);
+    return Started;
+}
+
+
+VOID
+PortFdoEndRequest(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
+{
+    if (InterlockedDecrement(&DeviceExtension->OutstandingRequests) == 0)
+        KeSetEvent(&DeviceExtension->RequestsDrained, IO_NO_INCREMENT, FALSE);
+}
+
+
+static
+VOID
+PortFdoHoldRequests(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ BOOLEAN Drain)
+{
+    KIRQL OldIrql;
+    LONG Outstanding;
+
+    KeAcquireSpinLock(&DeviceExtension->RequestHoldLock, &OldIrql);
+    DeviceExtension->HoldRequests = TRUE;
+    KeClearEvent(&DeviceExtension->RequestsDrained);
+    Outstanding = DeviceExtension->OutstandingRequests;
+    KeReleaseSpinLock(&DeviceExtension->RequestHoldLock, OldIrql);
+
+    if (Drain && (Outstanding != 0))
+        KeWaitForSingleObject(&DeviceExtension->RequestsDrained, Executive, KernelMode, FALSE, NULL);
+}
+
+
+static
+VOID
+PortFdoReleaseRequests(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ NTSTATUS Status)
+{
+    LIST_ENTRY Held;
+    PIO_STACK_LOCATION Stack;
+    KIRQL OldIrql;
+    PIRP Irp;
+
+    InitializeListHead(&Held);
+    KeAcquireSpinLock(&DeviceExtension->RequestHoldLock, &OldIrql);
+    if (NT_SUCCESS(Status))
+        DeviceExtension->HoldRequests = FALSE;
+    while (!IsListEmpty(&DeviceExtension->HeldRequests))
+        InsertTailList(&Held, RemoveHeadList(&DeviceExtension->HeldRequests));
+    KeReleaseSpinLock(&DeviceExtension->RequestHoldLock, OldIrql);
+
+    while (!IsListEmpty(&Held))
+    {
+        Irp = CONTAINING_RECORD(RemoveHeadList(&Held), IRP, Tail.Overlay.ListEntry);
+        Stack = IoGetCurrentIrpStackLocation(Irp);
+        if (NT_SUCCESS(Status))
+        {
+            PortPdoScsi(Stack->DeviceObject, Irp);
+            continue;
+        }
+
+        Stack->Parameters.Scsi.Srb->SrbStatus = SRB_STATUS_NO_DEVICE;
+        Irp->IoStatus.Information = 0;
+        Irp->IoStatus.Status = Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
     }
 }
 
@@ -1007,6 +1115,7 @@ PortFdoSendAdapterPnp(
     Stack->DeviceObject = DeviceExtension->Device;
     Stack->Parameters.Scsi.Srb = (PSCSI_REQUEST_BLOCK)&Srb;
 
+    PortFdoStartRequest(DeviceExtension, Irp, TRUE);
     if (PortSubmitSrb(DeviceExtension, DeviceExtension->Device, Irp, (PSCSI_REQUEST_BLOCK)&Srb) == STATUS_PENDING)
         KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
 }
@@ -1021,9 +1130,11 @@ PortFdoRemoveDevice(
     PDEVICE_OBJECT LowerDevice = DeviceExtension->LowerDevice;
     NTSTATUS Status;
 
+    PortFdoHoldRequests(DeviceExtension, DeviceExtension->PnpState != dsSurpriseRemoved);
     PortFdoSendAdapterPnp(DeviceExtension, StorRemoveDevice);
     PortFdoStopAdapter(DeviceExtension);
     DeviceExtension->PnpState = dsRemoved;
+    PortFdoReleaseRequests(DeviceExtension, STATUS_NO_SUCH_DEVICE);
     PortFdoReleaseAdapter(DeviceExtension);
 
     Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -1061,6 +1172,8 @@ PortFdoPnp(
         case IRP_MN_START_DEVICE: /* 0x00 */
             DPRINT("IRP_MJ_PNP / IRP_MN_START_DEVICE\n");
             Status = PortFdoStartDevice(DeviceExtension, Irp);
+            if (NT_SUCCESS(Status))
+                PortFdoReleaseRequests(DeviceExtension, STATUS_SUCCESS);
             break;
 
         case IRP_MN_QUERY_REMOVE_DEVICE: /* 0x01 */
@@ -1079,14 +1192,25 @@ PortFdoPnp(
 
         case IRP_MN_STOP_DEVICE: /* 0x04 */
             DPRINT1("IRP_MJ_PNP / IRP_MN_STOP_DEVICE\n");
-            break;
+            PortFdoHoldRequests(DeviceExtension, TRUE);
+            PortFdoStopAdapter(DeviceExtension);
+            PortFdoReleaseHardware(DeviceExtension);
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            return ForwardIrpAndForget(DeviceExtension->LowerDevice, Irp);
 
         case IRP_MN_QUERY_STOP_DEVICE: /* 0x05 */
             DPRINT1("IRP_MJ_PNP / IRP_MN_QUERY_STOP_DEVICE\n");
-            break;
+            PortFdoHoldRequests(DeviceExtension, TRUE);
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            return ForwardIrpAndForget(DeviceExtension->LowerDevice, Irp);
 
         case IRP_MN_CANCEL_STOP_DEVICE: /* 0x06 */
             DPRINT1("IRP_MJ_PNP / IRP_MN_CANCEL_STOP_DEVICE\n");
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            IoForwardIrpSynchronously(DeviceExtension->LowerDevice, Irp);
+            if (DeviceExtension->PnpState == dsStarted)
+                PortFdoReleaseRequests(DeviceExtension, STATUS_SUCCESS);
+            Status = STATUS_SUCCESS;
             break;
 
         case IRP_MN_QUERY_DEVICE_RELATIONS: /* 0x07 */
@@ -1120,7 +1244,7 @@ PortFdoPnp(
 
         case IRP_MN_QUERY_PNP_DEVICE_STATE: /* 0x14 */
             DPRINT("IRP_MJ_PNP / IRP_MN_QUERY_PNP_DEVICE_STATE\n");
-            break;
+            return ForwardIrpAndForget(DeviceExtension->LowerDevice, Irp);
 
         case IRP_MN_DEVICE_USAGE_NOTIFICATION: /* 0x16 */
             DPRINT1("IRP_MJ_PNP / IRP_MN_DEVICE_USAGE_NOTIFICATION\n");

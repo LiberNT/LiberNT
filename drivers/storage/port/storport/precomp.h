@@ -189,6 +189,12 @@ typedef struct _FDO_DEVICE_EXTENSION
     ULONG PdoCount;
     BOOLEAN BusScanned;
     volatile BOOLEAN DumpMode;
+
+    KSPIN_LOCK RequestHoldLock;
+    LIST_ENTRY HeldRequests;
+    BOOLEAN HoldRequests;
+    volatile LONG OutstandingRequests;
+    KEVENT RequestsDrained;
 } FDO_DEVICE_EXTENSION, *PFDO_DEVICE_EXTENSION;
 
 NTSTATUS PortInitializeDma(_In_ PFDO_DEVICE_EXTENSION FdoExtension,
@@ -321,6 +327,16 @@ NTAPI
 PortFdoPnp(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PIRP Irp);
+
+BOOLEAN
+PortFdoStartRequest(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ PIRP Irp,
+    _In_ BOOLEAN PortRequest);
+
+VOID
+PortFdoEndRequest(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension);
 
 
 /* miniport.c */
