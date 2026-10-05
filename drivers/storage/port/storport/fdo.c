@@ -965,6 +965,54 @@ PortFdoReleaseAdapter(
 
 
 static
+VOID
+PortFdoSendAdapterPnp(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ STOR_PNP_ACTION Action)
+{
+    SCSI_PNP_REQUEST_BLOCK Srb;
+    IO_STATUS_BLOCK IoStatusBlock;
+    PIO_STACK_LOCATION Stack;
+    KEVENT Event;
+    PIRP Irp;
+
+    if ((DeviceExtension->PnpState != dsStarted) ||
+        (DeviceExtension->Miniport.PortConfig.SrbType != SRB_TYPE_SCSI_REQUEST_BLOCK))
+        return;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_SCSI_EXECUTE_NONE,
+                                        DeviceExtension->Device,
+                                        NULL,
+                                        0,
+                                        NULL,
+                                        0,
+                                        TRUE,
+                                        &Event,
+                                        &IoStatusBlock);
+    if (Irp == NULL)
+        return;
+
+    RtlZeroMemory(&Srb, sizeof(Srb));
+    Srb.Length = sizeof(SCSI_PNP_REQUEST_BLOCK);
+    Srb.Function = SRB_FUNCTION_PNP;
+    Srb.PnPAction = Action;
+    Srb.SrbPnPFlags = SRB_PNP_FLAGS_ADAPTER_REQUEST;
+    Srb.SrbFlags = SRB_FLAGS_NO_QUEUE_FREEZE;
+    Srb.TimeOutValue = 10;
+    Srb.OriginalRequest = Irp;
+
+    IoSetNextIrpStackLocation(Irp);
+    Stack = IoGetCurrentIrpStackLocation(Irp);
+    Stack->DeviceObject = DeviceExtension->Device;
+    Stack->Parameters.Scsi.Srb = (PSCSI_REQUEST_BLOCK)&Srb;
+
+    if (PortSubmitSrb(DeviceExtension, DeviceExtension->Device, Irp, (PSCSI_REQUEST_BLOCK)&Srb) == STATUS_PENDING)
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+}
+
+
+static
 NTSTATUS
 PortFdoRemoveDevice(
     _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
@@ -973,6 +1021,7 @@ PortFdoRemoveDevice(
     PDEVICE_OBJECT LowerDevice = DeviceExtension->LowerDevice;
     NTSTATUS Status;
 
+    PortFdoSendAdapterPnp(DeviceExtension, StorRemoveDevice);
     PortFdoStopAdapter(DeviceExtension);
     DeviceExtension->PnpState = dsRemoved;
     PortFdoReleaseAdapter(DeviceExtension);
@@ -1081,6 +1130,7 @@ PortFdoPnp(
             DPRINT1("IRP_MJ_PNP / IRP_MN_SURPRISE_REMOVAL\n");
             if (DeviceExtension->PnpState == dsStarted)
             {
+                PortFdoSendAdapterPnp(DeviceExtension, StorSurpriseRemoval);
                 MiniportAdapterControl(&DeviceExtension->Miniport, ScsiAdapterSurpriseRemoval, NULL);
                 DeviceExtension->PnpState = dsSurpriseRemoved;
             }

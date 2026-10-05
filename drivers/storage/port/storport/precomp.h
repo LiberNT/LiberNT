@@ -450,6 +450,13 @@ PortDeletePdo(
     _In_ PPDO_DEVICE_EXTENSION PdoExtension);
 
 NTSTATUS
+PortSubmitSrb(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension,
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_ PSCSI_REQUEST_BLOCK Srb);
+
+NTSTATUS
 NTAPI
 PortPdoScsi(
     _In_ PDEVICE_OBJECT DeviceObject,

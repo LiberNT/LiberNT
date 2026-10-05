@@ -584,13 +584,8 @@ PortPdoScsi(
     PPDO_DEVICE_EXTENSION PdoExtension;
     PFDO_DEVICE_EXTENSION FdoExtension;
     PIO_STACK_LOCATION Stack;
-    PSTOR_SRB_CONTEXT SrbContext;
     PSCSI_REQUEST_BLOCK Srb;
-    PVOID MiniportSrb;
-    ULONG SrbExtensionSize;
     NTSTATUS Status;
-    KIRQL Irql;
-    BOOLEAN Pending = FALSE;
     KLOCK_QUEUE_HANDLE LockHandle;
 
     DPRINT("PortPdoScsi(%p %p)\n", DeviceObject, Irp);
@@ -603,8 +598,10 @@ PortPdoScsi(
 
     if (Srb == NULL)
     {
-        Status = STATUS_INVALID_PARAMETER;
-        goto Fail;
+        Irp->IoStatus.Information = 0;
+        Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_INVALID_PARAMETER;
     }
 
     /* Address the request at the logical unit this PDO represents. */
@@ -654,6 +651,24 @@ PortPdoScsi(
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
         return Status;
     }
+
+    return PortSubmitSrb(FdoExtension, DeviceObject, Irp, Srb);
+}
+
+
+NTSTATUS
+PortSubmitSrb(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension,
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_ PSCSI_REQUEST_BLOCK Srb)
+{
+    PSTOR_SRB_CONTEXT SrbContext;
+    PVOID MiniportSrb;
+    ULONG SrbExtensionSize;
+    NTSTATUS Status;
+    KIRQL Irql;
+    BOOLEAN Pending = FALSE;
 
     if (FdoExtension->RequestPoolsReady)
         SrbContext = ExAllocateFromNPagedLookasideList(&FdoExtension->SrbContextLookaside);
