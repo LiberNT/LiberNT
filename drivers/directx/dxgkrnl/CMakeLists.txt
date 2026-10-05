@@ -25,6 +25,7 @@ list(APPEND SOURCE
     dxgmms2_client.c
     iommu.c
     adapter.c
+    acpievent.c
     adapter_map_core.c
     adapter_start_core.c
     legacy.c

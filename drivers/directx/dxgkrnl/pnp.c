@@ -365,6 +365,44 @@ DxgkpAllocatePollDisplayChildrenWork(
     return STATUS_SUCCESS;
 }
 
+/*
+ * DxgkPnpQueuePollDisplayChildren
+ *
+ * Queues a connectivity poll of one adapter's children from kernel context,
+ * on the same worker that D3DKMTPollDisplayChildren uses.  The poll is
+ * non-destructive and interruptible: it answers a miniport's request to look
+ * again, not a user's request to force detection.
+ */
+NTSTATUS
+DxgkPnpQueuePollDisplayChildren(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    D3DKMT_POLLDISPLAYCHILDREN Request;
+    PDXGKP_POLL_CHILDREN_WORK  Work;
+    NTSTATUS                   Status;
+
+    PAGED_CODE();
+
+    /* The worker drops this reference when it finishes. */
+    if (!DxgkReferenceAdapter(Adapter))
+        return STATUS_DEVICE_REMOVED;
+
+    RtlZeroMemory(&Request, sizeof(Request));
+    Request.NonDestructiveOnly = 1;
+    Request.PollInterruptible  = 1;
+
+    Status = DxgkpAllocatePollDisplayChildrenWork(Adapter, &Request, &Work);
+    if (!NT_SUCCESS(Status))
+    {
+        DxgkDereferenceAdapter(Adapter);
+        return Status;
+    }
+
+    IoQueueWorkItem(Work->WorkItem, DxgkpPollDisplayChildrenWorker,
+                    DelayedWorkQueue, Work);
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 DxgkpPollDisplayChildrenRequest(
     _In_ CONST D3DKMT_POLLDISPLAYCHILDREN *PollRequest)

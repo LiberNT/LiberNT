@@ -4602,7 +4602,7 @@ static const GUID DxgkpBusInterfaceStandardGuid =
     {0xbe, 0xaf, 0x08, 0x00, 0x2b, 0xe2, 0x09, 0x2f}
 };
 
-static NTSTATUS
+NTSTATUS
 DxgkpQueryPdoInterface(
     _In_ PDEVICE_OBJECT PhysicalDeviceObject,
     _In_ const GUID *InterfaceType,
@@ -13667,6 +13667,10 @@ DxgkAdapterStart(
                   Adapter->QueueDpcCount,
                   Adapter->DpcCount);
 
+    /* Subscribe to ACPI and power-state events last: every rollback point
+     * is behind us, and start is still serialised against stop. */
+    DxgkAcpiEventsStart(Adapter);
+
     Status = STATUS_SUCCESS;
     DxgkpCompleteAdapterStart(Adapter, StartGeneration, Status, TRUE);
     return Status;
@@ -14356,6 +14360,10 @@ DxgkpAdapterStopInternal(
     DxgkBeginAdapterRundown(Adapter);
     SchedulerAlreadyPrepared = (InterlockedCompareExchange(&Adapter->VidSchStopping, 0, 0) != 0);
 
+    /* No more ACPI or power-state events once the miniport is stopping;
+     * this also waits out a delivery already in progress. */
+    DxgkAcpiEventsStop(Adapter);
+
     /* Stop the TDR watchdog before the miniport goes away. */
     DxgkpStopTdrWatchdog(Adapter);
     DxgkpWaitForFlagClear(&Adapter->HotPlugWorkActive);
@@ -14571,6 +14579,7 @@ DxgkAdapterRemove(
     }
     else if (Adapter->State == DxgkAdapterStateSurpriseRemoved)
     {
+        DxgkAcpiEventsStop(Adapter);
         DxgkpStopTdrWatchdog(Adapter);
         DxgkPresentTeardown(Adapter);
         VidSchPrepareForStop(Adapter);

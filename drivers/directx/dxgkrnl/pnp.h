@@ -119,6 +119,15 @@ NTSTATUS
 DxgkpPollDisplayChildrenRequest(
     _In_ CONST D3DKMT_POLLDISPLAYCHILDREN *PollRequest);
 
+/*
+ * DxgkPnpQueuePollDisplayChildren
+ *   Queue a non-destructive child-connectivity poll of one adapter from
+ *   kernel context, as DXGK_ACPI_POLL_DISPLAY_CHILDREN requests.
+ */
+NTSTATUS
+DxgkPnpQueuePollDisplayChildren(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 NTSTATUS
 DxgkPnpIndicateChildConnection(
     _In_ PDXGKRNL_ADAPTER Adapter,

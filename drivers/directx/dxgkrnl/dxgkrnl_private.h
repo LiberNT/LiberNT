@@ -592,6 +592,27 @@ typedef struct _DXGKRNL_POWER_COMPONENT
 } DXGKRNL_POWER_COMPONENT, *PDXGKRNL_POWER_COMPONENT;
 
 /* ========================================================================
+ * DXGKP_ACPI_EVENTS
+ *
+ * Subscriptions that feed DxgkDdiNotifyAcpiEvent (acpievent.c).  Held in the
+ * adapter rather than allocated, so a source that calls back late still
+ * finds valid memory and is turned away by Rundown.
+ * ====================================================================== */
+typedef struct _DXGKP_ACPI_EVENTS
+{
+    BOOLEAN                     Subscribed;
+    BOOLEAN                     AcpiNotificationsRegistered;
+    EX_RUNDOWN_REF              Rundown;
+    KSPIN_LOCK                  Lock;           /* guards Queue */
+    LIST_ENTRY                  Queue;          /* DXGKP_ACPI_EVENT_RECORD */
+    PIO_WORKITEM                WorkItem;
+    volatile LONG               WorkQueued;     /* a delivery pass is queued */
+    PVOID                       AcPowerSettingHandle;
+    PVOID                       LidPowerSettingHandle;
+    ACPI_INTERFACE_STANDARD2    AcpiInterface;  /* valid while registered */
+} DXGKP_ACPI_EVENTS, *PDXGKP_ACPI_EVENTS;
+
+/* ========================================================================
  * DXGKRNL_ADAPTER
  *
  * Stored in the FDO's DeviceExtension.  Lifetime: AddDevice → RemoveDevice.
@@ -1291,6 +1312,9 @@ struct _DXGKRNL_ADAPTER
     UNICODE_STRING              DisplayAdapterInterfaceName;
     BOOLEAN                     DisplayAdapterInterfaceEnabled;
     WCHAR                       DisplayDeviceName[24];
+
+    /* ACPI and power-state event subscriptions (acpievent.c). */
+    DXGKP_ACPI_EVENTS           AcpiEvents;
 
     /*
      * Linkage in the per-miniport AdapterListHead AND in the global
@@ -3310,6 +3334,24 @@ DxgkVidPnRebuildForHotPlug(
 NTSTATUS
 DxgkVidPnQueueHotPlugRebuild(
     _In_ PDXGKRNL_ADAPTER Adapter);
+
+/* acpievent.c */
+VOID
+DxgkAcpiEventsStart(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkAcpiEventsStop(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+/* adapter.c: IRP_MN_QUERY_INTERFACE to the top of the adapter's stack. */
+NTSTATUS
+DxgkpQueryPdoInterface(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _In_ const GUID *InterfaceType,
+    _In_ USHORT Size,
+    _In_ USHORT Version,
+    _Out_writes_bytes_(Size) PINTERFACE Interface);
 
 VOID
 DxgkVidPnInitializeHotPlugWorker(
