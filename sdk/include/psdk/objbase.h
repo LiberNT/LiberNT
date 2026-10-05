@@ -486,6 +486,19 @@ CoGetStandardMarshal(
   _In_ DWORD mshlflags,
   _Outptr_ LPMARSHAL *ppMarshal);
 
+typedef enum tagSTDMSHLFLAGS
+{
+  SMEXF_SERVER = 0x01,
+  SMEXF_HANDLER = 0x02
+} STDMSHLFLAGS;
+
+HRESULT
+WINAPI
+CoGetStdMarshalEx(
+  _In_ LPUNKNOWN pUnkOuter,
+  _In_ DWORD smexflags,
+  _Outptr_ LPUNKNOWN *ppUnkInner);
+
 HRESULT WINAPI CoMarshalHresult(_In_ LPSTREAM pstm, _In_ HRESULT hresult);
 
 _Check_return_

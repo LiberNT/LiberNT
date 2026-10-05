@@ -118,7 +118,7 @@
 @ stdcall CoGetPSClsid(ptr ptr)
 @ stub CoGetProcessIdentifier
 @ stdcall CoGetStandardMarshal(ptr ptr long ptr long ptr)
-@ stub CoGetStdMarshalEx
+@ stdcall CoGetStdMarshalEx(ptr long ptr)
 @ stub CoGetSystemSecurityPermissions
 @ stdcall CoGetTreatAsClass(ptr ptr)
 @ stdcall CoImpersonateClient()

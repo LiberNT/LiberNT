@@ -2254,6 +2254,167 @@ HRESULT WINAPI InternalCoStdMarshalObject(REFIID riid, DWORD dest_context, void 
     return StdMarshalImpl_Construct(riid, dest_context, dest_context_data, ppvObject);
 }
 
+#ifdef __REACTOS__
+struct stdmarshal_aggregate
+{
+    IUnknown IUnknown_inner;
+    IMarshal IMarshal_iface;
+    IUnknown *outer_unk;
+    IMarshal *marshal;
+    LONG refcount;
+};
+
+static inline struct stdmarshal_aggregate *impl_agg_from_IUnknown(IUnknown *iface)
+{
+    return CONTAINING_RECORD(iface, struct stdmarshal_aggregate, IUnknown_inner);
+}
+
+static inline struct stdmarshal_aggregate *impl_agg_from_IMarshal(IMarshal *iface)
+{
+    return CONTAINING_RECORD(iface, struct stdmarshal_aggregate, IMarshal_iface);
+}
+
+static HRESULT WINAPI stdmarshal_aggregate_inner_QueryInterface(IUnknown *iface, REFIID riid, void **obj)
+{
+    struct stdmarshal_aggregate *marshaler = impl_agg_from_IUnknown(iface);
+
+    TRACE("%p, %s, %p\n", iface, debugstr_guid(riid), obj);
+
+    *obj = NULL;
+    if (IsEqualIID(&IID_IUnknown, riid))
+        *obj = &marshaler->IUnknown_inner;
+    else if (IsEqualIID(&IID_IMarshal, riid))
+        *obj = &marshaler->IMarshal_iface;
+    else
+        return E_NOINTERFACE;
+
+    IUnknown_AddRef((IUnknown *)*obj);
+    return S_OK;
+}
+
+static ULONG WINAPI stdmarshal_aggregate_inner_AddRef(IUnknown *iface)
+{
+    struct stdmarshal_aggregate *marshaler = impl_agg_from_IUnknown(iface);
+
+    return InterlockedIncrement(&marshaler->refcount);
+}
+
+static ULONG WINAPI stdmarshal_aggregate_inner_Release(IUnknown *iface)
+{
+    struct stdmarshal_aggregate *marshaler = impl_agg_from_IUnknown(iface);
+    ULONG refcount = InterlockedDecrement(&marshaler->refcount);
+
+    if (!refcount)
+    {
+        IMarshal_Release(marshaler->marshal);
+        free(marshaler);
+    }
+    return refcount;
+}
+
+static const IUnknownVtbl stdmarshal_aggregate_inner_vtbl =
+{
+    stdmarshal_aggregate_inner_QueryInterface,
+    stdmarshal_aggregate_inner_AddRef,
+    stdmarshal_aggregate_inner_Release
+};
+
+static HRESULT WINAPI stdmarshal_aggregate_QueryInterface(IMarshal *iface, REFIID riid, void **obj)
+{
+    return IUnknown_QueryInterface(impl_agg_from_IMarshal(iface)->outer_unk, riid, obj);
+}
+
+static ULONG WINAPI stdmarshal_aggregate_AddRef(IMarshal *iface)
+{
+    return IUnknown_AddRef(impl_agg_from_IMarshal(iface)->outer_unk);
+}
+
+static ULONG WINAPI stdmarshal_aggregate_Release(IMarshal *iface)
+{
+    return IUnknown_Release(impl_agg_from_IMarshal(iface)->outer_unk);
+}
+
+static HRESULT WINAPI stdmarshal_aggregate_GetUnmarshalClass(IMarshal *iface, REFIID riid, void *pv,
+        DWORD dest_context, void *pvDestContext, DWORD mshlflags, CLSID *clsid)
+{
+    return IMarshal_GetUnmarshalClass(impl_agg_from_IMarshal(iface)->marshal, riid, pv, dest_context,
+                                      pvDestContext, mshlflags, clsid);
+}
+
+static HRESULT WINAPI stdmarshal_aggregate_GetMarshalSizeMax(IMarshal *iface, REFIID riid, void *pv,
+        DWORD dest_context, void *pvDestContext, DWORD mshlflags, DWORD *size)
+{
+    return IMarshal_GetMarshalSizeMax(impl_agg_from_IMarshal(iface)->marshal, riid, pv, dest_context,
+                                      pvDestContext, mshlflags, size);
+}
+
+static HRESULT WINAPI stdmarshal_aggregate_MarshalInterface(IMarshal *iface, IStream *stream, REFIID riid,
+        void *pv, DWORD dest_context, void *pvDestContext, DWORD mshlflags)
+{
+    return IMarshal_MarshalInterface(impl_agg_from_IMarshal(iface)->marshal, stream, riid, pv, dest_context,
+                                     pvDestContext, mshlflags);
+}
+
+static HRESULT WINAPI stdmarshal_aggregate_UnmarshalInterface(IMarshal *iface, IStream *stream, REFIID riid, void **ppv)
+{
+    return IMarshal_UnmarshalInterface(impl_agg_from_IMarshal(iface)->marshal, stream, riid, ppv);
+}
+
+static HRESULT WINAPI stdmarshal_aggregate_ReleaseMarshalData(IMarshal *iface, IStream *stream)
+{
+    return IMarshal_ReleaseMarshalData(impl_agg_from_IMarshal(iface)->marshal, stream);
+}
+
+static HRESULT WINAPI stdmarshal_aggregate_DisconnectObject(IMarshal *iface, DWORD reserved)
+{
+    return IMarshal_DisconnectObject(impl_agg_from_IMarshal(iface)->marshal, reserved);
+}
+
+static const IMarshalVtbl stdmarshal_aggregate_vtbl =
+{
+    stdmarshal_aggregate_QueryInterface,
+    stdmarshal_aggregate_AddRef,
+    stdmarshal_aggregate_Release,
+    stdmarshal_aggregate_GetUnmarshalClass,
+    stdmarshal_aggregate_GetMarshalSizeMax,
+    stdmarshal_aggregate_MarshalInterface,
+    stdmarshal_aggregate_UnmarshalInterface,
+    stdmarshal_aggregate_ReleaseMarshalData,
+    stdmarshal_aggregate_DisconnectObject
+};
+
+HRESULT WINAPI CoGetStdMarshalEx(IUnknown *outer, DWORD smexflags, IUnknown **inner)
+{
+    struct stdmarshal_aggregate *object;
+    HRESULT hr;
+
+    TRACE("%p, %#lx, %p\n", outer, smexflags, inner);
+
+    if (!inner)
+        return E_INVALIDARG;
+    *inner = NULL;
+    if (!outer || (smexflags != SMEXF_SERVER && smexflags != SMEXF_HANDLER))
+        return E_INVALIDARG;
+
+    if (!(object = malloc(sizeof(*object))))
+        return E_OUTOFMEMORY;
+
+    hr = StdMarshalImpl_Construct(&IID_IMarshal, MSHCTX_LOCAL, NULL, (void **)&object->marshal);
+    if (FAILED(hr))
+    {
+        free(object);
+        return hr;
+    }
+
+    object->IUnknown_inner.lpVtbl = &stdmarshal_aggregate_inner_vtbl;
+    object->IMarshal_iface.lpVtbl = &stdmarshal_aggregate_vtbl;
+    object->outer_unk = outer;
+    object->refcount = 1;
+    *inner = &object->IUnknown_inner;
+    return S_OK;
+}
+
+#endif
 /***********************************************************************
  *            CoGetStandardMarshal        (combase.@)
  */

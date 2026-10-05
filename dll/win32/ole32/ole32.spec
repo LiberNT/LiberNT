@@ -63,7 +63,7 @@
 @ stub CoGetProcessIdentifier
 @ stdcall CoGetStandardMarshal(ptr ptr long ptr long ptr) combase.CoGetStandardMarshal
 @ stdcall CoGetState(ptr)
-@ stdcall -stub CoGetStdMarshalEx(ptr long ptr) combase.CoGetStdMarshalEx
+@ stdcall CoGetStdMarshalEx(ptr long ptr) combase.CoGetStdMarshalEx
 @ stub CoGetSystemSecurityPermissions
 @ stub CoGetTIDFromIPID
 @ stdcall CoGetTreatAsClass(ptr ptr) combase.CoGetTreatAsClass
