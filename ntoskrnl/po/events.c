@@ -18,9 +18,9 @@ typedef struct _SYS_BUTTON_CONTEXT
 {
     PDEVICE_OBJECT DeviceObject;
     PIO_WORKITEM WorkItem;
-    KEVENT Event;
-    IO_STATUS_BLOCK IoStatusBlock;
-    ULONG SysButton;
+    ULONG SysButton;            /* the request's buffer */
+    ULONG LidState;             /* 1 open, 0 closed */
+    BOOLEAN LidStatePending;    /* LidState not yet published */
 } SYS_BUTTON_CONTEXT, *PSYS_BUTTON_CONTEXT;
 
 typedef struct _POP_POWER_SETTING_CACHE_ENTRY
@@ -566,6 +566,36 @@ PoNotifySystemTimeSet(VOID)
     }
 }
 
+/*
+ * Publishes the lid state as GUID_LIDSWITCH_STATE_CHANGE (1 open, 0 closed).
+ * The state is the same whatever the power source, so every condition
+ * carries it; the active one notifies.  Nothing is published before a lid
+ * has reported, so subscribers hear of the lid only once its state is known.
+ */
+static VOID
+PopPublishLidSwitchState(
+    _In_ ULONG LidState)
+{
+    ULONG Condition;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    for (Condition = PoAc; Condition < PoConditionMaximum; Condition++)
+    {
+        Status = PopSetPowerSettingValue(&GUID_LIDSWITCH_STATE_CHANGE,
+                                         (SYSTEM_POWER_CONDITION)Condition,
+                                         &LidState,
+                                         sizeof(LidState));
+        if (!NT_SUCCESS(Status))
+            DPRINT1("Lid state %lu not published for condition %lu: 0x%08lx\n", LidState, Condition, Status);
+    }
+}
+
+/*
+ * The request is the power manager's own IRP, freed here, so nothing of it
+ * outlives this routine.
+ */
 static NTSTATUS
 NTAPI
 PopGetSysButtonCompletion(
@@ -574,13 +604,24 @@ PopGetSysButtonCompletion(
     IN PVOID Context)
 {
     PSYS_BUTTON_CONTEXT SysButtonContext = Context;
+    NTSTATUS Status = Irp->IoStatus.Status;
+    BOOLEAN Valid = NT_SUCCESS(Status) && Irp->IoStatus.Information >= sizeof(ULONG);
     ULONG SysButton;
 
     /* The DeviceObject can be NULL, so use the one we stored */
     DeviceObject = SysButtonContext->DeviceObject;
+    IoFreeIrp(Irp);
+
+    if (!Valid)
+    {
+        /* Asking again would only fail again. */
+        DPRINT1("IOCTL_GET_SYS_BUTTON_EVENT failed with status 0x%08lx; device no longer watched\n", Status);
+        ExFreePoolWithTag(SysButtonContext, 'IWOP');
+        return STATUS_MORE_PROCESSING_REQUIRED;
+    }
 
     /* FIXME: What do do with the sys button event? */
-    SysButton = *(PULONG)Irp->AssociatedIrp.SystemBuffer;
+    SysButton = SysButtonContext->SysButton;
     {
         DPRINT1("A device reported the event 0x%x (", SysButton);
         if (SysButton & SYS_BUTTON_POWER) DbgPrint(" POWER");
@@ -598,20 +639,28 @@ PopGetSysButtonCompletion(
         }
     }
 
+    /* The lid reports its state with the event; it is published from the
+     * work item, which runs at PASSIVE_LEVEL. */
+    if ((SysButton & SYS_BUTTON_LID) && (SysButton & SYS_BUTTON_LID_STATE_MASK) != 0)
+    {
+        SysButtonContext->LidState = (SysButton & SYS_BUTTON_LID_OPEN) ? 1 : 0;
+        SysButtonContext->LidStatePending = TRUE;
+    }
+
     /* Allocate a new workitem to send the next IOCTL_GET_SYS_BUTTON_EVENT */
     SysButtonContext->WorkItem = IoAllocateWorkItem(DeviceObject);
     if (!SysButtonContext->WorkItem)
     {
         DPRINT("IoAllocateWorkItem() failed\n");
         ExFreePoolWithTag(SysButtonContext, 'IWOP');
-        return STATUS_SUCCESS;
+        return STATUS_MORE_PROCESSING_REQUIRED;
     }
     IoQueueWorkItem(SysButtonContext->WorkItem,
                     PopGetSysButton,
                     DelayedWorkQueue,
                     SysButtonContext);
 
-    return STATUS_SUCCESS /* STATUS_CONTINUE_COMPLETION */;
+    return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
 static VOID
@@ -622,32 +671,43 @@ PopGetSysButton(
 {
     PSYS_BUTTON_CONTEXT SysButtonContext = Context;
     PIO_WORKITEM CurrentWorkItem = SysButtonContext->WorkItem;
+    PIO_STACK_LOCATION Stack;
     PIRP Irp;
 
-    /* Get button pressed (IOCTL_GET_SYS_BUTTON_EVENT) */
-    KeInitializeEvent(&SysButtonContext->Event, NotificationEvent, FALSE);
-    Irp = IoBuildDeviceIoControlRequest(IOCTL_GET_SYS_BUTTON_EVENT,
-                                        DeviceObject,
-                                        NULL,
-                                        0,
-                                        &SysButtonContext->SysButton,
-                                        sizeof(SysButtonContext->SysButton),
-                                        FALSE,
-                                        &SysButtonContext->Event,
-                                        &SysButtonContext->IoStatusBlock);
+    if (SysButtonContext->LidStatePending)
+    {
+        SysButtonContext->LidStatePending = FALSE;
+        PopPublishLidSwitchState(SysButtonContext->LidState);
+    }
+
+    /* Get button pressed (IOCTL_GET_SYS_BUTTON_EVENT).  The request is
+     * built by hand and freed by its completion routine, so no I/O
+     * completion runs later against this context. */
+    Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
     if (Irp)
     {
+        SysButtonContext->SysButton = 0;
+        Irp->RequestorMode = KernelMode;
+        Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+        Irp->IoStatus.Information = 0;
+        Irp->AssociatedIrp.SystemBuffer = &SysButtonContext->SysButton;
+        Stack = IoGetNextIrpStackLocation(Irp);
+        Stack->MajorFunction = IRP_MJ_DEVICE_CONTROL;
+        Stack->Parameters.DeviceIoControl.IoControlCode = IOCTL_GET_SYS_BUTTON_EVENT;
+        Stack->Parameters.DeviceIoControl.InputBufferLength = 0;
+        Stack->Parameters.DeviceIoControl.OutputBufferLength = sizeof(SysButtonContext->SysButton);
+        Stack->Parameters.DeviceIoControl.Type3InputBuffer = NULL;
         IoSetCompletionRoutine(Irp,
                                PopGetSysButtonCompletion,
                                SysButtonContext,
                                TRUE,
-                               FALSE,
-                               FALSE);
+                               TRUE,
+                               TRUE);
         IoCallDriver(DeviceObject, Irp);
     }
     else
     {
-        DPRINT1("IoBuildDeviceIoControlRequest() failed\n");
+        DPRINT1("IoAllocateIrp() failed\n");
         ExFreePoolWithTag(SysButtonContext, 'IWOP');
     }
 
@@ -804,6 +864,7 @@ PopAddRemoveSysCapsCallback(IN PVOID NotificationStructure,
             ZwClose(FileHandle);
             return STATUS_INSUFFICIENT_RESOURCES;
         }
+        RtlZeroMemory(SysButtonContext, sizeof(*SysButtonContext));
 
         /* Queue a work item to get sys button event */
         SysButtonContext->WorkItem = IoAllocateWorkItem(DeviceObject);
