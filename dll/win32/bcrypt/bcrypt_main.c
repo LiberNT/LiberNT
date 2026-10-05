@@ -1306,7 +1306,11 @@ NTSTATUS WINAPI BCryptCreateHash( BCRYPT_ALG_HANDLE handle, BCRYPT_HASH_HANDLE *
         FIXME( "unimplemented flags %#lx\n", flags );
         return STATUS_NOT_IMPLEMENTED;
     }
-    if (object) FIXME( "ignoring object buffer\n" );
+    if (object)
+    {
+        static int once;
+        if (!once++) FIXME( "ignoring object buffer\n" );
+    }
 
     if (!alg) return STATUS_INVALID_HANDLE;
     if (!ret_handle) return STATUS_INVALID_PARAMETER;
@@ -1328,7 +1332,11 @@ NTSTATUS WINAPI BCryptDuplicateHash( BCRYPT_HASH_HANDLE handle, BCRYPT_HASH_HAND
 
     if (!hash_orig) return STATUS_INVALID_HANDLE;
     if (!handle_copy) return STATUS_INVALID_PARAMETER;
-    if (object) FIXME( "ignoring object buffer\n" );
+    if (object)
+    {
+        static int once;
+        if (!once++) FIXME( "ignoring object buffer\n" );
+    }
 
     if (!(hash_copy = malloc( sizeof(*hash_copy) ))) return STATUS_NO_MEMORY;
 
@@ -1619,7 +1627,11 @@ NTSTATUS WINAPI BCryptGenerateSymmetricKey( BCRYPT_ALG_HANDLE handle, BCRYPT_KEY
     NTSTATUS status;
 
     TRACE( "%p, %p, %p, %lu, %p, %lu, %#lx\n", handle, ret_handle, object, object_len, secret, secret_len, flags );
-    if (object) FIXME( "ignoring object buffer\n" );
+    if (object)
+    {
+        static int once;
+        if (!once++) FIXME( "ignoring object buffer\n" );
+    }
 
     if (!alg) return STATUS_INVALID_HANDLE;
 
@@ -3564,7 +3576,11 @@ NTSTATUS WINAPI BCryptDuplicateKey( BCRYPT_KEY_HANDLE handle, BCRYPT_KEY_HANDLE 
     NTSTATUS status;
 
     TRACE( "%p, %p, %p, %lu, %#lx\n", handle, handle_copy, object, object_len, flags );
-    if (object) FIXME( "ignoring object buffer\n" );
+    if (object)
+    {
+        static int once;
+        if (!once++) FIXME( "ignoring object buffer\n" );
+    }
 
     if (!key_orig) return STATUS_INVALID_HANDLE;
     if (!handle_copy) return STATUS_INVALID_PARAMETER;
