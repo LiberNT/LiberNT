@@ -4821,13 +4821,16 @@ MonitorSourceModeSet_AcquirePreferredModeInfo(
         }
     }
 
-    if (ModeSet->NumModes > 0)
-    {
-        *ppFirstMonitorSourceModeInfo = &ModeSet->Modes[ModeSet->NumModes - 1];
-        return STATUS_SUCCESS;
-    }
-
-    return STATUS_GRAPHICS_DATASET_IS_EMPTY;
+    /*
+     * No mode is marked preferred -- including when the set is empty.  Report
+     * that rather than promoting some other mode: a caller would otherwise
+     * treat an arbitrary resolution as the monitor's native one.
+     *
+     * STATUS_GRAPHICS_NO_PREFERRED_MODE is an informational status, so
+     * NT_SUCCESS() is TRUE for it; the NULL output is what tells the caller
+     * there is nothing to use.
+     */
+    return STATUS_GRAPHICS_NO_PREFERRED_MODE;
 }
 
 static NTSTATUS APIENTRY
