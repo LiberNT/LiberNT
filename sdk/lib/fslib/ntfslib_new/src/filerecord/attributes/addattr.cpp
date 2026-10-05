@@ -1729,6 +1729,11 @@ FileRecord::CreateInitialAttributeList()
             NULL);
         if (!NT_SUCCESS(Status))
             goto RestoreBase;
+        if (Attribute->AttributeType == TypeAttributeList)
+        {
+            Offset += Attribute->Length;
+            continue;
+        }
         if (AttributeCount == MAXULONG)
         {
             Status = STATUS_FILE_TOO_LARGE;
@@ -1771,6 +1776,11 @@ FileRecord::CreateInitialAttributeList()
             TypeAttributeEndMarker)
         {
             break;
+        }
+        if (Attribute->AttributeType == TypeAttributeList)
+        {
+            Offset += Attribute->Length;
+            continue;
         }
         Entry = &Entries[EntryIndex++];
         Entry->Attribute = Attribute;
