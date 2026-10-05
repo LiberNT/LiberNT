@@ -28,32 +28,10 @@ IO_BUS_TYPE_GUID_LIST PnpBusTypeGuidList;
 
 /* FUNCTIONS *****************************************************************/
 
-VOID
-IopFixupDeviceId(PWCHAR String)
-{
-    SIZE_T Length = wcslen(String), i;
-
-    for (i = 0; i < Length; i++)
-    {
-        if (String[i] == L'\\')
-            String[i] = L'#';
-    }
-}
-
-/*
- * A CriticalDeviceDatabase install writes ClassGUID + Service to the device's
- * Enum instance key. A full PnP install also points the instance's "Driver"
- * value at Control\Class\{ClassGUID}\NNNN. Honor an explicitly provisioned
- * CDDB Driver value first so its preinstalled hardware and software policy is
- * not stranded on a different class instance. Otherwise create the first free
- * driver key on demand, mirroring a normal install. Idempotent: a device that
- * already has a "Driver" value is left untouched.
- */
 static
 VOID
-IopEnsureCriticalDeviceDriverKey(
-    _In_ HANDLE InstanceKey,
-    _In_ HANDLE CriticalDeviceKey)
+IopEnsureDeviceDriverKey(
+    _In_ HANDLE InstanceKey)
 {
     UNICODE_STRING DriverU = RTL_CONSTANT_STRING(L"Driver");
     UNICODE_STRING ClassGuidU = RTL_CONSTANT_STRING(L"ClassGUID");
@@ -71,52 +49,6 @@ IopEnsureCriticalDeviceDriverKey(
     Status = ZwQueryValueKey(InstanceKey, &DriverU, KeyValuePartialInformation, NULL, 0, &Length);
     if (Status == STATUS_SUCCESS || Status == STATUS_BUFFER_OVERFLOW || Status == STATUS_BUFFER_TOO_SMALL)
         return;
-
-    /* Use the class instance selected by a preinstalled CDDB entry. */
-    if (CriticalDeviceKey)
-    {
-        PKEY_VALUE_PARTIAL_INFORMATION DriverInfo;
-
-        Length = 0;
-        Status = ZwQueryValueKey(CriticalDeviceKey,
-                                 &DriverU,
-                                 KeyValuePartialInformation,
-                                 NULL,
-                                 0,
-                                 &Length);
-        if (Status == STATUS_BUFFER_OVERFLOW || Status == STATUS_BUFFER_TOO_SMALL)
-        {
-            DriverInfo = ExAllocatePool(PagedPool, Length);
-            if (DriverInfo)
-            {
-                Status = ZwQueryValueKey(CriticalDeviceKey,
-                                         &DriverU,
-                                         KeyValuePartialInformation,
-                                         DriverInfo,
-                                         Length,
-                                         &Length);
-                if (NT_SUCCESS(Status) &&
-                    DriverInfo->Type == REG_SZ &&
-                    DriverInfo->DataLength >= 2 * sizeof(WCHAR) &&
-                    ((PWSTR)DriverInfo->Data)[DriverInfo->DataLength / sizeof(WCHAR) - 1] == UNICODE_NULL)
-                {
-                    Status = ZwSetValueKey(InstanceKey,
-                                           &DriverU,
-                                           0,
-                                           REG_SZ,
-                                           DriverInfo->Data,
-                                           DriverInfo->DataLength);
-                    if (NT_SUCCESS(Status))
-                    {
-                        ExFreePool(DriverInfo);
-                        return;
-                    }
-                }
-
-                ExFreePool(DriverInfo);
-            }
-        }
-    }
 
     /* Read the device's ClassGUID */
     Length = 0;
@@ -207,7 +139,7 @@ IopEnsureCriticalDeviceDriverKey(
                                (GuidBytes / sizeof(WCHAR) + 6) * sizeof(WCHAR));
         if (!NT_SUCCESS(Status))
         {
-            DPRINT1("CDDB: could not set Driver='%S' for critical device (0x%08lX)\n",
+            DPRINT1("Could not set Driver='%S' (0x%08lX)\n",
                     DriverValue, Status);
         }
         ExFreePool(DriverValue);
@@ -217,367 +149,38 @@ IopEnsureCriticalDeviceDriverKey(
     ExFreePool(PartialInfo);
 }
 
-VOID
-NTAPI
-IopInstallCriticalDevice(PDEVICE_NODE DeviceNode)
+typedef struct _IOP_DRIVER_DATABASE_MATCH
 {
-    NTSTATUS Status;
-    HANDLE CriticalDeviceKey, InstanceKey;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    UNICODE_STRING CriticalDeviceKeyU = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\CriticalDeviceDatabase");
-    UNICODE_STRING CompatibleIdU = RTL_CONSTANT_STRING(L"CompatibleIDs");
-    UNICODE_STRING HardwareIdU = RTL_CONSTANT_STRING(L"HardwareID");
-    UNICODE_STRING ServiceU = RTL_CONSTANT_STRING(L"Service");
-    UNICODE_STRING ClassGuidU = RTL_CONSTANT_STRING(L"ClassGUID");
-    PKEY_VALUE_PARTIAL_INFORMATION PartialInfo;
-    ULONG HidLength = 0, CidLength = 0, BufferLength;
-    PWCHAR IdBuffer, OriginalIdBuffer;
+    BOOLEAN Found;
+    ULONG Rank;
+    LARGE_INTEGER DriverDate;
+    ULONGLONG DriverVersion;
+    GUID ClassGuid;
+    WCHAR DeviceId[200];
+    WCHAR InfName[260];
+    WCHAR PackageId[260];
+} IOP_DRIVER_DATABASE_MATCH, *PIOP_DRIVER_DATABASE_MATCH;
 
-    /* Open the device instance key */
-    Status = IopCreateDeviceKeyPath(&DeviceNode->InstancePath, REG_OPTION_NON_VOLATILE, &InstanceKey);
-    if (Status != STATUS_SUCCESS)
-        return;
-
-    Status = ZwQueryValueKey(InstanceKey,
-                             &HardwareIdU,
-                             KeyValuePartialInformation,
-                             NULL,
-                             0,
-                             &HidLength);
-    if (Status != STATUS_BUFFER_OVERFLOW && Status != STATUS_BUFFER_TOO_SMALL)
-    {
-        ZwClose(InstanceKey);
-        return;
-    }
-
-    Status = ZwQueryValueKey(InstanceKey,
-                             &CompatibleIdU,
-                             KeyValuePartialInformation,
-                             NULL,
-                             0,
-                             &CidLength);
-    if (Status != STATUS_BUFFER_OVERFLOW && Status != STATUS_BUFFER_TOO_SMALL)
-    {
-        CidLength = 0;
-    }
-
-    BufferLength = HidLength + CidLength;
-    BufferLength -= (((CidLength != 0) ? 2 : 1) * FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data));
-
-    /* Allocate a buffer to hold data from both */
-    OriginalIdBuffer = IdBuffer = ExAllocatePool(PagedPool, BufferLength);
-    if (!IdBuffer)
-    {
-        ZwClose(InstanceKey);
-        return;
-    }
-
-    /* Compute the buffer size */
-    if (HidLength > CidLength)
-        BufferLength = HidLength;
-    else
-        BufferLength = CidLength;
-
-    PartialInfo = ExAllocatePool(PagedPool, BufferLength);
-    if (!PartialInfo)
-    {
-        ZwClose(InstanceKey);
-        ExFreePool(OriginalIdBuffer);
-        return;
-    }
-
-    Status = ZwQueryValueKey(InstanceKey,
-                             &HardwareIdU,
-                             KeyValuePartialInformation,
-                             PartialInfo,
-                             HidLength,
-                             &HidLength);
-    if (Status != STATUS_SUCCESS)
-    {
-        ExFreePool(PartialInfo);
-        ExFreePool(OriginalIdBuffer);
-        ZwClose(InstanceKey);
-        return;
-    }
-
-    /* Copy in HID info first (without 2nd terminating NULL if CID is present) */
-    HidLength = PartialInfo->DataLength - ((CidLength != 0) ? sizeof(WCHAR) : 0);
-    RtlCopyMemory(IdBuffer, PartialInfo->Data, HidLength);
-
-    if (CidLength != 0)
-    {
-        Status = ZwQueryValueKey(InstanceKey,
-                                 &CompatibleIdU,
-                                 KeyValuePartialInformation,
-                                 PartialInfo,
-                                 CidLength,
-                                 &CidLength);
-        if (Status != STATUS_SUCCESS)
-        {
-            ExFreePool(PartialInfo);
-            ExFreePool(OriginalIdBuffer);
-            ZwClose(InstanceKey);
-            return;
-        }
-
-        /* Copy CID next */
-        CidLength = PartialInfo->DataLength;
-        RtlCopyMemory(((PUCHAR)IdBuffer) + HidLength, PartialInfo->Data, CidLength);
-    }
-
-    /* Free our temp buffer */
-    ExFreePool(PartialInfo);
-
-    InitializeObjectAttributes(&ObjectAttributes,
-                               &CriticalDeviceKeyU,
-                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
-                               NULL,
-                               NULL);
-    Status = ZwOpenKey(&CriticalDeviceKey,
-                       KEY_ENUMERATE_SUB_KEYS,
-                       &ObjectAttributes);
-    if (!NT_SUCCESS(Status))
-    {
-        /* The critical device database doesn't exist because
-         * we're probably in 1st stage setup, but it's ok */
-        ExFreePool(OriginalIdBuffer);
-        ZwClose(InstanceKey);
-        return;
-    }
-
-    while (*IdBuffer)
-    {
-        USHORT StringLength = (USHORT)wcslen(IdBuffer) + 1, Index;
-
-        IopFixupDeviceId(IdBuffer);
-
-        /* Look through all subkeys for a match */
-        for (Index = 0; TRUE; Index++)
-        {
-            ULONG NeededLength;
-            PKEY_BASIC_INFORMATION BasicInfo;
-
-            Status = ZwEnumerateKey(CriticalDeviceKey,
-                                    Index,
-                                    KeyBasicInformation,
-                                    NULL,
-                                    0,
-                                    &NeededLength);
-            if (Status == STATUS_NO_MORE_ENTRIES)
-                break;
-            else if (Status == STATUS_BUFFER_OVERFLOW || Status == STATUS_BUFFER_TOO_SMALL)
-            {
-                UNICODE_STRING ChildIdNameU, RegKeyNameU;
-
-                BasicInfo = ExAllocatePool(PagedPool, NeededLength);
-                if (!BasicInfo)
-                {
-                    /* No memory */
-                    ExFreePool(OriginalIdBuffer);
-                    ZwClose(CriticalDeviceKey);
-                    ZwClose(InstanceKey);
-                    return;
-                }
-
-                Status = ZwEnumerateKey(CriticalDeviceKey,
-                                        Index,
-                                        KeyBasicInformation,
-                                        BasicInfo,
-                                        NeededLength,
-                                        &NeededLength);
-                if (Status != STATUS_SUCCESS)
-                {
-                    /* This shouldn't happen */
-                    ExFreePool(BasicInfo);
-                    continue;
-                }
-
-                ChildIdNameU.Buffer = IdBuffer;
-                ChildIdNameU.MaximumLength = ChildIdNameU.Length = (StringLength - 1) * sizeof(WCHAR);
-                RegKeyNameU.Buffer = BasicInfo->Name;
-                RegKeyNameU.MaximumLength = RegKeyNameU.Length = (USHORT)BasicInfo->NameLength;
-
-                if (RtlEqualUnicodeString(&ChildIdNameU, &RegKeyNameU, TRUE))
-                {
-                    HANDLE ChildKeyHandle;
-
-                    InitializeObjectAttributes(&ObjectAttributes,
-                                               &ChildIdNameU,
-                                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
-                                               CriticalDeviceKey,
-                                               NULL);
-
-                    Status = ZwOpenKey(&ChildKeyHandle,
-                                       KEY_QUERY_VALUE,
-                                       &ObjectAttributes);
-                    if (Status != STATUS_SUCCESS)
-                    {
-                        ExFreePool(BasicInfo);
-                        continue;
-                    }
-
-                    /* Check if there's already a driver installed */
-                    Status = ZwQueryValueKey(InstanceKey,
-                                             &ServiceU,
-                                             KeyValuePartialInformation,
-                                             NULL,
-                                             0,
-                                             &NeededLength);
-                    if (Status == STATUS_BUFFER_OVERFLOW || Status == STATUS_BUFFER_TOO_SMALL)
-                    {
-                        ExFreePool(BasicInfo);
-                        continue;
-                    }
-
-                    Status = ZwQueryValueKey(ChildKeyHandle,
-                                             &ClassGuidU,
-                                             KeyValuePartialInformation,
-                                             NULL,
-                                             0,
-                                             &NeededLength);
-                    if (Status != STATUS_BUFFER_OVERFLOW && Status != STATUS_BUFFER_TOO_SMALL)
-                    {
-                        ExFreePool(BasicInfo);
-                        continue;
-                    }
-
-                    PartialInfo = ExAllocatePool(PagedPool, NeededLength);
-                    if (!PartialInfo)
-                    {
-                        ExFreePool(OriginalIdBuffer);
-                        ExFreePool(BasicInfo);
-                        ZwClose(InstanceKey);
-                        ZwClose(ChildKeyHandle);
-                        ZwClose(CriticalDeviceKey);
-                        return;
-                    }
-
-                    /* Read ClassGUID entry in the CDDB */
-                    Status = ZwQueryValueKey(ChildKeyHandle,
-                                             &ClassGuidU,
-                                             KeyValuePartialInformation,
-                                             PartialInfo,
-                                             NeededLength,
-                                             &NeededLength);
-                    if (Status != STATUS_SUCCESS)
-                    {
-                        ExFreePool(BasicInfo);
-                        continue;
-                    }
-
-                    /* Write it to the ENUM key */
-                    Status = ZwSetValueKey(InstanceKey,
-                                           &ClassGuidU,
-                                           0,
-                                           REG_SZ,
-                                           PartialInfo->Data,
-                                           PartialInfo->DataLength);
-                    if (Status != STATUS_SUCCESS)
-                    {
-                        ExFreePool(BasicInfo);
-                        ExFreePool(PartialInfo);
-                        ZwClose(ChildKeyHandle);
-                        continue;
-                    }
-
-                    Status = ZwQueryValueKey(ChildKeyHandle,
-                                             &ServiceU,
-                                             KeyValuePartialInformation,
-                                             NULL,
-                                             0,
-                                             &NeededLength);
-                    if (Status == STATUS_BUFFER_OVERFLOW || Status == STATUS_BUFFER_TOO_SMALL)
-                    {
-                        ExFreePool(PartialInfo);
-                        PartialInfo = ExAllocatePool(PagedPool, NeededLength);
-                        if (!PartialInfo)
-                        {
-                            ExFreePool(OriginalIdBuffer);
-                            ExFreePool(BasicInfo);
-                            ZwClose(InstanceKey);
-                            ZwClose(ChildKeyHandle);
-                            ZwClose(CriticalDeviceKey);
-                            return;
-                        }
-
-                        /* Read the service entry from the CDDB */
-                        Status = ZwQueryValueKey(ChildKeyHandle,
-                                                 &ServiceU,
-                                                 KeyValuePartialInformation,
-                                                 PartialInfo,
-                                                 NeededLength,
-                                                 &NeededLength);
-                        if (Status != STATUS_SUCCESS)
-                        {
-                            ExFreePool(BasicInfo);
-                            ExFreePool(PartialInfo);
-                            ZwClose(ChildKeyHandle);
-                            continue;
-                        }
-
-                        /* Write it to the ENUM key */
-                        Status = ZwSetValueKey(InstanceKey,
-                                               &ServiceU,
-                                               0,
-                                               REG_SZ,
-                                               PartialInfo->Data,
-                                               PartialInfo->DataLength);
-                        if (Status != STATUS_SUCCESS)
-                        {
-                            ExFreePool(BasicInfo);
-                            ExFreePool(PartialInfo);
-                            ZwClose(ChildKeyHandle);
-                            continue;
-                        }
-
-                        DPRINT("Installed service '%S' for critical device '%wZ'\n", PartialInfo->Data, &ChildIdNameU);
-                    }
-                    else
-                    {
-                        DPRINT1("Installed NULL service for critical device '%wZ'\n", &ChildIdNameU);
-                    }
-
-                    /* Create the Control\Class driver key + "Driver" value so
-                     * IoOpenDeviceRegistryKey(PLUGPLAY_REGKEY_DRIVER) works for
-                     * this CDDB-installed device. */
-                    IopEnsureCriticalDeviceDriverKey(InstanceKey, ChildKeyHandle);
-
-                    ExFreePool(OriginalIdBuffer);
-                    ExFreePool(PartialInfo);
-                    ExFreePool(BasicInfo);
-                    ZwClose(InstanceKey);
-                    ZwClose(ChildKeyHandle);
-                    ZwClose(CriticalDeviceKey);
-
-                    /* That's it */
-                    return;
-                }
-
-                ExFreePool(BasicInfo);
-            }
-            else
-            {
-                /* Umm, not sure what happened here */
-                continue;
-            }
-        }
-
-        /* Advance to the next ID */
-        IdBuffer += StringLength;
-    }
-
-    ExFreePool(OriginalIdBuffer);
-    ZwClose(InstanceKey);
-    ZwClose(CriticalDeviceKey);
-}
+typedef struct _IOP_DRIVER_DATABASE_CONFIGURATION
+{
+    WCHAR Configuration[260];
+    WCHAR Service[260];
+    WCHAR Description[512];
+    WCHAR Manufacturer[512];
+    WCHAR Provider[260];
+    WCHAR MatchingDeviceId[200];
+    WCHAR Token[260];
+    WCHAR Text[64];
+} IOP_DRIVER_DATABASE_CONFIGURATION, *PIOP_DRIVER_DATABASE_CONFIGURATION;
 
 static
 NTSTATUS
 IopOpenDriverDatabaseKey(
     _Out_ PHANDLE KeyHandle,
-    _In_ HANDLE ParentKey,
+    _In_opt_ HANDLE ParentKey,
     _In_ PCWSTR Format,
-    _In_ PCWSTR Argument)
+    _In_ PCWSTR Argument,
+    _In_ ACCESS_MASK DesiredAccess)
 {
     UNICODE_STRING KeyName;
     WCHAR Buffer[512];
@@ -588,7 +191,7 @@ IopOpenDriverDatabaseKey(
         return Status;
 
     RtlInitUnicodeString(&KeyName, Buffer);
-    return IopOpenRegistryKeyEx(KeyHandle, ParentKey, &KeyName, KEY_READ);
+    return IopOpenRegistryKeyEx(KeyHandle, ParentKey, &KeyName, DesiredAccess);
 }
 
 static
@@ -617,6 +220,31 @@ IopGetDriverDatabaseString(
     Buffer[Length - 1] = UNICODE_NULL;
     ExFreePool(Information);
     return TRUE;
+}
+
+static
+VOID
+IopSetDriverDatabaseValue(
+    _In_ HANDLE Key,
+    _In_ PCWSTR ValueName,
+    _In_ ULONG Type,
+    _In_reads_bytes_(DataLength) PVOID Data,
+    _In_ ULONG DataLength)
+{
+    UNICODE_STRING Name;
+
+    RtlInitUnicodeString(&Name, ValueName);
+    ZwSetValueKey(Key, &Name, 0, Type, Data, DataLength);
+}
+
+static
+VOID
+IopSetDriverDatabaseString(
+    _In_ HANDLE Key,
+    _In_ PCWSTR ValueName,
+    _In_ PCWSTR Value)
+{
+    IopSetDriverDatabaseValue(Key, ValueName, REG_SZ, (PVOID)Value, ((ULONG)wcslen(Value) + 1) * sizeof(WCHAR));
 }
 
 static
@@ -687,108 +315,421 @@ IopCopyRegistryTree(
 
 static
 BOOLEAN
-IopApplyDriverDatabaseId(
-    _In_ HANDLE Database,
-    _In_ HANDLE InstanceKey,
-    _In_ PCWSTR DeviceId)
+IopGetDriverDatabaseVersion(
+    _In_ HANDLE Package,
+    _Out_ PIOP_DRIVER_DATABASE_MATCH Match)
 {
-    UNICODE_STRING ServiceU = RTL_CONSTANT_STRING(L"Service");
-    UNICODE_STRING ClassGuidU = RTL_CONSTANT_STRING(L"ClassGUID");
-    UNICODE_STRING DeviceU = RTL_CONSTANT_STRING(L"Device");
-    UNICODE_STRING ParametersU = RTL_CONSTANT_STRING(L"Device Parameters");
-    UNICODE_STRING GuidString;
-    PKEY_VALUE_BASIC_INFORMATION InfInformation;
-    PKEY_VALUE_FULL_INFORMATION VersionInformation;
-    HANDLE DeviceIds = NULL, InfFile = NULL, Package = NULL, Descriptor = NULL;
-    HANDLE Configuration = NULL, Source = NULL, Destination = NULL;
-    WCHAR InfName[260], PackageId[260], ConfigurationName[260], Service[260];
-    ULONG Index, Length;
-    GUID ClassGuid;
-    BOOLEAN Applied = FALSE;
-    NTSTATUS Status;
+    PKEY_VALUE_FULL_INFORMATION Information;
+    PUCHAR Data;
 
-    if (!NT_SUCCESS(IopOpenDriverDatabaseKey(&DeviceIds, Database, L"DeviceIds\\%s", DeviceId)))
+    if (!NT_SUCCESS(IopGetRegistryValue(Package, L"Version", &Information)))
         return FALSE;
 
-    for (Index = 0; !Applied; Index++)
+    if (Information->Type != REG_BINARY || Information->DataLength < 40)
     {
-        Status = ZwEnumerateValueKey(DeviceIds, Index, KeyValueBasicInformation, NULL, 0, &Length);
+        ExFreePool(Information);
+        return FALSE;
+    }
+
+    Data = (PUCHAR)Information + Information->DataOffset;
+    RtlCopyMemory(&Match->ClassGuid, Data + 8, sizeof(Match->ClassGuid));
+    RtlCopyMemory(&Match->DriverDate.QuadPart, Data + 24, sizeof(Match->DriverDate.QuadPart));
+    RtlCopyMemory(&Match->DriverVersion, Data + 32, sizeof(Match->DriverVersion));
+    ExFreePool(Information);
+    return TRUE;
+}
+
+static
+ULONG
+IopGetDriverDatabaseSignatureScore(
+    _In_ HANDLE Package)
+{
+    PKEY_VALUE_FULL_INFORMATION Information;
+    ULONG SignerScore = 0xFF000000;
+
+    if (NT_SUCCESS(IopGetRegistryValue(Package, L"SignerScore", &Information)))
+    {
+        if (Information->Type == REG_DWORD && Information->DataLength == sizeof(ULONG))
+            SignerScore = *(PULONG)((PUCHAR)Information + Information->DataOffset);
+        ExFreePool(Information);
+    }
+
+    return (SignerScore & 0xF0000000) ? (SignerScore & 0xFF000000) : 0;
+}
+
+static
+VOID
+IopRankDriverDatabaseId(
+    _In_ HANDLE Database,
+    _In_ PCWSTR DeviceId,
+    _In_ BOOLEAN Compatible,
+    _In_ ULONG Position,
+    _Inout_ PIOP_DRIVER_DATABASE_MATCH Best,
+    _Inout_ PIOP_DRIVER_DATABASE_MATCH Candidate)
+{
+    PKEY_VALUE_FULL_INFORMATION Information;
+    HANDLE DeviceIds, InfFile, Package;
+    ULONG Index, Length, Identifier, InfPosition;
+    UCHAR Flags, FeatureScore;
+    PUCHAR Data;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(IopOpenDriverDatabaseKey(&DeviceIds, Database, L"DeviceIds\\%s", DeviceId, KEY_READ)))
+        return;
+
+    for (Index = 0; ; Index++)
+    {
+        Status = ZwEnumerateValueKey(DeviceIds, Index, KeyValueFullInformation, NULL, 0, &Length);
         if (Status != STATUS_BUFFER_OVERFLOW && Status != STATUS_BUFFER_TOO_SMALL)
             break;
-        InfInformation = ExAllocatePool(PagedPool, Length);
-        if (!InfInformation)
+        Information = ExAllocatePool(PagedPool, Length);
+        if (!Information)
             break;
-        Status = ZwEnumerateValueKey(DeviceIds, Index, KeyValueBasicInformation, InfInformation, Length, &Length);
-        if (!NT_SUCCESS(Status) || InfInformation->NameLength >= sizeof(InfName))
+        Status = ZwEnumerateValueKey(DeviceIds, Index, KeyValueFullInformation, Information, Length, &Length);
+        if (!NT_SUCCESS(Status) || Information->Type != REG_BINARY || Information->DataLength < 4 ||
+            Information->NameLength >= sizeof(Candidate->InfName))
         {
-            ExFreePool(InfInformation);
+            ExFreePool(Information);
             continue;
         }
-        RtlCopyMemory(InfName, InfInformation->Name, InfInformation->NameLength);
-        InfName[InfInformation->NameLength / sizeof(WCHAR)] = UNICODE_NULL;
-        ExFreePool(InfInformation);
 
-        if (NT_SUCCESS(IopOpenDriverDatabaseKey(&InfFile, Database, L"DriverInfFiles\\%s", InfName)) &&
-            IopGetDriverDatabaseString(InfFile, L"Active", PackageId, RTL_NUMBER_OF(PackageId)) &&
-            NT_SUCCESS(IopOpenDriverDatabaseKey(&Package, Database, L"DriverPackages\\%s", PackageId)) &&
-            NT_SUCCESS(IopOpenDriverDatabaseKey(&Descriptor, Package, L"Descriptors\\%s", DeviceId)) &&
-            IopGetDriverDatabaseString(Descriptor, L"Configuration", ConfigurationName, RTL_NUMBER_OF(ConfigurationName)) &&
-            NT_SUCCESS(IopOpenDriverDatabaseKey(&Configuration, Package, L"Configurations\\%s", ConfigurationName)) &&
-            IopGetDriverDatabaseString(Configuration, L"Service", Service, RTL_NUMBER_OF(Service)) &&
-            NT_SUCCESS(IopGetRegistryValue(Package, L"Version", &VersionInformation)))
+        Data = (PUCHAR)Information + Information->DataOffset;
+        Flags = Data[0];
+        FeatureScore = Data[1];
+        InfPosition = Data[2] | ((ULONG)Data[3] << 8);
+        RtlCopyMemory(Candidate->InfName, Information->Name, Information->NameLength);
+        Candidate->InfName[Information->NameLength / sizeof(WCHAR)] = UNICODE_NULL;
+        ExFreePool(Information);
+
+        if (!Compatible && (Flags & 1))
+            Identifier = Position;
+        else if (!Compatible && (Flags & 2))
+            Identifier = 0x1000 + Position;
+        else if (Compatible && (Flags & 1))
+            Identifier = 0x2000 + Position;
+        else if (Compatible && (Flags & 2))
+            Identifier = 0x3000 + min(Position + InfPosition * 0x100, 0xFFF);
+        else
+            continue;
+
+        if (!NT_SUCCESS(IopOpenDriverDatabaseKey(&InfFile, Database, L"DriverInfFiles\\%s", Candidate->InfName, KEY_READ)))
+            continue;
+        if (!IopGetDriverDatabaseString(InfFile, L"Active", Candidate->PackageId, RTL_NUMBER_OF(Candidate->PackageId)))
         {
-            if (VersionInformation->Type == REG_BINARY &&
-                VersionInformation->DataLength >= 8 + sizeof(GUID))
-            {
-                RtlCopyMemory(&ClassGuid,
-                              (PUCHAR)VersionInformation + VersionInformation->DataOffset + 8,
-                              sizeof(GUID));
-                if (NT_SUCCESS(RtlStringFromGUID(&ClassGuid, &GuidString)))
-                {
-                    for (Length = 0; Length < GuidString.Length / sizeof(WCHAR); Length++)
-                    {
-                        if (GuidString.Buffer[Length] >= L'A' && GuidString.Buffer[Length] <= L'F')
-                            GuidString.Buffer[Length] += L'a' - L'A';
-                    }
-
-                    if (NT_SUCCESS(ZwSetValueKey(InstanceKey, &ClassGuidU, 0, REG_SZ,
-                                                 GuidString.Buffer, GuidString.Length + sizeof(UNICODE_NULL))) &&
-                        NT_SUCCESS(ZwSetValueKey(InstanceKey, &ServiceU, 0, REG_SZ, Service,
-                                                 ((ULONG)wcslen(Service) + 1) * sizeof(WCHAR))))
-                    {
-                        if (NT_SUCCESS(IopOpenRegistryKeyEx(&Source, Configuration, &DeviceU, KEY_READ)))
-                        {
-                            if (NT_SUCCESS(IopCreateRegistryKeyEx(&Destination, InstanceKey, &ParametersU,
-                                                                  KEY_ALL_ACCESS, REG_OPTION_NON_VOLATILE, NULL)))
-                            {
-                                IopCopyRegistryTree(Source, Destination, 0);
-                                ZwClose(Destination);
-                            }
-                            ZwClose(Source);
-                        }
-
-                        IopEnsureCriticalDeviceDriverKey(InstanceKey, NULL);
-                        DPRINT("Configured %S from driver package %S section %S\n", DeviceId, PackageId, ConfigurationName);
-                        Applied = TRUE;
-                    }
-                    RtlFreeUnicodeString(&GuidString);
-                }
-            }
-            ExFreePool(VersionInformation);
-        }
-
-        if (Configuration)
-            ZwClose(Configuration);
-        if (Descriptor)
-            ZwClose(Descriptor);
-        if (Package)
-            ZwClose(Package);
-        if (InfFile)
             ZwClose(InfFile);
-        Configuration = Descriptor = Package = InfFile = NULL;
+            continue;
+        }
+        ZwClose(InfFile);
+
+        if (!NT_SUCCESS(IopOpenDriverDatabaseKey(&Package, Database, L"DriverPackages\\%s", Candidate->PackageId, KEY_READ)))
+            continue;
+        if (!IopGetDriverDatabaseVersion(Package, Candidate))
+        {
+            ZwClose(Package);
+            continue;
+        }
+        Candidate->Rank = IopGetDriverDatabaseSignatureScore(Package) | ((ULONG)FeatureScore << 16) | Identifier;
+        ZwClose(Package);
+
+        if (!Best->Found ||
+            Candidate->Rank < Best->Rank ||
+            (Candidate->Rank == Best->Rank &&
+             (Candidate->DriverDate.QuadPart > Best->DriverDate.QuadPart ||
+              (Candidate->DriverDate.QuadPart == Best->DriverDate.QuadPart &&
+               Candidate->DriverVersion > Best->DriverVersion))))
+        {
+            Candidate->Found = TRUE;
+            RtlStringCbCopyW(Candidate->DeviceId, sizeof(Candidate->DeviceId), DeviceId);
+            RtlCopyMemory(Best, Candidate, sizeof(*Best));
+        }
     }
 
     ZwClose(DeviceIds);
+}
+
+static
+VOID
+IopGetDriverDatabaseText(
+    _In_ HANDLE Strings,
+    _In_ HANDLE Descriptor,
+    _In_ PWSTR ValueName,
+    _Out_writes_(BufferLength) PWSTR Buffer,
+    _In_ ULONG BufferLength,
+    _Out_writes_(TokenLength) PWSTR Token,
+    _In_ ULONG TokenLength)
+{
+    SIZE_T Length;
+
+    Buffer[0] = UNICODE_NULL;
+    if (!IopGetDriverDatabaseString(Descriptor, ValueName, Token, TokenLength))
+        return;
+
+    Length = wcslen(Token);
+    if (Length > 2 && Token[0] == L'%' && Token[Length - 1] == L'%')
+    {
+        Token[Length - 1] = UNICODE_NULL;
+        if (!Strings || !IopGetDriverDatabaseString(Strings, Token + 1, Buffer, BufferLength))
+            Buffer[0] = UNICODE_NULL;
+        return;
+    }
+
+    RtlStringCchCopyW(Buffer, BufferLength, Token);
+}
+
+static
+VOID
+IopGetDriverDatabaseMatchingId(
+    _In_ HANDLE Descriptor,
+    _In_ PCWSTR DeviceId,
+    _Out_writes_(BufferLength) PWSTR Buffer,
+    _In_ ULONG BufferLength)
+{
+    static const WCHAR Separator[] = L"\\Descriptors\\";
+    PKEY_NAME_INFORMATION Information;
+    ULONG Length, Count, Index, SeparatorLength = RTL_NUMBER_OF(Separator) - 1;
+    NTSTATUS Status;
+
+    RtlStringCchCopyW(Buffer, BufferLength, DeviceId);
+
+    Status = ZwQueryKey(Descriptor, KeyNameInformation, NULL, 0, &Length);
+    if (Status != STATUS_BUFFER_OVERFLOW && Status != STATUS_BUFFER_TOO_SMALL)
+        return;
+    Information = ExAllocatePool(PagedPool, Length);
+    if (!Information)
+        return;
+
+    if (NT_SUCCESS(ZwQueryKey(Descriptor, KeyNameInformation, Information, Length, &Length)))
+    {
+        Count = Information->NameLength / sizeof(WCHAR);
+        for (Index = 0; Index + SeparatorLength < Count; Index++)
+        {
+            if (RtlCompareMemory(&Information->Name[Index], Separator, SeparatorLength * sizeof(WCHAR)) ==
+                SeparatorLength * sizeof(WCHAR))
+            {
+                Index += SeparatorLength;
+                if (Count - Index < BufferLength)
+                {
+                    RtlCopyMemory(Buffer, &Information->Name[Index], (Count - Index) * sizeof(WCHAR));
+                    Buffer[Count - Index] = UNICODE_NULL;
+                }
+                break;
+            }
+        }
+    }
+
+    ExFreePool(Information);
+}
+
+static
+VOID
+IopApplyDriverDatabaseServices(
+    _In_ HANDLE Configuration,
+    _Inout_ PIOP_DRIVER_DATABASE_CONFIGURATION Config)
+{
+    UNICODE_STRING ServicesU = RTL_CONSTANT_STRING(L"Services");
+    PKEY_BASIC_INFORMATION Information;
+    UNICODE_STRING Name;
+    HANDLE Services, Source, Destination;
+    ULONG Index, Length;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&Services, Configuration, &ServicesU, KEY_READ)))
+        return;
+
+    for (Index = 0; ; Index++)
+    {
+        Status = ZwEnumerateKey(Services, Index, KeyBasicInformation, NULL, 0, &Length);
+        if (Status != STATUS_BUFFER_OVERFLOW && Status != STATUS_BUFFER_TOO_SMALL)
+            break;
+        Information = ExAllocatePool(PagedPool, Length);
+        if (!Information)
+            break;
+        Status = ZwEnumerateKey(Services, Index, KeyBasicInformation, Information, Length, &Length);
+        if (!NT_SUCCESS(Status) || Information->NameLength >= sizeof(Config->Token))
+        {
+            ExFreePool(Information);
+            continue;
+        }
+        RtlCopyMemory(Config->Token, Information->Name, Information->NameLength);
+        Config->Token[Information->NameLength / sizeof(WCHAR)] = UNICODE_NULL;
+        ExFreePool(Information);
+
+        RtlInitUnicodeString(&Name, Config->Token);
+        if (!NT_SUCCESS(IopOpenRegistryKeyEx(&Source, Services, &Name, KEY_READ)))
+            continue;
+        if (NT_SUCCESS(IopOpenDriverDatabaseKey(&Destination,
+                                                NULL,
+                                                L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\%s",
+                                                Config->Token,
+                                                KEY_ALL_ACCESS)))
+        {
+            IopCopyRegistryTree(Source, Destination, 0);
+            ZwClose(Destination);
+        }
+        ZwClose(Source);
+    }
+
+    ZwClose(Services);
+}
+
+static
+VOID
+IopApplyDriverDatabaseDriverKey(
+    _In_ HANDLE InstanceKey,
+    _In_ HANDLE Configuration,
+    _In_ PIOP_DRIVER_DATABASE_MATCH Match,
+    _Inout_ PIOP_DRIVER_DATABASE_CONFIGURATION Config)
+{
+    UNICODE_STRING DriverU = RTL_CONSTANT_STRING(L"Driver");
+    PKEY_VALUE_FULL_INFORMATION Included;
+    TIME_FIELDS TimeFields;
+    HANDLE DriverKey, Source;
+
+    IopEnsureDeviceDriverKey(InstanceKey);
+    if (!IopGetDriverDatabaseString(InstanceKey, L"Driver", Config->Token, RTL_NUMBER_OF(Config->Token)))
+        return;
+    if (!NT_SUCCESS(IopOpenDriverDatabaseKey(&DriverKey,
+                                            NULL,
+                                            L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class\\%s",
+                                            Config->Token,
+                                            KEY_ALL_ACCESS)))
+    {
+        return;
+    }
+
+    if (Config->Description[0])
+        IopSetDriverDatabaseString(DriverKey, L"DriverDesc", Config->Description);
+    if (Config->Provider[0])
+        IopSetDriverDatabaseString(DriverKey, L"ProviderName", Config->Provider);
+    IopSetDriverDatabaseValue(DriverKey, L"DriverDateData", REG_BINARY,
+                              &Match->DriverDate.QuadPart, sizeof(Match->DriverDate.QuadPart));
+    RtlTimeToTimeFields(&Match->DriverDate, &TimeFields);
+    if (NT_SUCCESS(RtlStringCbPrintfW(Config->Text, sizeof(Config->Text), L"%u-%u-%u",
+                                      TimeFields.Month, TimeFields.Day, TimeFields.Year)))
+    {
+        IopSetDriverDatabaseString(DriverKey, L"DriverDate", Config->Text);
+    }
+    if (NT_SUCCESS(RtlStringCbPrintfW(Config->Text, sizeof(Config->Text), L"%u.%u.%u.%u",
+                                      (ULONG)(Match->DriverVersion >> 48) & 0xFFFF,
+                                      (ULONG)(Match->DriverVersion >> 32) & 0xFFFF,
+                                      (ULONG)(Match->DriverVersion >> 16) & 0xFFFF,
+                                      (ULONG)Match->DriverVersion & 0xFFFF)))
+    {
+        IopSetDriverDatabaseString(DriverKey, L"DriverVersion", Config->Text);
+    }
+    IopSetDriverDatabaseString(DriverKey, L"InfPath", Match->InfName);
+    IopSetDriverDatabaseString(DriverKey, L"InfSection", Config->Configuration);
+    if (NT_SUCCESS(IopGetRegistryValue(Configuration, L"IncludedInfs", &Included)))
+    {
+        if (Included->Type == REG_MULTI_SZ)
+        {
+            IopSetDriverDatabaseValue(DriverKey, L"IncludedInfs", REG_MULTI_SZ,
+                                      (PUCHAR)Included + Included->DataOffset, Included->DataLength);
+        }
+        ExFreePool(Included);
+    }
+    IopSetDriverDatabaseString(DriverKey, L"MatchingDeviceId", Config->MatchingDeviceId);
+
+    if (NT_SUCCESS(IopOpenRegistryKeyEx(&Source, Configuration, &DriverU, KEY_READ)))
+    {
+        IopCopyRegistryTree(Source, DriverKey, 0);
+        ZwClose(Source);
+    }
+
+    ZwClose(DriverKey);
+}
+
+static
+BOOLEAN
+IopApplyDriverDatabaseMatch(
+    _In_ HANDLE Database,
+    _In_ HANDLE InstanceKey,
+    _In_ PIOP_DRIVER_DATABASE_MATCH Match)
+{
+    UNICODE_STRING DeviceU = RTL_CONSTANT_STRING(L"Device");
+    UNICODE_STRING StringsU = RTL_CONSTANT_STRING(L"Strings");
+    UNICODE_STRING ParametersU = RTL_CONSTANT_STRING(L"Device Parameters");
+    PIOP_DRIVER_DATABASE_CONFIGURATION Config;
+    PKEY_VALUE_FULL_INFORMATION ConfigFlags;
+    HANDLE Package = NULL, Descriptor = NULL, Configuration = NULL, Strings = NULL;
+    HANDLE Source, Destination;
+    UNICODE_STRING GuidString;
+    ULONG Index, Flags = 0;
+    BOOLEAN Applied = FALSE;
+
+    Config = ExAllocatePoolWithTag(PagedPool, sizeof(*Config), TAG_IO);
+    if (!Config)
+        return FALSE;
+    RtlZeroMemory(Config, sizeof(*Config));
+
+    if (!NT_SUCCESS(IopOpenDriverDatabaseKey(&Package, Database, L"DriverPackages\\%s", Match->PackageId, KEY_READ)) ||
+        !NT_SUCCESS(IopOpenDriverDatabaseKey(&Descriptor, Package, L"Descriptors\\%s", Match->DeviceId, KEY_READ)) ||
+        !IopGetDriverDatabaseString(Descriptor, L"Configuration", Config->Configuration, RTL_NUMBER_OF(Config->Configuration)) ||
+        !NT_SUCCESS(IopOpenDriverDatabaseKey(&Configuration, Package, L"Configurations\\%s", Config->Configuration, KEY_READ)) ||
+        !IopGetDriverDatabaseString(Configuration, L"Service", Config->Service, RTL_NUMBER_OF(Config->Service)) ||
+        !NT_SUCCESS(RtlStringFromGUID(&Match->ClassGuid, &GuidString)))
+    {
+        goto Cleanup;
+    }
+
+    for (Index = 0; Index < GuidString.Length / sizeof(WCHAR); Index++)
+    {
+        if (GuidString.Buffer[Index] >= L'A' && GuidString.Buffer[Index] <= L'F')
+            GuidString.Buffer[Index] += L'a' - L'A';
+    }
+
+    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&Strings, Package, &StringsU, KEY_READ)))
+        Strings = NULL;
+    IopGetDriverDatabaseText(Strings, Descriptor, L"Description", Config->Description,
+                             RTL_NUMBER_OF(Config->Description), Config->Token, RTL_NUMBER_OF(Config->Token));
+    IopGetDriverDatabaseText(Strings, Descriptor, L"Manufacturer", Config->Manufacturer,
+                             RTL_NUMBER_OF(Config->Manufacturer), Config->Token, RTL_NUMBER_OF(Config->Token));
+    if (!IopGetDriverDatabaseString(Package, L"Provider", Config->Provider, RTL_NUMBER_OF(Config->Provider)))
+        Config->Provider[0] = UNICODE_NULL;
+    IopGetDriverDatabaseMatchingId(Descriptor, Match->DeviceId, Config->MatchingDeviceId,
+                                   RTL_NUMBER_OF(Config->MatchingDeviceId));
+
+    IopSetDriverDatabaseValue(InstanceKey, L"ClassGUID", REG_SZ, GuidString.Buffer,
+                              GuidString.Length + sizeof(UNICODE_NULL));
+    RtlFreeUnicodeString(&GuidString);
+    IopSetDriverDatabaseString(InstanceKey, L"Service", Config->Service);
+    if (Config->Description[0])
+        IopSetDriverDatabaseString(InstanceKey, L"DeviceDesc", Config->Description);
+    if (Config->Manufacturer[0])
+        IopSetDriverDatabaseString(InstanceKey, L"Mfg", Config->Manufacturer);
+    if (NT_SUCCESS(IopGetRegistryValue(InstanceKey, L"ConfigFlags", &ConfigFlags)))
+        ExFreePool(ConfigFlags);
+    else
+        IopSetDriverDatabaseValue(InstanceKey, L"ConfigFlags", REG_DWORD, &Flags, sizeof(Flags));
+
+    if (NT_SUCCESS(IopOpenRegistryKeyEx(&Source, Configuration, &DeviceU, KEY_READ)))
+    {
+        if (NT_SUCCESS(IopCreateRegistryKeyEx(&Destination, InstanceKey, &ParametersU,
+                                              KEY_ALL_ACCESS, REG_OPTION_NON_VOLATILE, NULL)))
+        {
+            IopCopyRegistryTree(Source, Destination, 0);
+            ZwClose(Destination);
+        }
+        ZwClose(Source);
+    }
+
+    IopApplyDriverDatabaseDriverKey(InstanceKey, Configuration, Match, Config);
+    IopApplyDriverDatabaseServices(Configuration, Config);
+
+    DPRINT("Configured %S from driver package %S section %S rank 0x%08lx\n",
+           Match->DeviceId, Match->PackageId, Config->Configuration, Match->Rank);
+    Applied = TRUE;
+
+Cleanup:
+    if (Strings)
+        ZwClose(Strings);
+    if (Configuration)
+        ZwClose(Configuration);
+    if (Descriptor)
+        ZwClose(Descriptor);
+    if (Package)
+        ZwClose(Package);
+    ExFreePoolWithTag(Config, TAG_IO);
     return Applied;
 }
 
@@ -800,12 +741,13 @@ IopConfigureDeviceFromDriverDatabase(
     UNICODE_STRING DatabaseU = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\DriverDatabase");
     PKEY_VALUE_FULL_INFORMATION Ids[2] = { NULL, NULL };
     PWSTR IdNames[2] = { L"HardwareID", L"CompatibleIDs" };
+    PIOP_DRIVER_DATABASE_MATCH Matches;
     PKEY_VALUE_FULL_INFORMATION Service;
     HANDLE Database, InstanceKey;
     BOOLEAN Applied = FALSE;
     PCWSTR Id, End;
     SIZE_T IdLength;
-    ULONG List;
+    ULONG List, Position;
 
     if (!NT_SUCCESS(IopCreateDeviceKeyPath(&DeviceNode->InstancePath, REG_OPTION_NON_VOLATILE, &InstanceKey)))
         return FALSE;
@@ -823,7 +765,16 @@ IopConfigureDeviceFromDriverDatabase(
         return FALSE;
     }
 
-    for (List = 0; List < RTL_NUMBER_OF(Ids) && !Applied; List++)
+    Matches = ExAllocatePoolWithTag(PagedPool, 2 * sizeof(*Matches), TAG_IO);
+    if (!Matches)
+    {
+        ZwClose(Database);
+        ZwClose(InstanceKey);
+        return FALSE;
+    }
+    RtlZeroMemory(Matches, 2 * sizeof(*Matches));
+
+    for (List = 0; List < RTL_NUMBER_OF(Ids); List++)
     {
         if (!NT_SUCCESS(IopGetRegistryValue(InstanceKey, IdNames[List], &Ids[List])))
             continue;
@@ -832,22 +783,26 @@ IopConfigureDeviceFromDriverDatabase(
 
         Id = (PCWSTR)((PUCHAR)Ids[List] + Ids[List]->DataOffset);
         End = Id + Ids[List]->DataLength / sizeof(WCHAR);
-        while (Id < End && *Id && !Applied)
+        for (Position = 0; Id < End && *Id && Position < 0x1000; Position++)
         {
             IdLength = wcsnlen(Id, End - Id);
             if (IdLength == (SIZE_T)(End - Id))
                 break;
-            if (IdLength < 200)
-                Applied = IopApplyDriverDatabaseId(Database, InstanceKey, Id);
+            if (IdLength < RTL_NUMBER_OF(Matches->DeviceId))
+                IopRankDriverDatabaseId(Database, Id, List != 0, Position, &Matches[0], &Matches[1]);
             Id += IdLength + 1;
         }
     }
+
+    if (Matches[0].Found)
+        Applied = IopApplyDriverDatabaseMatch(Database, InstanceKey, &Matches[0]);
 
     for (List = 0; List < RTL_NUMBER_OF(Ids); List++)
     {
         if (Ids[List])
             ExFreePool(Ids[List]);
     }
+    ExFreePoolWithTag(Matches, TAG_IO);
     ZwClose(Database);
     ZwClose(InstanceKey);
     return Applied;
@@ -2182,7 +2137,7 @@ IoOpenDeviceRegistryKey(IN PDEVICE_OBJECT DeviceObject,
             Status = IopCreateDeviceKeyPath(&DeviceNode->InstancePath, REG_OPTION_NON_VOLATILE, &InstanceKey);
             if (!NT_SUCCESS(Status))
                 return Status;
-            IopEnsureCriticalDeviceDriverKey(InstanceKey, NULL);
+            IopEnsureDeviceDriverKey(InstanceKey);
             ZwClose(InstanceKey);
             Status = IoGetDeviceProperty(DeviceObject, DevicePropertyDriverKeyName,
                                          0, NULL, &DriverKeyLength);

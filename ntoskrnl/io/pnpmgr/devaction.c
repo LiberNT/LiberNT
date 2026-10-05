@@ -106,10 +106,6 @@ IopGetBusTypeGuidIndex(LPGUID BusTypeGuid);
 NTSTATUS
 IopSetDeviceInstanceData(HANDLE InstanceKey, PDEVICE_NODE DeviceNode);
 
-VOID
-NTAPI
-IopInstallCriticalDevice(PDEVICE_NODE DeviceNode);
-
 BOOLEAN
 NTAPI
 IopConfigureDeviceFromDriverDatabase(
@@ -1703,15 +1699,14 @@ PiInitializeDevNode(
     PiSetDevNodeFlag(DeviceNode, DNF_IDS_QUERIED);
 
     /*
-     * Install a CriticalDeviceDatabase match before asking the bus driver for
-     * resource requirements. The CDDB entry can provision the device's
-     * Driver/Class key, including DDInstall.HW policy such as
+     * Configure the device from the driver database before asking the bus
+     * driver for resource requirements. The configuration can provision the
+     * device's Driver/Class key, including DDInstall.HW policy such as
      * MSISupported. Querying first permanently caches requirements generated
      * without that policy and can strand a message-capable device on legacy
      * INTx during its first start.
      */
-    if (!IopConfigureDeviceFromDriverDatabase(DeviceNode))
-        IopInstallCriticalDevice(DeviceNode);
+    IopConfigureDeviceFromDriverDatabase(DeviceNode);
 
     // Set the device's DeviceDesc and LocationInformation fields
     PiSetDevNodeText(DeviceNode, InstanceKey);
