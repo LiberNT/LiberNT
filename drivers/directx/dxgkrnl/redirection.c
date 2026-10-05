@@ -85,6 +85,12 @@ DxgkRegisterWin32kCddInterface(
     else if (Interface->Version ==
              DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_5)
     {
+        RequiredSize = FIELD_OFFSET(DXGKRNL_WIN32K_CDD_INTERFACE,
+                                    RefreshComposition);
+    }
+    else if (Interface->Version ==
+             DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_6)
+    {
         RequiredSize = sizeof(*Interface);
     }
     else
@@ -226,6 +232,57 @@ DxgkQueryWindowPresentState(_In_ ULONG_PTR WindowHandle)
     KeLeaveCriticalRegion();
 
     return Callback != NULL ? Callback(WindowHandle) : STATUS_NOT_SUPPORTED;
+}
+
+static WORK_QUEUE_ITEM DxgkpCompositionRefreshWorkItem;
+static volatile LONG DxgkpCompositionRefreshQueued;
+
+static VOID
+DxgkpRefreshCompositionNow(VOID)
+{
+    PDXGKENG_REFRESH_COMPOSITION Callback;
+
+    KeEnterCriticalRegion();
+    ExfAcquirePushLockShared(&DxgkpWin32kCddInterfaceLock);
+    Callback = DxgkpWin32kCddInterface.RefreshComposition;
+    ExfReleasePushLockShared(&DxgkpWin32kCddInterfaceLock);
+    KeLeaveCriticalRegion();
+
+    if (Callback != NULL)
+        Callback();
+}
+
+static VOID
+NTAPI
+DxgkpCompositionRefreshWorker(
+    _In_ PVOID Parameter)
+{
+    UNREFERENCED_PARAMETER(Parameter);
+
+    /* Re-arm first: a request made during the refresh queues another. */
+    InterlockedExchange(&DxgkpCompositionRefreshQueued, 0);
+    DxgkpRefreshCompositionNow();
+}
+
+/*
+ * DxgkRequestCompositionRefresh
+ *
+ * Asks the compositor to compose and present a complete frame, as Windows
+ * notifies DWM when a miniport withdraws an overlay configuration.  The
+ * request is asynchronous and coalesced.  It is always deferred: a miniport
+ * may make it from inside a mode set that win32k started under its USER
+ * lock, which the refresh needs.
+ *
+ * IRQL: <= DISPATCH_LEVEL
+ */
+VOID
+DxgkRequestCompositionRefresh(VOID)
+{
+    if (InterlockedCompareExchange(&DxgkpCompositionRefreshQueued, 1, 0) != 0)
+        return;
+    ExInitializeWorkItem(&DxgkpCompositionRefreshWorkItem,
+                         DxgkpCompositionRefreshWorker, NULL);
+    ExQueueWorkItem(&DxgkpCompositionRefreshWorkItem, DelayedWorkQueue);
 }
 
 NTSTATUS

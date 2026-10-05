@@ -51,9 +51,15 @@ C_ASSERT(RXGK_D3DKMT_PRESENT_WIRE_SIZE <= sizeof(D3DKMT_PRESENT));
 /*
  * A compositor flip with overlay planes above its primary. The flip's
  * D3DKMT_PRESENT, RXGK_D3DKMT_PRESENT_WIRE_SIZE bytes, follows this header.
- * Each overlay is a linear surface the miniport scans out unscaled.
+ * The miniport is asked whether it can show the planes as described before
+ * the flip is queued.
  */
 #define RXGK_PRESENT_MAX_OVERLAYS 2
+
+/* RXGK_PRESENT_OVERLAY.Flags */
+#define RXGK_PRESENT_OVERLAY_VERTICAL_FLIP   0x00000001U
+#define RXGK_PRESENT_OVERLAY_HORIZONTAL_FLIP 0x00000002U
+#define RXGK_PRESENT_OVERLAY_VALID_FLAGS     0x00000003U
 
 typedef struct _RXGK_PRESENT_OVERLAY
 {
@@ -61,7 +67,16 @@ typedef struct _RXGK_PRESENT_OVERLAY
     UINT LayerIndex;            /* 1 is directly above the primary */
     RECT SrcRect;
     RECT DstRect;
+    RECT ClipRect;              /* empty: DstRect */
+    UINT Flags;                 /* RXGK_PRESENT_OVERLAY_* */
+    UINT Rotation;              /* D3DDDI_ROTATION; 0: identity */
+    UINT AlphaBlend;            /* premultiplied over the plane below */
+    UINT ColorSpace;            /* D3DDDI_COLOR_SPACE_TYPE */
+    UINT StretchQuality;        /* DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY; 0: bilinear */
+    UINT SdrWhiteLevel;         /* nits for sRGB 1.0 in HDR mode; 0: 80 */
 } RXGK_PRESENT_OVERLAY;
+
+C_ASSERT(sizeof(RXGK_PRESENT_OVERLAY) == 80);
 
 typedef struct _RXGK_PRESENT_OVERLAYS
 {
@@ -71,6 +86,79 @@ typedef struct _RXGK_PRESENT_OVERLAYS
 } RXGK_PRESENT_OVERLAYS;
 
 C_ASSERT(sizeof(RXGK_PRESENT_OVERLAYS) % 8 == 0);
+
+/*
+ * Multi-plane overlay queries.  The packets hold only fixed-width fields
+ * and are laid out alike on x86, amd64 and ARM64.
+ */
+#define IOCTL_RXGK_GETMULTIPLANEOVERLAYCAPS \
+    CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x1D6, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_RXGK_CHECKMULTIPLANEOVERLAYSUPPORT \
+    CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x1D7, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+#define RXGK_MPO_PACKET_VERSION_1           1U
+#define RXGK_MPO_MAX_PLANES                 16U   /* FailingPlane is 4 bits */
+#define RXGK_MPO_MAX_POST_COMPOSITION       16U
+
+/* In: hAdapter, VidPnSourceId.  Out: the miniport's
+ * DXGKARG_GETMULTIPLANEOVERLAYCAPS, OverlayCaps as D3DKMT_MULTIPLANE_OVERLAY_CAPS. */
+typedef struct _RXGK_GETMULTIPLANEOVERLAYCAPS_PACKET
+{
+    ULONG Size;
+    ULONG Version;
+    D3DKMT_HANDLE hAdapter;
+    UINT VidPnSourceId;
+    UINT MaxPlanes;
+    UINT MaxRGBPlanes;
+    UINT MaxYUVPlanes;
+    UINT OverlayCaps;
+    float MaxStretchFactor;
+    float MaxShrinkFactor;
+} RXGK_GETMULTIPLANEOVERLAYCAPS_PACKET;
+
+C_ASSERT(sizeof(RXGK_GETMULTIPLANEOVERLAYCAPS_PACKET) == 40);
+
+/* A plane to check: a resource of hDevice (0: a composition surface, which
+ * this kernel cannot scan out) and its attributes; Plane.hAllocation unused. */
+typedef struct _RXGK_CHECKMPO_PLANE
+{
+    D3DKMT_HANDLE hResource;
+    UINT VidPnSourceId;
+    RXGK_PRESENT_OVERLAY Plane;
+} RXGK_CHECKMPO_PLANE;
+
+C_ASSERT(sizeof(RXGK_CHECKMPO_PLANE) == 88);
+
+typedef struct _RXGK_CHECKMPO_POST_COMPOSITION
+{
+    UINT VidPnSourceId;
+    UINT Flags;                 /* RXGK_PRESENT_OVERLAY_*_FLIP */
+    RECT SrcRect;
+    RECT DstRect;
+    UINT Rotation;              /* D3DDDI_ROTATION; 0: identity */
+} RXGK_CHECKMPO_POST_COMPOSITION;
+
+C_ASSERT(sizeof(RXGK_CHECKMPO_POST_COMPOSITION) == 44);
+
+/*
+ * Followed by PlaneCount RXGK_CHECKMPO_PLANE and PostCompositionCount
+ * RXGK_CHECKMPO_POST_COMPOSITION; Size covers all of it.  hAdapter is
+ * optional (0) for the first-generation query, which names only hDevice.
+ * Out: Supported and ReturnInfo (D3DKMT_CHECK_MULTIPLANE_OVERLAY_SUPPORT_RETURN_INFO).
+ */
+typedef struct _RXGK_CHECKMPO_PACKET
+{
+    ULONG Size;
+    ULONG Version;
+    D3DKMT_HANDLE hAdapter;
+    D3DKMT_HANDLE hDevice;
+    UINT PlaneCount;
+    UINT PostCompositionCount;
+    UINT Supported;
+    UINT ReturnInfo;
+} RXGK_CHECKMPO_PACKET;
+
+C_ASSERT(sizeof(RXGK_CHECKMPO_PACKET) == 32);
 #if defined(_WIN64)
 C_ASSERT(FIELD_OFFSET(D3DKMT_PRESENT, PresentHistoryToken) == 360);
 #else
@@ -103,8 +191,9 @@ C_ASSERT(FIELD_OFFSET(D3DKMT_PRESENT, PresentHistoryToken) == 344);
 #define DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_3 3
 #define DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_4 4
 #define DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_5 5
+#define DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_6 6
 #define DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_CURRENT \
-    DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_5
+    DXGKRNL_WIN32K_CDD_INTERFACE_VERSION_6
 
 typedef struct _DXGKRNL_REDIRECTED_BLT_PRESENT
 {
@@ -163,6 +252,15 @@ NTSTATUS
 (NTAPI *PDXGKENG_QUERY_WINDOW_PRESENT_STATE)(
     _In_ ULONG_PTR WindowHandle);
 
+/*
+ * The display can no longer show what the compositor last presented (a
+ * miniport withdrew its overlay planes): compose and present the whole frame
+ * again.  PASSIVE_LEVEL.
+ */
+typedef
+VOID
+(NTAPI *PDXGKENG_REFRESH_COMPOSITION)(VOID);
+
 typedef struct _DXGKRNL_WIN32K_CDD_INTERFACE
 {
     ULONG Size;
@@ -173,6 +271,7 @@ typedef struct _DXGKRNL_WIN32K_CDD_INTERFACE
     PDXGKENG_CANCEL_REDIRECTED_BLT_PRESENT CancelRedirectedBltPresent;
     PDXGKENG_DISPATCH_NTGDI DispatchNtGdi;
     PDXGKENG_QUERY_WINDOW_PRESENT_STATE QueryWindowPresentState;
+    PDXGKENG_REFRESH_COMPOSITION RefreshComposition;
 } DXGKRNL_WIN32K_CDD_INTERFACE, *PDXGKRNL_WIN32K_CDD_INTERFACE;
 
 #define DXGKRNL_INTERFACE_VERSION_1        1

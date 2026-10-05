@@ -83,6 +83,7 @@ typedef struct _DXGKRNL_VBLANK_WAITER
 } DXGKRNL_VBLANK_WAITER, *PDXGKRNL_VBLANK_WAITER;
 
 static VOID NTAPI DxgkpVSyncWorker(_In_ PVOID Context);
+static VOID DxgkpDeliverMpoPostPresent(_In_ PDXGKRNL_ADAPTER Adapter, _Inout_ PDXGKRNL_PRESENT_QUEUE Queue);
 static NTSTATUS DxgkpExecuteFullPresent(_In_ PDXGKRNL_ADAPTER Adapter, _In_ PDXGKRNL_PRESENT_ENTRY Entry);
 static NTSTATUS DxgkpSelectPresentNode(_In_ PDXGKRNL_ADAPTER Adapter, _In_ DXGKRNL_PRESENT_TYPE PresentType, _Out_ PULONG OutNode);
 static NTSTATUS DxgkpSelectCddPresentEngine(_In_ PDXGKRNL_ADAPTER Adapter, _Out_ PULONG OutNode, _Out_ PUINT OutEngineAffinity);
@@ -2068,7 +2069,10 @@ DxgkpCaptureDesktop(
 
 Cleanup:
     if (MmioLocked)
+    {
         KeReleaseMutex(&Queue->MmioPresentMutex, FALSE);
+        DxgkpDeliverMpoPostPresent(Adapter, Queue);
+    }
     if (Queue != NULL)
         KeReleaseMutex(&Queue->ExecutionMutex, FALSE);
     if (Entry.DestinationOpenBindingReference != NULL)
@@ -2357,6 +2361,9 @@ DxgkPresentRetireScanout(
         RtlZeroMemory(Queues[Index].MmioPendingOverlays, sizeof(Queues[Index].MmioPendingOverlays));
         Queues[Index].MmioFailureStatus = STATUS_SUCCESS;
         Queues[Index].MmioLastFlipSequence = 0;
+        /* The reset discarded the configurations those notices were about. */
+        if (Index < 32)
+            InterlockedExchange(&Adapter->MpoPostPresentLayers[Index], 0);
         KeReleaseMutex(&Queues[Index].MmioPresentMutex, FALSE);
         DxgkpReleaseScanoutAllocation(Pending);
         DxgkpReleaseScanoutAllocation(Current);
@@ -4228,11 +4235,322 @@ DxgkpSetMmioSourceAddress(
     return NT_SUCCESS(Call->Status);
 }
 
+/* ========================================================================
+ * Multi-plane overlay configuration
+ *
+ * A WDDM 2.1+ miniport that supports overlay planes implements
+ * DxgkDdiCheckMultiPlaneOverlaySupport3 and is driven through
+ * DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3; a WDDM 1.3 miniport
+ * through the first-generation pair.  Admission, the public check and the
+ * armed flip pick the same generation, so a configuration the miniport
+ * accepted is the one it is asked to show.
+ * ====================================================================== */
+
+BOOLEAN
+DxgkMpo3Supported(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)
+    return Adapter->MiniportContext != NULL &&
+           !Adapter->MiniportContext->IsDisplayOnlyDriver &&
+           DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version,
+                                               DXGK_CAPS_CORE_LEVEL_WDDM_2_1) &&
+           DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport3) != NULL &&
+           DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3) != NULL;
+#else
+    UNREFERENCED_PARAMETER(Adapter);
+    return FALSE;
+#endif
+}
+
+static BOOLEAN
+DxgkpMpo1Supported(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    return REACTOS_WDDM_TARGET_LEVEL >= 1300 &&
+           Adapter->MiniportContext != NULL &&
+           !Adapter->MiniportContext->IsDisplayOnlyDriver &&
+           DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport) != NULL &&
+           DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay) != NULL;
+}
+
+BOOLEAN
+DxgkMpoSupported(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    return DxgkMpo3Supported(Adapter) || DxgkpMpo1Supported(Adapter);
+}
+
+/* Fields a compositor leaves zero mean identity rotation, bilinear
+ * stretching and, for an empty ClipRect, no clipping beyond DstRect. */
+NTSTATUS
+DxgkMpoCaptureOverlay(
+    _In_ const RXGK_PRESENT_OVERLAY *Overlay,
+    _Out_ PDXGKRNL_PRESENT_OVERLAY Plane)
+{
+    RtlZeroMemory(Plane, sizeof(*Plane));
+    if ((Overlay->Flags & ~RXGK_PRESENT_OVERLAY_VALID_FLAGS) != 0 ||
+        Overlay->Rotation > D3DDDI_ROTATION_270 || Overlay->AlphaBlend > 1 ||
+        Overlay->StretchQuality > DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY_HIGH ||
+        Overlay->ColorSpace == D3DDDI_COLOR_SPACE_CUSTOM ||
+        Overlay->SrcRect.right <= Overlay->SrcRect.left ||
+        Overlay->SrcRect.bottom <= Overlay->SrcRect.top ||
+        Overlay->DstRect.right <= Overlay->DstRect.left ||
+        Overlay->DstRect.bottom <= Overlay->DstRect.top)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Plane->hAllocation = Overlay->hAllocation;
+    Plane->LayerIndex = Overlay->LayerIndex;
+    Plane->SrcRect = Overlay->SrcRect;
+    Plane->DstRect = Overlay->DstRect;
+    if (Overlay->ClipRect.right > Overlay->ClipRect.left &&
+        Overlay->ClipRect.bottom > Overlay->ClipRect.top)
+    {
+        Plane->ClipRect = Overlay->ClipRect;
+    }
+    else
+    {
+        Plane->ClipRect = Overlay->DstRect;
+    }
+    Plane->Flags = Overlay->Flags;
+    Plane->Rotation = Overlay->Rotation != 0 ? (D3DDDI_ROTATION)Overlay->Rotation
+                                             : D3DDDI_ROTATION_IDENTITY;
+    Plane->AlphaBlend = Overlay->AlphaBlend != 0;
+    Plane->ColorSpace = (D3DDDI_COLOR_SPACE_TYPE)Overlay->ColorSpace;
+    Plane->StretchQuality = Overlay->StretchQuality != 0 ? Overlay->StretchQuality
+                                                         : DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY_BILINEAR;
+    Plane->SdrWhiteLevel = Overlay->SdrWhiteLevel;
+    return STATUS_SUCCESS;
+}
+
+/* Layer 0: the compositor's complete output, scanned out as presented. */
+VOID
+DxgkMpoPrimaryPlane(
+    _In_ const RECT *SrcRect,
+    _In_ const RECT *DstRect,
+    _Out_ PDXGKRNL_PRESENT_OVERLAY Plane)
+{
+    RtlZeroMemory(Plane, sizeof(*Plane));
+    Plane->LayerIndex = 0;
+    Plane->SrcRect = *SrcRect;
+    Plane->DstRect = *DstRect;
+    Plane->ClipRect = *DstRect;
+    Plane->Rotation = D3DDDI_ROTATION_IDENTITY;
+    Plane->ColorSpace = D3DDDI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+    Plane->StretchQuality = DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY_BILINEAR;
+}
+
+/* RXGK_PRESENT_OVERLAY_* flags have the DXGK_MULTIPLANE_OVERLAY_FLAGS
+ * layout.  The first-generation attributes have no colour space: they
+ * describe sRGB, which admission requires there. */
+VOID
+DxgkMpoAttributes(
+    _In_ const DXGKRNL_PRESENT_OVERLAY *Plane,
+    _Out_ DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES *Attributes)
+{
+    RtlZeroMemory(Attributes, sizeof(*Attributes));
+    Attributes->Flags.Value = Plane->Flags;
+    Attributes->SrcRect = Plane->SrcRect;
+    Attributes->DstRect = Plane->DstRect;
+    Attributes->ClipRect = Plane->ClipRect;
+    Attributes->Rotation = Plane->Rotation;
+    Attributes->Blend.AlphaBlend = Plane->AlphaBlend ? 1 : 0;
+    Attributes->VideoFrameFormat = DXGK_MULTIPLANE_OVERLAY_VIDEO_FRAME_FORMAT_PROGRESSIVE;
+    Attributes->StereoFormat = DXGK_MULTIPLANE_OVERLAY_STEREO_FORMAT_MONO;
+    Attributes->StretchQuality = (DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY)Plane->StretchQuality;
+}
+
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)
+VOID
+DxgkMpoAttributes3(
+    _In_ const DXGKRNL_PRESENT_OVERLAY *Plane,
+    _Out_ DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3 *Attributes)
+{
+    RtlZeroMemory(Attributes, sizeof(*Attributes));
+    Attributes->Flags.Value = Plane->Flags;
+    Attributes->SrcRect = Plane->SrcRect;
+    Attributes->DstRect = Plane->DstRect;
+    Attributes->ClipRect = Plane->ClipRect;
+    Attributes->Rotation = Plane->Rotation;
+    Attributes->Blend.AlphaBlend = Plane->AlphaBlend ? 1 : 0;
+    Attributes->ColorSpaceType = Plane->ColorSpace;
+    Attributes->StretchQuality = (DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY)Plane->StretchQuality;
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_3)
+    Attributes->SDRWhiteLevel = Plane->SdrWhiteLevel;
+#endif
+}
+#endif
+
+/*
+ * DxgkCheckMultiPlaneOverlay
+ *
+ * Asks the miniport whether it can show PlaneCount planes (each with its
+ * miniport allocation handle and source) plus optional post-composition
+ * transforms.  A configuration the miniport's DDI generation cannot express
+ * is reported unsupported, not as an error.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+NTSTATUS
+DxgkCheckMultiPlaneOverlay(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ UINT PlaneCount,
+    _In_reads_(PlaneCount) const DXGKP_MPO_CHECK_PLANE *Planes,
+    _In_ UINT PostCompositionCount,
+    _In_reads_opt_(PostCompositionCount) const DXGKP_MPO_POST_COMPOSITION *PostComposition,
+    _Out_ BOOL *Supported,
+    _Out_ UINT *ReturnInfo)
+{
+    DXGK_CHECK_MULTIPLANE_OVERLAY_SUPPORT_PLANE *Planes1;
+    DXGKARG_CHECKMULTIPLANEOVERLAYSUPPORT Check1;
+    NTSTATUS Status;
+    UINT Index, Slot, Order[DXGKP_MPO_MAX_LAYERS];
+
+    PAGED_CODE();
+    *Supported = FALSE;
+    *ReturnInfo = 0;
+    if (PlaneCount == 0 || PlaneCount > DXGKP_MPO_MAX_LAYERS ||
+        PostCompositionCount > DXGKP_MPO_MAX_POST_COMPOSITION ||
+        (PostCompositionCount != 0 && PostComposition == NULL))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)
+    if (DxgkMpo3Supported(Adapter))
+    {
+        struct
+        {
+            DXGKARG_CHECKMULTIPLANEOVERLAYSUPPORT3 Args;
+            DXGK_MULTIPLANE_OVERLAY_PLANE_WITH_SOURCE2 Planes[DXGKP_MPO_MAX_LAYERS];
+            DXGK_MULTIPLANE_OVERLAY_PLANE_WITH_SOURCE2 *PlanePointers[DXGKP_MPO_MAX_LAYERS];
+            DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION_WITH_SOURCE Post[DXGKP_MPO_MAX_POST_COMPOSITION];
+            DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION_WITH_SOURCE *PostPointers[DXGKP_MPO_MAX_POST_COMPOSITION];
+        } *Check3;
+
+        Check3 = ExAllocatePoolWithTag(PagedPool, sizeof(*Check3), TAG_DXGK_PRESENT);
+        if (Check3 == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        RtlZeroMemory(Check3, sizeof(*Check3));
+        for (Index = 0; Index < PlaneCount; ++Index)
+        {
+            Check3->Planes[Index].hAllocation = Planes[Index].hAllocation;
+            Check3->Planes[Index].VidPnSourceId = Planes[Index].VidPnSourceId;
+            Check3->Planes[Index].LayerIndex = Planes[Index].Plane.LayerIndex;
+            DxgkMpoAttributes3(&Planes[Index].Plane, &Check3->Planes[Index].PlaneAttributes);
+            Check3->PlanePointers[Index] = &Check3->Planes[Index];
+        }
+        for (Index = 0; Index < PostCompositionCount; ++Index)
+        {
+            Check3->Post[Index].VidPnSourceId = PostComposition[Index].VidPnSourceId;
+            Check3->Post[Index].PostComposition.Flags.Value = PostComposition[Index].Flags;
+            Check3->Post[Index].PostComposition.SrcRect = PostComposition[Index].SrcRect;
+            Check3->Post[Index].PostComposition.DstRect = PostComposition[Index].DstRect;
+            Check3->Post[Index].PostComposition.Rotation = PostComposition[Index].Rotation;
+            Check3->PostPointers[Index] = &Check3->Post[Index];
+        }
+        Check3->Args.PlaneCount = PlaneCount;
+        Check3->Args.ppPlanes = Check3->PlanePointers;
+        Check3->Args.PostCompositionCount = PostCompositionCount;
+        Check3->Args.ppPostComposition = PostCompositionCount != 0 ? Check3->PostPointers : NULL;
+        if (!DxgkAcquireKmdCall(Adapter))
+        {
+            ExFreePoolWithTag(Check3, TAG_DXGK_PRESENT);
+            return STATUS_DELETE_PENDING;
+        }
+        _SEH2_TRY
+        {
+            Status = DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport3)(
+                         Adapter->MiniportDeviceContext, &Check3->Args);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+        DxgkReleaseKmdCall(Adapter);
+        if (NT_SUCCESS(Status))
+        {
+            *Supported = Check3->Args.Supported;
+            *ReturnInfo = Check3->Args.ReturnInfo.Value;
+        }
+        ExFreePoolWithTag(Check3, TAG_DXGK_PRESENT);
+        return Status;
+    }
+#endif
+
+    if (!DxgkpMpo1Supported(Adapter))
+        return STATUS_NOT_SUPPORTED;
+
+    /* The first generation takes the planes bottom-up, with no layer index,
+     * no colour space and no post-composition transform. */
+    for (Index = 0; Index < PlaneCount; ++Index)
+    {
+        for (Slot = Index;
+             Slot > 0 && Planes[Order[Slot - 1]].Plane.LayerIndex > Planes[Index].Plane.LayerIndex;
+             --Slot)
+        {
+            Order[Slot] = Order[Slot - 1];
+        }
+        Order[Slot] = Index;
+    }
+    if (PostCompositionCount != 0)
+        return STATUS_SUCCESS;
+    for (Index = 0; Index < PlaneCount; ++Index)
+    {
+        if (Planes[Order[Index]].Plane.ColorSpace != D3DDDI_COLOR_SPACE_RGB_FULL_G22_NONE_P709)
+        {
+            *ReturnInfo = Order[Index] & 0xF;   /* FailingPlane */
+            return STATUS_SUCCESS;
+        }
+    }
+    Planes1 = ExAllocatePoolWithTag(PagedPool, sizeof(*Planes1) * PlaneCount, TAG_DXGK_PRESENT);
+    if (Planes1 == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(Planes1, sizeof(*Planes1) * PlaneCount);
+    for (Index = 0; Index < PlaneCount; ++Index)
+    {
+        Planes1[Index].hAllocation = Planes[Order[Index]].hAllocation;
+        Planes1[Index].VidPnSourceId = Planes[Order[Index]].VidPnSourceId;
+        DxgkMpoAttributes(&Planes[Order[Index]].Plane, &Planes1[Index].PlaneAttributes);
+    }
+    RtlZeroMemory(&Check1, sizeof(Check1));
+    Check1.PlaneCount = PlaneCount;
+    Check1.pPlanes = Planes1;
+    if (!DxgkAcquireKmdCall(Adapter))
+    {
+        ExFreePoolWithTag(Planes1, TAG_DXGK_PRESENT);
+        return STATUS_DELETE_PENDING;
+    }
+    _SEH2_TRY
+    {
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport)(
+                     Adapter->MiniportDeviceContext, &Check1);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    DxgkReleaseKmdCall(Adapter);
+    if (NT_SUCCESS(Status))
+    {
+        *Supported = Check1.Supported;
+        *ReturnInfo = Check1.ReturnInfo.Value;
+    }
+    ExFreePoolWithTag(Planes1, TAG_DXGK_PRESENT);
+    return Status;
+}
+
+/* The primary, the flip's overlays, and the layers it switches off. */
+#define DXGKP_MMIO_MAX_PLANES (1 + 2 * RXGK_PRESENT_MAX_OVERLAYS)
+
 typedef struct _DXGKP_MMIO_OVERLAY_CALL
 {
     PDXGKRNL_ADAPTER Adapter;
     DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY Args;
-    DXGK_MULTIPLANE_OVERLAY_PLANE Planes[1 + RXGK_PRESENT_MAX_OVERLAYS];
+    DXGK_MULTIPLANE_OVERLAY_PLANE Planes[DXGKP_MMIO_MAX_PLANES];
     LONG64 ArmSequence;
     NTSTATUS Status;
 } DXGKP_MMIO_OVERLAY_CALL;
@@ -4292,13 +4610,45 @@ typedef struct _DXGKP_MMIO_MPO3_CALL
 {
     PDXGKRNL_ADAPTER Adapter;
     DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3 Args;
-    DXGK_MULTIPLANE_OVERLAY_PLANE3 Plane;
-    DXGK_MULTIPLANE_OVERLAY_PLANE3 *PlanePointer;
-    DXGK_PRIMARYCONTEXTDATA Primary;
-    DXGK_PRIMARYCONTEXTDATA *PrimaryPointer;
+    DXGK_MULTIPLANE_OVERLAY_PLANE3 Planes[DXGKP_MMIO_MAX_PLANES];
+    DXGK_MULTIPLANE_OVERLAY_PLANE3 *PlanePointers[DXGKP_MMIO_MAX_PLANES];
+    DXGK_PRIMARYCONTEXTDATA Contexts[DXGKP_MMIO_MAX_PLANES];
+    DXGK_PRIMARYCONTEXTDATA *ContextPointers[DXGKP_MMIO_MAX_PLANES];
     LONG64 ArmSequence;
     NTSTATUS Status;
 } DXGKP_MMIO_MPO3_CALL;
+
+/* Plane Slot of an MPO3 flip: its allocation as the miniport's context
+ * data, and the attributes admission checked. */
+static VOID
+DxgkpMmioMpo3Plane(
+    _Inout_ DXGKP_MMIO_MPO3_CALL *Call,
+    _In_ UINT Slot,
+    _In_ const DXGKRNL_PRESENT_OVERLAY *Plane,
+    _In_ PDXGKVMM_ALLOCATION Allocation,
+    _In_ PHYSICAL_ADDRESS Address,
+    _In_opt_ HANDLE Context,
+    _In_ ULONG64 PresentId,
+    _In_ BOOLEAN Enabled,
+    _In_ BOOLEAN FlipImmediate)
+{
+    DXGK_MULTIPLANE_OVERLAY_PLANE3 *Plane3 = &Call->Planes[Slot];
+
+    Call->Contexts[Slot].hContext = Context;
+    Call->Contexts[Slot].hAllocation = Allocation->MiniportHandle;
+    Call->Contexts[Slot].SegmentId = (WORD)Allocation->SegmentId;
+    Call->Contexts[Slot].SegmentAddress = Address;
+    Call->ContextPointers[Slot] = &Call->Contexts[Slot];
+    Plane3->LayerIndex = Plane->LayerIndex;
+    Plane3->PresentId = PresentId;
+    Plane3->InputFlags.Enabled = Enabled ? 1 : 0;
+    Plane3->InputFlags.FlipImmediate = FlipImmediate ? 1 : 0;
+    Plane3->InputFlags.FlipOnNextVSync = FlipImmediate ? 0 : 1;
+    Plane3->ContextCount = 1;
+    Plane3->ppContextData = &Call->ContextPointers[Slot];
+    DxgkMpoAttributes3(Plane, &Plane3->PlaneAttributes);
+    Call->PlanePointers[Slot] = Plane3;
+}
 
 static BOOLEAN NTAPI
 DxgkpSetMmioMpo3(
@@ -4327,6 +4677,85 @@ DxgkpMmioFlipUsesMpo3(
 #endif
 }
 
+/*
+ * DxgkpDeliverMpoPostPresent
+ *
+ * The miniport flagged, in a v-sync notification, overlay layers whose new
+ * configuration took effect (PostPresentNeeded); it is told so through
+ * DxgkDdiPostMultiPlaneOverlayPresent at PASSIVE_LEVEL, in step with the
+ * flips it is given, so it can lower clocks or FIFO depths.  The flip mutex
+ * is only tried: whoever holds it delivers after releasing it.
+ */
+static VOID
+DxgkpDeliverMpoPostPresent(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Inout_ PDXGKRNL_PRESENT_QUEUE Queue)
+{
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)
+    ULONG SourceId = Queue->VidPnSourceId;
+    LARGE_INTEGER NoWait;
+    NTSTATUS Status;
+    LONG Layers;
+    ULONG Layer;
+
+    PAGED_CODE();
+    if (SourceId >= 32)
+        return;
+    while (InterlockedCompareExchange(&Adapter->MpoPostPresentLayers[SourceId], 0, 0) != 0)
+    {
+        NoWait.QuadPart = 0;
+        if (KeWaitForSingleObject(&Queue->MmioPresentMutex, Executive, KernelMode,
+                                  FALSE, &NoWait) != STATUS_SUCCESS)
+        {
+            return;
+        }
+        Layers = InterlockedExchange(&Adapter->MpoPostPresentLayers[SourceId], 0);
+        for (Layer = 0; Layer < DXGKP_MPO_MAX_LAYERS; ++Layer)
+        {
+            DXGKARG_POSTMULTIPLANEOVERLAYPRESENT Args;
+
+            if ((Layers & (1L << Layer)) == 0 ||
+                DXGK_CB_FULL(Adapter, DxgkDdiPostMultiPlaneOverlayPresent) == NULL)
+            {
+                continue;
+            }
+            RtlZeroMemory(&Args, sizeof(Args));
+            Args.VidPnTargetId = (D3DDDI_VIDEO_PRESENT_TARGET_ID)
+                InterlockedCompareExchange(&Adapter->MpoPostPresentTarget[SourceId], 0, 0);
+            Args.PhysicalAdapterMask = (UINT)
+                InterlockedCompareExchange(&Adapter->MpoPostPresentAdapterMask[SourceId], 0, 0);
+            Args.LayerIndex = Layer;
+            Args.PresentID = (ULONGLONG)
+                InterlockedCompareExchange64(&Adapter->MpoPostPresentId[SourceId][Layer], 0, 0);
+            if (!DxgkAcquireKmdCall(Adapter))
+                break;
+            _SEH2_TRY
+            {
+                Status = DXGK_CB_FULL(Adapter, DxgkDdiPostMultiPlaneOverlayPresent)(
+                             Adapter->MiniportDeviceContext, &Args);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+            DxgkReleaseKmdCall(Adapter);
+            /* Windows bugchecks here; the contract is to always succeed. */
+            if (!NT_SUCCESS(Status))
+            {
+                DXGKRNL_WARN("DxgkDdiPostMultiPlaneOverlayPresent: source %lu layer %lu "
+                             "present %I64u failed 0x%08lX\n",
+                             SourceId, Layer, Args.PresentID, Status);
+            }
+        }
+        KeReleaseMutex(&Queue->MmioPresentMutex, FALSE);
+    }
+#else
+    UNREFERENCED_PARAMETER(Adapter);
+    UNREFERENCED_PARAMETER(Queue);
+#endif
+}
+
 static NTSTATUS
 DxgkpExecuteMmioFlip(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -4345,7 +4774,12 @@ DxgkpExecuteMmioFlip(
     BOOLEAN Mpo3CompleteOnReturn = FALSE;
     BOOLEAN OverlayPinned[RXGK_PRESENT_MAX_OVERLAYS] = {0};
     PHYSICAL_ADDRESS OverlayAddress[RXGK_PRESENT_MAX_OVERLAYS];
-    ULONG OverlayIndex;
+    DXGKRNL_PRESENT_OVERLAY BasePlane;
+    UINT Retired[RXGK_PRESENT_MAX_OVERLAYS];
+    UINT RetiredCount = 0;
+    UINT PlaneCount;
+    BOOLEAN UseMpo;
+    ULONG OverlayIndex, Other;
     PDXGKVMM_ALLOCATION Allocation = Entry->SourceAllocation;
     PDXGKVMM_ALLOCATION Binding = NULL;
     HANDLE OpenHandle = Entry->SourceOpenBindingHandle;
@@ -4519,32 +4953,57 @@ DxgkpExecuteMmioFlip(
         Status = STATUS_INVALID_DEVICE_STATE;
         goto Cleanup;
     }
-    if (Entry->OverlayCount == 0 && DxgkpMmioFlipUsesMpo3(Adapter))
+    /*
+     * Layers the scanned-out flip shows and this one does not are switched
+     * off in the same call, still naming their allocation, so the miniport
+     * stops reading them before they are released.  Any flip that shows or
+     * retires overlays goes through the DDI generation that admitted them.
+     */
+    DxgkMpoPrimaryPlane(&Entry->SrcRect, &Entry->DstRect, &BasePlane);
+    for (OverlayIndex = 0; OverlayIndex < RXGK_PRESENT_MAX_OVERLAYS; ++OverlayIndex)
+    {
+        if (Queue->MmioCurrentOverlays[OverlayIndex].Allocation == NULL)
+            continue;
+        for (Other = 0; Other < Entry->OverlayCount; ++Other)
+        {
+            if (Queue->MmioPendingOverlays[Other].LayerIndex ==
+                Queue->MmioCurrentOverlays[OverlayIndex].LayerIndex)
+                break;
+        }
+        if (Other == Entry->OverlayCount)
+            Retired[RetiredCount++] = OverlayIndex;
+    }
+    UseMpo = Entry->OverlayCount != 0 || RetiredCount != 0;
+
+    if (UseMpo ? DxgkMpo3Supported(Adapter) : DxgkpMmioFlipUsesMpo3(Adapter))
     {
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)
+        BOOLEAN FlipImmediate = FlipCall.Args.Flags.FlipImmediate;
+        HANDLE PlaneContext = Entry->Context != NULL ? PresentContext : NULL;
+
         RtlZeroMemory(&Mpo3Call, sizeof(Mpo3Call));
         Mpo3Call.Adapter = Adapter;
-        Mpo3Call.Primary.hContext = Entry->Context != NULL ? PresentContext : NULL;
-        Mpo3Call.Primary.hAllocation = Allocation->MiniportHandle;
-        Mpo3Call.Primary.SegmentId = (WORD)Allocation->SegmentId;
-        Mpo3Call.Primary.SegmentAddress = Address;
-        Mpo3Call.PrimaryPointer = &Mpo3Call.Primary;
-        Mpo3Call.Plane.LayerIndex = 0;
-        Mpo3Call.Plane.PresentId = Entry->PresentId;
-        Mpo3Call.Plane.InputFlags.Enabled = 1;
-        Mpo3Call.Plane.InputFlags.FlipImmediate = FlipCall.Args.Flags.FlipImmediate;
-        Mpo3Call.Plane.InputFlags.FlipOnNextVSync = FlipCall.Args.Flags.FlipOnNextVSync;
-        Mpo3Call.Plane.ContextCount = 1;
-        Mpo3Call.Plane.ppContextData = &Mpo3Call.PrimaryPointer;
-        Mpo3Call.Plane.PlaneAttributes.SrcRect = Entry->SrcRect;
-        Mpo3Call.Plane.PlaneAttributes.DstRect = Entry->DstRect;
-        Mpo3Call.Plane.PlaneAttributes.ClipRect = Entry->DstRect;
-        Mpo3Call.Plane.PlaneAttributes.Rotation = D3DDDI_ROTATION_IDENTITY;
-        Mpo3Call.Plane.PlaneAttributes.StretchQuality = DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY_BILINEAR;
-        Mpo3Call.PlanePointer = &Mpo3Call.Plane;
+        DxgkpMmioMpo3Plane(&Mpo3Call, 0, &BasePlane, Allocation, Address, PlaneContext,
+                           Entry->PresentId, TRUE, FlipImmediate);
+        PlaneCount = 1;
+        for (OverlayIndex = 0; OverlayIndex < Entry->OverlayCount; ++OverlayIndex)
+        {
+            DxgkpMmioMpo3Plane(&Mpo3Call, PlaneCount++, &Queue->MmioPendingOverlays[OverlayIndex],
+                               Queue->MmioPendingOverlays[OverlayIndex].Allocation,
+                               OverlayAddress[OverlayIndex], PlaneContext,
+                               Entry->PresentId, TRUE, FlipImmediate);
+        }
+        for (Other = 0; Other < RetiredCount; ++Other)
+        {
+            const DXGKRNL_PRESENT_OVERLAY *Current = &Queue->MmioCurrentOverlays[Retired[Other]];
+
+            DxgkpMmioMpo3Plane(&Mpo3Call, PlaneCount++, Current, Current->Allocation,
+                               DxgkVidMmGetAllocationPrimaryAddress(Current->Allocation),
+                               PlaneContext, Entry->PresentId, FALSE, FlipImmediate);
+        }
         Mpo3Call.Args.VidPnSourceId = Entry->VidPnSourceId;
-        Mpo3Call.Args.PlaneCount = 1;
-        Mpo3Call.Args.ppPlanes = &Mpo3Call.PlanePointer;
+        Mpo3Call.Args.PlaneCount = PlaneCount;
+        Mpo3Call.Args.ppPlanes = Mpo3Call.PlanePointers;
         Status = DxgkSynchronizeScanoutExecution(Adapter, DxgkpSetMmioMpo3, &Mpo3Call, &Synchronized);
         if (NT_SUCCESS(Status))
             Status = Mpo3Call.Status;
@@ -4579,7 +5038,8 @@ DxgkpExecuteMmioFlip(
             if (!NT_SUCCESS(DxgkpWaitForNextMmioVsync(Queue)))
                 break;
             Mpo3Call.Args.OutputFlags.Value = 0;
-            Mpo3Call.Plane.OutputFlags.Value = 0;
+            for (Other = 0; Other < PlaneCount; ++Other)
+                Mpo3Call.Planes[Other].OutputFlags.Value = 0;
             if (Mpo3Call.Args.InputFlags.RetryAtLowerIrql)
             {
                 Mpo3Call.ArmSequence = InterlockedCompareExchange64(&Adapter->VsyncScanoutSequence[Entry->VidPnSourceId], 0, 0);
@@ -4604,20 +5064,24 @@ DxgkpExecuteMmioFlip(
         FlipCall.ArmSequence = Mpo3Call.ArmSequence;
         WaitPresentId = Entry->PresentId;
         Mpo3CompleteOnReturn =
-            (Mpo3Call.Plane.InputFlags.FlipImmediate || Mpo3Call.Plane.OutputFlags.FlipConvertedToImmediate)
+            (Mpo3Call.Planes[0].InputFlags.FlipImmediate || Mpo3Call.Planes[0].OutputFlags.FlipConvertedToImmediate)
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_2)
-            && !Mpo3Call.Plane.OutputFlags.HsyncInterruptCompletion
+            && !Mpo3Call.Planes[0].OutputFlags.HsyncInterruptCompletion
 #endif
             ;
 #else
         Status = STATUS_NOT_SUPPORTED;
 #endif
     }
-    else if (Entry->OverlayCount == 0)
+    else if (!UseMpo)
     {
         Status = DxgkSynchronizeScanoutExecution(Adapter, DxgkpSetMmioSourceAddress, &FlipCall, &Synchronized);
         if (NT_SUCCESS(Status))
             Status = FlipCall.Status;
+    }
+    else if (DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay) == NULL)
+    {
+        Status = STATUS_NOT_SUPPORTED;
     }
     else
     {
@@ -4628,27 +5092,39 @@ DxgkpExecuteMmioFlip(
         OverlayCall.Planes[0].AllocationSegment = Allocation->SegmentId;
         OverlayCall.Planes[0].AllocationAddress = Address;
         OverlayCall.Planes[0].hAllocation = Allocation->MiniportHandle;
-        OverlayCall.Planes[0].PlaneAttributes.SrcRect = Entry->SrcRect;
-        OverlayCall.Planes[0].PlaneAttributes.DstRect = Entry->DstRect;
-        OverlayCall.Planes[0].PlaneAttributes.ClipRect = Entry->DstRect;
-        OverlayCall.Planes[0].PlaneAttributes.Rotation = D3DDDI_ROTATION_IDENTITY;
+        DxgkMpoAttributes(&BasePlane, &OverlayCall.Planes[0].PlaneAttributes);
+        PlaneCount = 1;
         for (OverlayIndex = 0; OverlayIndex < Entry->OverlayCount; ++OverlayIndex)
         {
-            PDXGKVMM_ALLOCATION Overlay = Queue->MmioPendingOverlays[OverlayIndex].Allocation;
-            DXGK_MULTIPLANE_OVERLAY_PLANE *Plane = &OverlayCall.Planes[OverlayIndex + 1];
+            const DXGKRNL_PRESENT_OVERLAY *Pending = &Queue->MmioPendingOverlays[OverlayIndex];
+            DXGK_MULTIPLANE_OVERLAY_PLANE *Plane = &OverlayCall.Planes[PlaneCount++];
 
-            Plane->LayerIndex = Entry->Overlays[OverlayIndex].LayerIndex;
+            Plane->LayerIndex = Pending->LayerIndex;
             Plane->Enabled = TRUE;
-            Plane->AllocationSegment = Overlay->SegmentId;
+            Plane->AllocationSegment = Pending->Allocation->SegmentId;
             Plane->AllocationAddress = OverlayAddress[OverlayIndex];
-            Plane->hAllocation = Overlay->MiniportHandle;
-            Plane->PlaneAttributes.SrcRect = Entry->Overlays[OverlayIndex].SrcRect;
-            Plane->PlaneAttributes.DstRect = Entry->Overlays[OverlayIndex].DstRect;
-            Plane->PlaneAttributes.ClipRect = Entry->Overlays[OverlayIndex].DstRect;
-            Plane->PlaneAttributes.Rotation = D3DDDI_ROTATION_IDENTITY;
+            Plane->hAllocation = Pending->Allocation->MiniportHandle;
+            DxgkMpoAttributes(Pending, &Plane->PlaneAttributes);
+        }
+        for (Other = 0; Other < RetiredCount; ++Other)
+        {
+            const DXGKRNL_PRESENT_OVERLAY *Current = &Queue->MmioCurrentOverlays[Retired[Other]];
+            DXGK_MULTIPLANE_OVERLAY_PLANE *Plane = &OverlayCall.Planes[PlaneCount++];
+
+            Plane->LayerIndex = Current->LayerIndex;
+            Plane->Enabled = FALSE;
+            Plane->AllocationSegment = Current->Allocation->SegmentId;
+            Plane->AllocationAddress = DxgkVidMmGetAllocationPrimaryAddress(Current->Allocation);
+            Plane->hAllocation = Current->Allocation->MiniportHandle;
+            DxgkMpoAttributes(Current, &Plane->PlaneAttributes);
         }
         OverlayCall.Args.VidPnSourceId = Entry->VidPnSourceId;
-        OverlayCall.Args.PlaneCount = Entry->OverlayCount + 1;
+        if (Entry->Context != NULL)
+        {
+            OverlayCall.Args.ContextCount = 1;
+            OverlayCall.Args.Context[0] = PresentContext;
+        }
+        OverlayCall.Args.PlaneCount = PlaneCount;
         OverlayCall.Args.pPlanes = OverlayCall.Planes;
         OverlayCall.Args.Flags.FlipImmediate = FlipCall.Args.Flags.FlipImmediate;
         OverlayCall.Args.Flags.FlipOnNextVSync = FlipCall.Args.Flags.FlipOnNextVSync;
@@ -4689,6 +5165,10 @@ DxgkpExecuteMmioFlip(
         for (OverlayIndex = 0; OverlayIndex < RXGK_PRESENT_MAX_OVERLAYS; ++OverlayIndex)
             DxgkpReleaseScanoutAllocation(DisplacedOverlays[OverlayIndex].Allocation);
         InterlockedIncrement(&Queue->PresentedFrameCount);
+        /* A composed frame is on screen: overlays withdrawn by the miniport
+         * may be offered again, subject to its check. */
+        if (Entry->OverlayCount == 0 && Queue->VidPnSourceId < 32)
+            InterlockedAnd(&Adapter->MpoDisabledSources, ~(LONG)(1UL << Queue->VidPnSourceId));
     }
 
 Cleanup:
@@ -4725,6 +5205,7 @@ Cleanup:
     if (ScanoutLease)
         DxgkVidPnReleaseScanoutLease();
     KeReleaseMutex(&Queue->MmioPresentMutex, FALSE);
+    DxgkpDeliverMpoPostPresent(Adapter, Queue);
     return Status;
 }
 
@@ -5439,8 +5920,11 @@ DxgkpNotifyVSync(
     HasEntries = Queue->Count != 0;
     KeReleaseSpinLock(&Queue->QueueLock, OldIrql);
     /* A periodic monitored fence owes an advance on every pulse even when no
-     * present is queued, and that advance runs at PASSIVE_LEVEL. */
-    if (!HasEntries && !DxgkSyncHasPeriodicFences())
+     * present is queued, and that advance runs at PASSIVE_LEVEL; so does an
+     * overlay post-present notification. */
+    if (!HasEntries && !DxgkSyncHasPeriodicFences() &&
+        (VidPnSourceId >= 32 ||
+         InterlockedCompareExchange(&Adapter->MpoPostPresentLayers[VidPnSourceId], 0, 0) == 0))
     {
         DxgkpReleasePresentQueues(Adapter);
         return;
@@ -5464,6 +5948,47 @@ DxgkpNotifyVSync(
     DxgkpReleasePresentQueues(Adapter);
 }
 
+/*
+ * DxgkpNotifyMpoPostPresent
+ *
+ * Called from the adapter DPC when the miniport flagged a post-present on a
+ * source whose notification did not count as a v-blank (an h-sync flip
+ * completion).  Queues the source's v-sync worker without a pulse.
+ *
+ * IRQL: DISPATCH_LEVEL
+ */
+VOID
+DxgkpNotifyMpoPostPresent(
+    _In_ PDXGKRNL_ADAPTER                  Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID    VidPnSourceId)
+{
+    PDXGKRNL_PRESENT_QUEUE Queue;
+    PDXGKRNL_VSYNC_WORK Work;
+
+    if (Adapter == NULL || !DxgkpAcquirePresentQueues(Adapter))
+        return;
+    if (Adapter->PresentQueues == NULL || VidPnSourceId >= Adapter->PresentQueueCount)
+    {
+        DxgkpReleasePresentQueues(Adapter);
+        return;
+    }
+    Queue = &((PDXGKRNL_PRESENT_QUEUE)Adapter->PresentQueues)[VidPnSourceId];
+    /* A running worker delivers the layers when it gives up the queue. */
+    if (InterlockedCompareExchange(&Queue->VSyncWorkQueued, 1, 0) == 0)
+    {
+        Work = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Work), TAG_DXGK_PRESENT);
+        if (Work != NULL)
+        {
+            Work->Queue = Queue;
+            ExInitializeWorkItem(&Work->WorkItem, DxgkpVSyncWorker, Work);
+            ExQueueWorkItem(&Work->WorkItem, DelayedWorkQueue);
+            return;
+        }
+        InterlockedExchange(&Queue->VSyncWorkQueued, 0);
+    }
+    DxgkpReleasePresentQueues(Adapter);
+}
+
 static VOID
 NTAPI
 DxgkpVSyncWorker(
@@ -5481,6 +6006,7 @@ DxgkpVSyncWorker(
     {
         LONG Pulses = InterlockedExchange(&Queue->PendingVBlanks, 0);
 
+        DxgkpDeliverMpoPostPresent(Adapter, Queue);
         while (Pulses-- > 0)
         {
             NTSTATUS Status;
@@ -5503,7 +6029,13 @@ DxgkpVSyncWorker(
         InterlockedExchange(&Queue->VSyncWorkQueued, 0);
         KeMemoryBarrier();
         if (InterlockedCompareExchange(&Queue->PendingVBlanks, 0, 0) == 0)
+        {
+            /* Layers flagged before the queue was given up are delivered
+             * here, or by the flip holding the mutex once it releases it;
+             * later ones queue a new worker. */
+            DxgkpDeliverMpoPostPresent(Adapter, Queue);
             break;
+        }
         if (InterlockedCompareExchange(&Queue->VSyncWorkQueued, 1, 0) != 0)
             break;
     }

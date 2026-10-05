@@ -599,6 +599,8 @@ typedef struct _DXGKRNL_POWER_COMPONENT
  * finds valid memory and is turned away by Rundown.
  * ====================================================================== */
 /* VidPN sources whose gamma is tracked (matches DXGKP_MAX_SOURCES). */
+/* MPO return info names a failing plane in 4 bits: at most 16 layers. */
+#define DXGKP_MPO_MAX_LAYERS 16
 #define DXGKP_GAMMA_SOURCES 16
 
 typedef struct _DXGKP_ACPI_EVENTS
@@ -1256,6 +1258,23 @@ struct _DXGKRNL_ADAPTER
     volatile LONG               VsyncReportsAddress[32];
     volatile LONG               VsyncReportsPresentId[32];
     DECLSPEC_ALIGN(8) volatile LONG64 VsyncTargetSourceMap[32];
+
+    /*
+     * Overlay planes the miniport asked, in a v-sync notification, to hear
+     * about once their new configuration took effect
+     * (DXGKCB_NOTIFY_MPO_VSYNC_FLAGS.PostPresentNeeded).  The ISR records a
+     * layer bit and its present id; the source's v-sync worker calls
+     * DxgkDdiPostMultiPlaneOverlayPresent at PASSIVE_LEVEL.
+     */
+    volatile LONG               MpoPostPresentPending;      /* sources, for the DPC */
+    volatile LONG               MpoPostPresentLayers[32];
+    volatile LONG               MpoPostPresentTarget[32];
+    volatile LONG               MpoPostPresentAdapterMask[32];
+    DECLSPEC_ALIGN(8) volatile LONG64 MpoPostPresentId[32][DXGKP_MPO_MAX_LAYERS];
+    /* Sources whose overlay configuration the miniport withdrew
+     * (DxgkCbMultiPlaneOverlayDisabled).  Overlay presents there are
+     * refused until the compositor has flipped a composed frame. */
+    volatile LONG               MpoDisabledSources;
 
     /*
      * Tracks DMA buffers that remain owned by the miniport until it signals
@@ -3522,6 +3541,9 @@ DxgkPublishRedirectionPresent(
 
 NTSTATUS
 DxgkQueryWindowPresentState(_In_ ULONG_PTR WindowHandle);
+
+VOID
+DxgkRequestCompositionRefresh(VOID);
 
 NTSTATUS
 DxgkAdmitRedirectedBltPresent(

@@ -4531,6 +4531,7 @@ DxgkpDrainDpcNotifications(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
     ULONG VsyncMask;
+    ULONG PostPresentMask;
     ULONG SourceId;
 
     VidSchNotifyDpc(Adapter);
@@ -4541,11 +4542,15 @@ DxgkpDrainDpcNotifications(
 
     /* A target bit maps one-to-one to the implemented source ordinal. */
     VsyncMask = (ULONG)InterlockedExchange(&Adapter->VsyncPending, 0);
+    PostPresentMask = (ULONG)InterlockedExchange(&Adapter->MpoPostPresentPending, 0);
     for (SourceId = 0; SourceId < 32; SourceId++)
     {
         if ((VsyncMask & (1UL << SourceId)) != 0)
             DxgkpNotifyVSync(Adapter,
                             (D3DDDI_VIDEO_PRESENT_SOURCE_ID)SourceId);
+        else if ((PostPresentMask & (1UL << SourceId)) != 0)
+            DxgkpNotifyMpoPostPresent(Adapter,
+                                      (D3DDDI_VIDEO_PRESENT_SOURCE_ID)SourceId);
     }
 
     DxgkRetireCompletedDmaBuffers(Adapter);
@@ -6106,19 +6111,35 @@ DxgkCbHardwareContentProtectionTeardownSuppressed(
         ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
 }
 
-/* Public MPO support is off, so there is no DWM fallback state to notify. */
+/*
+ * The miniport can no longer show the overlay configuration committed on
+ * VidPnSourceId.  As Windows tells DWM, the compositor is asked to compose
+ * and present a whole frame; until it has flipped one there, overlay presents
+ * on the source are refused, so it falls back to composing them.  Later
+ * overlay presents are judged by DxgkDdiCheckMultiPlaneOverlaySupport(3)
+ * again.  Asynchronous, as on Windows.
+ */
 static VOID
 APIENTRY
-DxgkCbMultiPlaneOverlayDisabledSuppressed(
+DxgkCbMultiPlaneOverlayDisabled(
     _In_ HANDLE DeviceHandle,
     _In_ UINT VidPnSourceId)
 {
     PDXGKRNL_ADAPTER Adapter;
 
-    UNREFERENCED_PARAMETER(VidPnSourceId);
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
-    if (Adapter != NULL)
-        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+    if (Adapter == NULL)
+        return;
+    if (VidPnSourceId < 32)
+    {
+        InterlockedOr(&Adapter->MpoDisabledSources, (LONG)(1UL << VidPnSourceId));
+        DxgkRequestCompositionRefresh();
+    }
+    else
+    {
+        DXGKRNL_WARN("DxgkCbMultiPlaneOverlayDisabled: source %u out of range\n", VidPnSourceId);
+    }
+    ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
 }
 
 /* No SR-IOV virtual-function mitigated-range owner is advertised. */
@@ -7216,7 +7237,7 @@ DxgkpFillInterface(
     if (DxgkCapsCoreInterfaceVersionAtLeast(
             Interface->Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_1))
     {
-        Interface->DxgkCbMultiPlaneOverlayDisabled = DxgkCbMultiPlaneOverlayDisabledSuppressed; /* 0x138 */
+        Interface->DxgkCbMultiPlaneOverlayDisabled = DxgkCbMultiPlaneOverlayDisabled; /* 0x138 */
         Interface->DxgkCbMitigatedRangeUpdate = DxgkCbMitigatedRangeUpdateSuppressed; /* 0x140 */
     }
 #endif
@@ -7538,12 +7559,42 @@ DxgkCbNotifyInterrupt(
             InterlockedOr(&Adapter->VsyncPending, (LONG)(1UL << SourceId));
         }
     }
+    /* The first-generation MPO v-sync names each plane's scanned address. */
+    if (NotifyInterruptData->InterruptType == DXGK_INTERRUPT_CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY)
+    {
+        ULONG SourceId = DxgkVidPnVsyncSourceFromTarget(Adapter, NotifyInterruptData->CrtcVsyncWithMultiPlaneOverlay.VidPnTargetId);
+        UINT PlaneIndex;
+        BOOLEAN PrimaryReported = FALSE;
+
+        if (SourceId < RTL_NUMBER_OF(Adapter->VsyncScanoutAddress))
+        {
+            for (PlaneIndex = 0;
+                 NotifyInterruptData->CrtcVsyncWithMultiPlaneOverlay.pMultiPlaneOverlayVsyncInfo != NULL &&
+                 PlaneIndex < NotifyInterruptData->CrtcVsyncWithMultiPlaneOverlay.MultiPlaneOverlayVsyncInfoCount;
+                 PlaneIndex++)
+            {
+                const DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO *Info =
+                    &NotifyInterruptData->CrtcVsyncWithMultiPlaneOverlay.pMultiPlaneOverlayVsyncInfo[PlaneIndex];
+
+                if (Info->LayerIndex == 0 && Info->Enabled)
+                {
+                    InterlockedExchange64(&Adapter->VsyncScanoutAddress[SourceId], Info->PhysicalAddress.QuadPart);
+                    PrimaryReported = TRUE;
+                }
+            }
+            InterlockedExchange(&Adapter->VsyncReportsAddress[SourceId], PrimaryReported ? 1 : 0);
+            InterlockedExchange(&Adapter->VsyncReportsPresentId[SourceId], 0);
+            InterlockedIncrement64(&Adapter->VsyncScanoutSequence[SourceId]);
+            InterlockedOr(&Adapter->VsyncPending, (LONG)(1UL << SourceId));
+        }
+    }
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)
     if (NotifyInterruptData->InterruptType == DXGK_INTERRUPT_CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2)
     {
         ULONG SourceId = DxgkVidPnVsyncSourceFromTarget(Adapter, NotifyInterruptData->CrtcVsyncWithMultiPlaneOverlay2.VidPnTargetId);
         UINT PlaneIndex;
         BOOLEAN PrimaryReported = FALSE;
+        BOOLEAN PostPresent = FALSE;
 
         if (SourceId < RTL_NUMBER_OF(Adapter->VsyncScanoutPresentId))
         {
@@ -7560,7 +7611,22 @@ DxgkCbNotifyInterrupt(
                     InterlockedExchange64(&Adapter->VsyncScanoutPresentId[SourceId], (LONG64)Info->PresentId);
                     PrimaryReported = TRUE;
                 }
+                /* DxgkDdiPostMultiPlaneOverlayPresent is owed once this
+                 * layer's configuration has taken effect. */
+                if (Info->Flags.PostPresentNeeded && Info->LayerIndex < DXGKP_MPO_MAX_LAYERS)
+                {
+                    InterlockedExchange64(&Adapter->MpoPostPresentId[SourceId][Info->LayerIndex],
+                                          (LONG64)Info->PresentId);
+                    InterlockedExchange(&Adapter->MpoPostPresentTarget[SourceId],
+                                        (LONG)NotifyInterruptData->CrtcVsyncWithMultiPlaneOverlay2.VidPnTargetId);
+                    InterlockedExchange(&Adapter->MpoPostPresentAdapterMask[SourceId],
+                                        (LONG)NotifyInterruptData->CrtcVsyncWithMultiPlaneOverlay2.PhysicalAdapterMask);
+                    InterlockedOr(&Adapter->MpoPostPresentLayers[SourceId], (LONG)(1UL << Info->LayerIndex));
+                    PostPresent = TRUE;
+                }
             }
+            if (PostPresent)
+                InterlockedOr(&Adapter->MpoPostPresentPending, (LONG)(1UL << SourceId));
             /* This form never carries an address; it names the primary only
              * when layer 0 is in the list. */
             InterlockedExchange(&Adapter->VsyncReportsAddress[SourceId], 0);

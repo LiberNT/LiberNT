@@ -722,7 +722,8 @@ DxgkpCaptureRedirectedBltPresent(
 /*
  * Overlay planes ride a compositor flip: each is referenced for the queued
  * entry, and the miniport must accept the whole configuration now, so that
- * an unsupported overlay fails this present instead of the armed flip.
+ * an unsupported overlay fails this present instead of the armed flip.  A
+ * refused present tells the compositor to compose those planes itself.
  */
 static NTSTATUS
 DxgkpAdmitPresentOverlays(
@@ -732,9 +733,10 @@ DxgkpAdmitPresentOverlays(
     _In_reads_(OverlayCount) const RXGK_PRESENT_OVERLAY *Overlays,
     _In_ UINT OverlayCount)
 {
-    DXGK_CHECK_MULTIPLANE_OVERLAY_SUPPORT_PLANE Planes[1 + RXGK_PRESENT_MAX_OVERLAYS];
-    DXGKARG_CHECKMULTIPLANEOVERLAYSUPPORT Check;
-    NTSTATUS Status = STATUS_UNSUCCESSFUL;
+    DXGKP_MPO_CHECK_PLANE Planes[1 + RXGK_PRESENT_MAX_OVERLAYS];
+    BOOL Supported = FALSE;
+    UINT ReturnInfo = 0;
+    NTSTATUS Status;
     UINT Index, Other;
 
     /* Only an MMIO flip can arm every plane at once. */
@@ -743,8 +745,15 @@ DxgkpAdmitPresentOverlays(
         Adapter->MiniportContext->IsDisplayOnlyDriver ||
         !(Entry->FlipInterval == D3DDDI_FLIPINTERVAL_IMMEDIATE ?
               Adapter->FlipCaps.FlipImmediateMmIo : Adapter->FlipCaps.FlipOnVSyncMmIo) ||
-        DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport) == NULL ||
-        DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay) == NULL)
+        !DxgkMpoSupported(Adapter))
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    /* The miniport withdrew this source's overlays: the compositor composes
+     * until it has flipped a composed frame (DxgkCbMultiPlaneOverlayDisabled). */
+    if (Entry->VidPnSourceId >= 32 ||
+        (InterlockedCompareExchange(&Adapter->MpoDisabledSources, 0, 0) &
+         (LONG)(1UL << Entry->VidPnSourceId)) != 0)
     {
         return STATUS_NOT_SUPPORTED;
     }
@@ -752,14 +761,11 @@ DxgkpAdmitPresentOverlays(
     RtlZeroMemory(Planes, sizeof(Planes));
     Planes[0].hAllocation = Entry->SourceAllocation->MiniportHandle;
     Planes[0].VidPnSourceId = Entry->VidPnSourceId;
-    Planes[0].PlaneAttributes.SrcRect = Entry->SrcRect;
-    Planes[0].PlaneAttributes.DstRect = Entry->DstRect;
-    Planes[0].PlaneAttributes.ClipRect = Entry->DstRect;
-    Planes[0].PlaneAttributes.Rotation = D3DDDI_ROTATION_IDENTITY;
+    DxgkMpoPrimaryPlane(&Entry->SrcRect, &Entry->DstRect, &Planes[0].Plane);
     for (Index = 0; Index < OverlayCount; ++Index)
     {
         const RXGK_PRESENT_OVERLAY *Overlay = &Overlays[Index];
-        DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES *Attributes = &Planes[Index + 1].PlaneAttributes;
+        PDXGKRNL_PRESENT_OVERLAY Captured = &Entry->Overlays[Index];
 
         if (Overlay->hAllocation == 0 || Overlay->LayerIndex == 0 ||
             Overlay->LayerIndex > RXGK_PRESENT_MAX_OVERLAYS)
@@ -769,40 +775,23 @@ DxgkpAdmitPresentOverlays(
             if (Overlays[Other].LayerIndex == Overlay->LayerIndex)
                 return STATUS_INVALID_PARAMETER;
         }
-        Status = DxgkVidMmReferenceAllocation((HANDLE)(ULONG_PTR)Overlay->hAllocation,
-                                              Adapter, Device, &Entry->Overlays[Index].Allocation);
+        Status = DxgkMpoCaptureOverlay(Overlay, &Planes[Index + 1].Plane);
         if (!NT_SUCCESS(Status))
             return Status;
+        Status = DxgkVidMmReferenceAllocation((HANDLE)(ULONG_PTR)Overlay->hAllocation,
+                                              Adapter, Device, &Planes[Index + 1].Plane.Allocation);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        /* The entry owns the reference from here; its release drops it. */
+        *Captured = Planes[Index + 1].Plane;
         Entry->OverlayCount = Index + 1;
-        Entry->Overlays[Index].hAllocation = Overlay->hAllocation;
-        Entry->Overlays[Index].LayerIndex = Overlay->LayerIndex;
-        Entry->Overlays[Index].SrcRect = Overlay->SrcRect;
-        Entry->Overlays[Index].DstRect = Overlay->DstRect;
-        Planes[Index + 1].hAllocation = Entry->Overlays[Index].Allocation->MiniportHandle;
+        Planes[Index + 1].hAllocation = Captured->Allocation->MiniportHandle;
         Planes[Index + 1].VidPnSourceId = Entry->VidPnSourceId;
-        Attributes->SrcRect = Overlay->SrcRect;
-        Attributes->DstRect = Overlay->DstRect;
-        Attributes->ClipRect = Overlay->DstRect;
-        Attributes->Rotation = D3DDDI_ROTATION_IDENTITY;
     }
 
-    RtlZeroMemory(&Check, sizeof(Check));
-    Check.PlaneCount = OverlayCount + 1;
-    Check.pPlanes = Planes;
-    if (!DxgkAcquireKmdCall(Adapter))
-        return STATUS_DELETE_PENDING;
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport)(
-                     Adapter->MiniportDeviceContext, &Check);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
-    DxgkReleaseKmdCall(Adapter);
-    if (NT_SUCCESS(Status) && !Check.Supported)
+    Status = DxgkCheckMultiPlaneOverlay(Adapter, OverlayCount + 1, Planes, 0, NULL,
+                                        &Supported, &ReturnInfo);
+    if (NT_SUCCESS(Status) && !Supported)
         Status = STATUS_NOT_SUPPORTED;
     return Status;
 }

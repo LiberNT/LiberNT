@@ -621,6 +621,7 @@ DxgkpKmtIoctlMinimumConfiguredLevel(
         /* Exported KMT entry points first exposed at WDDM 1.3. */
         case IOCTL_D3DKMT_SETCONTEXTINPROCESSPRIORITY:
         case IOCTL_D3DKMT_GETCONTEXTINPROCESSPRIORITY:
+        case IOCTL_RXGK_CHECKMULTIPLANEOVERLAYSUPPORT:
             return DXGK_CAPS_CORE_LEVEL_WDDM_1_3;
 #endif
 
@@ -668,6 +669,7 @@ DxgkpKmtIoctlMinimumConfiguredLevel(
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
         case IOCTL_D3DKMT_CREATEHWCONTEXT:
         case IOCTL_D3DKMT_DESTROYHWCONTEXT:
+        case IOCTL_RXGK_GETMULTIPLANEOVERLAYCAPS:
             return DXGK_CAPS_CORE_LEVEL_WDDM_2_2;
 #endif
 
@@ -3538,17 +3540,14 @@ DxgkpQueryAdapterInfoCaptured(
                 DXGKP_QUERY_RETURN(STATUS_BUFFER_TOO_SMALL);
             }
 
+            /* Either DDI generation backs the public check and present. */
             RtlZeroMemory(&Support, sizeof(Support));
             Support.Supported = DxgkPresentCoreMpoV1Supported(
                                     REACTOS_WDDM_TARGET_LEVEL,
-                                    DXGK_CB_FULL(
-                                        Adapter,
-                                        DxgkDdiCheckMultiPlaneOverlaySupport) != NULL,
-                                    DXGK_CB_FULL(
-                                        Adapter,
-                                        DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay) != NULL,
-                                    FALSE,
-                                    FALSE);
+                                    DxgkMpoSupported(Adapter),
+                                    DxgkMpoSupported(Adapter),
+                                    TRUE,
+                                    TRUE);
             _SEH2_TRY
             {
                 *(D3DKMT_MULTIPLANEOVERLAY_SUPPORT *)
@@ -9937,6 +9936,235 @@ DxgkpReferencePublicOperationNtObject(_In_ ULONGLONG HandleValue)
     return STATUS_NOT_SUPPORTED;
 }
 
+#if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
+/*
+ * D3DKMTGetMultiPlaneOverlayCaps: the miniport's own report, through
+ * DxgkDdiGetMultiPlaneOverlayCaps (required of WDDM 2.2 miniports with
+ * overlay planes).  Caps may change with the display configuration, so they
+ * are asked for on every query.
+ */
+static NTSTATUS
+DxgkpGetMultiPlaneOverlayCaps(
+    _Inout_ RXGK_GETMULTIPLANEOVERLAYCAPS_PACKET *Packet)
+{
+    DXGKARG_GETMULTIPLANEOVERLAYCAPS Caps;
+    D3DKMT_MULTIPLANE_OVERLAY_CAPS OverlayCaps;
+    PDXGKRNL_ADAPTER Adapter;
+    NTSTATUS Status;
+
+    if (Packet->Size != sizeof(*Packet) || Packet->Version != RXGK_MPO_PACKET_VERSION_1)
+        return STATUS_INVALID_PARAMETER;
+    Status = DxgkpValidateAdapterVidPnSourceForIoctl(Packet->hAdapter, Packet->VidPnSourceId, &Adapter);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!DxgkMpoSupported(Adapter) ||
+        !DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version,
+                                             DXGK_CAPS_CORE_LEVEL_WDDM_2_2) ||
+        DXGK_CB_FULL(Adapter, DxgkDdiGetMultiPlaneOverlayCaps) == NULL)
+    {
+        DxgkDereferenceAdapter(Adapter);
+        return STATUS_NOT_SUPPORTED;
+    }
+    RtlZeroMemory(&Caps, sizeof(Caps));
+    Caps.VidPnSourceId = Packet->VidPnSourceId;
+    if (!DxgkBeginKmdTransaction(Adapter))
+    {
+        DxgkDereferenceAdapter(Adapter);
+        return STATUS_DELETE_PENDING;
+    }
+    _SEH2_TRY
+    {
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiGetMultiPlaneOverlayCaps)(Adapter->MiniportDeviceContext, &Caps);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    DxgkEndKmdTransaction(Adapter);
+    if (NT_SUCCESS(Status))
+    {
+        /* The miniport's bits share the D3DKMT layout up to
+         * Plane0ForVirtualModeOnly; Version3DDISupport is the kernel's. */
+        OverlayCaps.Value = Caps.OverlayCaps.Value & 0x7FF;
+        OverlayCaps.Version3DDISupport = DxgkMpo3Supported(Adapter) ? 1 : 0;
+        Packet->MaxPlanes = Caps.MaxPlanes;
+        Packet->MaxRGBPlanes = Caps.MaxRGBPlanes;
+        Packet->MaxYUVPlanes = Caps.MaxYUVPlanes;
+        Packet->OverlayCaps = OverlayCaps.Value;
+        Packet->MaxStretchFactor = Caps.MaxStretchFactor;
+        Packet->MaxShrinkFactor = Caps.MaxShrinkFactor;
+    }
+    DxgkDereferenceAdapter(Adapter);
+    return Status;
+}
+#endif
+
+#if (REACTOS_WDDM_TARGET_LEVEL >= 1300)
+/*
+ * D3DKMTCheckMultiPlaneOverlaySupport(2,3): each plane's resource is
+ * resolved to the allocation the miniport knows, then the miniport is asked
+ * (DxgkCheckMultiPlaneOverlay).  An adapter without overlay planes refuses
+ * the query, as Windows 11 does.
+ */
+static NTSTATUS
+DxgkpCheckMultiPlaneOverlaySupport(
+    _Inout_ RXGK_CHECKMPO_PACKET *Packet,
+    _In_ ULONG InputLength)
+{
+    const RXGK_CHECKMPO_PLANE *WirePlanes;
+    const RXGK_CHECKMPO_POST_COMPOSITION *WirePost;
+    DXGKP_MPO_CHECK_PLANE *Planes = NULL;
+    DXGKP_MPO_POST_COMPOSITION Post[RXGK_MPO_MAX_POST_COMPOSITION];
+    PDXGKVMM_RESOURCE Resources[RXGK_MPO_MAX_PLANES] = {0};
+    PDXGKVMM_ALLOCATION *Snapshots[RXGK_MPO_MAX_PLANES] = {0};
+    UINT SnapshotCounts[RXGK_MPO_MAX_PLANES] = {0};
+    PDXGKRNL_ADAPTER Adapter = NULL;
+    PDXGKRNL_ADAPTER NamedAdapter;
+    PDXGKRNL_DEVICE Device = NULL;
+    BOOLEAN SameAdapter;
+    BOOL Supported = FALSE;
+    UINT ReturnInfo = 0;
+    UINT PrivateDataSize;
+    UINT Index, Other;
+    NTSTATUS Status;
+
+    C_ASSERT(RXGK_MPO_MAX_PLANES == DXGKP_MPO_MAX_LAYERS);
+    C_ASSERT(RXGK_MPO_MAX_POST_COMPOSITION == DXGKP_MPO_MAX_POST_COMPOSITION);
+
+    if (InputLength < sizeof(*Packet) || Packet->Size != InputLength ||
+        Packet->Version != RXGK_MPO_PACKET_VERSION_1 ||
+        Packet->PlaneCount == 0 || Packet->PlaneCount > RXGK_MPO_MAX_PLANES ||
+        Packet->PostCompositionCount > RXGK_MPO_MAX_POST_COMPOSITION ||
+        InputLength != sizeof(*Packet) +
+                       Packet->PlaneCount * sizeof(RXGK_CHECKMPO_PLANE) +
+                       Packet->PostCompositionCount * sizeof(RXGK_CHECKMPO_POST_COMPOSITION))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Status = DxgkReferenceOwnedDeviceByHandle(Packet->hDevice, PsGetCurrentProcess(), &Adapter, &Device);
+    if (!NT_SUCCESS(Status))
+        return STATUS_INVALID_PARAMETER;
+    if (Packet->hAdapter != 0)
+    {
+        Status = DxgkReferenceAdapterByHandle(Packet->hAdapter, PsGetCurrentProcess(), &NamedAdapter);
+        if (!NT_SUCCESS(Status))
+        {
+            Status = STATUS_INVALID_PARAMETER;
+            goto Cleanup;
+        }
+        SameAdapter = NamedAdapter == Adapter;
+        DxgkDereferenceAdapter(NamedAdapter);
+        if (!SameAdapter)
+        {
+            Status = STATUS_INVALID_PARAMETER;
+            goto Cleanup;
+        }
+    }
+    if (!DxgkMpoSupported(Adapter))
+    {
+        Status = STATUS_INVALID_PARAMETER;
+        goto Cleanup;
+    }
+
+    Planes = ExAllocatePoolWithTag(PagedPool, sizeof(*Planes) * Packet->PlaneCount, TAG_DXGK_CAPTURE);
+    if (Planes == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Cleanup;
+    }
+    RtlZeroMemory(Planes, sizeof(*Planes) * Packet->PlaneCount);
+    WirePlanes = (const RXGK_CHECKMPO_PLANE *)(Packet + 1);
+    WirePost = (const RXGK_CHECKMPO_POST_COMPOSITION *)(WirePlanes + Packet->PlaneCount);
+    for (Index = 0; Index < Packet->PlaneCount; ++Index)
+    {
+        const RXGK_CHECKMPO_PLANE *Wire = &WirePlanes[Index];
+
+        if (Wire->VidPnSourceId >= Adapter->NumberOfVideoPresentSources ||
+            Wire->Plane.LayerIndex >= RXGK_MPO_MAX_PLANES)
+        {
+            Status = STATUS_INVALID_PARAMETER;
+            goto Cleanup;
+        }
+        for (Other = 0; Other < Index; ++Other)
+        {
+            if (WirePlanes[Other].VidPnSourceId == Wire->VidPnSourceId &&
+                WirePlanes[Other].Plane.LayerIndex == Wire->Plane.LayerIndex)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                goto Cleanup;
+            }
+        }
+        /* A composition surface (or a plane win32k found it cannot
+         * describe), or a resource of several allocations, is not something
+         * this kernel can put on one plane. */
+        if (Wire->hResource == 0)
+        {
+            ReturnInfo = Index;
+            goto Report;
+        }
+        Status = DxgkMpoCaptureOverlay(&Wire->Plane, &Planes[Index].Plane);
+        if (!NT_SUCCESS(Status))
+            goto Cleanup;
+        Status = DxgkVidMmReferenceResource(Wire->hResource, FALSE, Device, &Resources[Index]);
+        if (!NT_SUCCESS(Status))
+        {
+            Status = STATUS_INVALID_PARAMETER;
+            goto Cleanup;
+        }
+        Status = DxgkVidMmSnapshotResourceAllocations(Resources[Index], Adapter, &Snapshots[Index],
+                                                      &SnapshotCounts[Index], &PrivateDataSize);
+        if (!NT_SUCCESS(Status))
+            goto Cleanup;
+        if (SnapshotCounts[Index] != 1 || Snapshots[Index][0]->MiniportHandle == NULL)
+        {
+            ReturnInfo = Index;
+            goto Report;
+        }
+        Planes[Index].hAllocation = Snapshots[Index][0]->MiniportHandle;
+        Planes[Index].VidPnSourceId = Wire->VidPnSourceId;
+    }
+    for (Index = 0; Index < Packet->PostCompositionCount; ++Index)
+    {
+        if (WirePost[Index].VidPnSourceId >= Adapter->NumberOfVideoPresentSources ||
+            (WirePost[Index].Flags & ~(RXGK_PRESENT_OVERLAY_VERTICAL_FLIP | RXGK_PRESENT_OVERLAY_HORIZONTAL_FLIP)) != 0 ||
+            WirePost[Index].Rotation > D3DDDI_ROTATION_270)
+        {
+            Status = STATUS_INVALID_PARAMETER;
+            goto Cleanup;
+        }
+        Post[Index].VidPnSourceId = WirePost[Index].VidPnSourceId;
+        Post[Index].Flags = WirePost[Index].Flags;
+        Post[Index].SrcRect = WirePost[Index].SrcRect;
+        Post[Index].DstRect = WirePost[Index].DstRect;
+        Post[Index].Rotation = WirePost[Index].Rotation != 0 ? (D3DDDI_ROTATION)WirePost[Index].Rotation
+                                                             : D3DDDI_ROTATION_IDENTITY;
+    }
+    Status = DxgkCheckMultiPlaneOverlay(Adapter, Packet->PlaneCount, Planes,
+                                        Packet->PostCompositionCount, Post,
+                                        &Supported, &ReturnInfo);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+
+Report:
+    Status = STATUS_SUCCESS;
+    Packet->Supported = Supported ? 1 : 0;
+    Packet->ReturnInfo = ReturnInfo;
+
+Cleanup:
+    for (Index = 0; Index < RXGK_MPO_MAX_PLANES; ++Index)
+    {
+        DxgkVidMmReleaseAllocationSnapshot(Snapshots[Index], SnapshotCounts[Index]);
+        if (Resources[Index] != NULL)
+            DxgkVidMmDereferenceResource(Resources[Index]);
+    }
+    if (Planes != NULL)
+        ExFreePoolWithTag(Planes, TAG_DXGK_CAPTURE);
+    DxgkDereferenceDevice(Device);
+    return Status;
+}
+#endif
+
 static NTSTATUS
 DxgkpDispatchPublicOperation(_Inout_ PRXGK_PUBLIC_OPERATION_PACKET Packet)
 {
@@ -11283,6 +11511,33 @@ DxgkpDispatchBufferedIoctlWorker(
                 KmtRequest->Information = min(InputLength, OutputLength);
             return Status;
         }
+
+#if (REACTOS_WDDM_TARGET_LEVEL >= 1300)
+        case IOCTL_RXGK_CHECKMULTIPLANEOVERLAYSUPPORT:
+        {
+            if (SystemBuffer == NULL || InputLength < sizeof(RXGK_CHECKMPO_PACKET) ||
+                OutputLength < sizeof(RXGK_CHECKMPO_PACKET))
+                return STATUS_BUFFER_TOO_SMALL;
+            Status = DxgkpCheckMultiPlaneOverlaySupport((RXGK_CHECKMPO_PACKET *)SystemBuffer, InputLength);
+            if (NT_SUCCESS(Status))
+                KmtRequest->Information = sizeof(RXGK_CHECKMPO_PACKET);
+            return Status;
+        }
+#endif
+
+#if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
+        case IOCTL_RXGK_GETMULTIPLANEOVERLAYCAPS:
+        {
+            if (SystemBuffer == NULL ||
+                InputLength != sizeof(RXGK_GETMULTIPLANEOVERLAYCAPS_PACKET) ||
+                OutputLength < sizeof(RXGK_GETMULTIPLANEOVERLAYCAPS_PACKET))
+                return STATUS_BUFFER_TOO_SMALL;
+            Status = DxgkpGetMultiPlaneOverlayCaps((RXGK_GETMULTIPLANEOVERLAYCAPS_PACKET *)SystemBuffer);
+            if (NT_SUCCESS(Status))
+                KmtRequest->Information = sizeof(RXGK_GETMULTIPLANEOVERLAYCAPS_PACKET);
+            return Status;
+        }
+#endif
 
         case IOCTL_D3DKMT_WAITFORSYNCHRONIZATIONOBJECT:
         {
@@ -13509,6 +13764,12 @@ DxgkpIsBufferedKmtIoctl(
         case IOCTL_D3DKMT_RENDER:
         case IOCTL_D3DKMT_PRESENT:
         case IOCTL_D3DKMT_PRESENTOVERLAYS:
+#if (REACTOS_WDDM_TARGET_LEVEL >= 1300)
+        case IOCTL_RXGK_CHECKMULTIPLANEOVERLAYSUPPORT:
+#endif
+#if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
+        case IOCTL_RXGK_GETMULTIPLANEOVERLAYCAPS:
+#endif
         case IOCTL_D3DKMT_WAITFORSYNCHRONIZATIONOBJECT:
         case IOCTL_D3DKMT_SIGNALSYNCHRONIZATIONOBJECT:
         case IOCTL_D3DKMT_SETDISPLAYMODE:

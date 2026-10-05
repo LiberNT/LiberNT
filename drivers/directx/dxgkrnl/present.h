@@ -119,7 +119,34 @@ typedef struct _DXGKRNL_PRESENT_OVERLAY
     UINT                            LayerIndex;
     RECT                            SrcRect;
     RECT                            DstRect;
-} DXGKRNL_PRESENT_OVERLAY;
+    RECT                            ClipRect;
+    UINT                            Flags;          /* RXGK_PRESENT_OVERLAY_* */
+    D3DDDI_ROTATION                 Rotation;
+    BOOLEAN                         AlphaBlend;
+    D3DDDI_COLOR_SPACE_TYPE         ColorSpace;
+    UINT                            StretchQuality; /* DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY */
+    UINT                            SdrWhiteLevel;
+} DXGKRNL_PRESENT_OVERLAY, *PDXGKRNL_PRESENT_OVERLAY;
+
+/* One plane of a configuration put to the miniport's overlay check. */
+typedef struct _DXGKP_MPO_CHECK_PLANE
+{
+    HANDLE                          hAllocation;    /* miniport allocation handle */
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID  VidPnSourceId;
+    DXGKRNL_PRESENT_OVERLAY         Plane;          /* LayerIndex and attributes */
+} DXGKP_MPO_CHECK_PLANE;
+
+/* A transform applied to a source after its planes are composed. */
+#define DXGKP_MPO_MAX_POST_COMPOSITION 16
+
+typedef struct _DXGKP_MPO_POST_COMPOSITION
+{
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID  VidPnSourceId;
+    UINT                            Flags;          /* RXGK_PRESENT_OVERLAY_*_FLIP */
+    RECT                            SrcRect;
+    RECT                            DstRect;
+    D3DDDI_ROTATION                 Rotation;
+} DXGKP_MPO_POST_COMPOSITION;
 
 typedef struct _DXGKRNL_PRESENT_ENTRY
 {
@@ -495,6 +522,48 @@ DxgkpProcessPresentQueue(
     _In_ struct _DXGKRNL_ADAPTER          *Adapter,
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID    VidPnSourceId);
 
+/* Multi-plane overlay support: see present.c. */
+BOOLEAN
+DxgkMpo3Supported(
+    _In_ struct _DXGKRNL_ADAPTER *Adapter);
+
+BOOLEAN
+DxgkMpoSupported(
+    _In_ struct _DXGKRNL_ADAPTER *Adapter);
+
+NTSTATUS
+DxgkMpoCaptureOverlay(
+    _In_ const RXGK_PRESENT_OVERLAY *Overlay,
+    _Out_ PDXGKRNL_PRESENT_OVERLAY Plane);
+
+VOID
+DxgkMpoPrimaryPlane(
+    _In_ const RECT *SrcRect,
+    _In_ const RECT *DstRect,
+    _Out_ PDXGKRNL_PRESENT_OVERLAY Plane);
+
+VOID
+DxgkMpoAttributes(
+    _In_ const DXGKRNL_PRESENT_OVERLAY *Plane,
+    _Out_ DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES *Attributes);
+
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)
+VOID
+DxgkMpoAttributes3(
+    _In_ const DXGKRNL_PRESENT_OVERLAY *Plane,
+    _Out_ DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3 *Attributes);
+#endif
+
+NTSTATUS
+DxgkCheckMultiPlaneOverlay(
+    _In_ struct _DXGKRNL_ADAPTER *Adapter,
+    _In_ UINT PlaneCount,
+    _In_reads_(PlaneCount) const DXGKP_MPO_CHECK_PLANE *Planes,
+    _In_ UINT PostCompositionCount,
+    _In_reads_opt_(PostCompositionCount) const DXGKP_MPO_POST_COMPOSITION *PostComposition,
+    _Out_ BOOL *Supported,
+    _Out_ UINT *ReturnInfo);
+
 /*
  * DxgkpNotifyVSync
  *
@@ -505,6 +574,19 @@ DxgkpProcessPresentQueue(
  */
 VOID
 DxgkpNotifyVSync(
+    _In_ struct _DXGKRNL_ADAPTER          *Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID    VidPnSourceId);
+
+/*
+ * DxgkpNotifyMpoPostPresent
+ *
+ * Called from the adapter DPC for a source with overlay post-present work
+ * that came without a v-blank.  Queues the PASSIVE_LEVEL worker.
+ *
+ * IRQL: DISPATCH_LEVEL
+ */
+VOID
+DxgkpNotifyMpoPostPresent(
     _In_ struct _DXGKRNL_ADAPTER          *Adapter,
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID    VidPnSourceId);
 
