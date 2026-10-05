@@ -241,6 +241,13 @@ DxgkDisplayNotifyMonitorEvent(
     Callout(&Params);
 }
 
+BOOLEAN
+DxgkIsDisplayAdapter(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    return Adapter != NULL && g_DisplayAdapter == Adapter;
+}
+
 /* ========================================================================
  * Registry helper -- write a REG_SZ value
  * ====================================================================== */

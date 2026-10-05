@@ -5150,10 +5150,18 @@ DxgkCreateRedirectionSurface(
     _In_opt_ PDXGKRNL_DEVICE Device,
     _Inout_ PDXGK_REDIRECTION_SURFACE_CREATE Create)
 {
+    NTSTATUS Status;
+
     /* CDD paints directly into its shared bitmap for the bitmap's lifetime.
      * Ask the miniport for the OS CPU-visible texture contract; TEXTURE is
      * explicitly GPU-only and cannot supply that permanent CPU mapping.
      * User-owned redirection textures are rendered through the UMD. */
+    if (Device != NULL && !DxgkIsDisplayAdapter(Adapter))
+    {
+        Status = DxgkpCreateGdiSurface(Adapter, Device, Create, D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE);
+        if (NT_SUCCESS(Status))
+            return Status;
+    }
     return DxgkpCreateGdiSurface(Adapter, Device, Create,
                                 Device == NULL ?
                                     D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE :

@@ -3285,6 +3285,10 @@ NTAPI
 DxgkGetShadowSurface(
     _Inout_ DXGKMT_GETSHADOWSURFACE *pGetShadowSurface);
 
+BOOLEAN
+DxgkIsDisplayAdapter(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 NTSTATUS
 DxgkCreateRedirectionSurface(
     _In_ PDXGKRNL_ADAPTER Adapter,
