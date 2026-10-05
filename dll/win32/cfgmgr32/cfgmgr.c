@@ -206,6 +206,14 @@ CmpIsUserAdmin(VOID)
 
 
 BOOL
+CfgmgrIsValidMachine(
+    _In_opt_ HMACHINE hMachine)
+{
+    return (hMachine == NULL) || (((PMACHINE_INFO)hMachine)->BindingHandle != NULL);
+}
+
+
+BOOL
 CfgmgrIsKernelDevNodeProperty(
     _In_ ULONG ulProperty)
 {

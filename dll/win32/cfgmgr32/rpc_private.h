@@ -54,6 +54,7 @@ PnpGetLocalHandles(RPC_BINDING_HANDLE *BindingHandle);
 DEVINST CfgmgrDevInstFromId(const WCHAR *id);
 BOOL CfgmgrIdFromDevInst(DEVINST node, WCHAR *id, ULONG len);
 BOOL CfgmgrIsKernelDevNodeProperty(ULONG ulProperty);
+BOOL CfgmgrIsValidMachine(HMACHINE hMachine);
 CONFIGRET CfgmgrGetDevNodeRegistryPropertyA(DEVINST dnDevInst, ULONG ulProperty, PULONG pulRegDataType, PVOID Buffer, PULONG pulLength, ULONG ulFlags, HMACHINE hMachine);
 CONFIGRET CfgmgrGetDevNodeRegistryPropertyW(DEVINST dnDevInst, ULONG ulProperty, PULONG pulRegDataType, PVOID Buffer, PULONG pulLength, ULONG ulFlags, HMACHINE hMachine);
 

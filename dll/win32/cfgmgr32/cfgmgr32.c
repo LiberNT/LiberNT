@@ -1176,7 +1176,11 @@ CONFIGRET WINAPI CM_Enumerate_Classes_Ex( ULONG index, GUID *class, ULONG flags,
     HKEY root;
 
     TRACE( "index %lu, class %s, flags %#lx, machine %p\n", index, debugstr_guid(class), flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
 
     if (!class) return CR_INVALID_POINTER;
     if (flags & ~CM_ENUMERATE_CLASSES_BITS) return CR_INVALID_FLAG;
@@ -1206,7 +1210,11 @@ CONFIGRET WINAPI CM_Enumerate_Enumerators_ExW( ULONG index, WCHAR *buffer, ULONG
     HKEY root;
 
     TRACE( "index %lu, buffer %p, len %p, flags %#lx, machine %p\n", index, buffer, len, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
 
     if (!buffer || !len) return CR_INVALID_POINTER;
     if (!*len && buffer) return CR_INVALID_DATA;
@@ -1264,7 +1272,11 @@ CONFIGRET WINAPI CM_Get_Class_Key_Name_ExW( GUID *guid, WCHAR *name, ULONG *len,
     UINT capacity;
 
     TRACE( "guid %s, name %p, len %p, flags %#lx, machine %p\n", debugstr_guid(guid), name, len, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
     if (!guid || !len) return CR_INVALID_POINTER;
@@ -1315,7 +1327,11 @@ CONFIGRET WINAPI CM_Open_Class_Key_ExW( GUID *class, const WCHAR *name, REGSAM a
     WCHAR buffer[39];
 
     TRACE( "class %s, name %s, access %#lx, disposition %#lx, hkey %p, flags %#lx\n", debugstr_guid(class), debugstr_w(name), access, disposition, hkey, flags );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
 
     if (name) return CR_INVALID_DATA;
     if (!hkey) return CR_INVALID_POINTER;
@@ -1366,7 +1382,11 @@ CONFIGRET WINAPI CM_Get_Class_Registry_PropertyW( GUID *class, ULONG property, U
     LSTATUS err;
 
     TRACE( "class %s, property %#lx, type %p, buffer %p, len %p, flags %#lx, machine %p\n", debugstr_guid(class), property, type, buffer, len, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
     if (!class) return CR_INVALID_POINTER;
@@ -1384,7 +1404,11 @@ CONFIGRET WINAPI CM_Get_Class_Registry_PropertyA( GUID *class, ULONG property, U
     LSTATUS err;
 
     TRACE( "class %s, property %#lx, type %p, buffer %p, len %p, flags %#lx, machine %p\n", debugstr_guid(class), property, type, buffer, len, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
     if (!class) return CR_INVALID_POINTER;
@@ -1426,7 +1450,11 @@ CONFIGRET WINAPI CM_Get_Class_Property_ExW( const GUID *class, const DEVPROPKEY 
     LSTATUS err;
 
     TRACE( "class %s, key %s, type %p, buffer %p, size %p, flags %#lx, machine %p\n", debugstr_guid(class), debugstr_DEVPROPKEY(key), type, buffer, size, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
     if (!class) return CR_INVALID_POINTER;
@@ -1450,7 +1478,11 @@ CONFIGRET WINAPI CM_Get_Class_Property_Keys_Ex( const GUID *class, DEVPROPKEY *k
     LSTATUS err;
 
     TRACE( "class %s, keys %p, size %p, flags %#lx, machine %p\n", debugstr_guid(class), keys, count, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
     if (!class) return CR_INVALID_POINTER;
@@ -1478,7 +1510,11 @@ CONFIGRET WINAPI CM_Get_Device_Interface_List_Size_ExW( ULONG *len, GUID *class,
     BOOL all = flags == CM_GET_DEVICE_INTERFACE_LIST_ALL_DEVICES;
 
     TRACE( "len %p, class %s, instance %s, flags %#lx, machine %p\n", len, debugstr_guid(class), debugstr_w(instance_id), flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
 
     if (!class) return CR_FAILURE;
     if (!len) return CR_INVALID_POINTER;
@@ -1524,7 +1560,11 @@ CONFIGRET WINAPI CM_Get_Device_Interface_List_ExW( GUID *class, DEVINSTID_W inst
     BOOL all = flags == CM_GET_DEVICE_INTERFACE_LIST_ALL_DEVICES;
 
     TRACE( "class %s, instance %s, buffer %p, len %lu, flags %#lx, machine %p\n", debugstr_guid(class), debugstr_w(instance_id), buffer, len, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
 
     if (!class) return CR_FAILURE;
     if (!buffer) return CR_INVALID_POINTER;
@@ -1584,7 +1624,11 @@ CONFIGRET WINAPI CM_Open_Device_Interface_Key_ExW( const WCHAR *name, REGSAM acc
     LSTATUS err;
 
     TRACE( "name %s, access %#lx, disposition %#lx, hkey %p, flags %#lx\n", debugstr_w(name), access, disposition, hkey, flags );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
 
     if (!name) return CR_INVALID_POINTER;
     if (init_device_interface( &iface, name )) return CR_INVALID_DATA;
@@ -1639,7 +1683,11 @@ CONFIGRET WINAPI CM_Get_Device_Interface_Property_ExW( const WCHAR *name, const 
     LSTATUS err;
 
     TRACE( "name %s, key %p, type %p, buffer %p, size %p, flags %#lx\n", debugstr_w(name), key, type, buffer, size, flags);
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
 
     if (!name) return CR_INVALID_POINTER;
     if (init_device_interface( &iface, name )) return CR_NO_SUCH_DEVICE_INTERFACE;
@@ -1666,7 +1714,11 @@ CONFIGRET WINAPI CM_Get_Device_Interface_Property_Keys_ExW( const WCHAR *name, D
     LSTATUS err;
 
     TRACE( "name %s, buffer %p, size %p, flags %#lx\n", debugstr_w(name), buffer, size, flags);
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
     if (!name || !size) return CR_INVALID_POINTER;
@@ -1721,7 +1773,11 @@ CONFIGRET WINAPI CM_Get_Device_ID_List_Size_ExW( ULONG *len, const WCHAR *filter
     GUID guid;
 
     TRACE( "len %p, filter %s, flags %#lx, machine %p\n", len, debugstr_w(filter), flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
 
     if (!len) return CR_INVALID_POINTER;
     if (flags & ~CM_GETIDLIST_FILTER_BITS) return CR_INVALID_FLAG;
@@ -1787,7 +1843,11 @@ CONFIGRET WINAPI CM_Get_Device_ID_List_ExW( const WCHAR *filter, WCHAR *buffer, 
     GUID guid;
 
     TRACE( "filter %s, buffer %p, len %lu, flags %#lx, machine %p\n", debugstr_w(filter), buffer, len, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
 
     if (!buffer) return CR_INVALID_POINTER;
     if (!len) return buffer ? CR_INVALID_POINTER : CR_BUFFER_SMALL;
@@ -1961,7 +2021,11 @@ CONFIGRET WINAPI CM_Get_Device_ID_Size_Ex( ULONG *len, DEVINST node, ULONG flags
     struct device dev;
 
     TRACE( "len %p, node %#lx, flags %#lx, machine %p\n", len, node, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
     if (!len) return CR_INVALID_POINTER;
@@ -1992,7 +2056,11 @@ CONFIGRET WINAPI CM_Get_Device_ID_ExW( DEVINST node, WCHAR *buffer, ULONG len, U
     ULONG path_len;
 
     TRACE( "node %#lx, buffer %p, len %lu, flags %#lx, machine %p\n", node, buffer, len, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
     if (!buffer) return CR_INVALID_POINTER;
@@ -2056,7 +2124,11 @@ CONFIGRET WINAPI CM_Open_DevNode_Key_Ex( DEVINST node, REGSAM access, ULONG prof
     LSTATUS err;
 
     TRACE( "node %#lx, access %#lx, profile %lu, disposition %#lx, hkey %p, flags %#lx, machine %p\n", node, access, profile, disposition, hkey, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
 
     if (devnode_get_device( node, &dev )) return CR_NO_SUCH_DEVNODE;
     if ((flags & (CM_REGISTRY_USER | CM_REGISTRY_CONFIG)) == (CM_REGISTRY_USER | CM_REGISTRY_CONFIG)) return CR_INVALID_FLAG;
@@ -2104,7 +2176,9 @@ CONFIGRET WINAPI CM_Get_DevNode_Registry_Property_ExW( DEVINST node, ULONG prope
     LSTATUS err;
 
     TRACE( "node %#lx, property %#lx, type %p, buffer %p, len %p, flags %#lx, machine %p\n", node, property, type, buffer, len, flags, machine );
-#ifndef __REACTOS__
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
 #endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
@@ -2129,7 +2203,11 @@ CONFIGRET WINAPI CM_Get_DevNode_Registry_Property_ExA( DEVINST node, ULONG prope
     LSTATUS err;
 
     TRACE( "node %#lx, property %#lx, type %p, buffer %p, len %p, flags %#lx, machine %p\n", node, property, type, buffer, len, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
 #ifdef __REACTOS__
@@ -2168,7 +2246,11 @@ CONFIGRET WINAPI CM_Get_DevNode_Property_ExW( DEVINST node, const DEVPROPKEY *ke
     LSTATUS err;
 
     TRACE( "node %#lx, key %s, type %p, buffer %p, size %p, flags %#lx, machine %p\n", node, debugstr_DEVPROPKEY(key), type, buffer, size, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
     if (devnode_get_device( node, &dev )) return CR_INVALID_DEVNODE;
@@ -2194,7 +2276,11 @@ CONFIGRET WINAPI CM_Get_DevNode_Property_Keys_Ex( DEVINST node, DEVPROPKEY *keys
     LSTATUS err;
 
     TRACE( "node %#lx, keys %p, count %p, flags %#lx, machine %p\n", node, keys, count, flags, machine );
+#ifdef __REACTOS__
+    if (!CfgmgrIsValidMachine( machine )) return CR_FAILURE;
+#else
     if (machine) FIXME( "machine %p not implemented!\n", machine );
+#endif
     if (flags) FIXME( "flags %#lx not implemented!\n", flags );
 
     if (!count) return CR_INVALID_POINTER;

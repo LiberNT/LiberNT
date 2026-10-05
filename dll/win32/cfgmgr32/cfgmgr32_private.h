@@ -76,6 +76,7 @@ extern LSTATUS init_property( struct property *prop, const DEVPROPKEY *key, DEVP
 extern DEVINST CfgmgrDevInstFromId( const WCHAR *id );
 extern BOOL CfgmgrIdFromDevInst( DEVINST node, WCHAR *id, ULONG len );
 extern BOOL CfgmgrIsKernelDevNodeProperty( ULONG property );
+extern BOOL CfgmgrIsValidMachine( HMACHINE machine );
 extern CONFIGRET CfgmgrGetDevNodeRegistryPropertyW( DEVINST node, ULONG property, ULONG *type, void *buffer, ULONG *len, ULONG flags, HMACHINE machine );
 extern CONFIGRET CfgmgrGetDevNodeRegistryPropertyA( DEVINST node, ULONG property, ULONG *type, void *buffer, ULONG *len, ULONG flags, HMACHINE machine );
 
