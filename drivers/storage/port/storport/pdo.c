@@ -609,6 +609,57 @@ PortAllocateDoubleBuffer(
     return STATUS_INSUFFICIENT_RESOURCES;
 }
 
+static BOOLEAN
+PortMapsDataBuffer(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension,
+    _In_ PSCSI_REQUEST_BLOCK Srb)
+{
+    switch (FdoExtension->Miniport.PortConfig.MapBuffers)
+    {
+        case STOR_MAP_ALL_BUFFERS_INCLUDING_READ_WRITE:
+            return TRUE;
+
+        case STOR_MAP_ALL_BUFFERS:
+        case STOR_MAP_NON_READ_WRITE_BUFFERS:
+            if (Srb->Function != SRB_FUNCTION_EXECUTE_SCSI)
+                return TRUE;
+            switch (Srb->Cdb[0])
+            {
+                case SCSIOP_READ6:
+                case SCSIOP_READ:
+                case SCSIOP_READ12:
+                case SCSIOP_READ16:
+                case SCSIOP_WRITE6:
+                case SCSIOP_WRITE:
+                case SCSIOP_WRITE12:
+                case SCSIOP_WRITE16:
+                    return FALSE;
+            }
+            return TRUE;
+
+        default:
+            return (Srb->Function == SRB_FUNCTION_IO_CONTROL) ||
+                   (Srb->Function == SRB_FUNCTION_PROTOCOL_COMMAND) ||
+                   (Srb->Function == SRB_FUNCTION_WMI);
+    }
+}
+
+static NTSTATUS
+PortMapDataBuffer(
+    _Inout_ PSTOR_SRB_CONTEXT SrbContext,
+    _In_ PMDL Mdl,
+    _In_ PSCSI_REQUEST_BLOCK Srb)
+{
+    PUCHAR SystemVa = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
+
+    if (SystemVa == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    SrbContext->OriginalDataBuffer = Srb->DataBuffer;
+    Srb->DataBuffer = SystemVa + ((PUCHAR)Srb->DataBuffer - (PUCHAR)MmGetMdlVirtualAddress(Mdl));
+    return STATUS_SUCCESS;
+}
+
 static VOID
 PortFreeDoubleBuffer(
     _Inout_ PSTOR_SRB_CONTEXT SrbContext)
@@ -657,6 +708,8 @@ VOID PortFreeSrbContext(_In_ PIRP Irp)
 
     if (SrbContext->BounceVa != NULL)
         PortFreeDoubleBuffer(SrbContext);
+    else if (SrbContext->OriginalDataBuffer != NULL)
+        SrbContext->LegacySrb->DataBuffer = SrbContext->OriginalDataBuffer;
 
     if (SrbContext->Sgl != NULL)
     {
@@ -875,6 +928,14 @@ PortSubmitSrb(
             if (MiniportSrb != Srb)
                 ((PSTORAGE_REQUEST_BLOCK)MiniportSrb)->DataBuffer = SrbContext->BounceVa;
             DmaMdl = SrbContext->BounceMdl;
+        }
+        else if (PortMapsDataBuffer(FdoExtension, Srb))
+        {
+            Status = PortMapDataBuffer(SrbContext, Irp->MdlAddress, Srb);
+            if (!NT_SUCCESS(Status))
+                goto Fail;
+            if (MiniportSrb != Srb)
+                ((PSTORAGE_REQUEST_BLOCK)MiniportSrb)->DataBuffer = Srb->DataBuffer;
         }
         KeRaiseIrql(DISPATCH_LEVEL, &Irql);
         Status = Adapter->DmaOperations->GetScatterGatherList(Adapter, DeviceObject,

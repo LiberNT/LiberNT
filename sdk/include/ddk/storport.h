@@ -259,6 +259,8 @@ typedef struct _SCSI_PNP_REQUEST_BLOCK {
 
 #define SRB_FUNCTION_FLUSH                  0x08
 
+#define SRB_FUNCTION_PROTOCOL_COMMAND       0x09
+
 #define SRB_FUNCTION_ABORT_COMMAND          0x10
 
 #define SRB_FUNCTION_RELEASE_RECOVERY       0x11
@@ -3290,6 +3292,8 @@ typedef struct _MESSAGE_INTERRUPT_INFORMATION {
 #define STOR_MAP_ALL_BUFFERS                        (1)
 
 #define STOR_MAP_NON_READ_WRITE_BUFFERS             (2)
+
+#define STOR_MAP_ALL_BUFFERS_INCLUDING_READ_WRITE   (3)
 
 typedef struct _PORT_CONFIGURATION_INFORMATION {
     ULONG Length;
