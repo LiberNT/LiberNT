@@ -356,18 +356,6 @@ SecLookupAccountSid(
 }
 
 NTSTATUS
-SEC_ENTRY
-SecLookupWellKnownSid(
-    _In_ WELL_KNOWN_SID_TYPE SidType,
-    _Out_ PSID Sid,
-    _In_ ULONG SidBufferSize,
-    _Inout_opt_ PULONG SidSize)
-{
-    UNIMPLEMENTED_DBGBREAK();
-    return 0;
-}
-
-NTSTATUS
 NTAPI
 SecMakeSPN(
     _In_ PUNICODE_STRING ServiceClass,

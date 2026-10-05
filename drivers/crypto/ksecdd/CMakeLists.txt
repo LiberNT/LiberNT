@@ -12,6 +12,7 @@ list(APPEND SOURCE
     crypt.c
     bcrypt.c
     random.c
+    sid.c
     stubs.c
     ksecdd.rc
     ${CMAKE_CURRENT_BINARY_DIR}/ksecdd.def)
