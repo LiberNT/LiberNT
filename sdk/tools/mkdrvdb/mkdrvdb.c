@@ -517,6 +517,28 @@ DecorationCompatible(const char *Decoration)
     return 1;
 }
 
+static unsigned long long
+DecorationRank(const char *Decoration)
+{
+    const char *Part = strchr(Decoration, '.');
+    unsigned long long Rank = 0;
+    unsigned Index;
+
+    for (Index = 0; Part && *Part == '.' && Index < 5; Index++)
+    {
+        unsigned long Value = strtoul(Part + 1, NULL, 10);
+
+        if (Index == 0)
+            Rank |= (unsigned long long)(Value & 0xFF) << 48;
+        else if (Index == 1)
+            Rank |= (unsigned long long)(Value & 0xFF) << 40;
+        else if (Index == 4)
+            Rank |= Value & 0xFFFFFFFFULL;
+        Part = strchr(Part + 1, '.');
+    }
+    return Rank;
+}
+
 static char *
 ActualSection(HINF Inf, const char *Base)
 {
@@ -1021,7 +1043,8 @@ ProcessFile(INF_FILE *File)
     unsigned char Version[48], Guid[16], Data[4];
     unsigned long long Hash;
     char *ClassGuid, *Provider, *Date, *DriverVersion, *PackageId, *PackageKey;
-    char *ModelsBase, *Models, *Decoration, *InstallBase, *Install, *Id, *Key;
+    char *ModelsBase, *Models, *Decoration, *Decorated, *InstallBase, *Install, *Id, *Key;
+    unsigned long long BestRank;
     long Count, FieldIndex, DecorationIndex;
     unsigned Score;
     int Ok, Found, ModelFound, Compatible;
@@ -1079,14 +1102,32 @@ ProcessFile(INF_FILE *File)
 
         Count = InfHostGetFieldCount(Manufacturer);
         Compatible = Count < 2;
-        for (DecorationIndex = 2; DecorationIndex <= Count && !Compatible; DecorationIndex++)
+        Decorated = NULL;
+        BestRank = 0;
+        for (DecorationIndex = 2; DecorationIndex <= Count; DecorationIndex++)
         {
             Decoration = Field(Manufacturer, (ULONG)DecorationIndex);
-            Compatible = Decoration && DecorationCompatible(Decoration);
+            if (Decoration && DecorationCompatible(Decoration))
+            {
+                char *Candidate = Format("%s.%s", ModelsBase, Decoration);
+                unsigned long long Rank = DecorationRank(Decoration);
+
+                Compatible = 1;
+                if (Rank != 0 && SectionExists(File->Inf, Candidate) && (!Decorated || Rank > BestRank))
+                {
+                    free(Decorated);
+                    Decorated = Candidate;
+                    BestRank = Rank;
+                }
+                else
+                {
+                    free(Candidate);
+                }
+            }
             free(Decoration);
         }
 
-        Models = Compatible ? ActualSection(File->Inf, ModelsBase) : NULL;
+        Models = Decorated ? Decorated : (Compatible ? ActualSection(File->Inf, ModelsBase) : NULL);
         free(ModelsBase);
         if (!Models)
             continue;
