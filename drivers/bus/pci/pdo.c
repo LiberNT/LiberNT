@@ -4750,9 +4750,19 @@ PciSetPowerLevel(
     /* D3->D0 recovery delay per PCI PM spec (10ms minimum) */
     if (DeviceState == PowerDeviceD0)
     {
-        LARGE_INTEGER Delay;
-        Delay.QuadPart = -10 * 1000 * 10; /* 10ms in 100ns units, negative = relative */
-        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+        if (KeGetCurrentIrql() < DISPATCH_LEVEL)
+        {
+            LARGE_INTEGER Delay;
+            Delay.QuadPart = -10 * 1000 * 10; /* 10ms in 100ns units, negative = relative */
+            KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+        }
+        else
+        {
+            ULONG Stall;
+
+            for (Stall = 0; Stall < 10; Stall++)
+                KeStallExecutionProcessor(1000);
+        }
     }
 }
 
