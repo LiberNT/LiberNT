@@ -88,6 +88,13 @@ ROS                     = "ReactOS"
 DeviceDesc              = "AHCI SATA Driver"
 SATA_AHCI.DeviceDesc    = "Standard SATA AHCI Controller"
 
+SPSVCINST_ASSOCSERVICE = 0x00000002
+SERVICE_KERNEL_DRIVER  = 1
+SERVICE_BOOT_START     = 0
+SERVICE_ERROR_CRITICAL = 3
+REG_EXPAND_SZ          = 0x00020000
+REG_DWORD              = 0x00010001
+
 [Strings.0404]
 ROS                     = "ReactOS"
 DeviceDesc              = "AHCI SATA 驅動程式"
@@ -112,10 +119,3 @@ SATA_AHCI.DeviceDesc    = "标准 SATA AHCI 控制器"
 ROS                     = "ReactOS"
 DeviceDesc              = "AHCI SATA 驅動程式"
 SATA_AHCI.DeviceDesc    = "標準 SATA AHCI 控制器"
-
-SPSVCINST_ASSOCSERVICE = 0x00000002
-SERVICE_KERNEL_DRIVER  = 1
-SERVICE_BOOT_START     = 0
-SERVICE_ERROR_CRITICAL = 3
-REG_EXPAND_SZ          = 0x00020000
-REG_DWORD              = 0x00010001
