@@ -3421,7 +3421,11 @@ static BOOL CDecodeSignedMsg_GetParam(CDecodeMsg *msg, DWORD dwParamType,
                 SetLastError(CRYPT_E_INVALID_INDEX);
             else
                 ret = CRYPT_CopyParam(pvData, pcbData,
+#ifdef __REACTOS__
+                 msg->u.signed_data.info->rgSignerInfo[dwIndex].EncryptedHash.pbData,
+#else
                  &msg->u.signed_data.info->rgSignerInfo[dwIndex].EncryptedHash.pbData,
+#endif
                  msg->u.signed_data.info->rgSignerInfo[dwIndex].EncryptedHash.cbData);
         }
         else
