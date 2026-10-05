@@ -96,6 +96,20 @@ typedef struct _DXGK_CHILD_PDO_EXTENSION
     DXGKP_MONITOR_DESCRIPTOR_SET      DescriptorSet;
     DXGKP_MONITOR_FREQUENCY_RANGE_SET FrequencyRangeSet;
 
+    /*
+     * A target the miniport reported at run time (TargetStatusConnected or
+     * TargetStatusJoined, e.g. a DisplayPort MST branch or a tiled display)
+     * rather than through DxgkDdiQueryChildRelations.  ParentUid is the
+     * target it hangs off; its removal removes this one.  A target joined
+     * into a tiled one is Joined, names it in JoinedInto, and is driven only
+     * through it.  Guarded by ChildListLock.
+     */
+    BOOLEAN                 Dynamic;
+    BOOLEAN                 HasParent;
+    ULONG                   ParentUid;
+    BOOLEAN                 Joined;
+    ULONG                   JoinedInto;
+
 } DXGK_CHILD_PDO_EXTENSION, *PDXGK_CHILD_PDO_EXTENSION;
 
 /*
@@ -175,6 +189,25 @@ DxgkpPollDisplayChildrenRequest(
 NTSTATUS
 DxgkPnpQueuePollDisplayChildren(
     _In_ PDXGKRNL_ADAPTER Adapter);
+
+/*
+ * Dynamic targets (DXGK_CONNECTION_STATUS TargetStatus*): see pnp.c.
+ * PASSIVE_LEVEL, outside ChildListLock.
+ */
+NTSTATUS
+DxgkPnpAddDynamicTarget(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG BaseUid,
+    _In_ ULONG NewUid,
+    _In_ D3DKMDT_VIDEO_OUTPUT_TECHNOLOGY Technology,
+    _In_ BOOLEAN Join,
+    _Out_ PBOOLEAN Changed);
+
+NTSTATUS
+DxgkPnpRemoveTarget(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG Uid,
+    _Out_ PBOOLEAN Changed);
 
 NTSTATUS
 DxgkPnpIndicateChildConnection(

@@ -177,6 +177,202 @@ DxgkPnpIndicateChildConnection(
     return Found ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
 }
 
+/*
+ * DxgkPnpAddDynamicTarget
+ *
+ * TargetStatusConnected: a new target, NewUid, appeared downstream of the
+ * reported target BaseUid.  TargetStatusJoined: targets are joined into a
+ * new one, NewUid; each constituent is reported (BaseUid) in one batch.  The
+ * new target becomes a video-output child like those of
+ * DxgkDdiQueryChildRelations, with no monitor yet -- that arrives as
+ * MonitorStatusConnected on it.  A constituent of a join is driven only
+ * through the joined target from then on.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+NTSTATUS
+DxgkPnpAddDynamicTarget(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG BaseUid,
+    _In_ ULONG NewUid,
+    _In_ D3DKMDT_VIDEO_OUTPUT_TECHNOLOGY Technology,
+    _In_ BOOLEAN Join,
+    _Out_ PBOOLEAN Changed)
+{
+    PDXGK_CHILD_PDO_EXTENSION NewChild = NULL;
+    DXGK_CHILD_DESCRIPTOR Descriptor;
+    PLIST_ENTRY Entry;
+    ULONG64 Epoch;
+    KIRQL OldIrql;
+    BOOLEAN Exists = FALSE;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    *Changed = FALSE;
+    if (Adapter == NULL || NewUid == BaseUid)
+        return STATUS_INVALID_PARAMETER;
+
+    KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
+    Epoch = Adapter->ChildEnumerationEpoch;
+    for (Entry = Adapter->ChildListHead.Flink; Entry != &Adapter->ChildListHead; Entry = Entry->Flink)
+    {
+        PDXGK_CHILD_PDO_EXTENSION Child = CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry);
+
+        if (Child->Descriptor.ChildUid == NewUid)
+        {
+            Exists = TRUE;
+            if (!Child->Present || Child->EnumerationEpoch != Epoch)
+            {
+                Child->Present = TRUE;
+                Child->Connected = FALSE;
+                Child->EdidValid = FALSE;
+                Child->Dynamic = TRUE;
+                Child->HasParent = !Join;
+                Child->ParentUid = BaseUid;
+                Child->EnumerationEpoch = Epoch;
+                Child->StateGeneration++;
+                *Changed = TRUE;
+            }
+        }
+    }
+    KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+
+    if (!Exists)
+    {
+        RtlZeroMemory(&Descriptor, sizeof(Descriptor));
+        Descriptor.ChildDeviceType = TypeVideoOutput;
+        Descriptor.ChildCapabilities.Type.VideoOutput.InterfaceTechnology = Technology;
+        Descriptor.ChildCapabilities.Type.VideoOutput.MonitorOrientationAwareness = D3DKMDT_MOA_NONE;
+        Descriptor.ChildCapabilities.Type.VideoOutput.SupportsSdtvModes = FALSE;
+        Descriptor.ChildCapabilities.HpdAwareness = HpdAwarenessInterruptible;
+        Descriptor.ChildUid = NewUid;
+        Status = DxgkpCreateChildPdo(Adapter, &Descriptor, TRUE, FALSE, Epoch, &NewChild);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        NewChild->Dynamic = TRUE;
+        NewChild->HasParent = !Join;
+        NewChild->ParentUid = BaseUid;
+    }
+
+    KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
+    if (NewChild != NULL)
+    {
+        for (Entry = Adapter->ChildListHead.Flink; Entry != &Adapter->ChildListHead; Entry = Entry->Flink)
+        {
+            if (CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry)->Descriptor.ChildUid == NewUid)
+                break;
+        }
+        if (Entry == &Adapter->ChildListHead && Adapter->ChildEnumerationEpoch == Epoch)
+        {
+            InsertTailList(&Adapter->ChildListHead, &NewChild->ListEntry);
+            Adapter->ChildPdoCount++;
+            NewChild = NULL;
+            *Changed = TRUE;
+        }
+    }
+    if (Join)
+    {
+        for (Entry = Adapter->ChildListHead.Flink; Entry != &Adapter->ChildListHead; Entry = Entry->Flink)
+        {
+            PDXGK_CHILD_PDO_EXTENSION Child = CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry);
+
+            if (Child->Descriptor.ChildUid == BaseUid &&
+                (!Child->Joined || Child->JoinedInto != NewUid))
+            {
+                Child->Joined = TRUE;
+                Child->JoinedInto = NewUid;
+                Child->StateGeneration++;
+                *Changed = TRUE;
+            }
+        }
+    }
+    if (*Changed)
+        (VOID)DxgkHotPlugWorkCorePublishLocked(&Adapter->HotPlugGeneration);
+    KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+    if (NewChild != NULL)
+        DxgkpDeleteChildPdo(NewChild);
+    DXGKRNL_TRACE("DxgkPnpAddDynamicTarget: target %lu %s target %lu (technology %d)\n",
+                  NewUid, Join ? "joins" : "under", BaseUid, (int)Technology);
+    return STATUS_SUCCESS;
+}
+
+/*
+ * DxgkPnpRemoveTarget
+ *
+ * TargetStatusDisconnected: the target is gone, and with it every target
+ * reached through it and the monitors on them, which the miniport does not
+ * report separately.  A joined target goes when one of its constituents
+ * does, and its constituents are released.  A target the miniport declared
+ * in its child relations stays declared but loses its monitor.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+NTSTATUS
+DxgkPnpRemoveTarget(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG Uid,
+    _Out_ PBOOLEAN Changed)
+{
+    ULONG Removed[32];
+    ULONG RemovedCount = 0;
+    ULONG Scan;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+    BOOLEAN Found = FALSE;
+
+    *Changed = FALSE;
+    if (Adapter == NULL)
+        return STATUS_INVALID_PARAMETER;
+    Removed[RemovedCount++] = Uid;
+    KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
+    for (Scan = 0; Scan < RemovedCount; Scan++)
+    {
+        for (Entry = Adapter->ChildListHead.Flink; Entry != &Adapter->ChildListHead; Entry = Entry->Flink)
+        {
+            PDXGK_CHILD_PDO_EXTENSION Child = CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry);
+            ULONG ChildUid = Child->Descriptor.ChildUid;
+            BOOLEAN Goes = FALSE;
+
+            if (ChildUid == Removed[Scan])
+            {
+                Found = TRUE;
+                /* A constituent leaving takes its joined target along. */
+                if (Child->Joined && RemovedCount < RTL_NUMBER_OF(Removed))
+                    Removed[RemovedCount++] = Child->JoinedInto;
+                Goes = TRUE;
+            }
+            else if (Child->Dynamic && Child->Present && Child->HasParent &&
+                     Child->ParentUid == Removed[Scan] && RemovedCount < RTL_NUMBER_OF(Removed))
+            {
+                Removed[RemovedCount++] = ChildUid;
+                continue;
+            }
+            else if (Child->Joined && Child->JoinedInto == Removed[Scan])
+            {
+                Child->Joined = FALSE;
+                Child->StateGeneration++;
+                *Changed = TRUE;
+                continue;
+            }
+            if (!Goes || (!Child->Present && !Child->Connected))
+                continue;
+            if (Child->Dynamic)
+                Child->Present = FALSE;
+            Child->Connected = FALSE;
+            Child->EdidValid = FALSE;
+            Child->Joined = FALSE;
+            Child->StateGeneration++;
+            *Changed = TRUE;
+        }
+    }
+    if (*Changed)
+        (VOID)DxgkHotPlugWorkCorePublishLocked(&Adapter->HotPlugGeneration);
+    KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+    DXGKRNL_TRACE("DxgkPnpRemoveTarget: target %lu gone (%lu target(s) affected)\n",
+                  Uid, RemovedCount);
+    return Found ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+}
+
 NTSTATUS
 DxgkPnpResolveChildAcpiUid(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -1303,6 +1499,10 @@ DxgkpQueryBusRelations(
             PDXGK_CHILD_PDO_EXTENSION Child = CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry);
             BOOLEAN Reported = FALSE;
 
+            /* Run-time targets are reported through connection changes,
+             * never in the child relations; they stay until removed. */
+            if (Child->Dynamic && Child->EnumerationEpoch == ExpectedEpoch)
+                continue;
             for (i = 0; i < Adapter->NumberOfChildren; ++i)
             {
                 if (ChildRelations[i].ChildDeviceType != TypeUninitialized && ChildRelations[i].ChildUid == Child->Descriptor.ChildUid)

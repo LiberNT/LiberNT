@@ -2174,7 +2174,8 @@ DxgkpSnapshotHotPlugMonitor(
 
         if (!Child->Present || Child->EnumerationEpoch != Snapshot->ChildEnumerationEpoch || Child->Descriptor.ChildDeviceType != TypeVideoOutput)
             continue;
-        if (!Child->Connected)
+        /* An output joined into a tiled target is driven through that one. */
+        if (!Child->Connected || Child->Joined)
             continue;
         ConnectedCount++;
         /*
@@ -2537,12 +2538,40 @@ DxgkpDrainConnectionChanges(
                                   "started" : "succeeded");
                 continue;
 
+            case TargetStatusConnected:
+            case TargetStatusJoined:
+            {
+                BOOLEAN Join = Args.ConnectionChange.ConnectionStatus == TargetStatusJoined;
+
+                /* A downstream (MST) or joined (tiled) target appears; its
+                 * monitor is reported on it separately. */
+                if (NT_SUCCESS(DxgkPnpAddDynamicTarget(
+                                   Adapter,
+                                   Args.ConnectionChange.TargetId,
+                                   Join ? Args.ConnectionChange.TargetJoin.NewTargetId
+                                        : Args.ConnectionChange.TargetConnect.NewTargetId,
+                                   Join ? Args.ConnectionChange.TargetJoin.BaseTargetType
+                                        : Args.ConnectionChange.TargetConnect.BaseTargetType,
+                                   Join,
+                                   &Changed)) && Changed)
+                {
+                    AnyChanged = TRUE;
+                }
+                continue;
+            }
+
+            case TargetStatusDisconnected:
+                /* The target and everything reached through it are gone. */
+                if (NT_SUCCESS(DxgkPnpRemoveTarget(Adapter, Args.ConnectionChange.TargetId, &Changed)) &&
+                    Changed)
+                {
+                    AnyChanged = TRUE;
+                }
+                continue;
+
             default:
-                /* TODO: TargetStatusConnected / Disconnected / Joined add and
-                 * remove downstream (MST and tiled) targets at run time,
-                 * which the static child model does not support yet. */
                 DXGKRNL_WARN("CONNECTOR_CHANGE: adapter %p target %u status %u "
-                             "not handled\n",
+                             "not defined\n",
                              Adapter, (UINT)Args.ConnectionChange.TargetId,
                              (UINT)Args.ConnectionChange.ConnectionStatus);
                 continue;
