@@ -1135,6 +1135,25 @@ function(create_registry_hives)
         list(APPEND _converted_files ${_converted_file})
     endforeach()
 
+    get_property(_driver_infs GLOBAL PROPERTY DRIVER_INF_LIST)
+    get_property(_driver_inf_targets GLOBAL PROPERTY DRIVER_INF_TARGETS)
+    if(ARCH STREQUAL "i386")
+        set(_driver_database_arch x86)
+    else()
+        set(_driver_database_arch ${ARCH})
+    endif()
+    set(_driver_database_list "${CMAKE_BINARY_DIR}/boot/bootdata/driverdb_infs.txt")
+    set(_driver_database_inf "${CMAKE_BINARY_DIR}/boot/bootdata/driverdb.inf")
+    string(REPLACE ";" "\n" _driver_database_text "${_driver_infs}")
+    file(GENERATE OUTPUT ${_driver_database_list} CONTENT "${_driver_database_text}\n")
+    add_custom_command(
+        OUTPUT ${_driver_database_inf}
+        COMMAND native-mkdrvdb ${_driver_database_arch} ${_driver_database_inf} ${_driver_database_list}
+        DEPENDS native-mkdrvdb ${_driver_database_list} ${_driver_infs} ${_driver_inf_targets}
+        VERBATIM)
+    utf16le_convert(${_driver_database_inf} ${CMAKE_BINARY_DIR}/boot/bootdata/driverdb_utf16.inf)
+    list(APPEND _converted_files ${CMAKE_BINARY_DIR}/boot/bootdata/driverdb_utf16.inf)
+
     # Concatenate all registry files to registry.inf
     set(_registry_base_inf "${CMAKE_BINARY_DIR}/boot/bootdata/registry_base.inf")
     concatenate_files(${_registry_base_inf} ${_converted_files})
@@ -1311,6 +1330,8 @@ function(add_driver_inf _module)
 
     add_custom_target(${_module}_inf_files DEPENDS ${_converted_inf_files})
     add_cd_file(FILE ${_converted_inf_files} TARGET ${_module}_inf_files DESTINATION reactos/inf FOR all)
+    set_property(GLOBAL APPEND PROPERTY DRIVER_INF_LIST ${_converted_inf_files})
+    set_property(GLOBAL APPEND PROPERTY DRIVER_INF_TARGETS ${_module}_inf_files)
 endfunction()
 
 if(KDBG)
