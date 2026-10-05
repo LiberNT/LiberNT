@@ -11772,7 +11772,14 @@ DxgkpDispatchBufferedIoctlWorker(
                 if (NT_SUCCESS(Status) && PriorityList != NULL)
                     Status = DxgkpCopyFromUserBuffer(PriorityList, pMakeResident->PriorityList, sizeof(*PriorityList) * (SIZE_T)pMakeResident->NumAllocations, EmbeddedBufferMode);
 
-                if (NT_SUCCESS(Status) && PriorityList != NULL)
+                /*
+                 * Every allocation must belong to this paging queue's device.
+                 * This is ownership, not priority: it holds whether or not the
+                 * caller supplied priorities.  Gating it on PriorityList let a
+                 * device make another device's unopened allocation resident
+                 * simply by omitting them.
+                 */
+                if (NT_SUCCESS(Status))
                 {
                     for (i = 0; i < pMakeResident->NumAllocations; ++i)
                     {
