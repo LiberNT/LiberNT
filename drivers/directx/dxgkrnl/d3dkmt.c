@@ -3129,6 +3129,12 @@ DxgkpQueryRegistryInfo(
         if (!NT_SUCCESS(Status))
         {
             Info->Status = D3DDDI_QUERYREGISTRY_STATUS_FAIL;
+            if (Status == STATUS_OBJECT_NAME_NOT_FOUND ||
+                Status == STATUS_OBJECT_PATH_NOT_FOUND ||
+                Status == STATUS_OBJECT_TYPE_MISMATCH)
+            {
+                Status = STATUS_SUCCESS;
+            }
         }
         else if (DataBytes > Capacity)
         {
