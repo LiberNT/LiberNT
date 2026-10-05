@@ -10,6 +10,7 @@
 #include <d3dkmthk.h>
 #include <reactos/dwmframe.h>
 #include <winreg.h>
+#include <wchar.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(opengl32);
 
