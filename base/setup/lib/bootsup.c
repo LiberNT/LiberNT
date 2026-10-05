@@ -76,16 +76,7 @@ CreateFreeLoaderReactOSEntries(
     /* ReactOS */
     // BootEntry->BootEntryKey = MAKESTRKEY(L"ReactOS");
     BootEntry->FriendlyName = L"\"LiberNT\"";
-#if DBG
-#ifndef _WINKD_
-    if (IsUnattendedSetup)
-        Options->OsLoadOptions = L"/DEBUG /DEBUGPORT=COM1 /BAUDRATE=115200 /SOS /KDSERIAL";
-    else
-#endif
-        Options->OsLoadOptions = L"/DEBUG /DEBUGPORT=COM1 /BAUDRATE=115200 /SOS";
-#else
     Options->OsLoadOptions  = L"/FASTDETECT";
-#endif
     AddBootStoreEntry(BootStoreHandle, BootEntry, MAKESTRKEY(L"ReactOS"));
 
     /* DefaultOS=ReactOS */
