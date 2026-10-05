@@ -110,6 +110,11 @@ VOID
 NTAPI
 IopInstallCriticalDevice(PDEVICE_NODE DeviceNode);
 
+BOOLEAN
+NTAPI
+IopConfigureDeviceFromDriverDatabase(
+    _In_ PDEVICE_NODE DeviceNode);
+
 static
 VOID
 IopCancelPrepareDeviceForRemoval(PDEVICE_OBJECT DeviceObject);
@@ -1705,7 +1710,8 @@ PiInitializeDevNode(
      * without that policy and can strand a message-capable device on legacy
      * INTx during its first start.
      */
-    IopInstallCriticalDevice(DeviceNode);
+    if (!IopConfigureDeviceFromDriverDatabase(DeviceNode))
+        IopInstallCriticalDevice(DeviceNode);
 
     // Set the device's DeviceDesc and LocationInformation fields
     PiSetDevNodeText(DeviceNode, InstanceKey);
