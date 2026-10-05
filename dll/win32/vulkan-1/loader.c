@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strsafe.h>
+#include <d3dkmthk.h>
 
 #define VK_LOADER_ICD_INTERFACE_VERSION 5
 #define VK_LOADER_MIN_ICD_INTERFACE_VERSION 3
@@ -161,6 +162,101 @@ static void vk_load_icd_list(WCHAR *List)
     }
 }
 
+static WCHAR *vk_query_adapter_value(D3DKMT_HANDLE Adapter, const WCHAR *ValueName, ULONG ValueType)
+{
+    D3DKMT_QUERYADAPTERINFO Query;
+    D3DDDI_QUERYREGISTRY_INFO *Info;
+    UINT Size = sizeof(*Info);
+    WCHAR *Value = NULL;
+    ULONG Chars;
+
+    for (;;)
+    {
+        Info = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Size);
+        if (!Info)
+            return NULL;
+        Info->QueryType = D3DDDI_QUERYREGISTRY_ADAPTERKEY;
+        Info->QueryFlags.TranslatePath = 1;
+        Info->ValueType = ValueType;
+        if (FAILED(StringCchCopyW(Info->ValueName, ARRAYSIZE(Info->ValueName), ValueName)))
+            break;
+
+        ZeroMemory(&Query, sizeof(Query));
+        Query.hAdapter = Adapter;
+        Query.Type = KMTQAITYPE_QUERYREGISTRY;
+        Query.pPrivateDriverData = Info;
+        Query.PrivateDriverDataSize = Size;
+        if (D3DKMTQueryAdapterInfo(&Query) < 0)
+            break;
+
+        if (Info->Status == D3DDDI_QUERYREGISTRY_STATUS_BUFFER_OVERFLOW &&
+            Size == sizeof(*Info) && Info->OutputValueSize < VK_MANIFEST_MAX_SIZE)
+        {
+            Size = FIELD_OFFSET(D3DDDI_QUERYREGISTRY_INFO, OutputString) + Info->OutputValueSize;
+            if (Size < sizeof(*Info))
+                Size = sizeof(*Info);
+            HeapFree(GetProcessHeap(), 0, Info);
+            continue;
+        }
+
+        if (Info->Status == D3DDDI_QUERYREGISTRY_STATUS_SUCCESS)
+        {
+            Chars = Info->OutputValueSize / sizeof(WCHAR);
+            Value = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (Chars + 2) * sizeof(WCHAR));
+            if (Value)
+                memcpy(Value, Info->OutputString, Chars * sizeof(WCHAR));
+        }
+        break;
+    }
+
+    HeapFree(GetProcessHeap(), 0, Info);
+    return Value;
+}
+
+static void vk_load_adapter_icds(void)
+{
+    D3DKMT_ENUMADAPTERS2 Enumeration;
+    D3DKMT_ADAPTERINFO *Adapters;
+    D3DKMT_CLOSEADAPTER Close;
+    const WCHAR *ValueName = L"VulkanDriverName";
+    WCHAR *Value, *Path;
+    BOOL Wow64 = FALSE;
+    ULONG i;
+
+    if (sizeof(void *) == sizeof(ULONG) && IsWow64Process(GetCurrentProcess(), &Wow64) && Wow64)
+        ValueName = L"VulkanDriverNameWow";
+
+    ZeroMemory(&Enumeration, sizeof(Enumeration));
+    if (D3DKMTEnumAdapters2(&Enumeration) < 0 || !Enumeration.NumAdapters)
+        return;
+    Adapters = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Enumeration.NumAdapters * sizeof(*Adapters));
+    if (!Adapters)
+        return;
+    Enumeration.pAdapters = Adapters;
+    if (D3DKMTEnumAdapters2(&Enumeration) < 0)
+    {
+        HeapFree(GetProcessHeap(), 0, Adapters);
+        return;
+    }
+
+    for (i = 0; i < Enumeration.NumAdapters; i++)
+    {
+        if (!VkActiveIcd)
+        {
+            Value = vk_query_adapter_value(Adapters[i].hAdapter, ValueName, REG_MULTI_SZ);
+            if (!Value)
+                Value = vk_query_adapter_value(Adapters[i].hAdapter, ValueName, REG_SZ);
+            for (Path = Value; Path && *Path && !VkActiveIcd; Path += wcslen(Path) + 1)
+                vk_load_icd(Path);
+            HeapFree(GetProcessHeap(), 0, Value);
+        }
+        Close.hAdapter = Adapters[i].hAdapter;
+        D3DKMTCloseAdapter(&Close);
+    }
+
+    HeapFree(GetProcessHeap(), 0, Adapters);
+}
+
 static struct vk_icd *vk_get_icd(void)
 {
     static const WCHAR *const EnvironmentNames[] = { L"VK_DRIVER_FILES", L"VK_ICD_FILENAMES" };
@@ -186,7 +282,10 @@ static struct vk_icd *vk_get_icd(void)
             }
         }
 
-        if (!Override &&
+        if (!Override)
+            vk_load_adapter_icds();
+
+        if (!Override && !VkActiveIcd &&
             RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Khronos\\Vulkan\\Drivers", 0, KEY_READ, &Key) == ERROR_SUCCESS)
         {
             for (Index = 0; !VkActiveIcd; Index++)
