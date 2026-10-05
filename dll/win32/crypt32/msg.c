@@ -763,7 +763,11 @@ static BOOL CRYPT_AddBlobArray(DWORD *outCBlobs,
 
             memset(*outPBlobs + *outCBlobs, 0, cBlobs * sizeof(CRYPT_DATA_BLOB));
             for (i = *outCBlobs; ret && i < *outCBlobs + cBlobs; i++)
+#ifdef __REACTOS__
+                ret = CRYPT_ConstructBlob(&(*outPBlobs)[i], &pBlobs[i - *outCBlobs]);
+#else
                 ret = CRYPT_ConstructBlob(&(*outPBlobs)[i], &pBlobs[i]);
+#endif
 
             if (ret)
                 *outCBlobs += cBlobs;
@@ -2264,7 +2268,66 @@ typedef struct _CDecodeMsg
     CRYPT_DATA_BLOB        msg_data;
     CRYPT_DATA_BLOB        detached_data;
     CONTEXT_PROPERTY_LIST *properties;
+#ifdef __REACTOS__
+    BOOL                   modified;
+    BOOL                   certs_owned;
+    BOOL                  *unauth_owned;
+#endif
 } CDecodeMsg;
+#ifdef __REACTOS__
+static void CRYPT_FreeAttributes(CRYPT_ATTRIBUTES *attrs)
+{
+    DWORD i;
+
+    for (i = 0; attrs->rgAttr && i < attrs->cAttr; i++)
+    {
+        if (attrs->rgAttr[i].rgValue)
+            CRYPT_FreeBlobArray(attrs->rgAttr[i].cValue, attrs->rgAttr[i].rgValue);
+        CryptMemFree(attrs->rgAttr[i].pszObjId);
+    }
+    CryptMemFree(attrs->rgAttr);
+}
+
+static BOOL CDecodeMsg_OwnCerts(CDecodeMsg *msg)
+{
+    CRYPT_SIGNED_INFO *info = msg->u.signed_data.info;
+    CRYPT_DATA_BLOB *certs = NULL;
+    DWORD count;
+
+    if (msg->certs_owned) return TRUE;
+    if (!CRYPT_ConstructBlobArray(&count, &certs, info->cCertEncoded, info->rgCertEncoded))
+    {
+        if (certs) CRYPT_FreeBlobArray(info->cCertEncoded, certs);
+        return FALSE;
+    }
+    info->rgCertEncoded = count ? certs : NULL;
+    msg->certs_owned = TRUE;
+    return TRUE;
+}
+
+static BOOL CDecodeMsg_OwnUnauthAttrs(CDecodeMsg *msg, DWORD index)
+{
+    CRYPT_SIGNED_INFO *info = msg->u.signed_data.info;
+    CRYPT_ATTRIBUTES attrs;
+
+    if (!msg->unauth_owned)
+    {
+        if (!(msg->unauth_owned = CryptMemAlloc(info->cSignerInfo * sizeof(BOOL))))
+            return FALSE;
+        memset(msg->unauth_owned, 0, info->cSignerInfo * sizeof(BOOL));
+    }
+    if (msg->unauth_owned[index]) return TRUE;
+    if (!CRYPT_ConstructAttributes(&attrs, &info->rgSignerInfo[index].UnauthAttrs))
+    {
+        CRYPT_FreeAttributes(&attrs);
+        return FALSE;
+    }
+    info->rgSignerInfo[index].UnauthAttrs = attrs;
+    msg->unauth_owned[index] = TRUE;
+    return TRUE;
+}
+
+#endif
 
 static void CDecodeMsg_Close(HCRYPTMSG hCryptMsg)
 {
@@ -2287,6 +2350,17 @@ static void CDecodeMsg_Close(HCRYPTMSG hCryptMsg)
     case CMSG_SIGNED:
         if (msg->u.signed_data.info)
         {
+#ifdef __REACTOS__
+            DWORD i;
+
+            if (msg->certs_owned && msg->u.signed_data.info->rgCertEncoded)
+                CRYPT_FreeBlobArray(msg->u.signed_data.info->cCertEncoded,
+                 msg->u.signed_data.info->rgCertEncoded);
+            for (i = 0; msg->unauth_owned && i < msg->u.signed_data.info->cSignerInfo; i++)
+                if (msg->unauth_owned[i])
+                    CRYPT_FreeAttributes(&msg->u.signed_data.info->rgSignerInfo[i].UnauthAttrs);
+            CryptMemFree(msg->unauth_owned);
+#endif
             LocalFree(msg->u.signed_data.info);
             CSignedMsgData_CloseHandles(&msg->u.signed_data);
         }
@@ -3338,6 +3412,26 @@ static BOOL CDecodeSignedMsg_GetParam(CDecodeMsg *msg, DWORD dwParamType,
             SetLastError(CRYPT_E_INVALID_MSG_TYPE);
         break;
     case CMSG_ENCODED_MESSAGE:
+#ifdef __REACTOS__
+        if (msg->modified && msg->u.signed_data.info)
+        {
+            char oid_rsa_signed[] = szOID_RSA_signedData;
+            CRYPT_CONTENT_INFO info = { oid_rsa_signed, { 0, NULL } };
+
+            ret = CRYPT_AsnEncodeCMSSignedInfo(msg->u.signed_data.info, NULL,
+             &info.Content.cbData);
+            if (ret && !(info.Content.pbData = CryptMemAlloc(info.Content.cbData)))
+                ret = FALSE;
+            if (ret)
+                ret = CRYPT_AsnEncodeCMSSignedInfo(msg->u.signed_data.info,
+                 info.Content.pbData, &info.Content.cbData);
+            if (ret)
+                ret = CryptEncodeObjectEx(X509_ASN_ENCODING, PKCS_CONTENT_INFO,
+                 &info, 0, NULL, pvData, pcbData);
+            CryptMemFree(info.Content.pbData);
+        }
+        else
+#endif
         if (msg->msg_data.pbData)
             ret = CRYPT_CopyParam(pvData, pcbData, msg->msg_data.pbData, msg->msg_data.cbData);
         else
@@ -3844,8 +3938,15 @@ static BOOL CDecodeMsg_Control(HCRYPTMSG hCryptMsg, DWORD dwFlags,
                 SetLastError(CRYPT_E_INVALID_MSG_TYPE);
                 break;
             }
+#ifdef __REACTOS__
+            if (!CDecodeMsg_OwnCerts(msg))
+                break;
+#endif
             ret = CRYPT_AddBlobArray(&msg->u.signed_data.info->cCertEncoded,
                  &msg->u.signed_data.info->rgCertEncoded, 1, (const CRYPT_DATA_BLOB *)pvCtrlPara);
+#ifdef __REACTOS__
+            if (ret) msg->modified = TRUE;
+#endif
             break;
         default:
             SetLastError(CRYPT_E_INVALID_MSG_TYPE);
@@ -3869,12 +3970,23 @@ static BOOL CDecodeMsg_Control(HCRYPTMSG hCryptMsg, DWORD dwFlags,
                 SetLastError(CRYPT_E_INVALID_INDEX);
                 break;
             }
+#ifdef __REACTOS__
+            if (!CDecodeMsg_OwnCerts(msg))
+                break;
+#endif
             TRACE("CMSG_CTRL_DEL_CERT: index %lu of %lu\n", index, msg->u.signed_data.info->cCertEncoded);
             CryptMemFree(msg->u.signed_data.info->rgCertEncoded[index].pbData);
             memmove(&msg->u.signed_data.info->rgCertEncoded[index], &msg->u.signed_data.info->rgCertEncoded[index + 1],
+#ifdef __REACTOS__
+                    (msg->u.signed_data.info->cCertEncoded - index - 1) * sizeof(*msg->u.signed_data.info->rgCertEncoded));
+#else
                     (msg->u.signed_data.info->cCertEncoded - index - 1) * sizeof(msg->u.signed_data.info->rgCertEncoded));
+#endif
             msg->u.signed_data.info->cCertEncoded--;
             ret = TRUE;
+#ifdef __REACTOS__
+            msg->modified = TRUE;
+#endif
             break;
         }
         default:
@@ -3903,6 +4015,10 @@ static BOOL CDecodeMsg_Control(HCRYPTMSG hCryptMsg, DWORD dwFlags,
                 break;
             }
 
+#ifdef __REACTOS__
+            if (!CDecodeMsg_OwnUnauthAttrs(msg, param->dwSignerIndex))
+                break;
+#endif
             ret = CryptDecodeObjectEx(PKCS_7_ASN_ENCODING, PKCS_ATTRIBUTE, param->blob.pbData, param->blob.cbData,
                                       CRYPT_DECODE_ALLOC_FLAG, NULL, &attr, &size);
             if (!ret)
@@ -3915,6 +4031,9 @@ static BOOL CDecodeMsg_Control(HCRYPTMSG hCryptMsg, DWORD dwFlags,
             TRACE("CRYPT_ATTRIBUTE: %p: pszObjId %s, cValue %lu, rgValue %p\n", attr, debugstr_a(attr->pszObjId), attr->cValue, attr->rgValue);
             ret = CRYPT_AddAttribute(&msg->u.signed_data.info->rgSignerInfo[param->dwSignerIndex].UnauthAttrs, attr);
             LocalFree(attr);
+#ifdef __REACTOS__
+            if (ret) msg->modified = TRUE;
+#endif
             break;
         }
         default:
@@ -3922,6 +4041,51 @@ static BOOL CDecodeMsg_Control(HCRYPTMSG hCryptMsg, DWORD dwFlags,
             break;
         }
         break;
+#ifdef __REACTOS__
+    case CMSG_CTRL_DEL_SIGNER_UNAUTH_ATTR:
+        switch (msg->type)
+        {
+        case CMSG_SIGNED:
+        {
+            const CMSG_CTRL_DEL_SIGNER_UNAUTH_ATTR_PARA *param = pvCtrlPara;
+            CRYPT_ATTRIBUTES *attrs;
+            DWORD i;
+
+            if (!msg->u.signed_data.info)
+            {
+                SetLastError(CRYPT_E_INVALID_MSG_TYPE);
+                break;
+            }
+            if (param->dwSignerIndex >= msg->u.signed_data.info->cSignerInfo)
+            {
+                SetLastError(CRYPT_E_INVALID_INDEX);
+                break;
+            }
+            if (!CDecodeMsg_OwnUnauthAttrs(msg, param->dwSignerIndex))
+                break;
+            attrs = &msg->u.signed_data.info->rgSignerInfo[param->dwSignerIndex].UnauthAttrs;
+            if (param->dwUnauthAttrIndex >= attrs->cAttr)
+            {
+                SetLastError(CRYPT_E_INVALID_INDEX);
+                break;
+            }
+            for (i = 0; i < attrs->rgAttr[param->dwUnauthAttrIndex].cValue; i++)
+                CryptMemFree(attrs->rgAttr[param->dwUnauthAttrIndex].rgValue[i].pbData);
+            CryptMemFree(attrs->rgAttr[param->dwUnauthAttrIndex].rgValue);
+            CryptMemFree(attrs->rgAttr[param->dwUnauthAttrIndex].pszObjId);
+            memmove(&attrs->rgAttr[param->dwUnauthAttrIndex], &attrs->rgAttr[param->dwUnauthAttrIndex + 1],
+             (attrs->cAttr - param->dwUnauthAttrIndex - 1) * sizeof(*attrs->rgAttr));
+            attrs->cAttr--;
+            msg->modified = TRUE;
+            ret = TRUE;
+            break;
+        }
+        default:
+            SetLastError(CRYPT_E_INVALID_MSG_TYPE);
+            break;
+        }
+        break;
+#endif
 
     default:
         FIXME("unimplemented for %ld\n", dwCtrlType);
@@ -3958,6 +4122,11 @@ HCRYPTMSG WINAPI CryptMsgOpenToDecode(DWORD dwMsgEncodingType, DWORD dwFlags,
         msg->msg_data.pbData = NULL;
         msg->detached_data.cbData = 0;
         msg->detached_data.pbData = NULL;
+#ifdef __REACTOS__
+        msg->modified = FALSE;
+        msg->certs_owned = FALSE;
+        msg->unauth_owned = NULL;
+#endif
         msg->properties = ContextPropertyList_Create();
     }
     return msg;
