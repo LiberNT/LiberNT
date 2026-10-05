@@ -20,6 +20,7 @@
 #define NTFS_LAST_SEQUENCED_RECORD 23
 
 #define ROOT_REFERENCE NTFS_ROOT_FILE_REFERENCE
+#define EXTEND_REFERENCE NTFS_MK_FILE_REFERENCE(_Extend, _Extend)
 
 #define SYSTEM_FILE_PERMISSIONS (FILE_PERM_HIDDEN | FILE_PERM_SYSTEM)
 #define SYSTEM_FILE_NAME_FLAGS  (FN_HIDDEN | FN_SYSTEM)
@@ -37,6 +38,76 @@ FormatSequenceFor(_In_ ULONG RecordNumber)
         return 1;
 
     return (USHORT)RecordNumber;
+}
+
+static ULONG
+FormatSecurityIdFor(_In_ ULONG RecordNumber)
+{
+    if (RecordNumber == _Volume ||
+        RecordNumber == _Secure ||
+        RecordNumber >= _Extend)
+    {
+        return NTFS_FORMAT_SECURITY_ID_WRITE;
+    }
+
+    return NTFS_FORMAT_SECURITY_ID_READ;
+}
+
+typedef struct FormatSecurityEntry
+{
+    ULONG Hash;
+    ULONG SecurityId;
+    ULONGLONG Offset;
+    ULONG Length;
+    UCHAR Descriptor[128];
+} FormatSecurityEntry;
+
+static ULONGLONG
+FormatBuildSecurityEntries(_Out_ FormatSecurityEntry* Entries)
+{
+    ULONGLONG Offset = 0;
+    ULONGLONG End = 0;
+    ULONG Index;
+
+    for (Index = 0; Index < NTFS_FORMAT_SECURITY_ENTRIES; Index++)
+    {
+        ULONG DescriptorLength;
+
+        DescriptorLength = FormatBuildSystemSecurityDescriptor(
+            Entries[Index].Descriptor,
+            sizeof(Entries[Index].Descriptor),
+            Index != 0);
+
+        Entries[Index].SecurityId = NTFS_FORMAT_SECURITY_ID_READ + Index;
+        Entries[Index].Hash = FormatSecurityDescriptorHash(
+            Entries[Index].Descriptor,
+            DescriptorLength);
+        Entries[Index].Offset = Offset;
+        Entries[Index].Length = NTFS_FORMAT_SDS_HEADER_SIZE + DescriptorLength;
+
+        End = Offset + Entries[Index].Length;
+        Offset = ALIGN_UP_BY(End, 16);
+    }
+
+    return End;
+}
+
+ULONGLONG
+FormatSecureStreamSize(void)
+{
+    FormatSecurityEntry Entries[NTFS_FORMAT_SECURITY_ENTRIES];
+
+    return NTFS_FORMAT_SDS_MIRROR_OFFSET + FormatBuildSecurityEntries(Entries);
+}
+
+static void
+FormatWriteSdsHeader(_Out_ PUCHAR Buffer,
+                     _In_ const FormatSecurityEntry* Entry)
+{
+    RtlCopyMemory(Buffer, &Entry->Hash, sizeof(ULONG));
+    RtlCopyMemory(Buffer + 4, &Entry->SecurityId, sizeof(ULONG));
+    RtlCopyMemory(Buffer + 8, &Entry->Offset, sizeof(ULONGLONG));
+    RtlCopyMemory(Buffer + 16, &Entry->Length, sizeof(ULONG));
 }
 
 /* Writes the record currently in Ctx->RecordBuffer to its slot in $MFT, and
@@ -95,7 +166,11 @@ FormatBeginSystemFile(_In_ PFormatContext Ctx,
                       FormatSequenceFor(RecordNumber),
                       RecordFlags);
 
-    FormatFillStandardInformation(Ctx, &Information, SYSTEM_FILE_PERMISSIONS);
+    FormatFillStandardInformation(Ctx,
+                                  &Information,
+                                  SYSTEM_FILE_PERMISSIONS |
+                                      (NameFlags & FN_INDEX_VIEW));
+    Information.SecurityId = FormatSecurityIdFor(RecordNumber);
     if (!FormatAddResident(Ctx,
                            TypeStandardInformation,
                            NULL,
@@ -246,6 +321,9 @@ FormatWriteVolumeRecord(_In_ PFormatContext Ctx)
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
+    if (!FormatAddResident(Ctx, TypeData, NULL, NULL, 0, 0))
+        return STATUS_INSUFFICIENT_RESOURCES;
+
     return FormatFlushRecord(Ctx, _Volume);
 }
 
@@ -274,6 +352,7 @@ static const FormatRootEntry FormatRootEntries[] =
     { _Secure,   L"$Secure",   FN_INDEX_VIEW },
     { _UpCase,   L"$UpCase",   0 },
     { _Volume,   L"$Volume",   0 },
+    { _Root,     L".",         FN_DIRECTORY },
 };
 
 /*
@@ -383,9 +462,11 @@ FormatWriteRootIndexBlock(_In_ PFormatContext Ctx)
         EntryLength = FormatBuildFileNameIndexEntry(Ctx,
                                                     Block + Offset,
                                                     Reference,
+                                                    ROOT_REFERENCE,
                                                     Entry->Name,
                                                     SYSTEM_FILE_NAME_FLAGS |
                                                         Entry->NameFlags,
+                                                    NAME_TYPE_WIN32_AND_DOS,
                                                     AllocatedSize,
                                                     DataSize);
         if (EntryLength == 0)
@@ -540,30 +621,124 @@ FormatWriteBadClusRecord(_In_ PFormatContext Ctx)
     return FormatFlushRecord(Ctx, _BadClus);
 }
 
+static void
+FormatWriteViewEntryHeader(_Out_ PUCHAR Entry,
+                           _In_ USHORT DataOffset,
+                           _In_ USHORT DataLength,
+                           _In_ USHORT EntryLength,
+                           _In_ USHORT KeyLength)
+{
+    RtlCopyMemory(Entry, &DataOffset, sizeof(USHORT));
+    RtlCopyMemory(Entry + 2, &DataLength, sizeof(USHORT));
+    RtlCopyMemory(Entry + 8, &EntryLength, sizeof(USHORT));
+    RtlCopyMemory(Entry + 10, &KeyLength, sizeof(USHORT));
+}
+
 static NTSTATUS
 FormatWriteSecureRecord(_In_ PFormatContext Ctx)
 {
+    const USHORT SiiEntryLength = 40;
+    const USHORT SdhEntryLength = 48;
+    const ULONG SdhPadding = 0x00490049;
+    FormatSecurityEntry Entries[NTFS_FORMAT_SECURITY_ENTRIES];
+    UCHAR Sii[NTFS_FORMAT_SECURITY_ENTRIES * 40];
+    UCHAR Sdh[NTFS_FORMAT_SECURITY_ENTRIES * 48];
+    ULONG Order[NTFS_FORMAT_SECURITY_ENTRIES];
+    ULONG Index;
     NTSTATUS Status;
 
-    Status = FormatBeginSystemFile(Ctx, _Secure, L"$Secure", FR_IN_USE, 0, 0, 0);
+    FormatBuildSecurityEntries(Entries);
+
+    for (Index = 0; Index < NTFS_FORMAT_SECURITY_ENTRIES; Index++)
+    {
+        ULONG Position = Index;
+
+        while (Position != 0 &&
+               (Entries[Order[Position - 1]].Hash > Entries[Index].Hash ||
+                (Entries[Order[Position - 1]].Hash == Entries[Index].Hash &&
+                 Entries[Order[Position - 1]].SecurityId > Entries[Index].SecurityId)))
+        {
+            Order[Position] = Order[Position - 1];
+            Position--;
+        }
+        Order[Position] = Index;
+    }
+
+    RtlZeroMemory(Sii, sizeof(Sii));
+    RtlZeroMemory(Sdh, sizeof(Sdh));
+    for (Index = 0; Index < NTFS_FORMAT_SECURITY_ENTRIES; Index++)
+    {
+        PUCHAR SiiEntry = Sii + Index * SiiEntryLength;
+        PUCHAR SdhEntry = Sdh + Index * SdhEntryLength;
+        const FormatSecurityEntry* SdhSource = &Entries[Order[Index]];
+
+        FormatWriteViewEntryHeader(SiiEntry,
+                                   INDEX_ENTRY_HEADER_SIZE + sizeof(ULONG),
+                                   NTFS_FORMAT_SDS_HEADER_SIZE,
+                                   SiiEntryLength,
+                                   sizeof(ULONG));
+        RtlCopyMemory(SiiEntry + INDEX_ENTRY_HEADER_SIZE,
+                      &Entries[Index].SecurityId,
+                      sizeof(ULONG));
+        FormatWriteSdsHeader(SiiEntry + INDEX_ENTRY_HEADER_SIZE + sizeof(ULONG),
+                             &Entries[Index]);
+
+        FormatWriteViewEntryHeader(SdhEntry,
+                                   INDEX_ENTRY_HEADER_SIZE + 2 * sizeof(ULONG),
+                                   NTFS_FORMAT_SDS_HEADER_SIZE,
+                                   SdhEntryLength,
+                                   2 * sizeof(ULONG));
+        RtlCopyMemory(SdhEntry + INDEX_ENTRY_HEADER_SIZE,
+                      &SdhSource->Hash,
+                      sizeof(ULONG));
+        RtlCopyMemory(SdhEntry + INDEX_ENTRY_HEADER_SIZE + sizeof(ULONG),
+                      &SdhSource->SecurityId,
+                      sizeof(ULONG));
+        FormatWriteSdsHeader(SdhEntry + INDEX_ENTRY_HEADER_SIZE + 2 * sizeof(ULONG),
+                             SdhSource);
+        RtlCopyMemory(SdhEntry + SdhEntryLength - sizeof(ULONG),
+                      &SdhPadding,
+                      sizeof(ULONG));
+    }
+
+    Status = FormatBeginSystemFile(Ctx,
+                                   _Secure,
+                                   L"$Secure",
+                                   FR_IN_USE | FR_SPECIAL_INDEX,
+                                   FN_INDEX_VIEW,
+                                   0,
+                                   0);
     if (!NT_SUCCESS(Status))
         return Status;
 
-    /* Empty security descriptor stream plus its two empty view indexes. */
-    if (!FormatAddResident(Ctx, TypeData, L"$SDS", NULL, 0, 0))
+    if (!FormatAddNonResident(Ctx,
+                              TypeData,
+                              L"$SDS",
+                              Ctx->SecureSdsLcn,
+                              Ctx->SecureSdsClusters,
+                              Ctx->SecureSdsDataSize,
+                              Ctx->SecureSdsDataSize,
+                              0,
+                              FALSE))
+    {
         return STATUS_INSUFFICIENT_RESOURCES;
+    }
 
-    Status = FormatAddEmptyDirectoryIndex(Ctx,
-                                          0,
-                                          ATTRDEF_COLLATION_SEC_HASH,
-                                          L"$SDH");
+    Status = FormatAddIndexRootEntries(Ctx,
+                                       L"$SDH",
+                                       0,
+                                       ATTRDEF_COLLATION_SEC_HASH,
+                                       Sdh,
+                                       sizeof(Sdh));
     if (!NT_SUCCESS(Status))
         return Status;
 
-    Status = FormatAddEmptyDirectoryIndex(Ctx,
-                                          0,
-                                          ATTRDEF_COLLATION_ULONG,
-                                          L"$SII");
+    Status = FormatAddIndexRootEntries(Ctx,
+                                       L"$SII",
+                                       0,
+                                       ATTRDEF_COLLATION_ULONG,
+                                       Sii,
+                                       sizeof(Sii));
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -571,10 +746,82 @@ FormatWriteSecureRecord(_In_ PFormatContext Ctx)
 }
 
 static NTSTATUS
+FormatWriteSecureStream(_In_ PFormatContext Ctx)
+{
+    FormatSecurityEntry Entries[NTFS_FORMAT_SECURITY_ENTRIES];
+    ULONG Length = (ULONG)(Ctx->SecureSdsClusters * Ctx->ClusterSize);
+    PUCHAR Stream;
+    ULONG Index;
+    NTSTATUS Status;
+
+    FormatBuildSecurityEntries(Entries);
+
+    Stream = (PUCHAR)Ctx->Params->Allocate(Ctx->Params->IoContext, Length);
+    if (!Stream)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlZeroMemory(Stream, Length);
+    for (Index = 0; Index < NTFS_FORMAT_SECURITY_ENTRIES; Index++)
+    {
+        ULONGLONG Offset = Entries[Index].Offset;
+
+        FormatWriteSdsHeader(Stream + Offset, &Entries[Index]);
+        RtlCopyMemory(Stream + Offset + NTFS_FORMAT_SDS_HEADER_SIZE,
+                      Entries[Index].Descriptor,
+                      Entries[Index].Length - NTFS_FORMAT_SDS_HEADER_SIZE);
+        RtlCopyMemory(Stream + NTFS_FORMAT_SDS_MIRROR_OFFSET + Offset,
+                      Stream + Offset,
+                      Entries[Index].Length);
+    }
+
+    Status = FormatWriteCluster(Ctx, Ctx->SecureSdsLcn, Length, Stream);
+    Ctx->Params->Free(Ctx->Params->IoContext, Stream);
+
+    return Status;
+}
+
+typedef struct FormatExtendEntry
+{
+    ULONG RecordNumber;
+    PCWSTR Name;
+} FormatExtendEntry;
+
+static const FormatExtendEntry FormatExtendEntries[] =
+{
+    { NTFS_FORMAT_OBJID_RECORD,   L"$ObjId" },
+    { NTFS_FORMAT_QUOTA_RECORD,   L"$Quota" },
+    { NTFS_FORMAT_REPARSE_RECORD, L"$Reparse" },
+};
+
+static NTSTATUS
 FormatWriteExtendRecord(_In_ PFormatContext Ctx)
 {
     StandardInformationEx Information;
+    UCHAR Entries[NTFS_FORMAT_INDEX_ROOT_ENTRIES_MAX];
+    ULONG EntriesLength = 0;
+    ULONG Index;
     NTSTATUS Status;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(FormatExtendEntries); Index++)
+    {
+        ULONG RecordNumber = FormatExtendEntries[Index].RecordNumber;
+        ULONG EntryLength;
+
+        EntryLength = FormatBuildFileNameIndexEntry(
+            Ctx,
+            Entries + EntriesLength,
+            NTFS_MK_FILE_REFERENCE(RecordNumber, FormatSequenceFor(RecordNumber)),
+            EXTEND_REFERENCE,
+            FormatExtendEntries[Index].Name,
+            SYSTEM_FILE_NAME_FLAGS | FN_INDEX_VIEW,
+            NAME_TYPE_POSIX,
+            0,
+            0);
+        if (EntryLength == 0)
+            return STATUS_INVALID_PARAMETER;
+
+        EntriesLength += EntryLength;
+    }
 
     FormatBeginRecord(Ctx,
                       _Extend,
@@ -582,6 +829,7 @@ FormatWriteExtendRecord(_In_ PFormatContext Ctx)
                       FR_IN_USE | FR_IS_DIRECTORY);
 
     FormatFillStandardInformation(Ctx, &Information, SYSTEM_FILE_PERMISSIONS);
+    Information.SecurityId = FormatSecurityIdFor(_Extend);
     if (!FormatAddResident(Ctx,
                            TypeStandardInformation,
                            NULL,
@@ -602,14 +850,164 @@ FormatWriteExtendRecord(_In_ PFormatContext Ctx)
     if (!NT_SUCCESS(Status))
         return Status;
 
-    Status = FormatAddEmptyDirectoryIndex(Ctx,
-                                          TypeFileName,
-                                          ATTRDEF_COLLATION_FILENAME,
-                                          L"$I30");
+    Status = FormatAddIndexRootEntries(Ctx,
+                                       L"$I30",
+                                       TypeFileName,
+                                       ATTRDEF_COLLATION_FILENAME,
+                                       Entries,
+                                       EntriesLength);
     if (!NT_SUCCESS(Status))
         return Status;
 
     return FormatFlushRecord(Ctx, _Extend);
+}
+
+static NTSTATUS
+FormatBeginExtendFile(_In_ PFormatContext Ctx,
+                      _In_ ULONG RecordNumber,
+                      _In_ PCWSTR Name)
+{
+    StandardInformationEx Information;
+
+    FormatBeginRecord(Ctx,
+                      RecordNumber,
+                      FormatSequenceFor(RecordNumber),
+                      FR_IN_USE | FR_IS_EXTENSION | FR_SPECIAL_INDEX);
+
+    FormatFillStandardInformation(Ctx,
+                                  &Information,
+                                  SYSTEM_FILE_PERMISSIONS | FN_INDEX_VIEW);
+    Information.SecurityId = FormatSecurityIdFor(RecordNumber);
+    if (!FormatAddResident(Ctx,
+                           TypeStandardInformation,
+                           NULL,
+                           &Information,
+                           sizeof(Information),
+                           0))
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    return FormatAddFileName(Ctx,
+                             EXTEND_REFERENCE,
+                             Name,
+                             SYSTEM_FILE_NAME_FLAGS | FN_INDEX_VIEW,
+                             NAME_TYPE_POSIX,
+                             0,
+                             0);
+}
+
+static ULONG
+FormatBuildQuotaEntry(_In_ PFormatContext Ctx,
+                      _Out_ PUCHAR Entry,
+                      _In_ ULONG OwnerId,
+                      _In_opt_ const UCHAR* Sid,
+                      _In_ ULONG SidLength)
+{
+    const ULONG QuotaVersion = 2;
+    const ULONG QuotaFlags = 1;
+    const ULONGLONG NoLimit = ~0ULL;
+    USHORT DataLength = (USHORT)(48 + SidLength);
+    USHORT EntryLength = (USHORT)ALIGN_UP_BY(INDEX_ENTRY_HEADER_SIZE + sizeof(ULONG) + DataLength, 8);
+    PUCHAR Data = Entry + INDEX_ENTRY_HEADER_SIZE + sizeof(ULONG);
+
+    RtlZeroMemory(Entry, EntryLength);
+    FormatWriteViewEntryHeader(Entry,
+                               INDEX_ENTRY_HEADER_SIZE + sizeof(ULONG),
+                               DataLength,
+                               EntryLength,
+                               sizeof(ULONG));
+    RtlCopyMemory(Entry + INDEX_ENTRY_HEADER_SIZE, &OwnerId, sizeof(ULONG));
+    RtlCopyMemory(Data, &QuotaVersion, sizeof(ULONG));
+    RtlCopyMemory(Data + 4, &QuotaFlags, sizeof(ULONG));
+    RtlCopyMemory(Data + 16, &Ctx->CurrentTime, sizeof(ULONGLONG));
+    RtlCopyMemory(Data + 24, &NoLimit, sizeof(ULONGLONG));
+    RtlCopyMemory(Data + 32, &NoLimit, sizeof(ULONGLONG));
+    if (SidLength != 0)
+        RtlCopyMemory(Data + 48, Sid, SidLength);
+
+    return EntryLength;
+}
+
+static NTSTATUS
+FormatWriteQuotaRecord(_In_ PFormatContext Ctx)
+{
+    static const UCHAR AdministratorsSid[] =
+        { 1, 2, 0, 0, 0, 0, 0, 5, 32, 0, 0, 0, 0x20, 2, 0, 0 };
+    const ULONG AdminOwnerId = NTFS_FORMAT_QUOTA_ADMIN_OWNER_ID;
+    const ULONG DefaultsOwnerId = 1;
+    UCHAR Owners[INDEX_ENTRY_HEADER_SIZE + sizeof(AdministratorsSid) + sizeof(ULONG) + 4];
+    UCHAR Quotas[2 * (INDEX_ENTRY_HEADER_SIZE + sizeof(ULONG) + 48 + sizeof(AdministratorsSid))];
+    ULONG QuotasLength;
+    NTSTATUS Status;
+
+    RtlZeroMemory(Owners, sizeof(Owners));
+    FormatWriteViewEntryHeader(Owners,
+                               INDEX_ENTRY_HEADER_SIZE + sizeof(AdministratorsSid),
+                               sizeof(ULONG),
+                               sizeof(Owners),
+                               sizeof(AdministratorsSid));
+    RtlCopyMemory(Owners + INDEX_ENTRY_HEADER_SIZE,
+                  AdministratorsSid,
+                  sizeof(AdministratorsSid));
+    RtlCopyMemory(Owners + INDEX_ENTRY_HEADER_SIZE + sizeof(AdministratorsSid),
+                  &AdminOwnerId,
+                  sizeof(ULONG));
+
+    QuotasLength = FormatBuildQuotaEntry(Ctx, Quotas, DefaultsOwnerId, NULL, 0);
+    QuotasLength += FormatBuildQuotaEntry(Ctx,
+                                          Quotas + QuotasLength,
+                                          AdminOwnerId,
+                                          AdministratorsSid,
+                                          sizeof(AdministratorsSid));
+
+    Status = FormatBeginExtendFile(Ctx, NTFS_FORMAT_QUOTA_RECORD, L"$Quota");
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = FormatAddIndexRootEntries(Ctx,
+                                       L"$O",
+                                       0,
+                                       ATTRDEF_COLLATION_SID,
+                                       Owners,
+                                       sizeof(Owners));
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = FormatAddIndexRootEntries(Ctx,
+                                       L"$Q",
+                                       0,
+                                       ATTRDEF_COLLATION_ULONG,
+                                       Quotas,
+                                       QuotasLength);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    return FormatFlushRecord(Ctx, NTFS_FORMAT_QUOTA_RECORD);
+}
+
+static NTSTATUS
+FormatWriteEmptyViewFile(_In_ PFormatContext Ctx,
+                         _In_ ULONG RecordNumber,
+                         _In_ PCWSTR Name,
+                         _In_ PCWSTR IndexName)
+{
+    NTSTATUS Status;
+
+    Status = FormatBeginExtendFile(Ctx, RecordNumber, Name);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = FormatAddIndexRootEntries(Ctx,
+                                       IndexName,
+                                       0,
+                                       ATTRDEF_COLLATION_ULONG_MULTI,
+                                       NULL,
+                                       0);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    return FormatFlushRecord(Ctx, RecordNumber);
 }
 
 /*
@@ -646,9 +1044,11 @@ FormatWriteRemainingRecords(_In_ PFormatContext Ctx)
         {
             StandardInformationEx Information;
 
+            ((PFileRecordHeader)Ctx->RecordBuffer)->HardLinkCount = 0;
             FormatFillStandardInformation(Ctx,
                                           &Information,
                                           SYSTEM_FILE_PERMISSIONS);
+            Information.SecurityId = FormatSecurityIdFor(RecordNumber);
             if (!FormatAddResident(Ctx,
                                    TypeStandardInformation,
                                    NULL,
@@ -685,6 +1085,13 @@ FormatWriteMftBitmap(_In_ PFormatContext Ctx)
     for (Bit = 0; Bit < NTFS_FORMAT_RESERVED_RECORDS; Bit++)
         Ctx->TransferBuffer[Bit / 8] |= (UCHAR)(1u << (Bit % 8));
 
+    for (Bit = 0; Bit < RTL_NUMBER_OF(FormatExtendEntries); Bit++)
+    {
+        ULONG RecordNumber = FormatExtendEntries[Bit].RecordNumber;
+
+        Ctx->TransferBuffer[RecordNumber / 8] |= (UCHAR)(1u << (RecordNumber % 8));
+    }
+
     return FormatWriteCluster(Ctx, Ctx->MftBitmapLcn, Length, Ctx->TransferBuffer);
 }
 
@@ -695,7 +1102,7 @@ FormatWriteMftBitmap(_In_ PFormatContext Ctx)
 static NTSTATUS
 FormatWriteVolumeBitmap(_In_ PFormatContext Ctx)
 {
-    FormatExtent Extents[9];
+    FormatExtent Extents[10];
     ULONG ExtentCount = 0;
     ULONGLONG TotalBytes = Ctx->BitmapClusters * Ctx->ClusterSize;
     ULONGLONG Written = 0;
@@ -719,6 +1126,8 @@ FormatWriteVolumeBitmap(_In_ PFormatContext Ctx)
     Extents[ExtentCount++].Count = Ctx->RootIndexClusters;
     Extents[ExtentCount].Lcn = Ctx->MftMirrLcn;
     Extents[ExtentCount++].Count = Ctx->MftMirrClusters;
+    Extents[ExtentCount].Lcn = Ctx->SecureSdsLcn;
+    Extents[ExtentCount++].Count = Ctx->SecureSdsClusters;
 
     while (Written < TotalBytes)
     {
@@ -865,6 +1274,10 @@ FormatWriteMetadata(_In_ PFormatContext Ctx)
     if (!NT_SUCCESS(Status))
         return Status;
 
+    Status = FormatWriteSecureStream(Ctx);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
     Status = FormatWriteVolumeBitmap(Ctx);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -951,5 +1364,17 @@ FormatWriteMetadata(_In_ PFormatContext Ctx)
     if (!NT_SUCCESS(Status))
         return Status;
 
-    return FormatWriteRemainingRecords(Ctx);
+    Status = FormatWriteRemainingRecords(Ctx);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = FormatWriteQuotaRecord(Ctx);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = FormatWriteEmptyViewFile(Ctx, NTFS_FORMAT_OBJID_RECORD, L"$ObjId", L"$O");
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    return FormatWriteEmptyViewFile(Ctx, NTFS_FORMAT_REPARSE_RECORD, L"$Reparse", L"$R");
 }

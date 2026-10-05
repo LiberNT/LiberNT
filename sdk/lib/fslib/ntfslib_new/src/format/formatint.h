@@ -39,28 +39,6 @@
 #define NULL 0
 #endif
 
-#include "ntfscasetable.h"
-
-static inline WCHAR
-RtlUpcaseUnicodeChar(WCHAR Character)
-{
-    const unsigned char* Table = NtfsCaseTable + 2 * sizeof(UINT16);
-    UINT16 Value = (UINT16)Character;
-    UINT16 Offset;
-
-    if (Value < 'a')
-        return Character;
-    if (Value <= 'z')
-        return (WCHAR)(Value - ('a' - 'A'));
-    Offset = Value >> 8;
-    Offset = (UINT16)(Table[2 * Offset] | (Table[2 * Offset + 1] << 8));
-    Offset = (UINT16)(Offset + ((Value >> 4) & 0xF));
-    Offset = (UINT16)(Table[2 * Offset] | (Table[2 * Offset + 1] << 8));
-    Offset = (UINT16)(Offset + (Value & 0xF));
-    Offset = (UINT16)(Table[2 * Offset] | (Table[2 * Offset + 1] << 8));
-    return (WCHAR)(Value + Offset);
-}
-
 #else /* NTFSLIB_PORTABLE */
 
 #ifndef NTOS_MODE_USER
@@ -90,6 +68,17 @@ RtlUpcaseUnicodeChar(WCHAR Character)
 
 /* $LogFile is written in 4 KB pages regardless of the cluster size. */
 #define NTFS_LOG_PAGE_SIZE 4096
+
+#define NTFS_FORMAT_SDS_MIRROR_OFFSET 0x40000
+#define NTFS_FORMAT_SDS_HEADER_SIZE 20
+#define NTFS_FORMAT_SECURITY_ID_READ 0x100
+#define NTFS_FORMAT_SECURITY_ID_WRITE 0x101
+#define NTFS_FORMAT_SECURITY_ENTRIES 2
+#define NTFS_FORMAT_INDEX_ROOT_ENTRIES_MAX 512
+#define NTFS_FORMAT_QUOTA_RECORD 24
+#define NTFS_FORMAT_OBJID_RECORD 25
+#define NTFS_FORMAT_REPARSE_RECORD 26
+#define NTFS_FORMAT_QUOTA_ADMIN_OWNER_ID 0x100
 
 /* An MFT reference packs the record number with its sequence number. */
 #define NTFS_MK_FILE_REFERENCE(Record, Sequence) \
@@ -125,6 +114,7 @@ typedef struct FormatContext
     ULONGLONG AttrDefLcn,   AttrDefClusters;
     ULONGLONG RootIndexLcn, RootIndexClusters;
     ULONGLONG MftMirrLcn,   MftMirrClusters;
+    ULONGLONG SecureSdsLcn, SecureSdsClusters;
 
     /* First cluster past the contiguous head region. */
     ULONGLONG HeadEndLcn;
@@ -134,6 +124,7 @@ typedef struct FormatContext
     ULONGLONG MftBitmapDataSize;
     ULONGLONG LogFileSize;
     ULONGLONG BitmapDataSize;
+    ULONGLONG SecureSdsDataSize;
 
     PUCHAR RecordBuffer;        /* one MFT record */
     PUCHAR TransferBuffer;      /* bulk fill buffer */
@@ -223,12 +214,6 @@ FormatAddFileName(
     _In_ ULONGLONG AllocatedSize,
     _In_ ULONGLONG DataSize);
 
-NTSTATUS
-FormatAddEmptyDirectoryIndex(
-    _In_ PFormatContext Ctx,
-    _In_ ULONG IndexedAttributeType,
-    _In_ ULONG CollationRule,
-    _In_opt_ PCWSTR IndexName);
 
 /* Fills a $FILE_NAME value into Buffer and returns its length. */
 ULONG
@@ -241,6 +226,15 @@ FormatFillFileName(
     _In_ UCHAR NameType,
     _In_ ULONGLONG AllocatedSize,
     _In_ ULONGLONG DataSize);
+
+NTSTATUS
+FormatAddIndexRootEntries(
+    _In_ PFormatContext Ctx,
+    _In_ PCWSTR IndexName,
+    _In_ ULONG IndexedAttributeType,
+    _In_ ULONG CollationRule,
+    _In_opt_ const UCHAR* Entries,
+    _In_ ULONG EntriesLength);
 
 /*
  * $INDEX_ROOT for a directory whose entries live in $INDEX_ALLOCATION: it
@@ -259,8 +253,10 @@ FormatBuildFileNameIndexEntry(
     _In_ PFormatContext Ctx,
     _Out_ PUCHAR Buffer,
     _In_ ULONGLONG FileReference,
+    _In_ ULONGLONG ParentReference,
     _In_ PCWSTR Name,
     _In_ ULONG Flags,
+    _In_ UCHAR NameType,
     _In_ ULONGLONG AllocatedSize,
     _In_ ULONGLONG DataSize);
 
@@ -285,7 +281,21 @@ FormatBuildDefaultSecurityDescriptor(
     _Out_ PUCHAR Buffer,
     _In_ ULONG BufferLength);
 
+ULONG
+FormatBuildSystemSecurityDescriptor(
+    _Out_ PUCHAR Buffer,
+    _In_ ULONG BufferLength,
+    _In_ BOOLEAN Writable);
+
+ULONG
+FormatSecurityDescriptorHash(
+    _In_ const UCHAR* Descriptor,
+    _In_ ULONG DescriptorLength);
+
 /* sysfiles.cpp */
+ULONGLONG
+FormatSecureStreamSize(void);
+
 NTSTATUS
 FormatWriteMetadata(
     _In_ PFormatContext Ctx);

@@ -373,8 +373,10 @@ ULONG
 FormatBuildFileNameIndexEntry(_In_ PFormatContext Ctx,
                               _Out_ PUCHAR Buffer,
                               _In_ ULONGLONG FileReference,
+                              _In_ ULONGLONG ParentReference,
                               _In_ PCWSTR Name,
                               _In_ ULONG Flags,
+                              _In_ UCHAR NameType,
                               _In_ ULONGLONG AllocatedSize,
                               _In_ ULONGLONG DataSize)
 {
@@ -384,10 +386,10 @@ FormatBuildFileNameIndexEntry(_In_ PFormatContext Ctx,
 
     StreamLength = FormatFillFileName(Ctx,
                                       Buffer + INDEX_ENTRY_HEADER_SIZE,
-                                      NTFS_ROOT_FILE_REFERENCE,
+                                      ParentReference,
                                       Name,
                                       Flags,
-                                      NAME_TYPE_WIN32_AND_DOS,
+                                      NameType,
                                       AllocatedSize,
                                       DataSize);
     if (StreamLength == 0)
@@ -407,20 +409,20 @@ FormatBuildFileNameIndexEntry(_In_ PFormatContext Ctx,
     return EntryLength;
 }
 
-/*
- * Adds an $INDEX_ROOT holding nothing but the end-of-node entry. Because the
- * index fits in the record there is no $INDEX_ALLOCATION and no $BITMAP.
- */
 NTSTATUS
-FormatAddEmptyDirectoryIndex(_In_ PFormatContext Ctx,
-                             _In_ ULONG IndexedAttributeType,
-                             _In_ ULONG CollationRule,
-                             _In_opt_ PCWSTR IndexName)
+FormatAddIndexRootEntries(_In_ PFormatContext Ctx,
+                          _In_ PCWSTR IndexName,
+                          _In_ ULONG IndexedAttributeType,
+                          _In_ ULONG CollationRule,
+                          _In_opt_ const UCHAR* Entries,
+                          _In_ ULONG EntriesLength)
 {
-    UCHAR Buffer[sizeof(IndexRootEx) + INDEX_ENTRY_HEADER_SIZE];
+    UCHAR Buffer[0x20 + NTFS_FORMAT_INDEX_ROOT_ENTRIES_MAX + INDEX_ENTRY_HEADER_SIZE];
     PIndexRootEx Root = (PIndexRootEx)Buffer;
     PIndexEntry End;
-    ULONG Length = 0x20 + INDEX_ENTRY_HEADER_SIZE;
+
+    if (0x20 + EntriesLength + INDEX_ENTRY_HEADER_SIZE > sizeof(Buffer))
+        return STATUS_INSUFFICIENT_RESOURCES;
 
     RtlZeroMemory(Buffer, sizeof(Buffer));
 
@@ -432,11 +434,15 @@ FormatAddEmptyDirectoryIndex(_In_ PFormatContext Ctx,
 
     /* Offsets in the node header are relative to the node header itself. */
     Root->Header.IndexOffset = sizeof(IndexNodeHeader);
-    Root->Header.TotalIndexSize = sizeof(IndexNodeHeader) + INDEX_ENTRY_HEADER_SIZE;
+    Root->Header.TotalIndexSize = sizeof(IndexNodeHeader) + EntriesLength +
+                                  INDEX_ENTRY_HEADER_SIZE;
     Root->Header.AllocatedSize = Root->Header.TotalIndexSize;
     Root->Header.Flags = 0;
 
-    End = (PIndexEntry)(Buffer + 0x20);
+    if (EntriesLength != 0)
+        RtlCopyMemory(Buffer + 0x20, Entries, EntriesLength);
+
+    End = (PIndexEntry)(Buffer + 0x20 + EntriesLength);
     End->EntryLength = INDEX_ENTRY_HEADER_SIZE;
     End->StreamLength = 0;
     End->Flags = INDEX_ENTRY_END;
@@ -445,7 +451,7 @@ FormatAddEmptyDirectoryIndex(_In_ PFormatContext Ctx,
                            TypeIndexRoot,
                            IndexName,
                            Buffer,
-                           Length,
+                           0x20 + EntriesLength + INDEX_ENTRY_HEADER_SIZE,
                            0))
     {
         return STATUS_INSUFFICIENT_RESOURCES;

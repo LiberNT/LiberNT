@@ -274,6 +274,7 @@ FormatComputeLayout(_In_ PFormatContext Ctx)
     Ctx->BitmapDataSize = ALIGN_UP_BY((Ctx->TotalClusters + 7) / 8, 8);
 
     Ctx->LogFileSize = FormatChooseLogFileSize(VolumeSize);
+    Ctx->SecureSdsDataSize = FormatSecureStreamSize();
 
     Ctx->CurrentTime = Params->CurrentTime;
 
@@ -317,6 +318,9 @@ FormatComputeLayout(_In_ PFormatContext Ctx)
     Ctx->RootIndexLcn = FormatAllocate(&NextLcn,
                                        FormatClustersFor(Ctx, Ctx->IndexRecordSize),
                                        &Ctx->RootIndexClusters);
+    Ctx->SecureSdsLcn = FormatAllocate(&NextLcn,
+                                       FormatClustersFor(Ctx, Ctx->SecureSdsDataSize),
+                                       &Ctx->SecureSdsClusters);
     Ctx->HeadEndLcn = NextLcn;
 
     /*
