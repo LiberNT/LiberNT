@@ -746,6 +746,17 @@ extern PWCHAR HalName;
 
 extern KAFFINITY HalpDefaultInterruptAffinity;
 
+NTSTATUS
+HalpSecondaryQueryInformation(
+    _In_ ULONG BufferSize,
+    _Out_ PVOID Buffer,
+    _Out_opt_ PULONG ReturnedLength);
+
+NTSTATUS
+HalpSecondaryRegisterInterface(
+    _In_ ULONG BufferSize,
+    _In_ PVOID Buffer);
+
 extern IDTUsageFlags HalpIDTUsageFlags[MAXIMUM_IDTVECTOR+1];
 
 extern BOOLEAN HalBootViaEfi;

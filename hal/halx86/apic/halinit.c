@@ -102,6 +102,8 @@ HalpInitPhase0(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     HalpPrintApicTables();
 
+    HalpSecondaryInitialize();
+
     /* Enable clock interrupt handler */
     HalpEnableInterruptHandler(IDT_INTERNAL,
                                0,

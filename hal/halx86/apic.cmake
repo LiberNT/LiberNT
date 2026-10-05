@@ -9,6 +9,7 @@ list(APPEND HAL_APIC_SOURCE
     apic/halinit.c
     apic/processor.c
     apic/rtctimer.c
+    apic/secondary.c
     apic/tsc.c)
 
 add_asm_files(lib_hal_apic_asm ${HAL_APIC_ASM_SOURCE})

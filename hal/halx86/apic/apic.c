@@ -230,6 +230,13 @@ ApicRequestSelfInterrupt(IN UCHAR Vector, UCHAR TriggerMode)
     }
 }
 
+VOID
+HalpRequestSelfInterrupt(
+    _In_ UCHAR Vector)
+{
+    ApicRequestSelfInterrupt(Vector, APIC_TGM_Edge);
+}
+
 FORCEINLINE
 VOID
 ApicSendEOI(void)
@@ -460,6 +467,9 @@ HalpGetRootInterruptVector(
     _Out_ PKAFFINITY OutAffinity)
 {
     UCHAR Vector;
+
+    if (HalpSecondaryIsGsiv(BusInterruptLevel))
+        return HalpSecondaryGetRootVector(BusInterruptLevel, OutIrql, OutAffinity);
 
     /* Levels beyond the discovered pin count cannot be routed by a line;
      * reject so the caller falls back to MSI/deferred allocation. */
@@ -792,6 +802,12 @@ HalEnableSystemInterrupt(
     IOAPIC_REDIRECTION_REGISTER ReDirReg;
     UCHAR Index;
     ASSERT(Irql <= HIGH_LEVEL);
+
+    if (HalpSecondaryIsVector(Vector))
+        return HalpSecondaryEnable(Vector, Irql, InterruptMode);
+    if (Irql == PASSIVE_LEVEL)
+        return FALSE;
+
     ASSERT((IrqlToTpr(Irql) & 0xF0) == (Vector & 0xF0));
 
     /* Get the irq for this vector */
@@ -883,7 +899,15 @@ HalDisableSystemInterrupt(
     ASSERT(Irql <= HIGH_LEVEL);
     ASSERT(Vector < RTL_NUMBER_OF(HalpVectorToIndex));
 
+    if (HalpSecondaryIsVector(Vector))
+    {
+        HalpSecondaryDisable(Vector);
+        return;
+    }
+
     Index = HalpVectorToIndex[Vector];
+    if (Index == APIC_RESERVED_VECTOR)
+        return;
 
     /* No IOAPIC line behind this vector; a blind RMW through the stale
        index would target an unrelated register. */

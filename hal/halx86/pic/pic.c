@@ -1287,3 +1287,26 @@ KfRaiseIrql(
 }
 
 #endif /* !_MINIHAL_ */
+
+NTSTATUS
+HalpSecondaryQueryInformation(
+    _In_ ULONG BufferSize,
+    _Out_ PVOID Buffer,
+    _Out_opt_ PULONG ReturnedLength)
+{
+    UNREFERENCED_PARAMETER(BufferSize);
+    UNREFERENCED_PARAMETER(Buffer);
+    if (ReturnedLength != NULL)
+        *ReturnedLength = 0;
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
+HalpSecondaryRegisterInterface(
+    _In_ ULONG BufferSize,
+    _In_ PVOID Buffer)
+{
+    UNREFERENCED_PARAMETER(BufferSize);
+    UNREFERENCED_PARAMETER(Buffer);
+    return STATUS_NOT_SUPPORTED;
+}

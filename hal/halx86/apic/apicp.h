@@ -79,6 +79,14 @@ extern ULONG HalpIoApicMaxIrq;
 
 extern UCHAR HalpVectorToIndex[256];
 
+VOID HalpRequestSelfInterrupt(_In_ UCHAR Vector);
+VOID HalpSecondaryInitialize(VOID);
+BOOLEAN HalpSecondaryIsGsiv(_In_ ULONG Gsiv);
+BOOLEAN HalpSecondaryIsVector(_In_ ULONG Vector);
+ULONG HalpSecondaryGetRootVector(_In_ ULONG Gsiv, _Out_ PKIRQL OutIrql, _Out_ PKAFFINITY OutAffinity);
+BOOLEAN HalpSecondaryEnable(_In_ ULONG Vector, _In_ KIRQL Irql, _In_ KINTERRUPT_MODE InterruptMode);
+VOID HalpSecondaryDisable(_In_ ULONG Vector);
+
 /* The IMCR is supported by two read/writable or write-only I/O ports,
    22h and 23h, which receive address and data respectively.
    To access the IMCR, write a value of 70h to I/O port 22h, which selects the IMCR.
