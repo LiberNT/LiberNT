@@ -7,6 +7,7 @@
 #include <winuser.h>
 #include <winbase.h>
 #include <d3dkmthk.h>
+#include <reactos/rddm/rxgkadvcolor.h>
 #include "wine/debug.h"
 
 #ifndef NT_SUCCESS
@@ -490,6 +491,52 @@ QueryDisplayConfig(
     return ERROR_SUCCESS;
 }
 
+/* The advanced colour state of the output a path's source drives, from
+ * dxgkrnl (RXGK_ESCAPE_ADVANCED_COLOR). */
+static NTSTATUS
+DisplayConfigAdvancedColor(
+    const DISPLAYCONFIG_LOCAL_PATH *Path,
+    RXGK_ADVANCED_COLOR_PACKET *Packet)
+{
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME Open;
+    D3DKMT_CLOSEADAPTER Close;
+    D3DKMT_ESCAPE Escape;
+    NTSTATUS Status;
+
+    memset(&Open, 0, sizeof(Open));
+    lstrcpynW(Open.DeviceName, Path->GdiDeviceName, ARRAY_SIZE(Open.DeviceName));
+    Status = D3DKMTOpenAdapterFromGdiDisplayName(&Open);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Packet->Size = sizeof(*Packet);
+    Packet->Version = RXGK_ADVANCED_COLOR_VERSION_1;
+    Packet->VidPnSourceId = Open.VidPnSourceId;
+    memset(&Escape, 0, sizeof(Escape));
+    Escape.hAdapter = Open.hAdapter;
+    Escape.Type = (D3DKMT_ESCAPETYPE)RXGK_ESCAPE_ADVANCED_COLOR;
+    Escape.pPrivateDriverData = Packet;
+    Escape.PrivateDriverDataSize = sizeof(*Packet);
+    Status = D3DKMTEscape(&Escape);
+
+    Close.hAdapter = Open.hAdapter;
+    D3DKMTCloseAdapter(&Close);
+    return Status;
+}
+
+static LONG
+DisplayConfigStatusToError(
+    NTSTATUS Status)
+{
+    if (NT_SUCCESS(Status))
+        return ERROR_SUCCESS;
+    if (Status == (NTSTATUS)0xC00000BBL) /* STATUS_NOT_SUPPORTED */
+        return ERROR_NOT_SUPPORTED;
+    if (Status == (NTSTATUS)0xC000000DL) /* STATUS_INVALID_PARAMETER */
+        return ERROR_INVALID_PARAMETER;
+    return ERROR_GEN_FAILURE;
+}
+
 typedef enum ORIENTATION_PREFERENCE {
     ORIENTATION_PREFERENCE_NONE              = 0x0,
     ORIENTATION_PREFERENCE_LANDSCAPE         = 0x1,
@@ -528,6 +575,12 @@ LONG WINAPI DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *packet)
             break;
         case DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_BASE_TYPE:
             ExpectedSize = sizeof(DISPLAYCONFIG_TARGET_BASE_TYPE);
+            break;
+        case DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO:
+            ExpectedSize = sizeof(DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO);
+            break;
+        case DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL:
+            ExpectedSize = sizeof(DISPLAYCONFIG_SDR_WHITE_LEVEL);
             break;
         default:
             FIXME("DisplayConfigGetDeviceInfo: type %d not supported\n", packet->type);
@@ -601,6 +654,39 @@ LONG WINAPI DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *packet)
             Base->baseOutputTechnology = DISPLAYCONFIG_OUTPUT_TECHNOLOGY_OTHER;
             return ERROR_SUCCESS;
         }
+        case DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO:
+        {
+            DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO *Info = (DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO *)packet;
+            RXGK_ADVANCED_COLOR_PACKET Color;
+            NTSTATUS Status;
+
+            memset(&Color, 0, sizeof(Color));
+            Color.Operation = RXGK_ADVANCED_COLOR_GET;
+            Status = DisplayConfigAdvancedColor(Local, &Color);
+            if (!NT_SUCCESS(Status))
+                return DisplayConfigStatusToError(Status);
+            Info->value = 0;
+            Info->advancedColorSupported = (Color.Flags & RXGK_ADVANCED_COLOR_SUPPORTED) != 0;
+            Info->advancedColorEnabled = (Color.Flags & RXGK_ADVANCED_COLOR_ENABLED) != 0;
+            Info->colorEncoding = (DISPLAYCONFIG_COLOR_ENCODING)Color.ColorEncoding;
+            Info->bitsPerColorChannel = Color.BitsPerColorChannel;
+            return ERROR_SUCCESS;
+        }
+        case DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL:
+        {
+            DISPLAYCONFIG_SDR_WHITE_LEVEL *White = (DISPLAYCONFIG_SDR_WHITE_LEVEL *)packet;
+            RXGK_ADVANCED_COLOR_PACKET Color;
+            NTSTATUS Status;
+
+            memset(&Color, 0, sizeof(Color));
+            Color.Operation = RXGK_ADVANCED_COLOR_GET;
+            Status = DisplayConfigAdvancedColor(Local, &Color);
+            if (!NT_SUCCESS(Status))
+                return DisplayConfigStatusToError(Status);
+            /* In thousandths of 80 nits: 1000 is 80 nits. */
+            White->SDRWhiteLevel = Color.SdrWhiteLevel * 1000 / 80;
+            return ERROR_SUCCESS;
+        }
         default:
             return ERROR_INVALID_PARAMETER;
     }
@@ -611,8 +697,49 @@ LONG WINAPI DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *packet)
  */
 LONG WINAPI DisplayConfigSetDeviceInfo( DISPLAYCONFIG_DEVICE_INFO_HEADER *packet )
 {
-    FIXME( "DisplayConfigSetDeviceInfo: stub!\n" );
-    return 1;
+    DISPLAYCONFIG_LOCAL_PATH Paths[DISPLAYCONFIG_MAX_PATHS];
+    const DISPLAYCONFIG_LOCAL_PATH *Local = NULL;
+    int Count;
+    int Index;
+
+    if (packet == NULL || packet->size < sizeof(*packet))
+        return ERROR_GEN_FAILURE;
+
+    switch (packet->type)
+    {
+        case DISPLAYCONFIG_DEVICE_INFO_SET_ADVANCED_COLOR_STATE:
+        {
+            DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE *State = (DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE *)packet;
+            RXGK_ADVANCED_COLOR_PACKET Color;
+
+            if (packet->size != sizeof(*State))
+                return ERROR_INVALID_PARAMETER;
+            Count = DisplayConfigCollectPaths(Paths, ARRAY_SIZE(Paths));
+            if (Count < 0)
+                return ERROR_GEN_FAILURE;
+            for (Index = 0; Index < Count; Index++)
+            {
+                if (Paths[Index].AdapterId.LowPart == packet->adapterId.LowPart &&
+                    Paths[Index].AdapterId.HighPart == packet->adapterId.HighPart &&
+                    Paths[Index].SourceId == packet->id)
+                {
+                    Local = &Paths[Index];
+                    break;
+                }
+            }
+            if (Local == NULL)
+                return ERROR_GEN_FAILURE;
+
+            memset(&Color, 0, sizeof(Color));
+            Color.Operation = RXGK_ADVANCED_COLOR_SET;
+            Color.Enable = State->enableAdvancedColor ? 1 : 0;
+            return DisplayConfigStatusToError(
+                DisplayConfigAdvancedColor(Local, &Color));
+        }
+        default:
+            FIXME("DisplayConfigSetDeviceInfo: type %d not supported\n", packet->type);
+            return ERROR_NOT_SUPPORTED;
+    }
 }
 
 /**********************************************************************
