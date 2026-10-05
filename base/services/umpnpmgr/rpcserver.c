@@ -3759,6 +3759,64 @@ PNP_DisableDevInst(
 }
 
 
+static
+VOID
+DeleteDeviceInterfaceKeys(
+    _In_ LPWSTR pszDeviceID)
+{
+    WCHAR szClassName[40];
+    WCHAR szInterfaceName[MAX_DEVICE_ID_LEN + 40];
+    WCHAR szDeviceInstance[MAX_DEVICE_ID_LEN];
+    HKEY hClassesKey, hInterfaceClassKey, hInterfaceKey;
+    DWORD dwClassIndex, dwIndex, dwSize;
+    BOOL bMatch;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"System\\CurrentControlSet\\Control\\DeviceClasses",
+                      0,
+                      KEY_ENUMERATE_SUB_KEYS,
+                      &hClassesKey) != ERROR_SUCCESS)
+        return;
+
+    for (dwClassIndex = 0; ; dwClassIndex++)
+    {
+        dwSize = ARRAYSIZE(szClassName);
+        if (RegEnumKeyExW(hClassesKey, dwClassIndex, szClassName, &dwSize, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        if (RegOpenKeyExW(hClassesKey, szClassName, 0, KEY_READ, &hInterfaceClassKey) != ERROR_SUCCESS)
+            continue;
+
+        for (dwIndex = 0; ; )
+        {
+            dwSize = ARRAYSIZE(szInterfaceName);
+            if (RegEnumKeyExW(hInterfaceClassKey, dwIndex, szInterfaceName, &dwSize, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+                break;
+
+            bMatch = FALSE;
+            if (RegOpenKeyExW(hInterfaceClassKey, szInterfaceName, 0, KEY_QUERY_VALUE, &hInterfaceKey) == ERROR_SUCCESS)
+            {
+                dwSize = sizeof(szDeviceInstance) - sizeof(WCHAR);
+                if (RegQueryValueExW(hInterfaceKey, L"DeviceInstance", NULL, NULL,
+                                     (LPBYTE)szDeviceInstance, &dwSize) == ERROR_SUCCESS)
+                {
+                    szDeviceInstance[dwSize / sizeof(WCHAR)] = UNICODE_NULL;
+                    bMatch = !_wcsicmp(szDeviceInstance, pszDeviceID);
+                }
+                RegCloseKey(hInterfaceKey);
+            }
+
+            if (bMatch && SHDeleteKeyW(hInterfaceClassKey, szInterfaceName) == ERROR_SUCCESS)
+                continue;
+            dwIndex++;
+        }
+
+        RegCloseKey(hInterfaceClassKey);
+    }
+
+    RegCloseKey(hClassesKey);
+}
+
+
 /* Function 33 */
 DWORD
 WINAPI
@@ -3802,6 +3860,8 @@ PNP_UninstallDevInst(
     Status = NtPlugPlayControl(PlugPlayControlDeregisterDevice, &ControlData, sizeof(ControlData));
     if (!NT_SUCCESS(Status) && Status != STATUS_NO_SUCH_DEVICE)
         return NtStatusToCrError(Status);
+
+    DeleteDeviceInterfaceKeys(pDeviceID);
 
     Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, REGSTR_PATH_HWPROFILES, 0, KEY_READ | KEY_WRITE, &ProfilesKey);
     if (Error == ERROR_SUCCESS)

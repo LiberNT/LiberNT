@@ -1478,6 +1478,7 @@ SetupDiRemoveDevice(HDEVINFO DeviceInfoSet, PSP_DEVINFO_DATA DeviceInfoData)
 {
     struct DeviceInfoSet *Set = (struct DeviceInfoSet *)DeviceInfoSet;
     struct DeviceInfo *Device;
+    PLIST_ENTRY ListEntry;
     CONFIGRET cr;
     PNP_VETO_TYPE VetoType;
     WCHAR VetoName[MAX_PATH];
@@ -1517,6 +1518,8 @@ SetupDiRemoveDevice(HDEVINFO DeviceInfoSet, PSP_DEVINFO_DATA DeviceInfoData)
         SetLastError(GetErrorCodeFromCrCode(cr));
         return FALSE;
     }
+    for (ListEntry = Device->InterfaceListHead.Flink; ListEntry != &Device->InterfaceListHead; ListEntry = ListEntry->Flink)
+        CONTAINING_RECORD(ListEntry, struct DeviceInterface, ListEntry)->Flags |= SPINT_REMOVED;
     Device->dnDevInst = 0;
     DeviceInfoData->DevInst = 0;
     SetLastError(ERROR_SUCCESS);
