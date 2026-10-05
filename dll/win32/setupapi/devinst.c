@@ -693,6 +693,19 @@ DestroyDeviceInfoSet(struct DeviceInfoSet* list)
 {
     PLIST_ENTRY ListEntry;
     struct DeviceInfo *deviceInfo;
+    SP_DEVINFO_DATA DevInfoData;
+
+    for (ListEntry = list->ListHead.Flink; ListEntry != &list->ListHead; ListEntry = ListEntry->Flink)
+    {
+        deviceInfo = CONTAINING_RECORD(ListEntry, struct DeviceInfo, ListEntry);
+        if (!deviceInfo->InstallersCalled)
+            continue;
+        DevInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+        DevInfoData.ClassGuid = deviceInfo->ClassGuid;
+        DevInfoData.DevInst = deviceInfo->dnDevInst;
+        DevInfoData.Reserved = (ULONG_PTR)deviceInfo;
+        SetupDiCallClassInstaller(DIF_DESTROYPRIVATEDATA, (HDEVINFO)list, &DevInfoData);
+    }
 
     while (!IsListEmpty(&list->ListHead))
     {
@@ -2613,7 +2626,11 @@ HDEVINFO WINAPI SetupDiGetClassDevsExW(
 
 cleanup:
     if (!deviceset && hDeviceInfo != INVALID_HANDLE_VALUE && hDeviceInfo != set)
+    {
+        DWORD dwError = GetLastError();
         SetupDiDestroyDeviceInfoList(hDeviceInfo);
+        SetLastError(dwError);
+    }
     return set;
 }
 
@@ -3233,6 +3250,8 @@ BOOL WINAPI SetupDiDestroyDeviceInfoList(HDEVINFO devinfo)
 
     if (ret == FALSE)
         SetLastError(ERROR_INVALID_HANDLE);
+    else
+        SetLastError(ERROR_SUCCESS);
 
     return ret;
 }
@@ -5307,7 +5326,7 @@ BOOL WINAPI SetupDiCallClassInstaller(
                 CanHandle = CLASS_COINSTALLER | CLASS_INSTALLER;
                 break;
             case DIF_DESTROYPRIVATEDATA:
-                CanHandle = CLASS_INSTALLER;
+                CanHandle = CLASS_COINSTALLER | DEVICE_COINSTALLER | CLASS_INSTALLER;
                 break;
             case DIF_INSTALLDEVICE:
                 CanHandle = CLASS_COINSTALLER | DEVICE_COINSTALLER | CLASS_INSTALLER;
@@ -5371,8 +5390,8 @@ BOOL WINAPI SetupDiCallClassInstaller(
                 DefaultHandler = SetupDiUnremoveDevice;
                 break;
             default:
-                ERR("Install function %u not supported\n", InstallFunction);
-                SetLastError(ERROR_NOT_SUPPORTED);
+                CanHandle = CLASS_COINSTALLER | DEVICE_COINSTALLER | CLASS_INSTALLER;
+                break;
         }
 
         InstallParams.cbSize = sizeof(SP_DEVINSTALL_PARAMS_W);
@@ -5419,7 +5438,7 @@ BOOL WINAPI SetupDiCallClassInstaller(
                                     if (!coinstaller)
                                         continue;
                                     ZeroMemory(coinstaller, sizeof(struct CoInstallerElement));
-                                    if (GetFunctionPointer(ptr, &coinstaller->Module, (PVOID*)&coinstaller->Function) == ERROR_SUCCESS)
+                                    if (GetFunctionPointer(ptr, "CoDeviceInstall", &coinstaller->Module, (PVOID*)&coinstaller->Function) == ERROR_SUCCESS)
                                         InsertTailList(&DeviceCoInstallersListHead, &coinstaller->ListEntry);
                                     else
                                         HeapFree(GetProcessHeap(), 0, coinstaller);
@@ -5463,7 +5482,7 @@ BOOL WINAPI SetupDiCallClassInstaller(
                                         if (!coinstaller)
                                             continue;
                                         ZeroMemory(coinstaller, sizeof(struct CoInstallerElement));
-                                        if (GetFunctionPointer(ptr, &coinstaller->Module, (PVOID*)&coinstaller->Function) == ERROR_SUCCESS)
+                                        if (GetFunctionPointer(ptr, "CoDeviceInstall", &coinstaller->Module, (PVOID*)&coinstaller->Function) == ERROR_SUCCESS)
                                             InsertTailList(&ClassCoInstallersListHead, &coinstaller->ListEntry);
                                         else
                                             HeapFree(GetProcessHeap(), 0, coinstaller);
@@ -5492,7 +5511,7 @@ BOOL WINAPI SetupDiCallClassInstaller(
                             {
                                 /* Get ClassInstaller function pointer */
                                 TRACE("Got class installer '%s'\n", debugstr_w(KeyBuffer));
-                                if (GetFunctionPointer(KeyBuffer, &ClassInstallerLibrary, (PVOID*)&ClassInstaller) != ERROR_SUCCESS)
+                                if (GetFunctionPointer(KeyBuffer, "ClassInstall", &ClassInstallerLibrary, (PVOID*)&ClassInstaller) != ERROR_SUCCESS)
                                 {
                                     InstallParams.FlagsEx |= DI_FLAGSEX_CI_FAILED;
                                     SetupDiSetDeviceInstallParamsW(DeviceInfoSet, DeviceInfoData, &InstallParams);
@@ -5503,6 +5522,12 @@ BOOL WINAPI SetupDiCallClassInstaller(
                     }
                     RegCloseKey(hKey);
                 }
+            }
+
+            if (DeviceInfoData &&
+                (ClassInstaller || !IsListEmpty(&ClassCoInstallersListHead) || !IsListEmpty(&DeviceCoInstallersListHead)))
+            {
+                ((struct DeviceInfo *)DeviceInfoData->Reserved)->InstallersCalled = TRUE;
             }
 
             /* Call Class co-installers */
@@ -5540,26 +5565,25 @@ BOOL WINAPI SetupDiCallClassInstaller(
             }
 
             /* Call Class installer */
-            if (ClassInstaller)
+            if (rc == NO_ERROR)
             {
-                rc = (*ClassInstaller)(InstallFunction, DeviceInfoSet, DeviceInfoData);
-                FreeFunctionPointer(ClassInstallerLibrary, ClassInstaller);
-            }
-            else
-                rc = ERROR_DI_DO_DEFAULT;
-
-            /* Call default handler */
-            if (rc == ERROR_DI_DO_DEFAULT)
-            {
-                if (DefaultHandler && !(InstallParams.Flags & DI_NODI_DEFAULTACTION))
+                if (ClassInstaller)
                 {
-                    if ((*DefaultHandler)(DeviceInfoSet, DeviceInfoData))
-                        rc = NO_ERROR;
-                    else
-                        rc = GetLastError();
+                    rc = (*ClassInstaller)(InstallFunction, DeviceInfoSet, DeviceInfoData);
                 }
                 else
+                    rc = ERROR_DI_DO_DEFAULT;
+            }
+            if (ClassInstaller)
+                FreeFunctionPointer(ClassInstallerLibrary, ClassInstaller);
+
+            /* Call default handler */
+            if (rc == ERROR_DI_DO_DEFAULT && DefaultHandler && !(InstallParams.Flags & DI_NODI_DEFAULTACTION))
+            {
+                if ((*DefaultHandler)(DeviceInfoSet, DeviceInfoData))
                     rc = NO_ERROR;
+                else
+                    rc = GetLastError();
             }
 
             /* Call Class co-installers that required postprocessing */
@@ -5608,6 +5632,8 @@ BOOL WINAPI SetupDiCallClassInstaller(
             }
 
             ret = (rc == NO_ERROR);
+            if (!ret)
+                SetLastError(rc);
         }
     }
 

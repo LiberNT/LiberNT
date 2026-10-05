@@ -1264,7 +1264,7 @@ InstallCurrentDriver(
         DIF_ALLOW_INSTALL,
         DevInstData->hDevInfo,
         &DevInstData->devInfoData);
-    if (!ret)
+    if (!ret && GetLastError() != ERROR_DI_DO_DEFAULT)
     {
         TRACE("SetupDiCallClassInstaller(DIF_ALLOW_INSTALL) failed with error 0x%x\n", GetLastError());
         return FALSE;
@@ -1274,7 +1274,7 @@ InstallCurrentDriver(
         DIF_NEWDEVICEWIZARD_PREANALYZE,
         DevInstData->hDevInfo,
         &DevInstData->devInfoData);
-    if (!ret)
+    if (!ret && GetLastError() != ERROR_DI_DO_DEFAULT)
     {
         TRACE("SetupDiCallClassInstaller(DIF_NEWDEVICEWIZARD_PREANALYZE) failed with error 0x%x\n", GetLastError());
         return FALSE;
@@ -1284,7 +1284,7 @@ InstallCurrentDriver(
         DIF_NEWDEVICEWIZARD_POSTANALYZE,
         DevInstData->hDevInfo,
         &DevInstData->devInfoData);
-    if (!ret)
+    if (!ret && GetLastError() != ERROR_DI_DO_DEFAULT)
     {
         TRACE("SetupDiCallClassInstaller(DIF_NEWDEVICEWIZARD_POSTANALYZE) failed with error 0x%x\n", GetLastError());
         return FALSE;
@@ -1334,7 +1334,7 @@ InstallCurrentDriver(
         DIF_NEWDEVICEWIZARD_FINISHINSTALL,
         DevInstData->hDevInfo,
         &DevInstData->devInfoData);
-    if (!ret)
+    if (!ret && GetLastError() != ERROR_DI_DO_DEFAULT)
     {
         TRACE("SetupDiCallClassInstaller(DIF_NEWDEVICEWIZARD_FINISHINSTALL) failed with error 0x%x\n", GetLastError());
         return FALSE;
@@ -1344,7 +1344,7 @@ InstallCurrentDriver(
         DIF_DESTROYPRIVATEDATA,
         DevInstData->hDevInfo,
         &DevInstData->devInfoData);
-    if (!ret)
+    if (!ret && GetLastError() != ERROR_DI_DO_DEFAULT)
     {
         TRACE("SetupDiCallClassInstaller(DIF_DESTROYPRIVATEDATA) failed with error 0x%x\n", GetLastError());
         return FALSE;

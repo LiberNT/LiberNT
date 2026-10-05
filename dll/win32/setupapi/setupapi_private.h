@@ -194,6 +194,7 @@ struct DeviceInfo /* Element of DeviceInfoSet.ListHead */
     GUID ClassGuid;
     DWORD CreationFlags;
     BOOL Phantom;
+    BOOL InstallersCalled;
 
     /* If CreationFlags contains DICD_INHERIT_CLASSDRVS, this list is invalid */
     /* If the driver is not searched/detected, this list is empty */
@@ -431,6 +432,7 @@ SETUP_CreateAllInterfaceLists(
 DWORD
 GetFunctionPointer(
     IN PWSTR InstallerName,
+    IN PCSTR DefaultFunctionName OPTIONAL,
     OUT HMODULE* ModulePointer,
     OUT PVOID* FunctionPointer);
 

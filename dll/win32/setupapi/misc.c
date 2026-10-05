@@ -43,6 +43,7 @@ static CRITICAL_SECTION setupapi_cs = { &critsect_debug, -1, 0, 0, 0, 0 };
 DWORD
 GetFunctionPointer(
     IN PWSTR InstallerName,
+    IN PCSTR DefaultFunctionName OPTIONAL,
     OUT HMODULE* ModulePointer,
     OUT PVOID* FunctionPointer)
 {
@@ -57,7 +58,25 @@ GetFunctionPointer(
     Comma = strchrW(InstallerName, ',');
     if (!Comma)
     {
-        rc = ERROR_INVALID_PARAMETER;
+        if (!DefaultFunctionName)
+        {
+            rc = ERROR_INVALID_PARAMETER;
+            goto cleanup;
+        }
+        hModule = LoadLibraryW(InstallerName);
+        if (!hModule)
+        {
+            rc = GetLastError();
+            goto cleanup;
+        }
+        *FunctionPointer = GetProcAddress(hModule, DefaultFunctionName);
+        if (!*FunctionPointer)
+        {
+            rc = GetLastError();
+            goto cleanup;
+        }
+        *ModulePointer = hModule;
+        rc = ERROR_SUCCESS;
         goto cleanup;
     }
 

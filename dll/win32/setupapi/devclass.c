@@ -866,7 +866,11 @@ SetupDiInstallClassExW(
 
 cleanup:
         if (hDeviceInfo != INVALID_HANDLE_VALUE)
+        {
+            DWORD dwError = GetLastError();
             SetupDiDestroyDeviceInfoList(hDeviceInfo);
+            SetLastError(dwError);
+        }
         if (hInf != INVALID_HANDLE_VALUE)
             SetupCloseInfFile(hInf);
         if (hRootKey != INVALID_HANDLE_VALUE)
@@ -1230,7 +1234,10 @@ SETUP_CallInstaller(
                                     DeviceInfoData);
     if (ret == FALSE)
     {
-        ERR("SetupDiCallClassInstaller failed\n");
+        if (GetLastError() == ERROR_DI_DO_DEFAULT)
+            ret = TRUE;
+        else
+            ERR("SetupDiCallClassInstaller failed\n");
         goto done;
     }
 
@@ -1325,7 +1332,7 @@ SetupDiGetClassDevPropertySheetsW(
                 rc = SETUP_GetValueString(hKey, REGSTR_VAL_ENUMPROPPAGES_32, &PropPageProvider);
                 if (rc == ERROR_SUCCESS)
                 {
-                    rc = GetFunctionPointer(PropPageProvider, &hModule, (PVOID*)&pPropPageProvider);
+                    rc = GetFunctionPointer(PropPageProvider, NULL, &hModule, (PVOID*)&pPropPageProvider);
                     if (rc != ERROR_SUCCESS)
                     {
                         SetLastError(ERROR_INVALID_PROPPAGE_PROVIDER);
@@ -1353,7 +1360,7 @@ SetupDiGetClassDevPropertySheetsW(
                 rc = SETUP_GetValueString(hKey, REGSTR_VAL_ENUMPROPPAGES_32, &PropPageProvider);
                 if (rc == ERROR_SUCCESS)
                 {
-                    rc = GetFunctionPointer(PropPageProvider, &hModule, (PVOID*)&pPropPageProvider);
+                    rc = GetFunctionPointer(PropPageProvider, NULL, &hModule, (PVOID*)&pPropPageProvider);
                     if (rc != ERROR_SUCCESS)
                     {
                         SetLastError(ERROR_INVALID_PROPPAGE_PROVIDER);
