@@ -7365,6 +7365,11 @@ HKEY WINAPI SetupDiOpenDevRegKey(
         SetLastError(ERROR_INVALID_PARAMETER);
         return INVALID_HANDLE_VALUE;
     }
+    if (devInfo->Phantom)
+    {
+        SetLastError(ERROR_DEVINFO_NOT_REGISTERED);
+        return INVALID_HANDLE_VALUE;
+    }
     if (Scope != DICS_FLAG_GLOBAL)
     {
         RootKey = OpenHardwareProfileKey(set->HKLM, HwProfile, 0);
@@ -7376,8 +7381,8 @@ HKEY WINAPI SetupDiOpenDevRegKey(
     switch (KeyType)
     {
         case DIREG_DEV:
-            key = SETUPDI_OpenDevKey(RootKey, devInfo, samDesired);
-            if (Scope == DICS_FLAG_GLOBAL)
+            key = SETUPDI_OpenDevKey(RootKey, devInfo, KEY_QUERY_VALUE);
+            if (key != INVALID_HANDLE_VALUE)
             {
                 LONG rc;
                 HKEY hTempKey = key;
@@ -7386,8 +7391,12 @@ HKEY WINAPI SetupDiOpenDevRegKey(
                                    0,
                                    samDesired,
                                    &key);
-                if (rc == ERROR_SUCCESS)
-                    RegCloseKey(hTempKey);
+                RegCloseKey(hTempKey);
+                if (rc != ERROR_SUCCESS)
+                {
+                    key = INVALID_HANDLE_VALUE;
+                    SetLastError(rc);
+                }
             }
             break;
         case DIREG_DRV:
@@ -7398,19 +7407,47 @@ HKEY WINAPI SetupDiOpenDevRegKey(
     }
     if (RootKey != set->HKLM)
         RegCloseKey(RootKey);
+    if (key == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND)
+        SetLastError(ERROR_KEY_DOES_NOT_EXIST);
     return key;
 }
 
 static BOOL SETUPDI_DeleteDevKey(HKEY RootKey, struct DeviceInfo *devInfo)
 {
-    FIXME("\n");
-    return FALSE;
+    HKEY hKey;
+    LONG rc;
+
+    hKey = SETUPDI_OpenDevKey(RootKey, devInfo, KEY_READ);
+    if (hKey == INVALID_HANDLE_VALUE)
+        return FALSE;
+    rc = RegDeleteTreeW(hKey, L"Device Parameters");
+    RegCloseKey(hKey);
+    if (rc != ERROR_SUCCESS)
+    {
+        SetLastError(rc);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 static BOOL SETUPDI_DeleteDrvKey(HKEY RootKey, struct DeviceInfo *devInfo)
 {
-    FIXME("\n");
-    return FALSE;
+    HKEY hKey;
+    LONG rc;
+
+    hKey = SETUPDI_OpenDrvKey(RootKey, devInfo, KEY_ALL_ACCESS);
+    if (hKey == INVALID_HANDLE_VALUE)
+        return FALSE;
+    rc = RegDeleteTreeW(hKey, NULL);
+    if (rc == ERROR_SUCCESS)
+        rc = RegDeleteKeyW(hKey, L"");
+    RegCloseKey(hKey);
+    if (rc != ERROR_SUCCESS)
+    {
+        SetLastError(rc);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 /***********************************************************************
@@ -7463,6 +7500,11 @@ BOOL WINAPI SetupDiDeleteDevRegKey(
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
+    if (devInfo->Phantom)
+    {
+        SetLastError(ERROR_DEVINFO_NOT_REGISTERED);
+        return FALSE;
+    }
     if (Scope != DICS_FLAG_GLOBAL)
     {
         RootKey = OpenHardwareProfileKey(set->HKLM, HwProfile, 0);
@@ -7480,9 +7522,9 @@ BOOL WINAPI SetupDiDeleteDevRegKey(
             ret = SETUPDI_DeleteDrvKey(RootKey, devInfo);
             break;
         case DIREG_BOTH:
-            ret = SETUPDI_DeleteDevKey(RootKey, devInfo);
+            ret = SETUPDI_DeleteDrvKey(RootKey, devInfo);
             if (ret)
-                ret = SETUPDI_DeleteDrvKey(RootKey, devInfo);
+                ret = SETUPDI_DeleteDevKey(RootKey, devInfo);
             break;
         default:
             WARN("unknown KeyType %d\n", KeyType);
