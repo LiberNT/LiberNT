@@ -14097,22 +14097,42 @@ DxgkReleaseLevel3Transition(
     KeReleaseMutex(&Adapter->Level3TransitionMutex, FALSE);
 }
 
-VOID
-DxgkBeginKmdExclusive(
-    _In_ PDXGKRNL_ADAPTER Adapter)
+/*
+ * DxgkpBeginKmdExclusiveCapture
+ *
+ * DxgkBeginKmdExclusive, also reporting whether KMD admission was already
+ * closed.  The value is captured by the same exchange that closes admission,
+ * while KmdExclusiveMutex is held, so it cannot be overtaken by another
+ * exclusive owner reopening admission.  A caller that must leave admission
+ * exactly as it found it passes !*WasBlocked to DxgkEndKmdExclusive.
+ */
+static VOID
+DxgkpBeginKmdExclusiveCapture(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Out_opt_ PLONG WasBlocked)
 {
     LARGE_INTEGER Delay;
+    LONG Previous;
 
     PAGED_CODE();
     ASSERT(Adapter != NULL);
     (VOID)KeWaitForSingleObject(&Adapter->KmdExclusiveMutex, Executive, KernelMode, FALSE, NULL);
-    InterlockedExchange(&Adapter->KmdCallsBlocked, 1);
+    Previous = InterlockedExchange(&Adapter->KmdCallsBlocked, 1);
+    if (WasBlocked != NULL)
+        *WasBlocked = Previous;
     KeMemoryBarrier();
     Delay.QuadPart = -(LONGLONG)(10 * 1000);
     while (InterlockedCompareExchange(&Adapter->KmdActiveCalls, 0, 0) != 0)
         KeDelayExecutionThread(KernelMode, FALSE, &Delay);
     Adapter->KmdExclusiveOwnerThread = PsGetCurrentThread();
     KeMemoryBarrier();
+}
+
+VOID
+DxgkBeginKmdExclusive(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    DxgkpBeginKmdExclusiveCapture(Adapter, NULL);
 }
 
 VOID
@@ -15230,6 +15250,7 @@ DxgkpForwardPowerIrpSynchronously(
 static NTSTATUS
 DxgkpCallMiniportSetPowerState(
     _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG DeviceUid,
     _In_ DEVICE_POWER_STATE NewState,
     _In_ POWER_ACTION ShutdownType)
 {
@@ -15246,7 +15267,7 @@ DxgkpCallMiniportSetPowerState(
     {
         _SEH2_TRY
         {
-            Status = Adapter->MiniportContext->InitData.s.DxgkDdiSetPowerState(Adapter->MiniportDeviceContext, DISPLAY_ADAPTER_HW_ID, NewState, ShutdownType);
+            Status = Adapter->MiniportContext->InitData.s.DxgkDdiSetPowerState(Adapter->MiniportDeviceContext, DeviceUid, NewState, ShutdownType);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -15259,11 +15280,166 @@ DxgkpCallMiniportSetPowerState(
 }
 
 /*
+ * Child (monitor) device power.
+ *
+ * A child's device-power transition is the miniport's to carry out: it takes
+ * DxgkDdiSetPowerState with the child's UID, the same DDI the adapter uses
+ * with DISPLAY_ADAPTER_HW_ID.  Completing the IRP without that call reported
+ * a monitor as asleep or awake while its hardware never changed.
+ *
+ * DxgkDdiSetPowerState is an exclusive-level DDI, so the call is made under
+ * KMD exclusive ownership.  Admission is restored to exactly what it was:
+ * when the adapter itself is powered down or mid-transition, admission is
+ * closed, the miniport is not called, and it stays closed.
+ */
+static VOID
+DxgkpChildApplyDevicePower(
+    _In_ PDXGK_CHILD_PDO_EXTENSION Child,
+    _In_ DEVICE_POWER_STATE NewState,
+    _In_ POWER_ACTION Action)
+{
+    PDXGKRNL_ADAPTER Adapter = Child->ParentAdapter;
+    NTSTATUS         Status = STATUS_SUCCESS;
+    POWER_STATE      State;
+    LONG             WasBlocked;
+
+    PAGED_CODE();
+
+    if (NewState == Child->DevicePowerState)
+        return;
+
+    if (Adapter != NULL &&
+        InterlockedCompareExchange(&Adapter->RemoveRundownStarted, 0, 0) == 0 &&
+        ExAcquireRundownProtection(&Adapter->RemoveRundownRef))
+    {
+        DxgkpBeginKmdExclusiveCapture(Adapter, &WasBlocked);
+        if (!WasBlocked && Adapter->DevicePowerState == PowerDeviceD0)
+        {
+            Status = DxgkpCallMiniportSetPowerState(
+                Adapter, Child->Descriptor.ChildUid, NewState, Action);
+        }
+        else
+        {
+            /* The adapter is not taking calls, and its children went down
+             * with it; there is no hardware transition left to request. */
+            DXGKRNL_TRACE("DxgkpChildApplyDevicePower: child 0x%lx -> D%d "
+                          "recorded only; adapter in D%d, admission %s\n",
+                          Child->Descriptor.ChildUid, NewState - PowerDeviceD0,
+                          Adapter->DevicePowerState - PowerDeviceD0,
+                          WasBlocked ? "closed" : "open");
+        }
+        DxgkEndKmdExclusive(Adapter, WasBlocked == 0);
+        ExReleaseRundownProtection(&Adapter->RemoveRundownRef);
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        /* A set-power IRP cannot be failed.  Report the miniport's refusal;
+         * the power manager already treats the new state as current. */
+        DXGKRNL_WARN("DxgkpChildApplyDevicePower: child 0x%lx -> D%d: "
+                     "DxgkDdiSetPowerState failed 0x%08lx\n",
+                     Child->Descriptor.ChildUid, NewState - PowerDeviceD0,
+                     Status);
+    }
+
+    Child->DevicePowerState = NewState;
+    State.DeviceState = NewState;
+    PoSetPowerState(Child->DeviceObject, DevicePowerState, State);
+}
+
+typedef struct _DXGKP_CHILD_POWER_WORK
+{
+    PIO_WORKITEM WorkItem;
+    PIRP         Irp;
+} DXGKP_CHILD_POWER_WORK, *PDXGKP_CHILD_POWER_WORK;
+
+static VOID
+NTAPI
+DxgkpChildPowerWorker(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PVOID Context)
+{
+    PDXGKP_CHILD_POWER_WORK Work = (PDXGKP_CHILD_POWER_WORK)Context;
+    PIO_STACK_LOCATION      Stack;
+
+    PAGED_CODE();
+    ASSERT(Work != NULL);
+
+    Stack = IoGetCurrentIrpStackLocation(Work->Irp);
+    DxgkpChildApplyDevicePower(
+        (PDXGK_CHILD_PDO_EXTENSION)DeviceObject->DeviceExtension,
+        Stack->Parameters.Power.State.DeviceState,
+        Stack->Parameters.Power.ShutdownType);
+
+    PoStartNextPowerIrp(Work->Irp);
+    Work->Irp->IoStatus.Status = STATUS_SUCCESS;
+    IoCompleteRequest(Work->Irp, IO_NO_INCREMENT);
+    IoFreeWorkItem(Work->WorkItem);
+    ExFreePoolWithTag(Work, TAG_DXGK_ADAPTER);
+}
+
+static NTSTATUS
+DxgkpChildPowerDispatch(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP           Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+
+    if (Stack->MinorFunction == IRP_MN_SET_POWER &&
+        Stack->Parameters.Power.Type == DevicePowerState)
+    {
+        if (KeGetCurrentIrql() == PASSIVE_LEVEL)
+        {
+            DxgkpChildApplyDevicePower(
+                (PDXGK_CHILD_PDO_EXTENSION)DeviceObject->DeviceExtension,
+                Stack->Parameters.Power.State.DeviceState,
+                Stack->Parameters.Power.ShutdownType);
+        }
+        else
+        {
+            /* The PDO asks for PASSIVE_LEVEL power IRPs, but a function
+             * driver above it that is not pageable makes them arrive at
+             * DISPATCH_LEVEL.  The miniport cannot be called there, so
+             * finish the transition from a work item. */
+            PDXGKP_CHILD_POWER_WORK Work =
+                (PDXGKP_CHILD_POWER_WORK)ExAllocatePoolWithTag(
+                    NonPagedPool, sizeof(*Work), TAG_DXGK_ADAPTER);
+
+            if (Work != NULL)
+            {
+                Work->WorkItem = IoAllocateWorkItem(DeviceObject);
+                if (Work->WorkItem != NULL)
+                {
+                    Work->Irp = Irp;
+                    IoMarkIrpPending(Irp);
+                    IoQueueWorkItem(Work->WorkItem, DxgkpChildPowerWorker,
+                                    DelayedWorkQueue, Work);
+                    return STATUS_PENDING;
+                }
+                ExFreePoolWithTag(Work, TAG_DXGK_ADAPTER);
+            }
+
+            DXGKRNL_WARN("DxgkpChildPowerDispatch: no work item for child "
+                         "set-power at IRQL %u; transition not applied\n",
+                         KeGetCurrentIrql());
+        }
+    }
+
+    /* Query-power and system-power IRPs have nothing to apply here. */
+    PoStartNextPowerIrp(Irp);
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_SUCCESS;
+}
+
+/*
  * DxgkpMiniportPowerDispatch
  *
  * IRP_MJ_POWER handler installed into the miniport DriverObject.
  * Handles device power state changes by calling DxgkDdiSetPowerState
  * with the DISPLAY_ADAPTER_HW_ID device UID (targets the whole GPU).
+ * Child (monitor) PDOs are handed to DxgkpChildPowerDispatch, which calls
+ * the same DDI with the child's UID.
  *
  * IRQL: PASSIVE_LEVEL for set-power; may be called at DISPATCH_LEVEL
  *       for query-power by some callers — handled by forwarding directly.
@@ -15294,12 +15470,7 @@ DxgkpMiniportPowerDispatch(
     {
         PULONG Signature = (PULONG)DeviceObject->DeviceExtension;
         if (Signature != NULL && *Signature == DXGK_CHILD_PDO_SIGNATURE)
-        {
-            PoStartNextPowerIrp(Irp);
-            Irp->IoStatus.Status = STATUS_SUCCESS;
-            IoCompleteRequest(Irp, IO_NO_INCREMENT);
-            return STATUS_SUCCESS;
-        }
+            return DxgkpChildPowerDispatch(DeviceObject, Irp);
     }
 
     /* Check for display device (\Device\Video0) — not a real power device. */
@@ -15474,7 +15645,7 @@ DxgkpMiniportPowerDispatch(
                 Status = STATUS_DELETE_PENDING;
                 goto RetainPowerDownAdmission;
             }
-            KmdStatus = DxgkpCallMiniportSetPowerState(Adapter, NewState, ShutdownType);
+            KmdStatus = DxgkpCallMiniportSetPowerState(Adapter, DISPLAY_ADAPTER_HW_ID, NewState, ShutdownType);
             if (!NT_SUCCESS(KmdStatus))
             {
                 DXGKRNL_WARN("DxgkpMiniportPowerDispatch: power-down DxgkDdiSetPowerState failed 0x%08lX; restoring D%d\n", KmdStatus, CurrentState - PowerDeviceD0);
@@ -15486,7 +15657,7 @@ DxgkpMiniportPowerDispatch(
             LowerStatus = DxgkpForwardPowerIrpSynchronously(LowerDeviceObject, Irp);
             if (!NT_SUCCESS(LowerStatus))
             {
-                KmdStatus = DxgkpCallMiniportSetPowerState(Adapter, CurrentState, PowerActionNone);
+                KmdStatus = DxgkpCallMiniportSetPowerState(Adapter, DISPLAY_ADAPTER_HW_ID, CurrentState, PowerActionNone);
                 if (!NT_SUCCESS(KmdStatus))
                 {
                     DXGKRNL_ERR("DxgkpMiniportPowerDispatch: lower power-down failed 0x%08lX and D%d compensation failed 0x%08lX; retaining blocked admission\n", LowerStatus, CurrentState - PowerDeviceD0, KmdStatus);
@@ -15552,7 +15723,7 @@ RetainPowerDownAdmission:
                 goto CompletePowerIrp;
 
             DxgkBeginKmdExclusive(Adapter);
-            KmdStatus = DxgkpCallMiniportSetPowerState(Adapter, NewState, ShutdownType);
+            KmdStatus = DxgkpCallMiniportSetPowerState(Adapter, DISPLAY_ADAPTER_HW_ID, NewState, ShutdownType);
             if (!NT_SUCCESS(KmdStatus))
             {
                 DXGKRNL_WARN("DxgkpMiniportPowerDispatch: power-up DxgkDdiSetPowerState failed 0x%08lX; completing the lower power IRP and retaining blocked admission\n", KmdStatus);

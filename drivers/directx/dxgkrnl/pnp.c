@@ -568,7 +568,12 @@ DxgkpCreateChildPdo(
     ChildExt->StateGeneration = 1;
     ChildExt->EnumerationEpoch = EnumerationEpoch;
     ChildExt->EdidValid      = FALSE;
+    ChildExt->DevicePowerState = PowerDeviceD0;
     InitializeListHead(&ChildExt->ListEntry);
+
+    /* Set-power IRPs for this child are forwarded to the miniport, which
+     * must be called at PASSIVE_LEVEL, so ask for them there. */
+    Pdo->Flags |= DO_POWER_PAGABLE;
 
     /*
      * Query the monitor descriptor (EDID base block) for connected video

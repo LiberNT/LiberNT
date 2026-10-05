@@ -58,6 +58,10 @@ typedef struct _DXGK_CHILD_PDO_EXTENSION
     UCHAR                   Edid[128];
     BOOLEAN                 EdidValid;
 
+    /* Device power state last applied to this child (monitor sleep/wake).
+     * Written only while handling this PDO's set-power IRPs. */
+    DEVICE_POWER_STATE      DevicePowerState;
+
 } DXGK_CHILD_PDO_EXTENSION, *PDXGK_CHILD_PDO_EXTENSION;
 
 /* Pool tag for child PDO extensions */
