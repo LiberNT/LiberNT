@@ -970,6 +970,9 @@ typedef struct _CSignedMsgData
     CRYPT_SIGNED_INFO *info;
     DWORD              cSignerHandle;
     CSignerHandles    *signerHandles;
+#ifdef __REACTOS__
+    LPCSTR             innerOID;
+#endif
 } CSignedMsgData;
 
 /* Constructs the signer handles for the signerIndex'th signer of msg_data.
@@ -1118,6 +1121,26 @@ static BOOL CSignedMsgData_UpdateAuthenticatedAttributes(
         {
             if (flag == Sign)
             {
+#ifdef __REACTOS__
+                CRYPT_DATA_BLOB content = { 0, NULL };
+                char contentType[] = szOID_RSA_contentType;
+                CRYPT_ATTRIBUTE contentTypeAttr = { contentType, 1, &content };
+
+                LPCSTR innerOID = msg_data->innerOID ? msg_data->innerOID :
+                 szOID_RSA_data;
+
+                ret = CRYPT_AsnEncodeOid(0, NULL, innerOID, 0, NULL, NULL,
+                 &content.cbData);
+                if (ret && !(content.pbData = CryptMemAlloc(content.cbData)))
+                    ret = FALSE;
+                if (ret)
+                    ret = CRYPT_AsnEncodeOid(0, NULL, innerOID, 0, NULL,
+                     content.pbData, &content.cbData);
+                if (ret)
+                    ret = CRYPT_AppendAttribute(
+                     &msg_data->info->rgSignerInfo[i].AuthAttrs, &contentTypeAttr);
+                CryptMemFree(content.pbData);
+#else
                 BYTE oid_rsa_data_encoded[] = { 0x06,0x09,0x2a,0x86,0x48,0x86,
                  0xf7,0x0d,0x01,0x07,0x01 };
                 CRYPT_DATA_BLOB content = { sizeof(oid_rsa_data_encoded),
@@ -1128,6 +1151,7 @@ static BOOL CSignedMsgData_UpdateAuthenticatedAttributes(
                 /* FIXME: does this depend on inner OID? */
                 ret = CRYPT_AppendAttribute(
                  &msg_data->info->rgSignerInfo[i].AuthAttrs, &contentTypeAttr);
+#endif
                 if (ret)
                     ret = CSignedMsgData_AppendMessageDigestAttribute(msg_data,
                      i);
@@ -1208,6 +1232,44 @@ static BOOL CSignedMsgData_Sign(CSignedMsgData *msg_data)
     return ret;
 }
 
+#ifdef __REACTOS__
+static BOOL CRYPT_GetContentOctets(const BYTE **pbData, DWORD *cbData)
+{
+    const BYTE *data = *pbData;
+    DWORD len, lenBytes = 0, i;
+
+    if (*cbData < 2 || (data[0] & 0x1f) == 0x1f)
+        goto corrupt;
+    if (data[1] == 0x80)
+    {
+        if (*cbData < 4 || data[*cbData - 2] || data[*cbData - 1])
+            goto corrupt;
+        *pbData = data + 2;
+        *cbData -= 4;
+        return TRUE;
+    }
+    if (data[1] & 0x80)
+    {
+        lenBytes = data[1] & 0x7f;
+        if (!lenBytes || lenBytes > sizeof(DWORD) || *cbData - 2 < lenBytes)
+            goto corrupt;
+        for (len = 0, i = 0; i < lenBytes; i++)
+            len = (len << 8) | data[2 + i];
+    }
+    else
+        len = data[1];
+    if (len > *cbData - 2 - lenBytes)
+        goto corrupt;
+    *pbData = data + 2 + lenBytes;
+    *cbData = len;
+    return TRUE;
+
+corrupt:
+    SetLastError(CRYPT_E_ASN1_CORRUPT);
+    return FALSE;
+}
+
+#endif
 static BOOL CSignedMsgData_Update(CSignedMsgData *msg_data,
  const BYTE *pbData, DWORD cbData, BOOL fFinal, SignOrVerify flag)
 {
@@ -1395,9 +1457,24 @@ static BOOL CSignedEncodeMsg_Update(HCRYPTMSG hCryptMsg, const BYTE *pbData,
             }
             else
                 ret = TRUE;
+#ifdef __REACTOS__
+            if (ret)
+            {
+                const BYTE *content = pbData;
+                DWORD contentLen = cbData;
+
+                if (cbData && msg->innerOID &&
+                 strcmp(msg->innerOID, szOID_RSA_data))
+                    ret = CRYPT_GetContentOctets(&content, &contentLen);
+                if (ret)
+                    ret = CSignedMsgData_Update(&msg->msg_data, content,
+                     contentLen, fFinal, Sign);
+            }
+#else
             if (ret)
                 ret = CSignedMsgData_Update(&msg->msg_data, pbData, cbData,
                  fFinal, Sign);
+#endif
             msg->base.state = MsgStateFinalized;
         }
     }
@@ -1449,6 +1526,9 @@ static HCRYPTMSG CSignedEncodeMsg_Open(DWORD dwFlags,
             msg->innerOID = NULL;
         msg->data.cbData = 0;
         msg->data.pbData = NULL;
+#ifdef __REACTOS__
+        msg->msg_data.innerOID = msg->innerOID;
+#endif
         if (ret)
             msg->msg_data.info = CryptMemAlloc(sizeof(CRYPT_SIGNED_INFO));
         else
@@ -2484,6 +2564,18 @@ static BOOL CDecodeMsg_FinalizeSignedContent(CDecodeMsg *msg,
                 }
             }
             else
+#ifdef __REACTOS__
+            if (!(msg->base.open_flags & CMSG_DETACHED_FLAG))
+            {
+                const BYTE *octets = content->pbData;
+                DWORD octetsLen = content->cbData;
+
+                if ((ret = CRYPT_GetContentOctets(&octets, &octetsLen)))
+                    ret = CSignedMsgData_Update(&msg->u.signed_data,
+                     octets, octetsLen, TRUE, Verify);
+            }
+            else
+#endif
                 ret = CSignedMsgData_Update(&msg->u.signed_data,
                  content->pbData, content->cbData, TRUE, Verify);
         }
