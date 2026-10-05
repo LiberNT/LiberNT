@@ -326,6 +326,17 @@ BOOLEAN acpi_bus_can_wakeup(ACPI_HANDLE handle);
 int acpi_bus_generate_proc_event(struct acpi_device *device, UINT8 type, int data);
 int acpi_bus_generate_event(struct acpi_device *device, UINT8 type, int data);
 int acpi_bus_receive_event(struct acpi_bus_event *event);
+typedef BOOLEAN (*acpi_bus_event_filter)(const struct acpi_bus_event *event, void *context);
+struct acpi_bus_event_waiter {
+	LIST_ENTRY		link;
+	KEVENT			wake;
+	acpi_bus_event_filter	filter;
+	void			*context;
+};
+void acpi_bus_event_listen(struct acpi_bus_event_waiter *waiter, acpi_bus_event_filter filter, void *context);
+int acpi_bus_event_wait(struct acpi_bus_event_waiter *waiter, struct acpi_bus_event *event);
+void acpi_bus_event_unlisten(struct acpi_bus_event_waiter *waiter);
+int acpi_bus_receive_event_filtered(acpi_bus_event_filter filter, void *context, struct acpi_bus_event *event);
 int acpi_bus_register_driver(struct acpi_driver *driver);
 void acpi_bus_unregister_driver(struct acpi_driver *driver);
 int acpi_bus_add(struct acpi_device **child, struct acpi_device *parent,

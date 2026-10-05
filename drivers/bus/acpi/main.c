@@ -291,35 +291,185 @@ ACPIDispatchCreateClose(
    return STATUS_SUCCESS;
 }
 
+/* What one button PDO reports, as SYS_BUTTON_* bits. */
+static
+ULONG
+AcpiButtonCapsForPdo(
+    _In_ PPDO_DEVICE_DATA PdoData)
+{
+    ULONG Caps = 0;
+
+    if (wcsstr(PdoData->HardwareIDs, L"PNP0C0D"))
+    {
+        Caps |= SYS_BUTTON_LID;
+    }
+    else if (PdoData->AcpiHandle == NULL)
+    {
+        /* We have to return both at the same time because since we
+         * have a NULL handle we are the fixed feature DO and we will
+         * only be called once (not once per device)
+         */
+        if (power_button)
+            Caps |= SYS_BUTTON_POWER;
+        if (sleep_button)
+            Caps |= SYS_BUTTON_SLEEP;
+    }
+    else if (wcsstr(PdoData->HardwareIDs, L"PNP0C0C"))
+    {
+        Caps |= SYS_BUTTON_POWER;
+    }
+    else if (wcsstr(PdoData->HardwareIDs, L"PNP0C0E"))
+    {
+        Caps |= SYS_BUTTON_SLEEP;
+    }
+    return Caps;
+}
+
+/* The SYS_BUTTON_* bit a button event stands for, or 0. */
+static
+ULONG
+AcpiButtonEventToSysButton(
+    _In_ const struct acpi_bus_event *Event)
+{
+    if (Event->type != ACPI_BUTTON_NOTIFY_STATUS)
+        return 0;
+    if (!strcmp(Event->device_class, ACPI_BUTTON_CLASS "/" ACPI_BUTTON_SUBCLASS_POWER))
+        return SYS_BUTTON_POWER;
+    if (!strcmp(Event->device_class, ACPI_BUTTON_CLASS "/" ACPI_BUTTON_SUBCLASS_SLEEP))
+        return SYS_BUTTON_SLEEP;
+    if (!strcmp(Event->device_class, ACPI_BUTTON_CLASS "/" ACPI_BUTTON_SUBCLASS_LID))
+        return SYS_BUTTON_LID;
+    return 0;
+}
+
+/* Event filter: Context is the SYS_BUTTON_* bits the receiver serves. */
+static
+BOOLEAN
+AcpiButtonEventFilter(
+    _In_ const struct acpi_bus_event *Event,
+    _In_ void *Context)
+{
+    return (AcpiButtonEventToSysButton(Event) & (ULONG)(ULONG_PTR)Context) != 0;
+}
+
+/*
+ * Lid state last handed to the power manager: -1 before the first report,
+ * else 1 open / 0 closed.  The power manager keeps one request pending on
+ * the lid at a time.
+ */
+static volatile LONG AcpiLidReportedState = -1;
+
+static
+NTSTATUS
+AcpiLidQueryOpen(
+    _In_ ACPI_HANDLE Handle,
+    _Out_ PULONG Open)
+{
+    unsigned long long Value;
+
+    if (Handle == NULL ||
+        ACPI_FAILURE(acpi_evaluate_integer(Handle, "_LID", NULL, &Value)))
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+    *Open = (Value != 0) ? 1 : 0;
+    return STATUS_SUCCESS;
+}
+
+/*
+ * Completes a lid request with the lid's state once it differs from what
+ * was last reported: at once for the first request (the initial state) or
+ * when the lid moved while no request was pending, otherwise on the next
+ * Notify() that changes _LID.  Listening starts before _LID is read, so a
+ * change between the two is not lost.
+ */
+static
+NTSTATUS
+AcpiLidWaitForState(
+    _In_ ACPI_HANDLE Handle,
+    _Out_ PULONG ButtonEvent)
+{
+    struct acpi_bus_event_waiter Waiter;
+    struct acpi_bus_event Event;
+    NTSTATUS Status;
+    ULONG Open;
+    LONG Reported;
+
+    acpi_bus_event_listen(&Waiter, AcpiButtonEventFilter, (PVOID)(ULONG_PTR)SYS_BUTTON_LID);
+    for (;;)
+    {
+        Status = AcpiLidQueryOpen(Handle, &Open);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("Lid state unreadable (_LID failed)\n");
+            break;
+        }
+
+        Reported = InterlockedExchange(&AcpiLidReportedState, (LONG)Open);
+        if (Reported != (LONG)Open)
+        {
+            *ButtonEvent = SYS_BUTTON_LID |
+                           (Open ? SYS_BUTTON_LID_OPEN : SYS_BUTTON_LID_CLOSED) |
+                           (Reported < 0 ? SYS_BUTTON_LID_INITIAL : SYS_BUTTON_LID_CHANGED);
+            break;
+        }
+
+        if (!ACPI_SUCCESS(acpi_bus_event_wait(&Waiter, &Event)))
+        {
+            Status = STATUS_UNSUCCESSFUL;
+            break;
+        }
+    }
+    acpi_bus_event_unlisten(&Waiter);
+    return Status;
+}
+
+typedef struct _ACPI_BUTTON_WAIT
+{
+    PIRP Irp;
+    ACPI_HANDLE Handle;
+    ULONG Buttons;
+} ACPI_BUTTON_WAIT, *PACPI_BUTTON_WAIT;
+
+/*
+ * Completes one IOCTL_GET_SYS_BUTTON_EVENT with the next event of the
+ * buttons its device serves.  Each button device has its own request, so
+ * an event is delivered on the device it belongs to.
+ */
 VOID
 NTAPI
 ButtonWaitThread(PVOID Context)
 {
-    PIRP Irp = Context;
-    int result;
+    ACPI_BUTTON_WAIT Wait = *(PACPI_BUTTON_WAIT)Context;
+    PIRP Irp = Wait.Irp;
     struct acpi_bus_event event;
-    ULONG ButtonEvent;
+    ULONG ButtonEvent = 0;
+    NTSTATUS Status;
 
-    while (ACPI_SUCCESS(result = acpi_bus_receive_event(&event)) &&
-           event.type != ACPI_BUTTON_NOTIFY_STATUS);
+    ExFreePoolWithTag(Context, 'IPCA');
 
-    if (!ACPI_SUCCESS(result))
+    if (Wait.Buttons & SYS_BUTTON_LID)
     {
-       Irp->IoStatus.Status = STATUS_UNSUCCESSFUL;
+        Status = AcpiLidWaitForState(Wait.Handle, &ButtonEvent);
+    }
+    else if (ACPI_SUCCESS(acpi_bus_receive_event_filtered(AcpiButtonEventFilter,
+                                                          (PVOID)(ULONG_PTR)Wait.Buttons,
+                                                          &event)))
+    {
+        ButtonEvent = AcpiButtonEventToSysButton(&event);
+        Status = STATUS_SUCCESS;
     }
     else
     {
-       if (strstr(event.device_class, ACPI_BUTTON_SUBCLASS_POWER))
-           ButtonEvent = SYS_BUTTON_POWER;
-       else if (strstr(event.device_class, ACPI_BUTTON_SUBCLASS_SLEEP))
-           ButtonEvent = SYS_BUTTON_SLEEP;
-       else
-           ButtonEvent = 0;
+        Status = STATUS_UNSUCCESSFUL;
+    }
 
+    if (NT_SUCCESS(Status))
+    {
        RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &ButtonEvent, sizeof(ButtonEvent));
-       Irp->IoStatus.Status = STATUS_SUCCESS;
        Irp->IoStatus.Information = sizeof(ULONG);
     }
+    Irp->IoStatus.Status = Status;
 
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
@@ -483,55 +633,54 @@ ACPIDispatchDeviceControl(
                 break;
             }
 
-            if (wcsstr(((PPDO_DEVICE_DATA)commonData)->HardwareIDs, L"PNP0C0D"))
-            {
+            Caps = AcpiButtonCapsForPdo((PPDO_DEVICE_DATA)commonData);
+            if (Caps & SYS_BUTTON_LID)
                 DPRINT1("Lid button reported to power manager\n");
-                Caps |= SYS_BUTTON_LID;
-            }
-            else if (((PPDO_DEVICE_DATA)commonData)->AcpiHandle == NULL)
+            if (Caps != 0)
             {
-                /* We have to return both at the same time because since we
-                 * have a NULL handle we are the fixed feature DO and we will
-                 * only be called once (not once per device)
-                 */
-                if (power_button)
-                {
-                    DPRINT("Fixed power button reported to power manager\n");
-                    Caps |= SYS_BUTTON_POWER;
-                }
-                if (sleep_button)
-                {
-                    DPRINT("Fixed sleep button reported to power manager\n");
-                    Caps |= SYS_BUTTON_SLEEP;
-                }
-            }
-            else if (wcsstr(((PPDO_DEVICE_DATA)commonData)->HardwareIDs, L"PNP0C0C"))
-            {
-                DPRINT("Control method power button reported to power manager\n");
-                Caps |= SYS_BUTTON_POWER;
-            }
-            else if (wcsstr(((PPDO_DEVICE_DATA)commonData)->HardwareIDs, L"PNP0C0E"))
-            {
-                DPRINT("Control method sleep reported to power manager\n");
-                Caps |= SYS_BUTTON_SLEEP;
+                DPRINT("Button caps 0x%lx reported to power manager\n", Caps);
+                RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &Caps, sizeof(Caps));
+                Irp->IoStatus.Information = sizeof(Caps);
+                status = STATUS_SUCCESS;
             }
             else
             {
                 DPRINT1("IOCTL_GET_SYS_BUTTON_CAPS sent to a non-button device\n");
                 status = STATUS_INVALID_PARAMETER;
             }
-
-            if (Caps != 0)
-            {
-                RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &Caps, sizeof(Caps));
-                Irp->IoStatus.Information = sizeof(Caps);
-                status = STATUS_SUCCESS;
-            }
             break;
 
         case IOCTL_GET_SYS_BUTTON_EVENT:
             {
-                NTSTATUS ThreadStatus = PsCreateSystemThread(&ThreadHandle, THREAD_ALL_ACCESS, 0, 0, 0, ButtonWaitThread, Irp);
+                PACPI_BUTTON_WAIT Wait;
+                NTSTATUS ThreadStatus;
+
+                if (irpStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(ULONG))
+                {
+                    status = STATUS_BUFFER_TOO_SMALL;
+                    break;
+                }
+                Caps = AcpiButtonCapsForPdo((PPDO_DEVICE_DATA)commonData);
+                if (Caps == 0)
+                {
+                    status = STATUS_INVALID_PARAMETER;
+                    break;
+                }
+                Wait = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Wait), 'IPCA');
+                if (!Wait)
+                {
+                    status = STATUS_INSUFFICIENT_RESOURCES;
+                    break;
+                }
+                Wait->Irp = Irp;
+                Wait->Handle = ((PPDO_DEVICE_DATA)commonData)->AcpiHandle;
+                Wait->Buttons = Caps;
+
+                /* The thread may complete the request at once (the lid's
+                 * initial state), so it is marked pending first and not
+                 * touched again here. */
+                IoMarkIrpPending(Irp);
+                ThreadStatus = PsCreateSystemThread(&ThreadHandle, THREAD_ALL_ACCESS, 0, 0, 0, ButtonWaitThread, Wait);
                 if (NT_SUCCESS(ThreadStatus))
                 {
                     ZwClose(ThreadHandle);
@@ -539,13 +688,12 @@ ACPIDispatchDeviceControl(
                 else
                 {
                     DPRINT1("Failed to create system thread: 0x%lx\n", ThreadStatus);
-                    status = ThreadStatus;
-                    break;
+                    ExFreePoolWithTag(Wait, 'IPCA');
+                    Irp->IoStatus.Status = ThreadStatus;
+                    IoCompleteRequest(Irp, IO_NO_INCREMENT);
                 }
+                return STATUS_PENDING;
             }
-
-            status = STATUS_PENDING;
-            break;
 
         case IOCTL_BATTERY_QUERY_TAG:
             DPRINT("IOCTL_BATTERY_QUERY_TAG is not supported!\n");

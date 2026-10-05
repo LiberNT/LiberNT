@@ -181,8 +181,8 @@ acpi_button_add (
 		if (!power_button)
 			power_button = device;
 		else {
-			ExFreePoolWithTag(button, 'IPCA');
-			return_VALUE(-15);
+			result = -15;
+			goto end;
 		}
 		break;
 	case ACPI_BUTTON_TYPE_SLEEP:
@@ -190,16 +190,16 @@ acpi_button_add (
 		if (!sleep_button)
 			sleep_button = device;
 		else {
-			ExFreePoolWithTag(button, 'IPCA');
-			return_VALUE(-15);
+			result = -15;
+			goto end;
 		}
 		break;
 	case ACPI_BUTTON_TYPE_LID:
 		if (!lid_button)
 			lid_button = device;
 		else {
-			ExFreePoolWithTag(button, 'IPCA');
-			return_VALUE(-15);
+			result = -15;
+			goto end;
 		}
 		break;
 	}
@@ -217,13 +217,10 @@ acpi_button_add (
 			acpi_button_notify_fixed,
 			button);
 		break;
-	case ACPI_BUTTON_TYPE_LID:
-		status = AcpiInstallFixedEventHandler (
-			ACPI_BUTTON_TYPE_LID,
-			acpi_button_notify_fixed,
-			button);
-		break;
 	default:
+		/* Control-method buttons, the lid among them, report through
+		 * Notify() on their own node; only the fixed-feature buttons
+		 * above have fixed events. */
 		status = AcpiInstallNotifyHandler (
 			button->handle,
 			ACPI_DEVICE_NOTIFY,
@@ -244,6 +241,15 @@ acpi_button_add (
 
 end:
 	if (result) {
+		/* Leave nothing pointing at the freed button, and let another
+		 * device of the same type take the slot. */
+		acpi_driver_data(device) = NULL;
+		if (power_button == device)
+			power_button = NULL;
+		if (sleep_button == device)
+			sleep_button = NULL;
+		if (lid_button == device)
+			lid_button = NULL;
 		ExFreePoolWithTag(button, 'IPCA');
 	}
 
@@ -273,10 +279,6 @@ acpi_button_remove (struct acpi_device *device, int type)
 	case ACPI_BUTTON_TYPE_SLEEPF:
 		status = AcpiRemoveFixedEventHandler(
 			ACPI_EVENT_SLEEP_BUTTON, acpi_button_notify_fixed);
-		break;
-	case ACPI_BUTTON_TYPE_LID:
-		status = AcpiRemoveFixedEventHandler(
-			ACPI_BUTTON_TYPE_LID, acpi_button_notify_fixed);
 		break;
 	default:
 		status = AcpiRemoveNotifyHandler(button->handle,

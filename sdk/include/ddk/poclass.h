@@ -98,6 +98,13 @@ DEFINE_GUID(GUID_DEVINTERFACE_THERMAL_MANAGER, 0x927ec093, 0x69a4, 0x4bc0, 0xbd,
 #define SYS_BUTTON_LID                    0x00000004
 #define SYS_BUTTON_WAKE                   0x80000000
 
+/* Lid-specific state embedded in the button event */
+#define SYS_BUTTON_LID_STATE_MASK         0x00030000
+#define SYS_BUTTON_LID_OPEN               0x00010000
+#define SYS_BUTTON_LID_CLOSED             0x00020000
+#define SYS_BUTTON_LID_INITIAL            0x00040000
+#define SYS_BUTTON_LID_CHANGED            0x00080000
+
 #define MAX_ACTIVE_COOLING_LEVELS         10
 #define ACTIVE_COOLING                    0
 #define PASSIVE_COOLING                   1
