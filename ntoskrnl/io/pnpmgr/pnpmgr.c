@@ -641,6 +641,173 @@ IopApplyDriverDatabaseDriverKey(
 
 static
 BOOLEAN
+IopMultiSzContains(
+    _In_opt_ PKEY_VALUE_FULL_INFORMATION Information,
+    _In_ PCUNICODE_STRING Name)
+{
+    UNICODE_STRING Entry;
+    PCWSTR Current, End;
+    SIZE_T Length;
+
+    if (!Information || Information->Type != REG_MULTI_SZ)
+        return FALSE;
+
+    Current = (PCWSTR)((PUCHAR)Information + Information->DataOffset);
+    End = Current + Information->DataLength / sizeof(WCHAR);
+    while (Current < End && *Current)
+    {
+        Length = wcsnlen(Current, End - Current);
+        if (Length * sizeof(WCHAR) <= MAXUSHORT)
+        {
+            Entry.Buffer = (PWSTR)Current;
+            Entry.Length = Entry.MaximumLength = (USHORT)(Length * sizeof(WCHAR));
+            if (RtlEqualUnicodeString(&Entry, Name, TRUE))
+                return TRUE;
+        }
+        Current += Length + 1;
+    }
+    return FALSE;
+}
+
+static
+VOID
+IopAppendDriverDatabaseFilter(
+    _In_ HANDLE InstanceKey,
+    _In_ PWSTR ValueName,
+    _In_ PCUNICODE_STRING Filter)
+{
+    PKEY_VALUE_FULL_INFORMATION Information = NULL;
+    UNICODE_STRING NameU;
+    PUCHAR Buffer;
+    ULONG Used = 0, Size;
+
+    if (NT_SUCCESS(IopGetRegistryValue(InstanceKey, ValueName, &Information)))
+    {
+        if (IopMultiSzContains(Information, Filter))
+        {
+            ExFreePool(Information);
+            return;
+        }
+        if (Information->Type == REG_MULTI_SZ && Information->DataLength >= sizeof(WCHAR) &&
+            (Information->DataLength % sizeof(WCHAR)) == 0)
+        {
+            Used = Information->DataLength - sizeof(WCHAR);
+            while (Used >= sizeof(WCHAR) &&
+                   *(PWCHAR)((PUCHAR)Information + Information->DataOffset + Used - sizeof(WCHAR)) == UNICODE_NULL)
+            {
+                Used -= sizeof(WCHAR);
+            }
+            if (Used)
+                Used += sizeof(WCHAR);
+        }
+    }
+
+    Size = Used + Filter->Length + 2 * sizeof(WCHAR);
+    Buffer = ExAllocatePoolWithTag(PagedPool, Size, TAG_IO);
+    if (Buffer)
+    {
+        if (Used)
+            RtlCopyMemory(Buffer, (PUCHAR)Information + Information->DataOffset, Used);
+        RtlCopyMemory(Buffer + Used, Filter->Buffer, Filter->Length);
+        *(PWCHAR)(Buffer + Used + Filter->Length) = UNICODE_NULL;
+        *(PWCHAR)(Buffer + Used + Filter->Length + sizeof(WCHAR)) = UNICODE_NULL;
+        RtlInitUnicodeString(&NameU, ValueName);
+        ZwSetValueKey(InstanceKey, &NameU, 0, REG_MULTI_SZ, Buffer, Size);
+        ExFreePoolWithTag(Buffer, TAG_IO);
+    }
+
+    if (Information)
+        ExFreePool(Information);
+}
+
+static
+VOID
+IopApplyDriverDatabaseFilters(
+    _In_ HANDLE InstanceKey,
+    _In_ HANDLE Configuration)
+{
+    UNICODE_STRING FiltersU = RTL_CONSTANT_STRING(L"Filters");
+    UNICODE_STRING DeviceU = RTL_CONSTANT_STRING(L"Device");
+    UNICODE_STRING UpperU = RTL_CONSTANT_STRING(L"*Upper");
+    UNICODE_STRING LowerU = RTL_CONSTANT_STRING(L"*Lower");
+    PKEY_VALUE_FULL_INFORMATION UpperLevels = NULL, LowerLevels = NULL;
+    PKEY_VALUE_BASIC_INFORMATION ValueInformation;
+    PKEY_BASIC_INFORMATION KeyInformation;
+    UNICODE_STRING Level, Filter;
+    HANDLE Filters, Device, LevelKey;
+    ULONG Index, ValueIndex, Length;
+    PWSTR Target;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&Filters, Configuration, &FiltersU, KEY_READ)))
+        return;
+
+    if (NT_SUCCESS(IopOpenRegistryKeyEx(&Device, Configuration, &DeviceU, KEY_READ)))
+    {
+        if (!NT_SUCCESS(IopGetRegistryValue(Device, L"UpperFilterLevels", &UpperLevels)))
+            UpperLevels = NULL;
+        if (!NT_SUCCESS(IopGetRegistryValue(Device, L"LowerFilterLevels", &LowerLevels)))
+            LowerLevels = NULL;
+        ZwClose(Device);
+    }
+
+    for (Index = 0; ; Index++)
+    {
+        Status = ZwEnumerateKey(Filters, Index, KeyBasicInformation, NULL, 0, &Length);
+        if (Status != STATUS_BUFFER_OVERFLOW && Status != STATUS_BUFFER_TOO_SMALL)
+            break;
+        KeyInformation = ExAllocatePool(PagedPool, Length);
+        if (!KeyInformation)
+            break;
+        if (!NT_SUCCESS(ZwEnumerateKey(Filters, Index, KeyBasicInformation, KeyInformation, Length, &Length)))
+        {
+            ExFreePool(KeyInformation);
+            continue;
+        }
+
+        Level.Buffer = KeyInformation->Name;
+        Level.Length = Level.MaximumLength = (USHORT)KeyInformation->NameLength;
+        if (RtlEqualUnicodeString(&Level, &UpperU, TRUE) || IopMultiSzContains(UpperLevels, &Level))
+            Target = L"UpperFilters";
+        else if (RtlEqualUnicodeString(&Level, &LowerU, TRUE) || IopMultiSzContains(LowerLevels, &Level))
+            Target = L"LowerFilters";
+        else
+            Target = NULL;
+
+        if (Target && NT_SUCCESS(IopOpenRegistryKeyEx(&LevelKey, Filters, &Level, KEY_READ)))
+        {
+            for (ValueIndex = 0; ; ValueIndex++)
+            {
+                Status = ZwEnumerateValueKey(LevelKey, ValueIndex, KeyValueBasicInformation, NULL, 0, &Length);
+                if (Status != STATUS_BUFFER_OVERFLOW && Status != STATUS_BUFFER_TOO_SMALL)
+                    break;
+                ValueInformation = ExAllocatePool(PagedPool, Length);
+                if (!ValueInformation)
+                    break;
+                if (NT_SUCCESS(ZwEnumerateValueKey(LevelKey, ValueIndex, KeyValueBasicInformation,
+                                                   ValueInformation, Length, &Length)) &&
+                    ValueInformation->NameLength)
+                {
+                    Filter.Buffer = ValueInformation->Name;
+                    Filter.Length = Filter.MaximumLength = (USHORT)ValueInformation->NameLength;
+                    IopAppendDriverDatabaseFilter(InstanceKey, Target, &Filter);
+                }
+                ExFreePool(ValueInformation);
+            }
+            ZwClose(LevelKey);
+        }
+        ExFreePool(KeyInformation);
+    }
+
+    if (UpperLevels)
+        ExFreePool(UpperLevels);
+    if (LowerLevels)
+        ExFreePool(LowerLevels);
+    ZwClose(Filters);
+}
+
+static
+BOOLEAN
 IopApplyDriverDatabaseMatch(
     _In_ HANDLE Database,
     _In_ HANDLE InstanceKey,
@@ -666,11 +833,23 @@ IopApplyDriverDatabaseMatch(
         !NT_SUCCESS(IopOpenDriverDatabaseKey(&Descriptor, Package, L"Descriptors\\%s", Match->DeviceId, KEY_READ)) ||
         !IopGetDriverDatabaseString(Descriptor, L"Configuration", Config->Configuration, RTL_NUMBER_OF(Config->Configuration)) ||
         !NT_SUCCESS(IopOpenDriverDatabaseKey(&Configuration, Package, L"Configurations\\%s", Config->Configuration, KEY_READ)) ||
-        !IopGetDriverDatabaseString(Configuration, L"Service", Config->Service, RTL_NUMBER_OF(Config->Service)) ||
-        !NT_SUCCESS(RtlStringFromGUID(&Match->ClassGuid, &GuidString)))
+        !IopGetDriverDatabaseString(Configuration, L"Service", Config->Service, RTL_NUMBER_OF(Config->Service)))
     {
         goto Cleanup;
     }
+
+    if (NT_SUCCESS(IopGetRegistryValue(Configuration, L"ConfigFlags", &ConfigFlags)))
+    {
+        if (ConfigFlags->Type == REG_DWORD && ConfigFlags->DataLength == sizeof(ULONG))
+            Flags = *(PULONG)((PUCHAR)ConfigFlags + ConfigFlags->DataOffset);
+        ExFreePool(ConfigFlags);
+        if (Flags & CONFIGFLAG_FINISH_INSTALL)
+            goto Cleanup;
+        Flags = 0;
+    }
+
+    if (!NT_SUCCESS(RtlStringFromGUID(&Match->ClassGuid, &GuidString)))
+        goto Cleanup;
 
     for (Index = 0; Index < GuidString.Length / sizeof(WCHAR); Index++)
     {
@@ -713,6 +892,7 @@ IopApplyDriverDatabaseMatch(
         ZwClose(Source);
     }
 
+    IopApplyDriverDatabaseFilters(InstanceKey, Configuration);
     IopApplyDriverDatabaseDriverKey(InstanceKey, Configuration, Match, Config);
     IopApplyDriverDatabaseServices(Configuration, Config);
 
