@@ -2442,7 +2442,7 @@
 @ stdcall IoCreateFileEx(ptr long ptr ptr ptr long long long long ptr long long ptr long ptr)
 @ stub -arch=win64 IoCreateStreamFileObjectEx2
 @ stub -arch=win64 IoCreateSymbolicLink2
-@ stub -arch=win64 IoCreateSystemThread
+@ stdcall IoCreateSystemThread(ptr ptr long ptr ptr ptr ptr ptr)
 @ stub -arch=win64 IoDecrementKeepAliveCount
 @ stub -arch=win64 IoDriverProxyCreateHotSwappableWorkerThread
 @ stub -arch=win64 IoDuplicateDependency

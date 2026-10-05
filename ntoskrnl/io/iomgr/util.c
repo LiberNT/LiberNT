@@ -343,6 +343,135 @@ IoValidateDeviceIoControlAccess(IN PIRP Irp,
     return STATUS_SUCCESS;
 }
 
+typedef struct _IOP_SYSTEM_THREAD
+{
+    LIST_ENTRY ListEntry;
+    HANDLE ThreadId;
+    PVOID IoObject;
+    PKSTART_ROUTINE StartRoutine;
+    PVOID StartContext;
+} IOP_SYSTEM_THREAD, *PIOP_SYSTEM_THREAD;
+
+static LIST_ENTRY IopSystemThreadList = { &IopSystemThreadList, &IopSystemThreadList };
+static KSPIN_LOCK IopSystemThreadLock;
+static EX_PUSH_LOCK IopSystemThreadNotifyLock;
+static LONG IopSystemThreadNotifyRegistered;
+
+static
+VOID
+NTAPI
+IopSystemThreadNotify(
+    _In_ HANDLE ProcessId,
+    _In_ HANDLE ThreadId,
+    _In_ BOOLEAN Create)
+{
+    PIOP_SYSTEM_THREAD SystemThread = NULL;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    if (Create || IsListEmpty(&IopSystemThreadList))
+        return;
+
+    KeAcquireSpinLock(&IopSystemThreadLock, &OldIrql);
+    for (Entry = IopSystemThreadList.Flink; Entry != &IopSystemThreadList; Entry = Entry->Flink)
+    {
+        if (CONTAINING_RECORD(Entry, IOP_SYSTEM_THREAD, ListEntry)->ThreadId == ThreadId)
+        {
+            SystemThread = CONTAINING_RECORD(Entry, IOP_SYSTEM_THREAD, ListEntry);
+            RemoveEntryList(Entry);
+            break;
+        }
+    }
+    KeReleaseSpinLock(&IopSystemThreadLock, OldIrql);
+
+    if (SystemThread)
+    {
+        ObDereferenceObject(SystemThread->IoObject);
+        ExFreePoolWithTag(SystemThread, TAG_IO);
+    }
+}
+
+static
+VOID
+NTAPI
+IopSystemThreadStart(
+    _In_ PVOID Context)
+{
+    PIOP_SYSTEM_THREAD SystemThread = Context;
+    KIRQL OldIrql;
+
+    SystemThread->ThreadId = PsGetCurrentThreadId();
+    KeAcquireSpinLock(&IopSystemThreadLock, &OldIrql);
+    InsertTailList(&IopSystemThreadList, &SystemThread->ListEntry);
+    KeReleaseSpinLock(&IopSystemThreadLock, OldIrql);
+
+    SystemThread->StartRoutine(SystemThread->StartContext);
+}
+
+NTSTATUS
+NTAPI
+IoCreateSystemThread(
+    _Inout_ PVOID IoObject,
+    _Out_ PHANDLE ThreadHandle,
+    _In_ ULONG DesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_opt_ HANDLE ProcessHandle,
+    _Out_opt_ PCLIENT_ID ClientId,
+    _In_ PKSTART_ROUTINE StartRoutine,
+    _In_opt_ PVOID StartContext)
+{
+    PIOP_SYSTEM_THREAD SystemThread;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+
+    if (!IoObject || !StartRoutine ||
+        (((PDEVICE_OBJECT)IoObject)->Type != IO_TYPE_DEVICE &&
+         ((PDRIVER_OBJECT)IoObject)->Type != IO_TYPE_DRIVER))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (!InterlockedCompareExchange(&IopSystemThreadNotifyRegistered, 0, 0))
+    {
+        KeEnterCriticalRegion();
+        ExAcquirePushLockExclusive(&IopSystemThreadNotifyLock);
+        if (!IopSystemThreadNotifyRegistered)
+        {
+            Status = PsSetCreateThreadNotifyRoutine(IopSystemThreadNotify);
+            if (NT_SUCCESS(Status))
+                InterlockedExchange(&IopSystemThreadNotifyRegistered, 1);
+        }
+        ExReleasePushLockExclusive(&IopSystemThreadNotifyLock);
+        KeLeaveCriticalRegion();
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+
+    SystemThread = ExAllocatePoolWithTag(NonPagedPool, sizeof(*SystemThread), TAG_IO);
+    if (!SystemThread)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    SystemThread->IoObject = IoObject;
+    SystemThread->StartRoutine = StartRoutine;
+    SystemThread->StartContext = StartContext;
+    ObReferenceObject(IoObject);
+
+    Status = PsCreateSystemThread(ThreadHandle,
+                                  DesiredAccess,
+                                  ObjectAttributes,
+                                  ProcessHandle,
+                                  ClientId,
+                                  IopSystemThreadStart,
+                                  SystemThread);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(IoObject);
+        ExFreePoolWithTag(SystemThread, TAG_IO);
+    }
+    return Status;
+}
+
 /*
  * @implemented
  */
