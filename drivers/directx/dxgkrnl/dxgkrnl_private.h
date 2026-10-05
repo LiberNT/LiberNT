@@ -1148,6 +1148,9 @@ struct _DXGKRNL_ADAPTER
      * driver reported LinkConfigurationStarted and not yet Succeeded or
      * Failed.  Scan-out is stopped there, so flips cannot complete. */
     volatile LONG               LinkConfiguringSources;
+    /* Bumped on every link-configuration transition, so a v-blank wait can
+     * tell that a configuration began and ended while it slept. */
+    volatile LONG               LinkConfigGeneration;
 
     /*
      * Gamma per VidPN source, as last applied through D3DKMTSetGammaRamp.
@@ -2431,6 +2434,10 @@ DxgkAdapterStart(
 
 NTSTATUS
 DxgkAdapterStop(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+NTSTATUS
+DxgkRearmVsyncInterrupt(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
 NTSTATUS

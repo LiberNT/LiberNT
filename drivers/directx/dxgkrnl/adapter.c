@@ -13049,6 +13049,28 @@ DxgkpSetVsyncInterruptState(
 }
 
 /*
+ * DxgkRearmVsyncInterrupt
+ *
+ * Turns the vsync interrupt on again where dxgkrnl has it on.  After a
+ * target's link configuration succeeds, scan-out resumes and the OS is to
+ * turn v-blank interrupts back on; the interrupt is adapter-wide, so it is
+ * never turned off for one target and this only re-asserts it.  PASSIVE.
+ */
+NTSTATUS
+DxgkRearmVsyncInterrupt(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PAGED_CODE();
+
+    if (Adapter == NULL ||
+        InterlockedCompareExchange(&Adapter->VsyncInterruptEnabled, 0, 0) == 0)
+    {
+        return STATUS_SUCCESS;
+    }
+    return DxgkpSetVsyncInterruptState(Adapter, DXGK_VSYNC_ENABLE);
+}
+
+/*
  * DxgkpEnableEngineInterrupt
  *
  * Turns on a non-vsync interrupt source.  dxgkrnl only ever enabled

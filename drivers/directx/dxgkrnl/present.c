@@ -583,6 +583,29 @@ DxgkpValidateVBlankSource(
     return STATUS_SUCCESS;
 }
 
+/*
+ * Whether a v-blank wait that timed out should be held: the source's link is
+ * configuring (scan-out stopped, v-blanks lost until it succeeds), or some
+ * configuration began or ended since the wait last looked.
+ */
+static BOOLEAN
+DxgkpVBlankHeldForLinkConfiguration(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _Inout_ PLONG ObservedGeneration)
+{
+    LONG Generation = InterlockedCompareExchange(&Adapter->LinkConfigGeneration, 0, 0);
+    BOOLEAN Held = Generation != *ObservedGeneration;
+
+    if (VidPnSourceId < 32 &&
+        (InterlockedCompareExchange(&Adapter->LinkConfiguringSources, 0, 0) & (LONG)(1UL << VidPnSourceId)) != 0)
+    {
+        Held = TRUE;
+    }
+    *ObservedGeneration = Generation;
+    return Held;
+}
+
 NTSTATUS
 DxgkpWaitForVerticalBlank(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -597,7 +620,8 @@ DxgkpWaitForVerticalBlank(
     PDXGKRNL_PRESENT_QUEUE Queue;
     DXGKRNL_VBLANK_WAITER Waiter;
     BOOLEAN WaiterLinked = FALSE;
-    ULONGLONG Deadline, Now;
+    ULONGLONG Began, Deadline, Now;
+    LONG LinkGeneration;
     LARGE_INTEGER Timeout;
     KIRQL OldIrql;
     ULONG Index;
@@ -649,7 +673,9 @@ DxgkpWaitForVerticalBlank(
     InsertTailList(&Queue->VBlankWaiterList, &Waiter.Entry);
     WaiterLinked = TRUE;
     KeReleaseSpinLock(&Queue->VBlankWaitLock, OldIrql);
-    Deadline = KeQueryInterruptTime() + DXGK_VBLANK_WAIT_TIMEOUT_100NS;
+    LinkGeneration = InterlockedCompareExchange(&Adapter->LinkConfigGeneration, 0, 0);
+    Began = KeQueryInterruptTime();
+    Deadline = Began + DXGK_VBLANK_WAIT_TIMEOUT_100NS;
     for (;;)
     {
         /* The source can disappear after validation, or its interrupts can
@@ -678,6 +704,15 @@ DxgkpWaitForVerticalBlank(
         if (Status == STATUS_TIMEOUT)
         {
             KeReleaseSpinLock(&Queue->VBlankWaitLock, OldIrql);
+            /* Across a link configuration the wait is held for the first
+             * v-blank after scan-out resumes, within the same bounded grace
+             * flips get, rather than failed for v-blanks the link lost. */
+            if (DxgkpVBlankHeldForLinkConfiguration(Adapter, VidPnSourceId, &LinkGeneration) &&
+                KeQueryInterruptTime() - Began < DXGK_MMIO_LINK_CONFIG_GRACE_100NS)
+            {
+                Deadline = KeQueryInterruptTime() + DXGK_VBLANK_WAIT_TIMEOUT_100NS;
+                continue;
+            }
             Status = DxgkpValidateVBlankSource(Adapter, VidPnSourceId);
             if (NT_SUCCESS(Status))
                 Status = STATUS_IO_TIMEOUT;

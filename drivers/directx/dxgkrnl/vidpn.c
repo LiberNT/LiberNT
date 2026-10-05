@@ -2550,6 +2550,7 @@ DxgkpSetLinkConfiguring(
         InterlockedOr(&Adapter->LinkConfiguringSources, (LONG)(1UL << SourceId));
     else
         InterlockedAnd(&Adapter->LinkConfiguringSources, ~(LONG)(1UL << SourceId));
+    InterlockedIncrement(&Adapter->LinkConfigGeneration);
 }
 
 static VOID
@@ -2560,6 +2561,7 @@ DxgkpDrainConnectionChanges(
     DXGKARG_QUERYCONNECTIONCHANGE Args;
     BOOLEAN Changed;
     BOOLEAN AnyChanged = FALSE;
+    BOOLEAN RearmVsync = FALSE;
     ULONG Count;
     NTSTATUS Status = STATUS_SUCCESS;
 
@@ -2620,12 +2622,16 @@ DxgkpDrainConnectionChanges(
 
             case LinkConfigurationStarted:
             case LinkConfigurationSucceeded:
-                /* Started stops scan-out on the target until Succeeded
-                 * resumes it; flips waiting there are held rather than
-                 * timed out across the window (see DxgkpWaitForMmioScanout). */
+                /* Started stops scan-out on the target and loses its
+                 * v-blanks until Succeeded resumes it; flips and v-blank
+                 * waits there are held rather than timed out across the
+                 * window (DxgkpWaitForMmioScanout, DxgkpWaitForVerticalBlank),
+                 * and on success v-blank interrupts are turned back on. */
                 DxgkpSetLinkConfiguring(Adapter, Args.ConnectionChange.TargetId,
                                         Args.ConnectionChange.ConnectionStatus ==
                                             LinkConfigurationStarted);
+                if (Args.ConnectionChange.ConnectionStatus == LinkConfigurationSucceeded)
+                    RearmVsync = TRUE;
                 DXGKRNL_TRACE("CONNECTOR_CHANGE: adapter %p target %u link "
                               "configuration %s\n",
                               Adapter, (UINT)Args.ConnectionChange.TargetId,
@@ -2681,6 +2687,16 @@ DxgkpDrainConnectionChanges(
         }
     }
     DxgkEndKmdTransaction(Adapter);
+    if (RearmVsync)
+    {
+        Status = DxgkRearmVsyncInterrupt(Adapter);
+        if (!NT_SUCCESS(Status) && Status != STATUS_NOT_SUPPORTED)
+        {
+            DXGKRNL_WARN("CONNECTOR_CHANGE: adapter %p v-blank interrupt not "
+                         "re-armed after link configuration 0x%08lX\n",
+                         Adapter, Status);
+        }
+    }
     if (AnyChanged)
         IoInvalidateDeviceRelations(Adapter->PhysicalDeviceObject, BusRelations);
 }
