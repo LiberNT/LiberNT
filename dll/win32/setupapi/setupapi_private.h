@@ -415,6 +415,12 @@ VOID
 SETUPAPI_DeleteDriverDatabasePackage(
     IN PCWSTR PublishedName);
 
+VOID
+SETUPAPI_InstallFilters(
+    IN HINF hInf,
+    IN PCWSTR FiltersSection,
+    IN HKEY InstanceKey);
+
 /* install.c */
 
 BOOL

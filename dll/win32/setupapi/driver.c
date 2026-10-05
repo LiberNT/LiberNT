@@ -2271,6 +2271,160 @@ DriverDatabaseRecordRegistry(
     DriverDatabaseCloseKey(Parent, Name, Key);
 }
 
+static BOOL
+DriverDatabaseGetFilter(
+    IN HINF hInf,
+    IN PINFCONTEXT AddFilter,
+    OUT PWSTR Name,
+    IN DWORD NameSize,
+    OUT PWSTR Level,
+    IN DWORD LevelSize)
+{
+    WCHAR Section[LINE_LEN], Position[16];
+    INFCONTEXT Context;
+
+    if (!SetupGetStringFieldW(AddFilter, 1, Name, NameSize, NULL) || !Name[0] ||
+        !SetupGetStringFieldW(AddFilter, 3, Section, ARRAY_SIZE(Section), NULL) || !Section[0])
+    {
+        return FALSE;
+    }
+
+    if (SetupFindFirstLineW(hInf, Section, L"FilterLevel", &Context) &&
+        SetupGetStringFieldW(&Context, 1, Level, LevelSize, NULL) && Level[0])
+    {
+        return TRUE;
+    }
+
+    if (SetupFindFirstLineW(hInf, Section, L"FilterPosition", &Context) &&
+        SetupGetStringFieldW(&Context, 1, Position, ARRAY_SIZE(Position), NULL) &&
+        (!strcmpiW(Position, L"Upper") || !strcmpiW(Position, L"Lower")) &&
+        LevelSize > 6)
+    {
+        lstrcpyW(Level, !strcmpiW(Position, L"Upper") ? L"*Upper" : L"*Lower");
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+static VOID
+DriverDatabaseRecordFilter(
+    IN HINF hInf,
+    IN HKEY Configuration,
+    IN PINFCONTEXT AddFilter)
+{
+    WCHAR Name[LINE_LEN], Level[LINE_LEN], Path[LINE_LEN + 16];
+    HKEY Key;
+
+    if (!DriverDatabaseGetFilter(hInf, AddFilter, Name, ARRAY_SIZE(Name), Level, ARRAY_SIZE(Level)))
+        return;
+
+    swprintf(Path, ARRAY_SIZE(Path), L"Filters\\%s", Level);
+    if (RegCreateKeyExW(Configuration, Path, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &Key, NULL) == ERROR_SUCCESS)
+    {
+        RegSetValueExW(Key, Name, 0, REG_NONE, NULL, 0);
+        RegCloseKey(Key);
+    }
+}
+
+static BOOL
+FilterListContains(
+    IN PCWSTR List,
+    IN DWORD ListSize,
+    IN PCWSTR Name)
+{
+    PCWSTR Current = List, End = List + ListSize / sizeof(WCHAR);
+
+    while (Current < End && *Current)
+    {
+        if (!strcmpiW(Current, Name))
+            return TRUE;
+        Current += lstrlenW(Current) + 1;
+    }
+    return FALSE;
+}
+
+static VOID
+AppendFilter(
+    IN HKEY InstanceKey,
+    IN PCWSTR ValueName,
+    IN PCWSTR Name)
+{
+    WCHAR List[1024];
+    DWORD Size = sizeof(List) - 2 * sizeof(WCHAR), Type, Used, Length = lstrlenW(Name) + 1;
+
+    if (RegQueryValueExW(InstanceKey, ValueName, NULL, &Type, (LPBYTE)List, &Size) != ERROR_SUCCESS ||
+        Type != REG_MULTI_SZ)
+    {
+        Size = 0;
+    }
+    Size &= ~(sizeof(WCHAR) - 1);
+    List[Size / sizeof(WCHAR)] = UNICODE_NULL;
+    List[Size / sizeof(WCHAR) + 1] = UNICODE_NULL;
+    if (FilterListContains(List, Size, Name))
+        return;
+
+    Used = Size / sizeof(WCHAR);
+    while (Used && !List[Used - 1])
+        Used--;
+    if (Used)
+        Used++;
+    if (Used + Length + 1 > ARRAY_SIZE(List))
+        return;
+
+    memcpy(List + Used, Name, Length * sizeof(WCHAR));
+    List[Used + Length] = UNICODE_NULL;
+    RegSetValueExW(InstanceKey, ValueName, 0, REG_MULTI_SZ, (const BYTE *)List, (Used + Length + 1) * sizeof(WCHAR));
+}
+
+VOID
+SETUPAPI_InstallFilters(
+    IN HINF hInf,
+    IN PCWSTR FiltersSection,
+    IN HKEY InstanceKey)
+{
+    WCHAR Name[LINE_LEN], Level[LINE_LEN], Levels[1024];
+    INFCONTEXT Context;
+    HKEY Parameters;
+    DWORD Size, Type;
+    PCWSTR ValueName;
+    BOOL Found;
+
+    for (Found = SetupFindFirstLineW(hInf, FiltersSection, L"AddFilter", &Context);
+         Found;
+         Found = SetupFindNextMatchLineW(&Context, L"AddFilter", &Context))
+    {
+        if (!DriverDatabaseGetFilter(hInf, &Context, Name, ARRAY_SIZE(Name), Level, ARRAY_SIZE(Level)))
+            continue;
+
+        ValueName = NULL;
+        if (!strcmpiW(Level, L"*Upper"))
+            ValueName = L"UpperFilters";
+        else if (!strcmpiW(Level, L"*Lower"))
+            ValueName = L"LowerFilters";
+        else if (RegOpenKeyExW(InstanceKey, L"Device Parameters", 0, KEY_QUERY_VALUE, &Parameters) == ERROR_SUCCESS)
+        {
+            Size = sizeof(Levels) - 2 * sizeof(WCHAR);
+            if (RegQueryValueExW(Parameters, L"UpperFilterLevels", NULL, &Type, (LPBYTE)Levels, &Size) == ERROR_SUCCESS &&
+                Type == REG_MULTI_SZ && FilterListContains(Levels, Size, Level))
+            {
+                ValueName = L"UpperFilters";
+            }
+            Size = sizeof(Levels) - 2 * sizeof(WCHAR);
+            if (!ValueName &&
+                RegQueryValueExW(Parameters, L"LowerFilterLevels", NULL, &Type, (LPBYTE)Levels, &Size) == ERROR_SUCCESS &&
+                Type == REG_MULTI_SZ && FilterListContains(Levels, Size, Level))
+            {
+                ValueName = L"LowerFilters";
+            }
+            RegCloseKey(Parameters);
+        }
+
+        if (ValueName)
+            AppendFilter(InstanceKey, ValueName, Name);
+    }
+}
+
 static VOID
 DriverDatabaseRecordConfiguration(
     IN HINF hInf,
@@ -2289,7 +2443,9 @@ DriverDatabaseRecordConfiguration(
         return;
 
     DriverDatabaseSetDword(Configuration, L"ConfigScope", 0xF7F);
-    DriverDatabaseSetDword(Configuration, L"ConfigFlags", 0);
+    swprintf(Path, ARRAY_SIZE(Path), L"%s.CoInstallers", Section);
+    DriverDatabaseSetDword(Configuration, L"ConfigFlags",
+                           SetupFindFirstLineW(hInf, Path, NULL, &Context) ? CONFIGFLAG_FINISH_INSTALL : 0);
 
     Included[0] = UNICODE_NULL;
     for (Found = SetupFindFirstLineW(hInf, Section, L"Include", &Context);
@@ -2326,6 +2482,14 @@ DriverDatabaseRecordConfiguration(
                 DriverDatabaseRecordRegistry(hInf, Services, Service, ServiceSection);
         }
         DriverDatabaseCloseKey(Configuration, L"Services", Services);
+    }
+
+    swprintf(Path, ARRAY_SIZE(Path), L"%s.Filters", Section);
+    for (Found = SetupFindFirstLineW(hInf, Path, L"AddFilter", &Context);
+         Found;
+         Found = SetupFindNextMatchLineW(&Context, L"AddFilter", &Context))
+    {
+        DriverDatabaseRecordFilter(hInf, Configuration, &Context);
     }
 
     swprintf(Path, ARRAY_SIZE(Path), L"%s.HW", Section);
@@ -2365,15 +2529,16 @@ DriverDatabaseRecordText(
     if (!SETUPAPI_GetRawStringField(Context, 0, Raw, ARRAY_SIZE(Raw)) || !Raw[0])
         return;
 
+    Length = lstrlenW(Raw);
+    if (Length > 2 && Raw[0] == L'%' && Raw[Length - 1] == L'%')
+        CharLowerW(Raw);
     DriverDatabaseSetString(Descriptor, ValueName, Raw);
 
-    Length = lstrlenW(Raw);
     if (Length > 2 && Raw[0] == L'%' && Raw[Length - 1] == L'%' &&
         SetupGetStringFieldW(Context, 0, Value, ARRAY_SIZE(Value), NULL))
     {
         memcpy(Token, Raw + 1, (Length - 2) * sizeof(WCHAR));
         Token[Length - 2] = UNICODE_NULL;
-        CharLowerW(Token);
         DriverDatabaseSetString(Strings, Token, Value);
     }
 }

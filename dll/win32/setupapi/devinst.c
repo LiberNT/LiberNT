@@ -7305,6 +7305,10 @@ SetupDiInstallDevice(
     RegCloseKey(hHwKey);
     hHwKey = INVALID_HANDLE_VALUE;
 
+    strcpyW(pSectionName, L".Filters");
+    SETUPAPI_InstallFilters(SelectedDriver->InfFileDetails->hInf, SectionName, hKey);
+    *pSectionName = UNICODE_NULL;
+
     /* Write information to enum key */
     TRACE("Write information to enum key\n");
     TRACE("Class           : '%s'\n", debugstr_w(ClassName));
