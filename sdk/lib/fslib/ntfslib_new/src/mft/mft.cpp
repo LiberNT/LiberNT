@@ -10,7 +10,7 @@
 #include "ntfslib_new_internal.h"
 
 #define MFT_ALLOCATION_BITMAP_CHUNK_SIZE 0x10000
-#define MFT_FIRST_ORDINARY_FILE_RECORD 24
+#define MFT_FIRST_ORDINARY_FILE_RECORD (NTFS_LAST_RESERVED_FILE_RECORD + 1)
 
 /*
  * Reserve $MFT data in coarse chunks so its records stay in long runs
@@ -394,8 +394,7 @@ MasterFileTable::AllocateExtensionFileRecord(
     if (GetSequenceFromFileRef(
             BaseFileReference) == 0 ||
         GetFRNFromFileRef(
-            BaseFileReference) <=
-            NTFS_LAST_RESERVED_FILE_RECORD ||
+            BaseFileReference) == _MFT ||
         GetFRNFromFileRef(
             BaseFileReference) > MAXULONG)
     {
@@ -463,6 +462,86 @@ MasterFileTable::GetFileRecordInDirectory(
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS
+ExtendMftDataToAllocation(
+    _In_ PFileRecord MFTFile,
+    _In_ ULONG FileRecordSize)
+{
+    static const UCHAR Zeroes[
+        MFT_ALLOCATION_BITMAP_CHUNK_SIZE] = {};
+    PAttribute DataAttribute;
+    PAttribute BitmapAttribute;
+    ULONGLONG Position;
+    ULONGLONG RecordBytes;
+    ULONGLONG RequiredBitmapLength;
+    NTSTATUS Status;
+
+    DataAttribute =
+        MFTFile->GetAttribute(TypeData, NULL);
+    if (!DataAttribute ||
+        !DataAttribute->IsNonResident)
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+    Position =
+        DataAttribute->NonResident.DataSize;
+    RecordBytes =
+        DataAttribute->NonResident.AllocatedSize -
+        DataAttribute->NonResident.AllocatedSize %
+            FileRecordSize;
+
+    while (Position < RecordBytes)
+    {
+        LARGE_INTEGER Offset;
+        ULONG Length = (ULONG)min(
+            RecordBytes - Position,
+            (ULONGLONG)sizeof(Zeroes));
+
+        if (Position > NTFS_MAX_SIGNED_OFFSET)
+            return STATUS_FILE_TOO_LARGE;
+        Offset.QuadPart = (LONGLONG)Position;
+        Status = MFTFile->WriteFileData(
+            TypeData,
+            NULL,
+            const_cast<PUCHAR>(Zeroes),
+            &Length,
+            &Offset);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Position += Length;
+    }
+
+    BitmapAttribute =
+        MFTFile->GetAttribute(TypeBitmap, NULL);
+    if (!BitmapAttribute)
+        return STATUS_FILE_CORRUPT_ERROR;
+    Position = GetAttributeDataSize(BitmapAttribute);
+    RequiredBitmapLength = ALIGN_UP_BY(
+        (RecordBytes / FileRecordSize + 7) / 8,
+        sizeof(ULONGLONG));
+
+    while (Position < RequiredBitmapLength)
+    {
+        LARGE_INTEGER Offset;
+        ULONG Length = (ULONG)min(
+            RequiredBitmapLength - Position,
+            (ULONGLONG)sizeof(Zeroes));
+
+        Offset.QuadPart = (LONGLONG)Position;
+        Status = MFTFile->WriteFileData(
+            TypeBitmap,
+            NULL,
+            const_cast<PUCHAR>(Zeroes),
+            &Length,
+            &Offset);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Position += Length;
+    }
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 MasterFileTable::AllocateFileRecord(
     _In_ ULONGLONG BaseFileReference,
@@ -501,8 +580,7 @@ MasterFileTable::AllocateFileRecord(
         (GetSequenceFromFileRef(
              BaseFileReference) == 0 ||
          GetFRNFromFileRef(
-             BaseFileReference) <=
-             NTFS_LAST_RESERVED_FILE_RECORD ||
+             BaseFileReference) == _MFT ||
          GetFRNFromFileRef(
              BaseFileReference) > MAXULONG))
     {
@@ -605,7 +683,9 @@ ScanAgain:
                 {
                     if ((ValidMask & (1u << Bit)) &&
                         !(BitmapBuffer[Index] &
-                          (1u << Bit)))
+                          (1u << Bit)) &&
+                        FirstRecord + Bit >=
+                            MFT_FIRST_ORDINARY_FILE_RECORD)
                     {
                         Candidate =
                             FirstRecord + Bit;
@@ -824,6 +904,14 @@ ScanAgain:
                     "Chunked $MFT preallocation "
                     "failed: 0x%lx.\n",
                     GrowthStatus);
+            }
+            else
+            {
+                Status = ExtendMftDataToAllocation(
+                    MFTFile,
+                    FileRecordSize);
+                if (!NT_SUCCESS(Status))
+                    goto Done;
             }
         }
     }

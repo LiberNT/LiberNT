@@ -61,7 +61,7 @@ enum FileRecordNumbers
 /* File records up to and including this number are reserved for
  * NTFS metadata files and are hidden from directory enumeration.
  */
-#define NTFS_LAST_RESERVED_FILE_RECORD 26
+#define NTFS_LAST_RESERVED_FILE_RECORD 15
 
 /* File record flags */
 #define FR_IN_USE        0x01

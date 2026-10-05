@@ -2365,8 +2365,7 @@ FileRecord::EnsureAttributeListForMappingGrowth(
     *Created = FALSE;
     if (*AttributeOwner != this ||
         Header->BaseFileRecord != 0 ||
-        Header->MFTRecordNumber <=
-            NTFS_LAST_RESERVED_FILE_RECORD ||
+        Header->MFTRecordNumber == _MFT ||
         GetAttribute(TypeAttributeList, NULL))
     {
         return STATUS_SUCCESS;
