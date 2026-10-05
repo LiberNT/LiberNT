@@ -618,6 +618,8 @@ typedef struct _DXGKP_ACPI_EVENTS
     volatile LONG               WorkQueued;     /* a delivery pass is queued */
     PVOID                       AcPowerSettingHandle;
     PVOID                       LidPowerSettingHandle;
+    PVOID                       HwProfileNotificationEntry; /* dock/undock */
+    volatile LONG               LastLidState;   /* -1 none delivered yet */
     ACPI_INTERFACE_STANDARD2    AcpiInterface;  /* valid while registered */
 } DXGKP_ACPI_EVENTS, *PDXGKP_ACPI_EVENTS;
 

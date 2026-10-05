@@ -16,6 +16,9 @@
  *     PO_CB_AC_STATUS.
  *   - The lid switch, delivered as DxgkPowerStateEvent with
  *     PO_CB_LID_SWITCH_STATE.
+ *   - Docking and undocking, delivered as DxgkDockingEvent with
+ *     ACPI_NOTIFY_DOCK_EVENT when the PnP manager reports that the hardware
+ *     profile changed.
  *
  * DxgkDdiNotifyAcpiEvent must be called at PASSIVE_LEVEL, and ACPI
  * notifications arrive at DISPATCH_LEVEL, so every source only queues the
@@ -44,6 +47,8 @@ static CONST GUID DxgkpGuidAcDcPowerSource =
     { 0x5D3E9A59, 0xE9D5, 0x4B00, { 0xA6, 0xBD, 0xFF, 0x34, 0xFF, 0x51, 0x65, 0x48 } };
 static CONST GUID DxgkpGuidLidSwitchStateChange =
     { 0xBA3E0F4D, 0xB817, 0x4094, { 0xA2, 0xD1, 0xD5, 0x63, 0x79, 0xE6, 0xA0, 0xF3 } };
+static CONST GUID DxgkpGuidHwProfileChangeComplete =
+    { 0xCB3A4003, 0x46F0, 0x11D0, { 0xB0, 0x8F, 0x00, 0x60, 0x97, 0x13, 0x05, 0x3F } };
 
 typedef struct _DXGKP_ACPI_EVENT_RECORD
 {
@@ -299,16 +304,47 @@ DxgkpLidSwitchCallback(
     _In_ ULONG ValueLength,
     _Inout_opt_ PVOID Context)
 {
+    PDXGKRNL_ADAPTER Adapter = (PDXGKRNL_ADAPTER)Context;
+    LONG State;
+
     UNREFERENCED_PARAMETER(SettingGuid);
 
-    if (Context == NULL || Value == NULL || ValueLength < sizeof(ULONG))
+    if (Adapter == NULL || Value == NULL || ValueLength < sizeof(ULONG))
         return STATUS_SUCCESS;
 
     /* 1 when the lid opens, 0 when it closes -- the same sense the setting
-     * reports. */
-    DxgkpQueueAcpiEvent((PDXGKRNL_ADAPTER)Context, DxgkPowerStateEvent,
-                        PO_CB_LID_SWITCH_STATE, TRUE,
-                        (*(PULONG)Value != 0) ? 1 : 0);
+     * reports.  The setting is replayed when the power source changes; the
+     * miniport hears only of the lid moving. */
+    State = (*(PULONG)Value != 0) ? 1 : 0;
+    if (InterlockedExchange(&Adapter->AcpiEvents.LastLidState, State) == State)
+        return STATUS_SUCCESS;
+    DxgkpQueueAcpiEvent(Adapter, DxgkPowerStateEvent,
+                        PO_CB_LID_SWITCH_STATE, TRUE, (ULONG)State);
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+NTAPI
+DxgkpHwProfileChangeCallback(
+    _In_ PVOID NotificationStructure,
+    _Inout_opt_ PVOID Context)
+{
+    PHWPROFILE_CHANGE_NOTIFICATION Notification =
+        (PHWPROFILE_CHANGE_NOTIFICATION)NotificationStructure;
+
+    if (Context == NULL || Notification == NULL ||
+        Notification->Size < sizeof(*Notification))
+    {
+        return STATUS_SUCCESS;
+    }
+
+    /* Only a completed change is a docking event; a query or a cancelled
+     * one left the machine as it was. */
+    if (IsEqualGUID(&Notification->Event, &DxgkpGuidHwProfileChangeComplete))
+    {
+        DxgkpQueueAcpiEvent((PDXGKRNL_ADAPTER)Context, DxgkDockingEvent,
+                            ACPI_NOTIFY_DOCK_EVENT, FALSE, 0);
+    }
     return STATUS_SUCCESS;
 }
 
@@ -342,6 +378,7 @@ DxgkAcpiEventsStart(
     }
 
     RtlZeroMemory(Events, sizeof(*Events));
+    Events->LastLidState = -1;
     ExInitializeRundownProtection(&Events->Rundown);
     KeInitializeSpinLock(&Events->Lock);
     InitializeListHead(&Events->Queue);
@@ -379,6 +416,21 @@ DxgkAcpiEventsStart(
     {
         Events->LidPowerSettingHandle = NULL;
         DXGKRNL_WARN("DxgkAcpiEventsStart: lid switch not subscribed "
+                     "0x%08lx\n", Status);
+    }
+
+    Status = IoRegisterPlugPlayNotification(
+        EventCategoryHardwareProfileChange,
+        0,
+        NULL,
+        Adapter->FunctionalDeviceObject->DriverObject,
+        DxgkpHwProfileChangeCallback,
+        Adapter,
+        &Events->HwProfileNotificationEntry);
+    if (!NT_SUCCESS(Status))
+    {
+        Events->HwProfileNotificationEntry = NULL;
+        DXGKRNL_WARN("DxgkAcpiEventsStart: docking changes not subscribed "
                      "0x%08lx\n", Status);
     }
 
@@ -467,6 +519,16 @@ DxgkAcpiEventsStop(
     {
         PoUnregisterPowerSettingCallback(Events->LidPowerSettingHandle);
         Events->LidPowerSettingHandle = NULL;
+    }
+    if (Events->HwProfileNotificationEntry != NULL)
+    {
+#ifdef _WIN64
+        /* Waits for a callback already running. */
+        IoUnregisterPlugPlayNotificationEx(Events->HwProfileNotificationEntry);
+#else
+        IoUnregisterPlugPlayNotification(Events->HwProfileNotificationEntry);
+#endif
+        Events->HwProfileNotificationEntry = NULL;
     }
 
     /* Sources are closed; wait out any callback or delivery pass that had
