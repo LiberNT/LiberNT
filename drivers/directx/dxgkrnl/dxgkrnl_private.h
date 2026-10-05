@@ -599,6 +599,8 @@ typedef struct _DXGKRNL_POWER_COMPONENT
  * finds valid memory and is turned away by Rundown.
  * ====================================================================== */
 /* VidPN sources whose gamma is tracked (matches DXGKP_MAX_SOURCES). */
+/* Swizzling ranges arbitrated per adapter; a miniport may report more. */
+#define DXGKP_MAX_SWIZZLING_RANGES 32
 /* MPO return info names a failing plane in 4 bits: at most 16 layers. */
 #define DXGKP_MPO_MAX_LAYERS 16
 #define DXGKP_GAMMA_SOURCES 16
@@ -1271,6 +1273,17 @@ struct _DXGKRNL_ADAPTER
     volatile LONG               MpoPostPresentTarget[32];
     volatile LONG               MpoPostPresentAdapterMask[32];
     DECLSPEC_ALIGN(8) volatile LONG64 MpoPostPresentId[32][DXGKP_MPO_MAX_LAYERS];
+    /*
+     * Swizzling ranges (DXGK_DRIVERCAPS.NumberOfSwizzlingRanges): CPU
+     * apertures through which the miniport shows a swizzled allocation
+     * linear.  SwizzlingRangeOwner[i] is the allocation holding range i.
+     * SwizzlingRangeLock serializes DxgkDdiAcquire/ReleaseSwizzlingRange and
+     * the table.
+     */
+    ULONG                       SwizzlingRangeCount;
+    struct _DXGKVMM_ALLOCATION *SwizzlingRangeOwner[DXGKP_MAX_SWIZZLING_RANGES];
+    KMUTEX                      SwizzlingRangeLock;
+
     /* Sources whose overlay configuration the miniport withdrew
      * (DxgkCbMultiPlaneOverlayDisabled).  Overlay presents there are
      * refused until the compositor has flipped a composed frame. */
@@ -3983,6 +3996,9 @@ typedef struct _DXGKRNL_PAGING_OP
      * means the whole allocation (TransferStart and TransferEnd). */
     BOOLEAN                     ContinuesTransfer;      /* not the first */
     BOOLEAN                     TransferContinues;      /* not the last */
+    /* Layout conversion for a swizzled allocation's transfer. */
+    BOOLEAN                     Swizzle;
+    BOOLEAN                     Unswizzle;
     /* The allocation a transfer or discard moves: a build the miniport
      * refuses with STATUS_GRAPHICS_ALLOCATION_BUSY is retried once it is
      * idle.  Without it that status fails the operation. */

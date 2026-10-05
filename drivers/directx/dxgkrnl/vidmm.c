@@ -83,6 +83,7 @@ static NTSTATUS DxgkpVidMmUnmapUserMappings(
     _In_ BOOLEAN IncludeActive);
 static NTSTATUS DxgkpVidMmUnmapAllocationUserProcess(_In_ PDXGKVMM_ALLOCATION Allocation, _In_ PEPROCESS Process, _In_ BOOLEAN Force, _In_ BOOLEAN IncludeActive);
 static NTSTATUS DxgkpVidMmLockResidencyForExternalOperation(_In_ PDXGKVMM_ALLOCATION Allocation);
+static VOID DxgkpVidMmReleaseSwizzleRange(_Inout_ PDXGKVMM_ALLOCATION Allocation);
 static VOID DxgkpVidMmReleaseSegmentPlacement(_In_ PDXGKVMM_ALLOCATION Allocation);
 static VOID DxgkpVidMmReleaseSystemBacking(_In_ PDXGKVMM_ALLOCATION Allocation);
 static VOID DxgkpVidMmFinalizeAllocation(_In_ PDXGKVMM_ALLOCATION Allocation);
@@ -622,7 +623,19 @@ FORCEINLINE
 BOOLEAN
 VidMmAllocationSupportsSegment(_In_ CONST PDXGKVMM_ALLOCATION Allocation, _In_ ULONG SegmentId)
 {
-    return SegmentId >= 1 && SegmentId <= 32 && (Allocation->SupportedWriteSegmentSet & (1UL << (SegmentId - 1))) != 0;
+    if (SegmentId < 1 || SegmentId > 32 || (Allocation->SupportedWriteSegmentSet & (1UL << (SegmentId - 1))) == 0)
+        return FALSE;
+    /* A swizzled allocation whose backing was left linear must be swizzled
+     * into a memory segment (an aperture would show the GPU linear bytes),
+     * as must one being paged in so the miniport can unswizzle it. */
+    if (((Allocation->Swizzled && Allocation->BackingLinear) || Allocation->RequireMemorySegment) &&
+        Allocation->Adapter != NULL && Allocation->Adapter->Segments != NULL &&
+        SegmentId <= Allocation->Adapter->SegmentCount &&
+        VidMmSegmentIsAperture(&ADAPTER_SEGMENTS(Allocation->Adapter)[SegmentId - 1]))
+    {
+        return FALSE;
+    }
+    return TRUE;
 }
 
 FORCEINLINE
@@ -6046,6 +6059,9 @@ DxgkpVidMmCreateAllocationTracked(
     Alloc->Cached             = (AllocInfo->Flags.Cached != 0);
     Alloc->ExplicitResidencyNotification = (AllocInfo->Flags.ExplicitResidencyNotification != 0);
     Alloc->Capture            = (AllocInfo->FlagsWddm2.Capture != 0);
+    /* The backing of a new swizzled allocation holds no linear content. */
+    Alloc->Swizzled           = (AllocInfo->Flags.Swizzled != 0);
+    Alloc->BackingLinear      = FALSE;
     Alloc->Resident           = FALSE;
     Alloc->Resource           = NULL;
 
@@ -10070,6 +10086,7 @@ DxgkpVidMmReleaseSegmentPlacement(
     }
 
     Segment = &ADAPTER_SEGMENTS(Adapter)[Allocation->SegmentId - 1];
+    DxgkpVidMmReleaseSwizzleRange(Allocation);
     DxgkpVidMmUnmapHostAperture(Allocation, Segment);
 
     ExAcquireFastMutex(&Segment->Lock);
@@ -13911,6 +13928,10 @@ DxgkpVidMmSubmitTransferPagingPacket(
     Op.hMiniportAllocation = Allocation->MiniportHandle;
     Op.TransferOffset = 0;
     Op.TransferSize = Allocation->Size;
+    /* A linear backing is swizzled on the way in; an eviction for CPU
+     * access leaves the backing linear. */
+    Op.Swizzle = Allocation->Swizzled && ToSegment && Allocation->BackingLinear;
+    Op.Unswizzle = Allocation->Swizzled && !ToSegment && Allocation->UnswizzleOnEvict;
     if (ToSegment)
     {
         Op.SourceSegmentId = 0;
@@ -13939,6 +13960,7 @@ DxgkpVidMmTransferAllocationContent(
 {
     PDXGKRNL_SEGMENT Segment;
     NTSTATUS Status = STATUS_NOT_SUPPORTED;
+    BOOLEAN LayoutChange;
 
     if (Adapter == NULL || Allocation == NULL ||
         Allocation->SystemMemory == NULL ||
@@ -13956,10 +13978,14 @@ DxgkpVidMmTransferAllocationContent(
     if (VidMmSegmentIsAperture(Segment))
         return STATUS_SUCCESS;
 
+    /* Only the miniport can convert a swizzled allocation's layout. */
+    LayoutChange = Allocation->Swizzled &&
+                   (ToSegment ? Allocation->BackingLinear : Allocation->UnswizzleOnEvict);
+
     /* A CPU-visible segment needs no paging-engine round trip.  Besides being
      * cheaper, the direct copy remains available when the allocation has no
      * owning device (standard kernel allocations are valid in that state). */
-    if (VidMmSegmentIsCpuVisible(Segment))
+    if (VidMmSegmentIsCpuVisible(Segment) && !LayoutChange)
     {
         if (NT_SUCCESS(VidMmMapSegmentCpu(Segment)) &&
             Allocation->SegmentOffset + Allocation->Size <= Segment->Size)
@@ -13978,7 +14004,11 @@ DxgkpVidMmTransferAllocationContent(
             Status = STATUS_SUCCESS;
         }
         if (NT_SUCCESS(Status))
+        {
+            if (!ToSegment)
+                Allocation->BackingLinear = !Allocation->Swizzled;
             return Status;
+        }
     }
 
     /* Non-CPU-visible memory requires a real TRANSFER packet and fence. */
@@ -13988,6 +14018,10 @@ DxgkpVidMmTransferAllocationContent(
         DPRINT1("DxgkpVidMmTransferAllocationContent: %s failed 0x%08lx "
                 "alloc=%p\n",
                 ToSegment ? "upload" : "download", Status, Allocation);
+    }
+    else if (!ToSegment)
+    {
+        Allocation->BackingLinear = !Allocation->Swizzled || Allocation->UnswizzleOnEvict;
     }
     return Status;
 }
@@ -14694,7 +14728,13 @@ DxgkpVidMmBuildAllocationUserMdl(
             return STATUS_SUCCESS;
         }
 
-        if (Segment->HostAperture)
+        if (Allocation->Swizzled && Allocation->SwizzleRangeHeld)
+        {
+            /* The process sees the placement linear through the range. */
+            HostAperturePhysical = Allocation->SwizzleRangePhysical;
+            Coherent = FALSE;
+        }
+        else if (Segment->HostAperture)
         {
             /* The process sees the placement through its window run. */
             Status = DxgkpVidMmMapHostAperture(Allocation, Segment);
@@ -15017,6 +15057,345 @@ DxgkVidMmMapAllocationUser(
 }
 
 
+/* ========================================================================
+ * Swizzled allocations
+ *
+ * A lock with AcquireAperture asks for a linear CPU view of an allocation
+ * the miniport keeps swizzled.  A resident placement in a memory segment is
+ * given one through a swizzling range (DxgkDdiAcquireSwizzlingRange); when
+ * none can be had the allocation is evicted with Unswizzle and the CPU uses
+ * the linear backing until the last such lock ends, when a placement it had
+ * is given back (paged in with Swizzle).  A backing left swizzled by an
+ * ordinary eviction is first paged into a memory segment.
+ * ====================================================================== */
+
+/* Takes Owner's range away.  Caller holds SwizzlingRangeLock. */
+static VOID
+DxgkpVidMmReleaseSwizzleRangeLocked(
+    _Inout_ PDXGKVMM_ALLOCATION Owner)
+{
+    PDXGKRNL_ADAPTER Adapter = Owner->Adapter;
+    DXGKARG_RELEASESWIZZLINGRANGE Args;
+    NTSTATUS Status;
+
+    if (!Owner->SwizzleRangeHeld)
+        return;
+    if (Owner->CpuAddress != NULL && Owner->CpuAddress == Owner->SwizzleRangeVa)
+        Owner->CpuAddress = NULL;
+    if (Owner->SwizzleRangeVa != NULL)
+        MmUnmapIoSpace(Owner->SwizzleRangeVa, Owner->SwizzleRangeSize);
+    RtlZeroMemory(&Args, sizeof(Args));
+    Args.hAllocation = Owner->MiniportHandle;
+    Args.PrivateDriverData = Owner->SwizzleRangeData;
+    Args.RangeId = Owner->SwizzleRangeId;
+    if (DxgkAcquireKmdCall(Adapter))
+    {
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiReleaseSwizzlingRange)(Adapter->MiniportDeviceContext, &Args);
+        DxgkReleaseKmdCall(Adapter);
+        if (!NT_SUCCESS(Status))
+            DPRINT1("DxgkDdiReleaseSwizzlingRange: range %u failed 0x%08lx\n", Args.RangeId, Status);
+    }
+    if (Owner->SwizzleRangeId < DXGKP_MAX_SWIZZLING_RANGES &&
+        Adapter->SwizzlingRangeOwner[Owner->SwizzleRangeId] == Owner)
+    {
+        Adapter->SwizzlingRangeOwner[Owner->SwizzleRangeId] = NULL;
+    }
+    Owner->SwizzleRangeHeld = FALSE;
+    Owner->SwizzleRangeVa = NULL;
+    Owner->SwizzleRangePhysical.QuadPart = 0;
+    Owner->SwizzleRangeSize = 0;
+}
+
+/* The placement is going away (eviction, destruction).  Process mappings of
+ * it were revoked by the caller. */
+static VOID
+DxgkpVidMmReleaseSwizzleRange(
+    _Inout_ PDXGKVMM_ALLOCATION Allocation)
+{
+    PDXGKRNL_ADAPTER Adapter = Allocation->Adapter;
+
+    if (Adapter == NULL || !Allocation->Swizzled)
+        return;
+    (VOID)KeWaitForSingleObject(&Adapter->SwizzlingRangeLock, Executive, KernelMode, FALSE, NULL);
+    DxgkpVidMmReleaseSwizzleRangeLocked(Allocation);
+    KeReleaseMutex(&Adapter->SwizzlingRangeLock, FALSE);
+}
+
+/*
+ * Takes a range from an allocation no lock is using, so another can have
+ * it.  Its cached process mappings, which name the range, are revoked first.
+ * Caller holds SwizzlingRangeLock.
+ */
+static BOOLEAN
+DxgkpVidMmStealSwizzleRangeLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKVMM_ALLOCATION Requester)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Adapter->SwizzlingRangeCount; ++Index)
+    {
+        PDXGKVMM_ALLOCATION Owner = Adapter->SwizzlingRangeOwner[Index];
+
+        if (Owner == NULL || Owner == Requester ||
+            InterlockedCompareExchange(&Owner->SwizzleLockCount, 0, 0) != 0 ||
+            InterlockedCompareExchange(&Owner->UserModeMappingCount, 0, 0) != 0)
+        {
+            continue;
+        }
+        (VOID)DxgkpVidMmUnmapUserMappings(Owner, FALSE);
+        DxgkpVidMmReleaseSwizzleRangeLocked(Owner);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/*
+ * DxgkpVidMmAcquireSwizzleRange
+ *
+ * Gives the resident allocation a swizzling range for PrivateDriverData
+ * (cached per allocation and data).  Caller holds the allocation's
+ * ResidencyLock, so the placement stays.
+ */
+static NTSTATUS
+DxgkpVidMmAcquireSwizzleRange(
+    _Inout_ PDXGKVMM_ALLOCATION Allocation,
+    _In_ UINT PrivateDriverData)
+{
+    PDXGKRNL_ADAPTER Adapter = Allocation->Adapter;
+    DXGKARG_ACQUIRESWIZZLINGRANGE Args;
+    NTSTATUS Status = STATUS_GRAPHICS_UNSWIZZLING_APERTURE_UNAVAILABLE;
+    ULONG RangeId;
+
+    PAGED_CODE();
+    if (Adapter->SwizzlingRangeCount == 0)
+        return STATUS_GRAPHICS_UNSWIZZLING_APERTURE_UNSUPPORTED;
+    (VOID)KeWaitForSingleObject(&Adapter->SwizzlingRangeLock, Executive, KernelMode, FALSE, NULL);
+    if (Allocation->SwizzleRangeHeld)
+    {
+        if (Allocation->SwizzleRangeData == PrivateDriverData)
+        {
+            KeReleaseMutex(&Adapter->SwizzlingRangeLock, FALSE);
+            return STATUS_SUCCESS;
+        }
+        (VOID)DxgkpVidMmUnmapUserMappings(Allocation, FALSE);
+        DxgkpVidMmReleaseSwizzleRangeLocked(Allocation);
+    }
+    for (;;)
+    {
+        for (RangeId = 0; RangeId < Adapter->SwizzlingRangeCount; ++RangeId)
+        {
+            if (Adapter->SwizzlingRangeOwner[RangeId] == NULL)
+                break;
+        }
+        if (RangeId == Adapter->SwizzlingRangeCount)
+        {
+            if (!DxgkpVidMmStealSwizzleRangeLocked(Adapter, Allocation))
+                break;
+            continue;
+        }
+        RtlZeroMemory(&Args, sizeof(Args));
+        Args.hAllocation = Allocation->MiniportHandle;
+        Args.PrivateDriverData = PrivateDriverData;
+        Args.RangeId = RangeId;
+        Args.SegmentId = Allocation->SegmentId;
+        Args.RangeSize = Allocation->Size;
+        if (!DxgkAcquireKmdCall(Adapter))
+        {
+            Status = STATUS_DELETE_PENDING;
+            break;
+        }
+        _SEH2_TRY
+        {
+            Status = DXGK_CB_FULL(Adapter, DxgkDdiAcquireSwizzlingRange)(Adapter->MiniportDeviceContext, &Args);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+        DxgkReleaseKmdCall(Adapter);
+        if (NT_SUCCESS(Status))
+        {
+            Adapter->SwizzlingRangeOwner[RangeId] = Allocation;
+            Allocation->SwizzleRangeHeld = TRUE;
+            Allocation->SwizzleRangeId = RangeId;
+            Allocation->SwizzleRangeData = PrivateDriverData;
+            Allocation->SwizzleRangePhysical = Args.CPUTranslatedAddress;
+            Allocation->SwizzleRangeSize = Args.RangeSize;
+            Allocation->SwizzleRangeVa = NULL;
+            /* Mappings made before name the raw placement. */
+            (VOID)DxgkpVidMmUnmapUserMappings(Allocation, FALSE);
+            break;
+        }
+        /* Another range uses what this one needs: free one and try again. */
+        if (Status != STATUS_GRAPHICS_UNSWIZZLING_APERTURE_UNAVAILABLE ||
+            !DxgkpVidMmStealSwizzleRangeLocked(Adapter, Allocation))
+        {
+            break;
+        }
+    }
+    KeReleaseMutex(&Adapter->SwizzlingRangeLock, FALSE);
+    return Status;
+}
+
+/* The kernel address of the linear view a held range gives. */
+static NTSTATUS
+DxgkpVidMmMapSwizzleRange(
+    _Inout_ PDXGKVMM_ALLOCATION Allocation,
+    _Out_ PVOID *OutVa)
+{
+    PDXGKRNL_ADAPTER Adapter = Allocation->Adapter;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    (VOID)KeWaitForSingleObject(&Adapter->SwizzlingRangeLock, Executive, KernelMode, FALSE, NULL);
+    if (!Allocation->SwizzleRangeHeld)
+    {
+        Status = STATUS_INVALID_DEVICE_STATE;
+    }
+    else if (Allocation->SwizzleRangeVa == NULL)
+    {
+        Allocation->SwizzleRangeVa = MmMapIoSpace(Allocation->SwizzleRangePhysical,
+                                                  Allocation->SwizzleRangeSize, MmWriteCombined);
+        if (Allocation->SwizzleRangeVa == NULL)
+            Status = STATUS_NO_MEMORY;
+    }
+    *OutVa = Allocation->SwizzleRangeVa;
+    KeReleaseMutex(&Adapter->SwizzlingRangeLock, FALSE);
+    return Status;
+}
+
+/*
+ * DxgkVidMmBeginSwizzledLock
+ *
+ * Prepares an AcquireAperture lock of a swizzled allocation: on return the
+ * allocation either holds a swizzling range for PrivateDriverData or is
+ * evicted with a linear backing, and the mapping paths give the CPU that
+ * linear view.  DonotEvict refuses the eviction.  Paired with
+ * DxgkVidMmEndSwizzledLock on unlock (or on a lock that fails later).
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+NTSTATUS
+DxgkVidMmBeginSwizzledLock(
+    _Inout_ PDXGKVMM_ALLOCATION Allocation,
+    _In_ UINT PrivateDriverData,
+    _In_ BOOLEAN DonotEvict)
+{
+    PDXGKRNL_SEGMENT Segment;
+    BOOLEAN PagedIn = FALSE;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    if (Allocation == NULL || Allocation->Adapter == NULL || !Allocation->Swizzled)
+        return STATUS_INVALID_PARAMETER;
+    InterlockedIncrement(&Allocation->SwizzleLockCount);
+    for (;;)
+    {
+        Status = DxgkpVidMmLockResidencyForExternalOperation(Allocation);
+        if (!NT_SUCCESS(Status))
+            break;
+        Segment = Allocation->Resident && Allocation->Adapter->Segments != NULL &&
+                  Allocation->SegmentId >= 1 && Allocation->SegmentId <= Allocation->Adapter->SegmentCount
+                      ? &ADAPTER_SEGMENTS(Allocation->Adapter)[Allocation->SegmentId - 1]
+                      : NULL;
+        if (Segment == NULL && Allocation->BackingLinear)
+        {
+            /* Already linear in system memory. */
+            KeReleaseMutex(&Allocation->ResidencyLock, FALSE);
+            return STATUS_SUCCESS;
+        }
+        if (Segment != NULL && !VidMmSegmentIsAperture(Segment))
+        {
+            Status = DxgkpVidMmAcquireSwizzleRange(Allocation, PrivateDriverData);
+            KeReleaseMutex(&Allocation->ResidencyLock, FALSE);
+            if (NT_SUCCESS(Status))
+                return Status;
+            if (Status == STATUS_DELETE_PENDING)
+                break;
+            if (DonotEvict)
+            {
+                Status = STATUS_GRAPHICS_UNSWIZZLING_APERTURE_UNAVAILABLE;
+                break;
+            }
+            /* No range: leave the content linear in system memory. */
+            Allocation->UnswizzleOnEvict = TRUE;
+            Status = DxgkVidMmEvict(Allocation);
+            Allocation->UnswizzleOnEvict = FALSE;
+            if (NT_SUCCESS(Status))
+            {
+                if (!PagedIn)
+                    Allocation->SwizzleRestoreResidency = TRUE;
+                return STATUS_SUCCESS;
+            }
+            break;
+        }
+        KeReleaseMutex(&Allocation->ResidencyLock, FALSE);
+        /* Swizzled in system memory, or in an aperture: only a memory
+         * segment lets the miniport unswizzle it. */
+        if (PagedIn || DonotEvict)
+        {
+            Status = STATUS_GRAPHICS_UNSWIZZLING_APERTURE_UNAVAILABLE;
+            break;
+        }
+        if (Segment != NULL)
+        {
+            Status = DxgkVidMmEvict(Allocation);
+            if (!NT_SUCCESS(Status))
+                break;
+            Allocation->SwizzleRestoreResidency = TRUE;
+        }
+        Allocation->RequireMemorySegment = TRUE;
+        Status = DxgkVidMmMakeResident(Allocation, Allocation->Adapter);
+        Allocation->RequireMemorySegment = FALSE;
+        if (!NT_SUCCESS(Status))
+            break;
+        PagedIn = TRUE;
+    }
+    DxgkVidMmEndSwizzledLock(Allocation);
+    return Status;
+}
+
+/*
+ * DxgkVidMmEndSwizzledLock
+ *
+ * The last AcquireAperture lock is over: a placement the lock's eviction
+ * took is given back, swizzling the linear backing on the way in.  A held
+ * range stays cached for the next lock.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+VOID
+DxgkVidMmEndSwizzledLock(
+    _Inout_ PDXGKVMM_ALLOCATION Allocation)
+{
+    NTSTATUS Status;
+    LONG Count;
+
+    PAGED_CODE();
+    if (Allocation == NULL || !Allocation->Swizzled)
+        return;
+    /* Unlock does not say which kind of lock it ends; one with no
+     * AcquireAperture lock outstanding owes nothing. */
+    do
+    {
+        Count = InterlockedCompareExchange(&Allocation->SwizzleLockCount, 0, 0);
+        if (Count <= 0)
+            return;
+    } while (InterlockedCompareExchange(&Allocation->SwizzleLockCount, Count - 1, Count) != Count);
+    if (Count != 1 || !Allocation->SwizzleRestoreResidency)
+        return;
+    Allocation->SwizzleRestoreResidency = FALSE;
+    if (Allocation->Resident)
+        return;
+    Status = DxgkVidMmMakeResident(Allocation, Allocation->Adapter);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("DxgkVidMmEndSwizzledLock: alloc %p not paged back in (0x%08lx); "
+                "it returns on its next residency request\n", Allocation, Status);
+    }
+}
+
 /*
  * DxgkVidMmMapAllocationCpu
  *
@@ -15100,6 +15479,15 @@ DxgkVidMmMapAllocationCpu(
     Segment = &ADAPTER_SEGMENTS(Adapter)[Allocation->SegmentId - 1];
     if (Segment->Flags.PitchAlignment)
         return STATUS_NOT_SUPPORTED;
+
+    /* A swizzled placement with a range: the CPU sees it linear there. */
+    if (Allocation->Swizzled && Allocation->SwizzleRangeHeld)
+    {
+        Status = DxgkpVidMmMapSwizzleRange(Allocation, OutVa);
+        if (NT_SUCCESS(Status))
+            Allocation->CpuAddress = *OutVa;
+        return Status;
+    }
 
     /* Case B: aperture segment → use system backing. */
     if (VidMmSegmentIsAperture(Segment))

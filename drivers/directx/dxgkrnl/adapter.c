@@ -13558,6 +13558,12 @@ DxgkAdapterStart(
                     Adapter->SupportSurpriseRemoval = Caps->SupportSurpriseRemoval;
                 Adapter->HybridDiscrete = Caps->HybridDiscrete;
                 Adapter->HybridIntegrated = Caps->HybridIntegrated;
+                /* Ranges are usable only with both swizzling-range DDIs. */
+                Adapter->SwizzlingRangeCount =
+                    (DXGK_CB_FULL(Adapter, DxgkDdiAcquireSwizzlingRange) != NULL &&
+                     DXGK_CB_FULL(Adapter, DxgkDdiReleaseSwizzlingRange) != NULL)
+                        ? min(Caps->NumberOfSwizzlingRanges, (UINT)DXGKP_MAX_SWIZZLING_RANGES)
+                        : 0;
                 if (!Adapter->MiniportContext->IsDisplayOnlyDriver)
                 {
                     /* The topology count is defined only for multi-engine miniports. */
@@ -16382,6 +16388,7 @@ DxgkpAddDeviceRegistered(
         &Adapter->PeriodicInterruptCore);
     KeInitializeSpinLock(&Adapter->ChildListLock);
     KeInitializeMutex(&Adapter->PresentLifecycleMutex, 0);
+    KeInitializeMutex(&Adapter->SwizzlingRangeLock, 0);
     KeInitializeMutex(&Adapter->CddPresentMutex, 0);
     KeInitializeSpinLock(&Adapter->SubmitDmaLock);
     KeInitializeSpinLock(&Adapter->DmaBufferCacheLock);

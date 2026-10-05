@@ -5024,6 +5024,32 @@ DxgkpBeginSynchronizedLock(
 }
 
 /*
+ * A swizzled allocation admits no unsynchronized (no-overwrite) lock, and an
+ * AcquireAperture lock needs the linear view VidMm prepares.  *Prepared says
+ * DxgkVidMmEndSwizzledLock is owed if the lock fails later.
+ */
+static NTSTATUS
+DxgkpPrepareSwizzledLock(
+    _In_ PDXGKVMM_ALLOCATION Allocation,
+    _In_ const D3DKMT_LOCK *Lock,
+    _Out_ PBOOLEAN Prepared)
+{
+    NTSTATUS Status;
+
+    *Prepared = FALSE;
+    if (!Allocation->Swizzled)
+        return STATUS_SUCCESS;
+    if (Lock->Flags.IgnoreSync)
+        return STATUS_INVALID_PARAMETER;
+    if (!Lock->Flags.AcquireAperture)
+        return STATUS_SUCCESS;
+    Status = DxgkVidMmBeginSwizzledLock(Allocation, Lock->PrivateDriverData,
+                                        (BOOLEAN)Lock->Flags.DonotEvict);
+    *Prepared = NT_SUCCESS(Status);
+    return Status;
+}
+
+/*
  * DxgkLock -- D3DKMTLock handler.
  *
  * When called through the interface (no IRP), we assume kernel caller
@@ -5038,6 +5064,7 @@ DxgkLock(
     PDXGKRNL_DEVICE  LockDevice;
     PDXGKVMM_ALLOCATION LockAlloc;
     PVOID LockVa = NULL;
+    BOOLEAN SwizzlePrepared;
     NTSTATUS Status;
 
     if (pLock == NULL)
@@ -5063,12 +5090,18 @@ DxgkLock(
         return STATUS_INVALID_PARAMETER;
     }
 
-    Status = DxgkpBeginSynchronizedLock(LockAdapter,
-                                        LockDevice,
-                                        LockAlloc,
-                                        pLock->Flags);
+    Status = DxgkpPrepareSwizzledLock(LockAlloc, pLock, &SwizzlePrepared);
+    if (NT_SUCCESS(Status))
+    {
+        Status = DxgkpBeginSynchronizedLock(LockAdapter,
+                                            LockDevice,
+                                            LockAlloc,
+                                            pLock->Flags);
+    }
     if (!NT_SUCCESS(Status))
     {
+        if (SwizzlePrepared)
+            DxgkVidMmEndSwizzledLock(LockAlloc);
         DxgkVidMmDereferenceAllocation(LockAlloc);
         DxgkDereferenceDevice(LockDevice);
         return Status;
@@ -5076,6 +5109,8 @@ DxgkLock(
     /* Interface callers are always kernel -- use system VA mapping. */
     Status = DxgkVidMmMapAllocationCpu(LockAlloc, &LockVa);
     DxgkEndKmdTransaction(LockAdapter);
+    if (!NT_SUCCESS(Status) && SwizzlePrepared)
+        DxgkVidMmEndSwizzledLock(LockAlloc);
     DxgkVidMmDereferenceAllocation(LockAlloc);
     DxgkDereferenceDevice(LockDevice);
     if (!NT_SUCCESS(Status))
@@ -5132,6 +5167,7 @@ DxgkUnlock(
             }
 
             DxgkVidMmUnmapAllocationCpu(UnlockAlloc);
+            DxgkVidMmEndSwizzledLock(UnlockAlloc);
             DxgkVidMmDereferenceAllocation(UnlockAlloc);
         }
     }
@@ -10889,6 +10925,7 @@ DxgkpDispatchBufferedIoctlWorker(
             PDXGKVMM_ALLOCATION LockAlloc;
             PVOID LockVa = NULL;
             BOOLEAN UserMappingCaller;
+            BOOLEAN SwizzlePrepared;
 
             if (InputLength < sizeof(D3DKMT_LOCK) || SystemBuffer == NULL)
                 return STATUS_BUFFER_TOO_SMALL;
@@ -10925,12 +10962,18 @@ DxgkpDispatchBufferedIoctlWorker(
              * kernel and needs a system VA for the shadow surface.
              */
             UserMappingCaller = KmtRequest->Internal || (KmtRequest->RequestorMode == UserMode);
-            Status = DxgkpBeginSynchronizedLock(LockAdapter,
-                                                LockDevice,
-                                                LockAlloc,
-                                                pLock->Flags);
+            Status = DxgkpPrepareSwizzledLock(LockAlloc, pLock, &SwizzlePrepared);
+            if (NT_SUCCESS(Status))
+            {
+                Status = DxgkpBeginSynchronizedLock(LockAdapter,
+                                                    LockDevice,
+                                                    LockAlloc,
+                                                    pLock->Flags);
+            }
             if (!NT_SUCCESS(Status))
             {
+                if (SwizzlePrepared)
+                    DxgkVidMmEndSwizzledLock(LockAlloc);
                 DxgkVidMmDereferenceAllocation(LockAlloc);
                 DxgkDereferenceDevice(LockDevice);
                 return Status;
@@ -10940,6 +10983,8 @@ DxgkpDispatchBufferedIoctlWorker(
             else
                 Status = DxgkVidMmMapAllocationCpu(LockAlloc, &LockVa);
             DxgkEndKmdTransaction(LockAdapter);
+            if (!NT_SUCCESS(Status) && SwizzlePrepared)
+                DxgkVidMmEndSwizzledLock(LockAlloc);
 
             DxgkVidMmDereferenceAllocation(LockAlloc);
             DxgkDereferenceDevice(LockDevice);
@@ -11012,6 +11057,8 @@ DxgkpDispatchBufferedIoctlWorker(
                         Status = STATUS_INVALID_PARAMETER;
                     else
                         DxgkVidMmUnmapAllocationCpu(UnlockAlloc);
+                    if (NT_SUCCESS(Status))
+                        DxgkVidMmEndSwizzledLock(UnlockAlloc);
 
                     DxgkVidMmDereferenceAllocation(UnlockAlloc);
                     if (!NT_SUCCESS(Status))

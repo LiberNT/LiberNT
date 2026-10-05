@@ -172,6 +172,8 @@ DxgkpPagingFillBuildArgs(
             BuildArgs->Transfer.Flags.TransferStart = Op->ContinuesTransfer ? 0 : 1;
             BuildArgs->Transfer.Flags.TransferEnd = Op->TransferContinues ? 0 : 1;
             BuildArgs->Transfer.Flags.AllocationIsIdle = (Idle || Op->AllocationIsIdle) ? 1 : 0;
+            BuildArgs->Transfer.Flags.Swizzle = Op->Swizzle ? 1 : 0;
+            BuildArgs->Transfer.Flags.Unswizzle = Op->Unswizzle ? 1 : 0;
             BuildArgs->Transfer.hAllocation = Op->hMiniportAllocation;
             BuildArgs->Transfer.TransferOffset = Op->TransferOffset;
             BuildArgs->Transfer.TransferSize = Op->TransferSize;

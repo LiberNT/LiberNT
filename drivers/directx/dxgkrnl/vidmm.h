@@ -507,6 +507,35 @@ typedef struct _DXGKVMM_ALLOCATION
     PVOID               PrivateDriverData;
     UINT                PrivateDriverDataSize;
 
+    /*
+     * DXGK_ALLOCATIONINFOFLAGS.Swizzled: the miniport keeps the content in a
+     * layout of its own.  BackingLinear records that the system-memory
+     * backing holds the linear (unswizzled) form, left by an unswizzling
+     * eviction for CPU access: paging it in then asks for a Swizzle transfer,
+     * and no aperture may scan it.  UnswizzleOnEvict asks the next eviction
+     * for that form.  A held swizzling range (DxgkDdiAcquireSwizzlingRange)
+     * gives the CPU a linear view of the resident placement at
+     * SwizzleRangePhysical; SwizzleRangeVa is its kernel mapping.  Range
+     * state is protected by the adapter's SwizzlingRangeLock.
+     */
+    BOOLEAN             Swizzled;
+    BOOLEAN             BackingLinear;
+    BOOLEAN             UnswizzleOnEvict;
+    BOOLEAN             SwizzleRangeHeld;
+    UINT                SwizzleRangeId;
+    UINT                SwizzleRangeData;
+    PHYSICAL_ADDRESS    SwizzleRangePhysical;
+    SIZE_T              SwizzleRangeSize;
+    PVOID               SwizzleRangeVa;
+    /* Active AcquireAperture locks; a range is not taken from an allocation
+     * that has any.  SwizzleRestoreResidency: an unswizzling eviction for a
+     * lock took the placement, which the last unlock gives back.
+     * RequireMemorySegment: a page-in that must land where the miniport can
+     * unswizzle it (no aperture). */
+    volatile LONG       SwizzleLockCount;
+    BOOLEAN             SwizzleRestoreResidency;
+    BOOLEAN             RequireMemorySegment;
+
     /* Host-aperture run giving the CPU this placement (HostAperturePageCount
      * zero when none); HostApertureVa is its kernel mapping. */
     ULONG               HostApertureFirstPage;
@@ -1010,6 +1039,16 @@ NTSTATUS
 DxgkVidMmWaitForTrackedSubmissions(
     _In_ PDXGKVMM_ALLOCATION Allocation,
     _In_ BOOLEAN DoNotWait);
+
+NTSTATUS
+DxgkVidMmBeginSwizzledLock(
+    _Inout_ PDXGKVMM_ALLOCATION Allocation,
+    _In_ UINT PrivateDriverData,
+    _In_ BOOLEAN DonotEvict);
+
+VOID
+DxgkVidMmEndSwizzledLock(
+    _Inout_ PDXGKVMM_ALLOCATION Allocation);
 
 NTSTATUS
 DxgkVidMmReferenceResource(
