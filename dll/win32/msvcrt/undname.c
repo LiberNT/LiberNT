@@ -93,6 +93,9 @@ struct datatype_t
 
 static BOOL symbol_demangle(struct parsed_symbol* sym);
 static char* get_class_name(struct parsed_symbol* sym);
+#ifdef __REACTOS__
+static BOOL get_unknown_class(struct parsed_symbol* sym, struct datatype_t* ct);
+#endif
 
 /******************************************************************
  *		und_alloc
@@ -566,6 +569,22 @@ static BOOL get_qualified_type(struct datatype_t *ct, struct parsed_symbol* sym,
         }
     }
 
+#ifdef __REACTOS__
+    if (sym->flags & UNDNAME_NO_ARGUMENTS)
+    {
+        const char* save = sym->current;
+
+        get_extended_qualifier(sym, &xdt2);
+        if (*sym->current > '`')
+        {
+            if (!sym->current[1]) return FALSE;
+            sym->current += 2;
+            return get_unknown_class(sym, ct);
+        }
+        sym->current = save;
+    }
+
+#endif
     if (get_qualifier(sym, &xdt2, &class))
     {
         unsigned            mark = sym->stack.num;
@@ -804,6 +823,46 @@ static char* get_class_name(struct parsed_symbol* sym)
     sym->stack.num = mark;
     return s;
 }
+#ifdef __REACTOS__
+
+static BOOL get_unknown_class(struct parsed_symbol* sym, struct datatype_t* ct)
+{
+    unsigned    mark = sym->stack.num;
+    const char* ptr;
+    BOOL        complete = FALSE;
+    char        c;
+
+    while (*sym->current)
+    {
+        if (*sym->current == '@')
+        {
+            sym->current++;
+            complete = sym->stack.num > mark;
+            break;
+        }
+        if (*sym->current >= '0' && *sym->current <= '9') goto fail;
+        for (ptr = sym->current; (c = *sym->current) && c != '@'; sym->current++)
+        {
+            if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                  c == '_' || c == '$' || c == '<' || c == '>'))
+                goto fail;
+        }
+        if (!str_array_push(sym, ptr, sym->current - ptr, &sym->stack)) goto fail;
+        if (*sym->current == '@') sym->current++;
+    }
+    if (sym->stack.num == mark)
+        ct->left = " ?? ";
+    else if (complete)
+        ct->left = get_class_string(sym, mark);
+    else
+        ct->left = str_printf(sym, " ?? ::%s", get_class_string(sym, mark));
+    sym->stack.num = mark;
+    return ct->left != NULL;
+fail:
+    sym->stack.num = mark;
+    return FALSE;
+}
+#endif
 
 /******************************************************************
  *		get_calling_convention
@@ -1192,6 +1251,13 @@ static BOOL demangle_datatype(struct parsed_symbol* sym, struct datatype_t* ct,
         }
         break;
     default :
+#ifdef __REACTOS__
+        if ((sym->flags & UNDNAME_NO_ARGUMENTS) && dt > '`')
+        {
+            get_unknown_class(sym, ct);
+            break;
+        }
+#endif
         ERR("Unknown type %c\n", dt);
         break;
     }
