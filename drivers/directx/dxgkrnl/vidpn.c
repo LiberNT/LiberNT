@@ -2469,10 +2469,45 @@ DxgkpDrainConnectionChanges(
         DXGKRNL_INFO("CONNECTOR_CHANGE: adapter %p id=%I64u target=%u status=%u\n",
                      Adapter, Args.ConnectionChange.ConnectionChangeId,
                      (UINT)Args.ConnectionChange.TargetId, (UINT)Args.ConnectionChange.ConnectionStatus);
-        if (Args.ConnectionChange.ConnectionStatus != MonitorStatusConnected &&
-            Args.ConnectionChange.ConnectionStatus != MonitorStatusDisconnected)
+        switch (Args.ConnectionChange.ConnectionStatus)
         {
-            continue;
+            case MonitorStatusConnected:
+            case MonitorStatusDisconnected:
+                break;
+
+            case LinkConfigurationFailed:
+                /* The rebuild this worker runs after draining re-enumerates
+                 * co-functional timings and commits again, which is the
+                 * documented response; a failure on that commit's own
+                 * SetTimingsFromVidPn result is retried there, bounded. */
+                DXGKRNL_WARN("CONNECTOR_CHANGE: adapter %p target %u link "
+                             "training failed; the rebuild retries with "
+                             "re-enumerated timings\n",
+                             Adapter, (UINT)Args.ConnectionChange.TargetId);
+                continue;
+
+            case LinkConfigurationStarted:
+            case LinkConfigurationSucceeded:
+                /* TODO: Started stops scan-out and loses pending v-blanks,
+                 * and Succeeded resumes them; the present path does not yet
+                 * suspend v-blank waits across the window. */
+                DXGKRNL_TRACE("CONNECTOR_CHANGE: adapter %p target %u link "
+                              "configuration %s\n",
+                              Adapter, (UINT)Args.ConnectionChange.TargetId,
+                              Args.ConnectionChange.ConnectionStatus ==
+                                  LinkConfigurationStarted ?
+                                  "started" : "succeeded");
+                continue;
+
+            default:
+                /* TODO: TargetStatusConnected / Disconnected / Joined add and
+                 * remove downstream (MST and tiled) targets at run time,
+                 * which the static child model does not support yet. */
+                DXGKRNL_WARN("CONNECTOR_CHANGE: adapter %p target %u status %u "
+                             "not handled\n",
+                             Adapter, (UINT)Args.ConnectionChange.TargetId,
+                             (UINT)Args.ConnectionChange.ConnectionStatus);
+                continue;
         }
         if (NT_SUCCESS(DxgkPnpIndicateChildConnection(Adapter,
                                                       Args.ConnectionChange.TargetId,

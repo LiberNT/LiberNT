@@ -639,6 +639,48 @@ DxgkpSignalInfoEqual(
                (ULONGLONG)B->HSyncFreq.Numerator * A->HSyncFreq.Denominator;
 }
 
+/* Consecutive link-training failures re-tried before giving up. */
+#define DXGKP_MAX_LINK_RETRAIN_ATTEMPTS 3
+
+/*
+ * DxgkpRequestLinkRetrain
+ *
+ * A path came back LinkConfigurationFailed.  The documented response is to
+ * re-enumerate co-functional timings -- now limited by the link as trained --
+ * and retry SetTimingsFromVidPn.  The hot-plug rebuild does exactly that:
+ * recommendation, co-functional enumeration, commit.  It also drains the
+ * driver's queue, which holds the matching connection change.
+ *
+ * Retries are bounded.  Queuing a rebuild publishes a new generation, and the
+ * worker restarts its own retry count for every generation, so a link that
+ * kept failing would otherwise set the mode forever.
+ */
+static VOID
+DxgkpRequestLinkRetrain(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
+{
+    LONG Attempt = InterlockedIncrement(&Adapter->LinkRetrainAttempts);
+
+    if (Attempt > DXGKP_MAX_LINK_RETRAIN_ATTEMPTS)
+    {
+        DXGKRNL_ERR("Link training on target %u failed %ld times in a row; "
+                    "not retrying\n", TargetId, Attempt);
+        return;
+    }
+
+    DXGKRNL_WARN("Link training on target %u failed; re-enumerating timings "
+                 "and retrying (attempt %ld of %u)\n",
+                 TargetId, Attempt, DXGKP_MAX_LINK_RETRAIN_ATTEMPTS);
+    InterlockedExchange(&Adapter->ConnectorChangePending, 1);
+    if (!NT_SUCCESS(DxgkVidPnQueueHotPlugRebuild(Adapter)))
+    {
+        /* Refused while the adapter is still starting; start queues it as
+         * its last step. */
+        InterlockedExchange(&Adapter->LinkRetrainPending, 1);
+    }
+}
+
 NTSTATUS
 DxgkpDisplayCommitVidPnCandidateWithTarget(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -1466,6 +1508,29 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
              * this is set; otherwise it rebuilds from stale state. */
             InterlockedExchange(&Adapter->ConnectorChangePending, 1);
             (VOID)DxgkVidPnQueueHotPlugRebuild(Adapter);
+        }
+
+        if (!TopologyEmpty &&
+            TimingPath.TargetState.ConnectionStatus == LinkConfigurationFailed)
+        {
+            DxgkpRequestLinkRetrain(Adapter, ActiveTargetId);
+
+            /* A timing the caller asked for by name cannot be delivered, so
+             * fail and let it restore the previous mode.  Any other commit --
+             * at start, on hot-plug, as a recommit -- is kept, and the retry
+             * finds a timing the link can carry; failing the initial commit
+             * would abandon the adapter start. */
+            if (RequestedTarget != NULL)
+            {
+                MiniportModeSetFailed = TRUE;
+                Status = STATUS_GRAPHICS_MODE_NOT_IN_MODESET;
+                goto Cleanup;
+            }
+        }
+        else if (!TopologyEmpty)
+        {
+            /* The link came up; a later failure starts a fresh count. */
+            InterlockedExchange(&Adapter->LinkRetrainAttempts, 0);
         }
     }
     else if (!ForceDodPresentOnlyPath &&

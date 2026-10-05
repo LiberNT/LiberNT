@@ -13490,6 +13490,8 @@ DxgkAdapterStart(
         D3DKMDT_HVIDPN hVidPn = NULL;
 
         StepStart100ns = DxgkpTraceNow100ns();
+        InterlockedExchange(&Adapter->LinkRetrainAttempts, 0);
+        InterlockedExchange(&Adapter->LinkRetrainPending, 0);
         Status = DxgkVidPnCreateForAdapter(Adapter, &hVidPn);
         VidPnUs = DxgkpTraceElapsedUs(StepStart100ns);
         if (NT_SUCCESS(Status))
@@ -13687,6 +13689,11 @@ DxgkAdapterStart(
 
     Status = STATUS_SUCCESS;
     DxgkpCompleteAdapterStart(Adapter, StartGeneration, Status, TRUE);
+
+    /* A link that failed to train during the initial commit could not be
+     * retried while the adapter was still starting. */
+    if (InterlockedExchange(&Adapter->LinkRetrainPending, 0) != 0)
+        (VOID)DxgkVidPnQueueHotPlugRebuild(Adapter);
     return Status;
 
 StartRollback:

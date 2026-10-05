@@ -1125,6 +1125,15 @@ struct _DXGKRNL_ADAPTER
     WORK_QUEUE_ITEM             HotPlugWorkItem;
     volatile LONG               ConnectorChangePending;
 
+    /*
+     * Link re-training after SetTimingsFromVidPn reports
+     * LinkConfigurationFailed.  Attempts counts consecutive failures and is
+     * cleared by a mode set whose link came up; Pending records a retry that
+     * could not be queued because the adapter had not finished starting.
+     */
+    volatile LONG               LinkRetrainAttempts;
+    volatile LONG               LinkRetrainPending;
+
     /* Timing firmware left running, as the driver described it in answer to
      * DXGK_RFVR_FIRMWARE at start.  Used only by the first commit. */
     BOOLEAN                     FirmwareTimingValid;
