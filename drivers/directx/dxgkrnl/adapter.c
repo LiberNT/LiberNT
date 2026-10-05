@@ -7448,6 +7448,8 @@ DxgkCbNotifyInterrupt(
         {
             InterlockedExchange64(&Adapter->VsyncScanoutAddress[SourceId],
                                   NotifyInterruptData->CrtcVsync.PhysicalAddress.QuadPart);
+            InterlockedExchange(&Adapter->VsyncReportsAddress[SourceId], 1);
+            InterlockedExchange(&Adapter->VsyncReportsPresentId[SourceId], 0);
             InterlockedIncrement64(&Adapter->VsyncScanoutSequence[SourceId]);
             InterlockedOr(&Adapter->VsyncPending, (LONG)(1UL << SourceId));
         }
@@ -7457,6 +7459,7 @@ DxgkCbNotifyInterrupt(
     {
         ULONG SourceId = DxgkVidPnVsyncSourceFromTarget(Adapter, NotifyInterruptData->CrtcVsyncWithMultiPlaneOverlay2.VidPnTargetId);
         UINT PlaneIndex;
+        BOOLEAN PrimaryReported = FALSE;
 
         if (SourceId < RTL_NUMBER_OF(Adapter->VsyncScanoutPresentId))
         {
@@ -7469,8 +7472,15 @@ DxgkCbNotifyInterrupt(
                     &NotifyInterruptData->CrtcVsyncWithMultiPlaneOverlay2.pMultiPlaneOverlayVsyncInfo[PlaneIndex];
 
                 if (Info->LayerIndex == 0)
+                {
                     InterlockedExchange64(&Adapter->VsyncScanoutPresentId[SourceId], (LONG64)Info->PresentId);
+                    PrimaryReported = TRUE;
+                }
             }
+            /* This form never carries an address; it names the primary only
+             * when layer 0 is in the list. */
+            InterlockedExchange(&Adapter->VsyncReportsAddress[SourceId], 0);
+            InterlockedExchange(&Adapter->VsyncReportsPresentId[SourceId], PrimaryReported ? 1 : 0);
             if (!NotifyInterruptData->Flags.HsyncFlipCompletion)
             {
                 InterlockedIncrement64(&Adapter->VsyncScanoutSequence[SourceId]);

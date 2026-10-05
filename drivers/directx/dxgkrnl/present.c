@@ -3917,6 +3917,8 @@ DxgkpWaitForMmioScanout(
     LONG64 Sequence;
     LONG64 EffectiveAddress;
     LONG64 EffectivePresentId;
+    BOOLEAN AddressReported;
+    BOOLEAN PresentIdReported;
     NTSTATUS Status;
 
     /* A periodic bounded wait also observes device/reset teardown when the
@@ -3937,12 +3939,34 @@ DxgkpWaitForMmioScanout(
         Sequence = InterlockedCompareExchange64(&Adapter->VsyncScanoutSequence[SourceId], 0, 0);
         EffectiveAddress = InterlockedCompareExchange64(&Adapter->VsyncScanoutAddress[SourceId], 0, 0);
         EffectivePresentId = InterlockedCompareExchange64(&Adapter->VsyncScanoutPresentId[SourceId], 0, 0);
+        AddressReported = InterlockedCompareExchange(&Adapter->VsyncReportsAddress[SourceId], 0, 0) != 0;
+        PresentIdReported = InterlockedCompareExchange(&Adapter->VsyncReportsPresentId[SourceId], 0, 0) != 0;
         if (Sequence == InterlockedCompareExchange64(&Adapter->VsyncScanoutSequence[SourceId], 0, 0) &&
-            Sequence >= TargetSequence && (!MatchAddress || EffectiveAddress == Address.QuadPart) &&
-            (PresentId == 0 || (LONG64)((ULONG64)EffectivePresentId - PresentId) >= 0))
+            Sequence >= TargetSequence)
         {
-            *ObservedSequence = Sequence;
-            return STATUS_SUCCESS;
+            BOOLEAN Latched;
+
+            /*
+             * Confirm the flip by whatever the hardware reports.  A driver
+             * chooses its notification form independently of the flip DDI it
+             * was called through: a flip made with SetVidPnSourceAddress has
+             * no present id, and a multiplane-overlay-2 notification has no
+             * address.  Requiring one the hardware never reports would time
+             * out a flip that completed; when the notification names neither,
+             * the v-sync after arming is the one that latched it.
+             */
+            if (PresentId != 0 && PresentIdReported)
+                Latched = (LONG64)((ULONG64)EffectivePresentId - PresentId) >= 0;
+            else if (MatchAddress && Address.QuadPart != 0 && AddressReported)
+                Latched = EffectiveAddress == Address.QuadPart;
+            else
+                Latched = TRUE;
+
+            if (Latched)
+            {
+                *ObservedSequence = Sequence;
+                return STATUS_SUCCESS;
+            }
         }
         if (KeQueryInterruptTime() - Start >= DXGK_MMIO_FLIP_TIMEOUT_100NS)
             return STATUS_IO_TIMEOUT;
@@ -4341,7 +4365,7 @@ DxgkpExecuteMmioFlip(
     }
     else
     {
-        Status = DxgkpWaitForMmioScanout(Queue, Entry, ResetGeneration, FlipCall.ArmSequence + 1, WaitPresentId == 0, Address, WaitPresentId, &ObservedSequence);
+        Status = DxgkpWaitForMmioScanout(Queue, Entry, ResetGeneration, FlipCall.ArmSequence + 1, TRUE, Address, WaitPresentId, &ObservedSequence);
     }
     if (NT_SUCCESS(Status))
     {

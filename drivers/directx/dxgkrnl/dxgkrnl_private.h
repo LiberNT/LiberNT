@@ -1207,6 +1207,12 @@ struct _DXGKRNL_ADAPTER
     DECLSPEC_ALIGN(8) volatile LONG64 VsyncScanoutAddress[32];
     DECLSPEC_ALIGN(8) volatile LONG64 VsyncScanoutSequence[32];
     DECLSPEC_ALIGN(8) volatile LONG64 VsyncScanoutPresentId[32];
+    /* How the latest v-sync notification on each source identified the flip
+     * it latched: by address (DXGK_INTERRUPT_CRTC_VSYNC) or by present id
+     * (..._WITH_MULTIPLANE_OVERLAY2).  Flip completion checks whichever the
+     * hardware actually reports.  Written before the sequence advances. */
+    volatile LONG               VsyncReportsAddress[32];
+    volatile LONG               VsyncReportsPresentId[32];
     DECLSPEC_ALIGN(8) volatile LONG64 VsyncTargetSourceMap[32];
 
     /*
