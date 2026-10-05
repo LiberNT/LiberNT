@@ -575,6 +575,7 @@ SETUPAPI_RecordInstalledDriverPackage(
     HKEY Key;
 
     if (!InfFileDetails->DirectoryName ||
+        _wcsnicmp(InfFileDetails->FileName, L"oem", 3) == 0 ||
         !IsSystemInfDirectory(InfFileDetails->DirectoryName) ||
         !CombinePath(Published, InfFileDetails->DirectoryName, InfFileDetails->FileName))
     {

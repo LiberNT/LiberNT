@@ -2100,31 +2100,175 @@ done:
     return ret;
 }
 
-static const BYTE DriverDatabaseIdData[] = { 0x01, 0xFF, 0x00, 0x00 };
+static VOID
+DriverDatabaseSetDword(
+    IN HKEY Key,
+    IN PCWSTR Name,
+    IN DWORD Value)
+{
+    RegSetValueExW(Key, Name, 0, REG_DWORD, (const BYTE *)&Value, sizeof(Value));
+}
+
+static VOID
+DriverDatabaseSetString(
+    IN HKEY Key,
+    IN PCWSTR Name,
+    IN PCWSTR Value)
+{
+    RegSetValueExW(Key, Name, 0, REG_SZ, (const BYTE *)Value, (lstrlenW(Value) + 1) * sizeof(WCHAR));
+}
+
+static VOID
+DriverDatabaseSetDefaultDword(
+    IN HKEY Key,
+    IN PCWSTR Name,
+    IN DWORD Value)
+{
+    if (RegQueryValueExW(Key, Name, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+        DriverDatabaseSetDword(Key, Name, Value);
+}
+
+static VOID
+DriverDatabaseTouch(
+    IN HKEY Database)
+{
+    FILETIME Now;
+
+    GetSystemTimeAsFileTime(&Now);
+    RegSetValueExW(Database, L"UpdateDate", 0, REG_BINARY, (const BYTE *)&Now, sizeof(Now));
+}
+
+static HKEY
+DriverDatabaseOpen(VOID)
+{
+    WCHAR SystemRoot[MAX_PATH];
+    SYSTEM_INFO SystemInfo;
+    HKEY Database;
+    UINT Length;
+
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\DriverDatabase", 0, NULL, REG_OPTION_NON_VOLATILE,
+                        KEY_ALL_ACCESS, NULL, &Database, NULL) != ERROR_SUCCESS)
+    {
+        return NULL;
+    }
+
+    GetNativeSystemInfo(&SystemInfo);
+    DriverDatabaseSetDefaultDword(Database, L"Version", 0x0A000000);
+    DriverDatabaseSetDefaultDword(Database, L"SchemaVersion", 0x10000);
+    DriverDatabaseSetDefaultDword(Database, L"ConfigOptions", 0x100);
+    DriverDatabaseSetDefaultDword(Database, L"Architecture", SystemInfo.wProcessorArchitecture);
+    DriverDatabaseSetDefaultDword(Database, L"SetupStatus", 0);
+    if (RegQueryValueExW(Database, L"SystemRoot", NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+    {
+        Length = GetSystemWindowsDirectoryW(SystemRoot, ARRAY_SIZE(SystemRoot));
+        if (Length && Length < ARRAY_SIZE(SystemRoot))
+            DriverDatabaseSetString(Database, L"SystemRoot", SystemRoot);
+    }
+    return Database;
+}
+
+static VOID
+DriverDatabaseUpdateOemInfMap(
+    IN HKEY Database,
+    IN PCWSTR PublishedName,
+    IN BOOL Used)
+{
+    BYTE Map[512];
+    DWORD Size = sizeof(Map), Type, Number = 0;
+    PCWSTR Digit;
+    LONG Error;
+
+    if (_wcsnicmp(PublishedName, L"oem", 3) != 0 || !iswdigit(PublishedName[3]))
+        return;
+    for (Digit = PublishedName + 3; iswdigit(*Digit); Digit++)
+    {
+        Number = Number * 10 + (*Digit - L'0');
+        if (Number >= sizeof(Map) * 8)
+            return;
+    }
+    if (_wcsicmp(Digit, L".inf") != 0)
+        return;
+
+    Error = RegQueryValueExW(Database, L"OemInfMap", NULL, &Type, Map, &Size);
+    if (Error == ERROR_MORE_DATA)
+        return;
+    if (Error != ERROR_SUCCESS || Type != REG_BINARY)
+        Size = 0;
+    if (Size <= Number / 8)
+    {
+        if (!Used)
+            return;
+        memset(Map + Size, 0, Number / 8 + 1 - Size);
+        Size = Number / 8 + 1;
+    }
+
+    if (Used)
+        Map[Number / 8] |= (BYTE)(0x80 >> (Number % 8));
+    else
+        Map[Number / 8] &= (BYTE)~(0x80 >> (Number % 8));
+    RegSetValueExW(Database, L"OemInfMap", 0, REG_BINARY, Map, Size);
+}
 
 static BOOL
-DriverDatabaseAddConfiguration(
-    IN OUT PWSTR Configurations,
-    IN DWORD ConfigurationsSize,
-    IN OUT PDWORD ConfigurationsLength,
+DriverDatabaseAddMultiSz(
+    IN OUT PWSTR MultiSz,
+    IN DWORD MultiSzSize,
+    IN OUT PDWORD MultiSzLength,
     IN PCWSTR Name)
 {
     PCWSTR Current;
     DWORD Length = lstrlenW(Name) + 1;
 
-    for (Current = Configurations; *Current; Current += lstrlenW(Current) + 1)
+    for (Current = MultiSz; *Current; Current += lstrlenW(Current) + 1)
     {
         if (!strcmpiW(Current, Name))
             return FALSE;
     }
 
-    if (*ConfigurationsLength + Length + 1 > ConfigurationsSize)
+    if (*MultiSzLength + Length + 1 > MultiSzSize)
         return FALSE;
 
-    memcpy(Configurations + *ConfigurationsLength, Name, Length * sizeof(WCHAR));
-    *ConfigurationsLength += Length;
-    Configurations[*ConfigurationsLength] = UNICODE_NULL;
+    memcpy(MultiSz + *MultiSzLength, Name, Length * sizeof(WCHAR));
+    *MultiSzLength += Length;
+    MultiSz[*MultiSzLength] = UNICODE_NULL;
     return TRUE;
+}
+
+static VOID
+DriverDatabaseCloseKey(
+    IN HKEY Parent,
+    IN PCWSTR Name,
+    IN HKEY Key)
+{
+    DWORD SubKeys, Values;
+
+    if (RegQueryInfoKeyW(Key, NULL, NULL, NULL, &SubKeys, NULL, NULL, &Values, NULL, NULL, NULL, NULL) == ERROR_SUCCESS &&
+        SubKeys == 0 && Values == 0)
+    {
+        RegCloseKey(Key);
+        RegDeleteKeyW(Parent, Name);
+        return;
+    }
+    RegCloseKey(Key);
+}
+
+static VOID
+DriverDatabaseRecordRegistry(
+    IN HINF hInf,
+    IN HKEY Parent,
+    IN PCWSTR Name,
+    IN PCWSTR Section)
+{
+    INFCONTEXT Context;
+    HKEY Key;
+
+    if (!SetupFindFirstLineW(hInf, Section, NULL, &Context))
+        return;
+    if (RegCreateKeyExW(Parent, Name, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &Key, NULL) != ERROR_SUCCESS)
+        return;
+
+    SETUPAPI_RecordRelativeRegistry(hInf, Section, Key);
+    DriverDatabaseCloseKey(Parent, Name, Key);
 }
 
 static VOID
@@ -2133,42 +2277,166 @@ DriverDatabaseRecordConfiguration(
     IN HKEY Package,
     IN PCWSTR Section)
 {
-    WCHAR Path[LINE_LEN + 32], Service[LINE_LEN];
+    WCHAR Path[LINE_LEN + 32], Service[LINE_LEN], ServiceSection[LINE_LEN], Included[1024];
+    DWORD IncludedLength = 0, Field, FieldCount;
     INFCONTEXT Context;
-    HKEY Configuration, Device;
+    HKEY Configuration, Services;
+    BOOL Found, Associated = FALSE;
     INT Flags;
-    BOOL Found;
 
     swprintf(Path, ARRAY_SIZE(Path), L"Configurations\\%s", Section);
     if (RegCreateKeyExW(Package, Path, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &Configuration, NULL) != ERROR_SUCCESS)
         return;
 
-    swprintf(Path, ARRAY_SIZE(Path), L"%s.Services", Section);
-    for (Found = SetupFindFirstLineW(hInf, Path, L"AddService", &Context);
+    DriverDatabaseSetDword(Configuration, L"ConfigScope", 0xF7F);
+    DriverDatabaseSetDword(Configuration, L"ConfigFlags", 0);
+
+    Included[0] = UNICODE_NULL;
+    for (Found = SetupFindFirstLineW(hInf, Section, L"Include", &Context);
          Found;
-         Found = SetupFindNextMatchLineW(&Context, L"AddService", &Context))
+         Found = SetupFindNextMatchLineW(&Context, L"Include", &Context))
     {
-        if (SetupGetIntField(&Context, 2, &Flags) &&
-            (Flags & SPSVCINST_ASSOCSERVICE) &&
-            SetupGetStringFieldW(&Context, 1, Service, ARRAY_SIZE(Service), NULL))
+        FieldCount = SetupGetFieldCount(&Context);
+        for (Field = 1; Field <= FieldCount; Field++)
         {
-            RegSetValueExW(Configuration, L"Service", 0, REG_SZ, (const BYTE *)Service, (lstrlenW(Service) + 1) * sizeof(WCHAR));
-            break;
+            if (SetupGetStringFieldW(&Context, Field, ServiceSection, ARRAY_SIZE(ServiceSection), NULL) && ServiceSection[0])
+                DriverDatabaseAddMultiSz(Included, ARRAY_SIZE(Included), &IncludedLength, ServiceSection);
         }
+    }
+    if (IncludedLength)
+        RegSetValueExW(Configuration, L"IncludedInfs", 0, REG_MULTI_SZ, (const BYTE *)Included, (IncludedLength + 1) * sizeof(WCHAR));
+
+    if (RegCreateKeyExW(Configuration, L"Services", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &Services, NULL) == ERROR_SUCCESS)
+    {
+        swprintf(Path, ARRAY_SIZE(Path), L"%s.Services", Section);
+        for (Found = SetupFindFirstLineW(hInf, Path, L"AddService", &Context);
+             Found;
+             Found = SetupFindNextMatchLineW(&Context, L"AddService", &Context))
+        {
+            if (!SetupGetStringFieldW(&Context, 1, Service, ARRAY_SIZE(Service), NULL) || !Service[0])
+                continue;
+
+            if (!Associated && SetupGetIntField(&Context, 2, &Flags) && (Flags & SPSVCINST_ASSOCSERVICE))
+            {
+                DriverDatabaseSetString(Configuration, L"Service", Service);
+                Associated = TRUE;
+            }
+
+            if (SetupGetStringFieldW(&Context, 3, ServiceSection, ARRAY_SIZE(ServiceSection), NULL) && ServiceSection[0])
+                DriverDatabaseRecordRegistry(hInf, Services, Service, ServiceSection);
+        }
+        DriverDatabaseCloseKey(Configuration, L"Services", Services);
     }
 
-    if (RegCreateKeyExW(Configuration, L"Device", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &Device, NULL) == ERROR_SUCCESS)
-    {
-        swprintf(Path, ARRAY_SIZE(Path), L"%s.HW", Section);
-        if (SetupFindFirstLineW(hInf, Path, NULL, &Context))
-        {
-            SETUPAPI_InstallFromInfSectionWithIncludes(NULL, hInf, Path, SPINST_REGISTRY, Device,
-                                                       NULL, 0, NULL, NULL, NULL, NULL);
-        }
-        RegCloseKey(Device);
-    }
+    swprintf(Path, ARRAY_SIZE(Path), L"%s.HW", Section);
+    DriverDatabaseRecordRegistry(hInf, Configuration, L"Device", Path);
+    DriverDatabaseRecordRegistry(hInf, Configuration, L"Driver", Section);
 
     RegCloseKey(Configuration);
+}
+
+static DWORD
+DriverDatabaseGetFeatureScore(
+    IN HINF hInf,
+    IN PCWSTR Section)
+{
+    INFCONTEXT Context;
+    INT FeatureScore;
+
+    if (SetupFindFirstLineW(hInf, Section, L"FeatureScore", &Context) &&
+        SetupGetIntField(&Context, 1, &FeatureScore) &&
+        FeatureScore >= 0 && FeatureScore <= 0xFF)
+    {
+        return FeatureScore;
+    }
+    return 0xFF;
+}
+
+static VOID
+DriverDatabaseRecordText(
+    IN HKEY Descriptor,
+    IN HKEY Strings,
+    IN PCWSTR ValueName,
+    IN PINFCONTEXT Context)
+{
+    WCHAR Raw[LINE_LEN], Token[LINE_LEN], Value[MAX_INF_STRING_LENGTH];
+    DWORD Length;
+
+    if (!SETUPAPI_GetRawStringField(Context, 0, Raw, ARRAY_SIZE(Raw)) || !Raw[0])
+        return;
+
+    DriverDatabaseSetString(Descriptor, ValueName, Raw);
+
+    Length = lstrlenW(Raw);
+    if (Length > 2 && Raw[0] == L'%' && Raw[Length - 1] == L'%' &&
+        SetupGetStringFieldW(Context, 0, Value, ARRAY_SIZE(Value), NULL))
+    {
+        memcpy(Token, Raw + 1, (Length - 2) * sizeof(WCHAR));
+        Token[Length - 2] = UNICODE_NULL;
+        CharLowerW(Token);
+        DriverDatabaseSetString(Strings, Token, Value);
+    }
+}
+
+static VOID
+DriverDatabaseRecordDescriptor(
+    IN HKEY Package,
+    IN HKEY Strings,
+    IN PCWSTR DeviceId,
+    IN PCWSTR Section,
+    IN PINFCONTEXT Manufacturer,
+    IN PINFCONTEXT Model)
+{
+    WCHAR Path[MAX_DEVICE_ID_LEN + 16];
+    DWORD Disposition;
+    HKEY Key;
+
+    swprintf(Path, ARRAY_SIZE(Path), L"Descriptors\\%s", DeviceId);
+    if (RegCreateKeyExW(Package, Path, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &Key, &Disposition) != ERROR_SUCCESS)
+        return;
+
+    if (Disposition == REG_CREATED_NEW_KEY)
+    {
+        DriverDatabaseSetString(Key, L"Configuration", Section);
+        DriverDatabaseRecordText(Key, Strings, L"Manufacturer", Manufacturer);
+        DriverDatabaseRecordText(Key, Strings, L"Description", Model);
+    }
+    RegCloseKey(Key);
+}
+
+static VOID
+DriverDatabaseRecordDeviceId(
+    IN HKEY Database,
+    IN PCWSTR DeviceId,
+    IN PCWSTR PublishedName,
+    IN BYTE Flags,
+    IN BYTE FeatureScore,
+    IN WORD Position)
+{
+    WCHAR Path[MAX_DEVICE_ID_LEN + 16];
+    BYTE Data[4], Current[4];
+    DWORD Size = sizeof(Current), Type;
+    WORD CurrentPosition;
+    HKEY Key;
+
+    swprintf(Path, ARRAY_SIZE(Path), L"DeviceIds\\%s", DeviceId);
+    if (RegCreateKeyExW(Database, Path, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &Key, NULL) != ERROR_SUCCESS)
+        return;
+
+    Data[0] = Flags;
+    Data[1] = FeatureScore;
+    memcpy(Data + 2, &Position, sizeof(Position));
+    if (RegQueryValueExW(Key, PublishedName, NULL, &Type, Current, &Size) == ERROR_SUCCESS &&
+        Type == REG_BINARY && Size == sizeof(Current))
+    {
+        memcpy(&CurrentPosition, Current + 2, sizeof(CurrentPosition));
+        Data[0] = Current[0] | Flags;
+        Data[1] = Current[1];
+        if ((Current[0] & 2) && (!(Flags & 2) || CurrentPosition < Position))
+            memcpy(Data + 2, Current + 2, sizeof(CurrentPosition));
+    }
+    RegSetValueExW(Key, PublishedName, 0, REG_BINARY, Data, sizeof(Data));
+    RegCloseKey(Key);
 }
 
 BOOL
@@ -2181,11 +2449,12 @@ SETUPAPI_RecordDriverDatabasePackage(
     WCHAR PackageId[MAX_PATH], ModelsSection[LINE_LEN], Section[LINE_LEN];
     WCHAR DeviceId[MAX_DEVICE_ID_LEN], Path[MAX_DEVICE_ID_LEN + MAX_PATH];
     WCHAR Configurations[4096];
-    DWORD ConfigurationsLength = 0, Field, FieldCount;
+    DWORD ConfigurationsLength = 0, Field, FieldCount, FeatureScore;
     INFCONTEXT Manufacturer, Model;
     BYTE VersionData[48];
-    HKEY Database = NULL, Package = NULL, Key;
+    HKEY Database = NULL, Package = NULL, Strings = NULL, Key;
     LPWSTR Provider = NULL;
+    SYSTEM_INFO SystemInfo;
     FILETIME DriverDate;
     DWORDLONG DriverVersion;
     GUID ClassGuid;
@@ -2202,12 +2471,11 @@ SETUPAPI_RecordDriverDatabasePackage(
         goto cleanup;
     }
 
-    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\DriverDatabase", 0, NULL, REG_OPTION_NON_VOLATILE,
-                        KEY_ALL_ACCESS, NULL, &Database, NULL) != ERROR_SUCCESS)
-    {
-        Database = NULL;
+    SETUPAPI_DeleteDriverDatabasePackage(PublishedName);
+
+    Database = DriverDatabaseOpen();
+    if (!Database)
         goto cleanup;
-    }
 
     swprintf(Path, ARRAY_SIZE(Path), L"DriverPackages\\%s", PackageId);
     if (RegCreateKeyExW(Database, Path, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &Package, NULL) != ERROR_SUCCESS)
@@ -2215,18 +2483,33 @@ SETUPAPI_RecordDriverDatabasePackage(
         Package = NULL;
         goto cleanup;
     }
+    if (RegCreateKeyExW(Package, L"Strings", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &Strings, NULL) != ERROR_SUCCESS)
+    {
+        Strings = NULL;
+        goto cleanup;
+    }
 
+    GetNativeSystemInfo(&SystemInfo);
     memset(VersionData, 0, sizeof(VersionData));
+    VersionData[0] = OemPath ? 0x00 : 0xFF;
+    VersionData[1] = 0xFF;
+    memcpy(VersionData + 2, &SystemInfo.wProcessorArchitecture, sizeof(SystemInfo.wProcessorArchitecture));
     memcpy(VersionData + 8, &ClassGuid, sizeof(ClassGuid));
     memcpy(VersionData + 24, &DriverDate, sizeof(DriverDate));
     memcpy(VersionData + 32, &DriverVersion, sizeof(DriverVersion));
     RegSetValueExW(Package, NULL, 0, REG_SZ, (const BYTE *)PublishedName, (lstrlenW(PublishedName) + 1) * sizeof(WCHAR));
-    RegSetValueExW(Package, L"InfName", 0, REG_SZ, (const BYTE *)InfName, (lstrlenW(InfName) + 1) * sizeof(WCHAR));
     RegSetValueExW(Package, L"Version", 0, REG_BINARY, VersionData, sizeof(VersionData));
     if (Provider)
-        RegSetValueExW(Package, L"Provider", 0, REG_SZ, (const BYTE *)Provider, (lstrlenW(Provider) + 1) * sizeof(WCHAR));
+        DriverDatabaseSetString(Package, L"Provider", Provider);
     if (OemPath)
-        RegSetValueExW(Package, L"OemPath", 0, REG_SZ, (const BYTE *)OemPath, (lstrlenW(OemPath) + 1) * sizeof(WCHAR));
+    {
+        DriverDatabaseSetString(Package, L"InfName", InfName);
+        DriverDatabaseSetString(Package, L"OemPath", OemPath);
+    }
+    else
+    {
+        DriverDatabaseSetDword(Package, L"SignerScore", SIGNERSCORE_INBOX);
+    }
 
     Configurations[0] = UNICODE_NULL;
     for (Found = SetupFindFirstLineW(hInf, INF_MANUFACTURER, NULL, &Manufacturer);
@@ -2252,28 +2535,23 @@ SETUPAPI_RecordDriverDatabasePackage(
                 continue;
             }
 
-            if (DriverDatabaseAddConfiguration(Configurations, ARRAY_SIZE(Configurations), &ConfigurationsLength, Section))
+            if (DriverDatabaseAddMultiSz(Configurations, ARRAY_SIZE(Configurations), &ConfigurationsLength, Section))
                 DriverDatabaseRecordConfiguration(hInf, Package, Section);
 
+            FeatureScore = DriverDatabaseGetFeatureScore(hInf, Section);
             FieldCount = SetupGetFieldCount(&Model);
-            for (Field = 2; Field <= FieldCount; Field++)
+            for (Field = 2; Field <= FieldCount && Field <= 0x102; Field++)
             {
                 if (!SetupGetStringFieldW(&Model, Field, DeviceId, ARRAY_SIZE(DeviceId), NULL) || !DeviceId[0])
                     continue;
 
-                swprintf(Path, ARRAY_SIZE(Path), L"Descriptors\\%s", DeviceId);
-                if (RegCreateKeyExW(Package, Path, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &Key, NULL) == ERROR_SUCCESS)
-                {
-                    RegSetValueExW(Key, L"Configuration", 0, REG_SZ, (const BYTE *)Section, (lstrlenW(Section) + 1) * sizeof(WCHAR));
-                    RegCloseKey(Key);
-                }
-
-                swprintf(Path, ARRAY_SIZE(Path), L"DeviceIds\\%s", DeviceId);
-                if (RegCreateKeyExW(Database, Path, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &Key, NULL) == ERROR_SUCCESS)
-                {
-                    RegSetValueExW(Key, PublishedName, 0, REG_BINARY, DriverDatabaseIdData, sizeof(DriverDatabaseIdData));
-                    RegCloseKey(Key);
-                }
+                DriverDatabaseRecordDescriptor(Package, Strings, DeviceId, Section, &Manufacturer, &Model);
+                DriverDatabaseRecordDeviceId(Database,
+                                             DeviceId,
+                                             PublishedName,
+                                             Field == 2 ? 1 : 2,
+                                             (BYTE)FeatureScore,
+                                             (WORD)(Field == 2 ? 0 : Field - 3));
             }
         }
     }
@@ -2292,7 +2570,13 @@ SETUPAPI_RecordDriverDatabasePackage(
         Ret = TRUE;
     }
 
+    if (OemPath)
+        DriverDatabaseUpdateOemInfMap(Database, PublishedName, TRUE);
+    DriverDatabaseTouch(Database);
+
 cleanup:
+    if (Strings)
+        DriverDatabaseCloseKey(Package, L"Strings", Strings);
     if (Package)
         RegCloseKey(Package);
     if (Database)
@@ -2386,7 +2670,9 @@ SETUPAPI_DeleteDriverDatabasePackage(
         swprintf(Path, ARRAY_SIZE(Path), L"DriverInfFiles\\%s", PublishedName);
         RegDeleteTreeW(Database, Path);
         RegDeleteKeyW(Database, Path);
+        DriverDatabaseTouch(Database);
     }
 
+    DriverDatabaseUpdateOemInfMap(Database, PublishedName, FALSE);
     RegCloseKey(Database);
 }

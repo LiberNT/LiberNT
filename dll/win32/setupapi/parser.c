@@ -2060,6 +2060,17 @@ BOOL WINAPI SetupGetStringFieldW( PINFCONTEXT context, DWORD index, PWSTR buffer
 }
 
 
+BOOL SETUPAPI_GetRawStringField( PINFCONTEXT context, DWORD index, PWSTR buffer, DWORD size )
+{
+    struct inf_file *file = context->CurrentInf;
+    struct field *field = get_field( file, context->Section, context->Line, index );
+
+    if (!field || strlenW( field->text ) >= size) return FALSE;
+    strcpyW( buffer, field->text );
+    return TRUE;
+}
+
+
 /***********************************************************************
  *		SetupGetIntField    (SETUPAPI.@)
  */

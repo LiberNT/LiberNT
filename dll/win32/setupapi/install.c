@@ -68,6 +68,7 @@ struct registry_callback_info
 {
     HKEY default_root;
     BOOL delete;
+    BOOL relative_only;
 };
 
 /* info passed to callback functions dealing with registering dlls */
@@ -513,6 +514,8 @@ static BOOL registry_callback( HINF hinf, PCWSTR field, void *arg )
             continue;
         if (!(root_key = get_root_key( buffer, info->default_root )))
             continue;
+        if (info->relative_only && root_key != info->default_root)
+            continue;
 
         /* get key */
         if (!SetupGetStringFieldW( &context, 2, buffer, sizeof(buffer)/sizeof(WCHAR), NULL ))
@@ -536,7 +539,7 @@ static BOOL registry_callback( HINF hinf, PCWSTR field, void *arg )
             if (RegOpenKeyW( root_key, buffer, &hkey )) continue;  /* ignore if it doesn't exist */
         }
         else if (RegCreateKeyExW( root_key, buffer, 0, NULL, 0, MAXIMUM_ALLOWED,
-            sd ? &security_attributes : NULL, &hkey, NULL ))
+            (sd && !info->relative_only) ? &security_attributes : NULL, &hkey, NULL ))
         {
             ERR( "could not create key %p %s\n", root_key, debugstr_w(buffer) );
             continue;
@@ -1414,6 +1417,27 @@ static BOOL needs_callback( HINF hinf, PCWSTR field, void *arg )
 }
 
 
+static BOOL record_needs_callback( HINF hinf, PCWSTR field, void *arg )
+{
+    struct registry_callback_info *info = arg;
+
+    return iterate_section_fields( hinf, field, AddReg, registry_callback, info );
+}
+
+
+BOOL SETUPAPI_RecordRelativeRegistry( HINF hinf, PCWSTR section, HKEY key_root )
+{
+    struct registry_callback_info info;
+
+    iterate_section_fields( hinf, section, Include, include_callback, NULL );
+    info.default_root = key_root;
+    info.delete = FALSE;
+    info.relative_only = TRUE;
+    return iterate_section_fields( hinf, section, Needs, record_needs_callback, &info ) &&
+           iterate_section_fields( hinf, section, AddReg, registry_callback, &info );
+}
+
+
 BOOL SETUPAPI_InstallFromInfSectionWithIncludes( HWND owner, HINF hinf, PCWSTR section, UINT flags,
                                                  HKEY key_root, PCWSTR src_root, UINT copy_flags,
                                                  PSP_FILE_CALLBACK_W callback, PVOID context,
@@ -1543,6 +1567,7 @@ BOOL WINAPI SetupInstallFromInfSectionW( HWND owner, HINF hinf, PCWSTR section, 
         struct registry_callback_info info;
 
         info.default_root = key_root;
+        info.relative_only = FALSE;
         info.delete = TRUE;
         if (!iterate_section_fields( hinf, section, DelReg, registry_callback, &info ))
             return FALSE;

@@ -488,6 +488,9 @@ LPSTR WINAPI UnicodeToMultiByte(LPCWSTR lpUnicodeStr, UINT uCodePage);
 
 typedef BOOL (*FIND_CALLBACK)(LPCWSTR SectionName, PVOID Context);
 BOOL EnumerateSectionsStartingWith(HINF hInf, LPCWSTR pStr, FIND_CALLBACK Callback, PVOID Context);
+BOOL SETUPAPI_GetRawStringField(PINFCONTEXT context, DWORD index, PWSTR buffer, DWORD size);
+
+BOOL SETUPAPI_RecordRelativeRegistry(HINF hinf, PCWSTR section, HKEY key_root);
 
 BOOL SETUPAPI_InstallFromInfSectionWithIncludes(HWND owner, HINF hinf, PCWSTR section, UINT flags,
                                                 HKEY key_root, PCWSTR src_root, UINT copy_flags,
