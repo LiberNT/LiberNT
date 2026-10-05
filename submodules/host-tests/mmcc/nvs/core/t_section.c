@@ -1634,9 +1634,146 @@ TestSection(void)
     SectionImageWindow();
 }
 
+static void
+ImageRelocationRollback(void)
+{
+    MI_SEGMENT_LAYOUT Layout = { 0, 2, 0, 2 * PAGE_SIZE, MI_PROT_READONLY };
+    TEST_WORLD World;
+    TEST_FILE File;
+    PMI_SEGMENT Image;
+    PUCHAR Pages[2];
+    UCHAR Original[16];
+    ULONG Page;
+
+    WorldCreate(&World, 256, 1, 100000);
+    WorldAttachPageFile(&World, 32);
+    FileCreate(&File, 2 * PAGE_SIZE);
+    CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentImage, 2 * PAGE_SIZE, MI_PROT_READONLY,
+                                     &TestFileOps, &File, &Layout, 1, &Image)));
+    CHECK(NT_SUCCESS(MiReadImageSegment(Image, 0, Original, sizeof(Original))));
+    for (Page = 0; Page < RTL_NUMBER_OF(Pages); Page++)
+    {
+        Pages[Page] = malloc(PAGE_SIZE);
+        CHECK(Pages[Page] != NULL);
+        memcpy(Pages[Page], File.Data + Page * PAGE_SIZE, PAGE_SIZE);
+        *(ULONG64 *)Pages[Page] = 0xABCDEF0123456789ULL;
+    }
+    File.FailReads = TRUE;
+    CHECK(MiReplaceImagePages(Image, Pages, RTL_NUMBER_OF(Pages)) == STATUS_IN_PAGE_ERROR);
+    CHECK(Image->CommitCharge == 2);
+    CHECK(NT_SUCCESS(MiReadImageSegment(Image, 0, Original, sizeof(Original))));
+    CHECK(*(ULONG64 *)Original == 0xABCDEF0123456789ULL);
+    CHECK(MiWriteModifiedPages(&World.System, 32) == 1);
+    CHECK(World.Paging.PageFile.SlotsInUse == 1);
+    CHECK(File.Writes == 0);
+    CHECK(MiSegmentDereferenceAndClose(Image));
+    CHECK(World.Paging.PageFile.SlotsInUse == 0);
+    CHECK(MI_ATOMIC_READ64(&World.System.CommittedPages) == 0);
+    CHECK(IsListEmpty(&World.System.SegmentList));
+    for (Page = 0; Page < RTL_NUMBER_OF(Pages); Page++)
+        free(Pages[Page]);
+    WorldExpectClean(&World, 256);
+    FileDestroy(&File);
+    WorldDestroy(&World);
+}
+
+static void
+ImageRelocatedBacking(void)
+{
+    MI_SEGMENT_LAYOUT Layout[] =
+    {
+        { 0, 1, 0, PAGE_SIZE, MI_PROT_READONLY },
+        { 1, 1, PAGE_SIZE, PAGE_SIZE, MI_PROT_EXECUTE_READ },
+        { 2, 1, 0, 0, MI_PROT_READWRITE }
+    };
+    TEST_WORLD World;
+    TEST_FILE File;
+    MI_ADDRESS_SPACE A, B;
+    PMI_SEGMENT Image;
+    MI_MEMORY_INFORMATION Info;
+    ULONG64 BaseA = 0, BaseB = 0;
+    PUCHAR Pages[3];
+    UCHAR Cross[16];
+    ULONG Page, Frame, Held[1024], HeldCount = 0;
+    NTSTATUS Status;
+
+    WorldCreate(&World, 1024, 2, 100000);
+    World.Machine.StrictTlb = TRUE;
+    WorldAttachPageFile(&World, 256);
+    FileCreate(&File, 2 * PAGE_SIZE);
+    SpaceCreate(&World, 0, &A);
+    SpaceCreate(&World, 1, &B);
+    CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentImage, 3 * PAGE_SIZE, MI_PROT_EXECUTE_READ,
+                                     &TestFileOps, &File, Layout, RTL_NUMBER_OF(Layout), &Image)));
+    CHECK(NT_SUCCESS(MiReadImageSegment(Image, PAGE_SIZE - 8, Cross, sizeof(Cross))));
+    CHECK(memcmp(Cross, File.Data + PAGE_SIZE - 8, sizeof(Cross)) == 0);
+    CHECK(MiReadImageSegment(Image, 3 * PAGE_SIZE - 8, Cross, sizeof(Cross)) == STATUS_INVALID_PARAMETER);
+    CHECK(Image->CommitCharge == 0);
+    for (Page = 0; Page < RTL_NUMBER_OF(Pages); Page++)
+    {
+        Pages[Page] = malloc(PAGE_SIZE);
+        CHECK(Pages[Page] != NULL);
+        CHECK(NT_SUCCESS(MiReadImageSegment(Image, (ULONG64)Page * PAGE_SIZE, Pages[Page], PAGE_SIZE)));
+        *(ULONG64 *)(Pages[Page] + 32) = 0x1234567890000000ULL + Page;
+    }
+    World.System.CommitLimit = MI_ATOMIC_READ64(&World.System.CommittedPages);
+    CHECK(MiReplaceImagePages(Image, Pages, RTL_NUMBER_OF(Pages)) == STATUS_COMMITMENT_LIMIT);
+    CHECK(Image->CommitCharge == 0);
+    CHECK(NT_SUCCESS(MiReadImageSegment(Image, 32, Cross, sizeof(Cross))));
+    CHECK(memcmp(Cross, File.Data + 32, sizeof(Cross)) == 0);
+    World.System.CommitLimit = 100000;
+    CHECK(NT_SUCCESS(MiReplaceImagePages(Image, Pages, RTL_NUMBER_OF(Pages))));
+    CHECK(Image->CommitCharge == RTL_NUMBER_OF(Pages));
+    CHECK(NT_SUCCESS(Map(&A, Image, &BaseA, 0, 0, MI_PROT_READONLY)));
+    CHECK(NT_SUCCESS(Map(&B, Image, &BaseB, 0, 0, MI_PROT_READONLY)));
+    CHECK(MiReplaceImagePages(Image, Pages, RTL_NUMBER_OF(Pages)) == STATUS_CONFLICTING_ADDRESSES);
+    CHECK(Image->CommitCharge == RTL_NUMBER_OF(Pages));
+    for (Page = 0; Page < RTL_NUMBER_OF(Pages); Page++)
+    {
+        CHECK(UserRead64(&World, 0, BaseA + Page * PAGE_SIZE + 32, &Status) == 0x1234567890000000ULL + Page);
+        CHECK(NT_SUCCESS(Status));
+        CHECK(UserRead64(&World, 1, BaseB + Page * PAGE_SIZE + 32, &Status) == 0x1234567890000000ULL + Page);
+        CHECK(NT_SUCCESS(Status));
+        free(Pages[Page]);
+    }
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&A, BaseA, &Info)) && Info.Protect == MI_PROT_READONLY);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&A, BaseA + PAGE_SIZE, &Info)) && Info.Protect == MI_PROT_EXECUTE_READ);
+    CHECK(UserWrite64(&World, 0, BaseA + 32, 1) == STATUS_ACCESS_VIOLATION);
+    CHECK(UserWrite64(&World, 0, BaseA + PAGE_SIZE + 32, 1) == STATUS_ACCESS_VIOLATION);
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, BaseA + 2 * PAGE_SIZE + 32, 0x1234)));
+    CHECK(UserRead64(&World, 1, BaseB + 2 * PAGE_SIZE + 32, &Status) == 0x1234567890000002ULL);
+    CHECK(MiTrimAddressSpace(&A, 1000, TRUE) != 0);
+    CHECK(MiTrimAddressSpace(&B, 1000, TRUE) != 0);
+    CHECK(MiWriteModifiedPages(&World.System, 1000) != 0);
+    CHECK(File.Writes == 0);
+    CHECK(World.Paging.PageFile.SlotsInUse == 4);
+    while ((Frame = MiPfnAllocatePage(&World.System.Pfn, TEST_ANY_FRAME)) != MI_FRAME_INVALID)
+        Held[HeldCount++] = Frame;
+    CHECK(MiPfnListCount(&World.System.Pfn, MiPageStandby) == 0);
+    for (Page = 0; Page < HeldCount; Page++)
+        MiPfnShareDecrement(&World.System.Pfn, Held[Page], TRUE);
+    for (Page = 0; Page < RTL_NUMBER_OF(Pages); Page++)
+    {
+        CHECK(UserRead64(&World, 1, BaseB + Page * PAGE_SIZE + 32, &Status) == 0x1234567890000000ULL + Page);
+        CHECK(NT_SUCCESS(Status));
+    }
+    CHECK(UserRead64(&World, 0, BaseA + 2 * PAGE_SIZE + 32, &Status) == 0x1234);
+    CHECK(MI_ATOMIC_READ64(&World.Paging.PageFile.PagesRead) == 4);
+    MiSegmentDereference(Image);
+    SpaceDestroy(&World, 0, &A);
+    SpaceDestroy(&World, 1, &B);
+    CHECK(IsListEmpty(&World.System.SegmentList));
+    WorldExpectClean(&World, 1024);
+    FileDestroy(&File);
+    WorldDestroy(&World);
+}
+
 void
 TestImage(void)
 {
+    ImageRelocationRollback();
+    ImageRelocatedBacking();
+
     static MI_SEGMENT_LAYOUT Layout[] =
     {
         { 0, 1, 0, 0x400, MI_PROT_READONLY },

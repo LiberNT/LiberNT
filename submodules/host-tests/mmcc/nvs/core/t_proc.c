@@ -278,13 +278,13 @@ ProcAdoptedSharedPage(void)
     WorldCreate(&World, 512, 1, 1000000);
     CHECK(NT_SUCCESS(MiSystemPtesInitialize(&World.System, 1024, 1)));
     Frame = MiPfnAllocatePage(&World.System.Pfn, MI_ALLOCATE_ZEROED);
-    *(ULONG64 *)(MachineFrame(&World.Machine, Frame) + 0x14) = 0x7FFE7FFE;
+    memcpy(MachineFrame(&World.Machine, Frame) + 0x14, &(ULONG64){0x7FFE7FFE}, sizeof(ULONG64));
 
     CHECK(NT_SUCCESS(MiProcessManagerInitializeEx(&World.System, &Manager, Frame, 0xFFFFF78000000000ULL)));
     CHECK(NT_SUCCESS(MiProcessCreate(&World.System, &Manager, &Process)));
     WorldAttach(&World, 0, &Process.Space);
     CHECK(UserRead64(&World, 0, MI_SHARED_USER_DATA_VA + 0x14, &Status) == 0x7FFE7FFE);
-    *(ULONG64 *)(MachineFrame(&World.Machine, Frame) + 0x14) = 0x1234;
+    memcpy(MachineFrame(&World.Machine, Frame) + 0x14, &(ULONG64){0x1234}, sizeof(ULONG64));
     CHECK(UserRead64(&World, 0, MI_SHARED_USER_DATA_VA + 0x14, &Status) == 0x1234);
     CHECK(MiTrimAddressSpace(&Process.Space, 100, TRUE) == 1);
     CHECK(World.PfnArray[Frame].State == MiPageActive && World.PfnArray[Frame].ShareCount == 1);
@@ -379,9 +379,268 @@ ProcCommitOwner(void)
     WorldDestroy(&World);
 }
 
+static
+NTSTATUS
+ProcCopyMapped(TEST_WORLD *World, PMI_ADDRESS_SPACE Space, ULONG64 Address, PVOID Buffer, ULONG Size,
+               BOOLEAN UserMode, BOOLEAN WriteAccess)
+{
+    PMI_MDL Mdl = MiMdlAllocate(Space, Address, Size);
+    NTSTATUS Status;
+
+    if (Mdl == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Status = MiMapPagesForCopy(Mdl, UserMode, WriteAccess);
+    if (NT_SUCCESS(Status))
+    {
+        Status = MachineAccessMemory(&World->Machine, 0, Mdl->MappedSystemVa + Mdl->ByteOffset, Buffer, Size,
+                                      WriteAccess ? MachineWrite : MachineRead, FALSE);
+        MiUnlockPages(Mdl);
+    }
+    MiMdlFree(Mdl);
+    return Status;
+}
+
+static
+void
+ProcCopyGuardRange(void)
+{
+    static TEST_WORLD World;
+    MI_ADDRESS_SPACE Space;
+    MI_MEMORY_INFORMATION Info;
+    UCHAR Pattern[3 * PAGE_SIZE], Buffer[3 * PAGE_SIZE], Sentinel[3 * PAGE_SIZE];
+    ULONG Frames[3], References[3];
+    ULONG Kind, Page, Attempt, Index, Old;
+    ULONG64 Base, Size, Physical;
+
+    for (Kind = 0; Kind < 2; Kind++)
+    {
+        for (Page = 0; Page < 3; Page++)
+        {
+            ULONG Protection = Kind ? MI_PROT_NOACCESS : MI_PROT_READWRITE | MI_PROT_GUARD;
+            NTSTATUS Expected = Kind ? STATUS_ACCESS_VIOLATION : STATUS_GUARD_PAGE_VIOLATION;
+
+            WorldCreate(&World, 512, 1, 10000);
+            CHECK(NT_SUCCESS(MiSystemPtesInitialize(&World.System, 1024, 1)));
+            ProcessCreate(&World, &Space);
+            WorldAttach(&World, 0, &Space);
+            Base = USER_BASE;
+            Size = sizeof(Pattern);
+            CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Base, &Size,
+                                                     MI_MEM_RESERVE | MI_MEM_COMMIT, MI_PROT_READWRITE)));
+            for (Index = 0; Index < sizeof(Pattern); Index++)
+                Pattern[Index] = (UCHAR)(Index * 7 + Index / PAGE_SIZE);
+            CHECK(NT_SUCCESS(MachineAccessMemory(&World.Machine, 0, Base, Pattern, sizeof(Pattern),
+                                                  MachineWrite, TRUE)));
+            for (Index = 0; Index < 3; Index++)
+            {
+                CHECK(MiPtTranslate(&Space, Base + (ULONG64)Index * PAGE_SIZE, &Physical, NULL));
+                Frames[Index] = (ULONG)(Physical >> PAGE_SHIFT);
+            }
+            CHECK(NT_SUCCESS(MiProtectVirtualMemory(&Space, &(ULONG64){Base + (ULONG64)Page * PAGE_SIZE},
+                                                    &(ULONG64){PAGE_SIZE}, Protection, &Old)));
+            for (Index = 0; Index < 3; Index++)
+                References[Index] = World.PfnArray[Frames[Index]].ReferenceCount;
+            memset(Sentinel, 0xcc, sizeof(Sentinel));
+            for (Attempt = 0; Attempt < 3; Attempt++)
+            {
+                memcpy(Buffer, Sentinel, sizeof(Buffer));
+                CHECK(ProcCopyMapped(&World, &Space, Base + 17, Buffer, sizeof(Buffer) - 34, TRUE, FALSE) ==
+                      Expected);
+                CHECK(memcmp(Buffer, Sentinel, sizeof(Buffer)) == 0);
+                CHECK(ProcCopyMapped(&World, &Space, Base + 17, Buffer, sizeof(Buffer) - 34, TRUE, TRUE) ==
+                      Expected);
+                CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base + (ULONG64)Page * PAGE_SIZE, &Info)));
+                CHECK(Info.Protect == Protection);
+                for (Index = 0; Index < 3; Index++)
+                    CHECK(World.PfnArray[Frames[Index]].ReferenceCount == References[Index]);
+            }
+            CHECK(NT_SUCCESS(MiProtectVirtualMemory(&Space, &(ULONG64){Base + (ULONG64)Page * PAGE_SIZE},
+                                                    &(ULONG64){PAGE_SIZE}, MI_PROT_READWRITE, &Old)));
+            CHECK(Old == Protection);
+            CHECK(NT_SUCCESS(ProcCopyMapped(&World, &Space, Base + 17, Buffer, sizeof(Buffer) - 34,
+                                             TRUE, FALSE)));
+            CHECK(memcmp(Buffer, Pattern + 17, sizeof(Buffer) - 34) == 0);
+            CHECK(memcmp(Buffer + sizeof(Buffer) - 34, Sentinel, 34) == 0);
+            WorldAttach(&World, 0, NULL);
+            ProcessDestroy(&World, &Space);
+            MiSystemPtesUninitialize(&World.System);
+            WorldExpectClean(&World, 512);
+            WorldDestroy(&World);
+        }
+    }
+}
+
+static
+void
+ProcCopyPhysical(void)
+{
+    static TEST_WORLD World;
+    MI_ADDRESS_SPACE Space;
+    MI_FRAME_NUMBER Frames[2] = { 0, 0x100001234ULL };
+    ULONG64 Base = USER_BASE, Physical, Value = 0x4141414141414141ULL;
+    MI_PFN Before;
+    ULONG WriteAccess, Page;
+    MI_PTE Original, Alias;
+    PMI_MDL Mdl;
+
+    WorldCreate(&World, 512, 1, 10000);
+    CHECK(NT_SUCCESS(MiSystemPtesInitialize(&World.System, 1024, 1)));
+    ProcessCreate(&World, &Space);
+    WorldAttach(&World, 0, &Space);
+    Before = World.PfnArray[0];
+    CHECK(Before.State == MiPageUnusable);
+    CHECK(NT_SUCCESS(MiMapFramesUser(&Space, Frames, 2, MI_PROT_READWRITE, MI_LEAF_DEVICE, FALSE, &Base)));
+    for (WriteAccess = 0; WriteAccess < 2; WriteAccess++)
+    {
+        Mdl = MiMdlAllocate(&Space, Base + 17, 2 * PAGE_SIZE - 34);
+        CHECK(Mdl != NULL);
+        if (Mdl == NULL)
+            continue;
+        CHECK(NT_SUCCESS(MiMapPagesForCopy(Mdl, TRUE, (BOOLEAN)WriteAccess)));
+        if (Mdl->Locked)
+        {
+            for (Page = 0; Page < 2; Page++)
+            {
+                CHECK(Mdl->Frames[Page] == Frames[Page]);
+                CHECK(MiPtTranslate(&Space, Base + (ULONG64)Page * PAGE_SIZE, &Physical, &Original));
+                CHECK(MiPtTranslate(&World.System.SystemSpace, Mdl->MappedSystemVa + (ULONG64)Page * PAGE_SIZE,
+                                    &Physical, &Alias));
+                CHECK((Physical >> PAGE_SHIFT) == Frames[Page]);
+                CHECK((MiArchPteLeafFlags(Alias) & MI_LEAF_CACHE_MASK) ==
+                      (MiArchPteLeafFlags(Original) & MI_LEAF_CACHE_MASK));
+                CHECK(!MiArchPteIsUser(Alias));
+                CHECK(MiArchPteIsWritable(Alias) == (BOOLEAN)WriteAccess);
+            }
+            CHECK(NT_SUCCESS(MachineAccessMemory(&World.Machine, 0, Mdl->MappedSystemVa + Mdl->ByteOffset,
+                                                  &Value, sizeof(Value),
+                                                  WriteAccess ? MachineWrite : MachineRead, FALSE)));
+            if (!WriteAccess)
+                CHECK(Value == 0);
+            MiUnlockPages(Mdl);
+        }
+        MiMdlFree(Mdl);
+        CHECK(memcmp(&Before, &World.PfnArray[0], sizeof(Before)) == 0);
+    }
+    CHECK(NT_SUCCESS(MiUnmapFramesUser(&Space, Base, FALSE)));
+    WorldAttach(&World, 0, NULL);
+    ProcessDestroy(&World, &Space);
+    MiSystemPtesUninitialize(&World.System);
+    WorldExpectClean(&World, 512);
+    WorldDestroy(&World);
+}
+
+static
+void
+ProcCopyGuard(void)
+{
+    static TEST_WORLD World;
+    MI_ADDRESS_SPACE Source, Clone, Target;
+    MI_MEMORY_INFORMATION Info;
+    ULONG64 Base = USER_BASE, TargetBase = USER_BASE, Size = PAGE_SIZE;
+    ULONG64 Bytes;
+    NTSTATUS Status;
+    ULONG Old, Kind, Attempt;
+
+    for (Kind = 0; Kind < 5; Kind++)
+    {
+        PMI_ADDRESS_SPACE ReadSpace;
+        PMI_SEGMENT Segment = NULL;
+        ULONG64 Buffer;
+
+        WorldCreate(&World, 512, 3, 10000);
+        World.Machine.StrictTlb = TRUE;
+        CHECK(NT_SUCCESS(MiSystemPtesInitialize(&World.System, 1024, 3)));
+        ProcessCreate(&World, &Source);
+        ProcessCreate(&World, &Clone);
+        ProcessCreate(&World, &Target);
+        WorldAttach(&World, 0, &Source);
+        WorldAttach(&World, 1, &Clone);
+        WorldAttach(&World, 2, &Target);
+        Base = TargetBase = USER_BASE;
+        Size = PAGE_SIZE;
+        if (Kind < 3)
+        {
+            CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Source, &Base, &Size,
+                                                     MI_MEM_RESERVE | MI_MEM_COMMIT, MI_PROT_READWRITE)));
+        }
+        else
+        {
+            CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentPageFileBacked, PAGE_SIZE,
+                                             MI_PROT_READWRITE, NULL, NULL, NULL, 0, &Segment)));
+            CHECK(NT_SUCCESS(MiMapView(&Source, Segment, &Base, 0, &Size, MI_PROT_READWRITE, 0)));
+        }
+        Size = PAGE_SIZE;
+        CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Target, &TargetBase, &Size,
+                                                 MI_MEM_RESERVE | MI_MEM_COMMIT, MI_PROT_READWRITE)));
+        CHECK(NT_SUCCESS(UserWrite64(&World, 2, TargetBase, 0xccccccccccccccccULL)));
+        if (Kind != 0 && Kind != 3)
+            CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base, 0x4141414141414141ULL)));
+        Size = PAGE_SIZE;
+        CHECK(NT_SUCCESS(MiProtectVirtualMemory(&Source, &Base, &Size,
+                                                MI_PROT_READWRITE | MI_PROT_GUARD, &Old)));
+        if (Kind == 2)
+            CHECK(NT_SUCCESS(MiCloneAddressSpace(&Source, &Clone)));
+        ReadSpace = Kind == 2 ? &Clone : &Source;
+        for (Attempt = 0; Attempt < 3; Attempt++)
+        {
+            Buffer = 0xccccccccccccccccULL;
+            CHECK(ProcCopyMapped(&World, ReadSpace, Base, &Buffer, sizeof(Buffer), TRUE, FALSE) ==
+                  STATUS_GUARD_PAGE_VIOLATION);
+            CHECK(Buffer == 0xccccccccccccccccULL);
+            CHECK(ProcCopyMapped(&World, ReadSpace, Base, &Buffer, sizeof(Buffer), TRUE, TRUE) ==
+                  STATUS_GUARD_PAGE_VIOLATION);
+            Bytes = 0xcccccccc;
+            Status = MiCopyVirtualMemory(ReadSpace, Base, &Target, TargetBase, 8, TRUE, &Bytes);
+            CHECK(!NT_SUCCESS(Status));
+            CHECK(Bytes == 0);
+            CHECK(NT_SUCCESS(MiQueryVirtualMemory(ReadSpace, Base, &Info)));
+            CHECK(Info.Protect == (MI_PROT_READWRITE | MI_PROT_GUARD));
+            CHECK(UserRead64(&World, 2, TargetBase, &Status) == 0xccccccccccccccccULL);
+        }
+        CHECK(NT_SUCCESS(MiProtectVirtualMemory(ReadSpace, &Base, &Size, MI_PROT_READWRITE, &Old)));
+        CHECK(Old == (MI_PROT_READWRITE | MI_PROT_GUARD));
+        CHECK(NT_SUCCESS(MiCopyVirtualMemory(ReadSpace, Base, &Target, TargetBase, 8, TRUE, &Bytes)));
+        CHECK(Bytes == 8);
+        Buffer = 0xccccccccccccccccULL;
+        CHECK(NT_SUCCESS(ProcCopyMapped(&World, ReadSpace, Base, &Buffer, sizeof(Buffer), TRUE, FALSE)));
+        CHECK(Buffer == ((Kind != 0 && Kind != 3) ? 0x4141414141414141ULL : 0));
+        CHECK(UserRead64(&World, 2, TargetBase, &Status) == ((Kind != 0 && Kind != 3) ? 0x4141414141414141ULL : 0));
+        CHECK(NT_SUCCESS(MiProtectVirtualMemory(ReadSpace, &Base, &Size,
+                                                MI_PROT_READWRITE | MI_PROT_GUARD, &Old)));
+        UserRead64(&World, Kind == 2 ? 1 : 0, Base, &Status);
+        CHECK(Status == STATUS_GUARD_PAGE_VIOLATION);
+        CHECK(NT_SUCCESS(MiQueryVirtualMemory(ReadSpace, Base, &Info)));
+        CHECK(Info.Protect == MI_PROT_READWRITE);
+        Buffer = 0x5555555555555555ULL;
+        CHECK(NT_SUCCESS(ProcCopyMapped(&World, ReadSpace, Base, &Buffer, sizeof(Buffer), TRUE, TRUE)));
+        CHECK(UserRead64(&World, Kind == 2 ? 1 : 0, Base, &Status) == Buffer);
+        CHECK(NT_SUCCESS(MiProtectVirtualMemory(&Target, &TargetBase, &Size,
+                                                MI_PROT_READWRITE | MI_PROT_GUARD, &Old)));
+        CHECK(MiCopyVirtualMemory(ReadSpace, Base, &Target, TargetBase, 8, TRUE, &Bytes) ==
+              STATUS_GUARD_PAGE_VIOLATION);
+        CHECK(Bytes == 0);
+        CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Target, TargetBase, &Info)));
+        CHECK(Info.Protect == MI_PROT_READWRITE);
+        WorldAttach(&World, 0, NULL);
+        WorldAttach(&World, 1, NULL);
+        WorldAttach(&World, 2, NULL);
+        ProcessDestroy(&World, &Clone);
+        ProcessDestroy(&World, &Source);
+        ProcessDestroy(&World, &Target);
+        if (Segment != NULL)
+            MiSegmentDereference(Segment);
+        MiSystemPtesUninitialize(&World.System);
+        WorldExpectClean(&World, 512);
+        WorldDestroy(&World);
+    }
+}
+
 void
 TestProcess(void)
 {
+    ProcCopyGuard();
+    ProcCopyGuardRange();
+    ProcCopyPhysical();
     ProcAdoptedSharedPage();
     ProcLifecycle();
     ProcBalanceAndCopy();
