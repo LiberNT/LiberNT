@@ -2965,6 +2965,165 @@ DxgkpWaitForPresentWrites(
     return Status;
 }
 
+/*
+ * DxgkpPresentSubmitDirect
+ *
+ * Submits one present DMA buffer straight to the miniport, for an adapter
+ * whose scheduler is not running yet: fence, patch, flush and submit, tracked
+ * the way a scheduled submission is.  Used for every pass of a multipass
+ * present, the final one carrying the present's completion in TrackArgs.
+ * On success the tracking owns the buffer, its private data and whatever
+ * TrackArgs hands over; on failure the caller still owns them.
+ */
+static NTSTATUS
+DxgkpPresentSubmitDirect(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_DMA_BUFFER DmaBuffer,
+    _In_opt_ PVOID DmaBufferPrivateData,
+    _In_ ULONG DmaBufferPrivateDataSize,
+    _In_ PDXGK_ALLOCATIONLIST PresentAllocationList,
+    _In_reads_(PatchEntries) D3DDDI_PATCHLOCATIONLIST *PatchLocationList,
+    _In_ UINT PatchEntries,
+    _In_opt_ HANDLE MiniportDeviceHandle,
+    _In_opt_ HANDLE MiniportContextHandle,
+    _In_ UINT PresentNode,
+    _In_ UINT PresentEngine,
+    _In_ DXGK_SUBMITCOMMANDFLAGS SubmitFlags,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _In_ D3DDDI_FLIPINTERVAL_TYPE FlipInterval,
+    _Inout_ PDXGKRNL_TRACK_DMA_ARGS TrackArgs,
+    _Out_ PULONG OutSubmissionFenceId)
+{
+    PDXGKRNL_SUBMIT_DMA_BUFFER Reservation = NULL;
+    DXGKARG_SUBMITCOMMAND SubmitArgs;
+    DXGKARG_PATCH PatchArgs;
+    ULONG SubmissionFenceId;
+    NTSTATUS Status;
+
+    *OutSubmissionFenceId = 0;
+
+    SubmissionFenceId = DxgkAllocateSubmissionFenceId(Adapter);
+    if (SubmissionFenceId == 0)
+        return STATUS_INTEGER_OVERFLOW;
+    TrackArgs->SubmissionFenceId = SubmissionFenceId;
+    TrackArgs->NodeOrdinal = PresentNode;
+    TrackArgs->EngineOrdinal = PresentEngine;
+    TrackArgs->DmaBuffer = DmaBuffer;
+    Status = DxgkPrepareTrackedDmaBuffer(Adapter, TrackArgs, &Reservation);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (DXGK_CB_FULL(Adapter, DxgkDdiPatch) != NULL)
+    {
+        RtlZeroMemory(&PatchArgs, sizeof(PatchArgs));
+        if (Adapter->SchedulingCaps.MultiEngineAware)
+            PatchArgs.hContext = MiniportContextHandle;
+        else
+            PatchArgs.hDevice = MiniportDeviceHandle;
+        PatchArgs.DmaBufferSegmentId = DmaBuffer->SegmentId;
+        PatchArgs.DmaBufferPhysicalAddress = DmaBuffer->SegmentAddress;
+        PatchArgs.pDmaBuffer = DmaBuffer->VirtualAddress;
+        PatchArgs.DmaBufferSize = DmaBuffer->Capacity;
+        PatchArgs.DmaBufferSubmissionStartOffset = DmaBuffer->SubmissionStartOffset;
+        PatchArgs.DmaBufferSubmissionEndOffset = DmaBuffer->SubmissionEndOffset;
+        PatchArgs.pDmaBufferPrivateData = DmaBufferPrivateData;
+        PatchArgs.DmaBufferPrivateDataSize = DmaBufferPrivateDataSize;
+        PatchArgs.DmaBufferPrivateDataSubmissionStartOffset = 0;
+        PatchArgs.DmaBufferPrivateDataSubmissionEndOffset = DmaBufferPrivateDataSize;
+        PatchArgs.pAllocationList = PresentAllocationList;
+        PatchArgs.AllocationListSize = DXGK_PRESENT_MAX_INDEX + 1;
+        PatchArgs.pPatchLocationList = PatchLocationList;
+        PatchArgs.PatchLocationListSize = PatchEntries;
+        PatchArgs.PatchLocationListSubmissionStart = 0;
+        PatchArgs.PatchLocationListSubmissionLength = PatchEntries;
+        PatchArgs.SubmissionFenceId = SubmissionFenceId;
+        PatchArgs.Flags.Value = SubmitFlags.Value & 0x0fu;
+        PatchArgs.EngineOrdinal = PresentEngine;
+
+        if (!DxgkAcquireKmdCall(Adapter))
+        {
+            Status = STATUS_DELETE_PENDING;
+            goto Failed;
+        }
+        DxgkEnterSchedulerClass(Adapter);
+        _SEH2_TRY
+        {
+            Status = DXGK_CB_FULL(Adapter, DxgkDdiPatch)(Adapter->MiniportDeviceContext, &PatchArgs);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+        DxgkLeaveSchedulerClass(Adapter);
+        DxgkReleaseKmdCall(Adapter);
+        if (!NT_SUCCESS(Status))
+            goto Failed;
+    }
+
+    Status = DxgkFlushDmaBufferForSubmission(DmaBuffer);
+    if (!NT_SUCCESS(Status))
+        goto Failed;
+
+    RtlZeroMemory(&SubmitArgs, sizeof(SubmitArgs));
+    if (Adapter->SchedulingCaps.MultiEngineAware)
+        SubmitArgs.hContext = MiniportContextHandle;
+    else
+        SubmitArgs.hDevice = MiniportDeviceHandle;
+    SubmitArgs.DmaBufferSegmentId = DmaBuffer->SegmentId;
+    SubmitArgs.DmaBufferPhysicalAddress = DmaBuffer->SegmentAddress;
+    SubmitArgs.DmaBufferSize = DmaBuffer->Capacity;
+    SubmitArgs.pDmaBufferPrivateData = DmaBufferPrivateData;
+    SubmitArgs.DmaBufferPrivateDataSize = DmaBufferPrivateDataSize;
+    SubmitArgs.DmaBufferPrivateDataSubmissionStartOffset = 0;
+    SubmitArgs.DmaBufferPrivateDataSubmissionEndOffset = DmaBufferPrivateDataSize;
+    SubmitArgs.DmaBufferSubmissionStartOffset = DmaBuffer->SubmissionStartOffset;
+    SubmitArgs.DmaBufferSubmissionEndOffset = DmaBuffer->SubmissionEndOffset;
+    SubmitArgs.SubmissionFenceId = SubmissionFenceId;
+    SubmitArgs.VidPnSourceId = VidPnSourceId;
+    SubmitArgs.FlipInterval = FlipInterval;
+    SubmitArgs.NodeOrdinal = PresentNode;
+    SubmitArgs.EngineOrdinal = PresentEngine;
+    SubmitArgs.Flags = SubmitFlags;
+    if (!DxgkAcquireKmdCall(Adapter))
+    {
+        Status = STATUS_DELETE_PENDING;
+        goto Failed;
+    }
+    if (!DxgkReserveSubmissionFenceIdentity(Adapter, PresentNode, SubmissionFenceId, &Reservation->FenceIdentityEpoch))
+    {
+        DxgkReleaseKmdCall(Adapter);
+        Status = STATUS_DEVICE_BUSY;
+        goto Failed;
+    }
+    Reservation->FenceIdentityOwned = TRUE;
+    Status = DxgkActivateTrackedDmaBuffer(Reservation);
+    if (!NT_SUCCESS(Status))
+    {
+        DxgkReleaseKmdCall(Adapter);
+        goto Failed;
+    }
+    DxgkPublishSubmittedFence(Adapter, PresentNode, SubmissionFenceId);
+    {
+        DPT_SCOPE DdiTrace = DptBegin(&g_DxgPresentTrace, DPT_KMD_SUBMIT);
+        DxgkEnterSchedulerClass(Adapter);
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand)(Adapter->MiniportDeviceContext, &SubmitArgs);
+        DxgkLeaveSchedulerClass(Adapter);
+        DptEnd(&g_DxgPresentTrace, DdiTrace, NT_SUCCESS(Status), 0);
+    }
+    DxgkReleaseKmdCall(Adapter);
+    if (!NT_SUCCESS(Status))
+        KeBugCheckEx(0x119, 0x2, (ULONG_PTR)Status, (ULONG_PTR)&SubmitArgs, (ULONG_PTR)Adapter);
+
+    DxgkCommitTrackedDmaBuffer(Adapter, Reservation);
+    *OutSubmissionFenceId = SubmissionFenceId;
+    return STATUS_SUCCESS;
+
+Failed:
+    DxgkCancelTrackedDmaBuffer(Reservation);
+    return Status;
+}
+
 /* Passes one present may take before translation is deemed stuck. */
 #define DXGKP_PRESENT_MAX_PASSES 64
 
@@ -3132,7 +3291,6 @@ DxgkpExecuteFullPresentMeasured(
     HANDLE MiniportContextHandle;
     HANDLE MiniportPresentContext;
     PDXGKRNL_DMA_BUFFER DmaBuffer = NULL;
-    PDXGKRNL_SUBMIT_DMA_BUFFER Reservation = NULL;
     DXGKRNL_TRACK_DMA_ARGS TrackArgs;
     PVOID DmaBufferPrivateData = NULL;
     ULONG DmaBufferPrivateDataSize = 0;
@@ -3648,10 +3806,20 @@ RetryPassSubmit:
                 }
                 goto RetryPassSubmit;
             }
+            /* An adapter with no scheduler yet takes each pass directly,
+             * as it takes the final one. */
+            if (Status == STATUS_DEVICE_NOT_READY && !VirtualPresent &&
+                Adapter->VidSchContext == NULL)
+            {
+                Status = DxgkpPresentSubmitDirect(Adapter, DmaBuffer, DmaBufferPrivateData, DmaBufferPrivateDataSize,
+                                                  PresentAllocationList, PatchLocationList, PassPatches,
+                                                  MiniportDeviceHandle, MiniportContextHandle,
+                                                  PresentNode, PresentEngine, PassFlags,
+                                                  Entry->VidPnSourceId, D3DDDI_FLIPINTERVAL_IMMEDIATE,
+                                                  &PassTrack, &PassFence);
+            }
             if (!NT_SUCCESS(Status))
             {
-                /* TODO: an adapter with no scheduler yet submits directly;
-                 * that path handles a single pass only. */
                 DXGKRNL_WARN("DxgkpExecuteFullPresent: partial pass %u not "
                              "submitted 0x%08lX\n", PresentPass, Status);
                 goto PresentCleanup;
@@ -3755,10 +3923,7 @@ RetryPassSubmit:
 
     if (NT_SUCCESS(Status) && DmaBytesUsed > 0)
     {
-        DXGKARG_SUBMITCOMMAND SubmitArgs;
-        DXGKARG_PATCH PatchArgs;
         DXGK_SUBMITCOMMANDFLAGS SubmitFlags;
-        PDXGKRNL_SUBMIT_DMA_BUFFER CommittedReservation;
         ULONG VidSchFence = 0;
         UINT PatchEntries;
         UINT PatchIndex;
@@ -3903,136 +4068,20 @@ RetryTrackedSubmit:
         if (VirtualPresent || !(Status == STATUS_DEVICE_NOT_READY && Adapter->VidSchContext == NULL))
             goto PresentSubmissionDone;
 
-        SubmissionFenceId = DxgkAllocateSubmissionFenceId(Adapter);
-        if (SubmissionFenceId == 0)
-        {
-            Status = STATUS_INTEGER_OVERFLOW;
-            goto PresentSubmissionDone;
-        }
-        TrackArgs.SubmissionFenceId = SubmissionFenceId;
-        TrackArgs.NodeOrdinal = PresentNode;
-        TrackArgs.EngineOrdinal = PresentEngine;
-        TrackArgs.DmaBuffer = DmaBuffer;
-        Status = DxgkPrepareTrackedDmaBuffer(Adapter, &TrackArgs, &Reservation);
+        Status = DxgkpPresentSubmitDirect(Adapter, DmaBuffer, DmaBufferPrivateData, DmaBufferPrivateDataSize,
+                                          PresentAllocationList, PatchLocationList, PatchEntries,
+                                          MiniportDeviceHandle, MiniportContextHandle,
+                                          PresentNode, PresentEngine, SubmitFlags,
+                                          Entry->VidPnSourceId, PresentArgs.FlipInterval,
+                                          &TrackArgs, &SubmissionFenceId);
         if (!NT_SUCCESS(Status))
             goto PresentSubmissionDone;
-
-        if (DXGK_CB_FULL(Adapter, DxgkDdiPatch) != NULL)
-        {
-            RtlZeroMemory(&PatchArgs, sizeof(PatchArgs));
-            if (Adapter->SchedulingCaps.MultiEngineAware)
-                PatchArgs.hContext = MiniportContextHandle;
-            else
-                PatchArgs.hDevice = MiniportDeviceHandle;
-            PatchArgs.DmaBufferSegmentId = DmaBuffer->SegmentId;
-            PatchArgs.DmaBufferPhysicalAddress = DmaBuffer->SegmentAddress;
-            PatchArgs.pDmaBuffer = DmaBuffer->VirtualAddress;
-            PatchArgs.DmaBufferSize = DmaBuffer->Capacity;
-            PatchArgs.DmaBufferSubmissionStartOffset = DmaBuffer->SubmissionStartOffset;
-            PatchArgs.DmaBufferSubmissionEndOffset = DmaBuffer->SubmissionEndOffset;
-            PatchArgs.pDmaBufferPrivateData = DmaBufferPrivateData;
-            PatchArgs.DmaBufferPrivateDataSize = DmaBufferPrivateDataSize;
-            PatchArgs.DmaBufferPrivateDataSubmissionStartOffset = 0;
-            PatchArgs.DmaBufferPrivateDataSubmissionEndOffset = DmaBufferPrivateDataSize;
-            PatchArgs.pAllocationList = PresentAllocationList;
-            PatchArgs.AllocationListSize = DXGK_PRESENT_MAX_INDEX + 1;
-            PatchArgs.pPatchLocationList = PatchLocationList;
-            PatchArgs.PatchLocationListSize = PatchEntries;
-            PatchArgs.PatchLocationListSubmissionStart = 0;
-            PatchArgs.PatchLocationListSubmissionLength = PatchEntries;
-            PatchArgs.SubmissionFenceId = SubmissionFenceId;
-            PatchArgs.Flags.Value = SubmitFlags.Value & 0x0fu;
-            PatchArgs.EngineOrdinal = PresentEngine;
-
-            if (!DxgkAcquireKmdCall(Adapter))
-            {
-                Status = STATUS_DELETE_PENDING;
-                goto PresentSubmissionDone;
-            }
-            DxgkEnterSchedulerClass(Adapter);
-            _SEH2_TRY
-            {
-                Status = DXGK_CB_FULL(Adapter, DxgkDdiPatch)(Adapter->MiniportDeviceContext, &PatchArgs);
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                Status = _SEH2_GetExceptionCode();
-            }
-            _SEH2_END;
-            DxgkLeaveSchedulerClass(Adapter);
-            DxgkReleaseKmdCall(Adapter);
-            if (!NT_SUCCESS(Status))
-                goto PresentSubmissionDone;
-        }
-
-        Status = DxgkFlushDmaBufferForSubmission(DmaBuffer);
-        if (!NT_SUCCESS(Status))
-            goto PresentSubmissionDone;
-
-        RtlZeroMemory(&SubmitArgs, sizeof(SubmitArgs));
-        if (Adapter->SchedulingCaps.MultiEngineAware)
-            SubmitArgs.hContext = MiniportContextHandle;
-        else
-            SubmitArgs.hDevice = MiniportDeviceHandle;
-        SubmitArgs.DmaBufferSegmentId = DmaBuffer->SegmentId;
-        SubmitArgs.DmaBufferPhysicalAddress = DmaBuffer->SegmentAddress;
-        SubmitArgs.DmaBufferSize = DmaBuffer->Capacity;
-        SubmitArgs.pDmaBufferPrivateData = DmaBufferPrivateData;
-        SubmitArgs.DmaBufferPrivateDataSize = DmaBufferPrivateDataSize;
-        SubmitArgs.DmaBufferPrivateDataSubmissionStartOffset = 0;
-        SubmitArgs.DmaBufferPrivateDataSubmissionEndOffset = DmaBufferPrivateDataSize;
-        SubmitArgs.DmaBufferSubmissionStartOffset = DmaBuffer->SubmissionStartOffset;
-        SubmitArgs.DmaBufferSubmissionEndOffset = DmaBuffer->SubmissionEndOffset;
-        SubmitArgs.SubmissionFenceId = SubmissionFenceId;
-        SubmitArgs.VidPnSourceId = Entry->VidPnSourceId;
-        SubmitArgs.FlipInterval = PresentArgs.FlipInterval;
-        SubmitArgs.NodeOrdinal = PresentNode;
-        SubmitArgs.EngineOrdinal = PresentEngine;
-        SubmitArgs.Flags = SubmitFlags;
-        if (!DxgkAcquireKmdCall(Adapter))
-        {
-            Status = STATUS_DELETE_PENDING;
-            goto PresentSubmissionDone;
-        }
-        if (!DxgkReserveSubmissionFenceIdentity(Adapter, PresentNode, SubmissionFenceId, &Reservation->FenceIdentityEpoch))
-        {
-            DxgkReleaseKmdCall(Adapter);
-            Status = STATUS_DEVICE_BUSY;
-            goto PresentSubmissionDone;
-        }
-        Reservation->FenceIdentityOwned = TRUE;
-        Status = DxgkActivateTrackedDmaBuffer(Reservation);
-        if (!NT_SUCCESS(Status))
-        {
-            DxgkReleaseKmdCall(Adapter);
-            goto PresentSubmissionDone;
-        }
         Entry->DeviceWork = NULL;
-        DxgkPublishSubmittedFence(Adapter, PresentNode, SubmissionFenceId);
-        {
-            DPT_SCOPE DdiTrace = DptBegin(&g_DxgPresentTrace, DPT_KMD_SUBMIT);
-            DxgkEnterSchedulerClass(Adapter);
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand)(Adapter->MiniportDeviceContext, &SubmitArgs);
-            DxgkLeaveSchedulerClass(Adapter);
-            DptEnd(&g_DxgPresentTrace, DdiTrace, NT_SUCCESS(Status), 0);
-        }
-        DxgkReleaseKmdCall(Adapter);
-        if (!NT_SUCCESS(Status))
-            KeBugCheckEx(0x119, 0x2, (ULONG_PTR)Status, (ULONG_PTR)&SubmitArgs, (ULONG_PTR)Adapter);
-
-        CommittedReservation = Reservation;
-        Reservation = NULL;
         DmaBuffer = NULL;
         PresentBindingsTracked = TRUE;
         RefreshSharedPrimaryOnRetire = TrackRefresh;
-        DxgkCommitTrackedDmaBuffer(Adapter, CommittedReservation);
 
 PresentSubmissionDone:
-        if (Reservation != NULL)
-        {
-            DxgkCancelTrackedDmaBuffer(Reservation);
-            Reservation = NULL;
-        }
         if (NT_SUCCESS(Status) && SubmissionFenceId != 0)
         {
             Entry->SubmissionFenceId = SubmissionFenceId;
