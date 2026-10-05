@@ -503,6 +503,8 @@ XhciEndpointContextInit(
 #define XHCI_WAIT_RESET_US          (1000 * 1000)
 #define XHCI_WAIT_CNR_US            (1000 * 1000)
 #define XHCI_TRB_LEN_MASK         0x1FFFF
+#define XHCI_TRB_TD_SIZE_SHIFT    17
+#define XHCI_TRB_TD_SIZE_MAX      31
 #define XHCI_MAX_TRB_TRANSFER_LENGTH XHCI_TRB_LEN_MASK
 
 /* xHCI completion codes (Table 6-90 in xHCI 1.2 spec) */

@@ -436,6 +436,62 @@ XHCI_CalcTrbTransferChunk(
     return Chunk;
 }
 
+static
+ULONG
+XHCI_CalcTrbTdSize(
+    _In_ PXHCI_EXTENSION Extension,
+    _In_ ULONG MaxPacketSize,
+    _In_ ULONG TdLength,
+    _In_ ULONG TdBytesBeforeTrb,
+    _In_ ULONG TrbLength)
+{
+    ULONG TdBytesThroughTrb = TdBytesBeforeTrb + TrbLength;
+    ULONG TdSize;
+
+    if (Extension->HciVersion < 0x0100)
+    {
+        TdSize = (TdLength - TdBytesBeforeTrb) >> 10;
+    }
+    else
+    {
+        if (TdBytesThroughTrb >= TdLength || MaxPacketSize == 0)
+            return 0;
+
+        TdSize = (TdLength + MaxPacketSize - 1) / MaxPacketSize -
+                 TdBytesThroughTrb / MaxPacketSize;
+    }
+
+    if (TdSize > XHCI_TRB_TD_SIZE_MAX)
+        TdSize = XHCI_TRB_TD_SIZE_MAX;
+
+    return TdSize << XHCI_TRB_TD_SIZE_SHIFT;
+}
+
+static
+ULONG
+XHCI_GetEndpointMaxPacketSize(
+    _In_ PXHCI_EXTENSION Extension,
+    _In_ PXHCI_ENDPOINT Endpoint)
+{
+    PXHCI_ENDPOINT_CONTEXT EpCtx;
+    ULONG MaxPacketSize = 0;
+
+    if (Endpoint->Slot &&
+        Endpoint->Slot->DeviceContext.VirtualAddress &&
+        Endpoint->EndpointId != 0)
+    {
+        EpCtx = XHCI_GetDeviceEndpointContextVa(Extension,
+                                                Endpoint->Slot->DeviceContext.VirtualAddress,
+                                                Endpoint->EndpointId - 1);
+        MaxPacketSize = EpCtx->EpInfo2 >> 16;
+    }
+
+    if (MaxPacketSize == 0)
+        MaxPacketSize = Endpoint->EndpointProperties.MaxPacketSize;
+
+    return MaxPacketSize;
+}
+
 /* Optional callbacks (safe stubs) */
 static MPSTATUS NTAPI XHCI_ReopenEndpoint(PVOID MiniPortExtension,
                                          PUSBPORT_ENDPOINT_PROPERTIES EndpointProperties,
@@ -10704,6 +10760,7 @@ XHCI_SubmitControlTransfer(
     ULONG BosBytesProgrammed = 0;
     ULONG DevDescBytesProgrammed = 0;
     PXHCI_TRB SetupTrbDeferred = NULL;
+    ULONG TdMaxPacketSize;
     ULONG SetupCycleBitDeferred = 0;
 
     if (!Extension || !Endpoint || !Transfer)
@@ -11376,6 +11433,7 @@ XHCI_SubmitControlTransfer(
     XHCI_AdvanceTransferRing(&Endpoint->TransferRing);
 
     Remaining = TransferParameters->TransferBufferLength;
+    TdMaxPacketSize = XHCI_GetEndpointMaxPacketSize(Extension, Endpoint);
 
     if (HasDataStage)
     {
@@ -11412,7 +11470,12 @@ XHCI_SubmitControlTransfer(
                     DevDescBytesProgrammed += Chunk;
                 Trb->Parameter1 = (ULONG)(ElementAddress & 0xFFFFFFFF);
                 Trb->Parameter2 = (ULONG)(ElementAddress >> 32);
-                Trb->Status = Chunk;
+                Trb->Status = Chunk |
+                              XHCI_CalcTrbTdSize(Extension,
+                                                 TdMaxPacketSize,
+                                                 TransferParameters->TransferBufferLength,
+                                                 TransferParameters->TransferBufferLength - Remaining,
+                                                 Chunk);
                 Control = (XHCI_TRB_TYPE_DATA_STAGE << XHCI_TRB_TYPE_SHIFT) |
                           (Endpoint->TransferRing.CycleState & XHCI_TRB_CYCLE);
 
@@ -11490,7 +11553,12 @@ XHCI_SubmitControlTransfer(
                         DevDescBytesProgrammed += Chunk;
                     Trb->Parameter1 = (ULONG)(ElementAddress & 0xFFFFFFFF);
                     Trb->Parameter2 = (ULONG)(ElementAddress >> 32);
-                    Trb->Status = Chunk;
+                    Trb->Status = Chunk |
+                              XHCI_CalcTrbTdSize(Extension,
+                                                 TdMaxPacketSize,
+                                                 TransferParameters->TransferBufferLength,
+                                                 TransferParameters->TransferBufferLength - Remaining,
+                                                 Chunk);
                     Control = (XHCI_TRB_TYPE_DATA_STAGE << XHCI_TRB_TYPE_SHIFT) |
                               (Endpoint->TransferRing.CycleState & XHCI_TRB_CYCLE);
 
@@ -11714,6 +11782,8 @@ XHCI_SubmitSgTransfer(
     PXHCI_RING Ring;
     USHORT StreamId;
     BOOLEAN ShortPacketOk = FALSE;
+    ULONG TdLength;
+    ULONG TdMaxPacketSize;
 
     if (!Extension || !Endpoint || !Transfer)
         return MP_STATUS_ERROR;
@@ -11806,6 +11876,8 @@ XHCI_SubmitSgTransfer(
 
     Remaining = TransferParameters ?
                 TransferParameters->TransferBufferLength : 0;
+    TdLength = Remaining;
+    TdMaxPacketSize = XHCI_GetEndpointMaxPacketSize(Extension, Endpoint);
     SgIndex = 0;
 
     if (Remaining == 0)
@@ -11929,7 +12001,12 @@ XHCI_SubmitSgTransfer(
 
             Trb->Parameter1 = (ULONG)(BufferAddress & 0xFFFFFFFF);
             Trb->Parameter2 = (ULONG)(BufferAddress >> 32);
-            Trb->Status = Chunk;
+            Trb->Status = Chunk |
+                          XHCI_CalcTrbTdSize(Extension,
+                                             TdMaxPacketSize,
+                                             TdLength,
+                                             TdLength - Remaining,
+                                             Chunk);
             Control = (TrbType << XHCI_TRB_TYPE_SHIFT) |
                       (Ring->CycleState & XHCI_TRB_CYCLE);
             if (Endpoint->InterruptTarget < Extension->InterrupterCount)
@@ -12001,7 +12078,12 @@ XHCI_SubmitSgTransfer(
 
                 Trb->Parameter1 = (ULONG)(BufferAddress & 0xFFFFFFFF);
                 Trb->Parameter2 = (ULONG)(BufferAddress >> 32);
-                Trb->Status = Chunk;
+                Trb->Status = Chunk |
+                          XHCI_CalcTrbTdSize(Extension,
+                                             TdMaxPacketSize,
+                                             TdLength,
+                                             TdLength - Remaining,
+                                             Chunk);
                 Control = (TrbType << XHCI_TRB_TYPE_SHIFT) |
                           (Ring->CycleState & XHCI_TRB_CYCLE);
                 if (Endpoint->InterruptTarget < Extension->InterrupterCount)
@@ -13666,6 +13748,7 @@ XHCI_SubmitIsochronousTransfer(
     PXHCI_TRB Trb;
     ULONGLONG PhysicalAddress = 0;
     ULONG IsoPayloadLimit;
+    ULONG TdMaxPacketSize;
     ULONG PacketIndex;
     ULONG TrbsNeeded;
     ULONG Control;
@@ -13758,6 +13841,7 @@ XHCI_SubmitIsochronousTransfer(
     }
 
     IsoContextSize = IsoBlock->NumberOfPackets * sizeof(XHCI_ISO_PACKET_CONTEXT);
+    TdMaxPacketSize = XHCI_GetEndpointMaxPacketSize(Extension, Endpoint);
     Transfer->IsoPacketContext = ExAllocatePoolWithTag(NonPagedPool,
                                                        IsoContextSize,
                                                        XHCI_TAG);
@@ -13875,7 +13959,12 @@ XHCI_SubmitIsochronousTransfer(
 
                 Trb->Parameter1 = (ULONG)(ElementAddress & 0xFFFFFFFF);
                 Trb->Parameter2 = (ULONG)(ElementAddress >> 32);
-                Trb->Status = Chunk;
+                Trb->Status = Chunk |
+                              XHCI_CalcTrbTdSize(Extension,
+                                                 TdMaxPacketSize,
+                                                 PacketEnd - PacketOffset,
+                                                 (PacketEnd - PacketOffset) - PacketRemaining,
+                                                 Chunk);
                 Control = (XHCI_TRB_TYPE_ISOCH << XHCI_TRB_TYPE_SHIFT) |
                           (Ring->CycleState & XHCI_TRB_CYCLE);
                 if (!PacketProgrammed)
@@ -13956,7 +14045,12 @@ XHCI_SubmitIsochronousTransfer(
 
                     Trb->Parameter1 = (ULONG)(ElementAddress & 0xFFFFFFFF);
                     Trb->Parameter2 = (ULONG)(ElementAddress >> 32);
-                    Trb->Status = Chunk;
+                    Trb->Status = Chunk |
+                              XHCI_CalcTrbTdSize(Extension,
+                                                 TdMaxPacketSize,
+                                                 PacketEnd - PacketOffset,
+                                                 (PacketEnd - PacketOffset) - PacketRemaining,
+                                                 Chunk);
                     Control = (XHCI_TRB_TYPE_ISOCH << XHCI_TRB_TYPE_SHIFT) |
                               (Ring->CycleState & XHCI_TRB_CYCLE);
                     if (!PacketProgrammed)
