@@ -60,6 +60,8 @@ BOOLEAN DebugStartOfLine = TRUE;
 static BOOLEAN DebugForceScreen = FALSE;
 static BOOLEAN DebugScreenDisabled = FALSE;
 static CHAR DebugLastError[256];
+static CHAR DebugErrorLines[8][192];
+static ULONG DebugErrorLineCount;
 
 #if defined(UEFIBOOT) && (defined(_M_ARM64) || defined(_M_RISCV64))
 static VOID
@@ -343,7 +345,34 @@ DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, .
         Length = strlen(DebugLastError);
         while (Length && (DebugLastError[Length - 1] == '\n' || DebugLastError[Length - 1] == '\r'))
             DebugLastError[--Length] = ANSI_NULL;
+
+        {
+            PCSTR Name = strrchr(File, '\\');
+            if (!Name)
+                Name = strrchr(File, '/');
+            RtlStringCbPrintfA(DebugErrorLines[DebugErrorLineCount % RTL_NUMBER_OF(DebugErrorLines)],
+                               sizeof(DebugErrorLines[0]),
+                               "%s:%lu %s",
+                               Name ? Name + 1 : File,
+                               Line,
+                               DebugLastError);
+            ++DebugErrorLineCount;
+        }
     }
+}
+
+ULONG
+DebugGetErrorLines(
+    _Out_writes_(MaxLines) PCSTR* Lines,
+    _In_ ULONG MaxLines)
+{
+    ULONG Count = min(min(DebugErrorLineCount, (ULONG)RTL_NUMBER_OF(DebugErrorLines)), MaxLines);
+    ULONG First = DebugErrorLineCount - Count;
+    ULONG Index;
+
+    for (Index = 0; Index < Count; ++Index)
+        Lines[Index] = DebugErrorLines[(First + Index) % RTL_NUMBER_OF(DebugErrorLines)];
+    return Count;
 }
 
 PCSTR

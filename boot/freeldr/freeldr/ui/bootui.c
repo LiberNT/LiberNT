@@ -12,6 +12,7 @@
 #include "bootui_font.h"
 #include "bootui_icons.h"
 #include "bootui_logo.h"
+#include <debug.h>
 
 #define BOOTUI_BACKGROUND 0x202020
 #define BOOTUI_TEXT 0xF3F6F8
@@ -99,6 +100,9 @@ BootUiPresent(VOID)
 }
 
 static VOID
+BootUiDrawErrors(ULONG Height);
+
+static VOID
 BootUiBackground(ULONG Height)
 {
     ULONG Index, Count = min(Height, BootUiHeight) * BootUiWidth;
@@ -106,6 +110,7 @@ BootUiBackground(ULONG Height)
         return;
     for (Index = 0; Index < Count; ++Index)
         BootUiPixels[Index] = (UiKeepFirmwareScreen || UiProgressBar.Show) ? 0 : BOOTUI_BACKGROUND;
+    BootUiDrawErrors(min(Height, BootUiHeight));
 }
 
 static ULONG
@@ -194,6 +199,16 @@ BootUiReadPointer(PMACH_POINTER_STATE Previous)
     BootUiPointer = State;
     BootUiPointerVisible = !State.Absolute;
     return TRUE;
+}
+
+static VOID
+BootUiDrawErrors(ULONG Height)
+{
+    PCSTR Lines[8];
+    ULONG Count, Index, Size = max(12, BootUiFontSize - 6);
+    Count = DebugGetErrorLines(Lines, RTL_NUMBER_OF(Lines));
+    for (Index = 0; Index < Count && 8 + (Index + 1) * (Size + 6) <= Height; ++Index)
+        BootUiText(8, 8 + Index * (Size + 6), Lines[Index], Size, 0xFF8A80, BootUiWidth - 16, MAXULONG);
 }
 
 static VOID

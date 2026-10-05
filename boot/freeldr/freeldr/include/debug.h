@@ -50,6 +50,7 @@
     VOID    DebugDisableScreenPort(VOID);
     PCSTR   DebugGetLastError(VOID);
     VOID    DebugClearLastError(VOID);
+    ULONG   DebugGetErrorLines(PCSTR* Lines, ULONG MaxLines);
     VOID    DbgParseDebugChannels(PCHAR Value);
 
     #define ERR_LEVEL      0x1
@@ -125,6 +126,7 @@ void    MEMORY_WRITE_BREAKPOINT4(unsigned long addr);
     #define DebugDisableScreenPort()
     #define DebugGetLastError() ""
     #define DebugClearLastError()
+    #define DebugGetErrorLines(Lines, MaxLines) ((void)(Lines), (void)(MaxLines), 0UL)
     #define DbgParseDebugChannels(val)
 
 #endif // DBG
