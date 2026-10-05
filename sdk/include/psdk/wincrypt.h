@@ -325,7 +325,7 @@ typedef struct _CERT_ECC_SIGNATURE {
 
 typedef struct _CERT_POLICY_ID {
     DWORD  cCertPolicyElementId;
-    LPSTR *rgbszCertPolicyElementId;
+    LPSTR *rgpszCertPolicyElementId;
 } CERT_POLICY_ID, *PCERT_POLICY_ID;
 
 typedef struct _CERT_KEY_USAGE_RESTRICTION_INFO {
