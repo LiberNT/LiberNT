@@ -112,7 +112,9 @@ IopConsolidateInterruptDescriptors(
                 !(Desc->Flags & CM_RESOURCE_INTERRUPT_MESSAGE))
             {
 #ifdef IOP_MESSAGE_VECTOR_BASE
-                if (Desc->u.Interrupt.Vector >= IOP_MESSAGE_VECTOR_BASE)
+                if (Desc->u.Interrupt.Vector >= IOP_MESSAGE_VECTOR_BASE &&
+                    (HalIsInterruptTypeSecondary == NULL ||
+                     !HalIsInterruptTypeSecondary(0, Desc->u.Interrupt.Level)))
                 {
                     DPRINT1("IopConsolidateInterruptDescriptors: dropping ghost "
                             "legacy interrupt vec=0x%x level=%lu "
@@ -575,7 +577,9 @@ IopFindInterruptResource(
          * Flexible ranges stay clamped below the fixed line window. */
         if (LegacyMin == LegacyMax)
         {
-            if (LegacyMin >= IOP_FIXED_INTERRUPT_LIMIT)
+            if (LegacyMin >= IOP_FIXED_INTERRUPT_LIMIT &&
+                (HalIsInterruptTypeSecondary == NULL ||
+                 !HalIsInterruptTypeSecondary(0, LegacyMin)))
             {
                 DPRINT1("IopFindInterruptResource: fixed line %lu past the controller range\n", LegacyMin);
                 return FALSE;
