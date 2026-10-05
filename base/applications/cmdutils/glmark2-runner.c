@@ -298,6 +298,8 @@ main(int argc, char **argv)
     BOOL Complete;
     RUNNER_SCENE Scene;
     RUNNER_OUTPUT_SCAN OutputScan;
+    PCSTR Size = "800x600";
+    PCSTR SwapMode = "immediate";
 
     ZeroMemory(&OutputScan, sizeof(OutputScan));
     /* Run glmark2's complete default benchmark list unless --bench selects
@@ -326,6 +328,10 @@ main(int argc, char **argv)
                 return 1;
             }
         }
+        else if (strcmp(argv[Argument], "--size") == 0 && Argument + 1 < argc)
+            Size = argv[++Argument];
+        else if (strcmp(argv[Argument], "--swap-mode") == 0 && Argument + 1 < argc)
+            SwapMode = argv[++Argument];
         else if (strcmp(argv[Argument], "--bench") == 0 && Argument + 1 < argc)
         {
             size_t Used = strlen(BenchList);
@@ -346,7 +352,8 @@ main(int argc, char **argv)
         {
             RunnerPrint("Usage: glmark2_runner [--full] [--bench SPEC] "
                         "[--show-console] [--off-screen] [--validate] "
-                        "[--frame-end default|finish|readpixels]\n");
+                        "[--frame-end default|finish|readpixels] "
+                        "[--size WxH] [--swap-mode MODE]\n");
             return 1;
         }
     }
@@ -377,10 +384,12 @@ main(int argc, char **argv)
                   SystemDirectory) < 0 ||
         _snprintf(CommandLine,
                   sizeof(CommandLine),
-                  "\"%s\" --data-path \"%s\" -s 800x600 "
-                  "--swap-mode immediate%s --frame-end %s%s%s",
+                  "\"%s\" --data-path \"%s\" -s %s "
+                  "--swap-mode %s%s --frame-end %s%s%s",
                   ApplicationPath,
                   DataPath,
+                  Size,
+                  SwapMode,
                   /* Validation reads after update advances the FBO ring.
                    * One buffer keeps that read on the rendered image. */
                   Offscreen ? (Validate ? " --off-screen=1" : " --off-screen") : "",
@@ -427,10 +436,12 @@ main(int argc, char **argv)
     RunnerPrint("RPI5_GLMARK2_BEGIN source=glmark2 "
                 "commit=22c527cb0556f3a1ac4445aaa52cc532760928d5 "
                 "suite=%s bench_count=%u expected_scene_mask=0x%lx "
-                "size=800x600 swap_mode=immediate offscreen=%u offscreen_buffers=%u frame_end=%s validate=%u console_visible=%u\n",
+                "size=%s swap_mode=%s offscreen=%u offscreen_buffers=%u frame_end=%s validate=%u console_visible=%u\n",
                 FullSuite ? "full" : "custom",
                 BenchCount,
                 ExpectedSceneMask,
+                Size,
+                SwapMode,
                 Offscreen,
                 Offscreen ? (Validate ? 1 : 3) : 0,
                 FrameEnd,
