@@ -1494,7 +1494,11 @@ static BOOL symbol_demangle(struct parsed_symbol* sym)
     {
         struct datatype_t   ct;
 
+#ifdef __REACTOS__
+        if (demangle_datatype(sym, &ct, 0) && !*sym->current)
+#else
         if (demangle_datatype(sym, &ct, 0))
+#endif
         {
             sym->result = str_printf(sym, "%s%s", ct.left, ct.right);
             ret = TRUE;
