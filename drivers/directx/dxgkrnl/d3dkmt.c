@@ -1706,30 +1706,58 @@ DxgkpValidateAdapterVidPnSourceForIoctl(
     return STATUS_SUCCESS;
 }
 
-/* A periodic monitored fence names the output it tracks.  This stack maps one
- * target ordinal onto one source ordinal, the same mapping CRTC_VSYNC uses. */
+/*
+ * A periodic monitored fence names the output it tracks by VidPN target id.
+ *
+ * A target id is the miniport's child UID, not an ordinal: a part may number
+ * its connected output 49 while declaring only a few sources, so comparing
+ * the id against NumberOfVideoPresentSources rejects valid outputs.  Accept
+ * the id only when it names a present video-output child of this adapter --
+ * the same rule DxgkpSyncValidatePeriodicTarget applies when the fence is
+ * created, so this early gate can no longer refuse what that check allows.
+ */
 static NTSTATUS
 DxgkpValidateAdapterVidPnTargetForIoctl(
     _In_ D3DKMT_HANDLE hAdapter,
     _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID VidPnTargetId,
     _In_opt_ PDXGKRNL_ADAPTER ExpectedAdapter)
 {
-    PDXGKRNL_ADAPTER Adapter;
-    NTSTATUS LookupStatus;
+    PDXGKRNL_ADAPTER    Adapter;
+    NTSTATUS            Status;
+    KLOCK_QUEUE_HANDLE  LockHandle;
+    PLIST_ENTRY         Entry;
 
-    LookupStatus = DxgkReferenceAdapterByHandle(hAdapter, PsGetCurrentProcess(), &Adapter);
-    if (!NT_SUCCESS(LookupStatus))
+    Status = DxgkReferenceAdapterByHandle(hAdapter, PsGetCurrentProcess(), &Adapter);
+    if (!NT_SUCCESS(Status))
         return STATUS_INVALID_PARAMETER;
 
-    if ((ExpectedAdapter != NULL && Adapter != ExpectedAdapter) ||
-        VidPnTargetId >= Adapter->NumberOfVideoPresentSources)
+    if (ExpectedAdapter != NULL && Adapter != ExpectedAdapter)
     {
         DxgkDereferenceAdapter(Adapter);
         return STATUS_INVALID_PARAMETER;
     }
 
+    Status = STATUS_INVALID_PARAMETER;
+    KeAcquireInStackQueuedSpinLock(&Adapter->ChildListLock, &LockHandle);
+    for (Entry = Adapter->ChildListHead.Flink;
+         Entry != &Adapter->ChildListHead;
+         Entry = Entry->Flink)
+    {
+        PDXGK_CHILD_PDO_EXTENSION Child =
+            CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry);
+
+        if (Child->Present &&
+            Child->Descriptor.ChildDeviceType == TypeVideoOutput &&
+            Child->Descriptor.ChildUid == VidPnTargetId)
+        {
+            Status = STATUS_SUCCESS;
+            break;
+        }
+    }
+    KeReleaseInStackQueuedSpinLock(&LockHandle);
+
     DxgkDereferenceAdapter(Adapter);
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 static NTSTATUS
