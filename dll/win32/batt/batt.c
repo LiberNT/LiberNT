@@ -29,7 +29,6 @@ InstallCompositeBattery(
     _In_ PSP_DEVINSTALL_PARAMS_W DeviceInstallParams)
 {
     WCHAR szDeviceId[32];
-    SP_DRVINFO_DATA DriverInfoData;
     HDEVINFO NewDeviceInfoSet = INVALID_HANDLE_VALUE;
     PSP_DEVINFO_DATA NewDeviceInfoData = NULL;
     BOOL  bDeviceRegistered = FALSE, bHaveDriverInfoList = FALSE;
@@ -114,24 +113,11 @@ InstallCompositeBattery(
 
     bHaveDriverInfoList = TRUE;
 
-    DriverInfoData.cbSize = sizeof(SP_DRVINFO_DATA);
-    if (!SetupDiEnumDriverInfo(NewDeviceInfoSet,
-                               NewDeviceInfoData,
-                               SPDIT_COMPATDRIVER,
-                               0,
-                               &DriverInfoData))
+    if (!SetupDiSelectBestCompatDrv(NewDeviceInfoSet,
+                                    NewDeviceInfoData))
     {
         dwError = GetLastError();
-        DPRINT1("SetupDiEnumDriverInfo() failed (Error %lu 0x%08lx)\n", dwError, dwError);
-        goto done;
-    }
-
-    if (!SetupDiSetSelectedDriver(NewDeviceInfoSet,
-                                  NewDeviceInfoData,
-                                  &DriverInfoData))
-    {
-        dwError = GetLastError();
-        DPRINT1("SetupDiSetSelectedDriver() failed (Error %lu 0x%08lx)\n", dwError, dwError);
+        DPRINT1("SetupDiSelectBestCompatDrv() failed (Error %lu 0x%08lx)\n", dwError, dwError);
         goto done;
     }
 

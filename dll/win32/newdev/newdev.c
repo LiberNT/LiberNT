@@ -731,13 +731,17 @@ SearchDriverResult(
         return DriverSearchError;
     }
 
-    DevInstData->drvInfoData.cbSize = sizeof(SP_DRVINFO_DATA);
-    ret = SetupDiEnumDriverInfoW(
+    ret = SetupDiSelectBestCompatDrv(
         DevInstData->hDevInfo,
-        &DevInstData->devInfoData,
-        SPDIT_COMPATDRIVER,
-        0,
-        &DevInstData->drvInfoData);
+        &DevInstData->devInfoData);
+    if (ret)
+    {
+        DevInstData->drvInfoData.cbSize = sizeof(SP_DRVINFO_DATA);
+        ret = SetupDiGetSelectedDriverW(
+            DevInstData->hDevInfo,
+            &DevInstData->devInfoData,
+            &DevInstData->drvInfoData);
+    }
     if (!ret)
     {
         Error = GetLastError();
