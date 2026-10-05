@@ -3966,7 +3966,9 @@ typedef enum _DXGKRNL_PAGING_OP_TYPE
     DxgkPagingOpUpdatePageTable,
     DxgkPagingOpFlushTlb,
     DxgkPagingOpNotifyResidency,
-    DxgkPagingOpUpdateContextAllocation
+    DxgkPagingOpUpdateContextAllocation,
+    DxgkPagingOpTransferVirtual,
+    DxgkPagingOpFillVirtual
 } DXGKRNL_PAGING_OP_TYPE;
 
 typedef struct _DXGKRNL_PAGING_OP
@@ -3999,6 +4001,16 @@ typedef struct _DXGKRNL_PAGING_OP
     /* Layout conversion for a swizzled allocation's transfer. */
     BOOLEAN                     Swizzle;
     BOOLEAN                     Unswizzle;
+    /* Virtual transfer / fill in the paging process (GpuMmu): scratch
+     * addresses of both sides, the leaf tables mapping them, and the
+     * direction.  AllocationOffsetInBytes and TransferSize / FillSize /
+     * FillPattern are shared with the other operations. */
+    D3DGPU_VIRTUAL_ADDRESS      SourceVirtualAddress;
+    D3DGPU_VIRTUAL_ADDRESS      SourcePageTableVa;
+    D3DGPU_VIRTUAL_ADDRESS      DestinationPageTableVa;
+    ULONG                       TransferDirection;      /* DXGK_MEMORY_TRANSFER_DIRECTION */
+    BOOLEAN                     Source64KBPages;
+    BOOLEAN                     Destination64KBPages;
     /* The allocation a transfer or discard moves: a build the miniport
      * refuses with STATUS_GRAPHICS_ALLOCATION_BUSY is retried once it is
      * idle.  Without it that status fails the operation. */
@@ -4076,6 +4088,26 @@ NTSTATUS
 DxgkGpuVaFlushPageTableUpdatesForDevice(
     _In_ PDXGKRNL_PROCESS Process,
     _In_ PDXGKRNL_DEVICE Device);
+
+/* Scratch mappings in the paging process for virtual paging operations. */
+BOOLEAN
+DxgkGpuVaPagingScratchAvailable(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+NTSTATUS
+DxgkGpuVaMapPagingScratch(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _In_ ULONGLONG SegmentOffset,
+    _In_opt_ PMDL Mdl,
+    _In_ ULONGLONG Bytes,
+    _Out_ D3DGPU_VIRTUAL_ADDRESS *OutVa,
+    _Out_ D3DGPU_VIRTUAL_ADDRESS *OutPageTableVa);
+
+VOID
+DxgkGpuVaUnmapPagingScratch(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DGPU_VIRTUAL_ADDRESS Address);
 
 BOOLEAN
 DxgkSyncHasPeriodicFences(VOID);

@@ -3548,6 +3548,223 @@ GpuVaMapSegmentWindow(
     return STATUS_SUCCESS;
 }
 
+/* PAGING SCRATCH MAPPINGS ***************************************************/
+
+/*
+ * Maps the pages of Mdl into Process at a fresh range, like
+ * GpuVaMapSegmentWindow does for a segment window.  System pages are named
+ * by physical address (segment 0).
+ */
+static NTSTATUS
+GpuVaMapPageList(
+    _In_ PDXGKRNL_PROCESS Process,
+    _In_ PMDL Mdl,
+    _In_ ULONGLONG MapBytes,
+    _In_ ULONGLONG SizeInBytes,
+    _Out_ D3DGPU_VIRTUAL_ADDRESS *OutAddress)
+{
+    PDXGKRNL_GPUVA_RANGE Range;
+    PPFN_NUMBER Pfns = MmGetMdlPfnArray(Mdl);
+    ULONG PageCount = ADDRESS_AND_SIZE_TO_SPAN_PAGES(MmGetMdlVirtualAddress(Mdl), MmGetMdlByteCount(Mdl));
+    D3DGPU_VIRTUAL_ADDRESS Address = 0;
+    ULONGLONG Offset = 0;
+    NTSTATUS Status;
+
+    *OutAddress = 0;
+    if ((MapBytes >> PAGE_SHIFT) > PageCount)
+        return STATUS_INVALID_PARAMETER;
+    Range = GpuVaAllocRange();
+    if (Range == NULL)
+        return STATUS_NO_MEMORY;
+
+    ExAcquireFastMutex(&Process->GpuVaLock);
+    Status = GpuVaEnsureRootPageTable(Process);
+    if (NT_SUCCESS(Status))
+    {
+        Address = GpuVaFindFreeRegion(Process,
+                                      GPUVA_START_ADDRESS,
+                                      GpuVaAddressSpaceEnd(Process),
+                                      SizeInBytes,
+                                      GPUVA_RESERVATION_ALIGNMENT);
+        if (Address == 0)
+            Status = STATUS_NO_MEMORY;
+    }
+    for (; NT_SUCCESS(Status) && Offset < MapBytes; Offset += GPUVA_PAGE_SIZE)
+    {
+        PDXGKRNL_GPUVA_PAGE_TABLE Leaf = GpuVaGetLeafTable(Process, Address + Offset, TRUE);
+        ULONG Index;
+
+        if (Leaf == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+        Index = GpuVaPteIndexFor(Process->Adapter, Address + Offset, 0);
+        RtlZeroMemory(&Leaf->Entries[Index], sizeof(Leaf->Entries[Index]));
+        Leaf->Entries[Index].Valid = 1;
+        Leaf->Entries[Index].CacheCoherent =
+            Process->Adapter->GpuMmuCaps.CacheCoherentMemorySupported ? 1 : 0;
+        Leaf->Entries[Index].Segment = 0;
+        Leaf->Entries[Index].PageAddress =
+            GpuVaPteAddress((ULONGLONG)Pfns[Offset >> PAGE_SHIFT] << PAGE_SHIFT);
+        Status = GpuVaNotifyPageTableUpdate(Process, Leaf, Index, 1, Address + Offset);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        if (Address != 0 && Offset != 0)
+            GpuVaClearPteSpan(Process, Address, Offset);
+        ExReleaseFastMutex(&Process->GpuVaLock);
+        GpuVaFreeRange(Range);
+        return Status;
+    }
+
+    Range->GpuVirtualAddress = Address;
+    Range->SizeInBytes = SizeInBytes;
+    Range->State = GpuVaStateReserved;
+    Range->hAllocation = NULL;
+    Range->AllocationOffset = 0;
+    Range->Protection.Value = 0;
+    Range->Protection.SystemUseOnly = 1;
+    Range->DriverProtection = 0;
+    Range->ReservationBase = Address;
+    Range->ReservationSize = SizeInBytes;
+    GpuVaInsertRange(Process, Range);
+    Process->GpuVaRangeCount++;
+    Process->GpuVaTotalReserved += SizeInBytes;
+    ExReleaseFastMutex(&Process->GpuVaLock);
+
+    DxgkGpuVaRecordEvent('R', Address, SizeInBytes, 0);
+    *OutAddress = Address;
+    return STATUS_SUCCESS;
+}
+
+/* The paging process has page tables the GPU walks and a paging device to
+ * update them through: virtual paging operations can run in it. */
+BOOLEAN
+DxgkGpuVaPagingScratchAvailable(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    return Adapter != NULL &&
+           Adapter->GpuMmuCapsValid &&
+           InterlockedCompareExchange(&Adapter->PagingVirtualReady, 0, 0) != 0 &&
+           Adapter->PagingSystemDevice != NULL &&
+           Adapter->PagingSystemDevice->ProcessRecord != NULL &&
+           Adapter->PagingSystemContext != NULL &&
+           Adapter->PagingSystemContext->RootPageTablePublished &&
+           DxgkPagingOperationSupported(Adapter, DxgkPagingOpUpdatePageTable) &&
+           DxgkPagingOperationSupported(Adapter, DxgkPagingOpFlushTlb);
+}
+
+/*
+ * DxgkGpuVaUnmapPagingScratch
+ *
+ * Takes a scratch mapping out of the paging process and makes that visible
+ * (PTEs invalidated, TLB flushed) before the range can be handed out again.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+VOID
+DxgkGpuVaUnmapPagingScratch(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DGPU_VIRTUAL_ADDRESS Address)
+{
+    PDXGKRNL_PROCESS PagingProcess;
+    PLIST_ENTRY Entry;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    if (Address == 0 || Adapter->PagingSystemDevice == NULL ||
+        Adapter->PagingSystemDevice->ProcessRecord == NULL)
+    {
+        return;
+    }
+    PagingProcess = Adapter->PagingSystemDevice->ProcessRecord;
+    ExAcquireFastMutex(&PagingProcess->GpuVaLock);
+    for (Entry = PagingProcess->GpuVaRangeList.Flink;
+         Entry != &PagingProcess->GpuVaRangeList;
+         Entry = Entry->Flink)
+    {
+        PDXGKRNL_GPUVA_RANGE Range = CONTAINING_RECORD(Entry, DXGKRNL_GPUVA_RANGE, RangeListEntry);
+
+        if (Range->GpuVirtualAddress != Address)
+            continue;
+        RemoveEntryList(&Range->RangeListEntry);
+        GpuVaClearPteSpan(PagingProcess, Address, Range->SizeInBytes);
+        PagingProcess->GpuVaRangeCount--;
+        PagingProcess->GpuVaTotalReserved -= min(Range->SizeInBytes, PagingProcess->GpuVaTotalReserved);
+        GpuVaFreeRange(Range);
+        break;
+    }
+    ExReleaseFastMutex(&PagingProcess->GpuVaLock);
+    DxgkGpuVaRecordEvent('F', Address, 0, 0);
+    Status = DxgkGpuVaFlushPageTableUpdatesForDevice(PagingProcess, Adapter->PagingSystemDevice);
+    if (!NT_SUCCESS(Status))
+        DXGKRNL_WARN("DxgkGpuVa: paging scratch 0x%I64x unmap flush deferred 0x%08lX\n", Address, Status);
+}
+
+/*
+ * DxgkGpuVaMapPagingScratch
+ *
+ * Maps one side of a content move into the paging process scratch area --
+ * a memory-segment range (SegmentId != 0 at SegmentOffset) or the system
+ * pages of Mdl (SegmentId 0) -- and makes it visible to the GPU
+ * (UpdatePageTable, then FlushTlb, on the paging device), as Windows VidMm
+ * does before DXGK_OPERATION_VIRTUAL_TRANSFER / VIRTUAL_FILL.  *OutVa names
+ * the first mapped page; *OutPageTableVa the leaf table that maps it, as the
+ * paging process sees it.  Undone by DxgkGpuVaUnmapPagingScratch.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+NTSTATUS
+DxgkGpuVaMapPagingScratch(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _In_ ULONGLONG SegmentOffset,
+    _In_opt_ PMDL Mdl,
+    _In_ ULONGLONG Bytes,
+    _Out_ D3DGPU_VIRTUAL_ADDRESS *OutVa,
+    _Out_ D3DGPU_VIRTUAL_ADDRESS *OutPageTableVa)
+{
+    PDXGKRNL_PROCESS PagingProcess;
+    PDXGKRNL_GPUVA_PAGE_TABLE Leaf;
+    ULONGLONG MapBytes;
+    ULONGLONG Reserve;
+    D3DGPU_VIRTUAL_ADDRESS Va = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    *OutVa = 0;
+    *OutPageTableVa = 0;
+    if (!DxgkGpuVaPagingScratchAvailable(Adapter))
+        return STATUS_NOT_SUPPORTED;
+    if (Bytes == 0 || (SegmentId == 0 && Mdl == NULL) ||
+        (SegmentId != 0 && (SegmentOffset & (GPUVA_PAGE_SIZE - 1)) != 0))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    PagingProcess = Adapter->PagingSystemDevice->ProcessRecord;
+    MapBytes = (Bytes + GPUVA_PAGE_SIZE - 1) & ~((ULONGLONG)GPUVA_PAGE_SIZE - 1);
+    Reserve = (MapBytes + GPUVA_RESERVATION_ALIGNMENT - 1) & ~((ULONGLONG)GPUVA_RESERVATION_ALIGNMENT - 1);
+    if (SegmentId != 0)
+        Status = GpuVaMapSegmentWindow(PagingProcess, SegmentId, SegmentOffset, MapBytes, Reserve, &Va);
+    else
+        Status = GpuVaMapPageList(PagingProcess, Mdl, MapBytes, Reserve, &Va);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = DxgkGpuVaFlushPageTableUpdatesForDevice(PagingProcess, Adapter->PagingSystemDevice);
+    if (!NT_SUCCESS(Status))
+    {
+        DxgkGpuVaUnmapPagingScratch(Adapter, Va);
+        return Status;
+    }
+    ExAcquireFastMutex(&PagingProcess->GpuVaLock);
+    Leaf = GpuVaGetLeafTable(PagingProcess, Va, FALSE);
+    *OutPageTableVa = Leaf != NULL ? Leaf->PagingVa : 0;
+    ExReleaseFastMutex(&PagingProcess->GpuVaLock);
+    *OutVa = Va;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 DxgkGpuVaInitializePageTablePool(
     _In_ PDXGKRNL_ADAPTER Adapter)

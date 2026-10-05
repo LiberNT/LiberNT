@@ -248,6 +248,29 @@ DxgkpPagingFillBuildArgs(
             BuildArgs->UpdatePageTable.DriverProtection = Op->DriverProtection;
             break;
 
+        case DxgkPagingOpTransferVirtual:
+            BuildArgs->Operation = DXGK_OPERATION_VIRTUAL_TRANSFER;
+            BuildArgs->TransferVirtual.hAllocation = Op->hMiniportAllocation;
+            BuildArgs->TransferVirtual.AllocationOffsetInBytes = Op->AllocationOffsetInBytes;
+            BuildArgs->TransferVirtual.TransferSizeInBytes = Op->TransferSize;
+            BuildArgs->TransferVirtual.SourceVirtualAddress = Op->SourceVirtualAddress;
+            BuildArgs->TransferVirtual.DestinationVirtualAddress = Op->DestinationGpuVirtualAddress;
+            BuildArgs->TransferVirtual.SourcePageTable = Op->SourcePageTableVa;
+            BuildArgs->TransferVirtual.DestinationPageTable = Op->DestinationPageTableVa;
+            BuildArgs->TransferVirtual.TransferDirection = (DXGK_MEMORY_TRANSFER_DIRECTION)Op->TransferDirection;
+            BuildArgs->TransferVirtual.Flags.Src64KBPages = Op->Source64KBPages ? 1 : 0;
+            BuildArgs->TransferVirtual.Flags.Dst64KBPages = Op->Destination64KBPages ? 1 : 0;
+            break;
+
+        case DxgkPagingOpFillVirtual:
+            BuildArgs->Operation = DXGK_OPERATION_VIRTUAL_FILL;
+            BuildArgs->FillVirtual.hAllocation = Op->hMiniportAllocation;
+            BuildArgs->FillVirtual.AllocationOffsetInBytes = Op->AllocationOffsetInBytes;
+            BuildArgs->FillVirtual.FillSizeInBytes = Op->FillSize;
+            BuildArgs->FillVirtual.FillPattern = Op->FillPattern;
+            BuildArgs->FillVirtual.DestinationVirtualAddress = Op->DestinationGpuVirtualAddress;
+            break;
+
         case DxgkPagingOpFlushTlb:
             BuildArgs->Operation = DXGK_OPERATION_FLUSH_TLB;
             BuildArgs->FlushTlb.RootPageTableAddress = Op->RootPageTableAddress;
@@ -430,6 +453,14 @@ DxgkPagingOperationSupported(
         case DxgkPagingOpNotifyResidency:
         case DxgkPagingOpUpdateContextAllocation:
             return Adapter->MiniportContext != NULL &&
+                   DxgkCapsCoreInterfaceVersionAtLeast(
+                       Adapter->MiniportContext->InitData.s.Version,
+                       DXGK_CAPS_CORE_LEVEL_WDDM_2_0);
+        case DxgkPagingOpTransferVirtual:
+        case DxgkPagingOpFillVirtual:
+            /* The GpuMmu content-move operations run in the paging process. */
+            return Adapter->MiniportContext != NULL &&
+                   Adapter->GpuMmuCapsValid &&
                    DxgkCapsCoreInterfaceVersionAtLeast(
                        Adapter->MiniportContext->InitData.s.Version,
                        DXGK_CAPS_CORE_LEVEL_WDDM_2_0);

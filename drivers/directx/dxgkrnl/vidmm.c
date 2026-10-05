@@ -401,6 +401,11 @@ DxgkpVidMmTransferAllocationContent(
     _In_ PDXGKVMM_ALLOCATION Allocation,
     _In_ BOOLEAN ToSegment);
 
+static NTSTATUS
+DxgkpVidMmZeroFillPlacement(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKVMM_ALLOCATION Allocation);
+
 /*
  * VidMmSegmentIsAperture
  * Returns TRUE if this is a GPU-visible system memory aperture segment.
@@ -6220,6 +6225,11 @@ DxgkpVidMmCreateAllocationTracked(
             Alloc->CpuAddress = Alloc->SystemMemory;
     }
 
+    /* A fresh memory-segment placement is cleared before anyone sees it;
+     * the allocation is not published yet, so no GPU work can use it. */
+    if (Placed && Alloc->SystemMemory == NULL)
+        (VOID)DxgkpVidMmZeroFillPlacement(Adapter, Alloc);
+
 #if defined(REACTOS_WDDM_TARGET_LEVEL) && (REACTOS_WDDM_TARGET_LEVEL >= 2000)
     if (Placed && Device != NULL && Device->OwnerProcess != NULL)
     {
@@ -11919,6 +11929,8 @@ DxgkpVidMmCompleteResidencyOwned(
     }
     else if (Allocation->SystemMemory != NULL)
         Status = DxgkpVidMmTransferAllocationContent(Adapter, Allocation, TRUE);
+    else
+        Status = DxgkpVidMmZeroFillPlacement(Adapter, Allocation);
     if (NT_SUCCESS(Status) && !VidMmSegmentIsAperture(Segment) && Allocation->CpuAddress == Allocation->SystemMemory)
         Allocation->CpuAddress = NULL;
     if (!NT_SUCCESS(Status))
@@ -13891,6 +13903,92 @@ DxgkVidMmGetAllocationPrimaryAddress(
  * carries the placement offset.  Returns STATUS_NOT_SUPPORTED when the
  * miniport cannot describe the transfer, so the caller can fall back.
  */
+/*
+ * DxgkpVidMmTransferVirtual
+ *
+ * The GpuMmu content move Windows VidMm makes: both sides are mapped into
+ * the paging process scratch area (UpdatePageTable + FlushTlb), the
+ * miniport is asked for DXGK_OPERATION_VIRTUAL_TRANSFER between them, and
+ * the scratch mappings are taken down once the move has retired.  The
+ * scratch PTEs are 4 KB, so neither side is described as 64 KB pages.
+ * STATUS_NOT_SUPPORTED lets the caller use the physical transfer.
+ */
+static NTSTATUS
+DxgkpVidMmTransferVirtual(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKVMM_ALLOCATION Allocation,
+    _In_ PMDL Mdl,
+    _In_ BOOLEAN ToSegment)
+{
+    D3DGPU_VIRTUAL_ADDRESS SegmentVa = 0, SegmentTable = 0;
+    D3DGPU_VIRTUAL_ADDRESS SystemVa = 0, SystemTable = 0;
+    ULONG MdlOffset = MmGetMdlByteOffset(Mdl);
+    DXGKRNL_PAGING_OP Op;
+    NTSTATUS Status;
+
+    if (!DxgkPagingOperationSupported(Adapter, DxgkPagingOpTransferVirtual) ||
+        !DxgkGpuVaPagingScratchAvailable(Adapter) ||
+        Adapter->PagingSystemDevice->hMiniportDevice == NULL ||
+        (Allocation->SegmentOffset & (PAGE_SIZE - 1)) != 0)
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    Status = DxgkGpuVaMapPagingScratch(Adapter, Allocation->SegmentId, Allocation->SegmentOffset,
+                                       NULL, Allocation->Size, &SegmentVa, &SegmentTable);
+    if (NT_SUCCESS(Status))
+        Status = DxgkGpuVaMapPagingScratch(Adapter, 0, 0, Mdl, (ULONGLONG)MdlOffset + Allocation->Size,
+                                           &SystemVa, &SystemTable);
+    if (!NT_SUCCESS(Status))
+    {
+        /* No scratch space: the physical transfer still moves it. */
+        DxgkGpuVaUnmapPagingScratch(Adapter, SystemVa);
+        DxgkGpuVaUnmapPagingScratch(Adapter, SegmentVa);
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    RtlZeroMemory(&Op, sizeof(Op));
+    Op.Type = DxgkPagingOpTransferVirtual;
+    Op.Allocation = Allocation;
+    /* Runs with the paging process page tables. */
+    Op.hMiniportDevice = Adapter->PagingSystemDevice->hMiniportDevice;
+    Op.hMiniportAllocation = Allocation->MiniportHandle;
+    Op.AllocationOffsetInBytes = 0;
+    Op.TransferSize = Allocation->Size;
+    if (ToSegment)
+    {
+        Op.SourceVirtualAddress = SystemVa + MdlOffset;
+        Op.SourcePageTableVa = SystemTable;
+        Op.DestinationGpuVirtualAddress = SegmentVa;
+        Op.DestinationPageTableVa = SegmentTable;
+        Op.TransferDirection = DXGK_MEMORY_TRANSFER_SYSTEM_TO_LOCAL;
+    }
+    else
+    {
+        Op.SourceVirtualAddress = SegmentVa;
+        Op.SourcePageTableVa = SegmentTable;
+        Op.DestinationGpuVirtualAddress = SystemVa + MdlOffset;
+        Op.DestinationPageTableVa = SystemTable;
+        Op.TransferDirection = DXGK_MEMORY_TRANSFER_LOCAL_TO_SYSTEM;
+    }
+    /* The table addresses are defined only with this legacy behaviour. */
+    if (!Adapter->GpuMmuCaps.LegacyBehaviors.SourcePageTableVaInTransfer)
+    {
+        Op.SourcePageTableVa = 0;
+        Op.DestinationPageTableVa = 0;
+    }
+    Status = DxgkPagingExecuteSynchronous(Adapter, Allocation->Device, &Op);
+
+    /* After a failed or timed-out move the GPU may still use the scratch
+     * range; leaking it is safer than handing it out again.  A move the
+     * miniport refused to build never ran. */
+    if (NT_SUCCESS(Status) || Status == STATUS_NOT_SUPPORTED)
+    {
+        DxgkGpuVaUnmapPagingScratch(Adapter, SystemVa);
+        DxgkGpuVaUnmapPagingScratch(Adapter, SegmentVa);
+    }
+    return Status;
+}
+
 static NTSTATUS
 DxgkpVidMmSubmitTransferPagingPacket(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -13921,6 +14019,19 @@ DxgkpVidMmSubmitTransferPagingPacket(
         return STATUS_INSUFFICIENT_RESOURCES;
     MmBuildMdlForNonPagedPool(Mdl);
 
+    /* GpuMmu moves run virtually in the paging process.  A layout change
+     * needs the Swizzle/Unswizzle flags only the physical transfer has. */
+    if (!(Allocation->Swizzled &&
+          (ToSegment ? Allocation->BackingLinear : Allocation->UnswizzleOnEvict)))
+    {
+        Status = DxgkpVidMmTransferVirtual(Adapter, Allocation, Mdl, ToSegment);
+        if (Status != STATUS_NOT_SUPPORTED)
+        {
+            IoFreeMdl(Mdl);
+            return Status;
+        }
+    }
+
     RtlZeroMemory(&Op, sizeof(Op));
     Op.Type = DxgkPagingOpTransfer;
     Op.Allocation = Allocation;
@@ -13949,6 +14060,84 @@ DxgkpVidMmSubmitTransferPagingPacket(
 
     Status = DxgkPagingExecuteSynchronous(Adapter, Allocation->Device, &Op);
     IoFreeMdl(Mdl);
+    return Status;
+}
+
+/*
+ * DxgkpVidMmZeroFillPlacement
+ *
+ * A memory-segment placement that receives no content (a fresh allocation)
+ * is cleared, as Windows VidMm fills it with zeros, so it never shows what
+ * an earlier owner of that memory left.  A CPU-visible segment is cleared
+ * directly; otherwise the miniport is asked for DXGK_OPERATION_VIRTUAL_FILL
+ * through the paging process (GpuMmu) or DXGK_OPERATION_FILL.  Where no
+ * fill can be issued (adapter teardown, KMD-exclusive callers) the
+ * placement is left as it is and that is logged.
+ */
+static NTSTATUS
+DxgkpVidMmZeroFillPlacement(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKVMM_ALLOCATION Allocation)
+{
+    D3DGPU_VIRTUAL_ADDRESS Va = 0, Table = 0;
+    DXGKRNL_PAGING_OP Op;
+    PDXGKRNL_SEGMENT Segment;
+    NTSTATUS Status;
+
+    if (!Allocation->Resident || Adapter->Segments == NULL ||
+        Allocation->SegmentId < 1 || Allocation->SegmentId > Adapter->SegmentCount)
+    {
+        return STATUS_SUCCESS;
+    }
+    Segment = &ADAPTER_SEGMENTS(Adapter)[Allocation->SegmentId - 1];
+    if (VidMmSegmentIsAperture(Segment) || Segment->Flags.PitchAlignment)
+        return STATUS_SUCCESS;
+    if (VidMmSegmentIsCpuVisible(Segment) && NT_SUCCESS(VidMmMapSegmentCpu(Segment)) &&
+        Allocation->SegmentOffset + Allocation->Size <= Segment->Size)
+    {
+        RtlZeroMemory((PUCHAR)Segment->CpuBase + Allocation->SegmentOffset, Allocation->Size);
+        return STATUS_SUCCESS;
+    }
+    if (Adapter->KmdExclusiveOwnerThread == PsGetCurrentThread() ||
+        InterlockedCompareExchange(&Adapter->SubmitDmaStopping, 0, 0) != 0)
+    {
+        DPRINT1("DxgkpVidMmZeroFillPlacement: alloc %p left uncleared (no paging now)\n", Allocation);
+        return STATUS_SUCCESS;
+    }
+
+    RtlZeroMemory(&Op, sizeof(Op));
+    Op.Allocation = Allocation;
+    Op.hMiniportAllocation = Allocation->MiniportHandle;
+    Op.FillSize = Allocation->Size;
+    Op.FillPattern = 0;
+    Status = STATUS_NOT_SUPPORTED;
+    if (DxgkPagingOperationSupported(Adapter, DxgkPagingOpFillVirtual) &&
+        DxgkGpuVaPagingScratchAvailable(Adapter) &&
+        Adapter->PagingSystemDevice->hMiniportDevice != NULL &&
+        NT_SUCCESS(DxgkGpuVaMapPagingScratch(Adapter, Allocation->SegmentId, Allocation->SegmentOffset,
+                                             NULL, Allocation->Size, &Va, &Table)))
+    {
+        Op.Type = DxgkPagingOpFillVirtual;
+        Op.hMiniportDevice = Adapter->PagingSystemDevice->hMiniportDevice;
+        Op.DestinationGpuVirtualAddress = Va;
+        Status = DxgkPagingExecuteSynchronous(Adapter, Allocation->Device, &Op);
+        if (NT_SUCCESS(Status) || Status == STATUS_NOT_SUPPORTED)
+            DxgkGpuVaUnmapPagingScratch(Adapter, Va);
+    }
+    if (Status == STATUS_NOT_SUPPORTED && DxgkPagingOperationSupported(Adapter, DxgkPagingOpFill))
+    {
+        Op.Type = DxgkPagingOpFill;
+        Op.hMiniportDevice = Allocation->MiniportDeviceHandle;
+        Op.DestinationGpuVirtualAddress = 0;
+        Op.DestinationSegmentId = Allocation->SegmentId;
+        Op.DestinationSegmentAddress.QuadPart = (LONGLONG)Allocation->SegmentOffset;
+        Status = DxgkPagingExecuteSynchronous(Adapter, Allocation->Device, &Op);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("DxgkpVidMmZeroFillPlacement: alloc %p segment %lu not cleared 0x%08lx\n",
+                Allocation, Allocation->SegmentId, Status);
+    }
     return Status;
 }
 
