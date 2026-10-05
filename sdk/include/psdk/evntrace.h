@@ -566,6 +566,7 @@ typedef struct _TRACE_LOGFILE_HEADER64 {
 #if !defined(_WMIKM_) && !defined(_NTDDK_) && !defined(_NTIFS_)
 
 #define ENABLE_TRACE_PARAMETERS_VERSION     1
+#define ENABLE_TRACE_PARAMETERS_VERSION_2   2
 
 typedef struct _EVENT_TRACE_PROPERTIES {
   WNODE_HEADER Wnode;

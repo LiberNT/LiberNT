@@ -67,7 +67,7 @@
 @ stdcall CloseEncryptedFileRaw(ptr)
 @ stdcall CloseEventLog(long)
 @ stdcall CloseServiceHandle(long)
-@ stub CloseTrace
+@ stdcall CloseTrace(int64)
 @ stdcall CommandLineFromMsiDescriptor(wstr ptr ptr)
 @ stub ComputeAccessTokenFromCodeAuthzLevel
 @ stdcall ControlService(long long ptr)
@@ -210,6 +210,7 @@
 @ stdcall ElfReportEventW(long long long long ptr long long ptr ptr long ptr ptr)
 @ stdcall -version=0x502 EnableTrace(long long long ptr double) ntdll.EtwEnableTrace
 @ stdcall -version=0x600+ EnableTrace(long long long ptr double) EtwEnableTrace
+@ stdcall -version=0x601+ EnableTraceEx2(int64 ptr long long int64 int64 long ptr)
 @ stdcall EncryptFileA(str)
 @ stdcall EncryptFileW(wstr)
 @ stub EncryptedFileKeyInfo
@@ -524,6 +525,7 @@
 @ stdcall RegDeleteValueA(long str) kernelbase.RegDeleteValueA
 @ stdcall RegDeleteValueW(long wstr) kernelbase.RegDeleteValueW
 @ stdcall RegDisablePredefinedCache()
+@ stdcall -version=0x600+ RegDisablePredefinedCacheEx()
 @ stdcall RegDisableReflectionKey(ptr)
 @ stdcall RegEnableReflectionKey(ptr)
 @ stdcall RegEnumKeyA(long long ptr long)
