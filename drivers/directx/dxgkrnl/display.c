@@ -36,6 +36,7 @@
 #include "present.h"
 #include "presenttrace.h"
 #include "vidpn.h"
+#include "pnp.h"
 #include "d3dkmt.h"
 #include <ntddvdeo.h>
 #include <ntstrsafe.h>
@@ -619,6 +620,213 @@ DxgkpSelectTimingWireFormat(
 
     Selected.Rgb = D3DKMDT_BITS_PER_COMPONENT_08;
     return Selected;
+}
+
+/*
+ * Target colorimetry (DxgkDdiSetTargetAdjustedColorimetry2).
+ *
+ * The OS reports the colorimetry it selected for a target whenever it
+ * changes.  It comes from the monitor's EDID: the chromaticity of the
+ * primaries and white point (bytes 25-34, already the 10-bit encoding the
+ * DDI uses) and, when a CTA-861 HDR static metadata block is present, the
+ * luminance range in 1/10000 nit.  An EDID without usable chromaticity gets
+ * Rec.709 primaries and a D65 white point -- the standard SDR values the OS
+ * reverts to.  Capability fields are zero in a report, as the contract says.
+ */
+
+/* 10000 * 2^(i/32), for the CTA-861 luminance code 50 * 2^(CV/32) nits. */
+static CONST ULONG DxgkpCta2PowTable[32] = { 10000, 10219, 10443, 10671, 10905, 11144, 11388, 11637, 11892, 12152, 12419, 12691, 12968, 13252, 13543, 13839, 14142, 14452, 14768, 15092, 15422, 15760, 16105, 16458, 16818, 17186, 17563, 17947, 18340, 18742, 19152, 19571 };
+
+/* A CTA-861 luminance code value, in 1/10000 nit. */
+static ULONG
+DxgkpCtaLuminance(_In_ UCHAR CodeValue)
+{
+    return (ULONG)(50ULL * DxgkpCta2PowTable[CodeValue & 31] << (CodeValue >> 5));
+}
+
+/* The HDR static metadata data block (CTA extended tag 6), if any. */
+static BOOLEAN
+DxgkpFindHdrStaticMetadata(
+    _In_reads_(Count) UCHAR (*Extensions)[128],
+    _In_ UCHAR Count,
+    _Out_ CONST UCHAR **Block,
+    _Out_ UCHAR *Length)
+{
+    UCHAR Index;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        CONST UCHAR *Ext = Extensions[Index];
+        ULONG Offset;
+        ULONG End;
+
+        if (Ext[0] != 0x02)             /* CTA-861 extension */
+            continue;
+        End = Ext[2];                   /* start of detailed timings */
+        if (End < 4 || End > 127)
+            End = 127;
+        for (Offset = 4; Offset < End;)
+        {
+            UCHAR Tag = Ext[Offset] >> 5;
+            UCHAR Len = Ext[Offset] & 0x1F;
+
+            if (Offset + 1 + Len > End)
+                break;
+            if (Tag == 7 && Len >= 3 && Ext[Offset + 1] == 6)
+            {
+                *Block = &Ext[Offset + 1];  /* extended tag code first */
+                *Length = Len;
+                return TRUE;
+            }
+            Offset += 1 + Len;
+        }
+    }
+    return FALSE;
+}
+
+static VOID
+DxgkpEdidColorimetry(
+    _In_reads_bytes_(128) CONST UCHAR *Edid,
+    _In_reads_(ExtensionCount) UCHAR (*Extensions)[128],
+    _In_ UCHAR ExtensionCount,
+    _Out_ DXGK_COLORIMETRY *Colorimetry)
+{
+    CONST UCHAR *Hdr;
+    UCHAR HdrLength;
+    LONG Rx, Ry, Gx, Gy, Bx, By, Wx, Wy;
+
+    RtlZeroMemory(Colorimetry, sizeof(*Colorimetry));
+
+    Rx = (Edid[27] << 2) | ((Edid[25] >> 6) & 3);
+    Ry = (Edid[28] << 2) | ((Edid[25] >> 4) & 3);
+    Gx = (Edid[29] << 2) | ((Edid[25] >> 2) & 3);
+    Gy = (Edid[30] << 2) | (Edid[25] & 3);
+    Bx = (Edid[31] << 2) | ((Edid[26] >> 6) & 3);
+    By = (Edid[32] << 2) | ((Edid[26] >> 4) & 3);
+    Wx = (Edid[33] << 2) | ((Edid[26] >> 2) & 3);
+    Wy = (Edid[34] << 2) | (Edid[26] & 3);
+    if (Rx == 0 || Ry == 0 || Gx == 0 || Gy == 0 ||
+        Bx == 0 || By == 0 || Wx == 0 || Wy == 0)
+    {
+        /* Rec.709 primaries, D65 white, in 1/1024. */
+        Rx = 655; Ry = 338; Gx = 307; Gy = 614;
+        Bx = 154; By = 61;  Wx = 320; Wy = 337;
+    }
+    Colorimetry->RedPoint.cx = Rx;   Colorimetry->RedPoint.cy = Ry;
+    Colorimetry->GreenPoint.cx = Gx; Colorimetry->GreenPoint.cy = Gy;
+    Colorimetry->BluePoint.cx = Bx;  Colorimetry->BluePoint.cy = By;
+    Colorimetry->WhitePoint.cx = Wx; Colorimetry->WhitePoint.cy = Wy;
+
+    /* Block: [ext tag][EOTFs][descriptors][max][max frame-average][min]. */
+    if (DxgkpFindHdrStaticMetadata(Extensions, ExtensionCount, &Hdr, &HdrLength) &&
+        HdrLength >= 4 && Hdr[3] != 0)
+    {
+        Colorimetry->MaxLuminance = DxgkpCtaLuminance(Hdr[3]);
+        Colorimetry->MaxFullFrameLuminance =
+            HdrLength >= 5 && Hdr[4] != 0 ? DxgkpCtaLuminance(Hdr[4]) : Colorimetry->MaxLuminance;
+        if (HdrLength >= 6)
+        {
+            /* Min = Max * (CV / 255)^2 / 100 */
+            Colorimetry->MinLuminance =
+                (ULONG)((ULONGLONG)Colorimetry->MaxLuminance * Hdr[5] * Hdr[5] / (255ULL * 255ULL * 100ULL));
+        }
+    }
+}
+
+/* Tells the driver the colorimetry of the monitor on a target, if changed. */
+static VOID
+DxgkpReportTargetColorimetry(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
+{
+    PDXGKDDI_SETTARGETADJUSTEDCOLORIMETRY2 Report2;
+    PDXGKDDI_SETTARGETADJUSTEDCOLORIMETRY Report1;
+    UCHAR Edid[128];
+    UCHAR Extensions[DXGKP_EDID_MAX_EXTENSIONS][128];
+    UCHAR ExtensionCount = 0;
+    BOOLEAN HaveEdid = FALSE;
+    DXGK_COLORIMETRY Colorimetry;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (Adapter->MiniportContext == NULL || Adapter->MiniportContext->UseDodLayout)
+        return;
+    Report2 = DXGK_CB_FULL(Adapter, DxgkDdiSetTargetAdjustedColorimetry2);
+    Report1 = DXGK_CB_FULL(Adapter, DxgkDdiSetTargetAdjustedColorimetry);
+    if (Report2 == NULL && Report1 == NULL)
+        return;
+
+    KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
+    for (Entry = Adapter->ChildListHead.Flink; Entry != &Adapter->ChildListHead; Entry = Entry->Flink)
+    {
+        PDXGK_CHILD_PDO_EXTENSION Child = CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry);
+
+        if (Child->Present && Child->Descriptor.ChildUid == TargetId && Child->EdidValid)
+        {
+            RtlCopyMemory(Edid, Child->Edid, sizeof(Edid));
+            ExtensionCount = Child->EdidExtensionCount;
+            RtlCopyMemory(Extensions, Child->EdidExtensions, sizeof(Extensions));
+            HaveEdid = TRUE;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+
+    if (HaveEdid)
+    {
+        DxgkpEdidColorimetry(Edid, Extensions, ExtensionCount, &Colorimetry);
+    }
+    else
+    {
+        RtlZeroMemory(Edid, sizeof(Edid));
+        DxgkpEdidColorimetry(Edid, Extensions, 0, &Colorimetry);
+    }
+
+    if (Adapter->ReportedColorimetryValid &&
+        Adapter->ReportedColorimetryTarget == TargetId &&
+        RtlCompareMemory(&Adapter->ReportedColorimetry, &Colorimetry, sizeof(Colorimetry)) == sizeof(Colorimetry))
+    {
+        return;
+    }
+
+    if (!DxgkAcquireKmdCall(Adapter))
+        return;
+    _SEH2_TRY
+    {
+        if (Report2 != NULL)
+        {
+            DXGKARG_SETTARGETADJUSTEDCOLORIMETRY2 Args;
+
+            RtlZeroMemory(&Args, sizeof(Args));
+            Args.TargetId = TargetId;
+            Args.AdjustedColorimetry = Colorimetry;
+            Args.SdrWhiteLevel = 0;     /* default 80 nits; outputs are SDR */
+            Status = Report2(Adapter->MiniportDeviceContext, &Args);
+        }
+        else
+        {
+            Status = Report1(Adapter->MiniportDeviceContext, TargetId, Colorimetry);
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    DxgkReleaseKmdCall(Adapter);
+
+    /* Per the contract this should never fail; when it does the driver keeps
+     * standard SDR values, and the next change reports again. */
+    if (!NT_SUCCESS(Status))
+    {
+        DXGKRNL_WARN("SetTargetAdjustedColorimetry refused 0x%08lX for target %u\n", Status, TargetId);
+        Adapter->ReportedColorimetryValid = FALSE;
+        return;
+    }
+    Adapter->ReportedColorimetry = Colorimetry;
+    Adapter->ReportedColorimetryTarget = TargetId;
+    Adapter->ReportedColorimetryValid = TRUE;
 }
 
 /* Same timing, compared field by field (the structure has padding). */
@@ -1633,6 +1841,10 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
     Result->CommittedWidth = NewCommittedWidth;
     Result->CommittedHeight = NewCommittedHeight;
     Result->VidPnCommitted = TRUE;
+
+    /* The monitor on the committed target may be a different one. */
+    if (!TopologyEmpty)
+        DxgkpReportTargetColorimetry(Adapter, ActiveTargetId);
 
     if (TopologyEmpty && !Adapter->MiniportContext->IsDisplayOnlyDriver)
     {

@@ -1148,6 +1148,12 @@ struct _DXGKRNL_ADAPTER
     D3DDDI_GAMMARAMP_TYPE       SourceGammaType[DXGKP_GAMMA_SOURCES];
     SIZE_T                      SourceGammaSize[DXGKP_GAMMA_SOURCES];
 
+    /* Colorimetry last reported through SetTargetAdjustedColorimetry(2), so
+     * it is reported again only when it changes. */
+    BOOLEAN                     ReportedColorimetryValid;
+    D3DDDI_VIDEO_PRESENT_TARGET_ID ReportedColorimetryTarget;
+    DXGK_COLORIMETRY            ReportedColorimetry;
+
     /* Timing firmware left running, as the driver described it in answer to
      * DXGK_RFVR_FIRMWARE at start.  Used only by the first commit. */
     BOOLEAN                     FirmwareTimingValid;
