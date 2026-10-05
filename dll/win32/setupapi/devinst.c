@@ -5924,91 +5924,101 @@ SetupDiOpenDeviceInfoW(
         TRACE("Unknown flags: 0x%08lx\n", OpenFlags & ~(DIOD_CANCEL_REMOVE | DIOD_INHERIT_CLASSDRVS));
         SetLastError(ERROR_INVALID_FLAGS);
     }
-    else if (DeviceInfoData && DeviceInfoData->cbSize != sizeof(SP_DEVINFO_DATA))
-        SetLastError(ERROR_INVALID_USER_BUFFER);
     else
     {
         struct DeviceInfo *deviceInfo = NULL;
-        /* Search if device already exists in DeviceInfoSet.
-         *    If yes, return the existing element
-         *    If no, create a new element using information in registry
-         */
-        PLIST_ENTRY ItemList = list->ListHead.Flink;
-        while (ItemList != &list->ListHead)
+        PLIST_ENTRY ItemList;
+        GUID ClassGUID;
+        WCHAR szClassGuid[MAX_GUID_STRING_LEN];
+        DWORD dwPhantom;
+
+        rc = RegOpenKeyExW(
+            list->HKLM,
+            REGSTR_PATH_SYSTEMENUM,
+            0, /* Options */
+            READ_CONTROL,
+            &hEnumKey);
+        if (rc != ERROR_SUCCESS)
+        {
+            SetLastError(rc);
+            goto cleanup;
+        }
+        rc = RegOpenKeyExW(
+            hEnumKey,
+            DeviceInstanceId,
+            0, /* Options */
+            KEY_QUERY_VALUE,
+            &hKey);
+        RegCloseKey(hEnumKey);
+        if (rc != ERROR_SUCCESS)
+        {
+            if (rc == ERROR_FILE_NOT_FOUND)
+                rc = ERROR_NO_SUCH_DEVINST;
+            SetLastError(rc);
+            goto cleanup;
+        }
+
+        dwPhantom = 0;
+        dwSize = sizeof(dwPhantom);
+        if (RegQueryValueExW(hKey, L"Phantom", NULL, NULL, (LPBYTE)&dwPhantom, &dwSize) == ERROR_SUCCESS &&
+            dwPhantom != 0)
+        {
+            SetLastError(ERROR_NO_SUCH_DEVINST);
+            goto cleanup;
+        }
+
+        ClassGUID = GUID_NULL;
+        dwSize = MAX_GUID_STRING_LEN * sizeof(WCHAR);
+
+        if (RegQueryValueExW(hKey,
+                             REGSTR_VAL_CLASSGUID,
+                             NULL,
+                             NULL,
+                             (LPBYTE)szClassGuid,
+                             &dwSize) == ERROR_SUCCESS)
+        {
+            szClassGuid[MAX_GUID_STRING_LEN - 2] = UNICODE_NULL;
+
+            /* Convert a string to a ClassGuid */
+            UuidFromStringW(&szClassGuid[1], &ClassGUID);
+        }
+
+        if (!IsEqualGUID(&list->ClassGuid, &GUID_NULL) && !IsEqualGUID(&list->ClassGuid, &ClassGUID))
+        {
+            SetLastError(ERROR_CLASS_MISMATCH);
+            goto cleanup;
+        }
+
+        for (ItemList = list->ListHead.Flink; ItemList != &list->ListHead; ItemList = ItemList->Flink)
         {
             deviceInfo = CONTAINING_RECORD(ItemList, struct DeviceInfo, ListEntry);
-            if (!wcscmp(deviceInfo->instanceId, DeviceInstanceId))
+            if (!strcmpiW(deviceInfo->instanceId, DeviceInstanceId))
                 break;
             deviceInfo = NULL;
-            ItemList = ItemList->Flink;
         }
 
-        if (deviceInfo)
+        if (!deviceInfo)
         {
-            /* good one found */
-            ret = TRUE;
-        }
-        else
-        {
-            GUID ClassGUID;
-            WCHAR szClassGuid[MAX_GUID_STRING_LEN];
-
-            /* Open supposed registry key */
-            rc = RegOpenKeyExW(
-                list->HKLM,
-                REGSTR_PATH_SYSTEMENUM,
-                0, /* Options */
-                READ_CONTROL,
-                &hEnumKey);
-            if (rc != ERROR_SUCCESS)
-            {
-                SetLastError(rc);
-                goto cleanup;
-            }
-            rc = RegOpenKeyExW(
-                hEnumKey,
-                DeviceInstanceId,
-                0, /* Options */
-                KEY_QUERY_VALUE,
-                &hKey);
-            RegCloseKey(hEnumKey);
-            if (rc != ERROR_SUCCESS)
-            {
-                if (rc == ERROR_FILE_NOT_FOUND)
-                    rc = ERROR_NO_SUCH_DEVINST;
-                SetLastError(rc);
-                goto cleanup;
-            }
-
-            ClassGUID = GUID_NULL;
-            dwSize = MAX_GUID_STRING_LEN * sizeof(WCHAR);
-
-            if (RegQueryValueExW(hKey,
-                                 REGSTR_VAL_CLASSGUID,
-                                 NULL,
-                                 NULL,
-                                 (LPBYTE)szClassGuid,
-                                 &dwSize) == ERROR_SUCCESS)
-            {
-                szClassGuid[MAX_GUID_STRING_LEN - 2] = UNICODE_NULL;
-
-                /* Convert a string to a ClassGuid */
-                UuidFromStringW(&szClassGuid[1], &ClassGUID);
-            }
-
             if (!CreateDeviceInfo(list, DeviceInstanceId, &ClassGUID, &deviceInfo))
                 goto cleanup;
 
             InsertTailList(&list->ListHead, &deviceInfo->ListEntry);
-
-            ret = TRUE;
         }
 
-        if (ret && deviceInfo && DeviceInfoData)
+        if (DeviceInfoData && DeviceInfoData->cbSize != sizeof(SP_DEVINFO_DATA))
         {
-            memcpy(&DeviceInfoData->ClassGuid, &deviceInfo->ClassGuid, sizeof(GUID));
-            DeviceInfoData->DevInst = deviceInfo->dnDevInst;
-            DeviceInfoData->Reserved = (ULONG_PTR)deviceInfo;
+            SetLastError(ERROR_INVALID_USER_BUFFER);
+        }
+        else
+        {
+            if (DeviceInfoData)
+            {
+                memcpy(&DeviceInfoData->ClassGuid, &deviceInfo->ClassGuid, sizeof(GUID));
+                DeviceInfoData->DevInst = deviceInfo->dnDevInst;
+                DeviceInfoData->Reserved = (ULONG_PTR)deviceInfo;
+            }
+            SetLastError(ERROR_SUCCESS);
+            ret = TRUE;
         }
     }
 
