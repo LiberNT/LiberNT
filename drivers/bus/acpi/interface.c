@@ -1215,3 +1215,212 @@ Bus_PDO_QueryInterface(PPDO_DEVICE_DATA DeviceData,
       return STATUS_NOT_SUPPORTED;
   }
 }
+
+/* ======================================================================
+ * Notify interface for the namespace node of a PCI function
+ * (IOCTL_ACPI_QUERY_PCI_NOTIFY_INTERFACE).
+ *
+ * A PCI function's node has no ACPI PDO, so the per-PDO notification list
+ * above does not apply.  Each interface handed out is its own context: one
+ * registration, installed on the node for system and device notifies, kept
+ * alive by the interface's references.
+ * ====================================================================== */
+
+#define ACPI_PCI_NOTIFY_CONTEXT_SIGNATURE 'NPcA'
+
+typedef struct _ACPI_PCI_NOTIFY_CONTEXT
+{
+    ULONG Signature;
+    volatile LONG RefCount;
+    ACPI_HANDLE Handle;
+    KSPIN_LOCK Lock;
+    PDEVICE_NOTIFY_CALLBACK2 Callback;
+    PVOID CallbackContext;
+    BOOLEAN Installed;
+} ACPI_PCI_NOTIFY_CONTEXT, *PACPI_PCI_NOTIFY_CONTEXT;
+
+static PACPI_PCI_NOTIFY_CONTEXT
+AcpiPciNotifyFromContext(PVOID Context)
+{
+    PACPI_PCI_NOTIFY_CONTEXT Notify = (PACPI_PCI_NOTIFY_CONTEXT)Context;
+
+    return (Notify != NULL && Notify->Signature == ACPI_PCI_NOTIFY_CONTEXT_SIGNATURE) ? Notify : NULL;
+}
+
+static
+VOID
+ACPI_SYSTEM_XFACE
+AcpiPciNotifyThunk(ACPI_HANDLE Handle, UINT32 Value, PVOID Context)
+{
+    PACPI_PCI_NOTIFY_CONTEXT Notify = AcpiPciNotifyFromContext(Context);
+    PDEVICE_NOTIFY_CALLBACK2 Callback;
+    PVOID CallbackContext;
+    KIRQL OldIrql;
+
+    UNREFERENCED_PARAMETER(Handle);
+    if (Notify == NULL)
+        return;
+    KeAcquireSpinLock(&Notify->Lock, &OldIrql);
+    Callback = Notify->Callback;
+    CallbackContext = Notify->CallbackContext;
+    KeReleaseSpinLock(&Notify->Lock, OldIrql);
+    if (Callback != NULL)
+        Callback(CallbackContext, Value);
+}
+
+static VOID
+AcpiPciNotifyRemoveHandlers(PACPI_PCI_NOTIFY_CONTEXT Notify)
+{
+    if (!Notify->Installed)
+        return;
+    AcpiRemoveNotifyHandler(Notify->Handle, ACPI_DEVICE_NOTIFY, AcpiPciNotifyThunk);
+    AcpiRemoveNotifyHandler(Notify->Handle, ACPI_SYSTEM_NOTIFY, AcpiPciNotifyThunk);
+    Notify->Installed = FALSE;
+}
+
+static VOID
+NTAPI
+AcpiPciNotifyReference(PVOID Context)
+{
+    PACPI_PCI_NOTIFY_CONTEXT Notify = AcpiPciNotifyFromContext(Context);
+
+    if (Notify != NULL)
+        InterlockedIncrement(&Notify->RefCount);
+}
+
+static VOID
+NTAPI
+AcpiPciNotifyDereference(PVOID Context)
+{
+    PACPI_PCI_NOTIFY_CONTEXT Notify = AcpiPciNotifyFromContext(Context);
+
+    if (Notify == NULL || InterlockedDecrement(&Notify->RefCount) != 0)
+        return;
+    AcpiPciNotifyRemoveHandlers(Notify);
+    Notify->Signature = 0;
+    ExFreePoolWithTag(Notify, ACPI_NOTIFY_TAG);
+}
+
+static NTSTATUS
+NTAPI
+AcpiPciNotifyRegister(PVOID Context, PDEVICE_NOTIFY_CALLBACK2 Handler, PVOID HandlerContext)
+{
+    PACPI_PCI_NOTIFY_CONTEXT Notify = AcpiPciNotifyFromContext(Context);
+    ACPI_STATUS Status;
+    KIRQL OldIrql;
+
+    if (Notify == NULL || Handler == NULL)
+        return STATUS_INVALID_PARAMETER;
+    if (Notify->Installed)
+        return STATUS_INVALID_DEVICE_STATE;
+
+    KeAcquireSpinLock(&Notify->Lock, &OldIrql);
+    Notify->Callback = Handler;
+    Notify->CallbackContext = HandlerContext;
+    KeReleaseSpinLock(&Notify->Lock, OldIrql);
+
+    Status = AcpiInstallNotifyHandler(Notify->Handle, ACPI_SYSTEM_NOTIFY, AcpiPciNotifyThunk, Notify);
+    if (ACPI_SUCCESS(Status))
+    {
+        Status = AcpiInstallNotifyHandler(Notify->Handle, ACPI_DEVICE_NOTIFY, AcpiPciNotifyThunk, Notify);
+        if (ACPI_FAILURE(Status))
+            AcpiRemoveNotifyHandler(Notify->Handle, ACPI_SYSTEM_NOTIFY, AcpiPciNotifyThunk);
+    }
+    if (ACPI_FAILURE(Status))
+    {
+        KeAcquireSpinLock(&Notify->Lock, &OldIrql);
+        Notify->Callback = NULL;
+        Notify->CallbackContext = NULL;
+        KeReleaseSpinLock(&Notify->Lock, OldIrql);
+        return AcpiStatusToNtStatus(Status);
+    }
+    Notify->Installed = TRUE;
+    return STATUS_SUCCESS;
+}
+
+static VOID
+NTAPI
+AcpiPciNotifyUnregister(PVOID Context)
+{
+    PACPI_PCI_NOTIFY_CONTEXT Notify = AcpiPciNotifyFromContext(Context);
+    KIRQL OldIrql;
+
+    if (Notify == NULL)
+        return;
+    AcpiPciNotifyRemoveHandlers(Notify);
+    KeAcquireSpinLock(&Notify->Lock, &OldIrql);
+    Notify->Callback = NULL;
+    Notify->CallbackContext = NULL;
+    KeReleaseSpinLock(&Notify->Lock, OldIrql);
+}
+
+/* GPEs belong to the platform's own devices; this interface offers none. */
+static NTSTATUS NTAPI
+AcpiPciNotifyGpeConnect(PVOID Context, ULONG GpeNumber, KINTERRUPT_MODE Mode, BOOLEAN Shareable,
+                        PGPE_SERVICE_ROUTINE ServiceRoutine, PVOID ServiceContext, PVOID *ObjectContext)
+{
+    UNREFERENCED_PARAMETER(Context); UNREFERENCED_PARAMETER(GpeNumber);
+    UNREFERENCED_PARAMETER(Mode); UNREFERENCED_PARAMETER(Shareable);
+    UNREFERENCED_PARAMETER(ServiceRoutine); UNREFERENCED_PARAMETER(ServiceContext);
+    if (ObjectContext != NULL)
+        *ObjectContext = NULL;
+    return STATUS_NOT_SUPPORTED;
+}
+
+static NTSTATUS NTAPI
+AcpiPciNotifyGpeObject(PVOID Context, PVOID ObjectContext)
+{
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(ObjectContext);
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
+AcpiQueryPciNotifyInterfaceIoctl(PIRP Irp, PIO_STACK_LOCATION IrpSp)
+{
+    PACPI_PCI_NOTIFY_INTERFACE_INPUT Input;
+    PACPI_INTERFACE_STANDARD2 Interface;
+    PACPI_PCI_NOTIFY_CONTEXT Notify;
+    ACPI_HANDLE Handle;
+
+    PAGED_CODE();
+
+    if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(*Input) ||
+        IrpSp->Parameters.DeviceIoControl.OutputBufferLength < sizeof(*Interface) ||
+        Irp->AssociatedIrp.SystemBuffer == NULL)
+    {
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+    Input = (PACPI_PCI_NOTIFY_INTERFACE_INPUT)Irp->AssociatedIrp.SystemBuffer;
+    if (Input->Signature != ACPI_PCI_NOTIFY_INTERFACE_INPUT_SIGNATURE)
+        return STATUS_INVALID_PARAMETER;
+    if (!AcpiFindPciDeviceInNamespace(Input->Segment, Input->Bus, Input->Device, Input->Function, &Handle))
+        return STATUS_NOT_FOUND;
+
+    Notify = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Notify), ACPI_NOTIFY_TAG);
+    if (Notify == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(Notify, sizeof(*Notify));
+    Notify->Signature = ACPI_PCI_NOTIFY_CONTEXT_SIGNATURE;
+    Notify->RefCount = 1;   /* the caller's */
+    Notify->Handle = Handle;
+    KeInitializeSpinLock(&Notify->Lock);
+
+    /* The buffered output overlays the input, which has been read. */
+    Interface = (PACPI_INTERFACE_STANDARD2)Irp->AssociatedIrp.SystemBuffer;
+    RtlZeroMemory(Interface, sizeof(*Interface));
+    Interface->Size = sizeof(*Interface);
+    Interface->Version = 1;
+    Interface->Context = Notify;
+    Interface->InterfaceReference = AcpiPciNotifyReference;
+    Interface->InterfaceDereference = AcpiPciNotifyDereference;
+    Interface->GpeConnectVector = AcpiPciNotifyGpeConnect;
+    Interface->GpeDisconnectVector = AcpiPciNotifyGpeObject;
+    Interface->GpeEnableEvent = AcpiPciNotifyGpeObject;
+    Interface->GpeDisableEvent = AcpiPciNotifyGpeObject;
+    Interface->GpeClearStatus = AcpiPciNotifyGpeObject;
+    Interface->RegisterForDeviceNotifications = AcpiPciNotifyRegister;
+    Interface->UnregisterForDeviceNotifications = AcpiPciNotifyUnregister;
+    Irp->IoStatus.Information = sizeof(*Interface);
+    return STATUS_SUCCESS;
+}

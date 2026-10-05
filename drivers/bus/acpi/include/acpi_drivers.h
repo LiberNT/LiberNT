@@ -194,6 +194,12 @@ AcpiPciRootQueryInfo(
  * for PCI devices. The PCI driver uses the device interface and
  * IOCTL_ACPI_EVAL_METHOD_FOR_PCI instead of calling this directly.
  */
+/* interface.c: IOCTL_ACPI_QUERY_PCI_NOTIFY_INTERFACE (internal device control). */
+NTSTATUS
+AcpiQueryPciNotifyInterfaceIoctl(
+    _Inout_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IrpSp);
+
 BOOLEAN
 NTAPI
 AcpiFindPciDeviceInNamespace(

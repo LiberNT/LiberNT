@@ -324,6 +324,33 @@ ButtonWaitThread(PVOID Context)
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
+/*
+ * Internal device control.  Only the PCI notify interface is served here, on
+ * the bus FDO that pci.sys reaches through the device interface; anything
+ * else completes as it did before this routine existed.
+ */
+static
+NTSTATUS
+NTAPI
+ACPIDispatchInternalDeviceControl(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PIO_STACK_LOCATION IrpSp = IoGetCurrentIrpStackLocation(Irp);
+    PCOMMON_DEVICE_DATA CommonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
+    NTSTATUS Status = STATUS_INVALID_DEVICE_REQUEST;
+
+    Irp->IoStatus.Information = 0;
+    if (CommonData != NULL && CommonData->IsFDO &&
+        IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_ACPI_QUERY_PCI_NOTIFY_INTERFACE)
+    {
+        Status = AcpiQueryPciNotifyInterfaceIoctl(Irp, IrpSp);
+    }
+    Irp->IoStatus.Status = Status;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
+}
+
 
 NTSTATUS
 NTAPI
@@ -932,6 +959,7 @@ DriverEntry (
     // Set entry points into the driver
     //
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = ACPIDispatchDeviceControl;
+    DriverObject->MajorFunction[IRP_MJ_INTERNAL_DEVICE_CONTROL] = ACPIDispatchInternalDeviceControl;
     DriverObject->MajorFunction [IRP_MJ_PNP] = Bus_PnP;
     DriverObject->MajorFunction [IRP_MJ_POWER] = Bus_Power;
     DriverObject->MajorFunction [IRP_MJ_CREATE] = ACPIDispatchCreateClose;

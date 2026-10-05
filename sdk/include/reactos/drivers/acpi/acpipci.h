@@ -160,4 +160,34 @@ typedef struct _ACPI_PCI_SET_POWER_INPUT_BUFFER {
 #define ACPI_PCI_CHILD_EVAL_GET_INPUT_BUFFER(Buffer) \
     ((PVOID)((PUCHAR)(Buffer) + (Buffer)->InputBufferOffset))
 
+/*
+ * Return an ACPI_INTERFACE_STANDARD2 for the ACPI namespace node of a PCI
+ * function, so the function's driver can receive Notify() on that node
+ * (display switch, output hot-plug, dock, video wake).  On Windows acpi.sys
+ * is a filter beneath such a PCI device and answers
+ * GUID_ACPI_INTERFACE_STANDARD2 itself; here pci.sys asks acpi.sys for it on
+ * the device's behalf.
+ *
+ * Internal device control only: the returned interface carries kernel entry
+ * points.  The caller owns one reference and drops it with
+ * InterfaceDereference.  Only notification registration is provided; the
+ * GPE members return STATUS_NOT_SUPPORTED.
+ *
+ * Input:  ACPI_PCI_NOTIFY_INTERFACE_INPUT
+ * Output: ACPI_INTERFACE_STANDARD2
+ */
+#define IOCTL_ACPI_QUERY_PCI_NOTIFY_INTERFACE \
+    CTL_CODE(FILE_DEVICE_ACPI, 0x13, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+#define ACPI_PCI_NOTIFY_INTERFACE_INPUT_SIGNATURE 'NcpA'
+
+typedef struct _ACPI_PCI_NOTIFY_INTERFACE_INPUT
+{
+    ULONG Signature;
+    ULONG Segment;
+    ULONG Bus;
+    ULONG Device;
+    ULONG Function;
+} ACPI_PCI_NOTIFY_INTERFACE_INPUT, *PACPI_PCI_NOTIFY_INTERFACE_INPUT;
+
 /* EOF */
