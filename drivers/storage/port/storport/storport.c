@@ -106,13 +106,46 @@ PortGetDriverInitData(
 
 
 static
-BOOLEAN
-PortHasSharedMessageLock(
+ULONG
+PortMessageLockCount(
     PFDO_DEVICE_EXTENSION DeviceExtension)
 {
-    return (DeviceExtension->MessageInfo != NULL) &&
-           (DeviceExtension->MessageInfo->MessageCount != 0) &&
-           (DeviceExtension->Miniport.PortConfig.InterruptSynchronizationMode != InterruptSynchronizePerMessage);
+    if ((DeviceExtension->MessageInfo == NULL) || (DeviceExtension->MessageInfo->MessageCount == 0))
+        return 0;
+    if (DeviceExtension->Miniport.PortConfig.InterruptSynchronizationMode != InterruptSynchronizePerMessage)
+        return 1;
+    return DeviceExtension->MessageInfo->MessageCount;
+}
+
+static
+KIRQL
+PortAcquireMessageLocks(
+    PFDO_DEVICE_EXTENSION DeviceExtension,
+    ULONG Count)
+{
+    PIO_INTERRUPT_MESSAGE_INFO Info = DeviceExtension->MessageInfo;
+    KIRQL OldIrql;
+    ULONG Index;
+
+    OldIrql = KeAcquireInterruptSpinLock(Info->MessageInfo[0].InterruptObject);
+    for (Index = 1; Index < Count; Index++)
+        KeAcquireInterruptSpinLock(Info->MessageInfo[Index].InterruptObject);
+    return OldIrql;
+}
+
+static
+VOID
+PortReleaseMessageLocks(
+    PFDO_DEVICE_EXTENSION DeviceExtension,
+    ULONG Count,
+    KIRQL OldIrql)
+{
+    PIO_INTERRUPT_MESSAGE_INFO Info = DeviceExtension->MessageInfo;
+    ULONG Index;
+
+    for (Index = Count - 1; Index > 0; Index--)
+        KeReleaseInterruptSpinLock(Info->MessageInfo[Index].InterruptObject, Info->UnifiedIrql);
+    KeReleaseInterruptSpinLock(Info->MessageInfo[0].InterruptObject, OldIrql);
 }
 
 C_ASSERT(RTL_FIELD_SIZE(STOR_LOCK_HANDLE, Context) == sizeof(KLOCK_QUEUE_HANDLE));
@@ -167,8 +200,8 @@ PortAcquireSpinLock(
             DPRINT("InterruptLock\n");
             if (DeviceExtension->Interrupt != NULL)
                 LockHandle->Context.OldIrql = KeAcquireInterruptSpinLock(DeviceExtension->Interrupt);
-            else if (PortHasSharedMessageLock(DeviceExtension))
-                LockHandle->Context.OldIrql = KeAcquireInterruptSpinLock(DeviceExtension->MessageInfo->MessageInfo[0].InterruptObject);
+            else if (PortMessageLockCount(DeviceExtension) != 0)
+                LockHandle->Context.OldIrql = PortAcquireMessageLocks(DeviceExtension, PortMessageLockCount(DeviceExtension));
             else
                 KeAcquireSpinLock(&DeviceExtension->NoInterruptLock, &LockHandle->Context.OldIrql);
             break;
@@ -216,9 +249,9 @@ PortReleaseSpinLock(
             if (DeviceExtension->Interrupt != NULL)
                 KeReleaseInterruptSpinLock(DeviceExtension->Interrupt,
                                            LockHandle->Context.OldIrql);
-            else if (PortHasSharedMessageLock(DeviceExtension))
-                KeReleaseInterruptSpinLock(DeviceExtension->MessageInfo->MessageInfo[0].InterruptObject,
-                                           LockHandle->Context.OldIrql);
+            else if (PortMessageLockCount(DeviceExtension) != 0)
+                PortReleaseMessageLocks(DeviceExtension, PortMessageLockCount(DeviceExtension),
+                                        LockHandle->Context.OldIrql);
             else
                 KeReleaseSpinLock(&DeviceExtension->NoInterruptLock, LockHandle->Context.OldIrql);
             break;
