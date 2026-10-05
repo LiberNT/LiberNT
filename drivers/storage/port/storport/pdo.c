@@ -784,6 +784,51 @@ Fail:
 }
 
 
+static
+VOID
+PortPdoQueryMiniportCapabilities(
+    _In_ PPDO_DEVICE_EXTENSION PdoExtension)
+{
+    PFDO_DEVICE_EXTENSION FdoExtension = PdoExtension->FdoExtension;
+    STOR_DEVICE_CAPABILITIES Capabilities;
+    SCSI_PNP_REQUEST_BLOCK Srb;
+    IO_STATUS_BLOCK IoStatusBlock;
+    KEVENT Event;
+    PIRP Irp;
+
+    if ((FdoExtension->PnpState != dsStarted) ||
+        (FdoExtension->Miniport.PortConfig.SrbType != SRB_TYPE_SCSI_REQUEST_BLOCK))
+        return;
+
+    RtlZeroMemory(&Capabilities, sizeof(Capabilities));
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_SCSI_EXECUTE_NONE,
+                                        PdoExtension->Device,
+                                        NULL,
+                                        0,
+                                        NULL,
+                                        0,
+                                        TRUE,
+                                        &Event,
+                                        &IoStatusBlock);
+    if (Irp == NULL)
+        return;
+
+    RtlZeroMemory(&Srb, sizeof(Srb));
+    Srb.Length = sizeof(SCSI_PNP_REQUEST_BLOCK);
+    Srb.Function = SRB_FUNCTION_PNP;
+    Srb.PnPAction = StorQueryCapabilities;
+    Srb.SrbFlags = SRB_FLAGS_NO_QUEUE_FREEZE;
+    Srb.TimeOutValue = 10;
+    Srb.DataBuffer = &Capabilities;
+    Srb.DataTransferLength = sizeof(Capabilities);
+    IoGetNextIrpStackLocation(Irp)->Parameters.Scsi.Srb = (PSCSI_REQUEST_BLOCK)&Srb;
+
+    if (IoCallDriver(PdoExtension->Device, Irp) == STATUS_PENDING)
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+}
+
+
 static PCSTR
 PortPdoGetDeviceType(
     _In_ PINQUIRYDATA InquiryData)
@@ -1079,12 +1124,14 @@ PortPdoPnp(
             {
                 PDEVICE_CAPABILITIES Capabilities;
 
+                PortPdoQueryMiniportCapabilities(PdoExtension);
                 Capabilities = Stack->Parameters.DeviceCapabilities.Capabilities;
                 Capabilities->Removable = PdoExtension->InquiryBuffer->RemovableMedia;
                 Capabilities->SurpriseRemovalOK = FALSE;
                 Capabilities->UniqueID = FALSE;
+                Capabilities->SilentInstall = TRUE;
+                Capabilities->RawDeviceOK = TRUE;
                 Capabilities->Address = PdoExtension->Target;
-                Capabilities->UINumber = PdoExtension->Target;
                 Status = STATUS_SUCCESS;
             }
             else
