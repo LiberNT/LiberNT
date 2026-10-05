@@ -2752,6 +2752,7 @@ static LONG
 SETUPDI_OpenInterfaceReferenceKey(
         struct DeviceInterface *DevItf,
         REGSAM samDesired,
+        BOOL Create,
         HKEY *phRefKey,
         HKEY *phDevKey);
 
@@ -2827,7 +2828,7 @@ BOOL WINAPI SetupDiCreateDeviceInterfaceW(
     }
     HeapFree(GetProcessHeap(), 0, Path);
 
-    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, KEY_ALL_ACCESS, &hRefKey, NULL);
+    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, KEY_ALL_ACCESS, TRUE, &hRefKey, NULL);
     if (rc != ERROR_SUCCESS)
     {
         SetLastError(rc);
@@ -2889,6 +2890,7 @@ static LONG
 SETUPDI_OpenInterfaceReferenceKey(
         struct DeviceInterface *DevItf,
         REGSAM samDesired,
+        BOOL Create,
         HKEY *phRefKey,
         HKEY *phDevKey)
 {
@@ -2902,6 +2904,8 @@ SETUPDI_OpenInterfaceReferenceKey(
     hKey = SetupDiOpenClassRegKeyExW(&DevItf->InterfaceClassGuid, samDesired, DIOCR_INTERFACE, NULL, NULL);
     if (hKey == INVALID_HANDLE_VALUE)
     {
+        if (!Create)
+            return ERROR_FILE_NOT_FOUND;
         hKey = SetupDiOpenClassRegKeyExW(NULL, samDesired, DIOCR_INTERFACE, NULL, NULL);
         if (hKey == INVALID_HANDLE_VALUE)
             return ERROR_INVALID_PARAMETER;
@@ -2933,13 +2937,17 @@ SETUPDI_OpenInterfaceReferenceKey(
             SymbolicLink[Index] = L'#';
     }
 
-    rc = RegCreateKeyExW(hKey, SymbolicLink, 0, NULL, 0, samDesired | KEY_QUERY_VALUE | KEY_SET_VALUE, NULL, &hDevKey, NULL);
+    if (Create)
+        rc = RegCreateKeyExW(hKey, SymbolicLink, 0, NULL, 0, samDesired | KEY_QUERY_VALUE | KEY_SET_VALUE, NULL, &hDevKey, NULL);
+    else
+        rc = RegOpenKeyExW(hKey, SymbolicLink, 0, samDesired | KEY_QUERY_VALUE, &hDevKey);
     HeapFree(GetProcessHeap(), 0, SymbolicLink);
     RegCloseKey(hKey);
     if (rc != ERROR_SUCCESS)
         return rc;
 
-    if (RegQueryValueExW(hDevKey, L"DeviceInstance", NULL, NULL, NULL, NULL) == ERROR_FILE_NOT_FOUND)
+    if (Create &&
+        RegQueryValueExW(hDevKey, L"DeviceInstance", NULL, NULL, NULL, NULL) == ERROR_FILE_NOT_FOUND)
     {
         RegSetValueExW(hDevKey, L"DeviceInstance", 0, REG_SZ, (const BYTE *)DevItf->DeviceInfo->instanceId,
                        (DWORD)(wcslen(DevItf->DeviceInfo->instanceId) + 1) * sizeof(WCHAR));
@@ -2955,12 +2963,19 @@ SETUPDI_OpenInterfaceReferenceKey(
         }
         wcscpy(Munged, ReferenceString);
         Munged[0] = L'#';
-        rc = RegCreateKeyExW(hDevKey, Munged, 0, NULL, 0, samDesired | KEY_QUERY_VALUE | KEY_SET_VALUE, NULL, phRefKey, NULL);
+        if (Create)
+            rc = RegCreateKeyExW(hDevKey, Munged, 0, NULL, 0, samDesired | KEY_QUERY_VALUE | KEY_SET_VALUE, NULL, phRefKey, NULL);
+        else
+            rc = RegOpenKeyExW(hDevKey, Munged, 0, samDesired | KEY_QUERY_VALUE, phRefKey);
         HeapFree(GetProcessHeap(), 0, Munged);
+    }
+    else if (Create)
+    {
+        rc = RegCreateKeyExW(hDevKey, ReferenceString, 0, NULL, 0, samDesired | KEY_QUERY_VALUE | KEY_SET_VALUE, NULL, phRefKey, NULL);
     }
     else
     {
-        rc = RegCreateKeyExW(hDevKey, ReferenceString, 0, NULL, 0, samDesired | KEY_QUERY_VALUE | KEY_SET_VALUE, NULL, phRefKey, NULL);
+        rc = RegOpenKeyExW(hDevKey, ReferenceString, 0, samDesired | KEY_QUERY_VALUE, phRefKey);
     }
     if (rc == ERROR_SUCCESS && phDevKey)
         *phDevKey = hDevKey;
@@ -2969,7 +2984,8 @@ SETUPDI_OpenInterfaceReferenceKey(
     if (rc != ERROR_SUCCESS)
         return rc;
 
-    if (RegQueryValueExW(*phRefKey, L"SymbolicLink", NULL, NULL, NULL, NULL) == ERROR_FILE_NOT_FOUND)
+    if (Create &&
+        RegQueryValueExW(*phRefKey, L"SymbolicLink", NULL, NULL, NULL, NULL) == ERROR_FILE_NOT_FOUND)
     {
         RegSetValueExW(*phRefKey, L"SymbolicLink", 0, REG_SZ, (const BYTE *)DevItf->SymbolicLink,
                        (DWORD)(wcslen(DevItf->SymbolicLink) + 1) * sizeof(WCHAR));
@@ -3016,7 +3032,7 @@ HKEY WINAPI SetupDiCreateDeviceInterfaceRegKeyW(
     }
 
     DevItf = (struct DeviceInterface *)DeviceInterfaceData->Reserved;
-    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, samDesired, &hRefKey, NULL);
+    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, samDesired, TRUE, &hRefKey, NULL);
     if (rc != ERROR_SUCCESS)
     {
         SetLastError(rc);
@@ -3084,7 +3100,7 @@ BOOL WINAPI SetupDiDeleteDeviceInterfaceRegKey(
     }
 
     rc = SETUPDI_OpenInterfaceReferenceKey((struct DeviceInterface *)DeviceInterfaceData->Reserved,
-                                           KEY_ALL_ACCESS, &hRefKey, NULL);
+                                           KEY_ALL_ACCESS, FALSE, &hRefKey, NULL);
     if (rc == ERROR_SUCCESS)
     {
         rc = RegDeleteKeyW(hRefKey, L"Device Parameters");
@@ -3568,7 +3584,7 @@ BOOL WINAPI SetupDiRemoveDeviceInterface(HDEVINFO DeviceInfoSet, PSP_DEVICE_INTE
     if (!(DevItf = get_device_interface(DeviceInfoSet, DeviceInterfaceData)))
         return FALSE;
 
-    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, KEY_ALL_ACCESS, &hRefKey, &hDevKey);
+    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, KEY_ALL_ACCESS, TRUE, &hRefKey, &hDevKey);
     if (rc != ERROR_SUCCESS)
     {
         SetLastError(rc);
@@ -3603,6 +3619,35 @@ BOOL WINAPI SetupDiDeleteDeviceInterfaceData(HDEVINFO DeviceInfoSet, PSP_DEVICE_
 
     RemoveEntryList(&DevItf->ListEntry);
     return DestroyDeviceInterface(DevItf);
+}
+
+/***********************************************************************
+ *		SetupDiOpenDeviceInterfaceRegKey (SETUPAPI.@)
+ */
+HKEY WINAPI SetupDiOpenDeviceInterfaceRegKey(HDEVINFO DeviceInfoSet, PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData,
+                                             DWORD Reserved, REGSAM samDesired)
+{
+    struct DeviceInterface *DevItf;
+    HKEY hRefKey, hKey;
+    LONG rc;
+
+    TRACE("%s(%p %p %lu 0x%08lx)\n", __FUNCTION__, DeviceInfoSet, DeviceInterfaceData, Reserved, samDesired);
+
+    if (!(DevItf = get_device_interface(DeviceInfoSet, DeviceInterfaceData)))
+        return INVALID_HANDLE_VALUE;
+
+    rc = SETUPDI_OpenInterfaceReferenceKey(DevItf, KEY_QUERY_VALUE, FALSE, &hRefKey, NULL);
+    if (rc == ERROR_SUCCESS)
+    {
+        rc = RegOpenKeyExW(hRefKey, L"Device Parameters", 0, samDesired, &hKey);
+        RegCloseKey(hRefKey);
+    }
+    if (rc != ERROR_SUCCESS)
+    {
+        SetLastError(rc);
+        return INVALID_HANDLE_VALUE;
+    }
+    return hKey;
 }
 
 static DWORD get_device_reg_properties(HKEY base_key, DEVPROPKEY *buf, DWORD buf_len, DWORD *req_len)
@@ -3796,7 +3841,7 @@ BOOL WINAPI SetupDiGetDeviceInterfacePropertyKeys(HDEVINFO devinfo, SP_DEVICE_IN
         return FALSE;
     }
 
-    error = SETUPDI_OpenInterfaceReferenceKey(iface, KEY_QUERY_VALUE, &key, NULL);
+    error = SETUPDI_OpenInterfaceReferenceKey(iface, KEY_QUERY_VALUE, FALSE, &key, NULL);
     if (error != ERROR_SUCCESS)
     {
         SetLastError(error);
@@ -3878,7 +3923,7 @@ BOOL WINAPI SetupDiGetDeviceInterfacePropertyW(HDEVINFO devinfo, SP_DEVICE_INTER
     }
     else
     {
-        error = SETUPDI_OpenInterfaceReferenceKey(iface, KEY_QUERY_VALUE, &reg_key, NULL);
+        error = SETUPDI_OpenInterfaceReferenceKey(iface, KEY_QUERY_VALUE, FALSE, &reg_key, NULL);
         if (error == ERROR_SUCCESS)
         {
             error = get_device_reg_property(reg_key, key, type, buf, buf_size, req_size, flags);
@@ -3938,7 +3983,7 @@ BOOL WINAPI SetupDiSetDeviceInterfacePropertyW(HDEVINFO devinfo, SP_DEVICE_INTER
         return !error;
     }
 
-    error = SETUPDI_OpenInterfaceReferenceKey(iface, KEY_READ | KEY_WRITE, &reg_key, NULL);
+    error = SETUPDI_OpenInterfaceReferenceKey(iface, KEY_READ | KEY_WRITE, FALSE, &reg_key, NULL);
     if (error == ERROR_SUCCESS)
     {
         error = set_device_reg_property(reg_key, key, type, buf, buf_size);
