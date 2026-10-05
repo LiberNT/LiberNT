@@ -2037,6 +2037,20 @@ DxgkVidPnDestroy(
  * Hot-plug detection support
  * ====================================================================== */
 
+/* A further connected output: the desktop is cloned to it. */
+typedef struct _DXGKP_HOTPLUG_EXTRA_TARGET
+{
+    ULONG ChildUid;
+    ULONG64 ChildStateGeneration;
+    BOOLEAN EdidValid;
+    UCHAR Edid[128];
+} DXGKP_HOTPLUG_EXTRA_TARGET;
+
+/*
+ * The connected outputs a rebuild drives.  The chosen one (ChildUid,
+ * TargetId) carries the desktop; the others are cloned from it, in the
+ * order they were connected.
+ */
 typedef struct _DXGKP_HOTPLUG_MONITOR_SNAPSHOT
 {
     BOOLEAN Connected;
@@ -2048,6 +2062,8 @@ typedef struct _DXGKP_HOTPLUG_MONITOR_SNAPSHOT
     UCHAR Edid[128];
     UCHAR EdidExtensions[DXGKP_EDID_MAX_EXTENSIONS][128];
     UCHAR EdidExtensionCount;
+    ULONG ExtraCount;
+    DXGKP_HOTPLUG_EXTRA_TARGET Extra[DXGKP_MAX_PATHS - 1];
 } DXGKP_HOTPLUG_MONITOR_SNAPSHOT, *PDXGKP_HOTPLUG_MONITOR_SNAPSHOT;
 
 /*
@@ -2071,6 +2087,9 @@ DxgkpBindVidPnTargetsToChildren(
     _Inout_ PDXGKP_VIDPN VidPn)
 {
     BOOLEAN SlotBound[DXGKP_MAX_TARGETS];
+    ULONG GrownUids[DXGKP_MAX_TARGETS];
+    ULONG GrownCount = 0;
+    ULONG Grown;
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
     ULONG NumTargets;
@@ -2123,6 +2142,13 @@ DxgkpBindVidPnTargetsToChildren(
             continue;
         while (Slot < NumTargets && SlotBound[Slot])
             Slot++;
+        if (Slot >= NumTargets && NumTargets < DXGKP_MAX_TARGETS && GrownCount < RTL_NUMBER_OF(GrownUids))
+        {
+            /* A target reported at run time (MST, tiled) owns no slot yet;
+             * it gets one once the list lock is dropped. */
+            GrownUids[GrownCount++] = Child->Descriptor.ChildUid;
+            continue;
+        }
         if (Slot >= NumTargets)
         {
             /* More outputs than this VidPn has slots for.  The remaining ones
@@ -2140,6 +2166,31 @@ DxgkpBindVidPnTargetsToChildren(
         SlotBound[Slot] = TRUE;
     }
     KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+
+    /* New slots for run-time targets: mode sets the miniport fills through
+     * cofunctional modality, as for any output. */
+    for (Grown = 0; Grown < GrownCount && VidPn->NumTargets < DXGKP_MAX_TARGETS; Grown++)
+    {
+        ULONG NewSlot = VidPn->NumTargets;
+
+        if (DxgkVidPnTargetIndexFromId(VidPn, GrownUids[Grown]) != MAXULONG)
+            continue;
+        VidPn->TargetModeSets[NewSlot] = DxgkpAllocateTargetModeSet(VidPn, GrownUids[Grown]);
+        VidPn->MonitorModeSets[NewSlot] = DxgkpAllocateMonitorModeSet(VidPn, GrownUids[Grown]);
+        if (VidPn->TargetModeSets[NewSlot] == NULL || VidPn->MonitorModeSets[NewSlot] == NULL)
+        {
+            if (VidPn->TargetModeSets[NewSlot] != NULL)
+                ExFreePoolWithTag(VidPn->TargetModeSets[NewSlot], TAG_DXGK_MODESET);
+            if (VidPn->MonitorModeSets[NewSlot] != NULL)
+                ExFreePoolWithTag(VidPn->MonitorModeSets[NewSlot], TAG_DXGK_MODESET);
+            VidPn->TargetModeSets[NewSlot] = NULL;
+            VidPn->MonitorModeSets[NewSlot] = NULL;
+            break;
+        }
+        VidPn->NumTargets++;
+        DXGKRNL_TRACE("DxgkpBindVidPnTargetsToChildren: run-time target %lu takes slot %lu\n",
+                      GrownUids[Grown], NewSlot);
+    }
     KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
 }
 
@@ -2206,6 +2257,44 @@ DxgkpSnapshotHotPlugMonitor(
                           sizeof(Snapshot->EdidExtensions));
             Snapshot->EdidExtensionCount = ConnectedChild->EdidExtensionCount;
         }
+        /* Every other connected output that owns a target slot shows a
+         * clone of the desktop, earliest connected first. */
+        while (Snapshot->ExtraCount < RTL_NUMBER_OF(Snapshot->Extra))
+        {
+            PDXGK_CHILD_PDO_EXTENSION Next = NULL;
+
+            for (Entry = Adapter->ChildListHead.Flink; Entry != &Adapter->ChildListHead; Entry = Entry->Flink)
+            {
+                PDXGK_CHILD_PDO_EXTENSION Child = CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry);
+                ULONG Taken;
+
+                if (Child == ConnectedChild || !Child->Present || !Child->Connected ||
+                    Child->EnumerationEpoch != Snapshot->ChildEnumerationEpoch ||
+                    Child->Descriptor.ChildDeviceType != TypeVideoOutput ||
+                    Child->Joined ||
+                    DxgkVidPnTargetIndexFromId(VidPn, Child->Descriptor.ChildUid) == MAXULONG)
+                {
+                    continue;
+                }
+                for (Taken = 0; Taken < Snapshot->ExtraCount; Taken++)
+                {
+                    if (Snapshot->Extra[Taken].ChildUid == Child->Descriptor.ChildUid)
+                        break;
+                }
+                if (Taken != Snapshot->ExtraCount)
+                    continue;
+                if (Next == NULL || Child->ConnectSequence < Next->ConnectSequence)
+                    Next = Child;
+            }
+            if (Next == NULL)
+                break;
+            Snapshot->Extra[Snapshot->ExtraCount].ChildUid = Next->Descriptor.ChildUid;
+            Snapshot->Extra[Snapshot->ExtraCount].ChildStateGeneration = Next->StateGeneration;
+            Snapshot->Extra[Snapshot->ExtraCount].EdidValid = Next->EdidValid;
+            if (Next->EdidValid)
+                RtlCopyMemory(Snapshot->Extra[Snapshot->ExtraCount].Edid, Next->Edid, 128);
+            Snapshot->ExtraCount++;
+        }
     }
     if (InterlockedCompareExchange64(&Adapter->HotPlugGeneration, 0, 0) != ExpectedGeneration)
     {
@@ -2213,30 +2302,13 @@ DxgkpSnapshotHotPlugMonitor(
         return STATUS_RETRY;
     }
     KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
-    if (ConnectedCount > 1)
+    if (ConnectedCount > 1 && Snapshot->ExtraCount + 1 < ConnectedCount)
     {
-        /*
-         * Several outputs are connected.  Refusing the rebuild here used to
-         * abandon the whole VidPn: no topology was built, so no mode was ever
-         * committed, so win32k could not create a primary surface and the boot
-         * ended in VIDEO_DRIVER_INIT_FAILURE.  A single-source topology over
-         * the chosen output is a correct VidPn and drives the display; it is
-         * only incomplete in that the remaining outputs stay dark.
-         *
-         * TODO: build a multi-path topology so every connected output gets a
-         * source.  DXGKP_HOTPLUG_MONITOR_SNAPSHOT holds one child, so that
-         * needs the snapshot to become a list first.
-         */
-        static LONG DxgkpMultiOutputReported;
-
-        if (InterlockedCompareExchange(&DxgkpMultiOutputReported, 1, 0) == 0)
-        {
-            DXGKRNL_WARN("DxgkpSnapshotHotPlugMonitor: %lu connected outputs, "
-                         "driving child uid %lu (edid=%u); the others stay dark\n",
-                         ConnectedCount,
-                         Snapshot->ChildUid,
-                         (UINT)Snapshot->EdidValid);
-        }
+        /* Outputs beyond the topology's capacity, or without a target slot,
+         * stay dark. */
+        DXGKRNL_WARN("DxgkpSnapshotHotPlugMonitor: %lu connected outputs, driving "
+                     "%lu (desktop on child uid %lu)\n",
+                     ConnectedCount, Snapshot->ExtraCount + 1, Snapshot->ChildUid);
     }
     /* Nothing connected is a complete answer for any adapter; the single
      * source this implementation drives only matters once a path exists. */
@@ -2301,6 +2373,30 @@ DxgkpHotPlugSnapshotCurrentLocked(
     }
     if (!Snapshot->Connected)
         return ConnectedCount == 0;
+    /* The cloned outputs must still be there, unchanged, too. */
+    {
+        ULONG Extra;
+
+        for (Extra = 0; Extra < Snapshot->ExtraCount; Extra++)
+        {
+            BOOLEAN Current = FALSE;
+
+            for (Entry = Adapter->ChildListHead.Flink; Entry != &Adapter->ChildListHead; Entry = Entry->Flink)
+            {
+                PDXGK_CHILD_PDO_EXTENSION Child = CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry);
+
+                if (Child->Present && Child->Connected &&
+                    Child->Descriptor.ChildUid == Snapshot->Extra[Extra].ChildUid &&
+                    Child->StateGeneration == Snapshot->Extra[Extra].ChildStateGeneration)
+                {
+                    Current = TRUE;
+                    break;
+                }
+            }
+            if (!Current)
+                return FALSE;
+        }
+    }
     /*
      * The snapshot is still current when the output it chose is still present,
      * still connected and unchanged.  Demanding that no *other* output be
@@ -2919,7 +3015,19 @@ DxgkpBuildHotPlugCandidate(
         VidPn->NumSources == 0)
         return STATUS_NOT_SUPPORTED;
     if (Snapshot->EdidValid)
-        return DxgkpAddEdidPreferredModes(VidPn, Snapshot->TargetId, Snapshot->Edid);
+    {
+        NTSTATUS Status = DxgkpAddEdidPreferredModes(VidPn, Snapshot->TargetId, Snapshot->Edid);
+        ULONG Extra;
+
+        if (!NT_SUCCESS(Status))
+            return Status;
+        for (Extra = 0; Extra < Snapshot->ExtraCount; Extra++)
+        {
+            if (Snapshot->Extra[Extra].EdidValid)
+                (VOID)DxgkpAddEdidPreferredModes(VidPn, Snapshot->Extra[Extra].ChildUid,
+                                                 Snapshot->Extra[Extra].Edid);
+        }
+    }
     return STATUS_SUCCESS;
 }
 
@@ -2952,12 +3060,31 @@ DxgkpSeedDefaultHotPlugPath(
         return STATUS_NOT_SUPPORTED;
 
     DxgkpPopulateDefaultPath(&VidPn->Paths[0], 0, Snapshot->TargetId);
+    VidPn->NumPaths = 1;
+    /* The other connected outputs show the same source: a clone. */
+    {
+        ULONG Extra;
+
+        for (Extra = 0; Extra < Snapshot->ExtraCount && VidPn->NumPaths < DXGKP_MAX_PATHS; Extra++)
+        {
+            ULONG ExtraIndex = DxgkVidPnTargetIndexFromId(VidPn, Snapshot->Extra[Extra].ChildUid);
+
+            if (ExtraIndex == MAXULONG)
+                continue;
+            DxgkpPopulateDefaultPath(&VidPn->Paths[VidPn->NumPaths], 0, Snapshot->Extra[Extra].ChildUid);
+            if (VidPn->TargetModeSets[ExtraIndex] != NULL)
+                VidPn->TargetModeSets[ExtraIndex]->PinnedModeId = (UINT)-1;
+            VidPn->NumPaths++;
+        }
+    }
 
     if (Adapter->MiniportContext != NULL &&
         !Adapter->MiniportContext->IsDisplayOnlyDriver &&
         !Adapter->MiniportContext->IsBasicDisplayFallback &&
         DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality) != NULL)
     {
+        SIZE_T PathIndex;
+
         /*
          * This is an OS-created starting topology, not a functional VidPN
          * yet.  Leave its transformations unpinned so a full miniport can
@@ -2971,12 +3098,17 @@ DxgkpSeedDefaultHotPlugPath(
          * target too, allowing a landscape source mode and portrait target
          * timing to be joined by the rotation selected after enumeration.
          */
-        VidPn->Paths[0].ContentTransformation.Scaling = D3DKMDT_VPPS_UNPINNED;
-        RtlZeroMemory(&VidPn->Paths[0].ContentTransformation.ScalingSupport,
-                      sizeof(VidPn->Paths[0].ContentTransformation.ScalingSupport));
-        VidPn->Paths[0].ContentTransformation.Rotation = D3DKMDT_VPPR_UNPINNED;
-        RtlZeroMemory(&VidPn->Paths[0].ContentTransformation.RotationSupport,
-                      sizeof(VidPn->Paths[0].ContentTransformation.RotationSupport));
+        for (PathIndex = 0; PathIndex < VidPn->NumPaths; PathIndex++)
+        {
+            D3DKMDT_VIDPN_PRESENT_PATH *Path = &VidPn->Paths[PathIndex];
+
+            Path->ContentTransformation.Scaling = D3DKMDT_VPPS_UNPINNED;
+            RtlZeroMemory(&Path->ContentTransformation.ScalingSupport,
+                          sizeof(Path->ContentTransformation.ScalingSupport));
+            Path->ContentTransformation.Rotation = D3DKMDT_VPPR_UNPINNED;
+            RtlZeroMemory(&Path->ContentTransformation.RotationSupport,
+                          sizeof(Path->ContentTransformation.RotationSupport));
+        }
 
         if (VidPn->SourceModeSets[0] != NULL)
             VidPn->SourceModeSets[0]->PinnedModeId = (UINT)-1;
@@ -2984,7 +3116,6 @@ DxgkpSeedDefaultHotPlugPath(
             VidPn->TargetModeSets[TargetIndex]->PinnedModeId = (UINT)-1;
     }
 
-    VidPn->NumPaths = 1;
     return STATUS_SUCCESS;
 }
 
@@ -3181,8 +3312,18 @@ DxgkpRecommendHotPlugCandidate(
 {
     PDXGKDDI_RECOMMEND_FUNCTIONAL_VIDPN RecommendFunctionalVidPn = DXGK_CB(Adapter, DxgkDdiRecommendFunctionalVidPn);
     DXGKARG_RECOMMENDFUNCTIONALVIDPN RecommendArgs;
-    D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId = Snapshot->TargetId;
+    D3DDDI_VIDEO_PRESENT_TARGET_ID Targets[DXGKP_MAX_PATHS];
+    ULONG TargetCount = 0;
+    ULONG Extra;
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
+
+    /* The desktop output first, then the others in connection order. */
+    if (Snapshot->Connected)
+    {
+        Targets[TargetCount++] = Snapshot->TargetId;
+        for (Extra = 0; Extra < Snapshot->ExtraCount && TargetCount < RTL_NUMBER_OF(Targets); Extra++)
+            Targets[TargetCount++] = Snapshot->Extra[Extra].ChildUid;
+    }
 
     /*
      * Offer the driver its chance to add monitor modes first.  A monitor's mode
@@ -3192,45 +3333,41 @@ DxgkpRecommendHotPlugCandidate(
      * that reason, so a driver that only implements this DDI is not silently
      * limited to its EDID.  A refusal costs nothing: the EDID modes stand.
      */
-    if (Snapshot->Connected &&
-        DxgkVidPnTargetIndexFromId(VidPn, Snapshot->TargetId) != MAXULONG &&
-        DxgkVidPnTargetIndexFromId(VidPn, Snapshot->TargetId) != MAXULONG &&
-        VidPn->MonitorModeSets[DxgkVidPnTargetIndexFromId(VidPn, Snapshot->TargetId)] != NULL &&
-        DXGK_CB(Adapter, DxgkDdiRecommendMonitorModes) != NULL)
+    for (Extra = 0; Extra < TargetCount && DXGK_CB(Adapter, DxgkDdiRecommendMonitorModes) != NULL; Extra++)
     {
+        ULONG Slot = DxgkVidPnTargetIndexFromId(VidPn, Targets[Extra]);
         DXGKARG_RECOMMENDMONITORMODES MonitorArgs;
         NTSTATUS MonitorStatus;
 
+        if (Slot == MAXULONG || VidPn->MonitorModeSets[Slot] == NULL)
+            continue;
         RtlZeroMemory(&MonitorArgs, sizeof(MonitorArgs));
-        MonitorArgs.VideoPresentTargetId = Snapshot->TargetId;
-        MonitorArgs.hMonitorSourceModeSet =
-            (D3DKMDT_HMONITORSOURCEMODESET)
-                VidPn->MonitorModeSets[DxgkVidPnTargetIndexFromId(VidPn, Snapshot->TargetId)];
+        MonitorArgs.VideoPresentTargetId = Targets[Extra];
+        MonitorArgs.hMonitorSourceModeSet = (D3DKMDT_HMONITORSOURCEMODESET)VidPn->MonitorModeSets[Slot];
         MonitorArgs.pMonitorSourceModeSetInterface = &g_MonitorSourceModeSetInterface;
-        if (DxgkAcquireKmdCall(Adapter))
+        if (!DxgkAcquireKmdCall(Adapter))
+            break;
+        _SEH2_TRY
         {
-            _SEH2_TRY
-            {
-                MonitorStatus = DXGK_CB(Adapter, DxgkDdiRecommendMonitorModes)(Adapter->MiniportDeviceContext, &MonitorArgs);
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                MonitorStatus = _SEH2_GetExceptionCode();
-            }
-            _SEH2_END;
-            DxgkReleaseKmdCall(Adapter);
-            if (!NT_SUCCESS(MonitorStatus))
-                DXGKRNL_TRACE("RecommendMonitorModes declined 0x%08lX for target %u\n",
-                              MonitorStatus, Snapshot->TargetId);
+            MonitorStatus = DXGK_CB(Adapter, DxgkDdiRecommendMonitorModes)(Adapter->MiniportDeviceContext, &MonitorArgs);
         }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            MonitorStatus = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+        DxgkReleaseKmdCall(Adapter);
+        if (!NT_SUCCESS(MonitorStatus))
+            DXGKRNL_TRACE("RecommendMonitorModes declined 0x%08lX for target %u\n",
+                          MonitorStatus, Targets[Extra]);
     }
 
     if (RecommendFunctionalVidPn == NULL)
         return DxgkpRecommendTopologyFallback(Adapter, VidPn, Snapshot,
                                               DXGK_RVT_INITIALIZATION_NOLKG);
     RtlZeroMemory(&RecommendArgs, sizeof(RecommendArgs));
-    RecommendArgs.NumberOfVidPnTargets = Snapshot->Connected ? 1 : 0;
-    RecommendArgs.pVidPnTargetPrioritizationVector = Snapshot->Connected ? &TargetId : NULL;
+    RecommendArgs.NumberOfVidPnTargets = TargetCount;
+    RecommendArgs.pVidPnTargetPrioritizationVector = TargetCount != 0 ? Targets : NULL;
     RecommendArgs.hRecommendedFunctionalVidPn = (D3DKMDT_HVIDPN)VidPn;
     RecommendArgs.RequestReason = DXGK_RFVR_HOTKEY;
     if (!DxgkAcquireKmdCall(Adapter))
@@ -3384,7 +3521,7 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ LONG64 ExpectedGeneration)
 {
-    DXGKP_HOTPLUG_MONITOR_SNAPSHOT Snapshot;
+    PDXGKP_HOTPLUG_MONITOR_SNAPSHOT Snapshot = NULL;
     D3DKMDT_HVIDPN OldVidPn = NULL;
     D3DKMDT_HVIDPN Candidate = NULL;
     D3DKMDT_HVIDPN DetachedVidPn = NULL;
@@ -3393,9 +3530,9 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     DXGKP_DISPLAY_COMMIT_RESULT RollbackResult;
     ULONG OldCommittedWidth;
     ULONG OldCommittedHeight;
-    D3DKMDT_VIDPN_PRESENT_PATH OldPath;
-    D3DKMDT_VIDPN_PRESENT_PATH NewPath;
-    BOOLEAN PathsComparable = FALSE;
+    D3DKMDT_VIDPN_PRESENT_PATH OldPaths[DXGKP_MAX_PATHS];
+    D3DKMDT_VIDPN_PRESENT_PATH NewPaths[DXGKP_MAX_PATHS];
+    ULONG ComparablePaths = 0;
     BOOLEAN KmdTransaction = FALSE;
     BOOLEAN RecoveryRequired = FALSE;
     PDXGK_CHILD_PDO_EXTENSION MatchingChild = NULL;
@@ -3416,6 +3553,9 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     {
         return STATUS_NOT_SUPPORTED;
     }
+    Snapshot = ExAllocatePoolWithTag(PagedPool, sizeof(*Snapshot), TAG_DXGK_VIDPN);
+    if (Snapshot == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
     (VOID)KeWaitForSingleObject(&Adapter->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
     DxgkpBeginSharedSurfaceMutationLocked(Adapter);
     if (!DxgkBeginKmdTransaction(Adapter))
@@ -3438,29 +3578,29 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     }
     DxgkpBindVidPnTargetsToChildren(Adapter, (PDXGKP_VIDPN)OldVidPn);
     DxgkpRefreshConnectedChildEdids(Adapter);
-    Status = DxgkpSnapshotHotPlugMonitor(Adapter, (PDXGKP_VIDPN)OldVidPn, ExpectedGeneration, &Snapshot);
+    Status = DxgkpSnapshotHotPlugMonitor(Adapter, (PDXGKP_VIDPN)OldVidPn, ExpectedGeneration, Snapshot);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
-    Status = DxgkpRefreshHotPlugEdid(Adapter, &Snapshot);
+    Status = DxgkpRefreshHotPlugEdid(Adapter, Snapshot);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     Status = DxgkVidPnClone(OldVidPn, &Candidate);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     CandidateObject = (PDXGKP_VIDPN)Candidate;
-    Status = DxgkpBuildHotPlugCandidate(CandidateObject, &Snapshot);
+    Status = DxgkpBuildHotPlugCandidate(CandidateObject, Snapshot);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
-    Status = DxgkpRecommendHotPlugCandidate(Adapter, CandidateObject, &Snapshot);
+    Status = DxgkpRecommendHotPlugCandidate(Adapter, CandidateObject, Snapshot);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     /* Only now, once the driver has had the empty topology it is entitled to
      * and declined to fill it, does dxgkrnl wire the output itself. */
-    Status = DxgkpSeedDefaultHotPlugPath(Adapter, CandidateObject, &Snapshot);
+    Status = DxgkpSeedDefaultHotPlugPath(Adapter, CandidateObject, Snapshot);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     KeAcquireSpinLock(&Adapter->ChildListLock, &ChildOldIrql);
-    if (!DxgkpHotPlugSnapshotCurrentLocked(Adapter, &Snapshot, ExpectedGeneration, &MatchingChild))
+    if (!DxgkpHotPlugSnapshotCurrentLocked(Adapter, Snapshot, ExpectedGeneration, &MatchingChild))
     {
         KeReleaseSpinLock(&Adapter->ChildListLock, ChildOldIrql);
         /* Retire the stale snapshot before making a mode-set DDI call. The
@@ -3470,12 +3610,23 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     }
     KeReleaseSpinLock(&Adapter->ChildListLock, ChildOldIrql);
     Status = DxgkpDisplayCommitVidPnCandidate(Adapter, Candidate, &CommitResult);
+    if (!NT_SUCCESS(Status) && CandidateObject->NumPaths > 1 &&
+        Status != STATUS_DELETE_PENDING && Status != STATUS_DEVICE_REMOVED)
+    {
+        /* The miniport cannot drive every output this way (a clone needs
+         * cofunctional timings on all of them).  The desktop output alone
+         * is still a correct configuration. */
+        DXGKRNL_WARN("DxgkVidPnRebuildForHotPlug: %Iu-path topology refused 0x%08lX; "
+                     "driving the desktop output alone\n", CandidateObject->NumPaths, Status);
+        CandidateObject->NumPaths = 1;
+        Status = DxgkpDisplayCommitVidPnCandidate(Adapter, Candidate, &CommitResult);
+    }
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     (VOID)KeWaitForSingleObject(&Adapter->VidPnMutex, Executive, KernelMode, FALSE, NULL);
     KeAcquireSpinLock(&Adapter->ChildListLock, &ChildOldIrql);
     MatchingChild = NULL;
-    if ((D3DKMDT_HVIDPN)Adapter->VidPn != OldVidPn || !DxgkpHotPlugSnapshotCurrentLocked(Adapter, &Snapshot, ExpectedGeneration, &MatchingChild))
+    if ((D3DKMDT_HVIDPN)Adapter->VidPn != OldVidPn || !DxgkpHotPlugSnapshotCurrentLocked(Adapter, Snapshot, ExpectedGeneration, &MatchingChild))
     {
         KeReleaseSpinLock(&Adapter->ChildListLock, ChildOldIrql);
         KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
@@ -3501,13 +3652,24 @@ DxgkpVidPnRebuildForHotPlugGeneration(
      * has something to compare against. */
     {
         PDXGKP_VIDPN OutgoingVidPn = (PDXGKP_VIDPN)Adapter->VidPn;
+        SIZE_T OldIndex, NewIndex;
 
-        if (OutgoingVidPn != NULL && OutgoingVidPn->NumPaths == 1 &&
-            CandidateObject != NULL && CandidateObject->NumPaths == 1)
+        /* Paths that drive the same output from the same source before and
+         * after; a changed transformation on one is announced below. */
+        for (NewIndex = 0; OutgoingVidPn != NULL && CandidateObject != NULL &&
+                           NewIndex < CandidateObject->NumPaths; NewIndex++)
         {
-            OldPath = OutgoingVidPn->Paths[0];
-            NewPath = CandidateObject->Paths[0];
-            PathsComparable = TRUE;
+            for (OldIndex = 0; OldIndex < OutgoingVidPn->NumPaths; OldIndex++)
+            {
+                if (OutgoingVidPn->Paths[OldIndex].VidPnTargetId == CandidateObject->Paths[NewIndex].VidPnTargetId &&
+                    OutgoingVidPn->Paths[OldIndex].VidPnSourceId == CandidateObject->Paths[NewIndex].VidPnSourceId)
+                {
+                    OldPaths[ComparablePaths] = OutgoingVidPn->Paths[OldIndex];
+                    NewPaths[ComparablePaths] = CandidateObject->Paths[NewIndex];
+                    ComparablePaths++;
+                    break;
+                }
+            }
         }
     }
     Adapter->VidPn = Candidate;
@@ -3516,12 +3678,12 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     Adapter->VidPnCommitted = CommitResult.VidPnCommitted;
     Adapter->HeadlessDesktop = CommitResult.HeadlessDesktop;
     DxgkVidPnPublishVsyncTargetMap(Adapter, CommitResult.VidPnCommitted ? Candidate : NULL);
-    if (Snapshot.Connected && Snapshot.EdidValid && MatchingChild != NULL)
+    if (Snapshot->Connected && Snapshot->EdidValid && MatchingChild != NULL)
     {
-        RtlCopyMemory(MatchingChild->Edid, Snapshot.Edid, sizeof(MatchingChild->Edid));
-        RtlCopyMemory(MatchingChild->EdidExtensions, Snapshot.EdidExtensions,
+        RtlCopyMemory(MatchingChild->Edid, Snapshot->Edid, sizeof(MatchingChild->Edid));
+        RtlCopyMemory(MatchingChild->EdidExtensions, Snapshot->EdidExtensions,
                       sizeof(MatchingChild->EdidExtensions));
-        MatchingChild->EdidExtensionCount = Snapshot.EdidExtensionCount;
+        MatchingChild->EdidExtensionCount = Snapshot->EdidExtensionCount;
         MatchingChild->EdidValid = TRUE;
     }
     Candidate = NULL;
@@ -3530,16 +3692,19 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     DxgkpDisplayPublishInitialMode(Adapter);
     DxgkVidPnDestroyDisplayModeCache(Adapter);
     NotifyMonitorEvent = CommitResult.VidPnCommitted &&
-                         (Snapshot.Connected ||
+                         (Snapshot->Connected ||
                           CommitResult.CommittedWidth != OldCommittedWidth || CommitResult.CommittedHeight != OldCommittedHeight);
     if (CommitResult.CommittedWidth != OldCommittedWidth || CommitResult.CommittedHeight != OldCommittedHeight ||
-        (!Snapshot.Connected && !CommitResult.HeadlessDesktop))
+        (!Snapshot->Connected && !CommitResult.HeadlessDesktop))
         DxgkpDestroySharedPrimaryLocked(Adapter);
     /* After the new VidPn is published and the VidPn mutex is dropped, but
      * while the KMD transaction still holds the miniport. */
-    if (PathsComparable)
-        DxgkpNotifyActivePathChanged(Adapter, &OldPath, &NewPath);
-    DXGKRNL_TRACE("DxgkVidPnRebuildForHotPlug: atomically published %p replacing %p connected=%u target=%u mode=%ux%u\n", Adapter->VidPn, DetachedVidPn, Snapshot.Connected, Snapshot.TargetId, CommitResult.CommittedWidth, CommitResult.CommittedHeight);
+    while (ComparablePaths != 0)
+    {
+        ComparablePaths--;
+        DxgkpNotifyActivePathChanged(Adapter, &OldPaths[ComparablePaths], &NewPaths[ComparablePaths]);
+    }
+    DXGKRNL_TRACE("DxgkVidPnRebuildForHotPlug: atomically published %p replacing %p connected=%u target=%u mode=%ux%u\n", Adapter->VidPn, DetachedVidPn, Snapshot->Connected, Snapshot->TargetId, CommitResult.CommittedWidth, CommitResult.CommittedHeight);
     Status = STATUS_SUCCESS;
 
 Cleanup:
@@ -3564,6 +3729,7 @@ Cleanup:
         DxgkVidPnDestroy(Candidate);
     if (NotifyMonitorEvent && NT_SUCCESS(Status))
         DxgkDisplayNotifyMonitorEvent(Adapter);
+    ExFreePoolWithTag(Snapshot, TAG_DXGK_VIDPN);
     return Status;
 }
 
@@ -7946,7 +8112,9 @@ DxgkVidPnSetVideoMode(
     OldWidth = Adapter->CommittedWidth;
     OldHeight = Adapter->CommittedHeight;
     KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
-    if (Current == NULL || Current->NumPaths != 1 ||
+    /* The mode is the desktop source's (Paths[0]); outputs cloned from it
+     * are given timings for the new source mode by the commit. */
+    if (Current == NULL || Current->NumPaths == 0 ||
         Current->Paths[0].VidPnSourceId != Cache->SourceId || Current->Paths[0].VidPnTargetId != Cache->TargetId)
     {
         Status = STATUS_RETRY;
@@ -8032,7 +8200,14 @@ DxgkVidPnSetVideoMode(
     if (OldWidth != Result.CommittedWidth || OldHeight != Result.CommittedHeight)
         DxgkpDestroySharedPrimaryLocked(Adapter);
     DxgkpDisplayPublishInitialMode(Adapter);
-    DxgkpNotifyActivePathChanged(Adapter, &Current->Paths[0], &((PDXGKP_VIDPN)Adapter->VidPn)->Paths[0]);
+    for (TargetModeIndex = 0;
+         TargetModeIndex < Current->NumPaths &&
+         TargetModeIndex < ((PDXGKP_VIDPN)Adapter->VidPn)->NumPaths;
+         TargetModeIndex++)
+    {
+        DxgkpNotifyActivePathChanged(Adapter, &Current->Paths[TargetModeIndex],
+                                     &((PDXGKP_VIDPN)Adapter->VidPn)->Paths[TargetModeIndex]);
+    }
 
 Cleanup:
     if (Transaction)

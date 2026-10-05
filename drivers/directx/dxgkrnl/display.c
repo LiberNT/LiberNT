@@ -409,6 +409,81 @@ DxgkpPinSupportedPathTransformations(
     return STATUS_SUCCESS;
 }
 
+/*
+ * Pins the timing of a path other than the desktop path.  A clone of the
+ * desktop source takes a timing whose active size is the source's (no
+ * scaling) when the output offers one; otherwise, and for a path on another
+ * source, the monitor's preferred timing, else the first offered.  FALSE
+ * when the output offers no timing at all.
+ */
+static BOOLEAN
+DxgkpPinExtraPathTargetMode(
+    _Inout_ PDXGKP_VIDPN VidPn,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _In_ UINT CloneWidth,
+    _In_ UINT CloneHeight,
+    _Out_ PUINT OutWidth,
+    _Out_ PUINT OutHeight)
+{
+    PDXGKP_VIDPN_TARGET_MODESET Set;
+    SIZE_T Index, Pick = (SIZE_T)-1, Preferred = (SIZE_T)-1;
+    ULONG Slot = DxgkVidPnTargetIndexFromId(VidPn, TargetId);
+
+    *OutWidth = 0;
+    *OutHeight = 0;
+    if (Slot == MAXULONG || (Set = VidPn->TargetModeSets[Slot]) == NULL || Set->NumModes == 0)
+        return FALSE;
+    for (Index = 0; Index < Set->NumModes; Index++)
+    {
+        UINT Width, Height;
+
+        DxgkpGetTargetModeDimensions(&Set->Modes[Index], &Width, &Height);
+        if (Pick == (SIZE_T)-1 && CloneWidth != 0 && Width == CloneWidth && Height == CloneHeight)
+            Pick = Index;
+        if (Preferred == (SIZE_T)-1 && Set->Modes[Index].Preference == D3DKMDT_MP_PREFERRED)
+            Preferred = Index;
+    }
+    if (Pick == (SIZE_T)-1)
+        Pick = Preferred != (SIZE_T)-1 ? Preferred : 0;
+    Set->PinnedModeId = Set->Modes[Pick].Id;
+    DxgkpGetTargetModeDimensions(&Set->Modes[Pick], OutWidth, OutHeight);
+    return TRUE;
+}
+
+/* A further source shows its output's raster when its set offers it; a mode
+ * already pinned stays, otherwise the first offered is taken. */
+static VOID
+DxgkpPinExtraSourceMode(
+    _Inout_ PDXGKP_VIDPN VidPn,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId,
+    _In_ UINT Width,
+    _In_ UINT Height)
+{
+    PDXGKP_VIDPN_SOURCE_MODESET Set;
+    SIZE_T Index;
+
+    if (SourceId >= DXGKP_MAX_SOURCES || (Set = VidPn->SourceModeSets[SourceId]) == NULL ||
+        Set->NumModes == 0)
+    {
+        return;
+    }
+    for (Index = 0; Index < Set->NumModes; Index++)
+    {
+        if ((UINT)Set->Modes[Index].Format.Graphics.PrimSurfSize.cx == Width &&
+            (UINT)Set->Modes[Index].Format.Graphics.PrimSurfSize.cy == Height)
+        {
+            Set->PinnedModeId = Set->Modes[Index].Id;
+            return;
+        }
+    }
+    for (Index = 0; Index < Set->NumModes; Index++)
+    {
+        if (Set->Modes[Index].Id == Set->PinnedModeId)
+            return;
+    }
+    Set->PinnedModeId = Set->Modes[0].Id;
+}
+
 static VOID
 DxgkpSnapshotCommittedDisplayState(
     _In_opt_ PDXGKRNL_ADAPTER Adapter,
@@ -975,6 +1050,29 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
                         ActiveTargetId, VidPn->NumTargets);
             return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
         }
+        /*
+         * Paths[0] is the desktop path; the others clone a source to more
+         * outputs or drive further sources.  Each must name a declared source
+         * and a target this VidPN has a slot for, and no target twice.
+         */
+        if (VidPn->NumPaths > DXGKP_MAX_PATHS)
+            return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
+        for (i = 1; i < VidPn->NumPaths; i++)
+        {
+            SIZE_T Other;
+
+            if (VidPn->Paths[i].VidPnSourceId >= VidPn->NumSources ||
+                VidPn->Paths[i].VidPnSourceId >= DXGKP_MAX_SOURCES ||
+                DxgkVidPnTargetIndexFromId(VidPn, VidPn->Paths[i].VidPnTargetId) == MAXULONG)
+            {
+                return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
+            }
+            for (Other = 0; Other < i; Other++)
+            {
+                if (VidPn->Paths[Other].VidPnTargetId == VidPn->Paths[i].VidPnTargetId)
+                    return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
+            }
+        }
     }
 
     /*
@@ -1078,9 +1176,15 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
              * able to scan out at all -- which is how a 720x480 Raspberry Pi 3
              * ended up being offered an 800x600 source and refusing the VidPN.
              */
-            TransformationsPinned =
-                DxgkpVidPnPathScalingIsPinned(&VidPn->Paths[0]) &&
-                DxgkpVidPnPathRotationIsPinned(&VidPn->Paths[0]);
+            TransformationsPinned = TRUE;
+            for (i = 0; i < VidPn->NumPaths; i++)
+            {
+                if (!DxgkpVidPnPathScalingIsPinned(&VidPn->Paths[i]) ||
+                    !DxgkpVidPnPathRotationIsPinned(&VidPn->Paths[i]))
+                {
+                    TransformationsPinned = FALSE;
+                }
+            }
             SourcePinned =
                 TransformationsPinned &&
                 DxgkVidPnEnsurePinnedSourceMode(VidPn,
@@ -1093,6 +1197,18 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
             TgtSet->NumModes = 0;
             TgtSet->PinnedModeId = (UINT)-1;
             TgtSet->NextModeId = 0;
+            /* Every other path's output enumerates its own timings too. */
+            for (i = 1; i < VidPn->NumPaths; i++)
+            {
+                ULONG OtherIndex = DxgkVidPnTargetIndexFromId(VidPn, VidPn->Paths[i].VidPnTargetId);
+
+                if (OtherIndex != MAXULONG && VidPn->TargetModeSets[OtherIndex] != NULL)
+                {
+                    VidPn->TargetModeSets[OtherIndex]->NumModes = 0;
+                    VidPn->TargetModeSets[OtherIndex]->PinnedModeId = (UINT)-1;
+                    VidPn->TargetModeSets[OtherIndex]->NextModeId = 0;
+                }
+            }
 
             if (SourcePinned)
             {
@@ -1598,6 +1714,78 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
     }
 
     /*
+     * Step 3a: the other paths.  A path on the desktop source clones the
+     * desktop to another output; a path on another source is a further
+     * output the miniport recommended.  With the desktop path and source
+     * pinned, a full miniport is asked for cofunctional modality again, so
+     * the remaining outputs are offered only timings that can run alongside
+     * them; their timings are pinned from what it leaves.
+     */
+    if (!TopologyEmpty && VidPn->NumPaths > 1)
+    {
+        if (FullMiniportNegotiatesModes && !ForceDodPresentOnlyPath &&
+            DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality) != NULL)
+        {
+            DXGKARG_ENUMVIDPNCOFUNCMODALITY EnumArgs;
+
+            RtlZeroMemory(&EnumArgs, sizeof(EnumArgs));
+            EnumArgs.hConstrainingVidPn = (D3DKMDT_HVIDPN)VidPn;
+            EnumArgs.EnumPivotType = D3DKMDT_EPT_VIDPNSOURCE;
+            EnumArgs.EnumPivot.VidPnSourceId = ActiveSourceId;
+            EnumArgs.EnumPivot.VidPnTargetId = ActiveTargetId;
+            if (!DxgkAcquireKmdCall(Adapter))
+            {
+                Status = STATUS_DELETE_PENDING;
+                goto Cleanup;
+            }
+            _SEH2_TRY
+            {
+                Status = DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality)(Adapter->MiniportDeviceContext, &EnumArgs);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+            DxgkReleaseKmdCall(Adapter);
+            if (!NT_SUCCESS(Status))
+            {
+                DXGKRNL_WARN("DxgkpCommitVidPnToMiniport: cofunctional modality for %Iu "
+                             "paths failed 0x%08lX\n", VidPn->NumPaths, Status);
+                goto Cleanup;
+            }
+        }
+        for (i = 1; i < VidPn->NumPaths; i++)
+        {
+            D3DDDI_VIDEO_PRESENT_SOURCE_ID PathSource = VidPn->Paths[i].VidPnSourceId;
+            BOOLEAN Clone = PathSource == ActiveSourceId;
+            UINT PathWidth, PathHeight;
+
+            if (!DxgkpPinExtraPathTargetMode(VidPn, VidPn->Paths[i].VidPnTargetId,
+                                             Clone ? NewCommittedWidth : 0,
+                                             Clone ? NewCommittedHeight : 0,
+                                             &PathWidth, &PathHeight))
+            {
+                DXGKRNL_WARN("DxgkpCommitVidPnToMiniport: output %u offers no timing\n",
+                             VidPn->Paths[i].VidPnTargetId);
+                Status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+                goto Cleanup;
+            }
+            if (!Clone)
+                DxgkpPinExtraSourceMode(VidPn, PathSource, PathWidth, PathHeight);
+            DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: path %Iu source %u target %u "
+                          "pinned %ux%u%s\n", i, PathSource, VidPn->Paths[i].VidPnTargetId,
+                          PathWidth, PathHeight, Clone ? " (clone)" : "");
+        }
+        if (FullMiniportNegotiatesModes)
+        {
+            Status = DxgkpPinSupportedPathTransformations(VidPn);
+            if (!NT_SUCCESS(Status))
+                goto Cleanup;
+        }
+    }
+
+    /*
      * Step 3b: ask again, now that the driver has made the VidPN cofunctional
      * and the pinned modes come from the sets the driver itself left behind.
      * This is the answer that decides the mode set; a driver that still says
@@ -1627,53 +1815,101 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
      */
     /* Whichever DDI commits it, the path carries the source's gamma; a mode
      * set without it resets the source to identity. */
-    if (!TopologyEmpty)
-        DxgkpLoadSourceGamma(Adapter, ActiveSourceId, &VidPn->Paths[0].GammaRamp);
+    /* Each source's first path carries its gamma. */
+    for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
+    {
+        SIZE_T Other;
+
+        for (Other = 0; Other < i; Other++)
+        {
+            if (VidPn->Paths[Other].VidPnSourceId == VidPn->Paths[i].VidPnSourceId)
+                break;
+        }
+        if (Other == i)
+            DxgkpLoadSourceGamma(Adapter, VidPn->Paths[i].VidPnSourceId, &VidPn->Paths[i].GammaRamp);
+    }
 
     if (!ForceDodPresentOnlyPath && UseSetTimings)
     {
         DXGKARG_SETTIMINGSFROMVIDPN TimingArgs;
         DXGK_SET_TIMING_RESULTS TimingResults;
-        DXGK_SET_TIMING_PATH_INFO TimingPath;
+        DXGK_SET_TIMING_PATH_INFO TimingPaths[DXGKP_MAX_PATHS + DXGKP_MAX_COMMITTED_TARGETS];
+        ULONG TimingCount = 0;
+        ULONG Old;
 
+        C_ASSERT(DXGKP_MAX_COMMITTED_TARGETS >= DXGKP_MAX_PATHS);
         RtlZeroMemory(&TimingArgs, sizeof(TimingArgs));
         RtlZeroMemory(&TimingResults, sizeof(TimingResults));
-        RtlZeroMemory(&TimingPath, sizeof(TimingPath));
+        RtlZeroMemory(TimingPaths, sizeof(TimingPaths));
 
-        TimingPath.VidPnTargetId = ActiveTargetId;
-        TimingPath.OutputWireColorSpace =
-            D3DDDI_OUTPUT_WIRE_COLOR_SPACE_G22_P709;
-        /* A removal record carries no timing, so its format is moot. */
-        if (TopologyEmpty)
-            TimingPath.SelectedWireFormat.Rgb = D3DKMDT_BITS_PER_COMPONENT_08;
-        else
-            TimingPath.SelectedWireFormat =
-                DxgkpSelectTimingWireFormat(VidPn, ActiveTargetId);
-        TimingPath.Input.VidPnPathUpdates =
-            TopologyEmpty
-                ? DXGK_PATH_UPDATE_REMOVED
-                : (Adapter->VidPnCommitted
-                    ? DXGK_PATH_UPDATE_MODIFIED
-                    : DXGK_PATH_UPDATE_ADDED);
-        TimingPath.Input.Active = TopologyEmpty ? 0 : 1;
-        TimingPath.Input.IgnoreConnectivity = 1;
-        /* Only when the path carries the very timing the driver described
-         * as inherited from firmware: asking it to preserve anything else
-         * would leave it guessing what "inherited" means. */
-        TimingPath.Input.PreserveInherited = InheritedTimingPinned ? 1 : 0;
+        /*
+         * One record per path, added or modified against what the miniport
+         * has timings for now, and a removal record for every output that
+         * had a timing and is not in this topology.
+         */
+        for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
+        {
+            DXGK_SET_TIMING_PATH_INFO *Timing = &TimingPaths[TimingCount++];
+            D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId = VidPn->Paths[i].VidPnTargetId;
+            BOOLEAN WasTimed = FALSE;
+
+            for (Old = 0; Old < Adapter->CommittedTargetCount; Old++)
+            {
+                if (Adapter->CommittedTargetIds[Old] == TargetId)
+                    WasTimed = TRUE;
+            }
+            Timing->VidPnTargetId = TargetId;
+            Timing->OutputWireColorSpace = D3DDDI_OUTPUT_WIRE_COLOR_SPACE_G22_P709;
+            Timing->SelectedWireFormat = DxgkpSelectTimingWireFormat(VidPn, TargetId);
+            Timing->Input.VidPnPathUpdates = WasTimed ? DXGK_PATH_UPDATE_MODIFIED : DXGK_PATH_UPDATE_ADDED;
+            Timing->Input.Active = 1;
+            Timing->Input.IgnoreConnectivity = 1;
+            /* Only when the path carries the very timing the driver
+             * described as inherited from firmware: asking it to preserve
+             * anything else would leave it guessing what "inherited" means. */
+            Timing->Input.PreserveInherited = (i == 0 && InheritedTimingPinned) ? 1 : 0;
+        }
+        for (Old = 0; Old < Adapter->CommittedTargetCount; Old++)
+        {
+            BOOLEAN Kept = FALSE;
+
+            for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
+            {
+                if (VidPn->Paths[i].VidPnTargetId == Adapter->CommittedTargetIds[Old])
+                    Kept = TRUE;
+            }
+            if (Kept)
+                continue;
+            TimingPaths[TimingCount].VidPnTargetId = Adapter->CommittedTargetIds[Old];
+            TimingPaths[TimingCount].OutputWireColorSpace = D3DDDI_OUTPUT_WIRE_COLOR_SPACE_G22_P709;
+            /* A removal record carries no timing, so its format is moot. */
+            TimingPaths[TimingCount].SelectedWireFormat.Rgb = D3DKMDT_BITS_PER_COMPONENT_08;
+            TimingPaths[TimingCount].Input.VidPnPathUpdates = DXGK_PATH_UPDATE_REMOVED;
+            TimingPaths[TimingCount].Input.Active = 0;
+            TimingPaths[TimingCount].Input.IgnoreConnectivity = 1;
+            TimingCount++;
+        }
+        /* The first commit of an empty topology still removes the target
+         * firmware left lit, as the single-path version did. */
+        if (TimingCount == 0)
+        {
+            TimingPaths[0].VidPnTargetId = ActiveTargetId;
+            TimingPaths[0].OutputWireColorSpace = D3DDDI_OUTPUT_WIRE_COLOR_SPACE_G22_P709;
+            TimingPaths[0].SelectedWireFormat.Rgb = D3DKMDT_BITS_PER_COMPONENT_08;
+            TimingPaths[0].Input.VidPnPathUpdates = DXGK_PATH_UPDATE_REMOVED;
+            TimingPaths[0].Input.IgnoreConnectivity = 1;
+            TimingCount = 1;
+        }
 
         TimingArgs.hFunctionalVidPn = (D3DKMDT_HVIDPN)VidPn;
         TimingArgs.SetFlags.Value = 0;
         TimingArgs.pResultsFlags = &TimingResults;
-        TimingArgs.PathCount = 1;
-        TimingArgs.pSetTimingPathInfo = &TimingPath;
+        TimingArgs.PathCount = TimingCount;
+        TimingArgs.pSetTimingPathInfo = TimingPaths;
 
         DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: calling "
-                      "DxgkDdiSetTimingsFromVidPn (hVidPn=%p update=%u "
-                      "active=%u)\n",
-                      TimingArgs.hFunctionalVidPn,
-                      (UINT)TimingPath.Input.VidPnPathUpdates,
-                      TimingPath.Input.Active);
+                      "DxgkDdiSetTimingsFromVidPn (hVidPn=%p records=%lu)\n",
+                      TimingArgs.hFunctionalVidPn, TimingCount);
         if (!DxgkAcquireKmdCall(Adapter))
         {
             Status = STATUS_DELETE_PENDING;
@@ -1703,17 +1939,23 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
             MiniportModeSetFailed = TRUE;
             goto Cleanup;
         }
-        if ((TimingResults.Value & ~1UL) != 0 ||
-            (TimingPath.OutputFlags & ~1UL) != 0)
+        for (Old = 0; Old < TimingCount; Old++)
+        {
+            if ((TimingPaths[Old].OutputFlags & ~1UL) != 0)
+                break;
+        }
+        if ((TimingResults.Value & ~1UL) != 0 || Old != TimingCount)
         {
             DXGKRNL_ERR("DxgkpCommitVidPnToMiniport: miniport returned "
-                        "reserved timing result bits (results=0x%08X "
-                        "path=0x%08X)\n",
-                        TimingResults.Value,
-                        TimingPath.OutputFlags);
+                        "reserved timing result bits (results=0x%08X)\n",
+                        TimingResults.Value);
             Status = STATUS_DATA_ERROR;
             goto Cleanup;
         }
+        /* The miniport now has timings for exactly these outputs. */
+        Adapter->CommittedTargetCount = 0;
+        for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
+            Adapter->CommittedTargetIds[Adapter->CommittedTargetCount++] = VidPn->Paths[i].VidPnTargetId;
         if (TimingResults.ConnectionStatusChanges)
         {
             /* The driver queued connection changes.  The rebuild worker
@@ -1723,27 +1965,30 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
             (VOID)DxgkVidPnQueueHotPlugRebuild(Adapter);
         }
 
-        if (!TopologyEmpty &&
-            TimingPath.TargetState.ConnectionStatus == LinkConfigurationFailed)
         {
-            DxgkpRequestLinkRetrain(Adapter, ActiveTargetId);
+            BOOLEAN AnyLinkFailed = FALSE;
 
-            /* A timing the caller asked for by name cannot be delivered, so
-             * fail and let it restore the previous mode.  Any other commit --
-             * at start, on hot-plug, as a recommit -- is kept, and the retry
-             * finds a timing the link can carry; failing the initial commit
-             * would abandon the adapter start. */
-            if (RequestedTarget != NULL)
+            for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
             {
-                MiniportModeSetFailed = TRUE;
-                Status = STATUS_GRAPHICS_MODE_NOT_IN_MODESET;
-                goto Cleanup;
+                if (TimingPaths[i].TargetState.ConnectionStatus != LinkConfigurationFailed)
+                    continue;
+                AnyLinkFailed = TRUE;
+                DxgkpRequestLinkRetrain(Adapter, TimingPaths[i].VidPnTargetId);
+                /* A timing the caller asked for by name cannot be delivered,
+                 * so fail and let it restore the previous mode.  Any other
+                 * commit -- at start, on hot-plug, as a recommit -- is kept,
+                 * and the retry finds a timing the link can carry; failing
+                 * the initial commit would abandon the adapter start. */
+                if (i == 0 && RequestedTarget != NULL)
+                {
+                    MiniportModeSetFailed = TRUE;
+                    Status = STATUS_GRAPHICS_MODE_NOT_IN_MODESET;
+                    goto Cleanup;
+                }
             }
-        }
-        else if (!TopologyEmpty)
-        {
-            /* The link came up; a later failure starts a fresh count. */
-            InterlockedExchange(&Adapter->LinkRetrainAttempts, 0);
+            /* Every link came up; a later failure starts a fresh count. */
+            if (!TopologyEmpty && !AnyLinkFailed)
+                InterlockedExchange(&Adapter->LinkRetrainAttempts, 0);
         }
     }
     else if (!ForceDodPresentOnlyPath &&
@@ -1753,6 +1998,12 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
         RtlZeroMemory(&CommitArgs, sizeof(CommitArgs));
         CommitArgs.hFunctionalVidPn = (D3DKMDT_HVIDPN)VidPn;
         CommitArgs.AffectedVidPnSourceId = ActiveSourceId;
+        /* A topology over several sources changes all of them at once. */
+        for (i = 1; !TopologyEmpty && i < VidPn->NumPaths; i++)
+        {
+            if (VidPn->Paths[i].VidPnSourceId != ActiveSourceId)
+                CommitArgs.AffectedVidPnSourceId = D3DDDI_ID_ALL;
+        }
         CommitArgs.MonitorConnectivityChecks = D3DKMDT_MCC_IGNORE;
         CommitArgs.hPrimaryAllocation = NULL;
         CommitArgs.Flags.PathPowerTransition = 0;
@@ -1779,6 +2030,9 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
             MiniportModeSetFailed = TRUE;
             goto Cleanup;
         }
+        Adapter->CommittedTargetCount = 0;
+        for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
+            Adapter->CommittedTargetIds[Adapter->CommittedTargetCount++] = VidPn->Paths[i].VidPnTargetId;
         Status = STATUS_SUCCESS;
     }
     else
@@ -1815,26 +2069,42 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
     {
         DXGKARG_SETVIDPNSOURCEVISIBILITY VisArgs;
         NTSTATUS VisibilityStatus;
-        RtlZeroMemory(&VisArgs, sizeof(VisArgs));
-        VisArgs.VidPnSourceId = ActiveSourceId;
-        VisArgs.Visible = TopologyEmpty ? FALSE : TRUE;
+        SIZE_T PathIndex;
 
-        if (DxgkAcquireKmdCall(Adapter))
+        /* Every source the topology drives, once. */
+        for (PathIndex = 0; PathIndex < max(VidPn->NumPaths, (SIZE_T)1); PathIndex++)
         {
-            DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: calling SetVidPnSourceVisibility\n");
+            SIZE_T Other;
+
+            if (!TopologyEmpty)
+            {
+                for (Other = 0; Other < PathIndex; Other++)
+                {
+                    if (VidPn->Paths[Other].VidPnSourceId == VidPn->Paths[PathIndex].VidPnSourceId)
+                        break;
+                }
+                if (Other != PathIndex)
+                    continue;
+            }
+            RtlZeroMemory(&VisArgs, sizeof(VisArgs));
+            VisArgs.VidPnSourceId = TopologyEmpty ? ActiveSourceId : VidPn->Paths[PathIndex].VidPnSourceId;
+            VisArgs.Visible = TopologyEmpty ? FALSE : TRUE;
+            if (!DxgkAcquireKmdCall(Adapter))
+                break;
+            DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: calling SetVidPnSourceVisibility(%u)\n",
+                          VisArgs.VidPnSourceId);
             VisibilityStatus = DXGK_CB(Adapter, DxgkDdiSetVidPnSourceVisibility)(Adapter->MiniportDeviceContext, &VisArgs);
             DxgkReleaseKmdCall(Adapter);
-            DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: SetVidPnSourceVisibility returned "
-                          "0x%08lX\n", VisibilityStatus);
-
             if (!NT_SUCCESS(VisibilityStatus))
             {
                 /* CommitVidPn already made the topology functional.  Visibility
                  * is a separate best-effort state transition and cannot turn a
                  * completed hardware commit into an uncommitted transaction. */
-                DXGKRNL_WARN("DxgkpCommitVidPnToMiniport: SetVisibility failed 0x%08lX\n",
-                             VisibilityStatus);
+                DXGKRNL_WARN("DxgkpCommitVidPnToMiniport: SetVisibility(%u) failed 0x%08lX\n",
+                             VisArgs.VidPnSourceId, VisibilityStatus);
             }
+            if (TopologyEmpty)
+                break;
         }
     }
 
@@ -1842,9 +2112,9 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
     Result->CommittedHeight = NewCommittedHeight;
     Result->VidPnCommitted = TRUE;
 
-    /* The monitor on the committed target may be a different one. */
-    if (!TopologyEmpty)
-        DxgkpReportTargetColorimetry(Adapter, ActiveTargetId);
+    /* The monitor on each committed target may be a different one. */
+    for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
+        DxgkpReportTargetColorimetry(Adapter, VidPn->Paths[i].VidPnTargetId);
 
     if (TopologyEmpty && !Adapter->MiniportContext->IsDisplayOnlyDriver)
     {

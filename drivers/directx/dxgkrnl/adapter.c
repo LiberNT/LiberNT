@@ -12686,6 +12686,7 @@ DxgkpDestroyAdapterVidPn(
     DxgkVidPnPublishVsyncTargetMap(Adapter, NULL);
     Adapter->CommittedWidth = 0;
     Adapter->CommittedHeight = 0;
+    Adapter->CommittedTargetCount = 0;
     KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
     if (VidPn != NULL)
         DxgkVidPnDestroy(VidPn);
@@ -13817,6 +13818,8 @@ DxgkAdapterStart(
         InterlockedExchange(&Adapter->LinkRetrainPending, 0);
         InterlockedExchange(&Adapter->LinkConfiguringSources, 0);
         Adapter->ReportedColorimetryValid = FALSE;
+        /* A started miniport holds no timings yet. */
+        Adapter->CommittedTargetCount = 0;
         Status = DxgkVidPnCreateForAdapter(Adapter, &hVidPn);
         VidPnUs = DxgkpTraceElapsedUs(StepStart100ns);
         if (NT_SUCCESS(Status))

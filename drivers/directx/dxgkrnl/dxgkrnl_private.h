@@ -599,6 +599,8 @@ typedef struct _DXGKRNL_POWER_COMPONENT
  * finds valid memory and is turned away by Rundown.
  * ====================================================================== */
 /* VidPN sources whose gamma is tracked (matches DXGKP_MAX_SOURCES). */
+/* Paths one commit can time (DXGKP_MAX_PATHS). */
+#define DXGKP_MAX_COMMITTED_TARGETS 16
 /* Swizzling ranges arbitrated per adapter; a miniport may report more. */
 #define DXGKP_MAX_SWIZZLING_RANGES 32
 /* MPO return info names a failing plane in 4 bits: at most 16 layers. */
@@ -1268,6 +1270,15 @@ struct _DXGKRNL_ADAPTER
      * layer bit and its present id; the source's v-sync worker calls
      * DxgkDdiPostMultiPlaneOverlayPresent at PASSIVE_LEVEL.
      */
+    /*
+     * Targets the miniport currently has timings for (the paths of the last
+     * successful SetTimingsFromVidPn/CommitVidPn).  A later commit reports
+     * each as modified or removed, and new ones as added.  Written by the
+     * commit under the KMD transaction.
+     */
+    D3DDDI_VIDEO_PRESENT_TARGET_ID CommittedTargetIds[DXGKP_MAX_COMMITTED_TARGETS];
+    ULONG                       CommittedTargetCount;
+
     volatile LONG               MpoPostPresentPending;      /* sources, for the DPC */
     volatile LONG               MpoPostPresentLayers[32];
     volatile LONG               MpoPostPresentTarget[32];
