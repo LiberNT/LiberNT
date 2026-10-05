@@ -157,6 +157,25 @@ typedef struct _DXGKRNL_SEGMENT
     /* TRUE while the ranges above are blocked. */
     BOOLEAN             UEFIFrameBufferRangesBlocked;
 
+    /*
+     * ---- CPU host aperture (DXGK_SEGMENTFLAGS.SupportsCpuHostAperture) ----
+     *
+     * A memory segment the CPU cannot address directly is reached through a
+     * window of HostAperturePages pages at HostApertureBase.  An allocation
+     * the CPU must see gets a run of window pages, the miniport is told which
+     * segment pages they show (DxgkDdiMapCpuHostAperture), and the run is
+     * mapped for the CPU; it lasts as long as the placement.  Pages are the
+     * segment's page size.  HostApertureLock (a leaf lock, PASSIVE_LEVEL)
+     * protects HostApertureMap and serializes the map/unmap DDIs.
+     */
+    BOOLEAN             HostAperture;
+    PHYSICAL_ADDRESS    HostApertureBase;
+    ULONG               HostAperturePages;
+    ULONG               HostAperturePageSize;
+    RTL_BITMAP          HostApertureMap;
+    PULONG              HostApertureMapBuffer;
+    KMUTEX              HostApertureLock;
+
 } DXGKRNL_SEGMENT, *PDXGKRNL_SEGMENT;
 
 typedef struct _DXGKVMM_RESOURCE
@@ -487,6 +506,12 @@ typedef struct _DXGKVMM_ALLOCATION
     /* Allocation-private driver data used by QueryResourceInfo/OpenResource. */
     PVOID               PrivateDriverData;
     UINT                PrivateDriverDataSize;
+
+    /* Host-aperture run giving the CPU this placement (HostAperturePageCount
+     * zero when none); HostApertureVa is its kernel mapping. */
+    ULONG               HostApertureFirstPage;
+    ULONG               HostAperturePageCount;
+    PVOID               HostApertureVa;
 
     /* MDL backing an aperture attachment, when active. */
     PMDL                ApertureMdl;
