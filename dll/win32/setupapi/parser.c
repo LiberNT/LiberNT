@@ -1231,15 +1231,35 @@ PARSER_GetInfClassW(
     OUT PDWORD RequiredSize OPTIONAL)
 {
     DWORD requiredSize;
-    WCHAR guidW[MAX_GUID_STRING_LEN + 1];
+    WCHAR guidW[MAX_PATH];
+    INFCONTEXT Context;
+    BOOL HaveGuid;
+    DWORD Length;
     BOOL ret = FALSE;
 
     /* Read class Guid */
-    if (!SetupGetLineTextW(NULL, hInf, Version, ClassGUID, guidW, sizeof(guidW), NULL))
-        goto cleanup;
-    guidW[37] = '\0'; /* Replace the } by a NULL character */
-    if (UuidFromStringW(&guidW[1], ClassGuid) != RPC_S_OK)
-        goto cleanup;
+    HaveGuid = SetupFindFirstLineW(hInf, Version, ClassGUID, &Context);
+    if (HaveGuid)
+    {
+        if (!SetupGetStringFieldW(&Context, 1, guidW, sizeof(guidW) / sizeof(guidW[0]), NULL))
+            goto cleanup;
+        Length = strlenW(guidW);
+        if (Length < 2)
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            goto cleanup;
+        }
+        guidW[Length - 1] = UNICODE_NULL;
+        if (UuidFromStringW(&guidW[1], ClassGuid) != RPC_S_OK)
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            goto cleanup;
+        }
+    }
+    else
+    {
+        *ClassGuid = GUID_NULL;
+    }
 
     /* Read class name */
     ret = SetupGetLineTextW(NULL, hInf, Version, Class, ClassName, ClassNameSize, &requiredSize);
@@ -1251,7 +1271,12 @@ PARSER_GetInfClassW(
         ret = FALSE;
         goto cleanup;
     }
-    if (!ret)
+    if (ret)
+    {
+        if (RequiredSize)
+            *RequiredSize = requiredSize;
+    }
+    else
     {
         if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
         {
@@ -1259,7 +1284,16 @@ PARSER_GetInfClassW(
                 *RequiredSize = requiredSize;
             goto cleanup;
         }
-        else if (!SetupDiClassNameFromGuidW(ClassGuid, ClassName, ClassNameSize, &requiredSize))
+        else if (!HaveGuid)
+        {
+            goto cleanup;
+        }
+        else if (SetupDiClassNameFromGuidW(ClassGuid, ClassName, ClassNameSize, &requiredSize))
+        {
+            if (RequiredSize)
+                *RequiredSize = requiredSize;
+        }
+        else
         {
             if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
             {
@@ -2417,7 +2451,7 @@ SetupDiGetINFClassW(
     TRACE("%s %p %p %ld %p\n", debugstr_w(InfName), ClassGuid,
         ClassName, ClassNameSize, RequiredSize);
 
-    if (!InfName || !ClassGuid || !ClassName || ClassNameSize == 0)
+    if (!InfName)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
@@ -2426,7 +2460,19 @@ SetupDiGetINFClassW(
     /* Open .inf file */
     hInf = SetupOpenInfFileW(InfName, NULL, INF_STYLE_WIN4, NULL);
     if (hInf == INVALID_HANDLE_VALUE)
+    {
+        if (GetLastError() == ERROR_PATH_NOT_FOUND)
+            SetLastError(ERROR_FILE_NOT_FOUND);
+        else if (GetLastError() != ERROR_FILE_NOT_FOUND && (!ClassGuid || !ClassName || ClassNameSize == 0))
+            SetLastError(ERROR_INVALID_PARAMETER);
         goto cleanup;
+    }
+
+    if (!ClassGuid || !ClassName || ClassNameSize == 0)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        goto cleanup;
+    }
 
     ret = PARSER_GetInfClassW(hInf, ClassGuid, ClassName, ClassNameSize, RequiredSize);
 
