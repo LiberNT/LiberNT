@@ -1666,6 +1666,75 @@ DxgkVidPnEnsurePinnedSourceMode(
 }
 
 /* ========================================================================
+ * Pending-object lifetime (see DXGKP_PENDING_OBJECT in vidpn.h)
+ *
+ * These follow the VidPN's existing access model: the interface functions
+ * that reach them run at PASSIVE_LEVEL, serialised per VidPN by the caller.
+ * ====================================================================== */
+
+static PVOID
+DxgkpPendingCreate(
+    _In_ PDXGKP_VIDPN       VidPn,
+    _In_ DXGKP_PENDING_KIND Kind)
+{
+    PDXGKP_PENDING_OBJECT Object;
+
+    Object = (PDXGKP_PENDING_OBJECT)ExAllocatePoolWithTag(
+        NonPagedPool, sizeof(*Object), TAG_DXGK_VIDPN);
+    if (Object == NULL)
+        return NULL;
+
+    RtlZeroMemory(Object, sizeof(*Object));
+    Object->Kind = Kind;
+    InsertTailList(&VidPn->PendingObjects, &Object->Link);
+    return &Object->u;
+}
+
+/*
+ * Frees the pending object the miniport knows as Pointer, if it is one.  A
+ * pointer that is not a pending object of this kind -- such as a mode the
+ * miniport acquired from a set -- is left alone, and the caller succeeds as
+ * before: only objects this VidPN created have a lifetime to end.
+ */
+static VOID
+DxgkpPendingConsume(
+    _In_ PDXGKP_VIDPN       VidPn,
+    _In_ CONST VOID        *Pointer,
+    _In_ DXGKP_PENDING_KIND Kind)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = VidPn->PendingObjects.Flink;
+         Entry != &VidPn->PendingObjects;
+         Entry = Entry->Flink)
+    {
+        PDXGKP_PENDING_OBJECT Object =
+            CONTAINING_RECORD(Entry, DXGKP_PENDING_OBJECT, Link);
+
+        if ((CONST VOID *)&Object->u == Pointer && Object->Kind == Kind)
+        {
+            RemoveEntryList(&Object->Link);
+            ExFreePoolWithTag(Object, TAG_DXGK_VIDPN);
+            return;
+        }
+    }
+}
+
+static VOID
+DxgkpPendingDrain(
+    _In_ PDXGKP_VIDPN VidPn)
+{
+    while (!IsListEmpty(&VidPn->PendingObjects))
+    {
+        PLIST_ENTRY Entry = RemoveHeadList(&VidPn->PendingObjects);
+
+        ExFreePoolWithTag(
+            CONTAINING_RECORD(Entry, DXGKP_PENDING_OBJECT, Link),
+            TAG_DXGK_VIDPN);
+    }
+}
+
+/* ========================================================================
  * VidPN object lifecycle
  * ====================================================================== */
 
@@ -1697,6 +1766,7 @@ DxgkVidPnCreateForAdapter(
     }
 
     RtlZeroMemory(VidPn, sizeof(*VidPn));
+    InitializeListHead(&VidPn->PendingObjects);
     VidPn->Signature = DXGKP_VIDPN_SIGNATURE;
     VidPn->RefCount  = 1;
     VidPn->Adapter   = Adapter;
@@ -1824,6 +1894,7 @@ Fail:
             VidPn->MonitorModeSets[i] = NULL;
         }
     }
+    DxgkpPendingDrain(VidPn);
     ExFreePoolWithTag(VidPn, TAG_DXGK_VIDPN);
     return STATUS_INSUFFICIENT_RESOURCES;
 }
@@ -1853,6 +1924,7 @@ DxgkVidPnClone(
         return STATUS_INSUFFICIENT_RESOURCES;
 
     RtlZeroMemory(Clone, sizeof(*Clone));
+    InitializeListHead(&Clone->PendingObjects);
     Clone->Signature  = DXGKP_VIDPN_SIGNATURE;
     Clone->RefCount   = 1;
     Clone->Adapter    = Source->Adapter;
@@ -1932,6 +2004,9 @@ DxgkVidPnDestroy(
     DXGKRNL_TRACE("DxgkVidPnDestroy: freeing VidPN %p\n", VidPn);
 
     VidPn->Signature = 0;
+
+    /* Objects the miniport created but never added or released. */
+    DxgkpPendingDrain(VidPn);
 
     for (i = 0; i < DXGKP_MAX_SOURCES; i++)
     {
@@ -3448,7 +3523,6 @@ VidPn_CreateNewSourceModeSet(
     if (ModeSet == NULL)
         return STATUS_NO_MEMORY;
     ModeSet->References = 1;
-    VidPn->NewSourceModeValid = FALSE;
 
     *phVidPnSourceModeSet          = (D3DKMDT_HVIDPNSOURCEMODESET)ModeSet;
     *ppVidPnSourceModeSetInterface = &g_VidPnSourceModeSetInterface;
@@ -3633,7 +3707,6 @@ VidPn_CreateNewTargetModeSet(
     if (ModeSet == NULL)
         return STATUS_NO_MEMORY;
     ModeSet->References = 1;
-    VidPn->NewTargetModeValid = FALSE;
 
     *phVidPnTargetModeSet          = (D3DKMDT_HVIDPNTARGETMODESET)ModeSet;
     *ppVidPnTargetModeSetInterface = &g_VidPnTargetModeSetInterface;
@@ -3919,8 +3992,10 @@ VidPnTopology_ReleasePathInfo(
     _In_ D3DKMDT_HVIDPNTOPOLOGY                hVidPnTopology,
     _In_ CONST D3DKMDT_VIDPN_PRESENT_PATH*     pVidPnPresentPathInfo)
 {
-    UNREFERENCED_PARAMETER(hVidPnTopology);
-    UNREFERENCED_PARAMETER(pVidPnPresentPathInfo);
+    PDXGKP_VIDPN VidPn = DxgkpTopologyFromHandle(hVidPnTopology);
+
+    if (VidPn != NULL && pVidPnPresentPathInfo != NULL)
+        DxgkpPendingConsume(VidPn, pVidPnPresentPathInfo, DxgkpPendingPath);
     return STATUS_SUCCESS;
 }
 
@@ -3940,9 +4015,13 @@ VidPnTopology_CreateNewPathInfo(
     if (VidPn == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    RtlZeroMemory(&VidPn->NewPath, sizeof(VidPn->NewPath));
-    VidPn->NewPathValid = TRUE;
-    *ppNewVidPnPresentPathInfo = &VidPn->NewPath;
+    {
+        D3DKMDT_VIDPN_PRESENT_PATH *Path =
+            DxgkpPendingCreate(VidPn, DxgkpPendingPath);
+        if (Path == NULL)
+            return STATUS_NO_MEMORY;
+        *ppNewVidPnPresentPathInfo = Path;
+    }
 
     return STATUS_SUCCESS;
 }
@@ -3995,7 +4074,9 @@ VidPnTopology_AddPath(
     RtlCopyMemory(&VidPn->Paths[VidPn->NumPaths], pVidPnPresentPath,
                    sizeof(D3DKMDT_VIDPN_PRESENT_PATH));
     VidPn->NumPaths++;
-    VidPn->NewPathValid = FALSE;
+
+    /* The topology holds its own copy now, so a created path is consumed. */
+    DxgkpPendingConsume(VidPn, pVidPnPresentPath, DxgkpPendingPath);
 
     DXGKRNL_TRACE("VidPnTopology_AddPath: added path src=%u tgt=%u (now %Iu paths)\n",
                   pVidPnPresentPath->VidPnSourceId,
@@ -4169,8 +4250,12 @@ VidPnSourceModeSet_ReleaseModeInfo(
     _In_ D3DKMDT_HVIDPNSOURCEMODESET                   hVidPnSourceModeSet,
     _In_ CONST D3DKMDT_VIDPN_SOURCE_MODE*              pVidPnSourceModeInfo)
 {
-    UNREFERENCED_PARAMETER(hVidPnSourceModeSet);
-    UNREFERENCED_PARAMETER(pVidPnSourceModeInfo);
+    PDXGKP_VIDPN_SOURCE_MODESET ModeSet =
+        DxgkpSourceModeSetFromHandle(hVidPnSourceModeSet);
+
+    if (ModeSet != NULL && ModeSet->Owner != NULL && pVidPnSourceModeInfo != NULL)
+        DxgkpPendingConsume(ModeSet->Owner, pVidPnSourceModeInfo,
+                            DxgkpPendingSourceMode);
     return STATUS_SUCCESS;
 }
 
@@ -4190,11 +4275,14 @@ VidPnSourceModeSet_CreateNewModeInfo(
     if (ModeSet == NULL || ModeSet->Owner == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    RtlZeroMemory(&ModeSet->Owner->NewSourceMode, sizeof(D3DKMDT_VIDPN_SOURCE_MODE));
-    ModeSet->Owner->NewSourceMode.Id = ModeSet->NextModeId++;
-    ModeSet->Owner->NewSourceModeValid = TRUE;
-
-    *ppNewVidPnSourceModeInfo = &ModeSet->Owner->NewSourceMode;
+    {
+        D3DKMDT_VIDPN_SOURCE_MODE *Mode =
+            DxgkpPendingCreate(ModeSet->Owner, DxgkpPendingSourceMode);
+        if (Mode == NULL)
+            return STATUS_NO_MEMORY;
+        Mode->Id = ModeSet->NextModeId++;
+        *ppNewVidPnSourceModeInfo = Mode;
+    }
     return STATUS_SUCCESS;
 }
 
@@ -4221,8 +4309,6 @@ VidPnSourceModeSet_AddMode(
     {
         if (ModeSet->Modes[i].Id == NewMode.Id)
         {
-            if (ModeSet->Owner)
-                ModeSet->Owner->NewSourceModeValid = FALSE;
             return DxgkpAreEquivalentSourceModes(&ModeSet->Modes[i], &NewMode) ?
                    STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET :
                    STATUS_GRAPHICS_MODE_ID_MUST_BE_UNIQUE;
@@ -4233,8 +4319,6 @@ VidPnSourceModeSet_AddMode(
     {
         if (DxgkpAreEquivalentSourceModes(&ModeSet->Modes[i], &NewMode))
         {
-            if (ModeSet->Owner)
-                ModeSet->Owner->NewSourceModeValid = FALSE;
             return STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET;
         }
     }
@@ -4247,8 +4331,11 @@ VidPnSourceModeSet_AddMode(
         ModeSet->NextModeId = NewMode.Id + 1;
     ModeSet->NumModes++;
 
+    /* The set holds its own copy now, so a created object is consumed.  On
+     * failure it stays the miniport's, to release through ReleaseModeInfo. */
     if (ModeSet->Owner)
-        ModeSet->Owner->NewSourceModeValid = FALSE;
+        DxgkpPendingConsume(ModeSet->Owner, pVidPnSourceModeInfo,
+                            DxgkpPendingSourceMode);
 
     return STATUS_SUCCESS;
 }
@@ -4410,8 +4497,12 @@ VidPnTargetModeSet_ReleaseModeInfo(
     _In_ D3DKMDT_HVIDPNTARGETMODESET                   hVidPnTargetModeSet,
     _In_ CONST D3DKMDT_VIDPN_TARGET_MODE*              pVidPnTargetModeInfo)
 {
-    UNREFERENCED_PARAMETER(hVidPnTargetModeSet);
-    UNREFERENCED_PARAMETER(pVidPnTargetModeInfo);
+    PDXGKP_VIDPN_TARGET_MODESET ModeSet =
+        DxgkpTargetModeSetFromHandle(hVidPnTargetModeSet);
+
+    if (ModeSet != NULL && ModeSet->Owner != NULL && pVidPnTargetModeInfo != NULL)
+        DxgkpPendingConsume(ModeSet->Owner, pVidPnTargetModeInfo,
+                            DxgkpPendingTargetMode);
     return STATUS_SUCCESS;
 }
 
@@ -4431,11 +4522,14 @@ VidPnTargetModeSet_CreateNewModeInfo(
     if (ModeSet == NULL || ModeSet->Owner == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    RtlZeroMemory(&ModeSet->Owner->NewTargetMode, sizeof(D3DKMDT_VIDPN_TARGET_MODE));
-    ModeSet->Owner->NewTargetMode.Id = ModeSet->NextModeId++;
-    ModeSet->Owner->NewTargetModeValid = TRUE;
-
-    *ppNewVidPnTargetModeInfo = &ModeSet->Owner->NewTargetMode;
+    {
+        D3DKMDT_VIDPN_TARGET_MODE *Mode =
+            DxgkpPendingCreate(ModeSet->Owner, DxgkpPendingTargetMode);
+        if (Mode == NULL)
+            return STATUS_NO_MEMORY;
+        Mode->Id = ModeSet->NextModeId++;
+        *ppNewVidPnTargetModeInfo = Mode;
+    }
     return STATUS_SUCCESS;
 }
 
@@ -4462,8 +4556,6 @@ VidPnTargetModeSet_AddMode(
     {
         if (ModeSet->Modes[i].Id == NewMode.Id)
         {
-            if (ModeSet->Owner)
-                ModeSet->Owner->NewTargetModeValid = FALSE;
             return DxgkpAreSameTargetModeValues(&ModeSet->Modes[i], &NewMode) ?
                    STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET :
                    STATUS_GRAPHICS_MODE_ID_MUST_BE_UNIQUE;
@@ -4474,8 +4566,6 @@ VidPnTargetModeSet_AddMode(
     {
         if (DxgkpAreSameTargetModeValues(&ModeSet->Modes[i], &NewMode))
         {
-            if (ModeSet->Owner)
-                ModeSet->Owner->NewTargetModeValid = FALSE;
             return STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET;
         }
     }
@@ -4488,8 +4578,11 @@ VidPnTargetModeSet_AddMode(
         ModeSet->NextModeId = NewMode.Id + 1;
     ModeSet->NumModes++;
 
+    /* The set holds its own copy now, so a created object is consumed.  On
+     * failure it stays the miniport's, to release through ReleaseModeInfo. */
     if (ModeSet->Owner)
-        ModeSet->Owner->NewTargetModeValid = FALSE;
+        DxgkpPendingConsume(ModeSet->Owner, pVidPnTargetModeInfo,
+                            DxgkpPendingTargetMode);
 
     return STATUS_SUCCESS;
 }
@@ -4658,14 +4751,17 @@ MonitorSourceModeSet_CreateNewModeInfo(
     *ppNewMonitorSourceModeInfo = NULL;
 
     ModeSet = DxgkpMonitorModeSetFromHandle(hMonitorSourceModeSet);
-    if (ModeSet == NULL)
+    if (ModeSet == NULL || ModeSet->Owner == NULL)
         return STATUS_INVALID_PARAMETER;
 
     {
-        static D3DKMDT_MONITOR_SOURCE_MODE s_ScratchMonitorMode;
-        RtlZeroMemory(&s_ScratchMonitorMode, sizeof(s_ScratchMonitorMode));
-        s_ScratchMonitorMode.Id = ModeSet->NextModeId;
-        *ppNewMonitorSourceModeInfo = &s_ScratchMonitorMode;
+        /* AddMode assigns the stored id, so this one is only a preview. */
+        D3DKMDT_MONITOR_SOURCE_MODE *Mode =
+            DxgkpPendingCreate(ModeSet->Owner, DxgkpPendingMonitorMode);
+        if (Mode == NULL)
+            return STATUS_NO_MEMORY;
+        Mode->Id = ModeSet->NextModeId;
+        *ppNewMonitorSourceModeInfo = Mode;
     }
 
     return STATUS_SUCCESS;
@@ -4704,6 +4800,12 @@ MonitorSourceModeSet_AddMode(
     ModeSet->NextModeId++;
     ModeSet->NumModes++;
 
+    /* The set holds its own copy now, so a created object is consumed.  On
+     * failure it stays the miniport's, to release through ReleaseModeInfo. */
+    if (ModeSet->Owner)
+        DxgkpPendingConsume(ModeSet->Owner, pMonitorSourceModeInfo,
+                            DxgkpPendingMonitorMode);
+
     return STATUS_SUCCESS;
 }
 
@@ -4712,8 +4814,12 @@ MonitorSourceModeSet_ReleaseModeInfo(
     _In_ D3DKMDT_HMONITORSOURCEMODESET               hMonitorSourceModeSet,
     _In_ CONST D3DKMDT_MONITOR_SOURCE_MODE*          pMonitorSourceModeInfo)
 {
-    UNREFERENCED_PARAMETER(hMonitorSourceModeSet);
-    UNREFERENCED_PARAMETER(pMonitorSourceModeInfo);
+    PDXGKP_MONITOR_SOURCE_MODESET ModeSet =
+        DxgkpMonitorModeSetFromHandle(hMonitorSourceModeSet);
+
+    if (ModeSet != NULL && ModeSet->Owner != NULL && pMonitorSourceModeInfo != NULL)
+        DxgkpPendingConsume(ModeSet->Owner, pMonitorSourceModeInfo,
+                            DxgkpPendingMonitorMode);
     return STATUS_SUCCESS;
 }
 

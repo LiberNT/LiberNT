@@ -222,6 +222,40 @@ NTSTATUS NTAPI DxgkpSetVidPnSourceOwnerWithFlagsAndAccessMode(_In_ D3DKMT_SETVID
  * ====================================================================== */
 #define DXGKP_VIDPN_SIGNATURE  'NpDV'   /* "VDpN" */
 
+/* ========================================================================
+ * DXGKP_PENDING_OBJECT - an object a miniport created but has not handed back
+ *
+ * pfnCreateNewModeInfo and pfnCreateNewPathInfo each return a fresh object
+ * the miniport fills in and then either adds to its set (which consumes it)
+ * or releases.  Every creation gets its own allocation: handing out one
+ * shared buffer let a second creation overwrite the first while the miniport
+ * still held it, and a static buffer did the same across adapters.
+ *
+ * The miniport only ever sees &Object->u, so that address is the key used to
+ * find the object again.  Outstanding objects are freed when the owning VidPN
+ * is destroyed, so a miniport that never releases one does not leak it.
+ * ====================================================================== */
+typedef enum _DXGKP_PENDING_KIND
+{
+    DxgkpPendingSourceMode = 1,
+    DxgkpPendingTargetMode,
+    DxgkpPendingMonitorMode,
+    DxgkpPendingPath
+} DXGKP_PENDING_KIND;
+
+typedef struct _DXGKP_PENDING_OBJECT
+{
+    LIST_ENTRY          Link;
+    DXGKP_PENDING_KIND  Kind;
+    union
+    {
+        D3DKMDT_VIDPN_SOURCE_MODE   SourceMode;
+        D3DKMDT_VIDPN_TARGET_MODE   TargetMode;
+        D3DKMDT_MONITOR_SOURCE_MODE MonitorMode;
+        D3DKMDT_VIDPN_PRESENT_PATH  Path;
+    } u;
+} DXGKP_PENDING_OBJECT, *PDXGKP_PENDING_OBJECT;
+
 typedef struct _DXGKP_VIDPN
 {
     /* Signature for handle validation. */
@@ -265,19 +299,10 @@ typedef struct _DXGKP_VIDPN
     SIZE_T                          NumMultisamplingMethods[DXGKP_MAX_SOURCES];
     BOOLEAN                         MultisamplingMethodsAssigned[DXGKP_MAX_SOURCES];
 
-    /* ---- Scratch storage for newly created objects ---- */
-
-    D3DKMDT_VIDPN_PRESENT_PATH      NewPath;
-    BOOLEAN                         NewPathValid;
-
-    D3DKMDT_VIDPN_SOURCE_MODE       NewSourceMode;
-    BOOLEAN                         NewSourceModeValid;
-
-    D3DKMDT_VIDPN_TARGET_MODE       NewTargetMode;
-    BOOLEAN                         NewTargetModeValid;
-
-    D3DKMDT_MONITOR_SOURCE_MODE     NewMonitorMode;
-    BOOLEAN                         NewMonitorModeValid;
+    /* ---- Objects created by the miniport and not yet handed back ---- */
+    /* DXGKP_PENDING_OBJECT entries, linked through Link.  Drained by
+     * DxgkVidPnDestroy. */
+    LIST_ENTRY                      PendingObjects;
 
     /* ---- Compatibility shim for single-source code paths ---- */
     /* These pointers reference SourceModeSets[0], TargetModeSets[0], and
