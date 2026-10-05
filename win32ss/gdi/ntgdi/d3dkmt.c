@@ -2069,21 +2069,219 @@ NtGdiDdDDIOutputDuplReleaseFrame(_In_ const struct _D3DKMT_OUTPUTDUPL_RELEASE_FR
     return STATUS_NOT_IMPLEMENTED;
 }
 
+/* ---- Multi-plane overlays ------------------------------------------------- */
+
+#define TAG_D3DKMT_MPO 'oMmD'
+/* D3DKMT_MULTIPLANE_OVERLAY_FLAG_STATIC_CHECK (WDDM 3.0): answered as an
+ * ordinary check, which is the stricter question. */
+#define D3DKMT_MPO_FLAG_STATIC_CHECK 0x4U
+
+static NTSTATUS
+D3dkmtWriteUser(
+    _Out_writes_bytes_(Size) VOID *Destination,
+    _In_reads_bytes_(Size) const VOID *Source,
+    _In_ SIZE_T Size)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    _SEH2_TRY
+    {
+        if (ExGetPreviousMode() != KernelMode)
+            ProbeForWrite(Destination, Size, 1);
+        RtlCopyMemory(Destination, Source, Size);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    return Status;
+}
+
+/*
+ * D3DKMT plane attributes as the kernel's overlay description.  FALSE for
+ * what the overlay path does not do: interlaced or stereo video, YCbCr flags
+ * (the first-generation attributes have no colour space), unknown flags.
+ */
+static BOOLEAN
+D3dkmtMpoFromAttributes(
+    _In_ const D3DKMT_MULTIPLANE_OVERLAY_ATTRIBUTES *Attributes,
+    _Out_ RXGK_PRESENT_OVERLAY *Overlay)
+{
+    UINT Flags = Attributes->Flags & ~D3DKMT_MPO_FLAG_STATIC_CHECK;
+
+    RtlZeroMemory(Overlay, sizeof(*Overlay));
+    if ((Flags & ~RXGK_PRESENT_OVERLAY_VALID_FLAGS) != 0 ||
+        Attributes->Blend > D3DKMT_MULTIPLANE_OVERLAY_BLEND_ALPHABLEND ||
+        Attributes->VideoFrameFormat != D3DKMT_MULIIPLANE_OVERLAY_VIDEO_FRAME_FORMAT_PROGRESSIVE ||
+        Attributes->YCbCrFlags != 0 ||
+        Attributes->StereoFormat != DXGKMT_MULTIPLANE_OVERLAY_STEREO_FORMAT_MONO ||
+        Attributes->StereoFlipMode != DXGKMT_MULTIPLANE_OVERLAY_STEREO_FLIP_NONE)
+    {
+        return FALSE;
+    }
+    Overlay->SrcRect = Attributes->SrcRect;
+    Overlay->DstRect = Attributes->DstRect;
+    Overlay->ClipRect = Attributes->ClipRect;
+    Overlay->Flags = Flags;
+    Overlay->Rotation = Attributes->Rotation;
+    Overlay->AlphaBlend = Attributes->Blend == D3DKMT_MULTIPLANE_OVERLAY_BLEND_ALPHABLEND;
+    Overlay->ColorSpace = D3DDDI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+    Overlay->StretchQuality = Attributes->StretchQuality;
+    return TRUE;
+}
+
+static RXGK_CHECKMPO_PACKET *
+D3dkmtAllocateMpoCheck(
+    _In_ D3DKMT_HANDLE hAdapter,
+    _In_ D3DKMT_HANDLE hDevice,
+    _In_ UINT PlaneCount,
+    _In_ UINT PostCompositionCount)
+{
+    RXGK_CHECKMPO_PACKET *Packet;
+    ULONG Size;
+
+    Size = sizeof(*Packet) + PlaneCount * sizeof(RXGK_CHECKMPO_PLANE) +
+           PostCompositionCount * sizeof(RXGK_CHECKMPO_POST_COMPOSITION);
+    Packet = ExAllocatePoolWithTag(PagedPool, Size, TAG_D3DKMT_MPO);
+    if (Packet == NULL)
+        return NULL;
+    RtlZeroMemory(Packet, Size);
+    Packet->Size = Size;
+    Packet->Version = RXGK_MPO_PACKET_VERSION_1;
+    Packet->hAdapter = hAdapter;
+    Packet->hDevice = hDevice;
+    Packet->PlaneCount = PlaneCount;
+    Packet->PostCompositionCount = PostCompositionCount;
+    return Packet;
+}
+
+/* Asks dxgkrnl and stores the answer in the caller's Supported and
+ * ReturnInfo, which every check structure keeps adjacent. */
+static NTSTATUS
+D3dkmtSendMpoCheck(
+    _Inout_ RXGK_CHECKMPO_PACKET *Packet,
+    _Out_ BOOL *UserSupported,
+    _Out_ UINT *UserReturnInfo)
+{
+    ULONG_PTR Information = 0;
+    BOOL Supported;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSendIoctlWithInformation(IOCTL_RXGK_CHECKMULTIPLANEOVERLAYSUPPORT,
+                                                Packet, Packet->Size,
+                                                Packet, Packet->Size,
+                                                &Information);
+    if (NT_SUCCESS(Status) && Information != sizeof(*Packet))
+        Status = STATUS_INFO_LENGTH_MISMATCH;
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Supported = Packet->Supported != 0;
+    Status = D3dkmtWriteUser(UserSupported, &Supported, sizeof(Supported));
+    if (NT_SUCCESS(Status))
+        Status = D3dkmtWriteUser(UserReturnInfo, &Packet->ReturnInfo, sizeof(Packet->ReturnInfo));
+    return Status;
+}
+
+/* The compositor's output and the overlay planes above it, as one flip. */
+typedef struct _D3DKMT_MPO_PRESENT
+{
+    D3DKMT_HANDLE hContext;
+    ULONG BroadcastContextCount;
+    D3DKMT_HANDLE BroadcastContext[D3DDDI_MAX_BROADCAST_CONTEXT];
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId;
+    UINT PresentCount;
+    BOOLEAN PresentCountValid;
+    BOOLEAN FlipDoNotWait;
+    BOOLEAN FlipRestart;
+    D3DDDI_FLIPINTERVAL_TYPE FlipInterval;
+    BOOLEAN HaveBase;
+    D3DKMT_HANDLE hBase;
+    RECT BaseSrcRect;
+    RECT BaseDstRect;
+    RXGK_PRESENT_OVERLAYS Overlays;
+} D3DKMT_MPO_PRESENT;
+
+static NTSTATUS
+D3dkmtMpoAddPlane(
+    _Inout_ D3DKMT_MPO_PRESENT *Request,
+    _In_ UINT LayerIndex,
+    _In_ D3DKMT_HANDLE hAllocation,
+    _In_ const RXGK_PRESENT_OVERLAY *Attributes)
+{
+    RXGK_PRESENT_OVERLAY *Overlay;
+
+    if (LayerIndex == 0)
+    {
+        if (Request->HaveBase)
+            return STATUS_INVALID_PARAMETER;
+        Request->HaveBase = TRUE;
+        Request->hBase = hAllocation;
+        Request->BaseSrcRect = Attributes->SrcRect;
+        Request->BaseDstRect = Attributes->DstRect;
+        return STATUS_SUCCESS;
+    }
+    if (Request->Overlays.OverlayCount == RXGK_PRESENT_MAX_OVERLAYS)
+        return STATUS_INVALID_PARAMETER;
+    Overlay = &Request->Overlays.Overlays[Request->Overlays.OverlayCount++];
+    *Overlay = *Attributes;
+    Overlay->hAllocation = hAllocation;
+    Overlay->LayerIndex = LayerIndex;
+    return STATUS_SUCCESS;
+}
+
 /*
  * The attached compositor presents its complete output with overlay planes
  * above it. The layer 0 plane is that output, flipped exactly like the
- * promoted Blt in NtGdiDdDDIPresent; the others are scanned out unscaled.
+ * promoted Blt in NtGdiDdDDIPresent; dxgkrnl asks the miniport whether it
+ * can show the others before the flip is queued.
  */
+static NTSTATUS
+D3dkmtMpoSubmit(
+    _In_ const D3DKMT_MPO_PRESENT *Request)
+{
+    D3DKMT_PRESENT Present;
+    HWND Window;
+
+    Window = IntCompositionGetGpuOutputWindow();
+    if (!Request->HaveBase || Request->Overlays.OverlayCount == 0 || Window == NULL ||
+        Request->VidPnSourceId != 0 ||
+        Request->BroadcastContextCount > D3DDDI_MAX_BROADCAST_CONTEXT ||
+        !IntCompositionIsGpuOutputPresent(Window, &Request->BaseSrcRect, &Request->BaseDstRect))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    RtlZeroMemory(&Present, sizeof(Present));
+    Present.hContext = Request->hContext;
+    Present.BroadcastContextCount = Request->BroadcastContextCount;
+    RtlCopyMemory(Present.BroadcastContext, Request->BroadcastContext,
+                  Request->BroadcastContextCount * sizeof(Present.BroadcastContext[0]));
+    Present.hWindow = Window;
+    Present.hSource = Request->hBase;
+    Present.SrcRect = Request->BaseSrcRect;
+    Present.DstRect = Request->BaseDstRect;
+    Present.FlipInterval = Request->FlipInterval;
+    Present.PresentCount = Request->PresentCount;
+    Present.Flags.Flip = 1;
+    Present.Flags.RestrictVidPnSource = 1;
+    Present.Flags.SrcRectValid = 1;
+    Present.Flags.DstRectValid = 1;
+    Present.Flags.PresentCountValid = Request->PresentCountValid;
+    Present.Flags.FlipDoNotWait = Request->FlipDoNotWait;
+    Present.Flags.FlipRestart = Request->FlipRestart;
+    Present.VidPnSourceId = 0;
+    return D3DKMTPresentWithOverlays(&Request->Overlays, &Present);
+}
+
 NTSTATUS
 APIENTRY
 NtGdiDdDDIPresentMultiPlaneOverlay(_In_ const struct _D3DKMT_PRESENT_MULTIPLANE_OVERLAY* unnamedParam1)
 {
     D3DKMT_PRESENT_MULTIPLANE_OVERLAY Captured;
     D3DKMT_MULTIPLANE_OVERLAY Planes[1 + RXGK_PRESENT_MAX_OVERLAYS];
-    const D3DKMT_MULTIPLANE_OVERLAY *Base = NULL;
-    RXGK_PRESENT_OVERLAYS Overlays;
-    D3DKMT_PRESENT Present;
-    HWND Window;
+    D3DKMT_MPO_PRESENT Request;
+    RXGK_PRESENT_OVERLAY Attributes;
     NTSTATUS Status = STATUS_SUCCESS;
     UINT Index;
 
@@ -2116,66 +2314,84 @@ NtGdiDdDDIPresentMultiPlaneOverlay(_In_ const struct _D3DKMT_PRESENT_MULTIPLANE_
     if (!NT_SUCCESS(Status))
         return Status;
 
-    RtlZeroMemory(&Overlays, sizeof(Overlays));
+    RtlZeroMemory(&Request, sizeof(Request));
     for (Index = 0; Index < Captured.PresentPlaneCount; ++Index)
     {
-        const D3DKMT_MULTIPLANE_OVERLAY *Plane = &Planes[Index];
-
-        if (!Plane->Enabled)
+        if (!Planes[Index].Enabled)
             continue;
-        if (Plane->LayerIndex == 0)
-        {
-            if (Base != NULL)
-                return STATUS_INVALID_PARAMETER;
-            Base = Plane;
-            continue;
-        }
-        if (Overlays.OverlayCount == RXGK_PRESENT_MAX_OVERLAYS)
-            return STATUS_INVALID_PARAMETER;
-        Overlays.Overlays[Overlays.OverlayCount].hAllocation = Plane->hAllocation;
-        Overlays.Overlays[Overlays.OverlayCount].LayerIndex = Plane->LayerIndex;
-        Overlays.Overlays[Overlays.OverlayCount].SrcRect = Plane->PlaneAttributes.SrcRect;
-        Overlays.Overlays[Overlays.OverlayCount].DstRect = Plane->PlaneAttributes.DstRect;
-        Overlays.OverlayCount++;
+        if (!D3dkmtMpoFromAttributes(&Planes[Index].PlaneAttributes, &Attributes))
+            return STATUS_NOT_SUPPORTED;
+        Status = D3dkmtMpoAddPlane(&Request, Planes[Index].LayerIndex,
+                                   Planes[Index].hAllocation, &Attributes);
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
-    Window = IntCompositionGetGpuOutputWindow();
-    if (Base == NULL || Overlays.OverlayCount == 0 || Window == NULL ||
-        Captured.VidPnSourceId != 0 || Captured.BroadcastContextCount > D3DDDI_MAX_BROADCAST_CONTEXT ||
-        !IntCompositionIsGpuOutputPresent(Window, &Base->PlaneAttributes.SrcRect,
-                                          &Base->PlaneAttributes.DstRect))
+    Request.hContext = Captured.hContext;
+    Request.BroadcastContextCount = Captured.BroadcastContextCount;
+    if (Captured.BroadcastContextCount <= D3DDDI_MAX_BROADCAST_CONTEXT)
     {
-        return STATUS_INVALID_PARAMETER;
+        RtlCopyMemory(Request.BroadcastContext, Captured.BroadcastContext,
+                      Captured.BroadcastContextCount * sizeof(Request.BroadcastContext[0]));
     }
-
-    RtlZeroMemory(&Present, sizeof(Present));
-    Present.hContext = Captured.hContext;
-    Present.BroadcastContextCount = Captured.BroadcastContextCount;
-    RtlCopyMemory(Present.BroadcastContext, Captured.BroadcastContext,
-                  Captured.BroadcastContextCount * sizeof(Present.BroadcastContext[0]));
-    Present.hWindow = Window;
-    Present.hSource = Base->hAllocation;
-    Present.SrcRect = Base->PlaneAttributes.SrcRect;
-    Present.DstRect = Base->PlaneAttributes.DstRect;
-    Present.FlipInterval = Captured.FlipInterval;
-    Present.PresentCount = Captured.PresentCount;
-    Present.Flags.Flip = 1;
-    Present.Flags.RestrictVidPnSource = 1;
-    Present.Flags.SrcRectValid = 1;
-    Present.Flags.DstRectValid = 1;
-    Present.Flags.PresentCountValid = Captured.Flags.PresentCountValid;
-    Present.Flags.FlipDoNotWait = Captured.Flags.FlipDoNotWait;
-    Present.Flags.FlipRestart = Captured.Flags.FlipRestart;
-    Present.VidPnSourceId = 0;
-    return D3DKMTPresentWithOverlays(&Overlays, &Present);
+    Request.VidPnSourceId = Captured.VidPnSourceId;
+    Request.PresentCount = Captured.PresentCount;
+    Request.PresentCountValid = Captured.Flags.PresentCountValid;
+    Request.FlipDoNotWait = Captured.Flags.FlipDoNotWait;
+    Request.FlipRestart = Captured.Flags.FlipRestart;
+    Request.FlipInterval = Captured.FlipInterval;
+    return D3dkmtMpoSubmit(&Request);
 }
 
+/*
+ * First-generation check: the planes are given bottom-up with no layer
+ * index, as DxgkDdiCheckMultiPlaneOverlaySupport takes them.  A plane whose
+ * attributes the overlay path cannot describe is sent without a resource,
+ * so dxgkrnl validates the rest and reports that plane as the failing one.
+ */
 NTSTATUS
 APIENTRY
 NtGdiDdDDICheckMultiPlaneOverlaySupport(_Inout_ struct _D3DKMT_CHECKMULTIPLANEOVERLAYSUPPORT* unnamedParam1)
 {
+#if (REACTOS_WDDM_TARGET_LEVEL >= 1300)
+    D3DKMT_CHECKMULTIPLANEOVERLAYSUPPORT Captured;
+    D3DKMT_CHECK_MULTIPLANE_OVERLAY_PLANE Plane;
+    RXGK_CHECKMPO_PACKET *Packet;
+    RXGK_CHECKMPO_PLANE *Planes;
+    NTSTATUS Status;
+    UINT Index;
+
+    Status = D3dkmtCaptureUserStructure(unnamedParam1, sizeof(Captured), &Captured);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Captured.PlaneCount == 0 || Captured.PlaneCount > RXGK_MPO_MAX_PLANES ||
+        Captured.pOverlayPlanes == NULL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Packet = D3dkmtAllocateMpoCheck(0, Captured.hDevice, Captured.PlaneCount, 0);
+    if (Packet == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Planes = (RXGK_CHECKMPO_PLANE *)(Packet + 1);
+    for (Index = 0; Index < Captured.PlaneCount; ++Index)
+    {
+        Status = D3dkmtCaptureUserStructure(&Captured.pOverlayPlanes[Index], sizeof(Plane), &Plane);
+        if (!NT_SUCCESS(Status))
+            goto Cleanup;
+        if (D3dkmtMpoFromAttributes(&Plane.PlaneAttributes, &Planes[Index].Plane))
+            Planes[Index].hResource = Plane.hResource;
+        Planes[Index].VidPnSourceId = Plane.VidPnSourceId;
+        Planes[Index].Plane.LayerIndex = Index;
+    }
+    Status = D3dkmtSendMpoCheck(Packet, &unnamedParam1->Supported,
+                                &unnamedParam1->ReturnInfo.Value);
+
+Cleanup:
+    ExFreePoolWithTag(Packet, TAG_D3DKMT_MPO);
+    return Status;
+#else
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    /* Win11 refuses the query on an adapter without MPO; not implementing it is honest, answering NOT_IMPLEMENTED is not. */
     return STATUS_INVALID_PARAMETER;
+#endif
 }
 
 /* ---- WDDM 2.x extended contract stubs (v2 keyed mutex / MPO / misc) ---- */
@@ -2263,8 +2479,39 @@ NTSTATUS
 APIENTRY
 NtGdiDdDDIGetMultiPlaneOverlayCaps(_Inout_ struct _D3DKMT_GET_MULTIPLANE_OVERLAY_CAPS* unnamedParam1)
 {
+#if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
+    D3DKMT_GET_MULTIPLANE_OVERLAY_CAPS Captured;
+    RXGK_GETMULTIPLANEOVERLAYCAPS_PACKET Packet;
+    ULONG_PTR Information = 0;
+    NTSTATUS Status;
+
+    Status = D3dkmtCaptureUserStructure(unnamedParam1, sizeof(Captured), &Captured);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    RtlZeroMemory(&Packet, sizeof(Packet));
+    Packet.Size = sizeof(Packet);
+    Packet.Version = RXGK_MPO_PACKET_VERSION_1;
+    Packet.hAdapter = Captured.hAdapter;
+    Packet.VidPnSourceId = Captured.VidPnSourceId;
+    Status = WddmBridgeSendIoctlWithInformation(IOCTL_RXGK_GETMULTIPLANEOVERLAYCAPS,
+                                                &Packet, sizeof(Packet),
+                                                &Packet, sizeof(Packet),
+                                                &Information);
+    if (NT_SUCCESS(Status) && Information != sizeof(Packet))
+        Status = STATUS_INFO_LENGTH_MISMATCH;
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Captured.MaxPlanes = Packet.MaxPlanes;
+    Captured.MaxRGBPlanes = Packet.MaxRGBPlanes;
+    Captured.MaxYUVPlanes = Packet.MaxYUVPlanes;
+    Captured.OverlayCaps.Value = Packet.OverlayCaps;
+    Captured.MaxStretchFactor = Packet.MaxStretchFactor;
+    Captured.MaxShrinkFactor = Packet.MaxShrinkFactor;
+    return D3dkmtWriteUser(unnamedParam1, &Captured, sizeof(Captured));
+#else
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return STATUS_NOT_SUPPORTED;
+#endif
 }
 
 NTSTATUS
@@ -2488,21 +2735,132 @@ NtGdiDdDDISignalSynchronizationObjectFromGpu2(_In_ const struct _D3DKMT_SIGNALSY
     D3DKMT_CALL_CALLBACK(RxgkIntPfnSignalSynchronizationObjectFromGpu2, unnamedParam1);
 }
 
+#if (REACTOS_WDDM_TARGET_LEVEL >= 2000)
+static BOOLEAN
+D3dkmtMpoFromAttributes2(
+    _In_ const D3DKMT_MULTIPLANE_OVERLAY_ATTRIBUTES2 *Attributes,
+    _Out_ RXGK_PRESENT_OVERLAY *Overlay)
+{
+    UINT Flags = Attributes->Flags & ~D3DKMT_MPO_FLAG_STATIC_CHECK;
+
+    RtlZeroMemory(Overlay, sizeof(*Overlay));
+    if ((Flags & ~RXGK_PRESENT_OVERLAY_VALID_FLAGS) != 0 ||
+        Attributes->Blend > D3DKMT_MULTIPLANE_OVERLAY_BLEND_ALPHABLEND ||
+        Attributes->VideoFrameFormat != D3DKMT_MULIIPLANE_OVERLAY_VIDEO_FRAME_FORMAT_PROGRESSIVE ||
+        Attributes->StereoFormat != DXGKMT_MULTIPLANE_OVERLAY_STEREO_FORMAT_MONO ||
+        Attributes->StereoFlipMode != DXGKMT_MULTIPLANE_OVERLAY_STEREO_FLIP_NONE ||
+        Attributes->ColorSpace == D3DDDI_COLOR_SPACE_CUSTOM)
+    {
+        return FALSE;
+    }
+    Overlay->SrcRect = Attributes->SrcRect;
+    Overlay->DstRect = Attributes->DstRect;
+    Overlay->ClipRect = Attributes->ClipRect;
+    Overlay->Flags = Flags;
+    Overlay->Rotation = Attributes->Rotation;
+    Overlay->AlphaBlend = Attributes->Blend == D3DKMT_MULTIPLANE_OVERLAY_BLEND_ALPHABLEND;
+    Overlay->ColorSpace = Attributes->ColorSpace;
+    Overlay->StretchQuality = Attributes->StretchQuality;
+    return TRUE;
+}
+
+NTSTATUS
+APIENTRY
+NtGdiDdDDICheckMultiPlaneOverlaySupport2(_Inout_ struct _D3DKMT_CHECKMULTIPLANEOVERLAYSUPPORT2* unnamedParam1)
+{
+    D3DKMT_CHECKMULTIPLANEOVERLAYSUPPORT2 Captured;
+    D3DKMT_CHECK_MULTIPLANE_OVERLAY_PLANE2 Plane;
+    RXGK_CHECKMPO_PACKET *Packet;
+    RXGK_CHECKMPO_PLANE *Planes;
+    NTSTATUS Status;
+    UINT Index;
+
+    Status = D3dkmtCaptureUserStructure(unnamedParam1, sizeof(Captured), &Captured);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Captured.PlaneCount == 0 || Captured.PlaneCount > RXGK_MPO_MAX_PLANES ||
+        Captured.pOverlayPlanes == NULL || Captured.hAdapter == 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Packet = D3dkmtAllocateMpoCheck(Captured.hAdapter, Captured.hDevice, Captured.PlaneCount, 0);
+    if (Packet == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Planes = (RXGK_CHECKMPO_PLANE *)(Packet + 1);
+    for (Index = 0; Index < Captured.PlaneCount; ++Index)
+    {
+        Status = D3dkmtCaptureUserStructure(&Captured.pOverlayPlanes[Index], sizeof(Plane), &Plane);
+        if (!NT_SUCCESS(Status))
+            goto Cleanup;
+        if (D3dkmtMpoFromAttributes2(&Plane.PlaneAttributes, &Planes[Index].Plane))
+            Planes[Index].hResource = Plane.hResource;
+        Planes[Index].VidPnSourceId = Plane.VidPnSourceId;
+        Planes[Index].Plane.LayerIndex = Plane.LayerIndex;
+    }
+    Status = D3dkmtSendMpoCheck(Packet, &unnamedParam1->Supported,
+                                &unnamedParam1->ReturnInfo.Value);
+
+Cleanup:
+    ExFreePoolWithTag(Packet, TAG_D3DKMT_MPO);
+    return Status;
+}
+
+NTSTATUS
+APIENTRY
+NtGdiDdDDIPresentMultiPlaneOverlay2(_In_ const struct _D3DKMT_PRESENT_MULTIPLANE_OVERLAY2* unnamedParam1)
+{
+    D3DKMT_PRESENT_MULTIPLANE_OVERLAY2 Captured;
+    D3DKMT_MULTIPLANE_OVERLAY2 Planes[1 + RXGK_PRESENT_MAX_OVERLAYS];
+    D3DKMT_MPO_PRESENT Request;
+    RXGK_PRESENT_OVERLAY Attributes;
+    NTSTATUS Status;
+    UINT Index;
+
+    Status = D3dkmtCaptureUserStructure(unnamedParam1, sizeof(Captured), &Captured);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Captured.PresentPlaneCount < 2 || Captured.PresentPlaneCount > ARRAYSIZE(Planes) ||
+        Captured.pPresentPlanes == NULL ||
+        Captured.BroadcastContextCount > D3DDDI_MAX_BROADCAST_CONTEXT)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Status = D3dkmtCaptureUserStructure(Captured.pPresentPlanes,
+                                        Captured.PresentPlaneCount * sizeof(Planes[0]), Planes);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&Request, sizeof(Request));
+    for (Index = 0; Index < Captured.PresentPlaneCount; ++Index)
+    {
+        if (!Planes[Index].Enabled)
+            continue;
+        if (!D3dkmtMpoFromAttributes2(&Planes[Index].PlaneAttributes, &Attributes))
+            return STATUS_NOT_SUPPORTED;
+        Status = D3dkmtMpoAddPlane(&Request, Planes[Index].LayerIndex,
+                                   Planes[Index].hAllocation, &Attributes);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    Request.hContext = Captured.hContext;
+    Request.BroadcastContextCount = Captured.BroadcastContextCount;
+    RtlCopyMemory(Request.BroadcastContext, Captured.BroadcastContext,
+                  Captured.BroadcastContextCount * sizeof(Request.BroadcastContext[0]));
+    Request.VidPnSourceId = Captured.VidPnSourceId;
+    Request.PresentCount = Captured.PresentCount;
+    Request.PresentCountValid = Captured.Flags.PresentCountValid;
+    Request.FlipDoNotWait = Captured.Flags.FlipDoNotWait;
+    Request.FlipRestart = Captured.Flags.FlipRestart;
+    Request.FlipInterval = Captured.FlipInterval;
+    return D3dkmtMpoSubmit(&Request);
+}
+#else
 NTSTATUS
 APIENTRY
 NtGdiDdDDICheckMultiPlaneOverlaySupport2(_Inout_ struct _D3DKMT_CHECKMULTIPLANEOVERLAYSUPPORT2* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    /* Win11 refuses the query on an adapter without MPO; not implementing it is honest, answering NOT_IMPLEMENTED is not. */
     return STATUS_INVALID_PARAMETER;
-}
-
-NTSTATUS
-APIENTRY
-NtGdiDdDDICheckMultiPlaneOverlaySupport3(_Inout_ struct _D3DKMT_CHECKMULTIPLANEOVERLAYSUPPORT3* unnamedParam1)
-{
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
 }
 
 NTSTATUS
@@ -2510,7 +2868,230 @@ APIENTRY
 NtGdiDdDDIPresentMultiPlaneOverlay2(_In_ const struct _D3DKMT_PRESENT_MULTIPLANE_OVERLAY2* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return STATUS_NOT_SUPPORTED;
+}
+#endif
+
+#if (REACTOS_WDDM_TARGET_LEVEL >= 2100)
+/* Dirty rectangles are a hint the overlay path does not need. */
+static BOOLEAN
+D3dkmtMpoFromAttributes3(
+    _In_ const D3DKMT_MULTIPLANE_OVERLAY_ATTRIBUTES3 *Attributes,
+    _Out_ RXGK_PRESENT_OVERLAY *Overlay)
+{
+    UINT Flags = Attributes->Flags & ~D3DKMT_MPO_FLAG_STATIC_CHECK;
+
+    RtlZeroMemory(Overlay, sizeof(*Overlay));
+    if ((Flags & ~RXGK_PRESENT_OVERLAY_VALID_FLAGS) != 0 ||
+        Attributes->Blend > D3DKMT_MULTIPLANE_OVERLAY_BLEND_ALPHABLEND ||
+        Attributes->ColorSpace == D3DDDI_COLOR_SPACE_CUSTOM)
+    {
+        return FALSE;
+    }
+    Overlay->SrcRect = Attributes->SrcRect;
+    Overlay->DstRect = Attributes->DstRect;
+    Overlay->ClipRect = Attributes->ClipRect;
+    Overlay->Flags = Flags;
+    Overlay->Rotation = Attributes->Rotation;
+    Overlay->AlphaBlend = Attributes->Blend == D3DKMT_MULTIPLANE_OVERLAY_BLEND_ALPHABLEND;
+    Overlay->ColorSpace = Attributes->ColorSpace;
+    Overlay->StretchQuality = Attributes->StretchQuality;
+#if (REACTOS_WDDM_TARGET_LEVEL >= 2300)
+    Overlay->SdrWhiteLevel = Attributes->SDRWhiteLevel;
+#endif
+    return TRUE;
+}
+
+/* The pointer at Index of a caller's array of plane pointers. */
+static NTSTATUS
+D3dkmtCaptureUserPointer(
+    _In_ VOID *const *Array,
+    _In_ UINT Index,
+    _Out_ VOID **Pointer)
+{
+    NTSTATUS Status;
+
+    Status = D3dkmtCaptureUserStructure(&Array[Index], sizeof(*Pointer), Pointer);
+    if (NT_SUCCESS(Status) && *Pointer == NULL)
+        Status = STATUS_INVALID_PARAMETER;
+    return Status;
+}
+
+NTSTATUS
+APIENTRY
+NtGdiDdDDICheckMultiPlaneOverlaySupport3(_Inout_ struct _D3DKMT_CHECKMULTIPLANEOVERLAYSUPPORT3* unnamedParam1)
+{
+    D3DKMT_CHECKMULTIPLANEOVERLAYSUPPORT3 Captured;
+    D3DKMT_CHECK_MULTIPLANE_OVERLAY_PLANE3 Plane;
+    D3DKMT_MULTIPLANE_OVERLAY_ATTRIBUTES3 PlaneAttributes;
+    D3DKMT_MULTIPLANE_OVERLAY_POST_COMPOSITION_WITH_SOURCE PostComposition;
+    RXGK_CHECKMPO_POST_COMPOSITION *Post;
+    RXGK_CHECKMPO_PACKET *Packet;
+    RXGK_CHECKMPO_PLANE *Planes;
+    PVOID Pointer;
+    NTSTATUS Status;
+    UINT Index;
+
+    Status = D3dkmtCaptureUserStructure(unnamedParam1, sizeof(Captured), &Captured);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Captured.PlaneCount == 0 || Captured.PlaneCount > RXGK_MPO_MAX_PLANES ||
+        Captured.ppOverlayPlanes == NULL || Captured.hAdapter == 0 ||
+        Captured.PostCompositionCount > RXGK_MPO_MAX_POST_COMPOSITION ||
+        (Captured.PostCompositionCount != 0 && Captured.ppPostComposition == NULL))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Packet = D3dkmtAllocateMpoCheck(Captured.hAdapter, Captured.hDevice,
+                                    Captured.PlaneCount, Captured.PostCompositionCount);
+    if (Packet == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Planes = (RXGK_CHECKMPO_PLANE *)(Packet + 1);
+    Post = (RXGK_CHECKMPO_POST_COMPOSITION *)(Planes + Captured.PlaneCount);
+    for (Index = 0; Index < Captured.PlaneCount; ++Index)
+    {
+        Status = D3dkmtCaptureUserPointer((VOID *const *)Captured.ppOverlayPlanes, Index, &Pointer);
+        if (NT_SUCCESS(Status))
+            Status = D3dkmtCaptureUserStructure(Pointer, sizeof(Plane), &Plane);
+        if (NT_SUCCESS(Status))
+            Status = Plane.pPlaneAttributes != NULL ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+        if (NT_SUCCESS(Status))
+            Status = D3dkmtCaptureUserStructure(Plane.pPlaneAttributes, sizeof(PlaneAttributes), &PlaneAttributes);
+        if (!NT_SUCCESS(Status))
+            goto Cleanup;
+        if (D3dkmtMpoFromAttributes3(&PlaneAttributes, &Planes[Index].Plane))
+            Planes[Index].hResource = Plane.hResource;
+        Planes[Index].VidPnSourceId = Plane.VidPnSourceId;
+        Planes[Index].Plane.LayerIndex = Plane.LayerIndex;
+    }
+    for (Index = 0; Index < Captured.PostCompositionCount; ++Index)
+    {
+        Status = D3dkmtCaptureUserPointer((VOID *const *)Captured.ppPostComposition, Index, &Pointer);
+        if (NT_SUCCESS(Status))
+            Status = D3dkmtCaptureUserStructure(Pointer, sizeof(PostComposition), &PostComposition);
+        if (!NT_SUCCESS(Status))
+            goto Cleanup;
+        Post[Index].VidPnSourceId = PostComposition.VidPnSourceId;
+        Post[Index].Flags = PostComposition.PostComposition.Flags.Value;
+        Post[Index].SrcRect = PostComposition.PostComposition.SrcRect;
+        Post[Index].DstRect = PostComposition.PostComposition.DstRect;
+        Post[Index].Rotation = PostComposition.PostComposition.Rotation;
+    }
+    Status = D3dkmtSendMpoCheck(Packet, &unnamedParam1->Supported,
+                                &unnamedParam1->ReturnInfo.Value);
+
+Cleanup:
+    ExFreePoolWithTag(Packet, TAG_D3DKMT_MPO);
+    return Status;
+}
+
+/*
+ * The third generation names each plane's allocation in a list and allows
+ * per-plane flip intervals, fences and driver data.  The compositor-output
+ * flip takes one allocation per plane, flips every plane together at the
+ * base plane's interval, and carries no flip fences, driver data, HDR
+ * metadata (the HDR output pipeline is not implemented) or post-composition
+ * transform; a present asking for those is refused, so the compositor
+ * composes instead.
+ */
+NTSTATUS
+APIENTRY
+NtGdiDdDDIPresentMultiPlaneOverlay3(_In_ const struct _D3DKMT_PRESENT_MULTIPLANE_OVERLAY3* unnamedParam1)
+{
+    D3DKMT_PRESENT_MULTIPLANE_OVERLAY3 Captured;
+    D3DKMT_MULTIPLANE_OVERLAY3 Planes[1 + RXGK_PRESENT_MAX_OVERLAYS];
+    D3DKMT_MULTIPLANE_OVERLAY_ATTRIBUTES3 PlaneAttributes;
+    D3DKMT_HANDLE Contexts[1 + D3DDDI_MAX_BROADCAST_CONTEXT];
+    D3DKMT_MPO_PRESENT Request;
+    RXGK_PRESENT_OVERLAY Attributes;
+    D3DKMT_HANDLE Allocation;
+    PVOID Pointer;
+    NTSTATUS Status;
+    UINT Index;
+    BOOLEAN HaveInterval = FALSE;
+
+    Status = D3dkmtCaptureUserStructure(unnamedParam1, sizeof(Captured), &Captured);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Captured.PresentPlaneCount < 2 || Captured.PresentPlaneCount > ARRAYSIZE(Planes) ||
+        Captured.ppPresentPlanes == NULL ||
+        Captured.ContextCount == 0 || Captured.ContextCount > ARRAYSIZE(Contexts) ||
+        Captured.pContextList == NULL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (Captured.Flags.FlipStereo || Captured.Flags.FlipStereoTemporaryMono ||
+        Captured.Flags.FlipStereoPreferRight || Captured.Flags.FlipDoNotFlip ||
+        Captured.Flags.HMD || Captured.Flags.TrueImmediate ||
+        Captured.Flags.FromDDisplay || Captured.Flags.IndirectDisplay ||
+        Captured.pPostComposition != NULL ||
+        (Captured.Flags.HDRMetaDataValid && Captured.HDRMetaDataType != D3DDDI_HDR_METADATA_TYPE_NONE))
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    Status = D3dkmtCaptureUserStructure(Captured.pContextList,
+                                        Captured.ContextCount * sizeof(Contexts[0]), Contexts);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&Request, sizeof(Request));
+    for (Index = 0; Index < Captured.PresentPlaneCount; ++Index)
+    {
+        Status = D3dkmtCaptureUserPointer((VOID *const *)Captured.ppPresentPlanes, Index, &Pointer);
+        if (NT_SUCCESS(Status))
+            Status = D3dkmtCaptureUserStructure(Pointer, sizeof(Planes[Index]), &Planes[Index]);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    for (Index = 0; Index < Captured.PresentPlaneCount; ++Index)
+    {
+        const D3DKMT_MULTIPLANE_OVERLAY3 *Plane = &Planes[Index];
+
+        if (!Plane->InputFlags.Enabled)
+            continue;
+        if (Plane->AllocationCount != 1 || Plane->pAllocationList == NULL ||
+            Plane->pPlaneAttributes == NULL)
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+        if (Plane->DriverPrivateDataSize != 0 ||
+            Plane->hFlipToFence != 0 || Plane->hFlipAwayFence != 0 ||
+            (HaveInterval && Plane->FlipInterval != Request.FlipInterval))
+        {
+            return STATUS_NOT_SUPPORTED;
+        }
+        Request.FlipInterval = Plane->FlipInterval;
+        HaveInterval = TRUE;
+        Status = D3dkmtCaptureUserStructure(Plane->pAllocationList, sizeof(Allocation), &Allocation);
+        if (NT_SUCCESS(Status))
+            Status = D3dkmtCaptureUserStructure(Plane->pPlaneAttributes, sizeof(PlaneAttributes),
+                                                &PlaneAttributes);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (!D3dkmtMpoFromAttributes3(&PlaneAttributes, &Attributes))
+            return STATUS_NOT_SUPPORTED;
+        Status = D3dkmtMpoAddPlane(&Request, Plane->LayerIndex, Allocation, &Attributes);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    Request.hContext = Contexts[0];
+    Request.BroadcastContextCount = Captured.ContextCount - 1;
+    RtlCopyMemory(Request.BroadcastContext, &Contexts[1],
+                  Request.BroadcastContextCount * sizeof(Request.BroadcastContext[0]));
+    Request.VidPnSourceId = Captured.VidPnSourceId;
+    Request.PresentCount = Captured.PresentCount;
+    Request.PresentCountValid = Captured.PresentCount != 0;
+    Request.FlipDoNotWait = Captured.Flags.FlipDoNotWait;
+    Request.FlipRestart = Captured.Flags.FlipRestart;
+    return D3dkmtMpoSubmit(&Request);
+}
+#else
+NTSTATUS
+APIENTRY
+NtGdiDdDDICheckMultiPlaneOverlaySupport3(_Inout_ struct _D3DKMT_CHECKMULTIPLANEOVERLAYSUPPORT3* unnamedParam1)
+{
+    RETURN_STATUS_IF_NULL(unnamedParam1);
+    return STATUS_INVALID_PARAMETER;
 }
 
 NTSTATUS
@@ -2518,8 +3099,9 @@ APIENTRY
 NtGdiDdDDIPresentMultiPlaneOverlay3(_In_ const struct _D3DKMT_PRESENT_MULTIPLANE_OVERLAY3* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return STATUS_NOT_SUPPORTED;
 }
+#endif
 
 NTSTATUS
 APIENTRY
