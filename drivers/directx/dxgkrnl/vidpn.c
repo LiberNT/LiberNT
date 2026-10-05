@@ -2774,13 +2774,43 @@ DxgkpAddEdidPreferredModes(
  * DxgkpSeedDefaultHotPlugPath builds the OS's own path afterwards, and only if
  * the driver produced none.
  */
+/*
+ * DxgkpPrepareVidPnForRecommendation
+ *
+ * Windows passes a recommendation DDI a VidPN it has just created: no
+ * topology and nothing pinned.  A clone of the committed VidPN still carries
+ * the committed pins, and a driver that recommends a new configuration by
+ * replacing a mode set is then refused with
+ * STATUS_GRAPHICS_PINNED_MODE_MUST_REMAIN_IN_SET -- failing a recommendation
+ * Windows accepts.  Clear the topology and every pin; the modes stay, as
+ * hints the driver may use or replace.
+ */
+static VOID
+DxgkpPrepareVidPnForRecommendation(
+    _Inout_ PDXGKP_VIDPN VidPn)
+{
+    ULONG i;
+
+    RtlZeroMemory(VidPn->Paths, sizeof(VidPn->Paths));
+    VidPn->NumPaths = 0;
+    for (i = 0; i < DXGKP_MAX_SOURCES; i++)
+    {
+        if (VidPn->SourceModeSets[i] != NULL)
+            VidPn->SourceModeSets[i]->PinnedModeId = (UINT)-1;
+    }
+    for (i = 0; i < DXGKP_MAX_TARGETS; i++)
+    {
+        if (VidPn->TargetModeSets[i] != NULL)
+            VidPn->TargetModeSets[i]->PinnedModeId = (UINT)-1;
+    }
+}
+
 static NTSTATUS
 DxgkpBuildHotPlugCandidate(
     _Inout_ PDXGKP_VIDPN VidPn,
     _In_ PDXGKP_HOTPLUG_MONITOR_SNAPSHOT Snapshot)
 {
-    RtlZeroMemory(VidPn->Paths, sizeof(VidPn->Paths));
-    VidPn->NumPaths = 0;
+    DxgkpPrepareVidPnForRecommendation(VidPn);
     if (!Snapshot->Connected)
         return STATUS_SUCCESS;
     if (DxgkVidPnTargetIndexFromId(VidPn, Snapshot->TargetId) == MAXULONG ||
