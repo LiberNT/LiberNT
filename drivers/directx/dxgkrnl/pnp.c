@@ -373,6 +373,59 @@ DxgkpAllocatePollDisplayChildrenWork(
  * non-destructive and interruptible: it answers a miniport's request to look
  * again, not a user's request to force detection.
  */
+/*
+ * DxgkPnpReadEdidExtensions -- see pnp.h.
+ */
+UCHAR
+DxgkPnpReadEdidExtensions(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG ChildUid,
+    _In_reads_bytes_(128) CONST UCHAR *BaseBlock,
+    _Out_writes_(DXGKP_EDID_MAX_EXTENSIONS) UCHAR (*Extensions)[128])
+{
+    PDXGKDDI_QUERY_DEVICE_DESCRIPTOR QueryDeviceDescriptor;
+    DXGK_DEVICE_DESCRIPTOR Descriptor;
+    UCHAR Wanted, Read;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    QueryDeviceDescriptor = DXGK_CB(Adapter, DxgkDdiQueryDeviceDescriptor);
+    Wanted = BaseBlock[126];
+    if (Wanted > DXGKP_EDID_MAX_EXTENSIONS)
+        Wanted = DXGKP_EDID_MAX_EXTENSIONS;
+    if (QueryDeviceDescriptor == NULL)
+        return 0;
+
+    for (Read = 0; Read < Wanted; Read++)
+    {
+        RtlZeroMemory(&Descriptor, sizeof(Descriptor));
+        Descriptor.DescriptorOffset = 128 * (ULONG)(Read + 1);
+        Descriptor.DescriptorLength = 128;
+        Descriptor.DescriptorBuffer = Extensions[Read];
+        if (!DxgkAcquireKmdCall(Adapter))
+            break;
+        _SEH2_TRY
+        {
+            Status = QueryDeviceDescriptor(Adapter->MiniportDeviceContext,
+                                           ChildUid, &Descriptor);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+        DxgkReleaseKmdCall(Adapter);
+        if (!NT_SUCCESS(Status))
+        {
+            DXGKRNL_TRACE("DxgkPnpReadEdidExtensions: ChildUid %lu block %u "
+                          "not read (0x%08lX)\n", ChildUid, Read + 1, Status);
+            break;
+        }
+    }
+    return Read;
+}
+
 NTSTATUS
 DxgkPnpQueuePollDisplayChildren(
     _In_ PDXGKRNL_ADAPTER Adapter)
@@ -639,9 +692,14 @@ DxgkpCreateChildPdo(
 
         if (NT_SUCCESS(Status))
         {
+            ChildExt->EdidExtensionCount =
+                DxgkPnpReadEdidExtensions(Adapter, Descriptor->ChildUid,
+                                          ChildExt->Edid,
+                                          ChildExt->EdidExtensions);
             ChildExt->EdidValid = TRUE;
             DXGKRNL_TRACE("DxgkpCreateChildPdo: EDID captured for "
-                          "ChildUid %lu\n", Descriptor->ChildUid);
+                          "ChildUid %lu (%u extension block(s))\n",
+                          Descriptor->ChildUid, ChildExt->EdidExtensionCount);
         }
         else if (Status != STATUS_MONITOR_NO_DESCRIPTOR &&
                  Status != STATUS_NOT_SUPPORTED)

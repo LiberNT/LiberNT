@@ -23,6 +23,10 @@
  * The Signature field is the first ULONG; DxgkpMiniportPnpDispatch reads
  * it to distinguish child PDOs from the GPU FDO.
  */
+/* EDID extension blocks cached beside the base block.  Displays rarely
+ * carry more than a CTA-861 block and a DisplayID or block map. */
+#define DXGKP_EDID_MAX_EXTENSIONS   3
+
 typedef struct _DXGK_CHILD_PDO_EXTENSION
 {
     /* Signature / type tag — must be first field */
@@ -62,7 +66,26 @@ typedef struct _DXGK_CHILD_PDO_EXTENSION
      * Written only while handling this PDO's set-power IRPs. */
     DEVICE_POWER_STATE      DevicePowerState;
 
+    /* EDID extension blocks that follow Edid, read with it.  Meaningful
+     * only while EdidValid is set. */
+    UCHAR                   EdidExtensions[DXGKP_EDID_MAX_EXTENSIONS][128];
+    UCHAR                   EdidExtensionCount;
+
 } DXGK_CHILD_PDO_EXTENSION, *PDXGK_CHILD_PDO_EXTENSION;
+
+/*
+ * DxgkPnpReadEdidExtensions
+ *   Reads the extension blocks a cached EDID base block announces (byte 126),
+ *   up to DXGKP_EDID_MAX_EXTENSIONS, through DxgkDdiQueryDeviceDescriptor.
+ *   PASSIVE_LEVEL, never from inside a miniport callback.  Returns the number
+ *   of consecutive blocks read; a block that cannot be read ends the run.
+ */
+UCHAR
+DxgkPnpReadEdidExtensions(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG ChildUid,
+    _In_reads_bytes_(128) CONST UCHAR *BaseBlock,
+    _Out_writes_(DXGKP_EDID_MAX_EXTENSIONS) UCHAR (*Extensions)[128]);
 
 /* Pool tag for child PDO extensions */
 #define TAG_DXGK_CHILD_PDO  'CxgD'

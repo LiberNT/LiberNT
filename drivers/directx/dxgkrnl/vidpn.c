@@ -2046,6 +2046,8 @@ typedef struct _DXGKP_HOTPLUG_MONITOR_SNAPSHOT
     LONG64 ChildEnumerationEpoch;
     D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId;
     UCHAR Edid[128];
+    UCHAR EdidExtensions[DXGKP_EDID_MAX_EXTENSIONS][128];
+    UCHAR EdidExtensionCount;
 } DXGKP_HOTPLUG_MONITOR_SNAPSHOT, *PDXGKP_HOTPLUG_MONITOR_SNAPSHOT;
 
 /*
@@ -2197,7 +2199,12 @@ DxgkpSnapshotHotPlugMonitor(
         Snapshot->ChildStateGeneration = ConnectedChild->StateGeneration;
         Snapshot->EdidValid = ConnectedChild->EdidValid;
         if (Snapshot->EdidValid)
+        {
             RtlCopyMemory(Snapshot->Edid, ConnectedChild->Edid, sizeof(Snapshot->Edid));
+            RtlCopyMemory(Snapshot->EdidExtensions, ConnectedChild->EdidExtensions,
+                          sizeof(Snapshot->EdidExtensions));
+            Snapshot->EdidExtensionCount = ConnectedChild->EdidExtensionCount;
+        }
     }
     if (InterlockedCompareExchange64(&Adapter->HotPlugGeneration, 0, 0) != ExpectedGeneration)
     {
@@ -2337,6 +2344,9 @@ DxgkpRefreshHotPlugEdid(
     DxgkReleaseKmdCall(Adapter);
     if (NT_SUCCESS(Status))
     {
+        Snapshot->EdidExtensionCount =
+            DxgkPnpReadEdidExtensions(Adapter, Snapshot->ChildUid,
+                                      Snapshot->Edid, Snapshot->EdidExtensions);
         Snapshot->EdidValid = TRUE;
         return STATUS_SUCCESS;
     }
@@ -2354,6 +2364,8 @@ DxgkpRefreshConnectedChildEdids(
     ULONG ChildUids[16];
     ULONG64 ChildGenerations[16];
     UCHAR Edid[128];
+    UCHAR EdidExtensions[DXGKP_EDID_MAX_EXTENSIONS][128];
+    UCHAR EdidExtensionCount;
     DXGK_DEVICE_DESCRIPTOR Descriptor;
     PLIST_ENTRY Entry;
     ULONG Count = 0;
@@ -2400,6 +2412,8 @@ DxgkpRefreshConnectedChildEdids(
         DxgkReleaseKmdCall(Adapter);
         if (!NT_SUCCESS(Status))
             continue;
+        EdidExtensionCount = DxgkPnpReadEdidExtensions(Adapter, ChildUids[Index],
+                                                       Edid, EdidExtensions);
         KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
         for (Entry = Adapter->ChildListHead.Flink; Entry != &Adapter->ChildListHead; Entry = Entry->Flink)
         {
@@ -2410,6 +2424,9 @@ DxgkpRefreshConnectedChildEdids(
             if (Child->Connected && Child->StateGeneration == ChildGenerations[Index])
             {
                 RtlCopyMemory(Child->Edid, Edid, sizeof(Child->Edid));
+                RtlCopyMemory(Child->EdidExtensions, EdidExtensions,
+                              sizeof(Child->EdidExtensions));
+                Child->EdidExtensionCount = EdidExtensionCount;
                 Child->EdidValid = TRUE;
             }
             break;
@@ -3452,6 +3469,9 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     if (Snapshot.Connected && Snapshot.EdidValid && MatchingChild != NULL)
     {
         RtlCopyMemory(MatchingChild->Edid, Snapshot.Edid, sizeof(MatchingChild->Edid));
+        RtlCopyMemory(MatchingChild->EdidExtensions, Snapshot.EdidExtensions,
+                      sizeof(MatchingChild->EdidExtensions));
+        MatchingChild->EdidExtensionCount = Snapshot.EdidExtensionCount;
         MatchingChild->EdidValid = TRUE;
     }
     Candidate = NULL;
