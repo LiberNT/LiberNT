@@ -297,3 +297,86 @@ DWORD WINAPI DsCrackNamesW(HANDLE handle, DS_NAME_FLAGS flags, DS_NAME_FORMAT of
     FIXME("(%p %u %u %u %lu %p %p stub\n", handle, flags, offered, desired, num, names, result);
     return ERROR_CALL_NOT_IMPLEMENTED;
 }
+#ifdef __REACTOS__
+
+static BOOL is_rdn_space(WCHAR c)
+{
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+DWORD WINAPI DsGetRdnW(LPCWCH *dn, DWORD *dn_len, LPCWCH *key, DWORD *key_len, LPCWCH *val, DWORD *val_len)
+{
+    LPCWCH p, end, key_end, val_end;
+
+    TRACE("(%p %p %p %p %p %p)\n", dn, dn_len, key, key_len, val, val_len);
+
+    if (!dn || !dn_len || !key || !key_len || !val || !val_len || (*dn_len && !*dn))
+        return ERROR_INVALID_PARAMETER;
+
+    p = *dn;
+    end = p + *dn_len;
+    while (p < end && is_rdn_space(*p)) p++;
+    if (p < end && (*p == ',' || *p == ';')) p++;
+    while (p < end && is_rdn_space(*p)) p++;
+
+    *key_len = 0;
+    *val_len = 0;
+    if (p == end)
+    {
+        *dn = end;
+        *dn_len = 0;
+        return ERROR_SUCCESS;
+    }
+
+    *key = p;
+    while (p < end && *p != '=' && *p != ',' && *p != ';') p++;
+    if (p == end || *p != '=')
+        return ERROR_DS_NAME_UNPARSEABLE;
+    key_end = p;
+    while (key_end > *key && is_rdn_space(key_end[-1])) key_end--;
+    if (key_end == *key)
+        return ERROR_DS_NAME_UNPARSEABLE;
+
+    p++;
+    while (p < end && is_rdn_space(*p)) p++;
+    *val = p;
+    if (p < end && *p == '"')
+    {
+        for (p++; p < end && *p != '"'; p++)
+        {
+            if (*p == '\\' && ++p == end)
+                return ERROR_DS_NAME_UNPARSEABLE;
+        }
+        if (p == end)
+            return ERROR_DS_NAME_UNPARSEABLE;
+        val_end = ++p;
+    }
+    else
+    {
+        val_end = p;
+        while (p < end && *p != ',' && *p != ';')
+        {
+            if (*p == '\\')
+            {
+                if (++p == end)
+                    return ERROR_DS_NAME_UNPARSEABLE;
+                val_end = p + 1;
+            }
+            else if (!is_rdn_space(*p))
+            {
+                val_end = p + 1;
+            }
+            p++;
+        }
+    }
+    while (p < end && is_rdn_space(*p)) p++;
+    if (p < end && *p != ',' && *p != ';')
+        return ERROR_DS_NAME_UNPARSEABLE;
+
+    *key_len = (DWORD)(key_end - *key);
+    *val_len = (DWORD)(val_end - *val);
+    *dn_len = (DWORD)(end - p);
+    *dn = p;
+    return ERROR_SUCCESS;
+}
+#endif

@@ -28,7 +28,7 @@
 @ stub DsFreeSpnArrayW
 @ stub DsGetDomainControllerInfoA
 @ stub DsGetDomainControllerInfoW
-@ stub DsGetRdnW
+@ stdcall DsGetRdnW(ptr ptr ptr ptr ptr ptr)
 @ stdcall DsGetSpnA(long str str long long ptr ptr ptr ptr)
 @ stub DsGetSpnW
 @ stub DsInheritSecurityIdentityA
