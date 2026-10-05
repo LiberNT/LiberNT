@@ -105,27 +105,50 @@ PortGetDriverInitData(
 }
 
 
+C_ASSERT(RTL_FIELD_SIZE(STOR_LOCK_HANDLE, Context) == sizeof(KLOCK_QUEUE_HANDLE));
+C_ASSERT(FIELD_OFFSET(STOR_LOCK_HANDLE, Context.OldIrql) - FIELD_OFFSET(STOR_LOCK_HANDLE, Context) ==
+         FIELD_OFFSET(KLOCK_QUEUE_HANDLE, OldIrql));
+C_ASSERT(RTL_FIELD_SIZE(STOR_DPC, Lock) == sizeof(KSPIN_LOCK));
+
 static
-VOID
+ULONG
 PortAcquireSpinLock(
     PFDO_DEVICE_EXTENSION DeviceExtension,
     STOR_SPINLOCK SpinLock,
     PVOID LockContext,
     PSTOR_LOCK_HANDLE LockHandle)
 {
+    PKLOCK_QUEUE_HANDLE QueueHandle = (PKLOCK_QUEUE_HANDLE)&LockHandle->Context;
+    PSTOR_DPC Dpc = (PSTOR_DPC)LockContext;
+
     DPRINT("PortAcquireSpinLock(%p %lu %p %p)\n",
            DeviceExtension, SpinLock, LockContext, LockHandle);
 
+    if (SpinLock != DpcLock && SpinLock != StartIoLock && SpinLock != InterruptLock &&
+        SpinLock != ThreadedDpcLock && SpinLock != DpcLevelLock)
+    {
+        LockHandle->Lock = InvalidLock;
+        return STOR_STATUS_INVALID_PARAMETER;
+    }
+
     LockHandle->Lock = SpinLock;
+    if ((SpinLock == DpcLevelLock) && (KeGetCurrentIrql() < DISPATCH_LEVEL))
+        return STOR_STATUS_INVALID_IRQL;
+    if ((Dpc == NULL) && (SpinLock != StartIoLock) && (SpinLock != InterruptLock))
+        return STOR_STATUS_INVALID_PARAMETER;
+
     if (DeviceExtension->DumpMode)
     {
         LockHandle->Context.OldIrql = KeGetCurrentIrql();
-        return;
+        return STOR_STATUS_SUCCESS;
     }
 
     switch (SpinLock)
     {
         case DpcLock: /* 1, */
+            KeAcquireInStackQueuedSpinLock((PKSPIN_LOCK)&Dpc->Lock, QueueHandle);
+            break;
+
         case StartIoLock: /* 2 */
             KeAcquireSpinLock(&DeviceExtension->MiniportExLock, &LockHandle->Context.OldIrql);
             break;
@@ -138,12 +161,19 @@ PortAcquireSpinLock(
                 LockHandle->Context.OldIrql = KeAcquireInterruptSpinLock(DeviceExtension->Interrupt);
             break;
 
-        case InvalidLock:
         case ThreadedDpcLock:
+            KeAcquireInStackQueuedSpinLockForDpc((PKSPIN_LOCK)&Dpc->Lock, QueueHandle);
+            break;
+
         case DpcLevelLock:
-            DPRINT1("Unsupported spin lock type %lu\n", SpinLock);
+            KeAcquireInStackQueuedSpinLockAtDpcLevel((PKSPIN_LOCK)&Dpc->Lock, QueueHandle);
+            break;
+
+        case InvalidLock:
             break;
     }
+
+    return STOR_STATUS_SUCCESS;
 }
 
 
@@ -162,6 +192,9 @@ PortReleaseSpinLock(
     switch (LockHandle->Lock)
     {
         case DpcLock: /* 1, */
+            KeReleaseInStackQueuedSpinLock((PKLOCK_QUEUE_HANDLE)&LockHandle->Context);
+            break;
+
         case StartIoLock: /* 2 */
             KeReleaseSpinLock(&DeviceExtension->MiniportExLock, LockHandle->Context.OldIrql);
             break;
@@ -175,10 +208,15 @@ PortReleaseSpinLock(
                                            LockHandle->Context.OldIrql);
             break;
 
-        case InvalidLock:
         case ThreadedDpcLock:
+            KeReleaseInStackQueuedSpinLockForDpc((PKLOCK_QUEUE_HANDLE)&LockHandle->Context);
+            break;
+
         case DpcLevelLock:
-            DPRINT1("Unsupported spin lock type %lu\n", LockHandle->Lock);
+            KeReleaseInStackQueuedSpinLockFromDpcLevel((PKLOCK_QUEUE_HANDLE)&LockHandle->Context);
+            break;
+
+        case InvalidLock:
             break;
     }
 }
@@ -1938,23 +1976,14 @@ StorPortExtendedFunction(
             PSTOR_LOCK_HANDLE LockHandle = va_arg(Args, PSTOR_LOCK_HANDLE);
             PMINIPORT_DEVICE_EXTENSION MiniportExtension;
 
-            if (!HwDeviceExtension || !LockHandle ||
-                (SpinLock != DpcLock && SpinLock != StartIoLock &&
-                 SpinLock != InterruptLock && SpinLock != ThreadedDpcLock &&
-                 SpinLock != DpcLevelLock))
+            if (!HwDeviceExtension || !LockHandle)
             {
                 Status = STOR_STATUS_INVALID_PARAMETER;
                 break;
             }
-            if (SpinLock == ThreadedDpcLock || SpinLock == DpcLevelLock)
-            {
-                Status = STOR_STATUS_NOT_IMPLEMENTED;
-                break;
-            }
             MiniportExtension = CONTAINING_RECORD(HwDeviceExtension, MINIPORT_DEVICE_EXTENSION, HwDeviceExtension);
             /* Paired with the ReleaseSpinLock notification */
-            PortAcquireSpinLock(MiniportExtension->Miniport->DeviceExtension, SpinLock, LockContext, LockHandle);
-            Status = STOR_STATUS_SUCCESS;
+            Status = PortAcquireSpinLock(MiniportExtension->Miniport->DeviceExtension, SpinLock, LockContext, LockHandle);
             break;
         }
 
@@ -2830,6 +2859,25 @@ StorPortNotification(
             KeInitializeSpinLock(&Dpc->Lock);
             break;
 
+        case InitializeDpcWithContext:
+        case InitializeThreadedDpc:
+        {
+            PVOID DpcContext;
+            ULONG Importance;
+
+            Dpc = (PSTOR_DPC)va_arg(ap, PSTOR_DPC);
+            HwDpcRoutine = (PHW_DPC_ROUTINE)va_arg(ap, PHW_DPC_ROUTINE);
+            DpcContext = va_arg(ap, PVOID);
+            Importance = va_arg(ap, ULONG);
+
+            if (NotificationType == InitializeThreadedDpc)
+                KeInitializeThreadedDpc((PRKDPC)&Dpc->Dpc, (PKDEFERRED_ROUTINE)HwDpcRoutine, DpcContext);
+            else
+                KeInitializeDpc((PRKDPC)&Dpc->Dpc, (PKDEFERRED_ROUTINE)HwDpcRoutine, DpcContext);
+            KeSetImportanceDpc((PRKDPC)&Dpc->Dpc, (KDPC_IMPORTANCE)Importance);
+            break;
+        }
+
         case AcquireSpinLock:
             DPRINT("AcquireSpinLock\n");
             SpinLock = (STOR_SPINLOCK)va_arg(ap, STOR_SPINLOCK);
@@ -2838,10 +2886,13 @@ StorPortNotification(
             DPRINT("LockContext %p\n", LockContext);
             LockHandle = (PSTOR_LOCK_HANDLE)va_arg(ap, PSTOR_LOCK_HANDLE);
             DPRINT("LockHandle %p\n", LockHandle);
-            PortAcquireSpinLock(DeviceExtension,
-                                SpinLock,
-                                LockContext,
-                                LockHandle);
+            if (SpinLock == DpcLock || SpinLock == StartIoLock || SpinLock == InterruptLock)
+                PortAcquireSpinLock(DeviceExtension,
+                                    SpinLock,
+                                    LockContext,
+                                    LockHandle);
+            else
+                LockHandle->Lock = InvalidLock;
             break;
 
         case ReleaseSpinLock:
