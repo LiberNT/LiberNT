@@ -78,11 +78,37 @@ typedef struct _RXGK_PRESENT_OVERLAY
 
 C_ASSERT(sizeof(RXGK_PRESENT_OVERLAY) == 80);
 
+/* HDR10 static metadata (the D3DDDI_HDR_METADATA_HDR10 layout): primaries
+ * and white point in 1/50000, mastering luminance in 1/10000 nit, content
+ * light levels in nits. */
+typedef struct _RXGK_HDR10_METADATA
+{
+    UINT16 RedPrimary[2];
+    UINT16 GreenPrimary[2];
+    UINT16 BluePrimary[2];
+    UINT16 WhitePoint[2];
+    UINT MaxMasteringLuminance;
+    UINT MinMasteringLuminance;
+    UINT16 MaxContentLightLevel;
+    UINT16 MaxFrameAverageLightLevel;
+} RXGK_HDR10_METADATA;
+
+C_ASSERT(sizeof(RXGK_HDR10_METADATA) == 28);
+
+/* RXGK_PRESENT_OVERLAYS.HdrMetadata: what HDR metadata the flip brings for
+ * the output.  UNCHANGED: none new; NONE: the output has none from now on;
+ * HDR10: Hdr10 holds it. */
+#define RXGK_PRESENT_HDR_METADATA_UNCHANGED 0U
+#define RXGK_PRESENT_HDR_METADATA_NONE      1U
+#define RXGK_PRESENT_HDR_METADATA_HDR10     2U
+
 typedef struct _RXGK_PRESENT_OVERLAYS
 {
     UINT OverlayCount;
-    UINT Reserved;
+    UINT HdrMetadata;           /* RXGK_PRESENT_HDR_METADATA_* */
     RXGK_PRESENT_OVERLAY Overlays[RXGK_PRESENT_MAX_OVERLAYS];
+    RXGK_HDR10_METADATA Hdr10;
+    UINT Reserved;
 } RXGK_PRESENT_OVERLAYS;
 
 C_ASSERT(sizeof(RXGK_PRESENT_OVERLAYS) % 8 == 0);

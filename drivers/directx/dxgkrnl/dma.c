@@ -801,7 +801,9 @@ DxgkpPresent(
     _Inout_ D3DKMT_PRESENT *pPresent,
     _In_ ULONG InputLength,
     _In_reads_opt_(OverlayCount) const RXGK_PRESENT_OVERLAY *Overlays,
-    _In_ UINT OverlayCount)
+    _In_ UINT OverlayCount,
+    _In_ UINT HdrMetadata,
+    _In_opt_ const RXGK_HDR10_METADATA *Hdr10)
 {
     PDXGKRNL_ADAPTER         Adapter = NULL;
     PDXGKRNL_DEVICE          Device = NULL;
@@ -1193,6 +1195,10 @@ DxgkpPresent(
             DxgkpReleasePresentEntry(&Entry);
             return Status;
         }
+        /* Metadata reaches the output with the planes it describes. */
+        Entry.HdrMetadata = HdrMetadata;
+        if (HdrMetadata == RXGK_PRESENT_HDR_METADATA_HDR10 && Hdr10 != NULL)
+            Entry.Hdr10 = *Hdr10;
     }
 
     /* --- Submit to the present queue ----------------------------------- */
@@ -1214,7 +1220,8 @@ DxgkPresent(
     _Inout_ D3DKMT_PRESENT *pPresent,
     _In_ ULONG InputLength)
 {
-    return DxgkpPresent(pPresent, InputLength, NULL, 0);
+    return DxgkpPresent(pPresent, InputLength, NULL, 0,
+                        RXGK_PRESENT_HDR_METADATA_UNCHANGED, NULL);
 }
 
 /* A compositor flip carrying overlay planes; see RXGK_PRESENT_OVERLAYS. */
@@ -1228,13 +1235,15 @@ DxgkPresentWithOverlays(
 
     if (Request == NULL ||
         InputLength < sizeof(*Request) + RTL_SIZEOF_THROUGH_FIELD(D3DKMT_PRESENT, Flags) ||
-        Request->OverlayCount == 0 || Request->OverlayCount > RXGK_PRESENT_MAX_OVERLAYS)
+        Request->OverlayCount == 0 || Request->OverlayCount > RXGK_PRESENT_MAX_OVERLAYS ||
+        Request->HdrMetadata > RXGK_PRESENT_HDR_METADATA_HDR10)
     {
         return STATUS_INVALID_PARAMETER;
     }
     Present = (D3DKMT_PRESENT *)(Request + 1);
     return DxgkpPresent(Present, InputLength - sizeof(*Request),
-                        Request->Overlays, Request->OverlayCount);
+                        Request->Overlays, Request->OverlayCount,
+                        Request->HdrMetadata, &Request->Hdr10);
 }
 
 NTSTATUS

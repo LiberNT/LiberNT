@@ -247,6 +247,10 @@ typedef struct _DXGKRNL_PRESENT_ENTRY
     UINT                            OverlayCount;
     DXGKRNL_PRESENT_OVERLAY         Overlays[RXGK_PRESENT_MAX_OVERLAYS];
 
+    /* HDR metadata the flip brings for the output (RXGK_PRESENT_HDR_METADATA_*). */
+    UINT                            HdrMetadata;
+    RXGK_HDR10_METADATA             Hdr10;
+
 } DXGKRNL_PRESENT_ENTRY, *PDXGKRNL_PRESENT_ENTRY;
 
 NTSTATUS DxgkPresentSetQueuedLimit(_In_ struct _DXGKRNL_DEVICE *Device, _In_ ULONG RequestedLimit);
@@ -317,6 +321,12 @@ typedef struct _DXGKRNL_PRESENT_QUEUE
     /* Pinned overlay planes of the scanned and the armed flip. */
     DXGKRNL_PRESENT_OVERLAY         MmioCurrentOverlays[RXGK_PRESENT_MAX_OVERLAYS];
     DXGKRNL_PRESENT_OVERLAY         MmioPendingOverlays[RXGK_PRESENT_MAX_OVERLAYS];
+    /* HDR metadata the output was last given through an MPO3 flip, under
+     * MmioPresentMutex: HdrMetadataApplied is TRUE once the output has had
+     * any (so entering HDR starts from none), HdrMetadataFromFlip while it
+     * is metadata a flip brought rather than none. */
+    BOOLEAN                         HdrMetadataApplied;
+    BOOLEAN                         HdrMetadataFromFlip;
     NTSTATUS                        MmioFailureStatus;
     LONG64                          MmioLastFlipSequence;
     /* Ordered MMIO flips wait for scanout on this drainer, never on the

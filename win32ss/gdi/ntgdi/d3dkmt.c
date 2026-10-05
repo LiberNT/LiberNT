@@ -2183,6 +2183,10 @@ D3dkmtSendMpoCheck(
     return Status;
 }
 
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)
+C_ASSERT(sizeof(RXGK_HDR10_METADATA) == sizeof(D3DDDI_HDR_METADATA_HDR10));
+#endif
+
 /* The compositor's output and the overlay planes above it, as one flip. */
 typedef struct _D3DKMT_MPO_PRESENT
 {
@@ -3025,7 +3029,9 @@ NtGdiDdDDIPresentMultiPlaneOverlay3(_In_ const struct _D3DKMT_PRESENT_MULTIPLANE
         Captured.Flags.HMD || Captured.Flags.TrueImmediate ||
         Captured.Flags.FromDDisplay || Captured.Flags.IndirectDisplay ||
         Captured.pPostComposition != NULL ||
-        (Captured.Flags.HDRMetaDataValid && Captured.HDRMetaDataType != D3DDDI_HDR_METADATA_TYPE_NONE))
+        (Captured.Flags.HDRMetaDataValid &&
+         Captured.HDRMetaDataType != D3DDDI_HDR_METADATA_TYPE_NONE &&
+         Captured.HDRMetaDataType != D3DDDI_HDR_METADATA_TYPE_HDR10))
     {
         return STATUS_NOT_SUPPORTED;
     }
@@ -3035,6 +3041,29 @@ NtGdiDdDDIPresentMultiPlaneOverlay3(_In_ const struct _D3DKMT_PRESENT_MULTIPLANE
         return Status;
 
     RtlZeroMemory(&Request, sizeof(Request));
+    /* New HDR metadata for the output travels with the flip; without the
+     * flag the output keeps what it had. */
+    if (Captured.Flags.HDRMetaDataValid)
+    {
+        if (Captured.HDRMetaDataType == D3DDDI_HDR_METADATA_TYPE_HDR10)
+        {
+            if (Captured.HDRMetaDataSize != sizeof(D3DDDI_HDR_METADATA_HDR10) ||
+                Captured.pHDRMetaData == NULL)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+            Status = D3dkmtCaptureUserStructure((PVOID)Captured.pHDRMetaData,
+                                                sizeof(Request.Overlays.Hdr10),
+                                                &Request.Overlays.Hdr10);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            Request.Overlays.HdrMetadata = RXGK_PRESENT_HDR_METADATA_HDR10;
+        }
+        else
+        {
+            Request.Overlays.HdrMetadata = RXGK_PRESENT_HDR_METADATA_NONE;
+        }
+    }
     for (Index = 0; Index < Captured.PresentPlaneCount; ++Index)
     {
         Status = D3dkmtCaptureUserPointer((VOID *const *)Captured.ppPresentPlanes, Index, &Pointer);

@@ -605,6 +605,8 @@ typedef struct _DXGKRNL_POWER_COMPONENT
  * bounds as the VidPN object's (DXGKP_MAX_SOURCES,
  * DXGKP_MAX_MULTISAMPLING_METHODS in vidpn.h). */
 #define DXGKP_COMMITTED_MSAA_SOURCES  16
+/* Targets whose advanced colour state is kept. */
+#define DXGKP_ADVANCED_COLOR_TARGETS  16
 #define DXGKP_COMMITTED_MSAA_METHODS  32
 /* Swizzling ranges arbitrated per adapter; a miniport may report more. */
 #define DXGKP_MAX_SWIZZLING_RANGES 32
@@ -1167,6 +1169,25 @@ struct _DXGKRNL_ADAPTER
     PVOID                       SourceGammaBuffer[DXGKP_GAMMA_SOURCES];
     D3DDDI_GAMMARAMP_TYPE       SourceGammaType[DXGKP_GAMMA_SOURCES];
     SIZE_T                      SourceGammaSize[DXGKP_GAMMA_SOURCES];
+
+    /*
+     * Advanced colour (HDR), per target.  Requested is what the user asked
+     * for and survives mode sets; Active, Encoding and BitsPerColor are what
+     * the last commit drove.  HdrActiveSources (bit per VidPN source) lets
+     * the flip path see, without the lock, which sources scan out to an HDR
+     * signal.  Guarded by AdvancedColorLock.
+     */
+    KSPIN_LOCK                  AdvancedColorLock;
+    struct
+    {
+        D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId;
+        BOOLEAN                 Requested;
+        BOOLEAN                 Active;
+        UCHAR                   Encoding;       /* DISPLAYCONFIG_COLOR_ENCODING */
+        UCHAR                   BitsPerColor;
+    }                           AdvancedColor[DXGKP_ADVANCED_COLOR_TARGETS];
+    ULONG                       AdvancedColorCount;
+    volatile LONG               HdrActiveSources;
 
     /* Colorimetry last reported through SetTargetAdjustedColorimetry(2), so
      * it is reported again only when it changes. */
@@ -2452,6 +2473,17 @@ DxgkAdapterStop(
 NTSTATUS
 DxgkRearmVsyncInterrupt(
     _In_ PDXGKRNL_ADAPTER Adapter);
+
+BOOLEAN
+DxgkAdvancedColorSourceActive(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId);
+
+NTSTATUS
+DxgkAdvancedColorEscape(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Inout_updates_bytes_(Size) PVOID Packet,
+    _In_ ULONG Size);
 
 NTSTATUS
 DxgkCollectAdapterDiagnosticInfo(

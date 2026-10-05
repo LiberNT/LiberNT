@@ -43,6 +43,7 @@
 /* IOCTL_VIDEO_DXGK_* present-path contract, shared with cdd/win32k. */
 #include <reactos/dwmframe.h>
 #include <reactos/rddm/rxgkpresent.h>
+#include <reactos/rddm/rxgkadvcolor.h>
 
 /* TAG_DXGK_DISPLAY is now in dxgkrnl_private.h */
 
@@ -624,35 +625,26 @@ DxgkpPrepareHeadlessDesktop(
  * pinned mode offers -- a mode that is only valid at 10 bpc cannot be driven
  * at 8.
  *
- * This path drives SDR (G22_P709), so RGB is preferred, then YCbCr 4:4:4,
- * 4:2:2, 4:2:0 and intensity.  Within an encoding 8 bpc comes first, being
- * what this path has always sent, then the higher depths, then 6 bpc.
- * Choosing deeper formats for HDR belongs with the output colour space.
+ * For SDR (G22_P709) RGB is preferred, then YCbCr 4:4:4, 4:2:2, 4:2:0 and
+ * intensity.  Within an encoding 8 bpc comes first, being what this path has
+ * always sent, then the higher depths, then 6 bpc.  An HDR output takes
+ * DxgkpSelectHdrWireFormat instead.
  *
  * A mode that lists no formats -- a driver below WDDM 2.2 leaves the field
  * zero -- keeps RGB at 8 bpc.
  */
+/* The wire formats the target's pinned mode lists, preference cleared. */
 static D3DKMDT_WIRE_FORMAT_AND_PREFERENCE
-DxgkpSelectTimingWireFormat(
+DxgkpPinnedWireFormats(
     _In_ PDXGKP_VIDPN VidPn,
     _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
 {
-    static CONST UINT DepthOrder[] =
-    {
-        D3DKMDT_BITS_PER_COMPONENT_08, D3DKMDT_BITS_PER_COMPONENT_10,
-        D3DKMDT_BITS_PER_COMPONENT_12, D3DKMDT_BITS_PER_COMPONENT_14,
-        D3DKMDT_BITS_PER_COMPONENT_16, D3DKMDT_BITS_PER_COMPONENT_06
-    };
     D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Supported;
-    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Selected;
     PDXGKP_VIDPN_TARGET_MODESET TargetSet = NULL;
     ULONG TargetIndex;
     SIZE_T i;
-    UINT Encoding, Depth;
 
-    Selected.Value = 0;
     Supported.Value = 0;
-
     TargetIndex = DxgkVidPnTargetIndexFromId(VidPn, TargetId);
     if (TargetIndex != MAXULONG)
         TargetSet = VidPn->TargetModeSets[TargetIndex];
@@ -668,6 +660,26 @@ DxgkpSelectTimingWireFormat(
         }
     }
     Supported.Preference = 0;
+    return Supported;
+}
+
+static D3DKMDT_WIRE_FORMAT_AND_PREFERENCE
+DxgkpSelectTimingWireFormat(
+    _In_ PDXGKP_VIDPN VidPn,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
+{
+    static CONST UINT DepthOrder[] =
+    {
+        D3DKMDT_BITS_PER_COMPONENT_08, D3DKMDT_BITS_PER_COMPONENT_10,
+        D3DKMDT_BITS_PER_COMPONENT_12, D3DKMDT_BITS_PER_COMPONENT_14,
+        D3DKMDT_BITS_PER_COMPONENT_16, D3DKMDT_BITS_PER_COMPONENT_06
+    };
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Supported;
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Selected;
+    UINT Encoding, Depth;
+
+    Selected.Value = 0;
+    Supported = DxgkpPinnedWireFormats(VidPn, TargetId);
 
     for (Encoding = 0; Encoding < 5; Encoding++)
     {
@@ -719,11 +731,13 @@ DxgkpCtaLuminance(_In_ UCHAR CodeValue)
     return (ULONG)(50ULL * DxgkpCta2PowTable[CodeValue & 31] << (CodeValue >> 5));
 }
 
-/* The HDR static metadata data block (CTA extended tag 6), if any. */
+/* A CTA-861 data block with an extended tag (tag code 7), if any: Block
+ * points at the extended tag code, Length counts it and the payload. */
 static BOOLEAN
-DxgkpFindHdrStaticMetadata(
+DxgkpFindCtaExtendedBlock(
     _In_reads_(Count) UCHAR (*Extensions)[128],
     _In_ UCHAR Count,
+    _In_ UCHAR ExtendedTag,
     _Out_ CONST UCHAR **Block,
     _Out_ UCHAR *Length)
 {
@@ -747,7 +761,7 @@ DxgkpFindHdrStaticMetadata(
 
             if (Offset + 1 + Len > End)
                 break;
-            if (Tag == 7 && Len >= 3 && Ext[Offset + 1] == 6)
+            if (Tag == 7 && Len >= 2 && Ext[Offset + 1] == ExtendedTag)
             {
                 *Block = &Ext[Offset + 1];  /* extended tag code first */
                 *Length = Len;
@@ -757,6 +771,17 @@ DxgkpFindHdrStaticMetadata(
         }
     }
     return FALSE;
+}
+
+/* The HDR static metadata data block (CTA extended tag 6), if any. */
+static BOOLEAN
+DxgkpFindHdrStaticMetadata(
+    _In_reads_(Count) UCHAR (*Extensions)[128],
+    _In_ UCHAR Count,
+    _Out_ CONST UCHAR **Block,
+    _Out_ UCHAR *Length)
+{
+    return DxgkpFindCtaExtendedBlock(Extensions, Count, 6, Block, Length) && *Length >= 3;
 }
 
 static VOID
@@ -902,6 +927,499 @@ DxgkpReportTargetColorimetry(
     Adapter->ReportedColorimetry = Colorimetry;
     Adapter->ReportedColorimetryTarget = TargetId;
     Adapter->ReportedColorimetryValid = TRUE;
+}
+
+/*
+ * Advanced colour (HDR) output.
+ *
+ * A target is driven in HDR -- the HDR10 signal: SMPTE ST 2084 transfer,
+ * BT.2020 primaries, at least 10 bits per component -- when the user asked
+ * for it and everything on the way can carry it:
+ *
+ *   - the miniport takes timings through DxgkDdiSetTimingsFromVidPn, whose
+ *     path records carry the output wire colour space, and flips through
+ *     DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3, whose planes carry
+ *     their colour space and SDR white level and whose flips carry HDR
+ *     metadata -- what an HDR output needs to show SDR content correctly;
+ *   - the monitor's EDID lists ST 2084 among the EOTFs of its CTA-861 HDR
+ *     static metadata block;
+ *   - the pinned target mode offers a wire format of 10 bits or more.
+ *
+ * The desktop stays SDR content (sRGB, G22_P709): on an HDR output each flip
+ * says so, and the driver maps sRGB white to the SDR white level (the
+ * default 80 nits).
+ */
+
+/* What the monitor's EDID says about HDR. */
+typedef struct _DXGKP_HDR_SINK
+{
+    BOOLEAN St2084;             /* HDR static metadata block: SMPTE ST 2084 */
+    BOOLEAN ColorimetryBlock;   /* a colorimetry data block is present */
+    BOOLEAN Bt2020Rgb;
+    BOOLEAN Bt2020Ycc;
+} DXGKP_HDR_SINK;
+
+static VOID
+DxgkpEdidHdrSink(
+    _In_reads_(ExtensionCount) UCHAR (*Extensions)[128],
+    _In_ UCHAR ExtensionCount,
+    _Out_ DXGKP_HDR_SINK *Sink)
+{
+    CONST UCHAR *Block;
+    UCHAR Length;
+
+    RtlZeroMemory(Sink, sizeof(*Sink));
+    /* [ext tag 6][EOTFs]...: EOTF bit 2 is SMPTE ST 2084. */
+    if (DxgkpFindHdrStaticMetadata(Extensions, ExtensionCount, &Block, &Length))
+        Sink->St2084 = (Block[1] & 0x04) != 0;
+    /* [ext tag 5][flags]...: bit 7 BT2020RGB, bit 6 BT2020YCC. */
+    if (DxgkpFindCtaExtendedBlock(Extensions, ExtensionCount, 5, &Block, &Length) && Length >= 2)
+    {
+        Sink->ColorimetryBlock = TRUE;
+        Sink->Bt2020Rgb = (Block[1] & 0x80) != 0;
+        Sink->Bt2020Ycc = (Block[1] & 0x40) != 0;
+    }
+}
+
+/* The EDID of the monitor on a target, if one is known. */
+static BOOLEAN
+DxgkpCopyTargetEdid(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _Out_writes_bytes_(128) UCHAR *Edid,
+    _Out_writes_(DXGKP_EDID_MAX_EXTENSIONS) UCHAR (*Extensions)[128],
+    _Out_ UCHAR *ExtensionCount)
+{
+    BOOLEAN HaveEdid = FALSE;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    *ExtensionCount = 0;
+    KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
+    for (Entry = Adapter->ChildListHead.Flink; Entry != &Adapter->ChildListHead; Entry = Entry->Flink)
+    {
+        PDXGK_CHILD_PDO_EXTENSION Child = CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry);
+
+        if (Child->Present && Child->Descriptor.ChildUid == TargetId && Child->EdidValid)
+        {
+            RtlCopyMemory(Edid, Child->Edid, 128);
+            *ExtensionCount = min(Child->EdidExtensionCount, (UCHAR)DXGKP_EDID_MAX_EXTENSIONS);
+            RtlCopyMemory(Extensions, Child->EdidExtensions,
+                          sizeof(UCHAR[128]) * DXGKP_EDID_MAX_EXTENSIONS);
+            HaveEdid = TRUE;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+    return HaveEdid;
+}
+
+/* Whether the miniport can be asked for an HDR output at all. */
+static BOOLEAN
+DxgkpAdapterDrivesHdr(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    return Adapter->MiniportContext != NULL &&
+           !Adapter->MiniportContext->UseDodLayout &&
+           !Adapter->MiniportContext->IsDisplayOnlyDriver &&
+           DXGK_CB_FULL(Adapter, DxgkDdiSetTimingsFromVidPn) != NULL &&
+           DxgkMpo3Supported(Adapter);
+}
+
+/*
+ * A wire format of 10 bits or more from those listed, RGB first unless the
+ * monitor takes BT.2020 only as YCbCr; Value 0 when there is none.
+ */
+static D3DKMDT_WIRE_FORMAT_AND_PREFERENCE
+DxgkpSelectHdrWireFormat(
+    _In_ D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Supported,
+    _In_ BOOLEAN PreferYCbCr)
+{
+    static CONST UINT DepthOrder[] =
+    {
+        D3DKMDT_BITS_PER_COMPONENT_10, D3DKMDT_BITS_PER_COMPONENT_12,
+        D3DKMDT_BITS_PER_COMPONENT_14, D3DKMDT_BITS_PER_COMPONENT_16
+    };
+    static CONST UINT RgbFirst[] = { 0, 1, 2, 3 };
+    static CONST UINT YccFirst[] = { 1, 2, 3, 0 };
+    CONST UINT *Order = PreferYCbCr ? YccFirst : RgbFirst;
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Selected;
+    UINT Index, Depth;
+
+    Selected.Value = 0;
+    for (Index = 0; Index < 4; Index++)
+    {
+        UINT Encoding = Order[Index];
+        UINT Mask = Encoding == 0 ? Supported.Rgb :
+                    Encoding == 1 ? Supported.YCbCr444 :
+                    Encoding == 2 ? Supported.YCbCr422 :
+                                    Supported.YCbCr420;
+
+        for (Depth = 0; Depth < RTL_NUMBER_OF(DepthOrder); Depth++)
+        {
+            if ((Mask & DepthOrder[Depth]) == 0)
+                continue;
+            switch (Encoding)
+            {
+                case 0: Selected.Rgb      = DepthOrder[Depth]; break;
+                case 1: Selected.YCbCr444 = DepthOrder[Depth]; break;
+                case 2: Selected.YCbCr422 = DepthOrder[Depth]; break;
+                default: Selected.YCbCr420 = DepthOrder[Depth]; break;
+            }
+            return Selected;
+        }
+    }
+    return Selected;
+}
+
+/*
+ * Whether the target can be driven in HDR in this VidPN; if so, the wire
+ * format to drive it with.
+ */
+static BOOLEAN
+DxgkpTargetCanDriveHdr(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKP_VIDPN VidPn,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _Out_opt_ D3DKMDT_WIRE_FORMAT_AND_PREFERENCE *WireFormat)
+{
+    UCHAR Edid[128];
+    UCHAR Extensions[DXGKP_EDID_MAX_EXTENSIONS][128];
+    UCHAR ExtensionCount;
+    DXGKP_HDR_SINK Sink;
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Selected;
+
+    if (!DxgkpAdapterDrivesHdr(Adapter) ||
+        !DxgkpCopyTargetEdid(Adapter, TargetId, Edid, Extensions, &ExtensionCount))
+    {
+        return FALSE;
+    }
+    DxgkpEdidHdrSink(Extensions, ExtensionCount, &Sink);
+    if (!Sink.St2084)
+        return FALSE;
+    Selected = DxgkpSelectHdrWireFormat(DxgkpPinnedWireFormats(VidPn, TargetId),
+                                        Sink.ColorimetryBlock && !Sink.Bt2020Rgb && Sink.Bt2020Ycc);
+    if (Selected.Value == 0)
+        return FALSE;
+    if (WireFormat != NULL)
+        *WireFormat = Selected;
+    return TRUE;
+}
+
+/* The record of a target, or -1. */
+static LONG
+DxgkpAdvancedColorFindLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Adapter->AdvancedColorCount; Index++)
+    {
+        if (Adapter->AdvancedColor[Index].TargetId == TargetId)
+            return (LONG)Index;
+    }
+    return -1;
+}
+
+/* The record of a target, made when there is none and there is room. */
+static LONG
+DxgkpAdvancedColorRecordLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
+{
+    LONG Index = DxgkpAdvancedColorFindLocked(Adapter, TargetId);
+
+    if (Index < 0 && Adapter->AdvancedColorCount < DXGKP_ADVANCED_COLOR_TARGETS)
+    {
+        Index = (LONG)Adapter->AdvancedColorCount++;
+        RtlZeroMemory(&Adapter->AdvancedColor[Index], sizeof(Adapter->AdvancedColor[Index]));
+        Adapter->AdvancedColor[Index].TargetId = TargetId;
+    }
+    return Index;
+}
+
+static BOOLEAN
+DxgkpAdvancedColorRequested(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
+{
+    BOOLEAN Requested = FALSE;
+    KIRQL OldIrql;
+    LONG Index;
+
+    KeAcquireSpinLock(&Adapter->AdvancedColorLock, &OldIrql);
+    Index = DxgkpAdvancedColorFindLocked(Adapter, TargetId);
+    if (Index >= 0)
+        Requested = Adapter->AdvancedColor[Index].Requested;
+    KeReleaseSpinLock(&Adapter->AdvancedColorLock, OldIrql);
+    return Requested;
+}
+
+/* DISPLAYCONFIG_COLOR_ENCODING and bits per component of a wire format. */
+static VOID
+DxgkpWireFormatDescription(
+    _In_ D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Wire,
+    _Out_ PUCHAR Encoding,
+    _Out_ PUCHAR BitsPerColor)
+{
+    UINT Mask = Wire.Rgb;
+    UINT Depth;
+
+    *Encoding = 0;              /* DISPLAYCONFIG_COLOR_ENCODING_RGB */
+    if (Mask == 0 && Wire.YCbCr444 != 0) { Mask = Wire.YCbCr444; *Encoding = 1; }
+    if (Mask == 0 && Wire.YCbCr422 != 0) { Mask = Wire.YCbCr422; *Encoding = 2; }
+    if (Mask == 0 && Wire.YCbCr420 != 0) { Mask = Wire.YCbCr420; *Encoding = 3; }
+    if (Mask == 0 && Wire.Intensity != 0) { Mask = Wire.Intensity; *Encoding = 4; }
+    Depth = Mask & D3DKMDT_BITS_PER_COMPONENT_16 ? 16 :
+            Mask & D3DKMDT_BITS_PER_COMPONENT_14 ? 14 :
+            Mask & D3DKMDT_BITS_PER_COMPONENT_12 ? 12 :
+            Mask & D3DKMDT_BITS_PER_COMPONENT_10 ? 10 :
+            Mask & D3DKMDT_BITS_PER_COMPONENT_08 ? 8 :
+            Mask & D3DKMDT_BITS_PER_COMPONENT_06 ? 6 : 0;
+    *BitsPerColor = (UCHAR)Depth;
+}
+
+/*
+ * Records what a commit the miniport accepted drives: each target's colour
+ * space and wire format from its timing record (none for a commit without
+ * them), and which sources now scan out to an HDR signal.
+ */
+static VOID
+DxgkpRecordAdvancedColor(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKP_VIDPN VidPn,
+    _In_ BOOLEAN TopologyEmpty,
+    _In_reads_opt_(TimingCount) CONST DXGK_SET_TIMING_PATH_INFO *Timings,
+    _In_ ULONG TimingCount)
+{
+    LONG Sources = 0;
+    KIRQL OldIrql;
+    ULONG Index;
+    SIZE_T PathIndex;
+
+    KeAcquireSpinLock(&Adapter->AdvancedColorLock, &OldIrql);
+    for (Index = 0; Index < Adapter->AdvancedColorCount; Index++)
+        Adapter->AdvancedColor[Index].Active = FALSE;
+    for (PathIndex = 0; !TopologyEmpty && PathIndex < VidPn->NumPaths; PathIndex++)
+    {
+        D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId = VidPn->Paths[PathIndex].VidPnTargetId;
+        D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId = VidPn->Paths[PathIndex].VidPnSourceId;
+        CONST DXGK_SET_TIMING_PATH_INFO *Timing = NULL;
+        LONG Record;
+
+        for (Index = 0; Timings != NULL && Index < TimingCount; Index++)
+        {
+            if (Timings[Index].VidPnTargetId == TargetId &&
+                Timings[Index].Input.VidPnPathUpdates != DXGK_PATH_UPDATE_REMOVED)
+            {
+                Timing = &Timings[Index];
+            }
+        }
+        Record = DxgkpAdvancedColorRecordLocked(Adapter, TargetId);
+        if (Record < 0)
+            continue;
+        if (Timing != NULL)
+        {
+            DxgkpWireFormatDescription(Timing->SelectedWireFormat,
+                                       &Adapter->AdvancedColor[Record].Encoding,
+                                       &Adapter->AdvancedColor[Record].BitsPerColor);
+            Adapter->AdvancedColor[Record].Active =
+                Timing->OutputWireColorSpace == D3DDDI_OUTPUT_WIRE_COLOR_SPACE_G2084_P2020;
+        }
+        else
+        {
+            Adapter->AdvancedColor[Record].Encoding = 0;
+            Adapter->AdvancedColor[Record].BitsPerColor = 8;
+        }
+        if (Adapter->AdvancedColor[Record].Active && SourceId < 32)
+            Sources |= (LONG)(1UL << SourceId);
+    }
+    InterlockedExchange(&Adapter->HdrActiveSources, Sources);
+    KeReleaseSpinLock(&Adapter->AdvancedColorLock, OldIrql);
+}
+
+BOOLEAN
+DxgkAdvancedColorSourceActive(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId)
+{
+    return VidPnSourceId < 32 &&
+           (InterlockedCompareExchange(&Adapter->HdrActiveSources, 0, 0) &
+            (LONG)(1UL << VidPnSourceId)) != 0;
+}
+
+/* Default SDR white level, in nits, that sRGB white maps to in HDR. */
+#define DXGKP_SDR_WHITE_LEVEL_NITS 80
+
+/*
+ * DxgkAdvancedColorEscape
+ *
+ * RXGK_ESCAPE_ADVANCED_COLOR: reads or sets the advanced colour state of
+ * the output a VidPN source drives.  A SET that changes what is asked for
+ * sets the mode again with the current VidPN, which is how the output
+ * colour space reaches the miniport; a failed one restores the old request.
+ * PASSIVE_LEVEL.
+ */
+NTSTATUS
+DxgkAdvancedColorEscape(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Inout_updates_bytes_(Size) PVOID Buffer,
+    _In_ ULONG Size)
+{
+    RXGK_ADVANCED_COLOR_PACKET *Packet = (RXGK_ADVANCED_COLOR_PACKET *)Buffer;
+    D3DDDI_VIDEO_PRESENT_TARGET_ID Targets[DXGKP_MAX_PATHS];
+    BOOLEAN PreviousRequest[DXGKP_MAX_PATHS];
+    D3DKMDT_HVIDPN hVidPn;
+    PDXGKP_VIDPN VidPn;
+    ULONG TargetCount = 0;
+    BOOLEAN Supported = TRUE;
+    BOOLEAN Changed = FALSE;
+    KIRQL OldIrql;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Index;
+    SIZE_T PathIndex;
+
+    PAGED_CODE();
+
+    if (Size != sizeof(*Packet) || Packet->Size != sizeof(*Packet) ||
+        Packet->Version != RXGK_ADVANCED_COLOR_VERSION_1 ||
+        (Packet->Operation != RXGK_ADVANCED_COLOR_GET &&
+         Packet->Operation != RXGK_ADVANCED_COLOR_SET) ||
+        Packet->VidPnSourceId >= Adapter->NumberOfVideoPresentSources)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* The targets the source drives in the committed topology. */
+    (VOID)KeWaitForSingleObject(&Adapter->VidPnMutex, Executive, KernelMode, FALSE, NULL);
+    hVidPn = Adapter->VidPnCommitted ? (D3DKMDT_HVIDPN)Adapter->VidPn : NULL;
+    if (hVidPn != NULL && !DxgkVidPnReference(hVidPn))
+        hVidPn = NULL;
+    KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
+    if (hVidPn == NULL)
+        return STATUS_GRAPHICS_PATH_NOT_IN_TOPOLOGY;
+    VidPn = (PDXGKP_VIDPN)hVidPn;
+    for (PathIndex = 0; PathIndex < VidPn->NumPaths && TargetCount < RTL_NUMBER_OF(Targets); PathIndex++)
+    {
+        if (VidPn->Paths[PathIndex].VidPnSourceId == Packet->VidPnSourceId)
+            Targets[TargetCount++] = VidPn->Paths[PathIndex].VidPnTargetId;
+    }
+    if (TargetCount == 0)
+    {
+        DxgkVidPnDestroy(hVidPn);
+        return STATUS_GRAPHICS_PATH_NOT_IN_TOPOLOGY;
+    }
+    for (Index = 0; Index < TargetCount; Index++)
+    {
+        if (!DxgkpTargetCanDriveHdr(Adapter, VidPn, Targets[Index], NULL))
+            Supported = FALSE;
+    }
+
+    if (Packet->Operation == RXGK_ADVANCED_COLOR_GET)
+    {
+        UCHAR Edid[128];
+        UCHAR Extensions[DXGKP_EDID_MAX_EXTENSIONS][128];
+        UCHAR ExtensionCount = 0;
+        DXGK_COLORIMETRY Colorimetry;
+        UCHAR Encoding, BitsPerColor;
+        LONG Record;
+
+        Packet->Flags = Supported ? RXGK_ADVANCED_COLOR_SUPPORTED : 0;
+        DxgkpWireFormatDescription(DxgkpSelectTimingWireFormat(VidPn, Targets[0]),
+                                   &Encoding, &BitsPerColor);
+        KeAcquireSpinLock(&Adapter->AdvancedColorLock, &OldIrql);
+        Record = DxgkpAdvancedColorFindLocked(Adapter, Targets[0]);
+        if (Record >= 0)
+        {
+            if (Adapter->AdvancedColor[Record].Requested)
+                Packet->Flags |= RXGK_ADVANCED_COLOR_REQUESTED;
+            if (Adapter->AdvancedColor[Record].Active)
+                Packet->Flags |= RXGK_ADVANCED_COLOR_ENABLED;
+            if (Adapter->AdvancedColor[Record].BitsPerColor != 0)
+            {
+                Encoding = Adapter->AdvancedColor[Record].Encoding;
+                BitsPerColor = Adapter->AdvancedColor[Record].BitsPerColor;
+            }
+        }
+        KeReleaseSpinLock(&Adapter->AdvancedColorLock, OldIrql);
+        Packet->ColorEncoding = Encoding;
+        Packet->BitsPerColorChannel = BitsPerColor;
+        Packet->SdrWhiteLevel = DXGKP_SDR_WHITE_LEVEL_NITS;
+
+        if (!DxgkpCopyTargetEdid(Adapter, Targets[0], Edid, Extensions, &ExtensionCount))
+        {
+            RtlZeroMemory(Edid, sizeof(Edid));
+            ExtensionCount = 0;
+        }
+        DxgkpEdidColorimetry(Edid, Extensions, ExtensionCount, &Colorimetry);
+        Packet->RedPrimary[0] = (UINT32)Colorimetry.RedPoint.cx;
+        Packet->RedPrimary[1] = (UINT32)Colorimetry.RedPoint.cy;
+        Packet->GreenPrimary[0] = (UINT32)Colorimetry.GreenPoint.cx;
+        Packet->GreenPrimary[1] = (UINT32)Colorimetry.GreenPoint.cy;
+        Packet->BluePrimary[0] = (UINT32)Colorimetry.BluePoint.cx;
+        Packet->BluePrimary[1] = (UINT32)Colorimetry.BluePoint.cy;
+        Packet->WhitePoint[0] = (UINT32)Colorimetry.WhitePoint.cx;
+        Packet->WhitePoint[1] = (UINT32)Colorimetry.WhitePoint.cy;
+        Packet->MinLuminance = Colorimetry.MinLuminance;
+        Packet->MaxLuminance = Colorimetry.MaxLuminance;
+        Packet->MaxFullFrameLuminance = Colorimetry.MaxFullFrameLuminance;
+        if (Colorimetry.MaxLuminance != 0)
+            Packet->Flags |= RXGK_ADVANCED_COLOR_EDID_LUMINANCE;
+        DxgkVidPnDestroy(hVidPn);
+        return STATUS_SUCCESS;
+    }
+
+    DxgkVidPnDestroy(hVidPn);
+    if (Packet->Enable > 1)
+        return STATUS_INVALID_PARAMETER;
+    if (Packet->Enable && !Supported)
+        return STATUS_NOT_SUPPORTED;
+
+    KeAcquireSpinLock(&Adapter->AdvancedColorLock, &OldIrql);
+    for (Index = 0; Index < TargetCount; Index++)
+    {
+        LONG Record = DxgkpAdvancedColorRecordLocked(Adapter, Targets[Index]);
+
+        if (Record < 0)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            TargetCount = Index;
+            break;
+        }
+        PreviousRequest[Index] = Adapter->AdvancedColor[Record].Requested;
+        if (PreviousRequest[Index] != (BOOLEAN)Packet->Enable)
+            Changed = TRUE;
+        Adapter->AdvancedColor[Record].Requested = (BOOLEAN)Packet->Enable;
+    }
+    KeReleaseSpinLock(&Adapter->AdvancedColorLock, OldIrql);
+
+    if (NT_SUCCESS(Status) && Changed)
+    {
+        DXGKRNL_TRACE("AdvancedColor: source %u HDR %s; setting the mode again\n",
+                      Packet->VidPnSourceId, Packet->Enable ? "on" : "off");
+        Status = DxgkDisplayCommitVidPn(Adapter);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        KeAcquireSpinLock(&Adapter->AdvancedColorLock, &OldIrql);
+        for (Index = 0; Index < TargetCount; Index++)
+        {
+            LONG Record = DxgkpAdvancedColorFindLocked(Adapter, Targets[Index]);
+
+            if (Record >= 0)
+                Adapter->AdvancedColor[Record].Requested = PreviousRequest[Index];
+        }
+        KeReleaseSpinLock(&Adapter->AdvancedColorLock, OldIrql);
+        if (Changed)
+        {
+            DXGKRNL_WARN("AdvancedColor: source %u mode set refused 0x%08lX; "
+                         "restoring the previous output\n",
+                         Packet->VidPnSourceId, Status);
+            (VOID)DxgkDisplayCommitVidPn(Adapter);
+        }
+    }
+    return Status;
 }
 
 /* Same timing, compared field by field (the structure has padding). */
@@ -1895,8 +2413,17 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
                     WasTimed = TRUE;
             }
             Timing->VidPnTargetId = TargetId;
-            Timing->OutputWireColorSpace = D3DDDI_OUTPUT_WIRE_COLOR_SPACE_G22_P709;
-            Timing->SelectedWireFormat = DxgkpSelectTimingWireFormat(VidPn, TargetId);
+            /* HDR where it was asked for and the whole chain carries it. */
+            if (DxgkpAdvancedColorRequested(Adapter, TargetId) &&
+                DxgkpTargetCanDriveHdr(Adapter, VidPn, TargetId, &Timing->SelectedWireFormat))
+            {
+                Timing->OutputWireColorSpace = D3DDDI_OUTPUT_WIRE_COLOR_SPACE_G2084_P2020;
+            }
+            else
+            {
+                Timing->OutputWireColorSpace = D3DDDI_OUTPUT_WIRE_COLOR_SPACE_G22_P709;
+                Timing->SelectedWireFormat = DxgkpSelectTimingWireFormat(VidPn, TargetId);
+            }
             Timing->Input.VidPnPathUpdates = WasTimed ? DXGK_PATH_UPDATE_MODIFIED : DXGK_PATH_UPDATE_ADDED;
             Timing->Input.Active = 1;
             Timing->Input.IgnoreConnectivity = 1;
@@ -1993,6 +2520,7 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
         for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
             Adapter->CommittedTargetIds[Adapter->CommittedTargetCount++] = VidPn->Paths[i].VidPnTargetId;
         DxgkpRecordCommittedMultisampling(Adapter, VidPn, TopologyEmpty);
+        DxgkpRecordAdvancedColor(Adapter, VidPn, TopologyEmpty, TimingPaths, TimingCount);
         if (TimingResults.ConnectionStatusChanges)
         {
             /* The driver queued connection changes.  The rebuild worker
@@ -2071,6 +2599,8 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
         for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
             Adapter->CommittedTargetIds[Adapter->CommittedTargetCount++] = VidPn->Paths[i].VidPnTargetId;
         DxgkpRecordCommittedMultisampling(Adapter, VidPn, TopologyEmpty);
+        /* CommitVidPn has no output colour space: SDR. */
+        DxgkpRecordAdvancedColor(Adapter, VidPn, TopologyEmpty, NULL, 0);
         Status = STATUS_SUCCESS;
     }
     else

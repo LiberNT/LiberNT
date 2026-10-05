@@ -31,6 +31,7 @@
 #include "vidpn.h"
 #include "present.h"
 #include "pnp.h"
+#include <reactos/rddm/rxgkadvcolor.h>
 #include "caps_core.h"
 #include "paging_core.h"
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3200)
@@ -5251,6 +5252,15 @@ DxgkpEscapeCaptured(
             Status = STATUS_INVALID_PARAMETER;
             goto Cleanup;
         }
+    }
+
+    /* The advanced colour state of an output is dxgkrnl's own; it never
+     * reaches the miniport. */
+    if ((UINT)pEscape->Type == RXGK_ESCAPE_ADVANCED_COLOR)
+    {
+        Status = DxgkAdvancedColorEscape(Adapter, pEscape->pPrivateDriverData,
+                                         pEscape->PrivateDriverDataSize);
+        goto Cleanup;
     }
 
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3000)
