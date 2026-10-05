@@ -192,6 +192,9 @@ DxgkpRenderPublishRing(
  *
  * IRQL: PASSIVE_LEVEL
  * ====================================================================== */
+/* Passes one command buffer may take before translation is deemed stuck. */
+#define DXGKP_RENDER_MAX_PASSES 64
+
 NTSTATUS
 NTAPI
 DxgkRender(
@@ -216,6 +219,9 @@ DxgkRender(
     UINT ReferencedCount = 0;
     UINT PatchOutCount = 0;
     UINT DmaBytesUsed = 0;
+    UINT MultipassOffset = 0;
+    UINT QueuedBuffers = 0;
+    UINT Pass;
     ULONGLONG BackpressureDeadline = 0;
     UINT Index;
     ULONG VidSchFence = 0;
@@ -410,147 +416,197 @@ DxgkRender(
         RtlZeroMemory(DmaBufferPrivateData, DmaBufferPrivateDataSize);
     }
 
-    RtlZeroMemory(&RenderArgs, sizeof(RenderArgs));
-    RenderArgs.pCommand = (PUCHAR)Context->RenderRingKernel + pRender->CommandOffset;
-    RenderArgs.CommandLength = pRender->CommandLength;
-    RenderArgs.pDmaBuffer = DmaBuffer->VirtualAddress;
-    RenderArgs.DmaSize = DmaBuffer->Capacity;
-    RenderArgs.pDmaBufferPrivateData = DmaBufferPrivateData;
-    RenderArgs.DmaBufferPrivateDataSize = DmaBufferPrivateDataSize;
-    RenderArgs.pAllocationList = KernelAllocations;
-    RenderArgs.AllocationListSize = pRender->AllocationCount;
-    RenderArgs.pPatchLocationListIn = CapturedPatches;
-    RenderArgs.PatchLocationListInSize = pRender->PatchLocationCount;
-    RenderArgs.pPatchLocationListOut = PatchOut;
-    RenderArgs.PatchLocationListOutSize = RTL_NUMBER_OF(PatchOut);
-    RenderArgs.DmaBufferSegmentId = DmaBuffer->SegmentId;
-    RenderArgs.DmaBufferPhysicalAddress = DmaBuffer->SegmentAddress;
-    RtlZeroMemory(PatchOut, sizeof(PatchOut));
+    /*
+     * A command buffer may translate into more DMA than one buffer holds.
+     * The driver then returns STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER with
+     * pDmaBuffer, pPatchLocationListOut and MultipassOffset describing what it
+     * wrote.  That portion is submitted, a fresh DMA buffer is taken, and the
+     * driver is called again with the same command buffer and the
+     * MultipassOffset it returned, which dxgkrnl never alters.
+     */
+    for (Pass = 0;; ++Pass)
+    {
+        UINT PreviousOffset = MultipassOffset;
+        BOOLEAN Partial;
 
-    if (!DxgkAcquireKmdCall(Adapter))
-    {
-        Status = STATUS_DELETE_PENDING;
-        goto Cleanup;
-    }
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiRender)(Context->hMiniportContext != NULL ? Context->hMiniportContext : Device->hMiniportDevice, &RenderArgs);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
-    DxgkReleaseKmdCall(Adapter);
-    if (!NT_SUCCESS(Status))
-        goto Cleanup;
+        if (Pass != 0)
+        {
+            Status = DxgkAllocateDmaBufferInSegmentSet(Adapter, max(Context->ContextInfo.DmaBufferSize, pRender->CommandLength), Context->ContextInfo.DmaBufferSegmentSet, &DmaBuffer);
+            if (!NT_SUCCESS(Status))
+                goto Cleanup;
+            /* The submitted packet kept its own copy of the last pass's
+             * private data; this buffer starts clean. */
+            if (DmaBufferPrivateData != NULL)
+                RtlZeroMemory(DmaBufferPrivateData, DmaBufferPrivateDataSize);
+        }
 
-    if (RenderArgs.pDmaBuffer == NULL ||
-        (PUCHAR)RenderArgs.pDmaBuffer < (PUCHAR)DmaBuffer->VirtualAddress ||
-        (PUCHAR)RenderArgs.pDmaBuffer > (PUCHAR)DmaBuffer->VirtualAddress + DmaBuffer->Capacity)
-    {
-        Status = STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
-        goto Cleanup;
-    }
-    DmaBytesUsed = (UINT)((PUCHAR)RenderArgs.pDmaBuffer - (PUCHAR)DmaBuffer->VirtualAddress);
-    if (RenderArgs.pPatchLocationListOut < PatchOut ||
-        (SIZE_T)(RenderArgs.pPatchLocationListOut - PatchOut) > RTL_NUMBER_OF(PatchOut))
-    {
-        Status = STATUS_INVALID_PARAMETER;
-        goto Cleanup;
-    }
-    PatchOutCount = (UINT)(RenderArgs.pPatchLocationListOut - PatchOut);
-    for (Index = 0; Index < PatchOutCount; ++Index)
-    {
-        UINT AllocationIndex = PatchOut[Index].AllocationIndex;
+        RtlZeroMemory(&RenderArgs, sizeof(RenderArgs));
+        RenderArgs.pCommand = (PUCHAR)Context->RenderRingKernel + pRender->CommandOffset;
+        RenderArgs.CommandLength = pRender->CommandLength;
+        RenderArgs.pDmaBuffer = DmaBuffer->VirtualAddress;
+        RenderArgs.DmaSize = DmaBuffer->Capacity;
+        RenderArgs.pDmaBufferPrivateData = DmaBufferPrivateData;
+        RenderArgs.DmaBufferPrivateDataSize = DmaBufferPrivateDataSize;
+        RenderArgs.pAllocationList = KernelAllocations;
+        RenderArgs.AllocationListSize = pRender->AllocationCount;
+        RenderArgs.pPatchLocationListIn = CapturedPatches;
+        RenderArgs.PatchLocationListInSize = pRender->PatchLocationCount;
+        RenderArgs.pPatchLocationListOut = PatchOut;
+        RenderArgs.PatchLocationListOutSize = RTL_NUMBER_OF(PatchOut);
+        RenderArgs.MultipassOffset = MultipassOffset;
+        RenderArgs.DmaBufferSegmentId = DmaBuffer->SegmentId;
+        RenderArgs.DmaBufferPhysicalAddress = DmaBuffer->SegmentAddress;
+        RtlZeroMemory(PatchOut, sizeof(PatchOut));
 
-        if (AllocationIndex >= pRender->AllocationCount)
+        if (!DxgkAcquireKmdCall(Adapter))
+        {
+            Status = STATUS_DELETE_PENDING;
+            goto Cleanup;
+        }
+        _SEH2_TRY
+        {
+            Status = DXGK_CB_FULL(Adapter, DxgkDdiRender)(Context->hMiniportContext != NULL ? Context->hMiniportContext : Device->hMiniportDevice, &RenderArgs);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+        DxgkReleaseKmdCall(Adapter);
+        Partial = (Status == STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER);
+        if (!NT_SUCCESS(Status) && !Partial)
+            goto Cleanup;
+
+        if (RenderArgs.pDmaBuffer == NULL ||
+            (PUCHAR)RenderArgs.pDmaBuffer < (PUCHAR)DmaBuffer->VirtualAddress ||
+            (PUCHAR)RenderArgs.pDmaBuffer > (PUCHAR)DmaBuffer->VirtualAddress + DmaBuffer->Capacity)
+        {
+            Status = STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+            goto Cleanup;
+        }
+        DmaBytesUsed = (UINT)((PUCHAR)RenderArgs.pDmaBuffer - (PUCHAR)DmaBuffer->VirtualAddress);
+        if (RenderArgs.pPatchLocationListOut < PatchOut ||
+            (SIZE_T)(RenderArgs.pPatchLocationListOut - PatchOut) > RTL_NUMBER_OF(PatchOut))
         {
             Status = STATUS_INVALID_PARAMETER;
             goto Cleanup;
         }
-        /* DXGK_ALLOCATIONLIST carries no size, so the miniport cannot bound
-         * the offset it will patch.  dxgkrnl owns the allocation and must
-         * refuse an offset that would resolve outside it, otherwise a
-         * user-mode driver could name a neighbouring allocation's memory. */
-        if (AllocationReferences[AllocationIndex] == NULL ||
-            PatchOut[Index].AllocationOffset >= AllocationReferences[AllocationIndex]->Size)
+        PatchOutCount = (UINT)(RenderArgs.pPatchLocationListOut - PatchOut);
+        for (Index = 0; Index < PatchOutCount; ++Index)
         {
-            Status = STATUS_INVALID_PARAMETER;
+            UINT AllocationIndex = PatchOut[Index].AllocationIndex;
+
+            if (AllocationIndex >= pRender->AllocationCount)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                goto Cleanup;
+            }
+            /* DXGK_ALLOCATIONLIST carries no size, so the miniport cannot
+             * bound the offset it will patch.  dxgkrnl owns the allocation
+             * and must refuse an offset that would resolve outside it,
+             * otherwise a user-mode driver could name a neighbouring
+             * allocation's memory. */
+            if (AllocationReferences[AllocationIndex] == NULL ||
+                PatchOut[Index].AllocationOffset >= AllocationReferences[AllocationIndex]->Size)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                goto Cleanup;
+            }
+        }
+        MultipassOffset = RenderArgs.MultipassOffset;
+
+        /* A pass that wrote nothing and recorded no progress would ask for
+         * the same buffer forever; so would a stream that never ends. */
+        if (Partial &&
+            ((DmaBytesUsed == 0 && MultipassOffset == PreviousOffset) ||
+             Pass + 1 >= DXGKP_RENDER_MAX_PASSES))
+        {
+            DXGKRNL_WARN("DxgkRender: multipass translation stalled at pass %u "
+                         "(offset %u, %u bytes)\n",
+                         Pass, MultipassOffset, DmaBytesUsed);
+            Status = STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
             goto Cleanup;
         }
-    }
-    if (DmaBytesUsed == 0)
-    {
-        /* The miniport translated the stream to no hardware work. */
-        DxgkpRenderPublishRing(Context, pRender);
-        pRender->QueuedBufferCount = 0;
-        Status = STATUS_SUCCESS;
-        goto Cleanup;
-    }
-    DmaBuffer->SubmissionStartOffset = 0;
-    DmaBuffer->SubmissionEndOffset = DmaBytesUsed;
 
-    RtlZeroMemory(&TrackArgs, sizeof(TrackArgs));
-    TrackArgs.Device = Device;
-    TrackArgs.Context = Context;
-    TrackArgs.EnforceSubmissionQuota = TRUE;
-    TrackArgs.AllocationReferences = AllocationReferences;
-    TrackArgs.AllocationReferenceCount = ReferencedCount;
-    TrackArgs.OpenBindingReferences = OpenBindings;
-    TrackArgs.OpenBindingReferenceCount = ReferencedCount;
+        if (DmaBytesUsed == 0)
+        {
+            /* The miniport translated this part of the stream to no
+             * hardware work. */
+            DxgkFreeDmaBuffer(DmaBuffer);
+            DmaBuffer = NULL;
+        }
+        else
+        {
+            DmaBuffer->SubmissionStartOffset = 0;
+            DmaBuffer->SubmissionEndOffset = DmaBytesUsed;
+
+            RtlZeroMemory(&TrackArgs, sizeof(TrackArgs));
+            TrackArgs.Device = Device;
+            TrackArgs.Context = Context;
+            TrackArgs.EnforceSubmissionQuota = TRUE;
+            TrackArgs.AllocationReferences = AllocationReferences;
+            TrackArgs.AllocationReferenceCount = ReferencedCount;
+            TrackArgs.OpenBindingReferences = OpenBindings;
+            TrackArgs.OpenBindingReferenceCount = ReferencedCount;
+            BackpressureDeadline = 0;
 
 RetryTrackedSubmit:
-    Status = VidSchSubmitCommandTracked(Adapter,
-                                        Context->NodeOrdinal,
-                                        0,
-                                        DmaBuffer,
-                                        DmaBufferPrivateData,
-                                        DmaBufferPrivateDataSize,
-                                        KernelAllocations,
-                                        pRender->AllocationCount,
-                                        PatchOut,
-                                        PatchOutCount,
-                                        Adapter->SchedulingCaps.MultiEngineAware ? NULL : Device->hMiniportDevice,
-                                        Adapter->SchedulingCaps.MultiEngineAware ? Context->hMiniportContext : NULL,
-                                        Context->SchedulingPriority,
-                                        &TrackArgs,
-                                        0,
-                                        0,
-                                        &VidSchFence);
-    if (Status == STATUS_RETRY)
-    {
-        if (BackpressureDeadline == 0)
-        {
-            BackpressureDeadline =
-                KeQueryInterruptTime() +
-                (ULONGLONG)VIDSCH_CONTEXT_BACKPRESSURE_MS * 10000ULL;
-        }
-        Status = DxgkYieldKmdTransactionForContextRoom(Adapter,
-                                                       Context,
-                                                       BackpressureDeadline,
-                                                       &KmdTransaction);
-        if (!NT_SUCCESS(Status))
-            goto Cleanup;
-        if (InterlockedCompareExchange(&Device->ExecutionState, 0, 0) !=
-                D3DKMT_DEVICEEXECUTION_ACTIVE ||
-            InterlockedCompareExchange(&Context->Destroying, 0, 0) != 0)
-        {
-            Status = STATUS_DEVICE_REMOVED;
-            goto Cleanup;
-        }
-        goto RetryTrackedSubmit;
-    }
-    if (!NT_SUCCESS(Status))
-        goto Cleanup;
+            Status = VidSchSubmitCommandTracked(Adapter,
+                                                Context->NodeOrdinal,
+                                                0,
+                                                DmaBuffer,
+                                                DmaBufferPrivateData,
+                                                DmaBufferPrivateDataSize,
+                                                KernelAllocations,
+                                                pRender->AllocationCount,
+                                                PatchOut,
+                                                PatchOutCount,
+                                                Adapter->SchedulingCaps.MultiEngineAware ? NULL : Device->hMiniportDevice,
+                                                Adapter->SchedulingCaps.MultiEngineAware ? Context->hMiniportContext : NULL,
+                                                Context->SchedulingPriority,
+                                                &TrackArgs,
+                                                0,
+                                                0,
+                                                &VidSchFence);
+            if (Status == STATUS_RETRY)
+            {
+                if (BackpressureDeadline == 0)
+                {
+                    BackpressureDeadline =
+                        KeQueryInterruptTime() +
+                        (ULONGLONG)VIDSCH_CONTEXT_BACKPRESSURE_MS * 10000ULL;
+                }
+                Status = DxgkYieldKmdTransactionForContextRoom(Adapter,
+                                                               Context,
+                                                               BackpressureDeadline,
+                                                               &KmdTransaction);
+                if (!NT_SUCCESS(Status))
+                    goto Cleanup;
+                if (InterlockedCompareExchange(&Device->ExecutionState, 0, 0) !=
+                        D3DKMT_DEVICEEXECUTION_ACTIVE ||
+                    InterlockedCompareExchange(&Context->Destroying, 0, 0) != 0)
+                {
+                    Status = STATUS_DEVICE_REMOVED;
+                    goto Cleanup;
+                }
+                goto RetryTrackedSubmit;
+            }
+            if (!NT_SUCCESS(Status))
+                goto Cleanup;
 
-    /* The DMA buffer is now owned by the tracked submission, which took its
-     * own allocation references and residency pins; the ones this call holds
-     * are released below either way. */
-    DmaBuffer = NULL;
+            /* The DMA buffer is now owned by the tracked submission, which
+             * took its own allocation references and residency pins; the
+             * ones this call holds are released below either way. */
+            DmaBuffer = NULL;
+            ++QueuedBuffers;
+        }
+
+        if (!Partial)
+            break;
+    }
 
     DxgkpRenderPublishRing(Context, pRender);
-    pRender->QueuedBufferCount = 1;
+    pRender->QueuedBufferCount = QueuedBuffers;
     Status = STATUS_SUCCESS;
 
 Cleanup:
