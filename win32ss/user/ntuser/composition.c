@@ -3415,6 +3415,29 @@ IntCompositionDwmTeardown(VOID)
     }
 }
 
+/*
+ * dxgkrnl: a miniport withdrew the overlay planes dwm presented with, so the
+ * frame on screen is no longer the one dwm composed.  Compose and present it
+ * whole.  Every dwm teardown runs under the exclusive USER lock; holding it
+ * shared keeps the wake event alive while it is signalled.
+ */
+VOID
+NTAPI
+DxgkEngRefreshComposition(VOID)
+{
+    BOOL Entered;
+
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return;
+    Entered = UserIsEntered();
+    if (!Entered)
+        UserEnterShared();
+    if (gbCompositionEnabled && g_DwmAttached)
+        IntCompositionMarkDamage(TRUE);
+    if (!Entered)
+        UserLeave();
+}
+
 VOID
 IntCompositionCleanupProcess(_In_ PEPROCESS Process)
 {

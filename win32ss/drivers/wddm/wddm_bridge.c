@@ -92,6 +92,10 @@ NTSTATUS
 NTAPI
 DxgkEngQueryWindowPresentState(_In_ ULONG_PTR WindowHandle);
 
+VOID
+NTAPI
+DxgkEngRefreshComposition(VOID);
+
 NTSTATUS
 NTAPI
 DxgkEngAdmitRedirectedBltPresent(
@@ -549,6 +553,7 @@ WddmBridgeInit(VOID)
             DxgkEngCancelRedirectedBltPresent;
         CddInterface.DispatchNtGdi = DxgkEngDispatchNtGdiDdDDI;
         CddInterface.QueryWindowPresentState = DxgkEngQueryWindowPresentState;
+        CddInterface.RefreshComposition = DxgkEngRefreshComposition;
         Status = WddmBridgeSendIoctlToDevice(
                      DeviceObject,
                      IOCTL_DXGKRNL_REGISTER_WIN32K_CDD_INTERFACE,
