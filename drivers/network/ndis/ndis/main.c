@@ -87,12 +87,48 @@ NdisWriteErrorLogEntry(
  *     Variable: list of log items
  * NOTES:
  *     - THIS IS >CDECL<
- *     - This needs to be fixed to do var args
- *     - FIXME - this needs to be properly implemented once we have an event log
  */
 {
+  PLOGICAL_ADAPTER Adapter = GET_LOGICAL_ADAPTER(NdisAdapterHandle);
+  PIO_ERROR_LOG_PACKET Packet = NULL;
+  ULONG MaximumValues;
+  ULONG Value;
+  ULONG i;
+  va_list Values;
+
   NDIS_DbgPrint(MIN_TRACE, ("ERROR: ErrorCode 0x%x\n", ErrorCode));
   /* ASSERT(0); */
+
+  MaximumValues = (ERROR_LOG_MAXIMUM_SIZE - FIELD_OFFSET(IO_ERROR_LOG_PACKET, DumpData)) / sizeof(ULONG);
+  if (NumberOfErrorValues > MaximumValues)
+      NumberOfErrorValues = MaximumValues;
+
+  if (Adapter != NULL && Adapter->NdisMiniportBlock.DeviceObject != NULL)
+  {
+      Packet = IoAllocateErrorLogEntry(Adapter->NdisMiniportBlock.DeviceObject,
+                                       (UCHAR)(FIELD_OFFSET(IO_ERROR_LOG_PACKET, DumpData) +
+                                               NumberOfErrorValues * sizeof(ULONG)));
+  }
+
+  if (Packet != NULL)
+  {
+      RtlZeroMemory(Packet, FIELD_OFFSET(IO_ERROR_LOG_PACKET, DumpData));
+      Packet->ErrorCode = ErrorCode;
+      Packet->DumpDataSize = (USHORT)(NumberOfErrorValues * sizeof(ULONG));
+  }
+
+  va_start(Values, NumberOfErrorValues);
+  for (i = 0; i < NumberOfErrorValues; i++)
+  {
+      Value = va_arg(Values, ULONG);
+      NDIS_DbgPrint(MIN_TRACE, ("ERROR: ErrorValue[%lu] 0x%lx\n", i, Value));
+      if (Packet != NULL)
+          Packet->DumpData[i] = Value;
+  }
+  va_end(Values);
+
+  if (Packet != NULL)
+      IoWriteErrorLogEntry(Packet);
 }
 
 
