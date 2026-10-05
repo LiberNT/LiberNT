@@ -37,16 +37,30 @@ PortInitializeDma(
 {
     DEVICE_DESCRIPTION Description = {0};
     ULONG MapRegisters;
+    BOOLEAN Data64 = FALSE;
+    BOOLEAN Common64 = FALSE;
 
     if (FdoExtension->DmaAdapter)
         return STATUS_SUCCESS;
+
+    switch (Config->Dma64BitAddresses)
+    {
+        case SCSI_DMA64_MINIPORT_SUPPORTED:
+        case SCSI_DMA64_MINIPORT_FULL64BIT_SUPPORTED:
+            Data64 = TRUE;
+            break;
+
+        case SCSI_DMA64_MINIPORT_FULL64BIT_NO_BOUNDARY_REQ_SUPPORTED:
+            Data64 = TRUE;
+            Common64 = TRUE;
+            break;
+    }
 
     Description.Version = DEVICE_DESCRIPTION_VERSION2;
     Description.Master = TRUE;
     Description.ScatterGather = TRUE;
     Description.Dma32BitAddresses = TRUE;
-    Description.Dma64BitAddresses =
-        Config->Dma64BitAddresses == SCSI_DMA64_MINIPORT_SUPPORTED;
+    Description.Dma64BitAddresses = Data64;
     Description.BusNumber = Config->SystemIoBusNumber;
     Description.InterfaceType = Config->AdapterInterfaceType;
     Description.MaximumLength = Config->MaximumTransferLength;
@@ -57,6 +71,20 @@ PortInitializeDma(
                                               &Description, &MapRegisters);
     if (!FdoExtension->DmaAdapter)
         return STATUS_NOT_SUPPORTED;
+
+    FdoExtension->CommonBufferAdapter = FdoExtension->DmaAdapter;
+    if (Data64 && !Common64)
+    {
+        Description.Dma64BitAddresses = FALSE;
+        FdoExtension->CommonBufferAdapter = IoGetDmaAdapter(FdoExtension->PhysicalDevice,
+                                                           &Description, &MapRegisters);
+        if (!FdoExtension->CommonBufferAdapter)
+        {
+            FdoExtension->DmaAdapter->DmaOperations->PutDmaAdapter(FdoExtension->DmaAdapter);
+            FdoExtension->DmaAdapter = NULL;
+            return STATUS_NOT_SUPPORTED;
+        }
+    }
 
     InitializeListHead(&FdoExtension->DmaBuffers);
     KeInitializeSpinLock(&FdoExtension->DmaBufferLock);
@@ -71,7 +99,7 @@ PortAllocateDmaBuffer(
     _Out_ PPHYSICAL_ADDRESS LogicalAddress)
 {
     PPORT_DMA_BUFFER Buffer;
-    PDMA_ADAPTER Adapter = FdoExtension->DmaAdapter;
+    PDMA_ADAPTER Adapter = FdoExtension->CommonBufferAdapter;
     KIRQL OldIrql;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
@@ -106,7 +134,7 @@ PortFreeDmaBuffer(
 {
     PLIST_ENTRY Entry;
     PPORT_DMA_BUFFER Buffer = NULL;
-    PDMA_ADAPTER Adapter = FdoExtension->DmaAdapter;
+    PDMA_ADAPTER Adapter = FdoExtension->CommonBufferAdapter;
     KIRQL OldIrql;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);

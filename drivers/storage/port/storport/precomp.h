@@ -116,6 +116,7 @@ typedef struct _FDO_DEVICE_EXTENSION
     LIST_ENTRY AdapterListEntry;
     MINIPORT Miniport;
     PDMA_ADAPTER DmaAdapter;
+    PDMA_ADAPTER CommonBufferAdapter;
     KSPIN_LOCK DmaBufferLock;
     LIST_ENTRY DmaBuffers;
     SLIST_HEADER FreeSrbExtensions;
