@@ -361,7 +361,7 @@ extern HANDLE BaseNamedObjectDirectory;
 
 HANDLE
 WINAPI
-BaseGetNamedObjectDirectory(VOID);
+BasepGetNamedObjectDirectory(VOID);
 
 NTSTATUS
 WINAPI
