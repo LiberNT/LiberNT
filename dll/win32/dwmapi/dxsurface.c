@@ -54,6 +54,7 @@ typedef struct _DWM_DX_SURFACE
     D3DKMT_HANDLE hAllocation;
     D3DKMT_HANDLE hGlobalShare;
     HANDLE ReadyEvent;
+    DWM_DX_SHARED_SURFACE_INFO Info;
 } DWM_DX_SURFACE;
 
 static INIT_ONCE g_DxInitOnce = INIT_ONCE_STATIC_INIT;
@@ -316,7 +317,25 @@ DwmDxRegisterSurface(HWND Window,
     Surface->hAllocation = Allocation.hAllocation;
     Surface->hGlobalShare = Create.hGlobalShare;
     Surface->ReadyEvent = ReadyEvent;
+    Surface->Info = RuntimeInfo;
     return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+DwmDxReregisterSurface(const DWM_DX_SURFACE *Surface)
+{
+    DWM_DX_SURFACE_EXCHANGE Exchange;
+
+    RtlZeroMemory(&Exchange, sizeof(Exchange));
+    Exchange.StructSize = sizeof(Exchange);
+    Exchange.Action = DWM_DX_SURFACE_REGISTER;
+    Exchange.Window = (ULONGLONG)(ULONG_PTR)Surface->Window;
+    Exchange.AdapterLuid = g_DxDevices[Surface->DeviceIndex].Luid;
+    Exchange.GlobalShare = Surface->hGlobalShare;
+    Exchange.Info = Surface->Info;
+    Exchange.ReadyEvent = (ULONGLONG)(ULONG_PTR)Surface->ReadyEvent;
+    return (NTSTATUS)NtUserCallOneParam((DWORD_PTR)&Exchange,
+                                        DWM_ROUTINE_DXSURFACE);
 }
 
 static NTSTATUS
@@ -542,6 +561,11 @@ DwmpDxGetWindowSharedSurface(HWND Window,
     }
 
     Status = DwmDxIssueSurface(Surface, &AdapterLuid, UpdateId);
+    if (Status == STATUS_INVALID_PARAMETER && !Registered &&
+        NT_SUCCESS(DwmDxReregisterSurface(Surface)))
+    {
+        Status = DwmDxIssueSurface(Surface, &AdapterLuid, UpdateId);
+    }
     if (Status == STATUS_INVALID_PARAMETER && !Registered)
     {
         RtlZeroMemory(&NewSurface, sizeof(NewSurface));
