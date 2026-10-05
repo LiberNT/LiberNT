@@ -235,6 +235,16 @@ KdpPrint(
     _Out_ PBOOLEAN Handled
 );
 
+VOID
+NTAPI
+KdpPrintToCallbacks(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level,
+    _In_reads_bytes_(Length) PCHAR String,
+    _In_ USHORT Length,
+    _In_ KPROCESSOR_MODE PreviousMode
+);
+
 USHORT
 NTAPI
 KdpPrompt(

@@ -20,7 +20,146 @@
 
 static PVOID volatile KdpPrintOpenLine;
 
+typedef struct _KDP_PRINT_CALLBACK
+{
+    LIST_ENTRY ListEntry;
+    PDEBUG_PRINT_CALLBACK Callback;
+} KDP_PRINT_CALLBACK, *PKDP_PRINT_CALLBACK;
+
+static LIST_ENTRY KdpPrintCallbackList = { &KdpPrintCallbackList, &KdpPrintCallbackList };
+static KSPIN_LOCK KdpPrintCallbackLock;
+static volatile LONG KdpPrintCallbackCount;
+
 /* FUNCTIONS *****************************************************************/
+
+static
+KIRQL
+KdpAcquirePrintCallbackLock(VOID)
+{
+    KIRQL OldIrql = KeGetCurrentIrql();
+
+    if (OldIrql < SYNCH_LEVEL)
+        KeRaiseIrql(SYNCH_LEVEL, &OldIrql);
+    KeAcquireSpinLockAtDpcLevel(&KdpPrintCallbackLock);
+    return OldIrql;
+}
+
+static
+VOID
+KdpReleasePrintCallbackLock(
+    _In_ KIRQL OldIrql)
+{
+    KeReleaseSpinLockFromDpcLevel(&KdpPrintCallbackLock);
+    if (OldIrql < SYNCH_LEVEL)
+        KeLowerIrql(OldIrql);
+}
+
+static
+VOID
+KdpNotifyPrintCallbacks(
+    _In_reads_bytes_(Length) PCHAR String,
+    _In_ USHORT Length,
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level)
+{
+    PLIST_ENTRY Entry;
+    STRING Output;
+    KIRQL OldIrql;
+
+    if (InterlockedCompareExchange(&KdpPrintCallbackCount, 0, 0) == 0)
+        return;
+
+    Output.Buffer = String;
+    Output.Length = Length;
+    Output.MaximumLength = 0;
+
+    OldIrql = KdpAcquirePrintCallbackLock();
+    for (Entry = KdpPrintCallbackList.Flink; Entry != &KdpPrintCallbackList; Entry = Entry->Flink)
+    {
+        CONTAINING_RECORD(Entry, KDP_PRINT_CALLBACK, ListEntry)->Callback(&Output, ComponentId, Level);
+    }
+    KdpReleasePrintCallbackLock(OldIrql);
+}
+
+VOID
+NTAPI
+KdpPrintToCallbacks(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level,
+    _In_reads_bytes_(Length) PCHAR String,
+    _In_ USHORT Length,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    CHAR CapturedString[KD_PRINT_MAX_BYTES];
+
+    if (InterlockedCompareExchange(&KdpPrintCallbackCount, 0, 0) == 0 ||
+        NtQueryDebugFilterState(ComponentId, Level) == (NTSTATUS)FALSE)
+    {
+        return;
+    }
+
+    Length = min(Length, KD_PRINT_MAX_BYTES);
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForRead(String, Length, 1);
+            KdpMoveMemory(CapturedString, String, Length);
+            String = CapturedString;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return);
+        }
+        _SEH2_END;
+    }
+
+    KdpNotifyPrintCallbacks(String, Length, ComponentId, Level);
+}
+
+NTSTATUS
+NTAPI
+DbgSetDebugPrintCallback(
+    _In_ PDEBUG_PRINT_CALLBACK DebugPrintCallback,
+    _In_ BOOLEAN Enable)
+{
+    PKDP_PRINT_CALLBACK Registration = NULL;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    if (Enable)
+    {
+        Registration = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Registration), TAG_KDBG);
+        if (!Registration)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        Registration->Callback = DebugPrintCallback;
+
+        OldIrql = KdpAcquirePrintCallbackLock();
+        InsertTailList(&KdpPrintCallbackList, &Registration->ListEntry);
+        InterlockedIncrement(&KdpPrintCallbackCount);
+        KdpReleasePrintCallbackLock(OldIrql);
+        return STATUS_SUCCESS;
+    }
+
+    OldIrql = KdpAcquirePrintCallbackLock();
+    for (Entry = KdpPrintCallbackList.Flink; Entry != &KdpPrintCallbackList; Entry = Entry->Flink)
+    {
+        if (CONTAINING_RECORD(Entry, KDP_PRINT_CALLBACK, ListEntry)->Callback == DebugPrintCallback)
+        {
+            Registration = CONTAINING_RECORD(Entry, KDP_PRINT_CALLBACK, ListEntry);
+            RemoveEntryList(&Registration->ListEntry);
+            InterlockedDecrement(&KdpPrintCallbackCount);
+            break;
+        }
+    }
+    KdpReleasePrintCallbackLock(OldIrql);
+
+    if (!Registration)
+        return STATUS_NOT_FOUND;
+
+    ExFreePoolWithTag(Registration, TAG_KDBG);
+    return STATUS_SUCCESS;
+}
 
 static
 USHORT
@@ -522,6 +661,8 @@ static
 NTSTATUS
 NTAPI
 KdpPrintCaptured(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level,
     _In_reads_bytes_(Length) PCHAR String,
     _In_ USHORT Length,
     _In_ BOOLEAN UserString,
@@ -561,7 +702,7 @@ KdpPrintFromUser(
     _SEH2_END;
 
     /* Now go through the kernel-mode code path */
-    return KdpPrintCaptured(String, Length, TRUE, Handled);
+    return KdpPrintCaptured(ComponentId, Level, String, Length, TRUE, Handled);
 }
 
 NTSTATUS
@@ -607,13 +748,15 @@ KdpPrint(
                                 Handled);
     }
 
-    return KdpPrintCaptured(String, Length, FALSE, Handled);
+    return KdpPrintCaptured(ComponentId, Level, String, Length, FALSE, Handled);
 }
 
 static
 NTSTATUS
 NTAPI
 KdpPrintCaptured(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level,
     _In_reads_bytes_(Length) PCHAR String,
     _In_ USHORT Length,
     _In_ BOOLEAN UserString,
@@ -624,6 +767,8 @@ KdpPrintCaptured(
     STRING OutputString;
     CHAR OutputBuffer[KD_PRINT_MAX_BYTES + KD_PRINT_PREFIX_BYTES];
     USHORT PrefixLength, OutputLength;
+
+    KdpNotifyPrintCallbacks(String, Length, ComponentId, Level);
 
     /* Build the timestamp prefix directly into the output buffer */
     PrefixLength = KdpBuildTimestampPrefix(OutputBuffer, KD_PRINT_PREFIX_BYTES, String, Length, UserString);

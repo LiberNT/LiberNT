@@ -347,6 +347,15 @@ KdpStub(IN PKTRAP_FRAME TrapFrame,
          (ExceptionCommand == BREAKPOINT_COMMAND_STRING) ||
          (ExceptionCommand == BREAKPOINT_PRINT)))
     {
+        if (ExceptionCommand == BREAKPOINT_PRINT)
+        {
+            KdpPrintToCallbacks((ULONG)KdpGetParameterThree(ContextRecord),
+                                (ULONG)KdpGetParameterFour(ContextRecord),
+                                (PCHAR)ExceptionRecord->ExceptionInformation[1],
+                                (USHORT)ExceptionRecord->ExceptionInformation[2],
+                                PreviousMode);
+        }
+
         /* This we can handle: simply bump the Program Counter */
         KeSetContextPc(ContextRecord,
                        KeGetContextPc(ContextRecord) + KD_BREAKPOINT_SIZE);

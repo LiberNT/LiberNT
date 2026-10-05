@@ -2112,7 +2112,7 @@
 @ stub -arch=win64 CmRegisterMachineHiveLoadedNotification
 @ stdcall CmSetCallbackObjectContext(ptr ptr ptr ptr)
 @ stub -arch=win64 CmUnregisterMachineHiveLoadedNotification
-@ stub -arch=win64 DbgSetDebugPrintCallback
+@ stdcall DbgSetDebugPrintCallback(ptr long)
 @ stdcall DbgkLkmdRegisterCallback(ptr ptr long)
 @ stdcall DbgkLkmdUnregisterCallback(ptr)
 @ stdcall -arch=win64 DbgkWerCaptureLiveKernelDump(ptr long ptr ptr ptr ptr ptr ptr long)
