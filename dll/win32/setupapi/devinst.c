@@ -7324,6 +7324,8 @@ SetupDiInstallDevice(
        goto cleanup;
     }
 
+    SETUPAPI_RecordInstalledDriverPackage(SelectedDriver->InfFileDetails);
+
     /* Start the device only when INF processing associated a function service. */
     if (HasAssociatedService(DeviceInfoSet, DeviceInfoData) &&
         !RebootRequired &&

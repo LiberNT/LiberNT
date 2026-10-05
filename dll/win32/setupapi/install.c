@@ -2745,6 +2745,8 @@ BOOL WINAPI SetupCopyOEMInfW(
             if (HasSourcePath && !SETUPAPI_StageDriverPackage(SourceInfFileName))
                 goto cleanup;
 
+            SETUPAPI_RecordPublishedDriverPackage(pFullFileName, SourceInfFileName);
+
             if ((CopyStyle & SP_COPY_DELETESOURCE) && !DeleteFileW(SourceInfFileName))
                 goto cleanup;
 
@@ -2799,6 +2801,8 @@ BOOL WINAPI SetupCopyOEMInfW(
             SetLastError(LastError);
             goto cleanup;
         }
+
+        SETUPAPI_RecordPublishedDriverPackage(pFullFileName, SourceInfFileName);
 
         len = strlenW(pFullFileName) + 1;
         if (RequiredSize)

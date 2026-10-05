@@ -388,6 +388,33 @@ BOOL
 SETUPAPI_DeleteDriverStorePackage(
     IN PCWSTR PublishedInfFileName);
 
+BOOL
+SETUPAPI_GetDriverPackageId(
+    IN PCWSTR InfFileName,
+    IN PCWSTR InfBaseName,
+    OUT PWSTR PackageId,
+    IN DWORD PackageIdSize);
+
+VOID
+SETUPAPI_RecordPublishedDriverPackage(
+    IN PCWSTR PublishedInfFileName,
+    IN PCWSTR SourceInfFileName);
+
+VOID
+SETUPAPI_RecordInstalledDriverPackage(
+    IN const struct InfFileDetails *InfFileDetails);
+
+BOOL
+SETUPAPI_RecordDriverDatabasePackage(
+    IN PCWSTR InfFileName,
+    IN PCWSTR PublishedName,
+    IN PCWSTR InfName,
+    IN PCWSTR OemPath OPTIONAL);
+
+VOID
+SETUPAPI_DeleteDriverDatabasePackage(
+    IN PCWSTR PublishedName);
+
 /* install.c */
 
 BOOL

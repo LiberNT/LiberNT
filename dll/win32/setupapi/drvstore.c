@@ -310,6 +310,29 @@ StageCatalogFiles(
     } while (SetupFindNextLine(&Context, &Context));
 }
 
+BOOL
+SETUPAPI_GetDriverPackageId(
+    IN PCWSTR InfFileName,
+    IN PCWSTR InfBaseName,
+    OUT PWSTR PackageId,
+    IN DWORD PackageIdSize)
+{
+    ULONGLONG Hash;
+
+    if (!HashFileContents(InfFileName, &Hash))
+        return FALSE;
+
+    if ((DWORD)lstrlenW(InfBaseName) + 32 >= PackageIdSize)
+    {
+        SetLastError(ERROR_FILENAME_EXCED_RANGE);
+        return FALSE;
+    }
+
+    swprintf(PackageId, PackageIdSize, L"%s_%s_%016I64x", InfBaseName, GetStoreArchitecture(), Hash);
+    CharLowerW(PackageId);
+    return TRUE;
+}
+
 static BOOL
 BuildStoreDirectory(
     IN PCWSTR InfFileName,
@@ -317,19 +340,12 @@ BuildStoreDirectory(
     OUT PWSTR StoreDirectory)
 {
     WCHAR Root[MAX_PATH], Name[MAX_PATH];
-    ULONGLONG Hash;
 
-    if (!GetRepositoryRoot(Root, ARRAY_SIZE(Root)) || !HashFileContents(InfFileName, &Hash))
-        return FALSE;
-
-    if (lstrlenW(InfBaseName) + 32 >= ARRAY_SIZE(Name))
+    if (!GetRepositoryRoot(Root, ARRAY_SIZE(Root)) ||
+        !SETUPAPI_GetDriverPackageId(InfFileName, InfBaseName, Name, ARRAY_SIZE(Name)))
     {
-        SetLastError(ERROR_FILENAME_EXCED_RANGE);
         return FALSE;
     }
-
-    swprintf(Name, ARRAY_SIZE(Name), L"%s_%s_%016I64x", InfBaseName, GetStoreArchitecture(), Hash);
-    CharLowerW(Name);
 
     if (!CombinePath(StoreDirectory, Root, Name))
     {
@@ -528,6 +544,51 @@ SETUPAPI_GetInfSourceDirectory(
 
     *Last = UNICODE_NULL;
     return Buffer;
+}
+
+VOID
+SETUPAPI_RecordPublishedDriverPackage(
+    IN PCWSTR PublishedInfFileName,
+    IN PCWSTR SourceInfFileName)
+{
+    WCHAR Source[MAX_PATH];
+    PCWSTR PublishedName;
+    PWSTR BaseName;
+    DWORD Length;
+
+    PublishedName = wcsrchr(PublishedInfFileName, L'\\');
+    PublishedName = PublishedName ? PublishedName + 1 : PublishedInfFileName;
+
+    Length = GetFullPathNameW(SourceInfFileName, ARRAY_SIZE(Source), Source, &BaseName);
+    if (Length == 0 || Length >= ARRAY_SIZE(Source) || !BaseName || BaseName == Source)
+        return;
+
+    BaseName[-1] = UNICODE_NULL;
+    SETUPAPI_RecordDriverDatabasePackage(PublishedInfFileName, PublishedName, BaseName, Source);
+}
+
+VOID
+SETUPAPI_RecordInstalledDriverPackage(
+    IN const struct InfFileDetails *InfFileDetails)
+{
+    WCHAR Published[MAX_PATH], Path[MAX_PATH + 64];
+    HKEY Key;
+
+    if (!InfFileDetails->DirectoryName ||
+        !IsSystemInfDirectory(InfFileDetails->DirectoryName) ||
+        !CombinePath(Published, InfFileDetails->DirectoryName, InfFileDetails->FileName))
+    {
+        return;
+    }
+
+    swprintf(Path, ARRAY_SIZE(Path), L"SYSTEM\\DriverDatabase\\DriverInfFiles\\%s", InfFileDetails->FileName);
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, Path, 0, KEY_QUERY_VALUE, &Key) == ERROR_SUCCESS)
+    {
+        RegCloseKey(Key);
+        return;
+    }
+
+    SETUPAPI_RecordDriverDatabasePackage(Published, InfFileDetails->FileName, InfFileDetails->FileName, NULL);
 }
 
 static BOOL
