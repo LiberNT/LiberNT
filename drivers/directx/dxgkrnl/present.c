@@ -4698,9 +4698,51 @@ typedef struct _DXGKP_MMIO_MPO3_CALL
     DXGK_MULTIPLANE_OVERLAY_PLANE3 *PlanePointers[DXGKP_MMIO_MAX_PLANES];
     DXGK_PRIMARYCONTEXTDATA Contexts[DXGKP_MMIO_MAX_PLANES];
     DXGK_PRIMARYCONTEXTDATA *ContextPointers[DXGKP_MMIO_MAX_PLANES];
+    DXGK_HDR_METADATA HdrMetadata;
+    D3DDDI_HDR_METADATA_HDR10 Hdr10;
     LONG64 ArmSequence;
     NTSTATUS Status;
 } DXGKP_MMIO_MPO3_CALL;
+
+C_ASSERT(sizeof(RXGK_HDR10_METADATA) == sizeof(D3DDDI_HDR_METADATA_HDR10));
+
+/*
+ * The HDR metadata an MPO3 flip gives the output, if any: what the flip
+ * brings; otherwise none, once, when the output has just entered HDR or
+ * when metadata a flip brought goes with that flip's planes.
+ */
+static VOID
+DxgkpMmioMpo3HdrMetadata(
+    _Inout_ DXGKP_MMIO_MPO3_CALL *Call,
+    _In_ PDXGKRNL_PRESENT_QUEUE Queue,
+    _In_ PDXGKRNL_PRESENT_ENTRY Entry,
+    _In_ BOOLEAN HdrOutput)
+{
+    UINT Kind = Entry->HdrMetadata;
+
+    if (Kind == RXGK_PRESENT_HDR_METADATA_UNCHANGED &&
+        ((HdrOutput && !Queue->HdrMetadataApplied) ||
+         (Queue->HdrMetadataFromFlip && Entry->OverlayCount == 0)))
+    {
+        Kind = RXGK_PRESENT_HDR_METADATA_NONE;
+    }
+    if (Kind == RXGK_PRESENT_HDR_METADATA_UNCHANGED)
+        return;
+
+    RtlZeroMemory(&Call->HdrMetadata, sizeof(Call->HdrMetadata));
+    if (Kind == RXGK_PRESENT_HDR_METADATA_HDR10)
+    {
+        RtlCopyMemory(&Call->Hdr10, &Entry->Hdr10, sizeof(Call->Hdr10));
+        Call->HdrMetadata.Type = D3DDDI_HDR_METADATA_TYPE_HDR10;
+        Call->HdrMetadata.Size = sizeof(Call->Hdr10);
+        Call->HdrMetadata.pMetaData = &Call->Hdr10;
+    }
+    else
+    {
+        Call->HdrMetadata.Type = D3DDDI_HDR_METADATA_TYPE_NONE;
+    }
+    Call->Args.pHDRMetaData = &Call->HdrMetadata;
+}
 
 /* Plane Slot of an MPO3 flip: its allocation as the miniport's context
  * data, and the attributes admission checked. */
@@ -4863,6 +4905,7 @@ DxgkpExecuteMmioFlip(
     UINT RetiredCount = 0;
     UINT PlaneCount;
     BOOLEAN UseMpo;
+    BOOLEAN HdrOutput;
     ULONG OverlayIndex, Other;
     PDXGKVMM_ALLOCATION Allocation = Entry->SourceAllocation;
     PDXGKVMM_ALLOCATION Binding = NULL;
@@ -5057,7 +5100,15 @@ DxgkpExecuteMmioFlip(
         if (Other == Entry->OverlayCount)
             Retired[RetiredCount++] = OverlayIndex;
     }
-    UseMpo = Entry->OverlayCount != 0 || RetiredCount != 0;
+    /* An output in HDR takes every flip through MPO3, which tells the
+     * miniport the primary is SDR content and where its white sits. */
+    HdrOutput = DxgkAdvancedColorSourceActive(Adapter, Entry->VidPnSourceId) &&
+                DxgkMpo3Supported(Adapter);
+    UseMpo = Entry->OverlayCount != 0 || RetiredCount != 0 || HdrOutput;
+    /* Out of HDR the metadata is forgotten, so entering it again starts
+     * from none. */
+    if (!HdrOutput && !Queue->HdrMetadataFromFlip)
+        Queue->HdrMetadataApplied = FALSE;
 
     if (UseMpo ? DxgkMpo3Supported(Adapter) : DxgkpMmioFlipUsesMpo3(Adapter))
     {
@@ -5067,6 +5118,9 @@ DxgkpExecuteMmioFlip(
 
         RtlZeroMemory(&Mpo3Call, sizeof(Mpo3Call));
         Mpo3Call.Adapter = Adapter;
+        /* 0: sRGB white at the default SDR white level. */
+        BasePlane.SdrWhiteLevel = 0;
+        DxgkpMmioMpo3HdrMetadata(&Mpo3Call, Queue, Entry, HdrOutput);
         DxgkpMmioMpo3Plane(&Mpo3Call, 0, &BasePlane, Allocation, Address, PlaneContext,
                            Entry->PresentId, TRUE, FlipImmediate);
         PlaneCount = 1;
@@ -5147,6 +5201,15 @@ DxgkpExecuteMmioFlip(
         }
         FlipCall.ArmSequence = Mpo3Call.ArmSequence;
         WaitPresentId = Entry->PresentId;
+        if (NT_SUCCESS(Status))
+        {
+            if (Mpo3Call.Args.pHDRMetaData != NULL)
+            {
+                Queue->HdrMetadataApplied = TRUE;
+                Queue->HdrMetadataFromFlip =
+                    Mpo3Call.HdrMetadata.Type != D3DDDI_HDR_METADATA_TYPE_NONE;
+            }
+        }
         Mpo3CompleteOnReturn =
             (Mpo3Call.Planes[0].InputFlags.FlipImmediate || Mpo3Call.Planes[0].OutputFlags.FlipConvertedToImmediate)
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_2)
