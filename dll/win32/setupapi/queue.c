@@ -1155,6 +1155,16 @@ static BOOL do_file_copyW( LPCWSTR source, LPCWSTR target, DWORD style,
     TRACE("copy %s to %s style 0x%x\n",debugstr_w(source),debugstr_w(target),style);
 
 #ifdef __REACTOS__
+    Length = GetFullPathNameW(source, ARRAYSIZE(TempPath), TempPath, NULL);
+    if (Length && Length < ARRAYSIZE(TempPath) &&
+        (Length = GetFullPathNameW(target, ARRAYSIZE(TempFile), TempFile, NULL)) &&
+        Length < ARRAYSIZE(TempFile) && !lstrcmpiW(TempPath, TempFile) &&
+        GetFileAttributesW(TempFile) != INVALID_FILE_ATTRIBUTES)
+    {
+        SetLastError(ERROR_SUCCESS);
+        return TRUE;
+    }
+
     /* A forced no-overwrite does not require the source to exist. */
     if ((style & SP_COPY_FORCE_NOOVERWRITE) &&
         GetFileAttributesW(target) != INVALID_FILE_ATTRIBUTES)
