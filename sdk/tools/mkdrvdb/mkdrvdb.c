@@ -21,6 +21,7 @@
 #define FLG_ADDREG_DELVAL 0x00000004
 #define FLG_ADDREG_KEYONLY 0x00000010
 #define FLG_ADDREG_DELREG_BIT 0x00008000
+#define CONFIGFLAG_FINISH_INSTALL 0x00000400
 #define MAX_SET_INFS 16
 
 typedef struct _INF_FILE
@@ -724,6 +725,38 @@ EmitRelativeRegistry(INF_SET *Set, const char *Section, const char *Prefix)
 }
 
 static void
+EmitFilter(HINF Inf, const char *ConfigurationKey, PINFCONTEXT AddFilter)
+{
+    char *Name = Field(AddFilter, 1), *Section = Field(AddFilter, 3), *Level = NULL, *Key = NULL;
+
+    if (Name && *Name && Section && *Section)
+    {
+        Level = LineField(Inf, Section, "FilterLevel", 1);
+        if (Level && *Level)
+        {
+            Key = Format("%s\\Filters\\%s", ConfigurationKey, Level);
+        }
+        else
+        {
+            free(Level);
+            Level = LineField(Inf, Section, "FilterPosition", 1);
+            if (Level && (Equal(Level, "Upper") || Equal(Level, "Lower")))
+                Key = Format("%s\\Filters\\*%s", ConfigurationKey, Equal(Level, "Upper") ? "Upper" : "Lower");
+        }
+    }
+
+    if (Key)
+    {
+        PutValue(Key, Name, 0x00020001);
+        fputc('\n', Out);
+        free(Key);
+    }
+    free(Level);
+    free(Section);
+    free(Name);
+}
+
+static void
 EmitConfiguration(INF_FILE *File, const char *PackageKey, const char *Section)
 {
     STRING_LIST Included = { NULL, 0 };
@@ -735,7 +768,12 @@ EmitConfiguration(INF_FILE *File, const char *PackageKey, const char *Section)
 
     Key = Format("%s\\Configurations\\%s", PackageKey, Section);
     PutDword(Key, "ConfigScope", 0xF7F);
-    PutDword(Key, "ConfigFlags", 0);
+    Path = Format("%s.CoInstallers", Section);
+    Found = FindFirst(File->Inf, Path, NULL, &Context);
+    if (Found)
+        InfHostFreeContext(Context);
+    PutDword(Key, "ConfigFlags", Found ? CONFIGFLAG_FINISH_INSTALL : 0);
+    free(Path);
 
     AddIncludes(&Set, File->Inf, Section, &Included);
     if (Included.Count)
@@ -770,6 +808,15 @@ EmitConfiguration(INF_FILE *File, const char *PackageKey, const char *Section)
             free(ServiceSection);
             free(Service);
         }
+        InfHostFreeContext(Context);
+    }
+    free(Path);
+
+    Path = Format("%s.Filters", Section);
+    if (FindFirst(File->Inf, Path, "AddFilter", &Context))
+    {
+        for (Found = 1; Found; Found = FindNextMatch(Context, "AddFilter"))
+            EmitFilter(File->Inf, Key, Context);
         InfHostFreeContext(Context);
     }
     free(Path);
@@ -910,14 +957,15 @@ EmitText(const char *DescriptorKey, const char *PackageKey, const char *ValueNam
         free(Raw);
         return;
     }
+    Length = strlen(Raw);
+    if (Length > 2 && Raw[0] == '%' && Raw[Length - 1] == '%')
+        Lower(Raw);
     PutSz(DescriptorKey, ValueName, Raw);
 
-    Length = strlen(Raw);
     if (Length > 2 && Raw[0] == '%' && Raw[Length - 1] == '%')
     {
         Token = Duplicate(Raw + 1);
         Token[Length - 2] = 0;
-        Lower(Token);
         if (!ListContains(Tokens, Token))
         {
             Value = Field(Context, 0);
