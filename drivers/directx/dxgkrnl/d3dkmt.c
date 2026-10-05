@@ -5765,24 +5765,83 @@ DxgkGetDeviceState(
     return Status;
 }
 
+/*
+ * The multisampling methods the miniport assigned to the source in the
+ * committed VidPN.  With no list (or a zero count) only the required count
+ * is returned; a list too small gets the required count and
+ * STATUS_BUFFER_TOO_SMALL.  A source the miniport gave no methods has none.
+ * The methods belong to the source's committed mode; Width, Height and
+ * Format are not used to select among modes.
+ */
+static NTSTATUS
+DxgkpGetMultisampleMethodListCore(
+    _Inout_ D3DKMT_GETMULTISAMPLEMETHODLIST *pData)
+{
+    D3DDDI_MULTISAMPLINGMETHOD Methods[DXGKP_COMMITTED_MSAA_METHODS];
+    D3DKMT_MULTISAMPLEMETHOD *List;
+    PDXGKRNL_ADAPTER Adapter;
+    ULONG Count = 0;
+    ULONG Index;
+    KIRQL OldIrql;
+    NTSTATUS Status;
+
+    Status = DxgkpValidateAdapterVidPnSourceForIoctl(pData->hAdapter,
+                                                     pData->VidPnSourceId,
+                                                     &Adapter);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (pData->VidPnSourceId < DXGKP_COMMITTED_MSAA_SOURCES)
+    {
+        KeAcquireSpinLock(&Adapter->CommittedMultisampleLock, &OldIrql);
+        Count = min(Adapter->CommittedMultisamplingMethodCount[pData->VidPnSourceId],
+                    (ULONG)DXGKP_COMMITTED_MSAA_METHODS);
+        RtlCopyMemory(Methods,
+                      Adapter->CommittedMultisamplingMethods[pData->VidPnSourceId],
+                      Count * sizeof(Methods[0]));
+        KeReleaseSpinLock(&Adapter->CommittedMultisampleLock, OldIrql);
+    }
+    DxgkDereferenceAdapter(Adapter);
+
+    List = (D3DKMT_MULTISAMPLEMETHOD *)pData->pMethodList;
+    if (List == NULL || pData->MethodCount == 0)
+    {
+        pData->MethodCount = Count;
+        return STATUS_SUCCESS;
+    }
+    if (pData->MethodCount < Count)
+    {
+        pData->MethodCount = Count;
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+    _SEH2_TRY
+    {
+        if (Count != 0 && ExGetPreviousMode() != KernelMode)
+            ProbeForWrite(List, Count * sizeof(*List), sizeof(UINT));
+        for (Index = 0; Index < Count; Index++)
+        {
+            List[Index].NumSamples = Methods[Index].NumSamples;
+            List[Index].NumQualityLevels = Methods[Index].NumQualityLevels;
+            List[Index].Reserved = 0;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    if (NT_SUCCESS(Status))
+        pData->MethodCount = Count;
+    return Status;
+}
+
 static NTSTATUS
 NTAPI
 DxgkGetMultisampleMethodList(
     _Inout_ D3DKMT_GETMULTISAMPLEMETHODLIST *pData)
 {
-    NTSTATUS Status;
-
     if (pData == NULL)
         return STATUS_INVALID_PARAMETER;
-
-    Status = DxgkpValidateAdapterVidPnSourceForIoctl(pData->hAdapter,
-                                                     pData->VidPnSourceId,
-                                                     NULL);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    pData->MethodCount = 0;
-    return STATUS_NOT_SUPPORTED;
+    return DxgkpGetMultisampleMethodListCore(pData);
 }
 
 static NTSTATUS
@@ -12727,15 +12786,10 @@ DxgkpDispatchBufferedIoctlWorker(
                 return STATUS_BUFFER_TOO_SMALL;
 
             pMethods = (D3DKMT_GETMULTISAMPLEMETHODLIST *)SystemBuffer;
-            Status = DxgkpValidateAdapterVidPnSourceForIoctl(pMethods->hAdapter,
-                                                             pMethods->VidPnSourceId,
-                                                             NULL);
-            if (!NT_SUCCESS(Status))
-                return Status;
-
-            pMethods->MethodCount = 0;
-            KmtRequest->Information = sizeof(D3DKMT_GETMULTISAMPLEMETHODLIST);
-            return STATUS_NOT_SUPPORTED;
+            Status = DxgkpGetMultisampleMethodListCore(pMethods);
+            if (NT_SUCCESS(Status) || Status == STATUS_BUFFER_TOO_SMALL)
+                KmtRequest->Information = sizeof(D3DKMT_GETMULTISAMPLEMETHODLIST);
+            return Status == STATUS_BUFFER_TOO_SMALL ? STATUS_BUFFER_OVERFLOW : Status;
         }
 
         case IOCTL_D3DKMT_GETRUNTIMEDATA:

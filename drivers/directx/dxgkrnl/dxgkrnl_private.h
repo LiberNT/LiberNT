@@ -601,6 +601,11 @@ typedef struct _DXGKRNL_POWER_COMPONENT
 /* VidPN sources whose gamma is tracked (matches DXGKP_MAX_SOURCES). */
 /* Paths one commit can time (DXGKP_MAX_PATHS). */
 #define DXGKP_MAX_COMMITTED_TARGETS 16
+/* Sources and methods per source kept from the committed VidPN; the same
+ * bounds as the VidPN object's (DXGKP_MAX_SOURCES,
+ * DXGKP_MAX_MULTISAMPLING_METHODS in vidpn.h). */
+#define DXGKP_COMMITTED_MSAA_SOURCES  16
+#define DXGKP_COMMITTED_MSAA_METHODS  32
 /* Swizzling ranges arbitrated per adapter; a miniport may report more. */
 #define DXGKP_MAX_SWIZZLING_RANGES 32
 /* MPO return info names a failing plane in 4 bits: at most 16 layers. */
@@ -1283,6 +1288,14 @@ struct _DXGKRNL_ADAPTER
      */
     D3DDDI_VIDEO_PRESENT_TARGET_ID CommittedTargetIds[DXGKP_MAX_COMMITTED_TARGETS];
     ULONG                       CommittedTargetCount;
+
+    /* Multisampling methods the miniport assigned to each source of the
+     * committed VidPN (pfnAssignMultisamplingMethodSet), for
+     * D3DKMTGetMultisampleMethodList.  Guarded by CommittedMultisampleLock. */
+    KSPIN_LOCK                  CommittedMultisampleLock;
+    D3DDDI_MULTISAMPLINGMETHOD  CommittedMultisamplingMethods[DXGKP_COMMITTED_MSAA_SOURCES]
+                                                             [DXGKP_COMMITTED_MSAA_METHODS];
+    ULONG                       CommittedMultisamplingMethodCount[DXGKP_COMMITTED_MSAA_SOURCES];
 
     volatile LONG               MpoPostPresentPending;      /* sources, for the DPC */
     volatile LONG               MpoPostPresentLayers[32];

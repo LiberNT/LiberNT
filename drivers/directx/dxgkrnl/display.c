@@ -964,6 +964,42 @@ DxgkpRequestLinkRetrain(
     }
 }
 
+C_ASSERT(DXGKP_COMMITTED_MSAA_SOURCES == DXGKP_MAX_SOURCES);
+C_ASSERT(DXGKP_COMMITTED_MSAA_METHODS == DXGKP_MAX_MULTISAMPLING_METHODS);
+
+/*
+ * Keeps the multisampling methods the miniport assigned to each source of a
+ * VidPN it has just accepted, for D3DKMTGetMultisampleMethodList.  A source
+ * outside the topology, or one the miniport gave no methods, has none.
+ */
+static VOID
+DxgkpRecordCommittedMultisampling(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKP_VIDPN VidPn,
+    _In_ BOOLEAN TopologyEmpty)
+{
+    SIZE_T PathIndex;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Adapter->CommittedMultisampleLock, &OldIrql);
+    RtlZeroMemory(Adapter->CommittedMultisamplingMethodCount,
+                  sizeof(Adapter->CommittedMultisamplingMethodCount));
+    for (PathIndex = 0; !TopologyEmpty && PathIndex < VidPn->NumPaths; PathIndex++)
+    {
+        D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId = VidPn->Paths[PathIndex].VidPnSourceId;
+        SIZE_T Count;
+
+        if (SourceId >= DXGKP_MAX_SOURCES || !VidPn->MultisamplingMethodsAssigned[SourceId])
+            continue;
+        Count = min(VidPn->NumMultisamplingMethods[SourceId], (SIZE_T)DXGKP_MAX_MULTISAMPLING_METHODS);
+        RtlCopyMemory(Adapter->CommittedMultisamplingMethods[SourceId],
+                      VidPn->MultisamplingMethods[SourceId],
+                      Count * sizeof(D3DDDI_MULTISAMPLINGMETHOD));
+        Adapter->CommittedMultisamplingMethodCount[SourceId] = (ULONG)Count;
+    }
+    KeReleaseSpinLock(&Adapter->CommittedMultisampleLock, OldIrql);
+}
+
 NTSTATUS
 DxgkpDisplayCommitVidPnCandidateWithTarget(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -1956,6 +1992,7 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
         Adapter->CommittedTargetCount = 0;
         for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
             Adapter->CommittedTargetIds[Adapter->CommittedTargetCount++] = VidPn->Paths[i].VidPnTargetId;
+        DxgkpRecordCommittedMultisampling(Adapter, VidPn, TopologyEmpty);
         if (TimingResults.ConnectionStatusChanges)
         {
             /* The driver queued connection changes.  The rebuild worker
@@ -2033,6 +2070,7 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
         Adapter->CommittedTargetCount = 0;
         for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
             Adapter->CommittedTargetIds[Adapter->CommittedTargetCount++] = VidPn->Paths[i].VidPnTargetId;
+        DxgkpRecordCommittedMultisampling(Adapter, VidPn, TopologyEmpty);
         Status = STATUS_SUCCESS;
     }
     else

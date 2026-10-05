@@ -16414,6 +16414,7 @@ DxgkpAddDeviceRegistered(
     KeInitializeSpinLock(&Adapter->ChildListLock);
     KeInitializeMutex(&Adapter->PresentLifecycleMutex, 0);
     KeInitializeMutex(&Adapter->SwizzlingRangeLock, 0);
+    KeInitializeSpinLock(&Adapter->CommittedMultisampleLock);
     KeInitializeMutex(&Adapter->CddPresentMutex, 0);
     KeInitializeSpinLock(&Adapter->SubmitDmaLock);
     KeInitializeSpinLock(&Adapter->DmaBufferCacheLock);
