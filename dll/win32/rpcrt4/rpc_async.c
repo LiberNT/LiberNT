@@ -91,6 +91,10 @@ RPC_STATUS WINAPI RpcAsyncInitializeHandle(PRPC_ASYNC_STATE pAsync, unsigned int
  */
 RPC_STATUS WINAPI RpcAsyncGetCallStatus(PRPC_ASYNC_STATE pAsync)
 {
+#ifdef __REACTOS__
+    if (!valid_async_handle(pAsync) || !pAsync->StubInfo)
+        return RPC_S_INVALID_BINDING;
+#endif
     FIXME("(%p): stub\n", pAsync);
     return RPC_S_INVALID_ASYNC_HANDLE;
 }
