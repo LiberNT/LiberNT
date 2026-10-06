@@ -839,6 +839,19 @@ static UINT set_prop( MSISUMMARYINFO *si, UINT uiProperty, UINT type,
 
     prop = &si->property[uiProperty];
 
+#ifdef __REACTOS__
+    if( prop->vt != VT_EMPTY && prop->vt != type )
+        return ERROR_SUCCESS;
+
+    if( !(si->updated & (1u << uiProperty)) )
+    {
+        if( !si->update_count )
+            return ERROR_FUNCTION_FAILED;
+
+        si->update_count--;
+        si->updated |= 1u << uiProperty;
+    }
+#else
     if( prop->vt == VT_EMPTY )
     {
         if( !si->update_count )
@@ -848,6 +861,7 @@ static UINT set_prop( MSISUMMARYINFO *si, UINT uiProperty, UINT type,
     }
     else if( prop->vt != type )
         return ERROR_SUCCESS;
+#endif
 
     free_prop( prop );
     prop->vt = type;

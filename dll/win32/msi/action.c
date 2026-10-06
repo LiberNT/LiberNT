@@ -7403,7 +7403,11 @@ static UINT admin_update_package_info( MSIPACKAGE *package )
     UINT r, type;
     int flags;
 
+#ifdef __REACTOS__
+    if ((r = msi_get_suminfo( package->db->storage, 1, &info ))) return r;
+#else
     if ((r = msi_get_suminfo( package->db->storage, 0, &info ))) return r;
+#endif
     if ((r = msi_suminfo_get_prop( info, PID_WORDCOUNT, &type, &flags, NULL, NULL, NULL ))) goto done;
 
     flags &= ~msidbSumInfoSourceTypeCompressed;

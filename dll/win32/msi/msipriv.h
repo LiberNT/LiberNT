@@ -497,6 +497,9 @@ typedef struct tagMSISUMMARYINFO
     IStorage *storage;
     DWORD update_count;
     PROPVARIANT property[MSI_MAX_PROPS];
+#ifdef __REACTOS__
+    DWORD updated;
+#endif
 } MSISUMMARYINFO;
 
 typedef struct tagMSIFEATURE
