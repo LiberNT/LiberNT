@@ -2352,7 +2352,8 @@ SeTokenCanImpersonate(
      * Deny impersonation for the server if it wants to impersonate a client
      * beyond what the impersonation level originally permits.
      */
-    if (ImpersonationLevel > TokenToImpersonate->ImpersonationLevel)
+    if ((TokenToImpersonate->TokenType == TokenImpersonation) &&
+        (ImpersonationLevel > TokenToImpersonate->ImpersonationLevel))
     {
         DPRINT1("Cannot impersonate a client above the permitted impersonation level!\n");
         CanImpersonate = FALSE;
