@@ -401,8 +401,9 @@ IntelI2cWaitForStop(
             return Status;
         if (IntelI2cRead32(DeviceExtension, DW_IC_RAW_INTR_STAT) & DW_IC_INTR_STOP_DET)
         {
+            Status = IntelI2cCheckAbort(DeviceExtension);
             IntelI2cRead32(DeviceExtension, DW_IC_CLR_STOP_DET);
-            return STATUS_SUCCESS;
+            return Status;
         }
         KeStallExecutionProcessor(5);
     } while (KeQueryInterruptTime() < Deadline);
