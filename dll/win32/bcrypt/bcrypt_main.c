@@ -93,6 +93,7 @@ enum alg_id
 
 #define HASH_FLAG_HMAC      0x01
 #define HASH_FLAG_REUSABLE  0x02
+#define HASH_FLAG_FINISHED  0x04
 struct hash
 {
     struct object hdr;
@@ -1395,6 +1396,7 @@ NTSTATUS WINAPI BCryptHashData( BCRYPT_HASH_HANDLE handle, UCHAR *input, ULONG s
     TRACE( "%p, %p, %lu, %#lx\n", handle, input, size, flags );
 
     if (!hash) return STATUS_INVALID_HANDLE;
+    if (hash->flags & HASH_FLAG_FINISHED) return STATUS_INVALID_HANDLE;
 
     hash_data( hash, input, size );
     return STATUS_SUCCESS;
@@ -2067,7 +2069,7 @@ static NTSTATUS encrypt_aes_vector( struct key *key, const UCHAR *input, ULONG i
     const UCHAR *in;
 
     if (flags & BCRYPT_BLOCK_PADDING) *ret_len = (input_len + block_size) & ~(block_size - 1);
-    else if (input_len & (block_size - 1)) return STATUS_INVALID_BUFFER_SIZE;
+    else if (key->s.mode != CHAIN_MODE_CFB && (input_len & (block_size - 1))) return STATUS_INVALID_BUFFER_SIZE;
 
     if (!output) return STATUS_SUCCESS;
     if (output_len < *ret_len) return STATUS_BUFFER_TOO_SMALL;
@@ -2100,6 +2102,8 @@ static NTSTATUS encrypt_aes_vector( struct key *key, const UCHAR *input, ULONG i
         else
             SymCryptCbcEncrypt( SymCryptAesBlockCipher, &key->s.aes.handle, key->s.vector, buf, out, block_size );
     }
+    else if (bytes_left)
+        SymCryptCfbEncrypt( SymCryptAesBlockCipher, 1, &key->s.aes.handle, key->s.vector, in, out, bytes_left );
 
     if (iv) memcpy( iv, key->s.vector, block_size );
 
@@ -3891,6 +3895,8 @@ NTSTATUS WINAPI BCryptDeriveKeyCapi( BCRYPT_HASH_HANDLE handle, BCRYPT_ALG_HANDL
         FIXME( "algorithm handle not supported\n" );
         return STATUS_NOT_IMPLEMENTED;
     }
+    if (hash->flags & HASH_FLAG_FINISHED) return STATUS_INVALID_HANDLE;
+    if (!(hash->flags & HASH_FLAG_REUSABLE)) hash->flags |= HASH_FLAG_FINISHED;
 
     finish_hash( hash, buf );
 
