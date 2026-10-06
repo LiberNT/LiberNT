@@ -380,7 +380,35 @@ SECURITY_STATUS WINAPI NCryptGetProperty(NCRYPT_HANDLE handle, const WCHAR *name
     if (flags) FIXME("flags %#lx not supported\n", flags);
 
     if (!object) return NTE_INVALID_HANDLE;
+#ifdef __REACTOS__
+    if (!(property = get_object_property(object, name)))
+    {
+        static const WCHAR *const unset_properties[] =
+        {
+            NCRYPT_UI_POLICY_PROPERTY,
+            NCRYPT_WINDOW_HANDLE_PROPERTY,
+            NCRYPT_USE_CONTEXT_PROPERTY,
+            NCRYPT_LAST_MODIFIED_PROPERTY,
+            NCRYPT_CERTIFICATE_PROPERTY,
+        };
+        unsigned int i;
+
+        if (object->type != KEY || !name) return NTE_INVALID_PARAMETER;
+        if (!lstrcmpW(name, NCRYPT_SECURITY_DESCR_PROPERTY) &&
+            !(flags & (OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION |
+                       DACL_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION)))
+        {
+            return NTE_BAD_FLAGS;
+        }
+        for (i = 0; i < sizeof(unset_properties) / sizeof(unset_properties[0]); i++)
+        {
+            if (!lstrcmpW(name, unset_properties[i])) return NTE_NOT_FOUND;
+        }
+        return NTE_NOT_SUPPORTED;
+    }
+#else
     if (!(property = get_object_property(object, name))) return NTE_INVALID_PARAMETER;
+#endif
 
     *result = property->value_size;
     if (!output) return ERROR_SUCCESS;
