@@ -131,6 +131,24 @@ CompareIndexKey(
         }
         return STATUS_SUCCESS;
 
+    case ATTRDEF_COLLATION_ULONG_MULTI:
+        if (Key->ValueLength == 0 ||
+            Key->ValueLength % sizeof(ULONG) != 0 ||
+            Entry->StreamLength != Key->ValueLength)
+        {
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        *Comparison = 0;
+        for (ULONG Offset = 0;
+             Offset < Key->ValueLength && *Comparison == 0;
+             Offset += sizeof(ULONG))
+        {
+            *Comparison = CompareIndexUlongs(
+                ReadIndexKeyUlong(Key->Value + Offset),
+                ReadIndexKeyUlong(Entry->IndexStream + Offset));
+        }
+        return STATUS_SUCCESS;
+
     default:
         return STATUS_NOT_IMPLEMENTED;
     }
@@ -2518,6 +2536,7 @@ static NTSTATUS
 ReleaseEndOnlyChain(
     _In_ PVolume DiskVolume,
     _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
     _In_ ULONG RecordSize,
     _In_ ULONGLONG AllocationUnit,
     _In_ ULONGLONG ChainVcn)
@@ -2546,7 +2565,7 @@ ReleaseEndOnlyChain(
         Status = ReadIndexNode(
             DiskVolume,
             DirectoryFile,
-            NtfsI30Name,
+            IndexName,
             RecordSize,
             AllocationUnit,
             ChainVcn,
@@ -2577,7 +2596,7 @@ ReleaseEndOnlyChain(
 
         Status = SetIndexRecordBitmapBit(
             DirectoryFile,
-            NtfsI30Name,
+            IndexName,
             (ChainVcn * AllocationUnit) /
                 RecordSize,
             FALSE);
@@ -2603,6 +2622,7 @@ static NTSTATUS
 RemoveMaxFromSubtree(
     _In_ PVolume DiskVolume,
     _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
     _In_ ULONG RecordSize,
     _In_ ULONGLONG AllocationUnit,
     _In_ ULONGLONG Vcn,
@@ -2636,7 +2656,7 @@ RemoveMaxFromSubtree(
     Status = ReadIndexNode(
         DiskVolume,
         DirectoryFile,
-        NtfsI30Name,
+        IndexName,
         RecordSize,
         AllocationUnit,
         Vcn,
@@ -2700,6 +2720,7 @@ RemoveMaxFromSubtree(
         Status = RemoveMaxFromSubtree(
             DiskVolume,
             DirectoryFile,
+            IndexName,
             RecordSize,
             AllocationUnit,
             RightVcn,
@@ -2724,6 +2745,7 @@ RemoveMaxFromSubtree(
         Status = ReleaseEndOnlyChain(
             DiskVolume,
             DirectoryFile,
+            IndexName,
             RecordSize,
             AllocationUnit,
             RightVcn);
@@ -2762,7 +2784,7 @@ RemoveMaxFromSubtree(
         Status = WriteIndexNode(
             DiskVolume,
             DirectoryFile,
-            NtfsI30Name,
+            IndexName,
             Vcn,
             AllocationUnit,
             RecordSize,
@@ -2787,7 +2809,7 @@ RemoveMaxFromSubtree(
     Status = WriteIndexNode(
         DiskVolume,
         DirectoryFile,
-        NtfsI30Name,
+        IndexName,
         Vcn,
         AllocationUnit,
         RecordSize,
@@ -2816,6 +2838,29 @@ Directory::RemoveFileFromDirectory(
     _In_ PUNICODE_STRING Name)
 {
     IndexSearchKey Key = { ATTRDEF_COLLATION_FILENAME, Name, NULL, 0 };
+
+    if (!DirectoryFile || !DirectoryFile->Header ||
+        !Name || Name->Length == 0 ||
+        !(DirectoryFile->Header->Flags & FR_IS_DIRECTORY))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    return RemoveIndexEntry(DirectoryFile,
+                            NtfsI30Name,
+                            TypeFileName,
+                            &Key,
+                            FileReference);
+}
+
+NTSTATUS
+Directory::RemoveIndexEntry(
+    _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
+    _In_ ULONG IndexedAttributeType,
+    _In_ const IndexSearchKey* SearchKey,
+    _In_ ULONGLONG FileReference)
+{
+    IndexSearchKey Key = *SearchKey;
     PAttribute IndexRootAttribute;
     PIndexRootEx IndexRoot;
     PIndexEntry Matched;
@@ -2845,9 +2890,6 @@ Directory::RemoveFileFromDirectory(
     if (!DiskVolume || !DirectoryFile ||
         !DirectoryFile->Header ||
         !DirectoryFile->Data ||
-        !Name || Name->Length == 0 ||
-        !(DirectoryFile->Header->Flags &
-          FR_IS_DIRECTORY) ||
         DiskVolume->IsReadOnly)
     {
         return STATUS_INVALID_PARAMETER;
@@ -2857,7 +2899,7 @@ Directory::RemoveFileFromDirectory(
     IndexRootAttribute =
         DirectoryFile->GetAttribute(
             TypeIndexRoot,
-            const_cast<PWSTR>(NtfsI30Name));
+            const_cast<PWSTR>(IndexName));
     if (!IndexRootAttribute ||
         IndexRootAttribute->IsNonResident ||
         IndexRootAttribute->
@@ -2876,9 +2918,9 @@ Directory::RemoveFileFromDirectory(
         BytesPerIndexRecord(DiskVolume);
     if (IndexRecordSize == 0 ||
         IndexRoot->AttributeType !=
-            TypeFileName ||
+            IndexedAttributeType ||
         IndexRoot->CollationRule !=
-            ATTRDEF_COLLATION_FILENAME)
+            Key.CollationRule)
     {
         return STATUS_FILE_CORRUPT_ERROR;
     }
@@ -2945,7 +2987,7 @@ Directory::RemoveFileFromDirectory(
         Status = ReadIndexNode(
             DiskVolume,
             DirectoryFile,
-            NtfsI30Name,
+            IndexName,
             IndexRecordSize,
             AllocationUnit,
             ChildVcn,
@@ -2982,7 +3024,8 @@ Directory::RemoveFileFromDirectory(
                   &reinterpret_cast<PIndexBuffer>(
                       NodeImage)->IndexHeader) +
               MatchOffset);
-    if (Matched->Data.Directory.IndexedFile !=
+    if (Key.CollationRule == ATTRDEF_COLLATION_FILENAME &&
+        Matched->Data.Directory.IndexedFile !=
         FileReference)
     {
         Status = STATUS_INVALID_PARAMETER;
@@ -3032,7 +3075,7 @@ Directory::RemoveFileFromDirectory(
             Status = ReplaceIndexRootValue(
                 DiskVolume,
                 DirectoryFile,
-                NtfsI30Name,
+                IndexName,
                 RootValue,
                 RootPrefix +
                     reinterpret_cast<
@@ -3053,7 +3096,7 @@ Directory::RemoveFileFromDirectory(
             Status = WriteIndexNode(
                 DiskVolume,
                 DirectoryFile,
-                NtfsI30Name,
+                IndexName,
                 VisitedVcns[VisitedCount - 1],
                 AllocationUnit,
                 IndexRecordSize,
@@ -3073,6 +3116,7 @@ Directory::RemoveFileFromDirectory(
     Status = RemoveMaxFromSubtree(
         DiskVolume,
         DirectoryFile,
+        IndexName,
         IndexRecordSize,
         AllocationUnit,
         RemovedChild,
@@ -3099,6 +3143,7 @@ Directory::RemoveFileFromDirectory(
         Status = ReleaseEndOnlyChain(
             DiskVolume,
             DirectoryFile,
+            IndexName,
             IndexRecordSize,
             AllocationUnit,
             RemovedChild);
@@ -3119,7 +3164,7 @@ Directory::RemoveFileFromDirectory(
         IndexRootAttribute =
             DirectoryFile->GetAttribute(
                 TypeIndexRoot,
-                const_cast<PWSTR>(NtfsI30Name));
+                const_cast<PWSTR>(IndexName));
         if (!IndexRootAttribute ||
             IndexRootAttribute->IsNonResident)
         {
@@ -3210,7 +3255,7 @@ Directory::RemoveFileFromDirectory(
         Status = ReplaceIndexRootValue(
             DiskVolume,
             DirectoryFile,
-            NtfsI30Name,
+            IndexName,
             RootValue,
             ReplacementLength);
         if (Status == STATUS_BUFFER_TOO_SMALL)
@@ -3218,7 +3263,7 @@ Directory::RemoveFileFromDirectory(
             Status = PushDownRoot(
                 DiskVolume,
                 DirectoryFile,
-                NtfsI30Name,
+                IndexName,
                 IndexRoot,
                 Scratch,
                 ListBytes,
@@ -3244,7 +3289,7 @@ Directory::RemoveFileFromDirectory(
             Status = SplitAndPromote(
                 DiskVolume,
                 DirectoryFile,
-                NtfsI30Name,
+                IndexName,
                 FALSE,
                 IndexRecordSize,
                 AllocationUnit,
@@ -3260,7 +3305,7 @@ Directory::RemoveFileFromDirectory(
             Status = WriteIndexNode(
                 DiskVolume,
                 DirectoryFile,
-                NtfsI30Name,
+                IndexName,
                 VisitedVcns[VisitedCount - 1],
                 AllocationUnit,
                 IndexRecordSize,
@@ -3275,7 +3320,9 @@ TouchDirectory:
     if (EntryCommitted)
     {
         TimestampStatus =
-            DirectoryFile->TouchDirectory();
+            Key.CollationRule == ATTRDEF_COLLATION_FILENAME
+            ? DirectoryFile->TouchDirectory()
+            : STATUS_SUCCESS;
         if (!NT_SUCCESS(TimestampStatus))
         {
             DPRINT1(

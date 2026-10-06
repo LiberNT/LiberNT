@@ -1246,6 +1246,13 @@ protected:
     PBTreeKey CurrentKey;
 };
 
+NTSTATUS
+NtfsUpdateReparseIndex(
+    _In_ PVolume DiskVolume,
+    _In_ ULONG ReparseTag,
+    _In_ ULONGLONG FileReference,
+    _In_ BOOLEAN Remove);
+
 typedef struct IndexSearchKey
 {
     ULONG CollationRule;
@@ -1305,6 +1312,14 @@ public:
         _In_ PFileRecord DirectoryFile,
         _In_ ULONGLONG FileReference,
         _In_ PUNICODE_STRING Name);
+
+    NTSTATUS
+    RemoveIndexEntry(
+        _In_ PFileRecord DirectoryFile,
+        _In_ PCWSTR IndexName,
+        _In_ ULONG IndexedAttributeType,
+        _In_ const IndexSearchKey* SearchKey,
+        _In_ ULONGLONG FileReference);
 
     NTSTATUS
     PushDownResidentRoot(

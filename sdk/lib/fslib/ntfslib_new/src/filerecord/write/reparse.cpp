@@ -139,6 +139,71 @@ FileRecord::DeleteReparsePoint(
 }
 
 NTSTATUS
+NtfsUpdateReparseIndex(
+    _In_ PVolume DiskVolume,
+    _In_ ULONG ReparseTag,
+    _In_ ULONGLONG FileReference,
+    _In_ BOOLEAN Remove)
+{
+    WCHAR Path[] = L"\\$Extend\\$Reparse";
+    UCHAR KeyValue[sizeof(ULONG) + sizeof(ULONGLONG)];
+    UCHAR EntryData[0x20];
+    PIndexEntry Entry = reinterpret_cast<PIndexEntry>(EntryData);
+    IndexSearchKey Key;
+    PFileRecord ReparseFile = NULL;
+    NTSTATUS Status;
+
+    if (!DiskVolume || !DiskVolume->MFT)
+        return STATUS_INVALID_PARAMETER;
+    Status = DiskVolume->MFT->GetFileRecordFromQuery(Path, &ReparseFile);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlCopyMemory(KeyValue, &ReparseTag, sizeof(ULONG));
+    RtlCopyMemory(KeyValue + sizeof(ULONG), &FileReference, sizeof(ULONGLONG));
+    Key.CollationRule = ATTRDEF_COLLATION_ULONG_MULTI;
+    Key.Name = NULL;
+    Key.Value = KeyValue;
+    Key.ValueLength = sizeof(KeyValue);
+
+    {
+        Directory ReparseIndex(DiskVolume);
+
+        if (Remove)
+        {
+            Status = ReparseIndex.RemoveIndexEntry(ReparseFile,
+                                                   L"$R",
+                                                   0,
+                                                   &Key,
+                                                   0);
+            if (Status == STATUS_NOT_FOUND)
+                Status = STATUS_SUCCESS;
+        }
+        else
+        {
+            RtlZeroMemory(EntryData, sizeof(EntryData));
+            Entry->Data.ViewIndex.DataOffset =
+                (USHORT)(FIELD_OFFSET(IndexEntry, IndexStream) + sizeof(KeyValue));
+            Entry->Data.ViewIndex.DataLength = 0;
+            Entry->EntryLength = sizeof(EntryData);
+            Entry->StreamLength = sizeof(KeyValue);
+            RtlCopyMemory(Entry->IndexStream, KeyValue, sizeof(KeyValue));
+            Status = ReparseIndex.AddIndexEntry(ReparseFile,
+                                                L"$R",
+                                                0,
+                                                &Key,
+                                                Entry,
+                                                sizeof(EntryData));
+            if (Status == STATUS_OBJECT_NAME_COLLISION)
+                Status = STATUS_SUCCESS;
+        }
+    }
+
+    delete ReparseFile;
+    return Status;
+}
+
+NTSTATUS
 FileRecord::UpdateReparsePoint(
     _In_opt_ const UCHAR* Buffer,
     _In_ ULONG BufferLength,
@@ -163,6 +228,7 @@ FileRecord::UpdateReparsePoint(
     BOOLEAN IsDirectory;
     BOOLEAN Promote = FALSE;
     BOOLEAN Committed = FALSE;
+    BOOLEAN HadReparsePoint;
     UINT32 FileNameFields;
     NTSTATUS Status;
 
@@ -209,6 +275,7 @@ FileRecord::UpdateReparsePoint(
         return STATUS_FILE_CORRUPT_ERROR;
     }
 
+    HadReparsePoint = ReparseAttribute != NULL;
     if (ReparseAttribute)
     {
         if (ReparseAttribute->NameLength != 0 ||
@@ -450,6 +517,14 @@ FileRecord::UpdateReparsePoint(
 
     if (OldRuns)
         Status = DiskVolume->ReleaseClusters(OldRuns);
+    if (NT_SUCCESS(Status) && (Delete || !HadReparsePoint))
+    {
+        Status = NtfsUpdateReparseIndex(
+            DiskVolume,
+            Delete ? ExistingHeader.ReparseType : RequestedHeader.ReparseType,
+            ((ULONGLONG)Header->SequenceNumber << 48) | Header->MFTRecordNumber,
+            Delete);
+    }
     goto Done;
 
 Restore:

@@ -817,6 +817,9 @@ MasterFileTable::DeleteFile(
         NTFS_MAX_FILE_NAME_LENGTH + 1];
     UNICODE_STRING AliasString = {};
     BOOLEAN IsDirectory;
+    BOOLEAN HasReparseTag = FALSE;
+    ULONG ReparseTag = 0;
+    PAttribute ReparseAttribute;
     NTSTATUS Status;
 
     if (RecordDeleted)
@@ -959,6 +962,20 @@ MasterFileTable::DeleteFile(
      * captured while the records are still alive, records are blanked
      * next, and only then do the clusters return to $Bitmap.
      */
+    ReparseAttribute = Child->GetAttribute(TypeReparsePoint, NULL);
+    if (ReparseAttribute)
+    {
+        ULONG TagLength = sizeof(ReparseTag);
+
+        Status = Child->CopyData(ReparseAttribute,
+                                 reinterpret_cast<PUCHAR>(&ReparseTag),
+                                 &TagLength,
+                                 0);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        HasReparseTag = TagLength == 0;
+    }
+
     Status = CollectReleasableRuns(
         Child,
         &ReleaseRuns);
@@ -996,6 +1013,15 @@ MasterFileTable::DeleteFile(
         goto Done;
     if (RecordDeleted)
         *RecordDeleted = TRUE;
+    if (HasReparseTag)
+    {
+        Status = NtfsUpdateReparseIndex(DiskVolume,
+                                        ReparseTag,
+                                        ChildReference,
+                                        TRUE);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+    }
 
     if (ReleaseRuns)
     {
