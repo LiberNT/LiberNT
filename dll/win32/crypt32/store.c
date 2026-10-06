@@ -1531,11 +1531,19 @@ static BOOL EmptyStore_add(WINECRYPT_CERTSTORE *store, context_t *context,
 {
     TRACE("(%p, %p, %p, %p)\n", store, context, replace, ret_context);
 
+#ifdef __REACTOS__
+    if(ret_context) {
+        *ret_context = context->vtbl->clone(context, store, use_link);
+        if(!*ret_context)
+            return FALSE;
+    }
+#else
     /* FIXME: We should clone the context */
     if(ret_context) {
         Context_AddRef(context);
         *ret_context = context;
     }
+#endif
 
     return TRUE;
 }
