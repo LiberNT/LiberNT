@@ -56,7 +56,7 @@ static SecurePackageTable *packageTable = NULL;
 static SecureProviderTable *providerTable = NULL;
 
 static SecurityFunctionTableA securityFunctionTableA = {
-    SECURITY_SUPPORT_PROVIDER_INTERFACE_VERSION_3,
+    SECURITY_SUPPORT_PROVIDER_INTERFACE_VERSION,
     EnumerateSecurityPackagesA,
     QueryCredentialsAttributesA,
     AcquireCredentialsHandleA,
@@ -91,7 +91,7 @@ static SecurityFunctionTableA securityFunctionTableA = {
 };
 
 static SecurityFunctionTableW securityFunctionTableW = {
-    SECURITY_SUPPORT_PROVIDER_INTERFACE_VERSION_3,
+    SECURITY_SUPPORT_PROVIDER_INTERFACE_VERSION,
     EnumerateSecurityPackagesW,
     QueryCredentialsAttributesW,
     AcquireCredentialsHandleW,
