@@ -2272,6 +2272,34 @@ typedef struct _CDecodeMsg
     BOOL                   modified;
     BOOL                   certs_owned;
     BOOL                  *unauth_owned;
+    struct
+    {
+        BOOL  initialized;
+        BOOL  active;
+        BOOL  passthrough;
+        BOOL  started;
+        BOOL  complete;
+        BOOL  contentDone;
+        BOOL  inPrimitive;
+        BOOL  primitiveIsContent;
+        DWORD primitiveMode;
+        DWORD primitiveRemaining;
+        DWORD error;
+        DWORD type;
+        DWORD headerLen;
+        DWORD oidLen;
+        DWORD depth;
+        BYTE  header[6];
+        BYTE  oid[16];
+        struct
+        {
+            DWORD remaining;
+            DWORD index;
+            DWORD role;
+            BOOL  indefinite;
+            BOOL  isContent;
+        } frames[16];
+    } stream;
 #endif
 } CDecodeMsg;
 #ifdef __REACTOS__
@@ -2725,6 +2753,349 @@ static BOOL CDecodeMsg_FinalizeContent(CDecodeMsg *msg, CRYPT_DER_BLOB *blob)
     return ret;
 }
 
+#ifdef __REACTOS__
+enum
+{
+    StreamRoleOuter,
+    StreamRoleOuterContent,
+    StreamRoleSigned,
+    StreamRoleInnerInfo,
+    StreamRoleInnerContent,
+    StreamRoleOctets,
+    StreamRoleSkip
+};
+
+enum
+{
+    StreamPrimitiveSkip,
+    StreamPrimitiveOid,
+    StreamPrimitiveDeliver
+};
+
+static BOOL CDecodeStream_Fail(CDecodeMsg *msg, DWORD error)
+{
+    msg->stream.error = error;
+    SetLastError(error);
+    return FALSE;
+}
+
+static BOOL CDecodeStream_Output(CDecodeMsg *msg, const BYTE *data, DWORD size,
+ BOOL final)
+{
+    BOOL ret = FALSE;
+    DWORD error = 0;
+
+    __TRY
+    {
+        ret = msg->base.stream_info.pfnStreamOutput(
+         msg->base.stream_info.pvArg, (BYTE *)data, size, final);
+        if (!ret && !(error = GetLastError()))
+            error = CRYPT_E_MSG_ERROR;
+    }
+    __EXCEPT_PAGE_FAULT
+    {
+        error = STATUS_ACCESS_VIOLATION;
+    }
+    __ENDTRY
+    if (!ret)
+        return CDecodeStream_Fail(msg, error);
+    return TRUE;
+}
+
+static BOOL CDecodeStream_ContentDone(CDecodeMsg *msg, const BYTE *pos)
+{
+    if (msg->stream.contentDone)
+        return TRUE;
+    msg->stream.contentDone = TRUE;
+    return CDecodeStream_Output(msg, pos, 0, TRUE);
+}
+
+static void CDecodeStream_Consume(CDecodeMsg *msg, DWORD size)
+{
+    DWORD i;
+
+    for (i = 0; i < msg->stream.depth; i++)
+        if (!msg->stream.frames[i].indefinite)
+            msg->stream.frames[i].remaining -= size;
+}
+
+static BOOL CDecodeStream_FrameEnd(CDecodeMsg *msg, DWORD role, BOOL isContent,
+ const BYTE *pos)
+{
+    if (isContent || role == StreamRoleInnerInfo ||
+     (role == StreamRoleOuter && msg->stream.type == CMSG_DATA))
+        return CDecodeStream_ContentDone(msg, pos);
+    return TRUE;
+}
+
+static BOOL CDecodeStream_CloseFrames(CDecodeMsg *msg, const BYTE *pos)
+{
+    while (msg->stream.depth)
+    {
+        DWORD top = msg->stream.depth - 1;
+
+        if (msg->stream.frames[top].indefinite ||
+         msg->stream.frames[top].remaining)
+            break;
+        msg->stream.depth--;
+        if (!CDecodeStream_FrameEnd(msg, msg->stream.frames[top].role,
+         msg->stream.frames[top].isContent, pos))
+            return FALSE;
+    }
+    if (!msg->stream.depth && msg->stream.started)
+        msg->stream.complete = TRUE;
+    return TRUE;
+}
+
+static BOOL CDecodeStream_PrimitiveEnd(CDecodeMsg *msg, const BYTE *pos)
+{
+    static const BYTE pkcs7[] = { 0x2a,0x86,0x48,0x86,0xf7,0x0d,0x01,0x07 };
+
+    msg->stream.inPrimitive = FALSE;
+    if (msg->stream.primitiveMode == StreamPrimitiveOid)
+    {
+        msg->stream.type = ~0u;
+        if (msg->stream.oidLen == sizeof(pkcs7) + 1 &&
+         !memcmp(msg->stream.oid, pkcs7, sizeof(pkcs7)))
+        {
+            switch (msg->stream.oid[sizeof(pkcs7)])
+            {
+            case 1: msg->stream.type = CMSG_DATA; break;
+            case 2: msg->stream.type = CMSG_SIGNED; break;
+            case 3: msg->stream.type = CMSG_ENVELOPED; break;
+            case 5: msg->stream.type = CMSG_HASHED; break;
+            }
+        }
+    }
+    else if (msg->stream.primitiveIsContent &&
+     !CDecodeStream_ContentDone(msg, pos))
+        return FALSE;
+    return CDecodeStream_CloseFrames(msg, pos);
+}
+
+static BOOL CDecodeStream_Element(CDecodeMsg *msg, BYTE tag, BOOL indefinite,
+ DWORD len, const BYTE *pos)
+{
+    BOOL constructed = (tag & ASN_CONSTRUCTOR) != 0, isContent = FALSE;
+    DWORD role = StreamRoleSkip, mode = StreamPrimitiveSkip;
+
+    if (!msg->stream.depth)
+    {
+        if (tag != ASN_SEQUENCE)
+            return CDecodeStream_Fail(msg, CRYPT_E_ASN1_BADTAG);
+        role = msg->type == CMSG_SIGNED ? StreamRoleSigned : StreamRoleOuter;
+        msg->stream.started = TRUE;
+    }
+    else
+    {
+        DWORD parent = msg->stream.depth - 1;
+        DWORD index = msg->stream.frames[parent].index++;
+
+        switch (msg->stream.frames[parent].role)
+        {
+        case StreamRoleOuter:
+            if (index == 0)
+            {
+                if (tag != ASN_OBJECTIDENTIFIER)
+                    return CDecodeStream_Fail(msg, CRYPT_E_ASN1_BADTAG);
+                mode = StreamPrimitiveOid;
+                msg->stream.oidLen = 0;
+            }
+            else if (index == 1)
+            {
+                if (tag != (ASN_CONTEXT | ASN_CONSTRUCTOR))
+                    return CDecodeStream_Fail(msg, CRYPT_E_ASN1_BADTAG);
+                if (msg->stream.type != CMSG_DATA &&
+                 msg->stream.type != CMSG_SIGNED &&
+                 msg->stream.type != CMSG_ENVELOPED)
+                    return CDecodeStream_Fail(msg, CRYPT_E_INVALID_MSG_TYPE);
+                role = StreamRoleOuterContent;
+            }
+            break;
+        case StreamRoleOuterContent:
+            if (index == 0 && msg->stream.type == CMSG_DATA)
+            {
+                if ((tag & ~ASN_CONSTRUCTOR) != ASN_OCTETSTRING)
+                    return CDecodeStream_Fail(msg, CRYPT_E_ASN1_BADTAG);
+                role = StreamRoleOctets;
+                mode = StreamPrimitiveDeliver;
+                isContent = TRUE;
+            }
+            else if (index == 0 && msg->stream.type == CMSG_SIGNED)
+            {
+                if (tag != ASN_SEQUENCE)
+                    return CDecodeStream_Fail(msg, CRYPT_E_ASN1_BADTAG);
+                role = StreamRoleSigned;
+            }
+            break;
+        case StreamRoleSigned:
+            if (index == 0 && tag != ASN_INTEGER)
+                return CDecodeStream_Fail(msg, CRYPT_E_ASN1_BADTAG);
+            if (index == 2 && tag == ASN_SEQUENCE)
+                role = StreamRoleInnerInfo;
+            break;
+        case StreamRoleInnerInfo:
+            if (index == 1 && tag == (ASN_CONTEXT | ASN_CONSTRUCTOR))
+                role = StreamRoleInnerContent;
+            break;
+        case StreamRoleInnerContent:
+            if (index == 0 && (tag & ~ASN_CONSTRUCTOR) == ASN_OCTETSTRING)
+            {
+                role = StreamRoleOctets;
+                mode = StreamPrimitiveDeliver;
+                isContent = TRUE;
+            }
+            break;
+        case StreamRoleOctets:
+            role = StreamRoleOctets;
+            mode = StreamPrimitiveDeliver;
+            break;
+        }
+    }
+
+    if (constructed)
+    {
+        DWORD top = msg->stream.depth;
+
+        if (top == ARRAY_SIZE(msg->stream.frames))
+            return CDecodeStream_Fail(msg, CRYPT_E_ASN1_CORRUPT);
+        msg->stream.frames[top].remaining = len;
+        msg->stream.frames[top].index = 0;
+        msg->stream.frames[top].role = role;
+        msg->stream.frames[top].indefinite = indefinite;
+        msg->stream.frames[top].isContent = isContent;
+        msg->stream.depth++;
+        return CDecodeStream_CloseFrames(msg, pos);
+    }
+    if (indefinite)
+        return CDecodeStream_Fail(msg, CRYPT_E_ASN1_CORRUPT);
+    msg->stream.inPrimitive = TRUE;
+    msg->stream.primitiveMode = mode;
+    msg->stream.primitiveIsContent = isContent;
+    msg->stream.primitiveRemaining = len;
+    if (!len)
+        return CDecodeStream_PrimitiveEnd(msg, pos);
+    return TRUE;
+}
+
+static BOOL CDecodeStream_Scan(CDecodeMsg *msg, const BYTE *data, DWORD size,
+ DWORD *used)
+{
+    DWORD pos = 0;
+
+    while (pos < size && !msg->stream.complete)
+    {
+        BOOL indefinite = FALSE;
+        DWORD len = 0, lenBytes, i;
+        BYTE tag;
+
+        if (msg->stream.inPrimitive)
+        {
+            DWORD count = min(size - pos, msg->stream.primitiveRemaining);
+
+            if (msg->stream.primitiveMode == StreamPrimitiveOid)
+            {
+                for (i = 0; i < count; i++)
+                {
+                    if (msg->stream.oidLen < sizeof(msg->stream.oid))
+                        msg->stream.oid[msg->stream.oidLen] = data[pos + i];
+                    msg->stream.oidLen++;
+                }
+            }
+            else if (msg->stream.primitiveMode == StreamPrimitiveDeliver &&
+             !CDecodeStream_Output(msg, data + pos, count, FALSE))
+                return FALSE;
+            CDecodeStream_Consume(msg, count);
+            msg->stream.primitiveRemaining -= count;
+            pos += count;
+            if (!msg->stream.primitiveRemaining &&
+             !CDecodeStream_PrimitiveEnd(msg, data + pos))
+                return FALSE;
+            continue;
+        }
+
+        msg->stream.header[msg->stream.headerLen++] = data[pos++];
+        if (msg->stream.headerLen < 2)
+            continue;
+        tag = msg->stream.header[0];
+        if (msg->stream.header[1] == 0x80)
+            indefinite = TRUE;
+        else if (msg->stream.header[1] < 0x80)
+            len = msg->stream.header[1];
+        else
+        {
+            lenBytes = msg->stream.header[1] & 0x7f;
+            if (lenBytes > 4)
+                return CDecodeStream_Fail(msg, CRYPT_E_ASN1_LARGE);
+            if (msg->stream.headerLen < 2 + lenBytes)
+                continue;
+            for (i = 0; i < lenBytes; i++)
+                len = (len << 8) | msg->stream.header[2 + i];
+        }
+        CDecodeStream_Consume(msg, msg->stream.headerLen);
+        msg->stream.headerLen = 0;
+
+        if (!tag && !indefinite && !len)
+        {
+            DWORD top = msg->stream.depth;
+
+            if (!top || !msg->stream.frames[top - 1].indefinite)
+                return CDecodeStream_Fail(msg, CRYPT_E_ASN1_BADTAG);
+            msg->stream.depth--;
+            if (!CDecodeStream_FrameEnd(msg, msg->stream.frames[top - 1].role,
+             msg->stream.frames[top - 1].isContent, data + pos) ||
+             !CDecodeStream_CloseFrames(msg, data + pos))
+                return FALSE;
+            continue;
+        }
+        if (!CDecodeStream_Element(msg, tag, indefinite, len, data + pos))
+            return FALSE;
+    }
+    *used = pos;
+    return TRUE;
+}
+
+static BOOL CDecodeStream_Update(CDecodeMsg *msg, const BYTE *data, DWORD *size,
+ BOOL final)
+{
+    DWORD used = *size;
+
+    if (msg->stream.error)
+    {
+        SetLastError(msg->stream.error);
+        return FALSE;
+    }
+    if (msg->base.state != MsgStateInit && msg->base.state != MsgStateUpdated)
+        return TRUE;
+    if (!msg->stream.initialized)
+    {
+        msg->stream.initialized = TRUE;
+        msg->stream.passthrough = msg->type == CMSG_DATA;
+        msg->stream.active = !msg->type || msg->type == CMSG_SIGNED;
+    }
+    if (msg->stream.passthrough)
+    {
+        if ((*size || final) && !CDecodeStream_Output(msg, data, *size, final))
+            return FALSE;
+        *size = 0;
+        return TRUE;
+    }
+    if (!msg->stream.active)
+        return TRUE;
+    if (!CDecodeStream_Scan(msg, data, *size, &used))
+        return FALSE;
+    if (final && (!msg->stream.complete || used != *size))
+    {
+        msg->base.state = MsgStateFinalized;
+        SetLastError(msg->stream.complete ? CRYPT_E_MSG_ERROR :
+         CRYPT_E_STREAM_INSUFFICIENT_DATA);
+        return FALSE;
+    }
+    *size = used;
+    return TRUE;
+}
+#endif
+
 static BOOL CDecodeMsg_Update(HCRYPTMSG hCryptMsg, const BYTE *pbData,
  DWORD cbData, BOOL fFinal)
 {
@@ -2737,8 +3108,22 @@ static BOOL CDecodeMsg_Update(HCRYPTMSG hCryptMsg, const BYTE *pbData,
         SetLastError(CRYPT_E_MSG_ERROR);
     else if (msg->base.streamed)
     {
+#ifdef __REACTOS__
+        if (!CDecodeStream_Update(msg, pbData, &cbData, fFinal))
+            return FALSE;
+        if (msg->stream.passthrough)
+        {
+            if (fFinal)
+                msg->base.state = MsgStateFinalized;
+            else
+                msg->base.state = MsgStateUpdated;
+            SetLastError(ERROR_SUCCESS);
+            return TRUE;
+        }
+#else
         FIXME("(%p, %p, %ld, %d): streamed update stub\n", hCryptMsg, pbData,
          cbData, fFinal);
+#endif
         switch (msg->base.state)
         {
         case MsgStateInit:
@@ -2803,6 +3188,16 @@ static BOOL CDecodeMsg_Update(HCRYPTMSG hCryptMsg, const BYTE *pbData,
             }
         }
     }
+#ifdef __REACTOS__
+    if (ret && msg->base.streamed && msg->stream.active &&
+     msg->stream.type == CMSG_DATA)
+    {
+        if (fFinal)
+            msg->type = CMSG_DATA;
+        SetLastError(ERROR_SUCCESS);
+        return TRUE;
+    }
+#endif
     if (ret && fFinal &&
      ((msg->base.open_flags & CMSG_DETACHED_FLAG && msg->base.state ==
      MsgStateDataFinalized) ||
@@ -2811,6 +3206,10 @@ static BOOL CDecodeMsg_Update(HCRYPTMSG hCryptMsg, const BYTE *pbData,
         ret = CDecodeMsg_DecodeContent(msg, &msg->msg_data, msg->type);
     if (ret && msg->base.state == MsgStateFinalized)
         ret = CDecodeMsg_FinalizeContent(msg, &msg->msg_data);
+#ifdef __REACTOS__
+    if (ret)
+        SetLastError(ERROR_SUCCESS);
+#endif
     return ret;
 }
 
@@ -3544,6 +3943,21 @@ static BOOL CDecodeMsg_GetParam(HCRYPTMSG hCryptMsg, DWORD dwParamType,
     CDecodeMsg *msg = hCryptMsg;
     BOOL ret = FALSE;
 
+#ifdef __REACTOS__
+    if (msg->base.streamed && dwParamType == CMSG_CONTENT_PARAM)
+    {
+        SetLastError(E_INVALIDARG);
+        return FALSE;
+    }
+    if (msg->base.streamed && dwParamType == CMSG_TYPE_PARAM && !msg->type)
+    {
+        if (msg->stream.type && msg->stream.type != ~0u)
+            return CRYPT_CopyParam(pvData, pcbData, &msg->stream.type,
+             sizeof(msg->stream.type));
+        SetLastError(CRYPT_E_STREAM_MSG_NOT_READY);
+        return FALSE;
+    }
+#endif
     switch (msg->type)
     {
     case CMSG_HASHED:
@@ -3589,6 +4003,10 @@ static BOOL CDecodeHashMsg_VerifyHash(CDecodeMsg *msg)
 
     ret = ContextPropertyList_FindProperty(msg->properties,
      CMSG_HASH_DATA_PARAM, &hashBlob);
+#ifdef __REACTOS__
+    if (!ret)
+        SetLastError(STATUS_ACCESS_VIOLATION);
+#endif
     if (ret)
     {
         DWORD computedHashSize = 0;
@@ -4144,6 +4562,7 @@ HCRYPTMSG WINAPI CryptMsgOpenToDecode(DWORD dwMsgEncodingType, DWORD dwFlags,
         msg->modified = FALSE;
         msg->certs_owned = FALSE;
         msg->unauth_owned = NULL;
+        memset(&msg->stream, 0, sizeof(msg->stream));
 #endif
         msg->properties = ContextPropertyList_Create();
     }
