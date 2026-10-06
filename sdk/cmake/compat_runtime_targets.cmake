@@ -86,6 +86,7 @@ set(COMPAT_RUNTIME_MODULES
     libtiff
     libxslt
     lpk
+    lz32
     mbedtls
     mf
     mfplat
@@ -117,6 +118,7 @@ set(COMPAT_RUNTIME_MODULES
     ole32
     oleacc
     oleaut32
+    oledlg
     opengl32
     powrprof
     printui
@@ -125,6 +127,7 @@ set(COMPAT_RUNTIME_MODULES
     psapi
     rasadhlp
     riched20
+    riched32
     rpcrt4
     rsaenh
     rtworkq
