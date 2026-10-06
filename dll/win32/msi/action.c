@@ -612,7 +612,12 @@ INSTALLSTATE msi_get_component_action( MSIPACKAGE *package, MSICOMPONENT *comp )
         TRACE("component is disabled: %s\n", debugstr_w(comp->Component));
         return INSTALLSTATE_UNKNOWN;
     }
+#ifdef __REACTOS__
+    if (package->need_rollback)
+        return comp->Installed == INSTALLSTATE_UNKNOWN ? INSTALLSTATE_ABSENT : comp->Installed;
+#else
     if (package->need_rollback) return comp->Installed;
+#endif
     if (comp->num_clients > 0 && comp->ActionRequest == INSTALLSTATE_ABSENT)
     {
         TRACE("%s has %u clients left\n", debugstr_w(comp->Component), comp->num_clients);
@@ -8078,6 +8083,10 @@ UINT MSI_InstallPackage( MSIPACKAGE *package, LPCWSTR szPackagePath,
     }
 
     rc = ACTION_PerformAction(package, action);
+#ifdef __REACTOS__
+    if (rc == ERROR_FUNCTION_NOT_CALLED)
+        rc = ERROR_INSTALL_FAILURE;
+#endif
 
     /* process the ending type action */
     if (rc == ERROR_SUCCESS)
