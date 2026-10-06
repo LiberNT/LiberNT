@@ -7017,6 +7017,7 @@ SetupDiInstallDevice(
     GUID ClassGuid;
     LPWSTR lpGuidString = NULL, lpFullGuidString = NULL;
     BOOL RebootRequired = FALSE;
+    DWORD ConfigFlags, ConfigFlagsType;
     HKEY hKey = INVALID_HANDLE_VALUE;
     HKEY hHwKey = INVALID_HANDLE_VALUE;
     BOOL NeedtoCopyFile;
@@ -7069,6 +7070,7 @@ SetupDiInstallDevice(
             goto cleanup;
         }
         ConfigFlags |= CONFIGFLAG_FAILEDINSTALL;
+        ConfigFlags &= ~CONFIGFLAG_REINSTALL;
         Result = SetupDiSetDeviceRegistryPropertyW(
             DeviceInfoSet,
             DeviceInfoData,
@@ -7330,6 +7332,27 @@ SetupDiInstallDevice(
     }
 
     SETUPAPI_RecordInstalledDriverPackage(SelectedDriver->InfFileDetails);
+
+    if (SetupDiGetDeviceRegistryPropertyW(DeviceInfoSet,
+                                          DeviceInfoData,
+                                          SPDRP_CONFIGFLAGS,
+                                          &ConfigFlagsType,
+                                          (PBYTE)&ConfigFlags,
+                                          sizeof(ConfigFlags),
+                                          NULL) &&
+        ConfigFlagsType == REG_DWORD &&
+        (ConfigFlags & (CONFIGFLAG_FAILEDINSTALL | CONFIGFLAG_REINSTALL)))
+    {
+        ConfigFlags &= ~(CONFIGFLAG_FAILEDINSTALL | CONFIGFLAG_REINSTALL);
+        if (!SetupDiSetDeviceRegistryPropertyW(DeviceInfoSet,
+                                               DeviceInfoData,
+                                               SPDRP_CONFIGFLAGS,
+                                               (PBYTE)&ConfigFlags,
+                                               sizeof(ConfigFlags)))
+        {
+            goto cleanup;
+        }
+    }
 
     /* Start the device only when INF processing associated a function service. */
     if (HasAssociatedService(DeviceInfoSet, DeviceInfoData) &&
