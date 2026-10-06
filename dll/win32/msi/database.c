@@ -270,6 +270,9 @@ UINT MSI_OpenDatabaseW(LPCWSTR szDBPath, LPCWSTR szPersist, MSIDATABASE **pdb)
         enum_stream_names( stg );
 
     db->storage = stg;
+#ifdef __REACTOS__
+    IStorage_AddRef( stg );
+#endif
     db->mode = mode;
     if (created)
         db->deletefile = wcsdup( szDBPath );
@@ -278,12 +281,21 @@ UINT MSI_OpenDatabaseW(LPCWSTR szDBPath, LPCWSTR szPersist, MSIDATABASE **pdb)
 
     db->strings = msi_load_string_table( stg, &db->bytes_per_strref );
     if( !db->strings )
+#ifdef __REACTOS__
+    {
+        ret = ERROR_OPEN_FAILED;
         goto end;
+    }
+#else
+        goto end;
+#endif
 
     ret = ERROR_SUCCESS;
 
     msiobj_addref( &db->hdr );
+#ifndef __REACTOS__
     IStorage_AddRef( stg );
+#endif
     *pdb = db;
 
 end:
