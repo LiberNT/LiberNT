@@ -194,10 +194,12 @@ struct acpi_device
     {
         unsigned int power_manageable:1;
         unsigned int force_power_state:1;
+        unsigned int processor_id:1;
     } flags;
     struct
     {
         char *hardware_id;
+        unsigned int processor_id;
     } pnp;
 };
 
