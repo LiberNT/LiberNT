@@ -127,7 +127,8 @@ FindString(
     {
         ++lLineNumber;
 
-        bSubstringFound = (StrStrCase(szLineBuffer, pszSearchString, bIgnoreCase) != NULL);
+        bSubstringFound = (*pszSearchString != UNICODE_NULL &&
+                           StrStrCase(szLineBuffer, pszSearchString, bIgnoreCase) != NULL);
 
         /* Check if this line can be counted */
         if (bSubstringFound != bInvertSearch)
