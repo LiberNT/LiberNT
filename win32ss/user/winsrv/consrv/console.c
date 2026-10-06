@@ -1571,6 +1571,92 @@ ConSrvConsoleProcessCtrlEvent(IN PCONSRV_CONSOLE Console,
     return Status;
 }
 
+typedef struct _CONSRV_CLOSE_WAIT
+{
+    ULONG Count;
+    HANDLE Processes[ANYSIZE_ARRAY];
+} CONSRV_CLOSE_WAIT, *PCONSRV_CLOSE_WAIT;
+
+static DWORD
+WINAPI
+ConSrvCloseWaitThread(IN PVOID Parameter)
+{
+    PCONSRV_CLOSE_WAIT Wait = Parameter;
+    ULONG StartTime = GetTickCount();
+    ULONG Elapsed, i;
+
+    for (i = 0; i < Wait->Count; i++)
+    {
+        Elapsed = GetTickCount() - StartTime;
+        if (WaitForSingleObject(Wait->Processes[i],
+                                Elapsed < 5000 ? 5000 - Elapsed : 0) == WAIT_TIMEOUT)
+        {
+            NtTerminateProcess(Wait->Processes[i], CONTROL_C_EXIT);
+        }
+        NtClose(Wait->Processes[i]);
+    }
+
+    ConsoleFreeHeap(Wait);
+    return 0;
+}
+
+NTSTATUS NTAPI
+ConSrvConsoleProcessCloseEvent(IN PCONSRV_CONSOLE Console)
+{
+    PLIST_ENTRY current_entry;
+    PCONSOLE_PROCESS_DATA current;
+    PCONSRV_CLOSE_WAIT Wait;
+    HANDLE Thread;
+    ULONG Count = 0;
+
+    if (!ConDrvValidateConsoleState((PCONSOLE)Console, CONSOLE_RUNNING))
+        return STATUS_UNSUCCESSFUL;
+
+    for (current_entry = Console->ProcessList.Flink;
+         current_entry != &Console->ProcessList;
+         current_entry = current_entry->Flink)
+    {
+        Count++;
+    }
+
+    Wait = ConsoleAllocHeap(HEAP_ZERO_MEMORY,
+                            FIELD_OFFSET(CONSRV_CLOSE_WAIT, Processes[Count]));
+
+    current_entry = Console->ProcessList.Flink;
+    while (current_entry != &Console->ProcessList)
+    {
+        current = CONTAINING_RECORD(current_entry, CONSOLE_PROCESS_DATA, ConsoleLink);
+        current_entry = current_entry->Flink;
+
+        if (Wait != NULL &&
+            NT_SUCCESS(NtDuplicateObject(NtCurrentProcess(),
+                                         current->Process->ProcessHandle,
+                                         NtCurrentProcess(),
+                                         &Wait->Processes[Wait->Count],
+                                         0, 0, DUPLICATE_SAME_ACCESS)))
+        {
+            Wait->Count++;
+        }
+
+        ConSrvConsoleCtrlEvent(CTRL_CLOSE_EVENT, current);
+    }
+
+    if (Wait == NULL)
+        return STATUS_NO_MEMORY;
+
+    Thread = CreateThread(NULL, 0, ConSrvCloseWaitThread, Wait, 0, NULL);
+    if (Thread == NULL)
+    {
+        while (Wait->Count != 0)
+            NtClose(Wait->Processes[--Wait->Count]);
+        ConsoleFreeHeap(Wait);
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    NtClose(Thread);
+    return STATUS_SUCCESS;
+}
+
 VOID
 ConSrvSetProcessFocus(IN PCSR_PROCESS CsrProcess,
                       IN BOOLEAN SetForeground)

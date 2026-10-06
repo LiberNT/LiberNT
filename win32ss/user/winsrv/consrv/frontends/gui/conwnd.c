@@ -1460,7 +1460,7 @@ OnClose(PGUI_CONSOLE_DATA GuiData)
      * We shouldn't wait here, though, since the console lock is entered.
      * A copy of the thread list probably needs to be made.
      */
-    ConSrvConsoleProcessCtrlEvent(Console, 0, CTRL_CLOSE_EVENT);
+    ConSrvConsoleProcessCloseEvent(Console);
 
     LeaveCriticalSection(&Console->Lock);
     return FALSE;

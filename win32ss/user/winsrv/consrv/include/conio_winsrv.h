@@ -193,6 +193,8 @@ ConSrvConsoleCtrlEvent(IN ULONG CtrlEvent,
                        IN PCONSOLE_PROCESS_DATA ProcessData);
 
 NTSTATUS NTAPI
+ConSrvConsoleProcessCloseEvent(IN PCONSRV_CONSOLE Console);
+NTSTATUS NTAPI
 ConSrvConsoleProcessCtrlEvent(IN PCONSRV_CONSOLE Console,
                               IN ULONG ProcessGroupId,
                               IN ULONG CtrlEvent);
