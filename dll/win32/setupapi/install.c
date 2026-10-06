@@ -172,7 +172,10 @@ static BOOL copy_files_callback( HINF hinf, PCWSTR field, void *arg )
     if (field[0] == '@')  /* special case: copy single file */
         ret = SetupQueueDefaultCopyW( info->queue, info->layout ? info->layout : hinf, root, field+1, field+1, info->copy_flags );
     else
+    {
         ret = SetupQueueCopySectionW( info->queue, root, info->layout ? info->layout : hinf, hinf, field, info->copy_flags );
+        if (!ret && GetLastError() == ERROR_SECTION_NOT_FOUND) ret = TRUE;
+    }
     HeapFree( GetProcessHeap(), 0, source );
     return ret;
 }

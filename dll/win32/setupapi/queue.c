@@ -942,7 +942,12 @@ BOOL WINAPI SetupQueueCopySectionW( HSPFILEQ queue, PCWSTR src_root, HINF hinf, 
     ret = FALSE;
     if (!hlist) hlist = hinf;
     if (!hinf) hinf = hlist;
-    if (!SetupFindFirstLineW( hlist, section, NULL, &context )) goto done;
+    if (!SetupFindFirstLineW( hlist, section, NULL, &context ))
+    {
+        if (SetupGetLineCountW( hlist, section ) == 0) ret = TRUE;
+        else SetLastError( ERROR_SECTION_NOT_FOUND );
+        goto done;
+    }
     if (!(params.TargetDirectory = get_destination_dir( hinf, section ))) goto done;
     do
     {
@@ -1006,7 +1011,11 @@ BOOL WINAPI SetupQueueDeleteSectionW( HSPFILEQ queue, HINF hinf, HINF hlist, PCW
     TRACE( "hinf=%p/%p section=%s\n", hinf, hlist, debugstr_w(section) );
 
     if (!hlist) hlist = hinf;
-    if (!SetupFindFirstLineW( hlist, section, NULL, &context )) return FALSE;
+    if (!SetupFindFirstLineW( hlist, section, NULL, &context ))
+    {
+        SetLastError( ERROR_SECTION_NOT_FOUND );
+        return FALSE;
+    }
     if (!(dest_dir = get_destination_dir( hinf, section ))) return FALSE;
     do
     {
@@ -1054,7 +1063,11 @@ BOOL WINAPI SetupQueueRenameSectionW( HSPFILEQ queue, HINF hinf, HINF hlist, PCW
     TRACE( "hinf=%p/%p section=%s\n", hinf, hlist, debugstr_w(section) );
 
     if (!hlist) hlist = hinf;
-    if (!SetupFindFirstLineW( hlist, section, NULL, &context )) return FALSE;
+    if (!SetupFindFirstLineW( hlist, section, NULL, &context ))
+    {
+        SetLastError( ERROR_SECTION_NOT_FOUND );
+        return FALSE;
+    }
     if (!(dest_dir = get_destination_dir( hinf, section ))) return FALSE;
     do
     {
