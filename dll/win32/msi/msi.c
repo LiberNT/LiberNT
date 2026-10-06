@@ -2926,8 +2926,34 @@ INSTALLSTATE WINAPI MsiGetComponentPathExW( LPCWSTR product, LPCWSTR comp, LPCWS
     return MSI_GetComponentPath( product, comp, usersid, ctx, &path, buflen );
 }
 
+#ifdef __REACTOS__
+static INSTALLSTATE get_component_path_a( LPCSTR product, LPCSTR comp, LPCSTR usersid,
+                                          MSIINSTALLCONTEXT ctx, LPSTR buf, LPDWORD buflen );
+
 INSTALLSTATE WINAPI MsiGetComponentPathExA( LPCSTR product, LPCSTR comp, LPCSTR usersid,
                                             MSIINSTALLCONTEXT ctx, LPSTR buf, LPDWORD buflen )
+{
+    DWORD size = buflen ? *buflen : 0;
+    INSTALLSTATE r = get_component_path_a( product, comp, usersid, ctx, buf, buflen );
+
+    if (buflen)
+    {
+        if (r == INSTALLSTATE_MOREDATA)
+            *buflen *= 2;
+        else if (r == INSTALLSTATE_INVALIDARG || (r == INSTALLSTATE_UNKNOWN && buf))
+            *buflen = 0;
+        else if (r == INSTALLSTATE_UNKNOWN)
+            *buflen = size * 2;
+    }
+    return r;
+}
+
+static INSTALLSTATE get_component_path_a( LPCSTR product, LPCSTR comp, LPCSTR usersid,
+                                          MSIINSTALLCONTEXT ctx, LPSTR buf, LPDWORD buflen )
+#else
+INSTALLSTATE WINAPI MsiGetComponentPathExA( LPCSTR product, LPCSTR comp, LPCSTR usersid,
+                                            MSIINSTALLCONTEXT ctx, LPSTR buf, LPDWORD buflen )
+#endif
 {
     WCHAR *productW = NULL, *compW = NULL, *usersidW =  NULL;
     INSTALLSTATE r = INSTALLSTATE_UNKNOWN;
@@ -2966,7 +2992,11 @@ INSTALLSTATE WINAPI MsiGetComponentPathW( LPCWSTR product, LPCWSTR comp, LPWSTR 
  */
 INSTALLSTATE WINAPI MsiGetComponentPathA( LPCSTR product, LPCSTR comp, LPSTR buf, LPDWORD buflen )
 {
+#ifdef __REACTOS__
+    return get_component_path_a( product, comp, "s-1-1-0", MSIINSTALLCONTEXT_ALL, buf, buflen );
+#else
     return MsiGetComponentPathExA( product, comp, "s-1-1-0", MSIINSTALLCONTEXT_ALL, buf, buflen );
+#endif
 }
 
 static UINT query_feature_state( const WCHAR *product, const WCHAR *squashed, const WCHAR *usersid,
