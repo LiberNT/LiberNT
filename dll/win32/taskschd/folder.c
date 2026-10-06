@@ -298,7 +298,11 @@ static HRESULT WINAPI TaskFolder_DeleteTask(ITaskFolder *iface, BSTR name, LONG 
 
     TRACE("%p,%s,%lx\n", iface, debugstr_w(name), flags);
 
+#ifdef __REACTOS__
+    if (!name || !*name) return SchRpcDelete(folder->path, 0);
+#else
     if (!name || !*name) return E_ACCESSDENIED;
+#endif
 
     if (flags)
         FIXME("unsupported flags %lx\n", flags);

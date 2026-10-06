@@ -932,6 +932,93 @@ HRESULT __cdecl SchRpcGetNumberOfMissedRuns(const WCHAR *path, DWORD *runs)
 
 HRESULT __cdecl SchRpcEnableTask(const WCHAR *path, DWORD enabled)
 {
+#ifdef __REACTOS__
+    const WCHAR *value = enabled ? L"true" : L"false";
+    WCHAR *full_name, *xml, *body, *settings, *settings_end, *open, *close, *new_xml, *p;
+    const WCHAR *prefix_end, *suffix, *before = L"", *after = L"";
+    HRESULT hr;
+    size_t len;
+
+    TRACE("%s,%lu\n", debugstr_w(path), enabled);
+
+    full_name = get_full_name(path, NULL);
+    if (!full_name) return E_OUTOFMEMORY;
+
+    hr = read_xml(full_name, &xml);
+    if (hr != S_OK)
+    {
+        free(full_name);
+        return hr;
+    }
+
+    body = xml;
+    while (iswspace(*body)) body++;
+    if (!wcsncmp(body, L"<!--", 4) && (p = wcsstr(body, L"-->")))
+    {
+        body = p + 3;
+        while (iswspace(*body)) body++;
+    }
+
+    settings = wcsstr(body, L"<Settings");
+    while (settings && settings[9] != '>' && !iswspace(settings[9]))
+        settings = wcsstr(settings + 9, L"<Settings");
+    settings_end = settings ? wcsstr(settings, L"</Settings>") : NULL;
+    open = settings ? wcsstr(settings, L"<Enabled>") : NULL;
+    if (open && settings_end && open > settings_end) open = NULL;
+    close = open ? wcsstr(open, L"</Enabled>") : NULL;
+
+    if (open && close)
+    {
+        prefix_end = open + 9;
+        suffix = close;
+    }
+    else if (settings && settings_end && (p = wcschr(settings, '>')) && p < settings_end)
+    {
+        prefix_end = suffix = p + 1;
+        before = L"<Enabled>";
+        after = L"</Enabled>";
+    }
+    else if (enabled)
+    {
+        free(xml);
+        free(full_name);
+        return S_OK;
+    }
+    else
+    {
+        if (!(p = wcsstr(body, L"<Actions")) && !(p = wcsstr(body, L"</Task>")))
+        {
+            free(xml);
+            free(full_name);
+            return SCHED_E_MALFORMEDXML;
+        }
+        prefix_end = suffix = p;
+        before = L"<Settings><Enabled>";
+        after = L"</Enabled></Settings>";
+    }
+
+    len = (prefix_end - body) + wcslen(before) + wcslen(value) + wcslen(after) + wcslen(suffix) + 1;
+    if (!(new_xml = malloc(len * sizeof(WCHAR))))
+    {
+        free(xml);
+        free(full_name);
+        return E_OUTOFMEMORY;
+    }
+    memcpy(new_xml, body, (prefix_end - body) * sizeof(WCHAR));
+    new_xml[prefix_end - body] = 0;
+    wcscat(new_xml, before);
+    wcscat(new_xml, value);
+    wcscat(new_xml, after);
+    wcscat(new_xml, suffix);
+
+    hr = write_xml_utf8(full_name, CREATE_ALWAYS, new_xml);
+
+    free(new_xml);
+    free(xml);
+    free(full_name);
+    return hr;
+#else
     FIXME("%s,%lu: stub\n", debugstr_w(path), enabled);
     return E_NOTIMPL;
+#endif
 }

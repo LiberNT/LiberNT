@@ -179,8 +179,16 @@ static HRESULT WINAPI regtask_get_Enabled(IRegisteredTask *iface, VARIANT_BOOL *
 
 static HRESULT WINAPI regtask_put_Enabled(IRegisteredTask *iface, VARIANT_BOOL enabled)
 {
+#ifdef __REACTOS__
+    RegisteredTask *regtask = impl_from_IRegisteredTask(iface);
+
+    TRACE("%p,%d\n", iface, enabled);
+
+    return SchRpcEnableTask(regtask->path, enabled != VARIANT_FALSE);
+#else
     FIXME("%p,%d: stub\n", iface, enabled);
     return S_OK;
+#endif
 }
 
 static HRESULT WINAPI regtask_Run(IRegisteredTask *iface, VARIANT params, IRunningTask **task)

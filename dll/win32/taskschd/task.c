@@ -1347,6 +1347,9 @@ typedef struct
     IRegistrationInfo IRegistrationInfo_iface;
     LONG ref;
     WCHAR *description, *author, *version, *date, *documentation, *uri, *source;
+#ifdef __REACTOS__
+    WCHAR *sddl;
+#endif
 } registration_info;
 
 static inline registration_info *impl_from_IRegistrationInfo(IRegistrationInfo *iface)
@@ -1375,6 +1378,9 @@ static ULONG WINAPI RegistrationInfo_Release(IRegistrationInfo *iface)
         free(reginfo->documentation);
         free(reginfo->uri);
         free(reginfo->source);
+#ifdef __REACTOS__
+        free(reginfo->sddl);
+#endif
         free(reginfo);
     }
 
@@ -1604,14 +1610,48 @@ static HRESULT WINAPI RegistrationInfo_put_URI(IRegistrationInfo *iface, BSTR ur
 
 static HRESULT WINAPI RegistrationInfo_get_SecurityDescriptor(IRegistrationInfo *iface, VARIANT *sddl)
 {
+#ifdef __REACTOS__
+    registration_info *reginfo = impl_from_IRegistrationInfo(iface);
+
+    TRACE("%p,%p\n", iface, sddl);
+
+    if (!sddl) return E_POINTER;
+
+    V_VT(sddl) = VT_EMPTY;
+    if (reginfo->sddl)
+    {
+        if (!(V_BSTR(sddl) = SysAllocString(reginfo->sddl))) return E_OUTOFMEMORY;
+        V_VT(sddl) = VT_BSTR;
+    }
+    return S_OK;
+#else
     FIXME("%p,%p: stub\n", iface, sddl);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI RegistrationInfo_put_SecurityDescriptor(IRegistrationInfo *iface, VARIANT sddl)
 {
+#ifdef __REACTOS__
+    registration_info *reginfo = impl_from_IRegistrationInfo(iface);
+    WCHAR *str = NULL;
+
+    TRACE("%p,%s\n", iface, debugstr_variant(&sddl));
+
+    if (V_VT(&sddl) == VT_BSTR)
+    {
+        if (V_BSTR(&sddl) && !(str = wcsdup(V_BSTR(&sddl)))) return E_OUTOFMEMORY;
+    }
+    else if (V_VT(&sddl) != VT_EMPTY && V_VT(&sddl) != VT_NULL)
+        return E_INVALIDARG;
+
+    free(reginfo->sddl);
+    reginfo->sddl = str;
+    return S_OK;
+#else
     FIXME("%p,%s: stub\n", iface, debugstr_variant(&sddl));
     return S_OK;
+#endif
 }
 
 static HRESULT WINAPI RegistrationInfo_get_Source(IRegistrationInfo *iface, BSTR *source)
@@ -3474,7 +3514,11 @@ static HRESULT write_registration_info(IStream *stream, IRegistrationInfo *regin
             VariantClear(&var);
             if (hr != S_OK) return hr;
         }
+#ifdef __REACTOS__
+        else if (V_VT(&var) != VT_EMPTY)
+#else
         else
+#endif
             FIXME("SecurityInfo variant type %d is not supported\n", V_VT(&var));
     }
 
@@ -4032,6 +4076,10 @@ static HRESULT read_principals(IXmlReader *reader, ITaskDefinition *taskdef)
 
 static HRESULT read_actions(IXmlReader *reader, ITaskDefinition *taskdef)
 {
+#ifdef __REACTOS__
+    if (IXmlReader_IsEmptyElement(reader))
+        return SCHED_E_MISSINGNODE;
+#endif
     FIXME("stub\n");
     return S_OK;
 }
@@ -4265,6 +4313,20 @@ static HRESULT read_registration_info(IXmlReader *reader, IRegistrationInfo *inf
                 if (hr == S_OK)
                     IRegistrationInfo_put_Source(info, value);
             }
+#ifdef __REACTOS__
+            else if (!lstrcmpW(name, L"SecurityDescriptor"))
+            {
+                hr = read_text_value(reader, &value);
+                if (hr == S_OK)
+                {
+                    VARIANT sddl;
+
+                    V_VT(&sddl) = VT_BSTR;
+                    V_BSTR(&sddl) = value;
+                    IRegistrationInfo_put_SecurityDescriptor(info, sddl);
+                }
+            }
+#endif
             else
                 FIXME("unhandled RegistrationInfo element %s\n", debugstr_w(name));
 
@@ -4457,7 +4519,11 @@ static HRESULT read_xml(IXmlReader *reader, ITaskDefinition *taskdef)
                 return read_task(reader, taskdef);
             }
             else
+#ifdef __REACTOS__
+                return SCHED_E_UNEXPECTEDNODE;
+#else
                 FIXME("unhandled XML element %s\n", debugstr_w(name));
+#endif
 
             break;
 
