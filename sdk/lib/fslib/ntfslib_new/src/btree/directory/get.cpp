@@ -35,7 +35,9 @@ AddKeyToBothDirInfo(_In_     PBTreeKey Key,
     Info.EndOfFile.QuadPart = FileNameData->DataSize;
     Info.AllocationSize.QuadPart = FileNameData->AllocatedSize;
     Info.FileAttributes = FileNameData->Flags;
-    Info.EaSize = FileNameData->Extended.EAInfo.PackedEASize;
+    Info.EaSize = (FileNameData->Flags & FILE_PERM_REPARSE_PT)
+        ? FileNameData->Extended.ReparseTag
+        : FileNameData->Extended.EAInfo.PackedEASize;
     Info.FileId.QuadPart = GetFRNFromFileRef(FileRef(Key));
 
     if (FileNameData->Flags & FN_DIRECTORY)
