@@ -432,11 +432,22 @@ selcollist:
     selcolumn
   | selcolumn TK_COMMA selcollist
         {
-            $1->next = $3;
+            $1->next = $3 ? $3 : parser_alloc_column( info, NULL, NULL );
+            if( !$1->next )
+                YYABORT;
         }
   | TK_STAR
         {
             $$ = NULL;
+        }
+  | TK_STAR TK_COMMA selcollist
+        {
+            $$ = parser_alloc_column( info, NULL, NULL );
+            if( !$$ )
+                YYABORT;
+            $$->next = $3 ? $3 : parser_alloc_column( info, NULL, NULL );
+            if( !$$->next )
+                YYABORT;
         }
     ;
 
@@ -718,7 +729,7 @@ table:
 id:
     TK_ID
         {
-            if ( SQL_getstring( info, &$1, &$$ ) != ERROR_SUCCESS || !$$ )
+            if ( SQL_getstring( info, &$1, &$$ ) != ERROR_SUCCESS || !$$ || !$$[0] )
                 YYABORT;
         }
     ;

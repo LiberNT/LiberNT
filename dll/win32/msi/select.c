@@ -414,6 +414,7 @@ static UINT SELECT_AddColumn( struct select_view *sv, const WCHAR *name, const W
     return ERROR_SUCCESS;
 }
 
+#ifndef __REACTOS__
 static int select_count_columns( const column_info *col )
 {
     int n;
@@ -421,16 +422,41 @@ static int select_count_columns( const column_info *col )
         n++;
     return n;
 }
+#endif
 
 UINT SELECT_CreateView( MSIDATABASE *db, MSIVIEW **view, MSIVIEW *table,
                         const column_info *columns )
 {
     struct select_view *sv = NULL;
     UINT count = 0, r = ERROR_SUCCESS;
+#ifdef __REACTOS__
+    const column_info *col;
+    UINT table_cols = 0, i;
+#endif
 
     TRACE("%p\n", sv );
 
+#ifdef __REACTOS__
+    for( col = columns; col; col = col->next )
+    {
+        if( col->column )
+        {
+            count++;
+            continue;
+        }
+        if( !table_cols )
+        {
+            if( !table->ops->get_dimensions )
+                return ERROR_FUNCTION_FAILED;
+            r = table->ops->get_dimensions( table, NULL, &table_cols );
+            if( r != ERROR_SUCCESS )
+                return r;
+        }
+        count += table_cols;
+    }
+#else
     count = select_count_columns( columns );
+#endif
 
     sv = calloc( 1, offsetof( struct select_view, cols[count] ) );
     if( !sv )
@@ -445,6 +471,15 @@ UINT SELECT_CreateView( MSIDATABASE *db, MSIVIEW **view, MSIVIEW *table,
 
     while( columns )
     {
+#ifdef __REACTOS__
+        if( !columns->column )
+        {
+            for( i = 1; i <= table_cols; i++ )
+                sv->cols[sv->num_cols++] = i;
+            columns = columns->next;
+            continue;
+        }
+#endif
         r = SELECT_AddColumn( sv, columns->column, columns->table );
         if( r )
             break;
