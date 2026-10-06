@@ -106,6 +106,10 @@ void set_ldids(HINF hInf, LPCWSTR pszInstallSection, LPCWSTR pszWorkingDir)
     DWORD size;
     int ldid;
 
+#ifdef __REACTOS__
+    SetupSetDirectoryIdW(hInf, 0, NULL);
+#endif
+
     if (!SetupGetLineTextW(NULL, hInf, pszInstallSection, L"CustomDestination",
                            field, MAX_FIELD_LENGTH, &size))
         return;
