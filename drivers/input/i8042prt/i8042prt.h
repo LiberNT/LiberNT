@@ -88,6 +88,7 @@ typedef struct _PORT_DEVICE_EXTENSION
 	PKINTERRUPT HighestDIRQLInterrupt;
 	KSPIN_LOCK SpinLock;
 	KIRQL HighestDirql;
+	KMUTEX PnpMutex;
 
 	OUTPUT_PACKET Packet;
 	ULONG PacketResends;

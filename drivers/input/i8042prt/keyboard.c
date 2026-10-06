@@ -593,8 +593,10 @@ i8042KbdInternalDeviceControl(
 				Status = STATUS_INSUFFICIENT_RESOURCES;
 				goto cleanup;
 			}
+			KeWaitForSingleObject(&DeviceExtension->Common.PortDeviceExtension->PnpMutex, Executive, KernelMode, FALSE, NULL);
 			DeviceExtension->Common.PortDeviceExtension->KeyboardExtension = DeviceExtension;
-			DeviceExtension->Common.PortDeviceExtension->Flags |= KEYBOARD_CONNECTED;
+			InterlockedOr((PLONG)&DeviceExtension->Common.PortDeviceExtension->Flags, KEYBOARD_CONNECTED);
+			KeReleaseMutex(&DeviceExtension->Common.PortDeviceExtension->PnpMutex, FALSE);
 
             i8042InitializeKeyboardAttributes(DeviceExtension);
 

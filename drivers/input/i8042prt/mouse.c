@@ -371,7 +371,7 @@ i8042DpcRoutineMouseTimeout(
 	WARN_(I8042PRT, "Mouse initialization timeout! (substate %x)\n",
 		DeviceExtension->MouseResetState);
 
-	PortDeviceExtension->Flags &= ~MOUSE_PRESENT;
+	InterlockedAnd((PLONG)&PortDeviceExtension->Flags, ~MOUSE_PRESENT);
 
 	KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
 }
@@ -456,8 +456,10 @@ i8042MouInternalDeviceControl(
 				i8042DpcRoutineMouseTimeout,
 				DeviceExtension);
 			KeInitializeTimer(&DeviceExtension->TimerMouseTimeout);
+			KeWaitForSingleObject(&DeviceExtension->Common.PortDeviceExtension->PnpMutex, Executive, KernelMode, FALSE, NULL);
 			DeviceExtension->Common.PortDeviceExtension->MouseExtension = DeviceExtension;
-			DeviceExtension->Common.PortDeviceExtension->Flags |= MOUSE_CONNECTED;
+			InterlockedOr((PLONG)&DeviceExtension->Common.PortDeviceExtension->Flags, MOUSE_CONNECTED);
+			KeReleaseMutex(&DeviceExtension->Common.PortDeviceExtension->PnpMutex, FALSE);
 
 			IoMarkIrpPending(Irp);
 			DeviceExtension->MouseState = MouseResetting;
@@ -672,7 +674,7 @@ i8042MouResetIsr(
 			}
 			else
 			{
-				PortDeviceExtension->Flags &= ~MOUSE_PRESENT;
+				InterlockedAnd((PLONG)&PortDeviceExtension->Flags, ~MOUSE_PRESENT);
 				DeviceExtension->MouseState = MouseIdle;
 				WARN_(I8042PRT, "Mouse returned bad reset reply: %x (expected aa)\n", Value);
 			}
@@ -692,7 +694,7 @@ i8042MouResetIsr(
 			}
 			else
 			{
-				PortDeviceExtension->Flags &= ~MOUSE_PRESENT;
+				InterlockedAnd((PLONG)&PortDeviceExtension->Flags, ~MOUSE_PRESENT);
 				DeviceExtension->MouseState = MouseIdle;
 				WARN_(I8042PRT, "Mouse returned bad reset reply part two: %x (expected 0)\n", Value);
 			}
@@ -888,7 +890,7 @@ i8042MouResetIsr(
 			DeviceExtension->MouseResetState = ExpectingEnableACK;
 			return TRUE;
 		case ExpectingEnableACK:
-			PortDeviceExtension->Flags |= MOUSE_PRESENT;
+			InterlockedOr((PLONG)&PortDeviceExtension->Flags, MOUSE_PRESENT);
 			DeviceExtension->MouseState = MouseIdle;
 			DeviceExtension->MouseTimeoutState = TimeoutCancel;
 			INFO_(I8042PRT, "Mouse type = %u\n", DeviceExtension->MouseType);

@@ -498,6 +498,7 @@ DriverEntry(
 	}
 	RtlZeroMemory(DriverExtension, sizeof(I8042_DRIVER_EXTENSION));
 	KeInitializeSpinLock(&DriverExtension->Port.SpinLock);
+	KeInitializeMutex(&DriverExtension->Port.PnpMutex, 0);
 	InitializeListHead(&DriverExtension->DeviceListHead);
 	KeInitializeSpinLock(&DriverExtension->DeviceListLock);
 
