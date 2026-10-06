@@ -2039,7 +2039,16 @@ UINT WINAPI MsiEnumComponentCostsW( MSIHANDLE handle, const WCHAR *component, DW
         return r;
     }
 
+#ifdef __REACTOS__
+    if (msi_get_property_int( package->db, L"CostingComplete", -1 ) == -1)
+    {
+        msiobj_release( &package->hdr );
+        return ERROR_INVALID_HANDLE_STATE;
+    }
+    if (!msi_get_property_int( package->db, L"CostingComplete", 0 ) || !package->install_validated)
+#else
     if (!msi_get_property_int( package->db, L"CostingComplete", 0 ))
+#endif
     {
         msiobj_release( &package->hdr );
         return ERROR_FUNCTION_NOT_CALLED;
@@ -2082,6 +2091,16 @@ UINT WINAPI MsiEnumComponentCostsW( MSIHANDLE handle, const WCHAR *component, DW
     }
     else if (IStorage_Stat( package->db->storage, &stat, STATFLAG_NONAME ) == S_OK)
     {
+#ifdef __REACTOS__
+        WIN32_FILE_ATTRIBUTE_DATA data;
+
+        if (!stat.cbSize.QuadPart && package->db->path &&
+            GetFileAttributesExW( package->db->path, GetFileExInfoStandard, &data ))
+        {
+            stat.cbSize.u.LowPart = data.nFileSizeLow;
+            stat.cbSize.u.HighPart = data.nFileSizeHigh;
+        }
+#endif
         *temp = cost_from_size( stat.cbSize.QuadPart );
         *buflen = set_drive( drive, path[0] );
         r = ERROR_SUCCESS;

@@ -3138,6 +3138,9 @@ static UINT ACTION_InstallValidate(MSIPACKAGE *package)
     UINT rc;
 
     TRACE("InstallValidate\n");
+#ifdef __REACTOS__
+    package->install_validated = TRUE;
+#endif
 
     rc = MSI_DatabaseOpenViewW( package->db, L"SELECT * FROM `Registry`", &view );
     if (rc == ERROR_SUCCESS)
