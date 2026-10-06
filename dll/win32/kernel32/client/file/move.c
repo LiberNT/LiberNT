@@ -777,7 +777,8 @@ MoveFileWithProgressW(IN LPCWSTR lpExistingFileName,
                             &ObjectAttributes,
                             &IoStatusBlock,
                             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                            FILE_OPEN_FOR_BACKUP_INTENT | ((dwFlags & MOVEFILE_WRITE_THROUGH) ? FILE_WRITE_THROUGH : 0));
+                            FILE_OPEN_FOR_BACKUP_INTENT | FILE_OPEN_REPARSE_POINT |
+                            ((dwFlags & MOVEFILE_WRITE_THROUGH) ? FILE_WRITE_THROUGH : 0));
         if (!NT_SUCCESS(Status))
         {
             /* If we failed and the file doesn't exist, don't attempt to reopen without reparse */
@@ -818,7 +819,8 @@ MoveFileWithProgressW(IN LPCWSTR lpExistingFileName,
             }
             /* Validate the reparse point (do we support it?) */
             else if ((TagInfo.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) &&
-                     (TagInfo.ReparseTag != IO_REPARSE_TAG_MOUNT_POINT))
+                     (TagInfo.ReparseTag != IO_REPARSE_TAG_MOUNT_POINT) &&
+                     (TagInfo.ReparseTag != IO_REPARSE_TAG_SYMLINK))
             {
                 NtClose(SourceHandle);
                 SourceHandle = INVALID_HANDLE_VALUE;
