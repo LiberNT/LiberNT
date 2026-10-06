@@ -152,7 +152,7 @@
 @ stdcall CryptMemAlloc(long)
 @ stdcall CryptMemFree(ptr)
 @ stdcall CryptMemRealloc(ptr long)
-@ stub CryptMsgCalculateEncodedLength
+@ stdcall CryptMsgCalculateEncodedLength(long long long ptr str long)
 @ stdcall CryptMsgClose(ptr)
 @ stdcall CryptMsgControl(ptr long long ptr)
 @ stub CryptMsgCountersign

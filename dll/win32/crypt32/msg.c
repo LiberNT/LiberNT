@@ -2775,6 +2775,12 @@ static BOOL CDecodeMsg_Update(HCRYPTMSG hCryptMsg, const BYTE *pbData,
     }
     else
     {
+#ifdef __REACTOS__
+        if (!fFinal && (msg->base.open_flags & CMSG_DETACHED_FLAG) &&
+         msg->base.state == MsgStateDataFinalized)
+            ret = CDecodeMsg_CopyData(&msg->detached_data, pbData, cbData);
+        else
+#endif
         if (!fFinal)
             SetLastError(CRYPT_E_MSG_ERROR);
         else
@@ -4143,6 +4149,156 @@ HCRYPTMSG WINAPI CryptMsgOpenToDecode(DWORD dwMsgEncodingType, DWORD dwFlags,
     }
     return msg;
 }
+
+#ifdef __REACTOS__
+static BYTE *CRYPT_EncodeMsgForLength(DWORD dwMsgEncodingType, DWORD dwFlags,
+ DWORD dwMsgType, const void *pvMsgEncodeInfo, LPSTR pszInnerContentObjID,
+ const BYTE *pbData, DWORD cbData, DWORD *pcbEncoded)
+{
+    DWORD param = (dwFlags & CMSG_BARE_CONTENT_FLAG) ? CMSG_BARE_CONTENT_PARAM :
+     CMSG_CONTENT_PARAM;
+    HCRYPTMSG msg;
+    BYTE *buf = NULL;
+    DWORD size = 0;
+
+    msg = CryptMsgOpenToEncode(dwMsgEncodingType, dwFlags & CMSG_DETACHED_FLAG,
+     dwMsgType, pvMsgEncodeInfo, pszInnerContentObjID, NULL);
+    if (!msg)
+        return NULL;
+    if (CryptMsgUpdate(msg, pbData, cbData, TRUE) &&
+     CryptMsgGetParam(msg, param, 0, NULL, &size) && size &&
+     (buf = CryptMemAlloc(size)))
+    {
+        if (!CryptMsgGetParam(msg, param, 0, buf, &size))
+        {
+            CryptMemFree(buf);
+            buf = NULL;
+        }
+    }
+    CryptMsgClose(msg);
+    *pcbEncoded = size;
+    return buf;
+}
+
+static DWORD CRYPT_LenOfLen(DWORD len)
+{
+    if (len < 0x80) return 1;
+    if (len <= 0xff) return 2;
+    if (len <= 0xffff) return 3;
+    if (len <= 0xffffff) return 4;
+    return 5;
+}
+
+DWORD WINAPI CryptMsgCalculateEncodedLength(DWORD dwMsgEncodingType,
+ DWORD dwFlags, DWORD dwMsgType, const void *pvMsgEncodeInfo,
+ LPSTR pszInnerContentObjID, DWORD cbData)
+{
+    static const BYTE zero = 0x00, ones = 0xff;
+    struct { DWORD header; DWORD content; } frames[16];
+    DWORD lenA = 0, lenB = 0, pos, offset, depth = 0, oldChild, newChild, i;
+    BYTE *a, *b = NULL;
+
+    TRACE("(%08lx, %08lx, %ld, %p, %s, %ld)\n", dwMsgEncodingType, dwFlags,
+     dwMsgType, pvMsgEncodeInfo, debugstr_a(pszInnerContentObjID), cbData);
+
+    a = CRYPT_EncodeMsgForLength(dwMsgEncodingType, dwFlags, dwMsgType,
+     pvMsgEncodeInfo, pszInnerContentObjID, &zero, 1, &lenA);
+    if (!a)
+        return 0;
+    if (dwFlags & CMSG_DETACHED_FLAG)
+    {
+        CryptMemFree(a);
+        return lenA;
+    }
+    b = CRYPT_EncodeMsgForLength(dwMsgEncodingType, dwFlags, dwMsgType,
+     pvMsgEncodeInfo, pszInnerContentObjID, &ones, 1, &lenB);
+    if (!b || lenA != lenB)
+        goto fallback;
+    for (pos = 0; pos < lenA && a[pos] == b[pos]; pos++)
+        ;
+    if (pos == lenA)
+        goto fallback;
+
+    offset = 0;
+    for (;;)
+    {
+        DWORD header, content, lenBytes;
+
+        if (offset + 2 > lenA || depth == ARRAY_SIZE(frames))
+            goto fallback;
+        if (a[offset + 1] < 0x80)
+        {
+            header = 2;
+            content = a[offset + 1];
+        }
+        else
+        {
+            lenBytes = a[offset + 1] & 0x7f;
+            if (!lenBytes || lenBytes > 4 || offset + 2 + lenBytes > lenA)
+                goto fallback;
+            header = 2 + lenBytes;
+            content = 0;
+            for (i = 0; i < lenBytes; i++)
+                content = (content << 8) | a[offset + 2 + i];
+        }
+        if (offset + header + content > lenA)
+            goto fallback;
+        if (pos < offset + header || pos >= offset + header + content)
+        {
+            offset += header + content;
+            continue;
+        }
+        if (a[offset] & 0x20)
+        {
+            frames[depth].header = header;
+            frames[depth].content = content;
+            depth++;
+            offset += header;
+            continue;
+        }
+        if (content != 1)
+            goto fallback;
+        oldChild = header + content;
+        break;
+    }
+
+    newChild = 1 + CRYPT_LenOfLen(cbData) + cbData;
+    while (depth--)
+    {
+        DWORD content = frames[depth].content - oldChild + newChild;
+
+        oldChild = frames[depth].header + frames[depth].content;
+        newChild = 1 + CRYPT_LenOfLen(content) + content;
+    }
+    CryptMemFree(a);
+    CryptMemFree(b);
+    return newChild;
+
+fallback:
+    CryptMemFree(a);
+    CryptMemFree(b);
+    a = NULL;
+    lenA = 0;
+    if (cbData)
+    {
+        BYTE *data = CryptMemAlloc(cbData);
+
+        if (!data)
+            return 0;
+        memset(data, 0, cbData);
+        a = CRYPT_EncodeMsgForLength(dwMsgEncodingType, dwFlags, dwMsgType,
+         pvMsgEncodeInfo, pszInnerContentObjID, data, cbData, &lenA);
+        CryptMemFree(data);
+    }
+    else
+        a = CRYPT_EncodeMsgForLength(dwMsgEncodingType, dwFlags, dwMsgType,
+         pvMsgEncodeInfo, pszInnerContentObjID, NULL, 0, &lenA);
+    if (!a)
+        return 0;
+    CryptMemFree(a);
+    return lenA;
+}
+#endif
 
 HCRYPTMSG WINAPI CryptMsgDuplicate(HCRYPTMSG hCryptMsg)
 {
