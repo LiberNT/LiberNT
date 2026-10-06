@@ -2385,6 +2385,10 @@ BOOL WINAPI CertDllVerifyRevocation(DWORD dwEncodingType, DWORD dwRevType,
     }
     if (!cContext)
     {
+#ifdef __REACTOS__
+        memset(&pRevStatus->dwIndex, 0, pRevStatus->cbSize - sizeof(DWORD));
+        pRevStatus->dwError = E_INVALIDARG;
+#endif
         SetLastError(E_INVALIDARG);
         return FALSE;
     }
@@ -2397,7 +2401,12 @@ BOOL WINAPI CertDllVerifyRevocation(DWORD dwEncodingType, DWORD dwRevType,
         pTime = &now;
     }
     memset(&pRevStatus->dwIndex, 0, pRevStatus->cbSize - sizeof(DWORD));
+#ifdef __REACTOS__
+    if (dwRevType != CERT_CONTEXT_REVOCATION_TYPE ||
+        GET_CERT_ENCODING_TYPE(dwEncodingType) != X509_ASN_ENCODING)
+#else
     if (dwRevType != CERT_CONTEXT_REVOCATION_TYPE)
+#endif
         error = CRYPT_E_NO_REVOCATION_CHECK;
     else
     {
