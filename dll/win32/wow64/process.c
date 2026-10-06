@@ -62,15 +62,124 @@ static BOOL is_process_id_wow64( const CLIENT_ID *id )
 }
 
 
+#ifdef __REACTOS__
+static SIZE_T get_environment_size( const WCHAR *env )
+{
+    const WCHAR *end = env;
+
+    while (*end) end += wcslen( end ) + 1;
+    return (end + 1 - env) * sizeof(WCHAR);
+}
+
+static WCHAR *copy_environment( const WCHAR *env )
+{
+    SIZE_T size = get_environment_size( env );
+    WCHAR *copy;
+
+    if ((copy = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, size + sizeof(WCHAR) )))
+        memcpy( copy, env, size );
+    return copy;
+}
+
+static BOOL get_environment_var( WCHAR *env, const WCHAR *name, UNICODE_STRING *value, WCHAR *buffer, USHORT size )
+{
+    UNICODE_STRING nameW;
+
+    RtlInitUnicodeString( &nameW, name );
+    value->Buffer = buffer;
+    value->Length = 0;
+    value->MaximumLength = size;
+    return !RtlQueryEnvironmentVariable_U( env, &nameW, value );
+}
+
+static void set_environment_var( WCHAR **env, const WCHAR *name, UNICODE_STRING *value )
+{
+    UNICODE_STRING nameW;
+
+    RtlInitUnicodeString( &nameW, name );
+    RtlSetEnvironmentVariable( env, &nameW, value );
+}
+
+static void copy_environment_var( WCHAR **env, const WCHAR *from, const WCHAR *to )
+{
+    WCHAR buffer[1024];
+    UNICODE_STRING value;
+
+    if (get_environment_var( *env, from, &value, buffer, sizeof(buffer) ))
+        set_environment_var( env, to, &value );
+}
+
+void init_reactos_wow64_environment(void)
+{
+    RTL_USER_PROCESS_PARAMETERS32 *params32;
+    WCHAR buffer[64], *env, *env32 = NULL;
+    SIZE_T size, alloc_size;
+    UNICODE_STRING value;
+    PEB32 *peb32 = NULL;
+
+    if (current_machine != IMAGE_FILE_MACHINE_I386) return;
+    if (NtQueryInformationProcess( GetCurrentProcess(), ProcessWow64Information, &peb32, sizeof(peb32), NULL ) || !peb32) return;
+    if (!(params32 = ULongToPtr( peb32->ProcessParameters )) || !params32->Environment) return;
+    if (!(env = copy_environment( ULongToPtr( params32->Environment ) ))) return;
+
+    copy_environment_var( &env, L"ProgramFiles(x86)", L"ProgramFiles" );
+    copy_environment_var( &env, L"CommonProgramFiles(x86)", L"CommonProgramFiles" );
+    if (!get_environment_var( env, L"PROCESSOR_ARCHITEW6432", &value, buffer, sizeof(buffer) ))
+        copy_environment_var( &env, L"PROCESSOR_ARCHITECTURE", L"PROCESSOR_ARCHITEW6432" );
+    RtlInitUnicodeString( &value, L"x86" );
+    set_environment_var( &env, L"PROCESSOR_ARCHITECTURE", &value );
+
+    size = alloc_size = get_environment_size( env );
+    if (!NtAllocateVirtualMemory( GetCurrentProcess(), (void **)&env32, default_zero_bits, &alloc_size,
+                                  MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE ))
+    {
+        memcpy( env32, env, size );
+        params32->Environment = PtrToUlong( env32 );
+        params32->EnvironmentSize = size;
+    }
+    RtlFreeHeap( GetProcessHeap(), 0, env );
+}
+
+static WCHAR *get_native_environment( const WCHAR *env32 )
+{
+    WCHAR buffer[64], *env;
+    UNICODE_STRING value;
+
+    if (!env32 || !(env = copy_environment( env32 ))) return NULL;
+
+    copy_environment_var( &env, L"ProgramW6432", L"ProgramFiles" );
+    copy_environment_var( &env, L"CommonProgramW6432", L"CommonProgramFiles" );
+    if (get_environment_var( env, L"PROCESSOR_ARCHITEW6432", &value, buffer, sizeof(buffer) ))
+    {
+        set_environment_var( &env, L"PROCESSOR_ARCHITECTURE", &value );
+        set_environment_var( &env, L"PROCESSOR_ARCHITEW6432", NULL );
+    }
+    return env;
+}
+
+#endif
 static RTL_USER_PROCESS_PARAMETERS *process_params_32to64( RTL_USER_PROCESS_PARAMETERS **params,
                                                            RTL_USER_PROCESS_PARAMETERS32 *params32 )
 {
     UNICODE_STRING image, dllpath, curdir, cmdline, title, desktop, shell, runtime;
     RTL_USER_PROCESS_PARAMETERS *ret;
+#ifdef __REACTOS__
+    WCHAR *env;
+#endif
 
     *params = NULL;
+#ifdef __REACTOS__
+    env = get_native_environment( ULongToPtr( params32->Environment ) );
+    if (RtlCreateProcessParametersEx( &ret, unicode_str_32to64( &image, &params32->ImagePathName ), unicode_str_32to64( &dllpath, &params32->DllPath ), unicode_str_32to64( &curdir, &params32->CurrentDirectory.DosPath ), unicode_str_32to64( &cmdline, &params32->CommandLine ), env ? env : ULongToPtr( params32->Environment ), unicode_str_32to64( &title, &params32->WindowTitle ), unicode_str_32to64( &desktop, &params32->Desktop ), unicode_str_32to64( &shell, &params32->ShellInfo ), unicode_str_32to64( &runtime, &params32->RuntimeInfo ), PROCESS_PARAMS_FLAG_NORMALIZED ))
+    {
+        if (env) RtlFreeHeap( GetProcessHeap(), 0, env );
+        return NULL;
+    }
+    if (env) RtlFreeHeap( GetProcessHeap(), 0, env );
+#else
     if (RtlCreateProcessParametersEx( &ret, unicode_str_32to64( &image, &params32->ImagePathName ), unicode_str_32to64( &dllpath, &params32->DllPath ), unicode_str_32to64( &curdir, &params32->CurrentDirectory.DosPath ), unicode_str_32to64( &cmdline, &params32->CommandLine ), ULongToPtr( params32->Environment ), unicode_str_32to64( &title, &params32->WindowTitle ), unicode_str_32to64( &desktop, &params32->Desktop ), unicode_str_32to64( &shell, &params32->ShellInfo ), unicode_str_32to64( &runtime, &params32->RuntimeInfo ), PROCESS_PARAMS_FLAG_NORMALIZED ))
         return NULL;
+#endif
 
     ret->DebugFlags            = params32->DebugFlags;
     ret->ConsoleHandle         = LongToHandle( params32->ConsoleHandle );

@@ -540,6 +540,18 @@ CreateEnvironmentBlock(OUT LPVOID *lpEnvironment,
     LPWSTR lpDomainName = NULL;
     WCHAR Buffer[MAX_PATH];
     WCHAR szValue[1024];
+    static const struct
+    {
+        PCWSTR ValueName;
+        LPWSTR VariableName;
+    } Wow64Variables[] =
+    {
+        { L"ProgramFilesDir (x86)", L"ProgramFiles(x86)" },
+        { L"CommonFilesDir (x86)", L"CommonProgramFiles(x86)" },
+        { L"ProgramW6432Dir", L"ProgramW6432" },
+        { L"CommonW6432Dir", L"CommonProgramW6432" }
+    };
+    ULONG i;
 
     DPRINT("CreateEnvironmentBlock() called\n");
 
@@ -661,6 +673,24 @@ CreateEnvironmentBlock(OUT LPVOID *lpEnvironment,
                                        L"CommonProgramFiles",
                                        szValue,
                                        FALSE);
+        }
+
+        for (i = 0; i < ARRAYSIZE(Wow64Variables); i++)
+        {
+            Length = sizeof(szValue);
+            lError = RegQueryValueExW(hKey,
+                                      Wow64Variables[i].ValueName,
+                                      NULL,
+                                      &dwType,
+                                      (LPBYTE)szValue,
+                                      &Length);
+            if (lError == ERROR_SUCCESS)
+            {
+                SetUserEnvironmentVariable(Environment,
+                                           Wow64Variables[i].VariableName,
+                                           szValue,
+                                           FALSE);
+            }
         }
 
         RegCloseKey(hKey);

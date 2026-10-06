@@ -1143,6 +1143,7 @@ static DWORD WINAPI process_init( RTL_RUN_ONCE *once, void *param, void **contex
 
 #ifdef __REACTOS__
     init_reactos_syscall_table();
+    init_reactos_wow64_environment();
 #endif
 
 #define GET_PTR(name) p ## name = RtlFindExportedRoutineByName( module, #name )

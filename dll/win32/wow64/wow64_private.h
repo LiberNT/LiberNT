@@ -44,6 +44,9 @@ ALL_SYSCALLS32
 
 extern void init_image_mapping( HMODULE module );
 extern void init_file_redirects(void);
+#ifdef __REACTOS__
+extern void init_reactos_wow64_environment(void);
+#endif
 extern BOOL get_file_redirect( OBJECT_ATTRIBUTES *attr );
 
 extern USHORT native_machine;

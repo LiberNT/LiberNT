@@ -1361,6 +1361,44 @@ InitializeProgramFilesDir(VOID)
     }
 
 #ifdef _WIN64
+    Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                          L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion",
+                          0,
+                          KEY_SET_VALUE,
+                          &hKey);
+    if (Error == ERROR_SUCCESS)
+    {
+        dwLength = (wcslen(szProgramFilesDirPath) + 1) * sizeof(WCHAR);
+        Error = RegSetValueExW(hKey,
+                               L"ProgramW6432Dir",
+                               0,
+                               REG_SZ,
+                               (LPBYTE)szProgramFilesDirPath,
+                               dwLength);
+        if (Error != ERROR_SUCCESS)
+        {
+            DPRINT1("Warning: %lu\n", Error);
+        }
+
+        dwLength = (wcslen(szCommonFilesDirPath) + 1) * sizeof(WCHAR);
+        Error = RegSetValueExW(hKey,
+                               L"CommonW6432Dir",
+                               0,
+                               REG_SZ,
+                               (LPBYTE)szCommonFilesDirPath,
+                               dwLength);
+        if (Error != ERROR_SUCCESS)
+        {
+            DPRINT1("Warning: %lu\n", Error);
+        }
+
+        RegCloseKey(hKey);
+    }
+    else
+    {
+        DPRINT1("Warning: %lu\n", Error);
+    }
+
     if (!LoadStringW(hDllInstance,
                      IDS_COMMONFILES,
                      szBuffer,
