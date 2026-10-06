@@ -126,6 +126,9 @@ HRESULT rpc_revoke_local_server(unsigned int cookie);
 HRESULT rpc_create_clientchannel(const OXID *oxid, const IPID *ipid, const OXID_INFO *oxid_info, const IID *iid,
         DWORD dest_context, void *dest_context_data, IRpcChannelBuffer **chan, struct apartment *apt);
 HRESULT rpc_create_serverchannel(DWORD dest_context, void *dest_context_data, IRpcChannelBuffer **chan);
+#ifdef __REACTOS__
+extern DWORD com_default_imp_level;
+#endif
 HRESULT rpc_register_interface(REFIID riid);
 void rpc_unregister_interface(REFIID riid, BOOL wait);
 HRESULT rpc_resolve_oxid(OXID oxid, OXID_INFO *oxid_info);

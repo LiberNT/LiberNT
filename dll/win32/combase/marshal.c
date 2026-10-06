@@ -53,6 +53,9 @@ struct ifproxy
     IRpcProxyBuffer *proxy;  /* interface proxy (RO) */
     ULONG refs;              /* imported (public) references (LOCK) */
     IRpcChannelBuffer *chan; /* channel to object (CS parent->cs) */
+#ifdef __REACTOS__
+    DWORD imp_level;
+#endif
 };
 
 /* imported object / proxy manager */
@@ -74,6 +77,9 @@ struct proxy_manager
     HANDLE remoting_mutex;    /* mutex used for synchronizing access to IRemUnknown */
     MSHCTX dest_context;      /* context used for activating optimisations (LOCK) */
     void *dest_context_data;  /* reserved context value (LOCK) */
+#ifdef __REACTOS__
+    DWORD imp_level;
+#endif
 };
 
 static inline struct proxy_manager *impl_from_IMultiQI(IMultiQI *iface)
@@ -1351,6 +1357,38 @@ static ULONG WINAPI ProxyCliSec_Release(IClientSecurity *iface)
     return IMultiQI_Release(&This->IMultiQI_iface);
 }
 
+#ifdef __REACTOS__
+static HRESULT proxy_manager_create_ifproxy(struct proxy_manager *This, const STDOBJREF *stdobjref, REFIID riid,
+                                            IRpcChannelBuffer *channel, struct ifproxy **iif_out);
+
+static struct ifproxy *proxy_manager_find_ifproxy_by_iface(struct proxy_manager *This, IUnknown *proxy)
+{
+    struct ifproxy *ifproxy, *ret = NULL;
+
+    EnterCriticalSection(&This->cs);
+    LIST_FOR_EACH_ENTRY(ifproxy, &This->interfaces, struct ifproxy, entry)
+    {
+        if (ifproxy->iface == (void *)proxy && ifproxy->iface != (void *)&This->IMultiQI_iface)
+        {
+            ret = ifproxy;
+            break;
+        }
+    }
+    LeaveCriticalSection(&This->cs);
+    return ret;
+}
+
+static DWORD *proxy_manager_get_imp_level(struct proxy_manager *This, IUnknown *proxy)
+{
+    struct ifproxy *ifproxy;
+
+    if (!proxy) return NULL;
+    if (proxy == (IUnknown *)&This->IMultiQI_iface) return &This->imp_level;
+    if (!(ifproxy = proxy_manager_find_ifproxy_by_iface(This, proxy))) return NULL;
+    return &ifproxy->imp_level;
+}
+#endif
+
 static HRESULT WINAPI ProxyCliSec_QueryBlanket(IClientSecurity *iface,
                                                IUnknown *pProxy,
                                                DWORD *pAuthnSvc,
@@ -1361,6 +1399,34 @@ static HRESULT WINAPI ProxyCliSec_QueryBlanket(IClientSecurity *iface,
                                                void **pAuthInfo,
                                                DWORD *pCapabilities)
 {
+#ifdef __REACTOS__
+    struct proxy_manager *This = impl_from_IClientSecurity(iface);
+    DWORD *imp_level;
+
+    TRACE("(%p, %p, %p, %p, %p, %p, %p, %p)\n", pProxy, pAuthnSvc,
+          pAuthzSvc, ppServerPrincName, pAuthnLevel, pImpLevel, pAuthInfo,
+          pCapabilities);
+
+    if (!(imp_level = proxy_manager_get_imp_level(This, pProxy)))
+        return E_NOINTERFACE;
+
+    if (pAuthnSvc)
+        *pAuthnSvc = RPC_C_AUTHN_WINNT;
+    if (pAuthzSvc)
+        *pAuthzSvc = RPC_C_AUTHZ_NONE;
+    if (ppServerPrincName)
+        *ppServerPrincName = NULL;
+    if (pAuthnLevel)
+        *pAuthnLevel = RPC_C_AUTHN_LEVEL_PKT_PRIVACY;
+    if (pImpLevel)
+        *pImpLevel = *imp_level != RPC_C_IMP_LEVEL_DEFAULT ? *imp_level : com_default_imp_level;
+    if (pAuthInfo)
+        *pAuthInfo = NULL;
+    if (pCapabilities)
+        *pCapabilities = EOAC_NONE;
+
+    return S_OK;
+#else
     FIXME("(%p, %p, %p, %p, %p, %p, %p, %p): stub\n", pProxy, pAuthnSvc,
           pAuthzSvc, ppServerPrincName, pAuthnLevel, pImpLevel, pAuthInfo,
           pCapabilities);
@@ -1381,6 +1447,7 @@ static HRESULT WINAPI ProxyCliSec_QueryBlanket(IClientSecurity *iface,
         *pCapabilities = EOAC_NONE;
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI ProxyCliSec_SetBlanket(IClientSecurity *iface,
@@ -1391,18 +1458,70 @@ static HRESULT WINAPI ProxyCliSec_SetBlanket(IClientSecurity *iface,
                                              void *pAuthInfo,
                                              DWORD Capabilities)
 {
+#ifdef __REACTOS__
+    struct proxy_manager *This = impl_from_IClientSecurity(iface);
+    DWORD *imp_level;
+
+    TRACE("%p, %ld, %ld, %s, %ld, %ld, %p, %#lx\n", pProxy, AuthnSvc, AuthzSvc,
+          pServerPrincName == COLE_DEFAULT_PRINCIPAL ? "<default principal>" : debugstr_w(pServerPrincName),
+          AuthnLevel, ImpLevel, pAuthInfo, Capabilities);
+
+    if (!(imp_level = proxy_manager_get_imp_level(This, pProxy)))
+        return E_NOINTERFACE;
+
+    if ((AuthnSvc > RPC_C_AUTHN_MQ && AuthnSvc != RPC_C_AUTHN_DEFAULT) ||
+        AuthnLevel > RPC_C_AUTHN_LEVEL_PKT_PRIVACY || ImpLevel > RPC_C_IMP_LEVEL_DELEGATE)
+        return E_INVALIDARG;
+
+    *imp_level = ImpLevel;
+    return S_OK;
+#else
     FIXME("%p, %ld, %ld, %s, %ld, %ld, %p, %#lx: stub\n", pProxy, AuthnSvc, AuthzSvc,
           pServerPrincName == COLE_DEFAULT_PRINCIPAL ? "<default principal>" : debugstr_w(pServerPrincName),
           AuthnLevel, ImpLevel, pAuthInfo, Capabilities);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI ProxyCliSec_CopyProxy(IClientSecurity *iface,
                                             IUnknown *pProxy, IUnknown **ppCopy)
 {
+#ifdef __REACTOS__
+    struct proxy_manager *This = impl_from_IClientSecurity(iface);
+    struct ifproxy *source, *copy;
+    IRpcChannelBuffer *chan;
+    HRESULT hr;
+
+    TRACE("(%p, %p)\n", pProxy, ppCopy);
+
+    if (!ppCopy)
+        return E_INVALIDARG;
+    *ppCopy = NULL;
+
+    if (pProxy && pProxy == (IUnknown *)&This->IMultiQI_iface)
+    {
+        IUnknown_AddRef(pProxy);
+        *ppCopy = pProxy;
+        return S_OK;
+    }
+    if (!pProxy || !(source = proxy_manager_find_ifproxy_by_iface(This, pProxy)))
+        return E_NOINTERFACE;
+
+    hr = rpc_create_clientchannel(&source->stdobjref.oxid, &source->stdobjref.ipid, &This->oxid_info,
+                                  &source->iid, This->dest_context, This->dest_context_data, &chan, This->parent);
+    if (hr == S_OK)
+        hr = proxy_manager_create_ifproxy(This, &source->stdobjref, &source->iid, chan, &copy);
+    if (hr == S_OK)
+    {
+        *ppCopy = copy->iface;
+        IUnknown_AddRef(*ppCopy);
+    }
+    return hr;
+#else
     FIXME("(%p, %p): stub\n", pProxy, ppCopy);
     *ppCopy = NULL;
     return E_NOTIMPL;
+#endif
 }
 
 static const IClientSecurityVtbl ProxyCliSec_Vtbl =
@@ -1591,6 +1710,9 @@ static HRESULT proxy_manager_construct(
      * overwritten in proxy_manager_set_context */
     This->dest_context = MSHCTX_INPROC;
     This->dest_context_data = NULL;
+#ifdef __REACTOS__
+    This->imp_level = RPC_C_IMP_LEVEL_DEFAULT;
+#endif
 
     EnterCriticalSection(&apt->cs);
     /* FIXME: we are dependent on the ordering in here to make sure a proxy's
@@ -1721,6 +1843,9 @@ static HRESULT proxy_manager_create_ifproxy(
     ifproxy->iid = *riid;
     ifproxy->refs = 0;
     ifproxy->proxy = NULL;
+#ifdef __REACTOS__
+    ifproxy->imp_level = RPC_C_IMP_LEVEL_DEFAULT;
+#endif
 
     assert(channel);
     ifproxy->chan = channel; /* FIXME: we should take the binding strings and construct the channel in this function */

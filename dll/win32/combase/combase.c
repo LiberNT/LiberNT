@@ -988,6 +988,10 @@ HRESULT WINAPI CoCreateGuid(GUID *guid)
     return HRESULT_FROM_WIN32(status);
 }
 
+#ifdef __REACTOS__
+DWORD com_default_imp_level = RPC_C_IMP_LEVEL_IDENTIFY;
+
+#endif
 /******************************************************************************
  *            CoQueryProxyBlanket        (combase.@)
  */
@@ -1137,6 +1141,10 @@ HRESULT WINAPI CoInitializeSecurity(PSECURITY_DESCRIPTOR sd, LONG cAuthSvc,
         TRACE("%p, %ld, %p, %p, %ld, %ld, %p, %ld, %p stub\n", sd, cAuthSvc, asAuthSvc, reserved1, authn_level,
               imp_level, reserved2, capabilities, reserved3);
 
+#ifdef __REACTOS__
+    if (imp_level >= RPC_C_IMP_LEVEL_ANONYMOUS && imp_level <= RPC_C_IMP_LEVEL_DELEGATE)
+        com_default_imp_level = imp_level;
+#endif
     return S_OK;
 }
 
