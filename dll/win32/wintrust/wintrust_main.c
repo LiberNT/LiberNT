@@ -284,6 +284,39 @@ static LONG WINTRUST_DefaultVerify(HWND hwnd, GUID *actionID,
     numSteps = WINTRUST_AddTrustStepsFromFunctions(verifySteps,
      provData->psPfns);
     err = WINTRUST_ExecuteSteps(verifySteps, numSteps, provData);
+#ifdef __REACTOS__
+    while (err && provData->pSigState && !provData->pSigState->fNoMoreSigs)
+    {
+        DWORD i, j, first;
+
+        for (first = 0; first < numSteps; first++)
+            if (verifySteps[first].error_index == TRUSTERROR_STEP_FINAL_SIGPROV)
+                break;
+        if (first == numSteps)
+            break;
+
+        for (i = 0; i < provData->csSigners; i++)
+        {
+            for (j = 0; j < provData->pasSigners[i].csCertChain; j++)
+                CertFreeCertificateContext(provData->pasSigners[i].pasCertChain[j].pCert);
+            provData->psPfns->pfnFree(provData->pasSigners[i].pasCertChain);
+            provData->psPfns->pfnFree(provData->pasSigners[i].psSigner);
+            CertFreeCertificateChain(provData->pasSigners[i].pChainContext);
+        }
+        provData->psPfns->pfnFree(provData->pasSigners);
+        provData->pasSigners = NULL;
+        provData->csSigners = 0;
+        for (i = first; i < numSteps; i++)
+            provData->padwTrustStepErrors[verifySteps[i].error_index] = 0;
+
+        err = WINTRUST_ExecuteSteps(&verifySteps[first], numSteps - first, provData);
+    }
+    if (err && WVT_ISINSTRUCT(WINTRUST_DATA, data->cbStruct, dwProvFlags) &&
+        (data->dwProvFlags & WTD_HASH_ONLY_FLAG))
+    {
+        err = TRUST_E_NOSIGNATURE;
+    }
+#endif
     goto done;
 
 error:
@@ -1006,6 +1039,10 @@ BOOL WINAPI WINTRUST_AddSgnr(CRYPT_PROVIDER_DATA *data,
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
+#ifdef __REACTOS__
+    if (sgnr->cbStruct != sizeof(CRYPT_PROVIDER_SGNR))
+        idxSigner = data->csSigners;
+#endif
     data->pasSigners = realloc(data->pasSigners,
      (data->csSigners + 1) * sizeof(CRYPT_PROVIDER_SGNR));
     if (data->pasSigners)
@@ -1026,8 +1063,16 @@ BOOL WINAPI WINTRUST_AddSgnr(CRYPT_PROVIDER_DATA *data,
              sizeof(CRYPT_PROVIDER_SGNR));
         }
         else
+#ifdef __REACTOS__
+        {
             memset(&data->pasSigners[idxSigner], 0,
              sizeof(CRYPT_PROVIDER_SGNR));
+            memcpy(&data->pasSigners[idxSigner], sgnr, sgnr->cbStruct);
+        }
+#else
+            memset(&data->pasSigners[idxSigner], 0,
+             sizeof(CRYPT_PROVIDER_SGNR));
+#endif
         data->csSigners++;
     }
     else

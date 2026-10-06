@@ -332,6 +332,25 @@ BOOL WINAPI CryptSIPRetrieveSubjectGuid
 
     TRACE("file magic = 0x%02x%02x%02x%02x\n", hdr[0], hdr[1], hdr[2], hdr[3]);
     /* As everything is in place now we start looking at the file header */
+#ifdef __REACTOS__
+    if (!memcmp(hdr, &dosHdr, sizeof(dosHdr)))
+    {
+        IMAGE_DOS_HEADER dos;
+        DWORD signature = 0, sigCount = 0;
+
+        SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
+        if (ReadFile(hFile, &dos, sizeof(dos), &count, NULL) && count == sizeof(dos) &&
+            SetFilePointer(hFile, dos.e_lfanew, NULL, FILE_BEGIN) != INVALID_SET_FILE_POINTER &&
+            ReadFile(hFile, &signature, sizeof(signature), &sigCount, NULL) &&
+            sigCount == sizeof(signature) && signature == IMAGE_NT_SIGNATURE)
+        {
+            *pgSubject = unknown;
+            SetLastError(S_OK);
+            bRet = TRUE;
+            goto cleanup;
+        }
+    }
+#else
     if (!memcmp(hdr, &dosHdr, sizeof(dosHdr)))
     {
         *pgSubject = unknown;
@@ -339,6 +358,7 @@ BOOL WINAPI CryptSIPRetrieveSubjectGuid
         bRet = TRUE;
         goto cleanup;
     }
+#endif
     /* Quick-n-dirty check for a cab file. */
     if (!memcmp(hdr, cabHdr, sizeof(cabHdr)))
     {

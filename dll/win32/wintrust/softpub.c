@@ -95,7 +95,11 @@ static DWORD SOFTPUB_OpenFile(CRYPT_PROVIDER_DATA *data)
         if (data->pWintrustData->pFile->hFile != INVALID_HANDLE_VALUE)
             data->fOpenedFile = TRUE;
         else
+#ifdef __REACTOS__
+            err = CRYPT_E_FILE_ERROR;
+#else
             err = GetLastError();
+#endif
     }
     if (!err)
         GetFileTime(data->pWintrustData->pFile->hFile, &data->sftSystemTime,
@@ -127,11 +131,17 @@ static DWORD SOFTPUB_GetFileSubject(CRYPT_PROVIDER_DATA *data)
              * TRUST_E_SUBJECT_FORM_UNKNOWN, rather than whatever
              * CryptSIPRetrieveSubjectGuid returns.
              */
+#ifdef __REACTOS__
+            UNREFERENCED_PARAMETER(fileSize);
+            UNREFERENCED_PARAMETER(sipError);
+            err = TRUST_E_SUBJECT_FORM_UNKNOWN;
+#else
             if (GetFileSizeEx(data->pWintrustData->pFile->hFile, &fileSize)
              && !fileSize.QuadPart)
                 err = TRUST_E_SUBJECT_FORM_UNKNOWN;
             else
                 err = sipError;
+#endif
         }
     }
     else
@@ -802,8 +812,17 @@ static DWORD WINTRUST_VerifySigner(CRYPT_PROVIDER_DATA *data, DWORD signerIdx)
 
     if (certInfo)
     {
+#ifdef __REACTOS__
+        PCCERT_CONTEXT subject = NULL;
+        DWORD store;
+
+        for (store = 0; !subject && store < data->chStores; store++)
+            subject = CertGetSubjectCertificateFromStore(
+             data->pahStores[store], data->dwEncoding, certInfo);
+#else
         PCCERT_CONTEXT subject = CertGetSubjectCertificateFromStore(
          data->pahStores[0], data->dwEncoding, certInfo);
+#endif
 
         if (subject)
         {
@@ -881,6 +900,28 @@ done:
     data->psPfns->pfnFree(attrs);
 }
 
+#ifdef __REACTOS__
+static DWORD SOFTPUB_SelectSecondarySignature(CRYPT_PROVIDER_DATA *data, DWORD index)
+{
+    HCRYPTMSG msg = CryptMsgDuplicate(data->pSigState->rhSecondarySigs[index]);
+    DWORD err;
+
+    CryptMsgClose(data->hMsg);
+    data->hMsg = msg;
+    err = SOFTPUB_CreateStoreFromMessage(data);
+    if (!err)
+    {
+        data->psPfns->pfnFree(data->pPDSip->psIndirectData);
+        data->pPDSip->psIndirectData = NULL;
+        err = SOFTPUB_DecodeInnerContent(data);
+    }
+    if (!err && data->pWintrustData->dwUnionChoice == WTD_CHOICE_FILE &&
+     data->pWintrustData->pFile)
+        err = SOFTPUB_VerifyImageHash(data, data->pWintrustData->pFile->hFile);
+    return err;
+}
+#endif
+
 HRESULT WINAPI SoftpubLoadSignature(CRYPT_PROVIDER_DATA *data)
 {
     DWORD err = ERROR_SUCCESS;
@@ -890,6 +931,52 @@ HRESULT WINAPI SoftpubLoadSignature(CRYPT_PROVIDER_DATA *data)
     if (!data->padwTrustStepErrors)
         return S_FALSE;
 
+#ifdef __REACTOS__
+    if (data->pSigState)
+    {
+        if (data->pSigState->fFirstAttemptMade)
+            data->pSigState->dwCurrentIndex++;
+    }
+    else if (!(data->pSigState = data->psPfns->pfnAlloc(sizeof(*data->pSigState))))
+    {
+        err = ERROR_OUTOFMEMORY;
+    }
+    else
+    {
+        data->pSigState->cbStruct = sizeof(*data->pSigState);
+        data->pSigState->fSupportMultiSig = TRUE;
+        data->pSigState->dwCryptoPolicySupport = WSS_SIGTRUST_SUPPORT | WSS_OBJTRUST_SUPPORT | WSS_CERTTRUST_SUPPORT;
+        if (data->hMsg)
+        {
+            data->pSigState->hPrimarySig = CryptMsgDuplicate(data->hMsg);
+            load_secondary_signatures(data, data->pSigState->hPrimarySig);
+        }
+        if (data->pSigSettings)
+        {
+            if (data->pSigSettings->dwFlags & WSS_GET_SECONDARY_SIG_COUNT)
+                data->pSigSettings->cSecondarySigs = data->pSigState->cSecondarySigs;
+            if (data->pSigSettings->dwFlags & WSS_VERIFY_SPECIFIC)
+                data->pSigState->dwCurrentIndex = data->pSigSettings->dwIndex;
+        }
+    }
+    if (!err && data->hMsg)
+    {
+        CRYPT_PROVIDER_SIGSTATE *state = data->pSigState;
+
+        state->fFirstAttemptMade = TRUE;
+        state->iAttemptCount++;
+        state->fNoMoreSigs = state->dwCurrentIndex >= state->cSecondarySigs ||
+         (data->pSigSettings && (data->pSigSettings->dwFlags & WSS_VERIFY_SPECIFIC));
+        if (state->dwCurrentIndex > state->cSecondarySigs)
+            err = TRUST_E_NOSIGNATURE;
+        else if (state->dwCurrentIndex)
+        {
+            err = SOFTPUB_SelectSecondarySignature(data, state->dwCurrentIndex - 1);
+            if (data->pSigSettings)
+                data->pSigSettings->dwVerifiedSigIndex = state->dwCurrentIndex;
+        }
+    }
+#else
     if (data->pSigState)
     {
         /* We did not initialize this, probably an unsupported usage. */
@@ -915,6 +1002,7 @@ HRESULT WINAPI SoftpubLoadSignature(CRYPT_PROVIDER_DATA *data)
                 data->pSigSettings->cSecondarySigs = data->pSigState->cSecondarySigs;
         }
     }
+#endif
 
     if (!err && data->hMsg)
     {
@@ -1313,7 +1401,8 @@ HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
                 }
             }
 #ifdef __REACTOS__
-            if (ret && !(data->pWintrustData->dwProvFlags & WTD_HASH_ONLY_FLAG))
+            if (ret && !(WVT_ISINSTRUCT(WINTRUST_DATA, data->pWintrustData->cbStruct, dwProvFlags) &&
+             (data->pWintrustData->dwProvFlags & WTD_HASH_ONLY_FLAG)))
 #else
             if (ret)
 #endif
