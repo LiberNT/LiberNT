@@ -16,6 +16,7 @@ set(WOW64_I386_EXECUTABLES
     notepad
     reg
     regsvr32
+    rundll32
     wglgears_runner
     winver)
 
