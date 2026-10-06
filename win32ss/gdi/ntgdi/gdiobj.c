@@ -560,7 +560,7 @@ ENTRY_ReferenceEntryByHandle(HGDIOBJ hobj, FLONG fl)
     ASSERT(pentry->einfo.pobj != NULL);
 
     /* Check if lower 32 bits match, the upper 32 bits are ignored */
-    ASSERT(pentry->einfo.pobj->hHmgr == UlongToPtr(PtrToUlong(hobj)));
+    ASSERT(pentry->einfo.pobj->hHmgr == LongToPtr(PtrToLong(hobj)));
 
     return pentry;
 }
@@ -585,7 +585,7 @@ ENTRY_hInsertObject(PENTRY pentry, POBJ pobj, UCHAR objt, ULONG ulOwner)
     InterlockedOr((LONG*)&gpaulRefCount[ulIndex], REF_MASK_VALID | 1);
 
     /* Return the handle */
-    return (HGDIOBJ)(((ULONG_PTR)pentry->FullUnique << 16) | ulIndex);
+    return (HGDIOBJ)LongToPtr((LONG)(((ULONG)pentry->FullUnique << 16) | ulIndex));
 }
 
 POBJ
@@ -1249,7 +1249,7 @@ GreGetObjectOwner(HGDIOBJ hobj)
     /* Check if the handle is valid */
     if (ulIndex >= GDI_HANDLE_COUNT ||
         gpentHmgr[ulIndex].Objt == GDIObjType_DEF_TYPE ||
-        ((ULONG_PTR)hobj >> 16) != gpentHmgr[ulIndex].FullUnique)
+        (USHORT)((ULONG_PTR)hobj >> 16) != gpentHmgr[ulIndex].FullUnique)
     {
         DPRINT1("GreGetObjectOwner: invalid handle 0x%p.\n", hobj);
         return GDI_OBJ_HMGR_RESTRICTED;

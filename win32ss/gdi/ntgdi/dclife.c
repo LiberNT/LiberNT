@@ -1008,7 +1008,7 @@ NtGdiDeleteObjectApp(HANDLE hobj)
 
 #ifdef _WIN64
     /* GDI handles are 32-bit values even in 64-bit processes. */
-    hobj = UlongToHandle(HandleToUlong(hobj));
+    hobj = LongToHandle(HandleToLong(hobj));
 #endif
 
     if (GDI_HANDLE_IS_STOCKOBJ(hobj))
