@@ -4780,6 +4780,8 @@ BOOL WINAPI IntSetupDiSetDeviceRegistryPropertyAW(
         if (!PropertyBuffer && !PropertyBufferSize)
         {
             l = RegDeleteValueW(hKey, PropertyMap[Property].nameW);
+            if (l == ERROR_FILE_NOT_FOUND)
+                l = ERROR_INVALID_DATA;
         }
         else if (isAnsi)
         {
