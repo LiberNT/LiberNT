@@ -791,6 +791,9 @@ static inline BOOL set_cache_glyph_widths(SCRIPT_CACHE *psc, WORD glyph, ABC *ab
 static HRESULT init_script_cache(const HDC hdc, SCRIPT_CACHE *psc)
 {
     ScriptCache *sc;
+#ifdef __REACTOS__
+    ScriptCache *new_sc;
+#endif
     unsigned size;
     LOGFONTW lf;
 
@@ -859,31 +862,49 @@ static HRESULT init_script_cache(const HDC hdc, SCRIPT_CACHE *psc)
     }
     sc->lf = lf;
     sc->refcount = 1;
+#ifdef __REACTOS__
+    new_sc = sc;
+#else
     *psc = sc;
+#endif
 
     EnterCriticalSection(&cs_script_cache);
+#ifdef __REACTOS__
+    list_add_head(&script_cache_list, &new_sc->entry);
+#else
     list_add_head(&script_cache_list, &sc->entry);
+#endif
     LIST_FOR_EACH_ENTRY(sc, &script_cache_list, ScriptCache, entry)
     {
+#ifdef __REACTOS__
+        if (sc != new_sc && !memcmp(&sc->lf, &lf, sizeof(lf)))
+#else
         if (sc != *psc && !memcmp(&sc->lf, &lf, sizeof(lf)))
+#endif
         {
             /* Another thread won the race. Use their cache instead of ours */
 #ifdef __REACTOS__
-            list_remove(&((ScriptCache *)*psc)->entry);
+            list_remove(&new_sc->entry);
 #else
             list_remove(&sc->entry);
 #endif
             sc->refcount++;
             LeaveCriticalSection(&cs_script_cache);
 #ifdef __REACTOS__
-            free(((ScriptCache *)*psc)->otm);
-#endif
+            free(new_sc->otm);
+            free(new_sc);
+#else
             free(*psc);
+#endif
             *psc = sc;
             return S_OK;
         }
     }
     LeaveCriticalSection(&cs_script_cache);
+#ifdef __REACTOS__
+    *psc = new_sc;
+    sc = new_sc;
+#endif
     TRACE("<- %p\n", sc);
     return S_OK;
 }
