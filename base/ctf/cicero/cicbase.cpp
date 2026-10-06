@@ -220,6 +220,65 @@ _cicGetSetUserCoCreateInstance(FN_CoCreateInstance fnUserCoCreateInstance)
     return s_fn;
 }
 
+static HRESULT
+cicCreateInprocInstance(
+    _In_ REFCLSID rclsid,
+    _In_ LPUNKNOWN pUnkOuter,
+    _In_ REFIID iid,
+    _Out_ LPVOID *ppv)
+{
+    typedef HRESULT (WINAPI *FN_DllGetClassObject)(REFCLSID, REFIID, LPVOID *);
+    WCHAR szKey[96], szValue[MAX_PATH], szPath[MAX_PATH];
+    DWORD cbValue = sizeof(szValue) - sizeof(WCHAR), dwType = REG_NONE;
+    FN_DllGetClassObject fnDllGetClassObject;
+    IClassFactory *pFactory = NULL;
+    HINSTANCE hDll;
+    HKEY hKey;
+    LSTATUS error;
+    HRESULT hr;
+
+    StringCchPrintfW(szKey, _countof(szKey),
+                     L"CLSID\\{%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}\\InprocServer32",
+                     rclsid.Data1, rclsid.Data2, rclsid.Data3,
+                     rclsid.Data4[0], rclsid.Data4[1], rclsid.Data4[2], rclsid.Data4[3],
+                     rclsid.Data4[4], rclsid.Data4[5], rclsid.Data4[6], rclsid.Data4[7]);
+
+    error = ::RegOpenKeyExW(HKEY_CLASSES_ROOT, szKey, 0, KEY_READ, &hKey);
+    if (error != ERROR_SUCCESS)
+        return REGDB_E_CLASSNOTREG;
+
+    ZeroMemory(szValue, sizeof(szValue));
+    error = ::RegQueryValueExW(hKey, NULL, NULL, &dwType, (LPBYTE)szValue, &cbValue);
+    ::RegCloseKey(hKey);
+    if (error != ERROR_SUCCESS || (dwType != REG_SZ && dwType != REG_EXPAND_SZ))
+        return REGDB_E_CLASSNOTREG;
+
+    if (!::ExpandEnvironmentStringsW(szValue, szPath, _countof(szPath)))
+        return REGDB_E_CLASSNOTREG;
+
+    hDll = ::LoadLibraryExW(szPath, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (!hDll)
+        return CO_E_DLLNOTFOUND;
+
+    fnDllGetClassObject = (FN_DllGetClassObject)::GetProcAddress(hDll, "DllGetClassObject");
+    if (!fnDllGetClassObject)
+    {
+        ::FreeLibrary(hDll);
+        return CO_E_ERRORINDLL;
+    }
+
+    hr = fnDllGetClassObject(rclsid, IID_IClassFactory, (LPVOID *)&pFactory);
+    if (FAILED(hr) || !pFactory)
+    {
+        ::FreeLibrary(hDll);
+        return FAILED(hr) ? hr : E_FAIL;
+    }
+
+    hr = pFactory->CreateInstance(pUnkOuter, iid, ppv);
+    pFactory->Release();
+    return hr;
+}
+
 EXTERN_C
 HRESULT
 cicRealCoCreateInstance(
@@ -229,6 +288,7 @@ cicRealCoCreateInstance(
     _In_ REFIID iid,
     _Out_ LPVOID *ppv)
 {
+    HRESULT hr;
     static HINSTANCE s_hOle32 = NULL;
     static FN_CoCreateInstance s_fnCoCreateInstance = NULL;
     if (!s_fnCoCreateInstance)
@@ -240,7 +300,11 @@ cicRealCoCreateInstance(
             return E_NOTIMPL;
     }
 
-    return s_fnCoCreateInstance(rclsid, pUnkOuter, dwClsContext, iid, ppv);
+    hr = s_fnCoCreateInstance(rclsid, pUnkOuter, dwClsContext, iid, ppv);
+    if (hr != CO_E_NOTINITIALIZED || !(dwClsContext & CLSCTX_INPROC_SERVER))
+        return hr;
+
+    return cicCreateInprocInstance(rclsid, pUnkOuter, iid, ppv);
 }
 
 /**

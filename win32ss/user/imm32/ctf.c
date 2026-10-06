@@ -117,59 +117,6 @@ Imm32GetFn(
     Imm32GetFn((FARPROC*)(ppfn), (phinstDLL), (dll_name), #func_name)
 
 /***********************************************************************
- * OLE32.DLL
- */
-
-HINSTANCE g_hOle32 = NULL;
-
-#define OLE32_FN(name) g_pfnOLE32_##name
-
-typedef HRESULT (WINAPI *FN_CoInitializeEx)(LPVOID, DWORD);
-typedef VOID    (WINAPI *FN_CoUninitialize)(VOID);
-typedef HRESULT (WINAPI *FN_CoRegisterInitializeSpy)(IInitializeSpy*, ULARGE_INTEGER*);
-typedef HRESULT (WINAPI *FN_CoRevokeInitializeSpy)(ULARGE_INTEGER);
-
-FN_CoInitializeEx           OLE32_FN(CoInitializeEx)            = NULL;
-FN_CoUninitialize           OLE32_FN(CoUninitialize)            = NULL;
-FN_CoRegisterInitializeSpy  OLE32_FN(CoRegisterInitializeSpy)   = NULL;
-FN_CoRevokeInitializeSpy    OLE32_FN(CoRevokeInitializeSpy)     = NULL;
-
-#define Imm32GetOle32Fn(func_name) \
-    IMM32_GET_FN(&OLE32_FN(func_name), &g_hOle32, L"ole32.dll", func_name)
-
-HRESULT Imm32CoInitializeEx(VOID)
-{
-    if (!Imm32GetOle32Fn(CoInitializeEx))
-        return E_FAIL;
-
-    return OLE32_FN(CoInitializeEx)(NULL, COINIT_APARTMENTTHREADED);
-}
-
-VOID Imm32CoUninitialize(VOID)
-{
-    if (!Imm32GetOle32Fn(CoUninitialize))
-        return;
-
-    OLE32_FN(CoUninitialize)();
-}
-
-HRESULT Imm32CoRegisterInitializeSpy(IInitializeSpy* spy, ULARGE_INTEGER* cookie)
-{
-    if (!Imm32GetOle32Fn(CoRegisterInitializeSpy))
-        return E_FAIL;
-
-    return OLE32_FN(CoRegisterInitializeSpy)(spy, cookie);
-}
-
-HRESULT Imm32CoRevokeInitializeSpy(ULARGE_INTEGER cookie)
-{
-    if (!Imm32GetOle32Fn(CoRevokeInitializeSpy))
-        return E_FAIL;
-
-    return OLE32_FN(CoRevokeInitializeSpy)(cookie);
-}
-
-/***********************************************************************
  * MSCTF.DLL
  */
 
@@ -336,55 +283,6 @@ Imm32GetTLS(VOID)
     return (IMMTLSDATA*)TlsGetValue(g_dwTLSIndex);
 }
 
-/* Get */
-static DWORD
-Imm32GetCoInitCountSkip(VOID)
-{
-    IMMTLSDATA *pData = Imm32GetTLS();
-    if (!pData)
-        return 0;
-    return pData->dwSkipCount;
-}
-
-/* Increment */
-static DWORD
-Imm32IncCoInitCountSkip(VOID)
-{
-    IMMTLSDATA *pData;
-    DWORD dwOldSkipCount;
-
-    pData = Imm32GetTLS();
-    if (!pData)
-        return 0;
-
-    dwOldSkipCount = pData->dwSkipCount;
-    if (pData->bDoCount)
-        pData->dwSkipCount = dwOldSkipCount + 1;
-
-    return dwOldSkipCount;
-}
-
-/* Decrement */
-static DWORD
-Imm32DecCoInitCountSkip(VOID)
-{
-    DWORD dwSkipCount;
-    IMMTLSDATA *pData;
-
-    pData = Imm32GetTLS();;
-    if (!pData)
-        return 0;
-
-    dwSkipCount = pData->dwSkipCount;
-    if (pData->bDoCount)
-    {
-        if (dwSkipCount)
-            pData->dwSkipCount = dwSkipCount - 1;
-    }
-
-    return dwSkipCount;
-}
-
 /***********************************************************************
  *		CtfImmEnterCoInitCountSkipMode (IMM32.@)
  */
@@ -417,202 +315,17 @@ BOOL WINAPI CtfImmLeaveCoInitCountSkipMode(VOID)
 }
 
 /***********************************************************************
- * ISPY (I am not spy!)
- *
- * ISPY watches CoInitialize[Ex] / CoUninitialize to manage COM initialization status.
- */
-
-typedef struct ISPY
-{
-    const IInitializeSpyVtbl *m_pSpyVtbl;
-    LONG m_cRefs;
-} ISPY, *PISPY;
-
-static STDMETHODIMP
-ISPY_QueryInterface(
-    _Inout_ IInitializeSpy *pThis,
-    _In_ REFIID riid,
-    _Inout_ LPVOID *ppvObj)
-{
-    ISPY *pSpy = (ISPY*)pThis;
-
-    if (!ppvObj)
-        return E_INVALIDARG;
-
-    *ppvObj = NULL;
-
-    if (!IsEqualIID(riid, &IID_IUnknown) && !IsEqualIID(riid, &IID_IInitializeSpy))
-        return E_NOINTERFACE;
-
-    ++(pSpy->m_cRefs);
-    *ppvObj = pSpy;
-    return S_OK;
-}
-
-static STDMETHODIMP_(ULONG)
-ISPY_AddRef(
-    _Inout_ IInitializeSpy *pThis)
-{
-    ISPY *pSpy = (ISPY*)pThis;
-    return ++pSpy->m_cRefs;
-}
-
-static STDMETHODIMP_(ULONG)
-ISPY_Release(
-    _Inout_ IInitializeSpy *pThis)
-{
-    ISPY *pSpy = (ISPY*)pThis;
-    if (--pSpy->m_cRefs == 0)
-    {
-        ImmLocalFree(pSpy);
-        return 0;
-    }
-    return pSpy->m_cRefs;
-}
-
-/*
- * (Pre/Post)(Initialize/Uninitialize) will be automatically called from OLE32
- * as the results of watching.
- */
-
-static STDMETHODIMP
-ISPY_PreInitialize(
-    _Inout_ IInitializeSpy *pThis,
-    _In_ DWORD dwCoInit,
-    _In_ DWORD dwCurThreadAptRefs)
-{
-    DWORD cCount;
-
-    UNREFERENCED_PARAMETER(pThis);
-
-    cCount = Imm32IncCoInitCountSkip();
-    if (!dwCoInit &&
-        (dwCurThreadAptRefs == cCount + 1) &&
-        (GetWin32ClientInfo()->CI_flags & CI_CTFCOINIT))
-    {
-        Imm32ActivateOrDeactivateTIM(FALSE);
-        CtfImmCoUninitialize();
-    }
-
-    return S_OK;
-}
-
-static STDMETHODIMP
-ISPY_PostInitialize(
-    _Inout_ IInitializeSpy *pThis,
-    _In_ HRESULT hrCoInit,
-    _In_ DWORD dwCoInit,
-    _In_ DWORD dwNewThreadAptRefs)
-{
-    DWORD CoInitCountSkip;
-
-    UNREFERENCED_PARAMETER(pThis);
-    UNREFERENCED_PARAMETER(dwCoInit);
-
-    CoInitCountSkip = Imm32GetCoInitCountSkip();
-
-    if ((hrCoInit != S_FALSE) ||
-        (dwNewThreadAptRefs != CoInitCountSkip + 2) ||
-        !(GetWin32ClientInfo()->CI_flags & CI_CTFCOINIT))
-    {
-        return hrCoInit;
-    }
-
-    return S_OK;
-}
-
-static STDMETHODIMP
-ISPY_PreUninitialize(
-    _Inout_ IInitializeSpy *pThis,
-    _In_ DWORD dwCurThreadAptRefs)
-{
-    UNREFERENCED_PARAMETER(pThis);
-
-    if (dwCurThreadAptRefs == 1 &&
-        !RtlDllShutdownInProgress() &&
-        !Imm32InsideLoaderLock() &&
-        (GetWin32ClientInfo()->CI_flags & CI_CTFCOINIT))
-    {
-        IMMTLSDATA *pData = Imm32GetTLS();
-        if (pData && !pData->bUninitializing)
-            Imm32CoInitializeEx();
-    }
-
-    return S_OK;
-}
-
-static STDMETHODIMP
-ISPY_PostUninitialize(
-    _In_ IInitializeSpy *pThis,
-    _In_ DWORD dwNewThreadAptRefs)
-{
-    UNREFERENCED_PARAMETER(pThis);
-    UNREFERENCED_PARAMETER(dwNewThreadAptRefs);
-    Imm32DecCoInitCountSkip();
-    return S_OK;
-}
-
-static const IInitializeSpyVtbl g_vtblISPY =
-{
-    ISPY_QueryInterface,
-    ISPY_AddRef,
-    ISPY_Release,
-    ISPY_PreInitialize,
-    ISPY_PostInitialize,
-    ISPY_PreUninitialize,
-    ISPY_PostUninitialize,
-};
-
-static ISPY*
-Imm32AllocIMMISPY(VOID)
-{
-    ISPY *pSpy = (ISPY*)ImmLocalAlloc(0, sizeof(ISPY));
-    if (!pSpy)
-        return NULL;
-
-    pSpy->m_pSpyVtbl = &g_vtblISPY;
-    pSpy->m_cRefs = 1;
-    return pSpy;
-}
-
-#define Imm32DeleteIMMISPY(pSpy) ImmLocalFree(pSpy)
-
-/***********************************************************************
  *		CtfImmCoInitialize (Not exported)
  */
 HRESULT
 CtfImmCoInitialize(VOID)
 {
-    HRESULT hr;
-    IMMTLSDATA *pData;
-    ISPY *pSpy;
-
     if (GetWin32ClientInfo()->CI_flags & CI_CTFCOINIT)
         return S_OK; /* Already initialized */
 
-    hr = Imm32CoInitializeEx();
-    if (FAILED_UNEXPECTEDLY(hr))
-        return hr; /* CoInitializeEx failed */
-
     GetWin32ClientInfo()->CI_flags |= CI_CTFCOINIT;
     Imm32InitTLS();
-
-    pData = Imm32AllocateTLS();
-    if (!pData || pData->pSpy)
-        return S_OK; /* Cannot allocate or already it has a spy */
-
-    pSpy = Imm32AllocIMMISPY();
-    pData->pSpy = (IInitializeSpy*)pSpy;
-    if (IS_NULL_UNEXPECTEDLY(pSpy))
-        return S_OK; /* Cannot allocate a spy */
-
-    if (FAILED_UNEXPECTEDLY(Imm32CoRegisterInitializeSpy(pData->pSpy, &pData->uliCookie)))
-    {
-        /* Failed to register the spy */
-        Imm32DeleteIMMISPY(pData->pSpy);
-        pData->pSpy = NULL;
-        pData->uliCookie.QuadPart = 0;
-    }
+    Imm32AllocateTLS();
 
     return S_OK;
 }
@@ -623,30 +336,7 @@ CtfImmCoInitialize(VOID)
 VOID WINAPI
 CtfImmCoUninitialize(VOID)
 {
-    IMMTLSDATA *pData;
-
-    if (!(GetWin32ClientInfo()->CI_flags & CI_CTFCOINIT))
-        return; /* Not CoInitialize'd */
-
-    pData = Imm32GetTLS();
-    if (pData)
-    {
-        pData->bUninitializing = TRUE;
-        Imm32CoUninitialize(); /* Do CoUninitialize */
-        pData->bUninitializing = FALSE;
-
-        GetWin32ClientInfo()->CI_flags &= ~CI_CTFCOINIT;
-    }
-
-    pData = Imm32AllocateTLS();
-    if (!pData || !pData->pSpy)
-        return; /* There were no spy */
-
-    /* Our work is done. We don't need spies like you anymore. */
-    Imm32CoRevokeInitializeSpy(pData->uliCookie);
-    ISPY_Release(pData->pSpy);
-    pData->pSpy = NULL;
-    pData->uliCookie.QuadPart = 0;
+    GetWin32ClientInfo()->CI_flags &= ~CI_CTFCOINIT;
 }
 
 /***********************************************************************

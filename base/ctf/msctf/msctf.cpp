@@ -352,8 +352,8 @@ static HRESULT activate_given_ts(ActivatedTextService *actsvr, ITfThreadMgrEx *t
     if (actsvr->pITfTextInputProcessor)
         return S_OK;
 
-    hr = CoCreateInstance(actsvr->LanguageProfile.clsid, NULL, CLSCTX_INPROC_SERVER,
-                          IID_ITfTextInputProcessor, (void **)&actsvr->pITfTextInputProcessor);
+    hr = cicCoCreateInstance(actsvr->LanguageProfile.clsid, NULL, CLSCTX_INPROC_SERVER,
+                             IID_ITfTextInputProcessor, (void **)&actsvr->pITfTextInputProcessor);
     if (FAILED(hr)) return hr;
 
     hr = actsvr->pITfTextInputProcessor->QueryInterface(IID_ITfTextInputProcessorEx, (void **)&processorEx);
