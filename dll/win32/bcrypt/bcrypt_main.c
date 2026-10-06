@@ -27,7 +27,9 @@
 #include "ntsecapi.h"
 #include "wincrypt.h"
 #include "winternl.h"
+#include "winreg.h"
 #include "bcrypt.h"
+#include "ncrypt.h"
 
 #include "symcrypt.h"
 #include "wine/debug.h"
@@ -310,11 +312,131 @@ NTSTATUS WINAPI BCryptRemoveContextFunctionProvider( ULONG table, const WCHAR *c
     return STATUS_NOT_IMPLEMENTED;
 }
 
+static const WCHAR *context_table_name( ULONG table )
+{
+    switch (table)
+    {
+    case CRYPT_LOCAL:  return L"Local";
+    case CRYPT_DOMAIN: return L"Domain";
+    default:           return NULL;
+    }
+}
+
+static NTSTATUS return_string_list( const WCHAR *strings, ULONG *buflen, void **buffer )
+{
+    CRYPT_CONTEXT_FUNCTIONS *list;
+    const WCHAR *src;
+    WCHAR *dst;
+    ULONG count = 0, chars = 0, size, i;
+
+    for (src = strings; *src; src += wcslen( src ) + 1)
+    {
+        count++;
+        chars += wcslen( src ) + 1;
+    }
+    size = sizeof(*list) + count * sizeof(WCHAR *) + chars * sizeof(WCHAR);
+
+    if (*buffer)
+    {
+        if (*buflen < size)
+        {
+            *buflen = size;
+            return STATUS_BUFFER_TOO_SMALL;
+        }
+        list = *buffer;
+    }
+    else if (!(list = malloc( size ))) return STATUS_NO_MEMORY;
+
+    list->cFunctions = count;
+    list->rgpszFunctions = (WCHAR **)(list + 1);
+    dst = (WCHAR *)(list->rgpszFunctions + count);
+    for (src = strings, i = 0; *src; src += wcslen( src ) + 1, i++)
+    {
+        list->rgpszFunctions[i] = dst;
+        wcscpy( dst, src );
+        dst += wcslen( src ) + 1;
+    }
+
+    *buffer = list;
+    *buflen = size;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS WINAPI BCryptEnumContexts( ULONG table, ULONG *buflen, CRYPT_CONTEXTS **buffer )
+{
+    const WCHAR *table_name = context_table_name( table );
+    WCHAR path[128], name[256], *names = NULL, *tmp;
+    ULONG used = 0, len, index;
+    NTSTATUS status;
+    HKEY key;
+
+    TRACE( "%#lx, %p, %p\n", table, buflen, buffer );
+
+    if (!table_name || !buflen || !buffer) return STATUS_INVALID_PARAMETER;
+
+    swprintf( path, ARRAY_SIZE(path), L"SYSTEM\\CurrentControlSet\\Control\\Cryptography\\Configuration\\%s", table_name );
+    if (RegOpenKeyExW( HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &key )) return STATUS_NOT_FOUND;
+
+    for (index = 0; ; index++)
+    {
+        len = ARRAY_SIZE(name);
+        if (RegEnumKeyExW( key, index, name, &len, NULL, NULL, NULL, NULL )) break;
+        if (!(tmp = realloc( names, (used + len + 2) * sizeof(WCHAR) )))
+        {
+            free( names );
+            RegCloseKey( key );
+            return STATUS_NO_MEMORY;
+        }
+        names = tmp;
+        wcscpy( names + used, name );
+        used += len + 1;
+        names[used] = 0;
+    }
+    RegCloseKey( key );
+
+    status = return_string_list( names ? names : L"", buflen, (void **)buffer );
+    free( names );
+    return status;
+}
+
 NTSTATUS WINAPI BCryptEnumContextFunctions( ULONG table, const WCHAR *ctx, ULONG iface, ULONG *buflen,
                                             CRYPT_CONTEXT_FUNCTIONS **buffer )
 {
-    FIXME( "%#lx, %s, %#lx, %p, %p\n", table, debugstr_w(ctx), iface, buflen, buffer );
-    return STATUS_NOT_IMPLEMENTED;
+    const WCHAR *table_name = context_table_name( table );
+    WCHAR path[512], *strings;
+    DWORD type, size = 0;
+    NTSTATUS status;
+    HKEY key;
+
+    TRACE( "%#lx, %s, %#lx, %p, %p\n", table, debugstr_w(ctx), iface, buflen, buffer );
+
+    if (!table_name || !ctx || !buflen || !buffer) return STATUS_INVALID_PARAMETER;
+    if (!(iface >= BCRYPT_CIPHER_INTERFACE && iface <= BCRYPT_KEY_DERIVATION_INTERFACE) &&
+        !(iface >= NCRYPT_KEY_STORAGE_INTERFACE && iface <= NCRYPT_KEY_PROTECTION_INTERFACE))
+        return STATUS_INVALID_PARAMETER;
+    if (wcslen( ctx ) > 256) return STATUS_INVALID_PARAMETER;
+
+    swprintf( path, ARRAY_SIZE(path), L"SYSTEM\\CurrentControlSet\\Control\\Cryptography\\Configuration\\%s\\%s\\%08lx",
+              table_name, ctx, iface );
+    if (RegOpenKeyExW( HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &key )) return STATUS_NOT_FOUND;
+
+    if (RegQueryValueExW( key, L"Functions", NULL, &type, NULL, &size ) || type != REG_MULTI_SZ ||
+        !(strings = calloc( 1, size + 2 * sizeof(WCHAR) )))
+    {
+        RegCloseKey( key );
+        return STATUS_NOT_FOUND;
+    }
+    if (RegQueryValueExW( key, L"Functions", NULL, &type, (BYTE *)strings, &size ))
+    {
+        free( strings );
+        RegCloseKey( key );
+        return STATUS_NOT_FOUND;
+    }
+    RegCloseKey( key );
+
+    status = return_string_list( strings, buflen, (void **)buffer );
+    free( strings );
+    return status;
 }
 
 void WINAPI BCryptFreeBuffer( void *buffer )

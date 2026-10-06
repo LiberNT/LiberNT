@@ -343,6 +343,28 @@ HKLM,"SYSTEM\CurrentControlSet\Control\ComputerName",,0x00000012
 HKLM,"SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName","ComputerName",0x00000002,"COMPUTERNAME"
 
 ; Crash Control
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default","Flags",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\SSL","Flags",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000001","",0x00000000,"CRYPT_CIPHER_INTERFACE"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000001","Functions",0x00010000,"AES","3DES","RC4","CHACHA20_POLY1305"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000002","",0x00000000,"CRYPT_HASH_INTERFACE"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000002","Functions",0x00010000,"SHA256","SHA384","SHA512","SHA1","MD5","MD4","MD2","AES-GMAC"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000003","",0x00000000,"CRYPT_ASYMMETRIC_ENCRYPTION_INTERFACE"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000003","Functions",0x00010000,"RSA"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000004","",0x00000000,"CRYPT_SECRET_AGREEMENT_INTERFACE"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000004","Functions",0x00010000,"DH","ECDH_P256","ECDH_P384","ECDH_P521","ECDH"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000005","",0x00000000,"CRYPT_SIGNATURE_INTERFACE"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000005","Functions",0x00010000,"RSA_SIGN","ECDSA_P256","ECDSA_P384","ECDSA_P521","ECDSA","DSA"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000006","",0x00000000,"CRYPT_RNG_INTERFACE"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000006","Functions",0x00010000,"RNG"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000007","",0x00000000,"CRYPT_KEY_DERIVATION_INTERFACE"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00000007","Functions",0x00010000,"PBKDF2"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00010001","",0x00000000,"CRYPT_KEY_STORAGE_INTERFACE"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00010001","Functions",0x00010000,"KEY_STORAGE"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00010002","",0x00000000,"NCRYPT_SCHANNEL_INTERFACE"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\Default\00010002","Functions",0x00010000,"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384","TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256","TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384","TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256","TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384","TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256","TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384","TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256","TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA","TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA","TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA","TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA","TLS_RSA_WITH_AES_256_GCM_SHA384","TLS_RSA_WITH_AES_128_GCM_SHA256","TLS_RSA_WITH_AES_256_CBC_SHA256","TLS_RSA_WITH_AES_128_CBC_SHA256","TLS_RSA_WITH_AES_256_CBC_SHA","TLS_RSA_WITH_AES_128_CBC_SHA"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\SSL\00010002","",0x00000000,"NCRYPT_SCHANNEL_INTERFACE"
+HKLM,"SYSTEM\CurrentControlSet\Control\Cryptography\Configuration\Local\SSL\00010002","Functions",0x00010000,"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384","TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256","TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384","TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256","TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384","TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256","TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384","TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256","TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA","TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA","TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA","TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA","TLS_RSA_WITH_AES_256_GCM_SHA384","TLS_RSA_WITH_AES_128_GCM_SHA256","TLS_RSA_WITH_AES_256_CBC_SHA256","TLS_RSA_WITH_AES_128_CBC_SHA256","TLS_RSA_WITH_AES_256_CBC_SHA","TLS_RSA_WITH_AES_128_CBC_SHA"
 HKLM,"SYSTEM\CurrentControlSet\Control\CrashControl","AutoReboot",0x00010003,0
 HKLM,"SYSTEM\CurrentControlSet\Control\CrashControl","CrashDumpEnabled",0x00010003,7
 HKLM,"SYSTEM\CurrentControlSet\Control\CrashControl","DedicatedDumpPartitionType",0x00010003,0x0000007f
