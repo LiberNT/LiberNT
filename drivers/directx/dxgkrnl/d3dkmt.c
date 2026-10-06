@@ -7130,6 +7130,7 @@ DxgkpLoadSourceGamma(
     _Out_ D3DKMDT_GAMMA_RAMP *GammaRamp)
 {
     RtlZeroMemory(GammaRamp, sizeof(*GammaRamp));
+    GammaRamp->Type = D3DDDI_GAMMARAMP_DEFAULT;
     if (SourceId >= DXGKP_GAMMA_SOURCES ||
         Adapter->SourceGammaType[SourceId] == D3DDDI_GAMMARAMP_UNINITIALIZED)
     {
