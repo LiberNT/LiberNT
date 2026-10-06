@@ -27,6 +27,9 @@
 #include <winreg.h>
 #include <winuser.h>
 #include <winwlx.h>
+#define NTOS_MODE_USER
+#include <ndk/obfuncs.h>
+#include <ndk/rtlfuncs.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -82,19 +85,53 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
  */
 BOOL WINAPI SfcIsFileProtected(HANDLE RpcHandle, LPCWSTR ProtFileName)
 {
-    static BOOL reported = FALSE;
-
-    if (reported) {
-        DPRINT("(%p, %S) stub\n", RpcHandle, ProtFileName);
-    }
-    else
+    static const SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
+    static const ULONG TrustedInstallerRids[] =
     {
-        DPRINT1("(%p, %S) stub\n", RpcHandle, ProtFileName);
-        reported = TRUE;
+        SECURITY_SERVICE_ID_BASE_RID, 956008885, 3418522649U, 1831038044, 1853292631, 2271478464U
+    };
+    UCHAR SidBuffer[SECURITY_MAX_SID_SIZE];
+    UCHAR Descriptor[SECURITY_DESCRIPTOR_MIN_LENGTH + 2 * SECURITY_MAX_SID_SIZE];
+    PSID TrustedInstaller = (PSID)SidBuffer, Owner = NULL;
+    BOOLEAN Defaulted, Protected = FALSE;
+    RTL_PATH_TYPE PathType;
+    DWORD Attributes;
+    ULONG Index, Length;
+    HANDLE File;
+
+    DPRINT("(%p, %S)\n", RpcHandle, ProtFileName);
+
+    if (ProtFileName)
+    {
+        PathType = RtlDetermineDosPathNameType_U(ProtFileName);
+        Attributes = GetFileAttributesW(ProtFileName);
+        if ((PathType == RtlPathTypeDriveAbsolute || PathType == RtlPathTypeUncAbsolute) &&
+            Attributes != INVALID_FILE_ATTRIBUTES && !(Attributes & FILE_ATTRIBUTE_DIRECTORY))
+        {
+            File = CreateFileW(ProtFileName, READ_CONTROL,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                               NULL, OPEN_EXISTING, 0, NULL);
+            if (File != INVALID_HANDLE_VALUE)
+            {
+                RtlInitializeSid(TrustedInstaller, (PSID_IDENTIFIER_AUTHORITY)&NtAuthority,
+                                 RTL_NUMBER_OF(TrustedInstallerRids));
+                for (Index = 0; Index < RTL_NUMBER_OF(TrustedInstallerRids); Index++)
+                    *RtlSubAuthoritySid(TrustedInstaller, Index) = TrustedInstallerRids[Index];
+
+                if (NT_SUCCESS(NtQuerySecurityObject(File, OWNER_SECURITY_INFORMATION, Descriptor,
+                                                     sizeof(Descriptor), &Length)) &&
+                    NT_SUCCESS(RtlGetOwnerSecurityDescriptor(Descriptor, &Owner, &Defaulted)) &&
+                    Owner != NULL)
+                {
+                    Protected = RtlEqualSid(Owner, TrustedInstaller);
+                }
+                CloseHandle(File);
+            }
+        }
     }
 
-    SetLastError(ERROR_FILE_NOT_FOUND);
-    return FALSE;
+    SetLastError(Protected ? ERROR_SUCCESS : ERROR_FILE_NOT_FOUND);
+    return Protected;
 }
 
 /******************************************************************
