@@ -232,6 +232,11 @@ ServiceMain(DWORD argc,
             LPWSTR* argv)
 {
     DWORD dwError;
+    struct
+    {
+        SYSTEMTIME Time;
+        ULONG Reserved[2];
+    } StartData;
 
     UNREFERENCED_PARAMETER(argc);
     UNREFERENCED_PARAMETER(argv);
@@ -273,13 +278,15 @@ ServiceMain(DWORD argc,
 
         ReportProductInfoEvent();
 
+        RtlZeroMemory(&StartData, sizeof(StartData));
+        GetSystemTime(&StartData.Time);
         LogfReportEvent(EVENTLOG_INFORMATION_TYPE,
                         0,
                         EVENT_EventlogStarted,
                         0,
                         NULL,
-                        0,
-                        NULL);
+                        sizeof(StartData),
+                        &StartData);
     }
 
     DPRINT("ServiceMain() done\n");
