@@ -4413,7 +4413,8 @@ NtSetInformationFile(IN HANDLE FileHandle,
         PFILE_IO_PRIORITY_HINT_INFORMATION HintInfo = Irp->AssociatedIrp.SystemBuffer;
 
         if ((HintInfo->PriorityHint < IoPriorityVeryLow) ||
-            (HintInfo->PriorityHint >= MaxIoPriorityTypes))
+            (HintInfo->PriorityHint >= MaxIoPriorityTypes) ||
+            ((PreviousMode != KernelMode) && (HintInfo->PriorityHint > IoPriorityNormal)))
         {
             Status = STATUS_INVALID_PARAMETER;
         }
