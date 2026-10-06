@@ -372,7 +372,13 @@ WCHAR *msi_resolve_source_folder( MSIPACKAGE *package, const WCHAR *name, MSIFOL
 
     TRACE("working to resolve %s\n", debugstr_w(name));
 
+#ifdef __REACTOS__
+    if (!wcscmp( name, L"SourceDir" ) ||
+        ((package->WordCount & msidbSumInfoSourceTypeCompressed) && !wcscmp( name, L"SOURCEDIR" )))
+        name = L"TARGETDIR";
+#else
     if (!wcscmp( name, L"SourceDir" )) name = L"TARGETDIR";
+#endif
     if (!(f = msi_get_loaded_folder( package, name ))) return NULL;
 
     /* special resolving for root dir */
@@ -454,6 +460,10 @@ UINT WINAPI MsiGetSourcePathA(MSIHANDLE hinst, const char *folder, char *buf, DW
         return r;
     }
 
+#ifdef __REACTOS__
+    if (!list_empty(&package->folders))
+        msi_set_sourcedir_props(package, FALSE);
+#endif
     path = msi_resolve_source_folder(package, folderW, NULL);
     if (path)
         r = msi_strncpyWtoA(path, -1, buf, sz, FALSE);
@@ -506,6 +516,10 @@ UINT WINAPI MsiGetSourcePathW(MSIHANDLE hinst, const WCHAR *folder, WCHAR *buf, 
         return r;
     }
 
+#ifdef __REACTOS__
+    if (!list_empty(&package->folders))
+        msi_set_sourcedir_props(package, FALSE);
+#endif
     path = msi_resolve_source_folder(package, folder, NULL);
     if (path)
         r = msi_strncpyW(path, -1, buf, sz);
