@@ -16,14 +16,22 @@ HANDLE g_hSemaphore;
 
 void exitfunc1(void)
 {
+#ifdef TEST_STATIC_CRT
     ok_int(g_sequence, 1);
+#else
+    ok_int(g_sequence, 2);
+#endif
     g_sequence++;
     ReleaseSemaphore(g_hSemaphore, 1, NULL);
 }
 
 void exitfunc2(void)
 {
+#ifdef TEST_STATIC_CRT
     ok_int(g_sequence, 2);
+#else
+    ok_int(g_sequence, 1);
+#endif
     g_sequence++;
     ReleaseSemaphore(g_hSemaphore, 1, NULL);
 }
