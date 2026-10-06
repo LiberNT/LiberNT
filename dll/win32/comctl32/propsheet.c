@@ -1555,6 +1555,9 @@ PROPSHEET_WizardSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
       return TRUE;
 
     case WM_CTLCOLORSTATIC:
+#ifdef __REACTOS__
+      SetTextColor((HDC)wParam, GetSysColor(COLOR_WINDOWTEXT));
+#endif
       SetBkColor((HDC)wParam, GetSysColor(COLOR_WINDOW));
       return (INT_PTR)GetSysColorBrush(COLOR_WINDOW);
   }
@@ -3478,7 +3481,11 @@ static LRESULT PROPSHEET_Paint(HWND hwnd, HDC hdcParam)
             SelectObject(hdcSrc, hbmp);
         }
 
+#ifdef __REACTOS__
+	clrOld = SetTextColor (hdc, GetSysColor(COLOR_WINDOWTEXT));
+#else
 	clrOld = SetTextColor (hdc, 0x00000000);
+#endif
 	oldBkMode = SetBkMode (hdc, TRANSPARENT); 
 
 	if (flags & PSP_USEHEADERTITLE) {
