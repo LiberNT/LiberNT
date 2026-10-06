@@ -475,7 +475,7 @@ HANDLE UserAllocHandle(
    entry->type = type;
    entry->flags = 0;
    entry->pi = HandleOwner;
-   if (++entry->generation >= 0xffff)
+   if (++entry->generation >= 0x8000)
       entry->generation = 1;
 
    /* We have created a handle, which is a reference! */
