@@ -488,7 +488,12 @@ SepTransformCreatorAce(RTL_SECURITY_ACL_BUFFER *Buffer, PACE_HEADER Ace,
     Status = RtlpSecurityAceView(Ace, &View);
     if (!NT_SUCCESS(Status)) return Status;
     Mask = ((PACCESS_ALLOWED_ACE)Ace)->Mask;
-    if (Ace->AceType <= ACCESS_MAX_MS_V2_ACE_TYPE && !(Ace->AceFlags & INHERIT_ONLY_ACE))
+    if ((Ace->AceType <= ACCESS_MAX_MS_V2_ACE_TYPE ||
+         Ace->AceType == ACCESS_ALLOWED_CALLBACK_ACE_TYPE ||
+         Ace->AceType == ACCESS_DENIED_CALLBACK_ACE_TYPE ||
+         Ace->AceType == SYSTEM_AUDIT_CALLBACK_ACE_TYPE ||
+         Ace->AceType == SYSTEM_ALARM_CALLBACK_ACE_TYPE) &&
+        !(Ace->AceFlags & INHERIT_ONLY_ACE))
     {
         RtlMapGenericMask(&Mask, Mapping);
         Mask &= Mapping->GenericAll;
