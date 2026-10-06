@@ -6212,8 +6212,8 @@ FileRecord::WriteCompressedUnits(_Inout_ PAttribute* Attribute,
     NewDataSize = EndOffset > OldDataSize ? EndOffset : OldDataSize;
 
     if (TargetAttribute->NonResident.AllocatedSize % UnitBytes != 0 ||
-        Offset > ((OldDataSize + UnitBytes - 1) / UnitBytes) * UnitBytes &&
-            OldDataSize % UnitBytes != 0)
+        (Offset > ((OldDataSize + UnitBytes - 1) / UnitBytes) * UnitBytes &&
+         OldDataSize % UnitBytes != 0))
     {
         return STATUS_NOT_IMPLEMENTED;
     }
@@ -6676,7 +6676,6 @@ FileRecord::ShrinkCompressedUnits(_Inout_ PAttribute* Attribute,
     ULONGLONG OldUnits;
     ULONGLONG NewUnits;
     ULONGLONG PhysicalClusters = 0;
-    BOOLEAN Committed = FALSE;
     NTSTATUS Status;
 
     if (ClusterSize == 0 ||
@@ -6768,7 +6767,6 @@ FileRecord::ShrinkCompressedUnits(_Inout_ PAttribute* Attribute,
         goto Restore;
 
     ClearDataRunCache();
-    Committed = TRUE;
     *Attribute = TargetAttribute;
     if (ReleasedRuns)
         Status = DiskVolume->ReleaseClusters(ReleasedRuns);
