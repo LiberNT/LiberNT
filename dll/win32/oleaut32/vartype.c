@@ -3519,6 +3519,65 @@ HRESULT WINAPI VarCyFromR8(DOUBLE dblIn, CY* pCyOut)
 
   if (result_fpstatus & 0x9) /* Overflow | Invalid */
     return DISP_E_OVERFLOW;
+#elif defined(__REACTOS__)
+  ULONG64 bits, mant, hi, lo, low, q, rem, half;
+  unsigned int exp, shift;
+  BOOL neg, up;
+
+  memcpy(&bits, &dblIn, sizeof(bits));
+  neg = (bits >> 63) != 0;
+  exp = (unsigned int)((bits >> 52) & 0x7ff);
+  mant = bits & 0xfffffffffffffULL;
+  if (exp == 0x7ff)
+    return DISP_E_OVERFLOW;
+  if (exp)
+    mant |= 1ULL << 52;
+  else
+    exp = 1;
+  if (!mant)
+  {
+    pCyOut->int64 = 0;
+    return S_OK;
+  }
+  if (exp > 1072)
+    return DISP_E_OVERFLOW;
+  shift = 1075 - exp;
+
+  low = (mant & 0xffffffff) * CY_MULTIPLIER;
+  hi = (mant >> 32) * CY_MULTIPLIER;
+  lo = low + (hi << 32);
+  hi = (hi >> 32) + (lo < low);
+
+  if (shift >= 128)
+  {
+    q = 0;
+    up = FALSE;
+  }
+  else if (shift > 64)
+  {
+    q = hi >> (shift - 64);
+    rem = hi & ((1ULL << (shift - 64)) - 1);
+    half = 1ULL << (shift - 65);
+    up = rem > half || (rem == half && (lo || (q & 1)));
+  }
+  else if (shift == 64)
+  {
+    q = hi;
+    half = 1ULL << 63;
+    up = lo > half || (lo == half && (q & 1));
+  }
+  else
+  {
+    q = (lo >> shift) | (hi << (64 - shift));
+    rem = lo & ((1ULL << shift) - 1);
+    half = 1ULL << (shift - 1);
+    up = rem > half || (rem == half && (q & 1));
+  }
+  if (up && ++q == 0)
+    return DISP_E_OVERFLOW;
+  if (q > (neg ? 0x8000000000000000ULL : 0x7fffffffffffffffULL))
+    return DISP_E_OVERFLOW;
+  pCyOut->int64 = neg ? (LONG64)(0 - q) : (LONG64)q;
 #else
   /* This version produces slightly different results for boundary cases */
   if (dblIn < -922337203685477.5807 || dblIn >= 922337203685477.5807)
@@ -3680,6 +3739,11 @@ HRESULT WINAPI VarCyFromUI4(ULONG ulIn, CY* pCyOut)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static unsigned char VARIANT_int_divbychar(DWORD * p, unsigned int n, unsigned char divisor);
+static unsigned char VARIANT_int_mulbychar(DWORD * p, unsigned int n, unsigned char m);
+#endif
+
 /************************************************************************
  * VarCyFromDec (OLEAUT32.228)
  *
@@ -3697,6 +3761,43 @@ HRESULT WINAPI VarCyFromUI4(ULONG ulIn, CY* pCyOut)
  */
 HRESULT WINAPI VarCyFromDec(const DECIMAL* pdecIn, CY* pCyOut)
 {
+#ifdef __REACTOS__
+  DWORD n[3];
+  unsigned char digit = 0;
+  BOOL sticky = FALSE;
+  ULONG64 value;
+  unsigned int i;
+
+  if ((pdecIn->sign & ~DECIMAL_NEG) || pdecIn->scale > DEC_MAX_SCALE)
+    return E_INVALIDARG;
+
+  n[0] = pdecIn->Lo32;
+  n[1] = pdecIn->Mid32;
+  n[2] = pdecIn->Hi32;
+
+  for (i = pdecIn->scale; i > 4; i--)
+  {
+    if (digit) sticky = TRUE;
+    digit = VARIANT_int_divbychar(n, 3, 10);
+  }
+  if (digit > 5 || (digit == 5 && (sticky || (n[0] & 1))))
+  {
+    if (!++n[0] && !++n[1]) ++n[2];
+  }
+  for (i = pdecIn->scale; i < 4; i++)
+  {
+    if (VARIANT_int_mulbychar(n, 3, 10))
+      return DISP_E_OVERFLOW;
+  }
+  if (n[2])
+    return DISP_E_OVERFLOW;
+
+  value = ((ULONG64)n[1] << 32) | n[0];
+  if (value > ((pdecIn->sign & DECIMAL_NEG) ? 0x8000000000000000ULL : 0x7fffffffffffffffULL))
+    return DISP_E_OVERFLOW;
+  pCyOut->int64 = (pdecIn->sign & DECIMAL_NEG) ? (LONG64)(0 - value) : (LONG64)value;
+  return S_OK;
+#else
   DECIMAL rounded;
   HRESULT hRet;
 
@@ -3716,6 +3817,7 @@ HRESULT WINAPI VarCyFromDec(const DECIMAL* pdecIn, CY* pCyOut)
     return VarCyFromR8(d, pCyOut);
   }
   return hRet;
+#endif
 }
 
 /************************************************************************
