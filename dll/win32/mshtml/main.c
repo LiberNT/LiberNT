@@ -626,10 +626,15 @@ HRESULT WINAPI DllInstall(BOOL install, const WCHAR *cmdline)
 {
     TRACE("(%x %s)\n", install, debugstr_w(cmdline));
 
+#ifdef __REACTOS__
+    if(cmdline && *cmdline)
+        FIXME("unsupported cmdline: %s\n", debugstr_w(cmdline));
+#else
     if(cmdline && *cmdline)
         FIXME("unsupported cmdline: %s\n", debugstr_w(cmdline));
     else if(install)
         load_gecko();
+#endif
 
     return S_OK;
 }

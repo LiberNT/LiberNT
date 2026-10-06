@@ -25,21 +25,35 @@
 #endif
 
 #include <msi.h>
+#include <bcrypt.h>
 
-#define GECKO_VERSION "2.40"
+#define GECKO_VERSION "2.47.4"
 
-#ifdef __i386__
-#define ARCH_STRING "x86"
-#define GECKO_SHA "8a3adedf3707973d1ed4ac3b2e791486abf814bd"
-#else
-#define ARCH_STRING ""
-#define GECKO_SHA "???"
-#endif
+typedef struct {
+    const char *file_name;
+    const WCHAR *url;
+    const char *sha;
+    BOOL native;
+} addon_package_t;
+
+static const addon_package_t gecko_x86_64 =
+{
+    "wine-gecko-" GECKO_VERSION "-x86_64.msi",
+    L"https://dl.winehq.org/wine/wine-gecko/" GECKO_VERSION "/wine-gecko-" GECKO_VERSION "-x86_64.msi",
+    "e590b7d988a32d6aa4cf1d8aa3aa3d33766fdd4cf4c89c2dcc2095ecb28d066f",
+    TRUE
+};
+
+static const addon_package_t gecko_x86 =
+{
+    "wine-gecko-" GECKO_VERSION "-x86.msi",
+    L"https://dl.winehq.org/wine/wine-gecko/" GECKO_VERSION "/wine-gecko-" GECKO_VERSION "-x86.msi",
+    "26cecc47706b091908f7f814bddb074c61beb8063318e9efc5a7f789857793d6",
+    FALSE
+};
 
 typedef struct {
     const char *version;
-    const char *file_name;
-    const char *sha;
     const char *config_key;
     const char *dir_config_key;
     LPCWSTR dialog_template;
@@ -48,8 +62,6 @@ typedef struct {
 static const addon_info_t addons_info[] = {
     {
         GECKO_VERSION,
-        "wine_gecko-" GECKO_VERSION "-" ARCH_STRING ".msi",
-        GECKO_SHA,
         "MSHTML",
         "GeckoCabDir",
         MAKEINTRESOURCEW(ID_DWL_GECKO_DIALOG)
@@ -57,33 +69,22 @@ static const addon_info_t addons_info[] = {
 };
 
 static const addon_info_t *addon;
+static const addon_package_t *packages[2];
+static UINT package_count;
+static const addon_package_t *package;
 
 static HWND install_dialog = NULL;
 static CRITICAL_SECTION csLock;
 static IBinding *download_binding = NULL;
 
-static WCHAR GeckoUrl[] = L"https://svn.reactos.org/amine/wine_gecko-2.40-x86.msi";
-
-/* SHA definitions are copied from advapi32. They aren't available in headers. */
-
-typedef struct {
-   ULONG Unknown[6];
-   ULONG State[5];
-   ULONG Count[2];
-   UCHAR Buffer[64];
-} SHA_CTX, *PSHA_CTX;
-
-void WINAPI A_SHAInit(PSHA_CTX);
-void WINAPI A_SHAUpdate(PSHA_CTX,const unsigned char*,UINT);
-void WINAPI A_SHAFinal(PSHA_CTX,PULONG);
-
 static BOOL sha_check(const WCHAR *file_name)
 {
     const unsigned char *file_map;
     HANDLE file, map;
-    ULONG sha[5];
+    UCHAR sha[32];
     char buf[2*sizeof(sha)+1];
-    SHA_CTX ctx;
+    BCRYPT_ALG_HANDLE alg;
+    NTSTATUS status;
     DWORD size, i;
 
     file = CreateFileW(file_name, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_READONLY, NULL);
@@ -102,17 +103,24 @@ static BOOL sha_check(const WCHAR *file_name)
     if(!file_map)
         return FALSE;
 
-    A_SHAInit(&ctx);
-    A_SHAUpdate(&ctx, file_map, size);
-    A_SHAFinal(&ctx, sha);
+    status = BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, NULL, 0);
+    if(!status) {
+        status = BCryptHash(alg, NULL, 0, (UCHAR *)file_map, size, sha, sizeof(sha));
+        BCryptCloseAlgorithmProvider(alg, 0);
+    }
 
     UnmapViewOfFile(file_map);
 
-    for(i=0; i < sizeof(sha); i++)
-        sprintf(buf + i*2, "%02x", *((unsigned char*)sha+i));
+    if(status) {
+        WARN("Hashing failed: %08x\n", (int)status);
+        return FALSE;
+    }
 
-    if(strcmp(buf, addon->sha)) {
-        WARN("Got %s, expected %s\n", buf, addon->sha);
+    for(i=0; i < sizeof(sha); i++)
+        sprintf(buf + i*2, "%02x", sha[i]);
+
+    if(strcmp(buf, package->sha)) {
+        WARN("Got %s, expected %s\n", buf, package->sha);
         return FALSE;
     }
 
@@ -203,17 +211,17 @@ static enum install_res install_from_registered_dir(void)
     DWORD res, type, size = MAX_PATH;
     enum install_res ret;
 
-    package_dir = heap_alloc(size + sizeof(addon->file_name));
+    package_dir = heap_alloc(size + strlen(package->file_name) + 1);
 
     res = RegGetValueA(HKEY_CURRENT_USER, mshtml_keyA, "GeckoCabDir", RRF_RT_ANY, &type, (PBYTE)package_dir, &size);
     if(res == ERROR_MORE_DATA) {
-        package_dir = heap_realloc(package_dir, size + sizeof(addon->file_name));
+        package_dir = heap_realloc(package_dir, size + strlen(package->file_name) + 1);
         res = RegGetValueA(HKEY_CURRENT_USER, mshtml_keyA, "GeckoCabDir", RRF_RT_ANY, &type, (PBYTE)package_dir, &size);
     }
 
     if(res != ERROR_SUCCESS || (type != REG_SZ && type != REG_EXPAND_SZ)) {
         heap_free(package_dir);
-        return INSTALL_FAILED;
+        return INSTALL_NEXT;
     }
 
     if (type == REG_EXPAND_SZ)
@@ -221,16 +229,16 @@ static enum install_res install_from_registered_dir(void)
         size = ExpandEnvironmentStringsA(package_dir, NULL, 0);
         if (size)
         {
-            char* buf = heap_alloc(size + sizeof(addon->file_name));
+            char* buf = heap_alloc(size + strlen(package->file_name) + 1);
             ExpandEnvironmentStringsA(package_dir, buf, size);
             heap_free(package_dir);
             package_dir = buf;
         }
     }
 
-    TRACE("Trying %s/%s\n", debugstr_a(package_dir), debugstr_a(addon->file_name));
+    TRACE("Trying %s/%s\n", debugstr_a(package_dir), debugstr_a(package->file_name));
 
-    ret = install_from_unix_file(package_dir, "", addon->file_name);
+    ret = install_from_unix_file(package_dir, "", package->file_name);
 
     heap_free(package_dir);
     return ret;
@@ -359,6 +367,7 @@ static DWORD WINAPI download_proc(PVOID arg)
     WCHAR message[256];
     WCHAR tmp_dir[MAX_PATH], tmp_file[MAX_PATH];
     HRESULT hres, hrCoInit;
+    UINT i;
 
     hrCoInit = CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
@@ -367,23 +376,29 @@ static DWORD WINAPI download_proc(PVOID arg)
 
     TRACE("using temp file %s\n", debugstr_w(tmp_file));
 
-    hres = URLDownloadToFileW(NULL, GeckoUrl, tmp_file, 0, &InstallCallback);
-    if(FAILED(hres)) {
-        if (LoadStringW(hApplet, IDS_DWL_FAILED, message, sizeof(message) / sizeof(WCHAR))) {
-            /* If the user aborted the download, DO NOT display the message box */
-            if (hres == E_ABORT) {
-                TRACE("Downloading of Gecko package aborted!\n");
-            } else {
-                MessageBoxW(NULL, message, NULL, MB_ICONERROR);
+    for(i = 0; i < package_count; i++) {
+        package = packages[i];
+
+        hres = URLDownloadToFileW(NULL, package->url, tmp_file, 0, &InstallCallback);
+        if(FAILED(hres)) {
+            if (LoadStringW(hApplet, IDS_DWL_FAILED, message, sizeof(message) / sizeof(WCHAR))) {
+                /* If the user aborted the download, DO NOT display the message box */
+                if (hres == E_ABORT) {
+                    TRACE("Downloading of Gecko package aborted!\n");
+                } else {
+                    MessageBoxW(NULL, message, NULL, MB_ICONERROR);
+                }
             }
-        }
-        ERR("URLDownloadToFile failed: %08x\n", hres);
-    } else {
-        if(sha_check(tmp_file)) {
-            install_file(tmp_file);
-        }else {
-            if(LoadStringW(hApplet, IDS_INVALID_SHA, message, sizeof(message)/sizeof(WCHAR))) {
-                MessageBoxW(NULL, message, NULL, MB_ICONERROR);
+            ERR("URLDownloadToFile failed: %08x\n", hres);
+            break;
+        } else {
+            if(sha_check(tmp_file)) {
+                install_file(tmp_file);
+            }else {
+                if(LoadStringW(hApplet, IDS_INVALID_SHA, message, sizeof(message)/sizeof(WCHAR))) {
+                    MessageBoxW(NULL, message, NULL, MB_ICONERROR);
+                }
+                break;
             }
         }
     }
@@ -447,13 +462,51 @@ static INT_PTR CALLBACK installer_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
     return FALSE;
 }
 
+static BOOL is_package_installed(const addon_package_t *pkg)
+{
+    static const WCHAR suffixW[] = L"\\gecko\\" GECKO_VERSION "\\wine_gecko\\xul.dll";
+    WCHAR path[MAX_PATH + sizeof(suffixW)/sizeof(WCHAR)];
+    UINT len;
+
+    if(pkg->native)
+        len = GetSystemDirectoryW(path, MAX_PATH);
+    else if(!(len = GetSystemWow64DirectoryW(path, MAX_PATH)))
+        len = GetSystemDirectoryW(path, MAX_PATH);
+    if(!len || len >= MAX_PATH)
+        return FALSE;
+
+    memcpy(path + len, suffixW, sizeof(suffixW));
+    return GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
+}
+
+static void select_packages(void)
+{
+    WCHAR dir[MAX_PATH];
+    SYSTEM_INFO info;
+
+    package_count = 0;
+    GetNativeSystemInfo(&info);
+
+    if(info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 && !is_package_installed(&gecko_x86_64))
+        packages[package_count++] = &gecko_x86_64;
+
+    if((info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL || GetSystemWow64DirectoryW(dir, MAX_PATH))
+       && !is_package_installed(&gecko_x86))
+        packages[package_count++] = &gecko_x86;
+}
+
 BOOL install_addon(addon_t addon_type, HWND hwnd_parent)
 {
+    UINT i, remaining = 0;
 
-    if(!*ARCH_STRING)
+    if(addon_type != ADDON_GECKO)
         return FALSE;
 
     addon = addons_info + addon_type;
+
+    select_packages();
+    if(!package_count)
+        return FALSE;
 
     InitializeCriticalSection(&csLock);
 
@@ -462,7 +515,14 @@ BOOL install_addon(addon_t addon_type, HWND hwnd_parent)
      * - directory stored in $dir_config_key value of HKCU/Wine/Software/$config_key key
      * - download the package
      */
-    if (install_from_registered_dir() == INSTALL_NEXT)
+    for(i = 0; i < package_count; i++) {
+        package = packages[i];
+        if(install_from_registered_dir() != INSTALL_OK)
+            packages[remaining++] = package;
+    }
+    package_count = remaining;
+
+    if(package_count)
         DialogBoxW(hApplet, addon->dialog_template, hwnd_parent, installer_proc);
 
     DeleteCriticalSection(&csLock);
