@@ -2596,6 +2596,21 @@ CopyHostFileToImage(NtfsFuseState* State,
         }
     }
 
+    if (NT_SUCCESS(Status))
+    {
+        PAttribute DataAttribute =
+            NtfsFileRecordGetAttribute(File, TypeData, NULL);
+
+        if (DataAttribute && DataAttribute->IsNonResident)
+        {
+            Status = NtfsFileRecordSetFileAllocationSize(
+                File,
+                TypeData,
+                NULL,
+                (ULONGLONG)Offset.QuadPart);
+        }
+    }
+
 Done:
     NtfsFileRecordDestroy(File);
     fclose(Source);
