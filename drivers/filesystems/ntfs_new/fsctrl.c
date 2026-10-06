@@ -342,6 +342,139 @@ NtfsSetSparse(_In_ PDEVICE_OBJECT VolumeDeviceObject,
 
 static
 NTSTATUS
+NtfsGetCompression(_In_ PDEVICE_OBJECT VolumeDeviceObject,
+                   _Inout_ PIRP Irp,
+                   _In_ PIO_STACK_LOCATION IrpSp)
+{
+    PFILE_OBJECT FileObject;
+    PFileContextBlock FileCB;
+    PVolumeContextBlock VolCB;
+    BOOLEAN Compressed = FALSE;
+    NTSTATUS Status;
+
+    FileObject = IrpSp->FileObject;
+    FileCB = NtfsGetFileContext(FileObject);
+    VolCB = VolumeDeviceObject
+        ? (PVolumeContextBlock)VolumeDeviceObject->DeviceExtension
+        : NULL;
+    if (!FileObject || !FileCB || !FileCB->FileRec ||
+        !VolCB || !VolCB->DiskVolume)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (IrpSp->Parameters.FileSystemControl.OutputBufferLength < sizeof(USHORT) ||
+        !Irp->AssociatedIrp.SystemBuffer)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(NtfsGetMainResource(FileCB), TRUE);
+    NtfsAcquireMetadata(VolCB);
+    Status = NtfsFileRecordGetCompression(FileCB->FileRec,
+                                          FileCB->RequestedStream,
+                                          &Compressed);
+    NtfsReleaseMetadata(VolCB);
+    ExReleaseResourceLite(NtfsGetMainResource(FileCB));
+    KeLeaveCriticalRegion();
+    if (NT_SUCCESS(Status))
+    {
+        *(PUSHORT)Irp->AssociatedIrp.SystemBuffer =
+            Compressed ? COMPRESSION_FORMAT_LZNT1 : COMPRESSION_FORMAT_NONE;
+        Irp->IoStatus.Information = sizeof(USHORT);
+    }
+    return Status;
+}
+
+static
+NTSTATUS
+NtfsSetCompression(_In_ PDEVICE_OBJECT VolumeDeviceObject,
+                   _Inout_ PIRP Irp,
+                   _In_ PIO_STACK_LOCATION IrpSp)
+{
+    PFILE_OBJECT FileObject;
+    PFileContextBlock FileCB;
+    PVolumeContextBlock VolCB;
+    IO_STATUS_BLOCK CacheStatus;
+    USHORT Format;
+    BOOLEAN IsDirectory;
+    NTSTATUS Status;
+
+    FileObject = IrpSp->FileObject;
+    FileCB = NtfsGetFileContext(FileObject);
+    VolCB = VolumeDeviceObject
+        ? (PVolumeContextBlock)VolumeDeviceObject->DeviceExtension
+        : NULL;
+    if (!FileObject || !FileCB || !FileCB->FileRec ||
+        !VolCB || !VolCB->DiskVolume)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (IrpSp->Parameters.FileSystemControl.InputBufferLength < sizeof(USHORT) ||
+        !Irp->AssociatedIrp.SystemBuffer)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Format = *(PUSHORT)Irp->AssociatedIrp.SystemBuffer;
+    if (Format != COMPRESSION_FORMAT_NONE &&
+        Format != COMPRESSION_FORMAT_DEFAULT &&
+        Format != COMPRESSION_FORMAT_LZNT1)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if ((FileCB->DesiredAccess & (FILE_READ_DATA | FILE_WRITE_DATA)) !=
+        (FILE_READ_DATA | FILE_WRITE_DATA))
+    {
+        return STATUS_ACCESS_DENIED;
+    }
+    if (NtfsVolumeIsReadOnly(VolCB->DiskVolume))
+        return STATUS_MEDIA_WRITE_PROTECTED;
+    IsDirectory = !!(NtfsFileRecordGetHeader(FileCB->FileRec)->Flags &
+                     FR_IS_DIRECTORY);
+    if (!IsDirectory && FileCB->RequestedType != TypeData)
+        return STATUS_INVALID_PARAMETER;
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
+    if (!IsDirectory)
+    {
+        if (CcIsFileCached(FileObject))
+        {
+            CcFlushCache(FileObject->SectionObjectPointer,
+                         NULL,
+                         0,
+                         &CacheStatus);
+            if (!NT_SUCCESS(CacheStatus.Status))
+            {
+                Status = CacheStatus.Status;
+                goto Done;
+            }
+        }
+        Status = NtfsPersistPendingSize(VolCB, FileCB);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+    }
+    NtfsAcquireMetadata(VolCB);
+    Status = NtfsFileRecordSetCompression(
+        FileCB->FileRec,
+        IsDirectory ? NULL : FileCB->RequestedStream,
+        Format != COMPRESSION_FORMAT_NONE);
+    NtfsReleaseMetadata(VolCB);
+    if (NT_SUCCESS(Status))
+    {
+        if (!IsDirectory)
+            NtfsRefreshFileSizes(VolCB, FileCB, FileObject);
+        FileObject->Flags |= FO_FILE_MODIFIED;
+    }
+
+Done:
+    ExReleaseResourceLite(NtfsGetMainResource(FileCB));
+    KeLeaveCriticalRegion();
+    return Status;
+}
+
+static
+NTSTATUS
 NtfsSetZeroData(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                 _Inout_ PIRP Irp,
                 _In_ PIO_STACK_LOCATION IrpSp)
@@ -1471,6 +1604,22 @@ NtfsFsdFileSystemControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                     case FSCTL_DELETE_EXTERNAL_BACKING:
                         Irp->IoStatus.Status =
                             NtfsDeleteExternalBacking(
+                                VolumeDeviceObject,
+                                Irp,
+                                IrpSp);
+                        break;
+
+                    case FSCTL_GET_COMPRESSION:
+                        Irp->IoStatus.Status =
+                            NtfsGetCompression(
+                                VolumeDeviceObject,
+                                Irp,
+                                IrpSp);
+                        break;
+
+                    case FSCTL_SET_COMPRESSION:
+                        Irp->IoStatus.Status =
+                            NtfsSetCompression(
                                 VolumeDeviceObject,
                                 Irp,
                                 IrpSp);

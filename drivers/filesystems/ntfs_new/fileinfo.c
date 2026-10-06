@@ -1933,6 +1933,7 @@ NtfsFsdQueryInformation(_In_    PDEVICE_OBJECT VolumeDeviceObject,
         case FileNetworkOpenInformation:
         case FileStreamInformation:
         case FileAttributeTagInformation:
+        case FileCompressionInformation:
         case FileAllInformation:
             if (!FileCB->FileRec || !VolCB || !VolCB->DiskVolume)
             {
@@ -2002,6 +2003,57 @@ NtfsFsdQueryInformation(_In_    PDEVICE_OBJECT VolumeDeviceObject,
             Position->CurrentByteOffset = FileObject->CurrentByteOffset;
             BufferLength -= sizeof(FILE_POSITION_INFORMATION);
             Status = STATUS_SUCCESS;
+            break;
+        }
+        case FileCompressionInformation:
+        {
+            PFILE_COMPRESSION_INFORMATION Compression = (PFILE_COMPRESSION_INFORMATION)SystemBuffer;
+            FILE_STANDARD_INFORMATION Standard;
+            FILE_BASIC_INFORMATION Basic;
+            ULONG StandardLength = sizeof(Standard);
+            ULONG BasicLength = sizeof(Basic);
+            ULONGLONG ClusterSize;
+            BOOLEAN Compressed = FALSE;
+            UCHAR ClusterShift = 0;
+
+            if (BufferLength < sizeof(FILE_COMPRESSION_INFORMATION))
+            {
+                Status = STATUS_BUFFER_TOO_SMALL;
+                break;
+            }
+            Status = GetFileStandardInformation(VolCB, FileCB, &Standard, &StandardLength);
+            if (!NT_SUCCESS(Status))
+                break;
+            Status = GetFileBasicInformation(FileCB, &Basic, &BasicLength);
+            if (!NT_SUCCESS(Status))
+                break;
+            Status = NtfsFileRecordGetCompression(FileCB->FileRec,
+                                                  FileCB->RequestedStream,
+                                                  &Compressed);
+            if (!NT_SUCCESS(Status))
+                break;
+
+            RtlZeroMemory(Compression, sizeof(*Compression));
+            Compression->CompressedFileSize =
+                ((Compressed || (Basic.FileAttributes & FILE_ATTRIBUTE_SPARSE_FILE)) &&
+                 Standard.AllocationSize.QuadPart != 0)
+                    ? Standard.AllocationSize
+                    : Standard.EndOfFile;
+            if (Compressed)
+            {
+                ClusterSize = (ULONGLONG)VolCB->BytesPerSector *
+                              NtfsVolumeGetSectorsPerCluster(VolCB->DiskVolume);
+                while (ClusterSize > 1)
+                {
+                    ClusterShift++;
+                    ClusterSize >>= 1;
+                }
+                Compression->CompressionFormat = COMPRESSION_FORMAT_LZNT1;
+                Compression->CompressionUnitShift = ClusterShift + 4;
+                Compression->ChunkShift = 12;
+                Compression->ClusterShift = ClusterShift;
+            }
+            BufferLength -= sizeof(FILE_COMPRESSION_INFORMATION);
             break;
         }
         case FileAttributeTagInformation:

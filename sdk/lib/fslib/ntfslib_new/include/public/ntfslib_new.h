@@ -590,6 +590,18 @@ NtfsFileRecordSetSparse(
     _In_opt_ PWSTR StreamName,
     _In_ BOOLEAN SetSparse);
 
+NTSTATUS
+NtfsFileRecordSetCompression(
+    _In_ NtfsFileRecord *FileRecord,
+    _In_opt_ PWSTR StreamName,
+    _In_ BOOLEAN Compress);
+
+NTSTATUS
+NtfsFileRecordGetCompression(
+    _In_ NtfsFileRecord *FileRecord,
+    _In_opt_ PWSTR StreamName,
+    _Out_ PBOOLEAN Compressed);
+
 /*
  * Implements FSCTL_SET_ZERO_DATA semantics without extending EOF. A sparse
  * stream may release complete NTFS sparse units wholly covered by the range.

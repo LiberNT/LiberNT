@@ -394,6 +394,41 @@ NtfsFileRecordSetSparse(
 }
 
 NTSTATUS
+NtfsFileRecordSetCompression(
+    _In_ PNtfsFileRecord Fr,
+    _In_opt_ PWSTR StreamName,
+    _In_ BOOLEAN Compress)
+{
+    if (!Fr)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PFileRecord>(Fr)->SetCompression(
+        StreamName,
+        Compress);
+}
+
+NTSTATUS
+NtfsFileRecordGetCompression(
+    _In_ PNtfsFileRecord Fr,
+    _In_opt_ PWSTR StreamName,
+    _Out_ PBOOLEAN Compressed)
+{
+    PFileRecord File = reinterpret_cast<PFileRecord>(Fr);
+    PAttribute Attribute;
+
+    if (!Fr || !Compressed)
+        return STATUS_INVALID_PARAMETER;
+    *Compressed = FALSE;
+    Attribute = (File->Header->Flags & FR_IS_DIRECTORY)
+        ? File->GetAttribute(TypeIndexRoot, const_cast<PWSTR>(NtfsI30Name))
+        : File->GetAttribute(TypeData,
+                             StreamName && StreamName[0] ? StreamName : NULL);
+    if (!Attribute)
+        return STATUS_NOT_FOUND;
+    *Compressed = (Attribute->Flags & ATTR_COMPRESSION_MASK) != 0;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 NtfsFileRecordSetZeroData(
     _In_ PNtfsFileRecord Fr,
     _In_ AttributeType AttrType,

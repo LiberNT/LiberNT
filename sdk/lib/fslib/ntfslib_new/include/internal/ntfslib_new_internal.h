@@ -849,6 +849,9 @@ public:
         _In_ ULONGLONG NewAllocationSize);
 
     NTSTATUS
+    SetCompression(_In_opt_ PWSTR StreamName,
+                   _In_ BOOLEAN Compress);
+    NTSTATUS
     SetSparse(_In_ AttributeType AttrType,
               _In_opt_ PWSTR StreamName,
               _In_ BOOLEAN SetSparse);

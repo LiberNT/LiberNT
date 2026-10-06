@@ -5387,6 +5387,50 @@ main(int Argc, char** Argv)
         return Result;
     }
 
+    if (strcmp(Argv[First], "--set-compression") == 0)
+    {
+        PNtfsFileRecord File = NULL;
+        AttributeType RequestedType = TypeData;
+        PWSTR RequestedStream = NULL;
+
+        if (First + 4 != Argc || ShowMetadata ||
+            (strcmp(Argv[First + 3], "0") != 0 &&
+             strcmp(Argv[First + 3], "1") != 0))
+        {
+            PrintUsage(Argv[0]);
+            return 2;
+        }
+        Status = OpenImageWritable(Argv[First + 1], &State);
+        if (NT_SUCCESS(Status))
+        {
+            Status = LookupAttribute(State.Volume,
+                                     Argv[First + 2],
+                                     &File,
+                                     &RequestedType,
+                                     &RequestedStream);
+            if (NT_SUCCESS(Status))
+            {
+                Status = NtfsFileRecordSetCompression(
+                    File,
+                    RequestedStream,
+                    strcmp(Argv[First + 3], "1") == 0);
+            }
+            NtfsFileRecordDestroy(File);
+            delete[] RequestedStream;
+            CloseImage(&State);
+        }
+        if (!NT_SUCCESS(Status))
+        {
+            fprintf(stderr,
+                    "%s: ntfslib status 0x%08" PRIx32 " (%s)\n",
+                    Argv[First + 2],
+                    (uint32_t)Status,
+                    strerror(NtStatusToErrno(Status)));
+            return 1;
+        }
+        return 0;
+    }
+
     if (strcmp(Argv[First], "--set-sparse") == 0)
     {
         bool SetSparse;
