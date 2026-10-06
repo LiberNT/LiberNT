@@ -55,12 +55,12 @@ KMT_TESTFUNC Test_WfpUser;
 /* tests with a leading '-' will not be listed */
 const KMT_TEST TestList[] =
 {
-    { "-CcCopyRead",                   Test_CcCopyRead },   // TODO: Crashes on TestWHS
-    { "-CcCopyWrite",                  Test_CcCopyWrite },  // TODO: Crashes on TestWHS
-    { "-CcMapData",                    Test_CcMapData },
-    { "-CcPinMappedData",              Test_CcPinMappedData },
-    { "-CcPinRead",                    Test_CcPinRead },
-    { "-CcSetFileSizes",               Test_CcSetFileSizes },
+    { "CcCopyRead",                    Test_CcCopyRead },
+    { "CcCopyWrite",                   Test_CcCopyWrite },
+    { "CcMapData",                     Test_CcMapData },
+    { "CcPinMappedData",               Test_CcPinMappedData },
+    { "CcPinRead",                     Test_CcPinRead },
+    { "CcSetFileSizes",                Test_CcSetFileSizes },
     { "-Example",                     Test_Example },
     { "FileAttributes",               Test_FileAttributes },
     { "FindFile",                     Test_FindFile },
