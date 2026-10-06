@@ -558,6 +558,12 @@ ElfrReadELW(
     if (ReadFlags & EVENTLOG_SEQUENTIAL_READ)
     {
         RecordNumber = pLogHandle->CurrentRecord;
+        if (RecordNumber != 0 && (ReadFlags & EVENTLOG_BACKWARDS_READ))
+        {
+            RecordNumber--;
+            if (RecordNumber == 0)
+                return STATUS_END_OF_FILE;
+        }
     }
     else // (ReadFlags & EVENTLOG_SEEK_READ)
     {
@@ -576,7 +582,7 @@ ElfrReadELW(
     /* Update the handle's CurrentRecord if success */
     if (NT_SUCCESS(Status))
     {
-        pLogHandle->CurrentRecord = RecordNumber;
+        pLogHandle->CurrentRecord = (ReadFlags & EVENTLOG_BACKWARDS_READ) ? RecordNumber + 1 : RecordNumber;
     }
 
     return Status;
@@ -968,6 +974,12 @@ ElfrReadELA(
     if (ReadFlags & EVENTLOG_SEQUENTIAL_READ)
     {
         RecordNumber = pLogHandle->CurrentRecord;
+        if (RecordNumber != 0 && (ReadFlags & EVENTLOG_BACKWARDS_READ))
+        {
+            RecordNumber--;
+            if (RecordNumber == 0)
+                return STATUS_END_OF_FILE;
+        }
     }
     else // (ReadFlags & EVENTLOG_SEEK_READ)
     {
@@ -986,7 +998,7 @@ ElfrReadELA(
     /* Update the handle's CurrentRecord if success */
     if (NT_SUCCESS(Status))
     {
-        pLogHandle->CurrentRecord = RecordNumber;
+        pLogHandle->CurrentRecord = (ReadFlags & EVENTLOG_BACKWARDS_READ) ? RecordNumber + 1 : RecordNumber;
     }
 
     return Status;

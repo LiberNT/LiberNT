@@ -994,12 +994,11 @@ LogfAllocAndBuildNewRecord(PSIZE_T pRecSize,
     pos = ROUND_UP(pos, sizeof(ULONG));
 
     pRec->UserSidLength = 0;
-    pRec->UserSidOffset = 0;
+    pRec->UserSidOffset = pos;
     if (dwSidLength)
     {
         RtlCopyMemory(Buffer + pos, pUserSid, dwSidLength);
         pRec->UserSidLength = dwSidLength;
-        pRec->UserSidOffset = pos;
         pos += dwSidLength;
     }
 
@@ -1014,12 +1013,11 @@ LogfAllocAndBuildNewRecord(PSIZE_T pRecSize,
     pRec->NumStrings = wNumStrings;
 
     pRec->DataLength = 0;
-    pRec->DataOffset = 0;
+    pRec->DataOffset = pos;
     if (dwDataSize)
     {
         RtlCopyMemory(Buffer + pos, pRawData, dwDataSize);
         pRec->DataLength = dwDataSize;
-        pRec->DataOffset = pos;
         pos += dwDataSize;
     }
 
