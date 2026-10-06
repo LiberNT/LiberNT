@@ -232,6 +232,39 @@ done:
 
 
 static
+VOID
+SetProfileDirectorySecurity(
+    _In_ PCWSTR pszProfilePath,
+    _In_ PSID pUserSid)
+{
+    WCHAR szSddl[320];
+    PSECURITY_DESCRIPTOR pSecurityDescriptor = NULL;
+    PWSTR pszSidString;
+
+    if (!ConvertSidToStringSidW(pUserSid, &pszSidString))
+        return;
+
+    if (SUCCEEDED(StringCbPrintfW(szSddl, sizeof(szSddl),
+                                  L"O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;%s)",
+                                  pszSidString)) &&
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(szSddl, SDDL_REVISION_1,
+                                                             &pSecurityDescriptor, NULL))
+    {
+        if (!SetFileSecurityW(pszProfilePath,
+                              OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION |
+                              DACL_SECURITY_INFORMATION,
+                              pSecurityDescriptor) &&
+            !SetFileSecurityW(pszProfilePath, DACL_SECURITY_INFORMATION, pSecurityDescriptor))
+        {
+            DPRINT1("SetFileSecurityW(%S) failed (Error %lu)\n", pszProfilePath, GetLastError());
+        }
+        LocalFree(pSecurityDescriptor);
+    }
+    LocalFree(pszSidString);
+}
+
+
+static
 HANDLE
 CreateProfileMutex(
     _In_ PWSTR pszSidString)
@@ -1078,6 +1111,8 @@ CreateUserProfileExW(
             }
         }
     }
+
+    SetProfileDirectorySecurity(szUserProfilePath, pSid);
 
     /* Copy default user directory */
 
