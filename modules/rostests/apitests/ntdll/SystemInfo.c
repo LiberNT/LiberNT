@@ -244,7 +244,8 @@ Test_TimeAdjustment(void)
                                       sizeof(GetTimeInfo),
                                       &ReturnLength);
     ok_ntstatus(Status, STATUS_SUCCESS);
-    ok_long(GetTimeInfo.TimeAdjustment, IsWindows7OrGreater() ? 0x7076cc : -1);
+    if (GetNTVersion() < _WIN32_WINNT_WIN10)
+        ok_long(GetTimeInfo.TimeAdjustment, IsWindows7OrGreater() ? 0x7076cc : -1);
     ok_long(GetTimeInfo.Enable, 0);
 
     /* set Enable to 1 */
