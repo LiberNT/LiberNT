@@ -3880,6 +3880,9 @@ NtUserWaitForInputIdle( IN HANDLE hProcess,
     HANDLE Handles[3];
     LARGE_INTEGER Timeout;
     KAPC_STATE ApcState;
+    SECTION_IMAGE_INFORMATION ImageInformation;
+    LARGE_INTEGER Interval;
+    DWORD Waited = 0;
 
     UserEnterExclusive();
 
@@ -3900,6 +3903,38 @@ NtUserWaitForInputIdle( IN HANDLE hProcess,
     pti = PsGetCurrentThreadWin32Thread();
 
     W32Process = (PPROCESSINFO)Process->Win32Process;
+
+    if ((!W32Process || !W32Process->InputIdleEvent) &&
+        !PsGetProcessExitProcessCalled(Process) &&
+        NT_SUCCESS(ZwQueryInformationProcess(hProcess,
+                                             ProcessImageInformation,
+                                             &ImageInformation,
+                                             sizeof(ImageInformation),
+                                             NULL)) &&
+        ImageInformation.SubSystemType == IMAGE_SUBSYSTEM_WINDOWS_GUI)
+    {
+        Interval.QuadPart = -10 * 10000;
+        Status = STATUS_TIMEOUT;
+        while (Status == STATUS_TIMEOUT &&
+               (dwMilliseconds == INFINITE || Waited < dwMilliseconds))
+        {
+            UserLeave();
+            Status = KeWaitForSingleObject(Process, UserRequest, UserMode, FALSE, &Interval);
+            UserEnterExclusive();
+            Waited += 10;
+            W32Process = (PPROCESSINFO)Process->Win32Process;
+            if (W32Process && W32Process->InputIdleEvent)
+                break;
+        }
+        if (Status == STATUS_TIMEOUT && (!W32Process || !W32Process->InputIdleEvent))
+        {
+            ObDereferenceObject(Process);
+            UserLeave();
+            return STATUS_TIMEOUT;
+        }
+        if (dwMilliseconds != INFINITE)
+            dwMilliseconds -= min(Waited, dwMilliseconds);
+    }
 
     if ( PsGetProcessExitProcessCalled(Process) ||
          !W32Process ||
