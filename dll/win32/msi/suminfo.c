@@ -1353,6 +1353,16 @@ UINT WINAPI MsiCreateTransformSummaryInfoA( MSIHANDLE db, MSIHANDLE db_ref, cons
 UINT WINAPI MsiCreateTransformSummaryInfoW( MSIHANDLE db, MSIHANDLE db_ref, const WCHAR *transform, int error,
                                             int validation )
 {
+#ifdef __REACTOS__
+    MSIDATABASE *database, *reference;
+
+    if (!(database = msihandle2msiinfo( db, MSIHANDLETYPE_DATABASE )))
+        return ERROR_INSTALL_PACKAGE_OPEN_FAILED;
+    msiobj_release( &database->hdr );
+    if (!(reference = msihandle2msiinfo( db_ref, MSIHANDLETYPE_DATABASE )))
+        return ERROR_INSTALL_PACKAGE_OPEN_FAILED;
+    msiobj_release( &reference->hdr );
+#endif
     FIXME( "%lu, %lu, %s, %d, %d\n", db, db_ref, debugstr_w(transform), error, validation );
     return ERROR_FUNCTION_FAILED;
 }

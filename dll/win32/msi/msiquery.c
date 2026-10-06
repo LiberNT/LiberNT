@@ -962,6 +962,16 @@ UINT WINAPI MsiDatabaseApplyTransformA( MSIHANDLE hdb, const char *transform, in
 UINT WINAPI MsiDatabaseGenerateTransformA( MSIHANDLE hdb, MSIHANDLE hdbref, const char *szTransformFile,
                                            int iReserved1, int iReserved2 )
 {
+#ifdef __REACTOS__
+    MSIDATABASE *db, *ref;
+
+    if (!(db = msihandle2msiinfo( hdb, MSIHANDLETYPE_DATABASE )))
+        return ERROR_INVALID_HANDLE;
+    msiobj_release( &db->hdr );
+    if (!(ref = msihandle2msiinfo( hdbref, MSIHANDLETYPE_DATABASE )))
+        return ERROR_INVALID_HANDLE;
+    msiobj_release( &ref->hdr );
+#endif
     FIXME( "%lu, %lu, %s, %d, %d\n", hdb, hdbref, debugstr_a(szTransformFile), iReserved1, iReserved2 );
     return ERROR_CALL_NOT_IMPLEMENTED;
 }
@@ -969,6 +979,16 @@ UINT WINAPI MsiDatabaseGenerateTransformA( MSIHANDLE hdb, MSIHANDLE hdbref, cons
 UINT WINAPI MsiDatabaseGenerateTransformW( MSIHANDLE hdb, MSIHANDLE hdbref, const WCHAR *szTransformFile,
                                            int iReserved1, int iReserved2 )
 {
+#ifdef __REACTOS__
+    MSIDATABASE *db, *ref;
+
+    if (!(db = msihandle2msiinfo( hdb, MSIHANDLETYPE_DATABASE )))
+        return ERROR_INVALID_HANDLE;
+    msiobj_release( &db->hdr );
+    if (!(ref = msihandle2msiinfo( hdbref, MSIHANDLETYPE_DATABASE )))
+        return ERROR_INVALID_HANDLE;
+    msiobj_release( &ref->hdr );
+#endif
     FIXME( "%lu, %lu, %s, %d, %d\n", hdb, hdbref, debugstr_w(szTransformFile), iReserved1, iReserved2 );
     return ERROR_CALL_NOT_IMPLEMENTED;
 }
