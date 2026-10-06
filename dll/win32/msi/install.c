@@ -1454,8 +1454,19 @@ static UINT MSI_SetComponentStateW(MSIPACKAGE *package, LPCWSTR szComponent,
     if (!comp)
         return ERROR_UNKNOWN_COMPONENT;
 
+#ifdef __REACTOS__
+    if (comp->Enabled)
+    {
+        if (iState == INSTALLSTATE_ABSENT && comp->Installed != INSTALLSTATE_LOCAL &&
+            comp->Installed != INSTALLSTATE_SOURCE)
+            comp->Action = INSTALLSTATE_UNKNOWN;
+        else
+            comp->Action = iState;
+    }
+#else
     if (comp->Enabled)
         comp->Action = iState;
+#endif
 
     return ERROR_SUCCESS;
 }
