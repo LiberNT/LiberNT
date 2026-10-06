@@ -287,13 +287,14 @@ IopCompleteRequest(IN PKAPC Apc,
     {
         /* Check if we're reparsing */
         if ((Irp->IoStatus.Status == STATUS_REPARSE) &&
-            (Irp->IoStatus.Information == IO_REPARSE_TAG_MOUNT_POINT))
+            (Irp->IoStatus.Information == IO_REPARSE_TAG_MOUNT_POINT ||
+             Irp->IoStatus.Information == IO_REPARSE_TAG_SYMLINK))
         {
             PREPARSE_DATA_BUFFER ReparseData;
 
             ReparseData = (PREPARSE_DATA_BUFFER)*SystemArgument2;
 
-            ASSERT(ReparseData->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT);
+            ASSERT(ReparseData->ReparseTag == Irp->IoStatus.Information);
             ASSERT(ReparseData->ReparseDataLength < MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
             ASSERT(ReparseData->Reserved < MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
 
@@ -1564,7 +1565,8 @@ IofCompleteRequest(IN PIRP Irp,
         if (Irp->IoStatus.Information > IO_REMOUNT)
         {
             /* If that's a reparse tag we understand, save the buffer from deletion */
-            if (Irp->IoStatus.Information == IO_REPARSE_TAG_MOUNT_POINT)
+            if (Irp->IoStatus.Information == IO_REPARSE_TAG_MOUNT_POINT ||
+                Irp->IoStatus.Information == IO_REPARSE_TAG_SYMLINK)
             {
                 ASSERT(Irp->Tail.Overlay.AuxiliaryBuffer != NULL);
                 DataBuffer = (PREPARSE_DATA_BUFFER)Irp->Tail.Overlay.AuxiliaryBuffer;
@@ -1652,7 +1654,8 @@ IofCompleteRequest(IN PIRP Irp,
     {
         /* Restore the saved reparse buffer for the caller */
         if (Irp->IoStatus.Status == STATUS_REPARSE &&
-            Irp->IoStatus.Information == IO_REPARSE_TAG_MOUNT_POINT)
+            (Irp->IoStatus.Information == IO_REPARSE_TAG_MOUNT_POINT ||
+             Irp->IoStatus.Information == IO_REPARSE_TAG_SYMLINK))
         {
             Irp->Tail.Overlay.AuxiliaryBuffer = (PCHAR)DataBuffer;
         }

@@ -162,6 +162,163 @@ IopCheckDeviceAndDriver(IN POPEN_PACKET OpenPacket,
     }
 }
 
+static
+VOID
+IopDoSymbolicLinkTransmogrify(IN PIRP Irp,
+                              IN PFILE_OBJECT FileObject,
+                              IN PREPARSE_DATA_BUFFER DataBuffer)
+{
+    const ULONG HeaderLength = FIELD_OFFSET(REPARSE_DATA_BUFFER, SymbolicLinkReparseBuffer.PathBuffer) -
+                               REPARSE_DATA_BUFFER_HEADER_SIZE;
+    PFILE_OBJECT RelatedFileObject = FileObject->RelatedFileObject;
+    POBJECT_NAME_INFORMATION DeviceName = NULL;
+    PWSTR Substitute, Unparsed, NewBuffer = NULL, Path, Source, SourceEnd, Target, Component;
+    ULONG SubstituteLength, UnparsedLength, ParsedLength, DeviceLength = 0, PathLength = 0;
+    ULONG RequiredLength, ReturnLength, Count;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+
+    SubstituteLength = DataBuffer->SymbolicLinkReparseBuffer.SubstituteNameLength;
+    UnparsedLength = DataBuffer->Reserved;
+    if (DataBuffer->ReparseDataLength < HeaderLength ||
+        DataBuffer->SymbolicLinkReparseBuffer.SubstituteNameOffset + SubstituteLength >
+            DataBuffer->ReparseDataLength - HeaderLength ||
+        SubstituteLength == 0 ||
+        (SubstituteLength & 1) ||
+        (DataBuffer->SymbolicLinkReparseBuffer.SubstituteNameOffset & 1) ||
+        (UnparsedLength & 1) ||
+        UnparsedLength > FileObject->FileName.Length)
+    {
+        Status = STATUS_IO_REPARSE_DATA_INVALID;
+        goto Done;
+    }
+
+    Substitute = (PWSTR)((ULONG_PTR)DataBuffer->SymbolicLinkReparseBuffer.PathBuffer +
+                         DataBuffer->SymbolicLinkReparseBuffer.SubstituteNameOffset);
+    ParsedLength = FileObject->FileName.Length - UnparsedLength;
+    Unparsed = (PWSTR)((ULONG_PTR)FileObject->FileName.Buffer + ParsedLength);
+
+    if (DataBuffer->SymbolicLinkReparseBuffer.Flags & SYMLINK_FLAG_RELATIVE)
+    {
+        RequiredLength = 1024;
+        DeviceName = ExAllocatePoolWithTag(PagedPool, RequiredLength, TAG_IO_NAME);
+        if (!DeviceName)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto Done;
+        }
+
+        Status = ObQueryNameString(FileObject->DeviceObject, DeviceName, RequiredLength, &ReturnLength);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        DeviceLength = DeviceName->Name.Length;
+    }
+
+    RequiredLength = DeviceLength + ParsedLength + SubstituteLength + UnparsedLength + 3 * sizeof(WCHAR);
+    if (RelatedFileObject)
+        RequiredLength += RelatedFileObject->FileName.Length;
+    if (RequiredLength > MAXUSHORT)
+    {
+        Status = STATUS_NAME_TOO_LONG;
+        goto Done;
+    }
+
+    NewBuffer = ExAllocatePoolWithTag(PagedPool, RequiredLength, TAG_IO_NAME);
+    if (!NewBuffer)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Done;
+    }
+
+    if (DeviceLength)
+        RtlCopyMemory(NewBuffer, DeviceName->Name.Buffer, DeviceLength);
+    Path = (PWSTR)((ULONG_PTR)NewBuffer + DeviceLength);
+
+    if ((DataBuffer->SymbolicLinkReparseBuffer.Flags & SYMLINK_FLAG_RELATIVE) &&
+        Substitute[0] != OBJ_NAME_PATH_SEPARATOR)
+    {
+        if (RelatedFileObject && RelatedFileObject->FileName.Length)
+        {
+            RtlCopyMemory(Path, RelatedFileObject->FileName.Buffer, RelatedFileObject->FileName.Length);
+            PathLength = RelatedFileObject->FileName.Length / sizeof(WCHAR);
+        }
+        if (ParsedLength)
+        {
+            if (PathLength &&
+                Path[PathLength - 1] != OBJ_NAME_PATH_SEPARATOR &&
+                FileObject->FileName.Buffer[0] != OBJ_NAME_PATH_SEPARATOR)
+            {
+                Path[PathLength++] = OBJ_NAME_PATH_SEPARATOR;
+            }
+            RtlCopyMemory(&Path[PathLength], FileObject->FileName.Buffer, ParsedLength);
+            PathLength += ParsedLength / sizeof(WCHAR);
+        }
+        while (PathLength && Path[PathLength - 1] == OBJ_NAME_PATH_SEPARATOR)
+            PathLength--;
+        while (PathLength && Path[PathLength - 1] != OBJ_NAME_PATH_SEPARATOR)
+            PathLength--;
+        if (!PathLength)
+            Path[PathLength++] = OBJ_NAME_PATH_SEPARATOR;
+    }
+
+    RtlCopyMemory(&Path[PathLength], Substitute, SubstituteLength);
+    PathLength += SubstituteLength / sizeof(WCHAR);
+
+    if (DataBuffer->SymbolicLinkReparseBuffer.Flags & SYMLINK_FLAG_RELATIVE)
+    {
+        Source = Path;
+        SourceEnd = Path + PathLength;
+        Target = Path;
+        while (Source < SourceEnd)
+        {
+            while (Source < SourceEnd && *Source == OBJ_NAME_PATH_SEPARATOR)
+                Source++;
+            Component = Source;
+            while (Source < SourceEnd && *Source != OBJ_NAME_PATH_SEPARATOR)
+                Source++;
+            Count = (ULONG)(Source - Component);
+            if (Count == 0 || (Count == 1 && Component[0] == L'.'))
+                continue;
+            if (Count == 2 && Component[0] == L'.' && Component[1] == L'.')
+            {
+                while (Target > Path && Target[-1] != OBJ_NAME_PATH_SEPARATOR)
+                    Target--;
+                if (Target > Path)
+                    Target--;
+                continue;
+            }
+            *Target++ = OBJ_NAME_PATH_SEPARATOR;
+            RtlMoveMemory(Target, Component, Count * sizeof(WCHAR));
+            Target += Count;
+        }
+        PathLength = (ULONG)(Target - Path);
+    }
+
+    if (UnparsedLength)
+    {
+        RtlCopyMemory(&Path[PathLength], Unparsed, UnparsedLength);
+        PathLength += UnparsedLength / sizeof(WCHAR);
+    }
+    Path[PathLength] = UNICODE_NULL;
+
+    if (FileObject->FileName.Buffer)
+        ExFreePoolWithTag(FileObject->FileName.Buffer, 0);
+    FileObject->FileName.Buffer = NewBuffer;
+    FileObject->FileName.Length = (USHORT)(DeviceLength + PathLength * sizeof(WCHAR));
+    FileObject->FileName.MaximumLength = (USHORT)RequiredLength;
+    NewBuffer = NULL;
+
+Done:
+    if (!NT_SUCCESS(Status))
+        Irp->IoStatus.Status = Status;
+    if (NewBuffer)
+        ExFreePoolWithTag(NewBuffer, TAG_IO_NAME);
+    if (DeviceName)
+        ExFreePoolWithTag(DeviceName, TAG_IO_NAME);
+    ExFreePool(DataBuffer);
+}
+
 VOID
 NTAPI
 IopDoNameTransmogrify(IN PIRP Irp,
@@ -176,9 +333,16 @@ IopDoNameTransmogrify(IN PIRP Irp,
     PAGED_CODE();
 
     ASSERT(Irp->IoStatus.Status == STATUS_REPARSE);
+    ASSERT(DataBuffer != NULL);
+
+    if (DataBuffer->ReparseTag == IO_REPARSE_TAG_SYMLINK)
+    {
+        IopDoSymbolicLinkTransmogrify(Irp, FileObject, DataBuffer);
+        return;
+    }
+
     ASSERT(Irp->IoStatus.Information == IO_REPARSE_TAG_MOUNT_POINT);
     ASSERT(Irp->Tail.Overlay.AuxiliaryBuffer != NULL);
-    ASSERT(DataBuffer != NULL);
     ASSERT(DataBuffer->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT);
     ASSERT(DataBuffer->ReparseDataLength < MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
     ASSERT(DataBuffer->Reserved < MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
@@ -1021,7 +1185,8 @@ IopParseDevice(IN PVOID ParseObject,
             if (Status == STATUS_REPARSE)
             {
                 /* Check this is a mount point */
-                if (Irp->IoStatus.Information == IO_REPARSE_TAG_MOUNT_POINT)
+                if (Irp->IoStatus.Information == IO_REPARSE_TAG_MOUNT_POINT ||
+                    Irp->IoStatus.Information == IO_REPARSE_TAG_SYMLINK)
                 {
                     PREPARSE_DATA_BUFFER ReparseData;
 
@@ -1029,7 +1194,7 @@ IopParseDevice(IN PVOID ParseObject,
                     ASSERT(Irp->Tail.Overlay.AuxiliaryBuffer != NULL);
                     ReparseData = (PREPARSE_DATA_BUFFER)Irp->Tail.Overlay.AuxiliaryBuffer;
 
-                    ASSERT(ReparseData->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT);
+                    ASSERT(ReparseData->ReparseTag == Irp->IoStatus.Information);
                     ASSERT(ReparseData->ReparseDataLength < MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
                     ASSERT(ReparseData->Reserved < MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
 
@@ -1108,7 +1273,8 @@ IopParseDevice(IN PVOID ParseObject,
         else if (Status == STATUS_REPARSE)
         {
             if (OpenPacket->Information == IO_REPARSE ||
-                OpenPacket->Information == IO_REPARSE_TAG_MOUNT_POINT)
+                OpenPacket->Information == IO_REPARSE_TAG_MOUNT_POINT ||
+                OpenPacket->Information == IO_REPARSE_TAG_SYMLINK)
             {
                 /* Update CompleteName with reparse info which got updated in IopDoNameTransmogrify() */
                 if (CompleteName->MaximumLength < FileObject->FileName.Length)
