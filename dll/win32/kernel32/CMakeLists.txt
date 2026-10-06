@@ -170,7 +170,7 @@ set_module_type(kernel32 win32dll ENTRYPOINT DllMain 12)
 set_subsystem(kernel32 console)
 ################# END  HACK #################
 
-target_link_libraries(kernel32 psapi_static kernel32_vista_static kernel32_shared wine chkstk ${PSEH_LIB})
+target_link_libraries(kernel32 psapi_static kernel32_vista_static kernel32_shared wine chkstk symz ${PSEH_LIB})
 add_importlibs(kernel32 kernelbase ntdll)
 add_pch(kernel32 k32.h SOURCE)
 if(CLANG_NATIVE_SEH AND CMAKE_C_COMPILER_ID STREQUAL "Clang" AND NOT USE_DUMMY_PSEH)

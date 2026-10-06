@@ -14,6 +14,7 @@
 #include <k32.h>
 #include <strsafe.h>
 #include <errorrep.h>
+#include <symz.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -55,6 +56,84 @@ _module_name_from_addr(const void* addr, void **module_start_addr,
     return psz;
 }
 
+
+static VOID
+_print_address(const void *addr)
+{
+    PVOID StartAddr;
+    CHAR szMod[128] = "", *szModFile;
+    CHAR szName[256];
+    CHAR szSymbol[512] = "";
+    PIMAGE_NT_HEADERS NtHeaders;
+    PIMAGE_SECTION_HEADER Section;
+    const UCHAR *Table = NULL;
+    ULONG TableSize = 0, Rva, SymbolRva, Line, Index;
+    const char *Name, *FileName;
+    PUCHAR Buffer;
+
+    _module_name_from_addr(addr, &StartAddr, szMod, sizeof(szMod), &szModFile);
+
+    _SEH2_TRY
+    {
+        NtHeaders = StartAddr ? RtlImageNtHeader(StartAddr) : NULL;
+        if (NtHeaders != NULL)
+        {
+            Section = IMAGE_FIRST_SECTION(NtHeaders);
+            for (Index = 0; Index < NtHeaders->FileHeader.NumberOfSections; Index++, Section++)
+            {
+                if (RtlCompareMemory(Section->Name, SYMZ_SECTION_NAME, sizeof(SYMZ_SECTION_NAME)) == sizeof(SYMZ_SECTION_NAME) &&
+                    Section->VirtualAddress < NtHeaders->OptionalHeader.SizeOfImage &&
+                    Section->Misc.VirtualSize <= NtHeaders->OptionalHeader.SizeOfImage - Section->VirtualAddress)
+                {
+                    Table = (const UCHAR *)StartAddr + Section->VirtualAddress;
+                    TableSize = Section->Misc.VirtualSize;
+                    break;
+                }
+            }
+        }
+
+        Buffer = Table ? VirtualAlloc(NULL,
+                                      SYMZ_MAX_BLOCK_SIZE + SYMZ_DECODER_WORK_SIZE,
+                                      MEM_COMMIT | MEM_RESERVE,
+                                      PAGE_READWRITE) : NULL;
+        if (Buffer != NULL)
+        {
+            Rva = (ULONG)((ULONG_PTR)addr - (ULONG_PTR)StartAddr);
+            if (SymzLookup(Table, TableSize, Rva,
+                           Buffer, SYMZ_MAX_BLOCK_SIZE,
+                           Buffer + SYMZ_MAX_BLOCK_SIZE, SYMZ_DECODER_WORK_SIZE,
+                           &Name, &SymbolRva))
+            {
+                StringCbCopyA(szName, sizeof(szName), Name);
+                if (SymzLookupLine(Table, TableSize, Rva,
+                                   Buffer, SYMZ_MAX_BLOCK_SIZE,
+                                   Buffer + SYMZ_MAX_BLOCK_SIZE, SYMZ_DECODER_WORK_SIZE,
+                                   &FileName, &Line))
+                {
+                    StringCbPrintfA(szSymbol, sizeof(szSymbol), " (%s:%lu (%s+0x%lx))", FileName, Line, szName, Rva - SymbolRva);
+                }
+                else
+                {
+                    StringCbPrintfA(szSymbol, sizeof(szSymbol), " (%s+0x%lx)", szName, Rva - SymbolRva);
+                }
+            }
+
+            VirtualFree(Buffer, 0, MEM_RELEASE);
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        szSymbol[0] = ANSI_NULL;
+    }
+    _SEH2_END;
+
+    DbgPrint("<%s:%Ix> (%s@%p)%s\n",
+             szModFile,
+             (ULONG_PTR)addr - (ULONG_PTR)StartAddr,
+             szMod,
+             StartAddr,
+             szSymbol);
+}
 
 static VOID
 _dump_context(PCONTEXT pc)
@@ -142,8 +221,6 @@ BasepReportFault(IN PEXCEPTION_POINTERS ExceptionInfo)
 static VOID
 PrintStackTrace(IN PEXCEPTION_POINTERS ExceptionInfo)
 {
-    PVOID StartAddr;
-    CHAR szMod[128] = "", *szModFile;
     PEXCEPTION_RECORD ExceptionRecord = ExceptionInfo->ExceptionRecord;
     PCONTEXT ContextRecord = ExceptionInfo->ContextRecord;
 
@@ -165,12 +242,8 @@ PrintStackTrace(IN PEXCEPTION_POINTERS ExceptionInfo)
     }
 
     _dump_context(ContextRecord);
-    _module_name_from_addr(ExceptionRecord->ExceptionAddress, &StartAddr, szMod, sizeof(szMod), &szModFile);
-    DbgPrint("Address:\n<%s:%Ix> (%s@%p)\n",
-             szModFile,
-             (ULONG_PTR)ExceptionRecord->ExceptionAddress - (ULONG_PTR)StartAddr,
-             szMod,
-             StartAddr);
+    DbgPrint("Address:\n");
+    _print_address(ExceptionRecord->ExceptionAddress);
 #ifdef _M_IX86
     DbgPrint("Frames:\n");
 
@@ -187,13 +260,7 @@ PrintStackTrace(IN PEXCEPTION_POINTERS ExceptionInfo)
             }
             else
             {
-                _module_name_from_addr((const void*)Frame[1], &StartAddr,
-                                       szMod, sizeof(szMod), &szModFile);
-                DbgPrint("<%s:%x> (%s@%x)\n",
-                         szModFile,
-                         (ULONG_PTR)Frame[1] - (ULONG_PTR)StartAddr,
-                         szMod,
-                         StartAddr);
+                _print_address((const void*)Frame[1]);
             }
 
             if (IsBadReadPtr((PVOID)Frame[0], sizeof(*Frame) * 2))
@@ -238,8 +305,46 @@ PrintStackTrace(IN PEXCEPTION_POINTERS ExceptionInfo)
             }
 
             if (!UnwindContext.Rip || UnwindContext.Rsp <= PreviousRsp || UnwindContext.Rsp > StackHigh) break;
-            _module_name_from_addr((const void *)UnwindContext.Rip, &StartAddr, szMod, sizeof(szMod), &szModFile);
-            DbgPrint("<%s:%Ix> (%s@%p)\n", szModFile, (ULONG_PTR)UnwindContext.Rip - (ULONG_PTR)StartAddr, szMod, StartAddr);
+            _print_address((const void *)UnwindContext.Rip);
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        DbgPrint("<error dumping stack trace: 0x%x>\n", _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+#elif defined(_M_ARM64)
+    DbgPrint("Frames:\n");
+
+    _SEH2_TRY
+    {
+        CONTEXT UnwindContext = *ContextRecord;
+        PRUNTIME_FUNCTION FunctionEntry;
+        ULONG64 ImageBase;
+        ULONG64 EstablisherFrame;
+        ULONG64 PreviousSp;
+        ULONG64 PreviousPc;
+        ULONG64 StackHigh = (ULONG64)NtCurrentTeb()->NtTib.StackBase;
+        PVOID HandlerData;
+        UINT i;
+
+        for (i = 0; i < 128; i++)
+        {
+            PreviousSp = UnwindContext.Sp;
+            PreviousPc = UnwindContext.Pc;
+            FunctionEntry = RtlLookupFunctionEntry(UnwindContext.Pc, &ImageBase, NULL);
+            if (FunctionEntry)
+            {
+                RtlVirtualUnwind(UNW_FLAG_NHANDLER, ImageBase, UnwindContext.Pc, FunctionEntry, &UnwindContext, &HandlerData, &EstablisherFrame, NULL);
+            }
+            else
+            {
+                UnwindContext.Pc = UnwindContext.Lr;
+            }
+
+            if (!UnwindContext.Pc || UnwindContext.Sp < PreviousSp || UnwindContext.Sp > StackHigh) break;
+            if (UnwindContext.Pc == PreviousPc && UnwindContext.Sp == PreviousSp) break;
+            _print_address((const void *)UnwindContext.Pc);
         }
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
