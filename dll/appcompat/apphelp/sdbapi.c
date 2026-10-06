@@ -480,13 +480,16 @@ BOOL WINAPI SdbGetDatabaseVersion(LPCWSTR database, PDWORD VersionHi, PDWORD Ver
 {
     PDB pdb;
 
+    *VersionHi = 0;
+    *VersionLo = 0;
+
     pdb = SdbpOpenDatabase(database, DOS_PATH);
-    if (pdb)
-    {
-        *VersionHi = pdb->major;
-        *VersionLo = pdb->minor;
-        SdbCloseDatabase(pdb);
-    }
+    if (!pdb)
+        return FALSE;
+
+    *VersionHi = pdb->major;
+    *VersionLo = pdb->minor;
+    SdbCloseDatabase(pdb);
 
     return TRUE;
 }
