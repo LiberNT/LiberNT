@@ -5335,7 +5335,11 @@ static const BYTE gif_sig_pattern[12] = "GIF87aGIF89a";
 static const BYTE gif_sig_mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 
 static const WCHAR tiff_codecname[] = L"Built-in TIFF";
+#ifdef __REACTOS__
+static const WCHAR tiff_extension[] = L"*.TIF;*.TIFF";
+#else
 static const WCHAR tiff_extension[] = L"*.TIFF;*.TIF";
+#endif
 static const WCHAR tiff_mimetype[] = L"image/tiff";
 static const WCHAR tiff_format[] = L"TIFF";
 static const BYTE tiff_sig_pattern[] = {0x49,0x49,42,0,0x4d,0x4d,0,42};
