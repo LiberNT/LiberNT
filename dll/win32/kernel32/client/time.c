@@ -107,17 +107,15 @@ WINAPI
 CompareFileTime(IN CONST FILETIME *lpFileTime1,
                 IN CONST FILETIME *lpFileTime2)
 {
-    LARGE_INTEGER Time1, Time2, Diff;
+    ULARGE_INTEGER Time1, Time2;
 
     Time1.LowPart = lpFileTime1->dwLowDateTime;
     Time2.LowPart = lpFileTime2->dwLowDateTime;
     Time1.HighPart = lpFileTime1->dwHighDateTime;
     Time2.HighPart = lpFileTime2->dwHighDateTime;
 
-    Diff.QuadPart = Time1.QuadPart - Time2.QuadPart;
-
-    if (Diff.HighPart < 0) return -1;
-    if (Diff.QuadPart == 0) return 0;
+    if (Time1.QuadPart < Time2.QuadPart) return -1;
+    if (Time1.QuadPart == Time2.QuadPart) return 0;
     return 1;
 }
 
