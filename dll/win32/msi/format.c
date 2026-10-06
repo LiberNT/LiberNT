@@ -91,6 +91,7 @@ struct stack
     struct list items;
 };
 
+#ifndef __REACTOS__
 static struct stack *create_stack(void)
 {
     struct stack *stack = malloc(sizeof(*stack));
@@ -151,6 +152,7 @@ static struct form_str *stack_peek(struct stack *stack)
     return LIST_ENTRY(list_head(&stack->items), struct form_str, entry);
 }
 
+#endif
 static const WCHAR *get_formstr_data(struct format *format, struct form_str *str)
 {
     return &format->deformatted[str->n];
@@ -184,6 +186,7 @@ static WCHAR *format_strdup( struct format *format, const WCHAR *str )
 }
 
 #endif
+#ifndef __REACTOS__
 static WCHAR *dup_formstr( struct format *format, struct form_str *str, int *ret_len )
 {
     WCHAR *val;
@@ -201,6 +204,7 @@ static WCHAR *dup_formstr( struct format *format, struct form_str *str, int *ret
     }
     return val;
 }
+#endif
 
 static WCHAR *deformat_index( struct format *format, struct form_str *str, int *ret_len )
 {
@@ -427,6 +431,7 @@ static WCHAR *deformat_environment( struct format *format, struct form_str *str,
     return ret;
 }
 
+#ifndef __REACTOS__
 static WCHAR *deformat_literal( struct format *format, struct form_str *str, BOOL *propfound,
                                 int *type, int *len )
 {
@@ -494,6 +499,7 @@ static WCHAR *deformat_literal( struct format *format, struct form_str *str, BOO
 
     return replaced;
 }
+#endif
 
 static WCHAR *build_default_format( const MSIRECORD *record )
 {
@@ -518,6 +524,7 @@ static WCHAR *build_default_format( const MSIRECORD *record )
     return ret;
 }
 
+#ifndef __REACTOS__
 static BOOL format_is_number(WCHAR x)
 {
     return ((x >= '0') && (x <= '9'));
@@ -1151,6 +1158,282 @@ done:
     return ERROR_SUCCESS;
 #endif
 }
+#else
+enum format_pass
+{
+    FORMAT_PASS_FIELDS,
+    FORMAT_PASS_PROPERTIES
+};
+
+enum format_result
+{
+    FORMAT_RESULT_NONE,
+    FORMAT_RESULT_FOUND,
+    FORMAT_RESULT_NULL,
+    FORMAT_RESULT_LITERAL
+};
+
+struct format_buffer
+{
+    WCHAR *data;
+    size_t len;
+    size_t size;
+};
+
+struct format_stats
+{
+    BOOL found;
+    BOOL null;
+    BOOL literal;
+};
+
+#define FORMAT_MAX_DEPTH 256
+
+static UINT buffer_append( struct format_buffer *buffer, const WCHAR *str, size_t len )
+{
+    WCHAR *data;
+    size_t size;
+
+    if (len >= INT_MAX - buffer->len) return ERROR_OUTOFMEMORY;
+    if (buffer->len + len + 1 > buffer->size)
+    {
+        size = max( buffer->size * 2, buffer->len + len + 1 );
+        if (size >= (size_t)-1 / sizeof(WCHAR)) return ERROR_OUTOFMEMORY;
+        if (!(data = realloc( buffer->data, size * sizeof(WCHAR) ))) return ERROR_OUTOFMEMORY;
+        buffer->data = data;
+        buffer->size = size;
+    }
+    if (len) memcpy( buffer->data + buffer->len, str, len * sizeof(WCHAR) );
+    buffer->len += len;
+    buffer->data[buffer->len] = 0;
+    return ERROR_SUCCESS;
+}
+
+static const WCHAR *format_match_bracket( const WCHAR *str, const WCHAR *end )
+{
+    const WCHAR *ptr;
+    unsigned int depth = 1;
+
+    if (end - str > 1 && str[1] == '\\')
+    {
+        if (end - str < 4) return NULL;
+        for (ptr = str + 3; ptr < end; ptr++)
+            if (*ptr == ']') return ptr;
+        return NULL;
+    }
+
+    for (ptr = str + 1; ptr < end; ptr++)
+    {
+        if (*ptr == '[')
+        {
+            if (end - ptr > 1 && ptr[1] == '\\')
+            {
+                if (!(ptr = format_match_bracket( ptr, end ))) return NULL;
+            }
+            else depth++;
+        }
+        else if (*ptr == ']' && !--depth) return ptr;
+    }
+    return NULL;
+}
+
+static UINT format_key( struct format *format, enum format_pass pass, WCHAR *key, size_t len,
+                        struct format_buffer *out, enum format_result *result )
+{
+    struct form_str str = {0};
+    WCHAR *value = NULL;
+    int value_len = 0;
+    BOOL number = len != 0;
+    size_t i;
+    UINT r;
+
+    for (i = 0; i < len; i++)
+        if (key[i] < '0' || key[i] > '9') number = FALSE;
+
+    *result = FORMAT_RESULT_NONE;
+    format->deformatted = key;
+    format->error = ERROR_SUCCESS;
+    str.len = len;
+
+    if (number && pass == FORMAT_PASS_FIELDS)
+    {
+        value = deformat_index( format, &str, &value_len );
+        *result = value ? FORMAT_RESULT_FOUND : FORMAT_RESULT_NULL;
+    }
+    else if (number || pass == FORMAT_PASS_FIELDS)
+    {
+        *result = FORMAT_RESULT_LITERAL;
+        if ((r = buffer_append( out, L"[", 1 ))) return r;
+        if ((r = buffer_append( out, key, len ))) return r;
+        return buffer_append( out, L"]", 1 );
+    }
+    else if (!len)
+    {
+        *result = FORMAT_RESULT_NULL;
+        return ERROR_SUCCESS;
+    }
+    else if (key[0] == '\\')
+    {
+        if (len > 1) return buffer_append( out, key + 1, 1 );
+        return ERROR_SUCCESS;
+    }
+    else if (key[0] == '~')
+    {
+        if (len == 1) return buffer_append( out, L"", 1 );
+        return ERROR_SUCCESS;
+    }
+    else if (key[0] == '%' || key[0] == '#' || key[0] == '!' || key[0] == '$')
+    {
+        str.n = 1;
+        str.len = len - 1;
+
+        switch (key[0])
+        {
+        case '%':
+            value = deformat_environment( format, &str, &value_len ); break;
+        case '#':
+            value = deformat_file( format, &str, FALSE, &value_len ); break;
+        case '!':
+            value = deformat_file( format, &str, TRUE, &value_len ); break;
+        case '$':
+            value = deformat_component( format, &str, &value_len ); break;
+        }
+    }
+    else
+    {
+        value = deformat_property( format, &str, &value_len );
+        *result = value ? FORMAT_RESULT_FOUND : FORMAT_RESULT_NULL;
+    }
+
+    if (format->error)
+    {
+        free( value );
+        return format->error;
+    }
+    r = value ? buffer_append( out, value, value_len ) : ERROR_SUCCESS;
+    free( value );
+    return r;
+}
+
+static UINT format_segment( struct format *format, enum format_pass pass, const WCHAR *str,
+                            const WCHAR *end, unsigned int depth, struct format_buffer *out,
+                            struct format_stats *stats )
+{
+    const WCHAR *ptr, *close, *text = str;
+    enum format_result result;
+    UINT r;
+
+    for (ptr = str; ptr < end; ptr++)
+    {
+        struct format_buffer key = {0};
+
+        if (*ptr != '[') continue;
+        if ((r = buffer_append( out, text, ptr - text ))) return r;
+        if (depth >= FORMAT_MAX_DEPTH || !(close = format_match_bracket( ptr, end )))
+            return buffer_append( out, ptr, end - ptr );
+
+        if (ptr[1] == '\\') r = buffer_append( &key, ptr + 1, close - ptr - 1 );
+        else r = format_segment( format, pass, ptr + 1, close, depth + 1, &key, NULL );
+        if (r == ERROR_SUCCESS) r = format_key( format, pass, key.data, key.len, out, &result );
+        free( key.data );
+        if (r != ERROR_SUCCESS) return r;
+
+        if (stats)
+        {
+            if (result == FORMAT_RESULT_FOUND) stats->found = TRUE;
+            else if (result == FORMAT_RESULT_NULL) stats->null = TRUE;
+            else if (result == FORMAT_RESULT_LITERAL) stats->literal = TRUE;
+        }
+        ptr = close;
+        text = close + 1;
+    }
+    return buffer_append( out, text, end - text );
+}
+
+static UINT format_pass( struct format *format, enum format_pass pass, const WCHAR *str, size_t len,
+                         struct format_buffer *out )
+{
+    const WCHAR *end = str + len, *ptr, *close, *text = str;
+    UINT r;
+
+    for (ptr = str; ptr < end; ptr++)
+    {
+        struct format_stats stats = {0};
+        struct format_buffer group = {0};
+
+        if (*ptr != '{') continue;
+        if ((r = format_segment( format, pass, text, ptr, 0, out, NULL ))) return r;
+        text = ptr;
+
+        if (end - ptr > 1 && ptr[1] == '{')
+        {
+            for (close = ptr + 2; end - close > 1; close++)
+                if (close[0] == '}' && close[1] == '}') break;
+            if (end - close <= 1) break;
+            ptr = close + 1;
+            text = close + 2;
+            continue;
+        }
+
+        for (close = ptr + 1; close < end; close++)
+            if (*close == '}') break;
+        if (close == end) break;
+
+        r = format_segment( format, pass, ptr + 1, close, 0, &group, &stats );
+        if (r == ERROR_SUCCESS && close != ptr + 1 && (stats.literal || !stats.null))
+        {
+            if (stats.literal || !stats.found) r = buffer_append( out, L"{", 1 );
+            if (r == ERROR_SUCCESS) r = buffer_append( out, group.data, group.len );
+            if (r == ERROR_SUCCESS && (stats.literal || !stats.found)) r = buffer_append( out, L"}", 1 );
+        }
+        free( group.data );
+        if (r != ERROR_SUCCESS) return r;
+        ptr = close;
+        text = close + 1;
+    }
+    return format_segment( format, pass, text, end, 0, out, NULL );
+}
+
+static DWORD deformat_string_internal(MSIPACKAGE *package, LPCWSTR ptr,
+                                      WCHAR** data, DWORD *len,
+                                      MSIRECORD* record)
+{
+    struct format_buffer fields = {0}, result = {0};
+    struct format format;
+    size_t length;
+    UINT r;
+
+    *data = NULL;
+    *len = 0;
+    if (!ptr) return ERROR_SUCCESS;
+
+    length = wcslen(ptr);
+    if (length >= INT_MAX) return ERROR_OUTOFMEMORY;
+
+    ZeroMemory(&format, sizeof(format));
+    format.package = package;
+    format.record = record;
+
+    if (record) r = format_pass( &format, FORMAT_PASS_FIELDS, ptr, length, &fields );
+    else r = buffer_append( &fields, ptr, length );
+
+    if (r == ERROR_SUCCESS && package)
+    {
+        r = format_pass( &format, FORMAT_PASS_PROPERTIES, fields.data, fields.len, &result );
+        free( fields.data );
+    }
+    else result = fields;
+
+    if (r != ERROR_SUCCESS)
+    {
+        free( result.data );
+        return r;
+    }
+    *data = result.data;
+    *len = result.len;
+    return ERROR_SUCCESS;
+}
+#endif
 
 UINT MSI_FormatRecordW( MSIPACKAGE* package, MSIRECORD* record, LPWSTR buffer,
                         LPDWORD size )
@@ -1163,7 +1446,9 @@ UINT MSI_FormatRecordW( MSIPACKAGE* package, MSIRECORD* record, LPWSTR buffer,
 #else
     MSIRECORD *record_deformated;
 #endif
+#ifndef __REACTOS__
     int field_count, i;
+#endif
 
     dump_record(record);
 
@@ -1173,7 +1458,9 @@ UINT MSI_FormatRecordW( MSIPACKAGE* package, MSIRECORD* record, LPWSTR buffer,
     if (!format) return ERROR_OUTOFMEMORY;
 #endif
 
+#ifndef __REACTOS__
     field_count = MSI_RecordGetFieldCount(record);
+#endif
     record_deformated = MSI_CloneRecord(record);
     if (!record_deformated)
     {
@@ -1186,25 +1473,17 @@ UINT MSI_FormatRecordW( MSIPACKAGE* package, MSIRECORD* record, LPWSTR buffer,
 #else
     MSI_RecordSetStringW(record_deformated, 0, format);
 #endif
+#ifndef __REACTOS__
     for (i = 1; i <= field_count; i++)
     {
         if (MSI_RecordGetString(record, i))
         {
-#ifdef __REACTOS__
-            rc = deformat_string_internal(package, MSI_RecordGetString(record, i), &deformated, &len, NULL);
-            if (rc != ERROR_SUCCESS) goto end;
-            rc = MSI_RecordSetStringW(record_deformated, i, deformated);
-#else
             deformat_string_internal(package, MSI_RecordGetString(record, i), &deformated, &len, NULL);
             MSI_RecordSetStringW(record_deformated, i, deformated);
-#endif
             free(deformated);
-#ifdef __REACTOS__
-            deformated = NULL;
-            if (rc != ERROR_SUCCESS) goto end;
-#endif
         }
     }
+#endif
 
 #ifdef __REACTOS__
     rc = deformat_string_internal(package, format, &deformated, &len, record_deformated);
