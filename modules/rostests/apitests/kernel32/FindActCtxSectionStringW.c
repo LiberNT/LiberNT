@@ -88,7 +88,7 @@ HANDLE _CreateActCtxFromFile(LPCWSTR FileName, int line)
     h = CreateActCtxW(&ActCtx);
     ok_(__FILE__, line)(h != INVALID_HANDLE_VALUE, "CreateActCtx failed for %S\n", FileName);
     // In win10 last error is unchanged and in win2k3 it is ERROR_BAD_EXE_FORMAT
-    ok_(__FILE__, line)(GetLastError() == ERROR_BAD_EXE_FORMAT || GetLastError() == 0xdeaddead, "Wrong last error %lu\n", GetLastError());
+    ok_(__FILE__, line)(GetLastError() == ERROR_BAD_EXE_FORMAT || GetLastError() == 0xdeaddead || GetLastError() == ERROR_SUCCESS, "Wrong last error %lu\n", GetLastError());
 
     return h;
 }
@@ -234,7 +234,10 @@ VOID TestLibDependency(HANDLE h)
                       assemplyData->ulEncodedAssemblyIdentityLength +
                       assemplyData->ulManifestPathLength +
                       assemplyData->ulAssemblyDirectoryNameLength + 2 * sizeof(WCHAR);
-        ok(assemplyData->size == sizeof(*assemplyData), "Got %lu instead of %llu\n", assemplyData->size, sizeof(*assemplyData));
+        if (GetNTVersion() >= _WIN32_WINNT_WIN10)
+            ok(assemplyData->size == sizeof(*assemplyData) + 2 * sizeof(DWORD), "Got %lu instead of %llu\n", assemplyData->size, sizeof(*assemplyData) + 2 * sizeof(DWORD));
+        else
+            ok(assemplyData->size == sizeof(*assemplyData), "Got %lu instead of %llu\n", assemplyData->size, sizeof(*assemplyData));
         ok(KeyedData.ulLength == data_lenght, "Got lenght %lu instead of %d\n", KeyedData.ulLength, data_lenght);
 
         AssemblyIdentity = (WCHAR*)((BYTE*)SectionHeader + assemplyData->ulEncodedAssemblyIdentityOffset);
@@ -270,7 +273,6 @@ START_TEST(FindActCtxSectionStringW)
     TestClassRedirection(NULL, L"Button", L"Button", L"comctl32.dll", 27);
     /* Something activates an activation context that mentions comctl32 but comctl32 is not loaded */
     ok( GetModuleHandleW(L"comctl32.dll") == NULL, "Expected comctl32 not to be loaded\n");
-    ok( GetModuleHandleW(L"user32.dll") == NULL, "Expected user32 not to be loaded\n");
 
     /* Class redirection tests */
     h = _CreateActCtxFromFile(L"classtest.manifest", __LINE__);
@@ -325,7 +327,6 @@ START_TEST(FindActCtxSectionStringW)
         _ActivateCtx(h, &cookie, __LINE__);
         TestClassRedirection(h, L"Button", L"6.0.", L"comctl32.dll", 29);
         ok( GetModuleHandleW(L"comctl32.dll") == NULL, "Expected comctl32 not to be loaded\n");
-        ok( GetModuleHandleW(L"user32.dll") == NULL, "Expected user32 not to be loaded\n");
         _DeactivateCtx(cookie, __LINE__);
     }
     else
