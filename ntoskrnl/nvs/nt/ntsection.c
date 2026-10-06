@@ -812,6 +812,49 @@ MiImageNeedsLowAddress(
 
 static
 NTSTATUS
+MiReplaceImageHeader(
+    _Inout_ PMI_CONTROL_AREA Control,
+    _In_reads_bytes_(SizeOfHeaders) PUCHAR Header,
+    _In_ ULONG SizeOfHeaders)
+{
+    ULONG PageCount = (ULONG)(Control->ImageSize >> PAGE_SHIFT);
+    ULONG HeaderPages = BYTES_TO_PAGES(SizeOfHeaders);
+    NTSTATUS Status = STATUS_SUCCESS;
+    PUCHAR *Pages;
+    ULONG Page;
+
+    Pages = ExAllocatePoolWithTag(NonPagedPool, PageCount * sizeof(PUCHAR), 'rImM');
+    if (Pages == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(Pages, PageCount * sizeof(PUCHAR));
+
+    for (Page = 0; Page < HeaderPages && Page < PageCount; Page++)
+    {
+        ULONG Offset = Page << PAGE_SHIFT;
+        ULONG Bytes = min(SizeOfHeaders - Offset, PAGE_SIZE);
+
+        Pages[Page] = ExAllocatePoolWithTag(NonPagedPool, PAGE_SIZE, 'rImM');
+        if (Pages[Page] == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+        RtlZeroMemory(Pages[Page], PAGE_SIZE);
+        RtlCopyMemory(Pages[Page], Header + Offset, Bytes);
+    }
+
+    if (NT_SUCCESS(Status))
+        Status = MiReplaceImagePages(Control->Segment, Pages, PageCount);
+
+    for (Page = 0; Page < HeaderPages && Page < PageCount; Page++)
+        if (Pages[Page] != NULL)
+            ExFreePoolWithTag(Pages[Page], 'rImM');
+    ExFreePoolWithTag(Pages, 'rImM');
+    return Status;
+}
+
+static
+NTSTATUS
 MiBuildImageControlArea(
     _Inout_ PMI_CONTROL_AREA Control,
     _In_ ULONG64 FileSize)
@@ -829,6 +872,8 @@ MiBuildImageControlArea(
     ULONG LayoutCount = 0;
     ULONG SectionAlignment, FileAlignment, SizeOfHeaders, SizeOfImage;
     ULONG HeaderBytes = (ULONG)min(FileSize, (ULONG64)MI_HEADER_BUFFER_SIZE);
+    BOOLEAN HeaderFromData = FALSE;
+    PMI_CONTROL_AREA Data;
     ULONG Transferred;
     NTSTATUS Status;
     PUCHAR Buffer;
@@ -842,6 +887,13 @@ MiBuildImageControlArea(
     Status = MiPagingIo(Control->FileObject, 0, ROUND_UP(HeaderBytes, 512), Buffer, FALSE, &Transferred);
     if (!NT_SUCCESS(Status))
         goto Done;
+
+    Data = MiReferenceDataControlArea(Control->FileObject->SectionObjectPointer);
+    if (Data != NULL)
+    {
+        HeaderFromData = MiSegmentCopyResident(Data->Segment, Buffer, HeaderBytes);
+        MiDereferenceControlArea(Data);
+    }
 
     Status = STATUS_INVALID_IMAGE_FORMAT;
     DosHeader = (PIMAGE_DOS_HEADER)Buffer;
@@ -1093,6 +1145,15 @@ MiBuildImageControlArea(
     ImageOps.Release = NULL;
     Status = MiSegmentCreate(&MiSystem, MiSegmentImage, Control->ImageSize, MI_PROT_EXECUTE_READ, &ImageOps,
                              Control, Layout, LayoutCount, &Control->Segment);
+    if (NT_SUCCESS(Status) && HeaderFromData && !Information->ImageMappedFlat && SizeOfHeaders <= HeaderBytes)
+    {
+        Status = MiReplaceImageHeader(Control, Buffer, SizeOfHeaders);
+        if (!NT_SUCCESS(Status))
+        {
+            MiSegmentDereferenceAndClose(Control->Segment);
+            Control->Segment = NULL;
+        }
+    }
     if (NT_SUCCESS(Status))
     {
         Status = MiRelocateImageControlArea(Control, DosHeader->e_lfanew,

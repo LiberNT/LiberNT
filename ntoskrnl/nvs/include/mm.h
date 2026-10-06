@@ -513,6 +513,8 @@ NTSTATUS MiSegmentMakeResidentBeyond(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 O
 NTSTATUS MiSegmentPrefetch(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 Offset, _In_ ULONG64 Length);
 VOID MiSegmentDrainReads(_Inout_ PMI_SEGMENT Segment, _Inout_ PMI_ASYNC_DRAIN Drain);
 NTSTATUS MiSegmentMarkDirty(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 Offset, _In_ ULONG64 Length);
+BOOLEAN MiSegmentCopyResident(_Inout_ PMI_SEGMENT Segment, _Inout_ PVOID Buffer,
+                              _In_ ULONG Length);
 
 NTSTATUS MiReadImageSegment(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 Offset,
                             _Out_ PVOID Buffer, _In_ ULONG Length);

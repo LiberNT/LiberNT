@@ -1016,6 +1016,50 @@ MiReadImageSegment(
     return Status;
 }
 
+BOOLEAN
+MiSegmentCopyResident(
+    _Inout_ PMI_SEGMENT Segment,
+    _Inout_ PVOID Buffer,
+    _In_ ULONG Length)
+{
+    BOOLEAN Changed = FALSE;
+    ULONG Done = 0;
+
+    if (Segment->Kind != MiSegmentDataFile)
+        return FALSE;
+
+    MI_MUTEX_ACQUIRE(&Segment->Lock);
+    if (Length > MiSegmentSize(Segment))
+        Length = (ULONG)MiSegmentSize(Segment);
+    while (Done < Length)
+    {
+        ULONG Bytes = (Length - Done < PAGE_SIZE) ? Length - Done : PAGE_SIZE;
+        PMI_PTE Proto = MiSegmentProto(Segment, Done >> PAGE_SHIFT);
+        MI_SOFT_KIND Kind = MiSoftKind(MiArchPteRead(Proto));
+        ULONG Frame;
+        ULONG Same;
+
+        if ((Kind == MiSoftResident || Kind == MiSoftTransition) &&
+            NT_SUCCESS(MiSegmentAcquirePage(Segment, Proto, FALSE, &Frame)))
+        {
+            PUCHAR Mapping = MiPfnMapFrame(&Segment->System->Pfn, Frame);
+
+            for (Same = 0; Same < Bytes && ((PUCHAR)Buffer)[Done + Same] == Mapping[Same]; Same++)
+                ;
+            if (Same != Bytes)
+            {
+                RtlCopyMemory((PUCHAR)Buffer + Done, Mapping, Bytes);
+                Changed = TRUE;
+            }
+            MiPfnUnmapFrame(&Segment->System->Pfn, Mapping);
+            MiSegmentReleasePage(Segment, Proto, Frame);
+        }
+        Done += Bytes;
+    }
+    MI_MUTEX_RELEASE(&Segment->Lock);
+    return Changed;
+}
+
 NTSTATUS
 MiReplaceImagePages(
     _Inout_ PMI_SEGMENT Segment,
