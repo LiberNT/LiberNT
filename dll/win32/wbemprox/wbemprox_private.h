@@ -142,6 +142,9 @@ struct array
 struct field
 {
     UINT type;
+#ifdef __REACTOS__
+    BOOL assigned;
+#endif
     union
     {
         LONGLONG ival;

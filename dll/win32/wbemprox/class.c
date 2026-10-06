@@ -238,6 +238,9 @@ static struct record *create_record( struct table *table )
     {
         record->fields[i].type    = table->columns[i].type;
         record->fields[i].u.ival  = 0;
+#ifdef __REACTOS__
+        record->fields[i].assigned = FALSE;
+#endif
     }
     record->count = table->num_cols;
     record->table = grab_table( table );
@@ -386,6 +389,11 @@ static HRESULT record_get_value( const struct record *record, UINT index, VARIAN
         FIXME("unhandled type %u\n", record->fields[index].type);
         return WBEM_E_INVALID_PARAMETER;
     }
+#ifdef __REACTOS__
+    if (!record->fields[index].assigned &&
+        (record->fields[index].type == CIM_SINT32 || record->fields[index].type == CIM_UINT32))
+        vartype = VT_NULL;
+#endif
     V_VT( var ) = vartype;
     return S_OK;
 }
@@ -422,6 +430,9 @@ static HRESULT record_set_value( struct record *record, UINT index, VARIANT *var
 
     if ((hr = to_longlong( var, &val, &type )) != S_OK) return hr;
     if (type != record->fields[index].type) return WBEM_E_TYPE_MISMATCH;
+#ifdef __REACTOS__
+    record->fields[index].assigned = TRUE;
+#endif
 
     if (type & CIM_FLAG_ARRAY)
     {
