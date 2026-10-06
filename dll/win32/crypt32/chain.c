@@ -3077,6 +3077,17 @@ static BOOL WINAPI verify_base_policy(LPCSTR szPolicyOID,
          CERT_TRUST_IS_UNTRUSTED_ROOT, &pPolicyStatus->lChainIndex,
          &pPolicyStatus->lElementIndex);
     }
+#ifdef __REACTOS__
+    if (!pPolicyStatus->dwError &&
+     pChainContext->TrustStatus.dwErrorStatus & CERT_TRUST_IS_PARTIAL_CHAIN &&
+     !(checks & CERT_CHAIN_POLICY_ALLOW_UNKNOWN_CA_FLAG))
+    {
+        pPolicyStatus->dwError = CERT_E_CHAINING;
+        find_element_with_error(pChainContext,
+         CERT_TRUST_IS_PARTIAL_CHAIN, &pPolicyStatus->lChainIndex,
+         &pPolicyStatus->lElementIndex);
+    }
+#endif
     if (!pPolicyStatus->dwError &&
      pChainContext->TrustStatus.dwErrorStatus & CERT_TRUST_IS_NOT_TIME_VALID &&
      !(checks & CERT_CHAIN_POLICY_IGNORE_NOT_TIME_VALID_FLAG))

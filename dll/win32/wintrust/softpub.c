@@ -1265,6 +1265,16 @@ HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
         ret = TRUE;
         for (i = 0; ret && i < data->csSigners; i++)
         {
+#ifdef __REACTOS__
+            BYTE hash[64];
+            DWORD size = sizeof(hash);
+
+            if (CertGetCertificateContextProperty(
+             data->pasSigners[i].pasCertChain[0].pCert,
+             CERT_SIGNATURE_HASH_PROP_ID, hash, &size))
+            {
+                CRYPT_HASH_BLOB hashBlob = { size, hash };
+#else
             BYTE hash[20];
             DWORD size = sizeof(hash);
 
@@ -1273,6 +1283,7 @@ HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
              data->pasSigners[i].pasCertChain[0].pCert,
              CERT_SIGNATURE_HASH_PROP_ID, hash, &size)))
             {
+#endif
                 static const WCHAR disallowedW[] =
                  { 'D','i','s','a','l','l','o','w','e','d',0 };
                 HCERTSTORE disallowed = CertOpenStore(CERT_STORE_PROV_SYSTEM_W,
@@ -1281,9 +1292,15 @@ HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
 
                 if (disallowed)
                 {
+#ifdef __REACTOS__
+                    PCCERT_CONTEXT found = CertFindCertificateInStore(
+                     disallowed, X509_ASN_ENCODING, 0, CERT_FIND_SIGNATURE_HASH,
+                     &hashBlob, NULL);
+#else
                     PCCERT_CONTEXT found = CertFindCertificateInStore(
                      disallowed, X509_ASN_ENCODING, 0, CERT_FIND_SIGNATURE_HASH,
                      hash, NULL);
+#endif
 
                     if (found)
                     {
@@ -1295,7 +1312,11 @@ HRESULT WINAPI SoftpubAuthenticode(CRYPT_PROVIDER_DATA *data)
                     CertCloseStore(disallowed, 0);
                 }
             }
+#ifdef __REACTOS__
+            if (ret && !(data->pWintrustData->dwProvFlags & WTD_HASH_ONLY_FLAG))
+#else
             if (ret)
+#endif
             {
                 CERT_CHAIN_POLICY_PARA policyPara = { sizeof(policyPara), 0 };
 
