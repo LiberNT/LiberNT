@@ -42,7 +42,7 @@
 DWORD NFS41D_VERSION = 0;
 
 #ifndef __REACTOS__
-static const char FILE_NETCONFIG[] = "C:\\ReactOS\\System32\\drivers\\etc\\netconfig";
+static const char FILE_NETCONFIG[] = "C:\\Windows\\System32\\drivers\\etc\\netconfig";
 #endif
 
 /* Globals */

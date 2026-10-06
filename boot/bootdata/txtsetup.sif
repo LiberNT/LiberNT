@@ -281,7 +281,7 @@ inport = inport.sys
 Cabinet = reactos.cab
 
 [SetupData]
-DefaultPath = \ReactOS
+DefaultPath = \Windows
 SetupDebugOptions = "/DEBUG /KDSERIAL /DEBUGPORT=COM1 /FIRSTCHANCE"
 ;SetupDebugOptions = "/DEBUG /SOS /DEBUGPORT=SCREEN"
 OsLoadOptions = "/FASTDETECT /NOGUIBOOT /NODEBUG"

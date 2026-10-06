@@ -76,7 +76,7 @@ struct idmap_lookup {
 
 #ifndef __REACTOS__
 /* configuration */
-static const char CONFIG_FILENAME[] = "C:\\ReactOS\\System32\\drivers\\etc\\ms-nfs41-idmap.conf";
+static const char CONFIG_FILENAME[] = "C:\\Windows\\System32\\drivers\\etc\\ms-nfs41-idmap.conf";
 #endif
 
 struct idmap_config {

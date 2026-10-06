@@ -36,7 +36,7 @@ function(freeldr_ini_add_http_boot SOURCE OUTPUT URL STATIC_IP DEFAULT_OS)
     string(REPLACE "${_os_marker}"
                    "HttpBoot=\"ReactOS HTTP Boot - Debug\""
                    _contents "${_contents}")
-    set(_http_boot_entry "[HttpBoot]\nBootType=Windows2003\nSystemPath=ramdisk(0)\\reactos\nOptions=/KERNEL=ntkrnlmp.exe /DEBUG /DEBUGPORT=COM1 /BAUDRATE=115200 /SOS /FASTDETECT /MININT /LOADSYMBOLS\nHttpBootUrl=${URL}")
+    set(_http_boot_entry "[HttpBoot]\nBootType=Windows2003\nSystemPath=ramdisk(0)\\Windows\nOptions=/KERNEL=ntkrnlmp.exe /DEBUG /DEBUGPORT=COM1 /BAUDRATE=115200 /SOS /FASTDETECT /MININT /LOADSYMBOLS\nHttpBootUrl=${URL}")
     if(STATIC_IP)
         string(APPEND _http_boot_entry "\nHttpBootIp=${STATIC_IP}")
     endif()
@@ -316,6 +316,7 @@ function(image_list_command _image _var)
         -DBASE=${CMAKE_CURRENT_BINARY_DIR}/${_image}.$<CONFIG>.lst
         -DOPTIONAL=${CMAKE_CURRENT_BINARY_DIR}/${_image}.optional.$<CONFIG>.lst
         -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/${_image}.effective.lst
+        -DSYSTEM_DIR=Windows
         -P ${REACTOS_SOURCE_DIR}/sdk/cmake/optional_files.cmake PARENT_SCOPE)
 endfunction()
 

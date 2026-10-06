@@ -37,7 +37,7 @@ Przykłady:\n\
     WHERE mojplik*.exe\n\
     WHERE /F /T mspaint\n\
     WHERE $WINDIR:notepad mojplik???\n\
-    WHERE C:\\ReactOS;C:\\ReactOS\\system32:exp*.exe\n\
+    WHERE C:\\Windows;C:\\Windows\\system32:exp*.exe\n\
     WHERE /R ""C:\\Program Files"" *.dll\n"
 
     IDS_BAD_ARG "BŁĄD: Nieprawidłowy argument - '%ls'.\n"

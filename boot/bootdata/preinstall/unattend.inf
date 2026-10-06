@@ -5,10 +5,10 @@ Signature = "$ReactOS$"
 ; First boot runs InstallReactOS() automatically
 UnattendSetupEnabled = yes
 
-; Install to \Device\Harddisk0\Partition1\ReactOS
+; Install to \Device\Harddisk0\Partition1\Windows
 DestinationDiskNumber = 0
 DestinationPartitionNumber = 1
-InstallationDirectory=ReactOS
+InstallationDirectory=Windows
 
 FullName="ReactOS User"
 ComputerName="REACTOS"

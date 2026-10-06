@@ -38,7 +38,7 @@ NOT: Bu araç, arama başarılı olursa 0, dosya bulunamazsa 1 ve bir hata\n\
     WHERE myfile*.exe\n\
     WHERE /F /T mspaint\n\
     WHERE $WINDIR:notepad myfile???\n\
-    WHERE C:\\ReactOS;C:\\ReactOS\\system32:exp*.exe\n\
+    WHERE C:\\Windows;C:\\Windows\\system32:exp*.exe\n\
     WHERE /R ""C:\\Program Files"" *.dll\n"
     
     IDS_BAD_ARG "HATA: Geçersiz seçenek -'%ls'.\n"

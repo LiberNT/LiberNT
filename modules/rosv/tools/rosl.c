@@ -3413,9 +3413,9 @@ static BOOL GetExeDir(char *buf, DWORD bufSize)
  * Resolve kernel path for disk-backed boots.
  *
  * Preferred order:
- *   1) Bundled kernel path (e.g. X:\reactos\system32\rosv\vmlinuz)
- *   2) Installed alongside VHDX: <disk_drive>:\reactos\system32\rosv\vmlinuz
- *      (e.g. C:\reactos\system32\rosv\vmlinuz when C:\...\ubuntu24.vhdx found)
+ *   1) Bundled kernel path (e.g. X:\Windows\system32\rosv\vmlinuz)
+ *   2) Installed alongside VHDX: <disk_drive>:\Windows\system32\rosv\vmlinuz
+ *      (e.g. C:\Windows\system32\rosv\vmlinuz when C:\...\ubuntu24.vhdx found)
  *   3) Root-level fallback: <disk_drive>:\vmlinuz
  */
 static const char *ResolveDiskBootKernelPath(const char *defaultKernelPath,
@@ -3436,7 +3436,7 @@ static const char *ResolveDiskBootKernelPath(const char *defaultKernelPath,
     {
         /* Probe 2: standard ReactOS installation path on the data drive */
         _snprintf(fallbackBuf, fallbackBufSize,
-                  "%c:\\reactos\\system32\\rosv\\vmlinuz", diskImagePath[0]);
+                  "%c:\\Windows\\system32\\rosv\\vmlinuz", diskImagePath[0]);
         fallbackBuf[fallbackBufSize - 1] = '\0';
         if (GetFileAttributesA(fallbackBuf) != INVALID_FILE_ATTRIBUTES)
             return fallbackBuf;
@@ -3861,7 +3861,7 @@ int main(int argc, char *argv[])
             static char scannedDisk[MAX_PATH];
             static const char *Suffixes[] = {
                 "\\ubuntu24.vhdx",
-                "\\reactos\\system32\\rosv\\ubuntu24.vhdx"
+                "\\Windows\\system32\\rosv\\ubuntu24.vhdx"
             };
             char fallbackDrive = 0;
             DWORD startTick = GetTickCount();
@@ -3873,7 +3873,7 @@ int main(int argc, char *argv[])
             _snprintf(defaultDisk, sizeof(defaultDisk), "%srosv\\ubuntu24.vhdx", exeDir);
             defaultDisk[sizeof(defaultDisk) - 1] = '\0';
 
-            /* Bundled VHDX next to the kernel (e.g. X:\reactos\system32\rosv\).
+            /* Bundled VHDX next to the kernel (e.g. X:\Windows\system32\rosv\).
              * If present, use it immediately — no need to poll data drives. */
             if (GetFileAttributesA(defaultDisk) != INVALID_FILE_ATTRIBUTES)
             {

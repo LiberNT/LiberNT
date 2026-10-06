@@ -162,7 +162,7 @@ target_include_directories(glmark2 BEFORE PRIVATE
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib)
 target_compile_definitions(glmark2 PRIVATE
     GLMARK_VERSION="2023.01"
-    GLMARK_DATA_PATH="C:/ReactOS/system32/glmark2"
+    GLMARK_DATA_PATH="C:/Windows/system32/glmark2"
     GLMARK2_EXECUTABLE="glmark2"
     GLMARK2_USE_GL=1
     GLMARK2_USE_WIN32=1
