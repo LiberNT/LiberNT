@@ -5901,6 +5901,8 @@ SetupDiGetDeviceInstallParamsW(
     return ret;
 }
 
+#define DI_NOSYNCPROCESSING 0x00400000L
+
 static BOOL
 CheckDeviceInstallParameters(
         IN PSP_DEVINSTALL_PARAMS_W DeviceInstallParams)
@@ -5925,6 +5927,7 @@ CheckDeviceInstallParameters(
         DI_FLAGSEX_CI_FAILED |                /* 0x00000004 */
         DI_FLAGSEX_DIDINFOLIST |              /* 0x00000010 */
         DI_FLAGSEX_DIDCOMPATINFO |            /* 0x00000020 */
+        DI_FLAGSEX_SETFAILEDINSTALL |
         DI_FLAGSEX_ALLOWEXCLUDEDDRVS |        /* 0x00000800 */
         DI_FLAGSEX_NO_DRVREG_MODIFY |         /* 0x00008000 */
         DI_FLAGSEX_INSTALLEDDRIVER;           /* 0x04000000 */
@@ -5936,21 +5939,19 @@ CheckDeviceInstallParameters(
      * It should be checked before accessing to other values
      * of the SP_DEVINSTALL_PARAMS structure */
 
-    if (DeviceInstallParams->Flags & ~SupportedFlags)
-    {
-        FIXME("Unknown Flags: 0x%08lx\n", DeviceInstallParams->Flags & ~SupportedFlags);
+    if (DeviceInstallParams->Flags & DI_NOSYNCPROCESSING)
         SetLastError(ERROR_INVALID_FLAGS);
-    }
-    else if (DeviceInstallParams->FlagsEx & ~SupportedFlagsEx)
-    {
-        FIXME("Unknown FlagsEx: 0x%08lx\n", DeviceInstallParams->FlagsEx & ~SupportedFlagsEx);
-        SetLastError(ERROR_INVALID_FLAGS);
-    }
+    else if (DeviceInstallParams->FlagsEx & DI_FLAGSEX_ALTPLATFORM_DRVSEARCH)
+        SetLastError(ERROR_INVALID_PARAMETER);
     else if ((DeviceInstallParams->Flags & DI_NOVCP)
         && (DeviceInstallParams->FileQueue == NULL || DeviceInstallParams->FileQueue == (HSPFILEQ)INVALID_HANDLE_VALUE))
         SetLastError(ERROR_INVALID_USER_BUFFER);
     else
     {
+        if (DeviceInstallParams->Flags & ~SupportedFlags)
+            FIXME("Flags not implemented: 0x%08lx\n", DeviceInstallParams->Flags & ~SupportedFlags);
+        if (DeviceInstallParams->FlagsEx & ~SupportedFlagsEx)
+            FIXME("FlagsEx not implemented: 0x%08lx\n", DeviceInstallParams->FlagsEx & ~SupportedFlagsEx);
         /* FIXME: check Reserved field */
         ret = TRUE;
     }
