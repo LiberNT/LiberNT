@@ -419,6 +419,25 @@ MasterFileTable::InsertFileNameLink(
     Value->ParentFileReference = ParentReference;
     Value->NameLength = (UCHAR)NameLength;
     Value->NameType = NAME_TYPE_POSIX;
+    if (!(File->Header->Flags & FR_IS_DIRECTORY))
+    {
+        PAttribute DataAttribute =
+            File->FindAttributeInRecord(TypeData, NULL, NULL);
+
+        if (DataAttribute && !DataAttribute->IsNonResident)
+        {
+            Value->AllocatedSize = 0;
+            Value->DataSize = DataAttribute->Resident.DataLength;
+        }
+        else if (DataAttribute && DataAttribute->NonResident.FirstVCN == 0)
+        {
+            Value->AllocatedSize =
+                (DataAttribute->Flags & (ATTR_COMPRESSION_MASK | ATTR_SPARSE))
+                    ? DataAttribute->NonResident.CompressedDataSize
+                    : DataAttribute->NonResident.AllocatedSize;
+            Value->DataSize = DataAttribute->NonResident.DataSize;
+        }
+    }
     RtlCopyMemory(Value->Name,
                   Name,
                   NameLength * sizeof(WCHAR));
