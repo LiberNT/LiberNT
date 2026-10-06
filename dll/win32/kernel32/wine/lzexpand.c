@@ -342,7 +342,25 @@ INT WINAPI GetExpandedNameW( LPWSTR in, LPWSTR out )
 /***********************************************************************
  *           LZRead   (KERNEL32.@)
  */
+#ifdef __REACTOS__
+static INT WINAPI LZReadData( HFILE fd, LPSTR vbuf, INT toread );
+
 INT WINAPI LZRead( HFILE fd, LPSTR vbuf, INT toread )
+{
+	struct	lzstate	*lzs;
+	INT	ret;
+
+	ret = LZReadData(fd, vbuf, toread);
+	if (ret >= 0 && ret < toread && (lzs = GET_LZ_STATE(fd)) &&
+	    lzs->realcurrent < lzs->reallength)
+		return LZERROR_READ;
+	return ret;
+}
+
+static INT WINAPI LZReadData( HFILE fd, LPSTR vbuf, INT toread )
+#else
+INT WINAPI LZRead( HFILE fd, LPSTR vbuf, INT toread )
+#endif
 {
 	int	howmuch;
 	BYTE	b,*buf;
@@ -500,7 +518,11 @@ LONG WINAPI LZCopy( HFILE src, HFILE dest )
 		xread=_lread;
 #endif
 	else
+#ifdef __REACTOS__
+		xread=(_readfun)LZReadData;
+#else
 		xread=(_readfun)LZRead;
+#endif
 	len=0;
 	while (1) {
 		ret=xread(src,buf,BUFLEN);
