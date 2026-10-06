@@ -4,6 +4,10 @@
 
 int *_errno(void);
 
+#define BESSEL_LARGE 4503599627370496.0
+#define BESSEL_PI 3.14159265358979323846
+#define BESSEL_PI_4 0.78539816339744830962
+
 static double MakeDouble(unsigned long long Bits)
 {
   union { unsigned long long l; double d; } u;
@@ -21,6 +25,11 @@ double _j0(double num)
     *_errno() = EDOM;
     if (!_isnan(num))
       return MakeDouble(0xFFF8000000000000ULL);
+  }
+  if (fabs(num) >= BESSEL_LARGE)
+  {
+    double x = fabs(num);
+    return sqrt(2.0 / (BESSEL_PI * x)) * cos(x - BESSEL_PI_4);
   }
   return __ieee754_j0(num);
 }
@@ -45,5 +54,7 @@ double _y0(double num)
   }
   if (_isnan(num))
     *_errno() = EDOM;
+  if (num >= BESSEL_LARGE)
+    return sqrt(2.0 / (BESSEL_PI * num)) * sin(num - BESSEL_PI_4);
   return __ieee754_y0(num);
 }
