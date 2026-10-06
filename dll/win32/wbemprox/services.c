@@ -217,6 +217,9 @@ static HRESULT queue_async( struct async_header *async )
 struct wbem_services
 {
     IWbemServices IWbemServices_iface;
+#ifdef __REACTOS__
+    IClientSecurity IClientSecurity_iface;
+#endif
     LONG refs;
     CRITICAL_SECTION cs;
     enum wbm_namespace ns;
@@ -278,8 +281,12 @@ static HRESULT WINAPI wbem_services_QueryInterface(
     }
     else if ( IsEqualGUID( riid, &IID_IClientSecurity ) )
     {
+#ifdef __REACTOS__
+        *ppvObject = &ws->IClientSecurity_iface;
+#else
         *ppvObject = &client_security;
         return S_OK;
+#endif
     }
     else
     {
@@ -289,6 +296,46 @@ static HRESULT WINAPI wbem_services_QueryInterface(
     IWbemServices_AddRef( iface );
     return S_OK;
 }
+
+#ifdef __REACTOS__
+static inline struct wbem_services *services_from_IClientSecurity( IClientSecurity *iface )
+{
+    return CONTAINING_RECORD( iface, struct wbem_services, IClientSecurity_iface );
+}
+
+static HRESULT WINAPI services_security_QueryInterface(
+    IClientSecurity *iface,
+    REFIID riid,
+    void **ppvObject )
+{
+    struct wbem_services *ws = services_from_IClientSecurity( iface );
+    return IWbemServices_QueryInterface( &ws->IWbemServices_iface, riid, ppvObject );
+}
+
+static ULONG WINAPI services_security_AddRef(
+    IClientSecurity *iface )
+{
+    struct wbem_services *ws = services_from_IClientSecurity( iface );
+    return IWbemServices_AddRef( &ws->IWbemServices_iface );
+}
+
+static ULONG WINAPI services_security_Release(
+    IClientSecurity *iface )
+{
+    struct wbem_services *ws = services_from_IClientSecurity( iface );
+    return IWbemServices_Release( &ws->IWbemServices_iface );
+}
+
+static const IClientSecurityVtbl services_security_vtbl =
+{
+    services_security_QueryInterface,
+    services_security_AddRef,
+    services_security_Release,
+    client_security_QueryBlanket,
+    client_security_SetBlanket,
+    client_security_CopyProxy
+};
+#endif
 
 static HRESULT WINAPI wbem_services_OpenNamespace(
     IWbemServices *iface,
@@ -1006,6 +1053,9 @@ HRESULT WbemServices_create( const WCHAR *namespace, IWbemContext *context, LPVO
     if (!(ws = calloc( 1, sizeof(*ws) ))) return E_OUTOFMEMORY;
 
     ws->IWbemServices_iface.lpVtbl = &wbem_services_vtbl;
+#ifdef __REACTOS__
+    ws->IClientSecurity_iface.lpVtbl = &services_security_vtbl;
+#endif
     ws->refs      = 1;
     ws->ns        = ns;
     InitializeCriticalSectionEx( &ws->cs, 0, RTL_CRITICAL_SECTION_FLAG_FORCE_DEBUG_INFO );
