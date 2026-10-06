@@ -1,5 +1,6 @@
 
-Most icons are from the Tango icon set. The other ones come from:
+The icons listed in Adwaita.txt are from the Adwaita icon theme of the GNOME
+Project. Some of the others are from the Tango icon set. The rest come from:
 
 OpenClipArt license: https://openclipart.org/share
 

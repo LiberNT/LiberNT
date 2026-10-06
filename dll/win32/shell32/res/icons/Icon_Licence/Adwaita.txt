@@ -1,0 +1,245 @@
+The following icons are unmodified icons from the Adwaita icon theme of the
+GNOME Project (http://www.gnome.org), taken from
+https://gitlab.gnome.org/GNOME/adwaita-icon-theme and, where the name is
+prefixed with AdwaitaLegacy, from
+https://gitlab.gnome.org/GNOME/adwaita-icon-theme-legacy. Both themes state:
+
+  This work is licenced under the terms of either the GNU LGPL v3 or
+  Creative Commons Attribution-Share Alike 3.0 United States License.
+
+  To view a copy of the CC-BY-SA licence, visit
+  http://creativecommons.org/licenses/by-sa/3.0/ or send a letter to Creative
+  Commons, 171 Second Street, Suite 300, San Francisco, California 94105, USA.
+
+  When attributing the artwork, using "GNOME Project" is enough.
+  Please link to http://www.gnome.org where available.
+
+The source artwork is in media/graphics/adwaita-icons.
+
+1.ico          mimetypes/application-x-generic
+2.ico          mimetypes/x-office-document
+3.ico          mimetypes/application-x-executable
+4.ico          places/folder
+5.ico          status/folder-open
+6.ico          AdwaitaLegacy legacy/media-floppy
+7.ico          AdwaitaLegacy legacy/media-floppy
+8.ico          devices/drive-removable-media
+9.ico          devices/drive-harddisk
+10.ico         places/folder-remote
+11.ico         AdwaitaLegacy legacy/network-offline
+12.ico         devices/drive-optical
+13.ico         mimetypes/application-x-firmware
+14.ico         AdwaitaLegacy legacy/applications-internet
+15.ico         places/network-server
+16.ico         devices/computer
+17.ico         devices/printer
+18.ico         places/network-workgroup
+19.ico         places/network-workgroup
+20.ico         AdwaitaLegacy legacy/applications-other
+21.ico         AdwaitaLegacy legacy/document-open-recent
+22.ico         AdwaitaLegacy legacy/preferences-system
+23.ico         AdwaitaLegacy legacy/system-search
+24.ico         AdwaitaLegacy legacy/help-browser
+25.ico         AdwaitaLegacy legacy/system-run
+26.ico         AdwaitaLegacy legacy/preferences-desktop-screensaver
+27.ico         AdwaitaLegacy legacy/media-eject
+28.ico         AdwaitaLegacy legacy/system-shutdown
+29.ico         AdwaitaLegacy emblems/emblem-shared
+30.ico         AdwaitaLegacy emblems/emblem-symbolic-link
+32.ico         places/user-trash
+33.ico         status/user-trash-full
+34.ico         AdwaitaLegacy legacy/modem
+35.ico         places/user-desktop
+36.ico         AdwaitaLegacy legacy/preferences-system
+37.ico         AdwaitaLegacy legacy/applications-other
+38.ico         devices/printer
+39.ico         AdwaitaLegacy legacy/preferences-desktop-font
+40.ico         AdwaitaLegacy legacy/preferences-system-windows
+41.ico         devices/media-optical
+43.ico         devices/computer
+44.ico         AdwaitaLegacy legacy/emblem-favorite
+45.ico         AdwaitaLegacy legacy/system-log-out
+46.ico         AdwaitaLegacy legacy/system-file-manager
+47.ico         AdwaitaLegacy legacy/system-software-update
+48.ico         AdwaitaLegacy legacy/system-lock-screen
+49.ico         AdwaitaLegacy legacy/network-offline
+54.ico         AdwaitaLegacy legacy/network-offline
+133.ico        AdwaitaLegacy legacy/edit-copy
+134.ico        AdwaitaLegacy legacy/document-open
+135.ico        AdwaitaLegacy legacy/preferences-system-search
+137.ico        AdwaitaLegacy legacy/preferences-system
+138.ico        devices/printer
+139.ico        devices/printer
+140.ico        devices/printer-network
+141.ico        AdwaitaLegacy legacy/document-print
+142.ico        status/user-trash-full
+143.ico        status/user-trash-full
+144.ico        status/user-trash-full
+145.ico        AdwaitaLegacy legacy/view-refresh
+146.ico        places/folder-drag-accept
+147.ico        places/folder
+148.ico        AdwaitaLegacy legacy/preferences-other
+151.ico        AdwaitaLegacy legacy/document-properties
+152.ico        mimetypes/text-x-generic
+153.ico        mimetypes/text-x-script
+154.ico        mimetypes/application-x-sharedlib
+155.ico        mimetypes/font-x-generic
+156.ico        mimetypes/font-x-generic
+157.ico        mimetypes/font-x-generic
+160.ico        AdwaitaLegacy legacy/system-run
+161.ico        AdwaitaLegacy legacy/edit-delete
+165.ico        AdwaitaLegacy legacy/document-save
+166.ico        devices/drive-harddisk
+167.ico        devices/drive-multidisk
+168.ico        devices/printer
+169.ico        devices/printer-network
+170.ico        AdwaitaLegacy legacy/document-print
+171.ico        mimetypes/x-office-presentation
+172.ico        places/folder-remote
+173.ico        AdwaitaLegacy legacy/emblem-favorite
+174.ico        AdwaitaLegacy legacy/document-properties
+175.ico        AdwaitaLegacy legacy/preferences-system-network
+176.ico        AdwaitaLegacy legacy/network-idle
+177.ico        AdwaitaLegacy legacy/preferences-system-windows
+178.ico        AdwaitaLegacy legacy/applications-internet
+179.ico        AdwaitaLegacy legacy/network-transmit-receive
+180.ico        AdwaitaLegacy legacy/preferences-system-windows
+181.ico        AdwaitaLegacy legacy/preferences-desktop-wallpaper
+182.ico        AdwaitaLegacy legacy/system-file-manager
+183.ico        AdwaitaLegacy legacy/system-file-manager
+184.ico        AdwaitaLegacy legacy/preferences-system-windows
+185.ico        AdwaitaLegacy legacy/window-new
+186.ico        devices/input-mouse
+187.ico        devices/input-mouse
+191.ico        places/user-trash
+192.ico        status/user-trash-full
+193.ico        places/folder-remote
+194.ico        AdwaitaLegacy legacy/security-high
+196.ico        AdwaitaLegacy legacy/modem
+197.ico        AdwaitaLegacy legacy/modem
+198.ico        AdwaitaLegacy legacy/modem
+199.ico        AdwaitaLegacy legacy/modem
+200.ico        AdwaitaLegacy legacy/process-stop
+210.ico        AdwaitaLegacy legacy/system-file-manager
+220.ico        AdwaitaLegacy legacy/system-users
+221.ico        AdwaitaLegacy legacy/system-shutdown
+222.ico        devices/media-optical
+223.ico        AdwaitaLegacy legacy/edit-copy
+224.ico        mimetypes/video-x-generic
+225.ico        mimetypes/audio-x-generic
+226.ico        mimetypes/image-x-generic
+227.ico        mimetypes/video-x-generic
+228.ico        devices/media-optical
+229.ico        devices/input-mouse
+233.ico        AdwaitaLegacy legacy/media-floppy
+234.ico        AdwaitaLegacy legacy/dialog-error
+235.ico        places/folder-documents
+236.ico        places/folder-pictures
+237.ico        places/folder-music
+238.ico        places/folder-videos
+240.ico        status/user-trash-full
+241.ico        AdwaitaLegacy legacy/document-send
+243.ico        AdwaitaLegacy legacy/edit-copy
+244.ico        AdwaitaLegacy legacy/applications-internet
+245.ico        devices/printer
+246.ico        AdwaitaLegacy legacy/media-playback-start
+247.ico        mimetypes/audio-x-generic
+248.ico        AdwaitaLegacy legacy/camera-photo
+249.ico        mimetypes/x-office-presentation
+250.ico        devices/video-display
+251.ico        mimetypes/image-x-generic
+252.ico        AdwaitaLegacy legacy/document-print
+253.ico        AdwaitaLegacy legacy/emblem-default
+254.ico        AdwaitaLegacy legacy/process-stop
+255.ico        AdwaitaLegacy legacy/edit-undo
+256.ico        places/folder-drag-accept
+257.ico        AdwaitaLegacy legacy/preferences-system-network
+258.ico        places/folder-remote
+259.ico        places/network-workgroup
+260.ico        devices/media-optical
+261.ico        devices/media-optical
+262.ico        devices/media-optical
+263.ico        AdwaitaLegacy legacy/help-browser
+264.ico        places/folder-drag-accept
+265.ico        AdwaitaLegacy legacy/mail-send
+266.ico        devices/media-optical
+267.ico        places/folder-publicshare
+268.ico        AdwaitaLegacy legacy/preferences-desktop-accessibility
+269.ico        AdwaitaLegacy legacy/system-users
+270.ico        AdwaitaLegacy legacy/preferences-desktop-theme
+271.ico        AdwaitaLegacy legacy/system-software-install
+272.ico        AdwaitaLegacy legacy/preferences-desktop-peripherals
+273.ico        AdwaitaLegacy legacy/preferences-system-network
+274.ico        AdwaitaLegacy legacy/applications-system
+275.ico        mimetypes/x-office-presentation
+276.ico        AdwaitaLegacy legacy/preferences-desktop-locale
+277.ico        AdwaitaLegacy legacy/audio-speakers
+278.ico        AdwaitaLegacy legacy/utilities-terminal
+279.ico        AdwaitaLegacy legacy/system-users
+281.ico        AdwaitaLegacy legacy/system-search
+282.ico        devices/computer
+283.ico        devices/input-keyboard
+289.ico        AdwaitaLegacy legacy/help-contents
+290.ico        AdwaitaLegacy legacy/go-next
+291.ico        devices/drive-optical
+292.ico        devices/media-optical
+293.ico        devices/media-optical
+294.ico        devices/media-optical
+295.ico        devices/media-optical
+296.ico        devices/media-optical
+297.ico        devices/media-optical
+298.ico        devices/media-optical
+299.ico        AdwaitaLegacy legacy/multimedia-player
+300.ico        places/network-server
+301.ico        places/network-server
+302.ico        devices/media-optical
+303.ico        devices/media-flash
+304.ico        devices/media-optical
+305.ico        AdwaitaLegacy legacy/media-floppy
+307.ico        devices/media-flash
+308.ico        devices/media-flash
+309.ico        AdwaitaLegacy legacy/camera-photo
+310.ico        devices/phone
+311.ico        devices/printer-network
+312.ico        devices/drive-removable-media
+313.ico        devices/drive-removable-media
+314.ico        AdwaitaLegacy legacy/pda
+315.ico        devices/scanner
+316.ico        AdwaitaLegacy legacy/camera-photo
+317.ico        AdwaitaLegacy legacy/camera-video
+318.ico        devices/media-optical
+319.ico        AdwaitaLegacy legacy/folder-new
+320.ico        devices/media-optical
+321.ico        AdwaitaLegacy legacy/preferences-system
+322.ico        AdwaitaLegacy legacy/emblem-favorite
+323.ico        AdwaitaLegacy legacy/system-search
+324.ico        AdwaitaLegacy legacy/help-browser
+325.ico        AdwaitaLegacy legacy/system-log-out
+326.ico        AdwaitaLegacy legacy/applications-other
+327.ico        AdwaitaLegacy legacy/document-open-recent
+328.ico        AdwaitaLegacy legacy/system-run
+329.ico        AdwaitaLegacy legacy/system-shutdown
+330.ico        AdwaitaLegacy legacy/preferences-system
+331.ico        AdwaitaLegacy legacy/media-eject
+337.ico        AdwaitaLegacy legacy/edit-find
+338.ico        AdwaitaLegacy legacy/edit-delete
+512.ico        AdwaitaLegacy legacy/web-browser
+1001.ico       AdwaitaLegacy legacy/dialog-information
+1002.ico       devices/printer
+1003.ico       places/network-server
+1004.ico       AdwaitaLegacy legacy/help-contents
+1005.ico       AdwaitaLegacy legacy/document-send
+1006.ico       AdwaitaLegacy legacy/document-print
+1007.ico       AdwaitaLegacy legacy/emblem-default
+1008.ico       AdwaitaLegacy legacy/printer-printing
+1009.ico       AdwaitaLegacy legacy/printer-printing
+1010.ico       devices/printer-network
+1011.ico       AdwaitaLegacy legacy/modem
+1700.ico       places/folder
+8240.ico       AdwaitaLegacy legacy/system-shutdown
+16710.ico      AdwaitaLegacy legacy/edit-delete
+16715.ico      AdwaitaLegacy legacy/edit-delete
+16717.ico      AdwaitaLegacy legacy/edit-delete
+16718.ico      AdwaitaLegacy legacy/edit-delete
+16721.ico      AdwaitaLegacy legacy/edit-delete
+downloads.ico  places/folder-download

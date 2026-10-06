@@ -1,1 +1,1 @@
-This icon originates from Freedesktop Tango icon set (http://tango.freedesktop.org) and is licensed under the Creative Commons Attribution Share-Alike license (http://creativecommons.org/licenses/by-sa/2.5/).
+This icon is the unmodified audio-speakers icon of the Adwaita legacy icon theme of the GNOME Project (http://www.gnome.org), taken from https://gitlab.gnome.org/GNOME/adwaita-icon-theme-legacy and licensed under the terms of either the GNU LGPL v3 or the Creative Commons Attribution-Share Alike 3.0 United States License (http://creativecommons.org/licenses/by-sa/3.0/).

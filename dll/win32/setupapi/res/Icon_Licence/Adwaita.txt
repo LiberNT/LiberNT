@@ -1,0 +1,48 @@
+The following icons are unmodified icons from the Adwaita icon theme of the
+GNOME Project (http://www.gnome.org), taken from
+https://gitlab.gnome.org/GNOME/adwaita-icon-theme and, where the name is
+prefixed with AdwaitaLegacy, from
+https://gitlab.gnome.org/GNOME/adwaita-icon-theme-legacy. Both themes state:
+
+  This work is licenced under the terms of either the GNU LGPL v3 or
+  Creative Commons Attribution-Share Alike 3.0 United States License.
+
+  To view a copy of the CC-BY-SA licence, visit
+  http://creativecommons.org/licenses/by-sa/3.0/ or send a letter to Creative
+  Commons, 171 Second Street, Suite 300, San Francisco, California 94105, USA.
+
+  When attributing the artwork, using "GNOME Project" is enough.
+  Please link to http://www.gnome.org where available.
+
+The source artwork is in media/graphics/adwaita-icons.
+
+1.ico    devices/video-display
+2.ico    devices/input-mouse
+3.ico    devices/input-keyboard
+4.ico    devices/printer
+5.ico    AdwaitaLegacy legacy/network-wired
+6.ico    AdwaitaLegacy legacy/network-wired
+7.ico    devices/computer
+8.ico    devices/video-display
+9.ico    mimetypes/application-x-firmware
+10.ico   mimetypes/application-x-firmware
+11.ico   devices/media-flash
+18.ico   AdwaitaLegacy legacy/dialog-question
+19.ico   mimetypes/application-x-executable
+20.ico   devices/media-removable
+23.ico   AdwaitaLegacy legacy/network-wired
+24.ico   devices/input-tablet
+26.ico   AdwaitaLegacy legacy/network-wired
+27.ico   devices/computer
+28.ico   mimetypes/application-x-firmware
+40.ico   mimetypes/application-certificate
+42.ico   AdwaitaLegacy legacy/dialog-warning
+43.ico   AdwaitaLegacy legacy/network-error
+50.ico   AdwaitaLegacy legacy/media-floppy
+51.ico   devices/drive-optical
+52.ico   places/network-server
+53.ico   devices/drive-harddisk
+54.ico   AdwaitaLegacy legacy/system-software-install
+105.ico  AdwaitaLegacy legacy/media-floppy
+159.ico  mimetypes/application-x-firmware
+161.ico  AdwaitaLegacy legacy/process-stop
