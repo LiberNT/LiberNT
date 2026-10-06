@@ -64,7 +64,6 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/)
 endif()
 
 # Add font file DroidSansFallback.ttf for LiveCD
-# See also boot/bootdata/packages/reactos.dff.in
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/optional/DroidSansFallback.ttf)
     add_cd_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/optional/DroidSansFallback.ttf" DESTINATION reactos/Fonts FOR livecd)
 endif()

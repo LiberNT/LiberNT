@@ -311,6 +311,22 @@ function(add_user_profile_dirs _image_filelist _rootdir _username)
 endfunction()
 
 
+function(add_system_dirs _image_filelist)
+    foreach(_dir
+            Help Config Cursors Prefetch repair twain_32
+            security/Database security/logs security/templates
+            system32/CatRoot system32/CatRoot2 system32/ShellExt
+            system32/spool/PRINTERS system32/spool/drivers/color
+            system32/spool/drivers/w32x86/3 system32/spool/prtprocs/w32x86
+            system32/wbem/AdStatus system32/wbem/AutoRecover system32/wbem/Logs
+            system32/wbem/Performance system32/wbem/Repository/FS
+            system32/wbem/mof/bad system32/wbem/mof/good
+            system32/wbem/snmp system32/wbem/xml)
+        file(APPEND ${_image_filelist} "reactos/${_dir}=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
+    endforeach()
+endfunction()
+
+
 function(image_list_command _image _var)
     set(${_var} ${CMAKE_COMMAND} -DMODE=list
         -DBASE=${CMAKE_CURRENT_BINARY_DIR}/${_image}.$<CONFIG>.lst
@@ -339,6 +355,7 @@ add_custom_target(bootcd
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 # Create TEMP directory
 file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "reactos/TEMP=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
+add_system_dirs(${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst)
 file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "reactos/system32/Tasks=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 
 # Create user profile directories
@@ -463,6 +480,7 @@ endif()
 
 # Create TEMP dir
 file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/preinstall.cmake.lst "reactos/TEMP=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
+add_system_dirs(${CMAKE_CURRENT_BINARY_DIR}/preinstall.cmake.lst)
 file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/preinstall.cmake.lst "reactos/system32/Tasks=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 
 # Create installed-system directories that second-stage setup normally creates.

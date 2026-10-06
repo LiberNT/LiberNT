@@ -1,5 +1,4 @@
 
-add_subdirectory(packages)
 
 # Setup settings file
 add_cd_file(FILE ${REACTOS_BINARY_DIR}/boot/bootdata/txtsetup.$<CONFIG>.sif DESTINATION reactos NO_CAB NAME_ON_CD txtsetup.sif FOR bootcd)

@@ -2,167 +2,23 @@
 Signature = "$Windows NT$"
 ;Signature = "$ReactOS$"
 
-;
-; The [SourceDisksNames] section lists all the available installation media
-; where the installation files can be found. It can specifies media common
-; to all architectures, or media specific to a given architecture (x86, amd64,
-; and so on...) within [SourceDisksNames.x86] (etc...) sections.
-;
-; The format of each line is as follows:
-; <disk_id> = <description>,<tagfile>,<unused>,<subdirectory>,<flags>,<tagfile>
-;
-[SourceDisksNames]
-_1 = %cdname%,%cdtagfile%,,""
+[SystemTrees]
+Windows = "\"
+"Program Files" = "\Program Files"
 
-[SourceDisksNames.x86]
-1 = %cdname%,%cdtagfilei%,,\i386
-
-[SourceDisksNames.amd64]
-1 = %cdname%,%cdtagfilea%,,\amd64
-
-;
-; The directories listed in the [Directories] or [WinntDirectories] sections
-; are relative to the installation source or destination directories.
-;
-; The format of each line is as follows:
-; <directory_id> = <path>
-;
-; For specifying absolute directories, use the SystemPartitionFiles section,
-; or use names starting with \.
-;
-[Directories]
-1 = "\"
-2 = system32
-3 = system32\config
-4 = system32\drivers
-5 = media
-6 = Fonts
-7 = bin
-8 = system32\Tasks
+; A directory listed here is created empty.
+[SystemTrees.Exclude]
+"Windows\system32\config" = 1
+"Windows\SysWOW64\config" = 1
+"Windows\TEMP" = 1
+"Windows\system32\app_launcher.cmd" = 1
+"Windows\unattend.inf" = 1
+"Windows\welcome.ini" = 1
+"Windows\welcome" = 1
 
 [DiskSpaceRequirements]
 ; Required free system partition disk space in MB
 FreeSysPartDiskSpace = 450
-
-;
-; The [SourceDisksFiles] section lists all the files available to the
-; installer. It can specifies files common to all architectures, or files
-; specific to a given architecture (x86, amd64, and so on...) within
-; [SourceDisksFiles.x86] (etc...) sections.
-;
-; Each line provides the location of a file in the installation media
-; and its destination when being installed on a target architecture.
-; The format of each line is as follows:
-;
-; <source_filename> =
-;     <disk_id>,<subdirectory>,<file_size>,<checksum>,<unused>,<unused>,
-; NT-specific fields:
-;     <boot_media_id>,<destination_dir_id>,<upgrade_dispo>,<install_dispo>,
-;     <destination_filename>,
-; WinPE(MiniNT)-specific optional fields:
-;     <WinPE_disk_id>,<WinPE_directory_id>
-;
-; The 'disk_id', 'boot_media_id' and 'WinPE_disk_id' media IDs refer to
-; source media listed in the [SourceDisksNames] section. The 'boot_media_id'
-; value specifies any additional boot/installation media.
-;
-; The values for the disposition flags 'upgrade_dispo' (used when upgrading)
-; or 'install_dispo' (used when installing, usually by the text-mode installer)
-; are:
-;   0: always copy (default);
-;   1: copy if present;
-;   2: copy if not present;
-;   3: never copy.
-;
-; The 'destination_dir_id' and 'WinPE_directory_id' directory IDs refer to
-; the directories listed in the [Directories] section.
-;
-; ReactOS-specific: we don't use 'boot_media_id' yet and instead, we use
-; an identifier 'x' to signal the SetupLdr that it has to load the file.
-; This must be replaced by handling the "DiskDrivers.Load", "FileSystems.Load",
-; ("Hal.Load", "Display.Load"), "SCSI.Load", "BootBusExtenders.Load",
-; "BusExtenders.Load", "InputDevicesSupport.Load", "Keyboard.Load",
-; "ScsiClass.Load", "FloppyDrivers.Load", "CdRomDrivers.Load", and
-; "MouseDrivers.Load" sections.
-;
-[SourceDisksFiles]
-nmidebug.sys = 1,,,,,,x,4,,,,1,4
-;uniata.sys   = 1,,,,,,x,4,,,,1,4
-buslogic.sys = 1,,,,,,x,4,,,,1,4
-vgafonts.cab = 1,,,,,,,1,,,,1,1
-bootvid.dll  = 1,,,,,,,2,,,,1,2
-c_437.nls    = 1,,,,,,,2,,,,1,2
-c_1252.nls   = 1,,,,,,,2,,,,1,2
-cdfs.sys     = 1,,,,,,x,4,,,,1,4
-cdrom.sys    = 1,,,,,,x,4,,,,1,4
-classpnp.sys = 1,,,,,,,4,,,,1,4
-kdcom.dll    = 1,,,,,,,2,,,,1,2
-disk.sys     = 1,,,,,,x,4,,,,1,4
-hidclass.sys = 1,,,,,,,4,,,,1,4
-hidparse.sys = 1,,,,,,,4,,,,1,4
-hidusb.sys   = 1,,,,,,,4,,,,1,4
-usbccgp.sys  = 1,,,,,,x,4,,,,1,4
-usbd.sys     = 1,,,,,,,4,,,,1,4
-usbhub.sys   = 1,,,,,,x,4,,,,1,4
-usbport.sys  = 1,,,,,,,4,,,,1,4
-usbuhci.sys  = 1,,,,,,x,4,,,,1,4
-usbohci.sys  = 1,,,,,,x,4,,,,1,4
-usbehci.sys  = 1,,,,,,x,4,,,,1,4
-usbxhci.sys  = 1,,,,,,x,4,,,,1,4
-usbstor.sys  = 1,,,,,,x,4,,,,1,4
-kbdhid.sys   = 1,,,,,,,4,,,,1,4
-kbdclass.sys = 1,,,,,,x,4,,,,1,4
-l_intl.nls   = 1,,,,,,,2,,,,1,2
-pci.sys      = 1,,,,,,x,4,,,,1,4
-scsiport.sys = 1,,,,,,,4,,,,1,4
-storport.sys = 1,,,,,,,4,,,,1,4
-fastfat.sys  = 1,,,,,,x,4,,,,1,4
-btrfs.sys    = 1,,,,,,x,4,,,,1,4
-ntfs.sys    = 1,,,,,,x,4,,,,1,4
-ramdisk.sys  = 1,,,,,,x,4,,,,1,4
-pciidex.sys  = 1,,,,,,,4,,,,1,4
-pcix.sys     = 1,,,,,,,4,,,,1,4
-pcmcia.sys   = 1,,,,,,,4,,,,1,4
-swenum.sys   = 1,,,,,,,4,,,,1,4
-ntdll.dll    = 1,,,,,,,2,,,,1,2
-wmilib.sys   = 1,,,,,,,4,,,,1,4
-ksecdd.sys   = 1,,,,,,,4,,,,1,4
-mountmgr.sys = 1,,,,,,x,4,,,,1,4
-partmgr.sys  = 1,,,,,,x,4,,,,1,4
-wdfldr.sys   = 1,,,,,,,4,,,,1,4
-wdf01000.sys = 1,,,,,,x,4,,,,1,4
-
-[SourceDisksFiles.x86]
-acpi.sys     = 1,,,,,,,4,1,,,1,4
-legide.sys   = 1,,,,,,,4,,,,1,4
-sacdrv.sys   = 1,,,,,,x,4,,,,1,4
-atapi.sys    = 1,,,,,,x,4,,,,1,4
-blue.sys     = 1,,,,,,x,4,,,,1,4
-isapnp.sys   = 1,,,,,,x,4,,,,1,4
-floppy.sys   = 1,,,,,,x,4,,,,1,4
-i8042prt.sys = 1,,,,,,,4,,,,1,4
-pciide.sys   = 1,,,,,,x,4,,,,1,4
-
-[SourceDisksFiles.amd64]
-acpi.sys     = 1,,,,,,x,4,,,,1,4
-sacdrv.sys   = 1,,,,,,x,4,,,,1,4
-atapi.sys    = 1,,,,,,x,4,,,,1,4
-blue.sys     = 1,,,,,,x,4,,,,1,4
-isapnp.sys   = 1,,,,,,x,4,,,,1,4
-floppy.sys   = 1,,,,,,x,4,,,,1,4
-i8042prt.sys = 1,,,,,,,4,,,,1,4
-pciide.sys   = 1,,,,,,x,4,,,,1,4
-
-[SourceDisksFiles.arm64]
-acpi.sys     = 1,,,,,,x,4,,,,1,4
-rp1.sys      = 1,,,,,,x,4,,,,1,4
-rp1gem.sys   = 1,,,,,,x,4,,,,1,4
-
-;
-; The [SystemPartitionFiles] section lists all the files
-; that should be installed in the System Partition.
-;
-[SystemPartitionFiles]
 
 [HardwareIdsDatabase]
 *PNP0A03 = pci
@@ -277,9 +133,6 @@ inport = inport.sys
 [MouseDrivers.Load.amd64]
 inport = inport.sys
 
-[Cabinets]
-Cabinet = reactos.cab
-
 [SetupData]
 DefaultPath = \Windows
 SetupDebugOptions = "/DEBUG /KDSERIAL /DEBUGPORT=COM1 /FIRSTCHANCE"
@@ -323,45 +176,30 @@ x64_up = "X64 UP"
 x64_mp = "X64 MP"
 
 [Files.pci_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-hal.dll      = 1,,,,,,,2,,,,1,2
-
-;[Files.pci_mp]
-;ntkrnlmp.exe = 1,,,,,,,2,,,ntoskrnl.exe,1,2
-;halmps.dll   = 1,,,,,,,2,,,hal.dll,1,2
 
 [Files.acpi_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-halacpi.dll  = 1,,,,,,,2,,,hal.dll,1,2
+halacpi.dll = system32,hal.dll
 
 [Files.acpi_mp]
-ntkrnlmp.exe = 1,,,,,,,2,,,ntoskrnl.exe,1,2
-halmacpi.dll  = 1,,,,,,,2,,,hal.dll,1,2
+ntkrnlmp.exe = system32,ntoskrnl.exe
+halmacpi.dll = system32,hal.dll
 
 [Files.apic_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-halapic.dll  = 1,,,,,,,2,,,hal.dll,1,2
+halapic.dll = system32,hal.dll
 
 [Files.aacpi_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-halaacpi.dll  = 1,,,,,,,2,,,hal.dll,1,2
+halaacpi.dll = system32,hal.dll
 
 [Files.xbox]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-halxbox.dll  = 1,,,,,,,2,,,hal.dll,1,2
-vfatfs.sys   = 1,,,,,,,4,,,,1,4
+halxbox.dll = system32,hal.dll
 
 [Files.pc98_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-halpc98.dll  = 1,,,,,,,2,,,hal.dll,1,2
+halpc98.dll = system32,hal.dll
 
 [Files.x64_up]
-ntoskrnl.exe = 1,,,,,,,2,,,,1,2
-hal.dll      = 1,,,,,,,2,,,,1,2
 
 [Files.x64_mp]
-ntkrnlmp.exe = 1,,,,,,,2,,,ntoskrnl.exe,1,2
-hal.dll      = 1,,,,,,,2,,,,1,2
+ntkrnlmp.exe = system32,ntoskrnl.exe
 
 [Display]
 ;<id> = <user friendly name>,<spare>,<service key name>,<width>,<height>,<bpp>
