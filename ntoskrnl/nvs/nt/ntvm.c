@@ -366,6 +366,9 @@ MiAllocateVirtualMemoryNt(
     if (BaseAddress != NULL && (LowestAddress | HighestEndingAddress | Alignment) != 0)
         return STATUS_INVALID_PARAMETER;
 
+    if (HighestEndingAddress != 0 && HighestEndingAddress - LowestAddress + 1 < RegionSize)
+        return STATUS_INVALID_PARAMETER;
+
     if (BaseAddress != NULL && (ULONG_PTR)BaseAddress < (ULONG_PTR)MM_LOWEST_USER_ADDRESS)
         return STATUS_CONFLICTING_ADDRESSES;
 
@@ -586,6 +589,9 @@ MiCaptureAddressRequirements(
     }
 
     if ((*LowestAddress & (MI_ALLOCATION_GRANULARITY - 1)) != 0)
+        return STATUS_INVALID_PARAMETER;
+
+    if (*Alignment != 0 && (*LowestAddress & (*Alignment - 1)) != 0)
         return STATUS_INVALID_PARAMETER;
 
     if (*HighestEndingAddress != 0)
