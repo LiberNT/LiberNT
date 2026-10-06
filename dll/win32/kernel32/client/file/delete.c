@@ -98,7 +98,8 @@ DeleteFileW(IN LPCWSTR lpFileName)
                                         FileAttributeTagInformation);
         if ((NT_SUCCESS(Status)) &&
             (FileTagInformation.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) &&
-            (FileTagInformation.ReparseTag != IO_REPARSE_TAG_MOUNT_POINT))
+            (FileTagInformation.ReparseTag != IO_REPARSE_TAG_MOUNT_POINT) &&
+            (FileTagInformation.ReparseTag != IO_REPARSE_TAG_SYMLINK))
         {
             /* There is, so now try to open it with reparse behavior */
             NtClose(FileHandle);

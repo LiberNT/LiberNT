@@ -797,6 +797,11 @@ RemoveDirectoryW(IN LPCWSTR lpPathName)
         goto MarkFileForDelete;
     }
 
+    if (FileTagInfo.ReparseTag == IO_REPARSE_TAG_SYMLINK)
+    {
+        goto MarkFileForDelete;
+    }
+
     /* Check if that's a mount point */
     if (FileTagInfo.ReparseTag != IO_REPARSE_TAG_MOUNT_POINT)
     {
