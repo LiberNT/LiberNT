@@ -149,6 +149,44 @@ RtlpSecurityEmitAce(RTL_SECURITY_ACL_BUFFER *Buffer, PACE_HEADER Ace,
     return STATUS_SUCCESS;
 }
 
+static VOID
+RtlpSecurityDropDuplicateAces(RTL_SECURITY_ACL_BUFFER *Buffer, ULONG Start)
+{
+    PACCESS_ALLOWED_ACE Ace, Other;
+    ULONG Offset = Start, Scan, Size;
+
+    while (Offset < Buffer->Length)
+    {
+        Ace = (PACCESS_ALLOWED_ACE)((PUCHAR)Buffer->Acl + Offset);
+        Size = Ace->Header.AceSize;
+        Scan = Offset;
+        if (Ace->Header.AceType == ACCESS_ALLOWED_ACE_TYPE)
+        {
+            for (Scan = sizeof(ACL); Scan < Offset; Scan += Other->Header.AceSize)
+            {
+                Other = (PACCESS_ALLOWED_ACE)((PUCHAR)Buffer->Acl + Scan);
+                if (Other->Header.AceType == ACCESS_ALLOWED_ACE_TYPE &&
+                    Other->Header.AceFlags == Ace->Header.AceFlags &&
+                    Other->Mask == Ace->Mask &&
+                    RtlEqualSid((PSID)&Other->SidStart, (PSID)&Ace->SidStart))
+                {
+                    break;
+                }
+            }
+        }
+        if (Scan < Offset)
+        {
+            RtlMoveMemory(Ace, (PUCHAR)Ace + Size, Buffer->Length - Offset - Size);
+            Buffer->Length -= Size;
+            Buffer->Count--;
+        }
+        else
+        {
+            Offset += Size;
+        }
+    }
+}
+
 static NTSTATUS
 RtlpSecurityTransformAce(RTL_SECURITY_ACL_BUFFER *Buffer, PACE_HEADER Ace,
                         BOOLEAN Parent, BOOLEAN MarkInherited, BOOLEAN ClearInherited,

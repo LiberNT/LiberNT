@@ -24,7 +24,7 @@ RtlpSecurityTransformAcl(PACL Source, BOOLEAN Parent, BOOLEAN MarkInherited,
 {
     RTL_SECURITY_ACL_BUFFER Buffer;
     PACE_HEADER Ace;
-    ULONG Index, Pass;
+    ULONG Index, Pass, Start;
     NTSTATUS Status = STATUS_SUCCESS;
 
     *Result = NULL;
@@ -41,9 +41,11 @@ RtlpSecurityTransformAcl(PACL Source, BOOLEAN Parent, BOOLEAN MarkInherited,
             Status = RtlGetAce(Source, Index, (PVOID *)&Ace);
             if (!NT_SUCCESS(Status)) goto Done;
             if (Filter >= 0 && !!(Ace->AceFlags & INHERITED_ACE) != Filter) continue;
+            Start = Buffer.Length;
             Status = RtlpSecurityTransformAce(&Buffer, Ace, Parent, MarkInherited, ClearInherited,
                                               Container, Types, TypeCount, Owner, Group, Mapping);
             if (!NT_SUCCESS(Status)) goto Done;
+            if (Pass && Parent) RtlpSecurityDropDuplicateAces(&Buffer, Start);
         }
         if (!Pass)
         {
@@ -711,6 +713,46 @@ RtlpSecurityAceAccessKind(PACE_HEADER Ace)
     }
 }
 
+static VOID
+RtlpSecurityMergeEffectiveAces(PACL Acl)
+{
+    PACCESS_ALLOWED_ACE Ace, Other;
+    ULONG Index = 0, Scan;
+
+    while (Index < Acl->AceCount && NT_SUCCESS(RtlGetAce(Acl, Index, (PVOID *)&Ace)))
+    {
+        Scan = Index;
+        if (Ace->Header.AceType == ACCESS_ALLOWED_ACE_TYPE &&
+            !(Ace->Header.AceFlags & INHERIT_ONLY_ACE))
+        {
+            for (Scan = 0; Scan < Index; ++Scan)
+            {
+                if (!NT_SUCCESS(RtlGetAce(Acl, Scan, (PVOID *)&Other))) continue;
+                if (Other->Header.AceType == ACCESS_ALLOWED_ACE_TYPE &&
+                    !(Other->Header.AceFlags & INHERIT_ONLY_ACE) &&
+                    Other->Mask == Ace->Mask &&
+                    RtlEqualSid((PSID)&Other->SidStart, (PSID)&Ace->SidStart))
+                {
+                    break;
+                }
+            }
+        }
+        if (Scan == Index)
+        {
+            ++Index;
+        }
+        else if (Ace->Header.AceFlags & (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE))
+        {
+            Ace->Header.AceFlags |= INHERIT_ONLY_ACE;
+            ++Index;
+        }
+        else
+        {
+            RtlDeleteAce(Acl, Index);
+        }
+    }
+}
+
 static NTSTATUS
 RtlpSecurityConvertAcl(PACL Current, PACL Parent, BOOLEAN Container,
                        LPGUID *Types, ULONG TypeCount, PSID Owner, PSID Group,
@@ -743,6 +785,7 @@ RtlpSecurityConvertAcl(PACL Current, PACL Parent, BOOLEAN Container,
         Status = RtlpSecurityTransformAcl(Parent, TRUE, TRUE, FALSE, -1, Container,
                                           Types, TypeCount, Owner, Group, Mapping, &ParentAcl);
         if (!NT_SUCCESS(Status)) goto Done;
+        if (ParentAcl) RtlpSecurityMergeEffectiveAces(ParentAcl);
     }
     for (Index = 0; Index < Current->AceCount; ++Index)
     {
@@ -769,6 +812,7 @@ RtlpSecurityConvertAcl(PACL Current, PACL Parent, BOOLEAN Container,
                     Entries[Index].Inherited = TRUE;
             }
             if (ParentMask && View.MapMask &&
+                !(Entries[Index].Ace->AceFlags & INHERIT_ONLY_ACE) &&
                 (Mask & (GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE | GENERIC_ALL)))
             {
                 Status = STATUS_NOT_IMPLEMENTED;
@@ -780,8 +824,8 @@ RtlpSecurityConvertAcl(PACL Current, PACL Parent, BOOLEAN Container,
                     CurrentMask |= ((PACCESS_ALLOWED_ACE)Entries[Other].Ace)->Mask;
             if ((ParentMask & CurrentMask) && (ParentMask & ~CurrentMask))
             {
-                Status = STATUS_NOT_IMPLEMENTED;
-                goto Done;
+                *Protected = TRUE;
+                break;
             }
             if ((Mask & ParentMask) && (Mask & ~ParentMask))
             {
@@ -800,6 +844,17 @@ RtlpSecurityConvertAcl(PACL Current, PACL Parent, BOOLEAN Container,
                 }
             }
             AnyInherited |= Entries[Index].Inherited;
+        }
+        for (Other = 0; Other < ParentAcl->AceCount && !*Protected; ++Other)
+        {
+            Status = RtlGetAce(ParentAcl, Other, (PVOID *)&ParentAce);
+            if (!NT_SUCCESS(Status)) goto Done;
+            CurrentMask = 0;
+            for (Index = 0; Index < Current->AceCount; ++Index)
+                if (RtlpSecuritySameAceSubject(Entries[Index].Ace, ParentAce))
+                    CurrentMask |= ((PACCESS_ALLOWED_ACE)Entries[Index].Ace)->Mask;
+            if (((PACCESS_ALLOWED_ACE)ParentAce)->Mask & ~CurrentMask)
+                *Protected = TRUE;
         }
         for (Index = 0; Index < Current->AceCount && !*Protected; ++Index)
         {

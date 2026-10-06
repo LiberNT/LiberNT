@@ -543,44 +543,6 @@ SepPropagateOpaqueAce(RTL_SECURITY_ACL_BUFFER *Buffer, PACE_HEADER Ace,
     return STATUS_SUCCESS;
 }
 
-static VOID
-SepDropDuplicateAces(RTL_SECURITY_ACL_BUFFER *Buffer, ULONG Start)
-{
-    PACCESS_ALLOWED_ACE Ace, Other;
-    ULONG Offset = Start, Scan, Size;
-
-    while (Offset < Buffer->Length)
-    {
-        Ace = (PACCESS_ALLOWED_ACE)((PUCHAR)Buffer->Acl + Offset);
-        Size = Ace->Header.AceSize;
-        Scan = Offset;
-        if (Ace->Header.AceType == ACCESS_ALLOWED_ACE_TYPE)
-        {
-            for (Scan = sizeof(ACL); Scan < Offset; Scan += Other->Header.AceSize)
-            {
-                Other = (PACCESS_ALLOWED_ACE)((PUCHAR)Buffer->Acl + Scan);
-                if (Other->Header.AceType == ACCESS_ALLOWED_ACE_TYPE &&
-                    Other->Header.AceFlags == Ace->Header.AceFlags &&
-                    Other->Mask == Ace->Mask &&
-                    RtlEqualSid((PSID)&Other->SidStart, (PSID)&Ace->SidStart))
-                {
-                    break;
-                }
-            }
-        }
-        if (Scan < Offset)
-        {
-            RtlMoveMemory(Ace, (PUCHAR)Ace + Size, Buffer->Length - Offset - Size);
-            Buffer->Length -= Size;
-            Buffer->Count--;
-        }
-        else
-        {
-            Offset += Size;
-        }
-    }
-}
-
 /**
  * @brief
  * Propagates (copies) an access control list.
@@ -658,7 +620,7 @@ SepPropagateAcl(
                 Status = SepPropagateOpaqueAce(&Buffer, Ace, IsInherited, MarkInherited,
                                                 IsDirectoryObject);
             if (!NT_SUCCESS(Status)) goto Done;
-            if (Scratch) SepDropDuplicateAces(&Buffer, Start);
+            if (Scratch) RtlpSecurityDropDuplicateAces(&Buffer, Start);
         }
         if (!Pass && IsInherited)
         {
