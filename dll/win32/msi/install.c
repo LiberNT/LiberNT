@@ -1185,6 +1185,10 @@ UINT MSI_GetFeatureCost( MSIPACKAGE *package, MSIFEATURE *feature, MSICOSTTREE t
     {
         MSIFEATURE *child;
 
+#ifdef __REACTOS__
+        if (feature->ActionRequest == state)
+            *cost = feature_cost( feature );
+#endif
         LIST_FOR_EACH_ENTRY( child, &feature->Children, MSIFEATURE, entry )
         {
             if (child->ActionRequest == state)
@@ -1233,8 +1237,19 @@ UINT WINAPI MsiGetFeatureCostW( MSIHANDLE hInstall, const WCHAR *szFeature, MSIC
 
     TRACE( "%lu, %s, %d, %d, %p\n", hInstall, debugstr_w(szFeature), iCostTree, iState, piCost );
 
+#ifdef __REACTOS__
+    if (!szFeature)
+    {
+        if ((package = msihandle2msiinfo(hInstall, MSIHANDLETYPE_PACKAGE)))
+            msiobj_release( &package->hdr );
+        else if (piCost && msi_get_remote(hInstall))
+            *piCost = 0;
+        return ERROR_INVALID_PARAMETER;
+    }
+#else
     if (!szFeature)
         return ERROR_INVALID_PARAMETER;
+#endif
 
     package = msihandle2msiinfo(hInstall, MSIHANDLETYPE_PACKAGE);
     if (!package)
