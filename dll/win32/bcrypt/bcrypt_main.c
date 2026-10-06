@@ -977,6 +977,8 @@ static NTSTATUS set_alg_property( struct algorithm *alg, const WCHAR *prop, UCHA
         }
         else if (!wcscmp( (WCHAR *)prop, BCRYPT_MESSAGE_BLOCK_LENGTH ))
             return STATUS_INVALID_PARAMETER;
+        else if (!wcscmp( prop, BCRYPT_KEY_LENGTH ))
+            return STATUS_NOT_SUPPORTED;
 
         FIXME( "unsupported aes algorithm property %s\n", debugstr_w(prop) );
         return STATUS_NOT_IMPLEMENTED;
@@ -2118,7 +2120,13 @@ static NTSTATUS encrypt_symmetric( struct key *key, const UCHAR *input, ULONG in
     *ret_len = input_len;
 
     if (key->s.mode == CHAIN_MODE_ECB && iv) return STATUS_INVALID_PARAMETER;
-    if (key->s.mode == CHAIN_MODE_GCM && (flags & BCRYPT_BLOCK_PADDING)) return STATUS_INVALID_PARAMETER;
+    if (key->s.mode == CHAIN_MODE_GCM && (flags & BCRYPT_BLOCK_PADDING))
+    {
+        ULONG block_size = key->s.block_size;
+
+        if (output && output_len < ((input_len + block_size) & ~(block_size - 1))) return STATUS_BUFFER_TOO_SMALL;
+        return STATUS_INVALID_PARAMETER;
+    }
 
     switch (key->alg_id)
     {
