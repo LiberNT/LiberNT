@@ -199,7 +199,7 @@ START_TEST(Bus_PDO_QueryResourceRequirements)
     ok(Status == STATUS_WAIT_0 + 17, "Status = 0x%lx\n", Status);
 
     /* PCI Bus device */
-    AcpiCallExpected = FALSE;
+    AcpiCallExpected = TRUE;
     Irp.IoStatus.Status = STATUS_WAIT_0 + 17;
     DeviceData.AcpiHandle = CorrectHandle;
     DeviceData.HardwareIDs = L"PNP0A03\0";
@@ -207,7 +207,7 @@ START_TEST(Bus_PDO_QueryResourceRequirements)
     ok(Status == STATUS_WAIT_0 + 17, "Status = 0x%lx\n", Status);
 
     /* PCI Bus device #2 */
-    AcpiCallExpected = FALSE;
+    AcpiCallExpected = TRUE;
     Irp.IoStatus.Status = STATUS_WAIT_0 + 17;
     DeviceData.AcpiHandle = CorrectHandle;
     DeviceData.HardwareIDs = L"PNP0A08\0";
