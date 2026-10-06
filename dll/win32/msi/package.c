@@ -2444,6 +2444,23 @@ UINT __cdecl s_remote_GetProperty(MSIHANDLE hinst, LPCWSTR property, LPWSTR *val
 {
     WCHAR empty[1];
     UINT r;
+#ifdef __REACTOS__
+    MSIPACKAGE *package = msihandle2msiinfo(hinst, MSIHANDLETYPE_PACKAGE);
+    BOOL deferred = FALSE;
+
+    if (package)
+    {
+        deferred = package->scheduled_action_running || package->commit_action_running ||
+                   package->rollback_action_running;
+        msiobj_release(&package->hdr);
+    }
+    if (deferred && wcscmp(property, L"CustomActionData") && wcscmp(property, L"ProductCode") &&
+        wcscmp(property, L"UserSID"))
+    {
+        *size = 0;
+        return ERROR_SUCCESS;
+    }
+#endif
 
     *size = 0;
     r = MsiGetPropertyW(hinst, property, empty, size);
