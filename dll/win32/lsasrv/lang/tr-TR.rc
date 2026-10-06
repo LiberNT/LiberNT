@@ -76,4 +76,7 @@ BEGIN
     IDS_MANAGE_VOLUME_PRIVILEGE "Disk birimi bakım görevlerini gerçekleştir"
     IDS_IMPERSONATE_PRIVILEGE "Kimlik doğrulamasından sonra bir istemcinin kimliğine bürün"
     IDS_CREATE_GLOBAL_PRIVILEGE "Global nesneler oluştur"
+    IDS_INC_WORKING_SET_PRIVILEGE "Increase a process working set"
+    IDS_TIME_ZONE_PRIVILEGE "Change the time zone"
+    IDS_CREATE_SYMBOLIC_LINK_PRIVILEGE "Create symbolic links"
 END

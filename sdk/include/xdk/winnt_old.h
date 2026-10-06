@@ -455,6 +455,12 @@
 #define SE_MANAGE_VOLUME_NAME    TEXT("SeManageVolumePrivilege")
 #define SE_IMPERSONATE_NAME    TEXT("SeImpersonatePrivilege")
 #define SE_CREATE_GLOBAL_NAME    TEXT("SeCreateGlobalPrivilege")
+#define SE_TRUSTED_CREDMAN_ACCESS_NAME    TEXT("SeTrustedCredManAccessPrivilege")
+#define SE_RELABEL_NAME    TEXT("SeRelabelPrivilege")
+#define SE_INC_WORKING_SET_NAME    TEXT("SeIncreaseWorkingSetPrivilege")
+#define SE_TIME_ZONE_NAME    TEXT("SeTimeZonePrivilege")
+#define SE_CREATE_SYMBOLIC_LINK_NAME    TEXT("SeCreateSymbolicLinkPrivilege")
+#define SE_DELEGATE_SESSION_USER_IMPERSONATE_NAME    TEXT("SeDelegateSessionUserImpersonatePrivilege")
 
 #define SE_GROUP_MANDATORY          0x00000001
 #define SE_GROUP_ENABLED_BY_DEFAULT 0x00000002

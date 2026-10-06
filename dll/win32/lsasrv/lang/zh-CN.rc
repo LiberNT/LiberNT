@@ -82,4 +82,7 @@ BEGIN
     IDS_MANAGE_VOLUME_PRIVILEGE "执行卷维护任务"
     IDS_IMPERSONATE_PRIVILEGE "在鉴权后模仿一个客户端"
     IDS_CREATE_GLOBAL_PRIVILEGE "创建全局对象"
+    IDS_INC_WORKING_SET_PRIVILEGE "Increase a process working set"
+    IDS_TIME_ZONE_PRIVILEGE "Change the time zone"
+    IDS_CREATE_SYMBOLIC_LINK_PRIVILEGE "Create symbolic links"
 END

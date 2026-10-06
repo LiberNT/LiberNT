@@ -74,4 +74,7 @@ BEGIN
     IDS_MANAGE_VOLUME_PRIVILEGE "Executar tarefas de manutenção de volume"
     IDS_IMPERSONATE_PRIVILEGE "Representar um cliente após a autenticação"
     IDS_CREATE_GLOBAL_PRIVILEGE "Crie objectos globais"
+    IDS_INC_WORKING_SET_PRIVILEGE "Increase a process working set"
+    IDS_TIME_ZONE_PRIVILEGE "Change the time zone"
+    IDS_CREATE_SYMBOLIC_LINK_PRIVILEGE "Create symbolic links"
 END

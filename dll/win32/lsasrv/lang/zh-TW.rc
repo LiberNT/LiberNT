@@ -82,4 +82,7 @@ BEGIN
     IDS_MANAGE_VOLUME_PRIVILEGE "執行磁碟區維護工作"
     IDS_IMPERSONATE_PRIVILEGE "在驗證後模擬用戶端"
     IDS_CREATE_GLOBAL_PRIVILEGE "建立通用物件"
+    IDS_INC_WORKING_SET_PRIVILEGE "Increase a process working set"
+    IDS_TIME_ZONE_PRIVILEGE "Change the time zone"
+    IDS_CREATE_SYMBOLIC_LINK_PRIVILEGE "Create symbolic links"
 END
