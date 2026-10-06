@@ -6,6 +6,7 @@ spec2def(acgenral.dll genral.spec)
 list(APPEND SOURCE
     ignoredbgout.c
     ignorefreelib.c
+    ignoreloadlibrary.c
     main.c
     shimtest.c
     themes.c
@@ -17,6 +18,7 @@ endif()
 
 add_library(acgenral MODULE
     ${SOURCE}
+    genral.rc
     ${CMAKE_CURRENT_BINARY_DIR}/acgenral.def)
 
 set_module_type(acgenral win32dll ENTRYPOINT DllMain 12)

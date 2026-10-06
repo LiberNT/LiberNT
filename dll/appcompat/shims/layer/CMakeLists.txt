@@ -7,7 +7,6 @@ list(APPEND SOURCE
     dispmode.c
     forcedxsetupsuccess.c
     globalmemorystatus.c
-    ignoreloadlibrary.c
     versionlie.c
     vmhorizon.c
     main.c
@@ -15,6 +14,7 @@ list(APPEND SOURCE
 
 add_library(aclayers MODULE
     ${SOURCE}
+    layer.rc
     ${CMAKE_CURRENT_BINARY_DIR}/aclayers.def)
 
 set_module_type(aclayers win32dll ENTRYPOINT DllMain 12)

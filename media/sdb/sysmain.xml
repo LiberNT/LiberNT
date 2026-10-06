@@ -252,7 +252,7 @@
                 <DLLFILE>acgenral.dll</DLLFILE>
             </SHIM>
             <SHIM NAME="IgnoreLoadLibrary">
-                <DLLFILE>aclayers.dll</DLLFILE>
+                <DLLFILE>acgenral.dll</DLLFILE>
             </SHIM>
             <SHIM NAME="ShimTest">
                 <DLLFILE>acgenral.dll</DLLFILE>
