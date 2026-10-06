@@ -135,6 +135,8 @@ set(COMPAT_RUNTIME_MODULES
     sensapi
     settingsyncpolicy
     setupapi
+    sfc
+    sfc_os
     shcore
     shdocvw
     shell32
@@ -144,6 +146,7 @@ set(COMPAT_RUNTIME_MODULES
     sndvolsso
     sspicli
     sxs
+    taskschd
     twinapi
     ucrtbase
     uiautomationcore
