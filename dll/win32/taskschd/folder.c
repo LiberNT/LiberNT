@@ -347,6 +347,70 @@ static HRESULT WINAPI TaskFolder_RegisterTask(ITaskFolder *iface, BSTR name, BST
     return hr;
 }
 
+#ifdef __REACTOS__
+static HRESULT apply_registration_user(ITaskDefinition *definition, const WCHAR *user, TASK_LOGON_TYPE logon,
+                                       ITaskDefinition **effective)
+{
+    IActionCollection *actions;
+    ITaskDefinition *copy;
+    IPrincipal *principal;
+    HRESULT hr;
+    BSTR str;
+
+    hr = ITaskDefinition_get_XmlText(definition, &str);
+    if (hr != S_OK) return hr;
+
+    hr = TaskDefinition_create(&copy);
+    if (hr == S_OK)
+    {
+        hr = ITaskDefinition_put_XmlText(copy, str);
+        if (hr != S_OK) ITaskDefinition_Release(copy);
+    }
+    SysFreeString(str);
+    if (hr != S_OK) return hr;
+
+    hr = ITaskDefinition_get_Principal(copy, &principal);
+    if (hr == S_OK)
+    {
+        if (logon == TASK_LOGON_GROUP)
+        {
+            IPrincipal_put_UserId(principal, NULL);
+            hr = IPrincipal_put_GroupId(principal, (BSTR)user);
+        }
+        else
+        {
+            IPrincipal_put_GroupId(principal, NULL);
+            hr = IPrincipal_put_UserId(principal, (BSTR)user);
+        }
+        if (hr == S_OK && logon != TASK_LOGON_NONE)
+            hr = IPrincipal_put_LogonType(principal, logon);
+        if (hr == S_OK && IPrincipal_get_Id(principal, &str) == S_OK)
+        {
+            if (!str) hr = IPrincipal_put_Id(principal, (BSTR)L"Author");
+            SysFreeString(str);
+        }
+        IPrincipal_Release(principal);
+    }
+    if (hr == S_OK && ITaskDefinition_get_Actions(copy, &actions) == S_OK)
+    {
+        if (IActionCollection_get_Context(actions, &str) == S_OK)
+        {
+            if (!str) hr = IActionCollection_put_Context(actions, (BSTR)L"Author");
+            SysFreeString(str);
+        }
+        IActionCollection_Release(actions);
+    }
+    if (hr != S_OK)
+    {
+        ITaskDefinition_Release(copy);
+        return hr;
+    }
+
+    *effective = copy;
+    return S_OK;
+}
+
+#endif
 static HRESULT WINAPI TaskFolder_RegisterTaskDefinition(ITaskFolder *iface, BSTR name, ITaskDefinition *definition, LONG flags,
                                                         VARIANT user, VARIANT password, TASK_LOGON_TYPE logon,
                                                         VARIANT sddl, IRegisteredTask **task)
@@ -361,11 +425,35 @@ static HRESULT WINAPI TaskFolder_RegisterTaskDefinition(ITaskFolder *iface, BSTR
     if (!is_variant_null(&sddl))
         FIXME("security descriptor %s is ignored\n", debugstr_variant(&sddl));
 
+#ifdef __REACTOS__
+    if (!is_variant_null(&password))
+        FIXME("password is ignored\n");
+#else
     if (!is_variant_null(&user) || !is_variant_null(&password))
         FIXME("user/password are ignored\n");
+#endif
 
     if (!task) task = &regtask;
 
+#ifdef __REACTOS__
+    if (V_VT(&user) == VT_BSTR && V_BSTR(&user) && *V_BSTR(&user))
+    {
+        ITaskDefinition *effective;
+
+        hr = apply_registration_user(definition, V_BSTR(&user), logon, &effective);
+        if (hr != S_OK) return hr;
+
+        hr = RegisteredTask_create(folder->path, name, effective, flags, logon, task, TRUE);
+        if (hr != S_OK)
+            ITaskDefinition_Release(effective);
+
+        if (regtask)
+            IRegisteredTask_Release(regtask);
+
+        return hr;
+    }
+
+#endif
     ITaskDefinition_AddRef(definition);
     hr = RegisteredTask_create(folder->path, name, definition, flags, logon, task, TRUE);
     if (hr != S_OK)

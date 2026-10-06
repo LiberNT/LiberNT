@@ -31,8 +31,41 @@
 #include "taskschd_private.h"
 
 #include "wine/debug.h"
+#ifdef __REACTOS__
+#include <sddl.h>
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(taskschd);
+
+#ifdef __REACTOS__
+static HRESULT task_get_string(const WCHAR *value, BSTR *str)
+{
+    if (!str) return E_POINTER;
+
+    if (!value)
+    {
+        *str = NULL;
+        return S_OK;
+    }
+
+    *str = SysAllocString(value);
+    if (!*str) return E_OUTOFMEMORY;
+
+    return S_OK;
+}
+
+static HRESULT task_put_string(WCHAR **value, const WCHAR *str)
+{
+    WCHAR *copy = NULL;
+
+    if (str && !(copy = wcsdup(str))) return E_OUTOFMEMORY;
+
+    free(*value);
+    *value = copy;
+
+    return S_OK;
+}
+#endif
 
 typedef struct {
     IRepetitionPattern IRepetitionPattern_iface;
@@ -265,6 +298,12 @@ typedef struct {
     WCHAR *start_boundary;
     WCHAR *end_boundary;
     BOOL enabled;
+#ifdef __REACTOS__
+    WCHAR *id;
+    WCHAR *execution_time_limit;
+    WCHAR *random_delay;
+    IRepetitionPattern *repetition;
+#endif
 } DailyTrigger;
 
 static inline DailyTrigger *impl_from_IDailyTrigger(IDailyTrigger *iface)
@@ -318,6 +357,12 @@ static ULONG WINAPI DailyTrigger_Release(IDailyTrigger *iface)
         TRACE("destroying %p\n", iface);
         free(This->start_boundary);
         free(This->end_boundary);
+#ifdef __REACTOS__
+        free(This->id);
+        free(This->execution_time_limit);
+        free(This->random_delay);
+        if (This->repetition) IRepetitionPattern_Release(This->repetition);
+#endif
         free(This);
     }
 
@@ -357,27 +402,71 @@ static HRESULT WINAPI DailyTrigger_Invoke(IDailyTrigger *iface, DISPID dispid, R
 
 static HRESULT WINAPI DailyTrigger_get_Type(IDailyTrigger *iface, TASK_TRIGGER_TYPE2 *type)
 {
+#ifdef __REACTOS__
+    DailyTrigger *This = impl_from_IDailyTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, type);
+
+    if (!type) return E_POINTER;
+
+    *type = TASK_TRIGGER_DAILY;
+    return S_OK;
+#else
     DailyTrigger *This = impl_from_IDailyTrigger(iface);
     FIXME("(%p)->(%p)\n", This, type);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DailyTrigger_get_Id(IDailyTrigger *iface, BSTR *id)
 {
+#ifdef __REACTOS__
+    DailyTrigger *This = impl_from_IDailyTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, id);
+
+    return task_get_string(This->id, id);
+#else
     DailyTrigger *This = impl_from_IDailyTrigger(iface);
     FIXME("(%p)->(%p)\n", This, id);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DailyTrigger_put_Id(IDailyTrigger *iface, BSTR id)
 {
+#ifdef __REACTOS__
+    DailyTrigger *This = impl_from_IDailyTrigger(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(id));
+
+    return task_put_string(&This->id, id);
+#else
     DailyTrigger *This = impl_from_IDailyTrigger(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_w(id));
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DailyTrigger_get_Repetition(IDailyTrigger *iface, IRepetitionPattern **repeat)
 {
+#ifdef __REACTOS__
+    DailyTrigger *This = impl_from_IDailyTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, repeat);
+
+    if (!repeat) return E_POINTER;
+
+    if (!This->repetition)
+    {
+        HRESULT hr = RepetitionPattern_create(&This->repetition);
+        if (FAILED(hr)) return hr;
+    }
+
+    IRepetitionPattern_AddRef(This->repetition);
+    *repeat = This->repetition;
+    return S_OK;
+#else
     DailyTrigger *This = impl_from_IDailyTrigger(iface);
 
     TRACE("(%p)->(%p)\n", This, repeat);
@@ -385,6 +474,7 @@ static HRESULT WINAPI DailyTrigger_get_Repetition(IDailyTrigger *iface, IRepetit
     if (!repeat) return E_POINTER;
 
     return RepetitionPattern_create(repeat);
+#endif
 }
 
 static HRESULT WINAPI DailyTrigger_put_Repetition(IDailyTrigger *iface, IRepetitionPattern *repeat)
@@ -396,16 +486,32 @@ static HRESULT WINAPI DailyTrigger_put_Repetition(IDailyTrigger *iface, IRepetit
 
 static HRESULT WINAPI DailyTrigger_get_ExecutionTimeLimit(IDailyTrigger *iface, BSTR *limit)
 {
+#ifdef __REACTOS__
+    DailyTrigger *This = impl_from_IDailyTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, limit);
+
+    return task_get_string(This->execution_time_limit, limit);
+#else
     DailyTrigger *This = impl_from_IDailyTrigger(iface);
     FIXME("(%p)->(%p)\n", This, limit);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DailyTrigger_put_ExecutionTimeLimit(IDailyTrigger *iface, BSTR limit)
 {
+#ifdef __REACTOS__
+    DailyTrigger *This = impl_from_IDailyTrigger(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(limit));
+
+    return task_put_string(&This->execution_time_limit, limit);
+#else
     DailyTrigger *This = impl_from_IDailyTrigger(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_w(limit));
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DailyTrigger_get_StartBoundary(IDailyTrigger *iface, BSTR *start)
@@ -511,16 +617,32 @@ static HRESULT WINAPI DailyTrigger_put_DaysInterval(IDailyTrigger *iface, short 
 
 static HRESULT WINAPI DailyTrigger_get_RandomDelay(IDailyTrigger *iface, BSTR *pRandomDelay)
 {
+#ifdef __REACTOS__
+    DailyTrigger *This = impl_from_IDailyTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, pRandomDelay);
+
+    return task_get_string(This->random_delay, pRandomDelay);
+#else
     DailyTrigger *This = impl_from_IDailyTrigger(iface);
     FIXME("(%p)->(%p)\n", This, pRandomDelay);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DailyTrigger_put_RandomDelay(IDailyTrigger *iface, BSTR randomDelay)
 {
+#ifdef __REACTOS__
+    DailyTrigger *This = impl_from_IDailyTrigger(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(randomDelay));
+
+    return task_put_string(&This->random_delay, randomDelay);
+#else
     DailyTrigger *This = impl_from_IDailyTrigger(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_w(randomDelay));
     return E_NOTIMPL;
+#endif
 }
 
 static const IDailyTriggerVtbl DailyTrigger_vtbl = {
@@ -564,6 +686,12 @@ static HRESULT DailyTrigger_create(ITrigger **trigger)
     daily_trigger->start_boundary = NULL;
     daily_trigger->end_boundary = NULL;
     daily_trigger->enabled = TRUE;
+#ifdef __REACTOS__
+    daily_trigger->id = NULL;
+    daily_trigger->execution_time_limit = NULL;
+    daily_trigger->random_delay = NULL;
+    daily_trigger->repetition = NULL;
+#endif
 
     *trigger = (ITrigger*)&daily_trigger->IDailyTrigger_iface;
     return S_OK;
@@ -573,6 +701,14 @@ typedef struct {
     IRegistrationTrigger IRegistrationTrigger_iface;
     BOOL enabled;
     LONG ref;
+#ifdef __REACTOS__
+    WCHAR *id;
+    WCHAR *start_boundary;
+    WCHAR *end_boundary;
+    WCHAR *execution_time_limit;
+    WCHAR *delay;
+    IRepetitionPattern *repetition;
+#endif
 } RegistrationTrigger;
 
 static inline RegistrationTrigger *impl_from_IRegistrationTrigger(IRegistrationTrigger *iface)
@@ -624,6 +760,14 @@ static ULONG WINAPI RegistrationTrigger_Release(IRegistrationTrigger *iface)
     if(!ref)
     {
         TRACE("destroying %p\n", iface);
+#ifdef __REACTOS__
+        free(This->id);
+        free(This->start_boundary);
+        free(This->end_boundary);
+        free(This->execution_time_limit);
+        free(This->delay);
+        if (This->repetition) IRepetitionPattern_Release(This->repetition);
+#endif
         free(This);
     }
 
@@ -663,27 +807,71 @@ static HRESULT WINAPI RegistrationTrigger_Invoke(IRegistrationTrigger *iface, DI
 
 static HRESULT WINAPI RegistrationTrigger_get_Type(IRegistrationTrigger *iface, TASK_TRIGGER_TYPE2 *type)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, type);
+
+    if (!type) return E_POINTER;
+
+    *type = TASK_TRIGGER_REGISTRATION;
+    return S_OK;
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
     FIXME("(%p)->(%p)\n", This, type);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI RegistrationTrigger_get_Id(IRegistrationTrigger *iface, BSTR *id)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, id);
+
+    return task_get_string(This->id, id);
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
     FIXME("(%p)->(%p)\n", This, id);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI RegistrationTrigger_put_Id(IRegistrationTrigger *iface, BSTR id)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(id));
+
+    return task_put_string(&This->id, id);
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_w(id));
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI RegistrationTrigger_get_Repetition(IRegistrationTrigger *iface, IRepetitionPattern **repeat)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, repeat);
+
+    if (!repeat) return E_POINTER;
+
+    if (!This->repetition)
+    {
+        HRESULT hr = RepetitionPattern_create(&This->repetition);
+        if (FAILED(hr)) return hr;
+    }
+
+    IRepetitionPattern_AddRef(This->repetition);
+    *repeat = This->repetition;
+    return S_OK;
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
 
     TRACE("(%p)->(%p)\n", This, repeat);
@@ -691,6 +879,7 @@ static HRESULT WINAPI RegistrationTrigger_get_Repetition(IRegistrationTrigger *i
     if (!repeat) return E_POINTER;
 
     return RepetitionPattern_create(repeat);
+#endif
 }
 
 static HRESULT WINAPI RegistrationTrigger_put_Repetition(IRegistrationTrigger *iface, IRepetitionPattern *repeat)
@@ -702,44 +891,92 @@ static HRESULT WINAPI RegistrationTrigger_put_Repetition(IRegistrationTrigger *i
 
 static HRESULT WINAPI RegistrationTrigger_get_ExecutionTimeLimit(IRegistrationTrigger *iface, BSTR *limit)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, limit);
+
+    return task_get_string(This->execution_time_limit, limit);
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
     FIXME("(%p)->(%p)\n", This, limit);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI RegistrationTrigger_put_ExecutionTimeLimit(IRegistrationTrigger *iface, BSTR limit)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(limit));
+
+    return task_put_string(&This->execution_time_limit, limit);
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_w(limit));
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI RegistrationTrigger_get_StartBoundary(IRegistrationTrigger *iface, BSTR *start)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, start);
+
+    return task_get_string(This->start_boundary, start);
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
     FIXME("(%p)->(%p)\n", This, start);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI RegistrationTrigger_put_StartBoundary(IRegistrationTrigger *iface, BSTR start)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(start));
+
+    return task_put_string(&This->start_boundary, start);
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_w(start));
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI RegistrationTrigger_get_EndBoundary(IRegistrationTrigger *iface, BSTR *end)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, end);
+
+    return task_get_string(This->end_boundary, end);
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
     FIXME("(%p)->(%p)\n", This, end);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI RegistrationTrigger_put_EndBoundary(IRegistrationTrigger *iface, BSTR end)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(end));
+
+    return task_put_string(&This->end_boundary, end);
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_w(end));
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI RegistrationTrigger_get_Enabled(IRegistrationTrigger *iface, VARIANT_BOOL *enabled)
@@ -766,16 +1003,32 @@ static HRESULT WINAPI RegistrationTrigger_put_Enabled(IRegistrationTrigger *ifac
 
 static HRESULT WINAPI RegistrationTrigger_get_Delay(IRegistrationTrigger *iface, BSTR *pDelay)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, pDelay);
+
+    return task_get_string(This->delay, pDelay);
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
     FIXME("(%p)->(%p)\n", This, pDelay);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI RegistrationTrigger_put_Delay(IRegistrationTrigger *iface, BSTR delay)
 {
+#ifdef __REACTOS__
+    RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(delay));
+
+    return task_put_string(&This->delay, delay);
+#else
     RegistrationTrigger *This = impl_from_IRegistrationTrigger(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_w(delay));
     return E_NOTIMPL;
+#endif
 }
 
 static const IRegistrationTriggerVtbl RegistrationTrigger_vtbl = {
@@ -814,6 +1067,14 @@ static HRESULT RegistrationTrigger_create(ITrigger **trigger)
     registration_trigger->IRegistrationTrigger_iface.lpVtbl = &RegistrationTrigger_vtbl;
     registration_trigger->ref = 1;
     registration_trigger->enabled = TRUE;
+#ifdef __REACTOS__
+    registration_trigger->id = NULL;
+    registration_trigger->start_boundary = NULL;
+    registration_trigger->end_boundary = NULL;
+    registration_trigger->execution_time_limit = NULL;
+    registration_trigger->delay = NULL;
+    registration_trigger->repetition = NULL;
+#endif
 
     *trigger = (ITrigger*)&registration_trigger->IRegistrationTrigger_iface;
     return S_OK;
@@ -829,6 +1090,9 @@ typedef struct {
     WCHAR *start_boundary;
     WCHAR *end_boundary;
     WCHAR *delay;
+#ifdef __REACTOS__
+    IRepetitionPattern *repetition;
+#endif
 } LogonTrigger;
 
 static inline LogonTrigger *impl_from_ILogonTrigger(ILogonTrigger *iface)
@@ -885,6 +1149,9 @@ static ULONG WINAPI LogonTrigger_Release(ILogonTrigger *iface)
         free(This->start_boundary);
         free(This->end_boundary);
         free(This->delay);
+#ifdef __REACTOS__
+        if (This->repetition) IRepetitionPattern_Release(This->repetition);
+#endif
         free(This);
     }
 
@@ -963,6 +1230,23 @@ static HRESULT WINAPI LogonTrigger_put_Id(ILogonTrigger *iface, BSTR id)
 
 static HRESULT WINAPI LogonTrigger_get_Repetition(ILogonTrigger *iface, IRepetitionPattern **repeat)
 {
+#ifdef __REACTOS__
+    LogonTrigger *This = impl_from_ILogonTrigger(iface);
+
+    TRACE("(%p)->(%p)\n", This, repeat);
+
+    if (!repeat) return E_POINTER;
+
+    if (!This->repetition)
+    {
+        HRESULT hr = RepetitionPattern_create(&This->repetition);
+        if (FAILED(hr)) return hr;
+    }
+
+    IRepetitionPattern_AddRef(This->repetition);
+    *repeat = This->repetition;
+    return S_OK;
+#else
     LogonTrigger *This = impl_from_ILogonTrigger(iface);
 
     TRACE("(%p)->(%p)\n", This, repeat);
@@ -970,6 +1254,7 @@ static HRESULT WINAPI LogonTrigger_get_Repetition(ILogonTrigger *iface, IRepetit
     if (!repeat) return E_POINTER;
 
     return RepetitionPattern_create(repeat);
+#endif
 }
 
 static HRESULT WINAPI LogonTrigger_put_Repetition(ILogonTrigger *iface, IRepetitionPattern *repeat)
@@ -1180,6 +1465,9 @@ static HRESULT LogonTrigger_create(ITrigger **trigger)
     logon_trigger->start_boundary = NULL;
     logon_trigger->end_boundary = NULL;
     logon_trigger->delay = NULL;
+#ifdef __REACTOS__
+    logon_trigger->repetition = NULL;
+#endif
 
     *trigger = (ITrigger*)&logon_trigger->ILogonTrigger_iface;
     return S_OK;
@@ -1189,6 +1477,10 @@ typedef struct
 {
     ITriggerCollection ITriggerCollection_iface;
     LONG ref;
+#ifdef __REACTOS__
+    ITrigger **items;
+    LONG count;
+#endif
 } trigger_collection;
 
 static inline trigger_collection *impl_from_ITriggerCollection(ITriggerCollection *iface)
@@ -1233,8 +1525,18 @@ static ULONG WINAPI TriggerCollection_Release(ITriggerCollection *iface)
 
     TRACE("(%p) ref=%ld\n", This, ref);
 
+#ifdef __REACTOS__
+    if(!ref)
+    {
+        while (This->count)
+            ITrigger_Release(This->items[--This->count]);
+        free(This->items);
+        free(This);
+    }
+#else
     if(!ref)
         free(This);
+#endif
 
     return ref;
 }
@@ -1272,16 +1574,40 @@ static HRESULT WINAPI TriggerCollection_Invoke(ITriggerCollection *iface, DISPID
 
 static HRESULT WINAPI TriggerCollection_get_Count(ITriggerCollection *iface, LONG *count)
 {
+#ifdef __REACTOS__
+    trigger_collection *This = impl_from_ITriggerCollection(iface);
+
+    TRACE("(%p)->(%p)\n", This, count);
+
+    if (!count) return E_POINTER;
+
+    *count = This->count;
+    return S_OK;
+#else
     trigger_collection *This = impl_from_ITriggerCollection(iface);
     FIXME("(%p)->(%p)\n", This, count);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI TriggerCollection_get_Item(ITriggerCollection *iface, LONG index, ITrigger **trigger)
 {
+#ifdef __REACTOS__
+    trigger_collection *This = impl_from_ITriggerCollection(iface);
+
+    TRACE("(%p)->(%ld %p)\n", This, index, trigger);
+
+    if (!trigger) return E_POINTER;
+    if (index < 1 || index > This->count) return E_INVALIDARG;
+
+    ITrigger_AddRef(This->items[index - 1]);
+    *trigger = This->items[index - 1];
+    return S_OK;
+#else
     trigger_collection *This = impl_from_ITriggerCollection(iface);
     FIXME("(%p)->(%ld %p)\n", This, index, trigger);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI TriggerCollection_get__NewEnum(ITriggerCollection *iface, IUnknown **penum)
@@ -1293,6 +1619,54 @@ static HRESULT WINAPI TriggerCollection_get__NewEnum(ITriggerCollection *iface, 
 
 static HRESULT WINAPI TriggerCollection_Create(ITriggerCollection *iface, TASK_TRIGGER_TYPE2 type, ITrigger **trigger)
 {
+#ifdef __REACTOS__
+    trigger_collection *This = impl_from_ITriggerCollection(iface);
+    ITrigger *created, **items;
+    HRESULT hr;
+
+    TRACE("(%p)->(%d %p)\n", This, type, trigger);
+
+    switch(type) {
+    case TASK_TRIGGER_DAILY:
+        hr = DailyTrigger_create(&created);
+        break;
+    case TASK_TRIGGER_REGISTRATION:
+        hr = RegistrationTrigger_create(&created);
+        break;
+    case TASK_TRIGGER_LOGON:
+        hr = LogonTrigger_create(&created);
+        break;
+    case TASK_TRIGGER_EVENT:
+    case TASK_TRIGGER_TIME:
+    case TASK_TRIGGER_WEEKLY:
+    case TASK_TRIGGER_MONTHLY:
+    case TASK_TRIGGER_MONTHLYDOW:
+    case TASK_TRIGGER_IDLE:
+    case TASK_TRIGGER_BOOT:
+    case TASK_TRIGGER_SESSION_STATE_CHANGE:
+        FIXME("Unimplemented type %d\n", type);
+        return E_NOTIMPL;
+    default:
+        return E_INVALIDARG;
+    }
+    if (FAILED(hr)) return hr;
+
+    items = realloc(This->items, (This->count + 1) * sizeof(*items));
+    if (!items)
+    {
+        ITrigger_Release(created);
+        return E_OUTOFMEMORY;
+    }
+    This->items = items;
+    This->items[This->count++] = created;
+
+    if (trigger)
+    {
+        ITrigger_AddRef(created);
+        *trigger = created;
+    }
+    return S_OK;
+#else
     trigger_collection *This = impl_from_ITriggerCollection(iface);
 
     TRACE("(%p)->(%d %p)\n", This, type, trigger);
@@ -1310,20 +1684,49 @@ static HRESULT WINAPI TriggerCollection_Create(ITriggerCollection *iface, TASK_T
     }
 
     return S_OK;
+#endif
 }
 
 static HRESULT WINAPI TriggerCollection_Remove(ITriggerCollection *iface, VARIANT index)
 {
+#ifdef __REACTOS__
+    trigger_collection *This = impl_from_ITriggerCollection(iface);
+    VARIANT v;
+    LONG i;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&index));
+
+    VariantInit(&v);
+    if (FAILED(VariantChangeType(&v, &index, 0, VT_I4)) || V_I4(&v) < 1 || V_I4(&v) > This->count)
+        return E_INVALIDARG;
+
+    i = V_I4(&v) - 1;
+    ITrigger_Release(This->items[i]);
+    memmove(&This->items[i], &This->items[i + 1], (This->count - i - 1) * sizeof(*This->items));
+    This->count--;
+    return S_OK;
+#else
     trigger_collection *This = impl_from_ITriggerCollection(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_variant(&index));
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI TriggerCollection_Clear(ITriggerCollection *iface)
 {
+#ifdef __REACTOS__
+    trigger_collection *This = impl_from_ITriggerCollection(iface);
+
+    TRACE("(%p)\n", This);
+
+    while (This->count)
+        ITrigger_Release(This->items[--This->count]);
+    return S_OK;
+#else
     trigger_collection *This = impl_from_ITriggerCollection(iface);
     FIXME("(%p)\n", This);
     return E_NOTIMPL;
+#endif
 }
 
 static const ITriggerCollectionVtbl TriggerCollection_vtbl = {
@@ -1726,6 +2129,366 @@ static HRESULT RegistrationInfo_create(IRegistrationInfo **obj)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+typedef struct
+{
+    IIdleSettings IIdleSettings_iface;
+    LONG ref;
+    WCHAR *idle_duration;
+    WCHAR *wait_timeout;
+    VARIANT_BOOL stop_on_idle_end;
+    VARIANT_BOOL restart_on_idle;
+} IdleSettings;
+
+static inline IdleSettings *impl_from_IIdleSettings(IIdleSettings *iface)
+{
+    return CONTAINING_RECORD(iface, IdleSettings, IIdleSettings_iface);
+}
+
+static ULONG WINAPI IdleSettings_AddRef(IIdleSettings *iface)
+{
+    IdleSettings *idle = impl_from_IIdleSettings(iface);
+    return InterlockedIncrement(&idle->ref);
+}
+
+static ULONG WINAPI IdleSettings_Release(IIdleSettings *iface)
+{
+    IdleSettings *idle = impl_from_IIdleSettings(iface);
+    LONG ref = InterlockedDecrement(&idle->ref);
+
+    if (!ref)
+    {
+        TRACE("destroying %p\n", iface);
+        free(idle->idle_duration);
+        free(idle->wait_timeout);
+        free(idle);
+    }
+
+    return ref;
+}
+
+static HRESULT WINAPI IdleSettings_QueryInterface(IIdleSettings *iface, REFIID riid, void **obj)
+{
+    if (!riid || !obj) return E_INVALIDARG;
+
+    TRACE("%p,%s,%p\n", iface, debugstr_guid(riid), obj);
+
+    if (IsEqualGUID(riid, &IID_IIdleSettings) ||
+        IsEqualGUID(riid, &IID_IDispatch) ||
+        IsEqualGUID(riid, &IID_IUnknown))
+    {
+        IIdleSettings_AddRef(iface);
+        *obj = iface;
+        return S_OK;
+    }
+
+    FIXME("interface %s is not implemented\n", debugstr_guid(riid));
+    *obj = NULL;
+    return E_NOINTERFACE;
+}
+
+static HRESULT WINAPI IdleSettings_GetTypeInfoCount(IIdleSettings *iface, UINT *count)
+{
+    FIXME("%p,%p: stub\n", iface, count);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IdleSettings_GetTypeInfo(IIdleSettings *iface, UINT index, LCID lcid, ITypeInfo **info)
+{
+    FIXME("%p,%u,%lu,%p: stub\n", iface, index, lcid, info);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IdleSettings_GetIDsOfNames(IIdleSettings *iface, REFIID riid, LPOLESTR *names,
+                                                 UINT count, LCID lcid, DISPID *dispid)
+{
+    FIXME("%p,%s,%p,%u,%lu,%p: stub\n", iface, debugstr_guid(riid), names, count, lcid, dispid);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IdleSettings_Invoke(IIdleSettings *iface, DISPID dispid, REFIID riid, LCID lcid, WORD flags,
+                                          DISPPARAMS *params, VARIANT *result, EXCEPINFO *excepinfo, UINT *argerr)
+{
+    FIXME("%p,%ld,%s,%04lx,%04x,%p,%p,%p,%p: stub\n", iface, dispid, debugstr_guid(riid), lcid, flags,
+          params, result, excepinfo, argerr);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IdleSettings_get_IdleDuration(IIdleSettings *iface, BSTR *delay)
+{
+    IdleSettings *idle = impl_from_IIdleSettings(iface);
+
+    TRACE("%p,%p\n", iface, delay);
+
+    return task_get_string(idle->idle_duration, delay);
+}
+
+static HRESULT WINAPI IdleSettings_put_IdleDuration(IIdleSettings *iface, BSTR delay)
+{
+    IdleSettings *idle = impl_from_IIdleSettings(iface);
+
+    TRACE("%p,%s\n", iface, debugstr_w(delay));
+
+    return task_put_string(&idle->idle_duration, delay);
+}
+
+static HRESULT WINAPI IdleSettings_get_WaitTimeout(IIdleSettings *iface, BSTR *timeout)
+{
+    IdleSettings *idle = impl_from_IIdleSettings(iface);
+
+    TRACE("%p,%p\n", iface, timeout);
+
+    return task_get_string(idle->wait_timeout, timeout);
+}
+
+static HRESULT WINAPI IdleSettings_put_WaitTimeout(IIdleSettings *iface, BSTR timeout)
+{
+    IdleSettings *idle = impl_from_IIdleSettings(iface);
+
+    TRACE("%p,%s\n", iface, debugstr_w(timeout));
+
+    return task_put_string(&idle->wait_timeout, timeout);
+}
+
+static HRESULT WINAPI IdleSettings_get_StopOnIdleEnd(IIdleSettings *iface, VARIANT_BOOL *stop)
+{
+    IdleSettings *idle = impl_from_IIdleSettings(iface);
+
+    TRACE("%p,%p\n", iface, stop);
+
+    if (!stop) return E_POINTER;
+
+    *stop = idle->stop_on_idle_end;
+
+    return S_OK;
+}
+
+static HRESULT WINAPI IdleSettings_put_StopOnIdleEnd(IIdleSettings *iface, VARIANT_BOOL stop)
+{
+    IdleSettings *idle = impl_from_IIdleSettings(iface);
+
+    TRACE("%p,%d\n", iface, stop);
+
+    idle->stop_on_idle_end = stop;
+
+    return S_OK;
+}
+
+static HRESULT WINAPI IdleSettings_get_RestartOnIdle(IIdleSettings *iface, VARIANT_BOOL *restart)
+{
+    IdleSettings *idle = impl_from_IIdleSettings(iface);
+
+    TRACE("%p,%p\n", iface, restart);
+
+    if (!restart) return E_POINTER;
+
+    *restart = idle->restart_on_idle;
+
+    return S_OK;
+}
+
+static HRESULT WINAPI IdleSettings_put_RestartOnIdle(IIdleSettings *iface, VARIANT_BOOL restart)
+{
+    IdleSettings *idle = impl_from_IIdleSettings(iface);
+
+    TRACE("%p,%d\n", iface, restart);
+
+    idle->restart_on_idle = restart;
+
+    return S_OK;
+}
+
+static const IIdleSettingsVtbl IdleSettings_vtbl =
+{
+    IdleSettings_QueryInterface,
+    IdleSettings_AddRef,
+    IdleSettings_Release,
+    IdleSettings_GetTypeInfoCount,
+    IdleSettings_GetTypeInfo,
+    IdleSettings_GetIDsOfNames,
+    IdleSettings_Invoke,
+    IdleSettings_get_IdleDuration,
+    IdleSettings_put_IdleDuration,
+    IdleSettings_get_WaitTimeout,
+    IdleSettings_put_WaitTimeout,
+    IdleSettings_get_StopOnIdleEnd,
+    IdleSettings_put_StopOnIdleEnd,
+    IdleSettings_get_RestartOnIdle,
+    IdleSettings_put_RestartOnIdle
+};
+
+static HRESULT IdleSettings_create(IIdleSettings **obj)
+{
+    IdleSettings *idle;
+
+    idle = malloc(sizeof(*idle));
+    if (!idle) return E_OUTOFMEMORY;
+
+    idle->IIdleSettings_iface.lpVtbl = &IdleSettings_vtbl;
+    idle->ref = 1;
+    idle->idle_duration = wcsdup(L"PT10M");
+    idle->wait_timeout = wcsdup(L"PT1H");
+    idle->stop_on_idle_end = VARIANT_TRUE;
+    idle->restart_on_idle = VARIANT_FALSE;
+
+    *obj = &idle->IIdleSettings_iface;
+
+    TRACE("created %p\n", *obj);
+
+    return S_OK;
+}
+
+typedef struct
+{
+    INetworkSettings INetworkSettings_iface;
+    LONG ref;
+    WCHAR *name;
+    WCHAR *id;
+} NetworkSettings;
+
+static inline NetworkSettings *impl_from_INetworkSettings(INetworkSettings *iface)
+{
+    return CONTAINING_RECORD(iface, NetworkSettings, INetworkSettings_iface);
+}
+
+static ULONG WINAPI NetworkSettings_AddRef(INetworkSettings *iface)
+{
+    NetworkSettings *network = impl_from_INetworkSettings(iface);
+    return InterlockedIncrement(&network->ref);
+}
+
+static ULONG WINAPI NetworkSettings_Release(INetworkSettings *iface)
+{
+    NetworkSettings *network = impl_from_INetworkSettings(iface);
+    LONG ref = InterlockedDecrement(&network->ref);
+
+    if (!ref)
+    {
+        TRACE("destroying %p\n", iface);
+        free(network->name);
+        free(network->id);
+        free(network);
+    }
+
+    return ref;
+}
+
+static HRESULT WINAPI NetworkSettings_QueryInterface(INetworkSettings *iface, REFIID riid, void **obj)
+{
+    if (!riid || !obj) return E_INVALIDARG;
+
+    TRACE("%p,%s,%p\n", iface, debugstr_guid(riid), obj);
+
+    if (IsEqualGUID(riid, &IID_INetworkSettings) ||
+        IsEqualGUID(riid, &IID_IDispatch) ||
+        IsEqualGUID(riid, &IID_IUnknown))
+    {
+        INetworkSettings_AddRef(iface);
+        *obj = iface;
+        return S_OK;
+    }
+
+    FIXME("interface %s is not implemented\n", debugstr_guid(riid));
+    *obj = NULL;
+    return E_NOINTERFACE;
+}
+
+static HRESULT WINAPI NetworkSettings_GetTypeInfoCount(INetworkSettings *iface, UINT *count)
+{
+    FIXME("%p,%p: stub\n", iface, count);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI NetworkSettings_GetTypeInfo(INetworkSettings *iface, UINT index, LCID lcid, ITypeInfo **info)
+{
+    FIXME("%p,%u,%lu,%p: stub\n", iface, index, lcid, info);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI NetworkSettings_GetIDsOfNames(INetworkSettings *iface, REFIID riid, LPOLESTR *names,
+                                                    UINT count, LCID lcid, DISPID *dispid)
+{
+    FIXME("%p,%s,%p,%u,%lu,%p: stub\n", iface, debugstr_guid(riid), names, count, lcid, dispid);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI NetworkSettings_Invoke(INetworkSettings *iface, DISPID dispid, REFIID riid, LCID lcid, WORD flags,
+                                             DISPPARAMS *params, VARIANT *result, EXCEPINFO *excepinfo, UINT *argerr)
+{
+    FIXME("%p,%ld,%s,%04lx,%04x,%p,%p,%p,%p: stub\n", iface, dispid, debugstr_guid(riid), lcid, flags,
+          params, result, excepinfo, argerr);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI NetworkSettings_get_Name(INetworkSettings *iface, BSTR *name)
+{
+    NetworkSettings *network = impl_from_INetworkSettings(iface);
+
+    TRACE("%p,%p\n", iface, name);
+
+    return task_get_string(network->name, name);
+}
+
+static HRESULT WINAPI NetworkSettings_put_Name(INetworkSettings *iface, BSTR name)
+{
+    NetworkSettings *network = impl_from_INetworkSettings(iface);
+
+    TRACE("%p,%s\n", iface, debugstr_w(name));
+
+    return task_put_string(&network->name, name);
+}
+
+static HRESULT WINAPI NetworkSettings_get_Id(INetworkSettings *iface, BSTR *id)
+{
+    NetworkSettings *network = impl_from_INetworkSettings(iface);
+
+    TRACE("%p,%p\n", iface, id);
+
+    return task_get_string(network->id, id);
+}
+
+static HRESULT WINAPI NetworkSettings_put_Id(INetworkSettings *iface, BSTR id)
+{
+    NetworkSettings *network = impl_from_INetworkSettings(iface);
+
+    TRACE("%p,%s\n", iface, debugstr_w(id));
+
+    return task_put_string(&network->id, id);
+}
+
+static const INetworkSettingsVtbl NetworkSettings_vtbl =
+{
+    NetworkSettings_QueryInterface,
+    NetworkSettings_AddRef,
+    NetworkSettings_Release,
+    NetworkSettings_GetTypeInfoCount,
+    NetworkSettings_GetTypeInfo,
+    NetworkSettings_GetIDsOfNames,
+    NetworkSettings_Invoke,
+    NetworkSettings_get_Name,
+    NetworkSettings_put_Name,
+    NetworkSettings_get_Id,
+    NetworkSettings_put_Id
+};
+
+static HRESULT NetworkSettings_create(INetworkSettings **obj)
+{
+    NetworkSettings *network;
+
+    network = calloc(1, sizeof(*network));
+    if (!network) return E_OUTOFMEMORY;
+
+    network->INetworkSettings_iface.lpVtbl = &NetworkSettings_vtbl;
+    network->ref = 1;
+
+    *obj = &network->INetworkSettings_iface;
+
+    TRACE("created %p\n", *obj);
+
+    return S_OK;
+}
+#endif
+
 typedef struct
 {
     ITaskSettings ITaskSettings_iface;
@@ -1747,6 +2510,10 @@ typedef struct
     BOOL hidden;
     BOOL run_only_if_idle;
     BOOL wake_to_run;
+#ifdef __REACTOS__
+    IIdleSettings *idle_settings;
+    INetworkSettings *network_settings;
+#endif
 } TaskSettings;
 
 static inline TaskSettings *impl_from_ITaskSettings(ITaskSettings *iface)
@@ -1771,6 +2538,10 @@ static ULONG WINAPI TaskSettings_Release(ITaskSettings *iface)
         free(taskset->restart_interval);
         free(taskset->execution_time_limit);
         free(taskset->delete_expired_task_after);
+#ifdef __REACTOS__
+        IIdleSettings_Release(taskset->idle_settings);
+        INetworkSettings_Release(taskset->network_settings);
+#endif
         free(taskset);
     }
 
@@ -2222,14 +2993,41 @@ static HRESULT WINAPI TaskSettings_put_Hidden(ITaskSettings *iface, VARIANT_BOOL
 
 static HRESULT WINAPI TaskSettings_get_IdleSettings(ITaskSettings *iface, IIdleSettings **settings)
 {
+#ifdef __REACTOS__
+    TaskSettings *taskset = impl_from_ITaskSettings(iface);
+
+    TRACE("%p,%p\n", iface, settings);
+
+    if (!settings) return E_POINTER;
+
+    IIdleSettings_AddRef(taskset->idle_settings);
+    *settings = taskset->idle_settings;
+
+    return S_OK;
+#else
     FIXME("%p,%p: stub\n", iface, settings);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI TaskSettings_put_IdleSettings(ITaskSettings *iface, IIdleSettings *settings)
 {
+#ifdef __REACTOS__
+    TaskSettings *taskset = impl_from_ITaskSettings(iface);
+
+    TRACE("%p,%p\n", iface, settings);
+
+    if (!settings) return S_OK;
+
+    IIdleSettings_AddRef(settings);
+    IIdleSettings_Release(taskset->idle_settings);
+    taskset->idle_settings = settings;
+
+    return S_OK;
+#else
     FIXME("%p,%p: stub\n", iface, settings);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI TaskSettings_get_RunOnlyIfIdle(ITaskSettings *iface, VARIANT_BOOL *run)
@@ -2282,14 +3080,44 @@ static HRESULT WINAPI TaskSettings_put_WakeToRun(ITaskSettings *iface, VARIANT_B
 
 static HRESULT WINAPI TaskSettings_get_NetworkSettings(ITaskSettings *iface, INetworkSettings **settings)
 {
+#ifdef __REACTOS__
+    TaskSettings *taskset = impl_from_ITaskSettings(iface);
+
+    TRACE("%p,%p\n", iface, settings);
+
+    if (!settings) return E_POINTER;
+
+    INetworkSettings_AddRef(taskset->network_settings);
+    *settings = taskset->network_settings;
+
+    return S_OK;
+#else
     FIXME("%p,%p: stub\n", iface, settings);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI TaskSettings_put_NetworkSettings(ITaskSettings *iface, INetworkSettings *settings)
 {
+#ifdef __REACTOS__
+    TaskSettings *taskset = impl_from_ITaskSettings(iface);
+    HRESULT hr;
+
+    TRACE("%p,%p\n", iface, settings);
+
+    if (settings)
+        INetworkSettings_AddRef(settings);
+    else if (FAILED(hr = NetworkSettings_create(&settings)))
+        return hr;
+
+    INetworkSettings_Release(taskset->network_settings);
+    taskset->network_settings = settings;
+
+    return S_OK;
+#else
     FIXME("%p,%p: stub\n", iface, settings);
     return E_NOTIMPL;
+#endif
 }
 
 static const ITaskSettingsVtbl TaskSettings_vtbl =
@@ -2350,6 +3178,20 @@ static HRESULT TaskSettings_create(ITaskSettings **obj)
     taskset = malloc(sizeof(*taskset));
     if (!taskset) return E_OUTOFMEMORY;
 
+#ifdef __REACTOS__
+    if (FAILED(IdleSettings_create(&taskset->idle_settings)))
+    {
+        free(taskset);
+        return E_OUTOFMEMORY;
+    }
+    if (FAILED(NetworkSettings_create(&taskset->network_settings)))
+    {
+        IIdleSettings_Release(taskset->idle_settings);
+        free(taskset);
+        return E_OUTOFMEMORY;
+    }
+
+#endif
     taskset->ITaskSettings_iface.lpVtbl = &TaskSettings_vtbl;
     taskset->ref = 1;
     /* set the defaults */
@@ -2382,6 +3224,14 @@ typedef struct
 {
     IPrincipal IPrincipal_iface;
     LONG ref;
+#ifdef __REACTOS__
+    WCHAR *id;
+    WCHAR *display_name;
+    WCHAR *user_id;
+    WCHAR *group_id;
+    TASK_LOGON_TYPE logon_type;
+    TASK_RUNLEVEL_TYPE run_level;
+#endif
 } Principal;
 
 static inline Principal *impl_from_IPrincipal(IPrincipal *iface)
@@ -2403,6 +3253,12 @@ static ULONG WINAPI Principal_Release(IPrincipal *iface)
     if (!ref)
     {
         TRACE("destroying %p\n", iface);
+#ifdef __REACTOS__
+        free(principal->id);
+        free(principal->display_name);
+        free(principal->user_id);
+        free(principal->group_id);
+#endif
         free(principal);
     }
 
@@ -2456,76 +3312,209 @@ static HRESULT WINAPI Principal_Invoke(IPrincipal *iface, DISPID dispid, REFIID 
     return E_NOTIMPL;
 }
 
+#ifdef __REACTOS__
+static HRESULT principal_get_account(const WCHAR *value, BSTR *str)
+{
+    WCHAR name[256], domain[256];
+    DWORD name_len = ARRAY_SIZE(name), domain_len = ARRAY_SIZE(domain);
+    SID_NAME_USE use;
+    PSID sid;
+
+    if (!str) return E_POINTER;
+
+    if (value && ConvertStringSidToSidW(value, &sid))
+    {
+        BOOL found = LookupAccountSidW(NULL, sid, name, &name_len, domain, &domain_len, &use);
+
+        LocalFree(sid);
+        if (found && (use == SidTypeWellKnownGroup || use == SidTypeAlias))
+            value = name;
+    }
+
+    return task_get_string(value, str);
+}
+
+#endif
 static HRESULT WINAPI Principal_get_Id(IPrincipal *iface, BSTR *id)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%p\n", iface, id);
+
+    return task_get_string(principal->id, id);
+#else
     FIXME("%p,%p: stub\n", iface, id);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Principal_put_Id(IPrincipal *iface, BSTR id)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%s\n", iface, debugstr_w(id));
+
+    return task_put_string(&principal->id, id);
+#else
     FIXME("%p,%s: stub\n", iface, debugstr_w(id));
     return S_OK;
+#endif
 }
 
 static HRESULT WINAPI Principal_get_DisplayName(IPrincipal *iface, BSTR *name)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%p\n", iface, name);
+
+    return task_get_string(principal->display_name, name);
+#else
     FIXME("%p,%p: stub\n", iface, name);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Principal_put_DisplayName(IPrincipal *iface, BSTR name)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%s\n", iface, debugstr_w(name));
+
+    return task_put_string(&principal->display_name, name);
+#else
     FIXME("%p,%s: stub\n", iface, debugstr_w(name));
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Principal_get_UserId(IPrincipal *iface, BSTR *user_id)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%p\n", iface, user_id);
+
+    return principal_get_account(principal->user_id, user_id);
+#else
     FIXME("%p,%p: stub\n", iface, user_id);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Principal_put_UserId(IPrincipal *iface, BSTR user_id)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%s\n", iface, debugstr_w(user_id));
+
+    return task_put_string(&principal->user_id, user_id);
+#else
     FIXME("%p,%s: stub\n", iface, debugstr_w(user_id));
     return S_OK;
+#endif
 }
 
 static HRESULT WINAPI Principal_get_LogonType(IPrincipal *iface, TASK_LOGON_TYPE *logon_type)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%p\n", iface, logon_type);
+
+    if (!logon_type) return E_POINTER;
+
+    *logon_type = principal->logon_type;
+
+    return S_OK;
+#else
     FIXME("%p,%p: stub\n", iface, logon_type);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Principal_put_LogonType(IPrincipal *iface, TASK_LOGON_TYPE logon_type)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%u\n", iface, logon_type);
+
+    if (logon_type == TASK_LOGON_NONE) return E_INVALIDARG;
+
+    principal->logon_type = logon_type;
+
+    return S_OK;
+#else
     FIXME("%p,%u: stub\n", iface, logon_type);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Principal_get_GroupId(IPrincipal *iface, BSTR *group_id)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%p\n", iface, group_id);
+
+    return principal_get_account(principal->group_id, group_id);
+#else
     FIXME("%p,%p: stub\n", iface, group_id);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Principal_put_GroupId(IPrincipal *iface, BSTR group_id)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%s\n", iface, debugstr_w(group_id));
+
+    return task_put_string(&principal->group_id, group_id);
+#else
     FIXME("%p,%s: stub\n", iface, debugstr_w(group_id));
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Principal_get_RunLevel(IPrincipal *iface, TASK_RUNLEVEL_TYPE *run_level)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%p\n", iface, run_level);
+
+    if (!run_level) return E_POINTER;
+
+    *run_level = principal->run_level;
+
+    return S_OK;
+#else
     FIXME("%p,%p: stub\n", iface, run_level);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Principal_put_RunLevel(IPrincipal *iface, TASK_RUNLEVEL_TYPE run_level)
 {
+#ifdef __REACTOS__
+    Principal *principal = impl_from_IPrincipal(iface);
+
+    TRACE("%p,%u\n", iface, run_level);
+
+    principal->run_level = run_level;
+
+    return S_OK;
+#else
     FIXME("%p,%u: stub\n", iface, run_level);
     return S_OK;
+#endif
 }
 
 static const IPrincipalVtbl Principal_vtbl =
@@ -2560,6 +3549,14 @@ static HRESULT Principal_create(IPrincipal **obj)
 
     principal->IPrincipal_iface.lpVtbl = &Principal_vtbl;
     principal->ref = 1;
+#ifdef __REACTOS__
+    principal->id = NULL;
+    principal->display_name = NULL;
+    principal->user_id = NULL;
+    principal->group_id = NULL;
+    principal->logon_type = TASK_LOGON_INTERACTIVE_TOKEN;
+    principal->run_level = TASK_RUNLEVEL_LUA;
+#endif
 
     *obj = &principal->IPrincipal_iface;
 
@@ -2823,6 +3820,11 @@ typedef struct
 {
     IActionCollection IActionCollection_iface;
     LONG ref;
+#ifdef __REACTOS__
+    IAction **items;
+    LONG count;
+    WCHAR *context;
+#endif
 } Actions;
 
 static inline Actions *impl_from_IActionCollection(IActionCollection *iface)
@@ -2844,6 +3846,12 @@ static ULONG WINAPI Actions_Release(IActionCollection *iface)
     if (!ref)
     {
         TRACE("destroying %p\n", iface);
+#ifdef __REACTOS__
+        while (actions->count)
+            IAction_Release(actions->items[--actions->count]);
+        free(actions->items);
+        free(actions->context);
+#endif
         free(actions);
     }
 
@@ -2899,14 +3907,38 @@ static HRESULT WINAPI Actions_Invoke(IActionCollection *iface, DISPID dispid, RE
 
 static HRESULT WINAPI Actions_get_Count(IActionCollection *iface, LONG *count)
 {
+#ifdef __REACTOS__
+    Actions *actions = impl_from_IActionCollection(iface);
+
+    TRACE("%p,%p\n", iface, count);
+
+    if (!count) return E_POINTER;
+
+    *count = actions->count;
+    return S_OK;
+#else
     FIXME("%p,%p: stub\n", iface, count);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Actions_get_Item(IActionCollection *iface, LONG index, IAction **action)
 {
+#ifdef __REACTOS__
+    Actions *actions = impl_from_IActionCollection(iface);
+
+    TRACE("%p,%ld,%p\n", iface, index, action);
+
+    if (!action) return E_POINTER;
+    if (index < 1 || index > actions->count) return E_INVALIDARG;
+
+    IAction_AddRef(actions->items[index - 1]);
+    *action = actions->items[index - 1];
+    return S_OK;
+#else
     FIXME("%p,%ld,%p: stub\n", iface, index, action);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Actions_get__NewEnum(IActionCollection *iface, IUnknown **penum)
@@ -2929,6 +3961,46 @@ static HRESULT WINAPI Actions_put_XmlText(IActionCollection *iface, BSTR xml)
 
 static HRESULT WINAPI Actions_Create(IActionCollection *iface, TASK_ACTION_TYPE type, IAction **action)
 {
+#ifdef __REACTOS__
+    Actions *actions = impl_from_IActionCollection(iface);
+    IAction *created, **items;
+    HRESULT hr;
+
+    TRACE("%p,%u,%p\n", iface, type, action);
+
+    switch (type)
+    {
+    case TASK_ACTION_EXEC:
+        hr = ExecAction_create((IExecAction **)&created);
+        break;
+
+    case TASK_ACTION_COM_HANDLER:
+    case TASK_ACTION_SEND_EMAIL:
+    case TASK_ACTION_SHOW_MESSAGE:
+        FIXME("unimplemented type %u\n", type);
+        return E_NOTIMPL;
+
+    default:
+        return E_INVALIDARG;
+    }
+    if (FAILED(hr)) return hr;
+
+    items = realloc(actions->items, (actions->count + 1) * sizeof(*items));
+    if (!items)
+    {
+        IAction_Release(created);
+        return E_OUTOFMEMORY;
+    }
+    actions->items = items;
+    actions->items[actions->count++] = created;
+
+    if (action)
+    {
+        IAction_AddRef(created);
+        *action = created;
+    }
+    return S_OK;
+#else
     TRACE("%p,%u,%p\n", iface, type, action);
 
     switch (type)
@@ -2940,30 +4012,75 @@ static HRESULT WINAPI Actions_Create(IActionCollection *iface, TASK_ACTION_TYPE 
         FIXME("unimplemented type %u\n", type);
         return E_NOTIMPL;
     }
+#endif
 }
 
 static HRESULT WINAPI Actions_Remove(IActionCollection *iface, VARIANT index)
 {
+#ifdef __REACTOS__
+    Actions *actions = impl_from_IActionCollection(iface);
+    VARIANT v;
+    LONG i;
+
+    TRACE("%p,%s\n", iface, debugstr_variant(&index));
+
+    VariantInit(&v);
+    if (FAILED(VariantChangeType(&v, &index, 0, VT_I4)) || V_I4(&v) < 1 || V_I4(&v) > actions->count)
+        return E_INVALIDARG;
+
+    i = V_I4(&v) - 1;
+    IAction_Release(actions->items[i]);
+    memmove(&actions->items[i], &actions->items[i + 1], (actions->count - i - 1) * sizeof(*actions->items));
+    actions->count--;
+    return S_OK;
+#else
     FIXME("%p,%s: stub\n", iface, debugstr_variant(&index));
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Actions_Clear(IActionCollection *iface)
 {
+#ifdef __REACTOS__
+    Actions *actions = impl_from_IActionCollection(iface);
+
+    TRACE("%p\n", iface);
+
+    while (actions->count)
+        IAction_Release(actions->items[--actions->count]);
+    return S_OK;
+#else
     FIXME("%p: stub\n", iface);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Actions_get_Context(IActionCollection *iface, BSTR *ctx)
 {
+#ifdef __REACTOS__
+    Actions *actions = impl_from_IActionCollection(iface);
+
+    TRACE("%p,%p\n", iface, ctx);
+
+    return task_get_string(actions->context, ctx);
+#else
     FIXME("%p,%p: stub\n", iface, ctx);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI Actions_put_Context(IActionCollection *iface, BSTR ctx)
 {
+#ifdef __REACTOS__
+    Actions *actions = impl_from_IActionCollection(iface);
+
+    TRACE("%p,%s\n", iface, debugstr_w(ctx));
+
+    return task_put_string(&actions->context, ctx);
+#else
     FIXME("%p,%s: stub\n", iface, debugstr_w(ctx));
     return S_OK;
+#endif
 }
 
 static const IActionCollectionVtbl Actions_vtbl =
@@ -2996,6 +4113,11 @@ static HRESULT Actions_create(IActionCollection **obj)
 
     actions->IActionCollection_iface.lpVtbl = &Actions_vtbl;
     actions->ref = 1;
+#ifdef __REACTOS__
+    actions->items = NULL;
+    actions->count = 0;
+    actions->context = NULL;
+#endif
 
     *obj = &actions->IActionCollection_iface;
 
@@ -3129,6 +4251,15 @@ static HRESULT WINAPI TaskDefinition_put_RegistrationInfo(ITaskDefinition *iface
 
     TRACE("%p,%p\n", iface, info);
 
+#ifdef __REACTOS__
+    if (info)
+        IRegistrationInfo_AddRef(info);
+
+    if (taskdef->reginfo)
+        IRegistrationInfo_Release(taskdef->reginfo);
+
+    taskdef->reginfo = info;
+#else
     if (!info) return E_POINTER;
 
     if (taskdef->reginfo)
@@ -3136,6 +4267,7 @@ static HRESULT WINAPI TaskDefinition_put_RegistrationInfo(ITaskDefinition *iface
 
     IRegistrationInfo_AddRef(info);
     taskdef->reginfo = info;
+#endif
 
     return S_OK;
 }
@@ -3154,6 +4286,10 @@ static HRESULT WINAPI TaskDefinition_get_Triggers(ITaskDefinition *iface, ITrigg
         if (!collection) return E_OUTOFMEMORY;
 
         collection->ITriggerCollection_iface.lpVtbl = &TriggerCollection_vtbl;
+#ifdef __REACTOS__
+        collection->items = NULL;
+        collection->count = 0;
+#endif
         collection->ref = 1;
         This->triggers = &collection->ITriggerCollection_iface;
     }
@@ -3168,6 +4304,15 @@ static HRESULT WINAPI TaskDefinition_put_Triggers(ITaskDefinition *iface, ITrigg
 
     TRACE("%p,%p\n", iface, triggers);
 
+#ifdef __REACTOS__
+    if (triggers)
+        ITriggerCollection_AddRef(triggers);
+
+    if (taskdef->triggers)
+        ITriggerCollection_Release(taskdef->triggers);
+
+    taskdef->triggers = triggers;
+#else
     if (!triggers) return E_POINTER;
 
     if (taskdef->triggers)
@@ -3175,6 +4320,7 @@ static HRESULT WINAPI TaskDefinition_put_Triggers(ITaskDefinition *iface, ITrigg
 
     ITriggerCollection_AddRef(triggers);
     taskdef->triggers = triggers;
+#endif
 
     return S_OK;
 }
@@ -3206,6 +4352,15 @@ static HRESULT WINAPI TaskDefinition_put_Settings(ITaskDefinition *iface, ITaskS
 
     TRACE("%p,%p\n", iface, settings);
 
+#ifdef __REACTOS__
+    if (settings)
+        ITaskSettings_AddRef(settings);
+
+    if (taskdef->taskset)
+        ITaskSettings_Release(taskdef->taskset);
+
+    taskdef->taskset = settings;
+#else
     if (!settings) return E_POINTER;
 
     if (taskdef->taskset)
@@ -3213,6 +4368,7 @@ static HRESULT WINAPI TaskDefinition_put_Settings(ITaskDefinition *iface, ITaskS
 
     ITaskSettings_AddRef(settings);
     taskdef->taskset = settings;
+#endif
 
     return S_OK;
 }
@@ -3283,6 +4439,15 @@ static HRESULT WINAPI TaskDefinition_put_Principal(ITaskDefinition *iface, IPrin
 
     TRACE("%p,%p\n", iface, principal);
 
+#ifdef __REACTOS__
+    if (principal)
+        IPrincipal_AddRef(principal);
+
+    if (taskdef->principal)
+        IPrincipal_Release(taskdef->principal);
+
+    taskdef->principal = principal;
+#else
     if (!principal) return E_POINTER;
 
     if (taskdef->principal)
@@ -3290,6 +4455,7 @@ static HRESULT WINAPI TaskDefinition_put_Principal(ITaskDefinition *iface, IPrin
 
     IPrincipal_AddRef(principal);
     taskdef->principal = principal;
+#endif
 
     return S_OK;
 }
@@ -3321,6 +4487,15 @@ static HRESULT WINAPI TaskDefinition_put_Actions(ITaskDefinition *iface, IAction
 
     TRACE("%p,%p\n", iface, actions);
 
+#ifdef __REACTOS__
+    if (actions)
+        IActionCollection_AddRef(actions);
+
+    if (taskdef->actions)
+        IActionCollection_Release(taskdef->actions);
+
+    taskdef->actions = actions;
+#else
     if (!actions) return E_POINTER;
 
     if (taskdef->actions)
@@ -3328,6 +4503,7 @@ static HRESULT WINAPI TaskDefinition_put_Actions(ITaskDefinition *iface, IAction
 
     IActionCollection_AddRef(actions);
     taskdef->actions = actions;
+#endif
 
     return S_OK;
 }
@@ -3527,6 +4703,130 @@ static HRESULT write_registration_info(IStream *stream, IRegistrationInfo *regin
     return write_element_end(stream, L"RegistrationInfo");
 }
 
+#ifdef __REACTOS__
+static HRESULT principal_get_stored_ids(IPrincipal *iface, BSTR *user_id, BSTR *group_id)
+{
+    HRESULT hr;
+
+    if (iface->lpVtbl == &Principal_vtbl)
+    {
+        Principal *principal = impl_from_IPrincipal(iface);
+
+        hr = task_get_string(principal->user_id, user_id);
+        if (hr == S_OK) hr = task_get_string(principal->group_id, group_id);
+        return hr;
+    }
+
+    hr = IPrincipal_get_UserId(iface, user_id);
+    if (hr == S_OK) hr = IPrincipal_get_GroupId(iface, group_id);
+    return hr;
+}
+
+static HRESULT write_principal(IStream *stream, IPrincipal *principal)
+{
+    BSTR id = NULL, display_name = NULL, user_id = NULL, group_id = NULL;
+    const WCHAR *logon_str = NULL, *level_str = NULL;
+    TASK_RUNLEVEL_TYPE level;
+    TASK_LOGON_TYPE logon;
+    HRESULT hr;
+
+    if (!principal)
+        return S_OK;
+
+    if (FAILED(hr = IPrincipal_get_Id(principal, &id)) ||
+        FAILED(hr = IPrincipal_get_DisplayName(principal, &display_name)) ||
+        FAILED(hr = principal_get_stored_ids(principal, &user_id, &group_id)) ||
+        FAILED(hr = IPrincipal_get_LogonType(principal, &logon)) ||
+        FAILED(hr = IPrincipal_get_RunLevel(principal, &level)))
+        goto done;
+
+    hr = S_OK;
+    if (!id && !display_name && !user_id && !group_id)
+        goto done;
+
+    switch (logon)
+    {
+    case TASK_LOGON_PASSWORD:
+        logon_str = L"Password";
+        break;
+    case TASK_LOGON_S4U:
+        logon_str = L"S4U";
+        break;
+    case TASK_LOGON_INTERACTIVE_TOKEN:
+        logon_str = L"InteractiveToken";
+        break;
+    case TASK_LOGON_INTERACTIVE_TOKEN_OR_PASSWORD:
+        logon_str = L"InteractiveTokenOrPassword";
+        break;
+    case TASK_LOGON_GROUP:
+        if (user_id && *user_id) hr = E_INVALIDARG;
+        break;
+    case TASK_LOGON_SERVICE_ACCOUNT:
+        break;
+    default:
+        hr = E_INVALIDARG;
+        break;
+    }
+    if (FAILED(hr))
+        goto done;
+
+    switch (level)
+    {
+    case TASK_RUNLEVEL_HIGHEST:
+        level_str = L"HighestAvailable";
+        break;
+    case TASK_RUNLEVEL_LUA:
+        level_str = L"LeastPrivilege";
+        break;
+    default:
+        FIXME("Principal run level %d\n", level);
+        break;
+    }
+
+    if (FAILED(hr = write_element(stream, L"Principals")))
+        goto done;
+
+    push_indent();
+
+    if (id)
+    {
+        write_indent(stream);
+        write_stringW(stream, L"<Principal id=\"");
+        write_stringW(stream, id);
+        hr = write_stringW(stream, L"\">\n");
+    }
+    else
+        hr = write_element(stream, L"Principal");
+
+    push_indent();
+
+    if (SUCCEEDED(hr) && user_id && *user_id)
+        hr = write_text_value(stream, L"UserId", user_id);
+    if (SUCCEEDED(hr) && group_id && *group_id)
+        hr = write_text_value(stream, L"GroupId", group_id);
+    if (SUCCEEDED(hr) && logon_str)
+        hr = write_text_value(stream, L"LogonType", logon_str);
+    if (SUCCEEDED(hr) && display_name && *display_name)
+        hr = write_text_value(stream, L"DisplayName", display_name);
+    if (SUCCEEDED(hr) && level_str)
+        hr = write_text_value(stream, L"RunLevel", level_str);
+
+    pop_indent();
+    if (SUCCEEDED(hr))
+        hr = write_element_end(stream, L"Principal");
+
+    pop_indent();
+    if (SUCCEEDED(hr))
+        hr = write_element_end(stream, L"Principals");
+
+done:
+    SysFreeString(id);
+    SysFreeString(display_name);
+    SysFreeString(user_id);
+    SysFreeString(group_id);
+    return hr;
+}
+#else
 static HRESULT write_principal(IStream *stream, IPrincipal *principal)
 {
     HRESULT hr;
@@ -3635,6 +4935,7 @@ static HRESULT write_principal(IStream *stream, IPrincipal *principal)
     pop_indent();
     return write_element_end(stream, L"Principals");
 }
+#endif
 
 const WCHAR *string_from_instances_policy(TASK_INSTANCES_POLICY policy)
 {
@@ -3648,6 +4949,80 @@ const WCHAR *string_from_instances_policy(TASK_INSTANCES_POLICY policy)
     return L"<error>";
 }
 
+#ifdef __REACTOS__
+static HRESULT write_idle_settings(IStream *stream, IIdleSettings *idle)
+{
+    VARIANT_BOOL bval;
+    HRESULT hr;
+    BSTR s;
+
+    if (FAILED(hr = write_element(stream, L"IdleSettings")))
+        return hr;
+
+    push_indent();
+
+    if (FAILED(hr = IIdleSettings_get_IdleDuration(idle, &s)))
+        return hr;
+    if (s && *s)
+        hr = write_text_value(stream, L"Duration", s);
+    SysFreeString(s);
+    if (FAILED(hr))
+        return hr;
+
+    if (FAILED(hr = IIdleSettings_get_WaitTimeout(idle, &s)))
+        return hr;
+    if (s && *s)
+        hr = write_text_value(stream, L"WaitTimeout", s);
+    SysFreeString(s);
+    if (FAILED(hr))
+        return hr;
+
+    if (FAILED(hr = IIdleSettings_get_StopOnIdleEnd(idle, &bval)))
+        return hr;
+    if (FAILED(hr = write_bool_value(stream, L"StopOnIdleEnd", bval)))
+        return hr;
+
+    if (FAILED(hr = IIdleSettings_get_RestartOnIdle(idle, &bval)))
+        return hr;
+    if (FAILED(hr = write_bool_value(stream, L"RestartOnIdle", bval)))
+        return hr;
+
+    pop_indent();
+    return write_element_end(stream, L"IdleSettings");
+}
+
+static HRESULT write_network_settings(IStream *stream, INetworkSettings *network)
+{
+    BSTR name = NULL, id = NULL;
+    HRESULT hr;
+
+    if (FAILED(hr = INetworkSettings_get_Name(network, &name)))
+        return hr;
+    if (FAILED(hr = INetworkSettings_get_Id(network, &id)))
+        goto done;
+    if (!(name && *name) && !(id && *id))
+        goto done;
+
+    if (FAILED(hr = write_element(stream, L"NetworkSettings")))
+        goto done;
+
+    push_indent();
+
+    if (name && *name && FAILED(hr = write_text_value(stream, L"Name", name)))
+        goto done;
+    if (id && *id && FAILED(hr = write_text_value(stream, L"Id", id)))
+        goto done;
+
+    pop_indent();
+    hr = write_element_end(stream, L"NetworkSettings");
+
+done:
+    SysFreeString(name);
+    SysFreeString(id);
+    return hr;
+}
+
+#endif
 static HRESULT write_settings(IStream *stream, ITaskSettings *settings)
 {
     INetworkSettings *network_settings;
@@ -3708,13 +5083,29 @@ static HRESULT write_settings(IStream *stream, ITaskSettings *settings)
     }
     if (SUCCEEDED(hr = TaskSettings_get_IdleSettings(settings, &idle_settings)))
     {
+#ifdef __REACTOS__
+        hr = write_idle_settings(stream, idle_settings);
+        IIdleSettings_Release(idle_settings);
+        if (FAILED(hr))
+            return hr;
+#else
         FIXME("IdleSettings not handled.\n");
         IIdleSettings_Release(idle_settings);
+#endif
     }
     if (SUCCEEDED(hr = TaskSettings_get_NetworkSettings(settings, &network_settings)))
     {
+#ifdef __REACTOS__
+        hr = S_OK;
+        if (SUCCEEDED(TaskSettings_get_RunOnlyIfNetworkAvailable(settings, &bval)) && bval)
+            hr = write_network_settings(stream, network_settings);
+        INetworkSettings_Release(network_settings);
+        if (FAILED(hr))
+            return hr;
+#else
         FIXME("NetworkSettings not handled.\n");
         INetworkSettings_Release(network_settings);
+#endif
     }
     if (SUCCEEDED(hr = TaskSettings_get_ExecutionTimeLimit(settings, &s)) && s)
     {
@@ -3737,17 +5128,253 @@ static HRESULT write_settings(IStream *stream, ITaskSettings *settings)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static HRESULT write_open_element(IStream *stream, const WCHAR *name, const WCHAR *attr, const WCHAR *value)
+{
+    if (!value || !*value)
+        return write_element(stream, name);
+
+    write_indent(stream);
+    write_stringW(stream, L"<");
+    write_stringW(stream, name);
+    write_stringW(stream, L" ");
+    write_stringW(stream, attr);
+    write_stringW(stream, L"=\"");
+    write_stringW(stream, value);
+    return write_stringW(stream, L"\">\n");
+}
+
+#define WRITE_OPTIONAL_TEXT(name, call) \
+    if (SUCCEEDED(hr)) \
+    { \
+        str = NULL; \
+        if ((call) == S_OK && str && *str) \
+            hr = write_text_value(stream, name, str); \
+        SysFreeString(str); \
+    }
+
+static HRESULT write_trigger(IStream *stream, ITrigger *trigger)
+{
+    IRegistrationTrigger *registration = NULL;
+    IRepetitionPattern *repetition;
+    ILogonTrigger *logon = NULL;
+    IDailyTrigger *daily = NULL;
+    TASK_TRIGGER_TYPE2 type;
+    const WCHAR *element;
+    VARIANT_BOOL bval;
+    short interval;
+    HRESULT hr;
+    BSTR str;
+
+    if (FAILED(hr = ITrigger_get_Type(trigger, &type)))
+        return hr;
+
+    switch (type)
+    {
+    case TASK_TRIGGER_LOGON:
+        element = L"LogonTrigger";
+        if (FAILED(ITrigger_QueryInterface(trigger, &IID_ILogonTrigger, (void **)&logon))) logon = NULL;
+        break;
+    case TASK_TRIGGER_DAILY:
+        element = L"CalendarTrigger";
+        if (FAILED(ITrigger_QueryInterface(trigger, &IID_IDailyTrigger, (void **)&daily))) daily = NULL;
+        break;
+    case TASK_TRIGGER_REGISTRATION:
+        element = L"RegistrationTrigger";
+        if (FAILED(ITrigger_QueryInterface(trigger, &IID_IRegistrationTrigger, (void **)&registration))) registration = NULL;
+        break;
+    default:
+        FIXME("unhandled trigger type %d\n", type);
+        return S_OK;
+    }
+
+    str = NULL;
+    ITrigger_get_Id(trigger, &str);
+    hr = write_open_element(stream, element, L"id", str);
+    SysFreeString(str);
+
+    push_indent();
+
+    if (SUCCEEDED(hr) && ITrigger_get_Repetition(trigger, &repetition) == S_OK)
+    {
+        str = NULL;
+        IRepetitionPattern_get_Interval(repetition, &str);
+        if (str && *str)
+        {
+            hr = write_element(stream, L"Repetition");
+            push_indent();
+            if (SUCCEEDED(hr))
+                hr = write_text_value(stream, L"Interval", str);
+            SysFreeString(str);
+            WRITE_OPTIONAL_TEXT(L"Duration", IRepetitionPattern_get_Duration(repetition, &str));
+            bval = VARIANT_FALSE;
+            IRepetitionPattern_get_StopAtDurationEnd(repetition, &bval);
+            if (SUCCEEDED(hr))
+                hr = write_bool_value(stream, L"StopAtDurationEnd", bval);
+            pop_indent();
+            if (SUCCEEDED(hr))
+                hr = write_element_end(stream, L"Repetition");
+        }
+        else
+            SysFreeString(str);
+        IRepetitionPattern_Release(repetition);
+    }
+
+    WRITE_OPTIONAL_TEXT(L"StartBoundary", ITrigger_get_StartBoundary(trigger, &str));
+    WRITE_OPTIONAL_TEXT(L"EndBoundary", ITrigger_get_EndBoundary(trigger, &str));
+    WRITE_OPTIONAL_TEXT(L"ExecutionTimeLimit", ITrigger_get_ExecutionTimeLimit(trigger, &str));
+    if (SUCCEEDED(hr) && ITrigger_get_Enabled(trigger, &bval) == S_OK)
+        hr = write_bool_value(stream, L"Enabled", bval);
+
+    if (logon)
+    {
+        WRITE_OPTIONAL_TEXT(L"UserId", ILogonTrigger_get_UserId(logon, &str));
+        WRITE_OPTIONAL_TEXT(L"Delay", ILogonTrigger_get_Delay(logon, &str));
+        ILogonTrigger_Release(logon);
+    }
+    if (daily)
+    {
+        WRITE_OPTIONAL_TEXT(L"RandomDelay", IDailyTrigger_get_RandomDelay(daily, &str));
+        if (SUCCEEDED(hr) && IDailyTrigger_get_DaysInterval(daily, &interval) == S_OK)
+        {
+            hr = write_element(stream, L"ScheduleByDay");
+            push_indent();
+            if (SUCCEEDED(hr))
+                hr = write_int_value(stream, L"DaysInterval", interval);
+            pop_indent();
+            if (SUCCEEDED(hr))
+                hr = write_element_end(stream, L"ScheduleByDay");
+        }
+        IDailyTrigger_Release(daily);
+    }
+    if (registration)
+    {
+        WRITE_OPTIONAL_TEXT(L"Delay", IRegistrationTrigger_get_Delay(registration, &str));
+        IRegistrationTrigger_Release(registration);
+    }
+
+    pop_indent();
+    if (SUCCEEDED(hr))
+        hr = write_element_end(stream, element);
+    return hr;
+}
+
+static HRESULT write_action(IStream *stream, IAction *action)
+{
+    BSTR id = NULL, path = NULL, args = NULL, dir = NULL;
+    TASK_ACTION_TYPE type;
+    IExecAction *exec;
+    HRESULT hr;
+
+    if (FAILED(hr = IAction_get_Type(action, &type)))
+        return hr;
+
+    if (type != TASK_ACTION_EXEC ||
+        FAILED(IAction_QueryInterface(action, &IID_IExecAction, (void **)&exec)))
+    {
+        FIXME("unhandled action type %d\n", type);
+        return S_OK;
+    }
+
+    IAction_get_Id(action, &id);
+    IExecAction_get_Path(exec, &path);
+    IExecAction_get_Arguments(exec, &args);
+    IExecAction_get_WorkingDirectory(exec, &dir);
+
+    if (!(id && *id) && !(path && *path) && !(args && *args) && !(dir && *dir))
+        hr = write_empty_element(stream, L"Exec");
+    else
+    {
+        hr = write_open_element(stream, L"Exec", L"id", id);
+        push_indent();
+        if (SUCCEEDED(hr) && path && *path)
+            hr = write_text_value(stream, L"Command", path);
+        if (SUCCEEDED(hr) && args && *args)
+            hr = write_text_value(stream, L"Arguments", args);
+        if (SUCCEEDED(hr) && dir && *dir)
+            hr = write_text_value(stream, L"WorkingDirectory", dir);
+        pop_indent();
+        if (SUCCEEDED(hr))
+            hr = write_element_end(stream, L"Exec");
+    }
+
+    SysFreeString(id);
+    SysFreeString(path);
+    SysFreeString(args);
+    SysFreeString(dir);
+    IExecAction_Release(exec);
+    return hr;
+}
+#undef WRITE_OPTIONAL_TEXT
+
+#endif
 static HRESULT write_triggers(IStream *stream, ITriggerCollection *triggers)
 {
+#ifdef __REACTOS__
+    LONG count = 0, i;
+    HRESULT hr;
+
+    if (!triggers || FAILED(ITriggerCollection_get_Count(triggers, &count)) || !count)
+        return write_empty_element(stream, L"Triggers");
+
+    if (FAILED(hr = write_element(stream, L"Triggers")))
+        return hr;
+
+    push_indent();
+    for (i = 1; SUCCEEDED(hr) && i <= count; i++)
+    {
+        ITrigger *trigger;
+
+        if (FAILED(hr = ITriggerCollection_get_Item(triggers, i, &trigger)))
+            break;
+        hr = write_trigger(stream, trigger);
+        ITrigger_Release(trigger);
+    }
+    pop_indent();
+
+    if (SUCCEEDED(hr))
+        hr = write_element_end(stream, L"Triggers");
+    return hr;
+#else
     if (!triggers)
         return write_empty_element(stream, L"Triggers");
 
     FIXME("stub\n");
     return S_OK;
+#endif
 }
 
 static HRESULT write_actions(IStream *stream, IActionCollection *actions)
 {
+#ifdef __REACTOS__
+    LONG count = 0, i;
+    HRESULT hr;
+    BSTR str;
+
+    if (!actions || FAILED(IActionCollection_get_Count(actions, &count)) || !count)
+        return write_empty_element(stream, L"Actions");
+
+    str = NULL;
+    IActionCollection_get_Context(actions, &str);
+    hr = write_open_element(stream, L"Actions", L"Context", str);
+    SysFreeString(str);
+
+    push_indent();
+    for (i = 1; SUCCEEDED(hr) && i <= count; i++)
+    {
+        IAction *action;
+
+        if (FAILED(hr = IActionCollection_get_Item(actions, i, &action)))
+            break;
+        hr = write_action(stream, action);
+        IAction_Release(action);
+    }
+    pop_indent();
+
+    if (SUCCEEDED(hr))
+        hr = write_element_end(stream, L"Actions");
+    return hr;
+#else
     if (!actions)
     {
         write_element(stream, L"Actions");
@@ -3759,6 +5386,7 @@ static HRESULT write_actions(IStream *stream, IActionCollection *actions)
 
     FIXME("stub\n");
     return S_OK;
+#endif
 }
 
 static HRESULT WINAPI TaskDefinition_get_XmlText(ITaskDefinition *iface, BSTR *xml)
@@ -3781,6 +5409,11 @@ static HRESULT WINAPI TaskDefinition_get_XmlText(ITaskDefinition *iface, BSTR *x
         return hr;
     }
 
+#ifdef __REACTOS__
+    hr = write_stringW(stream, L"<?xml version=\"1.0\" encoding=\"UTF-16\"?>\n");
+    if (hr != S_OK) goto failed;
+
+#endif
     hr = write_task_attributes(stream, &taskdef->ITaskDefinition_iface);
     if (hr != S_OK) goto failed;
 
@@ -3887,10 +5520,380 @@ static HRESULT read_int_value(IXmlReader *reader, int *int_val)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static HRESULT skip_element(IXmlReader *reader)
+{
+    XmlNodeType type;
+    LONG depth = 1;
+
+    if (IXmlReader_IsEmptyElement(reader))
+        return S_OK;
+
+    while (IXmlReader_Read(reader, &type) == S_OK)
+    {
+        if (type == XmlNodeType_Element)
+        {
+            if (!IXmlReader_IsEmptyElement(reader)) depth++;
+        }
+        else if (type == XmlNodeType_EndElement && !--depth)
+            return S_OK;
+    }
+
+    return SCHED_E_MALFORMEDXML;
+}
+
+static WCHAR *read_attribute(IXmlReader *reader, const WCHAR *attr)
+{
+    const WCHAR *name, *value;
+    WCHAR *ret = NULL;
+
+    if (IXmlReader_MoveToFirstAttribute(reader) != S_OK)
+        return NULL;
+
+    do
+    {
+        if (IXmlReader_GetLocalName(reader, &name, NULL) == S_OK && !lstrcmpW(name, attr) &&
+            IXmlReader_GetValue(reader, &value, NULL) == S_OK)
+        {
+            ret = wcsdup(value);
+            break;
+        }
+    } while (IXmlReader_MoveToNextAttribute(reader) == S_OK);
+
+    IXmlReader_MoveToElement(reader);
+    return ret;
+}
+
+static HRESULT read_repetition(IXmlReader *reader, ITrigger *trigger)
+{
+    IRepetitionPattern *repetition;
+    VARIANT_BOOL bool_val;
+    const WCHAR *name;
+    XmlNodeType type;
+    WCHAR *value;
+    HRESULT hr;
+
+    if (IXmlReader_IsEmptyElement(reader))
+        return S_OK;
+
+    hr = ITrigger_get_Repetition(trigger, &repetition);
+    if (hr != S_OK) return hr;
+
+    hr = SCHED_E_MALFORMEDXML;
+    while (IXmlReader_Read(reader, &type) == S_OK)
+    {
+        if (type == XmlNodeType_EndElement)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK || !lstrcmpW(name, L"Repetition")) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+        else if (type == XmlNodeType_Element)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK) break;
+
+            if (!lstrcmpW(name, L"Interval"))
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = IRepetitionPattern_put_Interval(repetition, value);
+            }
+            else if (!lstrcmpW(name, L"Duration"))
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = IRepetitionPattern_put_Duration(repetition, value);
+            }
+            else if (!lstrcmpW(name, L"StopAtDurationEnd"))
+            {
+                if ((hr = read_variantbool_value(reader, &bool_val)) == S_OK)
+                    hr = IRepetitionPattern_put_StopAtDurationEnd(repetition, bool_val);
+            }
+            else
+            {
+                FIXME("unhandled Repetition element %s\n", debugstr_w(name));
+                hr = skip_element(reader);
+            }
+
+            if (hr != S_OK) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+    }
+
+    IRepetitionPattern_Release(repetition);
+    return hr;
+}
+
+static HRESULT read_trigger(IXmlReader *reader, ITriggerCollection *triggers,
+                            TASK_TRIGGER_TYPE2 trigger_type, const WCHAR *element)
+{
+    BOOL empty = IXmlReader_IsEmptyElement(reader), unsupported = FALSE;
+    IRegistrationTrigger *registration = NULL;
+    ILogonTrigger *logon = NULL;
+    IDailyTrigger *daily = NULL;
+    VARIANT_BOOL bool_val;
+    const WCHAR *name;
+    ITrigger *trigger;
+    XmlNodeType type;
+    WCHAR *value, *id;
+    int int_val;
+    HRESULT hr;
+
+    id = read_attribute(reader, L"id");
+    hr = ITriggerCollection_Create(triggers, trigger_type, &trigger);
+    if (hr != S_OK)
+    {
+        free(id);
+        return hr;
+    }
+    if (id) ITrigger_put_Id(trigger, id);
+    free(id);
+
+    if (empty)
+    {
+        ITrigger_Release(trigger);
+        return S_OK;
+    }
+
+    if (trigger_type == TASK_TRIGGER_LOGON &&
+        FAILED(ITrigger_QueryInterface(trigger, &IID_ILogonTrigger, (void **)&logon))) logon = NULL;
+    if (trigger_type == TASK_TRIGGER_DAILY &&
+        FAILED(ITrigger_QueryInterface(trigger, &IID_IDailyTrigger, (void **)&daily))) daily = NULL;
+    if (trigger_type == TASK_TRIGGER_REGISTRATION &&
+        FAILED(ITrigger_QueryInterface(trigger, &IID_IRegistrationTrigger, (void **)&registration))) registration = NULL;
+
+    hr = SCHED_E_MALFORMEDXML;
+    while (IXmlReader_Read(reader, &type) == S_OK)
+    {
+        if (type == XmlNodeType_EndElement)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK || !lstrcmpW(name, element)) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+        else if (type == XmlNodeType_Element)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK) break;
+
+            TRACE("Element: %s\n", debugstr_w(name));
+
+            if (!lstrcmpW(name, L"StartBoundary"))
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = ITrigger_put_StartBoundary(trigger, value);
+            }
+            else if (!lstrcmpW(name, L"EndBoundary"))
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = ITrigger_put_EndBoundary(trigger, value);
+            }
+            else if (!lstrcmpW(name, L"ExecutionTimeLimit"))
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = ITrigger_put_ExecutionTimeLimit(trigger, value);
+            }
+            else if (!lstrcmpW(name, L"Enabled"))
+            {
+                if ((hr = read_variantbool_value(reader, &bool_val)) == S_OK)
+                    hr = ITrigger_put_Enabled(trigger, bool_val);
+            }
+            else if (!lstrcmpW(name, L"Repetition"))
+                hr = read_repetition(reader, trigger);
+            else if (!lstrcmpW(name, L"Delay") && logon)
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = ILogonTrigger_put_Delay(logon, value);
+            }
+            else if (!lstrcmpW(name, L"Delay") && registration)
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = IRegistrationTrigger_put_Delay(registration, value);
+            }
+            else if (!lstrcmpW(name, L"UserId") && logon)
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = ILogonTrigger_put_UserId(logon, value);
+            }
+            else if (!lstrcmpW(name, L"RandomDelay") && daily)
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = IDailyTrigger_put_RandomDelay(daily, value);
+            }
+            else if (!lstrcmpW(name, L"ScheduleByDay") && daily)
+                hr = S_OK;
+            else if (!lstrcmpW(name, L"DaysInterval") && daily)
+            {
+                if ((hr = read_int_value(reader, &int_val)) == S_OK)
+                    hr = IDailyTrigger_put_DaysInterval(daily, (short)int_val);
+            }
+            else
+            {
+                FIXME("unhandled %s element %s\n", debugstr_w(element), debugstr_w(name));
+                if (!wcsncmp(name, L"ScheduleBy", 10)) unsupported = TRUE;
+                hr = skip_element(reader);
+            }
+
+            if (hr != S_OK) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+    }
+
+    if (logon) ILogonTrigger_Release(logon);
+    if (daily) IDailyTrigger_Release(daily);
+    if (registration) IRegistrationTrigger_Release(registration);
+    ITrigger_Release(trigger);
+
+    if (hr == S_OK && unsupported)
+    {
+        VARIANT index;
+        LONG count;
+
+        if (ITriggerCollection_get_Count(triggers, &count) == S_OK)
+        {
+            V_VT(&index) = VT_I4;
+            V_I4(&index) = count;
+            ITriggerCollection_Remove(triggers, index);
+        }
+    }
+
+    return hr;
+}
+
+static HRESULT read_exec_action(IXmlReader *reader, IActionCollection *actions)
+{
+    BOOL empty = IXmlReader_IsEmptyElement(reader);
+    const WCHAR *name;
+    IExecAction *exec;
+    XmlNodeType type;
+    IAction *action;
+    WCHAR *value, *id;
+    HRESULT hr;
+
+    id = read_attribute(reader, L"id");
+    hr = IActionCollection_Create(actions, TASK_ACTION_EXEC, &action);
+    if (hr == S_OK)
+    {
+        hr = IAction_QueryInterface(action, &IID_IExecAction, (void **)&exec);
+        IAction_Release(action);
+    }
+    if (hr != S_OK)
+    {
+        free(id);
+        return hr;
+    }
+    if (id) IExecAction_put_Id(exec, id);
+    free(id);
+
+    if (empty)
+    {
+        IExecAction_Release(exec);
+        return S_OK;
+    }
+
+    hr = SCHED_E_MALFORMEDXML;
+    while (IXmlReader_Read(reader, &type) == S_OK)
+    {
+        if (type == XmlNodeType_EndElement)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK || !lstrcmpW(name, L"Exec")) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+        else if (type == XmlNodeType_Element)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK) break;
+
+            if (!lstrcmpW(name, L"Command"))
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = IExecAction_put_Path(exec, value);
+            }
+            else if (!lstrcmpW(name, L"Arguments"))
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = IExecAction_put_Arguments(exec, value);
+            }
+            else if (!lstrcmpW(name, L"WorkingDirectory"))
+            {
+                if ((hr = read_text_value(reader, &value)) == S_OK)
+                    hr = IExecAction_put_WorkingDirectory(exec, value);
+            }
+            else
+            {
+                FIXME("unhandled Exec element %s\n", debugstr_w(name));
+                hr = skip_element(reader);
+            }
+
+            if (hr != S_OK) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+    }
+
+    IExecAction_Release(exec);
+    return hr;
+}
+
+#endif
 static HRESULT read_triggers(IXmlReader *reader, ITaskDefinition *taskdef)
 {
+#ifdef __REACTOS__
+    BOOL empty = IXmlReader_IsEmptyElement(reader);
+    ITriggerCollection *triggers;
+    const WCHAR *name;
+    XmlNodeType type;
+    HRESULT hr;
+
+    hr = ITaskDefinition_get_Triggers(taskdef, &triggers);
+    if (hr != S_OK) return hr;
+
+    ITriggerCollection_Clear(triggers);
+
+    if (empty)
+    {
+        ITriggerCollection_Release(triggers);
+        return S_OK;
+    }
+
+    hr = SCHED_E_MALFORMEDXML;
+    while (IXmlReader_Read(reader, &type) == S_OK)
+    {
+        if (type == XmlNodeType_EndElement)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK || !lstrcmpW(name, L"Triggers")) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+        else if (type == XmlNodeType_Element)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK) break;
+
+            TRACE("Element: %s\n", debugstr_w(name));
+
+            if (!lstrcmpW(name, L"LogonTrigger"))
+                hr = read_trigger(reader, triggers, TASK_TRIGGER_LOGON, L"LogonTrigger");
+            else if (!lstrcmpW(name, L"CalendarTrigger"))
+                hr = read_trigger(reader, triggers, TASK_TRIGGER_DAILY, L"CalendarTrigger");
+            else if (!lstrcmpW(name, L"RegistrationTrigger"))
+                hr = read_trigger(reader, triggers, TASK_TRIGGER_REGISTRATION, L"RegistrationTrigger");
+            else
+            {
+                FIXME("unhandled Triggers element %s\n", debugstr_w(name));
+                hr = skip_element(reader);
+            }
+
+            if (hr != S_OK) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+    }
+
+    ITriggerCollection_Release(triggers);
+    return hr;
+#else
     FIXME("stub\n");
     return S_OK;
+#endif
 }
 
 static HRESULT read_principal_attributes(IXmlReader *reader, IPrincipal *principal)
@@ -3928,6 +5931,17 @@ static HRESULT read_principal(IXmlReader *reader, IPrincipal *principal)
     XmlNodeType type;
     const WCHAR *name;
     WCHAR *value;
+#ifdef __REACTOS__
+    BOOL logon_seen = FALSE;
+    BSTR str;
+
+    IPrincipal_put_Id(principal, NULL);
+    IPrincipal_put_DisplayName(principal, NULL);
+    IPrincipal_put_UserId(principal, NULL);
+    IPrincipal_put_GroupId(principal, NULL);
+    IPrincipal_put_LogonType(principal, TASK_LOGON_INTERACTIVE_TOKEN);
+    IPrincipal_put_RunLevel(principal, TASK_RUNLEVEL_LUA);
+#endif
 
     if (IXmlReader_IsEmptyElement(reader))
     {
@@ -3948,7 +5962,26 @@ static HRESULT read_principal(IXmlReader *reader, IPrincipal *principal)
             TRACE("/%s\n", debugstr_w(name));
 
             if (!lstrcmpW(name, L"Principal"))
+#ifdef __REACTOS__
+            {
+                if (logon_seen)
+                    return S_OK;
+
+                if (IPrincipal_get_GroupId(principal, &str) == S_OK && str)
+                {
+                    IPrincipal_put_LogonType(principal, TASK_LOGON_GROUP);
+                    SysFreeString(str);
+                }
+                else if (IPrincipal_get_UserId(principal, &str) == S_OK && str)
+                {
+                    IPrincipal_put_LogonType(principal, TASK_LOGON_SERVICE_ACCOUNT);
+                    SysFreeString(str);
+                }
                 return S_OK;
+            }
+#else
+                return S_OK;
+#endif
 
             break;
 
@@ -3973,10 +6006,23 @@ static HRESULT read_principal(IXmlReader *reader, IPrincipal *principal)
 
                     if (!lstrcmpW(value, L"InteractiveToken"))
                         logon = TASK_LOGON_INTERACTIVE_TOKEN;
+#ifdef __REACTOS__
+                    else if (!lstrcmpW(value, L"Password"))
+                        logon = TASK_LOGON_PASSWORD;
+                    else if (!lstrcmpW(value, L"S4U"))
+                        logon = TASK_LOGON_S4U;
+                    else if (!lstrcmpW(value, L"InteractiveTokenOrPassword"))
+                        logon = TASK_LOGON_INTERACTIVE_TOKEN_OR_PASSWORD;
+#endif
                     else
                         FIXME("unhandled LogonType %s\n", debugstr_w(value));
 
+#ifdef __REACTOS__
+                    if (SUCCEEDED(IPrincipal_put_LogonType(principal, logon)))
+                        logon_seen = TRUE;
+#else
                     IPrincipal_put_LogonType(principal, logon);
+#endif
                 }
             }
             else if (!lstrcmpW(name, L"RunLevel"))
@@ -3988,12 +6034,30 @@ static HRESULT read_principal(IXmlReader *reader, IPrincipal *principal)
 
                     if (!lstrcmpW(value, L"LeastPrivilege"))
                         level = TASK_RUNLEVEL_LUA;
+#ifdef __REACTOS__
+                    else if (!lstrcmpW(value, L"HighestAvailable"))
+                        level = TASK_RUNLEVEL_HIGHEST;
+#endif
                     else
                         FIXME("unhandled RunLevel %s\n", debugstr_w(value));
 
                     IPrincipal_put_RunLevel(principal, level);
                 }
             }
+#ifdef __REACTOS__
+            else if (!lstrcmpW(name, L"GroupId"))
+            {
+                hr = read_text_value(reader, &value);
+                if (hr == S_OK)
+                    IPrincipal_put_GroupId(principal, value);
+            }
+            else if (!lstrcmpW(name, L"DisplayName"))
+            {
+                hr = read_text_value(reader, &value);
+                if (hr == S_OK)
+                    IPrincipal_put_DisplayName(principal, value);
+            }
+#endif
             else
                 FIXME("unhandled Principal element %s\n", debugstr_w(name));
 
@@ -4077,19 +6141,213 @@ static HRESULT read_principals(IXmlReader *reader, ITaskDefinition *taskdef)
 static HRESULT read_actions(IXmlReader *reader, ITaskDefinition *taskdef)
 {
 #ifdef __REACTOS__
-    if (IXmlReader_IsEmptyElement(reader))
+    BOOL empty = IXmlReader_IsEmptyElement(reader);
+    IActionCollection *actions;
+    const WCHAR *name;
+    XmlNodeType type;
+    WCHAR *context;
+    HRESULT hr;
+
+    context = read_attribute(reader, L"Context");
+    hr = ITaskDefinition_get_Actions(taskdef, &actions);
+    if (hr != S_OK)
+    {
+        free(context);
+        return hr;
+    }
+
+    IActionCollection_Clear(actions);
+    IActionCollection_put_Context(actions, context);
+    free(context);
+
+    if (empty)
+    {
+        IActionCollection_Release(actions);
         return SCHED_E_MISSINGNODE;
-#endif
+    }
+
+    hr = SCHED_E_MALFORMEDXML;
+    while (IXmlReader_Read(reader, &type) == S_OK)
+    {
+        if (type == XmlNodeType_EndElement)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK || !lstrcmpW(name, L"Actions")) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+        else if (type == XmlNodeType_Element)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK) break;
+
+            TRACE("Element: %s\n", debugstr_w(name));
+
+            if (!lstrcmpW(name, L"Exec"))
+                hr = read_exec_action(reader, actions);
+            else
+            {
+                FIXME("unhandled Actions element %s\n", debugstr_w(name));
+                hr = skip_element(reader);
+            }
+
+            if (hr != S_OK) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+    }
+
+    IActionCollection_Release(actions);
+    return hr;
+#else
     FIXME("stub\n");
     return S_OK;
+#endif
 }
 
 static HRESULT read_idle_settings(IXmlReader *reader, ITaskSettings *taskset)
 {
+#ifdef __REACTOS__
+    VARIANT_BOOL bool_val;
+    IIdleSettings *idle;
+    XmlNodeType type;
+    const WCHAR *name;
+    WCHAR *value;
+    HRESULT hr;
+
+    hr = ITaskSettings_get_IdleSettings(taskset, &idle);
+    if (hr != S_OK) return hr;
+
+    IIdleSettings_put_IdleDuration(idle, NULL);
+    IIdleSettings_put_WaitTimeout(idle, NULL);
+
+    if (IXmlReader_IsEmptyElement(reader))
+    {
+        IIdleSettings_Release(idle);
+        return S_OK;
+    }
+
+    hr = SCHED_E_MALFORMEDXML;
+    while (IXmlReader_Read(reader, &type) == S_OK)
+    {
+        if (type == XmlNodeType_EndElement)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK) break;
+
+            TRACE("/%s\n", debugstr_w(name));
+
+            if (!lstrcmpW(name, L"IdleSettings")) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+        else if (type == XmlNodeType_Element)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK) break;
+
+            TRACE("Element: %s\n", debugstr_w(name));
+
+            if (!lstrcmpW(name, L"Duration"))
+            {
+                hr = read_text_value(reader, &value);
+                if (hr != S_OK) break;
+                hr = IIdleSettings_put_IdleDuration(idle, value);
+            }
+            else if (!lstrcmpW(name, L"WaitTimeout"))
+            {
+                hr = read_text_value(reader, &value);
+                if (hr != S_OK) break;
+                hr = IIdleSettings_put_WaitTimeout(idle, value);
+            }
+            else if (!lstrcmpW(name, L"StopOnIdleEnd"))
+            {
+                hr = read_variantbool_value(reader, &bool_val);
+                if (hr != S_OK) break;
+                hr = IIdleSettings_put_StopOnIdleEnd(idle, bool_val);
+            }
+            else if (!lstrcmpW(name, L"RestartOnIdle"))
+            {
+                hr = read_variantbool_value(reader, &bool_val);
+                if (hr != S_OK) break;
+                hr = IIdleSettings_put_RestartOnIdle(idle, bool_val);
+            }
+            else
+                FIXME("unhandled IdleSettings element %s\n", debugstr_w(name));
+
+            if (hr != S_OK) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+    }
+
+    IIdleSettings_Release(idle);
+    return hr;
+#else
     FIXME("stub\n");
     return S_OK;
+#endif
 }
 
+#ifdef __REACTOS__
+static HRESULT read_network_settings(IXmlReader *reader, ITaskSettings *taskset)
+{
+    INetworkSettings *network;
+    XmlNodeType type;
+    const WCHAR *name;
+    WCHAR *value;
+    HRESULT hr;
+    CLSID id;
+
+    if (IXmlReader_IsEmptyElement(reader))
+        return S_OK;
+
+    hr = ITaskSettings_get_NetworkSettings(taskset, &network);
+    if (hr != S_OK) return hr;
+
+    hr = SCHED_E_MALFORMEDXML;
+    while (IXmlReader_Read(reader, &type) == S_OK)
+    {
+        if (type == XmlNodeType_EndElement)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK) break;
+
+            TRACE("/%s\n", debugstr_w(name));
+
+            if (!lstrcmpW(name, L"NetworkSettings")) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+        else if (type == XmlNodeType_Element)
+        {
+            hr = IXmlReader_GetLocalName(reader, &name, NULL);
+            if (hr != S_OK) break;
+
+            TRACE("Element: %s\n", debugstr_w(name));
+
+            if (!lstrcmpW(name, L"Name"))
+            {
+                hr = read_text_value(reader, &value);
+                if (hr != S_OK) break;
+                hr = INetworkSettings_put_Name(network, value);
+            }
+            else if (!lstrcmpW(name, L"Id"))
+            {
+                hr = read_text_value(reader, &value);
+                if (hr != S_OK) break;
+                hr = CLSIDFromString(value, &id);
+                if (hr != S_OK) break;
+                hr = INetworkSettings_put_Id(network, value);
+            }
+            else
+                FIXME("unhandled NetworkSettings element %s\n", debugstr_w(name));
+
+            if (hr != S_OK) break;
+            hr = SCHED_E_MALFORMEDXML;
+        }
+    }
+
+    INetworkSettings_Release(network);
+    return hr;
+}
+
+#endif
 static HRESULT read_settings(IXmlReader *reader, ITaskSettings *taskset)
 {
     HRESULT hr;
@@ -4218,6 +6476,13 @@ static HRESULT read_settings(IXmlReader *reader, ITaskSettings *taskset)
                 hr = read_idle_settings(reader, taskset);
                 if (hr != S_OK) return hr;
             }
+#ifdef __REACTOS__
+            else if (!lstrcmpW(name, L"NetworkSettings"))
+            {
+                hr = read_network_settings(reader, taskset);
+                if (hr != S_OK) return hr;
+            }
+#endif
             else
                 FIXME("unhandled Settings element %s\n", debugstr_w(name));
 
