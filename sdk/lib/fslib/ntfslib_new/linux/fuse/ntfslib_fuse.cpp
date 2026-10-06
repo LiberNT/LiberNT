@@ -1925,6 +1925,520 @@ NormalizeImagePath(const std::string& Input)
     return Path;
 }
 
+struct SecurityRule
+{
+    bool Directory;
+    bool Recursive;
+    std::string Path;
+    std::vector<UCHAR> Descriptor;
+};
+
+static bool
+ParseSddlSid(const char*& Cursor, std::vector<UCHAR>& Sid)
+{
+    static const struct
+    {
+        const char* Alias;
+        const char* Sid;
+    } Aliases[] =
+    {
+        { "SY", "S-1-5-18" },
+        { "BA", "S-1-5-32-544" },
+        { "BU", "S-1-5-32-545" },
+        { "CO", "S-1-3-0" },
+        { "AU", "S-1-5-11" },
+        { "WD", "S-1-1-0" },
+        { "AC", "S-1-15-2-1" },
+        { "IU", "S-1-5-4" },
+        { "SU", "S-1-5-6" },
+        { "LS", "S-1-5-19" },
+        { "NS", "S-1-5-20" },
+    };
+    std::string Text;
+    const char* Position;
+    char* End;
+    unsigned long long Value;
+
+    if (Cursor[0] == 'S' && Cursor[1] == '-')
+    {
+        const char* Start = Cursor;
+
+        Cursor++;
+        while (*Cursor == '-' || isdigit((unsigned char)*Cursor))
+            Cursor++;
+        Text.assign(Start, Cursor);
+    }
+    else
+    {
+        for (const auto& Alias : Aliases)
+        {
+            if (strncmp(Cursor, Alias.Alias, 2) == 0)
+            {
+                Text = Alias.Sid;
+                Cursor += 2;
+                break;
+            }
+        }
+        if (Text.empty())
+            return false;
+    }
+
+    Position = Text.c_str() + 2;
+    if (strtoull(Position, &End, 10) != 1 || *End != '-')
+        return false;
+    Position = End + 1;
+    Value = strtoull(Position, &End, 10);
+    if (End == Position)
+        return false;
+    Sid.assign(8, 0);
+    Sid[0] = 1;
+    for (int Index = 0; Index < 6; Index++)
+        Sid[2 + Index] = (UCHAR)(Value >> (8 * (5 - Index)));
+    while (*End == '-')
+    {
+        Position = End + 1;
+        Value = strtoull(Position, &End, 10);
+        if (End == Position || Value > MAXULONG || Sid[1] == 15)
+            return false;
+        for (int Index = 0; Index < 4; Index++)
+            Sid.push_back((UCHAR)(Value >> (8 * Index)));
+        Sid[1]++;
+    }
+    return *End == '\0' && Sid[1] != 0;
+}
+
+static bool
+ParseSddlFlags(const std::string& Text,
+               const char* const* Names,
+               const ULONG* Values,
+               size_t Count,
+               ULONG& Result)
+{
+    if (Text.size() % 2 != 0)
+        return false;
+    for (size_t Offset = 0; Offset < Text.size(); Offset += 2)
+    {
+        size_t Index;
+
+        for (Index = 0; Index < Count; Index++)
+        {
+            if (Text.compare(Offset, 2, Names[Index]) == 0)
+                break;
+        }
+        if (Index == Count)
+            return false;
+        Result |= Values[Index];
+    }
+    return true;
+}
+
+static bool
+ParseSddl(const std::string& Text, std::vector<UCHAR>& Descriptor)
+{
+    static const char* const RightNames[] =
+    {
+        "GA", "GX", "GW", "GR", "RC", "SD", "WD", "WO",
+        "FA", "FR", "FW", "FX",
+        "CC", "DC", "LC", "SW", "RP", "WP", "DT", "LO", "CR",
+    };
+    static const ULONG RightValues[] =
+    {
+        0x10000000, 0x20000000, 0x40000000, 0x80000000,
+        0x00020000, 0x00010000, 0x00040000, 0x00080000,
+        0x001f01ff, 0x00120089, 0x00120116, 0x001200a0,
+        0x001, 0x002, 0x004, 0x008, 0x010, 0x020, 0x040, 0x080, 0x100,
+    };
+    static const char* const AceFlagNames[] = { "OI", "CI", "NP", "IO", "ID" };
+    static const ULONG AceFlagValues[] = { 0x01, 0x02, 0x04, 0x08, 0x10 };
+    const USHORT SelfRelative = 0x8000;
+    const USHORT DaclPresent = 0x0004;
+    const USHORT DaclAutoInheritRequired = 0x0100;
+    const USHORT DaclAutoInherited = 0x0400;
+    const USHORT DaclProtected = 0x1000;
+    const char* Cursor = Text.c_str();
+    std::vector<UCHAR> Owner;
+    std::vector<UCHAR> Group;
+    std::vector<UCHAR> Acl;
+    USHORT Control = SelfRelative;
+    USHORT AceCount = 0;
+    ULONG Offset;
+
+    while (*Cursor)
+    {
+        if (Cursor[0] == 'O' && Cursor[1] == ':')
+        {
+            Cursor += 2;
+            if (!ParseSddlSid(Cursor, Owner))
+                return false;
+        }
+        else if (Cursor[0] == 'G' && Cursor[1] == ':')
+        {
+            Cursor += 2;
+            if (!ParseSddlSid(Cursor, Group))
+                return false;
+        }
+        else if (Cursor[0] == 'D' && Cursor[1] == ':' && Acl.empty())
+        {
+            Cursor += 2;
+            Control |= DaclPresent;
+            while (*Cursor && *Cursor != '(')
+            {
+                if (Cursor[0] == 'P')
+                {
+                    Control |= DaclProtected;
+                    Cursor++;
+                }
+                else if (Cursor[0] == 'A' && Cursor[1] == 'I')
+                {
+                    Control |= DaclAutoInherited;
+                    Cursor += 2;
+                }
+                else if (Cursor[0] == 'A' && Cursor[1] == 'R')
+                {
+                    Control |= DaclAutoInheritRequired;
+                    Cursor += 2;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            Acl.assign(8, 0);
+            while (*Cursor == '(')
+            {
+                const char* Close = strchr(Cursor, ')');
+                std::string Fields[6];
+                std::vector<UCHAR> Sid;
+                const char* SidCursor;
+                size_t Field = 0;
+                ULONG Flags = 0;
+                ULONG Mask = 0;
+                USHORT AceSize;
+                UCHAR Type;
+
+                if (!Close)
+                    return false;
+                for (const char* Position = Cursor + 1;
+                     Position < Close;
+                     Position++)
+                {
+                    if (*Position != ';')
+                        Fields[Field] += *Position;
+                    else if (++Field == 6)
+                        return false;
+                }
+                Cursor = Close + 1;
+
+                if (Field != 5 || !Fields[3].empty() || !Fields[4].empty())
+                    return false;
+                if (Fields[0] == "A")
+                    Type = 0;
+                else if (Fields[0] == "D")
+                    Type = 1;
+                else
+                    return false;
+                if (!ParseSddlFlags(Fields[1],
+                                    AceFlagNames,
+                                    AceFlagValues,
+                                    RTL_NUMBER_OF(AceFlagNames),
+                                    Flags))
+                {
+                    return false;
+                }
+                if (Fields[2].compare(0, 2, "0x") == 0)
+                {
+                    char* End;
+
+                    Mask = (ULONG)strtoul(Fields[2].c_str(), &End, 16);
+                    if (*End != '\0')
+                        return false;
+                }
+                else if (!ParseSddlFlags(Fields[2],
+                                         RightNames,
+                                         RightValues,
+                                         RTL_NUMBER_OF(RightNames),
+                                         Mask))
+                {
+                    return false;
+                }
+                SidCursor = Fields[5].c_str();
+                if (Mask == 0 ||
+                    !ParseSddlSid(SidCursor, Sid) ||
+                    *SidCursor != '\0' ||
+                    Acl.size() + 8 + Sid.size() > MAXUSHORT)
+                {
+                    return false;
+                }
+
+                AceSize = (USHORT)(8 + Sid.size());
+                Acl.push_back(Type);
+                Acl.push_back((UCHAR)Flags);
+                Acl.push_back((UCHAR)AceSize);
+                Acl.push_back((UCHAR)(AceSize >> 8));
+                for (int Index = 0; Index < 4; Index++)
+                    Acl.push_back((UCHAR)(Mask >> (8 * Index)));
+                Acl.insert(Acl.end(), Sid.begin(), Sid.end());
+                AceCount++;
+            }
+            Acl[0] = 2;
+            Acl[2] = (UCHAR)Acl.size();
+            Acl[3] = (UCHAR)(Acl.size() >> 8);
+            Acl[4] = (UCHAR)AceCount;
+            Acl[5] = (UCHAR)(AceCount >> 8);
+        }
+        else
+        {
+            return false;
+        }
+    }
+    if (Owner.empty() || Group.empty() || Acl.empty())
+        return false;
+
+    Descriptor.assign(20, 0);
+    Descriptor[0] = 1;
+    Descriptor[2] = (UCHAR)Control;
+    Descriptor[3] = (UCHAR)(Control >> 8);
+    Offset = 20;
+    for (int Index = 0; Index < 4; Index++)
+        Descriptor[16 + Index] = (UCHAR)(Offset >> (8 * Index));
+    Descriptor.insert(Descriptor.end(), Acl.begin(), Acl.end());
+    Offset += (ULONG)Acl.size();
+    for (int Index = 0; Index < 4; Index++)
+        Descriptor[4 + Index] = (UCHAR)(Offset >> (8 * Index));
+    Descriptor.insert(Descriptor.end(), Owner.begin(), Owner.end());
+    Offset += (ULONG)Owner.size();
+    for (int Index = 0; Index < 4; Index++)
+        Descriptor[8 + Index] = (UCHAR)(Offset >> (8 * Index));
+    Descriptor.insert(Descriptor.end(), Group.begin(), Group.end());
+    return true;
+}
+
+static std::string
+SecurityRulePath(const std::string& Input)
+{
+    std::string Path = NormalizeImagePath(Input);
+
+    for (char& Character : Path)
+        Character = (char)tolower((unsigned char)Character);
+    return Path;
+}
+
+static bool
+LoadSecurityRules(const char* PolicyPath, std::vector<SecurityRule>& Rules)
+{
+    std::unordered_map<std::string, std::string> Definitions;
+    FILE* Policy = fopen(PolicyPath, "rb");
+    char* Line = NULL;
+    size_t Capacity = 0;
+    unsigned long LineNumber = 0;
+    bool Result = false;
+
+    if (!Policy)
+    {
+        fprintf(stderr, "%s: %s\n", PolicyPath, strerror(errno));
+        return false;
+    }
+
+    for (;;)
+    {
+        SecurityRule Rule;
+        std::string Kind;
+        std::string Name;
+        std::string Value;
+        char* Separator;
+        char* Space;
+        ssize_t Length;
+        size_t Open;
+
+        Length = getline(&Line, &Capacity, Policy);
+        if (Length < 0)
+        {
+            Result = feof(Policy) != 0;
+            break;
+        }
+        LineNumber++;
+        while (Length > 0 &&
+               (Line[Length - 1] == '\n' ||
+                Line[Length - 1] == '\r' ||
+                Line[Length - 1] == ' '))
+        {
+            Line[--Length] = '\0';
+        }
+        if (Length == 0)
+            continue;
+
+        Separator = strchr(Line, '=');
+        Space = strchr(Line, ' ');
+        if (!Separator || !Space || Space > Separator)
+            break;
+        Kind.assign(Line, Space);
+        Name.assign(Space + 1, Separator);
+        Value = Separator + 1;
+        while ((Open = Value.find('{')) != std::string::npos)
+        {
+            size_t Close = Value.find('}', Open);
+            std::unordered_map<std::string, std::string>::iterator Found;
+
+            if (Close == std::string::npos)
+                break;
+            Found = Definitions.find(Value.substr(Open + 1, Close - Open - 1));
+            if (Found == Definitions.end())
+                break;
+            Value.replace(Open, Close - Open + 1, Found->second);
+        }
+        if (Open != std::string::npos)
+            break;
+
+        if (Kind == "define")
+        {
+            Definitions[Name] = Value;
+            continue;
+        }
+        if (Kind == "dir" || Kind == "dirs")
+            Rule.Directory = true;
+        else if (Kind == "file" || Kind == "files")
+            Rule.Directory = false;
+        else
+            break;
+        Rule.Recursive = Kind.back() == 's';
+        Rule.Path = SecurityRulePath(Name);
+        if (!ParseSddl(Value, Rule.Descriptor))
+            break;
+        Rules.push_back(std::move(Rule));
+    }
+
+    if (!Result)
+    {
+        fprintf(stderr,
+                "%s:%lu: invalid security rule\n",
+                PolicyPath,
+                LineNumber);
+    }
+    free(Line);
+    fclose(Policy);
+    return Result;
+}
+
+static const SecurityRule*
+FindSecurityRule(const std::vector<SecurityRule>& Rules,
+                 const std::string& Path,
+                 bool Directory)
+{
+    const SecurityRule* Best = NULL;
+
+    for (const SecurityRule& Rule : Rules)
+    {
+        if (Rule.Directory != Directory)
+            continue;
+        if (!Rule.Recursive)
+        {
+            if (Rule.Path == Path)
+                Best = &Rule;
+            continue;
+        }
+        if (Best && (!Best->Recursive || Best->Path.size() > Rule.Path.size()))
+            continue;
+        if (Rule.Path.empty()
+                ? !Path.empty()
+                : (Path.size() > Rule.Path.size() &&
+                   Path[Rule.Path.size()] == '/' &&
+                   Path.compare(0, Rule.Path.size(), Rule.Path) == 0))
+        {
+            Best = &Rule;
+        }
+    }
+    return Best;
+}
+
+static NTSTATUS
+ApplySecurityRules(NtfsFuseState* State,
+                   const std::vector<SecurityRule>& Rules,
+                   const std::string& Path,
+                   bool IsDirectory)
+{
+    std::vector<std::pair<std::string, bool>> Children;
+    const SecurityRule* Rule;
+    PNtfsFileRecord File = NULL;
+    PNtfsDirectory Directory = NULL;
+    BOOLEAN Restart = TRUE;
+    NTSTATUS Status;
+
+    Status = Lookup(State->Volume, Path.empty() ? "/" : Path.c_str(), &File);
+    if (NT_SUCCESS(Status))
+    {
+        Rule = FindSecurityRule(Rules, SecurityRulePath(Path), IsDirectory);
+        if (Rule)
+        {
+            Status = NtfsFileRecordSetSecurityDescriptor(
+                File,
+                Rule->Descriptor.data(),
+                (ULONG)Rule->Descriptor.size());
+        }
+    }
+    if (NT_SUCCESS(Status) && IsDirectory)
+    {
+        Directory = NtfsDirectoryCreate(State->Volume);
+        Status = Directory
+            ? NtfsDirectoryLoadDirectory(Directory, File)
+            : STATUS_INSUFFICIENT_RESOURCES;
+        while (NT_SUCCESS(Status))
+        {
+            std::unique_ptr<NtfsDirectoryEntry> Entry(new NtfsDirectoryEntry);
+            std::string Name;
+
+            Status = NtfsDirectoryReadNext(Directory, Restart, Entry.get());
+            Restart = FALSE;
+            if (Status == STATUS_NO_MORE_FILES)
+            {
+                Status = STATUS_SUCCESS;
+                break;
+            }
+            if (!NT_SUCCESS(Status))
+                break;
+            if (!Utf16ToUtf8(Entry->Name, Entry->NameLength, Name))
+            {
+                Status = STATUS_FILE_CORRUPT_ERROR;
+                break;
+            }
+            Children.emplace_back(
+                Path.empty() ? Name : Path + "/" + Name,
+                (Entry->FileAttributes & FN_DIRECTORY) != 0);
+        }
+        NtfsDirectoryDestroy(Directory);
+    }
+    NtfsFileRecordDestroy(File);
+    if (!NT_SUCCESS(Status))
+    {
+        fprintf(stderr,
+                "%s: ntfslib status 0x%08" PRIx32 " (%s)\n",
+                Path.empty() ? "/" : Path.c_str(),
+                (uint32_t)Status,
+                strerror(NtStatusToErrno(Status)));
+        return Status;
+    }
+
+    for (const auto& Child : Children)
+    {
+        Status = ApplySecurityRules(State, Rules, Child.first, Child.second);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    return STATUS_SUCCESS;
+}
+
+static int
+ApplySecurityFromPolicy(NtfsFuseState* State, const char* PolicyPath)
+{
+    std::vector<SecurityRule> Rules;
+
+    if (!LoadSecurityRules(PolicyPath, Rules))
+        return 1;
+    return NT_SUCCESS(ApplySecurityRules(State, Rules, std::string(), true))
+        ? 0
+        : 1;
+}
+
 static NTSTATUS
 EnsureImageDirectory(NtfsFuseState* State,
                      const std::string& Directory)
@@ -4034,6 +4548,7 @@ PrintUsage(const char* Program)
             "  %s --set-label IMAGE LABEL\n"
             "  %s --set-basic IMAGE PATH CREATION ACCESS WRITE CHANGE ATTRS\n"
             "  %s --set-security IMAGE PATH SOURCE\n"
+            "  %s --apply-security IMAGE POLICY\n"
             "  %s --set-reparse IMAGE PATH SOURCE\n"
             "  %s --delete-reparse IMAGE PATH SOURCE\n"
             "  %s --set-ea IMAGE PATH FLAGS NAME SOURCE\n"
@@ -4059,6 +4574,7 @@ PrintUsage(const char* Program)
             "  %s [--show-metadata] --streams IMAGE PATH\n"
             "  %s [--show-metadata] [--writable] IMAGE MOUNTPOINT"
             " [FUSE options]\n",
+            Program,
             Program,
             Program,
             Program,
@@ -4584,6 +5100,29 @@ main(int Argc, char** Argv)
             &State,
             Argv[First + 2],
             Argv[First + 3]);
+        CloseImage(&State);
+        return Result;
+    }
+
+    if (strcmp(Argv[First], "--apply-security") == 0)
+    {
+        if (First + 3 != Argc || ShowMetadata)
+        {
+            PrintUsage(Argv[0]);
+            return 2;
+        }
+
+        Status = OpenImageWritable(Argv[First + 1], &State);
+        if (!NT_SUCCESS(Status))
+        {
+            fprintf(stderr,
+                    "%s: ntfslib status 0x%08" PRIx32 " (%s)\n",
+                    Argv[First + 1],
+                    (uint32_t)Status,
+                    strerror(NtStatusToErrno(Status)));
+            return 1;
+        }
+        Result = ApplySecurityFromPolicy(&State, Argv[First + 2]);
         CloseImage(&State);
         return Result;
     }

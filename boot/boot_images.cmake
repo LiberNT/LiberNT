@@ -704,6 +704,10 @@ add_custom_target(preinstall_partition
         --addfiles
         ${_preinstall_system_partition_file}
         ${CMAKE_CURRENT_BINARY_DIR}/preinstall.effective.lst
+    COMMAND native-ntfsimg
+        --apply-security
+        ${_preinstall_system_partition_file}
+        ${REACTOS_SOURCE_DIR}/boot/bootdata/filesecurity.txt
     DEPENDS ${_preinstall_partition_deps}
     VERBATIM)
 
