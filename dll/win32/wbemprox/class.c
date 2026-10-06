@@ -126,6 +126,10 @@ static HRESULT WINAPI enum_class_object_Next(
 
     *puReturned = 0;
 
+#ifdef __REACTOS__
+    if (view->type == VIEW_TYPE_SELECT && !view->table_count) return WBEM_E_INVALID_CLASS;
+#endif
+
     for (i = 0; i < uCount; i++)
     {
         if (ec->index >= view->result_count) return WBEM_S_FALSE;

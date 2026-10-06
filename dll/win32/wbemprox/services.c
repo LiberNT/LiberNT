@@ -1314,9 +1314,19 @@ static HRESULT WINAPI wbem_context_DeleteValue(
 static HRESULT WINAPI wbem_context_DeleteAll(
     IWbemContext *iface )
 {
+#ifdef __REACTOS__
+    struct wbem_context *context = impl_from_IWbemContext( iface );
+
+    TRACE( "%p\n", iface );
+
+    wbem_context_delete_values( context );
+    context->cursor = NULL;
+    return S_OK;
+#else
     FIXME("%p\n", iface);
 
     return E_NOTIMPL;
+#endif
 }
 
 static const IWbemContextVtbl wbem_context_vtbl =
