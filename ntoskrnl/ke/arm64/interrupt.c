@@ -28,6 +28,7 @@ extern BOOLEAN NTAPI HalArm64ProfileSample(ULONG Increment);
 #define ARM64_LPI_BASE 8192
 #define ARM64_LPI_COUNT 1024
 #define ARM64_MAX_INTID (ARM64_LPI_BASE + ARM64_LPI_COUNT)
+#define ARM64_SGI_COUNT 16
 #define ARM64_SGI_IPI 0
 #define ARM64_SGI_APC 1
 #define ARM64_SGI_DPC 2
@@ -35,6 +36,7 @@ extern BOOLEAN NTAPI HalArm64ProfileSample(ULONG Increment);
 #define ARM64_INTERRUPT_EXIT_APC 0x1
 #define ARM64_INTERRUPT_EXIT_DPC 0x2
 #define KI_ARM64_INTERRUPT_LOCK_NONE ((PKSPIN_LOCK)(LONG_PTR)-3)
+static BOOLEAN KiArm64ConnectInterrupt(IN PKINTERRUPT Interrupt);
 static PKINTERRUPT KiArm64BootIntTable[ARM64_MAX_INTID];
 static PKINTERRUPT *KiArm64IntTables[MAXIMUM_PROCESSORS] = {KiArm64BootIntTable};
 static ULONG KiArm64IntConnections[ARM64_MAX_INTID];
@@ -794,7 +796,7 @@ KeInitInterrupts(VOID)
                           0,
                           FALSE);
     KiRawDebugPuts("[KeInitInterrupts] IPI KeConnectInterrupt\n");
-    (VOID)KeConnectInterrupt(&KiArm64IpiInterrupt);
+    (VOID)KiArm64ConnectInterrupt(&KiArm64IpiInterrupt);
     KiRawDebugPuts("[KeInitInterrupts] IPI connect done\n");
 
     /* CPU interrupt delivery remains masked until HAL phase 0 completes. */
@@ -1257,9 +1259,9 @@ KeInitializeInterrupt(IN PKINTERRUPT Interrupt,
     InitializeListHead(&Interrupt->InterruptListEntry);
 }
 
+static
 BOOLEAN
-NTAPI
-KeConnectInterrupt(IN PKINTERRUPT Interrupt)
+KiArm64ConnectInterrupt(IN PKINTERRUPT Interrupt)
 {
     KIRQL OldIrql;
     PKINTERRUPT Head;
@@ -1321,6 +1323,14 @@ Done:
     if (RestoreAffinity) KeRevertToUserAffinityThreadEx(PreviousAffinity);
 
     return Connected;
+}
+
+BOOLEAN
+NTAPI
+KeConnectInterrupt(IN PKINTERRUPT Interrupt)
+{
+    if (Interrupt->Vector < ARM64_SGI_COUNT) return FALSE;
+    return KiArm64ConnectInterrupt(Interrupt);
 }
 
 BOOLEAN
