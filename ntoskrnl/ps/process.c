@@ -2493,6 +2493,8 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
     HANDLE hCallerFile = NULL;
     PFILE_OBJECT ImageFileObject;
     OBJECT_HANDLE_INFORMATION ImageFileInformation;
+    ACCESS_MASK ImageFileAccess = SYNCHRONIZE | FILE_EXECUTE;
+    BOOLEAN ReturnImageHandles;
     HANDLE ParentProcess = NtCurrentProcess();
     HANDLE DebugPort = NULL;
     HANDLE ExceptionPort = NULL;
@@ -2934,13 +2936,16 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
                                (PreviousMode != KernelMode ? OBJ_FORCE_ACCESS_CHECK : 0),
                                NULL,
                                NULL);
+    ReturnImageHandles = CapturedCreateInfo.InitState.WriteOutputOnExit;
+    if (ReturnImageHandles)
+        ImageFileAccess |= CapturedCreateInfo.InitState.AdditionalFileAccess;
     Status = ZwOpenFile(&hFile,
-                        SYNCHRONIZE | FILE_EXECUTE | FILE_READ_DATA,
+                        ImageFileAccess,
                         &LocalFileObjectAttributes,
                         &IoStatusBlock,
                         FILE_SHARE_DELETE | FILE_SHARE_READ,
                         FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
-    if (Status == STATUS_ACCESS_DENIED)
+    if (Status == STATUS_ACCESS_DENIED && ImageFileAccess != (SYNCHRONIZE | FILE_EXECUTE))
     {
         Status = ZwOpenFile(&hFile,
                             SYNCHRONIZE | FILE_EXECUTE,
@@ -2949,7 +2954,7 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
                             FILE_SHARE_DELETE | FILE_SHARE_READ,
                             FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
     }
-    if (NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status) && ReturnImageHandles)
     {
         hCallerFile = hFile;
         if (PreviousMode != KernelMode)
@@ -3012,9 +3017,12 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
         _SEH2_TRY
         {
             CreateInfo->State = PsCreateFailOnSectionCreate;
-            CreateInfo->FailSection.FileHandle = hCallerFile;
-            if (hCallerFile == hFile) hFile = NULL; /* Caller now owns this handle */
-            hCallerFile = NULL;
+            if (ReturnImageHandles)
+            {
+                CreateInfo->FailSection.FileHandle = hCallerFile;
+                if (hCallerFile == hFile) hFile = NULL; /* Caller now owns this handle */
+                hCallerFile = NULL;
+            }
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -3526,7 +3534,7 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
         CreateInfo->State = PsCreateSuccess;
         CreateInfo->SuccessState.OutputFlags = 0;
         CreateInfo->SuccessState.FileHandle = hCallerFile;
-        CreateInfo->SuccessState.SectionHandle = hSection;
+        CreateInfo->SuccessState.SectionHandle = ReturnImageHandles ? hSection : NULL;
         CreateInfo->SuccessState.UserProcessParametersNative = (ULONGLONG)(ULONG_PTR)NativeProcessParameters;
 #ifdef WOW64_SUPPORTED
         CreateInfo->SuccessState.UserProcessParametersWow64 = PtrToUlong(Wow64ProcessParameters);
@@ -3572,7 +3580,7 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
     {
         if (hCallerFile == hFile) hFile = NULL;
         hCallerFile = NULL;
-        hSection = NULL;
+        if (ReturnImageHandles) hSection = NULL;
         hProcess = NULL;
         hThread = NULL;
     }
