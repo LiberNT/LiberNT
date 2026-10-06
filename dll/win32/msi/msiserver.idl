@@ -171,6 +171,34 @@ library WindowsInstaller
         msiUILevelSourceResOnly = 256
     } MsiUILevel;
 
+#ifdef __REACTOS__
+    typedef enum {
+        msiReinstallModeFileMissing = 2,
+        msiReinstallModeFileOlderVersion = 4,
+        msiReinstallModeFileEqualVersion = 8,
+        msiReinstallModeFileExact = 16,
+        msiReinstallModeFileVerify = 32,
+        msiReinstallModeFileReplace = 64,
+        msiReinstallModeMachineData = 128,
+        msiReinstallModeUserData = 256,
+        msiReinstallModeShortcut = 512,
+        msiReinstallModePackage = 1024
+    } MsiReinstallMode;
+
+    typedef enum {
+        msiInstallTypeDefault = 0,
+        msiInstallTypeNetworkImage = 1,
+        msiInstallTypeSingleInstance = 2
+    } MsiInstallType;
+
+    typedef enum {
+        msiInstallModeNoSourceResolution = -3,
+        msiInstallModeNoDetection = -2,
+        msiInstallModeExisting = -1,
+        msiInstallModeDefault = 0
+    } MsiInstallMode;
+#endif
+
     [ uuid(000C1090-0000-0000-C000-000000000046) ]
     dispinterface Installer
     {
@@ -238,6 +266,117 @@ library WindowsInstaller
         [id(DISPID_INSTALLER_RELATEDPRODUCTS), propget]
             StringList *RelatedProducts(
                 [in] BSTR UpgradeCode);
+#ifdef __REACTOS__
+        [id(DISPID_INSTALLER_CONFIGUREPRODUCT)]
+            void ConfigureProduct(
+                [in] BSTR Product,
+                [in] long InstallLevel,
+                [in] MsiInstallState InstallState);
+        [id(DISPID_INSTALLER_REINSTALLPRODUCT)]
+            void ReinstallProduct(
+                [in] BSTR Product,
+                [in] MsiReinstallMode ReinstallMode);
+        [id(DISPID_INSTALLER_COLLECTUSERINFO)]
+            void CollectUserInfo([in] BSTR Product);
+        [id(DISPID_INSTALLER_APPLYPATCH)]
+            void ApplyPatch(
+                [in] BSTR PatchPackage,
+                [in] BSTR InstallPackage,
+                [in] MsiInstallType InstallType,
+                [in] BSTR CommandLine);
+        [id(DISPID_INSTALLER_FEATUREPARENT), propget]
+            BSTR FeatureParent(
+                [in] BSTR Product,
+                [in] BSTR Feature);
+        [id(DISPID_INSTALLER_FEATURESTATE), propget]
+            MsiInstallState FeatureState(
+                [in] BSTR Product,
+                [in] BSTR Feature);
+        [id(DISPID_INSTALLER_USEFEATURE)]
+            void UseFeature(
+                [in] BSTR Product,
+                [in] BSTR Feature,
+                [in] MsiInstallMode InstallMode);
+        [id(DISPID_INSTALLER_FEATUREUSAGECOUNT), propget]
+            long FeatureUsageCount(
+                [in] BSTR Product,
+                [in] BSTR Feature);
+        [id(DISPID_INSTALLER_FEATUREUSAGEDATE), propget]
+            DATE FeatureUsageDate(
+                [in] BSTR Product,
+                [in] BSTR Feature);
+        [id(DISPID_INSTALLER_CONFIGUREFEATURE)]
+            void ConfigureFeature(
+                [in] BSTR Product,
+                [in] BSTR Feature,
+                [in] MsiInstallState InstallState);
+        [id(DISPID_INSTALLER_REINSTALLFEATURE)]
+            void ReinstallFeature(
+                [in] BSTR Product,
+                [in] BSTR Feature,
+                [in] MsiReinstallMode ReinstallMode);
+        [id(DISPID_INSTALLER_PROVIDECOMPONENT)]
+            BSTR ProvideComponent(
+                [in] BSTR Product,
+                [in] BSTR Feature,
+                [in] BSTR Component,
+                [in] long InstallMode);
+        [id(DISPID_INSTALLER_COMPONENTPATH), propget]
+            BSTR ComponentPath(
+                [in] BSTR Product,
+                [in] BSTR Component);
+        [id(DISPID_INSTALLER_PROVIDEQUALIFIEDCOMPONENT)]
+            BSTR ProvideQualifiedComponent(
+                [in] BSTR Category,
+                [in] BSTR Qualifier,
+                [in] long InstallMode);
+        [id(DISPID_INSTALLER_QUALIFIERDESCRIPTION), propget]
+            BSTR QualifierDescription(
+                [in] BSTR Category,
+                [in] BSTR Qualifier);
+        [id(DISPID_INSTALLER_COMPONENTQUALIFIERS), propget]
+            StringList *ComponentQualifiers([in] BSTR Category);
+        [id(DISPID_INSTALLER_FEATURES), propget]
+            StringList *Features([in] BSTR Product);
+        [id(DISPID_INSTALLER_COMPONENTS), propget]
+            StringList *Components();
+        [id(DISPID_INSTALLER_COMPONENTCLIENTS), propget]
+            StringList *ComponentClients([in] BSTR Component);
+        [id(DISPID_INSTALLER_PATCHES), propget]
+            StringList *Patches([in] BSTR Product);
+        [id(DISPID_INSTALLER_PATCHINFO), propget]
+            BSTR PatchInfo(
+                [in] BSTR Patch,
+                [in] BSTR Attribute);
+        [id(DISPID_INSTALLER_PATCHTRANSFORMS), propget]
+            BSTR PatchTransforms(
+                [in] BSTR Product,
+                [in] BSTR Patch);
+        [id(DISPID_INSTALLER_ADDSOURCE)]
+            void AddSource(
+                [in] BSTR Product,
+                [in] BSTR User,
+                [in] BSTR Source);
+        [id(DISPID_INSTALLER_CLEARSOURCELIST)]
+            void ClearSourceList(
+                [in] BSTR Product,
+                [in] BSTR User);
+        [id(DISPID_INSTALLER_FORCESOURCELISTRESOLUTION)]
+            void ForceSourceListResolution(
+                [in] BSTR Product,
+                [in] BSTR User);
+        [id(DISPID_INSTALLER_SHORTCUTTARGET), propget]
+            Record *ShortcutTarget([in] BSTR ShortcutPath);
+        [id(DISPID_INSTALLER_FILEHASH)]
+            Record *FileHash(
+                [in] BSTR FilePath,
+                [in] long Options);
+        [id(DISPID_INSTALLER_FILESIGNATUREINFO)]
+            SAFEARRAY(unsigned char) FileSignatureInfo(
+                [in] BSTR FilePath,
+                [in] long Options,
+                [in] long Format);
+#endif
     }
 
     [ uuid(000C1093-0000-0000-C000-000000000046) ]
