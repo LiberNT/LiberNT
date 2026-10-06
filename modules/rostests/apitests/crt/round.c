@@ -20,7 +20,7 @@ static TESTENTRY_DBL s_round_tests[] =
     { 0x8000000000000001 /* -0.000000000000000e+000 */, 0x8000000000000000 /* -0.000000000000000e+000 */ },
     { 0x800fffffffffffff /* -0.000000000000000e+000 */, 0x8000000000000000 /* -0.000000000000000e+000 */ },
     { 0x7ff0000000000000 /*  1.#INF00000000000e+000 */, 0x7ff0000000000000 /*  1.#INF00000000000e+000 */ },
-#ifdef _M_IX86
+#ifndef _M_AMD64
     { 0x7ff0000000000001 /*  1.#QNAN0000000000e+000 */, 0x7ff8000000000001 /*  1.#QNAN0000000000e+000 */ },
     { 0x7ff7ffffffffffff /*  1.#QNAN0000000000e+000 */, 0x7fffffffffffffff /*  1.#QNAN0000000000e+000 */ },
 #else
@@ -31,7 +31,7 @@ static TESTENTRY_DBL s_round_tests[] =
     { 0x7ff8000000000001 /*  1.#QNAN0000000000e+000 */, 0x7ff8000000000001 /*  1.#QNAN0000000000e+000 */ },
     { 0x7fffffffffffffff /*  1.#QNAN0000000000e+000 */, 0x7fffffffffffffff /*  1.#QNAN0000000000e+000 */ },
     { 0xfff0000000000000 /* -1.#INF00000000000e+000 */, 0xfff0000000000000 /* -1.#INF00000000000e+000 */ },
-#ifdef _M_IX86
+#ifndef _M_AMD64
     { 0xfff0000000000001 /* -1.#QNAN0000000000e+000 */, 0xfff8000000000001 /* -1.#QNAN0000000000e+000 */ },
     { 0xfff7ffffffffffff /* -1.#QNAN0000000000e+000 */, 0xffffffffffffffff /* -1.#QNAN0000000000e+000 */ },
 #else
@@ -78,7 +78,7 @@ static TESTENTRY_FLT s_roundf_tests[] =
     { 0x80000001 /* -0.000000 */, 0x80000000 /* -0.000000 */ },
     { 0x807FFFFF /* -0.000000 */, 0x80000000 /* -0.000000 */ },
     { 0x7f800000 /*  1.#INF00 */, 0x7f800000 /*  1.#INF00 */ },
-#ifdef _M_IX86
+#ifndef _M_AMD64
     { 0x7f800001 /*  1.#SNAN0 */, 0x7fc00001 /*  1.#QNAN0 */ },
     { 0x7fBFffff /*  1.#SNAN0 */, 0x7fffffff /*  1.#QNAN0 */ },
 #else
@@ -89,7 +89,7 @@ static TESTENTRY_FLT s_roundf_tests[] =
     { 0x7fC80001 /*  1.#QNAN0 */, 0x7fc80001 /*  1.#QNAN0 */ },
     { 0x7fFfffff /*  1.#QNAN0 */, 0x7fffffff /*  1.#QNAN0 */ },
     { 0xff800000 /* -1.#INF00 */, 0xff800000 /* -1.#INF00 */ },
-#ifdef _M_IX86
+#ifndef _M_AMD64
     { 0xff800001 /* -1.#SNAN0 */, 0xffc00001 /* -1.#QNAN0 */ },
     { 0xffBfffff /* -1.#SNAN0 */, 0xffffffff /* -1.#QNAN0 */ },
 #else
