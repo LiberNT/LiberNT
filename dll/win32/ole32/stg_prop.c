@@ -223,6 +223,12 @@ struct tagPropertyStorage_impl
     struct dictionary *name_to_propid;
     struct dictionary *propid_to_name;
     struct dictionary *propid_to_prop;
+#ifdef __REACTOS__
+    FMTID other_fmtid;
+    BYTE *other_section;
+    DWORD other_section_size;
+    DWORD section_base;
+#endif
 };
 
 static inline PropertyStorage_impl *impl_from_IPropertyStorage(IPropertyStorage *iface)
@@ -472,6 +478,9 @@ static ULONG WINAPI IPropertyStorage_fnRelease(
         This->cs.DebugInfo->Spare[0] = 0;
         DeleteCriticalSection(&This->cs);
         PropertyStorage_DestroyDictionaries(This);
+#ifdef __REACTOS__
+        HeapFree(GetProcessHeap(), 0, This->other_section);
+#endif
         HeapFree(GetProcessHeap(), 0, This);
     }
     return ref;
@@ -1835,6 +1844,56 @@ static HRESULT PropertyStorage_ReadDictionary(PropertyStorage_impl *This, const 
     return hr;
 }
 
+#ifdef __REACTOS__
+static HRESULT PropertyStorage_ReadOtherSection(PropertyStorage_impl *This,
+ const FORMATIDOFFSET *entry, DWORD stream_size)
+{
+    LARGE_INTEGER seek;
+    BYTE buf[sizeof(DWORD)];
+    ULONG count = 0;
+    DWORD size;
+    HRESULT hr;
+
+    if (entry->dwOffset > stream_size ||
+     stream_size - entry->dwOffset < sizeof(PROPERTYSECTIONHEADER))
+        return STG_E_INVALIDHEADER;
+
+    seek.QuadPart = entry->dwOffset;
+    hr = IStream_Seek(This->stm, seek, STREAM_SEEK_SET, NULL);
+    if (FAILED(hr))
+        return hr;
+    hr = IStream_Read(This->stm, buf, sizeof(buf), &count);
+    if (FAILED(hr))
+        return hr;
+    if (count != sizeof(buf))
+        return STG_E_INVALIDHEADER;
+    StorageUtl_ReadDWord(buf, 0, &size);
+    if (size < sizeof(PROPERTYSECTIONHEADER) ||
+     size > stream_size - entry->dwOffset)
+        return STG_E_INVALIDHEADER;
+
+    This->other_section = HeapAlloc(GetProcessHeap(), 0, size);
+    if (!This->other_section)
+        return STG_E_INSUFFICIENTMEMORY;
+
+    hr = IStream_Seek(This->stm, seek, STREAM_SEEK_SET, NULL);
+    if (SUCCEEDED(hr))
+        hr = IStream_Read(This->stm, This->other_section, size, &count);
+    if (SUCCEEDED(hr) && count != size)
+        hr = STG_E_INVALIDHEADER;
+    if (FAILED(hr))
+    {
+        HeapFree(GetProcessHeap(), 0, This->other_section);
+        This->other_section = NULL;
+        return hr;
+    }
+
+    This->other_fmtid = entry->fmtid;
+    This->other_section_size = size;
+    return S_OK;
+}
+#endif
+
 static HRESULT PropertyStorage_ReadFromStream(PropertyStorage_impl *This)
 {
     struct read_buffer read_buffer;
@@ -1851,6 +1910,11 @@ static HRESULT PropertyStorage_ReadFromStream(PropertyStorage_impl *This)
 
     This->dirty = FALSE;
     This->highestProp = 0;
+#ifdef __REACTOS__
+    HeapFree(GetProcessHeap(), 0, This->other_section);
+    This->other_section = NULL;
+    This->other_section_size = 0;
+#endif
     hr = IStream_Stat(This->stm, &stat, STATFLAG_NONAME);
     if (FAILED(hr))
         goto end;
@@ -1899,9 +1963,57 @@ static HRESULT PropertyStorage_ReadFromStream(PropertyStorage_impl *This)
     This->originatorOS = hdr.dwOSVer;
     if (PROPSETHDR_OSVER_KIND(hdr.dwOSVer) == PROPSETHDR_OSVER_KIND_MAC)
         WARN("File comes from a Mac, strings will probably be screwed up\n");
+#ifdef __REACTOS__
+    if (IsEqualGUID(&This->fmtid, &FMTID_DocSummaryInformation) ||
+     IsEqualGUID(&This->fmtid, &FMTID_UserDefinedProperties))
+    {
+        FORMATIDOFFSET entry, other;
+        BOOL found = FALSE, found_other = FALSE;
+
+        for (i = 0; i < min(hdr.reserved, 2); i++)
+        {
+            hr = PropertyStorage_ReadFmtIdOffsetFromStream(This->stm, &entry);
+            if (FAILED(hr))
+                goto end;
+            if (!found && IsEqualGUID(&entry.fmtid, &This->fmtid))
+            {
+                fmtOffset = entry;
+                found = TRUE;
+            }
+            else if (!found_other)
+            {
+                other = entry;
+                found_other = TRUE;
+            }
+        }
+        if (found_other)
+        {
+            hr = PropertyStorage_ReadOtherSection(This, &other, stat.cbSize.LowPart);
+            if (FAILED(hr))
+                goto end;
+        }
+        if (!found)
+        {
+            if (This->grfFlags & PROPSETFLAG_ANSI)
+                This->codePage = GetACP();
+            else
+                This->codePage = CP_UNICODE;
+            This->locale = LOCALE_SYSTEM_DEFAULT;
+            hr = S_OK;
+            goto end;
+        }
+    }
+    else
+    {
+        hr = PropertyStorage_ReadFmtIdOffsetFromStream(This->stm, &fmtOffset);
+        if (FAILED(hr))
+            goto end;
+    }
+#else
     hr = PropertyStorage_ReadFmtIdOffsetFromStream(This->stm, &fmtOffset);
     if (FAILED(hr))
         goto end;
+#endif
     if (fmtOffset.dwOffset > stat.cbSize.LowPart)
     {
         WARN("invalid offset %ld (stream length is %ld)\n", fmtOffset.dwOffset, stat.cbSize.LowPart);
@@ -2146,7 +2258,11 @@ end:
     return SUCCEEDED(c->hr);
 }
 
+#ifdef __REACTOS__
+#define SECTIONHEADER_OFFSET (This->section_base)
+#else
 #define SECTIONHEADER_OFFSET sizeof(PROPERTYSETHEADER) + sizeof(FORMATIDOFFSET)
+#endif
 
 /* Writes the dictionary to the stream.  Assumes without checking that the
  * dictionary isn't empty.
@@ -2473,6 +2589,11 @@ static HRESULT PropertyStorage_WriteHeadersToStream(PropertyStorage_impl *This)
     if (FAILED(hr))
         goto end;
     PropertyStorage_MakeHeader(This, &hdr);
+#ifdef __REACTOS__
+    This->section_base = sizeof(PROPERTYSETHEADER) + sizeof(FORMATIDOFFSET);
+    if (This->other_section)
+        StorageUtl_WriteDWord(&hdr.reserved, 0, 2);
+#endif
     hr = IStream_Write(This->stm, &hdr, sizeof(hdr), &count);
     if (FAILED(hr))
         goto end;
@@ -2482,6 +2603,37 @@ static HRESULT PropertyStorage_WriteHeadersToStream(PropertyStorage_impl *This)
         goto end;
     }
 
+#ifdef __REACTOS__
+    if (This->other_section)
+    {
+        BOOL other_first = IsEqualGUID(&This->other_fmtid, &FMTID_DocSummaryInformation);
+        DWORD base = sizeof(PROPERTYSETHEADER) + 2 * sizeof(FORMATIDOFFSET);
+        DWORD other_size = (This->other_section_size + 3) & ~3;
+        FORMATIDOFFSET entries[2];
+
+        This->section_base = other_first ? base + other_size : base;
+        StorageUtl_WriteGUID(&entries[other_first ? 1 : 0], 0, &This->fmtid);
+        StorageUtl_WriteDWord(&entries[other_first ? 1 : 0],
+         offsetof(FORMATIDOFFSET, dwOffset), This->section_base);
+        StorageUtl_WriteGUID(&entries[other_first ? 0 : 1], 0, &This->other_fmtid);
+        StorageUtl_WriteDWord(&entries[other_first ? 0 : 1],
+         offsetof(FORMATIDOFFSET, dwOffset), other_first ? base : 0);
+        hr = IStream_Write(This->stm, entries, sizeof(entries), &count);
+        if (SUCCEEDED(hr) && count != sizeof(entries))
+            hr = STG_E_WRITEFAULT;
+        if (SUCCEEDED(hr) && other_first)
+        {
+            static const BYTE padding[3];
+
+            hr = IStream_Write(This->stm, This->other_section,
+             This->other_section_size, &count);
+            if (SUCCEEDED(hr) && other_size != This->other_section_size)
+                hr = IStream_Write(This->stm, padding,
+                 other_size - This->other_section_size, &count);
+        }
+        goto end;
+    }
+#endif
     PropertyStorage_MakeFmtIdOffset(This, &fmtOffset);
     hr = IStream_Write(This->stm, &fmtOffset, sizeof(fmtOffset), &count);
     if (FAILED(hr))
@@ -2587,6 +2739,33 @@ static HRESULT PropertyStorage_WriteToStream(PropertyStorage_impl *This)
         return hr;
     StorageUtl_WriteDWord(&dwTemp, 0, sectionOffset);
     hr = IStream_Write(This->stm, &dwTemp, sizeof(dwTemp), &count);
+#ifdef __REACTOS__
+    if (SUCCEEDED(hr) && This->other_section &&
+     !IsEqualGUID(&This->other_fmtid, &FMTID_DocSummaryInformation))
+    {
+        static const BYTE padding[3];
+        DWORD other_offset = This->section_base + ((sectionOffset + 3) & ~3);
+
+        seek.QuadPart = This->section_base + sectionOffset;
+        hr = IStream_Seek(This->stm, seek, STREAM_SEEK_SET, NULL);
+        if (SUCCEEDED(hr) && (sectionOffset & 3))
+            hr = IStream_Write(This->stm, padding, 4 - (sectionOffset & 3), &count);
+        if (SUCCEEDED(hr))
+            hr = IStream_Write(This->stm, This->other_section,
+             This->other_section_size, &count);
+        if (SUCCEEDED(hr))
+        {
+            seek.QuadPart = sizeof(PROPERTYSETHEADER) + sizeof(FORMATIDOFFSET) +
+             offsetof(FORMATIDOFFSET, dwOffset);
+            hr = IStream_Seek(This->stm, seek, STREAM_SEEK_SET, NULL);
+        }
+        if (SUCCEEDED(hr))
+        {
+            StorageUtl_WriteDWord(&dwTemp, 0, other_offset);
+            hr = IStream_Write(This->stm, &dwTemp, sizeof(dwTemp), &count);
+        }
+    }
+#endif
     if (SUCCEEDED(hr))
         This->dirty = FALSE;
     return hr;
