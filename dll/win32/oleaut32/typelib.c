@@ -1073,6 +1073,9 @@ typedef struct tagITypeLibImpl
     LCID lcid;
     SYSKIND syskind;
     int ptr_size;
+#ifdef __REACTOS__
+    int vft_unit;
+#endif
     WORD ver_major;
     WORD ver_minor;
     WORD libflags;
@@ -3595,7 +3598,11 @@ static ITypeInfoImpl * MSFT_DoTypeInfo(
     if (ptiRet->typeattr.typekind != TKIND_COCLASS && ptiRet->typeattr.cImplTypes > 1)
         goto failed;
 #endif
+#ifdef __REACTOS__
+    ptiRet->typeattr.cbSizeVft = tiBase.cbSizeVft * sizeof(void *) / pLibInfo->ptr_size;
+#else
     ptiRet->typeattr.cbSizeVft = tiBase.cbSizeVft;
+#endif
     if (ptiRet->typeattr.typekind == TKIND_ALIAS) {
         TYPEDESC tmp;
 #ifdef __REACTOS__
@@ -4695,6 +4702,7 @@ static ITypeLibImpl* TypeLibImpl_Constructor(void)
     list_init(&pTypeLibImpl->guid_list);
 #ifdef __REACTOS__
     list_init(&pTypeLibImpl->type_allocations);
+    pTypeLibImpl->vft_unit = sizeof(void *);
 #endif
     list_init(&pTypeLibImpl->ref_list);
     pTypeLibImpl->dispatch_href = -1;
@@ -4816,6 +4824,9 @@ static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
 
     pTypeLibImpl->syskind = tlbHeader.varflags & 0x0f; /* check the mask */
     pTypeLibImpl->ptr_size = get_ptr_size(pTypeLibImpl->syskind);
+#ifdef __REACTOS__
+    pTypeLibImpl->vft_unit = sizeof(void *);
+#endif
     pTypeLibImpl->ver_major = LOWORD(tlbHeader.version);
     pTypeLibImpl->ver_minor = HIWORD(tlbHeader.version);
     pTypeLibImpl->libflags = ((WORD) tlbHeader.flags & 0xffff) /* check mask */ | LIBFLAG_FHASDISKIMAGE;
@@ -5678,6 +5689,9 @@ static DWORD SLTG_ReadLibBlk(LPVOID pLibBlk, ITypeLibImpl *pTypeLibImpl)
     pTypeLibImpl->syskind = *(WORD*)ptr;
 #endif
     pTypeLibImpl->ptr_size = get_ptr_size(pTypeLibImpl->syskind);
+#ifdef __REACTOS__
+    pTypeLibImpl->vft_unit = pTypeLibImpl->ptr_size;
+#endif
     ptr += 2;
 
 #ifdef __REACTOS__
@@ -8916,7 +8930,11 @@ static HRESULT WINAPI ITypeInfo_fnGetTypeAttr( ITypeInfo2 *iface,
 
     if((*ppTypeAttr)->typekind == TKIND_DISPATCH) {
         /* This should include all the inherited funcs */
+#ifdef __REACTOS__
+        (*ppTypeAttr)->cFuncs = (*ppTypeAttr)->cbSizeVft / This->pTypeLib->vft_unit;
+#else
         (*ppTypeAttr)->cFuncs = (*ppTypeAttr)->cbSizeVft / This->pTypeLib->ptr_size;
+#endif
         /* This is always the size of IDispatch's vtbl */
         (*ppTypeAttr)->cbSizeVft = sizeof(IDispatchVtbl);
         (*ppTypeAttr)->wTypeFlags &= ~TYPEFLAG_FOLEAUTOMATION;
@@ -12231,6 +12249,9 @@ HRESULT WINAPI CreateTypeLib2(SYSKIND syskind, LPCOLESTR szFile,
     This->lcid = GetSystemDefaultLCID();
     This->syskind = syskind;
     This->ptr_size = get_ptr_size(syskind);
+#ifdef __REACTOS__
+    This->vft_unit = This->ptr_size;
+#endif
 
     This->path = wcsdup(szFile);
     if (!This->path) {
@@ -15642,6 +15663,22 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetTypeIdldesc(ICreateTypeInfo2 *iface,
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static UINT TLB_typeinfo_vft_unit(ITypeInfo *info)
+{
+    UINT index, unit = sizeof(void *);
+    ITypeLib *lib;
+
+    if (SUCCEEDED(ITypeInfo_GetContainingTypeLib(info, &lib, &index)))
+    {
+        if (lib->lpVtbl == (const ITypeLibVtbl *)&tlbvt)
+            unit = impl_from_ITypeLib(lib)->vft_unit;
+        ITypeLib_Release(lib);
+    }
+    return unit;
+}
+
+#endif
 static HRESULT WINAPI ICreateTypeInfo2_fnLayOut(ICreateTypeInfo2 *iface)
 {
     ITypeInfoImpl *This = info_impl_from_ICreateTypeInfo2(iface);
@@ -15670,7 +15707,12 @@ static HRESULT WINAPI ICreateTypeInfo2_fnLayOut(ICreateTypeInfo2 *iface)
                     ITypeInfo_Release(inh);
                     return hres;
                 }
+#ifdef __REACTOS__
+                This->typeattr.cbSizeVft = attr->cbSizeVft / TLB_typeinfo_vft_unit(inh) *
+                                           This->pTypeLib->ptr_size;
+#else
                 This->typeattr.cbSizeVft = attr->cbSizeVft;
+#endif
                 ITypeInfo_ReleaseTypeAttr(inh, attr);
 
                 do{
