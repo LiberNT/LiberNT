@@ -2,7 +2,7 @@
 # architecture-specific loader and guest executables remain separate.
 include("${CMAKE_CURRENT_LIST_DIR}/compat_runtime_targets.cmake")
 
-set(WOW64_I386_MODULES ${COMPAT_RUNTIME_MODULES} ntdll stdole2.tlb)
+set(WOW64_I386_MODULES ${COMPAT_RUNTIME_MODULES} mshtml ntdll stdole2.tlb)
 set(WOW64_I386_AUXILIARY_MODULES ${COMPAT_RUNTIME_AUXILIARY_MODULES})
 set(WOW64_I386_ALIASES ${COMPAT_RUNTIME_ALIASES})
 

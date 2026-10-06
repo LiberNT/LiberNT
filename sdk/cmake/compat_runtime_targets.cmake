@@ -74,7 +74,9 @@ set(COMPAT_RUNTIME_MODULES
     iertutil
     imagehlp
     imm32
+    inetcomm
     iphlpapi
+    jscript
     jsproxy
     kernel32
     kernel32_vista

@@ -95,6 +95,6 @@ add_idl_reg_scripts(mshtml registry mshtml_classes.idl)
 target_link_libraries(mshtml uuid wine wine_dll_canunload strmiids oldnames)
 add_delay_importlibs(mshtml wininet inetcomm)
 add_importlibs(mshtml urlmon shlwapi shell32 ole32 oleaut32 user32 gdi32 advapi32 msvcrt kernel32 ntdll)
-add_dependencies(mshtml mshtml_iface_headers stdole2)
+add_dependencies(mshtml mshtml_iface_headers jscript_jsdisp_header stdole2)
 add_cd_file(TARGET mshtml DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(mshtml) # CORE-5743: No CONST_VTABLE
