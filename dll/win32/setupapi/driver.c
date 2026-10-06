@@ -832,6 +832,11 @@ SetupDiBuildDriverInfoList(
             struct DeviceInfo *devInfo = (struct DeviceInfo *)DeviceInfoData->Reserved;
             struct InfFileDetails *infFileDetails = NULL;
             FILETIME DriverDate;
+            WCHAR Description[LINE_LEN], Provider[LINE_LEN], Manufacturer[LINE_LEN];
+            WCHAR MatchingDeviceId[MAX_DEVICE_ID_LEN], VersionText[64];
+            DWORDLONG DriverVersion = 0;
+            PLIST_ENTRY PreviousTail;
+            LPWSTR InstalledIds, VersionPart;
             LONG rc;
             DWORD len;
 
@@ -847,7 +852,10 @@ SetupDiBuildDriverInfoList(
             /* Read some information from registry, before creating the driver structure */
             hDriverKey = SETUPDI_OpenDrvKey(((struct DeviceInfoSet *)DeviceInfoSet)->HKLM, devInfo, KEY_QUERY_VALUE);
             if (hDriverKey == INVALID_HANDLE_VALUE)
+            {
+                ret = TRUE;
                 goto done;
+            }
             RequiredSize = (len - strlenW(InfFileName)) * sizeof(WCHAR);
             rc = RegGetValueW(
                 hDriverKey,
@@ -859,8 +867,8 @@ SetupDiBuildDriverInfoList(
                 &RequiredSize);
             if (rc != ERROR_SUCCESS)
             {
-                SetLastError(rc);
                 CloseHandle(hDriverKey);
+                ret = TRUE;
                 goto done;
             }
             RequiredSize = sizeof(InfFileSection);
@@ -885,8 +893,44 @@ SetupDiBuildDriverInfoList(
                 CloseHandle(hDriverKey);
                 goto done;
             }
-            DriverDate.dwLowDateTime = DriverDate.dwHighDateTime = 0; /* FIXME */
+            Description[0] = Provider[0] = Manufacturer[0] = MatchingDeviceId[0] = VersionText[0] = UNICODE_NULL;
+            RequiredSize = sizeof(Description);
+            RegGetValueW(hDriverKey, NULL, REGSTR_VAL_DRVDESC, RRF_RT_REG_SZ, NULL, Description, &RequiredSize);
+            RequiredSize = sizeof(Provider);
+            RegGetValueW(hDriverKey, NULL, REGSTR_VAL_PROVIDER_NAME, RRF_RT_REG_SZ, NULL, Provider, &RequiredSize);
+            RequiredSize = sizeof(MatchingDeviceId);
+            RegGetValueW(hDriverKey, NULL, REGSTR_VAL_MATCHINGDEVID, RRF_RT_REG_SZ, NULL, MatchingDeviceId, &RequiredSize);
+            RequiredSize = sizeof(VersionText);
+            RegGetValueW(hDriverKey, NULL, L"DriverVersion", RRF_RT_REG_SZ, NULL, VersionText, &RequiredSize);
+            RequiredSize = sizeof(DriverDate);
+            if (RegGetValueW(hDriverKey, NULL, L"DriverDateData", RRF_RT_REG_BINARY, NULL, &DriverDate, &RequiredSize) != ERROR_SUCCESS ||
+                RequiredSize != sizeof(DriverDate))
+            {
+                DriverDate.dwLowDateTime = DriverDate.dwHighDateTime = 0;
+            }
             CloseHandle(hDriverKey);
+
+            SetupDiGetDeviceRegistryPropertyW(DeviceInfoSet, DeviceInfoData, SPDRP_MFG, NULL,
+                                              (PBYTE)Manufacturer, sizeof(Manufacturer), NULL);
+
+            for (VersionPart = VersionText, len = 0; len < 4; len++)
+            {
+                DriverVersion = (DriverVersion << 16) | (strtoulW(VersionPart, &VersionPart, 10) & 0xffff);
+                if (*VersionPart == L'.')
+                    VersionPart++;
+            }
+
+            len = strlenW(MatchingDeviceId) + 2;
+            InstalledIds = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, len * sizeof(WCHAR));
+            if (!InstalledIds)
+            {
+                DereferenceInfFile(infFileDetails);
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                goto done;
+            }
+            strcpyW(InstalledIds, MatchingDeviceId);
+
+            PreviousTail = pDriverListHead->Blink;
             ret = AddKnownDriverToList(
                 pDriverListHead,
                 SPDIT_COMPATDRIVER,
@@ -894,16 +938,23 @@ SetupDiBuildDriverInfoList(
                 infFileDetails,
                 InfFileName,
                 InfFileSection, /* Yes, we don't care of section extension */
-                L"DriverDescription", /* FIXME */
-                L"ProviderName", /* FIXME */
-                L"ManufacturerName", /* FIXME */
-                L"MatchingId", /* FIXME */
+                Description,
+                Provider,
+                Manufacturer,
+                MatchingDeviceId,
                 DriverDate,
-                0, /* FIXME: DriverVersion */
+                DriverVersion,
                 0,
-                NULL);
+                InstalledIds);
             if (!ret)
+            {
+                HeapFree(GetProcessHeap(), 0, InstalledIds);
                 DereferenceInfFile(infFileDetails);
+            }
+            else if (pDriverListHead->Blink != PreviousTail)
+            {
+                CONTAINING_RECORD(pDriverListHead->Blink, struct DriverInfoElement, ListEntry)->Params.Flags |= DNF_INSTALLEDDRIVER;
+            }
             Result = FALSE;
         }
         else if (InstallParams.Flags & DI_ENUMSINGLEINF)
