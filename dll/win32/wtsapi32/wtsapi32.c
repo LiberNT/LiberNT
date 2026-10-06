@@ -367,6 +367,98 @@ BOOL WINAPI WTSEnumerateSessionsA(HANDLE server, DWORD reserved, DWORD version,
 /************************************************************
  *                WTSEnumerateEnumerateSessionsW  (WTSAPI32.@)
  */
+#ifdef __REACTOS__
+BOOL WINAPI WTSEnumerateSessionsW(HANDLE server, DWORD reserved, DWORD version,
+        PWTS_SESSION_INFOW *session_info, DWORD *count)
+{
+    static const WCHAR console_name[] = L"Console";
+    static const WCHAR services_name[] = L"Services";
+    SYSTEM_PROCESS_INFORMATION *nt_info, *nt_process;
+    ULONG nt_size = 4096, sessions[64], session_count = 1, console, i, j;
+    WTS_SESSION_INFOW *info;
+    NTSTATUS status;
+    WCHAR *name;
+
+    TRACE("%p 0x%08lx 0x%08lx %p %p\n", server, reserved, version, session_info, count);
+
+    if (!session_info || !count) return FALSE;
+
+    if (!(nt_info = malloc(nt_size)))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+
+    while ((status = NtQuerySystemInformation(SystemProcessInformation, nt_info,
+            nt_size, NULL)) == STATUS_INFO_LENGTH_MISMATCH)
+    {
+        SYSTEM_PROCESS_INFORMATION *new_info;
+
+        nt_size *= 2;
+        if (!(new_info = realloc(nt_info, nt_size)))
+        {
+            free(nt_info);
+            SetLastError(ERROR_OUTOFMEMORY);
+            return FALSE;
+        }
+        nt_info = new_info;
+    }
+    if (status)
+    {
+        free(nt_info);
+        SetLastError(RtlNtStatusToDosError(status));
+        return FALSE;
+    }
+
+    sessions[0] = 0;
+    nt_process = nt_info;
+    for (;;)
+    {
+        for (i = 0; i < session_count && sessions[i] < nt_process->SessionId; ++i) ;
+        if ((i == session_count || sessions[i] != nt_process->SessionId) && session_count < ARRAY_SIZE(sessions))
+        {
+            for (j = session_count; j > i; --j) sessions[j] = sessions[j - 1];
+            sessions[i] = nt_process->SessionId;
+            ++session_count;
+        }
+
+        if (!nt_process->NextEntryOffset)
+            break;
+        nt_process = (SYSTEM_PROCESS_INFORMATION *)((char *)nt_process + nt_process->NextEntryOffset);
+    }
+    free(nt_info);
+
+    if (!(info = malloc(session_count * (sizeof(*info) + sizeof(services_name)))))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+
+    console = WTSGetActiveConsoleSessionId();
+    name = (WCHAR *)(info + session_count);
+    for (i = 0; i < session_count; ++i)
+    {
+        info[i].SessionId = sessions[i];
+        info[i].pWinStationName = name;
+        if (sessions[i] == console)
+        {
+            info[i].State = WTSActive;
+            memcpy(name, console_name, sizeof(console_name));
+        }
+        else
+        {
+            info[i].State = WTSDisconnected;
+            if (!sessions[i]) memcpy(name, services_name, sizeof(services_name));
+            else *name = 0;
+        }
+        name += ARRAY_SIZE(services_name);
+    }
+
+    *session_info = info;
+    *count = session_count;
+    return TRUE;
+}
+#else
 BOOL WINAPI WTSEnumerateSessionsW(HANDLE server, DWORD reserved, DWORD version,
         PWTS_SESSION_INFOW *session_info, DWORD *count)
 {
@@ -393,6 +485,7 @@ BOOL WINAPI WTSEnumerateSessionsW(HANDLE server, DWORD reserved, DWORD version,
 
     return TRUE;
 }
+#endif
 
 /************************************************************
  *                WTSFreeMemory (WTSAPI32.@)
