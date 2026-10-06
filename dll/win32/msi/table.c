@@ -2054,6 +2054,23 @@ static UINT TABLE_release(struct tagMSIVIEW *view)
 
         if (!tv->table->col_count)
         {
+#ifdef __REACTOS__
+            MSIVIEW *tables;
+            MSIRECORD *rec;
+            UINT row;
+
+            if ((rec = MSI_CreateRecord(1)))
+            {
+                MSI_RecordSetStringW(rec, 1, tv->name);
+                if (TABLE_CreateView(tv->db, L"_Tables", &tables) == ERROR_SUCCESS)
+                {
+                    if (table_find_row((struct table_view *)tables, rec, &row, NULL) == ERROR_SUCCESS)
+                        TABLE_delete_row(tables, row);
+                    tables->ops->delete(tables);
+                }
+                msiobj_release(&rec->hdr);
+            }
+#endif
             list_remove(&tv->table->entry);
             free_table(tv->table);
             TABLE_delete(view);
