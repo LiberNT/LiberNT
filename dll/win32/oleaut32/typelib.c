@@ -8698,8 +8698,12 @@ static HRESULT WINAPI ITypeLibComp_fnBindType(
 
     *ppTInfo = (ITypeInfo *)&info->ITypeInfo2_iface;
     ITypeInfo_AddRef(*ppTInfo);
+#ifdef __REACTOS__
+    *ppTComp = NULL;
+#else
     *ppTComp = &info->ITypeComp_iface;
     ITypeComp_AddRef(*ppTComp);
+#endif
 
     return S_OK;
 }
