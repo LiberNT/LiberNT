@@ -2047,20 +2047,25 @@ static
 PMI_CONTROL_AREA
 MiReferenceControlForAddress(
     _In_ PMI_ADDRESS_SPACE Space,
-    _In_ PVOID Address)
+    _In_ PVOID Address,
+    _Out_opt_ PBOOLEAN SectionView)
 {
     PMI_CONTROL_AREA Control = NULL;
+    BOOLEAN Mapped;
     PMI_VAD Vad;
 
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
 
     Vad = MiVadLocate(Space, (ULONG64)(ULONG_PTR)Address);
-    if (Vad != NULL && (Vad->Type == MiVadMapped || Vad->Type == MiVadImage) &&
+    Mapped = (BOOLEAN)(Vad != NULL && (Vad->Type == MiVadMapped || Vad->Type == MiVadImage));
+    if (Mapped &&
         (Vad->Segment->FileOps.Read == MiControlRead || Vad->Segment->FileOps.Read == MiControlImageRead))
     {
         Control = Vad->Segment->FileContext;
         MiSegmentReference(Vad->Segment);
     }
+    if (SectionView != NULL)
+        *SectionView = Mapped;
 
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
     return Control;
@@ -2074,11 +2079,12 @@ MmGetFileNameForAddress(
 {
     POBJECT_NAME_INFORMATION Information;
     PMI_CONTROL_AREA Control;
+    BOOLEAN SectionView;
     NTSTATUS Status;
 
-    Control = MiReferenceControlForAddress(MiSpaceForAddress(Address), Address);
+    Control = MiReferenceControlForAddress(MiSpaceForAddress(Address), Address, &SectionView);
     if (Control == NULL)
-        return STATUS_INVALID_ADDRESS;
+        return SectionView ? STATUS_FILE_INVALID : STATUS_INVALID_ADDRESS;
 
     Status = MmGetFileNameForFileObject(Control->FileObject, &Information);
     MiDereferenceControlArea(Control);
@@ -2778,8 +2784,8 @@ NtAreMappedFilesTheSame(
     _In_ PVOID File2MappedAsFile)
 {
     PMI_ADDRESS_SPACE Space = MiSpaceOfProcess(PsGetCurrentProcess());
-    PMI_CONTROL_AREA First = MiReferenceControlForAddress(Space, File1MappedAsAnImage);
-    PMI_CONTROL_AREA Second = MiReferenceControlForAddress(Space, File2MappedAsFile);
+    PMI_CONTROL_AREA First = MiReferenceControlForAddress(Space, File1MappedAsAnImage, NULL);
+    PMI_CONTROL_AREA Second = MiReferenceControlForAddress(Space, File2MappedAsFile, NULL);
     NTSTATUS Status;
 
     if (First == NULL)
