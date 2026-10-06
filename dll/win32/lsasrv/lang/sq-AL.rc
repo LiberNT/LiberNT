@@ -81,4 +81,5 @@ BEGIN
     IDS_INC_WORKING_SET_PRIVILEGE "Increase a process working set"
     IDS_TIME_ZONE_PRIVILEGE "Change the time zone"
     IDS_CREATE_SYMBOLIC_LINK_PRIVILEGE "Create symbolic links"
+    IDS_DELEGATE_SESSION_USER_IMPERSONATE_PRIVILEGE "Obtain an impersonation token for another user in the same session"
 END

@@ -268,6 +268,7 @@ extern const LUID SeRelabelPrivilege;
 extern const LUID SeIncreaseWorkingSetPrivilege;
 extern const LUID SeTimeZonePrivilege;
 extern const LUID SeCreateSymbolicLinkPrivilege;
+extern const LUID SeDelegateSessionUserImpersonatePrivilege;
 
 //
 // DACLs

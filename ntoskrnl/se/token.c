@@ -1931,6 +1931,7 @@ SepCreateSystemProcessToken(VOID)
         {SeIncreaseWorkingSetPrivilege, SE_PRIVILEGE_ENABLED_BY_DEFAULT | SE_PRIVILEGE_ENABLED},
         {SeTimeZonePrivilege, SE_PRIVILEGE_ENABLED_BY_DEFAULT | SE_PRIVILEGE_ENABLED},
         {SeCreateSymbolicLinkPrivilege, SE_PRIVILEGE_ENABLED_BY_DEFAULT | SE_PRIVILEGE_ENABLED},
+        {SeDelegateSessionUserImpersonatePrivilege, SE_PRIVILEGE_ENABLED_BY_DEFAULT | SE_PRIVILEGE_ENABLED},
     };
 
     /* Setup the object attributes */

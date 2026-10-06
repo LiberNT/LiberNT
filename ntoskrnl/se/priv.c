@@ -52,6 +52,7 @@ const LUID SeRelabelPrivilege = CONST_LUID(SE_RELABEL_PRIVILEGE, 0);
 const LUID SeIncreaseWorkingSetPrivilege = CONST_LUID(SE_INC_WORKING_SET_PRIVILEGE, 0);
 const LUID SeTimeZonePrivilege = CONST_LUID(SE_TIME_ZONE_PRIVILEGE, 0);
 const LUID SeCreateSymbolicLinkPrivilege = CONST_LUID(SE_CREATE_SYMBOLIC_LINK_PRIVILEGE, 0);
+const LUID SeDelegateSessionUserImpersonatePrivilege = CONST_LUID(SE_DELEGATE_SESSION_USER_IMPERSONATE_PRIVILEGE, 0);
 
 
 /* PRIVATE FUNCTIONS **********************************************************/

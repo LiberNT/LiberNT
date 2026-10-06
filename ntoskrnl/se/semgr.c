@@ -101,6 +101,7 @@ SepInitExports(VOID)
     SepExports.SeIncreaseWorkingSetPrivilege = SeIncreaseWorkingSetPrivilege;
     SepExports.SeTimeZonePrivilege = SeTimeZonePrivilege;
     SepExports.SeCreateSymbolicLinkPrivilege = SeCreateSymbolicLinkPrivilege;
+    SepExports.SeDelegateSessionUserImpersonatePrivilege = SeDelegateSessionUserImpersonatePrivilege;
 
     SepExports.SeIUserSid = SeIUserSid;
     SepExports.SeUntrustedMandatorySid = SeUntrustedMandatorySid;
