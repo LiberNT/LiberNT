@@ -98,6 +98,7 @@ if(ARCH STREQUAL "riscv64")
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_PVR_DLL}" "${MESA_PVR_STAGE}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_PVR_MANIFEST}" "${MESA_PVR_STAGE_DIR}/powervr_mesa_icd.json"
         COMMAND "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/llvm-strip" --strip-debug "${MESA_PVR_STAGE}"
+        COMMAND native-symz "${MESA_PVR_STAGE}"
         DEPENDS mesa_gallium_build "${MESA_PVR_DLL}" "${MESA_PVR_MANIFEST}"
         VERBATIM)
     add_custom_target(mesa_vulkan_powervr DEPENDS "${MESA_PVR_STAGE}" "${MESA_PVR_STAGE_DIR}/powervr_mesa_icd.json")
@@ -112,6 +113,7 @@ if(ARCH STREQUAL "riscv64")
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/mesa-icd"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_WGL_ZINK_DLL}" "${MESA_WGL_ZINK_STAGE}"
         COMMAND "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/llvm-strip" --strip-debug "${MESA_WGL_ZINK_STAGE}"
+        COMMAND native-symz "${MESA_WGL_ZINK_STAGE}"
         DEPENDS mesa_gallium_build "${MESA_WGL_ZINK_DLL}"
         VERBATIM)
     add_custom_target(mesa_gallium_zink DEPENDS "${MESA_WGL_ZINK_STAGE}")
@@ -124,6 +126,7 @@ if(ARCH STREQUAL "riscv64")
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/mesa-d3d"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_D3D_ZINK_DLL}" "${MESA_D3D_ZINK_STAGE}"
         COMMAND "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/llvm-strip" --strip-debug "${MESA_D3D_ZINK_STAGE}"
+        COMMAND native-symz "${MESA_D3D_ZINK_STAGE}"
         DEPENDS mesa_gallium_build "${MESA_D3D_ZINK_DLL}"
         VERBATIM)
     add_custom_target(mesa_d3d10_zink DEPENDS "${MESA_D3D_ZINK_STAGE}")
@@ -349,6 +352,7 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E make_directory "${MESA_GALLIUM_ICD_STAGE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_DLL}" "${MESA_GALLIUM_ICD_STAGE}"
     COMMAND ${MESA_STRIP} --strip-debug "${MESA_GALLIUM_ICD_STAGE}"
+    COMMAND native-symz "${MESA_GALLIUM_ICD_STAGE}"
     DEPENDS mesa_gallium_build "${MESA_DLL}"
     VERBATIM)
 add_custom_target(mesa_gallium DEPENDS "${MESA_GALLIUM_ICD_STAGE}")
@@ -364,6 +368,7 @@ if(_mesa_d3d_umd_enabled)
         COMMAND ${CMAKE_COMMAND} -E make_directory "${MESA_D3D_UMD_STAGE_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_D3D_DLL}" "${MESA_D3D_UMD_STAGE}"
         COMMAND ${MESA_STRIP} --strip-debug "${MESA_D3D_UMD_STAGE}"
+        COMMAND native-symz "${MESA_D3D_UMD_STAGE}"
         DEPENDS mesa_gallium_build "${MESA_D3D_DLL}"
         VERBATIM)
     add_custom_target(mesa_d3d_umd DEPENDS "${MESA_D3D_UMD_STAGE}")

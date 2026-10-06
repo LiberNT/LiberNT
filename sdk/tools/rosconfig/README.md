@@ -119,7 +119,7 @@ the selected target.
 | Compiler toolchain | Clang, GCC or MSVC. |
 | Build type | Debug or Release. |
 | Code generation | CPU instruction set, tuning, LTO and stack protector (GCC and Clang only). |
-| Build options | ccache, separate debug symbol files, `.rossym` compression and MSVC analysis. |
+| Build options | ccache, separate debug symbol files and MSVC analysis. |
 | Boot options | UEFI HTTP boot for the boards that support it. |
 | System | Target NT version, ALPC, ISA Plug and Play and the ROSV hypervisor. |
 | Graphics | Display driver model, Mesa Gallium and LLVMpipe/Lavapipe. |

@@ -6,7 +6,6 @@
 # below into that layer, and toolchain-riscv64.cmake into
 # toolchain-clang.cmake, then delete this file.
 set(CMAKE_MC_COMPILER native-windmc)
-set(NO_ROSSYM TRUE)
 set(PSEH_LIB pseh)
 set(ARCH2 riscv64)
 set(LLVM_DLLTOOL_MACHINE riscv64)

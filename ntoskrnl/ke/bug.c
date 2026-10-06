@@ -1027,11 +1027,15 @@ KiFormatBugCheckFrame(
     CHAR ModuleName[64];
 #ifdef KDBG
     CHAR FunctionName[64];
+    CHAR FileName[96];
     ULONG_PTR Displacement;
+    ULONG SourceLine;
 
-    if (KdbSymDescribeAddress((PVOID)Frame, ModuleName, sizeof(ModuleName), FunctionName, sizeof(FunctionName), &Displacement))
+    if (KdbSymDescribeAddress((PVOID)Frame, ModuleName, sizeof(ModuleName), FunctionName, sizeof(FunctionName), &Displacement, FileName, sizeof(FileName), &SourceLine))
     {
-        if (FunctionName[0] != ANSI_NULL)
+        if (FunctionName[0] != ANSI_NULL && SourceLine != 0)
+            RtlStringCbPrintfA(Line, LineSize, "#%02lu %s!%s+0x%Ix [%s:%lu]\r\n", Index, ModuleName, FunctionName, Displacement, FileName, SourceLine);
+        else if (FunctionName[0] != ANSI_NULL)
             RtlStringCbPrintfA(Line, LineSize, "#%02lu %s!%s+0x%Ix\r\n", Index, ModuleName, FunctionName, Displacement);
         else
             RtlStringCbPrintfA(Line, LineSize, "#%02lu %s+0x%Ix\r\n", Index, ModuleName, Displacement);

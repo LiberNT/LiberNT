@@ -1,5 +1,6 @@
 #pragma once
 #include "../kd/kd.h"
+#include <symz.h>
 
 /* TYPES *********************************************************************/
 
@@ -232,7 +233,21 @@ KdbSymDescribeAddress(
     _In_ ULONG ModuleNameLength,
     _Out_writes_z_(FunctionNameLength) PCHAR FunctionName,
     _In_ ULONG FunctionNameLength,
-    _Out_ PULONG_PTR Displacement);
+    _Out_ PULONG_PTR Displacement,
+    _Out_writes_opt_z_(FileNameLength) PCHAR FileName,
+    _In_ ULONG FileNameLength,
+    _Out_opt_ PULONG Line);
+
+BOOLEAN
+KdbpSymzDescribe(
+    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ ULONG_PTR RelativeAddress,
+    _Out_writes_z_(FunctionNameLength) PCHAR FunctionName,
+    _In_ ULONG FunctionNameLength,
+    _Out_ PULONG_PTR SymbolAddress,
+    _Out_writes_opt_z_(FileNameLength) PCHAR FileName,
+    _In_ ULONG FileNameLength,
+    _Out_opt_ PULONG Line);
 
 typedef BOOLEAN (NTAPI *PKDB_SYMBOL_ENUM_CALLBACK)(_In_ ULONG_PTR Address, _In_ PCSTR ModuleName, _In_ PCSTR FunctionName, _In_ PCSTR FileName, _In_ ULONG SourceLine, _In_opt_ PVOID Context);
 
@@ -242,24 +257,11 @@ KdbSymEnumerate(_In_ PCSTR ModulePattern, _In_ PCSTR SymbolPattern, _In_ ULONG M
 BOOLEAN
 KdbSymPrintNearest(_In_ PVOID Address, _In_ PCONTEXT Context);
 
-VOID
-KdbSymProcessSymbols(
-    _Inout_ PLDR_DATA_TABLE_ENTRY LdrEntry,
-    _In_ BOOLEAN Load);
-
 BOOLEAN
-KdbSymInit(
-    _In_ ULONG BootPhase);
-
-BOOLEAN
-KdbgTakeDeferredSymbolRequest(
-    _Out_ PVOID *Base,
-    _Out_ PBOOLEAN Load);
-
-VOID
-KdbgProcessDeferredSymbolRequest(
-    _In_ PVOID Base,
-    _In_ BOOLEAN Load);
+KdbpSymzEnumerate(
+    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PSYMZ_ENUM_ROUTINE Routine,
+    _In_ PVOID Context);
 
 /* from kdb.c */
 

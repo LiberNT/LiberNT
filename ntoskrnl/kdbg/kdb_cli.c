@@ -1919,157 +1919,6 @@ KdbpCmdSetFpRegister(ULONG Argc, PCHAR Argv[])
     return TRUE;
 }
 
-#ifdef __ROS_DWARF__
-
-/*!\brief Print a struct
- */
-static VOID
-KdbpPrintStructInternal
-(PROSSYM_INFO Info, PCHAR Indent, BOOLEAN DoRead, PVOID BaseAddress, PROSSYM_AGGREGATE Aggregate)
-{
-    ULONG i;
-    ULONGLONG Result;
-    PROSSYM_AGGREGATE_MEMBER Member;
-    ULONG IndentLen = strlen(Indent);
-    ROSSYM_AGGREGATE MemberAggregate = {0 };
-
-    for (i = 0; i < Aggregate->NumElements; i++) {
-        Member = &Aggregate->Elements[i];
-        KdbpPrint("%s%p+%x: %s", Indent, ((PCHAR)BaseAddress) + Member->BaseOffset, Member->Size, Member->Name ? Member->Name : "<anoymous>");
-        if (DoRead) {
-            if (!strcmp(Member->Type, "_UNICODE_STRING")) {
-                KdbpPrint("\"");
-                KdbpPrintUnicodeString(((PCHAR)BaseAddress) + Member->BaseOffset);
-                KdbpPrint("\"\n");
-                continue;
-            } else if (!strcmp(Member->Type, "PUNICODE_STRING")) {
-                PUNICODE_STRING String;
-
-                KdbpPrint("\"");
-                if (NT_SUCCESS(KdbpSafeReadMemory(&String, ((PCHAR)BaseAddress) + Member->BaseOffset, sizeof(String))))
-                    KdbpPrintUnicodeString(String);
-                else
-                    KdbpPrint("<unreadable>");
-                KdbpPrint("\"\n");
-                continue;
-            }
-            switch (Member->Size) {
-            case 1:
-            case 2:
-            case 4:
-            case 8: {
-                Result = 0;
-                if (NT_SUCCESS(KdbpSafeReadMemory(&Result, ((PCHAR)BaseAddress) + Member->BaseOffset, Member->Size))) {
-                    if (Member->Bits) {
-                        if (Member->FirstBit >= sizeof(Result) * 8)
-                            Result = 0;
-                        else
-                            Result >>= Member->FirstBit;
-                        if (Member->Bits < sizeof(Result) * 8)
-                            Result &= ((1ULL << Member->Bits) - 1);
-                    }
-                    KdbpPrint(" %I64x\n", Result);
-                }
-                else goto readfail;
-                break;
-            }
-            default: {
-                if (Member->Size < 8) {
-                    if (NT_SUCCESS(KdbpSafeReadMemory(&Result, ((PCHAR)BaseAddress) + Member->BaseOffset, Member->Size))) {
-                        ULONG j;
-                        for (j = 0; j < Member->Size; j++) {
-                            KdbpPrint(" %02x", (int)(Result & 0xff));
-                            Result >>= 8;
-                        }
-                    } else goto readfail;
-                } else {
-                    KdbpPrint(" %s @ %p {\n", Member->Type, ((PCHAR)BaseAddress) + Member->BaseOffset);
-                    Indent[IndentLen] = ' ';
-                    if (RosSymAggregate(Info, Member->Type, &MemberAggregate)) {
-                        KdbpPrintStructInternal(Info, Indent, DoRead, ((PCHAR)BaseAddress) + Member->BaseOffset, &MemberAggregate);
-                        RosSymFreeAggregate(&MemberAggregate);
-                    }
-                    Indent[IndentLen] = 0;
-                    KdbpPrint("%s}\n", Indent);
-                } break;
-            }
-            }
-        } else {
-        readfail:
-            if (Member->Size <= 8) {
-                KdbpPrint(" ??\n");
-            } else {
-                KdbpPrint(" %s @ %x {\n", Member->Type, Member->BaseOffset);
-                Indent[IndentLen] = ' ';
-                if (RosSymAggregate(Info, Member->Type, &MemberAggregate)) {
-                    KdbpPrintStructInternal(Info, Indent, DoRead, BaseAddress, &MemberAggregate);
-                    RosSymFreeAggregate(&MemberAggregate);
-                }
-                Indent[IndentLen] = 0;
-                KdbpPrint("%s}\n", Indent);
-            }
-        }
-    }
-}
-
-PROSSYM_INFO KdbpSymFindCachedFile(PUNICODE_STRING ModName);
-
-static BOOLEAN
-KdbpCmdPrintStruct(ULONG Argc, PCHAR Argv[])
-{
-    ULONG i;
-    ULONGLONG Result = 0;
-    PVOID BaseAddress = NULL;
-    ROSSYM_AGGREGATE Aggregate = {0};
-    UNICODE_STRING ModName = {0};
-    ANSI_STRING AnsiName = {0};
-    CHAR Indent[100] = {0};
-    PROSSYM_INFO Info;
-
-    if (Argc < 3) goto end;
-    AnsiName.Length = AnsiName.MaximumLength = strlen(Argv[1]);
-    AnsiName.Buffer = Argv[1];
-    RtlAnsiStringToUnicodeString(&ModName, &AnsiName, TRUE);
-    Info = KdbpSymFindCachedFile(&ModName);
-
-    if (!Info || !RosSymAggregate(Info, Argv[2], &Aggregate)) {
-        DPRINT1("Could not get aggregate\n");
-        goto end;
-    }
-
-    // Get an argument for location if it was given
-    if (Argc > 3) {
-        ULONG len;
-        PCHAR ArgStart = Argv[3];
-        DPRINT("Trying to get expression\n");
-        for (i = 3; i < Argc - 1; i++)
-        {
-            len = strlen(Argv[i]);
-            Argv[i][len] = ' ';
-        }
-
-        /* Evaluate the expression */
-        DPRINT("Arg: %s\n", ArgStart);
-        if (KdbpEvaluateExpression(ArgStart, strlen(ArgStart), &Result))
-        {
-            if (Result > (ULONGLONG)MAXULONG_PTR)
-            {
-                KdbpPrint("Address 0x%I64x does not fit in a pointer.\n", Result);
-                goto end;
-            }
-            else
-                BaseAddress = (PVOID)(ULONG_PTR)Result;
-        }
-    }
-    DPRINT("BaseAddress: %p\n", BaseAddress);
-    KdbpPrintStructInternal(Info, Indent, !!BaseAddress, BaseAddress, &Aggregate);
-end:
-    RosSymFreeAggregate(&Aggregate);
-    RtlFreeUnicodeString(&ModName);
-    return TRUE;
-}
-#else /* !__ROS_DWARF__ */
-
 typedef enum _KDB_FIELD_KIND
 {
     KdbFieldHex,
@@ -2600,7 +2449,6 @@ KdbpCmdPrintStruct(ULONG Argc, PCHAR Argv[])
     }
     return TRUE;
 }
-#endif // __ROS_DWARF__
 
 /*!\brief Retrieves the component ID corresponding to a given component name.
  *
@@ -9786,9 +9634,6 @@ KdbInitialize(
     _In_ PKD_DISPATCH_TABLE DispatchTable,
     _In_ ULONG BootPhase)
 {
-    /* Saves the different symbol-loading status across boot phases */
-    static ULONG LoadSymbols = 0;
-
     if (BootPhase == 0)
     {
         /* Write out the functions that we support for now */
@@ -9825,23 +9670,10 @@ KdbInitialize(
         KeInitializeSpinLock(&KdpDmesgLogSpinLock);
     }
 
-    /* Initialize symbols support in BootPhase 0 and 1 */
-    if (BootPhase <= 1)
-    {
-        LoadSymbols <<= 1;
-        LoadSymbols |= KdbSymInit(BootPhase);
-    }
-
     if (BootPhase == 1)
     {
         /* Announce ourselves */
-        CHAR buffer[60];
-        RtlStringCbPrintfA(buffer, sizeof(buffer),
-                           "   KDBG debugger enabled - %s\r\n",
-                           !(LoadSymbols & 0x2) ? "No symbols loaded" :
-                           !(LoadSymbols & 0x1) ? "Kernel symbols loaded"
-                                                : "Loading symbols");
-        HalDisplayString(buffer);
+        HalDisplayString("   KDBG debugger enabled\r\n");
     }
 
     if (BootPhase >= 2)

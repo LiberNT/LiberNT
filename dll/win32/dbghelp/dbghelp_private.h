@@ -897,11 +897,6 @@ extern struct module*
                     pe_load_native_module(struct process* pcs, const WCHAR* name,
                                           HANDLE hFile, DWORD64 base, DWORD size);
 
-#ifdef __REACTOS__
-/* rsym.c */
-extern BOOL         rsym_parse(struct module* module, DWORD64 load_offset,
-                               const void* rsym, unsigned rsymlen);
-#endif
 extern struct module*
                     pe_load_builtin_module(struct process* pcs, const WCHAR* name,
                                            DWORD64 base, DWORD64 size);

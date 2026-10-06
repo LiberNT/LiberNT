@@ -84,5 +84,3 @@ reactos_hal_setup(halmacpi 0)
 # halacpi.c names PCI devices from the shared tables
 set_source_files_properties(${HAL_ARM64_SOURCE_DIR}/acpi/halacpi.c PROPERTIES
     OBJECT_DEPENDS "${REACTOS_BINARY_DIR}/hal/arch/common/pci_classes.h;${REACTOS_BINARY_DIR}/hal/arch/common/pci_vendors.h")
-
-# DWARF sections are preserved directly in the binary for rossym_new to parse

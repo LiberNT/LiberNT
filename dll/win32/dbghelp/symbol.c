@@ -2078,7 +2078,16 @@ static BOOL get_line_from_function(struct module_pair* pair, struct symt_functio
             }
             else
             {
+#ifdef __REACTOS__
+                const char *source = source_get(pair->effective, dli->u.source_file);
+                DWORD len = MultiByteToWideChar(CP_ACP, 0, source, -1, NULL, 0);
+                WCHAR *dospath = HeapAlloc(GetProcessHeap(), 0, len * sizeof(WCHAR));
+
+                if (!dospath) return FALSE;
+                MultiByteToWideChar(CP_ACP, 0, source, -1, dospath, len);
+#else
                 WCHAR *dospath = wine_get_dos_file_name(source_get(pair->effective, dli->u.source_file));
+#endif
                 ret = lineinfo_set_nameW(pair->pcs, line_info, dospath);
                 HeapFree( GetProcessHeap(), 0, dospath );
             }

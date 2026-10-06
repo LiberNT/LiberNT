@@ -354,8 +354,6 @@ def get_target_file(ntdll_path):
         count = b'|'.join(names).count(b'/')
         if IS_64_BIT:
             return 'baseaddress64.cmake'
-        elif b'.rossym' in names:
-            return 'baseaddress.cmake'
         elif count == 0:
             return 'baseaddress_msvc.cmake'
         elif count > 3:

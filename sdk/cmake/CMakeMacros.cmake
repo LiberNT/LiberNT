@@ -1022,11 +1022,6 @@ function(add_driver_inf _module)
     set_property(GLOBAL APPEND PROPERTY DRIVER_INF_TARGETS ${_module}_inf_files)
 endfunction()
 
-if(KDBG)
-    set(ROSSYM_LIB "rossym")
-else()
-    set(ROSSYM_LIB "")
-endif()
 
 function(add_rc_deps _target_rc)
     set_source_files_properties(${_target_rc} PROPERTIES OBJECT_DEPENDS "${ARGN}")

@@ -216,10 +216,10 @@ else()
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
         target_link_options(uefildr PRIVATE -Wl,/driver)
     endif()
-    # Strip everything, including rossym data
+    # Strip everything, including the compressed symbol section
     add_custom_command(TARGET uefildr
                     POST_BUILD
-                    COMMAND ${CMAKE_STRIP} --remove-section=.rossym $<TARGET_FILE:uefildr>
+                    COMMAND ${CMAKE_STRIP} --remove-section=.symz $<TARGET_FILE:uefildr>
                     COMMAND ${CMAKE_STRIP} --strip-all $<TARGET_FILE:uefildr>)
 endif()
 

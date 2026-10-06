@@ -570,7 +570,8 @@ endif()
             ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_cmdhist.c
             ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_expr.c
             ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_print.c
-            ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_symbols.c)
+            ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_symbols.c
+            ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/kdb_symz.c)
     endif()
 
     list(APPEND SOURCE

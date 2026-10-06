@@ -168,18 +168,6 @@ config SEPARATE_DBG
       Write debug symbols to separate files instead of keeping them inside
       the binaries.
 
-config ROSSYM_COMPRESSION
-    prompt "Compress the embedded .rossym section"
-    type bool
-    default n
-    depends TOOLCHAIN!=msvc
-    help
-      Store the embedded symbol section compressed with LZNT1 and expand it
-      when a module is loaded. The section shrinks to roughly a third of its
-      size, about 59 MB across a full image, at the cost of one decompression
-      per module at load time. Symbol lookup is unaffected because the
-      expanded copy is what gets searched.
-
 config RUNTIME_CHECKS
     prompt "MSVC runtime checks"
     type bool

@@ -101,9 +101,6 @@
     #undef _KDDLL_
     #include <kddll.h>
 #endif
-#ifdef __ROS_ROSSYM__
-#include <reactos/rossym.h>
-#endif
 
 /* PNP GUIDs */
 #include <umpnpmgr/sysguid.h>

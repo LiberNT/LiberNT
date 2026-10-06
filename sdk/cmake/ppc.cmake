@@ -1,7 +1,6 @@
 # Windows NT PowerPC (little-endian, 32-bit) uses PE/COFF modules with
 # two-word {code, TOC} function descriptors and native NT SEH tables.
 set(CMAKE_MC_COMPILER native-windmc)
-set(NO_ROSSYM TRUE)
 set(PSEH_LIB pseh)
 set(ARCH2 ppc)
 set(LLVM_DLLTOOL_MACHINE ppc)

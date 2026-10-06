@@ -1,45 +1,5 @@
 
-if(NOT CMAKE_CROSSCOMPILING)
-    add_definitions(-DDBGHELP_STATIC_LIB -DNONAMELESSUNION -D_CRT_NON_CONFORMING_SWPRINTFS)
-
-    include_directories(
-        ${REACTOS_SOURCE_DIR}/tools)
-
-    list(APPEND SOURCE
-        compat.c
-        dbghelp.c
-        dwarf.c
-        module.c
-        pe_module.c
-        source.c
-        stabs.c
-        storage.c
-        symbol.c
-        type.c)
-
-    if(ARCH STREQUAL "i386")
-        list(APPEND SOURCE cpu_i386.c)
-    elseif(ARCH STREQUAL "amd64")
-        list(APPEND SOURCE cpu_amd64_host.c)
-    elseif(ARCH STREQUAL "arm64")
-        list(APPEND SOURCE cpu_arm64_host.c)
-    endif()
-
-    # This helper is consumed only by rsym.  Architectures without an rsym
-    # target must not build an incomplete host CPU table as part of ALL.
-    add_library(dbghelphost EXCLUDE_FROM_ALL ${SOURCE})
-    target_link_libraries(dbghelphost PRIVATE host_includes zlibhost)
-    if(NOT MSVC)
-        target_compile_options(dbghelphost PRIVATE -fshort-wchar)
-    endif()
-    # Symbol-index storage follows the host pointer width, independently of the PE target.
-    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-        target_compile_definitions(dbghelphost PRIVATE DBGHELP_HOST_64BIT)
-    endif()
-    if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")
-        target_compile_definitions(dbghelphost PRIVATE _TARGET_PE64 _WIN64)
-    endif()
-else()
+if(CMAKE_CROSSCOMPILING)
     add_definitions(
         -D_WINE
         -D__WINESRC__
@@ -69,7 +29,6 @@ else()
         path.c
         pdb.c
         pe_module.c
-        rsym.c
         source.c
         stabs.c
         stack.c
@@ -91,7 +50,7 @@ else()
         ${CMAKE_CURRENT_BINARY_DIR}/dbghelp.def)
 
     set_module_type(dbghelp win32dll)
-    target_link_libraries(dbghelp wine ${PSEH_LIB} oldnames zlib)
+    target_link_libraries(dbghelp wine ${PSEH_LIB} oldnames zlib symz)
     if(ARCH STREQUAL "riscv64")
         target_link_libraries(dbghelp riscv64_rvuw)
     endif()

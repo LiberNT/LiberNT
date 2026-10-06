@@ -104,33 +104,6 @@ void cleanup_msvc_dll()
     ok(ret, "RemoveDirectoryA failed(%lu)\n", GetLastError());
 }
 
-int extract_gcc_dll(char szFile[MAX_PATH])
-{
-    const char* dir = tmpdir();
-    BOOL ret = CreateDirectoryA(dir, NULL);
-    ok(ret, "CreateDirectoryA failed(%lu)\n", GetLastError());
-
-    sprintf(szFile, "%s\\uffs.dll", dir);
-    if (!extract_one(szFile, "gcc_uffs.dll"))
-        return 0;
-
-    return 1;
-}
-
-void cleanup_gcc_dll()
-{
-    char szFile[MAX_PATH];
-    BOOL ret;
-    const char* dir = tmpdir();
-
-    sprintf(szFile, "%s\\uffs.dll", dir);
-    ret = DeleteFileA(szFile);
-    ok(ret, "DeleteFileA failed(%lu)\n", GetLastError());
-    ret = RemoveDirectoryA(dir);
-    ok(ret, "RemoveDirectoryA failed(%lu)\n", GetLastError());
-}
-
-
 #if 0
 static int compress_one(const char* src, const char* dest)
 {
@@ -183,92 +156,5 @@ void create_compressed_files()
         printf("msvc_uffs.dll failed\n");
     if (!compress_one("testdata/msvc_uffs.pdb", "testdata/msvc_uffs.pdb.compr"))
         printf("msvc_uffs.pdb failed\n");
-    if (!compress_one("testdata/gcc_uffs.dll", "testdata/gcc_uffs.dll.compr"))
-        printf("gcc_uffs.dll failed\n");
 }
-#endif
-
-#if 0
-
-#include <rossym.h> // For ROSSYM_ENTRY
-
-typedef struct _SYMBOLFILE_HEADER {
-    ULONG SymbolsOffset;
-    ULONG SymbolsLength;
-    ULONG StringsOffset;
-    ULONG StringsLength;
-} SYMBOLFILE_HEADER, *PSYMBOLFILE_HEADER;
-
-
-static int is_metadata(const char* name)
-{
-    size_t len = name ? strlen(name) : 0;
-    return len > 3 && name[0] == '_' && name[1] != '_' && name[len-1] == '_' && name[len-2] == '_';
-};
-
-static void dump_rsym_internal(void* data)
-{
-    PSYMBOLFILE_HEADER RosSymHeader = (PSYMBOLFILE_HEADER)data;
-    PROSSYM_ENTRY Entries = (PROSSYM_ENTRY)((char *)data + RosSymHeader->SymbolsOffset);
-    size_t symbols = RosSymHeader->SymbolsLength / sizeof(ROSSYM_ENTRY);
-    size_t i;
-    char *Strings = (char *)data + RosSymHeader->StringsOffset;
-
-    for (i = 0; i < symbols; i++)
-    {
-        PROSSYM_ENTRY Entry = Entries + i;
-        if (!Entry->FileOffset)
-        {
-            if (Entry->SourceLine)
-                printf("ERR: SOURCELINE (%lu) ", Entry->SourceLine);
-            if (is_metadata(Strings + Entry->FunctionOffset))
-                printf("metadata: %s: 0x%x\n", Strings + Entry->FunctionOffset, Entry->Address);
-            else
-                printf("0x%x: %s\n", Entry->Address, Strings + Entry->FunctionOffset);
-        }
-        else
-        {
-            printf("0x%x: %s (%s:%u)\n", Entry->Address,
-                Strings + Entry->FunctionOffset,
-                Strings + Entry->FileOffset,
-                Entry->SourceLine);
-        }
-    }
-
-}
-
-void dump_rsym(const char* filename)
-{
-    char* data;
-    SIZE_T size, res;
-    PIMAGE_FILE_HEADER PEFileHeader;
-    PIMAGE_OPTIONAL_HEADER PEOptHeader;
-    PIMAGE_SECTION_HEADER PESectionHeaders;
-    WORD i;
-
-    FILE* f = fopen(filename, "rb");
-
-    fseek(f, 0, SEEK_END);
-    size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    data = malloc(size);
-    res = fread(data, 1, size, f);
-    fclose(f);
-
-    PEFileHeader = (PIMAGE_FILE_HEADER)((char *)data + ((PIMAGE_DOS_HEADER)data)->e_lfanew + sizeof(ULONG));
-    PEOptHeader = (PIMAGE_OPTIONAL_HEADER)(PEFileHeader + 1);
-    PESectionHeaders = (PIMAGE_SECTION_HEADER)((char *)PEOptHeader + PEFileHeader->SizeOfOptionalHeader);
-
-    for (i = 0; i < PEFileHeader->NumberOfSections; i++)
-    {
-        if (!strcmp((char *)PESectionHeaders[i].Name, ".rossym"))
-        {
-            dump_rsym_internal(data + PESectionHeaders[i].PointerToRawData);
-            break;
-        }
-    }
-    free(data);
-}
-
 #endif

@@ -220,10 +220,10 @@ else()
         target_link_options(freeldr_pe PRIVATE -Wl,/driver)
     endif()
     add_linker_script(freeldr_pe freeldr_gcc.lds)
-    # Strip everything, including rossym data
+    # Strip everything, including the compressed symbol section
     add_custom_command(TARGET freeldr_pe
                     POST_BUILD
-                    COMMAND ${CMAKE_STRIP} --remove-section=.rossym $<TARGET_FILE:freeldr_pe>
+                    COMMAND ${CMAKE_STRIP} --remove-section=.symz $<TARGET_FILE:freeldr_pe>
                     COMMAND ${CMAKE_STRIP} --strip-all $<TARGET_FILE:freeldr_pe>)
 endif()
 

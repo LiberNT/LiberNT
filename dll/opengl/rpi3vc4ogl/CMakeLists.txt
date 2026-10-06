@@ -31,6 +31,7 @@ if(RPI3VC4_MESA_VC4_ICD)
                 "${RPI3VC4_MESA_VC4_ICD}"
                 "${RPI3VC4_MESA_ICD_STAGE}"
         COMMAND ${CMAKE_STRIP} --strip-debug "${RPI3VC4_MESA_ICD_STAGE}"
+        COMMAND native-symz "${RPI3VC4_MESA_ICD_STAGE}"
         DEPENDS "${RPI3VC4_MESA_VC4_ICD}"
         VERBATIM)
 else()

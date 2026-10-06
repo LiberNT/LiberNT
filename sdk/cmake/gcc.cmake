@@ -11,15 +11,6 @@ if(NOT DEFINED SEPARATE_DBG)
     set(SEPARATE_DBG FALSE)
 endif()
 
-# Dwarf based builds (no rsym)
-if(NOT WITH_DEBUG_SYMBOLS)
-    set(NO_ROSSYM TRUE)
-elseif(NOT (ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64"))
-    set(NO_ROSSYM TRUE)
-elseif(NOT DEFINED NO_ROSSYM)
-    set(NO_ROSSYM TRUE)
-endif()
-
 if(ARCH STREQUAL "arm64")
     # GCC has no native SEH support on AArch64, and the PSEH implementations
     # contain i386 assembly. Keep ARM64 on the dummy implementation.
@@ -322,59 +313,42 @@ if(SEPARATE_DBG)
         set(SYMBOL_FILE <TARGET>)
     endif()
 
-    if (NOT NO_ROSSYM)
-        get_target_property(RSYM native-rsym IMPORTED_LOCATION)
-        set(strip_debug "${RSYM} -s ${REACTOS_SOURCE_DIR} <TARGET> <TARGET>")
-    else()
-        set(strip_debug "${CMAKE_STRIP} --strip-debug <TARGET>")
-    endif()
+    get_target_property(SYMZ native-symz IMPORTED_LOCATION)
+    set(strip_debug "${CMAKE_STRIP} --strip-debug <TARGET>")
+    set(pack_symbols "${SYMZ} <TARGET> ${REACTOS_BINARY_DIR}/symbols/${SYMBOL_FILE}")
 
     set(CMAKE_C_LINK_EXECUTABLE
         "<CMAKE_C_COMPILER> -Wl,--start-group <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group"
         "${CMAKE_STRIP} --only-keep-debug <TARGET> -o ${REACTOS_BINARY_DIR}/symbols/${SYMBOL_FILE}"
-        ${strip_debug})
+        ${strip_debug}
+        ${pack_symbols})
     set(CMAKE_CXX_LINK_EXECUTABLE
         "<CMAKE_CXX_COMPILER> -Wl,--start-group <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group"
         "${CMAKE_STRIP} --only-keep-debug <TARGET> -o ${REACTOS_BINARY_DIR}/symbols/${SYMBOL_FILE}"
-        ${strip_debug})
+        ${strip_debug}
+        ${pack_symbols})
     set(CMAKE_C_CREATE_SHARED_LIBRARY
         "<CMAKE_C_COMPILER> -Wl,--start-group <CMAKE_SHARED_LIBRARY_C_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group"
         "${CMAKE_STRIP} --only-keep-debug <TARGET> -o ${REACTOS_BINARY_DIR}/symbols/${SYMBOL_FILE}"
-        ${strip_debug})
+        ${strip_debug}
+        ${pack_symbols})
     set(CMAKE_CXX_CREATE_SHARED_LIBRARY
         "<CMAKE_CXX_COMPILER> -Wl,--start-group <CMAKE_SHARED_LIBRARY_CXX_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group"
         "${CMAKE_STRIP} --only-keep-debug <TARGET> -o ${REACTOS_BINARY_DIR}/symbols/${SYMBOL_FILE}"
-        ${strip_debug})
+        ${strip_debug}
+        ${pack_symbols})
     set(CMAKE_RC_CREATE_SHARED_LIBRARY
         "<CMAKE_C_COMPILER> -shared -Wl,--start-group <CMAKE_SHARED_LIBRARY_C_FLAGS> <LINK_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group"
         "${CMAKE_STRIP} --only-keep-debug <TARGET> -o ${REACTOS_BINARY_DIR}/symbols/${SYMBOL_FILE}"
-        ${strip_debug})
-elseif(NO_ROSSYM)
-    # Dwarf-based build
-    message(STATUS "Generating a dwarf-based build (no rsym)")
+        ${strip_debug}
+        ${pack_symbols})
+else()
+    message(STATUS "Generating a dwarf-based build")
     set(CMAKE_C_LINK_EXECUTABLE "<CMAKE_C_COMPILER> -Wl,--start-group ${CMAKE_C_FLAGS} <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group")
     set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER> -Wl,--start-group ${CMAKE_CXX_FLAGS} <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group")
     set(CMAKE_C_CREATE_SHARED_LIBRARY "<CMAKE_C_COMPILER> -Wl,--start-group ${CMAKE_C_FLAGS} <CMAKE_SHARED_LIBRARY_C_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group")
     set(CMAKE_CXX_CREATE_SHARED_LIBRARY "<CMAKE_CXX_COMPILER> -Wl,--start-group ${CMAKE_CXX_FLAGS} <CMAKE_SHARED_LIBRARY_CXX_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group")
     set(CMAKE_RC_CREATE_SHARED_LIBRARY "<CMAKE_C_COMPILER> -shared -Wl,--start-group ${CMAKE_C_FLAGS} <CMAKE_SHARED_LIBRARY_C_FLAGS> <LINK_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group")
-else()
-    # Normal rsym build
-    get_target_property(RSYM native-rsym IMPORTED_LOCATION)
-
-    set(CMAKE_C_LINK_EXECUTABLE
-        "<CMAKE_C_COMPILER> -Wl,--start-group ${CMAKE_C_FLAGS} <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group"
-        "${RSYM} -s ${REACTOS_SOURCE_DIR} <TARGET> <TARGET>")
-    set(CMAKE_CXX_LINK_EXECUTABLE
-        "<CMAKE_CXX_COMPILER> -Wl,--start-group ${CMAKE_CXX_FLAGS} <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group"
-        "${RSYM} -s ${REACTOS_SOURCE_DIR} <TARGET> <TARGET>")
-    set(CMAKE_C_CREATE_SHARED_LIBRARY
-        "<CMAKE_C_COMPILER> -Wl,--start-group ${CMAKE_C_FLAGS} <CMAKE_SHARED_LIBRARY_C_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group"
-        "${RSYM} -s ${REACTOS_SOURCE_DIR} <TARGET> <TARGET>")
-    set(CMAKE_CXX_CREATE_SHARED_LIBRARY
-        "<CMAKE_CXX_COMPILER> -Wl,--start-group ${CMAKE_CXX_FLAGS} <CMAKE_SHARED_LIBRARY_CXX_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group"
-        "${RSYM} -s ${REACTOS_SOURCE_DIR} <TARGET> <TARGET>")
-    set(CMAKE_RC_CREATE_SHARED_LIBRARY
-        "<CMAKE_C_COMPILER> -shared -Wl,--start-group ${CMAKE_C_FLAGS} <CMAKE_SHARED_LIBRARY_C_FLAGS> <LINK_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group")
 endif()
 
 set(CMAKE_C_CREATE_SHARED_MODULE ${CMAKE_C_CREATE_SHARED_LIBRARY})

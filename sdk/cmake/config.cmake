@@ -202,8 +202,6 @@ option(ENABLE_ALPC
        "Whether to build the experimental ALPC port implementation in place of LPC."
        ON)
 
-option(ROSSYM_COMPRESSION "Whether to compress the embedded .rossym symbol section." OFF)
-
 option(ENABLE_MESA_LLVMPIPE "Add LLVMpipe to mesa_gallium.dll and package the Lavapipe Vulkan ICD and Khronos loader." OFF)
 
 option(ENABLE_EXPERIMENTAL_EARLY_SPLASH

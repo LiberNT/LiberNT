@@ -2580,7 +2580,7 @@ LoaderScan:
         PspRunLoadImageNotifyRoutines(FileName, NULL, &ImageInfo);
     }
 
-#ifdef __ROS_ROSSYM__
+#ifdef KDBG
 
     if (TRUE)
 #else

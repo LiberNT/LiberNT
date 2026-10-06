@@ -35,6 +35,9 @@
 #if !defined(__REACTOS__) || !defined(DBGHELP_STATIC_LIB)
 #include "winternl.h"
 #include "wine/debug.h"
+#ifdef __REACTOS__
+#include <symz.h>
+#endif
 #elif defined(_MSC_VER)
 #define strcasecmp _stricmp
 #endif
@@ -549,6 +552,191 @@ static BOOL pe_load_coff_symbol_table(struct module* module)
     return TRUE;
 }
 
+#if defined(__REACTOS__) && !defined(DBGHELP_STATIC_LIB)
+struct symz_symbol
+{
+    ULONG rva;
+    char* name;
+    struct symt_function* func;
+};
+
+struct symz_load
+{
+    struct module* module;
+    struct symz_symbol* symbols;
+    unsigned count;
+    unsigned capacity;
+    unsigned* sources;
+    unsigned source_count;
+    unsigned current;
+    BOOL failed;
+};
+
+static BOOLEAN pe_symz_symbol(PVOID context, ULONG rva, const char* name)
+{
+    struct symz_load* load = context;
+
+    if (load->count == load->capacity)
+    {
+        unsigned capacity = load->capacity ? load->capacity * 2 : 1024;
+        struct symz_symbol* symbols;
+
+        if (load->symbols)
+            symbols = HeapReAlloc(GetProcessHeap(), 0, load->symbols, capacity * sizeof(*symbols));
+        else
+            symbols = HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(*symbols));
+        if (!symbols)
+        {
+            load->failed = TRUE;
+            return FALSE;
+        }
+        load->symbols = symbols;
+        load->capacity = capacity;
+    }
+
+    if (name[0] == '_') name++;
+    load->symbols[load->count].rva = rva;
+    load->symbols[load->count].func = NULL;
+    load->symbols[load->count].name = pool_strdup(&load->module->pool, name);
+    load->count++;
+    return TRUE;
+}
+
+static BOOLEAN pe_symz_file(PVOID context, ULONG index, const char* name)
+{
+    struct symz_load* load = context;
+
+    if (index < load->source_count)
+        load->sources[index] = source_new(load->module, NULL, name);
+    return TRUE;
+}
+
+static BOOLEAN pe_symz_line(PVOID context, ULONG rva, ULONG file, ULONG line)
+{
+    struct symz_load* load = context;
+    struct symt_function* func;
+
+    while (load->current + 1 < load->count && load->symbols[load->current + 1].rva <= rva)
+        load->current++;
+
+    if (!line || file >= load->source_count || load->current >= load->count ||
+        load->symbols[load->current].rva > rva)
+    {
+        return TRUE;
+    }
+
+    func = load->symbols[load->current].func;
+    if (func && load->module->module.BaseOfImage + rva < func->ranges[0].high)
+        symt_add_func_line(load->module, func, load->sources[file], line,
+                           load->module->module.BaseOfImage + rva);
+    return TRUE;
+}
+
+static BOOL pe_load_symz(struct module* module)
+{
+    struct image_file_map* fmap = &module->format_info[DFI_PE]->u.pe_info->fmap;
+    const IMAGE_SECTION_HEADER* sect;
+    const IMAGE_NT_HEADERS* nthdr;
+    const SYMZ_HEADER* header;
+    struct symz_load load;
+    const char* mapping;
+    const char* table;
+    void* unpacked;
+    void* work;
+    BOOL ret = FALSE;
+    unsigned i, j, nsect;
+    ULONG size;
+
+    if (!(mapping = pe_map_full(fmap, NULL))) return FALSE;
+    if (!(nthdr = RtlImageNtHeader((HMODULE)mapping)))
+    {
+        pe_unmap_full(fmap);
+        return FALSE;
+    }
+    sect = IMAGE_FIRST_SECTION(nthdr);
+    nsect = nthdr->FileHeader.NumberOfSections;
+
+    for (i = 0; i < nsect; i++)
+        if (!memcmp(sect[i].Name, SYMZ_SECTION_NAME, sizeof(SYMZ_SECTION_NAME))) break;
+    if (i == nsect || sect[i].Misc.VirtualSize > sect[i].SizeOfRawData)
+    {
+        pe_unmap_full(fmap);
+        return FALSE;
+    }
+    table = mapping + sect[i].PointerToRawData;
+    size = sect[i].Misc.VirtualSize;
+    header = (const SYMZ_HEADER*)table;
+
+    memset(&load, 0, sizeof(load));
+    load.module = module;
+    unpacked = HeapAlloc(GetProcessHeap(), 0, SYMZ_MAX_BLOCK_SIZE);
+    work = HeapAlloc(GetProcessHeap(), 0, SYMZ_DECODER_WORK_SIZE);
+
+    if (unpacked && work && SymzCheckHeader(header, size) &&
+        SymzEnumerate(table, size, unpacked, SYMZ_MAX_BLOCK_SIZE, work, SYMZ_DECODER_WORK_SIZE,
+                      pe_symz_symbol, &load) && !load.failed)
+    {
+        for (i = 0; i < load.count; i++)
+        {
+            ULONG rva = load.symbols[i].rva;
+            ULONG_PTR address = module->module.BaseOfImage + rva;
+            unsigned length = 1;
+            BOOL code = FALSE;
+
+            for (j = i + 1; j < load.count; j++)
+            {
+                if (load.symbols[j].rva > rva)
+                {
+                    length = load.symbols[j].rva - rva;
+                    break;
+                }
+            }
+            for (j = 0; j < nsect; j++)
+            {
+                if (rva >= sect[j].VirtualAddress && rva - sect[j].VirtualAddress < sect[j].Misc.VirtualSize)
+                {
+                    code = (sect[j].Characteristics & IMAGE_SCN_MEM_EXECUTE) != 0;
+                    if (rva + length > sect[j].VirtualAddress + sect[j].Misc.VirtualSize)
+                        length = sect[j].VirtualAddress + sect[j].Misc.VirtualSize - rva;
+                    break;
+                }
+            }
+
+            if (code && (i + 1 == load.count || load.symbols[i + 1].rva != rva))
+                load.symbols[i].func = symt_new_function(module, 0, load.symbols[i].name, address, length, 0, 0);
+            else if (!(dbghelp_options & SYMOPT_NO_PUBLICS))
+                symt_new_public(module, NULL, load.symbols[i].name, FALSE, address, length);
+        }
+
+        load.source_count = header->FileCount + 1;
+        load.sources = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, load.source_count * sizeof(*load.sources));
+        if (load.sources && header->LineCount)
+        {
+            SymzEnumerateFiles(table, size, unpacked, SYMZ_MAX_BLOCK_SIZE, work, SYMZ_DECODER_WORK_SIZE,
+                               pe_symz_file, &load);
+            SymzEnumerateLines(table, size, unpacked, SYMZ_MAX_BLOCK_SIZE, work, SYMZ_DECODER_WORK_SIZE,
+                               pe_symz_line, &load);
+            module->module.LineNumbers = TRUE;
+        }
+        else module->module.LineNumbers = FALSE;
+
+        module->module.SymType = SymCoff;
+        module->module.GlobalSymbols = FALSE;
+        module->module.TypeInfo = FALSE;
+        module->module.SourceIndexed = FALSE;
+        module->module.Publics = TRUE;
+        ret = TRUE;
+    }
+
+    HeapFree(GetProcessHeap(), 0, load.sources);
+    HeapFree(GetProcessHeap(), 0, load.symbols);
+    HeapFree(GetProcessHeap(), 0, work);
+    HeapFree(GetProcessHeap(), 0, unpacked);
+    pe_unmap_full(fmap);
+    return ret;
+}
+#endif
+
 /******************************************************************
  *		pe_load_stabs
  *
@@ -604,32 +792,6 @@ static BOOL pe_load_dwarf(struct module* module)
 
     return ret;
 }
-
-#if defined(__REACTOS__) && !defined(DBGHELP_STATIC_LIB)
-/******************************************************************
- *              pe_load_rsym
- *
- * Load ReactOS native symbol data from the PE image.
- */
-static BOOL pe_load_rsym(struct module* module)
-{
-    struct image_file_map* fmap = &module->format_info[DFI_PE]->u.pe_info->fmap;
-    struct image_section_map section;
-    BOOL ret = FALSE;
-
-    if (image_find_section(fmap, ".rossym", &section))
-    {
-        const char* rsym = image_map_section(&section);
-
-        if (rsym != IMAGE_NO_MAP)
-            ret = rsym_parse(module, module->module.BaseOfImage,
-                             rsym, image_get_map_size(&section));
-        image_unmap_section(&section);
-    }
-    TRACE("%s the RSYM debug info\n", ret ? "successfully loaded" : "failed to load");
-    return ret;
-}
-#endif
 
 #if !defined(__REACTOS__) || !defined(DBGHELP_STATIC_LIB)
 /******************************************************************
@@ -861,7 +1023,7 @@ BOOL pe_load_debug_info(struct module* module)
                 pe_load_stabs(module) ||
                 pe_load_msc_debug_info(module) ||
 #ifdef __REACTOS__
-                pe_load_rsym(module) ||
+                pe_load_symz(module) ||
 #endif
                 pe_load_coff_symbol_table(module);
         }

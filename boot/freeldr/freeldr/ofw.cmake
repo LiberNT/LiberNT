@@ -86,6 +86,7 @@ add_dependencies(ofwldr xdk)
 add_custom_command(TARGET ofwldr
     POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:ofwldr> ${CMAKE_CURRENT_BINARY_DIR}/ofwldr.dbg.exe
+    COMMAND ${CMAKE_STRIP} --remove-section=.symz $<TARGET_FILE:ofwldr>
     COMMAND ${CMAKE_STRIP} --strip-all $<TARGET_FILE:ofwldr>)
 
 # Big-endian stage0 wrapping the loader: the image Open Firmware starts.

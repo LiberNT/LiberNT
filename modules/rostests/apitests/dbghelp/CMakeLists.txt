@@ -3,13 +3,11 @@ add_definitions(-DWINETEST_USE_DBGSTR_LONGLONG)
 
 include_directories(
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib
-    ${REACTOS_SOURCE_DIR}/sdk/tools/rsym
 )
 
 list(APPEND SOURCE
     MiniDumpSnapshot.c
     pdb.c
-    rsym.c
     data.c
     testlist.c)
 

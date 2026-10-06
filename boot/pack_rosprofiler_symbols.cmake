@@ -8,9 +8,6 @@ endif()
 if(NOT DEFINED FS_OVERHEAD_MB)
     set(FS_OVERHEAD_MB 4)
 endif()
-if(NOT DEFINED EMBEDDED_ROSSYM)
-    set(EMBEDDED_ROSSYM OFF)
-endif()
 
 file(REMOVE_RECURSE "${OUTPUT_DIR}")
 file(MAKE_DIRECTORY "${OUTPUT_DIR}")
@@ -76,7 +73,6 @@ string(APPEND _manifest "pdb_budget_bytes=${_available}\n")
 set(_selected_bytes 0)
 set(_selected_count 0)
 set(_skipped_count 0)
-set(_rossym_fallback_count 0)
 set(_module_offset_fallback_count 0)
 set(_fallback_scope "pdb-candidates")
 set(_fallback_counts_enumerated yes)
@@ -123,29 +119,17 @@ if(PACKAGE_PDBS AND EXISTS "${PDB_DIR}")
                    "included=${_name},${_size},${_allocated_size}\n")
         else()
             math(EXPR _skipped_count "${_skipped_count} + 1")
-            if(EMBEDDED_ROSSYM)
-                math(EXPR _rossym_fallback_count
-                     "${_rossym_fallback_count} + 1")
-                string(APPEND _manifest
-                       "embedded_rossym_fallback=${_name},${_size},${_allocated_size},budget\n")
-            else()
-                math(EXPR _module_offset_fallback_count
-                     "${_module_offset_fallback_count} + 1")
-                string(APPEND _manifest
-                       "module_offset_fallback=${_name},${_size},${_allocated_size},budget\n")
-            endif()
+            math(EXPR _module_offset_fallback_count
+                 "${_module_offset_fallback_count} + 1")
+            string(APPEND _manifest
+                   "module_offset_fallback=${_name},${_size},${_allocated_size},budget\n")
         endif()
     endforeach()
 else()
     set(_fallback_scope "built-pe-images")
     set(_fallback_counts_enumerated no)
-    if(EMBEDDED_ROSSYM)
-        string(APPEND _manifest
-               "mode=embedded-rossym (PDB packaging is Debug MSVC only)\n")
-    else()
-        string(APPEND _manifest
-               "mode=module-offset (no packaged PDB or embedded rossym)\n")
-    endif()
+    string(APPEND _manifest
+           "mode=compressed-symbols (PDB packaging is Debug MSVC only)\n")
 endif()
 
 string(APPEND _manifest "fallback_count_scope=${_fallback_scope}\n")
@@ -154,14 +138,10 @@ string(APPEND _manifest
 string(APPEND _manifest "included_pdb_count=${_selected_count}\n")
 string(APPEND _manifest "included_pdb_bytes=${_selected_bytes}\n")
 string(APPEND _manifest
-       "embedded_rossym_fallback_count=${_rossym_fallback_count}\n")
-string(APPEND _manifest
        "module_offset_fallback_count=${_module_offset_fallback_count}\n")
 file(WRITE "${OUTPUT_DIR}/rosprofiler-symbols.txt" "${_manifest}")
 if(PACKAGE_PDBS AND EXISTS "${PDB_DIR}")
-    message(STATUS "Profiler symbols: ${_selected_count} PDBs (${_selected_bytes} bytes), ${_rossym_fallback_count} PDB candidates use embedded rsym, ${_module_offset_fallback_count} PDB candidates use module+offset; budget ${_available} bytes")
-elseif(EMBEDDED_ROSSYM)
-    message(STATUS "Profiler symbols: PDB packaging disabled; built PE images use embedded rsym when present; unused PDB budget ${_available} bytes")
+    message(STATUS "Profiler symbols: ${_selected_count} PDBs (${_selected_bytes} bytes), ${_module_offset_fallback_count} PDB candidates use the compressed symbol section; budget ${_available} bytes")
 else()
-    message(STATUS "Profiler symbols: PDB packaging and embedded rsym disabled; unresolved built PE images use module+offset; unused PDB budget ${_available} bytes")
+    message(STATUS "Profiler symbols: PDB packaging disabled; built PE images use the compressed symbol section; unused PDB budget ${_available} bytes")
 endif()
