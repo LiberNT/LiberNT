@@ -133,8 +133,19 @@ void dictionary_insert(struct dictionary *d, const void *k, const void *v)
             return;
         elem->key = (void *)k;
         elem->value = (void *)v;
+#ifdef __REACTOS__
+        {
+            struct dictionary_entry **tail = &d->head;
+
+            while (*tail)
+                tail = &(*tail)->next;
+            elem->next = NULL;
+            *tail = elem;
+        }
+#else
         elem->next = d->head;
         d->head = elem;
+#endif
         d->num_entries++;
     }
 }
