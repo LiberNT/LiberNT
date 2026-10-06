@@ -25,6 +25,7 @@ static ULONG DummyBuffer[4096];
 C_ASSERT(LOOP_FUNCTION_SIZE == 128);
 typedef void LOOP_FUNCTION(volatile ULONG *, ULONG, ULONG);
 static
+DECLSPEC_NOINLINE
 void
 LoopFunction(
     _Inout_updates_all_(BufferSize) volatile ULONG *Buffer,
