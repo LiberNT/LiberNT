@@ -68,6 +68,9 @@ typedef struct _HFONTItem
   /* The font associated with this object. */
   HFONT gdiFont;
 
+#ifdef __REACTOS__
+  LOGFONTW logFont;
+#endif
 } HFONTItem, *PHFONTItem;
 
 static struct list OLEFontImpl_hFontList = LIST_INIT(OLEFontImpl_hFontList);
@@ -130,8 +133,34 @@ static HFONTItem *find_hfontitem(HFONT hfont)
     return NULL;
 }
 
+#ifdef __REACTOS__
+static HFONT share_hfontitem(const LOGFONTW *logFont)
+{
+    HFONTItem *item;
+    HFONT hfont = NULL;
+
+    EnterCriticalSection(&OLEFontImpl_csHFONTLIST);
+    LIST_FOR_EACH_ENTRY(item, &OLEFontImpl_hFontList, HFONTItem, entry)
+    {
+        if (!memcmp(&item->logFont, logFont, sizeof(*logFont)))
+        {
+            item->int_refs++;
+            item->total_refs++;
+            hfont = item->gdiFont;
+            break;
+        }
+    }
+    LeaveCriticalSection(&OLEFontImpl_csHFONTLIST);
+    return hfont;
+}
+#endif
+
 /* Add an item to the list with one internal reference */
+#ifdef __REACTOS__
+static HRESULT add_hfontitem(HFONT hfont, const LOGFONTW *logFont)
+#else
 static HRESULT add_hfontitem(HFONT hfont)
+#endif
 {
     HFONTItem *new_item = malloc(sizeof(*new_item));
 
@@ -140,6 +169,9 @@ static HRESULT add_hfontitem(HFONT hfont)
     new_item->int_refs = 1;
     new_item->total_refs = 1;
     new_item->gdiFont = hfont;
+#ifdef __REACTOS__
+    new_item->logFont = *logFont;
+#endif
     EnterCriticalSection(&OLEFontImpl_csHFONTLIST);
     list_add_tail(&OLEFontImpl_hFontList,&new_item->entry);
     LeaveCriticalSection(&OLEFontImpl_csHFONTLIST);
@@ -598,10 +630,21 @@ static void realize_font(OLEFontImpl *This)
     logFont.lfQuality         = DEFAULT_QUALITY;
     logFont.lfPitchAndFamily  = DEFAULT_PITCH;
 
+#ifdef __REACTOS__
+    This->gdiFont = share_hfontitem(&logFont);
+    This->dirty = FALSE;
+
+    if (!This->gdiFont)
+    {
+        This->gdiFont = CreateFontIndirectW(&logFont);
+        add_hfontitem(This->gdiFont, &logFont);
+    }
+#else
     This->gdiFont = CreateFontIndirectW(&logFont);
     This->dirty = FALSE;
 
     add_hfontitem(This->gdiFont);
+#endif
 
     /* Fixup the name and charset properties so that they match the
        selected font */
