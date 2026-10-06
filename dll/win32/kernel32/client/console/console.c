@@ -2162,7 +2162,7 @@ GenerateConsoleCtrlEvent(DWORD dwCtrlEvent,
 
 
 static DWORD
-IntGetConsoleTitle(LPVOID lpConsoleTitle, DWORD dwNumChars, BOOLEAN bUnicode)
+IntGetConsoleTitle(LPVOID lpConsoleTitle, DWORD dwNumChars, BOOLEAN bUnicode, BOOLEAN bOriginal)
 {
     CONSOLE_API_MESSAGE ApiMessage;
     PCONSOLE_GETSETCONSOLETITLE TitleRequest = &ApiMessage.Data.TitleRequest;
@@ -2175,6 +2175,7 @@ IntGetConsoleTitle(LPVOID lpConsoleTitle, DWORD dwNumChars, BOOLEAN bUnicode)
     TitleRequest->ConsoleHandle = NtCurrentPeb()->ProcessParameters->ConsoleHandle;
     TitleRequest->Length        = dwNumChars * (bUnicode ? sizeof(WCHAR) : sizeof(CHAR));
     TitleRequest->Unicode       = bUnicode;
+    TitleRequest->Original      = bOriginal;
 
     CaptureBuffer = CsrAllocateCaptureBuffer(1, TitleRequest->Length);
     if (CaptureBuffer == NULL)
@@ -2238,7 +2239,7 @@ DECLSPEC_HOTPATCH
 GetConsoleTitleW(LPWSTR lpConsoleTitle,
                  DWORD nSize)
 {
-    return IntGetConsoleTitle(lpConsoleTitle, nSize, TRUE);
+    return IntGetConsoleTitle(lpConsoleTitle, nSize, TRUE, FALSE);
 }
 
 
@@ -2251,7 +2252,27 @@ DECLSPEC_HOTPATCH
 GetConsoleTitleA(LPSTR lpConsoleTitle,
                  DWORD nSize)
 {
-    return IntGetConsoleTitle(lpConsoleTitle, nSize, FALSE);
+    return IntGetConsoleTitle(lpConsoleTitle, nSize, FALSE, FALSE);
+}
+
+
+DWORD
+WINAPI
+DECLSPEC_HOTPATCH
+GetConsoleOriginalTitleW(LPWSTR lpConsoleTitle,
+                         DWORD nSize)
+{
+    return IntGetConsoleTitle(lpConsoleTitle, nSize, TRUE, TRUE);
+}
+
+
+DWORD
+WINAPI
+DECLSPEC_HOTPATCH
+GetConsoleOriginalTitleA(LPSTR lpConsoleTitle,
+                         DWORD nSize)
+{
+    return IntGetConsoleTitle(lpConsoleTitle, nSize, FALSE, TRUE);
 }
 
 

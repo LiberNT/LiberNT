@@ -439,8 +439,8 @@
 @ stdcall GetConsoleKeyboardLayoutNameW(ptr) kernelbase.GetConsoleKeyboardLayoutNameW
 @ stdcall GetConsoleMode(long ptr) kernelbase.GetConsoleMode
 @ stdcall GetConsoleNlsMode(long ptr) kernelbase.GetConsoleNlsMode
-@ stdcall -version=0x600+ GetConsoleOriginalTitleA(ptr long)
-@ stdcall -version=0x600+ GetConsoleOriginalTitleW(ptr long)
+@ stdcall -version=0x600+ GetConsoleOriginalTitleA(ptr long) kernelbase.GetConsoleOriginalTitleA
+@ stdcall -version=0x600+ GetConsoleOriginalTitleW(ptr long) kernelbase.GetConsoleOriginalTitleW
 @ stdcall GetConsoleOutputCP() kernelbase.GetConsoleOutputCP
 @ stdcall GetConsoleProcessList(ptr long) kernelbase.GetConsoleProcessList
 @ stdcall GetConsoleScreenBufferInfo(long ptr) kernelbase.GetConsoleScreenBufferInfo

@@ -89,36 +89,6 @@ SetConsoleHistoryInfo(IN PCONSOLE_HISTORY_INFO lpConsoleHistoryInfo)
 
 
 /*
- * @unimplemented
- */
-DWORD
-WINAPI
-DECLSPEC_HOTPATCH
-GetConsoleOriginalTitleW(OUT LPWSTR lpConsoleTitle,
-                         IN DWORD nSize)
-{
-    DPRINT1("GetConsoleOriginalTitleW(0x%p, 0x%x) UNIMPLEMENTED!\n", lpConsoleTitle, nSize);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return 0;
-}
-
-
-/*
- * @unimplemented
- */
-DWORD
-WINAPI
-DECLSPEC_HOTPATCH
-GetConsoleOriginalTitleA(OUT LPSTR lpConsoleTitle,
-                         IN DWORD nSize)
-{
-    DPRINT1("GetConsoleOriginalTitleA(0x%p, 0x%x) UNIMPLEMENTED!\n", lpConsoleTitle, nSize);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return 0;
-}
-
-
-/*
  * @implemented
  */
 BOOL

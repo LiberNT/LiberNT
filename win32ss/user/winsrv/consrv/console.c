@@ -1897,6 +1897,7 @@ CON_API(SrvGetConsoleTitle,
         CONSOLE_GETSETCONSOLETITLE, TitleRequest)
 {
     ULONG Length;
+    PUNICODE_STRING Title = TitleRequest->Original ? &Console->OriginalTitle : &Console->Title;
 
     if (!CsrValidateMessageBuffer(ApiMessage,
                                   (PVOID)&TitleRequest->Title,
@@ -1911,23 +1912,23 @@ CON_API(SrvGetConsoleTitle,
     {
         if (TitleRequest->Length >= sizeof(WCHAR))
         {
-            Length = min(TitleRequest->Length - sizeof(WCHAR), Console->Title.Length);
-            RtlCopyMemory(TitleRequest->Title, Console->Title.Buffer, Length);
+            Length = min(TitleRequest->Length - sizeof(WCHAR), Title->Length);
+            RtlCopyMemory(TitleRequest->Title, Title->Buffer, Length);
             ((PWCHAR)TitleRequest->Title)[Length / sizeof(WCHAR)] = UNICODE_NULL;
             TitleRequest->Length = Length;
         }
         else
         {
-            TitleRequest->Length = Console->Title.Length;
+            TitleRequest->Length = Title->Length;
         }
     }
     else
     {
         if (TitleRequest->Length >= sizeof(CHAR))
         {
-            Length = min(TitleRequest->Length - sizeof(CHAR), Console->Title.Length / sizeof(WCHAR));
+            Length = min(TitleRequest->Length - sizeof(CHAR), Title->Length / sizeof(WCHAR));
             Length = WideCharToMultiByte(Console->InputCodePage, 0,
-                                         Console->Title.Buffer, Length,
+                                         Title->Buffer, Length,
                                          TitleRequest->Title, Length,
                                          NULL, NULL);
             ((PCHAR)TitleRequest->Title)[Length] = ANSI_NULL;
@@ -1935,7 +1936,7 @@ CON_API(SrvGetConsoleTitle,
         }
         else
         {
-            TitleRequest->Length = Console->Title.Length / sizeof(WCHAR);
+            TitleRequest->Length = Title->Length / sizeof(WCHAR);
         }
     }
 
