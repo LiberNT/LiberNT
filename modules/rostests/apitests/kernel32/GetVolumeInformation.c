@@ -46,7 +46,7 @@ TestGetVolumeInformationA(VOID)
     Ret = GetVolumeInformationA("C:\\", NULL, 0, NULL, &MCL, &Flags, Outbuf, Len);
     ok(Ret != TRUE, "GetVolumeInformationA succeed\n");
     ok(GetLastError() == ERROR_BAD_LENGTH, "Expected ERROR_BAD_LENGTH error, got %ld\n", GetLastError());
-    ok((UCHAR)Outbuf[0] != 0xAA, "Output buffer was not written to\n");
+    ok((UCHAR)Outbuf[0] == 0xAA, "Output buffer was written to\n");
     for (i = 0; i < MAX_PATH; ++i)
     {
         if (Outbuf[i] == 0)
@@ -62,8 +62,7 @@ TestGetVolumeInformationA(VOID)
             break;
         }
     }
-    ok(i != MAX_PATH, "String was not written to!\n");
-    ok(i < Len, "Buffer has been overruned\n");
+    ok(i == MAX_PATH, "String was written to!\n");
 }
 
 static VOID

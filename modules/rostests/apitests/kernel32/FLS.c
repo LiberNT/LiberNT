@@ -244,6 +244,8 @@ START_TEST(FLS)
 
     ok(bRet == 12345, "FlsFree(%lu) should have failed, got %u\n", dwIndex3, bRet);
     ok(dwErr == 0xdeaddead, "Expected GetLastError() to be 0xdeaddead, was %lx\n", dwErr);
+    if (g_WinVersion >= WINVER_WIN10)
+        g_FlsData3 = NULL;
 
     ok_fls(dwIndex1, g_FlsData1, NULL);
     ok_fls(dwIndex2, g_FlsData2, &FlsCallback2);

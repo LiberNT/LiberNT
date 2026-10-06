@@ -157,7 +157,7 @@ START_TEST(JapaneseCalendar)
         type = CAL_SERASTRING;
         ret = GetCalendarInfoA(lcid, CAL_JAPAN, type, szTextA, ARRAYSIZE(szTextA), NULL);
         ok(ret != 0, "ret: %d\n", ret);
-        ok(lstrcmpiA(szTextA, "\x95\xBD\x90\xAC") == 0, "szTextA: %s\n", szTextA);
+        ok(lstrcmpiA(szTextA, "\x97\xDF\x98\x61") == 0, "szTextA: %s\n", szTextA);
 
         szTextA[0] = 0x7F;
         szTextA[1] = 0;

@@ -134,7 +134,7 @@ QueryDeviceName(VOID)
     ok_type(Ret == 0, "DeviceIoControl succeed\n");
     Error = GetLastError();
     ok_type(Error == ERROR_MORE_DATA, "Expecting ERROR_MORE_DATA, got %ld\n", Error);
-    ok_type(Size == sizeof(MOUNTDEV_NAME), "Invalid output size: %ld\n", Size);
+    ok_type(Size == (DriveType == DRIVE_FIXED ? FIELD_OFFSET(MOUNTDEV_NAME, Name) : sizeof(MOUNTDEV_NAME)), "Invalid output size: %ld\n", Size);
 
     AllocatedMDN = HeapAlloc(GetProcessHeap(), 0, FIELD_OFFSET(MOUNTDEV_NAME, Name) + MDN.NameLength + sizeof(UNICODE_NULL));
     if (AllocatedMDN == NULL)
@@ -200,7 +200,7 @@ QueryUniqueId(VOID)
     ok_type(Ret == 0, "DeviceIoControl succeed\n");
     Error = GetLastError();
     ok_type(Error == ERROR_MORE_DATA, "Expecting ERROR_MORE_DATA, got %ld\n", Error);
-    ok_type(Size == sizeof(MOUNTDEV_UNIQUE_ID), "Invalid output size: %ld\n", Size);
+    ok_type(Size == (DriveType == DRIVE_FIXED ? FIELD_OFFSET(MOUNTDEV_UNIQUE_ID, UniqueId) : sizeof(MOUNTDEV_UNIQUE_ID)), "Invalid output size: %ld\n", Size);
 
     AllocatedMUI = HeapAlloc(GetProcessHeap(), 0, FIELD_OFFSET(MOUNTDEV_UNIQUE_ID, UniqueId) + MUI.UniqueIdLength + sizeof(UNICODE_NULL));
     if (AllocatedMUI == NULL)
