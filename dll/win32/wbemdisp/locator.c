@@ -54,6 +54,9 @@ struct services;
 
 static HRESULT EnumVARIANT_create( struct services *, IEnumWbemClassObject *, IEnumVARIANT ** );
 static HRESULT ISWbemSecurity_create( ISWbemSecurity ** );
+#ifdef __REACTOS__
+static HRESULT ISWbemSecurity_create_locator( ISWbemSecurity ** );
+#endif
 static HRESULT SWbemObject_create( struct services *, IWbemClassObject *, ISWbemObject ** );
 
 enum type_id
@@ -2797,7 +2800,11 @@ static HRESULT WINAPI locator_get_Security_(
     if (!objWbemSecurity)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    return ISWbemSecurity_create_locator( objWbemSecurity );
+#else
     return ISWbemSecurity_create( objWbemSecurity );
+#endif
 }
 
 static const ISWbemLocatorVtbl locator_vtbl =
@@ -2835,6 +2842,9 @@ struct security
     LONG refs;
     WbemImpersonationLevelEnum  implevel;
     WbemAuthenticationLevelEnum authlevel;
+#ifdef __REACTOS__
+    BOOL authlevel_set;
+#endif
 };
 
 static inline struct security *impl_from_ISWbemSecurity( ISWbemSecurity *iface )
@@ -2996,6 +3006,10 @@ static HRESULT WINAPI security_get_AuthenticationLevel(
     if (!authentication_level)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    if (!security->authlevel_set)
+        return WBEM_E_FAILED;
+#endif
     *authentication_level = security->authlevel;
     return S_OK;
 }
@@ -3008,6 +3022,9 @@ static HRESULT WINAPI security_put_AuthenticationLevel(
     FIXME( "%p, %d: stub\n", security, authentication_level );
 
     security->authlevel = authentication_level;
+#ifdef __REACTOS__
+    security->authlevel_set = TRUE;
+#endif
     return S_OK;
 }
 
@@ -3051,16 +3068,34 @@ static HRESULT ISWbemSecurity_create( ISWbemSecurity **obj )
     security->refs = 1;
     security->implevel = wbemImpersonationLevelImpersonate;
     security->authlevel = wbemAuthenticationLevelPktPrivacy;
+#ifdef __REACTOS__
+    security->authlevel_set = TRUE;
+#endif
 
     *obj = &security->ISWbemSecurity_iface;
     TRACE( "returning iface %p\n", *obj );
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static HRESULT ISWbemSecurity_create_locator( ISWbemSecurity **obj )
+{
+    HRESULT hr = ISWbemSecurity_create( obj );
+
+    if (SUCCEEDED(hr))
+        impl_from_ISWbemSecurity( *obj )->authlevel_set = FALSE;
+    return hr;
+}
+#endif
+
 struct namedvalue
 {
     ISWbemNamedValue ISWbemNamedValue_iface;
     LONG refs;
+#ifdef __REACTOS__
+    IWbemContext *context;
+    BSTR name;
+#endif
 };
 
 static struct namedvalueset *impl_from_ISWbemNamedValueSet( ISWbemNamedValueSet *iface )
@@ -3112,6 +3147,10 @@ static ULONG WINAPI namedvalue_Release(
     if (!refs)
     {
         TRACE( "destroying %p\n", value );
+#ifdef __REACTOS__
+        IWbemContext_Release( value->context );
+        SysFreeString( value->name );
+#endif
         free( value );
     }
     return refs;
@@ -3198,27 +3237,53 @@ static HRESULT WINAPI namedvalue_get_Value(
     ISWbemNamedValue *iface,
     VARIANT *var )
 {
+#ifdef __REACTOS__
+    struct namedvalue *value = impl_from_ISWbemNamedValue( iface );
+
+    TRACE( "%p, %p\n", value, var );
+
+    return IWbemContext_GetValue( value->context, value->name, 0, var );
+#else
     FIXME("\n");
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI namedvalue_put_Value(
     ISWbemNamedValue *iface,
     VARIANT *var )
 {
+#ifdef __REACTOS__
+    struct namedvalue *value = impl_from_ISWbemNamedValue( iface );
+
+    TRACE( "%p, %s\n", value, debugstr_variant(var) );
+
+    return IWbemContext_SetValue( value->context, value->name, 0, var );
+#else
     FIXME("\n");
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI namedvalue_get_Name(
     ISWbemNamedValue *iface,
     BSTR *name )
 {
+#ifdef __REACTOS__
+    struct namedvalue *value = impl_from_ISWbemNamedValue( iface );
+
+    TRACE( "%p, %p\n", value, name );
+
+    if (!name) return E_INVALIDARG;
+    if (!(*name = SysAllocString( value->name ))) return E_OUTOFMEMORY;
+    return S_OK;
+#else
     FIXME("\n");
 
     return E_NOTIMPL;
+#endif
 }
 
 static const ISWbemNamedValueVtbl namedvaluevtbl =
@@ -3235,7 +3300,11 @@ static const ISWbemNamedValueVtbl namedvaluevtbl =
     namedvalue_get_Name
 };
 
+#ifdef __REACTOS__
+static HRESULT namedvalue_create( IWbemContext *context, const WCHAR *name, ISWbemNamedValue **value )
+#else
 static HRESULT namedvalue_create( ISWbemNamedValue **value )
+#endif
 {
     struct namedvalue *object;
 
@@ -3243,6 +3312,15 @@ static HRESULT namedvalue_create( ISWbemNamedValue **value )
 
     object->ISWbemNamedValue_iface.lpVtbl = &namedvaluevtbl;
     object->refs = 1;
+#ifdef __REACTOS__
+    if (!(object->name = SysAllocString( name )))
+    {
+        free( object );
+        return E_OUTOFMEMORY;
+    }
+    object->context = context;
+    IWbemContext_AddRef( context );
+#endif
 
     *value = &object->ISWbemNamedValue_iface;
 
@@ -3396,7 +3474,11 @@ static HRESULT WINAPI namedvalueset_Item(
     if (SUCCEEDED(hr = IWbemContext_GetValue( set->context, name, flags, &var )))
     {
         VariantClear( &var );
+#ifdef __REACTOS__
+        hr = namedvalue_create( set->context, name, value );
+#else
         hr = namedvalue_create( value );
+#endif
     }
 
     return hr;
@@ -3406,9 +3488,26 @@ static HRESULT WINAPI namedvalueset_get_Count(
     ISWbemNamedValueSet *iface,
     LONG *count )
 {
+#ifdef __REACTOS__
+    struct namedvalueset *set = impl_from_ISWbemNamedValueSet( iface );
+    HRESULT hr;
+    LONG found = 0;
+
+    TRACE( "%p, %p\n", set, count );
+
+    if (!count) return E_INVALIDARG;
+    if (FAILED(hr = IWbemContext_BeginEnumeration( set->context, 0 ))) return hr;
+    while ((hr = IWbemContext_Next( set->context, 0, NULL, NULL )) == S_OK) found++;
+    IWbemContext_EndEnumeration( set->context );
+    if (FAILED(hr)) return hr;
+
+    *count = found;
+    return S_OK;
+#else
     FIXME("\n");
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI namedvalueset_Add(
@@ -3428,7 +3527,11 @@ static HRESULT WINAPI namedvalueset_Add(
 
     if (SUCCEEDED(hr = IWbemContext_SetValue( set->context, name, flags, var )))
     {
+#ifdef __REACTOS__
+        hr = namedvalue_create( set->context, name, value );
+#else
         hr = namedvalue_create( value );
+#endif
     }
 
     return hr;
