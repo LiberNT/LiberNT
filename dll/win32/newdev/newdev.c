@@ -55,6 +55,10 @@ InstallNullDriver(
     IN PDEVINSTDATA DevInstData);
 
 static BOOL
+InstallSelectedDriver(
+    IN PDEVINSTDATA DevInstData);
+
+static BOOL
 InstallDevicesFromBatchPipe(
     IN HANDLE hPipe);
 
@@ -639,6 +643,64 @@ DiInstallDriverW(
 
     SetLastError(Error);
     return Error == ERROR_SUCCESS;
+}
+
+BOOL WINAPI
+DiInstallDevice(
+    IN HWND hwndParent OPTIONAL,
+    IN HDEVINFO DeviceInfoSet,
+    IN PSP_DEVINFO_DATA DeviceInfoData,
+    IN PSP_DRVINFO_DATA_W DriverInfoData OPTIONAL,
+    IN DWORD Flags,
+    OUT PBOOL NeedReboot OPTIONAL)
+{
+    DEVINSTDATA DevInstData;
+    BOOL Result;
+
+    TRACE("DiInstallDevice(%p %p %p %p 0x%lx %p)\n", hwndParent, DeviceInfoSet, DeviceInfoData, DriverInfoData, Flags, NeedReboot);
+
+    if (NeedReboot)
+        *NeedReboot = FALSE;
+
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE || !DeviceInfoData)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (Flags & ~DIIDFLAG_BITS)
+    {
+        SetLastError(ERROR_INVALID_FLAGS);
+        return FALSE;
+    }
+    if (!IsUserAdmin())
+    {
+        SetLastError(ERROR_ACCESS_DENIED);
+        return FALSE;
+    }
+
+    ZeroMemory(&DevInstData, sizeof(DevInstData));
+    DevInstData.hDevInfo = DeviceInfoSet;
+    DevInstData.devInfoData = *DeviceInfoData;
+
+    if (Flags & DIIDFLAG_INSTALLNULLDRIVER)
+    {
+        Result = InstallNullDriver(&DevInstData);
+    }
+    else if (DriverInfoData)
+    {
+        Result = SetupDiSetSelectedDriverW(DeviceInfoSet, DeviceInfoData, DriverInfoData) &&
+                 InstallSelectedDriver(&DevInstData);
+    }
+    else
+    {
+        Result = SearchDriver(&DevInstData, NULL, NULL) &&
+                 InstallCurrentDriver(&DevInstData);
+    }
+
+    if (Result && NeedReboot && InstallNeedsReboot(&DevInstData))
+        *NeedReboot = TRUE;
+
+    return Result;
 }
 
 BOOL WINAPI
@@ -1259,6 +1321,15 @@ InstallCurrentDriver(
         TRACE("SetupDiCallClassInstaller(DIF_SELECTBESTCOMPATDRV) failed with error 0x%x\n", GetLastError());
         return FALSE;
     }
+
+    return InstallSelectedDriver(DevInstData);
+}
+
+static BOOL
+InstallSelectedDriver(
+    IN PDEVINSTDATA DevInstData)
+{
+    BOOL ret;
 
     ret = SetupDiCallClassInstaller(
         DIF_ALLOW_INSTALL,
