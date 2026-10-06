@@ -436,7 +436,8 @@ typedef struct _DIRECTORY_KEY_BLOCK
 #define NTFS_FILE_NAME_UPDATE_ARCHIVE ((UINT32)0x00000004)
 #define NTFS_FILE_NAME_UPDATE_REPARSE_TAG ((UINT32)0x00000008)
 #define NTFS_FILE_NAME_UPDATE_STORAGE_FLAGS ((UINT32)0x00000010)
-#define NTFS_FILE_NAME_UPDATE_ALL ((UINT32)0x0000001f)
+#define NTFS_FILE_NAME_UPDATE_BASIC ((UINT32)0x00000020)
+#define NTFS_FILE_NAME_UPDATE_ALL ((UINT32)0x0000003f)
 
 NTSTATUS
 NtfsValidateReparseBuffer(
@@ -1171,6 +1172,9 @@ private:
         _In_ USHORT PackedEaSize,
         _In_ ULONG ReparseTag,
         _In_ ULONG StorageFlags);
+
+    void
+    ApplyBasicInformationToFileName(_Inout_ PFileNameEx FileName);
 
     NTSTATUS
     SynchronizeFileNameSizes(_In_ ULONGLONG AllocatedSize,

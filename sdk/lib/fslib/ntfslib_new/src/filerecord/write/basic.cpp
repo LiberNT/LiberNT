@@ -313,6 +313,24 @@ FileRecord::StampChangeTime()
     return STATUS_SUCCESS;
 }
 
+void
+FileRecord::ApplyBasicInformationToFileName(
+    _Inout_ PFileNameEx FileName)
+{
+    PAttribute Attribute;
+    PStandardInformationEx Standard;
+
+    if (!NT_SUCCESS(GetStandardInformationForUpdate(&Attribute, &Standard)))
+        return;
+    FileName->CreationTime = Standard->CreationTime;
+    FileName->LastAccessTime = Standard->LastAccessTime;
+    FileName->LastWriteTime = Standard->LastWriteTime;
+    FileName->ChangeTime = Standard->ChangeTime;
+    FileName->Flags =
+        (FileName->Flags & ~NTFS_MUTABLE_BASIC_ATTRIBUTES) |
+        (Standard->FilePermissions & NTFS_MUTABLE_BASIC_ATTRIBUTES);
+}
+
 NTSTATUS
 FileRecord::SetBasicInformation(
     _In_ const NtfsFileBasicInformation* Information)
@@ -435,6 +453,8 @@ FileRecord::SetBasicInformation(
             goto Restore;
     }
 
+    (void)SynchronizeFileNameInformation(
+        NTFS_FILE_NAME_UPDATE_BASIC, 0, 0, 0, 0, 0);
     Status = DiskVolume->MFT->
         WriteFileRecordToMFT(this);
     if (NT_SUCCESS(Status))

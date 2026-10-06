@@ -170,6 +170,14 @@ UpdateIndexNodeInformation(
                FILE_PERM_COMPRESSED)) |
             StorageFlags;
     }
+    if (Fields & NTFS_FILE_NAME_UPDATE_BASIC)
+    {
+        MatchedName->CreationTime = TargetName->CreationTime;
+        MatchedName->LastAccessTime = TargetName->LastAccessTime;
+        MatchedName->LastWriteTime = TargetName->LastWriteTime;
+        MatchedName->ChangeTime = TargetName->ChangeTime;
+        MatchedName->Flags = TargetName->Flags;
+    }
     return STATUS_SUCCESS;
 }
 
@@ -564,6 +572,8 @@ FileRecord::SynchronizeFileNameInformation(
                 return STATUS_FILE_CORRUPT_ERROR;
             }
 
+            if (Fields & NTFS_FILE_NAME_UPDATE_BASIC)
+                ApplyBasicInformationToFileName(FileName);
             Status = UpdateParentIndexEntry(
                 FileName,
                 FileReference,

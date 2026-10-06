@@ -4327,6 +4327,8 @@ FileRecord::UpdateFileNameInformation(
                        FILE_PERM_COMPRESSED)) |
                     StorageFlags;
             }
+            if (Fields & NTFS_FILE_NAME_UPDATE_BASIC)
+                ApplyBasicInformationToFileName(FileName);
         }
 
         Offset += Attribute->Length;
