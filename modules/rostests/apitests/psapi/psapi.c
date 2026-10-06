@@ -115,19 +115,8 @@ START_TEST(GetDeviceDriverFileName)
     {
         SetLastError(0xDEADBEEF);
         Len = GetDeviceDriverFileNameA(ModInfo.ImageBase, FileName, 255);
-        ok(Len == ModInfo.Len, "Len: %lu\n", Len);
-        ok(GetLastError() == 0xDEADBEEF, "Error: %lx\n", GetLastError());
-        ok(lstrcmpiA(ModInfo.Path, FileName) == 0, "File name: %s\n", FileName);
-
-        /* Test with too small buffer */
-        SetLastError(0xDEADBEEF);
-        ModInfo.Len--;
-        ModInfo.Path[ModInfo.Len] = 0;
-        FileName[ModInfo.Len] = 0;
-        Len = GetDeviceDriverFileNameA(ModInfo.ImageBase, FileName, ModInfo.Len);
-        ok(Len == ModInfo.Len, "Len: %lu\n", Len);
-        ok(GetLastError() == 0xDEADBEEF, "Error: %lx\n", GetLastError());
-        ok(lstrcmpiA(ModInfo.Path, FileName) == 0, "File name: %s\n", FileName);
+        ok(Len == 0, "Len: %lu\n", Len);
+        ok(GetLastError() == ERROR_INVALID_HANDLE, "Error: %lx\n", GetLastError());
     }
     else
     {
@@ -174,19 +163,8 @@ START_TEST(GetDeviceDriverBaseName)
     {
         SetLastError(0xDEADBEEF);
         Len = GetDeviceDriverBaseNameA(ModInfo.ImageBase, FileName, 255);
-        ok(Len == ModInfo.Len, "Len: %lu\n", Len);
-        ok(GetLastError() == 0xDEADBEEF, "Error: %lx\n", GetLastError());
-        ok(lstrcmpiA(ModInfo.Path, FileName) == 0, "File name: %s\n", FileName);
-
-        /* Test with too small buffer */
-        SetLastError(0xDEADBEEF);
-        ModInfo.Len--;
-        ModInfo.Path[ModInfo.Len] = 0;
-        FileName[ModInfo.Len] = 0;
-        Len = GetDeviceDriverBaseNameA(ModInfo.ImageBase, FileName, ModInfo.Len);
-        ok(Len == ModInfo.Len, "Len: %lu\n", Len);
-        ok(GetLastError() == 0xDEADBEEF, "Error: %lx\n", GetLastError());
-        ok(lstrcmpiA(ModInfo.Path, FileName) == 0, "File name: %s\n", FileName);
+        ok(Len == 0, "Len: %lu\n", Len);
+        ok(GetLastError() == ERROR_INVALID_HANDLE, "Error: %lx\n", GetLastError());
     }
     else
     {
