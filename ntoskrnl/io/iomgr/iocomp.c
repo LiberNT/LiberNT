@@ -113,6 +113,36 @@ IopFreeMiniPacket(PIOP_MINI_COMPLETION_PACKET Packet)
     InterlockedPushEntrySList(&List->L.ListHead, (PSLIST_ENTRY)Packet);
 }
 
+static
+VOID
+IopFreeCompletionIrp(
+    _In_ PIRP Irp,
+    _In_ BOOLEAN Removed)
+{
+    PEPROCESS Process = Irp->Tail.Overlay.DriverContext[1];
+
+    if (Process != NULL)
+    {
+        if ((Removed) && (Process == PsGetCurrentProcess()))
+        {
+            _SEH2_TRY
+            {
+                IopWriteIoStatusBlock(Irp->UserIosb,
+                                      &Irp->IoStatus,
+                                      (BOOLEAN)(ULONG_PTR)Irp->Tail.Overlay.DriverContext[2]);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+            }
+            _SEH2_END;
+        }
+
+        ObDereferenceObject(Process);
+    }
+
+    IoFreeIrp(Irp);
+}
+
 VOID
 NTAPI
 IopDeleteIoCompletion(PVOID ObjectBody)
@@ -144,7 +174,7 @@ IopDeleteIoCompletion(PVOID ObjectBody)
             {
                 /* Get the IRP and free it */
                 Irp = CONTAINING_RECORD(Packet, IRP, Tail.Overlay.ListEntry);
-                IoFreeIrp(Irp);
+                IopFreeCompletionIrp(Irp, FALSE);
             }
             else
             {
@@ -558,7 +588,7 @@ NtRemoveIoCompletion(IN HANDLE IoCompletionHandle,
                 IoStatus = Irp->IoStatus;
 
                 /* Free the IRP */
-                IoFreeIrp(Irp);
+                IopFreeCompletionIrp(Irp, TRUE);
             }
             else
             {
@@ -731,7 +761,7 @@ NtRemoveIoCompletionEx(IN HANDLE IoCompletionHandle,
                 Information.KeyContext = Irp->Tail.CompletionKey;
                 Information.ApcContext = Irp->Overlay.AsynchronousParameters.UserApcContext;
                 Information.IoStatusBlock = Irp->IoStatus;
-                IoFreeIrp(Irp);
+                IopFreeCompletionIrp(Irp, TRUE);
             }
             else
             {

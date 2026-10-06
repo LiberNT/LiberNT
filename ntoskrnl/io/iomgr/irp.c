@@ -266,6 +266,8 @@ IopCompleteRequest(IN PKAPC Apc,
     PMDL Mdl, NextMdl;
     PVOID Port = NULL, Key = NULL;
     BOOLEAN SignaledCreateRequest = FALSE;
+    BOOLEAN DeferIosb = FALSE;
+    BOOLEAN Is32BitIosb = FALSE;
 
     /* Get data from the APC */
     FileObject = (PFILE_OBJECT)*SystemArgument1;
@@ -362,8 +364,20 @@ IopCompleteRequest(IN PKAPC Apc,
             Key = FileObject->CompletionContext->Key;
         }
 
+        if ((Port) &&
+            (Irp->UserIosb != NULL) &&
+            (Irp->UserEvent == NULL) &&
+            (Irp->PendingReturned) &&
+            (Irp->RequestorMode != KernelMode) &&
+            (Irp->Overlay.AsynchronousParameters.UserApcRoutine == NULL) &&
+            (Irp->Overlay.AsynchronousParameters.UserApcContext != NULL))
+        {
+            DeferIosb = TRUE;
+            Is32BitIosb = IopIs32BitFileIo(FileObject, Irp->RequestorMode);
+        }
+
         /* Check for UserIos */
-        if (Irp->UserIosb != NULL)
+        if ((Irp->UserIosb != NULL) && !(DeferIosb))
         {
             /* Use SEH to make sure we don't write somewhere invalid */
             _SEH2_TRY
@@ -497,6 +511,13 @@ IopCompleteRequest(IN PKAPC Apc,
             /* We have an I/O Completion setup... create the special Overlay */
             Irp->Tail.CompletionKey = Key;
             Irp->Tail.Overlay.PacketType = IopCompletionPacketIrp;
+            Irp->Tail.Overlay.DriverContext[1] = NULL;
+            Irp->Tail.Overlay.DriverContext[2] = (PVOID)(ULONG_PTR)Is32BitIosb;
+            if (DeferIosb)
+            {
+                Irp->Tail.Overlay.DriverContext[1] = PsGetCurrentProcess();
+                ObReferenceObject(PsGetCurrentProcess());
+            }
             KeInsertQueue(Port, &Irp->Tail.Overlay.ListEntry);
         }
         else
