@@ -427,6 +427,20 @@ BOOL WINAPI CryptSignMessage(PCRYPT_SIGN_MESSAGE_PARA pSignPara,
         SetLastError(E_INVALIDARG);
         return FALSE;
     }
+#ifdef __REACTOS__
+    ret = TRUE;
+    hCryptProv = 0;
+    keySpec = 0;
+    if (pSignPara->pSigningCert)
+        ret = CryptAcquireCertificatePrivateKey(pSignPara->pSigningCert,
+         CRYPT_ACQUIRE_CACHE_FLAG, NULL, &hCryptProv, &keySpec, &freeProv);
+    if (!ret)
+        return FALSE;
+
+    memset(&signer, 0, sizeof(signer));
+    signer.cbSize = sizeof(signer);
+    signer.pCertInfo = pSignPara->pSigningCert ? pSignPara->pSigningCert->pCertInfo : NULL;
+#else
     if (!pSignPara->pSigningCert)
         return TRUE;
 
@@ -438,6 +452,7 @@ BOOL WINAPI CryptSignMessage(PCRYPT_SIGN_MESSAGE_PARA pSignPara,
     memset(&signer, 0, sizeof(signer));
     signer.cbSize = sizeof(signer);
     signer.pCertInfo = pSignPara->pSigningCert->pCertInfo;
+#endif
     signer.hCryptProv = hCryptProv;
     signer.dwKeySpec = keySpec;
     signer.HashAlgorithm = pSignPara->HashAlgorithm;
@@ -449,7 +464,11 @@ BOOL WINAPI CryptSignMessage(PCRYPT_SIGN_MESSAGE_PARA pSignPara,
 
     memset(&signInfo, 0, sizeof(signInfo));
     signInfo.cbSize = sizeof(signInfo);
+#ifdef __REACTOS__
+    signInfo.cSigners = pSignPara->pSigningCert ? 1 : 0;
+#else
     signInfo.cSigners = 1;
+#endif
     signInfo.rgSigners = &signer;
 
     if (pSignPara->cMsgCert)

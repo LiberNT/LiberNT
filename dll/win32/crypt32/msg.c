@@ -3889,6 +3889,10 @@ static BOOL CDecodeMsg_Control(HCRYPTMSG hCryptMsg, DWORD dwFlags,
         {
         case CMSG_SIGNED:
             ret = CDecodeSignedMsg_VerifySignature(msg, (PCERT_INFO)pvCtrlPara);
+#ifdef __REACTOS__
+            if (msg->base.state == MsgStateDataFinalized)
+                msg->base.state = MsgStateFinalized;
+#endif
             break;
         default:
             SetLastError(CRYPT_E_INVALID_MSG_TYPE);
@@ -3913,6 +3917,10 @@ static BOOL CDecodeMsg_Control(HCRYPTMSG hCryptMsg, DWORD dwFlags,
         {
         case CMSG_HASHED:
             ret = CDecodeHashMsg_VerifyHash(msg);
+#ifdef __REACTOS__
+            if (msg->base.state == MsgStateDataFinalized)
+                msg->base.state = MsgStateFinalized;
+#endif
             break;
         default:
             SetLastError(CRYPT_E_INVALID_MSG_TYPE);
@@ -3924,6 +3932,10 @@ static BOOL CDecodeMsg_Control(HCRYPTMSG hCryptMsg, DWORD dwFlags,
         case CMSG_SIGNED:
             ret = CDecodeSignedMsg_VerifySignatureEx(msg,
              (PCMSG_CTRL_VERIFY_SIGNATURE_EX_PARA)pvCtrlPara);
+#ifdef __REACTOS__
+            if (msg->base.state == MsgStateDataFinalized)
+                msg->base.state = MsgStateFinalized;
+#endif
             break;
         default:
             SetLastError(CRYPT_E_INVALID_MSG_TYPE);

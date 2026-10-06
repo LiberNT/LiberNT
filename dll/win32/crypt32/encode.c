@@ -1119,12 +1119,70 @@ static BOOL WINAPI CRYPT_AsnEncodeNameValue(DWORD dwCertEncodingType,
     return ret;
 }
 
+#ifdef __REACTOS__
+static BOOL WINAPI CRYPT_AsnEncodeOrCopyUnicodeNameValue(
+ DWORD dwCertEncodingType, LPCSTR lpszStructType, const void *pvStructInfo,
+ DWORD dwFlags, PCRYPT_ENCODE_PARA pEncodePara, BYTE *pbEncoded,
+ DWORD *pcbEncoded);
+
+static DWORD CRYPT_InferUnicodeValueType(const CERT_RDN_ATTR *attr)
+{
+    static const DWORD defaultTypes[] = { CERT_RDN_PRINTABLE_STRING,
+     CERT_RDN_BMP_STRING, 0 };
+    const DWORD *types = defaultTypes;
+    const WCHAR *str = (const WCHAR *)attr->Value.pbData;
+    PCCRYPT_OID_INFO info;
+    DWORD len, i, j;
+
+    info = CryptFindOIDInfo(CRYPT_OID_INFO_OID_KEY, attr->pszObjId,
+     CRYPT_RDN_ATTR_OID_GROUP_ID);
+    if (info && info->ExtraInfo.cbData >= 2 * sizeof(DWORD))
+        types = (const DWORD *)info->ExtraInfo.pbData;
+
+    if (attr->Value.cbData)
+        len = attr->Value.cbData / sizeof(WCHAR);
+    else if (str)
+        len = lstrlenW(str);
+    else
+        len = 0;
+
+    for (i = 0; types[i]; i++)
+    {
+        for (j = 0; j < len; j++)
+        {
+            if (types[i] == CERT_RDN_NUMERIC_STRING &&
+             !('0' <= str[j] && str[j] <= '9'))
+                break;
+            if (types[i] == CERT_RDN_PRINTABLE_STRING && (!str[j] ||
+             !wcschr(L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 '()+,-./:=?", str[j])))
+                break;
+            if (types[i] == CERT_RDN_IA5_STRING && str[j] > 0x7f)
+                break;
+        }
+        if (j == len)
+            return types[i];
+    }
+    return types[0];
+}
+#endif
+
 static BOOL CRYPT_AsnEncodeRdnAttr(DWORD dwCertEncodingType,
  const CERT_RDN_ATTR *attr, CryptEncodeObjectExFunc nameValueEncodeFunc,
  BYTE *pbEncoded, DWORD *pcbEncoded)
 {
     DWORD bytesNeeded = 0, lenBytes, size;
     BOOL ret;
+#ifdef __REACTOS__
+    CERT_RDN_ATTR inferred;
+
+    if (nameValueEncodeFunc == CRYPT_AsnEncodeOrCopyUnicodeNameValue &&
+     attr->dwValueType == CERT_RDN_ANY_TYPE)
+    {
+        inferred = *attr;
+        inferred.dwValueType = CRYPT_InferUnicodeValueType(attr);
+        attr = &inferred;
+    }
+#endif
 
     ret = CRYPT_AsnEncodeOid(dwCertEncodingType, NULL, attr->pszObjId,
      0, NULL, NULL, &size);
