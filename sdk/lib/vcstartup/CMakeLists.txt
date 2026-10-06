@@ -52,7 +52,9 @@ list(APPEND VCSTARTUP_SOURCES
     isa_available.cpp
     mainCRTStartup.cpp
     tlssup.c
+    WinMainCRTStartup.cpp
     wmainCRTStartup.cpp
+    wWinMainCRTStartup.cpp
 )
 
 # Startup library (linked into executables, linking to ucrtbase)
