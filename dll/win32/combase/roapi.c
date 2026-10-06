@@ -341,8 +341,10 @@ static HRESULT WINAPI marshal_object_in_context(ComCallData *arg)
     HRESULT hr;
 
     hr = marshal_object_in_agile_reference(params->impl, params->iid, params->impl->obj);
+#ifndef __REACTOS__
     IUnknown_Release(params->impl->obj);
     params->impl->obj = NULL;
+#endif
     return hr;
 }
 
@@ -360,6 +362,10 @@ static HRESULT WINAPI agile_ref_Resolve(IAgileReference *iface, REFIID riid, voi
 
     if (FAILED(hr = CoGetContextToken((ULONG_PTR *)&cur_ctx)))
         return hr;
+#ifdef __REACTOS__
+    if (impl->option == AGILEREFERENCE_DELAYEDMARSHAL && cur_ctx == impl->ctx)
+        return IUnknown_QueryInterface(impl->obj, riid, obj);
+#endif
 
     EnterCriticalSection(&impl->cs);
     if (impl->option == AGILEREFERENCE_DELAYEDMARSHAL && impl->marshal_stream == NULL)
