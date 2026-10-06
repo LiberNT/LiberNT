@@ -173,6 +173,81 @@ static UINT propvar_changetype(PROPVARIANT *changed, PROPVARIANT *property, VART
     return (hr == S_OK) ? ERROR_SUCCESS : ERROR_FUNCTION_FAILED;
 }
 
+#ifdef __REACTOS__
+static void read_properties_from_data( PROPVARIANT *prop, LPBYTE data, DWORD sz )
+{
+    struct property_section_header *section_hdr = (struct property_section_header *)data;
+    struct property_id_offset *idofs = (struct property_id_offset *)&data[SECT_HDR_SIZE];
+    struct property_data *propdata;
+    PROPVARIANT property, changed;
+    UINT type, codepage = CP_ACP;
+    DWORD i, size, count, len;
+    char *str;
+
+    count = section_hdr->cProperties;
+    if( count > (sz - SECT_HDR_SIZE) / sizeof(*idofs) )
+        count = (sz - SECT_HDR_SIZE) / sizeof(*idofs);
+
+    for( i = 0; i < count; i++ )
+    {
+        if( idofs[i].propid != PID_CODEPAGE || idofs[i].dwOffset > sz - 2 * sizeof(DWORD) )
+            continue;
+        propdata = (struct property_data *)&data[ idofs[i].dwOffset ];
+        if( propdata->type == VT_I2 )
+            codepage = (USHORT)propdata->u.i2;
+    }
+
+    for( i = 0; i < count; i++ )
+    {
+        if( idofs[i].propid >= MSI_MAX_PROPS )
+            continue;
+
+        type = get_type( idofs[i].propid );
+        if( type == VT_EMPTY || idofs[i].dwOffset > sz - 2 * sizeof(DWORD) )
+            continue;
+
+        propdata = (struct property_data *)&data[ idofs[i].dwOffset ];
+        size = sz - idofs[i].dwOffset - sizeof(DWORD);
+
+        property.vt = propdata->type;
+        if( propdata->type == VT_LPSTR )
+        {
+            len = propdata->u.str.len;
+            if( len > size - sizeof(DWORD) )
+                continue;
+            if( codepage == CP_WINUNICODE )
+                len = 0;
+            if( !(str = malloc( len + 1 )) )
+                continue;
+            memcpy( str, propdata->u.str.str, len );
+            str[len] = 0;
+            property.pszVal = str;
+        }
+        else if( propdata->type == VT_FILETIME )
+        {
+            if( size < sizeof(FILETIME) )
+                continue;
+            property.filetime = propdata->u.ft;
+        }
+        else if( propdata->type == VT_I2 )
+            property.iVal = propdata->u.i2;
+        else if( propdata->type == VT_I4 )
+            property.lVal = propdata->u.i4;
+        else
+            continue;
+
+        if( type != propdata->type && propdata->type != VT_LPSTR )
+        {
+            if( propvar_changetype( &changed, &property, type ) != ERROR_SUCCESS )
+                continue;
+            property = changed;
+        }
+
+        free_prop( &prop[ idofs[i].propid ] );
+        prop[ idofs[i].propid ] = property;
+    }
+}
+#else
 /* FIXME: doesn't deal with endian conversion */
 static void read_properties_from_data( PROPVARIANT *prop, LPBYTE data, DWORD sz )
 {
@@ -242,6 +317,7 @@ static void read_properties_from_data( PROPVARIANT *prop, LPBYTE data, DWORD sz 
         prop[ idofs[i].propid ] = *ptr;
     }
 }
+#endif
 
 static UINT load_summary_info( MSISUMMARYINFO *si, IStream *stm )
 {
@@ -288,11 +364,16 @@ static UINT load_summary_info( MSISUMMARYINFO *si, IStream *stm )
     if( FAILED(r) || count != sz )
         return ERROR_FUNCTION_FAILED;
 
+#ifdef __REACTOS__
+    if( section_hdr.cbSection < SECT_HDR_SIZE )
+        return ERROR_FUNCTION_FAILED;
+#else
     if( section_hdr.cProperties > MSI_MAX_PROPS )
     {
         ERR( "too many properties %lu\n", section_hdr.cProperties );
         return ERROR_FUNCTION_FAILED;
     }
+#endif
 
     data = malloc( section_hdr.cbSection );
     if( !data )
@@ -518,6 +599,21 @@ UINT WINAPI MsiGetSummaryInformationW( MSIHANDLE hDatabase, const WCHAR *szDatab
     if( !pHandle )
         return ERROR_INVALID_PARAMETER;
 
+#ifdef __REACTOS__
+    if( szDatabase && (szDatabase[0] || !hDatabase) )
+    {
+        LPCWSTR persist = uiUpdateCount ? MSIDBOPEN_DIRECT : MSIDBOPEN_READONLY;
+
+        ret = MSI_OpenDatabaseW( szDatabase, persist, &db );
+        if( ret != ERROR_SUCCESS )
+        {
+            *pHandle = 0;
+            return ERROR_INSTALL_PACKAGE_OPEN_FAILED;
+        }
+    }
+    else if( !hDatabase )
+        return ERROR_INVALID_PARAMETER;
+#else
     if( szDatabase && szDatabase[0] )
     {
         LPCWSTR persist = uiUpdateCount ? MSIDBOPEN_DIRECT : MSIDBOPEN_READONLY;
@@ -526,6 +622,7 @@ UINT WINAPI MsiGetSummaryInformationW( MSIHANDLE hDatabase, const WCHAR *szDatab
         if( ret != ERROR_SUCCESS )
             return ret;
     }
+#endif
     else
     {
         db = msihandle2msiinfo( hDatabase, MSIHANDLETYPE_DATABASE );
