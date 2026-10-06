@@ -552,7 +552,8 @@ ExpGetHandleCount(
 PHANDLE_TABLE
 NTAPI
 ExCreateHandleTable(
-    IN PEPROCESS Process OPTIONAL
+    IN PEPROCESS Process OPTIONAL,
+    IN BOOLEAN InsertInList
 );
 
 VOID

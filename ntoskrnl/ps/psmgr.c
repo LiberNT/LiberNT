@@ -578,7 +578,7 @@ PspInitPhase0(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     KeInitializeGuardedMutex(&PspWorkingSetChangeHead.Lock);
 
     /* Create the CID Handle table */
-    PspCidTable = ExCreateHandleTable(NULL);
+    PspCidTable = ExCreateHandleTable(NULL, FALSE);
     if (!PspCidTable) return FALSE;
 
     /* FIXME: Initialize LDT/VDM support */

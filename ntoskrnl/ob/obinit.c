@@ -366,7 +366,7 @@ ObInitSystem(VOID)
     PsInitializeQuotaSystem();
 
     /* Create kernel handle table */
-    PsGetCurrentProcess()->ObjectTable = ExCreateHandleTable(NULL);
+    PsGetCurrentProcess()->ObjectTable = ExCreateHandleTable(NULL, TRUE);
     ObpKernelHandleTable = PsGetCurrentProcess()->ObjectTable;
 
     /* Create the Type Type */

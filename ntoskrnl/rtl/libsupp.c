@@ -559,7 +559,7 @@ RtlpUnlockAtomTable(PRTL_ATOM_TABLE AtomTable)
 BOOLEAN
 RtlpCreateAtomHandleTable(PRTL_ATOM_TABLE AtomTable)
 {
-   AtomTable->ExHandleTable = ExCreateHandleTable(NULL);
+   AtomTable->ExHandleTable = ExCreateHandleTable(NULL, FALSE);
    return (AtomTable->ExHandleTable != NULL);
 }
 

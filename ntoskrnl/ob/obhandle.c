@@ -2426,7 +2426,7 @@ ObInitProcess(IN PEPROCESS Parent OPTIONAL,
     {
         /* Otherwise just create a new table */
         ParentTable = NULL;
-        ObjectTable = ExCreateHandleTable(Process);
+        ObjectTable = ExCreateHandleTable(Process, TRUE);
     }
 
     /* Make sure we have a table */

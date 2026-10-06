@@ -788,7 +788,8 @@ ExpAllocateHandleTableEntry(IN PHANDLE_TABLE HandleTable,
 
 PHANDLE_TABLE
 NTAPI
-ExCreateHandleTable(IN PEPROCESS Process OPTIONAL)
+ExCreateHandleTable(IN PEPROCESS Process OPTIONAL,
+                    IN BOOLEAN InsertInList)
 {
     PHANDLE_TABLE HandleTable;
     PAGED_CODE();
@@ -796,6 +797,12 @@ ExCreateHandleTable(IN PEPROCESS Process OPTIONAL)
     /* Allocate the handle table */
     HandleTable = ExpAllocateHandleTable(Process, TRUE);
     if (!HandleTable) return NULL;
+
+    if (!InsertInList)
+    {
+        InitializeListHead(&HandleTable->HandleTableList);
+        return HandleTable;
+    }
 
     /* Acquire the handle table lock */
     KeEnterCriticalRegion();
