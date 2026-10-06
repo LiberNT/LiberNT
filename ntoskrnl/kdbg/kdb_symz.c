@@ -228,3 +228,46 @@ KdbpSymzEnumerate(
     InterlockedExchange(&KdbpSymzBusy, 0);
     return Complete;
 }
+
+VOID
+KdbSymzPrepareImage(
+    _In_ PVOID ImageBase)
+{
+    PUCHAR Base = ImageBase;
+    PIMAGE_NT_HEADERS NtHeaders;
+    PIMAGE_SECTION_HEADER Section;
+    volatile UCHAR Byte;
+    ULONG Index;
+    ULONG Offset;
+
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL || (ULONG_PTR)ImageBase > (ULONG_PTR)MmHighestUserAddress)
+        return;
+
+    _SEH2_TRY
+    {
+        NtHeaders = RtlImageNtHeader(Base);
+        if (NtHeaders && NtHeaders->FileHeader.NumberOfSections <= KDB_SYMZ_MAX_SECTIONS)
+        {
+            Section = IMAGE_FIRST_SECTION(NtHeaders);
+            for (Index = 0; Index < NtHeaders->FileHeader.NumberOfSections; Index++)
+            {
+                if (RtlCompareMemory(Section[Index].Name, SYMZ_SECTION_NAME, sizeof(SYMZ_SECTION_NAME)) != sizeof(SYMZ_SECTION_NAME))
+                    continue;
+
+                if (Section[Index].VirtualAddress < NtHeaders->OptionalHeader.SizeOfImage &&
+                    Section[Index].Misc.VirtualSize <= NtHeaders->OptionalHeader.SizeOfImage - Section[Index].VirtualAddress)
+                {
+                    for (Offset = 0; Offset < Section[Index].Misc.VirtualSize; Offset += PAGE_SIZE)
+                        Byte = Base[Section[Index].VirtualAddress + Offset];
+                }
+                break;
+            }
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    _SEH2_END;
+
+    (VOID)Byte;
+}

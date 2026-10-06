@@ -9,6 +9,9 @@
 /* INCLUDES ******************************************************************/
 
 #include <ntoskrnl.h>
+#ifdef KDBG
+#include <kdbg/kdb.h>
+#endif
 #define NDEBUG
 #include <debug.h>
 
@@ -111,6 +114,14 @@ DbgkCreateThread(IN PETHREAD Thread,
     ProcessFlags = PspSetProcessFlag(Process,
                                      PSF_CREATE_REPORTED_BIT |
                                      PSF_IMAGE_NOTIFY_DONE_BIT);
+
+#ifdef KDBG
+    if (!(ProcessFlags & PSF_IMAGE_NOTIFY_DONE_BIT))
+    {
+        KdbSymzPrepareImage(Process->SectionBaseAddress);
+        KdbSymzPrepareImage(PspSystemDllBase);
+    }
+#endif
 
     /* Check if we were the first to set them or if another thread raced us */
     if (!(ProcessFlags & PSF_IMAGE_NOTIFY_DONE_BIT) && (PsImageNotifyEnabled))
@@ -390,6 +401,10 @@ DbgkMapViewOfSection(IN PVOID Section,
     PAGED_CODE();
     DBGKTRACE(DBGK_PROCESS_DEBUG,
               "Section: %p. Base: %p\n", Section, BaseAddress);
+
+#ifdef KDBG
+    KdbSymzPrepareImage(BaseAddress);
+#endif
 
     /* Check if this thread is kernel, hidden or doesn't have a debug port */
     if ((ExGetPreviousMode() == KernelMode) ||

@@ -257,6 +257,10 @@ KdbSymEnumerate(_In_ PCSTR ModulePattern, _In_ PCSTR SymbolPattern, _In_ ULONG M
 BOOLEAN
 KdbSymPrintNearest(_In_ PVOID Address, _In_ PCONTEXT Context);
 
+VOID
+KdbSymzPrepareImage(
+    _In_ PVOID ImageBase);
+
 BOOLEAN
 KdbpSymzEnumerate(
     _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
