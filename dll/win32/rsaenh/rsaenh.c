@@ -3259,7 +3259,21 @@ static BOOL import_public_key(HCRYPTPROV hProv, const BYTE *pbData, DWORD dwData
      * available, so only signature verification is possible.
      */
     algID = pBlobHeader->aiKeyAlg;
+#ifdef __REACTOS__
+    {
+        const PROV_ENUMALGS_EX *info = get_algid_info(hProv, algID);
+
+        if (!info) return FALSE;
+        if (!pRSAPubKey->bitlen || (pRSAPubKey->bitlen % 8) || pRSAPubKey->bitlen > info->dwMaxLen)
+        {
+            SetLastError(NTE_BAD_DATA);
+            return FALSE;
+        }
+        *phKey = alloc_key(hProv, algID, 0, pRSAPubKey->bitlen, &pCryptKey);
+    }
+#else
     *phKey = new_key(hProv, algID, MAKELONG(0,pRSAPubKey->bitlen), &pCryptKey);
+#endif
     if (*phKey == (HCRYPTKEY)INVALID_HANDLE_VALUE) return FALSE;
     setup_key(pCryptKey);
     ret = import_public_key_impl(algID, (const BYTE *)(pRSAPubKey + 1), pRSAPubKey->bitlen / 8,

@@ -33,6 +33,11 @@ struct rsa_key
 {
     SYMCRYPT_RSAKEY *key;
     UINT32           flags;
+#ifdef __REACTOS__
+    BYTE            *small_modulus;
+    UINT32           small_size;
+    UINT32           small_pubexp;
+#endif
 };
 
 typedef union tagKEY_CONTEXT
