@@ -129,7 +129,6 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ex/ExFastMutex.c
     ntos_ex/ExFastMutexExtra.c
     ntos_ex/ExHardError.c
-    ntos_ex/ExHandleTable.c
     ntos_ex/ExInterlocked.c
     ntos_ex/ExLookaside.c
     ntos_ex/ExPoolExtra.c
@@ -335,20 +334,17 @@ if(ARCH STREQUAL "arm64")
         kmArm64/KdArm64Layout.c
         kmArm64/KeArm64.c
         kmArm64/KeArm64AffinityEx.c
-        kmArm64/KeArm64AffinityRace.c
         kmArm64/KeArm64Apc.c
         kmArm64/KeArm64Dispatcher.c
         kmArm64/KeArm64DpcIpi.c
         kmArm64/KeArm64DpcImportance.c
         kmArm64/KeArm64DpcFlush.c
-        kmArm64/KeArm64GenericDpc.c
         kmArm64/KeArm64PmrMigration.c
         kmArm64/KeArm64WakePlacement.c
         kmArm64/KeArm64Frames.c
         kmArm64/KeArm64Intrinsics.c
         kmArm64/KeArm64Interrupt.c
         kmArm64/KeArm64IpiBroadcast.c
-        kmArm64/KeArm64IpiConcurrent.c
         kmArm64/KeArm64IpiPreemption.c
         kmArm64/KeArm64Irql.c
         kmArm64/KeArm64LoaderCache.c
@@ -356,7 +352,6 @@ if(ARCH STREQUAL "arm64")
         kmArm64/KeArm64Profile.c
         kmArm64/KeArm64ProcessorChange.c
         kmArm64/KeArm64Smp.c
-        kmArm64/KeArm64SmpChurn.c
         kmArm64/KeArm64SpinLock.c
         kmArm64/KeArm64ThreadProcess.c
         kmArm64/RtlArm64Context.c

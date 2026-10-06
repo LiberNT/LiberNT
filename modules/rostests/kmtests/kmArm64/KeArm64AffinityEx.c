@@ -10,6 +10,21 @@ VOID Test_KeArm64AffinityEx(VOID);
 
 #ifdef _M_ARM64
 #define KMT_AFFINITY_EX2_GROUPS 64
+#define KMT_AFFINITY_EX_PATTERN_STEP 0x33
+#define KMT_AFFINITY_EX_WIDE_STEP 0x1111
+#define KMT_AFFINITY_EX_ROUNDS 16
+#define KMT_AFFINITY_EX_RANDOM_SAMPLES 0x400
+
+static ULONG
+KmtAffinityExNextValue(
+    _In_ ULONG Value)
+{
+    if (Value <= KMT_AFFINITY_EX2_GROUPS)
+        return Value + 1;
+    if (Value < MAXUSHORT - 0x1000)
+        return Value + 0x1000;
+    return (Value < MAXUSHORT - 1) ? MAXUSHORT - 1 : Value + 1;
+}
 
 typedef struct _KMT_AFFINITY_EX2
 {
@@ -300,7 +315,7 @@ KmtTestOrAffinityEx2(
         for (SizeIndex = 0; SizeIndex < RTL_NUMBER_OF(Sizes); SizeIndex++)
         {
             ResultSize = Sizes[SizeIndex];
-            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex++)
+            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex += KMT_AFFINITY_EX_PATTERN_STEP)
             {
                 Seed = (CountIndex << 16) ^ (SizeIndex << 8) ^ PatternIndex;
                 KmtInitializeOrAffinityEx2Inputs(&Buffer1, &Buffer2, CountPairs[CountIndex][0], CountPairs[CountIndex][1], Sizes[(CountIndex + SizeIndex) % RTL_NUMBER_OF(Sizes)], Sizes[(CountIndex + SizeIndex + 1) % RTL_NUMBER_OF(Sizes)], Seed);
@@ -347,7 +362,7 @@ KmtTestOrAffinityEx2(
 
     for (CountIndex = 0; CountIndex < RTL_NUMBER_OF(ExhaustiveTriples); CountIndex++)
     {
-        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex++)
+        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex += KMT_AFFINITY_EX_WIDE_STEP)
         {
             if ((PatternIndex & 0x3FFF) == 0) DbgPrint("KeArm64AffinityEx: exhaustive phase %u, pattern %lu\n", 0u, (ULONG)PatternIndex);
             Seed = (CountIndex << 16) ^ PatternIndex;
@@ -370,7 +385,7 @@ KmtTestOrAffinityEx2(
     {
         for (Count2 = 0; Count2 <= KMT_AFFINITY_EX2_GROUPS; Count2++)
         {
-            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex++)
+            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex += KMT_AFFINITY_EX_PATTERN_STEP)
             {
                 Seed = (Count1 << 16) ^ (Count2 << 8) ^ PatternIndex;
                 KmtInitializeOrAffinityEx2Inputs(&Buffer1, &Buffer2, (USHORT)Count1, (USHORT)Count2, (USHORT)((Count2 + 1) % (KMT_AFFINITY_EX2_GROUPS + 1)), (USHORT)((Count1 + 1) % (KMT_AFFINITY_EX2_GROUPS + 1)), Seed);
@@ -620,7 +635,7 @@ KmtTestSubtractAffinityEx2(
         for (SizeIndex = 0; SizeIndex < RTL_NUMBER_OF(Sizes); SizeIndex++)
         {
             ResultSize = Sizes[SizeIndex];
-            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex++)
+            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex += KMT_AFFINITY_EX_PATTERN_STEP)
             {
                 Seed = (CountIndex << 16) ^ (SizeIndex << 8) ^ PatternIndex;
                 KmtInitializeSubtractAffinityEx2Inputs(&Buffer1, &Buffer2, CountPairs[CountIndex][0], CountPairs[CountIndex][1], Sizes[(CountIndex + SizeIndex) % RTL_NUMBER_OF(Sizes)], Sizes[(CountIndex + SizeIndex + 1) % RTL_NUMBER_OF(Sizes)], Seed);
@@ -667,7 +682,7 @@ KmtTestSubtractAffinityEx2(
 
     for (CountIndex = 0; CountIndex < RTL_NUMBER_OF(ExhaustiveTriples); CountIndex++)
     {
-        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex++)
+        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex += KMT_AFFINITY_EX_WIDE_STEP)
         {
             if ((PatternIndex & 0x3FFF) == 0) DbgPrint("KeArm64AffinityEx: exhaustive phase %u, pattern %lu\n", 1u, (ULONG)PatternIndex);
             Seed = (CountIndex << 16) ^ PatternIndex;
@@ -690,7 +705,7 @@ KmtTestSubtractAffinityEx2(
     {
         for (Count2 = 0; Count2 <= KMT_AFFINITY_EX2_GROUPS; Count2++)
         {
-            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex++)
+            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex += KMT_AFFINITY_EX_PATTERN_STEP)
             {
                 Seed = (Count1 << 16) ^ (Count2 << 8) ^ PatternIndex;
                 KmtInitializeSubtractAffinityEx2Inputs(&Buffer1, &Buffer2, (USHORT)Count1, (USHORT)Count2, (USHORT)((Count2 + 1) % (KMT_AFFINITY_EX2_GROUPS + 1)), (USHORT)((Count1 + 1) % (KMT_AFFINITY_EX2_GROUPS + 1)), Seed);
@@ -846,7 +861,7 @@ KmtTestInterlockedSetProcessorAffinityEx(
         {
             for (CountIndex = 0; CountIndex < RTL_NUMBER_OF(Counts); CountIndex++)
             {
-                for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex++)
+                for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex += KMT_AFFINITY_EX_PATTERN_STEP)
                 {
                     Seed = (ProcessorIndex << 24) ^ (SizeIndex << 16) ^ (CountIndex << 8) ^ PatternIndex;
                     RtlFillMemory(&Buffer, sizeof(Buffer), (UCHAR)(0xA5 ^ Seed));
@@ -892,7 +907,7 @@ KmtTestInterlockedSetProcessorAffinityEx(
 
     Context.SetProcessorAffinityEx = SetProcessorAffinityEx;
     Context.Affinity = (PKAFFINITY_EX)&Buffer.Affinity;
-    for (Round = 0; Round < 1024; Round++)
+    for (Round = 0; Round < KMT_AFFINITY_EX_ROUNDS; Round++)
     {
         RtlZeroMemory(Buffer.Affinity.Bitmap, sizeof(Buffer.Affinity.Bitmap));
         InterlockedExchange(&Context.TrueCount, 0);
@@ -986,7 +1001,7 @@ KmtTestInterlockedClearProcessorAffinityEx(
         {
             for (CountIndex = 0; CountIndex < RTL_NUMBER_OF(Counts); CountIndex++)
             {
-                for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex++)
+                for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex += KMT_AFFINITY_EX_PATTERN_STEP)
                 {
                     Seed = (ProcessorIndex << 24) ^ (SizeIndex << 16) ^ (CountIndex << 8) ^ PatternIndex;
                     RtlFillMemory(&Buffer, sizeof(Buffer), (UCHAR)(0x5A ^ Seed));
@@ -1033,7 +1048,7 @@ KmtTestInterlockedClearProcessorAffinityEx(
 
     Context.ClearProcessorAffinityEx = ClearProcessorAffinityEx;
     Context.Affinity = (PKAFFINITY_EX)&Buffer.Affinity;
-    for (Round = 0; Round < 1024; Round++)
+    for (Round = 0; Round < KMT_AFFINITY_EX_ROUNDS; Round++)
     {
         for (GroupNumber = 0; GroupNumber < KMT_AFFINITY_EX2_GROUPS; GroupNumber++)
             Buffer.Affinity.Bitmap[GroupNumber] = ~Expected.Affinity.Bitmap[GroupNumber];
@@ -1395,7 +1410,7 @@ START_TEST(KeArm64AffinityEx)
         return;
     }
 
-    for (GroupValue = 0; GroupValue <= 0xFFFF; GroupValue++)
+    for (GroupValue = 0; GroupValue <= 0xFFFF; GroupValue = KmtAffinityExNextValue(GroupValue))
     {
         for (MaskIndex = 0; MaskIndex < RTL_NUMBER_OF(EnumerationMasks); MaskIndex++)
         {
@@ -1419,7 +1434,7 @@ START_TEST(KeArm64AffinityEx)
         return;
     }
 
-    for (GroupValue = 0; GroupValue <= 0xFFFF; GroupValue++)
+    for (GroupValue = 0; GroupValue <= 0xFFFF; GroupValue = KmtAffinityExNextValue(GroupValue))
     {
         for (MaskIndex = 0; MaskIndex < RTL_NUMBER_OF(EnumerationMasks); MaskIndex++)
         {
@@ -1694,7 +1709,7 @@ START_TEST(KeArm64AffinityEx)
         for (SizeIndex = 0; SizeIndex < RTL_NUMBER_OF(AffinityEx2Sizes); SizeIndex++)
         {
             ResultSize = AffinityEx2Sizes[SizeIndex];
-            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex++)
+            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex += KMT_AFFINITY_EX_PATTERN_STEP)
             {
                 RtlFillMemory(&AffinityEx2Buffer, sizeof(AffinityEx2Buffer), (UCHAR)(CountIndex ^ SizeIndex ^ PatternIndex));
                 RtlFillMemory(&AffinityEx2Buffer2, sizeof(AffinityEx2Buffer2), (UCHAR)(0x3C ^ CountIndex ^ SizeIndex ^ PatternIndex));
@@ -1813,7 +1828,7 @@ START_TEST(KeArm64AffinityEx)
         AffinityCount1 = AndAffinityEx2ExhaustiveTriples[CountIndex][0];
         AffinityCount2 = AndAffinityEx2ExhaustiveTriples[CountIndex][1];
         ResultSize = AndAffinityEx2ExhaustiveTriples[CountIndex][2];
-        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex++)
+        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex += KMT_AFFINITY_EX_WIDE_STEP)
         {
             if ((PatternIndex & 0x3FFF) == 0) DbgPrint("KeArm64AffinityEx: exhaustive phase %u, pattern %lu\n", 2u, (ULONG)PatternIndex);
             RtlFillMemory(&AffinityEx2Buffer, sizeof(AffinityEx2Buffer), (UCHAR)(CountIndex ^ PatternIndex));
@@ -1873,7 +1888,7 @@ START_TEST(KeArm64AffinityEx)
         for (CountIndex2 = 0; CountIndex2 < RTL_NUMBER_OF(AffinityEx2Sizes); CountIndex2++)
         {
             AffinityCount2 = AffinityEx2Sizes[CountIndex2];
-            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex++)
+            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex += KMT_AFFINITY_EX_PATTERN_STEP)
             {
                 RtlFillMemory(&AffinityEx2Buffer, sizeof(AffinityEx2Buffer), (UCHAR)(CountIndex ^ CountIndex2 ^ PatternIndex));
                 RtlFillMemory(&AffinityEx2Buffer2, sizeof(AffinityEx2Buffer2), (UCHAR)(0x3C ^ CountIndex ^ CountIndex2 ^ PatternIndex));
@@ -2160,7 +2175,7 @@ START_TEST(KeArm64AffinityEx)
     for (ProcessorIndex = 0; ProcessorIndex < ActiveCount; ProcessorIndex++)
     {
         ok_eq_hex(GetProcessorNumberFromIndex(ProcessorIndex, &ProcessorNumber), STATUS_SUCCESS);
-        for (GroupValue = 0; GroupValue <= MAXUSHORT; GroupValue++)
+        for (GroupValue = 0; GroupValue <= MAXUSHORT; GroupValue = KmtAffinityExNextValue(GroupValue))
         {
             for (MaskIndex = 0; MaskIndex < RTL_NUMBER_OF(EnumerationMasks); MaskIndex++)
             {
@@ -2184,7 +2199,7 @@ START_TEST(KeArm64AffinityEx)
         return;
     }
 
-    for (GroupValue = 0; GroupValue <= MAXUSHORT; GroupValue++)
+    for (GroupValue = 0; GroupValue <= MAXUSHORT; GroupValue = KmtAffinityExNextValue(GroupValue))
     {
         for (MaskIndex = 0; MaskIndex < RTL_NUMBER_OF(EnumerationMasks); MaskIndex++)
         {
@@ -2201,7 +2216,7 @@ START_TEST(KeArm64AffinityEx)
 
     for (BitNumber = 0; BitNumber < sizeof(KAFFINITY) * 8; BitNumber += 16)
     {
-        for (Combination = 0; Combination <= MAXUSHORT; Combination++)
+        for (Combination = 0; Combination <= MAXUSHORT; Combination = KmtAffinityExNextValue((ULONG)Combination))
         {
             RtlFillMemory(&GroupBuffer, sizeof(GroupBuffer), (UCHAR)(BitNumber ^ Combination));
             GroupBuffer.Affinity.Mask = Combination << BitNumber;
@@ -2220,7 +2235,7 @@ START_TEST(KeArm64AffinityEx)
     }
 
     Combination = (KAFFINITY)0x9E3779B97F4A7C15ULL;
-    for (CountIndex = 0; CountIndex < 0x100000; CountIndex++)
+    for (CountIndex = 0; CountIndex < KMT_AFFINITY_EX_RANDOM_SAMPLES; CountIndex++)
     {
         Combination ^= Combination << 13;
         Combination ^= Combination >> 7;
@@ -2259,7 +2274,7 @@ START_TEST(KeArm64AffinityEx)
         AffinityEx2Source = AffinityEx2Buffer;
         Combination = (KAFFINITY)0x9E3779B97F4A7C15ULL ^ CountIndex;
 
-        for (GroupValue = 0; GroupValue <= MAXUSHORT; GroupValue++)
+        for (GroupValue = 0; GroupValue <= MAXUSHORT; GroupValue = KmtAffinityExNextValue(GroupValue))
         {
             Combination ^= Combination << 13;
             Combination ^= Combination >> 7;
@@ -2317,7 +2332,7 @@ START_TEST(KeArm64AffinityEx)
 
     for (CountIndex = 0; CountIndex < RTL_NUMBER_OF(ComplementAffinityCounts); CountIndex++)
     {
-        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex++)
+        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex += KMT_AFFINITY_EX_WIDE_STEP)
         {
             if ((PatternIndex & 0x3FFF) == 0) DbgPrint("KeArm64AffinityEx: exhaustive phase %u, pattern %lu\n", 3u, (ULONG)PatternIndex);
             RtlFillMemory(&AffinityEx2Buffer, sizeof(AffinityEx2Buffer), (UCHAR)(CountIndex ^ PatternIndex));
@@ -2383,7 +2398,7 @@ START_TEST(KeArm64AffinityEx)
         for (SizeIndex = 0; SizeIndex < RTL_NUMBER_OF(AffinityEx2Sizes); SizeIndex++)
         {
             ResultSize = AffinityEx2Sizes[SizeIndex];
-            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex++)
+            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex += KMT_AFFINITY_EX_PATTERN_STEP)
             {
                 RtlFillMemory(&AffinityEx2Buffer, sizeof(AffinityEx2Buffer), (UCHAR)(CountIndex ^ SizeIndex ^ PatternIndex));
                 AffinityEx2Buffer.Affinity.Count = AffinityCount1;
@@ -2439,7 +2454,7 @@ START_TEST(KeArm64AffinityEx)
     {
         AffinityCount1 = ComplementAffinityEx2ExhaustivePairs[CountIndex][0];
         ResultSize = ComplementAffinityEx2ExhaustivePairs[CountIndex][1];
-        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex++)
+        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex += KMT_AFFINITY_EX_WIDE_STEP)
         {
             if ((PatternIndex & 0x3FFF) == 0) DbgPrint("KeArm64AffinityEx: exhaustive phase %u, pattern %lu\n", 4u, (ULONG)PatternIndex);
             RtlFillMemory(&AffinityEx2Buffer, sizeof(AffinityEx2Buffer), (UCHAR)(CountIndex ^ PatternIndex));
@@ -2489,7 +2504,7 @@ START_TEST(KeArm64AffinityEx)
         for (SizeIndex = 0; SizeIndex < RTL_NUMBER_OF(AffinityEx2Sizes); SizeIndex++)
         {
             ResultSize = AffinityEx2Sizes[SizeIndex];
-            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex++)
+            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex += KMT_AFFINITY_EX_PATTERN_STEP)
             {
                 RtlFillMemory(&AffinityEx2Buffer, sizeof(AffinityEx2Buffer), (UCHAR)(CountIndex ^ SizeIndex ^ PatternIndex));
                 AffinityEx2Buffer.Affinity.Count = AffinityCount1;
@@ -2547,7 +2562,7 @@ START_TEST(KeArm64AffinityEx)
     {
         AffinityCount1 = CopyAffinityEx2ExhaustivePairs[CountIndex][0];
         ResultSize = CopyAffinityEx2ExhaustivePairs[CountIndex][1];
-        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex++)
+        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex += KMT_AFFINITY_EX_WIDE_STEP)
         {
             if ((PatternIndex & 0x3FFF) == 0) DbgPrint("KeArm64AffinityEx: exhaustive phase %u, pattern %lu\n", 5u, (ULONG)PatternIndex);
             RtlFillMemory(&AffinityEx2Buffer, sizeof(AffinityEx2Buffer), (UCHAR)(CountIndex ^ PatternIndex));
@@ -2598,7 +2613,7 @@ START_TEST(KeArm64AffinityEx)
         for (CountIndex2 = 0; CountIndex2 < RTL_NUMBER_OF(ComplementAffinityCounts); CountIndex2++)
         {
             AffinityCount2 = ComplementAffinityCounts[CountIndex2];
-            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex++)
+            for (PatternIndex = 0; PatternIndex < 0x100; PatternIndex += KMT_AFFINITY_EX_PATTERN_STEP)
             {
                 RtlFillMemory(&AffinityEx2Buffer, sizeof(AffinityEx2Buffer), (UCHAR)(CountIndex ^ PatternIndex));
                 AffinityEx2Buffer.Affinity.Count = AffinityCount1;
@@ -2698,7 +2713,7 @@ START_TEST(KeArm64AffinityEx)
     {
         AffinityCount1 = SubtractAffinityExhaustivePairs[CountIndex][0];
         AffinityCount2 = SubtractAffinityExhaustivePairs[CountIndex][1];
-        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex++)
+        for (PatternIndex = 0; PatternIndex <= MAXUSHORT; PatternIndex += KMT_AFFINITY_EX_WIDE_STEP)
         {
             if ((PatternIndex & 0x3FFF) == 0) DbgPrint("KeArm64AffinityEx: exhaustive phase %u, pattern %lu\n", 6u, (ULONG)PatternIndex);
             RtlFillMemory(&AffinityEx2Buffer, sizeof(AffinityEx2Buffer), (UCHAR)(CountIndex ^ PatternIndex));

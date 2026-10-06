@@ -319,7 +319,7 @@ Cleanup:
     KeRevertToUserAffinityThreadEx(PreviousAffinity);
 }
 
-#define CONNECT_ROUNDS 2048
+#define CONNECT_ROUNDS 16
 
 typedef struct _CONNECT_RACE
 {

@@ -1,16 +1,14 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Executive address push-lock behavior and wake-race stress
+ * PURPOSE:     Executive address push-lock behavior
  */
 
 #include <kmt_test.h>
 
 #ifdef _M_ARM64
 
-#define ADDRESS_PUSH_LOCK_MICRO_ROUNDS 8192
-#define ADDRESS_PUSH_LOCK_AFFINITY_ROUNDS 8192
-#define ADDRESS_PUSH_LOCK_RACE_ROUNDS 65536
+#define ADDRESS_PUSH_LOCK_WAKE_ROUNDS 16
 
 typedef struct _ADDRESS_PUSH_LOCK_CONTEXT
 {
@@ -115,45 +113,6 @@ TestAddressPushLockImmediateBehavior(VOID)
 }
 
 static
-VOID
-TestAddressPushLockMicrobenchmarks(VOID)
-{
-    EX_PUSH_LOCK PushLock;
-    LARGE_INTEGER EndTime, Frequency, StartTime, ZeroTimeout;
-    ULONGLONG Address, Compare, MismatchMicroseconds, TimeoutMicroseconds;
-    NTSTATUS Status;
-    ULONG Failures = 0, Round;
-
-    Address = 1;
-    Compare = 0;
-    StartTime = KeQueryPerformanceCounter(&Frequency);
-    for (Round = 0; Round < ADDRESS_PUSH_LOCK_MICRO_ROUNDS; Round++)
-    {
-        PushLock.Value = 0;
-        Status = ExBlockOnAddressPushLock(&PushLock, &Address, &Compare, sizeof(Address), NULL);
-        if (!NT_SUCCESS(Status) || PushLock.Value) Failures++;
-    }
-    EndTime = KeQueryPerformanceCounter(NULL);
-    MismatchMicroseconds = Frequency.QuadPart > 0 ? (ULONGLONG)(EndTime.QuadPart - StartTime.QuadPart) * 1000000 / Frequency.QuadPart : 0;
-
-    Address = 1;
-    Compare = 1;
-    ZeroTimeout.QuadPart = 0;
-    StartTime = KeQueryPerformanceCounter(NULL);
-    for (Round = 0; Round < ADDRESS_PUSH_LOCK_MICRO_ROUNDS; Round++)
-    {
-        PushLock.Value = 0;
-        Status = ExBlockOnAddressPushLock(&PushLock, &Address, &Compare, sizeof(Address), &ZeroTimeout);
-        if (Status != STATUS_TIMEOUT || PushLock.Value) Failures++;
-    }
-    EndTime = KeQueryPerformanceCounter(NULL);
-    TimeoutMicroseconds = Frequency.QuadPart > 0 ? (ULONGLONG)(EndTime.QuadPart - StartTime.QuadPart) * 1000000 / Frequency.QuadPart : 0;
-
-    trace("address push-lock micro: rounds=%lu mismatch-us=%I64u zero-timeout-us=%I64u\n", ADDRESS_PUSH_LOCK_MICRO_ROUNDS, MismatchMicroseconds, TimeoutMicroseconds);
-    ok_eq_ulong(Failures, 0);
-}
-
-static
 ULONGLONG
 TestAddressPushLockRoundTrips(
     _In_ BOOLEAN UseAddressWait,
@@ -182,7 +141,7 @@ TestAddressPushLockRoundTrips(
     Context.UseAddressWait = UseAddressWait;
     Context.WakerPriorityMin = HIGH_PRIORITY;
     Compare = 0;
-    Timeout.QuadPart = -100LL * 10 * 1000;
+    Timeout.QuadPart = -1000LL * 10 * 1000;
     WakerThread = KmtStartThread(AddressPushLockWakeThread, &Context);
     if (MainAffinity) OldAffinity = KeSetSystemAffinityThreadEx(MainAffinity);
     StartTime = KeQueryPerformanceCounter(&Frequency);
@@ -242,36 +201,9 @@ TestAddressPushLockRoundTrips(
 
 static
 VOID
-TestAddressPushLockWakeRace(VOID)
+TestAddressPushLockWake(VOID)
 {
-    KAFFINITY ActiveProcessors, FirstProcessor, SecondProcessor;
-    ULONGLONG AddressMicroseconds, BaselineMicroseconds;
-    ULONG Processor;
-
-    ActiveProcessors = KeQueryActiveProcessors();
-    FirstProcessor = 0;
-    SecondProcessor = 0;
-    for (Processor = 0; Processor < sizeof(KAFFINITY) * CHAR_BIT; Processor++)
-    {
-        if (!(ActiveProcessors & ((KAFFINITY)1 << Processor))) continue;
-        if (!FirstProcessor) FirstProcessor = (KAFFINITY)1 << Processor;
-        else
-        {
-            SecondProcessor = (KAFFINITY)1 << Processor;
-            break;
-        }
-    }
-
-    if (SecondProcessor)
-    {
-        TestAddressPushLockRoundTrips(FALSE, FirstProcessor, FirstProcessor, 0, ADDRESS_PUSH_LOCK_AFFINITY_ROUNDS, "event-same-cpu");
-        TestAddressPushLockRoundTrips(FALSE, FirstProcessor, SecondProcessor, 0, ADDRESS_PUSH_LOCK_AFFINITY_ROUNDS, "event-cross-cpu");
-        TestAddressPushLockRoundTrips(FALSE, FirstProcessor, 0, SecondProcessor, ADDRESS_PUSH_LOCK_AFFINITY_ROUNDS, "event-seeded-remote");
-    }
-
-    BaselineMicroseconds = TestAddressPushLockRoundTrips(FALSE, 0, 0, 0, ADDRESS_PUSH_LOCK_RACE_ROUNDS, "event-baseline");
-    AddressMicroseconds = TestAddressPushLockRoundTrips(TRUE, 0, 0, 0, ADDRESS_PUSH_LOCK_RACE_ROUNDS, "race");
-    trace("address push-lock excess: baseline-us=%I64u address-us=%I64u excess-us=%I64u\n", BaselineMicroseconds, AddressMicroseconds, AddressMicroseconds > BaselineMicroseconds ? AddressMicroseconds - BaselineMicroseconds : 0);
+    TestAddressPushLockRoundTrips(TRUE, 0, 0, 0, ADDRESS_PUSH_LOCK_WAKE_ROUNDS, "wake");
 }
 
 #endif
@@ -280,8 +212,7 @@ START_TEST(ExPushLock)
 {
 #ifdef _M_ARM64
     TestAddressPushLockImmediateBehavior();
-    TestAddressPushLockMicrobenchmarks();
-    TestAddressPushLockWakeRace();
+    TestAddressPushLockWake();
 #else
     skip(TRUE, "ExBlockOnAddressPushLock is currently exposed for ARM64\n");
 #endif

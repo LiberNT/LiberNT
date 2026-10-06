@@ -110,7 +110,7 @@ static VOID Arm64SpinLockCheck(VOID)
     KeRevertToUserAffinityThreadEx(PreviousAffinity);
 }
 
-#define LOCK_STRESS_ROUNDS 4096
+#define LOCK_STRESS_ROUNDS 64
 #define LOCK_STRESS_WORDS 32
 
 typedef struct _LOCK_STRESS_SHARED

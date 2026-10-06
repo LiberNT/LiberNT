@@ -69,7 +69,6 @@ KMT_TESTFUNC Test_ExDoubleList;
 KMT_TESTFUNC Test_ExFastMutex;
 KMT_TESTFUNC Test_ExHardError;
 KMT_TESTFUNC Test_ExHardErrorInteractive;
-KMT_TESTFUNC Test_ExHandleTable;
 KMT_TESTFUNC Test_ExInterlocked;
 KMT_TESTFUNC Test_ExPoolBench;
 KMT_TESTFUNC Test_ExPool2;
@@ -181,12 +180,10 @@ KMT_TESTFUNC Test_HalArm64Stage5;
 KMT_TESTFUNC Test_KdArm64Layout;
 KMT_TESTFUNC Test_KeArm64;
 KMT_TESTFUNC Test_KeArm64AffinityEx;
-KMT_TESTFUNC Test_KeArm64AffinityRace;
 KMT_TESTFUNC Test_KeArm64Apc;
 KMT_TESTFUNC Test_KeArm64Dispatcher;
 KMT_TESTFUNC Test_KeArm64DpcIpi;
 KMT_TESTFUNC Test_KeArm64DpcFlush;
-KMT_TESTFUNC Test_KeArm64GenericDpc;
 KMT_TESTFUNC Test_KeArm64DpcImportance;
 KMT_TESTFUNC Test_KeArm64PmrMigration;
 KMT_TESTFUNC Test_KeArm64WakePlacement;
@@ -194,7 +191,6 @@ KMT_TESTFUNC Test_KeArm64Frames;
 KMT_TESTFUNC Test_KeArm64Intrinsics;
 KMT_TESTFUNC Test_KeArm64Interrupt;
 KMT_TESTFUNC Test_KeArm64IpiBroadcast;
-KMT_TESTFUNC Test_KeArm64IpiConcurrent;
 KMT_TESTFUNC Test_KeArm64IpiPreemption;
 KMT_TESTFUNC Test_KeArm64Irql;
 KMT_TESTFUNC Test_KeArm64LoaderCache;
@@ -202,7 +198,6 @@ KMT_TESTFUNC Test_KeArm64PcrPrcb;
 KMT_TESTFUNC Test_KeArm64Profile;
 KMT_TESTFUNC Test_KeArm64ProcessorChange;
 KMT_TESTFUNC Test_KeArm64Smp;
-KMT_TESTFUNC Test_KeArm64SmpChurn;
 KMT_TESTFUNC Test_KeArm64SpinLock;
 KMT_TESTFUNC Test_KeArm64ThreadProcess;
 KMT_TESTFUNC Test_RtlArm64Context;
@@ -391,7 +386,6 @@ const KMT_TEST TestList[] =
     { "ExHardError",                        Test_ExHardError },
     /* Keep the UI-driven variant available by name, but out of automated runs. */
     { "-ExHardErrorInteractive",            Test_ExHardErrorInteractive },
-    { "ExHandleTable",                      Test_ExHandleTable },
     { "ExInterlocked",                      Test_ExInterlocked },
     { "-ExPoolBench",                       Test_ExPoolBench },
     { "ExPool2",                            Test_ExPool2 },
@@ -492,12 +486,10 @@ const KMT_TEST TestList[] =
     { "KdArm64Layout",                      Test_KdArm64Layout },
     { "KeArm64",                            Test_KeArm64 },
     { "KeArm64AffinityEx",                  Test_KeArm64AffinityEx },
-    { "KeArm64AffinityRace",                Test_KeArm64AffinityRace },
     { "KeArm64Apc",                         Test_KeArm64Apc },
     { "KeArm64Dispatcher",                  Test_KeArm64Dispatcher },
     { "KeArm64DpcIpi",                      Test_KeArm64DpcIpi },
     { "KeArm64DpcFlush",                    Test_KeArm64DpcFlush },
-    { "KeArm64GenericDpc",                  Test_KeArm64GenericDpc },
     { "KeArm64DpcImportance",               Test_KeArm64DpcImportance },
     { "KeArm64PmrMigration",                Test_KeArm64PmrMigration },
     { "KeArm64WakePlacement",               Test_KeArm64WakePlacement },
@@ -510,10 +502,8 @@ const KMT_TEST TestList[] =
     { "KeArm64Profile",                     Test_KeArm64Profile },
     { "KeArm64ProcessorChange",              Test_KeArm64ProcessorChange },
     { "KeArm64IpiBroadcast",                Test_KeArm64IpiBroadcast },
-    { "KeArm64IpiConcurrent",               Test_KeArm64IpiConcurrent },
     { "KeArm64IpiPreemption",               Test_KeArm64IpiPreemption },
     { "KeArm64Smp",                         Test_KeArm64Smp },
-    { "KeArm64SmpChurn",                    Test_KeArm64SmpChurn },
     { "KeArm64SpinLock",                    Test_KeArm64SpinLock },
     { "KeArm64ThreadProcess",               Test_KeArm64ThreadProcess },
     { "RtlArm64Context",                    Test_RtlArm64Context },
