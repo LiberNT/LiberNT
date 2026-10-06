@@ -543,6 +543,44 @@ SepPropagateOpaqueAce(RTL_SECURITY_ACL_BUFFER *Buffer, PACE_HEADER Ace,
     return STATUS_SUCCESS;
 }
 
+static VOID
+SepDropDuplicateAces(RTL_SECURITY_ACL_BUFFER *Buffer, ULONG Start)
+{
+    PACCESS_ALLOWED_ACE Ace, Other;
+    ULONG Offset = Start, Scan, Size;
+
+    while (Offset < Buffer->Length)
+    {
+        Ace = (PACCESS_ALLOWED_ACE)((PUCHAR)Buffer->Acl + Offset);
+        Size = Ace->Header.AceSize;
+        Scan = Offset;
+        if (Ace->Header.AceType == ACCESS_ALLOWED_ACE_TYPE)
+        {
+            for (Scan = sizeof(ACL); Scan < Offset; Scan += Other->Header.AceSize)
+            {
+                Other = (PACCESS_ALLOWED_ACE)((PUCHAR)Buffer->Acl + Scan);
+                if (Other->Header.AceType == ACCESS_ALLOWED_ACE_TYPE &&
+                    Other->Header.AceFlags == Ace->Header.AceFlags &&
+                    Other->Mask == Ace->Mask &&
+                    RtlEqualSid((PSID)&Other->SidStart, (PSID)&Ace->SidStart))
+                {
+                    break;
+                }
+            }
+        }
+        if (Scan < Offset)
+        {
+            RtlMoveMemory(Ace, (PUCHAR)Ace + Size, Buffer->Length - Offset - Size);
+            Buffer->Length -= Size;
+            Buffer->Count--;
+        }
+        else
+        {
+            Offset += Size;
+        }
+    }
+}
+
 /**
  * @brief
  * Propagates (copies) an access control list.
@@ -594,7 +632,8 @@ SepPropagateAcl(
 {
     RTL_SECURITY_ACL_BUFFER Buffer = {0};
     PACE_HEADER Ace;
-    ULONG Index, Pass, Required;
+    PACL Scratch = NULL;
+    ULONG Index, Pass, Required, Start, Capacity = *AclLength;
     NTSTATUS Status;
 
     if (!RtlValidAcl(AclSource)) return STATUS_INVALID_ACL;
@@ -605,8 +644,9 @@ SepPropagateAcl(
         Buffer.Revision = AclSource->AclRevision;
         for (Index = 0; Index < AclSource->AceCount; ++Index)
         {
+            Start = Buffer.Length;
             Status = RtlGetAce(AclSource, Index, (PVOID *)&Ace);
-            if (!NT_SUCCESS(Status)) return Status;
+            if (!NT_SUCCESS(Status)) goto Done;
             if (IsInherited)
                 Status = RtlpSecurityTransformAce(&Buffer, Ace, TRUE, MarkInherited, !MarkInherited,
                                                    IsDirectoryObject, &ObjectType,
@@ -617,22 +657,44 @@ SepPropagateAcl(
             if (Status == STATUS_NOT_IMPLEMENTED)
                 Status = SepPropagateOpaqueAce(&Buffer, Ace, IsInherited, MarkInherited,
                                                 IsDirectoryObject);
-            if (!NT_SUCCESS(Status)) return Status;
+            if (!NT_SUCCESS(Status)) goto Done;
+            if (Scratch) SepDropDuplicateAces(&Buffer, Start);
         }
-        if (!Pass)
+        if (!Pass && IsInherited)
+        {
+            Scratch = ExAllocatePoolWithTag(PagedPool, Buffer.Length, TAG_ACL);
+            if (!Scratch) return STATUS_INSUFFICIENT_RESOURCES;
+            Buffer.Capacity = Buffer.Length;
+            Buffer.Acl = Scratch;
+        }
+        else if (!Pass)
         {
             Required = Buffer.Length;
-            Buffer.Capacity = *AclLength;
             *AclLength = Required;
-            if (!AclDest || Buffer.Capacity < Required) return STATUS_BUFFER_TOO_SMALL;
+            if (!AclDest || Capacity < Required) return STATUS_BUFFER_TOO_SMALL;
+            Buffer.Capacity = Capacity;
             Buffer.Acl = AclDest;
         }
+    }
+    if (Scratch)
+    {
+        *AclLength = Buffer.Length;
+        if (!AclDest || Capacity < Buffer.Length)
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+            goto Done;
+        }
+        RtlCopyMemory(AclDest, Scratch, Buffer.Length);
     }
     RtlZeroMemory(AclDest, sizeof(ACL));
     AclDest->AclRevision = Buffer.Revision;
     AclDest->AclSize = (USHORT)Buffer.Length;
     AclDest->AceCount = (USHORT)Buffer.Count;
-    return STATUS_SUCCESS;
+    Status = STATUS_SUCCESS;
+
+Done:
+    if (Scratch) ExFreePoolWithTag(Scratch, TAG_ACL);
+    return Status;
 }
 
 /**
