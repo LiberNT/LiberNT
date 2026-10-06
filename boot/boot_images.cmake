@@ -452,9 +452,9 @@ set(_preinstall_image_file ${REACTOS_BINARY_DIR}/ReactOS.img)
 set(_preinstall_vhd_file ${REACTOS_BINARY_DIR}/ReactOS.vhd)
 # Keep ROSBOOT as an active MBR ESP. UEFI discovers it by type, while the BIOS
 # MBR follows the active flag and loads its FAT32 boot sector. The Raspberry Pi
-# 1-3 boot ROM only scans for FAT MBR ids and skips 0xEF, so the ARM images
-# mark the same volume as FAT32 LBA instead; UEFI mounts it by content.
-if(ARCH MATCHES "^arm" OR FREELDR_HAS_OFW_BOOT)
+# 1-3 boot ROM only scans for FAT MBR ids and skips 0xEF, so the Raspberry Pi
+# images mark the same volume as FAT32 LBA instead; UEFI mounts it by content.
+if(RPI_SUPPORT OR ARCH STREQUAL "arm" OR FREELDR_HAS_OFW_BOOT)
     set(_preinstall_boot_partition_type 0c)
 else()
     set(_preinstall_boot_partition_type ef)
