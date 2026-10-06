@@ -214,14 +214,41 @@ IsSafeRelativePath(
     return TRUE;
 }
 
+static BOOL
+GetCompressedSourceName(
+    IN PCWSTR Source,
+    OUT PWSTR Compressed,
+    IN DWORD CompressedSize)
+{
+    PWSTR Name, Extension;
+    SIZE_T Length = wcslen(Source);
+
+    if (Length + 3 > CompressedSize)
+        return FALSE;
+
+    wcscpy(Compressed, Source);
+    Name = wcsrchr(Compressed, L'\\');
+    Name = Name ? Name + 1 : Compressed;
+    Extension = wcschr(Name, L'.');
+    if (!Extension)
+        wcscat(Compressed, L"._");
+    else if (wcslen(Extension + 1) < 3)
+        wcscat(Compressed, L"_");
+    else
+        Compressed[Length - 1] = L'_';
+
+    return TRUE;
+}
+
 static VOID
 StagePackageFile(
     IN PCWSTR SourceRoot,
     IN PCWSTR StoreRoot,
     IN PCWSTR Relative)
 {
-    WCHAR Source[MAX_PATH], Target[MAX_PATH];
+    WCHAR Source[MAX_PATH], Target[MAX_PATH], Compressed[MAX_PATH];
     PWSTR Last;
+    DWORD Error;
 
     if (!IsSafeRelativePath(Relative) ||
         !CombinePath(Source, SourceRoot, Relative) ||
@@ -230,8 +257,15 @@ StagePackageFile(
         return;
     }
 
+    Compressed[0] = UNICODE_NULL;
     if (GetFileAttributesW(Source) == INVALID_FILE_ATTRIBUTES)
-        return;
+    {
+        if (!GetCompressedSourceName(Source, Compressed, ARRAY_SIZE(Compressed)) ||
+            GetFileAttributesW(Compressed) == INVALID_FILE_ATTRIBUTES)
+        {
+            return;
+        }
+    }
 
     Last = wcsrchr(Target, L'\\');
     if (Last)
@@ -242,8 +276,16 @@ StagePackageFile(
         *Last = L'\\';
     }
 
-    if (!CopyFileW(Source, Target, FALSE))
+    if (Compressed[0])
+    {
+        Error = SetupDecompressOrCopyFileW(Compressed, Target, NULL);
+        if (Error != ERROR_SUCCESS)
+            TRACE("Expanding %s failed with error %lu\n", debugstr_w(Compressed), Error);
+    }
+    else if (!CopyFileW(Source, Target, FALSE))
+    {
         TRACE("Staging %s failed with error %lu\n", debugstr_w(Source), GetLastError());
+    }
 }
 
 static VOID
