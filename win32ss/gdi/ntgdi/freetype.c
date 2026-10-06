@@ -6642,7 +6642,8 @@ GetFontPenalty(const LOGFONTW *               LogFont,
 
     if (Byte != TM->tmCharSet)
     {
-        if (Byte != DEFAULT_CHARSET && Byte != ANSI_CHARSET)
+        if ((Byte != DEFAULT_CHARSET && Byte != ANSI_CHARSET) ||
+            (Byte == ANSI_CHARSET && TM->tmCharSet == SYMBOL_CHARSET))
         {
             /* CharSet Penalty 65000 */
             /* Requested charset does not match the candidate's. */
@@ -7274,6 +7275,8 @@ TextIntRealizeFont(HFONT FontHandle, PTEXTOBJ pTextObj)
 
     /* substitute */
     SubstitutedLogFont = *pLogFont;
+    if (_wcsicmp(SubstitutedLogFont.lfFaceName, L"Symbol") == 0)
+        SubstitutedLogFont.lfCharSet = SYMBOL_CHARSET;
     SubstituteFontRecurse(&SubstitutedLogFont);
     DPRINT("Font '%S,%u' is substituted by '%S,%u'.\n",
            pLogFont->lfFaceName, pLogFont->lfCharSet,
