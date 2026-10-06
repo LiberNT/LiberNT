@@ -111,7 +111,11 @@ static DWORD registry_read_credential(HKEY hkey, PCREDENTIALW credential,
     ret = RegQueryValueExW(hkey, L"Comment", 0, &type, NULL, &count);
     if (ret != ERROR_FILE_NOT_FOUND && ret != ERROR_SUCCESS)
         return ret;
+#ifdef __REACTOS__
+    else if (ret == ERROR_SUCCESS && type != REG_SZ)
+#else
     else if (type != REG_SZ)
+#endif
         return ERROR_REGISTRY_CORRUPT;
     *len += count;
     if (credential)
@@ -132,7 +136,11 @@ static DWORD registry_read_credential(HKEY hkey, PCREDENTIALW credential,
     ret = RegQueryValueExW(hkey, L"TargetAlias", 0, &type, NULL, &count);
     if (ret != ERROR_FILE_NOT_FOUND && ret != ERROR_SUCCESS)
         return ret;
+#ifdef __REACTOS__
+    else if (ret == ERROR_SUCCESS && type != REG_SZ)
+#else
     else if (type != REG_SZ)
+#endif
         return ERROR_REGISTRY_CORRUPT;
     *len += count;
     if (credential)
@@ -153,7 +161,11 @@ static DWORD registry_read_credential(HKEY hkey, PCREDENTIALW credential,
     ret = RegQueryValueExW(hkey, L"UserName", 0, &type, NULL, &count);
     if (ret != ERROR_FILE_NOT_FOUND && ret != ERROR_SUCCESS)
         return ret;
+#ifdef __REACTOS__
+    else if (ret == ERROR_SUCCESS && type != REG_SZ)
+#else
     else if (type != REG_SZ)
+#endif
         return ERROR_REGISTRY_CORRUPT;
     *len += count;
     if (credential)
@@ -209,6 +221,16 @@ static DWORD registry_read_credential(HKEY hkey, PCREDENTIALW credential,
         return ret;
     else if (type != REG_DWORD)
         return ERROR_REGISTRY_CORRUPT;
+#ifdef __REACTOS__
+    if (credential->Type == CRED_TYPE_DOMAIN_PASSWORD ||
+        credential->Type == CRED_TYPE_DOMAIN_CERTIFICATE)
+    {
+        if (credential->CredentialBlob)
+            SecureZeroMemory(credential->CredentialBlob, credential->CredentialBlobSize);
+        credential->CredentialBlob = NULL;
+        credential->CredentialBlobSize = 0;
+    }
+#endif
 
     count = sizeof(credential->LastWritten);
     ret = RegQueryValueExW(hkey, L"LastWritten", NULL, &type, (LPVOID)&credential->LastWritten,
