@@ -563,6 +563,9 @@ struct assembly
     ULONG                          num_compat_contexts;
     ACTCTX_REQUESTED_RUN_LEVEL     run_level;
     ULONG                          ui_access;
+#ifdef __REACTOS__
+    LARGE_INTEGER                  manifest_time;
+#endif
 };
 
 enum context_sections
@@ -3106,6 +3109,23 @@ static NTSTATUS parse_manifest( struct actctx_loader* acl, struct assembly_ident
     assembly->manifest.type = assembly->manifest.info ? ACTIVATION_CONTEXT_PATH_TYPE_WIN32_FILE
                                                       : ACTIVATION_CONTEXT_PATH_TYPE_NONE;
 
+#ifdef __REACTOS__
+    if (assembly->manifest.info)
+    {
+        FILE_NETWORK_OPEN_INFORMATION file_info;
+        OBJECT_ATTRIBUTES file_attr;
+        UNICODE_STRING nt_name;
+
+        if (RtlDosPathNameToNtPathName_U( assembly->manifest.info, &nt_name, NULL, NULL ))
+        {
+            InitializeObjectAttributes( &file_attr, &nt_name, OBJ_CASE_INSENSITIVE, NULL, NULL );
+            if (NT_SUCCESS(NtQueryFullAttributesFile( &file_attr, &file_info )))
+                assembly->manifest_time = file_info.LastWriteTime;
+            RtlFreeUnicodeString( &nt_name );
+        }
+    }
+#endif
+
     unicode_tests = IS_TEXT_UNICODE_SIGNATURE | IS_TEXT_UNICODE_REVERSE_SIGNATURE;
     if (RtlIsTextUnicode( buffer, size, &unicode_tests ))
     {
@@ -4226,6 +4246,7 @@ static NTSTATUS build_assemblyinfo_section(ACTIVATION_CONTEXT *actctx, struct st
         if (assembly->type != ASSEMBLY_SHARED_MANIFEST)
             info->Flags |= ACTIVATION_CONTEXT_DATA_ASSEMBLY_INFORMATION_PRIVATE_ASSEMBLY;
         info->ManifestPathType = path_len ? ACTIVATION_CONTEXT_PATH_TYPE_WIN32_FILE : ACTIVATION_CONTEXT_PATH_TYPE_NONE;
+        info->ManifestLastWriteTime = assembly->manifest_time;
         info->PolicyPathType = ACTIVATION_CONTEXT_PATH_TYPE_NONE;
         info->ManifestVersionMajor = 1;
         info->NumOfFilesInAssembly = assembly->num_dlls;
@@ -6560,7 +6581,11 @@ NTSTATUS WINAPI RtlQueryInformationActivationContext( ULONG flags, HANDLE handle
             afdi->ulEncodedAssemblyIdentityLength = (id_len - 1) * sizeof(WCHAR);
             afdi->ulManifestPathType = assembly->manifest.type;
             afdi->ulManifestPathLength = assembly->manifest.info ? (path_len - 1) * sizeof(WCHAR) : 0;
+#ifdef __REACTOS__
+            afdi->liManifestLastWriteTime = assembly->manifest_time;
+#else
             /* FIXME afdi->liManifestLastWriteTime = 0; */
+#endif
             afdi->ulPolicyPathType = ACTIVATION_CONTEXT_PATH_TYPE_NONE; /* FIXME */
             afdi->ulPolicyPathLength = 0;
             /* FIXME afdi->liPolicyLastWriteTime = 0; */
