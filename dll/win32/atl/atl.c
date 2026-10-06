@@ -531,6 +531,9 @@ HRESULT WINAPI AtlComModuleRegisterClassObjects(_ATL_COM_MODULE *module, DWORD c
     _ATL_OBJMAP_ENTRY **iter;
     IUnknown *unk;
     HRESULT hres;
+#ifdef __REACTOS__
+    HRESULT ret = S_FALSE;
+#endif
 
     TRACE("(%p %lx %lx)\n", module, context, flags);
 
@@ -549,9 +552,16 @@ HRESULT WINAPI AtlComModuleRegisterClassObjects(_ATL_COM_MODULE *module, DWORD c
         IUnknown_Release(unk);
         if(FAILED(hres))
             return hres;
+#ifdef __REACTOS__
+        ret = hres;
+#endif
     }
 
+#ifdef __REACTOS__
+   return ret;
+#else
    return S_OK;
+#endif
 }
 #else
 HRESULT WINAPI AtlComModuleRegisterClassObjects(_ATL_COM_MODULE *module, DWORD context, DWORD flags)
@@ -559,6 +569,9 @@ HRESULT WINAPI AtlComModuleRegisterClassObjects(_ATL_COM_MODULE *module, DWORD c
     _ATL_OBJMAP_ENTRY_EX **iter;
     IUnknown *unk;
     HRESULT hres;
+#ifdef __REACTOS__
+    HRESULT ret = S_FALSE;
+#endif
 
     TRACE("(%p %lx %lx)\n", module, context, flags);
 
@@ -577,9 +590,16 @@ HRESULT WINAPI AtlComModuleRegisterClassObjects(_ATL_COM_MODULE *module, DWORD c
         IUnknown_Release(unk);
         if(FAILED(hres))
             return hres;
+#ifdef __REACTOS__
+        ret = hres;
+#endif
     }
 
+#ifdef __REACTOS__
+   return ret;
+#else
    return S_OK;
+#endif
 }
 #endif
 
