@@ -264,6 +264,16 @@ SECURITY_STATUS WINAPI NCryptEncrypt(NCRYPT_KEY_HANDLE key, BYTE *input, DWORD i
         return NTE_BAD_FLAGS;
     }
 
+#ifdef __REACTOS__
+    if (flags & NCRYPT_PAD_OAEP_FLAG)
+    {
+        FIXME("oaep padding not supported\n");
+        return NTE_NOT_SUPPORTED;
+    }
+
+    if (!key_object || key_object->type != KEY) return NTE_INVALID_HANDLE;
+    if (!key_object->key.finalized) return NTE_BAD_KEY_STATE;
+#else
     if (flags & NCRYPT_NO_PADDING_FLAG || flags & NCRYPT_PAD_OAEP_FLAG)
     {
         FIXME("No padding and oaep padding not supported\n");
@@ -271,6 +281,7 @@ SECURITY_STATUS WINAPI NCryptEncrypt(NCRYPT_KEY_HANDLE key, BYTE *input, DWORD i
     }
 
     if (key_object->type != KEY) return NTE_INVALID_HANDLE;
+#endif
 
     return map_ntstatus(BCryptEncrypt(key_object->key.bcrypt_key, input, insize, padding,
                                       NULL, 0, output, outsize, result, flags));
@@ -317,6 +328,9 @@ SECURITY_STATUS WINAPI NCryptFinalizeKey(NCRYPT_KEY_HANDLE handle, DWORD flags)
         return map_ntstatus(status);
     }
 
+#ifdef __REACTOS__
+    object->key.finalized = TRUE;
+#endif
     return ERROR_SUCCESS;
 }
 
@@ -473,6 +487,9 @@ SECURITY_STATUS WINAPI NCryptImportKey(NCRYPT_PROV_HANDLE provider, NCRYPT_KEY_H
 
         set_object_property(object, NCRYPT_LENGTH_PROPERTY, (BYTE *)&rsablob->BitLength, sizeof(rsablob->BitLength));
         set_object_property(object, BCRYPT_PUBLIC_KEY_LENGTH, (BYTE *)&rsablob->BitLength, sizeof(rsablob->BitLength));
+#ifdef __REACTOS__
+        object->key.finalized = TRUE;
+#endif
         break;
     }
     default:
@@ -593,6 +610,31 @@ SECURITY_STATUS WINAPI NCryptSetProperty(NCRYPT_HANDLE handle, const WCHAR *name
     if (flags) FIXME("flags %#lx not supported\n", flags);
 
     if (!object) return NTE_INVALID_HANDLE;
+#ifdef __REACTOS__
+    if (object->type == KEY)
+    {
+        static const WCHAR *const writable_properties[] =
+        {
+            NCRYPT_LENGTH_PROPERTY,
+            NCRYPT_EXPORT_POLICY_PROPERTY,
+            NCRYPT_KEY_USAGE_PROPERTY,
+            NCRYPT_UI_POLICY_PROPERTY,
+            NCRYPT_WINDOW_HANDLE_PROPERTY,
+            NCRYPT_USE_CONTEXT_PROPERTY,
+            NCRYPT_SECURITY_DESCR_PROPERTY,
+            NCRYPT_CERTIFICATE_PROPERTY,
+            NCRYPT_PIN_PROPERTY,
+        };
+        unsigned int i;
+
+        if (!name) return NTE_INVALID_PARAMETER;
+        for (i = 0; i < sizeof(writable_properties) / sizeof(writable_properties[0]); i++)
+        {
+            if (!lstrcmpW(name, writable_properties[i])) break;
+        }
+        if (i == sizeof(writable_properties) / sizeof(writable_properties[0])) return NTE_NOT_SUPPORTED;
+    }
+#endif
     return set_object_property(object, name, input, insize);
 }
 
@@ -627,6 +669,20 @@ SECURITY_STATUS WINAPI NCryptVerifySignature(NCRYPT_KEY_HANDLE handle, void *pad
         FIXME("Symmetric keys not supported.\n");
         return NTE_NOT_SUPPORTED;
     }
+
+#ifdef __REACTOS__
+    if ((flags & NCRYPT_PAD_PKCS1_FLAG) && padding && ((BCRYPT_PKCS1_PADDING_INFO *)padding)->pszAlgId)
+    {
+        BCRYPT_ALG_HANDLE alg;
+        DWORD length = 0, size;
+
+        if (BCryptOpenAlgorithmProvider(&alg, ((BCRYPT_PKCS1_PADDING_INFO *)padding)->pszAlgId, NULL, 0))
+            return NTE_INVALID_PARAMETER;
+        BCryptGetProperty(alg, BCRYPT_HASH_LENGTH, (UCHAR *)&length, sizeof(length), &size, 0);
+        BCryptCloseAlgorithmProvider(alg, 0);
+        if (length != hash_size) return NTE_INVALID_PARAMETER;
+    }
+#endif
 
     return map_ntstatus(BCryptVerifySignature(key_object->key.bcrypt_key, padding, hash, hash_size, signature,
                                               signature_size, flags));

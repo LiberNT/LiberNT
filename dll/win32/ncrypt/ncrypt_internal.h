@@ -33,6 +33,9 @@ struct key
 {
     enum algid algid;
     BCRYPT_KEY_HANDLE bcrypt_key;
+#ifdef __REACTOS__
+    BOOL finalized;
+#endif
 };
 
 struct storage_provider
