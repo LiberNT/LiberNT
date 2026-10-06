@@ -2293,6 +2293,137 @@ cleanup:
     return bResult;
 }
 
+BOOL WINAPI
+SetupDiGetActualModelsSectionW(
+    IN PINFCONTEXT Context,
+    IN PSP_ALTPLATFORM_INFO AlternatePlatformInfo OPTIONAL,
+    OUT PWSTR InfSectionWithExt OPTIONAL,
+    IN DWORD InfSectionWithExtSize,
+    OUT PDWORD RequiredSize OPTIONAL,
+    IN PVOID Reserved)
+{
+    struct GetSectionCallbackInfo CallbackInfo;
+    WCHAR Candidate[LINE_LEN + 1], TargetOSVersion[LINE_LEN];
+    DWORD FieldCount, Length, i;
+    BOOL ret = FALSE;
+
+    TRACE("%s(%p %p %p %lu %p %p)\n", __FUNCTION__, Context, AlternatePlatformInfo,
+        InfSectionWithExt, InfSectionWithExtSize, RequiredSize, Reserved);
+
+    if (!Context || Reserved != NULL)
+        SetLastError(ERROR_INVALID_PARAMETER);
+    else if (AlternatePlatformInfo && AlternatePlatformInfo->cbSize != sizeof(SP_ALTPLATFORM_INFO))
+        SetLastError(ERROR_INVALID_USER_BUFFER);
+    else if (!SetupGetStringFieldW(Context, 1, CallbackInfo.BestSection, LINE_LEN, NULL))
+        SetLastError(ERROR_INVALID_DATA);
+    else
+    {
+        if (AlternatePlatformInfo)
+        {
+            CallbackInfo.PlatformInfo = AlternatePlatformInfo;
+            CallbackInfo.ProductType = 0;
+            CallbackInfo.SuiteMask = 0;
+        }
+        else
+        {
+            if (!InitOnceExecuteOnce(&CurrentPlatformInitOnce, InitCurrentPlatform, NULL, NULL))
+            {
+                SetLastError(ERROR_GEN_FAILURE);
+                goto done;
+            }
+            CallbackInfo.PlatformInfo = &CurrentPlatform;
+            CallbackInfo.ProductType = CurrentProductType;
+            CallbackInfo.SuiteMask = CurrentSuiteMask;
+        }
+
+        CallbackInfo.PrefixLength = strlenW(CallbackInfo.BestSection);
+        CallbackInfo.BestScore1 = ULONG_MAX;
+        CallbackInfo.BestScore2 = ULONG_MAX;
+        CallbackInfo.BestScore3 = ULONG_MAX;
+        CallbackInfo.BestScore4 = ULONG_MAX;
+        CallbackInfo.BestScore5 = ULONG_MAX;
+        CallbackInfo.BestScore6 = ULONG_MAX;
+
+        FieldCount = SetupGetFieldCount(Context);
+        for (i = 2; i <= FieldCount; i++)
+        {
+            if (!SetupGetStringFieldW(Context, i, TargetOSVersion, LINE_LEN, NULL) ||
+                CallbackInfo.PrefixLength + 1 + strlenW(TargetOSVersion) > LINE_LEN)
+            {
+                continue;
+            }
+
+            memcpy(Candidate, CallbackInfo.BestSection, CallbackInfo.PrefixLength * sizeof(WCHAR));
+            Candidate[CallbackInfo.PrefixLength] = '.';
+            strcpyW(&Candidate[CallbackInfo.PrefixLength + 1], TargetOSVersion);
+            GetSectionCallback(Candidate, &CallbackInfo);
+        }
+
+        if (CallbackInfo.BestScore1 == ULONG_MAX)
+        {
+            SetLastError(ERROR_INVALID_DATA);
+            goto done;
+        }
+
+        Length = strlenW(CallbackInfo.BestSection) + 1;
+        if (RequiredSize)
+            *RequiredSize = Length;
+
+        if (InfSectionWithExt)
+        {
+            if (InfSectionWithExtSize < Length)
+            {
+                SetLastError(ERROR_INSUFFICIENT_BUFFER);
+                goto done;
+            }
+            strcpyW(InfSectionWithExt, CallbackInfo.BestSection);
+        }
+
+        ret = TRUE;
+    }
+
+done:
+    TRACE("Returning %d\n", ret);
+    return ret;
+}
+
+BOOL WINAPI
+SetupDiGetActualModelsSectionA(
+    IN PINFCONTEXT Context,
+    IN PSP_ALTPLATFORM_INFO AlternatePlatformInfo OPTIONAL,
+    OUT PSTR InfSectionWithExt OPTIONAL,
+    IN DWORD InfSectionWithExtSize,
+    OUT PDWORD RequiredSize OPTIONAL,
+    IN PVOID Reserved)
+{
+    WCHAR InfSectionWithExtW[LINE_LEN + 1];
+    DWORD Length;
+    BOOL ret;
+
+    TRACE("%s()\n", __FUNCTION__);
+
+    ret = SetupDiGetActualModelsSectionW(Context, AlternatePlatformInfo, InfSectionWithExtW,
+                                         ARRAY_SIZE(InfSectionWithExtW), NULL, Reserved);
+    if (!ret)
+        return FALSE;
+
+    Length = WideCharToMultiByte(CP_ACP, 0, InfSectionWithExtW, -1, NULL, 0, NULL, NULL);
+    if (RequiredSize)
+        *RequiredSize = Length;
+
+    if (InfSectionWithExt)
+    {
+        if (InfSectionWithExtSize < Length)
+        {
+            SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            return FALSE;
+        }
+        WideCharToMultiByte(CP_ACP, 0, InfSectionWithExtW, -1, InfSectionWithExt, InfSectionWithExtSize, NULL, NULL);
+    }
+
+    return TRUE;
+}
+
 /***********************************************************************
  *		SetupDiGetClassDescriptionA  (SETUPAPI.@)
  */

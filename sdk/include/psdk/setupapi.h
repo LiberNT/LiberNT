@@ -1440,6 +1440,28 @@ WINSETUPAPI BOOL WINAPI SetupDiEnumDriverInfoW(_In_ HDEVINFO, _In_opt_ PSP_DEVIN
 WINSETUPAPI
 BOOL
 WINAPI
+SetupDiGetActualModelsSectionA(
+  _In_ PINFCONTEXT Context,
+  _In_opt_ PSP_ALTPLATFORM_INFO AlternatePlatformInfo,
+  _Out_writes_opt_(InfSectionWithExtSize) PSTR InfSectionWithExt,
+  _In_ DWORD InfSectionWithExtSize,
+  _Out_opt_ PDWORD RequiredSize,
+  _Reserved_ PVOID Reserved);
+
+WINSETUPAPI
+BOOL
+WINAPI
+SetupDiGetActualModelsSectionW(
+  _In_ PINFCONTEXT Context,
+  _In_opt_ PSP_ALTPLATFORM_INFO AlternatePlatformInfo,
+  _Out_writes_opt_(InfSectionWithExtSize) PWSTR InfSectionWithExt,
+  _In_ DWORD InfSectionWithExtSize,
+  _Out_opt_ PDWORD RequiredSize,
+  _Reserved_ PVOID Reserved);
+
+WINSETUPAPI
+BOOL
+WINAPI
 SetupDiGetActualSectionToInstallA(
   _In_ HINF InfHandle,
   _In_ PCSTR InfSectionName,
@@ -2554,6 +2576,7 @@ WINSETUPAPI PSTR WINAPI UnicodeToMultiByte(PCWSTR lpUnicodeStr, UINT uCodePage);
 #define SetupDiCreateInterfaceDevice	SetupDiCreateDeviceInterfaceW
 #define SetupDiCreateDevRegKey	SetupDiCreateDevRegKeyW
 #define SetupDiEnumDriverInfo	SetupDiEnumDriverInfoW
+#define SetupDiGetActualModelsSection	SetupDiGetActualModelsSectionW
 #define SetupDiGetActualSectionToInstall	SetupDiGetActualSectionToInstallW
 #define SetupDiGetActualSectionToInstallEx	SetupDiGetActualSectionToInstallExW
 #define SetupDiGetClassDescriptionEx	SetupDiGetClassDescriptionExW
@@ -2680,6 +2703,7 @@ WINSETUPAPI PSTR WINAPI UnicodeToMultiByte(PCWSTR lpUnicodeStr, UINT uCodePage);
 #define SetupDiCreateDevRegKey	SetupDiCreateDevRegKeyA
 #define SetupDiDeleteInterfaceDeviceData	SetupDiDeleteDeviceInterfaceData
 #define SetupDiEnumDriverInfo	SetupDiEnumDriverInfoA
+#define SetupDiGetActualModelsSection	SetupDiGetActualModelsSectionA
 #define SetupDiGetActualSectionToInstall	SetupDiGetActualSectionToInstallA
 #define SetupDiGetActualSectionToInstallEx	SetupDiGetActualSectionToInstallExA
 #define SetupDiGetClassDescription	SetupDiGetClassDescriptionA
