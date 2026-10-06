@@ -3628,12 +3628,9 @@ void Tick(void)
 
             AccumHistory(*p, cpuDelta);
 
-            if (p->pid != 0)
-            {
-                g.procCount++;
-                g.threadCount += p->threads;
-                g.handleCount += p->handles;
-            }
+            g.procCount++;
+            g.threadCount += p->threads;
+            g.handleCount += p->handles;
 
             if (!spi->NextEntryOffset) break;
             ptr += spi->NextEntryOffset;
