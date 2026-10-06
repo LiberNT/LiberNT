@@ -8241,6 +8241,17 @@ ITypeLib2_fnIsName_exit:
  * to quickly verify that a name exists in a type library.
  *
  */
+#ifdef __REACTOS__
+static BOOL TLB_name_matches(OLECHAR *name, const TLBString *str)
+{
+    const WCHAR *stored = TLB_get_bstr(str);
+
+    if (!stored || lstrcmpiW(name, stored)) return FALSE;
+    if (wcslen(stored) == wcslen(name)) wcscpy(name, stored);
+    return TRUE;
+}
+
+#endif
 static HRESULT WINAPI ITypeLib2_fnFindName(
 	ITypeLib2 *iface,
 	LPOLESTR name,
@@ -8252,9 +8263,7 @@ static HRESULT WINAPI ITypeLib2_fnFindName(
     ITypeLibImpl *This = impl_from_ITypeLib2(iface);
     int tic;
     UINT count = 0;
-#ifdef __REACTOS__
-    SIZE_T len;
-#else
+#ifndef __REACTOS__
     UINT len;
 #endif
 
@@ -8267,9 +8276,7 @@ static HRESULT WINAPI ITypeLib2_fnFindName(
 #endif
         return E_INVALIDARG;
 
-#ifdef __REACTOS__
-    len = (wcslen(name) + 1) * sizeof(WCHAR);
-#else
+#ifndef __REACTOS__
     len = (lstrlenW(name) + 1)*sizeof(WCHAR);
 #endif
     for(tic = 0; count < *found && tic < This->TypeInfoCount; ++tic) {
@@ -8277,7 +8284,11 @@ static HRESULT WINAPI ITypeLib2_fnFindName(
         TLBVarDesc *var;
         UINT fdc;
 
+#ifdef __REACTOS__
+        if (TLB_name_matches(name, pTInfo->Name)) {
+#else
         if(!TLB_str_memcmp(name, pTInfo->Name, len)) {
+#endif
             memid[count] = MEMBERID_NIL;
             goto ITypeLib2_fnFindName_exit;
         }
@@ -8285,7 +8296,11 @@ static HRESULT WINAPI ITypeLib2_fnFindName(
         for(fdc = 0; fdc < pTInfo->typeattr.cFuncs; ++fdc) {
             TLBFuncDesc *func = &pTInfo->funcdescs[fdc];
 
+#ifdef __REACTOS__
+            if (TLB_name_matches(name, func->Name)) {
+#else
             if(!TLB_str_memcmp(name, func->Name, len)) {
+#endif
                 memid[count] = func->funcdesc.memid;
                 goto ITypeLib2_fnFindName_exit;
             }
