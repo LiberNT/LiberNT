@@ -180,6 +180,13 @@ int sqliteGetToken(const WCHAR *z, int *tokenType, int *skip){
       return i;
     case '-':
       if( z[1]==0 ) return -1;
+#ifdef __REACTOS__
+      if( !isDigit(z[1]) && isIdChar[z[1]] ){
+        for(i=1; isIdChar[z[i]]; i++){}
+        *tokenType = TK_ID;
+        return i;
+      }
+#endif
       *tokenType = TK_MINUS;
       return 1;
     case '(':
