@@ -215,10 +215,11 @@ RtlFlsFree(
 
         if (FlsData->FlsDataChunks[ChunkIndex] && FlsData->FlsDataChunks[ChunkIndex][IndexInChunk + 1])
         {
-            if (Callback != RTLP_FLS_NO_CALLBACK)
-                RtlpCallFlsCallback(Callback, FlsData->FlsDataChunks[ChunkIndex][IndexInChunk + 1]);
+            PVOID Data = FlsData->FlsDataChunks[ChunkIndex][IndexInChunk + 1];
 
             FlsData->FlsDataChunks[ChunkIndex][IndexInChunk + 1] = NULL;
+            if (Callback != RTLP_FLS_NO_CALLBACK)
+                RtlpCallFlsCallback(Callback, Data);
         }
     }
 
