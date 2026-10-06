@@ -1274,13 +1274,15 @@ static UINT format_key( struct format *format, enum format_pass pass, WCHAR *key
     }
     else if (key[0] == '\\')
     {
-        if (len > 1) return buffer_append( out, key + 1, 1 );
-        return ERROR_SUCCESS;
+        if (len == 1) return ERROR_SUCCESS;
+        *result = FORMAT_RESULT_FOUND;
+        return buffer_append( out, key + 1, 1 );
     }
     else if (key[0] == '~')
     {
-        if (len == 1) return buffer_append( out, L"", 1 );
-        return ERROR_SUCCESS;
+        if (len != 1) return ERROR_SUCCESS;
+        *result = FORMAT_RESULT_FOUND;
+        return buffer_append( out, L"", 1 );
     }
     else if (key[0] == '%' || key[0] == '#' || key[0] == '!' || key[0] == '$')
     {
@@ -1298,6 +1300,7 @@ static UINT format_key( struct format *format, enum format_pass pass, WCHAR *key
         case '$':
             value = deformat_component( format, &str, &value_len ); break;
         }
+        *result = value ? FORMAT_RESULT_FOUND : FORMAT_RESULT_NULL;
     }
     else
     {
@@ -1367,6 +1370,7 @@ static UINT format_pass( struct format *format, enum format_pass pass, const WCH
 
         if (end - ptr > 1 && ptr[1] == '{')
         {
+            if (pass == FORMAT_PASS_PROPERTIES) break;
             for (close = ptr + 2; end - close > 1; close++)
                 if (close[0] == '}' && close[1] == '}') break;
             if (end - close <= 1) break;
