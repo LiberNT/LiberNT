@@ -123,6 +123,11 @@ KiFreezeWaitForThaw(
             }
         }
 
+        for (ULONG Source = 0; Source < KeNumberProcessors; Source++)
+        {
+            MiAmd64ProcessTlbRequest(Source);
+        }
+
         YieldProcessor();
         KeMemoryBarrier();
     }
