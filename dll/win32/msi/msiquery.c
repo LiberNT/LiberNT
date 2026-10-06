@@ -813,6 +813,9 @@ MSIDBERROR WINAPI MsiViewGetErrorW( MSIHANDLE handle, WCHAR *buffer, DWORD *bufl
     if (msi_strncpyW(column, -1, buffer, buflen) == ERROR_MORE_DATA)
         r = MSIDBERROR_MOREDATA;
 
+#ifdef __REACTOS__
+    if (buffer) query->view->error = MSIDBERROR_NOERROR;
+#endif
     msiobj_release( &query->hdr );
     return r;
 }
@@ -864,6 +867,9 @@ MSIDBERROR WINAPI MsiViewGetErrorA( MSIHANDLE handle, char *buffer, DWORD *bufle
     if (msi_strncpyWtoA(column, -1, buffer, buflen, FALSE) == ERROR_MORE_DATA)
         r = MSIDBERROR_MOREDATA;
 
+#ifdef __REACTOS__
+    if (buffer) query->view->error = MSIDBERROR_NOERROR;
+#endif
     msiobj_release( &query->hdr );
     return r;
 }
@@ -1240,6 +1246,14 @@ UINT __cdecl s_remote_ViewGetColumnInfo(MSIHANDLE view, MSICOLINFO info, struct 
 
 MSIDBERROR __cdecl s_remote_ViewGetError(MSIHANDLE view, LPWSTR *column)
 {
+#ifdef __REACTOS__
+    DWORD size = 0;
+
+    MsiViewGetErrorW(view, NULL, &size);
+    if (!(*column = midl_user_allocate(++size * sizeof(WCHAR))))
+        return MSIDBERROR_FUNCTIONERROR;
+    return MsiViewGetErrorW(view, *column, &size);
+#else
     WCHAR empty[1];
     DWORD size = 1;
     UINT r;
@@ -1252,6 +1266,7 @@ MSIDBERROR __cdecl s_remote_ViewGetError(MSIHANDLE view, LPWSTR *column)
         r = MsiViewGetErrorW(view, *column, &size);
     }
     return r;
+#endif
 }
 
 UINT __cdecl s_remote_ViewModify(MSIHANDLE view, MSIMODIFY mode,
