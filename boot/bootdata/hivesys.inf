@@ -1690,12 +1690,13 @@ HKLM,"SYSTEM\CurrentControlSet\Services\Browser\Parameters","ServiceDll",0x00020
 HKLM,"SYSTEM\CurrentControlSet\Services\EventLog",,0x00000010
 HKLM,"SYSTEM\CurrentControlSet\Services\EventLog","DisplayName",0x00000000,%EVENTLOG_SERVICE%
 HKLM,"SYSTEM\CurrentControlSet\Services\EventLog","Description",0x00000000,%EVENTLOG_SERVICE_DESCRIPTION%
-HKLM,"SYSTEM\CurrentControlSet\Services\EventLog","ErrorControl",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\EventLog","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\EventLog","Group",0x00000000,"Event Log"
-HKLM,"SYSTEM\CurrentControlSet\Services\EventLog","ImagePath",0x00020000,"%SystemRoot%\system32\eventlog.exe"
+HKLM,"SYSTEM\CurrentControlSet\Services\EventLog","ImagePath",0x00020000,"%SystemRoot%\system32\svchost.exe -k LocalServiceNetworkRestricted -p"
 HKLM,"SYSTEM\CurrentControlSet\Services\EventLog","ObjectName",0x00000000,"LocalSystem"
 HKLM,"SYSTEM\CurrentControlSet\Services\EventLog","Start",0x00010001,0x00000002
-HKLM,"SYSTEM\CurrentControlSet\Services\EventLog","Type",0x00010001,0x00000010
+HKLM,"SYSTEM\CurrentControlSet\Services\EventLog","Type",0x00010001,0x00000020
+HKLM,"SYSTEM\CurrentControlSet\Services\EventLog\Parameters","ServiceDll",0x00020000,"%SystemRoot%\system32\wevtsvc.dll"
 
 HKLM,"SYSTEM\CurrentControlSet\Services\EventLog\Application",,0x00000010
 HKLM,"SYSTEM\CurrentControlSet\Services\EventLog\Application","File",0x00020000,"%SystemRoot%\system32\config\AppEvent.Evt"
@@ -2406,7 +2407,7 @@ BROWSER_SERVICE_DESCRIPTION="Maintains an updated list of computers on the netwo
 DCOMLAUNCH_SERVICE="DcomLaunch service"
 DCOMLAUNCH_SERVICE_DESCRIPTION="DcomLaunch service stub."
 
-EVENTLOG_SERVICE="Event Logger"
+EVENTLOG_SERVICE="Windows Event Log"
 EVENTLOG_SERVICE_DESCRIPTION="Logs events or messages sent by the operating system in a database accessible via the event log viewer."
 
 MSISERVER_SERVICE="LiberNT Installer"
