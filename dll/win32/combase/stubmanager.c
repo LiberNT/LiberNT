@@ -89,9 +89,17 @@ struct ifstub * stub_manager_new_ifstub(struct stub_manager *m, IRpcStubBuffer *
         return NULL;
     }
 
+#ifdef __REACTOS__
+    if (IsEqualIID(iid, &IID_IUnknown))
+        IUnknown_Release(stub->iface);
+#endif
+
     hr = rpc_create_serverchannel(dest_context, dest_context_data, &stub->chan);
     if (hr != S_OK)
     {
+#ifdef __REACTOS__
+        if (!IsEqualIID(iid, &IID_IUnknown))
+#endif
         IUnknown_Release(stub->iface);
         free(stub);
         return NULL;
@@ -131,6 +139,9 @@ static void stub_manager_delete_ifstub(struct stub_manager *m, struct ifstub *if
         rpc_unregister_interface(&ifstub->iid, TRUE);
 
     if (ifstub->stubbuffer) IRpcStubBuffer_Release(ifstub->stubbuffer);
+#ifdef __REACTOS__
+    if (!IsEqualIID(&ifstub->iid, &IID_IUnknown))
+#endif
     IUnknown_Release(ifstub->iface);
     IRpcChannelBuffer_Release(ifstub->chan);
 
