@@ -1939,6 +1939,23 @@ UINT WINAPI MsiEnumComponentCostsA( MSIHANDLE handle, const char *component, DWO
     if (!drive || !buflen) return ERROR_INVALID_PARAMETER;
     if (component && !(componentW = strdupAtoW( component ))) return ERROR_OUTOFMEMORY;
 
+#ifdef __REACTOS__
+    {
+        MSIPACKAGE *package = msihandle2msiinfo( handle, MSIHANDLETYPE_PACKAGE );
+
+        if (package) msiobj_release( &package->hdr );
+        else if (msi_get_remote( handle ))
+        {
+            WCHAR buffer[3];
+
+            len = ARRAY_SIZE(buffer);
+            r = MsiEnumComponentCostsW( handle, componentW, index, state, buffer, &len, cost, temp );
+            if (!r) r = msi_strncpyWtoA( buffer, -1, drive, buflen, TRUE );
+            free( componentW );
+            return r;
+        }
+    }
+#endif
     len = *buflen;
     if (!(driveW = malloc( len * sizeof(WCHAR) )))
     {
