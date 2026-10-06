@@ -2409,8 +2409,14 @@ static HRESULT PropertyStorage_WritePropertyToStream(PropertyStorage_impl *This,
         *sectionOffset += bytesWritten;
         if (bytesWritten % sizeof(DWORD))
         {
+#ifdef __REACTOS__
+            static const BYTE zeros[sizeof(DWORD)];
+#endif
             DWORD padding = sizeof(DWORD) - bytesWritten % sizeof(DWORD);
             TRACE("adding %ld bytes of padding\n", padding);
+#ifdef __REACTOS__
+            hr = IStream_Write(This->stm, zeros, padding, &count);
+#endif
             *sectionOffset += padding;
         }
     }
