@@ -1772,6 +1772,12 @@ static DWORD CALLBACK write_minidump(void *_args)
         output.Status = E_NOTIMPL;
         if (dc->cb->CallbackRoutine(dc->cb->CallbackParam, &input, &output) && output.Status == S_FALSE)
             dc->callback_io = TRUE;
+#ifdef __REACTOS__
+        memset(&input, 0, sizeof(input));
+        memset(&output, 0, sizeof(output));
+        input.CallbackType = WriteKernelMinidumpCallback;
+        dc->cb->CallbackRoutine(dc->cb->CallbackParam, &input, &output);
+#endif
     }
     if (dc->snapshot) dc->secondary_flags = dump_secondary_flags(dc);
     if (!initialize_dump_process(dc)) return FALSE;
