@@ -70,9 +70,17 @@ static LRESULT CALLBACK AtlAxWin_wndproc( HWND hWnd, UINT wMsg, WPARAM wParam, L
             if (!ptr)
                 return 1;
             GetWindowTextW( hWnd, ptr, len );
+#ifdef __REACTOS__
+            {
+                HRESULT hr = AtlAxCreateControlEx( ptr, hWnd, NULL, NULL, NULL, NULL, NULL );
+                free( ptr );
+                return FAILED( hr ) ? -1 : 0;
+            }
+#else
             AtlAxCreateControlEx( ptr, hWnd, NULL, NULL, NULL, NULL, NULL );
             free( ptr );
             return 0;
+#endif
     }
     if ( wMsg == wmAtlGetControl )
     {
@@ -88,6 +96,26 @@ static LRESULT CALLBACK AtlAxWin_wndproc( HWND hWnd, UINT wMsg, WPARAM wParam, L
     }
     return DefWindowProcW( hWnd, wMsg, wParam, lParam );
 }
+
+#ifdef __REACTOS__
+static LRESULT CALLBACK AtlAxWinLic_wndproc( HWND hWnd, UINT wMsg, WPARAM wParam, LPARAM lParam )
+{
+    if ( wMsg == WM_CREATE )
+    {
+        DWORD len = GetWindowTextLengthW( hWnd ) + 1;
+        WCHAR *ptr = malloc( len*sizeof(WCHAR) );
+        HRESULT hr;
+
+        if (!ptr)
+            return -1;
+        GetWindowTextW( hWnd, ptr, len );
+        hr = AtlAxCreateControlLic( ptr, hWnd, NULL, NULL, NULL );
+        free( ptr );
+        return FAILED( hr ) ? -1 : 0;
+    }
+    return AtlAxWin_wndproc( hWnd, wMsg, wParam, lParam );
+}
+#endif
 
 /***********************************************************************
  *           AtlAxWinInit          [atl100.@]
@@ -142,6 +170,9 @@ BOOL WINAPI AtlAxWinInit(void)
     if(_ATL_VER > _ATL_VER_30) {
         static const WCHAR AtlAxWinLicW[] = L"AtlAxWinLic" ATL_NAME_SUFFIX;
 
+#ifdef __REACTOS__
+        wcex.lpfnWndProc   = AtlAxWinLic_wndproc;
+#endif
         wcex.lpszClassName = AtlAxWinLicW;
         if ( !RegisterClassExW( &wcex ) )
             return FALSE;
@@ -903,6 +934,9 @@ static LRESULT IOCS_OnWndProc( IOCS *This, HWND hWnd, UINT uMsg, WPARAM wParam, 
     {
         case WM_DESTROY:
             IOCS_Detach( This );
+#ifdef __REACTOS__
+            IOleClientSite_Release( &This->IOleClientSite_iface );
+#endif
             break;
         case WM_SIZE:
             {
@@ -930,11 +964,35 @@ static LRESULT CALLBACK AtlHost_wndproc( HWND hWnd, UINT wMsg, WPARAM wParam, LP
 
 static HRESULT IOCS_Attach( IOCS *This, HWND hWnd, IUnknown *pUnkControl ) /* subclass hWnd */
 {
+#ifdef __REACTOS__
+    IOCS *Previous = hWnd ? (IOCS*) GetPropW( hWnd, L"__WINE_ATL_IOCS" ) : NULL;
+
+    if ( Previous )
+    {
+        IOCS_Detach( Previous );
+        IOleClientSite_Release( &Previous->IOleClientSite_iface );
+    }
+
+    This->hWnd = hWnd;
+    This->control = NULL;
+    if ( pUnkControl )
+    {
+        IUnknown_QueryInterface( pUnkControl, &IID_IOleObject, (void**)&This->control );
+        IOleObject_SetClientSite( This->control, &This->IOleClientSite_iface );
+    }
+    if ( hWnd )
+    {
+        IOleClientSite_AddRef( &This->IOleClientSite_iface );
+        SetPropW( hWnd, L"__WINE_ATL_IOCS", This );
+        This->OrigWndProc = (WNDPROC)SetWindowLongPtrW( hWnd, GWLP_WNDPROC, (ULONG_PTR) AtlHost_wndproc );
+    }
+#else
     This->hWnd = hWnd;
     IUnknown_QueryInterface( pUnkControl, &IID_IOleObject, (void**)&This->control );
     IOleObject_SetClientSite( This->control, &This->IOleClientSite_iface );
     SetPropW( hWnd, L"__WINE_ATL_IOCS", This );
     This->OrigWndProc = (WNDPROC)SetWindowLongPtrW( hWnd, GWLP_WNDPROC, (ULONG_PTR) AtlHost_wndproc );
+#endif
 
     return S_OK;
 }
@@ -943,6 +1001,13 @@ static HRESULT IOCS_Init( IOCS *This )
 {
     RECT rect;
 
+#ifdef __REACTOS__
+    if ( !This->control )
+    {
+        SetRectEmpty( &This->size );
+        return S_OK;
+    }
+#endif
     IOleObject_SetHostNames( This->control, L"AXWIN", L"AXWIN" );
 
     GetClientRect( This->hWnd, &rect );
@@ -1077,8 +1142,22 @@ HRESULT WINAPI AtlAxCreateControlLicEx(LPCOLESTR lpszName, HWND hWnd,
 
     content = get_content_type(lpszName, &controlId);
 
+#ifdef __REACTOS__
+    if (content == IsEmpty)
+    {
+        hRes = IOCS_Create( hWnd, NULL, &pContainer );
+        if ( FAILED( hRes ) )
+            return hRes;
+        if (ppUnkContainer)
+            *ppUnkContainer = pContainer;
+        else
+            IUnknown_Release( pContainer );
+        return hWnd ? S_OK : S_FALSE;
+    }
+#else
     if (content == IsEmpty)
         return S_OK;
+#endif
 
     if (content == IsUnknown)
         return CO_E_CLASSSTRING;
