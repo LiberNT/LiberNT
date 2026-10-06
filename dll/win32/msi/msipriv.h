@@ -480,6 +480,9 @@ typedef struct tagMSIPACKAGE
     unsigned char need_reboot_now : 1;
     unsigned char need_rollback : 1;
     unsigned char rpc_server_started : 1;
+#ifdef __REACTOS__
+    unsigned char property_table_held : 1;
+#endif
 } MSIPACKAGE;
 
 typedef struct tagMSIPREVIEW

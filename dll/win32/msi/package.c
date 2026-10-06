@@ -348,6 +348,19 @@ static void MSI_FreePackage( MSIOBJECTHDR *arg)
     if( package->dialog )
         msi_dialog_destroy( package->dialog );
 
+#ifdef __REACTOS__
+    if (package->property_table_held)
+    {
+        MSIQUERY *view;
+
+        if (MSI_DatabaseOpenViewW( package->db, L"ALTER TABLE `_Property` FREE", &view ) == ERROR_SUCCESS)
+        {
+            MSI_ViewExecute( view, 0 );
+            MSI_ViewClose( view );
+            msiobj_release( &view->hdr );
+        }
+    }
+#endif
     msiobj_release( &package->db->hdr );
     free_package_structures(package);
     CloseHandle( package->log_file );
@@ -378,6 +391,20 @@ static UINT create_temp_property_table(MSIPACKAGE *package)
     rc = MSI_ViewExecute(view, 0);
     MSI_ViewClose(view);
     msiobj_release(&view->hdr);
+#ifdef __REACTOS__
+    if (rc != ERROR_SUCCESS)
+    {
+        rc = MSI_DatabaseOpenViewW(package->db, L"ALTER TABLE `_Property` HOLD", &view);
+        if (rc != ERROR_SUCCESS)
+            return rc;
+
+        rc = MSI_ViewExecute(view, 0);
+        MSI_ViewClose(view);
+        msiobj_release(&view->hdr);
+    }
+    if (rc == ERROR_SUCCESS)
+        package->property_table_held = TRUE;
+#endif
     return rc;
 }
 
