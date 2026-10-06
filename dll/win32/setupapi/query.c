@@ -593,11 +593,11 @@ BOOL WINAPI SetupGetTargetPathW( HINF hinf, PINFCONTEXT context, PCWSTR section,
         else
         {
             SetLastError( ERROR_INSUFFICIENT_BUFFER );
-            if (dir != systemdir) free( dir );
+            if (dir != systemdir) HeapFree( GetProcessHeap(), 0, dir );
             return FALSE;
         }
     }
-    if (dir != systemdir) free( dir );
+    if (dir != systemdir) HeapFree( GetProcessHeap(), 0, dir );
     return TRUE;
 }
 
