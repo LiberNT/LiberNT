@@ -2819,6 +2819,7 @@ static int read_utf8(ioinfo *fdinfo, wchar_t *buf, unsigned int count)
         }
     }
 
+#ifndef __REACTOS__
     /* NOTE: this case is broken in native dll, reading
      *        sometimes fails when small buffer is passed
      */
@@ -2878,6 +2879,7 @@ static int read_utf8(ioinfo *fdinfo, wchar_t *buf, unsigned int count)
 
         return num_read*2;
     }
+#endif
 
     if(!ReadFile(hand, readbuf+pos, readbuf_size-pos, &num_read, NULL)) {
         if(pos) {
