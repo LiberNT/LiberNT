@@ -13,6 +13,8 @@
 
 #define COUNT_OF(x) (sizeof((x))/sizeof((x)[0]))
 
+static BOOLEAN UefiFirmware;
+
 typedef struct _TEST_CASE
 {
     NTSTATUS        Result;
@@ -53,6 +55,16 @@ static void Test_API(IN ULONG TestNumber,
     BOOLEAN  WasEnabled = FALSE;
     WCHAR    ValueBuffer[MAX_BUFFER_LENGTH / sizeof(WCHAR)];
     ULONG    ReturnedLength = 0;
+    NTSTATUS ExpectedResult = TestCase->Result;
+    ULONG    MinimalLength = TestCase->MinimalExpectedReturnedLength;
+    ULONG    MaximalLength = TestCase->MaximalExpectedReturnedLength;
+
+    if (UefiFirmware && TestCase->AdjustPrivileges)
+    {
+        ExpectedResult = STATUS_UNSUCCESSFUL;
+        MinimalLength = 0;
+        MaximalLength = 0;
+    }
 
     //
     // Adjust the privileges if asked for (we need to
@@ -86,23 +98,26 @@ static void Test_API(IN ULONG TestNumber,
     //
     // Now check the results.
     //
-    ok(Status == TestCase->Result,
+    ok(Status == ExpectedResult,
        "NtQuerySystemEnvironmentValue(%lu) failed : returned 0x%08lx, expected 0x%08lx\n",
        TestNumber,
        Status,
-       TestCase->Result);
+       ExpectedResult);
 
-    ok( ((TestCase->MinimalExpectedReturnedLength <= ReturnedLength) && (ReturnedLength <= TestCase->MaximalExpectedReturnedLength)),
+    ok( ((MinimalLength <= ReturnedLength) && (ReturnedLength <= MaximalLength)),
         "NtQuerySystemEnvironmentValue(%lu) failed : returned length %lu, expected between %lu and %lu\n",
         TestNumber,
         ReturnedLength,
-        TestCase->MinimalExpectedReturnedLength,
-        TestCase->MaximalExpectedReturnedLength);
+        MinimalLength,
+        MaximalLength);
 }
 
 START_TEST(NtQuerySystemEnvironmentValue)
 {
     ULONG i;
+    FIRMWARE_TYPE FirmwareType;
+
+    UefiFirmware = GetFirmwareType(&FirmwareType) && FirmwareType == FirmwareTypeUefi;
 
     for (i = 0 ; i < COUNT_OF(TestCases) ; ++i)
     {

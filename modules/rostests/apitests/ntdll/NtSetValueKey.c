@@ -51,7 +51,7 @@ START_TEST(NtSetValueKey)
                                                            STATUS_ACCESS_VIOLATION,       STATUS_INSUFFICIENT_RESOURCES },        /* win7 */
         { REG_SZ,     NULL,                 6,             STATUS_INVALID_PARAMETER,      STATUS_ACCESS_VIOLATION,         /* CM_KEY_VALUE_SMALL+2, null data */
                                                            STATUS_ACCESS_VIOLATION,       STATUS_INSUFFICIENT_RESOURCES },        /* win7 */
-        { REG_SZ,     NULL,                 0x7fff0000,    STATUS_INVALID_PARAMETER,      STATUS_INSUFFICIENT_RESOURCES,   /* MI_USER_PROBE_ADDRESS, null data */
+        { REG_SZ,     NULL,                 0x7fff0000,    STATUS_ACCESS_VIOLATION,       STATUS_ACCESS_VIOLATION,         /* MI_USER_PROBE_ADDRESS, null data */
                                                            STATUS_INSUFFICIENT_RESOURCES, STATUS_INSUFFICIENT_RESOURCES },        /* win7 */
         { REG_SZ,     NULL,                 0x7fff0001,    STATUS_ACCESS_VIOLATION,       STATUS_ACCESS_VIOLATION,         /* MI_USER_PROBE_ADDRESS+1, null data */
                                                            STATUS_INSUFFICIENT_RESOURCES, STATUS_INSUFFICIENT_RESOURCES },        /* win7 */

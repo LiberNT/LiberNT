@@ -13,6 +13,7 @@ void
 Test_ProcBasePriorityClass(void)
 {
     NTSTATUS Status;
+    BOOLEAN WasEnabled;
 
     /*
      * Assign a priority of HIGH_PRIORITY (see pstypes.h).
@@ -72,10 +73,12 @@ Test_ProcBasePriorityClass(void)
     ok_hex(Status, STATUS_DATATYPE_MISALIGNMENT);
 
     /* Set the base priority but we have lack privileges to do so */
+    RtlAdjustPrivilege(SE_INC_BASE_PRIORITY_PRIVILEGE, FALSE, FALSE, &WasEnabled);
     Status = NtSetInformationProcess(NtCurrentProcess(),
                                      ProcessBasePriority,
                                      &BasePriority,
                                      sizeof(KPRIORITY));
+    RtlAdjustPrivilege(SE_INC_BASE_PRIORITY_PRIVILEGE, WasEnabled, FALSE, &WasEnabled);
     ok_hex(Status, STATUS_PRIVILEGE_NOT_HELD);
 
     /*
@@ -221,6 +224,7 @@ void
 Test_ProcessWx86InformationClass(void)
 {
     NTSTATUS Status;
+    BOOLEAN WasEnabled;
     ULONG VdmPower = 1;
 
     /* Everything is NULL */
@@ -259,10 +263,12 @@ Test_ProcessWx86InformationClass(void)
     ok_hex(Status, STATUS_DATATYPE_MISALIGNMENT);
 
     /* We do not have privileges to set the VDM power */
+    RtlAdjustPrivilege(SE_TCB_PRIVILEGE, FALSE, FALSE, &WasEnabled);
     Status = NtSetInformationProcess(NtCurrentProcess(),
                                      ProcessWx86Information,
                                      &VdmPower,
                                      sizeof(VdmPower));
+    RtlAdjustPrivilege(SE_TCB_PRIVILEGE, WasEnabled, FALSE, &WasEnabled);
     ok_hex(Status, STATUS_PRIVILEGE_NOT_HELD);
 }
 

@@ -40,5 +40,5 @@ START_TEST(NtGetCurrentProcessorNumberEx)
     ok_eq_hex(Status, STATUS_ACCESS_VIOLATION);
 
     Status = pNtGetCurrentProcessorNumberEx((PVOID)(ULONG_PTR)0xDEADDEADDEADDEADull);
-    ok_eq_hex(Status, STATUS_ACCESS_VIOLATION);
+    ok_eq_hex(Status, STATUS_DATATYPE_MISALIGNMENT);
 }

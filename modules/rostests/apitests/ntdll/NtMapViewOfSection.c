@@ -1510,7 +1510,7 @@ Test_SectionContents(BOOL Relocate)
                                     ViewShare,
                                     0,
                                     PAGE_READWRITE);
-        if (Relocate)
+        if (Relocate && GetNTVersion() < _WIN32_WINNT_WIN10)
             ok_ntstatus(Status, STATUS_IMAGE_NOT_AT_BASE);
         else
             ok_ntstatus(Status, STATUS_SUCCESS);

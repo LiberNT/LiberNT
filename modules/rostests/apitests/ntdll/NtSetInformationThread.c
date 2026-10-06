@@ -13,6 +13,7 @@ void
 Test_ThreadPriorityClass(void)
 {
     NTSTATUS Status;
+    BOOLEAN WasEnabled;
     KPRIORITY *Priority;
 
     Priority = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(KPRIORITY));
@@ -86,10 +87,12 @@ Test_ThreadPriorityClass(void)
      * we don't have privileges to do so.
     */
     *Priority = LOW_REALTIME_PRIORITY;
+    RtlAdjustPrivilege(SE_INC_BASE_PRIORITY_PRIVILEGE, FALSE, FALSE, &WasEnabled);
     Status = NtSetInformationThread(GetCurrentThread(),
                                     ThreadPriority,
                                     Priority,
                                     sizeof(KPRIORITY));
+    RtlAdjustPrivilege(SE_INC_BASE_PRIORITY_PRIVILEGE, WasEnabled, FALSE, &WasEnabled);
     ok_hex(Status, STATUS_PRIVILEGE_NOT_HELD);
 
     HeapFree(GetProcessHeap(), 0, Priority);

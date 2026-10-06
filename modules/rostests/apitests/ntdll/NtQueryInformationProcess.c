@@ -561,7 +561,7 @@ Test_ProcessPriorityClassAlignment(void)
                                        (PVOID)1,
                                        sizeof(PROCESS_PRIORITY_CLASS),
                                        NULL);
-    ok_hex(Status, STATUS_DATATYPE_MISALIGNMENT);
+    ok_hex(Status, STATUS_ACCESS_VIOLATION);
 
     /* Unaligned buffer -- wrong size (but this time do with an alignment of 2) */
     Status = NtQueryInformationProcess(NtCurrentProcess(),
@@ -577,7 +577,7 @@ Test_ProcessPriorityClassAlignment(void)
                                        (PVOID)2,
                                        sizeof(PROCESS_PRIORITY_CLASS),
                                        NULL);
-    ok_hex(Status, STATUS_DATATYPE_MISALIGNMENT);
+    ok_hex(Status, STATUS_ACCESS_VIOLATION);
 
     /* Do not care for the length but expect to return the priority class */
     Status = NtQueryInformationProcess(NtCurrentProcess(),

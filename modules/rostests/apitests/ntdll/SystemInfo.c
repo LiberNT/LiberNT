@@ -16,6 +16,7 @@ void
 Test_Flags(void)
 {
     NTSTATUS Status;
+    BOOLEAN WasEnabled;
     ULONG ReturnLength;
     ULONG Flags;
     ULONG Buffer[2];
@@ -134,7 +135,9 @@ Test_Flags(void)
     Status = NtSetSystemInformation(SystemFlagsInformation, NULL, sizeof(SYSTEM_FLAGS_INFORMATION) - 1);
     ok(Status == STATUS_INFO_LENGTH_MISMATCH, "NtSetSystemInformation returned %lx\n", Status);
 
+    RtlAdjustPrivilege(SE_DEBUG_PRIVILEGE, FALSE, FALSE, &WasEnabled);
     Status = NtSetSystemInformation(SystemFlagsInformation, NULL, sizeof(SYSTEM_FLAGS_INFORMATION));
+    RtlAdjustPrivilege(SE_DEBUG_PRIVILEGE, WasEnabled, FALSE, &WasEnabled);
     ok(Status == (IsWindows7OrGreater() ? STATUS_ACCESS_DENIED : STATUS_ACCESS_VIOLATION), "NtSetSystemInformation returned %lx\n", Status);
 
     Status = NtSetSystemInformation(SystemFlagsInformation, (PVOID)2, sizeof(SYSTEM_FLAGS_INFORMATION));

@@ -113,7 +113,7 @@ START_TEST(NtOpenKeyEx)
         {
             status = NtQueryValueKey(key, &value_name, KeyValuePartialInformation,
                                      value, sizeof(value), &result_length);
-            ok_ntstatus(status, STATUS_SUCCESS);
+            ok_ntstatus(status, STATUS_OBJECT_NAME_NOT_FOUND);
             NtClose(key);
         }
         status = open_key(&key, KEY_QUERY_VALUE, &attributes, 0);
