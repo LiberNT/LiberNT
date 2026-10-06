@@ -377,6 +377,7 @@ DxgkpRetainAndStopBasicDisplayFallback(
     _Out_ PBOOLEAN ReleasedByDriver)
 {
     BOOLEAN Armed;
+    BOOLEAN OwnerInUse;
     NTSTATUS RestoreStatus;
     NTSTATUS Status;
 
@@ -407,6 +408,19 @@ DxgkpRetainAndStopBasicDisplayFallback(
                      Owner,
                      Claimant);
         return STATUS_DELETE_PENDING;
+    }
+
+    (VOID)KeWaitForSingleObject(&Owner->AdapterMutex, Executive, KernelMode, FALSE, NULL);
+    OwnerInUse = !IsListEmpty(&Owner->DeviceListHead);
+    KeReleaseMutex(&Owner->AdapterMutex, FALSE);
+    if (OwnerInUse)
+    {
+        DXGKRNL_WARN("POSTDISPLAY_HANDOFF: BasicDisplay adapter %p has client "
+                     "devices; claimant %p cannot take ownership\n",
+                     Owner,
+                     Claimant);
+        ExReleaseRundownProtection(&Owner->RemoveRundownRef);
+        return STATUS_DEVICE_BUSY;
     }
 
     Status = DxgkpStopPostDisplayOwner(Owner,
