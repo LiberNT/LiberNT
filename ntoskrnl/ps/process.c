@@ -2490,6 +2490,9 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     HANDLE hProcess = NULL, hThread = NULL;
     HANDLE hSection = NULL, hFile = NULL;
+    HANDLE hCallerFile = NULL;
+    PFILE_OBJECT ImageFileObject;
+    OBJECT_HANDLE_INFORMATION ImageFileInformation;
     HANDLE ParentProcess = NtCurrentProcess();
     HANDLE DebugPort = NULL;
     HANDLE ExceptionPort = NULL;
@@ -2927,7 +2930,8 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
      */
     InitializeObjectAttributes(&LocalFileObjectAttributes,
                                &CapturedImageName,
-                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE |
+                               (PreviousMode != KernelMode ? OBJ_FORCE_ACCESS_CHECK : 0),
                                NULL,
                                NULL);
     Status = ZwOpenFile(&hFile,
@@ -2936,6 +2940,40 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
                         &IoStatusBlock,
                         FILE_SHARE_DELETE | FILE_SHARE_READ,
                         FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    if (Status == STATUS_ACCESS_DENIED)
+    {
+        Status = ZwOpenFile(&hFile,
+                            SYNCHRONIZE | FILE_EXECUTE,
+                            &LocalFileObjectAttributes,
+                            &IoStatusBlock,
+                            FILE_SHARE_DELETE | FILE_SHARE_READ,
+                            FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    }
+    if (NT_SUCCESS(Status))
+    {
+        hCallerFile = hFile;
+        if (PreviousMode != KernelMode)
+        {
+            hCallerFile = NULL;
+            Status = ObReferenceObjectByHandle(hFile,
+                                               0,
+                                               IoFileObjectType,
+                                               KernelMode,
+                                               (PVOID*)&ImageFileObject,
+                                               &ImageFileInformation);
+            if (NT_SUCCESS(Status))
+            {
+                Status = ObOpenObjectByPointer(ImageFileObject,
+                                               0,
+                                               NULL,
+                                               ImageFileInformation.GrantedAccess,
+                                               IoFileObjectType,
+                                               KernelMode,
+                                               &hCallerFile);
+                ObDereferenceObject(ImageFileObject);
+            }
+        }
+    }
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtCreateUserProcess: Failed to open image '%wZ', Status=0x%lx\n",
@@ -2974,8 +3012,9 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
         _SEH2_TRY
         {
             CreateInfo->State = PsCreateFailOnSectionCreate;
-            CreateInfo->FailSection.FileHandle = hFile;
-            hFile = NULL; /* Caller now owns this handle */
+            CreateInfo->FailSection.FileHandle = hCallerFile;
+            if (hCallerFile == hFile) hFile = NULL; /* Caller now owns this handle */
+            hCallerFile = NULL;
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -3486,7 +3525,7 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
         /* Fill the CreateInfo success output */
         CreateInfo->State = PsCreateSuccess;
         CreateInfo->SuccessState.OutputFlags = 0;
-        CreateInfo->SuccessState.FileHandle = hFile;
+        CreateInfo->SuccessState.FileHandle = hCallerFile;
         CreateInfo->SuccessState.SectionHandle = hSection;
         CreateInfo->SuccessState.UserProcessParametersNative = (ULONGLONG)(ULONG_PTR)NativeProcessParameters;
 #ifdef WOW64_SUPPORTED
@@ -3531,7 +3570,8 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
     /* On success, the caller owns the file and section handles */
     if (NT_SUCCESS(Status))
     {
-        hFile = NULL;
+        if (hCallerFile == hFile) hFile = NULL;
+        hCallerFile = NULL;
         hSection = NULL;
         hProcess = NULL;
         hThread = NULL;
@@ -3551,6 +3591,7 @@ Cleanup:
     if (hThread) ZwClose(hThread);
     if (hProcess) ZwClose(hProcess);
     if (hSection) ZwClose(hSection);
+    if (hCallerFile && hCallerFile != hFile) ZwClose(hCallerFile);
     if (hFile) ZwClose(hFile);
 
     return Status;
