@@ -505,7 +505,7 @@ DATA_SEG("INITDATA") CM_SYSTEM_CONTROL_VECTOR CmControlVector[] =
         L"Session Manager\\Executive",
         L"PriorityQuantumMatrix",
         &DummyData,
-        &DummyData,
+        NULL,
         NULL
     },
     {
@@ -673,7 +673,7 @@ DATA_SEG("INITDATA") CM_SYSTEM_CONTROL_VECTOR CmControlVector[] =
         L"\0\0",
         L"RegistrySizeLimit",
         &DummyData,
-        &DummyData,
+        NULL,
         &DummyData
     },
     {
@@ -736,7 +736,7 @@ DATA_SEG("INITDATA") CM_SYSTEM_CONTROL_VECTOR CmControlVector[] =
         L"Windows",
         L"ShutdownTime",
         &DummyData,
-        &DummyData,
+        NULL,
         NULL
     },
     {
