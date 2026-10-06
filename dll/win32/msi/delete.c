@@ -121,7 +121,12 @@ static UINT DELETE_get_dimensions( struct tagMSIVIEW *view, UINT *rows, UINT *co
     if( !dv->table )
          return ERROR_FUNCTION_FAILED;
 
+#ifdef __REACTOS__
+    if( rows )
+        *rows = 0;
+#else
     *rows = 0;
+#endif
 
     return dv->table->ops->get_dimensions( dv->table, NULL, cols );
 }
