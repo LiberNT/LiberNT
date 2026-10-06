@@ -2394,7 +2394,13 @@ RCreateServiceW(
         return ERROR_INVALID_PARAMETER;
     }
 
-    if ((dwServiceType == (SERVICE_WIN32_OWN_PROCESS | SERVICE_INTERACTIVE_PROCESS)) &&
+    if ((dwServiceType & SERVICE_WIN32) && lpServiceStartName &&
+        (_wcsicmp(lpServiceStartName, L".\\LocalSystem") == 0))
+    {
+        lpServiceStartName = L"LocalSystem";
+    }
+
+    if ((dwServiceType & SERVICE_INTERACTIVE_PROCESS) &&
         (lpServiceStartName))
     {
         /* We allow LocalSystem to run interactive. */
@@ -2427,7 +2433,8 @@ RCreateServiceW(
     }
 
     if (lpDisplayName != NULL &&
-        ScmGetServiceEntryByDisplayName(lpDisplayName) != NULL)
+        (ScmGetServiceEntryByDisplayName(lpDisplayName) != NULL ||
+         ScmGetServiceEntryByName(lpDisplayName) != NULL))
     {
         /* Unlock the service database */
         ScmUnlockDatabase();
