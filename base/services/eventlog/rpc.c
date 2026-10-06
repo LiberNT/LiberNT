@@ -136,6 +136,13 @@ ElfCreateEventLogHandle(PLOGHANDLE* LogHandle,
             }
         }
 
+        if (pLogHandle->LogFile == NULL)
+        {
+            pEventSource = GetEventSourceByName(LogName->Buffer);
+            if (pEventSource)
+                pLogHandle->LogFile = pEventSource->LogFile;
+        }
+
         /* Use the application log if the desired log does not exist */
         if (pLogHandle->LogFile == NULL)
         {

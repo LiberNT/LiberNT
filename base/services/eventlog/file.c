@@ -794,7 +794,7 @@ LogfReadEvents(PLOGFILE LogFile,
         {
             if (BufferUsage == 0)
             {
-                Status = STATUS_END_OF_FILE;
+                Status = (Flags & EVENTLOG_SEEK_READ) ? STATUS_INVALID_PARAMETER : STATUS_END_OF_FILE;
                 goto Quit;
             }
             else
