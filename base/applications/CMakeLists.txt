@@ -30,6 +30,7 @@ add_subdirectory(msconfig)
 #add_subdirectory(msconfig_new) #excluded from the build because it is significantly more buggy than the old msconfig. see CORE-18067 for examples
 add_subdirectory(mscutils)
 add_subdirectory(mshta)
+add_subdirectory(msinfo32)
 add_subdirectory(mspaint)
 add_subdirectory(mstsc)
 add_subdirectory(network)

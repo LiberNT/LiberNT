@@ -1,0 +1,54 @@
+/*
+ * PROJECT:     LiberNT System Information
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     English (United States) resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+IDM_MAIN MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "E&xit", IDM_EXIT
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Refresh\tF5", IDM_REFRESH
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About System Information", IDM_ABOUT
+    END
+END
+
+STRINGTABLE
+BEGIN
+    IDS_TITLE "System Information"
+    IDS_COLUMN_ITEM "Item"
+    IDS_COLUMN_VALUE "Value"
+    IDS_OS_NAME "OS Name"
+    IDS_VERSION "Version"
+    IDS_VERSION_FORMAT "%lu.%lu.%lu Build %lu"
+    IDS_SYSTEM_NAME "System Name"
+    IDS_MANUFACTURER "System Manufacturer"
+    IDS_MODEL "System Model"
+    IDS_SYSTEM_TYPE "System Type"
+    IDS_TYPE_X86 "x86-based PC"
+    IDS_TYPE_X64 "x64-based PC"
+    IDS_TYPE_ARM64 "ARM64-based PC"
+    IDS_PROCESSOR "Processor"
+    IDS_PROCESSOR_FORMAT "%s, %lu Logical Processor(s)"
+    IDS_BIOS "BIOS Version/Date"
+    IDS_WINDOWS_DIRECTORY "Windows Directory"
+    IDS_SYSTEM_DIRECTORY "System Directory"
+    IDS_LOCALE "Locale"
+    IDS_USER_NAME "User Name"
+    IDS_TIME_ZONE "Time Zone"
+    IDS_TOTAL_PHYSICAL "Total Physical Memory"
+    IDS_AVAILABLE_PHYSICAL "Available Physical Memory"
+    IDS_TOTAL_VIRTUAL "Total Virtual Memory"
+    IDS_AVAILABLE_VIRTUAL "Available Virtual Memory"
+    IDS_PAGE_FILE "Page File Space"
+END
