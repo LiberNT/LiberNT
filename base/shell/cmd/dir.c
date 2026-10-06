@@ -865,6 +865,52 @@ getName(const TCHAR* file, TCHAR * dest)
 }
 
 
+static BOOL
+DirGetReparseTarget(LPCTSTR szCurPath,
+                    LPCTSTR szName,
+                    DWORD dwTag,
+                    LPTSTR szTarget,
+                    DWORD cchTarget)
+{
+    TCHAR szFullPath[MAX_PATH];
+    PBYTE pBuffer;
+    HANDLE hFile;
+    DWORD dwReturned, dwHeader, dwOffset, dwLength;
+    BOOL bResult = FALSE;
+
+    if (FAILED(StringCchPrintf(szFullPath, _countof(szFullPath), _T("%s\\%s"), szCurPath, szName)))
+        return FALSE;
+
+    pBuffer = cmd_alloc(MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
+    if (!pBuffer)
+        return FALSE;
+
+    hFile = CreateFile(szFullPath, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                       OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
+        dwHeader = (dwTag == IO_REPARSE_TAG_SYMLINK) ? 20 : 16;
+        if (DeviceIoControl(hFile, FSCTL_GET_REPARSE_POINT, NULL, 0, pBuffer,
+                            MAXIMUM_REPARSE_DATA_BUFFER_SIZE, &dwReturned, NULL) &&
+            dwReturned >= dwHeader && *(PDWORD)pBuffer == dwTag)
+        {
+            dwOffset = *(PWORD)(pBuffer + 12);
+            dwLength = *(PWORD)(pBuffer + 14);
+            if (dwHeader + dwOffset + dwLength <= dwReturned &&
+                dwLength / sizeof(WCHAR) < cchTarget)
+            {
+                memcpy(szTarget, pBuffer + dwHeader + dwOffset, dwLength);
+                szTarget[dwLength / sizeof(WCHAR)] = _T('\0');
+                bResult = TRUE;
+            }
+        }
+        CloseHandle(hFile);
+    }
+
+    cmd_free(pBuffer);
+    return bResult;
+}
+
 /*
  *  DirPrintNewList
  *
@@ -881,18 +927,40 @@ DirPrintNewList(PDIRFINDINFO ptrFiles[],        /* [IN]Files' Info */
     TCHAR szShortName[15];
     TCHAR szDate[20];
     TCHAR szTime[20];
+    TCHAR szTarget[MAX_PATH + 3];
     INT iSizeFormat;
     ULARGE_INTEGER u64FileSize;
     PDIRFINDSTREAMNODE ptrCurStream;
+    DWORD dwTag;
 
     for (i = 0; i < dwCount && !CheckCtrlBreak(BREAK_INPUT); i++)
     {
+        szTarget[0] = _T('\0');
+        dwTag = (ptrFiles[i]->stFindInfo.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+                ? ptrFiles[i]->stFindInfo.dwReserved0 : 0;
+
         /* Calculate size */
-        if (ptrFiles[i]->stFindInfo.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+        if (dwTag == IO_REPARSE_TAG_MOUNT_POINT || dwTag == IO_REPARSE_TAG_SYMLINK)
         {
-            /* Junction */
             iSizeFormat = -14;
-            _tcscpy(szSize, _T("<JUNCTION>"));
+            if (dwTag == IO_REPARSE_TAG_MOUNT_POINT)
+                _tcscpy(szSize, _T("<JUNCTION>"));
+            else if (ptrFiles[i]->stFindInfo.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                _tcscpy(szSize, _T("<SYMLINKD>"));
+            else
+                _tcscpy(szSize, _T("<SYMLINK>"));
+
+            szTarget[0] = _T(' ');
+            szTarget[1] = _T('[');
+            if (DirGetReparseTarget(szCurPath, ptrFiles[i]->stFindInfo.cFileName, dwTag,
+                                    szTarget + 2, _countof(szTarget) - 3))
+            {
+                _tcscat(szTarget, _T("]"));
+            }
+            else
+            {
+                szTarget[0] = _T('\0');
+            }
         }
         else if (ptrFiles[i]->stFindInfo.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         {
@@ -918,13 +986,14 @@ DirPrintNewList(PDIRFINDINFO ptrFiles[],        /* [IN]Files' Info */
         DirPrintFileDateTime(szDate, szTime, &ptrFiles[i]->stFindInfo, lpFlags);
 
         /* Print the line */
-        DirPrintf(lpFlags, _T("%10s  %-6s    %*s%s %s\n"),
+        DirPrintf(lpFlags, _T("%10s  %-6s    %*s%s %s%s\n"),
                   szDate,
                   szTime,
                   iSizeFormat,
                   szSize,
                   szShortName,
-                  ptrFiles[i]->stFindInfo.cFileName);
+                  ptrFiles[i]->stFindInfo.cFileName,
+                  szTarget);
 
         /* Now, loop on the streams */
         ptrCurStream = ptrFiles[i]->ptrHead;
