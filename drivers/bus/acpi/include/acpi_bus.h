@@ -161,7 +161,8 @@ struct acpi_device_flags {
 	UINT32			performance_manageable:1;
 	UINT32			wake_capable:1;
 	UINT32			force_power_state:1;
-	UINT32			reserved:20;
+	UINT32			processor_id:1;
+	UINT32			reserved:19;
 };
 
 /* Plug and Play */
@@ -179,6 +180,7 @@ struct acpi_device_pnp {
 	acpi_hardware_id	hardware_id;	                      /* _HID */
 	ACPI_PNP_DEVICE_ID_LIST *cid_list;		     /* _CIDs */
 	acpi_unique_id		unique_id;	                      /* _UID */
+	UINT32			processor_id;
 	acpi_device_name	device_name;	         /* Driver-determined */
 	acpi_device_class	device_class;	         /*        "          */
 };

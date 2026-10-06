@@ -185,19 +185,14 @@ BuspGetProcessorUid(
     _Out_ PULONG Uid)
 {
     unsigned long long DeviceUid;
-    ACPI_OBJECT ProcessorObject;
-    ACPI_BUFFER Buffer;
     ACPI_STATUS Status;
 
     if (Device->pnp.hardware_id && strcmp(Device->pnp.hardware_id, ACPI_PROCESSOR_HID) == 0)
     {
-        Buffer.Length = sizeof(ProcessorObject);
-        Buffer.Pointer = &ProcessorObject;
-        Status = AcpiEvaluateObject(Device->handle, NULL, NULL, &Buffer);
-        if (ACPI_FAILURE(Status) || ProcessorObject.Type != ACPI_TYPE_PROCESSOR)
+        if (!Device->flags.processor_id)
             return FALSE;
 
-        *Uid = ProcessorObject.Processor.ProcId;
+        *Uid = Device->pnp.processor_id;
         return TRUE;
     }
 

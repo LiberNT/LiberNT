@@ -1509,10 +1509,20 @@ acpi_bus_add (
 		snprintf(uid, sizeof(static_uid_buffer), "%d", (PowerDeviceCount++));
 		break;
 	case ACPI_BUS_TYPE_PROCESSOR:
+	{
+		ACPI_OBJECT processor;
+		ACPI_BUFFER processor_buffer = { sizeof(processor), &processor };
+
 		hid = ACPI_PROCESSOR_HID;
 		uid = static_uid_buffer;
 		snprintf(uid, sizeof(static_uid_buffer), "_%d", (ProcessorCount++));
+		if (ACPI_SUCCESS(AcpiEvaluateObject(handle, NULL, NULL, &processor_buffer)) &&
+		    processor.Type == ACPI_TYPE_PROCESSOR) {
+			device->pnp.processor_id = processor.Processor.ProcId;
+			device->flags.processor_id = 1;
+		}
 		break;
+	}
 	case ACPI_BUS_TYPE_SYSTEM:
 		hid = ACPI_SYSTEM_HID;
 		break;

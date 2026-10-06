@@ -835,8 +835,6 @@ EvalProcessorObjectMethod(
     _In_ PCSTR MethodName,
     _Out_ ACPI_BUFFER *ReturnBuffer)
 {
-    ACPI_OBJECT Processor;
-    ACPI_BUFFER Buffer = { sizeof(Processor), &Processor };
     ACPI_OBJECT_TYPE Type;
     ACPI_TABLE_HEADER *Table;
     ACPI_SUBTABLE_HEADER *Entry, *Match;
@@ -852,9 +850,9 @@ EvalProcessorObjectMethod(
         return AE_NOT_FOUND;
     if (Type == ACPI_TYPE_PROCESSOR)
     {
-        if (ACPI_FAILURE(AcpiEvaluateObject(Handle, NULL, NULL, &Buffer)) || Processor.Type != ACPI_TYPE_PROCESSOR)
+        if (acpi_bus_get_device(Handle, &Device) || !Device->flags.processor_id)
             return AE_NOT_FOUND;
-        Uid = Processor.Processor.ProcId;
+        Uid = Device->pnp.processor_id;
         if (strcmp(MethodName, "_UID") == 0)
         {
             Result = AcpiOsAllocate(sizeof(*Result));
