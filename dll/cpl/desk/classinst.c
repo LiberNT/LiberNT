@@ -50,6 +50,8 @@ DisplayClassInstaller(
         goto cleanup;
     }
 
+    if (!(InstallParams.Flags & DI_DONOTCALLCONFIGMG))
+        InstallParams.Flags |= DI_NEEDREBOOT;
     InstallParams.Flags |= DI_DONOTCALLCONFIGMG;
 
     result = SetupDiSetDeviceInstallParams(DeviceInfoSet, DeviceInfoData, &InstallParams);
