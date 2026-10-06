@@ -1245,6 +1245,140 @@ static void OLEPictureImpl_PackIndexedBitmap(OLEPictureImpl *This, UINT colors)
     This->desc.bmp.hbitmap = hbmp;
 }
 
+static HRESULT OLEPictureImpl_LoadIndexedBitmap(OLEPictureImpl *This, const BYTE *xbuf, ULONG xread)
+{
+    static const RGBQUAD standard_colors[16] =
+    {
+        {0x00, 0x00, 0x00}, {0x00, 0x00, 0x80}, {0x00, 0x80, 0x00}, {0x00, 0x80, 0x80},
+        {0x80, 0x00, 0x00}, {0x80, 0x00, 0x80}, {0x80, 0x80, 0x00}, {0xc0, 0xc0, 0xc0},
+        {0x80, 0x80, 0x80}, {0x00, 0x00, 0xff}, {0x00, 0xff, 0x00}, {0x00, 0xff, 0xff},
+        {0xff, 0x00, 0x00}, {0xff, 0x00, 0xff}, {0xff, 0xff, 0x00}, {0xff, 0xff, 0xff}
+    };
+    struct
+    {
+        BITMAPINFOHEADER bmiHeader;
+        RGBQUAD bmiColors[256];
+    } info;
+    BITMAPFILEHEADER file_header;
+    BITMAPINFOHEADER header;
+    BITMAPINFO *source;
+    const RGBQUAD *colors;
+    ULONG colors_offset, bits_size;
+    UINT bpp, count, height, used, i, j;
+    BOOL standard = TRUE;
+    HBITMAP hbmp;
+    void *bits;
+    HDC hdc;
+    int lines;
+
+    if (xread < sizeof(file_header) + sizeof(header))
+        return S_FALSE;
+    memcpy(&file_header, xbuf, sizeof(file_header));
+    memcpy(&header, xbuf + sizeof(file_header), sizeof(header));
+    bpp = header.biBitCount;
+    if (header.biSize < sizeof(header) || header.biSize > xread - sizeof(file_header) ||
+        header.biPlanes != 1 || (bpp != 1 && bpp != 4 && bpp != 8) ||
+        header.biWidth <= 0 || header.biWidth > 0x7fff ||
+        !header.biHeight || header.biHeight > 0x7fff || header.biHeight < -0x7fff)
+        return S_FALSE;
+    if (header.biCompression != BI_RGB &&
+        !(header.biCompression == BI_RLE8 && bpp == 8) &&
+        !(header.biCompression == BI_RLE4 && bpp == 4))
+        return S_FALSE;
+
+    count = header.biClrUsed ? header.biClrUsed : 1u << bpp;
+    colors_offset = sizeof(file_header) + header.biSize;
+    if (count > 1u << bpp || count * sizeof(RGBQUAD) > xread - colors_offset ||
+        file_header.bfOffBits < colors_offset + count * sizeof(RGBQUAD) ||
+        file_header.bfOffBits >= xread)
+        return S_FALSE;
+
+    height = abs(header.biHeight);
+    bits_size = xread - file_header.bfOffBits;
+    if (header.biCompression == BI_RGB)
+    {
+        if (height > bits_size / get_dib_stride(header.biWidth, bpp))
+            return S_FALSE;
+    }
+    else if (!header.biSizeImage)
+    {
+        return CTL_E_INVALIDPICTURE;
+    }
+
+    source = malloc(header.biSize + count * sizeof(RGBQUAD));
+    if (!source)
+        return E_OUTOFMEMORY;
+    memcpy(source, xbuf + sizeof(file_header), header.biSize + count * sizeof(RGBQUAD));
+    if (header.biCompression != BI_RGB && source->bmiHeader.biSizeImage > bits_size)
+        source->bmiHeader.biSizeImage = bits_size;
+    colors = (const RGBQUAD *)((const BYTE *)source + header.biSize);
+
+    for (i = 0; i < count && standard; i++)
+    {
+        for (j = 0; j < ARRAY_SIZE(standard_colors); j++)
+        {
+            if (colors[i].rgbRed == standard_colors[j].rgbRed &&
+                colors[i].rgbGreen == standard_colors[j].rgbGreen &&
+                colors[i].rgbBlue == standard_colors[j].rgbBlue)
+                break;
+        }
+        if (j == ARRAY_SIZE(standard_colors))
+            standard = FALSE;
+    }
+
+    memset(&info, 0, sizeof(info));
+    info.bmiHeader.biSize = sizeof(info.bmiHeader);
+    info.bmiHeader.biWidth = header.biWidth;
+    info.bmiHeader.biHeight = header.biHeight;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = (bpp == 8 && count <= 16 && standard) ? 4 : bpp;
+    info.bmiHeader.biCompression = BI_RGB;
+    info.bmiHeader.biXPelsPerMeter = 4085;
+    info.bmiHeader.biYPelsPerMeter = 4085;
+    for (i = 0; i < count; i++)
+    {
+        info.bmiColors[i] = colors[i];
+        info.bmiColors[i].rgbReserved = 0;
+    }
+    used = count;
+    if (info.bmiHeader.biBitCount == 4 && standard)
+    {
+        for (j = 0; j < ARRAY_SIZE(standard_colors) && used < 16; j++)
+        {
+            for (i = 0; i < count; i++)
+            {
+                if (colors[i].rgbRed == standard_colors[j].rgbRed &&
+                    colors[i].rgbGreen == standard_colors[j].rgbGreen &&
+                    colors[i].rgbBlue == standard_colors[j].rgbBlue)
+                    break;
+            }
+            if (i == count)
+                info.bmiColors[used++] = standard_colors[j];
+        }
+    }
+
+    hbmp = CreateDIBSection(0, (BITMAPINFO *)&info, DIB_RGB_COLORS, &bits, NULL, 0);
+    if (!hbmp)
+    {
+        free(source);
+        return E_FAIL;
+    }
+    hdc = CreateCompatibleDC(0);
+    lines = SetDIBits(hdc, hbmp, 0, height, xbuf + file_header.bfOffBits, source, DIB_RGB_COLORS);
+    DeleteDC(hdc);
+    free(source);
+    if (!lines)
+    {
+        DeleteObject(hbmp);
+        return E_FAIL;
+    }
+
+    This->desc.bmp.hbitmap = hbmp;
+    This->desc.picType = PICTYPE_BITMAP;
+    OLEPictureImpl_SetBitmap(This);
+    return S_OK;
+}
+
 #endif
 static HRESULT OLEPictureImpl_LoadWICDecoder(OLEPictureImpl *This, REFGUID format_guid, BYTE *xbuf, ULONG xread)
 {
@@ -1668,7 +1802,13 @@ static HRESULT WINAPI OLEPictureImpl_Load(IPersistStream* iface, IStream *pStm) 
     hr = OLEPictureImpl_LoadWICDecoder(This, &GUID_ContainerFormatJpeg, xbuf, xread);
     break;
   case BITMAP_FORMAT_BMP: /* Bitmap */
+#ifdef __REACTOS__
+    hr = OLEPictureImpl_LoadIndexedBitmap(This, xbuf, xread);
+    if (hr == S_FALSE)
+        hr = OLEPictureImpl_LoadWICDecoder(This, &GUID_ContainerFormatBmp, xbuf, xread);
+#else
     hr = OLEPictureImpl_LoadWICDecoder(This, &GUID_ContainerFormatBmp, xbuf, xread);
+#endif
     break;
   case BITMAP_FORMAT_PNG: /* PNG */
     hr = OLEPictureImpl_LoadWICDecoder(This, &GUID_ContainerFormatPng, xbuf, xread);
