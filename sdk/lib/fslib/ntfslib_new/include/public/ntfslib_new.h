@@ -681,6 +681,14 @@ NtfsMasterFileTableGetLinkName(
     _Out_ PUNICODE_STRING LinkName);
 
 NTSTATUS
+NtfsMasterFileTableGetLinkShortName(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_ PNtfsFileRecord File,
+    _In_ ULONGLONG ParentReference,
+    _In_ PUNICODE_STRING Name,
+    _Out_ PUNICODE_STRING ShortName);
+
+NTSTATUS
 NtfsMasterFileTableIsDescendantDirectory(
     _In_ PNtfsMasterFileTable Mft,
     _In_ ULONGLONG FileReference,
@@ -765,6 +773,8 @@ NtfsMasterFileTableCreateFileInDirectory(
     _In_ BOOLEAN IsDirectory,
     _In_ ULONG FileAttributes,
     _In_ BOOLEAN NameKnownMissing,
+    _In_opt_ PCWSTR ShortName,
+    _In_ ULONG ShortNameLength,
     _Out_ PNtfsFileRecord* File);
 
 /*
@@ -802,6 +812,16 @@ NtfsMasterFileTableRenameFile(
     _In_ ULONG OldQueryLength,
     _In_reads_(NewQueryLength) PWCHAR NewQuery,
     _In_ ULONG NewQueryLength);
+
+NTSTATUS
+NtfsMasterFileTableRenameFileEx(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_reads_(OldQueryLength) PWCHAR OldQuery,
+    _In_ ULONG OldQueryLength,
+    _In_reads_(NewQueryLength) PWCHAR NewQuery,
+    _In_ ULONG NewQueryLength,
+    _In_opt_ PCWSTR ShortName,
+    _In_ ULONG ShortNameLength);
 
 /*
  * Publishes an additional hard link to an existing ordinary file at a

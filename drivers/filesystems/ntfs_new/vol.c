@@ -480,6 +480,7 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
     InitializeListHead(&VolCB->StreamList);
     InitializeListHead(&VolCB->NotifyList);
     FsRtlNotifyInitializeSync(&VolCB->NotifySync);
+    FsRtlInitializeTunnelCache(&VolCB->Tunnel);
     FSDeviceObject->Vpb = TargetDeviceObject->Vpb;
 
     // Give VolCB access to Ntfs Partition object

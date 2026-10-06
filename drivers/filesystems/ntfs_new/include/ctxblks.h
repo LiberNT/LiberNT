@@ -42,6 +42,7 @@ typedef struct _VolumeContextBlock
     LIST_ENTRY StreamList;
     PNOTIFY_SYNC NotifySync;
     LIST_ENTRY NotifyList;
+    TUNNEL Tunnel;
     ULONG BytesPerSector;
 
     /* Paths already known not to exist, most recently used first. */
@@ -418,6 +419,40 @@ NtfsReferenceNameParent(
     _In_ PUNICODE_STRING Name,
     _Out_ PStreamContextBlock* ParentStream,
     _Out_ PUNICODE_STRING LeafName);
+
+typedef struct _NTFS_TUNNEL_NAME
+{
+    ULONGLONG ParentReference;
+    ULONGLONG CreationTime;
+    UNICODE_STRING LongName;
+    UNICODE_STRING ShortName;
+    WCHAR ShortBuffer[13];
+    BOOLEAN Valid;
+} NTFS_TUNNEL_NAME, *PNTFS_TUNNEL_NAME;
+
+VOID
+NtfsCaptureTunnelName(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PNtfsFileRecord File,
+    _In_ PUNICODE_STRING Name,
+    _Out_ PNTFS_TUNNEL_NAME Tunnel);
+
+VOID
+NtfsAddTunnelName(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PNTFS_TUNNEL_NAME Tunnel);
+
+BOOLEAN
+NtfsFindTunnelName(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ ULONGLONG ParentReference,
+    _In_ PUNICODE_STRING LeafName,
+    _Out_ PNTFS_TUNNEL_NAME Tunnel);
+
+VOID
+NtfsApplyTunnelTime(
+    _In_ PNtfsFileRecord File,
+    _In_ PNTFS_TUNNEL_NAME Tunnel);
 
 NTSTATUS
 NtfsFindOpenLink(_In_ PVolumeContextBlock VolCB,

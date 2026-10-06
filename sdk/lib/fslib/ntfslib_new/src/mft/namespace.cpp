@@ -334,7 +334,8 @@ MasterFileTable::EnsureFileNameSpace(
     _In_ PFileRecord File,
     _In_ ULONG NameLength,
     _In_ PFileRecord OldParent,
-    _In_ PFileRecord NewParent)
+    _In_ PFileRecord NewParent,
+    _In_ ULONG AliasLength)
 {
     ULONG Required = ALIGN_UP_BY(0x18 + FIELD_OFFSET(FileNameEx, Name) +
                                 NameLength * sizeof(WCHAR), sizeof(ULONGLONG));
@@ -342,6 +343,11 @@ MasterFileTable::EnsureFileNameSpace(
     PFileRecord Parents[] = {OldParent, NewParent};
     NTSTATUS Status;
 
+    if (AliasLength)
+    {
+        Required += ALIGN_UP_BY(0x18 + FIELD_OFFSET(FileNameEx, Name) +
+                                AliasLength * sizeof(WCHAR), sizeof(ULONGLONG));
+    }
     /* A directory makes room by pushing its index root down on insert. */
     if (File->Header->Flags & FR_IS_DIRECTORY)
         return STATUS_SUCCESS;
@@ -1323,7 +1329,9 @@ MasterFileTable::SplitAndResolveParent(
 NTSTATUS
 MasterFileTable::RenameFile(
     _Inout_ PWCHAR OldQuery,
-    _Inout_ PWCHAR NewQuery)
+    _Inout_ PWCHAR NewQuery,
+    _In_opt_ PCWSTR PreferredShortName,
+    _In_ ULONG PreferredShortNameLength)
 {
     Directory OldParentIndex(DiskVolume);
     Directory NewParentIndex(DiskVolume);
@@ -1350,6 +1358,9 @@ MasterFileTable::RenameFile(
     WCHAR AliasName[
         NTFS_MAX_FILE_NAME_LENGTH + 1];
     UNICODE_STRING AliasString = {};
+    WCHAR ShortName[13];
+    ULONG ShortNameLength = 0;
+    BOOLEAN WantAlias;
     BOOLEAN CaseOnly;
     BOOLEAN NewEntryAdded = FALSE;
     NTSTATUS Status;
@@ -1452,7 +1463,15 @@ MasterFileTable::RenameFile(
         goto Done;
     }
 
-    Status = EnsureFileNameSpace(Child, NewNameLength, OldParent, NewParent);
+    WantAlias = DiskVolume->Generate8dot3Names &&
+                !NtfsIsLegalShortName(NewName, NewNameLength);
+    Status = EnsureFileNameSpace(Child, NewNameLength, OldParent, NewParent,
+                                 WantAlias ? 12 : 0);
+    if (Status == STATUS_BUFFER_TOO_SMALL && WantAlias)
+    {
+        WantAlias = FALSE;
+        Status = EnsureFileNameSpace(Child, NewNameLength, OldParent, NewParent);
+    }
     if (!NT_SUCCESS(Status))
         goto Done;
 
@@ -1470,6 +1489,24 @@ MasterFileTable::RenameFile(
     {
         AliasString = CaptureAlias(AliasValue, AliasName);
         RemovedLinks = 2;
+    }
+    if (WantAlias && (AliasAttribute || Child->Header->HardLinkCount == 1))
+    {
+        Status = NtfsGenerateShortName(
+            DiskVolume,
+            NewParent,
+            NewName,
+            NewNameLength,
+            PreferredShortName,
+            PreferredShortNameLength,
+            ChildReference,
+            (AliasAttribute && NewParent == OldParent) ? &AliasString : NULL,
+            ShortName,
+            &ShortNameLength);
+        if (Status == STATUS_NOT_FOUND)
+            ShortNameLength = 0;
+        else if (!NT_SUCCESS(Status))
+            goto Done;
     }
 
     if (CaseOnly)
@@ -1528,6 +1565,8 @@ MasterFileTable::RenameFile(
     }
     if (!NT_SUCCESS(Status))
         goto Done;
+    if (ShortNameLength)
+        NewValue->NameType = NAME_TYPE_WIN32;
     Status = WriteFileRecordToMFT(Child);
     if (!NT_SUCCESS(Status))
         goto Done;
@@ -1577,10 +1616,94 @@ MasterFileTable::RenameFile(
                 Child->Header->HardLinkCount -
                 (RemovedLinks - 1));
     }
+    if (ShortNameLength)
+    {
+        Status = FindFileNamePair(
+            Child,
+            NewParentReference,
+            &NewNameString,
+            &NameAttribute,
+            &NameValue,
+            &AliasAttribute,
+            &AliasValue);
+        if (NT_SUCCESS(Status))
+        {
+            Status = InsertFileNameLink(
+                Child,
+                NameValue,
+                NewParentReference,
+                ShortName,
+                ShortNameLength,
+                &NewAttribute,
+                &NewValue);
+        }
+        if (Status == STATUS_BUFFER_TOO_SMALL &&
+            (Child->Header->Flags & FR_IS_DIRECTORY))
+        {
+            Directory ChildIndex(DiskVolume);
+
+            Status = ChildIndex.PushDownResidentRoot(Child);
+            if (NT_SUCCESS(Status))
+            {
+                Status = FindFileNamePair(
+                    Child,
+                    NewParentReference,
+                    &NewNameString,
+                    &NameAttribute,
+                    &NameValue,
+                    &AliasAttribute,
+                    &AliasValue);
+            }
+            if (NT_SUCCESS(Status))
+            {
+                Status = InsertFileNameLink(
+                    Child,
+                    NameValue,
+                    NewParentReference,
+                    ShortName,
+                    ShortNameLength,
+                    &NewAttribute,
+                    &NewValue);
+            }
+        }
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        NewValue->NameType = NAME_TYPE_DOS;
+        Child->Header->HardLinkCount++;
+    }
     Status = Child->StampChangeTime();
     if (!NT_SUCCESS(Status))
         goto Done;
     Status = WriteFileRecordToMFT(Child);
+    if (NT_SUCCESS(Status) && ShortNameLength)
+    {
+        Directory AliasIndex(DiskVolume);
+        UNICODE_STRING ShortString = NtfsMakeCountedUnicodeString(
+            ShortName,
+            (USHORT)(ShortNameLength * sizeof(WCHAR)));
+
+        Status = FindFileNamePair(
+            Child,
+            NewParentReference,
+            &ShortString,
+            &NameAttribute,
+            &NameValue,
+            &AliasAttribute,
+            &AliasValue);
+        if (NT_SUCCESS(Status))
+        {
+            Status = AliasIndex.AddFileToDirectory(
+                NewParent,
+                ChildReference,
+                NameValue);
+        }
+        if (!NT_SUCCESS(Status) && NameAttribute &&
+            NT_SUCCESS(Child->RemoveAttributeRecord(NameAttribute)))
+        {
+            Child->Header->HardLinkCount--;
+            (void)WriteFileRecordToMFT(Child);
+        }
+    }
     goto Done;
 
 Rollback:
@@ -1743,6 +1866,34 @@ MasterFileTable::GetLinkName(
         NameValue = AliasValue;
     *LinkName = NtfsMakeCountedUnicodeString(NameValue->Name,
                                             NameValue->NameLength * sizeof(WCHAR));
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+MasterFileTable::GetLinkShortName(
+    _In_ PFileRecord File,
+    _In_ ULONGLONG ParentReference,
+    _In_ PUNICODE_STRING Name,
+    _Out_ PUNICODE_STRING ShortName)
+{
+    PAttribute NameAttribute;
+    PAttribute AliasAttribute;
+    PFileNameEx NameValue;
+    PFileNameEx AliasValue;
+    NTSTATUS Status;
+
+    RtlZeroMemory(ShortName, sizeof(*ShortName));
+    Status = FindFileNamePair(File, ParentReference, Name,
+                             &NameAttribute, &NameValue, &AliasAttribute, &AliasValue);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (NameValue->NameType != NAME_TYPE_DOS)
+        NameValue = AliasValue;
+    if (NameValue && NameValue->NameType == NAME_TYPE_DOS)
+    {
+        *ShortName = NtfsMakeCountedUnicodeString(NameValue->Name,
+                                                 NameValue->NameLength * sizeof(WCHAR));
+    }
     return STATUS_SUCCESS;
 }
 

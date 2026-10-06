@@ -142,6 +142,10 @@ NtfsGenerate8dot3NameFallback(_In_ PCUNICODE_STRING Name,
                               _Inout_ PGENERATE_NAME_CONTEXT Context,
                               _Inout_ PUNICODE_STRING ShortName);
 
+BOOLEAN
+NtfsIsLegalShortName(_In_reads_(NameLength) PCWSTR Name,
+                     _In_ ULONG NameLength);
+
 unsigned long long
 NtfsQueryTicks(void);
 
@@ -1552,7 +1556,9 @@ public:
         _Inout_ PWCHAR Query,
         _In_ BOOLEAN IsDirectory,
         _In_ ULONG FileAttributes,
-        _Out_ PFileRecord* File);
+        _Out_ PFileRecord* File,
+        _In_opt_ PCWSTR ShortName = NULL,
+        _In_ ULONG ShortNameLength = 0);
 
     NTSTATUS
     CreateFileInDirectory(
@@ -1562,7 +1568,9 @@ public:
         _In_ BOOLEAN IsDirectory,
         _In_ ULONG FileAttributes,
         _In_ BOOLEAN NameKnownMissing,
-        _Out_ PFileRecord* File);
+        _Out_ PFileRecord* File,
+        _In_opt_ PCWSTR PreferredShortName = NULL,
+        _In_ ULONG PreferredShortNameLength = 0);
 
     // ./namespace.cpp
     NTSTATUS
@@ -1576,7 +1584,9 @@ public:
     NTSTATUS
     RenameFile(
         _Inout_ PWCHAR OldQuery,
-        _Inout_ PWCHAR NewQuery);
+        _Inout_ PWCHAR NewQuery,
+        _In_opt_ PCWSTR PreferredShortName = NULL,
+        _In_ ULONG PreferredShortNameLength = 0);
 
     NTSTATUS
     CreateHardLink(
@@ -1596,6 +1606,13 @@ public:
         _In_ ULONGLONG ParentReference,
         _In_ PUNICODE_STRING Name,
         _Out_ PUNICODE_STRING LinkName);
+
+    NTSTATUS
+    GetLinkShortName(
+        _In_ PFileRecord File,
+        _In_ ULONGLONG ParentReference,
+        _In_ PUNICODE_STRING Name,
+        _Out_ PUNICODE_STRING ShortName);
 
     NTSTATUS
     IsDescendantDirectory(
@@ -1657,7 +1674,8 @@ private:
         _In_ PFileRecord File,
         _In_ ULONG NameLength,
         _In_ PFileRecord OldParent,
-        _In_ PFileRecord NewParent);
+        _In_ PFileRecord NewParent,
+        _In_ ULONG AliasLength = 0);
 
     NTSTATUS
     InsertFileNameLink(
@@ -1713,6 +1731,19 @@ private:
     PAttribute MFTDataAttr = NULL;
     PAttribute MFTMirrDataAttr = NULL;
 } *PMasterFileTable;
+
+NTSTATUS
+NtfsGenerateShortName(
+    _In_ PVolume DiskVolume,
+    _In_ PFileRecord Parent,
+    _In_reads_(NameLength) PCWSTR Name,
+    _In_ ULONG NameLength,
+    _In_opt_ PCWSTR Preferred,
+    _In_ ULONG PreferredLength,
+    _In_ ULONGLONG OwnReference,
+    _In_opt_ PUNICODE_STRING OwnAlias,
+    _Out_ PWCHAR ShortName,
+    _Out_ PULONG ShortNameLength);
 #endif // __cplusplus
 
  /* *** Formerly: lfs/logfile.h *** */

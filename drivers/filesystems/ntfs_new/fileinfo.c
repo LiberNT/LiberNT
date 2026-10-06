@@ -1571,6 +1571,8 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
     PNTFS_NATIVE_LCB Lcb = NULL;
     PStreamContextBlock NewParent = NULL;
     UNICODE_STRING NewLeaf;
+    NTFS_TUNNEL_NAME OldTunnel;
+    NTFS_TUNNEL_NAME NewTunnel;
     PWCHAR NewLeafBuffer = NULL;
     PFileContextBlock* RenamedFiles = NULL;
     PUNICODE_STRING RenamedNames = NULL;
@@ -1768,11 +1770,15 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
     }
 
     RemainingNameLength = 0;
-    Status = NtfsMasterFileTableRenameFile(NtfsVolumeGetMft(VolCB->DiskVolume), FileCB->FileName.Buffer, FileCB->FileName.Length / sizeof(WCHAR), NewName.Buffer, NewName.Length / sizeof(WCHAR));
+    NtfsCaptureTunnelName(VolCB, FileCB->FileRec, &FileCB->FileName, &OldTunnel);
+    NtfsFindTunnelName(VolCB, NewParent->FileReference, &NewLeaf, &NewTunnel);
+    Status = NtfsMasterFileTableRenameFileEx(NtfsVolumeGetMft(VolCB->DiskVolume), FileCB->FileName.Buffer, FileCB->FileName.Length / sizeof(WCHAR), NewName.Buffer, NewName.Length / sizeof(WCHAR),
+                                             NewTunnel.Valid ? NewTunnel.ShortBuffer : NULL, NewTunnel.ShortName.Length / sizeof(WCHAR));
     if (!NT_SUCCESS(Status))
     {
         goto Finish;
     }
+    NtfsAddTunnelName(VolCB, &OldTunnel);
 
     IsDirectory = !!(NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY);
     NameFilter = IsDirectory ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME;
@@ -1849,6 +1855,7 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
         {
             goto Finish;
         }
+        NtfsApplyTunnelTime(FileCB->FileRec, &NewTunnel);
     }
     else
     {

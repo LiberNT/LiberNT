@@ -1318,6 +1318,101 @@ NtfsReferenceNameParent(
     return Status;
 }
 
+VOID
+NtfsCaptureTunnelName(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PNtfsFileRecord File,
+    _In_ PUNICODE_STRING Name,
+    _Out_ PNTFS_TUNNEL_NAME Tunnel)
+{
+    PStreamContextBlock ParentStream;
+    NtfsFileBasicInformation Basic;
+    UNICODE_STRING ShortName;
+
+    Tunnel->Valid = FALSE;
+    if (!NT_SUCCESS(NtfsReferenceNameParent(VolCB, Name, &ParentStream, &Tunnel->LongName)))
+        return;
+    Tunnel->ParentReference = ParentStream->FileReference;
+    NtfsDereferenceStreamContext(VolCB, ParentStream);
+    if (!NT_SUCCESS(NtfsFileRecordGetBasicInformation(File, &Basic)) ||
+        !NT_SUCCESS(NtfsMasterFileTableGetLinkShortName(NtfsVolumeGetMft(VolCB->DiskVolume),
+                                                        File,
+                                                        Tunnel->ParentReference,
+                                                        &Tunnel->LongName,
+                                                        &ShortName)) ||
+        ShortName.Length > sizeof(Tunnel->ShortBuffer) - sizeof(WCHAR))
+    {
+        return;
+    }
+    RtlCopyMemory(Tunnel->ShortBuffer, ShortName.Buffer, ShortName.Length);
+    Tunnel->ShortName.Buffer = Tunnel->ShortBuffer;
+    Tunnel->ShortName.Length = Tunnel->ShortName.MaximumLength = ShortName.Length;
+    Tunnel->CreationTime = Basic.CreationTime;
+    Tunnel->Valid = TRUE;
+}
+
+VOID
+NtfsAddTunnelName(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PNTFS_TUNNEL_NAME Tunnel)
+{
+    if (!Tunnel->Valid)
+        return;
+    FsRtlAddToTunnelCache(&VolCB->Tunnel,
+                          Tunnel->ParentReference,
+                          &Tunnel->ShortName,
+                          &Tunnel->LongName,
+                          FALSE,
+                          sizeof(Tunnel->CreationTime),
+                          &Tunnel->CreationTime);
+}
+
+BOOLEAN
+NtfsFindTunnelName(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ ULONGLONG ParentReference,
+    _In_ PUNICODE_STRING LeafName,
+    _Out_ PNTFS_TUNNEL_NAME Tunnel)
+{
+    WCHAR LongBuffer[NTFS_MAX_FILE_NAME_LENGTH];
+    UNICODE_STRING LongName;
+    ULONG DataLength = sizeof(Tunnel->CreationTime);
+
+    Tunnel->ParentReference = ParentReference;
+    Tunnel->ShortName.Buffer = Tunnel->ShortBuffer;
+    Tunnel->ShortName.Length = 0;
+    Tunnel->ShortName.MaximumLength = sizeof(Tunnel->ShortBuffer);
+    LongName.Buffer = LongBuffer;
+    LongName.Length = 0;
+    LongName.MaximumLength = sizeof(LongBuffer);
+    Tunnel->Valid = FsRtlFindInTunnelCache(&VolCB->Tunnel,
+                                           ParentReference,
+                                           LeafName,
+                                           &Tunnel->ShortName,
+                                           &LongName,
+                                           &DataLength,
+                                           &Tunnel->CreationTime) &&
+                    DataLength == sizeof(Tunnel->CreationTime);
+    if (LongName.Buffer && LongName.Buffer != LongBuffer)
+        ExFreePool(LongName.Buffer);
+    return Tunnel->Valid;
+}
+
+VOID
+NtfsApplyTunnelTime(
+    _In_ PNtfsFileRecord File,
+    _In_ PNTFS_TUNNEL_NAME Tunnel)
+{
+    NtfsFileBasicInformation Basic;
+
+    if (!Tunnel->Valid)
+        return;
+    RtlZeroMemory(&Basic, sizeof(Basic));
+    Basic.Fields = NTFS_BASIC_INFO_CREATION_TIME;
+    Basic.CreationTime = Tunnel->CreationTime;
+    (void)NtfsFileRecordSetBasicInformation(File, &Basic);
+}
+
 NTSTATUS
 NtfsFindOpenLink(_In_ PVolumeContextBlock VolCB,
                  _In_ PFileContextBlock FileCB,
@@ -2307,6 +2402,7 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             {
                 BOOLEAN CreatedWithCachedParent = FALSE;
                 PSECURITY_DESCRIPTOR NewDescriptor = NULL;
+                NTFS_TUNNEL_NAME Tunnel = {0};
                 PWCHAR LeafName;
                 USHORT LeafLength;
                 USHORT ParentLength;
@@ -2415,6 +2511,17 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                             &NewDescriptor);
                         if (NT_SUCCESS(Status))
                         {
+                            UNICODE_STRING LeafString;
+
+                            LeafString.Buffer = LeafName;
+                            LeafString.Length = LeafString.MaximumLength =
+                                LeafLength * sizeof(WCHAR);
+                            NtfsFindTunnelName(
+                                VolCB,
+                                ((ULONGLONG)NtfsFileRecordGetHeader(VolCB->CachedLookupParent)->SequenceNumber << 48) |
+                                    NtfsFileRecordGetHeader(VolCB->CachedLookupParent)->MFTRecordNumber,
+                                &LeafString,
+                                &Tunnel);
                             Status =
                                 NtfsMasterFileTableCreateFileInDirectory(
                                     Mft,
@@ -2425,6 +2532,8 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                                        FILE_DIRECTORY_FILE),
                                     FileAttributes,
                                     TRUE,
+                                    Tunnel.Valid ? Tunnel.ShortBuffer : NULL,
+                                    Tunnel.ShortName.Length / sizeof(WCHAR),
                                     &CurrentFile);
                         }
                     }
@@ -2478,6 +2587,8 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                     LONG Generation =
                         InterlockedIncrement(
                             &VolCB->DirGeneration);
+
+                    NtfsApplyTunnelTime(CurrentFile, &Tunnel);
 
                     if (CreatedWithCachedParent)
                     {

@@ -512,6 +512,13 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
     }
     else if (NT_SUCCESS(DeleteStatus))
     {
+        NTFS_TUNNEL_NAME Tunnel;
+        UNICODE_STRING DeleteName;
+
+        DeleteName.Buffer = DeletePath;
+        DeleteName.Length = DeleteName.MaximumLength =
+            (USHORT)(DeletePathLength * sizeof(WCHAR));
+        NtfsCaptureTunnelName(VolCB, FileCB->FileRec, &DeleteName, &Tunnel);
         DeleteStatus = NtfsMasterFileTableDeleteFileEx(
             NtfsVolumeGetMft(VolCB->DiskVolume),
             DeletePath,
@@ -521,6 +528,8 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
             LastLink,
             &RecordDeleted);
         Deleted = NT_SUCCESS(DeleteStatus);
+        if (Deleted)
+            NtfsAddTunnelName(VolCB, &Tunnel);
     }
     InterlockedIncrement(&VolCB->DirGeneration);
     if (!StreamOnly)

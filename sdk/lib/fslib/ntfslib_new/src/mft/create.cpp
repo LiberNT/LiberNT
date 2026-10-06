@@ -91,8 +91,8 @@ IsShortNameCharacter(_In_ WCHAR Character)
     }
 }
 
-static BOOLEAN
-IsLegalShortName(
+BOOLEAN
+NtfsIsLegalShortName(
     _In_reads_(NameLength) PCWSTR Name,
     _In_ ULONG NameLength)
 {
@@ -218,11 +218,44 @@ NtfsGenerate8dot3NameFallback(
 }
 
 static NTSTATUS
-GenerateShortName(
+IsShortNameFree(
+    _In_ PVolume DiskVolume,
+    _In_ Directory* Index,
+    _In_ PFileRecord Parent,
+    _In_ PUNICODE_STRING Candidate,
+    _In_ ULONGLONG OwnReference,
+    _In_opt_ PUNICODE_STRING OwnAlias,
+    _Out_ PBOOLEAN Free)
+{
+    ULONGLONG Reference;
+    LONG Comparison;
+    NTSTATUS Status;
+
+    *Free = FALSE;
+    Status = Index->FindNextFile(Parent, Candidate->Buffer, &Reference);
+    if (Status == STATUS_NOT_FOUND)
+    {
+        *Free = TRUE;
+        return STATUS_SUCCESS;
+    }
+    if (!NT_SUCCESS(Status) || !OwnAlias || Reference != OwnReference)
+        return Status;
+    Status = DiskVolume->CompareFileNames(Candidate, OwnAlias, &Comparison);
+    if (NT_SUCCESS(Status))
+        *Free = Comparison == 0;
+    return Status;
+}
+
+NTSTATUS
+NtfsGenerateShortName(
     _In_ PVolume DiskVolume,
     _In_ PFileRecord Parent,
     _In_reads_(NameLength) PCWSTR Name,
     _In_ ULONG NameLength,
+    _In_opt_ PCWSTR Preferred,
+    _In_ ULONG PreferredLength,
+    _In_ ULONGLONG OwnReference,
+    _In_opt_ PUNICODE_STRING OwnAlias,
     _Out_ PWCHAR ShortName,
     _Out_ PULONG ShortNameLength)
 {
@@ -230,6 +263,7 @@ GenerateShortName(
     GENERATE_NAME_CONTEXT Context = {};
     UNICODE_STRING LongName;
     UNICODE_STRING Candidate;
+    BOOLEAN Free;
 
     *ShortNameLength = 0;
     LongName.Buffer = const_cast<PWSTR>(Name);
@@ -237,9 +271,26 @@ GenerateShortName(
     Candidate.Buffer = ShortName;
     Candidate.MaximumLength = 12 * sizeof(WCHAR);
 
+    if (Preferred && NtfsIsLegalShortName(Preferred, PreferredLength))
+    {
+        NTSTATUS Status;
+
+        RtlCopyMemory(ShortName, Preferred, PreferredLength * sizeof(WCHAR));
+        ShortName[PreferredLength] = L'\0';
+        Candidate.Length = (USHORT)(PreferredLength * sizeof(WCHAR));
+        Status = IsShortNameFree(DiskVolume, &Index, Parent, &Candidate,
+                                 OwnReference, OwnAlias, &Free);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (Free)
+        {
+            *ShortNameLength = PreferredLength;
+            return STATUS_SUCCESS;
+        }
+    }
+
     for (ULONG Attempt = 0; Attempt < 1000000; Attempt++)
     {
-        ULONGLONG Reference;
         NTSTATUS Status;
 
         Candidate.Length = 0;
@@ -253,14 +304,15 @@ GenerateShortName(
         }
         ShortName[Candidate.Length / sizeof(WCHAR)] = L'\0';
 
-        Status = Index.FindNextFile(Parent, ShortName, &Reference);
-        if (Status == STATUS_NOT_FOUND)
+        Status = IsShortNameFree(DiskVolume, &Index, Parent, &Candidate,
+                                 OwnReference, OwnAlias, &Free);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (Free)
         {
             *ShortNameLength = Candidate.Length / sizeof(WCHAR);
             return STATUS_SUCCESS;
         }
-        if (!NT_SUCCESS(Status))
-            return Status;
     }
     return STATUS_FILE_SYSTEM_LIMITATION;
 }
@@ -270,7 +322,9 @@ MasterFileTable::CreateFile(
     _Inout_ PWCHAR Query,
     _In_ BOOLEAN IsDirectory,
     _In_ ULONG FileAttributes,
-    _Out_ PFileRecord* File)
+    _Out_ PFileRecord* File,
+    _In_opt_ PCWSTR ShortName,
+    _In_ ULONG ShortNameLength)
 {
     PFileRecord Parent = NULL;
     PWCHAR Name;
@@ -298,7 +352,9 @@ MasterFileTable::CreateFile(
             IsDirectory,
             FileAttributes,
             FALSE,
-            File);
+            File,
+            ShortName,
+            ShortNameLength);
     }
     delete Parent;
     return Status;
@@ -312,7 +368,9 @@ MasterFileTable::CreateFileInDirectory(
     _In_ BOOLEAN IsDirectory,
     _In_ ULONG FileAttributes,
     _In_ BOOLEAN NameKnownMissing,
-    _Out_ PFileRecord* File)
+    _Out_ PFileRecord* File,
+    _In_opt_ PCWSTR PreferredShortName,
+    _In_ ULONG PreferredShortNameLength)
 {
     Directory ParentIndex(DiskVolume);
     PFileRecord NewFile = NULL;
@@ -367,14 +425,18 @@ MasterFileTable::CreateFileInDirectory(
     }
 
     if (DiskVolume->Generate8dot3Names &&
-        !IsLegalShortName(Name, NameLength))
+        !NtfsIsLegalShortName(Name, NameLength))
     {
-        Status = GenerateShortName(DiskVolume,
-                                   Parent,
-                                   Name,
-                                   NameLength,
-                                   ShortName,
-                                   &ShortNameLength);
+        Status = NtfsGenerateShortName(DiskVolume,
+                                       Parent,
+                                       Name,
+                                       NameLength,
+                                       PreferredShortName,
+                                       PreferredShortNameLength,
+                                       0,
+                                       NULL,
+                                       ShortName,
+                                       &ShortNameLength);
         if (Status == STATUS_NOT_FOUND)
             ShortNameLength = 0;
         else if (!NT_SUCCESS(Status))

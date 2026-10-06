@@ -198,6 +198,8 @@ NtfsMasterFileTableCreateFileInDirectory(
     _In_ BOOLEAN IsDirectory,
     _In_ ULONG FileAttributes,
     _In_ BOOLEAN NameKnownMissing,
+    _In_opt_ PCWSTR ShortName,
+    _In_ ULONG ShortNameLength,
     _Out_ PNtfsFileRecord* File)
 {
     if (!Mft || !Parent || !File)
@@ -211,7 +213,9 @@ NtfsMasterFileTableCreateFileInDirectory(
             IsDirectory,
             FileAttributes,
             NameKnownMissing,
-            reinterpret_cast<PFileRecord*>(File));
+            reinterpret_cast<PFileRecord*>(File),
+            ShortName,
+            ShortNameLength);
 }
 
 NTSTATUS
@@ -275,6 +279,20 @@ NtfsMasterFileTableRenameFile(
     _In_reads_(NewQueryLength) PWCHAR NewQuery,
     _In_ ULONG NewQueryLength)
 {
+    return NtfsMasterFileTableRenameFileEx(Mft, OldQuery, OldQueryLength,
+                                           NewQuery, NewQueryLength, NULL, 0);
+}
+
+NTSTATUS
+NtfsMasterFileTableRenameFileEx(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_reads_(OldQueryLength) PWCHAR OldQuery,
+    _In_ ULONG OldQueryLength,
+    _In_reads_(NewQueryLength) PWCHAR NewQuery,
+    _In_ ULONG NewQueryLength,
+    _In_opt_ PCWSTR ShortName,
+    _In_ ULONG ShortNameLength)
+{
     PWCHAR TerminatedOld = NULL;
     PWCHAR TerminatedNew = NULL;
     NTSTATUS Status;
@@ -299,7 +317,9 @@ NtfsMasterFileTableRenameFile(
                 Mft)->
                 RenameFile(
                     TerminatedOld,
-                    TerminatedNew);
+                    TerminatedNew,
+                    ShortName,
+                    ShortNameLength);
     }
     delete[] TerminatedNew;
     delete[] TerminatedOld;
@@ -405,6 +425,20 @@ NtfsMasterFileTableGetLinkName(
         return STATUS_INVALID_PARAMETER;
     return reinterpret_cast<PMasterFileTable>(Mft)->
         GetLinkName(reinterpret_cast<PFileRecord>(File), ParentReference, Name, LinkName);
+}
+
+NTSTATUS
+NtfsMasterFileTableGetLinkShortName(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_ PNtfsFileRecord File,
+    _In_ ULONGLONG ParentReference,
+    _In_ PUNICODE_STRING Name,
+    _Out_ PUNICODE_STRING ShortName)
+{
+    if (!Mft || !File || !Name || !ShortName)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PMasterFileTable>(Mft)->
+        GetLinkShortName(reinterpret_cast<PFileRecord>(File), ParentReference, Name, ShortName);
 }
 
 NTSTATUS
