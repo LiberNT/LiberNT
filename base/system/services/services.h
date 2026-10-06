@@ -83,6 +83,8 @@ typedef struct _SERVICE
 
     BOOLEAN ServiceVisited;
 
+    LIST_ENTRY HandleListHead;
+
     WCHAR szServiceName[1];
 } SERVICE, *PSERVICE;
 
@@ -271,6 +273,8 @@ VOID ScmQueryServiceLockStatusA(OUT LPQUERY_SERVICE_LOCK_STATUSA lpLockStatus);
 /* rpcserver.c */
 
 VOID ScmStartRpcServer(VOID);
+VOID ScmInitServiceNotify(VOID);
+VOID ScmNotifyServiceStatus(PSERVICE lpService);
 
 
 /* security.c */

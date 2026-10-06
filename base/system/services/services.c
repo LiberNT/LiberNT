@@ -301,6 +301,8 @@ wWinMain(HINSTANCE hInstance,
     ScmInitNamedPipeCriticalSection();
     bCanDeleteNamedPipeCriticalSection = TRUE;
 
+    ScmInitServiceNotify();
+
 //    ScmInitThreadManager();
 
     ScmInitializeSecurity();

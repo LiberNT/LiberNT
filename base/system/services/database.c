@@ -954,6 +954,8 @@ ScmCreateNewServiceRecord(LPCWSTR lpServiceName,
     /* Set the resume count */
     lpService->dwResumeCount = ResumeCount++;
 
+    InitializeListHead(&lpService->HandleListHead);
+
     /* Append service record */
     InsertTailList(&ServiceListHead,
                    &lpService->ServiceListEntry);
@@ -1972,8 +1974,11 @@ ScmWaitForServiceConnect(PSERVICE Service)
         }
     }
 
-    if ((ScmIsSecurityService(Service->lpImage) == FALSE)&&
-        (dwProcessId != Service->lpImage->dwProcessId))
+    if (ScmIsSecurityService(Service->lpImage))
+    {
+        Service->lpImage->dwProcessId = dwProcessId;
+    }
+    else if (dwProcessId != Service->lpImage->dwProcessId)
     {
 #if 0
         _ultow(Service->lpImage->dwProcessId, szBuffer1, 10);
@@ -2204,6 +2209,7 @@ ScmLoadService(PSERVICE Service,
             ScmLockDatabaseExclusive();
             Service->Status.dwCurrentState = SERVICE_START_PENDING;
             Service->Status.dwControlsAccepted = 0;
+            ScmNotifyServiceStatus(Service);
             ScmReferenceService(Service);
             ScmUnlockDatabase();
 
@@ -2221,6 +2227,7 @@ ScmLoadService(PSERVICE Service,
                 if (Service->Status.dwCurrentState == SERVICE_START_PENDING)
                 {
                     Service->Status.dwCurrentState = SERVICE_STOPPED;
+                    ScmNotifyServiceStatus(Service);
                     ScmDereferenceService(Service);
                 }
                 ScmUnlockDatabase();

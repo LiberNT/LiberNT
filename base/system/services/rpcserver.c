@@ -24,6 +24,7 @@
 
 #define MANAGER_TAG 0x72674D68  /* 'hMgr' */
 #define SERVICE_TAG 0x63765368  /* 'hSvc' */
+#define NOTIFY_TAG  0x7966744E
 #define INVALID_TAG 0xAABBCCDD
 
 typedef struct _SCMGR_HANDLE
@@ -40,10 +41,23 @@ typedef struct _MANAGER_HANDLE
 } MANAGER_HANDLE, *PMANAGER_HANDLE;
 
 
+typedef struct _NOTIFY_HANDLE
+{
+    SCMGR_HANDLE Handle;
+    LONG RefCount;
+    HANDLE hEvent;
+    DWORD dwNotifyMask;
+    PSC_RPC_NOTIFY_PARAMS_LIST pParamsList;
+} NOTIFY_HANDLE, *PNOTIFY_HANDLE;
+
+
 typedef struct _SERVICE_HANDLE
 {
     SCMGR_HANDLE Handle;
     PSERVICE ServiceEntry;
+    LIST_ENTRY HandleListEntry;
+    BOOL bStatusNotified;
+    PNOTIFY_HANDLE pNotify;
 } SERVICE_HANDLE, *PSERVICE_HANDLE;
 
 
@@ -100,6 +114,8 @@ ScmServiceMapping = {SERVICE_READ,
                      SERVICE_ALL_ACCESS};
 
 DWORD g_dwServiceBits = 0;
+
+static CRITICAL_SECTION ScmNotifyLock;
 
 /* FUNCTIONS ***************************************************************/
 
@@ -195,6 +211,131 @@ ScmCreateServiceHandle(PSERVICE lpServiceEntry,
     *Handle = (SC_HANDLE)Ptr;
 
     return ERROR_SUCCESS;
+}
+
+
+static VOID
+ScmLinkServiceHandle(SC_HANDLE Handle)
+{
+    PSERVICE_HANDLE hSvc = (PSERVICE_HANDLE)Handle;
+
+    EnterCriticalSection(&ScmNotifyLock);
+    InsertTailList(&hSvc->ServiceEntry->HandleListHead, &hSvc->HandleListEntry);
+    LeaveCriticalSection(&ScmNotifyLock);
+}
+
+
+VOID
+ScmInitServiceNotify(VOID)
+{
+    InitializeCriticalSection(&ScmNotifyLock);
+}
+
+
+static PNOTIFY_HANDLE
+ScmGetNotifyFromHandle(SC_NOTIFY_RPC_HANDLE Handle)
+{
+    PNOTIFY_HANDLE pNotify = NULL;
+
+    _SEH2_TRY
+    {
+        if (((PNOTIFY_HANDLE)Handle)->Handle.Tag == NOTIFY_TAG)
+            pNotify = (PNOTIFY_HANDLE)Handle;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        DPRINT1("Exception: Invalid notify handle\n");
+    }
+    _SEH2_END;
+
+    return pNotify;
+}
+
+
+static VOID
+ScmReleaseNotify(PNOTIFY_HANDLE pNotify)
+{
+    if (InterlockedDecrement(&pNotify->RefCount) != 0)
+        return;
+
+    CloseHandle(pNotify->hEvent);
+    if (pNotify->pParamsList != NULL)
+    {
+        HeapFree(GetProcessHeap(), 0, pNotify->pParamsList->NotifyParamsArray[0].pStatusChangeParam2);
+        HeapFree(GetProcessHeap(), 0, pNotify->pParamsList);
+    }
+
+    pNotify->Handle.Tag = INVALID_TAG;
+    HeapFree(GetProcessHeap(), 0, pNotify);
+}
+
+
+static VOID
+ScmFillNotify(PNOTIFY_HANDLE pNotify,
+              PSERVICE lpService)
+{
+    PSC_RPC_NOTIFY_PARAMS_LIST pList;
+    PSERVICE_NOTIFY_STATUS_CHANGE_PARAMS_2 pParams;
+
+    pList = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(SC_RPC_NOTIFY_PARAMS_LIST));
+    pParams = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(SERVICE_NOTIFY_STATUS_CHANGE_PARAMS_2));
+    if (pList == NULL || pParams == NULL)
+    {
+        if (pList != NULL)
+            HeapFree(GetProcessHeap(), 0, pList);
+        if (pParams != NULL)
+            HeapFree(GetProcessHeap(), 0, pParams);
+        SetEvent(pNotify->hEvent);
+        return;
+    }
+
+    pParams->dwNotifyMask = pNotify->dwNotifyMask;
+    RtlCopyMemory(&pParams->ServiceStatus, &lpService->Status, sizeof(SERVICE_STATUS));
+    if (lpService->Status.dwCurrentState != SERVICE_STOPPED && lpService->lpImage != NULL)
+        pParams->ServiceStatus.dwProcessId = lpService->lpImage->dwProcessId;
+    pParams->dwNotificationStatus = ERROR_SUCCESS;
+    pParams->dwNotificationTriggered = 1 << (lpService->Status.dwCurrentState - SERVICE_STOPPED);
+
+    pList->cElements = 1;
+    pList->NotifyParamsArray[0].dwInfoLevel = 2;
+    pList->NotifyParamsArray[0].pStatusChangeParam2 = pParams;
+
+    pNotify->pParamsList = pList;
+    SetEvent(pNotify->hEvent);
+}
+
+
+VOID
+ScmNotifyServiceStatus(PSERVICE lpService)
+{
+    PLIST_ENTRY Entry;
+    PSERVICE_HANDLE hSvc;
+    DWORD dwMask;
+
+    dwMask = 1 << (lpService->Status.dwCurrentState - SERVICE_STOPPED);
+
+    EnterCriticalSection(&ScmNotifyLock);
+
+    for (Entry = lpService->HandleListHead.Flink;
+         Entry != &lpService->HandleListHead;
+         Entry = Entry->Flink)
+    {
+        hSvc = CONTAINING_RECORD(Entry, SERVICE_HANDLE, HandleListEntry);
+
+        if (hSvc->pNotify != NULL && (hSvc->pNotify->dwNotifyMask & dwMask))
+        {
+            ScmFillNotify(hSvc->pNotify, lpService);
+            ScmReleaseNotify(hSvc->pNotify);
+            hSvc->pNotify = NULL;
+            hSvc->bStatusNotified = TRUE;
+        }
+        else
+        {
+            hSvc->bStatusNotified = FALSE;
+        }
+    }
+
+    LeaveCriticalSection(&ScmNotifyLock);
 }
 
 
@@ -973,6 +1114,16 @@ RCloseServiceHandle(
 
         /* Get the pointer to the service record */
         lpService = hService->ServiceEntry;
+
+        EnterCriticalSection(&ScmNotifyLock);
+        RemoveEntryList(&hService->HandleListEntry);
+        if (hService->pNotify != NULL)
+        {
+            SetEvent(hService->pNotify->hEvent);
+            ScmReleaseNotify(hService->pNotify);
+            hService->pNotify = NULL;
+        }
+        LeaveCriticalSection(&ScmNotifyLock);
 
         /* Make sure we don't access stale memory if someone tries to use this handle again. */
         hService->Handle.Tag = INVALID_TAG;
@@ -1769,6 +1920,9 @@ RSetServiceStatus(
 
     /* Restore the previous service type */
     lpService->Status.dwServiceType = dwPreviousType;
+
+    if (lpService->Status.dwCurrentState != dwPreviousState)
+        ScmNotifyServiceStatus(lpService);
 
     DPRINT("Service %S changed state %d to %d\n", lpService->lpServiceName, dwPreviousState, lpServiceStatus->dwCurrentState);
 
@@ -2696,6 +2850,7 @@ done:
     if (dwError == ERROR_SUCCESS)
     {
         DPRINT("hService %p\n", hServiceHandle);
+        ScmLinkServiceHandle(hServiceHandle);
         *lpServiceHandle = (SC_RPC_HANDLE)hServiceHandle;
 
         if (lpdwTagId != NULL)
@@ -3014,6 +3169,7 @@ ROpenServiceW(
     ScmReferenceService(lpService);
     DPRINT("OpenService %S - lpService->RefCount %u\n", lpService->lpServiceName, lpService->RefCount);
 
+    ScmLinkServiceHandle(hHandle);
     *lpServiceHandle = (SC_RPC_HANDLE)hHandle;
     DPRINT("*hService = %p\n", *lpServiceHandle);
 
@@ -4915,6 +5071,8 @@ REnumServiceGroupW(
     DPRINT("dwRequiredSize: %lu\n", dwRequiredSize);
     DPRINT("dwServiceCount: %lu\n", dwServiceCount);
 
+    dwRequiredSize = 0;
+
     for (;
          ServiceEntry != &ServiceListHead;
          ServiceEntry = ServiceEntry->Flink)
@@ -6404,6 +6562,8 @@ REnumServicesStatusExW(
     DPRINT("dwRequiredSize: %lu\n", dwRequiredSize);
     DPRINT("dwServiceCount: %lu\n", dwServiceCount);
 
+    dwRequiredSize = 0;
+
     for (;
          ServiceEntry != &ServiceListHead;
          ServiceEntry = ServiceEntry->Flink)
@@ -6672,8 +6832,82 @@ RNotifyServiceStatusChange(
     PBOOL pfCreateRemoteQueue,
     LPSC_NOTIFY_RPC_HANDLE phNotify)
 {
-    UNIMPLEMENTED;
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    PSERVICE_HANDLE hSvc;
+    PSERVICE lpService;
+    PNOTIFY_HANDLE pNotify;
+    DWORD dwMask;
+
+    DPRINT("RNotifyServiceStatusChange() called\n");
+
+    if (ScmShutdown)
+        return ERROR_SHUTDOWN_IN_PROGRESS;
+
+    if (ScmGetServiceManagerFromHandle(hService) != NULL)
+    {
+        UNIMPLEMENTED;
+        return ERROR_CALL_NOT_IMPLEMENTED;
+    }
+
+    hSvc = ScmGetServiceFromHandle(hService);
+    if (hSvc == NULL)
+        return ERROR_INVALID_HANDLE;
+
+    if (!RtlAreAllAccessesGranted(hSvc->Handle.DesiredAccess,
+                                  SERVICE_QUERY_STATUS))
+        return ERROR_ACCESS_DENIED;
+
+    lpService = hSvc->ServiceEntry;
+    if (lpService == NULL)
+        return ERROR_INVALID_HANDLE;
+
+    if (NotifyParams.dwInfoLevel != 2 || NotifyParams.pStatusChangeParam2 == NULL)
+        return ERROR_INVALID_LEVEL;
+
+    pNotify = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(NOTIFY_HANDLE));
+    if (pNotify == NULL)
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    pNotify->hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (pNotify->hEvent == NULL)
+    {
+        HeapFree(GetProcessHeap(), 0, pNotify);
+        return ERROR_NOT_ENOUGH_MEMORY;
+    }
+
+    pNotify->Handle.Tag = NOTIFY_TAG;
+    pNotify->RefCount = 1;
+    pNotify->dwNotifyMask = NotifyParams.pStatusChangeParam2->dwNotifyMask;
+
+    ScmLockDatabaseShared();
+    EnterCriticalSection(&ScmNotifyLock);
+
+    if (hSvc->pNotify != NULL)
+    {
+        LeaveCriticalSection(&ScmNotifyLock);
+        ScmUnlockDatabase();
+        ScmReleaseNotify(pNotify);
+        return ERROR_ALREADY_REGISTERED;
+    }
+
+    dwMask = 1 << (lpService->Status.dwCurrentState - SERVICE_STOPPED);
+    if (!hSvc->bStatusNotified && (pNotify->dwNotifyMask & dwMask))
+    {
+        ScmFillNotify(pNotify, lpService);
+        hSvc->bStatusNotified = TRUE;
+    }
+    else
+    {
+        InterlockedIncrement(&pNotify->RefCount);
+        hSvc->pNotify = pNotify;
+    }
+
+    LeaveCriticalSection(&ScmNotifyLock);
+    ScmUnlockDatabase();
+
+    *pfCreateRemoteQueue = FALSE;
+    *phNotify = (SC_NOTIFY_RPC_HANDLE)pNotify;
+
+    return ERROR_SUCCESS;
 }
 
 
@@ -6684,8 +6918,36 @@ RGetNotifyResults(
     SC_NOTIFY_RPC_HANDLE hNotify,
     PSC_RPC_NOTIFY_PARAMS_LIST *ppNotifyParams)
 {
-    UNIMPLEMENTED;
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    PNOTIFY_HANDLE pNotify;
+
+    if (ppNotifyParams == NULL)
+        return ERROR_INVALID_PARAMETER;
+
+    *ppNotifyParams = NULL;
+
+    pNotify = ScmGetNotifyFromHandle(hNotify);
+    if (pNotify == NULL)
+        return ERROR_INVALID_HANDLE;
+
+    InterlockedIncrement(&pNotify->RefCount);
+
+    if (WaitForSingleObject(pNotify->hEvent, INFINITE) != WAIT_OBJECT_0)
+    {
+        ScmReleaseNotify(pNotify);
+        return ERROR_GEN_FAILURE;
+    }
+
+    EnterCriticalSection(&ScmNotifyLock);
+    *ppNotifyParams = pNotify->pParamsList;
+    pNotify->pParamsList = NULL;
+    LeaveCriticalSection(&ScmNotifyLock);
+
+    ScmReleaseNotify(pNotify);
+
+    if (*ppNotifyParams == NULL)
+        return ERROR_REQUEST_ABORTED;
+
+    return ERROR_SUCCESS;
 }
 
 
@@ -6696,8 +6958,21 @@ RCloseNotifyHandle(
     LPSC_NOTIFY_RPC_HANDLE phNotify,
     PBOOL pfApcFired)
 {
-    UNIMPLEMENTED;
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    PNOTIFY_HANDLE pNotify;
+
+    if (phNotify == NULL || *phNotify == NULL)
+        return ERROR_INVALID_HANDLE;
+
+    pNotify = ScmGetNotifyFromHandle(*phNotify);
+    if (pNotify == NULL)
+        return ERROR_INVALID_HANDLE;
+
+    *pfApcFired = FALSE;
+    *phNotify = NULL;
+
+    ScmReleaseNotify(pNotify);
+
+    return ERROR_SUCCESS;
 }
 
 
@@ -6920,6 +7195,9 @@ void __RPC_USER SC_RPC_LOCK_rundown(SC_RPC_LOCK Lock)
 
 void __RPC_USER SC_NOTIFY_RPC_HANDLE_rundown(SC_NOTIFY_RPC_HANDLE hNotify)
 {
+    BOOL bApcFired;
+
+    RCloseNotifyHandle(&hNotify, &bApcFired);
 }
 
 /* EOF */

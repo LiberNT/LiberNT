@@ -1326,7 +1326,12 @@ static DWORD WINAPI notify_thread(void *user)
         QueueUserAPC((PAPCFUNC)data->notify_buffer->pfnNotifyCallback,
                 data->calling_thread, (ULONG_PTR)data->notify_buffer);
 
+#ifdef __REACTOS__
+        MIDL_user_free(cparams);
+        MIDL_user_free(list);
+#else
         HeapFree(GetProcessHeap(), 0, list);
+#endif
     }
     else
         WARN("GetNotifyResults server call failed: %lu\n", err);
@@ -1346,7 +1351,11 @@ static DWORD WINAPI notify_thread(void *user)
         WARN("CloseNotifyHandle server call failed: %lu\n", err);
 
     CloseHandle(data->calling_thread);
+#ifdef __REACTOS__
+    free(data);
+#else
     HeapFree(GetProcessHeap(), 0, data);
+#endif
 
     return 0;
 }
