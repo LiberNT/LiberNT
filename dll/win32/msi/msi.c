@@ -327,7 +327,11 @@ static UINT get_patch_product_codes( LPCWSTR szPatchPackage, WCHAR ***product_co
 
     r = MsiOpenDatabaseW( szPatchPackage, MSIDBOPEN_READONLY, &patch );
     if (r != ERROR_SUCCESS)
+#ifdef __REACTOS__
+        return ERROR_PATCH_PACKAGE_OPEN_FAILED;
+#else
         return r;
+#endif
 
     r = MsiGetSummaryInformationW( patch, NULL, 0, &info );
     if (r != ERROR_SUCCESS)
@@ -482,7 +486,15 @@ UINT WINAPI MsiApplyMultiplePatchesW(LPCWSTR szPatchPackages,
         len = end - beg;
         while (len && beg[len - 1] == ' ') len--;
 
+#ifdef __REACTOS__
+        if (!len)
+        {
+            while (beg > szPatchPackages && beg[-1] == ' ') beg--;
+            len = end - beg;
+        }
+#else
         if (!len) return ERROR_INVALID_NAME;
+#endif
 
         patch = malloc((len + 1) * sizeof(WCHAR));
         if (!patch)
@@ -491,6 +503,11 @@ UINT WINAPI MsiApplyMultiplePatchesW(LPCWSTR szPatchPackages,
         memcpy(patch, beg, len * sizeof(WCHAR));
         patch[len] = '\0';
 
+#ifdef __REACTOS__
+        if (GetFileAttributesW(patch) == INVALID_FILE_ATTRIBUTES)
+            r = GetLastError();
+        else
+#endif
         r = MSI_ApplyPatchW(patch, szProductCode, szPropertiesList);
         free(patch);
 
