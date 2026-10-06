@@ -1588,6 +1588,14 @@ static HRESULT start_binding(IMoniker *mon, Binding *binding_ctx, IUri *uri, IBi
         TRACE("start ret %08lx\n", hres);
 
         if(FAILED(hres) && hres != E_PENDING) {
+#ifdef __REACTOS__
+            if(hres == MK_E_SYNTAX) {
+                BOOL has_scheme;
+
+                if(SUCCEEDED(IUri_HasProperty(uri, Uri_PROPERTY_SCHEME_NAME, &has_scheme)) && !has_scheme)
+                    hres = INET_E_UNKNOWN_PROTOCOL;
+            }
+#endif
             stop_binding(binding, hres, NULL);
             IBinding_Release(&binding->IBinding_iface);
 
