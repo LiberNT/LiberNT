@@ -149,6 +149,7 @@ struct Compositor
     BOOL Registered, Active, FrameValid, WorkPending;
     LONG Width, Height;
     char Renderer[160];
+    LUID AdapterLuid;
     ID3D11Device *Device;
     ID3D11DeviceContext *Context;
     IDXGISwapChain1 *SwapChain;
@@ -851,6 +852,7 @@ BOOL CreateDevice(IDXGIAdapter1 **Selected)
                 *Selected = Adapter;
                 WideCharToMultiByte(CP_UTF8, 0, Desc.Description, -1, State.Renderer, sizeof(State.Renderer), NULL, NULL);
                 State.Renderer[sizeof(State.Renderer) - 1] = 0;
+                State.AdapterLuid = Desc.AdapterLuid;
                 IDXGIDevice1 *DxgiDevice = NULL;
                 if (SUCCEEDED(State.Device->QueryInterface(IID_IDXGIDevice1, (void **)&DxgiDevice)))
                 {
@@ -1081,6 +1083,38 @@ void PruneClientSources(const DWM_WIN *Windows, ULONG Count)
     }
 }
 
+BOOL ForeignAdapter(const DWM_WIN *Window)
+{
+    return (Window->DxAdapterLuid.LowPart != 0 || Window->DxAdapterLuid.HighPart != 0) &&
+           (Window->DxAdapterLuid.LowPart != State.AdapterLuid.LowPart ||
+            Window->DxAdapterLuid.HighPart != State.AdapterLuid.HighPart);
+}
+
+Texture *ImportForeign(const DWM_WIN *Window, DXGI_FORMAT Format)
+{
+    if (Window->DxUpdateId == 0 || Window->DxPitch < Window->DxWidth * sizeof(ULONG))
+        return NULL;
+    Surface *Slot = FindSurface(Window, TRUE);
+    if (Slot->Image.Resource == NULL || Slot->Share != Window->DxGlobalShare ||
+        Slot->Generation != Window->DxGeneration || Slot->UpdateId != Window->DxUpdateId)
+    {
+        const BYTE *Pixels = DwmDxGetSurfaceSnapshot(Window);
+        if (Pixels == NULL ||
+            !EnsureTexture(Slot->Image, (LONG)Window->DxWidth, (LONG)Window->DxHeight, FALSE, Format))
+            return NULL;
+        UnbindTextures();
+        State.Context->UpdateSubresource(Slot->Image.Resource, 0, NULL, Pixels, Window->DxPitch, 0);
+        State.WorkPending = TRUE;
+        Slot->Share = Window->DxGlobalShare;
+        Slot->Generation = Window->DxGeneration;
+        Slot->SurfaceId = Window->SurfaceId;
+        Slot->Client = TRUE;
+        Slot->UpdateId = Window->DxUpdateId;
+    }
+    Slot->LastFrame = State.Frame;
+    return &Slot->Image;
+}
+
 /* A retained publication is sampled where its producer left it, with no
  * copy. DWM holds it until a later frame reports a newer one. */
 Texture *ImportRetained(const DWM_WIN *Window)
@@ -1110,6 +1144,8 @@ Texture *Import(const DWM_WIN *Window, BOOL Client)
         return NULL;
     if (!Client && (Width != (ULONG)Window->cx || Height != (ULONG)Window->cy))
         return NULL;
+    if (Client && ForeignAdapter(Window))
+        return ImportForeign(Window, (DXGI_FORMAT)Format);
     if (Client && (Window->LayerFlags & DWM_WINDOW_DX_RETAINED))
         return ImportRetained(Window);
     Surface *Slot = FindSurface(Window, Client);
