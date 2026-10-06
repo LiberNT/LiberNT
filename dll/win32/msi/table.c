@@ -1627,6 +1627,39 @@ static UINT TABLE_get_column_info( struct tagMSIVIEW *view,
 
 static UINT table_find_row( struct table_view *, MSIRECORD *, UINT *, UINT * );
 
+#ifdef __REACTOS__
+static BOOL table_row_matches_record( struct table_view *tv, UINT row, MSIRECORD *rec )
+{
+    UINT i, x, value;
+
+    for( i = 0; i < tv->num_cols; i++ )
+    {
+        if( (tv->columns[i].type & MSITYPE_KEY) || MSITYPE_IS_BINARY(tv->columns[i].type) )
+            continue;
+
+        if( TABLE_fetch_int( &tv->view, row, i + 1, &x ) != ERROR_SUCCESS )
+            return FALSE;
+
+        if( tv->columns[i].type & MSITYPE_STRING )
+        {
+            int len;
+            const WCHAR *str = msi_record_get_string( rec, i + 1, &len );
+
+            value = 0;
+            if( str && (str[0] || len) &&
+                msi_string2id( tv->db->strings, str, len, &value ) != ERROR_SUCCESS )
+                return FALSE;
+        }
+        else if( int_to_table_storage( tv, i + 1, MSI_RecordGetInteger( rec, i + 1 ), &value ) )
+            return FALSE;
+
+        if( x != value )
+            return FALSE;
+    }
+    return TRUE;
+}
+#endif
+
 static UINT table_validate_new( struct table_view *tv, MSIRECORD *rec, UINT *column )
 {
     UINT r, row, i;
@@ -1936,6 +1969,10 @@ static UINT TABLE_modify( struct tagMSIVIEW *view, MSIMODIFY eModifyMode,
             if (r == ERROR_SUCCESS)
                 r = TABLE_insert_row( view, rec, -1, FALSE );
         }
+#ifdef __REACTOS__
+        else if (!table_row_matches_record( tv, frow, rec ))
+            r = ERROR_FUNCTION_FAILED;
+#endif
         break;
 
     case MSIMODIFY_REPLACE:
