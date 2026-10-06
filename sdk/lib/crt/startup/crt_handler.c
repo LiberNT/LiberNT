@@ -176,7 +176,9 @@ __mingw_SEH_error_handler (struct _EXCEPTION_RECORD* ExceptionRecord,
 	  action = 0; // EXCEPTION_CONTINUE_EXECUTION;
 	}
       break;
+#ifndef __REACTOS__
     case EXCEPTION_DATATYPE_MISALIGNMENT:
+#endif
     case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
     case EXCEPTION_FLT_STACK_CHECK:
     case EXCEPTION_INT_OVERFLOW:
@@ -280,7 +282,9 @@ _gnu_exception_handler (EXCEPTION_POINTERS *exception_data)
 	}
       break;
 #ifdef _WIN64
+#ifndef __REACTOS__
     case EXCEPTION_DATATYPE_MISALIGNMENT:
+#endif
     case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
     case EXCEPTION_FLT_STACK_CHECK:
     case EXCEPTION_INT_OVERFLOW:
