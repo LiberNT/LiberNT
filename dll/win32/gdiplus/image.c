@@ -4829,6 +4829,76 @@ GpStatus terminate_encoder_wic(GpImage *image)
         return hresult_to_status(hr);
     }
 }
+#ifdef __REACTOS__
+static HRESULT write_halftone_pixels(IWICBitmapFrameEncode *frame, GpBitmap *bitmap, GpRect *rc)
+{
+    ColorPalette *palette;
+    BitmapData data;
+    HRESULT hr = S_OK;
+    BYTE *row;
+    UINT x, y, i, best = 0, best_distance, distance;
+    ARGB color, last = 0;
+    BOOL have_last = FALSE;
+
+    palette = calloc(1, sizeof(*palette) + 255 * sizeof(ARGB));
+    row = malloc(rc->Width);
+    if (!palette || !row)
+    {
+        free(palette);
+        free(row);
+        return E_OUTOFMEMORY;
+    }
+
+    palette->Count = 256;
+    if (GdipInitializePalette(palette, PaletteTypeFixedHalftone256, 0, FALSE, NULL) != Ok)
+        hr = E_FAIL;
+    if (SUCCEEDED(hr))
+        hr = set_palette(frame, palette);
+    if (SUCCEEDED(hr) &&
+        GdipBitmapLockBits(bitmap, rc, ImageLockModeRead, PixelFormat32bppARGB, &data) != Ok)
+        hr = E_FAIL;
+
+    if (SUCCEEDED(hr))
+    {
+        for (y = 0; y < data.Height && SUCCEEDED(hr); y++)
+        {
+            const ARGB *src = (const ARGB *)((const BYTE *)data.Scan0 + (INT)y * data.Stride);
+
+            for (x = 0; x < data.Width; x++)
+            {
+                color = src[x] & 0xffffff;
+                if (!have_last || color != last)
+                {
+                    best_distance = ~0u;
+                    for (i = 0; i < palette->Count; i++)
+                    {
+                        INT red = (INT)((color >> 16) & 0xff) - (INT)((palette->Entries[i] >> 16) & 0xff);
+                        INT green = (INT)((color >> 8) & 0xff) - (INT)((palette->Entries[i] >> 8) & 0xff);
+                        INT blue = (INT)(color & 0xff) - (INT)(palette->Entries[i] & 0xff);
+
+                        distance = red * red + green * green + blue * blue;
+                        if (distance < best_distance)
+                        {
+                            best_distance = distance;
+                            best = i;
+                        }
+                    }
+                    last = color;
+                    have_last = TRUE;
+                }
+                row[x] = (BYTE)best;
+            }
+            hr = IWICBitmapFrameEncode_WritePixels(frame, 1, data.Width, data.Width, row);
+        }
+        GdipBitmapUnlockBits(bitmap, &data);
+    }
+
+    free(row);
+    free(palette);
+    return hr;
+}
+
+#endif
 
 static GpStatus encode_frame_wic(IWICBitmapEncoder *encoder, GpImage *image)
 {
@@ -4930,6 +5000,14 @@ static GpStatus encode_frame_wic(IWICBitmapEncoder *encoder, GpImage *image)
         if (SUCCEEDED(hr) && IsIndexedPixelFormat(gdipformat) && image->palette)
             hr = set_palette(frameencode, image->palette);
 
+#ifdef __REACTOS__
+        if (SUCCEEDED(hr) && gdipformat == PixelFormat8bppIndexed && !image->palette &&
+            !IsIndexedPixelFormat(bitmap->format))
+        {
+            hr = write_halftone_pixels(frameencode, bitmap, &rc);
+        }
+        else
+#endif
         if (SUCCEEDED(hr))
         {
             stat = GdipBitmapLockBits(bitmap, &rc, ImageLockModeRead, gdipformat,
