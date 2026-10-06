@@ -1443,6 +1443,9 @@ static HRESULT OLEPictureImpl_LoadEnhMetafile(OLEPictureImpl *This,
     This->origHeight = 0;
     This->himetricWidth = hdr.rclFrame.right - hdr.rclFrame.left;
     This->himetricHeight = hdr.rclFrame.bottom - hdr.rclFrame.top;
+#ifdef __REACTOS__
+    This->keepOrigFormat = FALSE;
+#endif
 
     return S_OK;
 }
@@ -1471,6 +1474,9 @@ static HRESULT OLEPictureImpl_LoadAPM(OLEPictureImpl *This,
     This->origHeight = 0;
     This->himetricWidth = MulDiv((INT)header->right - header->left, 2540, header->inch);
     This->himetricHeight = MulDiv((INT)header->bottom - header->top, 2540, header->inch);
+#ifdef __REACTOS__
+    This->keepOrigFormat = FALSE;
+#endif
     return S_OK;
 }
 
@@ -1871,6 +1877,12 @@ static BOOL serializeIcon(HICON hIcon, void ** ppBuffer, unsigned int * pLength)
             if (pInfoBitmap->bmiHeader.biWidth <= 0 || pInfoBitmap->bmiHeader.biWidth > INT_MAX - 31 ||
                 pInfoBitmap->bmiHeader.biHeight <= 0 || pInfoBitmap->bmiHeader.biHeight > INT_MAX / 2)
                 goto done;
+            pInfoBitmap->bmiHeader.biBitCount = 4;
+            pInfoBitmap->bmiHeader.biCompression = BI_RGB;
+            pInfoBitmap->bmiHeader.biSizeImage = get_dib_stride(pInfoBitmap->bmiHeader.biWidth, 4) *
+                                                 pInfoBitmap->bmiHeader.biHeight;
+            pInfoBitmap->bmiHeader.biClrUsed = 0;
+            pInfoBitmap->bmiHeader.biClrImportant = 0;
 #endif
 			iLengthScanLineMask = ((pInfoBitmap->bmiHeader.biWidth + 31) >> 5) << 2;
 /*
@@ -2144,7 +2156,24 @@ static HRESULT WINAPI OLEPictureImpl_GetSizeMax(IPersistStream *iface, ULARGE_IN
         hr = S_OK;
         break;
     case PICTYPE_ICON:
+#ifdef __REACTOS__
+        if (This->bIsDirty || !This->data)
+        {
+            void *icon_data;
+
+            if (serializeIcon(This->desc.icon.hicon, &icon_data, &datasize))
+            {
+                free(icon_data);
+                hr = S_OK;
+            }
+            else
+                hr = E_FAIL;
+        }
+        else
+            hr = S_OK;
+#else
         FIXME("(%p), PICTYPE_ICON not implemented!\n",This);
+#endif
         break;
     case PICTYPE_BITMAP:
         if (This->bIsDirty || !This->data) {
