@@ -1350,6 +1350,10 @@ UINT WINAPI MsiEnumClientsA( const char *szComponent, DWORD index, char *szProdu
     return r;
 }
 
+#ifdef __REACTOS__
+static DWORD enum_clients_last_index = ~0u;
+
+#endif
 UINT WINAPI MsiEnumClientsW( const WCHAR *szComponent, DWORD index, WCHAR *szProduct )
 {
     HKEY hkeyComp = 0;
@@ -1361,6 +1365,14 @@ UINT WINAPI MsiEnumClientsW( const WCHAR *szComponent, DWORD index, WCHAR *szPro
     if (!szComponent || !*szComponent || !szProduct)
         return ERROR_INVALID_PARAMETER;
 
+#ifdef __REACTOS__
+    if (index && index != enum_clients_last_index + 1)
+    {
+        enum_clients_last_index = ~0u;
+        return ERROR_INVALID_PARAMETER;
+    }
+    enum_clients_last_index = ~0u;
+#endif
     if (MSIREG_OpenUserDataComponentKey(szComponent, NULL, &hkeyComp, FALSE) != ERROR_SUCCESS &&
         MSIREG_OpenUserDataComponentKey(szComponent, L"S-1-5-18", &hkeyComp, FALSE) != ERROR_SUCCESS)
         return ERROR_UNKNOWN_COMPONENT;
@@ -1384,6 +1396,9 @@ UINT WINAPI MsiEnumClientsW( const WCHAR *szComponent, DWORD index, WCHAR *szPro
     {
         unsquash_guid(szValName, szProduct);
         TRACE("-> %s\n", debugstr_w(szProduct));
+#ifdef __REACTOS__
+        enum_clients_last_index = index;
+#endif
     }
     RegCloseKey(hkeyComp);
     return r;
