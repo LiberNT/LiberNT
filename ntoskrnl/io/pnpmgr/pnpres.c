@@ -727,6 +727,9 @@ IopFixupResourceListWithRequirements(IN PIO_RESOURCE_REQUIREMENTS_LIST Requireme
             PIO_RESOURCE_DESCRIPTOR IoDesc = &ResList->Descriptors[ii];
             BOOLEAN Matched = FALSE;
 
+            if (IoDesc->Type == CmResourceTypeNull)
+                continue;
+
             /* Skip alternates if we don't need one */
             if (!AlternateRequired && (IoDesc->Option & IO_RESOURCE_ALTERNATIVE))
             {
