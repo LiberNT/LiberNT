@@ -2528,16 +2528,6 @@ ClasspDeviceTemperatureProperty(
         status = STATUS_BUFFER_TOO_SMALL;
         goto Exit;
     }
-    if (outputLength < descriptorSize)
-    {
-        PSTORAGE_DESCRIPTOR_HEADER header = (PSTORAGE_DESCRIPTOR_HEADER)descriptor;
-        header->Version = descriptorSize;
-        header->Size = descriptorSize;
-        information = sizeof(*header);
-        status = STATUS_SUCCESS;
-        goto Exit;
-    }
-
     if (fdoData->TemperatureProperty == SupportUnknown)
     {
         status = ClassForwardIrpSynchronous(commonExtension, Irp);
@@ -2571,6 +2561,16 @@ ClasspDeviceTemperatureProperty(
     if (!ClasspParseTemperatureLogPage(logPage, transferLength, &temperature, &referenceTemperature, &referenceReported))
     {
         status = STATUS_NOT_SUPPORTED;
+        goto Exit;
+    }
+
+    if (outputLength < descriptorSize)
+    {
+        PSTORAGE_DESCRIPTOR_HEADER header = (PSTORAGE_DESCRIPTOR_HEADER)descriptor;
+        header->Version = descriptorSize;
+        header->Size = descriptorSize;
+        information = sizeof(*header);
+        status = STATUS_SUCCESS;
         goto Exit;
     }
 
