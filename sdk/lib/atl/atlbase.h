@@ -190,6 +190,7 @@ typedef _ATL_WIN_MODULE70 _ATL_WIN_MODULE;
 #pragma section("ATL$__z", read, write)
 #pragma section("ATL$__m", read, write)
 #define _ATLALLOC(x) __declspec(allocate(x))
+#define _ATL_OBJMAP_ENTRY_CONST const
 
 #if defined(_M_IX86)
 #define OBJECT_ENTRY_PRAGMA(class) __pragma(comment(linker, "/include:___pobjMap_" #class));
@@ -204,8 +205,10 @@ typedef _ATL_WIN_MODULE70 _ATL_WIN_MODULE;
 // GCC completely ignores __attribute__((unused)) on the __pobjMap_ pointer, so we pass it to a function that is not allowed to be optimized....
 #if defined(__clang__)
 #define ATL_OBJMAP_HACK_ATTRIBUTES __attribute__((optnone, noinline, unused))
+#define _ATL_OBJMAP_ENTRY_CONST
 #else
 #define ATL_OBJMAP_HACK_ATTRIBUTES __attribute__((optimize("O0"), unused))
+#define _ATL_OBJMAP_ENTRY_CONST const
 #endif
 static int ATL_OBJMAP_HACK_ATTRIBUTES hack_for_gcc(const _ATL_OBJMAP_ENTRY * const *)
 {
