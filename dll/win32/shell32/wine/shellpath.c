@@ -6968,6 +6968,19 @@ static HRESULT _SHGetCurrentVersionPath(DWORD dwFlags, BYTE folder,
     if (!pszPath)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    if (!is_win64)
+    {
+        BOOL is_wow64 = FALSE;
+
+        IsWow64Process(GetCurrentProcess(), &is_wow64);
+        if (is_wow64 && folder == CSIDL_PROGRAM_FILES)
+            folder = CSIDL_PROGRAM_FILESX86;
+        else if (is_wow64 && folder == CSIDL_PROGRAM_FILES_COMMON)
+            folder = CSIDL_PROGRAM_FILES_COMMONX86;
+    }
+
+#endif
     if (dwFlags & SHGFP_TYPE_DEFAULT)
 #ifndef __REACTOS__
         hr = _SHGetDefaultValue(folder, pszPath);
