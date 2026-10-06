@@ -91,43 +91,67 @@ BOOL WINAPI SfcIsFileProtected(HANDLE RpcHandle, LPCWSTR ProtFileName)
         SECURITY_SERVICE_ID_BASE_RID, 956008885, 3418522649U, 1831038044, 1853292631, 2271478464U
     };
     UCHAR SidBuffer[SECURITY_MAX_SID_SIZE];
-    UCHAR Descriptor[SECURITY_DESCRIPTOR_MIN_LENGTH + 2 * SECURITY_MAX_SID_SIZE];
     PSID TrustedInstaller = (PSID)SidBuffer, Owner = NULL;
-    BOOLEAN Defaulted, Protected = FALSE;
-    RTL_PATH_TYPE PathType;
-    DWORD Attributes;
-    ULONG Index, Length;
-    HANDLE File;
+    PSECURITY_DESCRIPTOR Descriptor = NULL;
+    PACCESS_ALLOWED_ACE Ace;
+    PACL Dacl = NULL;
+    BOOLEAN Defaulted, Present = FALSE, Protected = FALSE;
+    ULONG Index, Length = 0;
+    NTSTATUS Status;
+    HANDLE File = INVALID_HANDLE_VALUE;
 
     DPRINT("(%p, %S)\n", RpcHandle, ProtFileName);
 
     if (ProtFileName)
     {
-        PathType = RtlDetermineDosPathNameType_U(ProtFileName);
-        Attributes = GetFileAttributesW(ProtFileName);
-        if ((PathType == RtlPathTypeDriveAbsolute || PathType == RtlPathTypeUncAbsolute) &&
-            Attributes != INVALID_FILE_ATTRIBUTES && !(Attributes & FILE_ATTRIBUTE_DIRECTORY))
+        File = CreateFileW(ProtFileName, READ_CONTROL,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           NULL, OPEN_EXISTING, 0, NULL);
+    }
+    if (File != INVALID_HANDLE_VALUE)
+    {
+        Status = NtQuerySecurityObject(File, OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                                       NULL, 0, &Length);
+        if (Status == STATUS_BUFFER_TOO_SMALL)
+            Descriptor = RtlAllocateHeap(RtlGetProcessHeap(), 0, Length);
+        if (Descriptor)
         {
-            File = CreateFileW(ProtFileName, READ_CONTROL,
-                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                               NULL, OPEN_EXISTING, 0, NULL);
-            if (File != INVALID_HANDLE_VALUE)
-            {
-                RtlInitializeSid(TrustedInstaller, (PSID_IDENTIFIER_AUTHORITY)&NtAuthority,
-                                 RTL_NUMBER_OF(TrustedInstallerRids));
-                for (Index = 0; Index < RTL_NUMBER_OF(TrustedInstallerRids); Index++)
-                    *RtlSubAuthoritySid(TrustedInstaller, Index) = TrustedInstallerRids[Index];
+            Status = NtQuerySecurityObject(File, OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                                           Descriptor, Length, &Length);
+        }
+        CloseHandle(File);
 
-                if (NT_SUCCESS(NtQuerySecurityObject(File, OWNER_SECURITY_INFORMATION, Descriptor,
-                                                     sizeof(Descriptor), &Length)) &&
-                    NT_SUCCESS(RtlGetOwnerSecurityDescriptor(Descriptor, &Owner, &Defaulted)) &&
-                    Owner != NULL)
+        RtlInitializeSid(TrustedInstaller, (PSID_IDENTIFIER_AUTHORITY)&NtAuthority,
+                         RTL_NUMBER_OF(TrustedInstallerRids));
+        for (Index = 0; Index < RTL_NUMBER_OF(TrustedInstallerRids); Index++)
+            *RtlSubAuthoritySid(TrustedInstaller, Index) = TrustedInstallerRids[Index];
+
+        if (Descriptor && NT_SUCCESS(Status) &&
+            NT_SUCCESS(RtlGetOwnerSecurityDescriptor(Descriptor, &Owner, &Defaulted)) &&
+            Owner != NULL && RtlEqualSid(Owner, TrustedInstaller) &&
+            NT_SUCCESS(RtlGetDaclSecurityDescriptor(Descriptor, &Present, &Dacl, &Defaulted)) &&
+            Present && Dacl != NULL)
+        {
+            Protected = TRUE;
+            for (Index = 0; Index < Dacl->AceCount; Index++)
+            {
+                if (!NT_SUCCESS(RtlGetAce(Dacl, Index, (PVOID*)&Ace)))
                 {
-                    Protected = RtlEqualSid(Owner, TrustedInstaller);
+                    Protected = FALSE;
+                    break;
                 }
-                CloseHandle(File);
+                if (Ace->Header.AceType == ACCESS_ALLOWED_ACE_TYPE &&
+                    !(Ace->Header.AceFlags & INHERIT_ONLY_ACE) &&
+                    (Ace->Mask & ~(FILE_GENERIC_READ | FILE_GENERIC_EXECUTE)) &&
+                    !RtlEqualSid((PSID)&Ace->SidStart, TrustedInstaller))
+                {
+                    Protected = FALSE;
+                    break;
+                }
             }
         }
+        if (Descriptor)
+            RtlFreeHeap(RtlGetProcessHeap(), 0, Descriptor);
     }
 
     SetLastError(Protected ? ERROR_SUCCESS : ERROR_FILE_NOT_FOUND);
