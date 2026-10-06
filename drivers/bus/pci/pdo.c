@@ -4633,7 +4633,6 @@ PdoPnpControl(
         case IRP_MN_QUERY_PNP_DEVICE_STATE:
         {
             DPRINT("IRP_MN_QUERY_PNP_DEVICE_STATE received\n");
-            Irp->IoStatus.Information = 0;
             if (DeviceExtension->PciDevice->IsDebuggingDevice)
             {
                 Irp->IoStatus.Information |= PNP_DEVICE_NOT_DISABLEABLE;
