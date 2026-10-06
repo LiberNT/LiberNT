@@ -509,9 +509,15 @@ static WINECRYPT_CERTSTORE *CRYPT_SysRegOpenStoreW(HCRYPTPROV hCryptProv,
         break;
     case CERT_SYSTEM_STORE_LOCAL_MACHINE_ENTERPRISE:
         /* hklm\Software\Microsoft\EnterpriseCertificates */
+#ifdef __REACTOS__
+        root = HKEY_LOCAL_MACHINE;
+        base = L"Software\\Microsoft\\EnterpriseCertificates";
+        break;
+#else
         FIXME("CERT_SYSTEM_STORE_LOCAL_MACHINE_ENTERPRISE, %s: stub\n",
          debugstr_w(storeName));
         return NULL;
+#endif
     default:
         SetLastError(E_INVALIDARG);
         return NULL;
@@ -1372,8 +1378,14 @@ static LONG CRYPT_OpenParentStore(DWORD dwFlags,
         break;
     case CERT_SYSTEM_STORE_LOCAL_MACHINE_ENTERPRISE:
         /* hklm\Software\Microsoft\EnterpriseCertificates */
+#ifdef __REACTOS__
+        root = HKEY_LOCAL_MACHINE;
+        base = L"Software\\Microsoft\\EnterpriseCertificates";
+        break;
+#else
         FIXME("CERT_SYSTEM_STORE_LOCAL_MACHINE_ENTERPRISE\n");
         return ERROR_FILE_NOT_FOUND;
+#endif
     default:
         return ERROR_FILE_NOT_FOUND;
     }

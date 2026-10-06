@@ -543,10 +543,32 @@ WINECRYPT_CERTSTORE *CRYPT_RegOpenStore(HCRYPTPROV hCryptProv, DWORD dwFlags,
     {
         HKEY key;
 
+#ifdef __REACTOS__
+        BOOL opened;
+
+        if ((ULONG_PTR)pvPara >= (ULONG_PTR)HKEY_CLASSES_ROOT &&
+            (ULONG_PTR)pvPara <= (ULONG_PTR)HKEY_DYN_DATA)
+        {
+            LONG rc = RegOpenKeyExW((HKEY)pvPara, NULL, 0,
+             dwFlags & CERT_STORE_READONLY_FLAG ? KEY_READ : KEY_ALL_ACCESS, &key);
+
+            opened = rc == ERROR_SUCCESS;
+            if (!opened) SetLastError(rc);
+        }
+        else
+        {
+            opened = DuplicateHandle(GetCurrentProcess(), (HANDLE)pvPara,
+             GetCurrentProcess(), (LPHANDLE)&key,
+             dwFlags & CERT_STORE_READONLY_FLAG ? KEY_READ : KEY_ALL_ACCESS,
+             TRUE, 0);
+        }
+        if (opened)
+#else
         if (DuplicateHandle(GetCurrentProcess(), (HANDLE)pvPara,
          GetCurrentProcess(), (LPHANDLE)&key,
          dwFlags & CERT_STORE_READONLY_FLAG ? KEY_READ : KEY_ALL_ACCESS,
          TRUE, 0))
+#endif
         {
             WINECRYPT_CERTSTORE *memStore;
 
