@@ -783,7 +783,11 @@ MSIDBERROR WINAPI MsiViewGetErrorW( MSIHANDLE handle, WCHAR *buffer, DWORD *bufl
         MSIHANDLE remote;
 
         if (!(remote = msi_get_remote(handle)))
+#ifdef __REACTOS__
+            return rpc_handle ? MSIDBERROR_FUNCTIONERROR : MSIDBERROR_INVALIDARG;
+#else
             return MSIDBERROR_INVALIDARG;
+#endif
 
         if (!*buflen)
             return MSIDBERROR_FUNCTIONERROR;
@@ -837,7 +841,11 @@ MSIDBERROR WINAPI MsiViewGetErrorA( MSIHANDLE handle, char *buffer, DWORD *bufle
         MSIHANDLE remote;
 
         if (!(remote = msi_get_remote(handle)))
+#ifdef __REACTOS__
+            return rpc_handle ? MSIDBERROR_FUNCTIONERROR : MSIDBERROR_INVALIDARG;
+#else
             return MSIDBERROR_INVALIDARG;
+#endif
 
         if (!*buflen)
             return MSIDBERROR_FUNCTIONERROR;
