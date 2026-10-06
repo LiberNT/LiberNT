@@ -2917,11 +2917,17 @@ FileRecord::SetFileDataSize(_In_ AttributeType AttrType,
                               NULL,
                               NULL) != NULL;
     if (TargetAttribute->AttributeType != AttrType ||
-        (TargetAttribute->Flags & ~ATTR_SPARSE) != 0 ||
-        (TargetAttribute->Flags == ATTR_SPARSE &&
+        ((TargetAttribute->Flags & ~ATTR_SPARSE) != 0 &&
+         TargetAttribute->Flags != ATTR_COMPRESSED) ||
+        (TargetAttribute->Flags != 0 &&
          AttrType != TypeData))
     {
         return STATUS_NOT_IMPLEMENTED;
+    }
+    if (TargetAttribute->IsNonResident &&
+        TargetAttribute->Flags == ATTR_COMPRESSED)
+    {
+        return ResizeCompressedData(StreamName, NewSize);
     }
 
     if (TargetAttribute->IsNonResident)
@@ -4439,9 +4445,19 @@ FileRecord::PromoteResidentData(
             TypeIndexAllocation &&
          TargetAttribute->AttributeType !=
             TypeAttributeList) ||
-        TargetAttribute->Flags != 0)
+        (TargetAttribute->Flags != 0 &&
+         (TargetAttribute->Flags != ATTR_COMPRESSED ||
+          TargetAttribute->AttributeType != TypeData)))
     {
         return STATUS_NOT_IMPLEMENTED;
+    }
+    if (TargetAttribute->Flags == ATTR_COMPRESSED)
+    {
+        return PromoteResidentCompressedData(TargetAttribute,
+                                             Buffer,
+                                             Length,
+                                             Offset,
+                                             NewDataSize);
     }
 
     EndOffset = Offset + Length;
@@ -6084,88 +6100,162 @@ Done:
  * ATTR_COMPRESSED with a 16-cluster unit and a bounded stream size;
  * everything else keeps the previous unsupported result.
  */
-#define NTFS_COMPRESSED_WRITE_LIMIT (4ULL * 1024 * 1024)
+#define NTFS_COMPRESSED_WRITE_UNITS 64
+
+static NTSTATUS
+AppendLogicalRange(_In_opt_ PDataRun Source,
+                   _In_ ULONGLONG RangeStart,
+                   _In_ ULONGLONG RangeEnd,
+                   _In_opt_ PDataRun* Head,
+                   _In_opt_ PDataRun* Tail,
+                   _In_opt_ PDataRun* AllocatedHead,
+                   _In_opt_ PDataRun* AllocatedTail,
+                   _In_opt_ PULONGLONG PhysicalClusters)
+{
+    ULONGLONG Logical = 0;
+    NTSTATUS Status;
+
+    for (PDataRun Run = Source;
+         Run && Logical < RangeEnd;
+         Run = Run->NextRun)
+    {
+        ULONGLONG RunEnd;
+        ULONGLONG Start;
+        ULONGLONG End;
+
+        if (Run->Length == 0 ||
+            Logical > ~(ULONGLONG)0 - Run->Length)
+        {
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        RunEnd = Logical + Run->Length;
+        Start = Logical > RangeStart ? Logical : RangeStart;
+        End = RunEnd < RangeEnd ? RunEnd : RangeEnd;
+        if (End > Start)
+        {
+            if (Head)
+            {
+                Status = AppendLogicalRun(Head,
+                                          Tail,
+                                          Run->IsSparse,
+                                          Run->LCN + (Start - Logical),
+                                          End - Start);
+                if (!NT_SUCCESS(Status))
+                    return Status;
+            }
+            if (!Run->IsSparse)
+            {
+                if (AllocatedHead)
+                {
+                    Status = AppendLogicalRun(AllocatedHead,
+                                              AllocatedTail,
+                                              FALSE,
+                                              Run->LCN + (Start - Logical),
+                                              End - Start);
+                    if (!NT_SUCCESS(Status))
+                        return Status;
+                }
+                if (PhysicalClusters)
+                    *PhysicalClusters += End - Start;
+            }
+        }
+        Logical = RunEnd;
+    }
+
+    return STATUS_SUCCESS;
+}
 
 NTSTATUS
-FileRecord::WriteCompressedData(_In_ PAttribute TargetAttribute,
-                                _In_ PUCHAR Buffer,
-                                _In_ PULONG Length,
-                                _In_ ULONGLONG Offset)
+FileRecord::WriteCompressedUnits(_Inout_ PAttribute* Attribute,
+                                 _In_opt_ PUCHAR Buffer,
+                                 _In_ ULONG Length,
+                                 _In_ ULONGLONG Offset)
 {
+    PAttribute TargetAttribute = *Attribute;
     PDataRun OldPhysicalRuns = NULL;
+    PDataRun OldPhysicalTail = NULL;
     PDataRun NewPhysicalRuns = NULL;
-    PDataRun NewPhysicalTail = NULL;
     PDataRun CompositeRuns = NULL;
     PDataRun CompositeTail = NULL;
     PDataRun ExistingRuns;
+    PDataRun Cursor;
     PNonResidentMappingUpdate MappingUpdate = NULL;
     PUCHAR Plain = NULL;
     PUCHAR Stored = NULL;
+    PUCHAR UnitStored = NULL;
     PUCHAR RecordBackup = NULL;
     ULONGLONG ClusterSize;
     ULONGLONG UnitBytes;
     ULONGLONG OldDataSize;
     ULONGLONG NewDataSize;
     ULONGLONG EndOffset;
-    ULONGLONG UnitCount;
-    ULONGLONG PhysicalBytes = 0;
-    ULONGLONG PlainBytes;
+    ULONGLONG FirstUnit;
+    ULONGLONG EndUnit;
+    ULONGLONG OldUnits;
+    ULONGLONG NewUnits;
+    ULONGLONG RangeStart;
+    ULONGLONG RangeDataEnd;
+    ULONGLONG PhysicalClusters = 0;
+    ULONGLONG CursorUsed = 0;
+    ULONG RangeUnits;
+    ULONG PlainBytes;
+    ULONG PackedBytes = 0;
+    ULONG TotalClusters = 0;
     ULONG Remaining;
     BOOLEAN Committed = FALSE;
     NTSTATUS Status;
-    NTSTATUS ReleaseStatus;
 
-    if (!TargetAttribute || !Buffer || !Length || *Length == 0)
-        return STATUS_INVALID_PARAMETER;
     ClusterSize = BytesPerCluster(DiskVolume);
     UnitBytes = ClusterSize << 4;
     OldDataSize = TargetAttribute->NonResident.DataSize;
-    if (Offset > ~(ULONGLONG)0 - *Length)
-        return STATUS_FILE_TOO_LARGE;
-    EndOffset = Offset + *Length;
-    NewDataSize = EndOffset > OldDataSize
-        ? EndOffset
-        : OldDataSize;
+    EndOffset = Offset + Length;
+    NewDataSize = EndOffset > OldDataSize ? EndOffset : OldDataSize;
 
-    if (TargetAttribute->AttributeType != TypeData ||
-        !TargetAttribute->IsNonResident ||
-        TargetAttribute->Flags != ATTR_COMPRESSED ||
-        TargetAttribute->NonResident.CompressionUnitSize != 4 ||
-        TargetAttribute->NonResident.FirstVCN != 0 ||
-        GetAttributeOwner(TargetAttribute) != this ||
-        FindAttributeInRecord(TypeAttributeList, NULL, NULL) ||
-        ClusterSize == 0 ||
-        NewDataSize > NTFS_COMPRESSED_WRITE_LIMIT)
+    if (TargetAttribute->NonResident.AllocatedSize % UnitBytes != 0 ||
+        Offset > ((OldDataSize + UnitBytes - 1) / UnitBytes) * UnitBytes &&
+            OldDataSize % UnitBytes != 0)
     {
         return STATUS_NOT_IMPLEMENTED;
     }
 
-    ExistingRuns = GetCachedDataRuns(TargetAttribute);
-    if (!ExistingRuns)
-        return STATUS_FILE_CORRUPT_ERROR;
-    Status = CloneAllocatedRuns(ExistingRuns, &OldPhysicalRuns);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    FirstUnit = Offset / UnitBytes;
+    EndUnit = (EndOffset + UnitBytes - 1) / UnitBytes;
+    OldUnits = TargetAttribute->NonResident.AllocatedSize / UnitBytes;
+    NewUnits = EndUnit > OldUnits ? EndUnit : OldUnits;
+    if (EndUnit - FirstUnit > NTFS_COMPRESSED_WRITE_UNITS + 1)
+        return STATUS_INVALID_PARAMETER;
+    RangeUnits = (ULONG)(EndUnit - FirstUnit);
+    PlainBytes = (ULONG)(RangeUnits * UnitBytes);
+    RangeStart = FirstUnit * UnitBytes;
+    RangeDataEnd = RangeStart + PlainBytes < NewDataSize
+        ? RangeStart + PlainBytes
+        : NewDataSize;
 
-    UnitCount = (NewDataSize + UnitBytes - 1) / UnitBytes;
-    PlainBytes = UnitCount * UnitBytes;
-    Plain = new(PagedPool, TAG_NTFS) UCHAR[(ULONG)PlainBytes];
-    Stored = new(PagedPool, TAG_NTFS) UCHAR[(ULONG)UnitBytes];
-    if (!Plain || !Stored)
+    ExistingRuns = GetCachedDataRuns(TargetAttribute);
+    if (!ExistingRuns && OldUnits != 0)
+        return STATUS_FILE_CORRUPT_ERROR;
+
+    Plain = new(PagedPool, TAG_NTFS) UCHAR[PlainBytes + 1];
+    Stored = new(PagedPool, TAG_NTFS) UCHAR[PlainBytes + 1];
+    UnitStored = new(PagedPool, TAG_NTFS) UCHAR[RangeUnits + 1];
+    if (!Plain || !Stored || !UnitStored)
     {
         Status = STATUS_INSUFFICIENT_RESOURCES;
         goto Done;
     }
-    RtlZeroMemory(Plain, (ULONG)PlainBytes);
+    RtlZeroMemory(Plain, PlainBytes);
 
-    if (OldDataSize != 0)
+    if (OldDataSize > RangeStart)
     {
-        Remaining = (ULONG)OldDataSize;
-        Status = CopyData(TypeData,
-                          NULL,
+        ULONG OldBytes = (ULONG)((OldDataSize < RangeStart + PlainBytes
+            ? OldDataSize
+            : RangeStart + PlainBytes) - RangeStart);
+
+        Remaining = OldBytes;
+        Status = CopyData(TargetAttribute,
                           Plain,
                           &Remaining,
-                          0);
+                          RangeStart);
         if (!NT_SUCCESS(Status) || Remaining != 0)
         {
             if (NT_SUCCESS(Status))
@@ -6173,94 +6263,155 @@ FileRecord::WriteCompressedData(_In_ PAttribute TargetAttribute,
             goto Done;
         }
     }
-    RtlCopyMemory(Plain + Offset, Buffer, *Length);
+    if (Length != 0)
+        RtlCopyMemory(Plain + (Offset - RangeStart), Buffer, Length);
 
-    for (ULONGLONG Unit = 0; Unit < UnitCount; Unit++)
+    for (ULONG Unit = 0; Unit < RangeUnits; Unit++)
     {
-        PDataRun UnitRuns = NULL;
-        ULONGLONG UnitStart = Unit * UnitBytes;
-        ULONG UnitPlain = (ULONG)min(UnitBytes,
-                                     NewDataSize - UnitStart);
+        ULONGLONG UnitStart = RangeStart + Unit * UnitBytes;
+        ULONG UnitPlain = (ULONG)(RangeDataEnd - UnitStart < UnitBytes
+            ? RangeDataEnd - UnitStart
+            : UnitBytes);
+        PUCHAR Source = Plain + Unit * UnitBytes;
+        PUCHAR Target = Stored + PackedBytes;
         ULONG StoredSize = 0;
         ULONG StoredClusters;
-        BOOLEAN Raw = FALSE;
 
-        Status = NtfsLznt1Compress(Plain + UnitStart,
+        Status = NtfsLznt1Compress(Source,
                                    UnitPlain,
-                                   Stored,
+                                   Target,
                                    (ULONG)(UnitBytes - ClusterSize),
                                    &StoredSize);
         if (Status == STATUS_BUFFER_TOO_SMALL)
         {
-            Raw = TRUE;
-            Status = STATUS_SUCCESS;
-        }
-        if (!NT_SUCCESS(Status))
-            goto Done;
-
-        if (Raw)
-        {
             StoredClusters = 16;
-            RtlCopyMemory(Stored, Plain + UnitStart, UnitPlain);
-            RtlZeroMemory(Stored + UnitPlain,
-                          (ULONG)(UnitBytes - UnitPlain));
+            RtlCopyMemory(Target, Source, (ULONG)UnitBytes);
+        }
+        else if (!NT_SUCCESS(Status))
+        {
+            goto Done;
         }
         else
         {
             StoredClusters = (ULONG)
                 ((StoredSize + ClusterSize - 1) / ClusterSize);
-            RtlZeroMemory(Stored + StoredSize,
+            RtlZeroMemory(Target + StoredSize,
                           (ULONG)(StoredClusters * ClusterSize -
                                   StoredSize));
         }
+        UnitStored[Unit] = (UCHAR)StoredClusters;
+        PackedBytes += (ULONG)(StoredClusters * ClusterSize);
+        TotalClusters += StoredClusters;
+    }
 
-        Status = DiskVolume->AllocateClusters(
-            0,
-            StoredClusters,
-            8,
-            &UnitRuns);
+    if (TotalClusters != 0)
+    {
+        Status = DiskVolume->AllocateClusters(0,
+                                              TotalClusters,
+                                              RecordBufferSize / 3,
+                                              &NewPhysicalRuns);
         if (!NT_SUCCESS(Status))
             goto Done;
         Status = WriteRunBytes(DiskVolume,
-                               UnitRuns,
+                               NewPhysicalRuns,
                                0,
                                Stored,
-                               StoredClusters * ClusterSize);
-        if (NT_SUCCESS(Status))
+                               PackedBytes);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+    }
+
+    Status = AppendLogicalRange(ExistingRuns,
+                                0,
+                                (FirstUnit < OldUnits ? FirstUnit : OldUnits) << 4,
+                                &CompositeRuns,
+                                &CompositeTail,
+                                NULL,
+                                NULL,
+                                &PhysicalClusters);
+    if (!NT_SUCCESS(Status))
+        goto Done;
+    if (FirstUnit > OldUnits)
+    {
+        Status = AppendLogicalRun(&CompositeRuns,
+                                  &CompositeTail,
+                                  TRUE,
+                                  0,
+                                  (FirstUnit - OldUnits) << 4);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+    }
+
+    Cursor = NewPhysicalRuns;
+    for (ULONG Unit = 0; Unit < RangeUnits; Unit++)
+    {
+        ULONG Needed = UnitStored[Unit];
+
+        while (Needed != 0)
         {
-            for (PDataRun Run = UnitRuns;
-                 Run && NT_SUCCESS(Status);
-                 Run = Run->NextRun)
+            ULONGLONG Take;
+
+            if (!Cursor)
             {
-                Status = AppendLogicalRun(&CompositeRuns,
-                                          &CompositeTail,
-                                          FALSE,
-                                          Run->LCN,
-                                          Run->Length);
+                Status = STATUS_FILE_CORRUPT_ERROR;
+                goto Done;
+            }
+            Take = Cursor->Length - CursorUsed;
+            if (Take > Needed)
+                Take = Needed;
+            Status = AppendLogicalRun(&CompositeRuns,
+                                      &CompositeTail,
+                                      FALSE,
+                                      Cursor->LCN + CursorUsed,
+                                      Take);
+            if (!NT_SUCCESS(Status))
+                goto Done;
+            Needed -= (ULONG)Take;
+            CursorUsed += Take;
+            if (CursorUsed == Cursor->Length)
+            {
+                Cursor = Cursor->NextRun;
+                CursorUsed = 0;
             }
         }
-        if (NT_SUCCESS(Status) && StoredClusters < 16)
+        if (UnitStored[Unit] < 16)
         {
             Status = AppendLogicalRun(&CompositeRuns,
                                       &CompositeTail,
                                       TRUE,
                                       0,
-                                      16 - StoredClusters);
+                                      16 - UnitStored[Unit]);
+            if (!NT_SUCCESS(Status))
+                goto Done;
         }
+    }
+    PhysicalClusters += TotalClusters;
 
-        /* The unit chain joins the rollback list either way; on failure
-         * every cluster allocated so far is released through it.
-         */
-        if (NewPhysicalTail)
-            NewPhysicalTail->NextRun = UnitRuns;
-        else
-            NewPhysicalRuns = UnitRuns;
-        NewPhysicalTail = UnitRuns;
-        while (NewPhysicalTail && NewPhysicalTail->NextRun)
-            NewPhysicalTail = NewPhysicalTail->NextRun;
+    if (EndUnit < OldUnits)
+    {
+        Status = AppendLogicalRange(ExistingRuns,
+                                    EndUnit << 4,
+                                    OldUnits << 4,
+                                    &CompositeRuns,
+                                    &CompositeTail,
+                                    NULL,
+                                    NULL,
+                                    &PhysicalClusters);
         if (!NT_SUCCESS(Status))
             goto Done;
-        PhysicalBytes += (ULONGLONG)StoredClusters * ClusterSize;
+    }
+    if (FirstUnit < OldUnits)
+    {
+        Status = AppendLogicalRange(ExistingRuns,
+                                    FirstUnit << 4,
+                                    (EndUnit < OldUnits ? EndUnit : OldUnits) << 4,
+                                    NULL,
+                                    NULL,
+                                    &OldPhysicalRuns,
+                                    &OldPhysicalTail,
+                                    NULL);
+        if (!NT_SUCCESS(Status))
+            goto Done;
     }
 
     RecordBackup =
@@ -6275,7 +6426,7 @@ FileRecord::WriteCompressedData(_In_ PAttribute TargetAttribute,
     Status = ReplaceNonResidentMappingPairs(
         &TargetAttribute,
         CompositeRuns,
-        UnitCount * UnitBytes,
+        NewUnits * UnitBytes,
         NewDataSize,
         NewDataSize,
         &MappingUpdate,
@@ -6283,7 +6434,7 @@ FileRecord::WriteCompressedData(_In_ PAttribute TargetAttribute,
     if (!NT_SUCCESS(Status))
         goto Restore;
     if (TargetAttribute->NonResident.CompressedDataSize !=
-        PhysicalBytes)
+        PhysicalClusters * ClusterSize)
     {
         Status = STATUS_FILE_CORRUPT_ERROR;
         goto Restore;
@@ -6291,7 +6442,7 @@ FileRecord::WriteCompressedData(_In_ PAttribute TargetAttribute,
 
     if (TargetAttribute->NameLength == 0)
     {
-        Status = SynchronizeFileNameSizes(PhysicalBytes,
+        Status = SynchronizeFileNameSizes(PhysicalClusters * ClusterSize,
                                           NewDataSize);
         if (!NT_SUCCESS(Status))
             goto Restore;
@@ -6311,11 +6462,10 @@ FileRecord::WriteCompressedData(_In_ PAttribute TargetAttribute,
 
     ClearDataRunCache();
     Committed = TRUE;
+    *Attribute = TargetAttribute;
 
-    ReleaseStatus = STATUS_SUCCESS;
     if (OldPhysicalRuns)
-        ReleaseStatus = DiskVolume->ReleaseClusters(OldPhysicalRuns);
-    Status = ReleaseStatus;
+        Status = DiskVolume->ReleaseClusters(OldPhysicalRuns);
     goto Done;
 
 Restore:
@@ -6333,6 +6483,626 @@ Done:
     FreeDataRun(OldPhysicalRuns);
     FreeDataRun(NewPhysicalRuns);
     FreeDataRun(CompositeRuns);
+    NtfsReleaseRecordScratch(DiskVolume, RecordBackup, RecordBufferSize);
+    delete[] Plain;
+    delete[] Stored;
+    delete[] UnitStored;
+    return Status;
+}
+
+NTSTATUS
+FileRecord::WriteCompressedData(_In_ PAttribute TargetAttribute,
+                                _In_ PUCHAR Buffer,
+                                _In_ PULONG Length,
+                                _In_ ULONGLONG Offset)
+{
+    WCHAR StreamNameBuffer[NTFS_MAX_FILE_NAME_LENGTH + 1];
+    PWSTR StreamName = NULL;
+    PFileRecord AttributeOwner;
+    PUCHAR Zeroes = NULL;
+    PUCHAR Source;
+    ULONGLONG ClusterSize;
+    ULONGLONG UnitBytes;
+    ULONGLONG OldDataSize;
+    ULONGLONG Position;
+    ULONG Remaining;
+    ULONG Chunk;
+    ULONG Fill = 0;
+    ULONG ChunkUnits = NTFS_COMPRESSED_WRITE_UNITS;
+    BOOLEAN ListCreated;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (!TargetAttribute || !Buffer || !Length || *Length == 0)
+        return STATUS_INVALID_PARAMETER;
+    ClusterSize = BytesPerCluster(DiskVolume);
+    UnitBytes = ClusterSize << 4;
+    if (Offset > ~(ULONGLONG)0 - *Length)
+        return STATUS_FILE_TOO_LARGE;
+
+    if (TargetAttribute->AttributeType != TypeData ||
+        !TargetAttribute->IsNonResident ||
+        TargetAttribute->NameLength > NTFS_MAX_FILE_NAME_LENGTH ||
+        ClusterSize == 0)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
+    if (TargetAttribute->NameLength != 0)
+    {
+        RtlCopyMemory(StreamNameBuffer,
+                      reinterpret_cast<PUCHAR>(TargetAttribute) +
+                          TargetAttribute->NameOffset,
+                      TargetAttribute->NameLength * sizeof(WCHAR));
+        StreamNameBuffer[TargetAttribute->NameLength] = L'\0';
+        StreamName = StreamNameBuffer;
+    }
+
+    OldDataSize = TargetAttribute->NonResident.DataSize;
+    if (Offset > OldDataSize && OldDataSize % UnitBytes != 0)
+    {
+        Fill = (ULONG)(UnitBytes - OldDataSize % UnitBytes);
+        if (Fill > Offset - OldDataSize)
+            Fill = (ULONG)(Offset - OldDataSize);
+        Zeroes = new(PagedPool, TAG_NTFS) UCHAR[Fill];
+        if (!Zeroes)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        RtlZeroMemory(Zeroes, Fill);
+    }
+
+    Source = Fill ? Zeroes : Buffer;
+    Position = Fill ? OldDataSize : Offset;
+    Remaining = Fill ? Fill : *Length;
+    while (Remaining != 0)
+    {
+        ULONGLONG Room;
+
+        TargetAttribute = GetAttribute(TypeData, StreamName);
+        AttributeOwner = TargetAttribute
+            ? GetAttributeOwner(TargetAttribute)
+            : NULL;
+        if (!TargetAttribute || !AttributeOwner)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            break;
+        }
+        if (!TargetAttribute->IsNonResident ||
+            TargetAttribute->Flags != ATTR_COMPRESSED ||
+            TargetAttribute->NonResident.CompressionUnitSize != 4 ||
+            TargetAttribute->NonResident.FirstVCN != 0)
+        {
+            Status = STATUS_NOT_IMPLEMENTED;
+            break;
+        }
+
+        ListCreated = FALSE;
+        if (AttributeOwner == this &&
+            !GetAttribute(TypeAttributeList, NULL) &&
+            Header->AllocatedSize >= Header->ActualSize)
+        {
+            ULONG Free = Header->AllocatedSize - Header->ActualSize;
+
+            if (Free < 0x110)
+            {
+                Status = EnsureAttributeListForMappingGrowth(TypeData,
+                                                             StreamName,
+                                                             &TargetAttribute,
+                                                             &AttributeOwner,
+                                                             &ListCreated);
+                if (!NT_SUCCESS(Status))
+                    break;
+                if (ListCreated)
+                    ChunkUnits = NTFS_COMPRESSED_WRITE_UNITS;
+            }
+            else if (ChunkUnits > (Free - 0x100) / 16)
+            {
+                ChunkUnits = (Free - 0x100) / 16;
+            }
+        }
+        Room = ChunkUnits * UnitBytes - Position % UnitBytes;
+        Chunk = Remaining > Room ? (ULONG)Room : Remaining;
+
+        Status = AttributeOwner->WriteCompressedUnits(&TargetAttribute,
+                                                      Source,
+                                                      Chunk,
+                                                      Position);
+        if (Status == STATUS_BUFFER_TOO_SMALL)
+        {
+            TargetAttribute = GetAttribute(TypeData, StreamName);
+            AttributeOwner = TargetAttribute
+                ? GetAttributeOwner(TargetAttribute)
+                : NULL;
+            if (!TargetAttribute || !AttributeOwner)
+            {
+                Status = STATUS_FILE_CORRUPT_ERROR;
+                break;
+            }
+            Status = EnsureAttributeListForMappingGrowth(TypeData,
+                                                         StreamName,
+                                                         &TargetAttribute,
+                                                         &AttributeOwner,
+                                                         &ListCreated);
+            if (NT_SUCCESS(Status) && ListCreated)
+            {
+                Status = AttributeOwner->WriteCompressedUnits(&TargetAttribute,
+                                                              Source,
+                                                              Chunk,
+                                                              Position);
+            }
+            else if (NT_SUCCESS(Status))
+            {
+                if (ChunkUnits > 1)
+                {
+                    ChunkUnits /= 2;
+                    continue;
+                }
+                Status = STATUS_BUFFER_TOO_SMALL;
+            }
+        }
+        if (!NT_SUCCESS(Status))
+            break;
+        if (AttributeOwner != this || ListCreated)
+            ChunkUnits = NTFS_COMPRESSED_WRITE_UNITS;
+
+        Source += Chunk;
+        Position += Chunk;
+        Remaining -= Chunk;
+        if (Remaining == 0 && Fill)
+        {
+            Fill = 0;
+            Source = Buffer;
+            Position = Offset;
+            Remaining = *Length;
+        }
+    }
+
+    delete[] Zeroes;
+    return Status;
+}
+
+NTSTATUS
+FileRecord::ShrinkCompressedUnits(_Inout_ PAttribute* Attribute,
+                                  _In_ ULONGLONG NewSize)
+{
+    PAttribute TargetAttribute = *Attribute;
+    PDataRun ReleasedRuns = NULL;
+    PDataRun ReleasedTail = NULL;
+    PDataRun CompositeRuns = NULL;
+    PDataRun CompositeTail = NULL;
+    PDataRun ExistingRuns;
+    PNonResidentMappingUpdate MappingUpdate = NULL;
+    PUCHAR RecordBackup = NULL;
+    ULONGLONG ClusterSize = BytesPerCluster(DiskVolume);
+    ULONGLONG UnitBytes = ClusterSize << 4;
+    ULONGLONG OldUnits;
+    ULONGLONG NewUnits;
+    ULONGLONG PhysicalClusters = 0;
+    BOOLEAN Committed = FALSE;
+    NTSTATUS Status;
+
+    if (ClusterSize == 0 ||
+        TargetAttribute->NonResident.AllocatedSize % UnitBytes != 0 ||
+        NewSize > TargetAttribute->NonResident.DataSize)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
+    OldUnits = TargetAttribute->NonResident.AllocatedSize / UnitBytes;
+    NewUnits = (NewSize + UnitBytes - 1) / UnitBytes;
+    ExistingRuns = GetCachedDataRuns(TargetAttribute);
+    if (!ExistingRuns)
+        return STATUS_FILE_CORRUPT_ERROR;
+
+    if (NewUnits != 0)
+    {
+        Status = AppendLogicalRange(ExistingRuns,
+                                    0,
+                                    NewUnits << 4,
+                                    &CompositeRuns,
+                                    &CompositeTail,
+                                    NULL,
+                                    NULL,
+                                    &PhysicalClusters);
+    }
+    else
+    {
+        NewUnits = 1;
+        Status = AppendLogicalRun(&CompositeRuns,
+                                  &CompositeTail,
+                                  TRUE,
+                                  0,
+                                  16);
+    }
+    if (!NT_SUCCESS(Status))
+        goto Done;
+    Status = AppendLogicalRange(ExistingRuns,
+                                NewSize == 0 ? 0 : NewUnits << 4,
+                                OldUnits << 4,
+                                NULL,
+                                NULL,
+                                &ReleasedRuns,
+                                &ReleasedTail,
+                                NULL);
+    if (!NT_SUCCESS(Status))
+        goto Done;
+
+    RecordBackup =
+        new(PagedPool, TAG_FILE_RECORD) UCHAR[RecordBufferSize];
+    if (!RecordBackup)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Done;
+    }
+    RtlCopyMemory(RecordBackup, Data, RecordBufferSize);
+
+    Status = ReplaceNonResidentMappingPairs(
+        &TargetAttribute,
+        CompositeRuns,
+        NewUnits * UnitBytes,
+        NewSize,
+        NewSize,
+        &MappingUpdate,
+        NULL);
+    if (!NT_SUCCESS(Status))
+        goto Restore;
+    if (TargetAttribute->NonResident.CompressedDataSize !=
+        PhysicalClusters * ClusterSize)
+    {
+        Status = STATUS_FILE_CORRUPT_ERROR;
+        goto Restore;
+    }
+    if (TargetAttribute->NameLength == 0)
+    {
+        Status = SynchronizeFileNameSizes(PhysicalClusters * ClusterSize,
+                                          NewSize);
+        if (!NT_SUCCESS(Status))
+            goto Restore;
+    }
+    Status = PrepareAutomaticTimestamps(
+        AutomaticTimestampFieldsForAttribute(TypeData, TRUE),
+        NULL);
+    if (!NT_SUCCESS(Status))
+        goto Restore;
+    Status = MappingUpdate
+        ? CommitNonResidentMappingUpdate(&MappingUpdate)
+        : DiskVolume->MFT->WriteFileRecordToMFT(this);
+    if (!NT_SUCCESS(Status))
+        goto Restore;
+
+    ClearDataRunCache();
+    Committed = TRUE;
+    *Attribute = TargetAttribute;
+    if (ReleasedRuns)
+        Status = DiskVolume->ReleaseClusters(ReleasedRuns);
+    goto Done;
+
+Restore:
+    AbortNonResidentMappingUpdate(&MappingUpdate);
+    RtlCopyMemory(Data, RecordBackup, RecordBufferSize);
+    Header = reinterpret_cast<PFileRecordHeader>(Data);
+    ClearDataRunCache();
+
+Done:
+    FreeDataRun(ReleasedRuns);
+    FreeDataRun(CompositeRuns);
+    NtfsReleaseRecordScratch(DiskVolume, RecordBackup, RecordBufferSize);
+    return Status;
+}
+
+NTSTATUS
+FileRecord::ResizeCompressedData(_In_opt_ PWSTR StreamName,
+                                 _In_ ULONGLONG NewSize)
+{
+    PAttribute TargetAttribute;
+    PFileRecord AttributeOwner;
+    PUCHAR Zeroes;
+    ULONGLONG ClusterSize = BytesPerCluster(DiskVolume);
+    ULONGLONG UnitBytes = ClusterSize << 4;
+    ULONGLONG OldSize;
+    ULONG Fill;
+    BOOLEAN ListCreated;
+    NTSTATUS Status;
+
+    TargetAttribute = GetAttribute(TypeData, StreamName);
+    if (!TargetAttribute ||
+        !TargetAttribute->IsNonResident ||
+        TargetAttribute->Flags != ATTR_COMPRESSED ||
+        TargetAttribute->NonResident.CompressionUnitSize != 4 ||
+        TargetAttribute->NonResident.FirstVCN != 0 ||
+        ClusterSize == 0)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
+    OldSize = TargetAttribute->NonResident.DataSize;
+    if (NewSize == OldSize)
+        return STATUS_SUCCESS;
+
+    if (NewSize < OldSize)
+    {
+        AttributeOwner = GetAttributeOwner(TargetAttribute);
+        if (!AttributeOwner)
+            return STATUS_FILE_CORRUPT_ERROR;
+        return AttributeOwner->ShrinkCompressedUnits(&TargetAttribute,
+                                                     NewSize);
+    }
+
+    if (OldSize % UnitBytes != 0)
+    {
+        Fill = (ULONG)(UnitBytes - OldSize % UnitBytes);
+        if (Fill > NewSize - OldSize)
+            Fill = (ULONG)(NewSize - OldSize);
+        Zeroes = new(PagedPool, TAG_NTFS) UCHAR[Fill];
+        if (!Zeroes)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        RtlZeroMemory(Zeroes, Fill);
+        Status = WriteCompressedData(TargetAttribute,
+                                     Zeroes,
+                                     &Fill,
+                                     OldSize);
+        delete[] Zeroes;
+        if (!NT_SUCCESS(Status))
+            return Status;
+        TargetAttribute = GetAttribute(TypeData, StreamName);
+        if (!TargetAttribute || !TargetAttribute->IsNonResident)
+            return STATUS_FILE_CORRUPT_ERROR;
+        if (TargetAttribute->NonResident.DataSize == NewSize)
+            return STATUS_SUCCESS;
+    }
+
+    AttributeOwner = GetAttributeOwner(TargetAttribute);
+    if (!AttributeOwner)
+        return STATUS_FILE_CORRUPT_ERROR;
+    if (AttributeOwner == this &&
+        !GetAttribute(TypeAttributeList, NULL) &&
+        Header->AllocatedSize >= Header->ActualSize &&
+        Header->AllocatedSize - Header->ActualSize < 0x110)
+    {
+        Status = EnsureAttributeListForMappingGrowth(TypeData,
+                                                     StreamName,
+                                                     &TargetAttribute,
+                                                     &AttributeOwner,
+                                                     &ListCreated);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    Status = AttributeOwner->WriteCompressedUnits(&TargetAttribute,
+                                                  NULL,
+                                                  0,
+                                                  NewSize);
+    if (Status == STATUS_BUFFER_TOO_SMALL)
+    {
+        TargetAttribute = GetAttribute(TypeData, StreamName);
+        AttributeOwner = TargetAttribute
+            ? GetAttributeOwner(TargetAttribute)
+            : NULL;
+        if (!TargetAttribute || !AttributeOwner)
+            return STATUS_FILE_CORRUPT_ERROR;
+        Status = EnsureAttributeListForMappingGrowth(TypeData,
+                                                     StreamName,
+                                                     &TargetAttribute,
+                                                     &AttributeOwner,
+                                                     &ListCreated);
+        if (NT_SUCCESS(Status) && ListCreated)
+        {
+            Status = AttributeOwner->WriteCompressedUnits(&TargetAttribute,
+                                                          NULL,
+                                                          0,
+                                                          NewSize);
+        }
+        else if (NT_SUCCESS(Status))
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+    }
+    return Status;
+}
+
+NTSTATUS
+FileRecord::PromoteResidentCompressedData(
+    _In_ PAttribute TargetAttribute,
+    _In_opt_ PUCHAR Buffer,
+    _In_ ULONG Length,
+    _In_ ULONGLONG Offset,
+    _In_ ULONGLONG NewDataSize)
+{
+    WCHAR StreamNameBuffer[NTFS_MAX_FILE_NAME_LENGTH + 1];
+    PWSTR StreamName = NULL;
+    PDataRun AllocatedRuns = NULL;
+    PDataRun Runs = NULL;
+    PDataRun RunsTail = NULL;
+    PUCHAR Plain = NULL;
+    PUCHAR Stored = NULL;
+    PUCHAR RecordBackup = NULL;
+    ULONGLONG ClusterSize = BytesPerCluster(DiskVolume);
+    ULONGLONG UnitBytes = ClusterSize << 4;
+    ULONG OldDataLength;
+    ULONG FirstBytes;
+    ULONG Consumed = 0;
+    ULONG StoredSize = 0;
+    ULONG StoredClusters;
+    ULONG Rest;
+    BOOLEAN WriteAttempted = FALSE;
+    BOOLEAN Restored = TRUE;
+    NTSTATUS Status;
+
+    Status = ValidateResidentAttributeForUpdate(TargetAttribute,
+                                                &OldDataLength);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (ClusterSize == 0 ||
+        TargetAttribute->NameLength > NTFS_MAX_FILE_NAME_LENGTH ||
+        OldDataLength > UnitBytes ||
+        NewDataSize < OldDataLength ||
+        NewDataSize < Offset + Length)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (NewDataSize == 0)
+        return STATUS_SUCCESS;
+
+    if (TargetAttribute->NameLength != 0)
+    {
+        RtlCopyMemory(StreamNameBuffer,
+                      reinterpret_cast<PUCHAR>(TargetAttribute) +
+                          TargetAttribute->NameOffset,
+                      TargetAttribute->NameLength * sizeof(WCHAR));
+        StreamNameBuffer[TargetAttribute->NameLength] = L'\0';
+        StreamName = StreamNameBuffer;
+    }
+
+    FirstBytes = (ULONG)(NewDataSize < UnitBytes ? NewDataSize : UnitBytes);
+    Plain = new(PagedPool, TAG_NTFS) UCHAR[(ULONG)UnitBytes];
+    Stored = new(PagedPool, TAG_NTFS) UCHAR[(ULONG)UnitBytes];
+    if (!Plain || !Stored)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Done;
+    }
+    RtlZeroMemory(Plain, (ULONG)UnitBytes);
+    if (OldDataLength != 0)
+    {
+        RtlCopyMemory(Plain,
+                      reinterpret_cast<PUCHAR>(TargetAttribute) +
+                          TargetAttribute->Resident.DataOffset,
+                      OldDataLength);
+    }
+    if (Length != 0 && Offset < FirstBytes)
+    {
+        Consumed = (ULONG)(FirstBytes - Offset);
+        if (Consumed > Length)
+            Consumed = Length;
+        RtlCopyMemory(Plain + Offset, Buffer, Consumed);
+    }
+
+    Status = NtfsLznt1Compress(Plain,
+                               FirstBytes,
+                               Stored,
+                               (ULONG)(UnitBytes - ClusterSize),
+                               &StoredSize);
+    if (Status == STATUS_BUFFER_TOO_SMALL)
+    {
+        StoredClusters = 16;
+        RtlCopyMemory(Stored, Plain, (ULONG)UnitBytes);
+    }
+    else if (!NT_SUCCESS(Status))
+    {
+        goto Done;
+    }
+    else
+    {
+        StoredClusters = (ULONG)((StoredSize + ClusterSize - 1) / ClusterSize);
+        RtlZeroMemory(Stored + StoredSize,
+                      (ULONG)(StoredClusters * ClusterSize - StoredSize));
+    }
+
+    RecordBackup = NtfsAcquireRecordScratch(DiskVolume, RecordBufferSize);
+    if (!RecordBackup)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Done;
+    }
+    RtlCopyMemory(RecordBackup, Data, RecordBufferSize);
+
+    Status = DiskVolume->AllocateClusters(0,
+                                          StoredClusters,
+                                          RecordBufferSize / 3,
+                                          &AllocatedRuns);
+    if (!NT_SUCCESS(Status))
+        goto Done;
+    Status = WriteRunBytes(DiskVolume,
+                           AllocatedRuns,
+                           0,
+                           Stored,
+                           (ULONG)(StoredClusters * ClusterSize));
+    if (!NT_SUCCESS(Status))
+        goto Rollback;
+    for (PDataRun Run = AllocatedRuns;
+         Run && NT_SUCCESS(Status);
+         Run = Run->NextRun)
+    {
+        Status = AppendLogicalRun(&Runs,
+                                  &RunsTail,
+                                  FALSE,
+                                  Run->LCN,
+                                  Run->Length);
+    }
+    if (NT_SUCCESS(Status) && StoredClusters < 16)
+    {
+        Status = AppendLogicalRun(&Runs,
+                                  &RunsTail,
+                                  TRUE,
+                                  0,
+                                  16 - StoredClusters);
+    }
+    if (!NT_SUCCESS(Status))
+        goto Rollback;
+
+    Status = BuildNonResidentMappingSegment(TargetAttribute,
+                                            Runs,
+                                            0,
+                                            ATTR_COMPRESSED,
+                                            4,
+                                            UnitBytes,
+                                            FirstBytes,
+                                            FirstBytes,
+                                            StoredClusters * ClusterSize);
+    if (!NT_SUCCESS(Status))
+        goto Rollback;
+    if (!StreamName)
+    {
+        Status = SynchronizeFileNameSizes(StoredClusters * ClusterSize,
+                                          FirstBytes);
+        if (!NT_SUCCESS(Status))
+            goto Rollback;
+    }
+    Status = PrepareAutomaticTimestamps(
+        AutomaticTimestampFieldsForAttribute(TypeData, TRUE),
+        NULL);
+    if (!NT_SUCCESS(Status))
+        goto Rollback;
+    WriteAttempted = TRUE;
+    Status = DiskVolume->MFT->WriteFileRecordToMFT(this);
+    if (!NT_SUCCESS(Status))
+        goto Rollback;
+    ClearDataRunCache();
+
+    if (Length > Consumed)
+    {
+        TargetAttribute = GetAttribute(TypeData, StreamName);
+        if (!TargetAttribute)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Done;
+        }
+        Rest = Length - Consumed;
+        Status = WriteCompressedData(TargetAttribute,
+                                     Buffer + Consumed,
+                                     &Rest,
+                                     Offset + Consumed);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+    }
+    Status = ResizeCompressedData(StreamName, NewDataSize);
+    goto Done;
+
+Rollback:
+    RtlCopyMemory(Data, RecordBackup, RecordBufferSize);
+    Header = reinterpret_cast<PFileRecordHeader>(Data);
+    ClearDataRunCache();
+    if (WriteAttempted)
+    {
+        NTSTATUS RestoreStatus = DiskVolume->MFT->WriteFileRecordToMFT(this);
+
+        if (!NT_SUCCESS(RestoreStatus))
+        {
+            Restored = FALSE;
+            Status = RestoreStatus;
+        }
+    }
+    if (AllocatedRuns && Restored)
+        (void)DiskVolume->ReleaseClusters(AllocatedRuns);
+
+Done:
+    FreeDataRun(AllocatedRuns);
+    FreeDataRun(Runs);
     NtfsReleaseRecordScratch(DiskVolume, RecordBackup, RecordBufferSize);
     delete[] Plain;
     delete[] Stored;

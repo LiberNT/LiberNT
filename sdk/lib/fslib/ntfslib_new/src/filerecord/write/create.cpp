@@ -35,6 +35,7 @@ FileRecord::InitializeNewFileRecord(
     ULONG NormalizedAttributes;
     ULONGLONG CurrentTime;
     ULONGLONG ParentReference;
+    BOOLEAN InheritCompression = FALSE;
     NTSTATUS Status;
 
     if (!CreatedName)
@@ -66,6 +67,22 @@ FileRecord::InitializeNewFileRecord(
         FileAttributes == FILE_PERM_NORMAL
             ? 0
             : FileAttributes;
+
+    ParentStandard = Parent->GetAttribute(
+        TypeStandardInformation,
+        NULL);
+    if (ParentStandard &&
+        !ParentStandard->IsNonResident &&
+        ParentStandard->Resident.DataLength >=
+            FIELD_OFFSET(StandardInformationEx, FilePermissions) +
+                sizeof(ULONG) &&
+        (reinterpret_cast<PStandardInformationEx>(
+             GetResidentDataPointer(ParentStandard))->FilePermissions &
+         FILE_PERM_COMPRESSED))
+    {
+        InheritCompression = TRUE;
+        NormalizedAttributes |= FILE_PERM_COMPRESSED;
+    }
 
     NameBytes = NameLength * sizeof(WCHAR);
     if (NameBytes >
@@ -281,6 +298,8 @@ FileRecord::InitializeNewFileRecord(
             RootDataLength);
         if (!NT_SUCCESS(Status))
             goto Done;
+        if (InheritCompression)
+            Attribute->Flags = ATTR_COMPRESSED;
     }
     else
     {
@@ -290,6 +309,8 @@ FileRecord::InitializeNewFileRecord(
             &Attribute);
         if (!NT_SUCCESS(Status))
             goto Done;
+        if (InheritCompression)
+            Attribute->Flags = ATTR_COMPRESSED;
     }
 
     Header->HardLinkCount = 1;

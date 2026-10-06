@@ -1227,6 +1227,23 @@ private:
                         _In_ PUCHAR Buffer,
                         _In_ PULONG Length,
                         _In_ ULONGLONG Offset);
+    NTSTATUS
+    WriteCompressedUnits(_Inout_ PAttribute* Attribute,
+                         _In_opt_ PUCHAR Buffer,
+                         _In_ ULONG Length,
+                         _In_ ULONGLONG Offset);
+    NTSTATUS
+    ShrinkCompressedUnits(_Inout_ PAttribute* Attribute,
+                          _In_ ULONGLONG NewSize);
+    NTSTATUS
+    ResizeCompressedData(_In_opt_ PWSTR StreamName,
+                         _In_ ULONGLONG NewSize);
+    NTSTATUS
+    PromoteResidentCompressedData(_In_ PAttribute TargetAttribute,
+                                  _In_opt_ PUCHAR Buffer,
+                                  _In_ ULONG Length,
+                                  _In_ ULONGLONG Offset,
+                                  _In_ ULONGLONG NewDataSize);
 } *PFileRecord;
 
 struct FileRecordExtentCacheEntry
