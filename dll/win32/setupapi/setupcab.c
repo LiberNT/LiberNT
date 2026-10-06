@@ -455,7 +455,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
         DisableThreadLibraryCalls(hinstDLL);
 #ifdef __REACTOS__
         OsVersionInfo.dwOSVersionInfoSize = sizeof(OsVersionInfo);
-        if (!GetVersionExW((POSVERSIONINFOW)&OsVersionInfo))
+        if (!NT_SUCCESS(RtlGetVersion((PRTL_OSVERSIONINFOW)&OsVersionInfo)))
             return FALSE;
         hInstance = hinstDLL;
 #else
