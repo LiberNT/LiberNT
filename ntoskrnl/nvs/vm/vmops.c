@@ -1390,34 +1390,22 @@ MiQueryVirtualMemory(
     return STATUS_SUCCESS;
 }
 
-NTSTATUS
-MiQueryWorkingSetEx(
+static
+VOID
+MiWorkingSetPageLocked(
     _Inout_ PMI_ADDRESS_SPACE Space,
-    _In_ ULONG64 Address,
+    _In_ PMI_VAD Vad,
+    _In_ ULONG64 Va,
     _Out_ PMI_WORKING_SET_EX_INFORMATION Information)
 {
     PMI_PFN_DATABASE Db = &Space->System->Pfn;
-    ULONG64 Va = MI_PAGE_ALIGN_DOWN(Address);
     ULONG64 Frame;
     BOOLEAN Committed;
     ULONG Protection;
     PMI_PTE Slot;
     MI_PTE Pte;
-    PMI_VAD Vad;
 
     RtlZeroMemory(Information, sizeof(*Information));
-
-    if (Address < Space->LowestVa || Address > Space->HighestVa)
-        return STATUS_SUCCESS;
-
-    MI_RW_ACQUIRE_SHARED(&Space->Lock);
-
-    Vad = MiVadLocate(Space, Va);
-    if (Vad == NULL)
-    {
-        MI_RW_RELEASE_SHARED(&Space->Lock);
-        return STATUS_SUCCESS;
-    }
 
     Information->Shared = (BOOLEAN)!(Vad->Type == MiVadPrivate || (Vad->Type == MiVadLarge && Vad->Segment == NULL) ||
                                      Vad->Type == MiVadAwe || Vad->Type == MiVadRotate || Vad->LockedPages);
@@ -1436,10 +1424,7 @@ MiQueryWorkingSetEx(
     }
 
     if (!MiArchPteIsValid(Pte))
-    {
-        MI_RW_RELEASE_SHARED(&Space->Lock);
-        return STATUS_SUCCESS;
-    }
+        return;
 
     MiPageStatus(Space, Vad, Va, TRUE, &Committed, &Protection);
 
@@ -1457,8 +1442,94 @@ MiQueryWorkingSetEx(
         if (!MI_VAD_IS_DIRECT(Vad))
             Information->Shared = (BOOLEAN)((MI_PFN_FLAGS(&Db->Pfn[Frame]) & MI_PFN_FLAG_PROTOTYPE) != 0);
     }
+}
+
+NTSTATUS
+MiQueryWorkingSetEx(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 Address,
+    _Out_ PMI_WORKING_SET_EX_INFORMATION Information)
+{
+    ULONG64 Va = MI_PAGE_ALIGN_DOWN(Address);
+    PMI_VAD Vad;
+
+    RtlZeroMemory(Information, sizeof(*Information));
+
+    if (Address < Space->LowestVa || Address > Space->HighestVa)
+        return STATUS_SUCCESS;
+
+    MI_RW_ACQUIRE_SHARED(&Space->Lock);
+
+    Vad = MiVadLocate(Space, Va);
+    if (Vad != NULL)
+        MiWorkingSetPageLocked(Space, Vad, Va, Information);
 
     MI_RW_RELEASE_SHARED(&Space->Lock);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+MiQueryWorkingSetList(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _Inout_ PULONG64 Address,
+    _Out_ PMI_WORKING_SET_ENTRY Entries,
+    _In_ ULONG Capacity,
+    _Out_ PULONG Count,
+    _Out_ PBOOLEAN More)
+{
+    MI_WORKING_SET_EX_INFORMATION Ws;
+    PMI_VAD_NODE Node;
+    ULONG Found = 0;
+
+    *More = FALSE;
+
+    MI_RW_ACQUIRE_SHARED(&Space->Lock);
+
+    for (Node = MiVadFirst(&Space->VadRoot); Node != NULL && !*More; Node = MiVadNext(Node))
+    {
+        PMI_VAD Vad = CONTAINING_RECORD(Node, MI_VAD, Node);
+        ULONG64 End = MI_VAD_END(Vad);
+        ULONG64 Va = MI_VAD_START(Vad);
+
+        if (End <= *Address)
+            continue;
+        if (Va < *Address)
+            Va = MI_PAGE_ALIGN_DOWN(*Address);
+
+        while (Va < End)
+        {
+            if (Vad->Type != MiVadLarge && MiPtLookup(Space, Va, NULL) == NULL)
+            {
+                ULONG64 Next = MiPtNextTableBoundary(Space, Va);
+
+                Va = (Next < End) ? Next : End;
+                continue;
+            }
+
+            MiWorkingSetPageLocked(Space, Vad, Va, &Ws);
+            if (Ws.Valid)
+            {
+                if (Found == Capacity)
+                {
+                    *Address = Va;
+                    *More = TRUE;
+                    break;
+                }
+
+                Entries[Found].VirtualAddress = Va;
+                Entries[Found].Protection = Ws.Protection;
+                Entries[Found].ShareCount = Ws.ShareCount;
+                Entries[Found].Shared = Ws.Shared;
+                Found++;
+            }
+
+            Va += PAGE_SIZE;
+        }
+    }
+
+    MI_RW_RELEASE_SHARED(&Space->Lock);
+
+    *Count = Found;
     return STATUS_SUCCESS;
 }
 

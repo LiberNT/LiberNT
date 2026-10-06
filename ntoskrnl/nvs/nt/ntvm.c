@@ -1136,6 +1136,96 @@ MiQueryWorkingSetExList(
     return Status;
 }
 
+#define MI_WS_LIST_SHARE_SHIFT  5
+#define MI_WS_LIST_SHARED       0x100
+
+static
+NTSTATUS
+MiQueryWorkingSetInformation(
+    _In_ HANDLE ProcessHandle,
+    _Out_ PVOID MemoryInformation,
+    _In_ SIZE_T MemoryInformationLength,
+    _Out_opt_ PSIZE_T ReturnLength)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PULONG_PTR User = MemoryInformation;
+    MI_WORKING_SET_ENTRY Entries[MI_WS_EX_CHUNK];
+    MI_PROCESS_REFERENCE Target;
+    SIZE_T Capacity, Total = 0;
+    ULONG64 Address = 0;
+    BOOLEAN More;
+    ULONG Count, Index;
+    NTSTATUS Status;
+
+    if (MemoryInformationLength < 2 * sizeof(ULONG_PTR))
+        return STATUS_INFO_LENGTH_MISMATCH;
+
+    Capacity = MemoryInformationLength / sizeof(ULONG_PTR) - 1;
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForWrite(MemoryInformation, (Capacity + 1) * sizeof(ULONG_PTR), sizeof(ULONG_PTR));
+            if (ReturnLength != NULL)
+                ProbeForWriteSize_t(ReturnLength);
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    do
+    {
+        Status = MiReferenceTargetProcess(ProcessHandle, PROCESS_QUERY_INFORMATION, &Target);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        Status = MiQueryWorkingSetList(MiSpaceOfProcess(Target.Process), &Address, Entries, MI_WS_EX_CHUNK,
+                                       &Count, &More);
+
+        MiReleaseTargetProcess(&Target);
+
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        _SEH2_TRY
+        {
+            for (Index = 0; Index < Count; Index++, Total++)
+            {
+                if (Total < Capacity)
+                {
+                    User[Total + 1] = (ULONG_PTR)Entries[Index].VirtualAddress |
+                                      (Entries[Index].Protection & MI_PROT_MASK) |
+                                      ((ULONG_PTR)Entries[Index].ShareCount << MI_WS_LIST_SHARE_SHIFT) |
+                                      (Entries[Index].Shared ? MI_WS_LIST_SHARED : 0);
+                }
+            }
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    } while (More);
+
+    _SEH2_TRY
+    {
+        User[0] = Total;
+        if (ReturnLength != NULL)
+            *ReturnLength = (min(Total, Capacity) + 1) * sizeof(ULONG_PTR);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    return (Total > Capacity) ? STATUS_INFO_LENGTH_MISMATCH : STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 NtQueryVirtualMemory(
@@ -1172,6 +1262,12 @@ NtQueryVirtualMemory(
     {
         return MiQueryWorkingSetExList(ProcessHandle, MemoryInformation, MemoryInformationLength,
                                        ReturnLength);
+    }
+
+    if (MemoryInformationClass == MemoryWorkingSetList)
+    {
+        return MiQueryWorkingSetInformation(ProcessHandle, MemoryInformation, MemoryInformationLength,
+                                            ReturnLength);
     }
 
     if (MemoryInformationClass != MemoryBasicInformation)

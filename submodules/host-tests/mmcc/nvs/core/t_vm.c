@@ -882,6 +882,93 @@ VmWorkingSetEx(void)
     WorldDestroy(&World);
 }
 
+static void
+VmWorkingSetList(void)
+{
+    TEST_WORLD World;
+    MI_ADDRESS_SPACE A, B;
+    MI_WORKING_SET_ENTRY Entries[8];
+    PMI_SEGMENT Segment;
+    ULONG64 Private = 0, Reserved = 0, ViewA = 0, ViewB = 0, ViewSize, Address;
+    BOOLEAN More;
+    ULONG Count, Index, Seen;
+    NTSTATUS Status;
+
+    WorldCreate(&World, 512, 2, 100000);
+    World.Machine.StrictTlb = TRUE;
+    WorldAttachPageFile(&World, 1024);
+    ProcessCreate(&World, &A);
+    CHECK(NT_SUCCESS(MiAddressSpaceCreate(&World.System, &B)));
+    WorldAttach(&World, 1, &B);
+
+    Address = 0;
+    CHECK(NT_SUCCESS(MiQueryWorkingSetList(&A, &Address, Entries, 8, &Count, &More)));
+    CHECK(Count == 0 && !More);
+
+    CHECK(NT_SUCCESS(Alloc(&A, &Private, 8 * PAGE_SIZE, MI_MEM_RESERVE | MI_MEM_COMMIT, MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(Alloc(&A, &Reserved, PAGE_SIZE, MI_MEM_RESERVE, MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Private, 1)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Private + 3 * PAGE_SIZE, 1)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Private + 7 * PAGE_SIZE, 1)));
+
+    CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentPageFileBacked, 2 * PAGE_SIZE, MI_PROT_READWRITE,
+                                     NULL, NULL, NULL, 0, &Segment)));
+    ViewSize = 0;
+    CHECK(NT_SUCCESS(MiMapView(&A, Segment, &ViewA, 0, &ViewSize, MI_PROT_READWRITE, 0)));
+    ViewSize = 0;
+    CHECK(NT_SUCCESS(MiMapView(&B, Segment, &ViewB, 0, &ViewSize, MI_PROT_READWRITE, 0)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, ViewA, 7)));
+    CHECK(UserRead64(&World, 1, ViewB, &Status) == 7 && NT_SUCCESS(Status));
+
+    Address = 0;
+    CHECK(NT_SUCCESS(MiQueryWorkingSetList(&A, &Address, Entries, 8, &Count, &More)));
+    CHECK(Count == 4 && !More);
+    Seen = 0;
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Entries[Index].VirtualAddress == Private || Entries[Index].VirtualAddress == Private + 3 * PAGE_SIZE ||
+            Entries[Index].VirtualAddress == Private + 7 * PAGE_SIZE)
+        {
+            CHECK(!Entries[Index].Shared && Entries[Index].ShareCount == 1);
+            CHECK(Entries[Index].Protection == MI_PROT_READWRITE);
+            Seen++;
+        }
+        else
+        {
+            CHECK(Entries[Index].VirtualAddress == ViewA);
+            CHECK(Entries[Index].Shared && Entries[Index].ShareCount == 2);
+            Seen += 0x10;
+        }
+        CHECK(Index == 0 || Entries[Index - 1].VirtualAddress < Entries[Index].VirtualAddress);
+    }
+    CHECK(Seen == 0x13);
+
+    Address = 0;
+    Seen = 0;
+    do
+    {
+        CHECK(NT_SUCCESS(MiQueryWorkingSetList(&A, &Address, Entries, 3, &Count, &More)));
+        CHECK(Count <= 3);
+        Seen += Count;
+    } while (More);
+    CHECK(Seen == 4);
+
+    Address = 0;
+    CHECK(NT_SUCCESS(MiQueryWorkingSetList(&B, &Address, Entries, 8, &Count, &More)));
+    CHECK(Count == 1 && !More && Entries[0].VirtualAddress == ViewB && Entries[0].Shared);
+
+    CHECK(NT_SUCCESS(MiUnmapView(&B, ViewB)));
+    CHECK(NT_SUCCESS(MiUnmapView(&A, ViewA)));
+    MiSegmentDereference(Segment);
+    CHECK(NT_SUCCESS(Free(&A, Private, 0, MI_MEM_RELEASE)));
+    CHECK(NT_SUCCESS(Free(&A, Reserved, 0, MI_MEM_RELEASE)));
+    WorldAttach(&World, 1, NULL);
+    ProcessDestroy(&World, &B);
+    ProcessDestroy(&World, &A);
+    WorldExpectClean(&World, 512);
+    WorldDestroy(&World);
+}
+
 void
 TestVm(void)
 {
@@ -896,6 +983,7 @@ TestVm(void)
     VmWriteWatch();
     VmExecutableWriteTrackingReset();
     VmWorkingSetEx();
+    VmWorkingSetList();
 }
 
 static
