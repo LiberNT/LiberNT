@@ -2753,7 +2753,7 @@ static void test_IsProcessInJob(void)
     ok(ret, "IsProcessInJob error %lu\n", GetLastError());
     ok(out, "IsProcessInJob returned out=%u\n", out);
 #ifdef __REACTOS__
-    if (GetNTVersion() >= _WIN32_WINNT_WIN8) {
+    if (GetNTVersion() >= _WIN32_WINNT_WIN8 && GetNTVersion() < _WIN32_WINNT_WIN10) {
         test_assigned_proc(job, 1);
         test_accounting(job, 1, 1, 0);
     } else {
