@@ -100,7 +100,10 @@ GetDeviceInstallState(PCWSTR DeviceInstance)
                                 &DeviceStatus,
                                 &DeviceProblem,
                                 0) == CR_SUCCESS &&
-            (DeviceStatus & DN_STARTED))
+            ((DeviceStatus & DN_STARTED) ||
+             ((DeviceStatus & DN_HAS_PROBLEM) &&
+              (DeviceProblem == CM_PROB_FAILED_START ||
+               DeviceProblem == CM_PROB_FAILED_POST_START))))
         {
             State = DeviceInstallComplete;
         }
