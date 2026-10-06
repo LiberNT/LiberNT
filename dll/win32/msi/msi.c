@@ -1530,7 +1530,35 @@ UINT WINAPI MsiGetProductInfoExW(LPCWSTR szProductCode, LPCWSTR szUserSid,
         else if (dwContext == MSIINSTALLCONTEXT_MACHINE)
             hkey = classes;
 
+#ifdef __REACTOS__
+        if (!wcscmp( szProperty, INSTALLPROPERTY_PACKAGENAMEW ))
+        {
+            HKEY source;
+
+            if (RegOpenKeyExW(hkey, L"SourceList", 0, KEY_READ, &source) != ERROR_SUCCESS)
+                goto done;
+
+            val = reg_get_value(source, szProperty, &type);
+            RegCloseKey(source);
+        }
+        else
+            val = reg_get_value(hkey, szProperty, &type);
+
+        if (val && type == REG_SZ && !wcscmp( szProperty, INSTALLPROPERTY_PACKAGECODEW ))
+        {
+            WCHAR packagecode[GUID_SIZE];
+
+            if (!unsquash_guid(val, packagecode))
+            {
+                r = ERROR_BAD_CONFIGURATION;
+                goto done;
+            }
+            free(val);
+            val = wcsdup(packagecode);
+        }
+#else
         val = reg_get_value(hkey, szProperty, &type);
+#endif
         if (!val)
             val = wcsdup(L"");
 
@@ -1875,6 +1903,41 @@ UINT WINAPI MsiGetPatchInfoW( LPCWSTR patch, LPCWSTR attr, LPWSTR buffer, LPDWOR
     if (wcscmp( INSTALLPROPERTY_LOCALPACKAGEW, attr ))
         return ERROR_UNKNOWN_PROPERTY;
 
+#ifdef __REACTOS__
+    {
+        static const MSIINSTALLCONTEXT contexts[] =
+        {
+            MSIINSTALLCONTEXT_USERMANAGED, MSIINSTALLCONTEXT_USERUNMANAGED, MSIINSTALLCONTEXT_MACHINE
+        };
+        DWORD size = buflen ? *buflen : 0, len, i;
+        BOOL empty = FALSE;
+
+        for (index = 0; MsiEnumProductsW( index, product ) == ERROR_SUCCESS; index++)
+        {
+            for (i = 0; i < ARRAY_SIZE(contexts); i++)
+            {
+                len = 0;
+                r = MsiGetPatchInfoExW( patch, product, NULL, contexts[i], attr, NULL, &len );
+                if (r != ERROR_SUCCESS)
+                    continue;
+                if (!len)
+                {
+                    empty = TRUE;
+                    continue;
+                }
+                if (buflen) *buflen = size;
+                return MsiGetPatchInfoExW( patch, product, NULL, contexts[i], attr, buffer, buflen );
+            }
+        }
+        if (empty)
+        {
+            if (buffer && size) buffer[0] = 0;
+            if (buflen) *buflen = 0;
+            return ERROR_SUCCESS;
+        }
+    }
+    return ERROR_UNKNOWN_PRODUCT;
+#else
     index = 0;
     while (1)
     {
@@ -1898,6 +1961,7 @@ UINT WINAPI MsiGetPatchInfoW( LPCWSTR patch, LPCWSTR attr, LPWSTR buffer, LPDWOR
     }
 
     return ERROR_UNKNOWN_PRODUCT;
+#endif
 }
 
 UINT WINAPI MsiEnableLogA( DWORD dwLogMode, const char *szLogFile, DWORD attributes )
@@ -2593,6 +2657,13 @@ HRESULT WINAPI MsiGetFileSignatureInformationW( const WCHAR *path, DWORD flags, 
 
     if (!path || !cert) return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    if (GetFileAttributesW( path ) == INVALID_FILE_ATTRIBUTES)
+    {
+        *cert = NULL;
+        return CRYPT_E_FILE_ERROR;
+    }
+#endif
     info.cbStruct       = sizeof(info);
     info.pcwszFilePath  = path;
     info.hFile          = NULL;
@@ -2609,6 +2680,10 @@ HRESULT WINAPI MsiGetFileSignatureInformationW( const WCHAR *path, DWORD flags, 
 
     hr = WinVerifyTrustEx( INVALID_HANDLE_VALUE, &generic_verify_v2, &data );
     *cert = NULL;
+#ifdef __REACTOS__
+    if (hr == TRUST_E_NOSIGNATURE || hr == TRUST_E_SUBJECT_FORM_UNKNOWN || hr == TRUST_E_PROVIDER_UNKNOWN)
+        hr = HRESULT_FROM_WIN32(ERROR_FUNCTION_FAILED);
+#endif
     if (FAILED(hr)) goto done;
 
     if (!(signer = WTHelperGetProvSignerFromChain( data.hWVTStateData, 0, FALSE, 0 )))
@@ -3664,6 +3739,20 @@ static USERINFOSTATE MSI_GetUserInfo(LPCWSTR szProduct,
             goto done;
         }
 
+#ifdef __REACTOS__
+        if (lpUserNameBuf->str.w)
+        {
+            DWORD needed = lpUserNameBuf->unicode ? lstrlenW(user) :
+                           WideCharToMultiByte(CP_ACP, 0, user, -1, NULL, 0, NULL, NULL) - 1;
+
+            if (needed >= *pcchUserNameBuf)
+            {
+                *pcchUserNameBuf = needed;
+                state = USERINFOSTATE_MOREDATA;
+                goto done;
+            }
+        }
+#endif
         r = msi_strcpy_to_awstring(user, -1, lpUserNameBuf, pcchUserNameBuf);
         if (r == ERROR_MORE_DATA)
         {
