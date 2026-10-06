@@ -438,6 +438,40 @@ MasterFileTable::InsertFileNameLink(
             Value->DataSize = DataAttribute->NonResident.DataSize;
         }
     }
+    {
+        const ULONG StorageMask = FILE_PERM_SPARSE |
+                                  FILE_PERM_COMPRESSED |
+                                  FILE_PERM_REPARSE_PT;
+        PAttribute StandardAttribute =
+            File->FindAttributeInRecord(TypeStandardInformation, NULL, NULL);
+        PAttribute ReparseAttribute =
+            File->GetAttribute(TypeReparsePoint, NULL);
+        ULONG ReparseTag = 0;
+        ULONG TagLength = sizeof(ReparseTag);
+
+        if (StandardAttribute &&
+            !StandardAttribute->IsNonResident &&
+            StandardAttribute->Resident.DataLength >=
+                FIELD_OFFSET(StandardInformationEx, FilePermissions) +
+                    sizeof(ULONG))
+        {
+            Value->Flags =
+                (Value->Flags & ~StorageMask) |
+                (reinterpret_cast<PStandardInformationEx>(
+                     GetResidentDataPointer(StandardAttribute))->
+                         FilePermissions & StorageMask);
+        }
+        if ((Value->Flags & FILE_PERM_REPARSE_PT) &&
+            ReparseAttribute &&
+            NT_SUCCESS(File->CopyData(ReparseAttribute,
+                                      reinterpret_cast<PUCHAR>(&ReparseTag),
+                                      &TagLength,
+                                      0)) &&
+            TagLength == 0)
+        {
+            Value->Extended.ReparseTag = ReparseTag;
+        }
+    }
     RtlCopyMemory(Value->Name,
                   Name,
                   NameLength * sizeof(WCHAR));
