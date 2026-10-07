@@ -22,6 +22,7 @@
 void schedsvc_auto_start(void);
 void add_job(const WCHAR *name);
 void remove_job(const WCHAR *name);
+void update_job(const WCHAR *name);
 void check_task_state(void);
 void add_process_to_queue(HANDLE hproc);
 void update_process_status(DWORD pid);

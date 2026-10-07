@@ -46,6 +46,8 @@ static DWORD WINAPI tasks_monitor_thread(void *arg)
 {
     static const WCHAR tasksW[] = { '\\','T','a','s','k','s','\\',0 };
     WCHAR path[MAX_PATH];
+    WCHAR name[MAX_PATH];
+    FILE_NOTIFY_INFORMATION *entry;
     HANDLE htasks, hport, htimer;
     JOBOBJECT_ASSOCIATE_COMPLETION_PORT job_info;
     OVERLAPPED ov;
@@ -155,44 +157,50 @@ static DWORD WINAPI tasks_monitor_thread(void *arg)
             continue;
         }
 
-        if (info.data.NextEntryOffset)
-            FIXME("got multiple entries\n");
-
         /* Directory change notification */
-        info.data.FileName[info.data.FileNameLength/sizeof(WCHAR)] = 0;
-
-        switch (info.data.Action)
+        entry = &info.data;
+        for (;;)
         {
-        case FILE_ACTION_ADDED:
-            TRACE("FILE_ACTION_ADDED %s\n", debugstr_w(info.data.FileName));
+            DWORD len = min(entry->FileNameLength / sizeof(WCHAR), MAX_PATH - 1);
 
-            GetWindowsDirectoryW(path, MAX_PATH);
-            lstrcatW(path, tasksW);
-            lstrcatW(path, info.data.FileName);
-            add_job(path);
-            break;
+            memcpy(name, entry->FileName, len * sizeof(WCHAR));
+            name[len] = 0;
 
-        case FILE_ACTION_REMOVED:
-            TRACE("FILE_ACTION_REMOVED %s\n", debugstr_w(info.data.FileName));
-            GetWindowsDirectoryW(path, MAX_PATH);
-            lstrcatW(path, tasksW);
-            lstrcatW(path, info.data.FileName);
-            remove_job(path);
-            break;
+            switch (entry->Action)
+            {
+            case FILE_ACTION_ADDED:
+                TRACE("FILE_ACTION_ADDED %s\n", debugstr_w(name));
 
-        case FILE_ACTION_MODIFIED:
-            TRACE("FILE_ACTION_MODIFIED %s\n", debugstr_w(info.data.FileName));
+                GetWindowsDirectoryW(path, MAX_PATH);
+                lstrcatW(path, tasksW);
+                lstrcatW(path, name);
+                add_job(path);
+                break;
 
-            GetWindowsDirectoryW(path, MAX_PATH);
-            lstrcatW(path, tasksW);
-            lstrcatW(path, info.data.FileName);
-            remove_job(path);
-            add_job(path);
-            break;
+            case FILE_ACTION_REMOVED:
+                TRACE("FILE_ACTION_REMOVED %s\n", debugstr_w(name));
+                GetWindowsDirectoryW(path, MAX_PATH);
+                lstrcatW(path, tasksW);
+                lstrcatW(path, name);
+                remove_job(path);
+                break;
 
-        default:
-            FIXME("%s: action %#lx not handled\n", debugstr_w(info.data.FileName), info.data.Action);
-            break;
+            case FILE_ACTION_MODIFIED:
+                TRACE("FILE_ACTION_MODIFIED %s\n", debugstr_w(name));
+
+                GetWindowsDirectoryW(path, MAX_PATH);
+                lstrcatW(path, tasksW);
+                lstrcatW(path, name);
+                update_job(path);
+                break;
+
+            default:
+                FIXME("%s: action %#lx not handled\n", debugstr_w(name), entry->Action);
+                break;
+            }
+
+            if (!entry->NextEntryOffset) break;
+            entry = (FILE_NOTIFY_INFORMATION *)((BYTE *)entry + entry->NextEntryOffset);
         }
 
         check_task_state();

@@ -1068,6 +1068,37 @@ void check_missed_task_time(void)
     LeaveCriticalSection(&at_job_list_section);
 }
 
+void update_job(const WCHAR *name)
+{
+    struct job_t *job, *old;
+
+    job = calloc(1, sizeof(*job));
+    if (!job) return;
+
+    if (!load_job(name, job))
+    {
+        free_job(job);
+        return;
+    }
+
+    EnterCriticalSection(&at_job_list_section);
+    job->name = wcsdup(name);
+    old = find_job(0, name, NULL);
+    if (old)
+    {
+        job->info.JobId = old->info.JobId;
+        list_add_after(&old->entry, &job->entry);
+        list_remove(&old->entry);
+        free_job(old);
+    }
+    else
+    {
+        job->info.JobId = current_jobid++;
+        list_add_tail(&at_job_list, &job->entry);
+    }
+    LeaveCriticalSection(&at_job_list_section);
+}
+
 void remove_job(const WCHAR *name)
 {
     struct job_t *job;
