@@ -1050,10 +1050,30 @@ RtlDosApplyFileIsolationRedirection_Ustr(IN ULONG Flags,
 
     /* Activation-context DLL redirection applies only to bare module names.
      * Dot-local redirection above still applies when the caller supplies a path. */
-    for (p = OriginalName->Buffer; p < OriginalName->Buffer + OriginalName->Length / sizeof(WCHAR); p++)
+    for (p = OriginalName->Buffer + OriginalName->Length / sizeof(WCHAR); p > OriginalName->Buffer; p--)
     {
-        if (*p == L'\\' || *p == L'/' || *p == L':')
-            return STATUS_SXS_KEY_NOT_FOUND;
+        if (p[-1] == L'\\' || p[-1] == L'/' || p[-1] == L':')
+        {
+            static const UNICODE_STRING System32 = RTL_CONSTANT_STRING(L"\\System32\\");
+            UNICODE_STRING Directory, NtSystemRoot, Tail;
+
+            Directory.Buffer = OriginalName->Buffer;
+            Directory.Length = (USHORT)((p - OriginalName->Buffer) * sizeof(WCHAR));
+            Directory.MaximumLength = Directory.Length;
+            RtlInitUnicodeString(&NtSystemRoot, SharedUserData->NtSystemRoot);
+            if (Directory.Length != NtSystemRoot.Length + System32.Length ||
+                !RtlPrefixUnicodeString(&NtSystemRoot, &Directory, TRUE))
+            {
+                return STATUS_SXS_KEY_NOT_FOUND;
+            }
+
+            Tail.Buffer = Directory.Buffer + NtSystemRoot.Length / sizeof(WCHAR);
+            Tail.Length = System32.Length;
+            Tail.MaximumLength = Tail.Length;
+            if (!RtlEqualUnicodeString(&Tail, &System32, TRUE))
+                return STATUS_SXS_KEY_NOT_FOUND;
+            break;
+        }
     }
 
     pstrParam = OriginalName;
