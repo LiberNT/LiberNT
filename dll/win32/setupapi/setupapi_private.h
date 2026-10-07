@@ -487,6 +487,7 @@ LPVOID WINAPI MyMalloc(DWORD dwSize);
 LPVOID WINAPI MyRealloc(LPVOID lpSrc, DWORD dwSize);
 LPWSTR WINAPI DuplicateString(LPCWSTR lpSrc);
 BOOL WINAPI IsUserAdmin(VOID);
+BOOL SourceListNoBrowse(VOID);
 LPWSTR WINAPI MultiByteToUnicode(LPCSTR lpMultiByteStr, UINT uCodePage);
 LPSTR WINAPI UnicodeToMultiByte(LPCWSTR lpUnicodeStr, UINT uCodePage);
 

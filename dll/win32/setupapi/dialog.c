@@ -276,6 +276,8 @@ UINT WINAPI SetupPromptForDiskW(HWND hwndParent, PCWSTR DialogTitle, PCWSTR Disk
     params.FileSought = FileSought;
     params.TagFile = TagFile;
     params.DiskPromptStyle = DiskPromptStyle;
+    if (SourceListNoBrowse())
+        params.DiskPromptStyle |= IDF_NOBROWSE;
     params.PathBuffer = PathBuffer;
     params.PathBufferSize = PathBufferSize;
     params.PathRequiredSize = PathRequiredSize;

@@ -260,7 +260,7 @@
 @ stub SetupAdjustDiskSpaceListW
 @ stub SetupBackupErrorA
 @ stub SetupBackupErrorW
-@ stub SetupCancelTemporarySourceList
+@ stdcall SetupCancelTemporarySourceList()
 @ stdcall SetupCloseFileQueue(ptr)
 @ stdcall SetupCloseInfFile(long)
 @ stdcall SetupCloseLog()
@@ -449,8 +449,8 @@
 @ stdcall SetupFindNextLine(ptr ptr)
 @ stdcall SetupFindNextMatchLineA(ptr str ptr)
 @ stdcall SetupFindNextMatchLineW(ptr wstr ptr)
-@ stub SetupFreeSourceListA
-@ stub SetupFreeSourceListW
+@ stdcall SetupFreeSourceListA(ptr long)
+@ stdcall SetupFreeSourceListW(ptr long)
 @ stub SetupGetBackupInformationA
 @ stub SetupGetBackupInformationW
 @ stdcall SetupGetBinaryField(ptr long ptr long ptr)
@@ -537,8 +537,8 @@
 @ stdcall SetupQueryInfOriginalFileInformationW(ptr long ptr ptr)
 @ stdcall SetupQueryInfVersionInformationA(ptr long str ptr long ptr)
 @ stdcall SetupQueryInfVersionInformationW(ptr long wstr ptr long ptr)
-@ stub SetupQuerySourceListA
-@ stub SetupQuerySourceListW
+@ stdcall SetupQuerySourceListA(long ptr ptr)
+@ stdcall SetupQuerySourceListW(long ptr ptr)
 @ stdcall SetupQuerySpaceRequiredOnDriveA(long str ptr ptr long)
 @ stdcall SetupQuerySpaceRequiredOnDriveW(long wstr ptr ptr long)
 @ stdcall SetupQueueCopyA(long str str str str str str str long)
@@ -561,8 +561,8 @@
 @ stub SetupRemoveFileLogEntryW
 @ stub SetupRemoveFromDiskSpaceListA
 @ stub SetupRemoveFromDiskSpaceListW
-@ stdcall -stub SetupRemoveFromSourceListA(long str)
-@ stdcall -stub SetupRemoveFromSourceListW(long wstr)
+@ stdcall SetupRemoveFromSourceListA(long str)
+@ stdcall SetupRemoveFromSourceListW(long wstr)
 @ stub SetupRemoveInstallSectionFromDiskSpaceListA
 @ stub SetupRemoveInstallSectionFromDiskSpaceListW
 @ stub SetupRemoveSectionFromDiskSpaceListA

@@ -28,6 +28,7 @@ list(APPEND SOURCE
     queue.c
     setupcab.c
     stringtable.c
+    srclist.c
     stubs.c)
 
 list(APPEND PCH_SKIP_SOURCE

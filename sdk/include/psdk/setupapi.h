@@ -1210,6 +1210,11 @@ WINSETUPAPI BOOL WINAPI SetupAddToDiskSpaceListA(_In_ HDSKSPC, _In_ PCSTR, _In_ 
 WINSETUPAPI BOOL WINAPI SetupAddToDiskSpaceListW(_In_ HDSKSPC, _In_ PCWSTR, _In_ LONGLONG, _In_ UINT, _Reserved_ PVOID, _Reserved_ UINT);
 WINSETUPAPI BOOL WINAPI SetupAddToSourceListA(_In_ DWORD, _In_ PCSTR);
 WINSETUPAPI BOOL WINAPI SetupAddToSourceListW(_In_ DWORD, _In_ PCWSTR);
+WINSETUPAPI BOOL WINAPI SetupCancelTemporarySourceList(VOID);
+WINSETUPAPI BOOL WINAPI SetupQuerySourceListA(_In_ DWORD, _Outptr_result_buffer_(*Count) PCSTR **List, _Out_ PUINT Count);
+WINSETUPAPI BOOL WINAPI SetupQuerySourceListW(_In_ DWORD, _Outptr_result_buffer_(*Count) PCWSTR **List, _Out_ PUINT Count);
+WINSETUPAPI BOOL WINAPI SetupFreeSourceListA(_Inout_ PCSTR **List, _In_ UINT Count);
+WINSETUPAPI BOOL WINAPI SetupFreeSourceListW(_Inout_ PCWSTR **List, _In_ UINT Count);
 WINSETUPAPI BOOL WINAPI SetupAdjustDiskSpaceListA(_In_ HDSKSPC, _In_ LPCSTR, _In_ LONGLONG, _Reserved_ PVOID, _Reserved_ UINT);
 WINSETUPAPI BOOL WINAPI SetupAdjustDiskSpaceListW(_In_ HDSKSPC, _In_ LPCWSTR, _In_ LONGLONG, _Reserved_ PVOID, _Reserved_ UINT);
 WINSETUPAPI UINT WINAPI SetupBackupErrorA(_In_ HWND, _In_opt_ PCSTR, _In_ PCSTR, _In_opt_ PCSTR, _In_ UINT, _In_ DWORD);
