@@ -265,6 +265,7 @@ BasepLoadLibraryAsDatafile(PWSTR Path, LPCWSTR Name, DWORD Flags, HMODULE *hModu
     PVOID lpBaseAddress = NULL;
     SIZE_T ViewSize = 0;
     DWORD Protect = PAGE_READONLY;
+    PVOID ArbitraryUserPointer;
     //PUNICODE_STRING OriginalName;
     //UNICODE_STRING dotDLL = RTL_CONSTANT_STRING(L".DLL");
 
@@ -327,6 +328,8 @@ BasepLoadLibraryAsDatafile(PWSTR Path, LPCWSTR Name, DWORD Flags, HMODULE *hModu
     }
 
     /* Map view of section */
+    ArbitraryUserPointer = NtCurrentTeb()->NtTib.ArbitraryUserPointer;
+    NtCurrentTeb()->NtTib.ArbitraryUserPointer = FilenameW;
     Status = NtMapViewOfSection(hMapping,
                                 NtCurrentProcess(),
                                 &lpBaseAddress,
@@ -337,6 +340,7 @@ BasepLoadLibraryAsDatafile(PWSTR Path, LPCWSTR Name, DWORD Flags, HMODULE *hModu
                                 ViewShare,
                                 0,
                                 PAGE_READONLY);
+    NtCurrentTeb()->NtTib.ArbitraryUserPointer = ArbitraryUserPointer;
 
     /* Close handle to the section */
     CloseHandle(hMapping);
