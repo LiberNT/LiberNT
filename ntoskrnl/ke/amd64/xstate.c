@@ -422,9 +422,30 @@ KiSaveUserXState(
     ULONG64 Features, Layout;
     ULONG Index;
 
-    Features = SharedUserData->XState.CompactionEnabled ? Header->CompactionMask : Header->Mask;
-    Features &= KiGetUserXStateFeatures();
-    Layout = SharedUserData->XState.CompactionEnabled ? (Features | XSTATE_COMPACTION_ENABLE_MASK) : 0;
+    if (SharedUserData->XState.CompactionEnabled)
+    {
+        Features = Header->CompactionMask & KiGetUserXStateFeatures();
+        Layout = Features | XSTATE_COMPACTION_ENABLE_MASK;
+    }
+    else if (Header->Mask)
+    {
+        Features = Header->Mask & KiGetUserXStateFeatures();
+        Layout = 0;
+    }
+    else
+    {
+        Features = KiGetUserXStateFeatures();
+        Layout = 0;
+        for (Index = 2; Index < MAXIMUM_XSTATE_FEATURES; Index++)
+        {
+            if ((Features & (1ULL << Index)) &&
+                (KiGetUserXStateFeatureOffset(Layout, Index) +
+                 SharedUserData->XState.Features[Index].Size > Length))
+            {
+                Features &= ~(1ULL << Index);
+            }
+        }
+    }
 
     RtlZeroMemory(SaveArea, sizeof(XSAVE_AREA));
     if (Features)
