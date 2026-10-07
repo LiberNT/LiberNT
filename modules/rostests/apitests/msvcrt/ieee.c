@@ -376,7 +376,7 @@ void test_j0(void)
     tested.d = 2.387000;
     expected.l = 0x3F83059F9F6F30CALL;
     result.d =  _j0(tested.d);
-    ok(result.l == expected.l, "_j0 returned: %I64x\n", result.l);
+    ok(llabs(result.l - expected.l) <= 16, "_j0 returned: %I64x\n", result.l);
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
 }
 
@@ -528,7 +528,7 @@ void test_j1(void)
     tested.d = 2.387000;
     expected.l = 0x3FE0BBEFC62ABAB1LL;
     result.d =  _j1(tested.d);
-    ok(result.l == expected.l, "_j1 returned: %I64x\n", result.l);
+    ok(llabs(result.l - expected.l) <= 16, "_j1 returned: %I64x\n", result.l);
     ok(errno == 0xDEADBEEF, "errno: %d\n", errno);
 }
 

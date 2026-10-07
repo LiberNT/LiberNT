@@ -11,6 +11,7 @@
 static LONG s_record_count = 0;
 static DWORD s_record[MAX_RECORD + 1] = { 0 };
 static BOOL s_terminate_all = FALSE;
+static HANDLE s_hMainRecorded;
 
 static const DWORD s_expected[] =
 {
@@ -77,18 +78,21 @@ static DWORD WINAPI ThreadFunc2(LPVOID arg)
 static VOID NTAPI DoUserAPC1(ULONG_PTR Parameter)
 {
     ok_int((int)Parameter, 1);
+    ok_long(WaitForSingleObject(s_hMainRecorded, 5 * 1000), WAIT_OBJECT_0);
     AddValueToRecord(4);
 }
 
 static VOID NTAPI DoUserAPC2(ULONG_PTR Parameter)
 {
     ok_int((int)Parameter, 2);
+    ok_long(WaitForSingleObject(s_hMainRecorded, 5 * 1000), WAIT_OBJECT_0);
     AddValueToRecord(5);
 }
 
 static VOID NTAPI DoUserAPC3(ULONG_PTR Parameter)
 {
     ok_int((int)Parameter, 3);
+    ok_long(WaitForSingleObject(s_hMainRecorded, 5 * 1000), WAIT_OBJECT_0);
     AddValueToRecord(6);
     s_terminate_all = TRUE;
 }
@@ -110,12 +114,14 @@ static void JustDoIt(LPTHREAD_START_ROUTINE fn)
     AddValueToRecord(7);
     ok_long(QueueUserAPC(DoUserAPC1, hThread, 1), 1);
     AddValueToRecord(8);
+    ReleaseSemaphore(s_hMainRecorded, 1, NULL);
 
     Sleep(100);
 
     AddValueToRecord(9);
     ok_long(QueueUserAPC(DoUserAPC2, hThread, 2), 1);
     AddValueToRecord(10);
+    ReleaseSemaphore(s_hMainRecorded, 1, NULL);
 
     Sleep(100);
 
@@ -124,6 +130,7 @@ static void JustDoIt(LPTHREAD_START_ROUTINE fn)
     AddValueToRecord(12);
 
     AddValueToRecord(13);
+    ReleaseSemaphore(s_hMainRecorded, 1, NULL);
     ok_long(WaitForSingleObject(hThread, 5 * 1000), WAIT_OBJECT_0);
     AddValueToRecord(14);
 
@@ -166,6 +173,7 @@ static void TestMultipleUserAPCs(void)
 
     ok_long(s_record_count, 0);
 
+    ReleaseSemaphore(s_hMainRecorded, 3, NULL);
     ResumeThread(hThread);
 
     ok_long(WaitForSingleObject(hThread, 5 * 1000), WAIT_OBJECT_0);
@@ -179,7 +187,12 @@ static void TestMultipleUserAPCs(void)
 
 START_TEST(QueueUserAPC)
 {
+    s_hMainRecorded = CreateSemaphoreW(NULL, 0, 3, NULL);
+    ok(s_hMainRecorded != NULL, "CreateSemaphoreW failed\n");
+
     TestForSleepEx();
     TestForWaitForSingleObjectEx();
     TestMultipleUserAPCs();
+
+    CloseHandle(s_hMainRecorded);
 }

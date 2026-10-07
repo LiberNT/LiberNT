@@ -176,6 +176,49 @@ struct
 #endif
 };
 
+static BOOL FpExceptionsAreDelivered(void)
+{
+    volatile double a, b;
+    volatile BOOL Delivered = FALSE;
+
+    _fpreset();
+    _clearfp();
+    _controlfp(~_EM_ZERODIVIDE, 0xffffffff);
+    _SEH2_TRY
+    {
+        a = 0.0;
+        b = 1.0 / a;
+        (void)b;
+        _clearfp();
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _clearfp();
+        Delivered = TRUE;
+    }
+    _SEH2_END;
+    _fpreset();
+    _clearfp();
+
+    return Delivered;
+}
+
+static BOOL DenormalOperandIsReported(void)
+{
+    volatile double a, b;
+    unsigned int statusfp;
+
+    _fpreset();
+    _clearfp();
+    a = DBL_MIN;
+    b = a - 4.9406564584124654e-324;
+    (void)b;
+    statusfp = _clearfp();
+    _fpreset();
+
+    return (statusfp & _SW_DENORMAL) != 0;
+}
+
 void Test_exceptions(void)
 {
     volatile double a, b;
@@ -183,9 +226,21 @@ void Test_exceptions(void)
     volatile long status = 0;
 
     unsigned int i, exp_fpstatus, native_fpcw, statusfp;
+    BOOL Delivered = FpExceptionsAreDelivered();
+    BOOL Denormal = DenormalOperandIsReported();
+
+    if (!Delivered)
+        skip("The processor does not deliver unmasked floating-point exceptions\n");
+    if (!Denormal)
+        skip("The processor does not report denormal operands\n");
 
     for (i = 0; i < _countof(g_exception_Testcases); i++)
     {
+        if (!Delivered && g_exception_Testcases[i].ExceptionCode != 0)
+            continue;
+        if (!Denormal && (g_exception_Testcases[i].FpStatus & _SW_DENORMAL))
+            continue;
+
         /* Start clean */
         status = 0;
         _fpreset();
