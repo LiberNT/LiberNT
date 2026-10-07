@@ -402,7 +402,7 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
     else
     {
         /* User mode exception, was it first-chance? */
-        if (FirstChance)
+        if (FirstChance && ExceptionRecord->ExceptionCode != STATUS_STACK_BUFFER_OVERRUN)
         {
             /*
              * Break into the kernel debugger unless a user mode debugger
@@ -448,7 +448,8 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
             /* Handled, get out */
             return;
         }
-        else if (DbgkForwardException(ExceptionRecord, FALSE, TRUE))
+        else if (ExceptionRecord->ExceptionCode != STATUS_STACK_BUFFER_OVERRUN &&
+                 DbgkForwardException(ExceptionRecord, FALSE, TRUE))
         {
             /* Handled, get out */
             return;
@@ -583,6 +584,18 @@ KiIsPrivilegedInstruction(PUCHAR Ip, BOOLEAN Wow64)
         case 0xF4: // HLT
         case 0xFA: // CLI
         case 0xFB: // STI
+        case 0x6C: // INSB
+        case 0x6D: // INSD
+        case 0x6E: // OUTSB
+        case 0x6F: // OUTSD
+        case 0xE4: // IN AL, imm8
+        case 0xE5: // IN EAX, imm8
+        case 0xE6: // OUT imm8, AL
+        case 0xE7: // OUT imm8, EAX
+        case 0xEC: // IN AL, DX
+        case 0xED: // IN EAX, DX
+        case 0xEE: // OUT DX, AL
+        case 0xEF: // OUT DX, EAX
             return TRUE;
 
         case 0x0F:
