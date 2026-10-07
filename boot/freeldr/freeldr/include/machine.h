@@ -167,6 +167,9 @@ PVOID UefiGetSmbiosEpsPointer(VOID);
 BOOLEAN UefiGetSmbiosSystemUuid(_Out_ PGUID SystemGuid);
 BOOLEAN UefiFirmwareSetupSupported(VOID);
 VOID UefiBootToFirmware(VOID);
+#ifdef FREELDR_HTTP_BOOT
+BOOLEAN UefiHttpBootDownload(_In_ PCSTR Url, _In_opt_ PCSTR StaticIp, _Out_opt_ PBOOLEAN Cancelled);
+#endif
 #endif
 
 /* EOF */
