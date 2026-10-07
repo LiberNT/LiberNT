@@ -108,7 +108,7 @@ WdfCxParseConnectionId(
     return TRUE;
 }
 
-static
+FORCEINLINE
 NTSTATUS
 WdfCxQueryConnectionProperties(
     _In_ LARGE_INTEGER ConnectionId,
@@ -197,7 +197,7 @@ WdfCxQueryConnectionProperties(
     return Status;
 }
 
-static
+FORCEINLINE
 NTSTATUS
 WdfCxSendIoctlToDevice(
     _In_ WDFDEVICE Device,
