@@ -1211,12 +1211,13 @@ IntDefWindowProc(
          break;
 
       case WM_MOUSEWHEEL:
+      case WM_MOUSEHWHEEL:
          if (Wnd->style & WS_CHILD)
          {
             HWND hwndParent;
             PWND pwndParent = IntGetParent(Wnd);
             hwndParent = pwndParent ? UserHMGetHandle(pwndParent) : NULL;
-            return co_IntSendMessage( hwndParent, WM_MOUSEWHEEL, wParam, lParam);
+            return co_IntSendMessage( hwndParent, Msg, wParam, lParam);
          }
          break;
 

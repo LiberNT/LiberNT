@@ -160,6 +160,11 @@ UserProcessMouseInput(PMOUSE_INPUT_DATA mid)
         mi.mouseData = mid->ButtonData;
         mi.dwFlags |= MOUSEEVENTF_WHEEL;
     }
+    else if (mid->ButtonFlags & MOUSE_HWHEEL)
+    {
+        mi.mouseData = mid->ButtonData;
+        mi.dwFlags |= MOUSEEVENTF_HWHEEL;
+    }
 
     /* If something has changed, send input to user */
     if (mi.dwFlags)
@@ -378,6 +383,13 @@ UserSendMouseInputWorker(MOUSEINPUT *pmi, BOOL bInjected)
     if (dwFlags & MOUSEEVENTF_WHEEL)
     {
         Msg.message = WM_MOUSEWHEEL;
+        Msg.wParam = MAKEWPARAM(pCurInfo->ButtonsDown, pmi->mouseData);
+        co_MsqInsertMouseMessage(&Msg, bInjected, pmi->dwExtraInfo, TRUE);
+    }
+
+    if (dwFlags & MOUSEEVENTF_HWHEEL)
+    {
+        Msg.message = WM_MOUSEHWHEEL;
         Msg.wParam = MAKEWPARAM(pCurInfo->ButtonsDown, pmi->mouseData);
         co_MsqInsertMouseMessage(&Msg, bInjected, pmi->dwExtraInfo, TRUE);
     }

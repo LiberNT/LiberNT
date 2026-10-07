@@ -1844,7 +1844,9 @@ typedef enum tagHANDEDNESS
 #if (_WIN32_WINNT >= 0x0600)
 #define WM_MOUSEHWHEEL 526
 #endif
-#if (_WIN32_WINNT >= 0x0500)
+#if (_WIN32_WINNT >= 0x0600)
+#define WM_MOUSELAST 526
+#elif (_WIN32_WINNT >= 0x0500)
 #define WM_MOUSELAST 525
 #elif (_WIN32_WINNT >= 0x0400) || (_WIN32_WINDOWS > 0x0400)
 #define WM_MOUSELAST 522

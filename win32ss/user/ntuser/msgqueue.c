@@ -633,6 +633,7 @@ co_MsqInsertMouseMessage(MSG* Msg, DWORD flags, ULONG_PTR dwExtraInfo, BOOL Hook
    switch (Msg->message)
    {
       case WM_MOUSEWHEEL:
+      case WM_MOUSEHWHEEL:
          MouseHookData.mouseData = MAKELONG(0, GET_WHEEL_DELTA_WPARAM(Msg->wParam));
          break;
       case WM_XBUTTONDOWN:
@@ -1661,7 +1662,7 @@ BOOL co_IntProcessMouseMessage(MSG* msg, BOOL* RemoveMessages, BOOL* NotForUs, L
     message = msg->message;
 
     /* Note: windows has no concept of a non-client wheel message */
-    if (message != WM_MOUSEWHEEL)
+    if (message != WM_MOUSEWHEEL && message != WM_MOUSEHWHEEL)
     {
         if (hittest != HTCLIENT)
         {
