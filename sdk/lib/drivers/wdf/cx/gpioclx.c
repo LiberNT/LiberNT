@@ -48,7 +48,7 @@ typedef struct _GPIOCLX_CONTROLLER
     DECLSPEC_ALIGN(MEMORY_ALLOCATION_ALIGNMENT) UCHAR Context[1];
 } GPIOCLX_CONTROLLER, *PGPIOCLX_CONTROLLER;
 
-#define GPIOCLX_MAX_LINES 512
+#define GPIOCLX_MAX_LINES 640
 
 typedef struct _GPIOCLX_DEVICE_CONTEXT
 {
@@ -193,12 +193,9 @@ GpioCxReleaseBankLock(
 
 static
 BOOLEAN
-NTAPI
-GpioCxEvtInterruptIsr(
-    _In_ WDFINTERRUPT Interrupt,
-    _In_ ULONG MessageId)
+GpioCxServiceBank(
+    _In_ PGPIOCLX_BANK Bank)
 {
-    PGPIOCLX_BANK Bank = GpioCxGetInterruptContext(Interrupt)->Bank;
     PGPIOCLX_DEVICE_CONTEXT Device = Bank->Device;
     PGPIO_CLIENT_REGISTRATION_PACKET Packet = Device->Packet;
     PVOID Context = Device->Controller->Context;
@@ -206,8 +203,6 @@ GpioCxEvtInterruptIsr(
     GPIO_MASK_INTERRUPT_PARAMETERS Mask;
     GPIO_CLEAR_ACTIVE_INTERRUPTS_PARAMETERS Clear;
     NTSTATUS Status;
-
-    UNREFERENCED_PARAMETER(MessageId);
 
     if (!Device->Started || Bank->EnabledMask == 0)
         return FALSE;
@@ -268,8 +263,30 @@ GpioCxEvtInterruptIsr(
     }
 
     Bank->PendingMask |= Query.ActiveMask;
-    WdfInterruptQueueDpcForIsr(Interrupt);
     return TRUE;
+}
+
+static
+BOOLEAN
+NTAPI
+GpioCxEvtInterruptIsr(
+    _In_ WDFINTERRUPT Interrupt,
+    _In_ ULONG MessageId)
+{
+    PGPIOCLX_DEVICE_CONTEXT Device = GpioCxGetInterruptContext(Interrupt)->Bank->Device;
+    BOOLEAN Handled = FALSE;
+    USHORT Index;
+
+    UNREFERENCED_PARAMETER(MessageId);
+
+    for (Index = 0; Index < Device->BankCount; Index++)
+    {
+        if (Device->Banks[Index].Interrupt == Interrupt && GpioCxServiceBank(&Device->Banks[Index]))
+            Handled = TRUE;
+    }
+    if (Handled)
+        WdfInterruptQueueDpcForIsr(Interrupt);
+    return Handled;
 }
 
 static
@@ -565,12 +582,17 @@ GpioCxEvtInterruptDpc(
     _In_ WDFINTERRUPT Interrupt,
     _In_ WDFOBJECT AssociatedObject)
 {
-    PGPIOCLX_BANK Bank = GpioCxGetInterruptContext(Interrupt)->Bank;
+    PGPIOCLX_DEVICE_CONTEXT Device = GpioCxGetInterruptContext(Interrupt)->Bank->Device;
+    USHORT Index;
 
     UNREFERENCED_PARAMETER(AssociatedObject);
 
     WdfInterruptAcquireLock(Interrupt);
-    Bank->PendingMask = 0;
+    for (Index = 0; Index < Device->BankCount; Index++)
+    {
+        if (Device->Banks[Index].Interrupt == Interrupt)
+            Device->Banks[Index].PendingMask = 0;
+    }
     WdfInterruptReleaseLock(Interrupt);
 }
 
@@ -588,6 +610,60 @@ GpioCxFreeBanks(
 }
 
 static
+VOID
+GpioCxQueryInterruptBinding(
+    _In_ PGPIOCLX_DEVICE_CONTEXT Device,
+    _In_ WDFCMRESLIST ResourcesRaw,
+    _In_ WDFCMRESLIST ResourcesTranslated,
+    _Out_writes_(Device->BankCount) PULONG Mapping)
+{
+    CLIENT_CONTROLLER_QUERY_SET_INFORMATION_INPUT Input;
+    PCLIENT_CONTROLLER_QUERY_SET_INFORMATION_OUTPUT Output;
+    ULONG Count = min(WdfCmResourceListGetCount(ResourcesTranslated), WdfCmResourceListGetCount(ResourcesRaw));
+    ULONG InterruptIndex = 0;
+    ULONG OutputSize;
+    ULONG Index;
+
+    for (Index = 0; Index < Device->BankCount; Index++)
+        Mapping[Index] = MAXULONG;
+    for (Index = 0; Index < Count && InterruptIndex < Device->BankCount; Index++)
+    {
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated = WdfCmResourceListGetDescriptor(ResourcesTranslated, Index);
+
+        if (Translated != NULL && Translated->Type == CmResourceTypeInterrupt)
+            Mapping[InterruptIndex++] = Index;
+    }
+
+    if (Device->Packet->CLIENT_QuerySetControllerInformation == NULL || Device->BankCount < 2)
+        return;
+    OutputSize = FIELD_OFFSET(CLIENT_CONTROLLER_QUERY_SET_INFORMATION_OUTPUT, BankInterruptBinding.ResourceMapping) + Device->BankCount * sizeof(ULONG);
+    OutputSize = max(OutputSize, sizeof(*Output));
+    Output = ExAllocatePoolWithTag(NonPagedPool, OutputSize, WDFCX_TAG);
+    if (Output == NULL)
+        return;
+    RtlZeroMemory(Output, OutputSize);
+    Output->Version = GPIO_BANK_INTERRUPT_BINDING_INFORMATION_OUTPUT_VERSION;
+    Output->Size = (USHORT)OutputSize;
+    RtlZeroMemory(&Input, sizeof(Input));
+    Input.RequestType = QueryBankInterruptBindingInformation;
+    Input.Size = sizeof(Input);
+    Input.BankInterruptBinding.ResourcesTranslated = ResourcesTranslated;
+    Input.BankInterruptBinding.ResourcesRaw = ResourcesRaw;
+    Input.BankInterruptBinding.TotalBanks = Device->BankCount;
+    if (NT_SUCCESS(Device->Packet->CLIENT_QuerySetControllerInformation(Device->Controller->Context, &Input, Output)))
+    {
+        for (Index = 0; Index < Device->BankCount; Index++)
+        {
+            ULONG ResourceIndex = Output->BankInterruptBinding.ResourceMapping[Index];
+            PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated = ResourceIndex < Count ? WdfCmResourceListGetDescriptor(ResourcesTranslated, ResourceIndex) : NULL;
+
+            Mapping[Index] = (Translated != NULL && Translated->Type == CmResourceTypeInterrupt) ? ResourceIndex : MAXULONG;
+        }
+    }
+    ExFreePoolWithTag(Output, WDFCX_TAG);
+}
+
+static
 NTSTATUS
 GpioCxCreateBanks(
     _In_ WDFDEVICE DeviceHandle,
@@ -595,13 +671,12 @@ GpioCxCreateBanks(
     _In_ WDFCMRESLIST ResourcesRaw,
     _In_ WDFCMRESLIST ResourcesTranslated)
 {
-    ULONG Count = WdfCmResourceListGetCount(ResourcesTranslated);
-    ULONG RawCount = WdfCmResourceListGetCount(ResourcesRaw);
-    ULONG InterruptIndex = 0;
     USHORT PinsPerBank = Device->Info.NumberOfPinsPerBank;
     USHORT BankCount;
+    PULONG Mapping;
     ULONG Index;
-    NTSTATUS Status;
+    ULONG Shared;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     if (PinsPerBank == 0 || PinsPerBank > 64)
         return STATUS_INVALID_PARAMETER;
@@ -623,21 +698,37 @@ GpioCxCreateBanks(
         KeInitializeSpinLock(&Device->Banks[Index].Lock);
     }
 
-    for (Index = 0; Index < Count && Index < RawCount; Index++)
+    Mapping = ExAllocatePoolWithTag(NonPagedPool, BankCount * sizeof(ULONG), WDFCX_TAG);
+    if (Mapping == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    GpioCxQueryInterruptBinding(Device, ResourcesRaw, ResourcesTranslated, Mapping);
+
+    for (Index = 0; Index < BankCount; Index++)
     {
-        PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated = WdfCmResourceListGetDescriptor(ResourcesTranslated, Index);
-        PCM_PARTIAL_RESOURCE_DESCRIPTOR Raw = WdfCmResourceListGetDescriptor(ResourcesRaw, Index);
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated;
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR Raw;
         WDF_INTERRUPT_CONFIG InterruptConfig;
         WDF_OBJECT_ATTRIBUTES Attributes;
-        PGPIOCLX_BANK Bank;
+        PGPIOCLX_BANK Bank = &Device->Banks[Index];
         WDFINTERRUPT Interrupt;
 
-        if (Translated == NULL || Raw == NULL || Translated->Type != CmResourceTypeInterrupt)
+        if (Mapping[Index] == MAXULONG)
             continue;
+        for (Shared = 0; Shared < Index; Shared++)
+        {
+            if (Mapping[Shared] == Mapping[Index])
+                break;
+        }
+        if (Shared < Index)
+        {
+            Bank->Gsiv = Device->Banks[Shared].Gsiv;
+            Bank->Interrupt = Device->Banks[Shared].Interrupt;
+            continue;
+        }
 
-        Bank = &Device->Banks[min(InterruptIndex, (ULONG)BankCount - 1)];
-        InterruptIndex++;
-        if (Bank->Interrupt != NULL)
+        Translated = WdfCmResourceListGetDescriptor(ResourcesTranslated, Mapping[Index]);
+        Raw = WdfCmResourceListGetDescriptor(ResourcesRaw, Mapping[Index]);
+        if (Translated == NULL || Raw == NULL)
             continue;
         Bank->Gsiv = Raw->u.Interrupt.Vector;
 
@@ -649,13 +740,14 @@ GpioCxCreateBanks(
         WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&Attributes, GPIOCLX_INTERRUPT_CONTEXT);
         Status = WdfInterruptCreate(DeviceHandle, &InterruptConfig, &Attributes, &Interrupt);
         if (!NT_SUCCESS(Status))
-            return Status;
+            break;
 
         GpioCxGetInterruptContext(Interrupt)->Bank = Bank;
         Bank->Interrupt = Interrupt;
     }
 
-    return STATUS_SUCCESS;
+    ExFreePoolWithTag(Mapping, WDFCX_TAG);
+    return Status;
 }
 
 static
