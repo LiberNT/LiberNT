@@ -35,6 +35,24 @@ BaseDllInitializeMemoryManager(VOID)
                              NULL);
 }
 
+static
+VOID
+BaseProbeHeapPointer(HANDLE hMem)
+{
+    if (!hMem)
+        return;
+
+    _SEH2_TRY
+    {
+        (VOID)*((volatile UCHAR *)hMem - 1);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        RtlFailFast(FAST_FAIL_INVALID_ARG);
+    }
+    _SEH2_END;
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*
@@ -649,6 +667,8 @@ GlobalFree(HGLOBAL hMem)
     /* Check if this was a simple allocated heap entry */
     if (!((ULONG_PTR)hMem & BASE_HEAP_IS_HANDLE_ENTRY))
     {
+        BaseProbeHeapPointer(hMem);
+
         /* Free it with the RTL Heap Manager */
         if (RtlFreeHeap(BaseHeap, 0, hMem))
         {
@@ -1097,6 +1117,7 @@ GlobalReAlloc(HGLOBAL hMem,
     else
     {
         /* Otherwise, this is a simple RTL Managed Heap, so just call it */
+        BaseProbeHeapPointer(hMem);
         hMem = RtlReAllocateHeap(BaseHeap,
                                  Flags | HEAP_NO_SERIALIZE,
                                  hMem,
@@ -1814,6 +1835,7 @@ LocalReAlloc(HLOCAL hMem,
     else if (!(uFlags & LMEM_MODIFY))
     {
         /* Otherwise, this is a simple RTL Managed Heap, so just call it */
+        BaseProbeHeapPointer(hMem);
         hMem = RtlReAllocateHeap(BaseHeap,
                                  Flags | HEAP_NO_SERIALIZE,
                                  hMem,
