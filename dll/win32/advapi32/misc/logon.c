@@ -43,6 +43,7 @@ CreateProcessInternalA(
 
 typedef struct _TOKEN_ASSIGNMENT_STATE
 {
+    HANDLE OriginalToken;
     BOOLEAN ImpersonatedSelf;
     BOOLEAN HavePrivilege;
     BOOLEAN PrivilegeSet;
@@ -53,16 +54,30 @@ VOID
 BeginTokenAssignment(
     _Out_ PTOKEN_ASSIGNMENT_STATE State)
 {
-    HANDLE ThreadToken;
+    HANDLE NullToken = NULL;
     NTSTATUS Status;
 
+    State->OriginalToken = NULL;
     State->ImpersonatedSelf = FALSE;
     State->PrivilegeSet = FALSE;
 
-    Status = NtOpenThreadToken(NtCurrentThread(), TOKEN_QUERY, TRUE, &ThreadToken);
+    Status = NtOpenThreadToken(NtCurrentThread(),
+                               TOKEN_QUERY | TOKEN_IMPERSONATE,
+                               TRUE,
+                               &State->OriginalToken);
     if (NT_SUCCESS(Status))
-        NtClose(ThreadToken);
-    else if (Status == STATUS_NO_TOKEN && NT_SUCCESS(RtlImpersonateSelf(SecurityImpersonation)))
+    {
+        NtSetInformationThread(NtCurrentThread(),
+                               ThreadImpersonationToken,
+                               &NullToken,
+                               sizeof(NullToken));
+    }
+    else
+    {
+        State->OriginalToken = NULL;
+    }
+
+    if (NT_SUCCESS(RtlImpersonateSelf(SecurityImpersonation)))
         State->ImpersonatedSelf = TRUE;
 
     State->HavePrivilege = NT_SUCCESS(RtlAdjustPrivilege(SE_ASSIGNPRIMARYTOKEN_PRIVILEGE,
@@ -76,8 +91,6 @@ VOID
 EndTokenAssignment(
     _In_ PTOKEN_ASSIGNMENT_STATE State)
 {
-    HANDLE NullToken = NULL;
-
     if (State->HavePrivilege)
     {
         RtlAdjustPrivilege(SE_ASSIGNPRIMARYTOKEN_PRIVILEGE,
@@ -86,13 +99,16 @@ EndTokenAssignment(
                            &State->PrivilegeSet);
     }
 
-    if (State->ImpersonatedSelf)
+    if (State->ImpersonatedSelf || State->OriginalToken)
     {
         NtSetInformationThread(NtCurrentThread(),
                                ThreadImpersonationToken,
-                               &NullToken,
-                               sizeof(NullToken));
+                               &State->OriginalToken,
+                               sizeof(State->OriginalToken));
     }
+
+    if (State->OriginalToken)
+        NtClose(State->OriginalToken);
 }
 
 /* GLOBALS *****************************************************************/
