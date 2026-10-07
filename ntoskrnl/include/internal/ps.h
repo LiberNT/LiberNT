@@ -354,7 +354,8 @@ NTAPI
 PspSetPrimaryToken(
     IN PEPROCESS Process,
     IN HANDLE TokenHandle OPTIONAL,
-    IN PACCESS_TOKEN Token OPTIONAL
+    IN PACCESS_TOKEN Token OPTIONAL,
+    IN BOOLEAN Duplicate
 );
 
 NTSTATUS

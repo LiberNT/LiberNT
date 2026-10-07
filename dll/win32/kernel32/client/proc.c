@@ -2376,7 +2376,6 @@ BasepAssignJobListFromAttributes(
 
 #define BASEP_LOWBOX_HANDLE_COUNT 5
 
-#if defined(_WIN64) || defined(WOW64_I386_RUNTIME)
 static
 NTSTATUS
 BasepCreateAppContainerLink(
@@ -2495,7 +2494,6 @@ BasepCreateAppContainerDirectory(
     }
     return Status;
 }
-#endif
 
 typedef struct _BASE_CREATE_EXTENDED_ATTRIBUTES
 {
@@ -2680,7 +2678,6 @@ BasepCaptureExtendedAttributes(
     return TRUE;
 }
 
-#if defined(_WIN64) || defined(WOW64_I386_RUNTIME)
 static BOOL
 BasepCreateUserProcess(IN HANDLE UserToken,
                         IN HANDLE SaferToken,
@@ -3040,7 +3037,6 @@ Failure:
     BaseSetLastNTError(Status);
     return FALSE;
 }
-#endif
 
 /*
  * @implemented
@@ -4633,12 +4629,14 @@ StartScan:
         goto AppNameRetry;
     }
 
+    if (
 #if defined(_WIN64) || defined(WOW64_I386_RUNTIME)
-    if (ImageInformation.Machine == IMAGE_FILE_MACHINE_I386
+        ImageInformation.Machine == IMAGE_FILE_MACHINE_I386 ||
 #ifdef WOW64_I386_RUNTIME
-        || NtCurrentTeb()->WOW32Reserved
+        NtCurrentTeb()->WOW32Reserved ||
 #endif
-        || ExtendedAttributes.MitigationCount
+#endif
+        ExtendedAttributes.MitigationCount
         || ExtendedAttributes.ChildPolicyPresent
         || ExtendedAttributes.AllAppPackagesPresent
         || ExtendedAttributes.SecurityCapabilities
@@ -4646,12 +4644,12 @@ StartScan:
         || ExtendedAttributes.JobCount
         || ExtendedAttributes.BnoIsolation
         || ExtendedAttributes.ComponentFilterPresent
+        || hUserToken
        )
     {
         Result = BasepCreateUserProcess(hUserToken, TokenHandle, JobHandle, &PathName, lpApplicationName, lpCommandLine, lpEnvironment, lpCurrentDirectory, &StartupInfo, dwCreationFlags | NoWindow, bInheritHandles, lpProcessAttributes, lpThreadAttributes, ParameterFlags, Flags, ParentProcess, InheritHandleList, InheritHandleCount, &PriorityClass, &ExtendedAttributes, lpProcessInformation);
         goto Quickie;
     }
-#endif
 
     /* Initialize the process object attributes */
     ObjectAttributes = BaseFormatObjectAttributes(&LocalObjectAttributes,

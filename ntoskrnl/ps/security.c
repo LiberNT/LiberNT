@@ -227,7 +227,8 @@ NTSTATUS
 NTAPI
 PspSetPrimaryToken(IN PEPROCESS Process,
                    IN HANDLE TokenHandle OPTIONAL,
-                   IN PACCESS_TOKEN Token OPTIONAL)
+                   IN PACCESS_TOKEN Token OPTIONAL,
+                   IN BOOLEAN Duplicate)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     BOOLEAN IsChildOrSibling;
@@ -293,14 +294,28 @@ PspSetPrimaryToken(IN PEPROCESS Process,
         }
     }
 
-    Status = SeSubProcessToken((PTOKEN)NewToken,
-                               &ProcessToken,
-                               FALSE,
-                               MmGetSessionId(Process));
-    if (!NT_SUCCESS(Status))
+    if (Duplicate)
     {
-        if (!Token) ObDereferenceObject(NewToken);
-        return Status;
+        Status = SeSubProcessToken((PTOKEN)NewToken,
+                                   &ProcessToken,
+                                   FALSE,
+                                   MmGetSessionId(Process));
+        if (!NT_SUCCESS(Status))
+        {
+            if (!Token) ObDereferenceObject(NewToken);
+            return Status;
+        }
+    }
+    else
+    {
+        if (((PTOKEN)NewToken)->TokenType != TokenPrimary)
+        {
+            if (!Token) ObDereferenceObject(NewToken);
+            return STATUS_BAD_IMPERSONATION_LEVEL;
+        }
+
+        ProcessToken = (PTOKEN)NewToken;
+        ObReferenceObject(ProcessToken);
     }
 
     NewTokenObject = (PTOKEN)ProcessToken;

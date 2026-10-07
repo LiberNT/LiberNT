@@ -867,9 +867,6 @@ SeExchangePrimaryToken(
     SepAcquireTokenLockExclusive(NewToken);
     if (NewToken->TokenInUse)
     {
-        BOOLEAN IsEqual;
-        NTSTATUS Status;
-
         SepReleaseTokenLock(NewToken);
 
         /* Maybe we're trying to set the same token */
@@ -881,24 +878,9 @@ SeExchangePrimaryToken(
             return STATUS_SUCCESS;
         }
 
-        Status = SepCompareTokens(OldToken, NewToken, &IsEqual);
-        if (!NT_SUCCESS(Status))
-        {
-            PsDereferencePrimaryToken(OldToken);
-            *OldAccessToken = NULL;
-            return Status;
-        }
-
-        if (!IsEqual)
-        {
-            PsDereferencePrimaryToken(OldToken);
-            *OldAccessToken = NULL;
-            return STATUS_TOKEN_ALREADY_IN_USE;
-        }
-        /* Silently return STATUS_SUCCESS but do not set the new token,
-         * as it's already in use elsewhere. */
-        *OldAccessToken = OldToken;
-        return STATUS_SUCCESS;
+        PsDereferencePrimaryToken(OldToken);
+        *OldAccessToken = NULL;
+        return STATUS_TOKEN_ALREADY_IN_USE;
     }
 
     /* Lock the new token */

@@ -3126,7 +3126,7 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
 
         if (TokenHandle)
         {
-            Status = PspSetPrimaryToken(Process, TokenHandle, NULL);
+            Status = PspSetPrimaryToken(Process, TokenHandle, NULL, TRUE);
             if (!NT_SUCCESS(Status))
             {
                 DPRINT1("NtCreateUserProcess: PspSetPrimaryToken failed, Status=0x%lx\n", Status);

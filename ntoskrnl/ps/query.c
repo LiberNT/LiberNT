@@ -2631,7 +2631,7 @@ NtSetInformationProcess(
             _SEH2_END;
 
             /* Assign the actual token */
-            Status = PspSetPrimaryToken(Process, TokenHandle, NULL);
+            Status = PspSetPrimaryToken(Process, TokenHandle, NULL, FALSE);
             break;
 
         /* Hard error processing */
