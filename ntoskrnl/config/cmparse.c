@@ -2496,14 +2496,15 @@ CmpParseKeyNotify(
 {
     REG_CREATE_KEY_INFORMATION_V1 Information;
     CMP_CALLBACK_CALL CallbackCall;
-    PVOID ResultObject = NULL, ParsedObject;
+    PVOID ResultObject = NULL, ParsedObject, RootObject;
     UNICODE_STRING RelativeName;
     ULONG Disposition = 0;
     NTSTATUS Status;
 
+    RootObject = (ParseObject == CmpRegistryNamespaceRoot) ? CmpRegistryRootObject : ParseObject;
     RtlZeroMemory(&Information, sizeof(Information));
     Information.CompleteName = CompleteName;
-    Information.RootObject = ParseObject;
+    Information.RootObject = RootObject;
     Information.ObjectType = CmpKeyObjectType;
     Information.Options = ParseContext ? ParseContext->CreateOptions : 0;
     Information.Class = (ParseContext && ParseContext->CreateOperation && ParseContext->Class.Length) ? &ParseContext->Class : NULL;
@@ -2533,7 +2534,7 @@ CmpParseKeyNotify(
                          &Information,
                          &Information.CallContext,
                          &Information.RootObjectContext,
-                         ParseObject,
+                         RootObject,
                          &ResultObject,
                          &Status))
     {

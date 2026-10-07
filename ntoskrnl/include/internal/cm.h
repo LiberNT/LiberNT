@@ -1884,6 +1884,7 @@ extern ULONG CmSelfHeal;
 extern BOOLEAN CmpSelfHeal;
 extern HANDLE CmpRegistryRootHandle;
 extern PCM_KEY_BODY CmpRegistryRootObject;
+extern PCM_KEY_BODY CmpRegistryNamespaceRoot;
 extern BOOLEAN ExpInTextModeSetup;
 extern BOOLEAN InitIsWinPEMode;
 extern ULONG CmpHashTableSize;

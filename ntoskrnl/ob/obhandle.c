@@ -3207,6 +3207,12 @@ ObOpenObjectByPointer(IN PVOID Object,
     /* Get the Header Info */
     Header = OBJECT_TO_OBJECT_HEADER(Object);
 
+    if (Header->Flags & OB_FLAG_CREATE_INFO)
+    {
+        ObDereferenceObject(Object);
+        return STATUS_INVALID_PARAMETER;
+    }
+
     /* Check if we didn't get an access state */
     if (!PassedAccessState)
     {

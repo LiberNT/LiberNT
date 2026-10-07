@@ -1129,7 +1129,7 @@ CmpCreateRegistryRoot(VOID)
 {
     UNICODE_STRING KeyName;
     OBJECT_ATTRIBUTES ObjectAttributes;
-    PCM_KEY_BODY RootKey;
+    PCM_KEY_BODY RootKey, RootObject;
     HCELL_INDEX RootIndex;
     NTSTATUS Status;
     PCM_KEY_NODE KeyCell;
@@ -1225,7 +1225,39 @@ CmpCreateRegistryRoot(VOID)
         return FALSE;
     }
 
-    CmpRegistryRootObject = RootKey;
+    CmpRegistryNamespaceRoot = RootKey;
+
+    if (!CmpReferenceKeyControlBlock(Kcb))
+    {
+        return FALSE;
+    }
+
+    Status = ObCreateObject(KernelMode,
+                            CmpKeyObjectType,
+                            NULL,
+                            KernelMode,
+                            NULL,
+                            sizeof(CM_KEY_BODY),
+                            0,
+                            0,
+                            (PVOID*)&RootObject);
+    if (!NT_SUCCESS(Status))
+    {
+        CmpDereferenceKeyControlBlock(Kcb);
+        return FALSE;
+    }
+
+    RootObject->KeyControlBlock = Kcb;
+    RootObject->Type = CM_KEY_BODY_TYPE;
+    RootObject->NotifyClosed = FALSE;
+    RootObject->Trans.TransPtr = NULL;
+    RootObject->KtmUow = NULL;
+    InitializeListHead(&RootObject->ContextListHead);
+    RootObject->NotifyBlock = NULL;
+    RootObject->ProcessID = PsGetCurrentProcessId();
+    RootObject->KcbLocked = FALSE;
+    EnlistKeyBodyWithKCB(RootObject, 0);
+    CmpRegistryRootObject = RootObject;
 
     /* Completely successful */
     return TRUE;

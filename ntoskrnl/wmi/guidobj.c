@@ -185,6 +185,7 @@ static
 NTSTATUS
 WmipCreateGuidObject(
     _In_ const GUID *Guid,
+    _In_ ULONG Attributes,
     _Out_ PWMIP_GUID_OBJECT *OutGuidObject)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -194,7 +195,7 @@ WmipCreateGuidObject(
     /* Initialize object attributes for an unnamed object */
     InitializeObjectAttributes(&ObjectAttributes,
                                NULL,
-                               0,
+                               Attributes,
                                NULL,
                                NULL); // FIXME: security descriptor!
 
@@ -234,11 +235,12 @@ WmipOpenGuidObject(
     _Outptr_ PVOID *OutGuidObject)
 {
     PWMIP_GUID_OBJECT GuidObject;
-    ULONG HandleAttributes;
     NTSTATUS Status;
 
     /* Create the GUID object */
-    Status = WmipCreateGuidObject(Guid, &GuidObject);
+    Status = WmipCreateGuidObject(Guid,
+                                  (AccessMode == KernelMode) ? OBJ_KERNEL_HANDLE : 0,
+                                  &GuidObject);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Failed to create GUID object: 0x%lx\n", Status);
@@ -246,21 +248,16 @@ WmipOpenGuidObject(
         return Status;
     }
 
-    /* Set handle attributes */
-    HandleAttributes = (AccessMode == KernelMode) ? OBJ_KERNEL_HANDLE : 0;
-
     /* Get a handle for the object */
-    Status = ObOpenObjectByPointer(GuidObject,
-                                   HandleAttributes,
-                                   0,
-                                   DesiredAccess,
-                                   WmipGuidObjectType,
-                                   AccessMode,
-                                   OutGuidObjectHandle);
+    Status = ObInsertObject(GuidObject,
+                            NULL,
+                            DesiredAccess,
+                            1,
+                            (PVOID*)&GuidObject,
+                            OutGuidObjectHandle);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("ObOpenObjectByPointer failed: 0x%lx\n", Status);
-        ObDereferenceObject(GuidObject);
+        DPRINT1("ObInsertObject failed: 0x%lx\n", Status);
         GuidObject = NULL;
     }
 
