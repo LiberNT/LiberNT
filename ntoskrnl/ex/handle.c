@@ -940,8 +940,11 @@ ExRemoveHandleTable(IN PHANDLE_TABLE HandleTable)
     ExAcquirePushLockExclusive(&HandleTableListLock);
 
     /* Remove the table and reset the list */
-    RemoveEntryList(&HandleTable->HandleTableList);
-    InitializeListHead(&HandleTable->HandleTableList);
+    if (!IsListEmpty(&HandleTable->HandleTableList))
+    {
+        RemoveEntryList(&HandleTable->HandleTableList);
+        InitializeListHead(&HandleTable->HandleTableList);
+    }
 
     /* Release the lock */
     ExReleasePushLockExclusive(&HandleTableListLock);
