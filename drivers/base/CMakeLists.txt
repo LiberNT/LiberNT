@@ -16,6 +16,7 @@ else()
     add_subdirectory(kdrosdbg)
 endif()
 add_subdirectory(kdstub)
+add_subdirectory(kdnet)
 
 if(NOT ARCH STREQUAL "arm")
 add_subdirectory(nmidebug)

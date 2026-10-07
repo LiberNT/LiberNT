@@ -17,8 +17,25 @@ VOID
 KdbpSendCommandSerial(
     _In_ PCSTR Command)
 {
+    if (KdpDebugMode.Net)
+        KdpNetSendCommand(Command);
+
+    if (!KdpDebugMode.Serial)
+        return;
+
     while (*Command)
         KdPortPutByteEx(&SerialPortInfo, *Command++);
+}
+
+static
+BOOLEAN
+KdbpGetTerminalByte(
+    _Out_ PUCHAR Byte)
+{
+    if (KdpDebugMode.Serial && KdPortGetByteEx(&SerialPortInfo, Byte))
+        return TRUE;
+
+    return KdpDebugMode.Net && KdpNetGetByte(Byte);
 }
 
 CHAR
@@ -28,9 +45,9 @@ KdbpTryGetCharSerial(
     CHAR Result = -1;
 
     if (Retry == 0)
-        while (!KdPortGetByteEx(&SerialPortInfo, (PUCHAR)&Result));
+        while (!KdbpGetTerminalByte((PUCHAR)&Result));
     else
-        while (!KdPortGetByteEx(&SerialPortInfo, (PUCHAR)&Result) && Retry-- > 0);
+        while (!KdbpGetTerminalByte((PUCHAR)&Result) && Retry-- > 0);
 
     return Result;
 }

@@ -1742,7 +1742,10 @@ KdbpInternalEnter(
 
     /* Take control of the display */
     if (KdpDebugMode.Screen)
+    {
         DisplayAcquired = KdpScreenAcquire();
+        KdpNetDisplayStatus();
+    }
 
     /* Call the specified debugger procedure on a different stack */
     Thread = PsGetCurrentThread();

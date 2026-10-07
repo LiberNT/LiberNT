@@ -92,6 +92,13 @@ typedef VOID (NTAPI *KDNET_UNMAP_VIRTUAL_ADDRESS)(_In_ PVOID VirtualAddress,
 typedef ULONG64 (NTAPI *KDNET_READ_CYCLE_COUNTER)(_Out_opt_ ULONG64 *Frequency);
 typedef VOID (__cdecl *KDNET_DBGPRINT)(_In_ PCHAR pFmt, ...);
 
+#define KD_ENV_UNSPECIFIED 0
+#define KD_ENV_BOOT        1
+#define KD_ENV_KERNEL      2
+#define KD_ENV_HYPERVISOR  3
+#define KD_ENV_SK          4
+#define KD_ENV_HCL         5
+
 #define KDNET_EXT_IMPORTS 33
 
 typedef struct _KDNET_EXTENSIBILITY_IMPORTS

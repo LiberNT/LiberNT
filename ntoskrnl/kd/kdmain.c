@@ -105,6 +105,11 @@ KdpGetDebugMode(
             KdpLogFileName.Buffer = (PSTR)p1;
         }
     }
+    else if (!_strnicmp(p2, "NET", CONST_STR_LEN("NET")))
+    {
+        p2 += CONST_STR_LEN("NET");
+        KdpDebugMode.Net = TRUE;
+    }
 
     return (PSTR)p2;
 }

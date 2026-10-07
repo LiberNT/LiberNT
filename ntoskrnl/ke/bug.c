@@ -1286,6 +1286,28 @@ KiDumpParameterImages(IN PCHAR Message,
     }
 }
 
+#ifndef _WINKD_
+static
+VOID
+KiDisplayBugCheckTransport(VOID)
+{
+    CHAR Text[160];
+
+    if (!KdQueryTransportStatus(Text, sizeof(Text)))
+        return;
+
+    InbvDisplayString("\r\n");
+    InbvDisplayString(Text);
+    InbvDisplayString("\r\n");
+    if (KdQueryTransportKey(Text, sizeof(Text)))
+    {
+        InbvDisplayString("Network debugger key: ");
+        InbvDisplayString(Text);
+        InbvDisplayString("\r\n");
+    }
+}
+#endif
+
 VOID
 NTAPI
 KiDisplayBlueScreen(IN ULONG MessageId,
@@ -1396,6 +1418,9 @@ KiDisplayBlueScreen(IN ULONG MessageId,
 
     KiDisplayBugCheckRegisters(TrapFrame, Context);
     KiDisplayBugCheckBackTrace(TrapFrame, Context);
+#ifndef _WINKD_
+    KiDisplayBugCheckTransport();
+#endif
 }
 
 DECLSPEC_NORETURN

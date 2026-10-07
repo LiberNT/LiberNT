@@ -67,8 +67,9 @@ KdpInitTerminal(VOID)
     (KdpDebugMode.Serial && !KdpDebugMode.Screen);
 #else
     // New logic where KDSERIAL does not necessarily enable serial output.
-    KdpDebugMode.Serial &&
-    ((KdbDebugState & KD_DEBUG_KDSERIAL) || !KdpDebugMode.Screen);
+    KdpDebugMode.Net ||
+    (KdpDebugMode.Serial &&
+     ((KdbDebugState & KD_DEBUG_KDSERIAL) || !KdpDebugMode.Screen));
 #endif
 
     /* Flush the input buffer */
@@ -120,6 +121,18 @@ KdpUpdateTerminalSize(
     LONG NumberOfCols = -1; // Or initialize to TermSize->cx ??
     LONG NumberOfRows = -1; // Or initialize to TermSize->cy ??
     VID_DISPLAY_INFO DisplayInfo;
+    ULONG Columns, Rows;
+
+    if (KdpDebugMode.Net && KdpNetQueryAttached(&Columns, &Rows))
+    {
+        KdTermConnected = TRUE;
+        if (Columns && Rows)
+        {
+            TermSize->cx = Columns;
+            TermSize->cy = Rows;
+            return TRUE;
+        }
+    }
 
     /* Retrieve the size of the controlling terminal only when it is serial */
     if (KdTermConnected && KdTermSerial && KdTermReportsSize)

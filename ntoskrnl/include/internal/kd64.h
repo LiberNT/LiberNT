@@ -88,6 +88,20 @@ KdUpdateDataBlock(
     VOID
 );
 
+ULONG
+NTAPI
+KdQueryTransportStatus(
+    _Out_writes_z_(Size) PCHAR Buffer,
+    _In_ ULONG Size
+);
+
+ULONG
+NTAPI
+KdQueryTransportKey(
+    _Out_writes_z_(Size) PCHAR Buffer,
+    _In_ ULONG Size
+);
+
 VOID
 NTAPI
 KdSystemRootAvailable(

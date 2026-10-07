@@ -58,8 +58,9 @@ PKDP_INIT_ROUTINE InitRoutines[KdMax] =
     KdpSerialInit,
     KdpDebugLogInit,
 #ifdef KDBG // See kdb_cli.c
-    KdpKdbgInit
+    KdpKdbgInit,
 #endif
+    KdpNetInit
 };
 
 /* LOCKING FUNCTIONS *********************************************************/
@@ -775,6 +776,9 @@ KdReceivePacket(
         {
             return KdPacketReceived;
         }
+
+        if (KdpDebugMode.Net && KdpNetPollBreakIn())
+            return KdPacketReceived;
 
         return KdPacketTimedOut;
     }

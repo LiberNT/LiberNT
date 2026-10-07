@@ -16,6 +16,7 @@
 #include <arc/arc.h>
 #include <windbgkd.h>
 #include <kddll.h>
+#include <kdterm.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -42,6 +43,15 @@ KdDebuggerInitialize1(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock OPTIONAL)
 {
     return STATUS_NOT_IMPLEMENTED;
+}
+
+NTSTATUS
+NTAPI
+KdQueryTerminalInterface(
+    _Out_ PKD_TERMINAL_INTERFACE Interface)
+{
+    RtlZeroMemory(Interface, sizeof(*Interface));
+    return STATUS_NOT_SUPPORTED;
 }
 
 NTSTATUS

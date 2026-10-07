@@ -751,6 +751,51 @@ LoadModule(
     return BaseAddress;
 }
 
+static const PCSTR WinLdrNetworkDebugExtensions[] =
+{
+    "kd_02_10ec.dll",
+    "kd_02_1af4.dll",
+    "kd_02_8086.dll",
+    "kd_fdt_spacemit_k1x-emac.dll"
+};
+
+static
+PCSTR
+WinLdrGetDebugPortOption(
+    _In_ PCSTR BootOptions,
+    _Out_ PULONG OptionLength)
+{
+    PCSTR NextOptions = BootOptions, Option, First = NULL, Name;
+    ULONG Length, FirstLength = 0, NameLength;
+
+    while ((Option = NtLdrGetNextOption(&NextOptions, &Length)))
+    {
+        if (Length <= 10 || _strnicmp(Option, "DEBUGPORT=", 10) != 0)
+            continue;
+
+        if (!First)
+        {
+            First = Option;
+            FirstLength = Length;
+        }
+
+        Name = Option + 10;
+        NameLength = min((ULONG)strcspn(Name, " \t:"), Length - 10);
+        if ((NameLength >= 3 && _strnicmp(Name, "COM", 3) == 0) ||
+            (NameLength == 6 && _strnicmp(Name, "SCREEN", 6) == 0) ||
+            (NameLength == 4 && _strnicmp(Name, "FILE", 4) == 0))
+        {
+            continue;
+        }
+
+        *OptionLength = Length;
+        return Option;
+    }
+
+    *OptionLength = FirstLength;
+    return First;
+}
+
 #ifdef _M_IX86
 static
 BOOLEAN
@@ -1121,7 +1166,7 @@ LoadWindowsCore(IN USHORT OperatingSystemVersion,
         BOOLEAN IsCustomKdDll = FALSE;
 
         /* Check whether there is a DEBUGPORT option */
-        Option = NtLdrGetOptionEx(BootOptions, "DEBUGPORT=", &OptionLength);
+        Option = WinLdrGetDebugPortOption(BootOptions, &OptionLength);
         if (Option && (OptionLength > 10))
         {
             /* Move to the debug port name */
@@ -1188,6 +1233,28 @@ LoadWindowsCore(IN USHORT OperatingSystemVersion,
                 /* Ignore the failure; we will fail later when scanning the
                  * kernel import tables, if it really needs the KD DLL. */
                 ERR("LoadModule('%s') failed\n", KdDllName);
+            }
+        }
+
+        if (KdDllBase && _stricmp(KdDllName, "kdnet.dll") == 0)
+        {
+            PLDR_DATA_TABLE_ENTRY ExtensionDTE;
+            CHAR ExtensionPath[MAX_PATH];
+            ULONG ExtensionId;
+            ULONG i;
+
+            for (i = 0; i < RTL_NUMBER_OF(WinLdrNetworkDebugExtensions); i++)
+            {
+                RtlStringCbCopyA(ExtensionPath, sizeof(ExtensionPath), DirPath);
+                RtlStringCbCatA(ExtensionPath, sizeof(ExtensionPath), WinLdrNetworkDebugExtensions[i]);
+                if (ArcOpen(ExtensionPath, OpenReadOnly, &ExtensionId) != ESUCCESS)
+                    continue;
+
+                ArcClose(ExtensionId);
+                LoadModule(&LoaderBlock->LoadOrderListHead,
+                           DirPath, WinLdrNetworkDebugExtensions[i],
+                           WinLdrNetworkDebugExtensions[i], LoaderSystemCode,
+                           &ExtensionDTE, 40);
             }
         }
     }

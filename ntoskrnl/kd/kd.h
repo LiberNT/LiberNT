@@ -74,6 +74,48 @@ KdpDebugLogInit(
     _In_ struct _KD_DISPATCH_TABLE *DispatchTable,
     _In_ ULONG BootPhase);
 
+NTSTATUS
+NTAPI
+KdpNetInit(
+    _In_ struct _KD_DISPATCH_TABLE *DispatchTable,
+    _In_ ULONG BootPhase);
+
+BOOLEAN
+KdpNetGetByte(
+    _Out_ PUCHAR Byte);
+
+VOID
+KdpNetSendCommand(
+    _In_ PCSTR Command);
+
+BOOLEAN
+KdpNetPollBreakIn(VOID);
+
+VOID
+KdpNetDisplayStatus(VOID);
+
+BOOLEAN
+KdpNetQueryAttached(
+    _Out_opt_ PULONG Columns,
+    _Out_opt_ PULONG Rows);
+
+VOID
+KdpInfoInitialize(
+    _In_ struct _LOADER_PARAMETER_BLOCK *LoaderBlock);
+
+ULONG
+NTAPI
+KdpInfoQuery(
+    _In_ ULONG Class,
+    _In_ ULONG Offset,
+    _Out_writes_bytes_(Size) PUCHAR Buffer,
+    _In_ ULONG Size,
+    _Out_ PULONG Total);
+
+ULONG
+NTAPI
+KdpInfoState(VOID);
+
 #ifdef KDBG
 #define KdpKdbgInit KdbInitialize
 #endif
@@ -87,9 +129,9 @@ KdpDebugLogInit(
 // #define KdFile      2
 #ifdef KDBG
 // #define KdKdbg      3
-#define KdMax       4
+#define KdMax       5
 #else
-#define KdMax       3
+#define KdMax       4
 #endif
 
 /* KD Private Debug Modes */
@@ -103,6 +145,7 @@ typedef struct _KDP_DEBUG_MODE
             UCHAR Screen :1;
             UCHAR Serial :1;
             UCHAR File   :1;
+            UCHAR Net    :1;
         };
 
         /* Generic Value */
