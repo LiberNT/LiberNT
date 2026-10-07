@@ -229,6 +229,44 @@ BuspShouldEnumerateDevice(
 }
 
 static
+ACPI_HANDLE
+BuspGetDebuggerDevice(VOID)
+{
+    RTL_QUERY_REGISTRY_TABLE QueryTable[2];
+    WCHAR Buffer[128];
+    CHAR Path[RTL_NUMBER_OF(Buffer)];
+    UNICODE_STRING Value;
+    ACPI_HANDLE Handle;
+    ULONG Index;
+
+    RtlZeroMemory(QueryTable, sizeof(QueryTable));
+    Value.Buffer = Buffer;
+    Value.Length = 0;
+    Value.MaximumLength = sizeof(Buffer);
+    QueryTable[0].Flags = RTL_QUERY_REGISTRY_DIRECT | RTL_QUERY_REGISTRY_REQUIRED;
+    QueryTable[0].Name = L"Path";
+    QueryTable[0].EntryContext = &Value;
+    if (!NT_SUCCESS(RtlQueryRegistryValues(RTL_REGISTRY_SERVICES,
+                                           L"ACPI\\Debug\\0",
+                                           QueryTable,
+                                           NULL,
+                                           NULL)))
+    {
+        return NULL;
+    }
+
+    for (Index = 0; Index < Value.Length / sizeof(WCHAR) && Index < sizeof(Path) - 1; Index++)
+        Path[Index] = (CHAR)Value.Buffer[Index];
+
+    Path[Index] = ANSI_NULL;
+    if (ACPI_FAILURE(AcpiGetHandle(NULL, Path, &Handle)))
+        return NULL;
+
+    DPRINT1("ACPI debugging device %s\n", Path);
+    return Handle;
+}
+
+static
 BOOLEAN
 BuspAppendHardwareId(
     _Inout_updates_(BufferLength) PWCHAR Buffer,
@@ -560,13 +598,15 @@ ACPIEnumerateDevices(PFDO_DEVICE_DATA DeviceExtension)
     ULONG SkippedProcessorCount = 0;
     BUSP_PROCESSOR_UID_SET ProcessorUids;
     struct acpi_device *Device = acpi_root;
+    ACPI_HANDLE DebuggerDevice = BuspGetDebuggerDevice();
 
     BuspBuildProcessorUidSet(&ProcessorUids);
 
     while(Device)
     {
         if (Device->status.present && Device->status.enabled &&
-            Device->flags.hardware_id)
+            Device->flags.hardware_id &&
+            (!DebuggerDevice || Device->handle != DebuggerDevice))
         {
             if (BuspShouldEnumerateDevice(Device, &ProcessorUids))
             {
