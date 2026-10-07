@@ -2036,6 +2036,15 @@ static void test_thread_fpu_cw(void)
     _control87( _EM_INEXACT | _RC_CHOP | _PC_24, _MCW_EM | _MCW_RC | _MCW_PC );
     cw = _control87( 0, 0 );
     fpu_cw = get_fpu_cw();
+#if defined(__REACTOS__) && defined(__aarch64__)
+    if (!(fpu_cw & 0x9f00))
+    {
+        skip("The processor does not implement the FPCR trap enable bits\n");
+        _control87( initial_cw, _MCW_EM | _MCW_RC | _MCW_PC );
+        _clearfp();
+        return;
+    }
+#endif
     ok(cw == expected_cw[2].cw, "expected %#x got %#x\n", expected_cw[2].cw, cw);
     ok(fpu_cw == expected_cw[2].fpu_cw ||
             broken(expected_cw[2].fpu_cw_broken && fpu_cw == expected_cw[2].fpu_cw_broken),

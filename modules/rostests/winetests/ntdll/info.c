@@ -32,7 +32,9 @@
 #include "wine/test.h"
 
 #ifdef __REACTOS__
+#ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
+#endif
 #define AlwaysOn DEPPolicyAlwaysOn
 #endif
 
@@ -3876,6 +3878,11 @@ static void test_system_debug_control(void)
 {
     NTSTATUS status;
     int class;
+#ifdef __REACTOS__
+    SYSTEM_KERNEL_DEBUGGER_INFORMATION skdi = {0};
+
+    pNtQuerySystemInformation( SystemKernelDebuggerInformation, &skdi, sizeof(skdi), NULL );
+#endif
 
     for (class = 0; class < SysDbgMaxInfoClass; ++class)
     {
@@ -3890,6 +3897,12 @@ static void test_system_debug_control(void)
             ok( status == STATUS_DEBUGGER_INACTIVE || status == STATUS_NOT_IMPLEMENTED || status == STATUS_INFO_LENGTH_MISMATCH,
                     "class %d, got %#lx.\n", class, status );
         }
+#ifdef __REACTOS__
+        else if (class == SysDbgEnableKernelDebugger && skdi.DebuggerEnabled)
+        {
+            ok( status == STATUS_INVALID_PARAMETER, "class %d, got %#lx.\n", class, status );
+        }
+#endif
         else
         {
             ok( status == STATUS_DEBUGGER_INACTIVE || status == STATUS_ACCESS_DENIED || status == STATUS_INFO_LENGTH_MISMATCH || broken(/* __REACTOS__ Win 2003: */ status == STATUS_NOT_IMPLEMENTED),

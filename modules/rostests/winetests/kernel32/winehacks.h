@@ -10,7 +10,9 @@
 #ifndef RTL_CONSTANT_STRING
 #define RTL_CONSTANT_STRING(s) { sizeof(s) - sizeof(s[0]), sizeof(s), (void*)s }
 #endif
+#ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
+#endif
 
 /* WINBASE.H */
 typedef void *HPCON;

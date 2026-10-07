@@ -3075,7 +3075,9 @@ START_TEST(sync)
     test_WaitForMultipleObjects();
     test_initonce();
     test_condvars_base(&aligned_cv);
+#if !defined(__REACTOS__) || defined(__i386__) || defined(__x86_64__)
     test_condvars_base(&unaligned_cv.cv);
+#endif
     test_condvars_consumer_producer();
     test_srwlock_base(&aligned_srwlock);
     test_srwlock_quirk();

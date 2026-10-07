@@ -59,7 +59,7 @@ set_source_files_properties(ucrtbase_winetest.rc OBJECT_DEPENDS threaddll)
 add_executable(ucrtbase_winetest ${SOURCE})
 set_module_type(ucrtbase_winetest win32cui)
 
-target_link_libraries(ucrtbase_winetest wine oldnames ${PSEH_LIB} chkstk)
+target_link_libraries(ucrtbase_winetest wine ucrtoldnames ${PSEH_LIB} chkstk)
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     # Add this manually here, so it can link to ucrtbase.dll and vcstartup
     target_link_libraries(ucrtbase_winetest -lgcc)

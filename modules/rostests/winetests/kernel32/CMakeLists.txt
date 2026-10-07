@@ -93,6 +93,10 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
         -Wno-unused)
 endif()
 
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(kernel32_winetest PRIVATE -Wno-format-overflow)
+endif()
+
 set_module_type(kernel32_winetest win32cui)
 target_link_libraries(kernel32_winetest pseh oldnames)
 add_importlibs(kernel32_winetest user32 advapi32 msvcrt kernel32 ntdll)

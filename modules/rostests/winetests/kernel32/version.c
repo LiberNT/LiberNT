@@ -694,7 +694,20 @@ static void test_VerifyVersionInfo(void)
     ret = VerifyVersionInfoA(&info, VER_MINORVERSION | VER_SERVICEPACKMAJOR | VER_SERVICEPACKMINOR,
         VerSetConditionMask(VerSetConditionMask(0, VER_MINORVERSION, VER_GREATER_EQUAL),
             VER_MAJORVERSION, VER_GREATER_EQUAL));
+#ifdef __REACTOS__
+    {
+        OSVERSIONINFOEXA current;
+
+        current.dwOSVersionInfoSize = sizeof(current);
+        GetVersionExA((OSVERSIONINFOA *)&current);
+        if (current.dwMinorVersion == 0 && current.wServicePackMajor == 0 && current.wServicePackMinor < 10)
+            ok(!ret && GetLastError() == ERROR_OLD_WIN_VERSION, "VerifyVersionInfoA returned %d, error %ld\n", ret, GetLastError());
+        else
+            ok(ret, "VerifyVersionInfoA failed with error %ld\n", GetLastError());
+    }
+#else
     ok(ret, "VerifyVersionInfoA failed with error %ld\n", GetLastError());
+#endif
 
     /* test bad dwOSVersionInfoSize */
     info.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEXA);

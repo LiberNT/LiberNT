@@ -567,7 +567,11 @@ static void test_isblank(void)
             else
                 ok(_iswctype_l(c, _BLANK, NULL), "%d should be blank\n", c);
             ok(iswblank(c), "%d should be blank\n", c);
+#ifdef __REACTOS__
+            ok((_iswblank_l)(c, NULL), "%d should be blank\n", c);
+#else
             ok(_iswblank_l(c, NULL), "%d should be blank\n", c);
+#endif
         } else {
             ok(!_iswctype_l(c, _BLANK, NULL), "%d shouldn't be blank\n", c);
             ok(!iswblank(c), "%d shouldn't be blank\n", c);
