@@ -981,6 +981,8 @@ ElfReCreateFile(
 {
     ASSERT(LogFile);
 
+    LogFile->OffsetInfoNext = 0;
+
     return ElfpInitNewFile(LogFile,
                            LogFile->CurrentSize,
                            LogFile->Header.MaxSize,
