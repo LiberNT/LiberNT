@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Intel Serial I/O I2C Driver
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Alder Lake-N LPSS DesignWare I2C controller support
+ * PURPOSE:     Intel LPSS DesignWare I2C controller support
  */
 
 #include <ntddk.h>
@@ -12,7 +12,6 @@
 #include <debug.h>
 
 #define INTELI2C_TAG 'c2II'
-#define INTELI2C_INPUT_CLOCK_HZ 133000000UL
 #define INTELI2C_DEFAULT_SPEED 400000UL
 #define INTELI2C_DEFAULT_TIMEOUT_MS 1000UL
 #define INTELI2C_TARGET_SPIN_TIME 20000ULL
@@ -94,11 +93,19 @@
 #define DW_IC_TX_ABRT_SLV_ARBLOST 0x00004000
 #define DW_IC_TX_ABRT_SLVRD_INTX 0x00008000
 
+typedef struct _INTELI2C_PROFILE
+{
+    ULONG InputClockHz;
+    ULONG SdaHoldNanoseconds;
+    ULONG SdaFallNanoseconds;
+    ULONG SclFallNanoseconds;
+} INTELI2C_PROFILE;
+
 typedef struct _INTELI2C_PCI_ID
 {
-    PCWSTR Token;
-    ULONG DeviceId;
-    ULONG ControllerIndex;
+    USHORT DeviceId;
+    UCHAR ControllerIndex;
+    const INTELI2C_PROFILE *Profile;
 } INTELI2C_PCI_ID;
 
 typedef struct _INTELI2C_DEVICE_EXTENSION
@@ -118,6 +125,7 @@ typedef struct _INTELI2C_DEVICE_EXTENSION
     ULONG RegisterLength;
     ULONG ControllerIndex;
     ULONG PciDeviceId;
+    const INTELI2C_PROFILE *Profile;
     ULONG TxFifoDepth;
     ULONG RxFifoDepth;
     ULONG TargetResponseLength;
@@ -128,14 +136,199 @@ typedef struct _INTELI2C_DEVICE_EXTENSION
     UCHAR TargetResponse[INTELI2C_TARGET_BUFFER_SIZE];
 } INTELI2C_DEVICE_EXTENSION, *PINTELI2C_DEVICE_EXTENSION;
 
+static const INTELI2C_PROFILE IntelI2cSptProfile = {120000000, 230, 300, 300};
+static const INTELI2C_PROFILE IntelI2cBxtProfile = {133000000, 42, 171, 208};
+static const INTELI2C_PROFILE IntelI2cAplProfile = {133000000, 207, 171, 208};
+static const INTELI2C_PROFILE IntelI2cGlkProfile = {133000000, 313, 171, 290};
+static const INTELI2C_PROFILE IntelI2cCnlProfile = {216000000, 230, 300, 300};
+static const INTELI2C_PROFILE IntelI2cEhlProfile = {100000000, 42, 171, 208};
+
 static const INTELI2C_PCI_ID IntelI2cPciIds[] =
 {
-    {L"DEV_54E8", 0x54e8, 0},
-    {L"DEV_54E9", 0x54e9, 1},
-    {L"DEV_54EA", 0x54ea, 2},
-    {L"DEV_54EB", 0x54eb, 3},
-    {L"DEV_54C5", 0x54c5, 4},
-    {L"DEV_54C6", 0x54c6, 5}
+    {0x02e8, 0, &IntelI2cCnlProfile},
+    {0x02e9, 1, &IntelI2cCnlProfile},
+    {0x02ea, 2, &IntelI2cCnlProfile},
+    {0x02eb, 3, &IntelI2cCnlProfile},
+    {0x02c5, 4, &IntelI2cCnlProfile},
+    {0x02c6, 5, &IntelI2cCnlProfile},
+    {0x06e8, 0, &IntelI2cCnlProfile},
+    {0x06e9, 1, &IntelI2cCnlProfile},
+    {0x06ea, 2, &IntelI2cCnlProfile},
+    {0x06eb, 3, &IntelI2cCnlProfile},
+    {0x0aac, 0, &IntelI2cBxtProfile},
+    {0x0aae, 1, &IntelI2cBxtProfile},
+    {0x0ab0, 2, &IntelI2cBxtProfile},
+    {0x0ab2, 3, &IntelI2cBxtProfile},
+    {0x0ab4, 4, &IntelI2cBxtProfile},
+    {0x0ab6, 5, &IntelI2cBxtProfile},
+    {0x0ab8, 6, &IntelI2cBxtProfile},
+    {0x0aba, 7, &IntelI2cBxtProfile},
+    {0x1aac, 0, &IntelI2cBxtProfile},
+    {0x1aae, 1, &IntelI2cBxtProfile},
+    {0x1ab0, 2, &IntelI2cBxtProfile},
+    {0x1ab2, 3, &IntelI2cBxtProfile},
+    {0x1ab4, 4, &IntelI2cBxtProfile},
+    {0x1ab6, 5, &IntelI2cBxtProfile},
+    {0x1ab8, 6, &IntelI2cBxtProfile},
+    {0x1aba, 7, &IntelI2cBxtProfile},
+    {0x31ac, 0, &IntelI2cGlkProfile},
+    {0x31ae, 1, &IntelI2cGlkProfile},
+    {0x31b0, 2, &IntelI2cGlkProfile},
+    {0x31b2, 3, &IntelI2cGlkProfile},
+    {0x31b4, 4, &IntelI2cGlkProfile},
+    {0x31b6, 5, &IntelI2cGlkProfile},
+    {0x31b8, 6, &IntelI2cGlkProfile},
+    {0x31ba, 7, &IntelI2cGlkProfile},
+    {0x34e8, 0, &IntelI2cBxtProfile},
+    {0x34e9, 1, &IntelI2cBxtProfile},
+    {0x34ea, 2, &IntelI2cBxtProfile},
+    {0x34eb, 3, &IntelI2cBxtProfile},
+    {0x34c5, 4, &IntelI2cBxtProfile},
+    {0x34c6, 5, &IntelI2cBxtProfile},
+    {0x43e8, 0, &IntelI2cBxtProfile},
+    {0x43e9, 1, &IntelI2cBxtProfile},
+    {0x43ea, 2, &IntelI2cBxtProfile},
+    {0x43eb, 3, &IntelI2cBxtProfile},
+    {0x43ad, 4, &IntelI2cBxtProfile},
+    {0x43ae, 5, &IntelI2cBxtProfile},
+    {0x43d8, 6, &IntelI2cBxtProfile},
+    {0x4b44, 0, &IntelI2cEhlProfile},
+    {0x4b45, 1, &IntelI2cEhlProfile},
+    {0x4b4b, 2, &IntelI2cEhlProfile},
+    {0x4b4c, 3, &IntelI2cEhlProfile},
+    {0x4b78, 4, &IntelI2cEhlProfile},
+    {0x4b79, 5, &IntelI2cEhlProfile},
+    {0x4b7a, 6, &IntelI2cEhlProfile},
+    {0x4b7b, 7, &IntelI2cEhlProfile},
+    {0x4d50, 0, &IntelI2cEhlProfile},
+    {0x4d51, 1, &IntelI2cEhlProfile},
+    {0x4d78, 2, &IntelI2cEhlProfile},
+    {0x4d79, 3, &IntelI2cEhlProfile},
+    {0x4d7a, 4, &IntelI2cEhlProfile},
+    {0x4d7b, 5, &IntelI2cEhlProfile},
+    {0x4de8, 0, &IntelI2cBxtProfile},
+    {0x4de9, 1, &IntelI2cBxtProfile},
+    {0x4dea, 2, &IntelI2cBxtProfile},
+    {0x4deb, 3, &IntelI2cBxtProfile},
+    {0x4dc5, 4, &IntelI2cBxtProfile},
+    {0x4dc6, 5, &IntelI2cBxtProfile},
+    {0x51e8, 0, &IntelI2cBxtProfile},
+    {0x51e9, 1, &IntelI2cBxtProfile},
+    {0x51ea, 2, &IntelI2cBxtProfile},
+    {0x51eb, 3, &IntelI2cBxtProfile},
+    {0x51c5, 4, &IntelI2cBxtProfile},
+    {0x51c6, 5, &IntelI2cBxtProfile},
+    {0x51d8, 6, &IntelI2cBxtProfile},
+    {0x51d9, 7, &IntelI2cBxtProfile},
+    {0x54e8, 0, &IntelI2cBxtProfile},
+    {0x54e9, 1, &IntelI2cBxtProfile},
+    {0x54ea, 2, &IntelI2cBxtProfile},
+    {0x54eb, 3, &IntelI2cBxtProfile},
+    {0x54c5, 4, &IntelI2cBxtProfile},
+    {0x54c6, 5, &IntelI2cBxtProfile},
+    {0x5aac, 0, &IntelI2cAplProfile},
+    {0x5aae, 1, &IntelI2cAplProfile},
+    {0x5ab0, 2, &IntelI2cAplProfile},
+    {0x5ab2, 3, &IntelI2cAplProfile},
+    {0x5ab4, 4, &IntelI2cAplProfile},
+    {0x5ab6, 5, &IntelI2cAplProfile},
+    {0x5ab8, 6, &IntelI2cAplProfile},
+    {0x5aba, 7, &IntelI2cAplProfile},
+    {0x6e4c, 0, &IntelI2cEhlProfile},
+    {0x6e4d, 1, &IntelI2cEhlProfile},
+    {0x6e4e, 2, &IntelI2cEhlProfile},
+    {0x6e4f, 3, &IntelI2cEhlProfile},
+    {0x6e7a, 4, &IntelI2cEhlProfile},
+    {0x6e7b, 5, &IntelI2cEhlProfile},
+    {0x7750, 0, &IntelI2cBxtProfile},
+    {0x7751, 1, &IntelI2cBxtProfile},
+    {0x7778, 2, &IntelI2cBxtProfile},
+    {0x7779, 3, &IntelI2cBxtProfile},
+    {0x777a, 4, &IntelI2cBxtProfile},
+    {0x777b, 5, &IntelI2cBxtProfile},
+    {0x7a4c, 0, &IntelI2cBxtProfile},
+    {0x7a4d, 1, &IntelI2cBxtProfile},
+    {0x7a4e, 2, &IntelI2cBxtProfile},
+    {0x7a4f, 3, &IntelI2cBxtProfile},
+    {0x7a7c, 4, &IntelI2cBxtProfile},
+    {0x7a7d, 5, &IntelI2cBxtProfile},
+    {0x7acc, 0, &IntelI2cBxtProfile},
+    {0x7acd, 1, &IntelI2cBxtProfile},
+    {0x7ace, 2, &IntelI2cBxtProfile},
+    {0x7acf, 3, &IntelI2cBxtProfile},
+    {0x7afc, 4, &IntelI2cBxtProfile},
+    {0x7afd, 5, &IntelI2cBxtProfile},
+    {0x7e50, 0, &IntelI2cBxtProfile},
+    {0x7e51, 1, &IntelI2cBxtProfile},
+    {0x7e78, 2, &IntelI2cBxtProfile},
+    {0x7e79, 3, &IntelI2cBxtProfile},
+    {0x7e7a, 4, &IntelI2cBxtProfile},
+    {0x7e7b, 5, &IntelI2cBxtProfile},
+    {0x7f4c, 0, &IntelI2cBxtProfile},
+    {0x7f4d, 1, &IntelI2cBxtProfile},
+    {0x7f4e, 2, &IntelI2cBxtProfile},
+    {0x7f4f, 3, &IntelI2cBxtProfile},
+    {0x7f7a, 4, &IntelI2cBxtProfile},
+    {0x7f7b, 5, &IntelI2cBxtProfile},
+    {0x98e8, 0, &IntelI2cBxtProfile},
+    {0x98e9, 1, &IntelI2cBxtProfile},
+    {0x98ea, 2, &IntelI2cBxtProfile},
+    {0x98eb, 3, &IntelI2cBxtProfile},
+    {0x98c5, 4, &IntelI2cBxtProfile},
+    {0x98c6, 5, &IntelI2cBxtProfile},
+    {0x9d60, 0, &IntelI2cSptProfile},
+    {0x9d61, 1, &IntelI2cSptProfile},
+    {0x9d62, 2, &IntelI2cSptProfile},
+    {0x9d63, 3, &IntelI2cSptProfile},
+    {0x9d64, 4, &IntelI2cSptProfile},
+    {0x9d65, 5, &IntelI2cSptProfile},
+    {0x9de8, 0, &IntelI2cCnlProfile},
+    {0x9de9, 1, &IntelI2cCnlProfile},
+    {0x9dea, 2, &IntelI2cCnlProfile},
+    {0x9deb, 3, &IntelI2cCnlProfile},
+    {0x9dc5, 4, &IntelI2cCnlProfile},
+    {0x9dc6, 5, &IntelI2cCnlProfile},
+    {0xa0e8, 0, &IntelI2cSptProfile},
+    {0xa0e9, 1, &IntelI2cSptProfile},
+    {0xa0ea, 2, &IntelI2cSptProfile},
+    {0xa0eb, 3, &IntelI2cSptProfile},
+    {0xa0c5, 4, &IntelI2cSptProfile},
+    {0xa0c6, 5, &IntelI2cSptProfile},
+    {0xa0d8, 6, &IntelI2cSptProfile},
+    {0xa0d9, 7, &IntelI2cSptProfile},
+    {0xa160, 0, &IntelI2cSptProfile},
+    {0xa161, 1, &IntelI2cSptProfile},
+    {0xa162, 2, &IntelI2cSptProfile},
+    {0xa2e0, 0, &IntelI2cSptProfile},
+    {0xa2e1, 1, &IntelI2cSptProfile},
+    {0xa2e2, 2, &IntelI2cSptProfile},
+    {0xa2e3, 3, &IntelI2cSptProfile},
+    {0xa368, 0, &IntelI2cCnlProfile},
+    {0xa369, 1, &IntelI2cCnlProfile},
+    {0xa36a, 2, &IntelI2cCnlProfile},
+    {0xa36b, 3, &IntelI2cCnlProfile},
+    {0xa3e0, 0, &IntelI2cSptProfile},
+    {0xa3e1, 1, &IntelI2cSptProfile},
+    {0xa3e2, 2, &IntelI2cSptProfile},
+    {0xa3e3, 3, &IntelI2cSptProfile},
+    {0xa850, 0, &IntelI2cEhlProfile},
+    {0xa851, 1, &IntelI2cEhlProfile},
+    {0xa878, 2, &IntelI2cEhlProfile},
+    {0xa879, 3, &IntelI2cEhlProfile},
+    {0xa87a, 4, &IntelI2cEhlProfile},
+    {0xa87b, 5, &IntelI2cEhlProfile},
+    {0xe350, 0, &IntelI2cEhlProfile},
+    {0xe351, 1, &IntelI2cEhlProfile},
+    {0xe378, 2, &IntelI2cEhlProfile},
+    {0xe379, 3, &IntelI2cEhlProfile},
+    {0xe37a, 4, &IntelI2cEhlProfile},
+    {0xe37b, 5, &IntelI2cEhlProfile},
+    {0xe450, 0, &IntelI2cEhlProfile},
+    {0xe451, 1, &IntelI2cEhlProfile},
+    {0xe478, 2, &IntelI2cEhlProfile},
+    {0xe479, 3, &IntelI2cEhlProfile},
+    {0xe47a, 4, &IntelI2cEhlProfile},
+    {0xe47b, 5, &IntelI2cEhlProfile},
 };
 
 static
@@ -159,59 +352,66 @@ IntelI2cWrite32(
 
 static
 BOOLEAN
-IntelI2cContainsToken(
+IntelI2cParseDeviceId(
     _In_reads_(CharacterCount) PCWSTR Buffer,
     _In_ ULONG CharacterCount,
-    _In_ PCWSTR Token)
+    _Out_ PULONG DeviceId)
 {
-    ULONG TokenLength = 0;
+    static const WCHAR Prefix[] = L"DEV_";
     ULONG Index;
 
-    while (Token[TokenLength])
-        TokenLength++;
-    if (CharacterCount < TokenLength)
-        return FALSE;
-    for (Index = 0; Index <= CharacterCount - TokenLength; Index++)
+    for (Index = 0; Index + 8 <= CharacterCount; Index++)
     {
-        ULONG TokenIndex;
+        ULONG Value = 0;
+        ULONG Digit;
 
-        for (TokenIndex = 0; TokenIndex < TokenLength; TokenIndex++)
+        for (Digit = 0; Digit < 4; Digit++)
         {
-            if (RtlUpcaseUnicodeChar(Buffer[Index + TokenIndex]) != Token[TokenIndex])
+            if (RtlUpcaseUnicodeChar(Buffer[Index + Digit]) != Prefix[Digit])
                 break;
         }
-        if (TokenIndex == TokenLength)
-            return TRUE;
+        if (Digit != 4)
+            continue;
+        for (Digit = 0; Digit < 4; Digit++)
+        {
+            WCHAR Character = RtlUpcaseUnicodeChar(Buffer[Index + 4 + Digit]);
+
+            if (Character >= L'0' && Character <= L'9')
+                Value = (Value << 4) | (ULONG)(Character - L'0');
+            else if (Character >= L'A' && Character <= L'F')
+                Value = (Value << 4) | (ULONG)(Character - L'A' + 10);
+            else
+                break;
+        }
+        if (Digit != 4)
+            continue;
+        *DeviceId = Value;
+        return TRUE;
     }
     return FALSE;
 }
 
 static
-NTSTATUS
+const INTELI2C_PCI_ID *
 IntelI2cIdentifyController(
-    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
-    _Out_ PULONG ControllerIndex,
-    _Out_ PULONG DeviceId)
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject)
 {
     WCHAR HardwareIds[256];
     ULONG RequiredLength = 0;
+    ULONG DeviceId;
     ULONG Index;
-    NTSTATUS Status;
 
-    Status = IoGetDeviceProperty(PhysicalDeviceObject, DevicePropertyHardwareID, sizeof(HardwareIds), HardwareIds, &RequiredLength);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    if (!NT_SUCCESS(IoGetDeviceProperty(PhysicalDeviceObject, DevicePropertyHardwareID, sizeof(HardwareIds), HardwareIds, &RequiredLength)))
+        return NULL;
     RequiredLength = min(RequiredLength, (ULONG)sizeof(HardwareIds));
+    if (!IntelI2cParseDeviceId(HardwareIds, RequiredLength / sizeof(WCHAR), &DeviceId))
+        return NULL;
     for (Index = 0; Index < RTL_NUMBER_OF(IntelI2cPciIds); Index++)
     {
-        if (IntelI2cContainsToken(HardwareIds, RequiredLength / sizeof(WCHAR), IntelI2cPciIds[Index].Token))
-        {
-            *ControllerIndex = IntelI2cPciIds[Index].ControllerIndex;
-            *DeviceId = IntelI2cPciIds[Index].DeviceId;
-            return STATUS_SUCCESS;
-        }
+        if (IntelI2cPciIds[Index].DeviceId == DeviceId)
+            return &IntelI2cPciIds[Index];
     }
-    return STATUS_NOT_SUPPORTED;
+    return NULL;
 }
 
 static
@@ -270,12 +470,13 @@ IntelI2cDisable(
 static
 ULONG
 IntelI2cTimingCount(
+    _In_ PINTELI2C_DEVICE_EXTENSION DeviceExtension,
     _In_ ULONG Nanoseconds,
     _In_ ULONG Adjustment)
 {
     ULONGLONG Count;
 
-    Count = ((ULONGLONG)INTELI2C_INPUT_CLOCK_HZ * Nanoseconds + 500000000) / 1000000000;
+    Count = ((ULONGLONG)DeviceExtension->Profile->InputClockHz * Nanoseconds + 500000000) / 1000000000;
     if (Count > Adjustment)
         Count -= Adjustment;
     else
@@ -289,11 +490,12 @@ IntelI2cProgramTiming(
     _In_ PINTELI2C_DEVICE_EXTENSION DeviceExtension,
     _In_ ULONG ConnectionSpeed)
 {
+    const INTELI2C_PROFILE *Profile = DeviceExtension->Profile;
     ULONG HighNanoseconds;
     ULONG LowNanoseconds;
 
-    IntelI2cWrite32(DeviceExtension, DW_IC_SS_SCL_HCNT, IntelI2cTimingCount(4000 + 171, 3));
-    IntelI2cWrite32(DeviceExtension, DW_IC_SS_SCL_LCNT, IntelI2cTimingCount(4700 + 208, 1));
+    IntelI2cWrite32(DeviceExtension, DW_IC_SS_SCL_HCNT, IntelI2cTimingCount(DeviceExtension, 4000 + Profile->SdaFallNanoseconds, 3));
+    IntelI2cWrite32(DeviceExtension, DW_IC_SS_SCL_LCNT, IntelI2cTimingCount(DeviceExtension, 4700 + Profile->SclFallNanoseconds, 1));
     if (ConnectionSpeed <= 400000)
     {
         HighNanoseconds = 600;
@@ -304,10 +506,10 @@ IntelI2cProgramTiming(
         HighNanoseconds = 260;
         LowNanoseconds = 500;
     }
-    IntelI2cWrite32(DeviceExtension, DW_IC_FS_SCL_HCNT, IntelI2cTimingCount(HighNanoseconds + 171, 3));
-    IntelI2cWrite32(DeviceExtension, DW_IC_FS_SCL_LCNT, IntelI2cTimingCount(LowNanoseconds + 208, 1));
+    IntelI2cWrite32(DeviceExtension, DW_IC_FS_SCL_HCNT, IntelI2cTimingCount(DeviceExtension, HighNanoseconds + Profile->SdaFallNanoseconds, 3));
+    IntelI2cWrite32(DeviceExtension, DW_IC_FS_SCL_LCNT, IntelI2cTimingCount(DeviceExtension, LowNanoseconds + Profile->SclFallNanoseconds, 1));
     if (IntelI2cRead32(DeviceExtension, DW_IC_COMP_VERSION) >= DW_IC_SDA_HOLD_MIN_VERSION)
-        IntelI2cWrite32(DeviceExtension, DW_IC_SDA_HOLD, IntelI2cTimingCount(42, 0));
+        IntelI2cWrite32(DeviceExtension, DW_IC_SDA_HOLD, IntelI2cTimingCount(DeviceExtension, Profile->SdaHoldNanoseconds, 0));
 }
 
 static
@@ -1036,7 +1238,7 @@ IntelI2cDeviceControl(
                 Information->Version = INTELI2C_INTERFACE_VERSION;
                 Information->ControllerIndex = DeviceExtension->ControllerIndex;
                 Information->PciDeviceId = DeviceExtension->PciDeviceId;
-                Information->InputClockHz = INTELI2C_INPUT_CLOCK_HZ;
+                Information->InputClockHz = DeviceExtension->Profile->InputClockHz;
                 Information->MaximumConnectionSpeed = 1000000;
                 Information->TxFifoDepth = DeviceExtension->TxFifoDepth;
                 Information->RxFifoDepth = DeviceExtension->RxFifoDepth;
@@ -1174,13 +1376,12 @@ IntelI2cAddDevice(
 {
     PINTELI2C_DEVICE_EXTENSION DeviceExtension;
     PDEVICE_OBJECT DeviceObject;
-    ULONG ControllerIndex;
-    ULONG DeviceId;
+    const INTELI2C_PCI_ID *Controller;
     NTSTATUS Status;
 
-    Status = IntelI2cIdentifyController(PhysicalDeviceObject, &ControllerIndex, &DeviceId);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    Controller = IntelI2cIdentifyController(PhysicalDeviceObject);
+    if (!Controller)
+        return STATUS_NOT_SUPPORTED;
     Status = IoCreateDevice(DriverObject, sizeof(INTELI2C_DEVICE_EXTENSION), NULL, FILE_DEVICE_CONTROLLER, FILE_DEVICE_SECURE_OPEN, FALSE, &DeviceObject);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -1188,8 +1389,9 @@ IntelI2cAddDevice(
     RtlZeroMemory(DeviceExtension, sizeof(*DeviceExtension));
     DeviceExtension->Self = DeviceObject;
     DeviceExtension->PhysicalDevice = PhysicalDeviceObject;
-    DeviceExtension->ControllerIndex = ControllerIndex;
-    DeviceExtension->PciDeviceId = DeviceId;
+    DeviceExtension->ControllerIndex = Controller->ControllerIndex;
+    DeviceExtension->PciDeviceId = Controller->DeviceId;
+    DeviceExtension->Profile = Controller->Profile;
     DeviceExtension->LowerDevice = IoAttachDeviceToDeviceStack(DeviceObject, PhysicalDeviceObject);
     if (!DeviceExtension->LowerDevice)
     {
