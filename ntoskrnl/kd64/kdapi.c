@@ -1937,9 +1937,11 @@ KdpTimeSlipWork(IN PVOID Context)
     LARGE_INTEGER DueTime;
 
     /* Update the System time from the CMOS */
-    ExAcquireTimeRefreshLock(FALSE);
-    ExUpdateSystemTimeFromCmos(FALSE, 0);
-    ExReleaseTimeRefreshLock();
+    if (ExAcquireTimeRefreshLock(FALSE))
+    {
+        ExUpdateSystemTimeFromCmos(FALSE, 0);
+        ExReleaseTimeRefreshLock();
+    }
 
     /* Check if we have a registered Time Slip Event and signal it */
     KeAcquireSpinLock(&KdpTimeSlipEventLock, &OldIrql);
