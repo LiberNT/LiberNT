@@ -391,7 +391,7 @@ typedef struct _SMARTCARD_EXTENSION {
 } SMARTCARD_EXTENSION, *PSMARTCARD_EXTENSION;
 
 #ifndef _SMCLIBSYSTEM_
-#define SMCLIBAPI _declspec(dllimport)
+#define SMCLIBAPI DECLSPEC_IMPORT
 #else
 #define SMCLIBAPI
 #endif
