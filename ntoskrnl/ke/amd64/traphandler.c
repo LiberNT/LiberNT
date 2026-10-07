@@ -203,6 +203,7 @@ KiSystemCallHandler(
 
     /* We don't have an exception frame yet */
     TrapFrame->ExceptionFrame = 0;
+    TrapFrame->ExceptionActive = KEXCEPTION_ACTIVE_SERVICE_FRAME;
 
     /* Get the user Stack pointer */
     UserRsp = TrapFrame->Rsp;

@@ -285,6 +285,8 @@ MACRO(EnterTrap, Flags)
     /* Save MCXSR */
     stmxcsr [rbp + KTRAP_FRAME_MxCsr]
 
+    mov byte ptr [rbp + KTRAP_FRAME_ExceptionActive], KEXCEPTION_ACTIVE_INTERRUPT_FRAME
+
 #if DBG
     mov ecx, MSR_GS_BASE
     rdmsr

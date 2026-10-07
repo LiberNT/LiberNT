@@ -147,6 +147,7 @@ PspGetOrSetContextKernelRoutine(
     PPSP_XSTATE_BUFFER XStateBuffer;
     PKTHREAD Thread;
     PKTRAP_FRAME TrapFrame = NULL;
+    ULONG ContextFlags;
 
     PAGED_CODE();
 
@@ -181,6 +182,22 @@ PspGetOrSetContextKernelRoutine(
     {
         /* Get the nonvolatiles from the stack */
         KiGetTrapContext(TrapFrame, &GetSetContext->Context);
+
+        ContextFlags = GetSetContext->Context.ContextFlags &
+                       ~(CONTEXT_EXCEPTION_REPORTING | CONTEXT_SERVICE_ACTIVE | CONTEXT_EXCEPTION_ACTIVE);
+        if (ContextFlags & CONTEXT_EXCEPTION_REQUEST)
+        {
+            ContextFlags |= CONTEXT_EXCEPTION_REPORTING;
+            if (TrapFrame->ExceptionActive == KEXCEPTION_ACTIVE_SERVICE_FRAME)
+            {
+                ContextFlags |= CONTEXT_SERVICE_ACTIVE;
+            }
+            else if (TrapFrame->ExceptionActive == KEXCEPTION_ACTIVE_EXCEPTION_FRAME)
+            {
+                ContextFlags |= CONTEXT_EXCEPTION_ACTIVE;
+            }
+        }
+        GetSetContext->Context.ContextFlags = ContextFlags;
         if (XStateBuffer)
             GetSetContext->Status = KiSaveUserXState(XStateBuffer->XState,
                                                      XStateBuffer->Length,
