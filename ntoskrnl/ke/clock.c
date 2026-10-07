@@ -490,7 +490,7 @@ KeSetTimeIncrement(IN ULONG MaxIncrement,
 
     /* Set some Internal Variables */
     KeMaximumIncrement = MaxIncrement;
-    KeMinimumIncrement = max(MinIncrement, 10000);
+    KeMinimumIncrement = MinIncrement;
     KeTimeAdjustment = MaxIncrement;
     KeTimeIncrement = MaxIncrement;
     KiTickOffset = MaxIncrement;
