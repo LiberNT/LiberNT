@@ -1400,6 +1400,11 @@ LSTATUS WINAPI DECLSPEC_HOTPATCH RegSetValueExW( HKEY hkey, LPCWSTR name, DWORD 
         if (str[count / sizeof(WCHAR) - 1] && !str[count / sizeof(WCHAR)])
             count += sizeof(WCHAR);
     }
+#ifdef __REACTOS__
+    if (HandleToUlong(hkey) == HandleToUlong(HKEY_PERFORMANCE_TEXT) ||
+        HandleToUlong(hkey) == HandleToUlong(HKEY_PERFORMANCE_NLSTEXT))
+        return ERROR_BADKEY;
+#endif
     if (!(hkey = get_special_root_hkey( hkey ))) return ERROR_INVALID_HANDLE;
 #ifdef __REACTOS__
     if (IsHKCRKey( hkey ))
@@ -1442,6 +1447,11 @@ LSTATUS WINAPI DECLSPEC_HOTPATCH RegSetValueExA( HKEY hkey, LPCSTR name, DWORD r
         if (data[count-1] && !data[count]) count++;
     }
 
+#ifdef __REACTOS__
+    if (HandleToUlong(hkey) == HandleToUlong(HKEY_PERFORMANCE_TEXT) ||
+        HandleToUlong(hkey) == HandleToUlong(HKEY_PERFORMANCE_NLSTEXT))
+        return ERROR_BADKEY;
+#endif
     if (!(hkey = get_special_root_hkey( hkey ))) return ERROR_INVALID_HANDLE;
 
     if (is_string( type )) /* need to convert to Unicode */

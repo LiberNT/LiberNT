@@ -166,6 +166,11 @@ MapDefaultKey(OUT PHANDLE RealKey,
     }
 
     /* Handle special cases here */
+    if (Key == HKEY_PERFORMANCE_TEXT || Key == HKEY_PERFORMANCE_NLSTEXT)
+    {
+        return STATUS_INVALID_HANDLE;
+    }
+
     Index = GetPredefKeyIndex(Key);
     if (Index >= MAX_DEFAULT_HANDLES)
     {
@@ -2535,6 +2540,11 @@ RegEnumKeyExW(
     LONG ErrorCode = ERROR_SUCCESS;
     NTSTATUS Status;
 
+    if (hKey == HKEY_PERFORMANCE_TEXT || hKey == HKEY_PERFORMANCE_NLSTEXT)
+    {
+        return ERROR_NO_MORE_ITEMS;
+    }
+
     Status = MapDefaultKey(&KeyHandle,
                            hKey);
     if (!NT_SUCCESS(Status))
@@ -3255,6 +3265,14 @@ RegOpenKeyA(HKEY hKey,
     {
         *phkResult = hKey;
         return ERROR_SUCCESS;
+    }
+
+    if (!lpSubKey &&
+        (hKey == HKEY_PERFORMANCE_DATA ||
+         hKey == HKEY_PERFORMANCE_TEXT ||
+         hKey == HKEY_PERFORMANCE_NLSTEXT))
+    {
+        return ERROR_INVALID_HANDLE;
     }
 
     return RegOpenKeyExA(hKey,
