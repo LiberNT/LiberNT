@@ -89,6 +89,7 @@ typedef struct _ATTACH_FILTER_DRIVERS_CONTEXT
     PDEVICE_NODE DeviceNode;
     PLIST_ENTRY DriversListHead;
     BOOLEAN SafeBootClassAllowed;
+    BOOLEAN ServiceNamed;
 } ATTACH_FILTER_DRIVERS_CONTEXT, *PATTACH_FILTER_DRIVERS_CONTEXT;
 
 /* FUNCTIONS *****************************************************************/
@@ -678,6 +679,8 @@ PiAttachFilterDriversCallback(
     if (ValueLength <= sizeof(WCHAR))
         return STATUS_OBJECT_NAME_NOT_FOUND;
 
+    context->ServiceNamed = TRUE;
+
     // open the service registry key
     UNICODE_STRING serviceName = { .Length = 0 }, servicesKeyName;
     RtlInitUnicodeString(&serviceName, ValueData);
@@ -1043,7 +1046,7 @@ PiCallDriverAddDevice(
         // do nothing
     }
     // if a driver is not found, but a device allows raw access -> proceed
-    else if (Status == STATUS_OBJECT_NAME_NOT_FOUND &&
+    else if (Status == STATUS_OBJECT_NAME_NOT_FOUND && !routineContext.ServiceNamed &&
              (DeviceNode->CapabilityFlags & 0x00000040)) // CM_DEVCAP_RAWDEVICEOK
     {
         // add a dummy entry to the drivers list (need for later processing)
