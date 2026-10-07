@@ -270,9 +270,6 @@ KiSwapProcess(IN PKPROCESS NewProcess,
                          ~Pcr->Prcb.SetMember);
     }
 #endif
-
-    /* Update IOPM offset */
-    Pcr->TssBase->IoMapBase = NewProcess->IopmOffset;
 }
 
 NTSTATUS
