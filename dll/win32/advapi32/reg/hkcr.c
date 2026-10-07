@@ -607,6 +607,60 @@ QueryHKCRValue(
     return ErrorCode;
 }
 
+/* Get the key holding a value seen through an HKCR key */
+LONG
+WINAPI
+GetHKCRValueKey(
+    _In_ HKEY hKey,
+    _In_ LPCWSTR Name,
+    _Out_ HKEY* ValueKey)
+{
+    HKEY QueriedKey;
+    LONG ErrorCode;
+
+    ASSERT(IsHKCRKey(hKey));
+
+    /* Remove the HKCR flag while we're working */
+    hKey = (HKEY)(((ULONG_PTR)hKey) & ~0x2);
+    *ValueKey = hKey;
+
+    ErrorCode = GetPreferredHKCRKey(hKey, &QueriedKey);
+
+    if (ErrorCode == ERROR_FILE_NOT_FOUND)
+    {
+        /* The key doesn't exist on HKCU side, no chance for a value in it */
+        return ERROR_SUCCESS;
+    }
+
+    if (ErrorCode != ERROR_SUCCESS)
+    {
+        /* Somehow we failed for another reason (maybe deleted key or whatever) */
+        return ErrorCode;
+    }
+
+    /* Anything else than ERROR_FILE_NOT_FOUND means that we found it, even if it is with failures. */
+    ErrorCode = RegQueryValueExW(QueriedKey, Name, NULL, NULL, NULL, NULL);
+    if (ErrorCode != ERROR_FILE_NOT_FOUND)
+    {
+        *ValueKey = QueriedKey;
+        return ERROR_SUCCESS;
+    }
+
+    if (QueriedKey != hKey)
+        RegCloseKey(QueriedKey);
+
+    /* If we're here, we must open from HKLM key. */
+    ErrorCode = GetFallbackHKCRKey(hKey, &QueriedKey, FALSE);
+    if (ErrorCode != ERROR_SUCCESS)
+    {
+        /* Maybe the key doesn't exist in the HKLM view */
+        return ErrorCode;
+    }
+
+    *ValueKey = QueriedKey;
+    return ERROR_SUCCESS;
+}
+
 /* HKCR version of RegSetValueExW */
 LONG
 WINAPI

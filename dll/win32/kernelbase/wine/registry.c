@@ -1467,6 +1467,15 @@ LSTATUS WINAPI DECLSPEC_HOTPATCH RegSetValueExA( HKEY hkey, LPCSTR name, DWORD r
     RtlInitAnsiString( &nameA, name );
     if (!(status = RtlAnsiStringToUnicodeString( &nameW, &nameA, TRUE )))
     {
+#ifdef __REACTOS__
+        if (IsHKCRKey( hkey ))
+        {
+            LSTATUS ret = SetHKCRValue( hkey, nameW.Buffer, 0, type, data, count );
+            RtlFreeUnicodeString( &nameW );
+            HeapFree( GetProcessHeap(), 0, dataW );
+            return ret;
+        }
+#endif
         status = NtSetValueKey( hkey, &nameW, 0, type, data, count );
         RtlFreeUnicodeString( &nameW );
     }
@@ -1942,6 +1951,23 @@ LSTATUS WINAPI DECLSPEC_HOTPATCH RegQueryValueExA( HKEY hkey, LPCSTR name, LPDWO
     if ((data && !count) || reserved) return ERROR_INVALID_PARAMETER;
     if (!(hkey = get_special_root_hkey( hkey )))
         return ERROR_INVALID_HANDLE;
+#ifdef __REACTOS__
+    if (IsHKCRKey( hkey ))
+    {
+        HKEY value_key;
+        LSTATUS ret;
+
+        RtlInitAnsiString( &nameA, name );
+        if ((status = RtlAnsiStringToUnicodeString( &nameW, &nameA, TRUE )))
+            return RtlNtStatusToDosError(status);
+        ret = GetHKCRValueKey( hkey, nameW.Buffer, &value_key );
+        RtlFreeUnicodeString( &nameW );
+        if (ret) return ret;
+        ret = RegQueryValueExA( value_key, name, reserved, type, data, count );
+        if (value_key != (HKEY)((ULONG_PTR)hkey & ~0x2)) RegCloseKey( value_key );
+        return ret;
+    }
+#endif
 
     if (count) datalen = *count;
     if (!data && count) *count = 0;
@@ -2437,6 +2463,11 @@ LSTATUS WINAPI RegEnumValueA( HKEY hkey, DWORD index, LPSTR value, LPDWORD val_c
     char buffer[256], *buf_ptr = buffer;
     KEY_VALUE_FULL_INFORMATION *info = (KEY_VALUE_FULL_INFORMATION *)buffer;
     static const int info_size = offsetof( KEY_VALUE_FULL_INFORMATION, Name );
+#ifdef __REACTOS__
+    UNICODE_STRING name_str;
+    WCHAR *name_buf = NULL;
+    HKEY value_key = NULL;
+#endif
 
     TRACE("(%p,%ld,%p,%p,%p,%p,%p,%p)\n",
           hkey, index, value, val_count, reserved, type, data, count );
@@ -2445,11 +2476,36 @@ LSTATUS WINAPI RegEnumValueA( HKEY hkey, DWORD index, LPSTR value, LPDWORD val_c
         return ERROR_INVALID_PARAMETER;
     if (is_perf_key( hkey )) return ERROR_MORE_DATA;
     if (!(hkey = get_special_root_hkey( hkey ))) return ERROR_INVALID_HANDLE;
+#ifdef __REACTOS__
+    if (IsHKCRKey( hkey ))
+    {
+        DWORD name_len = 16384;
+        LSTATUS ret;
+
+        if (!(name_buf = HeapAlloc( GetProcessHeap(), 0, name_len * sizeof(WCHAR) )))
+            return ERROR_NOT_ENOUGH_MEMORY;
+        ret = EnumHKCRValue( hkey, index, name_buf, &name_len, NULL, NULL, NULL, NULL );
+        if (!ret) ret = GetHKCRValueKey( hkey, name_buf, &value_key );
+        if (ret)
+        {
+            HeapFree( GetProcessHeap(), 0, name_buf );
+            return ret;
+        }
+        RtlInitUnicodeString( &name_str, name_buf );
+        hkey = (HKEY)((ULONG_PTR)hkey & ~0x2);
+    }
+#endif
 
     total_size = info_size + (MAX_PATH + 1) * sizeof(WCHAR);
     if (data) total_size += *count;
     total_size = min( sizeof(buffer), total_size );
 
+#ifdef __REACTOS__
+    if (value_key)
+        status = NtQueryValueKey( value_key, &name_str, KeyValueFullInformation,
+                                  buffer, total_size, &total_size );
+    else
+#endif
     status = NtEnumerateValueKey( hkey, index, KeyValueFullInformation,
                                   buffer, total_size, &total_size );
 
@@ -2463,6 +2519,12 @@ LSTATUS WINAPI RegEnumValueA( HKEY hkey, DWORD index, LPSTR value, LPDWORD val_c
         if (!(buf_ptr = HeapAlloc( GetProcessHeap(), 0, total_size )))
             return ERROR_NOT_ENOUGH_MEMORY;
         info = (KEY_VALUE_FULL_INFORMATION *)buf_ptr;
+#ifdef __REACTOS__
+        if (value_key)
+            status = NtQueryValueKey( value_key, &name_str, KeyValueFullInformation,
+                                      buf_ptr, total_size, &total_size );
+        else
+#endif
         status = NtEnumerateValueKey( hkey, index, KeyValueFullInformation,
                                       buf_ptr, total_size, &total_size );
     }
@@ -2522,6 +2584,10 @@ LSTATUS WINAPI RegEnumValueA( HKEY hkey, DWORD index, LPSTR value, LPDWORD val_c
 
  done:
     if (buf_ptr != buffer) HeapFree( GetProcessHeap(), 0, buf_ptr );
+#ifdef __REACTOS__
+    if (value_key && value_key != hkey) RegCloseKey( value_key );
+    HeapFree( GetProcessHeap(), 0, name_buf );
+#endif
     return RtlNtStatusToDosError(status);
 }
 

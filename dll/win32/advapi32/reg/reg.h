@@ -70,6 +70,13 @@ QueryHKCRValue(
 
 LONG
 WINAPI
+GetHKCRValueKey(
+    _In_ HKEY hKey,
+    _In_ LPCWSTR Name,
+    _Out_ HKEY* ValueKey);
+
+LONG
+WINAPI
 SetHKCRValue(
     _In_ HKEY hKey,
     _In_ LPCWSTR Name,
