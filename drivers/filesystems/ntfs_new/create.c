@@ -2326,9 +2326,11 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             FileObject->FileName.Length != 0 &&
             FileObject->FileName.Buffer[FileObject->FileName.Length / sizeof(WCHAR) - 1] == L'\\')
         {
+            Status = ((CreateOptions & (FILE_DIRECTORY_FILE | FILE_NON_DIRECTORY_FILE)) == FILE_NON_DIRECTORY_FILE) ?
+                     STATUS_OBJECT_NAME_INVALID : STATUS_NOT_A_DIRECTORY;
             NtfsReleaseMetadata(VolCB);
             KeLeaveCriticalRegion();
-            return NtfsCompleteFailedCreate(VolumeDeviceObject, Irp, NULL, CurrentFile, CachedRecord, STATUS_NOT_A_DIRECTORY);
+            return NtfsCompleteFailedCreate(VolumeDeviceObject, Irp, NULL, CurrentFile, CachedRecord, Status);
         }
         if ((CreateOptions & FILE_DIRECTORY_FILE) &&
             !IsDirectory)

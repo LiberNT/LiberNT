@@ -628,6 +628,9 @@ TestRelativeNames(VOID)
         if (isDirectory && NT_SUCCESS(expectedStatus))
             ok(Status == STATUS_FILE_IS_A_DIRECTORY,
                "[%lu] Status = %lx, expected STATUS_FILE_IS_A_DIRECTORY\n", i, Status);
+        else if (g_Filesystem != FAT32 && Tests[i].Win10NotDirectory && (GetNTVersion() >= _WIN32_WINNT_WIN10))
+            ok(Status == STATUS_OBJECT_NAME_INVALID,
+               "[%lu] Status = %lx, expected STATUS_OBJECT_NAME_INVALID\n", i, Status);
         else
             ok(Status == expectedStatus,
                "[%lu] Status = %lx, expected %lx\n", i, Status, expectedStatus);
