@@ -1,0 +1,44 @@
+; PROJECT:     LiberNT HID over I2C Transport Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = HIDClass
+ClassGUID = {745a17a0-74d3-11d0-b6fe-00a0c90f57da}
+Provider = %LiberNT%
+DriverVer = 10/07/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%HidI2c.DeviceDesc% = HidI2c_Inst,ACPI\PNP0C50
+
+[HidI2c_Inst.NT]
+CopyFiles = HidI2c_CopyFiles
+
+[HidI2c_CopyFiles]
+hidi2c.sys
+hidclass.sys
+hidparse.sys
+
+[HidI2c_Inst.NT.Services]
+AddService = hidi2c,0x00000002,HidI2c_Service
+
+[HidI2c_Service]
+DisplayName = %HidI2c.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\hidi2c.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+HidI2c.DeviceDesc = "I2C HID Device"
+HidI2c.ServiceDesc = "LiberNT HID over I2C Transport Driver"
