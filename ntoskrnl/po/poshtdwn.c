@@ -272,6 +272,8 @@ PopGracefulShutdown(IN PVOID Context)
     /* Shut down the Shim cache if enabled */
     ApphelpCacheShutdown();
 
+    EtwpShutdownLoggers();
+
     /* In this step, the I/O manager does first-chance shutdown notification */
     DPRINT("I/O manager shutting down in phase 0\n");
     IoShutdownSystem(0);

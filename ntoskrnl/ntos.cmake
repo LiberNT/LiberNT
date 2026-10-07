@@ -285,6 +285,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntoskrnl/tm/tm.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/tm/tx.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/vf/driver.c
+    ${REACTOS_SOURCE_DIR}/ntoskrnl/wmi/etwlog.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/wmi/guidobj.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/wmi/pcw.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/wmi/smbios.c

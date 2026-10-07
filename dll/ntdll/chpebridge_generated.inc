@@ -2989,12 +2989,13 @@ ULONG_PTR NTAPI ChpeStubNtThawTransactions(VOID)
     return 0;
 }
 
-ULONG_PTR NTAPI ChpeStubNtTraceControl(ULONG a0, PVOID a1, ULONG a2, PVOID a3, ULONG a4, ULONG a5)
+NTSTATUS NTAPI ChpeAutoNtTraceControl(ULONG a0, PVOID a1, ULONG a2, PVOID a3, ULONG a4, PULONG a5)
 {
-    return 0;
+    return NtTraceControl(a0, a1, a2, a3, a4, a5);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoNtTraceControl), __typeof__(&NtTraceControl)), "NtTraceControl bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoNtTraceEvent(ULONG a0, ULONG a1, ULONG a2, PEVENT_TRACE_HEADER a3)
+NTSTATUS NTAPI ChpeAutoNtTraceEvent(HANDLE a0, ULONG a1, ULONG a2, PEVENT_TRACE_HEADER a3)
 {
     return NtTraceEvent(a0, a1, a2, a3);
 }
@@ -10039,12 +10040,13 @@ ULONG_PTR NTAPI ChpeStubZwThawTransactions(VOID)
     return 0;
 }
 
-ULONG_PTR NTAPI ChpeStubZwTraceControl(ULONG a0, PVOID a1, ULONG a2, PVOID a3, ULONG a4, ULONG a5)
+NTSTATUS NTAPI ChpeAutoZwTraceControl(ULONG a0, PVOID a1, ULONG a2, PVOID a3, ULONG a4, PULONG a5)
 {
-    return 0;
+    return ZwTraceControl(a0, a1, a2, a3, a4, a5);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoZwTraceControl), __typeof__(&ZwTraceControl)), "ZwTraceControl bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoZwTraceEvent(ULONG a0, ULONG a1, ULONG a2, PEVENT_TRACE_HEADER a3)
+NTSTATUS NTAPI ChpeAutoZwTraceEvent(HANDLE a0, ULONG a1, ULONG a2, PEVENT_TRACE_HEADER a3)
 {
     return ZwTraceEvent(a0, a1, a2, a3);
 }

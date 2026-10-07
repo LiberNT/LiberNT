@@ -315,6 +315,10 @@ VOID
 NTAPI
 ExShutdownSystem(VOID);
 
+VOID
+NTAPI
+EtwpShutdownLoggers(VOID);
+
 typedef NTSTATUS
 (NTAPI *PEXP_SHARE_DEVICE_ADDRESS_SPACE)(
     _In_ PDEVICE_OBJECT PhysicalDeviceObject,

@@ -978,7 +978,7 @@
 @ stdcall NtSetSecurityObject(ptr long ptr)
 @ stdcall NtSetVolumeInformationFile(ptr ptr ptr long long)
 @ stdcall NtShutdownSystem(long)
-@ stdcall NtTraceEvent(long long long ptr)
+@ stdcall NtTraceEvent(ptr long long ptr)
 @ stdcall NtUnlockFile(ptr ptr ptr ptr long)
 @ stdcall NtVdmControl(long ptr)
 @ stdcall NtWaitForSingleObject(ptr long ptr)
@@ -2794,7 +2794,7 @@
 @ stdcall NtSetInformationTransaction(ptr long ptr long)
 @ stdcall -arch=win64 NtSetInformationVirtualMemory(ptr long ptr ptr ptr long)
 @ stub -arch=win64 NtThawTransactions
-@ stub -arch=win64 NtTraceControl
+@ stdcall NtTraceControl(long ptr long ptr long ptr)
 @ stdcall -arch=arm64 NtWaitForAlertByThreadId(ptr ptr)
 @ stub -arch=win64 ObDereferenceObjectDeferDeleteWithTag
 @ stdcall ObGetFilterVersion()
@@ -3435,7 +3435,7 @@
 @ stdcall ZwSetInformationTransaction(ptr long ptr long)
 @ stdcall -arch=win64 ZwSetInformationVirtualMemory()
 @ stub -arch=win64 ZwSetTimerEx
-@ stub -arch=win64 ZwTraceControl
+@ stdcall ZwTraceControl(long ptr long ptr long ptr)
 @ stdcall -version=0x602+ -arch=win64 ZwUpdateWnfStateData(ptr ptr long ptr ptr long long)
 @ stdcall -arch=arm64 ZwWaitForAlertByThreadId(ptr ptr)
 @ stub -arch=win64 _makepath_s

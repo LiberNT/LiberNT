@@ -675,10 +675,22 @@ NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtTraceEvent(
-    _In_ ULONG TraceHandle,
+    _In_opt_ HANDLE TraceHandle,
     _In_ ULONG Flags,
     _In_ ULONG TraceHeaderLength,
     _In_ PEVENT_TRACE_HEADER TraceHeader
+);
+
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
+NtTraceControl(
+    _In_ ULONG FunctionCode,
+    _In_reads_bytes_opt_(InBufferLen) PVOID InBuffer,
+    _In_ ULONG InBufferLen,
+    _Out_writes_bytes_opt_(OutBufferLen) PVOID OutBuffer,
+    _In_ ULONG OutBufferLen,
+    _Out_ PULONG ReturnSize
 );
 
 NTSYSAPI
@@ -1129,10 +1141,22 @@ NTSYSAPI
 NTSTATUS
 NTAPI
 ZwTraceEvent(
-    _In_ ULONG TraceHandle,
+    _In_opt_ HANDLE TraceHandle,
     _In_ ULONG Flags,
     _In_ ULONG TraceHeaderLength,
     _In_ PEVENT_TRACE_HEADER TraceHeader
+);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+ZwTraceControl(
+    _In_ ULONG FunctionCode,
+    _In_reads_bytes_opt_(InBufferLen) PVOID InBuffer,
+    _In_ ULONG InBufferLen,
+    _Out_writes_bytes_opt_(OutBufferLen) PVOID OutBuffer,
+    _In_ ULONG OutBufferLen,
+    _Out_ PULONG ReturnSize
 );
 
 #ifdef __cplusplus

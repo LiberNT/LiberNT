@@ -558,20 +558,6 @@ WmiUpdateTrace(IN OUT PWMI_LOGGER_INFORMATION LoggerInfo)
     return STATUS_NOT_IMPLEMENTED;
 }
 
-/*
- * @unimplemented
- */
-NTSTATUS
-NTAPI
-NtTraceEvent(IN ULONG TraceHandle,
-             IN ULONG Flags,
-             IN ULONG TraceHeaderLength,
-             IN struct _EVENT_TRACE_HEADER* TraceHeader)
-{
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
-}
-
 ULONG
 NTAPI
 EtwpDisableStackWalkApc(VOID)

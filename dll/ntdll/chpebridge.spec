@@ -747,8 +747,8 @@
 569 stdcall NtTestAlert() ChpeAutoNtTestAlert
 570 stdcall -version=0x600+ NtThawRegistry() ChpeStubNtThawRegistry
 571 stdcall -version=0x600+ NtThawTransactions() ChpeStubNtThawTransactions
-572 stdcall -version=0x600+ NtTraceControl(long ptr long ptr long long) ChpeStubNtTraceControl
-573 stdcall NtTraceEvent(long long long ptr) ChpeAutoNtTraceEvent
+572 stdcall -version=0x600+ NtTraceControl(long ptr long ptr long ptr) ChpeAutoNtTraceControl
+573 stdcall NtTraceEvent(ptr long long ptr) ChpeAutoNtTraceEvent
 574 stdcall NtTranslateFilePath(ptr long ptr long) ChpeAutoNtTranslateFilePath
 575 stdcall NtUnloadDriver(ptr) ChpeAutoNtUnloadDriver
 576 stdcall NtUnloadKey2(ptr long) ChpeAutoNtUnloadKey2
@@ -1857,8 +1857,8 @@
 1826 stdcall ZwTestAlert() ChpeAutoZwTestAlert
 1827 stdcall -version=0x600+ ZwThawRegistry() ChpeStubZwThawRegistry
 1828 stdcall -version=0x600+ ZwThawTransactions() ChpeStubZwThawTransactions
-1829 stdcall -version=0x600+ ZwTraceControl(long ptr long ptr long long) ChpeStubZwTraceControl
-1830 stdcall ZwTraceEvent(long long long ptr) ChpeAutoZwTraceEvent
+1829 stdcall -version=0x600+ ZwTraceControl(long ptr long ptr long ptr) ChpeAutoZwTraceControl
+1830 stdcall ZwTraceEvent(ptr long long ptr) ChpeAutoZwTraceEvent
 1831 stdcall ZwTranslateFilePath(ptr long ptr long) ChpeAutoZwTranslateFilePath
 1832 stdcall ZwUnloadDriver(ptr) ChpeAutoZwUnloadDriver
 1833 stdcall ZwUnloadKey2(ptr long) ChpeAutoZwUnloadKey2
