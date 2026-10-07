@@ -280,6 +280,7 @@ struct symt_public* symt_new_public(struct module* module,
         sym->hash_elt.name = pool_strdup(&module->pool, name);
         sym->container     = compiland ? symt_ptr_to_symref(&compiland->symt) : 0;
         sym->is_function   = is_function;
+        sym->is_export     = !is_function;
         sym->address       = address;
         sym->size          = size;
         symt_add_module_ht(module, (struct symt_ht*)sym);
@@ -843,17 +844,13 @@ static BOOL symt_fill_sym_info(struct module_pair* pair,
             const struct symt_public* pub = (const struct symt_public*)sym;
             if (pub->is_function)
                 sym_info->Flags |= SYMFLAG_PUBLIC_CODE;
-            else
+            else if (pub->is_export)
                 sym_info->Flags |= SYMFLAG_EXPORT;
             symt_get_address(sym, &sym_info->Address);
         }
         break;
     case SymTagFunction:
     case SymTagInlineSite:
-#ifdef __REACTOS__
-        if (sym->tag == SymTagFunction)
-            sym_info->Flags |= SYMFLAG_FUNCTION;
-#endif
         symt_get_address(sym, &sym_info->Address);
         break;
     case SymTagThunk:
@@ -1271,6 +1268,20 @@ static symref_t symt_find_symref_at(struct module* module, DWORD_PTR addr)
     return nearest;
 }
 
+static symref_t symt_find_symref_near(struct module* module, DWORD_PTR addr)
+{
+    struct module_format_vtable_iterator iter = {};
+    symref_t symref;
+
+    while ((module_format_vtable_iterator_next(module, &iter,
+                                               MODULE_FORMAT_VTABLE_INDEX(lookup_near_address))))
+    {
+        if (iter.modfmt->vtable->lookup_near_address(iter.modfmt, addr, &symref) == MR_SUCCESS)
+            return symref;
+    }
+    return 0;
+}
+
 /* callers really expect a symt ptr from here, so fail when found
  * symbol is a symref
  */
@@ -1677,9 +1688,13 @@ BOOL WINAPI SymFromAddr(HANDLE hProcess, DWORD64 Address,
 {
     struct module_pair  pair;
     symref_t symref;
+    DWORD tag;
 
     if (!module_init_pair(&pair, hProcess, Address)) return FALSE;
-    if (!(symref = symt_find_symref_at(pair.effective, Address))) return FALSE;
+    symref = symt_find_symref_at(pair.effective, Address);
+    if (symref && symt_get_info_from_symref(pair.effective, symref, TI_GET_SYMTAG, &tag) && tag == SymTagExe)
+        symref = 0;
+    if (!symref && !(symref = symt_find_symref_near(pair.effective, Address))) return FALSE;
 
     symt_fill_sym_info_from_symref(&pair, NULL, symref, Symbol);
     if (Displacement)

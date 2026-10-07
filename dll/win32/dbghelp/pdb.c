@@ -189,6 +189,11 @@ struct pdb_reader
     struct pdb_global *globals;
     unsigned num_globals;
 
+    struct symt_public **publics;
+    struct symt_public **publics_by_address;
+    unsigned num_publics;
+    BOOL publics_loaded;
+
     /* PDB file access */
     pdb_reader_fetch_block_t fetch;
     struct {unsigned block_no; unsigned age;} cache[4*4];
@@ -220,7 +225,11 @@ static const unsigned short  PDB_STREAM_IPI = 4;
 
 static enum pdb_result pdb_reader_fetch_file_no_cache(struct pdb_reader *pdb, void *buffer, pdboff_t offset, pdbsize_t size)
 {
+#ifdef __REACTOS__
+    OVERLAPPED ov = {.Offset = offset, .OffsetHigh = offset >> 32};
+#else
     OVERLAPPED ov = {.Offset = offset, .OffsetHigh = offset >> 32, .hEvent = (HANDLE)(DWORD_PTR)1};
+#endif
     DWORD num_read;
 
     return ReadFile(pdb->file, buffer, size, &num_read, &ov) && num_read == size ? R_PDB_SUCCESS : R_PDB_IOERROR;
@@ -5365,6 +5374,103 @@ static enum pdb_result pdb_reader_lookup_top_symbol_by_segment_offset(struct pdb
     return R_PDB_NOT_FOUND;
 }
 
+static int pdb_public_address_cmp(const void *p1, const void *p2)
+{
+    const struct symt_public *pub1 = *(struct symt_public * const *)p1;
+    const struct symt_public *pub2 = *(struct symt_public * const *)p2;
+
+    if (pub1->address < pub2->address) return -1;
+    if (pub1->address > pub2->address) return 1;
+    return 0;
+}
+
+static enum pdb_result pdb_reader_ensure_publics(struct pdb_reader *pdb)
+{
+    enum pdb_result result;
+    struct pdb_reader_walker walker;
+    struct pdb_reader_whole_stream whole;
+    DBI_PUBLIC_HEADER public_header;
+    DBI_HASH_HEADER hash_header;
+    DBI_HASH_RECORD hash_record;
+    const union codeview_symbol *cv_symbol;
+    struct symt_public *sym;
+    DWORD64 address;
+    unsigned num_records, i;
+
+    if (pdb->publics_loaded) return R_PDB_SUCCESS;
+    pdb->publics_loaded = TRUE;
+    if (dbghelp_options & SYMOPT_NO_PUBLICS) return R_PDB_SUCCESS;
+
+    if ((result = pdb_reader_walker_init(pdb, pdb->dbi_header.public_stream, &walker))) return result;
+    if ((result = pdb_reader_READ(pdb, &walker, &public_header))) return result;
+    if ((result = pdb_reader_READ(pdb, &walker, &hash_header))) return result;
+    if (hash_header.signature != 0xFFFFFFFF ||
+        hash_header.version != 0xeffe0000 + 19990810 ||
+        hash_header.hash_records_size > walker.last - walker.offset)
+    {
+        WARN("Incorrect public hash stream header\n");
+        return R_PDB_INVALID_PDB_FILE;
+    }
+    num_records = hash_header.hash_records_size / sizeof(DBI_HASH_RECORD);
+    if (!num_records) return R_PDB_SUCCESS;
+    if ((result = pdb_reader_alloc(pdb, num_records * sizeof(*pdb->publics), (void **)&pdb->publics))) return result;
+    if ((result = pdb_reader_alloc(pdb, num_records * sizeof(*pdb->publics), (void **)&pdb->publics_by_address))) return result;
+    if ((result = pdb_reader_alloc_and_load_whole_stream(pdb, pdb->dbi_header.gsym_stream, &whole))) return result;
+
+    for (i = 0; i < num_records; i++)
+    {
+        if ((result = pdb_reader_READ(pdb, &walker, &hash_record))) break;
+        if (pdb_reader_whole_stream_access_codeview_symbol(pdb, &whole, hash_record.offset - 1, &cv_symbol) ||
+            cv_symbol->generic.id != S_PUB32 ||
+            pdb_reader_get_segment_address(pdb, cv_symbol->public_v3.segment, cv_symbol->public_v3.offset, &address))
+            continue;
+        if (!(sym = pool_alloc(&pdb->module->pool, sizeof(*sym))))
+        {
+            result = R_PDB_OUT_OF_MEMORY;
+            break;
+        }
+        memset(sym, 0, sizeof(*sym));
+        sym->symt.tag = SymTagPublicSymbol;
+        sym->hash_elt.name = pool_strdup(&pdb->module->pool, cv_symbol->public_v3.name);
+        sym->is_function = cv_symbol->public_v3.pubsymflags == SYMTYPE_FUNCTION;
+        sym->address = address;
+        pdb->publics[pdb->num_publics++] = sym;
+    }
+    pdb_reader_dispose_whole_stream(pdb, &whole);
+
+    memcpy(pdb->publics_by_address, pdb->publics, pdb->num_publics * sizeof(*pdb->publics));
+    qsort(pdb->publics_by_address, pdb->num_publics, sizeof(*pdb->publics), &pdb_public_address_cmp);
+    return result;
+}
+
+static enum pdb_result pdb_reader_lookup_public_by_address(struct pdb_reader *pdb, DWORD64 address, symref_t *symref)
+{
+    struct symt_public key, *pkey = &key, **found;
+
+    if (pdb_reader_ensure_publics(pdb) || !pdb->num_publics) return R_PDB_NOT_FOUND;
+    key.address = address;
+    found = bsearch(&pkey, pdb->publics_by_address, pdb->num_publics, sizeof(*pdb->publics), &pdb_public_address_cmp);
+    if (!found) return R_PDB_NOT_FOUND;
+    *symref = symt_ptr_to_symref(&(*found)->symt);
+    return R_PDB_SUCCESS;
+}
+
+static enum pdb_result pdb_reader_lookup_public_by_name(struct pdb_reader *pdb, const char *name, symref_t *symref)
+{
+    unsigned i;
+
+    if (pdb_reader_ensure_publics(pdb)) return R_PDB_NOT_FOUND;
+    for (i = 0; i < pdb->num_publics; i++)
+    {
+        if (!strcmp(pdb->publics[i]->hash_elt.name, name))
+        {
+            *symref = symt_ptr_to_symref(&pdb->publics[i]->symt);
+            return R_PDB_SUCCESS;
+        }
+    }
+    return R_PDB_NOT_FOUND;
+}
+
 static enum method_result pdb_method_lookup_symbol_by_address(struct module_format *modfmt, DWORD_PTR address, symref_t *symref)
 {
     enum pdb_result result;
@@ -5380,7 +5486,71 @@ static enum method_result pdb_method_lookup_symbol_by_address(struct module_form
         return MR_FAILURE;
     }
     result = pdb_reader_lookup_top_symbol_by_segment_offset(pdb, segment, offset, symref);
+    if (result == R_PDB_NOT_FOUND && !pdb_reader_lookup_public_by_address(pdb, address, symref))
+        return MR_SUCCESS;
     return pdb_method_result(result);
+}
+
+static BOOL pdb_is_nearer_rva(unsigned key, unsigned rva, BOOL has_best, unsigned best)
+{
+    if (!has_best) return TRUE;
+    if (rva <= key) return best > key || rva > best;
+    return best > key && rva < best;
+}
+
+static enum method_result pdb_method_lookup_symbol_near_address(struct module_format *modfmt, DWORD_PTR address, symref_t *symref)
+{
+    struct pdb_reader *pdb;
+    struct pdb_compiland *compiland;
+    BOOL has_best = FALSE, in_compiland = FALSE;
+    unsigned key, rva, best = 0, best_compiland = 0, best_stream_offset = 0;
+    symref_t best_symref = 0;
+    unsigned i, j;
+
+    pdb = pdb_get_current_reader(modfmt);
+    if (address < pdb->module->module.BaseOfImage) return MR_NOT_FOUND;
+    key = address - pdb->module->module.BaseOfImage;
+
+    for (i = 0; i < pdb->num_compilands; i++)
+    {
+        compiland = &pdb->compilands[i];
+        if (pdb_reader_ensure_compiland_shadow_table(pdb, compiland)) continue;
+        for (j = 0; j < compiland->num_shadow_entries; j++)
+        {
+            rva = compiland->shadow_entries[j].rva;
+            if (!pdb_is_nearer_rva(key, rva, has_best, best)) continue;
+            has_best = in_compiland = TRUE;
+            best = rva;
+            best_compiland = i;
+            best_stream_offset = compiland->shadow_entries[j].stream_offset;
+        }
+    }
+    for (i = 0; i < pdb->num_globals; i++)
+    {
+        rva = pdb->globals[i].rva;
+        if (!pdb_is_nearer_rva(key, rva, has_best, best)) continue;
+        has_best = TRUE;
+        in_compiland = FALSE;
+        best = rva;
+        best_symref = pdb->globals[i].symref;
+    }
+    if (!pdb_reader_ensure_publics(pdb))
+    {
+        for (i = 0; i < pdb->num_publics; i++)
+        {
+            rva = pdb->publics[i]->address - pdb->module->module.BaseOfImage;
+            if (!pdb_is_nearer_rva(key, rva, has_best, best)) continue;
+            has_best = TRUE;
+            in_compiland = FALSE;
+            best = rva;
+            best_symref = symt_ptr_to_symref(&pdb->publics[i]->symt);
+        }
+    }
+    if (!has_best) return MR_NOT_FOUND;
+    if (in_compiland)
+        return pdb_method_result(pdb_reader_ensure_compiland_symbol_present(pdb, best_compiland, best_stream_offset, symref));
+    *symref = best_symref;
+    return MR_SUCCESS;
 }
 
 static enum pdb_result pdb_reader_dereference_procedure(struct pdb_reader *pdb, unsigned compiland_id, pdbsize_t stream_offset,
@@ -5436,7 +5606,10 @@ static enum method_result pdb_method_lookup_symbol_by_name(struct module_format 
     pdb = pdb_get_current_reader(modfmt);
 
     if ((result = pdb_reader_read_DBI_codeview_symbol_by_name(pdb, name, &globals_offset, &cv_symbol)))
+    {
+        if (result == R_PDB_NOT_FOUND) result = pdb_reader_lookup_public_by_name(pdb, name, symref);
         return pdb_method_result(result);
+    }
 
     switch (cv_symbol.generic.id)
     {
@@ -5460,6 +5633,35 @@ static enum method_result pdb_method_lookup_symbol_by_name(struct module_format 
     if (result == R_PDB_SUCCESS) return MR_SUCCESS;
     TRACE("No symbol %s found...\n", name);
     return MR_NOT_FOUND;
+}
+
+static BOOL pdb_reader_has_global_at(struct pdb_reader *pdb, DWORD64 address)
+{
+    struct pdb_global key;
+    struct pdb_compiland *compiland;
+    struct pdb_reader_walker walker;
+    union codeview_symbol cv_symbol;
+    unsigned segment, offset, compiland_index, i;
+
+    key.rva = address - pdb->module->module.BaseOfImage;
+    if (pdb->num_globals &&
+        bsearch(&key, pdb->globals, pdb->num_globals, sizeof(*pdb->globals), &pdb_global_cmp))
+        return TRUE;
+    if (pdb_reader_get_segment_offset_from_address(pdb, address, &segment, &offset) ||
+        pdb_reader_lookup_compiland_by_segment_offset(pdb, segment, offset, &compiland_index))
+        return FALSE;
+    compiland = &pdb->compilands[compiland_index];
+    if (pdb_reader_ensure_compiland_shadow_table(pdb, compiland)) return FALSE;
+    for (i = 0; i < compiland->num_shadow_entries; i++)
+    {
+        if (compiland->shadow_entries[i].rva != key.rva) continue;
+        if (pdb_reader_walker_init(pdb, compiland->compiland_stream_id, &walker)) continue;
+        walker.offset = compiland->shadow_entries[i].stream_offset;
+        if (!pdb_reader_read_partial_codeview_symbol(pdb, &walker, &cv_symbol) &&
+            (cv_symbol.generic.id == S_GPROC32 || cv_symbol.generic.id == S_LPROC32))
+            return TRUE;
+    }
+    return FALSE;
 }
 
 static enum method_result pdb_method_enumerate_symbols(struct module_format *modfmt, const WCHAR *match, BOOL (*cb)(symref_t, const char *, void *), void *user)
@@ -5518,6 +5720,23 @@ static enum method_result pdb_method_enumerate_symbols(struct module_format *mod
         }
         pdb_reader_dispose_DBI_hash_iterator(pdb, &iter);
     }
+    if (mr == MR_NOT_FOUND && !pdb_reader_ensure_publics(pdb))
+    {
+        struct symt_public *pub;
+        unsigned i;
+
+        for (i = 0; i < pdb->num_publics; i++)
+        {
+            pub = pdb->publics[i];
+            if (!symt_match_stringAW(pub->hash_elt.name, match, TRUE)) continue;
+            if (pdb_reader_has_global_at(pdb, pub->address)) continue;
+            if (!cb(symt_ptr_to_symref(&pub->symt), pub->hash_elt.name, user))
+            {
+                mr = MR_SUCCESS;
+                break;
+            }
+        }
+    }
     return mr;
 }
 
@@ -5542,6 +5761,7 @@ static struct module_format_vtable pdb_module_format_vtable =
     pdb_method_enumerate_lines,
     pdb_method_get_line_from_inlined_address,
     pdb_method_enumerate_sources,
+    pdb_method_lookup_symbol_near_address,
 };
 
 BOOL pdb_init_modfmt(const struct msc_debug_info *msc_dbg,

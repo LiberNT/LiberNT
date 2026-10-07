@@ -332,6 +332,7 @@ struct symt_public
     struct hash_table_elt       hash_elt;
     symref_t                    container;      /* compiland */
     BOOL                        is_function;
+    BOOL                        is_export;
     ULONG_PTR                   address;
     ULONG_PTR                   size;
 };
@@ -480,6 +481,8 @@ struct module_format_vtable
     /* source files information */
     enum method_result          (*enumerate_sources)(struct module_format *modfmt, const WCHAR *sourcefile_regex,
                                                      PSYM_ENUMSOURCEFILES_CALLBACKW cb, void *user);
+
+    enum method_result          (*lookup_near_address)(struct module_format *modfmt, DWORD_PTR address, symref_t *symref);
 };
 
 struct module_format

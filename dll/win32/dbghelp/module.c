@@ -317,6 +317,21 @@ struct module* module_get_containee(const struct process* pcs, const struct modu
     return NULL;
 }
 
+static BOOL module_read_image_header(struct module* module)
+{
+    IMAGEHLP_CBA_READ_MEMORY    read_memory;
+    IMAGE_DOS_HEADER            dos;
+    DWORD                       bytes_read = 0;
+
+    read_memory.addr = module->module.BaseOfImage;
+    read_memory.buf = &dos;
+    read_memory.bytes = sizeof(dos);
+    read_memory.bytesread = &bytes_read;
+    if (pcs_callback(module->process, CBA_READ_MEMORY, &read_memory) && bytes_read == sizeof(dos))
+        return TRUE;
+    return read_process_memory(module->process, module->module.BaseOfImage, &dos, sizeof(dos));
+}
+
 BOOL module_load_debug(struct module* module)
 {
     IMAGEHLP_DEFERRED_SYMBOL_LOADW64    idslW64;
@@ -342,11 +357,18 @@ BOOL module_load_debug(struct module* module)
             idslW64.Reparse = FALSE;
             idslW64.hFile = INVALID_HANDLE_VALUE;
 
-            pcs_callback(module->process, CBA_DEFERRED_SYMBOL_LOAD_START, &idslW64);
-            ret = pe_load_debug_info(module);
-            pcs_callback(module->process,
-                         ret ? CBA_DEFERRED_SYMBOL_LOAD_COMPLETE : CBA_DEFERRED_SYMBOL_LOAD_FAILURE,
-                         &idslW64);
+            if (pcs_callback(module->process, CBA_DEFERRED_SYMBOL_LOAD_CANCEL, NULL))
+                ret = FALSE;
+            else
+            {
+                pcs_callback(module->process, CBA_DEFERRED_SYMBOL_LOAD_START, &idslW64);
+                if (!module_read_image_header(module))
+                    pcs_callback(module->process, CBA_DEFERRED_SYMBOL_LOAD_PARTIAL, &idslW64);
+                ret = pe_load_debug_info(module);
+                pcs_callback(module->process,
+                             ret ? CBA_DEFERRED_SYMBOL_LOAD_COMPLETE : CBA_DEFERRED_SYMBOL_LOAD_FAILURE,
+                             &idslW64);
+            }
         }
         else ret = module->process->loader->load_debug_info(module->process, module);
 

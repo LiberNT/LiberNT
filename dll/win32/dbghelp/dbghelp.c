@@ -888,6 +888,7 @@ BOOL pcs_callback(const struct process* pcs, ULONG action, void* data)
         {
         case CBA_DEBUG_INFO:
         case CBA_DEFERRED_SYMBOL_LOAD_CANCEL:
+        case CBA_READ_MEMORY:
         case CBA_SET_OPTIONS:
         case CBA_SYMBOLS_UNLOADED:
             break;
@@ -907,7 +908,6 @@ BOOL pcs_callback(const struct process* pcs, ULONG action, void* data)
             break;
         case CBA_DUPLICATE_SYMBOL:
         case CBA_EVENT:
-        case CBA_READ_MEMORY:
         default:
             FIXME("No mapping for action %lu\n", action);
             return FALSE;
