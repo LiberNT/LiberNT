@@ -461,23 +461,12 @@ USBSTOR_HandleQueryProperty(
         // -1 due STORAGE_DEVICE_DESCRIPTOR contains one byte length of parameter data
         TotalLength = sizeof(STORAGE_DEVICE_DESCRIPTOR) + FieldLengthVendor + FieldLengthProduct + FieldLengthRevision + FieldLengthSerialNumber + 3;
 
-        // check if output buffer is long enough
-        if (IoStack->Parameters.DeviceIoControl.OutputBufferLength < TotalLength)
-        {
-            // buffer too small
-            DescriptorHeader = (PSTORAGE_DESCRIPTOR_HEADER)Irp->AssociatedIrp.SystemBuffer;
-            ASSERT(IoStack->Parameters.DeviceIoControl.OutputBufferLength >= sizeof(STORAGE_DESCRIPTOR_HEADER));
-
-            // return required size
-            DescriptorHeader->Version = TotalLength;
-            DescriptorHeader->Size = TotalLength;
-
-            Irp->IoStatus.Information = sizeof(STORAGE_DESCRIPTOR_HEADER);
-            return STATUS_SUCCESS;
-        }
-
         // initialize the device descriptor
-        DeviceDescriptor = (PSTORAGE_DEVICE_DESCRIPTOR)Irp->AssociatedIrp.SystemBuffer;
+        DeviceDescriptor = ExAllocatePoolZero(NonPagedPool, TotalLength, USB_STOR_TAG);
+        if (!DeviceDescriptor)
+        {
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
 
         DeviceDescriptor->Version = sizeof(STORAGE_DEVICE_DESCRIPTOR);
         DeviceDescriptor->Size = TotalLength;
@@ -523,6 +512,10 @@ USBSTOR_HandleQueryProperty(
         DPRINT("Product %s\n", (LPCSTR)((ULONG_PTR)DeviceDescriptor + DeviceDescriptor->ProductIdOffset));
         DPRINT("Revision %s\n", (LPCSTR)((ULONG_PTR)DeviceDescriptor + DeviceDescriptor->ProductRevisionOffset));
         DPRINT("Serial %s\n", (LPCSTR)((ULONG_PTR)DeviceDescriptor + DeviceDescriptor->SerialNumberOffset));
+
+        TotalLength = min(TotalLength, IoStack->Parameters.DeviceIoControl.OutputBufferLength);
+        RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, DeviceDescriptor, TotalLength);
+        ExFreePoolWithTag(DeviceDescriptor, USB_STOR_TAG);
 
         Irp->IoStatus.Information = TotalLength;
         return STATUS_SUCCESS;
