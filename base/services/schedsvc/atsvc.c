@@ -551,15 +551,16 @@ static BOOL load_job_data(const char *data, DWORD size, struct job_t *info)
 
 static BOOL load_job(const WCHAR *name, struct job_t *info)
 {
-    HANDLE file, mapping;
-    DWORD size, try;
+    HANDLE file;
+    DWORD size, read, try;
     void *data;
     BOOL ret = FALSE;
 
     try = 1;
     for (;;)
     {
-        file = CreateFileW(name, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0);
+        file = CreateFileW(name, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           NULL, OPEN_EXISTING, 0, 0);
         if (file == INVALID_HANDLE_VALUE)
         {
             TRACE("Failed to open %s, error %lu\n", debugstr_w(name), GetLastError());
@@ -570,22 +571,14 @@ static BOOL load_job(const WCHAR *name, struct job_t *info)
 
         size = GetFileSize(file, NULL);
 
-        mapping = CreateFileMappingW(file, NULL, PAGE_READONLY, 0, 0, 0);
-        if (!mapping)
-        {
-            TRACE("Failed to create file mapping %s, error %lu\n", debugstr_w(name), GetLastError());
-            CloseHandle(file);
-            break;
-        }
-
-        data = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0);
+        data = malloc(size);
         if (data)
         {
-            ret = load_job_data(data, size, info);
-            UnmapViewOfFile(data);
+            if (ReadFile(file, data, size, &read, NULL) && read == size)
+                ret = load_job_data(data, size, info);
+            free(data);
         }
 
-        CloseHandle(mapping);
         CloseHandle(file);
         break;
     }
