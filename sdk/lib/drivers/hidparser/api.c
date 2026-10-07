@@ -154,37 +154,61 @@ HidParser_GetReportLength(
     IN PVOID CollectionContext,
     IN UCHAR ReportType)
 {
+    ULONG Count = HidParser_GetReportCountInCollection(CollectionContext);
+    ULONG Index, Length, MaximumLength = 0;
     PHID_REPORT Report;
-    ULONG ReportLength;
 
-    //
-    // get first report
-    //
-    Report = HidParser_GetReportInCollection(CollectionContext, ReportType);
-    if (!Report)
+    for (Index = 0; Index < Count; Index++)
     {
-        //
-        // no report found
-        //
-        return 0;
+        Report = HidParser_GetReportByIndex(CollectionContext, Index);
+        if (!Report || Report->Type != ReportType)
+            continue;
+
+        Length = HidParser_BitsToBytes(Report->ReportSize);
+        if (Length > MaximumLength)
+            MaximumLength = Length;
     }
 
-    //
-    // get report length
-    //
-    ReportLength = Report->ReportSize;
+    return MaximumLength;
+}
 
-    //
-    // done
-    //
-    if (ReportLength)
+static
+NTSTATUS
+HidParser_FindReportForData(
+    IN PVOID CollectionContext,
+    IN UCHAR ReportType,
+    IN PCHAR ReportData,
+    IN ULONG ReportDataLength,
+    OUT PHID_REPORT *Report)
+{
+    ULONG Count = HidParser_GetReportCountInCollection(CollectionContext);
+    ULONG Index, Length, MaximumLength = 0;
+    BOOLEAN TypeFound = FALSE;
+    PHID_REPORT Current;
+
+    *Report = NULL;
+    for (Index = 0; Index < Count; Index++)
     {
-        //
-        // byte aligned length
-        //
-        return HidParser_BitsToBytes(ReportLength);
+        Current = HidParser_GetReportByIndex(CollectionContext, Index);
+        if (!Current || Current->Type != ReportType)
+            continue;
+
+        TypeFound = TRUE;
+        Length = HidParser_BitsToBytes(Current->ReportSize);
+        if (Length > MaximumLength)
+            MaximumLength = Length;
+        if (ReportDataLength && !*Report && Current->ReportID == (UCHAR)ReportData[0])
+            *Report = Current;
     }
-    return ReportLength;
+
+    if (!TypeFound)
+        return HIDP_STATUS_REPORT_DOES_NOT_EXIST;
+    if (ReportDataLength != MaximumLength + 1)
+        return HIDP_STATUS_INVALID_REPORT_LENGTH;
+    if (!*Report)
+        return HIDP_STATUS_INCOMPATIBLE_REPORT_ID;
+
+    return HIDP_STATUS_SUCCESS;
 }
 
 ULONG
@@ -610,6 +634,7 @@ HidParser_GetUsagesWithReport(
     IN PVOID CollectionContext,
     IN UCHAR  ReportType,
     IN USAGE  UsagePage,
+    IN USHORT  LinkCollection,
     OUT USAGE  *UsageList,
     IN OUT PULONG UsageLength,
     IN PCHAR  ReportDescriptor,
@@ -623,26 +648,11 @@ HidParser_GetUsagesWithReport(
     UCHAR Activated;
     ULONG Data;
     PUSAGE_AND_PAGE UsageAndPage = NULL;
+    NTSTATUS Status;
 
-    //
-    // get report
-    //
-    Report = HidParser_GetReportInCollection(CollectionContext, ReportType);
-    if (!Report)
-    {
-        //
-        // no such report
-        //
-        return HIDP_STATUS_REPORT_DOES_NOT_EXIST;
-    }
-
-    if (HidParser_BitsToBytes(Report->ReportSize) != (ReportDescriptorLength - 1))
-    {
-        //
-        // invalid report descriptor length
-        //
-        return HIDP_STATUS_INVALID_REPORT_LENGTH;
-    }
+    Status = HidParser_FindReportForData(CollectionContext, ReportType, ReportDescriptor, ReportDescriptorLength, &Report);
+    if (Status != HIDP_STATUS_SUCCESS)
+        return Status;
 
     //
     // cast to usage and page
@@ -667,6 +677,9 @@ HidParser_GetUsagesWithReport(
         //
         if (!ReportItem->HasData ||
             !HidParser_ReportItemIsButtonCap(ReportItem))
+            continue;
+
+        if (LinkCollection != HIDP_LINK_COLLECTION_UNSPECIFIED && ReportItem->LinkCollection != LinkCollection)
             continue;
 
         //
@@ -926,26 +939,11 @@ HidParser_GetScaledUsageValueWithReport(
     USHORT CurrentUsagePage;
     PHID_REPORT_ITEM ReportItem;
     ULONG Data;
+    NTSTATUS Status;
 
-    //
-    // get report
-    //
-    Report = HidParser_GetReportInCollection(CollectionContext, ReportType);
-    if (!Report)
-    {
-        //
-        // no such report
-        //
-        return HIDP_STATUS_REPORT_DOES_NOT_EXIST;
-    }
-
-    if (HidParser_BitsToBytes(Report->ReportSize) != (ReportDescriptorLength - 1))
-    {
-        //
-        // invalid report descriptor length
-        //
-        return HIDP_STATUS_INVALID_REPORT_LENGTH;
-    }
+    Status = HidParser_FindReportForData(CollectionContext, ReportType, ReportDescriptor, ReportDescriptorLength, &Report);
+    if (Status != HIDP_STATUS_SUCCESS)
+        return Status;
 
     for (Index = 0; Index < Report->ItemCount; Index++)
     {

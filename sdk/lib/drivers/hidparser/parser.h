@@ -347,6 +347,7 @@ HidParser_GetUsagesWithReport(
     IN PVOID CollectionContext,
     IN UCHAR  ReportType,
     IN USAGE  UsagePage,
+    IN USHORT  LinkCollection,
     OUT USAGE  *UsageList,
     IN OUT PULONG UsageLength,
     IN PCHAR  ReportDescriptor,

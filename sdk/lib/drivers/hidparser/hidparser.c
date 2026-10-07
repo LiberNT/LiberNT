@@ -605,31 +605,26 @@ HidParser_GetUsages(
 {
     NTSTATUS ParserStatus;
 
-    //
-    // FIXME: implement searching in specific collection
-    //
-    ASSERT(LinkCollection == HIDP_LINK_COLLECTION_UNSPECIFIED);
-
     if (ReportType == HidP_Input)
     {
         //
         // input report
         //
-        ParserStatus = HidParser_GetUsagesWithReport(CollectionContext, HID_REPORT_TYPE_INPUT, UsagePage, UsageList, UsageLength, Report, ReportLength);
+        ParserStatus = HidParser_GetUsagesWithReport(CollectionContext, HID_REPORT_TYPE_INPUT, UsagePage, LinkCollection, UsageList, UsageLength, Report, ReportLength);
     }
     else if (ReportType == HidP_Output)
     {
         //
         // input report
         //
-        ParserStatus = HidParser_GetUsagesWithReport(CollectionContext, HID_REPORT_TYPE_OUTPUT, UsagePage, UsageList, UsageLength, Report, ReportLength);
+        ParserStatus = HidParser_GetUsagesWithReport(CollectionContext, HID_REPORT_TYPE_OUTPUT, UsagePage, LinkCollection, UsageList, UsageLength, Report, ReportLength);
     }
     else if (ReportType == HidP_Feature)
     {
         //
         // input report
         //
-        ParserStatus = HidParser_GetUsagesWithReport(CollectionContext, HID_REPORT_TYPE_FEATURE, UsagePage, UsageList, UsageLength, Report, ReportLength);
+        ParserStatus = HidParser_GetUsagesWithReport(CollectionContext, HID_REPORT_TYPE_FEATURE, UsagePage, LinkCollection, UsageList, UsageLength, Report, ReportLength);
     }
     else
     {
