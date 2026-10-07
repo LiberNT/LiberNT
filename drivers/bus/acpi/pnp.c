@@ -2,7 +2,6 @@
 
 #include <reactos/drivers/reshubio.h>
 #include <reactos/drivers/inteli2c.h>
-#include <reactos/drivers/intelgpio.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -17,7 +16,6 @@ static const GUID *Bus_ControllerInterfaces[] =
 {
     &GUID_DEVINTERFACE_RESOURCE_HUB_CONTROLLER,
     &GUID_DEVINTERFACE_INTEL_I2C,
-    &GUID_DEVINTERFACE_INTEL_GPIO,
 };
 
 C_ASSERT(RTL_NUMBER_OF(Bus_ControllerInterfaces) ==

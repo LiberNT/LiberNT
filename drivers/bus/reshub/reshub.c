@@ -6,10 +6,8 @@
 
 #include <ntifs.h>
 #include <initguid.h>
-#include <gpio.h>
 #include <spb.h>
 #include <reactos/drivers/reshubio.h>
-#include <reactos/drivers/intelgpio.h>
 #include <reactos/drivers/inteli2c.h>
 #include <ntstrsafe.h>
 #include <pseh/pseh2.h>
@@ -20,14 +18,6 @@
 #define RH_TAG 'bHuR'
 
 #define RH_AML_LARGE_HEADER_LENGTH 3
-#define RH_AML_GPIO_MINIMUM_LENGTH 23
-#define RH_AML_GPIO_CONNECTION_TYPE 4
-#define RH_AML_GPIO_INT_FLAGS 7
-#define RH_AML_GPIO_PIN_CONFIG 9
-#define RH_AML_GPIO_DEBOUNCE 12
-#define RH_AML_GPIO_PIN_TABLE_OFFSET 14
-#define RH_AML_GPIO_RESOURCE_SOURCE_OFFSET 17
-
 #define RH_AML_SERIAL_TYPE 5
 #define RH_AML_SERIAL_TYPE_FLAGS 7
 #define RH_AML_SERIAL_TYPE_DATA_LENGTH 10
@@ -60,6 +50,11 @@ typedef struct _RH_FILE_CONTEXT
     PRH_CONNECTION_ENTRY Connection;
     ULONG ControllerIndex;
     ULONG LockDepth;
+    PFILE_OBJECT I2cFileObject;
+    PDEVICE_OBJECT I2cDeviceObject;
+    ULONG ConnectionSpeed;
+    USHORT SlaveAddress;
+    USHORT AddressMode;
 } RH_FILE_CONTEXT, *PRH_FILE_CONTEXT;
 
 typedef struct _RH_I2C_GATE
@@ -76,7 +71,7 @@ static LIST_ENTRY RhConnectionList;
 static FAST_MUTEX RhConnectionLock;
 static PDEVICE_OBJECT RhDeviceObject;
 static UNICODE_STRING RhSymbolicName;
-static RH_I2C_GATE RhI2cGates[6];
+static RH_I2C_GATE RhI2cGates[8];
 
 static
 NTSTATUS
@@ -195,12 +190,7 @@ RhShouldReparse(
     ObDereferenceObject(Top);
     if (!Attached)
         return FALSE;
-    if (RhHasLegacyInterface(Pdo, &GUID_DEVINTERFACE_INTEL_GPIO) ||
-        RhHasLegacyInterface(Pdo, &GUID_DEVINTERFACE_INTEL_I2C))
-    {
-        return FALSE;
-    }
-    return TRUE;
+    return !RhHasLegacyInterface(Pdo, &GUID_DEVINTERFACE_INTEL_I2C);
 }
 
 static
@@ -321,6 +311,8 @@ RhCreateClose(
         FileObject->FsContext = NULL;
         Entry = Context->Connection;
         RhReleaseAllI2cLocks(Context);
+        if (Context->I2cFileObject)
+            ObDereferenceObject(Context->I2cFileObject);
         ExAcquireFastMutex(&RhConnectionLock);
         if (InterlockedDecrement(&Entry->ReferenceCount) == 0 && Entry->Deleted)
             ExFreePoolWithTag(Entry, RH_TAG);
@@ -469,6 +461,31 @@ RhReadUlong(
 
 static
 NTSTATUS
+RhQueryI2cControllerIndex(
+    _In_opt_ PDEVICE_OBJECT ControllerPdo,
+    _Out_ PULONG ControllerIndex)
+{
+    INTELI2C_CONTROLLER_INFORMATION Information;
+    PDEVICE_OBJECT Controller;
+    NTSTATUS Status;
+
+    if (!ControllerPdo)
+        return STATUS_NOT_FOUND;
+    Controller = IoGetAttachedDeviceReference(ControllerPdo);
+    RtlZeroMemory(&Information, sizeof(Information));
+    Information.Version = INTELI2C_INTERFACE_VERSION;
+    Status = RhSendSynchronousIoctl(Controller, IOCTL_INTELI2C_QUERY_CONTROLLER, &Information, sizeof(Information));
+    ObDereferenceObject(Controller);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Information.Version != INTELI2C_INTERFACE_VERSION || Information.ControllerIndex >= RTL_NUMBER_OF(RhI2cGates))
+        return STATUS_NOT_FOUND;
+    *ControllerIndex = Information.ControllerIndex;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 RhParseI2cConnection(
     _In_ PRH_CONNECTION_ENTRY Entry,
     _Out_ PULONG ControllerIndex,
@@ -496,6 +513,8 @@ RhParseI2cConnection(
     *ConnectionSpeed = RhReadUlong(Properties + RH_AML_I2C_CONNECTION_SPEED);
     *SlaveAddress = RhReadUshort(Properties + RH_AML_I2C_SLAVE_ADDRESS);
     *AddressMode = (RhReadUshort(Properties + RH_AML_SERIAL_TYPE_FLAGS) & 1) ? INTELI2C_ADDRESS_MODE_10BIT : INTELI2C_ADDRESS_MODE_7BIT;
+    if (NT_SUCCESS(RhQueryI2cControllerIndex(Entry->ControllerDevice, ControllerIndex)))
+        return STATUS_SUCCESS;
     for (Index = ResourceSourceOffset; Index + 3 < DescriptorLength; Index++)
     {
         if (RtlUpcaseUnicodeChar((WCHAR)Properties[Index]) == L'I' && Properties[Index + 1] == '2' && RtlUpcaseUnicodeChar((WCHAR)Properties[Index + 2]) == L'C' && Properties[Index + 3] >= '0' && Properties[Index + 3] <= '5')
@@ -509,21 +528,39 @@ RhParseI2cConnection(
 
 static
 NTSTATUS
+RhOpenIntelI2c(
+    _In_ ULONG ControllerIndex,
+    _Out_ PFILE_OBJECT *FileObject,
+    _Out_ PDEVICE_OBJECT *DeviceObject);
+
+static
+NTSTATUS
 RhPrepareI2cContext(
     _Inout_ PRH_FILE_CONTEXT Context)
 {
+    PFILE_OBJECT FileObject;
+    PDEVICE_OBJECT DeviceObject;
     ULONG ControllerIndex;
     ULONG ConnectionSpeed;
     USHORT SlaveAddress;
     USHORT AddressMode;
     NTSTATUS Status;
 
-    if (Context->ControllerIndex < RTL_NUMBER_OF(RhI2cGates))
+    if (Context->I2cFileObject)
         return STATUS_SUCCESS;
     Status = RhParseI2cConnection(Context->Connection, &ControllerIndex, &ConnectionSpeed, &SlaveAddress, &AddressMode);
     if (!NT_SUCCESS(Status))
         return Status;
+    Status = RhOpenIntelI2c(ControllerIndex, &FileObject, &DeviceObject);
+    if (!NT_SUCCESS(Status))
+        return Status;
     Context->ControllerIndex = ControllerIndex;
+    Context->ConnectionSpeed = ConnectionSpeed;
+    Context->SlaveAddress = SlaveAddress;
+    Context->AddressMode = AddressMode;
+    Context->I2cDeviceObject = DeviceObject;
+    if (InterlockedCompareExchangePointer((PVOID *)&Context->I2cFileObject, FileObject, NULL))
+        ObDereferenceObject(FileObject);
     return STATUS_SUCCESS;
 }
 
@@ -648,85 +685,6 @@ RhLeaveI2cTransfer(
     if (!Gate->ActiveTransfers)
         KeSetEvent(&Gate->StateChanged, IO_NO_INCREMENT, FALSE);
     KeReleaseSpinLock(&Gate->StateLock, OldIrql);
-}
-
-static
-NTSTATUS
-RhParseGpioConnection(
-    _In_ PRH_CONNECTION_ENTRY Entry,
-    _Out_ PUSHORT PinTableOffset,
-    _Out_ PUSHORT PinCount,
-    _Out_ PUCHAR IoRestriction,
-    _Out_ PUCHAR PinConfiguration,
-    _Out_ PUSHORT DebounceTimeout)
-{
-    PUCHAR Properties = (PUCHAR)Entry->Properties;
-    ULONG DescriptorLength;
-    USHORT ResourceSourceOffset;
-
-    if (Entry->Class != CM_RESOURCE_CONNECTION_CLASS_GPIO || Entry->Type != CM_RESOURCE_CONNECTION_TYPE_GPIO_IO || Entry->PropertiesLength < RH_AML_GPIO_MINIMUM_LENGTH)
-        return STATUS_INVALID_DEVICE_REQUEST;
-    if (!(Properties[0] & 0x80) || Properties[RH_AML_GPIO_CONNECTION_TYPE] != 1)
-        return STATUS_DEVICE_CONFIGURATION_ERROR;
-    DescriptorLength = RH_AML_LARGE_HEADER_LENGTH + RhReadUshort(Properties + 1);
-    if (DescriptorLength > Entry->PropertiesLength || DescriptorLength < RH_AML_GPIO_MINIMUM_LENGTH)
-        return STATUS_DEVICE_CONFIGURATION_ERROR;
-    *PinTableOffset = RhReadUshort(Properties + RH_AML_GPIO_PIN_TABLE_OFFSET);
-    ResourceSourceOffset = RhReadUshort(Properties + RH_AML_GPIO_RESOURCE_SOURCE_OFFSET);
-    if (*PinTableOffset < RH_AML_GPIO_MINIMUM_LENGTH || ResourceSourceOffset < *PinTableOffset || ResourceSourceOffset > DescriptorLength || (ResourceSourceOffset - *PinTableOffset) % sizeof(USHORT))
-        return STATUS_DEVICE_CONFIGURATION_ERROR;
-    *PinCount = (ResourceSourceOffset - *PinTableOffset) / sizeof(USHORT);
-    if (!*PinCount)
-        return STATUS_DEVICE_CONFIGURATION_ERROR;
-    *IoRestriction = Properties[RH_AML_GPIO_INT_FLAGS] & 3;
-    *PinConfiguration = Properties[RH_AML_GPIO_PIN_CONFIG];
-    *DebounceTimeout = RhReadUshort(Properties + RH_AML_GPIO_DEBOUNCE);
-    return STATUS_SUCCESS;
-}
-
-static
-ULONG
-RhGpioDebounceExponent(
-    _In_ USHORT DebounceTimeout)
-{
-    ULONGLONG PeriodUnits;
-    ULONG Exponent = 0;
-
-    if (!DebounceTimeout)
-        return INTELGPIO_DEBOUNCE_PRESERVE;
-    PeriodUnits = ((ULONGLONG)DebounceTimeout * 1000 + 31249) / 31250;
-    while (PeriodUnits > 1 && Exponent < 15)
-    {
-        PeriodUnits = (PeriodUnits + 1) >> 1;
-        Exponent++;
-    }
-    return Exponent;
-}
-
-static
-NTSTATUS
-RhOpenIntelGpio(
-    _Out_ PFILE_OBJECT *FileObject,
-    _Out_ PDEVICE_OBJECT *DeviceObject)
-{
-    PWCHAR InterfaceList = NULL;
-    UNICODE_STRING InterfaceName;
-    NTSTATUS Status;
-
-    *FileObject = NULL;
-    *DeviceObject = NULL;
-    Status = IoGetDeviceInterfaces(&GUID_DEVINTERFACE_INTEL_GPIO, NULL, 0, &InterfaceList);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    if (!InterfaceList[0])
-    {
-        ExFreePool(InterfaceList);
-        return STATUS_DEVICE_NOT_CONNECTED;
-    }
-    RtlInitUnicodeString(&InterfaceName, InterfaceList);
-    Status = IoGetDeviceObjectPointer(&InterfaceName, FILE_READ_DATA | FILE_WRITE_DATA, FileObject, DeviceObject);
-    ExFreePool(InterfaceList);
-    return Status;
 }
 
 static
@@ -922,12 +880,6 @@ RhExecuteSpbTransfers(
     _Out_opt_ PULONG BytesTransferred)
 {
     PINTELI2C_TRANSFER_REQUEST Request = NULL;
-    PFILE_OBJECT I2cFileObject = NULL;
-    PDEVICE_OBJECT I2cDeviceObject = NULL;
-    ULONG ControllerIndex;
-    ULONG ConnectionSpeed;
-    USHORT SlaveAddress;
-    USHORT AddressMode;
     ULONG HeaderLength;
     ULONG RequestLength;
     ULONG Offset;
@@ -938,7 +890,7 @@ RhExecuteSpbTransfers(
 
     if (!TransferCount || TransferCount > RH_SPB_MAXIMUM_TRANSFERS)
         return STATUS_INVALID_PARAMETER;
-    Status = RhParseI2cConnection(Context->Connection, &ControllerIndex, &ConnectionSpeed, &SlaveAddress, &AddressMode);
+    Status = RhPrepareI2cContext(Context);
     if (!NT_SUCCESS(Status))
         return Status;
     if (TransferCount > (MAXULONG - FIELD_OFFSET(INTELI2C_TRANSFER_REQUEST, Transfers)) / sizeof(INTELI2C_TRANSFER_ENTRY))
@@ -963,10 +915,10 @@ RhExecuteSpbTransfers(
         return STATUS_INSUFFICIENT_RESOURCES;
     RtlZeroMemory(Request, RequestLength);
     Request->Version = INTELI2C_INTERFACE_VERSION;
-    Request->ControllerIndex = ControllerIndex;
-    Request->SlaveAddress = SlaveAddress;
-    Request->AddressMode = AddressMode;
-    Request->ConnectionSpeed = ConnectionSpeed ? ConnectionSpeed : 100000;
+    Request->ControllerIndex = Context->ControllerIndex;
+    Request->SlaveAddress = Context->SlaveAddress;
+    Request->AddressMode = Context->AddressMode;
+    Request->ConnectionSpeed = Context->ConnectionSpeed ? Context->ConnectionSpeed : 100000;
     Request->TimeoutMilliseconds = 2000;
     Request->TransferCount = TransferCount;
     Offset = HeaderLength;
@@ -993,10 +945,7 @@ RhExecuteSpbTransfers(
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     GateEntered = TRUE;
-    Status = RhOpenIntelI2c(ControllerIndex, &I2cFileObject, &I2cDeviceObject);
-    if (!NT_SUCCESS(Status))
-        goto Cleanup;
-    Status = RhSendSynchronousIoctl(I2cDeviceObject, IOCTL_INTELI2C_EXECUTE_TRANSFER, Request, RequestLength);
+    Status = RhSendSynchronousIoctl(Context->I2cDeviceObject, IOCTL_INTELI2C_EXECUTE_TRANSFER, Request, RequestLength);
     for (Index = 0; Index < TransferCount; Index++)
     {
         ULONG Transferred = min(Request->Transfers[Index].Transferred, Request->Transfers[Index].BufferLength);
@@ -1017,111 +966,12 @@ RhExecuteSpbTransfers(
     }
 
 Cleanup:
-    if (I2cFileObject)
-        ObDereferenceObject(I2cFileObject);
     if (GateEntered)
         RhLeaveI2cTransfer(Context);
     if (Request)
         ExFreePoolWithTag(Request, RH_TAG);
     if (BytesTransferred)
         *BytesTransferred = CompletedBytes;
-    return Status;
-}
-
-static
-NTSTATUS
-RhAccessGpioConnection(
-    _In_ PRH_CONNECTION_ENTRY Entry,
-    _Inout_ PIRP Irp,
-    _In_ PIO_STACK_LOCATION IrpStack)
-{
-    PFILE_OBJECT GpioFileObject;
-    PDEVICE_OBJECT GpioDeviceObject;
-    PUCHAR Buffer = Irp->AssociatedIrp.SystemBuffer;
-    ULONG IoControlCode = IrpStack->Parameters.DeviceIoControl.IoControlCode;
-    ULONG BufferLength;
-    USHORT PinTableOffset;
-    USHORT PinCount;
-    USHORT DebounceTimeout;
-    UCHAR IoRestriction;
-    UCHAR PinConfiguration;
-    ULONG PinIndex;
-    NTSTATUS Status;
-
-    Status = RhParseGpioConnection(Entry, &PinTableOffset, &PinCount, &IoRestriction, &PinConfiguration, &DebounceTimeout);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    BufferLength = (PinCount + 7) / 8;
-    if (IoControlCode == IOCTL_GPIO_READ_PINS)
-    {
-        if (IoRestriction == 2)
-            return STATUS_ACCESS_DENIED;
-        if (!Buffer || IrpStack->Parameters.DeviceIoControl.OutputBufferLength < BufferLength)
-            return STATUS_BUFFER_TOO_SMALL;
-        RtlZeroMemory(Buffer, BufferLength);
-    }
-    else if (IoControlCode == IOCTL_GPIO_WRITE_PINS)
-    {
-        if (IoRestriction == 1)
-            return STATUS_ACCESS_DENIED;
-        if (!Buffer || IrpStack->Parameters.DeviceIoControl.InputBufferLength < BufferLength)
-            return STATUS_BUFFER_TOO_SMALL;
-    }
-    else
-    {
-        return STATUS_INVALID_DEVICE_REQUEST;
-    }
-
-    Status = RhOpenIntelGpio(&GpioFileObject, &GpioDeviceObject);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    for (PinIndex = 0; PinIndex < PinCount; PinIndex++)
-    {
-        ULONG PinNumber = RhReadUshort(Entry->Properties + PinTableOffset + PinIndex * sizeof(USHORT));
-
-        if (IoRestriction != 3)
-        {
-            INTELGPIO_PIN_CONFIGURATION Configuration;
-
-            RtlZeroMemory(&Configuration, sizeof(Configuration));
-            Configuration.Version = INTELGPIO_INTERFACE_VERSION;
-            Configuration.PinNumber = PinNumber;
-            Configuration.Direction = IoControlCode == IOCTL_GPIO_READ_PINS ? IntelGpioDirectionInput : IntelGpioDirectionOutput;
-            Configuration.InitialValue = !!(Buffer[PinIndex / 8] & (1U << (PinIndex % 8)));
-            Configuration.PullConfiguration = PinConfiguration == 1 ? IntelGpioPullUp20K : PinConfiguration == 2 ? IntelGpioPullDown20K : PinConfiguration == 3 ? IntelGpioPullNone : IntelGpioPullPreserve;
-            Configuration.DebounceExponent = RhGpioDebounceExponent(DebounceTimeout);
-            Status = RhSendSynchronousIoctl(GpioDeviceObject, IOCTL_INTELGPIO_CONFIGURE_PIN, &Configuration, sizeof(Configuration));
-            if (!NT_SUCCESS(Status))
-                break;
-        }
-        if (IoControlCode == IOCTL_GPIO_READ_PINS)
-        {
-            INTELGPIO_PIN_INFORMATION Information;
-
-            RtlZeroMemory(&Information, sizeof(Information));
-            Information.Version = INTELGPIO_INTERFACE_VERSION;
-            Information.PinNumber = PinNumber;
-            Status = RhSendSynchronousIoctl(GpioDeviceObject, IOCTL_INTELGPIO_QUERY_PIN, &Information, sizeof(Information));
-            if (!NT_SUCCESS(Status))
-                break;
-            if (Information.Value)
-                Buffer[PinIndex / 8] |= 1U << (PinIndex % 8);
-        }
-        else
-        {
-            INTELGPIO_PIN_WRITE Write;
-
-            Write.Version = INTELGPIO_INTERFACE_VERSION;
-            Write.PinNumber = PinNumber;
-            Write.Value = !!(Buffer[PinIndex / 8] & (1U << (PinIndex % 8)));
-            Status = RhSendSynchronousIoctl(GpioDeviceObject, IOCTL_INTELGPIO_WRITE_PIN, &Write, sizeof(Write));
-            if (!NT_SUCCESS(Status))
-                break;
-        }
-    }
-    ObDereferenceObject(GpioFileObject);
-    if (NT_SUCCESS(Status))
-        Irp->IoStatus.Information = IoControlCode == IOCTL_GPIO_READ_PINS ? BufferLength : 0;
     return Status;
 }
 
@@ -1405,11 +1255,7 @@ RhDeviceControl(
 
     UNREFERENCED_PARAMETER(DeviceObject);
     Irp->IoStatus.Information = 0;
-    if (Entry && Entry->Class == CM_RESOURCE_CONNECTION_CLASS_GPIO)
-    {
-        Status = RhAccessGpioConnection(Entry, Irp, IrpStack);
-    }
-    else if (Entry && Entry->Class == CM_RESOURCE_CONNECTION_CLASS_SERIAL && Entry->Type == CM_RESOURCE_CONNECTION_TYPE_SERIAL_I2C)
+    if (Entry && Entry->Class == CM_RESOURCE_CONNECTION_CLASS_SERIAL && Entry->Type == CM_RESOURCE_CONNECTION_TYPE_SERIAL_I2C)
     {
         Status = RhAccessSpbConnection(Context, Irp, IrpStack);
     }

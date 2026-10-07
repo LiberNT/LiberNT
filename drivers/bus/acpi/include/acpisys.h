@@ -126,7 +126,7 @@ typedef struct _FDO_DEVICE_DATA
     BOOLEAN         SystemInterfaceRegistered;
     BOOLEAN         SystemInterfaceEnabled;
 
-    PVOID           ControllerNotificationEntries[3];
+    PVOID           ControllerNotificationEntries[2];
 
 } FDO_DEVICE_DATA, *PFDO_DEVICE_DATA;
 

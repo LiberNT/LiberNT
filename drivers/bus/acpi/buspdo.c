@@ -6,7 +6,6 @@
 #include <poclass.h>
 #include <reactos/drivers/reshubio.h>
 #include <reactos/drivers/inteli2c.h>
-#include <reactos/drivers/intelgpio.h>
 #include <wdmguid.h>
 
 #define NDEBUG
@@ -789,8 +788,7 @@ BuspIsControllerReady(
     _In_ PDEVICE_OBJECT ControllerPdo)
 {
     return BuspControllerHasInterface(ControllerPdo, &GUID_DEVINTERFACE_RESOURCE_HUB_CONTROLLER) ||
-           BuspControllerHasInterface(ControllerPdo, &GUID_DEVINTERFACE_INTEL_I2C) ||
-           BuspControllerHasInterface(ControllerPdo, &GUID_DEVINTERFACE_INTEL_GPIO);
+           BuspControllerHasInterface(ControllerPdo, &GUID_DEVINTERFACE_INTEL_I2C);
 }
 
 BOOLEAN

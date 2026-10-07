@@ -15,7 +15,25 @@ DefaultDestDir = 12
 %LiberNT% = LiberNT
 
 [LiberNT]
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT344B
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT3451
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT345D
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT3450
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT34BB
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT3455
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT34C3
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT34C5
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT34C6
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INTC1055
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT34C8
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INTC1056
 %IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INTC1057
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INTC1085
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INTC105E
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INTC1083
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INTC1082
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INTC1084
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT34C4
 
 [IntelGpio_Inst.NT]
 CopyFiles = IntelGpio_CopyFiles
@@ -36,5 +54,5 @@ LoadOrderGroup = Extended Base
 
 [Strings]
 LiberNT = "LiberNT Project"
-IntelGpio.DeviceDesc = "Intel Alder Lake-N GPIO Controller"
+IntelGpio.DeviceDesc = "Intel Serial I/O GPIO Host Controller"
 IntelGpio.ServiceDesc = "LiberNT Intel GPIO Controller Driver"
