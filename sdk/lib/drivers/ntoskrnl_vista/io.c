@@ -518,7 +518,7 @@ IopQueryMappedDevicePropertyData(
                                    Type);
     }
 
-    if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_InstanceId))
+    if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_InstanceId) || IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_Parent))
     {
         PEXTENDED_DEVOBJ_EXTENSION DeviceObjectExtension;
         PDEVICE_NODE DeviceNode;
@@ -530,6 +530,13 @@ IopQueryMappedDevicePropertyData(
         DeviceNode = DeviceObjectExtension->DeviceNode;
         if (!DeviceNode || !DeviceNode->InstancePath.Buffer)
             return STATUS_INVALID_DEVICE_REQUEST;
+
+        if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_Parent))
+        {
+            DeviceNode = DeviceNode->Parent;
+            if (!DeviceNode || !DeviceNode->InstancePath.Buffer)
+                return STATUS_OBJECT_NAME_NOT_FOUND;
+        }
 
         *RequiredSize = DeviceNode->InstancePath.Length + sizeof(WCHAR);
         *Type = DEVPROP_TYPE_STRING;
