@@ -3473,6 +3473,22 @@ cleanup:
  */
 LSTATUS WINAPI RegLoadAppKeyA(const char *file, HKEY *result, REGSAM sam, DWORD options, DWORD reserved)
 {
+#ifdef __REACTOS__
+    UNICODE_STRING fileW;
+    ANSI_STRING fileA;
+    NTSTATUS status;
+    LSTATUS ret;
+
+    if (!file || reserved)
+        return ERROR_INVALID_PARAMETER;
+
+    RtlInitAnsiString( &fileA, file );
+    if ((status = RtlAnsiStringToUnicodeString( &fileW, &fileA, TRUE )))
+        return RtlNtStatusToDosError( status );
+    ret = RegLoadAppKeyW( fileW.Buffer, result, sam, options, reserved );
+    RtlFreeUnicodeString( &fileW );
+    return ret;
+#else
     FIXME("%s %p %lu %lu %lu: stub\n", wine_dbgstr_a(file), result, sam, options, reserved);
 
     if (!file || reserved)
@@ -3480,6 +3496,7 @@ LSTATUS WINAPI RegLoadAppKeyA(const char *file, HKEY *result, REGSAM sam, DWORD 
 
     *result = (HKEY)0xdeadbeef;
     return ERROR_SUCCESS;
+#endif
 }
 
 /******************************************************************************
@@ -3488,6 +3505,43 @@ LSTATUS WINAPI RegLoadAppKeyA(const char *file, HKEY *result, REGSAM sam, DWORD 
  */
 LSTATUS WINAPI RegLoadAppKeyW(const WCHAR *file, HKEY *result, REGSAM sam, DWORD options, DWORD reserved)
 {
+#ifdef __REACTOS__
+    OBJECT_ATTRIBUTES key_attr, file_attr;
+    UNICODE_STRING keyW, fileW;
+    ULARGE_INTEGER time;
+    ULONG range, sequence;
+    UCHAR seed[6];
+    WCHAR name[64];
+    HANDLE key = NULL;
+    NTSTATUS status;
+
+    if (!file || !result || reserved)
+        return ERROR_INVALID_PARAMETER;
+
+    if ((status = NtAllocateUuids( &time, &range, &sequence, seed )))
+        return RtlNtStatusToDosError( status );
+
+    swprintf( name, ARRAY_SIZE(name),
+              L"\\REGISTRY\\A\\{%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}",
+              time.LowPart, (USHORT)time.HighPart, (USHORT)(((time.HighPart >> 16) & 0x0fff) | 0x1000),
+              (UCHAR)(((sequence >> 8) & 0x3f) | 0x80), (UCHAR)sequence,
+              seed[0], seed[1], seed[2], seed[3], seed[4], seed[5] );
+
+    if ((status = RtlDosPathNameToNtPathName_U_WithStatus( file, &fileW, NULL, NULL )))
+        return RtlNtStatusToDosError( status );
+
+    RtlInitUnicodeString( &keyW, name );
+    InitializeObjectAttributes( &key_attr, &keyW, OBJ_CASE_INSENSITIVE, NULL, NULL );
+    InitializeObjectAttributes( &file_attr, &fileW, OBJ_CASE_INSENSITIVE, NULL, NULL );
+    status = NtLoadKeyEx( &key_attr, &file_attr,
+                          REG_APP_HIVE | ((options & REG_PROCESS_APPKEY) ? REG_PROCESS_PRIVATE : 0),
+                          NULL, NULL, sam, &key, NULL );
+    RtlFreeUnicodeString( &fileW );
+    if (status) return RtlNtStatusToDosError( status );
+
+    *result = key;
+    return ERROR_SUCCESS;
+#else
     FIXME("%s %p %lu %lu %lu: stub\n", wine_dbgstr_w(file), result, sam, options, reserved);
 
     if (!file || reserved)
@@ -3495,6 +3549,7 @@ LSTATUS WINAPI RegLoadAppKeyW(const WCHAR *file, HKEY *result, REGSAM sam, DWORD
 
     *result = (HKEY)0xdeadbeef;
     return ERROR_SUCCESS;
+#endif
 }
 
 

@@ -579,6 +579,8 @@
 #define REG_REFRESH_HIVE    2
 #define REG_NO_LAZY_FLUSH    4
 #define REG_FORCE_RESTORE    8
+#define REG_APP_HIVE    0x10
+#define REG_PROCESS_PRIVATE    0x20
 #define REG_OPTION_RESERVED    0
 #define REG_OPTION_NON_VOLATILE    0
 #define REG_OPTION_VOLATILE    1

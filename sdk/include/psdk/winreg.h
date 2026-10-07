@@ -72,6 +72,8 @@ extern "C" {
 #define RRF_NOEXPAND            (1 << 28)
 #define RRF_ZEROONFAILURE       (1 << 29)
 
+#define REG_PROCESS_APPKEY      0x00000001
+
 #ifndef RC_INVOKED
 typedef ACCESS_MASK REGSAM;
 typedef _Return_type_success_(return==ERROR_SUCCESS) LONG LSTATUS;
