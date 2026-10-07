@@ -77,8 +77,8 @@ double exp(double x)    /* default IEEE double exp */
             else
                 return (xsb == 0) ? x : 0.0;/* exp(+-inf)={inf,0} */
         }
-        if (x > o_threshold) return __acrt_report_math_error(0, "exp", x, 0, huge * huge, ERANGE);         /* overflow */
-        if (x < u_threshold) return __acrt_report_math_error(0, "exp", x, 0, twom1000 * twom1000, ERANGE); /* underflow */
+        if (x > o_threshold) return __acrt_report_math_error(_OVERFLOW, "exp", x, 0, huge * huge, ERANGE);         /* overflow */
+        if (x < u_threshold) return __acrt_report_math_error(_UNDERFLOW, "exp", x, 0, twom1000 * twom1000, 0); /* underflow */
     }
 
     /* argument reduction */

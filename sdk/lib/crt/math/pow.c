@@ -338,9 +338,11 @@ pow(double x, double y)
     if (_finite(x) && _finite(y))
     {
         if (_isnan(z))
-            return __acrt_report_math_error(0, "pow", x, y, z, EDOM);
-        if (!_finite(z) || (z == 0.0 && x != 0.0))
-            return __acrt_report_math_error(0, "pow", x, y, z, ERANGE);
+            return __acrt_report_math_error(_DOMAIN, "pow", x, y, z, EDOM);
+        if (!_finite(z))
+            return __acrt_report_math_error((x == 0.0) ? _SING : _OVERFLOW, "pow", x, y, z, ERANGE);
+        if (z == 0.0 && x != 0.0)
+            return __acrt_report_math_error(_UNDERFLOW, "pow", x, y, z, 0);
     }
     return z;
 }

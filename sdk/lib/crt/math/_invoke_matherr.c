@@ -67,7 +67,7 @@ __acrt_report_math_error(
         return excpt.retval;
 
 #ifndef _LIBCNT_
-    if (error)
+    if (error && type != _UNDERFLOW)
         *_errno() = error;
 #endif
 

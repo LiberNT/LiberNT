@@ -110,7 +110,7 @@ __acrt_report_math_error(
     if (type && __acrt_invoke_user_matherr(&excpt))
         return excpt.retval;
 
-    if (error)
+    if (error && type != _UNDERFLOW)
         errno = error;
 
     return excpt.retval;
