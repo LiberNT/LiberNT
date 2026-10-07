@@ -1420,11 +1420,13 @@ HidClass_InternalDeviceControl(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp)
 {
-    UNIMPLEMENTED;
-    ASSERT(FALSE);
-    Irp->IoStatus.Status = STATUS_NOT_IMPLEMENTED;
+    PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
+
+    DPRINT1("[HIDCLASS] InternalDeviceControl IoControlCode 0x%x not supported\n", IoStack->Parameters.DeviceIoControl.IoControlCode);
+    Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
+    Irp->IoStatus.Information = 0;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
-    return STATUS_NOT_IMPLEMENTED;
+    return STATUS_INVALID_DEVICE_REQUEST;
 }
 
 NTSTATUS
