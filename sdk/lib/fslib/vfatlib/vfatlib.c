@@ -50,6 +50,30 @@ ULONG FsCheckFlags;
 PVOID FsCheckMemQueue;
 ULONG FsCheckTotalFiles;
 
+static
+VOID
+VfatFormatReport(
+    IN PFMIFSCALLBACK Callback,
+    IN PCSTR Format,
+    ...)
+{
+    TEXTOUTPUT TextOut;
+    CHAR TextBuf[256];
+    va_list Args;
+
+    if (!Callback)
+        return;
+
+    va_start(Args, Format);
+    _vsnprintf(TextBuf, sizeof(TextBuf) - 1, Format, Args);
+    va_end(Args);
+    TextBuf[sizeof(TextBuf) - 1] = ANSI_NULL;
+
+    TextOut.Lines = 1;
+    TextOut.Output = TextBuf;
+    Callback(OUTPUT, 0, &TextOut);
+}
+
 BOOLEAN
 NTAPI
 VfatFormat(
@@ -96,6 +120,7 @@ VfatFormat(
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtOpenFile() failed with status 0x%08x\n", Status);
+        VfatFormatReport(Callback, "Unable to open the volume (status 0x%08lx)", Status);
         return FALSE;
     }
 
@@ -112,6 +137,7 @@ VfatFormat(
     if (!NT_SUCCESS(Status))
     {
         DPRINT("IOCTL_DISK_GET_DRIVE_GEOMETRY failed with status 0x%08x\n", Status);
+        VfatFormatReport(Callback, "Unable to query the drive geometry (status 0x%08lx)", Status);
         NtClose(FileHandle);
         return FALSE;
     }
@@ -141,6 +167,7 @@ VfatFormat(
         if (!NT_SUCCESS(Status))
         {
             DPRINT("IOCTL_DISK_GET_PARTITION_INFO_EX failed with status 0x%08x\n", Status);
+            VfatFormatReport(Callback, "Unable to query the partition information (status 0x%08lx)", Status);
             NtClose(FileHandle);
             return FALSE;
         }
@@ -257,6 +284,7 @@ VfatFormat(
         else
         {
             DPRINT1("The partition ist too large (> 32 GB) for the FAT file system!\n");
+            VfatFormatReport(Callback, "The partition is larger than 32 GB, too large for the FAT file system");
             NtClose(FileHandle);
             return FALSE;
         }
@@ -292,6 +320,7 @@ VfatFormat(
     if (!NT_SUCCESS(LockStatus))
     {
         DPRINT1("Failed to lock volume for formatting (Status: 0x%x)\n", LockStatus);
+        VfatFormatReport(Callback, "Unable to lock the volume (status 0x%08lx)", LockStatus);
         NtClose(FileHandle);
         return FALSE;
     }
@@ -319,6 +348,7 @@ VfatFormat(
         LockStatus != STATUS_NOT_SUPPORTED)
     {
         DPRINT1("Failed to enable extended raw volume I/O (Status: 0x%x)\n", LockStatus);
+        VfatFormatReport(Callback, "Unable to enable raw access to the whole volume (status 0x%08lx)", LockStatus);
         NtFsControlFile(FileHandle,
                         NULL,
                         NULL,
@@ -370,6 +400,9 @@ VfatFormat(
     {
         Status = STATUS_INVALID_PARAMETER;
     }
+
+    if (!NT_SUCCESS(Status))
+        VfatFormatReport(Callback, "Unable to write the FAT structures (status 0x%08lx)", Status);
 
     /* Attempt to dismount formatted volume */
     LockStatus = NtFsControlFile(FileHandle,

@@ -13,6 +13,7 @@
 #include <ndk/obfuncs.h>
 #include <ndk/rtlfuncs.h>
 #include <fmifs/fmifs.h>
+#include <stdio.h>
 
 #include <ntfsformat.h>
 
@@ -117,6 +118,30 @@ NtfsFormatProgress(
                                    (PVOID)&FormatContext->Percent);
 }
 
+static
+VOID
+NtfsFormatReport(
+    IN PFMIFSCALLBACK Callback,
+    IN PCSTR Format,
+    ...)
+{
+    TEXTOUTPUT TextOut;
+    CHAR TextBuf[256];
+    va_list Args;
+
+    if (!Callback)
+        return;
+
+    va_start(Args, Format);
+    _vsnprintf(TextBuf, sizeof(TextBuf) - 1, Format, Args);
+    va_end(Args);
+    TextBuf[sizeof(TextBuf) - 1] = ANSI_NULL;
+
+    TextOut.Lines = 1;
+    TextOut.Output = TextBuf;
+    Callback(OUTPUT, 0, &TextOut);
+}
+
 BOOLEAN
 NTAPI
 NtfsFormat(
@@ -162,6 +187,7 @@ NtfsFormat(
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtOpenFile() failed with status 0x%08x\n", Status);
+        NtfsFormatReport(Callback, "Unable to open the volume (status 0x%08lx)", Status);
         return FALSE;
     }
 
@@ -178,6 +204,7 @@ NtfsFormat(
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("IOCTL_DISK_GET_DRIVE_GEOMETRY failed with status 0x%08x\n", Status);
+        NtfsFormatReport(Callback, "Unable to query the drive geometry (status 0x%08lx)", Status);
         NtClose(Context.FileHandle);
         return FALSE;
     }
@@ -197,6 +224,7 @@ NtfsFormat(
         if (!NT_SUCCESS(Status))
         {
             DPRINT1("IOCTL_DISK_GET_PARTITION_INFO_EX failed with status 0x%08x\n", Status);
+            NtfsFormatReport(Callback, "Unable to query the partition information (status 0x%08lx)", Status);
             NtClose(Context.FileHandle);
             return FALSE;
         }
@@ -217,6 +245,7 @@ NtfsFormat(
     if (DiskGeometry.BytesPerSector == 0)
     {
         DPRINT1("Device reported a zero sector size\n");
+        NtfsFormatReport(Callback, "The device reports a sector size of zero");
         NtClose(Context.FileHandle);
         return FALSE;
     }
@@ -281,6 +310,7 @@ NtfsFormat(
     {
         DPRINT1("Failed to lock volume for formatting (Status: 0x%x)\n",
                 LockStatus);
+        NtfsFormatReport(Callback, "Unable to lock the volume (status 0x%08lx)", LockStatus);
         NtClose(Context.FileHandle);
         return FALSE;
     }
@@ -310,6 +340,7 @@ NtfsFormat(
     {
         DPRINT1("Failed to enable extended raw volume I/O (Status: 0x%x)\n",
                 LockStatus);
+        NtfsFormatReport(Callback, "Unable to enable raw access to the whole volume (status 0x%08lx)", LockStatus);
         NtFsControlFile(Context.FileHandle,
                         NULL,
                         NULL,
@@ -326,7 +357,10 @@ NtfsFormat(
 
     Status = NtfsVolumeFormat(&Parameters);
     if (!NT_SUCCESS(Status))
+    {
         DPRINT1("NtfsVolumeFormat() failed with status 0x%08x\n", Status);
+        NtfsFormatReport(Callback, "Unable to write the NTFS structures (status 0x%08lx)", Status);
+    }
 
     /* Attempt to dismount the formatted volume */
     LockStatus = NtFsControlFile(Context.FileHandle,

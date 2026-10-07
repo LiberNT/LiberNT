@@ -1731,6 +1731,8 @@ typedef struct _FSVOL_CONTEXT
     // PAGE_NUMBER NextPageOnAbort;
 } FSVOL_CONTEXT, *PFSVOL_CONTEXT;
 
+static WCHAR FormatOutput[256];
+
 static
 BOOLEAN
 NTAPI
@@ -1749,14 +1751,13 @@ FormatCallback(
             break;
         }
 
-#if 0
         case OUTPUT:
         {
             PTEXTOUTPUT output = (PTEXTOUTPUT)Argument;
             DPRINT("%s\n", output->Output);
+            StringCchPrintfW(FormatOutput, _countof(FormatOutput), L"%S", output->Output);
             break;
         }
-#endif
 
         case DONE:
         {
@@ -1956,15 +1957,34 @@ FsVolCallback(
         }
         else if (!NT_SUCCESS(FmtInfo->ErrorStatus))
         {
+            PPARTENTRY PartEntry = FmtInfo->Volume->PartEntry;
+            WCHAR Details[512];
+
             ASSERT(*FmtInfo->Volume->Info.DeviceName);
 
             DPRINT1("FormatPartition() failed with status 0x%08lx\n", FmtInfo->ErrorStatus);
+
+            if (!*FormatOutput)
+            {
+                StringCchPrintfW(FormatOutput, _countof(FormatOutput),
+                                 L"status 0x%08lx", FmtInfo->ErrorStatus);
+            }
+            StringCchPrintfW(Details, _countof(Details),
+                             L"%s\n Harddisk %lu, Partition %lu (%s)\n\nFile system: %s\nReason: %s",
+                             FmtInfo->Volume->Info.DeviceName,
+                             PartEntry->DiskEntry->DiskNumber,
+                             PartEntry->PartitionNumber,
+                             PartEntry->DiskEntry->DiskStyle == PARTITION_STYLE_MBR ? L"MBR" :
+                             PartEntry->DiskEntry->DiskStyle == PARTITION_STYLE_GPT ? L"GPT" :
+                                                                                      L"RAW",
+                             FmtInfo->FileSystemName,
+                             FormatOutput);
 
             // ERROR_FORMATTING_PARTITION
             DisplayError(NULL,
                          0, // Default to "Error"
                          IDS_ERROR_FORMATTING_PARTITION,
-                         FmtInfo->Volume->Info.DeviceName);
+                         Details);
             // FsVolContext->NextPageOnAbort = QUIT_PAGE;
             return FSVOL_ABORT;
         }
@@ -2047,6 +2067,8 @@ FsVolCallback(
                                 FmtInfo->Volume->Info.DeviceName,
                                 VolCreate->FileSystemName);
         }
+
+        FormatOutput[0] = UNICODE_NULL;
 
         // StartFormat(FmtInfo, FileSystemList->Selected);
         FmtInfo->FileSystemName = VolCreate->FileSystemName;
