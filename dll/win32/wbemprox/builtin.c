@@ -4510,7 +4510,11 @@ static enum fill_status fill_service( struct table *table, const struct expr *co
     if (!ret)
     {
         if (GetLastError() != ERROR_MORE_DATA) goto done;
+#ifdef __REACTOS__
+        size += needed;
+#else
         size = needed;
+#endif
         if (!(tmp = realloc( services, size ))) goto done;
         services = tmp;
         ret = EnumServicesStatusExW( manager, SC_ENUM_PROCESS_INFO, SERVICE_TYPE_ALL,

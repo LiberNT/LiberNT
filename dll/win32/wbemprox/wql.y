@@ -511,6 +511,16 @@ expr:
         }
   | prop_val TK_LIKE string_val
         {
+#ifdef __REACTOS__
+            const WCHAR *p;
+
+            for (p = $3->u.sval; *p; p++)
+            {
+                if (*p != '\\') continue;
+                if (p[1] != '\\') YYABORT;
+                p++;
+            }
+#endif
             $$ = expr_complex( ctx, $1, OP_LIKE, $3 );
             if (!$$)
                 YYABORT;
