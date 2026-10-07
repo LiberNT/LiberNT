@@ -1231,6 +1231,13 @@ IopParseDevice(IN PVOID ParseObject,
         /* Copy the I/O Status */
         OpenPacket->Information = IoStatusBlock.Information;
 
+        if (Status == STATUS_REPARSE &&
+            OpenPacket->Information == IO_REPARSE_TAG_SYMLINK &&
+            (OpenPacket->Options & IO_STOP_ON_SYMLINK))
+        {
+            Status = STATUS_STOPPED_ON_SYMLINK;
+        }
+
         /* The driver failed to create the file */
         if (!NT_SUCCESS(Status))
         {
