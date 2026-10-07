@@ -1190,6 +1190,26 @@ KiUseExceptionBugCheckContext(
     return TRUE;
 }
 
+static
+BOOLEAN
+KiIsBugCheckTrapFrame(
+    _In_ ULONG_PTR Address)
+{
+    ULONG_PTR ProgramCounter;
+
+    if ((Address <= (ULONG_PTR)MmHighestUserAddress) ||
+        (Address & (sizeof(ULONG_PTR) - 1)) ||
+        (Address > MAXULONG_PTR - (sizeof(KTRAP_FRAME) - 1)) ||
+        !MmIsAddressValid((PVOID)Address) ||
+        !MmIsAddressValid((PVOID)(Address + sizeof(KTRAP_FRAME) - 1)))
+    {
+        return FALSE;
+    }
+
+    ProgramCounter = KeGetTrapFramePc((PKTRAP_FRAME)Address);
+    return (ProgramCounter > (ULONG_PTR)MmHighestUserAddress) && MmIsAddressValid((PVOID)ProgramCounter);
+}
+
 VOID
 NTAPI
 KiDumpParameterImages(IN PCHAR Message,
@@ -1501,6 +1521,12 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
     switch (BugCheckCode)
     {
         case SYSTEM_THREAD_EXCEPTION_NOT_HANDLED:
+            Pc = (PVOID)BugCheckParameter2;
+            break;
+
+        case KMODE_EXCEPTION_NOT_HANDLED:
+            if (!TrapFrame && KiIsBugCheckTrapFrame(BugCheckParameter3))
+                TrapFrame = (PVOID)BugCheckParameter3;
             Pc = (PVOID)BugCheckParameter2;
             break;
 
