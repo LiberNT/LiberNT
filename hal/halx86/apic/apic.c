@@ -792,6 +792,102 @@ HalClearSoftwareInterrupt(
 
 /* SYSTEM INTERRUPTS **********************************************************/
 
+static PKINTERRUPT HalpPassiveLines[256];
+
+static
+VOID
+HalpSetLineMask(
+    _In_ ULONG Vector,
+    _In_ BOOLEAN Masked)
+{
+    IOAPIC_REDIRECTION_REGISTER ReDirReg;
+    UCHAR Index = HalpVectorToIndex[Vector];
+
+    if (Index >= HalpIoApicMaxIrq)
+        return;
+    HalpAcquireIoApicPairLock();
+    ReDirReg.Long0 = IOApicReadRaw(IOAPIC_REDTBL + 2 * Index);
+    ReDirReg.Mask = Masked;
+    IOApicWriteRaw(IOAPIC_REDTBL + 2 * Index, ReDirReg.Long0);
+    HalpReleaseIoApicPairLock();
+}
+
+static
+BOOLEAN
+NTAPI
+HalpPassiveLineService(
+    _In_ PKINTERRUPT Interrupt,
+    _In_ PVOID ServiceContext)
+{
+    UNREFERENCED_PARAMETER(ServiceContext);
+
+    if (Interrupt->Mode == LevelSensitive)
+        HalpSetLineMask(Interrupt->Vector, TRUE);
+    KeDispatchSecondaryInterrupt(Interrupt->Vector, 0, NULL);
+    return TRUE;
+}
+
+static
+BOOLEAN
+HalpEnablePassiveLine(
+    _In_ ULONG Vector,
+    _In_ KINTERRUPT_MODE InterruptMode)
+{
+    PKINTERRUPT Interrupt;
+    KIRQL Irql;
+
+    if (Vector >= RTL_NUMBER_OF(HalpPassiveLines) || HalpVectorToIndex[Vector] >= HalpIoApicMaxIrq)
+        return FALSE;
+    if (HalpPassiveLines[Vector] != NULL)
+    {
+        HalpSetLineMask(Vector, FALSE);
+        return TRUE;
+    }
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return FALSE;
+
+    Interrupt = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Interrupt), TAG_HAL);
+    if (Interrupt == NULL)
+        return FALSE;
+    Irql = HalpVectorToIrql((UCHAR)Vector);
+    KeInitializeInterrupt(Interrupt,
+                          HalpPassiveLineService,
+                          NULL,
+                          &Interrupt->SpinLock,
+                          Vector,
+                          Irql,
+                          Irql,
+                          InterruptMode,
+                          FALSE,
+                          0,
+                          FALSE);
+    HalpPassiveLines[Vector] = Interrupt;
+    if (!KeConnectInterrupt(Interrupt))
+    {
+        HalpPassiveLines[Vector] = NULL;
+        ExFreePoolWithTag(Interrupt, TAG_HAL);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static
+VOID
+HalpDisablePassiveLine(
+    _In_ ULONG Vector)
+{
+    PKINTERRUPT Interrupt;
+
+    if (Vector >= RTL_NUMBER_OF(HalpPassiveLines))
+        return;
+    Interrupt = HalpPassiveLines[Vector];
+    if (Interrupt == NULL)
+        return;
+    KeDisconnectInterrupt(Interrupt);
+    HalpPassiveLines[Vector] = NULL;
+    ExFreePoolWithTag(Interrupt, TAG_HAL);
+}
+
 BOOLEAN
 NTAPI
 HalEnableSystemInterrupt(
@@ -806,7 +902,7 @@ HalEnableSystemInterrupt(
     if (HalpSecondaryIsVector(Vector))
         return HalpSecondaryEnable(Vector, Irql, InterruptMode);
     if (Irql == PASSIVE_LEVEL)
-        return FALSE;
+        return HalpEnablePassiveLine(Vector, InterruptMode);
 
     ASSERT((IrqlToTpr(Irql) & 0xF0) == (Vector & 0xF0));
 
@@ -902,6 +998,11 @@ HalDisableSystemInterrupt(
     if (HalpSecondaryIsVector(Vector))
     {
         HalpSecondaryDisable(Vector);
+        return;
+    }
+    if (Irql == PASSIVE_LEVEL)
+    {
+        HalpDisablePassiveLine(Vector);
         return;
     }
 
