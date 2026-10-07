@@ -31,6 +31,7 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(eventlog);
 
+#ifndef __REACTOS__
 /******************************************************************************
  *     ControlTraceA   (sechost.@)
  */
@@ -51,6 +52,8 @@ ULONG WINAPI ControlTraceW( TRACEHANDLE handle, const WCHAR *session,
     return ERROR_SUCCESS;
 }
 
+#endif
+
 /******************************************************************************
  *     EnableTraceEx2   (sechost.@)
  */
@@ -65,6 +68,7 @@ ULONG WINAPI EnableTraceEx2( TRACEHANDLE handle, const GUID *provider, ULONG con
     return ERROR_SUCCESS;
 }
 
+#ifndef __REACTOS__
 /******************************************************************************
  *     QueryAllTracesA   (sechost.@)
  */
@@ -115,6 +119,8 @@ ULONG WINAPI StopTraceW( TRACEHANDLE handle, const WCHAR *session, EVENT_TRACE_P
     FIXME("(%s, %s, %p) stub\n", wine_dbgstr_longlong(handle), debugstr_w(session), properties);
     return ERROR_SUCCESS;
 }
+
+#endif
 
 /******************************************************************************
  *     OpenTraceW   (sechost.@)

@@ -28,8 +28,8 @@
 @ stdcall ControlService(long long ptr)
 @ stub ControlServiceExA
 @ stub ControlServiceExW
-@ stdcall ControlTraceA(int64 str ptr long)
-@ stdcall ControlTraceW(int64 wstr ptr long)
+@ stdcall ControlTraceA(int64 str ptr long) advapi32.ControlTraceA
+@ stdcall ControlTraceW(int64 wstr ptr long) advapi32.ControlTraceW
 @ stub ConvertSDToStringSDRootDomainW
 @ stdcall ConvertSecurityDescriptorToStringSecurityDescriptorW(ptr long long ptr ptr)
 @ stdcall ConvertSidToStringSidW(ptr ptr)
@@ -166,8 +166,8 @@
 @ stdcall OpenServiceW(long wstr long)
 @ stdcall -ret64 OpenTraceW(ptr)
 @ stdcall ProcessTrace(ptr long ptr ptr)
-@ stdcall QueryAllTracesA(ptr long ptr)
-@ stdcall QueryAllTracesW(ptr long ptr)
+@ stdcall QueryAllTracesA(ptr long ptr) advapi32.QueryAllTracesA
+@ stdcall QueryAllTracesW(ptr long ptr) advapi32.QueryAllTracesW
 @ stub QueryLocalUserServiceName
 @ stdcall QueryServiceConfig2A(long long ptr long ptr)
 @ stdcall QueryServiceConfig2W(long long ptr long ptr)
@@ -198,9 +198,9 @@
 @ stdcall StartServiceCtrlDispatcherA(ptr)
 @ stdcall StartServiceCtrlDispatcherW(ptr)
 @ stdcall StartServiceW(long long ptr)
-@ stdcall StartTraceA(ptr str ptr)
-@ stdcall StartTraceW(ptr wstr ptr)
-@ stdcall StopTraceW(int64 wstr ptr)
+@ stdcall StartTraceA(ptr str ptr) advapi32.StartTraceA
+@ stdcall StartTraceW(ptr wstr ptr) advapi32.StartTraceW
+@ stdcall StopTraceW(int64 wstr ptr) advapi32.StopTraceW
 @ stub SubscribeServiceChangeNotifications
 @ stub TraceQueryInformation
 @ stdcall TraceSetInformation(int64 long ptr long)
