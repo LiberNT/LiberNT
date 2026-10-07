@@ -36,6 +36,7 @@ static HANDLE StopEvent;
 static HANDLE LogFile = INVALID_HANDLE_VALUE;
 static BOOL Quiet;
 static BOOL ClockTime;
+static BOOL SinceBoot;
 static ULONG Sequence;
 static LONGLONG StartTime;
 
@@ -257,7 +258,7 @@ KernelCaptureThread(
     if (!Buffer)
         return 1;
 
-    Request.TimeoutMs = READ_TIMEOUT_MS;
+    Request.TimeoutMs = SinceBoot ? 0 : READ_TIMEOUT_MS;
     while (WaitForSingleObject(StopEvent, 0) == WAIT_TIMEOUT)
     {
         PDBGCAP_READ_HEADER Header = (PDBGCAP_READ_HEADER)Buffer;
@@ -267,6 +268,8 @@ KernelCaptureThread(
                              Buffer, READ_BUFFER_SIZE, &Returned, NULL) ||
             Returned < sizeof(*Header))
         {
+            if (SinceBoot)
+                break;
             if (GetLastError() != ERROR_OPERATION_ABORTED)
                 Sleep(READ_TIMEOUT_MS);
             continue;
@@ -284,6 +287,8 @@ KernelCaptureThread(
         if (Header->Count == 0)
         {
             FlushLine(&Line, TRUE);
+            if (SinceBoot)
+                break;
             continue;
         }
 
@@ -293,6 +298,8 @@ KernelCaptureThread(
 
             if (Record->Size < FIELD_OFFSET(DBGCAP_RECORD, Text) || Offset + Record->Size > Returned)
                 break;
+            if (SinceBoot && Record->SystemTime.QuadPart < StartTime)
+                StartTime = Record->SystemTime.QuadPart;
             AppendText(&Line, TRUE, Record->SystemTime.QuadPart, Record->ProcessId,
                        Record->Text, min(Record->Length, Record->Size - FIELD_OFFSET(DBGCAP_RECORD, Text)));
             Offset += Record->Size;
@@ -427,10 +434,11 @@ static VOID
 Usage(VOID)
 {
     fputws(L"Captures kernel debug prints (DbgPrint, DPRINT1) and OutputDebugString output.\n\n"
-           L"DBGLOG [/K] [/W] [/G] [/L file [/A]] [/C] [/Q]\n\n"
+           L"DBGLOG [/K] [/W] [/G] [/B] [/L file [/A]] [/C] [/Q]\n\n"
            L"  /K       Capture kernel debug output (loads the DbgCap driver).\n"
            L"  /W       Capture Win32 OutputDebugString output of this session.\n"
            L"  /G       Capture Win32 output of all sessions (Global namespace).\n"
+           L"  /B       Print the kernel debug output captured since boot, then exit.\n"
            L"  /L file  Write every line to file.\n"
            L"  /A       Append to the log file instead of replacing it.\n"
            L"  /C       Show clock time instead of seconds since capture start.\n"
@@ -448,7 +456,7 @@ wmain(
     PCWSTR LogPath = NULL;
     HANDLE Threads[2], Device = INVALID_HANDLE_VALUE;
     DBWIN_CAPTURE Capture;
-    DWORD ThreadCount = 0;
+    DWORD ThreadCount = 0, Returned;
     int Index;
 
     for (Index = 1; Index < argc; Index++)
@@ -465,6 +473,7 @@ wmain(
             case L'K': Kernel = TRUE; break;
             case L'W': Win32 = TRUE; break;
             case L'G': Win32 = TRUE; Global = TRUE; break;
+            case L'B': SinceBoot = TRUE; break;
             case L'A': Append = TRUE; break;
             case L'C': ClockTime = TRUE; break;
             case L'Q': Quiet = TRUE; break;
@@ -481,8 +490,15 @@ wmain(
                 return Arg[1] == L'?' ? 0 : 1;
         }
     }
-    if (!Kernel && !Win32)
+    if (SinceBoot)
+    {
+        Kernel = TRUE;
+        Win32 = FALSE;
+    }
+    else if (!Kernel && !Win32)
+    {
         Kernel = Win32 = TRUE;
+    }
 
     InitializeCriticalSection(&OutputLock);
     StopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
@@ -514,6 +530,15 @@ wmain(
         }
         else
         {
+            if (SinceBoot && StartedService)
+            {
+                fputws(L"dbglog: the DbgCap driver was not loaded at boot, nothing was captured before now\n", stderr);
+            }
+            else if (SinceBoot &&
+                     !DeviceIoControl(Device, IOCTL_DBGCAP_REWIND, NULL, 0, NULL, 0, &Returned, NULL))
+            {
+                fwprintf(stderr, L"dbglog: cannot read the output captured since boot (error %lu)\n", GetLastError());
+            }
             Threads[ThreadCount] = CreateThread(NULL, 0, KernelCaptureThread, Device, 0, NULL);
             if (Threads[ThreadCount])
                 ThreadCount++;

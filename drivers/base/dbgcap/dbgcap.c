@@ -22,11 +22,14 @@ typedef struct _DBGCAP_CONTEXT
     ULONG Head;
     ULONG Tail;
     ULONG Used;
+    ULONG Unread;
     ULONG Lost;
+    ULONG Dropped;
     KSPIN_LOCK Lock;
     KDPC Dpc;
     KEVENT DataEvent;
     BOOLEAN Registered;
+    BOOLEAN Opened;
 } DBGCAP_CONTEXT, *PDBGCAP_CONTEXT;
 
 static DBGCAP_CONTEXT DbgCap;
@@ -68,17 +71,16 @@ DbgCapRingWrite(
 
 static
 VOID
-DbgCapRingRead(
+DbgCapRingCopy(
+    _In_ ULONG Index,
     _Out_writes_bytes_(Size) PVOID Data,
     _In_ ULONG Size)
 {
-    ULONG First = min(Size, DBGCAP_RING_SIZE - DbgCap.Tail);
+    ULONG First = min(Size, DBGCAP_RING_SIZE - Index);
 
-    RtlCopyMemory(Data, DbgCap.Ring + DbgCap.Tail, First);
+    RtlCopyMemory(Data, DbgCap.Ring + Index, First);
     if (Size > First)
         RtlCopyMemory((PUCHAR)Data + First, DbgCap.Ring, Size - First);
-    DbgCap.Tail = (DbgCap.Tail + Size) % DBGCAP_RING_SIZE;
-    DbgCap.Used -= Size;
 }
 
 static
@@ -90,8 +92,9 @@ DbgCapPrintCallback(
 {
     DBGCAP_RECORD Header;
     USHORT Length;
-    ULONG Size;
+    ULONG Size, Oldest;
     KIRQL OldIrql;
+    BOOLEAN Wake;
     static const UCHAR Padding[8] = { 0 };
 
     Length = min(Output->Length, DBGCAP_MAX_TEXT);
@@ -106,19 +109,27 @@ DbgCapPrintCallback(
     Header.Length = Length;
 
     OldIrql = DbgCapAcquire();
-    if (DbgCap.Used + Size > DBGCAP_RING_SIZE)
+    while (DbgCap.Used + Size > DBGCAP_RING_SIZE)
     {
-        DbgCap.Lost++;
+        DbgCapRingCopy(DbgCap.Tail, &Oldest, sizeof(Oldest));
+        DbgCap.Tail = (DbgCap.Tail + Oldest) % DBGCAP_RING_SIZE;
+        DbgCap.Used -= Oldest;
+        DbgCap.Dropped++;
+        if (DbgCap.Unread > DbgCap.Used)
+        {
+            DbgCap.Unread = DbgCap.Used;
+            DbgCap.Lost++;
+        }
     }
-    else
-    {
-        DbgCapRingWrite(&Header, FIELD_OFFSET(DBGCAP_RECORD, Text));
-        DbgCapRingWrite(Output->Buffer, Length);
-        DbgCapRingWrite(Padding, Size - FIELD_OFFSET(DBGCAP_RECORD, Text) - Length);
-    }
+    DbgCapRingWrite(&Header, FIELD_OFFSET(DBGCAP_RECORD, Text));
+    DbgCapRingWrite(Output->Buffer, Length);
+    DbgCapRingWrite(Padding, Size - FIELD_OFFSET(DBGCAP_RECORD, Text) - Length);
+    DbgCap.Unread += Size;
+    Wake = DbgCap.Opened;
     DbgCapRelease(OldIrql);
 
-    KeInsertQueueDpc(&DbgCap.Dpc, NULL, NULL);
+    if (Wake)
+        KeInsertQueueDpc(&DbgCap.Dpc, NULL, NULL);
 }
 
 static
@@ -145,7 +156,7 @@ DbgCapCopyRecords(
     _In_ ULONG BufferSize)
 {
     PDBGCAP_READ_HEADER ReadHeader = (PDBGCAP_READ_HEADER)Buffer;
-    ULONG Offset = sizeof(*ReadHeader), Size;
+    ULONG Offset = sizeof(*ReadHeader), Size, Index;
     KIRQL OldIrql;
 
     ReadHeader->Count = 0;
@@ -153,16 +164,15 @@ DbgCapCopyRecords(
     OldIrql = DbgCapAcquire();
     ReadHeader->Lost = DbgCap.Lost;
     DbgCap.Lost = 0;
-    while (DbgCap.Used != 0)
+    while (DbgCap.Unread != 0)
     {
-        ULONG First = min((ULONG)sizeof(ULONG), DBGCAP_RING_SIZE - DbgCap.Tail);
+        Index = (DbgCap.Head + DBGCAP_RING_SIZE - DbgCap.Unread) % DBGCAP_RING_SIZE;
 
-        RtlCopyMemory(&Size, DbgCap.Ring + DbgCap.Tail, First);
-        if (First < sizeof(ULONG))
-            RtlCopyMemory((PUCHAR)&Size + First, DbgCap.Ring, sizeof(ULONG) - First);
+        DbgCapRingCopy(Index, &Size, sizeof(Size));
         if (Offset + Size > BufferSize)
             break;
-        DbgCapRingRead(Buffer + Offset, Size);
+        DbgCapRingCopy(Index, Buffer + Offset, Size);
+        DbgCap.Unread -= Size;
         Offset += Size;
         ReadHeader->Count++;
     }
@@ -189,7 +199,7 @@ DbgCapRead(
     if (Stack->Parameters.DeviceIoControl.InputBufferLength >= sizeof(DBGCAP_READ_REQUEST))
         TimeoutMs = ((PDBGCAP_READ_REQUEST)Buffer)->TimeoutMs;
 
-    if (TimeoutMs != 0 && InterlockedCompareExchange((volatile LONG *)&DbgCap.Used, 0, 0) == 0)
+    if (TimeoutMs != 0 && InterlockedCompareExchange((volatile LONG *)&DbgCap.Unread, 0, 0) == 0)
     {
         Timeout.QuadPart = -(LONGLONG)TimeoutMs * 10000;
         Status = KeWaitForSingleObject(&DbgCap.DataEvent, UserRequest, UserMode, TRUE, &Timeout);
@@ -219,21 +229,18 @@ DbgCapDispatch(
     switch (Stack->MajorFunction)
     {
         case IRP_MJ_CREATE:
-            OldIrql = DbgCapAcquire();
-            DbgCap.Head = DbgCap.Tail = DbgCap.Used = DbgCap.Lost = 0;
-            DbgCapRelease(OldIrql);
             KeClearEvent(&DbgCap.DataEvent);
-            Status = DbgSetDebugPrintCallback(DbgCapPrintCallback, TRUE);
-            DbgCap.Registered = NT_SUCCESS(Status);
+            OldIrql = DbgCapAcquire();
+            DbgCap.Unread = DbgCap.Lost = 0;
+            DbgCap.Opened = TRUE;
+            DbgCapRelease(OldIrql);
             break;
 
         case IRP_MJ_CLEANUP:
-            if (DbgCap.Registered)
-            {
-                DbgSetDebugPrintCallback(DbgCapPrintCallback, FALSE);
-                DbgCap.Registered = FALSE;
-                KeFlushQueuedDpcs();
-            }
+            OldIrql = DbgCapAcquire();
+            DbgCap.Opened = FALSE;
+            DbgCapRelease(OldIrql);
+            KeFlushQueuedDpcs();
             break;
 
         case IRP_MJ_CLOSE:
@@ -241,9 +248,20 @@ DbgCapDispatch(
 
         case IRP_MJ_DEVICE_CONTROL:
             if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_DBGCAP_READ)
+            {
                 Status = DbgCapRead(Irp, Stack);
+            }
+            else if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_DBGCAP_REWIND)
+            {
+                OldIrql = DbgCapAcquire();
+                DbgCap.Unread = DbgCap.Used;
+                DbgCap.Lost = DbgCap.Dropped;
+                DbgCapRelease(OldIrql);
+            }
             else
+            {
                 Status = STATUS_INVALID_DEVICE_REQUEST;
+            }
             break;
 
         default:
@@ -331,6 +349,17 @@ DriverEntry(
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DbgCapDispatch;
     DriverObject->DriverUnload = DbgCapUnload;
     DeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
+
+    Status = DbgSetDebugPrintCallback(DbgCapPrintCallback, TRUE);
+    if (!NT_SUCCESS(Status))
+    {
+        IoDeleteSymbolicLink(&DosName);
+        IoDeleteDevice(DeviceObject);
+        ExFreePoolWithTag(DbgCap.Ring, DBGCAP_TAG);
+        DbgCap.Ring = NULL;
+        return Status;
+    }
+    DbgCap.Registered = TRUE;
 
     return STATUS_SUCCESS;
 }
