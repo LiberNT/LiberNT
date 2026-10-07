@@ -658,9 +658,16 @@ NtQuerySystemEnvironmentValue(IN PUNICODE_STRING VariableName,
     }
 
     /* Get the environment variable and free the ANSI name */
-    Result = HalGetEnvironmentVariable(AName.Buffer,
-                                       MAX_ENVVAL_SIZE,
-                                       AnsiValueBuffer);
+    if (ExpFirmwareType == FirmwareTypeUefi)
+    {
+        Result = ENOENT;
+    }
+    else
+    {
+        Result = HalGetEnvironmentVariable(AName.Buffer,
+                                           MAX_ENVVAL_SIZE,
+                                           AnsiValueBuffer);
+    }
     RtlFreeAnsiString(&AName);
 
     /* Check if we had success */
