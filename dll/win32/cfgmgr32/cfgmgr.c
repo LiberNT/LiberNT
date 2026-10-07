@@ -5151,8 +5151,12 @@ CM_Query_And_Remove_SubTree_ExA(
           dnAncestor, pVetoType, pszVetoName, ulNameLength,
           ulFlags, hMachine);
 
-    if (pszVetoName == NULL && ulNameLength == 0)
+    if (pszVetoName == NULL && ulNameLength != 0)
         return CR_INVALID_POINTER;
+
+    if (pszVetoName == NULL)
+        return CM_Query_And_Remove_SubTree_ExW(dnAncestor, pVetoType, NULL, 0,
+                                               ulFlags, hMachine);
 
     lpLocalVetoName = HeapAlloc(GetProcessHeap(), 0, ulNameLength * sizeof(WCHAR));
     if (lpLocalVetoName == NULL)
