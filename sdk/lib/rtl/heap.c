@@ -140,7 +140,7 @@ RtlpInitializeHeap(OUT PHEAP Heap,
     ASSERT(!(Flags & HEAP_NO_SERIALIZE) || (Lock == NULL));  /* HEAP_NO_SERIALIZE => no lock */
 
     /* Make sure we're not doing stupid things */
-    FreeHintCount = PAGE_SIZE >> HEAP_ENTRY_SHIFT;
+    FreeHintCount = 0x80;
     /* Start out with the size of a plain Heap header + our hints of free entries + the bitmap */
     HeaderSize = FIELD_OFFSET(HEAP, FreeHints[FreeHintCount])
                  + (ROUND_UP(FreeHintCount, RTL_BITS_OF(ULONG)) / RTL_BITS_OF(ULONG)) * sizeof(ULONG);
