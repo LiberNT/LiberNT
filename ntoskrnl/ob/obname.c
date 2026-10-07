@@ -1154,7 +1154,16 @@ ReparseObject:
                     else
                     {
                         /* We still have a name, but no parse routine for it */
-                        Status = STATUS_OBJECT_TYPE_MISMATCH;
+                        if (ParseRoutine &&
+                            !(RemainingName.Length == sizeof(WCHAR) &&
+                              RemainingName.Buffer[0] == OBJ_NAME_PATH_SEPARATOR))
+                        {
+                            Status = STATUS_OBJECT_PATH_NOT_FOUND;
+                        }
+                        else
+                        {
+                            Status = STATUS_OBJECT_TYPE_MISMATCH;
+                        }
                         Object = NULL;
                         break;
                     }
