@@ -176,7 +176,12 @@ LanReadAddress(
     _In_ PLAN_ADAPTER Adapter,
     _Out_writes_(MAC_ADDRESS_SIZE) PUCHAR Address)
 {
+    UCHAR Suggested[MAC_ADDRESS_SIZE];
+    const UCHAR *Fallback;
     ULONG Low, High, Value, i;
+
+    for (i = 0; i < MAC_ADDRESS_SIZE; i++)
+        Suggested[i] = Address[i];
 
     if (NT_SUCCESS(LanReadRegister(Adapter, SMSC_ADDRL, &Low)) &&
         NT_SUCCESS(LanReadRegister(Adapter, SMSC_ADDRH, &High)))
@@ -206,8 +211,9 @@ LanReadAddress(
     if (i == MAC_ADDRESS_SIZE && LanValidAddress(Address))
         return;
 
+    Fallback = LanValidAddress(Suggested) ? Suggested : LanFallbackAddress;
     for (i = 0; i < MAC_ADDRESS_SIZE; i++)
-        Address[i] = LanFallbackAddress[i];
+        Address[i] = Fallback[i];
 }
 
 static

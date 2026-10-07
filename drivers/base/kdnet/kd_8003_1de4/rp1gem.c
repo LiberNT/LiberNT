@@ -357,6 +357,8 @@ GemInitializeController(
     PDEBUG_DEVICE_DESCRIPTOR Device = KdNet->Device;
     PGEM_ADAPTER Adapter = KdNet->Hardware;
     PUCHAR Hardware = KdNet->Hardware;
+    UCHAR Suggested[MAC_ADDRESS_SIZE];
+    const UCHAR *Fallback;
     ULONG Bottom, Top, Value, i;
     BOOLEAN Valid = FALSE;
 
@@ -389,6 +391,7 @@ GemInitializeController(
     Top = GemRead(Adapter, GEM_SA1T);
     for (i = 0; i < MAC_ADDRESS_SIZE; i++)
     {
+        Suggested[i] = KdNet->TargetMacAddress[i];
         KdNet->TargetMacAddress[i] = (UCHAR)(i < 4 ? Bottom >> (i * 8) : Top >> ((i - 4) * 8));
         if (KdNet->TargetMacAddress[i])
             Valid = TRUE;
@@ -396,8 +399,13 @@ GemInitializeController(
 
     if (!Valid || (KdNet->TargetMacAddress[0] & 1))
     {
+        Valid = FALSE;
         for (i = 0; i < MAC_ADDRESS_SIZE; i++)
-            KdNet->TargetMacAddress[i] = GemFallbackAddress[i];
+            Valid |= Suggested[i] != 0;
+
+        Fallback = (Valid && !(Suggested[0] & 1)) ? Suggested : GemFallbackAddress;
+        for (i = 0; i < MAC_ADDRESS_SIZE; i++)
+            KdNet->TargetMacAddress[i] = Fallback[i];
     }
 
     GemWrite(Adapter, GEM_SA1B,

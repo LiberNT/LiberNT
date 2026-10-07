@@ -401,8 +401,12 @@ K1xReadConfiguration(
     PKD_FDT_DEVICE Description = Device->OemData;
     ULONGLONG Base, Size;
     const CHAR *Mode;
+    UCHAR Suggested[MAC_ADDRESS_SIZE];
     RISCV_FDT Tree;
     ULONG Node, Port, Length, Value, i;
+
+    for (i = 0; i < MAC_ADDRESS_SIZE; i++)
+        Suggested[i] = Address[i];
 
     Node = Description->Node;
     if (!RiscvFdtOpen(Description->Blob, Description->Size, &Tree) ||
@@ -457,10 +461,22 @@ K1xReadConfiguration(
     if (!K1xReadAddress(&Tree, Node, "local-mac-address", Address) &&
         !K1xReadAddress(&Tree, Node, "mac-address", Address))
     {
+        Value = 0;
         for (i = 0; i < MAC_ADDRESS_SIZE; i++)
-            Address[i] = K1xFallbackAddress[i];
+            Value |= Suggested[i];
 
-        Address[MAC_ADDRESS_SIZE - 1] = (UCHAR)Port;
+        if (Value && !(Suggested[0] & 1))
+        {
+            for (i = 0; i < MAC_ADDRESS_SIZE; i++)
+                Address[i] = Suggested[i];
+        }
+        else
+        {
+            for (i = 0; i < MAC_ADDRESS_SIZE; i++)
+                Address[i] = K1xFallbackAddress[i];
+
+            Address[MAC_ADDRESS_SIZE - 1] = (UCHAR)Port;
+        }
     }
 
     return STATUS_SUCCESS;

@@ -481,10 +481,15 @@ RtlSetAddress(
 {
     BOOLEAN Extended = Adapter->Family == RtlFamily8169 && (Adapter->ChipFlags & RTL_CHIP_EXTENDED);
     BOOLEAN Early = (Adapter->ChipId & RTL_ID_8168EVL_MASK) == RTL_ID_8168EVL;
+    UCHAR Suggested[MAC_ADDRESS_SIZE];
+    const UCHAR *Fallback;
     ULONG Low, High, i;
 
     for (i = 0; i < MAC_ADDRESS_SIZE; i++)
+    {
+        Suggested[i] = Address[i];
         Address[i] = RtlRead8(Adapter, RTL_REG_IDR0 + i);
+    }
 
     if (RtlValidAddress(Address))
         return;
@@ -499,8 +504,9 @@ RtlSetAddress(
 
     if (!RtlValidAddress(Address))
     {
+        Fallback = RtlValidAddress(Suggested) ? Suggested : RtlFallbackAddress;
         for (i = 0; i < MAC_ADDRESS_SIZE; i++)
-            Address[i] = RtlFallbackAddress[i];
+            Address[i] = Fallback[i];
     }
 
     Low = Address[0] | (Address[1] << 8) | (Address[2] << 16) | ((ULONG)Address[3] << 24);

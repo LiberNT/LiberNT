@@ -14,6 +14,7 @@ typedef NTSTATUS
     _Inout_ PDEBUG_DEVICE_DESCRIPTOR Device);
 
 UCHAR KdNicAddress[MAC_ADDRESS_SIZE];
+static UCHAR KdpSuggestedAddress[MAC_ADDRESS_SIZE];
 UCHAR KdNicLinkState;
 DEBUG_DEVICE_DESCRIPTOR KdNicDevice;
 
@@ -450,6 +451,13 @@ KdpStartController(VOID)
     RtlZeroMemory(&KdpShared, sizeof(KdpShared));
     KdpShared.Hardware = KdNicDevice.Memory.VirtualAddress;
     KdpShared.Device = &KdNicDevice;
+    if (!(KdpSuggestedAddress[0] & 2))
+    {
+        KdCryptoRandom(KdpSuggestedAddress, sizeof(KdpSuggestedAddress));
+        KdpSuggestedAddress[0] = (KdpSuggestedAddress[0] & 0xFC) | 2;
+    }
+
+    RtlCopyMemory(KdNicAddress, KdpSuggestedAddress, sizeof(KdNicAddress));
     KdpShared.TargetMacAddress = KdNicAddress;
     KdpShared.LinkState = &KdNicLinkState;
 
