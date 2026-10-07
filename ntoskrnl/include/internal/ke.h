@@ -113,6 +113,14 @@ KiUpdateSharedTime(ULONG Increment, BOOLEAN UpdateSystem);
 
 VOID
 NTAPI
+KiFreezeInterruptTime(VOID);
+
+VOID
+NTAPI
+KiThawInterruptTime(VOID);
+
+VOID
+NTAPI
 KiSetTimeAdjustment(ULONG Adjustment, BOOLEAN Enabled);
 
 ULONGLONG

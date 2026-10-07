@@ -2002,6 +2002,8 @@ KdEnterDebugger(IN PKTRAP_FRAME TrapFrame,
 
     /* Freeze all CPUs, raising also the IRQL to HIGH_LEVEL */
     Enable = KeFreezeExecution(TrapFrame, ExceptionFrame);
+    if (!(KiFreezeFlag & 2))
+        KiFreezeInterruptTime();
 
     /* Lock the port, save its state and set the debugger entered flag */
     KdpPortLocked = KeTryToAcquireSpinLockAtDpcLevel(&KdpDebuggerLock);
@@ -2053,6 +2055,7 @@ KdExitDebugger(IN BOOLEAN Enable)
 #endif
 
     /* Unfreeze the CPUs, restoring also the IRQL */
+    KiThawInterruptTime();
     KeThawExecution(Enable);
 
     /* Compare time with the one from KdEnterDebugger */
