@@ -143,7 +143,7 @@ static VOID
 CheckSchedulerCpu(ULONG Controller, ULONG Cpu, ULONG OtherCpu, LONGLONG Frequency)
 {
     static const KPRIORITY ExpectedPriority[SCHEDULER_MODES][2] = {
-        {18, 17}, {20, 19}, {18, 17}, {18, 19}, {18, 17}, {18, 19}, {18, 17}
+        {26, 25}, {28, 27}, {26, 25}, {26, 27}, {26, 25}, {26, 27}, {26, 25}
     };
     SCHEDULER_HOLD Hold = {0};
     SCHEDULER_WORKER Workers[2] = {0};
@@ -192,7 +192,7 @@ CheckSchedulerCpu(ULONG Controller, ULONG Cpu, ULONG OtherCpu, LONGLONG Frequenc
                 Workers[Index].StateErrors = 0;
                 Workers[Index].Spin = (Mode >= 4 && Index == 0);
                 KeSetAffinityThread(Threads[Index], (KAFFINITY)1 << Cpu);
-                KeSetPriorityThread(Threads[Index], Index == 0 ? 18 : (Mode >= 4 ? 17 : 19));
+                KeSetPriorityThread(Threads[Index], Index == 0 ? 26 : (Mode >= 4 ? 25 : 27));
             }
             Held = Mode < 4;
             Migrating = Mode == 2 || Mode == 3;
@@ -227,23 +227,23 @@ CheckSchedulerCpu(ULONG Controller, ULONG Cpu, ULONG OtherCpu, LONGLONG Frequenc
                 switch (Mode)
                 {
                     case 0: /* Lower the standby thread below the ready thread. */
-                        KeSetPriorityThread(Threads[1], 17);
+                        KeSetPriorityThread(Threads[1], 25);
                         break;
                     case 1: /* Raise the ready thread above the standby thread. */
-                        KeSetPriorityThread(Threads[0], 20);
+                        KeSetPriorityThread(Threads[0], 28);
                         break;
                     case 2: /* Move the ready thread to an unblocked processor. */
-                        KeSetPriorityThread(Threads[1], 17);
+                        KeSetPriorityThread(Threads[1], 25);
                         KeSetAffinityThread(Threads[1], (KAFFINITY)1 << OtherCpu);
                         break;
                     case 3: /* Move the standby thread to an unblocked processor. */
                         KeSetAffinityThread(Threads[1], (KAFFINITY)1 << OtherCpu);
                         break;
                     case 4: /* Lower a running thread so its ready peer preempts it. */
-                        KeSetPriorityThread(Threads[0], 16);
+                        KeSetPriorityThread(Threads[0], 24);
                         break;
                     case 5: /* Raise a ready thread so it preempts its running peer. */
-                        KeSetPriorityThread(Threads[1], 19);
+                        KeSetPriorityThread(Threads[1], 27);
                         break;
                     case 6: /* Migrate a running thread, allowing its ready peer to run. */
                         KeSetAffinityThread(Threads[0], (KAFFINITY)1 << OtherCpu);
@@ -337,7 +337,7 @@ START_TEST(KeArm64Dispatcher)
     if (skip(KeNumberProcessors >= 3, "Three processors required\n")) return;
     KeQueryPerformanceCounter(&Frequency);
     PreviousAffinity = KeSetSystemAffinityThreadEx(1);
-    PreviousPriority = KeSetPriorityThread(KeGetCurrentThread(), 22);
+    PreviousPriority = KeSetPriorityThread(KeGetCurrentThread(), 30);
     for (Cpu = 0; Cpu < (ULONG)KeNumberProcessors; Cpu++)
     {
         Controller = (Cpu + 1) % (ULONG)KeNumberProcessors;
