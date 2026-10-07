@@ -1,0 +1,5 @@
+add_library(tpadhid MODULE tpadhid.c tpadhid.rc)
+set_module_type(tpadhid kernelmodedriver)
+add_importlibs(tpadhid ntoskrnl hal hidparse)
+add_cd_file(TARGET tpadhid DESTINATION reactos/system32/drivers FOR all)
+add_driver_inf(tpadhid tpadhid.inf tpadcfg.inf)

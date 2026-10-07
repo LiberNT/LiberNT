@@ -1,0 +1,51 @@
+; PROJECT:     LiberNT HID Precision Touchpad Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = Mouse
+ClassGUID = {4D36E96F-E325-11CE-BFC1-08002BE10318}
+Provider = %LiberNT%
+DriverVer = 10/07/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%TpadHid.DeviceDesc% = TpadHid_Inst,HID_DEVICE_UP:000D_U:0005
+
+[TpadHid_Inst.NT]
+CopyFiles = TpadHid_CopyFiles
+
+[TpadHid_CopyFiles]
+tpadhid.sys
+mouclass.sys
+
+[TpadHid_Inst.NT.Services]
+AddService = tpadhid,0x00000002,TpadHid_Service
+AddService = mouclass,,Mouclass_Service
+
+[TpadHid_Service]
+DisplayName = %TpadHid.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\tpadhid.sys
+LoadOrderGroup = Pointer Port
+
+[Mouclass_Service]
+ServiceType = 1
+StartType = 1
+ErrorControl = 1
+ServiceBinary = %12%\mouclass.sys
+LoadOrderGroup = Pointer Class
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard mice)"
+TpadHid.DeviceDesc = "HID Precision Touchpad"
+TpadHid.ServiceDesc = "LiberNT HID Precision Touchpad Driver"
