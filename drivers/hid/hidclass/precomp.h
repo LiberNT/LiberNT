@@ -81,6 +81,17 @@ typedef struct
     //
     PDEVICE_RELATIONS DeviceRelations;
 
+    KSPIN_LOCK ReadLock;
+    LIST_ENTRY OpenFileList;
+    PIRP ReadIrp;
+    PUCHAR ReadBuffer;
+    ULONG ReadBufferLength;
+    ULONG WaitingReads;
+    BOOLEAN ReadActive;
+    BOOLEAN ReadStopped;
+    KEVENT ReadIdleEvent;
+    KDPC ReadDpc;
+
 } HIDCLASS_FDO_EXTENSION, *PHIDCLASS_FDO_EXTENSION;
 
 typedef struct
@@ -119,6 +130,8 @@ typedef struct
 
 } HIDCLASS_PDO_DEVICE_EXTENSION, *PHIDCLASS_PDO_DEVICE_EXTENSION;
 
+#define HIDCLASS_QUEUED_REPORTS 32
+
 typedef struct __HIDCLASS_FILEOP_CONTEXT__
 {
     //
@@ -126,74 +139,24 @@ typedef struct __HIDCLASS_FILEOP_CONTEXT__
     //
     PHIDCLASS_PDO_DEVICE_EXTENSION DeviceExtension;
 
-    //
-    // spin lock
-    //
-    KSPIN_LOCK Lock;
+    LIST_ENTRY FdoListEntry;
 
     //
     // read irp pending list
     //
-    LIST_ENTRY ReadPendingIrpListHead;
+    LIST_ENTRY PendingReads;
 
-    //
-    // completed irp list
-    //
-    LIST_ENTRY IrpCompletedListHead;
+    PUCHAR ReportQueue;
+    ULONG ReportSlotLength;
+    ULONG ReportQueueHead;
+    ULONG ReportQueueCount;
 
     //
     // stop in progress indicator
     //
     BOOLEAN StopInProgress;
 
-    //
-    // read complete event
-    //
-    KEVENT IrpReadComplete;
-
 } HIDCLASS_FILEOP_CONTEXT, *PHIDCLASS_FILEOP_CONTEXT;
-
-typedef struct
-{
-    //
-    // class-created request sent to the HID minidriver
-    //
-    PIRP ReadIrp;
-
-    //
-    // private link for the class driver's pending-read queue.  The IRP's
-    // Tail.Overlay.ListEntry belongs to the driver currently holding the IRP
-    // and may therefore be used by the minidriver while the request is down
-    // the stack.
-    //
-    LIST_ENTRY PendingListEntry;
-
-    //
-    // original request
-    //
-    PIRP OriginalIrp;
-
-    //
-    // file op
-    //
-    PHIDCLASS_FILEOP_CONTEXT FileOp;
-
-    //
-    // buffer for reading report
-    //
-    PVOID InputReportBuffer;
-
-    //
-    // buffer length
-    //
-    ULONG InputReportBufferLength;
-
-    //
-    // work item
-    //
-    PIO_WORKITEM CompletionWorkItem;
-
-} HIDCLASS_IRP_CONTEXT, *PHIDCLASS_IRP_CONTEXT;
 
 /* fdo.c */
 NTSTATUS
@@ -210,6 +173,19 @@ NTSTATUS
 HidClassFDO_DispatchRequestSynchronous(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp);
+
+VOID
+HidClassFDO_InitializeRead(
+    IN PDEVICE_OBJECT FDODeviceObject);
+
+NTSTATUS
+HidClassFDO_StartRead(
+    IN PDEVICE_OBJECT FDODeviceObject);
+
+VOID
+HidClassFDO_StopRead(
+    IN PDEVICE_OBJECT FDODeviceObject,
+    IN BOOLEAN Wait);
 
 /* pdo.c */
 NTSTATUS

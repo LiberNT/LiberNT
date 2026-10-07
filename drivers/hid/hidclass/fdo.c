@@ -452,6 +452,8 @@ HidClassFDO_StartDevice(
         return Status;
     }
 
+    Status = HidClassFDO_StartRead(DeviceObject);
+
     //
     // complete request
     //
@@ -476,11 +478,15 @@ HidClassFDO_RemoveDevice(
 
     /* FIXME cleanup */
 
+    HidClassFDO_StopRead(DeviceObject, FALSE);
+
     //
     // dispatch to minidriver
     //
     IoSkipCurrentIrpStackLocation(Irp);
     Status = HidClassFDO_DispatchRequestSynchronous(DeviceObject, Irp);
+
+    HidClassFDO_StopRead(DeviceObject, TRUE);
 
     //
     // complete request
