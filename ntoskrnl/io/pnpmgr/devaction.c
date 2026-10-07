@@ -2877,7 +2877,6 @@ PiEnumerateDevice(
     for (i = 0; i < DeviceRelations->Count; i++)
     {
         ChildDeviceObject = DeviceRelations->Objects[i];
-        ASSERT((ChildDeviceObject->Flags & DO_DEVICE_INITIALIZING) == 0);
 
         ChildDeviceNode = IopGetDeviceNode(ChildDeviceObject);
         if (!ChildDeviceNode)
