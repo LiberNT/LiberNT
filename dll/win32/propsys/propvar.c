@@ -728,6 +728,28 @@ HRESULT WINAPI PropVariantChangeType(PROPVARIANT *ppropvarDest, REFPROPVARIANT p
         }
         return hr;
     }
+    case VT_R4:
+    {
+        double res;
+        hr = PropVariantToDouble(propvarSrc, &res);
+        if (SUCCEEDED(hr))
+        {
+            ppropvarDest->vt = VT_R4;
+            ppropvarDest->fltVal = res;
+        }
+        return hr;
+    }
+    case VT_BOOL:
+    {
+        BOOL res;
+        hr = PropVariantToBoolean(propvarSrc, &res);
+        if (SUCCEEDED(hr))
+        {
+            ppropvarDest->vt = VT_BOOL;
+            ppropvarDest->boolVal = res ? VARIANT_TRUE : VARIANT_FALSE;
+        }
+        return hr;
+    }
 
     case VT_LPWSTR:
     case VT_BSTR:

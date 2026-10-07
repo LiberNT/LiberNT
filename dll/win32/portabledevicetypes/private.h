@@ -60,9 +60,18 @@ static inline HRESULT portable_propvariant_copy(PROPVARIANT *destination, const 
 
 static inline HRESULT portable_propvariant_change_type(PROPVARIANT *destination, const PROPVARIANT *source, VARTYPE type)
 {
-    HRESULT hr = PropVariantChangeType(destination, source, 0, type);
+    HRESULT hr;
 
-    if (hr == DISP_E_TYPEMISMATCH)
+    if (source->vt == (VT_VECTOR | VT_UI1) && source->caub.cElems && !source->caub.pElems)
+        return E_INVALIDARG;
+    if (type == VT_EMPTY)
+    {
+        PropVariantInit(destination);
+        return S_OK;
+    }
+
+    hr = PropVariantChangeType(destination, source, 0, type);
+    if (hr == DISP_E_TYPEMISMATCH || hr == E_NOTIMPL)
         hr = TYPE_E_TYPEMISMATCH;
     return hr;
 }
