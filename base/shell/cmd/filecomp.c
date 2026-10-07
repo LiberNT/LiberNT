@@ -24,326 +24,6 @@
 
 #ifdef FEATURE_UNIX_FILENAME_COMPLETION
 
-VOID CompleteFilename (LPTSTR str, UINT charcount)
-{
-    WIN32_FIND_DATA file;
-    HANDLE hFile;
-    INT   curplace = 0;
-    INT   start;
-    INT   count;
-    INT step;
-    INT c = 0;
-    BOOL  found_dot = FALSE;
-    BOOL  perfectmatch = TRUE;
-    TCHAR path[MAX_PATH];
-    TCHAR fname[MAX_PATH];
-    TCHAR maxmatch[MAX_PATH] = _T("");
-    TCHAR directory[MAX_PATH];
-    LPCOMMAND cmds_ptr;
-
-    /* expand current file name */
-    count = charcount - 1;
-    if (count < 0)
-        count = 0;
-
-    /* find how many '"'s there is typed already. */
-    step = count;
-    while (step > 0)
-    {
-        if (str[step] == _T('"'))
-            c++;
-        step--;
-    }
-    /* if c is odd, then user typed " before name, else not. */
-
-    /* find front of word */
-    if (str[count] == _T('"') || (c % 2))
-    {
-        count--;
-        while (count > 0 && str[count] != _T('"'))
-            count--;
-    }
-    else
-    {
-        while (count > 0 && str[count] != _T(' '))
-            count--;
-    }
-
-    /* if not at beginning, go forward 1 */
-    if (str[count] == _T(' '))
-        count++;
-
-    start = count;
-
-    if (str[count] == _T('"'))
-        count++;	/* don't increment start */
-
-    /* extract directory from word */
-    _tcscpy (directory, &str[count]);
-    curplace = _tcslen (directory) - 1;
-
-    if (curplace >= 0 && directory[curplace] == _T('"'))
-        directory[curplace--] = _T('\0');
-
-    _tcscpy (path, directory);
-
-    while (curplace >= 0 && directory[curplace] != _T('\\') &&
-                   directory[curplace] != _T('/') &&
-           directory[curplace] != _T(':'))
-    {
-        directory[curplace] = 0;
-        curplace--;
-    }
-
-    /* look for a '.' in the filename */
-    for (count = _tcslen (directory); path[count] != _T('\0'); count++)
-    {
-        if (path[count] == _T('.'))
-        {
-            found_dot = TRUE;
-            break;
-        }
-    }
-
-    if (found_dot)
-        _tcscat (path, _T("*"));
-    else
-        _tcscat (path, _T("*.*"));
-
-    /* current fname */
-    curplace = 0;
-
-    hFile = FindFirstFile (path, &file);
-    if (hFile != INVALID_HANDLE_VALUE)
-    {
-        /* find anything */
-        do
-        {
-            /* ignore "." and ".." */
-            if (!_tcscmp (file.cFileName, _T(".")) ||
-                !_tcscmp (file.cFileName, _T("..")))
-                continue;
-
-            _tcscpy (fname, file.cFileName);
-
-            if (file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-                _tcscat (fname, _T("\\"));
-
-            if (!maxmatch[0] && perfectmatch)
-            {
-                _tcscpy(maxmatch, fname);
-            }
-            else
-            {
-                for (count = 0; maxmatch[count] && fname[count]; count++)
-                {
-                    if (tolower(maxmatch[count]) != tolower(fname[count]))
-                    {
-                        perfectmatch = FALSE;
-                        maxmatch[count] = 0;
-                        break;
-                    }
-                }
-
-                if (maxmatch[count] == _T('\0') &&
-                    fname[count] != _T('\0'))
-                    perfectmatch = FALSE;
-            }
-        }
-        while (FindNextFile (hFile, &file));
-
-        FindClose (hFile);
-
-        /* only quote if the filename contains spaces */
-        if (_tcschr(directory, _T(' ')) ||
-            _tcschr(maxmatch, _T(' ')))
-        {
-            str[start] = _T('\"');
-            _tcscpy (&str[start+1], directory);
-            _tcscat (&str[start], maxmatch);
-            _tcscat (&str[start], _T("\"") );
-        }
-        else
-        {
-            _tcscpy (&str[start], directory);
-            _tcscat (&str[start], maxmatch);
-        }
-
-        if (!perfectmatch)
-        {
-            MessageBeep (-1);
-        }
-    }
-    else
-    {
-        /* no match found - search for internal command */
-        for (cmds_ptr = cmds; cmds_ptr->name; cmds_ptr++)
-        {
-            if (!_tcsnicmp (&str[start], cmds_ptr->name,
-                _tcslen (&str[start])))
-            {
-                /* return the mach only if it is unique */
-                if (_tcsnicmp (&str[start], (cmds_ptr+1)->name, _tcslen (&str[start])))
-                    _tcscpy (&str[start], cmds_ptr->name);
-                break;
-            }
-        }
-
-        MessageBeep (-1);
-    }
-}
-
-
-/*
- * returns 1 if at least one match, else returns 0
- */
-BOOL ShowCompletionMatches (LPTSTR str, INT charcount)
-{
-    WIN32_FIND_DATA file;
-    HANDLE hFile;
-    BOOL  found_dot = FALSE;
-    INT   curplace = 0;
-    INT   count;
-    TCHAR path[MAX_PATH];
-    TCHAR fname[MAX_PATH];
-    TCHAR directory[MAX_PATH];
-    SHORT screenwidth;
-
-    /* expand current file name */
-    count = charcount - 1;
-    if (count < 0)
-        count = 0;
-
-    /* find front of word */
-    if (str[count] == _T('"'))
-    {
-        count--;
-        while (count > 0 && str[count] != _T('"'))
-            count--;
-    }
-    else
-    {
-        while (count > 0 && str[count] != _T(' '))
-            count--;
-    }
-
-    /* if not at beginning, go forward 1 */
-    if (str[count] == _T(' '))
-        count++;
-
-    if (str[count] == _T('"'))
-        count++;
-
-    /* extract directory from word */
-    _tcscpy (directory, &str[count]);
-    curplace = _tcslen (directory) - 1;
-
-    if (curplace >= 0 && directory[curplace] == _T('"'))
-        directory[curplace--] = _T('\0');
-
-    _tcscpy (path, directory);
-
-    while (curplace >= 0 &&
-           directory[curplace] != _T('\\') &&
-           directory[curplace] != _T(':'))
-    {
-        directory[curplace] = 0;
-        curplace--;
-    }
-
-    /* look for a . in the filename */
-    for (count = _tcslen (directory); path[count] != _T('\0'); count++)
-    {
-        if (path[count] == _T('.'))
-        {
-            found_dot = TRUE;
-            break;
-        }
-    }
-
-    if (found_dot)
-        _tcscat (path, _T("*"));
-    else
-        _tcscat (path, _T("*.*"));
-
-    /* current fname */
-    curplace = 0;
-
-    hFile = FindFirstFile (path, &file);
-    if (hFile != INVALID_HANDLE_VALUE)
-    {
-        UINT longestfname = 0;
-        /* Get the size of longest filename first. */
-        do
-        {
-            if (_tcslen(file.cFileName) > longestfname)
-            {
-                longestfname = _tcslen(file.cFileName);
-                /* Directories get extra brackets around them. */
-                if (file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-                    longestfname += 2;
-            }
-        }
-        while (FindNextFile (hFile, &file));
-        FindClose (hFile);
-
-        hFile = FindFirstFile (path, &file);
-
-        /* Count the highest number of columns */
-        GetScreenSize(&screenwidth, NULL);
-
-        /* For counting columns of output */
-        count = 0;
-
-        /* Increase by the number of spaces behind file name */
-        longestfname += 3;
-
-        /* find anything */
-        ConOutChar(_T('\n'));
-        do
-        {
-            /* ignore . and .. */
-            if (!_tcscmp (file.cFileName, _T(".")) ||
-                !_tcscmp (file.cFileName, _T("..")))
-                continue;
-
-            if (file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-                _stprintf (fname, _T("[%s]"), file.cFileName);
-            else
-                _tcscpy (fname, file.cFileName);
-
-            ConOutPrintf (_T("%*s"), - longestfname, fname);
-            count++;
-            /* output as much columns as fits on the screen */
-            if (count >= (screenwidth / longestfname))
-            {
-                /* print the new line only if we aren't on the
-                 * last column, in this case it wraps anyway */
-                if (count * longestfname != (UINT)screenwidth)
-                    ConOutChar(_T('\n'));
-                count = 0;
-            }
-        }
-        while (FindNextFile (hFile, &file));
-
-        FindClose (hFile);
-
-        if (count)
-            ConOutChar(_T('\n'));
-    }
-    else
-    {
-        /* no match found */
-        MessageBeep (-1);
-        return FALSE;
-    }
-
-    return TRUE;
-}
-#endif
-
-#ifdef FEATURE_4NT_FILENAME_COMPLETION
-
 typedef struct _FileName
 {
     TCHAR Name[MAX_PATH];
@@ -693,18 +373,135 @@ GetStartedCommandPrefix(
     return TRUE;
 }
 
+static VOID
+ShowCompletionMatches(
+    IN FileName *FileList,
+    IN INT FileListSize)
+{
+    INPUT_RECORD ir;
+    SHORT ScreenWidth;
+    WORD Key;
+    INT Width = 0;
+    INT Length;
+    INT Columns;
+    INT Rows;
+    INT Row;
+    INT Column;
+    INT Index;
+
+    if (FileListSize >= 100)
+    {
+        ConOutChar(_T('\n'));
+        ConOutPrintf(_T("Display all %d possibilities? (y or n)"), FileListSize);
+        for (;;)
+        {
+            ConInKey(&ir);
+            Key = ir.Event.KeyEvent.wVirtualKeyCode;
+            if (Key == _T('Y') || Key == VK_SPACE)
+                break;
+            if (Key == _T('N') || Key == VK_BACK ||
+                Key == VK_DELETE || Key == VK_ESCAPE ||
+                (Key == _T('C') &&
+                 (ir.Event.KeyEvent.dwControlKeyState &
+                  (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))))
+            {
+                ConOutChar(_T('\n'));
+                return;
+            }
+        }
+    }
+
+    for (Index = 0; Index < FileListSize; Index++)
+    {
+        Length = (INT)ConGetTextWidth(FileList[Index].Name);
+        if (Length > Width)
+            Width = Length;
+    }
+    Width += 2;
+
+    GetScreenSize(&ScreenWidth, NULL);
+    Columns = ScreenWidth / Width;
+    if (Columns > 1 && Columns * Width == ScreenWidth)
+        Columns--;
+    if (Columns < 1)
+        Columns = 1;
+    Rows = (FileListSize + Columns - 1) / Columns;
+
+    ConOutChar(_T('\n'));
+    for (Row = 0; Row < Rows; Row++)
+    {
+        for (Column = 0; Column < Columns; Column++)
+        {
+            Index = Column * Rows + Row;
+            if (Index >= FileListSize)
+                break;
+
+            Length = 0;
+            if (Column + 1 < Columns)
+                Length = Width - (INT)ConGetTextWidth(FileList[Index].Name);
+            ConOutPrintf(_T("%s%*s"), FileList[Index].Name, Length, _T(""));
+        }
+        ConOutChar(_T('\n'));
+    }
+}
+
+static BOOL
+SelectCompletion(
+    IN FileName *FileList,
+    IN INT FileListSize,
+    IN LPCTSTR Typed,
+    IN BOOL bList,
+    OUT LPTSTR Word,
+    OUT PBOOL Listed)
+{
+    SIZE_T TypedLength = _tcslen(Typed);
+    SIZE_T Length;
+    SIZE_T Common;
+    INT Index;
+
+    _tcscpy(Word, FileList[0].Name);
+    if (FileListSize == 1)
+        return TRUE;
+
+    if (bList)
+    {
+        ShowCompletionMatches(FileList, FileListSize);
+        *Listed = TRUE;
+        return FALSE;
+    }
+
+    Length = _tcslen(Word);
+    for (Index = 1; Index < FileListSize; Index++)
+    {
+        for (Common = 0; Common < Length; Common++)
+        {
+            if (_totlower(Word[Common]) !=
+                _totlower(FileList[Index].Name[Common]))
+            {
+                break;
+            }
+        }
+        Length = Common;
+    }
+    if (Length && IS_HIGH_SURROGATE(Word[Length - 1]))
+        Length--;
+    Word[Length] = _T('\0');
+
+    MessageBeep(-1);
+    return Length > TypedLength && !_tcsnicmp(Word, Typed, TypedLength);
+}
+
 BOOL
 CompleteCommand(
     LPTSTR strIN,
-    BOOL bNext,
+    BOOL bList,
     LPTSTR strOut,
-    UINT Cursor)
+    UINT Cursor,
+    PBOOL Listed)
 {
     static const TCHAR DefaultPathExt[] = _T(".COM;.EXE;.BAT;.CMD");
-    static TCHAR LastReturned[MAX_PATH];
-    static TCHAR SearchPrefix[MAX_PATH];
-    static UINT SearchPrefixStart;
-    static INT Sel;
+    TCHAR SearchPrefix[MAX_PATH];
+    TCHAR Word[MAX_PATH];
     FileName *FileList = NULL;
     INT FileListSize = 0;
     LPTSTR PathExt = NULL;
@@ -714,28 +511,15 @@ CompleteCommand(
     DWORD Length;
     UINT PrefixStart;
     UINT Index;
-    BOOL Repeating;
     BOOL NeededQuote;
     SIZE_T ResultLength;
 
     strOut[0] = _T('\0');
-    Repeating = (Cursor == _tcslen(strIN)) &&
-                LastReturned[0] &&
-                !_tcscmp(strIN, LastReturned);
-    if (Repeating)
+    if (Cursor >= MAX_PATH ||
+        !GetStartedCommandPrefix(strIN, Cursor,
+                                 SearchPrefix, &PrefixStart))
     {
-        _tcscpy(strOut, strIN);
-        PrefixStart = SearchPrefixStart;
-    }
-    else
-    {
-        if (!GetStartedCommandPrefix(strIN, Cursor,
-                                     SearchPrefix, &PrefixStart))
-        {
-            LastReturned[0] = _T('\0');
-            return FALSE;
-        }
-        SearchPrefixStart = PrefixStart;
+        return FALSE;
     }
 
     Length = GetEnvironmentVariable(_T("PATHEXT"), NULL, 0);
@@ -816,32 +600,27 @@ CompleteCommand(
 
     if (!FileListSize)
     {
-        LastReturned[0] = _T('\0');
         cmd_free(Path);
         cmd_free(PathExt);
         return FALSE;
     }
 
     qsort(FileList, FileListSize, sizeof(*FileList), compare);
-    if (Repeating)
+    if (!SelectCompletion(FileList, FileListSize, SearchPrefix,
+                          bList, Word, Listed))
     {
-        Sel %= FileListSize;
-        if (bNext)
-            Sel = (Sel + 1) % FileListSize;
-        else
-            Sel = Sel ? Sel - 1 : FileListSize - 1;
-    }
-    else
-    {
-        Sel = 0;
+        _tcscpy(strOut, strIN);
+        cmd_free(FileList);
+        cmd_free(Path);
+        cmd_free(PathExt);
+        return TRUE;
     }
 
-    NeededQuote = FileNameContainsSpecialCharacters(FileList[Sel].Name);
-    ResultLength = PrefixStart + _tcslen(FileList[Sel].Name) +
-                   (NeededQuote ? 2 : 0);
+    NeededQuote = FileNameContainsSpecialCharacters(Word);
+    ResultLength = PrefixStart + _tcslen(Word) +
+                   (NeededQuote ? 2 : 0) + 1;
     if (ResultLength >= MAX_PATH)
     {
-        LastReturned[0] = _T('\0');
         cmd_free(FileList);
         cmd_free(Path);
         cmd_free(PathExt);
@@ -852,10 +631,13 @@ CompleteCommand(
     strOut[PrefixStart] = _T('\0');
     if (NeededQuote)
         _tcscat(strOut, _T("\""));
-    _tcscat(strOut, FileList[Sel].Name);
-    if (NeededQuote)
-        _tcscat(strOut, _T("\""));
-    _tcscpy(LastReturned, strOut);
+    _tcscat(strOut, Word);
+    if (FileListSize == 1)
+    {
+        if (NeededQuote)
+            _tcscat(strOut, _T("\""));
+        _tcscat(strOut, _T(" "));
+    }
 
     cmd_free(FileList);
     cmd_free(Path);
@@ -863,7 +645,6 @@ CompleteCommand(
     return TRUE;
 
 OutOfMemory:
-    LastReturned[0] = _T('\0');
     cmd_free(FileList);
     cmd_free(Path);
     cmd_free(PathExt);
@@ -873,7 +654,7 @@ OutOfMemory:
 }
 
 
-VOID CompleteFilename (LPTSTR strIN, BOOL bNext, LPTSTR strOut, UINT cusor)
+VOID CompleteFilename (LPTSTR strIN, BOOL bList, LPTSTR strOut, UINT cusor, PBOOL Listed)
 {
     /* Length of string before we complete it */
     INT_PTR StartLength;
@@ -886,10 +667,8 @@ VOID CompleteFilename (LPTSTR strIN, BOOL bNext, LPTSTR strOut, UINT cusor)
     TCHAR szPrefix[MAX_PATH];
     TCHAR szOriginal[MAX_PATH];
     TCHAR szSearchPath[MAX_PATH];
-    /* Save the strings used last time, so if they hit tab again */
-    static TCHAR LastReturned[MAX_PATH];
-    static TCHAR LastSearch[MAX_PATH];
-    static TCHAR LastPrefix[MAX_PATH];
+    TCHAR szWord[MAX_PATH];
+    LPTSTR szTyped;
     /* Used to search for files */
     HANDLE hFile;
     WIN32_FIND_DATA file;
@@ -901,8 +680,6 @@ VOID CompleteFilename (LPTSTR strIN, BOOL bNext, LPTSTR strOut, UINT cusor)
     UINT i;
     /* Editable string of what was passed in */
     TCHAR str[MAX_PATH];
-    /* Keeps track of what element was last selected */
-    static INT Sel;
     BOOL NeededQuote = FALSE;
     BOOL ShowAll = TRUE;
     TCHAR * line = strIN;
@@ -922,64 +699,60 @@ VOID CompleteFilename (LPTSTR strIN, BOOL bNext, LPTSTR strOut, UINT cusor)
     if ((cusor + 1) < _tcslen(str))
         str[cusor] = _T('\0');
 
-    /* Look to see if they hit tab again, if so cut off the diff length */
-    if (_tcscmp(str,LastReturned) || !_tcslen(str))
+    /* We need to know how many chars we added from the start */
+    StartLength = _tcslen(str);
+
+    /* no string, we need all files in that directory */
+    if (!StartLength)
     {
-        /* We need to know how many chars we added from the start */
-        StartLength = _tcslen(str);
-
-        /* no string, we need all files in that directory */
-        if (!StartLength)
-        {
-            _tcscat(str,_T("*"));
-        }
-
-        /* Zero it out first */
-        szBaseWord[0] = _T('\0');
-        szPrefix[0] = _T('\0');
-
-        /*What comes out of this needs to be:
-            szBaseWord =  path no quotes to the object
-            szPrefix = what leads up to the filename
-            no quote at the END of the full name */
-        FindPrefixAndSuffix(str,szPrefix,szBaseWord);
-        /* Strip quotes */
-        for(i = 0; i < _tcslen(szBaseWord); )
-        {
-            if (szBaseWord[i] == _T('\"'))
-                memmove(&szBaseWord[i],&szBaseWord[i + 1], _tcslen(&szBaseWord[i]) * sizeof(TCHAR));
-            else
-                i++;
-        }
-
-        /* clear it out */
-        memset(szSearchPath, 0, sizeof(szSearchPath));
-
-        /* Start the search for all the files */
-        GetFullPathName(szBaseWord, MAX_PATH, szSearchPath, NULL);
-
-        /* Got a device path? Fallback to the the current dir plus the short path */
-        if (szSearchPath[0] == _T('\\') && szSearchPath[1] == _T('\\') &&
-            szSearchPath[2] == _T('.') && szSearchPath[3] == _T('\\'))
-        {
-            GetCurrentDirectory(MAX_PATH, szSearchPath);
-            _tcscat(szSearchPath, _T("\\"));
-            _tcscat(szSearchPath, szBaseWord);
-        }
-
-        if (StartLength > 0)
-        {
-            _tcscat(szSearchPath,_T("*"));
-        }
-        _tcscpy(LastSearch,szSearchPath);
-        _tcscpy(LastPrefix,szPrefix);
+        _tcscat(str,_T("*"));
     }
-    else
+
+    /* Zero it out first */
+    szBaseWord[0] = _T('\0');
+    szPrefix[0] = _T('\0');
+
+    /*What comes out of this needs to be:
+        szBaseWord =  path no quotes to the object
+        szPrefix = what leads up to the filename
+        no quote at the END of the full name */
+    FindPrefixAndSuffix(str,szPrefix,szBaseWord);
+    /* Strip quotes */
+    for(i = 0; i < _tcslen(szBaseWord); )
     {
-        _tcscpy(szSearchPath, LastSearch);
-        _tcscpy(szPrefix, LastPrefix);
-        StartLength = 0;
+        if (szBaseWord[i] == _T('\"'))
+            memmove(&szBaseWord[i],&szBaseWord[i + 1], _tcslen(&szBaseWord[i]) * sizeof(TCHAR));
+        else
+            i++;
     }
+
+    /* clear it out */
+    memset(szSearchPath, 0, sizeof(szSearchPath));
+
+    /* Start the search for all the files */
+    GetFullPathName(szBaseWord, MAX_PATH, szSearchPath, NULL);
+
+    /* Got a device path? Fallback to the the current dir plus the short path */
+    if (szSearchPath[0] == _T('\\') && szSearchPath[1] == _T('\\') &&
+        szSearchPath[2] == _T('.') && szSearchPath[3] == _T('\\'))
+    {
+        GetCurrentDirectory(MAX_PATH, szSearchPath);
+        _tcscat(szSearchPath, _T("\\"));
+        _tcscat(szSearchPath, szBaseWord);
+    }
+
+    if (StartLength > 0)
+    {
+        _tcscat(szSearchPath,_T("*"));
+    }
+
+    szTyped = szBaseWord + _tcslen(szBaseWord);
+    while (StartLength && szTyped > szBaseWord &&
+           !_tcschr(_T("\\/:"), szTyped[-1]))
+    {
+        szTyped--;
+    }
+
     /* search for the files it might be */
     hFile = FindFirstFile (szSearchPath, &file);
     if (hFile == INVALID_HANDLE_VALUE)
@@ -1021,6 +794,12 @@ VOID CompleteFilename (LPTSTR strIN, BOOL bNext, LPTSTR strOut, UINT cusor)
         }
         /* Copies the file name into the struct */
         _tcscpy(FileList[FileListSize-1].Name,file.cFileName);
+        if (file.dwFileAttributes != INVALID_FILE_ATTRIBUTES &&
+            (file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+            _tcslen(file.cFileName) < MAX_PATH - 1)
+        {
+            _tcscat(FileList[FileListSize-1].Name,_T("\\"));
+        }
 
     } while(FindNextFile(hFile,&file));
 
@@ -1038,34 +817,20 @@ VOID CompleteFilename (LPTSTR strIN, BOOL bNext, LPTSTR strOut, UINT cusor)
     /* Sort the files */
     qsort(FileList,FileListSize,sizeof(FileName), compare);
 
-    /* Find the next/previous */
-    if (_tcslen(szOriginal) && !_tcscmp(szOriginal,LastReturned))
+    if (!SelectCompletion(FileList, FileListSize, szTyped,
+                          bList, szWord, Listed) ||
+        _tcslen(szPrefix) + _tcslen(szWord) + 4 > MAX_PATH)
     {
-        if (bNext)
-        {
-            if (FileListSize - 1 == Sel)
-                Sel = 0;
-            else
-                Sel++;
-        }
-        else
-        {
-            if (!Sel)
-                Sel = FileListSize - 1;
-            else
-                Sel--;
-        }
-    }
-    else
-    {
-        Sel = 0;
+        _tcscpy(strOut,szOriginal);
+        cmd_free(FileList);
+        return;
     }
 
     /* nothing found that matched last time so return the first thing in the list */
     strOut[0] = _T('\0');
 
     /* Special character in the name */
-    if (FileNameContainsSpecialCharacters(FileList[Sel].Name))
+    if (FileNameContainsSpecialCharacters(szWord))
     {
         INT LastSpace;
         BOOL bInside;
@@ -1106,7 +871,7 @@ VOID CompleteFilename (LPTSTR strIN, BOOL bNext, LPTSTR strOut, UINT cusor)
     }
 
     _tcscpy(strOut,szPrefix);
-    _tcscat(strOut,FileList[Sel].Name);
+    _tcscat(strOut,szWord);
 
     /* check for odd number of quotes means we need to close them */
     if (!NeededQuote)
@@ -1118,10 +883,13 @@ VOID CompleteFilename (LPTSTR strIN, BOOL bNext, LPTSTR strOut, UINT cusor)
         }
     }
 
-    if (NeededQuote || (_tcslen(szPrefix) && szPrefix[_tcslen(szPrefix) - 1] == _T('\"')))
-        _tcscat(strOut,_T("\""));
+    if (FileListSize == 1 && szWord[_tcslen(szWord) - 1] != _T('\\'))
+    {
+        if (NeededQuote || (_tcslen(szPrefix) && szPrefix[_tcslen(szPrefix) - 1] == _T('\"')))
+            _tcscat(strOut,_T("\""));
+        _tcscat(strOut,_T(" "));
+    }
 
-    _tcscpy(LastReturned,strOut);
     //EndLength = _tcslen(strOut);
     //DiffLength = EndLength - StartLength;
     if (FileList != NULL)

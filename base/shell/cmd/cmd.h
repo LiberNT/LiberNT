@@ -127,7 +127,7 @@ extern HANDLE CMD_ModuleHandle;
 
 
 /* Prototypes for CMDINPUT.C */
-BOOL ReadCommand (LPTSTR, INT);
+BOOL ReadCommand (LPTSTR, INT, BOOL);
 
 extern TCHAR AutoCompletionChar;
 extern TCHAR PathCompletionChar;
@@ -223,12 +223,8 @@ VOID msg_pause(VOID);
 
 /* Prototypes for FILECOMP.C */
 #ifdef FEATURE_UNIX_FILENAME_COMPLETION
-VOID CompleteFilename (LPTSTR, UINT);
-INT  ShowCompletionMatches (LPTSTR, INT);
-#endif
-#ifdef FEATURE_4NT_FILENAME_COMPLETION
-BOOL CompleteCommand (LPTSTR, BOOL, LPTSTR, UINT);
-VOID CompleteFilename (LPTSTR, BOOL, LPTSTR, UINT);
+BOOL CompleteCommand (LPTSTR, BOOL, LPTSTR, UINT, PBOOL);
+VOID CompleteFilename (LPTSTR, BOOL, LPTSTR, UINT, PBOOL);
 #endif
 
 

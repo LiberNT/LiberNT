@@ -135,7 +135,7 @@ ClearCommandLine(LPTSTR str, INT maxlen, SHORT orgx, SHORT orgy)
 
 
 /* read in a command line */
-BOOL ReadCommand(LPTSTR str, INT maxlen)
+BOOL ReadCommand(LPTSTR str, INT maxlen, BOOL bMore)
 {
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     SHORT orgx;     /* origin x/y */
@@ -150,13 +150,12 @@ BOOL ReadCommand(LPTSTR str, INT maxlen)
     DWORD dwControlKeyState;
 #ifdef FEATURE_UNIX_FILENAME_COMPLETION
     WORD   wLastKey = 0;
+    BOOL bListed;
+    TCHAR szPath[MAX_PATH];
 #endif
     TCHAR  ch;
     BOOL bReturn = FALSE;
     BOOL bCharInput;
-#ifdef FEATURE_4NT_FILENAME_COMPLETION
-    TCHAR szPath[MAX_PATH];
-#endif
 #ifdef FEATURE_HISTORY
     //BOOL bContinue=FALSE;/*is TRUE the second case will not be executed*/
     TCHAR PreviousChar;
@@ -358,79 +357,35 @@ BOOL ReadCommand(LPTSTR str, INT maxlen)
 
             case VK_TAB:
 #ifdef FEATURE_UNIX_FILENAME_COMPLETION
-                /* expand current file name */
-                if ((current == charcount) ||
-                    (current == charcount - 1 &&
-                     str[current] == _T('"'))) /* only works at end of line*/
-                {
-                    if (wLastKey != VK_TAB)
-                    {
-                        /* if first TAB, complete filename*/
-                        tempscreen = charcount;
-                        CompleteFilename (str, charcount);
-                        charcount = _tcslen (str);
-                        current = charcount;
-
-                        SetCursorXY (orgx, orgy);
-                        ConOutPrintf (_T("%s"), str);
-
-                        if (tempscreen > charcount)
-                        {
-                            GetCursorXY (&curx, &cury);
-                            for (count = tempscreen - charcount; count--; )
-                                ConOutChar (_T(' '));
-                            SetCursorXY (curx, cury);
-                        }
-                        else
-                        {
-                            if (((charcount + orgx) / maxx) + orgy > maxy - 1)
-                                orgy += maxy - ((charcount + orgx) / maxx + orgy + 1);
-                        }
-
-                        /* set cursor position */
-                        SetCursorXY ((orgx + current) % maxx,
-                                 orgy + (orgx + current) / maxx);
-                        GetCursorXY (&curx, &cury);
-                    }
-                    else
-                    {
-                        /*if second TAB, list matches*/
-                        if (ShowCompletionMatches (str, charcount))
-                        {
-                            PrintPrompt();
-                            GetCursorXY(&orgx, &orgy);
-                            ConOutPrintf(_T("%s"), str);
-
-                            /* set cursor position */
-                            SetCursorXY((orgx + current) % maxx,
-                                         orgy + (orgx + current) / maxx);
-                            GetCursorXY(&curx, &cury);
-                        }
-
-                    }
-                }
-                else
-                {
-                    MessageBeep(-1);
-                }
-#endif
-#ifdef FEATURE_4NT_FILENAME_COMPLETION
                 /* used to later see if we went down to the next line */
                 tempscreen = charcount;
                 szPath[0]=_T('\0');
+                bListed = FALSE;
 
-                /* str is the whole things that is on the current line
-                   that is and and out.  arg 2 is weather it goes back
-                    one file or forward one file */
                 if (!CompleteCommand(str,
-                                     !(ir.Event.KeyEvent.dwControlKeyState & SHIFT_PRESSED),
+                                     wLastKey == VK_TAB,
                                      szPath,
-                                     current))
+                                     current,
+                                     &bListed))
                 {
                     CompleteFilename(str,
-                                     !(ir.Event.KeyEvent.dwControlKeyState & SHIFT_PRESSED),
+                                     wLastKey == VK_TAB,
                                      szPath,
-                                     current);
+                                     current,
+                                     &bListed);
+                }
+                if (bListed)
+                {
+                    if (bMore)
+                        ConOutResPrintf(STRING_MORE);
+                    else if (bEcho)
+                        PrintPrompt();
+                    GetCursorXY(&orgx, &orgy);
+                    if (((charcount + orgx) / maxx) + orgy > maxy - 1)
+                        orgy += maxy - ((charcount + orgx) / maxx + orgy + 1);
+                    ConOutPrintf(_T("%s"), str);
+                    GetCursorXY(&curx, &cury);
+                    break;
                 }
                 /* Attempt to clear the line */
                 ClearCommandLine (str, maxlen, orgx, orgy);
@@ -736,7 +691,14 @@ BOOL ReadCommand(LPTSTR str, INT maxlen)
                 }
             }
 
-        //wLastKey = ir.Event.KeyEvent.wVirtualKeyCode;
+#ifdef FEATURE_UNIX_FILENAME_COMPLETION
+        if (ir.Event.KeyEvent.wVirtualKeyCode != VK_SHIFT &&
+            ir.Event.KeyEvent.wVirtualKeyCode != VK_CONTROL &&
+            ir.Event.KeyEvent.wVirtualKeyCode != VK_MENU)
+        {
+            wLastKey = ir.Event.KeyEvent.wVirtualKeyCode;
+        }
+#endif
     }
     while (!bReturn);
 

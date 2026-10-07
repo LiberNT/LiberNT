@@ -1750,7 +1750,7 @@ ReadLine(TCHAR *commandline, BOOL bMore)
             }
         }
 
-        if (!ReadCommand(readline, CMDLINE_LENGTH - 1))
+        if (!ReadCommand(readline, CMDLINE_LENGTH - 1, bMore))
         {
             bExit = TRUE;
             return FALSE;
