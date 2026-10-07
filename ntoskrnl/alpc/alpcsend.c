@@ -174,6 +174,10 @@ AlpcpReplyToMessage(
             (Message->PortMessage.ClientId.UniqueProcess == Header->ClientId.UniqueProcess) &&
             (Message->PortMessage.ClientId.UniqueThread == Header->ClientId.UniqueThread))
         {
+            if (!Message->WaitingThread && !Message->SenderProcess && AlpcpReclaimCanceledMessage(Message))
+            {
+                AlpcpFreeMessage(Message);
+            }
             AlpcpReleaseLock();
             AlpcpReleaseMessageAttributes(&CapturedMessage);
             if (Buffer) ExFreePoolWithTag(Buffer, 'RcpA');

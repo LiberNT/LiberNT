@@ -574,6 +574,24 @@ AlpcpWaitForReply(
             Message->WaitingThread = NULL;
             if (Message->State & ALPC_MSG_STATE_IN_CANCELED_QUEUE)
             {
+                PKALPC_MESSAGE Canceled;
+
+                Canceled = Message->CancelQueuePort ? AlpcpAllocateMessage(sizeof(PORT_MESSAGE), Message->CancelQueuePort) : NULL;
+                if (Canceled)
+                {
+                    Canceled->PortMessage = Message->PortMessage;
+                    Canceled->PortMessage.u1.s1.DataLength = 0;
+                    Canceled->PortMessage.u1.s1.TotalLength = sizeof(PORT_MESSAGE);
+                    Canceled->Attributes.ClientContext = Message->Attributes.ClientContext;
+                    Canceled->Attributes.ServerContext = Message->Attributes.ServerContext;
+                    Canceled->Attributes.PortContext = Message->Attributes.PortContext;
+                    Canceled->Attributes.CancelPortContext = Message->Attributes.CancelPortContext;
+                    Canceled->CompletionStatus = Message->CompletionStatus;
+                    Canceled->State = ALPC_MSG_STATE_CANCELED | ALPC_MSG_STATE_IN_CANCELED_QUEUE;
+                    Canceled->CancelQueuePort = Message->CancelQueuePort;
+                    InsertTailList(&Message->CanceledEntry, &Canceled->CanceledEntry);
+                    Canceled->CancelQueuePort->CanceledQueueLength++;
+                }
                 RemoveEntryList(&Message->CanceledEntry);
                 InitializeListHead(&Message->CanceledEntry);
                 Message->State &= ~ALPC_MSG_STATE_IN_CANCELED_QUEUE;
