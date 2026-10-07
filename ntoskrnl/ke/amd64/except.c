@@ -413,6 +413,8 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
                  !(KdIgnoreUmExceptions)) ||
                  (KdIsThisAKdTrap(ExceptionRecord, &Context, PreviousMode)))
             {
+                ULONG64 Rip = Context.Rip;
+
                 /* Make sure the debugger can access debug directories */
                 KiPrepareUserDebugData();
 
@@ -427,6 +429,15 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
                     /* Exception was handled */
                     goto Handled;
                 }
+
+                /* The debugger did not take it, drop its changes */
+                Context.Rip = Rip;
+            }
+
+            /* User mode sees a breakpoint with its code as only parameter */
+            if (ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT)
+            {
+                ExceptionRecord->NumberParameters = 1;
             }
 
             /* Forward exception to user mode debugger */
