@@ -198,6 +198,57 @@ static void TestChain(IDXGIFactory *Factory, ID3D11Device *Device, ID3D11DeviceC
     AppSmokePumpMessages();
 }
 
+static void TestDefaultBufferMap(ID3D11Device *Device, ID3D11DeviceContext *Context)
+{
+    D3D11_FEATURE_DATA_D3D11_OPTIONS1 Options;
+    D3D11_MAPPED_SUBRESOURCE Map;
+    ID3D11Buffer *Buffer = NULL;
+    D3D11_BUFFER_DESC Desc;
+    UINT Index, Wrong = 0;
+    HRESULT Hr;
+
+    memset(&Options, 0, sizeof(Options));
+    Hr = Device->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS1, &Options, sizeof(Options));
+    if (FAILED(Hr) || !Options.MapOnDefaultBuffers)
+    {
+        skip("Default-usage buffers are not mappable on this device: %#lx\n", Hr);
+        return;
+    }
+
+    memset(&Desc, 0, sizeof(Desc));
+    Desc.ByteWidth = 4096;
+    Desc.Usage = D3D11_USAGE_DEFAULT;
+    Desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    Desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
+    Hr = Device->CreateBuffer(&Desc, NULL, &Buffer);
+    ok(Hr == S_OK && Buffer, "Default-usage buffer with CPU access: %#lx\n", Hr);
+    if (!Buffer)
+        return;
+
+    Hr = Context->Map(Buffer, 0, D3D11_MAP_WRITE, 0, &Map);
+    ok(Hr == S_OK && Map.pData, "Mapping a default-usage buffer for writing: %#lx\n", Hr);
+    if (Hr == S_OK && Map.pData)
+    {
+        for (Index = 0; Index < Desc.ByteWidth; ++Index)
+            static_cast<BYTE *>(Map.pData)[Index] = static_cast<BYTE>(Index * 5 + 1);
+        Context->Unmap(Buffer, 0);
+
+        Hr = Context->Map(Buffer, 0, D3D11_MAP_READ, 0, &Map);
+        ok(Hr == S_OK && Map.pData, "Mapping a default-usage buffer for reading: %#lx\n", Hr);
+        if (Hr == S_OK && Map.pData)
+        {
+            for (Index = 0; Index < Desc.ByteWidth; ++Index)
+            {
+                if (static_cast<const BYTE *>(Map.pData)[Index] != static_cast<BYTE>(Index * 5 + 1))
+                    ++Wrong;
+            }
+            ok(Wrong == 0, "%u of %u bytes read back from the default-usage buffer are wrong\n", Wrong, Desc.ByteWidth);
+            Context->Unmap(Buffer, 0);
+        }
+    }
+    Buffer->Release();
+}
+
 START_TEST(swap_chain)
 {
     typedef HRESULT (WINAPI *CREATE_DEVICE)(IDXGIAdapter *, D3D_DRIVER_TYPE, HMODULE, UINT, const D3D_FEATURE_LEVEL *,
@@ -244,6 +295,7 @@ START_TEST(swap_chain)
         if (Linkage)
             Linkage->Release();
     }
+    TestDefaultBufferMap(Device, Context);
 
     Hr = Device->QueryInterface(IID_IDXGIDevice, reinterpret_cast<void **>(&DxgiDevice));
     ok(Hr == S_OK && DxgiDevice, "IDXGIDevice: %#lx\n", Hr);
