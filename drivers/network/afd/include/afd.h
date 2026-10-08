@@ -230,6 +230,7 @@ typedef struct _AFD_FCB {
     SOCK_SHARED_INFO SharedData;
     BOOLEAN Locked, Critical, NonBlocking, OobInline, TdiReceiveClosed, SendClosed;
     BOOLEAN ReceiveRepostActive, ReceiveRepostPending;
+    BOOLEAN SendStartActive, SendStartPending;
     UINT Flags, GroupID, GroupType;
     KIRQL OldIrql;
     PVOID CurrentThread;

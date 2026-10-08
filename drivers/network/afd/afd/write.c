@@ -28,7 +28,7 @@ AfdBufferedSendComplete(PDEVICE_OBJECT DeviceObject, PIRP Irp, PVOID Context)
 }
 
 static NTSTATUS
-AfdStartBufferedSend(PAFD_FCB FCB)
+AfdSubmitBufferedSend(PAFD_FCB FCB)
 {
     PDEVICE_OBJECT DeviceObject;
     PIRP Irp;
@@ -73,6 +73,33 @@ AfdStartBufferedSend(PAFD_FCB FCB)
     TdiBuildSend(Irp, DeviceObject, FCB->Connection.Object, AfdBufferedSendComplete, FCB, Mdl, 0, FCB->Send.BytesUsed);
     FCB->SendIrp.InFlightRequest = Irp;
     return IoCallDriver(DeviceObject, Irp);
+}
+
+static NTSTATUS
+AfdStartBufferedSend(PAFD_FCB FCB)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (FCB->SendStartActive)
+    {
+        FCB->SendStartPending = TRUE;
+        return STATUS_SUCCESS;
+    }
+
+    FCB->SendStartActive = TRUE;
+
+    do
+    {
+        FCB->SendStartPending = FALSE;
+
+        if (FCB->SendIrp.InFlightRequest || !FCB->Send.BytesUsed) break;
+
+        Status = AfdSubmitBufferedSend(FCB);
+    } while (NT_SUCCESS(Status) && FCB->SendStartPending);
+
+    FCB->SendStartActive = FALSE;
+
+    return Status;
 }
 
 /* The send window owns buffered bytes independently of the caller's IRP. */

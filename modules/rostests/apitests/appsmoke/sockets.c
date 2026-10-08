@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Tests select, event selection and accept on loopback sockets, as a socket client of either bitness uses them
+ * PURPOSE:     Tests select, event selection, accept and a bulk transfer on loopback sockets in either bitness
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -24,6 +24,89 @@ static int SelectOne(SOCKET Socket, int Set, DWORD Milliseconds)
         return -1;
 
     return Result > 0 && FD_ISSET(Socket, &Sockets);
+}
+
+#define BULK_BYTES (24 * 1024 * 1024)
+#define BULK_CHUNK (64 * 1024)
+
+static DWORD WINAPI BulkSender(void *Context)
+{
+    SOCKET Socket = (SOCKET)(ULONG_PTR)Context;
+    char *Chunk = HeapAlloc(GetProcessHeap(), 0, BULK_CHUNK);
+    DWORD Sent = 0, Index;
+    int Result;
+
+    for (Index = 0; Index < BULK_CHUNK; Index++)
+        Chunk[Index] = (char)(Index * 7);
+
+    while (Sent < BULK_BYTES)
+    {
+        Result = send(Socket, Chunk, BULK_CHUNK, 0);
+        if (Result <= 0)
+            break;
+        Sent += Result;
+    }
+
+    HeapFree(GetProcessHeap(), 0, Chunk);
+    shutdown(Socket, SD_SEND);
+    return Sent;
+}
+
+static void TestBulkTransfer(void)
+{
+    SOCKET Listener, Client, Accepted;
+    struct sockaddr_in Address;
+    HANDLE Thread;
+    char *Chunk;
+    DWORD Received = 0, Sent = 0, Mismatches = 0, Index;
+    int Length, Result;
+
+    Listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    memset(&Address, 0, sizeof(Address));
+    Address.sin_family = AF_INET;
+    Address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    bind(Listener, (struct sockaddr *)&Address, sizeof(Address));
+    listen(Listener, 1);
+    Length = sizeof(Address);
+    getsockname(Listener, (struct sockaddr *)&Address, &Length);
+
+    Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    Result = connect(Client, (struct sockaddr *)&Address, sizeof(Address));
+    ok(Result == 0, "connect failed with %d\n", WSAGetLastError());
+    Accepted = accept(Listener, NULL, NULL);
+    ok(Accepted != INVALID_SOCKET, "accept failed with %d\n", WSAGetLastError());
+
+    Thread = CreateThread(NULL, 0, BulkSender, (void *)(ULONG_PTR)Client, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+
+    Chunk = HeapAlloc(GetProcessHeap(), 0, BULK_CHUNK);
+    for (;;)
+    {
+        Result = recv(Accepted, Chunk, BULK_CHUNK, 0);
+        if (Result <= 0)
+            break;
+
+        for (Index = 0; Index < (DWORD)Result; Index++)
+        {
+            if (Chunk[Index] != (char)(((Received + Index) % BULK_CHUNK) * 7))
+                Mismatches++;
+        }
+
+        Received += Result;
+    }
+
+    HeapFree(GetProcessHeap(), 0, Chunk);
+    ok(Result == 0, "recv ended with %d, error %d\n", Result, WSAGetLastError());
+    ok(WaitForSingleObject(Thread, 30000) == WAIT_OBJECT_0, "The sender did not finish\n");
+    GetExitCodeThread(Thread, &Sent);
+    CloseHandle(Thread);
+    ok(Sent == BULK_BYTES, "Sent %lu bytes\n", Sent);
+    ok(Received == BULK_BYTES, "Received %lu bytes\n", Received);
+    ok(Mismatches == 0, "%lu received bytes differ\n", Mismatches);
+
+    closesocket(Accepted);
+    closesocket(Client);
+    closesocket(Listener);
 }
 
 START_TEST(sockets)
@@ -157,6 +240,8 @@ START_TEST(sockets)
     getsockopt(Client, SOL_SOCKET, SO_ERROR, (char *)&Error, &Length);
     ok(Error == WSAECONNREFUSED, "The error of a refused connection is %d\n", Error);
     closesocket(Client);
+
+    TestBulkTransfer();
 
     WSACleanup();
 }
