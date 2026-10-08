@@ -85,7 +85,6 @@ BOOLEAN KdNetStopped;
 static const CHAR KdpMagic[4] = {'L', 'K', 'D', 'N'};
 static const CHAR KdpProtocolName[] = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
 static const CHAR KdpPrologueLabel[] = "LiberNT KDNET 1";
-static const CHAR KdpKeyAlphabet[] = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 static UCHAR KdpPresharedKey[KDNET_KEY_SIZE];
 static UCHAR KdpHelloKey[KDNET_KEY_SIZE];
@@ -623,10 +622,9 @@ KdSessionInitialize(VOID)
     static const CHAR KeyLabel[] = "LiberNT KDNET v1 key";
     static const CHAR HelloLabel[] = "LiberNT KDNET v1 hello";
     static const CHAR RendezvousLabel[] = "LiberNT KDNET v1 rendezvous";
-    UCHAR Random[25], Hash[KDNET_HASH_SIZE];
+    UCHAR Hash[KDNET_HASH_SIZE];
     CHAR Normalized[KDNET_KEY_TEXT_SIZE];
-    ULONG i, Length = 0;
-    PCHAR Text = KdSessionKeyText;
+    ULONG i, Length = 0, Value;
     CHAR Character;
 
     if (KdNetOptions.HaveKey)
@@ -636,17 +634,15 @@ KdSessionInitialize(VOID)
     }
     else
     {
-        KdCryptoRandom(Random, sizeof(Random));
-        for (i = 0; i < sizeof(Random); i++)
+        do
         {
-            if (i && i % 5 == 0)
-                *Text++ = '-';
+            KdCryptoRandom((PUCHAR)&Value, sizeof(Value));
+        } while (Value >= 4200000000UL);
 
-            *Text++ = KdpKeyAlphabet[Random[i] & 31];
-        }
-
-        *Text = ANSI_NULL;
-        KdCryptoWipe(Random, sizeof(Random));
+        Value %= 100000000UL;
+        _snprintf(KdSessionKeyText, sizeof(KdSessionKeyText), "%04lu-%04lu", Value / 10000, Value % 10000);
+        KdSessionKeyText[sizeof(KdSessionKeyText) - 1] = ANSI_NULL;
+        KdCryptoWipe(&Value, sizeof(Value));
     }
 
     for (i = 0; KdSessionKeyText[i]; i++)

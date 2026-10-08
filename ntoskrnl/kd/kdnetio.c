@@ -14,6 +14,7 @@ static KD_TERMINAL_INTERFACE KdpNetInterface;
 static const KD_TERMINAL_HOST KdpNetHost = {KdpInfoQuery, KdpInfoState};
 static KSPIN_LOCK KdpNetSpinLock;
 static volatile BOOLEAN KdpNetReady;
+static BOOLEAN KdpNetConfigured;
 static BOOLEAN KdpNetPrinted;
 
 static
@@ -115,7 +116,7 @@ KdQueryTransportKey(
         return 0;
 
     *Buffer = ANSI_NULL;
-    return KdpNetReady ? KdpNetInterface.QueryKey(Buffer, Size) : 0;
+    return KdpNetConfigured ? KdpNetInterface.QueryKey(Buffer, Size) : 0;
 }
 
 BOOLEAN
@@ -213,6 +214,7 @@ KdpNetInit(
 
         KdpNetInterface.Configure(KeLoaderBlock ? KeLoaderBlock->LoadOptions : NULL);
         KdpNetInterface.SetHost(&KdpNetHost);
+        KdpNetConfigured = TRUE;
         KeInitializeSpinLock(&KdpNetSpinLock);
         DispatchTable->KdpPrintRoutine = KdpNetPrint;
         DispatchTable->KdpInitRoutine = KdpNetInit;
@@ -224,6 +226,7 @@ KdpNetInit(
         if (!NT_SUCCESS(Result))
         {
             KdpDebugMode.Net = FALSE;
+            KdpNetConfigured = FALSE;
             HalDisplayString("   Network debugging unavailable\r\n");
             DbgPrint("Network debugger: no usable network card, status 0x%08lx\n", Result);
             return Result;

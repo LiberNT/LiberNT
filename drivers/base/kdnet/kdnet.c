@@ -173,6 +173,12 @@ KdpParseOptions(
     }
 
     Text = KdpFindOption(Options, "ENCRYPTION_KEY");
+    if (!Text)
+    {
+        Text = KdpFindOption(Options, "ASSISTANCE_KEY");
+        KdNetOptions.ShowKey = Text != NULL;
+    }
+
     if (Text)
     {
         for (i = 0; i < sizeof(KdNetOptions.Key) - 1 && Text[i] && Text[i] != ' '; i++)
@@ -385,10 +391,12 @@ KdpTerminalQueryKey(
         return 0;
 
     *Buffer = ANSI_NULL;
-    if (!KdNetReady || KdNetOptions.HaveKey)
+    if (KdNetOptions.ShowKey)
+        Length = _snprintf(Buffer, Size, "%s", KdNetOptions.Key);
+    else if (!KdNetReady || KdNetOptions.HaveKey)
         return 0;
-
-    Length = _snprintf(Buffer, Size, "%s", KdSessionKeyText);
+    else
+        Length = _snprintf(Buffer, Size, "%s", KdSessionKeyText);
     if (Length < 0 || (ULONG)Length >= Size)
         Length = Size - 1;
 

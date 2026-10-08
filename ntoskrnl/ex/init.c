@@ -1543,6 +1543,9 @@ Phase1InitializationDiscard(IN PVOID Context)
         /* It is, display the boot logo and enable printing strings */
         InbvEnableDisplayString(SosEnabled);
         DisplayBootBitmap(SosEnabled);
+#ifndef _WINKD_
+        KdDisplayTransportKey(SosEnabled && SharedUserData->NtProductType == NtProductWinNt);
+#endif
     }
     else
     {

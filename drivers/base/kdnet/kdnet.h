@@ -43,6 +43,7 @@ typedef struct _KDNET_OPTIONS
     ULONG Device;
     ULONG Function;
     BOOLEAN HaveKey;
+    BOOLEAN ShowKey;
     CHAR Key[KDNET_KEY_TEXT_SIZE];
     CHAR HostName[KDNET_HOST_NAME_SIZE];
 } KDNET_OPTIONS, *PKDNET_OPTIONS;
