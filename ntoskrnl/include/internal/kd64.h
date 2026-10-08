@@ -120,6 +120,10 @@ BOOLEAN NTAPI KdpInitializeCrashDumpCore(_In_opt_ PLOADER_PARAMETER_BLOCK Loader
 
 BOOLEAN NTAPI KdpInitializeDedicatedCrashDump(_In_ PFILE_OBJECT BootFileObject);
 
+BOOLEAN NTAPI KdpInitializeBootPageFileCrashDump(_In_ PCUNICODE_STRING BootDeviceName);
+
+BOOLEAN NTAPI KdpReleaseCrashDumpFile(VOID);
+
 VOID NTAPI KdpPublishCrashDumpArtifacts(VOID);
 
 NTSTATUS NTAPI KdpWriteCrashDump(VOID);

@@ -448,6 +448,7 @@ static VOID KdpQueryCrashControlPolicy(_Out_ PULONG DumpType, _Out_ PBOOLEAN Inc
 
 static VOID KdpCleanupCrashDumpTarget(VOID)
 {
+    KdpCrashDumpState.Initialized = FALSE;
     if (KdpCrashDumpState.RetrievalPointers != NULL)
         ExFreePoolWithTag(KdpCrashDumpState.RetrievalPointers, TAG_CRASH_DUMP);
     if (KdpCrashDumpState.IoEventHandle != NULL)
@@ -473,7 +474,6 @@ static VOID KdpCleanupCrashDumpTarget(VOID)
     KdpCrashDumpState.RawPartitionLength = 0;
     KdpCrashDumpState.PreviousArtifactsPending = FALSE;
     KdpCrashDumpState.Dedicated = FALSE;
-    KdpCrashDumpState.Initialized = FALSE;
 }
 
 static VOID KdpCleanupCrashDumpCore(VOID)
@@ -639,7 +639,7 @@ BOOLEAN NTAPI KdpInitializeCrashDump(_In_ HANDLE DumpFileHandle)
     NTSTATUS Status;
     PAGED_CODE();
 
-    if (KdpCrashDumpState.Initialized)
+    if (KdpCrashDumpState.Initialized && KdpCrashDumpState.Dedicated)
     {
         KdpCrashDumpInitializationStage = "dump target ready";
         KdpCrashDumpInitializationStatus = STATUS_SUCCESS;
@@ -756,6 +756,95 @@ Failure:
     DPRINT1("KD: Crash dump target initialization failed while %s (0x%08lx)\n", KdpCrashDumpInitializationStage, Status);
     KdpCrashDumpInitializationStatus = Status;
     KdpCleanupCrashDumpTarget();
+    return FALSE;
+}
+
+BOOLEAN NTAPI KdpReleaseCrashDumpFile(VOID)
+{
+    PAGED_CODE();
+
+    if (!KdpCrashDumpState.Initialized || KdpCrashDumpState.Dedicated || (KdpCrashDumpState.FileObject == NULL))
+        return FALSE;
+
+    KdpCleanupCrashDumpTarget();
+    KdpCrashDumpInitializationStage = "replacing the paging file";
+    KdpCrashDumpInitializationStatus = STATUS_DEVICE_NOT_READY;
+    return TRUE;
+}
+
+BOOLEAN NTAPI KdpInitializeBootPageFileCrashDump(_In_ PCUNICODE_STRING BootDeviceName)
+{
+    static const UNICODE_STRING PageFileName = RTL_CONSTANT_STRING(L"\\pagefile.sys");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING FilePath;
+    IO_STATUS_BLOCK IoStatus;
+    LARGE_INTEGER Offset;
+    PDUMP_HEADER64 Header = NULL;
+    HANDLE FileHandle = NULL;
+    NTSTATUS Status;
+    BOOLEAN Result;
+    PAGED_CODE();
+
+    if (KdpCrashDumpState.Initialized)
+        return TRUE;
+    if (!KdpCrashDumpState.CoreInitialized)
+        return FALSE;
+
+    KdpCrashDumpInitializationStage = "opening the previous paging file";
+    FilePath.Length = 0;
+    FilePath.MaximumLength = BootDeviceName->Length + PageFileName.Length + sizeof(UNICODE_NULL);
+    FilePath.Buffer = ExAllocatePoolWithTag(PagedPool, FilePath.MaximumLength, TAG_CRASH_DUMP);
+    if (FilePath.Buffer == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Failure;
+    }
+    RtlCopyUnicodeString(&FilePath, BootDeviceName);
+    RtlAppendUnicodeStringToString(&FilePath, &PageFileName);
+
+    InitializeObjectAttributes(&ObjectAttributes, &FilePath, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwOpenFile(&FileHandle, FILE_READ_DATA | FILE_WRITE_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus, FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_NO_INTERMEDIATE_BUFFERING);
+    ExFreePoolWithTag(FilePath.Buffer, TAG_CRASH_DUMP);
+    if (!NT_SUCCESS(Status))
+    {
+        FileHandle = NULL;
+        goto Failure;
+    }
+
+    Header = MmAllocateNonCachedMemory(DUMP_HEADER64_SIZE);
+    if (Header == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Failure;
+    }
+
+    KdpCrashDumpInitializationStage = "reading the previous paging file";
+    Offset.QuadPart = 0;
+    Status = ZwReadFile(FileHandle, NULL, NULL, NULL, &IoStatus, Header, DUMP_HEADER64_SIZE, &Offset, NULL);
+    if (NT_SUCCESS(Status) && (IoStatus.Information != DUMP_HEADER64_SIZE))
+        Status = STATUS_END_OF_FILE;
+    if (!NT_SUCCESS(Status))
+        goto Failure;
+
+    if ((Header->Signature == DUMP_SIGNATURE64) && (Header->ValidDump == DUMP_VALID_DUMP64))
+    {
+        KdpCrashDumpInitializationStage = "keeping the previous crash dump until it is saved";
+        Status = STATUS_DEVICE_BUSY;
+        goto Failure;
+    }
+
+    MmFreeNonCachedMemory(Header, DUMP_HEADER64_SIZE);
+    Result = KdpInitializeCrashDump(FileHandle);
+    ZwClose(FileHandle);
+    return Result;
+
+Failure:
+    DPRINT("KD: Paging file crash dump target not armed while %s (0x%08lx)\n", KdpCrashDumpInitializationStage, Status);
+    KdpCrashDumpInitializationStatus = Status;
+    if (Header != NULL)
+        MmFreeNonCachedMemory(Header, DUMP_HEADER64_SIZE);
+    if (FileHandle != NULL)
+        ZwClose(FileHandle);
     return FALSE;
 }
 
@@ -1581,6 +1670,17 @@ BOOLEAN NTAPI KdpInitializeCrashDumpCore(_In_opt_ PLOADER_PARAMETER_BLOCK Loader
 BOOLEAN NTAPI KdpInitializeDedicatedCrashDump(_In_ PFILE_OBJECT BootFileObject)
 {
     UNREFERENCED_PARAMETER(BootFileObject);
+    return FALSE;
+}
+
+BOOLEAN NTAPI KdpInitializeBootPageFileCrashDump(_In_ PCUNICODE_STRING BootDeviceName)
+{
+    UNREFERENCED_PARAMETER(BootDeviceName);
+    return FALSE;
+}
+
+BOOLEAN NTAPI KdpReleaseCrashDumpFile(VOID)
+{
     return FALSE;
 }
 

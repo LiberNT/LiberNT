@@ -470,7 +470,8 @@ IopMarkBootPartition(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     IopErrorLogObject = FileObject->DeviceObject;
 
     /* Configure the crash target while the resolved boot-volume stack is held. */
-    IoInitializeDedicatedCrashDump(FileObject);
+    if (!IoInitializeDedicatedCrashDump(FileObject))
+        IoInitializeBootPageFileCrashDump(&DeviceName);
 
     /* Cleanup and return success */
     RtlFreeUnicodeString(&DeviceName);
@@ -804,6 +805,20 @@ NTAPI
 IoInitializeDedicatedCrashDump(IN PFILE_OBJECT BootFileObject)
 {
     return KdpInitializeDedicatedCrashDump(BootFileObject);
+}
+
+BOOLEAN
+NTAPI
+IoInitializeBootPageFileCrashDump(IN PCUNICODE_STRING BootDeviceName)
+{
+    return KdpInitializeBootPageFileCrashDump(BootDeviceName);
+}
+
+BOOLEAN
+NTAPI
+IoReleaseCrashDumpFile(VOID)
+{
+    return KdpReleaseCrashDumpFile();
 }
 
 VOID

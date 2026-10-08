@@ -1036,6 +1036,18 @@ IoInitializeDedicatedCrashDump(
     IN PFILE_OBJECT BootFileObject
 );
 
+BOOLEAN
+NTAPI
+IoInitializeBootPageFileCrashDump(
+    IN PCUNICODE_STRING BootDeviceName
+);
+
+BOOLEAN
+NTAPI
+IoReleaseCrashDumpFile(
+    VOID
+);
+
 VOID
 NTAPI
 IoPublishCrashDumpArtifacts(
