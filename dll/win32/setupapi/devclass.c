@@ -1288,7 +1288,7 @@ SetupDiGetClassDevPropertySheetsW(
         PropertySheetHeader, PropertySheetHeaderPageListSize,
         RequiredSize, PropertySheetType);
 
-    if (!DeviceInfoSet)
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE)
         SetLastError(ERROR_INVALID_HANDLE);
     else if (((struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
         SetLastError(ERROR_INVALID_HANDLE);

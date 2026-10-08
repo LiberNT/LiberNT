@@ -775,7 +775,7 @@ SetupDiBuildDriverInfoList(
 
     TRACE("%p %p %ld\n", DeviceInfoSet, DeviceInfoData, DriverType);
 
-    if (!DeviceInfoSet)
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE)
         SetLastError(ERROR_INVALID_HANDLE);
     else if ((list = (struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
         SetLastError(ERROR_INVALID_HANDLE);
@@ -1309,7 +1309,7 @@ SetupDiDestroyDriverInfoList(
 
     TRACE("%p %p 0x%lx\n", DeviceInfoSet, DeviceInfoData, DriverType);
 
-    if (!DeviceInfoSet)
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE)
         SetLastError(ERROR_INVALID_HANDLE);
     else if ((list = (struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
         SetLastError(ERROR_INVALID_HANDLE);

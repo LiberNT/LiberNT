@@ -2713,6 +2713,9 @@ HDEVINFO WINAPI SetupDiGetClassDevsExW(
     }
 
 #endif
+    if (deviceset == INVALID_HANDLE_VALUE)
+        deviceset = NULL;
+
     /* Create the deviceset if not set */
     if (deviceset)
     {
@@ -5305,7 +5308,8 @@ BOOL WINAPI SetupDiOpenDeviceInterfaceW(
         return FALSE;
     }
 
-    if (((struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE ||
+        ((struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
     {
         SetLastError(ERROR_INVALID_HANDLE);
         return FALSE;
@@ -5966,7 +5970,7 @@ SetupDiGetDeviceInfoListClass(
 
     TRACE("%s(%p %p)\n", __FUNCTION__, DeviceInfoSet, ClassGuid);
 
-    if (!DeviceInfoSet)
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE)
         SetLastError(ERROR_INVALID_HANDLE);
     else if ((list = (struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
         SetLastError(ERROR_INVALID_HANDLE);
@@ -5997,7 +6001,7 @@ SetupDiGetDeviceInstallParamsW(
 
     TRACE("%s(%p %p %p)\n", __FUNCTION__, DeviceInfoSet, DeviceInfoData, DeviceInstallParams);
 
-    if (!DeviceInfoSet)
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE)
         SetLastError(ERROR_INVALID_HANDLE);
     else if ((list = (struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
         SetLastError(ERROR_INVALID_HANDLE);
@@ -6106,7 +6110,7 @@ SetupDiSetDeviceInstallParamsW(
 
     TRACE("%s(%p %p %p)\n", __FUNCTION__, DeviceInfoSet, DeviceInfoData, DeviceInstallParams);
 
-    if (!DeviceInfoSet)
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE)
         SetLastError(ERROR_INVALID_HANDLE);
     else if ((list = (struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
         SetLastError(ERROR_INVALID_HANDLE);
@@ -6260,7 +6264,7 @@ SetupDiDeleteDeviceInfo(
 
     TRACE("%s(%p %p)\n", __FUNCTION__, DeviceInfoSet, DeviceInfoData);
 
-    if (!DeviceInfoSet)
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE)
         SetLastError(ERROR_INVALID_HANDLE);
     else if ((deviceInfoSet = (struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
         SetLastError(ERROR_INVALID_HANDLE);
@@ -6331,7 +6335,7 @@ SetupDiOpenDeviceInfoW(
     if (OpenFlags & DIOD_CANCEL_REMOVE)
         FIXME("DIOD_CANCEL_REMOVE flag not implemented\n");
 
-    if (!DeviceInfoSet)
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE)
         SetLastError(ERROR_INVALID_HANDLE);
     else if ((list = (struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
         SetLastError(ERROR_INVALID_HANDLE);
@@ -6462,7 +6466,7 @@ SetupDiGetSelectedDevice(
 
     TRACE("%s(%p %p)\n", __FUNCTION__, DeviceInfoSet, DeviceInfoData);
 
-    if (!DeviceInfoSet)
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE)
         SetLastError(ERROR_INVALID_HANDLE);
     else if ((list = (struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
         SetLastError(ERROR_INVALID_HANDLE);
@@ -6500,7 +6504,7 @@ SetupDiSetSelectedDevice(
 
     TRACE("%s(%p %p)\n", __FUNCTION__, DeviceInfoSet, DeviceInfoData);
 
-    if (!DeviceInfoSet)
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE)
         SetLastError(ERROR_INVALID_HANDLE);
     else if ((list = (struct DeviceInfoSet *)DeviceInfoSet)->magic != SETUP_DEVICE_INFO_SET_MAGIC)
         SetLastError(ERROR_INVALID_HANDLE);
