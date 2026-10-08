@@ -186,7 +186,6 @@ DxgkpDisplayPublishInitialMode(
     ULONG Index;
     NTSTATUS Status;
     PCWSTR Names[] = {L"DefaultSettings.XResolution", L"DefaultSettings.YResolution",
-                      L"DefaultSettings.XPanning", L"DefaultSettings.YPanning",
                       L"DefaultSettings.VRefresh"};
     ULONG Values[RTL_NUMBER_OF(Names)];
 
@@ -209,9 +208,9 @@ DxgkpDisplayPublishInitialMode(
     Status = ZwOpenKey(&Key, KEY_SET_VALUE, &Attributes);
     if (!NT_SUCCESS(Status))
         return;
-    Values[0] = Values[2] = Current.DisplayMode.Width;
-    Values[1] = Values[3] = Current.DisplayMode.Height;
-    Values[4] = Current.DisplayMode.IntegerRefreshRate;
+    Values[0] = Current.DisplayMode.Width;
+    Values[1] = Current.DisplayMode.Height;
+    Values[2] = Current.DisplayMode.IntegerRefreshRate;
     for (Index = 0; Index < RTL_NUMBER_OF(Names); ++Index)
     {
         Status = DxgkpRegWriteDword(Key, Names[Index], Values[Index]);
@@ -4860,8 +4859,8 @@ DxgkDisplayRegister(
             DxgkpRegWriteDword(hDriverKey, L"DefaultSettings.BitsPerPel", 32);
             DxgkpRegWriteDword(hDriverKey, L"DefaultSettings.VRefresh", 60);
             DxgkpRegWriteDword(hDriverKey, L"DefaultSettings.Flags", 0);
-            DxgkpRegWriteDword(hDriverKey, L"DefaultSettings.XPanning", DefW);
-            DxgkpRegWriteDword(hDriverKey, L"DefaultSettings.YPanning", DefH);
+            DxgkpRegWriteDword(hDriverKey, L"DefaultSettings.XPanning", 0);
+            DxgkpRegWriteDword(hDriverKey, L"DefaultSettings.YPanning", 0);
         }
         DxgkpRegWriteDword(hDriverKey, L"DefaultSettings.Orientation", 0);
         DxgkpRegWriteDword(hDriverKey, L"DefaultSettings.FixedOutput", 0);
