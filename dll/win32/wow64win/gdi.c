@@ -518,6 +518,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICloseAdapter( UINT *args )
     return NtGdiDdDDICloseAdapter( desc );
 }
 
+#ifndef __REACTOS__
 NTSTATUS WINAPI wow64_NtGdiDdDDICreateAllocation( UINT *args )
 {
     struct
@@ -622,7 +623,9 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICreateAllocation( UINT *args )
         allocs32->hAllocation = desc.pAllocationInfo[i].hAllocation;
     return status;
 }
+#endif
 
+#ifndef __REACTOS__
 NTSTATUS WINAPI wow64_NtGdiDdDDICreateAllocation2( UINT *args )
 {
     struct
@@ -735,6 +738,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICreateAllocation2( UINT *args )
     }
     return status;
 }
+#endif
 
 NTSTATUS WINAPI wow64_NtGdiDdDDICreateDCFromMemory( UINT *args )
 {
@@ -1124,6 +1128,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenNtHandleFromName( UINT *args )
     return status;
 }
 
+#ifndef __REACTOS__
 NTSTATUS WINAPI wow64_NtGdiDdDDIOpenResource( UINT *args )
 {
     struct
@@ -1185,7 +1190,9 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenResource( UINT *args )
     }
     return status;
 }
+#endif
 
+#ifndef __REACTOS__
 NTSTATUS WINAPI wow64_NtGdiDdDDIOpenResource2( UINT *args )
 {
     struct
@@ -1251,7 +1258,9 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenResource2( UINT *args )
     }
     return status;
 }
+#endif
 
+#ifndef __REACTOS__
 NTSTATUS WINAPI wow64_NtGdiDdDDIOpenResourceFromNtHandle( UINT *args )
 {
     struct
@@ -1329,6 +1338,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenResourceFromNtHandle( UINT *args )
     }
     return status;
 }
+#endif
 
 NTSTATUS WINAPI wow64_NtGdiDdDDIOpenSyncObjectFromNtHandle( UINT *args )
 {
