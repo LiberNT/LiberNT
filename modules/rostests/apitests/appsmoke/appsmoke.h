@@ -28,6 +28,7 @@ void AppSmokePumpMessages(void);
 BOOL AppSmokeD3D11DriverName(WCHAR *Name, UINT Count);
 BOOL AppSmokeD3D12DriverName(WCHAR *Name, UINT Count);
 BOOL AppSmokeOpenGlIcdName(WCHAR *Name, UINT Count);
+BOOL AppSmokeOpenClDriverName(WCHAR *Name, UINT Count);
 BOOL AppSmokeModuleLoaded(const WCHAR *Path);
 
 #ifdef __cplusplus

@@ -6,6 +6,7 @@
  */
 
 #include "appsmoke.h"
+#include <winreg.h>
 #include <d3dkmthk.h>
 
 #ifndef NT_SUCCESS
@@ -138,6 +139,36 @@ BOOL AppSmokeOpenGlIcdName(WCHAR *Name, UINT Count)
         return FALSE;
 
     lstrcpynW(Name, Info.UmdOpenGlIcdFileName, Count);
+    return TRUE;
+}
+
+BOOL AppSmokeOpenClDriverName(WCHAR *Name, UINT Count)
+{
+    struct
+    {
+        D3DDDI_QUERYREGISTRY_INFO Info;
+        WCHAR Extra[MAX_PATH];
+    } Query;
+    APPSMOKE_ADAPTER Adapter;
+    NTSTATUS Status;
+
+    Name[0] = 0;
+    if (!AppSmokeOpenAdapter(&Adapter))
+        return FALSE;
+
+    memset(&Query, 0, sizeof(Query));
+    Query.Info.QueryType = D3DDDI_QUERYREGISTRY_ADAPTERKEY;
+    Query.Info.ValueType = REG_SZ;
+    lstrcpyW(Query.Info.ValueName, sizeof(void *) == 8 ? L"OpenCLDriverName" : L"OpenCLDriverNameWow");
+    Status = QueryAdapter(Adapter.hAdapter, KMTQAITYPE_QUERYREGISTRY, &Query, sizeof(Query));
+    AppSmokeCloseAdapter(&Adapter);
+    if (!NT_SUCCESS(Status) || Query.Info.Status != D3DDDI_QUERYREGISTRY_STATUS_SUCCESS ||
+        !Query.Info.OutputString[0])
+    {
+        return FALSE;
+    }
+
+    lstrcpynW(Name, Query.Info.OutputString, Count);
     return TRUE;
 }
 
@@ -291,6 +322,7 @@ static void TestTrimNotification(const APPSMOKE_ADAPTER *Adapter)
 
 START_TEST(d3dkmt)
 {
+    static D3DKMT_ADAPTERREGISTRYINFO Registry;
     D3DKMT_QUERYVIDEOMEMORYINFO Memory;
     D3DKMT_UMDFILENAMEINFO UmdName;
     D3DKMT_DESTROYDEVICE Destroy;
@@ -307,6 +339,12 @@ START_TEST(d3dkmt)
     trace("Adapter driver model %u\n", (UINT)Adapter.DriverVersion);
 
     TestEnumeration(&Adapter);
+
+    memset(&Registry, 0, sizeof(Registry));
+    Status = QueryAdapter(Adapter.hAdapter, KMTQAITYPE_ADAPTERREGISTRYINFO, &Registry, sizeof(Registry));
+    ok(NT_SUCCESS(Status) && Registry.AdapterString[0] != 0, "Adapter registry information: %#lx\n", Status);
+    trace("Adapter \"%ls\", chip \"%ls\", DAC \"%ls\", BIOS \"%ls\"\n", Registry.AdapterString,
+          Registry.ChipType, Registry.DacType, Registry.BiosString);
 
     memset(&UmdName, 0, sizeof(UmdName));
     UmdName.Version = KMTUMDVERSION_DX11;

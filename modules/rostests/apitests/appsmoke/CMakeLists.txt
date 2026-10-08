@@ -6,6 +6,7 @@ add_executable(appsmoke_apitest
     d3dkmt.c
     display.c
     graphics.cpp
+    opencl.c
     process.c
     suite.c
     testlist.c)

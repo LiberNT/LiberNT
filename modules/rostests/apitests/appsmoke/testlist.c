@@ -7,6 +7,7 @@ extern void func_d3d12_device(void);
 extern void func_d3dkmt(void);
 extern void func_display_mode(void);
 extern void func_dll_directory(void);
+extern void func_opencl(void);
 extern void func_opengl(void);
 extern void func_suite(void);
 extern void func_swap_chain(void);
@@ -20,6 +21,7 @@ const struct test winetest_testlist[] =
     { "d3dkmt", func_d3dkmt },
     { "display_mode", func_display_mode },
     { "dll_directory", func_dll_directory },
+    { "opencl", func_opencl },
     { "opengl", func_opengl },
     { "suite", func_suite },
     { "swap_chain", func_swap_chain },

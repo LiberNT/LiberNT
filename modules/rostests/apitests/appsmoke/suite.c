@@ -22,6 +22,7 @@ static const struct
     { "swap_chain", 30000 },
     { "d3d12_device", 30000 },
     { "opengl", 20000 },
+    { "opencl", 60000 },
 };
 
 static void Report(const char *Format, ...)
