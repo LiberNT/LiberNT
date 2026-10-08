@@ -389,6 +389,24 @@ KiTryStealStandbyThreadLocked(
     return Thread;
 }
 
+static
+BOOLEAN
+KiAnyReadyThreadQueued(
+    _In_ ULONG ExceptCpu)
+{
+    PKPRCB Prcb;
+    ULONG Cpu;
+
+    for (Cpu = 0; Cpu < (ULONG)KeNumberProcessors; Cpu++)
+    {
+        Prcb = KiProcessorBlock[Cpu];
+        if ((Cpu != ExceptCpu) && (Prcb != NULL) && (Prcb->ReadySummary != 0))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 _Requires_lock_not_held_(Target->PrcbLock)
 BOOLEAN
 FASTCALL
@@ -420,8 +438,11 @@ KiBalanceReadyQueues(
 
         TargetTick = KeTickCount.LowPart;
         PreviousTick = InterlockedExchange(&KiBalanceState[TargetCpu].IdleTick, TargetTick);
-        if ((PreviousTick != 0) && ((ULONG)PreviousTick == TargetTick))
+        if ((PreviousTick != 0) && ((ULONG)PreviousTick == TargetTick) &&
+            !KiAnyReadyThreadQueued(TargetCpu))
+        {
             return FALSE;
+        }
     }
 
     KiAcquirePrcbLock(Target);
