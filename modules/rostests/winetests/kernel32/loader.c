@@ -1413,15 +1413,7 @@ static void test_Loader(void)
         ok( status == (is_wow64 ? STATUS_SUCCESS : STATUS_INVALID_IMAGE_WIN_64),
             "NtCreateSection error %08lx\n", status );
     }
-#ifdef __REACTOS__
-    else if (is_reactos() && orig_machine == IMAGE_FILE_MACHINE_AMD64)
-    {
-        ok(FALSE, "FIXME: These tests crash on ReactOS x64!\n");
-    }
     else
-#else
-    else
-#endif
     {
         IMAGE_NT_HEADERS32 nt32;
 
