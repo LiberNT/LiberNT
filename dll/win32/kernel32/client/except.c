@@ -218,6 +218,62 @@ BasepReportFault(IN PEXCEPTION_POINTERS ExceptionInfo)
     FreeLibrary(FaultRep);
 }
 
+
+static VOID
+_print_cxx_exception(PEXCEPTION_RECORD ExceptionRecord)
+{
+    ULONG_PTR Base = 0;
+    const ULONG *Type, *Table, *Info;
+    BOOLEAN StdException = FALSE;
+    ULONG Count, Index;
+    PCSTR Name, What;
+
+    if (ExceptionRecord->ExceptionCode != 0xE06D7363 ||
+        ExceptionRecord->NumberParameters < 3 ||
+        ExceptionRecord->ExceptionInformation[0] < 0x19930520 ||
+        ExceptionRecord->ExceptionInformation[0] > 0x19930522)
+    {
+        return;
+    }
+
+    if (sizeof(PVOID) == sizeof(ULONG64))
+    {
+        if (ExceptionRecord->NumberParameters < 4)
+            return;
+        Base = ExceptionRecord->ExceptionInformation[3];
+    }
+
+    _SEH2_TRY
+    {
+        Type = (const ULONG *)ExceptionRecord->ExceptionInformation[2];
+        Table = (const ULONG *)(Base + Type[3]);
+        Count = min(Table[0], 8);
+        for (Index = 0; Index < Count; Index++)
+        {
+            Info = (const ULONG *)(Base + Table[1 + Index]);
+            Name = (PCSTR)(Base + Info[1] + 2 * sizeof(PVOID));
+            DbgPrint("C++ exception type: %s\n", Name);
+            if (!strcmp(Name, ".?AVexception@std@@"))
+                StdException = TRUE;
+        }
+
+        if (StdException)
+        {
+            const ULONG_PTR *Object = (const ULONG_PTR *)ExceptionRecord->ExceptionInformation[1];
+
+            What = (PCSTR)Object[1];
+            if (What)
+                DbgPrint("C++ exception what: %s\n", What);
+            DbgPrint("C++ exception data: %p %p\n", (PVOID)Object[3], (PVOID)Object[4]);
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        DbgPrint("<error reading C++ exception: 0x%x>\n", _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+}
+
 static VOID
 PrintStackTrace(IN PEXCEPTION_POINTERS ExceptionInfo)
 {
@@ -240,6 +296,8 @@ PrintStackTrace(IN PEXCEPTION_POINTERS ExceptionInfo)
     {
         DbgPrint("Missing function: %s!%s\n", (PSZ)ExceptionRecord->ExceptionInformation[0], (PSZ)ExceptionRecord->ExceptionInformation[1]);
     }
+
+    _print_cxx_exception(ExceptionRecord);
 
     _dump_context(ContextRecord);
     DbgPrint("Address:\n");
