@@ -426,6 +426,39 @@ gethostname(OUT char FAR * name,
 /*
  * @implemented
  */
+INT
+WSAAPI
+GetHostNameW(OUT PWSTR name,
+             IN INT namelen)
+{
+    CHAR HostName[256];
+    INT Length;
+
+    if (!name || namelen < 1)
+    {
+        SetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+
+    HostName[0] = ANSI_NULL;
+    if (gethostname(HostName, sizeof(HostName)) != ERROR_SUCCESS)
+        return SOCKET_ERROR;
+
+    HostName[sizeof(HostName) - 1] = ANSI_NULL;
+    Length = MultiByteToWideChar(CP_ACP, 0, HostName, -1, NULL, 0);
+    if (Length == 0 || Length > namelen)
+    {
+        SetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+
+    MultiByteToWideChar(CP_ACP, 0, HostName, -1, name, namelen);
+    return ERROR_SUCCESS;
+}
+
+/*
+ * @implemented
+ */
 PSERVENT
 WSAAPI
 getservbyport(IN int port,
