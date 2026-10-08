@@ -3546,8 +3546,8 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     DXGKP_DISPLAY_COMMIT_RESULT RollbackResult;
     ULONG OldCommittedWidth;
     ULONG OldCommittedHeight;
-    D3DKMDT_VIDPN_PRESENT_PATH OldPaths[DXGKP_MAX_PATHS];
-    D3DKMDT_VIDPN_PRESENT_PATH NewPaths[DXGKP_MAX_PATHS];
+    D3DKMDT_VIDPN_PRESENT_PATH *OldPaths;
+    D3DKMDT_VIDPN_PRESENT_PATH *NewPaths;
     ULONG ComparablePaths = 0;
     BOOLEAN KmdTransaction = FALSE;
     BOOLEAN RecoveryRequired = FALSE;
@@ -3572,6 +3572,13 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     Snapshot = ExAllocatePoolWithTag(PagedPool, sizeof(*Snapshot), TAG_DXGK_VIDPN);
     if (Snapshot == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
+    OldPaths = ExAllocatePoolWithTag(NonPagedPool, 2 * DXGKP_MAX_PATHS * sizeof(*OldPaths), TAG_DXGK_VIDPN);
+    if (OldPaths == NULL)
+    {
+        ExFreePoolWithTag(Snapshot, TAG_DXGK_VIDPN);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    NewPaths = OldPaths + DXGKP_MAX_PATHS;
     (VOID)KeWaitForSingleObject(&Adapter->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
     DxgkpBeginSharedSurfaceMutationLocked(Adapter);
     if (!DxgkBeginKmdTransaction(Adapter))
@@ -3745,6 +3752,7 @@ Cleanup:
         DxgkVidPnDestroy(Candidate);
     if (NotifyMonitorEvent && NT_SUCCESS(Status))
         DxgkDisplayNotifyMonitorEvent(Adapter);
+    ExFreePoolWithTag(OldPaths, TAG_DXGK_VIDPN);
     ExFreePoolWithTag(Snapshot, TAG_DXGK_VIDPN);
     return Status;
 }
