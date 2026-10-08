@@ -274,6 +274,8 @@ AfdGetTdiHandles(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     PAFD_FCB FCB = FileObject->FsContext;
     PULONG HandleFlags = LockRequest(Irp, IrpSp, TRUE, NULL);
     PAFD_TDI_HANDLE_DATA HandleData = Irp->UserBuffer;
+    PAFD_TDI_HANDLE_DATA32 HandleData32 = Irp->UserBuffer;
+    BOOLEAN Is32Bit = AfdIs32bitIoctl(Irp);
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -283,10 +285,22 @@ AfdGetTdiHandles(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         return UnlockAndMaybeComplete(FCB, STATUS_NO_MEMORY, Irp, 0);
 
     if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(ULONG) ||
-        IrpSp->Parameters.DeviceIoControl.OutputBufferLength < sizeof(*HandleData))
+        IrpSp->Parameters.DeviceIoControl.OutputBufferLength <
+        (Is32Bit ? sizeof(*HandleData32) : sizeof(*HandleData)))
     {
         AFD_DbgPrint(MIN_TRACE,("Buffer too small\n"));
         return UnlockAndMaybeComplete(FCB, STATUS_BUFFER_TOO_SMALL, Irp, 0);
+    }
+
+    if (Is32Bit)
+    {
+        if ((*HandleFlags) & AFD_ADDRESS_HANDLE)
+            HandleData32->TdiAddressHandle = HandleToUlong(FCB->AddressFile.Handle);
+
+        if ((*HandleFlags) & AFD_CONNECTION_HANDLE)
+            HandleData32->TdiConnectionHandle = HandleToUlong(FCB->Connection.Handle);
+
+        return UnlockAndMaybeComplete(FCB, STATUS_SUCCESS, Irp, 0);
     }
 
     if ((*HandleFlags) & AFD_ADDRESS_HANDLE)

@@ -105,6 +105,84 @@ VOID ZeroEvents( PAFD_HANDLE HandleArray,
     }
 }
 
+static NTSTATUS
+AfdCapturePollRequest(PIRP Irp, PIO_STACK_LOCATION IrpSp, PAFD_POLL_INFO *PollReq)
+{
+    ULONG Length = min(IrpSp->Parameters.DeviceIoControl.InputBufferLength,
+                       IrpSp->Parameters.DeviceIoControl.OutputBufferLength);
+    PAFD_POLL_INFO32 Request32 = Irp->AssociatedIrp.SystemBuffer;
+    PAFD_POLL_INFO Request = Irp->AssociatedIrp.SystemBuffer;
+    ULONG i;
+
+    Irp->Tail.Overlay.DriverContext[0] = NULL;
+
+    if (!AfdIs32bitIoctl(Irp))
+    {
+        if (Length < FIELD_OFFSET(AFD_POLL_INFO, Handles) ||
+            Request->HandleCount > (Length - FIELD_OFFSET(AFD_POLL_INFO, Handles)) / sizeof(AFD_HANDLE))
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        *PollReq = Request;
+        return STATUS_SUCCESS;
+    }
+
+    if (Length < FIELD_OFFSET(AFD_POLL_INFO32, Handles) ||
+        Request32->HandleCount > (Length - FIELD_OFFSET(AFD_POLL_INFO32, Handles)) / sizeof(AFD_HANDLE32))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Request = ExAllocatePoolWithTag(NonPagedPool,
+                                    FIELD_OFFSET(AFD_POLL_INFO, Handles) +
+                                    max(Request32->HandleCount, 1) * sizeof(AFD_HANDLE),
+                                    TAG_AFD_POLL_HANDLE);
+    if (!Request)
+        return STATUS_NO_MEMORY;
+
+    Request->Timeout = Request32->Timeout;
+    Request->HandleCount = Request32->HandleCount;
+    Request->Exclusive = Request32->Exclusive;
+    for (i = 0; i < Request32->HandleCount; i++)
+    {
+        Request->Handles[i].Handle = Request32->Handles[i].Handle;
+        Request->Handles[i].Events = Request32->Handles[i].Events;
+        Request->Handles[i].Status = Request32->Handles[i].Status;
+    }
+
+    Irp->Tail.Overlay.DriverContext[0] = Request32;
+    Irp->AssociatedIrp.SystemBuffer = Request;
+    *PollReq = Request;
+    return STATUS_SUCCESS;
+}
+
+static VOID
+AfdReleasePollRequest(PIRP Irp, PAFD_POLL_INFO PollReq)
+{
+    PAFD_POLL_INFO32 Request32 = Irp->Tail.Overlay.DriverContext[0];
+    ULONG i;
+
+    if (!Request32)
+        return;
+
+    for (i = 0; i < PollReq->HandleCount; i++)
+    {
+        Request32->Handles[i].Events = PollReq->Handles[i].Events;
+        Request32->Handles[i].Status = PollReq->Handles[i].Status;
+    }
+
+    if (Irp->IoStatus.Information)
+    {
+        Irp->IoStatus.Information =
+            FIELD_OFFSET(AFD_POLL_INFO32, Handles) + sizeof(AFD_HANDLE32) * PollReq->HandleCount;
+    }
+
+    Irp->Tail.Overlay.DriverContext[0] = NULL;
+    Irp->AssociatedIrp.SystemBuffer = Request32;
+    ExFreePoolWithTag(PollReq, TAG_AFD_POLL_HANDLE);
+}
+
 
 static VOID
 AfdDereferencePoll(PAFD_ACTIVE_POLL Poll)
@@ -193,6 +271,7 @@ BOOLEAN SignalSocket(PAFD_ACTIVE_POLL Poll OPTIONAL, PIRP _Irp OPTIONAL, PAFD_PO
               PollReq->Handles[i].Status));
     }
     UnlockHandles( AFD_HANDLES(PollReq), PollReq->HandleCount );
+    AfdReleasePollRequest( Irp, PollReq );
     if( Irp->MdlAddress ) UnlockRequest( Irp, IoGetCurrentIrpStackLocation( Irp ) );
     AFD_DbgPrint(MID_TRACE,("Completing\n"));
     IoCompleteRequest( Irp, IO_NETWORK_INCREMENT );
@@ -278,13 +357,21 @@ AfdSelect( PDEVICE_OBJECT DeviceObject, PIRP Irp,
     NTSTATUS Status = STATUS_NO_MEMORY;
     PAFD_FCB FCB;
     PFILE_OBJECT FileObject;
-    PAFD_POLL_INFO PollReq = Irp->AssociatedIrp.SystemBuffer;
+    PAFD_POLL_INFO PollReq;
     PAFD_DEVICE_EXTENSION DeviceExt = DeviceObject->DeviceExtension;
     KIRQL OldIrql;
     UINT i, Signalled = 0;
-    ULONG Exclusive = PollReq->Exclusive;
+    ULONG Exclusive;
 
-    UNREFERENCED_PARAMETER(IrpSp);
+    Status = AfdCapturePollRequest( Irp, IrpSp, &PollReq );
+    if( !NT_SUCCESS(Status) ) {
+        Irp->IoStatus.Status = Status;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest( Irp, IO_NETWORK_INCREMENT );
+        return Status;
+    }
+
+    Exclusive = PollReq->Exclusive;
 
     AFD_DbgPrint(MID_TRACE,("Called (HandleCount %u Timeout %d)\n",
                             PollReq->HandleCount,
@@ -296,6 +383,7 @@ AfdSelect( PDEVICE_OBJECT DeviceObject, PIRP Irp,
     if( !AFD_HANDLES(PollReq) ) {
         Irp->IoStatus.Status = STATUS_NO_MEMORY;
         Irp->IoStatus.Information = 0;
+        AfdReleasePollRequest( Irp, PollReq );
         IoCompleteRequest( Irp, IO_NETWORK_INCREMENT );
         return STATUS_NO_MEMORY;
     }
@@ -372,8 +460,8 @@ AfdSelect( PDEVICE_OBJECT DeviceObject, PIRP Irp,
               Status = STATUS_CANCELLED;
           }
        } else {
-          AFD_DbgPrint(MAX_TRACE, ("FIXME: do something with the IRP!\n"));
           Status = STATUS_NO_MEMORY;
+          SignalSocket(NULL, Irp, PollReq, Status, FALSE);
        }
     }
 

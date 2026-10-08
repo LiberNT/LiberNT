@@ -10,6 +10,7 @@ extern void func_dll_directory(void);
 extern void func_opencl(void);
 extern void func_opengl(void);
 extern void func_opengl_mode_change(void);
+extern void func_sockets(void);
 extern void func_suite(void);
 extern void func_swap_chain(void);
 extern void func_window_dc(void);
@@ -25,6 +26,7 @@ const struct test winetest_testlist[] =
     { "opencl", func_opencl },
     { "opengl", func_opengl },
     { "opengl_mode_change", func_opengl_mode_change },
+    { "sockets", func_sockets },
     { "suite", func_suite },
     { "swap_chain", func_swap_chain },
     { "window_dc", func_window_dc },

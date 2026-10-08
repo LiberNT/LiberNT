@@ -86,6 +86,12 @@ AfdTransferRequestSize(ULONG Code, BOOLEAN Is32Bit)
             if (Is32Bit) return sizeof(AFD_SEND_INFO_UDP32);
 #endif
             return sizeof(AFD_SEND_INFO_UDP);
+        case IOCTL_AFD_EVENT_SELECT:
+            if (Is32Bit) return sizeof(AFD_EVENT_SELECT_INFO32);
+            return sizeof(AFD_EVENT_SELECT_INFO);
+        case IOCTL_AFD_ENUM_NETWORK_EVENTS:
+            if (Is32Bit) return sizeof(AFD_ENUM_NETWORK_EVENTS_INFO32);
+            return sizeof(AFD_ENUM_NETWORK_EVENTS_INFO);
         default:
             return 0;
     }
@@ -99,10 +105,27 @@ AfdCaptureTransferRequest32(ULONG Code, PVOID Destination, const VOID *Source)
     {
         AFD_RECV_INFO_UDP32 Receive;
         AFD_SEND_INFO_UDP32 Send;
+        AFD_EVENT_SELECT_INFO32 EventSelect;
+        AFD_ENUM_NETWORK_EVENTS_INFO32 EnumEvents;
     } Captured = {0};
 
     RtlCopyMemory(&Captured, Source, AfdTransferRequestSize(Code, TRUE));
-    if (Code == IOCTL_AFD_SEND_DATAGRAM)
+    if (Code == IOCTL_AFD_EVENT_SELECT)
+    {
+        PAFD_EVENT_SELECT_INFO Request = Destination;
+
+        Request->EventObject = UlongToHandle(Captured.EventSelect.EventObject);
+        Request->Events = Captured.EventSelect.Events;
+    }
+    else if (Code == IOCTL_AFD_ENUM_NETWORK_EVENTS)
+    {
+        PAFD_ENUM_NETWORK_EVENTS_INFO Request = Destination;
+
+        Request->Event = UlongToHandle(Captured.EnumEvents.Event);
+        Request->PollEvents = Captured.EnumEvents.PollEvents;
+        RtlCopyMemory(Request->EventStatus, Captured.EnumEvents.EventStatus, sizeof(Request->EventStatus));
+    }
+    else if (Code == IOCTL_AFD_SEND_DATAGRAM)
     {
         const AFD_SEND_INFO_UDP32 *Source32 = &Captured.Send;
         PAFD_SEND_INFO_UDP Request = Destination;
@@ -237,7 +260,7 @@ PVOID LockRequest( PIRP Irp,
 #ifdef _WIN64
                 if (Is32Bit && RequestSize)
                 {
-                    ASSERT(!Output);
+                    ASSERT(!Output || IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_AFD_ENUM_NETWORK_EVENTS);
                     AfdCaptureTransferRequest32(IrpSp->Parameters.DeviceIoControl.IoControlCode, Irp->Tail.Overlay.DriverContext[0], Irp->Tail.Overlay.DriverContext[1]);
                 }
 #endif
@@ -338,14 +361,24 @@ VOID UnlockRequest( PIRP Irp, PIO_STACK_LOCATION IrpSp )
     ASSERT(Irp->MdlAddress);
     ASSERT(Irp->Tail.Overlay.DriverContext[0]);
 
-    UNREFERENCED_PARAMETER(IrpSp);
-
     /* Check if we need to copy stuff back */
     if (Irp->Tail.Overlay.DriverContext[1] != NULL)
     {
-        RtlCopyMemory(Irp->Tail.Overlay.DriverContext[1],
-                      Irp->Tail.Overlay.DriverContext[0],
-                      MmGetMdlByteCount(Irp->MdlAddress));
+        if (AfdIs32bitIoctl(Irp) &&
+            IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_AFD_ENUM_NETWORK_EVENTS)
+        {
+            PAFD_ENUM_NETWORK_EVENTS_INFO EnumReq = Irp->Tail.Overlay.DriverContext[0];
+            PAFD_ENUM_NETWORK_EVENTS_INFO32 EnumReq32 = Irp->Tail.Overlay.DriverContext[1];
+
+            EnumReq32->PollEvents = EnumReq->PollEvents;
+            RtlCopyMemory(EnumReq32->EventStatus, EnumReq->EventStatus, sizeof(EnumReq32->EventStatus));
+        }
+        else
+        {
+            RtlCopyMemory(Irp->Tail.Overlay.DriverContext[1],
+                          Irp->Tail.Overlay.DriverContext[0],
+                          MmGetMdlByteCount(Irp->MdlAddress));
+        }
     }
 
     ExFreePoolWithTag(Irp->Tail.Overlay.DriverContext[0], TAG_AFD_DATA_BUFFER);

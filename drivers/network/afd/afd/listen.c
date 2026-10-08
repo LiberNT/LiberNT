@@ -445,10 +445,13 @@ NTSTATUS AfdSuperAccept( PDEVICE_OBJECT DeviceObject, PIRP Irp,
     PFILE_OBJECT FileObject = IrpSp->FileObject;
     PAFD_FCB FCB = FileObject->FsContext;
     PAFD_SUPER_ACCEPT_INFO Info;
+    AFD_SUPER_ACCEPT_INFO32 Info32;
     PFILE_OBJECT AcceptFileObject = NULL;
+    BOOLEAN Is32Bit = AfdIs32bitIoctl( Irp );
     NTSTATUS Status;
 
-    if( IrpSp->Parameters.DeviceIoControl.OutputBufferLength < sizeof(AFD_SUPER_ACCEPT_INFO) ||
+    if( IrpSp->Parameters.DeviceIoControl.OutputBufferLength <
+        (Is32Bit ? sizeof(AFD_SUPER_ACCEPT_INFO32) : sizeof(AFD_SUPER_ACCEPT_INFO)) ||
         !Irp->UserBuffer ) {
         Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
         Irp->IoStatus.Information = 0;
@@ -466,9 +469,19 @@ NTSTATUS AfdSuperAccept( PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     Status = STATUS_SUCCESS;
     _SEH2_TRY {
-        if( Irp->RequestorMode != KernelMode )
-            ProbeForRead( Irp->UserBuffer, sizeof(AFD_SUPER_ACCEPT_INFO), sizeof(ULONG) );
-        RtlCopyMemory( Info, Irp->UserBuffer, sizeof(*Info) );
+        if( Is32Bit ) {
+            if( Irp->RequestorMode != KernelMode )
+                ProbeForRead( Irp->UserBuffer, sizeof(Info32), sizeof(ULONG) );
+            RtlCopyMemory( &Info32, Irp->UserBuffer, sizeof(Info32) );
+            Info->AcceptHandle = UlongToHandle( Info32.AcceptHandle );
+            Info->ReceiveDataLength = Info32.ReceiveDataLength;
+            Info->LocalAddressLength = Info32.LocalAddressLength;
+            Info->RemoteAddressLength = Info32.RemoteAddressLength;
+        } else {
+            if( Irp->RequestorMode != KernelMode )
+                ProbeForRead( Irp->UserBuffer, sizeof(AFD_SUPER_ACCEPT_INFO), sizeof(ULONG) );
+            RtlCopyMemory( Info, Irp->UserBuffer, sizeof(*Info) );
+        }
     } _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) {
         Status = _SEH2_GetExceptionCode();
     } _SEH2_END;
@@ -545,11 +558,20 @@ NTSTATUS AfdAccept( PDEVICE_OBJECT DeviceObject, PIRP Irp,
         (PAFD_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
     PAFD_FCB FCB = FileObject->FsContext;
     PAFD_ACCEPT_DATA AcceptData = Irp->AssociatedIrp.SystemBuffer;
+    PAFD_ACCEPT_DATA32 AcceptData32 = Irp->AssociatedIrp.SystemBuffer;
+    BOOLEAN Is32Bit = AfdIs32bitIoctl( Irp );
+    HANDLE ListenHandle;
     PLIST_ENTRY PendingConn;
 
     AFD_DbgPrint(MID_TRACE,("Called\n"));
 
     if( !SocketAcquireStateLock( FCB ) ) return LostSocket( Irp );
+
+    if( IrpSp->Parameters.DeviceIoControl.InputBufferLength <
+        (Is32Bit ? sizeof(AFD_ACCEPT_DATA32) : sizeof(AFD_ACCEPT_DATA)) )
+        return UnlockAndMaybeComplete( FCB, STATUS_INVALID_PARAMETER, Irp, 0 );
+
+    ListenHandle = Is32Bit ? UlongToHandle( AcceptData32->ListenHandle ) : AcceptData->ListenHandle;
 
     FCB->EventSelectDisabled &= ~AFD_EVENT_ACCEPT;
 
@@ -569,7 +591,7 @@ NTSTATUS AfdAccept( PDEVICE_OBJECT DeviceObject, PIRP Irp,
             RemoveEntryList( PendingConn );
 
             Status = ObReferenceObjectByHandle
-                ( AcceptData->ListenHandle,
+                ( ListenHandle,
                   FILE_ALL_ACCESS,
                   NULL,
                   KernelMode,

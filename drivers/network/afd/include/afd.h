@@ -117,6 +117,56 @@ typedef struct IPADDR_ENTRY {
 #define AFD_HANDLES(x) ((PAFD_HANDLE)(x)->Exclusive)
 #define SET_AFD_HANDLES(x,y) (((x)->Exclusive) = (ULONG_PTR)(y))
 
+typedef struct _AFD_HANDLE32 {
+    ULONG Handle;
+    ULONG Events;
+    NTSTATUS Status;
+} AFD_HANDLE32, *PAFD_HANDLE32;
+
+typedef struct _AFD_POLL_INFO32 {
+    LARGE_INTEGER Timeout;
+    ULONG HandleCount;
+    ULONG Exclusive;
+    AFD_HANDLE32 Handles[1];
+} AFD_POLL_INFO32, *PAFD_POLL_INFO32;
+
+typedef struct _AFD_ACCEPT_DATA32 {
+    ULONG UseSAN;
+    ULONG SequenceNumber;
+    ULONG ListenHandle;
+} AFD_ACCEPT_DATA32, *PAFD_ACCEPT_DATA32;
+
+typedef struct _AFD_SUPER_ACCEPT_INFO32 {
+    ULONG AcceptHandle;
+    ULONG ReceiveDataLength;
+    ULONG LocalAddressLength;
+    ULONG RemoteAddressLength;
+} AFD_SUPER_ACCEPT_INFO32, *PAFD_SUPER_ACCEPT_INFO32;
+
+typedef struct _AFD_EVENT_SELECT_INFO32 {
+    ULONG EventObject;
+    ULONG Events;
+} AFD_EVENT_SELECT_INFO32, *PAFD_EVENT_SELECT_INFO32;
+
+typedef struct _AFD_ENUM_NETWORK_EVENTS_INFO32 {
+    ULONG Event;
+    ULONG PollEvents;
+    NTSTATUS EventStatus[AFD_MAX_EVENTS];
+} AFD_ENUM_NETWORK_EVENTS_INFO32, *PAFD_ENUM_NETWORK_EVENTS_INFO32;
+
+typedef struct _AFD_TDI_HANDLE_DATA32 {
+    ULONG TdiAddressHandle;
+    ULONG TdiConnectionHandle;
+} AFD_TDI_HANDLE_DATA32, *PAFD_TDI_HANDLE_DATA32;
+
+C_ASSERT(FIELD_OFFSET(AFD_POLL_INFO32, Handles) == 16);
+C_ASSERT(sizeof(AFD_HANDLE32) == 12);
+C_ASSERT(sizeof(AFD_ACCEPT_DATA32) == 12);
+C_ASSERT(sizeof(AFD_SUPER_ACCEPT_INFO32) == 16);
+C_ASSERT(sizeof(AFD_EVENT_SELECT_INFO32) == 8);
+C_ASSERT(FIELD_OFFSET(AFD_ENUM_NETWORK_EVENTS_INFO32, EventStatus) == 8);
+C_ASSERT(sizeof(AFD_TDI_HANDLE_DATA32) == 8);
+
 typedef struct _AFD_MAPBUF {
     PVOID BufferAddress;
     PMDL  Mdl;

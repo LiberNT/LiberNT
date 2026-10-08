@@ -16,6 +16,7 @@ static const struct
     { "dll_directory", 15000 },
     { "child_start", 40000 },
     { "alert_wait", 20000 },
+    { "sockets", 20000 },
     { "d3dkmt", 15000 },
     { "window_dc", 15000 },
     { "display_mode", 30000 },
