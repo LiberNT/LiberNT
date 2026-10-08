@@ -111,6 +111,12 @@ SmpCheckForCrashDump(
     IN PUNICODE_STRING FileName
 );
 
+ULONGLONG
+NTAPI
+SmpQueryCrashDumpPageFileSize(
+    IN ULONGLONG Ram
+);
+
 /* pagefile.c */
 
 VOID

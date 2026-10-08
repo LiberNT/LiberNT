@@ -85,6 +85,7 @@
 #define SMP_PAGEFILE_ON_ANY_DRIVE       0x10
 #define SMP_PAGEFILE_EMERGENCY          0x20
 #define SMP_PAGEFILE_DUMP_PROCESSED     0x40
+#define SMP_PAGEFILE_DUMP_SIZED         0x80
 typedef struct _SMP_PAGEFILE_DESCRIPTOR
 {
     LIST_ENTRY Entry;
@@ -634,6 +635,11 @@ RetryPageFile:
     if (Descriptor->Flags & SMP_PAGEFILE_SYSTEM_MANAGED)
     {
         VolumeLimit.QuadPart = Volume->TotalSpace.QuadPart / 8;
+        if ((Descriptor->Flags & SMP_PAGEFILE_DUMP_SIZED) &&
+            (PageFileSize.QuadPart - 1024LL * MEGABYTE > VolumeLimit.QuadPart))
+        {
+            VolumeLimit.QuadPart = PageFileSize.QuadPart - 1024LL * MEGABYTE;
+        }
         if (Descriptor->ActualMinSize.QuadPart > VolumeLimit.QuadPart)
             Descriptor->ActualMinSize = VolumeLimit;
         if (Descriptor->ActualMaxSize.QuadPart > VolumeLimit.QuadPart)
@@ -743,7 +749,7 @@ NTAPI
 SmpMakeSystemManagedPagingFileDescriptor(IN PSMP_PAGEFILE_DESCRIPTOR Descriptor)
 {
     NTSTATUS Status;
-    ULONGLONG MinimumSize, MaximumSize, Ram;
+    ULONGLONG MinimumSize, MaximumSize, Ram, DumpSize;
     SYSTEM_BASIC_INFORMATION BasicInfo;
 
     /* Query the page size of the system, and the amount of RAM */
@@ -767,6 +773,13 @@ SmpMakeSystemManagedPagingFileDescriptor(IN PSMP_PAGEFILE_DESCRIPTOR Descriptor)
     MinimumSize = Ram / 8;
     if (MinimumSize > 32768ULL * MEGABYTE)
         MinimumSize = 32768ULL * MEGABYTE;
+
+    DumpSize = SmpQueryCrashDumpPageFileSize(Ram);
+    if (DumpSize > MinimumSize)
+    {
+        MinimumSize = DumpSize;
+        Descriptor->Flags |= SMP_PAGEFILE_DUMP_SIZED;
+    }
 
     /* Write the new sizes in the descriptor and mark it as system managed */
     Descriptor->MinSize.QuadPart = MinimumSize;

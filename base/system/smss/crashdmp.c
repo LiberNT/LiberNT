@@ -15,6 +15,10 @@
 #include <debug.h>
 
 #define SMP_DUMP_COPY_SIZE (1024 * 1024)
+#define SMP_DUMP_COMPLETE 1
+#define SMP_DUMP_AUTOMATIC 7
+#define SMP_COMPLETE_DUMP_OVERHEAD (257ULL * 1024 * 1024)
+#define SMP_LARGE_PAGEFILE_PERIOD (28LL * 24 * 60 * 60 * 10000000)
 #define SMP_VOLUME_PREFIX_LENGTH (6 * sizeof(WCHAR))
 
 /* FUNCTIONS ******************************************************************/
@@ -44,6 +48,83 @@ static BOOLEAN SmpIsDedicatedCrashDumpActive(VOID)
         return FALSE;
 
     return *(PULONG)ValueBuffer.Information.Data != 0;
+}
+
+static NTSTATUS SmpQueryCrashControlValue(_In_ PCWSTR Name, _In_ ULONG Type, _Out_writes_bytes_(DataSize) PVOID Data, _In_ ULONG DataSize)
+{
+    static const UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\CrashControl");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING ValueName;
+    HANDLE KeyHandle;
+    ULONG Length;
+    NTSTATUS Status;
+    struct
+    {
+        KEY_VALUE_PARTIAL_INFORMATION Information;
+        ULONG64 Value;
+    } ValueBuffer;
+
+    InitializeObjectAttributes(&ObjectAttributes, (PUNICODE_STRING)&KeyName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlInitUnicodeString(&ValueName, Name);
+    Status = NtQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation, &ValueBuffer, sizeof(ValueBuffer), &Length);
+    NtClose(KeyHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if ((ValueBuffer.Information.Type != Type) || (ValueBuffer.Information.DataLength != DataSize))
+        return STATUS_OBJECT_TYPE_MISMATCH;
+
+    RtlCopyMemory(Data, ValueBuffer.Information.Data, DataSize);
+    return STATUS_SUCCESS;
+}
+
+ULONGLONG
+NTAPI
+SmpQueryCrashDumpPageFileSize(IN ULONGLONG Ram)
+{
+    LARGE_INTEGER LastCrashTime, Now;
+    ULONG CrashDumpEnabled;
+
+    if (!NT_SUCCESS(SmpQueryCrashControlValue(L"CrashDumpEnabled", REG_DWORD, &CrashDumpEnabled, sizeof(CrashDumpEnabled))))
+        CrashDumpEnabled = SMP_DUMP_AUTOMATIC;
+
+    if (CrashDumpEnabled == SMP_DUMP_COMPLETE)
+        return Ram + SMP_COMPLETE_DUMP_OVERHEAD;
+    if (CrashDumpEnabled != SMP_DUMP_AUTOMATIC)
+        return 0;
+
+    if (!NT_SUCCESS(SmpQueryCrashControlValue(L"LastCrashTime", REG_QWORD, &LastCrashTime, sizeof(LastCrashTime))))
+        return 0;
+
+    NtQuerySystemTime(&Now);
+    if ((Now.QuadPart < LastCrashTime.QuadPart) || (Now.QuadPart - LastCrashTime.QuadPart >= SMP_LARGE_PAGEFILE_PERIOD))
+        return 0;
+
+    return Ram;
+}
+
+static VOID SmpRecordInsufficientDumpFile(VOID)
+{
+    static const UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\CrashControl");
+    static const UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"LastCrashTime");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    LARGE_INTEGER Now;
+    HANDLE KeyHandle;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, (PUNICODE_STRING)&KeyName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenKey(&KeyHandle, KEY_SET_VALUE, &ObjectAttributes);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    NtQuerySystemTime(&Now);
+    Status = NtSetValueKey(KeyHandle, (PUNICODE_STRING)&ValueName, 0, REG_QWORD, &Now, sizeof(Now));
+    NtClose(KeyHandle);
+    if (NT_SUCCESS(Status))
+        DPRINT1("SMSS: The paging file was too small for the crash dump; the next paging file covers physical memory\n");
 }
 
 static BOOLEAN SmpIsSameVolume(_In_ PUNICODE_STRING FirstPath, _In_ PUNICODE_STRING SecondPath)
@@ -303,6 +384,8 @@ SmpCheckForCrashDump(IN PUNICODE_STRING FileName)
     DPRINT1("SMSS: Saved crash dump from `%wZ' to `%wZ'\n", FileName, &DumpPath);
 
 Cleanup:
+    if (DumpSaved && Header->Attributes.InsufficientDumpfileSize)
+        SmpRecordInsufficientDumpFile();
     if (BufferAllocation)
         RtlFreeHeap(RtlGetProcessHeap(), 0, BufferAllocation);
     if (DumpFileHandle)
