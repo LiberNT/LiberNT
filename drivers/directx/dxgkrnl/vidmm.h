@@ -501,6 +501,7 @@ typedef struct _DXGKVMM_ALLOCATION
     BOOLEAN             ContextAllocation;
     PVOID               ContextAllocationHandle;
     BOOLEAN             SysMemContiguousWc;
+    BOOLEAN             SysMem64KBacking;
     PMDL                SysMemPagesMdl;
 
     /* Allocation-private driver data used by QueryResourceInfo/OpenResource. */

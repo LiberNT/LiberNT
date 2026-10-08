@@ -1874,6 +1874,10 @@ typedef struct _DXGKRNL_GPUVA_PIN
  * All tables of a process live on DXGKRNL_PROCESS->GpuVaPageTableList,
  * protected by GpuVaLock.
  */
+#define DXGKP_GPU_PAGE_64K          0x10000UL
+#define DXGKP_GPU_PAGES_PER_64K     (DXGKP_GPU_PAGE_64K / PAGE_SIZE)
+#define DXGKP_GPU_PAGES_PER_LEAF    512
+
 typedef struct _DXGKRNL_GPUVA_PAGE_TABLE
 {
     LIST_ENTRY                  PageTableListEntry;
@@ -1923,6 +1927,9 @@ typedef struct _DXGKRNL_GPUVA_PAGE_TABLE
     /* Entries changed since the last flush; empty when the end index is 0. */
     ULONG                       DirtyStartIndex;
     ULONG                       DirtyEndIndex;
+
+    BOOLEAN                     Pages64K;
+    ULONG                       Chunk64K[DXGKP_GPU_PAGES_PER_LEAF / 32];
 
     D3DGPU_VIRTUAL_ADDRESS      PagingVa;
 
@@ -4106,6 +4113,7 @@ typedef struct _DXGKRNL_PAGING_OP
     DXGK_PAGETABLEUPDATEMODE    UpdateMode;
     BOOLEAN                     Repeat;
     BOOLEAN                     InitialUpdate;
+    BOOLEAN                     Use64KBPages;
     D3DGPU_PHYSICAL_ADDRESS     RootPageTableAddress;
     D3DGPU_VIRTUAL_ADDRESS      StartVirtualAddress;
     D3DGPU_VIRTUAL_ADDRESS      EndVirtualAddress;

@@ -241,6 +241,7 @@ DxgkpPagingFillBuildArgs(
             BuildArgs->UpdatePageTable.NumPageTableEntries = Op->NumPageTableEntries;
             BuildArgs->UpdatePageTable.Flags.Repeat = Op->Repeat ? 1 : 0;
             BuildArgs->UpdatePageTable.Flags.InitialUpdate = Op->InitialUpdate ? 1 : 0;
+            BuildArgs->UpdatePageTable.Flags.Use64KBPages = Op->Use64KBPages ? 1 : 0;
             BuildArgs->UpdatePageTable.AllocationOffsetInBytes = Op->AllocationOffsetInBytes;
             BuildArgs->UpdatePageTable.hProcess = Op->hMiniportProcess;
             BuildArgs->UpdatePageTable.UpdateMode = Op->UpdateMode;

@@ -1387,8 +1387,83 @@ GpuVaLinkChildEntry(
     Parent->Entries[Index].Valid =
         (Child->SegmentId != 0 && Child->PlacementPending) ? 0 : 1;
     Parent->Entries[Index].Segment = Child->SegmentId;
+    Parent->Entries[Index].PageTablePageSize =
+        (Child->Level == 0 && Child->Pages64K) ? DXGK_PTE_PAGE_TABLE_PAGE_64KB : DXGK_PTE_PAGE_TABLE_PAGE_4KB;
     Parent->Entries[Index].PageTableAddress =
         GpuVaPteAddress(Address);
+}
+
+static VOID
+GpuVaMarkChunkPage(
+    _Inout_ PDXGKRNL_GPUVA_PAGE_TABLE Leaf,
+    _In_ ULONG Index,
+    _In_ BOOLEAN Chunked)
+{
+    if (Index >= DXGKP_GPU_PAGES_PER_LEAF)
+        return;
+    if (Chunked)
+        Leaf->Chunk64K[Index / 32] |= 1UL << (Index % 32);
+    else
+        Leaf->Chunk64K[Index / 32] &= ~(1UL << (Index % 32));
+}
+
+static BOOLEAN
+GpuVaLeafHolds64KPages(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_GPUVA_PAGE_TABLE Leaf)
+{
+    BOOLEAN Any = FALSE;
+    ULONG Slot;
+
+    if (!Adapter->GpuMmuCapsValid ||
+        !Adapter->GpuMmuCaps.SysMem64KBPageSupported ||
+        Adapter->GpuMmuCaps.DualPteSupported ||
+        Leaf->Level != 0 ||
+        Leaf->EntryCount != DXGKP_GPU_PAGES_PER_LEAF ||
+        Leaf->Bytes != Adapter->GpuMmuCaps.LeafPageTableSizeFor64KPagesInBytes ||
+        GpuVaLevelShift(Adapter, 0) != PAGE_SHIFT)
+    {
+        return FALSE;
+    }
+
+    for (Slot = 0; Slot < DXGKP_GPU_PAGES_PER_LEAF; Slot += DXGKP_GPU_PAGES_PER_64K)
+    {
+        const DXGK_PTE *First = &Leaf->Entries[Slot];
+        ULONG Page;
+
+        if (!First->Valid)
+        {
+            for (Page = 1; Page < DXGKP_GPU_PAGES_PER_64K; Page++)
+            {
+                if (Leaf->Entries[Slot + Page].Flags != 0)
+                    return FALSE;
+            }
+            if (First->Flags != 0)
+                return FALSE;
+            continue;
+        }
+        if (First->Zero || First->Segment != 0 ||
+            (First->PageAddress & (DXGKP_GPU_PAGES_PER_64K - 1)) != 0 ||
+            !(Leaf->Chunk64K[Slot / 32] & (1UL << (Slot % 32))))
+        {
+            return FALSE;
+        }
+        for (Page = 1; Page < DXGKP_GPU_PAGES_PER_64K; Page++)
+        {
+            const DXGK_PTE *Entry = &Leaf->Entries[Slot + Page];
+
+            if (Entry->Flags == 0)
+                continue;
+            if (Entry->Flags != First->Flags ||
+                Entry->PageAddress != First->PageAddress + Page ||
+                !(Leaf->Chunk64K[(Slot + Page) / 32] & (1UL << ((Slot + Page) % 32))))
+            {
+                return FALSE;
+            }
+        }
+        Any = TRUE;
+    }
+    return Any;
 }
 
 /*
@@ -2074,6 +2149,31 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
             Status = STATUS_DATA_ERROR;
             goto Complete;
         }
+        for (Entry = Process->GpuVaPageTableList.Flink;
+             Entry != &Process->GpuVaPageTableList;
+             Entry = Entry->Flink)
+        {
+            PDXGKRNL_GPUVA_PAGE_TABLE Leaf = CONTAINING_RECORD(Entry,
+                                                               DXGKRNL_GPUVA_PAGE_TABLE,
+                                                               PageTableListEntry);
+            BOOLEAN Holds64K;
+
+            if (Leaf->Level != 0 || Leaf->Parent == NULL ||
+                (Leaf->DirtyEndIndex <= Leaf->DirtyStartIndex && !Leaf->InitialUpdatePending && !ResendSpan))
+            {
+                continue;
+            }
+            Holds64K = GpuVaLeafHolds64KPages(Adapter, Leaf);
+            if (Holds64K == Leaf->Pages64K)
+                continue;
+            Leaf->Pages64K = Holds64K;
+            GpuVaLinkChildEntry(Leaf->Parent, Leaf->ParentIndex, Leaf);
+            (VOID)GpuVaNotifyPageTableUpdate(Process,
+                                             Leaf->Parent,
+                                             Leaf->ParentIndex,
+                                             1,
+                                             Leaf->CoverageBase);
+        }
         TableCount = 0;
         for (Entry = Process->GpuVaPageTableList.Flink;
              Entry != &Process->GpuVaPageTableList;
@@ -2283,17 +2383,34 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
         {
             /* Directory entries and unowned leaf entries do not name an
              * allocation, but still come from the coherent snapshot. */
-            Op.PageTableEntries = Snapshot->Entries;
-            Op.StartIndex = Snapshot->StartIndex;
-            Op.NumPageTableEntries = Snapshot->EndIndex - Snapshot->StartIndex;
-            Op.StartVirtualAddress = Table->CoverageBase +
-                                     (ULONGLONG)Snapshot->StartIndex * EntryCoverage;
-            Status = GpuVaAppendPagingOperation(&Operations,
-                                                 &OperationCount,
-                                                 &OperationCapacity,
-                                                 &Op);
-            if (!NT_SUCCESS(Status))
-                goto Requeue;
+            ULONG Count = Snapshot->EndIndex - Snapshot->StartIndex;
+            ULONG First = 0;
+
+            while (First < Count)
+            {
+                ULONG PageSize = Snapshot->Entries[First].PageTablePageSize;
+                ULONG Run = 1;
+
+                while (First + Run < Count &&
+                       (Table->Level != 1 || Snapshot->Entries[First + Run].PageTablePageSize == PageSize))
+                {
+                    Run++;
+                }
+                Op.PageTableEntries = Snapshot->Entries + First;
+                Op.StartIndex = Snapshot->StartIndex + First;
+                Op.NumPageTableEntries = Run;
+                Op.Use64KBPages = (BOOLEAN)(Table->Level == 1 && PageSize == DXGK_PTE_PAGE_TABLE_PAGE_64KB);
+                Op.StartVirtualAddress = Table->CoverageBase +
+                                         (ULONGLONG)(Snapshot->StartIndex + First) * EntryCoverage;
+                Status = GpuVaAppendPagingOperation(&Operations,
+                                                     &OperationCount,
+                                                     &OperationCapacity,
+                                                     &Op);
+                if (!NT_SUCCESS(Status))
+                    goto Requeue;
+                First += Run;
+            }
+            Op.Use64KBPages = FALSE;
         }
         if (Table->Level == 0 && SpanCount != 0)
         {
@@ -2647,6 +2764,7 @@ GpuVaClearPteSpan(
         Index = GpuVaPteIndexFor(Process->Adapter, Address + Offset, 0);
         Leaf->Entries[Index].Flags = 0;
         Leaf->Entries[Index].PageAddress = 0;
+        GpuVaMarkChunkPage(Leaf, Index, FALSE);
         (VOID)GpuVaNotifyPageTableUpdate(Process,
                                          Leaf,
                                          Index,
@@ -2733,6 +2851,10 @@ GpuVaWritePteSpan(
             ULONG Index = GpuVaPteIndexFor(Process->Adapter, Address + Offset, 0);
 
             Leaf->Entries[Index] = Pte;
+            GpuVaMarkChunkPage(Leaf,
+                               Index,
+                               (BOOLEAN)(Allocation != NULL && Allocation->SysMem64KBacking &&
+                                         Allocation->SystemMemory != NULL && Pte.Segment == 0));
             if (!NT_SUCCESS(GpuVaNotifyPageTableUpdate(Process,
                                                        Leaf,
                                                        Index,
@@ -2741,6 +2863,7 @@ GpuVaWritePteSpan(
             {
                 Leaf->Entries[Index].Flags = 0;
                 Leaf->Entries[Index].PageAddress = 0;
+                GpuVaMarkChunkPage(Leaf, Index, FALSE);
                 GpuVaClearPteSpan(Process, Address, Offset);
                 return STATUS_GRAPHICS_INVALID_ALLOCATION_USAGE;
             }
@@ -3543,6 +3666,7 @@ GpuVaMapSegmentWindow(
         }
         Index = GpuVaPteIndexFor(Process->Adapter, Address + Offset, 0);
         RtlZeroMemory(&Leaf->Entries[Index], sizeof(Leaf->Entries[Index]));
+        GpuVaMarkChunkPage(Leaf, Index, FALSE);
         Leaf->Entries[Index].Valid = 1;
         Leaf->Entries[Index].CacheCoherent =
             SegmentId == 0 && Process->Adapter->GpuMmuCaps.CacheCoherentMemorySupported ? 1 : 0;
@@ -3632,6 +3756,7 @@ GpuVaMapPageList(
         }
         Index = GpuVaPteIndexFor(Process->Adapter, Address + Offset, 0);
         RtlZeroMemory(&Leaf->Entries[Index], sizeof(Leaf->Entries[Index]));
+        GpuVaMarkChunkPage(Leaf, Index, FALSE);
         Leaf->Entries[Index].Valid = 1;
         Leaf->Entries[Index].CacheCoherent =
             Process->Adapter->GpuMmuCaps.CacheCoherentMemorySupported ? 1 : 0;
@@ -4581,6 +4706,7 @@ DxgkGpuVaMapFencePage(
         ULONG Index = GpuVaPteIndexFor(Process->Adapter, ActualAddress, 0);
 
         Leaf->Entries[Index] = Pte;
+        GpuVaMarkChunkPage(Leaf, Index, FALSE);
         if (!NT_SUCCESS(GpuVaNotifyPageTableUpdate(Process,
                                                    Leaf,
                                                    Index,

@@ -455,6 +455,7 @@ DxgkpVidMmAllocateBacking(
     ULONG Pass;
 
     CacheType = Allocation->Cached ? MmCached : MmWriteCombined;
+    Allocation->SysMem64KBacking = FALSE;
     Low.QuadPart = 0;
     Skip.QuadPart = 0;
     /*
@@ -469,8 +470,27 @@ DxgkpVidMmAllocateBacking(
      */
     for (Pass = 0; Pass < 2; ++Pass)
     {
+        BOOLEAN Chunked = FALSE;
+
         High.QuadPart = (Pass == 0) ? 0xFFFFFFFFLL : MAXLONGLONG;
-        Mdl = MmAllocatePagesForMdlEx(Low, High, Skip, Bytes, CacheType, 0);
+        Mdl = NULL;
+        if (Allocation->Adapter != NULL &&
+            Allocation->Adapter->GpuMmuCapsValid &&
+            Allocation->Adapter->GpuMmuCaps.SysMem64KBPageSupported &&
+            Bytes >= DXGKP_GPU_PAGE_64K &&
+            Bytes <= MAXULONG - DXGKP_GPU_PAGE_64K)
+        {
+            PHYSICAL_ADDRESS ChunkBytes;
+
+            ChunkBytes.QuadPart = DXGKP_GPU_PAGE_64K;
+            Mdl = MmAllocatePagesForMdlEx(Low, High, ChunkBytes,
+                                          (Bytes + DXGKP_GPU_PAGE_64K - 1) & ~(SIZE_T)(DXGKP_GPU_PAGE_64K - 1),
+                                          CacheType,
+                                          MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
+            Chunked = Mdl != NULL;
+        }
+        if (Mdl == NULL)
+            Mdl = MmAllocatePagesForMdlEx(Low, High, Skip, Bytes, CacheType, 0);
         if (Mdl == NULL)
             continue;
         if (MmGetMdlByteCount(Mdl) >= Bytes)
@@ -479,6 +499,7 @@ DxgkpVidMmAllocateBacking(
             if (Va != NULL)
             {
                 Allocation->SysMemPagesMdl = Mdl;
+                Allocation->SysMem64KBacking = Chunked;
                 /* The memory manager zero-filled the pages through a cached
                  * mapping.  Push those lines out now so they cannot be written
                  * back later over what user mode or the GPU has written. */
@@ -1356,6 +1377,7 @@ DxgkpVidMmCreateSystemAllocation(
 
     /* The backing's caching type follows the allocation's Cached flag. */
     Alloc->Cached = AllocInfo->Flags.Cached != 0;
+    Alloc->Adapter = Adapter;
     Alloc->SystemMemory = DxgkpVidMmAllocateBacking(Alloc, AllocSize);
     if (Alloc->SystemMemory == NULL)
     {
@@ -2223,6 +2245,7 @@ DxgkVidMmCreateContextAllocation(
             Allocation->CpuAddress = Wc;
             Allocation->PhysicalAddress = MmGetPhysicalAddress(Wc);
             Allocation->SysMemContiguousWc = TRUE;
+            Allocation->SysMem64KBacking = FALSE;
         }
         else
         {
@@ -4211,6 +4234,7 @@ DxgkpVidMmReleaseSystemBacking(
 {
     /* A dormant D3DKMTLock mapping must not outlive its backing pages. */
     (VOID)DxgkpVidMmUnmapUserMappings(Allocation, TRUE);
+    Allocation->SysMem64KBacking = FALSE;
     if (Allocation->SysMemContiguousWc && Allocation->SystemMemory != NULL)
     {
         MmFreeContiguousMemorySpecifyCache(Allocation->SystemMemory, Allocation->Size, MmWriteCombined);
