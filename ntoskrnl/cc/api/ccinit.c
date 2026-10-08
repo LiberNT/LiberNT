@@ -358,8 +358,10 @@ ExpKdbgExtFileCache(
     {
         PCC_NT_MAP NtMap = CONTAINING_RECORD(Entry, CC_NT_MAP, Link);
 
-        KdbpPrint("%p size %I64d views %lu dirty %I64d %wZ\n", NtMap, (LONGLONG)NtMap->Map.FileSize,
-                  NtMap->Map.ViewsAttached, NtMap->Map.DirtyPages, &NtMap->FileObject->FileName);
+        KdbpPrint("%p size %I64d views %lu dirty %I64d ", NtMap, (LONGLONG)NtMap->Map.FileSize,
+                  NtMap->Map.ViewsAttached, NtMap->Map.DirtyPages);
+        KdbpPrintUnicodeString(&NtMap->FileObject->FileName);
+        KdbpPrint("\n");
     }
 
     return TRUE;
