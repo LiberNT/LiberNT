@@ -1,3 +1,4 @@
+@ stdcall ApiSetQueryApiSetPresence(ptr ptr)
 @ stdcall -version=0x502 PropertyLengthAsVariant(ptr long long long)
 @ stdcall -version=0x502 RtlConvertPropertyToVariant(ptr long ptr ptr)
 @ stdcall -version=0x502 RtlConvertVariantToProperty(ptr long ptr ptr ptr long ptr)
@@ -1518,6 +1519,7 @@
 @ stdcall -stub -version=0x600+ WinSqmEndSession(ptr) ; stub on Win11?
 @ stdcall -version=0x600+ WinSqmEventEnabled(long ptr) ; stub on Win11?
 @ stdcall -stub -version=0x600+ WinSqmEventWrite(long long long) ; stub on Win11?
+@ stdcall -version=0x600+ WinSqmIncrementDWORD(long long long)
 @ stdcall -version=0x600+ WinSqmIsOptedIn() ; stub on Win11?
 @ stdcall -stub -version=0x600+ WinSqmSetDWORD(ptr long long)
 @ stdcall -stub -version=0x600+ WinSqmSetString(ptr long ptr) ; stub on Win11?

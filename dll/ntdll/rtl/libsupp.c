@@ -1184,6 +1184,23 @@ LdrpApisetVersion(VOID)
     return CachedApisetVersion;
 }
 
+NTSTATUS
+NTAPI
+ApiSetQueryApiSetPresence(
+    _In_ PCUNICODE_STRING Namespace,
+    _Out_ PBOOLEAN Present)
+{
+    UNICODE_STRING Host;
+    BOOLEAN Resolved = FALSE;
+    DWORD ApisetVersion = LdrpApisetVersion();
+
+    if (!ApisetVersion || !NT_SUCCESS(ApiSetResolveToHost(ApisetVersion, Namespace, &Resolved, &Host)))
+        Resolved = FALSE;
+
+    *Present = Resolved;
+    return STATUS_SUCCESS;
+}
+
 NTSYSAPI
 NTSTATUS
 NTAPI

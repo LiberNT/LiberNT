@@ -110,6 +110,18 @@ RtlFlushHeaps(VOID)
     return Status;
 }
 
+VOID
+NTAPI
+WinSqmIncrementDWORD(
+    _In_ ULONG Unknown1,
+    _In_ ULONG Unknown2,
+    _In_ ULONG Unknown3)
+{
+    UNREFERENCED_PARAMETER(Unknown1);
+    UNREFERENCED_PARAMETER(Unknown2);
+    UNREFERENCED_PARAMETER(Unknown3);
+}
+
 BOOL
 NTAPI
 WinSqmIsOptedIn(VOID)
