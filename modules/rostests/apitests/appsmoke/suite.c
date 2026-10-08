@@ -13,6 +13,7 @@ static const struct
     DWORD BudgetMs;
 } Cases[] =
 {
+    { "os_version", 10000 },
     { "dll_directory", 15000 },
     { "child_start", 40000 },
     { "alert_wait", 20000 },

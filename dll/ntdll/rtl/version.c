@@ -197,12 +197,6 @@ RtlGetVersion(IN OUT PRTL_OSVERSIONINFOW lpVersionInformation)
     SIZE_T Length;
     PPEB Peb = NtCurrentPeb();
 
-    if (lpVersionInformation->dwOSVersionInfoSize != sizeof(RTL_OSVERSIONINFOW) &&
-        lpVersionInformation->dwOSVersionInfoSize != sizeof(RTL_OSVERSIONINFOEXW))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
     lpVersionInformation->dwMajorVersion = Peb->OSMajorVersion;
     lpVersionInformation->dwMinorVersion = Peb->OSMinorVersion;
     lpVersionInformation->dwBuildNumber = Peb->OSBuildNumber;

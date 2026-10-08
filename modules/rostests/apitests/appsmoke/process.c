@@ -15,11 +15,34 @@ typedef LONG NTSTATUS;
 typedef NTSTATUS (NTAPI *RTL_WAIT_ON_ADDRESS)(const void *, const void *, SIZE_T, const LARGE_INTEGER *);
 typedef void (NTAPI *RTL_WAKE_ADDRESS)(const void *);
 
+NTSTATUS NTAPI RtlGetVersion(PRTL_OSVERSIONINFOW);
+
 static RTL_WAIT_ON_ADDRESS pRtlWaitOnAddress;
 static RTL_WAKE_ADDRESS pRtlWakeAddressSingle;
 static volatile LONG WaitValue;
 static volatile LONG WaiterState;
 static volatile LONG ApcCount;
+
+START_TEST(os_version)
+{
+    RTL_OSVERSIONINFOEXW Unsized, Sized;
+    NTSTATUS Status;
+
+    memset(&Unsized, 0, sizeof(Unsized));
+    Status = RtlGetVersion((PRTL_OSVERSIONINFOW)&Unsized);
+    ok(Status == STATUS_SUCCESS, "RtlGetVersion without a size returned %#lx\n", Status);
+
+    memset(&Sized, 0, sizeof(Sized));
+    Sized.dwOSVersionInfoSize = sizeof(Sized);
+    Status = RtlGetVersion((PRTL_OSVERSIONINFOW)&Sized);
+    ok(Status == STATUS_SUCCESS, "RtlGetVersion returned %#lx\n", Status);
+    ok(Sized.dwMajorVersion >= 10 && Sized.dwBuildNumber != 0, "The version is %lu.%lu.%lu\n",
+       Sized.dwMajorVersion, Sized.dwMinorVersion, Sized.dwBuildNumber);
+    ok(Unsized.dwMajorVersion == Sized.dwMajorVersion && Unsized.dwMinorVersion == Sized.dwMinorVersion &&
+       Unsized.dwBuildNumber == Sized.dwBuildNumber, "The version without a size is %lu.%lu.%lu\n",
+       Unsized.dwMajorVersion, Unsized.dwMinorVersion, Unsized.dwBuildNumber);
+    ok(Unsized.wProductType == 0, "The product type was written without a size\n");
+}
 
 START_TEST(dll_directory)
 {
