@@ -302,6 +302,11 @@ public:
     void MaybeDestroy();
     void Unimplemented(const char *method) { FIXME("Native D3D11 %s is not implemented.\n", method); operation_error = E_NOTIMPL; }
     void BeginCall() { operation_error = S_OK; }
+    bool MapOnDefaultBuffers() const
+    {
+        return wddm20 && feature_level >= D3D_FEATURE_LEVEL_11_0
+                && functions.pfnResourceMap && functions.pfnResourceUnmap;
+    }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **out) override;
     ULONG STDMETHODCALLTYPE AddRef() override { Retain(); return InterlockedIncrement(&references); }
@@ -2536,7 +2541,8 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateBuffer(const D3D11_BUFFER_DESC *de
             || desc->ByteWidth % 16 || desc->ByteWidth > D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16)) return E_INVALIDARG;
     if (desc->Usage == D3D11_USAGE_IMMUTABLE && !initial) return E_INVALIDARG;
     if (!NativeUsageValid(desc->Usage, desc->BindFlags, desc->CPUAccessFlags)) return E_INVALIDARG;
-    if ((desc->Usage == D3D11_USAGE_DEFAULT || desc->Usage == D3D11_USAGE_IMMUTABLE) && desc->CPUAccessFlags) return E_INVALIDARG;
+    if (desc->Usage == D3D11_USAGE_IMMUTABLE && desc->CPUAccessFlags) return E_INVALIDARG;
+    if (desc->Usage == D3D11_USAGE_DEFAULT && desc->CPUAccessFlags && !MapOnDefaultBuffers()) return E_INVALIDARG;
     if (desc->Usage == D3D11_USAGE_DYNAMIC && desc->CPUAccessFlags != D3D11_CPU_ACCESS_WRITE) return E_INVALIDARG;
     if (desc->Usage == D3D11_USAGE_STAGING && (desc->BindFlags || desc->MiscFlags)) return E_INVALIDARG;
     D3D11_BUFFER_DESC normalized = *desc;
@@ -2600,6 +2606,7 @@ static HRESULT MapBuffer(NativeDevice *device, NativeBuffer *buffer, UINT subres
     if (type == D3D11_MAP_WRITE_NO_OVERWRITE && constant) return E_INVALIDARG;
     PFND3D10DDI_RESOURCEMAP map;
     if (buffer->desc.Usage == D3D11_USAGE_STAGING) map = device->functions.pfnStagingResourceMap;
+    else if (buffer->desc.Usage == D3D11_USAGE_DEFAULT) map = device->functions.pfnResourceMap;
     else if (type == D3D11_MAP_WRITE_DISCARD) map = constant
             ? device->functions.pfnDynamicConstantBufferMapDiscard : device->functions.pfnDynamicIABufferMapDiscard;
     else if (type == D3D11_MAP_WRITE_NO_OVERWRITE) map = device->functions.pfnDynamicIABufferMapNoOverwrite;
@@ -3580,6 +3587,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFeatureSupport(D3D11_FEATURE featur
             D3D11_FEATURE_DATA_D3D11_OPTIONS1 *caps = static_cast<D3D11_FEATURE_DATA_D3D11_OPTIONS1 *>(data);
             ZeroMemory(caps, sizeof(*caps));
             caps->TiledResourcesTier = TiledResourcesTier();
+            caps->MapOnDefaultBuffers = MapOnDefaultBuffers();
             return S_OK;
         }
         case D3D11_FEATURE_D3D9_SIMPLE_INSTANCING_SUPPORT:
@@ -3684,6 +3692,7 @@ void STDMETHODCALLTYPE NativeContext::Unmap(ID3D11Resource *resource, UINT subre
     {
         if (subresource || !buffer->mapped) return;
         PFND3D10DDI_RESOURCEUNMAP unmap = buffer->desc.Usage == D3D11_USAGE_STAGING ? device->functions.pfnStagingResourceUnmap
+                : buffer->desc.Usage == D3D11_USAGE_DEFAULT ? device->functions.pfnResourceUnmap
                 : (buffer->desc.BindFlags & D3D11_BIND_CONSTANT_BUFFER) ? device->functions.pfnDynamicConstantBufferUnmap
                 : device->functions.pfnDynamicIABufferUnmap;
         if (!unmap) { Unimplemented("Unmap"); return; }
