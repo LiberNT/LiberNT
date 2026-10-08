@@ -1775,6 +1775,7 @@ IopSetServiceEnumData(
     UNICODE_STRING EnumKeyName;
     UNICODE_STRING ValueName;
     UNICODE_STRING ServiceName;
+    UNICODE_STRING NodeServiceName;
     PKEY_VALUE_FULL_INFORMATION KeyValueInformation, kvInfo2;
     HANDLE ServiceKey = NULL, ServiceEnumKey = NULL;
     ULONG Disposition;
@@ -1832,13 +1833,16 @@ IopSetServiceEnumData(
         goto done;
     }
 
-    Status = RtlDuplicateUnicodeString(RTL_DUPLICATE_UNICODE_STRING_ALLOCATE_NULL_STRING,
+    Status = RtlDuplicateUnicodeString(RTL_DUPLICATE_UNICODE_STRING_NULL_TERMINATE,
                                        &ServiceName,
-                                       &DeviceNode->ServiceName);
+                                       &NodeServiceName);
     if (!NT_SUCCESS(Status))
     {
         goto done;
     }
+
+    RtlFreeUnicodeString(&DeviceNode->ServiceName);
+    DeviceNode->ServiceName = NodeServiceName;
 
     /* Case-insensitive stripes serialize one service without blocking unrelated
      * services. Hash at PASSIVE_LEVEL, before acquiring the sleepable mutex. */
