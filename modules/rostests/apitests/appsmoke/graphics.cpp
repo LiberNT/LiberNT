@@ -607,7 +607,7 @@ START_TEST(d3d12_device)
     Device->Release();
 }
 
-START_TEST(opengl)
+struct GL_API
 {
     typedef HGLRC (WINAPI *CREATE_CONTEXT)(HDC);
     typedef BOOL (WINAPI *MAKE_CURRENT)(HDC, HGLRC);
@@ -617,8 +617,7 @@ START_TEST(opengl)
     typedef void (WINAPI *CLEAR)(unsigned int);
     typedef void (WINAPI *READ_PIXELS)(int, int, int, int, unsigned int, unsigned int, void *);
     typedef void (WINAPI *FINISH)(void);
-    HMODULE Module = LoadLibraryW(L"opengl32.dll");
-    PIXELFORMATDESCRIPTOR Descriptor;
+
     CREATE_CONTEXT CreateContext;
     DELETE_CONTEXT DeleteContext;
     MAKE_CURRENT MakeCurrent;
@@ -627,40 +626,46 @@ START_TEST(opengl)
     GET_STRING GetString;
     FINISH Finish;
     CLEAR Clear;
-    const unsigned char *Vendor, *Renderer;
-    WCHAR IcdName[MAX_PATH];
-    bool HasIcd = AppSmokeOpenGlIcdName(IcdName, ARRAYSIZE(IcdName));
-    UINT Index, Failures = 0;
-    DWORD Pixel = 0, Start;
-    HGLRC Context;
+};
+
+struct GL_WINDOW
+{
     HWND Window;
-    int Format;
     HDC Dc;
+    HGLRC Context;
+};
+
+static bool GlLoad(GL_API *Gl)
+{
+    HMODULE Module = LoadLibraryW(L"opengl32.dll");
 
     if (!Module)
-    {
-        skip("opengl32.dll is unavailable\n");
-        return;
-    }
+        return false;
+    Gl->CreateContext = reinterpret_cast<GL_API::CREATE_CONTEXT>(GetProcAddress(Module, "wglCreateContext"));
+    Gl->MakeCurrent = reinterpret_cast<GL_API::MAKE_CURRENT>(GetProcAddress(Module, "wglMakeCurrent"));
+    Gl->DeleteContext = reinterpret_cast<GL_API::DELETE_CONTEXT>(GetProcAddress(Module, "wglDeleteContext"));
+    Gl->GetString = reinterpret_cast<GL_API::GET_STRING>(GetProcAddress(Module, "glGetString"));
+    Gl->ClearColor = reinterpret_cast<GL_API::CLEAR_COLOR>(GetProcAddress(Module, "glClearColor"));
+    Gl->Clear = reinterpret_cast<GL_API::CLEAR>(GetProcAddress(Module, "glClear"));
+    Gl->ReadPixels = reinterpret_cast<GL_API::READ_PIXELS>(GetProcAddress(Module, "glReadPixels"));
+    Gl->Finish = reinterpret_cast<GL_API::FINISH>(GetProcAddress(Module, "glFinish"));
+    ok(Gl->CreateContext && Gl->MakeCurrent && Gl->DeleteContext && Gl->GetString && Gl->ClearColor && Gl->Clear &&
+       Gl->ReadPixels && Gl->Finish, "opengl32.dll lacks a core entry point\n");
+    return Gl->CreateContext && Gl->MakeCurrent && Gl->DeleteContext && Gl->GetString && Gl->ClearColor && Gl->Clear &&
+           Gl->ReadPixels && Gl->Finish;
+}
 
-    CreateContext = reinterpret_cast<CREATE_CONTEXT>(GetProcAddress(Module, "wglCreateContext"));
-    MakeCurrent = reinterpret_cast<MAKE_CURRENT>(GetProcAddress(Module, "wglMakeCurrent"));
-    DeleteContext = reinterpret_cast<DELETE_CONTEXT>(GetProcAddress(Module, "wglDeleteContext"));
-    GetString = reinterpret_cast<GET_STRING>(GetProcAddress(Module, "glGetString"));
-    ClearColor = reinterpret_cast<CLEAR_COLOR>(GetProcAddress(Module, "glClearColor"));
-    Clear = reinterpret_cast<CLEAR>(GetProcAddress(Module, "glClear"));
-    ReadPixels = reinterpret_cast<READ_PIXELS>(GetProcAddress(Module, "glReadPixels"));
-    Finish = reinterpret_cast<FINISH>(GetProcAddress(Module, "glFinish"));
-    ok(CreateContext && MakeCurrent && DeleteContext && GetString && ClearColor && Clear && ReadPixels && Finish,
-       "opengl32.dll lacks a core entry point\n");
-    if (!CreateContext || !MakeCurrent || !DeleteContext || !GetString || !ClearColor || !Clear || !ReadPixels || !Finish)
-        return;
+static bool GlCreate(const GL_API *Gl, GL_WINDOW *Target)
+{
+    PIXELFORMATDESCRIPTOR Descriptor;
+    int Format;
 
-    Window = AppSmokeCreateWindow(256, 256);
-    Dc = Window ? GetDC(Window) : NULL;
-    ok(Dc != NULL, "No window DC: %lu\n", GetLastError());
-    if (!Dc)
-        return;
+    memset(Target, 0, sizeof(*Target));
+    Target->Window = AppSmokeCreateWindow(256, 256);
+    Target->Dc = Target->Window ? GetDC(Target->Window) : NULL;
+    ok(Target->Dc != NULL, "No window DC: %lu\n", GetLastError());
+    if (!Target->Dc)
+        return false;
 
     memset(&Descriptor, 0, sizeof(Descriptor));
     Descriptor.nSize = sizeof(Descriptor);
@@ -669,17 +674,78 @@ START_TEST(opengl)
     Descriptor.iPixelType = PFD_TYPE_RGBA;
     Descriptor.cColorBits = 32;
     Descriptor.cDepthBits = 24;
-    Format = ChoosePixelFormat(Dc, &Descriptor);
+    Format = ChoosePixelFormat(Target->Dc, &Descriptor);
     ok(Format != 0, "ChoosePixelFormat: %lu\n", GetLastError());
-    ok(Format && SetPixelFormat(Dc, Format, &Descriptor), "SetPixelFormat: %lu\n", GetLastError());
+    ok(Format && SetPixelFormat(Target->Dc, Format, &Descriptor), "SetPixelFormat: %lu\n", GetLastError());
+
+    Target->Context = Format ? Gl->CreateContext(Target->Dc) : NULL;
+    ok(Target->Context != NULL, "wglCreateContext: %lu\n", GetLastError());
+    if (Target->Context && !Gl->MakeCurrent(Target->Dc, Target->Context))
+    {
+        ok(0, "wglMakeCurrent: %lu\n", GetLastError());
+        return false;
+    }
+    return Target->Context != NULL;
+}
+
+static void GlFrames(const GL_API *Gl, const GL_WINDOW *Target, UINT Count)
+{
+    UINT Index, Failures = 0;
+    DWORD Pixel = 0;
+
+    for (Index = 0; Index < Count; ++Index)
+    {
+        Gl->ClearColor(0.0f, 0.0f, 1.0f, 1.0f);
+        Gl->Clear(APPSMOKE_GL_COLOR_BUFFER_BIT);
+        if (!Index)
+        {
+            Gl->ReadPixels(8, 8, 1, 1, APPSMOKE_GL_RGBA, APPSMOKE_GL_UNSIGNED_BYTE, &Pixel);
+            ok(Pixel == BLUE_RGBA, "The cleared back buffer pixel is %#lx, expected %#x\n", Pixel, BLUE_RGBA);
+        }
+        if (!SwapBuffers(Target->Dc))
+            ++Failures;
+    }
+    Gl->Finish();
+    ok(Failures == 0, "%u of %u SwapBuffers calls failed\n", Failures, Count);
+}
+
+static void GlDestroy(const GL_API *Gl, GL_WINDOW *Target)
+{
+    if (Target->Context)
+    {
+        Gl->MakeCurrent(NULL, NULL);
+        Gl->DeleteContext(Target->Context);
+    }
+    if (Target->Dc)
+        ReleaseDC(Target->Window, Target->Dc);
+    if (Target->Window)
+        DestroyWindow(Target->Window);
+    memset(Target, 0, sizeof(*Target));
+    AppSmokePumpMessages();
+}
+
+START_TEST(opengl)
+{
+    const unsigned char *Vendor, *Renderer;
+    WCHAR IcdName[MAX_PATH];
+    bool HasIcd = AppSmokeOpenGlIcdName(IcdName, ARRAYSIZE(IcdName));
+    GL_WINDOW Target;
+    GL_API Gl;
+    DWORD Start;
+
+    if (!GetModuleHandleW(L"opengl32.dll") && !LoadLibraryW(L"opengl32.dll"))
+    {
+        skip("opengl32.dll is unavailable\n");
+        return;
+    }
+    if (!GlLoad(&Gl))
+        return;
 
     Start = GetTickCount();
-    Context = Format ? CreateContext(Dc) : NULL;
-    ok(Context != NULL, "wglCreateContext: %lu\n", GetLastError());
-    if (Context && MakeCurrent(Dc, Context))
+    if (GlCreate(&Gl, &Target))
     {
-        Vendor = GetString(APPSMOKE_GL_VENDOR);
-        Renderer = GetString(APPSMOKE_GL_RENDERER);
+        Vendor = Gl.GetString(APPSMOKE_GL_VENDOR);
+        Renderer = Gl.GetString(APPSMOKE_GL_RENDERER);
         ok(Vendor && Renderer, "The context has no vendor or renderer string\n");
         trace("OpenGL %s / %s, context in %lu ms\n", Vendor ? reinterpret_cast<const char *>(Vendor) : "?",
               Renderer ? reinterpret_cast<const char *>(Renderer) : "?", GetTickCount() - Start);
@@ -687,31 +753,44 @@ START_TEST(opengl)
             ok(AppSmokeModuleLoaded(IcdName), "The context does not run on the adapter's driver %ls\n", IcdName);
 
         Start = GetTickCount();
-        for (Index = 0; Index < 8; ++Index)
-        {
-            ClearColor(0.0f, 0.0f, 1.0f, 1.0f);
-            Clear(APPSMOKE_GL_COLOR_BUFFER_BIT);
-            if (!Index)
-            {
-                ReadPixels(8, 8, 1, 1, APPSMOKE_GL_RGBA, APPSMOKE_GL_UNSIGNED_BYTE, &Pixel);
-                ok(Pixel == BLUE_RGBA, "The cleared back buffer pixel is %#lx, expected %#x\n", Pixel, BLUE_RGBA);
-            }
-            if (!SwapBuffers(Dc))
-                ++Failures;
-        }
-        Finish();
-        ok(Failures == 0, "%u of 8 SwapBuffers calls failed\n", Failures);
+        GlFrames(&Gl, &Target, 8);
         trace("8 OpenGL frames: %lu ms\n", GetTickCount() - Start);
-        MakeCurrent(NULL, NULL);
     }
-    else if (Context)
-    {
-        ok(0, "wglMakeCurrent: %lu\n", GetLastError());
-    }
+    GlDestroy(&Gl, &Target);
+}
 
-    if (Context)
-        DeleteContext(Context);
-    ReleaseDC(Window, Dc);
-    DestroyWindow(Window);
-    AppSmokePumpMessages();
+START_TEST(opengl_mode_change)
+{
+    GL_WINDOW First, Second;
+    GL_API Gl;
+
+    if (!GetModuleHandleW(L"opengl32.dll") && !LoadLibraryW(L"opengl32.dll"))
+    {
+        skip("opengl32.dll is unavailable\n");
+        return;
+    }
+    if (!GlLoad(&Gl))
+        return;
+
+    memset(&Second, 0, sizeof(Second));
+    if (GlCreate(&Gl, &First))
+    {
+        GlFrames(&Gl, &First, 4);
+        if (!AppSmokeCycleDisplayMode())
+        {
+            skip("The display has no second mode\n");
+        }
+        else
+        {
+            AppSmokePumpMessages();
+            ok(Gl.MakeCurrent(First.Dc, First.Context), "wglMakeCurrent after the mode change: %lu\n", GetLastError());
+            GlFrames(&Gl, &First, 4);
+            if (GlCreate(&Gl, &Second))
+                GlFrames(&Gl, &Second, 8);
+            GlDestroy(&Gl, &Second);
+            if (First.Context)
+                Gl.MakeCurrent(First.Dc, First.Context);
+        }
+    }
+    GlDestroy(&Gl, &First);
 }

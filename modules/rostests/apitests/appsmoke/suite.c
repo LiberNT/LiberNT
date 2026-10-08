@@ -22,6 +22,7 @@ static const struct
     { "swap_chain", 30000 },
     { "d3d12_device", 30000 },
     { "opengl", 20000 },
+    { "opengl_mode_change", 30000 },
     { "opencl", 60000 },
 };
 

@@ -25,6 +25,7 @@ BOOL AppSmokeIsRole(const char *Role);
 BOOL AppSmokeRunSelf(const char *Test, const char *Role, DWORD BudgetMs, DWORD *ExitCode, DWORD *ElapsedMs);
 HWND AppSmokeCreateWindow(int Width, int Height);
 void AppSmokePumpMessages(void);
+BOOL AppSmokeCycleDisplayMode(void);
 BOOL AppSmokeD3D11DriverName(WCHAR *Name, UINT Count);
 BOOL AppSmokeD3D12DriverName(WCHAR *Name, UINT Count);
 BOOL AppSmokeOpenGlIcdName(WCHAR *Name, UINT Count);

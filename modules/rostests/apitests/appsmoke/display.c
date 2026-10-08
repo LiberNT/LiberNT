@@ -41,6 +41,31 @@ static BOOL PickMode(const DEVMODEW *Current, DEVMODEW *Picked)
     return PickedArea != 0;
 }
 
+BOOL AppSmokeCycleDisplayMode(void)
+{
+    DEVMODEW Current, Picked, Request;
+    LONG Result;
+
+    memset(&Current, 0, sizeof(Current));
+    Current.dmSize = sizeof(Current);
+    if (!EnumDisplaySettingsW(NULL, ENUM_CURRENT_SETTINGS, &Current) || !PickMode(&Current, &Picked))
+        return FALSE;
+
+    memset(&Request, 0, sizeof(Request));
+    Request.dmSize = sizeof(Request);
+    Request.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL;
+    Request.dmPelsWidth = Picked.dmPelsWidth;
+    Request.dmPelsHeight = Picked.dmPelsHeight;
+    Request.dmBitsPerPel = Picked.dmBitsPerPel;
+    Result = ChangeDisplaySettingsExW(NULL, &Request, NULL, CDS_FULLSCREEN, NULL);
+    ok(Result == DISP_CHANGE_SUCCESSFUL, "Changing the display mode: %ld\n", Result);
+    Sleep(300);
+    Result = ChangeDisplaySettingsExW(NULL, NULL, NULL, 0, NULL);
+    ok(Result == DISP_CHANGE_SUCCESSFUL, "Restoring the display mode: %ld\n", Result);
+    Sleep(300);
+    return TRUE;
+}
+
 START_TEST(window_dc)
 {
     static const WCHAR ClassName[] = L"AppSmokeOwnDc";
