@@ -20,6 +20,7 @@
 #include <nvs/nt/mmkernel.h>
 
 #define KI_BUGCHECK_BACKTRACE_FRAMES 8
+#define KI_BUGCHECK_LOG_FRAMES 48
 #define KI_BUGCHECK_MAX_MODULES 4096
 
 /* GLOBALS *******************************************************************/
@@ -797,7 +798,9 @@ KiUnwindBugCheckFrame(
 
     OldPc = KeGetContextPc(Context);
     OldSp = KeGetContextStackRegister(Context);
-    if ((OldPc == 0) || (OldSp < StackLow) || (OldSp >= StackHigh) || ((OldSp & (sizeof(ULONG_PTR) - 1)) != 0) || !KiIsBugCheckCodeAddress(OldPc))
+    if ((OldPc == 0) || (OldSp >= StackHigh) || ((OldSp & (sizeof(ULONG_PTR) - 1)) != 0) || !KiIsBugCheckCodeAddress(OldPc))
+        return FALSE;
+    if ((OldSp < StackLow) && (!FirstFrame || ((StackLow - OldSp) > KERNEL_STACK_SIZE)))
         return FALSE;
 
     LookupPc = OldPc;
@@ -1071,18 +1074,27 @@ KiDisplayBugCheckBackTrace(
     _In_opt_ PKTRAP_FRAME TrapFrame,
     _In_ PCONTEXT Context)
 {
-    ULONG_PTR Frames[KI_BUGCHECK_BACKTRACE_FRAMES];
+    ULONG_PTR Frames[KI_BUGCHECK_LOG_FRAMES];
     ULONG FrameCount;
     ULONG Index;
     CHAR Line[128];
+    PKTHREAD Thread = KeGetCurrentThread();
 
-    FrameCount = KiCaptureBugCheckBackTrace(TrapFrame, Context, KeGetCurrentThread(), Frames, RTL_NUMBER_OF(Frames));
+    FrameCount = KiCaptureBugCheckBackTrace(TrapFrame, Context, Thread, Frames, RTL_NUMBER_OF(Frames));
+    if ((Thread != NULL) && MmIsAddressValid(Thread))
+    {
+        RtlStringCbPrintfA(Line, sizeof(Line), "Stack: limit=%p base=%p\r\n", (PVOID)Thread->StackLimit, Thread->StackBase);
+        KiDisplayAndLogBugCheckString(Line);
+    }
     KiDisplayAndLogBugCheckString("Backtrace:\r\n");
 
     for (Index = 0; Index < FrameCount; Index++)
     {
         KiFormatBugCheckFrame(Index, Frames[Index], Line, sizeof(Line));
-        KiDisplayAndLogBugCheckString(Line);
+        if (Index < KI_BUGCHECK_BACKTRACE_FRAMES)
+            KiDisplayAndLogBugCheckString(Line);
+        else
+            KiLogBugCheckString(Line);
     }
 
     if (FrameCount == 0)
