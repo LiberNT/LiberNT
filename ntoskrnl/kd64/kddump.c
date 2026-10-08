@@ -1122,6 +1122,7 @@ BOOLEAN NTAPI KdpInitializeDedicatedCrashDump(_In_ PFILE_OBJECT BootFileObject)
     Status = KdpSendDeviceIoControl(SystemDevice, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, &LayoutBuffer, sizeof(LayoutBuffer));
     if (!NT_SUCCESS(Status))
         goto Failure;
+    KdpCrashDumpInitializationStage = "locating the crash dump partition";
     if (LayoutBuffer.Layout.PartitionStyle != PARTITION_STYLE_MBR)
     {
         Status = STATUS_NOT_SUPPORTED;
