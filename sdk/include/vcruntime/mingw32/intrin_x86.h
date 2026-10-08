@@ -711,6 +711,7 @@ __INTRIN_INLINE unsigned char _InterlockedCompareExchange128(_Interlocked_operan
 #endif
 
 #ifdef __i386__
+#if !HAS_BUILTIN(_InterlockedAddLargeStatistic)
 __INTRIN_INLINE long _InterlockedAddLargeStatistic(volatile long long * Addend, long Value)
 {
 	__asm__
@@ -726,6 +727,7 @@ __INTRIN_INLINE long _InterlockedAddLargeStatistic(volatile long long * Addend, 
 
 	return Value;
 }
+#endif
 #endif /* __i386__ */
 
 #if !HAS_BUILTIN(_interlockedbittestandreset)
@@ -780,6 +782,7 @@ __INTRIN_INLINE void __stosb(unsigned char * Dest, unsigned char Data, size_t Co
 }
 #endif
 
+#if !HAS_BUILTIN(__stosw)
 __INTRIN_INLINE void __stosw(unsigned short * Dest, unsigned short Data, size_t Count)
 {
 	__asm__ __volatile__
@@ -789,7 +792,9 @@ __INTRIN_INLINE void __stosw(unsigned short * Dest, unsigned short Data, size_t 
 		"[Dest]" (Dest), "a" (Data), "[Count]" (Count)
 	);
 }
+#endif
 
+#if !HAS_BUILTIN(__stosd)
 __INTRIN_INLINE void __stosd(unsigned long * Dest, unsigned long Data, size_t Count)
 {
 	__asm__ __volatile__
@@ -799,8 +804,10 @@ __INTRIN_INLINE void __stosd(unsigned long * Dest, unsigned long Data, size_t Co
 		"[Dest]" (Dest), "a" (Data), "[Count]" (Count)
 	);
 }
+#endif
 
 #ifdef __x86_64__
+#if !HAS_BUILTIN(__stosq)
 __INTRIN_INLINE void __stosq(unsigned long long * Dest, unsigned long long Data, size_t Count)
 {
 	__asm__ __volatile__
@@ -811,7 +818,9 @@ __INTRIN_INLINE void __stosq(unsigned long long * Dest, unsigned long long Data,
 	);
 }
 #endif
+#endif
 
+#if !HAS_BUILTIN(__movsb)
 __INTRIN_INLINE void __movsb(unsigned char * Destination, const unsigned char * Source, size_t Count)
 {
 	__asm__ __volatile__
@@ -821,7 +830,9 @@ __INTRIN_INLINE void __movsb(unsigned char * Destination, const unsigned char * 
 		"[Destination]" (Destination), "[Source]" (Source), "[Count]" (Count)
 	);
 }
+#endif
 
+#if !HAS_BUILTIN(__movsw)
 __INTRIN_INLINE void __movsw(unsigned short * Destination, const unsigned short * Source, size_t Count)
 {
 	__asm__ __volatile__
@@ -831,7 +842,9 @@ __INTRIN_INLINE void __movsw(unsigned short * Destination, const unsigned short 
 		"[Destination]" (Destination), "[Source]" (Source), "[Count]" (Count)
 	);
 }
+#endif
 
+#if !HAS_BUILTIN(__movsd)
 __INTRIN_INLINE void __movsd(unsigned long * Destination, const unsigned long * Source, size_t Count)
 {
 	__asm__ __volatile__
@@ -841,8 +854,10 @@ __INTRIN_INLINE void __movsd(unsigned long * Destination, const unsigned long * 
 		"[Destination]" (Destination), "[Source]" (Source), "[Count]" (Count)
 	);
 }
+#endif
 
 #ifdef __x86_64__
+#if !HAS_BUILTIN(__movsq)
 __INTRIN_INLINE void __movsq(unsigned long long * Destination, const unsigned long long * Source, size_t Count)
 {
 	__asm__ __volatile__
@@ -852,6 +867,7 @@ __INTRIN_INLINE void __movsq(unsigned long long * Destination, const unsigned lo
 		"[Destination]" (Destination), "[Source]" (Source), "[Count]" (Count)
 	);
 }
+#endif
 #endif
 
 #if defined(__x86_64__)
@@ -944,10 +960,12 @@ __INTRIN_INLINE void __addgsword(unsigned long Offset, unsigned short Data)
 	__asm__ __volatile__("addw %w[Data], %%gs:%a[Offset]" : : [Offset] "ir" (Offset), [Data] "ir" (Data) : "memory");
 }
 
+#if !HAS_BUILTIN(__addgsdword)
 __INTRIN_INLINE void __addgsdword(unsigned long Offset, unsigned long Data)
 {
 	__asm__ __volatile__("addl %k[Data], %%gs:%a[Offset]" : : [Offset] "ir" (Offset), [Data] "ir" (Data) : "memory");
 }
+#endif
 
 __INTRIN_INLINE void __addgsqword(unsigned long Offset, unsigned long long Data)
 {
@@ -958,20 +976,26 @@ __INTRIN_INLINE void __addgsqword(unsigned long Offset, unsigned long long Data)
 
 /*** FS segment addressing ***/
 
+#if !HAS_BUILTIN(__writefsbyte)
 __INTRIN_INLINE void __writefsbyte(unsigned long Offset, unsigned char Data)
 {
 	__asm__ __volatile__("movb %b[Data], %%fs:%a[Offset]" : : [Offset] "ir" (Offset), [Data] "iq" (Data) : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(__writefsword)
 __INTRIN_INLINE void __writefsword(unsigned long Offset, unsigned short Data)
 {
 	__asm__ __volatile__("movw %w[Data], %%fs:%a[Offset]" : : [Offset] "ir" (Offset), [Data] "ir" (Data) : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(__writefsdword)
 __INTRIN_INLINE void __writefsdword(unsigned long Offset, unsigned long Data)
 {
 	__asm__ __volatile__("movl %k[Data], %%fs:%a[Offset]" : : [Offset] "ir" (Offset), [Data] "ir" (Data) : "memory");
 }
+#endif
 
 #if !HAS_BUILTIN(__readfsbyte)
 __INTRIN_INLINE unsigned char __readfsbyte(unsigned long Offset)
@@ -1305,6 +1329,7 @@ __INTRIN_INLINE unsigned long __cdecl _lrotr(unsigned long value, int shift)
 #endif
 
 #if defined __x86_64__
+#if !HAS_BUILTIN(__ll_lshift)
 __INTRIN_INLINE
 unsigned long long __ll_lshift(unsigned long long Mask, int Bit)
 {
@@ -1318,7 +1343,9 @@ unsigned long long __ll_lshift(unsigned long long Mask, int Bit)
 
     return retval;
 }
+#endif
 
+#if !HAS_BUILTIN(__ll_rshift)
 __INTRIN_INLINE long long __ll_rshift(long long Mask, int Bit)
 {
     long long retval;
@@ -1331,7 +1358,9 @@ __INTRIN_INLINE long long __ll_rshift(long long Mask, int Bit)
 
     return retval;
 }
+#endif
 
+#if !HAS_BUILTIN(__ull_rshift)
 __INTRIN_INLINE unsigned long long __ull_rshift(unsigned long long Mask, int Bit)
 {
     long long retval;
@@ -1344,6 +1373,7 @@ __INTRIN_INLINE unsigned long long __ull_rshift(unsigned long long Mask, int Bit
 
     return retval;
 }
+#endif
 #else
 /*
 	NOTE: in __ll_lshift, __ll_rshift and __ull_rshift we use the "A"
@@ -1352,6 +1382,7 @@ __INTRIN_INLINE unsigned long long __ull_rshift(unsigned long long Mask, int Bit
 	just confuses it. Also we declare Bit as an int and then truncate it to
 	match Visual C++ behavior
 */
+#if !HAS_BUILTIN(__ll_lshift)
 __INTRIN_INLINE
 unsigned long long __ll_lshift(unsigned long long Mask, int Bit)
 {
@@ -1366,7 +1397,9 @@ unsigned long long __ll_lshift(unsigned long long Mask, int Bit)
 
 	return retval;
 }
+#endif
 
+#if !HAS_BUILTIN(__ll_rshift)
 __INTRIN_INLINE long long __ll_rshift(long long Mask, int Bit)
 {
 	long long retval = Mask;
@@ -1380,7 +1413,9 @@ __INTRIN_INLINE long long __ll_rshift(long long Mask, int Bit)
 
 	return retval;
 }
+#endif
 
+#if !HAS_BUILTIN(__ull_rshift)
 __INTRIN_INLINE unsigned long long __ull_rshift(unsigned long long Mask, int Bit)
 {
 	unsigned long long retval = Mask;
@@ -1394,6 +1429,7 @@ __INTRIN_INLINE unsigned long long __ull_rshift(unsigned long long Mask, int Bit
 
 	return retval;
 }
+#endif
 #endif
 
 __INTRIN_INLINE unsigned short __cdecl _byteswap_ushort(unsigned short value)
@@ -1526,27 +1562,34 @@ __INTRIN_INLINE unsigned long long __umulh(unsigned long long a, unsigned long l
 
 /*** Port I/O ***/
 
+#if !HAS_BUILTIN(__inbyte)
 __INTRIN_INLINE unsigned char __inbyte(unsigned short Port)
 {
 	unsigned char byte;
 	__asm__ __volatile__("inb %w[Port], %b[byte]" : [byte] "=a" (byte) : [Port] "Nd" (Port));
 	return byte;
 }
+#endif
 
+#if !HAS_BUILTIN(__inword)
 __INTRIN_INLINE unsigned short __inword(unsigned short Port)
 {
 	unsigned short word;
 	__asm__ __volatile__("inw %w[Port], %w[word]" : [word] "=a" (word) : [Port] "Nd" (Port));
 	return word;
 }
+#endif
 
+#if !HAS_BUILTIN(__indword)
 __INTRIN_INLINE unsigned long __indword(unsigned short Port)
 {
 	unsigned long dword;
 	__asm__ __volatile__("inl %w[Port], %k[dword]" : [dword] "=a" (dword) : [Port] "Nd" (Port));
 	return dword;
 }
+#endif
 
+#if !HAS_BUILTIN(__inbytestring)
 __INTRIN_INLINE void __inbytestring(unsigned short Port, unsigned char * Buffer, unsigned long Count)
 {
 	__asm__ __volatile__
@@ -1557,7 +1600,9 @@ __INTRIN_INLINE void __inbytestring(unsigned short Port, unsigned char * Buffer,
 		"memory"
 	);
 }
+#endif
 
+#if !HAS_BUILTIN(__inwordstring)
 __INTRIN_INLINE void __inwordstring(unsigned short Port, unsigned short * Buffer, unsigned long Count)
 {
 	__asm__ __volatile__
@@ -1568,7 +1613,9 @@ __INTRIN_INLINE void __inwordstring(unsigned short Port, unsigned short * Buffer
 		"memory"
 	);
 }
+#endif
 
+#if !HAS_BUILTIN(__indwordstring)
 __INTRIN_INLINE void __indwordstring(unsigned short Port, unsigned long * Buffer, unsigned long Count)
 {
 	__asm__ __volatile__
@@ -1579,22 +1626,30 @@ __INTRIN_INLINE void __indwordstring(unsigned short Port, unsigned long * Buffer
 		"memory"
 	);
 }
+#endif
 
+#if !HAS_BUILTIN(__outbyte)
 __INTRIN_INLINE void __outbyte(unsigned short Port, unsigned char Data)
 {
 	__asm__ __volatile__("outb %b[Data], %w[Port]" : : [Port] "Nd" (Port), [Data] "a" (Data));
 }
+#endif
 
+#if !HAS_BUILTIN(__outword)
 __INTRIN_INLINE void __outword(unsigned short Port, unsigned short Data)
 {
 	__asm__ __volatile__("outw %w[Data], %w[Port]" : : [Port] "Nd" (Port), [Data] "a" (Data));
 }
+#endif
 
+#if !HAS_BUILTIN(__outdword)
 __INTRIN_INLINE void __outdword(unsigned short Port, unsigned long Data)
 {
 	__asm__ __volatile__("outl %k[Data], %w[Port]" : : [Port] "Nd" (Port), [Data] "a" (Data));
 }
+#endif
 
+#if !HAS_BUILTIN(__outbytestring)
 __INTRIN_INLINE void __outbytestring(unsigned short Port, unsigned char * Buffer, unsigned long Count)
 {
 	__asm__ __volatile__
@@ -1605,7 +1660,9 @@ __INTRIN_INLINE void __outbytestring(unsigned short Port, unsigned char * Buffer
 		"memory"
 	);
 }
+#endif
 
+#if !HAS_BUILTIN(__outwordstring)
 __INTRIN_INLINE void __outwordstring(unsigned short Port, unsigned short * Buffer, unsigned long Count)
 {
 	__asm__ __volatile__
@@ -1616,7 +1673,9 @@ __INTRIN_INLINE void __outwordstring(unsigned short Port, unsigned short * Buffe
 		"memory"
 	);
 }
+#endif
 
+#if !HAS_BUILTIN(__outdwordstring)
 __INTRIN_INLINE void __outdwordstring(unsigned short Port, unsigned long * Buffer, unsigned long Count)
 {
 	__asm__ __volatile__
@@ -1627,6 +1686,7 @@ __INTRIN_INLINE void __outdwordstring(unsigned short Port, unsigned long * Buffe
 		"memory"
 	);
 }
+#endif
 
 __INTRIN_INLINE int __cdecl _inp(unsigned short Port)
 {
@@ -1730,20 +1790,26 @@ __INTRIN_INLINE void __int2c(void)
 }
 #endif
 
+#if !HAS_BUILTIN(_disable)
 __INTRIN_INLINE void __cdecl _disable(void)
 {
 	__asm__("cli" : : : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(_enable)
 __INTRIN_INLINE void __cdecl _enable(void)
 {
 	__asm__("sti" : : : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(__halt)
 __INTRIN_INLINE void __halt(void)
 {
 	__asm__("hlt" : : : "memory");
 }
+#endif
 
 #if !HAS_BUILTIN(__fastfail)
 __declspec(noreturn)
@@ -1758,110 +1824,143 @@ __INTRIN_INLINE void __fastfail(unsigned int Code)
 
 #ifdef __x86_64__
 
+#if !HAS_BUILTIN(__writecr0)
 __INTRIN_INLINE void __writecr0(unsigned long long Data)
 {
 	__asm__("mov %[Data], %%cr0" : : [Data] "r" (Data) : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(__writecr3)
 __INTRIN_INLINE void __writecr3(unsigned long long Data)
 {
 	__asm__("mov %[Data], %%cr3" : : [Data] "r" (Data) : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(__writecr4)
 __INTRIN_INLINE void __writecr4(unsigned long long Data)
 {
 	__asm__("mov %[Data], %%cr4" : : [Data] "r" (Data) : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(__writecr8)
 __INTRIN_INLINE void __writecr8(unsigned long long Data)
 {
 	__asm__("mov %[Data], %%cr8" : : [Data] "r" (Data) : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(__readcr0)
 __INTRIN_INLINE unsigned long long __readcr0(void)
 {
 	unsigned long long value;
 	__asm__ __volatile__("mov %%cr0, %[value]" : [value] "=r" (value));
 	return value;
 }
+#endif
 
+#if !HAS_BUILTIN(__readcr2)
 __INTRIN_INLINE unsigned long long __readcr2(void)
 {
 	unsigned long long value;
 	__asm__ __volatile__("mov %%cr2, %[value]" : [value] "=r" (value));
 	return value;
 }
+#endif
 
+#if !HAS_BUILTIN(__readcr3)
 __INTRIN_INLINE unsigned long long __readcr3(void)
 {
 	unsigned long long value;
 	__asm__ __volatile__("mov %%cr3, %[value]" : [value] "=r" (value));
 	return value;
 }
+#endif
 
+#if !HAS_BUILTIN(__readcr4)
 __INTRIN_INLINE unsigned long long __readcr4(void)
 {
 	unsigned long long value;
 	__asm__ __volatile__("mov %%cr4, %[value]" : [value] "=r" (value));
 	return value;
 }
+#endif
 
+#if !HAS_BUILTIN(__readcr8)
 __INTRIN_INLINE unsigned long long __readcr8(void)
 {
 	unsigned long long value;
 	__asm__ __volatile__("movq %%cr8, %q[value]" : [value] "=r" (value));
 	return value;
 }
+#endif
 
 #else /* __x86_64__ */
 
+#if !HAS_BUILTIN(__writecr0)
 __INTRIN_INLINE void __writecr0(unsigned int Data)
 {
 	__asm__("mov %[Data], %%cr0" : : [Data] "r" (Data) : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(__writecr3)
 __INTRIN_INLINE void __writecr3(unsigned int Data)
 {
 	__asm__("mov %[Data], %%cr3" : : [Data] "r" (Data) : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(__writecr4)
 __INTRIN_INLINE void __writecr4(unsigned int Data)
 {
 	__asm__("mov %[Data], %%cr4" : : [Data] "r" (Data) : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(__readcr0)
 __INTRIN_INLINE unsigned long __readcr0(void)
 {
 	unsigned long value;
 	__asm__ __volatile__("mov %%cr0, %[value]" : [value] "=r" (value));
 	return value;
 }
+#endif
 
+#if !HAS_BUILTIN(__readcr2)
 __INTRIN_INLINE unsigned long __readcr2(void)
 {
 	unsigned long value;
 	__asm__ __volatile__("mov %%cr2, %[value]" : [value] "=r" (value));
 	return value;
 }
+#endif
 
+#if !HAS_BUILTIN(__readcr3)
 __INTRIN_INLINE unsigned long __readcr3(void)
 {
 	unsigned long value;
 	__asm__ __volatile__("mov %%cr3, %[value]" : [value] "=r" (value));
 	return value;
 }
+#endif
 
+#if !HAS_BUILTIN(__readcr4)
 __INTRIN_INLINE unsigned long __readcr4(void)
 {
 	unsigned long value;
 	__asm__ __volatile__("mov %%cr4, %[value]" : [value] "=r" (value));
 	return value;
 }
+#endif
 
 #endif /* __x86_64__ */
 
 #ifdef __x86_64__
 
+#if !HAS_BUILTIN(__readdr)
 __INTRIN_INLINE unsigned long long __readdr(unsigned int reg)
 {
 	unsigned long long value;
@@ -1894,7 +1993,9 @@ __INTRIN_INLINE unsigned long long __readdr(unsigned int reg)
 	}
 	return value;
 }
+#endif
 
+#if !HAS_BUILTIN(__writedr)
 __INTRIN_INLINE void __writedr(unsigned reg, unsigned long long value)
 {
 	switch (reg)
@@ -1925,9 +2026,11 @@ __INTRIN_INLINE void __writedr(unsigned reg, unsigned long long value)
 			break;
 	}
 }
+#endif
 
 #else /* __x86_64__ */
 
+#if !HAS_BUILTIN(__readdr)
 __INTRIN_INLINE unsigned int __readdr(unsigned int reg)
 {
 	unsigned int value;
@@ -1960,7 +2063,9 @@ __INTRIN_INLINE unsigned int __readdr(unsigned int reg)
 	}
 	return value;
 }
+#endif
 
+#if !HAS_BUILTIN(__writedr)
 __INTRIN_INLINE void __writedr(unsigned reg, unsigned int value)
 {
 	switch (reg)
@@ -1991,16 +2096,20 @@ __INTRIN_INLINE void __writedr(unsigned reg, unsigned int value)
 			break;
 	}
 }
+#endif
 
 #endif /* __x86_64__ */
 
+#if !HAS_BUILTIN(__invlpg)
 __INTRIN_INLINE void __invlpg(void *Address)
 {
 	__asm__ __volatile__ ("invlpg (%[Address])" : : [Address] "b" (Address) : "memory");
 }
+#endif
 
 
 /*** System operations ***/
+#if !HAS_BUILTIN(__readmsr)
 __INTRIN_INLINE
 unsigned long long __readmsr(unsigned long reg)
 {
@@ -2014,7 +2123,9 @@ unsigned long long __readmsr(unsigned long reg)
 	return retval;
 #endif
 }
+#endif
 
+#if !HAS_BUILTIN(__writemsr)
 __INTRIN_INLINE
 void __writemsr(unsigned long Register, unsigned long long Value)
 {
@@ -2024,6 +2135,7 @@ void __writemsr(unsigned long Register, unsigned long long Value)
 	__asm__ __volatile__("wrmsr" : : "A" (Value), "c" (Register));
 #endif
 }
+#endif
 
 __INTRIN_INLINE unsigned long long __readpmc(unsigned long counter)
 {
@@ -2040,20 +2152,26 @@ __INTRIN_INLINE unsigned long __segmentlimit(unsigned long a)
 	return retval;
 }
 
+#if !HAS_BUILTIN(__wbinvd)
 __INTRIN_INLINE void __wbinvd(void)
 {
 	__asm__ __volatile__("wbinvd" : : : "memory");
 }
+#endif
 
+#if !HAS_BUILTIN(__lidt)
 __INTRIN_INLINE void __lidt(void *Source)
 {
 	__asm__ __volatile__("lidt %0" : : "m"(*(short*)Source));
 }
+#endif
 
+#if !HAS_BUILTIN(__sidt)
 __INTRIN_INLINE void __sidt(void *Destination)
 {
 	__asm__ __volatile__("sidt %0" : : "m"(*(short*)Destination) : "memory");
 }
+#endif
 
 __INTRIN_INLINE void _sgdt(void *Destination)
 {
@@ -2069,10 +2187,12 @@ __INTRIN_INLINE void _mm_pause(void)
 }
 #endif
 
+#if !HAS_BUILTIN(__nop)
 __INTRIN_INLINE void __nop(void)
 {
 	__asm__ __volatile__("nop");
 }
+#endif
 
 #ifdef __cplusplus
 }
