@@ -1290,7 +1290,8 @@ public:
         if (m_Theme)
             return;
 
-        m_StartButton.UpdateFont();
+        if (m_StartButton.m_hWnd)
+            m_StartButton.UpdateFont();
 
         NONCLIENTMETRICS ncm = {sizeof(ncm)};
         if (!SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, FALSE))
