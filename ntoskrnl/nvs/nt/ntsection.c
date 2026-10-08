@@ -12,6 +12,8 @@
 #define MI_HEADER_BUFFER_SIZE (64 * 1024)
 #define MI_IMAGE64_RELOCATION_WINDOW 0x800000000ULL
 #define MI_IMAGE64_RELOCATION_TOP_ALIGN 0x40000000ULL
+#define MI_IMAGE32_RELOCATION_LOWEST 0x50000000ULL
+#define MI_IMAGE32_RELOCATION_HIGHEST 0x77FFFFFFULL
 
 POBJECT_TYPE MmSectionObjectType;
 
@@ -605,10 +607,20 @@ MiRelocateImageControlArea(
         return STATUS_SUCCESS;
     if (!Control->Image64)
     {
-        Highest = min(Highest, (Information->ImageCharacteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) ? MAXULONG : MAXLONG);
-        Lowest = ((Highest + 1) / 2) & ~(ULONG64)(MI_ALLOCATION_GRANULARITY - 1);
-        if (Control->ImageSize >= Highest - Lowest - MI_ALLOCATION_GRANULARITY)
-            Lowest = 0;
+        if (!(Information->ImageCharacteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) &&
+            Highest >= MI_IMAGE32_RELOCATION_HIGHEST &&
+            Control->ImageSize < MI_IMAGE32_RELOCATION_HIGHEST - MI_IMAGE32_RELOCATION_LOWEST - MI_ALLOCATION_GRANULARITY)
+        {
+            Highest = MI_IMAGE32_RELOCATION_HIGHEST;
+            Lowest = MI_IMAGE32_RELOCATION_LOWEST;
+        }
+        else
+        {
+            Highest = min(Highest, (Information->ImageCharacteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) ? MAXULONG : MAXLONG);
+            Lowest = ((Highest + 1) / 2) & ~(ULONG64)(MI_ALLOCATION_GRANULARITY - 1);
+            if (Control->ImageSize >= Highest - Lowest - MI_ALLOCATION_GRANULARITY)
+                Lowest = 0;
+        }
     }
     else if (Highest >= MI_IMAGE64_RELOCATION_WINDOW + MI_IMAGE64_RELOCATION_TOP_ALIGN &&
              Control->ImageSize < MI_IMAGE64_RELOCATION_WINDOW - MI_ALLOCATION_GRANULARITY)
