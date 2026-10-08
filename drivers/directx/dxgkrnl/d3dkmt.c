@@ -855,6 +855,27 @@ DxgkpFreeRegistryValue(
         ExFreePoolWithTag(ValueInformation, TAG_DXGK_REGISTRY);
 }
 
+static VOID
+DxgkpReadHardwareInformation(
+    _In_ HANDLE KeyHandle,
+    _In_ PCWSTR ValueName,
+    _Out_writes_bytes_(BufferBytes) PWCHAR Buffer,
+    _In_ ULONG BufferBytes)
+{
+    PKEY_VALUE_PARTIAL_INFORMATION ValueInfo = NULL;
+    ULONG Length;
+
+    if (!NT_SUCCESS(DxgkpQueryRegistryValue(KeyHandle, ValueName, &ValueInfo)))
+        return;
+    if (ValueInfo->Type == REG_SZ || ValueInfo->Type == REG_MULTI_SZ || ValueInfo->Type == REG_BINARY)
+    {
+        Length = min(ValueInfo->DataLength, BufferBytes - sizeof(WCHAR)) & ~(ULONG)(sizeof(WCHAR) - 1);
+        RtlCopyMemory(Buffer, ValueInfo->Data, Length);
+        Buffer[Length / sizeof(WCHAR)] = UNICODE_NULL;
+    }
+    DxgkpFreeRegistryValue(ValueInfo);
+}
+
 static BOOLEAN
 DxgkpIsWow64Caller(VOID)
 {
@@ -4150,15 +4171,16 @@ DxgkpQueryAdapterInfoCaptured(
         }
 
         /*
-         * The four description strings.  Only the adapter string has a real
-         * source -- the PnP device description -- and the other three are left
-         * empty rather than filled with something invented, because a caller
-         * that displays "BiosString" expects a BIOS to have said it.
+         * The four description strings are the HardwareInformation values the
+         * miniport stores in its driver key.  An adapter string the miniport
+         * never stored falls back to the PnP device description; the other
+         * three stay empty rather than filled with something invented.
          */
         case KMTQAITYPE_ADAPTERREGISTRYINFO:
         case KMTQAITYPE_ADAPTERREGISTRYINFO_RENDER:
         {
             D3DKMT_ADAPTERREGISTRYINFO *Info;
+            HANDLE DriverKey = NULL;
             ULONG ResultLength = 0;
             NTSTATUS InfoStatus;
 
@@ -4175,15 +4197,30 @@ DxgkpQueryAdapterInfoCaptured(
                 DXGKP_QUERY_RETURN(STATUS_INSUFFICIENT_RESOURCES);
 
             RtlZeroMemory(Info, sizeof(*Info));
-            /* Truncation is not an error here: the field is fixed-width and a
-             * shortened description is still the right adapter's description. */
-            InfoStatus = IoGetDeviceProperty(Adapter->PhysicalDeviceObject,
-                                             DevicePropertyDeviceDescription,
-                                             sizeof(Info->AdapterString) - sizeof(WCHAR),
-                                             Info->AdapterString,
-                                             &ResultLength);
-            if (!NT_SUCCESS(InfoStatus) && InfoStatus != STATUS_BUFFER_TOO_SMALL)
-                RtlZeroMemory(Info->AdapterString, sizeof(Info->AdapterString));
+            if (NT_SUCCESS(DxgkpOpenAdapterDriverKey(Adapter, &DriverKey)))
+            {
+                DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.AdapterString",
+                                             Info->AdapterString, sizeof(Info->AdapterString));
+                DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.BiosString",
+                                             Info->BiosString, sizeof(Info->BiosString));
+                DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.DacType",
+                                             Info->DacType, sizeof(Info->DacType));
+                DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.ChipType",
+                                             Info->ChipType, sizeof(Info->ChipType));
+                ZwClose(DriverKey);
+            }
+            if (Info->AdapterString[0] == UNICODE_NULL)
+            {
+                /* Truncation is not an error here: the field is fixed-width and a
+                 * shortened description is still the right adapter's description. */
+                InfoStatus = IoGetDeviceProperty(Adapter->PhysicalDeviceObject,
+                                                 DevicePropertyDeviceDescription,
+                                                 sizeof(Info->AdapterString) - sizeof(WCHAR),
+                                                 Info->AdapterString,
+                                                 &ResultLength);
+                if (!NT_SUCCESS(InfoStatus) && InfoStatus != STATUS_BUFFER_TOO_SMALL)
+                    RtlZeroMemory(Info->AdapterString, sizeof(Info->AdapterString));
+            }
 
             _SEH2_TRY
             {
