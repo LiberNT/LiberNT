@@ -18,6 +18,7 @@ START_TEST(FltMgrLoad)
     trace("Message from user-mode\n");
 
     ok(KmtFltCreateService(FilterName, L"FltMgrLoad test driver", &hService) == ERROR_SUCCESS, "\n");
+    ok(KmtFltAddAltitude(L"123456") == ERROR_SUCCESS, "\n");
     Error = KmtFltLoadDriver(FALSE, FALSE, FALSE, &hPort);
     ok(Error == ERROR_PRIVILEGE_NOT_HELD, "KmtFltLoadDriver without privilege returned %lu\n", Error);
     Error = KmtFltLoadDriver(TRUE, FALSE, FALSE, &hPort);
