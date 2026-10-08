@@ -15,6 +15,7 @@
 #include <debug.h>
 
 #define SMP_DUMP_COPY_SIZE (1024 * 1024)
+#define SMP_VOLUME_PREFIX_LENGTH (6 * sizeof(WCHAR))
 
 /* FUNCTIONS ******************************************************************/
 
@@ -43,6 +44,67 @@ static BOOLEAN SmpIsDedicatedCrashDumpActive(VOID)
         return FALSE;
 
     return *(PULONG)ValueBuffer.Information.Data != 0;
+}
+
+static BOOLEAN SmpIsSameVolume(_In_ PUNICODE_STRING FirstPath, _In_ PUNICODE_STRING SecondPath)
+{
+    UNICODE_STRING Prefix;
+
+    if ((FirstPath->Length < SMP_VOLUME_PREFIX_LENGTH) || (SecondPath->Length < SMP_VOLUME_PREFIX_LENGTH))
+        return FALSE;
+
+    Prefix.Buffer = FirstPath->Buffer;
+    Prefix.Length = SMP_VOLUME_PREFIX_LENGTH;
+    Prefix.MaximumLength = SMP_VOLUME_PREFIX_LENGTH;
+    return RtlPrefixUnicodeString(&Prefix, SecondPath, TRUE);
+}
+
+static NTSTATUS SmpRenamePageFileToDump(_In_ PUNICODE_STRING FileName, _In_ PUNICODE_STRING DumpPath, _In_ LARGE_INTEGER DumpSize)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    FILE_END_OF_FILE_INFORMATION EndOfFile;
+    FILE_BASIC_INFORMATION BasicInfo;
+    PFILE_RENAME_INFORMATION RenameInfo;
+    IO_STATUS_BLOCK IoStatus;
+    HANDLE FileHandle;
+    ULONG RenameSize;
+    NTSTATUS Status;
+
+    RenameSize = FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName) + DumpPath->Length;
+    RenameInfo = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, RenameSize);
+    if (!RenameInfo)
+        return STATUS_NO_MEMORY;
+
+    InitializeObjectAttributes(&ObjectAttributes, FileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenFile(&FileHandle, FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES | DELETE | SYNCHRONIZE, &ObjectAttributes, &IoStatus, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status))
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, RenameInfo);
+        return Status;
+    }
+
+    EndOfFile.EndOfFile = DumpSize;
+    Status = NtSetInformationFile(FileHandle, &IoStatus, &EndOfFile, sizeof(EndOfFile), FileEndOfFileInformation);
+    if (NT_SUCCESS(Status))
+    {
+        RtlZeroMemory(&BasicInfo, sizeof(BasicInfo));
+        BasicInfo.FileAttributes = FILE_ATTRIBUTE_NORMAL;
+        Status = NtSetInformationFile(FileHandle, &IoStatus, &BasicInfo, sizeof(BasicInfo), FileBasicInformation);
+    }
+    if (NT_SUCCESS(Status))
+    {
+        RenameInfo->ReplaceIfExists = TRUE;
+        RenameInfo->RootDirectory = NULL;
+        RenameInfo->FileNameLength = DumpPath->Length;
+        RtlCopyMemory(RenameInfo->FileName, DumpPath->Buffer, DumpPath->Length);
+        Status = NtSetInformationFile(FileHandle, &IoStatus, RenameInfo, RenameSize, FileRenameInformation);
+    }
+    if (NT_SUCCESS(Status))
+        Status = NtFlushBuffersFile(FileHandle, &IoStatus);
+
+    NtClose(FileHandle);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, RenameInfo);
+    return Status;
 }
 
 static NTSTATUS SmpQueryDumpFilePath(_Out_ PUNICODE_STRING NtPath)
@@ -124,7 +186,7 @@ SmpCheckForCrashDump(IN PUNICODE_STRING FileName)
     DPRINT1("SMSS: Inspecting `%wZ' for a crash dump\n", FileName);
 
     InitializeObjectAttributes(&ObjectAttributes, FileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
-    Status = NtOpenFile(&PageFileHandle, FILE_READ_DATA | FILE_WRITE_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus, FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_NO_INTERMEDIATE_BUFFERING);
+    Status = NtOpenFile(&PageFileHandle, FILE_READ_DATA | FILE_WRITE_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_NO_INTERMEDIATE_BUFFERING);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("SMSS: Failed to open crash dump pagefile `%wZ' (0x%08lx)\n", FileName, Status);
@@ -171,6 +233,18 @@ SmpCheckForCrashDump(IN PUNICODE_STRING FileName)
     {
         DPRINT1("SMSS: Failed to query the crash dump path (0x%08lx)\n", Status);
         goto Cleanup;
+    }
+
+    if (SmpIsSameVolume(FileName, &DumpPath))
+    {
+        Status = SmpRenamePageFileToDump(FileName, &DumpPath, Header->RequiredDumpSpace);
+        if (NT_SUCCESS(Status))
+        {
+            DumpSaved = TRUE;
+            DPRINT1("SMSS: Saved crash dump `%wZ' as `%wZ'\n", FileName, &DumpPath);
+            goto Cleanup;
+        }
+        DPRINT1("SMSS: Failed to rename crash dump `%wZ' (0x%08lx), copying it\n", FileName, Status);
     }
 
     InitializeObjectAttributes(&ObjectAttributes, &DumpPath, OBJ_CASE_INSENSITIVE, NULL, NULL);
