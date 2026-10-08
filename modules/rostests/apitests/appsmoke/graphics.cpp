@@ -10,6 +10,7 @@
 #include <d3d11.h>
 #include <dxgi1_2.h>
 #include <d3d12.h>
+#include <d3d11on12.h>
 
 #define CHAIN_WIDTH 320
 #define CHAIN_HEIGHT 240
@@ -371,7 +372,79 @@ static ID3D12Resource *CreateBuffer(ID3D12Device *Device, D3D12_HEAP_TYPE Type, 
     return Buffer;
 }
 
-static void TestD3D12Present(ID3D12CommandQueue *Queue, ID3D12Fence *Fence)
+static void TestOn12Wrap(ID3D12Device *Device, ID3D12CommandQueue *Queue, IDXGISwapChain1 *Chain)
+{
+    typedef HRESULT (WINAPI *CREATE_ON12)(IUnknown *, UINT, const D3D_FEATURE_LEVEL *, UINT, IUnknown *const *,
+                                          UINT, UINT, ID3D11Device **, ID3D11DeviceContext **, D3D_FEATURE_LEVEL *);
+    static const float Blue[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+    HMODULE Module = LoadLibraryW(L"d3d11.dll");
+    CREATE_ON12 Create = Module ? reinterpret_cast<CREATE_ON12>(GetProcAddress(Module, "D3D11On12CreateDevice")) : NULL;
+    D3D11_RESOURCE_FLAGS Flags = { D3D11_BIND_RENDER_TARGET, 0, 0, 0 };
+    ID3D11RenderTargetView *View = NULL;
+    ID3D11DeviceContext *Context11 = NULL;
+    ID3D11Resource *Resources[1];
+    ID3D12Resource *BackBuffer = NULL;
+    ID3D11Texture2D *Wrapped = NULL;
+    ID3D11On12Device *On12 = NULL;
+    ID3D11Device *Device11 = NULL;
+    IUnknown *Queues[1] = { Queue };
+    HRESULT Hr;
+
+    if (!Create)
+    {
+        skip("D3D11On12CreateDevice is unavailable\n");
+        return;
+    }
+
+    Hr = Create(Device, D3D11_CREATE_DEVICE_BGRA_SUPPORT, NULL, 0, Queues, 1, 0, &Device11, &Context11, NULL);
+    ok(Hr == S_OK && Device11 && Context11, "D3D11On12CreateDevice: %#lx\n", Hr);
+    if (Device11)
+    {
+        Hr = Device11->QueryInterface(IID_ID3D11On12Device, reinterpret_cast<void **>(&On12));
+        ok(Hr == S_OK && On12, "ID3D11On12Device: %#lx\n", Hr);
+    }
+    Hr = Chain->GetBuffer(0, IID_ID3D12Resource, reinterpret_cast<void **>(&BackBuffer));
+    ok(Hr == S_OK && BackBuffer, "Direct3D 12 back buffer: %#lx\n", Hr);
+
+    if (On12 && BackBuffer)
+    {
+        Hr = On12->CreateWrappedResource(BackBuffer, &Flags, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_PRESENT,
+                                         IID_ID3D11Texture2D, reinterpret_cast<void **>(&Wrapped));
+        ok(Hr == S_OK && Wrapped, "Wrapping a swap chain buffer for Direct3D 11: %#lx\n", Hr);
+    }
+    if (Wrapped)
+    {
+        Hr = Device11->CreateRenderTargetView(Wrapped, NULL, &View);
+        ok(Hr == S_OK && View, "Render target view on the wrapped buffer: %#lx\n", Hr);
+        if (View)
+        {
+            Resources[0] = Wrapped;
+            On12->AcquireWrappedResources(Resources, 1);
+            Context11->ClearRenderTargetView(View, Blue);
+            On12->ReleaseWrappedResources(Resources, 1);
+            Context11->Flush();
+            Hr = Chain->Present(0, 0);
+            ok(Hr == S_OK || Hr == DXGI_STATUS_OCCLUDED, "Present after drawing through Direct3D 11: %#lx\n", Hr);
+            View->Release();
+        }
+        Wrapped->Release();
+    }
+
+    if (BackBuffer)
+        BackBuffer->Release();
+    if (On12)
+        On12->Release();
+    if (Context11)
+    {
+        Context11->ClearState();
+        Context11->Flush();
+        Context11->Release();
+    }
+    if (Device11)
+        Device11->Release();
+}
+
+static void TestD3D12Present(ID3D12Device *Device, ID3D12CommandQueue *Queue, ID3D12Fence *Fence)
 {
     typedef HRESULT (WINAPI *CREATE_FACTORY)(REFIID, void **);
     HMODULE Module = LoadLibraryW(L"dxgi.dll");
@@ -417,6 +490,8 @@ static void TestD3D12Present(ID3D12CommandQueue *Queue, ID3D12Fence *Fence)
         ok(Failures == 0, "%u of 4 flip presents failed\n", Failures);
         WaitForQueue(Queue, Fence, 2);
         trace("4 flip presents: %lu ms\n", GetTickCount() - Start);
+        TestOn12Wrap(Device, Queue, Chain);
+        WaitForQueue(Queue, Fence, 3);
         Chain->Release();
     }
 
@@ -514,7 +589,7 @@ START_TEST(d3d12_device)
             }
         }
 
-        TestD3D12Present(Queue, Fence);
+        TestD3D12Present(Device, Queue, Fence);
     }
 
     if (Readback)
