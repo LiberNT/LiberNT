@@ -114,6 +114,21 @@ KdpGetDebugMode(
     return (PSTR)p2;
 }
 
+static BOOLEAN
+KdpIsProviderRegistered(
+    _In_ PKD_DISPATCH_TABLE Table)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = KdProviders.Flink; Entry != &KdProviders; Entry = Entry->Flink)
+    {
+        if (Entry == &Table->KdProvidersList)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 NTSTATUS
 NTAPI
 KdDebuggerInitialize0(
@@ -178,6 +193,12 @@ KdDebuggerInitialize0(
     /* Call the providers at Phase 0 */
     for (i = 0; i < RTL_NUMBER_OF(DispatchTable); i++)
     {
+        if (KdpIsProviderRegistered(&DispatchTable[i]))
+        {
+            Success = TRUE;
+            continue;
+        }
+
         DispatchTable[i].InitStatus = InitRoutines[i](&DispatchTable[i], 0);
         Success = (Success || NT_SUCCESS(DispatchTable[i].InitStatus));
     }
