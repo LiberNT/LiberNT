@@ -107,6 +107,6 @@ MiArchBootClearUserHalf(_In_ ULONG64 RootFrame)
     for (Index = 0; Index < 256; Index++)
         MiArchPteWrite(&Root[Index], 0);
     MiArchTlbInvalidateAll(TRUE);
-    DbgPrint("NVS AMD64: INVPCID=%u, processors=%u, per-target TLB mailboxes\n",
-             !!(MiAmd64TlbCapabilities() & MI_AMD64_TLB_INVPCID), KeNumberProcessors);
+    DbgPrint("TLB shootdown: per-processor mailboxes on %u processors, INVPCID %s\n", KeNumberProcessors,
+             (MiAmd64TlbCapabilities() & MI_AMD64_TLB_INVPCID) ? "available" : "not available");
 }

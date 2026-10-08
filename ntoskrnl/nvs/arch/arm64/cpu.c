@@ -172,4 +172,5 @@ MiArchBootClearUserHalf(
 
     MiArm64Dsb(ishst);
     MiArchInvalidateTlbAll(MiTlbAllProcessors);
+    DbgPrint("TLB shootdown: broadcast TLBI\n");
 }

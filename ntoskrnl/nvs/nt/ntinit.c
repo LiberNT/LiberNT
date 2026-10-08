@@ -151,6 +151,51 @@ MiBuildPhysicalMemoryBlock(
 }
 
 static
+VOID
+MiReportPhysicalRuns(VOID)
+{
+    PPHYSICAL_MEMORY_DESCRIPTOR Block = MmPhysicalMemoryBlock;
+    ULONG64 Base, Bytes;
+    ULONG Run;
+
+    if (Block == NULL)
+        return;
+
+    DbgPrint("Physical memory: %I64u MB in %lu ranges\n", ((ULONG64)Block->NumberOfPages << PAGE_SHIFT) / _1MB,
+             Block->NumberOfRuns);
+    for (Run = 0; Run < Block->NumberOfRuns; Run++)
+    {
+        Base = (ULONG64)Block->Run[Run].BasePage << PAGE_SHIFT;
+        Bytes = (ULONG64)Block->Run[Run].PageCount << PAGE_SHIFT;
+        DbgPrint("    %012I64x-%012I64x (%I64u %s)\n", Base, Base + Bytes - 1,
+                 Bytes >= _1MB ? Bytes / _1MB : Bytes / _1KB, Bytes >= _1MB ? "MB" : "KB");
+    }
+}
+
+static
+VOID
+MiReportBootImages(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    PLIST_ENTRY Head = &LoaderBlock->LoadOrderListHead;
+    PLDR_DATA_TABLE_ENTRY First, Second;
+    PLIST_ENTRY Entry;
+    ULONG Count = 0;
+
+    for (Entry = Head->Flink; Entry != Head; Entry = Entry->Flink)
+        Count++;
+
+    if (Count < 2)
+        return;
+
+    First = CONTAINING_RECORD(Head->Flink, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+    Second = CONTAINING_RECORD(Head->Flink->Flink, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+    DbgPrint("Boot images: %wZ at %p-%p, %wZ at %p-%p, %lu loaded\n", &First->BaseDllName, First->DllBase,
+             (PUCHAR)First->DllBase + First->SizeOfImage - 1, &Second->BaseDllName, Second->DllBase,
+             (PUCHAR)Second->DllBase + Second->SizeOfImage - 1, Count);
+}
+
+static
 NTSTATUS
 MiCreatePoolRegion(
     _In_ ULONG64 Bytes,
@@ -291,7 +336,7 @@ MiInitializePhase0(
     MmCriticalSectionTimeout.QuadPart = -(LONGLONG)MmCritsectTimeoutSeconds * 10000000LL;
     KeInitializeMutant(&MmSystemLoadLock, FALSE);
 
-    DbgPrint("MM: phase 0 start\n");
+    DbgPrint("Memory manager: starting\n");
     Largest = MiScanMemoryDescriptors(LoaderBlock, &LargestEnd);
     if (Largest == NULL || MmNumberOfPhysicalPages < MI_MINIMUM_PHYSICAL_PAGES)
         KeBugCheckEx(INSTALL_MORE_MEMORY, MmNumberOfPhysicalPages, MmLowestPhysicalPage, MmHighestPhysicalPage, 0);
@@ -310,8 +355,8 @@ MiInitializePhase0(
     if (!NT_SUCCESS(Status))
         KeBugCheckEx(MEMORY_MANAGEMENT, 0x494E4954, (ULONG_PTR)Status, 0, 0);
 
-    DbgPrint("MM: pfn database frames %lx at frame %lx (%lu pages), physical pages %lu\n", FrameCount, PfnFirst,
-             PfnPages, (ULONG)MmNumberOfPhysicalPages);
+    DbgPrint("Page frame database: %lu MB at %012I64x for %lu frames\n", PfnPages >> (20 - PAGE_SHIFT),
+             (ULONG64)PfnFirst << PAGE_SHIFT, FrameCount);
     MiPfnMarkInUse(&MiSystem.Pfn, PfnFirst, PfnPages);
 
     MiBootRootFrame = MiArchBootRootFrame();
@@ -338,9 +383,9 @@ MiInitializePhase0(
             MiPfnMarkInUse(&MiSystem.Pfn, (ULONG)Descriptor->BasePage, (ULONG)Descriptor->PageCount);
     }
 
-    DbgPrint("MM: boot tables adopted, root %I64x, %lu VADs, %I64d tables, %I64u pages free\n", MiBootRootFrame,
-             (ULONG)MiSystem.SystemSpace.VadRoot.NodeCount, MiSystem.SystemSpace.PageTablePages,
-             MiPfnAvailablePages(&MiSystem.Pfn));
+    DbgPrint("Boot page tables adopted: root at %012I64x, %I64d tables, %lu regions, %I64u MB free\n",
+             MiBootRootFrame << PAGE_SHIFT, MiSystem.SystemSpace.PageTablePages,
+             (ULONG)MiSystem.SystemSpace.VadRoot.NodeCount, MiPfnAvailablePages(&MiSystem.Pfn) >> (20 - PAGE_SHIFT));
     Status = MiSystemReserveTopLevelHole(&MiSystem);
     if (NT_SUCCESS(Status))
         Status = MiSystemPopulateTopLevel(&MiSystem);
@@ -418,8 +463,9 @@ MiInitializePhase0(
     MiPoolLayout.PagedBase = MmPagedPoolStart;
     MiPoolLayout.PagedBytes = (SIZE_T)PagedBytes;
 
-    DbgPrint("MM: system PTEs %I64x, nonpaged pool %p, paged pool %p\n", MiSystem.SystemPtes->Base,
-             MmNonPagedPoolStart, MmPagedPoolStart);
+    DbgPrint("Kernel address space: system mappings at %p, nonpaged pool at %p (%I64u MB), "
+             "paged pool at %p (%I64u MB)\n", (PVOID)(ULONG_PTR)MiSystem.SystemPtes->Base, MmNonPagedPoolStart,
+             NonPagedBytes / _1MB, MmPagedPoolStart, PagedBytes / _1MB);
     InitializePool(NonPagedPool, 0);
     InitializePool(PagedPool, 0);
     MiPoolReady = TRUE;
@@ -494,10 +540,12 @@ MiInitializePhase0(
     MmSecondaryColors = 1;
     MmAllocationFragment = 64 * _1KB;
 
-    DbgPrint("MM: phase 0 done, %I64u pages available, commit limit %I64d\n", (ULONG64)MmAvailablePages,
-             MiSystem.CommitLimit);
+    DbgPrint("Memory: %I64u MB available, commit limit %I64d MB\n", (ULONG64)MmAvailablePages >> (20 - PAGE_SHIFT),
+             MiSystem.CommitLimit >> (20 - PAGE_SHIFT));
     MiBuildPhysicalMemoryBlock(LoaderBlock);
+    MiReportPhysicalRuns();
     MiInitializeLoadedModuleList(LoaderBlock);
+    MiReportBootImages(LoaderBlock);
 }
 
 BOOLEAN
@@ -567,7 +615,7 @@ MmDumpArmPfnDatabase(
 {
     UNREFERENCED_PARAMETER(StatusOnly);
 
-    DbgPrint("Mm: physical %lu available %lu standby %lu modified %lu committed %lu limit %lu\n",
+    DbgPrint("Memory: %lu pages, %lu available, %lu standby, %lu modified, %lu committed of %lu\n",
              (ULONG)MmNumberOfPhysicalPages, (ULONG)MiPfnAvailablePages(&MiSystem.Pfn),
              (ULONG)MiPfnListCount(&MiSystem.Pfn, MiPageStandby), (ULONG)MiPfnListCount(&MiSystem.Pfn, MiPageModified),
              (ULONG)MI_ATOMIC_READ64(&MiSystem.CommittedPages), (ULONG)MiSystem.CommitLimit);

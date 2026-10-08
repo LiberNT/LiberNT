@@ -104,7 +104,7 @@ MiExtendPagingFileTo(
     MI_ATOMIC_ADD64(&MiSystem.CommitLimit, (LONG64)(Target - Current));
     MmTotalCommitLimit = (SIZE_T)MI_ATOMIC_READ64(&MiSystem.CommitLimit);
     MiFreeSwapPages += (PFN_COUNT)(Target - Current);
-    DbgPrint("MM: paging file %wZ extended to %I64u MB, commit limit %I64d pages\n", &PagingFile->Name,
+    DbgPrint("Paging file %wZ extended to %I64u MB, commit limit %I64d pages\n", &PagingFile->Name,
              Target >> (20 - PAGE_SHIFT), MI_ATOMIC_READ64(&MiSystem.CommitLimit));
     return TRUE;
 }
@@ -360,7 +360,7 @@ NtCreatePagingFile(
     MiFreeSwapPages = (PFN_COUNT)PagingFile->Core.SlotCount;
     MmNumberOfPagingFiles = 1;
     MiSystem.ExpandCommit = MiExpandCommit;
-    DbgPrint("MM: paging file %wZ created, %I64u MB, maximum %I64u MB\n", &PagingFile->Name,
+    DbgPrint("Paging file %wZ created, %I64u MB, maximum %I64u MB\n", &PagingFile->Name,
              PagingFile->Core.SlotCount >> (20 - PAGE_SHIFT), PagingFile->MaximumSlots >> (20 - PAGE_SHIFT));
 
     KeReleaseGuardedMutex(&MiPagingFileCreationLock);

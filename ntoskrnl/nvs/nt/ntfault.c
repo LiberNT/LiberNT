@@ -244,7 +244,7 @@ MmAccessFaultEx(
         Status = STATUS_IN_PAGE_ERROR;
 
     if (!NT_SUCCESS(Status) && Process == NULL)
-        DbgPrint("MM: system fault %p access %u failed %08lx\n", Address, (ULONG)Access, Status);
+        DbgPrint("Kernel page fault at %p, access %u, not resolved: %08lx\n", Address, (ULONG)Access, Status);
 
     return Status;
 }

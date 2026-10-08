@@ -191,4 +191,5 @@ MiArchBootClearUserHalf(_In_ ULONG64 RootFrame)
 
     MiArchInvalidateTlbAll(MiTlbAllProcessors);
     MiArchUnmapFrame(Root);
+    DbgPrint("TLB shootdown: remote SFENCE.VMA requests\n");
 }
