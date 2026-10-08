@@ -654,6 +654,7 @@ CmBattAddBattery(IN PDRIVER_OBJECT DriverObject,
     NTSTATUS Status;
     PDEVICE_OBJECT FdoDeviceObject;
     PCMBATT_DEVICE_EXTENSION FdoExtension;
+    PVOID ClassData;
     PAGED_CODE();
     if (CmBattDebug & 0x220)
         DbgPrint("CmBattAddBattery: pdo %x\n", DeviceObject);
@@ -702,7 +703,7 @@ CmBattAddBattery(IN PDRIVER_OBJECT DriverObject,
     MiniportInfo.DeviceName = FdoExtension->DeviceName;
 
     /* Register with the class driver */
-    Status = BatteryClassInitializeDevice(&MiniportInfo, &FdoExtension->ClassData);
+    Status = BatteryClassInitializeDevice(&MiniportInfo, &ClassData);
     if (!NT_SUCCESS(Status))
     {
         IoDetachDevice(FdoExtension->AttachedDevice);
@@ -711,6 +712,7 @@ CmBattAddBattery(IN PDRIVER_OBJECT DriverObject,
             DbgPrint("CmBattAddBattery: error (0x%x) registering with class\n", Status);
         return Status;
     }
+    InterlockedExchangePointer(&FdoExtension->ClassData, ClassData);
 
     /* Register WMI */
     Status = CmBattWmiRegistration(FdoExtension);

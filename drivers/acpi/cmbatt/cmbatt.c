@@ -90,6 +90,7 @@ CmBattWakeDpc(IN PKDPC Dpc,
     PDEVICE_OBJECT CurrentObject;
     BOOLEAN AcNotify = FALSE;
     PCMBATT_DEVICE_EXTENSION DeviceExtension;
+    PVOID ClassData;
     ULONG ArFlag;
     if (CmBattDebug & 2) DbgPrint("CmBattWakeDpc: Entered.\n");
 
@@ -142,10 +143,11 @@ CmBattWakeDpc(IN PKDPC Dpc,
             }
 
             /* Notification (or AC/DC adapter change from first pass above) */
-            if ((ArFlag & CMBATT_AR_NOTIFY) || (AcNotify))
+            ClassData = InterlockedCompareExchangePointer(&DeviceExtension->ClassData, NULL, NULL);
+            if (((ArFlag & CMBATT_AR_NOTIFY) || (AcNotify)) && (ClassData))
             {
                 /* Notify the class driver */
-                BatteryClassStatusNotify(DeviceExtension->ClassData);
+                BatteryClassStatusNotify(ClassData);
             }
         }
     }
@@ -159,6 +161,7 @@ CmBattNotifyHandler(IN PCMBATT_DEVICE_EXTENSION DeviceExtension,
     ULONG ArFlag;
     PCMBATT_DEVICE_EXTENSION FdoExtension;
     PDEVICE_OBJECT DeviceObject;
+    PVOID ClassData;
 
     if (CmBattDebug & (CMBATT_ACPI_ASSERT | CMBATT_PNP_INFO))
         DbgPrint("CmBattNotifyHandler: CmBatt 0x%08x Type %d Number %d Notify Value: %x\n",
@@ -256,9 +259,12 @@ CmBattNotifyHandler(IN PCMBATT_DEVICE_EXTENSION DeviceExtension,
             FdoExtension = DeviceObject->DeviceExtension;
             if (FdoExtension->FdoType == CmBattBattery)
             {
+                ClassData = InterlockedCompareExchangePointer(&FdoExtension->ClassData, NULL, NULL);
+                if (!ClassData) continue;
+
                 /* Send a notification to the class driver */
                 FdoExtension->NotifySent = TRUE;
-                BatteryClassStatusNotify(FdoExtension->ClassData);
+                BatteryClassStatusNotify(ClassData);
             }
         }
     }
