@@ -27,6 +27,10 @@ if(ENABLE_ROSTESTS)
         win32u_winetest)
 endif()
 
+if(ENABLE_ROSTESTS OR ENABLE_APPSMOKE_TESTS)
+    list(APPEND WOW64_I386_EXECUTABLES appsmoke_apitest)
+endif()
+
 # Native ARM programs keep their canonical, unprefixed command names.  Give
 # guest graphics programs architecture-qualified aliases so i386 (and AMD64
 # payloads using the same convention) are unambiguous when launched manually.
