@@ -1073,7 +1073,6 @@ KiSwapThread(IN PKTHREAD CurrentThread,
     BOOLEAN SelfPlaced = FALSE;
     KIRQL WaitIrql;
     LONG_PTR WaitStatus;
-    PETHREAD CurrentEthread;
     PKTHREAD NextThread;
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
@@ -1182,19 +1181,6 @@ KiSwapThread(IN PKTHREAD CurrentThread,
         /* Deliver APCs */
         KiDeliverApc(KernelMode, NULL, NULL);
         ASSERT(WaitIrql == 0);
-
-        /*
-         * A remote user-thread termination is completed by a user APC. The
-         * kernel APC that queues it must break an interrupted non-alertable
-         * wait; otherwise the thread can immediately wait again and keep the
-         * terminating process alive indefinitely.
-         */
-        CurrentEthread = CONTAINING_RECORD(CurrentThread, ETHREAD, Tcb);
-        if (PsIsThreadTerminating(CurrentEthread) &&
-            CurrentThread->ApcState.UserApcPending)
-        {
-            WaitStatus = STATUS_USER_APC;
-        }
     }
 
     /* Lower IRQL back to what it was and return the wait status */
