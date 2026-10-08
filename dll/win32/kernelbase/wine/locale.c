@@ -6597,7 +6597,6 @@ INT WINAPI DECLSPEC_HOTPATCH IdnToUnicode( DWORD flags, const WCHAR *src, INT sr
     return dstlen;
 }
 
-#ifndef __REACTOS__
 
 
 /******************************************************************************
@@ -6769,7 +6768,6 @@ BOOL WINAPI DECLSPEC_HOTPATCH IsDBCSLeadByteEx( UINT codepage, BYTE testchar )
 }
 
 
-#endif
 
 /******************************************************************************
  *	IsNormalizedString   (kernelbase.@)
