@@ -57,6 +57,7 @@ list(APPEND SOURCE
     client/toolhelp.c
     client/utils.c
     client/thread.c
+    client/ums.c
     client/vdm.c
     client/version.c
     client/versionansi.c

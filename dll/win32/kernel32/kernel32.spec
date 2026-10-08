@@ -189,6 +189,8 @@
 @ stdcall CreateTimerQueue()
 @ stdcall CreateTimerQueueTimer(ptr long ptr ptr long long long)
 @ stdcall CreateToolhelp32Snapshot(long long)
+@ stdcall -arch=win64 CreateUmsCompletionList(ptr)
+@ stdcall -arch=win64 CreateUmsThreadContext(ptr)
 @ stdcall CreateWaitableTimerA(ptr long str)
 @ stdcall -version=0x600+ CreateWaitableTimerExA(ptr str long long)
 @ stdcall -version=0x600+ CreateWaitableTimerExW(ptr wstr long long)
@@ -217,8 +219,11 @@
 @ stdcall DeleteTimerQueue(long)
 @ stdcall DeleteTimerQueueEx(long long)
 @ stdcall DeleteTimerQueueTimer(long long long)
+@ stdcall -arch=win64 DeleteUmsCompletionList(ptr)
+@ stdcall -arch=win64 DeleteUmsThreadContext(ptr)
 @ stdcall DeleteVolumeMountPointA(str) ;check
 @ stdcall DeleteVolumeMountPointW(wstr) ;check
+@ stdcall -arch=win64 DequeueUmsCompletionListItems(ptr long ptr)
 @ stdcall DeviceIoControl(long long ptr long ptr long ptr ptr)
 @ stdcall DisableThreadLibraryCalls(ptr)
 @ stdcall -version=0x600+ DisassociateCurrentThreadFromCallback(ptr) ntdll.TpDisassociateCallback
@@ -236,6 +241,7 @@
 @ stdcall EndUpdateResourceA(long long)
 @ stdcall EndUpdateResourceW(long long)
 @ stdcall EnterCriticalSection(ptr) ntdll.RtlEnterCriticalSection
+@ stdcall -arch=win64 EnterUmsSchedulingMode(ptr)
 @ stdcall EnumCalendarInfoA(ptr long long long)
 @ stdcall EnumCalendarInfoExA(ptr long long long)
 @ stdcall -version=0x600+ EnumCalendarInfoExEx(ptr wstr long wstr long long) kernelbase.EnumCalendarInfoExEx
@@ -288,6 +294,7 @@
 @ stdcall -version=0x601+ EventWriteEx(int64 ptr int64 long ptr ptr long ptr) kernelbase.EventWriteEx
 @ stdcall -version=0x600+ EventWriteString(int64 long int64 wstr) kernelbase.EventWriteString
 @ stdcall -version=0x600+ EventWriteTransfer(int64 ptr ptr ptr long ptr) kernelbase.EventWriteTransfer
+@ stdcall -arch=win64 ExecuteUmsThread(ptr)
 @ stdcall ExitProcess(long) ; FIXME: ntdll.RtlExitUserProcess
 @ stdcall ExitThread(long) ; FIXME: ntdll.RtlExitUserThread
 @ stdcall ExitVDM(long long)
@@ -467,6 +474,7 @@
 @ stdcall -norelay GetCurrentThread()
 @ stdcall -norelay GetCurrentThreadId()
 @ stdcall -version=0x602+ GetCurrentThreadStackLimits(ptr ptr) kernelbase.GetCurrentThreadStackLimits
+@ stdcall -arch=win64 GetCurrentUmsThread()
 @ stdcall GetDateFormatA(long long ptr str ptr long)
 @ stdcall -version=0x600+ GetDateFormatEx(wstr long ptr wstr wstr long wstr)
 @ stdcall GetDateFormatW(long long ptr wstr ptr long)
@@ -535,8 +543,10 @@
 @ stdcall GetLocaleInfoA(long long ptr long)
 @ stdcall -version=0x600+ GetLocaleInfoEx(wstr long ptr long)
 @ stdcall GetLocaleInfoW(long long ptr long)
+@ stdcall -arch=win64 GetNextUmsListItem(ptr)
 @ stdcall -version=0x602+ GetOsSafeBootMode(ptr)
 @ stdcall -version=0x602+ GetStateSettingsFolder(ptr ptr ptr)
+@ stdcall -arch=win64 GetUmsCompletionListEvent(ptr ptr)
 @ stdcall -version=0x600+ IsValidLocaleName(wstr) kernelbase.IsValidLocaleName
 @ stdcall GetLogicalDriveStringsA(long ptr)
 @ stdcall GetLogicalDriveStringsW(long ptr)
@@ -986,6 +996,7 @@
 @ stdcall -version=0x600+ QueryProcessCycleTime(ptr ptr)
 @ stdcall -version=0x600+ QueryThreadCycleTime(ptr ptr)
 @ stdcall -version=0x600+ QueryThreadpoolStackInformation(ptr ptr) kernelbase.QueryThreadpoolStackInformation
+@ stdcall -arch=win64 QueryUmsThreadInformation(ptr long ptr long ptr)
 @ stdcall -version=0x600+ QueryUnbiasedInterruptTime(ptr)
 @ stdcall -version=0x602+ QueryUnbiasedInterruptTimePrecise(ptr)
 @ stdcall QueueUserAPC(ptr long long)
@@ -1217,6 +1228,7 @@
 @ stdcall -version=0x602+ SetThreadpoolWaitEx(ptr long ptr ptr) ntdll.TpSetWaitEx
 @ stdcall SetTimeZoneInformation(ptr)
 @ stdcall SetTimerQueueTimer(long ptr ptr long long long)
+@ stdcall -arch=win64 SetUmsThreadInformation(ptr long ptr long)
 @ stdcall SetUnhandledExceptionFilter(ptr)
 @ stdcall SetUserGeoID(long) kernelbase.SetUserGeoID
 @ stdcall SetUserGeoName(wstr) kernelbase.SetUserGeoName
@@ -1261,6 +1273,7 @@
 @ stdcall TryEnterCriticalSection(ptr) ntdll.RtlTryEnterCriticalSection
 @ stdcall -version=0x600+ TrySubmitThreadpoolCallback(ptr ptr ptr)
 @ stdcall TzSpecificLocalTimeToSystemTime(ptr ptr ptr)
+@ stdcall -arch=win64 UmsThreadYield(ptr)
 @ stdcall UTRegister(long str str str ptr ptr ptr)
 @ stdcall UTUnRegister(long)
 @ stdcall UnhandledExceptionFilter(ptr)
