@@ -45,6 +45,7 @@ set(COMPAT_RUNTIME_MODULES
     d3dcompiler_39
     d3dcompiler_43
     d3dcompiler_47
+    d3dumdrt
     dxdiagn
     dcomp
     ddraw
