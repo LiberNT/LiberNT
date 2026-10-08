@@ -338,7 +338,7 @@ NtUserCallOneParam(
         }
 
         case ONEPARAM_ROUTINE_WINDOWFROMDC:
-            Result = (DWORD_PTR)IntWindowFromDC((HDC)Param);
+            Result = (DWORD_PTR)IntWindowFromDC((HDC)LongToHandle((LONG)Param));
             break;
 
         case ONEPARAM_ROUTINE_ROS_GETSYSTEMMETRICS:
@@ -540,11 +540,11 @@ NtUserCallOneParam(
             break;
 
         case ONEPARAM_ROUTINE_RELEASEDC:
-            Result = UserReleaseDC(NULL, (HDC) Param, FALSE);
+            Result = UserReleaseDC(NULL, (HDC)LongToHandle((LONG)Param), FALSE);
             break;
 
         case ONEPARAM_ROUTINE_REALIZEPALETTE:
-            Result = UserRealizePalette((HDC) Param);
+            Result = UserRealizePalette((HDC)LongToHandle((LONG)Param));
             break;
 
         case ONEPARAM_ROUTINE_GETQUEUESTATUS:
