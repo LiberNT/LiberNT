@@ -4767,7 +4767,12 @@ static enum fill_status fill_systemenclosure( struct table *table, const struct 
 static DWORD get_reg_value_dword( HKEY key, const WCHAR *value )
 {
     DWORD type, ret, size = sizeof(ret);
+#ifdef __REACTOS__
+    if (RegQueryValueExW( key, value, NULL, &type, (BYTE *)&ret, &size ) ||
+        (type != REG_DWORD && (type != REG_BINARY || size != sizeof(ret)))) return 0;
+#else
     if (RegQueryValueExW( key, value, NULL, &type, (BYTE *)&ret, &size ) || type != REG_DWORD) return 0;
+#endif
     return ret;
 }
 
