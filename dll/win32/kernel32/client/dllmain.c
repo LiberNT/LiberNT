@@ -201,6 +201,7 @@ DllMain(HANDLE hDll,
             /* Initialize the DLL critical section */
             RtlInitializeCriticalSection(&BaseDllDirectoryLock);
             InitializeListHead(&BaseDllDirectoryList);
+            BasepInheritDllDirectory();
 
             /* Initialize the National Language Support routines */
             if (!NlsInit())

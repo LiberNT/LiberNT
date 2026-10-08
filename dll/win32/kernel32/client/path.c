@@ -472,6 +472,32 @@ BasepApplyPreferSystem32(
     return NewPath;
 }
 
+VOID
+BasepInheritDllDirectory(VOID)
+{
+    PUNICODE_STRING DllPath = &NtCurrentPeb()->ProcessParameters->DllPath;
+    UNICODE_STRING Directory;
+    PWCHAR Start, End, Limit;
+
+    if (DllPath->Buffer == NULL)
+        return;
+    Limit = DllPath->Buffer + DllPath->Length / sizeof(WCHAR);
+    for (Start = DllPath->Buffer; Start < Limit && *Start != L';'; Start++);
+    if (Start == Limit)
+        return;
+    Start++;
+    for (End = Start; End < Limit && *End != L';'; End++);
+    Directory.Buffer = Start;
+    Directory.Length = Directory.MaximumLength = (USHORT)((End - Start) * sizeof(WCHAR));
+    if (Directory.Length < 3 * sizeof(WCHAR) ||
+        (Start[1] != L':' && (Start[0] != L'\\' || Start[1] != L'\\')) ||
+        RtlEqualUnicodeString(&Directory, &BaseWindowsSystemDirectory, TRUE))
+    {
+        return;
+    }
+    RtlDuplicateUnicodeString(RTL_DUPLICATE_UNICODE_STRING_NULL_TERMINATE, &Directory, &BaseDllDirectory);
+}
+
 LPWSTR
 WINAPI
 BaseComputeProcessDllPath(IN LPWSTR FullPath,

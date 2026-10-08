@@ -174,6 +174,9 @@ extern HMODULE hCurrentModule;
 extern RTL_CRITICAL_SECTION BaseDllDirectoryLock;
 extern LIST_ENTRY BaseDllDirectoryList;
 
+VOID
+BasepInheritDllDirectory(VOID);
+
 extern UNICODE_STRING BaseDllDirectory;
 extern UNICODE_STRING BaseDefaultPath;
 extern UNICODE_STRING BaseDefaultPathAppend;
