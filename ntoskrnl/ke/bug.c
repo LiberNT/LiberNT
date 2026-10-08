@@ -80,6 +80,12 @@ KiLogBugCheckString(
 {
     ANSI_STRING LogString;
 
+    if (KdDebuggerEnabled && !KdDebuggerNotPresent)
+    {
+        DbgPrint("%s", String);
+        return;
+    }
+
     RtlInitAnsiString(&LogString, String);
     KdLogDbgPrint(&LogString);
 }
