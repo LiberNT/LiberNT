@@ -1561,6 +1561,18 @@ GpuVaNotifyPageTableUpdate(
     Coverage = (ULONGLONG)Count << GpuVaLevelShift(Adapter, Table->Level);
     if (Coverage == 0 || FirstVirtualAddress > MAXULONGLONG - Coverage)
         return STATUS_INTEGER_OVERFLOW;
+    if (Table->DirtyEndIndex == 0)
+    {
+        Table->DirtyStartIndex = StartIndex;
+        Table->DirtyEndIndex = StartIndex + Count;
+    }
+    else
+    {
+        if (StartIndex < Table->DirtyStartIndex)
+            Table->DirtyStartIndex = StartIndex;
+        if (StartIndex + Count > Table->DirtyEndIndex)
+            Table->DirtyEndIndex = StartIndex + Count;
+    }
     if (!Process->PageTableUpdatePending)
     {
         Process->PageTableUpdatePending = TRUE;
@@ -1584,6 +1596,7 @@ GpuVaRequeuePageTableUpdate(
     _In_ D3DGPU_VIRTUAL_ADDRESS End)
 {
     ExAcquireFastMutex(&Process->GpuVaLock);
+    Process->PageTableResendSpan = TRUE;
     if (!Process->PageTableUpdatePending)
     {
         Process->PageTableUpdatePending = TRUE;
@@ -1916,6 +1929,7 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
     ULONG OperationCapacity = 0;
     NTSTATUS Status;
     BOOLEAN TransactionHeld = FALSE;
+    BOOLEAN ResendSpan = FALSE;
 
     PAGED_CODE();
     if (Process == NULL)
@@ -2049,9 +2063,11 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
 
         Start = Process->PageTableUpdateStart;
         End = Process->PageTableUpdateEnd;
+        ResendSpan = Process->PageTableResendSpan;
         if (End <= Start)
         {
             Process->PageTableUpdatePending = FALSE;
+            Process->PageTableResendSpan = FALSE;
             Process->PageTableUpdateStart = 0;
             Process->PageTableUpdateEnd = 0;
             ExReleaseFastMutex(&Process->GpuVaLock);
@@ -2095,10 +2111,21 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
                 OverlapStart = Table->CoverageBase;
                 OverlapEnd = TableEnd;
             }
-            else
+            else if (ResendSpan)
             {
                 OverlapStart = max(Start, Table->CoverageBase);
                 OverlapEnd = min(End, TableEnd);
+            }
+            else if (Table->DirtyEndIndex > Table->DirtyStartIndex)
+            {
+                OverlapStart = Table->CoverageBase +
+                               (ULONGLONG)Table->DirtyStartIndex * EntryCoverage;
+                OverlapEnd = Table->CoverageBase +
+                             (ULONGLONG)min(Table->DirtyEndIndex, Table->EntryCount) * EntryCoverage;
+            }
+            else
+            {
+                continue;
             }
             if (OverlapStart >= OverlapEnd)
                 continue;
@@ -2136,6 +2163,8 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
             Tables[TableCount].StartIndex = StartIndex;
             Tables[TableCount].EndIndex = EndIndex;
             Tables[TableCount].InitialUpdatePending = Table->InitialUpdatePending;
+            Table->DirtyStartIndex = 0;
+            Table->DirtyEndIndex = 0;
             TableCount++;
         }
         /* Preserve protection for reservations too: zero PTEs have no backing
@@ -2194,6 +2223,7 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
             }
         }
         Process->PageTableUpdatePending = FALSE;
+        Process->PageTableResendSpan = FALSE;
         Process->PageTableUpdateStart = 0;
         Process->PageTableUpdateEnd = 0;
         ExReleaseFastMutex(&Process->GpuVaLock);
@@ -2884,6 +2914,7 @@ DxgkGpuVaCreateProcess(
     ExInitializeFastMutex(&Process->GpuVaLock);
     KeInitializeMutex(&Process->PageTableFlushMutex, 0);
     Process->PageTableUpdatePending = FALSE;
+    Process->PageTableResendSpan = FALSE;
     Process->PageTableUpdateStart = 0;
     Process->PageTableUpdateEnd = 0;
     Process->GpuVaTotalReserved = 0;

@@ -1920,6 +1920,10 @@ typedef struct _DXGKRNL_GPUVA_PAGE_TABLE
     /* The first KMD update must initialize the complete implicit table. */
     BOOLEAN                     InitialUpdatePending;
 
+    /* Entries changed since the last flush; empty when the end index is 0. */
+    ULONG                       DirtyStartIndex;
+    ULONG                       DirtyEndIndex;
+
     D3DGPU_VIRTUAL_ADDRESS      PagingVa;
 
     /* Child table pointers (non-leaf only, EntryCount entries), else NULL. */
@@ -2023,6 +2027,8 @@ struct _DXGKRNL_PROCESS
     BOOLEAN                     PageTableUpdatePending;
     D3DGPU_VIRTUAL_ADDRESS      PageTableUpdateStart;
     D3DGPU_VIRTUAL_ADDRESS      PageTableUpdateEnd;
+    /* A rejected flush is described again over its whole span. */
+    BOOLEAN                     PageTableResendSpan;
     /*
      * Serializes the snapshot/submit/retire transaction for the pending
      * page-table span.  This must remain a KMUTEX: the synchronous paging
