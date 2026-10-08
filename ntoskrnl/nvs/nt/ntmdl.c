@@ -508,11 +508,22 @@ MmAllocatePagesForMdlEx(
         : (((CacheType & 0xFF) == MmWriteCombined) ? MI_LEAF_WRITECOMBINE : 0);
     PPFN_NUMBER Pages;
     ULONG64 Got = 0;
+    ULONG64 Chunk = 0;
     PMDL Mdl;
 
-    UNREFERENCED_PARAMETER(SkipBytes);
     if (Wanted == 0 || Wanted > 0xFFFFFFFFULL / PAGE_SIZE || LowFrame > HighFrame)
         return NULL;
+    if (Flags & MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS)
+    {
+        ULONG64 Skip = (ULONG64)SkipBytes.QuadPart;
+
+        if (Skip != 0 &&
+            ((Skip & (Skip - 1)) != 0 || Skip < PAGE_SIZE || (TotalBytes & (Skip - 1)) != 0))
+        {
+            return NULL;
+        }
+        Chunk = (Skip != 0) ? (Skip >> PAGE_SHIFT) : Wanted;
+    }
 
     if (HighFrame >= MiSystem.Pfn.FrameCount)
         HighFrame = MiSystem.Pfn.FrameCount - 1;
@@ -523,7 +534,33 @@ MmAllocatePagesForMdlEx(
 
     Pages = MmGetMdlPfnArray(Mdl);
 
-    while (Got < Wanted && MiChargeCommit(&MiSystem.SystemSpace, 1))
+    while (Chunk != 0 && Got < Wanted && MiChargeCommit(&MiSystem.SystemSpace, (LONG64)Chunk))
+    {
+        ULONG First = MiPfnAllocateContiguous(&MiSystem.Pfn, (ULONG)Chunk, (ULONG)LowFrame, (ULONG)HighFrame,
+                                              SkipBytes.QuadPart != 0 ? (ULONG)Chunk : 0);
+        ULONG64 Index;
+
+        if (First == MI_FRAME_INVALID)
+        {
+            MiReturnCommit(&MiSystem.SystemSpace, (LONG64)Chunk);
+            break;
+        }
+
+        for (Index = 0; Index < Chunk; Index++)
+        {
+            ULONG Frame = First + (ULONG)Index;
+
+            if (!(Flags & MM_DONT_ZERO_ALLOCATION))
+                RtlZeroMemory(MiArchMapFrame(Frame), PAGE_SIZE);
+
+            if (CacheFlags == 0 || !NT_SUCCESS(MiPfnSetCache(&MiSystem.Pfn, Frame, CacheFlags)))
+                MiSystem.Pfn.Pfn[Frame].CacheFlags = CacheFlags;
+
+            Pages[Got++] = Frame;
+        }
+    }
+
+    while (Chunk == 0 && Got < Wanted && MiChargeCommit(&MiSystem.SystemSpace, 1))
     {
         ULONG Frame = MiPfnAllocatePageInRange(&MiSystem.Pfn, (ULONG)LowFrame, (ULONG)HighFrame, &Cursor);
 
@@ -542,7 +579,8 @@ MmAllocatePagesForMdlEx(
         Pages[Got++] = Frame;
     }
 
-    if (Got == 0 || ((Flags & MM_ALLOCATE_FULLY_REQUIRED) && Got != Wanted))
+    if (Got == 0 || ((Flags & MM_ALLOCATE_FULLY_REQUIRED) && Got != Wanted) ||
+        (Chunk != 0 && SkipBytes.QuadPart == 0 && Got != Wanted))
     {
         while (Got != 0)
         {
