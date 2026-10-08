@@ -947,6 +947,7 @@ CcmmTruncation(void)
     CHECK(File.Segment->MappedViews == 1);
     CHECK(MmCanFileBeTruncated(&Pointers, &Size));
     CHECK(MmCanFileBeTruncated(&Pointers, NULL));
+    CHECK(MiCanFileBeDeleted(&Pointers));
 
     ProcessCreate(&World, &Process);
     ProcessCreate(&World, &Child);
@@ -954,8 +955,10 @@ CcmmTruncation(void)
     CHECK(File.Segment->TruncationViews == 1);
     CHECK(!MmCanFileBeTruncated(&Pointers, &Size));
     CHECK(!MmCanFileBeTruncated(&Pointers, NULL));
+    CHECK(!MiCanFileBeDeleted(&Pointers));
     Size.QuadPart = File.File.Size;
     CHECK(MmCanFileBeTruncated(&Pointers, &Size));
+    CHECK(!MiCanFileBeDeleted(&Pointers));
     Conflict = Base;
     CHECK(MiMapView(&Process, File.Segment, &Conflict, 0, &ViewSize, MI_PROT_READONLY, 0) == STATUS_CONFLICTING_ADDRESSES);
     CHECK(File.Segment->TruncationViews == 1);
@@ -980,11 +983,13 @@ CcmmTruncation(void)
     File.Segment->SectionObjects = 1;
     CHECK(!MmCanFileBeTruncated(&Pointers, &Size));
     CHECK(!MmCanFileBeTruncated(&Pointers, NULL));
+    CHECK(!MiCanFileBeDeleted(&Pointers));
     Size.QuadPart = File.File.Size;
     CHECK(MmCanFileBeTruncated(&Pointers, &Size));
     Size.QuadPart = PAGE_SIZE;
     File.Segment->SectionObjects = 0;
     CHECK(MmCanFileBeTruncated(&Pointers, &Size));
+    CHECK(MiCanFileBeDeleted(&Pointers));
     CHECK(NT_SUCCESS(CcDirtyFlush(&NtMap.Map, 0, File.File.Size, ~0u, NULL)));
     CHECK(CcMapUninitialize(&NtMap.Map));
     CHECK(File.Segment->MappedViews == 0 && File.Segment->TruncationViews == 0);

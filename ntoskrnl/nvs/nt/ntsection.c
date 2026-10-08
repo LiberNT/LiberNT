@@ -2288,9 +2288,13 @@ MmFlushImageSection(
     _In_ PSECTION_OBJECT_POINTERS SectionObjectPointer,
     _In_ MMFLUSH_TYPE FlushType)
 {
-    UNREFERENCED_PARAMETER(FlushType);
+    if (!MiCloseUnusedControlArea(SectionObjectPointer, TRUE))
+        return FALSE;
 
-    return MiCloseUnusedControlArea(SectionObjectPointer, TRUE);
+    if (FlushType == MmFlushForDelete)
+        return MiCanFileBeDeleted(SectionObjectPointer);
+
+    return TRUE;
 }
 
 BOOLEAN

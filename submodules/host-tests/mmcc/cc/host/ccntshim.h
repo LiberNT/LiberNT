@@ -53,6 +53,7 @@ BOOLEAN CcPurgeCacheSection(PSECTION_OBJECT_POINTERS Pointers, PLARGE_INTEGER Of
 #define MmFlushForWrite 0
 BOOLEAN MmFlushImageSection(PSECTION_OBJECT_POINTERS Pointers, ULONG Type);
 BOOLEAN MmCanFileBeTruncated(PSECTION_OBJECT_POINTERS Pointers, PLARGE_INTEGER NewFileSize);
+BOOLEAN MiCanFileBeDeleted(PSECTION_OBJECT_POINTERS Pointers);
 NTSTATUS MiWaitForMemory(NTSTATUS Status, PULONG Attempts);
 #else
 typedef struct _MI_CONTROL_AREA *PMI_CONTROL_AREA;

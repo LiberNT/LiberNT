@@ -45,3 +45,20 @@ MmCanFileBeTruncated(
     return Allowed;
 }
 
+BOOLEAN
+MiCanFileBeDeleted(
+    _In_ PSECTION_OBJECT_POINTERS SectionPointer)
+{
+    PMI_CONTROL_AREA Control;
+    BOOLEAN Allowed;
+
+    Control = MiReferenceDataControlArea(SectionPointer);
+    if (Control == NULL)
+        return TRUE;
+
+    Allowed = (BOOLEAN)(MI_ATOMIC_READ32(&Control->Segment->TruncationViews) == 0 &&
+                        MI_ATOMIC_READ32(&Control->Segment->SectionObjects) == 0);
+    MiDereferenceControlArea(Control);
+    return Allowed;
+}
+

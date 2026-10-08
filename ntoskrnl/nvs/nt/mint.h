@@ -157,6 +157,7 @@ NTSTATUS MiControlWriteFrames(_In_opt_ PVOID Context, _In_ ULONG64 Offset, _In_ 
 VOID MiMemoryEventInitialize(VOID);
 PMI_CONTROL_AREA MiReferenceDataControlArea(_In_ PSECTION_OBJECT_POINTERS Pointers);
 VOID MiDereferenceControlArea(_Inout_ PMI_CONTROL_AREA Control);
+BOOLEAN MiCanFileBeDeleted(_In_ PSECTION_OBJECT_POINTERS SectionPointer);
 NTSTATUS MiCreateDataControlArea(_In_ PFILE_OBJECT FileObject, _In_ ULONG64 Size, _Out_ PMI_CONTROL_AREA *Control);
 NTSTATUS MiSectionInitialize(VOID);
 NTSTATUS MiPagingIo(_In_ PFILE_OBJECT FileObject, _In_ ULONG64 Offset, _In_ ULONG Length, _In_ PVOID Buffer,
