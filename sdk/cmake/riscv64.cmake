@@ -18,6 +18,11 @@ endif()
 add_compile_options("$<$<COMPILE_LANGUAGE:C>:SHELL:-Xclang -fasync-exceptions>")
 add_compile_options("$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<BOOL:$<TARGET_PROPERTY:WITH_CXX_EXCEPTIONS>>>>:SHELL:-Xclang -fasync-exceptions>")
 add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:SHELL:-Xclang -fstack-clash-protection>")
+# FIXME: Unlike its AArch64, ARM and X86 targets, the RISC-V target of the LLVM
+# fork does not trap on unreachable code for Windows, so a function whose body
+# is only unreachable is emitted empty and its RVUW entry is rejected. Remove
+# this once RISCVTargetMachine sets TrapUnreachable for Windows.
+add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:SHELL:-mllvm -trap-unreachable>")
 add_compile_definitions(_USE_NATIVE_SEH=1
     "$<$<NOT:$<BOOL:$<TARGET_PROPERTY:WITH_CXX_EXCEPTIONS>>>:_ATL_NO_EXCEPTIONS=1>")
 set(CLANG_NATIVE_SEH TRUE)
