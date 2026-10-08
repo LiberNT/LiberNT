@@ -1245,10 +1245,7 @@ HalpScatterGatherAdapterControl(IN PDEVICE_OBJECT DeviceObject,
 	PSCATTER_GATHER_ELEMENT TempElements;
 	ULONG ElementCount = 0, RemainingLength = AdapterControlContext->Length;
 	PUCHAR CurrentVa = AdapterControlContext->CurrentVa;
-    // RemainingLength / PAGE_SIZE + 1 for the remainder of our division
-    // + 1 for a safety cushion gives a good safe value. Using the
-    // min function with MAX_SG_ELEMENTS keeps us from getting too large.
-    ULONG Est_SG_Elements = min(RemainingLength / PAGE_SIZE + 2, MAX_SG_ELEMENTS);
+    ULONG Est_SG_Elements = max(AdapterControlContext->MapRegisterCount, 1);
 
 	/* Store the map register base for later in HalPutScatterGatherList */
 	AdapterControlContext->MapRegisterBase = MapRegisterBase;
@@ -1264,7 +1261,7 @@ HalpScatterGatherAdapterControl(IN PDEVICE_OBJECT DeviceObject,
 		return DeallocateObject;
 	}
 
-	while (RemainingLength > 0 && ElementCount < MAX_SG_ELEMENTS)
+	while (RemainingLength > 0 && ElementCount < Est_SG_Elements)
 	{
 	    TempElements[ElementCount].Length = RemainingLength;
 		TempElements[ElementCount].Reserved = 0;
