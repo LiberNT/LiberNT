@@ -49,11 +49,11 @@ def main():
                  llvm / 'libunwind/src/Unwind-seh.cpp']:
         if not path.is_file():
             parser.error(f'missing matching runtime input: {path}')
-    run('cmake', '--build', build, '--target', 'xdk')
+    run('cmake', '--build', build, '--target', 'xdk', 'psdk')
     includes = [resource / 'include'] + [source / 'sdk/include' / path for path in
                ['ucrt', 'vcruntime', 'crt', 'psdk', '', 'ddk', 'reactos']] + [
                build / 'sdk/include', build / 'sdk/include/psdk', build / 'sdk/include/ddk']
-    flags = ('-march=rv64gc -mabi=lp64 -mcmodel=medany -mno-relax -funwind-tables '
+    flags = ('-march=rv64gc -mabi=lp64 -mcmodel=medany -mno-relax -fms-extensions -funwind-tables '
              '-D_DLL -D__USE_CRTIMP -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 '
              '-D__REACTOS__ -D_CRT_DECLARE_NONSTDC_NAMES=1 -D__LARGE_MBSTATE_T '
              '-nostdlibinc ')
