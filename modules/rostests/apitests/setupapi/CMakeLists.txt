@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     devclass.c
+    InvalidDeviceInfoSet.c
     SetupDiInstallClassExA.c
     SetupInstallFile.c
     SetupInstallServicesFromInfSectionEx.c
