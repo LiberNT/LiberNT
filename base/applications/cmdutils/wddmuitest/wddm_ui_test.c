@@ -1598,6 +1598,7 @@ RunTaskmgrTimerComparison(VOID)
     return Failures ? 1 : 0;
 }
 
+#include "../../../system/dwm/material.h"
 #include "blur_probe.h"
 #include "blur_cache_probe.h"
 #include "damage_probe.h"

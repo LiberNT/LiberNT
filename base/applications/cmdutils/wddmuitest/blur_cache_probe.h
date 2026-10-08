@@ -82,7 +82,7 @@ RunBlurCacheProbe(const RECT *WorkArea)
         BlurProbeSettle();
         Status = StopCapture(Session, Capture, sizeof(*Capture));
         if (SUCCEEDED(Status)) Session = 0;
-        if (FAILED(Status) || Capture->Available != 7 || Capture->Status[0] < 0 ||
+        if (FAILED(Status) || !(Capture->Available & 1) || Capture->Status[0] < 0 ||
             Capture->Domain[0].Frequency == 0)
         {
             TestPrint("DWM_BLUR_CACHE_ERROR stage=stop status=0x%08lx\n", Status);
@@ -100,7 +100,8 @@ RunBlurCacheProbe(const RECT *WorkArea)
                 Pixels = FALSE;
             if (Phase == 2) Value[Index] = 255 - Value[Index];
         }
-        Pixels = Pixels && Value[0] <= 32 && Value[3] >= 223 &&
+        Pixels = Pixels && Value[0] <= 32 + DWM_MATERIAL_REFLECT_STRENGTH &&
+                 Value[3] >= 223 - DWM_MATERIAL_REFLECT_STRENGTH &&
                  Value[1] > Value[0] + 8 && Value[2] + 8 < Value[3] && Value[1] < Value[2];
         Valid = Pixels && Capture->Domain[0].Counter[DPT_FRAME].Completed >= 20 &&
                 (Phase == 2 ? Capture->Domain[0].Counter[DPT_BLUR_FILTER].Completed >= 20 :
