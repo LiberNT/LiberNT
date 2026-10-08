@@ -52,6 +52,12 @@ no_empty_index_buffer()
     done
 }
 
+name_spaces()
+{
+    "$ntfsinfo" -F "$1" "$image" 2>/dev/null |
+        awk -F'\t+ ' '/Namespace:/ { printf "%s%s", sep, $2; sep = "," }'
+}
+
 truncate -s 256M "$image"
 "$mkntfs" -F -Q -q -L NAMESPACE "$image"
 baseline=$(free_clusters)
@@ -134,6 +140,23 @@ test "$(link_count /moved-src/alias.bin)" = 1
 "$driver" --remove-dir "$image" /moved-src
 "$driver" --remove-dir "$image" /dst
 "$ntfsfix" -n "$image" >/dev/null
+
+"$driver" --short-names --create-dir "$image" /names >/dev/null
+"$driver" --short-names --create-file "$image" /names/Brief.txt >/dev/null
+"$driver" --short-names --create-file "$image" \
+    /names/a-long-file-name.txt >/dev/null
+test "$(name_spaces /names/Brief.txt)" = "Win32 & DOS"
+test "$(name_spaces /names/a-long-file-name.txt)" = "DOS,Win32"
+"$driver" --short-names --rename "$image" \
+    /names/a-long-file-name.txt /names/short.txt
+test "$(name_spaces /names/short.txt)" = "Win32 & DOS"
+"$driver" --short-names --link "$image" /names/short.txt /names/other.txt
+"$driver" --short-names --rename "$image" /names/other.txt /names/third.txt
+test "$(name_spaces /names/third.txt)" = "POSIX,Win32 & DOS"
+"$driver" --remove "$image" /names/third.txt
+"$driver" --remove "$image" /names/short.txt
+"$driver" --remove "$image" /names/Brief.txt
+"$driver" --remove-dir "$image" /names
 
 # Near-full resident records need room for the temporary second $FILE_NAME.
 dd if=/dev/zero bs=590 count=1 status=none |

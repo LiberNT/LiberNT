@@ -1361,6 +1361,7 @@ MasterFileTable::RenameFile(
     WCHAR ShortName[13];
     ULONG ShortNameLength = 0;
     BOOLEAN WantAlias;
+    BOOLEAN OwnShortName;
     BOOLEAN CaseOnly;
     BOOLEAN NewEntryAdded = FALSE;
     NTSTATUS Status;
@@ -1490,6 +1491,9 @@ MasterFileTable::RenameFile(
         AliasString = CaptureAlias(AliasValue, AliasName);
         RemovedLinks = 2;
     }
+    OwnShortName = DiskVolume->Generate8dot3Names &&
+                   (AliasAttribute || Child->Header->HardLinkCount == 1) &&
+                   NtfsIsLegalShortName(NewName, NewNameLength);
     if (WantAlias && (AliasAttribute || Child->Header->HardLinkCount == 1))
     {
         Status = NtfsGenerateShortName(
@@ -1567,6 +1571,8 @@ MasterFileTable::RenameFile(
         goto Done;
     if (ShortNameLength)
         NewValue->NameType = NAME_TYPE_WIN32;
+    else if (OwnShortName)
+        NewValue->NameType = NAME_TYPE_WIN32_AND_DOS;
     Status = WriteFileRecordToMFT(Child);
     if (!NT_SUCCESS(Status))
         goto Done;

@@ -503,6 +503,11 @@ MasterFileTable::CreateFileInDirectory(
             goto Rollback;
         }
     }
+    else if (DiskVolume->Generate8dot3Names &&
+             NtfsIsLegalShortName(Name, NameLength))
+    {
+        FileName->NameType = NAME_TYPE_WIN32_AND_DOS;
+    }
 
     Status = WriteFileRecordToMFT(NewFile);
     if (!NT_SUCCESS(Status))

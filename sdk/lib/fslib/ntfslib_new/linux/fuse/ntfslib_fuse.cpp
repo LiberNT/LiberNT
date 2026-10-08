@@ -4569,11 +4569,11 @@ PrintUsage(const char* Program)
             "  %s --set-ea IMAGE PATH FLAGS NAME SOURCE\n"
             "  %s --remove-ea IMAGE PATH NAME\n"
             "  %s --delete-external-backing IMAGE PATH\n"
-            "  %s --create-file IMAGE PATH [ATTRS]\n"
-            "  %s --create-dir IMAGE PATH [ATTRS]\n"
+            "  %s [--short-names] --create-file IMAGE PATH [ATTRS]\n"
+            "  %s [--short-names] --create-dir IMAGE PATH [ATTRS]\n"
             "  %s --remove IMAGE PATH\n"
             "  %s --remove-dir IMAGE PATH\n"
-            "  %s --rename IMAGE OLD NEW\n"
+            "  %s [--short-names] --rename IMAGE OLD NEW\n"
             "  %s --link IMAGE EXISTING NEW\n"
             "  %s --write IMAGE PATH OFFSET SOURCE\n"
             "  %s --addfiles IMAGE LIST\n"
@@ -4639,6 +4639,11 @@ main(int Argc, char** Argv)
     int Result;
     NTSTATUS Status;
 
+    if (First < Argc && strcmp(Argv[First], "--short-names") == 0)
+    {
+        NtfsSetGenerate8dot3Names(TRUE);
+        First++;
+    }
     if (First < Argc && strcmp(Argv[First], "--show-metadata") == 0)
     {
         ShowMetadata = true;
