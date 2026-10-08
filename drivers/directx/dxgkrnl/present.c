@@ -1817,6 +1817,41 @@ DxgkpWaitForCddCaptureIdle(_In_ PDXGKRNL_DEVICE Device)
     return Status == STATUS_TIMEOUT ? STATUS_IO_TIMEOUT : Status;
 }
 
+static NTSTATUS
+DxgkpWaitForCaptureWork(_Inout_ PDXGKRNL_DEVICE_WORK Work)
+{
+    LARGE_INTEGER Deadline;
+    NTSTATUS Status;
+
+    KeQuerySystemTime(&Deadline);
+    Deadline.QuadPart += 2000LL * 10000;
+    Status = DxgkDeviceWorkWaitUntil(Work, &Deadline);
+    return Status == STATUS_TIMEOUT ? STATUS_IO_TIMEOUT : Status;
+}
+
+static VOID
+DxgkpReleaseScanoutOwner(
+    _Inout_ PDXGKRNL_SCANOUT_OWNER Owner)
+{
+    if (Owner->Process != NULL)
+        ObDereferenceObject(Owner->Process);
+    Owner->Process = NULL;
+    Owner->ContextHandle = 0;
+}
+
+static VOID
+DxgkpAssignScanoutOwner(
+    _Inout_ PDXGKRNL_SCANOUT_OWNER Owner,
+    _In_opt_ PDXGKRNL_CONTEXT Context)
+{
+    DxgkpReleaseScanoutOwner(Owner);
+    if (Context == NULL || Context->Device == NULL || Context->Device->OwnerProcess == NULL)
+        return;
+    ObReferenceObject(Context->Device->OwnerProcess);
+    Owner->Process = Context->Device->OwnerProcess;
+    Owner->ContextHandle = Context->Handle;
+}
+
 /* Copies Entry's source into the capture staging allocation on the CDD
  * device and waits until the copy has retired. */
 static NTSTATUS
@@ -1837,10 +1872,13 @@ DxgkpCaptureBlit(
         PresentWork = Entry->DeviceWork;
         DxgkDeviceWorkReference(PresentWork);
         Status = DxgkpExecuteFullPresent(Adapter, Entry);
-        DxgkDeviceCompletePresent(Entry->Device, Entry->DeviceWork, Status);
+        if (Entry->CddPresent)
+            DxgkDeviceCompletePresent(Entry->Device, Entry->DeviceWork, Status);
+        else
+            DxgkDeviceWorkCompleteWithStatus(Entry->DeviceWork, Status);
     }
     if (NT_SUCCESS(Status))
-        Status = DxgkpWaitForCddCaptureIdle(Entry->Device);
+        Status = Entry->CddPresent ? DxgkpWaitForCddCaptureIdle(Entry->Device) : DxgkpWaitForCaptureWork(PresentWork);
     if (NT_SUCCESS(Status))
     {
         Status = DxgkDeviceWorkGetStatus(PresentWork);
@@ -1850,6 +1888,46 @@ DxgkpCaptureBlit(
     DxgkDeviceWorkDestroy(Entry->DeviceWork);
     Entry->DeviceWork = NULL;
     DxgkDeviceWorkDereference(PresentWork);
+    return Status;
+}
+
+static NTSTATUS
+DxgkpCaptureScanoutBlit(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_PRESENT_QUEUE Queue,
+    _Inout_ PDXGKRNL_PRESENT_ENTRY Entry)
+{
+    DXGKRNL_PRESENT_ENTRY OwnerEntry;
+    PDXGKRNL_ADAPTER OwnerAdapter;
+    PDXGKRNL_DEVICE OwnerDevice;
+    PDXGKRNL_CONTEXT OwnerContext;
+    KAPC_STATE ApcState;
+    NTSTATUS Status;
+
+    if (Queue->MmioCurrentOwner.Process == NULL ||
+        !NT_SUCCESS(DxgkReferenceContextByHandle(Queue->MmioCurrentOwner.ContextHandle,
+                                                 Queue->MmioCurrentOwner.Process,
+                                                 &OwnerAdapter, &OwnerDevice, &OwnerContext)))
+    {
+        return DxgkpCaptureBlit(Adapter, Entry);
+    }
+    if (OwnerAdapter != Adapter || !OwnerContext->VirtualAddressing)
+    {
+        DxgkDereferenceContext(OwnerContext);
+        return DxgkpCaptureBlit(Adapter, Entry);
+    }
+
+    OwnerEntry = *Entry;
+    OwnerEntry.Device = OwnerDevice;
+    OwnerEntry.Context = OwnerContext;
+    OwnerEntry.CddPresent = FALSE;
+    OwnerEntry.DeviceWork = NULL;
+    OwnerEntry.DestinationOpenBindingHandle = NULL;
+    OwnerEntry.DestinationOpenBindingReference = NULL;
+    KeStackAttachProcess((PKPROCESS)Queue->MmioCurrentOwner.Process, &ApcState);
+    Status = DxgkpCaptureBlit(Adapter, &OwnerEntry);
+    KeUnstackDetachProcess(&ApcState);
+    DxgkDereferenceContext(OwnerContext);
     return Status;
 }
 
@@ -2026,7 +2104,7 @@ DxgkpCaptureDesktop(
         Entry.SourceOpenBindingHandle = NULL;
         Entry.hSource = Queue->MmioCurrentHandle;
         Entry.SourceAllocation = Queue->MmioCurrentAllocation;
-        Status = DxgkpCaptureBlit(Adapter, &Entry);
+        Status = DxgkpCaptureScanoutBlit(Adapter, Queue, &Entry);
         for (Overlay = 0; NT_SUCCESS(Status) && Overlay < RXGK_PRESENT_MAX_OVERLAYS; ++Overlay)
         {
             const DXGKRNL_PRESENT_OVERLAY *Plane = &Queue->MmioCurrentOverlays[Overlay];
@@ -2054,7 +2132,7 @@ DxgkpCaptureDesktop(
                 Entry.SrcRect.bottom -= Plane->DstRect.bottom - Visible.bottom;
                 Entry.DstRect = Visible;
             }
-            Status = DxgkpCaptureBlit(Adapter, &Entry);
+            Status = DxgkpCaptureScanoutBlit(Adapter, Queue, &Entry);
         }
         Entry.SourceAllocation = NULL;
         Entry.SourceOpenBindingReference = PrimaryBinding;
@@ -2392,6 +2470,8 @@ DxgkPresentRetireScanout(
         Queues[Index].MmioPendingAllocation = NULL;
         Queues[Index].MmioCurrentHandle = 0;
         Queues[Index].MmioPendingHandle = 0;
+        DxgkpReleaseScanoutOwner(&Queues[Index].MmioCurrentOwner);
+        DxgkpReleaseScanoutOwner(&Queues[Index].MmioPendingOwner);
         RtlZeroMemory(Queues[Index].MmioCurrentOverlays, sizeof(Queues[Index].MmioCurrentOverlays));
         RtlZeroMemory(Queues[Index].MmioPendingOverlays, sizeof(Queues[Index].MmioPendingOverlays));
         Queues[Index].MmioFailureStatus = STATUS_SUCCESS;
@@ -5055,6 +5135,7 @@ DxgkpExecuteMmioFlip(
      * can associate a preceding UMD escape/render dependency with this call. */
     Queue->MmioPendingAllocation = Allocation;
     Queue->MmioPendingHandle = Entry->hSource;
+    DxgkpAssignScanoutOwner(&Queue->MmioPendingOwner, Entry->Context);
     Entry->SourceAllocation = NULL;
     PinOwned = FALSE;
     for (OverlayIndex = 0; OverlayIndex < Entry->OverlayCount; ++OverlayIndex)
@@ -5305,6 +5386,9 @@ DxgkpExecuteMmioFlip(
         RtlZeroMemory(Queue->MmioPendingOverlays, sizeof(Queue->MmioPendingOverlays));
         Queue->MmioCurrentAllocation = Queue->MmioPendingAllocation;
         Queue->MmioCurrentHandle = Queue->MmioPendingHandle;
+        DxgkpReleaseScanoutOwner(&Queue->MmioCurrentOwner);
+        Queue->MmioCurrentOwner = Queue->MmioPendingOwner;
+        RtlZeroMemory(&Queue->MmioPendingOwner, sizeof(Queue->MmioPendingOwner));
         Queue->MmioPendingAllocation = NULL;
         Queue->MmioPendingHandle = 0;
         Queue->MmioLastFlipSequence = ObservedSequence;

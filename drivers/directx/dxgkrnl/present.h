@@ -111,6 +111,12 @@ typedef struct _DXGKRNL_SHARED_SURFACE_SNAPSHOT
  * One instance per queued present.  Stored in the circular FIFO inside
  * DXGKRNL_PRESENT_QUEUE.  Lifetime: enqueue → dequeue+execute.
  * ====================================================================== */
+typedef struct _DXGKRNL_SCANOUT_OWNER
+{
+    PEPROCESS                       Process;
+    D3DKMT_HANDLE                   ContextHandle;
+} DXGKRNL_SCANOUT_OWNER, *PDXGKRNL_SCANOUT_OWNER;
+
 /* One overlay plane of a queued compositor flip. */
 typedef struct _DXGKRNL_PRESENT_OVERLAY
 {
@@ -318,6 +324,8 @@ typedef struct _DXGKRNL_PRESENT_QUEUE
     PDXGKVMM_ALLOCATION             MmioPendingAllocation;
     D3DKMT_HANDLE                   MmioCurrentHandle;
     D3DKMT_HANDLE                   MmioPendingHandle;
+    DXGKRNL_SCANOUT_OWNER           MmioCurrentOwner;
+    DXGKRNL_SCANOUT_OWNER           MmioPendingOwner;
     /* Pinned overlay planes of the scanned and the armed flip. */
     DXGKRNL_PRESENT_OVERLAY         MmioCurrentOverlays[RXGK_PRESENT_MAX_OVERLAYS];
     DXGKRNL_PRESENT_OVERLAY         MmioPendingOverlays[RXGK_PRESENT_MAX_OVERLAYS];
