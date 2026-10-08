@@ -1404,6 +1404,15 @@ private:
         _In_ ULONG RecordSize,
         _In_ ULONGLONG AllocationUnit);
 
+    NTSTATUS
+    ReleaseEmptyIndexNode(
+        _In_ PFileRecord DirectoryFile,
+        _In_ PCWSTR IndexName,
+        _In_ ULONG IndexedAttributeType,
+        _In_ const IndexSearchKey* PathKey,
+        _In_ ULONG IndexRecordSize,
+        _In_ ULONGLONG AllocationUnit);
+
     static NTSTATUS
     SplitAndPromote(
         _In_ PVolume DiskVolume,

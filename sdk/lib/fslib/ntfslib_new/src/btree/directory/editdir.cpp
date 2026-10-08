@@ -2630,7 +2630,8 @@ RemoveMaxFromSubtree(
     _Outptr_result_maybenull_
         PIndexEntry* KeyEntry,
     _Out_ PULONG KeyLength,
-    _Out_ PBOOLEAN Found)
+    _Out_ PBOOLEAN Found,
+    _Out_ PBOOLEAN LeafEmptied)
 {
     PIndexBuffer NodeBuffer;
     PIndexEntry Entry;
@@ -2645,6 +2646,7 @@ RemoveMaxFromSubtree(
     *KeyEntry = NULL;
     *KeyLength = 0;
     *Found = FALSE;
+    *LeafEmptied = FALSE;
     if (Depth > 64)
         return STATUS_FILE_CORRUPT_ERROR;
 
@@ -2727,7 +2729,8 @@ RemoveMaxFromSubtree(
             Depth + 1,
             KeyEntry,
             KeyLength,
-            Found);
+            Found,
+            LeafEmptied);
         if (!NT_SUCCESS(Status) || *Found)
             goto Done;
 
@@ -2806,6 +2809,9 @@ RemoveMaxFromSubtree(
         &NodeBuffer->IndexHeader,
         LastRealOffset,
         LastReal->EntryLength);
+    *LeafEmptied =
+        LastRealOffset ==
+            NodeBuffer->IndexHeader.IndexOffset;
     Status = WriteIndexNode(
         DiskVolume,
         DirectoryFile,
@@ -2828,6 +2834,578 @@ Done:
         }
     }
     delete[] Image;
+    return Status;
+}
+
+static NTSTATUS
+BuildChildlessEntry(
+    _In_ PIndexEntry Source,
+    _Outptr_result_bytebuffer_(*EntryLength)
+        PIndexEntry* NewEntry,
+    _Out_ PULONG EntryLength)
+{
+    PIndexEntry Entry;
+    ULONG Length = Source->EntryLength;
+
+    *NewEntry = NULL;
+    *EntryLength = 0;
+    if (Source->Flags & INDEX_ENTRY_NODE)
+    {
+        if (Length <
+            FIELD_OFFSET(IndexEntry, IndexStream) +
+                sizeof(ULONGLONG))
+        {
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        Length -= sizeof(ULONGLONG);
+    }
+    Entry =
+        reinterpret_cast<PIndexEntry>(
+            NtfsAllocatePoolWithTag(
+                PagedPool,
+                Length,
+                TAG_BTREE));
+    if (!Entry)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlCopyMemory(Entry, Source, Length);
+    Entry->EntryLength = (USHORT)Length;
+    Entry->Flags &= ~INDEX_ENTRY_NODE;
+    *NewEntry = Entry;
+    *EntryLength = Length;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+FindTrailingIndexEntries(
+    _In_ PIndexNodeHeader Header,
+    _In_ ULONG HeaderBytes,
+    _In_ BOOLEAN ViewIndex,
+    _Out_ PIndexEntry* LastReal,
+    _Out_ PIndexEntry* EndEntry)
+{
+    PIndexEntry Entry;
+    ULONG_PTR End;
+
+    *LastReal = NULL;
+    *EndEntry = NULL;
+    if (HeaderBytes < sizeof(*Header) ||
+        Header->IndexOffset < sizeof(*Header) ||
+        Header->IndexOffset >
+            Header->TotalIndexSize ||
+        Header->TotalIndexSize >
+            Header->AllocatedSize ||
+        Header->AllocatedSize > HeaderBytes)
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+
+    Entry =
+        reinterpret_cast<PIndexEntry>(
+            reinterpret_cast<PUCHAR>(Header) +
+            Header->IndexOffset);
+    End =
+        reinterpret_cast<ULONG_PTR>(Header) +
+        Header->TotalIndexSize;
+    while (reinterpret_cast<ULONG_PTR>(Entry) <
+           End)
+    {
+        if (!IsIndexEntryValid(
+                Entry,
+                (ULONG)(End -
+                    reinterpret_cast<ULONG_PTR>(
+                        Entry)),
+                ViewIndex))
+        {
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        if (Entry->Flags & INDEX_ENTRY_END)
+        {
+            *EndEntry = Entry;
+            return STATUS_SUCCESS;
+        }
+        *LastReal = Entry;
+        Entry =
+            reinterpret_cast<PIndexEntry>(
+                reinterpret_cast<PUCHAR>(Entry) +
+                Entry->EntryLength);
+    }
+    return STATUS_FILE_CORRUPT_ERROR;
+}
+
+static void
+MakeEntrySearchKey(
+    _In_ ULONG CollationRule,
+    _In_ PIndexEntry Entry,
+    _Out_ PUNICODE_STRING NameStorage,
+    _Out_ IndexSearchKey* Key)
+{
+    Key->CollationRule = CollationRule;
+    Key->Name = NULL;
+    Key->Value = NULL;
+    Key->ValueLength = 0;
+    if (CollationRule == ATTRDEF_COLLATION_FILENAME)
+    {
+        PFileNameEx IndexedName =
+            reinterpret_cast<PFileNameEx>(
+                Entry->IndexStream);
+
+        *NameStorage =
+            NtfsMakeCountedUnicodeString(
+                IndexedName->Name,
+                IndexedName->NameLength *
+                    sizeof(WCHAR));
+        Key->Name = NameStorage;
+    }
+    else
+    {
+        Key->Value = Entry->IndexStream;
+        Key->ValueLength = Entry->StreamLength;
+    }
+}
+
+NTSTATUS
+Directory::ReleaseEmptyIndexNode(
+    _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
+    _In_ ULONG IndexedAttributeType,
+    _In_ const IndexSearchKey* PathKey,
+    _In_ ULONG IndexRecordSize,
+    _In_ ULONGLONG AllocationUnit)
+{
+    const ULONG RootPrefix =
+        FIELD_OFFSET(IndexRootEx, Header);
+    const ULONG NodePrefix =
+        FIELD_OFFSET(IndexBuffer, IndexHeader);
+    const BOOLEAN ViewIndex =
+        PathKey->CollationRule !=
+            ATTRDEF_COLLATION_FILENAME;
+    IndexSearchKey ReinsertKey;
+    UNICODE_STRING ReinsertName;
+    PAttribute RootAttribute;
+    PIndexRootEx IndexRoot;
+    PIndexNodeHeader ParentHeader;
+    PIndexEntry Entry;
+    PIndexEntry Link;
+    PIndexEntry LastReal;
+    PIndexEntry EndEntry;
+    PIndexEntry Reinsert = NULL;
+    PUCHAR NodeImage = NULL;
+    PUCHAR ParentBackup = NULL;
+    PUCHAR RootValue = NULL;
+    PUCHAR RootBackup = NULL;
+    ULONGLONG Path[64];
+    ULONGLONG ChildVcn;
+    ULONG PathCount = 0;
+    ULONG Level;
+    ULONG LinkOffset;
+    ULONG ReinsertLength = 0;
+    ULONG RootBackupLength = 0;
+    BOOLEAN Descend;
+    BOOLEAN FoundExact;
+    BOOLEAN Rightmost = FALSE;
+    BOOLEAN ParentIsRoot;
+    NTSTATUS BitmapStatus;
+    NTSTATUS Status;
+
+    RootAttribute =
+        DirectoryFile->GetAttribute(
+            TypeIndexRoot,
+            const_cast<PWSTR>(IndexName));
+    if (!RootAttribute ||
+        RootAttribute->IsNonResident ||
+        RootAttribute->Resident.DataLength <
+            RootPrefix + sizeof(IndexNodeHeader))
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+    IndexRoot =
+        reinterpret_cast<PIndexRootEx>(
+            GetResidentDataPointer(RootAttribute));
+    Status = FindIndexInsertionPoint(
+        DiskVolume,
+        &IndexRoot->Header,
+        RootAttribute->Resident.DataLength -
+            RootPrefix,
+        PathKey,
+        &LinkOffset,
+        &ChildVcn,
+        &Descend,
+        &FoundExact);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (FoundExact)
+    {
+        Entry =
+            reinterpret_cast<PIndexEntry>(
+                reinterpret_cast<PUCHAR>(
+                    &IndexRoot->Header) +
+                LinkOffset);
+        if (!(Entry->Flags & INDEX_ENTRY_NODE))
+            return STATUS_SUCCESS;
+        ChildVcn = *GetSubnodeVCN(Entry);
+        Rightmost = TRUE;
+    }
+    else if (!Descend)
+    {
+        return STATUS_SUCCESS;
+    }
+
+    NodeImage =
+        new(PagedPool, TAG_BTREE)
+            UCHAR[IndexRecordSize];
+    if (!NodeImage)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    for (;;)
+    {
+        PIndexNodeHeader Header;
+
+        if (PathCount == RTL_NUMBER_OF(Path))
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Done;
+        }
+        for (ULONG Index = 0;
+             Index < PathCount;
+             Index++)
+        {
+            if (Path[Index] == ChildVcn)
+            {
+                Status = STATUS_FILE_CORRUPT_ERROR;
+                goto Done;
+            }
+        }
+        Path[PathCount++] = ChildVcn;
+
+        Status = ReadIndexNode(
+            DiskVolume,
+            DirectoryFile,
+            IndexName,
+            IndexRecordSize,
+            AllocationUnit,
+            ChildVcn,
+            NodeImage);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        Header =
+            &reinterpret_cast<PIndexBuffer>(
+                NodeImage)->IndexHeader;
+        if (Rightmost)
+        {
+            Status = FindTrailingIndexEntries(
+                Header,
+                IndexRecordSize - NodePrefix,
+                ViewIndex,
+                &LastReal,
+                &EndEntry);
+            if (!NT_SUCCESS(Status))
+                goto Done;
+            if (!(EndEntry->Flags & INDEX_ENTRY_NODE))
+                break;
+            ChildVcn = *GetSubnodeVCN(EndEntry);
+            continue;
+        }
+        Status = FindIndexInsertionPoint(
+            DiskVolume,
+            Header,
+            IndexRecordSize - NodePrefix,
+            PathKey,
+            &LinkOffset,
+            &ChildVcn,
+            &Descend,
+            &FoundExact);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        if (FoundExact)
+        {
+            Entry =
+                reinterpret_cast<PIndexEntry>(
+                    reinterpret_cast<PUCHAR>(Header) +
+                    LinkOffset);
+            if (!(Entry->Flags & INDEX_ENTRY_NODE))
+                goto Done;
+            ChildVcn = *GetSubnodeVCN(Entry);
+            Rightmost = TRUE;
+            continue;
+        }
+        if (!Descend)
+            break;
+    }
+
+    Status = FindTrailingIndexEntries(
+        &reinterpret_cast<PIndexBuffer>(
+            NodeImage)->IndexHeader,
+        IndexRecordSize - NodePrefix,
+        ViewIndex,
+        &LastReal,
+        &EndEntry);
+    if (!NT_SUCCESS(Status) || LastReal ||
+        (EndEntry->Flags & INDEX_ENTRY_NODE))
+    {
+        goto Done;
+    }
+
+    Level = PathCount - 1;
+    for (;;)
+    {
+        ParentIsRoot = Level == 0;
+        if (ParentIsRoot)
+        {
+            RootAttribute =
+                DirectoryFile->GetAttribute(
+                    TypeIndexRoot,
+                    const_cast<PWSTR>(IndexName));
+            if (!RootAttribute ||
+                RootAttribute->IsNonResident ||
+                RootAttribute->Resident.DataLength <
+                    RootPrefix +
+                        sizeof(IndexNodeHeader))
+            {
+                Status = STATUS_FILE_CORRUPT_ERROR;
+                goto Done;
+            }
+            RootBackupLength =
+                RootAttribute->Resident.DataLength;
+            RootBackup =
+                new(PagedPool, TAG_BTREE)
+                    UCHAR[RootBackupLength];
+            RootValue =
+                new(PagedPool, TAG_BTREE)
+                    UCHAR[RootBackupLength];
+            if (!RootBackup || !RootValue)
+            {
+                Status =
+                    STATUS_INSUFFICIENT_RESOURCES;
+                goto Done;
+            }
+            RtlCopyMemory(
+                RootBackup,
+                GetResidentDataPointer(RootAttribute),
+                RootBackupLength);
+            RtlCopyMemory(RootValue,
+                          RootBackup,
+                          RootBackupLength);
+            ParentHeader =
+                &reinterpret_cast<PIndexRootEx>(
+                    RootValue)->Header;
+            Status = FindTrailingIndexEntries(
+                ParentHeader,
+                RootBackupLength - RootPrefix,
+                ViewIndex,
+                &LastReal,
+                &EndEntry);
+        }
+        else
+        {
+            Status = ReadIndexNode(
+                DiskVolume,
+                DirectoryFile,
+                IndexName,
+                IndexRecordSize,
+                AllocationUnit,
+                Path[Level - 1],
+                NodeImage);
+            if (!NT_SUCCESS(Status))
+                goto Done;
+            ParentHeader =
+                &reinterpret_cast<PIndexBuffer>(
+                    NodeImage)->IndexHeader;
+            Status = FindTrailingIndexEntries(
+                ParentHeader,
+                IndexRecordSize - NodePrefix,
+                ViewIndex,
+                &LastReal,
+                &EndEntry);
+        }
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        Status = FindChildLinkOffset(
+            ParentHeader,
+            Path[Level],
+            &LinkOffset,
+            ViewIndex);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        Link =
+            reinterpret_cast<PIndexEntry>(
+                reinterpret_cast<PUCHAR>(
+                    ParentHeader) +
+                LinkOffset);
+        if (!(Link->Flags & INDEX_ENTRY_END) ||
+            LastReal || ParentIsRoot)
+        {
+            break;
+        }
+        Level--;
+    }
+
+    if (!ParentIsRoot)
+    {
+        ParentBackup =
+            new(PagedPool, TAG_BTREE)
+                UCHAR[IndexRecordSize];
+        if (!ParentBackup)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto Done;
+        }
+        RtlCopyMemory(ParentBackup,
+                      NodeImage,
+                      IndexRecordSize);
+    }
+
+    if (!(Link->Flags & INDEX_ENTRY_END))
+    {
+        Status = BuildChildlessEntry(
+            Link,
+            &Reinsert,
+            &ReinsertLength);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        CutEntryInNodeHeader(ParentHeader,
+                             LinkOffset,
+                             Link->EntryLength);
+    }
+    else if (LastReal)
+    {
+        ULONGLONG DonatedChild =
+            *GetSubnodeVCN(LastReal);
+
+        Status = BuildChildlessEntry(
+            LastReal,
+            &Reinsert,
+            &ReinsertLength);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        CutEntryInNodeHeader(
+            ParentHeader,
+            (ULONG)(
+                reinterpret_cast<PUCHAR>(LastReal) -
+                reinterpret_cast<PUCHAR>(
+                    ParentHeader)),
+            LastReal->EntryLength);
+        EndEntry =
+            reinterpret_cast<PIndexEntry>(
+                reinterpret_cast<PUCHAR>(
+                    ParentHeader) +
+                ParentHeader->TotalIndexSize -
+                (FIELD_OFFSET(IndexEntry,
+                              IndexStream) +
+                 sizeof(ULONGLONG)));
+        *GetSubnodeVCN(EndEntry) = DonatedChild;
+    }
+    else
+    {
+        EndEntry->EntryLength =
+            FIELD_OFFSET(IndexEntry, IndexStream);
+        EndEntry->Flags = INDEX_ENTRY_END;
+        ParentHeader->TotalIndexSize -=
+            sizeof(ULONGLONG);
+        ParentHeader->Flags &=
+            ~NTFS_INDEX_HEADER_LARGE;
+    }
+
+    if (ParentIsRoot)
+    {
+        ParentHeader->AllocatedSize =
+            ParentHeader->TotalIndexSize;
+        Status = ReplaceIndexRootValue(
+            DiskVolume,
+            DirectoryFile,
+            IndexName,
+            RootValue,
+            RootPrefix +
+                ParentHeader->TotalIndexSize);
+    }
+    else
+    {
+        Status = WriteIndexNode(
+            DiskVolume,
+            DirectoryFile,
+            IndexName,
+            Path[Level - 1],
+            AllocationUnit,
+            IndexRecordSize,
+            NodeImage);
+    }
+    if (!NT_SUCCESS(Status))
+        goto Done;
+
+    BitmapStatus = STATUS_SUCCESS;
+    for (ULONG Index = Level;
+         Index < PathCount;
+         Index++)
+    {
+        NTSTATUS ClearStatus =
+            SetIndexRecordBitmapBit(
+                DirectoryFile,
+                IndexName,
+                (Path[Index] * AllocationUnit) /
+                    IndexRecordSize,
+                FALSE);
+
+        if (!NT_SUCCESS(ClearStatus))
+            BitmapStatus = ClearStatus;
+    }
+
+    if (Reinsert)
+    {
+        MakeEntrySearchKey(PathKey->CollationRule,
+                           Reinsert,
+                           &ReinsertName,
+                           &ReinsertKey);
+        Status = AddIndexEntry(
+            DirectoryFile,
+            IndexName,
+            IndexedAttributeType,
+            &ReinsertKey,
+            Reinsert,
+            ReinsertLength);
+        if (!NT_SUCCESS(Status))
+        {
+            for (ULONG Index = Level;
+                 Index < PathCount;
+                 Index++)
+            {
+                (void)SetIndexRecordBitmapBit(
+                    DirectoryFile,
+                    IndexName,
+                    (Path[Index] * AllocationUnit) /
+                        IndexRecordSize,
+                    TRUE);
+            }
+            if (ParentIsRoot)
+            {
+                (void)ReplaceIndexRootValue(
+                    DiskVolume,
+                    DirectoryFile,
+                    IndexName,
+                    RootBackup,
+                    RootBackupLength);
+            }
+            else
+            {
+                (void)WriteIndexNode(
+                    DiskVolume,
+                    DirectoryFile,
+                    IndexName,
+                    Path[Level - 1],
+                    AllocationUnit,
+                    IndexRecordSize,
+                    ParentBackup);
+            }
+            goto Done;
+        }
+    }
+    Status = BitmapStatus;
+
+Done:
+    if (Reinsert)
+        NtfsFreePool(Reinsert);
+    delete[] RootBackup;
+    delete[] RootValue;
+    delete[] ParentBackup;
+    delete[] NodeImage;
     return Status;
 }
 
@@ -2861,6 +3439,9 @@ Directory::RemoveIndexEntry(
     _In_ ULONGLONG FileReference)
 {
     IndexSearchKey Key = *SearchKey;
+    IndexSearchKey MaxSearchKey;
+    const IndexSearchKey* ReleaseKey = NULL;
+    UNICODE_STRING MaxName;
     PAttribute IndexRootAttribute;
     PIndexRootEx IndexRoot;
     PIndexEntry Matched;
@@ -2883,8 +3464,10 @@ Directory::RemoveIndexEntry(
     BOOLEAN MatchedInRoot;
     BOOLEAN MatchedInternal;
     BOOLEAN MaxFound = FALSE;
+    BOOLEAN LeafEmptied = FALSE;
     BOOLEAN EntryCommitted = FALSE;
     NTSTATUS TimestampStatus;
+    NTSTATUS ReleaseStatus;
     NTSTATUS Status;
 
     if (!DiskVolume || !DirectoryFile ||
@@ -3093,6 +3676,12 @@ Directory::RemoveIndexEntry(
                 &NodeBuffer->IndexHeader,
                 MatchOffset,
                 Matched->EntryLength);
+            if (MatchOffset ==
+                    NodeBuffer->IndexHeader.IndexOffset &&
+                (Matched->Flags & INDEX_ENTRY_END))
+            {
+                ReleaseKey = &Key;
+            }
             Status = WriteIndexNode(
                 DiskVolume,
                 DirectoryFile,
@@ -3123,11 +3712,20 @@ Directory::RemoveIndexEntry(
         0,
         &MaxKey,
         &MaxKeyLength,
-        &MaxFound);
+        &MaxFound,
+        &LeafEmptied);
     if (!NT_SUCCESS(Status))
         goto Done;
     if (MaxFound)
     {
+        if (LeafEmptied)
+        {
+            MakeEntrySearchKey(Key.CollationRule,
+                               MaxKey,
+                               &MaxName,
+                               &MaxSearchKey);
+            ReleaseKey = &MaxSearchKey;
+        }
         Status = BuildPromotedEntry(
             reinterpret_cast<PUCHAR>(MaxKey),
             MaxKeyLength,
@@ -3149,6 +3747,7 @@ Directory::RemoveIndexEntry(
             RemovedChild);
         if (!NT_SUCCESS(Status))
             goto Done;
+        ReleaseKey = &Key;
     }
 
     if (MatchedInRoot)
@@ -3319,6 +3918,24 @@ Directory::RemoveIndexEntry(
 TouchDirectory:
     if (EntryCommitted)
     {
+        if (ReleaseKey)
+        {
+            ReleaseStatus = ReleaseEmptyIndexNode(
+                DirectoryFile,
+                IndexName,
+                IndexedAttributeType,
+                ReleaseKey,
+                IndexRecordSize,
+                AllocationUnit);
+            if (!NT_SUCCESS(ReleaseStatus))
+            {
+                DPRINT1(
+                    "Index entry was removed but "
+                    "the emptied index buffer was "
+                    "not released: 0x%lx.\n",
+                    ReleaseStatus);
+            }
+        }
         TimestampStatus =
             Key.CollationRule == ATTRDEF_COLLATION_FILENAME
             ? DirectoryFile->TouchDirectory()

@@ -31,6 +31,27 @@ mft_allocation()
         awk '/^[[:space:]]+Allocated size:/ { total += $3 } END { print total + 0 }'
 }
 
+no_empty_index_buffer()
+{
+    "$ntfscat" -a 0xb0 -n '$I30' "$image" "$1" \
+        >"$workdir/i30.bitmap" 2>/dev/null || return 0
+    "$ntfscat" -a 0xa0 -n '$I30' "$image" "$1" \
+        >"$workdir/i30.alloc" 2>/dev/null || return 0
+    blocks=$(($(wc -c <"$workdir/i30.alloc") / 4096))
+    block=0
+    while [ "$block" -lt "$blocks" ]; do
+        byte=$(od -An -tu1 -j $((block / 8)) -N1 "$workdir/i30.bitmap")
+        if [ $(((byte >> (block % 8)) & 1)) -eq 1 ] &&
+            ! od -An -tu4 -j $((block * 4096 + 24)) -N8 \
+                "$workdir/i30.alloc" |
+                awk '{ exit ($2 - $1 > 16) ? 0 : 1 }'; then
+            echo "$1: index buffer $block is allocated without entries" >&2
+            return 1
+        fi
+        block=$((block + 1))
+    done
+}
+
 truncate -s 256M "$image"
 "$mkntfs" -F -Q -q -L NAMESPACE "$image"
 baseline=$(free_clusters)
@@ -175,12 +196,52 @@ done
     grep -vE '^\.\.?$' | sort >"$workdir/grow.ntfs3g"
 cmp "$workdir/grow.ours" "$workdir/grow.ntfs3g"
 test "$(wc -l <"$workdir/grow.ours")" -eq 1000
+no_empty_index_buffer /grow
 
+i=0
 while read -r name; do
     "$driver" --remove "$image" "/grow/$name" >/dev/null
+    i=$((i + 1))
+    if [ $((i % 50)) -eq 0 ]; then
+        no_empty_index_buffer /grow
+    fi
 done <"$workdir/grow.ours"
 test "$("$driver" --list "$image" /grow | wc -l)" -eq 0
+no_empty_index_buffer /grow
 "$driver" --remove-dir "$image" /grow
+
+"$driver" --create-dir "$image" /sparse >/dev/null
+i=1
+while [ "$i" -le 150 ]; do
+    "$driver" --create-file "$image" \
+        "$(printf '/sparse/a-long-directory-entry-name-%03u.dat' "$i")" \
+        >/dev/null
+    i=$((i + 1))
+done
+i=1
+while [ "$i" -le 150 ]; do
+    case "$i" in
+        7|63|119) ;;
+        *)
+            "$driver" --remove "$image" \
+                "$(printf '/sparse/a-long-directory-entry-name-%03u.dat' "$i")" \
+                >/dev/null
+            no_empty_index_buffer /sparse
+            ;;
+    esac
+    i=$((i + 1))
+done
+"$driver" --list "$image" /sparse |
+    awk '{ print $NF }' | sort >"$workdir/sparse.ours"
+"$ntfsls" -p /sparse "$image" |
+    grep -vE '^\.\.?$' | sort >"$workdir/sparse.ntfs3g"
+cmp "$workdir/sparse.ours" "$workdir/sparse.ntfs3g"
+test "$(wc -l <"$workdir/sparse.ours")" -eq 3
+while read -r name; do
+    "$driver" --remove "$image" "/sparse/$name" >/dev/null
+done <"$workdir/sparse.ours"
+no_empty_index_buffer /sparse
+"$driver" --remove-dir "$image" /sparse
 
 # Every cluster except permanent chunked $MFT growth must be free again.
 final=$(free_clusters)
