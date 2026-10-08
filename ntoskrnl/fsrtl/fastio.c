@@ -724,7 +724,7 @@ FsRtlCopyWrite(IN PFILE_OBJECT FileObject,
             _SEH2_END;
 
             /* Reset the top component */
-            PsGetCurrentThread()->TopLevelIrp = FSRTL_FAST_IO_TOP_LEVEL_IRP;
+            PsGetCurrentThread()->TopLevelIrp = 0;
 
             /* Did the operation suceeded */
             if (Result)

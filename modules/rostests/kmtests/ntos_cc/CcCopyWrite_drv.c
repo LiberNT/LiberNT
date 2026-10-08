@@ -193,6 +193,34 @@ reset_read(void)
 
 static
 VOID
+Test_FsRtlCopyWrite(PFILE_OBJECT FileObject, BOOLEAN Wait)
+{
+    PTEST_FCB Fcb = FileObject->FsContext;
+    LARGE_INTEGER Offset;
+    IO_STATUS_BLOCK IoStatus;
+    ERESOURCE Resource;
+    CHAR Buffer[10];
+    BOOLEAN Ret;
+
+    RtlFillMemory(Buffer, sizeof(Buffer), 0xAC);
+    ExInitializeResourceLite(&Resource);
+    Fcb->Header.Resource = &Resource;
+    Fcb->Header.IsFastIoPossible = FastIoIsPossible;
+
+    Offset.QuadPart = 0;
+    ok_eq_pointer(IoGetTopLevelIrp(), NULL);
+    Ret = FsRtlCopyWrite(FileObject, &Offset, sizeof(Buffer), Wait, 0, Buffer, &IoStatus, TestDeviceObject);
+    ok(Ret, "FsRtlCopyWrite(Wait = %u) failed\n", Wait);
+    ok_eq_pointer(IoGetTopLevelIrp(), NULL);
+    IoSetTopLevelIrp(NULL);
+
+    Fcb->Header.IsFastIoPossible = FastIoIsNotPossible;
+    Fcb->Header.Resource = NULL;
+    ExDeleteResourceLite(&Resource);
+}
+
+static
+VOID
 Test_CcCopyWrite(PFILE_OBJECT FileObject)
 {
 
@@ -268,6 +296,9 @@ Test_CcCopyWrite(PFILE_OBJECT FileObject)
     KmtEndSeh(STATUS_SUCCESS);
     ok_bool_true(Ret, "CcCopyWrite should succeed\n");
     ok_read_called(PAGE_SIZE * 2, PAGE_SIZE);
+
+    Test_FsRtlCopyWrite(FileObject, FALSE);
+    Test_FsRtlCopyWrite(FileObject, TRUE);
 }
 
 static
