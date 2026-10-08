@@ -652,6 +652,7 @@ NTSTATUS
 NTAPI
 KeWaitForAlertByThreadId(
     IN PVOID Address,
+    IN KPROCESSOR_MODE WaitMode,
     IN PLARGE_INTEGER Timeout OPTIONAL
 );
 

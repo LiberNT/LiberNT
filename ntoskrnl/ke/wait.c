@@ -700,6 +700,7 @@ NoWait:
 NTSTATUS
 NTAPI
 KeWaitForAlertByThreadId(IN PVOID Address,
+                         IN KPROCESSOR_MODE WaitMode,
                          IN PLARGE_INTEGER Timeout OPTIONAL)
 {
     PKTHREAD Thread = KeGetCurrentThread();
@@ -730,10 +731,10 @@ WaitStart:
     Thread->WaitStatus = STATUS_SUCCESS;
     Thread->Alertable = FALSE;
     Thread->WaitReason = WrAlertByThreadId;
-    Thread->WaitMode = KernelMode;
+    Thread->WaitMode = WaitMode;
     KxChainTimerOnly();
     Thread->WaitListEntry.Flink = NULL;
-    Swappable = KiCheckThreadStackSwap(Thread, KernelMode);
+    Swappable = KiCheckThreadStackSwap(Thread, WaitMode);
     Thread->WaitTime = KeTickCount.LowPart;
 
     /* Arm the timeout timer, if one was supplied */
@@ -783,6 +784,9 @@ WaitStart:
                 WaitStatus = STATUS_ALERTED;
                 goto NoWait;
             }
+
+            WaitStatus = KiCheckAlertability(Thread, FALSE, WaitMode);
+            if (WaitStatus != STATUS_WAIT_0) goto NoWait;
 
             /* If a timeout was given, check whether it already expired */
             if (Timeout)

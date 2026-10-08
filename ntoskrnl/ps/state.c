@@ -391,7 +391,7 @@ NtWaitForAlertByThreadId(IN PVOID Address,
     }
 
     /* Block until alerted by thread id or until the timeout elapses */
-    return KeWaitForAlertByThreadId(Address, Timeout);
+    return KeWaitForAlertByThreadId(Address, PreviousMode, Timeout);
 }
 
 NTSTATUS
