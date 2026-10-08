@@ -530,6 +530,7 @@ TestSymlinks(VOID)
     SysDir.Length = sizeof(L"\\??\\C:") - sizeof(UNICODE_NULL);
     SysDir.MaximumLength = FileObject->FileName.Length + sizeof(L"\\??\\C:");
     RtlCopyMemory(SysDir.Buffer, L"\\??\\C:", sizeof(L"\\??\\C:") - sizeof(UNICODE_NULL));
+    SysDir.Buffer[4] = SharedUserData->NtSystemRoot[0];
     RtlAppendUnicodeStringToString(&SysDir, &FileObject->FileName);
 
     Foobar.Buffer = ExAllocatePool(NonPagedPool, FileObject->FileName.Length + sizeof(L"\\foobar.exe"));
