@@ -102,6 +102,12 @@ KdQueryTransportKey(
     _In_ ULONG Size
 );
 
+BOOLEAN
+NTAPI
+KdDisplayTransportKey(
+    _In_ BOOLEAN DarkPalette
+);
+
 VOID
 NTAPI
 KdSystemRootAvailable(

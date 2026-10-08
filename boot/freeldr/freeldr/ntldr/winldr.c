@@ -1593,6 +1593,8 @@ LoadAndBootWindows(
     /* Post-process the boot options */
     NtLdrNormalizeOptions(BootOptions);
     TRACE("BootOptions(2): '%s'\n", BootOptions);
+    if (NtLdrGetOption(BootOptions, "DEBUGPORT=NET"))
+        UiDrawText(0, 0, "Network assistance", ATTR(COLOR_WHITE, COLOR_BLACK));
 
 #if defined(UEFIBOOT) && defined(FREELDR_HTTP_BOOT)
     /* HTTP boot: download the ISO and initialize it as the boot ramdisk. */

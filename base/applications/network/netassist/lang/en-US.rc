@@ -1,0 +1,33 @@
+/*
+ * PROJECT:     LiberNT Network Assistance
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     English resources
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+IDD_ASSIST DIALOGEX 0, 0, 264, 204
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
+CAPTION "Network Assistance"
+FONT 9, "MS Shell Dlg"
+BEGIN
+    ICON IDI_ASSIST, -1, 12, 12, 20, 20
+    LTEXT "", IDC_STATE, 40, 16, 212, 12
+    LTEXT "", IDC_DETAIL, 12, 40, 240, 82
+    EDITTEXT IDC_KEY, 12, 126, 240, 14, ES_CENTER | ES_READONLY | ES_AUTOHSCROLL
+    PUSHBUTTON "&Copy key", IDC_COPY, 12, 146, 64, 14
+    CONTROL "Contact the team first: <a href=""https://discord.gg/BpcKg7FZ2"">Discord</a> or <a href=""https://matrix.to/#/#libernt:matrix.org"">Matrix</a>.", IDC_LINKS, "SysLink", WS_TABSTOP, 12, 168, 240, 10
+    DEFPUSHBUTTON "Close", IDCANCEL, 188, 182, 64, 14
+END
+
+STRINGTABLE
+BEGIN
+    IDS_ON "Network assistance is on"
+    IDS_ON_DETAIL "This boot was started with network assistance. A LiberNT developer who has the key below can connect to the kernel debugger of this machine and examine it.\n\nSend the key in a private message to the developer who is helping you. It is valid until the next restart."
+    IDS_OFF "Network assistance is off"
+    IDS_OFF_DETAIL "A LiberNT developer can examine a failure on this machine over the network when it is started with network assistance:\n\n1. Restart the computer.\n2. In the boot menu, press F8.\n3. Choose ""Boot with network assistance"".\n4. Start this program again and send the key to the developer."
+    IDS_DENIED_DETAIL "This boot was started with network assistance, but this account is not allowed to read the key. The key is also shown in the corner of the desktop."
+    IDS_COPIED "Copied"
+    IDS_LINK_FAILED "This address could not be opened here. Open it on another device:\n\n%s"
+END

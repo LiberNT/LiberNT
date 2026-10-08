@@ -118,6 +118,78 @@ KdQueryTransportKey(
     return KdpNetReady ? KdpNetInterface.QueryKey(Buffer, Size) : 0;
 }
 
+BOOLEAN
+NTAPI
+KdDisplayTransportKey(
+    _In_ BOOLEAN DarkPalette)
+{
+    static const CHAR Label[] = "Network assistance key ";
+    CHAR Text[sizeof(Label) + 40];
+    VID_DISPLAY_INFO DisplayInfo;
+
+    RtlCopyMemory(Text, Label, sizeof(Label));
+    if (!KdQueryTransportKey(Text + sizeof(Label) - 1, sizeof(Text) - sizeof(Label) + 1))
+        return FALSE;
+
+    if (!InbvIsBootDriverInstalled() || InbvGetDisplayState() != INBV_DISPLAY_STATE_OWNED)
+        return FALSE;
+
+    if (DarkPalette)
+    {
+        InbvQueryDisplayInfo(&DisplayInfo);
+        InbvSolidColorFill(0, 0, (ULONG)strlen(Text) * DisplayInfo.CharacterWidth - 1,
+                           DisplayInfo.CharacterHeight - 1, BV_COLOR_BLACK);
+    }
+
+    InbvAcquireLock();
+    VidDisplayStringXY(Text, 0, 0, DarkPalette);
+    InbvReleaseLock();
+    return TRUE;
+}
+
+static
+VOID
+KdpNetPublishKey(VOID)
+{
+    static UNICODE_STRING KeyName = RTL_CONSTANT_STRING(
+        L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\NetworkAssistance");
+    static UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"Key");
+    SECURITY_DESCRIPTOR SecurityDescriptor;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UCHAR DaclBuffer[128];
+    PACL Dacl = (PACL)DaclBuffer;
+    WCHAR Text[40];
+    CHAR Key[40];
+    HANDLE Handle;
+    ULONG Length, i;
+
+    Length = KdQueryTransportKey(Key, sizeof(Key));
+    if (!Length)
+        return;
+
+    for (i = 0; i <= Length; i++)
+        Text[i] = (UCHAR)Key[i];
+
+    if (!NT_SUCCESS(RtlCreateAcl(Dacl, sizeof(DaclBuffer), ACL_REVISION)) ||
+        !NT_SUCCESS(RtlAddAccessAllowedAce(Dacl, ACL_REVISION, KEY_ALL_ACCESS, SeLocalSystemSid)) ||
+        !NT_SUCCESS(RtlAddAccessAllowedAce(Dacl, ACL_REVISION, KEY_ALL_ACCESS, SeAliasAdminsSid)) ||
+        !NT_SUCCESS(RtlAddAccessAllowedAce(Dacl, ACL_REVISION, KEY_READ, SeInteractiveSid)) ||
+        !NT_SUCCESS(RtlCreateSecurityDescriptor(&SecurityDescriptor, SECURITY_DESCRIPTOR_REVISION)) ||
+        !NT_SUCCESS(RtlSetDaclSecurityDescriptor(&SecurityDescriptor, TRUE, Dacl, FALSE)))
+    {
+        return;
+    }
+
+    SecurityDescriptor.Control |= SE_DACL_PROTECTED;
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, &SecurityDescriptor);
+    if (!NT_SUCCESS(ZwCreateKey(&Handle, KEY_SET_VALUE, &ObjectAttributes, 0, NULL, REG_OPTION_VOLATILE, NULL)))
+        return;
+
+    ZwSetValueKey(Handle, &ValueName, 0, REG_SZ, Text, (Length + 1) * sizeof(WCHAR));
+    ZwClose(Handle);
+}
+
 NTSTATUS
 NTAPI
 KdpNetInit(
@@ -162,6 +234,10 @@ KdpNetInit(
         KdpNetReady = TRUE;
         HalDisplayString("   Network debugging enabled\r\n");
         KdpNetDisplayStatus();
+        KdDisplayTransportKey(SharedUserData->NtProductType == NtProductWinNt &&
+                              strstr(KeLoaderBlock->LoadOptions, "SOS") &&
+                              !strstr(KeLoaderBlock->LoadOptions, "NOGUIBOOT"));
+        KdpNetPublishKey();
         KdQueryTransportStatus(Status, sizeof(Status));
         DbgPrint("%s\n", Status);
     }

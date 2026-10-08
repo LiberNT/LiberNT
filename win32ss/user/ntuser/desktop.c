@@ -302,6 +302,46 @@ InitDesktopImpl(VOID)
     return STATUS_SUCCESS;
 }
 
+static VOID
+IntQueryNetworkAssistanceKey(OUT PWSTR pwszText,
+                             IN SIZE_T cchText)
+{
+    WCHAR KeyBuffer[40];
+    UNICODE_STRING KeyString;
+    RTL_QUERY_REGISTRY_TABLE QueryTable[] =
+    {
+        {
+            NULL,
+            RTL_QUERY_REGISTRY_DIRECT,
+            L"Key",
+            &KeyString,
+            REG_NONE, NULL, 0
+        },
+
+        {0}
+    };
+
+    pwszText[0] = UNICODE_NULL;
+    RtlInitEmptyUnicodeString(&KeyString, KeyBuffer, sizeof(KeyBuffer));
+    if (!NT_SUCCESS(RtlQueryRegistryValues(RTL_REGISTRY_CONTROL,
+                                           L"NetworkAssistance",
+                                           QueryTable,
+                                           NULL,
+                                           NULL)) ||
+        KeyString.Length == 0)
+    {
+        return;
+    }
+
+    if (!NT_SUCCESS(RtlStringCchPrintfW(pwszText,
+                                        cchText,
+                                        L"Network assistance key %wZ",
+                                        &KeyString)))
+    {
+        pwszText[0] = UNICODE_NULL;
+    }
+}
+
 static NTSTATUS
 GetSystemVersionString(OUT PWSTR pwszzVersion,
                        IN SIZE_T cchDest,
@@ -1885,6 +1925,8 @@ static BOOL
 IntPaintDesktopContent(HDC hDC)
 {
     static WCHAR s_wszSafeMode[] = L"Safe Mode"; // FIXME: Localize!
+    static WCHAR s_wszAssistance[64];
+    static BOOLEAN s_AssistanceQueried;
 
     RECTL Rect;
     HBRUSH DesktopBrush, PreviousBrush;
@@ -2131,13 +2173,19 @@ IntPaintDesktopContent(HDC hDC)
     /*
      * Display the system version on the desktop background
      */
-    if (InSafeMode || g_AlwaysDisplayVersion || g_PaintDesktopVersion)
+    if (!s_AssistanceQueried)
+    {
+        s_AssistanceQueried = TRUE;
+        IntQueryNetworkAssistanceKey(s_wszAssistance, ARRAYSIZE(s_wszAssistance));
+    }
+
+    if (InSafeMode || g_AlwaysDisplayVersion || g_PaintDesktopVersion || *s_wszAssistance)
     {
         NTSTATUS Status;
         static WCHAR wszzVersion[1024] = L"\0";
 
         /* Only used in normal mode */
-        static POLYTEXTW VerStrs[3] = {{0},{0},{0}};
+        static POLYTEXTW VerStrs[4] = {{0},{0},{0},{0}};
         INT i = 0;
         SIZE_T len;
 
@@ -2212,11 +2260,16 @@ IntPaintDesktopContent(HDC hDC)
             if (!InSafeMode && NT_SUCCESS(Status) && *wszzVersion)
             {
                 PWCHAR pstr = wszzVersion;
-                for (i = 0; (i < ARRAYSIZE(VerStrs)) && *pstr; ++i)
+                for (i = 0; (i < ARRAYSIZE(VerStrs) - 1) && *pstr; ++i)
                 {
                     VerStrs[i].n = lstrlenW(pstr);
                     VerStrs[i].lpstr = pstr;
                     pstr += (VerStrs[i].n + 1);
+                }
+                if (*s_wszAssistance)
+                {
+                    VerStrs[i].n = lstrlenW(s_wszAssistance);
+                    VerStrs[i].lpstr = s_wszAssistance;
                 }
             }
         }
@@ -2280,6 +2333,14 @@ IntPaintDesktopContent(HDC hDC)
 
                 IntGdiSetTextAlign(hDC, TA_CENTER | TA_TOP);
                 GreExtTextOutW(hDC, (Rect.right + Rect.left)/2, Rect.top + 3, 0, NULL, wszzVersion, len, NULL, 0);
+                if (*s_wszAssistance)
+                {
+                    SIZE Size = {0, 0};
+
+                    GreGetTextExtentW(hDC, wszzVersion, (INT)len, &Size, 1);
+                    GreExtTextOutW(hDC, (Rect.right + Rect.left)/2, Rect.top + 3 + Size.cy, 0, NULL,
+                                   s_wszAssistance, lstrlenW(s_wszAssistance), NULL, 0);
+                }
             }
         }
 

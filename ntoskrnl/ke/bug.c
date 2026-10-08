@@ -1378,6 +1378,10 @@ KiDisplayBlueScreen(IN ULONG MessageId,
             InbvInstallDisplayStringFilter(NULL);
             InbvEnableDisplayString(TRUE);
             InbvSetScrollRegion(0, 0, DisplayInfo.Width - 1, DisplayInfo.Height - 1);
+#ifndef _WINKD_
+            if (KdDisplayTransportKey(FALSE))
+                InbvSetScrollRegion(0, DisplayInfo.CharacterHeight, DisplayInfo.Width - 1, DisplayInfo.Height - 1);
+#endif
         }
     }
 
