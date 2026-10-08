@@ -255,7 +255,9 @@ KiFindStealableThreadLocked(
             !Thread->ProcessReadyQueue &&
             (Thread->NextProcessor == Source->Number) &&
             (Thread->Priority == Priority) &&
-            (KiThreadAffinityMask(Thread) & AFFINITY_MASK(TargetCpu)))
+            (KiThreadAffinityMask(Thread) & AFFINITY_MASK(TargetCpu)) &&
+            ((Thread->WaitReason != WrDispatchInt) ||
+             (Thread->WaitTime != KeTickCount.LowPart)))
         {
             return Thread;
         }
