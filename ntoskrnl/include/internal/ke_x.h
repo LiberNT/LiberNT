@@ -1416,6 +1416,21 @@ KiUndoActivateWaiterQueue(IN PKTHREAD Thread)
     }
 }
 
+FORCEINLINE
+BOOLEAN
+KxIsThreadWaitInterrupted(IN PKTHREAD Thread)
+{
+    if (Thread->Alertable)
+    {
+        return Thread->Alerted[(UCHAR)Thread->WaitMode] ||
+               ((Thread->WaitMode != KernelMode) &&
+                !IsListEmpty(&Thread->ApcState.ApcListHead[UserMode])) ||
+               Thread->Alerted[KernelMode];
+    }
+
+    return (Thread->WaitMode != KernelMode) && Thread->ApcState.UserApcPending;
+}
+
 //
 // Begins the wait publication: takes the thread lock and re-checks for a
 // late kernel APC, serializing APC insertion (KiInsertQueueApc) with the
@@ -1427,7 +1442,8 @@ BOOLEAN
 KxTryBeginThreadWait(IN PKTHREAD Thread)
 {
     KiAcquireThreadLock(Thread);
-    if (KiIsKernelApcDeliverable(Thread, Thread->WaitIrql))
+    if (KiIsKernelApcDeliverable(Thread, Thread->WaitIrql) ||
+        KxIsThreadWaitInterrupted(Thread))
     {
         KiReleaseThreadLock(Thread);
         return FALSE;
