@@ -65,13 +65,33 @@ CompletionPortThread(
 }
 
 static
+DWORD
+WINAPI
+CompletionPortExThread(
+    _In_ PVOID Parameter)
+{
+    PBLOCKED_WAITER_CONTEXT Context = Parameter;
+    OVERLAPPED_ENTRY Entry;
+    ULONG Removed;
+
+    SetEvent(Context->ReadyEvent);
+    GetQueuedCompletionStatusEx(Context->CompletionPort,
+                                &Entry,
+                                1,
+                                &Removed,
+                                INFINITE,
+                                FALSE);
+    return 3;
+}
+
+static
 DECLSPEC_NORETURN
 VOID
 ExitWithBlockedWaiters(VOID)
 {
-    BLOCKED_WAITER_CONTEXT Contexts[2];
-    HANDLE ReadyEvents[2];
-    HANDLE Threads[2];
+    BLOCKED_WAITER_CONTEXT Contexts[3];
+    HANDLE ReadyEvents[3];
+    HANDLE Threads[3];
     DWORD WaitResult;
     HMODULE Ntdll;
 
@@ -81,15 +101,23 @@ ExitWithBlockedWaiters(VOID)
                                                                           "RtlWaitOnAddress");
     ReadyEvents[0] = CreateEventW(NULL, TRUE, FALSE, NULL);
     ReadyEvents[1] = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ReadyEvents[2] = CreateEventW(NULL, TRUE, FALSE, NULL);
     Contexts[0].ReadyEvent = ReadyEvents[0];
     Contexts[1].ReadyEvent = ReadyEvents[1];
+    Contexts[2].ReadyEvent = ReadyEvents[2];
     Contexts[1].CompletionPort = CreateIoCompletionPort(INVALID_HANDLE_VALUE,
+                                                        NULL,
+                                                        0,
+                                                        1);
+    Contexts[2].CompletionPort = CreateIoCompletionPort(INVALID_HANDLE_VALUE,
                                                         NULL,
                                                         0,
                                                         1);
     if (!ReadyEvents[0] ||
         !ReadyEvents[1] ||
+        !ReadyEvents[2] ||
         !Contexts[1].CompletionPort ||
+        !Contexts[2].CompletionPort ||
         !RtlWaitOnAddressFunction)
     {
         ExitProcess(780);
@@ -107,7 +135,13 @@ ExitWithBlockedWaiters(VOID)
                               &Contexts[1],
                               0,
                               NULL);
-    if (!Threads[0] || !Threads[1])
+    Threads[2] = CreateThread(NULL,
+                              0,
+                              CompletionPortExThread,
+                              &Contexts[2],
+                              0,
+                              NULL);
+    if (!Threads[0] || !Threads[1] || !Threads[2])
         ExitProcess(781);
 
     WaitResult = WaitForMultipleObjects(_countof(ReadyEvents),
