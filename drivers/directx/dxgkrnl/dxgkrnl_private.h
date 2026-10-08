@@ -992,8 +992,8 @@ struct _DXGKRNL_ADAPTER
     /* KMTQAITYPE_UMOPENGLINFO answer cached after the first successful
      * registry query; the adapter's ICD registration does not change while
      * it is started and the query is on the ICD's per-present path. */
-    D3DKMT_OPENGLINFO           CachedOpenGlInfo;
-    volatile LONG               OpenGlInfoCached;
+    D3DKMT_OPENGLINFO           CachedOpenGlInfo[2];
+    volatile LONG               OpenGlInfoCached[2];
     /* TDR diagnostics: paging-buffer build accounting per operation type. */
     volatile LONG               PagingBuildCount[16];
     volatile LONG               PagingZeroByteBuildCount[16];

@@ -855,6 +855,16 @@ DxgkpFreeRegistryValue(
         ExFreePoolWithTag(ValueInformation, TAG_DXGK_REGISTRY);
 }
 
+static BOOLEAN
+DxgkpIsWow64Caller(VOID)
+{
+#if defined(_WIN64)
+    return IoIs32bitProcess(NULL) ? TRUE : FALSE;
+#else
+    return FALSE;
+#endif
+}
+
 static NTSTATUS
 DxgkpQueryDriverDwordValue(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -3334,7 +3344,8 @@ DxgkpQueryAdapterInfoCaptured(
                 DXGKP_QUERY_RETURN(STATUS_INVALID_PARAMETER);
 
             Status = DxgkpQueryDriverStringValue(Adapter,
-                                                 L"UserModeDriverName",
+                                                 DxgkpIsWow64Caller() ? L"UserModeDriverNameWow"
+                                                                      : L"UserModeDriverName",
                                                 (ULONG)DriverName.Version,
                                                 DriverName.UmdFileName,
                                                 ARRAYSIZE(DriverName.UmdFileName));
@@ -3379,6 +3390,7 @@ DxgkpQueryAdapterInfoCaptured(
         {
             D3DKMT_OPENGLINFO *pOpenGlInfo;
             D3DKMT_OPENGLINFO OpenGlInfo;
+            BOOLEAN Wow64 = DxgkpIsWow64Caller();
             NTSTATUS Status;
 
             if (pQueryAdapterInfo->pPrivateDriverData == NULL ||
@@ -3389,17 +3401,17 @@ DxgkpQueryAdapterInfoCaptured(
 
             pOpenGlInfo = (D3DKMT_OPENGLINFO *)pQueryAdapterInfo->pPrivateDriverData;
             RtlZeroMemory(&OpenGlInfo, sizeof(OpenGlInfo));
-            if (InterlockedCompareExchange(&Adapter->OpenGlInfoCached, 0, 0) != 0)
+            if (InterlockedCompareExchange(&Adapter->OpenGlInfoCached[Wow64], 0, 0) != 0)
             {
                 /* The registry answer is stable for a started adapter; the
                  * ICD asks on every present, so serve it from the cache. */
-                OpenGlInfo = Adapter->CachedOpenGlInfo;
+                OpenGlInfo = Adapter->CachedOpenGlInfo[Wow64];
             }
             else
             {
 
                 Status = DxgkpQueryDriverStringValue(Adapter,
-                                                     L"OpenGLDriverName",
+                                                     Wow64 ? L"OpenGLDriverNameWow" : L"OpenGLDriverName",
                                                      0,
                                                     OpenGlInfo.UmdOpenGlIcdFileName,
                                                     ARRAYSIZE(OpenGlInfo.UmdOpenGlIcdFileName));
@@ -3432,20 +3444,20 @@ DxgkpQueryAdapterInfoCaptured(
                 }
 
                 Status = DxgkpQueryDriverDwordValue(Adapter,
-                                                    L"OpenGLVersion",
+                                                    Wow64 ? L"OpenGLVersionWow" : L"OpenGLVersion",
                                                    &OpenGlInfo.Version);
                 if (!NT_SUCCESS(Status))
                     OpenGlInfo.Version = 0;
 
                 Status = DxgkpQueryDriverDwordValue(Adapter,
-                                                    L"OpenGLFlags",
+                                                    Wow64 ? L"OpenGLFlagsWow" : L"OpenGLFlags",
                                                    &OpenGlInfo.Flags);
                 if (!NT_SUCCESS(Status))
                     OpenGlInfo.Flags = 0;
 
-                Adapter->CachedOpenGlInfo = OpenGlInfo;
+                Adapter->CachedOpenGlInfo[Wow64] = OpenGlInfo;
                 KeMemoryBarrier();
-                InterlockedExchange(&Adapter->OpenGlInfoCached, 1);
+                InterlockedExchange(&Adapter->OpenGlInfoCached[Wow64], 1);
             }
             _SEH2_TRY
             {
