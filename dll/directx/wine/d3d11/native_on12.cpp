@@ -18,6 +18,8 @@ extern "C" HRESULT d3d11_native_device_attach_on12(ID3D11Device *device, IUnknow
 
 static const GUID NativeOn12ResourceGuid =
     { 0x6f1e5a3c, 0x2b7d, 0x4c41, { 0x9a, 0x0e, 0x51, 0x8d, 0x3c, 0x72, 0xb4, 0x16 } };
+static const GUID Native12LegacyShareGuid =
+    { 0xb76833be, 0x2939, 0x4a19, { 0x81, 0x2a, 0xc4, 0xd6, 0xb4, 0x80, 0x1a, 0x6c } };
 
 class NativeOn12 final : public ID3D11On12Device1
 {
@@ -66,20 +68,28 @@ public:
         *out = NULL;
         if (FAILED(resource->QueryInterface(IID_ID3D12Resource, reinterpret_cast<void **>(&resource12))))
             return E_INVALIDARG;
-        hr = device12->CreateSharedHandle(resource12, NULL, GENERIC_ALL, NULL, &shared);
-        if (FAILED(hr))
+        UINT legacy = 0, legacy_size = sizeof(legacy);
+        if (SUCCEEDED(resource12->GetPrivateData(Native12LegacyShareGuid, &legacy_size, &legacy)) && legacy)
         {
-            FIXME("Only shareable Direct3D 12 resources can be wrapped, hr %#lx.\n", hr);
-            resource12->Release();
-            return hr;
+            hr = device11->OpenSharedResource(reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(legacy)), iid, out);
         }
-        hr = device11->QueryInterface(IID_ID3D11Device1, reinterpret_cast<void **>(&device1));
-        if (SUCCEEDED(hr))
+        else
         {
-            hr = device1->OpenSharedResource1(shared, iid, out);
-            device1->Release();
+            hr = device12->CreateSharedHandle(resource12, NULL, GENERIC_ALL, NULL, &shared);
+            if (FAILED(hr))
+            {
+                FIXME("Only shareable Direct3D 12 resources can be wrapped, hr %#lx.\n", hr);
+                resource12->Release();
+                return hr;
+            }
+            hr = device11->QueryInterface(IID_ID3D11Device1, reinterpret_cast<void **>(&device1));
+            if (SUCCEEDED(hr))
+            {
+                hr = device1->OpenSharedResource1(shared, iid, out);
+                device1->Release();
+            }
+            CloseHandle(shared);
         }
-        CloseHandle(shared);
         if (SUCCEEDED(hr))
         {
             ID3D11DeviceChild *child = NULL;

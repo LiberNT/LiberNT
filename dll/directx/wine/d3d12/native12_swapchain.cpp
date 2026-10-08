@@ -14,6 +14,9 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d12);
 
+static const GUID Native12LegacyShareGuid =
+    { 0xb76833be, 0x2939, 0x4a19, { 0x81, 0x2a, 0xc4, 0xd6, 0xb4, 0x80, 0x1a, 0x6c } };
+
 extern "C" DWORD_PTR NTAPI NtUserCallOneParam(DWORD_PTR, DWORD);
 
 #define NATIVE12_SWAPCHAIN_BUFFERS 16
@@ -412,6 +415,8 @@ HRESULT Native12SwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requeste
         if (FAILED(hr)) break;
         hr = device->get_resource_handles(device->runtime_device, created[i]->identity, NULL, &created_shares[i]);
         if (SUCCEEDED(hr) && !created_shares[i]) hr = E_FAIL;
+        if (SUCCEEDED(hr))
+            hr = created[i]->SetPrivateData(Native12LegacyShareGuid, sizeof(created_shares[i]), &created_shares[i]);
         if (FAILED(hr)) break;
         created_events[i] = CreateEventW(NULL, TRUE, TRUE, NULL);
         if (!created_events[i]) hr = HRESULT_FROM_WIN32(GetLastError());
