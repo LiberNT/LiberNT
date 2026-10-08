@@ -364,6 +364,10 @@ NtCreatePagingFile(
              PagingFile->Core.SlotCount >> (20 - PAGE_SHIFT), PagingFile->MaximumSlots >> (20 - PAGE_SHIFT));
 
     KeReleaseGuardedMutex(&MiPagingFileCreationLock);
+
+    if (PagingFile->FileObject->DeviceObject->Flags & DO_SYSTEM_BOOT_PARTITION)
+        IoInitializeCrashDump(PagingFile->FileHandle);
+
     return STATUS_SUCCESS;
 }
 
