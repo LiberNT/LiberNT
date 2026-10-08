@@ -721,7 +721,7 @@ NtRemoveIoCompletionEx(IN HANDLE IoCompletionHandle,
     if (!NT_SUCCESS(Status))
         return Status;
 
-    WaitMode = Alertable ? PreviousMode : KernelMode;
+    WaitMode = PreviousMode;
 
     if (Alertable && PreviousMode != KernelMode)
     {
