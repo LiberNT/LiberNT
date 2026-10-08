@@ -2915,6 +2915,7 @@ HRESULT NativeDevice::CreateTexture(const D3D11_TEXTURE2D_DESC *input,
     if (present && !primary) args.BindFlags |= D3D10_DDI_BIND_SHADER_RESOURCE;
     args.MapFlags = input->CPUAccessFlags >> 16;
     args.MiscFlags = NativeDriverMiscFlags(input->MiscFlags);
+    if (present && !primary) args.MiscFlags |= D3D10_DDI_RESOURCE_MISC_SHARED;
     args.Format = input->Format;
     args.SampleDesc = input->SampleDesc;
     args.MipLevels = mip_count;
@@ -5385,6 +5386,7 @@ public:
     NativeTexture2D *transports[3] = {};
     UINT transport_frame[3] = {}, transport_fills = 0;
     NativeTexture2D *transport = NULL; /* the latest frame, one of transports */
+    NativeTexture2D *resolved = NULL;
     RECT frame_damage[8] = {};
     RECT back_damage[16] = {};
     UINT back_presents = 0;
@@ -5415,6 +5417,13 @@ public:
     bool primary = false;
     bool composition = false;
     bool transport_valid = false;
+    bool fullscreen_layout = false;
+    bool fullscreen_mode = false;
+    RECT windowed_rect = {};
+    LONG windowed_style = 0, windowed_exstyle = 0;
+    WCHAR fullscreen_device[CCHDEVICENAME] = {};
+    HRESULT EnterFullscreen(IDXGIOutput *, UINT, UINT, const DXGI_RATIONAL &);
+    void LeaveFullscreen();
     bool device_child = false;
     DXGI_FORMAT publish_format = DXGI_FORMAT_UNKNOWN;
 
@@ -5426,6 +5435,7 @@ public:
     }
     ~NativeSwapChain()
     {
+        LeaveFullscreen();
         DrainPublishes();
         DumpTrace();
         RetirePublication();
@@ -5437,6 +5447,7 @@ public:
         for (UINT i = 0; i < 16; ++i) if (publish_records[i].completion) CloseHandle(publish_records[i].completion);
         if (publishes_drained) CloseHandle(publishes_drained);
         for (UINT i = 0; i < 3; ++i) if (transports[i]) transports[i]->Drop();
+        if (resolved) resolved->Drop();
         for (UINT i = 0; i < 16; ++i) if (buffers[i]) buffers[i]->Drop();
         factory->Release();
         if (device_child) device->ChildRelease();
@@ -5515,15 +5526,28 @@ public:
     }
     HRESULT STDMETHODCALLTYPE SetFullscreenState(BOOL fullscreen, IDXGIOutput *output) override
     {
-        if (composition) return DXGI_ERROR_INVALID_CALL;
-        if (fullscreen || output) return DXGI_ERROR_UNSUPPORTED;
-        return S_OK;
+        if (composition || (!fullscreen && output)) return DXGI_ERROR_INVALID_CALL;
+        if (primary) return fullscreen ? DXGI_ERROR_UNSUPPORTED : S_OK;
+        if (!fullscreen)
+        {
+            LeaveFullscreen();
+            fullscreen_desc.Windowed = TRUE;
+            return S_OK;
+        }
+        if (!fullscreen_desc.Windowed) return S_OK;
+        HRESULT hr = EnterFullscreen(output, desc.Width, desc.Height, fullscreen_desc.RefreshRate);
+        if (SUCCEEDED(hr)) fullscreen_desc.Windowed = FALSE;
+        return hr;
     }
     HRESULT STDMETHODCALLTYPE GetFullscreenState(BOOL *fullscreen, IDXGIOutput **output) override
     {
         if (composition) return DXGI_ERROR_INVALID_CALL;
         if (fullscreen) *fullscreen = !fullscreen_desc.Windowed;
-        if (output) *output = NULL;
+        if (output)
+        {
+            *output = NULL;
+            if (!fullscreen_desc.Windowed) GetContainingOutput(output);
+        }
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetDesc(DXGI_SWAP_CHAIN_DESC *out) override
@@ -5547,7 +5571,16 @@ public:
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE ResizeBuffers(UINT, UINT, UINT, DXGI_FORMAT, UINT) override;
-    HRESULT STDMETHODCALLTYPE ResizeTarget(const DXGI_MODE_DESC *) override { return E_NOTIMPL; }
+    HRESULT STDMETHODCALLTYPE ResizeTarget(const DXGI_MODE_DESC *mode) override
+    {
+        if (!mode || composition || primary) return DXGI_ERROR_INVALID_CALL;
+        if (!fullscreen_desc.Windowed)
+            return EnterFullscreen(NULL, mode->Width, mode->Height, mode->RefreshRate);
+        RECT rect = {0, 0, static_cast<LONG>(mode->Width), static_cast<LONG>(mode->Height)};
+        AdjustWindowRectEx(&rect, GetWindowLongW(window, GWL_STYLE), FALSE, GetWindowLongW(window, GWL_EXSTYLE));
+        return SetWindowPos(window, NULL, 0, 0, rect.right - rect.left, rect.bottom - rect.top,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) ? S_OK : DXGI_ERROR_INVALID_CALL;
+    }
     HRESULT STDMETHODCALLTYPE GetContainingOutput(IDXGIOutput **out) override
     {
         if (!out) return E_INVALIDARG;
@@ -6024,7 +6057,13 @@ HRESULT NativeSwapChain::FillTransport(UINT flags, const DXGI_PRESENT_PARAMETERS
     for (UINT past = held + 1; past < frame && !EqualRect(&older, &full); ++past)
         UnionRect(&older, &older, &frame_damage[past % ARRAYSIZE(frame_damage)]);
     NativeTexture2D *target = transports[index];
+    NativeTexture2D *source = buffers[0];
     device->BeginCall();
+    if (resolved)
+    {
+        device->context->ResolveSubresource(resolved, 0, buffers[0], 0, desc.Format);
+        source = resolved;
+    }
     if (NativeFormatFamily(publish_format) != NativeFormatFamily(desc.Format))
     {
         if (!device->dxgi_functions.pfnBlt) return DXGI_ERROR_UNSUPPORTED;
@@ -6033,14 +6072,14 @@ HRESULT NativeSwapChain::FillTransport(UINT flags, const DXGI_PRESENT_PARAMETERS
         blt.hDstResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(target->handle.pDrvPrivate);
         blt.DstRight = desc.Width;
         blt.DstBottom = desc.Height;
-        blt.hSrcResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(buffers[0]->handle.pDrvPrivate);
+        blt.hSrcResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(source->handle.pDrvPrivate);
         blt.Flags.Convert = 1;
         blt.Rotate = DXGI_DDI_MODE_ROTATION_IDENTITY;
         HRESULT hr = device->dxgi_functions.pfnBlt(&blt);
         if (FAILED(hr)) return hr;
     }
     else if (EqualRect(&older, &full) || EqualRect(&damage, &full))
-        device->context->CopyResource(target, buffers[0]);
+        device->context->CopyResource(target, source);
     else
     {
         const RECT *rects = parameters->pDirtyRects;
@@ -6050,7 +6089,7 @@ HRESULT NativeSwapChain::FillTransport(UINT flags, const DXGI_PRESENT_PARAMETERS
             if (IsRectEmpty(&r)) continue;
             D3D11_BOX box = {static_cast<UINT>(r.left), static_cast<UINT>(r.top), 0,
                             static_cast<UINT>(r.right), static_cast<UINT>(r.bottom), 1};
-            device->context->CopySubresourceRegion(target, 0, r.left, r.top, 0, buffers[0], 0, &box);
+            device->context->CopySubresourceRegion(target, 0, r.left, r.top, 0, source, 0, &box);
         }
     }
     if (FAILED(device->operation_error)) return device->operation_error;
@@ -6284,8 +6323,14 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
     if (!NativeDisplayFormat(requested.Format)) return E_INVALIDARG;
     if (requested.Flags & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT) return DXGI_ERROR_UNSUPPORTED;
     if (!requested.Width || !requested.Height || !requested.BufferCount || requested.BufferCount > 16
-            || requested.SampleDesc.Count != 1 || requested.SampleDesc.Quality || requested.Stereo) return DXGI_ERROR_INVALID_CALL;
+            || !requested.SampleDesc.Count || requested.Stereo) return DXGI_ERROR_INVALID_CALL;
     bool flip = requested.SwapEffect == DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL || requested.SwapEffect == DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    bool multisampled = requested.SampleDesc.Count > 1;
+    UINT quality_levels = 1;
+    if (multisampled && (flip || primary || composition
+            || FAILED(device->CheckMultisampleQualityLevels(requested.Format, requested.SampleDesc.Count, &quality_levels))))
+        return DXGI_ERROR_INVALID_CALL;
+    if (requested.SampleDesc.Quality >= quality_levels) return DXGI_ERROR_INVALID_CALL;
     if ((flip && requested.BufferCount < 2) || (!flip && requested.SwapEffect != DXGI_SWAP_EFFECT_DISCARD
             && requested.SwapEffect != DXGI_SWAP_EFFECT_SEQUENTIAL)) return DXGI_ERROR_INVALID_CALL;
     if (requested.BufferCount > 1 && (!device->dxgi_functions.pfnRotateResourceIdentities || !device->rotate_resources)) return DXGI_ERROR_UNSUPPORTED;
@@ -6313,16 +6358,30 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
     primary_desc.ModeDesc.Rotation = DXGI_DDI_MODE_ROTATION_IDENTITY;
     NativeTexture2D *new_buffers[16] = {};
     NativeTexture2D *new_transports[3] = {};
+    NativeTexture2D *new_resolved = NULL;
     HRESULT hr = S_OK;
     for (UINT i = 0; i < requested.BufferCount; ++i)
     {
         ID3D11Texture2D *texture = NULL;
-        hr = device->CreateTexture(&texture_desc, NULL, &texture, true, primary ? &primary_desc : NULL);
+        hr = device->CreateTexture(&texture_desc, NULL, &texture, !multisampled, primary ? &primary_desc : NULL);
         if (FAILED(hr)) break;
         new_buffers[i] = static_cast<NativeTexture2D *>(texture);
         new_buffers[i]->read_only = i && !primary;
         new_buffers[i]->Retain();
         texture->Release();
+    }
+    texture_desc.SampleDesc.Count = 1;
+    texture_desc.SampleDesc.Quality = 0;
+    if (SUCCEEDED(hr) && multisampled)
+    {
+        ID3D11Texture2D *texture = NULL;
+        hr = device->CreateTexture(&texture_desc, NULL, &texture);
+        if (SUCCEEDED(hr))
+        {
+            new_resolved = static_cast<NativeTexture2D *>(texture);
+            new_resolved->Retain();
+            texture->Release();
+        }
     }
     /* Single buffering needs an immutable publication; composition also
      * needs retained history for damage across rotating back buffers. */
@@ -6331,7 +6390,7 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
     if (NativeFormatFamily(new_publish_format) != NativeFormatFamily(requested.Format))
         transport_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
     for (UINT i = 0; SUCCEEDED(hr) && !primary
-            && (requested.BufferCount == 1 || composition || new_publish_format != requested.Format) && i < 3; ++i)
+            && (requested.BufferCount == 1 || composition || multisampled || new_publish_format != requested.Format) && i < 3; ++i)
     {
         ID3D11Texture2D *texture = NULL;
         hr = device->CreateTexture(&transport_desc, NULL, &texture, true);
@@ -6358,6 +6417,9 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
             new_transports[i] = NULL;
             transport_frame[i] = 0;
         }
+        if (resolved) resolved->Drop();
+        resolved = new_resolved;
+        new_resolved = NULL;
         transport_fills = 0;
         back_presents = 0;
         transport = NULL;
@@ -6367,8 +6429,95 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
         CloseReleaseEvents();
     }
     for (UINT i = 0; i < 3; ++i) if (new_transports[i]) new_transports[i]->Drop();
+    if (new_resolved) new_resolved->Drop();
     for (UINT i = 0; i < 16; ++i) if (new_buffers[i]) new_buffers[i]->Drop();
     return hr;
+}
+
+static LONG NativeFullscreenStyle(LONG style)
+{
+    return (style | WS_POPUP | WS_SYSMENU) & ~(WS_CAPTION | WS_THICKFRAME);
+}
+
+static LONG NativeFullscreenExStyle(LONG exstyle)
+{
+    return exstyle & ~(WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE);
+}
+
+HRESULT NativeSwapChain::EnterFullscreen(IDXGIOutput *target, UINT width, UINT height, const DXGI_RATIONAL &refresh)
+{
+    IDXGIOutput *output = target;
+    HRESULT hr = S_OK;
+    if (output) output->AddRef();
+    else hr = GetContainingOutput(&output);
+    if (FAILED(hr)) return hr;
+    DXGI_OUTPUT_DESC output_desc;
+    hr = output->GetDesc(&output_desc);
+    output->Release();
+    if (FAILED(hr)) return hr;
+
+    RECT area = output_desc.DesktopCoordinates;
+    if (desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH)
+    {
+        DEVMODEW mode = {};
+        mode.dmSize = sizeof(mode);
+        mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
+        mode.dmPelsWidth = width;
+        mode.dmPelsHeight = height;
+        LONG changed = DISP_CHANGE_BADMODE;
+        if (refresh.Numerator && refresh.Denominator)
+        {
+            mode.dmFields |= DM_DISPLAYFREQUENCY;
+            mode.dmDisplayFrequency = (refresh.Numerator + refresh.Denominator / 2) / refresh.Denominator;
+            changed = ChangeDisplaySettingsExW(output_desc.DeviceName, &mode, NULL, CDS_FULLSCREEN, NULL);
+            mode.dmFields &= ~DM_DISPLAYFREQUENCY;
+        }
+        if (changed != DISP_CHANGE_SUCCESSFUL)
+            changed = ChangeDisplaySettingsExW(output_desc.DeviceName, &mode, NULL, CDS_FULLSCREEN, NULL);
+        if (changed != DISP_CHANGE_SUCCESSFUL) return DXGI_ERROR_NOT_CURRENTLY_AVAILABLE;
+        lstrcpynW(fullscreen_device, output_desc.DeviceName, ARRAYSIZE(fullscreen_device));
+        fullscreen_mode = true;
+        MONITORINFO info = {};
+        info.cbSize = sizeof(info);
+        if (GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &info)) area = info.rcMonitor;
+    }
+
+    if (!fullscreen_layout)
+    {
+        GetWindowRect(window, &windowed_rect);
+        windowed_style = GetWindowLongW(window, GWL_STYLE);
+        windowed_exstyle = GetWindowLongW(window, GWL_EXSTYLE);
+        fullscreen_layout = true;
+    }
+    SetWindowLongW(window, GWL_STYLE, NativeFullscreenStyle(windowed_style));
+    SetWindowLongW(window, GWL_EXSTYLE, NativeFullscreenExStyle(windowed_exstyle));
+    SetWindowPos(window, HWND_TOPMOST, area.left, area.top, area.right - area.left, area.bottom - area.top,
+            SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    return S_OK;
+}
+
+void NativeSwapChain::LeaveFullscreen()
+{
+    if (fullscreen_mode)
+    {
+        ChangeDisplaySettingsExW(fullscreen_device, NULL, NULL, 0, NULL);
+        fullscreen_mode = false;
+    }
+    if (!fullscreen_layout) return;
+    fullscreen_layout = false;
+    if (!IsWindow(window)) return;
+    LONG style = GetWindowLongW(window, GWL_STYLE);
+    LONG exstyle = GetWindowLongW(window, GWL_EXSTYLE);
+    LONG restored_style = (windowed_style & ~WS_VISIBLE) | (style & WS_VISIBLE);
+    if (style == NativeFullscreenStyle(restored_style)
+            && (exstyle & ~WS_EX_TOPMOST) == (NativeFullscreenExStyle(windowed_exstyle) & ~WS_EX_TOPMOST))
+    {
+        SetWindowLongW(window, GWL_STYLE, restored_style);
+        SetWindowLongW(window, GWL_EXSTYLE, windowed_exstyle);
+    }
+    SetWindowPos(window, (windowed_exstyle & WS_EX_TOPMOST) ? HWND_TOPMOST : HWND_NOTOPMOST,
+            windowed_rect.left, windowed_rect.top, windowed_rect.right - windowed_rect.left,
+            windowed_rect.bottom - windowed_rect.top, SWP_FRAMECHANGED | SWP_NOACTIVATE);
 }
 
 HRESULT STDMETHODCALLTYPE NativeDevice::create_swapchain(IDXGIFactory *factory, HWND window,
@@ -6378,21 +6527,27 @@ HRESULT STDMETHODCALLTYPE NativeDevice::create_swapchain(IDXGIFactory *factory, 
     if (!out) return E_INVALIDARG;
     *out = NULL;
     if (!factory || (window && !IsWindow(window)) || !requested || !fullscreen) return DXGI_ERROR_INVALID_CALL;
-    if (!fullscreen->Windowed || output) return DXGI_ERROR_UNSUPPORTED;
+    if (output || (!fullscreen->Windowed && !window)) return DXGI_ERROR_UNSUPPORTED;
     if (!dxgi_functions.pfnPresent) return DXGI_ERROR_UNSUPPORTED;
-    NativeLock guard(this);
-    NativeSwapChain *swapchain = new NativeSwapChain(this, factory, window);
-    if (!swapchain) return E_OUTOFMEMORY;
-    swapchain->fullscreen_desc = *fullscreen;
-    swapchain->composition = !window;
-    swapchain->primary = window && GetPropW(window, DWM_PROP_GPU_OUTPUT) != NULL;
-    DXGI_SWAP_CHAIN_DESC1 desc = *requested;
-    RECT client = {};
-    HRESULT hr = !window || GetClientRect(window, &client) ? S_OK : DXGI_ERROR_INVALID_CALL;
-    if (!window && (!desc.Width || !desc.Height)) hr = DXGI_ERROR_INVALID_CALL;
-    if (!desc.Width) desc.Width = max(1l, client.right - client.left);
-    if (!desc.Height) desc.Height = max(1l, client.bottom - client.top);
-    if (SUCCEEDED(hr)) hr = swapchain->AllocateBuffers(desc);
+    NativeSwapChain *swapchain;
+    HRESULT hr;
+    {
+        NativeLock guard(this);
+        swapchain = new NativeSwapChain(this, factory, window);
+        if (!swapchain) return E_OUTOFMEMORY;
+        swapchain->fullscreen_desc = *fullscreen;
+        swapchain->fullscreen_desc.Windowed = TRUE;
+        swapchain->composition = !window;
+        swapchain->primary = window && GetPropW(window, DWM_PROP_GPU_OUTPUT) != NULL;
+        DXGI_SWAP_CHAIN_DESC1 desc = *requested;
+        RECT client = {};
+        hr = !window || GetClientRect(window, &client) ? S_OK : DXGI_ERROR_INVALID_CALL;
+        if (!window && (!desc.Width || !desc.Height)) hr = DXGI_ERROR_INVALID_CALL;
+        if (!desc.Width) desc.Width = max(1l, client.right - client.left);
+        if (!desc.Height) desc.Height = max(1l, client.bottom - client.top);
+        if (SUCCEEDED(hr)) hr = swapchain->AllocateBuffers(desc);
+    }
+    if (SUCCEEDED(hr) && !fullscreen->Windowed) hr = swapchain->SetFullscreenState(TRUE, NULL);
     if (FAILED(hr)) { swapchain->Release(); return hr; }
     *out = swapchain;
     return S_OK;
@@ -6573,7 +6728,7 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
         }
     }
     ++present_count;
-    if (desc.BufferCount > 1 && sequence)
+    if (desc.BufferCount > 1 && sequence && !resolved)
     {
         DXGI_DDI_HRESOURCE resources[16];
         HANDLE runtime_resources[16];
