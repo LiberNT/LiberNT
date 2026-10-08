@@ -1101,6 +1101,66 @@ LdrpFindPreMappedChpeBridge(PVOID *BaseAddress, SIZE_T *ImageSize)
 }
 #endif
 
+static
+PWSTR
+LdrpNextSearchPath(
+    _In_ PWSTR SearchPath,
+    _In_ PCWSTR DllName,
+    _In_ PCUNICODE_STRING FullDllName)
+{
+    SIZE_T NameLength = wcslen(DllName);
+    ULONG FullSize = FullDllName->Length + sizeof(UNICODE_NULL);
+    PWSTR Entry = SearchPath, Next, Candidate, FullName;
+    UNICODE_STRING FullString;
+    SIZE_T EntryLength;
+    ULONG FullLength;
+
+    if (RtlDetermineDosPathNameType_U(DllName) != RtlPathTypeRelative)
+        return NULL;
+
+    FullName = RtlAllocateHeap(LdrpHeap, 0, FullSize);
+    if (!FullName)
+        return NULL;
+
+    while (*Entry)
+    {
+        Next = Entry;
+        while (*Next && *Next != L';')
+            ++Next;
+        EntryLength = Next - Entry;
+        if (*Next)
+            ++Next;
+
+        Candidate = RtlAllocateHeap(LdrpHeap, 0, (EntryLength + NameLength + 2) * sizeof(WCHAR));
+        if (!Candidate)
+            break;
+
+        RtlCopyMemory(Candidate, Entry, EntryLength * sizeof(WCHAR));
+        if (EntryLength && Candidate[EntryLength - 1] != OBJ_NAME_PATH_SEPARATOR)
+            Candidate[EntryLength++] = OBJ_NAME_PATH_SEPARATOR;
+        RtlCopyMemory(Candidate + EntryLength, DllName, (NameLength + 1) * sizeof(WCHAR));
+        FullLength = RtlGetFullPathName_U(Candidate, FullSize, FullName, NULL);
+        RtlFreeHeap(LdrpHeap, 0, Candidate);
+
+        if (FullLength == FullDllName->Length)
+        {
+            FullString.Buffer = FullName;
+            FullString.Length = (USHORT)FullLength;
+            FullString.MaximumLength = (USHORT)FullSize;
+            if (RtlEqualUnicodeString(&FullString, FullDllName, TRUE))
+            {
+                RtlFreeHeap(LdrpHeap, 0, FullName);
+                return Next;
+            }
+        }
+
+        Entry = Next;
+    }
+
+    RtlFreeHeap(LdrpHeap, 0, FullName);
+    return NULL;
+}
+
 /* NOTE: Not yet reviewed */
 NTSTATUS
 NTAPI
@@ -1140,6 +1200,8 @@ LdrpMapDll(IN PWSTR SearchPath OPTIONAL,
     ULONG RelocDataSize = 0;
     SECTION_IMAGE_INFORMATION ImageInformation;
     BOOLEAN DataImage = FALSE;
+    PWSTR RemainingPath = SearchPath;
+    BOOLEAN MachineMismatch = FALSE;
 
     // FIXME: AppCompat stuff is missing
 
@@ -1190,7 +1252,7 @@ SkipCheck:
     if (!SectionHandle)
     {
         /* It didn't, so try to resolve the name now */
-        if (LdrpResolveDllName(SearchPath,
+        if (LdrpResolveDllName(RemainingPath,
                                DllName,
                                &FullDllName,
                                &BaseDllName))
@@ -1233,6 +1295,9 @@ SkipCheck:
         }
         else
         {
+            if (MachineMismatch)
+                return STATUS_INVALID_IMAGE_FORMAT;
+
             /* We couldn't resolve the name, is this a static load? */
             if (Static)
             {
@@ -1335,6 +1400,23 @@ SkipCheck:
     if (NtHeaders->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC)
 #endif
     {
+        if (!KnownDll)
+        {
+            RemainingPath = LdrpNextSearchPath(RemainingPath ? RemainingPath : LdrpDefaultPath.Buffer,
+                                               DllName,
+                                               &FullDllName);
+            if (RemainingPath)
+            {
+                NtUnmapViewOfSection(NtCurrentProcess(), ViewBase);
+                NtClose(SectionHandle);
+                LdrpFreeUnicodeString(&FullDllName);
+                LdrpFreeUnicodeString(&BaseDllName);
+                SectionHandle = NULL;
+                MachineMismatch = TRUE;
+                goto SkipCheck;
+            }
+        }
+
         DPRINT1("LDR: %wZ has machine %04x magic %04x, wrong bitness for process %wZ\n",
                 &FullDllName, NtHeaders->FileHeader.Machine, NtHeaders->OptionalHeader.Magic,
                 &NtCurrentPeb()->ProcessParameters->ImagePathName);
