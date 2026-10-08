@@ -86,12 +86,6 @@ NtfsForwardVolumeIo(
             Status = STATUS_ACCESS_DENIED;
             goto Complete;
         }
-        if (NtfsVolumeIsReadOnly(VolCB->DiskVolume))
-        {
-            Status = STATUS_MEDIA_WRITE_PROTECTED;
-            goto Complete;
-        }
-
         ExAcquireFastMutex(&VolCB->VolumeStateMutex);
         if (VolCB->Dismounted)
             Status = FileCB->DismountedVolume ? STATUS_SUCCESS : STATUS_VOLUME_DISMOUNTED;
