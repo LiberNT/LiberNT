@@ -414,7 +414,11 @@ static struct memory_description minidump_get_memory_description(void *data, DWO
                     switch (dir)
                     {
                     case IMAGE_DIRECTORY_ENTRY_EXCEPTION:
+#ifdef __REACTOS__
+                        if (dir_start && nthdr->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64)
+#else
                         if (nthdr->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64)
+#endif
                         {
                             const IMAGE_AMD64_RUNTIME_FUNCTION_ENTRY *func;
                             for (func = (const void*)dir_start; func < (const IMAGE_AMD64_RUNTIME_FUNCTION_ENTRY *)(dir_start + dir_size); func++)
