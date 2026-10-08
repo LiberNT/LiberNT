@@ -655,9 +655,6 @@ USBSTOR_HandleExecuteSCSI(
 
     DPRINT("USBSTOR_HandleExecuteSCSI Operation Code %x, Length %lu\n", SrbGetCdb(Request)->CDB10.OperationCode, Request->DataTransferLength);
 
-    // check that we're sending to the right LUN
-    ASSERT(SrbGetCdb(Request)->CDB10.LogicalUnitNumber == PDODeviceExtension->LUN);
-
     USBSTOR_StartRequestTimer(FDODeviceExtension, Irp, Request->TimeOutValue);
 
     return USBSTOR_SendCBWRequest(FDODeviceExtension, Irp);
