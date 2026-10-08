@@ -66,6 +66,7 @@ NTSTATUS DxgkDeviceWorkCoreWaitForSnapshot(_Inout_ PDXGK_DEVICE_WORK_LEDGER Ledg
  * without limit.  STATUS_TIMEOUT means the snapshot had not drained. */
 NTSTATUS DxgkDeviceWorkCoreWaitForSnapshotUntil(_Inout_ PDXGK_DEVICE_WORK_LEDGER Ledger, _In_ const DXGK_DEVICE_WORK_SNAPSHOT *Snapshot, _In_opt_ PLARGE_INTEGER Deadline);
 NTSTATUS DxgkDeviceWorkCoreWaitForIdle(_Inout_ PDXGK_DEVICE_WORK_LEDGER Ledger, _Inout_opt_ PKEVENT ArmedEvent);
+NTSTATUS DxgkDeviceWorkCoreWaitForItemUntil(_Inout_ PDXGK_DEVICE_WORK_ITEM Item, _In_opt_ PLARGE_INTEGER Deadline);
 BOOLEAN DxgkDeviceWorkCoreIsEmpty(_Inout_opt_ PDXGK_DEVICE_WORK_LEDGER Ledger);
 
 #endif /* _DXGK_DEVICE_WORK_CORE_H_ */

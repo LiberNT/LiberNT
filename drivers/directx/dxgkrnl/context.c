@@ -154,6 +154,14 @@ DxgkDeviceWorkGetStatus(_In_ PDXGKRNL_DEVICE_WORK Work)
     return InterlockedCompareExchange(&Work->CompletionStatus, 0, 0);
 }
 
+NTSTATUS
+DxgkDeviceWorkWaitUntil(
+    _Inout_ PDXGKRNL_DEVICE_WORK Work,
+    _In_opt_ PLARGE_INTEGER Deadline)
+{
+    return DxgkDeviceWorkCoreWaitForItemUntil(&Work->CoreItem, Deadline);
+}
+
 VOID
 DxgkDeviceCompletePresent(
     _In_ PDXGKRNL_DEVICE Device,

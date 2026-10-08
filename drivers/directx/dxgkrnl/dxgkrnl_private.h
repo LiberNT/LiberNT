@@ -4273,6 +4273,7 @@ VOID DxgkDeviceWorkDereference(_Inout_opt_ PDXGKRNL_DEVICE_WORK Work);
 VOID DxgkDeviceWorkCompleteWithStatus(_Inout_opt_ PDXGKRNL_DEVICE_WORK Work,
                                     _In_ NTSTATUS Status);
 NTSTATUS DxgkDeviceWorkGetStatus(_In_ PDXGKRNL_DEVICE_WORK Work);
+NTSTATUS DxgkDeviceWorkWaitUntil(_Inout_ PDXGKRNL_DEVICE_WORK Work, _In_opt_ PLARGE_INTEGER Deadline);
 
 /* Only for the final execution result of an accepted present, not validation
  * before admission. A NULL Work remains owned by the submitted DMA tracker. */

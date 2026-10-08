@@ -536,6 +536,42 @@ static VOID DxgkDeviceWorkTestBoundedSnapshotWait(VOID)
     ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
 }
 
+static VOID DxgkDeviceWorkTestItemWait(VOID)
+{
+    DXGK_DEVICE_WORK_TEST_OWNER Owner;
+    DXGK_DEVICE_WORK_ITEM Earlier;
+    DXGK_DEVICE_WORK_ITEM Later;
+    LARGE_INTEGER Expired;
+    NTSTATUS Status;
+
+    DxgkDeviceWorkTestInitializeOwner(&Owner);
+    DxgkDeviceWorkCoreInitializeItem(&Earlier, &Owner.Ledger);
+    DxgkDeviceWorkCoreInitializeItem(&Later, &Owner.Ledger);
+    KeQuerySystemTime(&Expired);
+
+    Status = DxgkDeviceWorkCoreWaitForItemUntil(NULL, &Expired);
+    ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
+    Status = DxgkDeviceWorkCoreWaitForItemUntil(&Later, &Expired);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    { NTSTATUS Observed = DxgkDeviceWorkCoreActivate(&Earlier); ok_eq_hex(Observed, STATUS_SUCCESS); }
+    { NTSTATUS Observed = DxgkDeviceWorkCoreActivate(&Later); ok_eq_hex(Observed, STATUS_SUCCESS); }
+    Status = DxgkDeviceWorkCoreWaitForItemUntil(&Later, &Expired);
+    ok_eq_hex(Status, STATUS_TIMEOUT);
+
+    DxgkDeviceWorkCoreComplete(&Later);
+    Status = DxgkDeviceWorkCoreWaitForItemUntil(&Later, &Expired);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_bool_false(DxgkDeviceWorkCoreIsEmpty(&Owner.Ledger), "earlier work still outstanding");
+    Status = DxgkDeviceWorkCoreWaitForItemUntil(&Earlier, &Expired);
+    ok_eq_hex(Status, STATUS_TIMEOUT);
+
+    DxgkDeviceWorkCoreComplete(&Earlier);
+    Status = DxgkDeviceWorkCoreWaitForItemUntil(&Earlier, &Expired);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_bool_true(DxgkDeviceWorkCoreIsEmpty(&Owner.Ledger), "ledger drained after item waits");
+}
+
 START_TEST(DxgkDeviceWork)
 {
     DxgkDeviceWorkTestDormantIdempotentOverflow();
@@ -549,4 +585,5 @@ START_TEST(DxgkDeviceWork)
     DxgkDeviceWorkTestSnapshotAndIsolation();
     DxgkDeviceWorkTestConditionalTerminalTransition();
     DxgkDeviceWorkTestBoundedSnapshotWait();
+    DxgkDeviceWorkTestItemWait();
 }

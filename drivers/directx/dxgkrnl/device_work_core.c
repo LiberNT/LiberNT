@@ -234,6 +234,41 @@ NTSTATUS DxgkDeviceWorkCoreWaitForIdle(_Inout_ PDXGK_DEVICE_WORK_LEDGER Ledger, 
     return DxgkpDeviceWorkWait(Ledger, Snapshot.TargetSequence, ArmedEvent);
 }
 
+NTSTATUS DxgkDeviceWorkCoreWaitForItemUntil(_Inout_ PDXGK_DEVICE_WORK_ITEM Item, _In_opt_ PLARGE_INTEGER Deadline)
+{
+    PDXGK_DEVICE_WORK_LEDGER Ledger;
+    KIRQL OldIrql;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    if (Item == NULL || Item->Ledger == NULL)
+        return STATUS_INVALID_PARAMETER;
+    Ledger = Item->Ledger;
+    KeAcquireSpinLock(&Ledger->Lock, &OldIrql);
+    for (;;)
+    {
+        if (Item->State != DxgkDeviceWorkItemActive)
+        {
+            KeReleaseSpinLock(&Ledger->Lock, OldIrql);
+            return STATUS_SUCCESS;
+        }
+        Status = DxgkpDeviceWorkQueryTerminalLocked(Ledger);
+        if (!NT_SUCCESS(Status))
+        {
+            KeReleaseSpinLock(&Ledger->Lock, OldIrql);
+            return Status;
+        }
+        KeClearEvent(&Ledger->ProgressEvent);
+        KeReleaseSpinLock(&Ledger->Lock, OldIrql);
+        Status = KeWaitForSingleObject(&Ledger->ProgressEvent, Executive, KernelMode, FALSE, Deadline);
+        if (Status == STATUS_TIMEOUT)
+            return STATUS_TIMEOUT;
+        if (!NT_SUCCESS(Status))
+            return Status;
+        KeAcquireSpinLock(&Ledger->Lock, &OldIrql);
+    }
+}
+
 BOOLEAN DxgkDeviceWorkCoreIsEmpty(_Inout_opt_ PDXGK_DEVICE_WORK_LEDGER Ledger)
 {
     KIRQL OldIrql;
