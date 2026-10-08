@@ -771,6 +771,9 @@ WaitStart:
              * timeout. Take the thread lock to make this check a linearization
              * point against KeAlertThreadByThreadId. KxTryBeginThreadWait also
              * closes the late kernel-APC window before inspecting the flag. */
+            WaitStatus = KiCheckAlertability(Thread, FALSE, WaitMode);
+            if (WaitStatus != STATUS_WAIT_0) goto NoWait;
+
             if (!KxTryBeginThreadWait(Thread))
             {
                 KiReleaseDispatcherObject(&Timer->Header);
@@ -784,9 +787,6 @@ WaitStart:
                 WaitStatus = STATUS_ALERTED;
                 goto NoWait;
             }
-
-            WaitStatus = KiCheckAlertability(Thread, FALSE, WaitMode);
-            if (WaitStatus != STATUS_WAIT_0) goto NoWait;
 
             /* If a timeout was given, check whether it already expired */
             if (Timeout)
