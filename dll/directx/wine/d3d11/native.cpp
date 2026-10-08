@@ -352,7 +352,7 @@ public:
     HRESULT STDMETHODCALLTYPE CreateHullShader(const void *pShaderBytecode, SIZE_T BytecodeLength, ID3D11ClassLinkage *pClassLinkage, ID3D11HullShader **ppHullShader) override;
     HRESULT STDMETHODCALLTYPE CreateDomainShader(const void *pShaderBytecode, SIZE_T BytecodeLength, ID3D11ClassLinkage *pClassLinkage, ID3D11DomainShader **ppDomainShader) override;
     HRESULT STDMETHODCALLTYPE CreateComputeShader(const void *pShaderBytecode, SIZE_T BytecodeLength, ID3D11ClassLinkage *pClassLinkage, ID3D11ComputeShader **ppComputeShader) override;
-    HRESULT STDMETHODCALLTYPE CreateClassLinkage(ID3D11ClassLinkage **ppLinkage) override { if (ppLinkage) *ppLinkage = NULL; Unimplemented("CreateClassLinkage"); return E_NOTIMPL; }
+    HRESULT STDMETHODCALLTYPE CreateClassLinkage(ID3D11ClassLinkage **ppLinkage) override;
     HRESULT STDMETHODCALLTYPE CreateBlendState(const D3D11_BLEND_DESC *pBlendStateDesc, ID3D11BlendState **ppBlendState) override;
     HRESULT STDMETHODCALLTYPE CreateDepthStencilState(const D3D11_DEPTH_STENCIL_DESC *pDepthStencilDesc, ID3D11DepthStencilState **ppDepthStencilState) override;
     HRESULT STDMETHODCALLTYPE CreateRasterizerState(const D3D11_RASTERIZER_DESC *pRasterizerDesc, ID3D11RasterizerState **ppRasterizerState) override;
@@ -1403,6 +1403,31 @@ public:
     void STDMETHODCALLTYPE GetResource(ID3D11Resource **out) override { if (out) { *out = texture; texture->AddRef(); } }
     void STDMETHODCALLTYPE GetDesc(D3D11_DEPTH_STENCIL_VIEW_DESC *out) override { if (out) *out = desc; }
 };
+
+class NativeClassLinkage : public NativeChild<ID3D11ClassLinkage, &IID_ID3D11ClassLinkage>
+{
+public:
+    explicit NativeClassLinkage(NativeDevice *d) : NativeChild(d) {}
+    HRESULT STDMETHODCALLTYPE GetClassInstance(const char *name, UINT index, ID3D11ClassInstance **out) override
+    {
+        if (out) *out = NULL;
+        FIXME("Class instance %s[%u] is not available without shader interfaces.\n", debugstr_a(name), index);
+        return E_NOTIMPL;
+    }
+    HRESULT STDMETHODCALLTYPE CreateClassInstance(const char *type, UINT, UINT, UINT, UINT, ID3D11ClassInstance **out) override
+    {
+        if (out) *out = NULL;
+        FIXME("Class instance of type %s is not available without shader interfaces.\n", debugstr_a(type));
+        return E_NOTIMPL;
+    }
+};
+
+HRESULT STDMETHODCALLTYPE NativeDevice::CreateClassLinkage(ID3D11ClassLinkage **out)
+{
+    if (!out) return E_INVALIDARG;
+    *out = new NativeClassLinkage(this);
+    return *out ? S_OK : E_OUTOFMEMORY;
+}
 
 class NativeInputLayout : public NativeChild<ID3D11InputLayout, &IID_ID3D11InputLayout>
 {
@@ -4327,6 +4352,7 @@ class NativeShaderBytecode
     bool output_signature_streams = false;
 public:
     const UINT *tokens = NULL;
+    bool interfaces = false;
     D3D10DDIARG_STAGE_IO_SIGNATURES signatures = {};
     D3D11_1DDIARG_STAGE_IO_SIGNATURES modern_signatures = {};
     D3D11DDIARG_TESSELLATION_IO_SIGNATURES tessellation = {};
@@ -4423,6 +4449,8 @@ public:
                         || ReadDword(chunk + 4) < 2 || ReadDword(chunk + 4) > chunk_size / 4) return E_INVALIDARG;
                 tokens = reinterpret_cast<const UINT *>(chunk);
             }
+            else if (tag == 0x45434649)
+                interfaces = true;
             else if (tag == 0x4e475349 || tag == 0x31475349 || tag == 0x4e47534f || tag == 0x3147534f
                     || tag == 0x3547534f || tag == 0x47534350 || tag == 0x31475350)
             {
@@ -4504,7 +4532,7 @@ static HRESULT CreateNativeShader(NativeDevice *device, const void *code, SIZE_T
                     || system_value == D3D10_SB_NAME_VIEWPORT_ARRAY_INDEX) return E_INVALIDARG;
         }
     }
-    if (linkage) return E_NOTIMPL;
+    if (linkage && bytecode.interfaces) return E_NOTIMPL;
     auto &f = device->functions;
     auto &m = device->wddm20_functions;
     PFND3D10DDI_CREATEVERTEXSHADER create = type == 0 ? f.pfnCreatePixelShader
