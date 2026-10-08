@@ -202,7 +202,7 @@ KiDivideErrorDispatch:
     DispatchException STATUS_INTEGER_DIVIDE_BY_ZERO, 0, 0, 0, 0
 
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -226,7 +226,7 @@ KiDebugTrapOrFaultKMode:
     DispatchException STATUS_SINGLE_STEP, 0, 0, 0, 0
 
     /* Return */
-    ExitTrap (TF_SAVE_ALL OR TF_DEBUG)
+    ExitTrap (TF_SAVE_ALL OR TF_DEBUG OR TF_CHECKUSERAPC)
 ENDFUNC
 
 EXTERN KiNmiInterruptHandler:PROC
@@ -276,7 +276,7 @@ KiBreakpointTrapKMode:
     DispatchException STATUS_BREAKPOINT, 1, BREAKPOINT_BREAK, 0, 0
 
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -296,7 +296,7 @@ KiOverflowDispatch:
     DispatchException STATUS_INTEGER_OVERFLOW, 3, 0, 0, 0
 
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -320,7 +320,7 @@ KiBoundFaultUserMode:
     DispatchException STATUS_ARRAY_BOUNDS_EXCEEDED, 0, 0, 0, 0
 
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -349,7 +349,7 @@ KiInvalidOpcodeKernel:
     DispatchException STATUS_ILLEGAL_INSTRUCTION, 0, 0, 0, 0
 
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -376,7 +376,7 @@ KiNpxNotAvailableDispatch:
 
 KiNpxNotAvailableFaultExit:
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -464,7 +464,7 @@ FUNC KiStackFault
 KiStackFaultUserMode:
     sti
     DispatchException STATUS_ACCESS_VIOLATION, 2, 0, -1, 0
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -501,7 +501,7 @@ DispatchAccessViolation:
 
 KiGpfExit:
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -675,7 +675,7 @@ KiRaiseSecurityCheckFailureUserMode:
                            EXCEPTION_NONCONTINUABLE, 1, r9, 0, 0
 
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -687,7 +687,7 @@ FUNC KiFloatingErrorFault
     int 3
 
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -746,7 +746,7 @@ KiXmmDispatch:
 
 KiXmmExit:
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -770,7 +770,7 @@ KiRaiseAssertionDispatch:
     DispatchException STATUS_ASSERTION_FAILURE, 0, 0, 0, 0
 
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
@@ -805,7 +805,7 @@ KiDebugServiceKMode:
     DispatchException STATUS_BREAKPOINT, 3, [rbp+KTRAP_FRAME_Rax], [rbp+KTRAP_FRAME_Rcx], [rbp+KTRAP_FRAME_Rdx]
 
     /* Return */
-    ExitTrap TF_SAVE_ALL
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 
