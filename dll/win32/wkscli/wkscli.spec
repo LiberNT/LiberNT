@@ -11,4 +11,16 @@
 @ stdcall NetWkstaTransportAdd(wstr long ptr ptr) netapi32.NetWkstaTransportAdd
 @ stdcall NetWkstaTransportDel(wstr wstr long) netapi32.NetWkstaTransportDel
 @ stdcall NetApiBufferFree(ptr) netapi32.NetApiBufferFree
+@ stdcall NetAddAlternateComputerName(wstr wstr wstr wstr long) netapi32.NetAddAlternateComputerName
+@ stdcall NetEnumerateComputerNames(wstr long long ptr ptr) netapi32.NetEnumerateComputerNames
+@ stdcall NetJoinDomain(wstr wstr wstr wstr wstr long) netapi32.NetJoinDomain
+@ stdcall NetRemoveAlternateComputerName(wstr wstr wstr wstr long) netapi32.NetRemoveAlternateComputerName
+@ stdcall NetRenameMachineInDomain(wstr wstr wstr wstr long) netapi32.NetRenameMachineInDomain
+@ stdcall NetSetPrimaryComputerName(wstr wstr wstr wstr long) netapi32.NetSetPrimaryComputerName
+@ stdcall NetUnjoinDomain(wstr wstr wstr long) netapi32.NetUnjoinDomain
+@ stdcall NetUseAdd(wstr long ptr ptr) netapi32.NetUseAdd
+@ stdcall NetUseDel(wstr wstr long) netapi32.NetUseDel
+@ stdcall NetUseEnum(wstr long ptr long ptr ptr ptr) netapi32.NetUseEnum
+@ stdcall NetUseGetInfo(ptr ptr long ptr) netapi32.NetUseGetInfo
+@ stdcall NetValidateName(wstr wstr wstr wstr long) netapi32.NetValidateName
 @ stdcall -private DllInitialize(long long ptr) DllMain
