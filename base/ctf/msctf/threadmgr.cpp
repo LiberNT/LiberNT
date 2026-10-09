@@ -1418,6 +1418,8 @@ HRESULT CThreadMgr::CreateInstance(IUnknown *pUnkOuter, CThreadMgr **ppOut)
 void CThreadMgr::OnDocumentMgrDestruction(ITfDocumentMgr *mgr)
 {
     struct list *cursor;
+    BOOL found = FALSE;
+
     LIST_FOR_EACH(cursor, &m_CreatedDocumentMgrs)
     {
         DocumentMgrEntry *mgrentry = LIST_ENTRY(cursor, DocumentMgrEntry, entry);
@@ -1425,10 +1427,19 @@ void CThreadMgr::OnDocumentMgrDestruction(ITfDocumentMgr *mgr)
         {
             list_remove(cursor);
             cicMemFree(mgrentry);
-            return;
+            found = TRUE;
+            break;
         }
     }
-    FIXME("ITfDocumentMgr %p not found in this thread\n", mgr);
+    if (!found)
+        FIXME("ITfDocumentMgr %p not found in this thread\n", mgr);
+
+    LIST_FOR_EACH(cursor, &m_AssociatedFocusWindows)
+    {
+        AssociatedWindow *wnd = LIST_ENTRY(cursor, AssociatedWindow, entry);
+        if (wnd->docmgr == mgr)
+            wnd->docmgr = NULL;
+    }
 }
 
 void CThreadMgr::CleanupContextSinks(TfClientId tid)
