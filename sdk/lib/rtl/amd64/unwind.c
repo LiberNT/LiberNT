@@ -712,7 +712,17 @@ RtlpExecuteHandlerForUnwindHandler(
         }
     }
 
-    // TODO: properly handle nested exceptions
+    if (IS_DISPATCHING(ExceptionRecord->ExceptionFlags))
+    {
+        if (IS_UNWINDING(ExceptionFlags))
+        {
+            *DispatcherContext = *PreviousDispatcherContext;
+            return ExceptionCollidedUnwind;
+        }
+
+        DispatcherContext->EstablisherFrame = PreviousDispatcherContext->EstablisherFrame;
+        return ExceptionNestedException;
+    }
 
     return ExceptionContinueSearch;
 }
@@ -746,6 +756,7 @@ RtlpUnwindInternal(
     PRUNTIME_FUNCTION FunctionEntry;
     ULONG_PTR StackLow, StackHigh;
     ULONG64 ImageBase, EstablisherFrame;
+    ULONG64 NestedFrame = 0;
     CONTEXT UnwindContext;
 
     /* Get the current stack limits */
@@ -864,6 +875,12 @@ RtlpUnwindInternal(
                 ExceptionRecord->ExceptionFlags &= ~(EXCEPTION_TARGET_UNWIND |
                                                      EXCEPTION_COLLIDED_UNWIND);
 
+                if (EstablisherFrame == NestedFrame)
+                {
+                    ExceptionRecord->ExceptionFlags &= ~EXCEPTION_NESTED_CALL;
+                    NestedFrame = 0;
+                }
+
                 /* Check if we do exception handling */
                 if (HandlerType == UNW_FLAG_EHANDLER)
                 {
@@ -881,8 +898,12 @@ RtlpUnwindInternal(
                     }
                     else if (Disposition == ExceptionNestedException)
                     {
-                        /// TODO
-                        __debugbreak();
+                        ExceptionRecord->ExceptionFlags |= EXCEPTION_NESTED_CALL;
+                        if (DispatcherContext.EstablisherFrame > NestedFrame)
+                        {
+                            NestedFrame = DispatcherContext.EstablisherFrame;
+                        }
+                        Disposition = ExceptionContinueSearch;
                     }
                 }
 
@@ -893,7 +914,11 @@ RtlpUnwindInternal(
                        that resulted in this unwind. The installed handler has
                        already copied the original dispatcher context, we now
                        need to copy back the original context. */
-                    UnwindContext = *ContextRecord = *DispatcherContext.ContextRecord;
+                    UnwindContext = *DispatcherContext.ContextRecord;
+                    if (HandlerType == UNW_FLAG_UHANDLER)
+                    {
+                        *ContextRecord = UnwindContext;
+                    }
 
                     /* The original context was from "before" the unwind, so we
                        need to do an additional virtual unwind to restore the
@@ -910,13 +935,17 @@ RtlpUnwindInternal(
                     /* Restore the context pointer and establisher frame. */
                     DispatcherContext.ContextRecord =
                         (HandlerType == UNW_FLAG_UHANDLER) ? ContextRecord : &UnwindContext;
+                    DispatcherContext.TargetIp = (ULONG64)TargetIp;
                     EstablisherFrame = DispatcherContext.EstablisherFrame;
 
                     /* Set the exception flags to indicate that we collided
                        with an unwind and continue the handler loop, which
                        will run any additional handlers from the previous
                        unwind. */
-                    ExceptionRecord->ExceptionFlags |= EXCEPTION_COLLIDED_UNWIND;
+                    if (HandlerType == UNW_FLAG_UHANDLER)
+                    {
+                        ExceptionRecord->ExceptionFlags |= EXCEPTION_COLLIDED_UNWIND;
+                    }
                     if (EstablisherFrame == (ULONG64)TargetFrame)
                     {
                         ExceptionRecord->ExceptionFlags |= EXCEPTION_TARGET_UNWIND;
@@ -930,7 +959,7 @@ RtlpUnwindInternal(
                     __debugbreak();
                     RtlRaiseStatus(STATUS_INVALID_DISPOSITION);
                 }
-            } while (ExceptionRecord->ExceptionFlags & EXCEPTION_COLLIDED_UNWIND);
+            } while (Disposition == ExceptionCollidedUnwind);
         }
 
         /* Check, if we have left our stack (8.) */
