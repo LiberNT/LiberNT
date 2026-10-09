@@ -279,7 +279,13 @@ SECURITY_STATUS WINAPI InitializeSecurityContextA(
                  Reserved1, TargetDataRep, pInput, Reserved2, phNewContext ? &myCtxt : NULL,
                  pOutput, pfContextAttr, ptsExpiry);
             if ((ret == SEC_E_OK || ret == SEC_I_CONTINUE_NEEDED) &&
-                phNewContext && phNewContext != phContext)
+                phNewContext && phContext)
+            {
+                *(PCtxtHandle)phContext->dwLower = myCtxt;
+                *phNewContext = *phContext;
+            }
+            else if ((ret == SEC_E_OK || ret == SEC_I_CONTINUE_NEEDED) &&
+                phNewContext)
             {
                 SECURITY_STATUS ret2;
                 ret2 = SECUR32_makeSecHandle(phNewContext, package, &myCtxt);
@@ -343,7 +349,13 @@ SECURITY_STATUS WINAPI InitializeSecurityContextW(
                  Reserved1, TargetDataRep, pInput, Reserved2, phNewContext ? &myCtxt : NULL,
                  pOutput, pfContextAttr, ptsExpiry);
             if ((ret == SEC_E_OK || ret == SEC_I_CONTINUE_NEEDED) &&
-                phNewContext && phNewContext != phContext)
+                phNewContext && phContext)
+            {
+                *(PCtxtHandle)phContext->dwLower = myCtxt;
+                *phNewContext = *phContext;
+            }
+            else if ((ret == SEC_E_OK || ret == SEC_I_CONTINUE_NEEDED) &&
+                phNewContext)
             {
                 SECURITY_STATUS ret2;
                 ret2 = SECUR32_makeSecHandle(phNewContext, package, &myCtxt);
@@ -394,7 +406,13 @@ SECURITY_STATUS WINAPI AcceptSecurityContext(
                 ret = package->provider->fnTableW.AcceptSecurityContext(
                  cred, phContext ? &myCtxt : NULL, pInput, fContextReq,
                  TargetDataRep, &myCtxt, pOutput, pfContextAttr, ptsExpiry);
-                if (ret == SEC_E_OK || ret == SEC_I_CONTINUE_NEEDED)
+                if ((ret == SEC_E_OK || ret == SEC_I_CONTINUE_NEEDED) && phContext)
+                {
+                    *(PCtxtHandle)phContext->dwLower = myCtxt;
+                    if (phNewContext)
+                        *phNewContext = *phContext;
+                }
+                else if (ret == SEC_E_OK || ret == SEC_I_CONTINUE_NEEDED)
                 {
                     SECURITY_STATUS ret2;
                     ret2 = SECUR32_makeSecHandle(phNewContext, package, &myCtxt);
