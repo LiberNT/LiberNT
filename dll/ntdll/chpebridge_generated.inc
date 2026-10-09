@@ -5,6 +5,16 @@
 #pragma clang diagnostic ignored "-Wnullability-completeness"
 #endif
 
+/* Native definition: dll/ntdll/rtl/libsupp.c */
+#ifdef ApiSetQueryApiSetPresence
+#undef ApiSetQueryApiSetPresence
+#endif
+NTSTATUS NTAPI ApiSetQueryApiSetPresence(PVOID a0, PVOID a1);
+NTSTATUS NTAPI ChpeAutoApiSetQueryApiSetPresence(PVOID a0, PVOID a1)
+{
+    return ApiSetQueryApiSetPresence(a0, a1);
+}
+
 /* Native definition: dll/ntdll/rtl/wnf.c */
 #ifdef RtlFlushHeaps
 #undef RtlFlushHeaps
@@ -5198,6 +5208,12 @@ NTSTATUS NTAPI ChpeAutoRtlInitAnsiStringEx(PANSI_STRING a0, PCSZ a1)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlInitAnsiStringEx), __typeof__(&RtlInitAnsiStringEx)), "RtlInitAnsiStringEx bridge signature mismatch");
 
+void NTAPI ChpeAutoRtlInitUTF8String(PUTF8_STRING a0, PCSZ a1)
+{
+    RtlInitUTF8String(a0, a1);
+}
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlInitUTF8String), __typeof__(&RtlInitUTF8String)), "RtlInitUTF8String bridge signature mismatch");
+
 ULONG_PTR NTAPI ChpeStubRtlInitBarrier(ULONG a0, ULONG a1)
 {
     return 0;
@@ -6797,6 +6813,12 @@ NTSTATUS NTAPI ChpeAutoRtlUnicodeToUTF8N(PCHAR a0, ULONG a1, PULONG a2, PCWCH a3
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlUnicodeToUTF8N), __typeof__(&RtlUnicodeToUTF8N)), "RtlUnicodeToUTF8N bridge signature mismatch");
 
+NTSTATUS NTAPI ChpeAutoRtlUTF8StringToUnicodeString(PUNICODE_STRING a0, PUTF8_STRING a1, BOOLEAN a2)
+{
+    return RtlUTF8StringToUnicodeString(a0, a1, a2);
+}
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlUTF8StringToUnicodeString), __typeof__(&RtlUTF8StringToUnicodeString)), "RtlUTF8StringToUnicodeString bridge signature mismatch");
+
 NTSTATUS NTAPI ChpeAutoRtlUnicodeStringToAnsiString(PANSI_STRING a0, PCUNICODE_STRING a1, BOOLEAN a2)
 {
     return RtlUnicodeStringToAnsiString(a0, a1, a2);
@@ -7658,6 +7680,16 @@ BOOL NTAPI ChpeAutoWinSqmEventEnabled(ULONG a0, PVOID a1)
 ULONG_PTR NTAPI ChpeStubWinSqmEventWrite(ULONG a0, ULONG a1, ULONG a2)
 {
     return 0;
+}
+
+/* Native definition: dll/ntdll/rtl/wnf.c */
+#ifdef WinSqmIncrementDWORD
+#undef WinSqmIncrementDWORD
+#endif
+VOID NTAPI WinSqmIncrementDWORD(ULONG a0, ULONG a1, ULONG a2);
+VOID NTAPI ChpeAutoWinSqmIncrementDWORD(ULONG a0, ULONG a1, ULONG a2)
+{
+    WinSqmIncrementDWORD(a0, a1, a2);
 }
 
 /* Native definition: dll/ntdll/rtl/wnf.c */
