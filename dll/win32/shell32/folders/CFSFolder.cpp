@@ -1476,6 +1476,33 @@ HRESULT WINAPI CFSFolder::CreateViewObject(HWND hwndOwner,
 *  ULONG*          rgfInOut) //[out] result array
 *
 */
+static const DWORD FS_CHEAP_ATTRIBUTES = SFGAO_CANCOPY | SFGAO_CANLINK | SFGAO_STORAGE | SFGAO_DROPTARGET |
+                                         SFGAO_STORAGEANCESTOR | SFGAO_FILESYSANCESTOR | SFGAO_FOLDER |
+                                         SFGAO_FILESYSTEM;
+static const DWORD FS_TRIGGER_ATTRIBUTES = FS_CHEAP_ATTRIBUTES | SFGAO_CANMOVE | SFGAO_CANRENAME | SFGAO_CANDELETE |
+                                           SFGAO_HASPROPSHEET | SFGAO_LINK | SFGAO_READONLY | SFGAO_STREAM |
+                                           SFGAO_HASSUBFOLDER;
+static const DWORD FS_MULTI_ATTRIBUTES = SFGAO_CANCOPY | SFGAO_CANLINK | SFGAO_HASPROPSHEET | SFGAO_DROPTARGET |
+                                         SFGAO_FILESYSTEM;
+static const DWORD FS_MULTI_EDIT_ATTRIBUTES = SFGAO_CANMOVE | SFGAO_CANRENAME | SFGAO_CANDELETE;
+
+static DWORD
+SHELL32_MaskFSItemAttributes(DWORD dwRequested, DWORD dwAttributes)
+{
+    DWORD dwResult = dwRequested & dwAttributes;
+
+    if ((dwRequested & FS_TRIGGER_ATTRIBUTES) ||
+        (dwRequested & dwAttributes & (SFGAO_HIDDEN | SFGAO_NONENUMERATED)))
+    {
+        dwResult |= dwAttributes & FS_CHEAP_ATTRIBUTES;
+    }
+    if (dwRequested & (SFGAO_CANMOVE | SFGAO_CANDELETE))
+        dwResult |= dwAttributes & (SFGAO_CANMOVE | SFGAO_CANDELETE);
+    if (dwRequested & SFGAO_CANRENAME)
+        dwResult |= dwAttributes & SFGAO_HASPROPSHEET;
+    return dwResult;
+}
+
 HRESULT WINAPI CFSFolder::GetAttributesOf(UINT cidl,
         PCUITEMID_CHILD_ARRAY apidl, DWORD * rgfInOut)
 {
@@ -1486,18 +1513,37 @@ HRESULT WINAPI CFSFolder::GetAttributesOf(UINT cidl,
     if (cidl && !apidl)
         return E_INVALIDARG;
 
-    if (*rgfInOut == 0)
-        *rgfInOut = ~0;
+    if (cidl == 1 && *apidl && _ILIsFolderOrFile(*apidl))
+    {
+        DWORD dwRequested = *rgfInOut;
+        DWORD dwAttributes = dwRequested;
 
-    if(cidl == 0)
+        pdump(*apidl);
+        if (dwRequested)
+            SHELL32_GetFSItemAttributes(this, *apidl, &dwAttributes);
+        *rgfInOut = dwRequested ? SHELL32_MaskFSItemAttributes(dwRequested, dwAttributes) : 0;
+    }
+    else if (cidl > 1 || (cidl == 0 && _ILIsFolderOrFile(ILFindLastID(m_pidlRoot))))
+    {
+        DWORD dwRequested = *rgfInOut;
+
+        for (UINT i = 0; i < cidl; ++i)
+        {
+            if (!apidl[i] || !_ILIsFolderOrFile(apidl[i]))
+                ERR("Got an unknown type of pidl!!!\n");
+        }
+        *rgfInOut = FS_MULTI_ATTRIBUTES;
+        if (dwRequested & FS_MULTI_EDIT_ATTRIBUTES)
+            *rgfInOut |= FS_MULTI_EDIT_ATTRIBUTES;
+    }
+    else if(cidl == 0)
     {
         LPCITEMIDLIST rpidl = ILFindLastID(m_pidlRoot);
 
-        if (_ILIsFolderOrFile(rpidl))
-        {
-            SHELL32_GetFSItemAttributes(this, rpidl, rgfInOut);
-        }
-        else if (_ILIsDrive(rpidl))
+        if (*rgfInOut == 0)
+            *rgfInOut = ~0;
+
+        if (_ILIsDrive(rpidl))
         {
             IShellFolder *psfParent = NULL;
             hr = SHBindToParent(m_pidlRoot, IID_PPV_ARG(IShellFolder, &psfParent), NULL);
@@ -1514,16 +1560,7 @@ HRESULT WINAPI CFSFolder::GetAttributesOf(UINT cidl,
     }
     else
     {
-        while (cidl > 0 && *apidl)
-        {
-            pdump(*apidl);
-            if (_ILIsFolderOrFile(*apidl))
-                SHELL32_GetFSItemAttributes(this, *apidl, rgfInOut);
-            else
-                ERR("Got an unknown type of pidl!!!\n");
-            apidl++;
-            cidl--;
-        }
+        ERR("Got an unknown type of pidl!!!\n");
     }
     /* make sure SFGAO_VALIDATE is cleared, some apps depend on that */
     *rgfInOut &= ~SFGAO_VALIDATE;

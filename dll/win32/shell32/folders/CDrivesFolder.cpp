@@ -744,11 +744,12 @@ static const shvheader MyComputerSFHeader[] = {
 
 static const DWORD dwComputerAttributes =
     SFGAO_CANRENAME | SFGAO_CANDELETE | SFGAO_HASPROPSHEET | SFGAO_DROPTARGET |
-    SFGAO_FILESYSANCESTOR | SFGAO_FOLDER | SFGAO_HASSUBFOLDER | SFGAO_CANLINK;
+    SFGAO_FILESYSANCESTOR | SFGAO_FOLDER | SFGAO_HASSUBFOLDER;
 static const DWORD dwControlPanelAttributes =
     SFGAO_HASSUBFOLDER | SFGAO_FOLDER | SFGAO_CANLINK;
 static const DWORD dwDriveAttributes =
     SFGAO_HASSUBFOLDER | SFGAO_FILESYSTEM | SFGAO_FOLDER | SFGAO_FILESYSANCESTOR |
+    SFGAO_STORAGEANCESTOR | SFGAO_STORAGE |
     SFGAO_DROPTARGET | SFGAO_HASPROPSHEET | SFGAO_CANRENAME | SFGAO_CANLINK | SFGAO_CANCOPY;
 
 CDrivesFolder::CDrivesFolder()
@@ -1041,8 +1042,11 @@ HRESULT WINAPI CDrivesFolder::GetAttributesOf(UINT cidl, PCUITEMID_CHILD_ARRAY a
     if (cidl && !apidl)
         return E_INVALIDARG;
 
-    if (*rgfInOut == 0)
-        *rgfInOut = ~0;
+    for (UINT i = 0; i < cidl; ++i)
+    {
+        if (!apidl[i] || _ILIsEmpty(apidl[i]))
+            return E_INVALIDARG;
+    }
 
     if(cidl == 0)
         *rgfInOut &= dwComputerAttributes;

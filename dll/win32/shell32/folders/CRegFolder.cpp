@@ -413,7 +413,7 @@ HRESULT CRegFolder::GetGuidItemAttributes (LPCITEMIDLIST pidl, LPDWORD pdwAttrib
     /* Items have more attributes when on desktop */
     if (_ILIsDesktop(m_pidlRoot))
     {
-        *pdwAttributes |= (dwAttributes & (SFGAO_CANLINK|SFGAO_CANDELETE|SFGAO_CANRENAME|SFGAO_HASPROPSHEET));
+        *pdwAttributes |= (dwAttributes & (SFGAO_CANLINK|SFGAO_CANRENAME|SFGAO_HASPROPSHEET));
     }
 
     /* In any case, links can be created */
@@ -485,8 +485,28 @@ HRESULT WINAPI CRegFolder::ParseDisplayName(HWND hwndOwner, LPBC pbc, LPOLESTR l
 
     if (!*pch)
     {
-        if (pdwAttributes && *pdwAttributes)
+        if (pdwAttributes && *pdwAttributes && _ILIsDesktop(m_pidlRoot) && m_pOuterFolder)
+        {
+            WCHAR szKey[MAX_PATH] = L"CLSID\\";
+            DWORD dwRegAttributes, cbData = sizeof(dwRegAttributes);
+
+            StringFromGUID2(clsid, szKey + 6, CHARS_IN_GUID);
+            StringCchCatW(szKey, _countof(szKey), L"\\ShellFolder");
+            if (RegGetValueW(HKEY_CLASSES_ROOT, szKey, L"Attributes", RRF_RT_REG_DWORD, NULL,
+                             &dwRegAttributes, &cbData) == ERROR_SUCCESS)
+            {
+                *pdwAttributes = (*pdwAttributes & dwRegAttributes) | SFGAO_CANLINK;
+            }
+            else
+            {
+                *pdwAttributes = ~0u;
+                m_pOuterFolder->GetAttributesOf(1, (PCUITEMID_CHILD_ARRAY)ppidl, pdwAttributes);
+            }
+        }
+        else if (pdwAttributes && *pdwAttributes)
+        {
             GetGuidItemAttributes(*ppidl, pdwAttributes);
+        }
 
         return S_OK;
     }
@@ -595,9 +615,6 @@ HRESULT WINAPI CRegFolder::GetAttributesOf(UINT cidl, PCUITEMID_CHILD_ARRAY apid
 {
     if (!rgfInOut || !cidl || !apidl)
         return E_INVALIDARG;
-
-    if (*rgfInOut == 0)
-        *rgfInOut = ~0;
 
     while(cidl > 0 && *apidl)
     {

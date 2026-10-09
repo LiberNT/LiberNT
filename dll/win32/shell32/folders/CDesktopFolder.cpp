@@ -245,6 +245,8 @@ static const DWORD dwMyComputerAttributes =
 static DWORD dwMyNetPlacesAttributes =
     SFGAO_CANRENAME | SFGAO_CANDELETE | SFGAO_HASPROPSHEET | SFGAO_DROPTARGET |
     SFGAO_FILESYSANCESTOR | SFGAO_FOLDER | SFGAO_HASSUBFOLDER | SFGAO_CANLINK;
+static const DWORD dwControlPanelAttributes =
+    SFGAO_HASSUBFOLDER | SFGAO_FOLDER | SFGAO_CANLINK;
 
 CDesktopFolder::CDesktopFolder() :
     sPathTarget(NULL),
@@ -694,9 +696,6 @@ HRESULT WINAPI CDesktopFolder::GetAttributesOf(
     if (cidl && !apidl)
         return E_INVALIDARG;
 
-    if (*rgfInOut == 0)
-        *rgfInOut = ~0;
-
     if(cidl == 0)
         *rgfInOut &= dwDesktopAttributes;
     else
@@ -711,6 +710,8 @@ HRESULT WINAPI CDesktopFolder::GetAttributesOf(
                 *rgfInOut &= dwMyComputerAttributes;
             else if (IsRegItem(apidl[i], CLSID_NetworkPlaces))
                 *rgfInOut &= dwMyNetPlacesAttributes;
+            else if (IsRegItem(apidl[i], CLSID_ControlPanel))
+                *rgfInOut &= dwControlPanelAttributes;
             else if (_ILIsFolderOrFile(apidl[i]) || _ILIsSpecialFolder(apidl[i]))
             {
                 CComPtr<IShellFolder2> psf;

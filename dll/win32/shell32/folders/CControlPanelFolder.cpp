@@ -429,9 +429,6 @@ HRESULT WINAPI CControlPanelFolder::GetAttributesOf(UINT cidl, PCUITEMID_CHILD_A
     if (cidl && !apidl)
         return E_INVALIDARG;
 
-    if (*rgfInOut == 0)
-        *rgfInOut = ~0;
-
     if (!cidl)
     {
         *rgfInOut &= dwControlPanelAttributes;

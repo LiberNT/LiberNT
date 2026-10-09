@@ -13,7 +13,7 @@ HKCR
 			}
 			ShellFolder
 			{
-				val Attributes = d '&H00000000'
+				val Attributes = d '&HA0000004'
 				val HideAsDeletePerUser = s ''
 				val WantsFORDISPLAY = s ''
 			}
