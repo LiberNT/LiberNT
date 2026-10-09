@@ -201,6 +201,8 @@ BOOL WINAPI CryptCATAdminAcquireContext2(HCATADMIN *catAdmin, const GUID *sys, c
 {
     static const WCHAR catroot[] =
         {'\\','c','a','t','r','o','o','t',0};
+    static const WCHAR catroot2[] =
+        {'\\','c','a','t','r','o','o','t','2',0};
     static const WCHAR fmt[] =
         {'%','s','\\','{','%','0','8','x','-','%','0','4','x','-','%','0',
          '4','x','-','%','0','2','x','%','0','2','x','-','%','0','2','x',
@@ -210,6 +212,7 @@ BOOL WINAPI CryptCATAdminAcquireContext2(HCATADMIN *catAdmin, const GUID *sys, c
         {0x127d0a1d,0x4ef2,0x11d1,{0x86,0x08,0x00,0xc0,0x4f,0xc2,0x95,0xee}};
 
     WCHAR catroot_dir[MAX_PATH];
+    WCHAR catdb_dir[MAX_PATH], catdb_path[MAX_PATH];
     struct catadmin *ca;
     ALG_ID alg;
     const WCHAR *providerName;
@@ -275,6 +278,15 @@ BOOL WINAPI CryptCATAdminAcquireContext2(HCATADMIN *catAdmin, const GUID *sys, c
 
     /* create the directory if it doesn't exist */
     CreateDirectoryW(ca->path, NULL);
+
+    GetSystemDirectoryW(catdb_dir, MAX_PATH);
+    lstrcatW(catdb_dir, catroot2);
+    CreateDirectoryW(catdb_dir, NULL);
+    swprintf(catdb_path, ARRAY_SIZE(catdb_path), fmt, catdb_dir, sys->Data1, sys->Data2,
+             sys->Data3, sys->Data4[0], sys->Data4[1], sys->Data4[2],
+             sys->Data4[3], sys->Data4[4], sys->Data4[5], sys->Data4[6],
+             sys->Data4[7]);
+    CreateDirectoryW(catdb_path, NULL);
 
     ca->magic = CATADMIN_MAGIC;
     ca->find = INVALID_HANDLE_VALUE;
