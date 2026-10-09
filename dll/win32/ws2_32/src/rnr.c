@@ -766,11 +766,19 @@ NSProviderInfoFromContext(IN PNSCATALOG_ENTRY Entry,
     RtlMoveMemory(&infoW.NSProviderId,
         &Entry->ProviderId,
         sizeof(infoW.NSProviderId));
+
+    if (!Context->ProtocolBuffer)
+    {
+        Context->BufferUsed += size + size2;
+        Context->Count++;
+        return;
+    }
+
     if (size2)
     {
         /* Calculate ProviderName string pointer */
         infoW.lpszIdentifier = (LPWSTR)((ULONG_PTR)Context->ProtocolBuffer +
-            Context->BufferUsed + size);
+            Context->StringOffset);
     }
     else
     {
@@ -778,12 +786,12 @@ NSProviderInfoFromContext(IN PNSCATALOG_ENTRY Entry,
     }
 
     /* Check if we'll have space */
-    if ((Context->BufferUsed + size + size2) <=
-        (Context->BufferLength))
+    if ((Context->Count < Context->EntryCount) &&
+        ((Context->StringOffset + size2) <= (Context->BufferLength)))
     {
         /* Copy the data */
         RtlMoveMemory((PVOID)((ULONG_PTR)Context->ProtocolBuffer +
-            Context->BufferUsed),
+            Context->Count * size),
             &infoW,
             size);
         if (size2)
@@ -792,7 +800,7 @@ NSProviderInfoFromContext(IN PNSCATALOG_ENTRY Entry,
             if (Context->Unicode)
             {
                 RtlMoveMemory((PVOID)((ULONG_PTR)Context->ProtocolBuffer +
-                    Context->BufferUsed + size),
+                    Context->StringOffset),
                     Entry->ProviderName,
                     size2);
             }
@@ -804,7 +812,7 @@ NSProviderInfoFromContext(IN PNSCATALOG_ENTRY Entry,
                     Entry->ProviderName,
                     -1,
                     (LPSTR)((ULONG_PTR)Context->ProtocolBuffer +
-                        Context->BufferUsed + size),
+                        Context->StringOffset),
                     size2,
                     NULL,
                     NULL);
@@ -813,6 +821,7 @@ NSProviderInfoFromContext(IN PNSCATALOG_ENTRY Entry,
         }
 
         /* Increase the count */
+        Context->StringOffset += size2;
         Context->Count++;
     }
 }
@@ -824,13 +833,8 @@ NSProvidersEnumerationProc(PVOID EnumContext,
 {
     PNSPROVIDER_ENUM_CONTEXT Context = (PNSPROVIDER_ENUM_CONTEXT)EnumContext;
 
-    /* Calculate ProviderName string size */
-    INT size1 = Entry->ProviderName ? wcslen(Entry->ProviderName) + 1 : 0;
-    INT size2 = Context->Unicode ? size1 * sizeof(WCHAR) : size1 * sizeof(CHAR);
-
     /* Copy the information */
     NSProviderInfoFromContext(Entry, Context);
-    Context->BufferUsed += Context->Unicode ? (sizeof(WSANAMESPACE_INFOW)+size2) : (sizeof(WSANAMESPACE_INFOA)+size2);
 
     /* Continue enumeration */
     return TRUE;
@@ -863,7 +867,7 @@ WSAEnumNameSpaceProvidersInternal(IN OUT LPDWORD lpdwBufferLength,
         return SOCKET_ERROR;
     }
 
-    Context.ProtocolBuffer = lpnspBuffer;
+    Context.ProtocolBuffer = NULL;
     Context.BufferLength = lpnspBuffer ? *lpdwBufferLength : 0;
     Context.BufferUsed = 0;
     Context.Count = 0;
@@ -871,6 +875,18 @@ WSAEnumNameSpaceProvidersInternal(IN OUT LPDWORD lpdwBufferLength,
     Context.ErrorCode = ERROR_SUCCESS;
 
     WsNcEnumerateCatalogItems(Catalog, NSProvidersEnumerationProc, &Context);
+
+    if ((Context.ErrorCode == ERROR_SUCCESS) &&
+        (Context.BufferLength >= Context.BufferUsed) &&
+        (Context.Count != 0))
+    {
+        Context.ProtocolBuffer = lpnspBuffer;
+        Context.EntryCount = Context.Count;
+        Context.StringOffset = Context.Count * (Unicode ? sizeof(WSANAMESPACE_INFOW) : sizeof(WSANAMESPACE_INFOA));
+        Context.Count = 0;
+
+        WsNcEnumerateCatalogItems(Catalog, NSProvidersEnumerationProc, &Context);
+    }
 
     /* Get status */
     Status = Context.Count;

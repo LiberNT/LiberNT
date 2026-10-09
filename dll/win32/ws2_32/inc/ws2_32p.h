@@ -220,6 +220,8 @@ typedef struct _NSPROVIDER_ENUM_CONTEXT
     DWORD Count;
     BOOLEAN Unicode;
     INT ErrorCode;
+    DWORD EntryCount;
+    DWORD StringOffset;
 } NSPROVIDER_ENUM_CONTEXT, *PNSPROVIDER_ENUM_CONTEXT;
 
 typedef struct _PROTOCOL_ENUM_CONTEXT
