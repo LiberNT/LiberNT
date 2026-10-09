@@ -392,7 +392,7 @@ SecureProvider *SECUR32_addProvider(const SecurityFunctionTableA *fnTableA,
         list_init(&providerTable->table);
     }
 
-    ret = HeapAlloc(GetProcessHeap(), 0, sizeof(SecureProvider));
+    ret = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(SecureProvider));
     if (!ret)
     {
         LeaveCriticalSection(&cs);
