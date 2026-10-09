@@ -2613,6 +2613,56 @@ CmpCompleteAppHiveLoad(PCMHIVE Hive)
     CmpDereferenceHive(Hive);
 }
 
+static
+BOOLEAN
+CmpIsKcbBelow(
+    _In_ PCM_KEY_CONTROL_BLOCK Kcb,
+    _In_ PCM_KEY_CONTROL_BLOCK RootKcb)
+{
+    ULONG Levels;
+
+    if (Kcb->TotalLevels <= RootKcb->TotalLevels)
+        return FALSE;
+
+    for (Levels = Kcb->TotalLevels - RootKcb->TotalLevels; Levels != 0; Levels--)
+        Kcb = Kcb->ParentKcb;
+
+    return Kcb == RootKcb;
+}
+
+static
+VOID
+CmpRemoveEmptySubKeyCacheEntries(
+    _In_ PCM_KEY_CONTROL_BLOCK RootKcb)
+{
+    PCM_KEY_HASH Entry;
+    PCM_KEY_CONTROL_BLOCK CachedKcb;
+    BOOLEAN Removed;
+    ULONG i;
+
+    do
+    {
+        Removed = FALSE;
+        for (i = 0; i < CmpHashTableSize; i++)
+        {
+            Entry = CmpCacheTable[i].Entry;
+            while (Entry)
+            {
+                CachedKcb = CONTAINING_RECORD(Entry, CM_KEY_CONTROL_BLOCK, KeyHash);
+                if (CachedKcb->RefCount == 0 && CmpIsKcbBelow(CachedKcb, RootKcb))
+                {
+                    CmpRemoveFromDelayedClose(CachedKcb);
+                    CmpCleanUpKcbCacheWithLock(CachedKcb, TRUE);
+                    Removed = TRUE;
+                    Entry = CmpCacheTable[i].Entry;
+                    continue;
+                }
+                Entry = Entry->NextHash;
+            }
+        }
+    } while (Removed);
+}
+
 ULONG
 NTAPI
 CmpEnumerateOpenSubKeys(
@@ -2633,6 +2683,9 @@ CmpEnumerateOpenSubKeys(
     CMP_ASSERT_EXCLUSIVE_REGISTRY_LOCK();
 
     CmpRunDownDelayDerefKCBEngine();
+
+    if (RemoveEmptyCacheEntries)
+        CmpRemoveEmptySubKeyCacheEntries(RootKcb);
 
     /* The root key is the only referenced key. There are no referenced sub keys. */
     if (RootKcb->RefCount == 1)
