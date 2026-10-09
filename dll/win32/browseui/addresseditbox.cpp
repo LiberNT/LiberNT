@@ -178,7 +178,7 @@ BOOL CAddressEditBox::ExecuteCommandLine()
 
 HRESULT STDMETHODCALLTYPE CAddressEditBox::ParseNow(long paramC)
 {
-    ULONG eaten, attributes;
+    ULONG eaten, attributes = 0;
     CComHeapPtr<ITEMIDLIST_ABSOLUTE> pidlCurrent;
     CComHeapPtr<ITEMIDLIST_RELATIVE> pidlRelative;
     CComPtr<IShellFolder> psfCurrent;
