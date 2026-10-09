@@ -1,3 +1,4 @@
+add_definitions(-D_NTSYSTEM_)
 
 include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys)
 
