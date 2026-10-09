@@ -1143,6 +1143,13 @@ GetNtDevicePathOfDriveNumber(
         ULONG ReturnLength;
         Status = NtQuerySymbolicLinkObject(DeviceHandle, DevicePath, &ReturnLength);
         NtClose(DeviceHandle);
+        if (NT_SUCCESS(Status))
+        {
+            if (DevicePath->Length < DevicePath->MaximumLength)
+                DevicePath->Buffer[DevicePath->Length / sizeof(WCHAR)] = UNICODE_NULL;
+            else
+                Status = STATUS_BUFFER_TOO_SMALL;
+        }
     }
 
     /* Return the drive type if success, or unknown if failure */
