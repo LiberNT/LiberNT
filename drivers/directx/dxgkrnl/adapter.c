@@ -5393,6 +5393,7 @@ DxgkpRequestPowerComponentFState(
 /* --- Power Framework callbacks ---------------------------------------- */
 
 static VOID
+NTAPI
 DxgkpPowerRuntimeComponentActiveCallback(
     _In_ PVOID Context,
     _In_ ULONG Component)
@@ -5405,6 +5406,7 @@ DxgkpPowerRuntimeComponentActiveCallback(
 }
 
 static VOID
+NTAPI
 DxgkpPowerRuntimeComponentIdleCallback(
     _In_ PVOID Context,
     _In_ ULONG Component)
@@ -5421,6 +5423,7 @@ DxgkpPowerRuntimeComponentIdleCallback(
 }
 
 static VOID
+NTAPI
 DxgkpPowerRuntimeComponentIdleStateCallback(
     _In_ PVOID Context,
     _In_ ULONG Component,
@@ -5434,6 +5437,7 @@ DxgkpPowerRuntimeComponentIdleStateCallback(
 }
 
 static VOID
+NTAPI
 DxgkpPowerRuntimeDevicePowerRequiredCallback(
     _In_ PVOID Context)
 {
@@ -5451,6 +5455,7 @@ DxgkpPowerRuntimeDevicePowerRequiredCallback(
 }
 
 static VOID
+NTAPI
 DxgkpPowerRuntimeDevicePowerNotRequiredCallback(
     _In_ PVOID Context)
 {
@@ -5460,6 +5465,7 @@ DxgkpPowerRuntimeDevicePowerNotRequiredCallback(
 }
 
 static NTSTATUS
+NTAPI
 DxgkpPowerRuntimeControlCallback(
     _In_ PVOID Context,
     _In_ LPCGUID PowerControlCode,
