@@ -29,7 +29,6 @@
 #include <shellapi.h>
 #include <winioctl.h>
 #include <ndk/iofuncs.h>
-#undef DeleteFile
 #endif
 #include <wincodec.h>
 #include <sstream>

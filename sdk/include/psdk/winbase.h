@@ -800,10 +800,6 @@ typedef struct _FILE_ALLOCATION_INFO {
     LARGE_INTEGER AllocationSize;
 } FILE_ALLOCATION_INFO, *PFILE_ALLOCATION_INFO;
 
-typedef struct _FILE_DISPOSITION_INFO {
-    BOOLEAN DeleteFile;
-} FILE_DISPOSITION_INFO, *PFILE_DISPOSITION_INFO;
-
 typedef struct _FILE_END_OF_FILE_INFO {
     LARGE_INTEGER EndOfFile;
 } FILE_END_OF_FILE_INFO, *PFILE_END_OF_FILE_INFO;
@@ -3629,6 +3625,14 @@ typedef ENUMRESTYPEPROCA ENUMRESTYPEPROC;
 #define WritePrivateProfileStruct WritePrivateProfileStructA
 #define WriteProfileSection WriteProfileSectionA
 #define WriteProfileString WriteProfileStringA
+#endif
+#endif
+
+#ifndef RC_INVOKED
+#if (_WIN32_WINNT >= 0x0600)
+typedef struct _FILE_DISPOSITION_INFO {
+    BOOLEAN DeleteFile;
+} FILE_DISPOSITION_INFO, *PFILE_DISPOSITION_INFO;
 #endif
 #endif
 

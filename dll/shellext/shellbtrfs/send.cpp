@@ -20,9 +20,6 @@
 #include "resource.h"
 #include <stddef.h>
 #include <shlobj.h>
-#ifdef __REACTOS__
-#undef DeleteFile
-#endif
 #include <iostream>
 
 #define SEND_BUFFER_LEN 1048576
