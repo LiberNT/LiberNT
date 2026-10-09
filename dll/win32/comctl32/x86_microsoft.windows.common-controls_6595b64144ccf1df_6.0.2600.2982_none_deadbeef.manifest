@@ -7,6 +7,7 @@
     <windowClass>ComboBoxEx32</windowClass>
     <windowClass>ComboLBox</windowClass>
     <windowClass>Combobox</windowClass>
+    <windowClass>DropDown</windowClass>
     <windowClass>Edit</windowClass>
     <windowClass>Listbox</windowClass>
     <windowClass>NativeFontCtl</windowClass>
