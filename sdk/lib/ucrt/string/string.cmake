@@ -114,6 +114,7 @@ else()
     )
     if(${ARCH} STREQUAL "arm64")
         list(APPEND UCRT_STRING_SOURCES
+            string/arm64/strnlen.c
             string/arm64/wcslen.c
         )
     endif()
