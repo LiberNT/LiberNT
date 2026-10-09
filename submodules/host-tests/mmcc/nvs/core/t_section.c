@@ -1159,6 +1159,11 @@ SectionClusterRead(void)
         {0, 1, 0, 1024, MI_PROT_READONLY},
         {1, 4, 1024, 3 * PAGE_SIZE + 37, MI_PROT_READONLY},
     };
+    MI_SEGMENT_LAYOUT Overlap[] =
+    {
+        {0, 1, 0, PAGE_SIZE, MI_PROT_READONLY},
+        {2, 2, 1024, PAGE_SIZE + 512, MI_PROT_READONLY},
+    };
 
     WorldCreate(&World, 512, 1, 100000);
     FileCreate(&File.File, 20 * PAGE_SIZE + 37);
@@ -1216,6 +1221,21 @@ SectionClusterRead(void)
           *(ULONG64 *)(File.File.Data + 1024 + 3 * PAGE_SIZE));
     CHECK(UserRead64(&World, 0, Base + 4 * PAGE_SIZE + 40, &Status) == 0);
     CHECK(File.Calls == 1);
+    CHECK(NT_SUCCESS(MiUnmapView(&Space, Base)));
+    MiSegmentDereference(Segment);
+
+    Base = 0;
+    CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentImage, 4 * PAGE_SIZE,
+                                     MI_PROT_READONLY, &Ops, &File, Overlap, 2, &Segment)));
+    CHECK(NT_SUCCESS(Map(&Space, Segment, &Base, 0, 0, MI_PROT_READONLY)));
+    CHECK(UserRead64(&World, 0, Base + 2 * PAGE_SIZE + 0xc00, &Status) == *(ULONG64 *)(File.File.Data + PAGE_SIZE));
+    CHECK(NT_SUCCESS(Status));
+    CHECK(UserRead64(&World, 0, Base + 3 * PAGE_SIZE - 8, &Status) ==
+          *(ULONG64 *)(File.File.Data + 1024 + PAGE_SIZE - 8));
+    CHECK(UserRead64(&World, 0, Base + 3 * PAGE_SIZE, &Status) ==
+          *(ULONG64 *)(File.File.Data + 1024 + PAGE_SIZE));
+    CHECK(UserRead64(&World, 0, Base + 3 * PAGE_SIZE + 512, &Status) == 0);
+    CHECK(UserRead64(&World, 0, Base + 0x800, &Status) == *(ULONG64 *)(File.File.Data + 0x800));
     CHECK(NT_SUCCESS(MiUnmapView(&Space, Base)));
     MiSegmentDereference(Segment);
 

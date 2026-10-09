@@ -804,6 +804,7 @@ static
 ULONG
 MiSegmentPageBytes(
     _In_ PMI_SEGMENT Segment,
+    _In_ ULONG64 Page,
     _In_ ULONG64 FileOffset)
 {
     ULONG64 End = MiSegmentSize(Segment);
@@ -811,16 +812,20 @@ MiSegmentPageBytes(
 
     if (Segment->Kind == MiSegmentImage)
     {
-        End = 0;
-        for (i = 0; i < Segment->LayoutCount; i++)
+        for (i = Segment->LayoutCount; i != 0; i--)
         {
-            if (FileOffset >= Segment->Layout[i].FileOffset &&
-                FileOffset < Segment->Layout[i].FileOffset + Segment->Layout[i].FileBytes)
-            {
-                End = Segment->Layout[i].FileOffset + Segment->Layout[i].FileBytes;
-                break;
-            }
+            PMI_SEGMENT_LAYOUT Entry = &Segment->Layout[i - 1];
+            ULONG64 Done;
+
+            if (Page < Entry->FirstPage || Page - Entry->FirstPage >= Entry->PageCount)
+                continue;
+
+            Done = (Page - Entry->FirstPage) << PAGE_SHIFT;
+            if (Done >= Entry->FileBytes)
+                return 0;
+            return (Entry->FileBytes - Done < PAGE_SIZE) ? (ULONG)(Entry->FileBytes - Done) : PAGE_SIZE;
         }
+        return 0;
     }
 
     if (FileOffset >= End)
@@ -833,9 +838,10 @@ static
 ULONG
 MiSegmentReadBytes(
     _In_ PMI_SEGMENT Segment,
+    _In_ ULONG64 Page,
     _In_ ULONG64 FileOffset)
 {
-    ULONG Bytes = MiSegmentPageBytes(Segment, FileOffset);
+    ULONG Bytes = MiSegmentPageBytes(Segment, Page, FileOffset);
 
     if (Bytes != 0 && Segment->Kind != MiSegmentImage && Segment->FileOps.WholePageReads)
         return PAGE_SIZE;
@@ -846,6 +852,7 @@ static
 NTSTATUS
 MiSegmentMaterialize(
     _Inout_ PMI_SEGMENT Segment,
+    _In_ ULONG64 Page,
     _Inout_ PMI_PTE Proto,
     _In_ ULONG64 ZeroFrom,
     _Out_ PULONG FrameOut)
@@ -881,7 +888,7 @@ MiSegmentMaterialize(
     if (Kind == MiSoftSubsection && !Zero)
     {
         ULONG64 Offset = MiSoftValue(Pte) << MI_SECTOR_SHIFT;
-        ULONG Bytes = MiSegmentReadBytes(Segment, Offset);
+        ULONG Bytes = MiSegmentReadBytes(Segment, Page, Offset);
 
         Mapping = MiArchMapFrame(Frame);
         if (Bytes != 0)
@@ -924,6 +931,7 @@ static
 NTSTATUS
 MiSegmentAcquirePage(
     _Inout_ PMI_SEGMENT Segment,
+    _In_ ULONG64 Page,
     _Inout_ PMI_PTE Proto,
     _In_ BOOLEAN AllowIo,
     _Out_ PULONG FrameOut)
@@ -960,7 +968,7 @@ MiSegmentAcquirePage(
                 if (!AllowIo && (MiSoftKind(Pte) == MiSoftSubsection || MiSoftKind(Pte) == MiSoftPageFile))
                     return STATUS_PENDING_PAGE_IN;
 
-                return MiSegmentMaterialize(Segment, Proto, ~0ULL, FrameOut);
+                return MiSegmentMaterialize(Segment, Page, Proto, ~0ULL, FrameOut);
         }
     }
 }
@@ -1003,7 +1011,7 @@ MiReadImageSegment(
         ULONG Frame;
         PVOID Mapping;
 
-        Status = MiSegmentAcquirePage(Segment, Proto, TRUE, &Frame);
+        Status = MiSegmentAcquirePage(Segment, Address >> PAGE_SHIFT, Proto, TRUE, &Frame);
         if (!NT_SUCCESS(Status))
             break;
         Mapping = MiPfnMapFrame(&Segment->System->Pfn, Frame);
@@ -1040,7 +1048,7 @@ MiSegmentCopyResident(
         ULONG Same;
 
         if ((Kind == MiSoftResident || Kind == MiSoftTransition) &&
-            NT_SUCCESS(MiSegmentAcquirePage(Segment, Proto, FALSE, &Frame)))
+            NT_SUCCESS(MiSegmentAcquirePage(Segment, Done >> PAGE_SHIFT, Proto, FALSE, &Frame)))
         {
             PUCHAR Mapping = MiPfnMapFrame(&Segment->System->Pfn, Frame);
 
@@ -1098,7 +1106,7 @@ MiReplaceImagePages(
         if (Pages[Page] == NULL)
             continue;
         Proto = MiSegmentProto(Segment, Page);
-        Status = MiSegmentAcquirePage(Segment, Proto, TRUE, &Frame);
+        Status = MiSegmentAcquirePage(Segment, Page, Proto, TRUE, &Frame);
         if (!NT_SUCCESS(Status))
             break;
         Entry = &System->Pfn.Pfn[Frame];
@@ -2140,12 +2148,13 @@ static
 NTSTATUS
 MiSegmentWritePage(
     _Inout_ PMI_SEGMENT Segment,
+    _In_ ULONG64 Page,
     _In_ ULONG Frame,
     _In_ MI_PTE Original)
 {
     ULONG64 Offset = MiSoftValue(Original) << MI_SECTOR_SHIFT;
 
-    return MiSegmentWriteFrames(Segment, Offset, MiSegmentPageBytes(Segment, Offset), &Frame, 1);
+    return MiSegmentWriteFrames(Segment, Offset, MiSegmentPageBytes(Segment, Page, Offset), &Frame, 1);
 }
 
 NTSTATUS
@@ -2222,7 +2231,7 @@ MiSegmentFlush(
                     break;
             }
 
-            WriteStatus = MiSegmentAcquirePage(Segment, Proto, TRUE, &Frame);
+            WriteStatus = MiSegmentAcquirePage(Segment, Page, Proto, TRUE, &Frame);
             if (!NT_SUCCESS(WriteStatus))
             {
                 Status = WriteStatus;
@@ -2244,7 +2253,7 @@ MiSegmentFlush(
             if (Count == 0)
                 RunOffset = FileOffset;
             Frames[Count++] = Frame;
-            PageBytes = MiSegmentPageBytes(Segment, FileOffset);
+            PageBytes = MiSegmentPageBytes(Segment, Page, FileOffset);
             Bytes += PageBytes;
             Page++;
             if (PageBytes != PAGE_SIZE)
@@ -2506,7 +2515,7 @@ MiSegmentPrefetch(
         Read->Original = Original;
         Read->Generation = Segment->ReadGeneration;
         Read->Mapping = MiArchMapFrame(Read->Frame);
-        Read->Bytes = MiSegmentReadBytes(Segment, FileOffset);
+        Read->Bytes = MiSegmentReadBytes(Segment, Page, FileOffset);
         MiSegmentReference(Segment);
         InsertTailList(&Segment->PendingReads, &Read->Link);
         Segment->PendingReadCount++;
@@ -2567,7 +2576,7 @@ MiSegmentReadCluster(
 
         if (MiSoftKind(Pte) != MiSoftSubsection ||
             (MiSoftValue(Pte) << MI_SECTOR_SHIFT) != FileOffset ||
-            MiSegmentPageBytes(Segment, FileOffset) != PAGE_SIZE ||
+            MiSegmentPageBytes(Segment, Page + Count, FileOffset) != PAGE_SIZE ||
             FileOffset >= ValidDataLength || ValidDataLength - FileOffset < PAGE_SIZE)
             break;
 
@@ -2627,7 +2636,7 @@ MiSegmentFaultIn(
         if (Kind != MiSoftResident && Kind != MiSoftTransition &&
             MiSegmentReadCluster(Segment, Page, Last, ~0ULL) == 0)
         {
-            Status = MiSegmentMaterialize(Segment, Proto, ~0ULL, &Frame);
+            Status = MiSegmentMaterialize(Segment, Page, Proto, ~0ULL, &Frame);
             if (NT_SUCCESS(Status))
                 MiSegmentReleasePage(Segment, Proto, Frame);
         }
@@ -2671,7 +2680,7 @@ MiSegmentMakeResidentBeyond(
             continue;
         }
 
-        Status = MiSegmentMaterialize(Segment, Proto, ValidDataLength, &Frame);
+        Status = MiSegmentMaterialize(Segment, Page, Proto, ValidDataLength, &Frame);
         if (NT_SUCCESS(Status))
             MiSegmentReleasePage(Segment, Proto, Frame);
     }
@@ -2713,7 +2722,7 @@ MiSegmentMarkDirty(
 
             if ((Done & (1UL << i)) != 0 || MiArchPteRead(Slots[i]) == 0)
                 continue;
-            Status = MiSegmentAcquirePage(Segment, Slots[i], TRUE, &Frame);
+            Status = MiSegmentAcquirePage(Segment, Page + i, Slots[i], TRUE, &Frame);
             if (!NT_SUCCESS(Status))
                 break;
             MiPfnSetModified(&System->Pfn, Frame);
@@ -2757,7 +2766,7 @@ MiWritePrototypePage(
         if (NT_SUCCESS(Status))
         {
             MI_MUTEX_ACQUIRE(&Segment->FlushLock);
-            Status = MiSegmentWritePage(Segment, Frame, Entry->OriginalPte);
+            Status = MiSegmentWritePage(Segment, Page, Frame, Entry->OriginalPte);
             MiPfnWriteComplete(&System->Pfn, Frame, Entry->OriginalPte, (BOOLEAN)NT_SUCCESS(Status));
             MI_MUTEX_RELEASE(&Segment->FlushLock);
 
