@@ -624,7 +624,12 @@ typedef struct _CFG_CALL_TARGET_INFO {
 #define MEM_TOP_DOWN       0x100000
 #define MEM_WRITE_WATCH       0x200000 /* 98/Me */
 #define MEM_PHYSICAL       0x400000
+#define MEM_ROTATE                  0x00800000
+#define MEM_DIFFERENT_IMAGE_BASE_OK 0x00800000
+#define MEM_RESET_UNDO              0x01000000
+#define MEM_LARGE_PAGES             0x20000000
 #define MEM_4MB_PAGES    0x80000000
+#define MEM_64K_PAGES               (MEM_LARGE_PAGES | MEM_PHYSICAL)
 #define MEM_IMAGE        SEC_IMAGE
 #define MEM_EXTENDED_PARAMETER_GRAPHICS            0x00000001  
 #define MEM_EXTENDED_PARAMETER_NONPAGED            0x00000002  
@@ -2439,6 +2444,12 @@ RtlLookupFunctionEntry(
     _In_ DWORD64 ControlPc,
     _Out_ PDWORD64 ImageBase,
     _Inout_opt_ PUNWIND_HISTORY_TABLE HistoryTable);
+
+NTSYSAPI
+VOID
+__cdecl
+RtlRestoreContext(struct _CONTEXT *ContextRecord,
+                  struct _EXCEPTION_RECORD *ExceptionRecord);
 
 NTSYSAPI
 PEXCEPTION_ROUTINE
