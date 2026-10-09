@@ -740,7 +740,8 @@ FUNC KiXmmException
 
 KiXmmDispatch:
     /* Dispatch the exception */
-    DispatchException eax, 2, 0, [rbp+KTRAP_FRAME_MxCsr], 0
+    mov r10d, [rbp + KTRAP_FRAME_MxCsr]
+    DispatchException eax, 2, 0, r10, 0
 
     // FIXME: STATUS_FLOAT_MULTIPLE_TRAPS / STATUS_FLOAT_MULTIPLE_FAULTS
 
