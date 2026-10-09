@@ -235,7 +235,7 @@ SetupCopyFile(
     FILE_STANDARD_INFORMATION FileStandard;
     FILE_BASIC_INFORMATION FileBasic;
     ULONG RegionSize;
-    HANDLE SourceFileSection;
+    HANDLE SourceFileSection = NULL;
     PVOID SourceFileMap = NULL;
     SIZE_T SourceSectionSize = 0;
     LARGE_INTEGER ByteOffset;
@@ -281,33 +281,36 @@ SetupCopyFile(
         goto closesrc;
     }
 
-    Status = NtCreateSection(&SourceFileSection,
-                             SECTION_MAP_READ,
-                             NULL,
-                             NULL,
-                             PAGE_READONLY,
-                             SEC_COMMIT,
-                             FileHandleSource);
-    if (!NT_SUCCESS(Status))
+    if (FileStandard.EndOfFile.QuadPart != 0)
     {
-        DPRINT1("NtCreateSection failed: %x, %S\n", Status, SourceFileName);
-        goto closesrc;
-    }
+        Status = NtCreateSection(&SourceFileSection,
+                                 SECTION_MAP_READ,
+                                 NULL,
+                                 NULL,
+                                 PAGE_READONLY,
+                                 SEC_COMMIT,
+                                 FileHandleSource);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("NtCreateSection failed: %x, %S\n", Status, SourceFileName);
+            goto closesrc;
+        }
 
-    Status = NtMapViewOfSection(SourceFileSection,
-                                NtCurrentProcess(),
-                                &SourceFileMap,
-                                0,
-                                0,
-                                NULL,
-                                &SourceSectionSize,
-                                ViewUnmap,
-                                0,
-                                PAGE_READONLY);
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("NtMapViewOfSection failed: %x, %S\n", Status, SourceFileName);
-        goto closesrcsec;
+        Status = NtMapViewOfSection(SourceFileSection,
+                                    NtCurrentProcess(),
+                                    &SourceFileMap,
+                                    0,
+                                    0,
+                                    NULL,
+                                    &SourceSectionSize,
+                                    ViewUnmap,
+                                    0,
+                                    PAGE_READONLY);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("NtMapViewOfSection failed: %x, %S\n", Status, SourceFileName);
+            goto closesrcsec;
+        }
     }
 
     RtlInitUnicodeString(&FileName, DestinationFileName);
@@ -399,23 +402,26 @@ SetupCopyFile(
         }
     }
 
-    RegionSize = (ULONG)PAGE_ROUND_UP(FileStandard.EndOfFile.u.LowPart);
-    IoStatusBlock.Status = 0;
-    ByteOffset.QuadPart = 0ULL;
-    Status = NtWriteFile(FileHandleDest,
-                         NULL,
-                         NULL,
-                         NULL,
-                         &IoStatusBlock,
-                         SourceFileMap,
-                         RegionSize,
-                         &ByteOffset,
-                         NULL);
-    if (!NT_SUCCESS(Status))
+    if (SourceFileMap)
     {
-        DPRINT1("NtWriteFile failed: %x:%x, iosb: %p src: %p, size: %x\n",
-                Status, IoStatusBlock.Status, &IoStatusBlock, SourceFileMap, RegionSize);
-        goto closedest;
+        RegionSize = (ULONG)PAGE_ROUND_UP(FileStandard.EndOfFile.u.LowPart);
+        IoStatusBlock.Status = 0;
+        ByteOffset.QuadPart = 0ULL;
+        Status = NtWriteFile(FileHandleDest,
+                             NULL,
+                             NULL,
+                             NULL,
+                             &IoStatusBlock,
+                             SourceFileMap,
+                             RegionSize,
+                             &ByteOffset,
+                             NULL);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("NtWriteFile failed: %x:%x, iosb: %p src: %p, size: %x\n",
+                    Status, IoStatusBlock.Status, &IoStatusBlock, SourceFileMap, RegionSize);
+            goto closedest;
+        }
     }
 
     /* Copy file date/time from source file */
@@ -445,10 +451,12 @@ closedest:
     NtClose(FileHandleDest);
 
 unmapsrcsec:
-    NtUnmapViewOfSection(NtCurrentProcess(), SourceFileMap);
+    if (SourceFileMap)
+        NtUnmapViewOfSection(NtCurrentProcess(), SourceFileMap);
 
 closesrcsec:
-    NtClose(SourceFileSection);
+    if (SourceFileSection)
+        NtClose(SourceFileSection);
 
 closesrc:
     NtClose(FileHandleSource);
