@@ -40,6 +40,24 @@ jobs:
             config: Release
             ntver: '0xA00'
             profile: profile_raspberry
+          - compiler: clang
+            arch: riscv64
+            config: Debug
+            ntver: '0xA00'
+            profile: profile_spacemit_k1
+          - compiler: clang
+            arch: riscv64
+            config: Release
+            ntver: '0xA00'
+            profile: profile_spacemit_k1
+          - compiler: clang
+            arch: ppc
+            config: Debug
+            ntver: '0xA00'
+          - compiler: clang
+            arch: ppc
+            config: Release
+            ntver: '0xA00'
       fail-fast: false
     runs-on: ubuntu-24.04
     steps:
