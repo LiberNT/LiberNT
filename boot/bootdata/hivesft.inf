@@ -632,6 +632,9 @@ HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","RegDone",0x00000002,""
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","RegisteredOrganization",2,""
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","RegisteredOwner",2,""
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","SoftwareType",2,"System"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib",,0x00000012
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib\009",,0x00000012
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib\CurrentLanguage",,0x00000012
 
 ; Auto-Execute (AE) Debugger
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug","Auto",2,"0"

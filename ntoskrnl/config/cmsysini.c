@@ -1465,6 +1465,59 @@ CmpLoadHiveThread(IN PVOID StartContext)
     PsTerminateSystemThread(Status);
 }
 
+static
+VOID
+CmpMarkPredefinedKey(IN PCWSTR Name)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING KeyName;
+    PCM_KEY_CONTROL_BLOCK Kcb;
+    PCM_KEY_BODY KeyBody;
+    PCM_KEY_NODE Node;
+    HANDLE KeyHandle;
+    NTSTATUS Status;
+
+    RtlInitUnicodeString(&KeyName, Name);
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &KeyName,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+    Status = ZwOpenKey(&KeyHandle, KEY_READ, &ObjectAttributes);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = ObReferenceObjectByHandle(KeyHandle,
+                                       0,
+                                       CmpKeyObjectType,
+                                       KernelMode,
+                                       (PVOID*)&KeyBody,
+                                       NULL);
+    ZwClose(KeyHandle);
+    if (!NT_SUCCESS(Status)) return;
+
+    CmpLockRegistry();
+    Kcb = KeyBody->KeyControlBlock;
+    CmpAcquireKcbLockExclusive(Kcb);
+    if (!Kcb->Delete && !(Kcb->Flags & KEY_PREDEF_HANDLE))
+    {
+        CmpLockHiveFlusherShared((PCMHIVE)Kcb->KeyHive);
+        Node = (PCM_KEY_NODE)HvGetCell(Kcb->KeyHive, Kcb->KeyCell);
+        if (Node)
+        {
+            if (HvMarkCellDirty(Kcb->KeyHive, Kcb->KeyCell, FALSE))
+            {
+                Node->Flags |= KEY_PREDEF_HANDLE;
+                Kcb->Flags |= KEY_PREDEF_HANDLE;
+            }
+            HvReleaseCell(Kcb->KeyHive, Kcb->KeyCell);
+        }
+        CmpUnlockHiveFlusher((PCMHIVE)Kcb->KeyHive);
+    }
+    CmpReleaseKcbLock(Kcb);
+    CmpUnlockRegistry();
+    ObDereferenceObject(KeyBody);
+}
+
 VOID
 NTAPI
 CmpInitializeHiveList(VOID)
@@ -1657,6 +1710,8 @@ CmpInitializeHiveList(VOID)
                             L"\\Registry\\Machine\\Software\\Classes\\Typelib");
         }
     }
+    CmpMarkPredefinedKey(L"\\Registry\\Machine\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Perflib\\009");
+    CmpMarkPredefinedKey(L"\\Registry\\Machine\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Perflib\\CurrentLanguage");
     CmpNoVolatileCreates = TRUE;
 }
 

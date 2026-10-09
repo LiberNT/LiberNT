@@ -2462,6 +2462,12 @@ KeyCachedOpenNow:
         CmpTransBindKeyBody(*Object, Transaction);
     }
 
+    if (Status == STATUS_SUCCESS && Context && *Object &&
+        (((PCM_KEY_BODY)*Object)->KeyControlBlock->Flags & KEY_PREDEF_HANDLE))
+    {
+        ((PCM_PARSE_CONTEXT)Context)->PredefinedHandle = (HANDLE)(ULONG_PTR)KEY_PREDEF_HANDLE;
+    }
+
 Quickie:
     /* Unlock all the KCBs */
     if (LockedKcbs != NULL)

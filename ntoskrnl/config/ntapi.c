@@ -341,6 +341,7 @@ CmpCreateKey(OUT PHANDLE KeyHandle,
     for (;;)
     {
         ParseContext.ConflictEnlistment = NULL;
+        ParseContext.PredefinedHandle = NULL;
         Status = ObOpenObjectByName(ObjectAttributes,
                                     CmpKeyObjectType,
                                     PreviousMode,
@@ -362,6 +363,9 @@ CmpCreateKey(OUT PHANDLE KeyHandle,
 
     if (CapturedClass.Buffer)
         ReleaseCapturedUnicodeString(&CapturedClass, PreviousMode);
+
+    if (NT_SUCCESS(Status) && ParseContext.PredefinedHandle)
+        Status = STATUS_PREDEFINED_HANDLE;
 
     _SEH2_TRY
     {
@@ -496,6 +500,9 @@ CmpOpenKey(OUT PHANDLE KeyHandle,
     /* Only do this if we succeeded */
     if (NT_SUCCESS(Status))
     {
+        if (ParseContext.PredefinedHandle)
+            Status = STATUS_PREDEFINED_HANDLE;
+
         _SEH2_TRY
         {
             /* Return the handle to caller */
@@ -589,6 +596,12 @@ NtDeleteKey(IN HANDLE KeyHandle)
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
+    if (KeyObject->KeyControlBlock->Flags & KEY_PREDEF_HANDLE)
+    {
+        ObDereferenceObject(KeyObject);
+        return STATUS_INVALID_HANDLE;
+    }
+
     /* Setup the callback */
     DeleteKeyInfo.Object = (PVOID)KeyObject;
     DeleteKeyInfo.CallContext = NULL;
@@ -661,6 +674,12 @@ NtEnumerateKey(IN HANDLE KeyHandle,
                                        (PVOID*)&KeyObject,
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
+
+    if (KeyObject->KeyControlBlock->Flags & KEY_PREDEF_HANDLE)
+    {
+        ObDereferenceObject(KeyObject);
+        return STATUS_INVALID_HANDLE;
+    }
 
     if (PreviousMode != KernelMode)
     {
@@ -759,6 +778,12 @@ NtEnumerateValueKey(IN HANDLE KeyHandle,
                                        (PVOID*)&KeyObject,
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
+
+    if (KeyObject->KeyControlBlock->Flags & KEY_PREDEF_HANDLE)
+    {
+        ObDereferenceObject(KeyObject);
+        return STATUS_INVALID_HANDLE;
+    }
 
     if (PreviousMode != KernelMode)
     {
@@ -882,6 +907,12 @@ NtQueryKey(IN HANDLE KeyHandle,
     /* Quit on failure */
     if (!NT_SUCCESS(Status)) return Status;
 
+    if (KeyObject->KeyControlBlock->Flags & KEY_PREDEF_HANDLE)
+    {
+        ObDereferenceObject(KeyObject);
+        return STATUS_INVALID_HANDLE;
+    }
+
     if (PreviousMode != KernelMode)
     {
         _SEH2_TRY
@@ -978,6 +1009,12 @@ NtQueryValueKey(IN HANDLE KeyHandle,
                                        NULL);
     if (!NT_SUCCESS(Status))
         return Status;
+
+    if (KeyObject->KeyControlBlock->Flags & KEY_PREDEF_HANDLE)
+    {
+        ObDereferenceObject(KeyObject);
+        return STATUS_INVALID_HANDLE;
+    }
 
     if (PreviousMode != KernelMode)
     {
@@ -1090,6 +1127,12 @@ NtSetValueKey(IN HANDLE KeyHandle,
                                        NULL);
     if (!NT_SUCCESS(Status))
         return Status;
+
+    if (KeyObject->KeyControlBlock->Flags & KEY_PREDEF_HANDLE)
+    {
+        ObDereferenceObject(KeyObject);
+        return STATUS_INVALID_HANDLE;
+    }
 
     if (!DataSize)
         Data = NULL;
@@ -1247,6 +1290,12 @@ NtDeleteValueKey(IN HANDLE KeyHandle,
                                        NULL);
     if (!NT_SUCCESS(Status))
         return Status;
+
+    if (KeyObject->KeyControlBlock->Flags & KEY_PREDEF_HANDLE)
+    {
+        ObDereferenceObject(KeyObject);
+        return STATUS_INVALID_HANDLE;
+    }
 
     /* Capture the string */
     Status = ProbeAndCaptureUnicodeString(&ValueNameCopy, PreviousMode, ValueName);

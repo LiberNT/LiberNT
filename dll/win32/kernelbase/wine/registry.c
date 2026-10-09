@@ -189,7 +189,13 @@ static HKEY get_perflib_key( HANDLE key )
 {
     static const WCHAR performance_text[] =
             L"\\Registry\\Machine\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Perflib\\009";
+#ifdef __REACTOS__
+    static const WCHAR performance_nlstext[] =
+            L"\\Registry\\Machine\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Perflib\\CurrentLanguage";
+    char buffer[256];
+#else
     char buffer[200];
+#endif
     OBJECT_NAME_INFORMATION *info = (OBJECT_NAME_INFORMATION *)buffer;
 
     if (!NtQueryObject( key, ObjectNameInformation, buffer, sizeof(buffer), NULL ))
@@ -199,6 +205,13 @@ static HKEY get_perflib_key( HANDLE key )
             NtClose( key );
             return HKEY_PERFORMANCE_TEXT;
         }
+#ifdef __REACTOS__
+        if (!wcsicmp( info->Name.Buffer, performance_nlstext ))
+        {
+            NtClose( key );
+            return HKEY_PERFORMANCE_NLSTEXT;
+        }
+#endif
     }
 
     return key;
