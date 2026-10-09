@@ -66,6 +66,30 @@ BOOL AppSmokeCycleDisplayMode(void)
     return TRUE;
 }
 
+START_TEST(saved_bitmap)
+{
+    HDC Dc = CreateCompatibleDC(NULL);
+    HBITMAP First = CreateBitmap(8, 8, 1, 1, NULL), Second = CreateBitmap(8, 8, 1, 1, NULL);
+    HGDIOBJ Stock;
+    int Level;
+
+    ok(Dc != NULL && First != NULL && Second != NULL, "Creating the DC and bitmaps failed\n");
+    Stock = SelectObject(Dc, First);
+    ok(Stock != NULL, "Selecting the first bitmap failed\n");
+    Level = SaveDC(Dc);
+    ok(Level != 0, "SaveDC failed\n");
+    ok(SelectObject(Dc, Second) == First, "Selecting the second bitmap did not return the first\n");
+    SelectObject(Dc, First);
+    ok(RestoreDC(Dc, Level), "RestoreDC failed\n");
+    ok(GetCurrentObject(Dc, OBJ_BITMAP) == First, "The restored DC does not hold the first bitmap\n");
+    ok(SelectObject(Dc, Stock) == First, "Selecting the stock bitmap did not return the first\n");
+    ok(SelectObject(Dc, Second) == Stock, "The second bitmap cannot be selected after the restore\n");
+    SelectObject(Dc, Stock);
+    ok(DeleteObject(First), "Deleting the first bitmap failed\n");
+    ok(DeleteObject(Second), "Deleting the second bitmap failed\n");
+    ok(DeleteDC(Dc), "DeleteDC failed\n");
+}
+
 START_TEST(window_dc)
 {
     static const WCHAR ClassName[] = L"AppSmokeOwnDc";

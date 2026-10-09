@@ -20,6 +20,7 @@ static const struct
     { "yield_fairness", 20000 },
     { "sockets", 20000 },
     { "d3dkmt", 15000 },
+    { "saved_bitmap", 10000 },
     { "window_dc", 15000 },
     { "display_mode", 30000 },
     { "swap_chain", 30000 },

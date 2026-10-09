@@ -469,7 +469,7 @@ NtGdiSelectBitmap(
         if (hdcOld != NULL)
         {
             /* The bitmap is already selected into a different DC */
-            ASSERT(hdcOld != hdc);
+            ASSERT((hdcOld != hdc) || DC_bIsSurfaceSaved(pdc, psurfNew));
 
             /* Dereference the bitmap, unlock the DC and fail. */
             SURFACE_ShareUnlockSurface(psurfNew);
