@@ -161,6 +161,18 @@ KeDisconnectInterrupt(PKINTERRUPT Interrupt)
     return TRUE;
 }
 
+BOOLEAN
+NTAPI
+KeDispatchSecondaryInterrupt(
+    _In_ ULONG Vector,
+    _In_ ULONG_PTR Flags,
+    _In_opt_ PVOID Reserved)
+{
+    UNREFERENCED_PARAMETER(Flags);
+    UNREFERENCED_PARAMETER(Reserved);
+    return KiDispatchPassiveInterrupt(Vector, NULL);
+}
+
 /* The debugger lists connected sources with the other processors frozen. */
 PKINTERRUPT
 NTAPI

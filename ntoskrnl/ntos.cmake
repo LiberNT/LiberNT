@@ -489,6 +489,7 @@ elseif(ARCH STREQUAL "riscv64")
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/riscv64/usercall.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/riscv64/usercopy.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/riscv64/vector.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/riscv64/xstate.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ps/riscv64/psctx.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/rtl/riscv64/rtlexcpt.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/rtl/riscv64/slist.c)

@@ -268,3 +268,15 @@ KiDispatchInterrupt(VOID)
     KxQueueReadyThread(OldThread, Prcb);
     KiSwapContext(APC_LEVEL, OldThread);
 }
+
+BOOLEAN
+NTAPI
+KeDispatchSecondaryInterrupt(
+    _In_ ULONG Vector,
+    _In_ ULONG_PTR Flags,
+    _In_opt_ PVOID Reserved)
+{
+    UNREFERENCED_PARAMETER(Flags);
+    UNREFERENCED_PARAMETER(Reserved);
+    return KiDispatchPassiveInterrupt(Vector, NULL);
+}
