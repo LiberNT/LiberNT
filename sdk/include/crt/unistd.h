@@ -10,6 +10,25 @@
  */
 
 #include <io.h>
+#include <sys/types.h>
+
+#define F_OK 0
+#define X_OK 1
+#define W_OK 2
+#define R_OK 4
+
+#ifndef _PID_T_
+#define _PID_T_
+#ifndef _WIN64
+typedef int _pid_t;
+#else
+typedef __int64 _pid_t;
+#endif
+
+#ifndef NO_OLDNAMES
+typedef _pid_t pid_t;
+#endif
+#endif
 
 #ifndef _SSIZE_T_DEFINED
 #define _SSIZE_T_DEFINED
