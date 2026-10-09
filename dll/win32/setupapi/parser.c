@@ -75,6 +75,7 @@ struct inf_file
     WCHAR           *filename;        /* filename of the INF */
     WCHAR           *driver_store_dir;
     BOOL             driver_store_checked;
+    unsigned int     broken_line;
 };
 
 /* parser definitions */
@@ -1046,11 +1047,15 @@ static DWORD parse_buffer( struct inf_file *file, const WCHAR *buffer, const WCH
     /* find the [strings] section */
     file->strings_section = find_section( file, Strings );
 
+#ifdef __REACTOS__
+    file->broken_line = parser.broken_line;
+#else
     if (file->strings_section == -1 && parser.broken_line)
     {
         if (error_line) *error_line = parser.broken_line;
         return ERROR_EXPECTED_SECTION_NAME;
     }
+#endif
 
     return 0;
 }
@@ -1083,7 +1088,19 @@ static struct inf_file *parse_file( HANDLE handle, UINT *error_line, DWORD style
     struct inf_file *file;
 
     DWORD size = GetFileSize( handle, NULL );
+#ifdef __REACTOS__
+    HANDLE mapping;
+
+    if (!size)
+    {
+        if (error_line) *error_line = 0;
+        SetLastError( ERROR_GENERAL_SYNTAX );
+        return NULL;
+    }
+    mapping = CreateFileMappingW( handle, NULL, PAGE_READONLY, 0, size, NULL );
+#else
     HANDLE mapping = CreateFileMappingW( handle, NULL, PAGE_READONLY, 0, size, NULL );
+#endif
     if (!mapping) return NULL;
     buffer = MapViewOfFile( mapping, FILE_MAP_READ, 0, 0, size );
     NtClose( mapping );
@@ -1136,6 +1153,39 @@ static struct inf_file *parse_file( HANDLE handle, UINT *error_line, DWORD style
         err = parse_buffer( file, new_buff, (WCHAR *)((char *)buffer + size), error_line );
     }
 
+#ifdef __REACTOS__
+    if (err != ERROR_NOT_ENOUGH_MEMORY)
+    {
+        BOOL win4 = FALSE;
+        int version_index = find_section( file, Version );
+        if (version_index != -1)
+        {
+            struct line *line = find_line( file, version_index, Signature );
+            if (line && line->nb_fields > 0)
+            {
+                struct field *field = file->fields + line->first_field;
+                if (!strcmpiW( field->text, Chicago ) ||
+                    !strcmpiW( field->text, WindowsNT ) ||
+                    !strcmpiW( field->text, Windows95 ))
+                    win4 = TRUE;
+            }
+        }
+        if (!(style & (win4 ? INF_STYLE_WIN4 : INF_STYLE_OLDNT)))
+        {
+            if (error_line) *error_line = 0;
+            err = ERROR_WRONG_INF_STYLE;
+        }
+        else if (!err)
+        {
+            if (file->broken_line && (!win4 || file->strings_section == -1))
+            {
+                if (error_line) *error_line = file->broken_line;
+                err = ERROR_EXPECTED_SECTION_NAME;
+            }
+            else if (error_line) *error_line = 0;
+        }
+    }
+#else
     if (!err)  /* now check signature */
     {
         int version_index = find_section( file, Version );
@@ -1153,6 +1203,7 @@ static struct inf_file *parse_file( HANDLE handle, UINT *error_line, DWORD style
         if (error_line) *error_line = 0;
         if (style & INF_STYLE_WIN4) err = ERROR_WRONG_INF_STYLE;
     }
+#endif
 
  done:
     UnmapViewOfFile( buffer );
