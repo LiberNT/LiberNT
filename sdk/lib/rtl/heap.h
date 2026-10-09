@@ -259,7 +259,6 @@ typedef struct _HEAP
     USHORT MaximumTagIndex;
     PHEAP_TAG_ENTRY TagEntries;
     LIST_ENTRY UCRList;
-    LIST_ENTRY UCRSegments; // FIXME: non-Vista
     ULONG_PTR AlignRound;
     ULONG_PTR AlignMask;
     LIST_ENTRY VirtualAllocdBlocks;
@@ -315,12 +314,8 @@ typedef struct _HEAP_UCR_DESCRIPTOR
     SIZE_T Size;
 } HEAP_UCR_DESCRIPTOR, *PHEAP_UCR_DESCRIPTOR;
 
-typedef struct _HEAP_UCR_SEGMENT
-{
-    LIST_ENTRY ListEntry;
-    SIZE_T ReservedSize;
-    SIZE_T CommittedSize;
-} HEAP_UCR_SEGMENT, *PHEAP_UCR_SEGMENT;
+#define HEAP_UCR_TAIL_SIZE ((HEAP_ENTRY_SIZE + (ULONG)sizeof(HEAP_UCR_DESCRIPTOR)) >> HEAP_ENTRY_SHIFT)
+C_ASSERT((sizeof(HEAP_UCR_DESCRIPTOR) & (sizeof(HEAP_ENTRY) - 1)) == 0);
 
 typedef struct _HEAP_ENTRY_EXTRA
 {
