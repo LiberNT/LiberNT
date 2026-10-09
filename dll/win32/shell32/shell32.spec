@@ -550,7 +550,7 @@
 @ stdcall SHGetPathFromIDListW(ptr ptr) # 2k3:315, Vista:383
 @ stdcall -version=0x601+ SHGetPropertyStoreForWindow(long ptr ptr)
 @ stub -version=0x600+ SHGetPropertyStoreFromIDList # Vista:384
-@ stub -version=0x600+ SHGetPropertyStoreFromParsingName # Vista:385
+@ stdcall -version=0x600+ SHGetPropertyStoreFromParsingName(wstr ptr long ptr ptr) # Vista:385
 @ stdcall SHGetSettings(ptr long) # 2k3:316, Vista:386
 @ stdcall SHGetSpecialFolderLocation(long long ptr) # 2k3:317, Vista:387
 @ stdcall SHGetSpecialFolderPathA(long ptr long long) # 2k3:318, Vista:388

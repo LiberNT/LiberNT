@@ -367,6 +367,21 @@ HRESULT WINAPI SHCreateItemFromParsingName(PCWSTR pszPath, IBindCtx *pbc,
     return hr;
 }
 
+EXTERN_C HRESULT WINAPI SHGetPropertyStoreFromParsingName(PCWSTR pszPath, IBindCtx *pbc,
+    GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv)
+{
+    CComPtr<IShellItem2> item;
+    HRESULT hr;
+
+    if (!ppv)
+        return E_POINTER;
+    *ppv = NULL;
+    hr = SHCreateItemFromParsingName(pszPath, pbc, IID_PPV_ARG(IShellItem2, &item));
+    if (SUCCEEDED(hr))
+        hr = item->GetPropertyStore(flags, riid, ppv);
+    return hr;
+}
+
 HRESULT WINAPI SHCreateItemFromRelativeName(IShellItem *parent, PCWSTR name, IBindCtx *pbc,
     REFIID riid, void **ppv)
 {
