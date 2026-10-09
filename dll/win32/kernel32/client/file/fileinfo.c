@@ -280,6 +280,9 @@ GetFileType(HANDLE hFile)
     {
       if (VerifyConsoleIoHandle(hFile))
 	return FILE_TYPE_CHAR;
+
+      SetLastError(ERROR_INVALID_HANDLE);
+      return FILE_TYPE_UNKNOWN;
     }
 
   Status = NtQueryVolumeInformationFile(hFile,
