@@ -187,6 +187,39 @@ typedef struct STRUCT(_PEB)
 #else
     PTR(PVOID) pUnused;
 #endif
+    PTR(PVOID) pImageHeaderHash;
+    union
+    {
+        ULONG TracingFlags;
+        struct
+        {
+            ULONG HeapTracingEnabled:1;
+            ULONG CritSecTracingEnabled:1;
+            ULONG LibLoaderTracingEnabled:1;
+            ULONG SpareTracingBits:29;
+        };
+    };
+    ULONGLONG CsrServerReadOnlySharedMemoryBase;
+    PTR(ULONG_PTR) TppWorkerpListLock;
+    STRUCT(LIST_ENTRY) TppWorkerpList;
+    PTR(PVOID) WaitOnAddressHashTable[128];
+    PTR(PVOID) TelemetryCoverageHeader;
+    ULONG CloudFileFlags;
+    ULONG CloudFileDiagFlags;
+    CHAR PlaceholderCompatibilityMode;
+    CHAR PlaceholderCompatibilityModeReserved[7];
+    PTR(PVOID) LeapSecondData;
+    union
+    {
+        ULONG LeapSecondFlags;
+        struct
+        {
+            ULONG SixtySecondEnabled:1;
+            ULONG LeapSecondReserved:31;
+        };
+    };
+    ULONG NtGlobalFlag2;
+    ULONGLONG ExtendedFeatureDisableMask;
 #endif
 } STRUCT(PEB), *STRUCT(PPEB);
 
@@ -210,6 +243,12 @@ C_ASSERT(FIELD_OFFSET(STRUCT(PEB), FlsHighIndex) == 0x350);
 #endif
 #if (NTDDI_VERSION >= NTDDI_WIN10)
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), EcCodeBitMap) == 0x368);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), CsrServerReadOnlySharedMemoryBase) == 0x380);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), WaitOnAddressHashTable) == 0x3A0);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), TelemetryCoverageHeader) == 0x7A0);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), NtGlobalFlag2) == 0x7C4);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), ExtendedFeatureDisableMask) == 0x7C8);
+C_ASSERT(sizeof(STRUCT(PEB)) == 0x7D0);
 #endif
 #else
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), Mutant) == 0x04);
@@ -229,6 +268,12 @@ C_ASSERT(FIELD_OFFSET(STRUCT(PEB), FlsHighIndex) == 0x22C);
 #endif
 #if (NTDDI_VERSION >= NTDDI_WIN10)
 C_ASSERT(FIELD_OFFSET(STRUCT(PEB), pUnused) == 0x238);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), CsrServerReadOnlySharedMemoryBase) == 0x248);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), WaitOnAddressHashTable) == 0x25C);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), TelemetryCoverageHeader) == 0x45C);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), NtGlobalFlag2) == 0x478);
+C_ASSERT(FIELD_OFFSET(STRUCT(PEB), ExtendedFeatureDisableMask) == 0x480);
+C_ASSERT(sizeof(STRUCT(PEB)) == 0x488);
 #endif
 #endif
 

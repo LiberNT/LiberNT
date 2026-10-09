@@ -549,6 +549,9 @@ typedef struct _PEB
     PVOID                        LeapSecondData;                    /* 470/7b8 */
     ULONG                        LeapSecondFlags;                   /* 474/7c0 */
     ULONG                        NtGlobalFlag2;                     /* 478/7c4 */
+#ifdef __REACTOS__
+    ULONGLONG                    ExtendedFeatureDisableMask;        /* 480/7c8 */
+#endif
 } PEB, *PPEB;
 
 
@@ -995,9 +998,16 @@ typedef struct _PEB32
     ULONG                        LeapSecondData;                    /* 0470 */
     ULONG                        LeapSecondFlags;                   /* 0474 */
     ULONG                        NtGlobalFlag2;                     /* 0478 */
+#ifdef __REACTOS__
+    ULONGLONG                    ExtendedFeatureDisableMask;        /* 0480 */
+#endif
 } PEB32;
 
+#ifdef __REACTOS__
+C_ASSERT( sizeof(PEB32) == 0x488 );
+#else
 C_ASSERT( sizeof(PEB32) == 0x480 );
+#endif
 
 typedef struct _PEB64
 {
@@ -1109,9 +1119,16 @@ typedef struct _PEB64
     ULONG64                      LeapSecondData;                    /* 07b8 */
     ULONG                        LeapSecondFlags;                   /* 07c0 */
     ULONG                        NtGlobalFlag2;                     /* 07c4 */
+#ifdef __REACTOS__
+    ULONGLONG                    ExtendedFeatureDisableMask;        /* 07c8 */
+#endif
 } PEB64;
 
+#ifdef __REACTOS__
+C_ASSERT( sizeof(PEB64) == 0x7d0 );
+#else
 C_ASSERT( sizeof(PEB64) == 0x7c8 );
+#endif
 
 typedef struct _TEB32
 {
