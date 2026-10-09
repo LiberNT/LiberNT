@@ -147,12 +147,16 @@ cleanup:
 
 HGLOBAL RenderSHELLIDLIST(const ITEMIDLIST *pidlRoot, const ITEMIDLIST **apidl, unsigned int cidl)
 {
+	static const USHORT EmptyPidl = 0;
 	UINT i;
 	int offset = 0, sizePidl, size;
 	HGLOBAL hGlobal;
 	LPIDA	pcida;
 
 	TRACE("(%p,%p,%u)\n", pidlRoot, apidl, cidl);
+
+	if (!pidlRoot)
+	    pidlRoot = (const ITEMIDLIST *)&EmptyPidl;
 
 	/* get the size needed */
 	size = sizeof(CIDA) + sizeof (UINT)*(cidl);	/* header */
