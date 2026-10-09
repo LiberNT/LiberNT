@@ -21,6 +21,7 @@ extern "C" {
 
 #define LINE_LEN	256
 #define MAX_INF_STRING_LENGTH	4096
+#define MAX_INF_SECTION_NAME_LENGTH	255
 #define MAX_TITLE_LEN	60
 #define MAX_INSTRUCTION_LEN	256
 #define MAX_LABEL_LEN	30
@@ -1998,6 +1999,8 @@ WINSETUPAPI BOOL WINAPI SetupDiSetSelectedDriverW(_In_ HDEVINFO, _Inout_opt_ PSP
 WINSETUPAPI BOOL WINAPI SetupDiUnremoveDevice(_In_ HDEVINFO, _Inout_ PSP_DEVINFO_DATA);
 WINSETUPAPI HDSKSPC WINAPI SetupDuplicateDiskSpaceListA(_In_ HDSKSPC, _Reserved_ PVOID, _Reserved_ DWORD, _In_ UINT);
 WINSETUPAPI HDSKSPC WINAPI SetupDuplicateDiskSpaceListW(_In_ HDSKSPC, _Reserved_ PVOID, _Reserved_ DWORD, _In_ UINT);
+WINSETUPAPI BOOL WINAPI SetupEnumInfSectionsA(_In_ HINF, _In_ UINT, _Out_writes_opt_(Size) PSTR, _In_ UINT Size, _Out_opt_ UINT*);
+WINSETUPAPI BOOL WINAPI SetupEnumInfSectionsW(_In_ HINF, _In_ UINT, _Out_writes_opt_(Size) PWSTR, _In_ UINT Size, _Out_opt_ UINT*);
 WINSETUPAPI BOOL WINAPI SetupFindFirstLineA(_In_ HINF, _In_ PCSTR, _In_opt_ PCSTR, _Out_ PINFCONTEXT);
 WINSETUPAPI BOOL WINAPI SetupFindFirstLineW(_In_ HINF, _In_ PCWSTR, _In_opt_ PCWSTR, _Out_ PINFCONTEXT);
 WINSETUPAPI BOOL WINAPI SetupFindNextLine(_In_ PINFCONTEXT, _Out_ PINFCONTEXT);
@@ -2620,6 +2623,7 @@ WINSETUPAPI PSTR WINAPI UnicodeToMultiByte(PCWSTR lpUnicodeStr, UINT uCodePage);
 #define SetupDiSetDriverInstallParams	SetupDiSetDriverInstallParamsW
 #define SetupDiSetSelectedDriver	SetupDiSetSelectedDriverW
 #define SetupDuplicateDiskSpaceList	SetupDuplicateDiskSpaceListW
+#define SetupEnumInfSections	SetupEnumInfSectionsW
 #define SetupFindFirstLine	SetupFindFirstLineW
 #define SetupFindNextMatchLine	SetupFindNextMatchLineW
 #define SetupFreeSourceList	SetupFreeSourceListW
@@ -2745,6 +2749,7 @@ WINSETUPAPI PSTR WINAPI UnicodeToMultiByte(PCWSTR lpUnicodeStr, UINT uCodePage);
 #define SetupDiSetDriverInstallParams	SetupDiSetDriverInstallParamsA
 #define SetupDiSetSelectedDriver	SetupDiSetSelectedDriverA
 #define SetupDuplicateDiskSpaceList	SetupDuplicateDiskSpaceListA
+#define SetupEnumInfSections	SetupEnumInfSectionsA
 #define SetupFindFirstLine	SetupFindFirstLineA
 #define SetupFindNextMatchLine	SetupFindNextMatchLineA
 #define SetupFreeSourceList	SetupFreeSourceListA

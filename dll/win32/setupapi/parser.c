@@ -1534,7 +1534,11 @@ void WINAPI SetupCloseInfFile( HINF hinf )
 /***********************************************************************
  *            SetupEnumInfSectionsA   (SETUPAPI.@)
  */
+#ifdef __REACTOS__
+BOOL WINAPI SetupEnumInfSectionsA( HINF hinf, UINT index, PSTR buffer, UINT size, UINT *need )
+#else
 BOOL WINAPI SetupEnumInfSectionsA( HINF hinf, UINT index, PSTR buffer, DWORD size, DWORD *need )
+#endif
 {
     struct inf_file *file = hinf;
 
@@ -1569,7 +1573,11 @@ BOOL WINAPI SetupEnumInfSectionsA( HINF hinf, UINT index, PSTR buffer, DWORD siz
 /***********************************************************************
  *            SetupEnumInfSectionsW   (SETUPAPI.@)
  */
+#ifdef __REACTOS__
+BOOL WINAPI SetupEnumInfSectionsW( HINF hinf, UINT index, PWSTR buffer, UINT size, UINT *need )
+#else
 BOOL WINAPI SetupEnumInfSectionsW( HINF hinf, UINT index, PWSTR buffer, DWORD size, DWORD *need )
+#endif
 {
     struct inf_file *file = hinf;
 
