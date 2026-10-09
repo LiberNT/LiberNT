@@ -217,16 +217,16 @@ HidClassPDO_HandleQueryHardwareId(
         //
         // multi-tlc device
         //
-        Offset = _swprintf(&Buffer[Offset], L"HID\\Vid_%04x&Pid_%04x&Rev_%04x&Col%02x", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, PDODeviceExtension->Common.Attributes.VersionNumber, PDODeviceExtension->CollectionNumber) + 1;
-        Offset += _swprintf(&Buffer[Offset], L"HID\\Vid_%04x&Pid_%04x&Col%02x", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, PDODeviceExtension->CollectionNumber) + 1;
+        Offset = _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X&REV_%04X&Col%02X", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, PDODeviceExtension->Common.Attributes.VersionNumber, PDODeviceExtension->CollectionNumber) + 1;
+        Offset += _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X&Col%02X", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, PDODeviceExtension->CollectionNumber) + 1;
     }
     else
     {
         //
         // single tlc device
         //
-        Offset = _swprintf(&Buffer[Offset], L"HID\\Vid_%04x&Pid_%04x&Rev_%04x", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, PDODeviceExtension->Common.Attributes.VersionNumber) + 1;
-        Offset += _swprintf(&Buffer[Offset], L"HID\\Vid_%04x&Pid_%04x", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID) + 1;
+        Offset = _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X&REV_%04X", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, PDODeviceExtension->Common.Attributes.VersionNumber) + 1;
+        Offset += _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID) + 1;
     }
 
     //
@@ -279,7 +279,7 @@ HidClassPDO_HandleQueryHardwareId(
     //
     // add HID_DEVICE_UP:0001_U:0002'
     //
-    Offset += _swprintf(&Buffer[Offset], L"HID_DEVICE_UP:%04x_U:%04x", CollectionDescription->UsagePage, CollectionDescription->Usage) + 1;
+    Offset += _swprintf(&Buffer[Offset], L"HID_DEVICE_UP:%04X_U:%04X", CollectionDescription->UsagePage, CollectionDescription->Usage) + 1;
 
     //
     // add HID
@@ -323,11 +323,6 @@ HidClass_GetParentInstanceId_Completion(
     IN PIRP Irp,
     IN PVOID Context);
 
-static NTSTATUS
-HidClass_GetParentInstanceId(
-    IN PDEVICE_OBJECT DeviceObject,
-    OUT PWSTR *InstanceId);
-
 NTSTATUS
 HidClassPDO_HandleQueryInstanceId(
     IN PDEVICE_OBJECT DeviceObject,
@@ -335,11 +330,6 @@ HidClassPDO_HandleQueryInstanceId(
 {
     LPWSTR Buffer;
     PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension;
-    PDEVICE_OBJECT ParentDevice;
-    PWSTR ParentId = NULL;
-    WCHAR SuffixBuffer[20];
-    NTSTATUS Status;
-    ULONG TotalSize;
 
     //
     // get device extension
@@ -348,59 +338,18 @@ HidClassPDO_HandleQueryInstanceId(
     ASSERT(PDODeviceExtension->Common.IsFDO == FALSE);
 
     //
-    // Get the NextDeviceObject from the FDO extension.
-    // This is the device object of the parent (e.g. USB) driver.
-    //
-    ParentDevice = PDODeviceExtension->FDODeviceExtension->Common.HidDeviceExtension.NextDeviceObject;
-
-    //
-    // Query Parent Instance ID to ensure uniqueness
-    //
-    Status = HidClass_GetParentInstanceId(ParentDevice, &ParentId);
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("[HIDCLASS] Failed to query Parent Instance ID %x\n", Status);
-        ParentId = NULL;
-    }
-
-    //
-    // Prepare suffix: &ColXXXX
-    //
-    swprintf(SuffixBuffer,
-             RTL_NUMBER_OF(SuffixBuffer),
-             L"&Col%04x",
-             PDODeviceExtension->CollectionNumber);
-
-    //
-    // Calculate required size
-    //
-    TotalSize = (ParentId ? wcslen(ParentId) * sizeof(WCHAR) : sizeof(WCHAR)) + sizeof(SuffixBuffer);
-
-    //
     // allocate buffer
     //
-    Buffer = ExAllocatePoolWithTag(NonPagedPool, TotalSize, HIDCLASS_TAG);
+    Buffer = ExAllocatePoolWithTag(NonPagedPool, 5 * sizeof(WCHAR), HIDCLASS_TAG);
     if (!Buffer)
     {
-        if (ParentId)
-            ExFreePoolWithTag(ParentId, 0);
-
         //
         // failed
         //
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    //
-    // Build the Instance ID: ParentInstanceID&ColXXXX
-    //
-    Buffer[0] = UNICODE_NULL;
-    if (ParentId)
-    {
-        wcscpy(Buffer, ParentId);
-        ExFreePoolWithTag(ParentId, 0);
-    }
-    wcscat(Buffer, SuffixBuffer);
+    swprintf(Buffer, 5, L"%04x", PDODeviceExtension->CollectionNumber - 1);
 
     DPRINT("[HIDCLASS] Generated Instance ID: %S\n", Buffer);
     Irp->IoStatus.Information = (ULONG_PTR)Buffer;
@@ -409,71 +358,6 @@ HidClassPDO_HandleQueryInstanceId(
     // done
     //
     return STATUS_SUCCESS;
-}
-
-static NTSTATUS NTAPI
-HidClass_GetParentInstanceId_Completion(
-    IN PDEVICE_OBJECT DeviceObject,
-    IN PIRP Irp,
-    IN PVOID Context)
-{
-    PKEVENT Event = (PKEVENT)Context;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-    UNREFERENCED_PARAMETER(Irp);
-
-    KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
-    return STATUS_MORE_PROCESSING_REQUIRED;
-}
-
-static NTSTATUS
-HidClass_GetParentInstanceId(
-    IN PDEVICE_OBJECT DeviceObject,
-    OUT PWSTR *InstanceId)
-{
-    PIRP Irp;
-    PIO_STACK_LOCATION IrpSp;
-    KEVENT Event;
-    NTSTATUS Status;
-
-    KeInitializeEvent(&Event, NotificationEvent, FALSE);
-
-    Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
-    if (!Irp)
-        return STATUS_INSUFFICIENT_RESOURCES;
-
-    IrpSp = IoGetNextIrpStackLocation(Irp);
-    RtlZeroMemory(IrpSp, sizeof(IO_STACK_LOCATION));
-
-    IrpSp->MajorFunction = IRP_MJ_PNP;
-    IrpSp->MinorFunction = IRP_MN_QUERY_ID;
-    IrpSp->Parameters.QueryId.IdType = BusQueryInstanceID;
-
-    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
-    Irp->IoStatus.Information = 0;
-
-    IoSetCompletionRoutine(Irp, HidClass_GetParentInstanceId_Completion, &Event, TRUE, TRUE, TRUE);
-
-    Status = IoCallDriver(DeviceObject, Irp);
-
-    if (Status == STATUS_PENDING)
-    {
-        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
-    }
-
-    Status = Irp->IoStatus.Status;
-
-    if (NT_SUCCESS(Status))
-    {
-        *InstanceId = (PWSTR)Irp->IoStatus.Information;
-    }
-    else
-    {
-        *InstanceId = NULL;
-    }
-
-    IoFreeIrp(Irp);
-    return Status;
 }
 
 NTSTATUS
@@ -597,6 +481,8 @@ HidClassPDO_PnP(
             IoStack->Parameters.DeviceCapabilities.Capabilities->Removable = FALSE;
             IoStack->Parameters.DeviceCapabilities.Capabilities->SilentInstall = TRUE;
             IoStack->Parameters.DeviceCapabilities.Capabilities->SurpriseRemovalOK = TRUE;
+            IoStack->Parameters.DeviceCapabilities.Capabilities->UINumber = MAXULONG;
+            IoStack->Parameters.DeviceCapabilities.Capabilities->UniqueID = FALSE;
 
             /*
              * HIDCLASS serves collection I/O itself. Collections installed

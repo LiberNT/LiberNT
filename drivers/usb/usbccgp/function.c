@@ -398,13 +398,13 @@ USBCCGP_InitFunctionDescriptor(
     // now init hardware id
     //
     Index = _swprintf(Buffer,
-                      L"USB\\VID_%04x&PID_%04x&Rev_%04x&MI_%02x",
+                      L"USB\\VID_%04X&PID_%04X&REV_%04X&MI_%02X",
                       FDODeviceExtension->DeviceDescriptor->idVendor,
                       FDODeviceExtension->DeviceDescriptor->idProduct,
                       FDODeviceExtension->DeviceDescriptor->bcdDevice,
                       Descriptor->bFirstInterface) + 1;
     Index += _swprintf(&Buffer[Index],
-                       L"USB\\VID_%04x&PID_%04x&MI_%02x",
+                       L"USB\\VID_%04X&PID_%04X&MI_%02X",
                        FDODeviceExtension->DeviceDescriptor->idVendor,
                        FDODeviceExtension->DeviceDescriptor->idProduct,
                        Descriptor->bFirstInterface) + 1;
@@ -429,16 +429,16 @@ USBCCGP_InitFunctionDescriptor(
     // now init the compatible id
     //
     Index = _swprintf(Buffer,
-                      L"USB\\Class_%02x&SubClass_%02x&Prot_%02x",
+                      L"USB\\Class_%02X&SubClass_%02X&Prot_%02X",
                       Descriptor->bFunctionClass,
                       Descriptor->bFunctionSubClass,
                       Descriptor->bFunctionProtocol) + 1;
     Index += _swprintf(&Buffer[Index],
-                       L"USB\\Class_%02x&SubClass_%02x",
+                       L"USB\\Class_%02X&SubClass_%02X",
                        Descriptor->bFunctionClass,
                        Descriptor->bFunctionSubClass) + 1;
     Index += _swprintf(&Buffer[Index],
-                       L"USB\\Class_%02x",
+                       L"USB\\Class_%02X",
                        Descriptor->bFunctionClass) + 1;
 
     // allocate result buffer
@@ -576,13 +576,13 @@ USBCCG_InitIdsWithInterfaceDescriptor(
     // now init hardware id
     //
     Index = _swprintf(Buffer,
-                      L"USB\\VID_%04x&PID_%04x&Rev_%04x&MI_%02x",
+                      L"USB\\VID_%04X&PID_%04X&REV_%04X&MI_%02X",
                       FDODeviceExtension->DeviceDescriptor->idVendor,
                       FDODeviceExtension->DeviceDescriptor->idProduct,
                       FDODeviceExtension->DeviceDescriptor->bcdDevice,
                       FunctionIndex) + 1;
     Index += _swprintf(&Buffer[Index],
-                       L"USB\\VID_%04x&PID_%04x&MI_%02x",
+                       L"USB\\VID_%04X&PID_%04X&MI_%02X",
                        FDODeviceExtension->DeviceDescriptor->idVendor,
                        FDODeviceExtension->DeviceDescriptor->idProduct,
                        FunctionIndex) + 1;
@@ -607,16 +607,16 @@ USBCCG_InitIdsWithInterfaceDescriptor(
     // now init the compatible id
     //
     Index = _swprintf(Buffer,
-                      L"USB\\Class_%02x&SubClass_%02x&Prot_%02x",
+                      L"USB\\Class_%02X&SubClass_%02X&Prot_%02X",
                       Descriptor->bInterfaceClass,
                       Descriptor->bInterfaceSubClass,
                       Descriptor->bInterfaceProtocol) + 1;
     Index += _swprintf(&Buffer[Index],
-                       L"USB\\Class_%02x&SubClass_%02x",
+                       L"USB\\Class_%02X&SubClass_%02X",
                        Descriptor->bInterfaceClass,
                        Descriptor->bInterfaceSubClass) + 1;
     Index += _swprintf(&Buffer[Index],
-                       L"USB\\Class_%02x",
+                       L"USB\\Class_%02X",
                        Descriptor->bInterfaceClass) + 1;
 
     // allocate result buffer

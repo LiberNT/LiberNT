@@ -2180,7 +2180,7 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      NULL,
                                      &Remaining,
                                      0,
-                                     L"USB\\Vid_%04x&Pid_%04x",
+                                     L"USB\\VID_%04X&PID_%04X",
                                      DeviceDescriptor->idVendor,
                                      DeviceDescriptor->idProduct);
             }
@@ -2219,7 +2219,7 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      &EndBuffer,
                                      &Remaining,
                                      0,
-                                     L"USB\\Vid_%04x&Pid_%04x&Rev_%04x",
+                                     L"USB\\VID_%04X&PID_%04X&REV_%04X",
                                      DeviceDescriptor->idVendor,
                                      DeviceDescriptor->idProduct,
                                      DeviceDescriptor->bcdDevice);
@@ -2232,7 +2232,7 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      NULL,
                                      &Remaining,
                                      0,
-                                     L"USB\\Vid_%04x&Pid_%04x",
+                                     L"USB\\VID_%04X&PID_%04X",
                                      DeviceDescriptor->idVendor,
                                      DeviceDescriptor->idProduct);
             }
@@ -2285,7 +2285,7 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      &EndBuffer,
                                      &Remaining,
                                      0,
-                                     L"USB\\DevClass_%02x&SubClass_%02x&Prot_%02x",
+                                     L"USB\\DevClass_%02X&SubClass_%02X&Prot_%02X",
                                      InterfaceDescriptor->bInterfaceClass,
                                      InterfaceDescriptor->bInterfaceSubClass,
                                      InterfaceDescriptor->bInterfaceProtocol);
@@ -2298,7 +2298,7 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      &EndBuffer,
                                      &Remaining,
                                      0,
-                                     L"USB\\DevClass_%02x&SubClass_%02x",
+                                     L"USB\\DevClass_%02X&SubClass_%02X",
                                      InterfaceDescriptor->bInterfaceClass,
                                      InterfaceDescriptor->bInterfaceSubClass);
 
@@ -2310,7 +2310,7 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      &EndBuffer,
                                      &Remaining,
                                      0,
-                                     L"USB\\DevClass_%02x",
+                                     L"USB\\DevClass_%02X",
                                      InterfaceDescriptor->bInterfaceClass);
 
                 EndBuffer++;
@@ -2330,7 +2330,7 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      &EndBuffer,
                                      &Remaining,
                                      0,
-                                     L"USB\\Class_%02x&SubClass_%02x&Prot_%02x",
+                                     L"USB\\Class_%02X&SubClass_%02X&Prot_%02X",
                                      InterfaceDescriptor->bInterfaceClass,
                                      InterfaceDescriptor->bInterfaceSubClass,
                                      InterfaceDescriptor->bInterfaceProtocol);
@@ -2343,7 +2343,7 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      &EndBuffer,
                                      &Remaining,
                                      0,
-                                     L"USB\\Class_%02x&SubClass_%02x",
+                                     L"USB\\Class_%02X&SubClass_%02X",
                                      InterfaceDescriptor->bInterfaceClass,
                                      InterfaceDescriptor->bInterfaceSubClass);
 
@@ -2355,7 +2355,7 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      NULL,
                                      &Remaining,
                                      0,
-                                     L"USB\\Class_%02x",
+                                     L"USB\\Class_%02X",
                                      InterfaceDescriptor->bInterfaceClass);
             }
 
