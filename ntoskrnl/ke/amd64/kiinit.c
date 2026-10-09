@@ -532,6 +532,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         /* Set global feature bits */
         KeFeatureBits = (ULONG64)Pcr->Prcb.FeatureBitsHigh << 32 |
                         Pcr->Prcb.FeatureBits;
+        KiInitializeMxCsrMask();
 
         /* Initialize the module list (ntos, hal, kdcom) */
         KiInitModuleList(LoaderBlock);

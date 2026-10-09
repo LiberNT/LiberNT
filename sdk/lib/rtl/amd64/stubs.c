@@ -42,11 +42,7 @@ RtlInitializeContext(
 
     /* Initialize StartAddress and Stack */
     ThreadContext->Rip = (ULONG64)ThreadStartAddress;
-    ThreadContext->Rsp = (ULONG64)StackBase - 6 * sizeof(PVOID);
-
-    /* Align stack by 16 and substract 8 (unaligned on function entry) */
-    ThreadContext->Rsp &= ~15;
-    ThreadContext->Rsp -= 8;
+    ThreadContext->Rsp = ((ULONG64)StackBase - 2 * sizeof(PVOID)) & ~15ULL;
 
     /* Enable Interrupts */
     ThreadContext->EFlags = EFLAGS_INTERRUPT_MASK;

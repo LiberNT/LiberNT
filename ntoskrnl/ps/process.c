@@ -2001,7 +2001,7 @@ PspPrepareWow64Thread(IN HANDLE ProcessHandle,
 #ifdef _M_AMD64
     ThreadContext->Rip = CpuInit.Context.Eip;
     ThreadContext->Rax = CpuInit.Context.Eax;
-    ThreadContext->Rsp = ((CpuAddress - 6 * sizeof(PVOID)) & ~15ULL) - 8;
+    ThreadContext->Rsp = (CpuAddress - 2 * sizeof(PVOID)) & ~15ULL;
     ThreadContext->EFlags = EFLAGS_INTERRUPT_MASK;
     ThreadContext->SegCs = KGDT64_R3_CODE | RPL_MASK;
     ThreadContext->SegDs = KGDT64_R3_DATA | RPL_MASK;
@@ -3434,9 +3434,7 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
 #ifdef _M_AMD64
     /* AMD64: Set up initial context for the thread */
     ThreadContext.Rip = (ULONG64)ImageInformation.TransferAddress;
-    ThreadContext.Rsp = (ULONG64)InitialTeb.StackBase - 6 * sizeof(PVOID);
-    ThreadContext.Rsp &= ~15ULL;
-    ThreadContext.Rsp -= 8;  /* Unaligned on function entry per ABI */
+    ThreadContext.Rsp = ((ULONG64)InitialTeb.StackBase - 2 * sizeof(PVOID)) & ~15ULL;
     ThreadContext.EFlags = EFLAGS_INTERRUPT_MASK;
     ThreadContext.Rcx = (ULONG64)ProcessBasicInfo.PebBaseAddress;
 

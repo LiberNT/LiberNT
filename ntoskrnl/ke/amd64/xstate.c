@@ -525,6 +525,22 @@ KiCaptureUserLegacyFloatingState(
     RtlCopyMemory(FltSave->FloatRegisters, Area.FloatRegisters, sizeof(Area.FloatRegisters));
 }
 
+ULONG KiMxCsrMask;
+
+#ifdef __clang__
+__attribute__((target("fxsr")))
+#endif
+VOID
+NTAPI
+KiInitializeMxCsrMask(VOID)
+{
+    XSAVE_FORMAT Area;
+
+    RtlZeroMemory(&Area, sizeof(Area));
+    _fxsave64(&Area);
+    KiMxCsrMask = Area.MxCsr_Mask ? Area.MxCsr_Mask : 0xFFBF;
+}
+
 #define TAG_XSTATE_SAVE 'SsXK'
 
 #ifdef __clang__

@@ -554,7 +554,7 @@ PsArchInitializeUserThreadContext(
     Context->Rip = (ULONG64)ThreadStart;
     Context->Rcx = (ULONG64)StartRoutine;
     Context->Rdx = (ULONG64)Argument;
-    Context->Rsp = (((ULONG64)StackBase - 6 * sizeof(PVOID)) & ~15ULL) - 8;
+    Context->Rsp = ((ULONG64)StackBase - 2 * sizeof(PVOID)) & ~15ULL;
     Context->EFlags = EFLAGS_INTERRUPT_MASK;
     Context->SegCs = KGDT64_R3_CODE | RPL_MASK;
     Context->SegDs = KGDT64_R3_DATA | RPL_MASK;

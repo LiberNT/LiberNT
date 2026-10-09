@@ -205,7 +205,7 @@ typedef enum
 #define EFLAGS_VIF              0x80000
 #define EFLAGS_VIP              0x100000
 #define EFLAGS_ID               0x200000
-#define EFLAGS_USER_SANITIZE    0x3F4DD7
+#define EFLAGS_USER_SANITIZE    0x200DD7
 #define EFLAG_SIGN              0x8000
 #define EFLAG_ZERO              0x4000
 #define EFLAGS_TF_MASK          0x0100

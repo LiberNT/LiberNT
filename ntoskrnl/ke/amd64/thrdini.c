@@ -103,7 +103,7 @@ KiInitializeContextThread(IN PKTHREAD Thread,
 
         /* Make sure, we have control registers, disable debug registers */
         ASSERT((Context->ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL);
-        ContextFlags = Context->ContextFlags & ~CONTEXT_DEBUG_REGISTERS;
+        ContextFlags = Context->ContextFlags & ~(CONTEXT_DEBUG_REGISTERS | CONTEXT_FLOATING_POINT);
 
         /* Setup the Trap Frame */
         TrapFrame = &InitFrame->TrapFrame;
@@ -119,11 +119,22 @@ KiInitializeContextThread(IN PKTHREAD Thread,
                              CONTEXT_AMD64 | ContextFlags,
                              UserMode);
 
-        /* Set SS, DS, ES's RPL Mask properly */
-        TrapFrame->SegSs |= RPL_MASK;
-        TrapFrame->SegDs |= RPL_MASK;
-        TrapFrame->SegEs |= RPL_MASK;
+        TrapFrame->SegDs = KGDT64_R3_DATA | RPL_MASK;
+        TrapFrame->SegEs = KGDT64_R3_DATA | RPL_MASK;
+        TrapFrame->SegFs = KGDT64_R3_CMTEB | RPL_MASK;
+        TrapFrame->SegGs = KGDT64_R3_DATA | RPL_MASK;
+        TrapFrame->SegSs = KGDT64_R3_DATA | RPL_MASK;
+        if (Context->SegCs == (KGDT64_R3_CMCODE | RPL_MASK))
+        {
+            TrapFrame->SegCs = KGDT64_R3_CMCODE | RPL_MASK;
+        }
+        else
+        {
+            TrapFrame->SegCs = KGDT64_R3_CODE | RPL_MASK;
+            TrapFrame->Rsp -= 5 * sizeof(PVOID);
+        }
         TrapFrame->Dr7 = 0;
+        TrapFrame->MxCsr = INITIAL_MXCSR;
 
         /* Set the previous mode as user */
         TrapFrame->PreviousMode = UserMode;

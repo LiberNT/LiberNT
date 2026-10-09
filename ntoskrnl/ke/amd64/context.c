@@ -58,7 +58,7 @@ KeContextToTrapFrame(IN PCONTEXT Context,
     /* Handle floating point registers */
     if (ContextFlags & CONTEXT_FLOATING_POINT)
     {
-        TrapFrame->MxCsr = Context->MxCsr;
+        TrapFrame->MxCsr = Context->MxCsr & KiMxCsrMask;
         TrapFrame->Xmm0 = Context->Xmm0;
         TrapFrame->Xmm1 = Context->Xmm1;
         TrapFrame->Xmm2 = Context->Xmm2;

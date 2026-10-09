@@ -91,6 +91,7 @@ extern "C" {
 #ifndef __ASM__
 
 extern SIZE_T KeXStateLength;
+extern ULONG KiMxCsrMask;
 
 #include "intrin_i.h"
 
@@ -626,6 +627,10 @@ VOID
 NTAPI
 KiCaptureUserLegacyFloatingState(
     _Out_ PXSAVE_FORMAT FltSave);
+
+VOID
+NTAPI
+KiInitializeMxCsrMask(VOID);
 
 FORCEINLINE
 BOOLEAN
