@@ -425,11 +425,6 @@ HRESULT WINAPI CDefaultContextMenu::Initialize(const DEFCONTEXTMENU *pdcm, LPFND
     TRACE("cidl %u\n", pdcm->cidl);
 
     HRESULT hr = S_OK;
-    if (!pdcm->pcmcb && !lpfn)
-    {
-        ERR("CDefaultContextMenu needs a callback!\n");
-        return E_INVALIDARG;
-    }
 
     m_cidl = pdcm->cidl;
     m_apidl = const_cast<PCUITEMID_CHILD_ARRAY>(_ILCopyaPidl(pdcm->apidl, m_cidl));
