@@ -25,6 +25,36 @@ CshGetFuncletFrame(
     return EstablisherFrame;
 }
 
+static __inline BOOLEAN
+CshIsTargetInScope(
+    _In_ PSCOPE_TABLE ScopeTable,
+    _In_ ULONG Scope,
+    _In_ ULONG64 TargetIpOffset)
+{
+    ULONG Index;
+
+    if ((ScopeTable->ScopeRecord[Scope].JumpTarget != 0) &&
+        (ScopeTable->ScopeRecord[Scope].JumpTarget == TargetIpOffset))
+    {
+        return TRUE;
+    }
+
+    for (Index = 0; Index < ScopeTable->Count; Index++)
+    {
+        if ((TargetIpOffset >= ScopeTable->ScopeRecord[Index].BeginAddress) &&
+            (TargetIpOffset < ScopeTable->ScopeRecord[Index].EndAddress) &&
+            (ScopeTable->ScopeRecord[Index].HandlerAddress ==
+             ScopeTable->ScopeRecord[Scope].HandlerAddress) &&
+            (ScopeTable->ScopeRecord[Index].JumpTarget ==
+             ScopeTable->ScopeRecord[Scope].JumpTarget))
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 _CRTIMP
 EXCEPTION_DISPOSITION
 __cdecl
@@ -83,8 +113,7 @@ __C_specific_handler(
             if (ExceptionRecord->ExceptionFlags & EXCEPTION_TARGET_UNWIND)
             {
                 /* Check if the target is within the scope itself */
-                if ((TargetIpOffset >= BeginAddress) &&
-                    (TargetIpOffset <  EndAddress))
+                if (CshIsTargetInScope(ScopeTable, i, TargetIpOffset))
                 {
                     return ExceptionContinueSearch;
                 }
@@ -100,10 +129,6 @@ __C_specific_handler(
                                                   ContextRecord,
                                                   (PVOID)TRUE,
                                                   FuncletFrame);
-            }
-            else if (ScopeTable->ScopeRecord[i].JumpTarget == TargetIpOffset)
-            {
-                return ExceptionContinueSearch;
             }
         }
         else
