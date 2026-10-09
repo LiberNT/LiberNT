@@ -1610,6 +1610,12 @@ ApplyOrdinals(EXPORT* pexports, unsigned cExports)
         }
     }
 
+    for (i = 0; i < cExports; i++)
+    {
+        if ((pexports[i].uFlags & FL_ORDINAL) && !pexports[i].bVersionIncluded)
+            used[pexports[i].nOrdinal] = 1;
+    }
+
     /* Check if we found an ordinal and it's larger than it's index */
     if ((firstOrdinal != 0xFFFF) && (firstOrdinal > firstIndex))
     {
