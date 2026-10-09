@@ -237,9 +237,20 @@ static void test_SetupDiGetClassDevsA(void)
 
     SetLastError( 0xdeadbeef );
     device_info = SetupDiGetClassDevs( NULL, "(invalid enumerator)", NULL, DIGCF_ALLCLASSES );
-    ok( device_info == INVALID_HANDLE_VALUE,
-        "Fail expected\n" );
-    ok_lasterr( ERROR_INVALID_DATA );
+    if (GetNTVersion() >= _WIN32_WINNT_WIN8)
+    {
+        ok( device_info != INVALID_HANDLE_VALUE,
+            "Error reported %lx\n", GetLastError() );
+        SetLastError( 0xdeadbeef );
+        ok( SetupDiDestroyDeviceInfoList( device_info ),
+            "Error reported %lx\n", GetLastError() );
+    }
+    else
+    {
+        ok( device_info == INVALID_HANDLE_VALUE,
+            "Fail expected\n" );
+        ok_lasterr( ERROR_INVALID_DATA );
+    }
 
     SetLastError( 0xdeadbeef );
     device_info = SetupDiGetClassDevs( NULL, "Root", NULL, DIGCF_ALLCLASSES );

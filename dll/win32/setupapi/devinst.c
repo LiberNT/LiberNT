@@ -2712,6 +2712,16 @@ HDEVINFO WINAPI SetupDiGetClassDevsExW(
             return INVALID_HANDLE_VALUE;
         }
     }
+    else if (!(flags & DIGCF_DEVICEINTERFACE) && enumstr)
+    {
+        PCWSTR Separator = wcschr(enumstr, L'\\');
+
+        if (!*enumstr || (Separator && (!Separator[1] || wcschr(Separator + 1, L'\\'))))
+        {
+            SetLastError(ERROR_INVALID_DATA);
+            return INVALID_HANDLE_VALUE;
+        }
+    }
 
 #endif
     if (deviceset == INVALID_HANDLE_VALUE)
