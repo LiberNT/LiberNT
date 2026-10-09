@@ -3683,6 +3683,14 @@ NtSetInformationProcess(
             break;
         }
 
+        case ProcessInstrumentationCallback:
+
+            Status = PspArchSetInstrumentationCallback(Process,
+                                                       ProcessInformation,
+                                                       ProcessInformationLength,
+                                                       PreviousMode);
+            break;
+
         case ProcessThreadStackAllocation:
         {
             PPROCESS_STACK_ALLOCATION_INFORMATION StackAllocation = ProcessInformation;

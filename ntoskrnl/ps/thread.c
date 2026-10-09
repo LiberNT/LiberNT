@@ -72,12 +72,8 @@ PspUserThreadStartup(IN PKSTART_ROUTINE StartRoutine,
         KeRaiseIrql(APC_LEVEL, &OldIrql);
 
         /* Queue the User APC */
-        KiInitializeUserApc(KeGetExceptionFrame(&Thread->Tcb),
-                            KeGetTrapFrame(&Thread->Tcb),
-                            PspSystemDllEntryPoint,
-                            NULL,
-                            PspSystemDllBase,
-                            NULL);
+        PspArchInitializeUserThreadStartup(KeGetExceptionFrame(&Thread->Tcb),
+                                           KeGetTrapFrame(&Thread->Tcb));
 
         /* Lower it back to passive */
         KeLowerIrql(PASSIVE_LEVEL);

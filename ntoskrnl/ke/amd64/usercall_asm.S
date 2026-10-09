@@ -108,11 +108,20 @@ KiUserCallbackExit:
     cli
 
     RESTORE_USER_DEBUG_REGISTERS rsp
-    xor edx, edx
 
     /* Prepare user mode return address (rcx) and eflags (r11) for sysret */
     mov rcx, qword ptr KeUserCallbackDispatcher[rip]
     mov r11, EFLAGS_IF_MASK
+
+    mov rdx, gs:[PcCurrentThread]
+    mov rdx, [rdx + ThApcState + AsProcess]
+    mov rdx, [rdx + PrInstrumentationCallback]
+    test rdx, rdx
+    jz UserCallbackInstrumentationDone
+    mov r10, rcx
+    mov rcx, rdx
+UserCallbackInstrumentationDone:
+    xor edx, edx
 
     /* Load user mode stack (It was copied to the trap frame) */
     mov rsp, [rsp + KTRAP_FRAME_Rsp]

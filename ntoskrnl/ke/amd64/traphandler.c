@@ -186,6 +186,21 @@ KiConvertToGuiThreadFailure(VOID)
     return KiGetGuiServiceFailureStatus(ServiceNumber);
 }
 
+VOID
+KiInstrumentTrapFrame(
+    _Inout_ PKTRAP_FRAME TrapFrame)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+    PVOID Callback = Thread->ApcState.Process->InstrumentationCallback;
+
+    if (Callback == NULL)
+        return;
+
+    TrapFrame->R10 = TrapFrame->Rip;
+    TrapFrame->Rip = (ULONG64)Callback;
+    InterlockedAnd8((PCHAR)&Thread->Header.DebugActive, (CHAR)~DEBUG_ACTIVE_INSTRUMENTED);
+}
+
 PVOID
 KiSystemCallHandler(
     PKTRAP_FRAME TrapFrame)
@@ -212,6 +227,16 @@ KiSystemCallHandler(
     /* We don't have an exception frame yet */
     TrapFrame->ExceptionFrame = 0;
     TrapFrame->ExceptionActive = KEXCEPTION_ACTIVE_SERVICE_FRAME;
+
+    if (Thread->ApcState.Process->InstrumentationCallback != NULL)
+    {
+        if (!(Thread->Header.DebugActive & DEBUG_ACTIVE_INSTRUMENTED))
+            Thread->Header.DebugActive |= DEBUG_ACTIVE_INSTRUMENTED;
+    }
+    else if (Thread->Header.DebugActive & DEBUG_ACTIVE_INSTRUMENTED)
+    {
+        Thread->Header.DebugActive &= ~DEBUG_ACTIVE_INSTRUMENTED;
+    }
 
     /* Get the user Stack pointer */
     UserRsp = TrapFrame->Rsp;

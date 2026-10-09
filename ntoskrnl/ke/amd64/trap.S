@@ -1141,6 +1141,7 @@ GLOBAL_LABEL KiSystemServiceExit
     jnz SystemServiceApcMismatch
 
     /* Check for pending user APCs */
+    xor r10d, r10d
     mov rcx, gs:[PcCurrentThread]
     cmp byte ptr [rcx + ThApcState + AsUserApcPending], 0
     jz NoUserApcPending
@@ -1168,6 +1169,7 @@ GLOBAL_LABEL KiSystemServiceExit
 
     lea rcx, [rsp + MAX_SYSCALL_PARAM_SIZE]
     call KiInitiateUserApc
+    mov r10, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_R10]
 
 NoUserApcPending:
     /* Disable interrupts for return */
@@ -1191,6 +1193,11 @@ NoUserApcPending:
     mov rcx, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rip]
     mov r11, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_EFlags]
 
+    mov rdx, gs:[PcCurrentThread]
+    test byte ptr [rdx + ThDebugActive], DEBUG_ACTIVE_INSTRUMENTED
+    jnz SystemServiceInstrumented
+
+SystemServiceInstrumentationDone:
     /* Load user mode stack (It was copied to the trap frame) */
     mov rsp, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rsp]
 
@@ -1211,10 +1218,18 @@ NoUserApcPending:
     pxor xmm4, xmm4
     pxor xmm5, xmm5
     xor rdx, rdx
-    xor r10, r10
 
     /* return to user mode */
     sysretq
+
+SystemServiceInstrumented:
+    mov rdx, [rdx + ThApcState + AsProcess]
+    mov rdx, [rdx + PrInstrumentationCallback]
+    test rdx, rdx
+    jz SystemServiceInstrumentationDone
+    mov r10, rcx
+    mov rcx, rdx
+    jmp SystemServiceInstrumentationDone
 
 SystemServiceIrqlMismatch:
     /* Preserve the leaked IRQL as bugcheck parameter 2. */

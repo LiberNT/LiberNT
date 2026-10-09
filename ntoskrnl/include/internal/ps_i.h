@@ -352,7 +352,11 @@ static const INFORMATION_CLASS_INFO PsProcessInfoClass[] =
     ),
 
     /* ProcessInstrumentationCallback */
-    IQS_NONE,
+    IQS_NO_TYPE_LENGTH
+    (
+        ULONG_PTR,
+        ICIF_SET | ICIF_SET_SIZE_VARIABLE
+    ),
 
     /* ProcessThreadStackAllocation */
     IQS_NO_TYPE_LENGTH

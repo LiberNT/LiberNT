@@ -136,3 +136,33 @@ PspArchCompleteXStateContext(
     UNREFERENCED_PARAMETER(CopyOut);
     return STATUS_SUCCESS;
 }
+
+NTSTATUS
+NTAPI
+PspArchSetInstrumentationCallback(
+    _In_ PEPROCESS Process,
+    _In_reads_bytes_(Length) PVOID Information,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    UNREFERENCED_PARAMETER(Process);
+    UNREFERENCED_PARAMETER(Information);
+    UNREFERENCED_PARAMETER(Length);
+    UNREFERENCED_PARAMETER(PreviousMode);
+
+    return STATUS_INVALID_INFO_CLASS;
+}
+
+VOID
+NTAPI
+PspArchInitializeUserThreadStartup(
+    _In_ PKEXCEPTION_FRAME ExceptionFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame)
+{
+    KiInitializeUserApc(ExceptionFrame,
+                        TrapFrame,
+                        PspSystemDllEntryPoint,
+                        NULL,
+                        PspSystemDllBase,
+                        NULL);
+}

@@ -111,6 +111,7 @@ KiInitializeUserApc(
     /* Sanitize EFLAGS, enable interrupts */
     TrapFrame->EFlags &= EFLAGS_USER_SANITIZE;
     TrapFrame->EFlags |= EFLAGS_INTERRUPT_MASK;
+    KiInstrumentTrapFrame(TrapFrame);
 }
 
 /*
@@ -370,7 +371,7 @@ NtCallbackReturn(
     TrapFrame->Dr7 = 0;
 
     /* Check if debugging was active */
-    if (CurrentThread->Header.DebugActive & 0xFF)
+    if (CurrentThread->Header.DebugActive & DEBUG_ACTIVE_DR7)
     {
         /* Copy debug registers data from it */
         TrapFrame->Dr0 = CallbackTrapFrame->Dr0;

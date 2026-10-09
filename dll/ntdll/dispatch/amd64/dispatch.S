@@ -27,13 +27,21 @@ LdrpWow64PrepareForException:
 
 PUBLIC LdrInitializeThunk
 .PROC LdrInitializeThunk
-    mov rbp, 0
-    .setframe rbp, 0
+    sub rsp, HEX(38)
+    .allocstack HEX(38)
     .endprolog
 
-    /* First parameter is the APC context */
-    mov rcx, r9
-    jmp LdrpInit
+    mov [rsp + HEX(20)], rcx
+    xor r8d, r8d
+    call LdrpInit
+
+    mov rcx, [rsp + HEX(20)]
+    mov dl, 1
+    call NtContinue
+
+    mov ecx, eax
+    call RtlRaiseStatus
+    nop
 
 .ENDP
 

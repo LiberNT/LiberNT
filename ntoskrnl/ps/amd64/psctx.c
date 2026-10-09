@@ -453,6 +453,91 @@ PspArchCopyWow64DebugRegisters(
     return Status;
 }
 
+NTSTATUS
+NTAPI
+PspArchSetInstrumentationCallback(
+    _In_ PEPROCESS Process,
+    _In_reads_bytes_(Length) PVOID Information,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    PVOID Callback;
+
+    if (Length < sizeof(Callback))
+        return STATUS_INFO_LENGTH_MISMATCH;
+
+    _SEH2_TRY
+    {
+        if (Length >= sizeof(PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION))
+            Callback = ((PPROCESS_INSTRUMENTATION_CALLBACK_INFORMATION)Information)->Callback;
+        else
+            Callback = *(PVOID *)Information;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    if ((ULONG_PTR)Callback > (ULONG_PTR)MmHighestUserAddress)
+        return STATUS_INVALID_PARAMETER;
+
+    if (Process != PsGetCurrentProcess() &&
+        !SeSinglePrivilegeCheck(SeDebugPrivilege, PreviousMode))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    InterlockedExchangePointer(&Process->Pcb.InstrumentationCallback, Callback);
+    return STATUS_SUCCESS;
+}
+
+VOID
+NTAPI
+PspArchInitializeUserThreadStartup(
+    _In_ PKEXCEPTION_FRAME ExceptionFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame)
+{
+    PUAPC_FRAME StartFrame;
+    PCONTEXT Context;
+    PULONG64 ReturnAddress;
+    EXCEPTION_RECORD ExceptionRecord;
+
+    StartFrame = (PUAPC_FRAME)ALIGN_DOWN_POINTER_BY(TrapFrame->Rsp - sizeof(*StartFrame), 16);
+    Context = &StartFrame->Context;
+    ReturnAddress = (PULONG64)Context - 1;
+
+    _SEH2_TRY
+    {
+        ProbeForWrite(ReturnAddress, sizeof(*ReturnAddress) + sizeof(*StartFrame), sizeof(ULONG64));
+
+        Context->ContextFlags = CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS;
+        KeTrapFrameToContext(TrapFrame, ExceptionFrame, Context);
+        StartFrame->MachineFrame.Rip = TrapFrame->Rip;
+        StartFrame->MachineFrame.Rsp = TrapFrame->Rsp;
+        *ReturnAddress = 0;
+    }
+    _SEH2_EXCEPT(ExceptionRecord = *_SEH2_GetExceptionInformation()->ExceptionRecord, EXCEPTION_EXECUTE_HANDLER)
+    {
+        ExceptionRecord.ExceptionAddress = (PVOID)TrapFrame->Rip;
+        KiDispatchException(&ExceptionRecord, ExceptionFrame, TrapFrame, UserMode, TRUE);
+        _SEH2_YIELD(return);
+    }
+    _SEH2_END;
+
+    TrapFrame->Rsp = (ULONG64)ReturnAddress;
+    TrapFrame->Rip = (ULONG64)PspSystemDllEntryPoint;
+    TrapFrame->Rcx = (ULONG64)Context;
+    TrapFrame->Rdx = (ULONG64)PspSystemDllBase;
+    TrapFrame->SegCs = KGDT64_R3_CODE | RPL_MASK;
+    TrapFrame->SegFs = KGDT64_R3_CMTEB | RPL_MASK;
+    TrapFrame->SegGs = KGDT64_R3_DATA | RPL_MASK;
+    TrapFrame->SegSs = KGDT64_R3_DATA | RPL_MASK;
+    TrapFrame->EFlags &= EFLAGS_USER_SANITIZE;
+    TrapFrame->EFlags |= EFLAGS_INTERRUPT_MASK;
+    KiInstrumentTrapFrame(TrapFrame);
+}
+
 /* EOF */
 
 VOID

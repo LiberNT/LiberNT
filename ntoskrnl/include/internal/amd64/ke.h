@@ -567,6 +567,10 @@ KiExceptionExit(
     _In_ PKTRAP_FRAME TrapFrame,
     _In_ PKEXCEPTION_FRAME ExceptionFrame);
 
+VOID
+KiInstrumentTrapFrame(
+    _Inout_ PKTRAP_FRAME TrapFrame);
+
 BOOLEAN
 KiProcessorFreezeHandler(
     _In_ PKTRAP_FRAME TrapFrame,

@@ -691,6 +691,20 @@ PspArchCopyWow64DebugRegisters(
 
 NTSTATUS
 NTAPI
+PspArchSetInstrumentationCallback(
+    _In_ PEPROCESS Process,
+    _In_reads_bytes_(Length) PVOID Information,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE PreviousMode);
+
+VOID
+NTAPI
+PspArchInitializeUserThreadStartup(
+    _In_ PKEXCEPTION_FRAME ExceptionFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame);
+
+NTSTATUS
+NTAPI
 PspArchCaptureXStateContext(
     _In_ PCONTEXT Context,
     _In_ ULONG ContextFlags,

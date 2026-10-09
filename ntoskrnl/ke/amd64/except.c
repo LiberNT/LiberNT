@@ -243,6 +243,7 @@ KiDispatchExceptionToUser(
 
     /* Set RIP to the User-mode Dispatcher */
     TrapFrame->Rip = (ULONG64)KeUserExceptionDispatcher;
+    KiInstrumentTrapFrame(TrapFrame);
 
     /* Exit to usermode */
     return TRUE;
