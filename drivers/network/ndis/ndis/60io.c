@@ -291,19 +291,16 @@ Ndis6IoGetBusInterface(
     PIRP            Irp;
     PIO_STACK_LOCATION Stack;
     NTSTATUS        Status;
-    static BUS_INTERFACE_STANDARD CachedBusInterface;
-    static BOOLEAN                CachedValid = FALSE;
+    BUS_INTERFACE_STANDARD BusInterface;
 
-    /* Simple per-adapter cache. For multi-adapter workloads the cache
-     * would need to move onto Ext — this is a static for now because
-     * the e1000e-only test path has a single adapter. */
-    if (CachedValid)
-        return &CachedBusInterface;
-
-    if (Ext == NULL || Ext->PhysicalDeviceObject == NULL)
+    if (Ext == NULL)
+        return NULL;
+    if (Ext->BusInterfaceValid)
+        return &Ext->BusInterface;
+    if (Ext->PhysicalDeviceObject == NULL)
         return NULL;
 
-    RtlZeroMemory(&CachedBusInterface, sizeof(CachedBusInterface));
+    RtlZeroMemory(&BusInterface, sizeof(BusInterface));
 
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
     Irp = IoBuildSynchronousFsdRequest(
@@ -319,7 +316,7 @@ Ndis6IoGetBusInterface(
     Stack->Parameters.QueryInterface.InterfaceType        = &GUID_BUS_INTERFACE_STANDARD;
     Stack->Parameters.QueryInterface.Size                 = sizeof(BUS_INTERFACE_STANDARD);
     Stack->Parameters.QueryInterface.Version              = 1;
-    Stack->Parameters.QueryInterface.Interface            = (PINTERFACE)&CachedBusInterface;
+    Stack->Parameters.QueryInterface.Interface            = (PINTERFACE)&BusInterface;
     Stack->Parameters.QueryInterface.InterfaceSpecificData = NULL;
 
     Status = IoCallDriver(Ext->PhysicalDeviceObject, Irp);
@@ -329,11 +326,30 @@ Ndis6IoGetBusInterface(
         Status = IoStatus.Status;
     }
 
-    if (!NT_SUCCESS(Status) || CachedBusInterface.GetBusData == NULL)
+    if (!NT_SUCCESS(Status))
         return NULL;
+    if (BusInterface.GetBusData == NULL)
+    {
+        if (BusInterface.InterfaceDereference)
+            BusInterface.InterfaceDereference(BusInterface.Context);
+        return NULL;
+    }
 
-    CachedValid = TRUE;
-    return &CachedBusInterface;
+    Ext->BusInterface = BusInterface;
+    Ext->BusInterfaceValid = TRUE;
+    return &Ext->BusInterface;
+}
+
+VOID
+Ndis6IoReleaseBusInterface(
+    _In_ PNDIS6_ADAPTER_EXT Ext)
+{
+    if (Ext == NULL || !Ext->BusInterfaceValid)
+        return;
+    Ext->BusInterfaceValid = FALSE;
+    if (Ext->BusInterface.InterfaceDereference)
+        Ext->BusInterface.InterfaceDereference(Ext->BusInterface.Context);
+    RtlZeroMemory(&Ext->BusInterface, sizeof(Ext->BusInterface));
 }
 
 ULONG

@@ -1468,6 +1468,7 @@ Ndis6DestroyLogicalAdapter(
     if (Ext)
     {
         Ndis6IoFreeDmaAdapter(Ext);
+        Ndis6IoReleaseBusInterface(Ext);
         if (Ext->InterruptObject)
         {
             IoDisconnectInterrupt(Ext->InterruptObject);

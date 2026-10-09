@@ -369,6 +369,9 @@ typedef struct _NDIS6_ADAPTER_EXT
     NDIS_SG_DMA_DESCRIPTION         SgDescription;
     BOOLEAN                         SgDescriptionValid;
 
+    BUS_INTERFACE_STANDARD          BusInterface;
+    BOOLEAN                         BusInterfaceValid;
+
     /* NDIS-owned, zero-normalized offload descriptors. */
     PVOID                           OffloadHwPtr;
     PVOID                           OffloadDefaultPtr;
@@ -739,6 +742,10 @@ Ndis6IoInitDmaAdapter(
 
 VOID
 Ndis6IoFreeDmaAdapter(
+    _In_ PNDIS6_ADAPTER_EXT     Ext);
+
+VOID
+Ndis6IoReleaseBusInterface(
     _In_ PNDIS6_ADAPTER_EXT     Ext);
 
 VOID
