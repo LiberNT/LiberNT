@@ -45,7 +45,9 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
 
     # This test snapshots nonvolatile registers around compiler intrinsics.
     # Optimization may use those registers for the surrounding test itself.
-    set_property(SOURCE ntos_ex/ExInterlocked.c APPEND PROPERTY COMPILE_OPTIONS -O0)
+    if(NOT ARCH STREQUAL "i386")
+        set_property(SOURCE ntos_ex/ExInterlocked.c APPEND PROPERTY COMPILE_OPTIONS -O0)
+    endif()
 endif()
 
 if(ARCH STREQUAL "i386")
