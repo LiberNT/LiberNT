@@ -17,7 +17,6 @@ extern "C" unsigned long mainCRTStartup(void*)
     return __commonCRTStartup<decltype(main)>();
 }
 
-/* GCC pulls in libgcc's __main; Clang still uses the local startup stub. */
-#if !defined(__GNUC__) || defined(__clang__)
+#if !defined(__GNUC__)
 extern "C" void __main(void) { }
 #endif

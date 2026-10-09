@@ -141,11 +141,6 @@ set(GLMARK2_SOURCES
     ${GLMARK2_SOURCE_DIR}/src/glad/src/wgl.c)
 
 add_executable(glmark2 ${GLMARK2_SOURCES})
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    # GCC startup already calls __main to run .ctors. Bridging them again
-    # initializes globals twice and registers duplicate destructors.
-    target_sources(glmark2 PRIVATE glmark2-reactos-startup.c)
-endif()
 set_property(TARGET glmark2 PROPERTY CXX_STANDARD 17)
 set_property(TARGET glmark2 PROPERTY CXX_STANDARD_REQUIRED ON)
 target_include_directories(glmark2 BEFORE PRIVATE
@@ -181,7 +176,6 @@ set_target_cpp_properties(glmark2 WITH_EXCEPTIONS WITH_RTTI)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
     target_compile_options(glmark2 PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:-Wno-template-body>")
 endif()
-# The target-local startup bridge exposes LLVM's .ctors to the UCRT startup.
 # Resolve STLport's legacy _vsnprintf from msvcrt before trying ntdll; the
 # ARM64EC ntdll bridge does not export it to AMD64 processes.
 target_link_libraries(glmark2 cppstl cpprt getopt glmark2-png glmark2-zlib)
