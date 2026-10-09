@@ -29,7 +29,7 @@ if [ "${ROSBE_DOCKER_ACTIVE:-0}" = "1" ]; then
 	ROSBE_ROOT="/opt/rosbe"
 	ROSBE_SKIP_HOST_CHECK=1
 	ROSBE_OUTPUT_SUFFIX="-docker"
-elif [ -d "$HOME/.local/opt/rosbe/llvm-mingw" ] || [ -d "$HOME/.local/opt/rosbe/llvm-mingw-riscv24" ] || [ -d "$HOME/.local/opt/rosbe/mingw-gcc" ]; then
+elif [ -d "$HOME/.local/opt/rosbe/llvm" ] || [ -d "$HOME/.local/opt/rosbe/mingw-gcc" ]; then
 	ROSBE_ROOT="$HOME/.local/opt/rosbe"
 	ROSBE_SKIP_HOST_CHECK=0
 else
@@ -50,7 +50,7 @@ Then re-run configure.sh.
 NO_ROSBE
 	exit 1
 fi
-ROSBE_LLVM_ROOT="$ROSBE_ROOT/llvm-mingw"
+ROSBE_LLVM_ROOT="$ROSBE_ROOT/llvm"
 
 CMAKE_GENERATOR="Ninja"
 USE_CLANG=1
@@ -67,7 +67,7 @@ SKIP_FEEDS_UPDATE=0
 
 usage() {
 	echo "Usage: configure.sh [options]"
-	echo "  --clang              Use RosBE Clang/LLVM (RISC-V: llvm-mingw-riscv24; PowerPC: llvm-mingw-ppc; otherwise: llvm-mingw)"
+	echo "  --clang              Use RosBE Clang/LLVM from ~/.local/opt/rosbe/llvm"
 	echo "  --gcc                Use GCC from ~/.local/opt/rosbe/mingw-gcc"
 	echo "  -a, --arch <arch>    Target architecture: amd64, i386, arm64, riscv64, ppc (default: amd64)"
 	echo "  -r, --release        Configure a Release build (default: Debug)"
@@ -596,11 +596,6 @@ fi
 # target selection.
 if [ "$USE_CLANG" -eq 1 ]; then
 	TOOLCHAIN_FILE=toolchain-clang.cmake
-	if [ "$ARCH" = "riscv64" ]; then
-		ROSBE_LLVM_ROOT="$ROSBE_ROOT/llvm-mingw-riscv24"
-	elif [ "$ARCH" = "ppc" ]; then
-		ROSBE_LLVM_ROOT="$ROSBE_ROOT/llvm-mingw-ppc"
-	fi
 	LLVM_ROOT_OVERRIDE=${REACTOS_CLANG_LLVM_MINGW_ROOT:-}
 	for LLVM_ROOT_ARG in $ROS_CMAKEOPTS; do
 		case "$LLVM_ROOT_ARG" in
@@ -695,6 +690,14 @@ cmake -G "$CMAKE_GENERATOR" \
 if [ $? -ne 0 ]; then
 	echo "An error occurred while configuring ReactOS"
 	exit 1
+fi
+
+if [ "$USE_CLANG" -eq 1 ]; then
+	"$REACTOS_SOURCE_DIR/sdk/tools/cxx-runtime/build-cxx-runtime.py" --reactos-build "$BUILD_DIR"
+	if [ $? -ne 0 ]; then
+		echo "An error occurred while building the LLVM runtimes"
+		exit 1
+	fi
 fi
 
 if [ "$CMAKE_GENERATOR" = "Unix Makefiles" ]; then

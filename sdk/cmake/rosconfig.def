@@ -48,14 +48,14 @@ source "rosconfig/profiles/profiles.def"
 config TOOLCHAIN
     prompt "Compiler toolchain"
     type choice
-    value clang "Clang/LLVM (llvm-mingw)"
+    value clang "Clang/LLVM"
     value gcc   "GCC (mingw-gcc)"
     value msvc  "MSVC (configure.cmd from a VS prompt only)"
     default clang
     meta
     help
       Which compiler the configure script selects. "clang" uses the
-      RosBE llvm-mingw toolchain, "gcc" the RosBE mingw-gcc one.
+      RosBE LLVM toolchain, "gcc" the RosBE mingw-gcc one.
       "msvc" is only honoured by configure.cmd when run from a
       Visual Studio Developer Command Prompt; configure.sh refuses
       it. Explicit --clang/--gcc (or /clang, /gcc) arguments
@@ -121,6 +121,33 @@ config OARCH_ARM64
       Oldest architecture revision the generated code must run on (the
       OARCH variable, passed as -march). Do not raise this unless really
       needed: new designs still ship ARMv8.0 Cortex-A53 cores.
+
+config OARCH_PPC
+    prompt "CPU instruction set"
+    type choice
+    var OARCH
+    value 601 "PowerPC 601"
+    value 603 "PowerPC 603"
+    value 604 "PowerPC 604"
+    value 750 "PowerPC 750"
+    default 604
+    depends ARCH=ppc
+    help
+      Oldest CPU the generated code must run on (the OARCH variable,
+      passed as -mcpu).
+
+config OARCH_RISCV64
+    prompt "CPU instruction set"
+    type choice
+    var OARCH
+    value rv64gc   "RV64GC"
+    value rva22u64 "RVA22U64 profile"
+    value rva23u64 "RVA23U64 profile"
+    default rv64gc
+    depends ARCH=riscv64
+    help
+      ISA string or profile the generated code must run on (the OARCH
+      variable, passed as -march).
 
 config TUNE
     prompt "Tune for CPU"
@@ -283,7 +310,7 @@ config MESA_GALLIUM_FROM_SOURCE
     depends TOOLCHAIN=clang
     depends ARCH=i386 || ARCH=amd64 || ARCH=arm64
     help
-      Build and package mesa_gallium.dll with llvm-mingw Clang. AMD64 and
+      Build and package mesa_gallium.dll with Clang against the SDK. AMD64 and
       i386 use softpipe for CPU rendering. ARM64 includes the V3D and VC4
       Raspberry Pi hardware drivers in the same DLL, followed by softpipe.
       No LLVM runtime is needed unless LLVMpipe is enabled below.

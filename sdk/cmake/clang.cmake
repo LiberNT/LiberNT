@@ -47,9 +47,8 @@ if(USE_DUMMY_PSEH)
     add_definitions(-D_USE_DUMMY_PSEH=1)
 endif()
 
-# Clang implements native SEH for these targets (riscv64.cmake and ppc.cmake
-# set it for theirs).
-if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")
+# Clang implements native SEH for these targets.
+if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64" OR ARCH STREQUAL "riscv64" OR ARCH STREQUAL "ppc")
     set(CLANG_NATIVE_SEH TRUE)
 endif()
 
@@ -119,7 +118,11 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 # Tuning
-add_compile_options(-march=${OARCH} -mtune=${TUNE})
+if(ARCH STREQUAL "ppc")
+    add_compile_options(-mcpu=${OARCH})
+else()
+    add_compile_options(-march=${OARCH} -mtune=${TUNE})
+endif()
 
 # Warnings, errors
 # Clang builds don't use -Werror
@@ -193,6 +196,11 @@ elseif(ARCH STREQUAL "arm64")
     add_compile_options(-fno-optimize-sibling-calls -fno-omit-frame-pointer)
     add_compile_options("$<$<NOT:$<COMPILE_LANGUAGE:ASM>>:-ffixed-x18>")
     add_compile_options("$<$<NOT:$<COMPILE_LANGUAGE:ASM>>:-fno-builtin-memcpy;-fno-builtin-memmove;-fno-builtin-memset>")
+elseif(ARCH STREQUAL "riscv64")
+    add_compile_options(-mabi=lp64 -mcmodel=medany -mno-relax)
+    add_compile_options("$<$<NOT:$<COMPILE_LANGUAGE:ASM>>:-fno-builtin-memcpy;-fno-builtin-memmove;-fno-builtin-memset>")
+elseif(ARCH STREQUAL "ppc")
+    add_compile_options("$<$<NOT:$<COMPILE_LANGUAGE:ASM>>:-fno-builtin-memcpy;-fno-builtin-memmove;-fno-builtin-memset>")
 endif()
 
 # Other
@@ -232,6 +240,10 @@ elseif(ARCH STREQUAL "arm64")
     else()
         set(LLVM_DLLTOOL_MACHINE arm64)
     endif()
+elseif(ARCH STREQUAL "riscv64")
+    set(LLVM_DLLTOOL_MACHINE riscv64)
+elseif(ARCH STREQUAL "ppc")
+    set(LLVM_DLLTOOL_MACHINE ppc)
 endif()
 set(_target_tool_triplet ${CMAKE_C_COMPILER_TARGET})
 
@@ -307,13 +319,8 @@ if(ARCH STREQUAL "i386")
     set(_rc_target_flag "--target=pe-i386")
 elseif(ARCH STREQUAL "amd64")
     set(_rc_target_flag "--target=pe-x86-64")
-elseif(ARCH STREQUAL "arm64" AND ARM64EC_RUNTIME)
-    # The triplet-named windres wrapper already selects ARM64EC. Passing an
-    # ARM64EC Clang target through windres is not supported by llvm-windres.
-    set(RC_PREPROCESSOR_TARGET "")
-elseif(ARCH STREQUAL "arm64")
-    # The toolchain file selects aarch64-w64-mingw32-windres before RC is
-    # enabled, because changing CMAKE_RC_COMPILER here invalidates the cache.
+elseif(ARCH STREQUAL "arm64" OR ARCH STREQUAL "riscv64" OR ARCH STREQUAL "ppc")
+    set(_rc_target_flag "--target=${CMAKE_C_COMPILER_TARGET}")
 endif()
 
 set(CMAKE_RC_COMPILE_OBJECT "<CMAKE_RC_COMPILER> ${_rc_target_flag} -O coff <INCLUDES> <FLAGS> -DRC_INVOKED -D__WIN32__=1 -D__FLAT__=1 ${I18N_DEFS} <DEFINES> <SOURCE> <OBJECT>")
@@ -339,7 +346,7 @@ endfunction()
 function(set_subsystem MODULE SUBSYSTEM)
     if(ARCH STREQUAL "amd64")
         set(_subsystem_version "5.02")
-    elseif(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
+    elseif(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64" OR ARCH STREQUAL "riscv64" OR ARCH STREQUAL "ppc")
         set(_subsystem_version "6.02")
     else()
         set(_subsystem_version "5.01")
@@ -358,6 +365,10 @@ function(set_module_type_toolchain MODULE TYPE)
 
     if(ARM64EC_RUNTIME AND NOT TYPE IN_LIST KERNEL_MODULE_TYPES)
         add_arm64ec_chpe_support(${MODULE})
+    endif()
+
+    if(RISCV64_FAST_MISALIGNED_ACCESS AND NOT TYPE IN_LIST KERNEL_MODULE_TYPES)
+        target_compile_options(${MODULE} PRIVATE -mno-scalar-strict-align)
     endif()
 
     # Clang's _setjmp builtin on x64 lowers to __intrinsic_setjmp which must be
@@ -663,177 +674,73 @@ add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<IF:$<BOOL:$<TARGET_PROPERTY:WIT
 
 # Clang/LLVM runtime libraries
 
-if(NOT REACTOS_CLANG_LLVM_MINGW_ROOT OR
-   NOT IS_DIRECTORY "${REACTOS_CLANG_LLVM_MINGW_ROOT}")
-    message(FATAL_ERROR
-        "REACTOS_CLANG_LLVM_MINGW_ROOT does not name an llvm-mingw toolchain directory.")
+set(REACTOS_LIBCXX_ROOT
+    "${REACTOS_BINARY_DIR}/${ARCH}-cxx-runtime" CACHE PATH
+    "LLVM runtimes built against the SDK headers (see sdk/tools/cxx-runtime/build-cxx-runtime.py)")
+
+if(ARCH STREQUAL "i386")
+    set(_clang_builtins_name libclang_rt.builtins-i386.a)
+elseif(ARCH STREQUAL "amd64")
+    set(_clang_builtins_name libclang_rt.builtins-x86_64.a)
+elseif(ARCH STREQUAL "arm")
+    set(_clang_builtins_name libclang_rt.builtins-arm.a)
+elseif(ARCH STREQUAL "arm64")
+    set(_clang_builtins_name libclang_rt.builtins-aarch64.a)
+elseif(ARCH STREQUAL "riscv64")
+    set(_clang_builtins_name libclang_rt.builtins-riscv64.a)
+elseif(ARCH STREQUAL "ppc")
+    set(_clang_builtins_name libclang_rt.builtins-powerpcle.a)
+else()
+    message(FATAL_ERROR "Unsupported ARCH for the LLVM runtimes: ${ARCH}")
 endif()
 
-set(_mingw_toolchain_root "${REACTOS_CLANG_LLVM_MINGW_ROOT}")
+set(_clang_rt_builtins "${REACTOS_LIBCXX_ROOT}/lib/windows/${_clang_builtins_name}")
+set(_llvm_libcxx "${REACTOS_LIBCXX_ROOT}/lib/libc++.a")
+set(_llvm_libcxxabi "${REACTOS_LIBCXX_ROOT}/lib/libc++abi.a")
+set(_llvm_libunwind "${REACTOS_LIBCXX_ROOT}/lib/libunwind.a")
 
-function(_query_mingw_runtime _outvar _compiler)
-    if(NOT _compiler)
-        set(${_outvar} "" PARENT_SCOPE)
-        return()
-    endif()
+if(NOT EXISTS "${_clang_rt_builtins}" OR NOT EXISTS "${_llvm_libcxx}" OR
+   NOT EXISTS "${_llvm_libcxxabi}" OR NOT EXISTS "${_llvm_libunwind}" OR
+   NOT EXISTS "${REACTOS_LIBCXX_ROOT}/include/c++/v1/__config_site")
+    message(STATUS
+        "Build the LLVM runtimes with sdk/tools/cxx-runtime/build-cxx-runtime.py, "
+        "or set REACTOS_LIBCXX_ROOT to their install directory")
+endif()
 
-    execute_process(
-        COMMAND ${_compiler} ${ARGN}
-        OUTPUT_VARIABLE _runtime_path
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET)
+add_library(libgcc INTERFACE)
+target_link_libraries(libgcc INTERFACE ${_clang_rt_builtins} libkernel32)
+link_libraries(${_clang_rt_builtins})
+add_link_options(-Wl,--allow-multiple-definition)
+add_compile_options(
+    "$<$<COMPILE_LANGUAGE:CXX>:-D__LARGE_MBSTATE_T>"
+    "$<$<COMPILE_LANGUAGE:CXX>:-nostdinc++>"
+    "$<$<COMPILE_LANGUAGE:CXX>:-nobuiltininc>")
 
-    if(IS_ABSOLUTE "${_runtime_path}" AND EXISTS "${_runtime_path}")
-        set(${_outvar} "${_runtime_path}" PARENT_SCOPE)
-    else()
-        set(${_outvar} "" PARENT_SCOPE)
-    endif()
-endfunction()
+add_library(libwinpthread INTERFACE)
 
-function(_query_target_runtime _outvar _clang_compiler)
-    _query_mingw_runtime(_runtime_path ${_clang_compiler} --target=${_target_tool_triplet} ${ARGN})
-    set(${_outvar} "${_runtime_path}" PARENT_SCOPE)
-endfunction()
+add_library(libunwind STATIC IMPORTED GLOBAL)
+set_target_properties(libunwind PROPERTIES IMPORTED_LOCATION ${_llvm_libunwind})
+target_link_libraries(libunwind INTERFACE libkernel32 libntdll)
+if(DLL_EXPORT_VERSION LESS 0x601)
+    target_link_libraries(libunwind INTERFACE llvmcompat)
+endif()
 
-function(_find_mingw_runtime_file _outvar)
-    if(NOT _mingw_toolchain_root)
-        set(${_outvar} "" PARENT_SCOPE)
-        return()
-    endif()
+add_library(libsupc++ STATIC IMPORTED GLOBAL)
+set_target_properties(libsupc++ PROPERTIES IMPORTED_LOCATION ${_llvm_libcxxabi})
+target_link_libraries(libsupc++ INTERFACE libunwind ${_llvm_libcxx} oldnames libucrtbase)
+if(ARM64EC_RUNTIME)
+    target_link_libraries(libsupc++ INTERFACE chpe)
+endif()
 
-    set(_candidate_paths
-        "${_mingw_toolchain_root}/${_target_tool_triplet}/lib"
-        "${_mingw_toolchain_root}/${_target_tool_triplet}/mingw/lib"
-        "${_mingw_toolchain_root}/${_target_tool_triplet}/sysroot/lib"
-        "${_mingw_toolchain_root}/${_target_tool_triplet}/sysroot/usr/${_target_tool_triplet}/lib"
-        "${_mingw_toolchain_root}/${_target_tool_triplet}/sysroot/usr/lib"
-        "${_mingw_toolchain_root}/lib"
-        "${_mingw_toolchain_root}/lib/clang/${LLVM_TOOL_VERSION}/lib/windows")
-
-    find_file(_runtime_path
-        NAMES ${ARGN}
-        PATHS ${_candidate_paths}
-        NO_DEFAULT_PATH)
-
-    if(_runtime_path)
-        set(${_outvar} "${_runtime_path}" PARENT_SCOPE)
-    else()
-        set(${_outvar} "" PARENT_SCOPE)
-    endif()
-endfunction()
-
-    if(ARCH STREQUAL "i386")
-        set(_clang_builtins_name libclang_rt.builtins-i386.a)
-    elseif(ARCH STREQUAL "amd64")
-        set(_clang_builtins_name libclang_rt.builtins-x86_64.a)
-    elseif(ARCH STREQUAL "arm")
-        set(_clang_builtins_name libclang_rt.builtins-arm.a)
-    elseif(ARCH STREQUAL "arm64")
-        set(_clang_builtins_name libclang_rt.builtins-aarch64.a)
-    else()
-        message(FATAL_ERROR "Unsupported ARCH for llvm-mingw runtime: ${ARCH}")
-    endif()
-
-    _query_target_runtime(_clang_rt_builtins ${CMAKE_C_COMPILER} -rtlib=compiler-rt -print-file-name=${_clang_builtins_name})
-    _query_target_runtime(_llvm_libcxx ${CMAKE_CXX_COMPILER} -stdlib=libc++ -print-file-name=libc++.a)
-    _query_target_runtime(_llvm_libcxxabi ${CMAKE_CXX_COMPILER} -stdlib=libc++ -print-file-name=libc++abi.a)
-    _query_target_runtime(_llvm_libunwind ${CMAKE_CXX_COMPILER} -stdlib=libc++ -unwindlib=libunwind -print-file-name=libunwind.a)
-    _query_target_runtime(_mingwex_lib ${CMAKE_C_COMPILER} -print-file-name=libmingwex.a)
-
-    if(NOT _clang_rt_builtins)
-        _find_mingw_runtime_file(_clang_rt_builtins ${_clang_builtins_name})
-    endif()
-    if(NOT _llvm_libcxx)
-        _find_mingw_runtime_file(_llvm_libcxx libc++.a)
-    endif()
-    if(NOT _llvm_libcxxabi)
-        _find_mingw_runtime_file(_llvm_libcxxabi libc++abi.a)
-    endif()
-    if(NOT _llvm_libunwind)
-        _find_mingw_runtime_file(_llvm_libunwind libunwind.a)
-    endif()
-    if(NOT _mingwex_lib)
-        _find_mingw_runtime_file(_mingwex_lib libmingwex.a)
-    endif()
-
-    set(_missing_target_runtime)
-    if(NOT _clang_rt_builtins)
-        list(APPEND _missing_target_runtime ${_clang_builtins_name})
-    endif()
-    if(NOT _llvm_libcxx)
-        list(APPEND _missing_target_runtime libc++.a)
-    endif()
-    if(NOT _llvm_libcxxabi)
-        list(APPEND _missing_target_runtime libc++abi.a)
-    endif()
-    if(NOT _llvm_libunwind)
-        list(APPEND _missing_target_runtime libunwind.a)
-    endif()
-    if(NOT _mingwex_lib)
-        list(APPEND _missing_target_runtime libmingwex.a)
-    endif()
-    if(_missing_target_runtime)
-        list(JOIN _missing_target_runtime ", " _missing_target_runtime_text)
-        message(FATAL_ERROR
-            "Required llvm-mingw runtime libraries not found for ${_target_tool_triplet}: ${_missing_target_runtime_text}. "
-            "Install a matching llvm-mingw sysroot and compiler for ${_target_tool_triplet}.")
-    endif()
-
-    add_library(libgcc INTERFACE)
-    target_link_libraries(libgcc INTERFACE ${_clang_rt_builtins} libkernel32)
-    link_libraries(${_clang_rt_builtins})
-    add_link_options(-Wl,--allow-multiple-definition)
-    add_compile_options(
-        "$<$<COMPILE_LANGUAGE:CXX>:-D__LARGE_MBSTATE_T>"
-        "$<$<COMPILE_LANGUAGE:CXX>:-nostdinc++>"
-        "$<$<COMPILE_LANGUAGE:CXX>:-nobuiltininc>")
-
-    add_library(libwinpthread INTERFACE)
-
-    add_library(libunwind STATIC IMPORTED GLOBAL)
-    set_target_properties(libunwind PROPERTIES IMPORTED_LOCATION ${_llvm_libunwind})
-    target_link_libraries(libunwind INTERFACE libkernel32 libntdll)
-    if(DLL_EXPORT_VERSION LESS 0x601)
-        target_link_libraries(libunwind INTERFACE llvmcompat)
-    endif()
-
-    add_library(libsupc++ STATIC IMPORTED GLOBAL)
-    set_target_properties(libsupc++ PROPERTIES IMPORTED_LOCATION ${_llvm_libcxxabi})
-    target_link_libraries(libsupc++ INTERFACE libunwind ${_llvm_libcxx} libmingwex oldnames libucrtbase)
-
-    add_library(libmingwex STATIC IMPORTED GLOBAL)
-    set_target_properties(libmingwex PROPERTIES IMPORTED_LOCATION ${_mingwex_lib})
-    target_link_libraries(libmingwex INTERFACE libucrtbase libmsvcrt msvcrtex libkernel32)
-    if(DLL_EXPORT_VERSION LESS 0x601)
-        target_link_libraries(libmingwex INTERFACE llvmcompat)
-    endif()
-
-    add_library(libstdc++ STATIC IMPORTED GLOBAL)
-    set_target_properties(libstdc++ PROPERTIES IMPORTED_LOCATION ${_llvm_libcxx})
-    target_link_libraries(libstdc++ INTERFACE libsupc++ libmingwex oldnames libucrtbase)
-    get_filename_component(_llvm_libcxx_lib_dir "${_llvm_libcxx}" DIRECTORY)
-    get_filename_component(_llvm_libcxx_prefix "${_llvm_libcxx_lib_dir}" DIRECTORY)
-    foreach(_include_dir
-            "${_mingw_toolchain_root}/${_target_tool_triplet}/include/c++/v1"
-            "${_llvm_libcxx_prefix}/include/c++/v1"
-            "${_mingw_toolchain_root}/include/c++/v1")
-        if(EXISTS "${_include_dir}")
-            list(APPEND _reactos_libcxx_include_dirs "${_include_dir}")
-        endif()
-    endforeach()
-    list(REMOVE_DUPLICATES _reactos_libcxx_include_dirs)
-    if(NOT _reactos_libcxx_include_dirs)
-        message(FATAL_ERROR
-            "The llvm-mingw libc++ headers were not found for ${_target_tool_triplet}.")
-    endif()
-    foreach(_include_dir IN LISTS _reactos_libcxx_include_dirs)
-        string(APPEND _reactos_cppstl_pre_include_flags
-            " -I${_include_dir}")
-    endforeach()
-    if(EXISTS "${REACTOS_SOURCE_DIR}/sdk/include/ucrt")
-        target_include_directories(libstdc++ SYSTEM INTERFACE
-            "$<$<COMPILE_LANGUAGE:CXX>:${REACTOS_SOURCE_DIR}/sdk/include/ucrt>")
-    endif()
+add_library(libstdc++ STATIC IMPORTED GLOBAL)
+set_target_properties(libstdc++ PROPERTIES IMPORTED_LOCATION ${_llvm_libcxx})
+target_link_libraries(libstdc++ INTERFACE libsupc++ oldnames libucrtbase)
+string(APPEND _reactos_cppstl_pre_include_flags
+    " -I${REACTOS_LIBCXX_ROOT}/include/c++/v1")
+if(EXISTS "${REACTOS_SOURCE_DIR}/sdk/include/ucrt")
+    target_include_directories(libstdc++ SYSTEM INTERFACE
+        "$<$<COMPILE_LANGUAGE:CXX>:${REACTOS_SOURCE_DIR}/sdk/include/ucrt>")
+endif()
 
 set(CMAKE_CXX_COMPILE_OBJECT "<CMAKE_CXX_COMPILER> <DEFINES>${_reactos_cppstl_pre_include_flags} ${CLANG_RESOURCE_INCLUDE_FLAG} <INCLUDES> <FLAGS> -o <OBJECT> -c <SOURCE>")
 

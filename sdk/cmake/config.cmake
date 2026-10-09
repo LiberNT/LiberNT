@@ -36,6 +36,14 @@ elseif(ARCH STREQUAL "arm64")
     set(OARCH "armv8-a" CACHE STRING
     "Generate instructions for this CPU type. Specify one of:
      armv8-a armv8.1-a armv8.2-a armv8.3-a armv8.4-a armv8.5-a armv8.6-a")
+elseif(ARCH STREQUAL "ppc")
+    set(OARCH "604" CACHE STRING
+    "Generate instructions for this CPU type. Specify one of:
+     601 603 604 750")
+elseif(ARCH STREQUAL "riscv64")
+    set(OARCH "rv64gc" CACHE STRING
+    "Generate instructions for this ISA string or profile. Specify one of:
+     rv64gc rva22u64 rva23u64")
 endif()
 
 if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
@@ -44,7 +52,7 @@ if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
 elseif(ARCH STREQUAL "arm")
     set(TUNE "generic-armv7-a" CACHE STRING
     "Which CPU ReactOS should be optimized for.")
-elseif(ARCH STREQUAL "arm64")
+elseif(ARCH STREQUAL "arm64" OR ARCH STREQUAL "riscv64")
     set(TUNE "generic" CACHE STRING
     "Which CPU ReactOS should be optimized for.")
 endif()
@@ -171,6 +179,10 @@ if(KDBG AND _REACTOS_KD_DEBUGGER STREQUAL "AUTO" AND (ARCH STREQUAL "i386" OR AR
     set(KDBG FALSE)
 endif()
 
+if(KDBG AND _REACTOS_KD_DEBUGGER STREQUAL "AUTO" AND ARCH STREQUAL "ppc")
+    set(KDBG FALSE)
+endif()
+
 if(GDB)
     if(NOT (ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64"))
         message(FATAL_ERROR "KDGDB is only supported on i386, amd64 and arm64")
@@ -211,6 +223,14 @@ option(ENABLE_EXPERIMENTAL_EARLY_SPLASH
 cmake_dependent_option(ENABLE_FEX_ARM64EC
                        "Whether to build the optional FEX ARM64EC emulator for running AMD64 binaries on ARM64." ON
                        "ARCH STREQUAL arm64" OFF)
+
+cmake_dependent_option(RISCV64_FAST_MISALIGNED_ACCESS
+                       "The target harts perform misaligned scalar loads and stores to main memory in hardware" OFF
+                       "ARCH STREQUAL riscv64" OFF)
+
+cmake_dependent_option(RISCV64_VECTOR
+                       "The target harts implement the V extension; msvcrt calls its vector routines without runtime dispatch" OFF
+                       "ARCH STREQUAL riscv64" OFF)
 
 cmake_dependent_option(ENABLE_FEX_ARM64EC_TEST_PAYLOADS
                        "Whether to import optional AMD64 diagnostic executables into FEX ARM64EC images." OFF

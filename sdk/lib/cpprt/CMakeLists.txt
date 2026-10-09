@@ -1,13 +1,3 @@
-if(ARCH STREQUAL "riscv64")
-    # The matching LLVM package owns allocation, exceptions, RTTI and guards.
-    add_library(cpprt INTERFACE)
-    target_link_libraries(cpprt INTERFACE libsupc++ riscv64_libcxx)
-    return()
-elseif(ARCH STREQUAL "ppc")
-    add_library(cpprt INTERFACE)
-    target_link_libraries(cpprt INTERFACE libsupc++ ppc_libcxx)
-    return()
-endif()
 
 
 include_directories(

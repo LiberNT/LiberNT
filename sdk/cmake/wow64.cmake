@@ -187,7 +187,6 @@ set(_wow64_i386_cmake_args
 if(WOW64_I386_MESA_FILE)
     list(APPEND _wow64_i386_cmake_args
         -DMESA_GALLIUM_FROM_SOURCE:BOOL=ON
-        -DMESA_LLVM_MINGW_ROOT:PATH=${MESA_LLVM_MINGW_ROOT}
         -DMESA_BISON:FILEPATH=${MESA_BISON}
         -DMESA_FLEX:FILEPATH=${MESA_FLEX}
         -DMESA_PYTHON:FILEPATH=${MESA_PYTHON})
@@ -202,9 +201,17 @@ set(_wow64_i386_signature_file "${REACTOS_BINARY_DIR}/CMakeFiles/wow64-i386-conf
 set(_wow64_i386_configure_stamp "${REACTOS_BINARY_DIR}/CMakeFiles/wow64-i386-configure.stamp")
 file(GENERATE OUTPUT "${_wow64_i386_signature_file}" CONTENT "${_wow64_i386_configure_signature}\n")
 
+set(_wow64_i386_runtime)
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    find_program(NESTED_BUILD_PYTHON_EXECUTABLE NAMES python3 python REQUIRED)
+    set(_wow64_i386_runtime COMMAND "${NESTED_BUILD_PYTHON_EXECUTABLE}"
+        "${REACTOS_SOURCE_DIR}/sdk/tools/cxx-runtime/build-cxx-runtime.py" --reactos-build "${WOW64_I386_BINARY_DIR}")
+endif()
+
 add_custom_command(
     OUTPUT "${_wow64_i386_configure_stamp}"
     COMMAND ${CMAKE_COMMAND} -S "${REACTOS_SOURCE_DIR}" -B "${WOW64_I386_BINARY_DIR}" -G "${CMAKE_GENERATOR}" ${_wow64_i386_cmake_args}
+    ${_wow64_i386_runtime}
     COMMAND ${CMAKE_COMMAND} -E touch "${_wow64_i386_configure_stamp}"
     BYPRODUCTS "${WOW64_I386_BINARY_DIR}/build.ninja"
     DEPENDS "${_wow64_i386_signature_file}"

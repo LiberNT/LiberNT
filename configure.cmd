@@ -14,9 +14,9 @@ if /I "%1" == "/?" (
     echo Help for configure script
     echo Syntax: path\to\source\configure.cmd [script-options] [Cmake-options]
     echo Available script-options: Codeblocks, Eclipse, Makefiles, clang, VSSolution,
-    echo                           /gcc ^(default, RosBE GCC^), /clang ^(RosBE llvm-mingw^),
+    echo                           /gcc ^(default, RosBE GCC^), /clang ^(RosBE LLVM^),
     echo                           /r or /release ^(Release build^), /d or /debug ^(default^),
-    echo                           /arch=^<amd64^|i386^|arm64^> ^(default amd64^),
+    echo                           /arch=^<amd64^|i386^|arm64^|riscv64^|ppc^> ^(default amd64^),
     echo                           menuconfig ^(interactive configuration UI; selections
     echo                           persist in the selected output tree^)
     echo Cmake-options: -DVARIABLE:TYPE=VALUE
@@ -42,7 +42,7 @@ set CMAKE_GENERATOR="Ninja"
 set CMAKE_ARCH=
 
 REM Pre-scan args for compiler, build-type, and architecture. Last flag wins.
-REM Compiler: /gcc (default, RosBE GCC), /clang (RosBE llvm-mingw).
+REM Compiler: /gcc (default, RosBE GCC), /clang (RosBE LLVM).
 REM Build type: /d or /debug (default), /r or /release.
 REM Arch: /arch=amd64 (default), /arch=i386, /arch=arm64.
 REM Note: we tokenize with `for /f "tokens=1*"` (space/tab delims) instead of
@@ -164,14 +164,18 @@ if not defined ROS_ARCH if not defined VCINSTALLDIR (
     if /I "!_ARCH!" == "amd64" set "_ROSBE_TRIPLET=x86_64-w64-mingw32"
     if /I "!_ARCH!" == "i386"  set "_ROSBE_TRIPLET=i686-w64-mingw32"
     if /I "!_ARCH!" == "arm64" set "_ROSBE_TRIPLET=aarch64-w64-mingw32"
+    if "!_USE_LLVM_MINGW!" == "1" (
+        if /I "!_ARCH!" == "riscv64" set "_ROSBE_TRIPLET=riscv64-w64-mingw32"
+        if /I "!_ARCH!" == "ppc" set "_ROSBE_TRIPLET=powerpcle-w64-mingw32"
+    )
 
     if not defined _ROSBE_TRIPLET (
         echo. & echo Error: Unsupported architecture for RosBE: !_ARCH!
-        echo Supported: amd64 ^(default^), i386, arm64.
+        echo Supported: amd64 ^(default^), i386, arm64; riscv64 and ppc with /clang.
         goto quit
     )
 
-    if not exist "!ROSBE_ROOT!\mingw-gcc\!_ROSBE_TRIPLET!\bin\!_ROSBE_TRIPLET!-gcc.exe" (
+    if "!_USE_LLVM_MINGW!" == "0" if not exist "!ROSBE_ROOT!\mingw-gcc\!_ROSBE_TRIPLET!\bin\!_ROSBE_TRIPLET!-gcc.exe" (
         echo. & echo Error: RosBE found at !ROSBE_ROOT!
         echo but the !_ARCH! GCC toolchain is missing
         echo ^(expected !ROSBE_ROOT!\mingw-gcc\!_ROSBE_TRIPLET!\bin\!_ROSBE_TRIPLET!-gcc.exe^).
@@ -187,7 +191,7 @@ if not defined ROS_ARCH if not defined VCINSTALLDIR (
     for /d %%D in ("!ROSBE_ROOT!\cmake-*")          do set "_ROSBE_CMAKE_BIN=%%D\bin"
     for /d %%D in ("!ROSBE_ROOT!\ninja-*")          do set "_ROSBE_NINJA_DIR=%%D"
     for /d %%D in ("!ROSBE_ROOT!\win_flex_bison-*") do set "_ROSBE_WFB_DIR=%%D"
-    if exist "!ROSBE_ROOT!\llvm-mingw\bin"          set "_ROSBE_LLVM_BIN=!ROSBE_ROOT!\llvm-mingw\bin"
+    if exist "!ROSBE_ROOT!\llvm\bin"                set "_ROSBE_LLVM_BIN=!ROSBE_ROOT!\llvm\bin"
 
     set "_ROSBE_GCC_BIN=!ROSBE_ROOT!\mingw-gcc\!_ROSBE_TRIPLET!\bin"
 
@@ -198,7 +202,7 @@ if not defined ROS_ARCH if not defined VCINSTALLDIR (
 
     if "!_USE_LLVM_MINGW!" == "1" (
         if not defined _ROSBE_LLVM_BIN (
-            echo. & echo Error: /clang requested but llvm-mingw is missing under !ROSBE_ROOT!\llvm-mingw\bin.
+            echo. & echo Error: /clang requested but LLVM is missing under !ROSBE_ROOT!\llvm\bin.
             echo Re-run "rosbe install" to repair the toolchain bundle.
             goto quit
         )
@@ -207,8 +211,8 @@ if not defined ROS_ARCH if not defined VCINSTALLDIR (
             goto quit
         )
         set "PATH=!_ROSBE_LLVM_BIN!;!_ROSBE_CMAKE_BIN!;!_ROSBE_NINJA_DIR!;!_ROSBE_WFB_DIR!;!PATH!"
-        set "ROSBE_CMAKE_EXTRA=!ROSBE_CMAKE_EXTRA! -DREACTOS_CLANG_LLVM_MINGW_ROOT:PATH=!ROSBE_ROOT!\llvm-mingw"
-        echo Auto-detected RosBE at !ROSBE_ROOT! ^(/clang: llvm-mingw, !_ARCH!^)
+        set "ROSBE_CMAKE_EXTRA=!ROSBE_CMAKE_EXTRA! -DREACTOS_CLANG_LLVM_MINGW_ROOT:PATH=!ROSBE_ROOT!\llvm"
+        echo Auto-detected RosBE at !ROSBE_ROOT! ^(/clang: LLVM, !_ARCH!^)
     ) else (
         set "PATH=!_ROSBE_GCC_BIN!;!_ROSBE_CMAKE_BIN!;!_ROSBE_NINJA_DIR!;!_ROSBE_WFB_DIR!;!_ROSBE_LLVM_BIN!;!PATH!"
         echo Auto-detected RosBE at !ROSBE_ROOT! ^(/gcc: mingw-gcc, !_ARCH!^)
@@ -528,6 +532,14 @@ if "%BUILD_ENVIRONMENT%" == "MinGW" (
 
 if %ERRORLEVEL% NEQ 0 (
     goto quit
+)
+
+if "%BUILD_ENVIRONMENT%" == "MinGW" if "%_USE_LLVM_MINGW%" == "1" (
+    python "%REACTOS_SOURCE_DIR%\sdk\tools\cxx-runtime\build-cxx-runtime.py" --reactos-build "%CD%"
+    if errorlevel 1 (
+        echo. & echo Error: building the LLVM runtimes failed.
+        goto quit
+    )
 )
 
 if "%CD_SAME_AS_SOURCE%" == "1" (

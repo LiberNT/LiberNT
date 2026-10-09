@@ -88,9 +88,12 @@ set(_fex_amd64_signature_file "${REACTOS_BINARY_DIR}/CMakeFiles/fex-amd64-config
 set(_fex_amd64_configure_stamp "${REACTOS_BINARY_DIR}/CMakeFiles/fex-amd64-configure.stamp")
 file(GENERATE OUTPUT "${_fex_amd64_signature_file}" CONTENT "${_fex_amd64_configure_signature}\n")
 
+find_program(NESTED_BUILD_PYTHON_EXECUTABLE NAMES python3 python REQUIRED)
 add_custom_command(
     OUTPUT "${_fex_amd64_configure_stamp}"
     COMMAND ${CMAKE_COMMAND} -S "${REACTOS_SOURCE_DIR}" -B "${FEX_AMD64_BINARY_DIR}" -G "${CMAKE_GENERATOR}" ${_fex_amd64_cmake_args}
+    COMMAND "${NESTED_BUILD_PYTHON_EXECUTABLE}"
+        "${REACTOS_SOURCE_DIR}/sdk/tools/cxx-runtime/build-cxx-runtime.py" --reactos-build "${FEX_AMD64_BINARY_DIR}"
     COMMAND ${CMAKE_COMMAND} -E touch "${_fex_amd64_configure_stamp}"
     BYPRODUCTS "${FEX_AMD64_BINARY_DIR}/build.ninja"
     DEPENDS "${_fex_amd64_signature_file}"

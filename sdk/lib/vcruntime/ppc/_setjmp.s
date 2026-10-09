@@ -13,6 +13,11 @@ LEAF_ENTRY(_setjmp)
     b       .Lsave_context
 LEAF_END(_setjmp)
 
+LEAF_ENTRY(setjmp)
+    li      4, 0
+    b       .Lsave_context
+LEAF_END(setjmp)
+
 LEAF_ENTRY(__intrinsic_setjmp)
     li      4, 0
     b       .Lsave_context

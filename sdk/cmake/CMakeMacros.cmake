@@ -714,11 +714,7 @@ function(add_arm64ec_x64_source OUTPUT_VAR SOURCE_FILE)
     get_filename_component(_source_name "${SOURCE_FILE}" NAME_WE)
     set(_object_path "${CMAKE_CURRENT_BINARY_DIR}/${_source_name}.arm64ec_x64.obj")
     set(_depfile_path "${_object_path}.d")
-    set(_x64_compiler "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/x86_64-w64-mingw32-clang")
-
-    if(NOT EXISTS "${_x64_compiler}")
-        message(FATAL_ERROR "ARM64EC x64 compiler not found: ${_x64_compiler}")
-    endif()
+    set(_x64_compiler "${CMAKE_C_COMPILER}")
 
     get_includes(_x64_includes)
     get_defines(_directory_defines)
@@ -745,7 +741,6 @@ function(add_arm64ec_x64_source OUTPUT_VAR SOURCE_FILE)
         OUTPUT "${_object_path}"
         COMMAND "${_x64_compiler}"
             --target=x86_64-w64-mingw32
-            --sysroot="${REACTOS_CLANG_LLVM_MINGW_ROOT}"
             ${_x64_defines}
             -isystem "${CLANG_RESOURCE_DIR}/include"
             ${_x64_includes}
