@@ -109,6 +109,40 @@ FUNC InternalDispatchException
     /* Allocate stack space for EXCEPTION_RECORD and KEXCEPTION_FRAME */
     sub rsp, EXCEPTION_RECORD_LENGTH + KEXCEPTION_FRAME_LENGTH
     .allocstack (EXCEPTION_RECORD_LENGTH + KEXCEPTION_FRAME_LENGTH)
+    mov [rsp + KEXCEPTION_FRAME_Rbx], rbx
+    .savereg rbx, KEXCEPTION_FRAME_Rbx
+    mov [rsp + KEXCEPTION_FRAME_Rdi], rdi
+    .savereg rdi, KEXCEPTION_FRAME_Rdi
+    mov [rsp + KEXCEPTION_FRAME_Rsi], rsi
+    .savereg rsi, KEXCEPTION_FRAME_Rsi
+    mov [rsp + KEXCEPTION_FRAME_R12], r12
+    .savereg r12, KEXCEPTION_FRAME_R12
+    mov [rsp + KEXCEPTION_FRAME_R13], r13
+    .savereg r13, KEXCEPTION_FRAME_R13
+    mov [rsp + KEXCEPTION_FRAME_R14], r14
+    .savereg r14, KEXCEPTION_FRAME_R14
+    mov [rsp + KEXCEPTION_FRAME_R15], r15
+    .savereg r15, KEXCEPTION_FRAME_R15
+    movdqa [rsp + KEXCEPTION_FRAME_Xmm6], xmm6
+    .savexmm128 xmm6, KEXCEPTION_FRAME_Xmm6
+    movdqa [rsp + KEXCEPTION_FRAME_Xmm7], xmm7
+    .savexmm128 xmm7, KEXCEPTION_FRAME_Xmm7
+    movdqa [rsp + KEXCEPTION_FRAME_Xmm8], xmm8
+    .savexmm128 xmm8, KEXCEPTION_FRAME_Xmm8
+    movdqa [rsp + KEXCEPTION_FRAME_Xmm9], xmm9
+    .savexmm128 xmm9, KEXCEPTION_FRAME_Xmm9
+    movdqa [rsp + KEXCEPTION_FRAME_Xmm10], xmm10
+    .savexmm128 xmm10, KEXCEPTION_FRAME_Xmm10
+    movdqa [rsp + KEXCEPTION_FRAME_Xmm11], xmm11
+    .savexmm128 xmm11, KEXCEPTION_FRAME_Xmm11
+    movdqa [rsp + KEXCEPTION_FRAME_Xmm12], xmm12
+    .savexmm128 xmm12, KEXCEPTION_FRAME_Xmm12
+    movdqa [rsp + KEXCEPTION_FRAME_Xmm13], xmm13
+    .savexmm128 xmm13, KEXCEPTION_FRAME_Xmm13
+    movdqa [rsp + KEXCEPTION_FRAME_Xmm14], xmm14
+    .savexmm128 xmm14, KEXCEPTION_FRAME_Xmm14
+    movdqa [rsp + KEXCEPTION_FRAME_Xmm15], xmm15
+    .savexmm128 xmm15, KEXCEPTION_FRAME_Xmm15
     .endprolog
 
     mov byte ptr [rbp + KTRAP_FRAME_ExceptionActive], KEXCEPTION_ACTIVE_EXCEPTION_FRAME
@@ -133,23 +167,6 @@ InternalDispatchExceptionAddress:
     /* Set up KEXCEPTION_FRAME */
     mov rax, [rbp + KTRAP_FRAME_Rbp]
     mov [rsp + KEXCEPTION_FRAME_Rbp], rax
-    mov [rsp + KEXCEPTION_FRAME_Rbx], rbx
-    mov [rsp + KEXCEPTION_FRAME_Rdi], rdi
-    mov [rsp + KEXCEPTION_FRAME_Rsi], rsi
-    mov [rsp + KEXCEPTION_FRAME_R12], r12
-    mov [rsp + KEXCEPTION_FRAME_R13], r13
-    mov [rsp + KEXCEPTION_FRAME_R14], r14
-    mov [rsp + KEXCEPTION_FRAME_R15], r15
-    movdqa [rsp + KEXCEPTION_FRAME_Xmm6], xmm6
-    movdqa [rsp + KEXCEPTION_FRAME_Xmm7], xmm7
-    movdqa [rsp + KEXCEPTION_FRAME_Xmm8], xmm8
-    movdqa [rsp + KEXCEPTION_FRAME_Xmm9], xmm9
-    movdqa [rsp + KEXCEPTION_FRAME_Xmm10], xmm10
-    movdqa [rsp + KEXCEPTION_FRAME_Xmm11], xmm11
-    movdqa [rsp + KEXCEPTION_FRAME_Xmm12], xmm12
-    movdqa [rsp + KEXCEPTION_FRAME_Xmm13], xmm13
-    movdqa [rsp + KEXCEPTION_FRAME_Xmm14], xmm14
-    movdqa [rsp + KEXCEPTION_FRAME_Xmm15], xmm15
     mov qword ptr [rsp + KEXCEPTION_FRAME_Return], 0
 
     /* Call KiDispatchException */
