@@ -41,6 +41,7 @@ KMT_TESTFUNC Test_RtlGetVersion;
 KMT_TESTFUNC Test_RtlIntSafe;
 KMT_TESTFUNC Test_RtlMemory;
 KMT_TESTFUNC Test_RtlRegistry;
+KMT_TESTFUNC Test_RtlSehUnwind;
 KMT_TESTFUNC Test_RtlSplayTree;
 KMT_TESTFUNC Test_RtlStack;
 KMT_TESTFUNC Test_RtlStrSafe;
@@ -89,6 +90,7 @@ const KMT_TEST TestList[] =
     { "RtlIntSafe",                   Test_RtlIntSafe },
     { "RtlMemory",                    Test_RtlMemory },
     { "RtlRegistry",                  Test_RtlRegistry },
+    { "RtlSehUnwind",                 Test_RtlSehUnwind },
     { "RtlSplayTree",                 Test_RtlSplayTree },
     { "RtlStack",                     Test_RtlStack },
     { "RtlStrSafe",                   Test_RtlStrSafe },

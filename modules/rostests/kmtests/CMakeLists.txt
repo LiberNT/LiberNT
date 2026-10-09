@@ -23,6 +23,7 @@ list(APPEND COMMON_SOURCE
     ../apitests/rtl/RtlIntSafe.c
     rtl/RtlMemory.c
     rtl/RtlRegistry.c
+    rtl/RtlSehUnwind.c
     rtl/RtlSplayTree.c
     rtl/RtlStack.c
     rtl/RtlStrSafe.c

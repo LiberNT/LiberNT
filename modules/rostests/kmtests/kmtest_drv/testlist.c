@@ -312,6 +312,7 @@ KMT_TESTFUNC Test_RtlMemory;
 KMT_TESTFUNC Test_RtlRangeList;
 KMT_TESTFUNC Test_RtlCmResource;
 KMT_TESTFUNC Test_RtlRegistry;
+KMT_TESTFUNC Test_RtlSehUnwind;
 KMT_TESTFUNC Test_RtlSplayTree;
 KMT_TESTFUNC Test_RtlStack;
 KMT_TESTFUNC Test_RtlStrSafe;
@@ -626,6 +627,7 @@ const KMT_TEST TestList[] =
     { "MmSectionWin11KM",                   Test_MmSectionWin11KM },
     { "MmPteWin11KM",                       Test_MmPteWin11KM },
 #endif
+    { "RtlSehUnwindKM",                     Test_RtlSehUnwind },
     { "RtlSplayTreeKM",                     Test_RtlSplayTree },
     { "RtlStackKM",                         Test_RtlStack },
     { "RtlStrSafeKM",                       Test_RtlStrSafe },

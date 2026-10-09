@@ -2981,6 +2981,151 @@ void Test_collided_unwind(void)
 #endif
 }
 
+void Test_except_inside_finally(void)
+{
+    volatile int Flags = 0;
+    volatile int Count = 0;
+
+    _SEH2_TRY
+    {
+        _SEH2_TRY
+        {
+            Flags |= 1;
+            RaiseException(0xE00DEAD1, 0, 0, NULL);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            ok(Count == 0, "Count = %d\n", Count);
+            Flags |= 2;
+        }
+        _SEH2_END;
+
+        ok(Count == 0, "Count = %d\n", Count);
+        Flags |= 4;
+    }
+    _SEH2_FINALLY
+    {
+        Count++;
+        Flags |= 8;
+    }
+    _SEH2_END;
+
+    ok(Flags == (1 | 2 | 4 | 8), "Flags = %x\n", Flags);
+    ok(Count == 1, "Count = %d\n", Count);
+}
+
+void Test_exception_in_finally(void)
+{
+    volatile int Flags = 0;
+    volatile int Count = 0;
+
+    _SEH2_TRY
+    {
+        _SEH2_TRY
+        {
+            _SEH2_TRY
+            {
+                _SEH2_TRY
+                {
+                    Flags |= 1;
+                    RaiseException(0xE00DEAD1, 0, 0, NULL);
+                }
+                _SEH2_FINALLY
+                {
+                    Flags |= 2;
+                    RaiseException(0xE00DEAD2, 0, 0, NULL);
+                }
+                _SEH2_END;
+            }
+            _SEH2_EXCEPT(_SEH2_GetExceptionCode() == 0xE00DEAD1 ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+            {
+                Flags |= 4;
+            }
+            _SEH2_END;
+        }
+        _SEH2_FINALLY
+        {
+            Count++;
+            Flags |= 8;
+        }
+        _SEH2_END;
+    }
+    _SEH2_EXCEPT(_SEH2_GetExceptionCode() == 0xE00DEAD2 ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+    {
+        Flags |= 16;
+    }
+    _SEH2_END;
+
+    ok(Flags == (1 | 2 | 8 | 16), "Flags = %x\n", Flags);
+    ok(Count == 1, "Count = %d\n", Count);
+}
+
+static volatile int UnwoundFilterCalls;
+
+static int Unwound_frame_filter(unsigned int Code)
+{
+    if (Code == 0xE00DEAD2)
+        UnwoundFilterCalls++;
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+DECLSPEC_NOINLINE
+static void Do_raise_below_finally(void)
+{
+    _SEH2_TRY
+    {
+        RaiseException(0xE00DEAD1, 0, 0, NULL);
+    }
+    _SEH2_EXCEPT(Unwound_frame_filter(_SEH2_GetExceptionCode()))
+    {
+    }
+    _SEH2_END;
+}
+
+DECLSPEC_NOINLINE
+static void Do_raise_in_finally(volatile int *Flags)
+{
+    _SEH2_TRY
+    {
+        Do_raise_below_finally();
+    }
+    _SEH2_FINALLY
+    {
+        *Flags |= 2;
+        RaiseException(0xE00DEAD2, 0, 0, NULL);
+    }
+    _SEH2_END;
+}
+
+void Test_exception_in_finally_unwound_frame(void)
+{
+    volatile int Flags = 0;
+
+    UnwoundFilterCalls = 0;
+
+    _SEH2_TRY
+    {
+        _SEH2_TRY
+        {
+            Flags |= 1;
+            Do_raise_in_finally(&Flags);
+        }
+        _SEH2_EXCEPT(_SEH2_GetExceptionCode() == 0xE00DEAD1 ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+        {
+            Flags |= 4;
+        }
+        _SEH2_END;
+    }
+    _SEH2_EXCEPT(_SEH2_GetExceptionCode() == 0xE00DEAD2 ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+    {
+        Flags |= 8;
+    }
+    _SEH2_END;
+
+    ok(Flags == (1 | 2 | 8), "Flags = %x\n", Flags);
+    ok(UnwoundFilterCalls == 0, "UnwoundFilterCalls = %d\n", UnwoundFilterCalls);
+}
+
 void Do_nested_from_except(void)
 {
     volatile unsigned int Flags = 0;
@@ -3041,6 +3186,12 @@ START_TEST(pseh)
 #endif
     trace("Running Test_collided_unwind\n");
     Test_collided_unwind();
+    trace("Running Test_except_inside_finally\n");
+    Test_except_inside_finally();
+    trace("Running Test_exception_in_finally\n");
+    Test_exception_in_finally();
+    trace("Running Test_exception_in_finally_unwound_frame\n");
+    Test_exception_in_finally_unwound_frame();
     trace("Running Test_nested_from_except\n");
     Test_nested_from_except();
 
