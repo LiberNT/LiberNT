@@ -438,6 +438,102 @@ HRESULT WINAPI SHGetItemFromObject(IUnknown *punk, REFIID riid, void **ppv)
     return hr;
 }
 
+static BOOL
+IsIDListInBlock(const BYTE *pbBlock, SIZE_T cbBlock, UINT uOffset)
+{
+    SIZE_T Offset = uOffset;
+
+    for (;;)
+    {
+        USHORT cb;
+
+        if (Offset > cbBlock || cbBlock - Offset < sizeof(USHORT))
+            return FALSE;
+        CopyMemory(&cb, pbBlock + Offset, sizeof(cb));
+        if (!cb)
+            return TRUE;
+        if (cb < sizeof(USHORT) || cb > cbBlock - Offset)
+            return FALSE;
+        Offset += cb;
+    }
+}
+
+static HRESULT
+GetItemFromHIDA(IDataObject *pdtobj, DATAOBJ_GET_ITEM_FLAGS dwFlags, REFIID riid, void **ppv)
+{
+    STGMEDIUM medium = { 0 };
+    CIDA *pcida;
+    HRESULT hr = CDataObjectHIDA::CreateCIDA(pdtobj, &pcida, medium);
+
+    if (FAILED(hr))
+        return hr;
+
+    SIZE_T cbBlock = GlobalSize(medium.hGlobal);
+    hr = E_FAIL;
+    if (cbBlock >= FIELD_OFFSET(CIDA, aoffset) + 2 * sizeof(UINT) &&
+        pcida->cidl >= 1 &&
+        (pcida->cidl == 1 || !(dwFlags & DOGIF_ONLY_IF_ONE)) &&
+        IsIDListInBlock((const BYTE *)pcida, cbBlock, pcida->aoffset[0]) &&
+        IsIDListInBlock((const BYTE *)pcida, cbBlock, pcida->aoffset[1]))
+    {
+        LPITEMIDLIST pidl = ILCombine(HIDA_GetPIDLFolder(pcida), HIDA_GetPIDLItem(pcida, 0));
+        hr = pidl ? SHCreateItemFromIDList(pidl, riid, ppv) : E_OUTOFMEMORY;
+        ILFree(pidl);
+    }
+
+    CDataObjectHIDA::DestroyCIDA(pcida, medium);
+    return hr;
+}
+
+static HRESULT
+GetItemFromHDROP(IDataObject *pdtobj, DATAOBJ_GET_ITEM_FLAGS dwFlags, REFIID riid, void **ppv)
+{
+    FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    STGMEDIUM medium = { 0 };
+    HRESULT hr = pdtobj->GetData(&fmt, &medium);
+
+    if (FAILED(hr))
+        return hr;
+
+    hr = E_FAIL;
+    DROPFILES *pDrop = (DROPFILES *)GlobalLock(medium.hGlobal);
+    if (pDrop)
+    {
+        SIZE_T cbBlock = GlobalSize(medium.hGlobal);
+        if (cbBlock >= sizeof(*pDrop) && pDrop->fWide && pDrop->pFiles >= sizeof(*pDrop) &&
+            pDrop->pFiles < cbBlock && ((cbBlock - pDrop->pFiles) / sizeof(WCHAR)) >= 2)
+        {
+            PCWSTR pszFirst = (PCWSTR)((LPBYTE)pDrop + pDrop->pFiles);
+            SIZE_T cchMax = (cbBlock - pDrop->pFiles) / sizeof(WCHAR);
+            SIZE_T cchFirst = wcsnlen(pszFirst, cchMax);
+
+            if (cchFirst && cchFirst < cchMax &&
+                (!(dwFlags & DOGIF_ONLY_IF_ONE) || (cchFirst + 1 < cchMax && !pszFirst[cchFirst + 1])))
+            {
+                hr = SHCreateItemFromParsingName(pszFirst, NULL, riid, ppv);
+            }
+        }
+        GlobalUnlock(medium.hGlobal);
+    }
+    ReleaseStgMedium(&medium);
+    return hr;
+}
+
+EXTERN_C HRESULT WINAPI
+SHGetItemFromDataObject(IDataObject *pdtobj, DATAOBJ_GET_ITEM_FLAGS dwFlags, REFIID riid, void **ppv)
+{
+    HRESULT hr;
+
+    if (!pdtobj || !ppv)
+        return E_INVALIDARG;
+    *ppv = NULL;
+
+    hr = GetItemFromHIDA(pdtobj, dwFlags, riid, ppv);
+    if (FAILED(hr) && !(dwFlags & DOGIF_NO_HDROP))
+        hr = GetItemFromHDROP(pdtobj, dwFlags, riid, ppv);
+    return hr;
+}
+
 class CShellItemArray :
     public CComCoClass<CShellItemArray, &CLSID_NULL>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
@@ -530,6 +626,11 @@ END_COM_MAP()
 EXTERN_C HRESULT WINAPI
 SHCreateShellItemArrayFromDataObject(_In_ IDataObject *pdo, _In_ REFIID riid, _Out_ void **ppv)
 {
+    if (!pdo)
+    {
+        *ppv = NULL;
+        return E_INVALIDARG;
+    }
     return ShellObjectCreatorInit<CShellItemArray>(pdo, riid, ppv);
 }
 
@@ -558,6 +659,51 @@ SHCreateShellItemArray(_In_opt_ PCIDLIST_ABSOLUTE pidlParent, _In_opt_ IShellFol
     if (SUCCEEDED(hr))
         hr = SHCreateShellItemArrayFromDataObject(dataObject, IID_PPV_ARG(IShellItemArray, ppsiItemArray));
     ILFree(allocatedParent);
+    return hr;
+}
+
+EXTERN_C HRESULT WINAPI
+SHCreateShellItemArrayFromIDLists(_In_ UINT cidl, _In_reads_(cidl) PCIDLIST_ABSOLUTE_ARRAY rgpidl,
+                                  _Out_ IShellItemArray **ppsiItemArray)
+{
+    static const USHORT EmptyIDList = 0;
+    CComPtr<IDataObject> dataObject;
+    CComHeapPtr<PCIDLIST_ABSOLUTE> items;
+    HRESULT hr;
+    UINT i;
+
+    *ppsiItemArray = NULL;
+    if (!cidl || !rgpidl)
+        return E_INVALIDARG;
+    if (!rgpidl[0])
+        return E_OUTOFMEMORY;
+    if (!items.Allocate(cidl))
+        return E_OUTOFMEMORY;
+    for (i = 0; i < cidl; i++)
+        items[i] = rgpidl[i] ? rgpidl[i] : (PCIDLIST_ABSOLUTE)&EmptyIDList;
+
+    hr = SHCreateDataObject(NULL, cidl, (PCUITEMID_CHILD_ARRAY)(PCIDLIST_ABSOLUTE *)items, NULL,
+                            IID_PPV_ARG(IDataObject, &dataObject));
+    if (SUCCEEDED(hr))
+        hr = SHCreateShellItemArrayFromDataObject(dataObject, IID_PPV_ARG(IShellItemArray, ppsiItemArray));
+    return hr;
+}
+
+EXTERN_C HRESULT WINAPI
+SHCreateShellItemArrayFromShellItem(_In_ IShellItem *psi, _In_ REFIID riid, _Out_ void **ppv)
+{
+    CComPtr<IShellItemArray> itemArray;
+    PIDLIST_ABSOLUTE pidl;
+    HRESULT hr;
+
+    *ppv = NULL;
+    hr = SHGetIDListFromObject(psi, &pidl);
+    if (FAILED(hr))
+        return hr;
+    hr = SHCreateShellItemArrayFromIDLists(1, (PCIDLIST_ABSOLUTE_ARRAY)&pidl, &itemArray);
+    ILFree(pidl);
+    if (SUCCEEDED(hr))
+        hr = itemArray->QueryInterface(riid, ppv);
     return hr;
 }
 

@@ -503,8 +503,8 @@
 @ stdcall SHCreateShellItem(ptr ptr ptr ptr) # 2k3:283, Vista:338
 @ stdcall -version=0x600+ SHCreateShellItemArray(ptr ptr long ptr ptr) # Vista:339
 @ stdcall -version=0x600+ SHCreateShellItemArrayFromDataObject(ptr ptr ptr) # Vista:340
-@ stub -version=0x600+ SHCreateShellItemArrayFromIDLists # Vista:341
-@ stub -version=0x600+ SHCreateShellItemArrayFromShellItem # Vista:342
+@ stdcall -version=0x600+ SHCreateShellItemArrayFromIDLists(long ptr ptr) # Vista:341
+@ stdcall -version=0x600+ SHCreateShellItemArrayFromShellItem(ptr ptr ptr) # Vista:342
 @ stdcall SHEmptyRecycleBinA(long str long) # 2k3:284, Vista:343
 @ stdcall SHEmptyRecycleBinW(long wstr long) # 2k3:285, Vista:344
 @ stdcall SHEnableServiceObject(ptr long) # 2k3:286, Vista:345
@@ -533,6 +533,7 @@
 @ stdcall -version=0x600+ SHGetFolderPathEx(ptr long ptr ptr long) # Vista:368
 @ stdcall SHGetFolderPathW(long long long long ptr) # 2k3:307, Vista:369
 @ stdcall -version=0x600+ SHGetIDListFromObject(ptr ptr) # Vista:370
+@ stdcall -version=0x600+ SHGetItemFromDataObject(ptr long ptr ptr)
 @ stdcall -version=0x600+ SHGetItemFromObject(ptr ptr ptr)
 @ stdcall SHGetIconOverlayIndexA(str long) # 2k3:308, Vista:371
 @ stdcall SHGetIconOverlayIndexW(wstr long) # 2k3:309, Vista:372
