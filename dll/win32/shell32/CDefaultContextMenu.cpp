@@ -1341,6 +1341,8 @@ CDefaultContextMenu::MapVerbToCmdId(PVOID Verb, PUINT idCmd, BOOL IsUnicode)
     // Check the registry verbs
     if (!IsUnicode)
         hr = StringCchPrintfW(UnicodeStr, _countof(UnicodeStr), L"%hs", Verb);
+    else
+        hr = StringCchCopyW(UnicodeStr, _countof(UnicodeStr), (PCWSTR)Verb);
     for (i = 0, it = m_StaticEntries.GetHeadPosition(); it && SUCCEEDED(hr); ++i)
     {
         StaticShellEntry& entry = m_StaticEntries.GetNext(it);
