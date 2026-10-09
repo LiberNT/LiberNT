@@ -704,6 +704,10 @@ ExpandInstallerPath(
             StringCchCatW(lpInstallerPath, PathSize, L"AMD64");
             break;
 
+        case PROCESSOR_ARCHITECTURE_ARM64:
+            StringCchCatW(lpInstallerPath, PathSize, L"ARM64");
+            break;
+
         case PROCESSOR_ARCHITECTURE_RISCV64:
             StringCchCatW(lpInstallerPath, PathSize, L"RISCV64");
             break;
