@@ -544,7 +544,7 @@
 548 stdcall -noname SHAreIconsEqual(ptr ptr)
 549 stdcall -noname SHCoCreateInstanceAC(ptr ptr long ptr ptr)
 550 stub -noname GetTemplateInfoFromHandle
-551 stdcall -noname IShellFolder_CompareIDs(ptr ptr ptr ptr)
+551 stdcall -noname -version=0x501-0x502 IShellFolder_CompareIDs(ptr ptr ptr ptr)
 552 stdcall -noname -version=0x501-0x502 SHEvaluateSystemCommandTemplate(wstr ptr ptr ptr)
 553 stdcall IsInternetESCEnabled()
 554 stdcall -noname -stub SHGetAllAccessSA()
