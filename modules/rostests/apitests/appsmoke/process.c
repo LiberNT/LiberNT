@@ -23,6 +23,69 @@ static volatile LONG WaitValue;
 static volatile LONG WaiterState;
 static volatile LONG ApcCount;
 
+static volatile LONG StopSpinning;
+
+static DWORD WINAPI ComputeSpinner(void *Context)
+{
+    volatile ULONG Value = 0;
+
+    while (!StopSpinning)
+        Value++;
+
+    return 0;
+}
+
+static DWORD WINAPI YieldSpinner(void *Context)
+{
+    while (!StopSpinning)
+        Sleep(0);
+
+    return 0;
+}
+
+static ULONGLONG ThreadCpuTime(HANDLE Thread)
+{
+    FILETIME Creation, Exit, Kernel, User;
+
+    if (!GetThreadTimes(Thread, &Creation, &Exit, &Kernel, &User))
+        return 0;
+
+    return (((ULONGLONG)Kernel.dwHighDateTime << 32) | Kernel.dwLowDateTime) +
+           (((ULONGLONG)User.dwHighDateTime << 32) | User.dwLowDateTime);
+}
+
+START_TEST(yield_fairness)
+{
+    HANDLE Threads[MAXIMUM_WAIT_OBJECTS];
+    SYSTEM_INFO Info;
+    ULONGLONG ComputeTime = 0, YieldTime;
+    DWORD Count, Index, Elapsed, Start;
+
+    GetSystemInfo(&Info);
+    Count = min(Info.dwNumberOfProcessors, MAXIMUM_WAIT_OBJECTS - 1);
+    StopSpinning = 0;
+    for (Index = 0; Index < Count; Index++)
+        Threads[Index] = CreateThread(NULL, 0, ComputeSpinner, NULL, 0, NULL);
+    Threads[Count] = CreateThread(NULL, 0, YieldSpinner, NULL, 0, NULL);
+
+    Start = GetTickCount();
+    Sleep(2000);
+    StopSpinning = 1;
+    ok(WaitForMultipleObjects(Count + 1, Threads, TRUE, 10000) == WAIT_OBJECT_0, "The spinners did not stop\n");
+    Elapsed = GetTickCount() - Start;
+
+    for (Index = 0; Index < Count; Index++)
+        ComputeTime += ThreadCpuTime(Threads[Index]);
+    YieldTime = ThreadCpuTime(Threads[Count]);
+    for (Index = 0; Index <= Count; Index++)
+        CloseHandle(Threads[Index]);
+
+    ok(YieldTime / 10000 < Elapsed / 4, "A yielding thread used %lu ms of %lu ms beside %lu busy threads\n",
+       (ULONG)(YieldTime / 10000), Elapsed, Count);
+    ok(ComputeTime / 10000 > (ULONGLONG)Elapsed * Count * 3 / 4, "%lu busy threads used %lu ms in %lu ms\n",
+       Count, (ULONG)(ComputeTime / 10000), Elapsed);
+}
+
 START_TEST(os_version)
 {
     RTL_OSVERSIONINFOEXW Unsized, Sized;

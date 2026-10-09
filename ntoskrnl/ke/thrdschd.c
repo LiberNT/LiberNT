@@ -1593,7 +1593,15 @@ NtYieldExecution(VOID)
     /* NB: No instructions (other than entry code) should preceed this line */
 
     /* Fail if there's no ready summary */
+#ifdef CONFIG_SMP
+    if (!KiGetCurrentReadySummary() &&
+        !KiAnyReadyThreadQueued(KeGetCurrentProcessorNumber()))
+    {
+        return STATUS_NO_YIELD_PERFORMED;
+    }
+#else
     if (!KiGetCurrentReadySummary()) return STATUS_NO_YIELD_PERFORMED;
+#endif
 
     /* Now get the current thread, set the status... */
     Status = STATUS_NO_YIELD_PERFORMED;
@@ -1602,6 +1610,11 @@ NtYieldExecution(VOID)
     /* Raise IRQL to synch and get the KPRCB now */
     OldIrql = KeRaiseIrqlToSynchLevel();
     Prcb = KeGetCurrentPrcb();
+
+#ifdef CONFIG_SMP
+    if (!Prcb->ReadySummary && !Prcb->NextThread)
+        KiBalanceReadyQueues(Prcb, KiBalanceQuantum);
+#endif
 
     /* Now check if there's still a ready summary */
     if (Prcb->ReadySummary)
