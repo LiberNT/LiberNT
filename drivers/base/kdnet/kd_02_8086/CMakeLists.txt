@@ -12,6 +12,7 @@ add_library(kd_02_8086 MODULE
 
 set_module_type(kd_02_8086 kerneldll ENTRYPOINT 0)
 set_subsystem(kd_02_8086 native)
+target_link_libraries(kd_02_8086 libcntpr)
 if(NOT MSVC)
     target_compile_options(kd_02_8086 PRIVATE -fno-builtin)
 endif()

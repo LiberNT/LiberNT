@@ -12,6 +12,7 @@ add_library(kd_02_10ec MODULE
 
 set_module_type(kd_02_10ec kerneldll ENTRYPOINT 0)
 set_subsystem(kd_02_10ec native)
+target_link_libraries(kd_02_10ec libcntpr)
 if(NOT MSVC)
     target_compile_options(kd_02_10ec PRIVATE -fno-builtin)
 endif()

@@ -12,6 +12,7 @@ add_library(kd_8003_1de4 MODULE
 
 set_module_type(kd_8003_1de4 kerneldll ENTRYPOINT 0)
 set_subsystem(kd_8003_1de4 native)
+target_link_libraries(kd_8003_1de4 libcntpr)
 if(NOT MSVC)
     target_compile_options(kd_8003_1de4 PRIVATE -fno-builtin)
 endif()
