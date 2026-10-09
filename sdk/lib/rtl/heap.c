@@ -3986,35 +3986,34 @@ RtlSetUserValueHeap(IN PVOID HeapHandle,
         HeapLocked = TRUE;
     }
 
-    /* Get a pointer to the entry */
-    HeapEntry = (PHEAP_ENTRY)BaseAddress - 1;
-
-    /* If it's a free entry - return error */
-    if (!(HeapEntry->Flags & HEAP_ENTRY_BUSY))
+    _SEH2_TRY
     {
-        RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
+        /* Get a pointer to the entry */
+        HeapEntry = (PHEAP_ENTRY)BaseAddress - 1;
 
+        /* If it's a free entry - return error */
+        if (!(HeapEntry->Flags & HEAP_ENTRY_BUSY))
+        {
+            RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
+        }
+        /* Check if this entry has an extra stuff associated with it */
+        else if (HeapEntry->Flags & HEAP_ENTRY_EXTRA_PRESENT)
+        {
+            /* Use extra to store the value */
+            Extra = RtlpGetExtraStuffPointer(HeapEntry);
+            Extra->Settable = (ULONG_PTR)UserValue;
+
+            /* Indicate that value was set */
+            ValueSet = TRUE;
+        }
+    }
+    _SEH2_FINALLY
+    {
         /* Release the heap lock if it was acquired */
         if (HeapLocked)
             RtlLeaveHeapLock(Heap->LockVariable);
-
-        return FALSE;
     }
-
-    /* Check if this entry has an extra stuff associated with it */
-    if (HeapEntry->Flags & HEAP_ENTRY_EXTRA_PRESENT)
-    {
-        /* Use extra to store the value */
-        Extra = RtlpGetExtraStuffPointer(HeapEntry);
-        Extra->Settable = (ULONG_PTR)UserValue;
-
-        /* Indicate that value was set */
-        ValueSet = TRUE;
-    }
-
-    /* Release the heap lock if it was acquired */
-    if (HeapLocked)
-        RtlLeaveHeapLock(Heap->LockVariable);
+    _SEH2_END;
 
     return ValueSet;
 }
@@ -4032,7 +4031,7 @@ RtlSetUserFlagsHeap(IN PVOID HeapHandle,
 {
     PHEAP Heap = (PHEAP)HeapHandle;
     PHEAP_ENTRY HeapEntry;
-    BOOLEAN HeapLocked = FALSE;
+    BOOLEAN HeapLocked = FALSE, FlagsSet = FALSE;
 
     if ((UserFlagsReset | UserFlagsSet) & ~HEAP_SETTABLE_USER_FLAGS)
     {
@@ -4054,30 +4053,33 @@ RtlSetUserFlagsHeap(IN PVOID HeapHandle,
         HeapLocked = TRUE;
     }
 
-    /* Get a pointer to the entry */
-    HeapEntry = (PHEAP_ENTRY)BaseAddress - 1;
-
-    /* If it's a free entry - return error */
-    if (!(HeapEntry->Flags & HEAP_ENTRY_BUSY))
+    _SEH2_TRY
     {
-        RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
+        /* Get a pointer to the entry */
+        HeapEntry = (PHEAP_ENTRY)BaseAddress - 1;
 
+        /* If it's a free entry - return error */
+        if (!(HeapEntry->Flags & HEAP_ENTRY_BUSY))
+        {
+            RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
+        }
+        else
+        {
+            /* Set / reset flags */
+            HeapEntry->Flags &= ~(UserFlagsReset >> 4);
+            HeapEntry->Flags |= (UserFlagsSet >> 4);
+            FlagsSet = TRUE;
+        }
+    }
+    _SEH2_FINALLY
+    {
         /* Release the heap lock if it was acquired */
         if (HeapLocked)
             RtlLeaveHeapLock(Heap->LockVariable);
-
-        return FALSE;
     }
+    _SEH2_END;
 
-    /* Set / reset flags */
-    HeapEntry->Flags &= ~(UserFlagsReset >> 4);
-    HeapEntry->Flags |= (UserFlagsSet >> 4);
-
-    /* Release the heap lock if it was acquired */
-    if (HeapLocked)
-        RtlLeaveHeapLock(Heap->LockVariable);
-
-    return TRUE;
+    return FlagsSet;
 }
 
 /*
@@ -4094,7 +4096,7 @@ RtlGetUserInfoHeap(IN PVOID HeapHandle,
     PHEAP Heap = (PHEAP)HeapHandle;
     PHEAP_ENTRY HeapEntry;
     PHEAP_ENTRY_EXTRA Extra;
-    BOOLEAN HeapLocked = FALSE;
+    BOOLEAN HeapLocked = FALSE, InfoReturned = FALSE;
 
     /* Force flags */
     Flags |= Heap->ForceFlags;
@@ -4110,41 +4112,45 @@ RtlGetUserInfoHeap(IN PVOID HeapHandle,
         HeapLocked = TRUE;
     }
 
-    /* Get a pointer to the entry */
-    HeapEntry = (PHEAP_ENTRY)BaseAddress - 1;
-
-    /* If it's a free entry - return error */
-    if (!(HeapEntry->Flags & HEAP_ENTRY_BUSY))
+    _SEH2_TRY
     {
-        RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
+        /* Get a pointer to the entry */
+        HeapEntry = (PHEAP_ENTRY)BaseAddress - 1;
 
+        /* If it's a free entry - return error */
+        if (!(HeapEntry->Flags & HEAP_ENTRY_BUSY))
+        {
+            RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
+        }
+        else
+        {
+            /* Check if this entry has an extra stuff associated with it */
+            if (HeapEntry->Flags & HEAP_ENTRY_EXTRA_PRESENT)
+            {
+                /* Get pointer to extra data */
+                Extra = RtlpGetExtraStuffPointer(HeapEntry);
+
+                /* Pass user value */
+                if (UserValue)
+                    *UserValue = (PVOID)Extra->Settable;
+            }
+
+            /* Decode and return user flags */
+            if (UserFlags)
+                *UserFlags = (HeapEntry->Flags & HEAP_ENTRY_SETTABLE_FLAGS) << 4;
+
+            InfoReturned = TRUE;
+        }
+    }
+    _SEH2_FINALLY
+    {
         /* Release the heap lock if it was acquired */
         if (HeapLocked)
             RtlLeaveHeapLock(Heap->LockVariable);
-
-        return FALSE;
     }
+    _SEH2_END;
 
-    /* Check if this entry has an extra stuff associated with it */
-    if (HeapEntry->Flags & HEAP_ENTRY_EXTRA_PRESENT)
-    {
-        /* Get pointer to extra data */
-        Extra = RtlpGetExtraStuffPointer(HeapEntry);
-
-        /* Pass user value */
-        if (UserValue)
-            *UserValue = (PVOID)Extra->Settable;
-    }
-
-    /* Decode and return user flags */
-    if (UserFlags)
-        *UserFlags = (HeapEntry->Flags & HEAP_ENTRY_SETTABLE_FLAGS) << 4;
-
-    /* Release the heap lock if it was acquired */
-    if (HeapLocked)
-        RtlLeaveHeapLock(Heap->LockVariable);
-
-    return TRUE;
+    return InfoReturned;
 }
 
 /*
