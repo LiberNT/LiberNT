@@ -34,7 +34,7 @@ AddKeyToBothDirInfo(_In_     PBTreeKey Key,
     Info.ChangeTime.QuadPart = FileNameData->ChangeTime;
     Info.EndOfFile.QuadPart = FileNameData->DataSize;
     Info.AllocationSize.QuadPart = FileNameData->AllocatedSize;
-    Info.FileAttributes = FileNameData->Flags;
+    Info.FileAttributes = FileNameData->Flags & ~(ULONG)(FN_DIRECTORY | FN_INDEX_VIEW);
     Info.EaSize = (FileNameData->Flags & FILE_PERM_REPARSE_PT)
         ? FileNameData->Extended.ReparseTag
         : FileNameData->Extended.EAInfo.PackedEASize;
@@ -42,6 +42,8 @@ AddKeyToBothDirInfo(_In_     PBTreeKey Key,
 
     if (FileNameData->Flags & FN_DIRECTORY)
         Info.FileAttributes |= FILE_ATTRIBUTE_DIRECTORY;
+    if (Info.FileAttributes == 0)
+        Info.FileAttributes = FILE_PERM_NORMAL;
 
     if (ShortNameKey)
     {
