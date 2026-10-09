@@ -107,7 +107,7 @@ KeUpdateSystemTime(IN PKTRAP_FRAME TrapFrame,
     }
 
     /* Add the increment time to the shared data */
-    InterruptTime.QuadPart = KiUpdateSharedTime(Increment, FALSE);
+    InterruptTime.QuadPart = KiUpdateSharedTime(Increment, TRUE);
 
     if (KiLastClockInterruptTime)
     {
@@ -145,9 +145,6 @@ KeUpdateSystemTime(IN PKTRAP_FRAME TrapFrame,
             Prcb->TimerHand = KeTickCount.LowPart;
             HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
         }
-
-        /* Update the system time */
-        KiUpdateSharedTime(0, TRUE);
 
         /* Update the tick count */
         CurrentTime.QuadPart = (*(ULONGLONG*)&KeTickCount) + Ticks;
