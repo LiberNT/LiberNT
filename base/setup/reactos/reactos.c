@@ -4039,6 +4039,45 @@ WINAPI setupDelayHook(unsigned dliNotify, PDelayLoadInfo pdli)
 /*ExternC*/ PfnDliHook __pfnDliFailureHook2 = setupDelayHook;
 
 
+static BOOL
+IsSetupAlreadyRunning(
+    _In_ HINSTANCE hInstance)
+{
+    HANDLE hMutex;
+    WCHAR szCaption[128];
+    PWSTR Title = szCaption;
+    HWND hWnd = NULL;
+    HWND hWndMain;
+
+    hMutex = CreateMutexW(NULL, FALSE, L"Global\\__ReactOS_Setup__");
+    if (!hMutex && GetLastError() == ERROR_PATH_NOT_FOUND)
+        hMutex = CreateMutexW(NULL, FALSE, L"__ReactOS_Setup__");
+    if (!hMutex || GetLastError() != ERROR_ALREADY_EXISTS)
+        return FALSE;
+
+    (void)LoadAllocStringW(hInstance, IDS_CAPTION, &Title, _countof(szCaption));
+    if (Title)
+    {
+        hWndMain = FindWindowW(L"#32770", Title);
+        if (hWndMain)
+        {
+            hWnd = GetLastActivePopup(hWndMain);
+            if (!hWnd)
+                hWnd = hWndMain;
+        }
+        if (Title != szCaption)
+            HeapFree(GetProcessHeap(), 0, Title);
+    }
+    if (hWnd)
+    {
+        ShowWindow(hWnd, SW_SHOWNA);
+        SwitchToThisWindow(hWnd, TRUE);
+    }
+
+    CloseHandle(hMutex);
+    return TRUE;
+}
+
 int WINAPI
 _tWinMain(HINSTANCE hInst,
           HINSTANCE hPrevInstance,
@@ -4052,6 +4091,9 @@ _tWinMain(HINSTANCE hInst,
     HPROPSHEETPAGE ahpsp[11];
     PROPSHEETPAGE psp = {0};
     UINT nPages = 0;
+
+    if (IsSetupAlreadyRunning(hInst))
+        return 0;
 
     ProcessHeap = GetProcessHeap();
 
