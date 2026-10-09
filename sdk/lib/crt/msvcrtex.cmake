@@ -35,7 +35,10 @@ endif()
 
 if(ARCH STREQUAL "i386")
     # The x86 CRT does not export modff; libc++ still needs an out-of-line copy.
-    list(APPEND MSVCRTEX_SOURCE math/powf.c math/modff.c)
+    list(APPEND MSVCRTEX_SOURCE math/powf.c math/modff.c
+        math/acosf.c math/asinf.c math/atan2f.c math/atanf.c math/cosf.c math/coshf.c math/expf.c
+        math/fabsf.c math/fmodf.c math/log10f.c math/logf.c math/sinf.c math/sinhf.c math/tanf.c
+        math/tanhf.c)
     # Clang wants __aulldiv for its optimizations
     list(APPEND MSVCRTEX_ASM_SOURCE
         except/i386/chkstk_asm.s
