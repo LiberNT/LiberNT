@@ -81,18 +81,25 @@ GetVendorOption(
     _In_ ULONG OptionId)
 {
     DWORD Offset, OptionLength;
-    PBYTE Ptr;
 
-    Ptr = Data;
     Offset = 0;
     while (Offset < Length)
     {
-        if ((DWORD)*Ptr == OptionId)
-            return Ptr;
+        if (Data[Offset] == DHO_PAD)
+        {
+            Offset++;
+            continue;
+        }
+        if (Data[Offset] == DHO_END || Length - Offset < 2)
+            break;
 
-        OptionLength = (DWORD)*(Ptr + 1);
-        Offset += (OptionLength + 2);
-        Ptr += (OptionLength + 2);
+        OptionLength = Data[Offset + 1];
+        if (OptionLength > Length - Offset - 2)
+            break;
+        if (Data[Offset] == OptionId)
+            return &Data[Offset];
+
+        Offset += OptionLength + 2;
     }
 
     return NULL;
@@ -434,6 +441,12 @@ Server_RequestParams(
         goto done;
     }
 
+    if (RecdParams == NULL || RecdResults == NULL)
+    {
+        ret = ERROR_INVALID_PARAMETER;
+        goto done;
+    }
+
     dwReturnCount = 0;
     dwReturnLength = 0;
 
@@ -444,6 +457,8 @@ Server_RequestParams(
         for (i = 0; i < RecdParams->nParams; i++)
         {
             OptionId = RecdParams->Params[i].OptionId;
+            if (OptionId >= 256)
+                continue;
             if (RecdParams->Params[i].IsVendor == FALSE)
             {
                 DPRINT("Option %u: Length %d \n", OptionId, Options[OptionId].len);
@@ -481,7 +496,14 @@ Server_RequestParams(
             goto done;
         }
 
-        Results->ResultsCount = dwReturnCount;
+        ZeroMemory(Results, sizeof(*Results));
+        if (dwReturnCount == 0)
+        {
+            *RecdResults = Results;
+            Results = NULL;
+            goto done;
+        }
+
         Results->Results = MIDL_user_allocate(dwReturnCount * sizeof(DHCPCAPI_RESULTS));
         if (Results->Results == NULL)
         {
@@ -489,8 +511,8 @@ Server_RequestParams(
             ret = ERROR_NOT_ENOUGH_MEMORY;
             goto done;
         }
+        Results->ResultsCount = dwReturnCount;
 
-        Results->DataSize = dwReturnLength;
         Results->Data = MIDL_user_allocate(dwReturnLength);
         if (Results->Data == NULL)
         {
@@ -498,12 +520,15 @@ Server_RequestParams(
             ret = ERROR_NOT_ENOUGH_MEMORY;
             goto done;
         }
+        Results->DataSize = dwReturnLength;
 
         Offset = 0;
         Index = 0;
         for (i = 0; i < RecdParams->nParams; i++)
         {
             OptionId = RecdParams->Params[i].OptionId;
+            if (OptionId >= 256)
+                continue;
 
             if (RecdParams->Params[i].IsVendor == FALSE)
             {
@@ -555,10 +580,20 @@ Server_RequestParams(
         }
 
         *RecdResults = Results;
+        Results = NULL;
     }
 
 done:
     ApiUnlock();
+
+    if (Results)
+    {
+        if (Results->Results)
+            MIDL_user_free(Results->Results);
+        if (Results->Data)
+            MIDL_user_free(Results->Data);
+        MIDL_user_free(Results);
+    }
 
     return ret;
 }

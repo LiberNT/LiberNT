@@ -229,6 +229,16 @@ MapRequestResultData(
     LPBYTE Ptr;
     ULONG i;
 
+    if (Results->ResultsCount != 0 && (Results->Results == NULL || Results->Data == NULL))
+        return ERROR_INVALID_DATA;
+
+    for (i = 0; i < Results->ResultsCount; i++)
+    {
+        if (Results->Results[i].DataOffset > Results->DataSize ||
+            Results->Results[i].DataSize > Results->DataSize - Results->Results[i].DataOffset)
+            return ERROR_INVALID_DATA;
+    }
+
     if (Results->DataSize > *pSize)
     {
         *pSize = Results->DataSize;
@@ -243,6 +253,9 @@ MapRequestResultData(
                           Results->Results[i].IsVendor);
         if (Param)
         {
+            if (Results->Results[i].DataSize > *pSize - (DWORD)(Ptr - Buffer))
+                return ERROR_INVALID_DATA;
+
             CopyMemory(Ptr,
                        &Results->Data[Results->Results[i].DataOffset],
                        Results->Results[i].DataSize);
