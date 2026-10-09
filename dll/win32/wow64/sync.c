@@ -281,6 +281,34 @@ static NTSTATUS csr_api_message_64to32( CSR_API_MESSAGE32 *out, const CSR_API_ME
     return STATUS_SUCCESS;
 }
 
+void wow64_csr_port_connected( const UNICODE_STRING *name, HANDLE handle )
+{
+    if (is_csr_api_port( name )) csr_api_port = handle;
+}
+
+
+BOOL wow64_csr_request( HANDLE handle, ULONG flags, const void *send_msg, void *recv_msg, ULONG *size32,
+                        LARGE_INTEGER *timeout, NTSTATUS *status )
+{
+    WOW64_LPC_BUFFER buffer;
+    CSR_API_MESSAGE64 *csr64 = (CSR_API_MESSAGE64 *)buffer.Data;
+    CSR_API_MESSAGE32 *reply32 = recv_msg;
+    ULONG data_size32 = 0;
+    SIZE_T size = sizeof(buffer);
+
+    if (handle != csr_api_port || !(flags & ALPC_MSGFLG_SYNC_REQUEST) || !send_msg || !recv_msg) return FALSE;
+
+    *status = csr_api_message_32to64( csr64, send_msg, &data_size32 );
+    if (!NT_SUCCESS(*status)) return TRUE;
+    *status = NtAlpcSendWaitReceivePort( handle, flags, (void *)csr64, NULL, (void *)csr64, &size, NULL, timeout );
+    if (*status == STATUS_SUCCESS)
+    {
+        *status = csr_api_message_64to32( reply32, csr64, data_size32 );
+        if (NT_SUCCESS(*status) && size32) *size32 = reply32->Header.TotalLength;
+    }
+    return TRUE;
+}
+
 #else
 
 static NTSTATUS csr_client_connect_32to64( CSR_API_MESSAGE64 *out, const CSR_API_MESSAGE32 *in )
@@ -1648,26 +1676,6 @@ NTSTATUS WINAPI wow64_NtRequestWaitReplyPort( UINT *args )
     CSR_PORT_MESSAGE64 *reply64 = (CSR_PORT_MESSAGE64 *)reply_buffer.Data;
     NTSTATUS status;
 
-    if (handle == csr_api_port)
-    {
-        CSR_API_MESSAGE32 *csr32 = (CSR_API_MESSAGE32 *)msg_in;
-        CSR_API_MESSAGE64 *csr64 = (CSR_API_MESSAGE64 *)request_buffer.Data;
-#ifdef __REACTOS__
-        ULONG data_size32 = 0;
-
-        status = csr_api_message_32to64( csr64, csr32, &data_size32 );
-        if (!NT_SUCCESS(status)) return status;
-        status = NtRequestWaitReplyPort( handle, (LPC_MESSAGE *)csr64, (LPC_MESSAGE *)csr64 );
-        if (NT_SUCCESS(status)) status = csr_api_message_64to32( (CSR_API_MESSAGE32 *)msg_out, csr64, data_size32 );
-#else
-        status = csr_client_connect_32to64( csr64, csr32 );
-        if (!NT_SUCCESS(status)) return status;
-        status = NtRequestWaitReplyPort( handle, (LPC_MESSAGE *)csr64, (LPC_MESSAGE *)csr64 );
-        if (NT_SUCCESS(status)) status = csr_client_connect_64to32( (CSR_API_MESSAGE32 *)msg_out, csr64 );
-#endif
-        return status;
-    }
-
     status = lpc_message_32to64( request64, request32 );
     if (!NT_SUCCESS(status)) return status;
     memset( &reply_buffer, 0, sizeof(reply_buffer) );
@@ -1771,7 +1779,6 @@ NTSTATUS WINAPI wow64_NtSecureConnectPort( UINT *args )
     if (NT_SUCCESS(status))
     {
         put_handle( handle_ptr, handle );
-        if (is_csr_api_port( name_ptr )) csr_api_port = handle;
         if (write32)
         {
             write32->SectionOffset = write.SectionOffset;
@@ -2083,6 +2090,18 @@ static BOOL filter_out_state_change( HANDLE handle, DBGUI_WAIT_STATE_CHANGE *sta
     case DbgUnloadDllStateChange:
         filter_out = ((ULONG_PTR)state->StateInfo.UnloadDll.BaseAddress >> 32) != 0;
         break;
+#ifdef __REACTOS__
+    case DbgExceptionStateChange:
+    case DbgBreakpointStateChange:
+    case DbgSingleStepStateChange:
+        filter_out = ((ULONG_PTR)state->StateInfo.Exception.ExceptionRecord.ExceptionAddress >> 32) != 0;
+        if (filter_out)
+        {
+            NtDebugContinue( handle, &state->AppClientId, DBG_EXCEPTION_NOT_HANDLED );
+            return TRUE;
+        }
+        break;
+#endif
     default:
         filter_out = FALSE;
         break;
@@ -2147,6 +2166,18 @@ NTSTATUS WINAPI wow64_NtWaitForDebugEvent( UINT *args )
         case DbgExceptionStateChange:
         case DbgBreakpointStateChange:
         case DbgSingleStepStateChange:
+#ifdef __REACTOS__
+            if (state.StateInfo.Exception.ExceptionRecord.ExceptionCode == STATUS_WX86_BREAKPOINT)
+            {
+                state.StateInfo.Exception.ExceptionRecord.ExceptionCode = STATUS_BREAKPOINT;
+                state32->NewState = DbgBreakpointStateChange;
+            }
+            else if (state.StateInfo.Exception.ExceptionRecord.ExceptionCode == STATUS_WX86_SINGLE_STEP)
+            {
+                state.StateInfo.Exception.ExceptionRecord.ExceptionCode = STATUS_SINGLE_STEP;
+                state32->NewState = DbgSingleStepStateChange;
+            }
+#endif
             COPY_ULONG( Exception.FirstChance );
             COPY_ULONG( Exception.ExceptionRecord.ExceptionCode );
             COPY_ULONG( Exception.ExceptionRecord.ExceptionFlags );

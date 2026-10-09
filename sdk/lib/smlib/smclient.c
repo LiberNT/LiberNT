@@ -61,15 +61,23 @@ SmConnectToSm(
     _Out_ PHANDLE SmApiPort)
 {
     NTSTATUS Status;
-    SECURITY_QUALITY_OF_SERVICE SecurityQos;
+    ALPC_PORT_ATTRIBUTES PortAttributes;
     UNICODE_STRING PortName;
-    SB_CONNECTION_INFO ConnectInfo = {0};
-    ULONG ConnectInfoLength = sizeof(ConnectInfo);
+    SB_API_MSG ConnectMsg;
+    PSB_CONNECTION_INFO ConnectInfo = &ConnectMsg.ConnectionInfo;
+    SIZE_T BufferLength = sizeof(ConnectMsg);
+
+    RtlZeroMemory(&ConnectMsg, sizeof(ConnectMsg));
+    ConnectMsg.h.u1.s1.DataLength = sizeof(*ConnectInfo);
+    ConnectMsg.h.u1.s1.TotalLength = sizeof(ConnectMsg.h) + sizeof(*ConnectInfo);
 
     /* Setup the QoS structure */
-    SecurityQos.ImpersonationLevel = SecurityIdentification;
-    SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
-    SecurityQos.EffectiveOnly = TRUE;
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.MaxMessageLength = sizeof(SM_API_MSG);
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    PortAttributes.SecurityQos.EffectiveOnly = TRUE;
 
     /* Set the SM API port name */
     RtlInitUnicodeString(&PortName, L"\\SmApiPort"); // SM_API_PORT_NAME
@@ -82,34 +90,37 @@ SmConnectToSm(
             return STATUS_INVALID_PARAMETER_MIX;
 
         /* Validate SbApiPortName's length */
-        if (SbApiPortName->Length >= sizeof(ConnectInfo.SbApiPortName))
+        if (SbApiPortName->Length >= sizeof(ConnectInfo->SbApiPortName))
             return STATUS_INVALID_PARAMETER;
 
         /* Copy the client port name, and NULL-terminate it */
-        RtlCopyMemory(ConnectInfo.SbApiPortName,
+        RtlCopyMemory(ConnectInfo->SbApiPortName,
                       SbApiPortName->Buffer,
                       SbApiPortName->Length);
-        ConnectInfo.SbApiPortName[SbApiPortName->Length / sizeof(WCHAR)] = UNICODE_NULL;
+        ConnectInfo->SbApiPortName[SbApiPortName->Length / sizeof(WCHAR)] = UNICODE_NULL;
 
         /* Save the subsystem type */
-        ConnectInfo.SubsystemType = ImageType;
+        ConnectInfo->SubsystemType = ImageType;
     }
     else
     {
         /* No client port, and the subsystem type is not set */
-        ConnectInfo.SbApiPortName[0] = UNICODE_NULL;
-        ConnectInfo.SubsystemType = IMAGE_SUBSYSTEM_UNKNOWN;
+        ConnectInfo->SbApiPortName[0] = UNICODE_NULL;
+        ConnectInfo->SubsystemType = IMAGE_SUBSYSTEM_UNKNOWN;
     }
 
     /* Connect to SMSS and exchange connection information */
-    Status = NtConnectPort(SmApiPort,
-                           &PortName,
-                           &SecurityQos,
-                           NULL,
-                           NULL,
-                           NULL,
-                           &ConnectInfo,
-                           &ConnectInfoLength);
+    Status = NtAlpcConnectPort(SmApiPort,
+                               &PortName,
+                               NULL,
+                               &PortAttributes,
+                               ALPC_SYNC_CONNECTION,
+                               NULL,
+                               &ConnectMsg.h,
+                               &BufferLength,
+                               NULL,
+                               NULL,
+                               NULL);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("SmConnectToSm: Connect to Sm failed %lx\n", Status);
@@ -163,6 +174,7 @@ SmSendMsgToSm(
 
     NTSTATUS Status;
     ULONG DataLength;
+    SIZE_T BufferLength = sizeof(*SmApiMsg);
 
     if (SmApiMsg->ApiNumber >= SmpMaxApiNumber)
         return STATUS_NOT_IMPLEMENTED;
@@ -171,8 +183,7 @@ SmSendMsgToSm(
     DataLength = RtlpSmMessageInfo[SmApiMsg->ApiNumber];
 
     /* Fill out the Port Message Header */
-    // RtlZeroMemory(&SmApiMsg->h, sizeof(SmApiMsg->h));
-    SmApiMsg->h.u2.ZeroInit = 0;
+    RtlZeroMemory(&SmApiMsg->h, sizeof(SmApiMsg->h));
     /* DataLength = user_data_size + anything between
      * header and data, including intermediate padding */
     SmApiMsg->h.u1.s1.DataLength = (CSHORT)DataLength +
@@ -183,10 +194,17 @@ SmSendMsgToSm(
     SmApiMsg->h.u1.s1.TotalLength = SmApiMsg->h.u1.s1.DataLength + sizeof(SmApiMsg->h);
 
     /* Send the LPC message and wait for a reply */
-    Status = NtRequestWaitReplyPort(SmApiPort, &SmApiMsg->h, &SmApiMsg->h);
+    Status = NtAlpcSendWaitReceivePort(SmApiPort,
+                                       ALPC_MSGFLG_SYNC_REQUEST,
+                                       &SmApiMsg->h,
+                                       NULL,
+                                       &SmApiMsg->h,
+                                       &BufferLength,
+                                       NULL,
+                                       NULL);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("SmSendMsgToSm: NtRequestWaitReplyPort failed, Status: 0x%08lx\n", Status);
+        DPRINT1("SmSendMsgToSm: NtAlpcSendWaitReceivePort failed, Status: 0x%08lx\n", Status);
     }
     else
     {

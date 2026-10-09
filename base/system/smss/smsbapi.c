@@ -45,6 +45,7 @@ SmpSbCreateSession(IN PVOID Reserved,
     ULONG SessionId;
     PSMP_SUBSYSTEM KnownSubsys;
     SB_API_MSG SbApiMsg = {0};
+    SIZE_T BufferLength;
     PSB_CREATE_SESSION_MSG CreateSessionMsg = &SbApiMsg.u.CreateSession;
 
     /* Write out the create session message including its initial process */
@@ -112,12 +113,18 @@ SmpSbCreateSession(IN PVOID Reserved,
 
             /* Fill out the LPC message header and send it to the client! */
             SbApiMsg.ApiNumber = SbpCreateSession;
-            SbApiMsg.h.u2.ZeroInit = 0;
-            SbApiMsg.h.u1.s1.DataLength = sizeof(SB_CREATE_SESSION_MSG) + 8;
+            RtlZeroMemory(&SbApiMsg.h, sizeof(SbApiMsg.h));
+            SbApiMsg.h.u1.s1.DataLength = sizeof(SbApiMsg) - sizeof(SbApiMsg.h);
             SbApiMsg.h.u1.s1.TotalLength = sizeof(SbApiMsg);
-            Status = NtRequestWaitReplyPort(KnownSubsys->SbApiPort,
-                                            &SbApiMsg.h,
-                                            &SbApiMsg.h);
+            BufferLength = sizeof(SbApiMsg);
+            Status = NtAlpcSendWaitReceivePort(KnownSubsys->SbApiPort,
+                                               ALPC_MSGFLG_SYNC_REQUEST,
+                                               &SbApiMsg.h,
+                                               NULL,
+                                               &SbApiMsg.h,
+                                               &BufferLength,
+                                               NULL,
+                                               NULL);
             if (!NT_SUCCESS(Status))
             {
                 /* Bail out */

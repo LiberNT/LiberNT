@@ -32,6 +32,8 @@ typedef struct _CSR_API_CONNECTINFO32
     ULONG SizeOfTebData;
     ULONG NumberOfServerDllNames;
     ULONG ServerProcessId;
+    ULONG PortViewBase;
+    ULONG PortViewRemoteBase;
 } CSR_API_CONNECTINFO32, *PCSR_API_CONNECTINFO32;
 
 typedef struct _CSR_CLIENT_CONNECT32
@@ -106,7 +108,7 @@ typedef struct _CSR_API_MESSAGE64
 #endif /* _WIN64 */
 
 C_ASSERT(sizeof(CSR_PORT_MESSAGE32) == 0x18);
-C_ASSERT(sizeof(CSR_API_CONNECTINFO32) == 0x24);
+C_ASSERT(sizeof(CSR_API_CONNECTINFO32) == 0x2c);
 C_ASSERT(sizeof(CSR_CLIENT_CONNECT32) == 0x0c);
 C_ASSERT(FIELD_OFFSET(CSR_CAPTURE_BUFFER32, PointerOffsetsArray) == 0x10);
 C_ASSERT(FIELD_OFFSET(CSR_API_MESSAGE32, Data) == 0x28);

@@ -377,6 +377,7 @@ SmQueryInformation(
     NTSTATUS Status;
     SM_API_MSG SmApiMsg = {0};
     PSM_QUERYINFO_MSG QueryInfo = &SmApiMsg.u.QueryInfo;
+    SIZE_T BufferLength;
 
     /* Marshal data in the port message */
     switch (SmInformationClass)
@@ -414,7 +415,7 @@ SmQueryInformation(
 
     /* Fill out the Port Message Header */
     // SmApiMsg.h.u2.s2.Type = LPC_NEW_MESSAGE;
-    SmApiMsg.h.u2.ZeroInit = 0;
+    RtlZeroMemory(&SmApiMsg.h, sizeof(SmApiMsg.h));
     /* DataLength = user_data_size + anything between
      * header and data, including intermediate padding */
     SmApiMsg.h.u1.s1.DataLength = (CSHORT)DataLength +
@@ -425,10 +426,18 @@ SmQueryInformation(
     SmApiMsg.h.u1.s1.TotalLength = SmApiMsg.h.u1.s1.DataLength + sizeof(SmApiMsg.h);
 
     /* Send the LPC message and wait for a reply */
-    Status = NtRequestWaitReplyPort(SmApiPort, &SmApiMsg.h, &SmApiMsg.h);
+    BufferLength = sizeof(SmApiMsg);
+    Status = NtAlpcSendWaitReceivePort(SmApiPort,
+                                       ALPC_MSGFLG_SYNC_REQUEST,
+                                       &SmApiMsg.h,
+                                       NULL,
+                                       &SmApiMsg.h,
+                                       &BufferLength,
+                                       NULL,
+                                       NULL);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("SMLIB: %s: NtRequestWaitReplyPort failed, Status: 0x%08lx\n",
+        DPRINT1("SMLIB: %s: NtAlpcSendWaitReceivePort failed, Status: 0x%08lx\n",
                 __FUNCTION__, Status);
         return Status;
     }

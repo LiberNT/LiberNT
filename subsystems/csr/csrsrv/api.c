@@ -15,6 +15,7 @@
 #include <wincon.h>
 #include <wincon_undoc.h>
 #include <ndk/kefuncs.h>
+#include <ndk/mmfuncs.h>
 #include <reactos/subsys/csr/csrwow64.h>
 #include <reactos/subsys/win/conmsg.h>
 
@@ -77,6 +78,8 @@ CsrpConnectionInfo32To64(PCSR_API_CONNECTINFO ConnectInfo, const CSR_API_CONNECT
     ConnectInfo->SizeOfTebData = ConnectInfo32->SizeOfTebData;
     ConnectInfo->NumberOfServerDllNames = ConnectInfo32->NumberOfServerDllNames;
     ConnectInfo->ServerProcessId = LongToHandle(ConnectInfo32->ServerProcessId);
+    ConnectInfo->PortViewBase = ULongToPtr(ConnectInfo32->PortViewBase);
+    ConnectInfo->PortViewRemoteBase = ULongToPtr(ConnectInfo32->PortViewRemoteBase);
 }
 
 static VOID
@@ -91,9 +94,65 @@ CsrpConnectionInfo64To32(PCSR_API_CONNECTINFO32 ConnectInfo32, const CSR_API_CON
     ConnectInfo32->SizeOfTebData = ConnectInfo->SizeOfTebData;
     ConnectInfo32->NumberOfServerDllNames = ConnectInfo->NumberOfServerDllNames;
     ConnectInfo32->ServerProcessId = HandleToUlong(ConnectInfo->ServerProcessId);
+    ConnectInfo32->PortViewBase = PtrToUlong(ConnectInfo->PortViewBase);
+    ConnectInfo32->PortViewRemoteBase = PtrToUlong(ConnectInfo->PortViewRemoteBase);
 }
 
 #endif
+
+static NTSTATUS
+CsrpMapPortView(IN PCSR_PROCESS CsrProcess,
+                OUT PVOID *ServerViewBase,
+                OUT PVOID *ClientViewBase)
+{
+    NTSTATUS Status;
+    HANDLE SectionHandle;
+    LARGE_INTEGER SectionSize;
+    SIZE_T ViewSize;
+    ULONG_PTR ZeroBits = (CsrProcess->Flags & CsrProcessIsWow64) ? MAXULONG : 0;
+
+    SectionSize.QuadPart = CSR_CSRSS_SECTION_SIZE;
+    Status = NtCreateSection(&SectionHandle,
+                             SECTION_ALL_ACCESS,
+                             NULL,
+                             &SectionSize,
+                             PAGE_READWRITE,
+                             SEC_RESERVE,
+                             NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    *ServerViewBase = NULL;
+    ViewSize = 0;
+    Status = NtMapViewOfSection(SectionHandle,
+                                NtCurrentProcess(),
+                                ServerViewBase,
+                                ZeroBits,
+                                0,
+                                NULL,
+                                &ViewSize,
+                                ViewUnmap,
+                                0,
+                                PAGE_READWRITE);
+    if (NT_SUCCESS(Status))
+    {
+        *ClientViewBase = NULL;
+        ViewSize = 0;
+        Status = NtMapViewOfSection(SectionHandle,
+                                    CsrProcess->ProcessHandle,
+                                    ClientViewBase,
+                                    ZeroBits,
+                                    0,
+                                    NULL,
+                                    &ViewSize,
+                                    ViewUnmap,
+                                    0,
+                                    PAGE_READWRITE);
+        if (!NT_SUCCESS(Status)) NtUnmapViewOfSection(NtCurrentProcess(), *ServerViewBase);
+    }
+
+    NtClose(SectionHandle);
+    return Status;
+}
 
 /*++
  * @name CsrCallServerFromServer
@@ -221,7 +280,7 @@ CsrApiHandleConnectionRequest(IN PCSR_API_MESSAGE ApiMessage)
     PCSR_API_CONNECTINFO32 ConnectInfo32 = NULL;
 #endif
     BOOLEAN AllowConnection = FALSE;
-    REMOTE_PORT_VIEW RemotePortView;
+    PVOID ServerViewBase = NULL, ClientViewBase = NULL;
     HANDLE ServerPort;
 
 #ifdef _WIN64
@@ -254,25 +313,20 @@ CsrApiHandleConnectionRequest(IN PCSR_API_MESSAGE ApiMessage)
 
             /* Attach the Shared Section */
             Status = CsrSrvAttachSharedSection(CsrProcess, ConnectInfo);
-            if (NT_SUCCESS(Status))
+            if (NT_SUCCESS(Status) && !CsrProcess->ClientPort)
             {
-                /* Allow the connection and return debugging flag */
-                ConnectInfo->DebugFlags = CsrDebug;
-                AllowConnection = TRUE;
+                Status = CsrpMapPortView(CsrProcess, &ServerViewBase, &ClientViewBase);
+                if (NT_SUCCESS(Status))
+                {
+                    /* Allow the connection and return debugging flag */
+                    ConnectInfo->DebugFlags = CsrDebug;
+                    ConnectInfo->PortViewBase = ClientViewBase;
+                    ConnectInfo->PortViewRemoteBase = ServerViewBase;
+                    AllowConnection = TRUE;
+                }
             }
-
-            /* Dereference the Process */
-            CsrLockedDereferenceProcess(CsrProcess);
         }
     }
-
-    /* Release the Process Lock */
-    CsrReleaseProcessLock();
-
-    /* Setup the Port View Structure */
-    RemotePortView.Length = sizeof(REMOTE_PORT_VIEW);
-    RemotePortView.ViewSize = 0;
-    RemotePortView.ViewBase = NULL;
 
     /* Save the Process ID */
     ConnectInfo->ServerProcessId = NtCurrentTeb()->ClientId.UniqueProcess;
@@ -283,15 +337,23 @@ CsrApiHandleConnectionRequest(IN PCSR_API_MESSAGE ApiMessage)
 
     /* Accept the Connection */
     ASSERT(!AllowConnection || CsrProcess);
-    Status = NtAcceptConnectPort(&ServerPort,
-                                 AllowConnection ? UlongToPtr(CsrProcess->SequenceNumber) : 0,
-                                 &ApiMessage->Header,
-                                 AllowConnection,
-                                 NULL,
-                                 &RemotePortView);
+    Status = NtAlpcAcceptConnectPort(&ServerPort,
+                                     CsrApiPort,
+                                     0,
+                                     NULL,
+                                     NULL,
+                                     AllowConnection ? UlongToPtr(CsrProcess->SequenceNumber) : 0,
+                                     &ApiMessage->Header,
+                                     NULL,
+                                     AllowConnection);
     if (!NT_SUCCESS(Status))
     {
-         DPRINT1("CSRSS: NtAcceptConnectPort - failed.  Status == %X\n", Status);
+         DPRINT1("CSRSS: NtAlpcAcceptConnectPort - failed.  Status == %X\n", Status);
+         if (AllowConnection)
+         {
+             NtUnmapViewOfSection(CsrProcess->ProcessHandle, ClientViewBase);
+             NtUnmapViewOfSection(NtCurrentProcess(), ServerViewBase);
+         }
     }
     else if (AllowConnection)
     {
@@ -300,22 +362,14 @@ CsrApiHandleConnectionRequest(IN PCSR_API_MESSAGE ApiMessage)
             DPRINT1("CSRSS: ClientId: %lx.%lx has ClientView: Base=%p, Size=%lx\n",
                     ApiMessage->Header.ClientId.UniqueProcess,
                     ApiMessage->Header.ClientId.UniqueThread,
-                    RemotePortView.ViewBase,
-                    RemotePortView.ViewSize);
+                    ServerViewBase,
+                    CSR_CSRSS_SECTION_SIZE);
         }
 
         /* Set some Port Data in the Process */
         CsrProcess->ClientPort = ServerPort;
-        CsrProcess->ClientViewBase = (ULONG_PTR)RemotePortView.ViewBase;
-        CsrProcess->ClientViewBounds = (ULONG_PTR)((ULONG_PTR)RemotePortView.ViewBase +
-                                                   (ULONG_PTR)RemotePortView.ViewSize);
-
-        /* Complete the connection */
-        Status = NtCompleteConnectPort(ServerPort);
-        if (!NT_SUCCESS(Status))
-        {
-            DPRINT1("CSRSS: NtCompleteConnectPort - failed.  Status == %X\n", Status);
-        }
+        CsrProcess->ClientViewBase = (ULONG_PTR)ServerViewBase;
+        CsrProcess->ClientViewBounds = (ULONG_PTR)ServerViewBase + CSR_CSRSS_SECTION_SIZE;
     }
     else
     {
@@ -323,6 +377,12 @@ CsrApiHandleConnectionRequest(IN PCSR_API_MESSAGE ApiMessage)
                 ApiMessage->Header.ClientId.UniqueProcess,
                 ApiMessage->Header.ClientId.UniqueThread);
     }
+
+    /* Dereference the Process */
+    if (CsrProcess) CsrLockedDereferenceProcess(CsrProcess);
+
+    /* Release the Process Lock */
+    CsrReleaseProcessLock();
 
     /* Return status to caller */
     return Status;
@@ -433,7 +493,7 @@ CsrApiRequestThread(IN PVOID Parameter)
     CSR_API_MESSAGE ReceiveMsg;
     PCSR_PROCESS CsrProcess;
     PHARDERROR_MSG HardErrorMsg;
-    PVOID PortContext;
+    SIZE_T BufferLength;
     PCSR_SERVER_DLL ServerDll;
     PCLIENT_DIED_MSG ClientDiedMsg;
     PDBGKM_MSG DebugMessage;
@@ -489,10 +549,15 @@ CsrApiRequestThread(IN PVOID Parameter)
 #endif
 
         /* Wait for a message to come through */
-        Status = NtReplyWaitReceivePort(ReplyPort,
-                                        &PortContext,
-                                        &ReplyMsg->Header,
-                                        &ReceiveMsg.Header);
+        BufferLength = sizeof(ReceiveMsg);
+        Status = NtAlpcSendWaitReceivePort(ReplyPort,
+                                           ReplyMsg ? ALPC_MSGFLG_REPLY_MESSAGE : 0,
+                                           ReplyMsg ? &ReplyMsg->Header : NULL,
+                                           NULL,
+                                           &ReceiveMsg.Header,
+                                           &BufferLength,
+                                           NULL,
+                                           NULL);
 
         /* Check if we didn't get success */
         if (Status != STATUS_SUCCESS)
@@ -520,7 +585,9 @@ CsrApiRequestThread(IN PVOID Parameter)
             else
             {
                 /* A strange "success" code, just try again */
-                DPRINT1("NtReplyWaitReceivePort returned \"success\" status 0x%x\n", Status);
+                DPRINT1("NtAlpcSendWaitReceivePort returned \"success\" status 0x%x\n", Status);
+                ReplyMsg = NULL;
+                ReplyPort = CsrApiPort;
                 continue;
             }
         }
@@ -532,7 +599,8 @@ CsrApiRequestThread(IN PVOID Parameter)
         Teb->RealClientId = ReceiveMsg.Header.ClientId;
 
         /* Get the Message Type */
-        MessageType = ReceiveMsg.Header.u2.s2.Type;
+        MessageType = ReceiveMsg.Header.u2.s2.Type &
+                      ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE);
 
         /* Handle connection requests */
         if (MessageType == LPC_CONNECTION_REQUEST)
@@ -954,7 +1022,14 @@ CsrApiRequestThread(IN PVOID Parameter)
             {
                 /* Reply to the death message */
                 NTSTATUS Status2;
-                Status2 = NtReplyPort(ReplyPort, &ReplyMsg->Header);
+                Status2 = NtAlpcSendWaitReceivePort(ReplyPort,
+                                                    ALPC_MSGFLG_REPLY_MESSAGE,
+                                                    &ReplyMsg->Header,
+                                                    NULL,
+                                                    NULL,
+                                                    NULL,
+                                                    NULL,
+                                                    NULL);
                 if (!NT_SUCCESS(Status2))
                     DPRINT1("CSRSS: Error while replying to the death message, Status 0x%lx\n", Status2);
 
@@ -1015,6 +1090,7 @@ CsrApiPortInitialize(VOID)
     static PACL CsrApiPortSacl;
     ULONG Size;
     OBJECT_ATTRIBUTES ObjectAttributes;
+    ALPC_PORT_ATTRIBUTES PortAttributes;
     NTSTATUS Status;
     HANDLE hRequestEvent, hThread;
     CLIENT_ID ClientId;
@@ -1068,11 +1144,14 @@ CsrApiPortInitialize(VOID)
                                &CsrApiPortSd);
 
     /* Create the Port Object */
-    Status = NtCreatePort(&CsrApiPort,
-                          &ObjectAttributes,
-                          sizeof(CSR_API_CONNECTINFO),
-                          sizeof(CSR_API_MESSAGE),
-                          16 * PAGE_SIZE);
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.Flags = ALPC_PORFLG_ALLOW_LPC_REQUESTS | ALPC_PORFLG_ALLOW_IMPERSONATION;
+    PortAttributes.MaxMessageLength = sizeof(CSR_API_MESSAGE);
+    PortAttributes.MaxPoolUsage = 16 * PAGE_SIZE;
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityImpersonation;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    Status = NtAlpcCreatePort(&CsrApiPort, &ObjectAttributes, &PortAttributes);
     if (NT_SUCCESS(Status))
     {
         /* Create the event the Port Thread will use */

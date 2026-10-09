@@ -280,14 +280,16 @@ SmpHandleConnectionRequest(IN HANDLE SmApiPort,
     PSMP_CLIENT_CONTEXT ClientContext;
     NTSTATUS Status;
     OBJECT_ATTRIBUTES ObjectAttributes;
-    REMOTE_PORT_VIEW PortView;
-    SECURITY_QUALITY_OF_SERVICE SecurityQos;
+    ALPC_PORT_ATTRIBUTES PortAttributes;
     PSMP_SUBSYSTEM CidSubsystem, TypeSubsystem;
 
     /* Initialize QoS data */
-    SecurityQos.ImpersonationLevel = SecurityIdentification;
-    SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
-    SecurityQos.EffectiveOnly = TRUE;
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.MaxMessageLength = sizeof(SB_API_MSG);
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    PortAttributes.SecurityQos.EffectiveOnly = TRUE;
 
     /* Check if this is SM connecting to itself */
     if (SbApiMsg->h.ClientId.UniqueProcess == SmUniqueProcessId)
@@ -360,13 +362,15 @@ SmpHandleConnectionRequest(IN HANDLE SmApiPort,
     }
 
     /* Now send the actual accept reply (which could be a rejection) */
-    PortView.Length = sizeof(PortView);
-    Status = NtAcceptConnectPort(&PortHandle,
-                                 ClientContext,
-                                 &SbApiMsg->h,
-                                 Accept,
-                                 NULL,
-                                 &PortView);
+    Status = NtAlpcAcceptConnectPort(&PortHandle,
+                                     SmApiPort,
+                                     0,
+                                     NULL,
+                                     NULL,
+                                     Accept ? ClientContext : NULL,
+                                     &SbApiMsg->h,
+                                     NULL,
+                                     Accept);
     if (!(Accept) || !(NT_SUCCESS(Status)))
     {
         /* Close the process handle, reference the subsystem, and exit */
@@ -381,22 +385,23 @@ SmpHandleConnectionRequest(IN HANDLE SmApiPort,
     if (ClientContext) ClientContext->PortHandle = PortHandle;
     if (CidSubsystem) CidSubsystem->PortHandle = PortHandle;
 
-    /* Complete the port connection */
-    Status = NtCompleteConnectPort(PortHandle);
-    if ((NT_SUCCESS(Status)) && (CidSubsystem))
+    if (CidSubsystem)
     {
         /* This was an actual subsystem, so connect back to it */
         SbApiMsg->ConnectionInfo.SbApiPortName[119] = UNICODE_NULL;
         RtlCreateUnicodeString(&SubsystemPort,
                                SbApiMsg->ConnectionInfo.SbApiPortName);
-        Status = NtConnectPort(&CidSubsystem->SbApiPort,
-                               &SubsystemPort,
-                               &SecurityQos,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL);
+        Status = NtAlpcConnectPort(&CidSubsystem->SbApiPort,
+                                   &SubsystemPort,
+                                   NULL,
+                                   &PortAttributes,
+                                   ALPC_SYNC_CONNECTION,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   NULL);
         if (!NT_SUCCESS(Status))
         {
             DPRINT1("SMSS: Connect back to Sb %wZ failed %lx\n", &SubsystemPort, Status);
@@ -405,12 +410,6 @@ SmpHandleConnectionRequest(IN HANDLE SmApiPort,
 
         /* Now that we're connected, signal the event handle */
         NtSetEvent(CidSubsystem->Event, NULL);
-    }
-    else if (CidSubsystem)
-    {
-        /* We failed to complete the connection, so clear the port handle */
-        DPRINT1("Completing the connection failed: %lx\n", Status);
-        CidSubsystem->PortHandle = NULL;
     }
 
     /* Dereference the subsystem and return the result */
@@ -429,6 +428,12 @@ SmpApiLoop(IN PVOID Parameter)
     SM_API_MSG RequestMsg;
     PROCESS_BASIC_INFORMATION ProcessInformation;
     LARGE_INTEGER Timeout;
+    struct
+    {
+        ALPC_MESSAGE_ATTRIBUTES Header;
+        ALPC_CONTEXT_ATTR Context;
+    } ReceiveAttributes;
+    SIZE_T BufferLength;
 
     /* Increase the number of API threads for throttling code for later */
     _InterlockedExchangeAdd(&SmTotalApiThreads, 1);
@@ -448,10 +453,17 @@ SmpApiLoop(IN PVOID Parameter)
     while (TRUE)
     {
         /* Begin waiting on a request */
-        Status = NtReplyWaitReceivePort(SmApiPort,
-                                        (PVOID*)&ClientContext,
-                                        &ReplyMsg->h,
-                                        &RequestMsg.h);
+        ReceiveAttributes.Header.AllocatedAttributes = ALPC_MESSAGE_CONTEXT_ATTRIBUTE;
+        ReceiveAttributes.Header.ValidAttributes = 0;
+        BufferLength = sizeof(RequestMsg);
+        Status = NtAlpcSendWaitReceivePort(SmApiPort,
+                                           ReplyMsg ? ALPC_MSGFLG_REPLY_MESSAGE : 0,
+                                           ReplyMsg ? &ReplyMsg->h : NULL,
+                                           NULL,
+                                           &RequestMsg.h,
+                                           &BufferLength,
+                                           &ReceiveAttributes.Header,
+                                           NULL);
         if (Status == STATUS_NO_MEMORY)
         {
             /* Ran out of memory, so do a little timeout and try again */
@@ -460,9 +472,18 @@ SmpApiLoop(IN PVOID Parameter)
             NtDelayExecution(FALSE, &Timeout);
             continue;
         }
+        if (!NT_SUCCESS(Status))
+        {
+            ReplyMsg = NULL;
+            continue;
+        }
+
+        ClientContext = NULL;
+        if (ReceiveAttributes.Header.ValidAttributes & ALPC_MESSAGE_CONTEXT_ATTRIBUTE)
+            ClientContext = ReceiveAttributes.Context.PortContext;
 
         /* Check what kind of request we received */
-        switch (RequestMsg.h.u2.s2.Type)
+        switch (RequestMsg.h.u2.s2.Type & ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE))
         {
             /* A new connection */
             case LPC_CONNECTION_REQUEST:

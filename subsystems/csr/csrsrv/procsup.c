@@ -12,6 +12,7 @@
 #include <srv.h>
 
 #include <winuser.h>
+#include <ndk/mmfuncs.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -132,6 +133,7 @@ CsrProcessRefcountZero(IN PCSR_PROCESS CsrProcess)
 
     /* Close the Client Port if there is one */
     if (CsrProcess->ClientPort) NtClose(CsrProcess->ClientPort);
+    if (CsrProcess->ClientViewBase) NtUnmapViewOfSection(NtCurrentProcess(), (PVOID)CsrProcess->ClientViewBase);
 
     /* Close the process handle */
     NtClose(CsrProcess->ProcessHandle);

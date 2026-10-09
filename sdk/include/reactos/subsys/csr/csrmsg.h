@@ -55,10 +55,12 @@ typedef struct _CSR_API_CONNECTINFO
     ULONG  SizeOfTebData;
     ULONG  NumberOfServerDllNames;
     HANDLE ServerProcessId;
+    PVOID  PortViewBase;
+    PVOID  PortViewRemoteBase;
 } CSR_API_CONNECTINFO, *PCSR_API_CONNECTINFO;
 
 #if defined(_M_IX86)
-C_ASSERT(sizeof(CSR_API_CONNECTINFO) == 0x24);
+C_ASSERT(sizeof(CSR_API_CONNECTINFO) == 0x2C);
 #endif
 
 // We must have a size at most equal to the maximum acceptable LPC data size.

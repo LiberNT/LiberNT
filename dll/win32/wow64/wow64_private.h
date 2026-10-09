@@ -252,6 +252,12 @@ static inline ALPC_PORT_ATTRIBUTES *alpc_port_attributes_32to64( ALPC_PORT_ATTRI
     return out;
 }
 
+#ifdef __REACTOS__
+void wow64_csr_port_connected( const UNICODE_STRING *name, HANDLE handle );
+BOOL wow64_csr_request( HANDLE handle, ULONG flags, const void *send_msg, void *recv_msg, ULONG *size32,
+                        LARGE_INTEGER *timeout, NTSTATUS *status );
+#endif
+
 static inline ALPC_PORT_MESSAGE *alpc_port_message_32to64( ALPC_PORT_MESSAGE **out, SIZE_T out_msg_size,
                                                            const ALPC_PORT_MESSAGE32 *in, BOOL copy_msg )
 {

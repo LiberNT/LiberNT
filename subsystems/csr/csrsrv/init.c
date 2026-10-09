@@ -952,6 +952,7 @@ CsrSbApiPortInitialize(VOID)
     ULONG Size;
     PSECURITY_DESCRIPTOR PortSd;
     OBJECT_ATTRIBUTES ObjectAttributes;
+    ALPC_PORT_ATTRIBUTES PortAttributes;
     NTSTATUS Status;
     HANDLE hRequestThread;
     CLIENT_ID ClientId;
@@ -985,11 +986,13 @@ CsrSbApiPortInitialize(VOID)
                                PortSd);
 
     /* Create the Port Object */
-    Status = NtCreatePort(&CsrSbApiPort,
-                          &ObjectAttributes,
-                          sizeof(SB_CONNECTION_INFO),
-                          sizeof(SB_API_MSG),
-                          32 * sizeof(SB_API_MSG));
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.MaxMessageLength = sizeof(SB_API_MSG);
+    PortAttributes.MaxPoolUsage = 32 * sizeof(SB_API_MSG);
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    Status = NtAlpcCreatePort(&CsrSbApiPort, &ObjectAttributes, &PortAttributes);
     if (PortSd) RtlFreeHeap(CsrHeap, 0, PortSd);
 
     if (NT_SUCCESS(Status))

@@ -31,13 +31,23 @@ SmpCallCsrCreateProcess(IN PSB_API_MSG SbApiMsg,
                         IN HANDLE PortHandle)
 {
     NTSTATUS Status;
+    SIZE_T BufferLength = sizeof(SB_API_MSG);
+
+    UNREFERENCED_PARAMETER(MessageLength);
 
     /* Initialize the header and send the message to CSRSS */
-    SbApiMsg->h.u2.ZeroInit = 0;
-    SbApiMsg->h.u1.s1.DataLength = MessageLength + 8;
+    RtlZeroMemory(&SbApiMsg->h, sizeof(SbApiMsg->h));
+    SbApiMsg->h.u1.s1.DataLength = sizeof(SB_API_MSG) - sizeof(SbApiMsg->h);
     SbApiMsg->h.u1.s1.TotalLength = sizeof(SB_API_MSG);
     SbApiMsg->ApiNumber = SbpCreateProcess;
-    Status = NtRequestWaitReplyPort(PortHandle, &SbApiMsg->h, &SbApiMsg->h);
+    Status = NtAlpcSendWaitReceivePort(PortHandle,
+                                       ALPC_MSGFLG_SYNC_REQUEST,
+                                       &SbApiMsg->h,
+                                       NULL,
+                                       &SbApiMsg->h,
+                                       &BufferLength,
+                                       NULL,
+                                       NULL);
     if (NT_SUCCESS(Status)) Status = SbApiMsg->ReturnValue;
     return Status;
 }
@@ -146,6 +156,7 @@ SmpLoadSubSystem(IN PUNICODE_STRING FileName,
     HANDLE SubSysProcessId;
     NTSTATUS Status = STATUS_SUCCESS;
     SB_API_MSG SbApiMsg;
+    SIZE_T BufferLength;
     RTL_USER_PROCESS_INFORMATION ProcessInformation;
     LARGE_INTEGER Timeout;
     PVOID State;
@@ -375,19 +386,25 @@ SmpLoadSubSystem(IN PUNICODE_STRING FileName,
 
         /* Send the create session message to the subsystem */
         SbApiMsg.ReturnValue = STATUS_SUCCESS;
-        SbApiMsg.h.u2.ZeroInit = 0;
-        SbApiMsg.h.u1.s1.DataLength = sizeof(SB_CREATE_SESSION_MSG) + 8;
+        RtlZeroMemory(&SbApiMsg.h, sizeof(SbApiMsg.h));
+        SbApiMsg.h.u1.s1.DataLength = sizeof(SB_API_MSG) - sizeof(SbApiMsg.h);
         SbApiMsg.h.u1.s1.TotalLength = sizeof(SB_API_MSG);
         SbApiMsg.ApiNumber = SbpCreateSession;
-        Status = NtRequestWaitReplyPort(Subsystem->SbApiPort,
-                                        &SbApiMsg.h,
-                                        &SbApiMsg.h);
+        BufferLength = sizeof(SbApiMsg);
+        Status = NtAlpcSendWaitReceivePort(Subsystem->SbApiPort,
+                                           ALPC_MSGFLG_SYNC_REQUEST,
+                                           &SbApiMsg.h,
+                                           NULL,
+                                           &SbApiMsg.h,
+                                           &BufferLength,
+                                           NULL,
+                                           NULL);
         if (NT_SUCCESS(Status)) Status = SbApiMsg.ReturnValue;
         if (!NT_SUCCESS(Status))
         {
             /* Delete the session and handle failure if the LPC call failed */
             SmpDeleteSession(CreateSession->SessionId);
-            DPRINT1("SMSS: SmpLoadSubSystem - NtRequestWaitReplyPort Failed with  Status %lx for sessionid %lu\n",
+            DPRINT1("SMSS: SmpLoadSubSystem - NtAlpcSendWaitReceivePort Failed with  Status %lx for sessionid %lu\n",
                     Status,
                     MuSessionId);
             goto Quickie;

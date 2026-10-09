@@ -2619,6 +2619,7 @@ SmpInit(IN PUNICODE_STRING InitialCommand,
     UNICODE_STRING PortName, EventName;
     HANDLE EventHandle, PortHandle;
     ULONG HardErrorMode;
+    ALPC_PORT_ATTRIBUTES PortAttributes;
 
     /* Create the SMSS Heap */
     SmBaseTag = RtlCreateTagHeap(RtlGetProcessHeap(),
@@ -2665,11 +2666,14 @@ SmpInit(IN PUNICODE_STRING InitialCommand,
     /* Create the SM API Port */
     RtlInitUnicodeString(&PortName, L"\\SmApiPort");
     InitializeObjectAttributes(&ObjectAttributes, &PortName, 0, NULL, SmpApiPortSecurityDescriptor);
-    Status = NtCreatePort(&PortHandle,
-                          &ObjectAttributes,
-                          sizeof(SB_CONNECTION_INFO),
-                          sizeof(SM_API_MSG),
-                          sizeof(SB_API_MSG) * 32);
+    C_ASSERT(sizeof(SM_API_MSG) >= sizeof(PORT_MESSAGE) + sizeof(SB_CONNECTION_INFO));
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.MaxMessageLength = sizeof(SM_API_MSG);
+    PortAttributes.MaxPoolUsage = sizeof(SB_API_MSG) * 32;
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    Status = NtAlpcCreatePort(&PortHandle, &ObjectAttributes, &PortAttributes);
     ASSERT(NT_SUCCESS(Status));
     SmpDebugPort = PortHandle;
 

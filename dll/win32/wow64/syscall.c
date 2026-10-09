@@ -648,6 +648,9 @@ NTSTATUS WINAPI wow64_NtAlpcConnectPort( UINT *args )
     if (status == STATUS_SUCCESS)
     {
         put_handle( handle_ptr, handle );
+#ifdef __REACTOS__
+        wow64_csr_port_connected( &str, handle );
+#endif
         alpc_port_message_64to32( msg32, msg );
         alpc_port_message_attributes_64to32( recv_msg_attr32, recv_msg_attr );
     }
@@ -724,6 +727,10 @@ NTSTATUS WINAPI wow64_NtAlpcSendWaitReceivePort( UINT *args )
     ALPC_PORT_MESSAGE *recv_msg;
     ALPC_MESSAGE_ATTRIBUTES *recv_msg_attr;
     SIZE_T size = size32 ? (*size32 + sizeof(ALPC_PORT_MESSAGE) - sizeof(ALPC_PORT_MESSAGE32)) : 65535;
+
+#ifdef __REACTOS__
+    if (wow64_csr_request( handle, flags, send_msg32, recv_msg32, size32, timeout, &status )) return status;
+#endif
 
     status = NtAlpcSendWaitReceivePort( handle, flags, alpc_port_message_32to64( &send_msg, send_msg32 ? (sizeof(*send_msg) + send_msg32->DataLength) : 0, send_msg32, TRUE ), alpc_port_message_attributes_32to64( &send_msg_attr, send_msg_attr32, TRUE ), alpc_port_message_32to64( &recv_msg, size, recv_msg32, FALSE ), &size, alpc_port_message_attributes_32to64( &recv_msg_attr, recv_msg_attr32, FALSE ), timeout );
     if (status == STATUS_SUCCESS)
