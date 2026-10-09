@@ -220,7 +220,11 @@ HCRYPTPROV WINAPI DECLSPEC_HOTPATCH I_CryptGetDefaultCryptProv(ALG_ID algid)
 
     defprov = CRYPT_GetDefaultProvider();
 
+#ifdef __REACTOS__
+    if (algid && algid != CALG_NO_SIGN && !is_supported_algid(defprov, algid))
+#else
     if (algid && !is_supported_algid(defprov, algid))
+#endif
     {
         DWORD i = 0, type, size;
 
