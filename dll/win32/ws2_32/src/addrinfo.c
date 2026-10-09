@@ -422,6 +422,30 @@ GetServiceNameForPort(IN LPWSTR pServiceBuffer,
                       IN WORD Port,
                       IN DWORD Flags)
 {
+    PSERVENT Service = NULL;
+    CHAR Buffer[NI_MAXSERV];
+    PCSTR Name = Buffer;
+    DWORD Length;
+
+    if (!ServiceBufferSize)
+        return ERROR_SUCCESS;
+
+    if (!(Flags & NI_NUMERICSERV))
+        Service = getservbyport(Port, (Flags & NI_DGRAM) ? "udp" : NULL);
+
+    if (Service && Service->s_name)
+        Name = Service->s_name;
+    else
+        sprintf(Buffer, "%u", ntohs(Port));
+
+    Length = strlen(Name);
+    if (ServiceBufferSize <= Length)
+    {
+        MultiByteToWideChar(CP_ACP, 0, Name, ServiceBufferSize, pServiceBuffer, ServiceBufferSize);
+        return ERROR_INSUFFICIENT_BUFFER;
+    }
+
+    MultiByteToWideChar(CP_ACP, 0, Name, -1, pServiceBuffer, ServiceBufferSize);
     return ERROR_SUCCESS;
 }
 
@@ -1062,7 +1086,11 @@ getnameinfo(const struct sockaddr FAR *sa,
                                             hostlen,
                                             NULL,
                                             NULL);
-            if (!ErrorCode) goto Quickie;
+            if (!ErrorCode)
+            {
+                ErrorCode = GetLastError();
+                goto Quickie;
+            }
         }
 
         /* Check if we have a service pointer */
@@ -1077,7 +1105,11 @@ getnameinfo(const struct sockaddr FAR *sa,
                                             servlen,
                                             NULL,
                                             NULL);
-            if (!ErrorCode) goto Quickie;
+            if (!ErrorCode)
+            {
+                ErrorCode = GetLastError();
+                goto Quickie;
+            }
         }
 
         /* Return success */
