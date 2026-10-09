@@ -1402,6 +1402,7 @@ LsaApInitializePackage(IN ULONG AuthenticationPackageId,
         InitializeListHead(&LogonListHead);
         RtlInitializeResource(&LogonListResource);
         EnumCounter = 0;
+        NtlmMode = NtlmLsaMode;
         PackageInitialized = TRUE;
     }
 
@@ -1474,6 +1475,25 @@ LsaApLogonTerminated(
 }
 
 
+static
+BOOLEAN
+MsvpIsInSubmitBuffer(
+    _In_ PVOID SubmitBuffer,
+    _In_ ULONG SubmitBufferSize,
+    _In_opt_ PVOID Data,
+    _In_ ULONG Length)
+{
+    ULONG_PTR Start = (ULONG_PTR)SubmitBuffer;
+    ULONG_PTR Address = (ULONG_PTR)Data;
+
+    if (Length == 0)
+        return TRUE;
+
+    return Address >= Start &&
+           Address - Start <= SubmitBufferSize &&
+           Length <= SubmitBufferSize - (Address - Start);
+}
+
 /*
  * Handle Network logon
  */
@@ -1521,6 +1541,30 @@ LsaApLogonUserEx2_Network(
         (!NtlmFixupAndValidateUStr(&LogonInfo->Workstation, PtrOffset)) ||
         (!NtlmFixupAStr(&LogonInfo->CaseSensitiveChallengeResponse, PtrOffset)) ||
         (!NtlmFixupAStr(&LogonInfo->CaseInsensitiveChallengeResponse, PtrOffset)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (!MsvpIsInSubmitBuffer(ProtocolSubmitBuffer,
+                              SubmitBufferSize,
+                              LogonInfo->LogonDomainName.Buffer,
+                              LogonInfo->LogonDomainName.Length) ||
+        !MsvpIsInSubmitBuffer(ProtocolSubmitBuffer,
+                              SubmitBufferSize,
+                              LogonInfo->UserName.Buffer,
+                              LogonInfo->UserName.Length) ||
+        !MsvpIsInSubmitBuffer(ProtocolSubmitBuffer,
+                              SubmitBufferSize,
+                              LogonInfo->Workstation.Buffer,
+                              LogonInfo->Workstation.Length) ||
+        !MsvpIsInSubmitBuffer(ProtocolSubmitBuffer,
+                              SubmitBufferSize,
+                              LogonInfo->CaseSensitiveChallengeResponse.Buffer,
+                              LogonInfo->CaseSensitiveChallengeResponse.Length) ||
+        !MsvpIsInSubmitBuffer(ProtocolSubmitBuffer,
+                              SubmitBufferSize,
+                              LogonInfo->CaseInsensitiveChallengeResponse.Buffer,
+                              LogonInfo->CaseInsensitiveChallengeResponse.Length))
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -1763,18 +1807,21 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
     }
     // TODO: Add other LogonType validity checks.
 
-    Status = SamValidateUser(LogonType,
-                             LogonUserName,
-                             LogonDomain,
-                             &LogonPwdData,
-                             &ComputerName,
-                             &SpecialAccount,
-                             &AccountDomainSid,
-                             &UserHandle,
-                             &UserInfo,
-                             SubStatus);
-    if (!NT_SUCCESS(Status))
-        goto done;
+    if (LogonType != Network)
+    {
+        Status = SamValidateUser(LogonType,
+                                 LogonUserName,
+                                 LogonDomain,
+                                 &LogonPwdData,
+                                 &ComputerName,
+                                 &SpecialAccount,
+                                 &AccountDomainSid,
+                                 &UserHandle,
+                                 &UserInfo,
+                                 SubStatus);
+        if (!NT_SUCCESS(Status))
+            goto done;
+    }
 
     /* Return logon information */
 

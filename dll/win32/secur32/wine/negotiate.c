@@ -64,11 +64,6 @@ static SECURITY_STATUS SEC_ENTRY nego_AcquireCredentialsHandleW(
     ret = ntlm_AcquireCredentialsHandleW( pszPrincipal, ntlmW, fCredentialUse,
                                           pLogonID, pAuthData, pGetKeyFn, pGetKeyArgument,
                                           phCredential, ptsExpiry );
-    if (ret == SEC_E_OK)
-    {
-        NtlmCredentials *cred = (NtlmCredentials *)phCredential->dwLower;
-        cred->no_cached_credentials = (pAuthData == NULL);
-    }
     return ret;
 }
 
@@ -293,13 +288,6 @@ static SECURITY_STATUS SEC_ENTRY nego_QueryContextAttributesW(
         sizes->cbBlockSize       = 0;
         return SEC_E_OK;
     }
-    case SECPKG_ATTR_NEGOTIATION_INFO:
-    {
-        SecPkgContext_NegotiationInfoW *info = (SecPkgContext_NegotiationInfoW *)pBuffer;
-        info->PackageInfo      = ntlm_package_infoW;
-        info->NegotiationState = SECPKG_NEGOTIATION_COMPLETE;
-        return SEC_E_OK;
-    }
     default:
         return ntlm_QueryContextAttributesW( phContext, ulAttribute, pBuffer );
     }
@@ -322,13 +310,6 @@ static SECURITY_STATUS SEC_ENTRY nego_QueryContextAttributesA(PCtxtHandle phCont
         sizes->cbMaxSignature    = 16;
         sizes->cbSecurityTrailer = 16;
         sizes->cbBlockSize       = 0;
-        return SEC_E_OK;
-    }
-    case SECPKG_ATTR_NEGOTIATION_INFO:
-    {
-        SecPkgContext_NegotiationInfoA *info = (SecPkgContext_NegotiationInfoA *)pBuffer;
-        info->PackageInfo      = ntlm_package_infoA;
-        info->NegotiationState = SECPKG_NEGOTIATION_COMPLETE;
         return SEC_E_OK;
     }
     default:

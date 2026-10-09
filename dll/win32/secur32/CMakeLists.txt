@@ -12,9 +12,8 @@ list(APPEND SOURCE
     sspi.c
     stubs.c
     thunks.c
+    ntlmmsg.c
     wrapper.c
-    wine/base64_codec.c
-    wine/dispatcher.c
     wine/hmac_md5.c
     wine/kerberos.c
     wine/negotiate.c

@@ -326,6 +326,28 @@ SystemFunction012(const BYTE *in,
                   const BYTE *key,
                   LPBYTE out);
 
+typedef struct _MD5_CTX
+{
+    ULONG i[2];
+    ULONG buf[4];
+    UCHAR in[64];
+    UCHAR digest[16];
+} MD5_CTX, *PMD5_CTX;
+
+VOID
+WINAPI
+MD5Init(PMD5_CTX Context);
+
+VOID
+WINAPI
+MD5Update(PMD5_CTX Context,
+          const UCHAR *Buffer,
+          ULONG Length);
+
+VOID
+WINAPI
+MD5Final(PMD5_CTX Context);
+
 NTSTATUS
 NTAPI
 LsaApCallPackage(

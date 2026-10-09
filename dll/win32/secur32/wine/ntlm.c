@@ -30,18 +30,8 @@
 #include <wine/unicode.h>
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(ntlm);
-WINE_DECLARE_DEBUG_CHANNEL(winediag);
 
-#define NTLM_MAX_BUF 1904
-#define MIN_NTLM_AUTH_MAJOR_VERSION 3
-#define MIN_NTLM_AUTH_MINOR_VERSION 0
-#ifndef __REACTOS__
-#define MIN_NTLM_AUTH_MICRO_VERSION 25
-#else
-#define MIN_NTLM_AUTH_MICRO_VERSION 23
-#endif
-
-static CHAR ntlm_auth[] = "ntlm_auth";
+#define NTLM_MAX_BUF 2888
 
 /***********************************************************************
  *              QueryCredentialsAttributesA
@@ -85,40 +75,25 @@ static SECURITY_STATUS SEC_ENTRY ntlm_QueryCredentialsAttributesW(
     return ret;
 }
 
-static char *ntlm_GetUsernameArg(LPCWSTR userW, INT userW_length)
+static BOOL ntlm_DupString(WCHAR **dst, ULONG *dst_len, const WCHAR *src, ULONG len)
 {
-    static const char username_arg[] = "--username=";
-    char *user;
-    int unixcp_size;
-
-    unixcp_size =  WideCharToMultiByte(CP_UNIXCP, WC_NO_BEST_FIT_CHARS,
-        userW, userW_length, NULL, 0, NULL, NULL) + sizeof(username_arg);
-    user = HeapAlloc(GetProcessHeap(), 0, unixcp_size);
-    if (!user) return NULL;
-    memcpy(user, username_arg, sizeof(username_arg) - 1);
-    WideCharToMultiByte(CP_UNIXCP, WC_NO_BEST_FIT_CHARS, userW, userW_length,
-        user + sizeof(username_arg) - 1,
-        unixcp_size - sizeof(username_arg) + 1, NULL, NULL);
-    user[unixcp_size - 1] = '\0';
-    return user;
+    *dst = HeapAlloc(GetProcessHeap(), 0, (len + 1) * sizeof(WCHAR));
+    if (!*dst) return FALSE;
+    if (len) memcpy(*dst, src, len * sizeof(WCHAR));
+    (*dst)[len] = 0;
+    *dst_len = len;
+    return TRUE;
 }
 
-static char *ntlm_GetDomainArg(LPCWSTR domainW, INT domainW_length)
+static void ntlm_FreeCredentials(PNtlmCredentials ntlm_cred)
 {
-    static const char domain_arg[] = "--domain=";
-    char *domain;
-    int unixcp_size;
-
-    unixcp_size = WideCharToMultiByte(CP_UNIXCP, WC_NO_BEST_FIT_CHARS,
-        domainW, domainW_length, NULL, 0,  NULL, NULL) + sizeof(domain_arg);
-    domain = HeapAlloc(GetProcessHeap(), 0, unixcp_size);
-    if (!domain) return NULL;
-    memcpy(domain, domain_arg, sizeof(domain_arg) - 1);
-    WideCharToMultiByte(CP_UNIXCP, WC_NO_BEST_FIT_CHARS, domainW,
-        domainW_length, domain + sizeof(domain_arg) - 1,
-        unixcp_size - sizeof(domain) + 1, NULL, NULL);
-    domain[unixcp_size - 1] = '\0';
-    return domain;
+    if (!ntlm_cred) return;
+    if (ntlm_cred->password)
+        memset(ntlm_cred->password, 0, ntlm_cred->password_len * sizeof(WCHAR));
+    HeapFree(GetProcessHeap(), 0, ntlm_cred->password);
+    HeapFree(GetProcessHeap(), 0, ntlm_cred->user);
+    HeapFree(GetProcessHeap(), 0, ntlm_cred->domain);
+    HeapFree(GetProcessHeap(), 0, ntlm_cred);
 }
 
 /***********************************************************************
@@ -130,7 +105,7 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcquireCredentialsHandleW(
  PVOID pGetKeyArgument, PCredHandle phCredential, PTimeStamp ptsExpiry)
 {
     SECURITY_STATUS ret;
-    PNtlmCredentials ntlm_cred;
+    PNtlmCredentials ntlm_cred = NULL;
     LPWSTR domain = NULL, user = NULL, password = NULL;
     PSEC_WINNT_AUTH_IDENTITY_W auth_data = NULL;
 
@@ -141,17 +116,12 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcquireCredentialsHandleW(
     switch(fCredentialUse)
     {
         case SECPKG_CRED_INBOUND:
-            ntlm_cred = HeapAlloc(GetProcessHeap(), 0, sizeof(*ntlm_cred));
+            ntlm_cred = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*ntlm_cred));
             if (!ntlm_cred)
                 ret = SEC_E_INSUFFICIENT_MEMORY;
             else
             {
-                ntlm_cred->mode = NTLM_SERVER;
-                ntlm_cred->username_arg = NULL;
-                ntlm_cred->domain_arg = NULL;
-                ntlm_cred->password = NULL;
-                ntlm_cred->pwlen = 0;
-                ntlm_cred->no_cached_credentials = 0;
+                ntlm_cred->use = fCredentialUse;
 
                 phCredential->dwUpper = fCredentialUse;
                 phCredential->dwLower = (ULONG_PTR)ntlm_cred;
@@ -159,20 +129,17 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcquireCredentialsHandleW(
             }
             break;
         case SECPKG_CRED_OUTBOUND:
+        case SECPKG_CRED_BOTH:
             {
                 auth_data = pAuthData;
-                ntlm_cred = HeapAlloc(GetProcessHeap(), 0, sizeof(*ntlm_cred));
+                ntlm_cred = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*ntlm_cred));
                 if (!ntlm_cred)
                 {
                     ret = SEC_E_INSUFFICIENT_MEMORY;
                     break;
                 }
-                ntlm_cred->mode = NTLM_CLIENT;
-                ntlm_cred->username_arg = NULL;
-                ntlm_cred->domain_arg = NULL;
-                ntlm_cred->password = NULL;
-                ntlm_cred->pwlen = 0;
-                ntlm_cred->no_cached_credentials = 0;
+                ntlm_cred->use = fCredentialUse;
+                ntlm_cred->default_credentials = (pAuthData == NULL);
 
                 if(pAuthData != NULL)
                 {
@@ -237,25 +204,14 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcquireCredentialsHandleW(
                     TRACE("Username is %s\n", debugstr_wn(user, user_len));
                     TRACE("Domain name is %s\n", debugstr_wn(domain, domain_len));
 
-                    ntlm_cred->username_arg = ntlm_GetUsernameArg(user, user_len);
-                    ntlm_cred->domain_arg = ntlm_GetDomainArg(domain, domain_len);
-
-                    if(password_len != 0)
+                    if (!ntlm_DupString(&ntlm_cred->user, &ntlm_cred->user_len, user, user_len) ||
+                        !ntlm_DupString(&ntlm_cred->domain, &ntlm_cred->domain_len, domain, domain_len) ||
+                        !ntlm_DupString(&ntlm_cred->password, &ntlm_cred->password_len, password, password_len))
                     {
-                        ntlm_cred->pwlen = WideCharToMultiByte(CP_UNIXCP, WC_NO_BEST_FIT_CHARS, password,
-                                                               password_len, NULL, 0, NULL, NULL);
-
-                        ntlm_cred->password = HeapAlloc(GetProcessHeap(), 0,
-                                                        ntlm_cred->pwlen);
-                        if(!ntlm_cred->password)
-                        {
-                            ret = SEC_E_INSUFFICIENT_MEMORY;
-                            break;
-                        }
-
-                        WideCharToMultiByte(CP_UNIXCP, WC_NO_BEST_FIT_CHARS, password, password_len,
-                                            ntlm_cred->password, ntlm_cred->pwlen, NULL, NULL);
+                        ret = SEC_E_INSUFFICIENT_MEMORY;
+                        break;
                     }
+                    ntlm_cred->have_credentials = (user_len != 0 || password_len != 0);
                 }
 
                 phCredential->dwUpper = fCredentialUse;
@@ -265,11 +221,6 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcquireCredentialsHandleW(
                 ret = SEC_E_OK;
                 break;
             }
-        case SECPKG_CRED_BOTH:
-            FIXME("AcquireCredentialsHandle: SECPKG_CRED_BOTH stub\n");
-            ret = SEC_E_UNSUPPORTED_FUNCTION;
-            phCredential = NULL;
-            break;
         default:
             phCredential = NULL;
             ret = SEC_E_UNKNOWN_CREDENTIALS;
@@ -281,6 +232,8 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcquireCredentialsHandleW(
         HeapFree(GetProcessHeap(), 0, user);
         HeapFree(GetProcessHeap(), 0, password);
     }
+    if (ret != SEC_E_OK)
+        ntlm_FreeCredentials(ntlm_cred);
     return ret;
 }
 
@@ -478,6 +431,121 @@ static BOOL ntlm_GetCachedCredential(const SEC_WCHAR *pszTargetName, PCREDENTIAL
     return ret;
 }
 
+static SECURITY_STATUS ntlm_SetContextCredentials(PNegoHelper helper, PNtlmCredentials ntlm_cred,
+        const SEC_WCHAR *pszTargetName)
+{
+    PCREDENTIALW cred;
+    LPCWSTR user, domain = NULL;
+    ULONG domain_len = 0;
+    BOOL ok;
+
+    if (ntlm_cred->default_credentials)
+    {
+        if (!ntlm_GetCachedCredential(pszTargetName, &cred))
+            return SEC_E_OK;
+
+        if (!cred->UserName)
+        {
+            CredFree(cred);
+            return SEC_E_OK;
+        }
+
+        user = strchrW(cred->UserName, '\\');
+        if (user)
+        {
+            domain = cred->UserName;
+            domain_len = user - cred->UserName;
+            user++;
+        }
+        else
+            user = cred->UserName;
+
+        ok = ntlm_DupString(&helper->user, &helper->user_len, user, strlenW(user)) &&
+             ntlm_DupString(&helper->domain, &helper->domain_len, domain, domain_len) &&
+             ntlm_DupString(&helper->password, &helper->password_len, (LPCWSTR)cred->CredentialBlob,
+                            cred->CredentialBlobSize / sizeof(WCHAR));
+        CredFree(cred);
+        if (!ok)
+            return SEC_E_INSUFFICIENT_MEMORY;
+
+        helper->have_credentials = TRUE;
+        return SEC_E_OK;
+    }
+
+    if (!ntlm_cred->have_credentials)
+        return SEC_E_OK;
+
+    if (!ntlm_DupString(&helper->user, &helper->user_len, ntlm_cred->user, ntlm_cred->user_len) ||
+        !ntlm_DupString(&helper->domain, &helper->domain_len, ntlm_cred->domain, ntlm_cred->domain_len) ||
+        !ntlm_DupString(&helper->password, &helper->password_len, ntlm_cred->password, ntlm_cred->password_len))
+        return SEC_E_INSUFFICIENT_MEMORY;
+
+    helper->have_credentials = TRUE;
+    return SEC_E_OK;
+}
+
+static ULONG ntlm_GetContextAttributes(PNegoHelper helper)
+{
+    ULONG attr = 0;
+
+    if (helper->mode == NTLM_CLIENT)
+    {
+        if (helper->neg_flags & NTLMSSP_NEGOTIATE_SIGN)
+            attr |= ISC_RET_INTEGRITY | ISC_RET_REPLAY_DETECT | ISC_RET_SEQUENCE_DETECT;
+        if (helper->neg_flags & NTLMSSP_NEGOTIATE_SEAL)
+            attr |= ISC_RET_CONFIDENTIALITY;
+        if (helper->neg_flags & NTLMSSP_NEGOTIATE_ANONYMOUS)
+            attr |= ISC_RET_NULL_SESSION;
+    }
+    else
+    {
+        if (helper->neg_flags & NTLMSSP_NEGOTIATE_SIGN)
+            attr |= ASC_RET_INTEGRITY | ASC_RET_REPLAY_DETECT | ASC_RET_SEQUENCE_DETECT;
+        if (helper->neg_flags & NTLMSSP_NEGOTIATE_SEAL)
+            attr |= ASC_RET_CONFIDENTIALITY;
+        if (helper->neg_flags & NTLMSSP_NEGOTIATE_ANONYMOUS)
+            attr |= ASC_RET_NULL_SESSION;
+    }
+    return attr;
+}
+
+static void ntlm_FreeSessionSecurity(PNegoHelper helper)
+{
+    SECUR32_arc4Cleanup(helper->crypt.ntlm.a4i);
+    SECUR32_arc4Cleanup(helper->crypt.ntlm2.send_a4i);
+    SECUR32_arc4Cleanup(helper->crypt.ntlm2.recv_a4i);
+    HeapFree(GetProcessHeap(), 0, helper->crypt.ntlm2.send_sign_key);
+    HeapFree(GetProcessHeap(), 0, helper->crypt.ntlm2.send_seal_key);
+    HeapFree(GetProcessHeap(), 0, helper->crypt.ntlm2.recv_sign_key);
+    HeapFree(GetProcessHeap(), 0, helper->crypt.ntlm2.recv_seal_key);
+    memset(&helper->crypt, 0, sizeof(helper->crypt));
+}
+
+static SECURITY_STATUS ntlm_InitSessionSecurity(PNegoHelper helper)
+{
+    ntlm_FreeSessionSecurity(helper);
+
+    helper->crypt.ntlm.a4i = SECUR32_arc4Alloc();
+    helper->crypt.ntlm2.send_a4i = SECUR32_arc4Alloc();
+    helper->crypt.ntlm2.recv_a4i = SECUR32_arc4Alloc();
+    if (!helper->crypt.ntlm.a4i || !helper->crypt.ntlm2.send_a4i || !helper->crypt.ntlm2.recv_a4i ||
+        SECUR32_CreateNTLM2SubKeys(helper) != SEC_E_OK)
+    {
+        ntlm_FreeSessionSecurity(helper);
+        return SEC_E_INSUFFICIENT_MEMORY;
+    }
+
+    SECUR32_arc4Init(helper->crypt.ntlm.a4i, helper->session_key, 16);
+    helper->crypt.ntlm.seq_num = 0l;
+    SECUR32_arc4Init(helper->crypt.ntlm2.send_a4i,
+                     helper->crypt.ntlm2.send_seal_key, 16);
+    SECUR32_arc4Init(helper->crypt.ntlm2.recv_a4i,
+                     helper->crypt.ntlm2.recv_seal_key, 16);
+    helper->crypt.ntlm2.send_seq_no = 0l;
+    helper->crypt.ntlm2.recv_seq_no = 0l;
+    return SEC_E_OK;
+}
+
 /***********************************************************************
  *              InitializeSecurityContextW
  */
@@ -491,46 +559,24 @@ SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
     PNtlmCredentials ntlm_cred;
     PNegoHelper helper = NULL;
     ULONG ctxt_attr = 0;
-    char* buffer, *want_flags = NULL;
     PBYTE bin;
-    int buffer_len, bin_len, max_len = NTLM_MAX_BUF;
+    ULONG bin_len = 0;
     int token_idx;
-    SEC_CHAR *username = NULL;
-    SEC_CHAR *domain = NULL;
-    SEC_CHAR *password = NULL;
 
     TRACE("%p %p %s 0x%08x %d %d %p %d %p %p %p %p\n", phCredential, phContext,
      debugstr_w(pszTargetName), fContextReq, Reserved1, TargetDataRep, pInput,
      Reserved1, phNewContext, pOutput, pfContextAttr, ptsExpiry);
 
-    /****************************************
-     * When communicating with the client, there can be the
-     * following reply packets:
-     * YR <base64 blob>         should be sent to the server
-     * PW                       should be sent back to helper with
-     *                          base64 encoded password
-     * AF <base64 blob>         client is done, blob should be
-     *                          sent to server with KK prefixed
-     * GF <string list>         A string list of negotiated flags
-     * GK <base64 blob>         base64 encoded session key
-     * BH <char reason>         something broke
-     */
-    /* The squid cache size is 2010 chars, and that's what ntlm_auth uses */
-
     if(TargetDataRep == SECURITY_NETWORK_DREP){
         TRACE("Setting SECURITY_NETWORK_DREP\n");
     }
 
-    buffer = HeapAlloc(GetProcessHeap(), 0, sizeof(char) * NTLM_MAX_BUF);
     bin = HeapAlloc(GetProcessHeap(), 0, sizeof(BYTE) * NTLM_MAX_BUF);
+    if (!bin)
+        return SEC_E_INSUFFICIENT_MEMORY;
 
     if((phContext == NULL) && (pInput == NULL))
     {
-        static char helper_protocol[] = "--helper-protocol=ntlmssp-client-1";
-        static CHAR credentials_argv[] = "--use-cached-creds";
-        SEC_CHAR *client_argv[5];
-        int pwlen = 0;
-
         TRACE("First time in ISC()\n");
 
         if(!phCredential)
@@ -543,158 +589,42 @@ SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
          * the handler is a client handler.
          */
         ntlm_cred = (PNtlmCredentials)phCredential->dwLower;
-        if(ntlm_cred->mode != NTLM_CLIENT)
+        if(!(ntlm_cred->use & SECPKG_CRED_OUTBOUND))
         {
-            TRACE("Cred mode = %d\n", ntlm_cred->mode);
+            TRACE("Cred mode = %d\n", ntlm_cred->use);
             ret = SEC_E_INVALID_HANDLE;
             goto isc_end;
         }
 
-        client_argv[0] = ntlm_auth;
-        client_argv[1] = helper_protocol;
-        if (!ntlm_cred->username_arg && !ntlm_cred->domain_arg)
+        helper = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*helper));
+        if (!helper)
         {
-            LPWKSTA_USER_INFO_1 ui = NULL;
-            NET_API_STATUS status;
-            PCREDENTIALW cred;
-
-            if (ntlm_GetCachedCredential(pszTargetName, &cred))
-            {
-                LPWSTR p;
-                p = strchrW(cred->UserName, '\\');
-                if (p)
-                {
-                    domain = ntlm_GetDomainArg(cred->UserName, p - cred->UserName);
-                    p++;
-                }
-                else
-                {
-                    domain = ntlm_GetDomainArg(NULL, 0);
-                    p = cred->UserName;
-                }
-
-                username = ntlm_GetUsernameArg(p, -1);
-
-                if(cred->CredentialBlobSize != 0)
-                {
-                    pwlen = WideCharToMultiByte(CP_UNIXCP,
-                        WC_NO_BEST_FIT_CHARS, (LPWSTR)cred->CredentialBlob,
-                        cred->CredentialBlobSize / sizeof(WCHAR), NULL, 0,
-                        NULL, NULL);
-
-                    password = HeapAlloc(GetProcessHeap(), 0, pwlen);
-
-                    WideCharToMultiByte(CP_UNIXCP, WC_NO_BEST_FIT_CHARS,
-                                        (LPWSTR)cred->CredentialBlob,
-                                        cred->CredentialBlobSize / sizeof(WCHAR),
-                                        password, pwlen, NULL, NULL);
-                }
-
-                CredFree(cred);
-
-                client_argv[2] = username;
-                client_argv[3] = domain;
-                client_argv[4] = NULL;
-            }
-            else
-            {
-                status = NetWkstaUserGetInfo(NULL, 1, (LPBYTE *)&ui);
-                if (status != NERR_Success || ui == NULL || ntlm_cred->no_cached_credentials)
-                {
-                    ret = SEC_E_NO_CREDENTIALS;
-                    goto isc_end;
-                }
-                username = ntlm_GetUsernameArg(ui->wkui1_username, -1);
-                NetApiBufferFree(ui);
-
-                TRACE("using cached credentials\n");
-
-                client_argv[2] = username;
-                client_argv[3] = credentials_argv;
-                client_argv[4] = NULL;
-            }
-        }
-        else
-        {
-            client_argv[2] = ntlm_cred->username_arg;
-            client_argv[3] = ntlm_cred->domain_arg;
-            client_argv[4] = NULL;
-        }
-
-        if((ret = fork_helper(&helper, ntlm_auth, client_argv)) != SEC_E_OK)
+            ret = SEC_E_INSUFFICIENT_MEMORY;
             goto isc_end;
-
+        }
         helper->mode = NTLM_CLIENT;
-        helper->session_key = HeapAlloc(GetProcessHeap(), 0, 16);
-        if (!helper->session_key)
+
+        if((ret = ntlm_SetContextCredentials(helper, ntlm_cred, pszTargetName)) != SEC_E_OK)
         {
-            cleanup_helper(helper);
-            ret = SEC_E_INSUFFICIENT_MEMORY;
+            NtlmFreeContext(helper);
             goto isc_end;
         }
 
-        /* Generate the dummy session key = MD4(MD4(password))*/
-        if(password || ntlm_cred->password)
-        {
-            SEC_WCHAR *unicode_password;
-            int passwd_lenW;
-
-            TRACE("Converting password to unicode.\n");
-            passwd_lenW = MultiByteToWideChar(CP_ACP, 0,
-                                              password ? password : ntlm_cred->password,
-                                              password ? pwlen : ntlm_cred->pwlen,
-                                              NULL, 0);
-            unicode_password = HeapAlloc(GetProcessHeap(), 0,
-                                         passwd_lenW * sizeof(SEC_WCHAR));
-            MultiByteToWideChar(CP_ACP, 0, password ? password : ntlm_cred->password,
-                                password ? pwlen : ntlm_cred->pwlen, unicode_password, passwd_lenW);
-
-            SECUR32_CreateNTLM1SessionKey((PBYTE)unicode_password,
-                                          passwd_lenW * sizeof(SEC_WCHAR), helper->session_key);
-
-            HeapFree(GetProcessHeap(), 0, unicode_password);
-        }
-        else
-            memset(helper->session_key, 0, 16);
-
-        /* Allocate space for a maximal string of
-         * "SF NTLMSSP_FEATURE_SIGN NTLMSSP_FEATURE_SEAL
-         * NTLMSSP_FEATURE_SESSION_KEY"
-         */
-        want_flags = HeapAlloc(GetProcessHeap(), 0, 73);
-        if(want_flags == NULL)
-        {
-            cleanup_helper(helper);
-            ret = SEC_E_INSUFFICIENT_MEMORY;
-            goto isc_end;
-        }
-        lstrcpyA(want_flags, "SF");
         if(fContextReq & ISC_REQ_CONFIDENTIALITY)
-        {
-            if(strstr(want_flags, "NTLMSSP_FEATURE_SEAL") == NULL)
-                lstrcatA(want_flags, " NTLMSSP_FEATURE_SEAL");
-        }
+            helper->want_flags |= NTLMSSP_NEGOTIATE_SEAL | NTLMSSP_NEGOTIATE_SIGN |
+                                  NTLMSSP_NEGOTIATE_KEY_EXCHANGE;
         if(fContextReq & ISC_REQ_CONNECTION)
             ctxt_attr |= ISC_RET_CONNECTION;
         if(fContextReq & ISC_REQ_EXTENDED_ERROR)
             ctxt_attr |= ISC_RET_EXTENDED_ERROR;
         if(fContextReq & ISC_REQ_INTEGRITY)
-        {
-            if(strstr(want_flags, "NTLMSSP_FEATURE_SIGN") == NULL)
-                lstrcatA(want_flags, " NTLMSSP_FEATURE_SIGN");
-        }
+            helper->want_flags |= NTLMSSP_NEGOTIATE_SIGN | NTLMSSP_NEGOTIATE_KEY_EXCHANGE;
         if(fContextReq & ISC_REQ_MUTUAL_AUTH)
             ctxt_attr |= ISC_RET_MUTUAL_AUTH;
         if(fContextReq & ISC_REQ_REPLAY_DETECT)
-        {
-            if(strstr(want_flags, "NTLMSSP_FEATURE_SIGN") == NULL)
-                lstrcatA(want_flags, " NTLMSSP_FEATURE_SIGN");
-        }
+            helper->want_flags |= NTLMSSP_NEGOTIATE_SIGN | NTLMSSP_NEGOTIATE_KEY_EXCHANGE;
         if(fContextReq & ISC_REQ_SEQUENCE_DETECT)
-        {
-            if(strstr(want_flags, "NTLMSSP_FEATURE_SIGN") == NULL)
-                lstrcatA(want_flags, " NTLMSSP_FEATURE_SIGN");
-        }
+            helper->want_flags |= NTLMSSP_NEGOTIATE_SIGN | NTLMSSP_NEGOTIATE_KEY_EXCHANGE;
         if(fContextReq & ISC_REQ_STREAM)
             FIXME("ISC_REQ_STREAM\n");
         if(fContextReq & ISC_REQ_USE_DCE_STYLE)
@@ -702,83 +632,9 @@ SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
         if(fContextReq & ISC_REQ_DELEGATE)
             ctxt_attr |= ISC_RET_DELEGATE;
 
-        /* If no password is given, try to use cached credentials. Fall back to an empty
-         * password if this failed. */
-        if(!password && !ntlm_cred->password)
+        if((ret = NtlmBuildNegotiate(helper, bin, NTLM_MAX_BUF, &bin_len)) != SEC_E_OK)
         {
-            lstrcpynA(buffer, "OK", max_len-1);
-            if((ret = run_helper(helper, buffer, max_len, &buffer_len)) != SEC_E_OK)
-            {
-                cleanup_helper(helper);
-                goto isc_end;
-            }
-            /* If the helper replied with "PW", using cached credentials failed */
-            if(!strncmp(buffer, "PW", 2))
-            {
-                TRACE("Using cached credentials failed.\n");
-                lstrcpynA(buffer, "PW AA==", max_len-1);
-            }
-            else /* Just do a noop on the next run */
-                lstrcpynA(buffer, "OK", max_len-1);
-        }
-        else
-        {
-            lstrcpynA(buffer, "PW ", max_len-1);
-            if((ret = encodeBase64(password ? (unsigned char *)password : (unsigned char *)ntlm_cred->password,
-                        password ? pwlen : ntlm_cred->pwlen, buffer+3,
-                        max_len-3, &buffer_len)) != SEC_E_OK)
-            {
-                cleanup_helper(helper);
-                goto isc_end;
-            }
-
-        }
-
-        TRACE("Sending to helper: %s\n", debugstr_a(buffer));
-        if((ret = run_helper(helper, buffer, max_len, &buffer_len)) != SEC_E_OK)
-        {
-            cleanup_helper(helper);
-            goto isc_end;
-        }
-
-        TRACE("Helper returned %s\n", debugstr_a(buffer));
-
-        if(lstrlenA(want_flags) > 2)
-        {
-            TRACE("Want flags are %s\n", debugstr_a(want_flags));
-            lstrcpynA(buffer, want_flags, max_len-1);
-            if((ret = run_helper(helper, buffer, max_len, &buffer_len)) 
-                    != SEC_E_OK)
-            {
-                cleanup_helper(helper);
-                goto isc_end;
-            }
-            if(!strncmp(buffer, "BH", 2))
-                ERR("Helper doesn't understand new command set. Expect more things to fail.\n");
-        }
-
-        lstrcpynA(buffer, "YR", max_len-1);
-
-        if((ret = run_helper(helper, buffer, max_len, &buffer_len)) != SEC_E_OK)
-        {
-            cleanup_helper(helper);
-            goto isc_end;
-        }
-
-        TRACE("%s\n", buffer);
-
-        if(strncmp(buffer, "YR ", 3) != 0)
-        {
-            /* Something borked */
-            TRACE("Helper returned %c%c\n", buffer[0], buffer[1]);
-            ret = SEC_E_INTERNAL_ERROR;
-            cleanup_helper(helper);
-            goto isc_end;
-        }
-        if((ret = decodeBase64(buffer+3, buffer_len-3, bin,
-                        max_len-1, &bin_len)) != SEC_E_OK)
-        {
-            cleanup_helper(helper);
+            NtlmFreeContext(helper);
             goto isc_end;
         }
 
@@ -786,6 +642,9 @@ SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
 
         phNewContext->dwUpper = ctxt_attr;
         phNewContext->dwLower = (ULONG_PTR)helper;
+        if (pfContextAttr)
+            *pfContextAttr = fContextReq & (ISC_REQ_CONFIDENTIALITY | ISC_REQ_INTEGRITY | ISC_REQ_REPLAY_DETECT |
+                                            ISC_REQ_SEQUENCE_DETECT | ISC_REQ_CONNECTION);
 
         ret = SEC_I_CONTINUE_NEEDED;
     }
@@ -794,7 +653,6 @@ SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
         int input_token_idx;
 
         /* handle second call here */
-        /* encode server data to base64 */
         if (!pInput || ((input_token_idx = ntlm_GetTokenBufferIndex(pInput)) == -1))
         {
             ret = SEC_E_INVALID_TOKEN;
@@ -824,7 +682,7 @@ SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
             goto isc_end;
         }
 
-        if(pInput->pBuffers[input_token_idx].cbBuffer > max_len)
+        if(pInput->pBuffers[input_token_idx].cbBuffer > NTLM_MAX_BUF)
         {
             TRACE("pInput->pBuffers[%d].cbBuffer is: %d\n",
                     input_token_idx,
@@ -832,35 +690,9 @@ SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
             ret = SEC_E_INVALID_TOKEN;
             goto isc_end;
         }
-        else
-            bin_len = pInput->pBuffers[input_token_idx].cbBuffer;
 
-        memcpy(bin, pInput->pBuffers[input_token_idx].pvBuffer, bin_len);
-
-        lstrcpynA(buffer, "TT ", max_len-1);
-
-        if((ret = encodeBase64(bin, bin_len, buffer+3,
-                        max_len-3, &buffer_len)) != SEC_E_OK)
-            goto isc_end;
-
-        TRACE("Server sent: %s\n", debugstr_a(buffer));
-
-        /* send TT base64 blob to ntlm_auth */
-        if((ret = run_helper(helper, buffer, max_len, &buffer_len)) != SEC_E_OK)
-            goto isc_end;
-
-        TRACE("Helper replied: %s\n", debugstr_a(buffer));
-
-        if( (strncmp(buffer, "KK ", 3) != 0) &&
-                (strncmp(buffer, "AF ", 3) !=0))
-        {
-            TRACE("Helper returned %c%c\n", buffer[0], buffer[1]);
-            ret = SEC_E_INVALID_TOKEN;
-            goto isc_end;
-        }
-
-        /* decode the blob and send it to server */
-        if((ret = decodeBase64(buffer+3, buffer_len-3, bin, max_len,
+        if((ret = NtlmBuildAuthenticate(helper, pInput->pBuffers[input_token_idx].pvBuffer,
+                        pInput->pBuffers[input_token_idx].cbBuffer, bin, NTLM_MAX_BUF,
                         &bin_len)) != SEC_E_OK)
         {
             goto isc_end;
@@ -880,7 +712,7 @@ SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
         ret = SEC_E_BUFFER_TOO_SMALL;
         if ((phContext == NULL) && (pInput == NULL))
         {
-            cleanup_helper(helper);
+            NtlmFreeContext(helper);
             phNewContext->dwUpper = 0;
             phNewContext->dwLower = 0;
         }
@@ -898,7 +730,7 @@ SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
         ret = SEC_E_BUFFER_TOO_SMALL;
         if ((phContext == NULL) && (pInput == NULL))
         {
-            cleanup_helper(helper);
+            NtlmFreeContext(helper);
             phNewContext->dwUpper = 0;
             phNewContext->dwLower = 0;
         }
@@ -911,7 +743,7 @@ SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
         ret = SEC_E_INTERNAL_ERROR;
         if ((phContext == NULL) && (pInput == NULL))
         {
-            cleanup_helper(helper);
+            NtlmFreeContext(helper);
             phNewContext->dwUpper = 0;
             phNewContext->dwLower = 0;
         }
@@ -923,68 +755,12 @@ SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
 
     if(ret == SEC_E_OK)
     {
-        TRACE("Getting negotiated flags\n");
-        lstrcpynA(buffer, "GF", max_len - 1);
-        if((ret = run_helper(helper, buffer, max_len, &buffer_len)) != SEC_E_OK)
-            goto isc_end;
-
-        if(buffer_len < 3)
-        {
-            TRACE("No flags negotiated.\n");
-            helper->neg_flags = 0l;
-        }
-        else
-        {
-            TRACE("Negotiated %s\n", debugstr_a(buffer));
-            sscanf(buffer + 3, "%lx", &(helper->neg_flags));
-            TRACE("Stored 0x%08x as flags\n", helper->neg_flags);
-        }
-
-        TRACE("Getting session key\n");
-        lstrcpynA(buffer, "GK", max_len - 1);
-        if((ret = run_helper(helper, buffer, max_len, &buffer_len)) != SEC_E_OK)
-            goto isc_end;
-
-        if(strncmp(buffer, "BH", 2) == 0)
-            TRACE("No key negotiated.\n");
-        else if(strncmp(buffer, "GK ", 3) == 0)
-        {
-            if((ret = decodeBase64(buffer+3, buffer_len-3, bin, max_len, 
-                            &bin_len)) != SEC_E_OK)
-            {
-                TRACE("Failed to decode session key\n");
-            }
-            TRACE("Session key is %s\n", debugstr_a(buffer+3));
-            HeapFree(GetProcessHeap(), 0, helper->session_key);
-            helper->session_key = HeapAlloc(GetProcessHeap(), 0, bin_len);
-            if(!helper->session_key)
-            {
-                ret = SEC_E_INSUFFICIENT_MEMORY;
-                goto isc_end;
-            }
-            memcpy(helper->session_key, bin, bin_len);
-        }
-
-        helper->crypt.ntlm.a4i = SECUR32_arc4Alloc();
-        SECUR32_arc4Init(helper->crypt.ntlm.a4i, helper->session_key, 16);
-        helper->crypt.ntlm.seq_num = 0l;
-        SECUR32_CreateNTLM2SubKeys(helper);
-        helper->crypt.ntlm2.send_a4i = SECUR32_arc4Alloc();
-        helper->crypt.ntlm2.recv_a4i = SECUR32_arc4Alloc();
-        SECUR32_arc4Init(helper->crypt.ntlm2.send_a4i,
-                         helper->crypt.ntlm2.send_seal_key, 16);
-        SECUR32_arc4Init(helper->crypt.ntlm2.recv_a4i,
-                         helper->crypt.ntlm2.recv_seal_key, 16);
-        helper->crypt.ntlm2.send_seq_no = 0l;
-        helper->crypt.ntlm2.recv_seq_no = 0l;
+        ret = ntlm_InitSessionSecurity(helper);
+        if (pfContextAttr)
+            *pfContextAttr = ntlm_GetContextAttributes(helper);
     }
 
 isc_end:
-    HeapFree(GetProcessHeap(), 0, username);
-    HeapFree(GetProcessHeap(), 0, domain);
-    HeapFree(GetProcessHeap(), 0, password);
-    HeapFree(GetProcessHeap(), 0, want_flags);
-    HeapFree(GetProcessHeap(), 0, buffer);
     HeapFree(GetProcessHeap(), 0, bin);
     return ret;
 }
@@ -1032,9 +808,8 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcceptSecurityContext(
  PSecBufferDesc pOutput, ULONG *pfContextAttr, PTimeStamp ptsExpiry)
 {
     SECURITY_STATUS ret;
-    char *buffer, *want_flags = NULL;
     PBYTE bin;
-    int buffer_len, bin_len, max_len = NTLM_MAX_BUF;
+    ULONG bin_len;
     ULONG ctxt_attr = 0;
     PNegoHelper helper;
     PNtlmCredentials ntlm_cred;
@@ -1043,8 +818,9 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcceptSecurityContext(
      fContextReq, TargetDataRep, phNewContext, pOutput, pfContextAttr,
      ptsExpiry);
 
-    buffer = HeapAlloc(GetProcessHeap(), 0, sizeof(char) * NTLM_MAX_BUF);
     bin    = HeapAlloc(GetProcessHeap(),0, sizeof(BYTE) * NTLM_MAX_BUF);
+    if (!bin)
+        return SEC_E_INSUFFICIENT_MEMORY;
 
     if(TargetDataRep == SECURITY_NETWORK_DREP){
         TRACE("Using SECURITY_NETWORK_DREP\n");
@@ -1052,11 +828,6 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcceptSecurityContext(
 
     if(phContext == NULL)
     {
-        static CHAR server_helper_protocol[] = "--helper-protocol=squid-2.5-ntlmssp";
-        SEC_CHAR *server_argv[] = { ntlm_auth,
-            server_helper_protocol,
-            NULL };
-
         if (!phCredential)
         {
             ret = SEC_E_INVALID_HANDLE;
@@ -1065,7 +836,7 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcceptSecurityContext(
 
         ntlm_cred = (PNtlmCredentials)phCredential->dwLower;
 
-        if(ntlm_cred->mode != NTLM_SERVER)
+        if(!(ntlm_cred->use & SECPKG_CRED_INBOUND))
         {
             ret = SEC_E_INVALID_HANDLE;
             goto asc_end;
@@ -1084,53 +855,28 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcceptSecurityContext(
             goto asc_end;
         }
 
-        if(pInput->pBuffers[0].cbBuffer > max_len)
+        if(pInput->pBuffers[0].cbBuffer > NTLM_MAX_BUF)
         {
             ret = SEC_E_INVALID_TOKEN;
             goto asc_end;
         }
-        else
-            bin_len = pInput->pBuffers[0].cbBuffer;
 
-        if( (ret = fork_helper(&helper, ntlm_auth, server_argv)) !=
-            SEC_E_OK)
+        helper = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*helper));
+        if (!helper)
         {
-            ret = SEC_E_INTERNAL_ERROR;
+            ret = SEC_E_INSUFFICIENT_MEMORY;
             goto asc_end;
         }
         helper->mode = NTLM_SERVER;
 
         /* Handle all the flags */
-        want_flags = HeapAlloc(GetProcessHeap(), 0, 73);
-        if(want_flags == NULL)
-        {
-            TRACE("Failed to allocate memory for the want_flags!\n");
-            ret = SEC_E_INSUFFICIENT_MEMORY;
-            cleanup_helper(helper);
-            goto asc_end;
-        }
-        lstrcpyA(want_flags, "SF");
-        if(fContextReq & ASC_REQ_ALLOCATE_MEMORY)
-        {
-            FIXME("ASC_REQ_ALLOCATE_MEMORY stub\n");
-        }
-        if(fContextReq & ASC_REQ_CONFIDENTIALITY)
-        {
-            lstrcatA(want_flags, " NTLMSSP_FEATURE_SEAL");
-        }
         if(fContextReq & ASC_REQ_CONNECTION)
         {
-            /* This is default, so we'll enable it */
-            lstrcatA(want_flags, " NTLMSSP_FEATURE_SESSION_KEY");
             ctxt_attr |= ASC_RET_CONNECTION;
         }
         if(fContextReq & ASC_REQ_EXTENDED_ERROR)
         {
             FIXME("ASC_REQ_EXTENDED_ERROR stub\n");
-        }
-        if(fContextReq & ASC_REQ_INTEGRITY)
-        {
-            lstrcatA(want_flags, " NTLMSSP_FEATURE_SIGN");
         }
         if(fContextReq & ASC_REQ_MUTUAL_AUTH)
         {
@@ -1150,56 +896,11 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcceptSecurityContext(
         }
         /* Done with the flags */
 
-        if(lstrlenA(want_flags) > 3)
-        {
-            TRACE("Server set want_flags: %s\n", debugstr_a(want_flags));
-            lstrcpynA(buffer, want_flags, max_len - 1);
-            if((ret = run_helper(helper, buffer, max_len, &buffer_len)) !=
-                    SEC_E_OK)
-            {
-                cleanup_helper(helper);
-                goto asc_end;
-            }
-            if(!strncmp(buffer, "BH", 2))
-                TRACE("Helper doesn't understand new command set\n");
-        }
-
-        /* This is the YR request from the client, encode to base64 */
-
-        memcpy(bin, pInput->pBuffers[0].pvBuffer, bin_len);
-
-        lstrcpynA(buffer, "YR ", max_len-1);
-
-        if((ret = encodeBase64(bin, bin_len, buffer+3, max_len-3,
-                    &buffer_len)) != SEC_E_OK)
-        {
-            cleanup_helper(helper);
-            goto asc_end;
-        }
-
-        TRACE("Client sent: %s\n", debugstr_a(buffer));
-
-        if((ret = run_helper(helper, buffer, max_len, &buffer_len)) !=
-                    SEC_E_OK)
-        {
-            cleanup_helper(helper);
-            goto asc_end;
-        }
-
-        TRACE("Reply from ntlm_auth: %s\n", debugstr_a(buffer));
-        /* The expected answer is TT <base64 blob> */
-
-        if(strncmp(buffer, "TT ", 3) != 0)
-        {
-            ret = SEC_E_INTERNAL_ERROR;
-            cleanup_helper(helper);
-            goto asc_end;
-        }
-
-        if((ret = decodeBase64(buffer+3, buffer_len-3, bin, max_len,
+        if((ret = NtlmBuildChallenge(helper, pInput->pBuffers[0].pvBuffer,
+                        pInput->pBuffers[0].cbBuffer, bin, NTLM_MAX_BUF,
                         &bin_len)) != SEC_E_OK)
         {
-            cleanup_helper(helper);
+            NtlmFreeContext(helper);
             goto asc_end;
         }
 
@@ -1207,26 +908,43 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcceptSecurityContext(
         if(pOutput == NULL)
         {
             ret = SEC_E_INSUFFICIENT_MEMORY;
-            cleanup_helper(helper);
+            NtlmFreeContext(helper);
             goto asc_end;
         }
 
         if(pOutput->cBuffers < 1)
         {
             ret = SEC_E_INSUFFICIENT_MEMORY;
-            cleanup_helper(helper);
+            NtlmFreeContext(helper);
+            goto asc_end;
+        }
+
+        if(fContextReq & ASC_REQ_ALLOCATE_MEMORY)
+        {
+            pOutput->pBuffers[0].pvBuffer = HeapAlloc(GetProcessHeap(), 0, bin_len);
+            if(!pOutput->pBuffers[0].pvBuffer)
+            {
+                ret = SEC_E_INSUFFICIENT_MEMORY;
+                NtlmFreeContext(helper);
+                goto asc_end;
+            }
+        }
+        else if(pOutput->pBuffers[0].cbBuffer < bin_len)
+        {
+            ret = SEC_E_BUFFER_TOO_SMALL;
+            NtlmFreeContext(helper);
             goto asc_end;
         }
 
         pOutput->pBuffers[0].cbBuffer = bin_len;
-        pOutput->pBuffers[0].BufferType = SECBUFFER_DATA;
         memcpy(pOutput->pBuffers[0].pvBuffer, bin, bin_len);
+        if (pfContextAttr)
+            *pfContextAttr = ctxt_attr | (ntlm_GetContextAttributes(helper) & ~ASC_RET_INTEGRITY);
         ret = SEC_I_CONTINUE_NEEDED;
 
     }
     else
     {
-        /* we expect a KK request from client */
         if(pInput == NULL)
         {
             ret = SEC_E_INCOMPLETE_MESSAGE;
@@ -1247,133 +965,34 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcceptSecurityContext(
             goto asc_end;
         }
 
-        if(pInput->pBuffers[0].cbBuffer > max_len)
+        if(pInput->pBuffers[0].cbBuffer > NTLM_MAX_BUF)
         {
             ret = SEC_E_INVALID_TOKEN;
             goto asc_end;
         }
-        else
-            bin_len = pInput->pBuffers[0].cbBuffer;
 
-        memcpy(bin, pInput->pBuffers[0].pvBuffer, bin_len);
-
-        lstrcpynA(buffer, "KK ", max_len-1);
-
-        if((ret = encodeBase64(bin, bin_len, buffer+3, max_len-3,
-                    &buffer_len)) != SEC_E_OK)
+        if((ret = NtlmAcceptAuthenticate(helper, pInput->pBuffers[0].pvBuffer,
+                        pInput->pBuffers[0].cbBuffer)) != SEC_E_OK)
         {
+            if (pfContextAttr)
+                *pfContextAttr = ASC_RET_THIRD_LEG_FAILED;
             goto asc_end;
         }
 
-        TRACE("Client sent: %s\n", debugstr_a(buffer));
+        if(pOutput && pOutput->cBuffers >= 1)
+            pOutput->pBuffers[0].cbBuffer = 0;
 
-        if((ret = run_helper(helper, buffer, max_len, &buffer_len)) !=
-                    SEC_E_OK)
-        {
-            goto asc_end;
-        }
-
-        TRACE("Reply from ntlm_auth: %s\n", debugstr_a(buffer));
-
-        /* At this point, we get a NA if the user didn't authenticate, but a BH
-         * if ntlm_auth could not connect to winbindd. Apart from running Wine
-         * as root, there is no way to fix this for now, so just handle this as
-         * a failed login. */
-        if(strncmp(buffer, "AF ", 3) != 0)
-        {
-            if(strncmp(buffer, "NA ", 3) == 0)
-            {
-                ret = SEC_E_LOGON_DENIED;
-                goto asc_end;
-            }
-            else
-            {
-                size_t ntlm_pipe_err_v3_len = strlen("BH NT_STATUS_ACCESS_DENIED");
-                size_t ntlm_pipe_err_v4_len = strlen("BH NT_STATUS_UNSUCCESSFUL");
-
-                if( (buffer_len >= ntlm_pipe_err_v3_len &&
-                     strncmp(buffer, "BH NT_STATUS_ACCESS_DENIED", ntlm_pipe_err_v3_len) == 0) ||
-                    (buffer_len >= ntlm_pipe_err_v4_len &&
-                     strncmp(buffer, "BH NT_STATUS_UNSUCCESSFUL", ntlm_pipe_err_v4_len) == 0) )
-                {
-                    TRACE("Connection to winbindd failed\n");
-                    ret = SEC_E_LOGON_DENIED;
-                }
-                else
-                    ret = SEC_E_INTERNAL_ERROR;
-
-                goto asc_end;
-            }
-        }
-        pOutput->pBuffers[0].cbBuffer = 0;
-
-        TRACE("Getting negotiated flags\n");
-        lstrcpynA(buffer, "GF", max_len - 1);
-        if((ret = run_helper(helper, buffer, max_len, &buffer_len)) != SEC_E_OK)
+        if((ret = ntlm_InitSessionSecurity(helper)) != SEC_E_OK)
             goto asc_end;
 
-        if(buffer_len < 3)
-        {
-            TRACE("No flags negotiated, or helper does not support GF command\n");
-        }
-        else
-        {
-            TRACE("Negotiated %s\n", debugstr_a(buffer));
-            sscanf(buffer + 3, "%lx", &(helper->neg_flags));
-            TRACE("Stored 0x%08x as flags\n", helper->neg_flags);
-        }
-
-        TRACE("Getting session key\n");
-        lstrcpynA(buffer, "GK", max_len - 1);
-        if((ret = run_helper(helper, buffer, max_len, &buffer_len)) != SEC_E_OK)
-            goto asc_end;
-
-        if(buffer_len < 3)
-            TRACE("Helper does not support GK command\n");
-        else
-        {
-            if(strncmp(buffer, "BH ", 3) == 0)
-            {
-                TRACE("Helper sent %s\n", debugstr_a(buffer+3));
-                HeapFree(GetProcessHeap(), 0, helper->session_key);
-                helper->session_key = HeapAlloc(GetProcessHeap(), 0, 16);
-                if (!helper->session_key)
-                {
-                    ret = SEC_E_INSUFFICIENT_MEMORY;
-                    goto asc_end;
-                }
-                /*FIXME: Generate the dummy session key = MD4(MD4(password))*/
-                memset(helper->session_key, 0 , 16);
-            }
-            else if(strncmp(buffer, "GK ", 3) == 0)
-            {
-                if((ret = decodeBase64(buffer+3, buffer_len-3, bin, max_len, 
-                                &bin_len)) != SEC_E_OK)
-                {
-                    TRACE("Failed to decode session key\n");
-                }
-                TRACE("Session key is %s\n", debugstr_a(buffer+3));
-                HeapFree(GetProcessHeap(), 0, helper->session_key);
-                helper->session_key = HeapAlloc(GetProcessHeap(), 0, 16);
-                if(!helper->session_key)
-                {
-                    ret = SEC_E_INSUFFICIENT_MEMORY;
-                    goto asc_end;
-                }
-                memcpy(helper->session_key, bin, 16);
-            }
-        }
-        helper->crypt.ntlm.a4i = SECUR32_arc4Alloc();
-        SECUR32_arc4Init(helper->crypt.ntlm.a4i, helper->session_key, 16);
-        helper->crypt.ntlm.seq_num = 0l;
+        if (pfContextAttr)
+            *pfContextAttr = ntlm_GetContextAttributes(helper);
     }
 
     phNewContext->dwUpper = ctxt_attr;
     phNewContext->dwLower = (ULONG_PTR)helper;
 
 asc_end:
-    HeapFree(GetProcessHeap(), 0, want_flags);
-    HeapFree(GetProcessHeap(), 0, buffer);
     HeapFree(GetProcessHeap(), 0, bin);
     return ret;
 }
@@ -1408,18 +1027,45 @@ SECURITY_STATUS SEC_ENTRY ntlm_DeleteSecurityContext(PCtxtHandle phContext)
     phContext->dwUpper = 0;
     phContext->dwLower = 0;
 
-    SECUR32_arc4Cleanup(helper->crypt.ntlm.a4i);
-    SECUR32_arc4Cleanup(helper->crypt.ntlm2.send_a4i);
-    SECUR32_arc4Cleanup(helper->crypt.ntlm2.recv_a4i);
-    HeapFree(GetProcessHeap(), 0, helper->crypt.ntlm2.send_sign_key);
-    HeapFree(GetProcessHeap(), 0, helper->crypt.ntlm2.send_seal_key);
-    HeapFree(GetProcessHeap(), 0, helper->crypt.ntlm2.recv_sign_key);
-    HeapFree(GetProcessHeap(), 0, helper->crypt.ntlm2.recv_seal_key);
-
-    cleanup_helper(helper);
+    ntlm_FreeSessionSecurity(helper);
+    NtlmFreeContext(helper);
 
     return SEC_E_OK;
 }
+
+
+static SECURITY_STATUS ntlm_QueryNegotiationInfo(SecPkgContext_NegotiationInfoW *info, BOOL unicode)
+{
+    const SecPkgInfoW *source = unicode ? ntlm_package_infoW : (const SecPkgInfoW *)ntlm_package_infoA;
+    ULONG name_size, comment_size;
+    SecPkgInfoW *package;
+
+    if (unicode)
+    {
+        name_size = (strlenW(source->Name) + 1) * sizeof(WCHAR);
+        comment_size = (strlenW(source->Comment) + 1) * sizeof(WCHAR);
+    }
+    else
+    {
+        name_size = strlen((const char *)source->Name) + 1;
+        comment_size = strlen((const char *)source->Comment) + 1;
+    }
+
+    package = HeapAlloc(GetProcessHeap(), 0, sizeof(*package) + name_size + comment_size);
+    if (!package)
+        return SEC_E_INSUFFICIENT_MEMORY;
+
+    *package = *source;
+    package->Name = (SEC_WCHAR *)(package + 1);
+    memcpy(package->Name, source->Name, name_size);
+    package->Comment = (SEC_WCHAR *)((BYTE *)package->Name + name_size);
+    memcpy(package->Comment, source->Comment, comment_size);
+
+    info->PackageInfo = package;
+    info->NegotiationState = SECPKG_NEGOTIATION_COMPLETE;
+    return SEC_E_OK;
+}
+
 
 /***********************************************************************
  *              QueryContextAttributesW
@@ -1442,27 +1088,26 @@ SECURITY_STATUS SEC_ENTRY ntlm_QueryContextAttributesW(PCtxtHandle phContext,
             PSecPkgContext_Flags spcf = (PSecPkgContext_Flags)pBuffer;
             PNegoHelper helper = (PNegoHelper)phContext->dwLower;
 
-            spcf->Flags = 0;
-            if(helper->neg_flags & NTLMSSP_NEGOTIATE_SIGN)
-                spcf->Flags |= ISC_RET_INTEGRITY;
-            if(helper->neg_flags & NTLMSSP_NEGOTIATE_SEAL)
-                spcf->Flags |= ISC_RET_CONFIDENTIALITY;
+            spcf->Flags = ntlm_GetContextAttributes(helper);
             return SEC_E_OK;
         }
         _x(SECPKG_ATTR_KEY_INFO);
         _x(SECPKG_ATTR_LIFESPAN);
         _x(SECPKG_ATTR_NAMES);
         _x(SECPKG_ATTR_NATIVE_NAMES);
-        _x(SECPKG_ATTR_NEGOTIATION_INFO);
+        case SECPKG_ATTR_NEGOTIATION_INFO:
+            return ntlm_QueryNegotiationInfo(pBuffer, TRUE);
         _x(SECPKG_ATTR_PACKAGE_INFO);
         _x(SECPKG_ATTR_PASSWORD_EXPIRY);
         _x(SECPKG_ATTR_SESSION_KEY);
         case SECPKG_ATTR_SIZES:
         {
             PSecPkgContext_Sizes spcs = (PSecPkgContext_Sizes)pBuffer;
+            PNegoHelper helper = (PNegoHelper)phContext->dwLower;
+
             spcs->cbMaxToken = NTLM_MAX_BUF;
             spcs->cbMaxSignature = 16;
-            spcs->cbBlockSize = 0;
+            spcs->cbBlockSize = (helper->neg_flags & NTLMSSP_NEGOTIATE_SEAL) ? 1 : 0;
             spcs->cbSecurityTrailer = 16;
             return SEC_E_OK;
         }
@@ -1482,6 +1127,9 @@ SECURITY_STATUS SEC_ENTRY ntlm_QueryContextAttributesW(PCtxtHandle phContext,
 SECURITY_STATUS SEC_ENTRY ntlm_QueryContextAttributesA(PCtxtHandle phContext,
  ULONG ulAttribute, void *pBuffer)
 {
+    if (phContext && ulAttribute == SECPKG_ATTR_NEGOTIATION_INFO)
+        return ntlm_QueryNegotiationInfo(pBuffer, FALSE);
+
     return ntlm_QueryContextAttributesW(phContext, ulAttribute, pBuffer);
 }
 
@@ -1490,18 +1138,23 @@ SECURITY_STATUS SEC_ENTRY ntlm_QueryContextAttributesA(PCtxtHandle phContext,
  */
 static SECURITY_STATUS SEC_ENTRY ntlm_ImpersonateSecurityContext(PCtxtHandle phContext)
 {
-    SECURITY_STATUS ret;
+    PNegoHelper helper;
+    BOOL ret;
 
     TRACE("%p\n", phContext);
-    if (phContext)
-    {
-        ret = SEC_E_UNSUPPORTED_FUNCTION;
-    }
+    if (!phContext)
+        return SEC_E_INVALID_HANDLE;
+
+    helper = (PNegoHelper)phContext->dwLower;
+    if (helper->mode != NTLM_SERVER || !helper->crypt.ntlm.a4i)
+        return SEC_E_INVALID_HANDLE;
+
+    if (helper->token)
+        ret = ImpersonateLoggedOnUser(helper->token);
     else
-    {
-        ret = SEC_E_INVALID_HANDLE;
-    }
-    return ret;
+        ret = ImpersonateAnonymousToken(GetCurrentThread());
+
+    return ret ? SEC_E_OK : SEC_E_NO_IMPERSONATION;
 }
 
 /***********************************************************************
@@ -1509,19 +1162,13 @@ static SECURITY_STATUS SEC_ENTRY ntlm_ImpersonateSecurityContext(PCtxtHandle phC
  */
 static SECURITY_STATUS SEC_ENTRY ntlm_RevertSecurityContext(PCtxtHandle phContext)
 {
-    SECURITY_STATUS ret;
-
     TRACE("%p\n", phContext);
-    if (phContext)
-    {
-        ret = SEC_E_UNSUPPORTED_FUNCTION;
-    }
-    else
-    {
-        ret = SEC_E_INVALID_HANDLE;
-    }
-    return ret;
+    if (!phContext)
+        return SEC_E_INVALID_HANDLE;
+
+    return RevertToSelf() ? SEC_E_OK : SEC_E_NO_IMPERSONATION;
 }
+
 
 /***********************************************************************
  *             ntlm_CreateSignature
@@ -1772,12 +1419,7 @@ SECURITY_STATUS SEC_ENTRY ntlm_FreeCredentialsHandle(PCredHandle phCredential)
         PNtlmCredentials ntlm_cred = (PNtlmCredentials) phCredential->dwLower;
         phCredential->dwUpper = 0;
         phCredential->dwLower = 0;
-        if (ntlm_cred->password)
-            memset(ntlm_cred->password, 0, ntlm_cred->pwlen);
-        HeapFree(GetProcessHeap(), 0, ntlm_cred->password);
-        HeapFree(GetProcessHeap(), 0, ntlm_cred->username_arg);
-        HeapFree(GetProcessHeap(), 0, ntlm_cred->domain_arg);
-        HeapFree(GetProcessHeap(), 0, ntlm_cred);
+        ntlm_FreeCredentials(ntlm_cred);
         ret = SEC_E_OK;
     }
     else
@@ -1820,10 +1462,16 @@ SECURITY_STATUS SEC_ENTRY ntlm_EncryptMessage(PCtxtHandle phContext,
 
     helper = (PNegoHelper) phContext->dwLower;
 
-    if(helper->neg_flags & NTLMSSP_NEGOTIATE_NTLM2 && 
-            helper->neg_flags & NTLMSSP_NEGOTIATE_SEAL)
+    if(!(helper->neg_flags & (NTLMSSP_NEGOTIATE_SIGN | NTLMSSP_NEGOTIATE_SEAL)))
+        return SEC_E_UNSUPPORTED_FUNCTION;
+
+    if(helper->neg_flags & NTLMSSP_NEGOTIATE_NTLM2)
     { 
+        ULONG save_flags = helper->neg_flags;
+
+        helper->neg_flags |= NTLMSSP_NEGOTIATE_SIGN;
         ntlm_CreateSignature(helper, pMessage, token_idx, NTLM_SEND, FALSE);
+        helper->neg_flags = save_flags;
         SECUR32_arc4Process(helper->crypt.ntlm2.send_a4i,
                 pMessage->pBuffers[data_idx].pvBuffer,
                 pMessage->pBuffers[data_idx].cbBuffer);
@@ -1889,7 +1537,10 @@ SECURITY_STATUS SEC_ENTRY ntlm_DecryptMessage(PCtxtHandle phContext,
 
     helper = (PNegoHelper) phContext->dwLower;
 
-    if(helper->neg_flags & NTLMSSP_NEGOTIATE_NTLM2 && helper->neg_flags & NTLMSSP_NEGOTIATE_SEAL)
+    if(!(helper->neg_flags & (NTLMSSP_NEGOTIATE_SIGN | NTLMSSP_NEGOTIATE_SEAL)))
+        return SEC_E_UNSUPPORTED_FUNCTION;
+
+    if(helper->neg_flags & NTLMSSP_NEGOTIATE_NTLM2)
     {
         SECUR32_arc4Process(helper->crypt.ntlm2.recv_a4i,
                 pMessage->pBuffers[data_idx].pvBuffer,
@@ -2025,40 +1676,6 @@ SecPkgInfoW *ntlm_package_infoW = (SecPkgInfoW *)&infoW;
 
 void SECUR32_initNTLMSP(void)
 {
-    PNegoHelper helper;
-    static CHAR version[] = "--version";
-
-    SEC_CHAR *args[] = {
-        ntlm_auth,
-        version,
-        NULL };
-
-    if(fork_helper(&helper, ntlm_auth, args) != SEC_E_OK)
-        helper = NULL;
-    else
-        check_version(helper);
-
-    if( helper &&
-        ((helper->major >  MIN_NTLM_AUTH_MAJOR_VERSION) ||
-         (helper->major == MIN_NTLM_AUTH_MAJOR_VERSION  &&
-          helper->minor >  MIN_NTLM_AUTH_MINOR_VERSION) ||
-         (helper->major == MIN_NTLM_AUTH_MAJOR_VERSION  &&
-          helper->minor == MIN_NTLM_AUTH_MINOR_VERSION  &&
-          helper->micro >= MIN_NTLM_AUTH_MICRO_VERSION)) )
-    {
-        SecureProvider *provider = SECUR32_addProvider(&ntlmTableA, &ntlmTableW, NULL);
-        SECUR32_addPackages(provider, 1L, ntlm_package_infoA, ntlm_package_infoW);
-    }
-    else
-    {
-        ERR_(winediag)("%s was not found or is outdated. "
-                       "Make sure that ntlm_auth >= %d.%d.%d is in your path. "
-                       "Usually, you can find it in the winbind package of your distribution.\n",
-                       ntlm_auth,
-                       MIN_NTLM_AUTH_MAJOR_VERSION,
-                       MIN_NTLM_AUTH_MINOR_VERSION,
-                       MIN_NTLM_AUTH_MICRO_VERSION);
-
-    }
-    cleanup_helper(helper);
+    SecureProvider *provider = SECUR32_addProvider(&ntlmTableA, &ntlmTableW, NULL);
+    SECUR32_addPackages(provider, 1L, ntlm_package_infoA, ntlm_package_infoW);
 }

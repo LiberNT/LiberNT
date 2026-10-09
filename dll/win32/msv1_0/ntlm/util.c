@@ -32,7 +32,7 @@ NtlmAllocate(
     {
         case NtlmLsaMode:
         {
-            buffer = LsaFunctions->AllocateLsaHeap(Size);
+            buffer = DispatchTable.AllocateLsaHeap(Size);
 
             if (buffer != NULL)
                 RtlZeroMemory(buffer, Size);
@@ -49,6 +49,9 @@ NtlmAllocate(
             break;
         }
     }
+
+    if (buffer == NULL)
+        return NULL;
 
     memcpy(buffer, NTLM_ALLOC_TAG, NTLM_ALLOC_TAG_SIZE);
     buffer = (PBYTE)buffer + NTLM_ALLOC_TAG_SIZE;
@@ -70,7 +73,7 @@ NtlmFree(
         {
             case NtlmLsaMode:
             {
-                LsaFunctions->FreeLsaHeap(Buffer);
+                DispatchTable.FreeLsaHeap(Buffer);
                 break;
             }
             case NtlmUserMode:

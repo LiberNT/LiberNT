@@ -19,20 +19,21 @@ typedef struct tag_arc4_info {
 } arc4_info;
 
 typedef struct _NegoHelper {
-#ifndef __REACTOS__
-    pid_t helper_pid;
-#else
-    HANDLE helper_pid;
-#endif
     HelperMode mode;
-    int pipe_in;
-    int pipe_out;
-    int major;
-    int minor;
-    int micro;
-    char *com_buf;
-    int com_buf_size;
-    int com_buf_offset;
+    ULONG want_flags;
+    WCHAR *user;
+    WCHAR *domain;
+    WCHAR *password;
+    ULONG user_len;
+    ULONG domain_len;
+    ULONG password_len;
+    BOOL have_credentials;
+    BYTE *negotiate_msg;
+    ULONG negotiate_len;
+    BYTE *challenge_msg;
+    ULONG challenge_len;
+    BYTE server_challenge[8];
+    HANDLE token;
     BYTE *session_key;
     ULONG neg_flags;
     struct {
@@ -55,14 +56,15 @@ typedef struct _NegoHelper {
 
 typedef struct _NtlmCredentials
 {
-    HelperMode mode;
-
-    /* these are all in the Unix codepage */
-    char *username_arg;
-    char *domain_arg;
-    char *password; /* not nul-terminated */
-    int pwlen;
-    int no_cached_credentials; /* don't try to use cached Samba credentials */
+    ULONG use;
+    WCHAR *user;
+    WCHAR *domain;
+    WCHAR *password;
+    ULONG user_len;
+    ULONG domain_len;
+    ULONG password_len;
+    BOOL have_credentials;
+    BOOL default_credentials;
 } NtlmCredentials, *PNtlmCredentials;
 
 typedef enum _sign_direction {
@@ -82,6 +84,7 @@ SECURITY_STATUS SECUR32_CreateNTLM2SubKeys(PNegoHelper helper) DECLSPEC_HIDDEN;
 #define NTLMSSP_NEGOTIATE_DATAGRAM_STYLE            0x00000040
 #define NTLMSSP_NEGOTIATE_LM_SESSION_KEY            0x00000080
 #define NTLMSSP_NEGOTIATE_NTLM                      0x00000200
+#define NTLMSSP_NEGOTIATE_ANONYMOUS                 0x00000800
 #define NTLMSSP_NEGOTIATE_DOMAIN_SUPPLIED           0x00001000
 #define NTLMSSP_NEGOTIATE_WORKSTATION_SUPPLIED      0x00002000
 #define NTLMSSP_NEGOTIATE_LOCAL_CALL                0x00004000
@@ -90,6 +93,7 @@ SECURITY_STATUS SECUR32_CreateNTLM2SubKeys(PNegoHelper helper) DECLSPEC_HIDDEN;
 #define NTLMSSP_NEGOTIATE_TARGET_TYPE_SERVER        0x00020000
 #define NTLMSSP_NEGOTIATE_NTLM2                     0x00080000
 #define NTLMSSP_NEGOTIATE_TARGET_INFO               0x00800000
+#define NTLMSSP_NEGOTIATE_VERSION                   0x02000000
 #define NTLMSSP_NEGOTIATE_128                       0x20000000
 #define NTLMSSP_NEGOTIATE_KEY_EXCHANGE              0x40000000
 #define NTLMSSP_NEGOTIATE_56                        0x80000000
@@ -109,6 +113,14 @@ SECURITY_STATUS SEC_ENTRY ntlm_FreeCredentialsHandle(PCredHandle) DECLSPEC_HIDDE
 SECURITY_STATUS SEC_ENTRY ntlm_DeleteSecurityContext(PCtxtHandle) DECLSPEC_HIDDEN;
 SECURITY_STATUS SEC_ENTRY ntlm_MakeSignature(PCtxtHandle, ULONG, PSecBufferDesc, ULONG) DECLSPEC_HIDDEN;
 SECURITY_STATUS SEC_ENTRY ntlm_VerifySignature(PCtxtHandle, PSecBufferDesc, ULONG, PULONG) DECLSPEC_HIDDEN;
+
+SECURITY_STATUS NtlmBuildNegotiate(PNegoHelper context, BYTE *buffer, ULONG size, ULONG *length) DECLSPEC_HIDDEN;
+SECURITY_STATUS NtlmBuildChallenge(PNegoHelper context, const BYTE *negotiate, ULONG negotiate_len,
+    BYTE *buffer, ULONG size, ULONG *length) DECLSPEC_HIDDEN;
+SECURITY_STATUS NtlmBuildAuthenticate(PNegoHelper context, const BYTE *challenge, ULONG challenge_len,
+    BYTE *buffer, ULONG size, ULONG *length) DECLSPEC_HIDDEN;
+SECURITY_STATUS NtlmAcceptAuthenticate(PNegoHelper context, const BYTE *authenticate, ULONG authenticate_len) DECLSPEC_HIDDEN;
+void NtlmFreeContext(PNegoHelper context) DECLSPEC_HIDDEN;
 
 extern SecPkgInfoW *ntlm_package_infoW DECLSPEC_HIDDEN;
 extern SecPkgInfoA *ntlm_package_infoA DECLSPEC_HIDDEN;

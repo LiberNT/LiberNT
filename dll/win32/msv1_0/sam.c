@@ -62,6 +62,162 @@ done:
 
 
 static
+VOID
+MsvpHmacMd5(
+    _In_reads_bytes_(MSV1_0_NTLM3_OWF_LENGTH) const UCHAR *Key,
+    _In_reads_bytes_(FirstLength) const UCHAR *First,
+    _In_ ULONG FirstLength,
+    _In_reads_bytes_opt_(SecondLength) const UCHAR *Second,
+    _In_ ULONG SecondLength,
+    _Out_writes_bytes_(MSV1_0_NTLM3_OWF_LENGTH) PUCHAR Digest)
+{
+    MD5_CTX Context;
+    UCHAR Pad[64];
+    ULONG Index;
+
+    RtlZeroMemory(Pad, sizeof(Pad));
+    RtlCopyMemory(Pad, Key, MSV1_0_NTLM3_OWF_LENGTH);
+    for (Index = 0; Index < sizeof(Pad); Index++)
+        Pad[Index] ^= 0x36;
+
+    MD5Init(&Context);
+    MD5Update(&Context, Pad, sizeof(Pad));
+    MD5Update(&Context, First, FirstLength);
+    if (SecondLength != 0)
+        MD5Update(&Context, Second, SecondLength);
+    MD5Final(&Context);
+    RtlCopyMemory(Digest, Context.digest, MSV1_0_NTLM3_OWF_LENGTH);
+
+    for (Index = 0; Index < sizeof(Pad); Index++)
+        Pad[Index] ^= 0x36 ^ 0x5c;
+
+    MD5Init(&Context);
+    MD5Update(&Context, Pad, sizeof(Pad));
+    MD5Update(&Context, Digest, MSV1_0_NTLM3_OWF_LENGTH);
+    MD5Final(&Context);
+    RtlCopyMemory(Digest, Context.digest, MSV1_0_NTLM3_OWF_LENGTH);
+
+    RtlSecureZeroMemory(Pad, sizeof(Pad));
+    RtlSecureZeroMemory(&Context, sizeof(Context));
+}
+
+
+static
+BOOLEAN
+MsvpLimitBlankPasswordUse(VOID)
+{
+    DWORD Value = 1, Size = sizeof(Value), Type;
+    HKEY KeyHandle;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"SYSTEM\\CurrentControlSet\\Control\\Lsa",
+                      0,
+                      KEY_QUERY_VALUE,
+                      &KeyHandle) != ERROR_SUCCESS)
+    {
+        return TRUE;
+    }
+
+    if (RegQueryValueExW(KeyHandle,
+                         L"LimitBlankPasswordUse",
+                         NULL,
+                         &Type,
+                         (LPBYTE)&Value,
+                         &Size) != ERROR_SUCCESS ||
+        Type != REG_DWORD)
+    {
+        Value = 1;
+    }
+
+    RegCloseKey(KeyHandle);
+    return Value != 0;
+}
+
+
+static
+NTSTATUS
+MsvpCheckChallengeResponse(
+    _Inout_ PLSA_SAM_PWD_DATA UserPwdData,
+    _In_ PSAMPR_USER_INFO_BUFFER UserInfo)
+{
+    PMSV1_0_LM20_LOGON LogonInfo = UserPwdData->LogonInfo;
+    PMSV1_0_NTLM3_RESPONSE Response;
+    WCHAR EmptyBuffer[1] = { UNICODE_NULL };
+    UNICODE_STRING EmptyPassword = { 0, sizeof(EmptyBuffer), EmptyBuffer };
+    UCHAR NtOwf[MSV1_0_OWF_PASSWORD_LENGTH];
+    UCHAR EmptyOwf[MSV1_0_OWF_PASSWORD_LENGTH];
+    UCHAR OwfV2[MSV1_0_NTLM3_OWF_LENGTH];
+    UCHAR Proof[MSV1_0_NTLM3_RESPONSE_LENGTH];
+    ULONG ResponseLength, IdentityLength, Index;
+    PWCHAR Identity;
+    NTSTATUS Status;
+
+    Status = SystemFunction007(&EmptyPassword, EmptyOwf);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (UserInfo->All.NtPasswordPresent)
+        RtlCopyMemory(NtOwf, UserInfo->All.NtOwfPassword.Buffer, sizeof(NtOwf));
+    else if (UserInfo->All.LmPasswordPresent)
+        return STATUS_WRONG_PASSWORD;
+    else
+        RtlCopyMemory(NtOwf, EmptyOwf, sizeof(NtOwf));
+
+    ResponseLength = LogonInfo->CaseSensitiveChallengeResponse.Length;
+    Response = (PMSV1_0_NTLM3_RESPONSE)LogonInfo->CaseSensitiveChallengeResponse.Buffer;
+    if (ResponseLength < FIELD_OFFSET(MSV1_0_NTLM3_RESPONSE, Buffer) ||
+        Response->RespType != 1 ||
+        Response->HiRespType != 1)
+    {
+        return STATUS_WRONG_PASSWORD;
+    }
+
+    IdentityLength = LogonInfo->UserName.Length + LogonInfo->LogonDomainName.Length;
+    Identity = RtlAllocateHeap(RtlGetProcessHeap(), 0, IdentityLength + sizeof(WCHAR));
+    if (Identity == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    for (Index = 0; Index < LogonInfo->UserName.Length / sizeof(WCHAR); Index++)
+        Identity[Index] = RtlUpcaseUnicodeChar(LogonInfo->UserName.Buffer[Index]);
+    if (LogonInfo->LogonDomainName.Length != 0)
+    {
+        RtlCopyMemory(&Identity[Index],
+                      LogonInfo->LogonDomainName.Buffer,
+                      LogonInfo->LogonDomainName.Length);
+    }
+
+    MsvpHmacMd5(NtOwf, (PUCHAR)Identity, IdentityLength, NULL, 0, OwfV2);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Identity);
+
+    MsvpHmacMd5(OwfV2,
+                LogonInfo->ChallengeToClient,
+                MSV1_0_CHALLENGE_LENGTH,
+                &Response->RespType,
+                ResponseLength - MSV1_0_NTLM3_RESPONSE_LENGTH,
+                Proof);
+
+    if (!RtlEqualMemory(Proof, Response->Response, sizeof(Proof)))
+    {
+        Status = STATUS_WRONG_PASSWORD;
+    }
+    else if (RtlEqualMemory(NtOwf, EmptyOwf, sizeof(NtOwf)) && MsvpLimitBlankPasswordUse())
+    {
+        Status = STATUS_ACCOUNT_RESTRICTION;
+    }
+    else
+    {
+        MsvpHmacMd5(OwfV2, Proof, sizeof(Proof), NULL, 0, (PUCHAR)&UserPwdData->UserSessionKey);
+        UserPwdData->LogonType = NetLogonNtKey;
+        Status = STATUS_SUCCESS;
+    }
+
+    RtlSecureZeroMemory(NtOwf, sizeof(NtOwf));
+    RtlSecureZeroMemory(OwfV2, sizeof(OwfV2));
+    return Status;
+}
+
+
+static
 NTSTATUS
 MsvpCheckPassword(
     _In_ PLSA_SAM_PWD_DATA UserPwdData,
@@ -76,6 +232,9 @@ MsvpCheckPassword(
     NTSTATUS Status;
 
     TRACE("(%p %p)\n", UserPwdData, UserInfo);
+
+    if (UserPwdData->IsNetwork)
+        return MsvpCheckChallengeResponse(UserPwdData, UserInfo);
 
     /* Calculate the LM password and hash for the users password */
     LmPwdString.Length = 15;
@@ -331,7 +490,8 @@ SamValidateNormalUser(
     TRACE("UserName: %wZ\n", &UserInfo->All.UserName);
 
     /* Check the password */
-    if ((UserInfo->All.UserAccountControl & USER_PASSWORD_NOT_REQUIRED) == 0)
+    if (PwdData->IsNetwork ||
+        (UserInfo->All.UserAccountControl & USER_PASSWORD_NOT_REQUIRED) == 0)
     {
         Status = MsvpCheckPassword(PwdData, UserInfo);
         if (!NT_SUCCESS(Status))
