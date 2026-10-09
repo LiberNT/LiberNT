@@ -166,6 +166,7 @@ NTSTATUS PortFdoInitializeRequestPools(_In_ PFDO_DEVICE_EXTENSION FdoExtension)
         for (Index = 0; Index < Count; Index++)
             InterlockedPushEntrySList(&FdoExtension->FreeSrbExtensions,
                 (PSLIST_ENTRY)((PUCHAR)FdoExtension->SrbExtensionPool + Index * Size));
+        FdoExtension->RequestLimit = Count;
     }
 
     MaximumPages = FdoExtension->Miniport.PortConfig.NumberOfPhysicalBreaks + 2;

@@ -1117,7 +1117,10 @@ PortFdoStartRequest(
     BOOLEAN Started = TRUE;
 
     KeAcquireSpinLock(&DeviceExtension->RequestHoldLock, &OldIrql);
-    if (DeviceExtension->HoldRequests && !PortRequest)
+    if (!PortRequest &&
+        (DeviceExtension->HoldRequests ||
+         ((DeviceExtension->RequestLimit != 0) &&
+          (DeviceExtension->OutstandingRequests >= (LONG)DeviceExtension->RequestLimit))))
     {
         IoMarkIrpPending(Irp);
         InsertTailList(&DeviceExtension->HeldRequests, &Irp->Tail.Overlay.ListEntry);
@@ -1136,8 +1139,58 @@ VOID
 PortFdoEndRequest(
     _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
 {
-    if (InterlockedDecrement(&DeviceExtension->OutstandingRequests) == 0)
+    KIRQL OldIrql;
+    BOOLEAN Drained, Restart;
+
+    KeAcquireSpinLock(&DeviceExtension->RequestHoldLock, &OldIrql);
+    Drained = (InterlockedDecrement(&DeviceExtension->OutstandingRequests) == 0);
+    Restart = (DeviceExtension->RequestLimit != 0) &&
+              !DeviceExtension->HoldRequests &&
+              !IsListEmpty(&DeviceExtension->HeldRequests);
+    KeReleaseSpinLock(&DeviceExtension->RequestHoldLock, OldIrql);
+
+    if (Drained)
         KeSetEvent(&DeviceExtension->RequestsDrained, IO_NO_INCREMENT, FALSE);
+
+    if (Restart)
+        KeInsertQueueDpc(&DeviceExtension->RequestRestartDpc, NULL, NULL);
+}
+
+
+VOID
+NTAPI
+PortFdoRestartRequestsDpc(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    PFDO_DEVICE_EXTENSION DeviceExtension = DeferredContext;
+    PIO_STACK_LOCATION Stack;
+    PIRP Irp;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    for (;;)
+    {
+        Irp = NULL;
+        KeAcquireSpinLockAtDpcLevel(&DeviceExtension->RequestHoldLock);
+        if (!DeviceExtension->HoldRequests &&
+            !IsListEmpty(&DeviceExtension->HeldRequests) &&
+            (DeviceExtension->OutstandingRequests < (LONG)DeviceExtension->RequestLimit))
+        {
+            Irp = CONTAINING_RECORD(RemoveHeadList(&DeviceExtension->HeldRequests), IRP, Tail.Overlay.ListEntry);
+            InterlockedIncrement(&DeviceExtension->OutstandingRequests);
+        }
+        KeReleaseSpinLockFromDpcLevel(&DeviceExtension->RequestHoldLock);
+        if (Irp == NULL)
+            break;
+
+        Stack = IoGetCurrentIrpStackLocation(Irp);
+        PortSubmitSrb(DeviceExtension, Stack->DeviceObject, Irp, Stack->Parameters.Scsi.Srb);
+    }
 }
 
 

@@ -194,6 +194,8 @@ typedef struct _FDO_DEVICE_EXTENSION
     LIST_ENTRY HeldRequests;
     BOOLEAN HoldRequests;
     volatile LONG OutstandingRequests;
+    ULONG RequestLimit;
+    KDPC RequestRestartDpc;
     KEVENT RequestsDrained;
 } FDO_DEVICE_EXTENSION, *PFDO_DEVICE_EXTENSION;
 
@@ -307,6 +309,8 @@ typedef struct _PORT_DUMP_CONTEXT
 VOID PortFreeSrbContext(_In_ PIRP Irp);
 
 NTSTATUS PortFdoInitializeRequestPools(_In_ PFDO_DEVICE_EXTENSION FdoExtension);
+
+KDEFERRED_ROUTINE PortFdoRestartRequestsDpc;
 
 NTSTATUS PortSrbStatusToNtStatus(_In_ UCHAR SrbStatus);
 

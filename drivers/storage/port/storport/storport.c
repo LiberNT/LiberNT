@@ -593,6 +593,9 @@ PortAddDevice(
     InitializeListHead(&DeviceExtension->PdoListHead);
     KeInitializeSpinLock(&DeviceExtension->RequestHoldLock);
     InitializeListHead(&DeviceExtension->HeldRequests);
+    KeInitializeDpc(&DeviceExtension->RequestRestartDpc,
+                    PortFdoRestartRequestsDpc,
+                    DeviceExtension);
     KeInitializeEvent(&DeviceExtension->RequestsDrained, NotificationEvent, TRUE);
 
     /* Attach the FDO to the device stack */
