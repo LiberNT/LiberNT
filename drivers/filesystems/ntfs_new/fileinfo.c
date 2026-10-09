@@ -2439,8 +2439,7 @@ NtfsFsdSetInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                 if (BasicInformation.Fields & NTFS_BASIC_INFO_LAST_WRITE_TIME)
                     FileCB->NotifyFilter |= FILE_NOTIFY_CHANGE_LAST_WRITE;
                 FileObject->Flags |= FO_FILE_MODIFIED;
-                if (NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY)
-                    InterlockedIncrement(&VolCB->DirGeneration);
+                InterlockedIncrement(&VolCB->DirGeneration);
             }
             goto Complete;
 
