@@ -1338,10 +1338,14 @@ ElfReportEventA(IN HANDLE hEventLog,
     ULONG Time;
     ULONG dwSize;
     ANSI_STRING ComputerName;
-    CHAR szComputerName[MAX_COMPUTERNAME_LENGTH + 1];
+    CHAR szComputerName[MAX_PATH];
 
     dwSize = ARRAYSIZE(szComputerName);
-    GetComputerNameA(szComputerName, &dwSize);
+    if (!GetComputerNameExA(ComputerNameDnsFullyQualified, szComputerName, &dwSize))
+    {
+        dwSize = ARRAYSIZE(szComputerName);
+        GetComputerNameA(szComputerName, &dwSize);
+    }
     RtlInitAnsiString(&ComputerName, szComputerName);
 
     NtQuerySystemTime(&SystemTime);
@@ -1477,10 +1481,14 @@ ElfReportEventW(IN HANDLE hEventLog,
     ULONG Time;
     ULONG dwSize;
     UNICODE_STRING ComputerName;
-    WCHAR szComputerName[MAX_COMPUTERNAME_LENGTH + 1];
+    WCHAR szComputerName[MAX_PATH];
 
     dwSize = ARRAYSIZE(szComputerName);
-    GetComputerNameW(szComputerName, &dwSize);
+    if (!GetComputerNameExW(ComputerNameDnsFullyQualified, szComputerName, &dwSize))
+    {
+        dwSize = ARRAYSIZE(szComputerName);
+        GetComputerNameW(szComputerName, &dwSize);
+    }
     RtlInitUnicodeString(&ComputerName, szComputerName);
 
     NtQuerySystemTime(&SystemTime);
