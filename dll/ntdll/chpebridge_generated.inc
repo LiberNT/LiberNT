@@ -10488,6 +10488,12 @@ double NTAPI ChpeAutoatan(double a0)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoatan), __typeof__(&atan)), "atan bridge signature mismatch");
 
+double NTAPI ChpeAutoatan2(double a0, double a1)
+{
+    return atan2(a0, a1);
+}
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoatan2), __typeof__(&atan2)), "atan2 bridge signature mismatch");
+
 int NTAPI ChpeAutoatoi(const char * a0)
 {
     return atoi(a0);

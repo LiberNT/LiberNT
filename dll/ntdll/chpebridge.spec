@@ -12,7 +12,7 @@
 65 stdcall -version=0x600+ EtwEventWrite(int64 ptr long ptr) ChpeEtwEventWrite
 71 stdcall -version=0x600+ EtwEventWriteTransfer(int64 ptr ptr ptr long ptr) ChpeEtwEventWriteTransfer
 1862 cdecl __C_specific_handler(ptr long ptr ptr) ChpeCSpecificHandler
-2001 stdcall ChpeDispatchExceptionNative(ptr ptr)
+2002 stdcall ChpeDispatchExceptionNative(ptr ptr)
 105 stdcall KiUserExceptionDispatcher(ptr ptr) ChpeKiUserExceptionDispatcher
 108 stdcall LdrAccessResource(ptr ptr ptr ptr) ChpeLdrAccessResource
 110 stdcall LdrAddRefDll(long ptr) ChpeLdrAddRefDll
@@ -207,12 +207,12 @@
 1884 varargs _snprintf(ptr long str) ChpeSnprintf
 1886 varargs _snwprintf(ptr long wstr) ChpeSnwprintf
 1894 varargs _swprintf(ptr wstr) ChpeSwprintf
-1951 varargs sprintf(ptr str) ChpeSprintf
-1972 varargs swprintf(ptr wstr) ChpeSwprintf
+1952 varargs sprintf(ptr str) ChpeSprintf
+1973 varargs swprintf(ptr wstr) ChpeSwprintf
 1863 cdecl __chkstk() ChpeChkStk
 1877 cdecl _local_unwind(ptr ptr) ChpeLocalUnwind
-1945 cdecl memcpy(ptr ptr long) ChpeMemcpy
-2002 stdcall ChpeEmulationDispatch(ptr)
+1946 cdecl memcpy(ptr ptr long) ChpeMemcpy
+2003 stdcall ChpeEmulationDispatch(ptr)
 1329 stdcall RtlWow64GetThreadSelectorEntry(ptr ptr long ptr) ChpeRtlWow64GetThreadSelectorEntry
 
 274 stdcall NtCreateThread(ptr long ptr long ptr ptr ptr long) ChpeNtCreateThread
@@ -226,8 +226,8 @@
 1141 stdcall RtlQueueWorkItem(ptr ptr long) ChpeRtlQueueWorkItem
 1154 stdcall RtlRegisterWait(ptr ptr ptr ptr long long) ChpeRtlRegisterWait
 1341 stdcall RtlpApplyLengthFunction(long long ptr ptr) ChpeRtlpApplyLengthFunction
-1978 stdcall vDbgPrintEx(long long str ptr) ChpevDbgPrintEx
-1979 stdcall vDbgPrintExWithPrefix(str long long str ptr) ChpevDbgPrintExWithPrefix
+1979 stdcall vDbgPrintEx(long long str ptr) ChpevDbgPrintEx
+1980 stdcall vDbgPrintExWithPrefix(str long long str ptr) ChpevDbgPrintExWithPrefix
 834 stdcall LdrGetDllFullName(ptr ptr) ChpeLdrGetDllFullName
 871 stdcall RtlFindExportedRoutineByName(ptr str) ChpeRtlFindExportedRoutineByName
 837 stdcall RtlIsEcCode(ptr) ChpeRtlIsEcCode
@@ -241,16 +241,16 @@
 55 stdcall DbgUserBreakPoint() ChpeDbgUserBreakPoint
 87 varargs EtwTraceMessage(int64 long ptr long) ChpeEtwTraceMessage
 1301 stdcall RtlUserThreadStart(long long) ChpeRtlUserThreadStart
-1953 varargs sscanf(str str) ChpeSscanf
-1998 cdecl ChpeVsscanf(str str ptr) ChpeAutoVsscanf
-1999 stdcall ChpeVDbgPrintReturnControlC(str ptr) ChpeAutoVDbgPrintReturnControlC
+1954 varargs sscanf(str str) ChpeSscanf
+1999 cdecl ChpeVsscanf(str str ptr) ChpeAutoVsscanf
+2000 stdcall ChpeVDbgPrintReturnControlC(str ptr) ChpeAutoVDbgPrintReturnControlC
 1870 cdecl -private _errno() ChpeErrno
 1876 cdecl _lfind(ptr ptr ptr long ptr) ChpeLfind
-1917 cdecl bsearch(ptr ptr long long ptr) ChpeBsearch
-1949 cdecl qsort(ptr long long ptr) ChpeQsort
+1918 cdecl bsearch(ptr ptr long long ptr) ChpeBsearch
+1950 cdecl qsort(ptr long long ptr) ChpeQsort
 1882 cdecl _setjmp(ptr ptr) ChpeSetJmpX64
 1883 cdecl _setjmpex(ptr ptr) ChpeSetJmpX64
-1941 cdecl longjmp(ptr long) ChpeLongJmp
+1942 cdecl longjmp(ptr long) ChpeLongJmp
 974 stdcall RtlInitMemoryStream(ptr) ChpeRtlInitMemoryStream
 976 stdcall RtlInitOutOfProcessMemoryStream(ptr) ChpeRtlInitOutOfProcessMemoryStream
 1156 stdcall RtlReleaseMemoryStream(ptr) ChpeRtlReleaseMemoryStream
@@ -1931,79 +1931,80 @@
 1912 cdecl _wtol(wstr) ChpeAuto_wtol
 1913 cdecl abs(long) ChpeAutoabs
 1914 cdecl atan(double) ChpeAutoatan
-1915 cdecl atoi(str) ChpeAutoatoi
-1916 cdecl atol(str) ChpeAutoatol
-1918 cdecl ceil(double) ChpeAutoceil
-1919 cdecl cos(double) ChpeAutocos
-1920 cdecl fabs(double) ChpeAutofabs
-1921 cdecl floor(double) ChpeAutofloor
-1922 cdecl isalnum(long) ChpeAutoisalnum
-1923 cdecl isalpha(long) ChpeAutoisalpha
-1924 cdecl iscntrl(long) ChpeAutoiscntrl
-1925 cdecl isdigit(long) ChpeAutoisdigit
-1926 cdecl isgraph(long) ChpeAutoisgraph
-1927 cdecl islower(long) ChpeAutoislower
-1928 cdecl isprint(long) ChpeAutoisprint
-1929 cdecl ispunct(long) ChpeAutoispunct
-1930 cdecl isspace(long) ChpeAutoisspace
-1931 cdecl isupper(long) ChpeAutoisupper
-1932 cdecl iswalpha(long) ChpeAutoiswalpha
-1933 cdecl iswctype(long long) ChpeAutoiswctype
-1934 cdecl iswdigit(long) ChpeAutoiswdigit
-1935 cdecl iswlower(long) ChpeAutoiswlower
-1936 cdecl iswspace(long) ChpeAutoiswspace
-1937 cdecl iswxdigit(long) ChpeAutoiswxdigit
-1938 cdecl isxdigit(long) ChpeAutoisxdigit
-1939 cdecl labs(long) ChpeAutolabs
-1940 cdecl log(double) ChpeAutolog
-1942 cdecl mbstowcs(ptr str long) ChpeAutombstowcs
-1943 cdecl memchr(ptr long long) ChpeAutomemchr
-1944 cdecl memcmp(ptr ptr long) ChpeAutomemcmp
-1946 cdecl memmove(ptr ptr long) ChpeAutomemmove
-1947 cdecl memset(ptr long long) ChpeAutomemset
-1948 cdecl pow(double double) ChpeAutopow
-1950 cdecl sin(double) ChpeAutosin
-1952 cdecl sqrt(double) ChpeAutosqrt
-1954 cdecl strcat(str str) ChpeAutostrcat
-1955 cdecl strchr(str long) ChpeAutostrchr
-1956 cdecl strcmp(str str) ChpeAutostrcmp
-1957 cdecl strcpy(ptr str) ChpeAutostrcpy
-1958 cdecl -version=0x600+ strcpy_s(ptr long str) ChpeAutostrcpy_s
-1959 cdecl -version=0x600+ strcat_s(ptr long str) ChpeAutostrcat_s
-1960 cdecl -version=0x600+ strncpy_s(ptr long str long) ChpeAutostrncpy_s
-1961 cdecl strcspn(str str) ChpeAutostrcspn
-1962 cdecl strlen(str) ChpeAutostrlen
-1963 cdecl strncat(str str long) ChpeAutostrncat
-1964 cdecl strncmp(str str long) ChpeAutostrncmp
-1965 cdecl strncpy(ptr str long) ChpeAutostrncpy
-1966 cdecl strpbrk(str str) ChpeAutostrpbrk
-1967 cdecl strrchr(str long) ChpeAutostrrchr
-1968 cdecl strspn(str str) ChpeAutostrspn
-1969 cdecl strstr(str str) ChpeAutostrstr
-1970 cdecl strtol(str ptr long) ChpeAutostrtol
-1971 cdecl strtoul(str ptr long) ChpeAutostrtoul
-1973 cdecl tan(double) ChpeAutotan
-1974 cdecl tolower(long) ChpeAutotolower
-1975 cdecl toupper(long) ChpeAutotoupper
-1976 cdecl towlower(long) ChpeAutotowlower
-1977 cdecl towupper(long) ChpeAutotowupper
-1980 cdecl vsprintf(ptr str ptr) ChpeAutovsprintf
-1981 cdecl wcscat(wstr wstr) ChpeAutowcscat
-1982 cdecl wcschr(wstr long) ChpeAutowcschr
-1983 cdecl wcscmp(wstr wstr) ChpeAutowcscmp
-1984 cdecl wcscpy(ptr wstr) ChpeAutowcscpy
-1985 cdecl wcscspn(wstr wstr) ChpeAutowcscspn
-1986 cdecl wcslen(wstr) ChpeAutowcslen
-1987 cdecl wcsncat(wstr wstr long) ChpeAutowcsncat
-1988 cdecl wcsncmp(wstr wstr long) ChpeAutowcsncmp
-1989 cdecl wcsncpy(ptr wstr long) ChpeAutowcsncpy
-1990 cdecl wcsnlen(wstr long) ChpeAutowcsnlen
-1991 cdecl wcspbrk(wstr wstr) ChpeAutowcspbrk
-1992 cdecl wcsrchr(wstr long) ChpeAutowcsrchr
-1993 cdecl wcsspn(wstr wstr) ChpeAutowcsspn
-1994 cdecl wcsstr(wstr wstr) ChpeAutowcsstr
-1995 cdecl wcstol(wstr ptr long) ChpeAutowcstol
-1996 cdecl wcstombs(ptr ptr long) ChpeAutowcstombs
-1997 cdecl wcstoul(wstr ptr long) ChpeAutowcstoul
-2000 stdcall -version=0x602+ -ret64 RtlGetSystemTimePrecise() ChpeAutoRtlGetSystemTimePrecise
+1915 cdecl atan2(double double) ChpeAutoatan2
+1916 cdecl atoi(str) ChpeAutoatoi
+1917 cdecl atol(str) ChpeAutoatol
+1919 cdecl ceil(double) ChpeAutoceil
+1920 cdecl cos(double) ChpeAutocos
+1921 cdecl fabs(double) ChpeAutofabs
+1922 cdecl floor(double) ChpeAutofloor
+1923 cdecl isalnum(long) ChpeAutoisalnum
+1924 cdecl isalpha(long) ChpeAutoisalpha
+1925 cdecl iscntrl(long) ChpeAutoiscntrl
+1926 cdecl isdigit(long) ChpeAutoisdigit
+1927 cdecl isgraph(long) ChpeAutoisgraph
+1928 cdecl islower(long) ChpeAutoislower
+1929 cdecl isprint(long) ChpeAutoisprint
+1930 cdecl ispunct(long) ChpeAutoispunct
+1931 cdecl isspace(long) ChpeAutoisspace
+1932 cdecl isupper(long) ChpeAutoisupper
+1933 cdecl iswalpha(long) ChpeAutoiswalpha
+1934 cdecl iswctype(long long) ChpeAutoiswctype
+1935 cdecl iswdigit(long) ChpeAutoiswdigit
+1936 cdecl iswlower(long) ChpeAutoiswlower
+1937 cdecl iswspace(long) ChpeAutoiswspace
+1938 cdecl iswxdigit(long) ChpeAutoiswxdigit
+1939 cdecl isxdigit(long) ChpeAutoisxdigit
+1940 cdecl labs(long) ChpeAutolabs
+1941 cdecl log(double) ChpeAutolog
+1943 cdecl mbstowcs(ptr str long) ChpeAutombstowcs
+1944 cdecl memchr(ptr long long) ChpeAutomemchr
+1945 cdecl memcmp(ptr ptr long) ChpeAutomemcmp
+1947 cdecl memmove(ptr ptr long) ChpeAutomemmove
+1948 cdecl memset(ptr long long) ChpeAutomemset
+1949 cdecl pow(double double) ChpeAutopow
+1951 cdecl sin(double) ChpeAutosin
+1953 cdecl sqrt(double) ChpeAutosqrt
+1955 cdecl strcat(str str) ChpeAutostrcat
+1956 cdecl strchr(str long) ChpeAutostrchr
+1957 cdecl strcmp(str str) ChpeAutostrcmp
+1958 cdecl strcpy(ptr str) ChpeAutostrcpy
+1959 cdecl -version=0x600+ strcpy_s(ptr long str) ChpeAutostrcpy_s
+1960 cdecl -version=0x600+ strcat_s(ptr long str) ChpeAutostrcat_s
+1961 cdecl -version=0x600+ strncpy_s(ptr long str long) ChpeAutostrncpy_s
+1962 cdecl strcspn(str str) ChpeAutostrcspn
+1963 cdecl strlen(str) ChpeAutostrlen
+1964 cdecl strncat(str str long) ChpeAutostrncat
+1965 cdecl strncmp(str str long) ChpeAutostrncmp
+1966 cdecl strncpy(ptr str long) ChpeAutostrncpy
+1967 cdecl strpbrk(str str) ChpeAutostrpbrk
+1968 cdecl strrchr(str long) ChpeAutostrrchr
+1969 cdecl strspn(str str) ChpeAutostrspn
+1970 cdecl strstr(str str) ChpeAutostrstr
+1971 cdecl strtol(str ptr long) ChpeAutostrtol
+1972 cdecl strtoul(str ptr long) ChpeAutostrtoul
+1974 cdecl tan(double) ChpeAutotan
+1975 cdecl tolower(long) ChpeAutotolower
+1976 cdecl toupper(long) ChpeAutotoupper
+1977 cdecl towlower(long) ChpeAutotowlower
+1978 cdecl towupper(long) ChpeAutotowupper
+1981 cdecl vsprintf(ptr str ptr) ChpeAutovsprintf
+1982 cdecl wcscat(wstr wstr) ChpeAutowcscat
+1983 cdecl wcschr(wstr long) ChpeAutowcschr
+1984 cdecl wcscmp(wstr wstr) ChpeAutowcscmp
+1985 cdecl wcscpy(ptr wstr) ChpeAutowcscpy
+1986 cdecl wcscspn(wstr wstr) ChpeAutowcscspn
+1987 cdecl wcslen(wstr) ChpeAutowcslen
+1988 cdecl wcsncat(wstr wstr long) ChpeAutowcsncat
+1989 cdecl wcsncmp(wstr wstr long) ChpeAutowcsncmp
+1990 cdecl wcsncpy(ptr wstr long) ChpeAutowcsncpy
+1991 cdecl wcsnlen(wstr long) ChpeAutowcsnlen
+1992 cdecl wcspbrk(wstr wstr) ChpeAutowcspbrk
+1993 cdecl wcsrchr(wstr long) ChpeAutowcsrchr
+1994 cdecl wcsspn(wstr wstr) ChpeAutowcsspn
+1995 cdecl wcsstr(wstr wstr) ChpeAutowcsstr
+1996 cdecl wcstol(wstr ptr long) ChpeAutowcstol
+1997 cdecl wcstombs(ptr ptr long) ChpeAutowcstombs
+1998 cdecl wcstoul(wstr ptr long) ChpeAutowcstoul
+2001 stdcall -version=0x602+ -ret64 RtlGetSystemTimePrecise() ChpeAutoRtlGetSystemTimePrecise
 # END typed bridge wrappers
