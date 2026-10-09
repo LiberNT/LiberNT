@@ -1,6 +1,7 @@
 #define IDR_SHDOCVW 1
 #define IDR_FAVBAND 2
 #define IDR_EXPLORERBAND 3
+#define IDR_SHELLDOCOBJVIEW 4
 #define IDW_TOOLBAR  2
 #define IDW_TREEVIEW 100
 

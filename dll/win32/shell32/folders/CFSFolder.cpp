@@ -1185,6 +1185,22 @@ HRESULT WINAPI CFSFolder::EnumObjects(
 *  REFIID        riid,       //[in ] Initial Interface
 *  LPVOID*       ppvObject   //[out] Interface*
 */
+static BOOL
+ClassHasSubKey(REFCLSID rclsid, LPCWSTR pszSubKey)
+{
+    WCHAR szClsid[40], szKey[MAX_PATH];
+    HKEY hKey;
+
+    if (!StringFromGUID2(rclsid, szClsid, _countof(szClsid)) ||
+        FAILED(StringCchPrintfW(szKey, _countof(szKey), L"CLSID\\%s\\%s", szClsid, pszSubKey)) ||
+        RegOpenKeyExW(HKEY_CLASSES_ROOT, szKey, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+    {
+        return FALSE;
+    }
+    RegCloseKey(hKey);
+    return TRUE;
+}
+
 HRESULT WINAPI CFSFolder::BindToObject(
     PCUIDLIST_RELATIVE pidl,
     LPBC pbc,
@@ -1250,9 +1266,15 @@ HRESULT WINAPI CFSFolder::BindToObject(
     {
         hr = GetCLSIDForFileType(pidl, L"CLSID", &clsidFolder);
         if (hr == S_FALSE)
-            return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+            return E_FAIL;
         if (hr != S_OK)
             return hr;
+        if (!ClassHasSubKey(clsidFolder, L"ShellFolder"))
+        {
+            if (!ClassHasSubKey(clsidFolder, L"BrowseInPlace"))
+                return E_FAIL;
+            clsidFolder = CLSID_ShellDocObjView;
+        }
     }
 
     hr = SHELL32_BindToSF(m_pidlRoot, &pfti, pidl, &clsidFolder, riid, ppvOut);

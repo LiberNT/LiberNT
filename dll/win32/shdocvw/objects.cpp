@@ -28,6 +28,7 @@ void operator delete(void *ptr, size_t size)
 BEGIN_OBJECT_MAP(ObjectMap)
     OBJECT_ENTRY(CLSID_SH_FavBand, CFavBand)
     OBJECT_ENTRY(CLSID_ExplorerBand, CExplorerBand)
+    OBJECT_ENTRY(CLSID_ShellDocObjView, CShellDocObjView)
 END_OBJECT_MAP()
 
 class SHDOCVW_Module : public CComModule

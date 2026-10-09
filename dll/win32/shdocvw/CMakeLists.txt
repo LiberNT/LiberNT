@@ -13,7 +13,8 @@ list(APPEND SOURCE
 list(APPEND shdocvw_rc_deps
     ${CMAKE_CURRENT_SOURCE_DIR}/res/shdocvw.rgs
     ${CMAKE_CURRENT_SOURCE_DIR}/res/favband.rgs
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/explorerband.rgs)
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/explorerband.rgs
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/shelldocobjview.rgs)
 set_source_files_properties(shdocvw.rc PROPERTIES OBJECT_DEPENDS "${shdocvw_rc_deps}")
 
 add_library(shdocvw MODULE
@@ -39,6 +40,7 @@ add_library(shdocvw_sublib OBJECT
     CExplorerBand.cpp
     CFavBand.cpp
     CNSCBand.cpp
+    CShellDocObjView.cpp
     mrulist.cpp
     objects.cpp
     utility.cpp
