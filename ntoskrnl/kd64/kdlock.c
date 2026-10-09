@@ -79,12 +79,10 @@ KdPollBreakIn(VOID)
     /* First make sure that KD is enabled */
     if (KdDebuggerEnabled)
     {
-#if defined(_M_ARM64)
         if (KdpDebuggerLockOwnedByCurrentThread())
         {
             return FALSE;
         }
-#endif
 
         /* Disable interrupts */
         Enable = KeDisableInterrupts();
