@@ -26,6 +26,7 @@ static BOOL g_IsArm64Host;
 
 #define CPU_FEATURE_VMX 0x01
 #define CPU_FEATURE_HV 0x02
+#define CPU_FEATURE_KVM 0x04
 
 typedef void (*PFUNC)(void);
 
@@ -114,6 +115,12 @@ DetermineCpuFeatures(void)
     if (CpuInfo[2] & (1 << 5)) Features |= CPU_FEATURE_VMX;
     if (CpuInfo[2] & (1 << 31)) Features |= CPU_FEATURE_HV;
     trace("CPUID 1: 0x%x, 0x%x, 0x%x, 0x%x\n", CpuInfo[0], CpuInfo[1], CpuInfo[2], CpuInfo[3]);
+
+    if (Features & CPU_FEATURE_HV)
+    {
+        __cpuid(CpuInfo, 0x40000000);
+        if (memcmp(&CpuInfo[1], "KVMKVMKVM\0\0\0", 12) == 0) Features |= CPU_FEATURE_KVM;
+    }
 
     g_CpuFeatures = Features;
 #ifdef _M_AMD64
@@ -261,6 +268,10 @@ void Test_SingleInstruction(
     }
     else if (((Flags & FL_VMX) && !(g_CpuFeatures & CPU_FEATURE_VMX)) ||
              ((Flags & FL_HV) && !(g_CpuFeatures & CPU_FEATURE_HV)))
+    {
+        ExpectedStatus = STATUS_ILLEGAL_INSTRUCTION;
+    }
+    else if ((Flags & FL_HV) && (Flags & FL_ACC) && (g_CpuFeatures & CPU_FEATURE_KVM))
     {
         ExpectedStatus = STATUS_ILLEGAL_INSTRUCTION;
     }

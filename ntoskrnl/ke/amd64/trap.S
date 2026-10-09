@@ -19,6 +19,7 @@ EXTERN MmAccessFault:PROC
 EXTERN KiSystemFatalException:PROC
 EXTERN KiNpxNotAvailableFaultHandler:PROC
 EXTERN KiGeneralProtectionFaultHandler:PROC
+EXTERN KiInvalidOpcodeFaultHandler:PROC
 EXTERN KiXmmExceptionHandler:PROC
 EXTERN KiDeliverApc:PROC
 EXTERN KiDpcInterruptHandler:PROC
@@ -358,6 +359,10 @@ KiInvalidOpcodeDispatch:
     jz KiInvalidOpcodeKernel
 
     // FIXME: handle STATUS_INVALID_LOCK_SEQUENCE
+    mov rcx, rbp
+    call KiInvalidOpcodeFaultHandler
+    DispatchException eax, 0, 0, 0, 0
+    jmp KiInvalidOpcodeExit
 
 KiInvalidOpcodeKernel:
     /* Kernel mode fault */
@@ -365,6 +370,7 @@ KiInvalidOpcodeKernel:
     /* Dispatch the exception */
     DispatchException STATUS_ILLEGAL_INSTRUCTION, 0, 0, 0, 0
 
+KiInvalidOpcodeExit:
     /* Return */
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC

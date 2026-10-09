@@ -625,8 +625,6 @@ KiIsPrivilegedInstruction(PUCHAR Ip, BOOLEAN Wow64)
                 case 0x32: // RDMSR
                 case 0x33: // RDPMC
                 case 0x35: // SYSEXIT
-                case 0x78: // VMREAD
-                case 0x79: // VMWRITE
                     return TRUE;
 
                 case 0x00:
@@ -645,15 +643,13 @@ KiIsPrivilegedInstruction(PUCHAR Ip, BOOLEAN Wow64)
                 {
                     switch (Ip[2])
                     {
-                        case 0xC1: // VMCALL
-                        case 0xC2: // VMLAUNCH
-                        case 0xC3: // VMRESUME
-                        case 0xC4: // VMXOFF
-                        case 0xC8: // MONITOR
-                        case 0xC9: // MWAIT
-                        case 0xD1: // XSETBV
                         case 0xF8: // SWAPGS
                             return TRUE;
+                    }
+
+                    if (((Ip[2] >> 6) == 3) && (((Ip[2] >> 3) & 0x7) != 6))
+                    {
+                        break;
                     }
 
                     /* Check MODRM Reg field */
@@ -663,29 +659,6 @@ KiIsPrivilegedInstruction(PUCHAR Ip, BOOLEAN Wow64)
                         case 3: // LIDT
                         case 6: // LMSW
                         case 7: // INVLPG / SWAPGS / RDTSCP
-                            return TRUE;
-                    }
-                    break;
-                }
-
-                case 0x38:
-                {
-                    switch (Ip[2])
-                    {
-                        case 0x80: // INVEPT
-                        case 0x81: // INVVPID
-                            return TRUE;
-                    }
-                    break;
-                }
-
-                case 0xC7:
-                {
-                    /* Check MODRM Reg field */
-                    switch ((Ip[2] >> 3) & 0x7)
-                    {
-                        case 0x06: // VMPTRLD, VMCLEAR, VMXON
-                        case 0x07: // VMPTRST
                             return TRUE;
                     }
                     break;
@@ -704,7 +677,7 @@ NTSTATUS
 KiGeneralProtectionFaultUserMode(
     _In_ PKTRAP_FRAME TrapFrame)
 {
-    BOOLEAN Wow64 = TrapFrame->SegCs == KGDT64_R3_CMCODE;
+    BOOLEAN Wow64 = TrapFrame->SegCs == (KGDT64_R3_CMCODE | RPL_MASK);
     PUCHAR InstructionPointer;
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
 
@@ -729,6 +702,33 @@ KiGeneralProtectionFaultUserMode(
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
         Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END
+
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+KiInvalidOpcodeFaultHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
+{
+    BOOLEAN Wow64 = TrapFrame->SegCs == (KGDT64_R3_CMCODE | RPL_MASK);
+    PUCHAR InstructionPointer = (PUCHAR)TrapFrame->Rip;
+    NTSTATUS Status = STATUS_ILLEGAL_INSTRUCTION;
+
+    _SEH2_TRY
+    {
+        ProbeForRead(InstructionPointer, 64, 1);
+
+        if (KiIsPrivilegedInstruction(InstructionPointer, Wow64))
+        {
+            Status = STATUS_PRIVILEGED_INSTRUCTION;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = STATUS_ILLEGAL_INSTRUCTION;
     }
     _SEH2_END
 
