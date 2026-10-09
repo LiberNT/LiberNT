@@ -3075,6 +3075,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
         RtlpInitializeThreadPooling();
         Status = LdrpInitializeWow64(Context);
         if (OptionsKey) NtClose(OptionsKey);
+        if (NT_SUCCESS(Status) && Peb->BeingDebugged) LdrpDoDebuggerBreak();
         return Status;
     }
 #endif
