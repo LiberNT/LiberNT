@@ -1907,6 +1907,30 @@ static BOOL CRYPT_IsCertVersionValid(PCCERT_CONTEXT cert)
     return ret;
 }
 
+#ifdef __REACTOS__
+static void CRYPT_SetPreferredIssuerStatus(PCERT_SIMPLE_CHAIN chain)
+{
+    BOOL all = TRUE;
+    DWORD i;
+
+    for (i = 0; i < chain->cElement; i++)
+    {
+        PCERT_CHAIN_ELEMENT element = chain->rgpElement[i];
+
+        if ((i + 1 < chain->cElement ||
+             (element->TrustStatus.dwInfoStatus & CERT_TRUST_IS_SELF_SIGNED)) &&
+            !(element->TrustStatus.dwErrorStatus & CERT_TRUST_IS_NOT_SIGNATURE_VALID))
+            element->TrustStatus.dwInfoStatus |= CERT_TRUST_HAS_PREFERRED_ISSUER;
+        else
+            all = FALSE;
+    }
+    if (all)
+        chain->TrustStatus.dwInfoStatus |= CERT_TRUST_HAS_PREFERRED_ISSUER;
+    else
+        chain->TrustStatus.dwInfoStatus &= ~CERT_TRUST_HAS_PREFERRED_ISSUER;
+}
+#endif
+
 static void CRYPT_CheckSimpleChain(CertificateChainEngine *engine,
  PCERT_SIMPLE_CHAIN chain, LPFILETIME time)
 {
@@ -2008,6 +2032,9 @@ static void CRYPT_CheckSimpleChain(CertificateChainEngine *engine,
         CRYPT_CheckRootCert(engine->hRoot, rootElement);
     }
     CRYPT_CombineTrustStatus(&chain->TrustStatus, &rootElement->TrustStatus);
+#ifdef __REACTOS__
+    CRYPT_SetPreferredIssuerStatus(chain);
+#endif
 }
 
 static PCCERT_CONTEXT CRYPT_FindIssuer(const CertificateChainEngine *engine, const CERT_CONTEXT *cert,
@@ -3845,7 +3872,15 @@ static BOOL WINAPI verify_ms_root_policy(LPCSTR szPolicyOID,
     if (isMSRoot)
         pPolicyStatus->dwError = 0;
     else
+#ifdef __REACTOS__
+    {
         pPolicyStatus->dwError = CERT_E_UNTRUSTEDROOT;
+        pPolicyStatus->lChainIndex = pChainContext->cChain - 1;
+        pPolicyStatus->lElementIndex = rootChain->cElement - 1;
+    }
+#else
+        pPolicyStatus->dwError = CERT_E_UNTRUSTEDROOT;
+#endif
 
     return TRUE;
 }
