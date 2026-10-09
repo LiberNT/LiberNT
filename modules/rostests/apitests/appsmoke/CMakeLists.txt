@@ -10,9 +10,10 @@ add_executable(appsmoke_apitest
     process.c
     sockets.c
     suite.c
+    system.c
     testlist.c)
 
 target_include_directories(appsmoke_apitest PRIVATE ${REACTOS_SOURCE_DIR}/modules/rostests/apitests/include)
 set_module_type(appsmoke_apitest win32cui)
-add_importlibs(appsmoke_apitest user32 gdi32 ws2_32 msvcrt kernel32 ntdll)
+add_importlibs(appsmoke_apitest user32 gdi32 ws2_32 shell32 advapi32 msvcrt kernel32 ntdll)
 add_rostests_file(TARGET appsmoke_apitest)

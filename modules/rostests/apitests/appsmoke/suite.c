@@ -18,6 +18,8 @@ static const struct
     { "child_start", 40000 },
     { "alert_wait", 20000 },
     { "yield_fairness", 20000 },
+    { "program_folders", 10000 },
+    { "registry_security", 10000 },
     { "sockets", 20000 },
     { "d3dkmt", 15000 },
     { "saved_bitmap", 10000 },

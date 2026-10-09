@@ -657,6 +657,28 @@ AccpGetTrusteeSid(IN PTRUSTEE_W Trustee,
 
 static DWORD AccpProjectFileSecurity(HANDLE Handle, PSECURITY_DESCRIPTOR *Descriptor);
 
+static SE_OBJECT_TYPE
+AccpRegistryObjectType(SE_OBJECT_TYPE ObjectType,
+                       REGSAM *RegistryView)
+{
+    REGSAM View = 0;
+
+    if (ObjectType == SE_REGISTRY_WOW64_32KEY)
+    {
+        View = KEY_WOW64_32KEY;
+        ObjectType = SE_REGISTRY_KEY;
+    }
+    else if (ObjectType == SE_REGISTRY_WOW64_64KEY)
+    {
+        View = KEY_WOW64_64KEY;
+        ObjectType = SE_REGISTRY_KEY;
+    }
+
+    if (RegistryView != NULL)
+        *RegistryView = View;
+    return ObjectType;
+}
+
 /**********************************************************************
  * AccRewriteGetHandleRights				EXPORTED
  *
@@ -682,6 +704,8 @@ AccRewriteGetHandleRights(HANDLE handle,
 
     /* save the last error code */
     LastErr = GetLastError();
+
+    ObjectType = AccpRegistryObjectType(ObjectType, NULL);
 
     if (ObjectType == SE_FILE_OBJECT && (SecurityInfo & DACL_SECURITY_INFORMATION))
         QueryInformation |= OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION;
@@ -1920,6 +1944,8 @@ AccRewriteSetHandleRights(HANDLE handle,
     /* save the last error code */
     LastErr = GetLastError();
 
+    ObjectType = AccpRegistryObjectType(ObjectType, NULL);
+
     /* set the security according to the object type */
     switch (ObjectType)
     {
@@ -1999,7 +2025,10 @@ AccpOpenNamedObject(LPWSTR pObjectName,
     LPWSTR lpPath;
     NTSTATUS Status;
     ACCESS_MASK DesiredAccess = (ACCESS_MASK)0;
+    REGSAM RegistryView;
     DWORD Ret = ERROR_SUCCESS;
+
+    ObjectType = AccpRegistryObjectType(ObjectType, &RegistryView);
 
     /* determine the required access rights */
     switch (ObjectType)
@@ -2178,7 +2207,7 @@ ParseRegErr:
             Ret = RegOpenKeyEx(hRootKey,
                                lpKeyName,
                                0,
-                               (REGSAM)DesiredAccess,
+                               (REGSAM)DesiredAccess | RegistryView,
                                (PHKEY)Handle);
             if (Ret != ERROR_SUCCESS)
             {
@@ -2273,7 +2302,7 @@ AccpCloseObjectHandle(SE_OBJECT_TYPE ObjectType,
     ASSERT(Handle != NULL);
 
     /* close allocated handles depending on the object type */
-    switch (ObjectType)
+    switch (AccpRegistryObjectType(ObjectType, NULL))
     {
         case SE_REGISTRY_KEY:
             RegCloseKey((HKEY)Handle);

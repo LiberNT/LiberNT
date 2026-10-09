@@ -10,6 +10,8 @@ extern void func_dll_directory(void);
 extern void func_opencl(void);
 extern void func_opengl(void);
 extern void func_opengl_mode_change(void);
+extern void func_program_folders(void);
+extern void func_registry_security(void);
 extern void func_saved_bitmap(void);
 extern void func_os_version(void);
 extern void func_sockets(void);
@@ -30,6 +32,8 @@ const struct test winetest_testlist[] =
     { "opengl", func_opengl },
     { "opengl_mode_change", func_opengl_mode_change },
     { "os_version", func_os_version },
+    { "program_folders", func_program_folders },
+    { "registry_security", func_registry_security },
     { "saved_bitmap", func_saved_bitmap },
     { "sockets", func_sockets },
     { "suite", func_suite },
