@@ -244,7 +244,7 @@ public:
     }
     STDMETHODIMP SetViewportRect(const RECT *rect) override
     {
-        if (!rect || rect->right <= rect->left || rect->bottom <= rect->top) return E_INVALIDARG;
+        if (!rect || rect->right < rect->left || rect->bottom < rect->top) return E_INVALIDARG;
         ObjectLock lock(m_lock);
         m_rect = *rect;
         return S_OK;
