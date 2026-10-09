@@ -571,6 +571,15 @@ static const CSR_WOW64_FIELD CsrpWow64GetScreenBufferInfoEx[] =
     CSR_WOW64_DATA(CONSOLE_GETSCREENBUFFERINFOEX, ScreenBufferSize, ColorTable),
 };
 
+static const CSR_WOW64_FIELD CsrpWow64PseudoConsole[] =
+{
+    CSR_WOW64_HANDLE(CONSOLE_PSEUDOCONSOLE, ConsoleHandle),
+    CSR_WOW64_HANDLE(CONSOLE_PSEUDOCONSOLE, InputHandle),
+    CSR_WOW64_HANDLE(CONSOLE_PSEUDOCONSOLE, OutputHandle),
+    CSR_WOW64_DATA(CONSOLE_PSEUDOCONSOLE, Size, DesktopLength),
+    CSR_WOW64_POINTER(CONSOLE_PSEUDOCONSOLE, Desktop),
+};
+
 static const CSR_WOW64_MESSAGE CsrpWow64ConsoleMessages[ConsolepMaxApiNumber - CONSRV_FIRST_API_NUMBER] =
 {
     [ConsolepOpenConsole - CONSRV_FIRST_API_NUMBER] = CSR_WOW64_MESSAGE(CONSOLE_OPENCONSOLE, CsrpWow64OpenConsole),
@@ -650,6 +659,9 @@ static const CSR_WOW64_MESSAGE CsrpWow64ConsoleMessages[ConsolepMaxApiNumber - C
     [ConsolepSetHistory - CONSRV_FIRST_API_NUMBER] = CSR_WOW64_MESSAGE(CONSOLE_GETSETHISTORYINFO, CsrpWow64GetHistory),
     [ConsolepGetScreenBufferInfoEx - CONSRV_FIRST_API_NUMBER] = CSR_WOW64_MESSAGE(CONSOLE_GETSCREENBUFFERINFOEX, CsrpWow64GetScreenBufferInfoEx),
     [ConsolepSetScreenBufferInfoEx - CONSRV_FIRST_API_NUMBER] = CSR_WOW64_MESSAGE(CONSOLE_GETSCREENBUFFERINFOEX, CsrpWow64GetScreenBufferInfoEx),
+    [ConsolepCreatePseudoConsole - CONSRV_FIRST_API_NUMBER] = CSR_WOW64_MESSAGE(CONSOLE_PSEUDOCONSOLE, CsrpWow64PseudoConsole),
+    [ConsolepResizePseudoConsole - CONSRV_FIRST_API_NUMBER] = CSR_WOW64_MESSAGE(CONSOLE_PSEUDOCONSOLE, CsrpWow64PseudoConsole),
+    [ConsolepClosePseudoConsole - CONSRV_FIRST_API_NUMBER] = CSR_WOW64_MESSAGE(CONSOLE_PSEUDOCONSOLE, CsrpWow64PseudoConsole),
 };
 
 static const CSR_WOW64_FIELD CsrpWow64DefineDosDevice[] =

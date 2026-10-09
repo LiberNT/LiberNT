@@ -18,6 +18,7 @@ add_library(kernelbase_console STATIC
     client/console/console.c
     client/console/history.c
     client/console/init.c
+    client/console/pseudoconsole.c
     client/console/readwrite.c)
 target_link_libraries(kernelbase_console PRIVATE ${PSEH_LIB})
 add_dependencies(kernelbase_console psdk)

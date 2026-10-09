@@ -21,6 +21,7 @@ typedef struct _CONSOLE_INIT_INFO
     PWCHAR AppName;
     ULONG  CurDirLength;
     PWCHAR CurDir;
+    PVOID  PseudoConsole;
 } CONSOLE_INIT_INFO, *PCONSOLE_INIT_INFO;
 
 VOID NTAPI

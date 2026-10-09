@@ -2509,6 +2509,7 @@ typedef struct _BASE_CREATE_EXTENDED_ATTRIBUTES
     ULONG JobCount;
     COMPONENT_FILTER ComponentFilter;
     BOOL ComponentFilterPresent;
+    HANDLE PseudoConsole;
 } BASE_CREATE_EXTENDED_ATTRIBUTES, *PBASE_CREATE_EXTENDED_ATTRIBUTES;
 
 static
@@ -2637,6 +2638,15 @@ BasepCaptureExtendedAttributes(
             }
             Extended->ComponentFilter = *(PCOMPONENT_FILTER)Attribute->Value;
             Extended->ComponentFilterPresent = TRUE;
+        }
+        else if (Attribute->Attribute == PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE)
+        {
+            if (Attribute->Size != sizeof(HPCON) || !Attribute->Value)
+            {
+                SetLastError(ERROR_INVALID_PARAMETER);
+                return FALSE;
+            }
+            Extended->PseudoConsole = ((PBASE_PSEUDO_CONSOLE)Attribute->Value)->ConsoleHandle;
         }
         else if (Attribute->Attribute == PROC_THREAD_ATTRIBUTE_HANDLE_LIST)
         {
@@ -2786,10 +2796,13 @@ BasepCreateUserProcess(IN HANDLE UserToken,
         ProcessParameters->ConsoleHandle = HANDLE_CREATE_NEW_CONSOLE;
     else if (CreationFlags & CREATE_NO_WINDOW)
         ProcessParameters->ConsoleHandle = HANDLE_CREATE_NO_WINDOW;
+    else if (Extended->PseudoConsole)
+        ProcessParameters->ConsoleHandle = Extended->PseudoConsole;
     else
         ProcessParameters->ConsoleHandle = NtCurrentPeb()->ProcessParameters->ConsoleHandle;
 
     if (!(CreationFlags & (DETACHED_PROCESS | CREATE_NEW_CONSOLE | CREATE_NO_WINDOW)) &&
+        !Extended->PseudoConsole &&
         !(StartupInfo->dwFlags & (STARTF_USESTDHANDLES | STARTF_USEHOTKEY | STARTF_SHELLPRIVATE)))
     {
         PRTL_USER_PROCESS_PARAMETERS Parent = NtCurrentPeb()->ProcessParameters;
@@ -4644,6 +4657,7 @@ StartScan:
         || ExtendedAttributes.JobCount
         || ExtendedAttributes.BnoIsolation
         || ExtendedAttributes.ComponentFilterPresent
+        || ExtendedAttributes.PseudoConsole
         || hUserToken
        )
     {

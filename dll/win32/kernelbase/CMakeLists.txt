@@ -19,7 +19,6 @@ add_library(kernelbase MODULE
     DllMain.c
     AppModelToken.c
     PackageFamily.c
-    PseudoConsole.c
     PssSnapshot.c
     Security.c
     SyncObjects.c

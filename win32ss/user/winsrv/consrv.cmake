@@ -14,6 +14,7 @@ list(APPEND CONSRV_SOURCE
     consrv/init.c
     consrv/lineinput.c
     consrv/popup.c
+    consrv/pty.c
     consrv/settings.c
     consrv/shutdown.c
     consrv/subsysreg.c

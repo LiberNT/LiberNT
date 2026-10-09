@@ -699,6 +699,10 @@ ConDllInitialize(IN ULONG Reason,
     {
         ConnectInfo.TitleLength   = 0;
         ConnectInfo.DesktopLength = 0;
+        ConnectInfo.ConsoleStartInfo.dwStartupFlags = Parameters->WindowFlags;
+        ConnectInfo.ConsoleStartInfo.InputHandle  = NULL;
+        ConnectInfo.ConsoleStartInfo.OutputHandle = NULL;
+        ConnectInfo.ConsoleStartInfo.ErrorHandle  = NULL;
     }
 
     /* Initialize the Input EXE name */
@@ -745,8 +749,11 @@ ConDllInitialize(IN ULONG Reason,
     if (!InServerProcess && ConnectInfo.IsConsoleApp)
     {
         /* ... set the handles that we got */
-        if (Parameters->ConsoleHandle == NULL)
+        if (Parameters->ConsoleHandle == NULL ||
+            ConnectInfo.ConsoleStartInfo.InputHandle != NULL)
+        {
             SetUpHandles(&ConnectInfo.ConsoleStartInfo);
+        }
 
         InputWaitHandle = ConnectInfo.ConsoleStartInfo.InputWaitHandle;
 

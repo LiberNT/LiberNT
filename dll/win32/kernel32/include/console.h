@@ -14,6 +14,11 @@
 #define HANDLE_CREATE_NEW_CONSOLE   (HANDLE)-2
 #define HANDLE_CREATE_NO_WINDOW     (HANDLE)-3
 
+typedef struct _BASE_PSEUDO_CONSOLE
+{
+    HANDLE ConsoleHandle;
+} BASE_PSEUDO_CONSOLE, *PBASE_PSEUDO_CONSOLE;
+
 
 /* FUNCTION PROTOTYPES ********************************************************/
 

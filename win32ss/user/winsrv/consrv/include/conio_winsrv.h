@@ -130,6 +130,7 @@ typedef struct _CONSRV_CONSOLE
     HANDLE InitEvents[MAX_INIT_EVENTS];         /* Initialization events */
 
     FRONTEND FrontEndIFace;                     /* Frontend-specific interface */
+    PVOID PseudoConsole;
 
 /******************************* Process support ******************************/
     LIST_ENTRY ProcessList;         /* List of processes owning the console. The first one is the so-called "Console Leader Process" */
@@ -162,6 +163,7 @@ typedef struct _CONSRV_CONSOLE
 
     BOOLEAN InsertMode;
     BOOLEAN QuickEdit;
+    BOOLEAN AutoPosition;
 
 /************************ Virtual DOS Machine support *************************/
     COORD   VDMBufferSize;             /* Real size of the VDM buffer, in units of ??? */

@@ -63,6 +63,7 @@ typedef struct _CONSOLE_PROCESS_DATA
     PCSR_PROCESS Process;   // Process owning this structure.
 
     HANDLE ConsoleHandle;
+    HANDLE ParentConsoleHandle;
     BOOLEAN ConsoleApp;     // TRUE if it is a CUI app, FALSE otherwise.
 
     RTL_CRITICAL_SECTION HandleTableLock;

@@ -148,6 +148,11 @@ CSR_API(SrvGetConsoleNlsMode);
 CSR_API(SrvSetConsoleNlsMode);
 CSR_API(SrvGetConsoleLangId);
 
+/* pty.c */
+CSR_API(SrvCreatePseudoConsole);
+CSR_API(SrvResizePseudoConsole);
+CSR_API(SrvClosePseudoConsole);
+
 /* frontendctl.c */
 CSR_API(SrvGetConsoleHardwareState);
 CSR_API(SrvSetConsoleHardwareState);

@@ -113,6 +113,10 @@ typedef enum _CONSRV_API_NUMBER
     ConsolepGetScreenBufferInfoEx,          // Added in Vista+
     ConsolepSetScreenBufferInfoEx,          // Added in Vista+
 
+    ConsolepCreatePseudoConsole,
+    ConsolepResizePseudoConsole,
+    ConsolepClosePseudoConsole,
+
     ConsolepMaxApiNumber
 } CONSRV_API_NUMBER, *PCONSRV_API_NUMBER;
 
@@ -802,6 +806,17 @@ typedef struct _CONSOLE_GETWINDOW
     HWND   WindowHandle;
 } CONSOLE_GETWINDOW, *PCONSOLE_GETWINDOW;
 
+typedef struct _CONSOLE_PSEUDOCONSOLE
+{
+    HANDLE ConsoleHandle;
+    HANDLE InputHandle;
+    HANDLE OutputHandle;
+    COORD  Size;
+    ULONG  Flags;
+    ULONG  DesktopLength;
+    PWCHAR Desktop;
+} CONSOLE_PSEUDOCONSOLE, *PCONSOLE_PSEUDOCONSOLE;
+
 typedef struct _CONSOLE_SETICON
 {
     HANDLE ConsoleHandle;
@@ -1108,6 +1123,8 @@ typedef struct _CONSOLE_API_MESSAGE
         /* Console IME */
         CONSOLE_REGISTERCONSOLEIME RegisterConsoleIME;
         CONSOLE_UNREGISTERCONSOLEIME UnregisterConsoleIME;
+
+        CONSOLE_PSEUDOCONSOLE PseudoConsoleRequest;
     } Data;
 } CONSOLE_API_MESSAGE, *PCONSOLE_API_MESSAGE;
 

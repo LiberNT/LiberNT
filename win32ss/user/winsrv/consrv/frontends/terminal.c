@@ -10,6 +10,7 @@
 
 #include <consrv.h>
 #include "../include/vt.h"
+#include "../pty.h"
 #include "concfg/font.h"
 
 // #include "frontends/gui/guiterm.h"
@@ -226,6 +227,9 @@ ConSrvInitTerminal(IN OUT PTERMINAL Terminal,
         return Status;
     }
     DPRINT("CONSRV: Frontend initialized\n");
+
+    if (ConsoleInitInfo->PseudoConsole)
+        ConSrvPtyWrapFrontEnd(FrontEnd, ConsoleInitInfo->PseudoConsole);
 
     /* Initialize the ConSrv terminal */
     Terminal->Vtbl = &ConSrvTermVtbl;

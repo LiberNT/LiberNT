@@ -12,6 +12,7 @@
 
 #include "api.h"
 #include "procinit.h"
+#include "pty.h"
 
 #define NDEBUG
 #include <debug.h>
@@ -120,6 +121,10 @@ PCSR_API_ROUTINE ConsoleServerApiDispatchTable[ConsolepMaxApiNumber - CONSRV_FIR
     // SrvConsoleClientConnect,                // Added in Win7
     SrvGetConsoleScreenBufferInfoEx,        // Added in Vista+
     SrvSetConsoleScreenBufferInfoEx,        // Added in Vista+
+
+    SrvCreatePseudoConsole,
+    SrvResizePseudoConsole,
+    SrvClosePseudoConsole,
 };
 
 BOOLEAN ConsoleServerApiServerValidTable[ConsolepMaxApiNumber - CONSRV_FIRST_API_NUMBER] =
@@ -218,6 +223,10 @@ BOOLEAN ConsoleServerApiServerValidTable[ConsolepMaxApiNumber - CONSRV_FIRST_API
     // FALSE,   // SrvConsoleClientConnect,
     FALSE,   // SrvGetConsoleScreenBufferInfoEx,
     FALSE,   // SrvSetConsoleScreenBufferInfoEx,
+
+    FALSE,   // SrvCreatePseudoConsole,
+    FALSE,   // SrvResizePseudoConsole,
+    FALSE,   // SrvClosePseudoConsole,
 };
 
 /*
@@ -321,6 +330,10 @@ PCHAR ConsoleServerApiNameTable[ConsolepMaxApiNumber - CONSRV_FIRST_API_NUMBER] 
     // "ConsoleClientConnect",
     "GetConsoleScreenBufferInfoEx",
     "SetConsoleScreenBufferInfoEx",
+
+    "CreatePseudoConsole",
+    "ResizePseudoConsole",
+    "ClosePseudoConsole",
 };
 #endif
 
@@ -393,6 +406,10 @@ ConSrvNewProcess(PCSR_PROCESS SourceProcess,
             {
                 DPRINT1("Inheriting handles table failed\n");
             }
+            else
+            {
+                TargetProcessData->ParentConsoleHandle = SourceProcessData->ConsoleHandle;
+            }
 
             /* Unlock the parent's console */
             LeaveCriticalSection(&SourceConsole->Lock);
@@ -454,6 +471,7 @@ ConSrvConnect(IN PCSR_PROCESS CsrProcess,
         ConsoleInitInfo.AppName          = ConnectInfo->AppName;
         ConsoleInitInfo.CurDirLength     = ConnectInfo->CurDirLength;
         ConsoleInitInfo.CurDir           = ConnectInfo->CurDir;
+        ConsoleInitInfo.PseudoConsole    = NULL;
 
         /*
          * Contrary to the case of SrvAllocConsole, the desktop string is
@@ -514,13 +532,16 @@ ConSrvConnect(IN PCSR_PROCESS CsrProcess,
     {
         DPRINT("ConSrvConnect - Reuse current (parent's) console\n");
 
+        BOOLEAN NewHandles = (ProcessData->ConsoleHandle == NULL &&
+                              ProcessData->ParentConsoleHandle != ConnectInfo->ConsoleStartInfo.ConsoleHandle);
+
         /* Reuse our current console */
         Status = ConSrvInheritConsole(ProcessData,
                                       ConnectInfo->ConsoleStartInfo.ConsoleHandle,
-                                      FALSE,
-                                      NULL, // &ConnectInfo->ConsoleStartInfo.InputHandle,
-                                      NULL, // &ConnectInfo->ConsoleStartInfo.OutputHandle,
-                                      NULL, // &ConnectInfo->ConsoleStartInfo.ErrorHandle,
+                                      NewHandles,
+                                      NewHandles ? &ConnectInfo->ConsoleStartInfo.InputHandle : NULL,
+                                      NewHandles ? &ConnectInfo->ConsoleStartInfo.OutputHandle : NULL,
+                                      NewHandles ? &ConnectInfo->ConsoleStartInfo.ErrorHandle : NULL,
                                       &ConnectInfo->ConsoleStartInfo);
         if (!NT_SUCCESS(Status))
         {
@@ -545,6 +566,8 @@ ConSrvDisconnect(IN PCSR_PROCESS CsrProcess)
     /**************************************************************************
      * This function is called whenever a new process (GUI or CUI) is destroyed.
      **************************************************************************/
+
+    ConSrvPtyDisconnectProcess(CsrProcess);
 
     if ( ProcessData->ConsoleHandle != NULL ||
          ProcessData->HandleTable   != NULL )
@@ -572,6 +595,7 @@ CSR_SERVER_DLL_INIT(ConServerDllInitialization)
 */
 
     ConSrvInitConsoleSupport();
+    ConSrvPtyInitSupport();
 
     /* Setup the DLL Object */
     LoadedServerDll->ApiBase = CONSRV_FIRST_API_NUMBER;

@@ -747,6 +747,8 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
 
     DPRINT("Console initialized\n");
 
+    Console->PseudoConsole = ConsoleInitInfo->PseudoConsole;
+
     /* Apply the user's VT feature policy over the driver's permissive defaults */
     Console->AllowVtOscClipboard = !!VtPolicy.AllowOscClipboard;
     Console->AllowVtOscHyperlinks = !!VtPolicy.AllowOscHyperlinks;
@@ -809,6 +811,7 @@ ConSrvInitConsole(OUT PHANDLE NewConsoleHandle,
     Console->LineInsertToggle =
     Console->InsertMode = ConsoleInfo->InsertMode;
     Console->QuickEdit  = ConsoleInfo->QuickEdit;
+    Console->AutoPosition = !!ConsoleInfo->AutoPosition;
 
     /* Popup windows */
     InitializeListHead(&Console->PopupWindows);
@@ -1748,6 +1751,7 @@ CON_API_NOCONSOLE(SrvAllocConsole,
     ConsoleInitInfo.AppName          = AllocConsoleRequest->AppName;
     ConsoleInitInfo.CurDirLength     = AllocConsoleRequest->CurDirLength;
     ConsoleInitInfo.CurDir           = AllocConsoleRequest->CurDir;
+    ConsoleInitInfo.PseudoConsole    = NULL;
 
     /* Initialize a new Console owned by the Console Leader Process */
     Status = ConSrvAllocateConsole(ProcessData,
@@ -1903,13 +1907,14 @@ CON_API(SrvGetConsoleMode,
          */
         if (INPUT_BUFFER == Object->Type)
         {
-            if (Console->InsertMode || Console->QuickEdit)
+            if (Console->InsertMode || Console->QuickEdit || Console->AutoPosition)
             {
                 /* Windows also adds ENABLE_EXTENDED_FLAGS, even if it's not documented on MSDN */
                 *ConsoleMode |= ENABLE_EXTENDED_FLAGS;
 
                 if (Console->InsertMode) *ConsoleMode |= ENABLE_INSERT_MODE;
                 if (Console->QuickEdit ) *ConsoleMode |= ENABLE_QUICK_EDIT_MODE;
+                if (Console->AutoPosition) *ConsoleMode |= ENABLE_AUTO_POSITION;
             }
         }
     }
@@ -1927,8 +1932,8 @@ CON_API(SrvSetConsoleMode,
         CONSOLE_GETSETCONSOLEMODE, ConsoleModeRequest)
 {
 #define CONSOLE_VALID_CONTROL_MODES ( ENABLE_EXTENDED_FLAGS | \
-                                      ENABLE_INSERT_MODE    | ENABLE_QUICK_EDIT_MODE )
-// NOTE: Vista+ ENABLE_AUTO_POSITION is also a control mode.
+                                      ENABLE_INSERT_MODE    | ENABLE_QUICK_EDIT_MODE | \
+                                      ENABLE_AUTO_POSITION )
 
     NTSTATUS Status;
     PCONSOLE_IO_OBJECT Object;
@@ -1969,6 +1974,7 @@ CON_API(SrvSetConsoleMode,
                 {
                     Console->InsertMode = !!(ConsoleMode & ENABLE_INSERT_MODE);
                     Console->QuickEdit  = !!(ConsoleMode & ENABLE_QUICK_EDIT_MODE);
+                    Console->AutoPosition = !!(ConsoleMode & ENABLE_AUTO_POSITION);
                 }
             }
         }
