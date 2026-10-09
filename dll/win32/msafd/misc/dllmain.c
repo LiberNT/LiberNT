@@ -22,6 +22,7 @@ DWORD CatalogEntryId; /* CatalogEntryId for upcalls */
 LPWPUCOMPLETEOVERLAPPEDREQUEST lpWPUCompleteOverlappedRequest;
 PSOCKET_INFORMATION SocketListHead = NULL;
 CRITICAL_SECTION SocketListLock;
+static LONG StartupCount;
 LIST_ENTRY SockHelpersListHead = { NULL, NULL };
 ULONG SockAsyncThreadRefCount;
 HANDLE SockAsyncHelperAfdHandle;
@@ -3501,6 +3502,7 @@ WSPStartup(
         lpWSPData->wHighVersion = MAKEWORD(2, 2);
         /* Save CatalogEntryId for all upcalls */
         CatalogEntryId = lpProtocolInfo->dwCatalogEntryId;
+        InterlockedIncrement(&StartupCount);
     }
 
     TRACE("Status (%d).\n", Status);
@@ -3692,12 +3694,55 @@ WSPStringToAddress(IN LPWSTR AddressString,
  * RETURNS:
  *     0 if successful, or SOCKET_ERROR if not
  */
+static
+VOID
+MsafdCloseAllSockets(VOID)
+{
+    PSOCKET_INFORMATION Socket;
+    SOCKET *Handles;
+    ULONG Count = 0, Index = 0;
+    INT Errno;
+
+    EnterCriticalSection(&SocketListLock);
+    for (Socket = SocketListHead; Socket; Socket = Socket->NextSocket)
+        Count++;
+
+    Handles = Count ? HeapAlloc(GlobalHeap, 0, Count * sizeof(SOCKET)) : NULL;
+    if (Handles)
+    {
+        for (Socket = SocketListHead; Socket; Socket = Socket->NextSocket)
+            Handles[Index++] = Socket->Handle;
+    }
+    LeaveCriticalSection(&SocketListLock);
+
+    if (!Handles)
+        return;
+
+    for (Index = 0; Index < Count; Index++)
+        WSPCloseSocket(Handles[Index], &Errno);
+
+    HeapFree(GlobalHeap, 0, Handles);
+}
+
 INT
 WSPAPI
 WSPCleanup(OUT LPINT lpErrno)
 
 {
+    LONG Count;
+
     TRACE("Leaving.\n");
+
+    Count = InterlockedDecrement(&StartupCount);
+    if (Count < 0)
+    {
+        InterlockedIncrement(&StartupCount);
+        if (lpErrno) *lpErrno = WSANOTINITIALISED;
+        return SOCKET_ERROR;
+    }
+
+    if (Count == 0 && !RtlDllShutdownInProgress())
+        MsafdCloseAllSockets();
 
     if (lpErrno) *lpErrno = NO_ERROR;
 

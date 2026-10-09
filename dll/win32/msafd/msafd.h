@@ -20,6 +20,7 @@
 #define NTOS_MODE_USER
 #include <ndk/exfuncs.h>
 #include <ndk/iofuncs.h>
+#include <ndk/ldrfuncs.h>
 #include <ndk/obfuncs.h>
 #include <ndk/rtlfuncs.h>
 
