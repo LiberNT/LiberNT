@@ -139,7 +139,7 @@ ComputeQuerySetSize(IN LPWSAQUERYSETA AnsiSet,
     if (AnsiSet->lpServiceClassId)
     {
         /* Align the current size and add GUID size */
-        Size = (Size + 3) & ~3;
+        Size = (Size + sizeof(PVOID) - 1) & ~(sizeof(PVOID) - 1);
         Size += sizeof(GUID);
     }
 
@@ -147,7 +147,7 @@ ComputeQuerySetSize(IN LPWSAQUERYSETA AnsiSet,
     if (AnsiSet->lpVersion)
     {
         /* Align the current size and add GUID size */
-        Size = (Size + 3) & ~3;
+        Size = (Size + sizeof(PVOID) - 1) & ~(sizeof(PVOID) - 1);
         Size += sizeof(WSAVERSION);
     }
 
@@ -163,7 +163,7 @@ ComputeQuerySetSize(IN LPWSAQUERYSETA AnsiSet,
     if (AnsiSet->lpNSProviderId)
     {
         /* Align the current size and add GUID size */
-        Size = (Size + 3) & ~3;
+        Size = (Size + sizeof(PVOID) - 1) & ~(sizeof(PVOID) - 1);
         Size += sizeof(GUID);
     }
 
@@ -187,7 +187,7 @@ ComputeQuerySetSize(IN LPWSAQUERYSETA AnsiSet,
     if (AnsiSet->lpafpProtocols)
     {
         /* Align the current size and add AFP size */
-        Size = (Size + 3) & ~3;
+        Size = (Size + sizeof(PVOID) - 1) & ~(sizeof(PVOID) - 1);
         Size += sizeof(AFPROTOCOLS) * AnsiSet->dwNumberOfProtocols;
     }
 
@@ -195,7 +195,8 @@ ComputeQuerySetSize(IN LPWSAQUERYSETA AnsiSet,
     if (AnsiSet->lpcsaBuffer)
     {
         /* Align the current size */
-        Size = (Size + 3) & ~3;
+        Size = (Size + sizeof(PVOID) - 1) & ~(sizeof(PVOID) - 1);
+        Size += sizeof(CSADDR_INFO) * AnsiSet->dwNumberOfCsAddrs;
 
         /* Loop all the addresses in the array */
         for (i = 0; i < AnsiSet->dwNumberOfCsAddrs; i++)
@@ -204,19 +205,16 @@ ComputeQuerySetSize(IN LPWSAQUERYSETA AnsiSet,
             if (AnsiSet->lpcsaBuffer[i].LocalAddr.lpSockaddr)
             {
                 /* Align the current size and add the sockaddr's length */
-                Size = (Size + 3) & ~3;
+                Size = (Size + sizeof(PVOID) - 1) & ~(sizeof(PVOID) - 1);
                 Size += AnsiSet->lpcsaBuffer[i].LocalAddr.iSockaddrLength;
             }
             /* Check for remote sockaddr */
             if (AnsiSet->lpcsaBuffer[i].RemoteAddr.lpSockaddr)
             {
                 /* Align the current size and add the sockaddr's length */
-                Size = (Size + 3) & ~3;
+                Size = (Size + sizeof(PVOID) - 1) & ~(sizeof(PVOID) - 1);
                 Size += AnsiSet->lpcsaBuffer[i].RemoteAddr.iSockaddrLength;
             }
-
-            /* Add the sockaddr size itself */
-            Size += sizeof(CSADDR_INFO);
         }
     }
 
@@ -224,10 +222,11 @@ ComputeQuerySetSize(IN LPWSAQUERYSETA AnsiSet,
     if (AnsiSet->lpBlob)
     {
         /* Align the current size and add blob size */
-        Size = (Size + 3) & ~3;
+        Size = (Size + sizeof(PVOID) - 1) & ~(sizeof(PVOID) - 1);
         Size += sizeof(BLOB);
 
         /* Also add the actual blob data size, if it exists */
+        Size = (Size + sizeof(PVOID) - 1) & ~(sizeof(PVOID) - 1);
         if (AnsiSet->lpBlob) Size += AnsiSet->lpBlob->cbSize;
     }
 
