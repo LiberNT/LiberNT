@@ -8,7 +8,6 @@
 #include "setupapi_private.h"
 
 static const WCHAR RepositoryPath[] = L"\\DriverStore\\FileRepository";
-static const WCHAR SourceDisksFiles[] = L"SourceDisksFiles";
 static const WCHAR VersionSection[] = L"Version";
 static const WCHAR CatalogFile[] = L"CatalogFile";
 
@@ -240,13 +239,57 @@ GetCompressedSourceName(
     return TRUE;
 }
 
+typedef struct _STAGE_CABINET_CONTEXT
+{
+    PCWSTR FileName;
+    PCWSTR Target;
+} STAGE_CABINET_CONTEXT, *PSTAGE_CABINET_CONTEXT;
+
+static UINT CALLBACK
+StageCabinetCallback(
+    IN PVOID Context,
+    IN UINT Notification,
+    IN UINT_PTR Param1,
+    IN UINT_PTR Param2)
+{
+    PSTAGE_CABINET_CONTEXT Stage = Context;
+
+    switch (Notification)
+    {
+        case SPFILENOTIFY_FILEINCABINET:
+        {
+            PFILE_IN_CABINET_INFO_W Info = (PFILE_IN_CABINET_INFO_W)Param1;
+            PCWSTR Name = wcsrchr(Info->NameInCabinet, L'\\');
+
+            Name = Name ? Name + 1 : Info->NameInCabinet;
+            if (_wcsicmp(Name, Stage->FileName) != 0)
+                return FILEOP_SKIP;
+
+            lstrcpynW(Info->FullTargetName, Stage->Target, ARRAY_SIZE(Info->FullTargetName));
+            return FILEOP_DOIT;
+        }
+
+        case SPFILENOTIFY_FILEEXTRACTED:
+            return ((PFILEPATHS_W)Param1)->Win32Error;
+
+        case SPFILENOTIFY_NEEDNEWCABINET:
+            lstrcpyW((PWSTR)Param2, ((PCABINET_INFO_W)Param1)->CabinetPath);
+            return NO_ERROR;
+
+        default:
+            return NO_ERROR;
+    }
+}
+
 static VOID
 StagePackageFile(
     IN PCWSTR SourceRoot,
     IN PCWSTR StoreRoot,
-    IN PCWSTR Relative)
+    IN PCWSTR Relative,
+    IN PCWSTR Cabinet OPTIONAL)
 {
     WCHAR Source[MAX_PATH], Target[MAX_PATH], Compressed[MAX_PATH];
+    STAGE_CABINET_CONTEXT Stage;
     PWSTR Last;
     DWORD Error;
 
@@ -263,8 +306,18 @@ StagePackageFile(
         if (!GetCompressedSourceName(Source, Compressed, ARRAY_SIZE(Compressed)) ||
             GetFileAttributesW(Compressed) == INVALID_FILE_ATTRIBUTES)
         {
-            return;
+            Compressed[0] = UNICODE_NULL;
+            if (!Cabinet || GetFileAttributesW(Cabinet) == INVALID_FILE_ATTRIBUTES)
+                return;
         }
+        else
+        {
+            Cabinet = NULL;
+        }
+    }
+    else
+    {
+        Cabinet = NULL;
     }
 
     Last = wcsrchr(Target, L'\\');
@@ -276,7 +329,15 @@ StagePackageFile(
         *Last = L'\\';
     }
 
-    if (Compressed[0])
+    if (Cabinet)
+    {
+        Stage.FileName = wcsrchr(Relative, L'\\');
+        Stage.FileName = Stage.FileName ? Stage.FileName + 1 : Relative;
+        Stage.Target = Target;
+        if (!SetupIterateCabinetW(Cabinet, 0, StageCabinetCallback, &Stage))
+            TRACE("Extracting %s from %s failed with error %lu\n", debugstr_w(Relative), debugstr_w(Cabinet), GetLastError());
+    }
+    else if (Compressed[0])
     {
         Error = SetupDecompressOrCopyFileW(Compressed, Target, NULL);
         if (Error != ERROR_SUCCESS)
@@ -289,42 +350,105 @@ StagePackageFile(
 }
 
 static VOID
-StageSourceDiskFiles(
+StageCopyFile(
+    IN HINF hInf,
+    IN PCWSTR FileName,
+    IN PCWSTR SourceRoot,
+    IN PCWSTR StoreRoot)
+{
+    WCHAR SubDir[MAX_PATH], DiskPath[MAX_PATH], Tag[MAX_PATH], Relative[MAX_PATH], Cabinet[MAX_PATH];
+    PCWSTR CabinetPath = NULL;
+    SIZE_T Length;
+    UINT DiskId;
+
+    SubDir[0] = UNICODE_NULL;
+    if (!SetupGetSourceFileLocationW(hInf, NULL, FileName, &DiskId, SubDir, ARRAY_SIZE(SubDir), NULL))
+        return;
+
+    DiskPath[0] = UNICODE_NULL;
+    SetupGetSourceInfoW(hInf, DiskId, SRCINFO_PATH, DiskPath, ARRAY_SIZE(DiskPath), NULL);
+    Tag[0] = UNICODE_NULL;
+    SetupGetSourceInfoW(hInf, DiskId, SRCINFO_TAGFILE, Tag, ARRAY_SIZE(Tag), NULL);
+
+    if (!CombinePath(Relative, DiskPath, SubDir) ||
+        lstrlenW(Relative) + 1 + lstrlenW(FileName) >= MAX_PATH)
+    {
+        return;
+    }
+    if (Relative[0] && Relative[lstrlenW(Relative) - 1] != L'\\')
+        lstrcatW(Relative, L"\\");
+    lstrcatW(Relative, FileName);
+
+    Length = wcslen(Tag);
+    if (Length > 4 && _wcsicmp(Tag + Length - 4, L".cab") == 0 &&
+        IsSafeRelativePath(DiskPath) && IsSafeRelativePath(Tag) &&
+        CombinePath(Cabinet, SourceRoot, DiskPath) &&
+        lstrlenW(Cabinet) + 1 + Length < MAX_PATH)
+    {
+        if (Cabinet[0] && Cabinet[lstrlenW(Cabinet) - 1] != L'\\')
+            lstrcatW(Cabinet, L"\\");
+        lstrcatW(Cabinet, Tag);
+        CabinetPath = Cabinet;
+    }
+
+    StagePackageFile(SourceRoot, StoreRoot, Relative, CabinetPath);
+}
+
+static VOID
+StageCopyFilesSection(
     IN HINF hInf,
     IN PCWSTR Section,
     IN PCWSTR SourceRoot,
     IN PCWSTR StoreRoot)
 {
-    WCHAR FileName[MAX_PATH], SubDir[MAX_PATH], DiskPath[MAX_PATH], Relative[MAX_PATH];
+    WCHAR Target[MAX_PATH], Source[MAX_PATH];
     INFCONTEXT Context;
-    INT DiskId;
+
+    if (Section[0] == L'@')
+    {
+        StageCopyFile(hInf, Section + 1, SourceRoot, StoreRoot);
+        return;
+    }
 
     if (!SetupFindFirstLineW(hInf, Section, NULL, &Context))
         return;
 
     do
     {
-        if (!SetupGetStringFieldW(&Context, 0, FileName, ARRAY_SIZE(FileName), NULL) || !FileName[0])
+        if (!SetupGetStringFieldW(&Context, 1, Target, ARRAY_SIZE(Target), NULL) || !Target[0])
             continue;
+        if (!SetupGetStringFieldW(&Context, 2, Source, ARRAY_SIZE(Source), NULL) || !Source[0])
+            lstrcpyW(Source, Target);
 
-        DiskPath[0] = UNICODE_NULL;
-        if (SetupGetIntField(&Context, 1, &DiskId))
-            SetupGetSourceInfoW(hInf, DiskId, SRCINFO_PATH, DiskPath, ARRAY_SIZE(DiskPath), NULL);
-
-        SubDir[0] = UNICODE_NULL;
-        SetupGetStringFieldW(&Context, 2, SubDir, ARRAY_SIZE(SubDir), NULL);
-
-        if (!CombinePath(Relative, DiskPath, SubDir) ||
-            lstrlenW(Relative) + 1 + lstrlenW(FileName) >= MAX_PATH)
-        {
-            continue;
-        }
-        if (Relative[0] && Relative[lstrlenW(Relative) - 1] != L'\\')
-            lstrcatW(Relative, L"\\");
-        lstrcatW(Relative, FileName);
-
-        StagePackageFile(SourceRoot, StoreRoot, Relative);
+        StageCopyFile(hInf, Source, SourceRoot, StoreRoot);
     } while (SetupFindNextLine(&Context, &Context));
+}
+
+static VOID
+StageCopyFiles(
+    IN HINF hInf,
+    IN PCWSTR SourceRoot,
+    IN PCWSTR StoreRoot)
+{
+    WCHAR Section[MAX_INF_SECTION_NAME_LENGTH + 1], Files[MAX_INF_SECTION_NAME_LENGTH + 1];
+    DWORD Index, Field, FieldCount;
+    INFCONTEXT Context;
+    BOOL Found;
+
+    for (Index = 0; SetupEnumInfSectionsW(hInf, Index, Section, ARRAY_SIZE(Section), NULL); Index++)
+    {
+        for (Found = SetupFindFirstLineW(hInf, Section, L"CopyFiles", &Context);
+             Found;
+             Found = SetupFindNextMatchLineW(&Context, L"CopyFiles", &Context))
+        {
+            FieldCount = SetupGetFieldCount(&Context);
+            for (Field = 1; Field <= FieldCount; Field++)
+            {
+                if (SetupGetStringFieldW(&Context, Field, Files, ARRAY_SIZE(Files), NULL) && Files[0])
+                    StageCopyFilesSection(hInf, Files, SourceRoot, StoreRoot);
+            }
+        }
+    }
 }
 
 static VOID
@@ -348,7 +472,7 @@ StageCatalogFiles(
         }
 
         if (SetupGetStringFieldW(&Context, 1, Value, ARRAY_SIZE(Value), NULL) && Value[0])
-            StagePackageFile(SourceRoot, StoreRoot, Value);
+            StagePackageFile(SourceRoot, StoreRoot, Value, NULL);
     } while (SetupFindNextLine(&Context, &Context));
 }
 
@@ -421,7 +545,6 @@ SETUPAPI_StageDriverPackage(
     IN PCWSTR SourceInfFileName)
 {
     WCHAR Source[MAX_PATH], SourceRoot[MAX_PATH], Root[MAX_PATH], Store[MAX_PATH], Target[MAX_PATH];
-    WCHAR Section[LINE_LEN];
     PWSTR BaseName;
     HINF hInf;
     DWORD Length;
@@ -456,9 +579,7 @@ SETUPAPI_StageDriverPackage(
 
     StageCatalogFiles(hInf, SourceRoot, Store);
 
-    swprintf(Section, ARRAY_SIZE(Section), L"%s.%s", SourceDisksFiles, GetStoreArchitecture());
-    StageSourceDiskFiles(hInf, Section, SourceRoot, Store);
-    StageSourceDiskFiles(hInf, SourceDisksFiles, SourceRoot, Store);
+    StageCopyFiles(hInf, SourceRoot, Store);
 
     SetupCloseInfFile(hInf);
     return TRUE;
