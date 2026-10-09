@@ -10,6 +10,7 @@
 #include <atlcom.h>
 #include <atlsimpcoll.h>
 #include <directmanipulation.h>
+#include <dwmapi.h>
 #include <float.h>
 
 static LONG objectCount;
@@ -31,6 +32,11 @@ static HRESULT CopyMatrix(float *destination, const float *source, DWORD count)
         if (!_finite(source[i])) return E_INVALIDARG;
     CopyMemory(destination, source, 6 * sizeof(float));
     return S_OK;
+}
+
+static ULONGLONG QpcToMilliseconds(ULONGLONG counter, ULONGLONG frequency)
+{
+    return counter / frequency * 1000 + counter % frequency * 1000 / frequency;
 }
 
 static void MultiplyMatrix(float *out, const float *a, const float *b)
@@ -427,13 +433,12 @@ public:
         }
         return m_update->QueryInterface(iid, out);
     }
-    STDMETHODIMP CreateViewport(IDirectManipulationFrameInfoProvider *provider, HWND window,
+    STDMETHODIMP CreateViewport(IDirectManipulationFrameInfoProvider *, HWND window,
                                 REFIID iid, void **out) override
     {
         if (!out) return E_POINTER;
         *out = NULL;
         if (!IsWindow(window)) return E_INVALIDARG;
-        if (provider) return E_NOTIMPL;
         CComObject<CViewport> *viewport;
         HRESULT hr = CComObject<CViewport>::CreateInstance(&viewport);
         if (FAILED(hr)) return hr;
@@ -448,6 +453,55 @@ public:
     { if (!out) return E_POINTER; *out = NULL; return CLASS_E_CLASSNOTAVAILABLE; }
 };
 
+class CCompositor : public CComObjectRootEx<CComMultiThreadModel>, public IDirectManipulationCompositor2,
+                    public IDirectManipulationFrameInfoProvider, private ModuleObject
+{
+    CComAutoCriticalSection m_lock;
+    CComPtr<IDirectManipulationUpdateManager> m_update;
+public:
+    BEGIN_COM_MAP(CCompositor)
+        COM_INTERFACE_ENTRY_IID(IID_IDirectManipulationCompositor, IDirectManipulationCompositor)
+        COM_INTERFACE_ENTRY_IID(IID_IDirectManipulationCompositor2, IDirectManipulationCompositor2)
+        COM_INTERFACE_ENTRY_IID(IID_IDirectManipulationFrameInfoProvider, IDirectManipulationFrameInfoProvider)
+    END_COM_MAP()
+    STDMETHODIMP AddContent(IDirectManipulationContent *, IUnknown *, IUnknown *, IUnknown *) override
+    { return E_NOTIMPL; }
+    STDMETHODIMP RemoveContent(IDirectManipulationContent *) override { return E_NOTIMPL; }
+    STDMETHODIMP SetUpdateManager(IDirectManipulationUpdateManager *manager) override
+    {
+        if (!manager) return E_INVALIDARG;
+        ObjectLock lock(m_lock);
+        m_update = manager;
+        return S_OK;
+    }
+    STDMETHODIMP Flush() override { return S_OK; }
+    STDMETHODIMP AddContentWithCrossProcessChaining(IDirectManipulationPrimaryContent *, IUnknown *, IUnknown *,
+                                                    IUnknown *) override
+    { return E_NOTIMPL; }
+    STDMETHODIMP GetNextFrameInfo(ULONGLONG *time, ULONGLONG *process, ULONGLONG *composition) override
+    {
+        DWM_TIMING_INFO timing;
+        LARGE_INTEGER frequency, now;
+        ULONGLONG next;
+        HRESULT hr;
+
+        if (!time || !process || !composition) return E_POINTER;
+        ZeroMemory(&timing, sizeof(timing));
+        timing.cbSize = sizeof(timing);
+        hr = DwmGetCompositionTimingInfo(NULL, &timing);
+        if (FAILED(hr)) return hr;
+        if (!timing.qpcRefreshPeriod || !QueryPerformanceFrequency(&frequency) || !QueryPerformanceCounter(&now))
+            return E_FAIL;
+        next = timing.qpcVBlank + timing.qpcRefreshPeriod;
+        if (next < (ULONGLONG)now.QuadPart) next = now.QuadPart;
+        *time = QpcToMilliseconds(now.QuadPart, frequency.QuadPart);
+        *process = QpcToMilliseconds(next, frequency.QuadPart);
+        *composition = QpcToMilliseconds(next + timing.qpcRefreshPeriod, frequency.QuadPart);
+        return S_OK;
+    }
+};
+
+template <class T>
 class CFactory : public CComObjectRootEx<CComMultiThreadModel>, public IClassFactory, private ModuleObject
 {
 public:
@@ -459,12 +513,12 @@ public:
         if (!out) return E_POINTER;
         *out = NULL;
         if (outer) return CLASS_E_NOAGGREGATION;
-        CComObject<CManager> *manager;
-        HRESULT hr = CComObject<CManager>::CreateInstance(&manager);
+        CComObject<T> *object;
+        HRESULT hr = CComObject<T>::CreateInstance(&object);
         if (FAILED(hr)) return hr;
-        manager->AddRef();
-        hr = manager->QueryInterface(iid, out);
-        manager->Release();
+        object->AddRef();
+        hr = object->QueryInterface(iid, out);
+        object->Release();
         return hr;
     }
     STDMETHODIMP LockServer(BOOL lock) override
@@ -475,18 +529,25 @@ public:
     }
 };
 
-EXTERN_C HRESULT WINAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void **out)
+template <class T>
+static HRESULT CreateFactory(REFIID iid, void **out)
 {
-    if (!out) return E_POINTER;
-    *out = NULL;
-    if (clsid != CLSID_DirectManipulationManager) return CLASS_E_CLASSNOTAVAILABLE;
-    CComObjectNoLock<CFactory> *factory = NULL;
-    ATLTRY(factory = new CComObjectNoLock<CFactory>())
+    CComObjectNoLock<CFactory<T> > *factory = NULL;
+    ATLTRY(factory = new CComObjectNoLock<CFactory<T> >())
     if (!factory) return E_OUTOFMEMORY;
     factory->AddRef();
     HRESULT hr = factory->QueryInterface(iid, out);
     factory->Release();
     return hr;
+}
+
+EXTERN_C HRESULT WINAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void **out)
+{
+    if (!out) return E_POINTER;
+    *out = NULL;
+    if (clsid == CLSID_DirectManipulationManager) return CreateFactory<CManager>(iid, out);
+    if (clsid == CLSID_DCompManipulationCompositor) return CreateFactory<CCompositor>(iid, out);
+    return CLASS_E_CLASSNOTAVAILABLE;
 }
 
 EXTERN_C HRESULT WINAPI DllCanUnloadNow()

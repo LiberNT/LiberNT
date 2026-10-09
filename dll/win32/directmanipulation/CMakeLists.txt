@@ -4,5 +4,5 @@ add_library(directmanipulation MODULE main.cpp ${CMAKE_CURRENT_BINARY_DIR}/direc
 add_idl_reg_scripts(directmanipulation registry classes.idl)
 set_module_type(directmanipulation win32dll)
 target_link_libraries(directmanipulation uuid cpprt atl_classes wine wine_dll_register)
-add_importlibs(directmanipulation user32 ole32 msvcrt kernel32 ntdll)
+add_importlibs(directmanipulation dwmapi user32 ole32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET directmanipulation DESTINATION reactos/system32 FOR all)

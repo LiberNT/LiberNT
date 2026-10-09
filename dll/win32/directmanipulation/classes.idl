@@ -9,3 +9,14 @@ coclass DirectManipulationManager
     [default] interface IDirectManipulationManager;
     interface IDirectManipulationManager2;
 }
+
+[
+    uuid(79dea627-a08a-43ac-8ef5-6900b9299126),
+    threading(both)
+]
+coclass DCompManipulationCompositor
+{
+    [default] interface IDirectManipulationCompositor;
+    interface IDirectManipulationCompositor2;
+    interface IDirectManipulationFrameInfoProvider;
+}
