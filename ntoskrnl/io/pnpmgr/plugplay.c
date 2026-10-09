@@ -694,6 +694,7 @@ IopGetDeviceProperty(PPLUGPLAY_CONTROL_PROPERTY_DATA PropertyData)
             PowerData = (PCM_POWER_DATA)Buffer;
             RtlZeroMemory(PowerData, sizeof(CM_POWER_DATA));
             PowerData->PD_Size = sizeof(CM_POWER_DATA);
+            BufferSize = sizeof(CM_POWER_DATA);
 
             RtlZeroMemory(&DeviceCapabilities, sizeof(DEVICE_CAPABILITIES));
             DeviceCapabilities.Size = sizeof(DEVICE_CAPABILITIES);
@@ -751,16 +752,18 @@ IopGetDeviceProperty(PPLUGPLAY_CONTROL_PROPERTY_DATA PropertyData)
     }
     else if (Property == PNP_PROPERTY_REMOVAL_POLICY_HARDWARE_DEFAULT)
     {
-        if (BufferSize < sizeof(DeviceNode->HardwareRemovalPolicy))
+        ULONG HardwareRemovalPolicy = DeviceNode->HardwareRemovalPolicy;
+
+        if (BufferSize < sizeof(HardwareRemovalPolicy))
         {
             BufferSize = 0;
             Status = STATUS_BUFFER_TOO_SMALL;
         }
         else
         {
-            BufferSize = sizeof(DeviceNode->HardwareRemovalPolicy);
+            BufferSize = sizeof(HardwareRemovalPolicy);
             RtlCopyMemory(Buffer,
-                          &DeviceNode->HardwareRemovalPolicy,
+                          &HardwareRemovalPolicy,
                           BufferSize);
         }
     }
