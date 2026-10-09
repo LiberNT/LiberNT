@@ -697,6 +697,32 @@ function(get_defines OUTPUT_VAR)
     set(${OUTPUT_VAR} ${__tmp_var} PARENT_SCOPE)
 endfunction()
 
+function(export_sdk_libraries _target _directory)
+    cmake_parse_arguments(_export "" "FROM" "LIBRARIES;FILES;DEPENDS" ${ARGN})
+    set(_commands)
+    foreach(_file IN LISTS _export_FILES)
+        get_filename_component(_name "${_file}" NAME)
+        list(APPEND _commands
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${_directory}/${_name}"
+            COMMAND ${CMAKE_AR} qcL "${_directory}/${_name}" "${_file}")
+    endforeach()
+    foreach(_library IN LISTS _export_LIBRARIES)
+        set(_source "$<TARGET_FILE:${_library}>")
+        if(_export_FROM)
+            set(_source "${_export_FROM}/$<PATH:RELATIVE_PATH,$<TARGET_FILE:${_library}>,${REACTOS_BINARY_DIR}>")
+        endif()
+        set(_archive "${_directory}/$<TARGET_FILE_NAME:${_library}>")
+        list(APPEND _commands
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${_archive}"
+            COMMAND ${CMAKE_AR} qcL "${_archive}" "${_source}")
+    endforeach()
+    add_custom_target(${_target}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_directory}"
+        ${_commands}
+        DEPENDS ${_export_DEPENDS}
+        VERBATIM)
+endfunction()
+
 # Wine marks a small number of sources with `#pragma makedep arm64ec_x64`.
 # They contain genuine AMD64 call thunks which must be linked into the hybrid
 # image as AMD64 objects; compiling their ARM64 branch changes the ABI.

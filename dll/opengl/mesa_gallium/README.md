@@ -15,7 +15,7 @@ the target architecture:
 | `llvmpipe` | LLVM-accelerated CPU rendering | AMD64 and ARM64 when `ENABLE_MESA_LLVMPIPE=ON` |
 | `softpipe` | CPU rendering without LLVM | i386; AMD64 and ARM64 when `ENABLE_MESA_LLVMPIPE=OFF` |
 
-Native i386, AMD64 and ARM64 builds using llvm-mingw Clang enable
+Native i386, AMD64 and ARM64 builds using Clang enable
 `MESA_GALLIUM_FROM_SOURCE` by default. On ARM64, the normal profile contains
 V3D, VC4, and Softpipe. Enabling `ENABLE_MESA_LLVMPIPE` replaces Softpipe with
 LLVMpipe in that same DLL, producing exactly V3D, VC4, and LLVMpipe. The Pi
@@ -34,7 +34,7 @@ The support build retains the separate Pi KMT transports. Softpipe and
 LLVMpipe use the software presentation path.
 
 The i386, AMD64, ARM64, and ARM64EC source builds use the same native CMake
-project. Host requirements are CMake 3.24+, llvm-mingw, Ninja, Bison 2.7+,
+project. Host requirements are CMake 3.24+, the RosBE LLVM toolchain, Ninja, Bison 2.7+,
 Flex, and Python with Mako, packaging and PyYAML.
 Nested builds inherit the invoking `ninja -jN` or `cmake --build --parallel N`
 at build time, including ARM64EC and WoW64. `CMAKE_BUILD_PARALLEL_LEVEL` is also

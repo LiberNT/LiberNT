@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Ahmed ARIF <arif193@gmail.com>
 
 if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang" OR MSVC)
-    message(FATAL_ERROR "The Mesa Gallium source build requires llvm-mingw Clang; use MESA_GALLIUM_FROM_SOURCE=OFF for the packaged ICDs.")
+    message(FATAL_ERROR "The Mesa Gallium source build requires the RosBE Clang toolchain; use MESA_GALLIUM_FROM_SOURCE=OFF for the packaged ICDs.")
 endif()
 
 set(MESA_SOURCE_DIR "${REACTOS_SOURCE_DIR}/submodules/mesa")
@@ -12,292 +12,120 @@ endif()
 # Parallelism is inherited at build time; discard the old fixed job limit.
 unset(MESA_BUILD_JOBS CACHE)
 
-if(ARCH STREQUAL "riscv64")
-    if(NOT SPACEMIT_K1_SUPPORT)
-        return()
-    endif()
-    find_program(MESA_NINJA NAMES ninja REQUIRED)
-    find_program(MESA_PYTHON NAMES python3 python REQUIRED)
-    find_program(MESA_BISON NAMES bison REQUIRED)
-    find_program(MESA_FLEX NAMES flex REQUIRED)
-    include("${REACTOS_SOURCE_DIR}/sdk/cmake/nested-build.cmake")
-    include(ExternalProject)
-
-    set(MESA_WORK_DIR "${CMAKE_CURRENT_BINARY_DIR}/mesa-source")
-    set(MESA_BINARY_DIR "${MESA_WORK_DIR}/cmake-build")
-    set(MESA_SDK_LIBDIR "${MESA_WORK_DIR}/reactos-sdk-lib")
-    set(MESA_PVR_DLL "${MESA_BINARY_DIR}/src/imagination/vulkan/vulkan_powervr_mesa.dll")
-    set(MESA_PVR_MANIFEST "${MESA_BINARY_DIR}/src/imagination/vulkan/powervr_mesa_icd.json")
-    set(MESA_PVR_STAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/mesa-vulkan")
-    set(MESA_PVR_STAGE "${MESA_PVR_STAGE_DIR}/vulkan_powervr_mesa.dll")
-    set(MESA_WGL_ZINK_DLL "${MESA_BINARY_DIR}/src/gallium/targets/wgl/mesa_gallium.dll")
-    set(MESA_WGL_ZINK_STAGE "${CMAKE_CURRENT_BINARY_DIR}/mesa-icd/mesa_gallium.dll")
-    set(MESA_D3D_ZINK_DLL "${MESA_BINARY_DIR}/src/gallium/targets/d3d10umd/d3d10zink.dll")
-    set(MESA_D3D_ZINK_STAGE "${CMAKE_CURRENT_BINARY_DIR}/mesa-d3d/d3d10zink.dll")
-
-    set(_mesa_sdk_targets
-        msvcrtex libucrtbase libmsvcrt libkernel32 libntdll ucrtoldnames libuser32 libgdi32
-        libadvapi32 libole32 liboleaut32 libshell32 uuid libpsapi libws2_32 libversion libsetupapi libkernelbase libwinspool libcomdlg32)
-    set(_mesa_sdk_copy)
-    foreach(_mesa_sdk_target IN LISTS _mesa_sdk_targets)
-        list(APPEND _mesa_sdk_copy COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:${_mesa_sdk_target}>" "${MESA_SDK_LIBDIR}/")
-    endforeach()
-    add_custom_target(mesa_reactos_sdk_libs
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${MESA_SDK_LIBDIR}"
-        ${_mesa_sdk_copy}
-        DEPENDS ${_mesa_sdk_targets} ucrtoldnames_target pvrkmt
-        VERBATIM)
-
-    if(CMAKE_BUILD_TYPE STREQUAL "Release")
-        set(_mesa_assertions OFF)
-    else()
-        set(_mesa_assertions ON)
-    endif()
-    ExternalProject_Add(mesa_gallium_build
-        EXCLUDE_FROM_ALL TRUE
-        PREFIX "${MESA_WORK_DIR}/cmake-prefix"
-        SOURCE_DIR "${MESA_SOURCE_DIR}"
-        BINARY_DIR "${MESA_BINARY_DIR}"
-        DOWNLOAD_COMMAND ""
-        UPDATE_COMMAND ""
-        PATCH_COMMAND ""
-        CMAKE_GENERATOR Ninja
-        CMAKE_ARGS
-            -DCMAKE_TOOLCHAIN_FILE:FILEPATH=${REACTOS_SOURCE_DIR}/submodules/mesa-reactos-sdk.cmake
-            -DCMAKE_MAKE_PROGRAM:FILEPATH=${MESA_NINJA}
-            -DCMAKE_BUILD_TYPE:STRING=Release
-            -DREACTOS_CLANG_LLVM_MINGW_ROOT:PATH=${REACTOS_CLANG_LLVM_MINGW_ROOT}
-            -DMESA_REACTOS_ARCH:STRING=riscv64
-            -DMESA_REACTOS_TRIPLE:STRING=riscv64-w64-windows-gnu
-            "-DMESA_REACTOS_ARCH_FLAGS:STRING=-march=${RISCV64_MARCH} -mabi=lp64 -mcmodel=medany -mno-relax"
-            -DMESA_REACTOS_SOURCE_DIR:PATH=${REACTOS_SOURCE_DIR}
-            -DMESA_REACTOS_BUILD_DIR:PATH=${REACTOS_BINARY_DIR}
-            -DMESA_REACTOS_LIBDIR:PATH=${MESA_SDK_LIBDIR}
-            -DMESA_REACTOS_CXX_RUNTIME:PATH=${REACTOS_RISCV64_LIBCXX_ROOT}
-            -DMESA_REACTOS_SDK:BOOL=ON
-            -DMESA_ARCH:STRING=riscv64
-            -DMESA_IMAGINATION:BOOL=ON
-            -DMESA_ZINK:BOOL=ON
-            -DMESA_ASSERTIONS:BOOL=${_mesa_assertions}
-            -DMESA_WGL_DLL_NAME:STRING=mesa_gallium
-            -DPython3_EXECUTABLE:FILEPATH=${MESA_PYTHON}
-            -DBISON_EXECUTABLE:FILEPATH=${MESA_BISON}
-            -DFLEX_EXECUTABLE:FILEPATH=${MESA_FLEX}
-        BUILD_COMMAND ${CMAKE_COMMAND} -E env CCACHE_DISABLE=1 SCCACHE_DISABLE=1
-            ${REACTOS_NESTED_BUILD} <BINARY_DIR> --target vulkan_powervr_mesa powervr_icd mesa_gallium d3d10zink
-        BUILD_ALWAYS TRUE
-        INSTALL_COMMAND ""
-        BUILD_BYPRODUCTS "${MESA_PVR_DLL}" "${MESA_PVR_MANIFEST}" "${MESA_WGL_ZINK_DLL}" "${MESA_D3D_ZINK_DLL}"
-        USES_TERMINAL_BUILD TRUE)
-    ExternalProject_Add_StepDependencies(mesa_gallium_build configure mesa_reactos_sdk_libs)
-
-    add_custom_command(
-        OUTPUT "${MESA_PVR_STAGE}" "${MESA_PVR_STAGE_DIR}/powervr_mesa_icd.json"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${MESA_PVR_STAGE_DIR}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_PVR_DLL}" "${MESA_PVR_STAGE}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_PVR_MANIFEST}" "${MESA_PVR_STAGE_DIR}/powervr_mesa_icd.json"
-        COMMAND "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/llvm-strip" --strip-debug "${MESA_PVR_STAGE}"
-        COMMAND native-symz "${MESA_PVR_STAGE}"
-        DEPENDS mesa_gallium_build "${MESA_PVR_DLL}" "${MESA_PVR_MANIFEST}"
-        VERBATIM)
-    add_custom_target(mesa_vulkan_powervr DEPENDS "${MESA_PVR_STAGE}" "${MESA_PVR_STAGE_DIR}/powervr_mesa_icd.json")
-    add_cd_file(FILE "${MESA_PVR_STAGE}" TARGET mesa_vulkan_powervr DESTINATION reactos/system32 OPTIONAL FOR all)
-    add_cd_file(FILE "${MESA_PVR_STAGE_DIR}/powervr_mesa_icd.json" TARGET mesa_vulkan_powervr
-        DESTINATION reactos/system32 OPTIONAL FOR all)
-    add_optional_registry_inf(INF powervr-vulkan.inf REQUIRES "${MESA_PVR_STAGE}")
-    add_dependencies(submodules mesa_vulkan_powervr)
-
-    add_custom_command(
-        OUTPUT "${MESA_WGL_ZINK_STAGE}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/mesa-icd"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_WGL_ZINK_DLL}" "${MESA_WGL_ZINK_STAGE}"
-        COMMAND "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/llvm-strip" --strip-debug "${MESA_WGL_ZINK_STAGE}"
-        COMMAND native-symz "${MESA_WGL_ZINK_STAGE}"
-        DEPENDS mesa_gallium_build "${MESA_WGL_ZINK_DLL}"
-        VERBATIM)
-    add_custom_target(mesa_gallium_zink DEPENDS "${MESA_WGL_ZINK_STAGE}")
-    add_cd_file(FILE "${MESA_WGL_ZINK_STAGE}" TARGET mesa_gallium_zink DESTINATION reactos/system32 OPTIONAL FOR all)
-    add_dependencies(submodules mesa_gallium_zink)
-    set_property(GLOBAL APPEND PROPERTY CI_SYSTEM_OPTIONAL_FILES "${MESA_WGL_ZINK_STAGE}")
-
-    add_custom_command(
-        OUTPUT "${MESA_D3D_ZINK_STAGE}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/mesa-d3d"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_D3D_ZINK_DLL}" "${MESA_D3D_ZINK_STAGE}"
-        COMMAND "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/llvm-strip" --strip-debug "${MESA_D3D_ZINK_STAGE}"
-        COMMAND native-symz "${MESA_D3D_ZINK_STAGE}"
-        DEPENDS mesa_gallium_build "${MESA_D3D_ZINK_DLL}"
-        VERBATIM)
-    add_custom_target(mesa_d3d10_zink DEPENDS "${MESA_D3D_ZINK_STAGE}")
-    add_cd_file(FILE "${MESA_D3D_ZINK_STAGE}" TARGET mesa_d3d10_zink DESTINATION reactos/system32 OPTIONAL FOR all)
-    add_dependencies(submodules mesa_d3d10_zink)
-    set_property(GLOBAL APPEND PROPERTY CI_SYSTEM_OPTIONAL_FILES "${MESA_D3D_ZINK_STAGE}")
-    set_property(GLOBAL APPEND PROPERTY CI_SYSTEM_OPTIONAL_FILES "${MESA_PVR_STAGE}")
-    message(STATUS "Mesa PowerVR Vulkan ICD (riscv64): ReactOS SDK build from ${MESA_SOURCE_DIR}")
+if(ARCH STREQUAL "riscv64" AND NOT SPACEMIT_K1_SUPPORT)
     return()
 endif()
-set(MESA_LLVM_MINGW_ROOT "${REACTOS_CLANG_LLVM_MINGW_ROOT}" CACHE PATH "llvm-mingw toolchain used by modern Mesa")
-if(ARCH STREQUAL "arm64")
-    set(MESA_CPU aarch64)
-    set(MESA_TRIPLE aarch64-w64-mingw32)
-    if(ARM64EC_RUNTIME)
-        set(MESA_TRIPLE arm64ec-w64-mingw32)
-    endif()
-    if(ENABLE_MESA_LLVMPIPE)
-        set(MESA_GALLIUM_DRIVERS vc4,v3d,llvmpipe)
-    else()
-        set(MESA_GALLIUM_DRIVERS vc4,v3d,softpipe)
-    endif()
-elseif(ARCH STREQUAL "amd64")
-    set(MESA_CPU x86_64)
-    set(MESA_TRIPLE x86_64-w64-mingw32)
-    if(ENABLE_MESA_LLVMPIPE)
-        set(MESA_GALLIUM_DRIVERS llvmpipe)
-    else()
-        set(MESA_GALLIUM_DRIVERS softpipe)
-    endif()
+
+set(_mesa_arch ${ARCH})
+set(_mesa_arch_flags)
+set(_mesa_features)
+set(_mesa_support_targets)
+set(_mesa_d3d_umd_name)
+if(ARCH STREQUAL "amd64")
+    set(_mesa_processor x86_64)
+    set(_mesa_triple x86_64-w64-mingw32)
+    set(_mesa_arch_flags -mlong-double-64)
 elseif(ARCH STREQUAL "i386")
-    set(MESA_CPU x86)
-    set(MESA_TRIPLE i686-w64-mingw32)
-    set(MESA_GALLIUM_DRIVERS v3d,softpipe)
+    set(_mesa_processor i386)
+    set(_mesa_triple i686-w64-mingw32)
+    set(_mesa_arch_flags -mlong-double-64)
+    set(_mesa_support_targets vc4kmt zlib)
+    set(_mesa_d3d_umd_name rpi5vc4d3d)
+elseif(ARCH STREQUAL "arm64")
+    set(_mesa_processor aarch64)
+    set(_mesa_triple aarch64-w64-mingw32)
+    if(ARM64EC_RUNTIME)
+        set(_mesa_arch arm64ec)
+        set(_mesa_processor arm64ec)
+        set(_mesa_triple arm64ec-w64-mingw32)
+    else()
+        set(_mesa_d3d_umd_name rpi5vc4d3d)
+    endif()
+    set(_mesa_support_targets rpi3vc4kmt vc4kmt zlib)
+elseif(ARCH STREQUAL "riscv64")
+    set(_mesa_processor riscv64)
+    set(_mesa_triple riscv64-w64-mingw32)
+    set(_mesa_arch_flags -march=${OARCH} -mabi=lp64 -mcmodel=medany -mno-relax)
+    set(_mesa_features -DMESA_IMAGINATION:BOOL=ON -DMESA_ZINK:BOOL=ON)
+    set(_mesa_support_targets pvrkmt)
+    set(_mesa_d3d_umd_name d3d10zink)
 else()
-    message(FATAL_ERROR "Mesa Gallium requires a native i386, amd64 or arm64 target.")
+    message(FATAL_ERROR "Mesa Gallium requires an i386, amd64, arm64 or riscv64 target.")
 endif()
-find_program(MESA_CC NAMES ${MESA_TRIPLE}-clang HINTS "${MESA_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
-find_program(MESA_CXX NAMES ${MESA_TRIPLE}-clang++ HINTS "${MESA_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
-find_program(MESA_WINDRES NAMES ${MESA_TRIPLE}-windres HINTS "${MESA_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
-find_program(MESA_AR NAMES llvm-ar HINTS "${MESA_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
-find_program(MESA_STRIP NAMES llvm-strip HINTS "${MESA_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
-find_program(MESA_NINJA NAMES ninja REQUIRED)
-find_program(MESA_PYTHON NAMES python3 python REQUIRED)
-set(MESA_LLVM_ROOT "" CACHE PATH "Optional prebuilt Windows static LLVM installation for the selected architecture")
+string(JOIN " " _mesa_arch_flags ${_mesa_arch_flags})
+
+set(_mesa_lavapipe_enabled OFF)
+if(ENABLE_MESA_LLVMPIPE AND NOT ARM64EC_RUNTIME)
+    set(_mesa_lavapipe_enabled ON)
+endif()
 if(ENABLE_MESA_LLVMPIPE)
+    set(MESA_LLVM_ROOT "" CACHE PATH "Optional prebuilt Windows static LLVM installation for the selected architecture")
     if(MESA_LLVM_ROOT)
         get_filename_component(MESA_LLVM_PREFIX "${MESA_LLVM_ROOT}" ABSOLUTE)
     else()
         set(MESA_LLVM_PREFIX "${REACTOS_BINARY_DIR}/submodules/mesa-llvmpipe/llvm-install")
     endif()
-else()
-    set(MESA_LLVM_PREFIX "")
+    list(APPEND _mesa_features
+        -DMESA_LLVMPIPE:BOOL=ON
+        -DMESA_LAVAPIPE:BOOL=${_mesa_lavapipe_enabled}
+        -DMESA_LLVM_ROOT:PATH=${MESA_LLVM_PREFIX}
+        -DMESA_DIRECTX_HEADERS_ROOT:PATH=${REACTOS_BINARY_DIR}/submodules/mesa-llvmpipe/directx-headers-install)
 endif()
+
+include("${REACTOS_SOURCE_DIR}/submodules/mesa-cmake.cmake")
 execute_process(COMMAND "${MESA_PYTHON}" -c "import mako, packaging, yaml"
     RESULT_VARIABLE _mesa_python_status ERROR_VARIABLE _mesa_python_error)
 if(NOT _mesa_python_status EQUAL 0)
     message(FATAL_ERROR "Mesa needs Python mako, packaging and PyYAML modules for ${MESA_PYTHON}: ${_mesa_python_error}")
 endif()
 include("${REACTOS_SOURCE_DIR}/sdk/cmake/nested-build.cmake")
+include(ExternalProject)
 
 set(MESA_WORK_DIR "${CMAKE_CURRENT_BINARY_DIR}/mesa-source")
 set(MESA_BINARY_DIR "${MESA_WORK_DIR}/cmake-build")
-set(MESA_SUPPORT_DIR "${MESA_WORK_DIR}/reactos-release")
-set(MESA_DLL "${MESA_BINARY_DIR}/src/gallium/targets/wgl/mesa_gallium.dll")
-set(MESA_D3D_DLL "${MESA_BINARY_DIR}/src/gallium/targets/d3d10umd/rpi5vc4d3d.dll")
-set(MESA_LAVAPIPE_DLL "${MESA_BINARY_DIR}/src/gallium/targets/lavapipe/vulkan_lvp.dll")
-set(MESA_LAVAPIPE_MANIFEST "${MESA_BINARY_DIR}/src/gallium/targets/lavapipe/lvp_icd.json")
-set(MESA_DIRECTX_HEADERS_PREFIX "${REACTOS_BINARY_DIR}/submodules/mesa-llvmpipe/directx-headers-install")
-set(MESA_GALLIUM_ICD_STAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/mesa-icd")
-set(MESA_GALLIUM_ICD_STAGE "${MESA_GALLIUM_ICD_STAGE_DIR}/mesa_gallium.dll")
-set(MESA_D3D_UMD_STAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/mesa-d3d")
-set(MESA_D3D_UMD_STAGE "${MESA_D3D_UMD_STAGE_DIR}/rpi5vc4d3d.dll")
-include(ExternalProject)
-set(_mesa_support_dependency)
-set(_mesa_platform_options)
-if(ARCH STREQUAL "arm64" OR ARCH STREQUAL "i386")
-    if(HOST_TOOLS_DIR)
-        set(_mesa_host_tools_dir "${HOST_TOOLS_DIR}")
-    else()
-        set(_mesa_host_tools_dir "${REACTOS_BINARY_DIR}/host-tools/bin")
-    endif()
-    set(_mesa_abi_args)
-    if(ARCH STREQUAL "arm64")
-        list(APPEND _mesa_abi_args -DARM64EC_RUNTIME:BOOL=${ARM64EC_RUNTIME})
-        if(ARM64EC_RUNTIME)
-            list(APPEND _mesa_abi_args
-                -DARM64EC_NATIVE_BINARY_DIR:PATH=${ARM64EC_NATIVE_BINARY_DIR})
-        endif()
-        set(_mesa_support_targets rpi3vc4kmt vc4kmt zlib)
-        set(_mesa_support_byproducts
-            "${MESA_SUPPORT_DIR}/sdk/lib/rpi3vc4kmt/librpi3vc4kmt.a"
-            "${MESA_SUPPORT_DIR}/sdk/lib/vc4kmt/libvc4kmt.a"
-            "${MESA_SUPPORT_DIR}/sdk/lib/3rdparty/zlib/libzlib.a")
-    else()
-        set(_mesa_support_targets vc4kmt zlib)
-        set(_mesa_support_byproducts
-            "${MESA_SUPPORT_DIR}/sdk/lib/vc4kmt/libvc4kmt.a"
-            "${MESA_SUPPORT_DIR}/sdk/lib/3rdparty/zlib/libzlib.a")
-    endif()
-    # Build the graphics support libraries with the normal ReactOS toolchain
-    # in an isolated Release configuration even
-    # when the destination OS is Debug. No other OS binaries are built here.
-    ExternalProject_Add(mesa_gallium_support
-        EXCLUDE_FROM_ALL TRUE
-        PREFIX "${MESA_WORK_DIR}/support-prefix"
-        SOURCE_DIR "${REACTOS_SOURCE_DIR}"
-        BINARY_DIR "${MESA_SUPPORT_DIR}"
-        DOWNLOAD_COMMAND ""
-        UPDATE_COMMAND ""
-        CMAKE_GENERATOR Ninja
-        CMAKE_ARGS
-            -DCMAKE_TOOLCHAIN_FILE=${REACTOS_SOURCE_DIR}/toolchain-clang.cmake
-            -DHOST_TOOLS_DIR:PATH=${_mesa_host_tools_dir}
-            -DARCH=${ARCH}
-            ${_mesa_abi_args}
-            -DREACTOS_CLANG_LLVM_MINGW_ROOT=${MESA_LLVM_MINGW_ROOT}
-            -DREACTOS_GRAPHICS_DRIVER_MODEL=WDDM
-            -DREACTOS_WDDM_LEVEL=${REACTOS_WDDM_LEVEL}
-            -DCMAKE_BUILD_TYPE=Release
-            -DOPTIMIZE=6
-            -DDBG=OFF
-            -DNVS:BOOL=ON
-            -DSEPARATE_DBG=OFF
-            -DWITH_DEBUG_SYMBOLS=OFF
-            -DENABLE_FEX_ARM64EC=OFF
-            -DENABLE_MESA_LLVMPIPE=OFF
-            -DMESA_GALLIUM_FROM_SOURCE=OFF
-            -DENABLE_ROSTESTS=OFF
-            -DRPI3_SUPPORT=OFF
-            -DRPI5_SUPPORT=OFF
-        BUILD_COMMAND ${REACTOS_NESTED_BUILD} <BINARY_DIR> --target ${_mesa_support_targets}
-        BUILD_ALWAYS TRUE
-        INSTALL_COMMAND ""
-        BUILD_BYPRODUCTS ${_mesa_support_byproducts}
-        USES_TERMINAL_BUILD TRUE)
-    # The support build imports these tools, including in nested ARM64EC builds.
-    # Ensure they exist and are current before configuring or building support.
-    ExternalProject_Add_StepDependencies(mesa_gallium_support configure host-tools)
-    set(_mesa_support_dependency mesa_gallium_support)
-    set(_mesa_platform_options
-        -DMESA_REACTOS_SOURCE_DIR:PATH=${REACTOS_SOURCE_DIR}
-        -DMESA_REACTOS_BUILD_DIR:PATH=${MESA_SUPPORT_DIR})
-endif()
+set(MESA_SDK_LIBDIR "${MESA_WORK_DIR}/reactos-sdk-lib")
 
-set(_mesa_arch ${ARCH})
+set(_mesa_sdk_targets
+    msvcrtex libucrtbase libmsvcrt libkernel32 libntdll ucrtoldnames libuser32 libgdi32
+    libadvapi32 libole32 liboleaut32 libshell32 uuid libpsapi libws2_32 libversion libsetupapi libkernelbase libsynchronization libwinspool libcomdlg32)
 if(ARM64EC_RUNTIME)
-    set(_mesa_arch arm64ec)
+    list(APPEND _mesa_sdk_targets chpe)
 endif()
-include("${REACTOS_SOURCE_DIR}/submodules/mesa-cmake.cmake")
+export_sdk_libraries(mesa_reactos_sdk_libs "${MESA_SDK_LIBDIR}"
+    LIBRARIES ${_mesa_sdk_targets}
+    DEPENDS ${_mesa_sdk_targets} ucrtoldnames_target ${_mesa_support_targets})
+
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(_mesa_assertions OFF)
 else()
     set(_mesa_assertions ON)
 endif()
+
+set(MESA_WGL_DLL "${MESA_BINARY_DIR}/src/gallium/targets/wgl/mesa_gallium.dll")
 set(_mesa_build_targets mesa_gallium)
-set(_mesa_build_byproducts "${MESA_DLL}")
-set(_mesa_lavapipe_enabled OFF)
-if(ENABLE_MESA_LLVMPIPE AND NOT ARM64EC_RUNTIME)
-    set(_mesa_lavapipe_enabled ON)
+set(_mesa_build_byproducts "${MESA_WGL_DLL}")
+if(_mesa_d3d_umd_name)
+    set(MESA_D3D_UMD_DLL "${MESA_BINARY_DIR}/src/gallium/targets/d3d10umd/${_mesa_d3d_umd_name}.dll")
+    list(APPEND _mesa_build_byproducts "${MESA_D3D_UMD_DLL}")
+    if(ARCH STREQUAL "riscv64")
+        list(APPEND _mesa_build_targets d3d10zink)
+    else()
+        list(APPEND _mesa_build_targets mesa_d3d)
+    endif()
 endif()
-set(_mesa_d3d_umd_enabled OFF)
-if((ARCH STREQUAL "arm64" OR ARCH STREQUAL "i386") AND NOT ARM64EC_RUNTIME)
-    set(_mesa_d3d_umd_enabled ON)
-    list(APPEND _mesa_build_targets mesa_d3d)
-    list(APPEND _mesa_build_byproducts "${MESA_D3D_DLL}")
+if(ARCH STREQUAL "riscv64")
+    set(MESA_PVR_DLL "${MESA_BINARY_DIR}/src/imagination/vulkan/vulkan_powervr_mesa.dll")
+    set(MESA_PVR_MANIFEST "${MESA_BINARY_DIR}/src/imagination/vulkan/powervr_mesa_icd.json")
+    list(APPEND _mesa_build_targets vulkan_powervr_mesa powervr_icd)
+    list(APPEND _mesa_build_byproducts "${MESA_PVR_DLL}" "${MESA_PVR_MANIFEST}")
 endif()
 if(_mesa_lavapipe_enabled)
     list(APPEND _mesa_build_targets vulkan_lvp lvp_icd)
-    list(APPEND _mesa_build_byproducts "${MESA_LAVAPIPE_DLL}" "${MESA_LAVAPIPE_MANIFEST}")
+    list(APPEND _mesa_build_byproducts
+        "${MESA_BINARY_DIR}/src/gallium/targets/lavapipe/vulkan_lvp.dll"
+        "${MESA_BINARY_DIR}/src/gallium/targets/lavapipe/lvp_icd.json")
 endif()
+
 ExternalProject_Add(mesa_gallium_build
     EXCLUDE_FROM_ALL TRUE
     PREFIX "${MESA_WORK_DIR}/cmake-prefix"
@@ -309,21 +137,26 @@ ExternalProject_Add(mesa_gallium_build
     CMAKE_GENERATOR Ninja
     CMAKE_ARGS
         ${MESA_CMAKE_ARGS}
+        -DREACTOS_SDK_ARCH:STRING=${_mesa_processor}
+        -DREACTOS_SDK_TRIPLE:STRING=${_mesa_triple}
+        "-DREACTOS_SDK_ARCH_FLAGS:STRING=${_mesa_arch_flags}"
+        -DREACTOS_SDK_SOURCE_DIR:PATH=${REACTOS_SOURCE_DIR}
+        -DREACTOS_SDK_BUILD_DIR:PATH=${REACTOS_BINARY_DIR}
+        -DREACTOS_SDK_LIBDIR:PATH=${MESA_SDK_LIBDIR}
+        -DREACTOS_SDK_CXX_RUNTIME:PATH=${REACTOS_LIBCXX_ROOT}
+        -DMESA_REACTOS_SOURCE_DIR:PATH=${REACTOS_SOURCE_DIR}
+        -DMESA_REACTOS_BUILD_DIR:PATH=${REACTOS_BINARY_DIR}
         -DMESA_ARCH:STRING=${_mesa_arch}
         -DMESA_WGL_DLL_NAME:STRING=mesa_gallium
-        -DMESA_LLVMPIPE:BOOL=${ENABLE_MESA_LLVMPIPE}
-        -DMESA_LAVAPIPE:BOOL=${_mesa_lavapipe_enabled}
         -DMESA_ASSERTIONS:BOOL=${_mesa_assertions}
-        -DMESA_LLVM_ROOT:PATH=${MESA_LLVM_PREFIX}
-        -DMESA_DIRECTX_HEADERS_ROOT:PATH=${MESA_DIRECTX_HEADERS_PREFIX}
-        ${_mesa_platform_options}
+        ${_mesa_features}
     BUILD_COMMAND ${CMAKE_COMMAND} -E env CCACHE_DISABLE=1 SCCACHE_DISABLE=1
         ${REACTOS_NESTED_BUILD} <BINARY_DIR> --target ${_mesa_build_targets}
     BUILD_ALWAYS TRUE
     INSTALL_COMMAND ""
     BUILD_BYPRODUCTS ${_mesa_build_byproducts}
     USES_TERMINAL_BUILD TRUE)
-
+ExternalProject_Add_StepDependencies(mesa_gallium_build configure mesa_reactos_sdk_libs)
 if(ENABLE_MESA_LLVMPIPE)
     # These producers are declared later under submodules/. Attach them here,
     # where ExternalProject's configure-step custom command is scoped.
@@ -340,40 +173,45 @@ if(ENABLE_MESA_LLVMPIPE)
     endif()
 endif()
 
-if(_mesa_support_dependency)
-    # Build the support libraries before CMake checks for them, without depending
-    # on the ExternalProject completion stamp that changes on every build.
-    # Mesa's CMake build tracks changes to the libraries themselves.
-    ExternalProject_Add_StepDependencies(mesa_gallium_build configure ${_mesa_support_dependency})
-endif()
-
-add_custom_command(
-    OUTPUT "${MESA_GALLIUM_ICD_STAGE}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${MESA_GALLIUM_ICD_STAGE_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_DLL}" "${MESA_GALLIUM_ICD_STAGE}"
-    COMMAND ${MESA_STRIP} --strip-debug "${MESA_GALLIUM_ICD_STAGE}"
-    COMMAND native-symz "${MESA_GALLIUM_ICD_STAGE}"
-    DEPENDS mesa_gallium_build "${MESA_DLL}"
-    VERBATIM)
-add_custom_target(mesa_gallium DEPENDS "${MESA_GALLIUM_ICD_STAGE}")
-add_cd_file(FILE "${MESA_GALLIUM_ICD_STAGE}" TARGET mesa_gallium DESTINATION reactos/system32 OPTIONAL FOR all)
-add_optional_registry_inf(INF mesa-gallium.inf REQUIRES "${MESA_GALLIUM_ICD_STAGE}")
-add_dependencies(submodules mesa_gallium)
-# ExternalProject DLLs are staged files rather than CMake module targets.
-# Catalog the exact stripped images shipped to the guest.
-set_property(GLOBAL APPEND PROPERTY CI_SYSTEM_OPTIONAL_FILES "${MESA_GALLIUM_ICD_STAGE}")
-if(_mesa_d3d_umd_enabled)
+function(mesa_stage_dll _target _dll _stage_dir)
+    get_filename_component(_name "${_dll}" NAME)
+    set(_stage "${_stage_dir}/${_name}")
     add_custom_command(
-        OUTPUT "${MESA_D3D_UMD_STAGE}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${MESA_D3D_UMD_STAGE_DIR}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_D3D_DLL}" "${MESA_D3D_UMD_STAGE}"
-        COMMAND ${MESA_STRIP} --strip-debug "${MESA_D3D_UMD_STAGE}"
-        COMMAND native-symz "${MESA_D3D_UMD_STAGE}"
-        DEPENDS mesa_gallium_build "${MESA_D3D_DLL}"
+        OUTPUT "${_stage}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_stage_dir}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_dll}" "${_stage}"
+        COMMAND ${CMAKE_STRIP} --strip-debug "${_stage}"
+        COMMAND native-symz "${_stage}"
+        DEPENDS mesa_gallium_build "${_dll}"
         VERBATIM)
-    add_custom_target(mesa_d3d_umd DEPENDS "${MESA_D3D_UMD_STAGE}")
-    add_dependencies(mesa_gallium mesa_d3d_umd)
-    add_cd_file(FILE "${MESA_D3D_UMD_STAGE}" TARGET mesa_d3d_umd DESTINATION reactos/system32 OPTIONAL FOR all)
-    set_property(GLOBAL APPEND PROPERTY CI_SYSTEM_OPTIONAL_FILES "${MESA_D3D_UMD_STAGE}")
+    add_custom_target(${_target} DEPENDS "${_stage}")
+    add_cd_file(FILE "${_stage}" TARGET ${_target} DESTINATION reactos/system32 OPTIONAL FOR all)
+    add_dependencies(submodules ${_target})
+    set_property(GLOBAL APPEND PROPERTY CI_SYSTEM_OPTIONAL_FILES "${_stage}")
+    set(_mesa_stage "${_stage}" PARENT_SCOPE)
+endfunction()
+
+mesa_stage_dll(mesa_gallium "${MESA_WGL_DLL}" "${CMAKE_CURRENT_BINARY_DIR}/mesa-icd")
+if(NOT ARCH STREQUAL "riscv64")
+    add_optional_registry_inf(INF mesa-gallium.inf REQUIRES "${_mesa_stage}")
 endif()
-message(STATUS "Mesa Gallium OpenGL ICD (${ARCH}: ${MESA_GALLIUM_DRIVERS}): Release build from ${MESA_SOURCE_DIR}")
+if(_mesa_d3d_umd_name)
+    mesa_stage_dll(mesa_d3d_umd "${MESA_D3D_UMD_DLL}" "${CMAKE_CURRENT_BINARY_DIR}/mesa-d3d")
+    add_dependencies(mesa_gallium mesa_d3d_umd)
+endif()
+if(ARCH STREQUAL "riscv64")
+    mesa_stage_dll(mesa_vulkan_powervr "${MESA_PVR_DLL}" "${CMAKE_CURRENT_BINARY_DIR}/mesa-vulkan")
+    set(_mesa_pvr_stage "${_mesa_stage}")
+    set(_mesa_pvr_manifest "${CMAKE_CURRENT_BINARY_DIR}/mesa-vulkan/powervr_mesa_icd.json")
+    add_custom_command(
+        OUTPUT "${_mesa_pvr_manifest}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MESA_PVR_MANIFEST}" "${_mesa_pvr_manifest}"
+        DEPENDS mesa_gallium_build "${MESA_PVR_MANIFEST}"
+        VERBATIM)
+    add_custom_target(mesa_vulkan_powervr_manifest DEPENDS "${_mesa_pvr_manifest}")
+    add_dependencies(mesa_vulkan_powervr mesa_vulkan_powervr_manifest)
+    add_cd_file(FILE "${_mesa_pvr_manifest}" TARGET mesa_vulkan_powervr_manifest
+        DESTINATION reactos/system32 OPTIONAL FOR all)
+    add_optional_registry_inf(INF powervr-vulkan.inf REQUIRES "${_mesa_pvr_stage}")
+endif()
+message(STATUS "Mesa Gallium (${_mesa_arch}): ReactOS SDK build from ${MESA_SOURCE_DIR}")
