@@ -205,6 +205,22 @@ MiVadRangeForAddress(
 }
 
 BOOLEAN
+MiAddressIsImageView(
+    _In_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 Address)
+{
+    PMI_VAD Vad;
+    BOOLEAN Image;
+
+    MI_RW_ACQUIRE_SHARED(&Space->Lock);
+    Vad = MiVadLocate(Space, Address);
+    Image = (BOOLEAN)(Vad != NULL && Vad->Type == MiVadImage);
+    MI_RW_RELEASE_SHARED(&Space->Lock);
+
+    return Image;
+}
+
+BOOLEAN
 MiDynamicCodeBlocked(
     _In_ PEPROCESS Process)
 {

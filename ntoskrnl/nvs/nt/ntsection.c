@@ -2664,7 +2664,8 @@ MiUnmapViewOfSectionNt(
         }
     }
 
-    if (Process == PsGetCurrentProcess())
+    if (Process == PsGetCurrentProcess() &&
+        MiAddressIsImageView(MiSpaceOfProcess(Process), (ULONG64)(ULONG_PTR)BaseAddress))
     {
         DbgkUnMapViewOfSection(BaseAddress);
     }
