@@ -2658,6 +2658,15 @@ FileRecord::ReplaceNonResidentMappingPairs(
             *ResultOwner = AttributeOwner;
         return Status;
     }
+    if (AttributeOwner == this &&
+        MappingReserve != 0)
+    {
+        MaximumAttributeLength =
+            MaximumAttributeLength > MappingReserve
+            ? (MaximumAttributeLength - MappingReserve) &
+                  ~(sizeof(ULONGLONG) - 1)
+            : 0;
+    }
     if (!Header ||
         Header->BaseFileRecord != 0 ||
         !AttributeOwner->Header ||

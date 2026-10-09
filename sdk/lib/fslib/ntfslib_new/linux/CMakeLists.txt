@@ -403,6 +403,25 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
         )
     endif()
     if(MKNTFS_EXECUTABLE AND
+       FUSERMOUNT3_EXECUTABLE AND
+       NTFSLS_EXECUTABLE AND
+       NTFSFIX_EXECUTABLE)
+        add_test(
+            NAME ntfslib_linux_index_spill
+            COMMAND /bin/sh
+                "${CMAKE_CURRENT_LIST_DIR}/tests/index_spill_smoke.sh"
+                "$<TARGET_FILE:ntfslib_fuse>"
+                "${MKNTFS_EXECUTABLE}"
+                "${FUSERMOUNT3_EXECUTABLE}"
+                "${NTFSLS_EXECUTABLE}"
+                "${NTFSFIX_EXECUTABLE}"
+        )
+        set_tests_properties(
+            ntfslib_linux_index_spill
+            PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
+        )
+    endif()
+    if(MKNTFS_EXECUTABLE AND
        NTFSCP_EXECUTABLE AND
        NTFSLS_EXECUTABLE AND
        NTFSCAT_EXECUTABLE)

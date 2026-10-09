@@ -2411,6 +2411,123 @@ FileRecord::EnsureAttributeListForMappingGrowth(
     return STATUS_SUCCESS;
 }
 
+static const ULONG ResidentPromotionGrowth = 0x40 - 0x18 + 0x10;
+
+NTSTATUS
+FileRecord::ReleaseBaseRecordSpace(
+    _In_ ULONG Required)
+{
+    PNonResidentMappingUpdate MappingUpdate = NULL;
+    PAttribute Candidate = NULL;
+    PAttribute Current;
+    PDataRun Runs;
+    PUCHAR RecordBackup;
+    ULONG DataPtr;
+    ULONG Free;
+    NTSTATUS Status;
+
+    if (!Header || !Data || !DiskVolume ||
+        Required == 0 ||
+        Header->BaseFileRecord != 0 ||
+        Header->MFTRecordNumber == _MFT ||
+        Header->ActualSize > Header->AllocatedSize ||
+        !FindAttributeInRecord(TypeAttributeList,
+                               NULL,
+                               NULL))
+    {
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+    Free = Header->AllocatedSize - Header->ActualSize;
+    if (Free >= Required)
+        return STATUS_SUCCESS;
+
+    DataPtr = Header->AttributeOffset;
+    while (DataPtr + 0x10 <= Header->ActualSize)
+    {
+        Current = reinterpret_cast<PAttribute>(
+            &Data[DataPtr]);
+        if (Current->AttributeType ==
+                TypeAttributeEndMarker ||
+            Current->Length < 0x18 ||
+            (Current->Length & 7) != 0 ||
+            DataPtr + Current->Length >
+                Header->ActualSize)
+        {
+            break;
+        }
+        if (Current->IsNonResident &&
+            Current->AttributeType != TypeAttributeList &&
+            Current->NonResident.FirstVCN == 0 &&
+            Current->NonResident.AllocatedSize != 0 &&
+            (!Candidate ||
+             Current->Length > Candidate->Length))
+        {
+            Candidate = Current;
+        }
+        DataPtr += Current->Length;
+    }
+    if (!Candidate)
+        return STATUS_BUFFER_TOO_SMALL;
+
+    Runs = FindNonResidentData(Candidate);
+    if (!Runs)
+        return STATUS_FILE_CORRUPT_ERROR;
+    RecordBackup =
+        NtfsAcquireRecordScratch(DiskVolume, RecordBufferSize);
+    if (!RecordBackup)
+    {
+        FreeDataRun(Runs);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    RtlCopyMemory(RecordBackup,
+                  Data,
+                  RecordBufferSize);
+
+    MappingReserve = Required;
+    Status = ReplaceNonResidentMappingPairs(
+        &Candidate,
+        Runs,
+        Candidate->NonResident.AllocatedSize,
+        Candidate->NonResident.DataSize,
+        Candidate->NonResident.InitalizedDataSize,
+        &MappingUpdate);
+    MappingReserve = 0;
+    if (NT_SUCCESS(Status))
+    {
+        Status = MappingUpdate
+            ? CommitNonResidentMappingUpdate(
+                &MappingUpdate)
+            : DiskVolume->MFT->
+                WriteFileRecordToMFT(this);
+        if (!NT_SUCCESS(Status))
+        {
+            if (MappingUpdate)
+            {
+                AbortNonResidentMappingUpdate(
+                    &MappingUpdate);
+            }
+            RtlCopyMemory(Data,
+                          RecordBackup,
+                          RecordBufferSize);
+            Header =
+                reinterpret_cast<PFileRecordHeader>(Data);
+        }
+    }
+    ClearDataRunCache();
+    FreeDataRun(Runs);
+    NtfsReleaseRecordScratch(DiskVolume, RecordBackup, RecordBufferSize);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (Header->ActualSize > Header->AllocatedSize ||
+        Header->AllocatedSize - Header->ActualSize <
+            Required)
+    {
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 FileRecord::WriteFileData(_In_     AttributeType AttrType,
                           _In_opt_ PWSTR StreamName,
@@ -2430,6 +2547,7 @@ FileRecord::WriteFileData(_In_     AttributeType AttrType,
     UINT32 TimestampFields;
     ULONG OldResidentDataLength;
     ULONG RequestedLength;
+    BOOLEAN SpaceReleased = FALSE;
 
     if (!Length || !Offset ||
         (!Buffer && *Length != 0))
@@ -2455,6 +2573,7 @@ FileRecord::WriteFileData(_In_     AttributeType AttrType,
             return Status;
     }
 
+Retry:
     // Get the target attribute
     TargetAttribute = GetAttribute(AttrType, StreamName);
     if (!TargetAttribute)
@@ -2549,6 +2668,25 @@ FileRecord::WriteFileData(_In_     AttributeType AttrType,
                 EndOffset > OldResidentDataLength
                     ? EndOffset
                     : OldResidentDataLength);
+            if (Status == STATUS_BUFFER_TOO_SMALL &&
+                AttributeOwner == this &&
+                !SpaceReleased)
+            {
+                SpaceReleased = TRUE;
+                Status = ReleaseBaseRecordSpace(
+                    EndOffset - OldResidentDataLength <
+                        ResidentPromotionGrowth
+                    ? ALIGN_UP_BY(
+                        (ULONG)(EndOffset -
+                                OldResidentDataLength),
+                        sizeof(ULONGLONG))
+                    : ResidentPromotionGrowth);
+                if (NT_SUCCESS(Status))
+                {
+                    *Length = RequestedLength;
+                    goto Retry;
+                }
+            }
             if (NT_SUCCESS(Status))
             {
                 *Length = RequestedLength;

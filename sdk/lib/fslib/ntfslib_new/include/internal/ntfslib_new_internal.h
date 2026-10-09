@@ -916,6 +916,7 @@ private:
     PDataRunCacheEntry DataRunCache = NULL;
     PFileRecordExtentCacheEntry ExtentCache = NULL;
     FileRecord* BaseRecordOwner = NULL;
+    ULONG MappingReserve = 0;
     PUCHAR AttributeListData = NULL;
     ULONG AttributeListLength = 0;
     UINT32 AutomaticTimestampMask =
@@ -1073,6 +1074,9 @@ private:
         _Inout_ PAttribute* TargetAttribute,
         _Inout_ FileRecord** AttributeOwner,
         _Out_ PBOOLEAN Created);
+
+    NTSTATUS
+    ReleaseBaseRecordSpace(_In_ ULONG Required);
 
     NTSTATUS
     RemoveAttributeRecord(_In_ PAttribute TargetAttribute);
