@@ -476,7 +476,7 @@ VOID
 BasepInheritDllDirectory(VOID)
 {
     PUNICODE_STRING DllPath = &NtCurrentPeb()->ProcessParameters->DllPath;
-    UNICODE_STRING Directory;
+    UNICODE_STRING Directory, Remaining, Default;
     PWCHAR Start, End, Limit;
 
     if (DllPath->Buffer == NULL)
@@ -492,6 +492,17 @@ BasepInheritDllDirectory(VOID)
     if (Directory.Length < 3 * sizeof(WCHAR) ||
         (Start[1] != L':' && (Start[0] != L'\\' || Start[1] != L'\\')) ||
         RtlEqualUnicodeString(&Directory, &BaseWindowsSystemDirectory, TRUE))
+    {
+        return;
+    }
+    if (End == Limit)
+        return;
+    Default = BaseDefaultPath;
+    Default.Length -= sizeof(WCHAR);
+    Remaining.Buffer = End + 1;
+    Remaining.Length = Remaining.MaximumLength = (USHORT)((Limit - Remaining.Buffer) * sizeof(WCHAR));
+    if (!RtlPrefixUnicodeString(&Default, &Remaining, TRUE) ||
+        (Remaining.Length > Default.Length && Remaining.Buffer[Default.Length / sizeof(WCHAR)] != L';'))
     {
         return;
     }
