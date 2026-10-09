@@ -208,6 +208,16 @@ typedef struct _KALPC_MESSAGE_ATTRIBUTES
     ULONG ValidAttributes;
 } KALPC_MESSAGE_ATTRIBUTES, *PKALPC_MESSAGE_ATTRIBUTES;
 
+typedef struct _LPCP_DATA_INFO
+{
+    ULONG NumberOfEntries;
+    struct
+    {
+        PVOID BaseAddress;
+        ULONG DataLength;
+    } Entries[1];
+} LPCP_DATA_INFO, *PLPCP_DATA_INFO;
+
 typedef struct _KALPC_CONNECTION_DATA
 {
     PALPC_PORT ClientPort;

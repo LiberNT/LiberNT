@@ -293,31 +293,14 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntoskrnl/wmi/wmidrv.c)
 
 list(APPEND SOURCE
-    ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpchelp.c)
-
-if(ENABLE_ALPC)
-    list(APPEND SOURCE
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpcinit.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpcport.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpcconn.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpcsend.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpcattr.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpccompl.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpclpc.c)
-    add_definitions(-D_ALPC_ENABLED)
-else()
-    list(APPEND SOURCE
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/lpc/close.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/lpc/complete.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/lpc/connect.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/lpc/create.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/lpc/listen.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/lpc/port.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/lpc/reply.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/lpc/send.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/lpc/alpccompat.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/lpc/alpcstub.c)
-endif()
+    ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpchelp.c
+    ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpcinit.c
+    ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpcport.c
+    ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpcconn.c
+    ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpcsend.c
+    ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpcattr.c
+    ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpccompl.c
+    ${REACTOS_SOURCE_DIR}/ntoskrnl/alpc/alpclpc.c)
 
 if(DBG)
     list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/se/debug.c)
