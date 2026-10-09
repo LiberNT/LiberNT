@@ -1342,7 +1342,8 @@ InitializeProgramFilesDir(VOID)
     // FIXME: Security!
     if (!CreateDirectoryW(szProgramFilesDirPath, NULL))
     {
-        if (GetLastError() != ERROR_ALREADY_EXISTS)
+        if (GetLastError() != ERROR_ALREADY_EXISTS &&
+            GetFileAttributesW(szProgramFilesDirPath) == INVALID_FILE_ATTRIBUTES)
         {
             DPRINT1("Error: %lu\n", GetLastError());
             return FALSE;

@@ -335,6 +335,14 @@ function(add_system_dirs _image_filelist)
 endfunction()
 
 
+function(add_program_files_dirs _image_filelist)
+    file(APPEND ${_image_filelist} "Program Files/Common Files=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
+    if(ENABLE_WOW64)
+        file(APPEND ${_image_filelist} "Program Files (x86)/Common Files=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
+    endif()
+endfunction()
+
+
 function(image_list_command _image _var)
     set(${_var} ${CMAKE_COMMAND} -DMODE=list
         -DBASE=${CMAKE_CURRENT_BINARY_DIR}/${_image}.$<CONFIG>.lst
@@ -364,6 +372,7 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "${CMAKE_CURRENT_BINARY_
 # Create TEMP directory
 file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "reactos/TEMP=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 add_system_dirs(${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst)
+add_program_files_dirs(${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst)
 file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "reactos/system32/Tasks=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 
 # Create user profile directories
