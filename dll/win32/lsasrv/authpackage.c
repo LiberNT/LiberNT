@@ -1532,7 +1532,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
         goto done;
     }
 
-    if (LocalGroups->GroupCount > 0)
+    if (LocalGroups != NULL && LocalGroups->GroupCount > 0)
     {
         /* Add local groups to the token information */
         Status = LsapAddLocalGroups(TokenInformation,
@@ -1657,7 +1657,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
         Status = NtCreateToken(&TokenHandle,
                                TOKEN_ALL_ACCESS,
                                &ObjectAttributes,
-                               (RequestMsg->LogonUser.Request.LogonType == Network) ? TokenImpersonation : TokenPrimary,
+                               (LogonType == Network) ? TokenImpersonation : TokenPrimary,
                                &RequestMsg->LogonUser.Reply.LogonId,
                                &TokenInfo1->ExpirationTime,
                                &TokenInfo1->User,
@@ -1693,7 +1693,8 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
     }
     else
     {
-        FIXME("LogonType %lu is not supported yet!\n", LogonType);
+        UserName = AccountName;
+        LogonDomainName = AuthenticatingAuthority;
     }
 
     Status = LsapSetLogonSessionData(&RequestMsg->LogonUser.Reply.LogonId,

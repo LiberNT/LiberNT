@@ -85,7 +85,7 @@ LsapSetLogonSessionData(
     Session->LogonType = LogonType;
 
     Status = RtlValidateUnicodeString(0, UserName);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status) || UserName == NULL)
         return STATUS_INVALID_PARAMETER;
 
     /* UserName is mandatory and cannot be an empty string */
@@ -112,7 +112,7 @@ LsapSetLogonSessionData(
 
     /* LogonDomain is optional and can be an empty string */
     TRACE("LogonDomain %wZ\n", LogonDomain);
-    if (LogonDomain->Length)
+    if (LogonDomain != NULL && LogonDomain->Length)
     {
         Session->LogonDomain.Buffer = RtlAllocateHeap(RtlGetProcessHeap(),
                                                       HEAP_ZERO_MEMORY,
