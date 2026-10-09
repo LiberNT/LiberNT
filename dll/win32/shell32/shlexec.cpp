@@ -2600,8 +2600,30 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
     retval = SHELL_FindExecutable(sei_tmp.lpDirectory, lpFile, sei_tmp.lpVerb, wcmd, wcmdLen, wszKeyname, &env, (LPITEMIDLIST)sei_tmp.lpIDList, sei_tmp.lpParameters);
     if (retval > 32)  /* Found */
     {
+        WCHAR wszDocument[MAX_PATH], wszCurDir[MAX_PATH];
+        const WCHAR *search_paths[3] = { NULL };
+        LPCWSTR pszDocument = wszApplicationName;
+
+        GetCurrentDirectoryW(_countof(wszCurDir), wszCurDir);
+        if (*sei_tmp.lpDirectory)
+        {
+            search_paths[0] = sei_tmp.lpDirectory;
+            search_paths[1] = wszCurDir;
+        }
+        else
+        {
+            search_paths[0] = wszCurDir;
+        }
+        if (PathIsRelativeW(wszApplicationName) &&
+            SUCCEEDED(StringCchCopyW(wszDocument, _countof(wszDocument), wszApplicationName)) &&
+            (PathResolveW(wszDocument, search_paths, PRF_TRYPROGRAMEXTENSIONS | PRF_VERIFYEXISTS) ||
+             PathFindOnPathW(wszDocument, search_paths)))
+        {
+            pszDocument = wszDocument;
+        }
+
         retval = SHELL_quote_and_execute(wcmd, wszParameters, wszKeyname,
-                                         wszApplicationName, env, &sei_tmp,
+                                         pszDocument, env, &sei_tmp,
                                          sei, execfunc);
     }
     else if (PathIsDirectoryW(lpFile))
