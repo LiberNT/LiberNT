@@ -278,6 +278,10 @@ BOOL WINAPI SetupQueryDrivesInDiskSpaceListW(HDSKSPC handle, PWSTR buffer, DWORD
         {
             for (copied = 0; copied + 3 <= size && copied + 3 < len; copied += 3)
                 memcpy(buffer + copied, drives + copied, 3 * sizeof(WCHAR));
+#ifdef __REACTOS__
+            if (required_size)
+                *required_size = min(len, copied + 4);
+#endif
             SetLastError(ERROR_INSUFFICIENT_BUFFER);
             return FALSE;
         }
@@ -315,6 +319,10 @@ BOOL WINAPI SetupQueryDrivesInDiskSpaceListA(HDSKSPC handle, PSTR buffer, DWORD 
             buffer[i] = (char)drives[i];
         if (size < len)
         {
+#ifdef __REACTOS__
+            if (required_size)
+                *required_size = min(len, copied + 4);
+#endif
             SetLastError(ERROR_INSUFFICIENT_BUFFER);
             return FALSE;
         }
