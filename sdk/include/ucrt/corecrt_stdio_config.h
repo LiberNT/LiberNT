@@ -87,7 +87,7 @@ _CRT_BEGIN_C_HEADER
     __declspec(selectany) unsigned __int64 __local_stdio_printf_options_storage;
     _Check_return_ _Ret_notnull_
     _CRT_INLINE_PURE_SECURITYCRITICAL_ATTRIBUTE
-#if (defined _M_RISCV64 || defined _M_PPC) && defined __clang__
+#if defined __GNUC__
     static __inline unsigned __int64* __CRTDECL __local_stdio_printf_options(void)
 #else
     __inline unsigned __int64* __CRTDECL __local_stdio_printf_options(void)
@@ -99,7 +99,7 @@ _CRT_BEGIN_C_HEADER
     __declspec(selectany) unsigned __int64 __local_stdio_scanf_options_storage;
     _Check_return_ _Ret_notnull_
     _CRT_INLINE_PURE_SECURITYCRITICAL_ATTRIBUTE
-#if (defined _M_RISCV64 || defined _M_PPC) && defined __clang__
+#if defined __GNUC__
     static __inline unsigned __int64* __CRTDECL __local_stdio_scanf_options(void)
 #else
     __inline unsigned __int64* __CRTDECL __local_stdio_scanf_options(void)
