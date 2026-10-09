@@ -86,6 +86,17 @@ if(NOT DEFINED REACTOS_CLANG_LLVM_MINGW_ROOT OR NOT REACTOS_CLANG_LLVM_MINGW_ROO
     endif()
 endif()
 
+if(REACTOS_CLANG_LLVM_MINGW_ROOT AND CMAKE_C_COMPILER)
+    get_filename_component(_cached_compiler_dir "${CMAKE_C_COMPILER}" DIRECTORY)
+    get_filename_component(_cached_compiler_dir "${_cached_compiler_dir}" ABSOLUTE)
+    get_filename_component(_llvm_bin_dir "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin" ABSOLUTE)
+    if(NOT _cached_compiler_dir STREQUAL _llvm_bin_dir)
+        message(FATAL_ERROR "This build directory was configured with ${CMAKE_C_COMPILER}, "
+            "not the RosBE LLVM toolchain in ${REACTOS_CLANG_LLVM_MINGW_ROOT}. "
+            "Run configure.sh again for this output directory.")
+    endif()
+endif()
+
 set(_llvm_tool_bin_hints)
 if(REACTOS_CLANG_LLVM_MINGW_ROOT)
     list(APPEND _llvm_tool_bin_hints "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin")

@@ -606,6 +606,7 @@ if [ "$USE_CLANG" -eq 1 ]; then
 	done
 	if [ -z "$LLVM_ROOT_OVERRIDE" ]; then
 		LLVM_ROOT_OVERRIDE=$(cmake_cache_get "$BUILD_DIR/CMakeCache.txt" REACTOS_CLANG_LLVM_MINGW_ROOT)
+		[ -f "$LLVM_ROOT_OVERRIDE/src/llvm-project/runtimes/CMakeLists.txt" ] || LLVM_ROOT_OVERRIDE=
 	fi
 	if [ -n "$LLVM_ROOT_OVERRIDE" ]; then
 		ROSBE_LLVM_ROOT=$LLVM_ROOT_OVERRIDE
