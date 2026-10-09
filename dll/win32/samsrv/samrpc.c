@@ -3474,6 +3474,7 @@ SamrLookupNamesInDomain(IN SAMPR_HANDLE DomainHandle,
     ULONG DataLength;
     ULONG i;
     ULONG RelativeId;
+    PWSTR Name = NULL;
     NTSTATUS Status;
 
     TRACE("SamrLookupNamesInDomain(%p %lu %p %p %p)\n",
@@ -3525,6 +3526,19 @@ SamrLookupNamesInDomain(IN SAMPR_HANDLE DomainHandle,
     {
         TRACE("Name: %S\n", Names[i].Buffer);
 
+        if (Name != NULL)
+            RtlFreeHeap(RtlGetProcessHeap(), 0, Name);
+
+        Name = RtlAllocateHeap(RtlGetProcessHeap(), 0, Names[i].Length + sizeof(WCHAR));
+        if (Name == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+
+        RtlCopyMemory(Name, Names[i].Buffer, Names[i].Length);
+        Name[Names[i].Length / sizeof(WCHAR)] = UNICODE_NULL;
+
         RelativeId = 0;
 
         /* Lookup aliases */
@@ -3542,7 +3556,7 @@ SamrLookupNamesInDomain(IN SAMPR_HANDLE DomainHandle,
             {
                 DataLength = sizeof(ULONG);
                 Status = SampRegQueryValue(NamesKeyHandle,
-                                           Names[i].Buffer,
+                                           Name,
                                            NULL,
                                            &RelativeId,
                                            &DataLength);
@@ -3581,7 +3595,7 @@ SamrLookupNamesInDomain(IN SAMPR_HANDLE DomainHandle,
             {
                 DataLength = sizeof(ULONG);
                 Status = SampRegQueryValue(NamesKeyHandle,
-                                           Names[i].Buffer,
+                                           Name,
                                            NULL,
                                            &RelativeId,
                                            &DataLength);
@@ -3620,7 +3634,7 @@ SamrLookupNamesInDomain(IN SAMPR_HANDLE DomainHandle,
             {
                 DataLength = sizeof(ULONG);
                 Status = SampRegQueryValue(NamesKeyHandle,
-                                           Names[i].Buffer,
+                                           Name,
                                            NULL,
                                            &RelativeId,
                                            &DataLength);
@@ -3650,6 +3664,9 @@ SamrLookupNamesInDomain(IN SAMPR_HANDLE DomainHandle,
     }
 
 done:
+    if (Name != NULL)
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Name);
+
     if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
         Status = STATUS_SUCCESS;
 
