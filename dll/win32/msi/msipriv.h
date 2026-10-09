@@ -126,6 +126,9 @@ typedef struct tagMSIDATABASE
     MSISTREAM *streams;
     UINT num_streams;
     UINT num_streams_allocated;
+#ifdef __REACTOS__
+    BOOL memory_only;
+#endif
 } MSIDATABASE;
 
 typedef struct tagMSIVIEW MSIVIEW;

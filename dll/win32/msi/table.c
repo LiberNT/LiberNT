@@ -988,9 +988,15 @@ BOOL TABLE_Exists( MSIDATABASE *db, LPCWSTR name )
     UINT r, table_id, i;
     MSITABLE *table;
 
+#ifdef __REACTOS__
+    if( !wcscmp( name, L"_Tables" ) || !wcscmp( name, L"_Columns" ) ||
+        (!db->memory_only && (!wcscmp( name, L"_Streams" ) || !wcscmp( name, L"_Storages" ))) )
+        return TRUE;
+#else
     if( !wcscmp( name, L"_Tables" ) || !wcscmp( name, L"_Columns" ) ||
         !wcscmp( name, L"_Streams" ) || !wcscmp( name, L"_Storages" ) )
         return TRUE;
+#endif
 
     r = msi_string2id( db->strings, name, -1, &table_id );
     if( r != ERROR_SUCCESS )
@@ -2290,10 +2296,17 @@ UINT TABLE_CreateView( MSIDATABASE *db, LPCWSTR name, MSIVIEW **view )
 
     TRACE("%p %s %p\n", db, debugstr_w(name), view );
 
+#ifdef __REACTOS__
+    if ( !db->memory_only && !wcscmp( name, L"_Streams" ) )
+        return STREAMS_CreateView( db, view );
+    else if ( !db->memory_only && !wcscmp( name, L"_Storages" ) )
+        return STORAGES_CreateView( db, view );
+#else
     if ( !wcscmp( name, L"_Streams" ) )
         return STREAMS_CreateView( db, view );
     else if ( !wcscmp( name, L"_Storages" ) )
         return STORAGES_CreateView( db, view );
+#endif
 
     sz = FIELD_OFFSET( struct table_view, name[lstrlenW( name ) + 1] );
     tv = calloc( 1, sz );

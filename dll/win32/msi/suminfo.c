@@ -650,6 +650,13 @@ UINT WINAPI MsiGetSummaryInformationW( MSIHANDLE hDatabase, const WCHAR *szDatab
         }
     }
 
+#ifdef __REACTOS__
+    if (db->memory_only)
+    {
+        msiobj_release( &db->hdr );
+        return ERROR_INSTALL_PACKAGE_INVALID;
+    }
+#endif
     ret = msi_get_suminfo( db->storage, uiUpdateCount, &si );
     if (ret != ERROR_SUCCESS)
         ret = msi_get_db_suminfo( db, uiUpdateCount, &si );

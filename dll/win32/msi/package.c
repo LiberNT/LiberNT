@@ -1046,7 +1046,11 @@ MSIPACKAGE *MSI_CreatePackage( MSIDATABASE *db )
         len = swprintf( uilevel, ARRAY_SIZE(uilevel), L"%u", gUILevel & INSTALLUILEVEL_MASK );
         msi_set_property( package->db, L"UILevel", uilevel, len );
 
+#ifdef __REACTOS__
+        r = db->memory_only ? ERROR_SUCCESS : msi_load_suminfo_properties( package );
+#else
         r = msi_load_suminfo_properties( package );
+#endif
         if (r != ERROR_SUCCESS)
         {
             msiobj_release( &package->hdr );
@@ -1596,6 +1600,81 @@ UINT MSI_OpenPackageW(LPCWSTR szPackage, DWORD dwOptions, MSIPACKAGE **pPackage)
     return ERROR_SUCCESS;
 }
 
+#ifdef __REACTOS__
+static UINT create_folder_cache_table( MSIPACKAGE *package )
+{
+    static const int folders[] =
+    {
+        CSIDL_PROGRAMS, CSIDL_PERSONAL, CSIDL_FAVORITES, CSIDL_STARTUP, CSIDL_RECENT, CSIDL_SENDTO,
+        CSIDL_STARTMENU, CSIDL_DESKTOPDIRECTORY, CSIDL_NETHOOD, CSIDL_TEMPLATES, CSIDL_COMMON_STARTMENU,
+        CSIDL_COMMON_PROGRAMS, CSIDL_COMMON_STARTUP, CSIDL_COMMON_DESKTOPDIRECTORY, CSIDL_APPDATA,
+        CSIDL_PRINTHOOD, CSIDL_LOCAL_APPDATA, CSIDL_COMMON_APPDATA, CSIDL_MYPICTURES,
+        CSIDL_COMMON_ADMINTOOLS, CSIDL_ADMINTOOLS
+    };
+    WCHAR path[MAX_PATH + 1];
+    MSIQUERY *view;
+    MSIRECORD *rec;
+    UINT i, r;
+
+    r = MSI_DatabaseOpenViewW( package->db, L"CREATE TABLE `#_FolderCache` ( `FolderId` SHORT NOT NULL TEMPORARY, "
+                                            L"`FolderPath` LONGCHAR NOT NULL TEMPORARY PRIMARY KEY `FolderId`) HOLD", &view );
+    if (r != ERROR_SUCCESS) return r;
+    r = MSI_ViewExecute( view, 0 );
+    MSI_ViewClose( view );
+    msiobj_release( &view->hdr );
+    if (r != ERROR_SUCCESS) return r;
+
+    r = MSI_DatabaseOpenViewW( package->db, L"INSERT INTO `#_FolderCache` (`FolderId`,`FolderPath`) VALUES (?,?)", &view );
+    if (r != ERROR_SUCCESS) return r;
+
+    for (i = 0; i < ARRAY_SIZE(folders); i++)
+    {
+        if (SHGetFolderPathW( NULL, folders[i], NULL, 0, path ) != S_OK || !path[0]) continue;
+        PathAddBackslashW( path );
+        if (!(rec = MSI_CreateRecord( 2 ))) break;
+        MSI_RecordSetInteger( rec, 1, folders[i] );
+        MSI_RecordSetStringW( rec, 2, path );
+        MSI_ViewExecute( view, rec );
+        msiobj_release( &rec->hdr );
+    }
+    MSI_ViewClose( view );
+    msiobj_release( &view->hdr );
+    return ERROR_SUCCESS;
+}
+
+static UINT create_empty_package( MSIPACKAGE **ret )
+{
+    WCHAR temppath[MAX_PATH], filename[MAX_PATH];
+    MSIPACKAGE *package;
+    MSIDATABASE *db;
+    UINT r;
+
+    if (!GetTempPathW( MAX_PATH, temppath ) || !GetTempFileNameW( temppath, L"msi", 0, filename ))
+        return ERROR_FUNCTION_FAILED;
+
+    r = MSI_OpenDatabaseW( filename, MSIDBOPEN_CREATEDIRECT, &db );
+    if (r != ERROR_SUCCESS)
+    {
+        DeleteFileW( filename );
+        return r;
+    }
+    db->memory_only = TRUE;
+
+    package = MSI_CreatePackage( db );
+    msiobj_release( &db->hdr );
+    if (!package) return ERROR_FUNCTION_FAILED;
+
+    r = create_folder_cache_table( package );
+    if (r != ERROR_SUCCESS)
+    {
+        msiobj_release( &package->hdr );
+        return r;
+    }
+    *ret = package;
+    return ERROR_SUCCESS;
+}
+#endif
+
 UINT WINAPI MsiOpenPackageExW( const WCHAR *szPackage, DWORD dwOptions, MSIHANDLE *phPackage )
 {
     MSIPACKAGE *package = NULL;
@@ -1608,8 +1687,16 @@ UINT WINAPI MsiOpenPackageExW( const WCHAR *szPackage, DWORD dwOptions, MSIHANDL
 
     if ( !*szPackage )
     {
+#ifdef __REACTOS__
+        ret = create_empty_package( &package );
+        if (ret != ERROR_SUCCESS) return ret;
+        *phPackage = alloc_msihandle( &package->hdr );
+        msiobj_release( &package->hdr );
+        return *phPackage ? ERROR_SUCCESS : ERROR_NOT_ENOUGH_MEMORY;
+#else
         FIXME("Should create an empty database and package\n");
         return ERROR_FUNCTION_FAILED;
+#endif
     }
 
     if( dwOptions )

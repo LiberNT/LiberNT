@@ -1031,6 +1031,15 @@ UINT WINAPI MsiDatabaseCommit( MSIHANDLE hdb )
 
     /* FIXME: unlock the database */
 
+#ifdef __REACTOS__
+    if (r == ERROR_SUCCESS && !db->memory_only)
+    {
+        free( db->deletefile );
+        db->deletefile = NULL;
+    }
+
+    msiobj_release( &db->hdr );
+#else
     msiobj_release( &db->hdr );
 
     if (r == ERROR_SUCCESS)
@@ -1038,6 +1047,7 @@ UINT WINAPI MsiDatabaseCommit( MSIHANDLE hdb )
         free( db->deletefile );
         db->deletefile = NULL;
     }
+#endif
 
     return r;
 }
