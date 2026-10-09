@@ -1020,6 +1020,9 @@ NtCreateThread(OUT PHANDLE ThreadHandle,
         SafeInitialTeb = *InitialTeb;
     }
 
+    if (SafeInitialTeb.PreviousStackBase || SafeInitialTeb.PreviousStackLimit)
+        return STATUS_NOT_SUPPORTED;
+
 #ifdef WOW64_SUPPORTED
     {
         PEPROCESS Process;
