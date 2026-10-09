@@ -730,6 +730,41 @@ SETUPAPI_RecordPublishedDriverPackage(
     SETUPAPI_RecordDriverDatabasePackage(PublishedInfFileName, PublishedName, BaseName, Source);
 }
 
+BOOL
+SETUPAPI_GetOriginalInfName(
+    IN PCWSTR PublishedInfFileName,
+    OUT PWSTR OriginalName,
+    IN DWORD OriginalNameSize)
+{
+    WCHAR Directory[MAX_PATH], StoreInf[MAX_PATH];
+    WIN32_FIND_DATAW FindData;
+    HANDLE hFind;
+    PWSTR Last;
+
+    if (lstrlenW(PublishedInfFileName) >= ARRAY_SIZE(Directory))
+        return FALSE;
+    lstrcpyW(Directory, PublishedInfFileName);
+    Last = wcsrchr(Directory, L'\\');
+    if (!Last)
+        return FALSE;
+    *Last = UNICODE_NULL;
+    if (!IsSystemInfDirectory(Directory) ||
+        !FindStoreInf(PublishedInfFileName, NULL, StoreInf))
+    {
+        return FALSE;
+    }
+
+    hFind = FindFirstFileW(StoreInf, &FindData);
+    if (hFind == INVALID_HANDLE_VALUE)
+        return FALSE;
+    FindClose(hFind);
+
+    if ((DWORD)lstrlenW(FindData.cFileName) >= OriginalNameSize)
+        return FALSE;
+    lstrcpyW(OriginalName, FindData.cFileName);
+    return TRUE;
+}
+
 VOID
 SETUPAPI_RecordInstalledDriverPackage(
     IN const struct InfFileDetails *InfFileDetails)

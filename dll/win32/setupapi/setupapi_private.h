@@ -389,6 +389,12 @@ SETUPAPI_DeleteDriverStorePackage(
     IN PCWSTR PublishedInfFileName);
 
 BOOL
+SETUPAPI_GetOriginalInfName(
+    IN PCWSTR PublishedInfFileName,
+    OUT PWSTR OriginalName,
+    IN DWORD OriginalNameSize);
+
+BOOL
 SETUPAPI_GetDriverPackageId(
     IN PCWSTR InfFileName,
     IN PCWSTR InfBaseName,

@@ -682,7 +682,13 @@ BOOL WINAPI SetupQueryInfOriginalFileInformationW(
     if (inf_name) inf_name++;
     else inf_name = inf_path;
 
+#ifdef __REACTOS__
+    if (!SETUPAPI_GetOriginalInfName(inf_path, OriginalFileInfo->OriginalInfName,
+                                     ARRAY_SIZE(OriginalFileInfo->OriginalInfName)))
+        lstrcpyW(OriginalFileInfo->OriginalInfName, inf_name);
+#else
     lstrcpyW(OriginalFileInfo->OriginalInfName, inf_name);
+#endif
 
     return TRUE;
 }
