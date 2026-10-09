@@ -1840,6 +1840,7 @@ SASWindowProc(
                         ExitReactOSInProgress ? "TRUE" : "FALSE");
 
                     ExitReactOSInProgress = FALSE;
+                    TerminateSystemShutdown();
                     return 1;
                 }
                 default:
