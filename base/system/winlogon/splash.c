@@ -351,7 +351,24 @@ DWORD
 EarlySplashWaitForUserDesktopReady(
     _In_ HANDLE ReadyEvent)
 {
-    DWORD Result = WaitForSingleObject(ReadyEvent, REACTOS_EARLY_SPLASH_READY_TIMEOUT_MS);
+    DWORD Start = GetTickCount();
+    DWORD Elapsed;
+    DWORD Result;
+    MSG Msg;
+
+    for (;;)
+    {
+        PeekMessageW(&Msg, NULL, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
+        Elapsed = GetTickCount() - Start;
+        Result = MsgWaitForMultipleObjects(1,
+                                           &ReadyEvent,
+                                           FALSE,
+                                           Elapsed < REACTOS_EARLY_SPLASH_READY_TIMEOUT_MS ?
+                                               REACTOS_EARLY_SPLASH_READY_TIMEOUT_MS - Elapsed : 0,
+                                           QS_SENDMESSAGE);
+        if (Result != WAIT_OBJECT_0 + 1)
+            break;
+    }
 
     if (Result == WAIT_OBJECT_0)
         TRACE("EARLY_SPLASH: HANDOFF_READY result=signaled\n");
