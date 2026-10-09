@@ -1231,11 +1231,13 @@ NtUserSBGetParms(
 
    _SEH2_TRY
    {
-      ProbeForWrite(lpsi, sizeof(SCROLLINFO), 1);      
-      ProbeForRead(pSBData, sizeof(SBDATA), 1);
-
+      ProbeForWrite(lpsi, sizeof(SCROLLINFO), 1);
       RtlCopyMemory(&psi, lpsi, sizeof(SCROLLINFO));
-      RtlCopyMemory(&SBDataSafe, pSBData, sizeof(SBDATA));
+      if (pSBData)
+      {
+         ProbeForRead(pSBData, sizeof(SBDATA), 1);
+         RtlCopyMemory(&SBDataSafe, pSBData, sizeof(SBDATA));
+      }
    }
    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
    {
