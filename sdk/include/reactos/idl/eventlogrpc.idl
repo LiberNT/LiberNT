@@ -9,7 +9,7 @@ typedef long NTSTATUS;
 cpp_quote("#endif")
 
 #define MAX_STRINGS      0x00000100
-#define MAX_SINGLE_EVENT 0x0003FFFF // On Vista+ this is reduced to 0x0000F000
+#define MAX_SINGLE_EVENT 0x0000F000
 #define MAX_BATCH_BUFF   0x0007FFFF
 
 typedef [range(0, MAX_BATCH_BUFF)] unsigned long RULONG;

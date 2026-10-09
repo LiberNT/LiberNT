@@ -70,12 +70,9 @@ START_TEST(eventlog_supp)
             if (LastError == ERROR_ENVVAR_NOT_FOUND)
                 LastError = ERROR_SUCCESS;
 
-            ok( ( (Success == Tests[i].Result[0].Success) && (LastError == Tests[i].Result[0].LastError) ) ||
-                broken( (Success == FALSE) && (LastError == ERROR_INVALID_PARAMETER) /* For Win2k3, see above */) // ||
-                // broken( (Success == Tests[i].Result[1].Success) && (LastError == Tests[i].Result[1].LastError) /* For Vista+ */)
-                ,
+            ok( (Success == Tests[i].Result[1].Success) && (LastError == Tests[i].Result[1].LastError),
                "ReportEventW(%u) returned 0x%x with last error %lu, expected %s with last error %lu\n",
-               i, Success, LastError, (Tests[i].Result[0].Success ? "TRUE" : "FALSE"), Tests[i].Result[0].LastError);
+               i, Success, LastError, (Tests[i].Result[1].Success ? "TRUE" : "FALSE"), Tests[i].Result[1].LastError);
 
             HeapFree(GetProcessHeap(), 0, Data);
         }
