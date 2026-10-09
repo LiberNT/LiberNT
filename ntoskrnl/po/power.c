@@ -465,88 +465,65 @@ PopReleaseThreadPowerObject(IN PVOID PowerObject)
     if (PowerObject) ObDereferenceObject(PowerObject);
 }
 
+static IO_COMPLETION_ROUTINE PopSystemPowerIrpCompletion;
+
+static
 NTSTATUS
-PopSendQuerySystemPowerState(PDEVICE_OBJECT DeviceObject, SYSTEM_POWER_STATE SystemState, POWER_ACTION PowerAction)
+NTAPI
+PopSystemPowerIrpCompletion(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_reads_opt_(_Inexpressible_("varies")) PVOID Context)
+{
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(Irp);
+
+    KeSetEvent(Context, IO_NO_INCREMENT, FALSE);
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+static
+NTSTATUS
+PopSendSystemPowerIrp(PDEVICE_OBJECT DeviceObject, UCHAR MinorFunction, SYSTEM_POWER_STATE SystemState, POWER_ACTION PowerAction)
 {
     KEVENT Event;
-    IO_STATUS_BLOCK IoStatusBlock;
     PIO_STACK_LOCATION IrpSp;
     PIRP Irp;
     NTSTATUS Status;
 
-    KeInitializeEvent(&Event,
-                      NotificationEvent,
-                      FALSE);
-
-    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_POWER,
-                                       DeviceObject,
-                                       NULL,
-                                       0,
-                                       NULL,
-                                       &Event,
-                                       &IoStatusBlock);
+    Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
     if (!Irp) return STATUS_INSUFFICIENT_RESOURCES;
 
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+    Irp->IoStatus.Information = 0;
+
     IrpSp = IoGetNextIrpStackLocation(Irp);
-    IrpSp->MinorFunction = IRP_MN_QUERY_POWER;
+    IrpSp->MajorFunction = IRP_MJ_POWER;
+    IrpSp->MinorFunction = MinorFunction;
     IrpSp->Parameters.Power.Type = SystemPowerState;
     IrpSp->Parameters.Power.State.SystemState = SystemState;
     IrpSp->Parameters.Power.ShutdownType = PowerAction;
 
-    Status = PoCallDriver(DeviceObject, Irp);
-    if (Status == STATUS_PENDING)
-    {
-        KeWaitForSingleObject(&Event,
-                              Executive,
-                              KernelMode,
-                              FALSE,
-                              NULL);
-        Status = IoStatusBlock.Status;
-    }
+    IoSetCompletionRoutine(Irp, PopSystemPowerIrpCompletion, &Event, TRUE, TRUE, TRUE);
+    PoCallDriver(DeviceObject, Irp);
+    KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
 
+    Status = Irp->IoStatus.Status;
+    IoFreeIrp(Irp);
     return Status;
+}
+
+NTSTATUS
+PopSendQuerySystemPowerState(PDEVICE_OBJECT DeviceObject, SYSTEM_POWER_STATE SystemState, POWER_ACTION PowerAction)
+{
+    return PopSendSystemPowerIrp(DeviceObject, IRP_MN_QUERY_POWER, SystemState, PowerAction);
 }
 
 NTSTATUS
 PopSendSetSystemPowerState(PDEVICE_OBJECT DeviceObject, SYSTEM_POWER_STATE SystemState, POWER_ACTION PowerAction)
 {
-    KEVENT Event;
-    IO_STATUS_BLOCK IoStatusBlock;
-    PIO_STACK_LOCATION IrpSp;
-    PIRP Irp;
-    NTSTATUS Status;
-
-    KeInitializeEvent(&Event,
-                      NotificationEvent,
-                      FALSE);
-
-    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_POWER,
-                                       DeviceObject,
-                                       NULL,
-                                       0,
-                                       NULL,
-                                       &Event,
-                                       &IoStatusBlock);
-    if (!Irp) return STATUS_INSUFFICIENT_RESOURCES;
-
-    IrpSp = IoGetNextIrpStackLocation(Irp);
-    IrpSp->MinorFunction = IRP_MN_SET_POWER;
-    IrpSp->Parameters.Power.Type = SystemPowerState;
-    IrpSp->Parameters.Power.State.SystemState = SystemState;
-    IrpSp->Parameters.Power.ShutdownType = PowerAction;
-
-    Status = PoCallDriver(DeviceObject, Irp);
-    if (Status == STATUS_PENDING)
-    {
-        KeWaitForSingleObject(&Event,
-                              Executive,
-                              KernelMode,
-                              FALSE,
-                              NULL);
-        Status = IoStatusBlock.Status;
-    }
-
-    return Status;
+    return PopSendSystemPowerIrp(DeviceObject, IRP_MN_SET_POWER, SystemState, PowerAction);
 }
 
 NTSTATUS
