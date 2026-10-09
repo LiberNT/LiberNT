@@ -57,6 +57,7 @@ struct hash
 };
 
 BOOL init_hash_impl(ALG_ID algid, struct hash *hash);
+void duplicate_hash_impl(const struct hash *src, struct hash *dst);
 
 static inline void update_hash_impl(struct hash *hash, const BYTE *data, DWORD len)
 {

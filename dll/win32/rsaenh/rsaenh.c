@@ -904,14 +904,14 @@ static HCRYPTKEY alloc_key(HCRYPTPROV hprov, ALG_ID alg_id, DWORD flags, DWORD k
      * For compatibility reasons a 40 bit key on the Enhanced
      * provider will not have salt
      */
-    if (key_container->dwPersonality == RSAENH_PERSONALITY_ENHANCED
-        && (alg_id == CALG_RC2 || alg_id == CALG_RC4)
-        && (flags & CRYPT_CREATE_SALT) && key_len == 40)
+    if ((alg_id != CALG_RC2 && alg_id != CALG_RC4) || (flags & CRYPT_NO_SALT))
         key->dwSaltLen = 0;
-    else if ((flags & CRYPT_CREATE_SALT) || (key_len == 40 && !(flags & CRYPT_NO_SALT)))
-        key->dwSaltLen = 16 /*FIXME*/ - key->dwKeyLen;
+    else if (flags & CRYPT_CREATE_SALT)
+        key->dwSaltLen = (key_container->dwPersonality == RSAENH_PERSONALITY_BASE ||
+                          key_container->dwPersonality == RSAENH_PERSONALITY_STRONG) ? 11 : 0;
     else
-        key->dwSaltLen = 0;
+        key->dwSaltLen = (key_len == 40) ? 11 : 0;
+    memset(&key->context, 0, sizeof(key->context));
     memset(key->abKeyValue, 0, sizeof(key->abKeyValue));
     memset(key->abInitVector, 0, sizeof(key->abInitVector));
     memset(&key->siSChannelInfo.saEncAlg, 0, sizeof(key->siSChannelInfo.saEncAlg));
@@ -2506,6 +2506,9 @@ BOOL WINAPI RSAENH_CPDuplicateHash(HCRYPTPROV hUID, HCRYPTHASH hHash, DWORD *pdw
     if (*phHash != (HCRYPTHASH)INVALID_HANDLE_VALUE)
     {
         *pDestHash = *pSrcHash;
+        duplicate_hash_impl(&pSrcHash->hash, &pDestHash->hash);
+        if (pSrcHash->aiAlgid == CALG_MAC)
+            duplicate_key_impl(pSrcHash->key_alg_id, &pSrcHash->key_context, &pDestHash->key_context);
         copy_hmac_info(&pDestHash->pHMACInfo, pSrcHash->pHMACInfo);
         copy_data_blob(&pDestHash->tpPRFParams.blobLabel, &pSrcHash->tpPRFParams.blobLabel);
         copy_data_blob(&pDestHash->tpPRFParams.blobSeed, &pSrcHash->tpPRFParams.blobSeed);
@@ -3653,6 +3656,7 @@ BOOL WINAPI RSAENH_CPGenKey(HCRYPTPROV hProv, ALG_ID Algid, DWORD dwFlags, HCRYP
                         pCryptKey->abKeyValue[0] = RSAENH_TLS1_VERSION_MAJOR;
                         pCryptKey->abKeyValue[1] = RSAENH_TLS1_VERSION_MINOR;
                         break;
+                    case CALG_RC2:
                     case CALG_RC4:
                         if (!(dwFlags & CRYPT_CREATE_SALT))
                             memset(pCryptKey->abKeyValue + pCryptKey->dwKeyLen, 0, pCryptKey->dwSaltLen);
@@ -4076,6 +4080,14 @@ BOOL WINAPI RSAENH_CPGetKeyParam(HCRYPTPROV hProv, HCRYPTKEY hKey, DWORD dwParam
                     return copy_param(pbData, pdwDataLen,
                             &pCryptKey->abKeyValue[pCryptKey->dwKeyLen],
                             pCryptKey->dwSaltLen);
+                case CALG_DES:
+                case CALG_3DES_112:
+                case CALG_3DES:
+                case CALG_AES:
+                case CALG_AES_128:
+                case CALG_AES_192:
+                case CALG_AES_256:
+                    return copy_param(pbData, pdwDataLen, pCryptKey->abKeyValue, 0);
                 default:
                     SetLastError(NTE_BAD_KEY);
                     return FALSE;
@@ -4120,6 +4132,42 @@ BOOL WINAPI RSAENH_CPGetKeyParam(HCRYPTPROV hProv, HCRYPTKEY hKey, DWORD dwParam
     }
 }
 
+static void get_unique_container_name(const char *name, char *unique)
+{
+    char lower[MAX_PATH], guid[MAX_PATH];
+    BYTE digest[16];
+    DWORD size = sizeof(guid) - 1, len, i;
+    struct hash hash;
+    HKEY hKey;
+
+    unique[0] = 0;
+    if (!name[0]) return;
+
+    for (len = 0; name[len] && len < MAX_PATH - 1; len++)
+        lower[len] = (name[len] >= 'A' && name[len] <= 'Z') ? name[len] - 'A' + 'a' : name[len];
+    lower[len++] = 0;
+
+    init_hash_impl(CALG_MD5, &hash);
+    update_hash_impl(&hash, (const BYTE *)lower, len);
+    finalize_hash_impl(&hash, digest, sizeof(digest));
+
+    memset(guid, 0, sizeof(guid));
+    if (!RegOpenKeyExA(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Cryptography", 0,
+                       KEY_READ | KEY_WOW64_64KEY, &hKey))
+    {
+        if (RegQueryValueExA(hKey, "MachineGuid", NULL, NULL, (BYTE *)guid, &size))
+            memset(guid, 0, sizeof(guid));
+        RegCloseKey(hKey);
+    }
+
+    for (i = 0; i < 4; i++)
+        sprintf(unique + i * 8, "%08lx",
+                (DWORD)digest[i * 4] | ((DWORD)digest[i * 4 + 1] << 8) |
+                ((DWORD)digest[i * 4 + 2] << 16) | ((DWORD)digest[i * 4 + 3] << 24));
+    unique[32] = '_';
+    strcpy(unique + 33, guid);
+}
+
 /******************************************************************************
  * CPGetProvParam (RSAENH.@)
  *
@@ -4149,6 +4197,7 @@ BOOL WINAPI RSAENH_CPGetProvParam(HCRYPTPROV hProv, DWORD dwParam, BYTE *pbData,
 {
     KEYCONTAINER *pKeyContainer;
     PROV_ENUMALGS provEnumalgs;
+    CHAR szUnique[MAX_PATH + 34];
     DWORD dwTemp;
     HKEY hKey;
 
@@ -4189,9 +4238,12 @@ BOOL WINAPI RSAENH_CPGetProvParam(HCRYPTPROV hProv, DWORD dwParam, BYTE *pbData,
     switch (dwParam) 
     {
         case PP_CONTAINER:
-        case PP_UNIQUE_CONTAINER:/* MSDN says we can return the same value as PP_CONTAINER */
             return copy_param(pbData, pdwDataLen, (const BYTE*)pKeyContainer->szName,
                               strlen(pKeyContainer->szName)+1);
+
+        case PP_UNIQUE_CONTAINER:
+            get_unique_container_name(pKeyContainer->szName, szUnique);
+            return copy_param(pbData, pdwDataLen, (const BYTE*)szUnique, strlen(szUnique)+1);
 
         case PP_NAME:
             return copy_param(pbData, pdwDataLen, (const BYTE*)pKeyContainer->szProvName,

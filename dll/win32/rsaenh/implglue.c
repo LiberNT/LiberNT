@@ -81,6 +81,12 @@ BOOL init_hash_impl( ALG_ID algid, struct hash *hash )
     return TRUE;
 }
 
+void duplicate_hash_impl( const struct hash *src, struct hash *dst )
+{
+    *dst = *src;
+    if (src->desc) SymCryptHashStateCopy( src->desc, &src->state, &dst->state );
+}
+
 static SYMCRYPT_RSAKEY *alloc_rsa_key( DWORD bitlen, BOOL private )
 {
     SYMCRYPT_RSA_PARAMS params;
@@ -189,15 +195,27 @@ BOOL duplicate_key_impl( ALG_ID algid, const KEY_CONTEXT *src, KEY_CONTEXT *dst 
     switch (algid)
     {
     case CALG_RC4:
+        dst->rc4 = src->rc4;
+        SYMCRYPT_SET_MAGIC( &dst->rc4 );
+        break;
     case CALG_RC2:
+        dst->rc2 = src->rc2;
+        SYMCRYPT_SET_MAGIC( &dst->rc2 );
+        break;
     case CALG_3DES:
     case CALG_3DES_112:
+        dst->des3 = src->des3;
+        SYMCRYPT_SET_MAGIC( &dst->des3 );
+        break;
     case CALG_DES:
+        dst->des = src->des;
+        SYMCRYPT_SET_MAGIC( &dst->des.threeDes );
+        break;
     case CALG_AES:
     case CALG_AES_128:
     case CALG_AES_192:
     case CALG_AES_256:
-        *dst = *src;
+        SymCryptAesKeyCopy( &src->aes, &dst->aes );
         break;
     case CALG_RSA_KEYX:
     case CALG_RSA_SIGN:
