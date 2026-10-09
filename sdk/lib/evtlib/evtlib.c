@@ -300,7 +300,8 @@ ElfpInitNewFile(
     IN PEVTLOGFILE LogFile,
     IN ULONG FileSize,
     IN ULONG MaxSize,
-    IN ULONG Retention)
+    IN ULONG Retention,
+    IN ULONG CurrentRecordNumber)
 {
     NTSTATUS Status;
     LARGE_INTEGER FileOffset;
@@ -321,7 +322,7 @@ ElfpInitNewFile(
     /* Set the offset to the ELF_EOF_RECORD */
     LogFile->Header.EndOffset = sizeof(EVENTLOGHEADER);
     /* Set the number of the next record that will be added */
-    LogFile->Header.CurrentRecordNumber = 1;
+    LogFile->Header.CurrentRecordNumber = CurrentRecordNumber;
     /* The event log is empty, there is no record so far */
     LogFile->Header.OldestRecordNumber = 0;
 
@@ -863,7 +864,8 @@ Continue:
     if (RecordNumber != 0 && LogFile->Header.OldestRecordNumber == 0)
         LogFile->Header.OldestRecordNumber = 1;
 
-    LogFile->Header.CurrentRecordNumber = RecordNumber + LogFile->Header.OldestRecordNumber;
+    if (RecordNumber != 0 || LogFile->Header.OldestRecordNumber != 0)
+        LogFile->Header.CurrentRecordNumber = RecordNumber + LogFile->Header.OldestRecordNumber;
     if (LogFile->Header.CurrentRecordNumber == 0)
         LogFile->Header.CurrentRecordNumber = 1;
 
@@ -957,7 +959,7 @@ ElfCreateFile(
     LogFile->ReadOnly = ReadOnly; // !CreateNew && ReadOnly;
 
     if (CreateNew)
-        Status = ElfpInitNewFile(LogFile, FileSize, MaxSize, Retention);
+        Status = ElfpInitNewFile(LogFile, FileSize, MaxSize, Retention, 1);
     else
         Status = ElfpInitExistingFile(LogFile, FileSize, /* MaxSize, */ Retention);
 
@@ -986,7 +988,8 @@ ElfReCreateFile(
     return ElfpInitNewFile(LogFile,
                            LogFile->CurrentSize,
                            LogFile->Header.MaxSize,
-                           LogFile->Header.Retention);
+                           LogFile->Header.Retention,
+                           LogFile->Header.CurrentRecordNumber);
 }
 
 NTSTATUS
@@ -1317,7 +1320,7 @@ ElfWriteRecord(
 
     /* If the event log was empty, it will now contain one record */
     if (LogFile->Header.OldestRecordNumber == 0)
-        LogFile->Header.OldestRecordNumber = 1;
+        LogFile->Header.OldestRecordNumber = Record->RecordNumber;
 
     /* By default we append the new record at the old EOF record offset */
     WriteOffset = LogFile->Header.EndOffset;
