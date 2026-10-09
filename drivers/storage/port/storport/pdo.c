@@ -222,7 +222,8 @@ PortDmaListControl(PDEVICE_OBJECT DeviceObject, PIRP UnusedIrp,
     return;
 
 Fail:
-    Request->LegacySrb->SrbStatus = SRB_STATUS_ERROR;
+    Request->LegacySrb->SrbStatus = SRB_STATUS_INTERNAL_ERROR;
+    Request->LegacySrb->InternalStatus = STATUS_INSUFFICIENT_RESOURCES;
     Request->LegacySrb->SrbExtension = NULL;
     PortFreeSrbContext(Irp);
     Irp->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
@@ -962,7 +963,8 @@ Fail:
 
     if (Srb != NULL)
     {
-        Srb->SrbStatus = SRB_STATUS_ERROR;
+        Srb->SrbStatus = SRB_STATUS_INTERNAL_ERROR;
+        Srb->InternalStatus = Status;
         Srb->SrbExtension = NULL;
     }
 
