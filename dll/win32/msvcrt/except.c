@@ -1116,6 +1116,28 @@ int* CDECL __processing_throw(void)
 } while(0)
 
 LONG __C_ExecuteExceptionFilter( EXCEPTION_POINTERS *ptrs, void *frame, PEXCEPTION_FILTER filter, BYTE *nonvolatile );
+
+#ifdef __REACTOS__
+static inline BOOL is_unwind_target_in_scope( const SCOPE_TABLE *table, unsigned int scope,
+                                              ULONG_PTR base, ULONG_PTR target )
+{
+    unsigned int i;
+
+    if (table->ScopeRecord[scope].JumpTarget &&
+        target == base + table->ScopeRecord[scope].JumpTarget)
+        return TRUE;
+
+    for (i = 0; i < table->Count; i++)
+    {
+        if (target < base + table->ScopeRecord[i].BeginAddress) continue;
+        if (target >= base + table->ScopeRecord[i].EndAddress) continue;
+        if (table->ScopeRecord[i].HandlerAddress != table->ScopeRecord[scope].HandlerAddress) continue;
+        if (table->ScopeRecord[i].JumpTarget != table->ScopeRecord[scope].JumpTarget) continue;
+        return TRUE;
+    }
+    return FALSE;
+}
+#endif
 #endif
 
 #if defined(__aarch64__)  || defined(__arm64ec__)
@@ -1150,6 +1172,14 @@ EXCEPTION_DISPOSITION WINAPI __C_specific_handler( EXCEPTION_RECORD *rec, void *
         {
             if (pc < base + table->ScopeRecord[i].BeginAddress) continue;
             if (pc >= base + table->ScopeRecord[i].EndAddress) continue;
+#ifdef __REACTOS__
+            if (rec->ExceptionFlags & EXCEPTION_TARGET_UNWIND &&
+                is_unwind_target_in_scope( table, i, base, dispatch->TargetPc ))
+            {
+                break;
+            }
+            if (table->ScopeRecord[i].JumpTarget) continue;
+#else
             if (table->ScopeRecord[i].JumpTarget) continue;
 
             if (rec->ExceptionFlags & EXCEPTION_TARGET_UNWIND &&
@@ -1158,6 +1188,7 @@ EXCEPTION_DISPOSITION WINAPI __C_specific_handler( EXCEPTION_RECORD *rec, void *
             {
                 break;
             }
+#endif
             handler = (void *)(base + table->ScopeRecord[i].HandlerAddress);
             dispatch->ScopeIndex = i + 1;
             TRACE_(unwind)( "scope %u calling __finally %p frame %p\n", i, handler, frame );
@@ -1239,6 +1270,14 @@ EXCEPTION_DISPOSITION WINAPI __C_specific_handler( EXCEPTION_RECORD *rec, void *
         {
             if (pc < base + table->ScopeRecord[i].BeginAddress) continue;
             if (pc >= base + table->ScopeRecord[i].EndAddress) continue;
+#ifdef __REACTOS__
+            if (rec->ExceptionFlags & EXCEPTION_TARGET_UNWIND &&
+                is_unwind_target_in_scope( table, i, base, dispatch->TargetPc ))
+            {
+                break;
+            }
+            if (table->ScopeRecord[i].JumpTarget) continue;
+#else
             if (table->ScopeRecord[i].JumpTarget) continue;
 
             if (rec->ExceptionFlags & EXCEPTION_TARGET_UNWIND &&
@@ -1247,6 +1286,7 @@ EXCEPTION_DISPOSITION WINAPI __C_specific_handler( EXCEPTION_RECORD *rec, void *
             {
                 break;
             }
+#endif
             handler = (void *)(base + table->ScopeRecord[i].HandlerAddress);
             dispatch->ScopeIndex = i + 1;
             TRACE_(unwind)( "scope %u calling __finally %p frame %p\n", i, handler, frame );
@@ -1327,6 +1367,14 @@ EXCEPTION_DISPOSITION WINAPI __C_specific_handler( EXCEPTION_RECORD *rec, void *
         {
             if (pc < base + table->ScopeRecord[i].BeginAddress) continue;
             if (pc >= base + table->ScopeRecord[i].EndAddress) continue;
+#ifdef __REACTOS__
+            if (rec->ExceptionFlags & EXCEPTION_TARGET_UNWIND &&
+                is_unwind_target_in_scope( table, i, base, dispatch->TargetIp ))
+            {
+                break;
+            }
+            if (table->ScopeRecord[i].JumpTarget) continue;
+#else
             if (table->ScopeRecord[i].JumpTarget) continue;
 
             if (rec->ExceptionFlags & EXCEPTION_TARGET_UNWIND &&
@@ -1336,6 +1384,7 @@ EXCEPTION_DISPOSITION WINAPI __C_specific_handler( EXCEPTION_RECORD *rec, void *
                 break;
             }
             else
+#endif
             {
                 PTERMINATION_HANDLER handler = (void *)(base + table->ScopeRecord[i].HandlerAddress);
                 dispatch->ScopeIndex = i + 1;
