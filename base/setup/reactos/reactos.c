@@ -1879,9 +1879,6 @@ FsVolCallback(
             if (FsVolContext->pSetupData->RepairUpdateFlag)
                 return FSVOL_SKIP; /** HACK!! **/
 
-            if (IsUnattendedSetup && !FsVolContext->pSetupData->USetupData.FormatPartition)
-                return FSVOL_SKIP; /** HACK!! **/
-
             /* Set status text */
             SetDlgItemTextW(UiContext.hwndDlg, IDC_ITEM, L"");
         }
@@ -4231,6 +4228,18 @@ _tWinMain(HINSTANCE hInst,
         psp.lParam = (LPARAM)&SetupData;
         psp.pfnDlgProc = SummaryDlgProc;
         psp.pszTemplate = MAKEINTRESOURCEW(IDD_SUMMARYPAGE);
+        ahpsp[nPages++] = CreatePropertySheetPage(&psp);
+    }
+    else
+    {
+        psp.dwSize = sizeof(psp);
+        psp.dwFlags = PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
+        psp.pszHeaderTitle = MAKEINTRESOURCEW(IDS_DRIVETITLE);
+        psp.pszHeaderSubTitle = MAKEINTRESOURCEW(IDS_DRIVESUBTITLE);
+        psp.hInstance = hInst;
+        psp.lParam = (LPARAM)&SetupData;
+        psp.pfnDlgProc = DriveDlgProc;
+        psp.pszTemplate = MAKEINTRESOURCEW(IDD_DRIVEPAGE);
         ahpsp[nPages++] = CreatePropertySheetPage(&psp);
     }
 

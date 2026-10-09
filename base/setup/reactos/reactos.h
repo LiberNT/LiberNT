@@ -128,6 +128,7 @@ typedef struct _SETUPDATA
     /* General */
     HINSTANCE hInstance;
     BOOL bUnattend;
+    BOOL bUnattendTried;
     BOOL bMustReboot;
 
     HFONT hTitleFont;

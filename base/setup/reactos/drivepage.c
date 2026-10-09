@@ -371,6 +371,7 @@ typedef struct _PARTCREATE_CTX
     ULONG PartSizeMB;    //< Selected partition size in MB.
     BOOLEAN MBRExtPart;  //< Whether to create an MBR extended partition.
     BOOLEAN ForceFormat; //< Whether to force formatting ('Do not format' option hidden).
+    BOOLEAN AutoFormat;
 } PARTCREATE_CTX, *PPARTCREATE_CTX;
 
 static INT_PTR
@@ -413,8 +414,10 @@ FormatDlgProcWorker(
                     SendDlgItemMessageW(hDlg, IDC_FSTYPE, CB_SETITEMDATA, iItem, (LPARAM)NULL);
             }
 
-            // FIXME: Read from SetupData.FsType; select the "FAT" FS instead.
-            DefaultFs = L"FAT";
+            if (SetupData.bUnattend && SetupData.USetupData.FsType == 1)
+                DefaultFs = L"BTRFS";
+            else
+                DefaultFs = L"FAT";
 
             /* Retrieve the selected volume and create information */
             ASSERT(PartCreateCtx->PartItem->Volume == PartCreateCtx->PartItem->PartEntry->Volume);
@@ -552,6 +555,8 @@ FormatDlgProcWorker(
     return FALSE;
 }
 
+#define PM_FMTDLG_SHOWHIDE (WM_APP + 1)
+
 static INT_PTR
 CALLBACK
 FormatDlgProc(
@@ -575,8 +580,18 @@ FormatDlgProc(
 
             /* We actually want to format, so set the flag */
             PartCreateCtx->ForceFormat = TRUE;
+
+            if (PartCreateCtx->AutoFormat)
+            {
+                PostMessageW(hDlg, PM_FMTDLG_SHOWHIDE, FALSE, 0);
+                PostMessageW(hDlg, WM_COMMAND, MAKEWPARAM(IDOK, BN_CLICKED), 0);
+            }
             break;
         }
+
+        case PM_FMTDLG_SHOWHIDE:
+            ShowWindow(hDlg, wParam ? SW_SHOW : SW_HIDE);
+            break;
 
         case WM_COMMAND:
         {
@@ -2173,6 +2188,45 @@ DriveDlgProc(
                      * only when the user selects a valid partition. */
                     hList = GetDlgItem(hwndDlg, IDC_PARTITION);
                     UpdatePartitionButtons(hwndDlg, hList, TreeList_GetSelection(hList));
+
+                    if (pSetupData->bUnattend && !pSetupData->bUnattendTried)
+                    {
+                        PPARTENTRY PartEntry = NULL;
+                        HTLITEM hItem = NULL;
+
+                        pSetupData->bUnattendTried = TRUE;
+                        CheckRadioButton(hwndDlg, IDC_ERASEDISK, IDC_CUSTOMPART, IDC_CUSTOMPART);
+                        if (pSetupData->USetupData.DestinationDiskNumber >= 0 &&
+                            pSetupData->USetupData.DestinationPartitionNumber >= 0)
+                        {
+                            PartEntry = SelectPartition(pSetupData->PartitionList,
+                                                        pSetupData->USetupData.DestinationDiskNumber,
+                                                        pSetupData->USetupData.DestinationPartitionNumber);
+                        }
+                        if (PartEntry && !IsContainerPartition(PartEntry->PartitionType))
+                        {
+                            for (hItem = TreeList_GetNextItem(hList, TVI_ROOT, TVGN_NEXTITEM);
+                                 hItem;
+                                 hItem = TreeList_GetNextItem(hList, hItem, TVGN_NEXTITEM))
+                            {
+                                PPARTITEM PartItem = GetItemPartition(hList, hItem);
+                                if (PartItem && PartItem->PartEntry == PartEntry)
+                                    break;
+                            }
+                        }
+                        if (!hItem && pSetupData->USetupData.AutoPartition)
+                            hItem = FindDefaultInstallRegion(hList);
+                        if (hItem)
+                        {
+                            TreeList_SelectItem(hList, hItem);
+                            UpdatePartitionButtons(hwndDlg, hList, hItem);
+                            PostMessageW(GetParent(hwndDlg), PSM_PRESSBUTTON, PSBTN_NEXT, 0);
+                        }
+                        else
+                        {
+                            UpdatePartitionButtons(hwndDlg, hList, TreeList_GetSelection(hList));
+                        }
+                    }
                     break;
                 }
 
@@ -2273,7 +2327,8 @@ DriveDlgProc(
                      * is not recognized by the computer's firmware and if so, display
                      * a warning since such disks may not be bootable.
                      */
-                    if (PartEntry->DiskEntry->MediaType == FixedMedia &&
+                    if (!pSetupData->bUnattend &&
+                        PartEntry->DiskEntry->MediaType == FixedMedia &&
                         !PartEntry->DiskEntry->BiosFound &&
                         !IsListEmpty(&PartEntry->DiskEntry->PartList->BiosDiskListHead))
                     {
@@ -2351,7 +2406,8 @@ DriveDlgProc(
                     /* Force formatting only if the partition doesn't have a volume (may or may not be formatted) */
                     if (PartEntry->Volume &&
                         ((PartEntry->Volume->FormatState == Formatted) ||
-                         (PartItem->VolCreate && *PartItem->VolCreate->FileSystemName)))
+                         (PartItem->VolCreate && *PartItem->VolCreate->FileSystemName)) &&
+                        !(pSetupData->bUnattend && pSetupData->USetupData.FormatPartition))
                     {
                         /*NOTHING*/;
                     }
@@ -2362,6 +2418,7 @@ DriveDlgProc(
 
                         /* Show the formatting dialog */
                         PartCreateCtx.PartItem = PartItem;
+                        PartCreateCtx.AutoFormat = pSetupData->bUnattend && pSetupData->USetupData.FormatPartition;
                         ret = DialogBoxParamW(pSetupData->hInstance,
                                               MAKEINTRESOURCEW(IDD_FORMAT),
                                               hwndDlg,
