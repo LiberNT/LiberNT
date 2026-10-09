@@ -1,0 +1,22 @@
+--- a/llvm/include/llvm-c/DataTypes.h
++++ b/llvm/include/llvm-c/DataTypes.h
+@@ -27,7 +27,7 @@
+ #include <inttypes.h>
+ #include <stdint.h>
+ 
+-#ifndef _MSC_VER
++#if !defined(_MSC_VER) && !defined(__REACTOS__)
+ 
+ #if !defined(UINT32_MAX)
+ # error "The standard header <cstdint> is not C++11 compliant. Must #define "\
+--- a/llvm/lib/Support/raw_ostream.cpp
++++ b/llvm/lib/Support/raw_ostream.cpp
+@@ -41,7 +41,7 @@
+ #include <io.h>
+ #endif
+ 
+-#if defined(_MSC_VER)
++#if defined(_MSC_VER) || defined(__REACTOS__)
+ #include <io.h>
+ #ifndef STDIN_FILENO
+ # define STDIN_FILENO 0

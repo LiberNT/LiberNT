@@ -12,7 +12,7 @@ if(NOT ARCH MATCHES "^(amd64|arm64)$")
     message(FATAL_ERROR "Mesa LLVMpipe requires an amd64 or arm64 ReactOS target.")
 endif()
 if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang" OR MSVC)
-    message(FATAL_ERROR "Mesa LLVMpipe currently requires the llvm-mingw Clang toolchain.")
+    message(FATAL_ERROR "Mesa LLVMpipe requires the RosBE Clang toolchain.")
 endif()
 if(NOT TARGET mesa_gallium OR NOT TARGET mesa_gallium_build)
     message(FATAL_ERROR "Mesa LLVMpipe requires MESA_GALLIUM_FROM_SOURCE so LLVMpipe is built into the shared WGL ICD.")
@@ -26,27 +26,24 @@ endif()
 # Parallelism is inherited at build time; discard the old fixed job limit.
 unset(MESA_BUILD_JOBS CACHE)
 set(MESA_LLVM_ROOT "" CACHE PATH "Optional prebuilt Windows static LLVM installation for the selected architecture")
-set(MESA_LLVM_MINGW_ROOT "${REACTOS_CLANG_LLVM_MINGW_ROOT}" CACHE PATH "llvm-mingw toolchain used by modern Mesa")
 
+set(MESA_ARCH_FLAGS)
 if(ARCH STREQUAL "amd64")
     set(MESA_CPU x86_64)
     set(MESA_LLVM_TARGET X86)
+    set(MESA_ARCH_FLAGS -mlong-double-64)
 else()
     set(MESA_CPU aarch64)
     set(MESA_LLVM_TARGET AArch64)
 endif()
 if(ARM64EC_RUNTIME)
+    set(MESA_SDK_ARCH arm64ec)
     set(MESA_TRIPLE arm64ec-w64-mingw32)
 else()
+    set(MESA_SDK_ARCH ${MESA_CPU})
     set(MESA_TRIPLE "${MESA_CPU}-w64-mingw32")
 endif()
-# Do not cache architecture-specific tool selections across reconfiguration.
-find_program(MESA_CC NAMES ${MESA_TRIPLE}-clang HINTS "${MESA_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
-find_program(MESA_CXX NAMES ${MESA_TRIPLE}-clang++ HINTS "${MESA_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
-find_program(MESA_WINDRES NAMES ${MESA_TRIPLE}-windres HINTS "${MESA_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
-find_program(MESA_AR NAMES llvm-ar HINTS "${MESA_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
-find_program(MESA_RANLIB NAMES llvm-ranlib HINTS "${MESA_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
-find_program(MESA_STRIP NAMES llvm-strip HINTS "${MESA_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
+find_program(MESA_STRIP NAMES llvm-strip HINTS "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin" NO_CACHE REQUIRED)
 find_program(MESA_NINJA NAMES ninja REQUIRED)
 find_program(MESA_PYTHON NAMES python3 python REQUIRED)
 find_program(MESA_PATCH NAMES patch REQUIRED)
@@ -57,6 +54,7 @@ endif()
 include("${REACTOS_SOURCE_DIR}/sdk/cmake/nested-build.cmake")
 
 set(MESA_WORK_DIR "${CMAKE_CURRENT_BINARY_DIR}/mesa-llvmpipe")
+set(MESA_SDK_LIBDIR "${MESA_WORK_DIR}/reactos-sdk-lib")
 set(MESA_CMAKE_BINARY_DIR "${REACTOS_BINARY_DIR}/dll/opengl/mesa_gallium/mesa-source/cmake-build")
 set(MESA_LAVAPIPE_BUILD_DLL "${MESA_CMAKE_BINARY_DIR}/src/gallium/targets/lavapipe/vulkan_lvp.dll")
 set(MESA_LAVAPIPE_BUILD_MANIFEST "${MESA_CMAKE_BINARY_DIR}/src/gallium/targets/lavapipe/lvp_icd.json")
@@ -75,6 +73,28 @@ set(MESA_LICENSES "${MESA_WORK_DIR}/mesa-licenses.zip")
 file(MAKE_DIRECTORY "${MESA_WORK_DIR}")
 include(ExternalProject)
 
+set(_mesa_sdk_targets
+    msvcrtex libucrtbase libmsvcrt libkernel32 libntdll ucrtoldnames libuser32 libgdi32 libwinspool
+    libshell32 libole32 liboleaut32 uuid libcomdlg32 libadvapi32 libcfgmgr32 libpsapi libws2_32)
+if(ARM64EC_RUNTIME)
+    list(APPEND _mesa_sdk_targets chpe)
+endif()
+export_sdk_libraries(mesa_llvmpipe_sdk_libs "${MESA_SDK_LIBDIR}"
+    LIBRARIES ${_mesa_sdk_targets}
+    DEPENDS ${_mesa_sdk_targets} ucrtoldnames_target)
+string(JOIN " " _mesa_sdk_arch_flags ${MESA_ARCH_FLAGS})
+set(MESA_SDK_CMAKE_ARGS
+    -DCMAKE_TOOLCHAIN_FILE:FILEPATH=${REACTOS_SOURCE_DIR}/submodules/reactos-sdk.cmake
+    -DCMAKE_MAKE_PROGRAM:FILEPATH=${MESA_NINJA}
+    -DREACTOS_CLANG_LLVM_MINGW_ROOT:PATH=${REACTOS_CLANG_LLVM_MINGW_ROOT}
+    -DREACTOS_SDK_ARCH:STRING=${MESA_SDK_ARCH}
+    -DREACTOS_SDK_TRIPLE:STRING=${MESA_TRIPLE}
+    "-DREACTOS_SDK_ARCH_FLAGS:STRING=${_mesa_sdk_arch_flags}"
+    -DREACTOS_SDK_SOURCE_DIR:PATH=${REACTOS_SOURCE_DIR}
+    -DREACTOS_SDK_BUILD_DIR:PATH=${REACTOS_BINARY_DIR}
+    -DREACTOS_SDK_LIBDIR:PATH=${MESA_SDK_LIBDIR}
+    -DREACTOS_SDK_CXX_RUNTIME:PATH=${REACTOS_LIBCXX_ROOT})
+
 set(_mesa_llvm_dependency)
 if(MESA_LLVM_ROOT)
     get_filename_component(MESA_LLVM_PREFIX "${MESA_LLVM_ROOT}" ABSOLUTE)
@@ -87,10 +107,10 @@ if(MESA_LLVM_ROOT)
     endif()
 else()
     set(MESA_LLVM_PREFIX "${MESA_WORK_DIR}/llvm-install")
-    set(_mesa_llvm_patch_args)
+    set(_mesa_llvm_patch_args PATCH_COMMAND ${MESA_PATCH} -p1 -i "${REACTOS_SOURCE_DIR}/submodules/llvm-reactos-sdk.patch")
     set(_mesa_llvm_abi_args)
     if(ARM64EC_RUNTIME)
-        set(_mesa_llvm_patch_args PATCH_COMMAND ${MESA_PATCH} -p1 -i "${REACTOS_SOURCE_DIR}/submodules/llvm-arm64ec.patch")
+        list(APPEND _mesa_llvm_patch_args COMMAND ${MESA_PATCH} -p1 -i "${REACTOS_SOURCE_DIR}/submodules/llvm-arm64ec.patch")
         set(_mesa_llvm_abi_args -DLLVM_DISABLE_ASSEMBLY_FILES=ON)
     endif()
     set(MESA_LLVM_SOURCE_ROOT "" CACHE PATH "Optional existing LLVM 22.1.8 source tree to reuse across architectures")
@@ -126,14 +146,8 @@ else()
         ${_mesa_llvm_patch_args}
         CMAKE_GENERATOR Ninja
         CMAKE_ARGS
-            -DCMAKE_MAKE_PROGRAM=${MESA_NINJA}
-            -DCMAKE_SYSTEM_NAME=Windows
-            -DCMAKE_SYSTEM_PROCESSOR=${MESA_CPU}
-            -DCMAKE_C_COMPILER=${MESA_CC}
-            -DCMAKE_CXX_COMPILER=${MESA_CXX}
-            -DCMAKE_RC_COMPILER=${MESA_WINDRES}
-            -DCMAKE_AR=${MESA_AR}
-            -DCMAKE_RANLIB=${MESA_RANLIB}
+            ${MESA_SDK_CMAKE_ARGS}
+            -DCMAKE_TRY_COMPILE_TARGET_TYPE:STRING=EXECUTABLE
             -DCMAKE_C_COMPILER_LAUNCHER=
             -DCMAKE_CXX_COMPILER_LAUNCHER=
             -DCMAKE_BUILD_TYPE=Release
@@ -159,12 +173,14 @@ else()
             -DLLVM_INCLUDE_BENCHMARKS=OFF
             -DLLVM_INCLUDE_DOCS=OFF
             -DLLVM_BUILD_TOOLS=OFF
+            -DLLVM_INCLUDE_TOOLS=OFF
             -DLLVM_BUILD_LLVM_DYLIB=OFF
             -DLLVM_LINK_LLVM_DYLIB=OFF
             -DBUILD_SHARED_LIBS=OFF
         BUILD_COMMAND ${CMAKE_COMMAND} -E env CCACHE_DISABLE=1 SCCACHE_DISABLE=1 ${REACTOS_NESTED_BUILD} <BINARY_DIR>
         INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR>
         USES_TERMINAL_BUILD TRUE)
+    ExternalProject_Add_StepDependencies(mesa-llvm configure mesa_llvmpipe_sdk_libs)
     set(_mesa_llvm_dependency mesa-llvm)
 endif()
 
@@ -197,12 +213,7 @@ ExternalProject_Add(directx-headers-build
     BINARY_DIR "${DIRECTX_HEADERS_BINARY_DIR}"
     CMAKE_GENERATOR Ninja
     CMAKE_ARGS
-        -DCMAKE_MAKE_PROGRAM=${MESA_NINJA}
-        -DCMAKE_SYSTEM_NAME=Windows
-        -DCMAKE_SYSTEM_PROCESSOR=${MESA_CPU}
-        -DCMAKE_CXX_COMPILER=${MESA_CXX}
-        -DCMAKE_AR=${MESA_AR}
-        -DCMAKE_RANLIB=${MESA_RANLIB}
+        ${MESA_SDK_CMAKE_ARGS}
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_INSTALL_PREFIX=${DIRECTX_HEADERS_PREFIX}
         -DBUILD_TESTING=OFF
@@ -213,6 +224,7 @@ ExternalProject_Add(directx-headers-build
     BUILD_BYPRODUCTS
         "${DIRECTX_HEADERS_PREFIX}/include/directx/d3d12.h"
         "${DIRECTX_HEADERS_PREFIX}/include/dxguids/dxguids.h")
+ExternalProject_Add_StepDependencies(directx-headers-build configure mesa_llvmpipe_sdk_libs)
 
 ExternalProject_Add(vulkan-loader-build
     EXCLUDE_FROM_ALL TRUE
@@ -230,15 +242,7 @@ ExternalProject_Add(vulkan-loader-build
         -P ${CMAKE_CURRENT_LIST_DIR}/vulkan-loader-apply-patch.cmake
     CMAKE_GENERATOR Ninja
     CMAKE_ARGS
-        -DCMAKE_MAKE_PROGRAM=${MESA_NINJA}
-        -DCMAKE_SYSTEM_NAME=Windows
-        -DCMAKE_SYSTEM_PROCESSOR=${MESA_CPU}
-        -DCMAKE_C_COMPILER=${MESA_CC}
-        -DCMAKE_ASM_COMPILER=${MESA_CC}
-        -DCMAKE_RC_COMPILER=${MESA_WINDRES}
-        -DCMAKE_AR=${MESA_AR}
-        -DCMAKE_RANLIB=${MESA_RANLIB}
-        -DCMAKE_C_FLAGS=-D__REACTOS__
+        ${MESA_SDK_CMAKE_ARGS}
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_PREFIX_PATH=${VULKAN_HEADERS_PREFIX}
         -DUSE_GAS=ON
@@ -248,6 +252,7 @@ ExternalProject_Add(vulkan-loader-build
     INSTALL_COMMAND ""
     BUILD_BYPRODUCTS "${VULKAN_LOADER_BINARY_DIR}/loader/vulkan-1.dll"
     USES_TERMINAL_BUILD TRUE)
+ExternalProject_Add_StepDependencies(vulkan-loader-build configure mesa_llvmpipe_sdk_libs)
 
 # Declare the packaged files at the step that actually creates them. This
 # also regenerates any file if it was removed after a successful build.
