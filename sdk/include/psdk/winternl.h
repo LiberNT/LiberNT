@@ -27,10 +27,6 @@
  */
 #pragma once
 
-#if defined(__REACTOS__) && !defined(__WINESRC__)
-#error "Do not use this header, use NDK!"
-#endif
-
 #ifndef _WINTERNL_
 #define _WINTERNL_
 
@@ -81,6 +77,14 @@ typedef struct _UNICODE_STRING
     PWSTR Buffer;
 } UNICODE_STRING, *PUNICODE_STRING;
 typedef const UNICODE_STRING *PCUNICODE_STRING;
+
+typedef LONG KPRIORITY;
+
+typedef struct _CLIENT_ID
+{
+    HANDLE UniqueProcess;
+    HANDLE UniqueThread;
+} CLIENT_ID;
 
 typedef struct _RTL_USER_PROCESS_PARAMETERS
 {
@@ -524,6 +528,19 @@ typedef struct _SYSTEM_PROCESS_INFORMATION
     SIZE_T PrivatePageCount;
     LARGE_INTEGER Reserved6[6];
 } SYSTEM_PROCESS_INFORMATION, *PSYSTEM_PROCESS_INFORMATION;
+
+typedef struct _SYSTEM_THREAD_INFORMATION
+{
+    LARGE_INTEGER Reserved1[3];
+    ULONG Reserved2;
+    PVOID StartAddress;
+    CLIENT_ID ClientId;
+    KPRIORITY Priority;
+    LONG BasePriority;
+    ULONG Reserved3;
+    ULONG ThreadState;
+    ULONG WaitReason;
+} SYSTEM_THREAD_INFORMATION, *PSYSTEM_THREAD_INFORMATION;
 
 typedef struct _SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION
 {
