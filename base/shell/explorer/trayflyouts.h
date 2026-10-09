@@ -12,6 +12,7 @@ VOID TrayCalendar_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor);
 BOOL TrayCalendar_IsOpen(VOID);
 VOID TrayVolume_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor);
 VOID TrayVolume_SetCachedState(IN int nPercent, IN BOOL bMute);
+BOOL TrayVolume_HandleAppCommand(IN UINT uAppCmd);
 VOID TrayNetwork_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor);
 VOID TrayMixer_Open(IN const RECT *prcAnchor);
 VOID TrayPower_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor);

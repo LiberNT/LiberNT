@@ -3796,6 +3796,45 @@ TfyRequestMaster(IMMDevice *pDevice, int nPercent, int nMute)
     return TRUE;
 }
 
+BOOL TrayVolume_HandleAppCommand(UINT uAppCmd)
+{
+    CComPtr<IMMDeviceEnumerator> pEnum;
+    CComPtr<IMMDevice> pDevice;
+    CComPtr<IAudioEndpointVolume> pVolume;
+    BOOL bMute = FALSE;
+    float fLevel = 0.0f;
+    HRESULT hr;
+
+    if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARG(IMMDeviceEnumerator, &pEnum))) ||
+        FAILED(pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice)) ||
+        FAILED(pDevice->Activate(IID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, (void **)&pVolume)))
+    {
+        return FALSE;
+    }
+
+    switch (uAppCmd)
+    {
+        case APPCOMMAND_VOLUME_MUTE:
+            hr = pVolume->GetMute(&bMute);
+            if (SUCCEEDED(hr))
+                hr = pVolume->SetMute(!bMute, NULL);
+            break;
+        case APPCOMMAND_VOLUME_UP:
+            hr = pVolume->VolumeStepUp(NULL);
+            break;
+        case APPCOMMAND_VOLUME_DOWN:
+            hr = pVolume->VolumeStepDown(NULL);
+            break;
+        default:
+            return FALSE;
+    }
+
+    if (SUCCEEDED(pVolume->GetMasterVolumeLevelScalar(&fLevel)) && SUCCEEDED(pVolume->GetMute(&bMute)))
+        TrayVolume_SetCachedState((int)(fLevel * 100.0f + 0.5f), bMute);
+    return SUCCEEDED(hr);
+}
+
 VOID TrayMixer_Open(const RECT *prcAnchor);
 
 class CTrayVolumeWnd :
