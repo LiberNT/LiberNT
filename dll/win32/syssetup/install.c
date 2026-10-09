@@ -14,6 +14,7 @@
 #define COBJMACROS
 
 #include <io.h>
+#include <lmcons.h>
 #include <wincon.h>
 #include <winnls.h>
 #include <winsvc.h>
@@ -1155,6 +1156,57 @@ done:
 }
 
 static
+BOOL
+GetPreinstallUserName(
+    _Out_writes_(cchUserName) PWSTR UserName,
+    _In_ DWORD cchUserName)
+{
+    HKEY hKey;
+    DWORD cbData = (cchUserName - 1) * sizeof(WCHAR);
+    DWORD dwType;
+    LONG Error;
+
+    ZeroMemory(UserName, cchUserName * sizeof(WCHAR));
+    Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                          L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon",
+                          0,
+                          KEY_QUERY_VALUE,
+                          &hKey);
+    if (Error != ERROR_SUCCESS)
+        return FALSE;
+
+    Error = RegQueryValueExW(hKey, L"DefaultUserName", NULL, &dwType, (PBYTE)UserName, &cbData);
+    RegCloseKey(hKey);
+    if (Error != ERROR_SUCCESS || dwType != REG_SZ)
+    {
+        UserName[0] = UNICODE_NULL;
+        return FALSE;
+    }
+
+    return UserName[0] != UNICODE_NULL;
+}
+
+static
+LONG
+EndSystemSetup(VOID)
+{
+    HKEY hKey;
+    DWORD dwValue = 0;
+    LONG Error;
+
+    Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\Setup", 0, KEY_SET_VALUE, &hKey);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+
+    Error = RegSetValueExW(hKey, L"SystemSetupInProgress", 0, REG_DWORD, (PBYTE)&dwValue, sizeof(dwValue));
+    if (Error == ERROR_SUCCESS)
+        Error = RegSetValueExW(hKey, L"SetupType", 0, REG_DWORD, (PBYTE)&dwValue, sizeof(dwValue));
+    RegCloseKey(hKey);
+
+    return Error;
+}
+
+static
 DWORD
 InstallLiveCD(VOID)
 {
@@ -1163,13 +1215,39 @@ InstallLiveCD(VOID)
     LPVOID lpEnvironment;
     HANDLE hToken = NULL;
     BOOL bRes;
+    WCHAR UserName[UNLEN + 1];
+    WCHAR ComputerName[MAX_COMPUTERNAME_LENGTH + 1];
+    DWORD cchComputerName = ARRAYSIZE(ComputerName);
+    ITEMSDATA ItemsData = { NULL };
+    REGISTRATIONNOTIFY Notify;
+    BOOL bPreinstall;
+    NTSTATUS Status;
 
     PreprocessUnattend();
     InitializeProgramFilesDir();
     if (!CommonInstall())
         goto error;
 
-    InstallLiveCDPrivileges();
+    bPreinstall = GetPreinstallUserName(UserName, ARRAYSIZE(UserName));
+    if (bPreinstall)
+    {
+        if (!InitializeProfiles())
+            goto error;
+        InitializeDefaultUserLocale();
+        if (SaveDefaultUserHive() != ERROR_SUCCESS)
+            goto error;
+        if (!GetComputerNameW(ComputerName, &cchComputerName))
+            goto error;
+        Status = SetAccountsDomainSid(NULL, ComputerName);
+        if (!NT_SUCCESS(Status))
+            goto error;
+        ZeroMemory(&Notify, sizeof(Notify));
+        InstallSecurity(&ItemsData, &Notify);
+    }
+    else
+    {
+        InstallLiveCDPrivileges();
+    }
 
     /* Install the TCP/IP protocol driver */
     bRes = InstallNetworkComponent(L"MS_TCPIP", FALSE);
@@ -1207,6 +1285,16 @@ InstallLiveCD(VOID)
     SetupCloseInfFile(hSysSetupInf);
 
     StartServiceAccountServices();
+
+    if (bPreinstall)
+    {
+        Status = CreateTargetAccount(UserName, L"");
+        if (!NT_SUCCESS(Status) && Status != STATUS_USER_EXISTS)
+            goto error;
+        if (EndSystemSetup() != ERROR_SUCCESS)
+            goto error;
+        return 0;
+    }
 
     /* Run the shell with a fresh system environment, as winlogon does for
      * a shell without a user token: ours was inherited from SMSS before it

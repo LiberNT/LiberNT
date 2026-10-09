@@ -124,6 +124,11 @@ InstallLiveCDPrivileges(VOID);
 DWORD
 InstallTargetSystem(VOID);
 
+NTSTATUS
+CreateTargetAccount(
+    _In_ PCWSTR UserName,
+    _In_ PCWSTR Password);
+
 /* wizard.c */
 
 BOOL

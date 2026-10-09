@@ -143,6 +143,9 @@ RunSetupThreadProc(
 
     // SwitchDesktop(WLSession->WinlogonDesktop);
 
+    if (GetSetupType() == 0)
+        PostMessageW(WLSession->SASWindow, WL_WM_SETUP_DONE, 0, 0);
+
     TRACE ("RunSetup() done\n");
 
     return TRUE;

@@ -482,9 +482,10 @@ WriteTargetTimeZone(
     return ERROR_SUCCESS;
 }
 
-static NTSTATUS
+NTSTATUS
 CreateTargetAccount(
-    _In_ PTARGET_SETTINGS Settings)
+    _In_ PCWSTR UserName,
+    _In_ PCWSTR Password)
 {
     static SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
     PPOLICY_ACCOUNT_DOMAIN_INFO AccountDomain = NULL;
@@ -529,7 +530,7 @@ CreateTargetAccount(
     if (!NT_SUCCESS(Status))
         goto done;
 
-    RtlInitUnicodeString(&AccountName, Settings->UserName);
+    RtlInitUnicodeString(&AccountName, UserName);
     Status = SamCreateUser2InDomain(DomainHandle,
                                     &AccountName,
                                     USER_NORMAL_ACCOUNT,
@@ -543,7 +544,7 @@ CreateTargetAccount(
         goto done;
     }
 
-    RtlInitUnicodeString(&PasswordInfo.Password, Settings->Password);
+    RtlInitUnicodeString(&PasswordInfo.Password, Password);
     PasswordInfo.PasswordExpired = FALSE;
     Status = SamSetInformationUser(UserHandle, UserSetPasswordInformation, &PasswordInfo);
     if (!NT_SUCCESS(Status))
@@ -1056,7 +1057,7 @@ InstallTargetSystem(VOID)
     InstallSecurity(&ItemsData, &Notify);
 
     ReportTargetPhase(8);
-    Status = CreateTargetAccount(&Settings);
+    Status = CreateTargetAccount(Settings.UserName, Settings.Password);
     Error = NT_SUCCESS(Status) ? WriteTargetLogon(&Settings) : RtlNtStatusToDosError(Status);
     SecureZeroMemory(Settings.Password, sizeof(Settings.Password));
     if (Error != ERROR_SUCCESS)
