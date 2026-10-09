@@ -111,3 +111,7 @@ endif()
 add_library(vcruntime ${VCRUNTIME_SOURCES} $<TARGET_OBJECTS:setjmp>)
 target_link_libraries(vcruntime ${PSEH_LIB})
 target_include_directories(vcruntime INTERFACE inc)
+
+if(ARM64EC_RUNTIME)
+    add_library(chpe STATIC arm64ec/chpe.S)
+endif()
