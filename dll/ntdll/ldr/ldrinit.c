@@ -1621,6 +1621,8 @@ LdrpPropagateTlsToLiveThreads(
     ULONG BufferSize = 0x10000, ReturnLength;
     HANDLE ProcessId = NtCurrentTeb()->ClientId.UniqueProcess;
     HANDLE ThreadId = NtCurrentTeb()->ClientId.UniqueThread;
+    HANDLE ImpersonationToken;
+    HANDLE NoToken = NULL;
     NTSTATUS Status;
     ULONG i;
 
@@ -1653,6 +1655,20 @@ LdrpPropagateTlsToLiveThreads(
         if (!ProcessInfo->NextEntryOffset) { ProcessInfo = NULL; break; }
         ProcessInfo = (PSYSTEM_PROCESS_INFORMATION)
             ((PUCHAR)ProcessInfo + ProcessInfo->NextEntryOffset);
+    }
+
+    Status = NtOpenThreadToken(NtCurrentThread(), TOKEN_IMPERSONATE, TRUE, &ImpersonationToken);
+    if (!NT_SUCCESS(Status))
+    {
+        ImpersonationToken = NULL;
+    }
+    else if (!NT_SUCCESS(NtSetInformationThread(NtCurrentThread(),
+                                                ThreadImpersonationToken,
+                                                &NoToken,
+                                                sizeof(NoToken))))
+    {
+        NtClose(ImpersonationToken);
+        ImpersonationToken = NULL;
     }
 
     if (ProcessInfo)
@@ -1691,6 +1707,15 @@ LdrpPropagateTlsToLiveThreads(
 
             NtClose(hThread);
         }
+    }
+
+    if (ImpersonationToken)
+    {
+        NtSetInformationThread(NtCurrentThread(),
+                               ThreadImpersonationToken,
+                               &ImpersonationToken,
+                               sizeof(ImpersonationToken));
+        NtClose(ImpersonationToken);
     }
 
     RtlFreeHeap(RtlGetProcessHeap(), 0, Buffer);
@@ -1958,11 +1983,13 @@ LdrpFreeTls(VOID)
     PLIST_ENTRY ListHead, NextEntry;
     PLDRP_TLS_DATA TlsData;
     PVOID *TlsVector;
+    SIZE_T TlsCount;
     PTEB Teb = NtCurrentTeb();
 
     /* Get a pointer to the vector array */
     TlsVector = Teb->ThreadLocalStoragePointer;
     if (!TlsVector) return;
+    TlsCount = RtlSizeHeap(RtlGetProcessHeap(), 0, TlsVector) / sizeof(PVOID);
 
     /* Loop through it */
     ListHead = &LdrpTlsList;
@@ -1973,7 +2000,8 @@ LdrpFreeTls(VOID)
         NextEntry = NextEntry->Flink;
 
         /* Free each entry */
-        if (TlsVector[TlsData->TlsDirectory.Characteristics])
+        if (TlsData->TlsDirectory.Characteristics < TlsCount &&
+            TlsVector[TlsData->TlsDirectory.Characteristics])
         {
             RtlFreeHeap(RtlGetProcessHeap(),
                         0,
