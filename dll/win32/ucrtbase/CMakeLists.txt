@@ -44,6 +44,10 @@ add_library(ucrtbase SHARED
     ucrtbase.rc
 )
 
+if(NOT ARCH STREQUAL "amd64" AND NOT ARCH STREQUAL "i386")
+    target_sources(ucrtbase PRIVATE fma3_unavailable.c)
+endif()
+
 if(ARCH STREQUAL "arm64" AND ARM64EC_RUNTIME)
     target_sources(ucrtbase PRIVATE arm64ec_memory.c)
     set_source_files_properties(arm64ec_memory.c PROPERTIES COMPILE_OPTIONS "-fno-builtin")

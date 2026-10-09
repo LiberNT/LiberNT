@@ -36,14 +36,6 @@ int __cdecl __acrt_initialize_sse2(void)
     return 0;
 }
 
-#if defined(_M_ARM64) || defined(_M_RISCV64)
-int __cdecl _set_FMA3_enable(int flag)
-{
-    (void)flag;
-    return 0;
-}
-#endif
-
 // The following stubs cannot be implemented as stubs by spec2def, because they are intrinsics
 
 #ifdef _MSC_VER
