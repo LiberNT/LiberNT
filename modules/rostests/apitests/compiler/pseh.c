@@ -3325,7 +3325,7 @@ START_TEST(pseh)
 	for(i = 0; i < sizeof(testsuite) / sizeof(testsuite[0]); ++ i)
 	{
 		subtest_(__FILE__, __LINE__)(testsuite[i].name);
-#ifdef __clang__
+#if defined(__clang__) && !defined(_M_AMD64)
 		todo_if(testsuite[i].func == test_abnorm_7)
 #endif
 		ok(call_test(testsuite[i].func), "%s failed\n", testsuite[i].name);
