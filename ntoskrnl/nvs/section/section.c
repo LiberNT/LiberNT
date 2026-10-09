@@ -2320,6 +2320,7 @@ MiSegmentIsResident(
     _In_ ULONG64 Length)
 {
     BOOLEAN Resident = TRUE;
+    ULONG64 Pages = MiSegmentPages(Segment);
     ULONG64 Last;
     ULONG64 Page;
 
@@ -2327,13 +2328,11 @@ MiSegmentIsResident(
         return TRUE;
     if (Offset + Length < Offset || Offset + Length > ~(ULONG64)(PAGE_SIZE - 1))
         return FALSE;
-    if (!MI_MUTEX_TRY_ACQUIRE(&Segment->Lock))
-        return FALSE;
 
     Last = MI_PAGE_ALIGN_UP(Offset + Length) >> PAGE_SHIFT;
-    if (Last > MiSegmentPages(Segment))
+    if (Last > Pages)
     {
-        Last = MiSegmentPages(Segment);
+        Last = Pages;
         Resident = FALSE;
     }
 
@@ -2344,7 +2343,6 @@ MiSegmentIsResident(
         Resident = (BOOLEAN)(Kind == MiSoftResident || Kind == MiSoftTransition);
     }
 
-    MI_MUTEX_RELEASE(&Segment->Lock);
     return Resident;
 }
 
