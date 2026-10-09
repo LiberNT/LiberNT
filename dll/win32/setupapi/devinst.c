@@ -683,6 +683,7 @@ CreateDeviceInfo(
     deviceInfo->set = list;
     deviceInfo->InstallParams.cbSize = sizeof(SP_DEVINSTALL_PARAMS_W);
     strcpyW(deviceInfo->Data, InstancePath);
+    _wcsupr(deviceInfo->Data);
     deviceInfo->instanceId = deviceInfo->Data;
     deviceInfo->UniqueId = strrchrW(deviceInfo->Data, '\\');
     deviceInfo->DeviceDescription = NULL;

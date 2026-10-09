@@ -20,6 +20,9 @@
 #include "cfgmgr32_private.h"
 #include "initguid.h"
 #include "devpkey.h"
+#ifdef __REACTOS__
+#include "sddl.h"
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(setupapi);
 
@@ -106,6 +109,10 @@ static LSTATUS open_key( HKEY root, const WCHAR *key, REGSAM access, BOOL open, 
     return err;
 }
 
+#ifdef __REACTOS__
+static LSTATUS query_device_container_id( const WCHAR *instance_id, struct property *prop );
+
+#endif
 static LSTATUS query_value( HKEY hkey, const WCHAR *value, WCHAR *buffer, DWORD len )
 {
 #ifdef __REACTOS__
@@ -180,28 +187,36 @@ static LSTATUS query_property( HKEY root, const WCHAR *prefix, DEVPROPTYPE type,
 
 static LSTATUS query_named_property( HKEY hkey, const WCHAR *nameW, DEVPROPTYPE type, struct property *prop )
 {
+#ifdef __REACTOS__
+    DWORD local_type = REG_NONE, *reg_type = &local_type;
+#else
+    DWORD *reg_type = prop->reg_type;
+#endif
     LSTATUS err;
 
     if (prop->flags & PROP_FLAG_ANSI)
     {
         char nameA[MAX_PATH];
         if (nameW) WideCharToMultiByte( CP_ACP, 0, nameW, -1, nameA, sizeof(nameA), NULL, NULL );
-        err = RegQueryValueExA( hkey, nameW ? nameA : NULL, NULL, prop->reg_type, prop->buffer, prop->size );
+        err = RegQueryValueExA( hkey, nameW ? nameA : NULL, NULL, reg_type, prop->buffer, prop->size );
     }
     else if (type == DEVPROP_TYPE_GUID && (prop->flags & PROP_FLAG_BINARY))
     {
         WCHAR buffer[39];
         DWORD len = *prop->size >= sizeof(GUID) ? sizeof(buffer) : 0;
 
-        if (!(err = RegQueryValueExW( hkey, nameW, NULL, prop->reg_type, (BYTE *)buffer, &len )))
+        if (!(err = RegQueryValueExW( hkey, nameW, NULL, reg_type, (BYTE *)buffer, &len )))
             err = guid_from_string( buffer, prop->buffer );
         *prop->size = sizeof(GUID);
     }
     else
     {
-        err = RegQueryValueExW( hkey, nameW, NULL, prop->reg_type, prop->buffer, prop->size );
+        err = RegQueryValueExW( hkey, nameW, NULL, reg_type, prop->buffer, prop->size );
     }
 
+#ifdef __REACTOS__
+    if ((!err || err == ERROR_MORE_DATA) && prop->reg_type) *prop->reg_type = local_type;
+#endif
     if (!err && !prop->buffer) err = ERROR_MORE_DATA;
     if ((!err || err == ERROR_MORE_DATA) && prop->type) *prop->type = type;
     if (err == ERROR_FILE_NOT_FOUND) return ERROR_NOT_FOUND;
@@ -259,6 +274,32 @@ struct property_desc
     const WCHAR      *name;
 };
 
+#ifdef __REACTOS__
+static const struct property_desc class_properties[] =
+{
+    { &DEVPKEY_DeviceClass_ClassName,          DEVPROP_TYPE_STRING,                     L"Class" },
+    { &DEVPKEY_DeviceClass_Name,               DEVPROP_TYPE_STRING,                     L"" },
+    { &DEVPKEY_DeviceClass_UpperFilters,       DEVPROP_TYPE_STRING_LIST,                L"UpperFilters" },
+    { &DEVPKEY_DeviceClass_LowerFilters,       DEVPROP_TYPE_STRING_LIST,                L"LowerFilters" },
+    { &DEVPKEY_DeviceClass_Security,           DEVPROP_TYPE_SECURITY_DESCRIPTOR,        L"Security" },
+    { &DEVPKEY_DeviceClass_SecuritySDS,        DEVPROP_TYPE_SECURITY_DESCRIPTOR_STRING, L"SecuritySDS" },
+    { &DEVPKEY_DeviceClass_DevType,            DEVPROP_TYPE_UINT32,                     L"DevType" },
+    { &DEVPKEY_DeviceClass_Exclusive,          DEVPROP_TYPE_BOOLEAN,                    L"Exclusive" },
+    { &DEVPKEY_DeviceClass_Characteristics,    DEVPROP_TYPE_UINT32,                     L"Characteristics" },
+    { &DEVPKEY_DeviceClass_Icon,               DEVPROP_TYPE_STRING },
+    { &DEVPKEY_DeviceClass_ClassInstaller,     DEVPROP_TYPE_STRING,                     L"Installer32" },
+    { &DEVPKEY_DeviceClass_PropPageProvider,   DEVPROP_TYPE_STRING,                     L"EnumPropPages32" },
+    { &DEVPKEY_DeviceClass_NoInstallClass,     DEVPROP_TYPE_BOOLEAN,                    L"NoInstallClass" },
+    { &DEVPKEY_DeviceClass_NoDisplayClass,     DEVPROP_TYPE_BOOLEAN,                    L"NoDisplayClass" },
+    { &DEVPKEY_DeviceClass_SilentInstall,      DEVPROP_TYPE_BOOLEAN,                    L"SilentInstall" },
+    { &DEVPKEY_DeviceClass_NoUseClass,         DEVPROP_TYPE_BOOLEAN,                    L"NoUseClass" },
+    { &DEVPKEY_DeviceClass_DefaultService,     DEVPROP_TYPE_STRING,                     L"Default Service" },
+    { &DEVPKEY_DeviceClass_IconPath,           DEVPROP_TYPE_STRING_LIST,                L"IconPath" },
+    { &DEVPKEY_NAME,                           DEVPROP_TYPE_STRING,                     L"" },
+    { &DEVPKEY_DeviceClass_DHPRebalanceOptOut, DEVPROP_TYPE_BOOLEAN },
+    { &DEVPKEY_DeviceClass_ClassCoInstallers,  DEVPROP_TYPE_STRING_LIST },
+};
+#else
 static const struct property_desc class_properties[] =
 {
     { &DEVPKEY_DeviceClass_ClassName,          DEVPROP_TYPE_STRING,                     L"Class" },
@@ -285,6 +326,103 @@ static const struct property_desc class_properties[] =
     { &DEVPKEY_DeviceClass_DHPRebalanceOptOut, DEVPROP_TYPE_BOOLEAN },
     { &DEVPKEY_DeviceClass_ClassCoInstallers,  DEVPROP_TYPE_STRING_LIST },
 };
+#endif
+
+#ifdef __REACTOS__
+static LSTATUS return_registry_property( struct property *prop, DEVPROPTYPE type, DWORD reg_type, const void *data, DWORD size )
+{
+    LSTATUS err = *prop->size >= size ? ERROR_SUCCESS : ERROR_MORE_DATA;
+
+    if (!err && prop->buffer) memcpy( prop->buffer, data, size );
+    *prop->size = size;
+    if (prop->type) *prop->type = type;
+    if (prop->reg_type) *prop->reg_type = reg_type;
+    return err;
+}
+
+static LSTATUS query_class_security_string( HKEY props_key, struct property *prop )
+{
+    BYTE stack_buffer[256], *sd = stack_buffer;
+    DWORD size = sizeof(stack_buffer), type;
+    WCHAR *sddl = NULL;
+    ULONG sddl_len = 0;
+    LSTATUS err;
+
+    err = RegQueryValueExW( props_key, L"Security", NULL, &type, sd, &size );
+    if (err == ERROR_MORE_DATA)
+    {
+        if (!(sd = malloc( size ))) return ERROR_OUTOFMEMORY;
+        err = RegQueryValueExW( props_key, L"Security", NULL, &type, sd, &size );
+    }
+    if (!err && (type != REG_BINARY || !IsValidSecurityDescriptor( sd ))) err = ERROR_NOT_FOUND;
+    if (!err && !ConvertSecurityDescriptorToStringSecurityDescriptorW( sd, SDDL_REVISION_1,
+            OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION,
+            &sddl, &sddl_len ))
+        err = ERROR_NOT_FOUND;
+    if (sd != stack_buffer) free( sd );
+    if (err) return err == ERROR_FILE_NOT_FOUND ? ERROR_NOT_FOUND : err;
+
+    if (prop->flags & PROP_FLAG_ANSI)
+    {
+        DWORD lenA = WideCharToMultiByte( CP_ACP, 0, sddl, -1, NULL, 0, NULL, NULL );
+        char *sddlA = malloc( lenA );
+
+        if (!sddlA) err = ERROR_OUTOFMEMORY;
+        else
+        {
+            WideCharToMultiByte( CP_ACP, 0, sddl, -1, sddlA, lenA, NULL, NULL );
+            err = return_registry_property( prop, DEVPROP_TYPE_SECURITY_DESCRIPTOR_STRING, REG_SZ, sddlA, lenA );
+            free( sddlA );
+        }
+    }
+    else err = return_registry_property( prop, DEVPROP_TYPE_SECURITY_DESCRIPTOR_STRING, REG_SZ, sddl, (wcslen( sddl ) + 1) * sizeof(WCHAR) );
+
+    LocalFree( sddl );
+    return err;
+}
+
+static LSTATUS query_class_device_property( HKEY hkey, const struct property_desc *desc, struct property *prop )
+{
+    const WCHAR *name = NULL;
+    HKEY props_key;
+    LSTATUS err;
+
+    if (!memcmp( desc->key, &DEVPKEY_DeviceClass_Security, sizeof(*desc->key) )) name = L"Security";
+    else if (!memcmp( desc->key, &DEVPKEY_DeviceClass_DevType, sizeof(*desc->key) )) name = L"DeviceType";
+    else if (!memcmp( desc->key, &DEVPKEY_DeviceClass_Exclusive, sizeof(*desc->key) )) name = L"Exclusive";
+    else if (!memcmp( desc->key, &DEVPKEY_DeviceClass_Characteristics, sizeof(*desc->key) )) name = L"DeviceCharacteristics";
+
+    if (open_key( hkey, L"Properties", KEY_QUERY_VALUE, TRUE, &props_key )) return ERROR_NOT_FOUND;
+    if (!name) err = query_class_security_string( props_key, prop );
+    else if (desc->type == DEVPROP_TYPE_BOOLEAN && !prop->reg_type)
+    {
+        DWORD value = 0, size = sizeof(value);
+        DEVPROP_BOOLEAN flag;
+
+        if ((err = RegQueryValueExW( props_key, name, NULL, NULL, (BYTE *)&value, &size ))) err = ERROR_NOT_FOUND;
+        else
+        {
+            flag = value ? DEVPROP_TRUE : DEVPROP_FALSE;
+            err = return_registry_property( prop, DEVPROP_TYPE_BOOLEAN, REG_DWORD, &flag, sizeof(flag) );
+        }
+    }
+    else err = query_named_property( props_key, name, desc->type, prop );
+    RegCloseKey( props_key );
+    return err;
+}
+
+static LSTATUS query_class_flag_property( HKEY hkey, const struct property_desc *desc, struct property *prop )
+{
+    WCHAR value[16];
+    DWORD size = sizeof(value) - sizeof(WCHAR), type;
+    DEVPROP_BOOLEAN flag;
+
+    if (RegQueryValueExW( hkey, desc->name, NULL, &type, (BYTE *)value, &size ) || type != REG_SZ) return ERROR_NOT_FOUND;
+    value[size / sizeof(WCHAR)] = 0;
+    flag = wcstol( value, NULL, 10 ) ? DEVPROP_TRUE : DEVPROP_FALSE;
+    return return_registry_property( prop, DEVPROP_TYPE_BOOLEAN, REG_SZ, &flag, sizeof(flag) );
+}
+#endif
 
 static LSTATUS query_class_property( HKEY hkey, struct property *prop )
 {
@@ -292,6 +430,13 @@ static LSTATUS query_class_property( HKEY hkey, struct property *prop )
     {
         const struct property_desc *desc = class_properties + i;
         if (memcmp( desc->key, &prop->key, sizeof(prop->key) )) continue;
+#ifdef __REACTOS__
+        if (!memcmp( desc->key, &DEVPKEY_DeviceClass_Security, sizeof(desc->key->fmtid) ) &&
+            desc->key->pid >= DEVPKEY_DeviceClass_Security.pid)
+            return query_class_device_property( hkey, desc, prop );
+        if (desc->name && desc->type == DEVPROP_TYPE_BOOLEAN && !prop->reg_type)
+            return query_class_flag_property( hkey, desc, prop );
+#endif
         if (!desc->name) return query_property( hkey, L"Properties\\", desc->type, prop );
         return query_named_property( hkey, desc->name, desc->type, prop );
     }
@@ -328,6 +473,41 @@ static LSTATUS enum_class_property_keys( HKEY hkey, DEVPROPKEY *buffer, ULONG *s
     LSTATUS err = ERROR_SUCCESS;
     HKEY props_key;
 
+#ifdef __REACTOS__
+    for (UINT i = 0; i < ARRAY_SIZE(class_properties); i++)
+    {
+        const struct property_desc *desc = class_properties + i;
+        struct property prop;
+        DEVPROPTYPE type;
+        DWORD len = 0;
+        LSTATUS res;
+
+        if (!memcmp( desc->key, &DEVPKEY_DeviceClass_SecuritySDS, sizeof(*desc->key) )) continue;
+        init_property( &prop, desc->key, &type, NULL, &len, TRUE );
+        res = query_class_property( hkey, &prop );
+        if (res && res != ERROR_MORE_DATA) continue;
+        if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
+        else buffer[count - 1] = *desc->key;
+    }
+
+    if (!open_key( hkey, L"Properties", KEY_ENUMERATE_SUB_KEYS, TRUE, &props_key ))
+    {
+        WCHAR name[MAX_PATH];
+        for (ULONG i = 0, len = ARRAY_SIZE(name); !RegEnumValueW( props_key, i, name, &len, 0, NULL, NULL, NULL ); i++, len = ARRAY_SIZE(name))
+        {
+            DEVPROPKEY key;
+            UINT j;
+
+            if (propkey_from_string( name, &key )) continue;
+            for (j = 0; j < ARRAY_SIZE(class_properties); j++)
+                if (!memcmp( class_properties[j].key, &key, sizeof(key) )) break;
+            if (j < ARRAY_SIZE(class_properties)) continue;
+            if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
+            else buffer[count - 1] = key;
+        }
+        RegCloseKey( props_key );
+    }
+#else
     for (UINT i = 0; i < ARRAY_SIZE(class_properties); i++)
     {
         const struct property_desc *desc = class_properties + i;
@@ -348,6 +528,7 @@ static LSTATUS enum_class_property_keys( HKEY hkey, DEVPROPKEY *buffer, ULONG *s
         }
         RegCloseKey( props_key );
     }
+#endif
 
     *size = count;
     return err;
@@ -500,6 +681,15 @@ LSTATUS query_device_interface_property( HKEY hkey, const struct device_interfac
         return query_named_property( hkey, L"DeviceInstance", DEVPROP_TYPE_STRING, prop );
     if (!memcmp( &DEVPKEY_DeviceInterface_ClassGuid, &prop->key, sizeof(prop->key) ))
         return return_property( prop, DEVPROP_TYPE_GUID, &iface->class_guid, sizeof(iface->class_guid) );
+#ifdef __REACTOS__
+    if (!memcmp( &DEVPKEY_Device_ContainerId, &prop->key, sizeof(prop->key) ))
+    {
+        WCHAR instance_id[MAX_DEVICE_ID_LEN];
+
+        if (query_value( hkey, L"DeviceInstance", instance_id, ARRAY_SIZE(instance_id) )) return ERROR_NOT_FOUND;
+        return query_device_container_id( instance_id, prop );
+    }
+#endif
 
     swprintf( prefix, ARRAY_SIZE(prefix), L"%s\\Properties\\", iface->refstr );
     for (UINT i = 0; i < ARRAY_SIZE(device_interface_properties); i++)
@@ -557,6 +747,20 @@ LSTATUS enum_device_interface_property_keys( HKEY hkey, const struct device_inte
     else buffer[count - 1] = DEVPKEY_DeviceInterface_ClassGuid;
 
 #ifdef __REACTOS__
+    {
+        struct property prop;
+        DEVPROPTYPE type;
+        DWORD len = 0;
+        LSTATUS res;
+
+        init_property( &prop, &DEVPKEY_Device_ContainerId, &type, NULL, &len, TRUE );
+        res = query_device_interface_property( hkey, iface, &prop );
+        if (!res || res == ERROR_MORE_DATA)
+        {
+            if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
+            else buffer[count - 1] = DEVPKEY_Device_ContainerId;
+        }
+    }
     swprintf( path, ARRAY_SIZE(path), L"%s\\Device Parameters", iface->refstr );
 #endif
     for (UINT i = 0; i < ARRAY_SIZE(device_interface_properties); i++)
@@ -674,6 +878,9 @@ static const struct property_desc device_properties[] =
     { &DEVPKEY_Device_LocationPaths,                DEVPROP_TYPE_STRING_LIST,                   L"LocationPaths" },
     { &DEVPKEY_Device_BaseContainerId,              DEVPROP_TYPE_GUID,                          L"BaseContainerId" },
     /* unicode-only properties */
+#ifdef __REACTOS__
+    { &DEVPKEY_NAME,                                DEVPROP_TYPE_STRING },
+#endif
     { &DEVPKEY_Device_InstanceId,                   DEVPROP_TYPE_STRING },
     { &DEVPKEY_Device_DevNodeStatus,                DEVPROP_TYPE_UINT32 },
     { &DEVPKEY_Device_ProblemCode,                  DEVPROP_TYPE_UINT32 },
@@ -748,12 +955,9 @@ static const struct property_desc device_properties[] =
 };
 
 #ifdef __REACTOS__
-static LSTATUS query_kernel_device_property( const struct device *dev, ULONG property, struct property *prop )
+static DEVINST device_get_devnode( const struct device *dev )
 {
     WCHAR instance_id[3 * MAX_PATH];
-    ULONG value, size = sizeof(value);
-    LSTATUS err = ERROR_NOT_FOUND;
-    DEVINST node;
     UINT len;
 
     len = swprintf( instance_id, ARRAY_SIZE(instance_id), L"%s", dev->enumerator );
@@ -762,16 +966,127 @@ static LSTATUS query_kernel_device_property( const struct device *dev, ULONG pro
     if (*dev->instance)
         swprintf( instance_id + len, ARRAY_SIZE(instance_id) - len, L"\\%s", dev->instance );
 
-    if ((node = CfgmgrDevInstFromId( instance_id )) &&
-        !CfgmgrGetDevNodeRegistryPropertyW( node, property, NULL, &value, &size, 0, NULL ) && size == sizeof(value))
+    return CfgmgrDevInstFromId( instance_id );
+}
+
+static LSTATUS query_kernel_device_property( const struct device *dev, ULONG property, DEVPROPTYPE type, struct property *prop )
+{
+    BYTE stack_buffer[512], *data = stack_buffer;
+    ULONG size = sizeof(stack_buffer), reg_type = REG_NONE;
+    LSTATUS err = ERROR_NOT_FOUND;
+    const void *value;
+    CONFIGRET ret;
+    DEVINST node;
+    GUID guid;
+
+    if (!(node = device_get_devnode( dev ))) return ERROR_NOT_FOUND;
+
+    ret = CfgmgrGetDevNodeRegistryPropertyW( node, property, &reg_type, data, &size, 0, NULL );
+    if (ret == CR_BUFFER_SMALL)
     {
-        err = *prop->size >= sizeof(value) ? ERROR_SUCCESS : ERROR_MORE_DATA;
-        if (!err && prop->buffer) memcpy( prop->buffer, &value, sizeof(value) );
-        *prop->size = sizeof(value);
-        if (prop->type) *prop->type = DEVPROP_TYPE_UINT32;
-        if (prop->reg_type) *prop->reg_type = REG_DWORD;
+        if (!(data = malloc( size ))) return ERROR_OUTOFMEMORY;
+        ret = CfgmgrGetDevNodeRegistryPropertyW( node, property, &reg_type, data, &size, 0, NULL );
     }
 
+    if (ret == CR_SUCCESS)
+    {
+        value = data;
+        if (type == DEVPROP_TYPE_GUID && reg_type == REG_SZ)
+        {
+            if (guid_from_string( (const WCHAR *)data, &guid )) size = 0;
+            else
+            {
+                value = &guid;
+                size = sizeof(guid);
+            }
+        }
+
+        if (size)
+        {
+            err = *prop->size >= size ? ERROR_SUCCESS : ERROR_MORE_DATA;
+            if (!err && prop->buffer) memcpy( prop->buffer, value, size );
+            *prop->size = size;
+            if (prop->type) *prop->type = type;
+            if (prop->reg_type) *prop->reg_type = reg_type;
+        }
+    }
+
+    if (data != stack_buffer) free( data );
+    return err;
+}
+
+static LSTATUS append_devnode_id( DEVINST node, WCHAR **list, UINT *len )
+{
+    WCHAR id[MAX_DEVICE_ID_LEN], *tmp;
+    UINT id_len;
+
+    if (!CfgmgrIdFromDevInst( node, id, ARRAY_SIZE(id) )) return ERROR_SUCCESS;
+    id_len = wcslen( id ) + 1;
+    if (!(tmp = realloc( *list, (*len + id_len + 1) * sizeof(WCHAR) ))) return ERROR_OUTOFMEMORY;
+    memcpy( tmp + *len, id, id_len * sizeof(WCHAR) );
+    *len += id_len;
+    tmp[*len] = 0;
+    *list = tmp;
+    return ERROR_SUCCESS;
+}
+
+static LSTATUS query_device_relations( const struct device *dev, BOOL siblings, struct property *prop )
+{
+    DEVINST node, parent, child, next;
+    WCHAR *list = NULL;
+    LSTATUS err = ERROR_SUCCESS;
+    UINT len = 0;
+
+    if (!(node = device_get_devnode( dev ))) return ERROR_NOT_FOUND;
+    parent = node;
+    if (siblings && CM_Get_Parent( &parent, node, 0 )) return ERROR_NOT_FOUND;
+
+    if (!CM_Get_Child( &child, parent, 0 ))
+    {
+        do
+        {
+            if (child != node && (err = append_devnode_id( child, &list, &len ))) break;
+            next = 0;
+        } while (!CM_Get_Sibling( &next, child, 0 ) && (child = next));
+    }
+
+    if (!err && !list) err = ERROR_NOT_FOUND;
+    if (!err) err = return_property( prop, DEVPROP_TYPE_STRING_LIST, list, (len + 1) * sizeof(WCHAR) );
+    free( list );
+    return err;
+}
+
+static LSTATUS query_device_parent( const struct device *dev, struct property *prop )
+{
+    WCHAR id[MAX_DEVICE_ID_LEN];
+    DEVINST node, parent;
+
+    if (!(node = device_get_devnode( dev ))) return ERROR_NOT_FOUND;
+    if (CM_Get_Parent( &parent, node, 0 )) return ERROR_NOT_FOUND;
+    if (!CfgmgrIdFromDevInst( parent, id, ARRAY_SIZE(id) )) return ERROR_NOT_FOUND;
+    return return_property_string( prop, id );
+}
+
+static LSTATUS query_device_status( const struct device *dev, BOOL problem_code, struct property *prop )
+{
+    ULONG status, problem;
+    DEVINST node;
+
+    if (!(node = device_get_devnode( dev ))) return ERROR_NOT_FOUND;
+    if (CM_Get_DevNode_Status( &status, &problem, node, 0 )) return ERROR_NOT_FOUND;
+    return return_property( prop, DEVPROP_TYPE_UINT32, problem_code ? &problem : &status, sizeof(ULONG) );
+}
+
+static LSTATUS query_driver_property( HKEY hkey, const struct property_desc *desc, struct property *prop )
+{
+    WCHAR driver[MAX_PATH];
+    HKEY driver_key;
+    LSTATUS err;
+
+    if (query_value( hkey, L"Driver", driver, ARRAY_SIZE(driver) )) return ERROR_NOT_FOUND;
+    if (open_class_key( HKEY_LOCAL_MACHINE, driver, KEY_QUERY_VALUE, TRUE, &driver_key )) return ERROR_NOT_FOUND;
+    err = query_named_property( driver_key, desc->name, desc->type, prop );
+    RegCloseKey( driver_key );
     return err;
 }
 #endif
@@ -779,10 +1094,17 @@ static LSTATUS query_kernel_device_property( const struct device *dev, ULONG pro
 static LSTATUS query_device_property( HKEY hkey, const struct device *dev, struct property *prop )
 {
 #ifdef __REACTOS__
-    if (!memcmp( &DEVPKEY_Device_BusNumber, &prop->key, sizeof(prop->key) ))
-        return query_kernel_device_property( dev, CM_DRP_BUSNUMBER, prop );
-    if (!memcmp( &DEVPKEY_Device_Address, &prop->key, sizeof(prop->key) ))
-        return query_kernel_device_property( dev, CM_DRP_ADDRESS, prop );
+    if (!memcmp( &DEVPKEY_Device_Parent, &prop->key, sizeof(prop->key) ))
+        return query_device_parent( dev, prop );
+    if (!memcmp( &DEVPKEY_Device_Children, &prop->key, sizeof(prop->key) ) ||
+        !memcmp( &DEVPKEY_Device_BusRelations, &prop->key, sizeof(prop->key) ))
+        return query_device_relations( dev, FALSE, prop );
+    if (!memcmp( &DEVPKEY_Device_Siblings, &prop->key, sizeof(prop->key) ))
+        return query_device_relations( dev, TRUE, prop );
+    if (!memcmp( &DEVPKEY_Device_DevNodeStatus, &prop->key, sizeof(prop->key) ))
+        return query_device_status( dev, FALSE, prop );
+    if (!memcmp( &DEVPKEY_Device_ProblemCode, &prop->key, sizeof(prop->key) ))
+        return query_device_status( dev, TRUE, prop );
 #endif
     if (!memcmp( &DEVPKEY_Device_InstanceId, &prop->key, sizeof(prop->key) ))
     {
@@ -796,13 +1118,31 @@ static LSTATUS query_device_property( HKEY hkey, const struct device *dev, struc
             len += swprintf( instance_id + len, ARRAY_SIZE(instance_id) - len, L"\\%s", dev->device );
         if (*dev->instance)
             swprintf( instance_id + len, ARRAY_SIZE(instance_id) - len, L"\\%s", dev->instance );
+#ifdef __REACTOS__
+        wcsupr( instance_id );
+#endif
         return return_property_string( prop, instance_id );
     }
+#ifdef __REACTOS__
+    if (!memcmp( &DEVPKEY_NAME, &prop->key, sizeof(prop->key) ))
+    {
+        LSTATUS err = query_named_property( hkey, L"FriendlyName", DEVPROP_TYPE_STRING, prop );
+        if (err == ERROR_NOT_FOUND) err = query_named_property( hkey, L"DeviceDesc", DEVPROP_TYPE_STRING, prop );
+        return err;
+    }
+#endif
 
     for (UINT i = 0; i < ARRAY_SIZE(device_properties); i++)
     {
         const struct property_desc *desc = device_properties + i;
         if (memcmp( desc->key, &prop->key, sizeof(prop->key) )) continue;
+#ifdef __REACTOS__
+        if (!memcmp( &DEVPKEY_Device_DeviceDesc, &prop->key, sizeof(prop->key.fmtid) ) &&
+            CfgmgrIsKernelDevNodeProperty( prop->key.pid - 1 ))
+            return query_kernel_device_property( dev, prop->key.pid - 1, desc->type, prop );
+        if (desc->name && !memcmp( &DEVPKEY_Device_DriverDate, &prop->key, sizeof(prop->key.fmtid) ))
+            return query_driver_property( hkey, desc, prop );
+#endif
         if (!desc->name) return query_property( hkey, L"Properties\\", desc->type, prop );
         return query_named_property( hkey, desc->name, desc->type, prop );
     }
@@ -831,12 +1171,38 @@ static LSTATUS get_device_property( HKEY root, const struct device *dev, struct 
     return err;
 }
 
+#ifdef __REACTOS__
+static LSTATUS query_device_container_id( const WCHAR *instance_id, struct property *prop )
+{
+    struct device dev;
+
+    if (init_device( &dev, instance_id )) return ERROR_NOT_FOUND;
+    return get_device_property( HKEY_LOCAL_MACHINE, &dev, prop );
+}
+
+#endif
 LSTATUS enum_device_property_keys( HKEY hkey, const struct device *dev, DEVPROPKEY *buffer, ULONG *size )
 {
     ULONG capacity = *size, count = 0;
     LSTATUS err = ERROR_SUCCESS;
     HKEY props_key;
 
+#ifdef __REACTOS__
+    for (UINT i = 0; i < ARRAY_SIZE(device_properties); i++)
+    {
+        const struct property_desc *desc = device_properties + i;
+        struct property prop;
+        DEVPROPTYPE type;
+        DWORD len = 0;
+        LSTATUS res;
+
+        init_property( &prop, desc->key, &type, NULL, &len, TRUE );
+        res = query_device_property( hkey, dev, &prop );
+        if (res && res != ERROR_MORE_DATA) continue;
+        if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
+        else buffer[count - 1] = *desc->key;
+    }
+#else
     if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
     else buffer[count - 1] = DEVPKEY_Device_InstanceId;
 
@@ -849,14 +1215,27 @@ LSTATUS enum_device_property_keys( HKEY hkey, const struct device *dev, DEVPROPK
             else buffer[count - 1] = *desc->key;
         }
     }
+#endif
 
     if (!open_key( hkey, L"Properties", KEY_ENUMERATE_SUB_KEYS, TRUE, &props_key ))
     {
         WCHAR name[MAX_PATH];
         for (ULONG i = 0, len = ARRAY_SIZE(name); !RegEnumValueW( props_key, i, name, &len, 0, NULL, NULL, NULL ); i++, len = ARRAY_SIZE(name))
         {
+#ifdef __REACTOS__
+            DEVPROPKEY key;
+            UINT j;
+
+            if (propkey_from_string( name, &key )) continue;
+            for (j = 0; j < ARRAY_SIZE(device_properties); j++)
+                if (!memcmp( device_properties[j].key, &key, sizeof(key) )) break;
+            if (j < ARRAY_SIZE(device_properties)) continue;
+            if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
+            else buffer[count - 1] = key;
+#else
             if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
             else err = propkey_from_string( name, buffer + count - 1 );
+#endif
         }
         RegCloseKey( props_key );
     }
@@ -879,13 +1258,21 @@ static LSTATUS get_device_property_keys( HKEY root, const struct device *dev, DE
 
 static LSTATUS get_device_strings( const WCHAR *instance_id, const DEVPROPKEY *key, ULONG *size, WCHAR *buffer )
 {
+#ifdef __REACTOS__
+    const WCHAR *instance = instance_id;
+#else
     const WCHAR *instance = instance_id && *instance_id ? instance_id : L"HTREE\\ROOT\\0";
+#endif
     struct property prop;
     struct device dev;
     DEVPROPTYPE type;
     LSTATUS err;
 
+#ifdef __REACTOS__
+    if (!instance || !*instance || init_device( &dev, instance )) return ERROR_NOT_FOUND;
+#else
     if ((err = init_device( &dev, instance ))) return err;
+#endif
     if ((err = init_property( &prop, key, &type, buffer, size, TRUE ))) return err;
 
     if (!(err = get_device_property( HKEY_LOCAL_MACHINE, &dev, &prop ))) *size *= 3; /* maximum ANSI conversion size */
@@ -1521,6 +1908,13 @@ CONFIGRET WINAPI CM_Get_Device_Interface_List_Size_ExW( ULONG *len, GUID *class,
     if (flags & ~CM_GET_DEVICE_INTERFACE_LIST_BITS) return CR_INVALID_FLAG;
 
     *len = 0;
+#ifdef __REACTOS__
+    if (instance_id && *instance_id)
+    {
+        struct device dev;
+        if (init_device( &dev, instance_id ) || !*dev.enumerator || !*dev.device) return CR_INVALID_DEVNODE;
+    }
+#endif
     return map_error( enum_device_interface_list( class, instance_id, all, enum_objects_size, len ) );
 }
 
@@ -1572,6 +1966,13 @@ CONFIGRET WINAPI CM_Get_Device_Interface_List_ExW( GUID *class, DEVINSTID_W inst
     if (flags & ~CM_GET_DEVICE_INTERFACE_LIST_BITS) return CR_INVALID_FLAG;
 
     memset( buffer, 0, len * sizeof(WCHAR) );
+#ifdef __REACTOS__
+    if (instance_id && *instance_id)
+    {
+        struct device dev;
+        if (init_device( &dev, instance_id ) || !*dev.enumerator || !*dev.device) return CR_INVALID_DEVNODE;
+    }
+#endif
     return map_error( enum_device_interface_list( class, instance_id, all, enum_objects_append, &params ) );
 }
 
@@ -1690,7 +2091,15 @@ CONFIGRET WINAPI CM_Get_Device_Interface_Property_ExW( const WCHAR *name, const 
 #endif
 
     if (!name) return CR_INVALID_POINTER;
+#ifdef __REACTOS__
+    if (init_device_interface( &iface, name ))
+    {
+        if (size) *size = 0;
+        return CR_NO_SUCH_DEVICE_INTERFACE;
+    }
+#else
     if (init_device_interface( &iface, name )) return CR_NO_SUCH_DEVICE_INTERFACE;
+#endif
     if ((err = init_property( &prop, key, type, buffer, size, TRUE ))) return map_error( err );
     if (flags) return CR_INVALID_FLAG;
 
@@ -1793,7 +2202,11 @@ CONFIGRET WINAPI CM_Get_Device_ID_List_Size_ExW( ULONG *len, const WCHAR *filter
     case 0:                                      err = enum_devices( NULL, NULL, NULL, all, enum_objects_size, len ); break;
     case CM_GETIDLIST_FILTER_ENUMERATOR:         err = enum_devices( filter, NULL, NULL, all, enum_objects_size, len ); break;
     case CM_GETIDLIST_FILTER_CLASS:              err = enum_devices( NULL, &DEVPKEY_Device_ClassGuid, filter, all, enum_objects_size, len ); break;
+#ifdef __REACTOS__
+    case CM_GETIDLIST_FILTER_SERVICE:            err = enum_devices( NULL, filter && !*filter ? NULL : &DEVPKEY_Device_Service, filter, all, enum_objects_size, len ); break;
+#else
     case CM_GETIDLIST_FILTER_SERVICE:            err = enum_devices( NULL, &DEVPKEY_Device_Service, filter, all, enum_objects_size, len ); break;
+#endif
     case CM_GETIDLIST_FILTER_BUSRELATIONS:       err = get_device_strings( filter, &DEVPKEY_Device_BusRelations, len, NULL ); break;
     case CM_GETIDLIST_FILTER_TRANSPORTRELATIONS: err = get_device_strings( filter, &DEVPKEY_Device_TransportRelations, len, NULL ); break;
     case CM_GETIDLIST_FILTER_EJECTRELATIONS:     err = get_device_strings( filter, &DEVPKEY_Device_EjectionRelations, len, NULL ); break;
@@ -1864,7 +2277,11 @@ CONFIGRET WINAPI CM_Get_Device_ID_List_ExW( const WCHAR *filter, WCHAR *buffer, 
     case 0:                                      err = enum_devices( NULL, NULL, NULL, all, enum_objects_append, &params ); break;
     case CM_GETIDLIST_FILTER_ENUMERATOR:         err = enum_devices( filter, NULL, NULL, all, enum_objects_append, &params ); break;
     case CM_GETIDLIST_FILTER_CLASS:              err = enum_devices( NULL, &DEVPKEY_Device_ClassGuid, filter, all, enum_objects_append, &params ); break;
+#ifdef __REACTOS__
+    case CM_GETIDLIST_FILTER_SERVICE:            err = enum_devices( NULL, filter && !*filter ? NULL : &DEVPKEY_Device_Service, filter, all, enum_objects_append, &params ); break;
+#else
     case CM_GETIDLIST_FILTER_SERVICE:            err = enum_devices( NULL, &DEVPKEY_Device_Service, filter, all, enum_objects_append, &params ); break;
+#endif
     case CM_GETIDLIST_FILTER_BUSRELATIONS:       err = get_device_strings( filter, &DEVPKEY_Device_BusRelations, &len, buffer ); break;
     case CM_GETIDLIST_FILTER_TRANSPORTRELATIONS: err = get_device_strings( filter, &DEVPKEY_Device_TransportRelations, &len, buffer ); break;
     case CM_GETIDLIST_FILTER_EJECTRELATIONS:     err = get_device_strings( filter, &DEVPKEY_Device_EjectionRelations, &len, buffer ); break;
@@ -2065,10 +2482,16 @@ CONFIGRET WINAPI CM_Get_Device_ID_ExW( DEVINST node, WCHAR *buffer, ULONG len, U
 
     if (!buffer) return CR_INVALID_POINTER;
     if (devnode_get_device( node, &dev )) return CR_INVALID_DEVNODE;
+#ifdef __REACTOS__
+    if (!len) return CR_INVALID_POINTER;
+#endif
 
     path_len = swprintf( path, ARRAY_SIZE(path), L"%s", dev.enumerator );
     if (*dev.device) path_len += swprintf( path + path_len, ARRAY_SIZE(path) - path_len, L"\\%s", dev.device );
     if (*dev.instance) path_len += swprintf( path + path_len, ARRAY_SIZE(path) - path_len, L"\\%s", dev.instance );
+#ifdef __REACTOS__
+    wcsupr( path );
+#endif
 
     if (path_len > len) return CR_BUFFER_SMALL;
     memcpy( buffer, path, path_len * sizeof(WCHAR) );
