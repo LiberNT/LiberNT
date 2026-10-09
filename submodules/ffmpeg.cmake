@@ -21,23 +21,45 @@ endif()
 
 if(ARCH STREQUAL "arm64")
     set(_ffmpeg_cpu aarch64)
+    set(_ffmpeg_sdk_arch aarch64)
+    set(_ffmpeg_arch_flags "")
 elseif(ARCH STREQUAL "amd64")
     set(_ffmpeg_cpu x86_64)
+    set(_ffmpeg_sdk_arch x86_64)
+    set(_ffmpeg_arch_flags "-mlong-double-64")
 elseif(ARCH STREQUAL "i386")
     set(_ffmpeg_cpu i686)
+    set(_ffmpeg_sdk_arch i386)
+    set(_ffmpeg_arch_flags "-mlong-double-64")
 else()
     message(FATAL_ERROR "FFmpeg does not support ARCH ${ARCH}. Use -DENABLE_FFMPEG=OFF.")
 endif()
+set(_ffmpeg_triple ${_ffmpeg_cpu}-w64-mingw32)
 
-find_program(FFMPEG_CC NAMES ${_ffmpeg_cpu}-w64-mingw32-clang HINTS "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin" NO_CACHE)
 find_program(FFMPEG_SH NAMES sh NO_CACHE)
 find_program(FFMPEG_MAKE NAMES gmake make NO_CACHE)
-if(NOT FFMPEG_CC OR NOT FFMPEG_SH OR NOT FFMPEG_MAKE)
-    message(FATAL_ERROR "FFmpeg needs sh, make and the ${_ffmpeg_cpu}-w64-mingw32 llvm-mingw Clang. "
-        "Use -DENABLE_FFMPEG=OFF to disable it.")
+if(NOT FFMPEG_SH OR NOT FFMPEG_MAKE)
+    message(FATAL_ERROR "FFmpeg needs sh and make. Use -DENABLE_FFMPEG=OFF to disable it.")
 endif()
-get_filename_component(_ffmpeg_toolchain_bin "${FFMPEG_CC}" DIRECTORY)
-set(_ffmpeg_cross_prefix "${_ffmpeg_toolchain_bin}/${_ffmpeg_cpu}-w64-mingw32-")
+set(_ffmpeg_llvm "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin")
+
+set(FFMPEG_SDK_LIBDIR "${REACTOS_BINARY_DIR}/submodules/ffmpeg-sdk-lib")
+set(_ffmpeg_sdk_libraries
+    msvcrtex libucrtbase libmsvcrt libkernel32 libntdll ucrtoldnames
+    libadvapi32 libbcrypt libole32 libpsapi libshell32 libuser32 libws2_32)
+export_sdk_libraries(ffmpeg_sdk_libs "${FFMPEG_SDK_LIBDIR}"
+    LIBRARIES ${_ffmpeg_sdk_libraries}
+    DEPENDS ${_ffmpeg_sdk_libraries} ucrtoldnames_target)
+include("${REACTOS_SOURCE_DIR}/submodules/reactos-sdk-flags.cmake")
+reactos_sdk_flags(_ffmpeg_sdk
+    COMPILER "${_ffmpeg_llvm}/clang"
+    ARCH ${_ffmpeg_sdk_arch}
+    ARCH_FLAGS "${_ffmpeg_arch_flags}"
+    SOURCE_DIR "${REACTOS_SOURCE_DIR}"
+    BUILD_DIR "${REACTOS_BINARY_DIR}"
+    LIBDIR "${FFMPEG_SDK_LIBDIR}"
+    CXX_RUNTIME "${REACTOS_LIBCXX_ROOT}"
+    CRT full)
 
 set(_ffmpeg_asm_args)
 if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "i386")
@@ -77,9 +99,16 @@ ExternalProject_Add(ffmpeg
         --enable-cross-compile
         --target-os=mingw32
         --arch=${_ffmpeg_cpu}
-        --cross-prefix=${_ffmpeg_cross_prefix}
-        --cc=${_ffmpeg_cross_prefix}clang
-        --cxx=${_ffmpeg_cross_prefix}clang++
+        --cross-prefix=${_ffmpeg_llvm}/llvm-
+        --cc=${_ffmpeg_llvm}/clang
+        --cxx=${_ffmpeg_llvm}/clang++
+        "--windres=${_ffmpeg_llvm}/llvm-windres --target=${_ffmpeg_triple}"
+        "--extra-cflags=--target=${_ffmpeg_triple} ${_ffmpeg_sdk_C_FLAGS}"
+        "--extra-cxxflags=--target=${_ffmpeg_triple} ${_ffmpeg_sdk_CXX_FLAGS}"
+        "--extra-ldflags=--target=${_ffmpeg_triple} ${_ffmpeg_sdk_LINK_FLAGS}"
+        --extra-ldexeflags=-Wl,-entry,mainCRTStartup
+        --extra-ldsoflags=-Wl,-entry,DllMainCRTStartup
+        "--extra-libs=${_ffmpeg_sdk_C_LIBRARIES}"
         --pkg-config=false
         --enable-shared
         --disable-static
@@ -108,7 +137,7 @@ ExternalProject_Add(ffmpeg
     LOG_INSTALL TRUE
     LOG_OUTPUT_ON_FAILURE TRUE)
 # A feed update to another release reconfigures and rebuilds it.
-ExternalProject_Add_StepDependencies(ffmpeg configure "${FFMPEG_SOURCE_DIR}/RELEASE")
+ExternalProject_Add_StepDependencies(ffmpeg configure "${FFMPEG_SOURCE_DIR}/RELEASE" ffmpeg_sdk_libs)
 
 foreach(_ffmpeg_dll IN LISTS FFMPEG_DLLS)
     add_cd_file(FILE "${FFMPEG_ROOT}/bin/${_ffmpeg_dll}.dll" TARGET ffmpeg DESTINATION reactos/system32 FOR all)
