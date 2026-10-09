@@ -150,7 +150,8 @@ ExternalProject_Add(mesa_gallium_build
         -DMESA_WGL_DLL_NAME:STRING=mesa_gallium
         -DMESA_ASSERTIONS:BOOL=${_mesa_assertions}
         ${_mesa_features}
-    BUILD_COMMAND ${CMAKE_COMMAND} -E env CCACHE_DISABLE=1 SCCACHE_DISABLE=1
+    BUILD_COMMAND ${MESA_NINJA} -C <BINARY_DIR> -t recompact
+        COMMAND ${CMAKE_COMMAND} -E env CCACHE_DISABLE=1 SCCACHE_DISABLE=1
         ${REACTOS_NESTED_BUILD} <BINARY_DIR> --target ${_mesa_build_targets}
     BUILD_ALWAYS TRUE
     INSTALL_COMMAND ""
