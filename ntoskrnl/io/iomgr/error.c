@@ -111,26 +111,31 @@ IopConnectLogPort(VOID)
 {
     NTSTATUS Status;
     UNICODE_STRING PortName = RTL_CONSTANT_STRING(ELF_PORT_NAME);
-    SECURITY_QUALITY_OF_SERVICE SecurityQos;
+    ALPC_PORT_ATTRIBUTES PortAttributes;
 
     /* Make sure we're not already connected */
     if (IopLogPortConnected) return TRUE;
 
     /* Setup the QoS structure */
-    SecurityQos.Length = sizeof(SecurityQos);
-    SecurityQos.ImpersonationLevel = SecurityIdentification;
-    SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
-    SecurityQos.EffectiveOnly = TRUE;
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.MaxMessageLength = PORT_MAXIMUM_MESSAGE_LENGTH;
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    PortAttributes.SecurityQos.EffectiveOnly = TRUE;
 
     /* Connect the port */
-    Status = ZwConnectPort(&IopLogPort,
-                           &PortName,
-                           &SecurityQos,
-                           NULL,
-                           NULL,
-                           NULL,
-                           NULL,
-                           NULL);
+    Status = ZwAlpcConnectPort(&IopLogPort,
+                               &PortName,
+                               NULL,
+                               &PortAttributes,
+                               ALPC_SYNC_CONNECTION,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL);
     if (NT_SUCCESS(Status))
     {
         /* Remember we're connected */
@@ -450,7 +455,14 @@ IopLogWorker(IN PVOID Parameter)
         Message->Header.u1.s1.DataLength = (USHORT)MessageLength;
 
         /* Send the message */
-        Status = ZwRequestPort(IopLogPort, &Message->Header);
+        Status = ZwAlpcSendWaitReceivePort(IopLogPort,
+                                           ALPC_MSGFLG_REPLY_MESSAGE,
+                                           &Message->Header,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           NULL);
         if (!NT_SUCCESS(Status))
         {
             /*

@@ -49,43 +49,63 @@ NTSTATUS InitLogPort(VOID)
     NTSTATUS Status;
     UNICODE_STRING PortName = RTL_CONSTANT_STRING(ELF_PORT_NAME);
     OBJECT_ATTRIBUTES ObjectAttributes;
-    PORT_MESSAGE Request;
+    ALPC_PORT_ATTRIBUTES PortAttributes;
+    union
+    {
+        PORT_MESSAGE Header;
+        UCHAR Buffer[PORT_MAXIMUM_MESSAGE_LENGTH];
+    } Request;
+    SIZE_T BufferLength;
 
     ConnectPortHandle = NULL;
     MessagePortHandle = NULL;
 
     InitializeObjectAttributes(&ObjectAttributes, &PortName, 0, NULL, NULL);
 
-    Status = NtCreatePort(&ConnectPortHandle,
-                          &ObjectAttributes,
-                          0,
-                          PORT_MAXIMUM_MESSAGE_LENGTH, // IO_ERROR_LOG_MESSAGE_LENGTH,
-                          2 * PAGE_SIZE);
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.MaxMessageLength = PORT_MAXIMUM_MESSAGE_LENGTH;
+    PortAttributes.MaxPoolUsage = 2 * PAGE_SIZE;
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    Status = NtAlpcCreatePort(&ConnectPortHandle, &ObjectAttributes, &PortAttributes);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("NtCreatePort() failed (Status %lx)\n", Status);
+        DPRINT1("NtAlpcCreatePort() failed (Status %lx)\n", Status);
         goto ByeBye;
     }
 
-    Status = NtListenPort(ConnectPortHandle, &Request);
+    do
+    {
+        BufferLength = sizeof(Request);
+        Status = NtAlpcSendWaitReceivePort(ConnectPortHandle,
+                                           0,
+                                           NULL,
+                                           NULL,
+                                           &Request.Header,
+                                           &BufferLength,
+                                           NULL,
+                                           NULL);
+    } while (NT_SUCCESS(Status) &&
+             ((Request.Header.u2.s2.Type & ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE)) != LPC_CONNECTION_REQUEST));
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("NtListenPort() failed (Status %lx)\n", Status);
+        DPRINT1("NtAlpcSendWaitReceivePort() failed (Status %lx)\n", Status);
         goto ByeBye;
     }
 
-    Status = NtAcceptConnectPort(&MessagePortHandle, ConnectPortHandle,
-                                 &Request, TRUE, NULL, NULL);
+    Status = NtAlpcAcceptConnectPort(&MessagePortHandle,
+                                     ConnectPortHandle,
+                                     0,
+                                     NULL,
+                                     NULL,
+                                     NULL,
+                                     &Request.Header,
+                                     NULL,
+                                     TRUE);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("NtAcceptConnectPort() failed (Status %lx)\n", Status);
-        goto ByeBye;
-    }
-
-    Status = NtCompleteConnectPort(MessagePortHandle);
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("NtCompleteConnectPort() failed (Status %lx)\n", Status);
+        DPRINT1("NtAlpcAcceptConnectPort() failed (Status %lx)\n", Status);
         goto ByeBye;
     }
 
@@ -115,6 +135,8 @@ NTSTATUS ProcessPortMessage(VOID)
     UNICODE_STRING SourceName, ComputerName;
     DWORD dwComputerNameLength;
     WCHAR szComputerName[MAX_COMPUTERNAME_LENGTH + 1];
+    SIZE_T BufferLength;
+    ULONG MessageType;
 
     DPRINT("ProcessPortMessage() called\n");
 
@@ -122,14 +144,19 @@ NTSTATUS ProcessPortMessage(VOID)
 
     while (TRUE)
     {
-        Status = NtReplyWaitReceivePort(MessagePortHandle,
-                                        NULL,
-                                        NULL,
-                                        &Message->Header);
+        BufferLength = sizeof(Buffer);
+        Status = NtAlpcSendWaitReceivePort(MessagePortHandle,
+                                           0,
+                                           NULL,
+                                           NULL,
+                                           &Message->Header,
+                                           &BufferLength,
+                                           NULL,
+                                           NULL);
 
         if (!NT_SUCCESS(Status))
         {
-            DPRINT1("NtReplyWaitReceivePort() failed (Status %lx)\n", Status);
+            DPRINT1("NtAlpcSendWaitReceivePort() failed (Status %lx)\n", Status);
             break;
         }
 
@@ -138,17 +165,20 @@ NTSTATUS ProcessPortMessage(VOID)
 
         DPRINT("Received message\n");
 
-        if (Message->Header.u2.s2.Type == LPC_PORT_CLOSED)
+        MessageType = Message->Header.u2.s2.Type &
+                      ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE);
+
+        if (MessageType == LPC_PORT_CLOSED)
         {
             DPRINT("Port closed\n");
             return STATUS_SUCCESS;
         }
 
-        if (Message->Header.u2.s2.Type == LPC_REQUEST)
+        if (MessageType == LPC_REQUEST)
         {
             DPRINT("Received request\n");
         }
-        else if (Message->Header.u2.s2.Type == LPC_DATAGRAM)
+        else if (MessageType == LPC_DATAGRAM)
         {
             DPRINT("Received datagram (0x%x, 0x%x)\n",
                    Message->Unknown[0], Message->Unknown[1]);
