@@ -254,25 +254,46 @@ HRESULT WINAPI CIDLDataObj::GetData(LPFORMATETC pformatetcIn, STGMEDIUM *pmedium
         const FORMATETC& fmt = m_Formats[n];
         if (fmt.cfFormat == pformatetcIn->cfFormat &&
             fmt.dwAspect == pformatetcIn->dwAspect &&
-            fmt.tymed == pformatetcIn->tymed)
+            (fmt.tymed & pformatetcIn->tymed))
         {
             if (m_FailGetHDrop && fmt.cfFormat == CF_HDROP)
                 return DV_E_CLIPFORMAT;
 
-            if (pformatetcIn->tymed != TYMED_HGLOBAL)
+            if (m_Storage[n].tymed != TYMED_HGLOBAL)
             {
                 UNIMPLEMENTED;
-                return E_INVALIDARG;
+                return DV_E_TYMED;
             }
-            else
+
+            if (!m_Storage[n].hGlobal)
+                return DV_E_FORMATETC;
+
+            SIZE_T cb = GlobalSize(m_Storage[n].hGlobal);
+            HGLOBAL hCopy = GlobalAlloc(GMEM_MOVEABLE, cb);
+            if (!hCopy)
+                return E_OUTOFMEMORY;
+            PVOID pDst = GlobalLock(hCopy);
+            PVOID pSrc = GlobalLock(m_Storage[n].hGlobal);
+            if (!pDst || !pSrc)
             {
-                *pmedium = m_Storage[n];
-                return QueryInterface(IID_PPV_ARG(IUnknown, &pmedium->pUnkForRelease));
+                if (pSrc)
+                    GlobalUnlock(m_Storage[n].hGlobal);
+                if (pDst)
+                    GlobalUnlock(hCopy);
+                GlobalFree(hCopy);
+                return E_OUTOFMEMORY;
             }
+            CopyMemory(pDst, pSrc, cb);
+            GlobalUnlock(m_Storage[n].hGlobal);
+            GlobalUnlock(hCopy);
+
+            pmedium->tymed = TYMED_HGLOBAL;
+            pmedium->hGlobal = hCopy;
+            return S_OK;
         }
     }
 
-    return E_INVALIDARG;
+    return DV_E_FORMATETC;
 }
 
 HRESULT WINAPI CIDLDataObj::GetDataHere(LPFORMATETC pformatetc, STGMEDIUM *pmedium)
@@ -290,7 +311,7 @@ HRESULT WINAPI CIDLDataObj::QueryGetData(LPFORMATETC pformatetc)
         const FORMATETC& fmt = m_Formats[n];
         if (fmt.cfFormat == pformatetc->cfFormat &&
             fmt.dwAspect == pformatetc->dwAspect &&
-            fmt.tymed == pformatetc->tymed)
+            (fmt.tymed & pformatetc->tymed))
         {
             return S_OK;
         }
@@ -334,13 +355,12 @@ HRESULT WINAPI CIDLDataObj::EnumFormatEtc(DWORD dwDirection, IEnumFORMATETC **pp
     TRACE("(%p)->()\n", this);
     *ppenumFormatEtc = NULL;
 
-    /* only get data */
-    if (DATADIR_GET == dwDirection)
+    if (DATADIR_GET == dwDirection || DATADIR_SET == dwDirection)
     {
         return IEnumFORMATETC_Constructor(m_Formats.GetSize(), m_Formats.GetData(), ppenumFormatEtc);
     }
 
-    return E_NOTIMPL;
+    return E_INVALIDARG;
 }
 
 HRESULT WINAPI CIDLDataObj::DAdvise(FORMATETC *pformatetc, DWORD advf, IAdviseSink *pAdvSink, DWORD *pdwConnection)
