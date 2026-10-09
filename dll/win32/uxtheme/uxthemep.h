@@ -17,6 +17,7 @@
 #include <windowsx.h>
 #include <undocuser.h>
 #include <undocgdi.h>
+#include <reactos/dwmframe.h>
 #include <uxtheme.h>
 #include <uxundoc.h>
 #include <vfwmsgs.h>
@@ -70,6 +71,7 @@ typedef struct _WND_DATA
     HTHEME hthemeTab;
 
     RECT rcCaptionButtons[4];
+    ULONG DwmCaption[DWM_CAPTION_BUTTONS + 2];
     UINT lastHitTest;
     BOOL HasAppDefinedRgn;
     BOOL HasThemeRgn;
@@ -165,6 +167,7 @@ typedef enum {
 LRESULT CALLBACK ThemeWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, WNDPROC DefWndProc);
 void ThemeCalculateCaptionButtonsPos(HWND hWnd, HTHEME htheme);
 void ThemeDwmRepaintCaptionButtons(HWND hWnd);
+void ThemeDwmUpdateCaptionButtons(HWND hWnd);
 LONG SCROLL_getObjectId(INT nBar);
 void ThemeDrawScrollBarEx(PDRAW_CONTEXT pcontext, INT nBar, PSCROLLBARINFO psbi, POINT* pt);
 void ThemeDrawScrollBar(PDRAW_CONTEXT pcontext, INT Bar, POINT* pt);

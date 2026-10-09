@@ -14,6 +14,7 @@
 #include <reactos/ntdcomp.h>
 
 #include "dxsurface.h"
+#include "framebuttons.h"
 #include "gpucomp.h"
 #include "material.h"
 #include "presenttrace.h"
@@ -1495,6 +1496,28 @@ DwmBackdropNcLeft(const DWM_WIN *Window)
     return Left;
 }
 
+static LONG
+DwmBackdropInteriorRight(const DWM_WIN *Window)
+{
+    LONG Right = Window->ClientX + Window->ClientWidth - (LONG)Window->BackdropNcExtendRight;
+    LONG Limit = DwmBackdropNcLeft(Window);
+
+    if (Right < Limit)
+        Right = Limit;
+    return Right;
+}
+
+static LONG
+DwmBackdropInteriorBottom(const DWM_WIN *Window)
+{
+    LONG Top = Window->ClientY + Window->ClientHeight - (LONG)Window->BackdropNcExtendBottom;
+    LONG Limit = DwmBackdropNcBottom(Window);
+
+    if (Top < Limit)
+        Top = Limit;
+    return Top;
+}
+
 /* Retain the last dense, screen-space backdrop blur. During a move, nearly
  * all of the new glass overlaps the preceding frame and the pixels below it
  * are usually identical. The cache compares those source pixels exactly;
@@ -1933,13 +1956,13 @@ DwmApplyBackdropBlur(ULONG *Composition, LONG Width, LONG Height,
 
     NcBottom = DwmBackdropNcBottom(Window);
     Rectangles[0] = (RECTL){0, 0, Window->cx, NcBottom};
-    Rectangles[1] = (RECTL){0, Window->ClientY + Window->ClientHeight,
+    Rectangles[1] = (RECTL){0, DwmBackdropInteriorBottom(Window),
                             Window->cx, Window->cy};
     Rectangles[2] = (RECTL){0, NcBottom, DwmBackdropNcLeft(Window),
-                            Window->ClientY + Window->ClientHeight};
-    Rectangles[3] = (RECTL){Window->ClientX + Window->ClientWidth,
+                            DwmBackdropInteriorBottom(Window)};
+    Rectangles[3] = (RECTL){DwmBackdropInteriorRight(Window),
                             NcBottom, Window->cx,
-                            Window->ClientY + Window->ClientHeight};
+                            DwmBackdropInteriorBottom(Window)};
     BlurWindow.BlurRectCount = ARRAYSIZE(Rectangles);
     DwmApplyBackdropBlurCached(Composition, Width, Height,
                                ClipLeft, ClipTop, ClipRight, ClipBottom,
@@ -2257,6 +2280,121 @@ DwmBlendGlassSpan(ULONG * __restrict Dest, const ULONG * __restrict Base,
     }
 }
 
+static ULONG
+DwmFrameMaterial(ULONG Source, ULONG Under, const DWM_WIN *Window,
+                 ULONG BackdropKey, ULONG ColorizationKey,
+                 const ULONG *Wallpaper, LONG ScreenX, LONG ScreenY)
+{
+    ULONG Near = DwmChannelDistance(Source, BackdropKey);
+    ULONG Other = DwmChannelDistance(Source, ColorizationKey);
+    ULONG Key = BackdropKey, Weight = 0, Shift;
+    LONG Red, Green, Blue;
+
+    if (Other < Near)
+    {
+        Near = Other;
+        Key = ColorizationKey;
+    }
+    if (Near == 0 && Wallpaper != NULL &&
+        (Window->BackdropType == DWM_BACKDROP_MAIN ||
+         Window->BackdropType == DWM_BACKDROP_TABBED))
+    {
+        ULONG Base = *Wallpaper;
+        ULONG Opacity = Window->BackdropOpacity;
+        ULONG Inverse = 255u - Opacity;
+
+        return ((((Source >> 16) & 0xFFu) * Opacity + ((Base >> 16) & 0xFFu) * Inverse) / 255u << 16) |
+               ((((Source >> 8) & 0xFFu) * Opacity + ((Base >> 8) & 0xFFu) * Inverse) / 255u << 8) |
+               (((Source & 0xFFu) * Opacity + (Base & 0xFFu) * Inverse) / 255u);
+    }
+    if (Near <= DWM_MATERIAL_TINT_BAND)
+        Weight = 255;
+    else if (Near < DWM_MATERIAL_FRINGE)
+        Weight = (DWM_MATERIAL_FRINGE - Near) * 255u /
+                 (DWM_MATERIAL_FRINGE - DWM_MATERIAL_TINT_BAND);
+    if (Weight == 0)
+        return Source;
+
+    Shift = (255u - Window->BackdropOpacity) * Weight / 255u;
+    Red = (LONG)((Source >> 16) & 0xFFu) +
+          ((LONG)((Under >> 16) & 0xFFu) - (LONG)((Key >> 16) & 0xFFu)) * (LONG)Shift / 255;
+    Green = (LONG)((Source >> 8) & 0xFFu) +
+            ((LONG)((Under >> 8) & 0xFFu) - (LONG)((Key >> 8) & 0xFFu)) * (LONG)Shift / 255;
+    Blue = (LONG)(Source & 0xFFu) +
+           ((LONG)(Under & 0xFFu) - (LONG)(Key & 0xFFu)) * (LONG)Shift / 255;
+    if (Window->BackdropType == DWM_BACKDROP_TRANSIENT)
+    {
+        LONG Glow = (LONG)(DWM_MATERIAL_REFLECT_STRENGTH * DwmReflection(ScreenX, ScreenY) *
+                           Weight / (255u * 255u));
+
+        Red += Glow;
+        Green += Glow;
+        Blue += Glow;
+    }
+    if (Red < 0) Red = 0; else if (Red > 255) Red = 255;
+    if (Green < 0) Green = 0; else if (Green > 255) Green = 255;
+    if (Blue < 0) Blue = 0; else if (Blue > 255) Blue = 255;
+    return ((ULONG)Red << 16) | ((ULONG)Green << 8) | (ULONG)Blue;
+}
+
+static void
+DwmBlendFrameBand(ULONG *Dest, const ULONG *Under, const ULONG *Source,
+                  const ULONG *Wallpaper, LONG Count, LONG SourceX, LONG Row,
+                  LONG ScreenX, LONG ScreenY, const DWM_WIN *Window,
+                  BOOL UseBackdrop, ULONG BackdropKey, ULONG ColorizationKey,
+                  ULONG Frame, const ULONG *const *Buttons, ULONG WindowAlpha)
+{
+    LONG Index;
+    ULONG Button;
+
+    for (Index = 0; Index < Count; ++Index)
+    {
+        LONG X = SourceX + Index;
+        ULONG s = Source[Index], f = Frame, Alpha = (s >> 24) & 0xFFu;
+        ULONG Inverse = 255u - Alpha, Coverage = WindowAlpha, d;
+        ULONG Red, Green, Blue, Out;
+
+        for (Button = 0; Button < DWM_CAPTION_BUTTONS; ++Button)
+        {
+            const RECTL *Rect = &Window->CaptionButtons[Button];
+
+            if (Buttons[Button] != NULL && X >= Rect->left && X < Rect->right &&
+                Row >= Rect->top && Row < Rect->bottom)
+            {
+                f = Buttons[Button][(SIZE_T)(Row - Rect->top) * (ULONG)(Rect->right - Rect->left) +
+                                    (ULONG)(X - Rect->left)];
+                break;
+            }
+        }
+        if (UseBackdrop)
+            f = DwmFrameMaterial(f, Under[Index], Window, BackdropKey, ColorizationKey,
+                                 Wallpaper != NULL ? &Wallpaper[Index] : NULL,
+                                 ScreenX + Index, ScreenY);
+
+        Red = ((s >> 16) & 0xFFu) + ((f >> 16) & 0xFFu) * Inverse / 255u;
+        Green = ((s >> 8) & 0xFFu) + ((f >> 8) & 0xFFu) * Inverse / 255u;
+        Blue = (s & 0xFFu) + (f & 0xFFu) * Inverse / 255u;
+        if (Red > 255) Red = 255;
+        if (Green > 255) Green = 255;
+        if (Blue > 255) Blue = 255;
+        Out = (Red << 16) | (Green << 8) | Blue;
+
+        if (Window->CornerRadius != 0)
+            Coverage = Coverage * DwmCornerAlpha(X, Row, Window->cx, Window->cy,
+                                                 Window->CornerRadius) / 255u;
+        if (Coverage >= 255)
+        {
+            Dest[Index] = Out;
+            continue;
+        }
+        d = Dest[Index];
+        Dest[Index] =
+            ((((Out >> 16) & 0xFFu) * Coverage + ((d >> 16) & 0xFFu) * (255u - Coverage)) / 255u << 16) |
+            ((((Out >> 8) & 0xFFu) * Coverage + ((d >> 8) & 0xFFu) * (255u - Coverage)) / 255u << 8) |
+            (((Out & 0xFFu) * Coverage + (d & 0xFFu) * (255u - Coverage)) / 255u);
+    }
+}
+
 static void
 DwmBlitWindow(ULONG *comp, LONG scrW,
               LONG clipL, LONG clipT, LONG clipR, LONG clipB,
@@ -2277,7 +2415,12 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
                        w->BackdropRegion != 0;
     LONG ncBottom = DwmBackdropNcBottom(w);
     LONG ncLeft = DwmBackdropNcLeft(w);
+    LONG ncRight = DwmBackdropInteriorRight(w);
+    LONG ncTop = DwmBackdropInteriorBottom(w);
     ULONG a = w->Alpha, key = 0, backdropKey = 0, colorizationKey = 0;
+    BOOL useFrame = (w->LayerFlags & DWM_WINDOW_FRAME_ALPHA) != 0;
+    ULONG frameKey = 0, frameAlpha = 255, button;
+    const ULONG *frameButtons[DWM_CAPTION_BUTTONS] = { NULL };
     BOOL useEdge = useBackdrop && w->BackdropRegion == DWM_BACKDROP_REGION_WINDOW;
     BOOL edgeLeft, edgeTop, edgeRight, edgeBottom;
 
@@ -2318,6 +2461,14 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
         colorizationKey = ((c & 0xFFu) << 16) |
                           (c & 0xFF00u) | ((c >> 16) & 0xFFu);
     }
+    if (useFrame)
+    {
+        frameKey = DwmFrameKey(w);
+        if (useAlpha)
+            frameAlpha = a;
+        for (button = 0; button < DWM_CAPTION_BUTTONS; ++button)
+            frameButtons[button] = DwmFrameButtonImage(w, button, frameKey);
+    }
 
     for (r = r0; r < r1; r++)
     {
@@ -2329,6 +2480,7 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
         LONG reflectStart, glassStart = 0, glassEnd = width;
         LONG directStart = 0, directEnd = 0;
         const BYTE *reflection = NULL;
+        LONG bandStart[2], bandEnd[2], bandCount = 0, band = 0, segEnd;
 
         if (g_frameStats) g_statBlitPixels += width;
         dy = (LONG)(wy + r);
@@ -2360,8 +2512,35 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
             if (directEnd > width) directEnd = width;
         }
 
+        if (useFrame && r >= w->ClientY && r < w->ClientY + w->ClientHeight)
+        {
+            LONG Left[2], Right[2], Count = 1, Index;
+
+            Left[0] = w->ClientX;
+            Right[0] = w->ClientX + w->ClientWidth;
+            if (r >= ncBottom && r < ncTop)
+            {
+                Right[0] = ncLeft;
+                Left[1] = ncRight;
+                Right[1] = w->ClientX + w->ClientWidth;
+                Count = 2;
+            }
+            for (Index = 0; Index < Count; ++Index)
+            {
+                LONG Start = Left[Index] - srcx0, End = Right[Index] - srcx0;
+
+                if (Start < 0) Start = 0;
+                if (End > width) End = width;
+                if (Start >= End)
+                    continue;
+                bandStart[bandCount] = Start;
+                bandEnd[bandCount] = End;
+                bandCount++;
+            }
+        }
+
         if (!useKey && !useAlpha && !usePixelAlpha && !useBackdrop &&
-            !useCorner)
+            !useCorner && bandCount == 0)
         {
             RtlCopyMemory(dstrow, srcrow, (SIZE_T)width * 4);
             continue;
@@ -2373,10 +2552,10 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
         if (!useKey && !useAlpha && !usePixelAlpha && !useEdge &&
             (!useBackdrop ||
              (w->BackdropRegion == DWM_BACKDROP_REGION_NONCLIENT &&
-              r >= ncBottom && r < w->ClientY + w->ClientHeight)))
+              r >= ncBottom && r < ncTop)))
         {
             LONG left = useBackdrop ? ncLeft : 0;
-            LONG right = useBackdrop ? w->ClientX + w->ClientWidth : w->cx;
+            LONG right = useBackdrop ? ncRight : w->cx;
             LONG radius = (LONG)w->CornerRadius;
 
             if (radius > w->cx / 2) radius = w->cx / 2;
@@ -2421,11 +2600,14 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
                 reflection = g_reflectLut + reflectStart;
         }
 
-        for (x = 0; x < width; x++)
+        x = 0;
+next_segment:
+        segEnd = band < bandCount ? bandStart[band] : width;
+        for (; x < segEnd; x++)
         {
-            if (x == opaqueStart && opaqueEnd > opaqueStart)
+            if (x >= opaqueStart && x < opaqueEnd)
             {
-                for (; x < opaqueEnd; ++x)
+                for (; x < opaqueEnd && x < segEnd; ++x)
                     dstrow[x] = srcrow[x] & 0x00ffffffu;
                 --x;
                 continue;
@@ -2433,17 +2615,17 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
             if (reflection != NULL && x >= glassStart && x < glassEnd)
             {
                 LONG sourceX = srcx0 + x;
-                LONG Limit = glassEnd, End;
+                LONG Limit = glassEnd < segEnd ? glassEnd : segEnd, End;
                 ULONG Color = srcrow[x] & 0x00ffffffu;
                 BOOL Material = w->BackdropRegion == DWM_BACKDROP_REGION_WINDOW ||
-                                r < ncBottom || r >= w->ClientY + w->ClientHeight;
+                                r < ncBottom || r >= ncTop;
 
                 if (!Material && sourceX < ncLeft)
                 {
                     Material = TRUE;
                     if (Limit > ncLeft - srcx0) Limit = ncLeft - srcx0;
                 }
-                if (sourceX >= w->ClientX + w->ClientWidth) Material = TRUE;
+                if (sourceX >= ncRight) Material = TRUE;
                 if (Material)
                 {
                     for (End = x + 1; End < Limit; ++End)
@@ -2522,9 +2704,9 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
             {
                 if (w->BackdropRegion == DWM_BACKDROP_REGION_WINDOW ||
                     sourceX < ncLeft ||
-                    sourceX >= w->ClientX + w->ClientWidth ||
+                    sourceX >= ncRight ||
                     r < ncBottom ||
-                    r >= w->ClientY + w->ClientHeight)
+                    r >= ncTop)
                 {
                     ULONG Near = DwmChannelDistance(s, backdropKey);
                     ULONG Other = DwmChannelDistance(s, colorizationKey);
@@ -2642,6 +2824,20 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
                       (d & 0xFFu) * inverse) / 255u);
             }
         }
+        if (band < bandCount)
+        {
+            DwmBlendFrameBand(dstrow + bandStart[band],
+                              (backdropBase != NULL ? baserow : dstrow) + bandStart[band],
+                              srcrow + bandStart[band],
+                              wallpaperrow != NULL ? wallpaperrow + bandStart[band] : NULL,
+                              bandEnd[band] - bandStart[band], srcx0 + bandStart[band], r,
+                              x0 + bandStart[band], dy, w, useBackdrop,
+                              backdropKey, colorizationKey, frameKey,
+                              frameButtons, frameAlpha);
+            x = bandEnd[band];
+            band++;
+            goto next_segment;
+        }
     }
 }
 
@@ -2687,14 +2883,14 @@ DwmFindOpaqueCover(const DWM_WIN *Windows, ULONG Count, ULONG Index,
             (Cover->LayerFlags & DWM_WINDOW_PREMULTIPLIED_ALPHA) ||
             (Cover->BlurFlags & DWM_BLUR_ENABLE))
             continue;
-        if (Backdrop)
+        if (Backdrop || (Cover->LayerFlags & DWM_WINDOW_FRAME_ALPHA))
         {
-            if (Cover->BackdropRegion != DWM_BACKDROP_REGION_NONCLIENT)
+            if (Backdrop && Cover->BackdropRegion != DWM_BACKDROP_REGION_NONCLIENT)
                 continue;
             Left = DwmBackdropNcLeft(Cover);
             Top = DwmBackdropNcBottom(Cover);
-            Right = (LONGLONG)Cover->ClientX + Cover->ClientWidth;
-            Bottom = (LONGLONG)Cover->ClientY + Cover->ClientHeight;
+            Right = DwmBackdropInteriorRight(Cover);
+            Bottom = DwmBackdropInteriorBottom(Cover);
         }
         if (Radius > Cover->cx / 2) Radius = Cover->cx / 2;
         if (Radius > Cover->cy / 2) Radius = Cover->cy / 2;
@@ -2812,8 +3008,8 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
             (material->BackdropRegion == DWM_BACKDROP_REGION_WINDOW);
         matCx0 = DwmBackdropNcLeft(material);
         matCy0 = DwmBackdropNcBottom(material);
-        matCx1 = material->ClientX + material->ClientWidth;
-        matCy1 = material->ClientY + material->ClientHeight;
+        matCx1 = DwmBackdropInteriorRight(material);
+        matCy1 = DwmBackdropInteriorBottom(material);
 
         matKey = ((c & 0xFFu) << 16) | (c & 0xFF00u) | ((c >> 16) & 0xFFu);
         c = material->BackdropColorization;

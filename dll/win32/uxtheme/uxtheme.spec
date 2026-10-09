@@ -136,5 +136,6 @@
 @ stdcall SetWindowTheme(ptr wstr wstr)
 @ stdcall SetWindowThemeAttribute(ptr long ptr long)
 @ stdcall ThemeDwmDefWindowProc(ptr long ptr ptr ptr)
+@ stdcall ThemeDwmDrawCaptionButton(ptr ptr long long long long)
 @ stdcall ThemeDwmFrameChanged(ptr)
 @ stdcall ThemeInitApiHook(long ptr)

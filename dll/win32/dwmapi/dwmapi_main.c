@@ -311,13 +311,41 @@ HRESULT WINAPI DwmEnableComposition(UINT uCompositionAction)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static BOOL dwm_get_caption_button_bounds(HWND hwnd, RECT *rect)
+{
+    static const WCHAR *const buttons[] =
+    {
+        DWM_PROP_CAPTION_CLOSE, DWM_PROP_CAPTION_MAXIMIZE, DWM_PROP_CAPTION_MINIMIZE
+    };
+    ULONG_PTR row, span;
+    UINT i;
+
+    row = (ULONG_PTR)GetPropW(hwnd, DWM_PROP_CAPTION_ROW);
+    if (!row)
+        return FALSE;
+    SetRectEmpty(rect);
+    for (i = 0; i < ARRAYSIZE(buttons); i++)
+    {
+        RECT button;
+
+        span = (ULONG_PTR)GetPropW(hwnd, buttons[i]);
+        if (!span)
+            continue;
+        SetRect(&button, (SHORT)LOWORD(span), (SHORT)LOWORD(row), (SHORT)HIWORD(span), (SHORT)HIWORD(row));
+        UnionRect(rect, rect, &button);
+    }
+    return !IsRectEmpty(rect);
+}
+#endif
+
 /**********************************************************************
  *           DwmExtendFrameIntoClientArea    (DWMAPI.@)
  */
 HRESULT WINAPI DwmExtendFrameIntoClientArea(HWND hwnd, const MARGINS* margins)
 {
 #ifdef __REACTOS__
-    LONG top, left;
+    LONG top, left, right, bottom;
 
     TRACE("(%p, %p)\n", hwnd, margins);
 
@@ -333,13 +361,15 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea(HWND hwnd, const MARGINS* margins)
         margins->cyTopHeight < 0 || margins->cyBottomHeight < 0)
     {
         top = DWM_MAX_NC_EXTEND;
-        left = 0;
+        left = right = bottom = 0;
         SetPropW(hwnd, DWM_PROP_SHEET_OF_GLASS, (HANDLE)1);
     }
     else
     {
         top = min(margins->cyTopHeight, (LONG)DWM_MAX_NC_EXTEND);
         left = min(margins->cxLeftWidth, (LONG)DWM_MAX_NC_EXTEND);
+        right = min(margins->cxRightWidth, (LONG)DWM_MAX_NC_EXTEND);
+        bottom = min(margins->cyBottomHeight, (LONG)DWM_MAX_NC_EXTEND);
         RemovePropW(hwnd, DWM_PROP_SHEET_OF_GLASS);
     }
     if (top > 0)
@@ -350,6 +380,18 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea(HWND hwnd, const MARGINS* margins)
         SetPropW(hwnd, DWM_PROP_BACKDROP_NC_EXTEND_LEFT, (HANDLE)(ULONG_PTR)(left + 1));
     else
         RemovePropW(hwnd, DWM_PROP_BACKDROP_NC_EXTEND_LEFT);
+    if (right > 0)
+        SetPropW(hwnd, DWM_PROP_BACKDROP_NC_EXTEND_RIGHT, (HANDLE)(ULONG_PTR)(right + 1));
+    else
+        RemovePropW(hwnd, DWM_PROP_BACKDROP_NC_EXTEND_RIGHT);
+    if (bottom > 0)
+        SetPropW(hwnd, DWM_PROP_BACKDROP_NC_EXTEND_BOTTOM, (HANDLE)(ULONG_PTR)(bottom + 1));
+    else
+        RemovePropW(hwnd, DWM_PROP_BACKDROP_NC_EXTEND_BOTTOM);
+    if (top > 0 || left > 0 || right > 0 || bottom > 0)
+        SetPropW(hwnd, DWM_PROP_FRAME_ALPHA, (HANDLE)1);
+    else
+        RemovePropW(hwnd, DWM_PROP_FRAME_ALPHA);
     dwm_load_theme_hooks();
     if (dwm_theme_frame_changed)
         dwm_theme_frame_changed(hwnd);
@@ -665,6 +707,14 @@ HRESULT WINAPI DwmGetWindowAttribute(HWND hwnd, DWORD attribute, PVOID pv_attrib
 
         if (size < sizeof(*rect))
             return E_NOT_SUFFICIENT_BUFFER;
+
+#ifdef __REACTOS__
+        if (dwm_get_caption_button_bounds(hwnd, rect))
+        {
+            hr = S_OK;
+            break;
+        }
+#endif
 
         style = GetWindowLongW(hwnd, GWL_STYLE);
         ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);

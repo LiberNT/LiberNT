@@ -32,6 +32,7 @@
 extern "C" {
 #include "presenttrace.h"
 #include "dxsurface.h"
+#include "framebuttons.h"
 }
 #include <dwmoverlay.h>
 
@@ -123,6 +124,7 @@ struct Constants
     FLOAT Rectangle[4], TargetSize[4], SourceSize[4], ClientRect[4], CaptureRect[4];
     FLOAT Brush[4], Colorization[4], ColorKey[4], Flags[4], Extra[4], Shadow[4], Filter[4];
     FLOAT SampleExtent[4], SampleOrigin[4];
+    FLOAT FrameKey[4], FrameClient[4], FrameButtons[4];
     FLOAT Taps[33][4];
 };
 
@@ -183,6 +185,14 @@ struct Compositor
     Surface Surfaces[DWM_MAX_WINDOWS * 2];
     ClientSource ClientSources[DWM_MAX_WINDOWS * 2];
     BlurTarget Blurs[4];
+    struct
+    {
+        ULONG Surface;
+        ULONG Signature;
+        ULONG Stamp;
+        Texture Image;
+    } FrameAtlases[8];
+    ULONG FrameAtlasStamp;
     DWM_GPU_SCENE_CACHE Scene;
     BOOL LowerUnchanged[DWM_MAX_WINDOWS];
     /* The window redraws its material from last frame's filtered capture. */
@@ -219,7 +229,7 @@ BOOL Result(HRESULT Status, const char *Operation)
 
 void UnbindTextures()
 {
-    ID3D11ShaderResourceView *Empty[2] = {NULL, NULL};
+    ID3D11ShaderResourceView *Empty[3] = {NULL, NULL, NULL};
     State.Context->PSSetShaderResources(0, ARRAYSIZE(Empty), Empty);
     State.Context->OMSetRenderTargets(0, NULL, NULL);
 }
@@ -323,7 +333,8 @@ BOOL Draw(Texture &Target,
           ID3D11ShaderResourceView *Source = NULL,
           ID3D11ShaderResourceView *Backdrop = NULL,
           BOOL Blend = FALSE,
-          BOOL Premultiplied = FALSE)
+          BOOL Premultiplied = FALSE,
+          ID3D11ShaderResourceView *Buttons = NULL)
 {
     if (Clip.left >= Clip.right || Clip.top >= Clip.bottom)
         return TRUE;
@@ -385,7 +396,7 @@ BOOL Draw(Texture &Target,
     State.Context->VSSetConstantBuffers(0, 1, &Upload->Resource);
     State.Context->PSSetConstantBuffers(0, 1, &Upload->Resource);
     State.Context->PSSetSamplers(0, 1, &State.Sampler);
-    ID3D11ShaderResourceView *Views[2] = {Source, Backdrop};
+    ID3D11ShaderResourceView *Views[3] = {Source, Backdrop, Buttons};
     State.Context->PSSetShaderResources(0, ARRAYSIZE(Views), Views);
     for (ULONG Index = 0; Index < ScissorCount; ++Index)
     {
@@ -1342,6 +1353,44 @@ BlurTarget *FilterCapture(const RECT &Bounds, ULONG Radius)
     return Target;
 }
 
+ID3D11ShaderResourceView *FrameButtonsView(const DWM_WIN *Window, ULONG Background, RECTL *Bounds)
+{
+    ULONG Signature = DwmFrameButtonSignature(Window, Background);
+    ULONG Index, Oldest = 0;
+
+    if (!DwmFrameButtonBounds(Window, Bounds))
+        return NULL;
+    for (Index = 0; Index < ARRAYSIZE(State.FrameAtlases); ++Index)
+    {
+        if (State.FrameAtlases[Index].Image.View != NULL &&
+            State.FrameAtlases[Index].Surface == Window->SurfaceId &&
+            State.FrameAtlases[Index].Signature == Signature)
+        {
+            State.FrameAtlases[Index].Stamp = ++State.FrameAtlasStamp;
+            return State.FrameAtlases[Index].Image.View;
+        }
+        if (State.FrameAtlases[Index].Stamp < State.FrameAtlases[Oldest].Stamp)
+            Oldest = Index;
+    }
+
+    ULONG *Pixels = DwmFrameButtonAtlas(Window, Background, Bounds);
+    if (Pixels == NULL)
+        return NULL;
+    LONG Width = Bounds->right - Bounds->left, Height = Bounds->bottom - Bounds->top;
+    BOOL Created = CreateTexture(State.FrameAtlases[Oldest].Image, Width, Height, FALSE,
+                                 (const BYTE *)Pixels, (ULONG)Width * sizeof(ULONG));
+    HeapFree(GetProcessHeap(), 0, Pixels);
+    if (!Created)
+    {
+        SetRectEmpty((RECT *)Bounds);
+        return NULL;
+    }
+    State.FrameAtlases[Oldest].Surface = Window->SurfaceId;
+    State.FrameAtlases[Oldest].Signature = Signature;
+    State.FrameAtlases[Oldest].Stamp = ++State.FrameAtlasStamp;
+    return State.FrameAtlases[Oldest].Image.View;
+}
+
 BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG OriginX, LONG OriginY,
                  Texture *Prepared = NULL)
 {
@@ -1387,10 +1436,36 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
     Data.SourceSize[1] = Client ? Window->DxHeight : Window->cy;
     Data.SourceSize[2] = Alpha;
     Data.SourceSize[3] = Client ? 0 : min(Window->CornerRadius, (ULONG)min(Window->cx / 2, Window->cy / 2));
-    Data.ClientRect[0] = (FLOAT)min((LONGLONG)Window->ClientX + Window->BackdropNcExtendLeft, (LONGLONG)Window->ClientX + Window->ClientWidth);
-    Data.ClientRect[1] = (FLOAT)min((LONGLONG)Window->ClientY + Window->BackdropNcExtend, (LONGLONG)Window->ClientY + Window->ClientHeight);
-    Data.ClientRect[2] = (FLOAT)((LONGLONG)Window->ClientX + Window->ClientWidth);
-    Data.ClientRect[3] = (FLOAT)((LONGLONG)Window->ClientY + Window->ClientHeight);
+    RECTL Interior;
+    DwmFrameInterior(Window, &Interior);
+    Data.ClientRect[0] = (FLOAT)Interior.left;
+    Data.ClientRect[1] = (FLOAT)Interior.top;
+    Data.ClientRect[2] = (FLOAT)Interior.right;
+    Data.ClientRect[3] = (FLOAT)Interior.bottom;
+    BOOL Frame = !Client && (Window->LayerFlags & DWM_WINDOW_FRAME_ALPHA) != 0;
+    ID3D11ShaderResourceView *Buttons = NULL;
+    if (Frame)
+    {
+        ULONG Key = DwmFrameKey(Window);
+        RECTL ButtonBounds;
+
+        Data.FrameKey[0] = ((Key >> 16) & 0xFFu) / 255.0f;
+        Data.FrameKey[1] = ((Key >> 8) & 0xFFu) / 255.0f;
+        Data.FrameKey[2] = (Key & 0xFFu) / 255.0f;
+        Data.FrameKey[3] = 1.0f;
+        Data.FrameClient[0] = (FLOAT)Window->ClientX;
+        Data.FrameClient[1] = (FLOAT)Window->ClientY;
+        Data.FrameClient[2] = (FLOAT)((LONGLONG)Window->ClientX + Window->ClientWidth);
+        Data.FrameClient[3] = (FLOAT)((LONGLONG)Window->ClientY + Window->ClientHeight);
+        Buttons = FrameButtonsView(Window, Key, &ButtonBounds);
+        if (Buttons != NULL)
+        {
+            Data.FrameButtons[0] = (FLOAT)ButtonBounds.left;
+            Data.FrameButtons[1] = (FLOAT)ButtonBounds.top;
+            Data.FrameButtons[2] = (FLOAT)ButtonBounds.right;
+            Data.FrameButtons[3] = (FLOAT)ButtonBounds.bottom;
+        }
+    }
     Data.CaptureRect[0] = (FLOAT)Capture.left;
     Data.CaptureRect[1] = (FLOAT)Capture.top;
     Data.CaptureRect[2] = (FLOAT)(Capture.right - Capture.left);
@@ -1412,7 +1487,7 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
     Data.Extra[3] = (FLOAT)Premultiplied;
     BOOL Blend = Alpha < 1.0f || Data.SourceSize[3] != 0 || Data.Flags[2] != 0 || Premultiplied;
     /* An opaque layer without glass or colour key is its source unchanged. */
-    Shader Program = !Blend && !Glass && Data.Flags[3] == 0 ? Copy : Shader::Window;
+    Shader Program = !Blend && !Glass && !Frame && Data.Flags[3] == 0 ? Copy : Shader::Window;
     return Draw(State.Canvas,
                 Program,
                 ClipDraw(Bounds),
@@ -1420,7 +1495,8 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
                 Image->View,
                 Blur ? Blur->Result.View : NULL,
                 Blend,
-                Premultiplied);
+                Premultiplied,
+                Buttons);
 }
 } // namespace
 
@@ -1517,6 +1593,8 @@ DwmD3dShutdown(void)
         State.ClientSources[Index].Reset();
     for (ULONG Index = 0; Index < ARRAYSIZE(State.Blurs); ++Index)
         State.Blurs[Index].Reset();
+    for (ULONG Index = 0; Index < ARRAYSIZE(State.FrameAtlases); ++Index)
+        State.FrameAtlases[Index].Image.Reset();
     State.Backdrop.Reset();
     State.Canvas.Reset();
     Release(State.BackBuffer);

@@ -10,6 +10,7 @@ add_library(dwmcore MODULE
     dwmcore.c
     ../../../base/system/dwm/presenttrace.c
     ../../../base/system/dwm/dwm.c
+    ../../../base/system/dwm/framebuttons.c
     ../../../base/system/dwm/settings.c
     ../../../base/system/dwm/dxsurface.c
     ../../../base/system/dwm/gpucomp.c

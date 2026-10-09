@@ -238,6 +238,8 @@ NtUserRemoveProp(
     }
 
     Data = UserRemoveProp(Window, Atom, FALSE);
+    if (Data != NULL && IntCompositionIsFrameAtom(Atom))
+        IntCompositionDamageWindowMetadata(Window);
 
 Exit:
     TRACE("Leave NtUserRemoveProp, ret=%p\n", Data);
@@ -254,6 +256,7 @@ NtUserSetProp(
     _In_ HANDLE Data)
 {
     PWND Window;
+    HANDLE Old;
     BOOL Ret;
 
     TRACE("Enter NtUserSetProp\n");
@@ -266,7 +269,10 @@ NtUserSetProp(
         goto Exit;
     }
 
+    Old = IntCompositionIsFrameAtom(Atom) ? UserGetProp(Window, Atom, FALSE) : Data;
     Ret = UserSetProp(Window, Atom, Data, FALSE);
+    if (Ret && Old != Data)
+        IntCompositionDamageWindowMetadata(Window);
 
 Exit:
     TRACE("Leave NtUserSetProp, ret=%i\n", Ret);

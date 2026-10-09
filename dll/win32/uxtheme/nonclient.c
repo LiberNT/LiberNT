@@ -962,7 +962,7 @@ ThemeDwmHasCaptionButtons(HWND hWnd, const WINDOWINFO *wi)
         return FALSE;
     if ((wi->dwStyle & (WS_CAPTION | WS_SYSMENU)) != (WS_CAPTION | WS_SYSMENU))
         return FALSE;
-    if ((ULONG_PTR)GetPropW(hWnd, DWM_PROP_BACKDROP_NC_EXTEND) <= 1)
+    if ((ULONG_PTR)GetPropW(hWnd, DWM_PROP_BACKDROP_NC_EXTEND) <= 1 || !GetPropW(hWnd, DWM_PROP_FRAME_ALPHA))
         return FALSE;
     pwndData = ThemeGetWndData(hWnd);
     if (!pwndData)
@@ -972,67 +972,153 @@ ThemeDwmHasCaptionButtons(HWND hWnd, const WINDOWINFO *wi)
     return wi->rcClient.top - wi->rcWindow.top < pwndData->rcCaptionButtons[CLOSEBUTTON].bottom;
 }
 
-static void
-ThemeDwmDrawCaptionButtons(PDRAW_CONTEXT pcontext, DWORD htHot, DWORD htDown)
+static VOID
+ThemeDwmSetCaptionProperty(HWND hWnd, PWND_DATA pwndData, UINT Slot, LPCWSTR Name, ULONG Value)
 {
-    static const DWORD HitTest[] = { HTCLOSE, HTMAXBUTTON, HTMINBUTTON };
-    PWND_DATA pwndData = ThemeGetWndData(pcontext->hWnd);
-    HDC hDC = pcontext->hDC;
-    INT i;
+    if (pwndData->DwmCaption[Slot] == Value)
+        return;
+    pwndData->DwmCaption[Slot] = Value;
+    if (Value)
+        SetPropW(hWnd, Name, (HANDLE)(ULONG_PTR)Value);
+    else
+        RemovePropW(hWnd, Name);
+}
 
-    if (!pwndData || !pcontext->theme)
+static VOID
+ThemeDwmPublishCaptionButtons(HWND hWnd, const WINDOWINFO *wi, DWORD htHot, DWORD htDown)
+{
+    static const CAPTIONBUTTON Buttons[DWM_CAPTION_BUTTONS] = { CLOSEBUTTON, MAXBUTTON, MINBUTTON };
+    static const DWORD HitTest[DWM_CAPTION_BUTTONS] = { HTCLOSE, HTMAXBUTTON, HTMINBUTTON };
+    static const LPCWSTR Names[DWM_CAPTION_BUTTONS] =
+    {
+        DWM_PROP_CAPTION_CLOSE, DWM_PROP_CAPTION_MAXIMIZE, DWM_PROP_CAPTION_MINIMIZE
+    };
+    ULONG Spans[DWM_CAPTION_BUTTONS] = { 0 };
+    ULONG Row = 0, State = 0;
+    PWND_DATA pwndData;
+    const RECT *Rect;
+    HMENU SysMenu;
+    UINT i;
+
+    pwndData = ThemeGetWndData(hWnd);
+    if (!pwndData)
         return;
 
-    pcontext->hDC = GetDCEx(pcontext->hWnd, NULL, DCX_WINDOW | DCX_CACHE | DCX_CLIPSIBLINGS);
-    if (pcontext->hDC)
+    if (ThemeDwmHasCaptionButtons(hWnd, wi))
     {
-        for (i = CLOSEBUTTON; i <= MINBUTTON; i++)
+        Rect = &pwndData->rcCaptionButtons[CLOSEBUTTON];
+        Row = DWM_CAPTION_PACK(Rect->top, Rect->bottom);
+        State = DWM_CAPTION_STATE_VALID;
+        if (wi->dwStyle & WS_MAXIMIZE)
+            State |= DWM_CAPTION_STATE_RESTORE;
+        if (wi->dwExStyle & WS_EX_TOOLWINDOW)
+            State |= DWM_CAPTION_STATE_TOOLWINDOW;
+        for (i = 0; i < DWM_CAPTION_BUTTONS; i++)
         {
-            if (i != CLOSEBUTTON && !(pcontext->wi.dwStyle & (WS_MAXIMIZEBOX | WS_MINIMIZEBOX)))
+            Rect = &pwndData->rcCaptionButtons[Buttons[i]];
+            if (IsRectEmpty(Rect))
                 continue;
-            FillRect(pcontext->hDC, &pwndData->rcCaptionButtons[i], GetStockObject(BLACK_BRUSH));
-            ThemeDrawCaptionButton(pcontext, NULL, (CAPTIONBUTTON)i,
-                                   ThemeGetButtonState(HitTest[i - CLOSEBUTTON], htHot, htDown, pcontext->Active));
+            if (Buttons[i] != CLOSEBUTTON &&
+                ((wi->dwExStyle & WS_EX_TOOLWINDOW) || !(wi->dwStyle & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX))))
+                continue;
+            Spans[i] = DWM_CAPTION_PACK(Rect->left, Rect->right);
+            if (htHot == HitTest[i])
+                State |= DWM_CAPTION_STATE_HOT(i);
+            if (htDown == HitTest[i])
+                State |= DWM_CAPTION_STATE_PRESSED(i);
         }
-        ReleaseDC(pcontext->hWnd, pcontext->hDC);
+        SysMenu = GetSystemMenu(hWnd, FALSE);
+        if ((GetMenuState(SysMenu, SC_CLOSE, MF_BYCOMMAND) & (MF_GRAYED | MF_DISABLED)) ||
+            (GetClassLongPtrW(hWnd, GCL_STYLE) & CS_NOCLOSE))
+            State |= DWM_CAPTION_STATE_DISABLED(DWM_CAPTION_BUTTON_CLOSE);
+        if (!(wi->dwStyle & WS_MAXIMIZEBOX))
+            State |= DWM_CAPTION_STATE_DISABLED(DWM_CAPTION_BUTTON_MAXIMIZE);
+        if (!(wi->dwStyle & WS_MINIMIZEBOX))
+            State |= DWM_CAPTION_STATE_DISABLED(DWM_CAPTION_BUTTON_MINIMIZE);
     }
-    pcontext->hDC = hDC;
+
+    for (i = 0; i < DWM_CAPTION_BUTTONS; i++)
+        ThemeDwmSetCaptionProperty(hWnd, pwndData, i, Names[i], Spans[i]);
+    ThemeDwmSetCaptionProperty(hWnd, pwndData, DWM_CAPTION_BUTTONS, DWM_PROP_CAPTION_ROW, Row);
+    ThemeDwmSetCaptionProperty(hWnd, pwndData, DWM_CAPTION_BUTTONS + 1, DWM_PROP_CAPTION_STATE, State);
+}
+
+void
+ThemeDwmUpdateCaptionButtons(HWND hWnd)
+{
+    WINDOWINFO wi = { sizeof(wi) };
+    PWND_DATA pwndData;
+
+    pwndData = ThemeGetWndData(hWnd);
+    if (!pwndData || !GetWindowInfo(hWnd, &wi))
+        return;
+    ThemeDwmPublishCaptionButtons(hWnd, &wi, HT_ISBUTTON(pwndData->lastHitTest) ? pwndData->lastHitTest : 0, 0);
 }
 
 void
 ThemeDwmRepaintCaptionButtons(HWND hWnd)
 {
-    DRAW_CONTEXT context;
-    PWND_DATA pwndData;
-    HWND hWndRoot;
-    RECT rcRoot, rcPainted, rcButtons;
+    if (GetAncestor(hWnd, GA_ROOT) != hWnd || (ULONG_PTR)GetPropW(hWnd, DWM_PROP_BACKDROP_NC_EXTEND) <= 1)
+        return;
+    ThemeDwmUpdateCaptionButtons(hWnd);
+}
 
-    hWndRoot = GetAncestor(hWnd, GA_ROOT);
-    if (!hWndRoot || (ULONG_PTR)GetPropW(hWndRoot, DWM_PROP_BACKDROP_NC_EXTEND) <= 1)
-        return;
-    pwndData = ThemeGetWndData(hWndRoot);
-    if (!pwndData)
-        return;
-    if (hWnd != hWndRoot)
+BOOL WINAPI
+ThemeDwmDrawCaptionButton(HDC hDC, const RECT *prc, UINT Button, ULONG State, BOOL Active, BOOL Dark)
+{
+    static const CAPTIONBUTTON Buttons[DWM_CAPTION_BUTTONS] = { CLOSEBUTTON, MAXBUTTON, MINBUTTON };
+    DRAW_CONTEXT context;
+    HTHEME hTheme;
+    INT iPart, iState;
+
+    if (!hDC || !prc || Button >= DWM_CAPTION_BUTTONS)
+        return FALSE;
+
+    if (State & DWM_CAPTION_STATE_DISABLED(Button))
+        iState = Active ? BUTTON_DISABLED : BUTTON_INACTIVE_DISABLED;
+    else if (State & DWM_CAPTION_STATE_PRESSED(Button))
+        iState = Active ? BUTTON_PRESSED : BUTTON_INACTIVE_PRESSED;
+    else if (State & DWM_CAPTION_STATE_HOT(Button))
+        iState = Active ? BUTTON_HOT : BUTTON_INACTIVE_HOT;
+    else
+        iState = Active ? BUTTON_NORMAL : BUTTON_INACTIVE;
+
+    if (Dark)
     {
-        GetWindowRect(hWndRoot, &rcRoot);
-        GetWindowRect(hWnd, &rcPainted);
-        UnionRect(&rcButtons, &pwndData->rcCaptionButtons[CLOSEBUTTON], &pwndData->rcCaptionButtons[MINBUTTON]);
-        OffsetRect(&rcButtons, rcRoot.left, rcRoot.top);
-        if (!IntersectRect(&rcButtons, &rcButtons, &rcPainted))
-            return;
+        ZeroMemory(&context, sizeof(context));
+        context.hDC = hDC;
+        context.Active = Active;
+        context.DarkMode = TRUE;
+        context.wi.dwStyle = WS_CAPTION | WS_SYSMENU | ((State & DWM_CAPTION_STATE_RESTORE) ? WS_MAXIMIZE : 0);
+        context.wi.dwExStyle = (State & DWM_CAPTION_STATE_TOOLWINDOW) ? WS_EX_TOOLWINDOW : 0;
+        ThemeDrawDarkCaptionButton(&context, Buttons[Button], iState, prc);
+        return TRUE;
     }
 
-    ThemeInitDrawContext(&context, hWndRoot, 0);
-    if (ThemeDwmHasCaptionButtons(hWndRoot, &context.wi))
-        ThemeDwmDrawCaptionButtons(&context, HT_ISBUTTON(pwndData->lastHitTest) ? pwndData->lastHitTest : 0, 0);
-    ThemeCleanupDrawContext(&context);
+    switch (Buttons[Button])
+    {
+    case CLOSEBUTTON:
+        iPart = (State & DWM_CAPTION_STATE_TOOLWINDOW) ? WP_SMALLCLOSEBUTTON : WP_CLOSEBUTTON;
+        break;
+    case MAXBUTTON:
+        iPart = (State & DWM_CAPTION_STATE_RESTORE) ? WP_RESTOREBUTTON : WP_MAXBUTTON;
+        break;
+    default:
+        iPart = WP_MINBUTTON;
+        break;
+    }
+
+    hTheme = OpenThemeData(NULL, L"WINDOW");
+    if (!hTheme)
+        return FALSE;
+    DrawThemeBackground(hTheme, hDC, iPart, iState, prc, NULL);
+    CloseThemeData(hTheme);
+    return TRUE;
 }
 
 BOOL WINAPI
 ThemeDwmDefWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, LRESULT *plResult)
 {
-    DRAW_CONTEXT context;
     TRACKMOUSEEVENT tme;
     PWND_DATA pwndData;
     WINDOWINFO wi;
@@ -1071,12 +1157,7 @@ ThemeDwmDefWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, LRESULT
     }
 
     if (HT_ISBUTTON(Button) || HT_ISBUTTON(pwndData->lastHitTest))
-    {
-        pwndData->lastHitTest = (DWORD)Button;
-        ThemeInitDrawContext(&context, hWnd, 0);
-        ThemeDwmDrawCaptionButtons(&context, (DWORD)Button, 0);
-        ThemeCleanupDrawContext(&context);
-    }
+        ThemeDwmPublishCaptionButtons(hWnd, &wi, (DWORD)Button, 0);
     pwndData->lastHitTest = (DWORD)Button;
     return FALSE;
 }
@@ -1092,7 +1173,7 @@ ThemeDrawCaptionButtons(PDRAW_CONTEXT pcontext, DWORD htHot, DWORD htDown)
 
     if (ThemeDwmHasCaptionButtons(pcontext->hWnd, &pcontext->wi))
     {
-        ThemeDwmDrawCaptionButtons(pcontext, htHot, htDown);
+        ThemeDwmPublishCaptionButtons(pcontext->hWnd, &pcontext->wi, htHot, htDown);
         return;
     }
 
@@ -1859,6 +1940,32 @@ ThemeWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, WNDPROC DefWndPr
         Point.x = GET_X_LPARAM(lParam);
         Point.y = GET_Y_LPARAM(lParam);
         return DefWndNCHitTest(hWnd, Point);
+    }
+    case WM_GETTITLEBARINFOEX:
+    {
+        static const INT Child[] = { 5, 3, 2 };
+        PTITLEBARINFOEX Info = (PTITLEBARINFOEX)lParam;
+        LRESULT Result = DefWndProc(hWnd, Msg, wParam, lParam);
+        PWND_DATA pwndData;
+        RECT rcWindow;
+        INT i;
+
+        if (!Result || !Info || (GetWindowLongW(hWnd, GWL_STYLE) & WS_CAPTION) != WS_CAPTION)
+            return Result;
+        pwndData = ThemeGetWndData(hWnd);
+        if (!pwndData || !GetWindowRect(hWnd, &rcWindow))
+            return Result;
+        if (IsRectEmpty(&pwndData->rcCaptionButtons[CLOSEBUTTON]))
+            ThemeCalculateCaptionButtonsPos(hWnd, NULL);
+        for (i = CLOSEBUTTON; i <= MINBUTTON; i++)
+        {
+            if (IsRectEmpty(&Info->rgrect[Child[i - CLOSEBUTTON]]) ||
+                IsRectEmpty(&pwndData->rcCaptionButtons[i]))
+                continue;
+            Info->rgrect[Child[i - CLOSEBUTTON]] = pwndData->rcCaptionButtons[i];
+            OffsetRect(&Info->rgrect[Child[i - CLOSEBUTTON]], rcWindow.left, rcWindow.top);
+        }
+        return Result;
     }
     case WM_SYSCOMMAND:
     {

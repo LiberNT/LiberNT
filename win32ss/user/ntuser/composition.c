@@ -116,6 +116,76 @@ IntCompositionReleaseFrameSurfaces(VOID)
     }
 }
 
+static ULONG
+IntCompositionFrameExtent(_In_ PWND Wnd, _In_ ATOM Atom)
+{
+    ULONG_PTR Encoded;
+
+    if (Atom == 0)
+        return 0;
+    Encoded = (ULONG_PTR)UserGetProp(Wnd, Atom, FALSE);
+    return Encoded != 0 && Encoded <= DWM_MAX_NC_EXTEND + 1 ? (ULONG)(Encoded - 1) : 0;
+}
+
+static ULONG_PTR
+IntCompositionFrameProperty(_In_ PWND Wnd, _In_ ATOM Atom)
+{
+    return Atom != 0 ? (ULONG_PTR)UserGetProp(Wnd, Atom, FALSE) : 0;
+}
+
+static VOID
+IntCompositionReadFrameExtension(_In_ PWND Wnd, _Inout_ PDWM_WIN Window)
+{
+    ATOM Buttons[DWM_CAPTION_BUTTONS];
+    ULONG_PTR Row, Span, State;
+    ULONG Index;
+
+    if (IntCompositionFrameProperty(Wnd, AtomDwmFrameAlpha) == 0)
+        return;
+
+    Window->LayerFlags |= DWM_WINDOW_FRAME_ALPHA;
+    Window->BackdropNcExtend = IntCompositionFrameExtent(Wnd, AtomDwmBackdropNcExtend);
+    Window->BackdropNcExtendLeft = IntCompositionFrameExtent(Wnd, AtomDwmBackdropNcExtendLeft);
+    Window->BackdropNcExtendRight = IntCompositionFrameExtent(Wnd, AtomDwmBackdropNcExtendRight);
+    Window->BackdropNcExtendBottom = IntCompositionFrameExtent(Wnd, AtomDwmBackdropNcExtendBottom);
+
+    State = IntCompositionFrameProperty(Wnd, AtomDwmCaptionState);
+    Row = IntCompositionFrameProperty(Wnd, AtomDwmCaptionRow);
+    if (!(State & DWM_CAPTION_STATE_VALID) || Row == 0)
+        return;
+
+    Buttons[DWM_CAPTION_BUTTON_CLOSE] = AtomDwmCaptionClose;
+    Buttons[DWM_CAPTION_BUTTON_MAXIMIZE] = AtomDwmCaptionMaximize;
+    Buttons[DWM_CAPTION_BUTTON_MINIMIZE] = AtomDwmCaptionMinimize;
+    for (Index = 0; Index < DWM_CAPTION_BUTTONS; Index++)
+    {
+        Span = IntCompositionFrameProperty(Wnd, Buttons[Index]);
+        if (Span == 0)
+            continue;
+        Window->CaptionButtons[Index].left = (SHORT)LOWORD(Span);
+        Window->CaptionButtons[Index].right = (SHORT)HIWORD(Span);
+        Window->CaptionButtons[Index].top = (SHORT)LOWORD(Row);
+        Window->CaptionButtons[Index].bottom = (SHORT)HIWORD(Row);
+    }
+    Window->CaptionState = (ULONG)State;
+}
+
+BOOLEAN
+IntCompositionIsFrameAtom(_In_ ATOM Atom)
+{
+    return Atom != 0 &&
+           (Atom == AtomDwmFrameAlpha ||
+            Atom == AtomDwmBackdropNcExtend ||
+            Atom == AtomDwmBackdropNcExtendLeft ||
+            Atom == AtomDwmBackdropNcExtendRight ||
+            Atom == AtomDwmBackdropNcExtendBottom ||
+            Atom == AtomDwmCaptionClose ||
+            Atom == AtomDwmCaptionMaximize ||
+            Atom == AtomDwmCaptionMinimize ||
+            Atom == AtomDwmCaptionRow ||
+            Atom == AtomDwmCaptionState);
+}
+
 /* dwm.exe is the ONLY compositor (Windows model — win32k tracks redirection
  * and damage, never composes). Attach enables redirection; detach or a
  * silent dwm (watchdog on g_DwmLastFrameTime, bumped by every GetFrame)
@@ -3018,6 +3088,11 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         g_DwmFrameWindows[count].ContentBackdrop = 0;
         g_DwmFrameWindows[count].BackdropNcExtend = 0;
         g_DwmFrameWindows[count].BackdropNcExtendLeft = 0;
+        g_DwmFrameWindows[count].BackdropNcExtendRight = 0;
+        g_DwmFrameWindows[count].BackdropNcExtendBottom = 0;
+        RtlZeroMemory(g_DwmFrameWindows[count].CaptionButtons,
+                      sizeof(g_DwmFrameWindows[count].CaptionButtons));
+        g_DwmFrameWindows[count].CaptionState = 0;
         g_DwmFrameWindows[count].CornerRadius = 0;
         {
             ULONG_PTR Radius = (ULONG_PTR)UserGetProp(w, AtomDwmCornerRadius,
@@ -3204,6 +3279,7 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
                 }
             }
         }
+        IntCompositionReadFrameExtension(w, &g_DwmFrameWindows[count]);
         if (e->Redirect.FrontGlobalShare != 0)
         {
             SURFACE_ShareLockByPointer(e->Redirect.psurfFront);

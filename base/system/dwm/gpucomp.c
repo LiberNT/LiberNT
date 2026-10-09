@@ -16,6 +16,7 @@
 #include <reactos/dwmgpuinterop.h>
 
 #include "gpucomp.h"
+#include "framebuttons.h"
 #include "gpud3d.h"
 #include "presenttrace.h"
 #include "gpumaterial.h"
@@ -63,6 +64,7 @@ static PFNGLGETUNIFORMLOCATIONPROC      pglGetUniformLocation;
 static PFNGLUNIFORM1IPROC               pglUniform1i;
 static PFNGLUNIFORM1FPROC               pglUniform1f;
 static PFNGLUNIFORM2FPROC               pglUniform2f;
+static PFNGLUNIFORM4FPROC               pglUniform4f;
 static PFNGLUNIFORM3FPROC               pglUniform3f;
 static PFNGLUNIFORM1FVPROC              pglUniform1fv;
 static PFNGLACTIVETEXTUREPROC           pglActiveTexture;
@@ -194,6 +196,7 @@ DwmGpuLoadEntryPoints(void)
     pglUniform1i = (PFNGLUNIFORM1IPROC)DwmGpuGetProc("glUniform1i");
     pglUniform1f = (PFNGLUNIFORM1FPROC)DwmGpuGetProc("glUniform1f");
     pglUniform2f = (PFNGLUNIFORM2FPROC)DwmGpuGetProc("glUniform2f");
+    pglUniform4f = (PFNGLUNIFORM4FPROC)DwmGpuGetProc("glUniform4f");
     pglUniform3f = (PFNGLUNIFORM3FPROC)DwmGpuGetProc("glUniform3f");
     pglUniform1fv = (PFNGLUNIFORM1FVPROC)DwmGpuGetProc("glUniform1fv");
     pglActiveTexture =
@@ -236,7 +239,7 @@ DwmGpuLoadEntryPoints(void)
            pglGetProgramiv != NULL && pglUseProgram != NULL &&
            pglDeleteProgram != NULL && pglGetUniformLocation != NULL &&
            pglUniform1i != NULL && pglUniform1f != NULL &&
-           pglUniform2f != NULL && pglUniform3f != NULL && pglUniform1fv != NULL &&
+           pglUniform2f != NULL && pglUniform3f != NULL && pglUniform4f != NULL && pglUniform1fv != NULL &&
            pglActiveTexture != NULL &&
            pglGenFramebuffers != NULL && pglBindFramebuffer != NULL &&
            pglFramebufferTexture2D != NULL &&
@@ -982,7 +985,7 @@ DwmGpuComposeUncoveredQuad(LONGLONG Left, LONGLONG Top, LONGLONG Right, LONGLONG
 }
 
 static void DwmGpuComposeReleaseBlur(void);
-static BOOL DwmGpuComposeMaterial(const DWM_WIN *Window, GLuint Texture,
+static BOOL DwmGpuComposeMaterial(const DWM_WIN *Window, GLuint Texture, BOOL Frame,
                        LONGLONG Left, LONGLONG Top, LONG Width, LONG Height, GLfloat Alpha,
                        const RECT *Cover, const RECT *SceneCover);
 static GLuint g_shadowProgram;
@@ -996,8 +999,19 @@ typedef struct _DWM_GPU_MATERIAL_PROGRAM
     GLint Opacity, Alpha, Radius, Saturation, Reflection;
     GLint Size, ScreenSize, ClientMin, ClientMax;
     GLint CaptureOrigin, CaptureSize, Brush, Colorization, Key;
+    GLint Buttons, FrameKey, FrameClient, FrameButtons;
 } DWM_GPU_MATERIAL_PROGRAM;
 static DWM_GPU_MATERIAL_PROGRAM g_materialPrograms[2];
+
+typedef struct _DWM_GPU_FRAME_ATLAS
+{
+    ULONG Surface;
+    ULONG Signature;
+    ULONG Stamp;
+    GLuint Texture;
+} DWM_GPU_FRAME_ATLAS;
+static DWM_GPU_FRAME_ATLAS g_frameAtlases[8];
+static ULONG g_frameAtlasStamp;
 
 static DWM_GPU_TEXTURE *
 DwmGpuComposeFindTexture(const DWM_WIN *Window, BOOL Client)
@@ -1367,10 +1381,12 @@ DwmGpuComposeLayerMeasured(const DWM_WIN *Window, const BYTE *Pixels,
         OpaqueClient = &Cover;
 
     if (Window->BackdropType == DWM_BACKDROP_TRANSIENT ||
-        Window->CornerRadius != 0 || (Window->LayerFlags & DWM_LWA_COLORKEY))
+        Window->CornerRadius != 0 || (Window->LayerFlags & DWM_LWA_COLORKEY) ||
+        (!Client && (Window->LayerFlags & DWM_WINDOW_FRAME_ALPHA)))
     {
         Result = DwmGpuComposeMaterial(Window,
                                        Slot->Texture,
+                                       !Client && (Window->LayerFlags & DWM_WINDOW_FRAME_ALPHA) != 0,
                                        Geometry.Left,
                                        Geometry.Top,
                                        Geometry.Width,
@@ -1592,6 +1608,12 @@ DwmGpuComposeShutdown(void)
                 pglDeleteProgram(g_materialPrograms[i].Program);
         }
         RtlZeroMemory(g_materialPrograms, sizeof(g_materialPrograms));
+        for (i = 0; i < ARRAYSIZE(g_frameAtlases); ++i)
+        {
+            if (g_frameAtlases[i].Texture != 0)
+                glDeleteTextures(1, &g_frameAtlases[i].Texture);
+        }
+        RtlZeroMemory(g_frameAtlases, sizeof(g_frameAtlases));
         if (g_shadowProgram != 0)
             pglDeleteProgram(g_shadowProgram);
         g_shadowProgram = 0;
@@ -1712,11 +1734,14 @@ static void
 DwmGpuMaterialClientRect(RECT *Client, const DWM_WIN *Window, LONGLONG Left, LONGLONG Top,
                          LONG Width, LONG Height)
 {
-    LONGLONG Right = (LONGLONG)Window->ClientX + Window->ClientWidth;
-    LONGLONG Bottom = (LONGLONG)Window->ClientY + Window->ClientHeight;
-    LONGLONG X = min((LONGLONG)Window->ClientX + Window->BackdropNcExtendLeft, Right);
-    LONGLONG Y = min((LONGLONG)Window->ClientY + Window->BackdropNcExtend, Bottom);
+    RECTL Interior;
+    LONGLONG Right, Bottom, X, Y;
 
+    DwmFrameInterior(Window, &Interior);
+    Right = Interior.right;
+    Bottom = Interior.bottom;
+    X = Interior.left;
+    Y = Interior.top;
     RtlZeroMemory(Client, sizeof(*Client));
     if (Window->BackdropRegion == DWM_BACKDROP_REGION_NONCLIENT && Window->cx > 0 && Window->cy > 0)
     {
@@ -2522,6 +2547,10 @@ DwmGpuComposeBuildMaterial(DWM_GPU_MATERIAL_PROGRAM *Shader, BOOL Interior)
         MAT_CACHE(Brush);
         MAT_CACHE(Colorization);
         MAT_CACHE(Key);
+        MAT_CACHE(Buttons);
+        MAT_CACHE(FrameKey);
+        MAT_CACHE(FrameClient);
+        MAT_CACHE(FrameButtons);
 #undef MAT_CACHE
     }
     return TRUE;
@@ -2568,11 +2597,64 @@ DwmGpuMaterialParts(const DWM_WIN *Window, LONGLONG Left, LONGLONG Top,
     return 5;
 }
 
+static GLuint
+DwmGpuFrameButtons(const DWM_WIN *Window, ULONG Background, RECTL *Bounds)
+{
+    ULONG Signature = DwmFrameButtonSignature(Window, Background);
+    ULONG Index, Oldest = 0;
+    ULONG *Pixels;
+    DWM_GPU_FRAME_ATLAS *Atlas;
+
+    if (!DwmFrameButtonBounds(Window, Bounds))
+        return 0;
+    for (Index = 0; Index < ARRAYSIZE(g_frameAtlases); ++Index)
+    {
+        if (g_frameAtlases[Index].Texture != 0 &&
+            g_frameAtlases[Index].Surface == Window->SurfaceId &&
+            g_frameAtlases[Index].Signature == Signature)
+        {
+            g_frameAtlases[Index].Stamp = ++g_frameAtlasStamp;
+            return g_frameAtlases[Index].Texture;
+        }
+        if (g_frameAtlases[Index].Stamp < g_frameAtlases[Oldest].Stamp)
+            Oldest = Index;
+    }
+
+    Pixels = DwmFrameButtonAtlas(Window, Background, Bounds);
+    if (Pixels == NULL)
+        return 0;
+    Atlas = &g_frameAtlases[Oldest];
+    if (Atlas->Texture == 0)
+        glGenTextures(1, &Atlas->Texture);
+    glBindTexture(GL_TEXTURE_2D, Atlas->Texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Bounds->right - Bounds->left, Bounds->bottom - Bounds->top, 0,
+                 GL_BGRA_EXT, GL_UNSIGNED_BYTE, Pixels);
+    HeapFree(GetProcessHeap(), 0, Pixels);
+    if (glGetError() != GL_NO_ERROR)
+    {
+        glDeleteTextures(1, &Atlas->Texture);
+        RtlZeroMemory(Atlas, sizeof(*Atlas));
+        SetRectEmpty((RECT *)Bounds);
+        return 0;
+    }
+    Atlas->Surface = Window->SurfaceId;
+    Atlas->Signature = Signature;
+    Atlas->Stamp = ++g_frameAtlasStamp;
+    return Atlas->Texture;
+}
+
 static BOOL
-DwmGpuComposeMaterial(const DWM_WIN *Window, GLuint Texture,
+DwmGpuComposeMaterial(const DWM_WIN *Window, GLuint Texture, BOOL Frame,
                        LONGLONG Left, LONGLONG Top, LONG Width, LONG Height, GLfloat Alpha,
                        const RECT *Cover, const RECT *SceneCover)
 {
+    RECTL FrameInterior, ButtonBounds = {0, 0, 0, 0};
+    ULONG FrameKey = 0;
+    GLuint Buttons = 0;
     BOOL Glass = Window->BackdropType == DWM_BACKDROP_TRANSIENT &&
                  Window->BackdropRegion != 0 && Window->BackdropOpacity < 255;
     LONG Radius = DwmGpuMaterialBlurRadius(Window);
@@ -2603,6 +2685,14 @@ DwmGpuComposeMaterial(const DWM_WIN *Window, GLuint Texture,
          !DwmGpuComposeFilterRegion(&Capture, Radius, FALSE, &Output, &Excluded)))
         return FALSE;
 
+    DwmFrameInterior(Window, &FrameInterior);
+    if (Frame)
+    {
+        FrameKey = DwmFrameKey(Window);
+        Buttons = DwmGpuFrameButtons(Window, FrameKey, &ButtonBounds);
+    }
+    pglActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, Buttons != 0 ? Buttons : Texture);
     pglActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, Glass ? g_composeBlurTex : Texture);
     pglActiveTexture(GL_TEXTURE0);
@@ -2633,13 +2723,16 @@ DwmGpuComposeMaterial(const DWM_WIN *Window, GLuint Texture,
             pglUniform1f(Shader->Reflection, DWM_MATERIAL_REFLECT_STRENGTH / 255.0f);
             pglUniform2f(Shader->Size, Window->cx, Window->cy);
             pglUniform2f(Shader->ScreenSize, g_composeWidth, g_composeHeight);
-            pglUniform2f(Shader->ClientMin,
-                          min(Window->ClientX + (LONG)Window->BackdropNcExtendLeft,
-                              Window->ClientX + Window->ClientWidth),
-                          min(Window->ClientY + (LONG)Window->BackdropNcExtend,
-                              Window->ClientY + Window->ClientHeight));
-            pglUniform2f(Shader->ClientMax, Window->ClientX + Window->ClientWidth,
-                          Window->ClientY + Window->ClientHeight);
+            pglUniform2f(Shader->ClientMin, FrameInterior.left, FrameInterior.top);
+            pglUniform2f(Shader->ClientMax, FrameInterior.right, FrameInterior.bottom);
+            pglUniform1i(Shader->Buttons, 2);
+            pglUniform4f(Shader->FrameKey, ((FrameKey >> 16) & 0xFFu) / 255.0f,
+                          ((FrameKey >> 8) & 0xFFu) / 255.0f, (FrameKey & 0xFFu) / 255.0f,
+                          Frame ? 1.0f : 0.0f);
+            pglUniform4f(Shader->FrameClient, Window->ClientX, Window->ClientY,
+                          Window->ClientX + Window->ClientWidth, Window->ClientY + Window->ClientHeight);
+            pglUniform4f(Shader->FrameButtons, ButtonBounds.left, ButtonBounds.top,
+                          ButtonBounds.right, ButtonBounds.bottom);
             pglUniform2f(Shader->CaptureOrigin, Capture.left,
                           g_composeHeight - Capture.bottom);
             pglUniform2f(Shader->CaptureSize, Capture.right - Capture.left,
@@ -2664,6 +2757,8 @@ DwmGpuComposeMaterial(const DWM_WIN *Window, GLuint Texture,
               g_composeDamage.Draw.right - g_composeDamage.Draw.left,
               g_composeDamage.Draw.bottom - g_composeDamage.Draw.top);
     pglUseProgram(0);
+    pglActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
     pglActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);
     pglActiveTexture(GL_TEXTURE0);

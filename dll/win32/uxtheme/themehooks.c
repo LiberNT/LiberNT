@@ -926,7 +926,7 @@ VOID WINAPI
 ThemeDwmFrameChanged(HWND hWnd)
 {
     gabMSGPmessages[WM_PAINT / 8] |= (1 << (WM_PAINT % 8));
-    ThemeDwmRepaintCaptionButtons(hWnd);
+    ThemeDwmUpdateCaptionButtons(hWnd);
 }
 
 BOOL CALLBACK
@@ -967,6 +967,7 @@ ThemeInitApiHook(UAPIHK State, PUSERAPIHOOK puah)
     UAH_HOOK_MESSAGE(puah->DefWndProcArray, WM_NCMOUSEMOVE);
     UAH_HOOK_MESSAGE(puah->DefWndProcArray, WM_NCMOUSELEAVE);
     UAH_HOOK_MESSAGE(puah->DefWndProcArray, WM_NCHITTEST);
+    UAH_HOOK_MESSAGE(puah->DefWndProcArray, WM_GETTITLEBARINFOEX);
     UAH_HOOK_MESSAGE(puah->DefWndProcArray, WM_NCLBUTTONDOWN);
     UAH_HOOK_MESSAGE(puah->DefWndProcArray, WM_NCUAHDRAWCAPTION);
     UAH_HOOK_MESSAGE(puah->DefWndProcArray, WM_NCUAHDRAWFRAME);

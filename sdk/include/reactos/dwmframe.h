@@ -22,7 +22,7 @@
  */
 #pragma once
 
-#define DWM_FRAME_MAGIC   0x354d5744u   /* 'DWM5' (versioned FRONT dirty bounds) */
+#define DWM_FRAME_MAGIC   0x364d5744u
 #define DWM_MAX_WINDOWS    256
 #define DWM_MAX_SURFACES   512          /* every DWM_WIN SurfaceId is below */
 
@@ -234,6 +234,7 @@ typedef struct _DXGK_REDIRECTION_SURFACES_SYNC
 #define DWM_LWA_ALPHA    0x00000002u
 
 /* Compositor-owned attributes carried in the unused high LayerFlags bits. */
+#define DWM_WINDOW_FRAME_ALPHA 0x01000000u
 #define DWM_WINDOW_DX_SCANOUT  0x02000000u /* see DWM_DX_PUBLISH_SCANOUT */
 #define DWM_WINDOW_DX_RETAINED 0x04000000u /* see DWM_DX_PUBLISH_RETAINED */
 #define DWM_WINDOW_DX_PREMULTIPLIED_ALPHA 0x08000000u
@@ -251,6 +252,16 @@ typedef struct _DXGK_REDIRECTION_SURFACES_SYNC
 #define DWM_PROP_CONTENT_BACKDROP     L"ReactOS.Dwm.ContentBackdrop"
 #define DWM_PROP_BACKDROP_NC_EXTEND   L"ReactOS.Dwm.BackdropNcExtend"
 #define DWM_PROP_BACKDROP_NC_EXTEND_LEFT L"ReactOS.Dwm.BackdropNcExtendLeft"
+#define DWM_PROP_BACKDROP_NC_EXTEND_RIGHT L"ReactOS.Dwm.BackdropNcExtendRight"
+#define DWM_PROP_BACKDROP_NC_EXTEND_BOTTOM L"ReactOS.Dwm.BackdropNcExtendBottom"
+#define DWM_PROP_FRAME_ALPHA          L"ReactOS.Dwm.FrameAlpha"
+#define DWM_PROP_CAPTION_CLOSE        L"ReactOS.Dwm.CaptionClose"
+#define DWM_PROP_CAPTION_MAXIMIZE     L"ReactOS.Dwm.CaptionMaximize"
+#define DWM_PROP_CAPTION_MINIMIZE     L"ReactOS.Dwm.CaptionMinimize"
+#define DWM_PROP_CAPTION_ROW          L"ReactOS.Dwm.CaptionRow"
+#define DWM_PROP_CAPTION_STATE        L"ReactOS.Dwm.CaptionState"
+#define DWM_CAPTION_PACK(Low, High) \
+    ((((ULONG)(Low)) & 0xFFFFu) | ((((ULONG)(High)) & 0xFFFFu) << 16))
 #define DWM_PROP_SHEET_OF_GLASS       L"ReactOS.Dwm.SheetOfGlass"
 #define DWM_PROP_FRAME_EXTEND_TOP     L"ReactOS.Dwm.FrameExtendTop"
 #define DWM_PROP_CORNER_RADIUS        L"ReactOS.Dwm.CornerRadius"
@@ -272,6 +283,18 @@ typedef struct _DXGK_REDIRECTION_SURFACES_SYNC
 #define DWM_BACKDROP_MAIN       2u
 #define DWM_BACKDROP_TRANSIENT  3u
 #define DWM_BACKDROP_TABBED     4u
+
+#define DWM_CAPTION_BUTTON_CLOSE    0u
+#define DWM_CAPTION_BUTTON_MAXIMIZE 1u
+#define DWM_CAPTION_BUTTON_MINIMIZE 2u
+#define DWM_CAPTION_BUTTONS         3u
+
+#define DWM_CAPTION_STATE_HOT(Button)      (1u << (Button))
+#define DWM_CAPTION_STATE_PRESSED(Button)  (1u << ((Button) + 3))
+#define DWM_CAPTION_STATE_DISABLED(Button) (1u << ((Button) + 6))
+#define DWM_CAPTION_STATE_RESTORE          0x00000200u
+#define DWM_CAPTION_STATE_TOOLWINDOW       0x00000400u
+#define DWM_CAPTION_STATE_VALID            0x80000000u
 
 #define DWM_BACKDROP_REGION_NONCLIENT 1u
 #define DWM_BACKDROP_REGION_WINDOW    2u
@@ -351,6 +374,10 @@ typedef struct _DWM_WIN
     ULONGLONG BasePreviousUpdateId;
     RECTL BaseDirtyRect;
     RECTL DxClip;
+    ULONG BackdropNcExtendRight;
+    ULONG BackdropNcExtendBottom;
+    RECTL CaptionButtons[DWM_CAPTION_BUTTONS];
+    ULONG CaptionState;
 } DWM_WIN, *PDWM_WIN;
 
 typedef struct _DWM_FRAME_HEADER
