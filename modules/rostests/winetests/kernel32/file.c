@@ -41,7 +41,9 @@
 #include "fileapi.h"
 #include "native_machine.h"
 
+#ifndef __REACTOS__
 #undef DeleteFile  /* needed for FILE_DISPOSITION_INFO */
+#endif
 
 static HANDLE (WINAPI *pFindFirstFileExA)(LPCSTR,FINDEX_INFO_LEVELS,LPVOID,FINDEX_SEARCH_OPS,LPVOID,DWORD);
 static BOOL (WINAPI *pReplaceFileW)(LPCWSTR, LPCWSTR, LPCWSTR, DWORD, LPVOID, LPVOID);
