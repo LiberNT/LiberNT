@@ -166,7 +166,6 @@ LsapHandlePortConnection(PLSA_API_MSG RequestMsg)
     PLSAP_LOGON_CONTEXT LogonContext = NULL;
     HANDLE ConnectionHandle = NULL;
     BOOLEAN Accept;
-    REMOTE_PORT_VIEW RemotePortView;
     NTSTATUS Status = STATUS_SUCCESS;
 
     TRACE("LsapHandlePortConnection(%p)\n", RequestMsg);
@@ -192,16 +191,18 @@ LsapHandlePortConnection(PLSA_API_MSG RequestMsg)
         Accept = FALSE;
     }
 
-    RemotePortView.Length = sizeof(REMOTE_PORT_VIEW);
-    Status = NtAcceptConnectPort(&ConnectionHandle,
-                                 (PVOID*)LogonContext,
-                                 &RequestMsg->h,
-                                 Accept,
-                                 NULL,
-                                 &RemotePortView);
+    Status = NtAlpcAcceptConnectPort(&ConnectionHandle,
+                                     AuthPortHandle,
+                                     0,
+                                     NULL,
+                                     NULL,
+                                     LogonContext,
+                                     &RequestMsg->h,
+                                     NULL,
+                                     Accept);
     if (!NT_SUCCESS(Status))
     {
-        ERR("NtAcceptConnectPort failed (Status 0x%lx)\n", Status);
+        ERR("NtAlpcAcceptConnectPort failed (Status 0x%lx)\n", Status);
         return Status;
     }
 
@@ -213,13 +214,6 @@ LsapHandlePortConnection(PLSA_API_MSG RequestMsg)
 
             InsertHeadList(&LsapLogonContextList,
                            &LogonContext->Entry);
-        }
-
-        Status = NtCompleteConnectPort(ConnectionHandle);
-        if (!NT_SUCCESS(Status))
-        {
-            ERR("NtCompleteConnectPort failed (Status 0x%lx)\n", Status);
-            return Status;
         }
     }
 
@@ -234,6 +228,12 @@ AuthPortThreadRoutine(PVOID Param)
     PLSA_API_MSG ReplyMsg = NULL;
     LSA_API_MSG RequestMsg;
     NTSTATUS Status;
+    SIZE_T BufferLength;
+    struct
+    {
+        ALPC_MESSAGE_ATTRIBUTES Header;
+        ALPC_CONTEXT_ATTR Context;
+    } ReceiveAttributes;
 
     TRACE("AuthPortThreadRoutine() called\n");
 
@@ -242,19 +242,33 @@ AuthPortThreadRoutine(PVOID Param)
     for (;;)
     {
         TRACE("Reply: %p\n", ReplyMsg);
-        Status = NtReplyWaitReceivePort(AuthPortHandle,
-                                        (PVOID*)&LogonContext,
-                                        (PPORT_MESSAGE)ReplyMsg,
-                                        (PPORT_MESSAGE)&RequestMsg);
+        ReceiveAttributes.Header.AllocatedAttributes = ALPC_MESSAGE_CONTEXT_ATTRIBUTE;
+        ReceiveAttributes.Header.ValidAttributes = 0;
+        BufferLength = sizeof(RequestMsg);
+        Status = NtAlpcSendWaitReceivePort(AuthPortHandle,
+                                           ReplyMsg ? ALPC_MSGFLG_REPLY_MESSAGE : 0,
+                                           (PPORT_MESSAGE)ReplyMsg,
+                                           NULL,
+                                           (PPORT_MESSAGE)&RequestMsg,
+                                           &BufferLength,
+                                           &ReceiveAttributes.Header,
+                                           NULL);
         if (!NT_SUCCESS(Status))
         {
-            TRACE("NtReplyWaitReceivePort() failed (Status %lx)\n", Status);
-            break;
+            TRACE("NtAlpcSendWaitReceivePort() failed (Status %lx)\n", Status);
+            if (ReplyMsg == NULL)
+                break;
+            ReplyMsg = NULL;
+            continue;
         }
+
+        LogonContext = NULL;
+        if (ReceiveAttributes.Header.ValidAttributes & ALPC_MESSAGE_CONTEXT_ATTRIBUTE)
+            LogonContext = ReceiveAttributes.Context.PortContext;
 
         TRACE("Received message\n");
 
-        switch (RequestMsg.h.u2.s2.Type)
+        switch (RequestMsg.h.u2.s2.Type & ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE))
         {
             case LPC_CONNECTION_REQUEST:
                 TRACE("Port connection request\n");
@@ -287,8 +301,14 @@ AuthPortThreadRoutine(PVOID Param)
 
                         ReplyMsg = &RequestMsg;
                         RequestMsg.Status = STATUS_SUCCESS;
-                        NtReplyPort(AuthPortHandle,
-                                    &ReplyMsg->h);
+                        NtAlpcSendWaitReceivePort(AuthPortHandle,
+                                                  ALPC_MSGFLG_REPLY_MESSAGE,
+                                                  &ReplyMsg->h,
+                                                  NULL,
+                                                  NULL,
+                                                  NULL,
+                                                  NULL,
+                                                  NULL);
 
                         LsapDeregisterLogonProcess(&RequestMsg,
                                                    LogonContext);
@@ -343,6 +363,7 @@ StartAuthenticationPort(VOID)
     static SECURITY_DESCRIPTOR AuthPortSd;
     static PACL AuthPortSacl;
     OBJECT_ATTRIBUTES ObjectAttributes;
+    ALPC_PORT_ATTRIBUTES PortAttributes;
     UNICODE_STRING PortName;
     DWORD ThreadId;
     UNICODE_STRING EventName;
@@ -382,14 +403,17 @@ StartAuthenticationPort(VOID)
                                NULL,
                                &AuthPortSd);
 
-    Status = NtCreatePort(&AuthPortHandle,
-                          &ObjectAttributes,
-                          sizeof(LSA_CONNECTION_INFO),
-                          sizeof(LSA_API_MSG),
-                          sizeof(LSA_API_MSG) * 32);
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.Flags = ALPC_PORFLG_ALLOW_IMPERSONATION;
+    PortAttributes.MaxMessageLength = sizeof(LSA_API_MSG);
+    PortAttributes.MaxPoolUsage = sizeof(LSA_API_MSG) * 32;
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    Status = NtAlpcCreatePort(&AuthPortHandle, &ObjectAttributes, &PortAttributes);
     if (!NT_SUCCESS(Status))
     {
-        WARN("NtCreatePort() failed (Status %lx)\n", Status);
+        WARN("NtAlpcCreatePort() failed (Status %lx)\n", Status);
         return Status;
     }
 

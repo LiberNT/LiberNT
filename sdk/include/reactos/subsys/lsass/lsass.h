@@ -205,4 +205,16 @@ typedef struct _LSA_API_MSG
 #define LSA_PORT_DATA_SIZE(c)     (sizeof(ULONG)+sizeof(NTSTATUS)+sizeof(c))
 #define LSA_PORT_MESSAGE_SIZE     (sizeof(LSA_API_MSG))
 
+NTSTATUS
+NTAPI
+LsapClientConnect(
+    _Out_ PHANDLE PortHandle,
+    _Inout_ PLSA_CONNECTION_INFO ConnectInfo);
+
+NTSTATUS
+NTAPI
+LsapClientCall(
+    _In_ HANDLE PortHandle,
+    _Inout_ PLSA_API_MSG ApiMessage);
+
 #endif /* __INCLUDE_LSASS_LSASS_H */

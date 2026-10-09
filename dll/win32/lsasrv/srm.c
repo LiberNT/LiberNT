@@ -51,45 +51,44 @@ LsapRmServerThread(
 {
     LSAP_RM_API_MESSAGE Message;
     PPORT_MESSAGE ReplyMessage;
-    REMOTE_PORT_VIEW RemotePortView;
     HANDLE MessagePort, DummyPortHandle;
+    SIZE_T BufferLength;
+    ULONG MessageType;
     NTSTATUS Status;
 
-    /* Initialize the port message */
-    Message.Header.u1.s1.TotalLength = sizeof(Message);
-    Message.Header.u1.s1.DataLength = 0;
-
     /* Listen on the LSA command port */
-    Status = NtListenPort(SeLsaCommandPort, &Message.Header);
+    do
+    {
+        BufferLength = sizeof(Message);
+        Status = NtAlpcSendWaitReceivePort(SeLsaCommandPort,
+                                           0,
+                                           NULL,
+                                           NULL,
+                                           &Message.Header,
+                                           &BufferLength,
+                                           NULL,
+                                           NULL);
+    } while (NT_SUCCESS(Status) &&
+             ((Message.Header.u2.s2.Type & ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE)) != LPC_CONNECTION_REQUEST));
     if (!NT_SUCCESS(Status))
     {
         ERR("LsapRmServerThread - Port Listen failed 0x%lx\n", Status);
         return Status;
     }
 
-    /* Setup the Port View Structure */
-    RemotePortView.Length = sizeof(REMOTE_PORT_VIEW);
-    RemotePortView.ViewSize = 0;
-    RemotePortView.ViewBase = NULL;
-
     /* Accept the connection */
-    Status = NtAcceptConnectPort(&MessagePort,
-                                 0,
-                                 &Message.Header,
-                                 TRUE,
-                                 NULL,
-                                 &RemotePortView);
+    Status = NtAlpcAcceptConnectPort(&MessagePort,
+                                     SeLsaCommandPort,
+                                     0,
+                                     NULL,
+                                     NULL,
+                                     NULL,
+                                     &Message.Header,
+                                     NULL,
+                                     TRUE);
     if (!NT_SUCCESS(Status))
     {
         ERR("LsapRmServerThread - Port Accept Connect failed 0x%lx\n", Status);
-        return Status;
-    }
-
-    /* Complete the connection */
-    Status = NtCompleteConnectPort(MessagePort);
-    if (!NT_SUCCESS(Status))
-    {
-        ERR("LsapRmServerThread - Port Complete Connect failed 0x%lx\n", Status);
         return Status;
     }
 
@@ -100,27 +99,39 @@ LsapRmServerThread(
     while (TRUE)
     {
         /* Wait for a message */
-        Status = NtReplyWaitReceivePort(MessagePort,
-                                        NULL,
-                                        ReplyMessage,
-                                        &Message.Header);
+        BufferLength = sizeof(Message);
+        Status = NtAlpcSendWaitReceivePort(MessagePort,
+                                           ReplyMessage ? ALPC_MSGFLG_REPLY_MESSAGE : 0,
+                                           ReplyMessage,
+                                           NULL,
+                                           &Message.Header,
+                                           &BufferLength,
+                                           NULL,
+                                           NULL);
         if (!NT_SUCCESS(Status))
         {
             ERR("LsapRmServerThread - Failed to get message: 0x%lx\n", Status);
+            if (!ReplyMessage) return Status;
             ReplyMessage = NULL;
             continue;
         }
 
+        MessageType = Message.Header.u2.s2.Type &
+                      ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE);
+
         /* Check if this is a connection request */
-        if (Message.Header.u2.s2.Type == LPC_CONNECTION_REQUEST)
+        if (MessageType == LPC_CONNECTION_REQUEST)
         {
             /* Reject connection request */
-            NtAcceptConnectPort(&DummyPortHandle,
-                                NULL,
-                                &Message.Header,
-                                FALSE,
-                                NULL,
-                                NULL);
+            NtAlpcAcceptConnectPort(&DummyPortHandle,
+                                    SeLsaCommandPort,
+                                    0,
+                                    NULL,
+                                    NULL,
+                                    NULL,
+                                    &Message.Header,
+                                    NULL,
+                                    FALSE);
 
             /* Start over */
             ReplyMessage = NULL;
@@ -128,7 +139,7 @@ LsapRmServerThread(
         }
 
         /* Check if this is an actual request */
-        if (Message.Header.u2.s2.Type == LPC_REQUEST)
+        if (MessageType == LPC_REQUEST)
         {
             ReplyMessage = &Message.Header;
 
@@ -168,7 +179,7 @@ LsapRmInitializeServer(VOID)
 {
     UNICODE_STRING Name;
     OBJECT_ATTRIBUTES ObjectAttributes;
-    SECURITY_QUALITY_OF_SERVICE SecurityQos;
+    ALPC_PORT_ATTRIBUTES PortAttributes;
     HANDLE InitEvent;
     HANDLE ThreadHandle;
     DWORD ThreadId;
@@ -177,11 +188,13 @@ LsapRmInitializeServer(VOID)
     /* Create the LSA command port */
     RtlInitUnicodeString(&Name, L"\\SeLsaCommandPort");
     InitializeObjectAttributes(&ObjectAttributes, &Name, 0, NULL, NULL);
-    Status = NtCreatePort(&SeLsaCommandPort,
-                          &ObjectAttributes,
-                          0,
-                          PORT_MAXIMUM_MESSAGE_LENGTH,
-                          2 * PAGE_SIZE);
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.MaxMessageLength = PORT_MAXIMUM_MESSAGE_LENGTH;
+    PortAttributes.MaxPoolUsage = 2 * PAGE_SIZE;
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    Status = NtAlpcCreatePort(&SeLsaCommandPort, &ObjectAttributes, &PortAttributes);
     if (!NT_SUCCESS(Status))
     {
         ERR("LsapRmInitializeServer - Port Create failed 0x%lx\n", Status);
@@ -207,20 +220,26 @@ LsapRmInitializeServer(VOID)
     }
 
     /* Setup the QoS structure */
-    SecurityQos.ImpersonationLevel = SecurityIdentification;
-    SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
-    SecurityQos.EffectiveOnly = TRUE;
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.MaxMessageLength = PORT_MAXIMUM_MESSAGE_LENGTH;
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    PortAttributes.SecurityQos.EffectiveOnly = TRUE;
 
     /* Connect to the kernel server */
     RtlInitUnicodeString(&Name, L"\\SeRmCommandPort");
-    Status = NtConnectPort(&SeRmCommandPort,
-                           &Name,
-                           &SecurityQos,
-                           NULL,
-                           NULL,
-                           NULL,
-                           NULL,
-                           NULL);
+    Status = NtAlpcConnectPort(&SeRmCommandPort,
+                               &Name,
+                               NULL,
+                               &PortAttributes,
+                               ALPC_SYNC_CONNECTION,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL);
     if (!NT_SUCCESS(Status))
     {
         ERR("LsapRmInitializeServer - Connect to Rm Command Port failed 0x%lx\n", Status);
@@ -247,11 +266,12 @@ LsapRmCreateLogonSession(
 {
     SEP_RM_API_MESSAGE RequestMessage;
     SEP_RM_API_MESSAGE ReplyMessage;
+    SIZE_T BufferLength;
     NTSTATUS Status;
 
     TRACE("LsapRmCreateLogonSession(%p)\n", LogonId);
 
-    RequestMessage.Header.u2.ZeroInit = 0;
+    RtlZeroMemory(&RequestMessage.Header, sizeof(RequestMessage.Header));
     RequestMessage.Header.u1.s1.TotalLength =
         (CSHORT)(sizeof(PORT_MESSAGE) + sizeof(ULONG) + sizeof(LUID));
     RequestMessage.Header.u1.s1.DataLength =
@@ -270,9 +290,15 @@ LsapRmCreateLogonSession(
 
     ReplyMessage.u.ResultStatus = STATUS_SUCCESS;
 
-    Status = NtRequestWaitReplyPort(SeRmCommandPort,
-                                    (PPORT_MESSAGE)&RequestMessage,
-                                    (PPORT_MESSAGE)&ReplyMessage);
+    BufferLength = sizeof(ReplyMessage);
+    Status = NtAlpcSendWaitReceivePort(SeRmCommandPort,
+                                       ALPC_MSGFLG_SYNC_REQUEST,
+                                       (PPORT_MESSAGE)&RequestMessage,
+                                       NULL,
+                                       (PPORT_MESSAGE)&ReplyMessage,
+                                       &BufferLength,
+                                       NULL,
+                                       NULL);
     if (NT_SUCCESS(Status))
     {
         Status = ReplyMessage.u.ResultStatus;
@@ -287,11 +313,12 @@ LsapRmDeleteLogonSession(
 {
     SEP_RM_API_MESSAGE RequestMessage;
     SEP_RM_API_MESSAGE ReplyMessage;
+    SIZE_T BufferLength;
     NTSTATUS Status;
 
     TRACE("LsapRmDeleteLogonSession(%p)\n", LogonId);
 
-    RequestMessage.Header.u2.ZeroInit = 0;
+    RtlZeroMemory(&RequestMessage.Header, sizeof(RequestMessage.Header));
     RequestMessage.Header.u1.s1.TotalLength =
         (CSHORT)(sizeof(PORT_MESSAGE) + sizeof(ULONG) + sizeof(LUID));
     RequestMessage.Header.u1.s1.DataLength =
@@ -310,9 +337,15 @@ LsapRmDeleteLogonSession(
 
     ReplyMessage.u.ResultStatus = STATUS_SUCCESS;
 
-    Status = NtRequestWaitReplyPort(SeRmCommandPort,
-                                    (PPORT_MESSAGE)&RequestMessage,
-                                    (PPORT_MESSAGE)&ReplyMessage);
+    BufferLength = sizeof(ReplyMessage);
+    Status = NtAlpcSendWaitReceivePort(SeRmCommandPort,
+                                       ALPC_MSGFLG_SYNC_REQUEST,
+                                       (PPORT_MESSAGE)&RequestMessage,
+                                       NULL,
+                                       (PPORT_MESSAGE)&ReplyMessage,
+                                       &BufferLength,
+                                       NULL,
+                                       NULL);
     if (NT_SUCCESS(Status))
     {
         Status = ReplyMessage.u.ResultStatus;

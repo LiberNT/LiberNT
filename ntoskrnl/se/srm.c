@@ -46,10 +46,6 @@ extern LUID SeAnonymousAuthenticationId;
 HANDLE SeRmCommandPort;
 HANDLE SeLsaInitEvent;
 
-PVOID SepCommandPortViewBase;
-PVOID SepCommandPortViewRemoteBase;
-ULONG_PTR SepCommandPortViewBaseOffset;
-
 static HANDLE SepRmCommandMessagePort;
 
 BOOLEAN SepAdtAuditingEnabled;
@@ -213,17 +209,20 @@ SeRmInitPhase1(VOID)
 {
     UNICODE_STRING Name;
     OBJECT_ATTRIBUTES ObjectAttributes;
+    ALPC_PORT_ATTRIBUTES PortAttributes;
     HANDLE ThreadHandle;
     NTSTATUS Status;
 
     /* Create the SeRm command port */
     RtlInitUnicodeString(&Name, L"\\SeRmCommandPort");
     InitializeObjectAttributes(&ObjectAttributes, &Name, 0, NULL, NULL);
-    Status = ZwCreatePort(&SeRmCommandPort,
-                          &ObjectAttributes,
-                          sizeof(ULONG),
-                          PORT_MAXIMUM_MESSAGE_LENGTH,
-                          2 * PAGE_SIZE);
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.MaxMessageLength = PORT_MAXIMUM_MESSAGE_LENGTH;
+    PortAttributes.MaxPoolUsage = 2 * PAGE_SIZE;
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    Status = ZwAlpcCreatePort(&SeRmCommandPort, &ObjectAttributes, &PortAttributes);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Security: Rm Command Port creation failed: 0x%lx\n", Status);
@@ -1074,18 +1073,14 @@ BOOLEAN
 NTAPI
 SepRmCommandServerThreadInit(VOID)
 {
-    SECURITY_QUALITY_OF_SERVICE SecurityQos;
+    ALPC_PORT_ATTRIBUTES PortAttributes;
     SEP_RM_API_MESSAGE Message;
     UNICODE_STRING PortName;
-    REMOTE_PORT_VIEW RemotePortView;
-    PORT_VIEW PortView;
-    LARGE_INTEGER SectionSize;
-    HANDLE SectionHandle;
+    SIZE_T BufferLength;
     HANDLE PortHandle;
     NTSTATUS Status;
     BOOLEAN Result;
 
-    SectionHandle = NULL;
     PortHandle = NULL;
 
     /* Assume success */
@@ -1102,92 +1097,68 @@ SepRmCommandServerThreadInit(VOID)
     /* We don't need this event anymore */
     ObCloseHandle(SeLsaInitEvent, KernelMode);
 
-    /* Initialize the connection message */
-    Message.Header.u1.s1.TotalLength = sizeof(Message);
-    Message.Header.u1.s1.DataLength = 0;
-
     /* Only LSASS can connect, so handle the connection right now */
-    Status = ZwListenPort(SeRmCommandPort, &Message.Header);
+    do
+    {
+        BufferLength = sizeof(Message);
+        Status = ZwAlpcSendWaitReceivePort(SeRmCommandPort,
+                                           0,
+                                           NULL,
+                                           NULL,
+                                           &Message.Header,
+                                           &BufferLength,
+                                           NULL,
+                                           NULL);
+    } while (NT_SUCCESS(Status) &&
+             ((Message.Header.u2.s2.Type & ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE)) != LPC_CONNECTION_REQUEST));
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Security Rm Init: Listen to Command Port failed 0x%lx\n", Status);
         goto Cleanup;
     }
 
-    /* Set the Port View structure length */
-    RemotePortView.Length = sizeof(RemotePortView);
-
     /* Accept the connection */
-    Status = ZwAcceptConnectPort(&SepRmCommandMessagePort,
-                                 NULL,
-                                 &Message.Header,
-                                 TRUE,
-                                 NULL,
-                                 &RemotePortView);
+    Status = ZwAlpcAcceptConnectPort(&SepRmCommandMessagePort,
+                                     SeRmCommandPort,
+                                     0,
+                                     NULL,
+                                     NULL,
+                                     NULL,
+                                     &Message.Header,
+                                     NULL,
+                                     TRUE);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Security Rm Init: Accept Connect to Command Port failed 0x%lx\n", Status);
         goto Cleanup;
     }
 
-    /* Complete the connection */
-    Status = ZwCompleteConnectPort(SepRmCommandMessagePort);
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("Security Rm Init: Complete Connect to Command Port failed 0x%lx\n", Status);
-        goto Cleanup;
-    }
-
-    /* Create a section for messages */
-    SectionSize.QuadPart = PAGE_SIZE;
-    Status = ZwCreateSection(&SectionHandle,
-                             SECTION_ALL_ACCESS,
-                             NULL,
-                             &SectionSize,
-                             PAGE_READWRITE,
-                             SEC_COMMIT,
-                             NULL);
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("Security Rm Init: Create Memory Section for LSA port failed: 0x%lx\n", Status);
-        goto Cleanup;
-    }
-
-    /* Setup the PORT_VIEW structure */
-    PortView.Length = sizeof(PortView);
-    PortView.SectionHandle = SectionHandle;
-    PortView.SectionOffset = 0;
-    PortView.ViewSize = SectionSize.LowPart;
-    PortView.ViewBase = NULL;
-    PortView.ViewRemoteBase = NULL;
-
     /* Setup security QOS */
-    SecurityQos.Length = sizeof(SecurityQos);
-    SecurityQos.ImpersonationLevel = SecurityImpersonation;
-    SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
-    SecurityQos.EffectiveOnly = TRUE;
+    RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+    PortAttributes.MaxMessageLength = PORT_MAXIMUM_MESSAGE_LENGTH;
+    PortAttributes.SecurityQos.Length = sizeof(PortAttributes.SecurityQos);
+    PortAttributes.SecurityQos.ImpersonationLevel = SecurityImpersonation;
+    PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    PortAttributes.SecurityQos.EffectiveOnly = TRUE;
 
     /* Connect to LSASS */
     RtlInitUnicodeString(&PortName, L"\\SeLsaCommandPort");
-    Status = ZwConnectPort(&PortHandle,
-                           &PortName,
-                           &SecurityQos,
-                           &PortView,
-                           NULL,
-                           0,
-                           0,
-                           0);
+    Status = ZwAlpcConnectPort(&PortHandle,
+                               &PortName,
+                               NULL,
+                               &PortAttributes,
+                               ALPC_SYNC_CONNECTION,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Security Rm Init: Connect to LSA Port failed 0x%lx\n", Status);
         goto Cleanup;
     }
-
-    /* Remember section base and view offset */
-    SepCommandPortViewBase = PortView.ViewBase;
-    SepCommandPortViewRemoteBase = PortView.ViewRemoteBase;
-    SepCommandPortViewBaseOffset = (ULONG_PTR)SepCommandPortViewRemoteBase -
-                                   (ULONG_PTR)SepCommandPortViewBase;
 
     DPRINT("SepRmCommandServerThreadInit: done\n");
 
@@ -1201,12 +1172,6 @@ Cleanup:
         }
 
         Result = FALSE;
-    }
-
-    /* Did we create a section? */
-    if (SectionHandle != NULL)
-    {
-        ObCloseHandle(SectionHandle, KernelMode);
     }
 
     return Result;
@@ -1229,6 +1194,8 @@ SepRmCommandServerThread(
     SEP_RM_API_MESSAGE Message;
     PPORT_MESSAGE ReplyMessage;
     HANDLE DummyPortHandle;
+    SIZE_T BufferLength;
+    ULONG MessageType;
     NTSTATUS Status;
 
     /* Initialize the server thread */
@@ -1245,27 +1212,39 @@ SepRmCommandServerThread(
     while (TRUE)
     {
         /* Wait for a message */
-        Status = ZwReplyWaitReceivePort(SepRmCommandMessagePort,
-                                        NULL,
-                                        ReplyMessage,
-                                        &Message.Header);
+        BufferLength = sizeof(Message);
+        Status = ZwAlpcSendWaitReceivePort(SepRmCommandMessagePort,
+                                           ReplyMessage ? ALPC_MSGFLG_REPLY_MESSAGE : 0,
+                                           ReplyMessage,
+                                           NULL,
+                                           &Message.Header,
+                                           &BufferLength,
+                                           NULL,
+                                           NULL);
         if (!NT_SUCCESS(Status))
         {
             DPRINT1("Failed to get message: 0x%lx\n", Status);
+            if (!ReplyMessage) break;
             ReplyMessage = NULL;
             continue;
         }
 
+        MessageType = Message.Header.u2.s2.Type &
+                      ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE);
+
         /* Check if this is a connection request */
-        if (Message.Header.u2.s2.Type == LPC_CONNECTION_REQUEST)
+        if (MessageType == LPC_CONNECTION_REQUEST)
         {
             /* Reject connection request */
-            ZwAcceptConnectPort(&DummyPortHandle,
-                                NULL,
-                                &Message.Header,
-                                FALSE,
-                                NULL,
-                                NULL);
+            ZwAlpcAcceptConnectPort(&DummyPortHandle,
+                                    SeRmCommandPort,
+                                    0,
+                                    NULL,
+                                    NULL,
+                                    NULL,
+                                    &Message.Header,
+                                    NULL,
+                                    FALSE);
 
             /* Start over */
             ReplyMessage = NULL;
@@ -1273,15 +1252,15 @@ SepRmCommandServerThread(
         }
 
         /* Check if the port died */
-        if ((Message.Header.u2.s2.Type == LPC_PORT_CLOSED) ||
-            (Message.Header.u2.s2.Type == LPC_CLIENT_DIED))
+        if ((MessageType == LPC_PORT_CLOSED) ||
+            (MessageType == LPC_CLIENT_DIED))
         {
             /* LSASS is dead, so let's quit as well */
             break;
         }
 
         /* Check if this is an actual request */
-        if (Message.Header.u2.s2.Type != LPC_REQUEST)
+        if (MessageType != LPC_REQUEST)
         {
             DPRINT1("SepRmCommandServerThread: unexpected message type: 0x%x\n",
                     Message.Header.u2.s2.Type);
