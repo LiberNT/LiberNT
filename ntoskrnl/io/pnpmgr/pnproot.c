@@ -1054,8 +1054,6 @@ PnpRootFdoPnpControl(
             break;
 
         default:
-            // The root device object can receive only IRP_MN_QUERY_DEVICE_RELATIONS
-            ASSERT(FALSE);
             DPRINT("IRP_MJ_PNP / Unknown minor function 0x%lx\n", IrpSp->MinorFunction);
             break;
     }
