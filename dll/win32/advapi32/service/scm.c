@@ -2013,10 +2013,10 @@ LockServiceDatabase(SC_HANDLE hSCManager)
     }
     RpcEndExcept;
 
+    SetLastError(dwError);
     if (dwError != ERROR_SUCCESS)
     {
         TRACE("RLockServiceDatabase() failed (Error %lu)\n", dwError);
-        SetLastError(dwError);
         return NULL;
     }
 

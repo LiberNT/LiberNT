@@ -11,6 +11,8 @@
 #include "services.h"
 
 #include <time.h>
+#include <winnls.h>
+#include <lmcons.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -23,6 +25,58 @@ static PSTART_LOCK pServiceStartLock = NULL;
 
 /* FUNCTIONS *****************************************************************/
 
+static
+BOOL
+ScmGetClientAccountName(OUT LPWSTR Owner,
+                        IN DWORD OwnerLength)
+{
+    WCHAR Name[UNLEN + 1], Domain[MAX_PATH], Computer[MAX_COMPUTERNAME_LENGTH + 1];
+    BYTE Buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    PTOKEN_USER User = (PTOKEN_USER)Buffer;
+    DWORD NameLength = RTL_NUMBER_OF(Name);
+    DWORD DomainLength = RTL_NUMBER_OF(Domain);
+    DWORD ComputerLength = RTL_NUMBER_OF(Computer);
+    DWORD Length;
+    SID_NAME_USE Use;
+    HANDLE Token;
+    BOOL Success;
+
+    if (RpcImpersonateClient(NULL) != RPC_S_OK)
+        return FALSE;
+
+    Success = OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &Token);
+    RpcRevertToSelf();
+    if (!Success)
+        return FALSE;
+
+    Success = GetTokenInformation(Token, TokenUser, User, sizeof(Buffer), &Length);
+    CloseHandle(Token);
+    if (!Success)
+        return FALSE;
+
+    if (!LookupAccountSidW(NULL,
+                           User->User.Sid,
+                           Name,
+                           &NameLength,
+                           Domain,
+                           &DomainLength,
+                           &Use))
+    {
+        return FALSE;
+    }
+
+    if (GetComputerNameW(Computer, &ComputerLength) && _wcsicmp(Domain, Computer) == 0)
+        wcscpy(Domain, L".");
+
+    if (wcslen(Domain) + wcslen(Name) + 2 > OwnerLength)
+        return FALSE;
+
+    wcscpy(Owner, Domain);
+    wcscat(Owner, L"\\");
+    wcscat(Owner, Name);
+    return TRUE;
+}
+
 /*
  * NOTE: IsServiceController is TRUE if locked by the
  * Service Control Manager, and FALSE otherwise.
@@ -31,10 +85,15 @@ DWORD
 ScmAcquireServiceStartLock(IN BOOL IsServiceController,
                            OUT LPSC_RPC_LOCK lpLock)
 {
+    WCHAR Owner[UNLEN + MAX_PATH + 2];
     DWORD dwRequiredSize;
     DWORD dwError = ERROR_SUCCESS;
 
     *lpLock = NULL;
+    Owner[0] = UNICODE_NULL;
+
+    if (!IsServiceController && !ScmGetClientAccountName(Owner, RTL_NUMBER_OF(Owner)))
+        Owner[0] = UNICODE_NULL;
 
     /* Lock the service database exclusively */
     ScmLockDatabaseExclusive();
@@ -46,12 +105,8 @@ ScmAcquireServiceStartLock(IN BOOL IsServiceController,
     }
 
     /* Allocate a new lock for the database */
-    dwRequiredSize = sizeof(START_LOCK);
-
-    if (!IsServiceController)
-    {
-        /* FIXME: dwRequiredSize += RtlLengthSid(UserSid <-- to be retrieved); */
-    }
+    dwRequiredSize = FIELD_OFFSET(START_LOCK, LockOwner) +
+                     (DWORD)(wcslen(Owner) + 1) * sizeof(WCHAR);
 
     pServiceStartLock = HeapAlloc(GetProcessHeap(),
                                   HEAP_ZERO_MEMORY,
@@ -64,9 +119,7 @@ ScmAcquireServiceStartLock(IN BOOL IsServiceController,
 
     pServiceStartLock->Tag = LOCK_TAG;
     pServiceStartLock->TimeWhenLocked = (DWORD)time(NULL);
-
-    /* FIXME: Retrieve the owner SID. Use IsServiceController. */
-    pServiceStartLock->LockOwnerSid   = (PSID)NULL;
+    wcscpy(pServiceStartLock->LockOwner, Owner);
 
     *lpLock = (LPSC_RPC_LOCK)pServiceStartLock;
 
@@ -120,70 +173,113 @@ ScmReleaseServiceStartLock(IN OUT LPSC_RPC_LOCK lpLock)
 /*
  * Helper functions for RQueryServiceLockStatusW() and
  * RQueryServiceLockStatusA().
- * We suppose that lpLockStatus points to a valid
- * well-sized buffer.
  */
-VOID
-ScmQueryServiceLockStatusW(OUT LPQUERY_SERVICE_LOCK_STATUSW lpLockStatus)
+DWORD
+ScmQueryServiceLockStatusW(OUT LPQUERY_SERVICE_LOCK_STATUSW lpLockStatus,
+                           IN DWORD cbBufSize,
+                           OUT LPDWORD pcbBytesNeeded)
 {
+    LPCWSTR Owner = L"";
+    DWORD dwRequiredSize;
+    DWORD dwError = ERROR_SUCCESS;
+
     /* Lock the service database shared */
     ScmLockDatabaseShared();
 
     if (pServiceStartLock != NULL)
+        Owner = pServiceStartLock->LockOwner;
+
+    dwRequiredSize = sizeof(QUERY_SERVICE_LOCK_STATUSW) +
+                     (DWORD)(wcslen(Owner) + 1) * sizeof(WCHAR);
+    *pcbBytesNeeded = dwRequiredSize;
+
+    if (cbBufSize < dwRequiredSize)
+    {
+        dwError = ERROR_INSUFFICIENT_BUFFER;
+        goto done;
+    }
+
+    wcscpy((LPWSTR)(lpLockStatus + 1), Owner);
+    lpLockStatus->lpLockOwner = (LPWSTR)(ULONG_PTR)sizeof(QUERY_SERVICE_LOCK_STATUSW);
+
+    if (pServiceStartLock != NULL)
     {
         lpLockStatus->fIsLocked = TRUE;
-
-        /* FIXME: Retrieve the owner name. */
-        lpLockStatus->lpLockOwner = NULL;
-
         lpLockStatus->dwLockDuration = (DWORD)time(NULL) - pServiceStartLock->TimeWhenLocked;
     }
     else
     {
         lpLockStatus->fIsLocked = FALSE;
-
-        wcscpy((LPWSTR)(lpLockStatus + 1), L"");
-        lpLockStatus->lpLockOwner = (LPWSTR)(ULONG_PTR)sizeof(QUERY_SERVICE_LOCK_STATUSW);
-
         lpLockStatus->dwLockDuration = 0;
     }
 
+done:
     /* Unlock the service database */
     ScmUnlockDatabase();
 
-    return;
+    return dwError;
 }
 
 
-VOID
-ScmQueryServiceLockStatusA(OUT LPQUERY_SERVICE_LOCK_STATUSA lpLockStatus)
+DWORD
+ScmQueryServiceLockStatusA(OUT LPQUERY_SERVICE_LOCK_STATUSA lpLockStatus,
+                           IN DWORD cbBufSize,
+                           OUT LPDWORD pcbBytesNeeded)
 {
+    LPCWSTR Owner = L"";
+    DWORD dwRequiredSize;
+    DWORD dwOwnerSize;
+    DWORD dwError = ERROR_SUCCESS;
+
     /* Lock the service database shared */
     ScmLockDatabaseShared();
 
     if (pServiceStartLock != NULL)
+        Owner = pServiceStartLock->LockOwner;
+
+    dwOwnerSize = WideCharToMultiByte(CP_ACP, 0, Owner, -1, NULL, 0, NULL, NULL);
+    if (dwOwnerSize == 0)
+    {
+        Owner = L"";
+        dwOwnerSize = sizeof(CHAR);
+    }
+
+    dwRequiredSize = sizeof(QUERY_SERVICE_LOCK_STATUSA) +
+                     (DWORD)(wcslen(Owner) + 1) * sizeof(WCHAR);
+    *pcbBytesNeeded = dwRequiredSize;
+
+    if (cbBufSize < dwRequiredSize)
+    {
+        dwError = ERROR_INSUFFICIENT_BUFFER;
+        goto done;
+    }
+
+    WideCharToMultiByte(CP_ACP,
+                        0,
+                        Owner,
+                        -1,
+                        (LPSTR)(lpLockStatus + 1),
+                        dwOwnerSize,
+                        NULL,
+                        NULL);
+    lpLockStatus->lpLockOwner = (LPSTR)(ULONG_PTR)sizeof(QUERY_SERVICE_LOCK_STATUSA);
+
+    if (pServiceStartLock != NULL)
     {
         lpLockStatus->fIsLocked = TRUE;
-
-        /* FIXME: Retrieve the owner name. */
-        lpLockStatus->lpLockOwner = NULL;
-
         lpLockStatus->dwLockDuration = (DWORD)time(NULL) - pServiceStartLock->TimeWhenLocked;
     }
     else
     {
         lpLockStatus->fIsLocked = FALSE;
-
-        strcpy((LPSTR)(lpLockStatus + 1), "");
-        lpLockStatus->lpLockOwner = (LPSTR)(ULONG_PTR)sizeof(QUERY_SERVICE_LOCK_STATUSA);
-
         lpLockStatus->dwLockDuration = 0;
     }
 
+done:
     /* Unlock the service database */
     ScmUnlockDatabase();
 
-    return;
+    return dwError;
 }
 
 /* EOF */

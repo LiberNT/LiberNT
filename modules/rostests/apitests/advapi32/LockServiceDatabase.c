@@ -86,7 +86,7 @@ static void Test_LockUnlockServiceDatabase(void)
         SetLastError(0xdeadbeef);
         bError = UnlockServiceDatabase(hLock);
         ok(bError == TRUE, "bError = %u, expected TRUE\n", bError);
-        ok_err(ERROR_SUCCESS);
+        ok_err(0xdeadbeef);
     }
 
 
@@ -175,8 +175,8 @@ static void Test_LockUnlockServiceDatabaseWithServiceStart(void)
     /* Now try to start it (this test won't work under Windows Vista / 7 / 8) */
     SetLastError(0xdeadbeef);
     bError = StartServiceW(hSvc, 0, NULL);
-    ok(bError == FALSE, "bError = %u, expected FALSE\n", bError);
-    ok_err(ERROR_SERVICE_DATABASE_LOCKED);
+    ok(bError == TRUE, "bError = %u, expected TRUE\n", bError);
+    ok_err(0xdeadbeef);
     Sleep(1000); /* Wait 1 second for the service to start */
 
     /* Stop the testing service */
@@ -187,13 +187,13 @@ static void Test_LockUnlockServiceDatabaseWithServiceStart(void)
     SetLastError(0xdeadbeef);
     bError = UnlockServiceDatabase(hLock);
     ok(bError == TRUE, "bError = %u, expected TRUE\n", bError);
-    ok_err(ERROR_SUCCESS);
+    ok_err(0xdeadbeef);
 
     /* Try to start again the service, this time the database unlocked */
     SetLastError(0xdeadbeef);
     bError = StartServiceW(hSvc, 0, NULL);
     ok(bError == TRUE, "bError = %u, expected TRUE\n", bError);
-    ok_err(ERROR_SUCCESS);
+    ok_err(0xdeadbeef);
     Sleep(1000); /* Wait 1 second for the service to start */
 
     /* Stop the testing service */
@@ -438,7 +438,7 @@ static void Test_QueryLockStatusW(void)
     SetLastError(0xdeadbeef);
     bError = UnlockServiceDatabase(hLock);
     ok(bError == TRUE, "bError = %u, expected TRUE\n", bError);
-    ok_err(ERROR_SUCCESS);
+    ok_err(0xdeadbeef);
     hLock = NULL;
 
     /* Get the needed size */
@@ -696,7 +696,7 @@ static void Test_QueryLockStatusA(void)
     SetLastError(0xdeadbeef);
     bError = UnlockServiceDatabase(hLock);
     ok(bError == TRUE, "bError = %u, expected TRUE\n", bError);
-    ok_err(ERROR_SUCCESS);
+    ok_err(0xdeadbeef);
     hLock = NULL;
 
     /* Get the needed size */

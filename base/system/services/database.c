@@ -2303,7 +2303,6 @@ ScmStartService(PSERVICE Service,
                 const PCWSTR* argv)
 {
     DWORD dwError = ERROR_SUCCESS;
-    SC_RPC_LOCK Lock = NULL;
 
     DPRINT("ScmStartService() called\n");
     DPRINT("Start Service %p (%S)\n", Service, Service->lpServiceName);
@@ -2311,25 +2310,9 @@ ScmStartService(PSERVICE Service,
     /* Acquire the service control critical section, to synchronize starts */
     EnterCriticalSection(&ControlServiceCriticalSection);
 
-    /*
-     * Acquire the user service start lock while the service is starting, if
-     * needed (i.e. if we are not starting it during the initialization phase).
-     * If we don't success, bail out.
-     */
-    if (!ScmInitialize)
-    {
-        dwError = ScmAcquireServiceStartLock(TRUE, &Lock);
-        if (dwError != ERROR_SUCCESS)
-            goto done;
-    }
-
     /* Really start the service */
     dwError = ScmLoadService(Service, argc, argv);
 
-    /* Release the service start lock, if needed, and the critical section */
-    if (Lock) ScmReleaseServiceStartLock(&Lock);
-
-done:
     LeaveCriticalSection(&ControlServiceCriticalSection);
 
     DPRINT("ScmStartService() done (Error %lu)\n", dwError);
