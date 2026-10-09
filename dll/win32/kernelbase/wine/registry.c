@@ -2361,6 +2361,12 @@ LSTATUS WINAPI RegGetValueA( HKEY hKey, LPCSTR pszSubKey, LPCSTR pszValue,
 
         HeapFree(GetProcessHeap(), 0, pvBuf);
     }
+#ifdef __REACTOS__
+    else if (ret == ERROR_SUCCESS && !pvData && dwType == REG_EXPAND_SZ && (dwFlags & RRF_NOEXPAND))
+    {
+        cbData++;
+    }
+#endif
 
     if (pszSubKey && pszSubKey[0])
         RegCloseKey(hKey);
