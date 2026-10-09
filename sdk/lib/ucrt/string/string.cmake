@@ -109,14 +109,22 @@ elseif(${ARCH} STREQUAL "amd64")
         string/strset.c
     )
 else()
-    list(APPEND UCRT_STRING_SOURCES
-        string/arm/strlen.c
-    )
-    if(${ARCH} STREQUAL "arm64")
-        list(APPEND UCRT_STRING_SOURCES
-            string/arm64/strnlen.c
-            string/arm64/wcslen.c
+    if(ARCH STREQUAL "arm64" AND NOT ARM64EC_RUNTIME)
+        list(APPEND UCRT_STRING_ASM_SOURCES
+            ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strlen.S
+            ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strnlen.S
+            string/arm64/wcsnlen.S
         )
+    else()
+        list(APPEND UCRT_STRING_SOURCES
+            string/arm/strlen.c
+        )
+        if(${ARCH} STREQUAL "arm64")
+            list(APPEND UCRT_STRING_SOURCES
+                string/arm64/strnlen.c
+                string/arm64/wcslen.c
+            )
+        endif()
     endif()
     list(APPEND UCRT_STRING_SOURCES
         string/memccpy.c
