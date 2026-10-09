@@ -13,6 +13,7 @@ set(WOW64_I386_EXECUTABLES
     glmark2
     glmark2_runner
     msiexec
+    msinfo32
     notepad
     reg
     regsvr32

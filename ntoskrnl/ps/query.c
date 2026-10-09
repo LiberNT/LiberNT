@@ -268,6 +268,8 @@ PspCopyThreadWow64Context(IN PETHREAD Thread,
 
     if (Attached) KeUnstackDetachProcess(&ApcState);
     ExReleaseRundownProtection(&Thread->RundownProtect);
+    if (NT_SUCCESS(Status))
+        Status = PspArchCopyWow64DebugRegisters(Thread, Context, SetContext);
     return Status;
 }
 #endif

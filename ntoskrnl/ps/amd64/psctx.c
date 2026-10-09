@@ -405,6 +405,54 @@ PspArchCopyLiveWow64Context(
     return Status;
 }
 
+NTSTATUS
+NTAPI
+PspArchCopyWow64DebugRegisters(
+    _In_ PETHREAD Thread,
+    _Inout_ PWOW64_CONTEXT Context,
+    _In_ BOOLEAN SetContext)
+{
+    ULONG Flags = Context->ContextFlags & ~WOW64_CONTEXT_i386;
+    PCONTEXT Native;
+    NTSTATUS Status;
+
+    if (!(Flags & WOW64_CONTEXT_DEBUG_REGISTERS))
+        return STATUS_SUCCESS;
+
+    Native = ExAllocatePoolWithTag(PagedPool, sizeof(*Native), 'xtCP');
+    if (!Native)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlZeroMemory(Native, sizeof(*Native));
+    Native->ContextFlags = CONTEXT_DEBUG_REGISTERS;
+    if (SetContext)
+    {
+        Native->Dr0 = Context->Dr0;
+        Native->Dr1 = Context->Dr1;
+        Native->Dr2 = Context->Dr2;
+        Native->Dr3 = Context->Dr3;
+        Native->Dr6 = Context->Dr6;
+        Native->Dr7 = Context->Dr7;
+        Status = PspGetOrSetUserContext(Thread, Native, TRUE);
+    }
+    else
+    {
+        Status = PspGetOrSetUserContext(Thread, Native, FALSE);
+        if (NT_SUCCESS(Status))
+        {
+            Context->Dr0 = (ULONG)Native->Dr0;
+            Context->Dr1 = (ULONG)Native->Dr1;
+            Context->Dr2 = (ULONG)Native->Dr2;
+            Context->Dr3 = (ULONG)Native->Dr3;
+            Context->Dr6 = (ULONG)Native->Dr6;
+            Context->Dr7 = (ULONG)Native->Dr7;
+        }
+    }
+
+    ExFreePoolWithTag(Native, 'xtCP');
+    return Status;
+}
+
 /* EOF */
 
 VOID
