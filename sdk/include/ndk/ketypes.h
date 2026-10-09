@@ -88,6 +88,9 @@ Author:
 // This is usually index 1, so table number offset 0x10 (x86) or 0x20 (x64)
 //
 #define SERVICE_TABLE_TEST  (WIN32K_SERVICE_INDEX << BITS_PER_ENTRY)
+#define SERVICE_FAILURE_INVALID   0
+#define SERVICE_FAILURE_ZERO      1
+#define SERVICE_FAILURE_MINUS_ONE 2
 
 //
 // Context Record Flags

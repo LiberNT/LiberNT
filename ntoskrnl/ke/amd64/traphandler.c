@@ -178,6 +178,14 @@ NtSyscallFailure(void)
     return (NTSTATUS)KeGetCurrentThread()->TrapFrame->Rax;
 }
 
+NTSTATUS
+KiConvertToGuiThreadFailure(VOID)
+{
+    ULONG ServiceNumber = (ULONG)KeGetCurrentThread()->TrapFrame->Rax & SERVICE_NUMBER_MASK;
+
+    return KiGetGuiServiceFailureStatus(ServiceNumber);
+}
+
 PVOID
 KiSystemCallHandler(
     PKTRAP_FRAME TrapFrame)

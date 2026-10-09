@@ -1808,6 +1808,7 @@ KiSystemServiceHandler(IN PKTRAP_FRAME TrapFrame,
         if (!NT_SUCCESS(Status))
         {
             /* Set the last error and fail */
+            Status = KiGetGuiServiceFailureStatus(Id);
             goto ExitCall;
         }
 

@@ -1015,6 +1015,30 @@ KeAddSystemServiceTable(IN PULONG_PTR Base,
     return TRUE;
 }
 
+NTSTATUS
+NTAPI
+KiGetGuiServiceFailureStatus(
+    _In_ ULONG ServiceNumber)
+{
+    PKSERVICE_TABLE_DESCRIPTOR Table = &KeServiceDescriptorTableShadow[WIN32K_SERVICE_INDEX];
+
+    if (!Table->Number || (ServiceNumber >= Table->Limit))
+    {
+        return STATUS_INVALID_SYSTEM_SERVICE;
+    }
+
+    switch (Table->Number[Table->Limit + ServiceNumber])
+    {
+        case SERVICE_FAILURE_ZERO:
+            return 0;
+
+        case SERVICE_FAILURE_MINUS_ONE:
+            return (NTSTATUS)-1;
+    }
+
+    return STATUS_INVALID_SYSTEM_SERVICE;
+}
+
 /*
  * @implemented
  */

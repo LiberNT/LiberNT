@@ -285,7 +285,7 @@ KiSystemService(
                 }
                 else
                 {
-                    TrapFrame->X0 = ConvertStatus;
+                    TrapFrame->X0 = KiGetGuiServiceFailureStatus(ServiceNumber);
                     return;
                 }
             }

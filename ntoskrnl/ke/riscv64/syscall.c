@@ -177,7 +177,7 @@ KiRiscvSystemService(_Inout_ PKTRAP_FRAME Frame)
         Status = PsConvertToGuiThread();
         if (!NT_SUCCESS(Status) && (Status != STATUS_ALREADY_WIN32))
         {
-            Result = (LONG_PTR)Status;
+            Result = (LONG_PTR)KiGetGuiServiceFailureStatus((ULONG)Frame->Context.T0 & SERVICE_NUMBER_MASK);
             goto Exit;
         }
     }

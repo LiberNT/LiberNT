@@ -232,6 +232,11 @@ extern LONG KiTickOffset;
 extern ULONG KiFreezeFlag;
 extern ULONG KiDPCTimeout;
 extern PGDI_BATCHFLUSH_ROUTINE KeGdiFlushUserBatch;
+
+NTSTATUS
+NTAPI
+KiGetGuiServiceFailureStatus(
+    _In_ ULONG ServiceNumber);
 extern ULONGLONG BootCycles, BootCyclesEnd;
 extern ULONG ProcessCount;
 extern VOID __cdecl KiInterruptTemplate(VOID);

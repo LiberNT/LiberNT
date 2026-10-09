@@ -25,6 +25,7 @@ EXTERN KiDeliverApc:PROC
 EXTERN KiDpcInterruptHandler:PROC
 EXTERN KiIpiInterruptHandler:PROC
 EXTERN PsConvertToGuiThread:PROC
+EXTERN KiConvertToGuiThreadFailure:PROC
 EXTERN MmCreateKernelStack:PROC
 EXTERN MmDeleteKernelStack:PROC
 EXTERN KdSetOwedBreakpoints:PROC
@@ -1429,8 +1430,7 @@ KiConvertToGuiThreadFailed:
 
     /* Clean up the stack and return failure */
     add rsp, 40
-    mov eax, HEX(C0000017) // STATUS_NO_MEMORY
-    ret
+    jmp KiConvertToGuiThreadFailure
 
 ENDFUNC
 
