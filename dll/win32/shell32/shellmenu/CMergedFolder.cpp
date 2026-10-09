@@ -464,6 +464,7 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::ParseDisplayName(
 {
     HRESULT hr;
     LocalPidlInfo info;
+    ULONG dwRequested = pdwAttributes ? *pdwAttributes : 0;
 
     if (!ppidl)
         return E_FAIL;
@@ -487,8 +488,11 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::ParseDisplayName(
     if (pchEaten)
         *pchEaten = lstrlenW(info.parseName);
 
-    if (pdwAttributes)
-        *pdwAttributes = info.parent->GetAttributesOf(1, (LPCITEMIDLIST*)ppidl, pdwAttributes);
+    if (pdwAttributes && dwRequested)
+    {
+        *pdwAttributes = dwRequested;
+        info.parent->GetAttributesOf(1, (LPCITEMIDLIST*)ppidl, pdwAttributes);
+    }
 
     return S_OK;
 }
@@ -594,12 +598,15 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::GetAttributesOf(
 {
     LocalPidlInfo info;
     HRESULT hr;
+    SFGAOF dwRequested = rgfInOut ? *rgfInOut : 0;
+    SFGAOF dwResult = dwRequested;
 
     TRACE("GetAttributesOf\n");
 
     for (int i = 0; i < (int)cidl; i++)
     {
         LPCITEMIDLIST pidl = apidl[i];
+        SFGAOF dwItem = dwRequested;
 
         hr = m_EnumSource->FindPidlInList(NULL, pidl, &info);
         if (FAILED_UNEXPECTEDLY(hr))
@@ -607,13 +614,16 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::GetAttributesOf(
 
         pidl = info.pidl;
 
-        SFGAOF * pinOut1 = rgfInOut ? rgfInOut + i : NULL;
-
-        hr = info.parent->GetAttributesOf(1, &pidl, pinOut1);
+        hr = info.parent->GetAttributesOf(1, &pidl, rgfInOut ? &dwItem : NULL);
 
         if (FAILED_UNEXPECTEDLY(hr))
             return hr;
+
+        dwResult &= dwItem;
     }
+
+    if (rgfInOut)
+        *rgfInOut = dwResult;
 
     return S_OK;
 }
