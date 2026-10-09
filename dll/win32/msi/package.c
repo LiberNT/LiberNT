@@ -779,16 +779,17 @@ static VOID set_installer_properties(MSIPACKAGE *package)
     /* set the os things */
     OSVersion.dwOSVersionInfoSize = sizeof(OSVersion);
 #ifdef __REACTOS__
-    RtlGetVersion((PRTL_OSVERSIONINFOW)&OSVersion);
+    GetVersionExW((OSVERSIONINFOW *)&OSVersion);
+    verval = OSVersion.dwMinorVersion + OSVersion.dwMajorVersion * 100;
 #else
     RtlGetVersion(&OSVersion);
-#endif
     verval = OSVersion.dwMinorVersion + OSVersion.dwMajorVersion * 100;
     if (verval > 603)
     {
         verval = 603;
         OSVersion.dwBuildNumber = 9600;
     }
+#endif
     len = swprintf( verstr, ARRAY_SIZE(verstr), L"%u", verval );
     switch (OSVersion.dwPlatformId)
     {
