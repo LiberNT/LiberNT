@@ -75,14 +75,64 @@ typedef struct _TH32SNAPSHOT
   ULONG_PTR ThreadListOffset;
 } TH32SNAPSHOT, *PTH32SNAPSHOT;
 
+typedef struct _TH32_PEB32
+{
+  BOOLEAN InheritedAddressSpace;
+  BOOLEAN ReadImageFileExecOptions;
+  BOOLEAN BeingDebugged;
+  BOOLEAN BitField;
+  ULONG Mutant;
+  ULONG ImageBaseAddress;
+  ULONG Ldr;
+} TH32_PEB32, *PTH32_PEB32;
+
+typedef struct _TH32_PEB_LDR_DATA32
+{
+  ULONG Length;
+  BOOLEAN Initialized;
+  ULONG SsHandle;
+  LIST_ENTRY32 InLoadOrderModuleList;
+} TH32_PEB_LDR_DATA32, *PTH32_PEB_LDR_DATA32;
+
+typedef struct _TH32_LDR_DATA_TABLE_ENTRY32
+{
+  LIST_ENTRY32 InLoadOrderLinks;
+  LIST_ENTRY32 InMemoryOrderLinks;
+  LIST_ENTRY32 InInitializationOrderLinks;
+  ULONG DllBase;
+  ULONG EntryPoint;
+  ULONG SizeOfImage;
+  UNICODE_STRING32 FullDllName;
+  UNICODE_STRING32 BaseDllName;
+  ULONG Flags;
+  USHORT LoadCount;
+  USHORT TlsIndex;
+} TH32_LDR_DATA_TABLE_ENTRY32, *PTH32_LDR_DATA_TABLE_ENTRY32;
+
+C_ASSERT(FIELD_OFFSET(TH32_PEB32, Ldr) == 0x0C);
+C_ASSERT(FIELD_OFFSET(TH32_PEB_LDR_DATA32, InLoadOrderModuleList) == 0x0C);
+C_ASSERT(FIELD_OFFSET(TH32_LDR_DATA_TABLE_ENTRY32, DllBase) == 0x18);
+C_ASSERT(FIELD_OFFSET(TH32_LDR_DATA_TABLE_ENTRY32, FullDllName) == 0x24);
+C_ASSERT(FIELD_OFFSET(TH32_LDR_DATA_TABLE_ENTRY32, LoadCount) == 0x38);
+
 /* INTERNAL FUNCTIONS *********************************************************/
 
 static VOID
 TH32FreeAllocatedResources(PRTL_DEBUG_INFORMATION HeapDebug,
                            PRTL_DEBUG_INFORMATION ModuleDebug,
+                           PVOID Wow64Modules,
                            PVOID ProcThrdInfo,
                            SIZE_T ProcThrdInfoSize)
 {
+  SIZE_T Wow64ModulesSize = 0;
+
+  if(Wow64Modules != NULL)
+  {
+    NtFreeVirtualMemory(NtCurrentProcess(),
+                        &Wow64Modules,
+                        &Wow64ModulesSize,
+                        MEM_RELEASE);
+  }
   if(HeapDebug != NULL)
   {
     RtlDestroyQueryDebugBuffer(HeapDebug);
@@ -101,11 +151,218 @@ TH32FreeAllocatedResources(PRTL_DEBUG_INFORMATION HeapDebug,
   }
 }
 
+static BOOLEAN
+TH32ReadString32(HANDLE ProcessHandle,
+                 const UNICODE_STRING32 *String,
+                 PWCHAR Buffer,
+                 ULONG BufferChars)
+{
+  SIZE_T Length = String->Length & ~(sizeof(WCHAR) - 1);
+
+  if(Length > (BufferChars - 1) * sizeof(WCHAR))
+  {
+    Length = (BufferChars - 1) * sizeof(WCHAR);
+  }
+
+  if(Length != 0 &&
+     !NT_SUCCESS(NtReadVirtualMemory(ProcessHandle,
+                                     UlongToPtr(String->Buffer),
+                                     Buffer,
+                                     Length,
+                                     NULL)))
+  {
+    return FALSE;
+  }
+
+  Buffer[Length / sizeof(WCHAR)] = UNICODE_NULL;
+  return TRUE;
+}
+
+static NTSTATUS
+TH32QueryWow64Modules(DWORD th32ProcessID,
+                      PVOID *Modules,
+                      ULONG *ModuleCount)
+{
+  OBJECT_ATTRIBUTES ObjectAttributes;
+  CLIENT_ID ClientId;
+  HANDLE ProcessHandle;
+  ULONG_PTR Peb32 = 0;
+  ULONG Ldr = 0, Head, Current, Count = 0, Index = 0;
+  TH32_LDR_DATA_TABLE_ENTRY32 Entry;
+  LPMODULEENTRY32W ModuleEntry;
+  WCHAR FullName[MAX_PATH], Wow64Directory[MAX_PATH];
+  UNICODE_STRING FullNameString;
+  SIZE_T ModulesSize;
+  UINT Wow64Length;
+  NTSTATUS Status;
+
+  *Modules = NULL;
+  *ModuleCount = 0;
+
+  if(sizeof(PVOID) == sizeof(ULONG))
+  {
+    return STATUS_SUCCESS;
+  }
+
+  ClientId.UniqueProcess = UlongToHandle(th32ProcessID);
+  ClientId.UniqueThread = NULL;
+  InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
+
+  Status = NtOpenProcess(&ProcessHandle,
+                         PROCESS_VM_READ | PROCESS_QUERY_INFORMATION,
+                         &ObjectAttributes,
+                         &ClientId);
+  if(!NT_SUCCESS(Status))
+  {
+    return Status;
+  }
+
+  Status = NtQueryInformationProcess(ProcessHandle,
+                                     ProcessWow64Information,
+                                     &Peb32,
+                                     sizeof(Peb32),
+                                     NULL);
+  if(NT_SUCCESS(Status) && Peb32 != 0)
+  {
+    Status = NtReadVirtualMemory(ProcessHandle,
+                                 (PVOID)(Peb32 + FIELD_OFFSET(TH32_PEB32, Ldr)),
+                                 &Ldr,
+                                 sizeof(Ldr),
+                                 NULL);
+  }
+
+  if(!NT_SUCCESS(Status) || Ldr == 0)
+  {
+    NtClose(ProcessHandle);
+    return Status;
+  }
+
+  Head = Ldr + FIELD_OFFSET(TH32_PEB_LDR_DATA32, InLoadOrderModuleList);
+
+  Status = NtReadVirtualMemory(ProcessHandle,
+                               UlongToPtr(Head),
+                               &Current,
+                               sizeof(Current),
+                               NULL);
+  if(!NT_SUCCESS(Status))
+  {
+    NtClose(ProcessHandle);
+    return Status;
+  }
+
+  while(Current != Head)
+  {
+    Count++;
+
+    if(!NT_SUCCESS(NtReadVirtualMemory(ProcessHandle,
+                                       UlongToPtr(Current),
+                                       &Current,
+                                       sizeof(Current),
+                                       NULL)))
+    {
+      break;
+    }
+  }
+
+  if(Count == 0)
+  {
+    NtClose(ProcessHandle);
+    return STATUS_SUCCESS;
+  }
+
+  ModulesSize = Count * sizeof(MODULEENTRY32W);
+  Status = NtAllocateVirtualMemory(NtCurrentProcess(),
+                                   Modules,
+                                   0,
+                                   &ModulesSize,
+                                   MEM_COMMIT,
+                                   PAGE_READWRITE);
+  if(!NT_SUCCESS(Status))
+  {
+    *Modules = NULL;
+    NtClose(ProcessHandle);
+    return Status;
+  }
+
+  Wow64Length = GetSystemWow64DirectoryW(Wow64Directory, RTL_NUMBER_OF(Wow64Directory));
+  if(Wow64Length >= RTL_NUMBER_OF(Wow64Directory))
+  {
+    Wow64Length = 0;
+  }
+
+  Status = NtReadVirtualMemory(ProcessHandle,
+                               UlongToPtr(Head),
+                               &Current,
+                               sizeof(Current),
+                               NULL);
+
+  while(NT_SUCCESS(Status) &&
+        Index < Count &&
+        Current != Head &&
+        NT_SUCCESS(NtReadVirtualMemory(ProcessHandle,
+                                       UlongToPtr(Current),
+                                       &Entry,
+                                       sizeof(Entry),
+                                       NULL)))
+  {
+    Current = Entry.InLoadOrderLinks.Flink;
+    ModuleEntry = (LPMODULEENTRY32W)*Modules + Index;
+
+    if(!TH32ReadString32(ProcessHandle,
+                         &Entry.BaseDllName,
+                         ModuleEntry->szModule,
+                         RTL_NUMBER_OF(ModuleEntry->szModule)) ||
+       !TH32ReadString32(ProcessHandle,
+                         &Entry.FullDllName,
+                         FullName,
+                         RTL_NUMBER_OF(FullName)))
+    {
+      continue;
+    }
+
+    RtlInitUnicodeString(&FullNameString, FullName);
+    if(Wow64Length != 0 &&
+       RtlPrefixUnicodeString(&BaseWindowsSystemDirectory, &FullNameString, TRUE) &&
+       (FullNameString.Length == BaseWindowsSystemDirectory.Length ||
+        FullName[BaseWindowsSystemDirectory.Length / sizeof(WCHAR)] == L'\\'))
+    {
+      RtlStringCchPrintfW(ModuleEntry->szExePath,
+                          RTL_NUMBER_OF(ModuleEntry->szExePath),
+                          L"%s%s",
+                          Wow64Directory,
+                          FullName + BaseWindowsSystemDirectory.Length / sizeof(WCHAR));
+    }
+    else
+    {
+      RtlStringCchCopyW(ModuleEntry->szExePath,
+                        RTL_NUMBER_OF(ModuleEntry->szExePath),
+                        FullName);
+    }
+
+    ModuleEntry->dwSize = sizeof(MODULEENTRY32W);
+    ModuleEntry->th32ModuleID = 1;
+    ModuleEntry->th32ProcessID = th32ProcessID;
+    ModuleEntry->GlblcntUsage = Entry.LoadCount;
+    ModuleEntry->ProccntUsage = Entry.LoadCount;
+    ModuleEntry->modBaseAddr = UlongToPtr(Entry.DllBase);
+    ModuleEntry->modBaseSize = Entry.SizeOfImage;
+    ModuleEntry->hModule = UlongToPtr(Entry.DllBase);
+
+    Index++;
+  }
+
+  NtClose(ProcessHandle);
+  *ModuleCount = Index;
+  return STATUS_SUCCESS;
+}
+
 static NTSTATUS
 TH32CreateSnapshot(DWORD dwFlags,
                    DWORD th32ProcessID,
                    PRTL_DEBUG_INFORMATION *HeapDebug,
                    PRTL_DEBUG_INFORMATION *ModuleDebug,
+                   PVOID *Wow64Modules,
+                   ULONG *Wow64ModuleCount,
                    PVOID *ProcThrdInfo,
                    SIZE_T *ProcThrdInfoSize)
 {
@@ -113,6 +370,8 @@ TH32CreateSnapshot(DWORD dwFlags,
 
   *HeapDebug = NULL;
   *ModuleDebug = NULL;
+  *Wow64Modules = NULL;
+  *Wow64ModuleCount = 0;
   *ProcThrdInfo = NULL;
   *ProcThrdInfoSize = 0;
 
@@ -147,6 +406,14 @@ TH32CreateSnapshot(DWORD dwFlags,
     }
     else
       Status = STATUS_UNSUCCESSFUL;
+
+    if((dwFlags & TH32CS_SNAPMODULE32) &&
+       NT_SUCCESS(Status))
+    {
+      Status = TH32QueryWow64Modules(th32ProcessID,
+                                     Wow64Modules,
+                                     Wow64ModuleCount);
+    }
   }
 
   /*
@@ -197,6 +464,7 @@ TH32CreateSnapshot(DWORD dwFlags,
   {
     TH32FreeAllocatedResources(*HeapDebug,
                                *ModuleDebug,
+                               *Wow64Modules,
                                *ProcThrdInfo,
                                *ProcThrdInfoSize);
   }
@@ -209,6 +477,8 @@ TH32CreateSnapshotSectionInitialize(DWORD dwFlags,
                                     DWORD th32ProcessID,
                                     PRTL_DEBUG_INFORMATION HeapDebug,
                                     PRTL_DEBUG_INFORMATION ModuleDebug,
+                                    PVOID Wow64Modules,
+                                    ULONG Wow64ModuleCount,
                                     PVOID ProcThrdInfo,
                                     HANDLE *SectionHandle)
 {
@@ -246,7 +516,7 @@ TH32CreateSnapshotSectionInitialize(DWORD dwFlags,
   {
     mi = (PRTL_PROCESS_MODULES)ModuleDebug->Modules;
     nModules = mi->NumberOfModules;
-    RequiredSnapshotSize += nModules * sizeof(MODULEENTRY32W);
+    RequiredSnapshotSize += (nModules + Wow64ModuleCount) * sizeof(MODULEENTRY32W);
   }
 
   /*
@@ -348,7 +618,7 @@ TH32CreateSnapshotSectionInitialize(DWORD dwFlags,
   /* initialize the module list */
   if(dwFlags & TH32CS_SNAPMODULE)
   {
-    Snapshot->ModuleListCount = nModules;
+    Snapshot->ModuleListCount = nModules + Wow64ModuleCount;
     Snapshot->ModuleListOffset = DataOffset;
     ModuleListEntry = (LPMODULEENTRY32W)OffsetToPtr(Snapshot, DataOffset);
     for(i = 0; i < nModules; i++)
@@ -379,7 +649,14 @@ TH32CreateSnapshotSectionInitialize(DWORD dwFlags,
       ModuleListEntry++;
     }
 
-    DataOffset += mi->NumberOfModules * sizeof(MODULEENTRY32W);
+    if(Wow64ModuleCount != 0)
+    {
+      RtlCopyMemory(ModuleListEntry,
+                    Wow64Modules,
+                    Wow64ModuleCount * sizeof(MODULEENTRY32W));
+    }
+
+    DataOffset += (mi->NumberOfModules + Wow64ModuleCount) * sizeof(MODULEENTRY32W);
   }
 
   /* initialize the process list */
@@ -1255,8 +1532,9 @@ WINAPI
 CreateToolhelp32Snapshot(DWORD dwFlags, DWORD th32ProcessID)
 {
   PRTL_DEBUG_INFORMATION HeapDebug, ModuleDebug;
-  PVOID ProcThrdInfo;
+  PVOID ProcThrdInfo, Wow64Modules;
   SIZE_T ProcThrdInfoSize;
+  ULONG Wow64ModuleCount;
   NTSTATUS Status;
   HANDLE hSnapShotSection = NULL;
 
@@ -1272,6 +1550,8 @@ CreateToolhelp32Snapshot(DWORD dwFlags, DWORD th32ProcessID)
                               th32ProcessID,
                               &HeapDebug,
                               &ModuleDebug,
+                              &Wow64Modules,
+                              &Wow64ModuleCount,
                               &ProcThrdInfo,
                               &ProcThrdInfoSize);
   if(!NT_SUCCESS(Status))
@@ -1287,6 +1567,8 @@ CreateToolhelp32Snapshot(DWORD dwFlags, DWORD th32ProcessID)
                                                th32ProcessID,
                                                HeapDebug,
                                                ModuleDebug,
+                                               Wow64Modules,
+                                               Wow64ModuleCount,
                                                ProcThrdInfo,
                                                &hSnapShotSection);
 
@@ -1295,6 +1577,7 @@ CreateToolhelp32Snapshot(DWORD dwFlags, DWORD th32ProcessID)
    */
   TH32FreeAllocatedResources(HeapDebug,
                              ModuleDebug,
+                             Wow64Modules,
                              ProcThrdInfo,
                              ProcThrdInfoSize);
 
