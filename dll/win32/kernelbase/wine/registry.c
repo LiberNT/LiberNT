@@ -2198,8 +2198,13 @@ LSTATUS WINAPI RegGetValueW( HKEY hKey, LPCWSTR pszSubKey, LPCWSTR pszValue,
             /* Recheck dwType in case it changed since the first call */
             if (dwType == REG_EXPAND_SZ && !(dwFlags & RRF_NOEXPAND))
             {
+#ifdef __REACTOS__
+                cbData = ExpandEnvironmentStringsW(pvBuf, pvData,
+                                                   pvData ? *pcbData / sizeof(WCHAR) : 0) * sizeof(WCHAR);
+#else
                 cbData = ExpandEnvironmentStringsW(pvBuf, pvData,
                                                    pcbData ? *pcbData : 0) * sizeof(WCHAR);
+#endif
                 dwType = REG_SZ;
                 if (pvData && cbData > *pcbData)
                     ret = ERROR_MORE_DATA;
@@ -2317,8 +2322,13 @@ LSTATUS WINAPI RegGetValueA( HKEY hKey, LPCSTR pszSubKey, LPCSTR pszValue,
                 DWORD cbRaw = cbData;
 
 #endif
+#ifdef __REACTOS__
+                cbData = ExpandEnvironmentStringsA(pvBuf, pvData,
+                                                   pvData ? *pcbData : 0);
+#else
                 cbData = ExpandEnvironmentStringsA(pvBuf, pvData,
                                                    pcbData ? *pcbData : 0);
+#endif
                 dwType = REG_SZ;
                 if (pvData && cbData > *pcbData)
                     ret = ERROR_MORE_DATA;
