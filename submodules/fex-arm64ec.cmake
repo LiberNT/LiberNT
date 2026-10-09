@@ -21,16 +21,6 @@ elseif(NOT EXISTS "${FEX_SOURCE_DIR}/External/fmt/CMakeLists.txt" OR
        NOT EXISTS "${FEX_SOURCE_DIR}/External/unordered_dense/CMakeLists.txt" OR
        NOT EXISTS "${FEX_SOURCE_DIR}/External/xxhash/cmake_unofficial/CMakeLists.txt")
     set(FEX_ARM64EC_UNAVAILABLE_REASON "vendored source dependencies are incomplete")
-elseif(NOT EXISTS "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/arm64ec-w64-mingw32-clang" OR
-       NOT EXISTS "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/arm64ec-w64-mingw32-clang++")
-    set(FEX_ARM64EC_UNAVAILABLE_REASON "the ARM64EC Clang toolchain is unavailable")
-endif()
-
-if(NOT FEX_ARM64EC_UNAVAILABLE_REASON)
-    find_program(FEX_LLVM_STRIP llvm-strip HINTS "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin")
-    if(NOT FEX_LLVM_STRIP OR NOT EXISTS "${FEX_LLVM_STRIP}")
-        set(FEX_ARM64EC_UNAVAILABLE_REASON "llvm-strip is unavailable")
-    endif()
 endif()
 
 if(NOT FEX_ARM64EC_UNAVAILABLE_REASON)
@@ -90,11 +80,21 @@ set(FEX_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/fex-arm64ec-build")
 set(FEX_DLL_SOURCE "${FEX_BINARY_DIR}/Bin/libarm64ecfex.dll")
 set(FEX_DLL_DEST   "${CMAKE_CURRENT_BINARY_DIR}/arm64ecfex.dll")
 set(FEX_DLL_SYMBOLS "${REACTOS_BINARY_DIR}/symbols/arm64ecfex.dll")
-set(FEX_ARM64EC_INCLUDE_DIR
-    "${REACTOS_CLANG_LLVM_MINGW_ROOT}/aarch64-w64-mingw32/include")
-set(FEX_ARM64EC_CXX_INCLUDE_DIR "${FEX_ARM64EC_INCLUDE_DIR}/c++/v1")
-set(FEX_ARM64EC_LIBRARY_DIR
-    "${REACTOS_CLANG_LLVM_MINGW_ROOT}/aarch64-w64-mingw32/lib")
+set(FEX_SDK_LIBRARIES libucrtbase libkernelbase ucrtoldnames CACHE INTERNAL "")
+set(FEX_WOW64_SDK_LIBDIR "${CMAKE_CURRENT_BINARY_DIR}/fex-wow64-sdk-lib")
+set(FEX_ARM64EC_SDK_LIBDIR "${CMAKE_CURRENT_BINARY_DIR}/fex-arm64ec-sdk-lib" CACHE INTERNAL "")
+export_sdk_libraries(fex_wow64_sdk_libs "${FEX_WOW64_SDK_LIBDIR}"
+    LIBRARIES ${FEX_SDK_LIBRARIES}
+    DEPENDS ${FEX_SDK_LIBRARIES} ucrtoldnames_target)
+set(_fex_sdk_cmake_args
+    -DCMAKE_TOOLCHAIN_FILE:FILEPATH=${REACTOS_SOURCE_DIR}/submodules/reactos-sdk.cmake
+    -DREACTOS_CLANG_LLVM_MINGW_ROOT:PATH=${REACTOS_CLANG_LLVM_MINGW_ROOT}
+    -DREACTOS_SDK_SOURCE_DIR:PATH=${REACTOS_SOURCE_DIR}
+    -DREACTOS_SDK_BUILD_DIR:PATH=${REACTOS_BINARY_DIR}
+    -DREACTOS_SDK_CXX_RUNTIME:PATH=${REACTOS_LIBCXX_ROOT}
+    -DREACTOS:BOOL=ON
+    -DREACTOS_SDK:BOOL=ON
+    -DREACTOS_SDK_CRT:STRING=ucrtbase)
 
 function(fex_discard_stale_build _name _binary_dir)
     set(_cache "${_binary_dir}/CMakeCache.txt")
@@ -126,41 +126,18 @@ ExternalProject_Add(fex-arm64ec-build
     BUILD_ALWAYS TRUE
     CMAKE_ARGS
         -DCMAKE_BUILD_TYPE=${FEX_ARM64EC_BUILD_TYPE}
-        # FEX's ARM64EC Module.cpp needs CONTEXT with AMD64 fields (Rax etc).
-        # Only the arm64ec-w64-mingw32 target provides this hybrid CONTEXT.
-        # Let the target-prefixed compiler wrappers select it. Passing the
-        # target explicitly bypasses llvm-mingw's mapped C/C++ include paths
-        # when Clang 23 scans module dependencies.
-        -DCMAKE_C_COMPILER=${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/arm64ec-w64-mingw32-clang
-        -DCMAKE_CXX_COMPILER=${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/arm64ec-w64-mingw32-clang++
-        -DCMAKE_ASM_COMPILER=${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/arm64ec-w64-mingw32-clang
-        -DCMAKE_AR=${CMAKE_AR}
-        -DCMAKE_DLLTOOL=${CMAKE_DLLTOOL}
-        -DCMAKE_LINKER=${CMAKE_LINKER}
-        -DCMAKE_RC_COMPILER=${CMAKE_RC_COMPILER}
-        -DCMAKE_SYSROOT=${CMAKE_SYSROOT}
-        -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
-        # clang-scan-deps does not retain the target-prefixed wrapper's mapped
-        # include paths in Clang 23, so provide the llvm-mingw target headers.
-        "-DCMAKE_C_FLAGS=-D__REACTOS__ -isystem${FEX_ARM64EC_INCLUDE_DIR}"
-        "-DCMAKE_CXX_FLAGS=-D__REACTOS__ -isystem${FEX_ARM64EC_CXX_INCLUDE_DIR} -isystem${FEX_ARM64EC_INCLUDE_DIR}"
-        -DCMAKE_ASM_FLAGS=-D__REACTOS__
-        # llvm-mingw shares ARM64 headers and import libraries with ARM64EC,
-        # but Clang 23's ARM64EC driver no longer maps the library directory
-        # when FEX links with -nostdlib.
-        "-DCMAKE_SHARED_LINKER_FLAGS=-L${FEX_ARM64EC_LIBRARY_DIR}"
+        ${_fex_sdk_cmake_args}
+        -DREACTOS_SDK_ARCH:STRING=arm64ec
+        -DREACTOS_SDK_TRIPLE:STRING=arm64ec-w64-mingw32
+        -DREACTOS_SDK_LIBDIR:PATH=${FEX_ARM64EC_SDK_LIBDIR}
         # This is a Windows ARM64EC cross-build. FEX's default native tuning
         # probes Linux /proc/cpuinfo from the build host, which is not useful.
         -DTUNE_CPU=none
         # Avoid resolving a host fmt package while cross-compiling.
         -DCMAKE_DISABLE_FIND_PACKAGE_fmt=ON
-        -DREACTOS=ON
         # ARM64EC-clang also defines __x86_64 which confuses FEX's
         # host-arch check. Allow x86_64 host builds.
         -DENABLE_X86_HOST_DEBUG=ON
-        # Force FEX to detect the ARM64EC architecture to build ARM64EC module.
-        -DCMAKE_SYSTEM_NAME=Windows
-        -DCMAKE_SYSTEM_PROCESSOR=arm64ec
         # Disable everything we do not need.
         -DBUILD_TESTING=OFF
         -DBUILD_FEX_LINUX_TESTS=OFF
@@ -184,8 +161,8 @@ ExternalProject_Add(fex-arm64ec-build
         -DPython_EXECUTABLE=${FEX_PYTHON_EXECUTABLE}
     BUILD_COMMAND ${REACTOS_NESTED_BUILD} <BINARY_DIR> --target arm64ecfex
     INSTALL_COMMAND ${CMAKE_COMMAND} -E make_directory "${REACTOS_BINARY_DIR}/symbols"
-    COMMAND ${FEX_LLVM_STRIP} --only-keep-debug "${FEX_DLL_SOURCE}" -o "${FEX_DLL_SYMBOLS}"
-    COMMAND ${FEX_LLVM_STRIP} --strip-debug "${FEX_DLL_SOURCE}" -o "${FEX_DLL_DEST}"
+    COMMAND ${CMAKE_STRIP} --only-keep-debug "${FEX_DLL_SOURCE}" -o "${FEX_DLL_SYMBOLS}"
+    COMMAND ${CMAKE_STRIP} --strip-debug "${FEX_DLL_SOURCE}" -o "${FEX_DLL_DEST}"
     BUILD_BYPRODUCTS "${FEX_DLL_DEST}" "${FEX_DLL_SYMBOLS}"
     USES_TERMINAL_BUILD OFF
 )
@@ -202,26 +179,12 @@ ExternalProject_Add(fex-wow64-build
     BUILD_ALWAYS TRUE
     CMAKE_ARGS
         -DCMAKE_BUILD_TYPE=${FEX_ARM64EC_BUILD_TYPE}
-        -DCMAKE_C_COMPILER=${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/aarch64-w64-mingw32-clang
-        -DCMAKE_CXX_COMPILER=${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/aarch64-w64-mingw32-clang++
-        -DCMAKE_ASM_COMPILER=${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/aarch64-w64-mingw32-clang
-        -DCMAKE_AR=${CMAKE_AR}
-        # Generic llvm-dlltool defaults to x64; WOW64 needs ARM64 import libraries.
-        -DCMAKE_DLLTOOL=${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin/aarch64-w64-mingw32-dlltool
-        -DCMAKE_LINKER=${CMAKE_LINKER}
-        -DCMAKE_RC_COMPILER=${CMAKE_RC_COMPILER}
-        -DCMAKE_SYSROOT=${CMAKE_SYSROOT}
-        -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
-        "-DCMAKE_C_FLAGS=-D__REACTOS__ -isystem${FEX_ARM64EC_INCLUDE_DIR}"
-        "-DCMAKE_CXX_FLAGS=-D__REACTOS__ -isystem${FEX_ARM64EC_CXX_INCLUDE_DIR} -isystem${FEX_ARM64EC_INCLUDE_DIR}"
-        -DCMAKE_ASM_FLAGS=-D__REACTOS__
-        # ReactOS disables FEX's CRT substitutes; match the ARM64EC CRT libraries.
-        "-DCMAKE_SHARED_LINKER_FLAGS=-L${FEX_ARM64EC_LIBRARY_DIR} -lucrt -lmingwex"
+        ${_fex_sdk_cmake_args}
+        -DREACTOS_SDK_ARCH:STRING=aarch64
+        -DREACTOS_SDK_TRIPLE:STRING=aarch64-w64-mingw32
+        -DREACTOS_SDK_LIBDIR:PATH=${FEX_WOW64_SDK_LIBDIR}
         -DTUNE_CPU=none
         -DCMAKE_DISABLE_FIND_PACKAGE_fmt=ON
-        -DREACTOS=ON
-        -DCMAKE_SYSTEM_NAME=Windows
-        -DCMAKE_SYSTEM_PROCESSOR=aarch64
         -DBUILD_TESTING=${ENABLE_FEX_UNIT_TESTS}
         -DBUILD_FEX_LINUX_TESTS=OFF
         -DBUILD_THUNKS=OFF
@@ -242,11 +205,14 @@ ExternalProject_Add(fex-wow64-build
         -DPython_EXECUTABLE=${FEX_PYTHON_EXECUTABLE}
     BUILD_COMMAND ${REACTOS_NESTED_BUILD} <BINARY_DIR> --target ${FEX_WOW64_BUILD_TARGETS}
     INSTALL_COMMAND ${CMAKE_COMMAND} -E make_directory "${REACTOS_BINARY_DIR}/symbols"
-    COMMAND ${FEX_LLVM_STRIP} --only-keep-debug "${FEX_WOW64_DLL_SOURCE}" -o "${FEX_WOW64_DLL_SYMBOLS}"
-    COMMAND ${FEX_LLVM_STRIP} --strip-debug "${FEX_WOW64_DLL_SOURCE}" -o "${FEX_WOW64_DLL_DEST}"
+    COMMAND ${CMAKE_STRIP} --only-keep-debug "${FEX_WOW64_DLL_SOURCE}" -o "${FEX_WOW64_DLL_SYMBOLS}"
+    COMMAND ${CMAKE_STRIP} --strip-debug "${FEX_WOW64_DLL_SOURCE}" -o "${FEX_WOW64_DLL_DEST}"
     BUILD_BYPRODUCTS "${FEX_WOW64_DLL_DEST}" "${FEX_WOW64_DLL_SYMBOLS}"
     USES_TERMINAL_BUILD OFF
 )
+ExternalProject_Add_StepDependencies(fex-arm64ec-build configure fex_arm64ec_sdk_libs)
+ExternalProject_Add_StepDependencies(fex-wow64-build configure fex_wow64_sdk_libs)
+
 # Deploy uncompressed so ntdll can load the emulator during process startup.
 add_cd_file(
     TARGET fex-arm64ec-build

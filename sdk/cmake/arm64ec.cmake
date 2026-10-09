@@ -115,6 +115,7 @@ set(_fex_common_cmake_args
     -DOPTIMIZE:STRING=${OPTIMIZE}
     -DPCH:BOOL=${PCH}
     -DREACTOS_CLANG_LLVM_MINGW_ROOT:PATH=${REACTOS_CLANG_LLVM_MINGW_ROOT}
+    -DREACTOS_LIBCXX_ROOT:PATH=${REACTOS_LIBCXX_ROOT}
     -DREACTOS_GRAPHICS_DRIVER_MODEL:STRING=${REACTOS_GRAPHICS_DRIVER_MODEL}
     -DREACTOS_TARGET_NT:STRING=${REACTOS_TARGET_NT}
     -DREACTOS_WDDM_LEVEL:STRING=${REACTOS_WDDM_LEVEL}
@@ -137,7 +138,6 @@ if(TARGET mesa_gallium)
         -DMESA_GALLIUM_FROM_SOURCE:BOOL=ON
         -DMESA_LLVM_ROOT:PATH=${MESA_ARM64EC_LLVM_ROOT}
         -DMESA_LLVM_LICENSE_FILE:FILEPATH=${MESA_ARM64EC_LLVM_LICENSE_FILE}
-        -DMESA_LLVM_MINGW_ROOT:PATH=${MESA_LLVM_MINGW_ROOT}
         -DMESA_BISON:FILEPATH=${MESA_BISON}
         -DMESA_FLEX:FILEPATH=${MESA_FLEX}
         -DMESA_PYTHON:FILEPATH=${MESA_PYTHON})
@@ -186,14 +186,31 @@ endif()
 
 include("${REACTOS_SOURCE_DIR}/sdk/cmake/nested-build.cmake")
 
+set(_arm64ec_sdk_library_targets)
+foreach(_library IN LISTS FEX_SDK_LIBRARIES)
+    if(TARGET ${_library}_implib_target)
+        list(APPEND _arm64ec_sdk_library_targets ${_library}_implib_target)
+    elseif(TARGET ${_library}_target)
+        list(APPEND _arm64ec_sdk_library_targets ${_library}_target)
+    else()
+        list(APPEND _arm64ec_sdk_library_targets ${_library})
+    endif()
+endforeach()
+
 add_custom_target(fex_arm64ec_runtime ALL
     ${_arm64ec_heal}
-    COMMAND ${REACTOS_NESTED_BUILD} "${ARM64EC_BINARY_DIR}" --target ${ARM64EC_RUNTIME_BUILD_MODULES}
+    COMMAND ${REACTOS_NESTED_BUILD} "${ARM64EC_BINARY_DIR}" --target ${ARM64EC_RUNTIME_BUILD_MODULES} ${_arm64ec_sdk_library_targets} chpe
     ${_arm64ec_validate}
     BYPRODUCTS ${ARM64EC_RUNTIME_VALIDATION_FILES}
     COMMENT "Building ${_arm64ec_target_count} ARM64EC FEX runtime DLLs"
     VERBATIM)
 add_dependencies(fex_arm64ec_runtime fex_arm64ec_configure)
+
+export_sdk_libraries(fex_arm64ec_sdk_libs "${FEX_ARM64EC_SDK_LIBDIR}"
+    FROM "${ARM64EC_BINARY_DIR}"
+    LIBRARIES ${FEX_SDK_LIBRARIES}
+    FILES "${ARM64EC_BINARY_DIR}/sdk/lib/vcruntime/libchpe.a"
+    DEPENDS fex_arm64ec_runtime)
 
 add_cd_file(TARGET fex_arm64ec_runtime FILE ${ARM64EC_RUNTIME_FILES}
     DESTINATION reactos/system32/arm64ec FOR all)
