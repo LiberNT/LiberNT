@@ -965,7 +965,7 @@ PreprocessUnattend(VOID)
     {
         /* Retrieve an optional .theme (or .msstyles) override, defaulting to Aero */
         if (!GetPrivateProfileStringW(L"Shell", L"CustomDefaultThemeFile",
-                                      L"%WINDIR%\\Resources\\Themes\\Win8\\win8.msstyles",
+                                      L"%WINDIR%\\Resources\\Themes\\Aero\\aero.msstyles",
                                       szValue, _countof(szValue), szPath) || !*szValue)
             bDefaultThemesOff = TRUE; // Invalid override: fall back to the classic theme.
     }

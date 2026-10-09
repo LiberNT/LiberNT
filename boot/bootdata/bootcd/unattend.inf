@@ -87,4 +87,4 @@ InstallationType = 0
 ; Override the default Win8 visual style or select Classic with DefaultThemesOff = yes.
 ;[Shell]
 ;DefaultThemesOff = no
-;CustomDefaultThemeFile = "%WINDIR%\Resources\Themes\Win8\win8.msstyles"
+;CustomDefaultThemeFile = "%WINDIR%\Resources\Themes\Aero\aero.msstyles"
