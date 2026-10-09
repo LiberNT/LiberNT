@@ -98,6 +98,13 @@ static void fix_checksum(unsigned char *buffer, size_t len, PIMAGE_NT_HEADERS nt
     nt_header->OptionalHeader.CheckSum = checksum;
 }
 
+static PIMAGE_DATA_DIRECTORY image_data_directory(PIMAGE_NT_HEADERS nt_header, unsigned int index)
+{
+    if (nt_header->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC)
+        return &((PIMAGE_NT_HEADERS32)nt_header)->OptionalHeader.DataDirectory[index];
+    return &((PIMAGE_NT_HEADERS64)nt_header)->OptionalHeader.DataDirectory[index];
+}
+
 static int add_loadconfig(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header)
 {
     PIMAGE_DATA_DIRECTORY export_dir;
@@ -106,7 +113,7 @@ static int add_loadconfig(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header)
     PWORD ordinal_ptr;
     DWORD n;
 
-    export_dir = &nt_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    export_dir = image_data_directory(nt_header, IMAGE_DIRECTORY_ENTRY_EXPORT);
     if (export_dir->Size == 0)
     {
         error("No export directory\n");
@@ -135,7 +142,7 @@ static int add_loadconfig(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header)
 
             /* Update the DataDirectory pointer / size
                The first entry of the LOAD_CONFIG struct is the size, use that as DataDirectory.Size */
-            load_config_dir = &nt_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG];
+            load_config_dir = image_data_directory(nt_header, IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG);
             load_config_dir->VirtualAddress = load_config_rva;
             load_config_dir->Size = *load_config_ptr;
 
