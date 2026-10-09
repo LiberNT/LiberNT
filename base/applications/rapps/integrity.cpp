@@ -8,7 +8,19 @@
 
 #include "rapps.h"
 
-#include <sha1.h>
+#include "download.h"
+
+BOOL
+VerifyIntegDigest(LPCWSTR lpSHA1Hash, PSHA_CTX Context)
+{
+    ULONG sha[5];
+    WCHAR buf[(sizeof(sha) * 2) + 1];
+
+    A_SHAFinal(Context, sha);
+    for (UINT i = 0; i < sizeof(sha); i++)
+        _swprintf(buf + 2 * i, L"%02x", ((unsigned char *)sha)[i]);
+    return !_wcsicmp(buf, lpSHA1Hash);
+}
 
 BOOL
 VerifyInteg(LPCWSTR lpSHA1Hash, LPCWSTR lpFileName)
@@ -43,16 +55,8 @@ VerifyInteg(LPCWSTR lpSHA1Hash, LPCWSTR lpFileName)
             /* cool, we don't need this anymore */
             UnmapViewOfFile(file_map);
 
-            /* we're done, compute the final hash */
-            ULONG sha[5];
-            A_SHAFinal(&ctx, sha);
-
-            WCHAR buf[(sizeof(sha) * 2) + 1];
-            for (UINT i = 0; i < sizeof(sha); i++)
-                _swprintf(buf + 2 * i, L"%02x", ((unsigned char *)sha)[i]);
             /* does the resulting SHA1 match with the provided one? */
-            if (!_wcsicmp(buf, lpSHA1Hash))
-                ret = TRUE;
+            ret = VerifyIntegDigest(lpSHA1Hash, &ctx);
         }
         CloseHandle(map);
     }

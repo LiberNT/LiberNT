@@ -51,6 +51,7 @@
 #include "dialogs.h"
 #include "misc.h"
 #include "unattended.h"
+#include "download.h"
 
 #ifdef USE_CERT_PINNING
 #define CERT_ISSUER_INFO_PREFIX "US\r\nLet's Encrypt\r\nR"
@@ -197,7 +198,7 @@ class CDownloaderProgress : public CWindowImpl<CDownloaderProgress, CWindow, CCo
     }
 
     VOID
-    SetProgress(ULONG ulProgress, ULONG ulProgressMax)
+    SetProgress(ULONGLONG ulProgress, ULONGLONG ulProgressMax)
     {
         WCHAR szProgress[100];
 
@@ -211,7 +212,7 @@ class CDownloaderProgress : public CWindowImpl<CDownloaderProgress, CWindow, CCo
         {
             /* total size is known */
             WCHAR szProgressMax[100];
-            UINT uiPercentage = ((ULONGLONG)ulProgress * 100) / ulProgressMax;
+            UINT uiPercentage = (UINT)((ulProgress * 100) / ulProgressMax);
 
             /* send the current progress to the progress bar */
             if (!IsWindow())
@@ -485,7 +486,13 @@ public:
         WM_GETNEXT, // Return DownloadInfo* or NULL
     };
 
-    CDownloadManager() : m_hDlg(NULL), m_Threads(0), m_Index(0), m_bCancelled(FALSE) {}
+    enum {
+        PROGRESS_TIMER = 1,
+        PROGRESS_INTERVAL = 250,
+    };
+
+    CDownloadManager() : m_hDlg(NULL), m_Threads(0), m_Index(0), m_bCancelled(FALSE),
+                         m_lProgress(0), m_lProgressMax(0), m_ShownProgress(0), m_ShownProgressMax(0) {}
 
     static CDownloadManager*
     CreateInstanceHelper(UINT Flags)
@@ -528,7 +535,7 @@ public:
     BOOL
     IsCancelled()
     {
-        return !IsWindow(m_hDlg) || SendMessageW(m_hDlg, WM_ISCANCELLED, 0, 0);
+        return !IsWindow(m_hDlg) || InterlockedCompareExchange((LONG volatile *)&m_bCancelled, FALSE, FALSE);
     }
 
     BOOL
@@ -542,7 +549,7 @@ public:
     void Show();
     static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
     INT_PTR RealDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-    void UpdateProgress(ULONG ulProgress, ULONG ulProgressMax);
+    void UpdateProgress(ULONGLONG ulProgress, ULONGLONG ulProgressMax);
     static unsigned int CALLBACK ThreadFunc(void*ThreadParam);
     void PerformDownloadAndInstall(const DownloadInfo &Info);
 
@@ -556,6 +563,10 @@ protected:
     UINT m_Threads;
     UINT m_Index;
     BOOL m_bCancelled;
+    LONGLONG m_lProgress;
+    LONGLONG m_lProgressMax;
+    ULONGLONG m_ShownProgress;
+    ULONGLONG m_ShownProgressMax;
     BOOL m_bModal;
     UINT m_fDaf = 0;
     WCHAR m_szCaptionFmt[100];
@@ -692,6 +703,7 @@ CDownloadManager::RealDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
                 return FALSE;
             m_ListView.LoadList(m_List);
 
+            SetTimer(hDlg, PROGRESS_TIMER, PROGRESS_INTERVAL, NULL);
             ShowWindow(hDlg, IsSilentDialog() ? SW_HIDE : SW_SHOW);
             StartWorkerThread();
             return TRUE;
@@ -700,18 +712,19 @@ CDownloadManager::RealDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
         case WM_COMMAND:
             if (LOWORD(wParam) == IDCANCEL)
             {
-                m_bCancelled = TRUE;
+                InterlockedExchange((LONG volatile *)&m_bCancelled, TRUE);
                 PostMessageW(hDlg, WM_CLOSE, 0, 0);
             }
             return FALSE;
 
         case WM_CLOSE:
-            m_bCancelled = TRUE;
+            InterlockedExchange((LONG volatile *)&m_bCancelled, TRUE);
             if (m_ProgressBar)
                 m_ProgressBar.UnsubclassWindow(TRUE);
             return m_bModal && !IsSilentDialog() ? ::EndDialog(hDlg, 0) : ::DestroyWindow(hDlg);
 
         case WM_DESTROY:
+            KillTimer(hDlg, PROGRESS_TIMER);
             if (g_hDownloadWnd == hDlg)
                 g_hDownloadWnd = NULL;
             g_Busy--;
@@ -732,6 +745,20 @@ CDownloadManager::RealDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
         case WM_GETINSTANCE:
             return SetDlgMsgResult(hDlg, uMsg, (INT_PTR)this);
 
+        case WM_TIMER:
+            if (wParam == PROGRESS_TIMER)
+            {
+                ULONGLONG Progress = (ULONGLONG)InterlockedCompareExchange64(&m_lProgress, 0, 0);
+                ULONGLONG ProgressMax = (ULONGLONG)InterlockedCompareExchange64(&m_lProgressMax, 0, 0);
+                if (Progress != m_ShownProgress || ProgressMax != m_ShownProgressMax)
+                {
+                    m_ShownProgress = Progress;
+                    m_ShownProgressMax = ProgressMax;
+                    m_ProgressBar.SetProgress(Progress, ProgressMax);
+                }
+            }
+            break;
+
         case WM_GETNEXT:
         {
             DownloadInfo *pItem = NULL;
@@ -744,9 +771,16 @@ CDownloadManager::RealDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
 }
 
 void
-CDownloadManager::UpdateProgress(ULONG ulProgress, ULONG ulProgressMax)
+CDownloadManager::UpdateProgress(ULONGLONG ulProgress, ULONGLONG ulProgressMax)
 {
-    m_ProgressBar.SetProgress(ulProgress, ulProgressMax);
+    InterlockedExchange64(&m_lProgress, (LONGLONG)ulProgress);
+    InterlockedExchange64(&m_lProgressMax, (LONGLONG)ulProgressMax);
+}
+
+static BOOL
+DownloadSinkIsCancelled(PVOID Context)
+{
+    return ((CDownloadManager *)Context)->IsCancelled();
 }
 
 unsigned int CALLBACK
@@ -774,15 +808,19 @@ CDownloadManager::PerformDownloadAndInstall(const DownloadInfo &Info)
 
     m_ProgressBar.SetMarquee(FALSE);
     m_ProgressBar.SendMessageW(PBM_SETPOS, 0, 0);
-    m_ProgressBar.SetProgress(0, Info.SizeInBytes);
+    UpdateProgress(0, Info.SizeInBytes);
 
     CStringW str;
     CPathW Path;
     PCWSTR p;
 
-    ULONG dwContentLen, dwBytesWritten, dwBytesRead, dwStatus, dwStatusLen;
-    ULONG dwCurrentBytesRead = 0;
+    ULONGLONG ContentLength, Received = 0;
+    DWORD dwStatus, dwError;
     BOOL bTempfile = FALSE, bCancelled = FALSE;
+    DOWNLOAD_RESOURCE Resource;
+    const DOWNLOAD_SINK Sink = { this, DownloadSinkIsCancelled, &m_lProgress };
+    const BOOL bHash = (Info.DLType == DLTYPE_APPLICATION) && Info.szSHA1[0] != 0;
+    SHA_CTX HashContext = {};
 
     HINTERNET hOpen = NULL;
     HINTERNET hFile = NULL;
@@ -794,7 +832,6 @@ CDownloadManager::PerformDownloadAndInstall(const DownloadInfo &Info)
         INTERNET_FLAG_DONT_CACHE | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_KEEP_CONNECTION;
     URL_COMPONENTSW urlComponents;
     size_t urlLength;
-    unsigned char lpBuffer[4096];
 
     // Change caption to show the currently downloaded app
     switch (Info.DLType)
@@ -895,8 +932,10 @@ CDownloadManager::PerformDownloadAndInstall(const DownloadInfo &Info)
     }
 
     bTempfile = TRUE;
-    dwContentLen = 0;
-    dwStatusLen = sizeof(dwStatus);
+    ContentLength = 0;
+    Resource.Status = 0;
+    Resource.Length = 0;
+    Resource.AcceptsRanges = FALSE;
     ZeroMemory(&urlComponents, sizeof(urlComponents));
     urlComponents.dwStructSize = sizeof(urlComponents);
 
@@ -912,7 +951,7 @@ CDownloadManager::PerformDownloadAndInstall(const DownloadInfo &Info)
 
     if (urlComponents.nScheme == INTERNET_SCHEME_HTTP || urlComponents.nScheme == INTERNET_SCHEME_HTTPS)
     {
-        hFile = InternetOpenUrlW(hOpen, Info.szUrl, NULL, 0, dwUrlConnectFlags, 0);
+        hFile = OpenHttpDownload(hOpen, Info.szUrl, dwUrlConnectFlags, Resource);
         if (!hFile)
         {
             if (!ShowLastError(hMainWnd, TRUE, GetLastError()))
@@ -923,21 +962,13 @@ CDownloadManager::PerformDownloadAndInstall(const DownloadInfo &Info)
             goto end;
         }
 
-        // query connection
-        if (!HttpQueryInfoW(hFile, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwStatus, &dwStatusLen, NULL))
-        {
-            ShowLastError(hMainWnd, TRUE, GetLastError());
-            goto end;
-        }
-
-        if (dwStatus != HTTP_STATUS_OK)
+        if (Resource.Status != HTTP_STATUS_OK && Resource.Status != HTTP_STATUS_PARTIAL_CONTENT)
         {
             MessageBox_LoadString(hMainWnd, IDS_UNABLE_TO_DOWNLOAD);
             goto end;
         }
 
-        // query content length
-        HttpQueryInfoW(hFile, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &dwContentLen, &dwStatusLen, NULL);
+        ContentLength = Resource.Length;
     }
     else if (urlComponents.nScheme == INTERNET_SCHEME_FTP)
     {
@@ -954,7 +985,14 @@ CDownloadManager::PerformDownloadAndInstall(const DownloadInfo &Info)
             goto end;
         }
 
-        dwContentLen = FtpGetFileSize(hFile, &dwStatus);
+        dwStatus = 0;
+        SetLastError(ERROR_SUCCESS);
+        ContentLength = FtpGetFileSize(hFile, &dwStatus);
+        if (ContentLength == INVALID_FILE_SIZE && GetLastError() != ERROR_SUCCESS)
+            ContentLength = 0;
+        else
+            ContentLength |= (ULONGLONG)dwStatus << 32;
+        Resource.Length = ContentLength;
     }
     else if (urlComponents.nScheme == INTERNET_SCHEME_FILE)
     {
@@ -987,12 +1025,12 @@ CDownloadManager::PerformDownloadAndInstall(const DownloadInfo &Info)
         }
     }
 
-    if (!dwContentLen)
+    if (!ContentLength)
     {
         // Someone was nice enough to add this, let's use it
         if (Info.SizeInBytes)
         {
-            dwContentLen = Info.SizeInBytes;
+            ContentLength = Info.SizeInBytes;
         }
         else
         {
@@ -1028,6 +1066,7 @@ CDownloadManager::PerformDownloadAndInstall(const DownloadInfo &Info)
                 goto end;
             }
         }
+        Resource.AcceptsRanges = FALSE;
     }
 #endif
 
@@ -1038,29 +1077,19 @@ CDownloadManager::PerformDownloadAndInstall(const DownloadInfo &Info)
         goto end;
     }
 
-    dwCurrentBytesRead = 0;
-    do
+    UpdateProgress(0, ContentLength);
+    if (bHash)
+        A_SHAInit(&HashContext);
+    dwError = DownloadToFile(hOpen, hFile, Resource, dwUrlConnectFlags, hOut, bHash ? &HashContext : NULL, Sink, Received);
+    if (dwError == ERROR_CANCELLED)
     {
-        bCancelled = IsCancelled();
-        if (bCancelled)
-            break;
-
-        if (!InternetReadFile(hFile, lpBuffer, _countof(lpBuffer), &dwBytesRead))
-        {
-            ShowLastError(hDlg, TRUE, GetLastError());
-            goto end;
-        }
-
-        if (!WriteFile(hOut, &lpBuffer[0], dwBytesRead, &dwBytesWritten, NULL))
-        {
-            ShowLastError(hDlg, FALSE, GetLastError());
-            goto end;
-        }
-
-        dwCurrentBytesRead += dwBytesRead;
-        UpdateProgress(dwCurrentBytesRead, dwContentLen);
-        
-    } while (dwBytesRead);
+        bCancelled = TRUE;
+    }
+    else if (dwError != ERROR_SUCCESS)
+    {
+        ShowLastError(hDlg, dwError >= INTERNET_ERROR_BASE && dwError <= INTERNET_ERROR_LAST, dwError);
+        goto end;
+    }
 
     CloseHandle(hOut);
     hOut = INVALID_HANDLE_VALUE;
@@ -1071,13 +1100,13 @@ CDownloadManager::PerformDownloadAndInstall(const DownloadInfo &Info)
         goto end;
     }
 
-    if (!dwContentLen)
+    if (!ContentLength)
     {
         // set progress bar to 100%
         m_ProgressBar.SetMarquee(FALSE);
 
-        dwContentLen = dwCurrentBytesRead;
-        UpdateProgress(dwCurrentBytesRead, dwContentLen);
+        ContentLength = Received;
+        UpdateProgress(Received, ContentLength);
     }
 
     /* if this thing isn't a RAPPS update and it has a SHA-1 checksum
@@ -1096,8 +1125,7 @@ CDownloadManager::PerformDownloadAndInstall(const DownloadInfo &Info)
         SetWindowTextW(hDlg, szMsgText);
         SetWindowTextW(hStatus, Path);
 
-        // this may take a while, depending on the file size
-        if (!VerifyInteg(Info.szSHA1, Path))
+        if (!VerifyIntegDigest(Info.szSHA1, &HashContext))
         {
             if (!szMsgText.LoadStringW(IDS_INTEG_CHECK_FAIL))
             {

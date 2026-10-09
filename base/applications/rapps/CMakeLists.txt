@@ -13,6 +13,7 @@ list(APPEND SOURCE
     asyncinet.cpp
     cabinet.cpp
     configparser.cpp
+    download.cpp
     geninst.cpp
     gui.cpp
     integrity.cpp
@@ -30,6 +31,7 @@ list(APPEND SOURCE
     include/crichedit.h
     include/defines.h
     include/dialogs.h
+    include/download.h
     include/gui.h
     include/misc.h
     include/rapps.h
