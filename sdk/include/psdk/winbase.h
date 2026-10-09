@@ -30,6 +30,7 @@ extern "C" {
 #include <handleapi.h>
 #include <memoryapi.h>
 #include <processenv.h>
+#include <processtopologyapi.h>
 #include <timezoneapi.h>
 
 #ifdef _MSC_VER
@@ -310,6 +311,8 @@ extern "C" {
 #define THREAD_PRIORITY_NORMAL 0
 #define THREAD_PRIORITY_TIME_CRITICAL 15
 #define THREAD_PRIORITY_ERROR_RETURN 2147483647
+#define THREAD_MODE_BACKGROUND_BEGIN 0x00010000
+#define THREAD_MODE_BACKGROUND_END 0x00020000
 #define TIME_ZONE_ID_UNKNOWN 0
 #define TIME_ZONE_ID_STANDARD 1
 #define TIME_ZONE_ID_DAYLIGHT 2
@@ -3117,9 +3120,7 @@ BOOL WINAPI SetThreadContext(HANDLE,const CONTEXT*);
 DWORD WINAPI SetThreadIdealProcessor(_In_ HANDLE, _In_ DWORD);
 #if (_WIN32_WINNT >= 0x0601)
 BOOL WINAPI GetThreadIdealProcessorEx(_In_ HANDLE, _Out_ PPROCESSOR_NUMBER);
-BOOL WINAPI GetThreadGroupAffinity(_In_ HANDLE, _Out_ PGROUP_AFFINITY);
 BOOL WINAPI SetThreadIdealProcessorEx(_In_ HANDLE, _In_ PPROCESSOR_NUMBER, _Out_opt_ PPROCESSOR_NUMBER);
-BOOL WINAPI SetThreadGroupAffinity(_In_ HANDLE, _In_ const GROUP_AFFINITY *, _Out_opt_ PGROUP_AFFINITY);
 BOOL WINAPI GetNumaNodeProcessorMaskEx(_In_ USHORT, _Out_ PGROUP_AFFINITY);
 BOOL WINAPI GetNumaProcessorNodeEx(_In_ PPROCESSOR_NUMBER, _Out_ PUSHORT);
 #endif

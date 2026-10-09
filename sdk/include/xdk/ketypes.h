@@ -26,8 +26,6 @@ typedef enum _MODE {
 #define EVENT_MODIFY_STATE (0x0002)
 #define EVENT_ALL_ACCESS (STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x3)
 
-#define LTP_PC_SMT 0x1
-
 #if (NTDDI_VERSION < NTDDI_WIN7) || defined(_X86_) || !defined(NT_PROCESSOR_GROUPS)
 #define SINGLE_GROUP_LEGACY_API        1
 #endif
@@ -38,6 +36,8 @@ typedef enum _MODE {
 
 $endif(_WDMDDK_)
 $if(_WDMDDK_ || _WINNT_)
+
+#define LTP_PC_SMT 0x1
 
 typedef struct _PROCESSOR_GROUP_INFO {
   UCHAR MaximumProcessorCount;
