@@ -2379,6 +2379,7 @@ UnloadUserProfile(
     _In_ HANDLE hToken,
     _In_ HANDLE hProfile)
 {
+    static const UNICODE_STRING LocalSystemSidString = RTL_CONSTANT_STRING(L"S-1-5-18");
     UNICODE_STRING SidString = {0, 0, NULL};
     HANDLE hProfileMutex = NULL;
     HKEY hProfilesKey = NULL, hProfileKey = NULL;
@@ -2427,7 +2428,7 @@ UnloadUserProfile(
         goto cleanup;
     }
 
-    if (dwRefCount == 0)
+    if (dwRefCount == 0 && !RtlEqualUnicodeString(&SidString, &LocalSystemSidString, TRUE))
     {
         DPRINT("RefCount is 0: Unload the Hive!\n");
 
