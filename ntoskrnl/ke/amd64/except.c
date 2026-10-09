@@ -315,6 +315,29 @@ KiPrepareUserDebugData(void)
     _SEH2_END;
 }
 
+static
+BOOLEAN
+KiForwardExceptionToDebugPort(
+    _Inout_ PEXCEPTION_RECORD ExceptionRecord,
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ BOOLEAN SecondChance)
+{
+    NTSTATUS ExceptionCode = ExceptionRecord->ExceptionCode;
+    BOOLEAN Handled;
+
+    if (TrapFrame->SegCs == (KGDT64_R3_CMCODE | RPL_MASK))
+    {
+        if (ExceptionCode == STATUS_BREAKPOINT)
+            ExceptionRecord->ExceptionCode = STATUS_WX86_BREAKPOINT;
+        else if (ExceptionCode == STATUS_SINGLE_STEP)
+            ExceptionRecord->ExceptionCode = STATUS_WX86_SINGLE_STEP;
+    }
+
+    Handled = DbgkForwardException(ExceptionRecord, TRUE, SecondChance);
+    ExceptionRecord->ExceptionCode = ExceptionCode;
+    return Handled;
+}
+
 VOID
 NTAPI
 KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
@@ -442,7 +465,7 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
             }
 
             /* Forward exception to user mode debugger */
-            if (DbgkForwardException(ExceptionRecord, TRUE, FALSE)) return;
+            if (KiForwardExceptionToDebugPort(ExceptionRecord, TrapFrame, FALSE)) return;
 
             /* Forward exception to user mode */
             if (KiDispatchExceptionToUser(TrapFrame, &Context, ExceptionRecord))
@@ -455,7 +478,7 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
         }
 
         /* Try second chance */
-        if (DbgkForwardException(ExceptionRecord, TRUE, TRUE))
+        if (KiForwardExceptionToDebugPort(ExceptionRecord, TrapFrame, TRUE))
         {
             /* Handled, get out */
             return;
