@@ -3704,6 +3704,99 @@ typedef struct _KPROCESS
     PVOID AvailableCpuState;                             // 0x1B0
 } KPROCESS;                                              // sizeof 0x1B8
 
+//
+// Kernel Process (KPROCESS), Win11 26100 amd64 layout (ntkrnlmp.pdb 10.0.26100.8036)
+// sizeof == 0x1C8; members marked [ReactOS] live in the Win11 Padding[6] slot
+//
+#elif defined(_M_AMD64) && (NTDDI_VERSION >= NTDDI_WIN11_GE)
+
+typedef struct _KPROCESS
+{
+    DISPATCHER_HEADER Header;                            // 0x000
+    LIST_ENTRY ProfileListHead;                          // 0x018
+    ULONG_PTR DirectoryTableBase;                        // 0x028
+    LIST_ENTRY ThreadListHead;                           // 0x030
+    KSPIN_LOCK ProcessLock;                              // 0x040 Win11: ULONG ProcessLock + ULONG ProcessTimerDelay
+    ULONG64 DeepFreezeStartTime;                         // 0x048
+    KAFFINITY Affinity;                                  // 0x050 Win11 type: PKAFFINITY_EX
+    ULONG64 AutoBoostState[2];                           // 0x058 KAB_UM_PROCESS_CONTEXT
+    LIST_ENTRY ReadyListHead;                            // 0x068
+    SINGLE_LIST_ENTRY SwapListEntry;                     // 0x078
+    volatile KAFFINITY ActiveProcessors;                 // 0x080 Win11 type: PKAFFINITY_EX
+    union
+    {
+        struct
+        {
+            LONG AutoAlignment:1;                        // 0x088
+            LONG DisableBoost:1;
+            LONG DisableQuantum:1;
+            LONG DeepFreeze:1;
+            LONG TimerVirtualization:1;
+            LONG CheckStackExtents:1;
+            LONG CacheIsolationEnabled:1;
+            LONG PpmPolicy:4;
+            LONG VaSpaceDeleted:1;
+            LONG MultiGroup:1;
+            LONG ForegroundProcess:1;
+            LONG ReservedFlags:18;
+        };
+        volatile LONG ProcessFlags;
+    };
+    ULONG Spare0c;                                       // 0x08C
+    SCHAR BasePriority;                                  // 0x090
+    SCHAR QuantumReset;                                  // 0x091
+    UCHAR Visited;                                       // 0x092
+    union
+    {
+        KEXECUTE_OPTIONS Flags;                          // 0x093
+        UCHAR ExecuteOptions;
+    };
+    ULONG64 ActiveGroupsMask[2];                         // 0x098 KGROUP_MASK
+    ULONG64 ActiveGroupPadding[2];                       // 0x0A8
+    PVOID IdealProcessorAssignmentBlock;                 // 0x0B8
+    ULONG_PTR Unused0;                                   // 0x0C0 [ReactOS]
+    PVOID VdmTrapcHandler;                               // 0x0C8 [ReactOS]
+    USHORT IopmOffset;                                   // 0x0D0 [ReactOS]
+    UCHAR State;                                         // 0x0D2 [ReactOS]
+    UCHAR ThreadSeed;                                    // 0x0D3 [ReactOS]
+    UCHAR PowerState;                                    // 0x0D4 [ReactOS]
+    UCHAR IdealNode;                                     // 0x0D5 [ReactOS]
+    USHORT SpareD6;                                      // 0x0D6
+    KGDTENTRY64 LdtSystemDescriptor;                     // 0x0D8 [ReactOS]
+    PVOID LdtBaseAddress;                                // 0x0E8 [ReactOS]
+    ULONG Padding2;                                      // 0x0F0
+    ULONG SchedulerAssistYieldBoostCount;                // 0x0F4
+    LONG64 SchedulerAssistYieldBoostAllowedTime;         // 0x0F8
+    ULONG Spare0d;                                       // 0x100
+    USHORT IdealGlobalNode;                              // 0x104
+    USHORT Spare1;                                       // 0x106
+    volatile ULONG StackCount;                           // 0x108 KSTACK_COUNT
+    LIST_ENTRY ProcessListEntry;                         // 0x110
+    ULONG64 CycleTime;                                   // 0x120
+    ULONG64 ContextSwitches;                             // 0x128
+    PVOID SchedulingGroup;                               // 0x130 PKSCHEDULING_GROUP
+    ULONG64 KernelTime;                                  // 0x138
+    ULONG64 UserTime;                                    // 0x140
+    ULONG64 ReadyTime;                                   // 0x148
+    ULONG FreezeCount;                                   // 0x150
+    ULONG Spare4;                                        // 0x154
+    ULONG64 UserDirectoryTableBase;                      // 0x158
+    UCHAR AddressPolicy;                                 // 0x160
+    UCHAR Spare2[7];                                     // 0x161
+    PVOID InstrumentationCallback;                       // 0x168
+    ULONG64 SecureState;                                 // 0x170
+    ULONG64 KernelWaitTime;                              // 0x178
+    ULONG64 UserWaitTime;                                // 0x180
+    ULONG64 LastRebalanceQpc;                            // 0x188
+    PVOID PerProcessorCycleTimes;                        // 0x190
+    ULONG64 ExtendedFeatureDisableMask;                  // 0x198
+    USHORT PrimaryGroup;                                 // 0x1A0
+    USHORT Spare3[3];                                    // 0x1A2
+    PVOID UserCetLogging;                                // 0x1A8
+    LIST_ENTRY CpuPartitionList;                         // 0x1B0
+    PVOID AvailableCpuState;                             // 0x1C0
+} KPROCESS;                                              // sizeof 0x1C8
+
 #else
 
 typedef struct _KPROCESS
@@ -3792,6 +3885,33 @@ C_ASSERT(FIELD_OFFSET(KPROCESS, ProcessListEntry) == 0x118);
 C_ASSERT(FIELD_OFFSET(KPROCESS, CycleTime) == 0x128);
 C_ASSERT(FIELD_OFFSET(KPROCESS, KernelTime) == 0x140);
 C_ASSERT(FIELD_OFFSET(KPROCESS, UserTime) == 0x148);
+#endif
+
+#if defined(_M_AMD64) && (NTDDI_VERSION >= NTDDI_WIN11_GE) && !defined(__ASSEMBLER__)
+C_ASSERT(sizeof(KPROCESS) == 0x1C8);
+C_ASSERT(FIELD_OFFSET(KPROCESS, DirectoryTableBase) == 0x028);
+C_ASSERT(FIELD_OFFSET(KPROCESS, ThreadListHead) == 0x030);
+C_ASSERT(FIELD_OFFSET(KPROCESS, ProcessLock) == 0x040);
+C_ASSERT(FIELD_OFFSET(KPROCESS, Affinity) == 0x050);
+C_ASSERT(FIELD_OFFSET(KPROCESS, ReadyListHead) == 0x068);
+C_ASSERT(FIELD_OFFSET(KPROCESS, SwapListEntry) == 0x078);
+C_ASSERT(FIELD_OFFSET(KPROCESS, ActiveProcessors) == 0x080);
+C_ASSERT(FIELD_OFFSET(KPROCESS, ProcessFlags) == 0x088);
+C_ASSERT(FIELD_OFFSET(KPROCESS, BasePriority) == 0x090);
+C_ASSERT(FIELD_OFFSET(KPROCESS, Flags) == 0x093);
+C_ASSERT(FIELD_OFFSET(KPROCESS, IdealProcessorAssignmentBlock) == 0x0B8);
+C_ASSERT(FIELD_OFFSET(KPROCESS, Unused0) == 0x0C0);
+C_ASSERT(FIELD_OFFSET(KPROCESS, Padding2) == 0x0F0);
+C_ASSERT(FIELD_OFFSET(KPROCESS, StackCount) == 0x108);
+C_ASSERT(FIELD_OFFSET(KPROCESS, ProcessListEntry) == 0x110);
+C_ASSERT(FIELD_OFFSET(KPROCESS, CycleTime) == 0x120);
+C_ASSERT(FIELD_OFFSET(KPROCESS, KernelTime) == 0x138);
+C_ASSERT(FIELD_OFFSET(KPROCESS, UserTime) == 0x140);
+C_ASSERT(FIELD_OFFSET(KPROCESS, UserDirectoryTableBase) == 0x158);
+C_ASSERT(FIELD_OFFSET(KPROCESS, InstrumentationCallback) == 0x168);
+C_ASSERT(FIELD_OFFSET(KPROCESS, PrimaryGroup) == 0x1A0);
+C_ASSERT(FIELD_OFFSET(KPROCESS, CpuPartitionList) == 0x1B0);
+C_ASSERT(FIELD_OFFSET(KPROCESS, AvailableCpuState) == 0x1C0);
 #endif
 
 #define ASSERT_PROCESS(object) \

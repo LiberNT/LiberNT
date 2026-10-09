@@ -877,6 +877,9 @@ OFFSET(ThUcb, KTHREAD, Ucb),
 HEADER("KPROCESS offsets"),
 OFFSET(PrLdtSystemDescriptor, KPROCESS, LdtSystemDescriptor),
 OFFSET(PrLdtBaseAddress, KPROCESS, LdtBaseAddress),
+#if (NTDDI_VERSION >= NTDDI_WIN11_GE)
+OFFSET(PrInstrumentationCallback, KPROCESS, InstrumentationCallback),
+#endif
 #endif
 
 
