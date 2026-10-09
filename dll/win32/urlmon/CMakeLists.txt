@@ -53,7 +53,7 @@ add_library(urlmon MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/urlmon.def)
 
 set_module_type(urlmon win32dll)
-target_link_libraries(urlmon uuid wine crtheap ${PSEH_LIB} oldnames)
+target_link_libraries(urlmon uuid wine ${PSEH_LIB} oldnames)
 add_delay_importlibs(urlmon advpack)
 add_importlibs(urlmon rpcrt4 ole32 oleaut32 shlwapi shell32 wininet user32 advapi32 iertutil kernel32_vista msvcrt kernel32 ntdll)
 add_cd_file(TARGET urlmon DESTINATION reactos/system32 FOR all)

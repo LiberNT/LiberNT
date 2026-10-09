@@ -64,7 +64,7 @@ target_compile_options(shlwapi_autocomp PRIVATE $<TARGET_PROPERTY:shlwapi,COMPIL
 add_dependencies(shlwapi_autocomp psdk)
 
 set_module_type(shlwapi win32dll UNICODE)
-target_link_libraries(shlwapi uuid wine wine_dll_version crtheap cppstl)
+target_link_libraries(shlwapi uuid wine wine_dll_version msvcrtex cppstl)
 if(DLL_EXPORT_VERSION LESS 0x600)
     target_link_libraries(shlwapi evalcmd)
 endif()
