@@ -3272,7 +3272,7 @@ GenerateDeviceID(
         if (dwInstanceNumber >= 10000)
             return CR_FAILURE;
 
-        _swprintf(szGeneratedInstance, L"Root\\%ls\\%04lu",
+        _swprintf(szGeneratedInstance, L"ROOT\\%ls\\%04lu",
                   pszDeviceID, dwInstanceNumber);
 
         /* Try to open the enum key of the device instance */

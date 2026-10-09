@@ -15,7 +15,7 @@
 
 /* GLOBALS *******************************************************************/
 
-#define ENUM_NAME_ROOT L"Root"
+#define ENUM_NAME_ROOT L"ROOT"
 
 /* DATA **********************************************************************/
 
@@ -255,7 +255,7 @@ PnpRootCreateDevice(
     DPRINT("Creating a PnP root device for service '%wZ'\n", ServiceName);
 
     DevicePath.Length = 0;
-    DevicePath.MaximumLength = sizeof(REGSTR_KEY_ROOTENUM) + sizeof(L'\\') + ServiceName->Length;
+    DevicePath.MaximumLength = sizeof(ENUM_NAME_ROOT) + sizeof(L'\\') + ServiceName->Length;
     DevicePath.Buffer = ExAllocatePoolWithTag(PagedPool,
                                               DevicePath.MaximumLength,
                                               TAG_PNP_ROOT);
@@ -265,7 +265,7 @@ PnpRootCreateDevice(
         Status = STATUS_NO_MEMORY;
         goto cleanup;
     }
-    RtlAppendUnicodeToString(&DevicePath, REGSTR_KEY_ROOTENUM L"\\");
+    RtlAppendUnicodeToString(&DevicePath, ENUM_NAME_ROOT L"\\");
     RtlAppendUnicodeStringToString(&DevicePath, ServiceName);
 
     /* Initialize a PNPROOT_DEVICE structure */
@@ -705,7 +705,7 @@ EnumerateDevices(
     PPNPROOT_FDO_DEVICE_EXTENSION DeviceExtension;
     PKEY_BASIC_INFORMATION KeyInfo = NULL, SubKeyInfo = NULL;
     UNICODE_STRING LegacyU = RTL_CONSTANT_STRING(L"LEGACY_");
-    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\" REGSTR_PATH_SYSTEMENUM L"\\" REGSTR_KEY_ROOTENUM);
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\" REGSTR_PATH_SYSTEMENUM L"\\" ENUM_NAME_ROOT);
     UNICODE_STRING SubKeyName;
     UNICODE_STRING DevicePath;
     HANDLE KeyHandle = NULL;
@@ -855,7 +855,7 @@ EnumerateDevices(
 
             /* Compute device ID */
             DevicePath.Length = 0;
-            DevicePath.MaximumLength = sizeof(REGSTR_KEY_ROOTENUM) + sizeof(L'\\') + SubKeyName.Length;
+            DevicePath.MaximumLength = sizeof(ENUM_NAME_ROOT) + sizeof(L'\\') + SubKeyName.Length;
             DevicePath.Buffer = ExAllocatePoolWithTag(PagedPool,
                                                       DevicePath.MaximumLength,
                                                       TAG_PNP_ROOT);
@@ -866,7 +866,7 @@ EnumerateDevices(
                 goto cleanup;
             }
 
-            RtlAppendUnicodeToString(&DevicePath, REGSTR_KEY_ROOTENUM L"\\");
+            RtlAppendUnicodeToString(&DevicePath, ENUM_NAME_ROOT L"\\");
             RtlAppendUnicodeStringToString(&DevicePath, &SubKeyName);
             DPRINT("Found device %wZ\\%S!\n", &DevicePath, SubKeyInfo->Name);
 

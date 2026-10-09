@@ -81,7 +81,7 @@ IopOpenReportedRootDeviceKey(
 {
     static const UNICODE_STRING Prefix =
         RTL_CONSTANT_STRING(L"\\Registry\\Machine\\" REGSTR_PATH_SYSTEMENUM
-                            L"\\" REGSTR_KEY_ROOTENUM L"\\");
+                            L"\\ROOT\\");
     static const UNICODE_STRING Suffix = RTL_CONSTANT_STRING(L"\\0000");
     UNICODE_STRING KeyPath;
     ULONG Length;

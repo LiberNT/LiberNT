@@ -378,7 +378,7 @@ IopInitializePlugPlayServices(VOID)
 
     /* Create the root key */
     ParentHandle = EnumHandle;
-    RtlInitUnicodeString(&KeyName, REGSTR_KEY_ROOTENUM);
+    RtlInitUnicodeString(&KeyName, L"ROOT");
     Status = IopCreateRegistryKeyEx(&EnumHandle,
                                     ParentHandle,
                                     &KeyName,

@@ -674,7 +674,7 @@ NTAPI
 IopUpdateRootKey(VOID)
 {
     UNICODE_STRING EnumU = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Enum");
-    UNICODE_STRING RootPathU = RTL_CONSTANT_STRING(L"Root");
+    UNICODE_STRING RootPathU = RTL_CONSTANT_STRING(L"ROOT");
     UNICODE_STRING MultiKeyPathU = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\HARDWARE\\DESCRIPTION\\System\\MultifunctionAdapter");
     OBJECT_ATTRIBUTES ObjectAttributes;
     HANDLE hEnum, hRoot;
