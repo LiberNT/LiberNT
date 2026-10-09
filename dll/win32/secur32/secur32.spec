@@ -77,6 +77,12 @@
 
 @ stdcall SetCredentialsAttributesA(ptr long ptr long)
 @ stdcall SetCredentialsAttributesW(ptr long ptr long)
+@ stdcall SspiEncodeAuthIdentityAsStrings(ptr ptr ptr ptr) sspicli.SspiEncodeAuthIdentityAsStrings
+@ stdcall SspiEncodeStringsAsAuthIdentity(wstr wstr wstr ptr) sspicli.SspiEncodeStringsAsAuthIdentity
+@ stdcall SspiFreeAuthIdentity(ptr) sspicli.SspiFreeAuthIdentity
+@ stdcall SspiLocalFree(ptr) sspicli.SspiLocalFree
+@ stdcall SspiPrepareForCredWrite(ptr wstr ptr ptr ptr ptr ptr) sspicli.SspiPrepareForCredWrite
+@ stdcall SspiZeroAuthIdentity(ptr) sspicli.SspiZeroAuthIdentity
 
 @ stdcall QueryContextAttributesExA(ptr long ptr long)
 @ stdcall QueryContextAttributesExW(ptr long ptr long)

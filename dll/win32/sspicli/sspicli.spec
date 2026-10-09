@@ -65,3 +65,9 @@
 
 @ stdcall QueryContextAttributesExA(ptr long ptr long) secur32.QueryContextAttributesExA
 @ stdcall QueryContextAttributesExW(ptr long ptr long) secur32.QueryContextAttributesExW
+@ stdcall SspiEncodeAuthIdentityAsStrings(ptr ptr ptr ptr)
+@ stdcall SspiEncodeStringsAsAuthIdentity(wstr wstr wstr ptr)
+@ stdcall SspiFreeAuthIdentity(ptr)
+@ stdcall SspiLocalFree(ptr)
+@ stdcall SspiPrepareForCredWrite(ptr wstr ptr ptr ptr ptr ptr)
+@ stdcall SspiZeroAuthIdentity(ptr)
