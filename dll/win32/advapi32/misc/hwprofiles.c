@@ -122,7 +122,7 @@ GetCurrentHwProfileW(LPHW_PROFILE_INFOW lpHwProfileInfo)
     }
 
     _swprintf(szKeyName,
-              L"Hardware Profile\\%04lu",
+              L"Hardware Profiles\\%04lu",
               dwConfigId);
 
     if (RegOpenKeyExW(hDbKey,
