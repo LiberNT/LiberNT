@@ -29,11 +29,19 @@ typedef struct _CMP_NOTIFY_POST
 {
     LIST_ENTRY KeyList;
     LIST_ENTRY ThreadList;
+    LIST_ENTRY SlaveList;
     KEVENT WakeEvent;
+    KAPC Apc;
     PKEVENT Event;
     PETHREAD Thread;
+    PCM_NOTIFY_BLOCK SlaveNotify;
+    PCM_KEY_BODY SlaveKeyBody;
+    PIO_STATUS_BLOCK IoStatusBlock;
+    PIO_APC_ROUTINE ApcRoutine;
+    PVOID ApcContext;
     NTSTATUS Status;
     BOOLEAN Asynchronous;
+    BOOLEAN IoStatus32;
 } CMP_NOTIFY_POST, *PCMP_NOTIFY_POST;
 
 CODE_SEG("INIT")
@@ -45,8 +53,85 @@ CmpInitNotify(VOID)
     InitializeListHead(&CmpNotifyList);
 }
 
+static VOID
+CmpFreeNotifyPost(PCMP_NOTIFY_POST Post)
+{
+    if (Post->Event) ObDereferenceObjectDeferDelete(Post->Event);
+    if (Post->Thread) ObDereferenceObjectDeferDelete(Post->Thread);
+    ExFreePoolWithTag(Post, TAG_CM_POST);
+}
+
+static VOID
+NTAPI
+CmpNotifyApcRundown(PKAPC Apc)
+{
+    CmpFreeNotifyPost(CONTAINING_RECORD(Apc, CMP_NOTIFY_POST, Apc));
+}
+
+static VOID
+NTAPI
+CmpNotifyUserApcKernelRoutine(PKAPC Apc,
+                              PKNORMAL_ROUTINE *NormalRoutine,
+                              PVOID *NormalContext,
+                              PVOID *SystemArgument1,
+                              PVOID *SystemArgument2)
+{
+    UNREFERENCED_PARAMETER(NormalRoutine);
+    UNREFERENCED_PARAMETER(NormalContext);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    CmpFreeNotifyPost(CONTAINING_RECORD(Apc, CMP_NOTIFY_POST, Apc));
+}
+
+static VOID
+NTAPI
+CmpNotifyCompletionRoutine(PKAPC Apc,
+                           PKNORMAL_ROUTINE *NormalRoutine,
+                           PVOID *NormalContext,
+                           PVOID *SystemArgument1,
+                           PVOID *SystemArgument2)
+{
+    PCMP_NOTIFY_POST Post = CONTAINING_RECORD(Apc, CMP_NOTIFY_POST, Apc);
+    IO_STATUS_BLOCK IoStatus;
+
+    UNREFERENCED_PARAMETER(NormalRoutine);
+    UNREFERENCED_PARAMETER(NormalContext);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    if (Post->IoStatusBlock)
+    {
+        IoStatus.Status = Post->Status;
+        IoStatus.Information = 0;
+        _SEH2_TRY
+        {
+            IopWriteIoStatusBlock(Post->IoStatusBlock, &IoStatus, Post->IoStatus32);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+        _SEH2_END;
+    }
+    if (Post->Event) KeSetEvent(Post->Event, IO_NO_INCREMENT, FALSE);
+    if (Post->ApcRoutine)
+    {
+        KeInitializeApc(&Post->Apc,
+                        &Post->Thread->Tcb,
+                        OriginalApcEnvironment,
+                        CmpNotifyUserApcKernelRoutine,
+                        CmpNotifyApcRundown,
+                        (PKNORMAL_ROUTINE)Post->ApcRoutine,
+                        UserMode,
+                        Post->ApcContext);
+        if (KeInsertQueueApc(&Post->Apc, Post->IoStatusBlock, NULL, IO_NO_INCREMENT))
+            return;
+    }
+    CmpFreeNotifyPost(Post);
+}
+
 /* The caller holds CmpNotifyMutex. Synchronous posts belong to the waiting
- * system call; asynchronous posts are freed when their event is signaled. */
+ * system call; asynchronous posts complete in their requesting thread. */
 static VOID
 CmpCompleteNotify(PCMP_NOTIFY_POST Post, NTSTATUS Status)
 {
@@ -60,12 +145,34 @@ CmpCompleteNotify(PCMP_NOTIFY_POST Post, NTSTATUS Status)
         RemoveEntryList(&Post->ThreadList);
         InitializeListHead(&Post->ThreadList);
     }
+    if (Post->SlaveNotify)
+    {
+        RemoveEntryList(&Post->SlaveNotify->HiveList);
+        ExFreePoolWithTag(Post->SlaveNotify, TAG_CM_NOTIFY);
+        Post->SlaveNotify = NULL;
+        InitializeListHead(&Post->SlaveList);
+    }
+    if (Post->SlaveKeyBody)
+    {
+        ObDereferenceObjectDeferDelete(Post->SlaveKeyBody);
+        Post->SlaveKeyBody = NULL;
+    }
     Post->Status = Status;
     if (Post->Asynchronous)
     {
-        KeSetEvent(Post->Event, IO_NO_INCREMENT, FALSE);
-        ObDereferenceObjectDeferDelete(Post->Event);
-        ExFreePoolWithTag(Post, TAG_CM_POST);
+        KeInitializeApc(&Post->Apc,
+                        &Post->Thread->Tcb,
+                        OriginalApcEnvironment,
+                        CmpNotifyCompletionRoutine,
+                        NULL,
+                        NULL,
+                        KernelMode,
+                        NULL);
+        if (!KeInsertQueueApc(&Post->Apc, NULL, NULL, IO_NO_INCREMENT))
+        {
+            if (Post->Event) KeSetEvent(Post->Event, IO_NO_INCREMENT, FALSE);
+            CmpFreeNotifyPost(Post);
+        }
     }
     else
     {
@@ -125,41 +232,62 @@ CmpFlushNotifyThread(PETHREAD Thread)
 NTSTATUS
 NTAPI
 CmpNotifyChangeKey(PCM_KEY_BODY KeyBody,
+                   PCM_KEY_BODY SlaveKeyBody,
                    PKEVENT Event,
+                   PIO_APC_ROUTINE ApcRoutine,
+                   PVOID ApcContext,
+                   PIO_STATUS_BLOCK IoStatusBlock,
+                   BOOLEAN IoStatus32,
                    ULONG Filter,
                    BOOLEAN WatchTree,
                    BOOLEAN Asynchronous,
                    KPROCESSOR_MODE PreviousMode)
 {
     PCM_KEY_CONTROL_BLOCK Kcb = KeyBody->KeyControlBlock;
-    PCM_NOTIFY_BLOCK Notify, NewNotify;
+    PCM_NOTIFY_BLOCK Notify, NewNotify, SlaveNotify = NULL;
     PCMP_NOTIFY_POST Post;
     NTSTATUS Status;
 
     PAGED_CODE();
 
-    Post = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Post), TAG_CM_POST);
+    Post = ExAllocatePoolZero(NonPagedPool, sizeof(*Post), TAG_CM_POST);
     if (!Post) return STATUS_INSUFFICIENT_RESOURCES;
     NewNotify = ExAllocatePoolWithTag(PagedPool, sizeof(*NewNotify), TAG_CM_NOTIFY);
-    if (!NewNotify)
+    if (SlaveKeyBody)
+        SlaveNotify = ExAllocatePoolWithTag(PagedPool, sizeof(*SlaveNotify), TAG_CM_NOTIFY);
+    if (!NewNotify || (SlaveKeyBody && !SlaveNotify))
     {
+        if (NewNotify) ExFreePoolWithTag(NewNotify, TAG_CM_NOTIFY);
+        if (SlaveNotify) ExFreePoolWithTag(SlaveNotify, TAG_CM_NOTIFY);
         ExFreePoolWithTag(Post, TAG_CM_POST);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
     InitializeListHead(&Post->KeyList);
     InitializeListHead(&Post->ThreadList);
+    InitializeListHead(&Post->SlaveList);
     KeInitializeEvent(&Post->WakeEvent, NotificationEvent, FALSE);
-    Post->Event = Event;
     Post->Thread = PsGetCurrentThread();
     Post->Status = STATUS_PENDING;
     Post->Asynchronous = Asynchronous;
+    if (Asynchronous)
+    {
+        Post->IoStatusBlock = IoStatusBlock;
+        Post->IoStatus32 = IoStatus32;
+        Post->ApcRoutine = ApcRoutine;
+        Post->ApcContext = ApcContext;
+    }
 
     CmpLockRegistry();
     CmpAcquireKcbLockShared(Kcb);
     ExAcquireFastMutex(&CmpNotifyMutex);
-    if (Kcb->Delete || KeyBody->NotifyClosed)
+    if (Kcb->Delete || (SlaveKeyBody && SlaveKeyBody->KeyControlBlock->Delete))
     {
-        Status = Kcb->Delete ? STATUS_KEY_DELETED : STATUS_NOTIFY_CLEANUP;
+        Status = STATUS_KEY_DELETED;
+        goto Unlock;
+    }
+    if (KeyBody->NotifyClosed)
+    {
+        Status = STATUS_NOTIFY_CLEANUP;
         goto Unlock;
     }
 
@@ -179,8 +307,28 @@ CmpNotifyChangeKey(PCM_KEY_BODY KeyBody,
     }
     if (Asynchronous)
     {
-        ObReferenceObject(Event);
-        KeClearEvent(Event);
+        ObReferenceObject(Post->Thread);
+        if (Event)
+        {
+            ObReferenceObject(Event);
+            Post->Event = Event;
+            KeClearEvent(Event);
+        }
+    }
+    if (SlaveKeyBody)
+    {
+        InitializeListHead(&SlaveNotify->PostList);
+        SlaveNotify->KeyControlBlock = SlaveKeyBody->KeyControlBlock;
+        SlaveNotify->KeyBody = NULL;
+        SlaveNotify->Filter = Filter & REG_LEGAL_CHANGE_FILTER;
+        SlaveNotify->WatchTree = !!WatchTree;
+        SlaveNotify->NotifyPending = FALSE;
+        InsertTailList(&CmpNotifyList, &SlaveNotify->HiveList);
+        InsertTailList(&SlaveNotify->PostList, &Post->SlaveList);
+        ObReferenceObject(SlaveKeyBody);
+        Post->SlaveNotify = SlaveNotify;
+        Post->SlaveKeyBody = SlaveKeyBody;
+        SlaveNotify = NULL;
     }
     InsertTailList(&Notify->PostList, &Post->KeyList);
     if (!(Filter & REG_NOTIFY_THREAD_AGNOSTIC))
@@ -192,6 +340,7 @@ Unlock:
     CmpReleaseKcbLock(Kcb);
     CmpUnlockRegistry();
     if (NewNotify) ExFreePoolWithTag(NewNotify, TAG_CM_NOTIFY);
+    if (SlaveNotify) ExFreePoolWithTag(SlaveNotify, TAG_CM_NOTIFY);
     if (Status != STATUS_PENDING)
     {
         ExFreePoolWithTag(Post, TAG_CM_POST);
@@ -232,9 +381,11 @@ CmpReportNotify(IN PCM_KEY_CONTROL_BLOCK Kcb,
     if (!Kcb) return;
 
     ExAcquireFastMutex(&CmpNotifyMutex);
+Restart:
     for (Entry = CmpNotifyList.Flink; Entry != &CmpNotifyList; Entry = Entry->Flink)
     {
         Notify = CONTAINING_RECORD(Entry, CM_NOTIFY_BLOCK, HiveList);
+        if (IsListEmpty(&Notify->PostList)) continue;
         if (!(Notify->Filter & Filter)) continue;
         Changed = Kcb;
         if (Notify->WatchTree)
@@ -243,11 +394,18 @@ CmpReportNotify(IN PCM_KEY_CONTROL_BLOCK Kcb,
                 Changed = Changed->ParentKcb;
         }
         if (Changed != Notify->KeyControlBlock) continue;
+        if (!Notify->KeyBody)
+        {
+            Post = CONTAINING_RECORD(Notify->PostList.Flink, CMP_NOTIFY_POST, SlaveList);
+            CmpCompleteNotify(Post, STATUS_NOTIFY_ENUM_DIR);
+            goto Restart;
+        }
         while (!IsListEmpty(&Notify->PostList))
         {
             Post = CONTAINING_RECORD(Notify->PostList.Flink, CMP_NOTIFY_POST, KeyList);
             CmpCompleteNotify(Post, STATUS_NOTIFY_ENUM_DIR);
         }
+        goto Restart;
     }
     ExReleaseFastMutex(&CmpNotifyMutex);
 }
@@ -268,16 +426,21 @@ VOID
 NTAPI
 CmpFlushNotifyOnKcb(IN PCM_KEY_CONTROL_BLOCK Kcb)
 {
-    PLIST_ENTRY Entry, Next;
+    PLIST_ENTRY Entry;
     PCM_NOTIFY_BLOCK Notify;
 
     ExAcquireFastMutex(&CmpNotifyMutex);
-    for (Entry = CmpNotifyList.Flink; Entry != &CmpNotifyList; Entry = Next)
+Restart:
+    for (Entry = CmpNotifyList.Flink; Entry != &CmpNotifyList; Entry = Entry->Flink)
     {
-        Next = Entry->Flink;
         Notify = CONTAINING_RECORD(Entry, CM_NOTIFY_BLOCK, HiveList);
-        if (Notify->KeyControlBlock == Kcb)
+        if (Notify->KeyControlBlock != Kcb) continue;
+        if (Notify->KeyBody)
             CmpFlushNotifyLocked(Notify->KeyBody);
+        else
+            CmpCompleteNotify(CONTAINING_RECORD(Notify->PostList.Flink, CMP_NOTIFY_POST, SlaveList),
+                              STATUS_NOTIFY_CLEANUP);
+        goto Restart;
     }
     ExReleaseFastMutex(&CmpNotifyMutex);
 }

@@ -1835,8 +1835,12 @@ NtNotifyChangeMultipleKeys(IN HANDLE MasterKeyHandle,
                            IN BOOLEAN Asynchronous)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
-    PCM_KEY_BODY KeyBody;
+    PCM_KEY_BODY KeyBody, SlaveKeyBody = NULL;
     PKEVENT EventObject = NULL;
+    PIO_STATUS_BLOCK AsyncIoStatusBlock = IoStatusBlock;
+    BOOLEAN IoStatus32 = FALSE;
+    CM_PARSE_CONTEXT ParseContext = {0};
+    HANDLE SlaveHandle;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -1844,15 +1848,29 @@ NtNotifyChangeMultipleKeys(IN HANDLE MasterKeyHandle,
     if (CompletionFilter & ~(REG_LEGAL_CHANGE_FILTER | REG_NOTIFY_THREAD_AGNOSTIC))
         return STATUS_INVALID_PARAMETER;
 
-    if (Count || ApcRoutine)
+    if (Count > 1 || (Count && !SlaveObjects))
+        return STATUS_INVALID_PARAMETER;
+    if (ApcRoutine && (PreviousMode == KernelMode || !Asynchronous))
         return STATUS_NOT_IMPLEMENTED;
-    if (Asynchronous && !Event) return STATUS_INVALID_PARAMETER;
+    if (Asynchronous && !Event && !ApcRoutine) return STATUS_INVALID_PARAMETER;
 
     if (PreviousMode != KernelMode)
     {
         _SEH2_TRY
         {
             ProbeForWrite(IoStatusBlock, sizeof(*IoStatusBlock), sizeof(ULONG));
+            if (Asynchronous && sizeof(PVOID) == sizeof(ULONG64) &&
+                PsGetProcessMachine(PsGetCurrentProcess()) == IMAGE_FILE_MACHINE_I386)
+            {
+                AsyncIoStatusBlock = IoStatusBlock->Pointer;
+                ProbeForWrite(AsyncIoStatusBlock, 2 * sizeof(ULONG), sizeof(ULONG));
+                IoStatus32 = TRUE;
+            }
+            if (Count)
+            {
+                ProbeForRead(SlaveObjects, sizeof(OBJECT_ATTRIBUTES), sizeof(ULONG));
+                (VOID)ProbeForReadUnicodeString(SlaveObjects->ObjectName);
+            }
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -1865,21 +1883,46 @@ NtNotifyChangeMultipleKeys(IN HANDLE MasterKeyHandle,
     if (!NT_SUCCESS(Status))
         return Status;
 
+    if (Count)
+    {
+        Status = ObOpenObjectByName(SlaveObjects, CmpKeyObjectType, PreviousMode, NULL, KEY_NOTIFY, &ParseContext, &SlaveHandle);
+        if (NT_SUCCESS(Status))
+        {
+            Status = ObReferenceObjectByHandle(SlaveHandle, KEY_NOTIFY, CmpKeyObjectType, PreviousMode, (PVOID *)&SlaveKeyBody, NULL);
+            ObCloseHandle(SlaveHandle, PreviousMode);
+        }
+        if (NT_SUCCESS(Status))
+        {
+            if (SlaveKeyBody->KeyControlBlock == KeyBody->KeyControlBlock)
+                Status = STATUS_OBJECT_NAME_INVALID;
+            else if (SlaveKeyBody->KeyControlBlock->KeyHive == KeyBody->KeyControlBlock->KeyHive)
+                Status = STATUS_INVALID_PARAMETER;
+        }
+        if (!NT_SUCCESS(Status))
+        {
+            if (SlaveKeyBody) ObDereferenceObject(SlaveKeyBody);
+            ObDereferenceObject(KeyBody);
+            return Status;
+        }
+    }
+
     if (Event)
     {
         Status = ObReferenceObjectByHandle(Event, EVENT_MODIFY_STATE, ExEventObjectType, PreviousMode, (PVOID *)&EventObject, NULL);
         if (!NT_SUCCESS(Status))
         {
+            if (SlaveKeyBody) ObDereferenceObject(SlaveKeyBody);
             ObDereferenceObject(KeyBody);
             return Status;
         }
         if (!Asynchronous) KeClearEvent(EventObject);
     }
 
-    /* Event registrations must not retain the caller's stack-local IOSB. */
     if (Asynchronous)
     {
-        Status = CmpNotifyChangeKey(KeyBody, EventObject, CompletionFilter, WatchTree, TRUE, PreviousMode);
+        Status = CmpNotifyChangeKey(KeyBody, SlaveKeyBody, EventObject, ApcRoutine, ApcContext,
+                                    AsyncIoStatusBlock, IoStatus32,
+                                    CompletionFilter, WatchTree, TRUE, PreviousMode);
     }
     else
     {
@@ -1887,7 +1930,8 @@ NtNotifyChangeMultipleKeys(IN HANDLE MasterKeyHandle,
         {
             IoStatusBlock->Status = STATUS_PENDING;
             IoStatusBlock->Information = 0;
-            Status = CmpNotifyChangeKey(KeyBody, EventObject, CompletionFilter, WatchTree, FALSE, PreviousMode);
+            Status = CmpNotifyChangeKey(KeyBody, SlaveKeyBody, EventObject, NULL, NULL, NULL, FALSE,
+                                        CompletionFilter, WatchTree, FALSE, PreviousMode);
             IoStatusBlock->Status = Status;
             IoStatusBlock->Information = 0;
         }
@@ -1903,6 +1947,7 @@ NtNotifyChangeMultipleKeys(IN HANDLE MasterKeyHandle,
         if (!Asynchronous) KeSetEvent(EventObject, IO_NO_INCREMENT, FALSE);
         ObDereferenceObject(EventObject);
     }
+    if (SlaveKeyBody) ObDereferenceObject(SlaveKeyBody);
     ObDereferenceObject(KeyBody);
     return Status;
 }

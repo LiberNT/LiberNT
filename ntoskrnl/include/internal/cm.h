@@ -842,7 +842,7 @@ VOID NTAPI CmpInitNotify(VOID);
 VOID NTAPI CmpFlushNotifyOnKcb(IN PCM_KEY_CONTROL_BLOCK Kcb);
 VOID NTAPI CmpCloseNotify(PCM_KEY_BODY KeyBody);
 VOID NTAPI CmpFlushNotifyThread(PETHREAD Thread);
-NTSTATUS NTAPI CmpNotifyChangeKey(PCM_KEY_BODY KeyBody, PKEVENT Event, ULONG Filter, BOOLEAN WatchTree, BOOLEAN Asynchronous, KPROCESSOR_MODE PreviousMode);
+NTSTATUS NTAPI CmpNotifyChangeKey(PCM_KEY_BODY KeyBody, PCM_KEY_BODY SlaveKeyBody, PKEVENT Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, BOOLEAN IoStatus32, ULONG Filter, BOOLEAN WatchTree, BOOLEAN Asynchronous, KPROCESSOR_MODE PreviousMode);
 
 VOID
 NTAPI

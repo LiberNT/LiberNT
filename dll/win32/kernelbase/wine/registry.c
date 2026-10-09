@@ -3059,7 +3059,11 @@ LSTATUS WINAPI RegNotifyChangeKeyValue( HKEY hkey, BOOL fWatchSubTree,
                                         BOOL fAsync )
 {
     NTSTATUS status;
+#ifdef __REACTOS__
+    static IO_STATUS_BLOCK iosb;
+#else
     IO_STATUS_BLOCK iosb;
+#endif
 
     hkey = get_special_root_hkey( hkey );
     if (!hkey) return ERROR_INVALID_HANDLE;
