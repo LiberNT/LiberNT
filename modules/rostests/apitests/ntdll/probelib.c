@@ -179,6 +179,7 @@ QuerySetProcessValidator(
                  * where the function expects STATUS_INFO_LENGTH_MISMATCH instead.
                  */
                 case ProcessImageFileName:
+                case ProcessCommandLineInformation:
                 {
                     SpecialStatus = STATUS_INFO_LENGTH_MISMATCH;
                     break;
@@ -312,6 +313,7 @@ QuerySetProcessValidator(
                 case ProcessDebugObjectHandle:
                 case ProcessCookie:
                 case ProcessImageInformation:
+                case ProcessCommandLineInformation:
                 {
                     SpecialStatus = STATUS_INVALID_INFO_CLASS;
                     break;

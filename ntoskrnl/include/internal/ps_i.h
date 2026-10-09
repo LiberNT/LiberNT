@@ -422,7 +422,12 @@ static const INFORMATION_CLASS_INFO PsProcessInfoClass[] =
         ICIF_QUERY | ICIF_SET
     ),
     /* ProcessCommandLineInformation */
-    IQS_NONE,
+    IQS_SAME
+    (
+        UNICODE_STRING,
+        ULONG,
+        ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE
+    ),
     /* ProcessProtectionInformation */
     IQS_NONE,
     /* ProcessMemoryExhaustion */

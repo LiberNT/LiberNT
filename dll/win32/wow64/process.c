@@ -1102,6 +1102,7 @@ NTSTATUS WINAPI wow64_NtQueryInformationProcess( UINT *args )
 
     case ProcessImageFileName:
     case ProcessImageFileNameWin32:  /* UNICODE_STRING + string */
+    case ProcessCommandLineInformation:
         {
             ULONG retsize, size = len + sizeof(UNICODE_STRING) - sizeof(UNICODE_STRING32);
             UNICODE_STRING *str = Wow64AllocateTemp( size );

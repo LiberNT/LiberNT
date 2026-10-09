@@ -701,6 +701,72 @@ PsWatchWorkingSet(
     KeReleaseSpinLock(&History->SpinLock, OldIrql);
 }
 
+#define TAG_PS_COMMAND_LINE 'lCsP'
+
+static
+NTSTATUS
+PspCaptureProcessCommandLine(
+    _In_ PEPROCESS Process,
+    _Out_ PWSTR *CommandLineBuffer,
+    _Out_ PUSHORT CommandLineLength)
+{
+    PRTL_USER_PROCESS_PARAMETERS Parameters;
+    UNICODE_STRING CommandLine;
+    KAPC_STATE ApcState;
+    PWSTR Copy = NULL;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (!Process->Peb)
+        return STATUS_NOT_FOUND;
+    if (!ExAcquireRundownProtection(&Process->RundownProtect))
+        return STATUS_PROCESS_IS_TERMINATING;
+
+    KeStackAttachProcess(&Process->Pcb, &ApcState);
+    _SEH2_TRY
+    {
+        Parameters = Process->Peb->ProcessParameters;
+        if (!Parameters)
+        {
+            Status = STATUS_NOT_FOUND;
+            _SEH2_LEAVE;
+        }
+        ProbeForRead(Parameters, sizeof(*Parameters), sizeof(ULONG));
+        CommandLine = Parameters->CommandLine;
+        if (!(Parameters->Flags & RTL_USER_PROCESS_PARAMETERS_NORMALIZED) && CommandLine.Buffer)
+            CommandLine.Buffer = (PWSTR)((ULONG_PTR)CommandLine.Buffer + (ULONG_PTR)Parameters);
+        CommandLine.Length &= ~(sizeof(WCHAR) - 1);
+        if (CommandLine.Length > MAXUSHORT - 2 * sizeof(WCHAR))
+            CommandLine.Length = MAXUSHORT - 2 * sizeof(WCHAR);
+        ProbeForRead(CommandLine.Buffer, CommandLine.Length, sizeof(WCHAR));
+
+        Copy = ExAllocatePoolWithTag(PagedPool, CommandLine.Length + sizeof(UNICODE_NULL), TAG_PS_COMMAND_LINE);
+        if (!Copy)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            _SEH2_LEAVE;
+        }
+        RtlCopyMemory(Copy, CommandLine.Buffer, CommandLine.Length);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    KeUnstackDetachProcess(&ApcState);
+    ExReleaseRundownProtection(&Process->RundownProtect);
+
+    if (!NT_SUCCESS(Status))
+    {
+        if (Copy)
+            ExFreePoolWithTag(Copy, TAG_PS_COMMAND_LINE);
+        return Status;
+    }
+
+    *CommandLineBuffer = Copy;
+    *CommandLineLength = CommandLine.Length;
+    return STATUS_SUCCESS;
+}
+
 /* PUBLIC FUNCTIONS **********************************************************/
 
 /*
@@ -1435,6 +1501,48 @@ NtQueryInformationProcess(
                 ExFreePoolWithTag(ImageName, TAG_SEPA);
             }
             /* Dereference the process */
+            ObDereferenceObject(Process);
+            break;
+        }
+
+        case ProcessCommandLineInformation:
+        {
+            PWSTR CommandLine;
+            USHORT CommandLineLength;
+
+            Status = PspReferenceProcessForLimitedQuery(ProcessHandle,
+                                                        PreviousMode,
+                                                        &Process);
+            if (!NT_SUCCESS(Status)) break;
+
+            Status = PspCaptureProcessCommandLine(Process, &CommandLine, &CommandLineLength);
+            if (NT_SUCCESS(Status))
+            {
+                Length = sizeof(UNICODE_STRING) + CommandLineLength + sizeof(UNICODE_NULL);
+                if (Length <= ProcessInformationLength)
+                {
+                    _SEH2_TRY
+                    {
+                        PUNICODE_STRING String = (PUNICODE_STRING)ProcessInformation;
+
+                        String->Length = CommandLineLength;
+                        String->MaximumLength = CommandLineLength + sizeof(UNICODE_NULL);
+                        String->Buffer = (PWSTR)(String + 1);
+                        RtlCopyMemory(String->Buffer, CommandLine, CommandLineLength);
+                        String->Buffer[CommandLineLength / sizeof(WCHAR)] = UNICODE_NULL;
+                    }
+                    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                    {
+                        Status = _SEH2_GetExceptionCode();
+                    }
+                    _SEH2_END;
+                }
+                else
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                }
+                ExFreePoolWithTag(CommandLine, TAG_PS_COMMAND_LINE);
+            }
             ObDereferenceObject(Process);
             break;
         }
