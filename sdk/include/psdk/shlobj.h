@@ -111,7 +111,12 @@ typedef enum
     KF_FLAG_ALIAS_ONLY                  = 0x80000000
 } KNOWN_FOLDER_FLAG;
 
-typedef int GPFIDL_FLAGS;
+typedef enum tagGPFIDL_FLAGS
+{
+    GPFIDL_DEFAULT    = 0x0000,
+    GPFIDL_ALTNAME    = 0x0001,
+    GPFIDL_UNCPRINTER = 0x0002,
+} GPFIDL_FLAGS;
 
 typedef struct _SFVM_PROPPAGE_DATA
 {
@@ -251,6 +256,15 @@ SHGetPathFromIDListW(
   _Out_writes_(MAX_PATH) LPWSTR);
 
 #define SHGetPathFromIDList WINELIB_NAME_AW(SHGetPathFromIDList)
+
+_Success_(return != 0)
+BOOL
+WINAPI
+SHGetPathFromIDListEx(
+  _In_ PCIDLIST_ABSOLUTE pidl,
+  _Out_writes_(cchPath) PWSTR pszPath,
+  _In_ DWORD cchPath,
+  _In_ GPFIDL_FLAGS uOpts);
 
 INT          WINAPI SHHandleUpdateImage(_In_ PCIDLIST_ABSOLUTE);
 

@@ -4084,6 +4084,24 @@ BOOL WINAPI SHGetPathFromIDListW(LPCITEMIDLIST pidl, LPWSTR pszPath)
     return SUCCEEDED(SHGetPathCchFromIDListW(pidl, pszPath, MAX_PATH));
 }
 
+BOOL WINAPI SHGetPathFromIDListEx(LPCITEMIDLIST pidl, WCHAR *path, DWORD path_size, GPFIDL_FLAGS flags)
+{
+    WCHAR szShort[MAX_PATH];
+    DWORD cchShort;
+
+    if (!path || !path_size)
+        return FALSE;
+    if (FAILED(SHGetPathCchFromIDListW(pidl, path, path_size)))
+        return FALSE;
+    if (flags & GPFIDL_ALTNAME)
+    {
+        cchShort = GetShortPathNameW(path, szShort, _countof(szShort));
+        if (cchShort && cchShort < _countof(szShort) && cchShort < path_size)
+            lstrcpynW(path, szShort, path_size);
+    }
+    return TRUE;
+}
+
 /*************************************************************************
  *    SHBindToParent        [shell version 5.0]
  */
