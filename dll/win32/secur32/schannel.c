@@ -25,6 +25,7 @@
 
 #ifdef __REACTOS__
 #define WIN32_NO_STATUS
+#define CRYPT_OID_INFO_HAS_EXTRA_FIELDS
 #endif
 #include "windef.h"
 #include "winbase.h"
@@ -1397,7 +1398,15 @@ static SECURITY_STATUS SEC_ENTRY schan_QueryContextAttributesW(
 
         /* RFC 5929 */
         info = CryptFindOIDInfo(CRYPT_OID_INFO_OID_KEY, ctx->cert->pCertInfo->SignatureAlgorithm.pszObjId, 0);
-        if (info && info->Algid != CALG_SHA1 && info->Algid != CALG_MD5) hash_alg = info->Algid;
+        if (info && info->Algid == CALG_OID_INFO_CNG_ONLY)
+        {
+            if (info->cbSize >= sizeof(*info) && info->pwszCNGAlgid)
+            {
+                if (!wcscmp(info->pwszCNGAlgid, BCRYPT_SHA384_ALGORITHM)) hash_alg = CALG_SHA_384;
+                else if (!wcscmp(info->pwszCNGAlgid, BCRYPT_SHA512_ALGORITHM)) hash_alg = CALG_SHA_512;
+            }
+        }
+        else if (info && info->Algid != CALG_SHA1 && info->Algid != CALG_MD5) hash_alg = info->Algid;
 
         hash_size = sizeof(hash);
         ret = CryptHashCertificate(0, hash_alg, 0, ctx->cert->pbCertEncoded, ctx->cert->cbCertEncoded, hash, &hash_size);

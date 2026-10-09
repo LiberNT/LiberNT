@@ -32,6 +32,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(schannel);
 
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
+#include <mbedtls/cipher_internal.h>
 #include <mbedtls/md_internal.h>
 #include <mbedtls/ssl_internal.h>
 
@@ -370,12 +371,26 @@ static unsigned int schannel_get_cipher_key_size(int ciphersuite_id)
     return key_bitlen;
 }
 
+static BOOL schannel_is_aead(int ciphersuite_id)
+{
+    const mbedtls_ssl_ciphersuite_t *ssl_cipher_suite = mbedtls_ssl_ciphersuite_from_id(ciphersuite_id);
+    const mbedtls_cipher_info_t          *cipher_info = mbedtls_cipher_info_from_type(ssl_cipher_suite->cipher);
+
+    return cipher_info && (cipher_info->mode == MBEDTLS_MODE_GCM ||
+                           cipher_info->mode == MBEDTLS_MODE_CCM ||
+                           cipher_info->mode == MBEDTLS_MODE_CHACHAPOLY);
+}
+
 static unsigned int schannel_get_mac_key_size(int ciphersuite_id)
 {
     const mbedtls_ssl_ciphersuite_t *ssl_cipher_suite = mbedtls_ssl_ciphersuite_from_id(ciphersuite_id);
     const mbedtls_md_info_t                  *md_info = mbedtls_md_info_from_type(ssl_cipher_suite->mac);
+    int md_size;
 
-    int md_size = md_info->size * CHAR_BIT; /* return the size in bits, as the secur32:schannel winetest shows */
+    if (schannel_is_aead(ciphersuite_id))
+        return 0;
+
+    md_size = md_info->size * CHAR_BIT; /* return the size in bits, as the secur32:schannel winetest shows */
 
     TRACE("MBEDTLS schannel_get_mac_key_size: returning %i\n", md_size);
 
@@ -832,10 +847,13 @@ static NTSTATUS backend_get_cipher_info(void *args)
     SecPkgContext_CipherInfo *info = params->info;
     const char *name = mbedtls_ssl_get_ciphersuite(&session->ssl);
     int id = mbedtls_ssl_get_ciphersuite_id(name);
+    const mbedtls_ssl_ciphersuite_t *suite = mbedtls_ssl_ciphersuite_from_id(id);
+    const mbedtls_cipher_info_t *cipher = suite ? mbedtls_cipher_info_from_type(suite->cipher) : NULL;
+    WCHAR *p;
 
     memset(info, 0, sizeof(*info));
     info->dwVersion = SECPKGCONTEXT_CIPHERINFO_V1;
-    info->dwProtocol = schannel_get_protocol(&session->ssl, &session->conf);
+    info->dwProtocol = (session->ssl.major_ver << 8) | session->ssl.minor_ver;
     info->dwCipherSuite = id;
     info->dwBaseCipherSuite = id;
     info->dwCipherLen = schannel_get_cipher_key_size(id);
@@ -844,6 +862,35 @@ static NTSTATUS backend_get_cipher_info(void *args)
     info->dwMinExchangeLen = schannel_get_kx_key_size(&session->ssl, &session->conf, id);
     info->dwMaxExchangeLen = info->dwMinExchangeLen;
     MultiByteToWideChar(CP_ACP, 0, name, -1, info->szCipherSuite, ARRAY_SIZE(info->szCipherSuite));
+    for (p = info->szCipherSuite; *p; p++)
+        if (*p == '-') *p = '_';
+
+    if (cipher && cipher->base && cipher->base->cipher == MBEDTLS_CIPHER_ID_AES)
+        lstrcpyW(info->szCipher, BCRYPT_AES_ALGORITHM);
+
+    if (suite)
+    {
+        switch (suite->key_exchange)
+        {
+            case MBEDTLS_KEY_EXCHANGE_ECDHE_RSA:
+            case MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA:
+                lstrcpyW(info->szExchange, BCRYPT_ECDH_ALGORITHM);
+                info->dwMinExchangeLen = 0;
+                info->dwMaxExchangeLen = 65536;
+                break;
+            case MBEDTLS_KEY_EXCHANGE_DHE_RSA:
+                lstrcpyW(info->szExchange, BCRYPT_DH_ALGORITHM);
+                break;
+            default:
+                break;
+        }
+
+        if (suite->key_exchange == MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA ||
+            suite->key_exchange == MBEDTLS_KEY_EXCHANGE_ECDH_ECDSA)
+        {
+            lstrcpyW(info->szCertificate, BCRYPT_ECDSA_ALGORITHM);
+        }
+    }
     return SEC_E_OK;
 }
 
@@ -875,6 +922,28 @@ static NTSTATUS backend_get_key_signature_algorithm(void *args)
     default:
         return 0;
     }
+}
+
+static NTSTATUS backend_get_unique_channel_binding(void *args)
+{
+    const struct get_unique_channel_binding_params *params = args;
+    MBEDTLS_SESSION *session = session_from_handle(params->session);
+    const char *verify_data = (session->conf.endpoint == MBEDTLS_SSL_IS_CLIENT) ?
+                              session->ssl.own_verify_data : session->ssl.peer_verify_data;
+    ULONG size = session->ssl.verify_data_len;
+
+    if (!size)
+        return SEC_E_INTERNAL_ERROR;
+
+    if (!params->buffer || *params->bufsize < size)
+    {
+        *params->bufsize = size;
+        return SEC_E_BUFFER_TOO_SMALL;
+    }
+
+    memcpy(params->buffer, verify_data, size);
+    *params->bufsize = size;
+    return SEC_E_OK;
 }
 
 static NTSTATUS backend_get_session_peer_certificate(void *args)
@@ -1079,7 +1148,7 @@ NTSTATUS schan_backend_call(enum schan_funcs func, void *params)
     case unix_get_session_peer_certificate:
         return backend_get_session_peer_certificate(params);
     case unix_get_unique_channel_binding:
-        return SEC_E_UNSUPPORTED_FUNCTION;
+        return backend_get_unique_channel_binding(params);
     case unix_handshake:
         return backend_handshake(params);
     case unix_recv:
