@@ -399,7 +399,9 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/ctxswitch.S
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/usercall_asm.S
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/bootstack.S
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/zeropage.S)
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/zeropage.S
+        ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcpy.S
+        ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/wcscmp.S)
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntoskrnl/config/arm64/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ex/arm64/init.c

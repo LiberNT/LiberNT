@@ -1,6 +1,6 @@
 /*
  * PROJECT:     LiberNT Universal CRT
- * LICENSE:     MIT (https://spdx.org/licenses/MIT)
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     strnlen for ARM64
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */

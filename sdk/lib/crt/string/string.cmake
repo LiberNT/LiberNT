@@ -74,22 +74,14 @@ elseif(ARCH STREQUAL "arm64")
         string/arm64/strncmp.S
         string/arm64/strnlen.S
         string/arm64/strrchr.S
+        string/arm64/wcschr.S
+        string/arm64/wcsnlen.S
     )
     list(APPEND LIBCNTPR_STRING_SOURCE
-        string/strcat.c
+        string/arm64/strcopy.c
         string/strcpy.c
-        string/strncat.c
-        string/strncpy.c
-        string/wcscat.c
-        string/wcschr.c
         string/wcscmp.c
-        string/wcscpy.c
-        string/wcslen.c
-        string/wcsncat.c
         string/wcsncmp.c
-        string/wcsncpy.c
-        string/wcsnlen.c
-        string/wcsrchr.c
     )
 elseif(ARCH STREQUAL "riscv64")
     list(APPEND LIBCNTPR_STRING_SOURCE

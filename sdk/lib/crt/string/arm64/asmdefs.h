@@ -8,6 +8,10 @@
     name:
 
 #define ENTRY(name) ENTRY_ALIGN(name, 6)
+#define ENTRY_ALIAS(name) \
+    .text; \
+    .global name; \
+    name:
 #define END(name)
 #define L(label) .L##label
 

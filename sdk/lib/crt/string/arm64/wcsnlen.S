@@ -1,6 +1,6 @@
 /*
- * PROJECT:     LiberNT Universal CRT
- * LICENSE:     MIT (https://spdx.org/licenses/MIT)
+ * PROJECT:     LiberNT CRT library
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     wcslen and wcsnlen for ARMv8.0-A with Advanced SIMD
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
@@ -61,7 +61,10 @@ wcslen:
 .Lwcslen_unaligned:
     mov     x2, x0
 1:
-    ldrh    w3, [x2], #2
+    ldrb    w3, [x2]
+    ldrb    w4, [x2, #1]
+    add     x2, x2, #2
+    orr     w3, w3, w4
     cbnz    w3, 1b
     sub     x2, x2, x0
     sub     x2, x2, #2
@@ -144,7 +147,10 @@ wcsnlen:
 .Lwcsnlen_unaligned:
     mov     x2, #0
 1:
-    ldrh    w3, [x0, x2, lsl #1]
+    add     x5, x0, x2, lsl #1
+    ldrb    w3, [x5]
+    ldrb    w4, [x5, #1]
+    orr     w3, w3, w4
     cbz     w3, 2f
     add     x2, x2, #1
     cmp     x2, x1

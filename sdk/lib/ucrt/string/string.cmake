@@ -111,9 +111,17 @@ elseif(${ARCH} STREQUAL "amd64")
 else()
     if(ARCH STREQUAL "arm64" AND NOT ARM64EC_RUNTIME)
         list(APPEND UCRT_STRING_ASM_SOURCES
+            ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcpy.S
             ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strlen.S
+            ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strncmp.S
             ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strnlen.S
-            string/arm64/wcsnlen.S
+            ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/wcsnlen.S
+            string/arm64/strcmp_simd.S
+            string/arm64/wcscmp_simd.S
+        )
+        list(APPEND UCRT_STRING_SOURCES
+            ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcopy.c
+            string/arm64/strcmp.c
         )
     else()
         list(APPEND UCRT_STRING_SOURCES
@@ -140,6 +148,21 @@ else()
         string/strset.c
         string/strspn.c
     )
+    if(ARCH STREQUAL "arm64" AND NOT ARM64EC_RUNTIME)
+        list(REMOVE_ITEM UCRT_STRING_SOURCES
+            string/strcat.c
+            string/strcmp.c
+            string/strncat.c
+            string/strncmp.c
+            string/strncpy.c
+            string/wcscat.cpp
+            string/wcscmp.cpp
+            string/wcscpy.cpp
+            string/wcsncat.cpp
+            string/wcsncmp.cpp
+            string/wcsncpy.cpp
+        )
+    endif()
 endif()
 
 add_asm_files(UCRT_STRING_ASM ${UCRT_STRING_ASM_SOURCES})
