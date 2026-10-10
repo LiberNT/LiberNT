@@ -12,26 +12,31 @@ BasepArchUnwindFrame(
     _Inout_ PCONTEXT Context,
     _Out_ PULONG_PTR ReturnAddress)
 {
+#ifdef __arm64ec__
+    PARM64EC_NT_CONTEXT Registers = (PARM64EC_NT_CONTEXT)Context;
+#else
+    PCONTEXT Registers = Context;
+#endif
     PRUNTIME_FUNCTION FunctionEntry;
     ULONG64 ImageBase;
     ULONG64 EstablisherFrame;
-    ULONG64 PreviousSp = Context->Sp;
-    ULONG64 PreviousPc = Context->Pc;
+    ULONG64 PreviousSp = Registers->Sp;
+    ULONG64 PreviousPc = Registers->Pc;
     ULONG64 StackHigh = (ULONG64)NtCurrentTeb()->NtTib.StackBase;
     PVOID HandlerData;
 
-    FunctionEntry = RtlLookupFunctionEntry(Context->Pc, &ImageBase, NULL);
+    FunctionEntry = RtlLookupFunctionEntry(Registers->Pc, &ImageBase, NULL);
     if (FunctionEntry)
     {
-        RtlVirtualUnwind(UNW_FLAG_NHANDLER, ImageBase, Context->Pc, FunctionEntry, Context, &HandlerData, &EstablisherFrame, NULL);
+        RtlVirtualUnwind(UNW_FLAG_NHANDLER, ImageBase, Registers->Pc, FunctionEntry, Context, &HandlerData, &EstablisherFrame, NULL);
     }
     else
     {
-        Context->Pc = Context->Lr;
+        Registers->Pc = Registers->Lr;
     }
 
-    if (!Context->Pc || Context->Sp < PreviousSp || Context->Sp > StackHigh) return FALSE;
-    if (Context->Pc == PreviousPc && Context->Sp == PreviousSp) return FALSE;
-    *ReturnAddress = Context->Pc;
+    if (!Registers->Pc || Registers->Sp < PreviousSp || Registers->Sp > StackHigh) return FALSE;
+    if (Registers->Pc == PreviousPc && Registers->Sp == PreviousSp) return FALSE;
+    *ReturnAddress = Registers->Pc;
     return TRUE;
 }
