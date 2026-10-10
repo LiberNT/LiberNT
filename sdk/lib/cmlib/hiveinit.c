@@ -640,7 +640,16 @@ HvpGetHiveHeader(
     {
         DPRINT1("The hive base header block needs to be RECOVERED\n");
         *TimeStamp = BaseBlock->TimeStamp;
-        Hive->Free(BaseBlock, Hive->BaseBlockAlloc);
+        if (BaseBlock->Signature == HV_HBLOCK_SIGNATURE &&
+            BaseBlock->Major == HSYS_MAJOR &&
+            BaseBlock->RootCell != HCELL_NIL)
+        {
+            *HiveBaseBlock = BaseBlock;
+        }
+        else
+        {
+            Hive->Free(BaseBlock, Hive->BaseBlockAlloc);
+        }
         return RecoverHeader;
     }
 
@@ -655,6 +664,42 @@ HvpGetHiveHeader(
  * the FreeLdr binary size so large it makes booting impossible.
  */
 #if !defined(_M_AMD64)
+static
+HCELL_INDEX
+HvpFindRootCellInFirstBin(
+    _In_ PHHIVE Hive,
+    _Out_ PVOID Buffer)
+{
+    PHBIN Bin = (PHBIN)Buffer;
+    PUCHAR Data = (PUCHAR)Buffer;
+    ULONG FileOffset = HBLOCK_SIZE;
+    ULONG Offset = sizeof(HBIN);
+    LONG CellSize;
+    PCM_KEY_NODE KeyNode;
+
+    if (!Hive->FileRead(Hive, HFILE_TYPE_PRIMARY, &FileOffset, Buffer, HBLOCK_SIZE) ||
+        Bin->Signature != HV_HBIN_SIGNATURE || Bin->FileOffset != 0)
+    {
+        return HCELL_NIL;
+    }
+
+    while (Offset + sizeof(LONG) + FIELD_OFFSET(CM_KEY_NODE, LastWriteTime) <= HBLOCK_SIZE)
+    {
+        CellSize = *(PLONG)(Data + Offset);
+        if (CellSize == 0)
+            break;
+        if (CellSize < 0)
+        {
+            KeyNode = (PCM_KEY_NODE)(Data + Offset + sizeof(LONG));
+            if (KeyNode->Signature == CM_KEY_NODE_SIGNATURE && (KeyNode->Flags & KEY_HIVE_ENTRY))
+                return Offset;
+            CellSize = -CellSize;
+        }
+        Offset += (ULONG)CellSize;
+    }
+    return HCELL_NIL;
+}
+
 /**
  * @brief
  * Computes the hive space size by querying
@@ -748,8 +793,10 @@ HvpRecoverHeaderFromLog(
 {
     BOOLEAN Success;
     PHBASE_BLOCK LogHeader;
+    PHBASE_BLOCK PrimaryHeader = *BaseBlock;
     ULONG FileOffset;
     ULONG HiveSize;
+    HCELL_INDEX RootCell;
     BOOLEAN HeaderResuscitated;
 
     /*
@@ -757,6 +804,7 @@ HvpRecoverHeaderFromLog(
      * base block can permit.
      */
     ASSERT(sizeof(HBASE_BLOCK) >= (HSECTOR_SIZE * Hive->Cluster));
+    *BaseBlock = NULL;
 
     /* Assume we haven't resuscitated the header */
     HeaderResuscitated = FALSE;
@@ -766,6 +814,8 @@ HvpRecoverHeaderFromLog(
     if (!LogHeader)
     {
         DPRINT1("Failed to allocate memory for the log header\n");
+        if (PrimaryHeader)
+            Hive->Free(PrimaryHeader, Hive->BaseBlockAlloc);
         return NoMemory;
     }
 
@@ -793,6 +843,8 @@ HvpRecoverHeaderFromLog(
         {
             DPRINT1("The log couldn't be read and self-healing mode is disabled\n");
             Hive->Free(LogHeader, Hive->BaseBlockAlloc);
+            if (PrimaryHeader)
+                Hive->Free(PrimaryHeader, Hive->BaseBlockAlloc);
             return Fail;
         }
 
@@ -806,7 +858,29 @@ HvpRecoverHeaderFromLog(
         {
             DPRINT1("Failed to query the hive size\n");
             Hive->Free(LogHeader, Hive->BaseBlockAlloc);
+            if (PrimaryHeader)
+                Hive->Free(PrimaryHeader, Hive->BaseBlockAlloc);
             return Fail;
+        }
+
+        if (PrimaryHeader)
+        {
+            RtlCopyMemory(LogHeader, PrimaryHeader, HSECTOR_SIZE);
+        }
+        else
+        {
+            RootCell = HvpFindRootCellInFirstBin(Hive, LogHeader);
+            if (RootCell == HCELL_NIL)
+            {
+                DPRINT1("The root cell of the hive could not be found\n");
+                Hive->Free(LogHeader, Hive->BaseBlockAlloc);
+                return Fail;
+            }
+            RtlZeroMemory(LogHeader, sizeof(HBASE_BLOCK));
+            LogHeader->Major = HSYS_MAJOR;
+            LogHeader->Minor = HSYS_MINOR;
+            LogHeader->Format = HBASE_FORMAT_MEMORY;
+            LogHeader->RootCell = RootCell;
         }
 
         /*
@@ -835,6 +909,9 @@ HvpRecoverHeaderFromLog(
         HeaderResuscitated = TRUE;
         DPRINT1("Header has been resuscitated, triggering self-heal mode\n");
     }
+
+    if (PrimaryHeader)
+        Hive->Free(PrimaryHeader, Hive->BaseBlockAlloc);
 
     /*
      * Tag this log header as a primary hive before
@@ -1089,6 +1166,8 @@ HvLoadHive(
 /* FIXME: See the comment above (near HvpQueryHiveSize) */
 #if defined(_M_AMD64)
         {
+            if (BaseBlock)
+                Hive->Free(BaseBlock, Hive->BaseBlockAlloc);
             return STATUS_REGISTRY_CORRUPT;
         }
 #else
