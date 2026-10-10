@@ -1,0 +1,115 @@
+diff --git a/src/felix86/common/utility.cpp b/src/felix86/common/utility.cpp
+index fcf5a42..d58c6f7 100644
+--- a/src/felix86/common/utility.cpp
++++ b/src/felix86/common/utility.cpp
+@@ -345,6 +345,7 @@ void felix86_mpsadbw(u8* dst, u8* src, u8 imm) {
+     }
+ }
+ 
++#ifdef __linux__
+ void dump_states() {
+     if (!g_config.calltrace) {
+         printf("Enable FELIX86_CALLTRACE to see the calltrace\n");
+@@ -611,6 +612,8 @@ void pop_calltrace(ThreadState* state) {
+     state->recompiler->getCalltrace().pop_back();
+ }
+ 
++#endif
++
+ Float80 f64_to_80(double x) {
+     union {
+         double d;
+@@ -1051,6 +1054,7 @@ void felix86_pcmpxstrx(ThreadState* state, pcmpxstrx type, u8* dst, u8* src, u8
+     __builtin_unreachable();
+ }
+ 
++#ifdef __linux__
+ u64 mmap_min_addr() {
+     static u64 addr = []() {
+         FILE* file = fopen("/proc/sys/vm/mmap_min_addr", "r");
+@@ -1074,6 +1078,8 @@ u64 mmap_min_addr() {
+     return addr;
+ }
+ 
++#endif
++
+ u64 mmap_max_addr() {
+     static u64 addr = []() {
+         biscuit::CPUInfo info;
+@@ -1221,6 +1227,7 @@ void felix86_fxam(ThreadState* state) {
+     state->ctx.fpu_sw |= c3 ? C3_BIT : 0;
+ }
+ 
++#ifdef __linux__
+ // TODO: One day we need to make this better. It serves to hide some felix86 related files from /proc/self/maps
+ // because some things try to scan /proc/self/maps and open them. It also hides the rootfs path from the paths.
+ // However it also will leak some mappings not owned by the guest, for example anything we mmap
+@@ -1427,6 +1434,8 @@ bool check_if_privileged_executable(const std::filesystem::path& path) {
+     return false;
+ }
+ 
++#endif
++
+ void felix86_crash_and_burn() {
+     fprintf(stderr, "Reached felix86_crash_and_burn, this shouldn't happen\n");
+     ERROR("Reached felix86_crash_and_burn, this shouldn't happen");
+@@ -1437,6 +1446,7 @@ void felix86_warn_unaligned_atomic(ThreadState* state) {
+     IMPORTANT("Unaligned atomic that we can't properly emulate at %lx", state->GetRip());
+ }
+ 
++#ifdef __linux__
+ void replaceOne(std::string& s, const std::string& search, const std::string& replace) {
+     for (size_t pos = 0;; pos += replace.length()) {
+         // Locate the substring to replace
+@@ -1482,6 +1492,8 @@ std::string felix86_mountinfo() {
+     return rv;
+ }
+ 
++#endif
++
+ void felix86_exit_dispatcher(struct felix86_frame* frame) {
+     frame->state->recompiler->exitDispatcher(frame);
+ }
+@@ -1570,6 +1582,7 @@ void felix86_tf_changed(ThreadState* state, bool tf) {
+     state->recompiler->setSingleStepMode(tf ? SingleStepMode::TrapFlag : SingleStepMode::None);
+ }
+ 
++#ifdef __linux__
+ void felix86_coredump() {
+     WARN("Dumping core...");
+     struct rlimit rlim;
+@@ -1644,6 +1657,8 @@ pid_t get_tracer_pid() {
+     return (pid_t)pid_val;
+ }
+ 
++#endif
++
+ // These definitions are used by softfloat
+ extern "C" u8 softfloat_getRoundPrecision() {
+     ThreadState* state = ThreadState::Get();
+diff --git a/src/felix86/v2/handlers.cpp b/src/felix86/v2/handlers.cpp
+index 04754f8..7b43a60 100644
+--- a/src/felix86/v2/handlers.cpp
++++ b/src/felix86/v2/handlers.cpp
+@@ -1174,6 +1174,11 @@ FAST_HANDLE(CMP) {
+     bool needs_any_flag = needs_cf || needs_of || needs_pf || needs_sf || needs_zf || needs_af;
+     if (!needs_any_flag) {
+         // Same as TEST, don't warn here
++        for (int i = 0; i < 2; i++) {
++            if (operands[i].type == ZYDIS_OPERAND_TYPE_MEMORY) {
++                rec.getGPR(&operands[i]);
++            }
++        }
+         return;
+     }
+ 
+@@ -3295,6 +3300,9 @@ FAST_HANDLE(TEST) {
+     if (!needs_any_flag) {
+         // Weirdly enough some x86 programs run test al, al and use no flags and overwrite them right after
+         // Unsure if this is some sort of special nop or something, but in any case we don't warn about this
++        if (operands[0].type == ZYDIS_OPERAND_TYPE_MEMORY) {
++            rec.getGPR(&operands[0]);
++        }
+         return;
+     }
+ 

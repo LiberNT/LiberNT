@@ -589,6 +589,31 @@ RtlpUserThreadStart(
     PVOID StartAddress,
     PVOID Parameter);
 
+VOID
+NTAPI
+LdrpInit(
+    PCONTEXT Context,
+    PVOID SystemArgument1,
+    PVOID SystemArgument2);
+
+NTSTATUS
+LdrpPrepareEmulatedProcess(
+    _Inout_opt_ PCONTEXT Context,
+    _In_ PVOID NtdllBase,
+    _Out_ PBOOLEAN Redirected);
+
+PCWSTR
+LdrpArchGetEmulationHost(
+    _In_ USHORT Machine);
+
+VOID
+LdrpArchEnterEmulationHost(
+    _Inout_ PCONTEXT Context,
+    _In_ PTEB HostTeb,
+    _In_ PVOID Stack,
+    _In_ PVOID Entry,
+    _In_ PVOID Argument);
+
 BOOLEAN
 RtlpArchQueryPerformanceCounter(
     _Out_ PLARGE_INTEGER Counter);

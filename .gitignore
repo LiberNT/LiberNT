@@ -18,6 +18,7 @@ sdk/tools/winesync/winesync.cfg
 
 # Local feed configuration and the source feeds checked out by scripts/feeds
 feeds.conf
+/submodules/felix86/
 /submodules/fex-arm64ec/
 /submodules/ffmpeg/
 /submodules/mesa/

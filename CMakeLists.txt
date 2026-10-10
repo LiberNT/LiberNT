@@ -444,6 +444,10 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
         include(sdk/cmake/wow64.cmake)
     endif()
 
+    if(TARGET amd64emu)
+        include(sdk/cmake/emu_amd64.cmake)
+    endif()
+
     include(sdk/cmake/ci.cmake)
 
     # Create the registry hives

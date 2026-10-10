@@ -3461,6 +3461,7 @@ LdrpInit(PCONTEXT Context,
     NTSTATUS Status, LoaderStatus = STATUS_SUCCESS;
     MEMORY_BASIC_INFORMATION MemoryBasicInfo;
     PPEB Peb = NtCurrentPeb();
+    BOOLEAN Redirected;
 #if defined(_M_ARM64)
     BOOLEAN InitializeChpeProcess = ChpeIsChpeProcess() && !Peb->Ldr;
 #endif
@@ -3468,6 +3469,15 @@ LdrpInit(PCONTEXT Context,
     DPRINT("LdrpInit() %p/%p\n",
         NtCurrentTeb()->RealClientId.UniqueProcess,
         NtCurrentTeb()->RealClientId.UniqueThread);
+
+    Status = LdrpPrepareEmulatedProcess(Context, SystemArgument1, &Redirected);
+    if (!NT_SUCCESS(Status))
+    {
+        LdrpInitFailure(Status);
+        NtTerminateProcess(NtCurrentProcess(), Status);
+        return;
+    }
+    if (Redirected) return;
 
 #ifdef _WIN64
     /* Set the SList header usage */

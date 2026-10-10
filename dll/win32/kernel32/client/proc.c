@@ -11,6 +11,7 @@
 /* INCLUDES ****************************************************************/
 
 #include <k32.h>
+#include <reactos/emulation.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -1887,6 +1888,26 @@ IsWow64Process2(IN HANDLE hProcess,
     }
 
     return TRUE;
+}
+
+static
+BOOLEAN
+BasepIsEmulatedMachine(IN USHORT Machine)
+{
+    WCHAR Buffer[MAX_PATH];
+    UNICODE_STRING Path;
+
+    if (Machine != IMAGE_FILE_MACHINE_AMD64) return FALSE;
+
+    RtlInitEmptyUnicodeString(&Path, Buffer, sizeof(Buffer) - sizeof(UNICODE_NULL));
+    if (!NT_SUCCESS(RtlAppendUnicodeToString(&Path, SharedUserData->NtSystemRoot)) ||
+        !NT_SUCCESS(RtlAppendUnicodeToString(&Path, L"\\System32\\" EMULATION_HOST_IMAGE_AMD64)))
+    {
+        return FALSE;
+    }
+
+    Buffer[Path.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    return RtlDoesFileExists_U(Buffer);
 }
 
 static
@@ -4472,7 +4493,8 @@ StartScan:
         (ImageInformation.Machine != IMAGE_FILE_MACHINE_I386) &&
 #endif
         ((ImageInformation.Machine < SharedUserData->ImageNumberLow) ||
-         (ImageInformation.Machine > SharedUserData->ImageNumberHigh)))
+         (ImageInformation.Machine > SharedUserData->ImageNumberHigh)) &&
+        !BasepIsEmulatedMachine(ImageInformation.Machine))
     {
         /* It was not -- raise a hard error */
         ErrorResponse = ResponseOk;

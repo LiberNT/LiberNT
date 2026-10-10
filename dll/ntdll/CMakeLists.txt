@@ -40,6 +40,7 @@ list(APPEND SOURCE
     dbg/dbgui.c
     ldr/ldrapi.c
     ldr/ldrcfg.c
+    ldr/ldremul.c
     ldr/ldrguard.c
     ldr/ldrinit.c
     ldr/ldrpe.c
@@ -91,6 +92,12 @@ elseif(ARCH STREQUAL "ppc")
     list(APPEND SOURCE
         dispatch/dispatch.c
         rtl/ppc/rtlexcpt.c)
+endif()
+
+if(ARCH STREQUAL "riscv64")
+    list(APPEND SOURCE ldr/riscv64/emulation.c)
+else()
+    list(APPEND SOURCE ldr/noemulation.c)
 endif()
 
 if(ARCH STREQUAL "arm64")

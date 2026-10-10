@@ -228,6 +228,10 @@ cmake_dependent_option(RISCV64_VECTOR
                        "The target harts implement the V extension; msvcrt calls its vector routines without runtime dispatch" OFF
                        "ARCH STREQUAL riscv64" OFF)
 
+cmake_dependent_option(ENABLE_FELIX86
+                       "Whether to build the optional felix86 emulator for running AMD64 binaries on RISC-V64." ON
+                       "ARCH STREQUAL riscv64" OFF)
+
 cmake_dependent_option(ENABLE_FEX_ARM64EC_TEST_PAYLOADS
                        "Whether to import optional AMD64 diagnostic executables into FEX ARM64EC images." OFF
                        "ARCH STREQUAL arm64 AND ENABLE_FEX_ARM64EC" OFF)
