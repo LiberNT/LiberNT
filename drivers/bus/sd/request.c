@@ -11,6 +11,7 @@
 #include <debug.h>
 
 #include "sdhost.h"
+#include "dwmmc.h"
 
 #define SD_MAX_RETRIES 3
 #define SDIO_BUS_WIDTH_MASK 0x03
@@ -1118,6 +1119,17 @@ SdBusSendSdhciCommand(
                                     BlockSize,
                                     RequestFlags,
                                     Response);
+    }
+    if (FdoExtension->HostType == SdBusHostDwmmc)
+    {
+        return DwMmcExecuteRequest(FdoExtension,
+                                   CmdDesc,
+                                   Argument,
+                                   Mdl,
+                                   DataLength,
+                                   BlockSize,
+                                   RequestFlags,
+                                   Response);
     }
 
     TransferPath = SdTransferPathNone;
@@ -2406,7 +2418,7 @@ SdBusWriteSdioBlockLength(
     return Status;
 }
 
-static VOID
+VOID
 SdBusSetHostBusWidth(
     _In_ PFDO_EXTENSION FdoExtension,
     _In_ UCHAR BusWidth)
@@ -2416,6 +2428,11 @@ SdBusSetHostBusWidth(
     if (FdoExtension->HostType == SdBusHostBcm2835)
     {
         SdHostSetBusWidth(FdoExtension, BusWidth);
+        return;
+    }
+    if (FdoExtension->HostType == SdBusHostDwmmc)
+    {
+        DwMmcSetBusWidth(FdoExtension, BusWidth);
         return;
     }
 

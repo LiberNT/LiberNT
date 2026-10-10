@@ -37,7 +37,8 @@ typedef enum _SDBUS_DEVICE_STATE {
  */
 typedef enum _SDBUS_HOST_TYPE {
     SdBusHostSdhci = 0,
-    SdBusHostBcm2835
+    SdBusHostBcm2835,
+    SdBusHostDwmmc
 } SDBUS_HOST_TYPE;
 
 /**
@@ -79,6 +80,11 @@ typedef struct _FDO_EXTENSION {
     SDBUS_HOST_TYPE HostType;
     ULONG SdHostHcfg;
     ULONG SdHostCdiv;
+    ULONG DwMmcBusHz;
+    ULONG DwMmcFifoDepth;
+    ULONG DwMmcDataOffset;
+    ULONG DwMmcBusWidth;
+    BOOLEAN DwMmcNeedInit;
 
     /* Optional hardware-specific controller extension */
     PVOID HardwareExtension;
@@ -415,6 +421,11 @@ SdBusSendCommand(
     _In_ ULONG Argument,
     _In_ USHORT CommandFlags,
     _Out_opt_ PULONG Response);
+
+VOID
+SdBusSetHostBusWidth(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ UCHAR BusWidth);
 
 /**
  * @brief Send an application-specific command (CMD55 + ACMDxx).
@@ -895,7 +906,7 @@ SdBusUpdateInterruptSignalEnable(
     }
 
     /* The BCM2835 SDHost backend is fully polled and has no SDHCI interrupt registers */
-    if (FdoExtension->HostType == SdBusHostBcm2835)
+    if (FdoExtension->HostType != SdBusHostSdhci)
     {
         return 0;
     }

@@ -90,4 +90,8 @@ NTSTATUS
 SdBusK1xAttach(
     _In_ PFDO_EXTENSION FdoExtension);
 
+NTSTATUS
+SdBusJh7110Attach(
+    _In_ PFDO_EXTENSION FdoExtension);
+
 #endif /* _SDBUS_HARDWARE_H_ */

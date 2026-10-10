@@ -15,9 +15,12 @@ list(APPEND SOURCE
     sdio.c
     emmc.c
     sdhost.c
+    dwmmc.c
     k1x.c
+    jh7110.c
     hardware.h
     sdhost.h
+    dwmmc.h
     sdbus.h)
 
 add_library(sdbus MODULE ${SOURCE} sdbus.rc)

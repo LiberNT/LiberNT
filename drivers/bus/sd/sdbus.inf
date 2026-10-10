@@ -110,6 +110,7 @@ HKR, , SilentInstall,  0, 1
 %Broadcom_BCM2835_SDHOST.DeviceDesc% = sdbus_Inst, ACPI\BCM2855
 %Broadcom_BCM2836_ARASAN.DeviceDesc% = sdbus_Inst, ACPI\BCM2847
 %SpacemiT_K1_SD.DeviceDesc% = sdbus_Inst, FDT\spacemit_k1-x-sdhci
+%StarFive_JH7110_MMC.DeviceDesc% = sdbus_Inst, FDT\starfive_jh7110-mmc
 
 [ControlFlags]
 ExcludeFromSelect = *
@@ -166,6 +167,7 @@ Broadcom_BCM2711_EMMC2.DeviceDesc = "Broadcom BCM2711 eMMC2 Host Controller"
 Broadcom_BCM2835_SDHOST.DeviceDesc = "Broadcom BCM2835 SDHost Controller"
 Broadcom_BCM2836_ARASAN.DeviceDesc = "Broadcom BCM2836 Arasan SD Host Controller"
 SpacemiT_K1_SD.DeviceDesc = "SpacemiT K1 SD Host Controller"
+StarFive_JH7110_MMC.DeviceDesc = "StarFive JH7110 SD/MMC Host Controller"
 
 SPSVCINST_ASSOCSERVICE = 0x00000002
 SERVICE_KERNEL_DRIVER  = 1

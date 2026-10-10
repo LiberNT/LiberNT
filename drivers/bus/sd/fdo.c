@@ -12,6 +12,7 @@
 
 #include "hardware.h"
 #include "sdhost.h"
+#include "dwmmc.h"
 
 static VOID
 SdBusCompleteFdoIrp(
@@ -126,6 +127,10 @@ SdBusResetHost(
     if (FdoExtension->HostType == SdBusHostBcm2835)
     {
         return SdHostReset(FdoExtension);
+    }
+    if (FdoExtension->HostType == SdBusHostDwmmc)
+    {
+        return DwMmcReset(FdoExtension);
     }
 
     SdBusWriteReg8(FdoExtension, SDHCI_SOFTWARE_RESET, ResetMask);
@@ -361,6 +366,10 @@ SdBusInitializeController(
     if (FdoExtension->HostType == SdBusHostBcm2835)
     {
         return SdHostInitializeController(FdoExtension);
+    }
+    if (FdoExtension->HostType == SdBusHostDwmmc)
+    {
+        return DwMmcInitializeController(FdoExtension);
     }
 
     /* Read host controller version */
@@ -793,7 +802,7 @@ SdBusFdoStartDevice(
     (VOID)SdBusHardwareAttach(FdoExtension);
 
     /* The polled SDHost backend does not use its interrupt resource. */
-    if (FoundInterrupt && FdoExtension->HostType != SdBusHostBcm2835)
+    if (FoundInterrupt && FdoExtension->HostType == SdBusHostSdhci)
     {
         Status = IoConnectInterrupt(&FdoExtension->InterruptObject,
                                     SdBusInterruptService,

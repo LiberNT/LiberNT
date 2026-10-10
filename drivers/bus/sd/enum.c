@@ -12,6 +12,7 @@
 
 #include "hardware.h"
 #include "sdhost.h"
+#include "dwmmc.h"
 
 #define SDIO_OCR_READY                 0x80000000
 #define SDIO_OCR_NUM_FUNCTIONS_MASK    0x70000000
@@ -109,6 +110,10 @@ SdBusSendCommand(
     if (FdoExtension->HostType == SdBusHostBcm2835)
     {
         return SdHostSendCommand(FdoExtension, CommandIndex, Argument, CommandFlags, Response);
+    }
+    if (FdoExtension->HostType == SdBusHostDwmmc)
+    {
+        return DwMmcSendCommand(FdoExtension, CommandIndex, Argument, CommandFlags, Response);
     }
 
     /* Wait for CMD_INHIBIT to clear (hardware readiness, not completion) */
@@ -558,6 +563,30 @@ SdBusSendDataReadCommand(
         }
         return Status;
     }
+    if (FdoExtension->HostType == SdBusHostDwmmc)
+    {
+        ULONG DwMmcResponse = 0;
+
+        Status = DwMmcExecuteDataCommand(FdoExtension,
+                                          CommandIndex,
+                                          Argument,
+                                          CommandFlags,
+                                          TRUE,
+                                          FALSE,
+                                          DataBuffer,
+                                          DataLength,
+                                          1,
+                                          &DwMmcResponse);
+        if (Response != NULL)
+        {
+            Response[0] = DwMmcResponse;
+        }
+        if (NT_SUCCESS(Status))
+        {
+            Status = SdBusR1Status(DwMmcResponse);
+        }
+        return Status;
+    }
 
     /* Wait for DATA_INHIBIT to clear (hardware readiness) */
     Timeout = SD_CMD_TIMEOUT_MS * 100;
@@ -952,6 +981,11 @@ SdBusSetEmmcHostBusWidth(
     if (FdoExtension->HostType == SdBusHostBcm2835)
     {
         SdHostSetBusWidth(FdoExtension, (UCHAR)SdBusEmmcHostWidthFromExtCsd(BusWidth));
+        return;
+    }
+    if (FdoExtension->HostType == SdBusHostDwmmc)
+    {
+        DwMmcSetBusWidth(FdoExtension, (UCHAR)SdBusEmmcHostWidthFromExtCsd(BusWidth));
         return;
     }
 
@@ -1862,11 +1896,7 @@ SdBusEnumerateCard(
                                          NULL);
             if (NT_SUCCESS(Status))
             {
-                UCHAR HostCtrl;
-                HostCtrl = SdBusReadReg8(FdoExtension, SDHCI_HOST_CONTROL);
-                HostCtrl |= SDHCI_HC_DATA_WIDTH_4BIT;
-                SdBusWriteReg8(FdoExtension, SDHCI_HOST_CONTROL, HostCtrl);
-                FdoExtension->CurrentBusWidth = 4;
+                SdBusSetHostBusWidth(FdoExtension, 4);
                 DPRINT1("SdBusEnumerateCard: Switched to 4-bit bus\n");
             }
             else
@@ -2133,6 +2163,10 @@ SdBusProgramClock(
     if (FdoExtension->HostType == SdBusHostBcm2835)
     {
         return SdHostSetClock(FdoExtension, TargetClockKhz);
+    }
+    if (FdoExtension->HostType == SdBusHostDwmmc)
+    {
+        return DwMmcSetClock(FdoExtension, TargetClockKhz);
     }
 
     if (TargetClockKhz != 0 && FdoExtension->MaxClockFrequency == 0)
