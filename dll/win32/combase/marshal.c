@@ -719,13 +719,6 @@ static HRESULT std_release_marshal_data(IStream *stream)
     return S_OK;
 }
 
-#ifdef __REACTOS__
-static HRESULT std_release_marshal_data(IStream *stream)
-{
-    return std_release_marshal_data_ex(stream, FALSE);
-}
-#endif
-
 /***********************************************************************
  *            CoReleaseMarshalData        (combase.@)
  */
@@ -901,14 +894,6 @@ static HRESULT std_unmarshal_interface(MSHCTX dest_context, void *dest_context_d
     apartment_release(apt);
     return hres;
 }
-
-#ifdef __REACTOS__
-static HRESULT std_unmarshal_interface(MSHCTX dest_context, void *dest_context_data,
-        IStream *stream, REFIID riid, void **ppv, BOOL dest_context_known)
-{
-    return std_unmarshal_interface_ex(dest_context, dest_context_data, stream, riid, ppv, dest_context_known, FALSE);
-}
-#endif
 
 /***********************************************************************
  *            CoUnmarshalInterface        (combase.@)
