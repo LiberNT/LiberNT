@@ -268,6 +268,13 @@ uint32_t FAudio_CreateSourceVoice(
 	uint32_t i;
 
 	LOG_API_ENTER(audio)
+#ifdef __REACTOS__
+	if (audio->master == NULL)
+	{
+		LOG_API_EXIT(audio)
+		return FAUDIO_E_INVALID_CALL;
+	}
+#endif
 	LOG_FORMAT(audio, pSourceFormat)
 
 	*ppSourceVoice = (FAudioSourceVoice*) audio->pMalloc(sizeof(FAudioVoice));
@@ -583,6 +590,13 @@ uint32_t FAudio_CreateSubmixVoice(
 	uint32_t i;
 
 	LOG_API_ENTER(audio)
+#ifdef __REACTOS__
+	if (audio->master == NULL)
+	{
+		LOG_API_EXIT(audio)
+		return FAUDIO_E_INVALID_CALL;
+	}
+#endif
 
 	*ppSubmixVoice = (FAudioSubmixVoice*) audio->pMalloc(sizeof(FAudioVoice));
 	FAudio_zero(*ppSubmixVoice, sizeof(FAudioSubmixVoice));
