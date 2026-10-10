@@ -38,6 +38,32 @@ FUNC ZeroContext
 
 ENDFUNC
 
+FUNC FillLegacyFloatState
+
+    pushfq
+    .ALLOCSTACK 8
+    push rax
+    .PUSHREG rax
+    push rcx
+    .PUSHREG rcx
+    push rdi
+    .PUSHREG rdi
+    .ENDPROLOG
+
+    lea rdi, [rcx + CxFltSave]
+    mov rcx, LfXmmRegisters
+    mov eax, HEX(CC)
+    cld
+    rep stosb
+
+    pop rdi
+    pop rcx
+    pop rax
+    popfq
+    ret
+
+ENDFUNC
+
 //
 // VOID
 // RtlCaptureContextWrapper (
@@ -115,6 +141,7 @@ ReturnAddress:
 
     // Zero out the context (this does not clobber any registers/flags)
     call ZeroContext
+    call FillLegacyFloatState
 
     // Save returned Eflags
     pushfq

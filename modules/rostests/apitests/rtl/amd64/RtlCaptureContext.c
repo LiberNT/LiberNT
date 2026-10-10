@@ -138,21 +138,21 @@ START_TEST(RtlCaptureContext)
 
     /* Legacy floating point registers are truncated to 10 bytes */
     ok_eq_hex64(CapturedContext.Legacy[0].Low, OriginalContext.Legacy[0].Low);
-    ok_eq_hex64(CapturedContext.Legacy[0].High, OriginalContext.Legacy[0].High & 0xFF);
+    ok_eq_hex64(CapturedContext.Legacy[0].High, InOutContext.Legacy[0].High);
     ok_eq_hex64(CapturedContext.Legacy[1].Low, OriginalContext.Legacy[1].Low);
-    ok_eq_hex64(CapturedContext.Legacy[1].High, OriginalContext.Legacy[1].High & 0xFF);
+    ok_eq_hex64(CapturedContext.Legacy[1].High, InOutContext.Legacy[1].High);
     ok_eq_hex64(CapturedContext.Legacy[2].Low, OriginalContext.Legacy[2].Low);
-    ok_eq_hex64(CapturedContext.Legacy[2].High, OriginalContext.Legacy[2].High & 0xFF);
+    ok_eq_hex64(CapturedContext.Legacy[2].High, InOutContext.Legacy[2].High);
     ok_eq_hex64(CapturedContext.Legacy[3].Low, OriginalContext.Legacy[3].Low);
-    ok_eq_hex64(CapturedContext.Legacy[3].High, OriginalContext.Legacy[3].High & 0xFF);
+    ok_eq_hex64(CapturedContext.Legacy[3].High, InOutContext.Legacy[3].High);
     ok_eq_hex64(CapturedContext.Legacy[4].Low, OriginalContext.Legacy[4].Low);
-    ok_eq_hex64(CapturedContext.Legacy[4].High, OriginalContext.Legacy[4].High & 0xFF);
+    ok_eq_hex64(CapturedContext.Legacy[4].High, InOutContext.Legacy[4].High);
     ok_eq_hex64(CapturedContext.Legacy[5].Low, OriginalContext.Legacy[5].Low);
-    ok_eq_hex64(CapturedContext.Legacy[5].High, OriginalContext.Legacy[5].High & 0xFF);
+    ok_eq_hex64(CapturedContext.Legacy[5].High, InOutContext.Legacy[5].High);
     ok_eq_hex64(CapturedContext.Legacy[6].Low, OriginalContext.Legacy[6].Low);
-    ok_eq_hex64(CapturedContext.Legacy[6].High, OriginalContext.Legacy[6].High & 0xFF);
+    ok_eq_hex64(CapturedContext.Legacy[6].High, InOutContext.Legacy[6].High);
     ok_eq_hex64(CapturedContext.Legacy[7].Low, OriginalContext.Legacy[7].Low);
-    ok_eq_hex64(CapturedContext.Legacy[7].High, OriginalContext.Legacy[7].High & 0xFF);
+    ok_eq_hex64(CapturedContext.Legacy[7].High, InOutContext.Legacy[7].High);
 #else
     if (GetNTVersion() >= _WIN32_WINNT_WIN8)
     {
