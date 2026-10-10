@@ -10,6 +10,7 @@ import struct
 import sys
 
 SYSTEM32 = "%SystemRoot%\\system32"
+SYSWOW64 = "%SystemRoot%\\SysWOW64"
 MODULE_MARK = "\x01M\x01"
 SYSROOT_MARK = "\x01R\x01"
 
@@ -301,8 +302,8 @@ def decode_script(data):
     return data.decode("utf-8")
 
 
-def module_path(subdir, name):
-    return SYSTEM32 + "\\" + (subdir + "\\" if subdir else "") + name
+def module_path(subdir, name, root=SYSTEM32):
+    return root + "\\" + (subdir + "\\" if subdir else "") + name
 
 
 def script_ops(image, rtype, atl, warnings, label):
@@ -370,18 +371,18 @@ def write_inf(registry, out):
                 raise ValueError("unsupported value type %d" % vtype)
 
 
-def register(registry, modules, subdir, name, warnings):
+def register(registry, modules, subdir, name, warnings, root=SYSTEM32):
     image_path = modules.get(name.lower())
     if not image_path:
         warnings.append("%s: no module in this build" % name)
         return
     image = PeImage(image_path)
-    path = module_path(subdir, name)
+    path = module_path(subdir, name, root)
     apply(registry, script_ops(image, "WINE_REGISTRY", False, warnings, name), path)
     apply(registry, script_ops(image, "REGISTRY", True, warnings, name), path)
 
 
-def build(inf, modules, warnings):
+def build(inf, modules, wow64_modules, warnings):
     entries = [tuple(f[:4]) for f in read_inf_section(inf, "OleControlDlls") if len(f) >= 4]
     code = [tuple(f[:4]) for f in read_inf_section(inf, "OleControlDllsCode") if len(f) >= 4]
     keys = [tuple(x.lower() for x in entry) for entry in entries]
@@ -404,31 +405,39 @@ def build(inf, modules, warnings):
     for fields in read_inf_section(inf, "TypeLibraries"):
         if len(fields) > 1 and fields[1]:
             raise ValueError("type library %s is not in the system directory" % fields[0])
+        if fields[0].lower() in wow64_modules:
+            register(registry, wow64_modules, "", fields[0], warnings, SYSWOW64)
         register(registry, modules, "", fields[0], warnings)
     return registry
 
 
+def read_modules(path):
+    modules = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if "|" in line:
+                name, image = line.rstrip("\n").split("|", 1)
+                modules[name.lower()] = image
+    return modules
+
+
 def main(argv):
-    if len(argv) != 4:
-        sys.stderr.write("usage: mkcomreg.py <syssetup.inf> <modules.txt> <output.inf>\n")
+    if len(argv) != 5:
+        sys.stderr.write("usage: mkcomreg.py <syssetup.inf> <modules.txt> <wow64_modules.txt> <output.inf>\n")
         return 2
     with open(argv[1], encoding="utf-8-sig", errors="replace") as f:
         inf = f.read().splitlines()
-    with open(argv[2], encoding="utf-8") as f:
-        modules = {}
-        for line in f:
-            if "|" in line:
-                name, path = line.rstrip("\n").split("|", 1)
-                modules[name.lower()] = path
+    modules = read_modules(argv[2])
+    wow64_modules = read_modules(argv[3])
     warnings = []
     try:
-        registry = build(inf, modules, warnings)
+        registry = build(inf, modules, wow64_modules, warnings)
     except ValueError as e:
         sys.stderr.write("mkcomreg: error: %s\n" % e)
         return 1
     for w in warnings:
         sys.stderr.write("mkcomreg: warning: %s\n" % w)
-    with open(argv[3], "w", encoding="utf-16", newline="\r\n") as out:
+    with open(argv[4], "w", encoding="utf-16", newline="\r\n") as out:
         write_inf(registry, out)
     return 0
 

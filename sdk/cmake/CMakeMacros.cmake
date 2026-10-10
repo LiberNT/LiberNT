@@ -914,10 +914,17 @@ function(create_registry_hives)
         string(APPEND _comreg_modules "$<TARGET_FILE_NAME:${_comreg_target}>|$<TARGET_FILE:${_comreg_target}>\n")
     endforeach()
     file(GENERATE OUTPUT ${_comreg_list} CONTENT "${_comreg_modules}")
+    set(_comreg_wow64_list ${CMAKE_BINARY_DIR}/boot/bootdata/comreg_wow64_modules.txt)
+    set(_comreg_wow64_modules "")
+    foreach(_comreg_wow64_file IN LISTS WOW64_I386_FILES)
+        get_filename_component(_comreg_wow64_name ${_comreg_wow64_file} NAME)
+        string(APPEND _comreg_wow64_modules "${_comreg_wow64_name}|${_comreg_wow64_file}\n")
+    endforeach()
+    file(GENERATE OUTPUT ${_comreg_wow64_list} CONTENT "${_comreg_wow64_modules}")
     add_custom_command(
         OUTPUT ${_comreg_inf}
-        COMMAND ${MKCOMREG_PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_syssetup_inf} ${_comreg_list} ${_comreg_inf}
-        DEPENDS ${_comreg_targets} ${_syssetup_inf} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_comreg_list}
+        COMMAND ${MKCOMREG_PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_syssetup_inf} ${_comreg_list} ${_comreg_wow64_list} ${_comreg_inf}
+        DEPENDS ${_comreg_targets} ${WOW64_I386_FILES} ${_syssetup_inf} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_comreg_list} ${_comreg_wow64_list}
         VERBATIM)
 
     # LiveCD hives
