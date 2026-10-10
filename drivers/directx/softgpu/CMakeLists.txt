@@ -9,7 +9,8 @@
 #   2. dxgkrnl   — imports dxgmms2; owns the internal resolver device
 #   3. softgpu   — resolves DxgkInitialize through the static displib wrapper
 
-spec2def(BasicDisplay.sys softgpu.spec ADD_IMPORTLIB)
+include(${REACTOS_SOURCE_DIR}/sdk/lib/drivers/softgpu/softgpu.cmake)
+spec2def(BasicDisplay.sys ${SOFTGPU_ENGINE_SPEC} ADD_IMPORTLIB)
 
 # softgpu MUST compile with the same current header version as dxgkrnl so
 # DRIVER_INITIALIZATION_DATA, DXGK_INTERFACE and every DXGKARG_* structure are
@@ -25,28 +26,14 @@ add_definitions(-DNTDDI_VERSION=0x06010000)    # NTDDI_WIN7
 remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
 add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
 
-list(APPEND SOURCE
-    softgpu.c
-    platform_common.c
-    platform_root.c
-    vidpn.c
-    pointer.c
-    dma.c
-    wddm2.c)
-
 add_library(softgpu MODULE
-    ${SOURCE}
+    platform_root.c
     softgpu.rc
     ${CMAKE_CURRENT_BINARY_DIR}/BasicDisplay.def)
 
 set_target_properties(softgpu PROPERTIES OUTPUT_NAME "BasicDisplay")
 
-target_compile_definitions(softgpu PRIVATE
-    REACTOS_WDDM_TARGET_LEVEL=${REACTOS_WDDM_TARGET_LEVEL}
-    REACTOS_WDDM_TARGET_INTERFACE_VERSION=${REACTOS_WDDM_TARGET_INTERFACE_VERSION})
-
 set_module_type(softgpu kernelmodedriver)
-target_link_libraries(softgpu displib)
+target_link_libraries(softgpu softgpu_engine displib)
 add_importlibs(softgpu ntoskrnl hal)
-add_pch(softgpu softgpu.h "${SOURCE}")
 add_cd_file(TARGET softgpu DESTINATION reactos/system32/drivers FOR all)

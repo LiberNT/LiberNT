@@ -379,7 +379,7 @@ add_library(kmtest_drv MODULE ${KMTEST_DRV_SOURCE})
 target_include_directories(kmtest_drv PRIVATE
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgmms2
-    ${REACTOS_SOURCE_DIR}/drivers/directx/softgpu)
+    ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/softgpu)
 if(KMTEST_DXGK_WDDM_ABI)
     target_compile_definitions(kmtest_drv PRIVATE
         KMT_DXGK_WDDM_ABI)
