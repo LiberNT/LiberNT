@@ -562,7 +562,32 @@ cleanup:
  * The function leaves the stream pointer at the start of the data written
  * to the stream by the IMarshal* object.
  */
+#ifdef __REACTOS__
+static HRESULT read_std_objref_payload(IStream *stream, BOOL handler, struct OR_STANDARD *obj)
+{
+    LARGE_INTEGER skip;
+    HRESULT hr;
+    ULONG res;
+
+    hr = IStream_Read(stream, &obj->std, sizeof(obj->std), &res);
+    if (hr != S_OK || res != sizeof(obj->std))
+        return STG_E_READFAULT;
+    if (handler)
+    {
+        skip.QuadPart = sizeof(CLSID);
+        if (FAILED(IStream_Seek(stream, skip, STREAM_SEEK_CUR, NULL)))
+            return STG_E_READFAULT;
+    }
+    hr = IStream_Read(stream, &obj->saResAddr, FIELD_OFFSET(DUALSTRINGARRAY, aStringArray), &res);
+    if (hr != S_OK || res != FIELD_OFFSET(DUALSTRINGARRAY, aStringArray))
+        return STG_E_READFAULT;
+    return S_OK;
+}
+
+static HRESULT get_unmarshaler_from_stream_ex(IStream *stream, IMarshal **marshal, IID *iid, CLSID *handler_clsid, BOOL *handler)
+#else
 static HRESULT get_unmarshaler_from_stream(IStream *stream, IMarshal **marshal, IID *iid)
+#endif
 {
     OBJREF objref;
     HRESULT hr;
@@ -585,6 +610,25 @@ static HRESULT get_unmarshaler_from_stream(IStream *stream, IMarshal **marshal, 
 
     if (iid) *iid = objref.iid;
 
+#ifdef __REACTOS__
+    *handler = FALSE;
+    if (objref.flags & OBJREF_HANDLER)
+    {
+        LARGE_INTEGER back;
+
+        TRACE("Using handler unmarshaling\n");
+        hr = IStream_Read(stream, &objref.u_objref.u_handler, FIELD_OFFSET(struct OR_HANDLER, saResAddr), &res);
+        if (hr != S_OK || res != FIELD_OFFSET(struct OR_HANDLER, saResAddr))
+            return STG_E_READFAULT;
+        if (handler_clsid) *handler_clsid = objref.u_objref.u_handler.clsid;
+        back.QuadPart = -(LONGLONG)FIELD_OFFSET(struct OR_HANDLER, saResAddr);
+        if (FAILED(IStream_Seek(stream, back, STREAM_SEEK_CUR, NULL)))
+            return STG_E_READFAULT;
+        *handler = TRUE;
+        *marshal = NULL;
+        return S_FALSE;
+    }
+#endif
     /* FIXME: handler marshaling */
     if (objref.flags & OBJREF_STANDARD)
     {
@@ -622,15 +666,25 @@ static HRESULT get_unmarshaler_from_stream(IStream *stream, IMarshal **marshal, 
     return hr;
 }
 
+#ifdef __REACTOS__
+static HRESULT std_release_marshal_data_ex(IStream *stream, BOOL handler)
+#else
 static HRESULT std_release_marshal_data(IStream *stream)
+#endif
 {
     struct stub_manager *stubmgr;
     struct OR_STANDARD  obj;
     struct apartment *apt;
+#ifndef __REACTOS__
     ULONG res;
+#endif
     HRESULT hr;
 
+#ifdef __REACTOS__
+    hr = read_std_objref_payload(stream, handler, &obj);
+#else
     hr = IStream_Read(stream, &obj, FIELD_OFFSET(struct OR_STANDARD, saResAddr.aStringArray), &res);
+#endif
     if (hr != S_OK) return STG_E_READFAULT;
 
     if (obj.saResAddr.wNumEntries)
@@ -665,6 +719,13 @@ static HRESULT std_release_marshal_data(IStream *stream)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static HRESULT std_release_marshal_data(IStream *stream)
+{
+    return std_release_marshal_data_ex(stream, FALSE);
+}
+#endif
+
 /***********************************************************************
  *            CoReleaseMarshalData        (combase.@)
  */
@@ -672,13 +733,24 @@ HRESULT WINAPI CoReleaseMarshalData(IStream *stream)
 {
     IMarshal *marshal;
     HRESULT hr;
+#ifdef __REACTOS__
+    BOOL handler;
+#endif
 
     TRACE("%p\n", stream);
 
+#ifdef __REACTOS__
+    hr = get_unmarshaler_from_stream_ex(stream, &marshal, NULL, NULL, &handler);
+#else
     hr = get_unmarshaler_from_stream(stream, &marshal, NULL);
+#endif
     if (hr == S_FALSE)
     {
+#ifdef __REACTOS__
+        hr = std_release_marshal_data_ex(stream, handler);
+#else
         hr = std_release_marshal_data(stream);
+#endif
         if (hr != S_OK)
             ERR("StdMarshal ReleaseMarshalData failed with error %#lx\n", hr);
         return hr;
@@ -695,14 +767,23 @@ HRESULT WINAPI CoReleaseMarshalData(IStream *stream)
     return hr;
 }
 
+#ifdef __REACTOS__
+static HRESULT std_unmarshal_interface_ex(MSHCTX dest_context, void *dest_context_data,
+        IStream *stream, REFIID riid, void **ppv, BOOL dest_context_known, BOOL handler)
+#else
 static HRESULT std_unmarshal_interface(MSHCTX dest_context, void *dest_context_data,
         IStream *stream, REFIID riid, void **ppv, BOOL dest_context_known)
+#endif
 {
     struct stub_manager *stubmgr = NULL;
     struct OR_STANDARD obj;
     ULONG res;
     HRESULT hres;
     struct apartment *apt, *stub_apt;
+#ifdef __REACTOS__
+    OXID_INFO stub_oxid_info;
+    const OXID_INFO *oxid_info = NULL;
+#endif
 
     TRACE("(...,%s,....)\n", debugstr_guid(riid));
 
@@ -714,7 +795,12 @@ static HRESULT std_unmarshal_interface(MSHCTX dest_context, void *dest_context_d
     }
 
     /* read STDOBJREF from wire */
+#ifdef __REACTOS__
+    hres = read_std_objref_payload(stream, handler, &obj);
+    (void)res;
+#else
     hres = IStream_Read(stream, &obj, FIELD_OFFSET(struct OR_STANDARD, saResAddr.aStringArray), &res);
+#endif
     if (hres != S_OK)
     {
         apartment_release(apt);
@@ -763,17 +849,44 @@ static HRESULT std_unmarshal_interface(MSHCTX dest_context, void *dest_context_d
             WARN("Couldn't find object for OXID %s, OID %s, assuming disconnected\n",
                 wine_dbgstr_longlong(obj.std.oxid),
                 wine_dbgstr_longlong(obj.std.oid));
+#ifdef __REACTOS__
+            if (apartment_getoxid(apt) == obj.std.oxid)
+                hres = CO_E_OBJNOTCONNECTED;
+            else if (!obj.std.cPublicRefs)
+                hres = CO_E_OBJNOTREG;
+            else
+            {
+                stub_oxid_info.dwPid = GetCurrentProcessId();
+                stub_oxid_info.dwTid = stub_apt->tid;
+                stub_oxid_info.ipidRemUnknown.Data1 = 0xffffffff;
+                stub_oxid_info.ipidRemUnknown.Data2 = 0xffff;
+                stub_oxid_info.ipidRemUnknown.Data3 = 0xffff;
+                memcpy(stub_oxid_info.ipidRemUnknown.Data4, &stub_apt->oxid, sizeof(OXID));
+                stub_oxid_info.dwAuthnHint = RPC_C_AUTHN_LEVEL_NONE;
+                stub_oxid_info.psa = NULL;
+                oxid_info = &stub_oxid_info;
+            }
+#else
             hres = CO_E_OBJNOTCONNECTED;
+#endif
         }
     }
     else
         TRACE("Treating unmarshal from OXID %s as inter-process\n",
             wine_dbgstr_longlong(obj.std.oxid));
 
+#ifdef __REACTOS__
+    if (stubmgr) oxid_info = &stubmgr->oxid_info;
+    if (hres == S_OK)
+        hres = unmarshal_object(&obj.std, apt, dest_context,
+                                dest_context_data, riid,
+                                oxid_info, ppv);
+#else
     if (hres == S_OK)
         hres = unmarshal_object(&obj.std, apt, dest_context,
                                 dest_context_data, riid,
                                 stubmgr ? &stubmgr->oxid_info : NULL, ppv);
+#endif
 
     if (stubmgr) stub_manager_int_release(stubmgr);
     if (stub_apt) apartment_release(stub_apt);
@@ -784,6 +897,14 @@ static HRESULT std_unmarshal_interface(MSHCTX dest_context, void *dest_context_d
     apartment_release(apt);
     return hres;
 }
+
+#ifdef __REACTOS__
+static HRESULT std_unmarshal_interface(MSHCTX dest_context, void *dest_context_data,
+        IStream *stream, REFIID riid, void **ppv, BOOL dest_context_known)
+{
+    return std_unmarshal_interface_ex(dest_context, dest_context_data, stream, riid, ppv, dest_context_known, FALSE);
+}
+#endif
 
 /***********************************************************************
  *            CoUnmarshalInterface        (combase.@)
@@ -796,6 +917,9 @@ HRESULT WINAPI CoUnmarshalInterface(IStream *stream, REFIID riid, void **ppv)
     IID iid;
 #ifdef __REACTOS__
     struct apartment *apt;
+    ULARGE_INTEGER start_pos;
+    CLSID handler_clsid;
+    BOOL handler;
 #endif
 
     TRACE("%p, %s, %p\n", stream, debugstr_guid(riid), ppv);
@@ -809,6 +933,34 @@ HRESULT WINAPI CoUnmarshalInterface(IStream *stream, REFIID riid, void **ppv)
     apartment_release(apt);
 #endif
 
+#ifdef __REACTOS__
+    {
+        LARGE_INTEGER zero;
+        zero.QuadPart = 0;
+        if (FAILED(IStream_Seek(stream, zero, STREAM_SEEK_CUR, &start_pos)))
+            start_pos.QuadPart = 0;
+    }
+    hr = get_unmarshaler_from_stream_ex(stream, &marshal, &iid, &handler_clsid, &handler);
+    if (hr == S_FALSE && handler &&
+        SUCCEEDED(CoCreateInstance(&handler_clsid, NULL, CLSCTX_INPROC_HANDLER, &IID_IMarshal, (void **)&marshal)))
+    {
+        LARGE_INTEGER pos;
+
+        pos.QuadPart = start_pos.QuadPart;
+        hr = IStream_Seek(stream, pos, STREAM_SEEK_SET, NULL);
+        if (SUCCEEDED(hr))
+            hr = IMarshal_UnmarshalInterface(marshal, stream, &iid, (void **)&object);
+        IMarshal_Release(marshal);
+        if (hr != S_OK)
+            ERR("Handler IMarshal::UnmarshalInterface failed, hr %#lx\n", hr);
+    }
+    else if (hr == S_FALSE)
+    {
+        hr = std_unmarshal_interface_ex(0, NULL, stream, &iid, (void **)&object, FALSE, handler);
+        if (hr != S_OK)
+            ERR("StdMarshal UnmarshalInterface failed, hr %#lx\n", hr);
+    }
+#else
     hr = get_unmarshaler_from_stream(stream, &marshal, &iid);
     if (hr == S_FALSE)
     {
@@ -816,6 +968,7 @@ HRESULT WINAPI CoUnmarshalInterface(IStream *stream, REFIID riid, void **ppv)
         if (hr != S_OK)
             ERR("StdMarshal UnmarshalInterface failed, hr %#lx\n", hr);
     }
+#endif
     else if (hr == S_OK)
     {
         /* call the helper object to do the actual unmarshaling */
@@ -930,6 +1083,9 @@ HRESULT marshal_object(struct apartment *apt, STDOBJREF *stdobjref, REFIID riid,
             if (!ifstub)
                 hr = E_OUTOFMEMORY;
         }
+#ifdef __REACTOS__
+        if (stub && !ifstub) IRpcStubBuffer_Disconnect(stub);
+#endif
         if (stub) IRpcStubBuffer_Release(stub);
 
         if (hr != S_OK) {
@@ -1012,8 +1168,27 @@ static HRESULT WINAPI ClientIdentity_QueryMultipleInterfaces(IMultiQI *iface, UL
     IID *iids = malloc(cMQIs * sizeof(*iids));
     /* mapping of RemQueryInterface index to QueryMultipleInterfaces index */
     ULONG *mapping = malloc(cMQIs * sizeof(*mapping));
+#ifdef __REACTOS__
+    struct apartment *apt;
+#endif
 
     TRACE("cMQIs: %ld\n", cMQIs);
+
+#ifdef __REACTOS__
+    apt = apartment_get_current_or_mta();
+    if (apt) apartment_release(apt);
+    if (This->parent && apt != This->parent)
+    {
+        for (i = 0; i < cMQIs; i++)
+        {
+            pMQIs[i].pItf = NULL;
+            pMQIs[i].hr = RPC_E_WRONG_THREAD;
+        }
+        free(iids);
+        free(mapping);
+        return RPC_E_WRONG_THREAD;
+    }
+#endif
 
     /* try to get a local interface - this includes already active proxy
      * interfaces and also interfaces exposed by the proxy manager */
@@ -1646,6 +1821,9 @@ static void ifproxy_destroy(struct ifproxy * This)
 
     if (This->chan)
     {
+#ifdef __REACTOS__
+        if (This->proxy) IRpcProxyBuffer_Disconnect(This->proxy);
+#endif
         IRpcChannelBuffer_Release(This->chan);
         This->chan = NULL;
     }
@@ -2179,9 +2357,33 @@ static HRESULT WINAPI StdMarshalImpl_GetUnmarshalClass(IMarshal *iface, REFIID r
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static BOOL get_handler_clsid(void *pv, DWORD dest_context, void *dest_context_data, CLSID *clsid)
+{
+    IStdMarshalInfo *info;
+    BOOL ret = FALSE;
+
+    if (pv && SUCCEEDED(IUnknown_QueryInterface((IUnknown *)pv, &IID_IStdMarshalInfo, (void **)&info)))
+    {
+        ret = IStdMarshalInfo_GetClassForHandler(info, dest_context, dest_context_data, clsid) == S_OK;
+        IStdMarshalInfo_Release(info);
+    }
+    return ret;
+}
+#endif
+
 static HRESULT WINAPI StdMarshalImpl_GetMarshalSizeMax(IMarshal *iface, REFIID riid, void *pv,
         DWORD dwDestContext, void *pvDestContext, DWORD mshlflags, DWORD *pSize)
 {
+#ifdef __REACTOS__
+    CLSID clsid;
+
+    if (get_handler_clsid(pv, dwDestContext, pvDestContext, &clsid))
+    {
+        *pSize = FIELD_OFFSET(OBJREF, u_objref.u_handler.saResAddr.aStringArray);
+        return S_OK;
+    }
+#endif
     *pSize = FIELD_OFFSET(OBJREF, u_objref.u_standard.saResAddr.aStringArray);
     return S_OK;
 }
@@ -2215,6 +2417,23 @@ static HRESULT WINAPI StdMarshalImpl_MarshalInterface(IMarshal *iface, IStream *
         return hr;
     }
 
+#ifdef __REACTOS__
+    {
+        CLSID clsid;
+
+        if (get_handler_clsid(pv, dest_context, dest_context_data, &clsid))
+        {
+            STDOBJREF std = objref.u_objref.u_standard.std;
+
+            objref.flags = OBJREF_HANDLER;
+            objref.u_objref.u_handler.std = std;
+            objref.u_objref.u_handler.clsid = clsid;
+            objref.u_objref.u_handler.saResAddr.wNumEntries = 0;
+            objref.u_objref.u_handler.saResAddr.wSecurityOffset = 0;
+            return IStream_Write(stream, &objref, FIELD_OFFSET(OBJREF, u_objref.u_handler.saResAddr.aStringArray), &res);
+        }
+    }
+#endif
     return IStream_Write(stream, &objref, FIELD_OFFSET(OBJREF, u_objref.u_standard.saResAddr.aStringArray), &res);
 }
 
@@ -2305,13 +2524,22 @@ static HRESULT WINAPI StdMarshalImpl_UnmarshalInterface(IMarshal *iface, IStream
         return RPC_E_INVALID_OBJREF;
     }
 
+#ifdef __REACTOS__
+    if (!(objref.flags & (OBJREF_STANDARD | OBJREF_HANDLER)))
+#else
     if (!(objref.flags & OBJREF_STANDARD))
+#endif
     {
         FIXME("unsupported objref.flags = %lx\n", objref.flags);
         return E_NOTIMPL;
     }
 
+#ifdef __REACTOS__
+    return std_unmarshal_interface_ex(marshal->dest_context, marshal->dest_context_data, stream, riid, ppv, TRUE,
+            !!(objref.flags & OBJREF_HANDLER));
+#else
     return std_unmarshal_interface(marshal->dest_context, marshal->dest_context_data, stream, riid, ppv, TRUE);
+#endif
 }
 
 static HRESULT WINAPI StdMarshalImpl_ReleaseMarshalData(IMarshal *iface, IStream *stream)
@@ -2335,13 +2563,21 @@ static HRESULT WINAPI StdMarshalImpl_ReleaseMarshalData(IMarshal *iface, IStream
         return RPC_E_INVALID_OBJREF;
     }
 
+#ifdef __REACTOS__
+    if (!(objref.flags & (OBJREF_STANDARD | OBJREF_HANDLER)))
+#else
     if (!(objref.flags & OBJREF_STANDARD))
+#endif
     {
         FIXME("unsupported objref.flags = %lx\n", objref.flags);
         return E_NOTIMPL;
     }
 
+#ifdef __REACTOS__
+    return std_release_marshal_data_ex(stream, !!(objref.flags & OBJREF_HANDLER));
+#else
     return std_release_marshal_data(stream);
+#endif
 }
 
 static HRESULT WINAPI StdMarshalImpl_DisconnectObject(IMarshal *iface, DWORD reserved)

@@ -126,6 +126,10 @@ struct registered_class
     DWORD flags;
     unsigned int cookie;
     unsigned int rpcss_cookie;
+#ifdef __REACTOS__
+    BOOL suspended;
+    BOOL used;
+#endif
 };
 
 static struct list registered_classes = LIST_INIT(registered_classes);
@@ -139,10 +143,21 @@ static CRITICAL_SECTION_DEBUG registered_classes_cs_debug =
 };
 static CRITICAL_SECTION registered_classes_cs = { &registered_classes_cs_debug, -1, 0, 0, 0, 0 };
 
+#ifdef __REACTOS__
+IUnknown * com_get_registered_class_object_ex(const struct apartment *apt, REFCLSID rclsid, DWORD clscontext,
+        BOOL include_suspended, BOOL *suspended)
+#else
 IUnknown * com_get_registered_class_object(const struct apartment *apt, REFCLSID rclsid, DWORD clscontext)
+#endif
 {
     struct registered_class *cur;
     IUnknown *object = NULL;
+#ifdef __REACTOS__
+    unsigned int revoke_cookie = 0;
+    BOOL revoke = FALSE;
+
+    if (suspended) *suspended = FALSE;
+#endif
 
     EnterCriticalSection(&registered_classes_cs);
 
@@ -152,6 +167,23 @@ IUnknown * com_get_registered_class_object(const struct apartment *apt, REFCLSID
             (clscontext & cur->clscontext) &&
             IsEqualGUID(&cur->clsid, rclsid))
         {
+#ifdef __REACTOS__
+            if (cur->used)
+                continue;
+            if (cur->suspended && !include_suspended)
+            {
+                if (suspended) *suspended = TRUE;
+                continue;
+            }
+            if (!include_suspended && (clscontext & CLSCTX_LOCAL_SERVER) &&
+                (cur->clscontext & CLSCTX_LOCAL_SERVER) &&
+                !(cur->flags & (REGCLS_MULTIPLEUSE | REGCLS_MULTI_SEPARATE)))
+            {
+                cur->used = TRUE;
+                revoke = TRUE;
+                revoke_cookie = cur->rpcss_cookie;
+            }
+#endif
             object = cur->object;
             IUnknown_AddRef(cur->object);
             break;
@@ -160,8 +192,19 @@ IUnknown * com_get_registered_class_object(const struct apartment *apt, REFCLSID
 
     LeaveCriticalSection(&registered_classes_cs);
 
+#ifdef __REACTOS__
+    if (revoke)
+        rpc_revoke_local_server(revoke_cookie);
+#endif
     return object;
 }
+
+#ifdef __REACTOS__
+IUnknown * com_get_registered_class_object(const struct apartment *apt, REFCLSID rclsid, DWORD clscontext)
+{
+    return com_get_registered_class_object_ex(apt, rclsid, clscontext, FALSE, NULL);
+}
+#endif
 
 static struct init_spy *get_spy_entry(struct tlsdata *tlsdata, unsigned int id)
 {
@@ -1733,9 +1776,17 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoGetInstanceFromFile(COSERVERINFO *server_info
     IUnknown *obj = NULL;
     CLSID clsid;
     HRESULT hr;
+#ifdef __REACTOS__
+    DWORD i;
+#endif
 
     if (!count || !results)
         return E_INVALIDARG;
+
+#ifdef __REACTOS__
+    for (i = 0; i < count; i++)
+        if (results[i].pItf) return E_INVALIDARG;
+#endif
 
     if (server_info)
         FIXME("() non-NULL server_info not supported\n");
@@ -2080,6 +2131,10 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoGetClassObject(REFCLSID rclsid, DWORD clscont
 {
     TRACE("%s, %#lx, %s\n", debugstr_guid(rclsid), clscontext, debugstr_guid(riid));
 
+#ifdef __REACTOS__
+    if (clscontext & CLSCTX_APPCONTAINER)
+        return E_INVALIDARG;
+#endif
     return com_get_class_object(rclsid, clscontext, server_info, riid, obj);
 }
 
@@ -2297,7 +2352,11 @@ HRESULT WINAPI CoWaitForMultipleHandles(DWORD flags, DWORD timeout, ULONG handle
 
                 /* call message filter */
 
+#ifdef __REACTOS__
+                if (apt->filter && tlsdata->pending_call_count_client)
+#else
                 if (apt->filter)
+#endif
                 {
                     PENDINGTYPE pendingtype = tlsdata->pending_call_count_server ? PENDINGTYPE_NESTED : PENDINGTYPE_TOPLEVEL;
                     DWORD be_handled = IMessageFilter_MessagePending(apt->filter, 0 /* FIXME */, now - start_time, pendingtype);
@@ -2804,6 +2863,67 @@ static HRESULT WINAPI thread_context_callback_ContextCallback(IContextCallback *
         TRACE("callback returned %lx\n", hr);
         return hr;
     }
+
+#ifdef __REACTOS__
+    if (!apt->multi_threaded && context == mta_context)
+    {
+        IComThreadingInfo *cti = NULL;
+        IObjContext *saved_token;
+        struct apartment *mta, *saved_apt;
+        struct tlsdata *tlsdata;
+        GUID thread_id;
+
+        if (FAILED(hr = com_get_tlsdata(&tlsdata)))
+        {
+            apartment_release(apt);
+            return hr;
+        }
+        if (!(mta = apartment_get_mta()))
+        {
+            apartment_release(apt);
+            return CO_E_NOTINITIALIZED;
+        }
+
+        if (IsEqualIID(riid, &IID_IEnterActivityWithNoLock))
+        {
+            cti = &context->IComThreadingInfo_iface;
+            if (FAILED((hr = IComThreadingInfo_GetCurrentLogicalThreadId(cti, &thread_id))) ||
+                FAILED((hr = IComThreadingInfo_SetCurrentLogicalThreadId(cti, riid))))
+            {
+                apartment_release(mta);
+                apartment_release(apt);
+                return hr;
+            }
+        }
+
+        saved_apt = tlsdata->apt;
+        saved_token = tlsdata->context_token;
+        tlsdata->apt = mta;
+        tlsdata->context_token = &context->IObjContext_iface;
+
+        __TRY
+        {
+            hr = callback(param);
+        }
+        __EXCEPT_ALL
+        {
+            hr = RPC_E_SERVERFAULT;
+        }
+        __ENDTRY
+
+        tlsdata->apt = saved_apt;
+        tlsdata->context_token = saved_token;
+
+        if (cti)
+            IComThreadingInfo_SetCurrentLogicalThreadId(cti, &thread_id);
+
+        apartment_release(mta);
+        apartment_release(apt);
+
+        TRACE("callback returned %lx\n", hr);
+        return hr;
+    }
+#endif
 
     hr = rpc_resolve_oxid(context->oxid, &oxid_info);
     if (SUCCEEDED(hr))
@@ -3321,7 +3441,11 @@ HRESULT WINAPI CoRegisterClassObject(REFCLSID rclsid, IUnknown *object, DWORD cl
      * First, check if the class is already registered.
      * If it is, this should cause an error.
      */
+#ifdef __REACTOS__
+    if ((found_object = com_get_registered_class_object_ex(apt, rclsid, clscontext, TRUE, NULL)))
+#else
     if ((found_object = com_get_registered_class_object(apt, rclsid, clscontext)))
+#endif
     {
         if (flags & REGCLS_MULTIPLEUSE)
         {
@@ -3349,6 +3473,9 @@ HRESULT WINAPI CoRegisterClassObject(REFCLSID rclsid, IUnknown *object, DWORD cl
     newclass->apartment_id = apt->oxid;
     newclass->clscontext = clscontext;
     newclass->flags = flags;
+#ifdef __REACTOS__
+    newclass->suspended = !!(flags & REGCLS_SUSPENDED);
+#endif
 
     if (!(newclass->cookie = InterlockedIncrement(&next_cookie)))
         newclass->cookie = InterlockedIncrement(&next_cookie);
@@ -3385,7 +3512,11 @@ static void com_revoke_class_object(struct registered_class *entry)
 {
     list_remove(&entry->entry);
 
+#ifdef __REACTOS__
+    if ((entry->clscontext & CLSCTX_LOCAL_SERVER) && !entry->used)
+#else
     if (entry->clscontext & CLSCTX_LOCAL_SERVER)
+#endif
         rpc_revoke_local_server(entry->rpcss_cookie);
 
     IUnknown_Release(entry->object);
@@ -3431,6 +3562,9 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoRevokeClassObject(DWORD cookie)
     HRESULT hr = E_INVALIDARG;
     struct registered_class *cur;
     struct apartment *apt;
+#ifdef __REACTOS__
+    IUnknown *object = NULL;
+#endif
 
     TRACE("%#lx\n", cookie);
 
@@ -3449,6 +3583,10 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoRevokeClassObject(DWORD cookie)
 
         if (cur->apartment_id == apt->oxid)
         {
+#ifdef __REACTOS__
+            object = cur->object;
+            IUnknown_AddRef(object);
+#endif
             com_revoke_class_object(cur);
             hr = S_OK;
         }
@@ -3462,6 +3600,13 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoRevokeClassObject(DWORD cookie)
     }
 
     LeaveCriticalSection(&registered_classes_cs);
+#ifdef __REACTOS__
+    if (object)
+    {
+        CoDisconnectObject(object, 0);
+        IUnknown_Release(object);
+    }
+#endif
     apartment_release(apt);
 
     return hr;
@@ -3497,7 +3642,17 @@ ULONG WINAPI CoReleaseServerProcess(void)
     EnterCriticalSection(&registered_classes_cs);
 
     refs = --com_server_process_refcount;
+#ifdef __REACTOS__
+    if (!refs)
+    {
+        struct registered_class *cur;
+
+        LIST_FOR_EACH_ENTRY(cur, &registered_classes, struct registered_class, entry)
+            cur->suspended = TRUE;
+    }
+#else
     /* FIXME: suspend objects */
+#endif
 
     LeaveCriticalSection(&registered_classes_cs);
 
@@ -3663,7 +3818,18 @@ BOOL WINAPI CoIsHandlerConnected(IUnknown *object)
  */
 HRESULT WINAPI CoSuspendClassObjects(void)
 {
+#ifdef __REACTOS__
+    struct registered_class *cur;
+
+    TRACE("\n");
+
+    EnterCriticalSection(&registered_classes_cs);
+    LIST_FOR_EACH_ENTRY(cur, &registered_classes, struct registered_class, entry)
+        cur->suspended = TRUE;
+    LeaveCriticalSection(&registered_classes_cs);
+#else
     FIXME("\n");
+#endif
 
     return S_OK;
 }
@@ -3673,7 +3839,18 @@ HRESULT WINAPI CoSuspendClassObjects(void)
  */
 HRESULT WINAPI CoResumeClassObjects(void)
 {
+#ifdef __REACTOS__
+    struct registered_class *cur;
+
+    TRACE("\n");
+
+    EnterCriticalSection(&registered_classes_cs);
+    LIST_FOR_EACH_ENTRY(cur, &registered_classes, struct registered_class, entry)
+        cur->suspended = FALSE;
+    LeaveCriticalSection(&registered_classes_cs);
+#else
     FIXME("stub\n");
+#endif
 
     return S_OK;
 }

@@ -138,7 +138,11 @@ static HRESULT apartment_add_dll(const WCHAR *library_name, struct opendll **ret
     /* DllCanUnloadNow is optional */
     DllCanUnloadNow = (void *)GetProcAddress(hLibrary, "DllCanUnloadNow");
     DllGetClassObject = (void *)GetProcAddress(hLibrary, "DllGetClassObject");
+#ifdef __REACTOS__
+    if (!DllGetClassObject && !GetProcAddress(hLibrary, "DllGetActivationFactory"))
+#else
     if (!DllGetClassObject)
+#endif
     {
         /* failure: the dll did not export DllGetClassObject */
         ERR("couldn't find function DllGetClassObject in %s\n", debugstr_w(library_name));
@@ -295,11 +299,25 @@ static HRESULT WINAPI local_server_QueryService(IServiceProvider *iface, REFGUID
     if (!local_server->apt)
         return E_UNEXPECTED;
 
+#ifdef __REACTOS__
+    {
+        BOOL suspended;
+
+        if ((unk = com_get_registered_class_object_ex(apt, guid, CLSCTX_LOCAL_SERVER, FALSE, &suspended)))
+        {
+            hr = IUnknown_QueryInterface(unk, riid, obj);
+            IUnknown_Release(unk);
+        }
+        else if (suspended)
+            hr = CO_E_SERVER_STOPPING;
+    }
+#else
     if ((unk = com_get_registered_class_object(apt, guid, CLSCTX_LOCAL_SERVER)))
     {
         hr = IUnknown_QueryInterface(unk, riid, obj);
         IUnknown_Release(unk);
     }
+#endif
 
     return hr;
 }
@@ -508,6 +526,10 @@ void apartment_release(struct apartment *apt)
              * stub manager list in the apartment and all non-apartment users
              * must have a ref on the apartment and so it cannot be destroyed).
              */
+#ifdef __REACTOS__
+            if (stubmgr->extern_conn && stubmgr->extrefs)
+                IExternalConnection_ReleaseConnection(stubmgr->extern_conn, EXTCONN_STRONG, 0, FALSE);
+#endif
             stub_manager_int_release(stubmgr);
         }
 
@@ -820,6 +842,10 @@ static HRESULT apartment_getclassobject(struct apartment *apt, LPCWSTR dllpath,
 
     LeaveCriticalSection(&apt->cs);
 
+#ifdef __REACTOS__
+    if (SUCCEEDED(hr) && !apartment_loaded_dll->dll->DllGetClassObject)
+        hr = CO_E_DLLNOTFOUND;
+#endif
     if (SUCCEEDED(hr))
     {
         /* one component being multi-threaded overrides any number of
@@ -837,6 +863,40 @@ static HRESULT apartment_getclassobject(struct apartment *apt, LPCWSTR dllpath,
 
     return hr;
 }
+
+#ifdef __REACTOS__
+HRESULT apartment_track_dll(struct apartment *apt, const WCHAR *dllpath)
+{
+    struct apartment_loaded_dll *apartment_loaded_dll;
+    HRESULT hr = S_OK;
+
+    EnterCriticalSection(&apt->cs);
+
+    LIST_FOR_EACH_ENTRY(apartment_loaded_dll, &apt->loaded_dlls, struct apartment_loaded_dll, entry)
+    {
+        if (!wcsicmp(dllpath, apartment_loaded_dll->dll->library_name))
+        {
+            LeaveCriticalSection(&apt->cs);
+            return S_OK;
+        }
+    }
+
+    if (!(apartment_loaded_dll = malloc(sizeof(*apartment_loaded_dll))))
+        hr = E_OUTOFMEMORY;
+    else
+    {
+        apartment_loaded_dll->unload_time = 0;
+        apartment_loaded_dll->multi_threaded = apt->multi_threaded;
+        if (FAILED(hr = apartment_add_dll(dllpath, &apartment_loaded_dll->dll)))
+            free(apartment_loaded_dll);
+        else
+            list_add_tail(&apt->loaded_dlls, &apartment_loaded_dll->entry);
+    }
+
+    LeaveCriticalSection(&apt->cs);
+    return hr;
+}
+#endif
 
 static HRESULT apartment_hostobject(struct apartment *apt,
                                     const struct host_object_params *params);

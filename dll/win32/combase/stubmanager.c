@@ -138,7 +138,15 @@ static void stub_manager_delete_ifstub(struct stub_manager *m, struct ifstub *if
     if (!m->disconnected)
         rpc_unregister_interface(&ifstub->iid, TRUE);
 
+#ifdef __REACTOS__
+    if (ifstub->stubbuffer)
+    {
+        IRpcStubBuffer_Disconnect(ifstub->stubbuffer);
+        IRpcStubBuffer_Release(ifstub->stubbuffer);
+    }
+#else
     if (ifstub->stubbuffer) IRpcStubBuffer_Release(ifstub->stubbuffer);
+#endif
 #ifdef __REACTOS__
     if (!IsEqualIID(&ifstub->iid, &IID_IUnknown))
 #endif

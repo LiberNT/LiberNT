@@ -171,6 +171,13 @@ struct apartment * apartment_get_mta(void);
 HRESULT apartment_get_inproc_class_object(struct apartment *apt, const struct class_reg_data *regdata,
         REFCLSID rclsid, REFIID riid, DWORD class_context, void **ppv);
 HRESULT apartment_get_local_server_stream(struct apartment *apt, IStream **ret);
+#ifdef __REACTOS__
+HRESULT apartment_track_dll(struct apartment *apt, const WCHAR *dllpath);
+#endif
+#ifdef __REACTOS__
+IUnknown *com_get_registered_class_object_ex(const struct apartment *apt, REFCLSID rclsid, DWORD clscontext,
+        BOOL include_suspended, BOOL *suspended);
+#endif
 IUnknown *com_get_registered_class_object(const struct apartment *apartment, REFCLSID rclsid,
         DWORD clscontext);
 void apartment_revoke_all_classes(const struct apartment *apt);

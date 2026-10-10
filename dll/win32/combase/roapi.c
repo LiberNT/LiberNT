@@ -153,6 +153,9 @@ HRESULT WINAPI DECLSPEC_HOTPATCH RoGetActivationFactory(HSTRING classid, REFIID 
     WCHAR *library;
     HMODULE module;
     HRESULT hr;
+#ifdef __REACTOS__
+    BOOL tracked = FALSE;
+#endif
 
     TRACE("(%s, %s, %p)\n", debugstr_hstring(classid), debugstr_guid(iid), class_factory);
 
@@ -187,13 +190,41 @@ HRESULT WINAPI DECLSPEC_HOTPATCH RoGetActivationFactory(HSTRING classid, REFIID 
 
     TRACE("Found library %s for class %s\n", debugstr_w(library), debugstr_hstring(classid));
 
+#ifdef __REACTOS__
+    {
+        struct apartment *apt;
+
+        if ((apt = apartment_get_current_or_mta()))
+        {
+            tracked = SUCCEEDED(apartment_track_dll(apt, library));
+            apartment_release(apt);
+        }
+    }
+#endif
+
     hr = pDllGetActivationFactory(classid, &factory);
+#ifdef __REACTOS__
+    if (SUCCEEDED(hr))
+    {
+        ACTCTX_SECTION_KEYED_DATA data;
+        TrustLevel trust_level;
+
+        data.cbSize = sizeof(data);
+        if (FindActCtxSectionStringW(0, NULL, ACTIVATION_CONTEXT_SECTION_WINRT_ACTIVATABLE_CLASSES,
+                                     WindowsGetStringRawBuffer(classid, NULL), &data) &&
+            FAILED(hr = IActivationFactory_GetTrustLevel(factory, &trust_level)))
+            IActivationFactory_Release(factory);
+    }
+#endif
     if (SUCCEEDED(hr))
     {
         hr = IActivationFactory_QueryInterface(factory, iid, class_factory);
         if (SUCCEEDED(hr))
         {
             TRACE("Created interface %p\n", *class_factory);
+#ifdef __REACTOS__
+            if (!tracked)
+#endif
             module = NULL;
         }
         IActivationFactory_Release(factory);
