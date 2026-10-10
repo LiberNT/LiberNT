@@ -8,6 +8,24 @@ else()
     set(IDL_FLAGS -b ${ARCH}-x-y -nostdinc)
 endif()
 
+function(get_included_idls OUT_VAR IDL_FILE)
+    set(DEPS "")
+    get_filename_component(IDL_PATH ${IDL_FILE} ABSOLUTE BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+    get_filename_component(IDL_DIR ${IDL_PATH} DIRECTORY)
+    if(EXISTS ${IDL_PATH})
+        file(STRINGS ${IDL_PATH} INCLUDED_IDLS REGEX "^#include \"[^\"]+\\.idl\"")
+        foreach(INCLUDED_IDL ${INCLUDED_IDLS})
+            string(REGEX REPLACE "^#include \"([^\"]+)\".*" "\\1" INCLUDED_IDL "${INCLUDED_IDL}")
+            if(EXISTS "${IDL_DIR}/${INCLUDED_IDL}")
+                list(APPEND DEPS ${IDL_DIR}/${INCLUDED_IDL})
+            elseif(EXISTS "${REACTOS_SOURCE_DIR}/sdk/include/psdk/${INCLUDED_IDL}")
+                list(APPEND DEPS ${REACTOS_SOURCE_DIR}/sdk/include/psdk/${INCLUDED_IDL})
+            endif()
+        endforeach()
+    endif()
+    set(${OUT_VAR} ${DEPS} PARENT_SCOPE)
+endfunction()
+
 function(add_typelib)
     get_includes(INCLUDES)
     get_defines(DEFINES)
@@ -19,10 +37,11 @@ function(add_typelib)
             set(IDL_FLAGS ${IDL_FLAGS} --oldtlb)
         endif()
         get_filename_component(NAME ${FILE} NAME_WE)
+        get_included_idls(EXTRA_DEP ${FILE})
         add_custom_command(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.tlb
             COMMAND native-widl ${INCLUDES} ${LIBS} ${DEFINES} ${IDL_FLAGS} -t -o ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.tlb ${CMAKE_CURRENT_SOURCE_DIR}/${FILE}
-            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${FILE} native-widl)
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${FILE} ${EXTRA_DEP} native-widl)
         list(APPEND OBJECTS ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.tlb)
     endforeach()
 endfunction()
@@ -206,10 +225,11 @@ function(add_idl_reg_scripts TARGET TYPE)
 
     foreach(IDL_FILE ${ARGN})
         get_filename_component(NAME ${IDL_FILE} NAME_WE)
+        get_included_idls(EXTRA_DEP ${IDL_FILE})
         add_custom_command(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${NAME}${__suffix}.res
             COMMAND native-widl ${INCLUDES} ${DEFINES} ${LIBS} ${IDL_FLAGS} -Oicf ${IDL_REGFLAGS} -o ${CMAKE_CURRENT_BINARY_DIR}/${NAME}${__suffix}.res ${IDL_FILE}
-            DEPENDS ${IDL_FILE} native-widl
+            DEPENDS ${IDL_FILE} ${EXTRA_DEP} native-widl
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
         set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${NAME}${__suffix}.res PROPERTIES
             GENERATED TRUE EXTERNAL_OBJECT TRUE)
