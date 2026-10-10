@@ -12,6 +12,9 @@ add_library(mmcshext MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/mmcshext.def)
 
 set_module_type(mmcshext win32dll UNICODE)
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(mmcshext PRIVATE -Wno-write-strings)
+endif()
 target_link_libraries(mmcshext uuid cpprt atl_classes)
 add_importlibs(mmcshext oleaut32 ole32 shlwapi comctl32 shell32 user32 advapi32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET mmcshext DESTINATION reactos/system32 FOR all)
