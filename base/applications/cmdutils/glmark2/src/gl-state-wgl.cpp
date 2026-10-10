@@ -26,6 +26,36 @@
 #include "log.h"
 #include "options.h"
 
+namespace
+{
+
+using FenceSyncProc = GLsync (APIENTRY *)(GLenum condition, GLbitfield flags);
+using ClientWaitSyncProc = GLenum (APIENTRY *)(GLsync sync, GLbitfield flags, GLuint64 timeout);
+using DeleteSyncProc = void (APIENTRY *)(GLsync sync);
+
+FenceSyncProc fence_sync = nullptr;
+ClientWaitSyncProc client_wait_sync = nullptr;
+DeleteSyncProc delete_sync = nullptr;
+
+const GLenum sync_gpu_commands_complete = 0x9117;
+const GLbitfield sync_flush_commands_bit = 0x00000001;
+const GLenum timeout_expired = 0x911B;
+const GLuint64 wait_timeout_ns = 1000000000ull;
+
+struct GLStateSyncWGL : public GLStateSync
+{
+    GLStateSyncWGL() : sync(fence_sync(sync_gpu_commands_complete, 0)) { glFlush(); }
+    ~GLStateSyncWGL() override { delete_sync(sync); }
+    void wait() override
+    {
+        while (client_wait_sync(sync, sync_flush_commands_bit, wait_timeout_ns) == timeout_expired)
+            ;
+    }
+    GLsync sync;
+};
+
+}
+
 /******************
  * Public methods *
  ******************/
@@ -99,6 +129,10 @@ GLStateWGL::init_display(void* native_display, GLVisualConfig& /*visual_config*/
         Log::error("Failed to load WGL entry points\n");
         return false;
     }
+
+    fence_sync = reinterpret_cast<FenceSyncProc>(load_proc(this, "glFenceSync"));
+    client_wait_sync = reinterpret_cast<ClientWaitSyncProc>(load_proc(this, "glClientWaitSync"));
+    delete_sync = reinterpret_cast<DeleteSyncProc>(load_proc(this, "glDeleteSync"));
 
     return true;
 }
@@ -178,13 +212,13 @@ GLStateWGL::getVisualConfig(GLVisualConfig& vc)
 
 bool GLStateWGL::supports_sync()
 {
-    return false;
+    return fence_sync && client_wait_sync && delete_sync;
 }
 
 std::unique_ptr<GLStateSync>
 GLStateWGL::sync()
 {
-    return nullptr;
+    return std::make_unique<GLStateSyncWGL>();
 }
 
 /*******************
