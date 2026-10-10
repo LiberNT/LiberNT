@@ -1928,9 +1928,15 @@ HRESULT WINAPI OleSetMenuDescriptor(
     }
     else  /* Want to uninstall dispatching code */
     {
+#ifdef __REACTOS__
+        if ( OLEMenu_IsHookInstalled( GetCurrentThreadId() ) &&
+             !OLEMenu_UnInstallHooks( GetCurrentThreadId() ) )
+            return E_FAIL;
+#else
         /* Uninstall the hooks */
         if ( !OLEMenu_UnInstallHooks( GetCurrentThreadId() ) )
             return E_FAIL;
+#endif
 
         /* Remove the menu descriptor property from the frame window */
         RemovePropW( hwndFrame, prop_olemenuW );
