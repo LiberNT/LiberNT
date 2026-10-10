@@ -79,6 +79,9 @@ KeConnectInterrupt(PKINTERRUPT Interrupt)
     KIRQL OldIrql;
     BOOLEAN Connected = FALSE;
 
+    if (Interrupt && Interrupt->ServiceRoutine && (Interrupt->Irql == PASSIVE_LEVEL))
+        return KiConnectPassiveInterrupt(Interrupt);
+
     if (!Interrupt || !Interrupt->ServiceRoutine ||
         Interrupt->Vector == 0 || Interrupt->Vector > RISCV_PLIC_MAX_SOURCE ||
         Interrupt->Number != 0 || Interrupt->Irql != SYNCH_LEVEL ||
@@ -123,6 +126,9 @@ KeDisconnectInterrupt(PKINTERRUPT Interrupt)
     PKINTERRUPT Head;
     PLIST_ENTRY Next;
     KIRQL OldIrql;
+
+    if (Interrupt && (Interrupt->Irql == PASSIVE_LEVEL))
+        return KiDisconnectPassiveInterrupt(Interrupt);
 
     if (!Interrupt || Interrupt->Vector == 0 ||
         Interrupt->Vector > RISCV_PLIC_MAX_SOURCE)

@@ -141,6 +141,9 @@ KeSynchronizeExecution(
     BOOLEAN Result;
     KIRQL OldIrql;
 
+    if (Interrupt->Irql == PASSIVE_LEVEL)
+        return KiSynchronizePassiveInterrupt(Interrupt, SynchronizeRoutine, SynchronizeContext);
+
     OldIrql = KfRaiseIrql(Interrupt->SynchronizeIrql);
     KeAcquireSpinLockAtDpcLevel(Interrupt->ActualLock);
     Result = SynchronizeRoutine(SynchronizeContext);
