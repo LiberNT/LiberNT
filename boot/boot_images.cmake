@@ -556,6 +556,60 @@ if(PREINSTALL_EXTRA_FILE_LIST)
     list(APPEND _preinstall_overlay_deps "${_preinstall_extra_file_list}")
 endif()
 
+cmake_dependent_option(PREINSTALL_WINE_GECKO
+                       "Preinstall the Wine Gecko engine that mshtml uses in the preinstalled disk image" ON
+                       "ENABLE_ROSTESTS" OFF)
+if(PREINSTALL_WINE_GECKO)
+    set(_wine_gecko_version 2.47.4)
+    set(_wine_gecko_packages)
+    if(ARCH STREQUAL "amd64")
+        list(APPEND _wine_gecko_packages
+            x86_64 reactos/system32 fd88fc7e537d058d7a8abf0c1ebc90c574892a466de86706a26d254710a82814)
+    endif()
+    if(ARCH STREQUAL "i386")
+        list(APPEND _wine_gecko_packages
+            x86 reactos/system32 2cfc8d5c948602e21eff8a78613e1826f2d033df9672cace87fed56e8310afb6)
+    elseif(ENABLE_WOW64)
+        list(APPEND _wine_gecko_packages
+            x86 reactos/SysWOW64 2cfc8d5c948602e21eff8a78613e1826f2d033df9672cace87fed56e8310afb6)
+    endif()
+    set(_wine_gecko_dir "${REACTOS_BINARY_DIR}/wine-gecko")
+    while(_wine_gecko_packages)
+        list(POP_FRONT _wine_gecko_packages _wine_gecko_arch _wine_gecko_destination _wine_gecko_sha256)
+        set(_wine_gecko_name "wine-gecko-${_wine_gecko_version}-${_wine_gecko_arch}")
+        set(_wine_gecko_archive "${_wine_gecko_dir}/${_wine_gecko_name}.tar.xz")
+        set(_wine_gecko_stamp "${_wine_gecko_dir}/${_wine_gecko_name}.extracted")
+        file(DOWNLOAD "https://dl.winehq.org/wine/wine-gecko/${_wine_gecko_version}/${_wine_gecko_name}.tar.xz"
+             "${_wine_gecko_archive}" EXPECTED_HASH SHA256=${_wine_gecko_sha256} STATUS _wine_gecko_status)
+        list(GET _wine_gecko_status 0 _wine_gecko_result)
+        if(NOT _wine_gecko_result EQUAL 0)
+            message(FATAL_ERROR "Downloading ${_wine_gecko_name}.tar.xz failed: ${_wine_gecko_status}. "
+                                "Set PREINSTALL_WINE_GECKO=OFF to build the image without Wine Gecko.")
+        endif()
+        set(_wine_gecko_extracted)
+        if(EXISTS "${_wine_gecko_stamp}")
+            file(READ "${_wine_gecko_stamp}" _wine_gecko_extracted)
+        endif()
+        if(NOT _wine_gecko_extracted STREQUAL _wine_gecko_sha256)
+            file(REMOVE_RECURSE "${_wine_gecko_dir}/${_wine_gecko_name}" "${_wine_gecko_stamp}")
+            execute_process(COMMAND ${CMAKE_COMMAND} -E tar xf "${_wine_gecko_archive}"
+                            WORKING_DIRECTORY "${_wine_gecko_dir}" RESULT_VARIABLE _wine_gecko_result)
+            if(NOT _wine_gecko_result EQUAL 0)
+                message(FATAL_ERROR "Extracting ${_wine_gecko_name}.tar.xz failed: ${_wine_gecko_result}")
+            endif()
+            file(WRITE "${_wine_gecko_stamp}" "${_wine_gecko_sha256}")
+        endif()
+        file(GLOB_RECURSE _wine_gecko_files RELATIVE "${_wine_gecko_dir}/${_wine_gecko_name}"
+             "${_wine_gecko_dir}/${_wine_gecko_name}/*")
+        foreach(_wine_gecko_file IN LISTS _wine_gecko_files)
+            set(_wine_gecko_source "${_wine_gecko_dir}/${_wine_gecko_name}/${_wine_gecko_file}")
+            set_property(GLOBAL APPEND PROPERTY PREINSTALL_OVERLAY_FILE_LIST
+                "${_wine_gecko_destination}/gecko/${_wine_gecko_version}/wine_gecko/${_wine_gecko_file}=${_wine_gecko_source}")
+            list(APPEND _preinstall_overlay_deps "${_wine_gecko_source}")
+        endforeach()
+    endwhile()
+endif()
+
 # Disk image size configuration (in MiB). The 1-GiB default provides a
 # 959-MiB NTFS partition after the 1-MiB alignment gap and 64-MiB FAT boot
 # partition.
