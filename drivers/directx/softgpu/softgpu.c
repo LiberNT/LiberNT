@@ -2019,9 +2019,7 @@ SoftGpuDdiGetStandardAllocationDriverData(
                     ->pCreateSharedPrimarySurfaceData;
 
             if (Surface == NULL ||
-                Surface->VidPnSourceId != 0 ||
-                Surface->Width != Device->Width ||
-                Surface->Height != Device->Height)
+                Surface->VidPnSourceId != 0)
             {
                 return STATUS_INVALID_PARAMETER;
             }
@@ -2036,12 +2034,8 @@ SoftGpuDdiGetStandardAllocationDriverData(
             D3DKMDT_SHADOWSURFACEDATA *Surface =
                 GetStandardAllocationDriverData->pCreateShadowSurfaceData;
 
-            if (Surface == NULL ||
-                Surface->Width != Device->Width ||
-                Surface->Height != Device->Height)
-            {
+            if (Surface == NULL)
                 return STATUS_INVALID_PARAMETER;
-            }
             Width = Surface->Width;
             Height = Surface->Height;
             Format = Surface->Format;
