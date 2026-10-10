@@ -36,8 +36,7 @@ class CMenuBand :
     public IMenuPopup,
     public IMenuBand,
     public IShellMenu2,
-    public IWinEventHandler,
-    public IShellMenuAcc
+    public IWinEventHandler
 {
 private:
     CMenuFocusManager  * m_focusManager;
@@ -96,7 +95,6 @@ public:
         COM_INTERFACE_ENTRY_IID(IID_IMenuBand, IMenuBand)
         COM_INTERFACE_ENTRY_IID(IID_IShellMenu2, IShellMenu2)
         COM_INTERFACE_ENTRY_IID(IID_IWinEventHandler, IWinEventHandler)
-        COM_INTERFACE_ENTRY_IID(IID_IShellMenuAcc, IShellMenuAcc)
     END_COM_MAP()
 
     // *** IDeskBand methods ***
@@ -171,15 +169,6 @@ public:
     STDMETHOD(SetMinWidth)(THIS) override;
     STDMETHOD(SetNoBorder)(THIS) override;
     STDMETHOD(SetTheme)(THIS) override;
-
-    // *** IShellMenuAcc methods ***
-    STDMETHOD(GetTop)(THIS) override;
-    STDMETHOD(GetBottom)(THIS) override;
-    STDMETHOD(GetTracked)(THIS) override;
-    STDMETHOD(GetParentSite)(THIS) override;
-    STDMETHOD(GetState)(THIS) override;
-    STDMETHOD(DoDefaultAction)(THIS) override;
-    STDMETHOD(IsEmpty)(THIS) override;
 
     HRESULT _CallCBWithItemId(UINT Id, UINT uMsg, WPARAM wParam, LPARAM lParam);
     HRESULT _CallCBWithItemPidl(LPITEMIDLIST pidl, UINT uMsg, WPARAM wParam, LPARAM lParam);

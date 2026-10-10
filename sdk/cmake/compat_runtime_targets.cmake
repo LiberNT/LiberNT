@@ -60,6 +60,7 @@ set(COMPAT_RUNTIME_MODULES
     dxgi
     dxva2
     evr
+    explorerframe
     fmifs
     fontsub
     gdi32

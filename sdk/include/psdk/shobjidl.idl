@@ -587,6 +587,49 @@ interface INewWindowManager : IUnknown
 
 cpp_quote("#define SID_SNewWindowManager IID_INewWindowManager")
 
+[
+    object,
+    uuid(73db1241-1e85-4581-8e4f-a81e1d0f8c57),
+    local,
+    pointer_default(unique)
+]
+interface IAttachmentExecute : IUnknown
+{
+    typedef [v1_enum] enum ATTACHMENT_PROMPT
+    {
+        ATTACHMENT_PROMPT_NONE         = 0x0000,
+        ATTACHMENT_PROMPT_SAVE         = 0x0001,
+        ATTACHMENT_PROMPT_EXEC         = 0x0002,
+        ATTACHMENT_PROMPT_EXEC_OR_SAVE = 0x0003,
+    } ATTACHMENT_PROMPT;
+
+    typedef [v1_enum] enum ATTACHMENT_ACTION
+    {
+        ATTACHMENT_ACTION_CANCEL = 0x0000,
+        ATTACHMENT_ACTION_SAVE   = 0x0001,
+        ATTACHMENT_ACTION_EXEC   = 0x0002,
+    } ATTACHMENT_ACTION;
+
+    HRESULT SetClientTitle([in, string] LPCWSTR pszTitle);
+    HRESULT SetClientGuid([in] REFGUID guid);
+    HRESULT SetLocalPath([in, string] LPCWSTR pszLocalPath);
+    HRESULT SetFileName([in, string] LPCWSTR pszFileName);
+    HRESULT SetSource([in, string] LPCWSTR pszSource);
+    HRESULT SetReferrer([in, string] LPCWSTR pszReferrer);
+    HRESULT CheckPolicy();
+    HRESULT Prompt(
+        [in] HWND hwnd,
+        [in] ATTACHMENT_PROMPT prompt,
+        [out] ATTACHMENT_ACTION *paction);
+    HRESULT Save();
+    HRESULT Execute(
+        [in] HWND hwnd,
+        [in, string] LPCWSTR pszVerb,
+        [out] HANDLE *phProcess);
+    HRESULT SaveWithUI([in] HWND hwnd);
+    HRESULT ClearClientState();
+}
+
 /*****************************************************************************
  * IEnumShellItems interface
  */
@@ -4700,6 +4743,14 @@ library ShellObjects
     coclass ApplicationDocumentLists
     {
         interface IApplicationDocumentLists;
+    }
+
+    [
+        uuid(4125dd96-e03a-4103-8f70-e0597d803b9c)
+    ]
+    coclass AttachmentServices
+    {
+        interface IAttachmentExecute;
     }
 
     [

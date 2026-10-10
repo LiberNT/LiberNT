@@ -1,104 +1,11 @@
-PROJECT(SHELL)
 
-add_subdirectory(shellbars)
-add_subdirectory(shellfind)
-
-spec2def(browseui.dll browseui.spec ADD_IMPORTLIB)
+spec2def(browseui.dll browseui.spec)
 
 list(APPEND SOURCE
-    ACLCustomMRU.cpp
-    ACLCustomMRU.h
-    aclhistory.cpp
-    aclistisf.cpp
-    addressband.cpp
-    addresseditbox.cpp
-    bandproxy.cpp
-    basebarsite.cpp
-    brandband.cpp
-    browseui.cpp
-    browseuiord.cpp
-    CAutoComplete.cpp
-    CShellTaskScheduler.cpp
-    CShellTaskScheduler.h
-    CTaskbarList.cpp
-    CTaskbarList.h
-    COperationsProgressDialog.cpp
-    commonbrowser.cpp
-    desktopipc.cpp
-    globalfoldersettings.cpp
-    internettoolbar.cpp
-    parsecmdline.cpp
-    regtreeoptions.cpp
-    settings.cpp
-    shellbrowser.cpp
-    toolsband.cpp
-    travellog.cpp
-    CUserAssist.cpp
-    CUserAssist.h)
-
-list(APPEND PCH_SKIP_SOURCE
-    aclmulti.c
-    aclsource.c
-    browseui_main.c
-    compcatcachedaemon.c
-    dllinstall.c)
-
-set_source_files_properties(browseui_main.c PROPERTIES COMPILE_DEFINITIONS
-    "DllMain=WineBrowseUI_DllMain;DllCanUnloadNow=WineBrowseUI_DllCanUnloadNow;DllGetClassObject=WineBrowseUI_DllGetClassObject;DllInstall=WineBrowseUI_DllInstall;ACLShellSource_Constructor=ReactOS_ACLShellSource_Constructor")
-set_source_files_properties(aclsource.c PROPERTIES COMPILE_DEFINITIONS
-    "ACLShellSource_Constructor=Wine_ACLShellSource_Constructor")
-set_property(SOURCE
-    aclmulti.c
-    aclsource.c
-    browseui_main.c
-    compcatcachedaemon.c
-    APPEND PROPERTY COMPILE_DEFINITIONS __WINESRC__)
-
-add_library(browseui MODULE
-    ${SOURCE}
-    ${PCH_SKIP_SOURCE}
-    browseui.rc
+    version.rc
     ${CMAKE_CURRENT_BINARY_DIR}/browseui.def)
 
-# The RC compiler does not scan includes; rebuild the template when its
-# separately maintained layout or control IDs change.
-set_property(SOURCE browseui.rc APPEND PROPERTY OBJECT_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/res/operationsprogress.rc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/operationsprogress.h")
-
-add_rc_deps(browseui.rc
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/01-back.ico
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/02-forward.ico
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/03-up.ico
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/04-search.ico
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/05-folders.ico
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/06-move.ico
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/07-copy.ico
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/08-delete.ico
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/09-undo.ico
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/10-views.ico
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/11-dropdown.ico)
-
-set_module_type(browseui win32dll UNICODE)
-add_idl_reg_scripts(browseui registry browseui_classes.idl)
-target_link_libraries(browseui shellbars shellfind uuid wine wine_dll_register cpprt atl_classes)
-add_importlibs(browseui uxtheme shdocvw shlwapi shell32 comctl32 gdi32 ole32 oleaut32 user32 advapi32 mpr msvcrt kernel32 ntdll)
-add_pch(browseui precomp.h "${PCH_SKIP_SOURCE}")
+add_library(browseui MODULE ${SOURCE})
+set_module_type(browseui win32dll ENTRYPOINT 0)
+add_importlibs(browseui kernel32 ntdll)
 add_cd_file(TARGET browseui DESTINATION reactos/system32 FOR all)
-
-if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(browseui PRIVATE -Wno-unused-but-set-variable)
-endif()
-
-if(NOT MSVC)
-    # Binutils linker bug
-    if(LTCG)
-        target_link_options(browseui PRIVATE "-Wl,--allow-multiple-definition")
-    endif()
-endif()
-
-add_custom_command(TARGET browseui POST_BUILD
-  COMMAND "${CMAKE_COMMAND}" -E copy
-     "$<TARGET_FILE:browseui>"
-     "$<TARGET_FILE_DIR:filebrowser>/$<TARGET_FILE_NAME:browseui>"
-  COMMENT "Copying to output directory")

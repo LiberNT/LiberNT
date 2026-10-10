@@ -8,9 +8,10 @@
 
 class CCopyMoveToMenu :
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
-    public IContextMenu2,
+    public IContextMenu,
     public IObjectWithSite,
-    public IShellExtInit
+    public IShellExtInit,
+    public IFolderFilter
 {
 protected:
     CComPtr<IDataObject> m_pDataObject;
@@ -37,15 +38,15 @@ public:
     STDMETHODIMP GetCommandString(UINT_PTR idCommand, UINT uFlags, UINT *lpReserved, LPSTR lpszName, UINT uMaxNameLen) override;
     STDMETHODIMP InvokeCommand(LPCMINVOKECOMMANDINFO lpcmi) override;
 
-    // IContextMenu2
-    STDMETHODIMP HandleMenuMsg(UINT uMsg, WPARAM wParam, LPARAM lParam) override;
-
     // IShellExtInit
     STDMETHODIMP Initialize(PCIDLIST_ABSOLUTE pidlFolder, IDataObject *pdtobj, HKEY hkeyProgID) override;
 
     // IObjectWithSite
     STDMETHODIMP SetSite(IUnknown *pUnkSite) override;
     STDMETHODIMP GetSite(REFIID riid, void **ppvSite) override;
+
+    STDMETHODIMP ShouldShow(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, PCUITEMID_CHILD pidlItem) override;
+    STDMETHODIMP GetEnumFlags(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, HWND *phwnd, DWORD *pgrfFlags) override;
 
     static HRESULT DoCopyMoveToFolder(BOOL Copy, HWND hWnd, IUnknown *pSite, IShellFolder *pSF, UINT cidl, PCUITEMID_CHILD_ARRAY pidls);
 };
@@ -70,10 +71,10 @@ public:
     DECLARE_PROTECT_FINAL_CONSTRUCT()
 
     BEGIN_COM_MAP(CCopyToMenu)
-        COM_INTERFACE_ENTRY_IID(IID_IContextMenu2, IContextMenu2)
         COM_INTERFACE_ENTRY_IID(IID_IContextMenu, IContextMenu)
         COM_INTERFACE_ENTRY_IID(IID_IShellExtInit, IShellExtInit)
         COM_INTERFACE_ENTRY_IID(IID_IObjectWithSite, IObjectWithSite)
+        COM_INTERFACE_ENTRY_IID(IID_IFolderFilter, IFolderFilter)
     END_COM_MAP()
 
     UINT GetCaptionStringID() const override { return IDS_COPYITEMS; }
@@ -99,10 +100,10 @@ public:
     DECLARE_PROTECT_FINAL_CONSTRUCT()
 
     BEGIN_COM_MAP(CMoveToMenu)
-        COM_INTERFACE_ENTRY_IID(IID_IContextMenu2, IContextMenu2)
         COM_INTERFACE_ENTRY_IID(IID_IContextMenu, IContextMenu)
         COM_INTERFACE_ENTRY_IID(IID_IShellExtInit, IShellExtInit)
         COM_INTERFACE_ENTRY_IID(IID_IObjectWithSite, IObjectWithSite)
+        COM_INTERFACE_ENTRY_IID(IID_IFolderFilter, IFolderFilter)
     END_COM_MAP()
 
     UINT GetCaptionStringID() const override { return IDS_MOVEITEMS; }

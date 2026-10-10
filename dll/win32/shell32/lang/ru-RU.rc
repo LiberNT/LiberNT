@@ -105,6 +105,20 @@ BEGIN
     END
 END
 
+IDM_POPUPMENU MENUEX
+BEGIN
+    POPUP ""
+    BEGIN
+        POPUP "&Вид", IDM_VIEW_MENU
+        BEGIN
+            MENUITEM "&Крупные значки", IDM_LARGE_ICONS
+            MENUITEM "&Мелкие значки", IDM_SMALL_ICONS
+        END
+        MENUITEM "&Открыть папку", IDM_OPEN_FOLDER
+        MENUITEM "Показ&ывать подписи", IDM_SHOW_TEXT
+    END
+END
+
 IDD_BROWSE_FOR_FOLDER DIALOGEX 15, 40, 188, 192
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
 CAPTION "Обзор"

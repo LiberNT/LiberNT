@@ -1,0 +1,17 @@
+HKCR
+{
+	NoRemove CLSID
+	{
+		ForceRemove {0E5CBF21-D15F-11D0-8301-00AA005B4383} = s '&Links'
+		{
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Apartment'
+			}
+			'Implemented Categories'
+			{
+				'{00021492-0000-0000-C000-000000000046}'
+			}
+		}
+	}
+}

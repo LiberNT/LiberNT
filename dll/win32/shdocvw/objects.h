@@ -29,6 +29,8 @@
 #include "CExplorerBand.h"
 #include "CFavBand.h"
 #include "CShellDocObjView.h"
+#include "CAdminToolsFolder.h"
+#include "CAttachmentServices.h"
 #include "utility.h"
 void *operator new(size_t size);
 void operator delete(void *ptr);

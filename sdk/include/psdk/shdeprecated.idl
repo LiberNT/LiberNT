@@ -684,3 +684,11 @@ interface IBrowserService4 : IBrowserService3
 
     HRESULT _ResizeAllBorders();
 };
+
+[
+    uuid(8278F931-2A3E-11d2-838F-00C04FD918D0)
+]
+coclass TrackShellMenu
+{
+    [default] interface ITrackShellMenu;
+}

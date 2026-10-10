@@ -27,8 +27,8 @@
 class CUserNotification :
     public CComCoClass<CUserNotification, &CLSID_UserNotification>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
-    public IUserNotification
-//  public IUserNotification2   // On Vista+
+    public IUserNotification,
+    public IUserNotification2
 {
 private:
     HWND  m_hWorkerWnd;
@@ -41,6 +41,7 @@ private:
     BOOL  m_bIsShown;
     HRESULT m_hRes;
     IQueryContinue* m_pqc;
+    IUserNotificationCallback* m_pSink;
     CStringW m_szTip;
     CStringW m_szInfo;
     CStringW m_szInfoTitle;
@@ -88,14 +89,12 @@ public:
     STDMETHOD(PlaySound)(
         IN LPCWSTR pszSoundName) override;
 
-#if 0
     // IUserNotification2
     // Blocks until the notification times out.
     STDMETHOD(Show)(
         IN IQueryContinue* pqc,
         IN DWORD dwContinuePollInterval,
         IN IUserNotificationCallback* pSink) override;
-#endif
 
     DECLARE_REGISTRY_RESOURCEID(IDR_USERNOTIFICATION)
     DECLARE_NOT_AGGREGATABLE(CUserNotification)
@@ -104,7 +103,7 @@ public:
 
     BEGIN_COM_MAP(CUserNotification)
         COM_INTERFACE_ENTRY_IID(IID_IUserNotification , IUserNotification )
-    //  COM_INTERFACE_ENTRY_IID(IID_IUserNotification2, IUserNotification2)
+        COM_INTERFACE_ENTRY_IID(IID_IUserNotification2, IUserNotification2)
     END_COM_MAP()
 };
 

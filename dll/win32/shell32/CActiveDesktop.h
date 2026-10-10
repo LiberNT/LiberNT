@@ -14,8 +14,8 @@ class CActiveDesktop :
     public CComCoClass<CActiveDesktop, &CLSID_ActiveDesktop>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public IActiveDesktop,
-    //public IActiveDesktopP,
-    //public IADesktopP2,
+    public IActiveDesktopP,
+    public IADesktopP2,
     public IPropertyBag
 {
 public:
@@ -43,6 +43,16 @@ public:
     STDMETHOD(AddUrl)(HWND hwnd, PCWSTR pszSource, LPCOMPONENT pcomp, DWORD dwFlags) override;
     STDMETHOD(GetDesktopItemBySource)(PCWSTR pwszSource, LPCOMPONENT pcomp, DWORD dwReserved) override;
 
+    STDMETHOD(SetSafeMode)(DWORD dwFlags) override;
+    STDMETHOD(EnsureUpdateHTML)() override;
+    STDMETHOD(SetScheme)(PCWSTR pwszSchemeName, DWORD dwFlags) override;
+    STDMETHOD(GetScheme)(PWSTR pwszSchemeName, DWORD *pdwcchBuffer, DWORD dwFlags) override;
+
+    STDMETHOD(ReReadWallpaper)() override;
+    STDMETHOD(GetADObjectFlags)(DWORD *pdwFlags, DWORD dwMask) override;
+    STDMETHOD(UpdateAllDesktopSubscriptions)() override;
+    STDMETHOD(MakeDynamicChanges)(IOleObject *pOleObj) override;
+
     /*** IPropertyBag methods ***/
     STDMETHOD(Read)(LPCOLESTR pszPropName, VARIANT *pVar, IErrorLog *pErrorLog) override;
     STDMETHOD(Write)(LPCOLESTR pszPropName, VARIANT *pVar) override;
@@ -54,8 +64,8 @@ DECLARE_PROTECT_FINAL_CONSTRUCT()
 
 BEGIN_COM_MAP(CActiveDesktop)
     COM_INTERFACE_ENTRY_IID(IID_IActiveDesktop, IActiveDesktop)
-    //COM_INTERFACE_ENTRY_IID(IID_IActiveDesktopP, IActiveDesktopP)
-    //COM_INTERFACE_ENTRY_IID(IID_IADesktopP2, IADesktopP2)
+    COM_INTERFACE_ENTRY_IID(IID_IActiveDesktopP, IActiveDesktopP)
+    COM_INTERFACE_ENTRY_IID(IID_IADesktopP2, IADesktopP2)
     COM_INTERFACE_ENTRY_IID(IID_IPropertyBag, IPropertyBag)
 END_COM_MAP()
 };

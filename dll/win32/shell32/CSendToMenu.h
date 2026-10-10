@@ -27,7 +27,11 @@ class CSendToMenu :
     public CComCoClass<CSendToMenu, &CLSID_SendToMenu>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public IContextMenu3,
-    public IShellExtInit
+    public IShellExtInit,
+    public IOleWindow,
+    public IObjectWithSite,
+    public IServiceProvider,
+    public INamespaceWalkCB2
 {
 private:
     struct SENDTO_ITEM
@@ -65,6 +69,8 @@ private:
     CComPtr<IShellFolder> m_pDesktop;
     CComPtr<IShellFolder> m_pSendTo;
     CComPtr<IDataObject> m_pDataObject;
+    CComPtr<IUnknown> m_pSite;
+    CComPtr<IUnknown> m_pUnkMarshaler;
 
     HRESULT LoadAllItems(HWND hwnd);
     void UnloadAllItems();
@@ -97,6 +103,31 @@ public:
     // IShellExtInit
     STDMETHODIMP Initialize(PCIDLIST_ABSOLUTE pidlFolder, IDataObject *pdtobj, HKEY hkeyProgID);
 
+    STDMETHODIMP GetWindow(HWND *phwnd) override;
+    STDMETHODIMP ContextSensitiveHelp(BOOL fEnterMode) override;
+
+    STDMETHODIMP SetSite(IUnknown *pUnkSite) override;
+    STDMETHODIMP GetSite(REFIID riid, void **ppvSite) override;
+
+    STDMETHODIMP QueryService(REFGUID guidService, REFIID riid, void **ppvObject) override;
+
+    STDMETHODIMP FoundItem(IShellFolder *psf, PCUITEMID_CHILD pidl) override;
+    STDMETHODIMP EnterFolder(IShellFolder *psf, PCUITEMID_CHILD pidl) override;
+    STDMETHODIMP LeaveFolder(IShellFolder *psf, PCUITEMID_CHILD pidl) override;
+    STDMETHODIMP InitializeProgressDialog(LPWSTR *ppszTitle, LPWSTR *ppszCancel) override;
+
+    STDMETHODIMP WalkComplete(HRESULT hr) override;
+
+    HRESULT FinalConstruct()
+    {
+        return CoCreateFreeThreadedMarshaler(static_cast<IContextMenu3 *>(this), &m_pUnkMarshaler);
+    }
+
+    static HRESULT WINAPI QueryMarshaler(void *pv, REFIID riid, LPVOID *ppv, DWORD_PTR dw)
+    {
+        return static_cast<CSendToMenu *>(pv)->m_pUnkMarshaler->QueryInterface(riid, ppv);
+    }
+
     DECLARE_REGISTRY_RESOURCEID(IDR_SENDTOMENU)
     DECLARE_NOT_AGGREGATABLE(CSendToMenu)
     DECLARE_PROTECT_FINAL_CONSTRUCT()
@@ -106,6 +137,12 @@ public:
         COM_INTERFACE_ENTRY_IID(IID_IContextMenu2, IContextMenu2)
         COM_INTERFACE_ENTRY_IID(IID_IContextMenu, IContextMenu)
         COM_INTERFACE_ENTRY_IID(IID_IShellExtInit, IShellExtInit)
+        COM_INTERFACE_ENTRY_IID(IID_IOleWindow, IOleWindow)
+        COM_INTERFACE_ENTRY_IID(IID_IObjectWithSite, IObjectWithSite)
+        COM_INTERFACE_ENTRY_IID(IID_IServiceProvider, IServiceProvider)
+        COM_INTERFACE_ENTRY_IID(IID_INamespaceWalkCB2, INamespaceWalkCB2)
+        COM_INTERFACE_ENTRY_IID(IID_INamespaceWalkCB, INamespaceWalkCB)
+        COM_INTERFACE_ENTRY_FUNC(IID_IMarshal, 0, QueryMarshaler)
     END_COM_MAP()
 };
 

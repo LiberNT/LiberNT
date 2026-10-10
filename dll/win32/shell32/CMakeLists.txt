@@ -52,7 +52,6 @@ list(APPEND SOURCE
     folders/CDrivesFolder.cpp
     folders/CMyDocsFolder.cpp
     folders/CPrinterFolder.cpp
-    folders/CAdminToolsFolder.cpp
     folders/CNetFolder.cpp
     folders/CFontsFolder.cpp
     folders/CControlPanelFolder.cpp
@@ -76,6 +75,16 @@ list(APPEND SOURCE
     systray.cpp
     CKnownFolderManager.cpp
     CUserNotification.cpp
+    CUserAssist.cpp
+    COperationsProgressDialog.cpp
+    CISFBand.cpp
+    autocomplete/ACLCustomMRU.cpp
+    autocomplete/aclhistory.cpp
+    autocomplete/aclistisf.cpp
+    autocomplete/aclmulti.cpp
+    autocomplete/CAutoComplete.cpp
+    bandproxy.cpp
+    regtreeoptions.cpp
     CDefaultContextMenu.cpp
     COpenWithMenu.cpp
     CNewMenu.cpp
@@ -117,6 +126,7 @@ file(GLOB_RECURSE shell32_rc_deps res/*.*)
 list(APPEND shell32_rc_deps
     ${CMAKE_CURRENT_BINARY_DIR}/shell32_shldisp.tlb
     ${CMAKE_CURRENT_SOURCE_DIR}/rgs_res.rc
+    ${CMAKE_CURRENT_SOURCE_DIR}/operationsprogress.h
     ${CMAKE_CURRENT_SOURCE_DIR}/shresdef.h)
 add_rc_deps(shell32.rc ${shell32_rc_deps})
 
@@ -156,7 +166,7 @@ target_link_libraries(shell32 shellmenu shelldesktop wine uuid recyclebin cpprt 
 if(DLL_EXPORT_VERSION GREATER_EQUAL 0x600)
     target_link_libraries(shell32 evalcmd)
 endif()
-add_delay_importlibs(shell32 powrprof shdocvw devmgr winspool.drv winmm mpr uxtheme ole32 oleaut32 userenv browseui version fmifs netapi32 secur32 gdiplus iphlpapi propsys)
+add_delay_importlibs(shell32 powrprof shdocvw devmgr winspool.drv winmm mpr uxtheme ole32 oleaut32 userenv explorerframe version fmifs netapi32 secur32 gdiplus iphlpapi propsys oleacc)
 add_importlibs(shell32 advapi32 gdi32 user32 comctl32 comdlg32 shlwapi shcore msvcrt kernel32 ntdll)
 add_dependencies(shell32 stdole2) # shell32_shldisp.tlb needs stdole2.tlb
 add_pch(shell32 precomp.h "${PCH_SKIP_SOURCE}")

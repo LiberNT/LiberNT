@@ -1231,48 +1231,6 @@ HRESULT STDMETHODCALLTYPE CMenuBand::SetTheme(THIS)
     return S_OK;
 }
 
-HRESULT STDMETHODCALLTYPE CMenuBand::GetTop(THIS)
-{
-    UNIMPLEMENTED;
-    return S_OK;
-}
-
-HRESULT STDMETHODCALLTYPE CMenuBand::GetBottom(THIS)
-{
-    UNIMPLEMENTED;
-    return S_OK;
-}
-
-HRESULT STDMETHODCALLTYPE CMenuBand::GetTracked(THIS)
-{
-    UNIMPLEMENTED;
-    return S_OK;
-}
-
-HRESULT STDMETHODCALLTYPE CMenuBand::GetParentSite(THIS)
-{
-    UNIMPLEMENTED;
-    return S_OK;
-}
-
-HRESULT STDMETHODCALLTYPE CMenuBand::GetState(THIS)
-{
-    UNIMPLEMENTED;
-    return S_OK;
-}
-
-HRESULT STDMETHODCALLTYPE CMenuBand::DoDefaultAction(THIS)
-{
-    UNIMPLEMENTED;
-    return S_OK;
-}
-
-HRESULT STDMETHODCALLTYPE CMenuBand::IsEmpty(THIS)
-{
-    UNIMPLEMENTED;
-    return S_OK;
-}
-
 HRESULT STDMETHODCALLTYPE CMenuBand::HasFocusIO()
 {
     if (m_popupBar)

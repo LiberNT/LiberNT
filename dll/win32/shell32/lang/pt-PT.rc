@@ -106,6 +106,20 @@ BEGIN
     END
 END
 
+IDM_POPUPMENU MENUEX
+BEGIN
+    POPUP ""
+    BEGIN
+        POPUP "&Vista", IDM_VIEW_MENU
+        BEGIN
+            MENUITEM "Ícones &grandes", IDM_LARGE_ICONS
+            MENUITEM "Ícones &pequenos", IDM_SMALL_ICONS
+        END
+        MENUITEM "&Abrir pasta", IDM_OPEN_FOLDER
+        MENUITEM "&Mostrar texto", IDM_SHOW_TEXT
+    END
+END
+
 IDD_BROWSE_FOR_FOLDER DIALOGEX 15, 40, 188, 192
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
 CAPTION "Procurar pasta"

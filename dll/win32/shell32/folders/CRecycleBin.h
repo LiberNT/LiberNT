@@ -97,6 +97,7 @@ class CRecycleBin :
         BEGIN_COM_MAP(CRecycleBin)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder, IPersistFolder)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder2, IPersistFolder2)
+        COM_INTERFACE_ENTRY2_IID(IID_IPersist, IPersist, IPersistFolder2)
         COM_INTERFACE_ENTRY_IID(IID_IShellFolder, IShellFolder)
         COM_INTERFACE_ENTRY_IID(IID_IShellFolder2, IShellFolder2)
         COM_INTERFACE_ENTRY_IID(IID_IContextMenu, IContextMenu)

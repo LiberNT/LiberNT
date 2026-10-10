@@ -23,6 +23,8 @@ IDR_SHDOCVW WINE_REGISTRY "res/shdocvw.rgs"
 IDR_FAVBAND REGISTRY "res/favband.rgs"
 IDR_EXPLORERBAND REGISTRY "res/explorerband.rgs"
 IDR_SHELLDOCOBJVIEW REGISTRY "res/shelldocobjview.rgs"
+IDR_ADMINFOLDERSHORTCUT REGISTRY "res/adminfoldershortcut.rgs"
+IDR_ATTACHMENTSERVICES REGISTRY "res/attachmentservices.rgs"
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 

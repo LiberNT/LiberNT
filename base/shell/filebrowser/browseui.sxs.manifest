@@ -6,7 +6,7 @@
     name="browseui.sxs"
     version="6.0.2900.2180" />
 
-<file name="browseui.dll">
+<file name="explorerframe.dll">
 
     <comClass clsid="{0BE35200-8F91-11CE-9DE3-00AA004BB851}"/>
     <comClass clsid="{00BB2765-6A77-11D0-A535-00C04FD7D062}"/>

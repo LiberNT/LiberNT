@@ -533,6 +533,18 @@ HRESULT STDMETHODCALLTYPE CShellDispatch::ToggleDesktop()
     return PostTrayCommand(TRAYCMD_TOGGLE_DESKTOP);
 }
 
+HRESULT STDMETHODCALLTYPE CShellDispatch::WindowSwitcher()
+{
+    FIXME("(%p)\n", this);
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CShellDispatch::SearchCommand()
+{
+    TRACE("(%p)\n", this);
+    return PostTrayCommand(TRAYCMD_SEARCH_FILES);
+}
+
 HRESULT STDMETHODCALLTYPE CShellDispatch::ExplorerPolicy(BSTR policy, VARIANT *value)
 {
     TRACE("(%p, %ls, %p)\n", this, policy, value);

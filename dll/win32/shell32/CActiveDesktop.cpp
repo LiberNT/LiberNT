@@ -137,6 +137,54 @@ HRESULT WINAPI CActiveDesktop::GetDesktopItemBySource(PCWSTR pwszSource, LPCOMPO
     return E_NOTIMPL;
 }
 
+HRESULT WINAPI CActiveDesktop::SetSafeMode(DWORD dwFlags)
+{
+    UNIMPLEMENTED;
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CActiveDesktop::EnsureUpdateHTML()
+{
+    UNIMPLEMENTED;
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CActiveDesktop::SetScheme(PCWSTR pwszSchemeName, DWORD dwFlags)
+{
+    UNIMPLEMENTED;
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CActiveDesktop::GetScheme(PWSTR pwszSchemeName, DWORD *pdwcchBuffer, DWORD dwFlags)
+{
+    UNIMPLEMENTED;
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CActiveDesktop::ReReadWallpaper()
+{
+    UNIMPLEMENTED;
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CActiveDesktop::GetADObjectFlags(DWORD *pdwFlags, DWORD dwMask)
+{
+    UNIMPLEMENTED;
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CActiveDesktop::UpdateAllDesktopSubscriptions()
+{
+    UNIMPLEMENTED;
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CActiveDesktop::MakeDynamicChanges(IOleObject *pOleObj)
+{
+    UNIMPLEMENTED;
+    return E_NOTIMPL;
+}
+
 
 /***********************************************************************
 *   IPropertyBag implementation

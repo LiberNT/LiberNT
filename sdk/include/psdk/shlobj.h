@@ -1162,6 +1162,54 @@ DECLARE_INTERFACE_(IActiveDesktop, IUnknown)
 
 #endif
 
+#define SSM_CLEAR   0x0000
+#define SSM_SET     0x0001
+#define SSM_REFRESH 0x0002
+#define SSM_UPDATE  0x0004
+
+#define SCHEME_DISPLAY  0x0001
+#define SCHEME_EDIT     0x0002
+#define SCHEME_LOCAL    0x0004
+#define SCHEME_GLOBAL   0x0008
+#define SCHEME_REFRESH  0x0010
+#define SCHEME_UPDATE   0x0020
+#define SCHEME_DONOTUSE 0x0040
+#define SCHEME_CREATE   0x0080
+
+#define INTERFACE IActiveDesktopP
+DECLARE_INTERFACE_(IActiveDesktopP, IUnknown)
+{
+    STDMETHOD(QueryInterface) (THIS_ _In_ REFIID riid, _Outptr_ void **ppv) PURE;
+    STDMETHOD_(ULONG,AddRef)  (THIS) PURE;
+    STDMETHOD_(ULONG,Release) (THIS) PURE;
+
+    STDMETHOD(SetSafeMode)(THIS_ DWORD dwFlags) PURE;
+    STDMETHOD(EnsureUpdateHTML)(THIS) PURE;
+    STDMETHOD(SetScheme)(THIS_ _In_ PCWSTR pwszSchemeName, DWORD dwFlags) PURE;
+    STDMETHOD(GetScheme)(THIS_ _Out_writes_(*pdwcchBuffer) PWSTR pwszSchemeName, _Inout_ DWORD *pdwcchBuffer, DWORD dwFlags) PURE;
+};
+#undef INTERFACE
+
+typedef IActiveDesktopP *LPACTIVEDESKTOPP;
+
+#define GADOF_DIRTY 0x00000001
+
+#define INTERFACE IADesktopP2
+DECLARE_INTERFACE_(IADesktopP2, IUnknown)
+{
+    STDMETHOD(QueryInterface) (THIS_ _In_ REFIID riid, _Outptr_ void **ppv) PURE;
+    STDMETHOD_(ULONG,AddRef)  (THIS) PURE;
+    STDMETHOD_(ULONG,Release) (THIS) PURE;
+
+    STDMETHOD(ReReadWallpaper)(THIS) PURE;
+    STDMETHOD(GetADObjectFlags)(THIS_ _Out_ DWORD *pdwFlags, DWORD dwMask) PURE;
+    STDMETHOD(UpdateAllDesktopSubscriptions)(THIS) PURE;
+    STDMETHOD(MakeDynamicChanges)(THIS_ _In_ IOleObject *pOleObj) PURE;
+};
+#undef INTERFACE
+
+typedef IADesktopP2 *LPADESKTOPP2;
+
 /****************************************************************************
 * SHAddToRecentDocs API
 */

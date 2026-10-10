@@ -110,6 +110,14 @@ BrowseCallbackProc(HWND hwnd, UINT uMsg, LPARAM lParam, LPARAM lpData)
             SendMessageW(hwnd, BFFM_ENABLEOK, 0, pidl && IsValidTarget(this_, pidl));
             break;
         }
+        case BFFM_IUNKNOWN:
+        {
+            CComPtr<IFolderFilterSite> pSite;
+            IUnknown *punk = reinterpret_cast<IUnknown *>(lParam);
+            if (punk && SUCCEEDED(punk->QueryInterface(IID_PPV_ARG(IFolderFilterSite, &pSite))))
+                pSite->SetFilter(static_cast<IFolderFilter *>(this_));
+            break;
+        }
         case BFFM_SELCHANGED:
         {
             LPCITEMIDLIST pidl = reinterpret_cast<LPCITEMIDLIST>(lParam);
@@ -374,10 +382,26 @@ CCopyMoveToMenu::GetCommandString(
 }
 
 STDMETHODIMP
-CCopyMoveToMenu::HandleMenuMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
+CCopyMoveToMenu::ShouldShow(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, PCUITEMID_CHILD pidlItem)
 {
-    TRACE("This %p uMsg %x\n", this, uMsg);
-    return E_NOTIMPL;
+    SFGAOF attrs = SFGAO_FOLDER | SFGAO_FILESYSTEM | SFGAO_FILESYSANCESTOR;
+
+    if (!psf || !pidlItem)
+        return E_INVALIDARG;
+    if (FAILED(psf->GetAttributesOf(1, &pidlItem, &attrs)))
+        return S_FALSE;
+    if (!(attrs & SFGAO_FOLDER) || !(attrs & (SFGAO_FILESYSTEM | SFGAO_FILESYSANCESTOR)))
+        return S_FALSE;
+    return S_OK;
+}
+
+STDMETHODIMP
+CCopyMoveToMenu::GetEnumFlags(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, HWND *phwnd, DWORD *pgrfFlags)
+{
+    if (!pgrfFlags)
+        return E_POINTER;
+    *pgrfFlags = SHCONTF_FOLDERS;
+    return S_OK;
 }
 
 STDMETHODIMP

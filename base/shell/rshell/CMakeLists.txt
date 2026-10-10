@@ -28,7 +28,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 
 add_importlibs(rshell
-    browseui
+    explorerframe
     uxtheme
     shlwapi
     advapi32

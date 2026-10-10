@@ -78,6 +78,7 @@ static inline HRESULT GetUIObjectOfFolderItems(FolderItems *pFI, REFIID riid, vo
 }
 
 CFolderItem::CFolderItem()
+    : m_SafetyOptions(0)
 {
 }
 
@@ -89,6 +90,76 @@ HRESULT CFolderItem::Initialize(Folder* folder, LPCITEMIDLIST idlist)
 {
     m_Folder = folder;
     return SHILClone(idlist, &m_idlist);
+}
+
+HRESULT STDMETHODCALLTYPE CFolderItem::GetClassID(CLSID *pClassID)
+{
+    if (!pClassID)
+        return E_POINTER;
+    *pClassID = CLSID_FolderItem;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CFolderItem::Initialize(PCIDLIST_ABSOLUTE pidl)
+{
+    if (!pidl)
+        return E_INVALIDARG;
+
+    CComPtr<IDispatch> pApplication;
+    HRESULT hr = CShellDispatch_Constructor(IID_PPV_ARG(IDispatch, &pApplication));
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+
+    CComHeapPtr<ITEMIDLIST> pidlParent(ILClone(pidl));
+    if (!pidlParent)
+        return E_OUTOFMEMORY;
+    ILRemoveLastID(pidlParent);
+
+    CComPtr<Folder> pFolder;
+    hr = CFolder::CreateInstance(pidlParent, pApplication, IID_PPV_ARG(Folder, &pFolder));
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+
+    m_idlist.Free();
+    m_Folder = pFolder;
+    return SHILClone(pidl, &m_idlist);
+}
+
+HRESULT STDMETHODCALLTYPE CFolderItem::GetCurFolder(PIDLIST_ABSOLUTE *ppidl)
+{
+    if (!ppidl)
+        return E_POINTER;
+    *ppidl = NULL;
+    if (!m_idlist)
+        return S_FALSE;
+    return SHILClone(m_idlist, ppidl);
+}
+
+HRESULT STDMETHODCALLTYPE CFolderItem::GetInterfaceSafetyOptions(REFIID riid, DWORD *pdwSupportedOptions, DWORD *pdwEnabledOptions)
+{
+    if (!pdwSupportedOptions || !pdwEnabledOptions)
+        return E_POINTER;
+
+    CComPtr<IUnknown> pUnk;
+    if (FAILED(QueryInterface(riid, (void **)&pUnk)))
+        return E_NOINTERFACE;
+
+    *pdwSupportedOptions = INTERFACESAFE_FOR_UNTRUSTED_CALLER | INTERFACESAFE_FOR_UNTRUSTED_DATA;
+    *pdwEnabledOptions = m_SafetyOptions;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CFolderItem::SetInterfaceSafetyOptions(REFIID riid, DWORD dwOptionSetMask, DWORD dwEnabledOptions)
+{
+    CComPtr<IUnknown> pUnk;
+    if (FAILED(QueryInterface(riid, (void **)&pUnk)))
+        return E_NOINTERFACE;
+
+    if (dwOptionSetMask & ~(INTERFACESAFE_FOR_UNTRUSTED_CALLER | INTERFACESAFE_FOR_UNTRUSTED_DATA))
+        return E_FAIL;
+
+    m_SafetyOptions = (m_SafetyOptions & ~dwOptionSetMask) | (dwEnabledOptions & dwOptionSetMask);
+    return S_OK;
 }
 
 inline HRESULT CFolderItem::GetParentShellFolderAndItem(REFIID riid, void**ppv, PCUITEMID_CHILD &pidlLast)

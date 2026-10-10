@@ -15,7 +15,8 @@ list(APPEND SOURCE
     CMenuSite.cpp
     CMenuToolbars.cpp
     CMergedFolder.cpp
-    CStartMenu.cpp)
+    CStartMenu.cpp
+    CTrackShellMenu.cpp)
 
 add_library(shellmenu OBJECT ${SOURCE})
 target_link_libraries(shellmenu PRIVATE atl_classes)

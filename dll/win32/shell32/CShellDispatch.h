@@ -13,7 +13,7 @@
 class CShellDispatch:
     public CComCoClass<CShellDispatch, &CLSID_Shell>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
-    public IDispatchImpl<IShellDispatch4, &IID_IShellDispatch4>,
+    public IDispatchImpl<IShellDispatch6, &IID_IShellDispatch6>,
     public IObjectSafety,
     public IObjectWithSite
 {
@@ -70,6 +70,10 @@ public:
     STDMETHOD(ExplorerPolicy)(BSTR policy, VARIANT *value) override;
     STDMETHOD(GetSetting)(LONG setting, VARIANT_BOOL *result) override;
 
+    STDMETHOD(WindowSwitcher)() override;
+
+    STDMETHOD(SearchCommand)() override;
+
     // *** IObjectSafety methods ***
     STDMETHOD(GetInterfaceSafetyOptions)(REFIID riid, DWORD *pdwSupportedOptions, DWORD *pdwEnabledOptions) override;
     STDMETHOD(SetInterfaceSafetyOptions)(REFIID riid, DWORD dwOptionSetMask, DWORD dwEnabledOptions) override;
@@ -84,6 +88,8 @@ DECLARE_NOT_AGGREGATABLE(CShellDispatch)
 DECLARE_PROTECT_FINAL_CONSTRUCT()
 
 BEGIN_COM_MAP(CShellDispatch)
+    COM_INTERFACE_ENTRY_IID(IID_IShellDispatch6, IShellDispatch6)
+    COM_INTERFACE_ENTRY_IID(IID_IShellDispatch5, IShellDispatch5)
     COM_INTERFACE_ENTRY_IID(IID_IShellDispatch4, IShellDispatch4)
     COM_INTERFACE_ENTRY_IID(IID_IShellDispatch3, IShellDispatch3)
     COM_INTERFACE_ENTRY_IID(IID_IShellDispatch2, IShellDispatch2)

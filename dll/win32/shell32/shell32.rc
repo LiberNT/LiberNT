@@ -82,6 +82,8 @@ END
 
 1 TYPELIB "shell32_shldisp.tlb"
 
+#include "res/operationsprogress.rc"
+
 /*
  * Everything specific to any language goes
  * in one of the specific files.

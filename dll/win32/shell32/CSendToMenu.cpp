@@ -420,3 +420,64 @@ CSendToMenu::Initialize(PCIDLIST_ABSOLUTE pidlFolder,
     m_pDataObject = pdtobj;
     return S_OK;
 }
+
+STDMETHODIMP CSendToMenu::GetWindow(HWND *phwnd)
+{
+    if (!phwnd)
+        return E_POINTER;
+    *phwnd = NULL;
+    return IUnknown_GetWindow(m_pSite, phwnd);
+}
+
+STDMETHODIMP CSendToMenu::ContextSensitiveHelp(BOOL fEnterMode)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CSendToMenu::SetSite(IUnknown *pUnkSite)
+{
+    m_pSite = pUnkSite;
+    return S_OK;
+}
+
+STDMETHODIMP CSendToMenu::GetSite(REFIID riid, void **ppvSite)
+{
+    if (!ppvSite)
+        return E_POINTER;
+    *ppvSite = NULL;
+    if (!m_pSite)
+        return E_FAIL;
+    return m_pSite->QueryInterface(riid, ppvSite);
+}
+
+STDMETHODIMP CSendToMenu::QueryService(REFGUID guidService, REFIID riid, void **ppvObject)
+{
+    return IUnknown_QueryService(m_pSite, guidService, riid, ppvObject);
+}
+
+STDMETHODIMP CSendToMenu::FoundItem(IShellFolder *psf, PCUITEMID_CHILD pidl)
+{
+    return S_OK;
+}
+
+STDMETHODIMP CSendToMenu::EnterFolder(IShellFolder *psf, PCUITEMID_CHILD pidl)
+{
+    return S_OK;
+}
+
+STDMETHODIMP CSendToMenu::LeaveFolder(IShellFolder *psf, PCUITEMID_CHILD pidl)
+{
+    return S_OK;
+}
+
+STDMETHODIMP CSendToMenu::InitializeProgressDialog(LPWSTR *ppszTitle, LPWSTR *ppszCancel)
+{
+    *ppszTitle = NULL;
+    *ppszCancel = NULL;
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CSendToMenu::WalkComplete(HRESULT hr)
+{
+    return S_OK;
+}

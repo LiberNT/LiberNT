@@ -52,7 +52,8 @@ CUserNotification::CUserNotification() :
     m_uContinuePoolInterval(0),
     m_bIsShown(FALSE),
     m_hRes(S_OK),
-    m_pqc(NULL)
+    m_pqc(NULL),
+    m_pSink(NULL)
 {
 }
 
@@ -372,6 +373,17 @@ CUserNotification::WorkerWndProc(
                 case WM_LBUTTONDOWN:
                 case WM_RBUTTONDOWN:
                 {
+                    if (pThis->m_pSink)
+                    {
+                        POINT pt;
+                        ::GetCursorPos(&pt);
+                        if (lParam == NIN_BALLOONUSERCLICK)
+                            pThis->m_pSink->OnBalloonUserClick(&pt);
+                        else if (lParam == WM_LBUTTONDOWN)
+                            pThis->m_pSink->OnLeftClick(&pt);
+                        else
+                            pThis->m_pSink->OnContextMenu(&pt);
+                    }
                     pThis->DelayRemoveIcon(S_OK);
                     break;
                 }
@@ -453,7 +465,6 @@ CUserNotification::Show(
     return m_hRes;
 }
 
-#if 0   // IUserNotification2
 // Blocks until the notification times out.
 HRESULT STDMETHODCALLTYPE
 CUserNotification::Show(
@@ -461,9 +472,17 @@ CUserNotification::Show(
     IN DWORD dwContinuePollInterval,
     IN IUserNotificationCallback* pSink)
 {
-    return S_OK;
+    HRESULT hr;
+
+    m_pSink = pSink;
+    if (pSink)
+        pSink->AddRef();
+    hr = Show(pqc, dwContinuePollInterval);
+    if (m_pSink)
+        m_pSink->Release();
+    m_pSink = NULL;
+    return hr;
 }
-#endif
 
 HRESULT STDMETHODCALLTYPE
 CUserNotification::PlaySound(

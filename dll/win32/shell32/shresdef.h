@@ -928,11 +928,17 @@
 #define IDM_LINKHERE 0xB
 #define IDM_DVSELECT 0x104
 
+#define IDM_POPUPMENU        2001
+#define IDM_LARGE_ICONS      2002
+#define IDM_SMALL_ICONS      2003
+#define IDM_SHOW_TEXT        2004
+#define IDM_VIEW_MENU        2005
+#define IDM_OPEN_FOLDER      2006
+
 #define IDM_MYDOCUMENTS 516
 #define IDM_MYPICTURES 518
 
 /* Registrar scripts (RGS) */
-#define IDR_ADMINFOLDERSHORTCUT 128
 #define IDR_CONTROLPANEL        130
 #define IDR_DRAGDROPHELPER      131
 #define IDR_FOLDEROPTIONS       132
@@ -971,3 +977,17 @@
 #define IDR_WINECLASSES         165
 #define IDR_STARTMENUPIN        166
 #define IDR_FILEOPERATION       167
+#define IDR_ACLMULTI            168
+#define IDR_ACLHISTORY          169
+#define IDR_BANDPROXY           170
+#define IDR_REGTREEOPTIONS      171
+#define IDR_AUTOCOMPLETE        172
+#define IDR_ACLISTISF           173
+#define IDR_ACLCUSTOMMRU        174
+#define IDR_USERASSIST          175
+#define IDR_ACLMRU              176
+#define IDR_PROGRESSDIALOG      177
+#define IDR_ISFBAND             178
+#define IDR_FOLDERITEM          179
+#define IDR_TRACKSHELLMENU      180
+#define IDR_QUICKLINKS          181

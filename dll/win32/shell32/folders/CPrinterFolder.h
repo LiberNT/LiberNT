@@ -81,7 +81,6 @@ class CPrinterFolder :
         COM_INTERFACE_ENTRY_IID(IID_IShellFolder, IShellFolder)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder, IPersistFolder)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder2, IPersistFolder2)
-        COM_INTERFACE_ENTRY_IID(IID_IPersist, IPersist)
         END_COM_MAP()
 };
 

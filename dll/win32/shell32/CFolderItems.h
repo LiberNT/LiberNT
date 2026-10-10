@@ -10,14 +10,17 @@
 
 
 class CFolderItem:
-    public CComCoClass<CFolderItem>,
+    public CComCoClass<CFolderItem, &CLSID_FolderItem>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public IDispatchImpl<FolderItem2, &IID_FolderItem2>,
-    public IParentAndItem
+    public IParentAndItem,
+    public IPersistFolder2,
+    public IObjectSafety
 {
 private:
     CComHeapPtr<ITEMIDLIST> m_idlist;
     CComPtr<Folder> m_Folder;
+    DWORD m_SafetyOptions;
 
     inline HRESULT GetParentShellFolderAndItem(REFIID riid, void**ppv, PCUITEMID_CHILD &pidlLast);
 
@@ -63,6 +66,14 @@ public:
     STDMETHOD(SetParentAndItem)(PCIDLIST_ABSOLUTE, IShellFolder*, PCUITEMID_CHILD) override { return E_NOTIMPL; }
     STDMETHOD(GetParentAndItem)(PIDLIST_ABSOLUTE *ppidlParent, IShellFolder **ppsf, PITEMID_CHILD *ppidlChild) override;
 
+    STDMETHOD(GetClassID)(CLSID *pClassID) override;
+    STDMETHOD(Initialize)(PCIDLIST_ABSOLUTE pidl) override;
+    STDMETHOD(GetCurFolder)(PIDLIST_ABSOLUTE *ppidl) override;
+
+    STDMETHOD(GetInterfaceSafetyOptions)(REFIID riid, DWORD *pdwSupportedOptions, DWORD *pdwEnabledOptions) override;
+    STDMETHOD(SetInterfaceSafetyOptions)(REFIID riid, DWORD dwOptionSetMask, DWORD dwEnabledOptions) override;
+
+DECLARE_REGISTRY_RESOURCEID(IDR_FOLDERITEM)
 DECLARE_NOT_AGGREGATABLE(CFolderItem)
 DECLARE_PROTECT_FINAL_CONSTRUCT()
 
@@ -71,6 +82,10 @@ BEGIN_COM_MAP(CFolderItem)
     COM_INTERFACE_ENTRY_IID(IID_FolderItem2, FolderItem2)
     COM_INTERFACE_ENTRY_IID(IID_IDispatch, IDispatch)
     COM_INTERFACE_ENTRY_IID(IID_IParentAndItem, IParentAndItem)
+    COM_INTERFACE_ENTRY_IID(IID_IPersistFolder2, IPersistFolder2)
+    COM_INTERFACE_ENTRY_IID(IID_IPersistFolder, IPersistFolder)
+    COM_INTERFACE_ENTRY_IID(IID_IPersist, IPersist)
+    COM_INTERFACE_ENTRY_IID(IID_IObjectSafety, IObjectSafety)
 END_COM_MAP()
 };
 
@@ -119,8 +134,8 @@ DECLARE_PROTECT_FINAL_CONSTRUCT()
 
 BEGIN_COM_MAP(CFolderItems)
     COM_INTERFACE_ENTRY_IID(IID_FolderItems, FolderItems)
-    COM_INTERFACE_ENTRY_IID(IID_FolderItems, FolderItems2)
-    COM_INTERFACE_ENTRY_IID(IID_FolderItems, FolderItems3)
+    COM_INTERFACE_ENTRY_IID(IID_FolderItems2, FolderItems2)
+    COM_INTERFACE_ENTRY_IID(IID_FolderItems3, FolderItems3)
     COM_INTERFACE_ENTRY_IID(IID_IDispatch, IDispatch)
 END_COM_MAP()
 };

@@ -104,6 +104,20 @@ BEGIN
     END
 END
 
+IDM_POPUPMENU MENUEX
+BEGIN
+    POPUP ""
+    BEGIN
+        POPUP "&Afișează", IDM_VIEW_MENU
+        BEGIN
+            MENUITEM "&Pictograme mari", IDM_LARGE_ICONS
+            MENUITEM "Pi&ctograme mici", IDM_SMALL_ICONS
+        END
+        MENUITEM "&Deschide folderul", IDM_OPEN_FOLDER
+        MENUITEM "&Afișează textul", IDM_SHOW_TEXT
+    END
+END
+
 IDD_BROWSE_FOR_FOLDER DIALOGEX 15, 40, 188, 192
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
 CAPTION "Specificare folder"

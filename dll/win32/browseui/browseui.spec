@@ -1,31 +1,26 @@
-101 stdcall -noname InitOCHostClass(long)
-102 stdcall -noname SHOpenFolderWindow(ptr)
-103 stdcall -noname SHOpenNewFrame(ptr ptr long long)
-@ stdcall -private DllCanUnloadNow()
-105 stdcall -noname SHCreateSavedWindows()
-106 stdcall -noname SHCreateFromDesktop(ptr)
-107 stdcall -noname SHExplorerParseCmdLine(ptr)
-@ stdcall -private DllGetClassObject(ptr ptr ptr)
-@ stdcall -private DllGetVersion(ptr)
-@ stdcall -private DllInstall(long wstr)
-@ stdcall -private DllRegisterServer()
-@ stdcall -private DllUnregisterServer()
-118 stdcall -noname UEMRegisterNotify(long long)
-120 stdcall -noname SHCreateBandForPidl(ptr ptr long)
-121 stdcall -noname SHPidlFromDataObject(ptr ptr long ptr)
-122 stdcall -noname IDataObject_GetDeskBandState(long)
-123 stdcall -noname SHCreateIETHREADPARAM(long long ptr ptr)
-124 stdcall -noname SHCloneIETHREADPARAM(ptr)
-125 stdcall -noname SHParseIECommandLine(long long)
-126 stdcall -noname SHDestroyIETHREADPARAM(ptr)
-127 stdcall -noname SHOnCWMCommandLine(long)
-128 stdcall -noname Channel_GetFolderPidl()
-129 stdcall -noname ChannelBand_Create(ptr)
-130 stdcall -noname Channels_SetBandInfoSFB(ptr)
-131 stdcall -noname IUnknown_SetBandInfoSFB(ptr long)
-133 stdcall -noname Channel_QuickLaunch()
-134 stdcall -noname SHGetNavigateTarget(long long long long)
-135 stdcall -noname GetInfoTip(ptr long wstr long)
-136 stdcall -noname SHEnumClassesOfCategories(long ptr long ptr ptr)
-137 stdcall -noname SHWriteClassesOfCategories(long long long long long long long)
-138 stdcall -noname SHIsExplorerBrowser()
+101 stdcall -noname InitOCHostClass(long) explorerframe.#101
+102 stdcall -noname SHOpenFolderWindow(ptr) explorerframe.#102
+103 stdcall -noname SHOpenNewFrame(ptr ptr long long) explorerframe.#103
+104 stdcall -private DllGetVersion(ptr) explorerframe.DllGetVersion
+105 stdcall -noname SHCreateSavedWindows() explorerframe.#105
+106 stdcall -noname SHCreateFromDesktop(ptr) explorerframe.#106
+107 stdcall -noname SHExplorerParseCmdLine(ptr) explorerframe.#107
+118 stdcall -noname UEMRegisterNotify(long long) explorerframe.#118
+120 stdcall -noname SHCreateBandForPidl(ptr ptr long) explorerframe.#120
+121 stdcall -noname SHPidlFromDataObject(ptr ptr long ptr) explorerframe.#121
+122 stdcall -noname IDataObject_GetDeskBandState(long) explorerframe.#122
+123 stdcall -noname SHCreateIETHREADPARAM(long long ptr ptr) explorerframe.#123
+124 stdcall -noname SHCloneIETHREADPARAM(ptr) explorerframe.#124
+125 stdcall -noname SHParseIECommandLine(long long) explorerframe.#125
+126 stdcall -noname SHDestroyIETHREADPARAM(ptr) explorerframe.#126
+127 stdcall -noname SHOnCWMCommandLine(long) explorerframe.#127
+128 stdcall -noname Channel_GetFolderPidl() explorerframe.#128
+129 stdcall -noname ChannelBand_Create(ptr) explorerframe.#129
+130 stdcall -noname Channels_SetBandInfoSFB(ptr) explorerframe.#130
+131 stdcall -noname IUnknown_SetBandInfoSFB(ptr long) explorerframe.#131
+133 stdcall -noname Channel_QuickLaunch() explorerframe.#133
+134 stdcall -noname SHGetNavigateTarget(long long long long) explorerframe.#134
+135 stdcall -noname GetInfoTip(ptr long wstr long) explorerframe.#135
+136 stdcall -noname SHEnumClassesOfCategories(long ptr long ptr ptr) explorerframe.#136
+137 stdcall -noname SHWriteClassesOfCategories(long long long long long long long) explorerframe.#137
+138 stdcall -noname SHIsExplorerBrowser() explorerframe.#138

@@ -29,6 +29,8 @@ BEGIN_OBJECT_MAP(ObjectMap)
     OBJECT_ENTRY(CLSID_SH_FavBand, CFavBand)
     OBJECT_ENTRY(CLSID_ExplorerBand, CExplorerBand)
     OBJECT_ENTRY(CLSID_ShellDocObjView, CShellDocObjView)
+    OBJECT_ENTRY(CLSID_AdminFolderShortcut, CAdminToolsFolder)
+    OBJECT_ENTRY(CLSID_AttachmentServices, CAttachmentServices)
 END_OBJECT_MAP()
 
 class SHDOCVW_Module : public CComModule

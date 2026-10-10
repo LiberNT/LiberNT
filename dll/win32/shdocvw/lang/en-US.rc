@@ -13,4 +13,11 @@ BEGIN
     IDS_ADD "Add..."
     IDS_ORGANIZE "Organize..."
     IDS_FOLDERSLABEL "Folders"
+    IDS_ATTACHMENT_TITLE "File Download"
+    IDS_ATTACHMENT_OPEN "Do you want to open this file?"
+    IDS_ATTACHMENT_SAVE "Do you want to save this file?"
+    IDS_ATTACHMENT_OPENSAVE "Do you want to open or save this file? Choose Yes to open it, or No to save it."
+    IDS_ATTACHMENT_BLOCKED "This file was blocked because it could harm your computer."
+    IDS_ATTACHMENT_NAME "Name: %s"
+    IDS_ATTACHMENT_FROM "From: %s"
 END
