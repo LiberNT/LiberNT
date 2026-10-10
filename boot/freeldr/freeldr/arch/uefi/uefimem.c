@@ -463,18 +463,26 @@ UefiMemGetMemoryMap(ULONG *MemoryMapSize)
         ULONG_PTR FbBasePage = VramAddress / EFI_PAGE_SIZE;
         ULONG_PTR FbEndPage = (VramAddress + VramSize + EFI_PAGE_SIZE - 1) / EFI_PAGE_SIZE;
 
-        for (Index = 0; Index < FreeldrDescCount; Index++)
+        Index = 0;
+        while (Index < FreeldrDescCount)
         {
+            TYPE_OF_MEMORY DescType = FreeldrMem[Index].MemoryType;
             ULONG_PTR DescStart = FreeldrMem[Index].BasePage;
             ULONG_PTR DescEnd = DescStart + FreeldrMem[Index].PageCount;
-            ULONG_PTR ReserveEnd;
+            ULONG_PTR ReserveStart, ReserveEnd;
 
-            if (FreeldrMem[Index].MemoryType != LoaderFree || FbBasePage < DescStart || FbBasePage >= DescEnd)
+            if ((DescType != LoaderFree && DescType != LoaderFirmwareTemporary &&
+                 DescType != LoaderLoadedProgram && DescType != LoaderOsloaderStack) ||
+                FbEndPage <= DescStart || FbBasePage >= DescEnd)
+            {
+                Index++;
                 continue;
+            }
 
+            ReserveStart = (FbBasePage > DescStart) ? FbBasePage : DescStart;
             ReserveEnd = (FbEndPage < DescEnd) ? FbEndPage : DescEnd;
-            UefiSetMemory(FreeldrMem, FbBasePage * EFI_PAGE_SIZE, (PFN_COUNT)(ReserveEnd - FbBasePage), LoaderFirmwarePermanent);
-            break;
+            UefiSetMemory(FreeldrMem, ReserveStart * EFI_PAGE_SIZE, (PFN_COUNT)(ReserveEnd - ReserveStart), LoaderFirmwarePermanent);
+            Index = 0;
         }
     }
 
