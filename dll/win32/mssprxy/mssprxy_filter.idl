@@ -1,0 +1,17 @@
+/*
+ * PROJECT:     LiberNT Search Proxy
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     Proxies for the content filter interfaces
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep proxy
+#pragma makedep register
+
+#include "filter.idl"
+
+[
+    threading(both),
+    uuid(a5eba07a-dae8-4d15-b12f-728efd8a9866)
+]
+coclass PSFactoryBuffer { interface IPSFactoryBuffer; }
