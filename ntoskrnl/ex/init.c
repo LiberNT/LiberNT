@@ -1460,6 +1460,7 @@ ExpInitializeExecutive(IN ULONG Cpu,
     /* Set the OS Version */
     MmWriteableSharedUserData->NtMajorVersion = NtMajorVersion;
     MmWriteableSharedUserData->NtMinorVersion = NtMinorVersion;
+    MmWriteableSharedUserData->NtBuildNumber = NtBuildNumber & 0xFFFF;
 
     /* Set the machine type */
 #if defined(_M_ARM64)
