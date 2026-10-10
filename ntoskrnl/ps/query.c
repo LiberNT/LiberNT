@@ -711,7 +711,7 @@ PspCaptureProcessCommandLine(
     _Out_ PUSHORT CommandLineLength)
 {
     PRTL_USER_PROCESS_PARAMETERS Parameters;
-    UNICODE_STRING CommandLine;
+    UNICODE_STRING CommandLine = {0};
     KAPC_STATE ApcState;
     PWSTR Copy = NULL;
     NTSTATUS Status = STATUS_SUCCESS;
