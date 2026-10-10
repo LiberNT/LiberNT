@@ -66,6 +66,8 @@ StrStrCase(
 
         if (cch2 == 0)
             return (PWSTR)pszStr;
+        if (cch1 < cch2)
+            return NULL;
 
         for (i = 0; i <= cch1 - cch2; ++i)
         {
