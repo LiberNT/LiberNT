@@ -14,6 +14,10 @@
 #define RISCV_PCI_CONFIG_SIZE 0x1000UL
 #define RISCV_PCI_BUS_SIZE 0x100000UL
 #define RISCV_PHYSICAL_LIMIT 0x0100000000000000ULL
+#define RISCV_PLDA_BRIDGE_SIZE 0x1000UL
+#define RISCV_PLDA_IMASK_LOCAL 0x180
+#define RISCV_PLDA_ISTATUS_LOCAL 0x184
+#define RISCV_PLDA_INTX_MASK 0x0F000000UL
 
 typedef struct _RISCV_PCI_RANGE
 {
@@ -44,6 +48,10 @@ typedef struct _RISCV_PCI_HOST
     ULONG InterruptRouteCount;
     RISCV_PCI_INTX_ROUTE InterruptRoutes[RISCV_PCI_MAX_INTX_ROUTES];
     BOOLEAN DmaCoherent;
+    BOOLEAN Plda;
+    ULONG64 BridgeAddress;
+    PUCHAR BridgeMapping;
+    ULONG IntxSource;
     KSPIN_LOCK Lock;
 } RISCV_PCI_HOST;
 
@@ -69,19 +77,77 @@ HalpRiscvRangesOverlap(ULONG64 Base1, ULONG64 Size1, ULONG64 Base2, ULONG64 Size
     return Base1 <= Base2 ? Base2 - Base1 < Size1 : Base1 - Base2 < Size2;
 }
 
+static BOOLEAN
+HalpRiscvFdtRegByName(const RISCV_FDT *Fdt, ULONG Node, ULONG Parent, const CHAR *Name,
+                      PULONG64 Address, PULONG64 Size)
+{
+    const VOID *Names;
+    const CHAR *Entry;
+    ULONG Length, Cursor = 0, EntryLength, Index = 0;
+    SIZE_T NameLength = strlen(Name);
+
+    Names = RiscvFdtGetProperty(Fdt, Node, "reg-names", &Length);
+    while ((Entry = RiscvFdtNextString(Names, Length, &Cursor, &EntryLength)) != NULL)
+    {
+        if (EntryLength == NameLength && RtlEqualMemory(Entry, Name, NameLength))
+            return RiscvFdtReadReg(Fdt, Node, Parent, Index, Address, Size);
+        ++Index;
+    }
+    return FALSE;
+}
+
+static BOOLEAN
+HalpRiscvPldaInitialize(const RISCV_FDT *Fdt, ULONG Soc, ULONG Node, RISCV_PCI_HOST *Host, PULONG IntcPhandle)
+{
+    const VOID *Property;
+    ULONG Length, Parent, Child;
+    ULONG64 BridgeSize;
+
+    Host->DmaCoherent = !RiscvFdtGetProperty(Fdt, Node, "dma-noncoherent", &Length) &&
+                        !RiscvFdtGetProperty(Fdt, Soc, "dma-noncoherent", &Length);
+
+    Property = RiscvFdtGetProperty(Fdt, Node, "interrupts", &Length);
+    if (!Property || Length != sizeof(ULONG) ||
+        (!RiscvFdtReadU32(Fdt, Node, "interrupt-parent", &Parent) &&
+         !RiscvFdtReadU32(Fdt, Soc, "interrupt-parent", &Parent)))
+        return FALSE;
+    Host->IntxSource = RiscvFdtReadBigEndian32(Property);
+    if (!HalpRiscvPlicHasSource(Parent, Host->IntxSource))
+        return FALSE;
+
+    *IntcPhandle = 0;
+    for (Child = RiscvFdtFirstChild(Fdt, Node); Child != RISCV_FDT_NO_NODE; Child = RiscvFdtNextSibling(Fdt, Child))
+    {
+        if (RiscvFdtGetProperty(Fdt, Child, "interrupt-controller", &Length) &&
+            RiscvFdtReadU32(Fdt, Child, "phandle", IntcPhandle))
+            break;
+    }
+    if (!*IntcPhandle)
+        return FALSE;
+
+    return HalpRiscvFdtRegByName(Fdt, Node, Soc, "cfg", &Host->ConfigAddress, &Host->ConfigSize) &&
+           HalpRiscvFdtRegByName(Fdt, Node, Soc, "apb", &Host->BridgeAddress, &BridgeSize) &&
+           BridgeSize >= RISCV_PLDA_BRIDGE_SIZE &&
+           HalpRiscvDeviceRangeValid(Host->BridgeAddress, RISCV_PLDA_BRIDGE_SIZE) &&
+           HalpRiscvDeviceRangeValid(Host->ConfigAddress, Host->ConfigSize) &&
+           !(Host->ConfigAddress & (RISCV_PCI_BUS_SIZE - 1));
+}
+
 BOOLEAN
 HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
 {
     RISCV_FDT Fdt;
-    ULONG Root, Soc, Parent, Node, Length, Value, Index, Other, Entry, Phandle, Source;
+    ULONG Root, Soc, Parent, Node, Length, Value, Index, Other, Entry, Phandle, Source, IntcPhandle = 0;
     const VOID *Property;
     RISCV_PCI_HOST *Host = &HalpRiscvPciHost;
+    BOOLEAN Virt, Plda;
 
     if (!RiscvFdtOpen(DeviceTree, DeviceTreeSize, &Fdt))
         return FALSE;
     Root = RiscvFdtRootNode(&Fdt);
     Property = RiscvFdtGetProperty(&Fdt, Root, "compatible", &Length);
-    if (!RiscvFdtStringListContains(Property, Length, "riscv-virtio"))
+    Virt = RiscvFdtStringListContains(Property, Length, "riscv-virtio");
+    if (!Virt && !RiscvFdtStringListContains(Property, Length, "starfive,jh7110"))
         return TRUE;
 
     /* This PMA contract is for QEMU virt, not all generic ECAM hardware.
@@ -97,14 +163,20 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
     for (Node = RiscvFdtFirstChild(&Fdt, Soc); Node != RISCV_FDT_NO_NODE; Node = RiscvFdtNextSibling(&Fdt, Node))
     {
         Property = RiscvFdtGetProperty(&Fdt, Node, "compatible", &Length);
-        if (!RiscvFdtStringListContains(Property, Length, "pci-host-ecam-generic"))
+        Plda = !Virt && RiscvFdtStringListContains(Property, Length, "starfive,jh7110-pcie");
+        if (!Plda && !(Virt && RiscvFdtStringListContains(Property, Length, "pci-host-ecam-generic")))
             continue;
         Property = RiscvFdtGetProperty(&Fdt, Node, "status", &Length);
         if (Property && !RiscvFdtStringListContains(Property, Length, "okay") &&
             !RiscvFdtStringListContains(Property, Length, "ok"))
             continue;
         if (HalpRiscvPciHostPresent)
+        {
+            if (Plda)
+                continue;
             return FALSE;
+        }
+        Host->Plda = Plda;
 
         /* QEMU virt marks this host coherent. A different board may still
          * enumerate PCI, but our direct DMA adapter must reject it. */
@@ -112,6 +184,8 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
         if (Property && Length != 0)
             return FALSE;
         Host->DmaCoherent = (Property != NULL);
+        if (Plda && !HalpRiscvPldaInitialize(&Fdt, Soc, Node, Host, &IntcPhandle))
+            return FALSE;
 
         if (!RiscvFdtReadU32(&Fdt, Node, "#address-cells", &Value) || Value != 3 ||
             !RiscvFdtReadU32(&Fdt, Node, "#size-cells", &Value) || Value != 2 ||
@@ -138,18 +212,30 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
             Route->Pin = RiscvFdtReadBigEndian32(Cells + 3 * sizeof(ULONG));
             Phandle = RiscvFdtReadBigEndian32(Cells + 4 * sizeof(ULONG));
             Source = RiscvFdtReadBigEndian32(Cells + 5 * sizeof(ULONG));
-            if (Route->Pin < 1 || Route->Pin > 4 ||
-                !HalpRiscvPlicHasSource(Phandle, Source))
+            if (Route->Pin < 1 || Route->Pin > 4)
                 return FALSE;
+            if (Plda)
+            {
+                if (Phandle != IntcPhandle || Source < 1 || Source > 4)
+                    return FALSE;
+                Source = Host->IntxSource;
+            }
+            else if (!HalpRiscvPlicHasSource(Phandle, Source))
+            {
+                return FALSE;
+            }
             Route->Source = Source;
         }
-        Property = RiscvFdtGetProperty(&Fdt, Node, "reg", &Length);
-        if (!Property || Length != 4 * sizeof(ULONG) ||
-            !RiscvFdtReadCells(Property, Length, 0, 2, &Host->ConfigAddress) ||
-            !RiscvFdtReadCells(Property, Length, 2, 2, &Host->ConfigSize) ||
-            !HalpRiscvDeviceRangeValid(Host->ConfigAddress, Host->ConfigSize) ||
-            (Host->ConfigAddress & (RISCV_PCI_BUS_SIZE - 1)))
-            return FALSE;
+        if (!Plda)
+        {
+            Property = RiscvFdtGetProperty(&Fdt, Node, "reg", &Length);
+            if (!Property || Length != 4 * sizeof(ULONG) ||
+                !RiscvFdtReadCells(Property, Length, 0, 2, &Host->ConfigAddress) ||
+                !RiscvFdtReadCells(Property, Length, 2, 2, &Host->ConfigSize) ||
+                !HalpRiscvDeviceRangeValid(Host->ConfigAddress, Host->ConfigSize) ||
+                (Host->ConfigAddress & (RISCV_PCI_BUS_SIZE - 1)))
+                return FALSE;
+        }
 
         Host->FirstBus = 0;
         Host->LastBus = 255;
@@ -161,6 +247,9 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
             Host->FirstBus = RiscvFdtReadBigEndian32(Property);
             Host->LastBus = RiscvFdtReadBigEndian32((const UCHAR *)Property + sizeof(ULONG));
         }
+        if (Plda && Host->FirstBus <= Host->LastBus &&
+            Host->ConfigSize / RISCV_PCI_BUS_SIZE < (ULONG64)Host->LastBus - Host->FirstBus + 1)
+            Host->LastBus = Host->FirstBus + (ULONG)(Host->ConfigSize / RISCV_PCI_BUS_SIZE) - 1;
         if (Host->FirstBus > Host->LastBus || Host->LastBus > 255 ||
             Host->ConfigSize < (ULONG64)(Host->LastBus - Host->FirstBus + 1) * RISCV_PCI_BUS_SIZE)
             return FALSE;
@@ -188,7 +277,7 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
             ULONG Flags = RiscvFdtReadBigEndian32((const UCHAR *)Property + Index * 7 * sizeof(ULONG));
             ULONG Space = (Flags >> 24) & 3;
 
-            if ((Flags & ~0x43000000UL) || Space == 0 ||
+            if ((Flags & ~0xC3000000UL) || Space == 0 ||
                 !RiscvFdtReadCells(Property, Length, Index * 7 + 1, 2, &Range->BusAddress) ||
                 !RiscvFdtReadCells(Property, Length, Index * 7 + 3, 2, &Range->PhysicalAddress) ||
                 !RiscvFdtReadCells(Property, Length, Index * 7 + 5, 2, &Range->Size) ||
@@ -217,12 +306,41 @@ BOOLEAN
 HalpRiscvMapPciConfig(VOID)
 {
     PHYSICAL_ADDRESS Address;
+    volatile ULONG *Status;
 
     if (!HalpRiscvPciHostPresent)
         return TRUE;
     Address.QuadPart = HalpRiscvPciHost.ConfigAddress;
     HalpRiscvPciHost.ConfigMapping = MmMapIoSpace(Address, HalpRiscvPciHost.ConfigSize, MmNonCached);
-    return HalpRiscvPciHost.ConfigMapping != NULL;
+    if (!HalpRiscvPciHost.ConfigMapping)
+        return FALSE;
+    if (!HalpRiscvPciHost.Plda)
+        return TRUE;
+
+    Address.QuadPart = HalpRiscvPciHost.BridgeAddress;
+    HalpRiscvPciHost.BridgeMapping = MmMapIoSpace(Address, RISCV_PLDA_BRIDGE_SIZE, MmNonCached);
+    if (!HalpRiscvPciHost.BridgeMapping)
+        return FALSE;
+    *(volatile ULONG *)(HalpRiscvPciHost.BridgeMapping + RISCV_PLDA_IMASK_LOCAL) = RISCV_PLDA_INTX_MASK;
+    Status = (volatile ULONG *)(HalpRiscvPciHost.BridgeMapping + RISCV_PLDA_ISTATUS_LOCAL);
+    *Status = *Status;
+    __asm__ __volatile__("fence iorw, iorw" ::: "memory");
+    return TRUE;
+}
+
+VOID
+HalpRiscvAcknowledgePciInterrupt(ULONG Source)
+{
+    volatile ULONG *Status;
+    ULONG Pending;
+
+    if (!HalpRiscvPciHost.BridgeMapping || Source != HalpRiscvPciHost.IntxSource)
+        return;
+    Status = (volatile ULONG *)(HalpRiscvPciHost.BridgeMapping + RISCV_PLDA_ISTATUS_LOCAL);
+    Pending = *Status & RISCV_PLDA_INTX_MASK;
+    if (Pending)
+        *Status = Pending;
+    __asm__ __volatile__("fence iorw, iorw" ::: "memory");
 }
 
 BOOLEAN
@@ -419,6 +537,7 @@ HalpRiscvAccessPciConfig(BOOLEAN Write, BOOLEAN Lock, ULONG BusNumber, ULONG Slo
     volatile UCHAR *Config;
     KIRQL OldIrql = PASSIVE_LEVEL;
     ULONG Done = 0;
+    BOOLEAN RootPortBars;
 
     Slot.u.AsULONG = SlotNumber;
     if (!Buffer || !Length || !Host->ConfigMapping || Slot.u.bits.Reserved ||
@@ -431,6 +550,27 @@ HalpRiscvAccessPciConfig(BOOLEAN Write, BOOLEAN Lock, ULONG BusNumber, ULONG Slo
     if (Lock)
         OldIrql = KeAcquireSpinLockRaiseToDpc(&Host->Lock);
     __asm__ __volatile__("fence iorw, iorw" ::: "memory");
+
+    if (Host->Plda && Slot.u.bits.DeviceNumber &&
+        ((BusNumber & 255) == Host->FirstBus ||
+         (BusNumber & 255) == Host->ConfigMapping[FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.SecondaryBus)]))
+    {
+        if (Lock)
+            KeReleaseSpinLock(&Host->Lock, OldIrql);
+        if (Write)
+            return 0;
+        RtlFillMemory(Buffer, Length, 0xFF);
+        return Length;
+    }
+    RootPortBars = Host->Plda && (BusNumber & 255) == Host->FirstBus && !Slot.u.AsULONG &&
+                   Offset < FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.BaseAddresses[2]) &&
+                   Offset + Length > FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.BaseAddresses[0]);
+    if (Write && RootPortBars)
+    {
+        if (Lock)
+            KeReleaseSpinLock(&Host->Lock, OldIrql);
+        return 0;
+    }
 
     /* The legacy HAL API must not reconfigure a PCI bridge's common header.
      * The PCI bus driver's eventual raw configuration interface is separate. */
@@ -476,6 +616,17 @@ HalpRiscvAccessPciConfig(BOOLEAN Write, BOOLEAN Lock, ULONG BusNumber, ULONG Slo
     __asm__ __volatile__("fence iorw, iorw" ::: "memory");
     if (Lock)
         KeReleaseSpinLock(&Host->Lock, OldIrql);
+    if (RootPortBars)
+    {
+        ULONG Byte;
+
+        for (Byte = 0; Byte < Done; ++Byte)
+        {
+            if (Offset + Byte >= FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.BaseAddresses[0]) &&
+                Offset + Byte < FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.BaseAddresses[2]))
+                Bytes[Byte] = 0;
+        }
+    }
     return Done;
 }
 

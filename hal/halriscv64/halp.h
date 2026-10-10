@@ -99,6 +99,7 @@ RISCV_SBI_RETURN HalpRiscvSetTimer(_In_ ULONG64 Deadline);
 BOOLEAN HalpRiscvSystemReset(_In_ ULONG_PTR ResetType);
 BOOLEAN HalpRiscvInitializePci(_In_reads_bytes_(DeviceTreeSize) const VOID *DeviceTree, _In_ SIZE_T DeviceTreeSize);
 BOOLEAN HalpRiscvMapPciConfig(VOID);
+VOID HalpRiscvAcknowledgePciInterrupt(_In_ ULONG Source);
 BOOLEAN HalpRiscvInitializePlic(_In_reads_bytes_(DeviceTreeSize) const VOID *DeviceTree, _In_ SIZE_T DeviceTreeSize, _In_ ULONG64 BootHartId);
 BOOLEAN HalpRiscvMapPlic(VOID);
 BOOLEAN HalpRiscvPlicHasSource(_In_ ULONG Phandle, _In_ ULONG Source);

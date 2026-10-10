@@ -275,11 +275,16 @@ ULONG
 NTAPI
 HalpRiscvClaimPlicInterrupt(VOID)
 {
+    ULONG Source;
+
     if (!HalpRiscvPlic.Mapping)
         return 0;
-    return *(volatile ULONG *)(HalpRiscvPlic.Mapping + RISCV_PLIC_CONTEXT_BASE +
-                               HalpRiscvPlic.SupervisorContext * RISCV_PLIC_CONTEXT_STRIDE +
-                               RISCV_PLIC_CLAIM_OFFSET);
+    Source = *(volatile ULONG *)(HalpRiscvPlic.Mapping + RISCV_PLIC_CONTEXT_BASE +
+                                 HalpRiscvPlic.SupervisorContext * RISCV_PLIC_CONTEXT_STRIDE +
+                                 RISCV_PLIC_CLAIM_OFFSET);
+    if (Source)
+        HalpRiscvAcknowledgePciInterrupt(Source);
+    return Source;
 }
 
 VOID

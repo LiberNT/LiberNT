@@ -165,6 +165,7 @@ HalpRiscvFdtDescribe(_In_ ULONG Node, _In_ ULONG Bus, _Out_ RISCV_FDT_DEVICE *De
     Property = RiscvFdtGetProperty(Fdt, Node, "compatible", &Length);
     if (!Property || Length < 2 || ((const CHAR *)Property)[Length - 1] != '\0' ||
         RiscvFdtStringListContains(Property, Length, "pci-host-ecam-generic") ||
+        RiscvFdtStringListContains(Property, Length, "starfive,jh7110-pcie") ||
         RiscvFdtStringListContains(Property, Length, "google,goldfish-rtc") ||
         RiscvFdtGetProperty(Fdt, Node, "interrupt-controller", &Length))
         return FALSE;
