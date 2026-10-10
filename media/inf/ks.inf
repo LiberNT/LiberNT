@@ -341,7 +341,7 @@ HKLM,System\CurrentControlSet\Control\MediaInterfaces\{EC529B00-1A1F-11D1-BAD9-0
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 KSSTRING_Clock="{53172480-4791-11D0-A5D6-28DB04C10000}"
 KSSTRING_Quality="{97EBAACB-95BD-11D0-A3EA-00A0C9223196}"

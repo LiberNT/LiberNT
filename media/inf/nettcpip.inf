@@ -374,7 +374,7 @@ HKR,"Parameters","ServiceDll",0x00020000,"%SystemRoot%\system32\dnsrslvr.dll"
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 ; Localizable
 MS_TCPIP.DisplayName = "Internet Protocol Version 4 (TCP/IPv4)"

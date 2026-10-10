@@ -20,7 +20,7 @@ HKR, , EnumPropPages32, 0, "syssetup.dll,LegacyDriverPropPageProvider"
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 ; Localizable
 LegacyDriverClassName = "Non-Plug and Play Drivers"

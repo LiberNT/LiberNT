@@ -67,7 +67,7 @@ ServiceBinary = %12%\sysaudio.sys
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 ; Localizable
 AUDIOClassName = "Audio & Videocontroller"

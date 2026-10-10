@@ -40,7 +40,7 @@ HKR, , SilentInstall,   0, "1"
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 ; Localizable
 VolumeClassName = "Storage volumes"

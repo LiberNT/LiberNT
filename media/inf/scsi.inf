@@ -71,7 +71,7 @@ LoadOrderGroup = SCSI Miniport
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 ; Localizable
 SCSIClassName = "SCSI and RAID Controllers"

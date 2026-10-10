@@ -335,7 +335,7 @@ AddService = ac97, 0x00000002, ac97_Service_Inst
 
 [Strings]
 ; Non-localizable
-ReactOS="ReactOS Project"
+ReactOS="LiberNT Project"
 MfgName="Intel"
 
 ; Localizable

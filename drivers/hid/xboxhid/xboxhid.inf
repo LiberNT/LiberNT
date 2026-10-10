@@ -56,7 +56,7 @@ ServiceBinary  = %12%\xboxhid.sys
 LoadOrderGroup = Extended Base
 
 [Strings]
-ReactOS          = "ReactOS Project"
+ReactOS          = "LiberNT Project"
 MicrosoftMfg     = "Microsoft"
 XUSB.DeviceDesc  = "Xbox 360 Controller"
 GIP.DeviceDesc   = "Xbox Controller"

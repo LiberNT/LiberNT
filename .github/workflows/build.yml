@@ -144,11 +144,11 @@ jobs:
     - name: Upload ReactOS.img
       uses: actions/upload-artifact@v7
       with:
-        name: ReactOS-img-${{steps.images.outputs.tag}}
+        name: LiberNT-img-${{steps.images.outputs.tag}}
         path: ${{steps.configure.outputs.outdir}}/ReactOS.img
 
     - name: Upload ReactOS.vhd
       uses: actions/upload-artifact@v7
       with:
-        name: ReactOS-vhd-${{steps.images.outputs.tag}}
+        name: LiberNT-vhd-${{steps.images.outputs.tag}}
         path: ${{steps.configure.outputs.outdir}}/ReactOS.vhd

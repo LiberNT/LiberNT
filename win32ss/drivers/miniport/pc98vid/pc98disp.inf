@@ -51,7 +51,7 @@ HKR,, VideoDebugLevel,         0x00010001, 0
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 NecMfg = "NEC"
 
 ; Localizable

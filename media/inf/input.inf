@@ -73,7 +73,7 @@ LoadOrderGroup = Extended Base
 
 [Strings]
 ; Non-localizable
-ReactOS="ReactOS Project"
+ReactOS="LiberNT Project"
 
 MSMice="Microsoft"
 

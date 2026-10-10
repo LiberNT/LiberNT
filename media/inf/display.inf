@@ -26,7 +26,7 @@ HKR, , Installer32,     0, "desk.cpl,DisplayClassInstaller"
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 ; Localizable
 DisplayClassName = "Display adapters"

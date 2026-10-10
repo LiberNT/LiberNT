@@ -399,7 +399,7 @@ LoadOrderGroup = SCSI Miniport
 
 [Strings]
 ; Non-localizable
-ReactOS="ReactOS Project"
+ReactOS="LiberNT Project"
 
 ; Localizable
 HDCClassName="IDE ATA/ATAPI controllers"

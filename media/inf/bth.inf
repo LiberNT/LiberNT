@@ -59,7 +59,7 @@ fbtusb.sys
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 ; Localizable
 BTUSB.DeviceDesc="Generic USB Bluetooth Radio"

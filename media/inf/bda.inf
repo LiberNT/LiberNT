@@ -133,7 +133,7 @@ BdaPlgIn.ax,,,COPYFLG_NO_VERSION_DIALOG
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 RunOnce="SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"
 ActiveMovieCategories="CLSID\{da4e3da0-d07d-11d0-bd50-00a0c911ce86}\Instance"

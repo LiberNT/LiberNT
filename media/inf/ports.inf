@@ -91,7 +91,7 @@ LoadOrderGroup = PNP Filter
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 ; Localizable
 PortsClassName = "Serial and parallel ports"

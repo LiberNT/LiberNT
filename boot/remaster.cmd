@@ -16,7 +16,7 @@ setlocal enabledelayedexpansion
 :: Customizable settings
 ::
 :: ISO image identifier names
-set ISO_MANUFACTURER="ReactOS Project"& :: For both the publisher and the preparer
+set ISO_MANUFACTURER="LiberNT Project"& :: For both the publisher and the preparer
 set ISO_VOLNAME="ReactOS"&              :: For both the Volume ID and the Volume set ID
 
 :: Image names of the MKISOFS and ISOHYBRID tools

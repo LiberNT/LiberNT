@@ -52,7 +52,7 @@ LoadOrderGroup = Video
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 Bochs = "Bochs"
 
 REG_MULTI_SZ   = 0x00010000

@@ -33,7 +33,7 @@ AddService = , 0x00000002
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 ; Localizable
 GenericMfg = "(Generic system devices)"

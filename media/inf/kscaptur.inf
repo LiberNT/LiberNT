@@ -242,7 +242,7 @@ HKLM,%RunOnce%,"NDISIP0",,"rundll32.exe streamci,StreamingDeviceSetup %NdisIP.De
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 ActiveMovieCategories="CLSID\{da4e3da0-d07d-11d0-bd50-00a0c911ce86}\Instance"
 GUID.TvTuner="{A799A800-A46D-11d0-A18C-00A02401DCD4}"

@@ -161,7 +161,7 @@ LoadOrderGroup = Pointer Port
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 IbmMfg = "IBM"
 LogMfg = "Logitech"

@@ -238,7 +238,7 @@ HKR, , TypesSupported,   0x00010001, 7
 
 [Strings]
 ; Non-localizable
-ReactOS = "ReactOS Project"
+ReactOS = "LiberNT Project"
 
 nVidiaMfg = "nVidia"
 
