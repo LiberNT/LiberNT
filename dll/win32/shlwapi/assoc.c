@@ -666,6 +666,69 @@ HRESULT WINAPI AssocQueryStringByKeyA(ASSOCF cfFlags, ASSOCSTR str, HKEY hkAssoc
  */
 BOOL WINAPI AssocIsDangerous(LPCWSTR lpszAssoc)
 {
+#ifdef __REACTOS__
+    static const WCHAR *const dangerous_exts[] =
+    {
+        L".ade", L".adp", L".app", L".appref-ms", L".asp", L".bas", L".bat", L".cer", L".chm",
+        L".cmd", L".cnt", L".com", L".cpl", L".crt", L".csh", L".der", L".exe", L".fxp", L".gadget",
+        L".grp", L".hlp", L".hpj", L".hta", L".inf", L".ins", L".iso", L".isp", L".its", L".js",
+        L".jse", L".ksh", L".lnk", L".mad", L".maf", L".mag", L".mam", L".maq", L".mar", L".mas",
+        L".mat", L".mau", L".mav", L".maw", L".mcf", L".mda", L".mdb", L".mde", L".mdt", L".mdw",
+        L".mdz", L".msc", L".msh", L".msh1", L".msh1xml", L".msh2", L".msh2xml", L".mshxml",
+        L".msi", L".msp", L".mst", L".msu", L".ocx", L".ops", L".pcd", L".pif", L".pl", L".plg",
+        L".prf", L".prg", L".printerexport", L".ps1", L".ps1xml", L".ps2", L".ps2xml", L".psc1",
+        L".psc2", L".psd1", L".pst", L".reg", L".scf", L".scr", L".sct", L".shb", L".shs",
+        L".theme", L".tmp", L".url", L".vb", L".vbe", L".vbp", L".vbs", L".vhd", L".vhdx",
+        L".vsmacros", L".vsw", L".webpnp", L".website", L".ws", L".wsc", L".wsf", L".wsh", L".xnk",
+    };
+    static const WCHAR *const dangerous_progids[] =
+    {
+        L"batfile", L"exefile", L"inffile", L"JSFile",
+    };
+    WCHAR progid[MAX_PATH];
+    LPCWSTR type = lpszAssoc;
+    DWORD flags, size, i;
+    HKEY key;
+
+    TRACE("%s\n", debugstr_w(lpszAssoc));
+
+    if (!lpszAssoc)
+        return FALSE;
+    if (!*lpszAssoc)
+        return TRUE;
+
+    if (*lpszAssoc == '.')
+    {
+        LPCWSTR ext = PathFindExtensionW(lpszAssoc);
+        for (i = 0; i < ARRAY_SIZE(dangerous_exts); i++)
+        {
+            if (!wcsicmp(ext, dangerous_exts[i]))
+                return TRUE;
+        }
+        size = sizeof(progid);
+        if (RegGetValueW(HKEY_CLASSES_ROOT, ext, NULL, RRF_RT_REG_SZ, NULL, progid, &size) != ERROR_SUCCESS)
+            return FALSE;
+        type = progid;
+    }
+    else
+    {
+        for (i = 0; i < ARRAY_SIZE(dangerous_progids); i++)
+        {
+            if (!wcsicmp(lpszAssoc, dangerous_progids[i]))
+                return TRUE;
+        }
+    }
+
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, type, 0, KEY_READ, &key) != ERROR_SUCCESS)
+        return FALSE;
+    flags = 0;
+    size = sizeof(flags);
+    if (RegQueryValueExW(key, L"EditFlags", NULL, NULL, (BYTE *)&flags, &size) != ERROR_SUCCESS || size != sizeof(flags))
+        flags = 0;
+    RegCloseKey(key);
+    return (flags & FTA_AlwaysUnsafe) != 0;
+#else
     FIXME("%s\n", debugstr_w(lpszAssoc));
     return FALSE;
+#endif
 }
