@@ -602,7 +602,7 @@ void setup_adapter( PDHCP_ADAPTER Adapter, struct client_lease *new_lease ) {
         }
 
         if( err != NO_ERROR )
-            warning("AddIPAddress: %d\n", err);
+            warning("AddIPAddress: %lu\n", err);
     }
     else if( new_lease->options[DHO_SUBNET_MASK].len ) {
         warning("Invalid subnet mask option length: %d\n", new_lease->options[DHO_SUBNET_MASK].len);
@@ -627,7 +627,7 @@ void setup_adapter( PDHCP_ADAPTER Adapter, struct client_lease *new_lease ) {
         err = CreateIpForwardEntry( &Adapter->RouterMib );
 
         if( err != NO_ERROR )
-            warning("CreateIpForwardEntry: %d\n", err);
+            warning("CreateIpForwardEntry: %lu\n", err);
 
         if (hkey && err == NO_ERROR) {
             addr.S_un.S_addr = *((ULONG*)new_lease->options[DHO_ROUTERS].data);
