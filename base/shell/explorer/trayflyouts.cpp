@@ -4003,9 +4003,8 @@ public:
             }
         }
 
-        if (!m_bComVolume)
+        if (!m_bComVolume && m_Fallback.Open())
         {
-            m_Fallback.Open();
             m_nMaster = m_Fallback.GetVolume();
             m_bMasterMute = m_Fallback.GetMute();
         }
