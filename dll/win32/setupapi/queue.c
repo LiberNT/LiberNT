@@ -1163,6 +1163,7 @@ static BOOL do_file_copyW( LPCWSTR source, LPCWSTR target, DWORD style,
     WCHAR *Filename;
     LONG lRes;
     DWORD dwLastError, Length;
+    BOOL bDelayed = FALSE;
 #endif
 
     TRACE("copy %s to %s style 0x%x\n",debugstr_w(source),debugstr_w(target),style);
@@ -1393,20 +1394,44 @@ static BOOL do_file_copyW( LPCWSTR source, LPCWSTR target, DWORD style,
             docopy = FALSE;
         }
     }
-    if (style & (SP_COPY_NODECOMP | SP_COPY_LANGUAGEAWARE | SP_COPY_FORCE_IN_USE |
-                 SP_COPY_IN_USE_NEEDS_REBOOT | SP_COPY_NOSKIP | SP_COPY_WARNIFSKIP))
+    if (style & (SP_COPY_NODECOMP | SP_COPY_LANGUAGEAWARE |
+                 SP_COPY_NOSKIP | SP_COPY_WARNIFSKIP))
     {
         ERR("Unsupported style(s) 0x%x\n",style);
     }
 
     if (docopy)
     {
+#ifdef __REACTOS__
+        if ((style & SP_COPY_FORCE_IN_USE) && GetFileAttributesW(target) != INVALID_FILE_ATTRIBUTES)
+        {
+            rc = FALSE;
+            SetLastError(ERROR_SHARING_VIOLATION);
+        }
+        else
+#endif
         rc = MoveFileExW(TempFile,target,MOVEFILE_REPLACE_EXISTING);
         TRACE("Did copy... rc was %i\n",rc);
+#ifdef __REACTOS__
+        if (!rc && (style & (SP_COPY_IN_USE_NEEDS_REBOOT | SP_COPY_FORCE_IN_USE)) &&
+            (GetLastError() == ERROR_SHARING_VIOLATION || GetLastError() == ERROR_ACCESS_DENIED))
+        {
+            rc = MoveFileExW(TempFile, target, MOVEFILE_REPLACE_EXISTING | MOVEFILE_DELAY_UNTIL_REBOOT);
+            if (rc)
+            {
+                FILEPATHS_W filepaths = { target, source, ERROR_SUCCESS, 0 };
+
+                bDelayed = TRUE;
+                if (handler)
+                    handler(context, SPFILENOTIFY_FILEOPDELAYED, (UINT_PTR)&filepaths, 0);
+            }
+        }
+#endif
     }
 #ifdef __REACTOS__
     dwLastError = docopy && !rc ? GetLastError() : ERROR_SUCCESS;
-    DeleteFileW(TempFile);
+    if (!bDelayed)
+        DeleteFileW(TempFile);
 #endif
 
     /* after copy processing */
