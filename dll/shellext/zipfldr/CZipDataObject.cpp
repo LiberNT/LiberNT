@@ -7,24 +7,13 @@
 
 #include "precomp.h"
 
-struct ZipDataItem
-{
-    CStringW Name;
-    bool Directory;
-    bool Password;
-    bool HasDate;
-    ULONG DosDate;
-    ULONG64 Size;
-    unz64_file_pos Pos;
-};
-
 struct ZipDataSelection
 {
     CStringW Name;
     bool Directory;
 };
 
-static BOOL ZipDateToFileTime(ULONG DosDate, FILETIME *pFileTime)
+BOOL ZipDateToFileTime(ULONG DosDate, FILETIME *pFileTime)
 {
     FILETIME LocalFileTime;
     if (!DosDateTimeToFileTime(HIWORD(DosDate), LOWORD(DosDate), &LocalFileTime))
@@ -681,4 +670,9 @@ HRESULT _CZipDataObject_CreateInstance(PCWSTR ZipFile, PCWSTR ZipDir, HWND hwnd,
         hr = pObject->QueryInterface(riid, ppvOut);
     pObject->Release();
     return hr;
+}
+
+HRESULT _CZipStream_CreateInstance(PCWSTR ZipFile, const ZipDataItem *Item, PCSTR Password, REFIID riid, LPVOID *ppvOut)
+{
+    return ShellObjectCreatorInit<CZipStream>(ZipFile, Item, Password, riid, ppvOut);
 }

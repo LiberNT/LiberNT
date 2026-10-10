@@ -82,6 +82,7 @@ BEGIN
     IDS_DECOMPRESSERROR "不支援的壓縮方法 %d。您想要繼續嗎？"
     IDS_UNKNOWNERROR "不明錯誤 0x%08x。"
     IDS_CANTDELETEFILE "Failed to delete the file(s)."
+    IDS_DRAGEXTRACT "&Extract..."
 
     IDS_WIZ_TITLE "解壓縮精靈"
     IDS_WIZ_DEST_TITLE "選擇一個目標資料夾"

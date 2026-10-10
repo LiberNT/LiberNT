@@ -8,6 +8,8 @@
 #include <windef.h>
 #include <winbase.h>
 #include <shlobj.h>
+#include <shlobj_undoc.h>
+#include <shlguid_undoc.h>
 #include <atlbase.h>
 #include <atlcom.h>
 #include <atlcoll.h>
@@ -60,6 +62,21 @@ HRESULT _CFolderViewCB_CreateInstance(REFIID riid, LPVOID * ppvOut);
 HRESULT _CZipDataObject_CreateInstance(PCWSTR ZipFile, PCWSTR ZipDir, HWND hwnd, PCIDLIST_ABSOLUTE pidlFolder,
                                        UINT cidl, PCUITEMID_CHILD_ARRAY apidl, REFIID riid, LPVOID *ppvOut);
 void _CZipExtract_runWizard(PCWSTR Filename);
+void _CZipExtract_runWizardTo(PCWSTR Filename, PCWSTR Directory);
+
+struct ZipDataItem
+{
+    CStringW Name;
+    bool Directory;
+    bool Password;
+    bool HasDate;
+    ULONG DosDate;
+    ULONG64 Size;
+    unz64_file_pos Pos;
+};
+
+BOOL ZipDateToFileTime(ULONG DosDate, FILETIME *pFileTime);
+HRESULT _CZipStream_CreateInstance(PCWSTR ZipFile, const ZipDataItem *Item, PCSTR Password, REFIID riid, LPVOID *ppvOut);
 
 enum eZipPasswordResponse
 {
@@ -92,6 +109,8 @@ enum eZipExtractError
 
 #include "CZipEnumerator.hpp"
 #include "CZipFolder.hpp"
+#include "CZipFolderDropHandler.hpp"
+#include "CZipRightDragHandler.hpp"
 #include "CZipCreator.hpp"
 #include "CSendToZip.hpp"
 

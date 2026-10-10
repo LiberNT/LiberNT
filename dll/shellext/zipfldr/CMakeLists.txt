@@ -22,6 +22,10 @@ list(APPEND SOURCE
     CZipExtract.cpp
     CZipFolder.hpp
     CZipFolder.cpp
+    CZipFolderDropHandler.hpp
+    CZipFolderDropHandler.cpp
+    CZipRightDragHandler.hpp
+    CZipRightDragHandler.cpp
     CZipPassword.cpp
     Debug.cpp
     zipfldr.spec

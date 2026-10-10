@@ -158,6 +158,11 @@ HRESULT CZipFolder::DeleteItems(CComPtr<IDataObject> pDataObj)
         }
     }
 
+    return DeleteEntries(targetPaths);
+}
+
+HRESULT CZipFolder::DeleteEntries(const CAtlList<CStringW>& targetPaths)
+{
     // Create a temporary file
     WCHAR szTempPath[MAX_PATH], szTempFile[MAX_PATH];
     GetTempPathW(MAX_PATH, szTempPath);
@@ -539,6 +544,22 @@ STDMETHODIMP CZipFolder::CompareIDs(LPARAM lParam, PCUIDLIST_RELATIVE pidl1, PCU
     return MAKE_COMPARE_HRESULT(result);
 }
 
+HRESULT CZipFolder::CreateDropTarget(PCWSTR zipDir, REFIID riid, LPVOID *ppvOut)
+{
+    CComPtr<IDropTarget> pDropTarget;
+    CZipFolderDropHandler *pHandler;
+    HRESULT hr = ShellObjectCreator<CZipFolderDropHandler>(IID_PPV_ARG(IDropTarget, &pDropTarget));
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+
+    pHandler = static_cast<CZipFolderDropHandler *>(pDropTarget.p);
+    hr = pHandler->InitializeFolder(this, m_ZipFile, zipDir, m_CurDir);
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+
+    return pDropTarget->QueryInterface(riid, ppvOut);
+}
+
 STDMETHODIMP CZipFolder::CreateViewObject(HWND hwndOwner, REFIID riid, LPVOID *ppvOut)
 {
     m_hwnd = hwndOwner ? hwndOwner : m_hwnd;
@@ -570,9 +591,7 @@ STDMETHODIMP CZipFolder::CreateViewObject(HWND hwndOwner, REFIID riid, LPVOID *p
     }
     else if (riid == IID_IDropTarget)
     {
-        *ppvOut = static_cast<IDropTarget*>(this);
-        AddRef();
-        return S_OK;
+        return CreateDropTarget(m_ZipDir, riid, ppvOut);
     }
     if (UnknownIID != riid)
         DbgPrint("%s(%S) UNHANDLED\n", __FUNCTION__, guid2string(riid));
@@ -717,11 +736,16 @@ STDMETHODIMP CZipFolder::GetUIObjectOf(HWND hwndOwner, UINT cidl, PCUITEMID_CHIL
     {
         return _CZipDataObject_CreateInstance(m_ZipFile, m_ZipDir, m_hwnd, m_CurDir, cidl, apidl, riid, ppvOut);
     }
-    else if (riid == IID_IDropTarget)
+    else if (riid == IID_IDropTarget && cidl == 1)
     {
-        AddRef();
-        *ppvOut = static_cast<IDropTarget*>(this);
-        return S_OK;
+        const ZipPidlEntry* zipEntry = _ZipFromIL(*apidl);
+        if (!zipEntry || !zipEntry->IsDirectory())
+            return E_NOINTERFACE;
+
+        CStringW subDir = m_ZipDir;
+        subDir += zipEntry->Name;
+        subDir += L'/';
+        return CreateDropTarget(subDir, riid, ppvOut);
     }
 
     DbgPrint("%s(%S) UNHANDLED\n", __FUNCTION__ , guid2string(riid));
@@ -902,105 +926,313 @@ STDMETHODIMP CZipFolder::Initialize(PCIDLIST_ABSOLUTE pidl)
     return E_INVALIDARG;
 }
 
-STDMETHODIMP CZipFolder::IsDirty()
+class CEnumZipStatStg :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IEnumSTATSTG
 {
-    return S_FALSE;
-}
-
-STDMETHODIMP CZipFolder::Load(LPCOLESTR pszFileName, DWORD dwMode)
-{
-    m_ZipFile = pszFileName;
-
-    CComHeapPtr<ITEMIDLIST> pidl;
-    HRESULT hr = SHParseDisplayName(pszFileName, NULL, &pidl, 0, NULL);
-    if (SUCCEEDED(hr))
+    struct Entry
     {
-        m_CurDir.Attach(pidl.Detach());
+        CStringW Name;
+        DWORD Type;
+        ULONGLONG Size;
+        FILETIME Time;
+    };
+    CAtlArray<Entry> m_Entries;
+    size_t m_Index = 0;
+
+public:
+    void Add(PCWSTR Name, DWORD Type, ULONGLONG Size, const FILETIME &Time)
+    {
+        Entry entry;
+        entry.Name = Name;
+        entry.Type = Type;
+        entry.Size = Size;
+        entry.Time = Time;
+        m_Entries.Add(entry);
     }
 
+    void CopyFrom(const CEnumZipStatStg *pOther)
+    {
+        for (size_t i = 0; i < pOther->m_Entries.GetCount(); ++i)
+            m_Entries.Add(pOther->m_Entries[i]);
+        m_Index = pOther->m_Index;
+    }
+
+    STDMETHODIMP Next(ULONG celt, STATSTG *rgelt, ULONG *pceltFetched) override
+    {
+        ULONG fetched = 0;
+
+        if (!rgelt || (celt > 1 && !pceltFetched))
+            return STG_E_INVALIDPOINTER;
+
+        while (fetched < celt && m_Index < m_Entries.GetCount())
+        {
+            const Entry &entry = m_Entries[m_Index];
+            STATSTG *st = &rgelt[fetched];
+            SIZE_T cb = (entry.Name.GetLength() + 1) * sizeof(WCHAR);
+
+            ZeroMemory(st, sizeof(*st));
+            st->pwcsName = (LPOLESTR)CoTaskMemAlloc(cb);
+            if (!st->pwcsName)
+                break;
+            CopyMemory(st->pwcsName, entry.Name.GetString(), cb);
+            st->type = entry.Type;
+            st->cbSize.QuadPart = entry.Size;
+            st->mtime = entry.Time;
+            ++fetched;
+            ++m_Index;
+        }
+
+        if (pceltFetched)
+            *pceltFetched = fetched;
+        return fetched == celt ? S_OK : S_FALSE;
+    }
+
+    STDMETHODIMP Skip(ULONG celt) override
+    {
+        while (celt-- > 0)
+        {
+            if (m_Index >= m_Entries.GetCount())
+                return S_FALSE;
+            ++m_Index;
+        }
+        return S_OK;
+    }
+
+    STDMETHODIMP Reset() override
+    {
+        m_Index = 0;
+        return S_OK;
+    }
+
+    STDMETHODIMP Clone(IEnumSTATSTG **ppenum) override
+    {
+        CComPtr<IEnumSTATSTG> pEnum;
+        HRESULT hr = ShellObjectCreator<CEnumZipStatStg>(IID_PPV_ARG(IEnumSTATSTG, &pEnum));
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+        static_cast<CEnumZipStatStg *>(pEnum.p)->CopyFrom(this);
+        *ppenum = pEnum.Detach();
+        return S_OK;
+    }
+
+    DECLARE_NOT_AGGREGATABLE(CEnumZipStatStg)
+    DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+    BEGIN_COM_MAP(CEnumZipStatStg)
+        COM_INTERFACE_ENTRY_IID(IID_IEnumSTATSTG, IEnumSTATSTG)
+    END_COM_MAP()
+};
+
+HRESULT CZipFolder::FindEntry(LPCOLESTR pwcsName, ZipDataItem *pItem)
+{
+    CZipEnumerator zipEnum;
+    CStringW path = m_ZipDir + pwcsName;
+    CStringW dirPath = path;
+    dirPath += L'/';
+    CStringW name;
+    unz_file_info64 info;
+    bool found = false;
+
+    if (!zipEnum.Initialize(this))
+        return STG_E_FILENOTFOUND;
+
+    pItem->Directory = false;
+    while (zipEnum.Next(name, info))
+    {
+        if (!name.CompareNoCase(path))
+        {
+            pItem->Name = name;
+            pItem->Directory = false;
+            pItem->Password = (info.flag & MINIZIP_PASSWORD_FLAG) != 0;
+            pItem->HasDate = true;
+            pItem->DosDate = info.dosDate;
+            pItem->Size = info.uncompressed_size;
+            if (unzGetFilePos64(getZip(), &pItem->Pos) != UNZ_OK)
+                return STG_E_READFAULT;
+            return S_OK;
+        }
+        if (!found && name.GetLength() >= dirPath.GetLength() &&
+            !StrCmpNIW(name, dirPath, dirPath.GetLength()))
+        {
+            found = true;
+        }
+    }
+
+    if (!found)
+        return STG_E_FILENOTFOUND;
+
+    pItem->Name = dirPath;
+    pItem->Directory = true;
     return S_OK;
 }
 
-STDMETHODIMP CZipFolder::Save(LPCOLESTR pszFileName, BOOL fRemember)
+STDMETHODIMP CZipFolder::CreateStream(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStream **ppstm)
 {
     return E_NOTIMPL;
 }
 
-STDMETHODIMP CZipFolder::SaveCompleted(LPCOLESTR pszFileName)
+STDMETHODIMP CZipFolder::OpenStream(LPCOLESTR pwcsName, void *reserved1, DWORD grfMode, DWORD reserved2, IStream **ppstm)
 {
-    return S_OK;
+    ZipDataItem item;
+    HRESULT hr;
+
+    if (!pwcsName || !ppstm)
+        return STG_E_INVALIDPOINTER;
+    *ppstm = NULL;
+
+    if (grfMode & (STGM_WRITE | STGM_READWRITE))
+        return E_NOTIMPL;
+
+    hr = FindEntry(pwcsName, &item);
+    if (FAILED(hr))
+        return hr;
+    if (item.Directory)
+        return STG_E_FILENOTFOUND;
+
+    return _CZipStream_CreateInstance(m_ZipFile, &item, "", IID_PPV_ARG(IStream, ppstm));
 }
 
-STDMETHODIMP CZipFolder::GetCurFile(LPOLESTR *ppszFileName)
+STDMETHODIMP CZipFolder::CreateStorage(LPCOLESTR pwcsName, DWORD grfMode, DWORD dwStgFmt, DWORD reserved2, IStorage **ppstg)
 {
-    if (!ppszFileName)
-        return E_INVALIDARG;
+    return E_FAIL;
+}
 
-    *ppszFileName = NULL;
+STDMETHODIMP CZipFolder::OpenStorage(LPCOLESTR pwcsName, IStorage *pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage **ppstg)
+{
+    ZipDataItem item;
+    unz_file_info64 info = {};
+    HRESULT hr;
 
-    if (m_ZipFile.IsEmpty())
-        return S_FALSE;
+    if (!pwcsName || !ppstg)
+        return STG_E_INVALIDPOINTER;
+    *ppstg = NULL;
 
-    *ppszFileName = (LPOLESTR)CoTaskMemAlloc((m_ZipFile.GetLength() + 1) * sizeof(WCHAR));
-    if (!*ppszFileName)
+    hr = FindEntry(pwcsName, &item);
+    if (FAILED(hr))
+        return hr;
+    if (!item.Directory)
+        return E_NOTIMPL;
+
+    CComHeapPtr<ITEMIDLIST> pidl(_ILCreateZipItem(ZIP_PIDL_DIRECTORY, pwcsName, info));
+    if (!pidl)
         return E_OUTOFMEMORY;
 
-    wcscpy(*ppszFileName, m_ZipFile);
-    return S_OK;
+    return ShellObjectCreatorInit<CZipFolder>(m_ZipFile, item.Name, m_CurDir, pidl, IID_PPV_ARG(IStorage, ppstg));
 }
 
-STDMETHODIMP CZipFolder::DragEnter(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect)
+STDMETHODIMP CZipFolder::CopyTo(DWORD ciidExclude, const IID *rgiidExclude, SNB snbExclude, IStorage *pstgDest)
 {
-    *pdwEffect &= DROPEFFECT_COPY;
-    return S_OK;
+    return E_NOTIMPL;
 }
 
-STDMETHODIMP CZipFolder::DragOver(DWORD grfKeyState, POINTL pt, DWORD* pdwEffect)
+STDMETHODIMP CZipFolder::MoveElementTo(LPCOLESTR pwcsName, IStorage *pstgDest, LPCOLESTR pwcsNewName, DWORD grfFlags)
 {
-    *pdwEffect &= DROPEFFECT_COPY;
-    return S_OK;
+    return E_NOTIMPL;
 }
 
-STDMETHODIMP CZipFolder::DragLeave()
+STDMETHODIMP CZipFolder::Commit(DWORD grfCommitFlags)
 {
     return S_OK;
 }
 
-STDMETHODIMP CZipFolder::Drop(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect)
+STDMETHODIMP CZipFolder::Revert()
 {
-    STGMEDIUM sm;
-    FORMATETC fe = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
-    HRESULT hr = pDataObj->GetData(&fe, &sm);
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CZipFolder::EnumElements(DWORD reserved1, void *reserved2, DWORD reserved3, IEnumSTATSTG **ppenum)
+{
+    CComPtr<IEnumSTATSTG> pEnum;
+    CEnumZipStatStg *pImpl;
+    CZipEnumerator zipEnum;
+    CStringW name;
+    bool folder;
+    unz_file_info64 info;
+    HRESULT hr;
+
+    if (!ppenum)
+        return STG_E_INVALIDPOINTER;
+    *ppenum = NULL;
+
+    hr = ShellObjectCreator<CEnumZipStatStg>(IID_PPV_ARG(IEnumSTATSTG, &pEnum));
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
+    pImpl = static_cast<CEnumZipStatStg *>(pEnum.p);
 
-    HDROP hDrop = (HDROP)GlobalLock(sm.hGlobal);
-    if (hDrop)
+    if (zipEnum.Initialize(this))
     {
-        // Close the ZIP file before appending (it will be automatically
-        // reopened next time getZip() is called)
-        Close();
-
-        // Create creator
-        CZipCreator* pCreator = CZipCreator::DoCreate(m_ZipFile, m_ZipDir);
-
-        pCreator->SetNotifyPidl(m_CurDir);
-
-        // Add dropped files
-        UINT fileCount = DragQueryFileW(hDrop, 0xFFFFFFFF, NULL, 0);
-        for (UINT i = 0; i < fileCount; i++)
+        while (zipEnum.NextUnique(m_ZipDir, name, folder, info))
         {
-            WCHAR szFilePath[MAX_PATH];
-            DragQueryFileW(hDrop, i, szFilePath, MAX_PATH);
-            pCreator->DoAddItem(szFilePath);
+            FILETIME time = {};
+            if (!folder)
+                ZipDateToFileTime(info.dosDate, &time);
+            pImpl->Add(name, folder ? STGTY_STORAGE : STGTY_STREAM, folder ? 0 : info.uncompressed_size, time);
         }
-
-        CZipCreator::runThread(pCreator);
-
-        GlobalUnlock(sm.hGlobal);
-        *pdwEffect = DROPEFFECT_COPY;
     }
-    ReleaseStgMedium(&sm);
 
+    *ppenum = pEnum.Detach();
+    return S_OK;
+}
+
+STDMETHODIMP CZipFolder::DestroyElement(LPCOLESTR pwcsName)
+{
+    CAtlList<CStringW> targetPaths;
+    ZipDataItem item;
+    HRESULT hr;
+
+    if (!pwcsName)
+        return STG_E_INVALIDPOINTER;
+
+    hr = FindEntry(pwcsName, &item);
+    if (FAILED(hr))
+        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+
+    targetPaths.AddTail(item.Name);
+    return DeleteEntries(targetPaths);
+}
+
+STDMETHODIMP CZipFolder::RenameElement(LPCOLESTR pwcsOldName, LPCOLESTR pwcsNewName)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CZipFolder::SetElementTimes(LPCOLESTR pwcsName, const FILETIME *pctime, const FILETIME *patime, const FILETIME *pmtime)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CZipFolder::SetClass(REFCLSID clsid)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CZipFolder::SetStateBits(DWORD grfStateBits, DWORD grfMask)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CZipFolder::Stat(STATSTG *pstatstg, DWORD grfStatFlag)
+{
+    if (!pstatstg)
+        return STG_E_INVALIDPOINTER;
+
+    ZeroMemory(pstatstg, sizeof(*pstatstg));
+    if (!(grfStatFlag & STATFLAG_NONAME))
+    {
+        pstatstg->pwcsName = (LPOLESTR)CoTaskMemAlloc(sizeof(WCHAR));
+        if (!pstatstg->pwcsName)
+            return E_OUTOFMEMORY;
+        pstatstg->pwcsName[0] = UNICODE_NULL;
+    }
+    pstatstg->type = STGTY_STORAGE;
+    return S_OK;
+}
+
+STDMETHODIMP CZipFolder::GetFolderType(FOLDERTYPEID *pftid)
+{
+    if (!pftid)
+        return E_POINTER;
+    *pftid = FOLDERTYPEID_CompressedFolder;
     return S_OK;
 }

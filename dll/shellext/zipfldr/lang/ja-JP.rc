@@ -80,6 +80,7 @@ BEGIN
     IDS_DECOMPRESSERROR "圧縮方式 %d はサポートされていません。続行しますか?"
     IDS_UNKNOWNERROR "不明なエラー 0x%08x。"
     IDS_CANTDELETEFILE "ファイルの削除に失敗しました。"
+    IDS_DRAGEXTRACT "&Extract..."
 
     IDS_WIZ_TITLE "展開ウィザード"
     IDS_WIZ_DEST_TITLE "展開先を選んで下さい"

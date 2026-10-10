@@ -80,6 +80,7 @@ BEGIN
     IDS_DECOMPRESSERROR "Unsupported compression method %d. Do you want to continue?"
     IDS_UNKNOWNERROR "Unknown error 0x%08x."
     IDS_CANTDELETEFILE "Failed to delete the file(s)."
+    IDS_DRAGEXTRACT "&Extract..."
 
     IDS_WIZ_TITLE "Extraheringsguiden"
     IDS_WIZ_DEST_TITLE "Välj ett mål"

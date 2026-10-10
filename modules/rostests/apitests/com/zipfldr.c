@@ -39,6 +39,7 @@ static const CLASS_AND_INTERFACES ExpectedInterfaces[] =
             { NTDDI_MIN,          NTDDI_MAX,          &IID_IPersist },
 
             { NTDDI_VISTA,        NTDDI_MAX,          &IID_IObjectWithSite },
+            { NTDDI_WIN11_GE,     NTDDI_MAX,          &IID_IMarshal },
         },
     },
     {

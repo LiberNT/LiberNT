@@ -80,6 +80,7 @@ BEGIN
     IDS_DECOMPRESSERROR "Método de compressão %d não suportado. Pretende continuar?"
     IDS_UNKNOWNERROR "Erro desconhecido 0x%08x."
     IDS_CANTDELETEFILE "Falha ao eliminar o ficheiro(s)."
+    IDS_DRAGEXTRACT "&Extract..."
 
     IDS_WIZ_TITLE "Assistente de extracção"
     IDS_WIZ_DEST_TITLE "Seleccione um destino"

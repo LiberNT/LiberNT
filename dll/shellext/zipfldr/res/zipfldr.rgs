@@ -20,6 +20,10 @@ HKCR
         {
             InprocServer32 = s '%MODULE%' { val ThreadingModel = s 'Apartment' }
         }
+        '{BD472F60-27FA-11CF-B8B4-444553540000}' = s 'Compressed (zipped) Folder Right Drag Handler'
+        {
+            InprocServer32 = s '%MODULE%' { val ThreadingModel = s 'Apartment' }
+        }
         '{888DCA60-FC0A-11CF-8F0F-00C04FD7D062}' = s 'Compressed (zipped) Folder SendTo Target'
         {
             val EditFlags = d '0x01'
@@ -34,6 +38,16 @@ HKCR
             ShellEx
             {
                 DropHandler = s '{888DCA60-FC0A-11CF-8F0F-00C04FD7D062}' { }
+            }
+        }
+    }
+    NoRemove Folder
+    {
+        NoRemove shellex
+        {
+            NoRemove DragDropHandlers
+            {
+                ForceRemove '{BD472F60-27FA-11CF-B8B4-444553540000}'
             }
         }
     }
@@ -65,10 +79,8 @@ HKCR
                 {
                 }
             }
-            NoRemove DropHandler = s '{E88DCCE0-B7B3-11D1-A9F0-00AA0060FA31}'
-            {
-                val 'FIXME' = s 'This is a HACK! It must be {ED9D80B9-D157-457B-9192-0E7280313BF0}'
-            }
+            NoRemove DropHandler = s '{ED9D80B9-D157-457B-9192-0E7280313BF0}'
+            NoRemove StorageHandler = s '{E88DCCE0-B7B3-11D1-A9F0-00AA0060FA31}'
         }
     }
     NoRemove '.zip' = s 'CompressedFolder'

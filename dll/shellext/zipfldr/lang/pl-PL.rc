@@ -81,6 +81,7 @@ BEGIN
     IDS_DECOMPRESSERROR "Nieobsługiwana metoda kompresji %d. Czy chcesz kontynuować?"
     IDS_UNKNOWNERROR "Nieznany błąd 0x%08x."
     IDS_CANTDELETEFILE "Failed to delete the file(s)."
+    IDS_DRAGEXTRACT "&Extract..."
 
     IDS_WIZ_TITLE "Kreator wyodrębniania"
     IDS_WIZ_DEST_TITLE "Wybierz miejsce docelowe"

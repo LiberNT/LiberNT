@@ -13,9 +13,12 @@ class CSendToZip :
     public CComCoClass<CSendToZip, &CLSID_ZipFolderSendTo>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public IDropTarget,
-    public IPersistFile
+    public IPersistFile,
+    public IObjectWithSite
 {
     CComPtr<IDataObject> m_pDataObject;
+    CComPtr<IUnknown> m_pUnkMarshaler;
+    CComPtr<IUnknown> m_pSite;
     BOOL m_fCanDragDrop;
 
 public:
@@ -64,16 +67,44 @@ public:
         return S_OK;
     }
 
+    // *** IObjectWithSite methods ***
+    STDMETHODIMP SetSite(IUnknown *pUnkSite)
+    {
+        m_pSite = pUnkSite;
+        return S_OK;
+    }
+    STDMETHODIMP GetSite(REFIID riid, void **ppvSite)
+    {
+        if (!ppvSite)
+            return E_POINTER;
+        *ppvSite = NULL;
+        if (!m_pSite)
+            return E_FAIL;
+        return m_pSite->QueryInterface(riid, ppvSite);
+    }
+
 public:
     DECLARE_NO_REGISTRY()   // Handled manually
     DECLARE_NOT_AGGREGATABLE(CSendToZip)
 
     DECLARE_PROTECT_FINAL_CONSTRUCT()
 
+    HRESULT FinalConstruct()
+    {
+        return CoCreateFreeThreadedMarshaler(static_cast<IDropTarget *>(this), &m_pUnkMarshaler);
+    }
+
+    static HRESULT WINAPI QueryMarshaler(void *pv, REFIID riid, LPVOID *ppv, DWORD_PTR dw)
+    {
+        return static_cast<CSendToZip *>(pv)->m_pUnkMarshaler->QueryInterface(riid, ppv);
+    }
+
     BEGIN_COM_MAP(CSendToZip)
         COM_INTERFACE_ENTRY_IID(IID_IDropTarget, IDropTarget)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFile, IPersistFile)
         COM_INTERFACE_ENTRY_IID(IID_IPersist, IPersist)
+        COM_INTERFACE_ENTRY_IID(IID_IObjectWithSite, IObjectWithSite)
+        COM_INTERFACE_ENTRY_FUNC(IID_IMarshal, 0, QueryMarshaler)
     END_COM_MAP()
 };
 

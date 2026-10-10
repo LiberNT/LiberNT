@@ -54,6 +54,7 @@
 #define IDS_DECOMPRESSERROR 116
 #define IDS_UNKNOWNERROR    117
 #define IDS_CANTDELETEFILE  118
+#define IDS_DRAGEXTRACT     119
 
 /* Wizard titles */
 #define IDS_WIZ_TITLE           8000

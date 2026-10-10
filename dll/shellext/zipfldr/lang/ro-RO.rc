@@ -81,6 +81,7 @@ BEGIN
     IDS_DECOMPRESSERROR "Metoda de compresie %d nu este suportată. Doriți să continuați?"
     IDS_UNKNOWNERROR "Eroare necunoscută 0x%08x."
     IDS_CANTDELETEFILE "Failed to delete the file(s)."
+    IDS_DRAGEXTRACT "&Extract..."
 
     IDS_WIZ_TITLE "Expert extragere"
     IDS_WIZ_DEST_TITLE "Selectare destinaţie"

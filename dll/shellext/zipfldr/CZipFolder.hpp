@@ -43,12 +43,11 @@ class CZipFolder :
     public CComCoClass<CZipFolder, &CLSID_ZipFolderStorageHandler>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public IShellFolder2,
-    //public IStorage,
+    public IStorage,
+    public IFolderType,
     public IContextMenu,
     public IShellExtInit,
-    public IPersistFile,
     public IPersistFolder2,
-    public IDropTarget, // FIXME: This IDropTarget is a HACK. Must be CZipFolderDropHandler. See com_apitest:zipfldr.
     public IZip
 {
     CStringW m_ZipFile;
@@ -59,6 +58,8 @@ class CZipFolder :
     HWND m_hwnd = nullptr;
 
     HRESULT DeleteItems(CComPtr<IDataObject> pDataObj);
+    HRESULT DeleteEntries(const CAtlList<CStringW>& targetPaths);
+    HRESULT FindEntry(LPCOLESTR pwcsName, ZipDataItem *pItem);
     HRESULT DoDeleteItems(CComPtr<IDataObject> pDataObj);
     HRESULT CopyZipEntry(unzFile uf, zipFile zf, unz_file_info64* info, LPCSTR nameA);
     static DWORD WINAPI s_ExtractProc(LPVOID arg);
@@ -71,6 +72,7 @@ public:
     ~CZipFolder();
 
     HRESULT Initialize(PCWSTR zipFile, PCWSTR zipDir, PCUIDLIST_ABSOLUTE curDir, PCUIDLIST_RELATIVE pidl);
+    HRESULT CreateDropTarget(PCWSTR zipDir, REFIID riid, LPVOID *ppvOut);
     void Close();
 
     // *** IZip methods ***
@@ -123,22 +125,25 @@ public:
         UNIMPLEMENTED;
         return E_NOTIMPL;
     }
-    //// IStorage
-    //STDMETHODIMP CreateStream(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStream **ppstm);
-    //STDMETHODIMP OpenStream(LPCOLESTR pwcsName, void *reserved1, DWORD grfMode, DWORD reserved2, IStream **ppstm);
-    //STDMETHODIMP CreateStorage(LPCOLESTR pwcsName, DWORD grfMode, DWORD dwStgFmt, DWORD reserved2, IStorage **ppstg);
-    //STDMETHODIMP OpenStorage(LPCOLESTR pwcsName, IStorage *pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage **ppstg);
-    //STDMETHODIMP CopyTo(DWORD ciidExclude, const IID *rgiidExclude, SNB snbExclude, IStorage *pstgDest);
-    //STDMETHODIMP MoveElementTo(LPCOLESTR pwcsName, IStorage *pstgDest, LPCOLESTR pwcsNewName, DWORD grfFlags);
-    //STDMETHODIMP Commit(DWORD grfCommitFlags);
-    //STDMETHODIMP Revert();
-    //STDMETHODIMP EnumElements(DWORD reserved1, void *reserved2, DWORD reserved3, IEnumSTATSTG **ppenum);
-    //STDMETHODIMP DestroyElement(LPCOLESTR pwcsName);
-    //STDMETHODIMP RenameElement(LPCOLESTR pwcsOldName, LPCOLESTR pwcsNewName);
-    //STDMETHODIMP SetElementTimes(LPCOLESTR pwcsName, const FILETIME *pctime, const FILETIME *patime, const FILETIME *pmtime);
-    //STDMETHODIMP SetClass(REFCLSID clsid);
-    //STDMETHODIMP SetStateBits(DWORD grfStateBits, DWORD grfMask);
-    //STDMETHODIMP Stat(STATSTG *pstatstg, DWORD grfStatFlag);
+    // *** IStorage methods ***
+    STDMETHODIMP CreateStream(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStream **ppstm) override;
+    STDMETHODIMP OpenStream(LPCOLESTR pwcsName, void *reserved1, DWORD grfMode, DWORD reserved2, IStream **ppstm) override;
+    STDMETHODIMP CreateStorage(LPCOLESTR pwcsName, DWORD grfMode, DWORD dwStgFmt, DWORD reserved2, IStorage **ppstg) override;
+    STDMETHODIMP OpenStorage(LPCOLESTR pwcsName, IStorage *pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage **ppstg) override;
+    STDMETHODIMP CopyTo(DWORD ciidExclude, const IID *rgiidExclude, SNB snbExclude, IStorage *pstgDest) override;
+    STDMETHODIMP MoveElementTo(LPCOLESTR pwcsName, IStorage *pstgDest, LPCOLESTR pwcsNewName, DWORD grfFlags) override;
+    STDMETHODIMP Commit(DWORD grfCommitFlags) override;
+    STDMETHODIMP Revert() override;
+    STDMETHODIMP EnumElements(DWORD reserved1, void *reserved2, DWORD reserved3, IEnumSTATSTG **ppenum) override;
+    STDMETHODIMP DestroyElement(LPCOLESTR pwcsName) override;
+    STDMETHODIMP RenameElement(LPCOLESTR pwcsOldName, LPCOLESTR pwcsNewName) override;
+    STDMETHODIMP SetElementTimes(LPCOLESTR pwcsName, const FILETIME *pctime, const FILETIME *patime, const FILETIME *pmtime) override;
+    STDMETHODIMP SetClass(REFCLSID clsid) override;
+    STDMETHODIMP SetStateBits(DWORD grfStateBits, DWORD grfMask) override;
+    STDMETHODIMP Stat(STATSTG *pstatstg, DWORD grfStatFlag) override;
+
+    // *** IFolderType methods ***
+    STDMETHODIMP GetFolderType(FOLDERTYPEID *pftid) override;
 
     // *** IContextMenu methods ***
     STDMETHODIMP GetCommandString(UINT_PTR idCmd, UINT uFlags, UINT *pwReserved, LPSTR pszName, UINT cchMax) override;
@@ -147,13 +152,6 @@ public:
 
     // *** IShellExtInit methods ***
     STDMETHODIMP Initialize(PCIDLIST_ABSOLUTE pidlFolder, LPDATAOBJECT pDataObj, HKEY hkeyProgID) override;
-
-    // *** IPersistFile methods ***
-    STDMETHODIMP IsDirty() override;
-    STDMETHODIMP Load(LPCOLESTR pszFileName, DWORD dwMode) override;
-    STDMETHODIMP Save(LPCOLESTR pszFileName, BOOL fRemember) override;
-    STDMETHODIMP SaveCompleted(LPCOLESTR pszFileName) override;
-    STDMETHODIMP GetCurFile(LPOLESTR *ppszFileName) override;
 
     //// *** IPersistFolder2 methods ***
     STDMETHODIMP GetCurFolder(PIDLIST_ABSOLUTE * pidl) override
@@ -172,11 +170,6 @@ public:
         return S_OK;
     }
 
-    // *** IDropTarget methods *** // FIXME: This is a HACK. Must be CZipFolderDropHandler. See com_apitest:zipfldr.
-    STDMETHODIMP DragEnter(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override;
-    STDMETHODIMP DragOver(DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override;
-    STDMETHODIMP DragLeave() override;
-    STDMETHODIMP Drop(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override;
 
 public:
     DECLARE_NO_REGISTRY()   // Handled manually because this object is exposed via multiple clsid's
@@ -187,13 +180,12 @@ public:
     BEGIN_COM_MAP(CZipFolder)
         COM_INTERFACE_ENTRY_IID(IID_IShellFolder2, IShellFolder2)
         COM_INTERFACE_ENTRY_IID(IID_IShellFolder, IShellFolder)
-//        COM_INTERFACE_ENTRY_IID(IID_IStorage, IStorage)
+        COM_INTERFACE_ENTRY_IID(IID_IStorage, IStorage)
+        COM_INTERFACE_ENTRY_IID(IID_IFolderType, IFolderType)
         COM_INTERFACE_ENTRY_IID(IID_IContextMenu, IContextMenu)
         COM_INTERFACE_ENTRY_IID(IID_IShellExtInit, IShellExtInit)
-        COM_INTERFACE_ENTRY_IID(IID_IPersistFile, IPersistFile)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder2, IPersistFolder2)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder, IPersistFolder)
-        COM_INTERFACE_ENTRY_IID(IID_IDropTarget, IDropTarget) // FIXME: This is a HACK. Must be CZipFolderDropHandler. See com_apitest:zipfldr.
         COM_INTERFACE_ENTRY_IID(IID_IPersist, IPersistFolder)
     END_COM_MAP()
 };

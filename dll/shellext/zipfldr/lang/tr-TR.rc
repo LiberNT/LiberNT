@@ -80,6 +80,7 @@ BEGIN
     IDS_DECOMPRESSERROR "Desteklenmeyen sıkıştırma yöntemi: %d. Devam etmek ister misiniz?"
     IDS_UNKNOWNERROR "Bilinmeyen hata 0x%08x."
     IDS_CANTDELETEFILE "Failed to delete the file(s)."
+    IDS_DRAGEXTRACT "&Extract..."
 
     IDS_WIZ_TITLE "Çıkartma Sihirbazı"
     IDS_WIZ_DEST_TITLE "Hedef Belirle"

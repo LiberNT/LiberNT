@@ -29,6 +29,14 @@ public:
         m_Directory.ReleaseBuffer();
     }
 
+    CZipExtract(PCWSTR Filename, PCWSTR Directory)
+        :m_DirectoryChanged(false)
+        ,uf(NULL)
+    {
+        m_Filename = Filename;
+        m_Directory = Directory;
+    }
+
     ~CZipExtract()
     {
         if (uf)
@@ -718,6 +726,12 @@ public:
 void _CZipExtract_runWizard(PCWSTR Filename)
 {
     CZipExtract extractor(Filename);
+    extractor.runWizard();
+}
+
+void _CZipExtract_runWizardTo(PCWSTR Filename, PCWSTR Directory)
+{
+    CZipExtract extractor(Filename, Directory);
     extractor.runWizard();
 }
 
