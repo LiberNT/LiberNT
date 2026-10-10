@@ -151,8 +151,14 @@ elseif(ARCH STREQUAL "arm")
         client/nounwind.c)
 elseif(ARCH STREQUAL "arm64")
     list(APPEND SOURCE
-        client/arm64/fiber.c
-        client/arm64/unwind.c)
+        client/arm64/fiber.c)
+    if(ARM64EC_RUNTIME)
+        list(APPEND SOURCE
+            client/nounwind.c)
+    else()
+        list(APPEND SOURCE
+            client/arm64/unwind.c)
+    endif()
 elseif(ARCH STREQUAL "riscv64")
     list(APPEND SOURCE
         client/riscv64/fiber.c
