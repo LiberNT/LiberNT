@@ -203,6 +203,7 @@ VOID FASTCALL DC_vFinishRead(PDC pdc);
 VOID FASTCALL DC_vPrepareDCsForBlit(PDC pdcDest, const RECT* rcDest, PDC pdcSrc, const RECT* rcSrc);
 
 VOID NTAPI DC_vRestoreDC(IN PDC pdc, INT iSaveLevel);
+BOOL FASTCALL DC_bIsSurfaceSaved(PDC pdc, PSURFACE psurf);
 
 VOID NTAPI DC_vFreeDcAttr(PDC pdc);
 VOID NTAPI DC_vInitDc(PDC pdc, DCTYPE dctype, PPDEVOBJ ppdev);

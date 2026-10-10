@@ -139,6 +139,18 @@ NtGdiResetDC(
     return FALSE;
 }
 
+static
+VOID
+DC_vReleaseSurface(PDC pdc, PSURFACE psurf)
+{
+    if (psurf &&
+        psurf != pdc->dclevel.pSurface &&
+        psurf->hdc == pdc->BaseObject.hHmgr &&
+        !DC_bIsSurfaceSaved(pdc, psurf))
+    {
+        psurf->hdc = NULL;
+    }
+}
 
 VOID
 NTAPI
@@ -148,6 +160,7 @@ DC_vRestoreDC(
 {
     HDC hdcSave;
     PDC pdcSave;
+    PSURFACE psurfOld;
 
     NT_ASSERT(iSaveLevel > 0);
     DPRINT("DC_vRestoreDC(%p, %ld)\n", pdc->BaseObject.hHmgr, iSaveLevel);
@@ -193,13 +206,25 @@ DC_vRestoreDC(
 
             /* Only memory DC's change their surface */
             if (pdc->dctype == DCTYPE_MEMORY)
-                DC_vSelectSurface(pdc, pdcSave->dclevel.pSurface);
+            {
+                psurfOld = pdc->dclevel.pSurface;
+                if (pdcSave->dclevel.pSurface)
+                    GDIOBJ_vReferenceObjectByPointer((POBJ)pdcSave->dclevel.pSurface);
+                pdc->dclevel.pSurface = pdcSave->dclevel.pSurface;
+                if (psurfOld)
+                {
+                    DC_vReleaseSurface(pdc, psurfOld);
+                    SURFACE_ShareUnlockSurface(psurfOld);
+                }
+            }
 
             if (pdcSave->dclevel.hPath)
             {
                PATH_RestorePath( pdc, pdcSave );
             }
         }
+
+        DC_vReleaseSurface(pdc, pdcSave->dclevel.pSurface);
 
         /* Prevent save dc from being restored */
         pdcSave->dclevel.lSaveDepth = 1;

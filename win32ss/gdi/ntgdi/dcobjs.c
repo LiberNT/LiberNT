@@ -349,8 +349,8 @@ DC_bIsBitmapCompatible(PDC pdc, PSURFACE psurf)
     return FALSE;
 }
 
-static
 BOOL
+FASTCALL
 DC_bIsSurfaceSaved(PDC pdc, PSURFACE psurf)
 {
     HDC hdcSave = pdc->dclevel.hdcSave;
