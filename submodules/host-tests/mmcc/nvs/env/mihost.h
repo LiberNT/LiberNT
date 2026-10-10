@@ -96,6 +96,7 @@ typedef struct _LOADER_PARAMETER_BLOCK_HOST *PLOADER_PARAMETER_BLOCK;
 #define RtlZeroMemory(d, l) memset((d), 0, (l))
 #define RtlCopyMemory(d, s, l) memcpy((d), (s), (l))
 #define RtlFillMemory(d, l, f) memset((d), (f), (l))
+#define MI_ZERO_PAGE(p) memset((p), 0, PAGE_SIZE)
 
 typedef struct _LIST_ENTRY
 {

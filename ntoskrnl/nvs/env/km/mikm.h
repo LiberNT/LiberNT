@@ -60,6 +60,7 @@ MiKmAcquireExclusive(PMI_RWLOCK Lock)
 
 #define MI_CACHE_ALIGNED                DECLSPEC_CACHEALIGN
 #define MI_CURRENT_CPU()                KeGetCurrentProcessorNumber()
+#define MI_ZERO_PAGE(p)                 KeZeroPages((p), PAGE_SIZE)
 #define MI_RAISE_TO_DISPATCH(i)         KeRaiseIrql(DISPATCH_LEVEL, (i))
 #define MI_RESTORE_IRQL(i)              KeLowerIrql(i)
 #define MI_SPIN_INIT(l)                 KeInitializeSpinLock(l)

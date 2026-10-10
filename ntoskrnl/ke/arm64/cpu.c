@@ -224,14 +224,6 @@ KeFlushCurrentTb(VOID)
 }
 
 VOID
-FASTCALL
-KeZeroPages(_Out_writes_bytes_(Size) PVOID Address,
-            _In_ ULONG Size)
-{
-    RtlZeroMemory(Address, Size);
-}
-
-VOID
 NTAPI
 KiSaveProcessorControlState(_Out_ PKPROCESSOR_STATE ProcessorState)
 {

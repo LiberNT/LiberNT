@@ -262,7 +262,7 @@ MiPfnZeroFrame(
 {
     PVOID Mapping = MiPfnMapFrame(Db, Frame);
 
-    RtlZeroMemory(Mapping, PAGE_SIZE);
+    MI_ZERO_PAGE(Mapping);
     MiPfnUnmapFrame(Db, Mapping);
 }
 

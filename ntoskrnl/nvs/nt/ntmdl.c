@@ -551,7 +551,7 @@ MmAllocatePagesForMdlEx(
             ULONG Frame = First + (ULONG)Index;
 
             if (!(Flags & MM_DONT_ZERO_ALLOCATION))
-                RtlZeroMemory(MiArchMapFrame(Frame), PAGE_SIZE);
+                MI_ZERO_PAGE(MiArchMapFrame(Frame));
 
             if (CacheFlags == 0 || !NT_SUCCESS(MiPfnSetCache(&MiSystem.Pfn, Frame, CacheFlags)))
                 MiSystem.Pfn.Pfn[Frame].CacheFlags = CacheFlags;
@@ -571,7 +571,7 @@ MmAllocatePagesForMdlEx(
         }
 
         if (!(Flags & MM_DONT_ZERO_ALLOCATION))
-            RtlZeroMemory(MiArchMapFrame(Frame), PAGE_SIZE);
+            MI_ZERO_PAGE(MiArchMapFrame(Frame));
 
         if (CacheFlags == 0 || !NT_SUCCESS(MiPfnSetCache(&MiSystem.Pfn, Frame, CacheFlags)))
             MiSystem.Pfn.Pfn[Frame].CacheFlags = CacheFlags;
