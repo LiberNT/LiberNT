@@ -164,6 +164,44 @@ KeFlushIoBuffers(
 }
 
 VOID
+NTAPI
+KeFlushIoRectangle(
+    _In_ PMDL Mdl,
+    _In_ PVOID Start,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG Stride,
+    _In_ BOOLEAN ReadOperation)
+{
+    PPFN_NUMBER Pages = MmGetMdlPfnArray(Mdl);
+    ULONG StartOffset = (ULONG)((ULONG_PTR)Start - (ULONG_PTR)MmGetMdlVirtualAddress(Mdl));
+    ULONG_PTR Offset;
+    ULONG Row, Remaining, InPage, Chunk;
+
+    if (!Width || !Height)
+        return;
+
+    if (KiRiscvQueryCacheBlockSize())
+    {
+        for (Row = 0; Row < Height; ++Row)
+        {
+            Offset = Mdl->ByteOffset + StartOffset + (ULONG_PTR)Row * Stride;
+            for (Remaining = Width; Remaining; Remaining -= Chunk, Offset += Chunk)
+            {
+                InPage = (ULONG)(Offset & (PAGE_SIZE - 1));
+                Chunk = min(Remaining, PAGE_SIZE - InPage);
+                KiRiscvFlushDmaRange(((ULONG64)Pages[Offset >> PAGE_SHIFT] << PAGE_SHIFT) + InPage,
+                                     Chunk,
+                                     ReadOperation);
+            }
+        }
+    }
+    if (HalFlushIoRectangleExternalCache)
+        HalFlushIoRectangleExternalCache(Mdl, StartOffset, Width, Height, Stride, ReadOperation);
+    __asm__ __volatile__("fence iorw, iorw" ::: "memory");
+}
+
+VOID
 FASTCALL
 KeInvalidateRangeAllCaches(
     _In_ PVOID BaseAddress,

@@ -106,6 +106,44 @@ FramePixel(_In_ ULONG X, _In_ ULONG Y)
 }
 
 static VOID
+FlushFrameRect(
+    _In_ ULONG Left,
+    _In_ ULONG Top,
+    _In_ ULONG Right,
+    _In_ ULONG Bottom)
+{
+    ULONG_PTR First, Last;
+    ULONG X0, Y0, X1, Y1, Swap;
+
+    if ((FrameBufferStart != PhysicalFrameBufferStart) || (Left >= Right) || (Top >= Bottom))
+        return;
+
+    First = (ULONG_PTR)FramePixel(Left, Top) - FrameBufferStart;
+    Last = (ULONG_PTR)FramePixel(Right - 1, Bottom - 1) - FrameBufferStart;
+    X0 = (ULONG)((First % BytesPerScanLine) / BytesPerPixel);
+    Y0 = (ULONG)(First / BytesPerScanLine);
+    X1 = (ULONG)((Last % BytesPerScanLine) / BytesPerPixel);
+    Y1 = (ULONG)(Last / BytesPerScanLine);
+    if (X0 > X1)
+    {
+        Swap = X0;
+        X0 = X1;
+        X1 = Swap;
+    }
+    if (Y0 > Y1)
+    {
+        Swap = Y0;
+        Y0 = Y1;
+        Y1 = Swap;
+    }
+
+    VidpFlushFrameBuffer((PVOID)(FrameBufferStart + (ULONG_PTR)Y0 * BytesPerScanLine + (ULONG_PTR)X0 * BytesPerPixel),
+                         (X1 - X0 + 1) * BytesPerPixel,
+                         Y1 - Y0 + 1,
+                         BytesPerScanLine);
+}
+
+static VOID
 FlushBackBufferRect(
     _In_ ULONG Left,
     _In_ ULONG Top,
@@ -151,6 +189,7 @@ FlushBackBufferRect(
                 }
             }
         }
+        FlushFrameRect(NativeLeft, LogicalToPhysicalY(Top), NativeRight, LogicalToPhysicalY(Top + Height));
         return;
     }
 
@@ -175,6 +214,7 @@ FlushBackBufferRect(
             }
         }
     }
+    FlushFrameRect(NativeLeft, LogicalToPhysicalY(Top), NativeRight, LogicalToPhysicalY(Top + Height));
 }
 
 static VOID
@@ -511,6 +551,7 @@ VidInitialize(
         }
         FrameBufferStart = (ULONG_PTR)FrameBufferBase;
         FrameBufferStart += (TranslatedAddress.QuadPart - FrameBuffer.QuadPart); // BYTE_OFFSET()
+        VidpInitializeFrameBufferFlush(FrameBuffer, FrameBufferBase, MappedSize);
     }
     else
     {
@@ -672,6 +713,7 @@ VidFadeToBlack(
                 }
             }
         }
+        FlushFrameRect(0, 0, ScreenWidth, ScreenHeight);
 
         KeStallExecutionProcessor(BV_FADE_STEP_DELAY_US);
     }
@@ -695,6 +737,7 @@ ResetDisplay(
 {
     RtlZeroMemory(BackBuffer, BackBufferSize);
     RtlZeroMemory((PVOID)FrameBufferStart, FrameBufferSize);
+    FlushFrameRect(0, 0, ScreenWidth, ScreenHeight);
 
     /* Re-initialize the palette and fill the screen black */
     InitializePalette();
@@ -779,6 +822,7 @@ VidBufferToScreenBltNative(
 
             RtlCopyMemory(Dst, Src, Width * sizeof(ULONG));
         }
+        FlushFrameRect(Left, Top, Left + Width, Top + Height);
         return TRUE;
     }
 
@@ -789,6 +833,7 @@ VidBufferToScreenBltNative(
         for (x = 0; x < Width; ++x)
             *FramePixel(Left + x, Top + y) = Src[x];
     }
+    FlushFrameRect(Left, Top, Left + Width, Top + Height);
 
     return TRUE;
 }
@@ -985,6 +1030,7 @@ VidSolidColorFill(
     {
         RtlFillMemoryUlong(FramePixel(NativeLeft, y), NativeWidth, NativeColor);
     }
+    FlushFrameRect(NativeLeft, NativeTop, NativeRight, NativeBottom);
 }
 
 VOID

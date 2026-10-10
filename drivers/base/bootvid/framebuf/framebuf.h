@@ -9,6 +9,19 @@
 #pragma once
 
 VOID
+VidpInitializeFrameBufferFlush(
+    _In_ PHYSICAL_ADDRESS PhysicalAddress,
+    _In_ PVOID VirtualAddress,
+    _In_ ULONG Size);
+
+VOID
+VidpFlushFrameBuffer(
+    _In_ PVOID Start,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG Stride);
+
+VOID
 InitPaletteWithTable(
     _In_reads_(Count) const ULONG* Table,
     _In_ ULONG Count);

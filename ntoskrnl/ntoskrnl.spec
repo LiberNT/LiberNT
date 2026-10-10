@@ -629,6 +629,7 @@
 @ stdcall KeFindConfigurationNextEntry(ptr long long ptr ptr)
 @ stdcall KeFlushEntireTb(long long)
 @ stdcall -arch=!i386 KeFlushIoBuffers(ptr long long)
+@ stdcall -arch=riscv64 KeFlushIoRectangle(ptr ptr long long long long)
 @ stdcall KeFlushQueuedDpcs()
 @ stdcall KeGenericCallDpc(ptr ptr)
 @ stdcall KeGetCurrentNodeNumber()

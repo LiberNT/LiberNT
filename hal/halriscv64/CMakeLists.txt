@@ -2,6 +2,7 @@
 spec2def(hal.dll ../hal.spec ADD_IMPORTLIB)
 
 add_library(hal MODULE
+    cache.c
     clock.c
     dma.c
     halinit.c

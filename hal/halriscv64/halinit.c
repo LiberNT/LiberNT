@@ -18,7 +18,8 @@ typedef enum _RISCV_HAL_INITIALIZATION_FAILURE
     RiscvHalSbiUnavailable,
     RiscvHalPciMappingFailed,
     RiscvHalPlicMappingFailed,
-    RiscvHalRtcMappingFailed
+    RiscvHalRtcMappingFailed,
+    RiscvHalExternalCacheMappingFailed
 } RISCV_HAL_INITIALIZATION_FAILURE;
 
 volatile ULONG HalpRiscvInitializationPhase;
@@ -62,6 +63,11 @@ HalInitSystem(
         if (!HalpRiscvMapPlic())
         {
             HalpRiscvInitializationFailure = RiscvHalPlicMappingFailed;
+            return FALSE;
+        }
+        if (!HalpRiscvMapExternalCache())
+        {
+            HalpRiscvInitializationFailure = RiscvHalExternalCacheMappingFailed;
             return FALSE;
         }
 
@@ -125,6 +131,8 @@ HalInitSystem(
         HalpRiscvInitializationFailure = RiscvHalInvalidDeviceTree;
         return FALSE;
     }
+    HalpRiscvInitializeExternalCache((const VOID *)(ULONG_PTR)RiscvBlock->DeviceTree,
+                                     (SIZE_T)RiscvBlock->DeviceTreeSize);
     if (HalpRiscvPciDmaCoherent())
         KeSetDmaIoCoherency(1);
     HalpRiscvDeviceTree = (const VOID *)(ULONG_PTR)RiscvBlock->DeviceTree;

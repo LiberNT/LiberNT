@@ -124,4 +124,5 @@ FORCEINLINE KIRQL KeRaiseIrqlToSynchLevel(VOID) { return KfRaiseIrql(12); }
 extern NTKERNELAPI volatile KSYSTEM_TIME KeTickCount;
 NTKERNELAPI VOID NTAPI KeQueryTickCount(PLARGE_INTEGER CurrentCount);
 NTKERNELAPI VOID NTAPI KeFlushIoBuffers(PMDL Mdl, BOOLEAN ReadOperation, BOOLEAN DmaOperation);
+NTKERNELAPI VOID NTAPI KeFlushIoRectangle(PMDL Mdl, PVOID Start, ULONG Width, ULONG Height, ULONG Stride, BOOLEAN ReadOperation);
 $endif (_WDMDDK_)
