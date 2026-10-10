@@ -53,6 +53,16 @@ CsprngInitialize(VOID)
     return TRUE;
 }
 
+VOID
+NTAPI
+RosCsprngProcessAttach(VOID)
+{
+    RtlAcquireSRWLockExclusive(&CsprngLock);
+    if (!CsprngInitialized)
+        CsprngInitialize();
+    RtlReleaseSRWLockExclusive(&CsprngLock);
+}
+
 BOOLEAN
 NTAPI
 RosCsprngFill(

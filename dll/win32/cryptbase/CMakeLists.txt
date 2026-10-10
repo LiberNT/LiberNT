@@ -8,7 +8,7 @@ list(APPEND SOURCE
     ${CMAKE_CURRENT_BINARY_DIR}/cryptbase.def)
 
 add_library(cryptbase MODULE ${SOURCE})
-set_module_type(cryptbase win32dll ENTRYPOINT 0)
+set_module_type(cryptbase win32dll)
 target_link_libraries(cryptbase csprng wine)
 add_importlibs(cryptbase msvcrt kernel32 ntdll)
 add_cd_file(TARGET cryptbase DESTINATION reactos/system32 FOR all)

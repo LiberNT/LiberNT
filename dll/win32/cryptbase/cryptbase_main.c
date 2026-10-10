@@ -32,6 +32,18 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(crypt);
 
+#ifdef __REACTOS__
+BOOL WINAPI DllMain( HINSTANCE instance, DWORD reason, void *reserved )
+{
+    if (reason == DLL_PROCESS_ATTACH)
+    {
+        DisableThreadLibraryCalls( instance );
+        RosCsprngProcessAttach();
+    }
+    return TRUE;
+}
+#endif
+
 #ifndef __REACTOS__
 static CRITICAL_SECTION random_cs;
 static CRITICAL_SECTION_DEBUG random_debug =

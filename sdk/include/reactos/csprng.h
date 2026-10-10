@@ -17,6 +17,10 @@ RosCsprngFill(
     _Out_writes_bytes_all_(Length) PVOID Buffer,
     _In_ SIZE_T Length);
 
+VOID
+NTAPI
+RosCsprngProcessAttach(VOID);
+
 #ifdef __cplusplus
 }
 #endif

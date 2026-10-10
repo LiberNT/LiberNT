@@ -9,6 +9,7 @@
  */
 
 #include <advapi32.h>
+#include <csprng.h>
 
 extern BOOL RegInitialize(VOID);
 extern BOOL RegCleanup(VOID);
@@ -27,6 +28,7 @@ DllMain(
         case DLL_PROCESS_ATTACH:
             DisableThreadLibraryCalls(hinstDll);
             RegInitialize();
+            RosCsprngProcessAttach();
             break;
 
         case DLL_PROCESS_DETACH:
