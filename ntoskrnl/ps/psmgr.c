@@ -107,6 +107,7 @@ PVOID PspSystemDllBase;
 PVOID PspSystemDllSection;
 PVOID PspSystemDllEntryPoint;
 PVOID PspRtlUserThreadStart;
+PVOID PspSystemDllInitBlock;
 
 UNICODE_STRING PsNtDllPathName =
     RTL_CONSTANT_STRING(L"\\SystemRoot\\System32\\ntdll.dll");
@@ -161,6 +162,8 @@ PspLookupKernelUserEntryPoints(VOID)
     Status = PspLookupSystemDllEntryPoint("RtlUserThreadStart",
                                           &PspRtlUserThreadStart);
     if (!NT_SUCCESS(Status)) return Status;
+
+    PspLookupSystemDllEntryPoint("LdrSystemDllInitBlock", &PspSystemDllInitBlock);
 
 #if defined(_M_ARM64)
     Status = PspLookupSystemDllEntryPoint("KiUserExceptionDispatcherWorker",

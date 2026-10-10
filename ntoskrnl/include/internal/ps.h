@@ -837,6 +837,7 @@ PsCheckImageLoadPolicy(
     _In_ PFILE_OBJECT FileObject);
 extern PVOID PspSystemDllEntryPoint;
 extern PVOID PspRtlUserThreadStart;
+extern PVOID PspSystemDllInitBlock;
 extern PVOID PspSystemDllBase;
 extern BOOLEAN PspUseJobSchedulingClasses;
 extern CHAR PspJobSchedulingClasses[PSP_JOB_SCHEDULING_CLASSES];

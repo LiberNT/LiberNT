@@ -177,23 +177,26 @@ LdrpMapWow64Ntdll(
     SIZE_T ViewSize;
     NTSTATUS Status;
 
-    RtlInitEmptyUnicodeString(&Path, PathBuffer, sizeof(PathBuffer));
-    RtlInitUnicodeString(&SystemRoot, SharedUserData->NtSystemRoot);
-    Status = RtlAppendUnicodeStringToString(&Path, &SystemRoot);
-    if (!NT_SUCCESS(Status)) return Status;
-    Status = RtlAppendUnicodeToString(&Path, L"\\SysWOW64\\ntdll.dll");
-    if (!NT_SUCCESS(Status)) return Status;
-    if (!RtlDosPathNameToNtPathName_U(Path.Buffer, &NtPath, NULL, NULL)) return STATUS_OBJECT_PATH_SYNTAX_BAD;
+    ViewBase = (PVOID)(ULONG_PTR)LdrSystemDllInitBlock.ntdll_handle;
+    if (!ViewBase)
+    {
+        RtlInitEmptyUnicodeString(&Path, PathBuffer, sizeof(PathBuffer));
+        RtlInitUnicodeString(&SystemRoot, SharedUserData->NtSystemRoot);
+        Status = RtlAppendUnicodeStringToString(&Path, &SystemRoot);
+        if (!NT_SUCCESS(Status)) return Status;
+        Status = RtlAppendUnicodeToString(&Path, L"\\SysWOW64\\ntdll.dll");
+        if (!NT_SUCCESS(Status)) return Status;
+        if (!RtlDosPathNameToNtPathName_U(Path.Buffer, &NtPath, NULL, NULL)) return STATUS_OBJECT_PATH_SYNTAX_BAD;
 
-    Status = LdrpCreateDllSection(&NtPath, NULL, NULL, &SectionHandle);
-    RtlFreeHeap(RtlGetProcessHeap(), 0, NtPath.Buffer);
-    if (!NT_SUCCESS(Status)) return Status;
+        Status = LdrpCreateDllSection(&NtPath, NULL, NULL, &SectionHandle);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, NtPath.Buffer);
+        if (!NT_SUCCESS(Status)) return Status;
 
-    ViewBase = NULL;
-    ViewSize = 0;
-    Status = NtMapViewOfSection(SectionHandle, NtCurrentProcess(), &ViewBase, MAXLONG, 0, NULL, &ViewSize, ViewShare, 0, PAGE_READWRITE);
-    NtClose(SectionHandle);
-    if (!NT_SUCCESS(Status)) return Status;
+        ViewSize = 0;
+        Status = NtMapViewOfSection(SectionHandle, NtCurrentProcess(), &ViewBase, MAXLONG, 0, NULL, &ViewSize, ViewShare, 0, PAGE_READWRITE);
+        NtClose(SectionHandle);
+        if (!NT_SUCCESS(Status)) return Status;
+    }
 
     NtHeader = (PIMAGE_NT_HEADERS32)RtlImageNtHeader(ViewBase);
     if (!NtHeader || NtHeader->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC || NtHeader->FileHeader.Machine != IMAGE_FILE_MACHINE_I386 || (ULONG64)(ULONG_PTR)ViewBase + NtHeader->OptionalHeader.SizeOfImage > 0x80000000ULL)

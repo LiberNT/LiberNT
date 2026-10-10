@@ -1769,6 +1769,42 @@ PspAllocateUserStack(IN HANDLE ProcessHandle,
 
 #ifdef WOW64_SUPPORTED
 static NTSTATUS
+PspMapWow64SystemDll(IN HANDLE ProcessHandle)
+{
+    UNICODE_STRING Path = RTL_CONSTANT_STRING(L"\\SystemRoot\\SysWOW64\\ntdll.dll");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    HANDLE FileHandle, SectionHandle;
+    PVOID ViewBase = NULL;
+    SIZE_T ViewSize = 0;
+    ULONG64 NtdllBase;
+    NTSTATUS Status;
+
+    if (!PspSystemDllInitBlock) return STATUS_NOT_SUPPORTED;
+
+    InitializeObjectAttributes(&ObjectAttributes, &Path, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwOpenFile(&FileHandle, FILE_READ_ACCESS, &ObjectAttributes, &IoStatusBlock, FILE_SHARE_READ | FILE_SHARE_DELETE, 0);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ZwCreateSection(&SectionHandle, SECTION_ALL_ACCESS, NULL, NULL, PAGE_EXECUTE, SEC_IMAGE, FileHandle);
+    ZwClose(FileHandle);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ZwMapViewOfSection(SectionHandle, ProcessHandle, &ViewBase, MAXLONG, 0, NULL, &ViewSize, ViewShare, 0, PAGE_READWRITE);
+    ZwClose(SectionHandle);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    NtdllBase = (ULONG_PTR)ViewBase;
+    Status = ZwWriteVirtualMemory(ProcessHandle,
+                                  &((PSYSTEM_DLL_INIT_BLOCK)PspSystemDllInitBlock)->ntdll_handle,
+                                  &NtdllBase,
+                                  sizeof(NtdllBase),
+                                  NULL);
+    if (!NT_SUCCESS(Status)) ZwUnmapViewOfSection(ProcessHandle, ViewBase);
+    return Status;
+}
+
+static NTSTATUS
 PspAppendWow64String(IN PUNICODE_STRING Source,
                      OUT PWOW64_UNICODE_STRING Destination,
                      IN PUCHAR Buffer,
@@ -3375,6 +3411,7 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
         Status = PspCreateWow64ProcessParameters(hProcess, ProcessParameters, Wow64Peb, &Wow64ProcessParameters);
         if (!NT_SUCCESS(Status)) goto Cleanup;
     }
+    if (Wow64Peb) PspMapWow64SystemDll(hProcess);
 #endif
 
     /*
