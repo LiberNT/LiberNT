@@ -1554,6 +1554,37 @@ CleanupDeviceHandle:
     PdoExtension->CommonExtension.DevicePowerState = PowerDeviceD3;
 }
 
+static
+VOID
+USBPORT_SetLineInterruptDisable(
+    _In_ PUSBPORT_DEVICE_EXTENSION FdoExtension,
+    _In_ BOOLEAN Disable)
+{
+    PBUS_INTERFACE_STANDARD BusInterface = &FdoExtension->BusInterface;
+    USHORT Command;
+
+    if (!BusInterface->GetBusData || !BusInterface->SetBusData)
+        return;
+
+    if (BusInterface->GetBusData(BusInterface->Context,
+                                 PCI_WHICHSPACE_CONFIG,
+                                 &Command,
+                                 FIELD_OFFSET(PCI_COMMON_CONFIG, Command),
+                                 sizeof(Command)) != sizeof(Command))
+        return;
+
+    if (Disable)
+        Command |= PCI_DISABLE_LEVEL_INTERRUPT;
+    else
+        Command &= ~PCI_DISABLE_LEVEL_INTERRUPT;
+
+    BusInterface->SetBusData(BusInterface->Context,
+                             PCI_WHICHSPACE_CONFIG,
+                             &Command,
+                             FIELD_OFFSET(PCI_COMMON_CONFIG, Command),
+                             sizeof(Command));
+}
+
 NTSTATUS
 NTAPI
 USBPORT_StartDevice(IN PDEVICE_OBJECT FdoDevice,
@@ -1915,6 +1946,7 @@ USBPORT_StartDevice(IN PDEVICE_OBJECT FdoDevice,
     }
 
     USBPORT_EnsureInterruptApis();
+    USBPORT_SetLineInterruptDisable(FdoExtension, TRUE);
 
     if ((UsbPortResources->InterruptFlags & CM_RESOURCE_INTERRUPT_MESSAGE) &&
         UsbPortResources->InterruptMessageCount != 0 &&
@@ -2263,6 +2295,8 @@ USBPORT_StartDevice(IN PDEVICE_OBJECT FdoDevice,
         USBPORT_StartIsrDpcRundown(FdoExtension);
         FdoExtension->MiniPortFlags |= USBPORT_MPFLAG_INTERRUPTS_ENABLED;
         USBPORT_MiniportInterrupts(FdoDevice, TRUE);
+        if (!FdoExtension->MessageInterruptsEnabled)
+            USBPORT_SetLineInterruptDisable(FdoExtension, FALSE);
     }
 
     FdoExtension->TimerValue = 500;
