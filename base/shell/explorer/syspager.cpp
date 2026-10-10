@@ -348,7 +348,7 @@ public:
 static INT
 TrayIconRenderSize(VOID)
 {
-    return MulDiv(ShellTrayIconSize(), 4, 5);
+    return ShellTrayIconRenderSize();
 }
 
 static INT

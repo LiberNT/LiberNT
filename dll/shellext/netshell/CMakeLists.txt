@@ -16,7 +16,7 @@ list(APPEND SOURCE
 list(APPEND PCH_SKIP_SOURCE
     ${CMAKE_CURRENT_BINARY_DIR}/netshell_stubs.c)
 
-file(GLOB netshell_rc_deps res/*.*)
+file(GLOB_RECURSE netshell_rc_deps res/*.*)
 add_rc_deps(netshell.rc ${netshell_rc_deps})
 
 add_library(netshell MODULE

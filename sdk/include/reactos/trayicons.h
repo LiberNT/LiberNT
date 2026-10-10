@@ -27,3 +27,9 @@ ShellTrayIconSize(VOID)
 
     return MulDiv(SHELL_TRAY_ICON_BASE, nDpi, 96);
 }
+
+static inline INT
+ShellTrayIconRenderSize(VOID)
+{
+    return MulDiv(ShellTrayIconSize(), 4, 5);
+}
