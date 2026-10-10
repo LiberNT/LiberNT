@@ -1277,6 +1277,64 @@ RPC_STATUS WINAPI RpcServerRegisterIf3( RPC_IF_HANDLE IfSpec, UUID* MgrTypeUuid,
 /***********************************************************************
  *             RpcServerUnregisterIf (RPCRT4.@)
  */
+#ifdef __REACTOS__
+RPC_STATUS WINAPI RpcServerUnregisterIf( RPC_IF_HANDLE IfSpec, UUID* MgrTypeUuid, UINT WaitForCallsToComplete )
+{
+  PRPC_SERVER_INTERFACE If = IfSpec;
+  RpcServerInterface *cif, *cif2;
+  HANDLE *events = NULL;
+  struct list removed = LIST_INIT(removed);
+  unsigned int count = 0, found = 0, i;
+  RPC_STATUS status;
+
+  TRACE("(IfSpec == (RPC_IF_HANDLE)^%p, MgrTypeUuid == %s, WaitForCallsToComplete == %u)\n",
+    IfSpec, debugstr_guid(MgrTypeUuid), WaitForCallsToComplete);
+
+  EnterCriticalSection(&server_cs);
+  LIST_FOR_EACH_ENTRY_SAFE(cif, cif2, &server_interfaces, RpcServerInterface, entry) {
+    if (((!IfSpec && !(cif->Flags & RPC_IF_AUTOLISTEN)) ||
+        (IfSpec && !memcmp(&If->InterfaceId, &cif->If->InterfaceId, sizeof(RPC_SYNTAX_IDENTIFIER)))) &&
+        UuidEqual(MgrTypeUuid, &cif->MgrTypeUuid, &status)) {
+      list_remove(&cif->entry);
+      TRACE("unregistering cif %p\n", cif);
+      found++;
+      if (cif->CurrentCalls) {
+        cif->Delete = TRUE;
+        if (WaitForCallsToComplete) {
+          HANDLE *new_events = realloc(events, (count + 1) * sizeof(*events));
+          if (new_events) {
+            events = new_events;
+            cif->CallsCompletedEvent = events[count++] = CreateEventW(NULL, FALSE, FALSE, NULL);
+          }
+        }
+      }
+      else
+        list_add_tail(&removed, &cif->entry);
+      if (IfSpec) break;
+    }
+  }
+  LeaveCriticalSection(&server_cs);
+
+  if (!found) {
+    ERR("not found for object %s\n", debugstr_guid(MgrTypeUuid));
+    return IfSpec ? RPC_S_UNKNOWN_IF : RPC_S_UNKNOWN_MGR_TYPE;
+  }
+
+  LIST_FOR_EACH_ENTRY_SAFE(cif, cif2, &removed, RpcServerInterface, entry) {
+    list_remove(&cif->entry);
+    free(cif);
+  }
+
+  for (i = 0; i < count; i++) {
+    if (!events[i]) continue;
+    WaitForSingleObject(events[i], INFINITE);
+    CloseHandle(events[i]);
+  }
+  free(events);
+
+  return RPC_S_OK;
+}
+#else
 RPC_STATUS WINAPI RpcServerUnregisterIf( RPC_IF_HANDLE IfSpec, UUID* MgrTypeUuid, UINT WaitForCallsToComplete )
 {
   PRPC_SERVER_INTERFACE If = IfSpec;
@@ -1324,6 +1382,7 @@ RPC_STATUS WINAPI RpcServerUnregisterIf( RPC_IF_HANDLE IfSpec, UUID* MgrTypeUuid
 
   return RPC_S_OK;
 }
+#endif
 
 /***********************************************************************
  *             RpcServerUnregisterIfEx (RPCRT4.@)
