@@ -27,6 +27,21 @@ typedef enum _RESULT
 
 /* PRIVATE FUNCTIONS ********************************************************/
 
+static
+BOOLEAN
+HvpIsHiveHeaderSane(
+    _In_ PHBASE_BLOCK BaseBlock,
+    _In_ ULONG FileType)
+{
+    return BaseBlock->Signature == HV_HBLOCK_SIGNATURE &&
+           BaseBlock->Major == HSYS_MAJOR &&
+           BaseBlock->Minor >= HSYS_MINOR &&
+           BaseBlock->Type == FileType &&
+           BaseBlock->Format == HBASE_FORMAT_MEMORY &&
+           BaseBlock->Cluster == 1 &&
+           HvpHiveHeaderChecksum(BaseBlock) == BaseBlock->CheckSum;
+}
+
 /**
  * @brief
  * Validates the base block header of a registry
@@ -50,14 +65,8 @@ HvpVerifyHiveHeader(
     _In_ PHBASE_BLOCK BaseBlock,
     _In_ ULONG FileType)
 {
-    if (BaseBlock->Signature != HV_HBLOCK_SIGNATURE ||
-        BaseBlock->Major != HSYS_MAJOR ||
-        BaseBlock->Minor < HSYS_MINOR ||
-        BaseBlock->Type != FileType ||
-        BaseBlock->Format != HBASE_FORMAT_MEMORY ||
-        BaseBlock->Cluster != 1 ||
-        BaseBlock->Sequence1 != BaseBlock->Sequence2 ||
-        HvpHiveHeaderChecksum(BaseBlock) != BaseBlock->CheckSum)
+    if (!HvpIsHiveHeaderSane(BaseBlock, FileType) ||
+        BaseBlock->Sequence1 != BaseBlock->Sequence2)
     {
         DPRINT1("Verify Hive Header failed:\n");
         DPRINT1("    Signature: 0x%x, expected 0x%x; Major: 0x%x, expected 0x%x\n",
@@ -630,12 +639,15 @@ HvpGetHiveHeader(
     /*
      * This hive has a base block that's not maimed
      * but is the header data valid?
-     *
-     * FIXME: We must check if primary and secondary
-     * sequences mismatch separately and fire up RecoverData
-     * in that case  but due to a hack in HvLoadHive, let
-     * HvpVerifyHiveHeader check the sequences for now.
      */
+    if (HvpIsHiveHeaderSane(BaseBlock, HFILE_TYPE_PRIMARY) &&
+        BaseBlock->Sequence1 != BaseBlock->Sequence2)
+    {
+        *HiveBaseBlock = BaseBlock;
+        *TimeStamp = BaseBlock->TimeStamp;
+        return RecoverData;
+    }
+
     if (!HvpVerifyHiveHeader(BaseBlock, HFILE_TYPE_PRIMARY))
     {
         DPRINT1("The hive base header block needs to be RECOVERED\n");
@@ -1132,7 +1144,7 @@ HvLoadHive(
     /* Get the hive header */
     Result = HvpGetHiveHeader(Hive, &BaseBlock, &TimeStamp);
 #if !defined(CMLIB_HOST) && !defined(_BLDR_)
-    if (Result == RecoverHeader)
+    if (Result == RecoverHeader || Result == RecoverData)
     {
         Status = HvpRecoverHiveFromLog(Hive, BaseBlock, &RecoveredData, &FileSize, &AppliedBlocks);
         if (Status != STATUS_NOT_FOUND)
@@ -1184,20 +1196,6 @@ HvLoadHive(
 
         /* Hive data needs a repair */
         case RecoverData:
-        {
-            /*
-             * FIXME: We must be handling this status
-             * case if the header isn't corrupt but
-             * the counter sequences do not match but
-             * due to a hack in HvLoadHive we have
-             * to do both a header + data recovery.
-             * RecoverHeader also implies RecoverData
-             * anyway. When HvLoadHive gets rid of
-             * that hack, data recovery must be done
-             * after we read the hive block by block.
-             */
-            break;
-        }
 
         /* Hive header needs a repair */
         case RecoverHeader:
@@ -1322,7 +1320,7 @@ HvLoadHive(
      * tell the caller we did recover it. The caller
      * is responsible to flush the data later on.
      */
-    return (Result == RecoverHeader) ? STATUS_REGISTRY_RECOVERED : STATUS_SUCCESS;
+    return (Result == RecoverHeader || Result == RecoverData) ? STATUS_REGISTRY_RECOVERED : STATUS_SUCCESS;
 }
 
 /**

@@ -500,12 +500,20 @@ RegImportBinaryHive(
     _In_ BOOLEAN LoadAlternate)
 {
     BOOLEAN Success;
+    PHBASE_BLOCK BaseBlock;
     PCM_KEY_NODE KeyNode;
 
     TRACE("RegImportBinaryHive(%p, 0x%lx)\n", *ChunkBase, *ChunkSize);
 
     /* Assume that we don't need boot recover, unless we have to */
     ((PHBASE_BLOCK)*ChunkBase)->BootRecover = HBOOT_NO_BOOT_RECOVER;
+
+    BaseBlock = (PHBASE_BLOCK)*ChunkBase;
+    if (BaseBlock->Sequence1 != BaseBlock->Sequence2 &&
+        RegRecoverHiveFromLog(ChunkBase, ChunkSize, SearchPath, "SYSTEM"))
+    {
+        ((PHBASE_BLOCK)*ChunkBase)->BootRecover = HBOOT_BOOT_RECOVERED_BY_HIVE_LOG;
+    }
 
     /* Allocate and initialize the hive */
     CmSystemHive = FrLdrTempAlloc(sizeof(CMHIVE), 'eviH');
