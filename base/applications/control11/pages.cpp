@@ -193,6 +193,7 @@ static int PaintSystem(HDC hdc, int x, int y, int cx)
     if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) pszType = L"64-bit Operating System, x64-based processor";
     else if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64) pszType = L"64-bit Operating System, ARM-based processor";
     else if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM) pszType = L"32-bit Operating System, ARM-based processor";
+    else if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_RISCV64) pszType = L"64-bit Operating System, RISC-V-based processor";
     y += LabelValue(hdc, lx, y, cxLabel, lcx, L"System type:", pszType);
     StringCchPrintfW(szText, _countof(szText), L"%u", si.dwNumberOfProcessors);
     y += LabelValue(hdc, lx, y, cxLabel, lcx, L"Logical processors:", szText);
