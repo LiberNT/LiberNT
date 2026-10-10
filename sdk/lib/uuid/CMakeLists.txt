@@ -56,7 +56,7 @@ list(APPEND IDL_SOURCES
 #    iaspolcy.idl
 #    iedial.idl
 #    iextag.idl
-#    imapi.idl
+    imapi.idl
 #    imguitil.idl
 #    immact.idl
 #    indexsrc.idl

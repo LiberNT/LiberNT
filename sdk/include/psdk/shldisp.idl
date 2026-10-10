@@ -635,6 +635,23 @@ enum ShellSpecialFolderConstants {
     ssfPROGRAMFILESx86  = 0x30
 } ShellSpecialFolderConstants;
 
+[
+    uuid(2d91eea1-9932-11d2-be86-00a0c9a83da1),
+    oleautomation,
+    dual,
+    hidden,
+    pointer_default(unique)
+]
+interface IFileSearchBand : IDispatch
+{
+    [id(1)] HRESULT SetFocus();
+    [id(2)] HRESULT SetSearchParameters([in] BSTR *pbstrSearchID, [in] VARIANT_BOOL bNavToResults,
+                                        [in, optional] VARIANT *pvarScope, [in, optional] VARIANT *pvarQueryFile);
+    [id(3), propget] HRESULT SearchID([out, retval] BSTR *pbstrSearchID);
+    [id(4), propget] HRESULT Scope([out, retval] VARIANT *pvarScope);
+    [id(5), propget] HRESULT QueryFile([out, retval] VARIANT *pvarFile);
+}
+
 /*****************************************************************************
  * IShellFolderViewDual interface
  */

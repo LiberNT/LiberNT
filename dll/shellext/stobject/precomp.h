@@ -13,6 +13,8 @@
 
 #include <windef.h>
 #include <winbase.h>
+#include <wingdi.h>
+#include <wincon.h>
 #include <shlguid_undoc.h>
 #include <shlobj.h>
 #include <strsafe.h>

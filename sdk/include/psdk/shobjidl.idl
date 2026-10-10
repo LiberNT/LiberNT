@@ -4493,7 +4493,8 @@ typedef DWORD TRANSFER_SOURCE_FLAGS;
 [
     uuid(00adb003-bde9-45c6-8e29-d09f9353e108),
     object,
-    pointer_default(unique)
+    pointer_default(unique),
+    local
 ]
 interface ITransferSource : IUnknown
 {
@@ -4534,7 +4535,8 @@ interface ITransferSource : IUnknown
 [
     uuid(48addd32-3ca5-4124-abe3-b5a72531b207),
     object,
-    pointer_default(unique)
+    pointer_default(unique),
+    local
 ]
 interface ITransferDestination : IUnknown
 {
@@ -5166,3 +5168,518 @@ interface IUserAssist : IUnknown
 };
 
 #endif // __REACTOS__
+
+interface INamespaceWalkCB;
+interface IPreviewHandlerFrame;
+
+[v1_enum] enum _CDBE_ACTIONS
+{
+    CDBE_TYPE_MUSIC = 0x00000001,
+    CDBE_TYPE_DATA  = 0x00000002,
+    CDBE_TYPE_ALL   = (int) 0xFFFFFFFF
+};
+typedef DWORD CDBE_ACTIONS;
+
+typedef [v1_enum] enum FOLDERLOGICALVIEWMODE
+{
+    FLVM_UNSPECIFIED = -1,
+    FLVM_FIRST = 1,
+    FLVM_DETAILS = 1,
+    FLVM_TILES = 2,
+    FLVM_ICONS = 3,
+    FLVM_LIST = 4,
+    FLVM_CONTENT = 5,
+    FLVM_LAST = 5,
+} FOLDERLOGICALVIEWMODE;
+
+[v1_enum] enum _NMCII_FLAGS
+{
+    NMCII_NONE = 0x0000,
+    NMCII_ITEMS = 0x0001,
+    NMCII_FOLDERS = 0x0002,
+};
+typedef int NMCII_FLAGS;
+
+[v1_enum] enum _NMCSAEI_FLAGS
+{
+    NMCSAEI_SELECT = 0x0000,
+    NMCSAEI_EDIT = 0x0001,
+};
+typedef int NMCSAEI_FLAGS;
+
+[
+    object,
+    uuid(49ff1173-eadc-446d-9285-156453a6431c),
+    pointer_default(unique)
+]
+interface IActionProgress : IUnknown
+{
+    [v1_enum] enum _SPBEGINF
+    {
+        SPBEGINF_NORMAL             = 0x00000000,
+        SPBEGINF_AUTOTIME           = 0x00000002,
+        SPBEGINF_NOPROGRESSBAR      = 0x00000010,
+        SPBEGINF_MARQUEEPROGRESS    = 0x00000020,
+        SPBEGINF_NOCANCELBUTTON     = 0x00000040,
+    };
+    typedef DWORD SPBEGINF;
+
+    typedef [v1_enum] enum _SPTEXT
+    {
+        SPTEXT_ACTIONDESCRIPTION        = 1,
+        SPTEXT_ACTIONDETAIL,
+    } SPTEXT;
+
+    HRESULT Begin(
+        [in] SPACTION action,
+        [in] SPBEGINF flags);
+
+    HRESULT UpdateProgress(
+        [in] ULONGLONG ulCompleted,
+        [in] ULONGLONG ulTotal);
+
+    HRESULT UpdateText(
+        [in] SPTEXT sptext,
+        [in, string] LPCWSTR pszText,
+        [in] BOOL fMayCompact);
+
+    HRESULT QueryCancel([out] BOOL * pfCancelled);
+
+    HRESULT ResetCancel();
+
+    HRESULT End();
+
+}
+
+[
+    object,
+    uuid(49ff1172-eadc-446d-9285-156453a6431c),
+    pointer_default(unique)
+]
+interface IActionProgressDialog : IUnknown
+{
+    [v1_enum] enum _SPINITF
+    {
+        SPINITF_NORMAL         = 0x00000000,
+        SPINITF_MODAL          = 0x00000001,
+        SPINITF_NOMINIMIZE     = 0x00000008,
+    };
+    typedef DWORD SPINITF;
+
+    HRESULT Initialize(
+        [in] SPINITF flags,
+        [in, unique, string] LPCWSTR pszTitle,
+        [in, unique, string] LPCWSTR pszCancel);
+
+    HRESULT Stop();
+}
+
+[
+    uuid(B9075C7C-D48E-403f-AB99-D6C77A1084AC),
+    object,
+    pointer_default(unique)
+]
+interface IBandHost : IUnknown
+{
+    HRESULT CreateBand(
+        [in] REFCLSID rclsidBand,
+        [in] BOOL fAvailable,
+        [in] BOOL fVisible,
+        [in] REFIID riid,
+        [out, iid_is(riid)]void **ppv);
+
+    HRESULT SetBandAvailability(
+        [in] REFCLSID rclsidBand,
+        [in] BOOL fAvailable);
+
+    HRESULT DestroyBand([in] REFCLSID rclsidBand);
+}
+
+[
+    object,
+    uuid(3d73a659-e5d0-4d42-afc0-5121ba425c8d),
+    pointer_default(unique)
+]
+interface ICDBurn : IUnknown
+{
+    HRESULT GetRecorderDriveLetter(
+        [out, string, size_is(cch)] LPWSTR pszDrive,
+        [in] UINT cch);
+
+    HRESULT Burn([in] HWND hwnd);
+
+    HRESULT HasRecordableDrive([out] BOOL *pfHasRecorder);
+}
+
+[
+    uuid(2271dcca-74fc-4414-8fb7-c56b05ace2d7)
+]
+interface ICDBurnExt : IUnknown
+{
+    HRESULT GetSupportedActionTypes([out] CDBE_ACTIONS *pdwActions);
+}
+
+[
+    object,
+    uuid(0DF60D92-6818-46d6-B358-D66170DDE466),
+    pointer_default(unique)
+]
+interface IComputerInfoChangeNotify : IUnknown
+{
+    HRESULT ComputerInfoChanged();
+}
+
+[
+    uuid(0811AEBE-0B87-4C54-9E72-548CF649016B),
+    object,
+    pointer_default(unique)
+]
+interface IContextMenuSite : IUnknown
+{
+    HRESULT DoContextMenuPopup(
+        [in] IUnknown* punkContextMenu,
+        [in] UINT fFlags,
+        [in] POINT pt);
+}
+
+[
+    uuid(BB2E617C-0920-11d1-9A0B-00C04FC2D6C1),
+    object,
+    pointer_default(unique)
+]
+interface IExtractImage : IUnknown
+{
+    HRESULT GetLocation(
+        [out, string, size_is(cch)] LPWSTR pszPathBuffer,
+        [in] DWORD cch,
+        [in, out, unique] DWORD *pdwPriority,
+        [in] const SIZE * prgSize,
+        [in] DWORD dwRecClrDepth,
+        [in, out] DWORD *pdwFlags);
+
+   HRESULT Extract(
+       [out] HBITMAP *phBmpThumbnail);
+}
+
+[
+    uuid(953BB1EE-93B4-11d1-98A3-00C04FB687DA),
+    object,
+    pointer_default(unique)
+]
+interface IExtractImage2 : IExtractImage
+{
+    HRESULT GetDateStamp([out] FILETIME *pDateStamp);
+}
+
+[
+    uuid(ae8c987d-8797-4ed3-be72-2a47dd938db0),
+    object
+]
+interface IFolderViewSettings : IUnknown
+{
+
+    HRESULT GetColumnPropertyList(
+        [in] REFIID riid,
+        [out, iid_is(riid)] void **ppv);
+
+    HRESULT GetGroupByProperty(
+        [out] PROPERTYKEY *pkey,
+        [out] BOOL *pfGroupAscending);
+
+    HRESULT GetViewMode(
+        [out] FOLDERLOGICALVIEWMODE *plvm);
+
+    HRESULT GetIconSize(
+        [out] UINT *puIconSize);
+
+    HRESULT GetFolderFlags(
+        [out] FOLDERFLAGS *pfolderMask,
+        [out] FOLDERFLAGS *pfolderFlags);
+
+    HRESULT GetSortColumns(
+        [out, size_is(cColumnsIn), length_is(*pcColumnsOut)] SORTCOLUMN *rgSortColumns,
+        [in] UINT cColumnsIn,
+        [out] UINT *pcColumnsOut);
+
+    HRESULT GetGroupSubsetCount([out] UINT *pcVisibleRows);
+}
+
+[
+    object,
+    uuid(C1FB73D0-EC3A-4ba2-B512-8CDB9187B6D1),
+    pointer_default(unique)
+]
+interface IHWEventHandler : IUnknown
+{
+    HRESULT Initialize(
+        [in, string] LPCWSTR pszParams);
+
+    HRESULT HandleEvent(
+        [in, string] LPCWSTR pszDeviceID,
+        [in, string] LPCWSTR pszAltDeviceID,
+        [in, string] LPCWSTR pszEventType);
+
+    HRESULT HandleEventWithContent(
+        [in, string] LPCWSTR pszDeviceID,
+        [in, string] LPCWSTR pszAltDeviceID,
+        [in, string] LPCWSTR pszEventType,
+        [in, string] LPCWSTR pszContentTypeHandler,
+        [in] IDataObject* pdataobject);
+}
+
+[
+    object,
+    uuid(CFCC809F-295D-42e8-9FFC-424B33C487E6),
+    pointer_default(unique)
+]
+interface IHWEventHandler2 : IHWEventHandler
+{
+    HRESULT HandleEventWithHWND(
+        [in, string] LPCWSTR pszDeviceID,
+        [in, string] LPCWSTR pszAltDeviceID,
+        [in, string] LPCWSTR pszEventType,
+        [in] HWND hwndOwner);
+}
+
+[
+    object,
+    uuid(71c0d2bc-726d-45cc-a6c0-2e31c1db2159),
+    pointer_default(unique)
+]
+interface IInitializeWithBindCtx : IUnknown
+{
+    HRESULT Initialize([in] IBindCtx *pbc);
+}
+
+[
+    object,
+    uuid(68284fAA-6A48-11D0-8c78-00C04fd918b4),
+    pointer_default(unique)
+]
+interface IInputObject: IUnknown
+{
+
+    HRESULT UIActivateIO([in] BOOL fActivate, [in, unique] MSG *pMsg);
+
+    HRESULT HasFocusIO();
+
+    HRESULT TranslateAcceleratorIO([in] MSG *pMsg);
+}
+
+[
+    object,
+    uuid(F1DB8392-7331-11D0-8C99-00A0C92DBFE8),
+    pointer_default(unique),
+]
+interface IInputObjectSite: IUnknown
+{
+
+    HRESULT OnFocusChangeIS([in, unique] IUnknown* punkObj, [in] BOOL fSetFocus);
+}
+
+[
+    uuid(57ced8a7-3f4a-432c-9350-30f24483f74f),
+]
+interface INamespaceWalk : IUnknown
+{
+    typedef [v1_enum] enum NAMESPACEWALKFLAG
+    {
+        NSWF_DEFAULT                        = 0x00000000,
+        NSWF_NONE_IMPLIES_ALL               = 0x00000001,
+        NSWF_ONE_IMPLIES_ALL                = 0x00000002,
+        NSWF_DONT_TRAVERSE_LINKS            = 0x00000004,
+        NSWF_DONT_ACCUMULATE_RESULT         = 0x00000008,
+
+        NSWF_TRAVERSE_STREAM_JUNCTIONS      = 0x00000010,
+
+        NSWF_FILESYSTEM_ONLY                = 0x00000020,
+        NSWF_SHOW_PROGRESS                  = 0x00000040,
+        NSWF_FLAG_VIEWORDER                 = 0x00000080,
+        NSWF_IGNORE_AUTOPLAY_HIDA           = 0x00000100,
+        NSWF_ASYNC                          = 0x00000200,
+        NSWF_DONT_RESOLVE_LINKS             = 0x00000400,
+        NSWF_ACCUMULATE_FOLDERS             = 0x00000800,
+        NSWF_DONT_SORT                      = 0x00001000,
+        NSWF_USE_TRANSFER_MEDIUM            = 0x00002000,
+
+        NSWF_DONT_TRAVERSE_STREAM_JUNCTIONS = 0x00004000,
+        NSWF_ANY_IMPLIES_ALL                = 0x00008000,
+
+    }  NAMESPACEWALKFLAG;
+
+    cpp_quote("DEFINE_ENUM_FLAG_OPERATORS(NAMESPACEWALKFLAG)")
+
+    HRESULT Walk(
+        [in] IUnknown *punkToWalk,
+        [in] DWORD  dwFlags,
+        [in] int cDepth,
+        [in, unique] INamespaceWalkCB *pnswcb);
+
+    HRESULT GetIDArrayResult(
+        [out] UINT *pcItems,
+        [out, size_is( , *pcItems)] PIDLIST_ABSOLUTE **prgpidl);
+}
+
+[
+    uuid(d92995f8-cf5e-4a76-bf59-ead39ea2b97e),
+]
+interface INamespaceWalkCB : IUnknown
+{
+
+    HRESULT FoundItem([in] IShellFolder *psf, [in] PCUITEMID_CHILD pidl);
+
+    HRESULT EnterFolder([in] IShellFolder *psf, [in] PCUITEMID_CHILD pidl);
+
+    HRESULT LeaveFolder([in] IShellFolder *psf, [in] PCUITEMID_CHILD pidl);
+
+    HRESULT InitializeProgressDialog([out, string] LPWSTR *ppszTitle, [out, string] LPWSTR *ppszCancel);
+}
+
+[
+    uuid(7ac7492b-c38e-438a-87db-68737844ff70),
+]
+interface INamespaceWalkCB2 : INamespaceWalkCB
+{
+    HRESULT WalkComplete([in] HRESULT hr);
+}
+
+[
+    uuid(dcb07fdc-3bb5-451c-90be-966644fed7b0),
+    pointer_default(unique)
+]
+interface INewMenuClient : IUnknown
+{
+    HRESULT IncludeItems([out] NMCII_FLAGS *pflags);
+
+    HRESULT SelectAndEditItem(
+        [in] PCIDLIST_ABSOLUTE pidlItem,
+        [in] NMCSAEI_FLAGS flags);
+};
+
+[
+    object,
+    uuid(321a6a6a-d61f-4bf3-97ae-14be2986bb36),
+    pointer_default(unique)
+]
+interface IObjectWithBackReferences : IUnknown
+{
+
+    HRESULT RemoveBackReferences();
+}
+
+[
+    object,
+    uuid(8895b1c6-b41f-4c1c-a562-0d564250836f),
+]
+interface IPreviewHandler : IUnknown
+{
+    HRESULT SetWindow(
+        [in] HWND hwnd,
+        [in] const RECT *prc);
+
+    HRESULT SetRect([in] const RECT *prc);
+
+    HRESULT DoPreview();
+
+    HRESULT Unload();
+
+    HRESULT SetFocus();
+
+    HRESULT QueryFocus([out] HWND* phwnd);
+
+    HRESULT TranslateAccelerator([in] MSG* pmsg);
+}
+
+[
+    object,
+    uuid(fec87aaf-35f9-447a-adb7-20234491401a),
+    pointer_default(unique)
+]
+interface IPreviewHandlerFrame: IUnknown
+{
+    typedef struct PREVIEWHANDLERFRAMEINFO
+    {
+        HACCEL haccel;
+        UINT   cAccelEntries;
+    } PREVIEWHANDLERFRAMEINFO;
+
+    HRESULT GetWindowContext([out] PREVIEWHANDLERFRAMEINFO* pinfo);
+
+    HRESULT TranslateAccelerator([in] MSG* pmsg);
+}
+
+[
+    object,
+    uuid(196bf9a5-b346-4ef0-aa1e-5dcdb76768b1),
+    pointer_default(unique)
+]
+interface IPreviewHandlerVisuals : IUnknown
+{
+    HRESULT SetBackgroundColor([in] COLORREF color);
+
+    HRESULT SetFont([in] const LOGFONTW *plf);
+
+    HRESULT SetTextColor([in] COLORREF color);
+}
+
+[
+    uuid(000214FE-0000-0000-C000-000000000046),
+    object,
+    pointer_default(unique)
+]
+interface IRemoteComputer : IUnknown
+{
+
+    HRESULT Initialize(
+        [in, string] LPCWSTR pszMachine,
+        [in] BOOL bEnumerating);
+}
+
+[
+    uuid(e693cf68-d967-4112-8763-99172aee5e5a),
+    object,
+    pointer_default(unique)
+]
+interface IVisualProperties : IUnknown
+{
+    typedef [v1_enum] enum VPWATERMARKFLAGS
+    {
+        VPWF_DEFAULT    = 0x00000000,
+        VPWF_ALPHABLEND = 0x00000001,
+    } VPWATERMARKFLAGS;
+
+    cpp_quote("DEFINE_ENUM_FLAG_OPERATORS(VPWATERMARKFLAGS)")
+
+    HRESULT SetWatermark([in, unique] HBITMAP hbmp, [in] VPWATERMARKFLAGS vpwf);
+
+    typedef [v1_enum] enum VPCOLORFLAGS
+    {
+        VPCF_TEXT           = 1,
+        VPCF_BACKGROUND     = 2,
+        VPCF_SORTCOLUMN     = 3,
+        VPCF_SUBTEXT        = 4,
+        VPCF_TEXTBACKGROUND = 5,
+    } VPCOLORFLAGS;
+
+    HRESULT SetColor(
+        [in] VPCOLORFLAGS vpcf,
+        [in] COLORREF cr);
+
+    HRESULT GetColor(
+        [in] VPCOLORFLAGS vpcf,
+        [out] COLORREF *pcr);
+
+    HRESULT SetItemHeight([in] int cyItemInPixels);
+
+    HRESULT GetItemHeight([out] int *cyItemInPixels);
+
+    HRESULT SetFont(
+        [in] const LOGFONTW* plf,
+        [in] BOOL bRedraw);
+
+    HRESULT GetFont([out] LOGFONTW* plf);
+
+    HRESULT SetTheme(
+        [in, unique, string] LPCWSTR pszSubAppName,
+        [in, unique, string] LPCWSTR pszSubIdList);
+}

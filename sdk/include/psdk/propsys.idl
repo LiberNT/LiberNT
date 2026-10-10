@@ -65,6 +65,10 @@ interface IInitializeWithStream : IUnknown
         [in] IStream *pstream,
         [in] DWORD grfMode
     );
+    [call_as(Initialize)] HRESULT RemoteInitialize(
+        [in] IStream *pstream,
+        [in] DWORD grfMode
+    );
 }
 
 [

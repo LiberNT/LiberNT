@@ -1,0 +1,176 @@
+/*
+ * PROJECT:     LiberNT SDK
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Image Mastering API version 1 interfaces
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+import "oaidl.idl";
+import "ocidl.idl";
+import "propidl.idl";
+
+interface IDiscRecorder;
+interface IEnumDiscRecorders;
+interface IEnumDiscMasterFormats;
+interface IRedbookDiscMaster;
+interface IJolietDiscMaster;
+interface IDiscMasterProgressEvents;
+interface IDiscMaster;
+
+[
+    object,
+    uuid(85ac9776-ca88-4cf2-894e-09598c078a41),
+    pointer_default(unique)
+]
+interface IDiscRecorder : IUnknown
+{
+    enum MEDIA_TYPES
+    {
+        MEDIA_CDDA_CDROM = 1,
+        MEDIA_CD_ROM_XA,
+        MEDIA_CD_I,
+        MEDIA_CD_EXTRA,
+        MEDIA_CD_OTHER,
+        MEDIA_SPECIAL
+    };
+
+    enum MEDIA_FLAGS
+    {
+        MEDIA_BLANK                    = 0x1,
+        MEDIA_RW                       = 0x2,
+        MEDIA_WRITABLE                 = 0x4,
+        MEDIA_FORMAT_UNUSABLE_BY_IMAPI = 0x8
+    };
+
+    enum RECORDER_TYPES
+    {
+        RECORDER_CDR  = 0x1,
+        RECORDER_CDRW = 0x2
+    };
+
+    const ULONG RECORDER_DOING_NOTHING = 0;
+    const ULONG RECORDER_OPENED = 0x1;
+    const ULONG RECORDER_BURNING = 0x2;
+
+    HRESULT Init([in, size_is(nulIDSize)] byte *pbyUniqueID, [in] ULONG nulIDSize, [in] ULONG nulDriveNumber);
+    HRESULT GetRecorderGUID([in, out, unique, size_is(ulBufferSize)] byte *pbyUniqueID, [in] ULONG ulBufferSize,
+                            [out] ULONG *pulReturnSizeRequired);
+    HRESULT GetRecorderType([out] long *fTypeCode);
+    HRESULT GetDisplayNames([in, out, unique] BSTR *pbstrVendorID, [in, out, unique] BSTR *pbstrProductID,
+                            [in, out, unique] BSTR *pbstrRevision);
+    HRESULT GetBasePnPID([out] BSTR *pbstrBasePnPID);
+    HRESULT GetPath([out] BSTR *pbstrPath);
+    HRESULT GetRecorderProperties([out] IPropertyStorage **ppPropStg);
+    HRESULT SetRecorderProperties([in] IPropertyStorage *pPropStg);
+    HRESULT GetRecorderState([out] ULONG *pulDevStateFlags);
+    HRESULT OpenExclusive();
+    HRESULT QueryMediaType([out] long *fMediaType, [out] long *fMediaFlags);
+    HRESULT QueryMediaInfo([out] byte *pbSessions, [out] byte *pbLastTrack, [out] ULONG *ulStartAddress,
+                           [out] ULONG *ulNextWritable, [out] ULONG *ulFreeBlocks);
+    HRESULT Eject();
+    HRESULT Erase([in] boolean bFullErase);
+    HRESULT Close();
+}
+
+[
+    object,
+    uuid(9b1921e1-54ac-11d3-9144-00104ba11c5e),
+    pointer_default(unique)
+]
+interface IEnumDiscRecorders : IUnknown
+{
+    HRESULT Next([in] ULONG cRecorders, [out, size_is(cRecorders), length_is(*pcFetched)] IDiscRecorder **ppRecorder,
+                 [out] ULONG *pcFetched);
+    HRESULT Skip([in] ULONG cRecorders);
+    HRESULT Reset();
+    HRESULT Clone([out] IEnumDiscRecorders **ppEnum);
+}
+
+[
+    object,
+    uuid(ddf445e1-54ba-11d3-9144-00104ba11c5e),
+    pointer_default(unique)
+]
+interface IEnumDiscMasterFormats : IUnknown
+{
+    HRESULT Next([in] ULONG cFormats, [out, size_is(cFormats), length_is(*pcFetched)] LPIID lpiidFormatID,
+                 [out] ULONG *pcFetched);
+    HRESULT Skip([in] ULONG cFormats);
+    HRESULT Reset();
+    HRESULT Clone([out] IEnumDiscMasterFormats **ppEnum);
+}
+
+[
+    object,
+    uuid(e3bc42cd-4e5c-11d3-9144-00104ba11c5e),
+    pointer_default(unique)
+]
+interface IRedbookDiscMaster : IUnknown
+{
+    HRESULT GetTotalAudioTracks([out, retval] long *pnTracks);
+    HRESULT GetTotalAudioBlocks([out, retval] long *pnBlocks);
+    HRESULT GetUsedAudioBlocks([out, retval] long *pnBlocks);
+    HRESULT GetAvailableAudioTrackBlocks([out, retval] long *pnBlocks);
+    HRESULT GetAudioBlockSize([out, retval] long *pnBlockBytes);
+    HRESULT CreateAudioTrack([in] long nBlocks);
+    HRESULT AddAudioTrackBlocks([in, size_is(cb)] byte *pby, [in] long cb);
+    HRESULT CloseAudioTrack();
+}
+
+[
+    object,
+    uuid(e3bc42ce-4e5c-11d3-9144-00104ba11c5e),
+    pointer_default(unique)
+]
+interface IJolietDiscMaster : IUnknown
+{
+    HRESULT GetTotalDataBlocks([out, retval] long *pnBlocks);
+    HRESULT GetUsedDataBlocks([out, retval] long *pnBlocks);
+    HRESULT GetDataBlockSize([out, retval] long *pnBlockBytes);
+    HRESULT AddData([in] IStorage *pStorage, long lFileOverwrite);
+    HRESULT GetJolietProperties([out] IPropertyStorage **ppPropStg);
+    HRESULT SetJolietProperties([in] IPropertyStorage *pPropStg);
+}
+
+[
+    object,
+    uuid(ec9e51c1-4e5d-11d3-9144-00104ba11c5e),
+    pointer_default(unique)
+]
+interface IDiscMasterProgressEvents : IUnknown
+{
+    HRESULT QueryCancel([out, retval] boolean *pbCancel);
+    HRESULT NotifyPnPActivity();
+    HRESULT NotifyAddProgress([in] long nCompletedSteps, [in] long nTotalSteps);
+    HRESULT NotifyBlockProgress([in] long nCompleted, [in] long nTotal);
+    HRESULT NotifyTrackProgress([in] long nCurrentTrack, [in] long nTotalTracks);
+    HRESULT NotifyPreparingBurn([in] long nEstimatedSeconds);
+    HRESULT NotifyClosingDisc([in] long nEstimatedSeconds);
+    HRESULT NotifyBurnComplete([in] HRESULT status);
+    HRESULT NotifyEraseComplete([in] HRESULT status);
+}
+
+[
+    object,
+    uuid(520cca62-51a5-11d3-9144-00104ba11c5e),
+    pointer_default(unique)
+]
+interface IDiscMaster : IUnknown
+{
+    HRESULT Open();
+    HRESULT EnumDiscMasterFormats([out] IEnumDiscMasterFormats **ppEnum);
+    HRESULT GetActiveDiscMasterFormat([out] LPIID lpiid);
+    HRESULT SetActiveDiscMasterFormat([in] REFIID riid, [out, iid_is(riid)] void **ppUnk);
+    HRESULT EnumDiscRecorders([out] IEnumDiscRecorders **ppEnum);
+    HRESULT GetActiveDiscRecorder([out] IDiscRecorder **ppRecorder);
+    HRESULT SetActiveDiscRecorder([in] IDiscRecorder *pRecorder);
+    HRESULT ClearFormatContent();
+    HRESULT ProgressAdvise([in] IDiscMasterProgressEvents *pEvents, [out, retval] UINT_PTR *pvCookie);
+    HRESULT ProgressUnadvise([in] UINT_PTR vCookie);
+    HRESULT RecordDisc([in] boolean bSimulate, [in] boolean bEjectAfterBurn);
+    HRESULT Close();
+}
+
+cpp_quote("DEFINE_GUID(CLSID_MSDiscRecorderObj, 0x520cca61, 0x51a5, 0x11d3, 0x91, 0x44, 0x00, 0x10, 0x4b, 0xa1, 0x1c, 0x5e);")
+cpp_quote("DEFINE_GUID(CLSID_MSDiscMasterObj, 0x520cca63, 0x51a5, 0x11d3, 0x91, 0x44, 0x00, 0x10, 0x4b, 0xa1, 0x1c, 0x5e);")
+cpp_quote("DEFINE_GUID(CLSID_MSEnumDiscRecordersObj, 0x8a03567a, 0x63cb, 0x4ba8, 0xba, 0xf6, 0x52, 0x11, 0x98, 0x16, 0xd1, 0xef);")

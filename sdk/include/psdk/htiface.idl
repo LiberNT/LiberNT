@@ -85,6 +85,18 @@ interface ITargetFrame: IUnknown
     HRESULT OnChildFrameDeactivate([in] IUnknown *pUnkChildFrame);
 }
 
+[
+    object,
+    uuid(548793c0-9e74-11cf-9655-00a0c9034923),
+    pointer_default(unique)
+]
+interface ITargetEmbedding : IUnknown
+{
+    typedef [unique] ITargetEmbedding *LPTARGETEMBEDDING;
+
+    HRESULT GetTargetFrame([out] ITargetFrame **ppTargetFrame);
+}
+
 /*****************************************************************************
  *    ITargetFramePriv interface
  */

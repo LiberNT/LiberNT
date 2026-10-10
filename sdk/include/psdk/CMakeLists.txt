@@ -72,6 +72,7 @@ list(APPEND SOURCE
     evr9.idl
     eventtoken.idl
     exdisp.idl
+    filter.idl
     fusion.idl
     gameinput.idl
     hlink.idl
@@ -85,6 +86,7 @@ list(APPEND SOURCE
     iads.idl
     icftypes.idl
     ieautomation.idl
+    imapi.idl
     imnact.idl
     imnxport.idl
     indexsrv.idl

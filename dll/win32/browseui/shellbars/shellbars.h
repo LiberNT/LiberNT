@@ -7,6 +7,8 @@
 
 #include <windef.h>
 #include <winbase.h>
+#include <wingdi.h>
+#include <wincon.h>
 #include <shlobj.h>
 #include <shlobj_undoc.h>
 #include <shlguid_undoc.h>
