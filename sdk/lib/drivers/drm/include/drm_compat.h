@@ -225,10 +225,14 @@ struct drm_gem_shmem_object
     bool pages_mark_dirty_on_put;
     bool pages_mark_accessed_on_put;
     bool map_wc;
+    void (*lc_import_release)(void *context);
+    void *lc_import_context;
 };
 #define to_drm_gem_shmem_obj(obj) container_of(obj, struct drm_gem_shmem_object, base)
 extern const struct vm_operations_struct drm_gem_shmem_vm_ops;
 struct drm_gem_shmem_object *drm_gem_shmem_create(struct drm_device *dev, size_t size);
+struct drm_gem_shmem_object *drm_gem_shmem_lc_import(struct drm_device *dev, u64 first_pfn, size_t size,
+                                                      void (*release)(void *context), void *context);
 void drm_gem_shmem_free(struct drm_gem_shmem_object *shmem);
 int drm_gem_shmem_pin(struct drm_gem_shmem_object *shmem);
 void drm_gem_shmem_unpin(struct drm_gem_shmem_object *shmem);
@@ -374,6 +378,7 @@ int drmm_mutex_init(struct drm_device *dev, struct mutex *lock);
 struct drm_file *lc_drm_file_open(struct drm_device *dev);
 void lc_drm_file_close(struct drm_file *file);
 long lc_drm_ioctl(struct drm_file *file, unsigned int cmd, void __user *arg, unsigned int arg_size);
+long lc_drm_ioctl_kernel(struct drm_file *file, unsigned int cmd, void *data);
 int lc_drm_mmap(struct drm_file *file, u64 offset, u64 size, u64 *user_address);
 int lc_drm_munmap(struct drm_file *file, u64 user_address);
 

@@ -24,3 +24,6 @@ HKLM,"SYSTEM\CurrentControlSet\Services\k1xwdt","ErrorControl",0x00010001,0x0000
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xwdt","ImagePath",0x00020000,"system32\drivers\k1xwdt.sys"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xwdt","Start",0x00010001,0x00000003
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xwdt","Type",0x00010001,0x00000001
+
+HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_dpu","Service",0x00000000,"k1xdpu"
+HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\FDT#spacemit_dpu","ClassGUID",0x00000000,"{4D36E968-E325-11CE-BFC1-08002BE10318}"

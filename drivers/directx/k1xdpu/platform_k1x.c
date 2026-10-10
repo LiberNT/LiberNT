@@ -7,68 +7,14 @@
 
 #include "softgpu.h"
 #include "softgpu_2d_core.h"
-
-#define K1XDPU_TAG                       'pDiK'
-#define K1XDPU_WORKING_SURFACE_COUNT     12UL
-
-#define K1X_HDMI_BASE                    0xC0400500ULL
-#define K1X_HDMI_SIZE                    0x200
-#define K1X_HDMI_DDC_TX                  0x00
-#define K1X_HDMI_DDC_RX                  0x04
-#define K1X_HDMI_DDC_COMMAND             0x08
-#define K1X_HDMI_STATUS                  0x0C
-#define K1X_HDMI_STATUS_RX_COUNT_SHIFT   4
-#define K1X_HDMI_STATUS_RX_COUNT_MASK    0x1F0
-#define K1X_HDMI_STATUS_HPD              (1UL << 12)
-#define K1X_HDMI_STATUS_DDC_DONE         (1UL << 14)
-#define K1X_HDMI_STATUS_DDC_NACK         (1UL << 15)
-#define K1X_HDMI_STATUS_DDC_LOST         (1UL << 16)
-#define K1X_HDMI_DDC_CHUNK               16
-#define K1X_EDID_ADDRESS                 0x50
-#define K1X_EDID_BLOCK                   128
-#define K1X_EDID_MAX                     256
-#define K1X_DDC_TIMEOUT_US               50000
-
-#define K1X_APMU_BASE                    0xD4282800ULL
-#define K1X_APMU_SIZE                    0x100
-#define K1X_APMU_POWER_STATUS            0xF0
-#define K1X_APMU_POWER_LCD               (1UL << 12)
-#define K1X_APMU_POWER_HDMI              (1UL << 15)
-
-#define K1X_DPU_INT_OFFSET               0x900
-#define K1X_DPU_INT_SIZE                 0x100
-#define K1X_DPU_INT_ONLINE2_STATUS       0x38
-#define K1X_DPU_INT_ONLINE2_RAW          0x60
-#define K1X_DPU_INT_VSYNC                (1UL << 0)
-#define K1X_DPU_VSYNC_TIMEOUT_US         50000
-#define K1X_DPU_POLL_US                  20
-
-typedef struct _K1XDPU_CONTEXT
-{
-    PUCHAR Hdmi;
-    PUCHAR DpuInterrupts;
-    ULONG EdidLength;
-    UCHAR Edid[K1X_EDID_MAX];
-} K1XDPU_CONTEXT, *PK1XDPU_CONTEXT;
-
-static ULONG
-K1xRead(_In_ PUCHAR Base, _In_ ULONG Offset)
-{
-    return READ_REGISTER_ULONG((PULONG)(Base + Offset));
-}
-
-static VOID
-K1xWrite(_In_ PUCHAR Base, _In_ ULONG Offset, _In_ ULONG Value)
-{
-    WRITE_REGISTER_ULONG((PULONG)(Base + Offset), Value);
-}
+#include "k1xdpu.h"
 
 static NTSTATUS
 K1xDdcFinish(_In_ PUCHAR Hdmi)
 {
     ULONG Elapsed, Status;
 
-    for (Elapsed = 0; Elapsed < K1X_DDC_TIMEOUT_US; Elapsed += K1X_DPU_POLL_US)
+    for (Elapsed = 0; Elapsed < K1X_DDC_TIMEOUT_US; Elapsed += K1X_DDC_POLL_US)
     {
         Status = K1xRead(Hdmi, K1X_HDMI_STATUS);
         if (Status & K1X_HDMI_STATUS_DDC_DONE)
@@ -77,7 +23,7 @@ K1xDdcFinish(_In_ PUCHAR Hdmi)
             return (Status & (K1X_HDMI_STATUS_DDC_NACK | K1X_HDMI_STATUS_DDC_LOST)) ?
                        STATUS_DEVICE_PROTOCOL_ERROR : STATUS_SUCCESS;
         }
-        KeStallExecutionProcessor(K1X_DPU_POLL_US);
+        KeStallExecutionProcessor(K1X_DDC_POLL_US);
     }
     return STATUS_IO_TIMEOUT;
 }
@@ -101,7 +47,7 @@ K1xDdcReadEdid(_In_ PUCHAR Hdmi, _In_ UCHAR Offset, _Out_writes_bytes_(Length) P
     {
         Count = min(Length - Done, (ULONG)K1X_HDMI_DDC_CHUNK);
         K1xWrite(Hdmi, K1X_HDMI_DDC_COMMAND, ((Count - 1) << 8) | (K1X_EDID_ADDRESS << 1) | 1);
-        for (Elapsed = 0; ; Elapsed += K1X_DPU_POLL_US)
+        for (Elapsed = 0; ; Elapsed += K1X_DDC_POLL_US)
         {
             Status = K1xRead(Hdmi, K1X_HDMI_STATUS);
             if (!(Status & K1X_HDMI_STATUS_HPD))
@@ -110,7 +56,7 @@ K1xDdcReadEdid(_In_ PUCHAR Hdmi, _In_ UCHAR Offset, _Out_writes_bytes_(Length) P
                 break;
             if (Elapsed >= K1X_DDC_TIMEOUT_US)
                 return STATUS_IO_TIMEOUT;
-            KeStallExecutionProcessor(K1X_DPU_POLL_US);
+            KeStallExecutionProcessor(K1X_DDC_POLL_US);
         }
         for (Index = 0; Index < Count; ++Index)
             Buffer[Done + Index] = (UCHAR)K1xRead(Hdmi, K1X_HDMI_DDC_RX);
@@ -185,16 +131,20 @@ K1xReadPowerStatus(VOID)
     return Status;
 }
 
-static ULONG
-K1xFindRegName(_In_ PDEVICE_OBJECT PhysicalDeviceObject, _In_z_ const CHAR *Wanted)
+ULONG
+K1xFindName(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _In_ PCWSTR Property,
+    _In_z_ const CHAR *Wanted)
 {
     UCHAR Storage[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + 64];
     PKEY_VALUE_PARTIAL_INFORMATION Information = (PKEY_VALUE_PARTIAL_INFORMATION)Storage;
-    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"reg-names");
     ULONG Result, Offset = 0, Index = 0, Found = MAXULONG;
     SIZE_T WantedLength = strlen(Wanted);
+    UNICODE_STRING Name;
     HANDLE Key;
 
+    RtlInitUnicodeString(&Name, Property);
     if (!NT_SUCCESS(IoOpenDeviceRegistryKey(PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE, KEY_READ, &Key)))
         return MAXULONG;
     if (NT_SUCCESS(ZwQueryValueKey(Key, &Name, KeyValuePartialInformation, Information, sizeof(Storage), &Result)))
@@ -219,50 +169,53 @@ K1xFindRegName(_In_ PDEVICE_OBJECT PhysicalDeviceObject, _In_z_ const CHAR *Want
     return Found;
 }
 
-static PUCHAR
-K1xMapDpuInterrupts(_In_ PDXGK_INTERFACE DxgkInterface, _In_z_ const CHAR *Output)
+PCM_PARTIAL_RESOURCE_DESCRIPTOR
+K1xFindResource(
+    _In_ const DXGK_DEVICE_INFO *Information,
+    _In_ UCHAR Type,
+    _In_ ULONG Ordinal)
 {
-    PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor, Dpu = NULL;
-    DXGK_DEVICE_INFO Information;
-    PHYSICAL_ADDRESS Address;
-    ULONG Index, Wanted, Memory = 0;
+    PCM_PARTIAL_RESOURCE_LIST List;
+    ULONG Index, Seen = 0;
 
-    if (!DxgkInterface->DxgkCbGetDeviceInformation ||
-        !NT_SUCCESS(DxgkInterface->DxgkCbGetDeviceInformation(DxgkInterface->DeviceHandle, &Information)) ||
-        !Information.TranslatedResourceList || !Information.TranslatedResourceList->Count ||
-        !Information.PhysicalDeviceObject)
-    {
+    if (!Information->TranslatedResourceList || !Information->TranslatedResourceList->Count)
         return NULL;
-    }
-    Wanted = K1xFindRegName(Information.PhysicalDeviceObject, Output);
-    for (Index = 0; Index < Information.TranslatedResourceList->List[0].PartialResourceList.Count; ++Index)
+    List = &Information->TranslatedResourceList->List[0].PartialResourceList;
+    for (Index = 0; Index < List->Count; ++Index)
     {
-        Descriptor = &Information.TranslatedResourceList->List[0].PartialResourceList.PartialDescriptors[Index];
-        if (Descriptor->Type != CmResourceTypeMemory)
+        if (List->PartialDescriptors[Index].Type != Type)
             continue;
-        if (Memory++ == Wanted)
-        {
-            Dpu = Descriptor;
-            break;
-        }
+        if (Seen++ == Ordinal)
+            return &List->PartialDescriptors[Index];
     }
-    if (!Dpu || Dpu->u.Memory.Length < K1X_DPU_INT_OFFSET + K1X_DPU_INT_SIZE)
+    return NULL;
+}
+
+static PUCHAR
+K1xMapDpu(
+    _In_ const DXGK_DEVICE_INFO *Information,
+    _In_z_ const CHAR *Output)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Dpu;
+
+    Dpu = K1xFindResource(Information, CmResourceTypeMemory,
+                          K1xFindName(Information->PhysicalDeviceObject, L"reg-names", Output));
+    if (!Dpu || Dpu->u.Memory.Length < K1X_DPU_SIZE)
         return NULL;
-    Address.QuadPart = Dpu->u.Memory.Start.QuadPart + K1X_DPU_INT_OFFSET;
-    return MmMapIoSpace(Address, K1X_DPU_INT_SIZE, MmNonCached);
+    return MmMapIoSpace(Dpu->u.Memory.Start, K1X_DPU_SIZE, MmNonCached);
 }
 
 static BOOLEAN
-K1xWaitVsync(_In_ PUCHAR DpuInterrupts)
+K1xPollVsync(_In_ PUCHAR Dpu)
 {
     ULONG Elapsed;
 
-    K1xWrite(DpuInterrupts, K1X_DPU_INT_ONLINE2_STATUS, K1X_DPU_INT_VSYNC);
-    for (Elapsed = 0; Elapsed < K1X_DPU_VSYNC_TIMEOUT_US; Elapsed += K1X_DPU_POLL_US)
+    K1xWrite(Dpu, K1X_DPU_INT_ONLINE2_STATUS, K1X_DPU_INT_VSYNC);
+    for (Elapsed = 0; Elapsed < K1X_VSYNC_TIMEOUT_MS * 1000; Elapsed += K1X_DDC_POLL_US)
     {
-        if (K1xRead(DpuInterrupts, K1X_DPU_INT_ONLINE2_RAW) & K1X_DPU_INT_VSYNC)
+        if (K1xRead(Dpu, K1X_DPU_INT_ONLINE2_RAW) & K1X_DPU_INT_VSYNC)
             return TRUE;
-        KeStallExecutionProcessor(K1X_DPU_POLL_US);
+        KeStallExecutionProcessor(K1X_DDC_POLL_US);
     }
     return FALSE;
 }
@@ -281,6 +234,7 @@ SoftGpuPlatformQueryStart(
     _Out_ PSOFTGPU_PLATFORM_CONFIG Config)
 {
     DXGK_DISPLAY_INFORMATION PostDisplayInfo;
+    DXGK_DEVICE_INFO Information;
     ULONGLONG PostVisibleLength;
     PHYSICAL_ADDRESS Address;
     PK1XDPU_CONTEXT Context;
@@ -323,16 +277,25 @@ SoftGpuPlatformQueryStart(
     Context = ExAllocatePoolZero(NonPagedPool, sizeof(*Context), K1XDPU_TAG);
     if (!Context)
         return STATUS_INSUFFICIENT_RESOURCES;
+    Context->Device = Device;
+    ExInitializeFastMutex(&Context->GpuMutex);
+    RtlCopyMemory(&Context->Dxgk, DxgkInterface, min((SIZE_T)DxgkInterface->Size, sizeof(Context->Dxgk)));
+
     PowerStatus = K1xReadPowerStatus();
+    if (PowerStatus & K1X_APMU_POWER_HDMI)
+        Context->Output = "hdmi";
+    else if (PowerStatus & K1X_APMU_POWER_LCD)
+        Context->Output = "dsi";
+    if (Context->Output && DxgkInterface->DxgkCbGetDeviceInformation &&
+        NT_SUCCESS(DxgkInterface->DxgkCbGetDeviceInformation(DxgkInterface->DeviceHandle, &Information)) &&
+        Information.PhysicalDeviceObject)
+    {
+        Context->Dpu = K1xMapDpu(&Information, Context->Output);
+    }
     if (PowerStatus & K1X_APMU_POWER_HDMI)
     {
         Address.QuadPart = K1X_HDMI_BASE;
         Context->Hdmi = MmMapIoSpace(Address, K1X_HDMI_SIZE, MmNonCached);
-        Context->DpuInterrupts = K1xMapDpuInterrupts(DxgkInterface, "hdmi");
-    }
-    else if (PowerStatus & K1X_APMU_POWER_LCD)
-    {
-        Context->DpuInterrupts = K1xMapDpuInterrupts(DxgkInterface, "dsi");
     }
     if (Context->Hdmi)
         K1xReadEdid(Context);
@@ -356,9 +319,23 @@ NTSTATUS
 SoftGpuPlatformStartScanout(
     _Inout_ PSOFTGPU_DEVICE Device)
 {
+    PK1XDPU_CONTEXT Context;
+    DXGK_DEVICE_INFO Information;
+
     /* FIXME: program the DPU (RDMA layer, compositor, output timing) and the
      * HDMI PHY/PLL for the committed mode instead of reusing U-Boot's setup. */
-    UNREFERENCED_PARAMETER(Device);
+    if (Device == NULL || Device->PlatformContext == NULL)
+        return STATUS_NOT_SUPPORTED;
+    Context = Device->PlatformContext;
+    if (!Context->Dxgk.DxgkCbGetDeviceInformation ||
+        !NT_SUCCESS(Context->Dxgk.DxgkCbGetDeviceInformation(Context->Dxgk.DeviceHandle, &Information)) ||
+        !Information.PhysicalDeviceObject)
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    if (Context->Dpu && NT_SUCCESS(K1xPlanesStart(Context, &Information, Context->Output)))
+        Device->PlatformHardwarePointer = TRUE;
+    (VOID)K1xGpuStart(Context, &Information);
     return STATUS_NOT_SUPPORTED;
 }
 
@@ -371,10 +348,13 @@ SoftGpuPlatformStopScanout(
     if (Device == NULL || Device->PlatformContext == NULL)
         return STATUS_SUCCESS;
     Context = Device->PlatformContext;
-    Device->PlatformContext = NULL;
     InterlockedExchange(&Device->ScanoutVBlankAvailable, 0);
-    if (Context->DpuInterrupts)
-        MmUnmapIoSpace(Context->DpuInterrupts, K1X_DPU_INT_SIZE);
+    K1xPlanesStop(Context);
+    Device->PlatformHardwarePointer = FALSE;
+    K1xGpuStop(Context);
+    Device->PlatformContext = NULL;
+    if (Context->Dpu)
+        MmUnmapIoSpace(Context->Dpu, K1X_DPU_SIZE);
     if (Context->Hdmi)
         MmUnmapIoSpace(Context->Hdmi, K1X_HDMI_SIZE);
     ExFreePoolWithTag(Context, K1XDPU_TAG);
@@ -415,8 +395,9 @@ NTSTATUS
 SoftGpuPlatformUpdatePointer(
     _Inout_ PSOFTGPU_DEVICE Device)
 {
-    UNREFERENCED_PARAMETER(Device);
-    return STATUS_NOT_SUPPORTED;
+    if (Device == NULL || Device->PlatformContext == NULL)
+        return STATUS_DEVICE_NOT_READY;
+    return K1xPlanesUpdatePointer(Device->PlatformContext);
 }
 
 VOID
@@ -443,15 +424,15 @@ SoftGpuPlatformInitializeTiming(
         return;
     InterlockedExchange(&Device->ScanoutVBlankAvailable, 0);
     Context = Device->PlatformContext;
-    if (!Context || !Context->DpuInterrupts || !K1xWaitVsync(Context->DpuInterrupts))
+    if (!Context || !Context->Dpu || Context->PlanesReady || !K1xPollVsync(Context->Dpu))
         return;
     Start = KeQueryPerformanceCounter(&Frequency);
-    if (!K1xWaitVsync(Context->DpuInterrupts))
+    if (!K1xPollVsync(Context->Dpu))
         return;
     End = KeQueryPerformanceCounter(NULL);
     PeriodUs = (ULONGLONG)(End.QuadPart - Start.QuadPart) * 1000000ULL / (ULONGLONG)Frequency.QuadPart;
     DPRINT1("K1XDPU: vertical blank every %I64u us\n", PeriodUs);
-    if (PeriodUs >= 5000 && PeriodUs <= K1X_DPU_VSYNC_TIMEOUT_US)
+    if (PeriodUs >= 5000 && PeriodUs <= K1X_VSYNC_TIMEOUT_MS * 1000)
         InterlockedExchange(&Device->ScanoutVBlankAvailable, 1);
 }
 
@@ -464,7 +445,7 @@ SoftGpuPlatformWaitForVerticalBlank(
     if (Device == NULL || InterlockedCompareExchange(&Device->ScanoutVBlankAvailable, 0, 0) == 0)
         return FALSE;
     Context = Device->PlatformContext;
-    if (Context && Context->DpuInterrupts && K1xWaitVsync(Context->DpuInterrupts))
+    if (Context && K1xPlanesWaitVsync(Context))
         return TRUE;
     InterlockedExchange(&Device->ScanoutVBlankAvailable, 0);
     return FALSE;
@@ -483,7 +464,7 @@ SoftGpuPlatformQueryScanLine(
 MEMORY_CACHING_TYPE
 SoftGpuPlatformSegmentCacheType(VOID)
 {
-    return MmWriteCombined;
+    return MmCached;
 }
 
 NTSTATUS
@@ -504,4 +485,94 @@ SoftGpuPlatformQueryDescriptor(
     RtlCopyMemory(DeviceDescriptor->DescriptorBuffer, Context->Edid + DeviceDescriptor->DescriptorOffset, Length);
     DeviceDescriptor->DescriptorLength = Length;
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+SoftGpuPlatformEscape(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ CONST DXGKARG_ESCAPE *Escape)
+{
+    if (Device == NULL || Escape == NULL || Device->PlatformContext == NULL)
+        return STATUS_NOT_SUPPORTED;
+    return K1xGpuEscape(Device->PlatformContext, Escape);
+}
+
+VOID
+SoftGpuPlatformDestroyDevice(
+    _Inout_ PSOFTGPU_KMD_DEVICE KmdDevice)
+{
+    PK1X_GPU_DEVICE GpuDevice = KmdDevice->PlatformDevice;
+    PK1XDPU_CONTEXT Context = KmdDevice->Adapter->PlatformContext;
+
+    if (!GpuDevice)
+        return;
+    KmdDevice->PlatformDevice = NULL;
+    if (Context)
+        K1xOverlayHide(Context, KmdDevice);
+    pvr_glue_close(GpuDevice->File);
+    GpuDevice->Magic = 0;
+    ExFreePoolWithTag(GpuDevice, K1XDPU_TAG);
+}
+
+NTSTATUS
+SoftGpuPlatformOpenAllocation(
+    _Inout_ PSOFTGPU_OPENALLOC OpenAllocation)
+{
+    UNREFERENCED_PARAMETER(OpenAllocation);
+    return STATUS_SUCCESS;
+}
+
+VOID
+SoftGpuPlatformCloseAllocation(
+    _Inout_ PSOFTGPU_OPENALLOC OpenAllocation)
+{
+    UNREFERENCED_PARAMETER(OpenAllocation);
+}
+
+NTSTATUS
+SoftGpuPlatformRender(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ PSOFTGPU_KMD_DEVICE KmdDevice,
+    _Inout_ PDXGKARG_RENDER Render)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(KmdDevice);
+    UNREFERENCED_PARAMETER(Render);
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
+SoftGpuPlatformSubmitCommand(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ const DXGKARG_SUBMITCOMMAND *SubmitCommand)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(SubmitCommand);
+    return STATUS_NOT_SUPPORTED;
+}
+
+BOOLEAN
+SoftGpuPlatformInterruptRoutine(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    PK1XDPU_CONTEXT Context = Device->PlatformContext;
+    int QueueDpc = 0;
+    BOOLEAN Handled;
+
+    if (!Context || !Context->GpuCore)
+        return FALSE;
+    Handled = pvr_glue_isr(Context->GpuCore, &QueueDpc) != 0;
+    if (QueueDpc)
+        Context->Dxgk.DxgkCbQueueDpc(Context->Dxgk.DeviceHandle);
+    return Handled;
+}
+
+VOID
+SoftGpuPlatformDpcRoutine(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    PK1XDPU_CONTEXT Context = Device->PlatformContext;
+
+    if (Context && Context->GpuCore)
+        pvr_glue_dpc(Context->GpuCore);
 }

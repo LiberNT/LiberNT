@@ -11,6 +11,9 @@ HKLM,"SYSTEM\CurrentControlSet\Services\k1xdpu","Start",0x00010001,0x00000003
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xdpu","Type",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xdpu","UserModeDriverName",0x00010000,"softgpuum.dll"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xdpu","UserModeDriverNameWow",0x00010000,"softgpuum.dll"
+HKLM,"SYSTEM\CurrentControlSet\Services\k1xdpu","OpenGLDriverName",0x00000000,"mesa_gallium.dll"
+HKLM,"SYSTEM\CurrentControlSet\Services\k1xdpu","OpenGLVersion",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\k1xdpu","OpenGLFlags",0x00010001,0x00000000
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xdpu\Video","Service",0x00000000,"k1xdpu"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xdpu\Device0","InstalledDisplayDrivers",0x00010000,"framebuf"
 HKLM,"SYSTEM\CurrentControlSet\Services\k1xdpu\Device0","Device Description",0x00000000,"SpacemiT K1 Display (WDDM)"

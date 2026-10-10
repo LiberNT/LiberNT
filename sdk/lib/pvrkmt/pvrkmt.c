@@ -47,6 +47,7 @@ typedef struct _PVRKMT_FILE
     LUID Luid;
     D3DKMT_HANDLE Adapter;
     D3DKMT_HANDLE Device;
+    BOOL NoSyncMerge;
 } PVRKMT_FILE;
 
 typedef struct _PVRKMT_MAPPING
@@ -261,6 +262,125 @@ pvrkmt_close(int fd)
     D3DKMTDestroyDevice(&Destroy);
     Close.hAdapter = File.Adapter;
     D3DKMTCloseAdapter(&Close);
+    return 0;
+}
+
+int
+pvrkmt_scanout_query(int fd, uint32_t *width, uint32_t *height)
+{
+    PVRKMT_FILE *File = PvrKmtFile(fd);
+    POWERVR_ESCAPE_INFO Info;
+
+    if (!File)
+    {
+        errno = EBADF;
+        return -1;
+    }
+    PvrKmtHeader(&Info.Header, POWERVR_ESCAPE_QUERY_INFO, sizeof(Info));
+    if (!NT_SUCCESS(PvrKmtEscape(File->Adapter, File->Device, &Info, sizeof(Info))) || Info.Header.Status != 0 ||
+        !(Info.Caps & POWERVR_CAP_SCANOUT))
+    {
+        errno = ENOTSUP;
+        return -1;
+    }
+    *width = Info.ScreenWidth;
+    *height = Info.ScreenHeight;
+    return 0;
+}
+
+int
+pvrkmt_scanout_create(int fd, uint64_t size, uint32_t *handle, uint64_t *actual_size)
+{
+    PVRKMT_FILE *File = PvrKmtFile(fd);
+    POWERVR_SCANOUT_CREATE_ESCAPE Create;
+
+    if (!File)
+    {
+        errno = EBADF;
+        return -1;
+    }
+    PvrKmtHeader(&Create.Header, POWERVR_ESCAPE_SCANOUT_CREATE, sizeof(Create));
+    Create.Size = size;
+    if (!NT_SUCCESS(PvrKmtEscape(File->Adapter, File->Device, &Create, sizeof(Create))) ||
+        !NT_SUCCESS(Create.Header.Status) || !Create.Handle)
+    {
+        errno = ENOMEM;
+        return -1;
+    }
+    *handle = Create.Handle;
+    *actual_size = Create.Size;
+    return 0;
+}
+
+int
+pvrkmt_scanout_present(int fd, uint32_t handle, uint32_t syncobj, int32_t left, int32_t top, uint32_t width,
+                       uint32_t height, uint32_t pitch, int wait, uint32_t busy[3])
+{
+    PVRKMT_FILE *File = PvrKmtFile(fd);
+    POWERVR_SCANOUT_PRESENT_ESCAPE Present;
+    int Index;
+
+    if (!File)
+    {
+        errno = EBADF;
+        return -1;
+    }
+    PvrKmtHeader(&Present.Header, POWERVR_ESCAPE_SCANOUT_PRESENT, sizeof(Present));
+    Present.Handle = handle;
+    Present.SyncObject = syncobj;
+    Present.Left = left;
+    Present.Top = top;
+    Present.Width = width;
+    Present.Height = height;
+    Present.Pitch = pitch;
+    Present.Flags = wait ? POWERVR_SCANOUT_PRESENT_WAIT : 0;
+    if (!NT_SUCCESS(PvrKmtEscape(File->Adapter, File->Device, &Present, sizeof(Present))) ||
+        !NT_SUCCESS(Present.Header.Status))
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    for (Index = 0; Index < POWERVR_SCANOUT_BUSY_COUNT; ++Index)
+        busy[Index] = Present.Busy[Index];
+    return 0;
+}
+
+int
+pvrkmt_syncobj_merge(int fd, uint32_t destination, uint64_t destination_point, const uint32_t *handles,
+                     const uint64_t *points, uint32_t count)
+{
+    PVRKMT_FILE *File = PvrKmtFile(fd);
+    POWERVR_SYNC_MERGE_ESCAPE Merge;
+    uint32_t Index;
+
+    if (!File)
+    {
+        errno = EBADF;
+        return -1;
+    }
+    if (count > POWERVR_SYNC_MERGE_COUNT || File->NoSyncMerge)
+    {
+        errno = ENOSYS;
+        return -1;
+    }
+    PvrKmtHeader(&Merge.Header, POWERVR_ESCAPE_SYNC_MERGE, sizeof(Merge));
+    Merge.Destination = destination;
+    Merge.DestinationPoint = destination_point;
+    Merge.Count = count;
+    for (Index = 0; Index < count; Index++)
+    {
+        Merge.Handles[Index] = handles[Index];
+        Merge.Points[Index] = points[Index];
+    }
+    if (!NT_SUCCESS(PvrKmtEscape(File->Adapter, File->Device, &Merge, sizeof(Merge))) ||
+        Merge.Header.Status == STATUS_NOT_SUPPORTED)
+    {
+        File->NoSyncMerge = TRUE;
+        errno = ENOSYS;
+        return -1;
+    }
+    if (Merge.Header.Status < 0)
+        return PvrKmtSetError(-Merge.Header.Status);
     return 0;
 }
 

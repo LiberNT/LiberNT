@@ -122,6 +122,7 @@ SoftGpuPointerDrawLocked(
     ULONG Y;
 
     if (Device->Scanout == NULL || !Device->ScanoutVisible ||
+        Device->PlatformHardwarePointer ||
         !Device->TimingActive || !Device->PointerShapeValid ||
         !Device->PointerVisible ||
         Device->ScanoutPitch == 0 ||

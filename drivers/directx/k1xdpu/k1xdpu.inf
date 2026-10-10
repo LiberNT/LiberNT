@@ -30,6 +30,9 @@ k1xdpu.sys
 HKR,,InstalledDisplayDrivers,%REG_MULTI_SZ%,framebuf
 HKR,,VgaCompatible,%REG_DWORD%,0
 HKR,,"Device Description",%REG_SZ%,"%K1xDpu.DeviceDesc%"
+HKR,,"OpenGLDriverName",%REG_SZ%,"mesa_gallium.dll"
+HKR,,"OpenGLVersion",%REG_DWORD%,1
+HKR,,"OpenGLFlags",%REG_DWORD%,0
 
 [K1xDpu_Install.Services]
 AddService=k1xdpu,0x00000002,K1xDpu_Service

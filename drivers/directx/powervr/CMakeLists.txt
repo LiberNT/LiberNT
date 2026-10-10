@@ -15,7 +15,8 @@ add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
 
 list(APPEND SOURCE
     powervr.c
-    pvr_k1.c)
+    pvr_k1.c
+    pvr_k1_power.c)
 
 list(APPEND PVR_CORE_SOURCE
     glue/pvr_glue.c

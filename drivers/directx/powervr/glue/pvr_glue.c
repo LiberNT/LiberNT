@@ -7,8 +7,10 @@
 
 #include <linux_compat.h>
 #include <drm_compat.h>
+#include <drm/drm_syncobj.h>
 
 #include "pvr_device.h"
+#include "pvr_gem.h"
 #include "powervr_glue.h"
 
 struct pvr_glue_instance
@@ -220,6 +222,54 @@ long pvr_glue_ioctl(void *file, uint32_t cmd, void *user_arg, uint32_t arg_size)
     return lc_drm_ioctl(file, cmd, user_arg, arg_size);
 }
 
+long pvr_glue_sync_merge(void *file, uint32_t destination, uint64_t destination_point, uint32_t count,
+                         const uint32_t *handles, const uint64_t *points)
+{
+    struct drm_syncobj_create create = { 0 };
+    struct drm_syncobj_destroy destroy = { 0 };
+    struct drm_syncobj_transfer transfer;
+    uint32_t index;
+    long ret;
+
+    if (!file)
+        return -EBADF;
+    if (count == 1)
+    {
+        memset(&transfer, 0, sizeof(transfer));
+        transfer.src_handle = handles[0];
+        transfer.src_point = points[0];
+        transfer.dst_handle = destination;
+        transfer.dst_point = destination_point;
+        return lc_drm_ioctl_kernel(file, DRM_IOCTL_SYNCOBJ_TRANSFER, &transfer);
+    }
+
+    create.flags = count == 0 ? DRM_SYNCOBJ_CREATE_SIGNALED : 0;
+    ret = lc_drm_ioctl_kernel(file, DRM_IOCTL_SYNCOBJ_CREATE, &create);
+    if (ret)
+        return ret;
+    for (index = 0; index < count; index++)
+    {
+        memset(&transfer, 0, sizeof(transfer));
+        transfer.src_handle = handles[index];
+        transfer.src_point = points[index];
+        transfer.dst_handle = create.handle;
+        transfer.dst_point = index + 1;
+        ret = lc_drm_ioctl_kernel(file, DRM_IOCTL_SYNCOBJ_TRANSFER, &transfer);
+        if (ret)
+            goto out;
+    }
+    memset(&transfer, 0, sizeof(transfer));
+    transfer.src_handle = create.handle;
+    transfer.src_point = count;
+    transfer.dst_handle = destination;
+    transfer.dst_point = destination_point;
+    ret = lc_drm_ioctl_kernel(file, DRM_IOCTL_SYNCOBJ_TRANSFER, &transfer);
+out:
+    destroy.handle = create.handle;
+    lc_drm_ioctl_kernel(file, DRM_IOCTL_SYNCOBJ_DESTROY, &destroy);
+    return ret;
+}
+
 int pvr_glue_mmap(void *file, uint64_t offset, uint64_t size, uint64_t *user_address)
 {
     if (!file)
@@ -232,4 +282,131 @@ int pvr_glue_munmap(void *file, uint64_t user_address)
     if (!file)
         return -EBADF;
     return lc_drm_munmap(file, user_address);
+}
+
+struct pvr_glue_fence_wait
+{
+    struct dma_fence_cb cb;
+    void (*func)(void *context);
+    void *context;
+};
+
+int pvr_glue_import(void *file, uint64_t physical, uint64_t size, void (*release)(void *context), void *context,
+                    uint32_t *handle)
+{
+    struct drm_file *drm_file = file;
+    struct drm_gem_shmem_object *shmem;
+    struct pvr_gem_object *pvr_obj;
+    struct pvr_file *pvr_file;
+    int err;
+
+    *handle = 0;
+    if (!file || !release || (physical & (PAGE_SIZE - 1)) || !size || (size & (PAGE_SIZE - 1)))
+    {
+        if (release)
+            release(context);
+        return -EINVAL;
+    }
+    pvr_file = to_pvr_file(drm_file);
+    shmem = drm_gem_shmem_lc_import(from_pvr_device(pvr_file->pvr_dev), physical >> PAGE_SHIFT, (size_t)size, release,
+                                    context);
+    if (IS_ERR(shmem))
+    {
+        release(context);
+        return (int)PTR_ERR(shmem);
+    }
+    pvr_obj = shmem_gem_to_pvr_gem(shmem);
+    pvr_obj->flags = DRM_PVR_BO_ALLOW_CPU_USERSPACE_ACCESS;
+    err = pvr_gem_object_into_handle(pvr_obj, pvr_file, handle);
+    if (err)
+    {
+        pvr_gem_object_put(pvr_obj);
+        *handle = 0;
+    }
+    return err;
+}
+
+void *pvr_glue_import_acquire(void *file, uint32_t handle, void (*release)(void *context),
+                              void (*acquire)(void *context))
+{
+    struct drm_gem_shmem_object *shmem;
+    struct drm_gem_object *obj;
+    void *context = NULL;
+
+    if (!file || !handle)
+        return NULL;
+    obj = drm_gem_object_lookup(file, handle);
+    if (!obj)
+        return NULL;
+    shmem = to_drm_gem_shmem_obj(obj);
+    if (shmem->lc_import_release == release)
+    {
+        context = shmem->lc_import_context;
+        acquire(context);
+    }
+    drm_gem_object_put(obj);
+    return context;
+}
+
+void *pvr_glue_syncobj_fence(void *file, uint32_t syncobj)
+{
+    struct dma_fence *fence = NULL;
+
+    if (!file || !syncobj || drm_syncobj_find_fence(file, syncobj, 0, 0, &fence))
+        return NULL;
+    return fence;
+}
+
+void pvr_glue_fence_put(void *fence)
+{
+    dma_fence_put(fence);
+}
+
+static void pvr_glue_fence_wait_cb(struct dma_fence *fence, struct dma_fence_cb *cb)
+{
+    struct pvr_glue_fence_wait *wait = container_of(cb, struct pvr_glue_fence_wait, cb);
+
+    (void)fence;
+    wait->func(wait->context);
+}
+
+int pvr_glue_fence_notify(void *fence, void (*func)(void *context), void *context, void **wait)
+{
+    struct pvr_glue_fence_wait *record;
+
+    *wait = NULL;
+    if (!fence)
+        return 1;
+    record = kzalloc(sizeof(*record), GFP_KERNEL);
+    if (!record)
+        return -ENOMEM;
+    record->func = func;
+    record->context = context;
+    if (dma_fence_add_callback(fence, &record->cb, pvr_glue_fence_wait_cb))
+    {
+        kfree(record);
+        return 1;
+    }
+    *wait = record;
+    return 0;
+}
+
+int pvr_glue_fence_cancel(void *fence, void *wait)
+{
+    struct pvr_glue_fence_wait *record = wait;
+
+    if (!fence || !record)
+        return 0;
+    return dma_fence_remove_callback(fence, &record->cb) ? 1 : 0;
+}
+
+void pvr_glue_fence_end(void *fence, void *wait)
+{
+    struct pvr_glue_fence_wait *record = wait;
+
+    if (!record)
+        return;
+    if (fence)
+        (void)dma_fence_remove_callback(fence, &record->cb);
+    kfree(record);
 }

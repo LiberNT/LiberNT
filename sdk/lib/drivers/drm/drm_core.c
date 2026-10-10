@@ -449,6 +449,26 @@ out:
     return ret;
 }
 
+long lc_drm_ioctl_kernel(struct drm_file *file, unsigned int cmd, void *data)
+{
+    struct drm_device *dev = file->dev;
+    unsigned int nr = DRM_IOCTL_NR(cmd);
+    const struct drm_ioctl_desc *desc;
+    long ret;
+    int idx;
+
+    if (DRM_IOCTL_TYPE(cmd) != DRM_IOCTL_BASE || nr >= ARRAY_SIZE(lc_drm_core_ioctls))
+        return -ENOTTY;
+    desc = &lc_drm_core_ioctls[nr];
+    if (!desc->func || _IOC_SIZE(desc->cmd) != _IOC_SIZE(cmd))
+        return -EINVAL;
+    if (!drm_dev_enter(dev, &idx))
+        return -ENODEV;
+    ret = desc->func(dev, data, file);
+    drm_dev_exit(idx);
+    return ret;
+}
+
 static bool lc_drm_file_owns(struct drm_file *file, struct drm_gem_object *obj)
 {
     unsigned long index;

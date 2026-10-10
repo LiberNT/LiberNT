@@ -692,6 +692,18 @@ PowerVrDdiEscape(
             return STATUS_SUCCESS;
         }
 
+        case POWERVR_ESCAPE_SYNC_MERGE:
+        {
+            POWERVR_SYNC_MERGE_ESCAPE *Merge = (POWERVR_SYNC_MERGE_ESCAPE *)Header;
+            PVOID File = PowerVrEscapeFile(Escape);
+
+            if (Header->Size < sizeof(*Merge) || Merge->Count > POWERVR_SYNC_MERGE_COUNT || !File)
+                return STATUS_INVALID_PARAMETER;
+            Header->Status = (LONG)pvr_glue_sync_merge(File, Merge->Destination, Merge->DestinationPoint, Merge->Count,
+                                                       (const uint32_t *)Merge->Handles, Merge->Points);
+            return STATUS_SUCCESS;
+        }
+
         case POWERVR_ESCAPE_DRM_MMAP:
         case POWERVR_ESCAPE_DRM_MUNMAP:
         {

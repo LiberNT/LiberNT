@@ -113,6 +113,12 @@ int drmSyncobjEventfd(int fd, uint32_t handle, uint64_t point, int ev_fd, uint32
 int pvrkmt_open(const char *path, int flags);
 int pvrkmt_close(int fd);
 int pvrkmt_is_fd(int fd);
+int pvrkmt_scanout_query(int fd, uint32_t *width, uint32_t *height);
+int pvrkmt_scanout_create(int fd, uint64_t size, uint32_t *handle, uint64_t *actual_size);
+int pvrkmt_scanout_present(int fd, uint32_t handle, uint32_t syncobj, int32_t left, int32_t top, uint32_t width,
+                           uint32_t height, uint32_t pitch, int wait, uint32_t busy[3]);
+int pvrkmt_syncobj_merge(int fd, uint32_t destination, uint64_t destination_point, const uint32_t *handles,
+                         const uint64_t *points, uint32_t count);
 
 #ifdef __cplusplus
 }

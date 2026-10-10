@@ -43,5 +43,16 @@ void pvr_glue_dpc(void *instance);
 int pvr_glue_open(void *instance, void **file);
 void pvr_glue_close(void *file);
 long pvr_glue_ioctl(void *file, uint32_t cmd, void *user_arg, uint32_t arg_size);
+long pvr_glue_sync_merge(void *file, uint32_t destination, uint64_t destination_point, uint32_t count,
+                         const uint32_t *handles, const uint64_t *points);
 int pvr_glue_mmap(void *file, uint64_t offset, uint64_t size, uint64_t *user_address);
 int pvr_glue_munmap(void *file, uint64_t user_address);
+int pvr_glue_import(void *file, uint64_t physical, uint64_t size, void (*release)(void *context), void *context,
+                    uint32_t *handle);
+void *pvr_glue_import_acquire(void *file, uint32_t handle, void (*release)(void *context),
+                              void (*acquire)(void *context));
+void *pvr_glue_syncobj_fence(void *file, uint32_t syncobj);
+void pvr_glue_fence_put(void *fence);
+int pvr_glue_fence_notify(void *fence, void (*func)(void *context), void *context, void **wait);
+int pvr_glue_fence_cancel(void *fence, void *wait);
+void pvr_glue_fence_end(void *fence, void *wait);

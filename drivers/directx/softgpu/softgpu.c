@@ -1774,6 +1774,9 @@ SoftGpuDdiDestroyDevice(
     Device = KmdDevice->Adapter;
     DPRINT("SOFTGPU: DestroyDevice context=%p\n", KmdDevice);
 
+#if defined(SOFTGPU_PLATFORM_DEVICE_CONTEXT)
+    SoftGpuPlatformDestroyDevice(KmdDevice);
+#endif
     KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
     KmdDevice->Magic = 0xDEAD260DUL;
     KmdDevice->Process = NULL;

@@ -683,7 +683,16 @@ typedef struct _SOFTGPU_KMD_DEVICE
     ULONG               Magic;
     PSOFTGPU_DEVICE     Adapter;
     PSOFTGPU_PROCESS    Process;
+#if defined(SOFTGPU_PLATFORM_DEVICE_CONTEXT)
+    PVOID               PlatformDevice;
+#endif
 } SOFTGPU_KMD_DEVICE, *PSOFTGPU_KMD_DEVICE;
+
+#if defined(SOFTGPU_PLATFORM_DEVICE_CONTEXT)
+VOID
+SoftGpuPlatformDestroyDevice(
+    _Inout_ PSOFTGPU_KMD_DEVICE KmdDevice);
+#endif
 
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3000)
 #define SOFTGPU_CPU_EVENT_MAGIC 0x45434753UL /* 'SGCE' */

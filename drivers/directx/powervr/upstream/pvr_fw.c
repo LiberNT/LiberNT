@@ -656,7 +656,7 @@ pvr_fw_process(struct pvr_device *pvr_dev)
 	 * driver, a firmware address of 0 is invalid.
 	 */
 	fw_code_ptr = pvr_fw_object_create_and_map_offset(pvr_dev, 0, fw_mem->code_alloc_size,
-							  PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
+							  PVR_BO_FW_FLAGS_DEVICE_CACHED,
 							  NULL, NULL, &fw_mem->code_obj);
 	if (IS_ERR(fw_code_ptr)) {
 		drm_err(drm_dev, "Unable to allocate FW code memory\n");
@@ -669,11 +669,11 @@ pvr_fw_process(struct pvr_device *pvr_dev)
 		fw_data_ptr =
 			pvr_fw_object_create_and_map_offset(pvr_dev, base_addr,
 							    fw_mem->data_alloc_size,
-							    PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
+							    PVR_BO_FW_FLAGS_DEVICE_CACHED,
 							    NULL, NULL, &fw_mem->data_obj);
 	} else {
 		fw_data_ptr = pvr_fw_object_create_and_map(pvr_dev, fw_mem->data_alloc_size,
-							   PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
+							   PVR_BO_FW_FLAGS_DEVICE_CACHED,
 							   NULL, NULL, &fw_mem->data_obj);
 	}
 	if (IS_ERR(fw_data_ptr)) {
@@ -686,7 +686,7 @@ pvr_fw_process(struct pvr_device *pvr_dev)
 	if (fw_mem->core_code_alloc_size) {
 		fw_core_code_ptr =
 			pvr_fw_object_create_and_map(pvr_dev, fw_mem->core_code_alloc_size,
-						     PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
+						     PVR_BO_FW_FLAGS_DEVICE_CACHED,
 						     NULL, NULL, &fw_mem->core_code_obj);
 		if (IS_ERR(fw_core_code_ptr)) {
 			drm_err(drm_dev,
@@ -701,7 +701,7 @@ pvr_fw_process(struct pvr_device *pvr_dev)
 	if (fw_mem->core_data_alloc_size) {
 		fw_core_data_ptr =
 			pvr_fw_object_create_and_map(pvr_dev, fw_mem->core_data_alloc_size,
-						     PVR_BO_FW_FLAGS_DEVICE_UNCACHED,
+						     PVR_BO_FW_FLAGS_DEVICE_CACHED,
 						     NULL, NULL, &fw_mem->core_data_obj);
 		if (IS_ERR(fw_core_data_ptr)) {
 			drm_err(drm_dev,

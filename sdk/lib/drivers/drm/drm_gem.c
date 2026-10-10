@@ -215,6 +215,44 @@ struct drm_gem_shmem_object *drm_gem_shmem_create(struct drm_device *dev, size_t
     return shmem;
 }
 
+struct drm_gem_shmem_object *drm_gem_shmem_lc_import(struct drm_device *dev, u64 first_pfn, size_t size,
+                                                      void (*release)(void *context), void *context)
+{
+    struct drm_gem_shmem_object *shmem;
+    struct page *pages;
+    size_t count, i;
+
+    if (!size || (size & (PAGE_SIZE - 1)) || !release)
+        return ERR_PTR(-EINVAL);
+    shmem = drm_gem_shmem_create(dev, size);
+    if (IS_ERR(shmem))
+        return shmem;
+    count = size >> PAGE_SHIFT;
+    shmem->lc_pfns = kvmalloc_array(count, sizeof(*shmem->lc_pfns), GFP_KERNEL);
+    shmem->pages = kvmalloc_array(count, sizeof(*shmem->pages), GFP_KERNEL);
+    pages = kvzalloc(count * sizeof(*pages), GFP_KERNEL);
+    if (!shmem->lc_pfns || !shmem->pages || !pages)
+    {
+        kvfree(pages);
+        kvfree(shmem->pages);
+        kvfree(shmem->lc_pfns);
+        shmem->pages = NULL;
+        shmem->lc_pfns = NULL;
+        drm_gem_shmem_free(shmem);
+        return ERR_PTR(-ENOMEM);
+    }
+    for (i = 0; i < count; ++i)
+    {
+        shmem->lc_pfns[i] = first_pfn + i;
+        pages[i].pfn = first_pfn + i;
+        shmem->pages[i] = &pages[i];
+    }
+    shmem->map_wc = true;
+    shmem->lc_import_release = release;
+    shmem->lc_import_context = context;
+    return shmem;
+}
+
 static int drm_gem_shmem_get_pages(struct drm_gem_shmem_object *shmem)
 {
     size_t count = shmem->base.size >> PAGE_SHIFT, i;
@@ -413,6 +451,8 @@ void drm_gem_shmem_free(struct drm_gem_shmem_object *shmem)
     }
     if (shmem->lc_pages_allocation)
         lc_nt_free_pages(shmem->lc_pages_allocation);
+    if (shmem->lc_import_release)
+        shmem->lc_import_release(shmem->lc_import_context);
     kvfree(pages);
     kvfree(shmem->pages);
     kvfree(shmem->lc_pfns);
