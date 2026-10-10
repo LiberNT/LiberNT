@@ -90,6 +90,7 @@ dll/win32/cryptowinrt         # Synced to Wine-11.14
 dll/win32/dbgeng              # Synced to Wine-11.14
 dll/win32/dbghelp             # Synced to Wine-11.14
 dll/win32/dciman32            # Synced to Wine-11.14
+dll/win32/dispex              # Synced to Wine-11.14
 dll/win32/dwmapi              # Synced to Wine-11.14
 dll/win32/dxva2               # Synced to Wine-11.14
 dll/win32/evr                 # Synced to Wine-11.14
@@ -103,6 +104,7 @@ dll/win32/hlink               # Synced to Wine-11.14
 dll/win32/hnetcfg             # Synced to Wine-11.14
 dll/win32/iccvid              # Synced to Wine-11.14
 dll/win32/ieframe             # Synced to Wine-11.14
+dll/win32/ieproxy             # Synced to Wine-11.14
 dll/win32/iertutil            # Synced to Wine-11.14
 dll/win32/imaadp32.acm        # Synced to Wine-11.14
 dll/win32/imagehlp            # Synced to Wine-11.14
@@ -145,6 +147,7 @@ dll/win32/msadp32.acm         # Synced to Wine-11.14
 dll/win32/mscat32             # Synced to Wine-11.14
 dll/win32/mscms               # Synced to Wine-11.14
 dll/win32/mscoree             # Synced to Wine-11.14
+dll/win32/msdaps              # Synced to Wine-11.14
 dll/win32/msftedit            # Synced to Wine-11.14
 dll/win32/msg711.acm          # Synced to Wine-11.14
 dll/win32/msgsm32.acm         # Synced to Wine-11.14

@@ -69,6 +69,7 @@ AddReg=Classes
 11,,quartz.dll,1
 11,,devenum.dll,1
 11,,dinput.dll,1
+11,,dispex.dll,1
 11,,dinput8.dll,1
 11,,dmusic.dll,1
 11,,dplayx.dll,1
@@ -80,6 +81,7 @@ AddReg=Classes
 11,,hlink.dll,1
 11,,hnetcfg.dll,1
 11,,ieframe.dll,1
+11,,ieproxy.dll,1
 11,,iertutil.dll,1
 11,,inetcomm.dll,1
 11,,inseng.dll,1
@@ -99,6 +101,7 @@ AddReg=Classes
 11,,mmdevapi.dll,1
 11,,mscat32.dll,1
 11,,mscoree.dll,1
+11,,msdaps.dll,1
 11,,msctf.dll,1
 11,,mshtml.dll,3
 11,,msi.dll,1

@@ -1,0 +1,31 @@
+/*
+ * PROJECT:     LiberNT IE proxy
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Proxies for private web browser interfaces
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep proxy
+#pragma makedep register
+
+import "oaidl.idl";
+import "objidl.idl";
+
+[
+    object,
+    uuid(3050f804-98b5-11cf-bb82-00aa00bdce0b),
+    pointer_default(unique)
+]
+interface IWebBrowserPriv : IUnknown
+{
+    HRESULT NavigateWithBindCtx([in] VARIANT *uri, [in] VARIANT *flags, [in] VARIANT *target_frame,
+                                [in] VARIANT *post_data, [in] VARIANT *headers, [in] IBindCtx *bind_ctx,
+                                [in] BSTR url_fragment);
+    HRESULT OnClose();
+}
+
+[
+    threading(both),
+    uuid(a4a1a128-768f-41e0-bf75-e4fddd701cba)
+]
+coclass PSFactoryBuffer { interface IPSFactoryBuffer; }
