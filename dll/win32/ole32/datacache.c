@@ -341,7 +341,11 @@ static HRESULT get_static_entry( DataCache *cache, DataCacheEntry **cache_entry 
 static HRESULT check_valid_formatetc( const FORMATETC *fmt )
 {
     /* DVASPECT_ICON must be CF_METAFILEPICT */
+#ifdef __REACTOS__
+    if (fmt->dwAspect == DVASPECT_ICON && fmt->cfFormat && fmt->cfFormat != CF_METAFILEPICT)
+#else
     if (fmt->dwAspect == DVASPECT_ICON && fmt->cfFormat != CF_METAFILEPICT)
+#endif
         return DV_E_FORMATETC;
 
     if (!fmt->cfFormat ||
@@ -1925,6 +1929,31 @@ static HRESULT WINAPI DataCache_Load( IPersistStorage *iface, IStorage *stg )
  * our responsibility to copy the information when saving to a new
  * storage.
  */
+#ifdef __REACTOS__
+static HRESULT copy_pres_stream(DataCacheEntry *cache_entry, IStorage *src, IStorage *dst)
+{
+    ULARGE_INTEGER all;
+    IStream *in, *out;
+    HRESULT hr;
+
+    if (src == dst && cache_entry->load_stream_num == cache_entry->save_stream_num)
+        return S_OK;
+
+    hr = open_pres_stream(src, cache_entry->load_stream_num, &in);
+    if (FAILED(hr))
+        return hr;
+    hr = create_stream(cache_entry, dst, FALSE, &out);
+    if (SUCCEEDED(hr))
+    {
+        all.QuadPart = ~(ULONGLONG)0;
+        hr = IStream_CopyTo(in, out, all, NULL, NULL);
+        IStream_Release(out);
+    }
+    IStream_Release(in);
+    return hr;
+}
+#endif
+
 static HRESULT WINAPI DataCache_Save(IPersistStorage* iface, IStorage *stg, BOOL same_as_load)
 {
     DataCache *This = impl_from_IPersistStorage(iface);
@@ -1960,8 +1989,9 @@ static HRESULT WINAPI DataCache_Save(IPersistStorage* iface, IStorage *stg, BOOL
         {
 #ifdef __REACTOS__
             if (cache_entry->stgmedium.tymed == TYMED_NULL && cache_entry->fmtetc.cfFormat &&
-                cache_entry->load_stream_num != STREAM_NUMBER_NOT_SET && This->presentationStorage)
-                DataCacheEntry_LoadData(cache_entry, This->presentationStorage);
+                cache_entry->id != 1 && cache_entry->load_stream_num >= 0 && This->presentationStorage)
+                hr = copy_pres_stream(cache_entry, This->presentationStorage, stg);
+            else
 #endif
             hr = DataCacheEntry_Save(cache_entry, stg, same_as_load);
             if (FAILED(hr))
@@ -1974,6 +2004,11 @@ static HRESULT WINAPI DataCache_Save(IPersistStorage* iface, IStorage *stg, BOOL
 #ifdef __REACTOS__
     if (SUCCEEDED(hr))
     {
+        IStream *ole_stream;
+
+        if (SUCCEEDED(IStorage_OpenStream(stg, L"\1Ole", NULL, STGM_SHARE_EXCLUSIVE | STGM_READ, 0, &ole_stream)))
+            IStream_Release(ole_stream);
+
         for (;; stream_number++)
         {
             WCHAR pres[] = {2,'O','l','e','P','r','e','s',
