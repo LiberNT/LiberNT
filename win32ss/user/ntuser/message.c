@@ -2505,6 +2505,28 @@ IntGetProcessIntegrity(PEPROCESS Process)
     return Rid;
 }
 
+static ULONG FASTCALL
+IntUipiGetTargetIntegrity(PPROCESSINFO ppiTarget, PWND Window)
+{
+    PEPROCESS Process;
+    HANDLE ProcessId;
+    ULONG Rid;
+
+    if (Window &&
+        (Window->head.pti->TIF_flags & TIF_CSRSSTHREAD) &&
+        Window->pcls->atomClassName == gaGuiConsoleWndClass)
+    {
+        ProcessId = UlongToHandle((ULONG)*((LONG_PTR*)(Window + 1)));
+        if (ProcessId && NT_SUCCESS(PsLookupProcessByProcessId(ProcessId, &Process)))
+        {
+            Rid = IntGetProcessIntegrity(Process);
+            ObDereferenceObject(Process);
+            return Rid;
+        }
+    }
+    return IntGetProcessIntegrity(ppiTarget->peProcess);
+}
+
 static PUSER_MSG_FILTER
 IntUipiFindFilter(PPROCESSINFO ppi, HWND hwnd, UINT Msg)
 {
@@ -2528,7 +2550,7 @@ IntUipiIsAllowed(PPROCESSINFO ppiSender, PPROCESSINFO ppiTarget, PWND Window, UI
 
     if (!ppiSender || !ppiTarget || ppiSender == ppiTarget)
         return TRUE;
-    if (IntGetProcessIntegrity(ppiSender->peProcess) >= IntGetProcessIntegrity(ppiTarget->peProcess))
+    if (IntGetProcessIntegrity(ppiSender->peProcess) >= IntUipiGetTargetIntegrity(ppiTarget, Window))
         return TRUE;
 
     for (i = 0; i < RTL_NUMBER_OF(gUipiAllowedMessages); i++)
