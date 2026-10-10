@@ -9339,8 +9339,116 @@ static HRESULT STREAM_ReadString( IStream *stm, LPWSTR *string )
 }
 
 
+#ifdef __REACTOS__
+static HRESULT STREAM_WriteClipFormat( IStream *stm, CLIPFORMAT cf )
+{
+    DWORD data[2];
+    char name[256];
+    int len;
+
+    if (!cf)
+    {
+        data[0] = 0;
+        return IStream_Write( stm, data, sizeof(DWORD), NULL );
+    }
+    if (cf < 0xc000)
+    {
+        data[0] = 0xffffffff;
+        data[1] = cf;
+        return IStream_Write( stm, data, sizeof(data), NULL );
+    }
+    len = GetClipboardFormatNameA( cf, name, sizeof(name) );
+    data[0] = len + 1;
+    name[len] = 0;
+    if (FAILED(IStream_Write( stm, data, sizeof(DWORD), NULL )))
+        return E_FAIL;
+    return IStream_Write( stm, name, len + 1, NULL );
+}
+
+static HRESULT STREAM_ReadClipFormat( IStream *stm, CLIPFORMAT *cf )
+{
+    DWORD marker, count = 0;
+    HRESULT r;
+    char *name;
+
+    r = IStream_Read( stm, &marker, sizeof(marker), &count );
+    if (FAILED(r) || count != sizeof(marker))
+        return FAILED(r) ? r : E_FAIL;
+    if (!marker)
+    {
+        *cf = 0;
+        return S_OK;
+    }
+    if (marker == 0xffffffff || marker == 0xfffffffe)
+    {
+        DWORD id;
+        r = IStream_Read( stm, &id, sizeof(id), &count );
+        if (FAILED(r) || count != sizeof(id))
+            return FAILED(r) ? r : E_FAIL;
+        *cf = id;
+        return S_OK;
+    }
+    if (!(name = CoTaskMemAlloc( marker + 1 )))
+        return E_OUTOFMEMORY;
+    r = IStream_Read( stm, name, marker, &count );
+    if (FAILED(r) || count != marker)
+    {
+        CoTaskMemFree( name );
+        return FAILED(r) ? r : E_FAIL;
+    }
+    name[marker] = 0;
+    *cf = RegisterClipboardFormatA( name );
+    CoTaskMemFree( name );
+    return S_OK;
+}
+
+static HRESULT STORAGE_ReadCompObjStrings( LPSTORAGE pstg, LPWSTR *user_type, LPWSTR *progid )
+{
+    unsigned char header[12];
+    IStream *stm;
+    CLIPFORMAT cf;
+    DWORD count;
+    CLSID clsid;
+    HRESULT r;
+
+    *user_type = NULL;
+    *progid = NULL;
+    r = IStorage_OpenStream( pstg, L"\1CompObj", NULL, STGM_READ | STGM_SHARE_EXCLUSIVE, 0, &stm );
+    if (FAILED(r))
+        return r;
+    r = IStream_Read( stm, header, sizeof(header), &count );
+    if (SUCCEEDED(r) && count == sizeof(header))
+        r = ReadClassStm( stm, &clsid );
+    else
+        r = E_FAIL;
+    if (SUCCEEDED(r))
+        r = STREAM_ReadString( stm, user_type );
+    if (SUCCEEDED(r))
+        r = STREAM_ReadClipFormat( stm, &cf );
+    if (SUCCEEDED(r))
+        r = STREAM_ReadString( stm, progid );
+    IStream_Release( stm );
+    if (*user_type && !**user_type)
+    {
+        CoTaskMemFree( *user_type );
+        *user_type = NULL;
+    }
+    if (*progid && !**progid)
+    {
+        CoTaskMemFree( *progid );
+        *progid = NULL;
+    }
+    return r;
+}
+#endif
+
+#ifdef __REACTOS__
+static HRESULT STORAGE_WriteCompObj( LPSTORAGE pstg, CLSID *clsid,
+    LPCWSTR lpszUserType, CLIPFORMAT cf, LPCWSTR szProgIDName )
+#else
 static HRESULT STORAGE_WriteCompObj( LPSTORAGE pstg, CLSID *clsid,
     LPCWSTR lpszUserType, LPCWSTR szClipName, LPCWSTR szProgIDName )
+#endif
 {
     IStream *pstm;
     HRESULT r = S_OK;
@@ -9352,13 +9460,23 @@ static HRESULT STORAGE_WriteCompObj( LPSTORAGE pstg, CLSID *clsid,
        { 0xF4, 0x39, 0xB2, 0x71, 0x00, 0x00, 0x00, 0x00,
          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
+#ifdef __REACTOS__
+    TRACE("%p %s %s %x %s\n", pstg, debugstr_guid(clsid),
+           debugstr_w(lpszUserType), cf, debugstr_w(szProgIDName));
+#else
     TRACE("%p %s %s %s %s\n", pstg, debugstr_guid(clsid),
            debugstr_w(lpszUserType), debugstr_w(szClipName),
            debugstr_w(szProgIDName));
+#endif
 
     /*  Create a CompObj stream */
+#ifdef __REACTOS__
+    r = IStorage_CreateStream(pstg, L"\1CompObj",
+        STGM_CREATE | STGM_READWRITE | STGM_SHARE_EXCLUSIVE, 0, 0, &pstm );
+#else
     r = IStorage_CreateStream(pstg, L"\1CompObj",
         STGM_CREATE | STGM_WRITE  | STGM_SHARE_EXCLUSIVE, 0, 0, &pstm );
+#endif
     if( FAILED (r) )
         return r;
 
@@ -9370,8 +9488,13 @@ static HRESULT STORAGE_WriteCompObj( LPSTORAGE pstg, CLSID *clsid,
 
     if( SUCCEEDED( r ) )
         r = STREAM_WriteString( pstm, lpszUserType );
+#ifdef __REACTOS__
+    if( SUCCEEDED( r ) )
+        r = STREAM_WriteClipFormat( pstm, cf );
+#else
     if( SUCCEEDED( r ) )
         r = STREAM_WriteString( pstm, szClipName );
+#endif
     if( SUCCEEDED( r ) )
         r = STREAM_WriteString( pstm, szProgIDName );
     if( SUCCEEDED( r ) )
@@ -9385,6 +9508,38 @@ static HRESULT STORAGE_WriteCompObj( LPSTORAGE pstg, CLSID *clsid,
 /***********************************************************************
  *               WriteFmtUserTypeStg (OLE32.@)
  */
+#ifdef __REACTOS__
+HRESULT WINAPI WriteFmtUserTypeStg(
+	  LPSTORAGE pstg, CLIPFORMAT cf, LPOLESTR lpszUserType)
+{
+    LPWSTR old_user_type = NULL, old_progid = NULL, progid = NULL;
+    STATSTG stat;
+    CLSID clsid;
+    HRESULT r;
+
+    TRACE("(%p,%x,%s)\n",pstg,cf,debugstr_w(lpszUserType));
+
+    STORAGE_ReadCompObjStrings( pstg, &old_user_type, &old_progid );
+
+    r = IStorage_Stat(pstg, &stat, STATFLAG_NONAME);
+    if(SUCCEEDED(r))
+        clsid = stat.clsid;
+    else
+        clsid = CLSID_NULL;
+
+    if (FAILED(ProgIDFromCLSID(&clsid, &progid)))
+        progid = NULL;
+
+    r = STORAGE_WriteCompObj( pstg, &clsid, lpszUserType ? lpszUserType : old_user_type,
+            cf, progid ? progid : old_progid );
+
+    CoTaskMemFree(progid);
+    CoTaskMemFree(old_progid);
+    CoTaskMemFree(old_user_type);
+
+    return r;
+}
+#else
 HRESULT WINAPI WriteFmtUserTypeStg(
 	  LPSTORAGE pstg, CLIPFORMAT cf, LPOLESTR lpszUserType)
 {
@@ -9423,6 +9578,7 @@ HRESULT WINAPI WriteFmtUserTypeStg(
 
     return r;
 }
+#endif
 
 
 /******************************************************************************
@@ -9437,6 +9593,9 @@ HRESULT WINAPI ReadFmtUserTypeStg (LPSTORAGE pstg, CLIPFORMAT* pcf, LPOLESTR* lp
     DWORD count;
     LPWSTR szProgIDName = NULL, szCLSIDName = NULL, szOleTypeName = NULL;
     CLSID clsid;
+#ifdef __REACTOS__
+    CLIPFORMAT cf = 0;
+#endif
 
     TRACE("(%p,%p,%p)\n", pstg, pcf, lplpszUserType);
 
@@ -9459,7 +9618,11 @@ HRESULT WINAPI ReadFmtUserTypeStg (LPSTORAGE pstg, CLIPFORMAT* pcf, LPOLESTR* lp
     if( FAILED( r ) )
         goto end;
 
+#ifdef __REACTOS__
+    r = STREAM_ReadClipFormat( stm, &cf );
+#else
     r = STREAM_ReadString( stm, &szOleTypeName );
+#endif
     if( FAILED( r ) )
         goto end;
 
@@ -9472,8 +9635,13 @@ HRESULT WINAPI ReadFmtUserTypeStg (LPSTORAGE pstg, CLIPFORMAT* pcf, LPOLESTR* lp
         goto end;
 
     /* ok, success... now we just need to store what we found */
+#ifdef __REACTOS__
+    if( pcf )
+        *pcf = cf;
+#else
     if( pcf )
         *pcf = RegisterClipboardFormatW( szOleTypeName );
+#endif
 
     if( lplpszUserType )
     {

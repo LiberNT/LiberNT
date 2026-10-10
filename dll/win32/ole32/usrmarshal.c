@@ -1382,17 +1382,27 @@ HRESULT __RPC_STUB IEnumMoniker_Next_Stub(
 BOOL CALLBACK IRunnableObject_IsRunning_Proxy(
     IRunnableObject* This)
 {
+#ifdef __REACTOS__
+    TRACE("(%p)\n", This);
+    return IRunnableObject_RemoteIsRunning_Proxy(This) == S_OK;
+#else
     BOOL rv;
     FIXME(":stub\n");
     memset(&rv, 0, sizeof rv);
     return rv;
+#endif
 }
 
 HRESULT __RPC_STUB IRunnableObject_IsRunning_Stub(
     IRunnableObject* This)
 {
+#ifdef __REACTOS__
+    TRACE("(%p)\n", This);
+    return IRunnableObject_IsRunning(This) ? S_OK : S_FALSE;
+#else
     FIXME(":stub\n");
     return E_NOTIMPL;
+#endif
 }
 
 HRESULT CALLBACK IMoniker_BindToObject_Proxy(

@@ -1485,7 +1485,11 @@ HRESULT FileMoniker_CreateFromDisplayName(LPBC pbc, LPCOLESTR szDisplayName,
         IMoniker_Release(file_moniker);
     }
 
+#ifdef __REACTOS__
+    return MK_E_SYNTAX;
+#else
     return MK_E_CANTOPENFILE;
+#endif
 }
 
 

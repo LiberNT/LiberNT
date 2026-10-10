@@ -206,6 +206,38 @@ static HRESULT get_moniker_comparison_data(IMoniker *pMoniker, MonikerComparison
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static BOOL rot_server_identity_allows_any_client(void)
+{
+    WCHAR path[MAX_PATH], appid[CHARS_IN_GUID], key[MAX_PATH + 8];
+    const WCHAR *name;
+    DWORD size;
+    HKEY hkey;
+    BOOL ret = FALSE;
+
+    if (!GetModuleFileNameW(NULL, path, ARRAY_SIZE(path)))
+        return FALSE;
+    name = wcsrchr(path, '\\');
+    name = name ? name + 1 : path;
+
+    lstrcpyW(key, L"AppID\\");
+    lstrcatW(key, name);
+    size = sizeof(appid);
+    if (RegGetValueW(HKEY_CLASSES_ROOT, key, L"AppID", RRF_RT_REG_SZ, NULL, appid, &size))
+        return FALSE;
+
+    lstrcpyW(key, L"AppID\\");
+    lstrcatW(key, appid);
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, key, 0, KEY_QUERY_VALUE, &hkey))
+        return FALSE;
+    if (!RegQueryValueExW(hkey, L"LocalService", NULL, NULL, NULL, NULL) ||
+        !RegQueryValueExW(hkey, L"RunAs", NULL, NULL, NULL, NULL))
+        ret = TRUE;
+    RegCloseKey(hkey);
+    return ret;
+}
+#endif
+
 static HRESULT reduce_moniker(IMoniker *pmk, IBindCtx *pbc, IMoniker **pmkReduced)
 {
     IBindCtx *pbcNew = NULL;
@@ -300,6 +332,11 @@ RunningObjectTableImpl_Register(IRunningObjectTable* iface, DWORD flags,
     if (punkObject==NULL || pmkObjectName==NULL || pdwRegister==NULL)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    if ((flags & ROTFLAGS_ALLOWANYCLIENT) && !rot_server_identity_allows_any_client())
+        return CO_E_WRONG_SERVER_IDENTITY;
+#endif
+
     rot_entry = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*rot_entry));
     if (!rot_entry)
         return E_OUTOFMEMORY;
@@ -360,6 +397,7 @@ RunningObjectTableImpl_Register(IRunningObjectTable* iface, DWORD flags,
         hr = S_OK;
     }
 
+#ifndef __REACTOS__
     hr = get_moniker_comparison_data(pmkObjectName,
                                      &rot_entry->moniker_data);
     if (hr != S_OK)
@@ -368,6 +406,7 @@ RunningObjectTableImpl_Register(IRunningObjectTable* iface, DWORD flags,
         IMoniker_Release(pmkObjectName);
         return hr;
     }
+#endif
 
     hr = CreateStreamOnHGlobal(NULL, TRUE, &pStream);
     if (hr != S_OK)
@@ -395,6 +434,16 @@ RunningObjectTableImpl_Register(IRunningObjectTable* iface, DWORD flags,
             GlobalUnlock(hglobal);
         }
     }
+#ifdef __REACTOS__
+    if (hr == S_OK && FAILED(hr = get_moniker_comparison_data(pmkObjectName, &rot_entry->moniker_data)))
+    {
+        LARGE_INTEGER zero;
+
+        zero.QuadPart = 0;
+        IStream_Seek(pStream, zero, STREAM_SEEK_SET, NULL);
+        CoReleaseMarshalData(pStream);
+    }
+#endif
     IStream_Release(pStream);
     IMoniker_Release(pmkObjectName);
     if (hr != S_OK)
@@ -967,7 +1016,11 @@ HRESULT WINAPI GetClassFile(LPCOLESTR filePathName,CLSID *pclsid)
 
     res = PathCchFindExtension(filePathName, PATHCCH_MAX_CCH, &extension);
     if (FAILED(res) || !extension || !*extension || !wcscmp(extension, L"."))
+#ifdef __REACTOS__
+        return GetFileAttributesW(filePathName) == INVALID_FILE_ATTRIBUTES ? MK_E_CANTOPENFILE : MK_E_INVALIDEXTENSION;
+#else
         return MK_E_INVALIDEXTENSION;
+#endif
 
     ret = RegQueryValueW(HKEY_CLASSES_ROOT, extension, NULL, &sizeProgId);
     if (!ret) {
@@ -984,6 +1037,10 @@ HRESULT WINAPI GetClassFile(LPCOLESTR filePathName,CLSID *pclsid)
     else
         res = HRESULT_FROM_WIN32(ret);
 
+#ifdef __REACTOS__
+    if (res != S_OK && GetFileAttributesW(filePathName) == INVALID_FILE_ATTRIBUTES)
+        return MK_E_CANTOPENFILE;
+#endif
     return res != S_OK ? MK_E_INVALIDEXTENSION : res;
 }
 

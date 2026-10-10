@@ -3020,6 +3020,25 @@ HRESULT WINAPI OleCreateFromDataEx(IDataObject *data, REFIID iid, DWORD flags,
           data, debugstr_guid(iid), flags, renderopt, num_cache_fmts, adv_flags, cache_fmts,
           sink, conns, client_site, stg, obj);
 
+#ifdef __REACTOS__
+    {
+        IEnumFORMATETC *enum_fmt;
+        FORMATETC fmt;
+        BOOL found = FALSE;
+
+        if (FAILED(IDataObject_EnumFormatEtc(data, DATADIR_GET, &enum_fmt)))
+            return DV_E_FORMATETC;
+        while (IEnumFORMATETC_Next(enum_fmt, 1, &fmt, NULL) == S_OK)
+        {
+            if (fmt.cfFormat == embedded_object_clipboard_format || fmt.cfFormat == embed_source_clipboard_format)
+                found = TRUE;
+            CoTaskMemFree(fmt.ptd);
+        }
+        IEnumFORMATETC_Release(enum_fmt);
+        if (!found)
+            return DV_E_FORMATETC;
+    }
+#endif
     hr = get_storage(data, stg, &src_cf, TRUE);
     if(FAILED(hr)) return hr;
 

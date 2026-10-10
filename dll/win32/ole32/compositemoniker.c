@@ -305,7 +305,11 @@ CompositeMonikerImpl_GetSizeMax(IMoniker* iface,ULARGE_INTEGER* pcbSize)
     if (!pcbSize)
         return E_POINTER;
 
+#ifdef __REACTOS__
+    pcbSize->QuadPart = sizeof(DWORD) + sizeof(CLSID);
+#else
     pcbSize->QuadPart = sizeof(DWORD);
+#endif
 
     IMoniker_Enum(iface,TRUE,&enumMk);
 
@@ -1034,7 +1038,11 @@ static HRESULT composite_get_moniker_comparison_data(IMoniker *moniker,
     if (FAILED(hr = IMoniker_QueryInterface(moniker, &IID_IROTData, (void **)&rot_data)))
     {
         WARN("Failed to get IROTData for component moniker, hr %#lx.\n", hr);
+#ifdef __REACTOS__
+        return E_NOTIMPL;
+#else
         return hr;
+#endif
     }
 
     hr = IROTData_GetComparisonData(rot_data, data, max_len, ret_len);
@@ -1065,6 +1073,9 @@ static HRESULT WINAPI CompositeMonikerROTDataImpl_GetComparisonData(IROTData *if
     else
     {
         WARN("Failed to get comparison data length for left component, hr %#lx.\n", hr);
+#ifdef __REACTOS__
+        *ret_len = 0;
+#endif
         return hr;
     }
 
@@ -1075,6 +1086,9 @@ static HRESULT WINAPI CompositeMonikerROTDataImpl_GetComparisonData(IROTData *if
     else
     {
         WARN("Failed to get comparison data length for right component, hr %#lx.\n", hr);
+#ifdef __REACTOS__
+        *ret_len = 0;
+#endif
         return hr;
     }
 

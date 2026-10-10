@@ -522,6 +522,10 @@ static HRESULT WINAPI pointer_moniker_marshal_GetMarshalSizeMax(IMarshal *iface,
     TRACE("%p, %s, %p, %ld, %p, %#lx, %p.\n", iface, debugstr_guid(riid), pv, dwDestContext, pvDestContext,
             mshlflags, size);
 
+#ifdef __REACTOS__
+    if (!moniker->pObject)
+        return E_INVALIDARG;
+#endif
     return CoGetMarshalSizeMax(size, &IID_IUnknown, moniker->pObject, dwDestContext, pvDestContext, mshlflags);
 }
 

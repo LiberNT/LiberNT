@@ -165,6 +165,9 @@ struct DataCache
   BOOL dirty;
   /* running object set by OnRun */
   IDataObject *running_object;
+#ifdef __REACTOS__
+  DWORD frozen_aspects;
+#endif
 };
 
 typedef struct DataCache DataCache;
@@ -1096,6 +1099,26 @@ static HRESULT create_stream(DataCacheEntry *cache_entry, IStorage *storage,
     else
         name = pres;
 
+#ifdef __REACTOS__
+    if (!contents)
+    {
+        ULARGE_INTEGER zero;
+        HRESULT hr;
+
+        hr = IStorage_CreateStream(storage, name, STGM_READWRITE | STGM_SHARE_EXCLUSIVE, 0, 0, stream);
+        if (SUCCEEDED(hr))
+            IStream_Release(*stream);
+        else if (hr != STG_E_FILEALREADYEXISTS)
+            return hr;
+
+        hr = IStorage_OpenStream(storage, name, NULL, STGM_READWRITE | STGM_SHARE_EXCLUSIVE, 0, stream);
+        if (FAILED(hr))
+            return hr;
+        zero.QuadPart = 0;
+        IStream_SetSize(*stream, zero);
+        return S_OK;
+    }
+#endif
     return IStorage_CreateStream(storage, name,
                                  STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE,
                                  0, 0, stream);
@@ -1511,7 +1534,11 @@ static HRESULT WINAPI DataCache_GetData(
 
     cache_entry = DataCache_GetEntryForFormatEtc(This, pformatetcIn);
     if (!cache_entry)
+#ifdef __REACTOS__
+        return pformatetcIn->cfFormat ? OLE_E_BLANK : DV_E_CLIPFORMAT;
+#else
         return OLE_E_BLANK;
+#endif
 
     return DataCacheEntry_GetData(cache_entry, This->presentationStorage, pformatetcIn, pmedium);
 }
@@ -1766,7 +1793,18 @@ static HRESULT add_cache_entry( DataCache *This, const FORMATETC *fmt, DWORD adv
     return hr;
 }
 
+#ifdef __REACTOS__
+static HRESULT parse_pres_streams_ex( DataCache *cache, IStorage *stg, BOOL skip_content );
+
 static HRESULT parse_pres_streams( DataCache *cache, IStorage *stg )
+{
+    return parse_pres_streams_ex( cache, stg, FALSE );
+}
+
+static HRESULT parse_pres_streams_ex( DataCache *cache, IStorage *stg, BOOL skip_content )
+#else
+static HRESULT parse_pres_streams( DataCache *cache, IStorage *stg )
+#endif
 {
     HRESULT hr;
     IStream *stm;
@@ -1785,7 +1823,13 @@ static HRESULT parse_pres_streams( DataCache *cache, IStorage *stg )
 
         if (hr == S_OK) hr = IStream_Read( stm, &header, sizeof(header), &actual_read );
 
+#ifdef __REACTOS__
+        if (hr == S_OK && (actual_read == sizeof(header) ||
+            (!clipformat && actual_read >= FIELD_OFFSET(PresentationDataHeader, unknown7))) &&
+            !(skip_content && header.dvAspect == DVASPECT_CONTENT))
+#else
         if (hr == S_OK && actual_read == sizeof(header))
+#endif
         {
             fmtetc.cfFormat = clipformat;
             fmtetc.ptd = NULL; /* FIXME */
@@ -1856,6 +1900,9 @@ static HRESULT WINAPI DataCache_Load( IPersistStorage *iface, IStorage *stg )
     {
         hr = parse_contents_stream( This, stg );
         if (FAILED(hr)) hr = parse_pres_streams( This, stg );
+#ifdef __REACTOS__
+        else hr = parse_pres_streams_ex( This, stg, TRUE );
+#endif
     }
     else
         hr = parse_pres_streams( This, stg );
@@ -1890,6 +1937,10 @@ static HRESULT WINAPI DataCache_Save(IPersistStorage* iface, IStorage *stg, BOOL
     /* assign stream numbers to the cache entries */
     LIST_FOR_EACH_ENTRY(cache_entry, &This->cache_list, DataCacheEntry, entry)
     {
+#ifdef __REACTOS__
+        if (cache_entry->id == 1)
+            continue;
+#endif
         if (cache_entry->save_stream_num != stream_number)
         {
             cache_entry->dirty = TRUE; /* needs to be written out again */
@@ -1901,8 +1952,17 @@ static HRESULT WINAPI DataCache_Save(IPersistStorage* iface, IStorage *stg, BOOL
     /* write out the cache entries */
     LIST_FOR_EACH_ENTRY(cache_entry, &This->cache_list, DataCacheEntry, entry)
     {
+#ifdef __REACTOS__
+        if (cache_entry->id == 1 && !cache_entry->dirty)
+            continue;
+#endif
         if (!same_as_load || cache_entry->dirty)
         {
+#ifdef __REACTOS__
+            if (cache_entry->stgmedium.tymed == TYMED_NULL && cache_entry->fmtetc.cfFormat &&
+                cache_entry->load_stream_num != STREAM_NUMBER_NOT_SET && This->presentationStorage)
+                DataCacheEntry_LoadData(cache_entry, This->presentationStorage);
+#endif
             hr = DataCacheEntry_Save(cache_entry, stg, same_as_load);
             if (FAILED(hr))
                 break;
@@ -1910,6 +1970,22 @@ static HRESULT WINAPI DataCache_Save(IPersistStorage* iface, IStorage *stg, BOOL
             if (same_as_load) cache_entry->dirty = FALSE;
         }
     }
+
+#ifdef __REACTOS__
+    if (SUCCEEDED(hr))
+    {
+        for (;; stream_number++)
+        {
+            WCHAR pres[] = {2,'O','l','e','P','r','e','s',
+                            '0' + (stream_number / 100) % 10,
+                            '0' + (stream_number / 10) % 10,
+                            '0' + stream_number % 10, 0};
+
+            if (stream_number > 999 || FAILED(IStorage_DestroyElement(stg, pres)))
+                break;
+        }
+    }
+#endif
 
     if (same_as_load) This->dirty = FALSE;
     return hr;
@@ -2134,6 +2210,19 @@ static HRESULT WINAPI DataCache_Draw(
           GlobalUnlock( cache_entry->stgmedium.hGlobal );
           return S_OK;
       }
+#ifdef __REACTOS__
+      case CF_ENHMETAFILE:
+      {
+          RECT rc;
+
+          if (cache_entry->stgmedium.tymed != TYMED_ENHMF)
+              continue;
+
+          SetRect( &rc, lprcBounds->left, lprcBounds->top, lprcBounds->right, lprcBounds->bottom );
+          PlayEnhMetaFile( hdcDraw, cache_entry->stgmedium.hEnhMetaFile, &rc );
+          return S_OK;
+      }
+#endif
     }
   }
 
@@ -2162,16 +2251,56 @@ static HRESULT WINAPI DataCache_Freeze(
 	    void*           pvAspect,
 	    DWORD*          pdwFreeze)
 {
+#ifdef __REACTOS__
+  DataCache *This = impl_from_IViewObject2(iface);
+  DataCacheEntry *cache_entry;
+
+  TRACE("%p, %#lx, %ld, %p, %p.\n", iface, dwDrawAspect, lindex, pvAspect, pdwFreeze);
+
+  if (!pdwFreeze)
+    return E_INVALIDARG;
+  *pdwFreeze = 0;
+
+  LIST_FOR_EACH_ENTRY(cache_entry, &This->cache_list, DataCacheEntry, entry)
+  {
+    if ((cache_entry->fmtetc.dwAspect != dwDrawAspect) ||
+        (cache_entry->fmtetc.lindex != lindex))
+      continue;
+    if ((cache_entry->stgmedium.tymed == TYMED_NULL) &&
+        (cache_entry->load_stream_num == STREAM_NUMBER_NOT_SET))
+      continue;
+
+    *pdwFreeze = dwDrawAspect;
+    if (This->frozen_aspects & dwDrawAspect)
+      return VIEW_S_ALREADY_FROZEN;
+    This->frozen_aspects |= dwDrawAspect;
+    return S_OK;
+  }
+
+  return OLE_E_BLANK;
+#else
   FIXME("stub\n");
   return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DataCache_Unfreeze(
             IViewObject2*   iface,
 	    DWORD           dwFreeze)
 {
+#ifdef __REACTOS__
+  DataCache *This = impl_from_IViewObject2(iface);
+
+  TRACE("%p, %#lx.\n", iface, dwFreeze);
+
+  if (!dwFreeze || (This->frozen_aspects & dwFreeze) != dwFreeze)
+    return OLE_E_NOCONNECTION;
+  This->frozen_aspects &= ~dwFreeze;
+  return S_OK;
+#else
   FIXME("stub\n");
   return E_NOTIMPL;
+#endif
 }
 
 /************************************************************************
@@ -2850,6 +2979,10 @@ static void WINAPI DataCache_OnDataChange(IAdviseSink *iface, FORMATETC *fmt, ST
 {
     DataCache *This = impl_from_IAdviseSink(iface);
     TRACE("(%p)->(%s, %p)\n", This, debugstr_formatetc(fmt), med);
+#ifdef __REACTOS__
+    if (This->frozen_aspects & fmt->dwAspect)
+        return;
+#endif
     IOleCache2_SetData(&This->IOleCache2_iface, fmt, med, FALSE);
 }
 
@@ -3005,6 +3138,9 @@ static DataCache* DataCache_Construct(
   newObject->last_cache_id = 2;
   newObject->dirty = FALSE;
   newObject->running_object = NULL;
+#ifdef __REACTOS__
+  newObject->frozen_aspects = 0;
+#endif
 
   create_automatic_entry( newObject, clsid );
   newObject->clsid = *clsid;

@@ -90,6 +90,10 @@ struct DefaultHandler
   IRunnableObject   IRunnableObject_iface;
   IAdviseSink       IAdviseSink_iface;
   IPersistStorage   IPersistStorage_iface;
+#ifdef __REACTOS__
+  IMarshal          IMarshal_iface;
+  IUnknown         *marshal_inner;
+#endif
 
   /* Reference count of this object */
   LONG ref;
@@ -126,6 +130,9 @@ struct DefaultHandler
 
   /* IOleObject delegate */
   IOleObject *pOleDelegate;
+#ifdef __REACTOS__
+  IUnknown *pUnkDelegate;
+#endif
   /* IPersistStorage delegate */
   IPersistStorage *pPSDelegate;
   /* IDataObject delegate */
@@ -199,6 +206,36 @@ static inline void end_object_call(DefaultHandler *This)
         DefaultHandler_Stop( This );
 }
 
+#ifdef __REACTOS__
+static BOOL ole_running(DefaultHandler *This)
+{
+    if (!object_is_running(This))
+        return FALSE;
+
+    if (!This->pOleDelegate && This->pUnkDelegate &&
+        SUCCEEDED(IUnknown_QueryInterface(This->pUnkDelegate, &IID_IOleObject, (void **)&This->pOleDelegate)))
+    {
+        IOleObject_Advise(This->pOleDelegate, &This->IAdviseSink_iface, &This->dwAdvConn);
+        if (This->clientSite)
+            IOleObject_SetClientSite(This->pOleDelegate, This->clientSite);
+        if (This->containerApp)
+            IOleObject_SetHostNames(This->pOleDelegate, This->containerApp, This->containerObj);
+    }
+
+    return This->pOleDelegate != NULL;
+}
+
+static inline BOOL data_running(DefaultHandler *This)
+{
+    return object_is_running(This) && This->pDataDelegate;
+}
+
+static inline BOOL ps_running(DefaultHandler *This)
+{
+    return object_is_running(This) && This->pPSDelegate;
+}
+#endif
+
 /*********************************************************
  * Method implementation for the  non delegating IUnknown
  * part of the DefaultHandler class.
@@ -244,6 +281,10 @@ static HRESULT WINAPI DefaultHandler_NDIUnknown_QueryInterface(
     if (FAILED(hr)) FIXME("interface %s not implemented by data cache\n", debugstr_guid(riid));
     return hr;
   }
+#ifdef __REACTOS__
+  else if (IsEqualIID(&IID_IMarshal, riid) && This->marshal_inner)
+    *ppvObject = &This->IMarshal_iface;
+#endif
   else if (This->inproc_server && This->pOleDelegate)
   {
     return IOleObject_QueryInterface(This->pOleDelegate, riid, ppvObject);
@@ -364,7 +405,11 @@ static HRESULT WINAPI DefaultHandler_SetClientSite(
 
   TRACE("(%p, %p)\n", iface, pClientSite);
 
+#ifdef __REACTOS__
+  if (object_is_running(This) && This->pOleDelegate)
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hr = IOleObject_SetClientSite(This->pOleDelegate, pClientSite);
@@ -431,7 +476,11 @@ static HRESULT WINAPI DefaultHandler_SetHostNames(
 	debugstr_w(szContainerApp),
 	debugstr_w(szContainerObj));
 
+#ifdef __REACTOS__
+  if (object_is_running(This) && This->pOleDelegate)
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     IOleObject_SetHostNames(This->pOleDelegate, szContainerApp, szContainerObj);
@@ -462,6 +511,13 @@ static HRESULT WINAPI DefaultHandler_SetHostNames(
 
 static void release_delegates(DefaultHandler *This)
 {
+#ifdef __REACTOS__
+    if (This->pUnkDelegate)
+    {
+        IUnknown_Release(This->pUnkDelegate);
+        This->pUnkDelegate = NULL;
+    }
+#endif
     if (This->pDataDelegate)
     {
         IDataObject_Release(This->pDataDelegate);
@@ -495,6 +551,9 @@ static void DefaultHandler_Stop(DefaultHandler *This)
     IOleCacheControl_Release( cache_ctrl );
   }
 
+#ifdef __REACTOS__
+  if (This->pOleDelegate)
+#endif
   IOleObject_Unadvise(This->pOleDelegate, This->dwAdvConn);
 
   if (This->dataAdviseHolder)
@@ -524,9 +583,19 @@ static HRESULT WINAPI DefaultHandler_Close(
   if (!object_is_running(This))
     return S_OK;
 
+#ifdef __REACTOS__
+  hr = S_OK;
+  if (ole_running(This))
+  {
+    start_object_call( This );
+    hr = IOleObject_Close(This->pOleDelegate, dwSaveOption);
+    end_object_call( This );
+  }
+#else
   start_object_call( This );
   hr = IOleObject_Close(This->pOleDelegate, dwSaveOption);
   end_object_call( This );
+#endif
 
   DefaultHandler_Stop(This);
 
@@ -550,7 +619,11 @@ static HRESULT WINAPI DefaultHandler_SetMoniker(
 
   TRACE("%p, %ld, %p.\n", iface, dwWhichMoniker, pmk);
 
+#ifdef __REACTOS__
+  if (ole_running(This))
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hr = IOleObject_SetMoniker(This->pOleDelegate, dwWhichMoniker, pmk);
@@ -578,7 +651,11 @@ static HRESULT WINAPI DefaultHandler_GetMoniker(
 
   TRACE("%p, %ld, %ld, %p.\n", iface, dwAssign, dwWhichMoniker, ppmk);
 
+#ifdef __REACTOS__
+  if (ole_running(This))
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hr = IOleObject_GetMoniker(This->pOleDelegate, dwAssign, dwWhichMoniker,
@@ -618,7 +695,11 @@ static HRESULT WINAPI DefaultHandler_InitFromData(
 
   TRACE("%p, %p, %d, %ld.\n", iface, pDataObject, fCreation, dwReserved);
 
+#ifdef __REACTOS__
+  if (ole_running(This))
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hr = IOleObject_InitFromData(This->pOleDelegate, pDataObject, fCreation,
@@ -646,7 +727,11 @@ static HRESULT WINAPI DefaultHandler_GetClipboardData(
 
   TRACE("%p, %ld, %p.\n", iface, dwReserved, ppDataObject);
 
+#ifdef __REACTOS__
+  if (ole_running(This))
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hr = IOleObject_GetClipboardData(This->pOleDelegate, dwReserved,
@@ -700,7 +785,11 @@ static HRESULT WINAPI DefaultHandler_EnumVerbs(
 
   TRACE("(%p, %p)\n", iface, ppEnumOleVerb);
 
+#ifdef __REACTOS__
+  if (ole_running(This))
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hr = IOleObject_EnumVerbs(This->pOleDelegate, ppEnumOleVerb);
@@ -723,8 +812,16 @@ static HRESULT WINAPI DefaultHandler_Update(
 
     if (!object_is_running(This))
     {
+#ifdef __REACTOS__
+        hr = IRunnableObject_Run(&This->IRunnableObject_iface, NULL);
+        if (FAILED(hr))
+            return hr;
+        if (!ole_running(This))
+            return E_NOINTERFACE;
+#else
         FIXME("Should run object\n");
         return E_NOTIMPL;
+#endif
     }
 
     start_object_call( This );
@@ -748,7 +845,11 @@ static HRESULT WINAPI DefaultHandler_IsUpToDate(
     HRESULT hr = OLE_E_NOTRUNNING;
     TRACE("(%p)\n", iface);
 
+#ifdef __REACTOS__
+    if (ole_running(This))
+#else
     if (object_is_running(This))
+#endif
     {
         start_object_call( This );
         hr = IOleObject_IsUpToDate(This->pOleDelegate);
@@ -774,7 +875,11 @@ static HRESULT WINAPI DefaultHandler_GetUserClassID(
 
   TRACE("(%p, %p)\n", iface, pClsid);
 
+#ifdef __REACTOS__
+  if (ole_running(This))
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hr = IOleObject_GetUserClassID(This->pOleDelegate, pClsid);
@@ -807,7 +912,11 @@ static HRESULT WINAPI DefaultHandler_GetUserType(
   HRESULT hr;
 
   TRACE("%p, %ld, %p.\n", iface, dwFormOfType, pszUserType);
+#ifdef __REACTOS__
+  if (ole_running(This))
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hr = IOleObject_GetUserType(This->pOleDelegate, dwFormOfType, pszUserType);
@@ -815,7 +924,21 @@ static HRESULT WINAPI DefaultHandler_GetUserType(
     return hr;
   }
 
+#ifdef __REACTOS__
+  hr = OleRegGetUserType(&This->clsid, dwFormOfType, pszUserType);
+  if (FAILED(hr) && pszUserType)
+  {
+    static const WCHAR unknownW[] = L"Unknown";
+
+    if (!(*pszUserType = CoTaskMemAlloc(sizeof(unknownW))))
+      return E_OUTOFMEMORY;
+    memcpy(*pszUserType, unknownW, sizeof(unknownW));
+    hr = S_OK;
+  }
+  return hr;
+#else
   return OleRegGetUserType(&This->clsid, dwFormOfType, pszUserType);
+#endif
 }
 
 /************************************************************************
@@ -835,7 +958,11 @@ static HRESULT WINAPI DefaultHandler_SetExtent(
 
   TRACE("%p, %lx, (%ld x %ld))\n", iface, dwDrawAspect, psizel->cx, psizel->cy);
 
+#ifdef __REACTOS__
+  if (ole_running(This))
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hr = IOleObject_SetExtent(This->pOleDelegate, dwDrawAspect, psizel);
@@ -866,7 +993,11 @@ static HRESULT WINAPI DefaultHandler_GetExtent(
 
   TRACE("%p, %lx, %p.\n", iface, dwDrawAspect, psizel);
 
+#ifdef __REACTOS__
+  if (ole_running(This))
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hres = IOleObject_GetExtent(This->pOleDelegate, dwDrawAspect, psizel);
@@ -1001,7 +1132,11 @@ static HRESULT WINAPI DefaultHandler_GetMiscStatus(
 
   TRACE("%p, %lx, %p.\n", iface, dwAspect, pdwStatus);
 
+#ifdef __REACTOS__
+  if (ole_running(This))
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hres = IOleObject_GetMiscStatus(This->pOleDelegate, dwAspect, pdwStatus);
@@ -1033,7 +1168,11 @@ static HRESULT WINAPI DefaultHandler_SetColorScheme(
 
   TRACE("(%p, %p))\n", iface, pLogpal);
 
+#ifdef __REACTOS__
+  if (ole_running(This))
+#else
   if (object_is_running(This))
+#endif
   {
     start_object_call( This );
     hr = IOleObject_SetColorScheme(This->pOleDelegate, pLogpal);
@@ -1123,7 +1262,11 @@ static HRESULT WINAPI DefaultHandler_GetData(
 
   if (hres == S_OK) return hres;
 
+#ifdef __REACTOS__
+  if (data_running( This ))
+#else
   if (object_is_running( This ))
+#endif
   {
     start_object_call(This);
     hres = IDataObject_GetData(This->pDataDelegate, pformatetcIn, pmedium);
@@ -1180,7 +1323,11 @@ static HRESULT WINAPI DefaultHandler_QueryGetData(
 
   if (hres == S_OK) return hres;
 
+#ifdef __REACTOS__
+  if (data_running( This ))
+#else
   if (object_is_running( This ))
+#endif
   {
     start_object_call( This );
     hres = IDataObject_QueryGetData(This->pDataDelegate, pformatetc);
@@ -1212,7 +1359,11 @@ static HRESULT WINAPI DefaultHandler_GetCanonicalFormatEtc(
 
   TRACE("(%p, %p, %p)\n", iface, pformatetcIn, pformatetcOut);
 
+#ifdef __REACTOS__
+  if (!data_running( This ))
+#else
   if (!object_is_running( This ))
+#endif
     return OLE_E_NOTRUNNING;
 
   start_object_call( This );
@@ -1303,7 +1454,11 @@ static HRESULT WINAPI DefaultHandler_DAdvise(
   if (!This->dataAdviseHolder)
   {
     hres = CreateDataAdviseHolder(&This->dataAdviseHolder);
+#ifdef __REACTOS__
+    if (SUCCEEDED(hres) && data_running( This ))
+#else
     if (SUCCEEDED(hres) && object_is_running( This ))
+#endif
     {
       start_object_call( This );
       DataAdviseHolder_OnConnect(This->dataAdviseHolder, This->pDataDelegate);
@@ -1451,6 +1606,51 @@ static HRESULT WINAPI DefaultHandler_Run(
   if (object_is_running(This))
     return S_OK;
 
+#ifdef __REACTOS__
+  release_delegates(This);
+
+  hr = CoCreateInstance(&This->clsid, NULL, CLSCTX_LOCAL_SERVER | CLSCTX_REMOTE_SERVER,
+                        &IID_IUnknown, (void **)&This->pUnkDelegate);
+  if (FAILED(hr))
+    return hr;
+
+  IUnknown_QueryInterface(This->pUnkDelegate, &IID_IPersistStorage, (void **)&This->pPSDelegate);
+  if (This->storage_state == storage_state_initialised || This->storage_state == storage_state_loaded)
+  {
+    if (!This->pPSDelegate)
+      hr = E_NOINTERFACE;
+    else if (This->storage_state == storage_state_initialised)
+      hr = IPersistStorage_InitNew(This->pPSDelegate, This->storage);
+    else
+      hr = IPersistStorage_Load(This->pPSDelegate, This->storage);
+    if (FAILED(hr))
+    {
+      release_delegates(This);
+      return hr;
+    }
+  }
+
+  IUnknown_QueryInterface(This->pUnkDelegate, &IID_IDataObject, (void **)&This->pDataDelegate);
+
+  This->object_state = object_state_running;
+
+  if (This->dataAdviseHolder && This->pDataDelegate)
+  {
+    hr = DataAdviseHolder_OnConnect(This->dataAdviseHolder, This->pDataDelegate);
+    if (FAILED(hr)) goto fail;
+  }
+
+  if (This->pDataDelegate)
+  {
+    hr = IUnknown_QueryInterface( This->dataCache, &IID_IOleCacheControl, (void **)&cache_ctrl );
+    if (FAILED(hr)) goto fail;
+    hr = IOleCacheControl_OnRun( cache_ctrl, This->pDataDelegate );
+    IOleCacheControl_Release( cache_ctrl );
+    if (FAILED(hr)) goto fail;
+  }
+
+  return S_OK;
+#else
   release_delegates(This);
 
   hr = CoCreateInstance(&This->clsid, NULL, CLSCTX_LOCAL_SERVER | CLSCTX_REMOTE_SERVER,
@@ -1508,6 +1708,8 @@ static HRESULT WINAPI DefaultHandler_Run(
   if (FAILED(hr)) goto fail;
 
   return hr;
+
+#endif
 
 fail:
   DefaultHandler_Stop(This);
@@ -1700,7 +1902,11 @@ static HRESULT WINAPI DefaultHandler_IPersistStorage_GetClassID(
 
     TRACE("(%p)->(%p)\n", iface, clsid);
 
+#ifdef __REACTOS__
+    if(ps_running(This))
+#else
     if(object_is_running(This))
+#endif
     {
         start_object_call( This );
         hr = IPersistStorage_GetClassID(This->pPSDelegate, clsid);
@@ -1727,7 +1933,11 @@ static HRESULT WINAPI DefaultHandler_IPersistStorage_IsDirty(
     hr = IPersistStorage_IsDirty(This->dataCache_PersistStg);
     if(hr != S_FALSE) return hr;
 
+#ifdef __REACTOS__
+    if(ps_running(This))
+#else
     if(object_is_running(This))
+#endif
     {
         start_object_call( This );
         hr = IPersistStorage_IsDirty(This->pPSDelegate);
@@ -1814,7 +2024,11 @@ static HRESULT WINAPI DefaultHandler_IPersistStorage_InitNew(
 
     hr = IPersistStorage_InitNew(This->dataCache_PersistStg, pStg);
 
+#ifdef __REACTOS__
+    if(SUCCEEDED(hr) && ps_running(This))
+#else
     if(SUCCEEDED(hr) && object_is_running(This))
+#endif
     {
         start_object_call( This );
         hr = IPersistStorage_InitNew(This->pPSDelegate, pStg);
@@ -1850,7 +2064,11 @@ static HRESULT WINAPI DefaultHandler_IPersistStorage_Load(
     if(SUCCEEDED(hr))
         hr = IPersistStorage_Load(This->dataCache_PersistStg, pStg);
 
+#ifdef __REACTOS__
+    if(SUCCEEDED(hr) && ps_running(This))
+#else
     if(SUCCEEDED(hr) && object_is_running(This))
+#endif
     {
         start_object_call( This );
         hr = IPersistStorage_Load(This->pPSDelegate, pStg);
@@ -1882,7 +2100,11 @@ static HRESULT WINAPI DefaultHandler_IPersistStorage_Save(
     TRACE("(%p)->(%p, %d)\n", iface, pStgSave, fSameAsLoad);
 
     hr = IPersistStorage_Save(This->dataCache_PersistStg, pStgSave, fSameAsLoad);
+#ifdef __REACTOS__
+    if(SUCCEEDED(hr) && ps_running(This))
+#else
     if(SUCCEEDED(hr) && object_is_running(This))
+#endif
     {
         start_object_call( This );
         hr = IPersistStorage_Save(This->pPSDelegate, pStgSave, fSameAsLoad);
@@ -1908,7 +2130,11 @@ static HRESULT WINAPI DefaultHandler_IPersistStorage_SaveCompleted(
 
     hr = IPersistStorage_SaveCompleted(This->dataCache_PersistStg, pStgNew);
 
+#ifdef __REACTOS__
+    if(SUCCEEDED(hr) && ps_running(This))
+#else
     if(SUCCEEDED(hr) && object_is_running(This))
+#endif
     {
         start_object_call( This );
         hr = IPersistStorage_SaveCompleted(This->pPSDelegate, pStgNew);
@@ -1941,7 +2167,11 @@ static HRESULT WINAPI DefaultHandler_IPersistStorage_HandsOffStorage(
 
     hr = IPersistStorage_HandsOffStorage(This->dataCache_PersistStg);
 
+#ifdef __REACTOS__
+    if(SUCCEEDED(hr) && ps_running(This))
+#else
     if(SUCCEEDED(hr) && object_is_running(This))
+#endif
     {
         start_object_call( This );
         hr = IPersistStorage_HandsOffStorage(This->pPSDelegate);
@@ -2051,6 +2281,129 @@ static const IPersistStorageVtbl DefaultHandler_IPersistStorage_VTable =
 /*********************************************************
  * Methods implementation for the DefaultHandler class.
  */
+#ifdef __REACTOS__
+static inline DefaultHandler *impl_from_IMarshal( IMarshal *iface )
+{
+    return CONTAINING_RECORD(iface, DefaultHandler, IMarshal_iface);
+}
+
+static HRESULT get_inner_marshal(DefaultHandler *This, IMarshal **marshal)
+{
+    return IUnknown_QueryInterface(This->marshal_inner, &IID_IMarshal, (void **)marshal);
+}
+
+static HRESULT WINAPI DefaultHandler_IMarshal_QueryInterface(IMarshal *iface, REFIID riid, void **ppv)
+{
+    return IUnknown_QueryInterface(impl_from_IMarshal(iface)->outerUnknown, riid, ppv);
+}
+
+static ULONG WINAPI DefaultHandler_IMarshal_AddRef(IMarshal *iface)
+{
+    return IUnknown_AddRef(impl_from_IMarshal(iface)->outerUnknown);
+}
+
+static ULONG WINAPI DefaultHandler_IMarshal_Release(IMarshal *iface)
+{
+    return IUnknown_Release(impl_from_IMarshal(iface)->outerUnknown);
+}
+
+static HRESULT WINAPI DefaultHandler_IMarshal_GetUnmarshalClass(IMarshal *iface, REFIID riid, void *pv,
+        DWORD dest_context, void *dest_context_data, DWORD mshlflags, CLSID *clsid)
+{
+    IMarshal *marshal;
+    HRESULT hr = get_inner_marshal(impl_from_IMarshal(iface), &marshal);
+
+    if (FAILED(hr)) return hr;
+    hr = IMarshal_GetUnmarshalClass(marshal, riid, pv, dest_context, dest_context_data, mshlflags, clsid);
+    IMarshal_Release(marshal);
+    return hr;
+}
+
+static HRESULT WINAPI DefaultHandler_IMarshal_GetMarshalSizeMax(IMarshal *iface, REFIID riid, void *pv,
+        DWORD dest_context, void *dest_context_data, DWORD mshlflags, DWORD *size)
+{
+    IMarshal *marshal;
+    HRESULT hr = get_inner_marshal(impl_from_IMarshal(iface), &marshal);
+
+    if (FAILED(hr)) return hr;
+    hr = IMarshal_GetMarshalSizeMax(marshal, riid, pv, dest_context, dest_context_data, mshlflags, size);
+    IMarshal_Release(marshal);
+    return hr;
+}
+
+static HRESULT WINAPI DefaultHandler_IMarshal_MarshalInterface(IMarshal *iface, IStream *stream, REFIID riid,
+        void *pv, DWORD dest_context, void *dest_context_data, DWORD mshlflags)
+{
+    IMarshal *marshal;
+    HRESULT hr = get_inner_marshal(impl_from_IMarshal(iface), &marshal);
+
+    if (FAILED(hr)) return hr;
+    hr = IMarshal_MarshalInterface(marshal, stream, riid, pv, dest_context, dest_context_data, mshlflags);
+    IMarshal_Release(marshal);
+    return hr;
+}
+
+static HRESULT WINAPI DefaultHandler_IMarshal_UnmarshalInterface(IMarshal *iface, IStream *stream, REFIID riid, void **ppv)
+{
+    DefaultHandler *This = impl_from_IMarshal(iface);
+    IMarshal *marshal;
+    IUnknown *object;
+    HRESULT hr;
+
+    *ppv = NULL;
+    hr = get_inner_marshal(This, &marshal);
+    if (FAILED(hr)) return hr;
+    hr = IMarshal_UnmarshalInterface(marshal, stream, &IID_IUnknown, (void **)&object);
+    IMarshal_Release(marshal);
+    if (FAILED(hr)) return hr;
+
+    release_delegates(This);
+    This->pUnkDelegate = object;
+    if (FAILED(IUnknown_QueryInterface(object, &IID_IPersistStorage, (void **)&This->pPSDelegate)))
+        This->pPSDelegate = NULL;
+    if (FAILED(IUnknown_QueryInterface(object, &IID_IDataObject, (void **)&This->pDataDelegate)))
+        This->pDataDelegate = NULL;
+    This->object_state = object_state_running;
+
+    return IUnknown_QueryInterface(This->outerUnknown, riid, ppv);
+}
+
+static HRESULT WINAPI DefaultHandler_IMarshal_ReleaseMarshalData(IMarshal *iface, IStream *stream)
+{
+    IMarshal *marshal;
+    HRESULT hr = get_inner_marshal(impl_from_IMarshal(iface), &marshal);
+
+    if (FAILED(hr)) return hr;
+    hr = IMarshal_ReleaseMarshalData(marshal, stream);
+    IMarshal_Release(marshal);
+    return hr;
+}
+
+static HRESULT WINAPI DefaultHandler_IMarshal_DisconnectObject(IMarshal *iface, DWORD reserved)
+{
+    IMarshal *marshal;
+    HRESULT hr = get_inner_marshal(impl_from_IMarshal(iface), &marshal);
+
+    if (FAILED(hr)) return hr;
+    hr = IMarshal_DisconnectObject(marshal, reserved);
+    IMarshal_Release(marshal);
+    return hr;
+}
+
+static const IMarshalVtbl DefaultHandler_IMarshal_VTable =
+{
+    DefaultHandler_IMarshal_QueryInterface,
+    DefaultHandler_IMarshal_AddRef,
+    DefaultHandler_IMarshal_Release,
+    DefaultHandler_IMarshal_GetUnmarshalClass,
+    DefaultHandler_IMarshal_GetMarshalSizeMax,
+    DefaultHandler_IMarshal_MarshalInterface,
+    DefaultHandler_IMarshal_UnmarshalInterface,
+    DefaultHandler_IMarshal_ReleaseMarshalData,
+    DefaultHandler_IMarshal_DisconnectObject
+};
+#endif
+
 static DefaultHandler* DefaultHandler_Construct(
   REFCLSID  clsid,
   LPUNKNOWN pUnkOuter,
@@ -2071,6 +2424,10 @@ static DefaultHandler* DefaultHandler_Construct(
   This->IRunnableObject_iface.lpVtbl = &DefaultHandler_IRunnableObject_VTable;
   This->IAdviseSink_iface.lpVtbl = &DefaultHandler_IAdviseSink_VTable;
   This->IPersistStorage_iface.lpVtbl = &DefaultHandler_IPersistStorage_VTable;
+#ifdef __REACTOS__
+  This->IMarshal_iface.lpVtbl = &DefaultHandler_IMarshal_VTable;
+  This->marshal_inner = NULL;
+#endif
 
   This->inproc_server = (flags & EMBDHLP_INPROC_SERVER) != 0;
 
@@ -2124,6 +2481,9 @@ static DefaultHandler* DefaultHandler_Construct(
   This->containerApp = NULL;
   This->containerObj = NULL;
   This->pOleDelegate = NULL;
+#ifdef __REACTOS__
+  This->pUnkDelegate = NULL;
+#endif
   This->pPSDelegate = NULL;
   This->pDataDelegate = NULL;
   This->object_state = object_state_not_running;
@@ -2132,6 +2492,10 @@ static DefaultHandler* DefaultHandler_Construct(
   This->dwAdvConn = 0;
   This->storage = NULL;
   This->storage_state = storage_state_uninitialised;
+#ifdef __REACTOS__
+  if (!This->inproc_server && FAILED(CoGetStdMarshalEx(This->outerUnknown, SMEXF_HANDLER, &This->marshal_inner)))
+    This->marshal_inner = NULL;
+#endif
 
   if (This->inproc_server && !(flags & EMBDHLP_DELAYCREATE))
   {
@@ -2172,6 +2536,14 @@ static void DefaultHandler_Destroy(
 
   /* release delegates */
   DefaultHandler_Stop(This);
+#ifdef __REACTOS__
+  release_delegates(This);
+  if (This->marshal_inner)
+  {
+    IUnknown_Release(This->marshal_inner);
+    This->marshal_inner = NULL;
+  }
+#endif
 
   HeapFree( GetProcessHeap(), 0, This->containerApp );
   This->containerApp = NULL;
