@@ -355,6 +355,26 @@ NtfsFileRecordSetFileDataSize(
         NewSize);
 }
 
+ULONGLONG
+NtfsFileRecordGetAllocationSignature(
+    _In_ PNtfsFileRecord Fr)
+{
+    if (!Fr)
+        return 0;
+    return reinterpret_cast<PFileRecord>(Fr)->GetAllocationSignature();
+}
+
+NTSTATUS
+NtfsFileRecordGetDiskRange(
+    _In_ PNtfsFileRecord Fr,
+    _Out_ PULONGLONG Offset,
+    _Out_ PULONG Length)
+{
+    if (!Fr || !Offset || !Length)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PFileRecord>(Fr)->GetRecordDiskRange(Offset, Length);
+}
+
 NTSTATUS NtfsFileRecordSetFileValidDataLength(_In_ PNtfsFileRecord Fr, _In_ AttributeType AttrType, _In_opt_ PWSTR StreamName, _In_ ULONGLONG NewValidDataLength)
 {
     if (!Fr)

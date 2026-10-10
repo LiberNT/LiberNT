@@ -564,6 +564,16 @@ NtfsFileRecordSetFileDataSize(
     _In_opt_ PWSTR StreamName,
     _In_ ULONGLONG NewSize);
 
+ULONGLONG
+NtfsFileRecordGetAllocationSignature(
+    _In_ NtfsFileRecord *FileRecord);
+
+NTSTATUS
+NtfsFileRecordGetDiskRange(
+    _In_ NtfsFileRecord *FileRecord,
+    _Out_ PULONGLONG Offset,
+    _Out_ PULONG Length);
+
 NTSTATUS NtfsFileRecordSetFileValidDataLength(_In_ NtfsFileRecord *FileRecord, _In_ AttributeType AttrType, _In_opt_ PWSTR StreamName, _In_ ULONGLONG NewValidDataLength);
 
 /*

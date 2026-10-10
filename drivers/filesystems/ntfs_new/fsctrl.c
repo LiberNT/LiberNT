@@ -1711,6 +1711,42 @@ NtfsFsdFileSystemControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
 
 _Function_class_(IRP_MJ_FLUSH_BUFFERS)
 _Function_class_(DRIVER_DISPATCH)
+static
+NTSTATUS
+NtfsFlushFileMetadata(_In_ PVolumeContextBlock VolCB,
+                      _Inout_ PFileContextBlock FileCB)
+{
+    ULONGLONG Allocation = 0;
+    ULONGLONG Offset = 0;
+    ULONG Length = 0;
+    NTSTATUS Status;
+
+    if (FileCB->FileRec)
+    {
+        NtfsAcquireMetadata(VolCB);
+        Allocation = NtfsFileRecordGetAllocationSignature(FileCB->FileRec);
+        if (!Allocation ||
+            !FileCB->RecordFlushArmed ||
+            Allocation != FileCB->FlushedAllocation ||
+            !NT_SUCCESS(NtfsFileRecordGetDiskRange(FileCB->FileRec, &Offset, &Length)))
+        {
+            Length = 0;
+        }
+        NtfsReleaseMetadata(VolCB);
+    }
+
+    if (Length)
+        return NtfsDiskFlushRangeKm(VolCB->StorageDevice, Offset, Length);
+
+    Status = NtfsDiskFlushVolumeKm(VolCB->StorageDevice);
+    if (NT_SUCCESS(Status) && Allocation)
+    {
+        FileCB->RecordFlushArmed = TRUE;
+        FileCB->FlushedAllocation = Allocation;
+    }
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 NtfsFsdFlushBuffers(_In_ PDEVICE_OBJECT VolumeDeviceObject,
@@ -1756,8 +1792,7 @@ NtfsFsdFlushBuffers(_In_ PDEVICE_OBJECT VolumeDeviceObject,
 
     /* Metadata the library is holding back has to reach the disk too. */
     if (NT_SUCCESS(Status))
-        Status = NtfsDiskFlushVolumeKm(
-            ((PVolumeContextBlock)VolumeDeviceObject->DeviceExtension)->StorageDevice);
+        Status = NtfsFlushFileMetadata((PVolumeContextBlock)VolumeDeviceObject->DeviceExtension, FileCB);
 
     ExReleaseResourceLite(NtfsGetMainResource(FileCB));
     KeLeaveCriticalRegion();

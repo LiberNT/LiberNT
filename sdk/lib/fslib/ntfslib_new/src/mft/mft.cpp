@@ -230,6 +230,36 @@ MasterFileTable::QueryVolumeInformation(
 }
 
 NTSTATUS
+MasterFileTable::GetFileRecordDiskOffset(_In_ ULONGLONG RecordNumber,
+                                         _Out_ PULONGLONG DiskOffset)
+{
+    ULONGLONG Offset;
+    PDataRun Run;
+
+    if (!MFTFile || !MFTDataAttr || !FileRecordSize ||
+        RecordNumber > ~(ULONGLONG)0 / FileRecordSize)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Offset = RecordNumber * FileRecordSize;
+    for (Run = MFTFile->GetCachedDataRuns(MFTDataAttr); Run; Run = Run->NextRun)
+    {
+        ULONGLONG RunSize = GetRunSize(Run);
+
+        if (Offset < RunSize)
+        {
+            if (Run->IsSparse || RunSize - Offset < FileRecordSize)
+                return STATUS_NOT_IMPLEMENTED;
+            *DiskOffset = GetOffset(Run->LCN) + Offset;
+            return STATUS_SUCCESS;
+        }
+        Offset -= RunSize;
+    }
+    return STATUS_NOT_FOUND;
+}
+
+NTSTATUS
 MasterFileTable::WriteFileRecordToMFT(_In_ PFileRecord File)
 {
     PUCHAR CommittedImage = NULL;

@@ -907,6 +907,14 @@ public:
     NTSTATUS
     ApplyFixup();
 
+    // ./ findattr.cpp
+    ULONGLONG
+    GetAllocationSignature();
+
+    NTSTATUS
+    GetRecordDiskRange(_Out_ PULONGLONG Offset,
+                       _Out_ PULONG Length);
+
 private:
     friend class Directory;
     friend class MasterFileTable;
@@ -1515,6 +1523,10 @@ public:
 
     NTSTATUS
     WriteFileRecordToMFT(_In_ PFileRecord File);
+
+    NTSTATUS
+    GetFileRecordDiskOffset(_In_ ULONGLONG RecordNumber,
+                            _Out_ PULONGLONG DiskOffset);
 
     NTSTATUS
     IsFileRecordNumberInUse(_In_  ULONG FileRecordNumber,

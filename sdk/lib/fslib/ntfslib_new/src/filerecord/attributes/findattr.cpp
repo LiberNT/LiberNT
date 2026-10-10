@@ -831,3 +831,73 @@ FileRecord::ClearDataRunCache()
         delete Entry;
     }
 }
+
+ULONGLONG
+FileRecord::GetAllocationSignature()
+{
+    ULONGLONG Signature = 0xCBF29CE484222325ULL;
+    ULONG Offset;
+
+    if (!Header || !Data ||
+        Header->AttributeOffset < sizeof(FileRecordHeader) ||
+        Header->ActualSize > RecordBufferSize ||
+        Header->ActualSize < Header->AttributeOffset + 2 * sizeof(UINT32))
+    {
+        return 0;
+    }
+
+    for (Offset = Header->AttributeOffset;
+         Offset <= Header->ActualSize - 2 * sizeof(UINT32);
+         )
+    {
+        PAttribute Attr = (PAttribute)(Data + Offset);
+        PUCHAR Bytes = (PUCHAR)Attr;
+        ULONG Index;
+
+        if (Attr->AttributeType == TypeAttributeEndMarker)
+            return Signature ? Signature : 1;
+        if (Attr->AttributeType == TypeAttributeList ||
+            Attr->Length < FIELD_OFFSET(Attribute, Resident) ||
+            Attr->Length > Header->ActualSize - Offset)
+        {
+            return 0;
+        }
+        if (Attr->IsNonResident)
+        {
+            if (Attr->Length < FIELD_OFFSET(Attribute, NonResident.CompressedDataSize) ||
+                Attr->NonResident.DataRunsOffset > Attr->Length)
+            {
+                return 0;
+            }
+            for (Index = 0; Index < FIELD_OFFSET(Attribute, NonResident.DataRunsOffset); Index++)
+            {
+                if (Index < FIELD_OFFSET(Attribute, Length) || Index >= FIELD_OFFSET(Attribute, NonResident.FirstVCN))
+                    Signature = (Signature ^ Bytes[Index]) * 0x100000001B3ULL;
+            }
+            for (Index = FIELD_OFFSET(Attribute, NonResident.AllocatedSize);
+                 Index < FIELD_OFFSET(Attribute, NonResident.DataSize);
+                 Index++)
+            {
+                Signature = (Signature ^ Bytes[Index]) * 0x100000001B3ULL;
+            }
+            for (Index = Attr->NonResident.DataRunsOffset; Index < Attr->Length; Index++)
+                Signature = (Signature ^ Bytes[Index]) * 0x100000001B3ULL;
+        }
+        Offset += Attr->Length;
+    }
+    return 0;
+}
+
+NTSTATUS
+FileRecord::GetRecordDiskRange(_Out_ PULONGLONG Offset,
+                               _Out_ PULONG Length)
+{
+    if (!Header || !DiskVolume || !DiskVolume->MFT ||
+        Header->BaseFileRecord != 0)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
+    *Length = DiskVolume->MFT->FileRecordSize;
+    return DiskVolume->MFT->GetFileRecordDiskOffset(Header->MFTRecordNumber, Offset);
+}

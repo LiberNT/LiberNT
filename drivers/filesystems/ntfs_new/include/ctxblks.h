@@ -315,6 +315,9 @@ typedef struct _FCB
     BOOLEAN WriteTimesStamped;
     BOOLEAN ShareAccessSet;
 
+    BOOLEAN RecordFlushArmed;
+    ULONGLONG FlushedAllocation;
+
     /* Decided once at open: whether the first data read still owes a
      * last-access refresh. Checking the record on every read cost more
      * than the read. */
