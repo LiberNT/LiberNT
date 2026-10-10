@@ -74,6 +74,31 @@ SampAddRelativeTimeToTime(IN LARGE_INTEGER AbsoluteTime,
 }
 
 
+static
+LARGE_INTEGER
+SampGetPasswordMustChange(IN PSAM_USER_FIXED_DATA FixedData,
+                          IN PSAM_DOMAIN_FIXED_DATA DomainFixedData)
+{
+    LARGE_INTEGER MustChange;
+
+    if ((FixedData->UserAccountControl & USER_DONT_EXPIRE_PASSWORD) ||
+        DomainFixedData->MaxPasswordAge.QuadPart == MINLONGLONG)
+    {
+        MustChange.QuadPart = MAXLONGLONG;
+        return MustChange;
+    }
+
+    if (FixedData->PasswordLastSet.QuadPart == 0)
+    {
+        MustChange.QuadPart = 0;
+        return MustChange;
+    }
+
+    return SampAddRelativeTimeToTime(FixedData->PasswordLastSet,
+                                     DomainFixedData->MaxPasswordAge);
+}
+
+
 VOID
 SampStartRpcServer(VOID)
 {
@@ -5765,8 +5790,7 @@ SampQueryUserLogon(PSAM_DB_OBJECT UserObject,
     InfoBuffer->Logon.PasswordCanChange.LowPart = PasswordCanChange.LowPart;
     InfoBuffer->Logon.PasswordCanChange.HighPart = PasswordCanChange.HighPart;
 
-    PasswordMustChange = SampAddRelativeTimeToTime(FixedData.PasswordLastSet,
-                                                   DomainFixedData.MaxPasswordAge);
+    PasswordMustChange = SampGetPasswordMustChange(&FixedData, &DomainFixedData);
     InfoBuffer->Logon.PasswordMustChange.LowPart = PasswordMustChange.LowPart;
     InfoBuffer->Logon.PasswordMustChange.HighPart = PasswordMustChange.HighPart;
 
@@ -7012,8 +7036,7 @@ SampQueryUserAll(PSAM_DB_OBJECT UserObject,
     /* Get the PasswordMustChange attribute */
     if (InfoBuffer->All.WhichFields & USER_ALL_PASSWORDMUSTCHANGE)
     {
-        PasswordMustChange = SampAddRelativeTimeToTime(FixedData.PasswordLastSet,
-                                                       DomainFixedData.MaxPasswordAge);
+        PasswordMustChange = SampGetPasswordMustChange(&FixedData, &DomainFixedData);
         InfoBuffer->All.PasswordMustChange.LowPart = PasswordMustChange.LowPart;
         InfoBuffer->All.PasswordMustChange.HighPart = PasswordMustChange.HighPart;
     }
