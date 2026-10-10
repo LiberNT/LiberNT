@@ -55,6 +55,9 @@
 //
 #define HV_LOG_DIRTY_BLOCK 0xFF
 #define HV_LOG_DIRTY_SIGNATURE 0x54524944 // "DIRT"
+#define HV_LOG_INCREMENTAL_TYPE 6
+#define HV_LOG_ENTRY_SIGNATURE 0x454C7648
+#define HV_LOG_ENTRY_FLAGS 0x1
 
 //
 // Hive structure identifiers
@@ -177,17 +180,32 @@ typedef struct _HBASE_BLOCK
        of the full name of the hive file */
     WCHAR FileName[HIVE_FILENAME_MAXLEN + 1];
 
-    ULONG Reserved1[99];
+    GUID RmId;
+    GUID LogId;
+    ULONG Flags;
+    GUID TmId;
+    ULONG GuidSignature;
+    ULONGLONG LastReorganizeTime;
+    ULONG Reserved1[83];
 
     /* Checksum of first 0x200 bytes */
     ULONG CheckSum;
 
-    ULONG Reserved2[0x37E];
+    ULONG Reserved2[882];
+    GUID ThawTmId;
+    GUID ThawRmId;
+    GUID ThawLogId;
     ULONG BootType;
     ULONG BootRecover;
 } HBASE_BLOCK, *PHBASE_BLOCK;
 
 C_ASSERT(sizeof(HBASE_BLOCK) == HBLOCK_SIZE);
+C_ASSERT(FIELD_OFFSET(HBASE_BLOCK, RmId) == 112);
+C_ASSERT(FIELD_OFFSET(HBASE_BLOCK, Flags) == 144);
+C_ASSERT(FIELD_OFFSET(HBASE_BLOCK, LastReorganizeTime) == 168);
+C_ASSERT(FIELD_OFFSET(HBASE_BLOCK, CheckSum) == 508);
+C_ASSERT(FIELD_OFFSET(HBASE_BLOCK, ThawTmId) == 4040);
+C_ASSERT(FIELD_OFFSET(HBASE_BLOCK, BootType) == 4088);
 
 typedef struct _HBIN
 {
@@ -216,6 +234,28 @@ typedef struct _HCELL
 } HCELL, *PHCELL;
 
 #include <poppack.h>
+
+typedef struct _HV_LOG_ENTRY
+{
+    ULONG Signature;
+    ULONG Size;
+    ULONG Flags;
+    ULONG Sequence;
+    ULONG Length;
+    ULONG DirtyPageCount;
+    ULONGLONG Hash1;
+    ULONGLONG Hash2;
+} HV_LOG_ENTRY, *PHV_LOG_ENTRY;
+
+typedef struct _HV_LOG_DIRTY_PAGE
+{
+    ULONG Offset;
+    ULONG Size;
+} HV_LOG_DIRTY_PAGE, *PHV_LOG_DIRTY_PAGE;
+
+C_ASSERT(sizeof(HV_LOG_ENTRY) == 40);
+C_ASSERT(FIELD_OFFSET(HV_LOG_ENTRY, Hash2) == 32);
+C_ASSERT(sizeof(HV_LOG_DIRTY_PAGE) == 8);
 
 struct _HHIVE;
 

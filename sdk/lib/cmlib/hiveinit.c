@@ -1123,9 +1123,47 @@ HvLoadHive(
     PVOID HiveData;
     ULONG FileSize;
     BOOLEAN HiveSelfHeal = FALSE;
+#if !defined(CMLIB_HOST) && !defined(_BLDR_)
+    PHBASE_BLOCK RecoveredData;
+    RTL_BITMAP AppliedBlocks;
+    ULONG BlockIndex;
+#endif
 
     /* Get the hive header */
     Result = HvpGetHiveHeader(Hive, &BaseBlock, &TimeStamp);
+#if !defined(CMLIB_HOST) && !defined(_BLDR_)
+    if (Result == RecoverHeader)
+    {
+        Status = HvpRecoverHiveFromLog(Hive, BaseBlock, &RecoveredData, &FileSize, &AppliedBlocks);
+        if (Status != STATUS_NOT_FOUND)
+        {
+            if (BaseBlock)
+                Hive->Free(BaseBlock, Hive->BaseBlockAlloc);
+            if (!NT_SUCCESS(Status))
+                return Status;
+
+            RecoveredData->BootType = HBOOT_TYPE_REGULAR;
+            Status = HvpInitializeMemoryHive(Hive, RecoveredData, FileName);
+            Hive->Free(RecoveredData, FileSize);
+            if (NT_SUCCESS(Status))
+            {
+                for (BlockIndex = 0;
+                     BlockIndex < AppliedBlocks.SizeOfBitMap &&
+                     BlockIndex < Hive->Storage[Stable].Length / HBLOCK_SIZE;
+                     BlockIndex++)
+                {
+                    if (RtlCheckBit(&AppliedBlocks, BlockIndex))
+                    {
+                        RtlSetBits(&Hive->DirtyVector, BlockIndex, 1);
+                        Hive->DirtyCount++;
+                    }
+                }
+            }
+            Hive->Free(AppliedBlocks.Buffer, 0);
+            return NT_SUCCESS(Status) ? STATUS_REGISTRY_RECOVERED : Status;
+        }
+    }
+#endif
     switch (Result)
     {
         /* Out of memory */
@@ -1495,8 +1533,6 @@ HvInitialize(
                 return Status;
             }
 
-/* FIXME: See the comment above (near HvpQueryHiveSize) */
-#if !defined(_M_AMD64)
             /*
              * Check if we have recovered this hive. We are responsible to
              * flush the primary hive back to backing storage afterwards.
@@ -1532,7 +1568,6 @@ HvInitialize(
                  */
                 Status = STATUS_SUCCESS;
             }
-#endif
             break;
         }
 
@@ -1581,6 +1616,11 @@ HvFree(
         if (RegistryHive->DirtyVector.Buffer)
         {
             RegistryHive->Free(RegistryHive->DirtyVector.Buffer, 0);
+        }
+
+        if (RegistryHive->UnreconciledVector.Buffer)
+        {
+            RegistryHive->Free(RegistryHive->UnreconciledVector.Buffer, 0);
         }
 
         HvpFreeHiveBins(RegistryHive);

@@ -130,6 +130,7 @@ WinLdrInitSystemHive(
 {
     CHAR SearchPath[1024];
     PVOID ChunkBase;
+    ULONG ChunkSize;
     PCSTR HiveName;
     BOOLEAN Success;
     BAD_HIVE_REASON Reason;
@@ -164,7 +165,11 @@ WinLdrInitSystemHive(
     }
 
     /* Import what was loaded */
-    Success = RegImportBinaryHive(VaToPa(LoaderBlock->RegistryBase), LoaderBlock->RegistryLength, SearchPath, FALSE);
+    ChunkBase = VaToPa(LoaderBlock->RegistryBase);
+    ChunkSize = LoaderBlock->RegistryLength;
+    Success = RegImportBinaryHive(&ChunkBase, &ChunkSize, SearchPath, FALSE);
+    LoaderBlock->RegistryBase = PaToVa(ChunkBase);
+    LoaderBlock->RegistryLength = ChunkSize;
     if (!Success)
     {
         /*
@@ -201,7 +206,11 @@ LoadAlternateHive:
         }
 
         /* Retry importing it again */
-        Success = RegImportBinaryHive(VaToPa(LoaderBlock->RegistryBase), LoaderBlock->RegistryLength, SearchPath, TRUE);
+        ChunkBase = VaToPa(LoaderBlock->RegistryBase);
+        ChunkSize = LoaderBlock->RegistryLength;
+        Success = RegImportBinaryHive(&ChunkBase, &ChunkSize, SearchPath, TRUE);
+        LoaderBlock->RegistryBase = PaToVa(ChunkBase);
+        LoaderBlock->RegistryLength = ChunkSize;
         if (!Success)
         {
             UiMessageBox("Importing binary hive failed!");

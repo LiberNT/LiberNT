@@ -16,6 +16,7 @@
 
 #ifdef CMLIB_HOST
     #include <typedefs.h>
+    #include <guiddef.h>
     #include <stdio.h>
     #include <string.h>
 
@@ -32,6 +33,7 @@
     #define _Out_
     #define _Inout_
     #define _In_opt_
+    #define _Inout_opt_
     #define _In_range_(x, y)
     #endif
 
@@ -662,6 +664,11 @@ BOOLEAN CMAPI
 HvWriteHive(
    PHHIVE RegistryHive);
 
+BOOLEAN
+CMAPI
+HvReconcileHive(
+    _In_ PHHIVE RegistryHive);
+
 
 BOOLEAN
 CMAPI
@@ -732,6 +739,47 @@ HvpCreateHiveFreeCellList(
 ULONG CMAPI
 HvpHiveHeaderChecksum(
    PHBASE_BLOCK HiveHeader);
+
+ULONGLONG CMAPI
+HvpComputeLogHash(
+    _In_ PVOID Buffer,
+    _In_ ULONG Length);
+
+BOOLEAN
+CMAPI
+HvpApplyIncrementalLog(
+    _Inout_opt_ PHBASE_BLOCK BaseBlock,
+    _In_ ULONG ImageLength,
+    _In_ PVOID Log,
+    _In_ ULONG LogSize,
+    _In_ BOOLEAN Apply,
+    _Inout_opt_ PRTL_BITMAP AppliedBlocks,
+    _Out_ PULONG RequiredLength);
+
+#if !defined(CMLIB_HOST) && !defined(_BLDR_)
+ULONG
+CMAPI
+HvpQueryFileSize(
+    _In_ PHHIVE Hive,
+    _In_ ULONG FileType);
+
+BOOLEAN
+NTAPI
+CmpFileSetSize(
+    _In_ PHHIVE RegistryHive,
+    _In_ ULONG FileType,
+    _In_ ULONG FileSize,
+    _In_ ULONG OldFileSize);
+
+NTSTATUS
+CMAPI
+HvpRecoverHiveFromLog(
+    _In_ PHHIVE Hive,
+    _In_opt_ PHBASE_BLOCK PrimaryBaseBlock,
+    _Out_ PHBASE_BLOCK *HiveData,
+    _Out_ PULONG HiveDataSize,
+    _Out_ PRTL_BITMAP AppliedBlocks);
+#endif
 
 BOOLEAN CMAPI
 HvpVerifyHiveHeader(

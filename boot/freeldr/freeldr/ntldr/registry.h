@@ -29,8 +29,8 @@ typedef HANDLE HKEY, *PHKEY;
 
 BOOLEAN
 RegImportBinaryHive(
-    _In_ PVOID ChunkBase,
-    _In_ ULONG ChunkSize,
+    _Inout_ PVOID *ChunkBase,
+    _Inout_ PULONG ChunkSize,
     _In_ PCSTR SearchPath,
     _In_ BOOLEAN LoadAlternate);
 

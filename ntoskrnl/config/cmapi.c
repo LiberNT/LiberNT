@@ -107,7 +107,7 @@ CmpDoFlushAll(IN BOOLEAN ForceFlush)
             if (ForceFlush || !HvHiveWillShrink(&Hive->Hive))
             {
                 /* Do the sync */
-                Status = HvSyncHive(&Hive->Hive) ?
+                Status = (ForceFlush ? HvReconcileHive(&Hive->Hive) : HvSyncHive(&Hive->Hive)) ?
                          STATUS_SUCCESS : STATUS_REGISTRY_IO_FAILED;
 
                 /* If something failed - set the flag and continue looping */
@@ -2294,7 +2294,7 @@ CmLoadKey(IN POBJECT_ATTRIBUTES TargetKey,
         {
             /* Sync it under the flusher lock */
             CmpLockHiveFlusherExclusive(CmHive);
-            HvSyncHive(&CmHive->Hive);
+            HvReconcileHive(&CmHive->Hive);
             CmpUnlockHiveFlusher(CmHive);
         }
 
@@ -2448,6 +2448,12 @@ CmUnloadKey(
 
     /* Flush the hive */
     CmFlushKey(Kcb, TRUE);
+    if (!CmpNoWrite)
+    {
+        CmpLockHiveFlusherExclusive(CmHive);
+        (VOID)HvReconcileHive(Hive);
+        CmpUnlockHiveFlusher(CmHive);
+    }
 
     /* Unlink the hive from the master hive */
     if (!CmpUnlinkHiveFromMaster(CmHive, Cell))
@@ -2586,7 +2592,7 @@ CmpUnloadAppHiveIfUnused(PCMHIVE Hive)
     }
     Hive->Hive.HiveFlags |= HIVE_IS_UNLOADING | HIVE_NOLAZYFLUSH;
     CmpLockHiveFlusherExclusive(Hive);
-    if (!HvSyncHive(&Hive->Hive))
+    if (!HvReconcileHive(&Hive->Hive))
         DPRINT1("Application hive final flush failed\n");
     CmpCloseHiveFiles(Hive);
     CmpUnlockHiveFlusher(Hive);

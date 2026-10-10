@@ -334,7 +334,7 @@ CmpInitHiveFromFile(IN PCUNICODE_STRING HiveName,
 
     /* Open or create the hive files */
     Status = CmpOpenHiveFiles(HiveName,
-                              L".LOG",
+                              L".LOG1",
                               &FileHandle,
                               &LogHandle,
                               &HiveDisposition,
@@ -962,7 +962,7 @@ CmpInitializeSystemHive(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     Status = CmpInitializeHive(&SystemHive,
                                HiveBase ? HINIT_MEMORY : HINIT_CREATE,
                                HIVE_NOLAZYFLUSH,
-                               HFILE_TYPE_ALTERNATE,
+                               HFILE_TYPE_LOG,
                                HiveBase,
                                NULL,
                                NULL,
@@ -1296,7 +1296,7 @@ CmpLoadHiveThread(IN PVOID StartContext)
     USHORT FileStart;
     ULONG PrimaryDisposition, SecondaryDisposition, ClusterSize;
     PCMHIVE CmHive;
-    HANDLE PrimaryHandle = NULL, AlternateHandle = NULL;
+    HANDLE PrimaryHandle = NULL, LogHandle = NULL;
     NTSTATUS Status = STATUS_SUCCESS;
     PVOID ErrorParameters;
     PAGED_CODE();
@@ -1378,18 +1378,18 @@ CmpLoadHiveThread(IN PVOID StartContext)
         {
             /* It's now, open the hive file and log */
             Status = CmpOpenHiveFiles(&FileName,
-                                      L".ALT",
+                                      L".LOG1",
                                       &PrimaryHandle,
-                                      &AlternateHandle,
+                                      &LogHandle,
                                       &PrimaryDisposition,
                                       &SecondaryDisposition,
                                       TRUE,
                                       TRUE,
                                       FALSE,
                                       &ClusterSize);
-            if (!NT_SUCCESS(Status) || !AlternateHandle)
+            if (!NT_SUCCESS(Status) || !LogHandle)
             {
-                /* Couldn't open the hive or its alternate file, raise a hard error */
+                /* Couldn't open the hive or its log file, raise a hard error */
                 ErrorParameters = &FileName;
                 NtRaiseHardError(STATUS_CANNOT_LOAD_REGISTRY_FILE,
                                  1,
@@ -1403,14 +1403,7 @@ CmpLoadHiveThread(IN PVOID StartContext)
             }
 
             /* Save the file handles. This should remove our sync hacks */
-            /*
-             * FIXME: Any hive that relies on the alternate hive for recovery purposes
-             * will only get an alternate hive. As a result, the LOG file would never
-             * get synced each time a write is done to the hive. In the future it would
-             * be best to adapt the code so that a primary hive can use a LOG and ALT
-             * hives at the same time.
-             */
-            CmHive->FileHandles[HFILE_TYPE_ALTERNATE] = AlternateHandle;
+            CmHive->FileHandles[HFILE_TYPE_LOG] = LogHandle;
             CmHive->FileHandles[HFILE_TYPE_PRIMARY] = PrimaryHandle;
 
             /* Allow lazy flushing since the handles are there -- remove sync hacks */
@@ -1441,7 +1434,11 @@ CmpLoadHiveThread(IN PVOID StartContext)
                 DPRINT1("FreeLdr recovered the hive (hive 0x%p)\n", CmHive);
                 RtlSetAllBits(&CmHive->Hive.DirtyVector);
                 CmHive->Hive.DirtyCount = CmHive->Hive.DirtyVector.SizeOfBitMap;
-                HvSyncHive((PHHIVE)CmHive);
+                if (HvSyncHiveFromRecover((PHHIVE)CmHive))
+                {
+                    RtlClearAllBits(&CmHive->Hive.DirtyVector);
+                    CmHive->Hive.DirtyCount = 0;
+                }
             }
 
             /* Finally, set our allocated hive to the same hive we've had */

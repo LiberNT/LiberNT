@@ -410,12 +410,12 @@ CmpOpenAppHiveFiles(POBJECT_ATTRIBUTES SourceFile,
                                     sizeof(Standard), FileStandardInformation);
     if (!NT_SUCCESS(Status)) goto Exit;
     if (!Standard.EndOfFile.QuadPart) *NewHive = TRUE;
-    if (SourceFile->ObjectName->Length > MAXUSHORT - 5 * sizeof(WCHAR))
+    if (SourceFile->ObjectName->Length > MAXUSHORT - 6 * sizeof(WCHAR))
     {
         Status = STATUS_NAME_TOO_LONG;
         goto Exit;
     }
-    LogName.Length = SourceFile->ObjectName->Length + 4 * sizeof(WCHAR);
+    LogName.Length = SourceFile->ObjectName->Length + 5 * sizeof(WCHAR);
     LogName.MaximumLength = LogName.Length + sizeof(WCHAR);
     LogName.Buffer = ExAllocatePoolWithTag(PagedPool, LogName.MaximumLength, TAG_CM);
     if (!LogName.Buffer)
@@ -426,7 +426,7 @@ CmpOpenAppHiveFiles(POBJECT_ATTRIBUTES SourceFile,
     RtlCopyMemory(LogName.Buffer, SourceFile->ObjectName->Buffer,
                   SourceFile->ObjectName->Length);
     RtlCopyMemory((PUCHAR)LogName.Buffer + SourceFile->ObjectName->Length,
-                  L".LOG", 5 * sizeof(WCHAR));
+                  L".LOG1", 6 * sizeof(WCHAR));
     Attributes.ObjectName = &LogName;
     Status = ZwCreateFile(Log,
                           FILE_READ_DATA | FILE_WRITE_DATA | SYNCHRONIZE,
@@ -597,7 +597,7 @@ CmpLoadAppHive(POBJECT_ATTRIBUTES TargetKey,
     if (Constructed)
     {
         CmpLockHiveFlusherExclusive(Hive);
-        if (NewHive && !HvSyncHive(&Hive->Hive)) Status = STATUS_REGISTRY_IO_FAILED;
+        if (NewHive && !HvReconcileHive(&Hive->Hive)) Status = STATUS_REGISTRY_IO_FAILED;
         CmpUnlockHiveFlusher(Hive);
         if (!NT_SUCCESS(Status)) goto Exit;
         if (!(Flags & REG_NO_LAZY_FLUSH)) Hive->Hive.HiveFlags &= ~HIVE_NOLAZYFLUSH;
@@ -895,7 +895,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
                                NULL);
 
     /* Setup the flags */
-    IoFlags = FILE_NO_COMPRESSION | FILE_NO_INTERMEDIATE_BUFFERING;
+    IoFlags = FILE_NO_COMPRESSION;
 
     /* Check if this is a log file */
     if (!_wcsnicmp(Extension, L".log", 4))

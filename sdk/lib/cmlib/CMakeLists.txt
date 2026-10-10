@@ -16,6 +16,7 @@ list(APPEND SOURCE
     hivebin.c
     hivecell.c
     hiveinit.c
+    hivelog.c
     hivesum.c
     hivewrt.c
     cmlib.h)
