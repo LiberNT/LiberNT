@@ -1293,11 +1293,15 @@ SoftGpuDdiStopDevice(
         return Status;
     RtlZeroMemory(&Device->DxgkInterface, sizeof(Device->DxgkInterface));
 
-    /*
-     * Keep the validated segment across a PnP stop/start.  A later start
-     * reuses it when large enough or atomically replaces it; RemoveDevice is
-     * the single final owner that frees the recorded allocation size.
-     */
+    if (Device->FrameBuffer != NULL)
+    {
+        MmFreeContiguousMemorySpecifyCache(Device->FrameBuffer,
+                                           Device->FrameBufferSize,
+                                           Device->FrameBufferCacheType);
+        Device->FrameBuffer = NULL;
+        Device->FrameBufferSize = 0;
+        Device->FrameBufferPhys.QuadPart = 0;
+    }
     return STATUS_SUCCESS;
 }
 
@@ -1330,16 +1334,6 @@ SoftGpuDdiRemoveDevice(
     Status = SoftGpuDdiStopDevice(Device);
     if (!NT_SUCCESS(Status))
         return Status;
-
-    if (Device->FrameBuffer != NULL)
-    {
-        MmFreeContiguousMemorySpecifyCache(Device->FrameBuffer,
-                                           Device->FrameBufferSize,
-                                           Device->FrameBufferCacheType);
-        Device->FrameBuffer = NULL;
-        Device->FrameBufferSize = 0;
-        Device->FrameBufferPhys.QuadPart = 0;
-    }
 
     /* Poison the magic field so dangling-pointer dereferences are detectable. */
     Device->Magic = 0xDEADDEADUL;
