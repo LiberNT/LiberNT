@@ -2321,6 +2321,32 @@ ScmStartService(PSERVICE Service,
 }
 
 
+static
+BOOL
+ScmIsDeferredDuringSetup(
+    _In_ PSERVICE pService)
+{
+    HKEY hServiceKey;
+    LPWSTR pszAccountName = NULL;
+    BOOL bDeferred = FALSE;
+
+    if (!ScmSetupInProgress || !(pService->Status.dwServiceType & SERVICE_WIN32))
+        return FALSE;
+
+    if (ScmOpenServiceKey(pService->lpServiceName, KEY_READ, &hServiceKey) != ERROR_SUCCESS)
+        return FALSE;
+
+    if (ScmReadString(hServiceKey, L"ObjectName", &pszAccountName) == ERROR_SUCCESS)
+    {
+        bDeferred = ScmIsBuiltinServiceAccount(pszAccountName);
+        HeapFree(GetProcessHeap(), 0, pszAccountName);
+    }
+
+    RegCloseKey(hServiceKey);
+    return bDeferred;
+}
+
+
 VOID
 ScmAutoStartServices(VOID)
 {
@@ -2358,8 +2384,9 @@ ScmAutoStartServices(VOID)
         CurrentService = CONTAINING_RECORD(ServiceEntry, SERVICE, ServiceListEntry);
 
         CurrentService->ServiceVisited =
-            (SafeBootEnabled != 0) &&
-            !ScmIsSafeBootServiceAllowed(CurrentService, hSafeBootKey);
+            ((SafeBootEnabled != 0) &&
+             !ScmIsSafeBootServiceAllowed(CurrentService, hSafeBootKey)) ||
+            ScmIsDeferredDuringSetup(CurrentService);
 
         ServiceEntry = ServiceEntry->Flink;
     }
