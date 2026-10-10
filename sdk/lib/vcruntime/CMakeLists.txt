@@ -82,6 +82,32 @@ add_asm_files(vcrt_setjmp_asm ${VCRT_SETJMP_ASM_SOURCES})
 add_library(setjmp ${VCRT_SETJMP_SOURCES} ${vcrt_setjmp_asm})
 add_dependencies(setjmp psdk asm)
 
+if(${ARCH} STREQUAL "arm64" AND NOT ARM64EC_RUNTIME)
+    foreach(_lse_op CAS SWP LDADD LDCLR LDEOR LDSET)
+        foreach(_lse_size 1 2 4 8 16)
+            if(_lse_size EQUAL 16 AND NOT _lse_op STREQUAL "CAS")
+                continue()
+            endif()
+            foreach(_lse_model 1 2 3 4 5)
+                set(_lse_source ${CMAKE_CURRENT_BINARY_DIR}/lse/${_lse_op}${_lse_size}_${_lse_model}.S)
+                configure_file(arm64/lse.S ${_lse_source} COPYONLY)
+                set_source_files_properties(${_lse_source} PROPERTIES
+                    COMPILE_DEFINITIONS "LSE_OP_${_lse_op};LSE_SIZE=${_lse_size};LSE_MODEL=${_lse_model}")
+                list(APPEND LSE_ATOMICS_SOURCES ${_lse_source})
+            endforeach()
+        endforeach()
+    endforeach()
+
+    add_library(lse_atomics_um ${LSE_ATOMICS_SOURCES})
+    target_compile_definitions(lse_atomics_um PRIVATE LSE_USER_MODE)
+    add_library(lse_atomics_km ${LSE_ATOMICS_SOURCES})
+    target_compile_definitions(lse_atomics_km PRIVATE LSE_KERNEL_MODE)
+    add_library(lse_atomics_boot ${LSE_ATOMICS_SOURCES})
+    add_dependencies(lse_atomics_um asm)
+    add_dependencies(lse_atomics_km asm)
+    add_dependencies(lse_atomics_boot asm)
+endif()
+
 
 if(${ARCH} STREQUAL "i386")
     list(APPEND VCRUNTIME_ASM_SOURCES

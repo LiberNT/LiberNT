@@ -252,6 +252,9 @@ endif()
 if(ARCH STREQUAL "i386")
     target_link_libraries(uefildr mini_hal)
 endif()
+if(ARCH STREQUAL "arm64")
+    set_target_properties(uefildr PROPERTIES REACTOS_LSE_ATOMICS lse_atomics_boot)
+endif()
 
 # dynamic analysis switches
 if(STACK_PROTECTOR)

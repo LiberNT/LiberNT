@@ -51,6 +51,8 @@ endif()
 if(ARCH STREQUAL "arm64" AND ARM64EC_RUNTIME)
     target_sources(ucrtbase PRIVATE arm64ec_memory.c)
     set_source_files_properties(arm64ec_memory.c PROPERTIES COMPILE_OPTIONS "-fno-builtin")
+elseif(ARCH STREQUAL "arm64")
+    set_target_properties(ucrtbase PROPERTIES REACTOS_LSE_ATOMICS lse_atomics_um)
 endif()
 
 if(NOT MSVC)
