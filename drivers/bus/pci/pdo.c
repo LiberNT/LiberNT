@@ -2753,7 +2753,7 @@ PdoQueryResourceRequirements(
                 IoLimitFull |= ((ULONG)PciConfig.u.type1.IOLimitUpper16 << 16);
                 IoMax = 0xFFFFFFFF;
             }
-            if (IoBaseFull <= IoLimitFull)
+            if (IoBaseFull <= IoLimitFull && IoDecode)
             {
                 ULONG IoLength = IoLimitFull - IoBaseFull + 1;
 
@@ -3149,7 +3149,7 @@ PdoQueryResources(
                 IoBaseFull |= ((ULONG)PciConfig.u.type1.IOBaseUpper16 << 16);
                 IoLimitFull |= ((ULONG)PciConfig.u.type1.IOLimitUpper16 << 16);
             }
-            if (IoBaseFull <= IoLimitFull)
+            if (IoBaseFull <= IoLimitFull && IoDecode)
                 ResCount++;
         }
         {
@@ -3378,7 +3378,7 @@ PdoQueryResources(
                 IoBaseFull |= ((ULONG)PciConfig.u.type1.IOBaseUpper16 << 16);
                 IoLimitFull |= ((ULONG)PciConfig.u.type1.IOLimitUpper16 << 16);
             }
-            if (IoBaseFull <= IoLimitFull)
+            if (IoBaseFull <= IoLimitFull && IoDecode)
             {
                 Descriptor->Type = CmResourceTypePort;
                 Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
