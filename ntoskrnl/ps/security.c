@@ -131,7 +131,7 @@ PspWriteTebImpersonationInfo(IN PETHREAD Thread,
     if (Teb)
     {
         /* Check if we're not in the right process */
-        if (Thread->Tcb.ApcState.Process != &Process->Pcb)
+        if (CurrentThread->Tcb.ApcState.Process != &Process->Pcb)
         {
             /* Attach to the process */
             KeStackAttachProcess(&Process->Pcb, &ApcState);
