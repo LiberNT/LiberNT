@@ -34,6 +34,7 @@ typedef MMPTE MMPPE, *PMMPPE;
 
 /* WOW64 compatibility limits; no 32-bit guest ABI is implemented. */
 #define MM_HIGHEST_USER_ADDRESS_WOW64   0x7FFEFFFF
+#define MM_HIGHEST_USER_ADDRESS_WOW64_LARGE 0xFFFEFFFF
 #define MM_SYSTEM_RANGE_START_WOW64     0x80000000
 
 /* Private MmAccessFault flags, never raw scause. Trap entry must derive

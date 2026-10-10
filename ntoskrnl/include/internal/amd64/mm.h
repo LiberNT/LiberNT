@@ -26,6 +26,7 @@
 
 /* WOW64 address definitions */
 #define MM_HIGHEST_USER_ADDRESS_WOW64   0x7FFEFFFF
+#define MM_HIGHEST_USER_ADDRESS_WOW64_LARGE 0xFFFEFFFF
 #define MM_SYSTEM_RANGE_START_WOW64     0x80000000
 
 /* Misc address definitions */

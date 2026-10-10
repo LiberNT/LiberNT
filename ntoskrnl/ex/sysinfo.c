@@ -2844,8 +2844,11 @@ QSI_DEF(SystemEmulationBasicInformation)
     if (NT_SUCCESS(Status) && PsGetCurrentProcess()->WoW64Process != NULL)
     {
         PSYSTEM_BASIC_INFORMATION Sbi = (PSYSTEM_BASIC_INFORMATION)Buffer;
+        SECTION_IMAGE_INFORMATION ImageInformation;
 
-        Sbi->MaximumUserModeAddress = MM_HIGHEST_USER_ADDRESS_WOW64;
+        MmGetImageInformation(&ImageInformation);
+        Sbi->MaximumUserModeAddress = (ImageInformation.ImageCharacteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) ?
+                                      MM_HIGHEST_USER_ADDRESS_WOW64_LARGE : MM_HIGHEST_USER_ADDRESS_WOW64;
     }
 #endif
 
