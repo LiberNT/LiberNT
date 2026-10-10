@@ -470,6 +470,73 @@ static void RunStringBench(LONGLONG Freq)
              LibBps / RefBps, ((LibBps % RefBps) * 100ULL) / RefBps);
 }
 
+#define MEM_BENCH_MAX (16UL * 1024UL * 1024UL)
+#define MEM_BENCH_TARGET_MS 300
+
+static DECLSPEC_ALIGN(64) char gMemSrc[MEM_BENCH_MAX];
+static DECLSPEC_ALIGN(64) char gMemDst[MEM_BENCH_MAX];
+static volatile size_t gMemSink;
+
+static void *(* volatile gLibMemcpy)(void *, const void *, size_t) = memcpy;
+static void *(* volatile gLibMemmove)(void *, const void *, size_t) = memmove;
+static int (* volatile gLibMemcmp)(const void *, const void *, size_t) = memcmp;
+static void *(* volatile gLibMemset)(void *, int, size_t) = memset;
+
+static void MemCall(int Kind, size_t Size)
+{
+    switch (Kind)
+    {
+        case 0: gLibMemcpy(gMemDst, gMemSrc, Size); break;
+        case 1: gLibMemmove(gMemDst, gMemSrc, Size); break;
+        case 2: gMemSink += (size_t)gLibMemcmp(gMemDst, gMemSrc, Size); break;
+        default: gLibMemset(gMemDst, 0x5A, Size); break;
+    }
+}
+
+static ULONGLONG MemRate(int Kind, size_t Size, LONGLONG Freq)
+{
+    unsigned long Iters = 1, i;
+    LARGE_INTEGER T0, T1;
+    ULONGLONG Ticks, Bytes;
+
+    for (;;)
+    {
+        QueryPerformanceCounter(&T0);
+        for (i = 0; i < Iters; ++i)
+            MemCall(Kind, Size);
+        QueryPerformanceCounter(&T1);
+        Ticks = (ULONGLONG)(T1.QuadPart - T0.QuadPart);
+        if (Ticks * 1000ULL >= (ULONGLONG)Freq * MEM_BENCH_TARGET_MS || Iters >= 0x40000000UL)
+            break;
+        Iters *= 2;
+    }
+    if (Ticks == 0)
+        return 0;
+    Bytes = (ULONGLONG)Iters * Size;
+    return (Bytes / Ticks) * (ULONGLONG)Freq + ((Bytes % Ticks) * (ULONGLONG)Freq) / Ticks;
+}
+
+static void RunMemoryBench(LONGLONG Freq)
+{
+    static const size_t Sizes[] = { 16, 64, 256, 1024, 4096, 65536, 1048576, MEM_BENCH_MAX };
+    ULONGLONG Rate[4];
+    unsigned i;
+    int Kind;
+    size_t j;
+
+    for (j = 0; j < MEM_BENCH_MAX; ++j)
+        gMemSrc[j] = (char)(j * 131 + (j >> 12));
+    memset(gMemDst, 0, MEM_BENCH_MAX);
+
+    for (i = 0; i < sizeof(Sizes) / sizeof(Sizes[0]); ++i)
+    {
+        for (Kind = 0; Kind < 4; ++Kind)
+            Rate[Kind] = MemRate(Kind, Sizes[i], Freq) / 1000000ULL;
+        emit("[cpubench] mem %8lu B: memcpy %I64u memmove %I64u memcmp %I64u memset %I64u MB/s\n",
+             (unsigned long)Sizes[i], Rate[0], Rate[1], Rate[2], Rate[3]);
+    }
+}
+
 static unsigned CountProcessors(ULONG_PTR Mask)
 {
     unsigned Count = 0;
@@ -569,6 +636,7 @@ int main(int argc, char **argv)
     RunBench("Dhrystone", 0, 1, Freq.QuadPart, NumCpus);
     RunBench("FP", 1, FP_FLOPS_PER_ITER, Freq.QuadPart, NumCpus);
     RunStringBench(Freq.QuadPart);
+    RunMemoryBench(Freq.QuadPart);
     emit("[cpubench] ===== done =====\n");
     return 0;
 }
