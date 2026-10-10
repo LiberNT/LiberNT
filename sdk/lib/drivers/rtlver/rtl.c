@@ -1,41 +1,28 @@
 /*
- * PROJECT:         ReactOS Kernel - Vista+ APIs
- * LICENSE:         GPL v2 - See COPYING2 in the top level directory
- * FILE:            lib/drivers/ntoskrnl_vista/rtl.c
- * PURPOSE:         Implementation of RtlIsNtDdiVersionAvailable and RtlIsServicePackVersionInstalled
- * PROGRAMMERS:     Pierre Schweitzer <pierre@reactos.org>
+ * PROJECT:     LiberNT Driver Library
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     NTDDI version check for drivers built against the WDM library
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#include <ntdef.h>
 #include <ntifs.h>
 
 BOOLEAN
 WdmlibRtlIsNtDdiVersionAvailable(
     _In_ ULONG Version)
 {
-    UNICODE_STRING ImportName;
-    ULONG Major, Minor, Current;
-    BOOLEAN (NTAPI *pRtlIsNtDdiVersionAvailable)(ULONG Version);
+    RTL_OSVERSIONINFOEXW Information;
+    ULONG Running;
 
-    /* Try to use ntoskrnl version if available */
-    RtlInitUnicodeString(&ImportName, L"RtlIsNtDdiVersionAvailable");
-    pRtlIsNtDdiVersionAvailable = MmGetSystemRoutineAddress(&ImportName);
-    if (pRtlIsNtDdiVersionAvailable)
-    {
-        return pRtlIsNtDdiVersionAvailable(Version);
-    }
-
-    /* Only provide OS version. No SP */
-    if (SPVER(Version) || SUBVER(Version))
-    {
+    RtlZeroMemory(&Information, sizeof(Information));
+    Information.dwOSVersionInfoSize = sizeof(Information);
+    if (!NT_SUCCESS(RtlGetVersion((PRTL_OSVERSIONINFOW)&Information)))
         return FALSE;
-    }
 
-    /* Compute the version and compare */
-    Major = 0;
-    Minor = 0;
-    PsGetVersion(&Major, &Minor, NULL, NULL);
-    Current = (Minor + (Major << 8)) << 16;
+    Running = (Information.dwMajorVersion << 24) |
+              (Information.dwMinorVersion << 16) |
+              ((ULONG)Information.wServicePackMajor << 8) |
+              Information.wServicePackMinor;
 
-    return (Current >= Version);
+    return Version <= Running;
 }

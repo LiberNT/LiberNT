@@ -1,356 +1,259 @@
 /*
- * PROJECT:     ReactOS TimeZone Utilities Library
- * LICENSE:     GPL-2.0 (https://spdx.org/licenses/GPL-2.0)
- * PURPOSE:     Provides time-zone utility wrappers around Win32 functions,
- *              that are used by different ReactOS modules such as
- *              timedate.cpl, syssetup.dll.
- * COPYRIGHT:   Copyright 2004-2005 Eric Kohl
- *              Copyright 2016 Carlo Bramini
- *              Copyright 2020 Hermes Belusca-Maito
+ * PROJECT:     LiberNT Time Zone Library
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Time zone registry helpers shared by setup and the control panel
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <stdlib.h>
 #include <windef.h>
 #include <winbase.h>
 #include <winreg.h>
-
 #include "tzlib.h"
 
-BOOL
-GetTimeZoneListIndex(
-    IN OUT PULONG pIndex)
+#define TIME_ZONES_KEY L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Time Zones"
+#define TIME_ZONE_INFORMATION_KEY L"SYSTEM\\CurrentControlSet\\Control\\TimeZoneInformation"
+
+static
+LONG
+QueryTimeZoneString(
+    _In_ HKEY hZoneKey,
+    _In_ PCWSTR ValueName,
+    _Out_opt_ PWCHAR Buffer,
+    _Inout_opt_ PULONG BufferSize)
 {
-    LONG lError;
-    HKEY hKey;
-    DWORD dwType;
-    DWORD dwValueSize;
-    DWORD Length;
-    LPWSTR Buffer;
-    LPWSTR Ptr, End;
-    BOOL bFound = FALSE;
-    unsigned long iLanguageID;
-    WCHAR szLanguageIdString[9];
+    DWORD Type;
+    LONG Error;
 
-    if (*pIndex == -1)
-    {
-        *pIndex = 85; /* fallback to GMT time zone */
-
-        lError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                               L"SYSTEM\\CurrentControlSet\\Control\\NLS\\Language",
-                               0,
-                               KEY_QUERY_VALUE,
-                               &hKey);
-        if (lError != ERROR_SUCCESS)
-        {
-            return FALSE;
-        }
-
-        dwValueSize = sizeof(szLanguageIdString);
-        lError = RegQueryValueExW(hKey,
-                                  L"Default",
-                                  NULL,
-                                  NULL,
-                                  (LPBYTE)szLanguageIdString,
-                                  &dwValueSize);
-        if (lError != ERROR_SUCCESS)
-        {
-            RegCloseKey(hKey);
-            return FALSE;
-        }
-
-        iLanguageID = wcstoul(szLanguageIdString, NULL, 16);
-        RegCloseKey(hKey);
-    }
-    else
-    {
-        iLanguageID = *pIndex;
-    }
-
-    lError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                           L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Time Zones",
-                           0,
-                           KEY_QUERY_VALUE,
-                           &hKey);
-    if (lError != ERROR_SUCCESS)
-    {
-        return FALSE;
-    }
-
-    dwValueSize = 0;
-    lError = RegQueryValueExW(hKey,
-                              L"IndexMapping",
-                              NULL,
-                              &dwType,
-                              NULL,
-                              &dwValueSize);
-    if ((lError != ERROR_SUCCESS) || (dwType != REG_MULTI_SZ))
-    {
-        RegCloseKey(hKey);
-        return FALSE;
-    }
-
-    Buffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dwValueSize);
     if (Buffer == NULL)
-    {
-        RegCloseKey(hKey);
-        return FALSE;
-    }
+        return ERROR_SUCCESS;
+    if (BufferSize == NULL || *BufferSize < sizeof(WCHAR))
+        return ERROR_INVALID_PARAMETER;
 
-    lError = RegQueryValueExW(hKey,
-                              L"IndexMapping",
-                              NULL,
-                              &dwType,
-                              (LPBYTE)Buffer,
-                              &dwValueSize);
+    *BufferSize -= sizeof(WCHAR);
+    Error = RegQueryValueExW(hZoneKey, ValueName, NULL, &Type, (LPBYTE)Buffer, BufferSize);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+    if (Type != REG_SZ && Type != REG_EXPAND_SZ)
+        return ERROR_INVALID_DATA;
 
-    RegCloseKey(hKey);
-
-    if ((lError != ERROR_SUCCESS) || (dwType != REG_MULTI_SZ))
-    {
-        HeapFree(GetProcessHeap(), 0, Buffer);
-        return FALSE;
-    }
-
-    Ptr = Buffer;
-    while (*Ptr != 0)
-    {
-        Length = wcslen(Ptr);
-        if (wcstoul(Ptr, NULL, 16) == iLanguageID)
-            bFound = TRUE;
-
-        Ptr = Ptr + Length + 1;
-        if (*Ptr == 0)
-            break;
-
-        if (bFound)
-        {
-            *pIndex = wcstoul(Ptr, &End, 10);
-            HeapFree(GetProcessHeap(), 0, Buffer);
-            return TRUE;
-        }
-
-        Length = wcslen(Ptr);
-        Ptr = Ptr + Length + 1;
-    }
-
-    HeapFree(GetProcessHeap(), 0, Buffer);
-    return FALSE;
+    Buffer[*BufferSize / sizeof(WCHAR)] = UNICODE_NULL;
+    return ERROR_SUCCESS;
 }
 
 LONG
 QueryTimeZoneData(
-    IN HKEY hZoneKey,
-    OUT PULONG Index OPTIONAL,
-    OUT PREG_TZI_FORMAT TimeZoneInfo,
-    OUT PWCHAR Description OPTIONAL,
-    IN OUT PULONG DescriptionSize OPTIONAL,
-    OUT PWCHAR StandardName OPTIONAL,
-    IN OUT PULONG StandardNameSize OPTIONAL,
-    OUT PWCHAR DaylightName OPTIONAL,
-    IN OUT PULONG DaylightNameSize OPTIONAL)
+    _In_ HKEY hZoneKey,
+    _Out_opt_ PULONG Index,
+    _Out_ PREG_TZI_FORMAT TimeZoneInfo,
+    _Out_opt_ PWCHAR Description,
+    _Inout_opt_ PULONG DescriptionSize,
+    _Out_opt_ PWCHAR StandardName,
+    _Inout_opt_ PULONG StandardNameSize,
+    _Out_opt_ PWCHAR DaylightName,
+    _Inout_opt_ PULONG DaylightNameSize)
 {
-    LONG lError;
-    DWORD dwValueSize;
+    DWORD Type;
+    DWORD Size;
+    LONG Error;
 
-    if (Index)
+    if (Index != NULL)
     {
-        dwValueSize = sizeof(*Index);
-        lError = RegQueryValueExW(hZoneKey,
-                                  L"Index",
-                                  NULL,
-                                  NULL,
-                                  (LPBYTE)Index,
-                                  &dwValueSize);
-        if (lError != ERROR_SUCCESS)
-            *Index = 0;
+        Size = sizeof(*Index);
+        Error = RegQueryValueExW(hZoneKey, L"Index", NULL, &Type, (LPBYTE)Index, &Size);
+        if (Error != ERROR_SUCCESS)
+            return Error;
+        if (Type != REG_DWORD || Size != sizeof(*Index))
+            return ERROR_INVALID_DATA;
     }
 
-    /* The time zone information structure is mandatory for a valid time zone */
-    dwValueSize = sizeof(*TimeZoneInfo);
-    lError = RegQueryValueExW(hZoneKey,
-                              L"TZI",
-                              NULL,
-                              NULL,
-                              (LPBYTE)TimeZoneInfo,
-                              &dwValueSize);
-    if (lError != ERROR_SUCCESS)
-        return lError;
+    Size = sizeof(*TimeZoneInfo);
+    Error = RegQueryValueExW(hZoneKey, L"TZI", NULL, &Type, (LPBYTE)TimeZoneInfo, &Size);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+    if (Type != REG_BINARY || Size != sizeof(*TimeZoneInfo))
+        return ERROR_INVALID_DATA;
 
-    if (Description && DescriptionSize && *DescriptionSize > 0)
-    {
-        lError = RegQueryValueExW(hZoneKey,
-                                  L"Display",
-                                  NULL,
-                                  NULL,
-                                  (LPBYTE)Description,
-                                  DescriptionSize);
-        if (lError != ERROR_SUCCESS)
-            *Description = 0;
-    }
+    Error = QueryTimeZoneString(hZoneKey, L"Display", Description, DescriptionSize);
+    if (Error != ERROR_SUCCESS)
+        return Error;
 
-    if (StandardName && StandardNameSize && *StandardNameSize > 0)
-    {
-        lError = RegQueryValueExW(hZoneKey,
-                                  L"Std",
-                                  NULL,
-                                  NULL,
-                                  (LPBYTE)StandardName,
-                                  StandardNameSize);
-        if (lError != ERROR_SUCCESS)
-            *StandardName = 0;
-    }
+    Error = QueryTimeZoneString(hZoneKey, L"Std", StandardName, StandardNameSize);
+    if (Error != ERROR_SUCCESS)
+        return Error;
 
-    if (DaylightName && DaylightNameSize && *DaylightNameSize > 0)
-    {
-        lError = RegQueryValueExW(hZoneKey,
-                                  L"Dlt",
-                                  NULL,
-                                  NULL,
-                                  (LPBYTE)DaylightName,
-                                  DaylightNameSize);
-        if (lError != ERROR_SUCCESS)
-            *DaylightName = 0;
-    }
-
-    return ERROR_SUCCESS;
+    return QueryTimeZoneString(hZoneKey, L"Dlt", DaylightName, DaylightNameSize);
 }
 
-//
-// NOTE: Very similar to the EnumDynamicTimeZoneInformation() function
-// introduced in Windows 8.
-//
 VOID
 EnumerateTimeZoneList(
-    IN PENUM_TIMEZONE_CALLBACK Callback,
-    IN PVOID Context OPTIONAL)
+    _In_ PENUM_TIMEZONE_CALLBACK Callback,
+    _In_opt_ PVOID Context)
 {
-    LONG lError;
+    WCHAR KeyName[MAX_PATH];
     HKEY hZonesKey;
     HKEY hZoneKey;
-    DWORD dwIndex;
-    DWORD dwNameSize;
-    WCHAR szKeyName[256];
+    DWORD KeyNameLength;
+    DWORD Index;
 
-    /* Open the registry key containing the list of time zones */
-    lError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                           L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Time Zones",
-                           0,
-                           KEY_ENUMERATE_SUB_KEYS,
-                           &hZonesKey);
-    if (lError != ERROR_SUCCESS)
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, TIME_ZONES_KEY, 0, KEY_ENUMERATE_SUB_KEYS, &hZonesKey) != ERROR_SUCCESS)
         return;
 
-    /* Enumerate it */
-    for (dwIndex = 0; ; dwIndex++)
+    for (Index = 0; ; Index++)
     {
-        dwNameSize = sizeof(szKeyName);
-        lError = RegEnumKeyExW(hZonesKey,
-                               dwIndex,
-                               szKeyName,
-                               &dwNameSize,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL);
-        // if (lError != ERROR_SUCCESS && lError != ERROR_MORE_DATA)
-        if (lError == ERROR_NO_MORE_ITEMS)
+        KeyNameLength = ARRAYSIZE(KeyName);
+        if (RegEnumKeyExW(hZonesKey, Index, KeyName, &KeyNameLength, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
             break;
 
-        /* Open the time zone sub-key */
-        if (RegOpenKeyExW(hZonesKey,
-                          szKeyName,
-                          0,
-                          KEY_QUERY_VALUE,
-                          &hZoneKey))
-        {
-            /* We failed, continue with another sub-key */
+        if (RegOpenKeyExW(hZonesKey, KeyName, 0, KEY_QUERY_VALUE, &hZoneKey) != ERROR_SUCCESS)
             continue;
-        }
 
-        /* Call the user-provided callback */
-        lError = Callback(hZoneKey, Context);
-        // lError = QueryTimeZoneData(hZoneKey, Context);
-
+        Callback(hZoneKey, Context);
         RegCloseKey(hZoneKey);
     }
 
     RegCloseKey(hZonesKey);
 }
 
-// Returns TRUE if AutoDaylight is ON.
-// Returns FALSE if AutoDaylight is OFF.
+static
+BOOL
+QueryZoneIndex(
+    _In_ PCWSTR KeyName,
+    _Out_ PULONG Index)
+{
+    REG_TZI_FORMAT TimeZoneInfo;
+    HKEY hZonesKey;
+    HKEY hZoneKey;
+    LONG Error;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, TIME_ZONES_KEY, 0, KEY_ENUMERATE_SUB_KEYS, &hZonesKey) != ERROR_SUCCESS)
+        return FALSE;
+
+    Error = RegOpenKeyExW(hZonesKey, KeyName, 0, KEY_QUERY_VALUE, &hZoneKey);
+    RegCloseKey(hZonesKey);
+    if (Error != ERROR_SUCCESS)
+        return FALSE;
+
+    Error = QueryTimeZoneData(hZoneKey, Index, &TimeZoneInfo, NULL, NULL, NULL, NULL, NULL, NULL);
+    RegCloseKey(hZoneKey);
+    return Error == ERROR_SUCCESS;
+}
+
+static
+BOOL
+FindZoneIndexByStandardName(
+    _In_ PCWSTR StandardName,
+    _Out_ PULONG Index)
+{
+    REG_TZI_FORMAT TimeZoneInfo;
+    WCHAR KeyName[MAX_PATH];
+    WCHAR ZoneName[64];
+    HKEY hZonesKey;
+    HKEY hZoneKey;
+    DWORD KeyNameLength;
+    ULONG ZoneNameSize;
+    ULONG ZoneIndex;
+    DWORD Enum;
+    BOOL Found = FALSE;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, TIME_ZONES_KEY, 0, KEY_ENUMERATE_SUB_KEYS, &hZonesKey) != ERROR_SUCCESS)
+        return FALSE;
+
+    for (Enum = 0; !Found; Enum++)
+    {
+        KeyNameLength = ARRAYSIZE(KeyName);
+        if (RegEnumKeyExW(hZonesKey, Enum, KeyName, &KeyNameLength, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+
+        if (RegOpenKeyExW(hZonesKey, KeyName, 0, KEY_QUERY_VALUE, &hZoneKey) != ERROR_SUCCESS)
+            continue;
+
+        ZoneNameSize = sizeof(ZoneName) - sizeof(WCHAR);
+        if (QueryTimeZoneData(hZoneKey, &ZoneIndex, &TimeZoneInfo, NULL, NULL, ZoneName, &ZoneNameSize, NULL, NULL) == ERROR_SUCCESS &&
+            _wcsicmp(ZoneName, StandardName) == 0)
+        {
+            *Index = ZoneIndex;
+            Found = TRUE;
+        }
+
+        RegCloseKey(hZoneKey);
+    }
+
+    RegCloseKey(hZonesKey);
+    return Found;
+}
+
+BOOL
+GetTimeZoneListIndex(
+    _Inout_ PULONG pIndex)
+{
+    TIME_ZONE_INFORMATION TimeZoneInformation;
+    WCHAR KeyName[128];
+    DWORD KeyNameSize = sizeof(KeyName) - sizeof(WCHAR);
+    DWORD Type;
+    HKEY hKey;
+    ULONG Index;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, TIME_ZONE_INFORMATION_KEY, 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        LONG Error = RegQueryValueExW(hKey, L"TimeZoneKeyName", NULL, &Type, (LPBYTE)KeyName, &KeyNameSize);
+
+        RegCloseKey(hKey);
+        if (Error == ERROR_SUCCESS && Type == REG_SZ)
+        {
+            KeyName[KeyNameSize / sizeof(WCHAR)] = UNICODE_NULL;
+            if (KeyName[0] != UNICODE_NULL && QueryZoneIndex(KeyName, &Index))
+            {
+                *pIndex = Index;
+                return TRUE;
+            }
+        }
+    }
+
+    if (GetTimeZoneInformation(&TimeZoneInformation) == TIME_ZONE_ID_INVALID)
+        return FALSE;
+
+    if (!FindZoneIndexByStandardName(TimeZoneInformation.StandardName, &Index))
+        return FALSE;
+
+    *pIndex = Index;
+    return TRUE;
+}
+
 BOOL
 GetAutoDaylight(VOID)
 {
-    LONG lError;
+    DWORD Disabled = 0;
+    DWORD Size = sizeof(Disabled);
+    DWORD Type;
     HKEY hKey;
-    DWORD dwType;
-    DWORD dwDisabled;
-    DWORD dwValueSize;
+    LONG Error;
 
-    lError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                           L"SYSTEM\\CurrentControlSet\\Control\\TimeZoneInformation",
-                           0,
-                           KEY_QUERY_VALUE,
-                           &hKey);
-    if (lError != ERROR_SUCCESS)
-        return FALSE;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, TIME_ZONE_INFORMATION_KEY, 0, KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS)
+        return TRUE;
 
-    // NOTE: On Vista+: REG_DWORD "DynamicDaylightTimeDisabled"
-    dwValueSize = sizeof(dwDisabled);
-    lError = RegQueryValueExW(hKey,
-                              L"DisableAutoDaylightTimeSet",
-                              NULL,
-                              &dwType,
-                              (LPBYTE)&dwDisabled,
-                              &dwValueSize);
-
+    Error = RegQueryValueExW(hKey, L"DynamicDaylightTimeDisabled", NULL, &Type, (LPBYTE)&Disabled, &Size);
     RegCloseKey(hKey);
 
-    if ((lError != ERROR_SUCCESS) || (dwType != REG_DWORD) || (dwValueSize != sizeof(dwDisabled)))
-    {
-        /*
-         * The call failed (non zero) because the registry value isn't available,
-         * which means auto-daylight shouldn't be disabled.
-         */
-        dwDisabled = FALSE;
-    }
+    if (Error != ERROR_SUCCESS || Type != REG_DWORD || Size != sizeof(Disabled))
+        return TRUE;
 
-    return !dwDisabled;
+    return Disabled == 0;
 }
 
 VOID
 SetAutoDaylight(
-    IN BOOL EnableAutoDaylightTime)
+    _In_ BOOL EnableAutoDaylightTime)
 {
-    LONG lError;
+    DWORD Disabled = EnableAutoDaylightTime ? 0 : 1;
     HKEY hKey;
-    DWORD dwDisabled = TRUE;
 
-    lError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                           L"SYSTEM\\CurrentControlSet\\Control\\TimeZoneInformation",
-                           0,
-                           KEY_SET_VALUE,
-                           &hKey);
-    if (lError != ERROR_SUCCESS)
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, TIME_ZONE_INFORMATION_KEY, 0, NULL, REG_OPTION_NON_VOLATILE,
+                        KEY_SET_VALUE, NULL, &hKey, NULL) != ERROR_SUCCESS)
+    {
         return;
-
-    if (!EnableAutoDaylightTime)
-    {
-        /* Auto-Daylight disabled: set the value to TRUE */
-        // NOTE: On Vista+: REG_DWORD "DynamicDaylightTimeDisabled"
-        RegSetValueExW(hKey,
-                       L"DisableAutoDaylightTimeSet",
-                       0,
-                       REG_DWORD,
-                       (LPBYTE)&dwDisabled,
-                       sizeof(dwDisabled));
-    }
-    else
-    {
-        /* Auto-Daylight enabled: just delete the value */
-        RegDeleteValueW(hKey, L"DisableAutoDaylightTimeSet");
     }
 
+    RegSetValueExW(hKey, L"DynamicDaylightTimeDisabled", 0, REG_DWORD, (const BYTE *)&Disabled, sizeof(Disabled));
     RegCloseKey(hKey);
 }

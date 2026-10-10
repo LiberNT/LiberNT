@@ -1,13 +1,13 @@
 /*
- * PROJECT:     Recycle bin management
- * LICENSE:     GPL v2 - See COPYING2 in the top level directory
- * FILE:        lib/recyclebin/guid.c
- * PURPOSE:     Define GUID values
- * PROGRAMMERS: Copyright 2007 Hervé Poussineau (hpoussin@reactos.org)
+ * PROJECT:     LiberNT Shell
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Interface identifiers of the recycle bin library
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #define INITGUID
 #include <initguid.h>
+
 DEFINE_GUID(IID_IRecycleBin, 0x392ec73a, 0x45e9, 0x43de, 0xa8, 0x41, 0x4f, 0x32, 0x1a, 0xea, 0xa5, 0x80);
 DEFINE_GUID(IID_IRecycleBinEnumList, 0x392ec73a, 0x45e9, 0x43de, 0xa8, 0x41, 0x4f, 0x32, 0x1a, 0xea, 0xa5, 0x81);
 DEFINE_GUID(IID_IRecycleBinFile, 0x392ec73a, 0x45e9, 0x43de, 0xa8, 0x41, 0x4f, 0x32, 0x1a, 0xea, 0xa5, 0x82);
