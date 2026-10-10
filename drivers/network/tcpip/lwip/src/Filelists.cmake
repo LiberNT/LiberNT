@@ -253,7 +253,7 @@ set(lwipallapps_SRCS
 )
 
 # Generate lwip/init.h (version info)
-configure_file(${LWIP_DIR}/src/include/lwip/init.h.cmake.in ${LWIP_DIR}/src/include/lwip/init.h)
+configure_file(${LWIP_DIR}/src/include/lwip/init.h.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/lwip/init.h)
 
 # Documentation
 set(DOXYGEN_DIR ${LWIP_DIR}/doc/doxygen)
