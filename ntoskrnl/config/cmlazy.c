@@ -19,6 +19,7 @@ WORK_QUEUE_ITEM CmpLazyWorkItem;
 KTIMER CmpEnableLazyFlushTimer;
 KDPC CmpEnableLazyFlushDpc;
 BOOLEAN CmpLazyFlushPending;
+static LONG CmpLazyFlushArmed;
 BOOLEAN CmpForceForceFlush;
 BOOLEAN CmpHoldLazyFlush = TRUE;
 ULONG CmpLazyFlushIntervalInSeconds = 5;
@@ -113,6 +114,7 @@ CmpLazyFlushDpcRoutine(IN PKDPC Dpc,
 {
     /* Check if we should queue the lazy flush worker */
     DPRINT("Flush pending: %s, Holding lazy flush: %s.\n", CmpLazyFlushPending ? "yes" : "no", CmpHoldLazyFlush ? "yes" : "no");
+    InterlockedExchange(&CmpLazyFlushArmed, 0);
     if (!CmpLazyFlushPending && !CmpHoldLazyFlush)
     {
         CmpLazyFlushPending = TRUE;
@@ -128,7 +130,8 @@ CmpLazyFlush(VOID)
     PAGED_CODE();
 
     /* Check if we should set the lazy flush timer */
-    if (!CmpNoWrite && !CmpHoldLazyFlush)
+    if (!CmpNoWrite && !CmpHoldLazyFlush &&
+        !InterlockedExchange(&CmpLazyFlushArmed, 1))
     {
         /* Do it */
         DueTime.QuadPart = Int32x32To64(CmpLazyFlushIntervalInSeconds,
