@@ -316,7 +316,7 @@ InitKeyboardLayouts(VOID)
 
             /* Load keyboard layout with given locale id */
             Flags = KLF_SUBSTITUTE_OK;
-            if (i > 1)
+            if (i > 2)
                 Flags |= KLF_NOTELLSHELL|KLF_REPLACELANG;
             else // First layout
                 Flags |= KLF_ACTIVATE; // |0x40000000
