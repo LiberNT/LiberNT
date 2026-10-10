@@ -182,6 +182,7 @@ elseif(ARCH STREQUAL "riscv64")
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/riscv64/rvdispatch.c
     )
     list(APPEND MSVCRT_ASM_SOURCE
+        ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/riscv64/rvscalar.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/riscv64/rvvector.S
     )
     set_source_files_properties(${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/riscv64/rvdispatch.c
@@ -204,6 +205,9 @@ if(ARCH STREQUAL "riscv64")
     endif()
     if(RISCV64_VECTOR)
         target_compile_definitions(msvcrt_static PRIVATE RV_CRT_RVA23)
+        if(RISCV64_FAST_MISALIGNED_ACCESS)
+            target_compile_definitions(msvcrt_static PRIVATE RV_CRT_FAST_UNALIGNED)
+        endif()
     endif()
 endif()
 

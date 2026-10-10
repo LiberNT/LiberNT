@@ -45,6 +45,7 @@ typedef void *(*RV_MEMSET)(void *, int, size_t);
 typedef int (*RV_MEMCMP)(const void *, const void *, size_t);
 
 void *RvMemcpyRva23(void *Destination, const void *Source, size_t Length);
+void *RvMemmoveRva23(void *Destination, const void *Source, size_t Length);
 void *RvMemsetRva23(void *Destination, int Value, size_t Length);
 int RvMemcmpRva23(const void *First, const void *Second, size_t Length);
 
@@ -65,6 +66,8 @@ static char *RvStrcpySelect(char *Destination, const char *Source);
 static void *RvMemcpySelect(void *Destination, const void *Source, size_t Length);
 static void *RvMemsetSelect(void *Destination, int Value, size_t Length);
 static void *RvMemcpyScalar(void *Destination, const void *Source, size_t Length);
+static void *RvMemmoveSelect(void *Destination, const void *Source, size_t Length);
+static void *RvMemmoveScalar(void *Destination, const void *Source, size_t Length);
 static void *RvMemsetScalar(void *Destination, int Value, size_t Length);
 static int RvMemcmpSelect(const void *First, const void *Second, size_t Length);
 static int RvMemcmpScalar20(const void *First, const void *Second, size_t Length);
@@ -74,6 +77,7 @@ static RV_STRLEN volatile RvStrlen = RvStrlenSelect;
 static RV_STRCMP volatile RvStrcmp = RvStrcmpSelect;
 static RV_STRCPY volatile RvStrcpy = RvStrcpySelect;
 static RV_MEMCPY volatile RvMemcpy = RvMemcpySelect;
+static RV_MEMCPY volatile RvMemmove = RvMemmoveSelect;
 static RV_MEMSET volatile RvMemset = RvMemsetSelect;
 static RV_MEMCMP volatile RvMemcmp = RvMemcmpSelect;
 
@@ -87,6 +91,7 @@ RvSelect(VOID)
         RvMemcmp = RvMemcmpRva23;
         RvMemset = RvMemsetRva23;
         RvMemcpy = RvMemcpyRva23;
+        RvMemmove = RvMemmoveRva23;
         RvStrcpy = RvStrcpyRva23;
         RvStrcmp = RvStrcmpRva23;
         RvStrlen = RvStrlenRva23;
@@ -95,6 +100,7 @@ RvSelect(VOID)
 
     RvMemset = RvMemsetScalar;
     RvMemcpy = RvMemcpyScalar;
+    RvMemmove = RvMemmoveScalar;
     if (FeatureBits & KF_RISCV_ZBB)
     {
         RvMemcmp = RvMemcmpScalar22;
@@ -199,10 +205,29 @@ RvMemsetScalar(void *Destination, int Value, size_t Length)
     return RvMemsetRva20(Destination, Value, Length);
 }
 
+static void *
+RvMemmoveSelect(void *Destination, const void *Source, size_t Length)
+{
+    RvSelect();
+    return RvMemmove(Destination, Source, Length);
+}
+
+static void *
+RvMemmoveScalar(void *Destination, const void *Source, size_t Length)
+{
+    return RvMemmoveRva20(Destination, Source, Length);
+}
+
 void * __cdecl
 memcpy(void *Destination, const void *Source, size_t Length)
 {
     return RvMemcpy(Destination, Source, Length);
+}
+
+void * __cdecl
+memmove(void *Destination, const void *Source, size_t Length)
+{
+    return RvMemmove(Destination, Source, Length);
 }
 
 void * __cdecl

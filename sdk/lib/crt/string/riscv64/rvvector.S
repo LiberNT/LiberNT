@@ -68,9 +68,47 @@ RvStrcpyVector:
     bltz a3, 1b
     ret
 
+#if defined(RV_CRT_RVA23) && defined(RV_CRT_FAST_UNALIGNED)
+    .p2align 4
+    .global memcpy
+    .global memmove
+memcpy:
+memmove:
+    li t1, 64
+    bgtu a2, t1, 3f
+    vsetvli t0, a2, e8, m1, ta, ma
+    bne t0, a2, 1f
+    vle8.v v8, (a1)
+    vse8.v v8, (a0)
+    ret
+1:
+    vsetvli t0, a2, e8, m2, ta, ma
+    bne t0, a2, 2f
+    vle8.v v8, (a1)
+    vse8.v v8, (a0)
+    ret
+2:
+    vsetvli zero, a2, e8, m4, ta, ma
+    vle8.v v8, (a1)
+    vse8.v v8, (a0)
+    ret
+3:
+    addi t1, a2, -129
+    li t0, 128
+    bltu t1, t0, RvMemmoveRva23
+    tail RvMemmoveScalar
+
+    .p2align 4
+    .global memset
+memset:
+    li t1, 256
+    bleu a2, t1, RvMemsetRva23
+    tail RvMemsetScalar
+#endif
+
     .p2align 2
     .global RvMemcpyRva23
-#ifdef RV_CRT_RVA23
+#if defined(RV_CRT_RVA23) && !defined(RV_CRT_FAST_UNALIGNED)
     .global memcpy
 memcpy:
 #endif
@@ -117,8 +155,31 @@ RvMemcpyRva23:
     ret
 
     .p2align 2
+    .global RvMemmoveRva23
+#if defined(RV_CRT_RVA23) && defined(RV_CRT_VECTOR_MEMMOVE) && !defined(RV_CRT_FAST_UNALIGNED)
+    .global memmove
+memmove:
+#endif
+RvMemmoveRva23:
+    li t1, 64
+    bleu a2, t1, RvMemcpyRva23
+    sub t0, a0, a1
+    bgeu t0, a2, RvMemcpyRva23
+    add a3, a0, a2
+    add a1, a1, a2
+1:
+    vsetvli t0, a2, e8, m8, ta, ma
+    sub a1, a1, t0
+    sub a3, a3, t0
+    vle8.v v8, (a1)
+    sub a2, a2, t0
+    vse8.v v8, (a3)
+    bnez a2, 1b
+    ret
+
+    .p2align 2
     .global RvMemsetRva23
-#ifdef RV_CRT_RVA23
+#if defined(RV_CRT_RVA23) && !defined(RV_CRT_FAST_UNALIGNED)
     .global memset
 memset:
 #endif
