@@ -1,0 +1,23 @@
+/*
+ * PROJECT:     LiberNT MSXML 6.0
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Windows.Data.Xml.Dom runtime class registration
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep register
+#pragma winrt ns_prefix
+
+import "inspectable.idl";
+import "asyncinfo.idl";
+import "eventtoken.idl";
+import "windowscontracts.idl";
+import "windows.foundation.idl";
+import "windows.storage.idl";
+import "windows.storage.streams.idl";
+import "windows.data.xml.dom.idl";
+
+namespace Windows.Data.Xml.Dom {
+    runtimeclass XmlDocument;
+    runtimeclass XmlLoadSettings;
+}
