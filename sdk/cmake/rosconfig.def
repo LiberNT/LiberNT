@@ -385,7 +385,7 @@ config ENABLE_EXPERIMENTAL_EARLY_SPLASH
     type bool
     default y
     help
-      Show the BlueHorizon PNG as soon as Winlogon creates the interactive
+      Show the default wallpaper PNG as soon as Winlogon creates the interactive
       desktop, stretched across the virtual screen until Userinit has
       prepared the user background and started the shell. Disable to keep
       the classic solid-color startup background and omit the PNG decoder
