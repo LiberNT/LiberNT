@@ -5,6 +5,7 @@
  * COPYRIGHT:   Copyright 2026 Ahmed Arif <arif.img@outlook.com>
  */
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,6 +88,9 @@ typedef struct _PARTITION_INPUT
     const char* Name;
     unsigned int StartSector;
     unsigned char Type;
+    unsigned char TypeGuid[16];
+    int HasTypeGuid;
+    int Bootable;
     FILE* File;
     long Size;
     unsigned int SectorCount;
@@ -115,7 +119,7 @@ typedef struct _PARTITION_ENTRY
 
 static void print_usage(const char* name)
 {
-    printf("Usage: %s -o <output> [-gpt] [-mbr <mbr.bin>] {-partition <part.img>|-data <file>|-blank <sectors>} [-start <sector>] [-type <hex>] [-size <sectors>] [-name <label>] ... [-raw <file> -at <sector>] ... [-format <raw|vhd>] [-vhd]\n\n", name);
+    printf("Usage: %s -o <output> [-gpt] [-mbr <mbr.bin>] {-partition <part.img>|-data <file>|-blank <sectors>} [-start <sector>] [-type <hex>] [-size <sectors>] [-name <label>] [-guid <type>] [-bootable] ... [-raw <file> -at <sector>] ... [-format <raw|vhd>] [-vhd]\n\n", name);
     printf("  -gpt                Write a GUID partition table behind a protective MBR\n");
     printf("  -o <output>         Output image file\n");
     printf("  -mbr <mbr.bin>      MBR boot code binary (first 440 bytes used; shorter files are zero-padded).\n");
@@ -127,6 +131,8 @@ static void print_usage(const char* name)
     printf("  -type <hex>         Type ID for the preceding partition (first defaults to 0x%02X)\n", DEFAULT_PARTITION_TYPE);
     printf("  -size <sectors>     Sectors reserved for the preceding -data partition\n");
     printf("  -name <label>       GPT name of the preceding partition\n");
+    printf("  -guid <type>        GPT type GUID of the preceding partition (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)\n");
+    printf("  -bootable           Set the GPT legacy BIOS bootable attribute of the preceding partition\n");
     printf("  -raw <file>         Data written outside the partitions at the sector given by -at\n");
     printf("  -at <sector>        Start sector of the preceding -raw data (not sector 0)\n");
     printf("  -format <raw|vhd>   Output container format (default: raw)\n");
@@ -351,7 +357,9 @@ static void build_gpt_entries(unsigned char* entries, const PARTITION_INPUT* par
         const char* name = partition->Name ? partition->Name : "";
         size_t i;
 
-        if (partition->Type == 0xEF)
+        if (partition->HasTypeGuid)
+            type = partition->TypeGuid;
+        else if (partition->Type == 0xEF)
             type = gpt_type_esp;
         else if (partition->Type == 0x07 || partition->Type == 0x0B || partition->Type == 0x0C)
             type = gpt_type_basic_data;
@@ -359,6 +367,8 @@ static void build_gpt_entries(unsigned char* entries, const PARTITION_INPUT* par
         make_gpt_guid(entry + 16, index + 1, partition);
         write_le64(entry + 32, partition->StartSector);
         write_le64(entry + 40, (unsigned long long)partition->StartSector + partition->SectorCount - 1);
+        if (partition->Bootable)
+            write_le64(entry + 48, 1ULL << 2);
         for (i = 0; name[i] != 0 && i < GPT_NAME_LENGTH; i++)
             entry[56 + 2 * i] = (unsigned char)name[i];
     }
@@ -996,6 +1006,32 @@ static int parse_unsigned(const char* text,
     return 0;
 }
 
+static int parse_guid(const char* text, unsigned char guid[16])
+{
+    static const int byte_order[16] = {3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15};
+    unsigned int index = 0;
+    const char* p;
+
+    if (strlen(text) != 36 || text[8] != '-' || text[13] != '-' || text[18] != '-' || text[23] != '-')
+        return -1;
+
+    for (p = text; *p != '\0' && index < 16; p++)
+    {
+        unsigned int high, low;
+
+        if (*p == '-')
+            continue;
+        if (!isxdigit((unsigned char)p[0]) || !isxdigit((unsigned char)p[1]))
+            return -1;
+        high = (unsigned int)(isdigit((unsigned char)p[0]) ? p[0] - '0' : (tolower((unsigned char)p[0]) - 'a' + 10));
+        low = (unsigned int)(isdigit((unsigned char)p[1]) ? p[1] - '0' : (tolower((unsigned char)p[1]) - 'a' + 10));
+        guid[byte_order[index++]] = (unsigned char)((high << 4) | low);
+        p++;
+    }
+
+    return index == 16 ? 0 : -1;
+}
+
 int main(int argc, char* argv[])
 {
     const char* output_path = NULL;
@@ -1130,6 +1166,25 @@ int main(int argc, char* argv[])
             }
             partitions[current_partition].Name = argv[++i];
         }
+        else if (strcmp(argv[i], "-guid") == 0 && i + 1 < argc)
+        {
+            if (current_partition < 0 ||
+                parse_guid(argv[++i], partitions[current_partition].TypeGuid) != 0)
+            {
+                fprintf(stderr, "Error: -guid needs a type GUID after a partition.\n");
+                goto cleanup;
+            }
+            partitions[current_partition].HasTypeGuid = 1;
+        }
+        else if (strcmp(argv[i], "-bootable") == 0)
+        {
+            if (current_partition < 0)
+            {
+                fprintf(stderr, "Error: -bootable needs a partition.\n");
+                goto cleanup;
+            }
+            partitions[current_partition].Bootable = 1;
+        }
         else if (strcmp(argv[i], "-gpt") == 0)
         {
             gpt = 1;
@@ -1166,6 +1221,15 @@ int main(int argc, char* argv[])
         fprintf(stderr, "Error: Missing required arguments.\n");
         print_usage(argv[0]);
         goto cleanup;
+    }
+
+    for (index = 0; !gpt && index < partition_count; index++)
+    {
+        if (partitions[index].HasTypeGuid || partitions[index].Bootable)
+        {
+            fprintf(stderr, "Error: -guid and -bootable need -gpt.\n");
+            goto cleanup;
+        }
     }
 
     memset(mbr_sector, 0, sizeof(mbr_sector));
