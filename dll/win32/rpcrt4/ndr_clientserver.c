@@ -112,7 +112,11 @@ unsigned char* WINAPI NdrServerInitializeNew( PRPC_MESSAGE pRpcMsg, PMIDL_STUB_M
   pStubMsg->RpcMsg = pRpcMsg;
   pStubMsg->Buffer = pStubMsg->BufferStart = pRpcMsg->Buffer;
   pStubMsg->BufferEnd = pStubMsg->Buffer + pRpcMsg->BufferLength;
+#ifdef __REACTOS__
+  pStubMsg->BufferLength = 0;
+#else
   pStubMsg->BufferLength = pRpcMsg->BufferLength;
+#endif
   pStubMsg->IsClient = FALSE;
   pStubMsg->ReuseBuffer = FALSE;
   pStubMsg->pAllocAllNodesContext = NULL;
@@ -173,7 +177,9 @@ unsigned char *WINAPI NdrGetBuffer(PMIDL_STUB_MESSAGE stubmsg, ULONG buflen, RPC
 
   stubmsg->Buffer = stubmsg->RpcMsg->Buffer;
   stubmsg->fBufferValid = TRUE;
+#ifndef __REACTOS__
   stubmsg->BufferLength = stubmsg->RpcMsg->BufferLength;
+#endif
   return stubmsg->Buffer;
 }
 /***********************************************************************

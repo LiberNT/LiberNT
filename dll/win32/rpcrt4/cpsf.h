@@ -69,6 +69,9 @@ BOOL fill_delegated_proxy_table(IUnknownVtbl *vtbl, DWORD num);
 HRESULT create_proxy(REFIID iid, IUnknown *pUnkOuter, IRpcProxyBuffer **pproxy, void **ppv);
 HRESULT create_stub(REFIID iid, IUnknown *pUnk, IRpcStubBuffer **ppstub);
 BOOL fill_stubless_table(IUnknownVtbl *vtbl, DWORD num);
+#ifdef __REACTOS__
+BOOL fill_stubless_null_entries(IUnknownVtbl *vtbl, DWORD num);
+#endif
 const IUnknownVtbl *get_delegating_vtbl(DWORD num_methods);
 
 #define NB_THUNK_ENTRIES 1024

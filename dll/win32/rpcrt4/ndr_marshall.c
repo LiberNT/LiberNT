@@ -88,6 +88,13 @@ WINE_DEFAULT_DEBUG_CHANNEL(ole);
     LITTLE_ENDIAN_UINT32_READ(pchar)
 #endif
 
+#ifdef __REACTOS__
+static inline unsigned char *ndr_buffer_end(const MIDL_STUB_MESSAGE *msg)
+{
+    return (unsigned char *)msg->RpcMsg->Buffer + max(msg->BufferLength, msg->RpcMsg->BufferLength);
+}
+#endif
+
 static inline void align_length( ULONG *len, unsigned int align )
 {
     *len = (*len + align - 1) & ~(align - 1);
@@ -119,11 +126,19 @@ static inline void align_pointer_offset_clear( unsigned char **ptr, unsigned cha
     *ptr = base + (((ULONG_PTR)(*ptr - base) + mask) & ~mask);
 }
 
+#ifdef __REACTOS__
+#define STD_OVERFLOW_CHECK(_Msg) do { \
+    TRACE("buffer=%Id/%Id\n", _Msg->Buffer - (unsigned char *)_Msg->RpcMsg->Buffer, ndr_buffer_end(_Msg) - (unsigned char *)_Msg->RpcMsg->Buffer); \
+    if (_Msg->Buffer > ndr_buffer_end(_Msg)) \
+        ERR("buffer overflow %Id bytes\n", _Msg->Buffer - ndr_buffer_end(_Msg)); \
+  } while (0)
+#else
 #define STD_OVERFLOW_CHECK(_Msg) do { \
     TRACE("buffer=%Id/%ld\n", _Msg->Buffer - (unsigned char *)_Msg->RpcMsg->Buffer, _Msg->BufferLength); \
     if (_Msg->Buffer > (unsigned char *)_Msg->RpcMsg->Buffer + _Msg->BufferLength) \
         ERR("buffer overflow %Id bytes\n", _Msg->Buffer - ((unsigned char *)_Msg->RpcMsg->Buffer + _Msg->BufferLength)); \
   } while (0)
+#endif
 
 #define NDR_POINTER_ID_BASE 0x20000
 #define NDR_POINTER_ID(pStubMsg) (NDR_POINTER_ID_BASE + ((pStubMsg)->UniquePtrCount++) * 4)
@@ -516,7 +531,11 @@ done:
 static inline void WriteConformance(MIDL_STUB_MESSAGE *pStubMsg)
 {
     align_pointer_clear(&pStubMsg->Buffer, 4);
+#ifdef __REACTOS__
+    if (pStubMsg->Buffer + 4 > ndr_buffer_end(pStubMsg))
+#else
     if (pStubMsg->Buffer + 4 > (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength)
+#endif
         RpcRaiseException(RPC_X_BAD_STUB_DATA);
     NDR_LOCAL_UINT32_WRITE(pStubMsg->Buffer, pStubMsg->MaxCount);
     pStubMsg->Buffer += 4;
@@ -526,7 +545,11 @@ static inline void WriteConformance(MIDL_STUB_MESSAGE *pStubMsg)
 static inline void WriteVariance(MIDL_STUB_MESSAGE *pStubMsg)
 {
     align_pointer_clear(&pStubMsg->Buffer, 4);
+#ifdef __REACTOS__
+    if (pStubMsg->Buffer + 8 > ndr_buffer_end(pStubMsg))
+#else
     if (pStubMsg->Buffer + 8 > (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength)
+#endif
         RpcRaiseException(RPC_X_BAD_STUB_DATA);
     NDR_LOCAL_UINT32_WRITE(pStubMsg->Buffer, pStubMsg->Offset);
     pStubMsg->Buffer += 4;
@@ -721,7 +744,11 @@ static inline void validate_size(MIDL_STUB_MESSAGE *msg, unsigned char *end, ULO
 
 static inline void safe_buffer_increment(MIDL_STUB_MESSAGE *pStubMsg, ULONG size)
 {
+#ifdef __REACTOS__
+    validate_size( pStubMsg, ndr_buffer_end(pStubMsg), size );
+#else
     validate_size( pStubMsg, (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength, size );
+#endif
     pStubMsg->Buffer += size;
 }
 
@@ -2639,10 +2666,15 @@ unsigned char *  WINAPI NdrNonConformantStringUnmarshall(PMIDL_STUB_MESSAGE pStu
 
   validate_string_data(pStubMsg, bufsize, esize);
 
+#ifdef __REACTOS__
+  if (!*ppMemory)
+    *ppMemory = NdrAllocate(pStubMsg, memsize);
+#else
   if (!fMustAlloc && !*ppMemory)
     fMustAlloc = TRUE;
   if (fMustAlloc)
     *ppMemory = NdrAllocate(pStubMsg, memsize);
+#endif
 
   safe_copy_from_buffer(pStubMsg, *ppMemory, bufsize);
 
@@ -2849,6 +2881,9 @@ static unsigned char * ComplexMarshall(PMIDL_STUB_MESSAGE pStubMsg,
     case FC_SHORT:
     case FC_USHORT:
       TRACE("short=%d <= %p\n", *(WORD*)pMemory, pMemory);
+#ifdef __REACTOS__
+      align_pointer_clear(&pStubMsg->Buffer, 2);
+#endif
       copy_to_buffer(pStubMsg, pMemory, 2);
       pMemory += 2;
       break;
@@ -2858,6 +2893,9 @@ static unsigned char * ComplexMarshall(PMIDL_STUB_MESSAGE pStubMsg,
       TRACE("enum16=%ld <= %p\n", *(DWORD*)pMemory, pMemory);
       if (32767 < *(DWORD*)pMemory)
         RpcRaiseException(RPC_X_ENUM_VALUE_OUT_OF_RANGE);
+#ifdef __REACTOS__
+      align_pointer_clear(&pStubMsg->Buffer, 2);
+#endif
       copy_to_buffer(pStubMsg, &val, 2);
       pMemory += 4;
       break;
@@ -2866,6 +2904,9 @@ static unsigned char * ComplexMarshall(PMIDL_STUB_MESSAGE pStubMsg,
     case FC_ULONG:
     case FC_ENUM32:
       TRACE("long=%ld <= %p\n", *(DWORD*)pMemory, pMemory);
+#ifdef __REACTOS__
+      align_pointer_clear(&pStubMsg->Buffer, 4);
+#endif
       copy_to_buffer(pStubMsg, pMemory, 4);
       pMemory += 4;
       break;
@@ -2874,22 +2915,34 @@ static unsigned char * ComplexMarshall(PMIDL_STUB_MESSAGE pStubMsg,
     {
       UINT val = *(UINT_PTR *)pMemory;
       TRACE("int3264=%Id <= %p\n", *(UINT_PTR *)pMemory, pMemory);
+#ifdef __REACTOS__
+      align_pointer_clear(&pStubMsg->Buffer, 4);
+#endif
       copy_to_buffer(pStubMsg, &val, sizeof(UINT));
       pMemory += sizeof(UINT_PTR);
       break;
     }
     case FC_FLOAT:
       TRACE("float=%f <= %p\n", *(float*)pMemory, pMemory);
+#ifdef __REACTOS__
+      align_pointer_clear(&pStubMsg->Buffer, 4);
+#endif
       copy_to_buffer(pStubMsg, pMemory, sizeof(float));
       pMemory += sizeof(float);
       break;
     case FC_HYPER:
       TRACE("longlong=%s <= %p\n", wine_dbgstr_longlong(*(ULONGLONG*)pMemory), pMemory);
+#ifdef __REACTOS__
+      align_pointer_clear(&pStubMsg->Buffer, 8);
+#endif
       copy_to_buffer(pStubMsg, pMemory, 8);
       pMemory += 8;
       break;
     case FC_DOUBLE:
       TRACE("double=%f <= %p\n", *(double*)pMemory, pMemory);
+#ifdef __REACTOS__
+      align_pointer_clear(&pStubMsg->Buffer, 8);
+#endif
       copy_to_buffer(pStubMsg, pMemory, sizeof(double));
       pMemory += sizeof(double);
       break;
@@ -3008,6 +3061,9 @@ static unsigned char * ComplexUnmarshall(PMIDL_STUB_MESSAGE pStubMsg,
     case FC_WCHAR:
     case FC_SHORT:
     case FC_USHORT:
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 2);
+#endif
       safe_copy_from_buffer(pStubMsg, pMemory, 2);
       TRACE("short=%d => %p\n", *(WORD*)pMemory, pMemory);
       pMemory += 2;
@@ -3015,6 +3071,9 @@ static unsigned char * ComplexUnmarshall(PMIDL_STUB_MESSAGE pStubMsg,
     case FC_ENUM16:
     {
       WORD val;
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 2);
+#endif
       safe_copy_from_buffer(pStubMsg, &val, 2);
       *(DWORD*)pMemory = val;
       TRACE("enum16=%ld => %p\n", *(DWORD*)pMemory, pMemory);
@@ -3026,6 +3085,9 @@ static unsigned char * ComplexUnmarshall(PMIDL_STUB_MESSAGE pStubMsg,
     case FC_LONG:
     case FC_ULONG:
     case FC_ENUM32:
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 4);
+#endif
       safe_copy_from_buffer(pStubMsg, pMemory, 4);
       TRACE("long=%ld => %p\n", *(DWORD*)pMemory, pMemory);
       pMemory += 4;
@@ -3033,6 +3095,9 @@ static unsigned char * ComplexUnmarshall(PMIDL_STUB_MESSAGE pStubMsg,
     case FC_INT3264:
     {
       INT val;
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 4);
+#endif
       safe_copy_from_buffer(pStubMsg, &val, 4);
       *(INT_PTR *)pMemory = val;
       TRACE("int3264=%Id => %p\n", *(INT_PTR*)pMemory, pMemory);
@@ -3042,6 +3107,9 @@ static unsigned char * ComplexUnmarshall(PMIDL_STUB_MESSAGE pStubMsg,
     case FC_UINT3264:
     {
       UINT val;
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 4);
+#endif
       safe_copy_from_buffer(pStubMsg, &val, 4);
       *(UINT_PTR *)pMemory = val;
       TRACE("uint3264=%Id => %p\n", *(UINT_PTR*)pMemory, pMemory);
@@ -3049,16 +3117,25 @@ static unsigned char * ComplexUnmarshall(PMIDL_STUB_MESSAGE pStubMsg,
       break;
     }
     case FC_FLOAT:
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 4);
+#endif
       safe_copy_from_buffer(pStubMsg, pMemory, sizeof(float));
       TRACE("float=%f => %p\n", *(float*)pMemory, pMemory);
       pMemory += sizeof(float);
       break;
     case FC_HYPER:
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 8);
+#endif
       safe_copy_from_buffer(pStubMsg, pMemory, 8);
       TRACE("longlong=%s => %p\n", wine_dbgstr_longlong(*(ULONGLONG*)pMemory), pMemory);
       pMemory += 8;
       break;
     case FC_DOUBLE:
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 8);
+#endif
       safe_copy_from_buffer(pStubMsg, pMemory, sizeof(double));
       TRACE("double=%f => %p\n", *(double*)pMemory, pMemory);
       pMemory += sizeof(double);
@@ -3183,10 +3260,16 @@ static unsigned char * ComplexBufferSize(PMIDL_STUB_MESSAGE pStubMsg,
     case FC_WCHAR:
     case FC_SHORT:
     case FC_USHORT:
+#ifdef __REACTOS__
+      align_length(&pStubMsg->BufferLength, 2);
+#endif
       safe_buffer_length_increment(pStubMsg, 2);
       pMemory += 2;
       break;
     case FC_ENUM16:
+#ifdef __REACTOS__
+      align_length(&pStubMsg->BufferLength, 2);
+#endif
       safe_buffer_length_increment(pStubMsg, 2);
       pMemory += 4;
       break;
@@ -3194,16 +3277,25 @@ static unsigned char * ComplexBufferSize(PMIDL_STUB_MESSAGE pStubMsg,
     case FC_ULONG:
     case FC_ENUM32:
     case FC_FLOAT:
+#ifdef __REACTOS__
+      align_length(&pStubMsg->BufferLength, 4);
+#endif
       safe_buffer_length_increment(pStubMsg, 4);
       pMemory += 4;
       break;
     case FC_INT3264:
     case FC_UINT3264:
+#ifdef __REACTOS__
+      align_length(&pStubMsg->BufferLength, 4);
+#endif
       safe_buffer_length_increment(pStubMsg, 4);
       pMemory += sizeof(INT_PTR);
       break;
     case FC_HYPER:
     case FC_DOUBLE:
+#ifdef __REACTOS__
+      align_length(&pStubMsg->BufferLength, 8);
+#endif
       safe_buffer_length_increment(pStubMsg, 8);
       pMemory += 8;
       break;
@@ -3407,10 +3499,16 @@ static ULONG ComplexStructMemorySize(PMIDL_STUB_MESSAGE pStubMsg,
     case FC_SHORT:
     case FC_USHORT:
       size += 2;
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 2);
+#endif
       safe_buffer_increment(pStubMsg, 2);
       break;
     case FC_ENUM16:
       size += 4;
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 2);
+#endif
       safe_buffer_increment(pStubMsg, 2);
       break;
     case FC_LONG:
@@ -3418,16 +3516,25 @@ static ULONG ComplexStructMemorySize(PMIDL_STUB_MESSAGE pStubMsg,
     case FC_ENUM32:
     case FC_FLOAT:
       size += 4;
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 4);
+#endif
       safe_buffer_increment(pStubMsg, 4);
       break;
     case FC_INT3264:
     case FC_UINT3264:
       size += sizeof(INT_PTR);
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 4);
+#endif
       safe_buffer_increment(pStubMsg, 4);
       break;
     case FC_HYPER:
     case FC_DOUBLE:
       size += 8;
+#ifdef __REACTOS__
+      align_pointer(&pStubMsg->Buffer, 8);
+#endif
       safe_buffer_increment(pStubMsg, 8);
       break;
     case FC_RP:
@@ -5751,7 +5858,11 @@ static unsigned char *union_arm_marshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned c
                 {
                   STD_OVERFLOW_CHECK(pStubMsg);
                   pStubMsg->PointerBufferMark = pStubMsg->Buffer;
+#ifdef __REACTOS__
+                  if (saved_buffer + 4 > ndr_buffer_end(pStubMsg))
+#else
                   if (saved_buffer + 4 > (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength)
+#endif
                   {
                       ERR("buffer overflow - saved_buffer = %p, BufferEnd = %p\n",
                           saved_buffer, (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength);
@@ -7052,7 +7163,11 @@ void WINAPI NdrClientContextMarshall(PMIDL_STUB_MESSAGE pStubMsg,
 
     align_pointer_clear(&pStubMsg->Buffer, 4);
 
+#ifdef __REACTOS__
+    if (pStubMsg->Buffer + cbNDRContext > ndr_buffer_end(pStubMsg))
+#else
     if (pStubMsg->Buffer + cbNDRContext > (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength)
+#endif
     {
         ERR("buffer overflow - Buffer = %p, BufferEnd = %p\n",
             pStubMsg->Buffer, (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength);
@@ -7096,7 +7211,11 @@ void WINAPI NdrServerContextMarshall(PMIDL_STUB_MESSAGE pStubMsg,
 
     align_pointer(&pStubMsg->Buffer, 4);
 
+#ifdef __REACTOS__
+    if (pStubMsg->Buffer + cbNDRContext > ndr_buffer_end(pStubMsg))
+#else
     if (pStubMsg->Buffer + cbNDRContext > (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength)
+#endif
     {
         ERR("buffer overflow - Buffer = %p, BufferEnd = %p\n",
             pStubMsg->Buffer, (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength);
@@ -7117,7 +7236,11 @@ NDR_SCONTEXT WINAPI NdrServerContextUnmarshall(PMIDL_STUB_MESSAGE pStubMsg)
 
     align_pointer(&pStubMsg->Buffer, 4);
 
+#ifdef __REACTOS__
+    if (pStubMsg->Buffer + cbNDRContext > ndr_buffer_end(pStubMsg))
+#else
     if (pStubMsg->Buffer + cbNDRContext > (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength)
+#endif
     {
         ERR("buffer overflow - Buffer = %p, BufferEnd = %p\n",
             pStubMsg->Buffer, (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength);
@@ -7175,7 +7298,11 @@ void WINAPI NdrServerContextNewMarshall(PMIDL_STUB_MESSAGE pStubMsg,
 
     align_pointer(&pStubMsg->Buffer, 4);
 
+#ifdef __REACTOS__
+    if (pStubMsg->Buffer + cbNDRContext > ndr_buffer_end(pStubMsg))
+#else
     if (pStubMsg->Buffer + cbNDRContext > (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength)
+#endif
     {
         ERR("buffer overflow - Buffer = %p, BufferEnd = %p\n",
             pStubMsg->Buffer, (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength);
@@ -7208,7 +7335,11 @@ NDR_SCONTEXT WINAPI NdrServerContextNewUnmarshall(PMIDL_STUB_MESSAGE pStubMsg,
 
     align_pointer(&pStubMsg->Buffer, 4);
 
+#ifdef __REACTOS__
+    if (pStubMsg->Buffer + cbNDRContext > ndr_buffer_end(pStubMsg))
+#else
     if (pStubMsg->Buffer + cbNDRContext > (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength)
+#endif
     {
         ERR("buffer overflow - Buffer = %p, BufferEnd = %p\n",
             pStubMsg->Buffer, (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength);

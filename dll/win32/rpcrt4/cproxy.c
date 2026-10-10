@@ -70,6 +70,22 @@ BOOL fill_stubless_table( IUnknownVtbl *vtbl, DWORD num )
     return TRUE;
 }
 
+#ifdef __REACTOS__
+BOOL fill_stubless_null_entries( IUnknownVtbl *vtbl, DWORD num )
+{
+    size_t entry_size = (char *)ObjectStublessClient4 - (char *)ObjectStublessClient3;
+    const void **entry = (const void **)(vtbl + 1);
+    DWORD i;
+
+    if (num >= NB_THUNK_ENTRIES)
+        return FALSE;
+    for (i = 0; i < num - 3; i++, entry++)
+        if (!*entry) *entry = (char *)ObjectStublessClient3 + i * entry_size;
+
+    return TRUE;
+}
+#endif
+
 HRESULT StdProxy_Construct(REFIID riid,
                            LPUNKNOWN pUnkOuter,
                            const ProxyFileInfo *ProxyInfo,

@@ -195,7 +195,12 @@ RPC_STATUS RPC_ENTRY MesEncodeFixedBufferHandleCreate(
     if (!pEncodedSize)
         return RPC_S_INVALID_ARG;
 
+#ifdef __REACTOS__
+    if (!BufferSize)
+        return RPC_S_INVALID_ARG;
+#else
     /* FIXME: check BufferSize too */
+#endif
 
     pEsMsg = malloc(sizeof(*pEsMsg));
     if (!pEsMsg)

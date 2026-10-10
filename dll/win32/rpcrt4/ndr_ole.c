@@ -55,6 +55,13 @@ typedef struct RpcStreamImpl
   DWORD pos;
 } RpcStreamImpl;
 
+#ifdef __REACTOS__
+static inline unsigned char *ndr_buffer_end(const MIDL_STUB_MESSAGE *msg)
+{
+    return (unsigned char *)msg->RpcMsg->Buffer + max(msg->BufferLength, msg->RpcMsg->BufferLength);
+}
+#endif
+
 static inline RpcStreamImpl *impl_from_IStream(IStream *iface)
 {
   return CONTAINING_RECORD(iface, RpcStreamImpl, IStream_iface);
@@ -120,7 +127,11 @@ static HRESULT WINAPI RpcStream_Write(LPSTREAM iface,
                                      ULONG *pcbWritten)
 {
   RpcStreamImpl *This = impl_from_IStream(iface);
+#ifdef __REACTOS__
+  if (This->data + cb > ndr_buffer_end(This->pMsg))
+#else
   if (This->data + cb > (unsigned char *)This->pMsg->RpcMsg->Buffer + This->pMsg->BufferLength)
+#endif
     return STG_E_MEDIUMFULL;
   memcpy(This->data + This->pos, pv, cb);
   This->pos += cb;
@@ -284,7 +295,11 @@ unsigned char * WINAPI NdrInterfacePointerMarshall(PMIDL_STUB_MESSAGE pStubMsg,
 
   TRACE("(%p,%p,%p)\n", pStubMsg, pMemory, pFormat);
   pStubMsg->MaxCount = 0;
+#ifdef __REACTOS__
+  if (pStubMsg->Buffer + sizeof(DWORD) <= ndr_buffer_end(pStubMsg)) {
+#else
   if (pStubMsg->Buffer + sizeof(DWORD) <= (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength) {
+#endif
     hr = RpcStream_Create(pStubMsg, TRUE, NULL, &stream);
     if (hr == S_OK) {
       if (pMemory)
@@ -319,7 +334,11 @@ unsigned char * WINAPI NdrInterfacePointerUnmarshall(PMIDL_STUB_MESSAGE pStubMsg
     IUnknown_Release(*unk);
 
   *unk = NULL;
+#ifdef __REACTOS__
+  if (pStubMsg->Buffer + sizeof(DWORD) < ndr_buffer_end(pStubMsg)) {
+#else
   if (pStubMsg->Buffer + sizeof(DWORD) < (unsigned char *)pStubMsg->RpcMsg->Buffer + pStubMsg->BufferLength) {
+#endif
     ULONG size;
 
     hr = RpcStream_Create(pStubMsg, FALSE, &size, &stream);

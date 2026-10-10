@@ -165,6 +165,14 @@ static void init_psfactory( CStdPSFactoryBuffer *psfac, const ProxyFileInfo **fi
                 fill_delegated_proxy_table( (IUnknownVtbl *)vtbl, stubs[j]->header.DispatchTableCount );
                 pSrcRpcStubVtbl = (void * const *)&CStdStubBuffer_Delegating_Vtbl;
             }
+#ifdef __REACTOS__
+            else
+            {
+                void **vtbl = proxies[j]->Vtbl;
+                if (file_list[i]->TableVersion > 1) vtbl++;
+                fill_stubless_null_entries( (IUnknownVtbl *)vtbl, stubs[j]->header.DispatchTableCount );
+            }
+#endif
 
             for (k = 0; k < sizeof(IRpcStubBufferVtbl)/sizeof(void *); k++)
                 if (!pRpcStubVtbl[k]) pRpcStubVtbl[k] = pSrcRpcStubVtbl[k];

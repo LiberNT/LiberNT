@@ -1138,6 +1138,9 @@ RPC_STATUS RpcAuthInfo_Create(ULONG AuthnLevel, ULONG AuthnSvc,
     AuthInfo->cbMaxToken = cbMaxToken;
     AuthInfo->identity = identity;
     AuthInfo->server_principal_name = NULL;
+#ifdef __REACTOS__
+    AuthInfo->AuthzSvc = RPC_C_AUTHZ_NONE;
+#endif
 
     /* duplicate the SEC_WINNT_AUTH_IDENTITY structure, if applicable, to
      * enable better matching in RpcAuthInfo_IsEqual */
@@ -1540,11 +1543,15 @@ RpcBindingInqAuthInfoExW( RPC_BINDING_HANDLE Binding, RPC_WSTR *ServerPrincName,
     if (AuthnLevel) *AuthnLevel = bind->AuthInfo->AuthnLevel;
     if (AuthnSvc) *AuthnSvc = bind->AuthInfo->AuthnSvc;
     if (AuthIdentity) *AuthIdentity = bind->AuthInfo->identity;
+#ifdef __REACTOS__
+    if (AuthzSvc) *AuthzSvc = bind->AuthInfo->AuthzSvc;
+#else
     if (AuthzSvc)
     {
         FIXME("authorization service not implemented\n");
         *AuthzSvc = RPC_C_AUTHZ_NONE;
     }
+#endif
 
     return RPC_S_OK;
 }
@@ -1779,6 +1786,9 @@ RpcBindingSetAuthInfoExA( RPC_BINDING_HANDLE Binding, RPC_CSTR ServerPrincName,
     if (r == RPC_S_OK)
     {
       new_auth_info->server_principal_name = RPCRT4_strdupAtoW((char *)ServerPrincName);
+#ifdef __REACTOS__
+      new_auth_info->AuthzSvc = AuthzSvr;
+#endif
       if (!ServerPrincName || new_auth_info->server_principal_name)
       {
         if (bind->AuthInfo) RpcAuthInfo_Release(bind->AuthInfo);
@@ -1910,6 +1920,9 @@ RpcBindingSetAuthInfoExW( RPC_BINDING_HANDLE Binding, RPC_WSTR ServerPrincName, 
     if (r == RPC_S_OK)
     {
       new_auth_info->server_principal_name = wcsdup(ServerPrincName);
+#ifdef __REACTOS__
+      new_auth_info->AuthzSvc = AuthzSvr;
+#endif
       if (!ServerPrincName || new_auth_info->server_principal_name)
       {
         if (bind->AuthInfo) RpcAuthInfo_Release(bind->AuthInfo);
