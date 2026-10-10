@@ -200,6 +200,8 @@ static const CATEGORY_RULE Rules[] =
     { "kmtest", "HalArm64*", "kernel:arch" },
     { "kmtest", "KdArm64*", "kernel:arch" },
     { "kmtest", "RtlArm64*", "kernel:arch" },
+    { "kmtest", "RtlCaptureContextKM", "kernel:arch" },
+    { "kmtest", "HalPortIo", "kernel:arch" },
     { "kmtest", "Mm*", "kernel:mm" },
     { "kmtest", "ZwAllocateVirtualMemory", "kernel:mm" },
     { "kmtest", "ZwCreateSection", "kernel:mm" },
