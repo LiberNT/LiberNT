@@ -452,7 +452,7 @@ HalpRiscvFlushAdapterBuffers(PDMA_ADAPTER DmaAdapter, PMDL Mdl,
         return FALSE;
     if (Map && Map->Signature != RISCV_DMA_MAP_SIGNATURE)
         return FALSE;
-    if (!WriteToDevice && Mdl)
+    if (!WriteToDevice && Mdl && !Adapter->Coherent)
     {
         ULONG_PTR Offset = HalpRiscvMdlOffset(Mdl, CurrentVa);
         ULONG Remaining = Length, Chunk;
@@ -552,6 +552,24 @@ HalpRiscvMapTransfer(PDMA_ADAPTER DmaAdapter, PMDL Mdl,
             RtlCopyMemory(HalpRiscvDirectMap(Entry->Target), HalpRiscvDirectMap(Physical), Chunk);
         Physical = Entry->Target;
         Map->Used++;
+    }
+    else if (Adapter->Coherent)
+    {
+        while (Chunk < *Length)
+        {
+            ULONG_PTR NextOffset = Offset + Chunk;
+            ULONG64 NextPhysical;
+            ULONG NextChunk;
+            PMDL Next = Current;
+
+            if (!HalpRiscvMdlFragment(&Next, &NextOffset, *Length - Chunk, &NextPhysical, &NextChunk) ||
+                Next != Current || NextPhysical != Physical + Chunk ||
+                !HalpRiscvDmaTranslate(Adapter, Physical, Chunk + NextChunk, &Bus))
+            {
+                break;
+            }
+            Chunk += NextChunk;
+        }
     }
     if (!HalpRiscvDmaTranslate(Adapter, Physical, Chunk, &Bus))
         goto Fail;

@@ -1561,6 +1561,8 @@ USBPORT_DpcHandler(IN PDEVICE_OBJECT FdoDevice)
 
     FdoExtension = FdoDevice->DeviceExtension;
 
+    USBPORT_FlushDoneTransfers(FdoDevice);
+
     InitializeListHead(&List);
 
     KeAcquireSpinLockAtDpcLevel(&FdoExtension->EndpointListSpinLock);

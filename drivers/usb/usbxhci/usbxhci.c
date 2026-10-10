@@ -14526,7 +14526,13 @@ XHCI_PollEndpoint(PVOID MiniPortExtension,
     PXHCI_EXTENSION Extension = (PXHCI_EXTENSION)MiniPortExtension;
     UNREFERENCED_PARAMETER(EndpointHandle);
 
-    XHCI_PollForWork(Extension, TRUE);
+    if (!Extension || Extension->FatalError)
+        return;
+
+    if (XHCI_EventRingHasPendingTrb(Extension))
+        XHCI_ServiceEventRing(Extension, FALSE, TRUE);
+    else
+        XHCI_DrainDeferredTransferCompletions(Extension);
 }
 
 static VOID NTAPI
