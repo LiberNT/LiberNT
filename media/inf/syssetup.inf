@@ -44,6 +44,10 @@ RegisterDlls = EarlyRegisterDlls
 RegisterDlls = OleControlDlls
 AddReg=Classes
 
+[RegistrationLiveCD]
+RegisterDlls = OleControlDllsCode
+AddReg=Classes
+
 [OleControlDlls]
 11,,activeds.dll,1
 11,,atl.dll,1
@@ -152,6 +156,36 @@ AddReg=Classes
 11,,wuapi.dll,1
 11,wbem,wbemdisp.dll,1
 11,wbem,wbemprox.dll,1
+11,,shellbtrfs.dll,1
+11,,zipfldr.dll,1
+
+[OleControlDllsCode]
+11,,browseui.dll,1
+11,,cryptdlg.dll,1
+11,,cryptnet.dll,1
+11,,winegstreamer.dll,1
+11,,devenum.dll,1
+11,,quartz.dll,1
+11,,devenum.dll,1
+11,,dsound.dll,1
+11,,fontext.dll,1
+11,,mfh264enc.dll,1
+11,,mmdevapi.dll,1
+11,,mscat32.dll,1
+11,,mshtml.dll,3
+11,,msisip.dll,1
+11,,mydocs.dll,1
+11,,qcap.dll,1
+11,,qedit.dll,1
+11,,sendmail.dll,1
+11,,shdocvw.dll,3
+11,,shell32.dll,3
+11,,softpub.dll,1
+11,,urlmon.dll,3
+11,,w32time.dll,1
+11,,windowscodecs.dll,1
+11,,wininet.dll,2
+11,,wintrust.dll,1
 11,,shellbtrfs.dll,1
 11,,zipfldr.dll,1
 

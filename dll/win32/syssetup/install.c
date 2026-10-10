@@ -1267,14 +1267,12 @@ InstallLiveCD(VOID)
     _SEH2_TRY
     {
         if (!SetupInstallFromInfSectionW(NULL,
-                                         hSysSetupInf, L"RegistrationPhase2",
+                                         hSysSetupInf, L"RegistrationLiveCD",
                                          SPINST_ALL,
                                          0, NULL, 0, NULL, NULL, NULL, NULL))
         {
             DPRINT1("SetupInstallFromInfSectionW failed!\n");
         }
-
-        RegisterTypeLibraries(NULL, NULL, hSysSetupInf, L"TypeLibraries");
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {

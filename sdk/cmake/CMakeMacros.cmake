@@ -903,6 +903,42 @@ function(create_registry_hives)
                 DESTINATION reactos
                 NO_CAB FOR bootcd)
 
+    find_program(MKCOMREG_PYTHON_EXECUTABLE NAMES python3 python REQUIRED NO_CMAKE_FIND_ROOT_PATH)
+    set(_syssetup_inf ${CMAKE_SOURCE_DIR}/media/inf/syssetup.inf)
+    set(_comreg_inf ${CMAKE_BINARY_DIR}/boot/bootdata/comreg.inf)
+    set(_comreg_list ${CMAKE_BINARY_DIR}/boot/bootdata/comreg_modules-$<CONFIG>.txt)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_syssetup_inf})
+    file(STRINGS ${_syssetup_inf} _syssetup_lines)
+    set(_comreg_targets "")
+    set(_comreg_modules "")
+    foreach(_line IN LISTS _syssetup_lines)
+        string(STRIP "${_line}" _line)
+        if(_line MATCHES "^11,[^,]*,([^,]+\\.(dll|ocx|tlb|ax)),")
+            set(_comreg_file ${CMAKE_MATCH_1})
+        elseif(_line MATCHES "^([^ ;,=]+\\.(dll|ocx|tlb|ax))$")
+            set(_comreg_file ${CMAKE_MATCH_1})
+        else()
+            continue()
+        endif()
+        get_filename_component(_comreg_name ${_comreg_file} NAME_WLE)
+        string(REPLACE "." "_" _comreg_target_name ${_comreg_name})
+        foreach(_comreg_target ${_comreg_file} ${_comreg_name} ${_comreg_target_name})
+            if(TARGET ${_comreg_target})
+                if(NOT _comreg_target IN_LIST _comreg_targets)
+                    list(APPEND _comreg_targets ${_comreg_target})
+                    string(APPEND _comreg_modules "$<TARGET_FILE_NAME:${_comreg_target}>|$<TARGET_FILE:${_comreg_target}>\n")
+                endif()
+                break()
+            endif()
+        endforeach()
+    endforeach()
+    file(GENERATE OUTPUT ${_comreg_list} CONTENT "${_comreg_modules}")
+    add_custom_command(
+        OUTPUT ${_comreg_inf}
+        COMMAND ${MKCOMREG_PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_syssetup_inf} ${_comreg_list} ${_comreg_inf}
+        DEPENDS ${_comreg_targets} ${_syssetup_inf} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_comreg_list}
+        VERBATIM)
+
     # LiveCD hives
     list(APPEND _livecd_inf_files
         ${_registry_inf}
@@ -929,6 +965,7 @@ function(create_registry_hives)
         get_filename_component(_livecd_extra_registry_inf "${_livecd_extra_registry_inf}" ABSOLUTE BASE_DIR "${REACTOS_BINARY_DIR}")
         list(APPEND _livecd_inf_files ${_livecd_extra_registry_inf})
     endforeach()
+    list(APPEND _livecd_inf_files ${_comreg_inf})
 
     add_custom_command(
         OUTPUT ${CMAKE_BINARY_DIR}/boot/bootdata/system
@@ -977,6 +1014,7 @@ function(create_registry_hives)
         list(APPEND _preinstall_inf_files
             ${CMAKE_SOURCE_DIR}/boot/bootdata/hiveinst.inf)
     endif()
+    list(APPEND _preinstall_inf_files ${_comreg_inf})
 
     add_custom_command(
         OUTPUT ${CMAKE_BINARY_DIR}/boot/bootdata/preinstall/system
