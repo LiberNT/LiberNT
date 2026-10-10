@@ -58,6 +58,7 @@ Bus_FDO_Power (
 	ULONG AcpiState;
 	ACPI_STATUS AcpiStatus;
     SYSTEM_POWER_STATE  oldPowerState;
+    UINT8               SleepTypeA, SleepTypeB;
 
     stack = IoGetCurrentIrpStackLocation (Irp);
     powerType = stack->Parameters.Power.Type;
@@ -96,7 +97,11 @@ Bus_FDO_Power (
     }
       oldPowerState = Data->Common.SystemPowerState;
       Data->Common.SystemPowerState = powerState.SystemState;
-      AcpiStatus = acpi_suspend(AcpiState);
+      if (AcpiState == ACPI_STATE_S5 &&
+          ACPI_FAILURE(AcpiGetSleepTypeData(ACPI_STATE_S5, &SleepTypeA, &SleepTypeB)))
+        AcpiStatus = AE_OK;
+      else
+        AcpiStatus = acpi_suspend(AcpiState);
       if (!ACPI_SUCCESS(AcpiStatus)) {
         DPRINT1("Failed to enter sleep state %d (Status 0x%X)\n",
           AcpiState, AcpiStatus);
