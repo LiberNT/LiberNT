@@ -118,9 +118,9 @@ KdPollBreakIn(VOID)
                 }
 
                 /* Let go of the port */
-                KdpPortUnlock();
                 KdpPortOwnerPrcb = NULL;
                 KeMemoryBarrier();
+                KdpPortUnlock();
             }
             KeLowerIrql(OldIrql);
         }

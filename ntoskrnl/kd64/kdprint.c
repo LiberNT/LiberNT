@@ -834,9 +834,9 @@ KdpPrintCaptured(
     }
 
     KdRestore(FALSE);
-    KiReleaseSpinLock(&KdpDebuggerLock);
     KdpPortOwnerPrcb = NULL;
     KeMemoryBarrier();
+    KiReleaseSpinLock(&KdpDebuggerLock);
 #ifdef _WIN64
     /* A freeze request that arrived while we held the port lock was deferred. */
     KiFreezeIfRequested();
