@@ -254,6 +254,11 @@ VOID
 WINAPI
 BaseProcessStartThunk(VOID);
 
+BOOL
+BasepArchUnwindFrame(
+    _Inout_ PCONTEXT Context,
+    _Out_ PULONG_PTR ReturnAddress);
+
 VOID
 NTAPI
 BasepFreeActivationContextActivationBlock(

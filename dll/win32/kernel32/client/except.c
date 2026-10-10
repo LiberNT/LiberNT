@@ -302,115 +302,22 @@ PrintStackTrace(IN PEXCEPTION_POINTERS ExceptionInfo)
     _dump_context(ContextRecord);
     DbgPrint("Address:\n");
     _print_address(ExceptionRecord->ExceptionAddress);
-#ifdef _M_IX86
-    DbgPrint("Frames:\n");
-
-    _SEH2_TRY
-    {
-        UINT i;
-        PULONG Frame = (PULONG)ContextRecord->Ebp;
-
-        for (i = 0; Frame[1] != 0 && Frame[1] != 0xdeadbeef && i < 128; i++)
-        {
-            if (IsBadReadPtr((PVOID)Frame[1], 4))
-            {
-                DbgPrint("<%s:%x>\n", "[invalid address]", Frame[1]);
-            }
-            else
-            {
-                _print_address((const void*)Frame[1]);
-            }
-
-            if (IsBadReadPtr((PVOID)Frame[0], sizeof(*Frame) * 2))
-                break;
-
-            Frame = (PULONG)Frame[0];
-        }
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        DbgPrint("<error dumping stack trace: 0x%x>\n", _SEH2_GetExceptionCode());
-    }
-    _SEH2_END;
-#elif defined(_M_AMD64)
     DbgPrint("Frames:\n");
 
     _SEH2_TRY
     {
         CONTEXT UnwindContext = *ContextRecord;
-        PRUNTIME_FUNCTION FunctionEntry;
-        ULONG64 ImageBase;
-        ULONG64 EstablisherFrame;
-        ULONG64 PreviousRsp;
-        ULONG64 StackLow = (ULONG64)NtCurrentTeb()->NtTib.StackLimit;
-        ULONG64 StackHigh = (ULONG64)NtCurrentTeb()->NtTib.StackBase;
-        PVOID HandlerData;
+        ULONG_PTR ReturnAddress;
         UINT i;
 
-        for (i = 0; i < 128; i++)
-        {
-            PreviousRsp = UnwindContext.Rsp;
-            FunctionEntry = RtlLookupFunctionEntry(UnwindContext.Rip, &ImageBase, NULL);
-            if (FunctionEntry)
-            {
-                RtlVirtualUnwind(UNW_FLAG_NHANDLER, ImageBase, UnwindContext.Rip, FunctionEntry, &UnwindContext, &HandlerData, &EstablisherFrame, NULL);
-            }
-            else
-            {
-                if (UnwindContext.Rsp < StackLow || UnwindContext.Rsp > StackHigh - sizeof(ULONG64)) break;
-                UnwindContext.Rip = *(PULONG64)UnwindContext.Rsp;
-                UnwindContext.Rsp += sizeof(ULONG64);
-            }
-
-            if (!UnwindContext.Rip || UnwindContext.Rsp <= PreviousRsp || UnwindContext.Rsp > StackHigh) break;
-            _print_address((const void *)UnwindContext.Rip);
-        }
+        for (i = 0; i < 128 && BasepArchUnwindFrame(&UnwindContext, &ReturnAddress); i++)
+            _print_address((const void *)ReturnAddress);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
         DbgPrint("<error dumping stack trace: 0x%x>\n", _SEH2_GetExceptionCode());
     }
     _SEH2_END;
-#elif defined(_M_ARM64)
-    DbgPrint("Frames:\n");
-
-    _SEH2_TRY
-    {
-        CONTEXT UnwindContext = *ContextRecord;
-        PRUNTIME_FUNCTION FunctionEntry;
-        ULONG64 ImageBase;
-        ULONG64 EstablisherFrame;
-        ULONG64 PreviousSp;
-        ULONG64 PreviousPc;
-        ULONG64 StackHigh = (ULONG64)NtCurrentTeb()->NtTib.StackBase;
-        PVOID HandlerData;
-        UINT i;
-
-        for (i = 0; i < 128; i++)
-        {
-            PreviousSp = UnwindContext.Sp;
-            PreviousPc = UnwindContext.Pc;
-            FunctionEntry = RtlLookupFunctionEntry(UnwindContext.Pc, &ImageBase, NULL);
-            if (FunctionEntry)
-            {
-                RtlVirtualUnwind(UNW_FLAG_NHANDLER, ImageBase, UnwindContext.Pc, FunctionEntry, &UnwindContext, &HandlerData, &EstablisherFrame, NULL);
-            }
-            else
-            {
-                UnwindContext.Pc = UnwindContext.Lr;
-            }
-
-            if (!UnwindContext.Pc || UnwindContext.Sp < PreviousSp || UnwindContext.Sp > StackHigh) break;
-            if (UnwindContext.Pc == PreviousPc && UnwindContext.Sp == PreviousSp) break;
-            _print_address((const void *)UnwindContext.Pc);
-        }
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        DbgPrint("<error dumping stack trace: 0x%x>\n", _SEH2_GetExceptionCode());
-    }
-    _SEH2_END;
-#endif
 }
 
 /* GLOBALS ********************************************************************/

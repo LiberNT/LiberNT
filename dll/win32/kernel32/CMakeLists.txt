@@ -136,22 +136,31 @@ if(ARCH STREQUAL "i386")
     list(APPEND ASM_SOURCE
         client/i386/fiber.S
         client/i386/thread.S)
+    list(APPEND SOURCE
+        client/i386/unwind.c)
 elseif(ARCH STREQUAL "amd64")
     list(APPEND ASM_SOURCE
         client/amd64/fiber.S)
+    list(APPEND SOURCE
+        client/amd64/unwind.c)
 elseif(ARCH STREQUAL "arm")
     list(APPEND ASM_SOURCE
         client/arm/fiber.S
         client/arm/thread.S)
+    list(APPEND SOURCE
+        client/nounwind.c)
 elseif(ARCH STREQUAL "arm64")
     list(APPEND SOURCE
-        client/arm64/fiber.c)
+        client/arm64/fiber.c
+        client/arm64/unwind.c)
 elseif(ARCH STREQUAL "riscv64")
     list(APPEND SOURCE
-        client/riscv64/fiber.c)
+        client/riscv64/fiber.c
+        client/riscv64/unwind.c)
 elseif(ARCH STREQUAL "ppc")
     list(APPEND SOURCE
-        client/ppc/fiber.c)
+        client/ppc/fiber.c
+        client/nounwind.c)
 endif()
 
 add_asm_files(kernel32_asm ${ASM_SOURCE})
