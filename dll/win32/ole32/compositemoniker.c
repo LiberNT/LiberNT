@@ -1051,6 +1051,23 @@ static HRESULT composite_get_moniker_comparison_data(IMoniker *moniker,
     return hr;
 }
 
+#ifdef __REACTOS__
+static HRESULT composite_get_right_comparison_data(IMoniker *moniker,
+        BYTE *data, ULONG max_len, ULONG *ret_len)
+{
+    IROTData *rot_data;
+
+    if (FAILED(IMoniker_QueryInterface(moniker, &IID_IROTData, (void **)&rot_data)))
+    {
+        *ret_len = 0;
+        return S_OK;
+    }
+    IROTData_Release(rot_data);
+
+    return composite_get_moniker_comparison_data(moniker, data, max_len, ret_len);
+}
+#endif
+
 static HRESULT WINAPI CompositeMonikerROTDataImpl_GetComparisonData(IROTData *iface,
         BYTE *data, ULONG max_len, ULONG *ret_len)
 {
@@ -1080,7 +1097,11 @@ static HRESULT WINAPI CompositeMonikerROTDataImpl_GetComparisonData(IROTData *if
     }
 
     len = 0;
+#ifdef __REACTOS__
+    hr = composite_get_right_comparison_data(moniker->right, NULL, 0, &len);
+#else
     hr = composite_get_moniker_comparison_data(moniker->right, NULL, 0, &len);
+#endif
     if (SUCCEEDED(hr) || hr == E_OUTOFMEMORY)
         *ret_len += len;
     else
@@ -1105,7 +1126,11 @@ static HRESULT WINAPI CompositeMonikerROTDataImpl_GetComparisonData(IROTData *if
     }
     data += len;
     max_len -= len;
+#ifdef __REACTOS__
+    if (FAILED(hr = composite_get_right_comparison_data(moniker->right, data, max_len, &len)))
+#else
     if (FAILED(hr = composite_get_moniker_comparison_data(moniker->right, data, max_len, &len)))
+#endif
     {
         WARN("Failed to get comparison data for right component, hr %#lx.\n", hr);
         return hr;
