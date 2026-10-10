@@ -75,7 +75,7 @@ DriverEntry(_In_ PDRIVER_OBJECT DriverObject,
     DriverObject->MajorFunction[IRP_MJ_LOCK_CONTROL]             = NtfsFsdLockControl;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL]           = NtfsFsdDeviceControl;
     DriverObject->MajorFunction[IRP_MJ_SHUTDOWN]                 = NtfsFsdShutdown;
-    //DriverObject->MajorFunction[IRP_MJ_PNP]                      = NtfsFsdPnp;
+    DriverObject->MajorFunction[IRP_MJ_PNP]                      = NtfsFsdPnp;
 
     // Do not set DO_DIRECT_IO/DO_BUFFERED_IO flags on the FS control device
     // The I/O manager and Cache Manager will decide buffering for file I/O
@@ -862,9 +862,8 @@ NtfsFsdCleanup(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             CcUninitializeCacheMap(IrpSp->FileObject, NULL, NULL);
     }
 
-    // TODO: How do we determine when the volume needs to get cleaned up?
-
     Irp->IoStatus.Information = STATUS_SUCCESS;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    NtfsReleaseDismountedVolume(VolumeDeviceObject);
     return STATUS_SUCCESS;
 }

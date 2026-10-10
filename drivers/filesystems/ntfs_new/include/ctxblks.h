@@ -152,6 +152,13 @@ NtfsForgetMissingName(_In_ PVolumeContextBlock VolCB,
 VOID
 NtfsForgetAllMissingNames(_In_ PVolumeContextBlock VolCB);
 
+NTSTATUS
+NtfsFlushVolume(_In_ PVolumeContextBlock VolCB,
+                _In_ BOOLEAN Purge);
+
+VOID
+NtfsReleaseDismountedVolume(_In_ PDEVICE_OBJECT VolumeDeviceObject);
+
 PNtfsCachedRecord
 NtfsAcquireCachedRecord(_In_ PVolumeContextBlock VolCB,
                         _In_reads_(Length) PCWSTR Name,

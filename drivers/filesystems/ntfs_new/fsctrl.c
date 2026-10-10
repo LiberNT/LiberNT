@@ -1267,7 +1267,6 @@ NtfsGetNtfsFileRecord(
     return STATUS_SUCCESS;
 }
 
-static
 NTSTATUS
 NtfsFlushVolume(
     _In_ PVolumeContextBlock VolCB,
