@@ -31,25 +31,71 @@ KiRiscvUpdateInterruptMask(_In_ PKPCR Pcr)
         __asm__ __volatile__("csrsi sip, 2" ::: "memory");
     }
 
+    Pcr->MaskIrql = Irql;
     __asm__ __volatile__("csrw sie, %0" :: "r"(Mask) : "memory");
     /* Only the interrupt handler acknowledges SSIP. Clearing it here could
      * lose a remote hart's doorbell racing with a local IRQL change. */
+}
+
+VOID
+NTAPI
+KiRiscvSynchronizeInterruptMask(VOID)
+{
+    KiRiscvUpdateInterruptMask(KeGetPcr());
+}
+
+C_ASSERT(FIELD_OFFSET(KPCR, SoftwareInterrupts) < 2048);
+C_ASSERT(FIELD_OFFSET(KPCR, MaskIrql) < 2048);
+
+FORCEINLINE
+KIRQL
+KiRiscvGetMaskIrql(VOID)
+{
+    ULONG_PTR Irql;
+
+    __asm__ __volatile__("lbu %0, %1(gp)"
+                         : "=r"(Irql)
+                         : "i"(FIELD_OFFSET(KPCR, MaskIrql))
+                         : "memory");
+    return (KIRQL)Irql;
+}
+
+FORCEINLINE
+ULONG_PTR
+KiRiscvPendingSoftwareInterrupts(VOID)
+{
+    ULONG_PTR Pending;
+
+    __asm__ __volatile__("lbu %0, %1(gp)"
+                         : "=r"(Pending)
+                         : "i"(FIELD_OFFSET(KPCR, SoftwareInterrupts))
+                         : "memory");
+    return Pending;
+}
+
+static
+DECLSPEC_NOINLINE
+VOID
+KiRiscvChangeIrqlMasked(_In_ KIRQL NewIrql)
+{
+    BOOLEAN Interrupts = KeDisableInterrupts();
+    PKPCR Pcr = KeGetPcr();
+
+    Pcr->CurrentIrql = NewIrql;
+    KiRiscvUpdateInterruptMask(Pcr);
+    KeRestoreInterrupts(Interrupts);
 }
 
 KIRQL
 FASTCALL
 KfRaiseIrql(_In_ KIRQL NewIrql)
 {
-    BOOLEAN Interrupts = KeDisableInterrupts();
-    PKPCR Pcr = KeGetPcr();
-    KIRQL OldIrql = Pcr->CurrentIrql;
+    KIRQL OldIrql = KiRiscvGetCurrentIrql();
 
     if ((NewIrql < OldIrql) || (NewIrql > HIGH_LEVEL))
         KeBugCheckEx(IRQL_NOT_GREATER_OR_EQUAL, NewIrql, OldIrql, (ULONG_PTR)_ReturnAddress(), 0);
 
-    Pcr->CurrentIrql = NewIrql;
-    KiRiscvUpdateInterruptMask(Pcr);
-    KeRestoreInterrupts(Interrupts);
+    KiRiscvSetCurrentIrql(NewIrql);
     return OldIrql;
 }
 
@@ -57,16 +103,17 @@ VOID
 FASTCALL
 KfLowerIrql(_In_ KIRQL NewIrql)
 {
-    BOOLEAN Interrupts = KeDisableInterrupts();
-    PKPCR Pcr = KeGetPcr();
-    KIRQL OldIrql = Pcr->CurrentIrql;
+    KIRQL OldIrql = KiRiscvGetCurrentIrql();
 
     if (NewIrql > OldIrql)
         KeBugCheckEx(IRQL_NOT_LESS_OR_EQUAL, NewIrql, OldIrql, (ULONG_PTR)_ReturnAddress(), 0);
 
-    Pcr->CurrentIrql = NewIrql;
-    KiRiscvUpdateInterruptMask(Pcr);
-    KeRestoreInterrupts(Interrupts);
+    KiRiscvSetCurrentIrql(NewIrql);
+    if ((KiRiscvGetMaskIrql() > NewIrql) ||
+        ((NewIrql < DISPATCH_LEVEL) && (KiRiscvPendingSoftwareInterrupts() >> (NewIrql + 1))))
+    {
+        KiRiscvChangeIrqlMasked(NewIrql);
+    }
 }
 
 KIRQL
@@ -151,7 +198,8 @@ KiRiscvRequestSoftwareInterrupt(_In_ KIRQL Irql)
         KeBugCheckEx(IRQL_NOT_GREATER_OR_EQUAL, Irql, Pcr->CurrentIrql, 0, 0);
 
     Pcr->SoftwareInterrupts |= 1 << Irql;
-    KiRiscvUpdateInterruptMask(Pcr);
+    if (Pcr->CurrentIrql < Irql)
+        __asm__ __volatile__("csrsi sip, 2" ::: "memory");
     KeRestoreInterrupts(Interrupts);
 }
 
@@ -166,7 +214,6 @@ KiRiscvClearSoftwareInterrupt(_In_ KIRQL Irql)
         KeBugCheckEx(IRQL_NOT_GREATER_OR_EQUAL, Irql, Pcr->CurrentIrql, 0, 0);
 
     Pcr->SoftwareInterrupts &= ~(1 << Irql);
-    KiRiscvUpdateInterruptMask(Pcr);
     KeRestoreInterrupts(Interrupts);
 }
 

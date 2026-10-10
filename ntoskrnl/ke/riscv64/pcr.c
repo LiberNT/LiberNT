@@ -9,23 +9,6 @@
 
 static DECLSPEC_ALIGN(16) UCHAR KiRiscvPanicStack[KERNEL_STACK_SIZE];
 
-PKPCR
-NTAPI
-KeGetPcr(VOID)
-{
-    PKPCR Pcr;
-
-    __asm__ __volatile__("csrr %0, sscratch" : "=r"(Pcr) :: "memory");
-    return Pcr;
-}
-
-PKPRCB
-NTAPI
-KeGetCurrentPrcb(VOID)
-{
-    return &KeGetPcr()->Prcb;
-}
-
 ULONG
 NTAPI
 KeGetCurrentProcessorNumber(VOID)
@@ -33,15 +16,12 @@ KeGetCurrentProcessorNumber(VOID)
     return KeGetCurrentPrcb()->Number;
 }
 
+#undef KeGetCurrentIrql
 KIRQL
 NTAPI
 KeGetCurrentIrql(VOID)
 {
-    BOOLEAN Enabled = KeDisableInterrupts();
-    KIRQL Irql = KeGetPcr()->CurrentIrql;
-
-    KeRestoreInterrupts(Enabled);
-    return Irql;
+    return KiRiscvGetCurrentIrql();
 }
 
 BOOLEAN
@@ -71,7 +51,7 @@ KiRiscvInitializeBootPcr(
 
     /* Publish only initialized queues and processor identity. sscratch is
      * reserved from here onward; trap entry must restore it before C code. */
-    __asm__ __volatile__("csrw sie, zero\n\tcsrw sscratch, %0" :: "r"(Pcr) : "memory");
+    __asm__ __volatile__("csrw sie, zero\n\tcsrw sscratch, %0\n\tmv gp, %0" :: "r"(Pcr) : "memory");
     KiProcessorBlock[0] = Prcb;
     KeActiveProcessors = 1;
     KeMemoryBarrier();

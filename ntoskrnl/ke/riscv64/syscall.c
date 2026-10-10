@@ -12,6 +12,8 @@
 #define KI_RISCV_MAX_SERVICE_ARGUMENTS 32
 C_ASSERT(KI_RISCV_MAX_SERVICE_ARGUMENTS * sizeof(ULONG_PTR) == 256);
 ULONG_PTR NTAPI KiRiscvInvokeSystemService(PVOID Routine, PULONG_PTR Arguments);
+typedef ULONG_PTR (NTAPI *PKI_RISCV_REGISTER_SERVICE)(ULONG_PTR, ULONG_PTR, ULONG_PTR, ULONG_PTR,
+                                                      ULONG_PTR, ULONG_PTR, ULONG_PTR, ULONG_PTR);
 NTSTATUS NTAPI PsConvertToGuiThread(VOID);
 
 static
@@ -116,6 +118,27 @@ KiRiscvDeleteKernelStack(
 static
 DECLSPEC_NOINLINE
 ULONG_PTR
+KiRiscvDispatchStackService(
+    _In_ PKTRAP_FRAME Frame,
+    _In_ PVOID Routine,
+    _In_ ULONG Count)
+{
+    ULONG_PTR Arguments[KI_RISCV_MAX_SERVICE_ARGUMENTS] = {0};
+    ULONG Argument;
+    NTSTATUS Status;
+
+    for (Argument = 0; Argument < 8; ++Argument)
+        Arguments[Argument] = Frame->Context.X[10 + Argument];
+    if (Frame->Context.Sp & 15) return (LONG_PTR)STATUS_DATATYPE_MISALIGNMENT;
+    Status = KiRiscvCopyFromUser(&Arguments[8], (PVOID)Frame->Context.Sp, (Count - 8) * sizeof(ULONG_PTR));
+    if (!NT_SUCCESS(Status)) return (LONG_PTR)Status;
+
+    return KiRiscvInvokeSystemService(Routine, Arguments);
+}
+
+static
+DECLSPEC_NOINLINE
+ULONG_PTR
 KiRiscvDispatchSystemService(_Inout_ PKTRAP_FRAME Frame)
 {
     ULONG64 Service = Frame->Context.T0;
@@ -123,9 +146,7 @@ KiRiscvDispatchSystemService(_Inout_ PKTRAP_FRAME Frame)
     ULONG Index = Service & SERVICE_NUMBER_MASK;
     PKTHREAD Thread = KeGetCurrentThread();
     PKSERVICE_TABLE_DESCRIPTOR Descriptor;
-    ULONG_PTR Arguments[KI_RISCV_MAX_SERVICE_ARGUMENTS] = {0};
-    ULONG Count, Argument;
-    NTSTATUS Status;
+    ULONG Count;
 
     if (Service == RISCV_DEBUG_SERVICE_CALL)
         return KiRiscvUserDebugService(Frame);
@@ -137,21 +158,19 @@ KiRiscvDispatchSystemService(_Inout_ PKTRAP_FRAME Frame)
     if (!Descriptor->Base || !Descriptor->Number || (Index >= Descriptor->Limit))
         return (LONG_PTR)STATUS_INVALID_SYSTEM_SERVICE;
     Count = Descriptor->Number[Index];
-    if ((Count % sizeof(ULONG_PTR)) || (Count / sizeof(ULONG_PTR) > RTL_NUMBER_OF(Arguments)) ||
+    if ((Count % sizeof(ULONG_PTR)) || (Count / sizeof(ULONG_PTR) > KI_RISCV_MAX_SERVICE_ARGUMENTS) ||
         (Descriptor->Base[Index] < (ULONG_PTR)MmSystemRangeStart))
         return (LONG_PTR)STATUS_INVALID_SYSTEM_SERVICE;
     Count /= sizeof(ULONG_PTR);
 
-    for (Argument = 0; (Argument < Count) && (Argument < 8); ++Argument)
-        Arguments[Argument] = Frame->Context.X[10 + Argument];
-    if (Count > 8)
+    if (Count <= 8)
     {
-        if (Frame->Context.Sp & 15) return (LONG_PTR)STATUS_DATATYPE_MISALIGNMENT;
-        Status = KiRiscvCopyFromUser(&Arguments[8], (PVOID)Frame->Context.Sp, (Count - 8) * sizeof(ULONG_PTR));
-        if (!NT_SUCCESS(Status)) return (LONG_PTR)Status;
+        return ((PKI_RISCV_REGISTER_SERVICE)Descriptor->Base[Index])(
+            Frame->Context.X[10], Frame->Context.X[11], Frame->Context.X[12], Frame->Context.X[13],
+            Frame->Context.X[14], Frame->Context.X[15], Frame->Context.X[16], Frame->Context.X[17]);
     }
 
-    return KiRiscvInvokeSystemService((PVOID)Descriptor->Base[Index], Arguments);
+    return KiRiscvDispatchStackService(Frame, (PVOID)Descriptor->Base[Index], Count);
 }
 
 DECLSPEC_NORETURN
@@ -207,5 +226,5 @@ Exit:
         KeBugCheckEx(IRQL_GT_ZERO_AT_SYSTEM_SERVICE, Frame->Context.T0, KeGetCurrentIrql(), 0, 0);
     if ((Thread->ApcStateIndex != OriginalApcEnvironment) || Thread->CombinedApcDisable)
         KeBugCheckEx(APC_INDEX_MISMATCH, Frame->Context.T0, Thread->ApcStateIndex, Thread->CombinedApcDisable, 0);
-    KiRiscvReturnToUser(Frame);
+    KiRiscvServiceExit(Frame);
 }

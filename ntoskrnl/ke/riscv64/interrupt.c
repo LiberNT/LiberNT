@@ -7,11 +7,11 @@
  * Entered from KiRiscvTrapHandler with sstatus.SIE clear, the frame on the
  * interrupted kernel stack and Pcr->CurrentIrql still at the interrupted
  * level (TrapFrame->PreviousIrql). Every source is dispatched at its own
- * IRQL through KfRaiseIrql/KfLowerIrql, so `sie` is always recomputed from
- * the IRQL model before sret. Nested traps are allowed at any time; another
- * interrupt can only nest while SIE is deliberately re-enabled around the
- * DISPATCH_LEVEL and APC_LEVEL work below, where the mask admits nothing
- * but strictly higher sources.
+ * IRQL through KfRaiseIrql/KfLowerIrql. Raising the IRQL does not write
+ * `sie`: a source that arrives at or below the current IRQL is masked in
+ * `sie` then, left pending, and delivered when the IRQL is lowered. Nested
+ * traps are allowed at any time; another interrupt can only nest while SIE
+ * is deliberately re-enabled.
  *
  *   code 5 (STIP): clock. Raise to CLOCK_LEVEL, HAL rearms and updates time.
  *   code 1 (SSIP): APC/DPC request channel (Pcr->SoftwareInterrupts).
@@ -201,7 +201,10 @@ KiRiscvExternalInterrupt(_Inout_ PKTRAP_FRAME TrapFrame)
     BOOLEAN Handled;
 
     if (KeGetCurrentIrql() >= SYNCH_LEVEL)
-        KiRiscvTrapStop(TrapFrame);
+    {
+        KiRiscvSynchronizeInterruptMask();
+        return;
+    }
     Source = HalpRiscvClaimPlicInterrupt();
     if (Source == 0)
         return; /* A claim of zero is a PLIC spurious notification. */
@@ -312,6 +315,12 @@ KiRiscvDeliverSoftwareInterrupts(
     PKPCR Pcr = KeGetPcr();
     KIRQL Irql;
 
+    if (Pcr->CurrentIrql >= IPI_LEVEL)
+    {
+        KiRiscvSynchronizeInterruptMask();
+        return;
+    }
+
     /* Acknowledge first: mask updates re-raise SSIP when a deferred local
      * APC/DPC becomes eligible. Remote requests remain in RequestSummary. */
     __asm__ __volatile__("csrci sip, 2" ::: "memory");
@@ -358,10 +367,11 @@ KiRiscvClockInterrupt(
 {
     KIRQL OldIrql;
 
-    /* The mask clears STIE at CLOCK_LEVEL and above: delivery there means
-     * `sie` and Pcr->CurrentIrql disagree. */
     if (KeGetCurrentIrql() >= CLOCK_LEVEL)
-        KiRiscvTrapStop(TrapFrame);
+    {
+        KiRiscvSynchronizeInterruptMask();
+        return;
+    }
 
     /* The HAL rearms the deadline (which clears STIP) and updates time. */
     OldIrql = KfRaiseIrql(CLOCK_LEVEL);
@@ -377,7 +387,10 @@ KiRiscvProfileInterrupt(
     KIRQL OldIrql;
 
     if (KeGetCurrentIrql() >= PROFILE_LEVEL)
-        KiRiscvTrapStop(TrapFrame);
+    {
+        KiRiscvSynchronizeInterruptMask();
+        return;
+    }
 
     OldIrql = KfRaiseIrql(PROFILE_LEVEL);
     HalpRiscvProfileInterrupt(TrapFrame);

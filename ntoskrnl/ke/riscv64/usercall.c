@@ -181,6 +181,28 @@ Retry:
 DECLSPEC_NORETURN
 VOID
 NTAPI
+KiRiscvServiceExit(_Inout_ PKTRAP_FRAME Frame)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+
+    _disable();
+    if (Thread->ApcState.UserApcPending ||
+        !KiRiscvUserControlAddress(Frame->Context.Pc) || (Frame->Context.Pc & 1) ||
+        !KiRiscvUserControlAddress(Frame->Context.Sp) || (Frame->Context.Sp & 15))
+    {
+        _enable();
+        KiRiscvReturnToUser(Frame);
+    }
+
+    Frame->Sstatus = RISCV_USER_SSTATUS | KiRiscvReadVectorStatus();
+    Thread->PreviousMode = UserMode;
+    Thread->TrapFrame = Frame->PreviousTrapFrame;
+    KiRiscvRestoreTrapFrame(Frame);
+}
+
+DECLSPEC_NORETURN
+VOID
+NTAPI
 KiRiscvStartUserThread(VOID)
 {
     PKTHREAD Thread = KeGetCurrentThread();

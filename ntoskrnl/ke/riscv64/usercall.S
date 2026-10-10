@@ -71,7 +71,6 @@ KiRiscvCallbackReturn:
     .irp n,1,2,3,4,5,6,7,8,9,10,11
     ld s\n, CoS1 + 8 * (\n - 1)(sp)
     .endr
-    ld gp, CoGp(sp)
     ld tp, CoTp(sp)
     ld s0, CoS0(sp)
     ld ra, CoRa(sp)

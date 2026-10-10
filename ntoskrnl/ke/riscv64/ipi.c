@@ -25,8 +25,12 @@ VOID FASTCALL KiIpiSend(KAFFINITY Targets, ULONG Request)
     Targets = Remaining;
     while (BitScanForwardAffinity(&Number, Remaining))
     {
-        InterlockedBitTestAndSet(&KiProcessorBlock[Number]->RequestSummary, Request);
+        PKPRCB Prcb = KiProcessorBlock[Number];
+
+        InterlockedBitTestAndSet(&Prcb->RequestSummary, Request);
         Remaining &= ~AFFINITY_MASK(Number);
+        if ((Request != IPI_FREEZE) && CONTAINING_RECORD(Prcb, KPCR, Prcb)->IdlePolling)
+            Targets &= ~AFFINITY_MASK(Number);
     }
     if (Targets) HalRequestIpi(Targets);
 }

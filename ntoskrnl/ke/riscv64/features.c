@@ -291,6 +291,27 @@ KiRiscvQueryFeatureFlags(VOID)
 
 VOID
 NTAPI
+KiRiscvEnableUserTimeCounter(VOID)
+{
+    __asm__ __volatile__("csrs 0x106, %0" :: "r"((ULONG_PTR)RISCV_SCOUNTEREN_TM) : "memory");
+}
+
+VOID
+NTAPI
+KiRiscvEnableUserCacheBlockOperations(VOID)
+{
+    ULONG_PTR Enable = 0;
+
+    if (KiRiscvProcessorFeatures.Flags & KI_RISCV_FEATURE_ZICBOM)
+        Enable |= RISCV_SENVCFG_CBIE_FLUSH | RISCV_SENVCFG_CBCFE;
+    if (KiRiscvProcessorFeatures.Flags & KI_RISCV_FEATURE_ZICBOZ)
+        Enable |= RISCV_SENVCFG_CBZE;
+    if (Enable != 0)
+        __asm__ __volatile__("csrs 0x10a, %0" :: "r"(Enable) : "memory");
+}
+
+VOID
+NTAPI
 KiRiscvSaveProcessorClock(_In_ PKPRCB Prcb)
 {
     ULONG64 Frequency = KiRiscvProcessorFeatures.TimebaseFrequency;

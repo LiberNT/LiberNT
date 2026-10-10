@@ -80,6 +80,7 @@ KiRiscvTrapEntry:
     .irp n,1,3,4,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
     sd x\n, CxX + 8 * \n(t0)
     .endr
+    mv gp, sp
     sd zero, CxX + 8 * 0(t0)
     ld t1, PcTrapStack(sp)
     sd t1, CxX + 8 * 2(t0)
@@ -158,6 +159,10 @@ KiRiscvTrapHandlerReturn:
     ld t1, TfSstatus(sp)
     andi t1, t1, ~SSTATUS_SIE
     csrw sstatus, t1
+    andi t1, t1, SSTATUS_SPP
+    bnez t1, .Lrestore_pc
+    ld gp, CxX + 8 * 3(sp)
+.Lrestore_pc:
     ld t1, CxPc(sp)
     csrw sepc, t1
     lw t1, CxFlags(sp)
@@ -171,7 +176,7 @@ KiRiscvTrapHandlerReturn:
     fld f\n, CxF + 8 * \n(sp)
     .endr
 .Lrestore_int:
-    .irp n,1,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+    .irp n,1,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
     ld x\n, CxX + 8 * \n(sp)
     .endr
     /* An SC clears any reservation even when it fails. The already-consumed
@@ -192,6 +197,7 @@ KiRiscvRestoreTrapFrame:
     .irp n,0,1,3,4,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
     sd x\n, PcPanicFrame + CxX + 8 * \n(sp)
     .endr
+    mv gp, sp
     ld t0, PcTrapStack(sp)
     sd t0, PcPanicFrame + CxX + 8 * 2(sp)
     ld t0, PcTrapScratch(sp)

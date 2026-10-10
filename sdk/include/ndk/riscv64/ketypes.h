@@ -256,13 +256,16 @@ struct _KPRCB
     volatile ULONG IpiFrozen;
 };
 
-/* Kernel-owned resident storage, addressed by sscratch in supervisor code.
- * User tp is never used to locate this structure. */
+/* Kernel-owned resident storage, addressed by gp in supervisor code (sscratch
+ * holds the same address for trap entry). User tp is never used to locate
+ * this structure. */
 struct _KPCR
 {
     ULONG_PTR HartId;
     volatile KIRQL CurrentIrql;
     UCHAR SoftwareInterrupts;
+    KIRQL MaskIrql;
+    volatile UCHAR IdlePolling;
     ULONG_PTR InterruptEnable;
     PVOID PanicStack;
     ULONG_PTR TrapScratch;
@@ -273,15 +276,26 @@ struct _KPCR
     KPRCB Prcb;
     /* Debugger version block published by KdInitSystem (shared kd64 code). */
     PVOID KdVersionBlock;
+    volatile LONG FenceState;
 };
 
 /* Startup must install the PCR before calling these accessors. */
-#ifdef __cplusplus
-extern "C" {
-#endif
-PKPCR NTAPI KeGetPcr(VOID);
-PKPRCB NTAPI KeGetCurrentPrcb(VOID);
-#ifdef __cplusplus
+#ifndef NTOS_MODE_USER
+FORCEINLINE
+PKPCR
+KeGetPcr(VOID)
+{
+    PKPCR Pcr;
+
+    __asm__ __volatile__("mv %0, gp" : "=r"(Pcr));
+    return Pcr;
+}
+
+FORCEINLINE
+PKPRCB
+KeGetCurrentPrcb(VOID)
+{
+    return &KeGetPcr()->Prcb;
 }
 #endif
 

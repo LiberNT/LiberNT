@@ -346,6 +346,8 @@ KiRiscvSystemStartup(
     KiRiscvConsoleInitialize(LoaderBlock);
     KiRiscvIdentifyProcessor(LoaderBlock);
     KiRiscvInitializeVector();
+    KiRiscvEnableUserCacheBlockOperations();
+    KiRiscvEnableUserTimeCounter();
 
     InitialProcess = (PKPROCESS)(ULONG_PTR)LoaderBlock->Process;
     InitialThread = (PKTHREAD)(ULONG_PTR)LoaderBlock->Thread;
@@ -472,6 +474,7 @@ KiInitMachineDependent(VOID)
 {
     ULONG_PTR Satp, Vector;
     PKPCR Pcr = KeGetPcr();
+    LARGE_INTEGER Frequency;
 
     __asm__ __volatile__("csrr %0, satp\n\tcsrr %1, stvec"
                          : "=r"(Satp), "=r"(Vector) :: "memory");
@@ -486,5 +489,15 @@ KiInitMachineDependent(VOID)
                      Satp,
                      Vector,
                      (ULONG_PTR)Pcr);
+    }
+
+    Frequency.QuadPart = 0;
+    KeQueryPerformanceCounter(&Frequency);
+    if (Frequency.QuadPart != 0)
+    {
+        MmWriteableSharedUserData->QpcFrequency = Frequency.QuadPart;
+        MmWriteableSharedUserData->QpcBias = 0;
+        KeMemoryBarrier();
+        *(volatile USHORT *)&MmWriteableSharedUserData->QpcData = KI_RISCV_QPC_BYPASS_ENABLED;
     }
 }

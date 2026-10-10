@@ -40,6 +40,11 @@ KiRiscvCallUserMode(
 /* NT currently permits supervisor data access to probed user buffers. User
  * contexts cannot supply these CSRs, enable MXR, or select supervisor mode. */
 #define RISCV_USER_SSTATUS (RISCV_SSTATUS_UXL64 | RISCV_SSTATUS_FS | RISCV_SSTATUS_SUM | RISCV_SSTATUS_SPIE)
+#define RISCV_SENVCFG_CBIE_FLUSH (1ULL << 4)
+#define RISCV_SENVCFG_CBCFE      (1ULL << 6)
+#define RISCV_SENVCFG_CBZE       (1ULL << 7)
+#define RISCV_SCOUNTEREN_TM      (1ULL << 1)
+#define KI_RISCV_QPC_BYPASS_ENABLED 0x0001
 #define RISCV_SIE_SSIE     (1ULL << 1)
 #define RISCV_SIE_STIE     (1ULL << 5)
 #define RISCV_SIE_SEIE     (1ULL << 9)
@@ -253,6 +258,13 @@ VOID NTAPI KiRiscvRundownVectorState(_In_ PKTHREAD Thread);
 struct _RISCV_FDT;
 VOID NTAPI KiRiscvCaptureCacheTopology(_In_ const struct _RISCV_FDT *Fdt, _In_ ULONG Cpus);
 ULONG NTAPI KiRiscvQueryFeatureFlags(VOID);
+VOID NTAPI KiRiscvEnableUserCacheBlockOperations(VOID);
+VOID NTAPI KiRiscvEnableUserTimeCounter(VOID);
+VOID NTAPI KiRiscvSynchronizeInterruptMask(VOID);
+#define KI_RISCV_FENCE_TLB      0x00000001L
+#define KI_RISCV_FENCE_ICACHE   0x00000002L
+#define KI_RISCV_FENCE_SLEEPING ((LONG)0x80000000L)
+KAFFINITY NTAPI KiRiscvDeferSleepingFences(_In_ KAFFINITY Targets, _In_ LONG Request);
 ULONG NTAPI KiRiscvQueryCacheBlockSize(VOID);
 BOOLEAN NTAPI KiRiscvIsPhysicalCached(_In_ ULONG64 PhysicalAddress);
 BOOLEAN NTAPI KiRiscvFlushDmaRange(_In_ ULONG64 PhysicalAddress, _In_ SIZE_T Length, _In_ BOOLEAN Invalidate);
@@ -297,6 +309,7 @@ NTSTATUS NTAPI KiRiscvReadMemory(PVOID Destination, const VOID *Source, SIZE_T L
 NTSTATUS NTAPI KiRiscvReadCurrentProcess(PVOID Source, PVOID Destination, SIZE_T Length, PSIZE_T Returned);
 DECLSPEC_NORETURN VOID NTAPI KiRiscvRestoreTrapFrame(PKTRAP_FRAME Frame);
 DECLSPEC_NORETURN VOID NTAPI KiRiscvReturnToUser(PKTRAP_FRAME Frame);
+DECLSPEC_NORETURN VOID NTAPI KiRiscvServiceExit(PKTRAP_FRAME Frame);
 DECLSPEC_NORETURN VOID NTAPI KiRiscvStartUserThread(VOID);
 DECLSPEC_NORETURN VOID KiExceptionExit(PKTRAP_FRAME TrapFrame, PKEXCEPTION_FRAME ExceptionFrame);
 DECLSPEC_NORETURN VOID NTAPI KiRiscvSystemService(PKTRAP_FRAME Frame);
@@ -304,18 +317,45 @@ DECLSPEC_NORETURN VOID NTAPI KiRiscvSystemService(PKTRAP_FRAME Frame);
 }
 #endif
 
+C_ASSERT(FIELD_OFFSET(KPCR, Prcb.CurrentThread) < 2048);
+
 FORCEINLINE
 PKTHREAD
 _KeGetCurrentThread(VOID)
 {
-    BOOLEAN Enabled = KeDisableInterrupts();
-    PKTHREAD Thread = KeGetCurrentPrcb()->CurrentThread;
+    PKTHREAD Thread;
 
-    /* Reading sscratch and dereferencing the PCR are separate instructions.
-     * Keep a reschedule from migrating us between those two operations. */
-    KeRestoreInterrupts(Enabled);
+    __asm__ __volatile__("ld %0, %1(gp)"
+                         : "=r"(Thread)
+                         : "i"(FIELD_OFFSET(KPCR, Prcb.CurrentThread))
+                         : "memory");
     return Thread;
 }
+
+FORCEINLINE
+KIRQL
+KiRiscvGetCurrentIrql(VOID)
+{
+    ULONG_PTR Irql;
+
+    __asm__ __volatile__("lbu %0, %1(gp)"
+                         : "=r"(Irql)
+                         : "i"(FIELD_OFFSET(KPCR, CurrentIrql))
+                         : "memory");
+    return (KIRQL)Irql;
+}
+
+FORCEINLINE
+VOID
+KiRiscvSetCurrentIrql(_In_ KIRQL Irql)
+{
+    __asm__ __volatile__("sb %0, %1(gp)"
+                         :
+                         : "r"((ULONG_PTR)Irql), "i"(FIELD_OFFSET(KPCR, CurrentIrql))
+                         : "memory");
+}
+
+#define KeGetCurrentIrql KiRiscvGetCurrentIrql
 
 FORCEINLINE
 PKTRAP_FRAME

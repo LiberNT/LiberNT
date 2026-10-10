@@ -16,6 +16,27 @@ KeFlushCurrentTb(VOID)
     __asm__ __volatile__("sfence.vma zero, zero" ::: "memory");
 }
 
+KAFFINITY
+NTAPI
+KiRiscvDeferSleepingFences(_In_ KAFFINITY Targets, _In_ LONG Request)
+{
+    KAFFINITY Remaining = Targets;
+    ULONG Number;
+
+    while (BitScanForwardAffinity(&Number, Remaining))
+    {
+        PKPCR Pcr = CONTAINING_RECORD(KiProcessorBlock[Number], KPCR, Prcb);
+
+        Remaining &= ~AFFINITY_MASK(Number);
+        if ((ReadNoFence(&Pcr->FenceState) & KI_RISCV_FENCE_SLEEPING) &&
+            (InterlockedOr(&Pcr->FenceState, Request) & KI_RISCV_FENCE_SLEEPING))
+        {
+            Targets &= ~AFFINITY_MASK(Number);
+        }
+    }
+    return Targets;
+}
+
 VOID
 NTAPI
 KiIpiSendTbFlush(KAFFINITY Targets, PVOID Address, ULONG Pages)
@@ -35,6 +56,7 @@ KiIpiSendTbFlush(KAFFINITY Targets, PVOID Address, ULONG Pages)
                 KeInvalidateTlbEntry((PUCHAR)Address + (SIZE_T)Index * PAGE_SIZE);
     }
     Targets &= ~Self;
+    Targets = KiRiscvDeferSleepingFences(Targets, KI_RISCV_FENCE_TLB);
     if (Targets)
         HalpRiscvRemoteFence(Targets, Pages ? Address : NULL,
                             Pages ? (SIZE_T)Pages * PAGE_SIZE : 0, FALSE);

@@ -22,9 +22,11 @@ KiRiscvStartProcessor(KI_RISCV_AP *Ap)
     PKTHREAD Thread = &Ap->Thread.Tcb;
     PKPROCESS Process = (PKPROCESS)KeLoaderBlock->Process;
 
-    __asm__ __volatile__("csrw sscratch, %0" :: "r"(Pcr) : "memory");
+    __asm__ __volatile__("csrw sscratch, %0\n\tmv gp, %0" :: "r"(Pcr) : "memory");
     if (!KiRiscvInitializeTrapVector())
         KeBugCheckEx(HAL_INITIALIZATION_FAILED, Prcb->Number, Pcr->HartId, 0, 0);
+    KiRiscvEnableUserCacheBlockOperations();
+    KiRiscvEnableUserTimeCounter();
     Thread->ApcState.Process = Process;
     PoInitializePrcb(Prcb);
     KiRiscvSaveProcessorClock(Prcb);

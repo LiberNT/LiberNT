@@ -184,6 +184,35 @@ KiRundownThread(_In_ PKTHREAD Thread)
  * wfi could only wake through a pending software request, so the idle hart
  * polls instead of sleeping; the interrupt enable bit stays clear so a new
  * thread inherits the boot-time masked state through KiSwapContext. */
+FORCEINLINE
+VOID
+KiRiscvEnterFenceSleep(_Inout_ PKPCR Pcr)
+{
+    InterlockedOr(&Pcr->FenceState, KI_RISCV_FENCE_SLEEPING);
+}
+
+FORCEINLINE
+VOID
+KiRiscvLeaveFenceSleep(_Inout_ PKPCR Pcr)
+{
+    LONG Deferred = InterlockedExchange(&Pcr->FenceState, 0);
+
+    if (Deferred & KI_RISCV_FENCE_TLB)
+        __asm__ __volatile__("sfence.vma zero, zero" ::: "memory");
+    if (Deferred & KI_RISCV_FENCE_ICACHE)
+        __asm__ __volatile__("fence.i" ::: "memory");
+}
+
+FORCEINLINE
+BOOLEAN
+KiRiscvInterruptPending(VOID)
+{
+    ULONG_PTR Pending, Enabled;
+
+    __asm__ __volatile__("csrr %0, sip\n\tcsrr %1, sie" : "=&r"(Pending), "=r"(Enabled));
+    return (Pending & Enabled) != 0;
+}
+
 static
 VOID
 KiRiscvIdleWait(_In_ PKPCR Pcr)
@@ -194,9 +223,69 @@ KiRiscvIdleWait(_In_ PKPCR Pcr)
         return;
     }
 
+    KiRiscvEnterFenceSleep(Pcr);
     __asm__ __volatile__("wfi" ::: "memory");
+    KiRiscvLeaveFenceSleep(Pcr);
     _enable();
     _disable();
+}
+
+ULONG KiRiscvIdlePollMicroseconds = 200;
+
+FORCEINLINE
+BOOLEAN
+KiRiscvIdleWorkPending(_In_ PKPRCB Prcb)
+{
+    return Prcb->NextThread || Prcb->DpcData[0].DpcQueueDepth || Prcb->TimerRequest ||
+           Prcb->DeferredReadyListHead.Next || ReadNoFence(&Prcb->RequestSummary);
+}
+
+static
+BOOLEAN
+KiRiscvIdlePoll(
+    _In_ PKPCR Pcr,
+    _In_ PKPRCB Prcb)
+{
+    LARGE_INTEGER Frequency;
+    ULONG64 Start, Ticks;
+    KIRQL OldIrql;
+    BOOLEAN Work;
+
+    if (KiRiscvIdlePollMicroseconds == 0)
+        return FALSE;
+
+    Start = (ULONG64)KeQueryPerformanceCounter(&Frequency).QuadPart;
+    Ticks = ((ULONG64)Frequency.QuadPart * KiRiscvIdlePollMicroseconds) / 1000000;
+
+    Pcr->IdlePolling = TRUE;
+    KiRiscvEnterFenceSleep(Pcr);
+    for (;;)
+    {
+        Work = KiRiscvIdleWorkPending(Prcb);
+        if (Work || ((ULONG64)KeQueryPerformanceCounter(NULL).QuadPart - Start >= Ticks))
+            break;
+        if (KiRiscvInterruptPending())
+        {
+            KiRiscvLeaveFenceSleep(Pcr);
+            _enable();
+            _disable();
+            KiRiscvEnterFenceSleep(Pcr);
+            continue;
+        }
+        YieldProcessor();
+    }
+    KiRiscvLeaveFenceSleep(Pcr);
+    Pcr->IdlePolling = FALSE;
+    KeMemoryBarrier();
+
+    if (ReadNoFence(&Prcb->RequestSummary))
+    {
+        OldIrql = KfRaiseIrql(IPI_LEVEL);
+        KiIpiProcessRequests();
+        KfLowerIrql(OldIrql);
+        Work = TRUE;
+    }
+    return Work || KiRiscvIdleWorkPending(Prcb);
 }
 
 static
@@ -266,6 +355,8 @@ KiIdleLoop(VOID)
         KeMemoryBarrier();
         if (Prcb->NextThread || Prcb->DpcData[0].DpcQueueDepth ||
             Prcb->TimerRequest || Prcb->DeferredReadyListHead.Next)
+            continue;
+        if (Pcr->InterruptEnable && KiRiscvIdlePoll(Pcr, Prcb))
             continue;
         Prcb->Sleeping = TRUE;
         if (Pcr->InterruptEnable)
