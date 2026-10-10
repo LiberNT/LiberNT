@@ -16,6 +16,10 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#if 0
+#pragma makedep install
+#endif
+
 [
     object,
     uuid(0c733a8c-2a1c-11ce-ade5-00aa0044773d),
@@ -27,6 +31,27 @@ interface IAccessor : IUnknown
     typedef DWORD DBACCESSORFLAGS;
 
     typedef DWORD DBBINDSTATUS;
+
+    enum DBACCESSORFLAGSENUM
+    {
+        DBACCESSOR_INVALID       = 0x00,
+        DBACCESSOR_PASSBYREF     = 0x01,
+        DBACCESSOR_ROWDATA       = 0x02,
+        DBACCESSOR_PARAMETERDATA = 0x04,
+        DBACCESSOR_OPTIMIZED     = 0x08,
+        DBACCESSOR_INHERITED     = 0x10,
+    };
+
+    enum DBBINDSTATUSENUM
+    {
+        DBBINDSTATUS_OK                    = 0,
+        DBBINDSTATUS_BADORDINAL            = 1,
+        DBBINDSTATUS_UNSUPPORTEDCONVERSION = 2,
+        DBBINDSTATUS_BADBINDINFO           = 3,
+        DBBINDSTATUS_BADSTORAGEFLAGS       = 4,
+        DBBINDSTATUS_NOINTERFACE           = 5,
+        DBBINDSTATUS_MULTIPLESTORAGE       = 6,
+    };
 
     [local]
     HRESULT AddRefAccessor([in] HACCESSOR hAccessor,
@@ -76,4 +101,4 @@ interface IAccessor : IUnknown
                                   [in, out, unique] DBREFCOUNT *pcRefCount,
                                   [out] IErrorInfo **ppErrorInfoRem);
 
-};
+}

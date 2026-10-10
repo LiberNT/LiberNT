@@ -16,9 +16,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 cpp_quote("#ifdef _WIN64")
-cpp_quote("#include <pshpack8.h>")
+cpp_quote("#pragma pack(push,8)")
 cpp_quote("#else")
-cpp_quote("#include <pshpack2.h>")
+cpp_quote("#pragma pack(push,2)")
 cpp_quote("#endif")
 cpp_quote("")
 
@@ -28,27 +28,19 @@ import "ocidl.idl";
 import "propidl.idl";
 import "urlmon.idl";
 
-typedef ULONG DBBYTEOFFSET;
-typedef LONG  DBROWOFFSET;
-typedef LONG  DBROWCOUNT;
-typedef ULONG DBCOUNTITEM;
-typedef ULONG DBLENGTH;
-typedef ULONG DBORDINAL;
-typedef ULONG DBBKMARK;
-typedef DWORD DB_DWRESERVE;
-typedef ULONG DBREFCOUNT;
-typedef ULONG DB_UPARAMS;
-typedef LONG  DB_LPARAMS;
-typedef DWORD DBHASHVALUE;
-typedef struct {
-    SHORT year;
-    USHORT month;
-    USHORT day;
-    USHORT hour;
-    USHORT minute;
-    USHORT second;
-    ULONG fraction;
-} DBTIMESTAMP;
+typedef ULONG_PTR DBBYTEOFFSET;
+typedef LONG_PTR  DBROWOFFSET;
+typedef LONG_PTR  DBROWCOUNT;
+typedef ULONG_PTR DBCOUNTITEM;
+typedef ULONG_PTR DBLENGTH;
+typedef ULONG_PTR DBORDINAL;
+typedef ULONG_PTR DBBKMARK;
+typedef DWORD_PTR DB_DWRESERVE;
+typedef ULONG_PTR DBREFCOUNT;
+typedef ULONG_PTR DB_UPARAMS;
+typedef LONG_PTR  DB_LPARAMS;
+typedef DWORD_PTR DBHASHVALUE;
+typedef LONG_PTR DB_LRESERVE;
 
 #include "dbs.idl"
 
@@ -56,21 +48,55 @@ typedef struct {
 #include "rstbas.idl"
 #include "rstinf.idl"
 #include "rstloc.idl"
+#include "rstscr.idl"
+#include "rstxsc.idl"
+#include "chprst.idl"
+#include "rstfnd.idl"
+#include "rstvw.idl"
+#include "vwchp.idl"
+#include "vwflt.idl"
 #include "cmdbas.idl"
 #include "cmdtxt.idl"
+#include "colinf.idl"
+#include "colrst.idl"
 #include "dbccmd.idl"
 #include "dbcses.idl"
+#include "srcrst.idl"
 #include "dbprop.idl"
 #include "dbinit.idl"
 #include "dbdsad.idl"
 #include "asynot.idl"
 #include "asysta.idl"
 #include "sesprp.idl"
+#include "rstnot.idl"
 #include "opnrst.idl"
+#include "dbsrst.idl"
 #include "row.idl"
 #include "rowchg.idl"
+#include "rowpos.idl"
+#include "rowpsc.idl"
 #include "binres.idl"
 #include "crtrow.idl"
+#include "errrec.idl"
+#include "errlup.idl"
+#include "getdts.idl"
+#include "cmdstrm.idl"
+#include "cmdprp.idl"
+#include "cvttyp.idl"
+#include "cmdpre.idl"
+#include "rstchg.idl"
+#include "rstupd.idl"
+#include "rstidn.idl"
+#include "rstind.idl"
+#include "rstcridx.idl"
+#include "mulres.idl"
+#include "transact.idl"
+#include "trnjoi.idl"
+#include "trnlcl.idl"
+#include "trnobj.idl"
+#include "cmdwpr.idl"
 
-cpp_quote("#include <poppack.h>")
+cpp_quote("#include <accctrl.h>")
+
+cpp_quote("#pragma pack(pop)")
 cpp_quote("")
