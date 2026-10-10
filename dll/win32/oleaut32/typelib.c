@@ -285,6 +285,38 @@ struct tlibredirect_data
     WORD   minor_version;
 };
 
+#ifdef __REACTOS__
+static LONG query_typelib_path_value( HKEY hkey, const WCHAR *subkey, WCHAR *path, DWORD count )
+{
+    WCHAR value[MAX_PATH];
+    DWORD type, size = sizeof(value) - sizeof(WCHAR);
+    HKEY subhkey;
+    LONG res;
+
+    res = RegOpenKeyExW( hkey, subkey, 0, KEY_QUERY_VALUE, &subhkey );
+    if (res != ERROR_SUCCESS)
+        return res;
+    res = RegQueryValueExW( subhkey, NULL, NULL, &type, (BYTE *)value, &size );
+    RegCloseKey( subhkey );
+    if (res != ERROR_SUCCESS)
+        return res;
+    if (type != REG_SZ && type != REG_EXPAND_SZ)
+        return ERROR_FILE_NOT_FOUND;
+    value[size / sizeof(WCHAR)] = 0;
+    if (type == REG_SZ)
+    {
+        lstrcpynW( path, value, count );
+        return ERROR_SUCCESS;
+    }
+    size = ExpandEnvironmentStringsW( value, path, count );
+    if (!size)
+        return GetLastError();
+    if (size > count)
+        return ERROR_MORE_DATA;
+    return ERROR_SUCCESS;
+}
+#endif
+
 /* Get the path to a registered type library. Helper for QueryPathOfRegTypeLib. */
 static HRESULT query_typelib_path( REFGUID guid, WORD wMaj, WORD wMin,
                                    SYSKIND syskind, LCID lcid, BSTR *path, BOOL redir )
@@ -339,11 +371,17 @@ static HRESULT query_typelib_path( REFGUID guid, WORD wMaj, WORD wMin,
 
     while (hr != S_OK)
     {
+#ifndef __REACTOS__
         LONG dwPathLen = sizeof(Path);
+#endif
 
         get_lcid_subkey( myLCID, syskind, buffer );
 
+#ifdef __REACTOS__
+        if (query_typelib_path_value(hkey, buffer, Path, ARRAY_SIZE(Path)))
+#else
         if (RegQueryValueW(hkey, buffer, Path, &dwPathLen))
+#endif
         {
             if (!lcid)
                 break;
