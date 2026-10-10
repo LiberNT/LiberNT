@@ -40,6 +40,11 @@
 #include "htiface.h"
 #include "shdeprecated.h"
 #include "docobjectservice.h"
+#ifdef __REACTOS__
+#include "objsafe.h"
+#include "perhist.h"
+#include "urlhist.h"
+#endif
 
 #include "wine/list.h"
 
@@ -187,11 +192,26 @@ struct WebBrowser {
     IOleCommandTarget        IOleCommandTarget_iface;
     IServiceProvider         IServiceProvider_iface;
     IDataObject              IDataObject_iface;
+#ifdef __REACTOS__
+    IPersistPropertyBag      IPersistPropertyBag_iface;
+    IObjectSafety            IObjectSafety_iface;
+    ITargetEmbedding         ITargetEmbedding_iface;
+    IPersistHistory          IPersistHistory_iface;
+    IShellService            IShellService_iface;
+    IUrlHistoryNotify        IUrlHistoryNotify_iface;
+    ITargetNotify            ITargetNotify_iface;
+#endif
     HlinkFrame hlink_frame;
 
     LONG ref;
 
     INT version;
+#ifdef __REACTOS__
+    DWORD view_mode;
+    DWORD folder_flags;
+    DWORD dispatch_safety;
+    VARIANT_BOOL register_drop_target;
+#endif
 
     IOleClientSite *client;
     IOleClientSite *client_closed;
@@ -252,6 +272,12 @@ void WebBrowser_OleObject_Init(WebBrowser*);
 void WebBrowser_ViewObject_Init(WebBrowser*);
 void WebBrowser_Persist_Init(WebBrowser*);
 void WebBrowser_ClassInfo_Init(WebBrowser*);
+#ifdef __REACTOS__
+void WebBrowser_Ext_Init(WebBrowser*);
+void WebBrowser_Ext_InitNew(WebBrowser*);
+HRESULT WebBrowser_Ext_LoadStream(WebBrowser*,IStream*);
+HRESULT WebBrowser_Ext_SaveStream(WebBrowser*,IStream*);
+#endif
 
 void WebBrowser_OleObject_Destroy(WebBrowser*);
 
@@ -308,10 +334,18 @@ DWORD release_extern_ref(InternetExplorer*,BOOL);
 void register_iewindow_class(void);
 void unregister_iewindow_class(void);
 
+#ifdef __REACTOS__
+#define TID_LIST \
+    XCLSID(WebBrowser) \
+    XCLSID(WebBrowser_V1) \
+    XIID(IWebBrowser2) \
+    XIID(IShellUIHelper2)
+#else
 #define TID_LIST \
     XCLSID(WebBrowser) \
     XCLSID(WebBrowser_V1) \
     XIID(IWebBrowser2)
+#endif
 
 typedef enum {
 #define XIID(iface) iface ## _tid,
@@ -325,6 +359,9 @@ TID_LIST
 HRESULT get_typeinfo(tid_t,ITypeInfo**);
 
 HRESULT WINAPI CUrlHistory_Create(IClassFactory*,IUnknown*,REFIID,void**);
+#ifdef __REACTOS__
+HRESULT WINAPI ShellUIHelper_Create(IClassFactory*,IUnknown*,REFIID,void**);
+#endif
 HRESULT WINAPI InternetExplorer_Create(IClassFactory*,IUnknown*,REFIID,void**);
 HRESULT WINAPI InternetShortcut_Create(IClassFactory*,IUnknown*,REFIID,void**);
 HRESULT WINAPI WebBrowser_Create(IClassFactory*,IUnknown*,REFIID,void**);

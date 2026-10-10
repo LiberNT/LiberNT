@@ -178,6 +178,18 @@ static const IClassFactoryVtbl CUrlHistoryFactoryVtbl = {
 
 static IClassFactory CUrlHistoryFactory = { &CUrlHistoryFactoryVtbl };
 
+#ifdef __REACTOS__
+static const IClassFactoryVtbl ShellUIHelperFactoryVtbl = {
+    ClassFactory_QueryInterface,
+    ClassFactory_AddRef,
+    ClassFactory_Release,
+    ShellUIHelper_Create,
+    ClassFactory_LockServer
+};
+
+static IClassFactory ShellUIHelperFactory = { &ShellUIHelperFactoryVtbl };
+#endif
+
 /******************************************************************
  *              DllMain (ieframe.@)
  */
@@ -220,6 +232,11 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
         TRACE("(CLSID_InternetShortcut %s %p)\n", debugstr_guid(riid), ppv);
         return IClassFactory_QueryInterface(&InternetShortcutFactory, riid, ppv);
     }
+
+#ifdef __REACTOS__
+    if(IsEqualGUID(&CLSID_ShellUIHelper, rclsid))
+        return IClassFactory_QueryInterface(&ShellUIHelperFactory, riid, ppv);
+#endif
 
     if(IsEqualGUID(&CLSID_CUrlHistory, rclsid)) {
         TRACE("(CLSID_CUrlHistory %s %p)\n", debugstr_guid(riid), ppv);

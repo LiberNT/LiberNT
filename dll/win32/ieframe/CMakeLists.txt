@@ -21,6 +21,7 @@ list(APPEND SOURCE
     urlhist.c
     view.c
     webbrowser.c
+    webbrowserext.c
     precomp.h
     ${CMAKE_CURRENT_BINARY_DIR}/ieframe_stubs.c)
 

@@ -74,9 +74,11 @@ static HRESULT WINAPI WebBrowser_QueryInterface(IUnknown *iface, REFIID riid, vo
     }else if(IsEqualGUID(&IID_IPersistStorage, riid)) {
         TRACE("(%p)->(IID_IPersistStorage %p)\n", This, ppv);
         *ppv = &This->IPersistStorage_iface;
+#ifndef __REACTOS__
     }else if(IsEqualGUID(&IID_IPersistMemory, riid)) {
         TRACE("(%p)->(IID_IPersistStorage %p)\n", This, ppv);
         *ppv = &This->IPersistMemory_iface;
+#endif
     }else if(IsEqualGUID (&IID_IPersistStreamInit, riid)) {
         TRACE("(%p)->(IID_IPersistStreamInit %p)\n", This, ppv);
         *ppv = &This->IPersistStreamInit_iface;
@@ -107,6 +109,32 @@ static HRESULT WINAPI WebBrowser_QueryInterface(IUnknown *iface, REFIID riid, vo
     }else if(IsEqualGUID(&IID_IDataObject, riid)) {
         *ppv = &This->IDataObject_iface;
         TRACE("(%p)->(IID_IDataObject %p)\n", This, ppv);
+#ifdef __REACTOS__
+    }else if(IsEqualGUID(&IID_IPersistStream, riid)) {
+        TRACE("(%p)->(IID_IPersistStream %p)\n", This, ppv);
+        *ppv = &This->IPersistStreamInit_iface;
+    }else if(IsEqualGUID(&IID_IPersistPropertyBag, riid)) {
+        TRACE("(%p)->(IID_IPersistPropertyBag %p)\n", This, ppv);
+        *ppv = &This->IPersistPropertyBag_iface;
+    }else if(IsEqualGUID(&IID_IObjectSafety, riid)) {
+        TRACE("(%p)->(IID_IObjectSafety %p)\n", This, ppv);
+        *ppv = &This->IObjectSafety_iface;
+    }else if(IsEqualGUID(&IID_ITargetEmbedding, riid)) {
+        TRACE("(%p)->(IID_ITargetEmbedding %p)\n", This, ppv);
+        *ppv = &This->ITargetEmbedding_iface;
+    }else if(IsEqualGUID(&IID_IPersistHistory, riid)) {
+        TRACE("(%p)->(IID_IPersistHistory %p)\n", This, ppv);
+        *ppv = &This->IPersistHistory_iface;
+    }else if(IsEqualGUID(&IID_IShellService, riid)) {
+        TRACE("(%p)->(IID_IShellService %p)\n", This, ppv);
+        *ppv = &This->IShellService_iface;
+    }else if(IsEqualGUID(&IID_IUrlHistoryNotify, riid)) {
+        TRACE("(%p)->(IID_IUrlHistoryNotify %p)\n", This, ppv);
+        *ppv = &This->IUrlHistoryNotify_iface;
+    }else if(IsEqualGUID(&IID_ITargetNotify, riid)) {
+        TRACE("(%p)->(IID_ITargetNotify %p)\n", This, ppv);
+        *ppv = &This->ITargetNotify_iface;
+#endif
     }else if(IsEqualGUID(&IID_IQuickActivate, riid)) {
         TRACE("(%p)->(IID_IQuickActivate %p) returning NULL\n", This, ppv);
         return E_NOINTERFACE;
@@ -998,12 +1026,20 @@ static HRESULT WINAPI WebBrowser_get_RegisterAsDropTarget(IWebBrowser2 *iface,
 {
     WebBrowser *This = impl_from_IWebBrowser2(iface);
 
+#ifdef __REACTOS__
+    TRACE("(%p)->(%p)\n", This, pbRegister);
+#else
     FIXME("(%p)->(%p)\n", This, pbRegister);
+#endif
 
     if(!pbRegister)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    *pbRegister = This->register_drop_target;
+#else
     *pbRegister=0;
+#endif
     return S_OK;
 }
 
@@ -1012,6 +1048,9 @@ static HRESULT WINAPI WebBrowser_put_RegisterAsDropTarget(IWebBrowser2 *iface,
 {
     WebBrowser *This = impl_from_IWebBrowser2(iface);
     FIXME("(%p)->(%x)\n", This, bRegister);
+#ifdef __REACTOS__
+    This->register_drop_target = bRegister ? VARIANT_TRUE : VARIANT_FALSE;
+#endif
     return S_OK;
 }
 
@@ -1306,6 +1345,9 @@ static HRESULT create_webbrowser(int version, IUnknown *outer, REFIID riid, void
     WebBrowser_ViewObject_Init(ret);
     WebBrowser_Persist_Init(ret);
     WebBrowser_ClassInfo_Init(ret);
+#ifdef __REACTOS__
+    WebBrowser_Ext_Init(ret);
+#endif
 
     lock_module();
 

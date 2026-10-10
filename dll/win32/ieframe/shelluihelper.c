@@ -17,6 +17,9 @@
  */
 
 #include "ieframe.h"
+#ifdef __REACTOS__
+#include "objsafe.h"
+#endif
 
 #include "wine/debug.h"
 
@@ -24,6 +27,13 @@ WINE_DEFAULT_DEBUG_CHANNEL(ieframe);
 
 struct ShellUIHelper {
     IShellUIHelper2 IShellUIHelper2_iface;
+#ifdef __REACTOS__
+    IDispatchEx IDispatchEx_iface;
+    IObjectWithSite IObjectWithSite_iface;
+    IObjectSafety IObjectSafety_iface;
+    IUnknown *site;
+    DWORD safety_options;
+#endif
     LONG ref;
 };
 
@@ -48,6 +58,14 @@ static HRESULT WINAPI ShellUIHelper2_QueryInterface(IShellUIHelper2 *iface, REFI
     }else if(IsEqualGUID(&IID_IShellUIHelper2, riid)) {
         TRACE("(%p)->(IID_IShellUIHelper2 %p)\n", This, ppv);
         *ppv = &This->IShellUIHelper2_iface;
+#ifdef __REACTOS__
+    }else if(IsEqualGUID(&IID_IDispatchEx, riid)) {
+        *ppv = &This->IDispatchEx_iface;
+    }else if(IsEqualGUID(&IID_IObjectWithSite, riid)) {
+        *ppv = &This->IObjectWithSite_iface;
+    }else if(IsEqualGUID(&IID_IObjectSafety, riid)) {
+        *ppv = &This->IObjectSafety_iface;
+#endif
     }else {
         WARN("(%p)->(%s %p)\n", This, debugstr_guid(riid), ppv);
         *ppv = NULL;
@@ -75,8 +93,13 @@ static ULONG WINAPI ShellUIHelper2_Release(IShellUIHelper2 *iface)
 
     TRACE("(%p) ref=%ld\n", This, ref);
 
-    if(!ref)
+    if(!ref) {
+#ifdef __REACTOS__
+        if(This->site)
+            IUnknown_Release(This->site);
+#endif
         free(This);
+    }
 
     return ref;
 }
@@ -93,14 +116,38 @@ static HRESULT WINAPI ShellUIHelper2_GetTypeInfoCount(IShellUIHelper2 *iface, UI
 
 static HRESULT WINAPI ShellUIHelper2_GetTypeInfo(IShellUIHelper2 *iface, UINT iTInfo, LCID lcid, LPTYPEINFO *ppTInfo)
 {
+#ifdef __REACTOS__
+    HRESULT hres;
+
+    TRACE("(%p)->(%d %ld %p)\n", iface, iTInfo, lcid, ppTInfo);
+
+    if(iTInfo)
+        return DISP_E_BADINDEX;
+    hres = get_typeinfo(IShellUIHelper2_tid, ppTInfo);
+    if(SUCCEEDED(hres))
+        ITypeInfo_AddRef(*ppTInfo);
+    return hres;
+#else
     ShellUIHelper *This = impl_from_IShellUIHelper2(iface);
     FIXME("(%p)->(%d %ld %p)\n", This, iTInfo, lcid, ppTInfo);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI ShellUIHelper2_GetIDsOfNames(IShellUIHelper2 *iface, REFIID riid, LPOLESTR *rgszNames, UINT cNames,
         LCID lcid, DISPID *rgDispId)
 {
+#ifdef __REACTOS__
+    ITypeInfo *typeinfo;
+    HRESULT hres;
+
+    TRACE("(%p)->(%s %p %d %ld %p)\n", iface, debugstr_guid(riid), rgszNames, cNames, lcid, rgDispId);
+
+    hres = get_typeinfo(IShellUIHelper2_tid, &typeinfo);
+    if(FAILED(hres))
+        return hres;
+    return ITypeInfo_GetIDsOfNames(typeinfo, rgszNames, cNames, rgDispId);
+#else
     ShellUIHelper *This = impl_from_IShellUIHelper2(iface);
     unsigned i;
 
@@ -109,16 +156,30 @@ static HRESULT WINAPI ShellUIHelper2_GetIDsOfNames(IShellUIHelper2 *iface, REFII
         FIXME("%s\n", debugstr_w(rgszNames[i]));
 
     return DISP_E_UNKNOWNNAME;
+#endif
 }
 
 static HRESULT WINAPI ShellUIHelper2_Invoke(IShellUIHelper2 *iface, DISPID dispIdMember,
         REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult,
         EXCEPINFO *pExepInfo, UINT *puArgErr)
 {
+#ifdef __REACTOS__
+    ITypeInfo *typeinfo;
+    HRESULT hres;
+
+    TRACE("(%p)->(%ld %s %ld %08x %p %p %p %p)\n", iface, dispIdMember, debugstr_guid(riid),
+          lcid, wFlags, pDispParams, pVarResult, pExepInfo, puArgErr);
+
+    hres = get_typeinfo(IShellUIHelper2_tid, &typeinfo);
+    if(FAILED(hres))
+        return hres;
+    return ITypeInfo_Invoke(typeinfo, iface, dispIdMember, wFlags, pDispParams, pVarResult, pExepInfo, puArgErr);
+#else
     ShellUIHelper *This = impl_from_IShellUIHelper2(iface);
     FIXME("(%p)->(%ld %s %ld %08x %p %p %p %p)\n", This, dispIdMember, debugstr_guid(riid),
           lcid, wFlags, pDispParams, pVarResult, pExepInfo, puArgErr);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI ShellUIHelper2_ResetFirstBootMode(IShellUIHelper2 *iface)
@@ -366,6 +427,281 @@ static const IShellUIHelper2Vtbl ShellUIHelper2Vtbl = {
     ShellUIHelper2_SearchGuideUrl
 };
 
+#ifdef __REACTOS__
+static inline ShellUIHelper *impl_from_IDispatchEx(IDispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, ShellUIHelper, IDispatchEx_iface);
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_QueryInterface(IDispatchEx *iface, REFIID riid, void **ppv)
+{
+    return IShellUIHelper2_QueryInterface(&impl_from_IDispatchEx(iface)->IShellUIHelper2_iface, riid, ppv);
+}
+
+static ULONG WINAPI ShellUIHelperDispEx_AddRef(IDispatchEx *iface)
+{
+    return IShellUIHelper2_AddRef(&impl_from_IDispatchEx(iface)->IShellUIHelper2_iface);
+}
+
+static ULONG WINAPI ShellUIHelperDispEx_Release(IDispatchEx *iface)
+{
+    return IShellUIHelper2_Release(&impl_from_IDispatchEx(iface)->IShellUIHelper2_iface);
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_GetTypeInfoCount(IDispatchEx *iface, UINT *pctinfo)
+{
+    return IShellUIHelper2_GetTypeInfoCount(&impl_from_IDispatchEx(iface)->IShellUIHelper2_iface, pctinfo);
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_GetTypeInfo(IDispatchEx *iface, UINT iTInfo, LCID lcid, ITypeInfo **ppTInfo)
+{
+    return IShellUIHelper2_GetTypeInfo(&impl_from_IDispatchEx(iface)->IShellUIHelper2_iface, iTInfo, lcid, ppTInfo);
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_GetIDsOfNames(IDispatchEx *iface, REFIID riid, LPOLESTR *rgszNames,
+        UINT cNames, LCID lcid, DISPID *rgDispId)
+{
+    return IShellUIHelper2_GetIDsOfNames(&impl_from_IDispatchEx(iface)->IShellUIHelper2_iface, riid, rgszNames,
+            cNames, lcid, rgDispId);
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_Invoke(IDispatchEx *iface, DISPID dispIdMember, REFIID riid, LCID lcid,
+        WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
+{
+    return IShellUIHelper2_Invoke(&impl_from_IDispatchEx(iface)->IShellUIHelper2_iface, dispIdMember, riid, lcid,
+            wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_GetDispID(IDispatchEx *iface, BSTR bstrName, DWORD grfdex, DISPID *pid)
+{
+    ITypeInfo *typeinfo;
+    HRESULT hres;
+
+    TRACE("(%p)->(%s %lx %p)\n", iface, debugstr_w(bstrName), grfdex, pid);
+
+    hres = get_typeinfo(IShellUIHelper2_tid, &typeinfo);
+    if(FAILED(hres))
+        return hres;
+    return ITypeInfo_GetIDsOfNames(typeinfo, &bstrName, 1, pid);
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_InvokeEx(IDispatchEx *iface, DISPID id, LCID lcid, WORD wFlags,
+        DISPPARAMS *pdp, VARIANT *pvarRes, EXCEPINFO *pei, IServiceProvider *pspCaller)
+{
+    TRACE("(%p)->(%ld %ld %x %p %p %p %p)\n", iface, id, lcid, wFlags, pdp, pvarRes, pei, pspCaller);
+
+    return IShellUIHelper2_Invoke(&impl_from_IDispatchEx(iface)->IShellUIHelper2_iface, id, &IID_NULL, lcid,
+            wFlags, pdp, pvarRes, pei, NULL);
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_DeleteMemberByName(IDispatchEx *iface, BSTR bstrName, DWORD grfdex)
+{
+    return S_FALSE;
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_DeleteMemberByDispID(IDispatchEx *iface, DISPID id)
+{
+    return S_FALSE;
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_GetMemberProperties(IDispatchEx *iface, DISPID id, DWORD grfdexFetch,
+        DWORD *pgrfdex)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_GetMemberName(IDispatchEx *iface, DISPID id, BSTR *pbstrName)
+{
+    ITypeInfo *typeinfo;
+    UINT count;
+    HRESULT hres;
+
+    TRACE("(%p)->(%ld %p)\n", iface, id, pbstrName);
+
+    hres = get_typeinfo(IShellUIHelper2_tid, &typeinfo);
+    if(FAILED(hres))
+        return hres;
+    hres = ITypeInfo_GetNames(typeinfo, id, pbstrName, 1, &count);
+    if(SUCCEEDED(hres) && !count)
+        hres = DISP_E_UNKNOWNNAME;
+    return hres;
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_GetNextDispID(IDispatchEx *iface, DWORD grfdex, DISPID id, DISPID *pid)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI ShellUIHelperDispEx_GetNameSpaceParent(IDispatchEx *iface, IUnknown **ppunk)
+{
+    if(!ppunk)
+        return E_POINTER;
+    *ppunk = NULL;
+    return E_NOTIMPL;
+}
+
+static const IDispatchExVtbl ShellUIHelperDispExVtbl = {
+    ShellUIHelperDispEx_QueryInterface,
+    ShellUIHelperDispEx_AddRef,
+    ShellUIHelperDispEx_Release,
+    ShellUIHelperDispEx_GetTypeInfoCount,
+    ShellUIHelperDispEx_GetTypeInfo,
+    ShellUIHelperDispEx_GetIDsOfNames,
+    ShellUIHelperDispEx_Invoke,
+    ShellUIHelperDispEx_GetDispID,
+    ShellUIHelperDispEx_InvokeEx,
+    ShellUIHelperDispEx_DeleteMemberByName,
+    ShellUIHelperDispEx_DeleteMemberByDispID,
+    ShellUIHelperDispEx_GetMemberProperties,
+    ShellUIHelperDispEx_GetMemberName,
+    ShellUIHelperDispEx_GetNextDispID,
+    ShellUIHelperDispEx_GetNameSpaceParent
+};
+
+static inline ShellUIHelper *impl_from_IObjectWithSite(IObjectWithSite *iface)
+{
+    return CONTAINING_RECORD(iface, ShellUIHelper, IObjectWithSite_iface);
+}
+
+static HRESULT WINAPI ShellUIHelperSite_QueryInterface(IObjectWithSite *iface, REFIID riid, void **ppv)
+{
+    return IShellUIHelper2_QueryInterface(&impl_from_IObjectWithSite(iface)->IShellUIHelper2_iface, riid, ppv);
+}
+
+static ULONG WINAPI ShellUIHelperSite_AddRef(IObjectWithSite *iface)
+{
+    return IShellUIHelper2_AddRef(&impl_from_IObjectWithSite(iface)->IShellUIHelper2_iface);
+}
+
+static ULONG WINAPI ShellUIHelperSite_Release(IObjectWithSite *iface)
+{
+    return IShellUIHelper2_Release(&impl_from_IObjectWithSite(iface)->IShellUIHelper2_iface);
+}
+
+static HRESULT WINAPI ShellUIHelperSite_SetSite(IObjectWithSite *iface, IUnknown *site)
+{
+    ShellUIHelper *This = impl_from_IObjectWithSite(iface);
+
+    TRACE("(%p)->(%p)\n", This, site);
+
+    if(site)
+        IUnknown_AddRef(site);
+    if(This->site)
+        IUnknown_Release(This->site);
+    This->site = site;
+    return S_OK;
+}
+
+static HRESULT WINAPI ShellUIHelperSite_GetSite(IObjectWithSite *iface, REFIID riid, void **ppv)
+{
+    ShellUIHelper *This = impl_from_IObjectWithSite(iface);
+
+    TRACE("(%p)->(%s %p)\n", This, debugstr_guid(riid), ppv);
+
+    if(!ppv)
+        return E_POINTER;
+    *ppv = NULL;
+    if(!This->site)
+        return E_FAIL;
+    return IUnknown_QueryInterface(This->site, riid, ppv);
+}
+
+static const IObjectWithSiteVtbl ShellUIHelperSiteVtbl = {
+    ShellUIHelperSite_QueryInterface,
+    ShellUIHelperSite_AddRef,
+    ShellUIHelperSite_Release,
+    ShellUIHelperSite_SetSite,
+    ShellUIHelperSite_GetSite
+};
+
+static inline ShellUIHelper *impl_from_IObjectSafety(IObjectSafety *iface)
+{
+    return CONTAINING_RECORD(iface, ShellUIHelper, IObjectSafety_iface);
+}
+
+static HRESULT WINAPI ShellUIHelperSafety_QueryInterface(IObjectSafety *iface, REFIID riid, void **ppv)
+{
+    return IShellUIHelper2_QueryInterface(&impl_from_IObjectSafety(iface)->IShellUIHelper2_iface, riid, ppv);
+}
+
+static ULONG WINAPI ShellUIHelperSafety_AddRef(IObjectSafety *iface)
+{
+    return IShellUIHelper2_AddRef(&impl_from_IObjectSafety(iface)->IShellUIHelper2_iface);
+}
+
+static ULONG WINAPI ShellUIHelperSafety_Release(IObjectSafety *iface)
+{
+    return IShellUIHelper2_Release(&impl_from_IObjectSafety(iface)->IShellUIHelper2_iface);
+}
+
+#define SHELLUIHELPER_SAFETY_OPTIONS (INTERFACESAFE_FOR_UNTRUSTED_CALLER | INTERFACESAFE_FOR_UNTRUSTED_DATA)
+
+static HRESULT WINAPI ShellUIHelperSafety_GetInterfaceSafetyOptions(IObjectSafety *iface, REFIID riid,
+        DWORD *pdwSupportedOptions, DWORD *pdwEnabledOptions)
+{
+    ShellUIHelper *This = impl_from_IObjectSafety(iface);
+    IUnknown *unk;
+
+    TRACE("(%p)->(%s %p %p)\n", This, debugstr_guid(riid), pdwSupportedOptions, pdwEnabledOptions);
+
+    if(!pdwSupportedOptions || !pdwEnabledOptions)
+        return E_POINTER;
+    if(FAILED(IShellUIHelper2_QueryInterface(&This->IShellUIHelper2_iface, riid, (void **)&unk)))
+        return E_NOINTERFACE;
+    IUnknown_Release(unk);
+
+    *pdwSupportedOptions = SHELLUIHELPER_SAFETY_OPTIONS;
+    *pdwEnabledOptions = This->safety_options;
+    return S_OK;
+}
+
+static HRESULT WINAPI ShellUIHelperSafety_SetInterfaceSafetyOptions(IObjectSafety *iface, REFIID riid,
+        DWORD dwOptionSetMask, DWORD dwEnabledOptions)
+{
+    ShellUIHelper *This = impl_from_IObjectSafety(iface);
+    IUnknown *unk;
+
+    TRACE("(%p)->(%s %lx %lx)\n", This, debugstr_guid(riid), dwOptionSetMask, dwEnabledOptions);
+
+    if(FAILED(IShellUIHelper2_QueryInterface(&This->IShellUIHelper2_iface, riid, (void **)&unk)))
+        return E_NOINTERFACE;
+    IUnknown_Release(unk);
+    if(dwOptionSetMask & ~SHELLUIHELPER_SAFETY_OPTIONS)
+        return E_FAIL;
+
+    This->safety_options = (This->safety_options & ~dwOptionSetMask) | (dwEnabledOptions & dwOptionSetMask);
+    return S_OK;
+}
+
+static const IObjectSafetyVtbl ShellUIHelperSafetyVtbl = {
+    ShellUIHelperSafety_QueryInterface,
+    ShellUIHelperSafety_AddRef,
+    ShellUIHelperSafety_Release,
+    ShellUIHelperSafety_GetInterfaceSafetyOptions,
+    ShellUIHelperSafety_SetInterfaceSafetyOptions
+};
+
+HRESULT WINAPI ShellUIHelper_Create(IClassFactory *iface, IUnknown *outer, REFIID riid, void **ppv)
+{
+    IShellUIHelper2 *helper;
+    HRESULT hres;
+
+    TRACE("(%p %s %p)\n", outer, debugstr_guid(riid), ppv);
+
+    *ppv = NULL;
+    if(outer)
+        return CLASS_E_NOAGGREGATION;
+
+    hres = create_shell_ui_helper(&helper);
+    if(FAILED(hres))
+        return hres;
+
+    hres = IShellUIHelper2_QueryInterface(helper, riid, ppv);
+    IShellUIHelper2_Release(helper);
+    return hres;
+}
+#endif
+
 HRESULT create_shell_ui_helper(IShellUIHelper2 **_ret)
 {
     ShellUIHelper *ret;
@@ -375,6 +711,13 @@ HRESULT create_shell_ui_helper(IShellUIHelper2 **_ret)
         return E_OUTOFMEMORY;
 
     ret->IShellUIHelper2_iface.lpVtbl = &ShellUIHelper2Vtbl;
+#ifdef __REACTOS__
+    ret->IDispatchEx_iface.lpVtbl = &ShellUIHelperDispExVtbl;
+    ret->IObjectWithSite_iface.lpVtbl = &ShellUIHelperSiteVtbl;
+    ret->IObjectSafety_iface.lpVtbl = &ShellUIHelperSafetyVtbl;
+    ret->site = NULL;
+    ret->safety_options = 0;
+#endif
     ret->ref = 1;
 
     *_ret = &ret->IShellUIHelper2_iface;
