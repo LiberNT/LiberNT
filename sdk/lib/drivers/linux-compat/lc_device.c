@@ -483,8 +483,7 @@ void lc_irq_dpc(unsigned int irq)
 
     if (!line || !line->thread_wq)
         return;
-    if (!queue_work(line->thread_wq, &line->thread_work))
-        lc_irq_unmask_if_enabled(line);
+    queue_work(line->thread_wq, &line->thread_work);
 }
 
 bool lc_in_hardirq(void)
