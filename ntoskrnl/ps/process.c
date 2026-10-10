@@ -3406,6 +3406,8 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
         CpuInit.Context.ContextFlags = WOW64_CONTEXT_FULL;
         PspInitializeWow64FloatState(&CpuInit.Context);
         CpuInit.Context.Eip = PtrToUlong(ImageInformation.TransferAddress);
+        CpuInit.Context.Eax = PtrToUlong(ImageInformation.TransferAddress);
+        CpuInit.Context.Ebx = PtrToUlong(Wow64Peb);
         CpuInit.Context.Esp = PtrToUlong(Wow64InitialTeb.StackBase);
         CpuInit.Context.EFlags = EFLAGS_INTERRUPT_MASK;
         CpuInit.Context.SegCs = KGDT64_R3_CMCODE | RPL_MASK;
