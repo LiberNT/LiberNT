@@ -1,0 +1,17 @@
+; PROJECT:     LiberNT StarFive JH7110 display miniport
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     StarFive JH7110 display driver service registration
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[AddReg]
+HKLM,"SYSTEM\CurrentControlSet\Services\jh7110dc","ErrorControl",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\jh7110dc","Group",0x00000000,"Video"
+HKLM,"SYSTEM\CurrentControlSet\Services\jh7110dc","ImagePath",0x00020000,"system32\drivers\jh7110dc.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\jh7110dc","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\jh7110dc","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\jh7110dc","UserModeDriverName",0x00010000,"softgpuum.dll"
+HKLM,"SYSTEM\CurrentControlSet\Services\jh7110dc","UserModeDriverNameWow",0x00010000,"softgpuum.dll"
+HKLM,"SYSTEM\CurrentControlSet\Services\jh7110dc\Video","Service",0x00000000,"jh7110dc"
+HKLM,"SYSTEM\CurrentControlSet\Services\jh7110dc\Device0","InstalledDisplayDrivers",0x00010000,"framebuf"
+HKLM,"SYSTEM\CurrentControlSet\Services\jh7110dc\Device0","Device Description",0x00000000,"StarFive JH7110 Display (WDDM)"
+HKLM,"SYSTEM\CurrentControlSet\Services\jh7110dc\Device0","VgaCompatible",0x00010001,0x00000000

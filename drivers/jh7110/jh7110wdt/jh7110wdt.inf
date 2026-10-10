@@ -1,0 +1,48 @@
+; PROJECT:     LiberNT StarFive JH7110 watchdog driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     StarFive JH7110 watchdog driver installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=System
+ClassGUID={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+CatalogFile=jh7110wdt.cat
+DriverVer=10/10/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=StarFiveMfg,NTRISCV64
+
+[StarFiveMfg.NTRISCV64]
+%JH7110WDT.DeviceDesc%=JH7110WDT_Inst,FDT\starfive_jh7110-wdt
+
+[JH7110WDT_Inst.NT]
+CopyFiles=JH7110WDT_CopyFiles.NT
+
+[JH7110WDT_CopyFiles.NT]
+jh7110wdt.sys
+
+[JH7110WDT_Inst.NT.Services]
+AddService=jh7110wdt,0x00000002,JH7110WDT_Service_Inst
+
+[JH7110WDT_Service_Inst]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\jh7110wdt.sys
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+jh7110wdt.sys=1
+
+[Strings]
+ProviderName="Ahmed ARIF"
+ManufacturerName="StarFive"
+DiskName="StarFive JH7110 Watchdog Driver Disk"
+JH7110WDT.DeviceDesc="StarFive JH7110 watchdog timer"

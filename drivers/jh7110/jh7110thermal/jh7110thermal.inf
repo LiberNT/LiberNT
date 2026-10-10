@@ -1,0 +1,48 @@
+; PROJECT:     LiberNT StarFive JH7110 thermal driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     StarFive JH7110 thermal driver installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=System
+ClassGUID={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+CatalogFile=jh7110thermal.cat
+DriverVer=10/10/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=StarFiveMfg,NTRISCV64
+
+[StarFiveMfg.NTRISCV64]
+%JH7110THERMAL.DeviceDesc%=JH7110THERMAL_Inst,FDT\starfive_jh7110-temp
+
+[JH7110THERMAL_Inst.NT]
+CopyFiles=JH7110THERMAL_CopyFiles.NT
+
+[JH7110THERMAL_CopyFiles.NT]
+jh7110thermal.sys
+
+[JH7110THERMAL_Inst.NT.Services]
+AddService=jh7110thermal,0x00000002,JH7110THERMAL_Service_Inst
+
+[JH7110THERMAL_Service_Inst]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\jh7110thermal.sys
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+jh7110thermal.sys=1
+
+[Strings]
+ProviderName="Ahmed ARIF"
+ManufacturerName="StarFive"
+DiskName="StarFive JH7110 Thermal Driver Disk"
+JH7110THERMAL.DeviceDesc="StarFive JH7110 thermal zone"

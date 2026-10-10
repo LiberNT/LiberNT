@@ -1,0 +1,12 @@
+/*
+ * PROJECT:     LiberNT StarFive JH7110 PMIC driver
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     StarFive JH7110 PMIC driver version resource
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION "StarFive JH7110 PMIC driver"
+#define REACTOS_STR_INTERNAL_NAME "jh7110pmic"
+#define REACTOS_STR_ORIGINAL_FILENAME "jh7110pmic.sys"
+#include <reactos/version.rc>

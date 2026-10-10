@@ -1,0 +1,61 @@
+; PROJECT:     LiberNT StarFive JH7110 Ethernet Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     StarFive JH7110 GMAC miniport installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=Net
+ClassGUID={4D36E972-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+CatalogFile=netjh7110gmac.cat
+DriverVer=10/10/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+JH7110GMAC_CopyFiles.NT=12
+
+[Manufacturer]
+%ManufacturerName%=StarFiveMfg,NTRISCV64
+
+[StarFiveMfg.NTRISCV64]
+%JH7110GMAC.DeviceDesc%=JH7110GMAC_Inst.ndi,FDT\starfive_jh7110-dwmac
+
+[JH7110GMAC_Inst.ndi.NT]
+Characteristics=0x4
+BusType=0
+*IfType=6
+*MediaType=0
+*PhysicalMediaType=14
+AddReg=JH7110GMAC_AddReg.NT
+CopyFiles=JH7110GMAC_CopyFiles.NT
+
+[JH7110GMAC_Inst.ndi.NT.Services]
+AddService=jh7110gmac,0x00000002,JH7110GMAC_Service_Inst
+
+[JH7110GMAC_AddReg.NT]
+HKR,Ndi,Service,0,"jh7110gmac"
+HKR,Ndi\Interfaces,UpperRange,0,"ndis5"
+HKR,Ndi\Interfaces,LowerRange,0,"ethernet"
+
+[JH7110GMAC_CopyFiles.NT]
+jh7110gmac.sys
+
+[JH7110GMAC_Service_Inst]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\jh7110gmac.sys
+LoadOrderGroup=NDIS
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+jh7110gmac.sys=1
+
+[Strings]
+ProviderName="Ahmed ARIF"
+ManufacturerName="StarFive"
+DiskName="StarFive JH7110 Ethernet Driver Disk"
+JH7110GMAC.DeviceDesc="StarFive JH7110 Ethernet Controller"
