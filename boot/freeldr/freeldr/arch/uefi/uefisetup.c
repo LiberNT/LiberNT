@@ -37,6 +37,9 @@ MachInit(const char *CmdLine)
 #if defined(_M_ARM64)
     EarlyUartInitialize(0);
 #endif
+#if defined(_M_RISCV64)
+    UefiStopFirmwareWatchdogs();
+#endif
 
     MachVtbl.ConsPutChar = UefiConsPutChar;
     MachVtbl.ConsKbHit = UefiConsKbHit;

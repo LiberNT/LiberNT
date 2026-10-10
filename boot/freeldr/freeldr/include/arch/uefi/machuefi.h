@@ -104,6 +104,9 @@ UefiSerialPutChar(
 VOID
 UefiSerialDisableFirmware(VOID);
 
+VOID
+UefiStopFirmwareWatchdogs(VOID);
+
 PFREELDR_MEMORY_DESCRIPTOR
 UefiMemGetMemoryMap(ULONG *MemoryMapSize);
 

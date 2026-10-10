@@ -61,7 +61,8 @@ elseif(ARCH STREQUAL "arm64")
 elseif(ARCH STREQUAL "riscv64")
     list(APPEND UEFILDR_ARC_SOURCE
         arch/uefi/uefiserial.c
-        arch/uefi/riscv64/runtime.c)
+        arch/uefi/riscv64/runtime.c
+        arch/uefi/riscv64/watchdog.c)
     list(APPEND UEFILDR_COMMON_ASM_SOURCE
         arch/uefi/riscv64/uefiasm.S)
 else()
