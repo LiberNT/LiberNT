@@ -317,6 +317,7 @@ struct mutex
     lc_nt_event event;
     void *owner;
     int initialized;
+    int state;
 };
 void lc_mutex_init(struct mutex *lock);
 void lc_mutex_lock(struct mutex *lock);
@@ -333,7 +334,7 @@ bool lc_mutex_is_locked(struct mutex *lock);
 #define mutex_trylock(l) lc_mutex_trylock(l)
 #define mutex_unlock(l) lc_mutex_unlock(l)
 #define mutex_is_locked(l) lc_mutex_is_locked(l)
-#define DEFINE_MUTEX(name) struct mutex name = { { { 0 } }, NULL, 0 }
+#define DEFINE_MUTEX(name) struct mutex name = { { { 0 } }, NULL, 0, 0 }
 
 struct rw_semaphore { struct mutex lock; };
 #define init_rwsem(s) lc_mutex_init(&(s)->lock)

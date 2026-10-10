@@ -143,6 +143,12 @@ static void drm_sched_run_job_queue(struct drm_gpu_scheduler *sched)
 		queue_work(sched->submit_wq, &sched->work_run_job);
 }
 
+static void drm_sched_run_job_queue_tail(struct drm_gpu_scheduler *sched)
+{
+	if (!drm_sched_is_stopped(sched))
+		lc_queue_work_tail(sched->submit_wq, &sched->work_run_job);
+}
+
 /**
  * drm_sched_run_free_queue - enqueue free-job work
  * @sched: scheduler instance
@@ -1004,7 +1010,7 @@ static void drm_sched_free_job_work(struct work_struct *w)
 		sched->ops->free_job(job);
 	}
 
-	drm_sched_run_job_queue(sched);
+	drm_sched_run_job_queue_tail(sched);
 }
 
 /**
@@ -1035,7 +1041,7 @@ static void drm_sched_run_job_work(struct work_struct *w)
 	sched_job = drm_sched_entity_pop_job(entity);
 	if (!sched_job) {
 		complete_all(&entity->entity_idle);
-		drm_sched_run_job_queue(sched);
+		drm_sched_run_job_queue_tail(sched);
 		return;
 	}
 
@@ -1068,7 +1074,7 @@ static void drm_sched_run_job_work(struct work_struct *w)
 	}
 
 	wake_up(&sched->job_scheduled);
-	drm_sched_run_job_queue(sched);
+	drm_sched_run_job_queue_tail(sched);
 }
 
 static struct workqueue_struct *drm_sched_alloc_wq(const char *name)

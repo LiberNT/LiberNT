@@ -8,6 +8,9 @@
 #include <linux_compat.h>
 
 #define LC_WQ_MAX_WORKERS 4
+#define LC_WQ_INLINE_SLOTS 4
+#define LC_WORK_BATCH_SLOTS 8
+#define LC_WORK_BATCH_QUEUES 4
 
 enum
 {
@@ -35,7 +38,19 @@ struct workqueue_struct
     bool stopping;
     unsigned int nr_workers;
     struct lc_worker workers[LC_WQ_MAX_WORKERS];
+    struct lc_worker inline_slots[LC_WQ_INLINE_SLOTS];
 };
+
+struct lc_work_batch
+{
+    void *thread_id;
+    unsigned int depth;
+    unsigned int count;
+    struct workqueue_struct *queues[LC_WORK_BATCH_QUEUES];
+};
+
+static struct lc_work_batch lc_work_batches[LC_WORK_BATCH_SLOTS];
+static atomic_t lc_work_batch_active;
 
 static DEFINE_SPINLOCK(lc_work_lock);
 static LIST_HEAD(lc_workqueues);
@@ -54,6 +69,11 @@ static bool lc_work_running_locked(struct work_struct *work)
     for (i = 0; i < wq->nr_workers; ++i)
     {
         if (wq->workers[i].running == work)
+            return true;
+    }
+    for (i = 0; i < LC_WQ_INLINE_SLOTS; ++i)
+    {
+        if (wq->inline_slots[i].running == work)
             return true;
     }
     return false;
@@ -212,6 +232,212 @@ static void lc_enqueue_locked(struct workqueue_struct *wq, struct work_struct *w
     list_add_tail(&work->entry, &wq->pending);
 }
 
+static bool lc_thread_runs_wq(struct workqueue_struct *wq)
+{
+    void *thread = lc_nt_current_thread();
+    unsigned int i;
+
+    for (i = 0; i < wq->nr_workers; ++i)
+    {
+        if (READ_ONCE(wq->workers[i].thread_id) == thread)
+            return true;
+    }
+    for (i = 0; i < LC_WQ_INLINE_SLOTS; ++i)
+    {
+        if (READ_ONCE(wq->inline_slots[i].thread_id) == thread)
+            return true;
+    }
+    return false;
+}
+
+static bool lc_work_batch_note(struct workqueue_struct *wq)
+{
+    void *thread;
+    unsigned int i, j;
+
+    if (!atomic_read(&lc_work_batch_active))
+        return false;
+    thread = lc_nt_current_thread();
+    for (i = 0; i < LC_WORK_BATCH_SLOTS; ++i)
+    {
+        struct lc_work_batch *batch = &lc_work_batches[i];
+
+        if (READ_ONCE(batch->thread_id) != thread)
+            continue;
+        for (j = 0; j < batch->count; ++j)
+        {
+            if (batch->queues[j] == wq)
+                return true;
+        }
+        if (batch->count == LC_WORK_BATCH_QUEUES)
+            return false;
+        batch->queues[batch->count++] = wq;
+        return true;
+    }
+    return false;
+}
+
+static void lc_work_run_pending(struct workqueue_struct *wq)
+{
+    struct workqueue_struct *iter;
+    struct lc_worker *slot = NULL;
+    void *thread = lc_nt_current_thread();
+    bool passive = lc_nt_at_passive();
+    bool live = false;
+    unsigned int i;
+
+    spin_lock(&lc_work_lock);
+    list_for_each_entry(iter, &lc_workqueues, node)
+    {
+        if (iter == wq)
+        {
+            live = true;
+            break;
+        }
+    }
+    if (!live || wq->stopping || list_empty(&wq->pending))
+    {
+        spin_unlock(&lc_work_lock);
+        return;
+    }
+    for (i = 0; passive && i < LC_WQ_INLINE_SLOTS; ++i)
+    {
+        if (!wq->inline_slots[i].thread_id)
+        {
+            slot = &wq->inline_slots[i];
+            break;
+        }
+    }
+    if (!slot)
+    {
+        spin_unlock(&lc_work_lock);
+        lc_nt_event_set(&wq->wake);
+        return;
+    }
+    slot->wq = wq;
+    slot->thread_id = thread;
+    for (;;)
+    {
+        struct work_struct *work = NULL, *candidate;
+
+        list_for_each_entry(candidate, &wq->pending, entry)
+        {
+            if (!lc_work_running_locked(candidate))
+            {
+                work = candidate;
+                break;
+            }
+        }
+        if (!work)
+            break;
+        list_del_init(&work->entry);
+        clear_bit(WORK_STRUCT_PENDING_BIT, &work->state);
+        slot->running = work;
+        spin_unlock(&lc_work_lock);
+
+        work->func(work);
+
+        spin_lock(&lc_work_lock);
+        slot->running = NULL;
+        spin_unlock(&lc_work_lock);
+        lc_wake_up_all(&wq->idle);
+        spin_lock(&lc_work_lock);
+    }
+    slot->thread_id = NULL;
+    spin_unlock(&lc_work_lock);
+}
+
+void lc_work_batch_unplug(void)
+{
+    void *thread;
+    unsigned int i, j;
+
+    if (!atomic_read(&lc_work_batch_active))
+        return;
+    thread = lc_nt_current_thread();
+    for (i = 0; i < LC_WORK_BATCH_SLOTS; ++i)
+    {
+        struct lc_work_batch *batch = &lc_work_batches[i];
+
+        if (READ_ONCE(batch->thread_id) != thread)
+            continue;
+        for (j = 0; j < batch->count; ++j)
+            lc_nt_event_set(&batch->queues[j]->wake);
+        batch->count = 0;
+        return;
+    }
+}
+
+void lc_work_batch_begin(void)
+{
+    void *thread = lc_nt_current_thread();
+    struct lc_work_batch *free_slot = NULL;
+    unsigned int i;
+
+    spin_lock(&lc_work_lock);
+    for (i = 0; i < LC_WORK_BATCH_SLOTS; ++i)
+    {
+        struct lc_work_batch *batch = &lc_work_batches[i];
+
+        if (batch->thread_id == thread)
+        {
+            batch->depth++;
+            spin_unlock(&lc_work_lock);
+            return;
+        }
+        if (!batch->thread_id && !free_slot)
+            free_slot = batch;
+    }
+    if (free_slot)
+    {
+        free_slot->count = 0;
+        free_slot->depth = 1;
+        WRITE_ONCE(free_slot->thread_id, thread);
+        atomic_inc(&lc_work_batch_active);
+    }
+    spin_unlock(&lc_work_lock);
+}
+
+void lc_work_batch_end(void)
+{
+    struct workqueue_struct *queues[LC_WORK_BATCH_QUEUES];
+    void *thread = lc_nt_current_thread();
+    unsigned int i, count = 0;
+
+    spin_lock(&lc_work_lock);
+    for (i = 0; i < LC_WORK_BATCH_SLOTS; ++i)
+    {
+        struct lc_work_batch *batch = &lc_work_batches[i];
+
+        if (batch->thread_id != thread)
+            continue;
+        if (--batch->depth)
+            break;
+        count = batch->count;
+        memcpy(queues, batch->queues, sizeof(queues));
+        batch->count = 0;
+        WRITE_ONCE(batch->thread_id, NULL);
+        atomic_dec(&lc_work_batch_active);
+        break;
+    }
+    spin_unlock(&lc_work_lock);
+
+    for (i = 0; i < count; ++i)
+        lc_work_run_pending(queues[i]);
+}
+
+bool lc_queue_work_tail(struct workqueue_struct *wq, struct work_struct *work)
+{
+    if (test_and_set_bit(WORK_STRUCT_PENDING_BIT, &work->state))
+        return false;
+    spin_lock(&lc_work_lock);
+    lc_enqueue_locked(wq, work);
+    spin_unlock(&lc_work_lock);
+    if (!lc_thread_runs_wq(wq) && !lc_work_batch_note(wq))
+        lc_nt_event_set(&wq->wake);
+    return true;
+}
+
 bool lc_queue_work(struct workqueue_struct *wq, struct work_struct *work)
 {
     if (test_and_set_bit(WORK_STRUCT_PENDING_BIT, &work->state))
@@ -219,7 +445,8 @@ bool lc_queue_work(struct workqueue_struct *wq, struct work_struct *work)
     spin_lock(&lc_work_lock);
     lc_enqueue_locked(wq, work);
     spin_unlock(&lc_work_lock);
-    lc_nt_event_set(&wq->wake);
+    if (!lc_work_batch_note(wq))
+        lc_nt_event_set(&wq->wake);
     return true;
 }
 
@@ -332,6 +559,8 @@ static void lc_wait_work_idle(struct work_struct *work, bool wait_pending)
         return;
     if (lc_current_work() == work)
         return;
+    if (wait_pending && test_bit(WORK_STRUCT_PENDING_BIT, &work->state))
+        lc_nt_event_set(&wq->wake);
     wait_event(wq->idle, !lc_work_running(work) &&
                (!wait_pending || !test_bit(WORK_STRUCT_PENDING_BIT, &work->state)));
 }
@@ -398,12 +627,15 @@ static bool lc_workqueue_idle(struct workqueue_struct *wq)
     idle = list_empty(&wq->pending);
     for (i = 0; idle && i < wq->nr_workers; ++i)
         idle = wq->workers[i].running == NULL;
+    for (i = 0; idle && i < LC_WQ_INLINE_SLOTS; ++i)
+        idle = wq->inline_slots[i].running == NULL;
     spin_unlock(&lc_work_lock);
     return idle;
 }
 
 void lc_flush_workqueue(struct workqueue_struct *wq)
 {
+    lc_nt_event_set(&wq->wake);
     wait_event(wq->idle, lc_workqueue_idle(wq));
 }
 
@@ -427,6 +659,14 @@ struct work_struct *lc_current_work(void)
             if (wq->workers[i].thread_id == thread)
             {
                 work = wq->workers[i].running;
+                goto out;
+            }
+        }
+        for (i = 0; i < LC_WQ_INLINE_SLOTS; ++i)
+        {
+            if (wq->inline_slots[i].thread_id == thread)
+            {
+                work = wq->inline_slots[i].running;
                 goto out;
             }
         }

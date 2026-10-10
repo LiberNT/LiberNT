@@ -214,9 +214,11 @@ static irqreturn_t pvr_device_irq_thread_handler(int irq, void *data)
 		pvr_fw_irq_clear(pvr_dev);
 
 		if (READ_ONCE(pvr_dev->fw_dev.initialised)) {
+			lc_work_batch_begin();
 			pvr_fwccb_process(pvr_dev);
 			pvr_kccb_wake_up_waiters(pvr_dev);
 			pvr_device_process_active_queues(pvr_dev);
+			lc_work_batch_end();
 		}
 
 		pm_runtime_mark_last_busy(drm_dev->dev);

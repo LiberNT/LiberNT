@@ -67,6 +67,7 @@ long lc_waiter_sleep(struct lc_waiter *waiter, long timeout)
 {
     u64 start, elapsed_ms;
 
+    lc_work_batch_unplug();
     if (timeout == MAX_SCHEDULE_TIMEOUT)
     {
         lc_nt_event_wait(&waiter->event, -1);
@@ -96,27 +97,36 @@ static void lc_mutex_setup(void *object)
 {
     struct mutex *lock = object;
 
-    lc_nt_event_init(&lock->event, 1, 1);
-    lock->owner = NULL;
+    lc_nt_event_init(&lock->event, 1, 0);
 }
 
 void lc_mutex_init(struct mutex *lock)
 {
+    lock->owner = NULL;
+    lock->state = 0;
     lc_mutex_setup(lock);
     __atomic_store_n(&lock->initialized, 1, __ATOMIC_RELEASE);
 }
 
 void lc_mutex_lock(struct mutex *lock)
 {
-    lc_once(&lock->initialized, lc_mutex_setup, lock);
-    lc_nt_event_wait(&lock->event, -1);
+    int expected = 0;
+
+    if (!__atomic_compare_exchange_n(&lock->state, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+    {
+        lc_once(&lock->initialized, lc_mutex_setup, lock);
+        lc_work_batch_unplug();
+        while (__atomic_exchange_n(&lock->state, 2, __ATOMIC_ACQUIRE) != 0)
+            lc_nt_event_wait(&lock->event, -1);
+    }
     __atomic_store_n(&lock->owner, lc_nt_current_thread(), __ATOMIC_RELAXED);
 }
 
 int lc_mutex_trylock(struct mutex *lock)
 {
-    lc_once(&lock->initialized, lc_mutex_setup, lock);
-    if (!lc_nt_event_wait(&lock->event, 0))
+    int expected = 0;
+
+    if (!__atomic_compare_exchange_n(&lock->state, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
         return 0;
     __atomic_store_n(&lock->owner, lc_nt_current_thread(), __ATOMIC_RELAXED);
     return 1;
@@ -126,7 +136,8 @@ void lc_mutex_unlock(struct mutex *lock)
 {
     WARN_ON(__atomic_load_n(&lock->owner, __ATOMIC_RELAXED) == NULL);
     __atomic_store_n(&lock->owner, NULL, __ATOMIC_RELAXED);
-    lc_nt_event_set(&lock->event);
+    if (__atomic_exchange_n(&lock->state, 0, __ATOMIC_RELEASE) == 2)
+        lc_nt_event_set(&lock->event);
 }
 
 bool lc_mutex_is_locked(struct mutex *lock)
@@ -135,8 +146,10 @@ bool lc_mutex_is_locked(struct mutex *lock)
 }
 
 static DEFINE_SPINLOCK(lc_rcu_lock);
+#define LC_RCU_BATCH_MS 10
+
 static struct rcu_head *lc_rcu_pending;
-static struct work_struct lc_rcu_work;
+static struct delayed_work lc_rcu_work;
 static int lc_rcu_work_ready;
 static DEFINE_MUTEX(lc_rcu_barrier_lock);
 
@@ -180,7 +193,7 @@ static void lc_rcu_run(struct work_struct *work)
 
 static void lc_rcu_work_setup(void *object)
 {
-    INIT_WORK(object, lc_rcu_run);
+    INIT_DELAYED_WORK(object, lc_rcu_run);
 }
 
 void lc_call_rcu(struct rcu_head *head, rcu_callback_t func)
@@ -191,7 +204,7 @@ void lc_call_rcu(struct rcu_head *head, rcu_callback_t func)
     head->next = lc_rcu_pending;
     lc_rcu_pending = head;
     spin_unlock(&lc_rcu_lock);
-    queue_work(system_wq, &lc_rcu_work);
+    queue_delayed_work(system_wq, &lc_rcu_work, msecs_to_jiffies(LC_RCU_BATCH_MS));
 }
 
 void lc_rcu_barrier(void)
@@ -201,13 +214,13 @@ void lc_rcu_barrier(void)
     {
         bool pending;
 
-        flush_work(&lc_rcu_work);
+        flush_delayed_work(&lc_rcu_work);
         spin_lock(&lc_rcu_lock);
         pending = lc_rcu_pending != NULL;
         spin_unlock(&lc_rcu_lock);
         if (!pending)
             break;
-        queue_work(system_wq, &lc_rcu_work);
+        queue_delayed_work(system_wq, &lc_rcu_work, 0);
     }
 }
 
