@@ -61,7 +61,7 @@ HRESULT STDMETHODCALLTYPE CACLMulti::Append(IUnknown *punk)
     punk->AddRef();
     if (FAILED_UNEXPECTEDLY(punk->QueryInterface(IID_PPV_ARG(IEnumString, &fObjects[fObjectCount].pEnum))))
         fObjects[fObjectCount].pEnum = NULL;
-    if (FAILED_UNEXPECTEDLY(punk->QueryInterface(IID_PPV_ARG(IACList, &fObjects[fObjectCount].pACL))))
+    if (FAILED(punk->QueryInterface(IID_PPV_ARG(IACList, &fObjects[fObjectCount].pACL))))
         fObjects[fObjectCount].pACL = NULL;
     fObjectCount++;
     return S_OK;
