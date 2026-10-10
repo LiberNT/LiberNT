@@ -42,24 +42,90 @@ CmpRiscvSetDword(
     NtSetValueKey(KeyHandle, &ValueName, 0, REG_DWORD, &Value, sizeof(Value));
 }
 
-/* SBI implementation IDs from the SBI specification, chapter "Base Extension". */
-static
-PCWSTR
-CmpRiscvSbiImplementationName(
-    _In_ ULONG_PTR ImplementationId)
+typedef struct _CMP_RISCV_VENDOR
 {
-    switch (ImplementationId)
+    PCSTR Prefix;
+    ULONG_PTR MachineVendorId;
+    PCWSTR Name;
+} CMP_RISCV_VENDOR;
+
+static const CMP_RISCV_VENDOR CmpRiscvVendors[] =
+{
+    { "andestech", 0x31E, L"Andes" },
+    { "microchip", 0x029, L"Microchip" },
+    { "sifive", 0x489, L"SiFive" },
+    { "spacemit", 0, L"SpacemiT" },
+    { "thead", 0x5B7, L"T-Head" },
+};
+
+static
+const CMP_RISCV_VENDOR *
+CmpRiscvFindVendor(
+    _In_ const KI_RISCV_PROCESSOR_FEATURES *Features)
+{
+    PCSTR Comma = strchr(Features->Compatible, ',');
+    ULONG Index;
+
+    for (Index = 0; Comma && Index < RTL_NUMBER_OF(CmpRiscvVendors); Index++)
     {
-        case 0: return L"Berkeley Boot Loader";
-        case 1: return L"OpenSBI";
-        case 2: return L"Xvisor";
-        case 3: return L"KVM";
-        case 4: return L"RustSBI";
-        case 5: return L"Diosix";
-        case 6: return L"Coffer";
-        case 7: return L"Xen Project";
-        case 8: return L"PolarFire Hart Software Services";
-        default: return L"RISC-V SBI";
+        if (strlen(CmpRiscvVendors[Index].Prefix) == (SIZE_T)(Comma - Features->Compatible) &&
+            !strncmp(Features->Compatible, CmpRiscvVendors[Index].Prefix, Comma - Features->Compatible))
+        {
+            return &CmpRiscvVendors[Index];
+        }
+    }
+    for (Index = 0; Index < RTL_NUMBER_OF(CmpRiscvVendors); Index++)
+    {
+        if (CmpRiscvVendors[Index].MachineVendorId != 0 &&
+            CmpRiscvVendors[Index].MachineVendorId == Features->MachineVendorId)
+        {
+            return &CmpRiscvVendors[Index];
+        }
+    }
+    return NULL;
+}
+
+static
+BOOLEAN
+CmpRiscvIsUsableSmbiosString(
+    _In_z_ PCSTR String)
+{
+    return String[0] != ANSI_NULL &&
+           strcmp(String, "Unknown") &&
+           strncmp(String, "rv32", 4) &&
+           strncmp(String, "rv64", 4);
+}
+
+static
+VOID
+CmpRiscvBuildProcessorName(
+    _Out_writes_bytes_(BufferSize) PWCHAR Buffer,
+    _In_ SIZE_T BufferSize,
+    _In_ const KI_RISCV_PROCESSOR_FEATURES *Features,
+    _In_opt_ const CMP_RISCV_VENDOR *Vendor)
+{
+    PCSTR Model = strchr(Features->Compatible, ',');
+    CHAR Upper[sizeof(Features->Compatible)];
+    SIZE_T Index;
+
+    if (Model == NULL || Model[1] == ANSI_NULL)
+    {
+        RtlStringCbPrintfW(Buffer, BufferSize, L"RISC-V %S processor",
+                           Features->Valid && Features->IsaBase[0] ? Features->IsaBase : "rv64");
+        return;
+    }
+
+    for (Index = 0; Model[Index + 1] != ANSI_NULL && Index + 1 < sizeof(Upper); Index++)
+        Upper[Index] = (CHAR)toupper((UCHAR)Model[Index + 1]);
+    Upper[Index] = ANSI_NULL;
+    if (Vendor)
+    {
+        RtlStringCbPrintfW(Buffer, BufferSize, L"%s %S", Vendor->Name, Upper);
+    }
+    else
+    {
+        RtlStringCbPrintfW(Buffer, BufferSize, L"%.*S %S",
+                           (int)(Model - Features->Compatible), Features->Compatible, Upper);
     }
 }
 
@@ -74,12 +140,15 @@ CmpInitializeMachineDependentConfiguration(
     OBJECT_ATTRIBUTES ObjectAttributes;
     UNICODE_STRING KeyName;
     HANDLE SystemHandle, KeyHandle;
+    const CMP_RISCV_VENDOR *Vendor = CmpRiscvFindVendor(Features);
+    CHAR SmbiosManufacturer[64];
+    CHAR SmbiosVersion[64];
     CHAR Identifier[64];
     WCHAR Wide[KI_RISCV_EXTENSION_LIST_SIZE];
+    WCHAR VendorName[64];
+    WCHAR ProcessorName[64];
     ULONG Processor, Disposition;
     NTSTATUS Status;
-
-    UNREFERENCED_PARAMETER(LoaderBlock);
 
     RtlInitUnicodeString(&KeyName, L"\\Registry\\Machine\\Hardware\\Description\\System");
     InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE, NULL, NULL);
@@ -101,6 +170,20 @@ CmpInitializeMachineDependentConfiguration(
         NtClose(SystemHandle);
         return STATUS_SUCCESS;
     }
+
+    CmpGetSmbiosProcessorStrings(LoaderBlock,
+                                 SmbiosManufacturer,
+                                 sizeof(SmbiosManufacturer),
+                                 SmbiosVersion,
+                                 sizeof(SmbiosVersion));
+    if (CmpRiscvIsUsableSmbiosString(SmbiosManufacturer))
+        RtlStringCbPrintfW(VendorName, sizeof(VendorName), L"%hs", SmbiosManufacturer);
+    else
+        RtlStringCbCopyW(VendorName, sizeof(VendorName), Vendor ? Vendor->Name : L"RISC-V");
+    if (CmpRiscvIsUsableSmbiosString(SmbiosVersion))
+        RtlStringCbPrintfW(ProcessorName, sizeof(ProcessorName), L"%hs", SmbiosVersion);
+    else
+        CmpRiscvBuildProcessorName(ProcessorName, sizeof(ProcessorName), Features, Vendor);
 
     CmpConfigurationData = ExAllocatePoolWithTag(PagedPool, CmpConfigurationAreaSize, TAG_CM);
     if (!CmpConfigurationData)
@@ -129,10 +212,8 @@ CmpInitializeMachineDependentConfiguration(
             return Status;
         }
 
-        CmpRiscvSetString(KeyHandle, L"VendorIdentifier", CmpRiscvSbiImplementationName(Features->SbiImplId));
-        RtlStringCbPrintfW(Wide, sizeof(Wide), L"RISC-V %S processor (%S)",
-                           Features->Valid ? Features->IsaBase : "rv64", Features->MmuType[0] ? Features->MmuType : "sv39");
-        CmpRiscvSetString(KeyHandle, L"ProcessorNameString", Wide);
+        CmpRiscvSetString(KeyHandle, L"VendorIdentifier", VendorName);
+        CmpRiscvSetString(KeyHandle, L"ProcessorNameString", ProcessorName);
         RtlStringCbPrintfW(Wide, sizeof(Wide), L"%S", Features->Extensions);
         CmpRiscvSetString(KeyHandle, L"Extensions", Wide);
         CmpRiscvSetDword(KeyHandle, L"FeatureSet", Features->Flags);

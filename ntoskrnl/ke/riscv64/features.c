@@ -250,6 +250,16 @@ KiRiscvIdentifyProcessor(
     if (Cpu == RISCV_FDT_NO_NODE)
         return;
 
+    Property = RiscvFdtGetProperty(&Fdt, Cpu, "compatible", &Length);
+    Cursor = 0;
+    while ((Entry = RiscvFdtNextString(Property, Length, &Cursor, &EntryLength)) != NULL)
+    {
+        if (EntryLength != 0 && strncmp(Entry, "riscv", EntryLength + 1))
+        {
+            KiRiscvCopyBoundedString(Features->Compatible, sizeof(Features->Compatible), Entry, EntryLength);
+            break;
+        }
+    }
     Property = RiscvFdtGetProperty(&Fdt, Cpu, "riscv,isa-base", &Length);
     if (Property != NULL)
         KiRiscvCopyBoundedString(Features->IsaBase, sizeof(Features->IsaBase), Property, Length);

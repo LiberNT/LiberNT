@@ -280,6 +280,8 @@ BOOL IsGenericSystemName(PCWSTR ven, PCWSTR dev, BOOL * bRemove)
         { L"insyde", TRUE, FALSE },
         { L"Unknow", TRUE, TRUE },
         { L"Not Applicable", TRUE, TRUE },
+        { L"Unknown", TRUE, TRUE },
+        { L"U-Boot", TRUE, TRUE },
         // distinguish between Oracle and older VirtualBox releases (Sun, etc.)
         { L"innotek GmbH", TRUE, FALSE },
     };
@@ -291,6 +293,7 @@ BOOL IsGenericSystemName(PCWSTR ven, PCWSTR dev, BOOL * bRemove)
         { L"All Series", TRUE, TRUE },
         { L"System Product Name", TRUE, TRUE },
         { L"System Name", TRUE, TRUE },
+        { L"Unknown Product", TRUE, TRUE },
         // some Gigabyte boards
         { L"Default string", TRUE, TRUE },
         // some MSI boards
@@ -695,6 +698,11 @@ BOOL GetSystemName(PWSTR pBuf, SIZE_T cchBuf)
         {
             // board strings are empty, use BIOS vendor string
             GetSMBiosStringW(DmiStrings[BIOS_VENDOR], ven, _countof(ven), TRUE);
+
+            if (IsGenericSystemName(ven, NULL, &bRemove) && bRemove)
+            {
+                *ven = 0;
+            }
         }
     }
     else

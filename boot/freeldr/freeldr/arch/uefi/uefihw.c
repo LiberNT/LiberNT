@@ -13,6 +13,8 @@
 #include <arch/pc/pcbios.h>
 #endif
 #include <reactos/arc/loaderblk.h>
+#include <Fdt.h>
+#include <reactos/riscv64/fdtlib.h>
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(HWDETECT);
@@ -365,7 +367,9 @@ UefiIsUsableSmbiosString(
         !strcmp(String, "Default string") ||
         !strcmp(String, "System Product Name") ||
         !strcmp(String, "System manufacturer") ||
-        !strcmp(String, "Not Specified"))
+        !strcmp(String, "Not Specified") ||
+        !strcmp(String, "Unknown") ||
+        !strcmp(String, "Unknown Product"))
     {
         return FALSE;
     }
@@ -426,6 +430,45 @@ UefiGetSmbiosSystemIdentifier(
     }
 
     return FALSE;
+}
+
+static
+BOOLEAN
+UefiGetDeviceTreeModel(
+    _Out_writes_bytes_(BufferSize) PCHAR Buffer,
+    _In_ SIZE_T BufferSize)
+{
+    EFI_GUID DeviceTreeGuid = FDT_TABLE_GUID;
+    const CHAR *Model;
+    RISCV_FDT Fdt;
+    ULONG Size, Length;
+    UINTN Index;
+
+    for (Index = 0; Index < GlobalSystemTable->NumberOfTableEntries; ++Index)
+    {
+        EFI_CONFIGURATION_TABLE *Entry = &GlobalSystemTable->ConfigurationTable[Index];
+
+        if (memcmp(&Entry->VendorGuid, &DeviceTreeGuid, sizeof(DeviceTreeGuid)) ||
+            !RiscvFdtValidateHeader(Entry->VendorTable, RISCV_FDT_MAXIMUM_SIZE, &Size) ||
+            !RiscvFdtOpen(Entry->VendorTable, Size, &Fdt))
+        {
+            continue;
+        }
+        Model = RiscvFdtGetProperty(&Fdt, RiscvFdtRootNode(&Fdt), "model", &Length);
+        if (Model && Length > 1 && Model[Length - 1] == ANSI_NULL)
+            return NT_SUCCESS(RtlStringCbCopyA(Buffer, BufferSize, Model));
+    }
+    return FALSE;
+}
+
+static
+BOOLEAN
+UefiGetFirmwareSystemIdentifier(
+    _Out_writes_bytes_(BufferSize) PCHAR Buffer,
+    _In_ SIZE_T BufferSize)
+{
+    return UefiGetSmbiosSystemIdentifier(Buffer, BufferSize) ||
+           UefiGetDeviceTreeModel(Buffer, BufferSize);
 }
 
 #endif
@@ -756,7 +799,7 @@ UefiHwDetect(
         RtlStringCbCopyA(SystemIdentifier,
                          sizeof(SystemIdentifier),
                          "ARM processor family");
-        UefiGetSmbiosSystemIdentifier(SystemIdentifier, sizeof(SystemIdentifier));
+        UefiGetFirmwareSystemIdentifier(SystemIdentifier, sizeof(SystemIdentifier));
         FldrCreateSystemKey(&SystemKey, SystemIdentifier);
     }
 #elif defined(_M_RISCV64)
@@ -766,7 +809,7 @@ UefiHwDetect(
         RtlStringCbCopyA(SystemIdentifier,
                          sizeof(SystemIdentifier),
                          "RISC-V processor family");
-        UefiGetSmbiosSystemIdentifier(SystemIdentifier, sizeof(SystemIdentifier));
+        UefiGetFirmwareSystemIdentifier(SystemIdentifier, sizeof(SystemIdentifier));
         FldrCreateSystemKey(&SystemKey, SystemIdentifier);
     }
 #else

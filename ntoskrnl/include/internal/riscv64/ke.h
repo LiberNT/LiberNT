@@ -202,6 +202,7 @@ typedef struct _KI_RISCV_PROCESSOR_FEATURES
     BOOLEAN Valid;
     CHAR IsaBase[16];
     CHAR MmuType[16];
+    CHAR Compatible[32];
     ULONG Flags;
     ULONG CbomBlockSize;
     ULONG CbozBlockSize;
