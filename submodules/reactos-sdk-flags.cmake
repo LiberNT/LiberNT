@@ -13,10 +13,12 @@ function(reactos_sdk_flags _prefix)
         OUTPUT_VARIABLE _resource_dir OUTPUT_STRIP_TRAILING_WHITESPACE)
     set(_sdk "${_sdk_SOURCE_DIR}/sdk/include")
     set(_build "${_sdk_BUILD_DIR}/sdk/include")
-    set(_includes)
-    foreach(_dir "${_resource_dir}/include" "${_sdk}/ucrt" "${_sdk}/vcruntime" "${_sdk}/crt" "${_sdk}/psdk"
+    set(_includes " -isystem ${_resource_dir}/include")
+    set(_rc_includes)
+    foreach(_dir "${_sdk}/ucrt" "${_sdk}/vcruntime" "${_sdk}/crt" "${_sdk}/psdk"
                  "${_sdk}" "${_sdk}/ddk" "${_sdk}/reactos" "${_build}" "${_build}/psdk" "${_build}/ddk")
         string(APPEND _includes " -isystem ${_dir}")
+        string(APPEND _rc_includes " -I ${_dir}")
     endforeach()
     set(_defines "-D_DLL -D_UCRT -D__USE_CRTIMP -D__REACTOS__ -D_CRT_DECLARE_NONSTDC_NAMES=1 -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00")
     set(_codegen "-fms-extensions ${_sdk_ARCH_FLAGS}")
@@ -53,6 +55,7 @@ function(reactos_sdk_flags _prefix)
     set(${_prefix}_CXX_FLAGS
         "${_codegen} -nostdlibinc -nostdinc++ -isystem ${_sdk_CXX_RUNTIME}/include/c++/v1 -D__LARGE_MBSTATE_T ${_defines}${_includes}"
         PARENT_SCOPE)
+    set(${_prefix}_RC_FLAGS "${_defines}${_rc_includes}" PARENT_SCOPE)
     set(${_prefix}_C_LIBRARIES "${_libraries}" PARENT_SCOPE)
     set(${_prefix}_CXX_LIBRARIES
         "${_sdk_CXX_RUNTIME}/lib/libc++.a ${_sdk_CXX_RUNTIME}/lib/libc++abi.a ${_sdk_CXX_RUNTIME}/lib/libunwind.a ${_libraries}"

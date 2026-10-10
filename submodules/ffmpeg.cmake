@@ -102,7 +102,7 @@ ExternalProject_Add(ffmpeg
         --cross-prefix=${_ffmpeg_llvm}/llvm-
         --cc=${_ffmpeg_llvm}/clang
         --cxx=${_ffmpeg_llvm}/clang++
-        "--windres=${_ffmpeg_llvm}/llvm-windres --target=${_ffmpeg_triple}"
+        "--windres=${_ffmpeg_llvm}/llvm-windres --target=${_ffmpeg_triple} ${_ffmpeg_sdk_RC_FLAGS}"
         "--extra-cflags=--target=${_ffmpeg_triple} ${_ffmpeg_sdk_C_FLAGS}"
         "--extra-cxxflags=--target=${_ffmpeg_triple} ${_ffmpeg_sdk_CXX_FLAGS}"
         "--extra-ldflags=--target=${_ffmpeg_triple} ${_ffmpeg_sdk_LINK_FLAGS}"
