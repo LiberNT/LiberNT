@@ -396,6 +396,23 @@ LogfCreate(PLOGFILE* LogFile,
                            LogfpWriteFile,
                            LogfpReadFile,
                            LogfpFlushFile);
+    if (Status == STATUS_EVENTLOG_FILE_CORRUPT && !Backup)
+    {
+        DPRINT1("EventLog: Log `%wZ' is corrupt and will be cleared.\n", FileName);
+        Status = ElfCreateFile(&pLogFile->LogFile,
+                               FileName,
+                               FileStdInfo.EndOfFile.LowPart,
+                               MaxSize,
+                               Retention,
+                               TRUE,
+                               Backup,
+                               LogfpAlloc,
+                               LogfpFree,
+                               LogfpSetFileSize,
+                               LogfpWriteFile,
+                               LogfpReadFile,
+                               LogfpFlushFile);
+    }
     if (!NT_SUCCESS(Status))
         goto Quit;
 
