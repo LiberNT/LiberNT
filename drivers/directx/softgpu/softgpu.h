@@ -430,6 +430,11 @@ SoftGpuPlatformUpdatePointer(
     _Inout_ PSOFTGPU_DEVICE Device);
 
 VOID
+SoftGpuPlatformScanoutWritten(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ const RECT *Rect);
+
+VOID
 SoftGpuPlatformFillNodeMetadata(
     _In_ ULONG NodeOrdinal,
     _Out_ DXGKARG_GETNODEMETADATA *GetNodeMetadata);

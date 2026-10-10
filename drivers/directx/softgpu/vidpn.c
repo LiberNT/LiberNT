@@ -1213,6 +1213,7 @@ SoftGpuCopyCurrentPrimaryToScanout(
     }
     if (!NT_SUCCESS(Status))
         goto Complete;
+    SoftGpuPlatformScanoutWritten(Device, &FrameRect);
 
 Complete:
     if (PointerRestored)
@@ -1644,6 +1645,8 @@ SoftGpuDdiPresentDisplayOnly(
                                           &Rect);
         if (!NT_SUCCESS(Status))
             break;
+        if (Destination == Device->Scanout)
+            SoftGpuPlatformScanoutWritten(Device, &Rect);
     }
     for (Index = 0;
          NT_SUCCESS(Status) && Index < PresentDisplayOnly->NumDirtyRects;
@@ -1664,6 +1667,8 @@ SoftGpuDdiPresentDisplayOnly(
                                           DestinationPitch,
                                           Composite,
                                           &Rect);
+        if (NT_SUCCESS(Status) && Destination == Device->Scanout)
+            SoftGpuPlatformScanoutWritten(Device, &Rect);
     }
     KeMemoryBarrier();
 

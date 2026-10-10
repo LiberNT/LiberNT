@@ -105,6 +105,7 @@ SoftGpuPointerRestoreLocked(
             for (X = 0; X < Width; ++X)
                 Destination[X] = Device->PointerBacking[Y * SOFTGPU_POINTER_MAX_WIDTH + X];
         }
+        SoftGpuPlatformScanoutWritten(Device, &Device->PointerSavedRect);
     }
     Device->PointerBackingValid = FALSE;
 }
@@ -151,6 +152,7 @@ SoftGpuPointerDrawLocked(
             Destination[X] = SoftGpuPointerBlendPixel(Destination[X], Source[X]);
         }
     }
+    SoftGpuPlatformScanoutWritten(Device, &Clipped);
     Device->PointerBackingValid = TRUE;
 }
 
