@@ -10674,6 +10674,29 @@ static HRESULT WINAPI ITypeInfo_fnInvoke(
                             V_BYREF(&rgvarg[i]) = V_BYREF(src_arg);
                             V_VT(&rgvarg[i]) = rgvt[i];
                         }
+#ifdef __REACTOS__
+                        else if ((rgvt[i] == (VT_UNKNOWN | VT_BYREF) || rgvt[i] == (VT_DISPATCH | VT_BYREF)) &&
+                                 (V_VT(src_arg) == (VT_UNKNOWN | VT_BYREF) || V_VT(src_arg) == (VT_DISPATCH | VT_BYREF)))
+                        {
+                            const TYPEDESC *iface_tdesc = tdesc;
+                            IUnknown *in_iface = *V_UNKNOWNREF(src_arg);
+                            GUID iid = IID_IUnknown;
+
+                            while (iface_tdesc->vt == VT_PTR)
+                                iface_tdesc = iface_tdesc->lptdesc;
+                            if (iface_tdesc->vt == VT_USERDEFINED)
+                                hres = get_iface_guid((ITypeInfo *)iface, iface_tdesc->hreftype, &iid);
+                            else if (iface_tdesc->vt == VT_DISPATCH)
+                                iid = IID_IDispatch;
+
+                            V_VT(&missing_arg[i]) = VT_UNKNOWN;
+                            V_UNKNOWN(&missing_arg[i]) = NULL;
+                            if (SUCCEEDED(hres) && (wParamFlags & PARAMFLAG_FIN) && in_iface)
+                                hres = IUnknown_QueryInterface(in_iface, &iid, (void **)&V_UNKNOWN(&missing_arg[i]));
+                            V_BYREF(&rgvarg[i]) = &V_UNKNOWN(&missing_arg[i]);
+                            V_VT(&rgvarg[i]) = rgvt[i];
+                        }
+#endif
                         else
                         {
                             /* FIXME: this doesn't work for VT_BYREF arguments if
@@ -10742,6 +10765,13 @@ static HRESULT WINAPI ITypeInfo_fnInvoke(
                             V_VT(arg) = VT_VARIANT | VT_BYREF;
                             V_VARIANTREF(arg) = &missing_arg[i];
                         }
+#ifdef __REACTOS__
+                        else if (rgvt[i] != VT_VARIANT)
+                        {
+                            memset(arg, 0, sizeof(*arg));
+                            V_VT(arg) = rgvt[i];
+                        }
+#endif
                         else
                         {
                             V_VT(arg) = VT_ERROR;
@@ -10809,6 +10839,17 @@ static HRESULT WINAPI ITypeInfo_fnInvoke(
                     VARIANTARG *arg = &pDispParams->rgvarg[pDispParams->cArgs - 1 - vargs_converted];
                     if (wParamFlags & PARAMFLAG_FOUT)
                     {
+#ifdef __REACTOS__
+                        if (V_ISBYREF(arg) && V_VT(&missing_arg[i]) == VT_UNKNOWN &&
+                            V_BYREF(&rgvarg[i]) == &V_UNKNOWN(&missing_arg[i]))
+                        {
+                            if ((wParamFlags & PARAMFLAG_FIN) && *V_UNKNOWNREF(arg))
+                                IUnknown_Release(*V_UNKNOWNREF(arg));
+                            *V_UNKNOWNREF(arg) = V_UNKNOWN(&missing_arg[i]);
+                            V_VT(&missing_arg[i]) = VT_EMPTY;
+                        }
+                        else
+#endif
                         if ((rgvt[i] & VT_BYREF) && !(V_VT(arg) & VT_BYREF))
                         {
                             hres = VariantChangeType(arg, &rgvarg[i], 0, V_VT(arg));

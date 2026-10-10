@@ -359,7 +359,16 @@ static unsigned char *interface_user_unmarshal(ULONG *pFlags, unsigned char *Buf
   Buffer += sizeof(DWORD);
 
   if(!ptr)
+  {
+#ifdef __REACTOS__
+      if (*ppunk)
+      {
+          IUnknown_Release(*ppunk);
+          *ppunk = NULL;
+      }
+#endif
       return Buffer;
+  }
 
   return WdtpInterfacePointer_UserUnmarshal(pFlags, Buffer, ppunk, riid);
 }
