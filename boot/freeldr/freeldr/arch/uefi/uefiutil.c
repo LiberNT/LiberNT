@@ -13,6 +13,7 @@ DBG_DEFAULT_CHANNEL(WARNING);
 /* GLOBALS ********************************************************************/
 
 extern EFI_SYSTEM_TABLE *GlobalSystemTable;
+extern volatile BOOLEAN BootServicesExitedFlag;
 
 /* FUNCTIONS ******************************************************************/
 
@@ -20,19 +21,50 @@ TIMEINFO*
 UefiGetTime(VOID)
 {
     static TIMEINFO TimeInfo;
+    static BOOLEAN ClockUnavailable;
+    static EFI_EVENT SecondTimer;
+    static ULONG Seconds;
+    EFI_BOOT_SERVICES *Services = GlobalSystemTable->BootServices;
     EFI_STATUS Status;
     EFI_TIME time = {0};
 
-    Status = GlobalSystemTable->RuntimeServices->GetTime(&time, NULL);
-    if (Status != EFI_SUCCESS)
-        ERR("UefiGetTime: cannot get time status %d\n", Status);
+    if (!ClockUnavailable)
+    {
+        Status = GlobalSystemTable->RuntimeServices->GetTime(&time, NULL);
+        if (Status == EFI_SUCCESS)
+        {
+            TimeInfo.Year = time.Year;
+            TimeInfo.Month = time.Month;
+            TimeInfo.Day = time.Day;
+            TimeInfo.Hour = time.Hour;
+            TimeInfo.Minute = time.Minute;
+            TimeInfo.Second = time.Second;
+            return &TimeInfo;
+        }
 
-    TimeInfo.Year = time.Year;
-    TimeInfo.Month = time.Month;
-    TimeInfo.Day = time.Day;
-    TimeInfo.Hour = time.Hour;
-    TimeInfo.Minute = time.Minute;
-    TimeInfo.Second = time.Second;
+        ERR("UefiGetTime: cannot get time status %d, counting seconds with a timer\n", Status);
+        ClockUnavailable = TRUE;
+        if (BootServicesExitedFlag ||
+            EFI_ERROR(Services->CreateEvent(EVT_TIMER, TPL_APPLICATION, NULL, NULL, &SecondTimer)))
+        {
+            SecondTimer = NULL;
+        }
+        else if (EFI_ERROR(Services->SetTimer(SecondTimer, TimerPeriodic, 10000000)))
+        {
+            Services->CloseEvent(SecondTimer);
+            SecondTimer = NULL;
+        }
+    }
+
+    if (SecondTimer && !BootServicesExitedFlag && Services->CheckEvent(SecondTimer) == EFI_SUCCESS)
+        ++Seconds;
+
+    TimeInfo.Year = 0;
+    TimeInfo.Month = 0;
+    TimeInfo.Day = 0;
+    TimeInfo.Hour = (USHORT)((Seconds / 3600) % 24);
+    TimeInfo.Minute = (USHORT)((Seconds / 60) % 60);
+    TimeInfo.Second = (USHORT)(Seconds % 60);
     return &TimeInfo;
 }
 
