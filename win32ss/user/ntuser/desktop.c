@@ -1563,7 +1563,8 @@ DesktopWindowProc(PWND Wnd, UINT Msg, WPARAM wParam, LPARAM lParam, LRESULT *lRe
             if ((pWindowPos->flags & SWP_SHOWWINDOW) != 0)
             {
                 HDESK hdesk = UserOpenInputDesktop(0, FALSE, DESKTOP_ALL_ACCESS);
-                IntSetThreadDesktop(hdesk, FALSE);
+                if (hdesk && !IntSetThreadDesktop(hdesk, FALSE))
+                    ObCloseHandle(hdesk, UserMode);
             }
             break;
         }
