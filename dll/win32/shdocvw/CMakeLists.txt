@@ -28,7 +28,6 @@ target_include_directories(shdocvw BEFORE PRIVATE
 )
 
 set_module_type(shdocvw win32dll UNICODE)
-add_idl_reg_scripts(shdocvw regtypelib res/shdocvw_v1.idl)
 target_link_libraries(shdocvw cpprt uuid wine)
 add_delay_importlibs(shdocvw version shell32 user32 gdi32 ole32 oleaut32 ieframe)
 add_importlibs(shdocvw shlwapi advapi32 msvcrt comctl32 kernel32 ntdll)
