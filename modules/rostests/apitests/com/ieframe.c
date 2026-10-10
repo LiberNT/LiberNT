@@ -185,6 +185,7 @@ static const CLASS_AND_INTERFACES ExpectedInterfaces[] =
 #else
             { NTDDI_MIN,          NTDDI_WINBLUE,      &IID_IWebBrowserPriv },
 #endif
+            { NTDDI_WIN11_GE,     NTDDI_MAX,          &IID_IWebBrowserPriv },
 
             { NTDDI_MIN,          NTDDI_MAX,          &IID_IPersist },
             { NTDDI_MIN,          NTDDI_MAX,          &IID_IOleObject },
@@ -235,6 +236,7 @@ static const CLASS_AND_INTERFACES ExpectedInterfaces[] =
 #else
             { NTDDI_MIN,          NTDDI_WINBLUE,      &IID_IWebBrowserPriv },
 #endif
+            { NTDDI_WIN11_GE,     NTDDI_MAX,          &IID_IWebBrowserPriv },
 
             { NTDDI_MIN,          NTDDI_MAX,          &IID_IPersist },
             { NTDDI_MIN,          NTDDI_MAX,          &IID_IOleObject },

@@ -48,6 +48,8 @@ BOOLEAN RegisteredOnVistaToWin8Dot1(ULONG version) { return version >= NTDDI_VIS
 BOOLEAN RegisteredOnWin7OrNewer(ULONG version)     { return version >= NTDDI_WIN7; }
 BOOLEAN RegisteredOnWin8OrNewer(ULONG version)     { return version >= NTDDI_WIN8; }
 BOOLEAN RegisteredOnWS03OrOlder(ULONG version)     { return version <= NTDDI_WS03SP4; }
+BOOLEAN RegisteredBeforeWin11Ge(ULONG version)     { return version < NTDDI_WIN11_GE; }
+BOOLEAN RegisteredOnWin11GeOrNewer(ULONG version)  { return version >= NTDDI_WIN11_GE; }
 
 static KNOWN_INTERFACE KnownInterfaces[] =
 {
@@ -111,8 +113,8 @@ static KNOWN_INTERFACE KnownInterfaces[] =
     { ID_NAME(IID_IContinueCallback),              RegisteredAlways },
     { ID_NAME(IID_ICustomizeInfoTip),              RegisteredAlways },
     { ID_NAME(IID_IDataObject),                    RegisteredAlways },
-    { ID_NAME(IID_IDefViewFrame3),                 RegisteredAlways },
-    { ID_NAME(IID_IDefViewFrameGroup),             RegisteredAlways },
+    { ID_NAME(IID_IDefViewFrame3),                 RegisteredBeforeWin11Ge },
+    { ID_NAME(IID_IDefViewFrameGroup),             RegisteredBeforeWin11Ge },
     { ID_NAME(IID_IDeskBand),                      RegisteredAlways },
     { ID_NAME(IID_IDeskBandEx),                    RegisteredAlways },
     // { ID_NAME(IID_IDefViewID),                     RegisteredAlways }, == DefViewFrame3
@@ -365,9 +367,9 @@ static KNOWN_INTERFACE KnownInterfaces[] =
     { ID_NAME(IID_IClientSecurity),                RegisteredNever  },
     { ID_NAME(IID_IComThreadingInfo),              RegisteredNever  },
     { ID_NAME(IID_IContext),                       RegisteredNever  },
-    { ID_NAME(IID_IContextMenu),                   RegisteredNever  },
-    { ID_NAME(IID_IContextMenu2),                  RegisteredNever  },
-    { ID_NAME(IID_IContextMenu3),                  RegisteredNever  },
+    { ID_NAME(IID_IContextMenu),                   RegisteredOnWin11GeOrNewer },
+    { ID_NAME(IID_IContextMenu2),                  RegisteredOnWin11GeOrNewer },
+    { ID_NAME(IID_IContextMenu3),                  RegisteredOnWin11GeOrNewer },
     { ID_NAME(IID_IContextMenuCB),                 RegisteredNever  },
     { ID_NAME(IID_ICopyHookA),                     RegisteredNever  },
     { ID_NAME(IID_ICopyHookW),                     RegisteredNever  },
@@ -441,7 +443,7 @@ static KNOWN_INTERFACE KnownInterfaces[] =
     { ID_NAME(IID_IShellDispatch6),                RegisteredNever  },
     { ID_NAME(IID_IShellExecuteHookA),             RegisteredNever  },
     { ID_NAME(IID_IShellExecuteHookW),             RegisteredNever  },
-    { ID_NAME(IID_IShellExtInit),                  RegisteredNever  },
+    { ID_NAME(IID_IShellExtInit),                  RegisteredOnWin11GeOrNewer },
     { ID_NAME(IID_IShellFolderBand),               RegisteredNever  },
     { ID_NAME(IID_IShellFolderSearchable),         RegisteredNever  },
     { ID_NAME(IID_IShellFolderSearchableCallback), RegisteredNever  },
@@ -449,7 +451,7 @@ static KNOWN_INTERFACE KnownInterfaces[] =
     { ID_NAME(IID_IShellFolderViewCB),             RegisteredNever  },
     { ID_NAME(IID_IShellFolderViewType),           RegisteredNever  },
     { ID_NAME(IID_IShellIconOverlay),              RegisteredNever  },
-    { ID_NAME(IID_IShellIconOverlayIdentifier),    RegisteredNever  },
+    { ID_NAME(IID_IShellIconOverlayIdentifier),    RegisteredOnWin11GeOrNewer },
     { ID_NAME(IID_IShellImageData),                RegisteredNever  },
     { ID_NAME(IID_IShellImageDataAbort),           RegisteredNever  },
     { ID_NAME(IID_IShellImageDataFactory),         RegisteredNever  },
@@ -871,7 +873,8 @@ TestInterfaceRegistry(
 
             dataSize = sizeof(data);
             result = RegQueryValueExW(hKey, NULL, NULL, &type, (PBYTE)data, &dataSize);
-            ok(result == NO_ERROR, "Failed to query value for %s, error %lu\n", iface->name, result);
+            ok(result == NO_ERROR || (result == ERROR_FILE_NOT_FOUND && CurrentNTDDI >= NTDDI_WIN11_GE),
+               "Failed to query value for %s, error %lu\n", iface->name, result);
             if (!myskip(result == NO_ERROR, "No module name\n"))
             {
                 ok(type == REG_SZ, "type %lu for %s\n", type, iface->name);

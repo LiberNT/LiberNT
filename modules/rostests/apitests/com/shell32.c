@@ -529,7 +529,7 @@ static const CLASS_AND_INTERFACES ExpectedInterfaces[] =
         }
     },
     {
-        ID_NAME(CLSID_NetworkPlaces, NTDDI_MIN, NTDDI_MAX),
+        ID_NAME(CLSID_NetworkPlaces, NTDDI_MIN, NTDDI_WIN11_GA),
         {
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IPersistFreeThreadedObject },
 
