@@ -2372,6 +2372,60 @@ RtlpReportInvalidFree(HANDLE HeapPtr, PVOID Ptr)
 #endif /* DBG */
 }
 
+static
+BOOLEAN
+RtlpIsValidBusyEntry(PHEAP Heap, PHEAP_ENTRY HeapEntry)
+{
+    PHEAP_SEGMENT Segment;
+    PHEAP_ENTRY Neighbor;
+    BOOLEAN Valid = FALSE;
+
+    _SEH2_TRY
+    {
+        if (HeapEntry->Flags & HEAP_ENTRY_VIRTUAL_ALLOC)
+        {
+            Valid = ((ULONG_PTR)CONTAINING_RECORD(HeapEntry, HEAP_VIRTUAL_ALLOC_ENTRY, BusyBlock) & (PAGE_SIZE - 1)) == 0;
+            _SEH2_LEAVE;
+        }
+
+        if (HeapEntry->Size == 0)
+            _SEH2_LEAVE;
+
+        Segment = RtlpHeapSegmentFromAddress(Heap, HeapEntry);
+        if (!Segment ||
+            HeapEntry < Segment->FirstEntry ||
+            HeapEntry->Size > (SIZE_T)(Segment->LastValidEntry - HeapEntry))
+        {
+            _SEH2_LEAVE;
+        }
+
+        if (!(HeapEntry->Flags & HEAP_ENTRY_LAST_ENTRY))
+        {
+            Neighbor = HeapEntry + HeapEntry->Size;
+            if (Neighbor->PreviousSize != HeapEntry->Size)
+                _SEH2_LEAVE;
+        }
+
+        if (HeapEntry->PreviousSize != 0)
+        {
+            if (HeapEntry->PreviousSize > (SIZE_T)(HeapEntry - (PHEAP_ENTRY)Segment->BaseAddress))
+                _SEH2_LEAVE;
+            Neighbor = HeapEntry - HeapEntry->PreviousSize;
+            if (Neighbor->Size != HeapEntry->PreviousSize)
+                _SEH2_LEAVE;
+        }
+
+        Valid = TRUE;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Valid = FALSE;
+    }
+    _SEH2_END;
+
+    return Valid;
+}
+
 BOOLEAN NTAPI RtlFreeHeap(
    HANDLE HeapPtr, /* [in] Handle of heap */
    ULONG Flags,   /* [in] Heap freeing flags */
@@ -2439,6 +2493,14 @@ BOOLEAN NTAPI RtlFreeHeap(
     {
         RtlEnterHeapLock(Heap->LockVariable, TRUE);
         Locked = TRUE;
+    }
+
+    if (!RtlpIsValidBusyEntry(Heap, HeapEntry))
+    {
+        if (Locked) RtlLeaveHeapLock(Heap->LockVariable);
+        RtlpReportInvalidFree(HeapPtr, Ptr);
+        RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
+        return FALSE;
     }
 
     if (HeapEntry->Flags & HEAP_ENTRY_VIRTUAL_ALLOC)
