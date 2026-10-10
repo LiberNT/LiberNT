@@ -5,28 +5,27 @@ The binary drivers under the per-architecture subdirectories (amd64/
 today; other architectures may be added the same way) are NOT part of
 the ReactOS project. They are third-party firmware components
 redistributed here to enable network boot on hardware whose built-in
-UEFI firmware does not include them. Apart from the NIC-specific UNDI
-driver, they are the generic EDK2 network protocol stack; the only
-current consumer is the LattePanda Mu HTTP boot profile
-(FREELDR_HTTP_BOOT).
+UEFI firmware does not include them. They are the generic EDK2 network
+protocol stack; the only current consumer is the LattePanda Mu HTTP boot
+profile (FREELDR_HTTP_BOOT).
 
 These drivers are loaded by FreeLDR (uefildr.efi) at early boot time
 via UEFI Boot Services LoadImage()/StartImage() to provide network
 protocol support (SNP, IP, TCP, HTTP) before the operating system starts.
 
 
-RtkUndiDxe.efi
----------------
-  Description : Realtek PCIe Gigabit Ethernet UNDI (Universal Network Device
-                Interface) DXE driver v2.077.  Provides
-                EFI_SIMPLE_NETWORK_PROTOCOL for Realtek PCIe Ethernet
-                controllers (RTL8111/8168/8411 family).
-  Origin      : Realtek (https://www.realtek.com/Download/List?cate_id=584)
-  Copyright   : Copyright (c) Realtek Semiconductor Corp.
-  License     : Proprietary.
-  Signed      : Microsoft UEFI CA 2011.
-  Note        : The LattePanda Mu carrier board has an RTL8111/8168 PCIe
-                GbE NIC at PCI 01:00.0 [10ec:8168].
+RtkUndiDxe.efi (not shipped)
+----------------------------
+  The LattePanda Mu carrier board has an RTL8111/8168 PCIe GbE NIC at
+  PCI 01:00.0 [10ec:8168] and its firmware carries no UEFI driver for it.
+  Realtek's UNDI driver (RtkUndiDxe.efi) is proprietary and its licence
+  grants no redistribution, so it is not part of this repository.
+  Download it from Realtek (https://www.realtek.com/Download/List?cate_id=584)
+  and pass its path at configure time:
+
+    -DFREELDR_HTTP_BOOT_EXTRA_DRIVERS=/path/to/RtkUndiDxe.efi
+
+  The file is copied to EFI/BOOT/drivers/ and FreeLDR loads it from there.
 
 EDK2 DXE Drivers
 ----------------
@@ -118,7 +117,8 @@ EDK2 DXE Drivers
 
   Not all are required for every boot entry. FreeLDR loads the core set
   unconditionally and the rest only when the entry asks for them:
-    - Always:     DpcDxe + RngDxe + Hash2DxeCrypto + RtkUndiDxe + SnpDxe
+    - Always:     DpcDxe + RngDxe + Hash2DxeCrypto + RtkUndiDxe (when
+                  supplied) + SnpDxe
                   + MnpDxe + ArpDxe + Ip4Dxe + TcpDxe + HttpUtilitiesDxe
                   + HttpDxe
     - HttpBootUrl= names a host:      Udp4Dxe + DnsDxe

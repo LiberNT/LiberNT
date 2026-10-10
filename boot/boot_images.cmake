@@ -66,6 +66,8 @@ if(FREELDR_HTTP_BOOT)
         "Static IPv4 address/prefix[,gateway] for FreeLdr HTTP boot; empty uses DHCP")
     set(FREELDR_HTTP_BOOT_OPTIONS "" CACHE STRING
         "Boot options appended to the HTTP boot entry")
+    set(FREELDR_HTTP_BOOT_EXTRA_DRIVERS "" CACHE STRING
+        "Additional UEFI drivers (.efi paths) copied to EFI/BOOT/drivers, such as a vendor UNDI driver")
 
     set(FREELDR_BOOTCD_INI "${CMAKE_CURRENT_BINARY_DIR}/bootdata/bootcd_httpboot.ini")
     freeldr_ini_add_http_boot("${REACTOS_SOURCE_DIR}/boot/bootdata/bootcd.ini"
@@ -172,6 +174,12 @@ if(DEFINED EFI_PLATFORM_ID)
     if(FREELDR_HTTP_BOOT)
         set(_uefi_driver_dir "${REACTOS_SOURCE_DIR}/media/boot/uefi_drivers/${ARCH}")
         file(GLOB _uefi_driver_files CONFIGURE_DEPENDS "${_uefi_driver_dir}/*.efi")
+        foreach(_driver ${FREELDR_HTTP_BOOT_EXTRA_DRIVERS})
+            if(NOT EXISTS "${_driver}")
+                message(FATAL_ERROR "FREELDR_HTTP_BOOT_EXTRA_DRIVERS: ${_driver} does not exist")
+            endif()
+            list(APPEND _uefi_driver_files "${_driver}")
+        endforeach()
         if(NOT _uefi_driver_files)
             message(FATAL_ERROR "UEFI network boot drivers are missing from ${_uefi_driver_dir}")
         endif()
