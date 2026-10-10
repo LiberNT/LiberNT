@@ -463,12 +463,18 @@ SyscallId = 0
 #ifdef _M_IX86
 #define KUSER_SHARED_SYSCALL HEX(7ffe0300)
 #define KGDT_R0_CODE 8
+#ifdef WOW64_I386_RUNTIME
+.code
+Wow64SystemServiceCall:
+    jmp dword ptr fs:[HEX(c0)]
+#endif
 MACRO(STUBCODE_U, Name, SyscallId, ArgCount)
     StackBytes = 4 * ArgCount
     FPO 0, 0, 0, 0, 0, FRAME_FPO
     mov eax, SyscallId
 #ifdef WOW64_I386_RUNTIME
-    call dword ptr fs:[HEX(c0)]
+    mov edx, offset Wow64SystemServiceCall
+    call edx
 #else
     mov edx, KUSER_SHARED_SYSCALL
     call dword ptr [edx]
