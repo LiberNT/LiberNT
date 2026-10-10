@@ -527,8 +527,16 @@ void apartment_release(struct apartment *apt)
              * must have a ref on the apartment and so it cannot be destroyed).
              */
 #ifdef __REACTOS__
-            if (stubmgr->extern_conn && stubmgr->extrefs)
-                IExternalConnection_ReleaseConnection(stubmgr->extern_conn, EXTCONN_STRONG, 0, FALSE);
+            if (stubmgr->extern_conn)
+            {
+                struct ifstub *ifstub;
+
+                LIST_FOR_EACH_ENTRY(ifstub, &stubmgr->ifstubs, struct ifstub, entry)
+                    if (ifstub->extrefs)
+                        IExternalConnection_ReleaseConnection(stubmgr->extern_conn, EXTCONN_STRONG, 0, FALSE);
+                if (stubmgr->lockrefs)
+                    IExternalConnection_ReleaseConnection(stubmgr->extern_conn, EXTCONN_STRONG, 0, FALSE);
+            }
 #endif
             stub_manager_int_release(stubmgr);
         }

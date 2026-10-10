@@ -230,6 +230,9 @@ struct ifstub
     IUnknown         *iface;      /* RO */
     MSHLFLAGS         flags;      /* so we can enforce process-local marshalling rules (RO) */
     IRpcChannelBuffer*chan;       /* channel passed to IRpcStubBuffer::Invoke (RO) */
+#ifdef __REACTOS__
+    ULONG             extrefs;
+#endif
 };
 
 /* stub managers hold refs on the object and each interface stub */
@@ -241,6 +244,9 @@ struct stub_manager
     struct apartment *apt;        /* owning apt (RO) */
 
     ULONG             extrefs;    /* number of 'external' references (CS lock) */
+#ifdef __REACTOS__
+    ULONG             lockrefs;
+#endif
     ULONG             refs;       /* internal reference count (CS apt->cs) */
     ULONG             weakrefs;   /* number of weak references (CS lock) */
     OID               oid;        /* apartment-scoped unique identifier (RO) */
@@ -265,6 +271,13 @@ struct stub_manager * get_stub_manager_from_object(struct apartment *apt, IUnkno
 void stub_manager_disconnect(struct stub_manager *m);
 ULONG stub_manager_ext_addref(struct stub_manager *m, ULONG refs, BOOL tableweak);
 ULONG stub_manager_ext_release(struct stub_manager *m, ULONG refs, BOOL tableweak, BOOL last_unlock_releases);
+#ifdef __REACTOS__
+ULONG stub_manager_ext_addref_ex(struct stub_manager *m, struct ifstub *ifstub, ULONG refs, BOOL tableweak);
+ULONG stub_manager_ext_release_ex(struct stub_manager *m, struct ifstub *ifstub, ULONG refs, BOOL tableweak,
+                                  BOOL last_unlock_releases);
+ULONG stub_manager_ext_release_ipid(struct stub_manager *m, const IPID *ipid, ULONG refs, BOOL tableweak,
+                                    BOOL last_unlock_releases);
+#endif
 struct stub_manager * get_stub_manager(struct apartment *apt, OID oid);
 void stub_manager_release_marshal_data(struct stub_manager *m, ULONG refs, const IPID *ipid, BOOL tableweak);
 BOOL stub_manager_is_table_marshaled(struct stub_manager *m, const IPID *ipid);

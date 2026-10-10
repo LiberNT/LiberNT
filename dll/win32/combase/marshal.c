@@ -823,7 +823,11 @@ static HRESULT std_unmarshal_interface(MSHCTX dest_context, void *dest_context_d
 
         /* unref the ifstub. FIXME: only do this on success? */
         if (!stub_manager_is_table_marshaled(stubmgr, &obj.std.ipid))
+#ifdef __REACTOS__
+            stub_manager_ext_release_ipid(stubmgr, &obj.std.ipid, obj.std.cPublicRefs, obj.std.flags & SORFP_TABLEWEAK, FALSE);
+#else
             stub_manager_ext_release(stubmgr, obj.std.cPublicRefs, obj.std.flags & SORFP_TABLEWEAK, FALSE);
+#endif
 
         stub_manager_int_release(stubmgr);
         apartment_release(apt);
@@ -1097,6 +1101,21 @@ HRESULT marshal_object(struct apartment *apt, STDOBJREF *stdobjref, REFIID riid,
         }
     }
 
+#ifdef __REACTOS__
+    if (!tablemarshal)
+    {
+        stdobjref->cPublicRefs = NORMALEXTREFS;
+        stub_manager_ext_addref_ex(manager, ifstub, stdobjref->cPublicRefs, FALSE);
+    }
+    else
+    {
+        stdobjref->cPublicRefs = 0;
+        if (mshlflags & MSHLFLAGS_TABLESTRONG)
+            stub_manager_ext_addref_ex(manager, ifstub, 1, FALSE);
+        else
+            stub_manager_ext_addref_ex(manager, ifstub, 0, TRUE);
+    }
+#else
     if (!tablemarshal)
     {
         stdobjref->cPublicRefs = NORMALEXTREFS;
@@ -1110,6 +1129,7 @@ HRESULT marshal_object(struct apartment *apt, STDOBJREF *stdobjref, REFIID riid,
         else
             stub_manager_ext_addref(manager, 0, TRUE);
     }
+#endif
 
     /* FIXME: check return value */
     rpc_register_interface(riid);
@@ -2486,6 +2506,24 @@ HRESULT unmarshal_object(const STDOBJREF *stdobjref, struct apartment *apt, MSHC
 
         if (hr == S_OK)
         {
+#ifdef __REACTOS__
+            IRemUnknown *remunk;
+
+            if (stdobjref->cPublicRefs && !IsEqualGUID(&ifproxy->stdobjref.ipid, &stdobjref->ipid))
+            {
+                if (SUCCEEDED(proxy_manager_get_remunknown(proxy_manager, &remunk)))
+                {
+                    REMINTERFACEREF rif;
+
+                    rif.ipid = stdobjref->ipid;
+                    rif.cPublicRefs = stdobjref->cPublicRefs;
+                    rif.cPrivateRefs = 0;
+                    IRemUnknown_RemRelease(remunk, 1, &rif);
+                    IRemUnknown_Release(remunk);
+                }
+            }
+            else
+#endif
             InterlockedExchangeAdd((LONG *)&ifproxy->refs, stdobjref->cPublicRefs);
             /* get at least one external reference to the object to keep it alive */
             hr = ifproxy_get_public_ref(ifproxy);

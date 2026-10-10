@@ -423,6 +423,87 @@ struct stub_manager * get_stub_manager(struct apartment *apt, OID oid)
     return result;
 }
 
+#ifdef __REACTOS__
+ULONG stub_manager_ext_addref_ex(struct stub_manager *m, struct ifstub *ifstub, ULONG refs, BOOL tableweak)
+{
+    BOOL first_extern_ref;
+    ULONG *holder;
+    ULONG rc;
+
+    EnterCriticalSection(&m->lock);
+
+    holder = ifstub ? &ifstub->extrefs : &m->lockrefs;
+    refs = min(refs, (ULONG_MAX-1 - m->extrefs));
+    first_extern_ref = refs && !*holder;
+    *holder += refs;
+    rc = (m->extrefs += refs);
+
+    if (tableweak)
+        rc += ++m->weakrefs;
+
+    LeaveCriticalSection(&m->lock);
+
+    TRACE("added %lu refs to %p (oid %s), rc is now %lu\n", refs, m, wine_dbgstr_longlong(m->oid), rc);
+
+    if (first_extern_ref && m->extern_conn)
+        IExternalConnection_AddConnection(m->extern_conn, EXTCONN_STRONG, 0);
+
+    return rc;
+}
+
+ULONG stub_manager_ext_release_ex(struct stub_manager *m, struct ifstub *ifstub, ULONG refs, BOOL tableweak,
+                                  BOOL last_unlock_releases)
+{
+    BOOL last_extern_ref;
+    ULONG *holder;
+    ULONG held;
+    ULONG rc;
+
+    EnterCriticalSection(&m->lock);
+
+    holder = ifstub ? &ifstub->extrefs : &m->lockrefs;
+    refs = min(refs, m->extrefs);
+    held = min(refs, *holder);
+    *holder -= held;
+    rc = (m->extrefs -= refs);
+
+    if (tableweak)
+        --m->weakrefs;
+    if (!last_unlock_releases)
+        rc += m->weakrefs;
+
+    last_extern_ref = held && !*holder;
+
+    LeaveCriticalSection(&m->lock);
+
+    TRACE("removed %lu refs from %p (oid %s), rc is now %lu\n", refs, m, wine_dbgstr_longlong(m->oid), rc);
+
+    if (last_extern_ref && m->extern_conn)
+        IExternalConnection_ReleaseConnection(m->extern_conn, EXTCONN_STRONG, 0, last_unlock_releases);
+
+    if (rc == 0)
+        if (!(m->extern_conn && last_unlock_releases && m->weakrefs))
+            stub_manager_int_release(m);
+
+    return rc;
+}
+
+ULONG stub_manager_ext_release_ipid(struct stub_manager *m, const IPID *ipid, ULONG refs, BOOL tableweak,
+                                    BOOL last_unlock_releases)
+{
+    return stub_manager_ext_release_ex(m, stub_manager_ipid_to_ifstub(m, ipid), refs, tableweak, last_unlock_releases);
+}
+
+ULONG stub_manager_ext_addref(struct stub_manager *m, ULONG refs, BOOL tableweak)
+{
+    return stub_manager_ext_addref_ex(m, NULL, refs, tableweak);
+}
+
+ULONG stub_manager_ext_release(struct stub_manager *m, ULONG refs, BOOL tableweak, BOOL last_unlock_releases)
+{
+    return stub_manager_ext_release_ex(m, NULL, refs, tableweak, last_unlock_releases);
+}
+#else
 /* add some external references (ie from a client that unmarshaled an ifptr) */
 ULONG stub_manager_ext_addref(struct stub_manager *m, ULONG refs, BOOL tableweak)
 {
@@ -486,6 +567,7 @@ ULONG stub_manager_ext_release(struct stub_manager *m, ULONG refs, BOOL tablewea
 
     return rc;
 }
+#endif
 
 /* gets the stub manager associated with an ipid - caller must have
  * a reference to the apartment while a reference to the stub manager is held.
@@ -644,7 +726,11 @@ void stub_manager_release_marshal_data(struct stub_manager *m, ULONG refs, const
     else if (ifstub->flags & MSHLFLAGS_TABLESTRONG)
         refs = 1;
 
+#ifdef __REACTOS__
+    stub_manager_ext_release_ex(m, ifstub, refs, tableweak, !tableweak);
+#else
     stub_manager_ext_release(m, refs, tableweak, !tableweak);
+#endif
 }
 
 /* is an ifstub table marshaled? */
@@ -787,7 +873,12 @@ static HRESULT WINAPI Rundown_RemAddRef(IRundown *iface,
             continue;
         }
 
+#ifdef __REACTOS__
+        stub_manager_ext_addref_ex(stubmgr, stub_manager_ipid_to_ifstub(stubmgr, &InterfaceRefs[i].ipid),
+                                   InterfaceRefs[i].cPublicRefs, FALSE);
+#else
         stub_manager_ext_addref(stubmgr, InterfaceRefs[i].cPublicRefs, FALSE);
+#endif
         if (InterfaceRefs[i].cPrivateRefs)
             FIXME("Adding %ld refs securely not implemented\n", InterfaceRefs[i].cPrivateRefs);
 
@@ -820,7 +911,11 @@ static HRESULT WINAPI Rundown_RemRelease(IRundown *iface,
             break;
         }
 
+#ifdef __REACTOS__
+        stub_manager_ext_release_ipid(stubmgr, &InterfaceRefs[i].ipid, InterfaceRefs[i].cPublicRefs, FALSE, TRUE);
+#else
         stub_manager_ext_release(stubmgr, InterfaceRefs[i].cPublicRefs, FALSE, TRUE);
+#endif
         if (InterfaceRefs[i].cPrivateRefs)
             FIXME("Releasing %ld refs securely not implemented\n", InterfaceRefs[i].cPrivateRefs);
 
