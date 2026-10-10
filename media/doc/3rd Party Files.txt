@@ -242,6 +242,21 @@ Used Version: branch k1-bl-v2.2.y, git commit fc02b891b17b8bdc1273a39f80aa374cd9
 License: BSD-2-Clause (https://spdx.org/licenses/BSD-2-Clause.html), media/boot/spacemit-k1/LICENCE.opensbi
 URL: https://github.com/spacemit-com/opensbi
 
+Title: StarFive JH7110 U-Boot (SPL, U-Boot FIT with OpenSBI) for the Orange Pi RV
+Path: media/boot/starfive-jh7110/u-boot-spl.bin.normal.out
+Path: media/boot/starfive-jh7110/u-boot.itb
+Used Version: U-Boot git commit 0a55b098d6f5f6bafa84fc2f18b433dd167bf729, OpenSBI git commit 6ad246a1494807ee91e36ffcf60e4c30bb309d45 (PLATFORM=generic)
+License: GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later.html), media/boot/starfive-jh7110/LICENCE.u-boot; OpenSBI: BSD-2-Clause (https://spdx.org/licenses/BSD-2-Clause.html), media/boot/starfive-jh7110/LICENCE.opensbi
+URL: https://github.com/u-boot/u-boot
+URL: https://github.com/riscv-software-src/opensbi
+Modifications: none; built with starfive_visionfive2_defconfig plus media/boot/starfive-jh7110/u-boot.config and u-boot-sd.dtsi
+
+Title: Orange Pi RV device tree
+Path: media/boot/starfive-jh7110/jh7110-orangepi-rv.dtb
+Used Version: U-Boot git commit 0a55b098d6f5f6bafa84fc2f18b433dd167bf729, dts/upstream/src/riscv/starfive/jh7110-orangepi-rv.dts (unmodified)
+License: GPL-2.0 OR MIT (https://spdx.org/licenses/MIT.html)
+URL: https://github.com/u-boot/u-boot
+
 Title: DejaVu Fonts
 Path: media/fonts
 Used Version: 2.37

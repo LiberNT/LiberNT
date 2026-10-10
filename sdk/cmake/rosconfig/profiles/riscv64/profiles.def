@@ -4,6 +4,7 @@ config PROFILE_RISCV64
     var ROSCONFIG_PROFILE
     value generic "Generic RISC-V"
     value profile_spacemit_k1 "SpacemiT K1 (Banana Pi BPI-F3)"
+    value profile_starfive_jh7110 "StarFive JH7110 (Orange Pi RV)"
     default generic
     depends ARCH=riscv64
     help
@@ -15,3 +16,10 @@ config PROFILE_RISCV64
       It compiles for the RVA22U64 profile, lets user-mode modules use
       misaligned scalar accesses, which the K1's X60 harts perform in
       hardware, and binds msvcrt to its vector (V) string routines.
+
+      StarFive JH7110 (Orange Pi RV) builds ReactOS.img for a USB disk the
+      firmware starts through UEFI, and JH7110-SD.img, an SD card that holds
+      only U-Boot SPL, OpenSBI and U-Boot with a script that runs FreeLoader
+      from the USB disk.
+      It compiles for the RVA20U64 profile, which the JH7110's U74 harts
+      implement.

@@ -665,7 +665,7 @@ set(_preinstall_boot_partition_files
     -add ${FREELDR_PREINSTALL_INI} freeldr.ini)
 set(_preinstall_rpi_firmware)
 set(_preinstall_rpi_overlays)
-if(NOT SPACEMIT_K1_SUPPORT AND NOT FREELDR_HAS_OFW_BOOT)
+if(NOT SPACEMIT_K1_SUPPORT AND NOT STARFIVE_JH7110_SUPPORT AND NOT FREELDR_HAS_OFW_BOOT)
     file(GLOB _preinstall_rpi_firmware ${REACTOS_SOURCE_DIR}/media/boot/rpi/*)
     file(GLOB _preinstall_rpi_overlays ${REACTOS_SOURCE_DIR}/media/boot/rpi/overlays/*)
 endif()
@@ -720,6 +720,14 @@ if(SPACEMIT_K1_SUPPORT)
         ${SPACEMIT_K1_UBOOT_ENV})
     list(APPEND _reactosimg_deps
         ${SPACEMIT_K1_BOOTINFO} ${SPACEMIT_K1_FSBL} ${SPACEMIT_K1_OPENSBI} ${SPACEMIT_K1_UBOOT})
+endif()
+if(STARFIVE_JH7110_SUPPORT)
+    set(_preinstall_boot_partition_fs fat32)
+    list(APPEND _preinstall_boot_partition_files
+        -mkdir dtb
+        -mkdir dtb/starfive
+        -add ${STARFIVE_JH7110_DTB} dtb/starfive/jh7110-orangepi-rv.dtb)
+    list(APPEND _preinstall_partition_deps ${STARFIVE_JH7110_DTB})
 endif()
 if(FREELDR_HAS_OFW_BOOT)
     # The firmware boot partition is advertised as FAT32 LBA (0x0c).
@@ -813,6 +821,40 @@ add_custom_target(reactosimg
     DEPENDS ${_reactosimg_deps}
     VERBATIM)
 add_dependencies(reactosimg preinstall_partition)
+
+if(STARFIVE_JH7110_SUPPORT)
+    set(_jh7110_boot_partition_file ${CMAKE_CURRENT_BINARY_DIR}/jh7110-bootfs.img)
+    set(_jh7110_sd_image_file ${REACTOS_BINARY_DIR}/JH7110-SD.img)
+    add_custom_target(jh7110sdimg
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${_jh7110_boot_partition_file} ${_jh7110_sd_image_file}
+        COMMAND native-fatten ${_jh7110_boot_partition_file}
+            -format ${STARFIVE_JH7110_BOOT_SECTORS} fat32 LIBERNTSD
+            -add ${STARFIVE_JH7110_BOOT_SCRIPT} boot.scr
+            -add ${STARFIVE_JH7110_BOOT_SCRIPT_SOURCE} boot.cmd
+        COMMAND native-mkdiskimg
+            -o ${_jh7110_sd_image_file}
+            -gpt
+            -data ${STARFIVE_JH7110_SPL}
+            -start ${STARFIVE_JH7110_SPL_START}
+            -size ${STARFIVE_JH7110_SPL_SECTORS}
+            -name spl
+            -guid ${STARFIVE_JH7110_SPL_GUID}
+            -data ${STARFIVE_JH7110_UBOOT}
+            -start ${STARFIVE_JH7110_UBOOT_START}
+            -size ${STARFIVE_JH7110_UBOOT_SECTORS}
+            -name uboot
+            -guid ${STARFIVE_JH7110_UBOOT_GUID}
+            -partition ${_jh7110_boot_partition_file}
+            -start ${STARFIVE_JH7110_BOOT_START}
+            -type 0c
+            -name bootfs
+            -bootable
+        DEPENDS native-fatten native-mkdiskimg
+            ${STARFIVE_JH7110_SPL} ${STARFIVE_JH7110_UBOOT}
+            ${STARFIVE_JH7110_BOOT_SCRIPT} ${STARFIVE_JH7110_BOOT_SCRIPT_SOURCE}
+        VERBATIM)
+    add_dependencies(reactosimg jh7110sdimg)
+endif()
 
 add_custom_target(reactosvhd
     COMMAND ${CMAKE_COMMAND} -E rm -f ${_preinstall_vhd_file}

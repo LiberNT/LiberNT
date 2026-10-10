@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0 OR MIT
+
+&mmc1_pins {
+	bootph-pre-ram;
+
+	clk-pins {
+		bootph-pre-ram;
+	};
+
+	mmc-pins {
+		bootph-pre-ram;
+	};
+};
