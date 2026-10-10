@@ -51,6 +51,7 @@
 #ifdef __REACTOS__
 #include "winsvc.h"
 #include <winsvc_undoc.h>
+#include "dhcp.h"
 #endif
 
 #include "wine/nsi.h"
@@ -767,6 +768,9 @@ DWORD WINAPI GetAdaptersInfo( IP_ADAPTER_INFO *info, ULONG *size )
 
         info->LeaseObtained = 0;
         info->LeaseExpires = 0;
+#ifdef __REACTOS__
+        getDhcpInfoForAdapter( info->AdapterName, info );
+#endif
 
         info++;
     }

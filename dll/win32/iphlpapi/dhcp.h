@@ -11,7 +11,7 @@
 
 DWORD
 getDhcpInfoForAdapter(
-    DWORD AdapterIndex,
+    PCSTR AdapterName,
     PIP_ADAPTER_INFO ptr);
 
 #endif /* ndef WINE_DHCP_H_ */

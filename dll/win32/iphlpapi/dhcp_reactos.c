@@ -10,10 +10,9 @@
 
 DWORD
 getDhcpInfoForAdapter(
-    DWORD AdapterIndex,
+    PCSTR AdapterName,
     PIP_ADAPTER_INFO ptr)
 {
-    const char *ifname = NULL;
     HKEY hKeyInterfaces = NULL, hKeyInterface = NULL;
     DWORD dwValue, dwSize, dwType;
     DWORD ret = ERROR_SUCCESS;
@@ -22,10 +21,6 @@ getDhcpInfoForAdapter(
     ptr->LeaseObtained = 0;
     ptr->LeaseExpires = 0;
     strcpy(ptr->DhcpServer.IpAddress.String, "");
-
-    ifname = getInterfaceNameByIndex(AdapterIndex);
-    if (!ifname)
-        return ERROR_OUTOFMEMORY;
 
     ret = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
                         L"SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces",
@@ -36,7 +31,7 @@ getDhcpInfoForAdapter(
         goto done;
 
     ret = RegOpenKeyExA(hKeyInterfaces,
-                        ifname,
+                        AdapterName,
                         0,
                         KEY_READ,
                         &hKeyInterface);
@@ -55,7 +50,7 @@ getDhcpInfoForAdapter(
 
     if (ptr->DhcpEnabled != 0)
     {
-        dwSize = sizeof(ptr->LeaseObtained);
+        dwSize = sizeof(dwValue);
         ret = RegQueryValueExW(hKeyInterface,
                                L"LeaseObtainedTime",
                                NULL,
@@ -93,9 +88,6 @@ done:
 
     if (hKeyInterfaces)
         RegCloseKey(hKeyInterfaces);
-
-    if (ifname)
-        consumeInterfaceName(ifname);
 
     return ret;
 }
