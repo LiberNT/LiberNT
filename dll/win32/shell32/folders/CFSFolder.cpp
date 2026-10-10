@@ -2214,14 +2214,33 @@ HRESULT CFSFolder::_CreateShellExtInstance(const CLSID *pclsid, LPCITEMIDLIST pi
     }
     PathCombineW(wszPath, m_sPathTarget, pszName);
 
-    CComPtr<IPersistFile> pp;
-    hr = SHCoCreateInstance(NULL, pclsid, NULL, IID_PPV_ARG(IPersistFile, &pp));
+    CComPtr<IUnknown> punk;
+    hr = SHCoCreateInstance(NULL, pclsid, NULL, IID_PPV_ARG(IUnknown, &punk));
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
-    pp->Load(wszPath, 0);
+    CComPtr<IInitializeWithItem> pInitItem;
+    CComPtr<IPersistFile> pp;
+    if (SUCCEEDED(punk->QueryInterface(IID_PPV_ARG(IInitializeWithItem, &pInitItem))))
+    {
+        CComPtr<IShellItem> psi;
+        hr = SHCreateItemFromParsingName(wszPath, NULL, IID_PPV_ARG(IShellItem, &psi));
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+        hr = pInitItem->Initialize(psi, STGM_READ);
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+    }
+    else if (SUCCEEDED(punk->QueryInterface(IID_PPV_ARG(IPersistFile, &pp))))
+    {
+        pp->Load(wszPath, 0);
+    }
+    else
+    {
+        return E_NOINTERFACE;
+    }
 
-    hr = pp->QueryInterface(riid, ppvOut);
+    hr = punk->QueryInterface(riid, ppvOut);
     if (hr != S_OK)
     {
         ERR("Failed to query for interface IID_IShellExtInit hr %x pclsid %s\n", hr, wine_dbgstr_guid(pclsid));
