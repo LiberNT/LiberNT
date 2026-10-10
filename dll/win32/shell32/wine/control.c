@@ -1767,6 +1767,8 @@ Control_ShowAppletInTaskbar(CPlApplet* applet, UINT index)
     ShowWindow(applet->hWnd, SW_SHOWMINNOACTIVE);
 
     /* Activate the corresponding button in the taskbar */
+    if (!FindWindowW(L"Shell_TrayWnd", NULL))
+        return;
     CoInitialize(NULL);
     if (CoCreateInstance(&CLSID_TaskbarList,
                          NULL, CLSCTX_INPROC_SERVER,
