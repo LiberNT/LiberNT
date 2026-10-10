@@ -359,7 +359,11 @@ BOOL WINAPI SetupAddToDiskSpaceListA(HDSKSPC handle, const char *file,
 {
     WCHAR *fileW = strdupAtoW(file);
     BOOL ret = SetupAddToDiskSpaceListW(handle, fileW, size, op, reserved1, reserved2);
+#ifdef __REACTOS__
+    HeapFree(GetProcessHeap(), 0, fileW);
+#else
     free(fileW);
+#endif
     return ret;
 }
 

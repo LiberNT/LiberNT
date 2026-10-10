@@ -203,11 +203,19 @@ UINT WINAPI SetupPromptForDiskA(HWND hwndParent, PCSTR DialogTitle, PCSTR DiskNa
     ret = SetupPromptForDiskW(hwndParent, DialogTitleW, DiskNameW, PathToSourceW,
             FileSoughtW, TagFileW, DiskPromptStyle, PathBufferW, MAX_PATH, PathRequiredSize);
 
+#ifdef __REACTOS__
+    HeapFree(GetProcessHeap(), 0, DialogTitleW);
+    HeapFree(GetProcessHeap(), 0, DiskNameW);
+    HeapFree(GetProcessHeap(), 0, PathToSourceW);
+    HeapFree(GetProcessHeap(), 0, FileSoughtW);
+    HeapFree(GetProcessHeap(), 0, TagFileW);
+#else
     free(DialogTitleW);
     free(DiskNameW);
     free(PathToSourceW);
     free(FileSoughtW);
     free(TagFileW);
+#endif
 
     if(ret == DPROMPT_SUCCESS)
     {

@@ -351,7 +351,11 @@ BOOL WINAPI SetupGetSourceFileLocationA( HINF hinf, PINFCONTEXT context, PCSTR f
     ret = TRUE;
 
  done:
+#ifdef __REACTOS__
+    HeapFree( GetProcessHeap(), 0, filenameW );
+#else
     free( filenameW );
+#endif
     free( bufferW );
     return ret;
 }
@@ -552,7 +556,11 @@ BOOL WINAPI SetupGetTargetPathA( HINF hinf, PINFCONTEXT context, PCSTR section, 
     ret = TRUE;
 
  done:
+#ifdef __REACTOS__
+    HeapFree( GetProcessHeap(), 0, sectionW );
+#else
     free( sectionW );
+#endif
     free( bufferW );
     return ret;
 }
