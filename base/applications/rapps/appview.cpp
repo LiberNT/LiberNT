@@ -280,6 +280,90 @@ CComboBox::Create(HWND hwndParent)
 }
 // **** CComboBox ****
 
+typedef HRESULT (WINAPI *PFN_GET_MACHINE_TYPE_ATTRIBUTES)(USHORT, MACHINE_ATTRIBUTES *);
+
+static const struct
+{
+    USHORT Machine;
+    LPCWSTR Package;
+    LPCWSTR Name;
+} ArchChoices[] = {
+    { IMAGE_FILE_MACHINE_ARM64, L"arm64", L"arm64" },
+    { IMAGE_FILE_MACHINE_AMD64, L"amd64", L"amd64" },
+    { IMAGE_FILE_MACHINE_I386, L"x86", L"i386" },
+};
+
+CArchComboBox::CArchComboBox() : m_Width(70), m_Height(22)
+{
+}
+
+HWND
+CArchComboBox::Create(HWND hwndParent)
+{
+    PFN_GET_MACHINE_TYPE_ATTRIBUTES pGetMachineTypeAttributes;
+    LPCWSTR NativeName = CurrentArchitecture;
+    int Index;
+
+    m_hWnd = CreateWindowW(
+        WC_COMBOBOX, L"", CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_CHILD | WS_OVERLAPPED | WS_VISIBLE, 0, 0, m_Width,
+        m_Height, hwndParent, NULL, 0, NULL);
+
+    SendMessageW(WM_SETFONT, (WPARAM)GetStockObject(DEFAULT_GUI_FONT), 0);
+
+    for (SIZE_T i = 0; i < _countof(ArchChoices); i++)
+    {
+        if (!StrCmpIW(ArchChoices[i].Package, CurrentArchitecture))
+            NativeName = ArchChoices[i].Name;
+    }
+    Index = (int)SendMessageW(CB_ADDSTRING, 0, (LPARAM)NativeName);
+    SendMessageW(CB_SETITEMDATA, Index, (LPARAM)CurrentArchitecture);
+    SendMessageW(CB_SETCURSEL, Index, 0);
+
+    pGetMachineTypeAttributes = (PFN_GET_MACHINE_TYPE_ATTRIBUTES)GetProcAddress(GetModuleHandleW(L"kernel32.dll"),
+                                                                               "GetMachineTypeAttributes");
+    for (SIZE_T i = 0; i < _countof(ArchChoices) && pGetMachineTypeAttributes; i++)
+    {
+        MACHINE_ATTRIBUTES Attributes;
+
+        if (!StrCmpIW(ArchChoices[i].Package, CurrentArchitecture) ||
+            FAILED(pGetMachineTypeAttributes(ArchChoices[i].Machine, &Attributes)) ||
+            !(Attributes & UserEnabled))
+        {
+            continue;
+        }
+
+        Index = (int)SendMessageW(CB_ADDSTRING, 0, (LPARAM)ArchChoices[i].Name);
+        SendMessageW(CB_SETITEMDATA, Index, (LPARAM)ArchChoices[i].Package);
+        if (!StrCmpIW(ArchChoices[i].Package, GetPackageArchitecture()))
+            SendMessageW(CB_SETCURSEL, Index, 0);
+    }
+
+    ApplySelection();
+
+    return m_hWnd;
+}
+
+BOOL
+CArchComboBox::ApplySelection()
+{
+    int Index = (int)SendMessageW(CB_GETCURSEL);
+    LPCWSTR Package;
+
+    if (Index == CB_ERR)
+        return FALSE;
+
+    Package = (LPCWSTR)SendMessageW(CB_GETITEMDATA, Index);
+    if (!StrCmpIW(Package, GetPackageArchitecture()))
+        return FALSE;
+
+    if (!StrCmpIW(Package, CurrentArchitecture))
+        SettingsInfo.szPackageArch[0] = UNICODE_NULL;
+    else
+        CStringW::CopyChars(SettingsInfo.szPackageArch, _countof(SettingsInfo.szPackageArch), Package,
+                            (int)wcslen(Package) + 1);
+    return TRUE;
+}
+
 // **** CAppRichEdit ****
 
 VOID
@@ -1547,6 +1631,7 @@ CApplicationView::ProcessWindowMessage(
             bSuccess &= CreateToolbar();
             bSuccess &= CreateSearchBar();
             bSuccess &= CreateComboBox();
+            bSuccess &= CreateArchComboBox();
             bSuccess &= CreateHSplitter();
             bSuccess &= CreateListView();
             bSuccess &= CreateAppInfoDisplay();
@@ -1696,6 +1781,7 @@ CApplicationView::ProcessWindowMessage(
             m_AppsInfo->SendMessageW(WM_SYSCOLORCHANGE, wParam, lParam);
             m_Toolbar->SendMessageW(WM_SYSCOLORCHANGE, wParam, lParam);
             m_ComboBox->SendMessageW(WM_SYSCOLORCHANGE, wParam, lParam);
+            m_ArchComboBox->SendMessageW(WM_SYSCOLORCHANGE, wParam, lParam);
         }
         break;
 
@@ -1770,6 +1856,17 @@ CApplicationView::CreateComboBox()
     m_ComboBox->m_Margin.top = 4;
 
     return m_ComboBox->Create(m_Toolbar->m_hWnd) != NULL;
+}
+
+BOOL
+CApplicationView::CreateArchComboBox()
+{
+    m_ArchComboBox = new CUiWindow<CArchComboBox>();
+    m_ArchComboBox->m_VerticalAlignment = UiAlign_LeftTop;
+    m_ArchComboBox->m_HorizontalAlignment = UiAlign_RightBtm;
+    m_ArchComboBox->m_Margin.top = 4;
+
+    return m_ArchComboBox->Create(m_Toolbar->m_hWnd) != NULL;
 }
 
 BOOL
@@ -1850,7 +1947,8 @@ CApplicationView::OnSize(HWND hwnd, WPARAM wParam, LPARAM lParam)
 
     /* Automatically hide captions */
     DWORD dToolbarTreshold = m_Toolbar->GetMaxButtonsWidth();
-    DWORD dSearchbarMargin = (LOWORD(lParam) - m_SearchBar->m_Width - m_ComboBox->m_Width - TOOLBAR_PADDING * 2);
+    DWORD dSearchbarMargin = (LOWORD(lParam) - m_SearchBar->m_Width - m_ComboBox->m_Width - m_ArchComboBox->m_Width -
+                              TOOLBAR_PADDING * 3);
 
     if (dSearchbarMargin > dToolbarTreshold)
     {
@@ -1892,6 +1990,18 @@ CApplicationView::OnSize(HWND hwnd, WPARAM wParam, LPARAM lParam)
     if (hdwp)
     {
         hdwp = m_ComboBox->OnParentSize(r, hdwp);
+        if (hdwp)
+        {
+            EndDeferWindowPos(hdwp);
+        }
+    }
+
+    m_ArchComboBox->m_Margin.right = m_ComboBox->m_Margin.right + m_ComboBox->m_Width + TOOLBAR_PADDING;
+    count = m_ArchComboBox->CountSizableChildren();
+    hdwp = BeginDeferWindowPos(count);
+    if (hdwp)
+    {
+        hdwp = m_ArchComboBox->OnParentSize(r, hdwp);
         if (hdwp)
         {
             EndDeferWindowPos(hdwp);
@@ -1973,6 +2083,15 @@ CApplicationView::OnCommand(WPARAM wParam, LPARAM lParam)
 
             return;
         }
+        else if ((HWND)lParam == m_ArchComboBox->GetWindow())
+        {
+            if (HIWORD(wParam) == CBN_SELCHANGE && m_ArchComboBox->ApplySelection())
+            {
+                SaveSettings(hMainWnd, &SettingsInfo);
+                m_MainWindow->SendMessageW(WM_COMMAND, ID_REFRESH, 0);
+            }
+            return;
+        }
         else if ((HWND)lParam == m_Toolbar->GetWindow())
         {
             // the message is sent from Toolbar. fall down to continue process
@@ -2008,6 +2127,7 @@ CApplicationView::~CApplicationView()
 {
     delete m_Toolbar;
     delete m_SearchBar;
+    delete m_ArchComboBox;
     delete m_ListView;
     delete m_AppsInfo;
     delete m_HSplitter;
@@ -2119,6 +2239,7 @@ VOID
 CApplicationView::AppendTabOrderWindow(int Direction, ATL::CSimpleArray<HWND> &TabOrderList)
 {
     m_Toolbar->AppendTabOrderWindow(Direction, TabOrderList);
+    m_ArchComboBox->AppendTabOrderWindow(Direction, TabOrderList);
     m_ComboBox->AppendTabOrderWindow(Direction, TabOrderList);
     m_SearchBar->AppendTabOrderWindow(Direction, TabOrderList);
     m_ListView->AppendTabOrderWindow(Direction, TabOrderList);

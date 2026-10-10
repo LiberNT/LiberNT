@@ -342,12 +342,28 @@ class CComboBox : public CWindow
     Create(HWND hwndParent);
 };
 
+class CArchComboBox : public CWindow
+{
+  public:
+    int m_Width;
+    int m_Height;
+
+    CArchComboBox();
+
+    HWND
+    Create(HWND hwndParent);
+
+    BOOL
+    ApplySelection();
+};
+
 class CApplicationView : public CUiWindow<CWindowImpl<CApplicationView>>
 {
   private:
     CUiPanel *m_Panel = NULL;
     CMainToolbar *m_Toolbar = NULL;
     CUiWindow<CComboBox> *m_ComboBox = NULL;
+    CUiWindow<CArchComboBox> *m_ArchComboBox = NULL;
     CUiWindow<CSearchBar> *m_SearchBar = NULL;
     CAppsListView *m_ListView = NULL;
     CAppInfoDisplay *m_AppsInfo = NULL;
@@ -364,6 +380,8 @@ class CApplicationView : public CUiWindow<CWindowImpl<CApplicationView>>
     CreateSearchBar();
     BOOL
     CreateComboBox();
+    BOOL
+    CreateArchComboBox();
     BOOL
     CreateHSplitter();
     BOOL

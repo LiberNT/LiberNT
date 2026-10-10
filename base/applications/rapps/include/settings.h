@@ -23,9 +23,7 @@ struct SETTINGS_INFO
     /* Software source settings */
     BOOL bUseSource;
     WCHAR szSourceURL[INTERNET_MAX_URL_LENGTH];
-#ifdef _M_ARM64
-    BOOL bUseAmd64Catalog;
-#endif
+    WCHAR szPackageArch[16];
 };
 
 typedef SETTINGS_INFO *PSETTINGS_INFO;
