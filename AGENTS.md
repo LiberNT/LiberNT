@@ -52,6 +52,8 @@ Most of the tree is still shared with ReactOS, and the components synchronised w
 - Say which source a definition came from.
 - LiberNT's own headers show what LiberNT declares today, not what is right. Check them against the sources above.
 - Never transcribe disassembled or decompiled Windows code. Use Windows 11 as a black box. Inspect the Windows 11 binaries in the cleanroom store only when there is no way around it: no header, public symbol, documentation or Windows 11 run answers the question. Use what you read only to understand the behavior, never as the implementation: the Windows code itself is not necessarily correct. Record only the fact you needed (a layout, offset, constant or behavior), never the code.
+- Black-box study is the legal default. A lawful user may observe, study and test a program while running it to find the ideas and principles behind it (EU Software Directive 2009/24/EC, art. 5(3); in France, Code de la propriété intellectuelle L122-6-1 III).
+- Reading Windows binaries is decompilation and is allowed only within art. 6 of the same directive (L122-6-1 IV): by a lawful licensee, only when the information needed for interoperability is not otherwise readily available, and only for the parts needed for interoperability. Never use that information for another goal, never give it to others except for interoperability, and never use it to write a program substantially similar in its expression. The Windows licence forbids reverse engineering beyond what this law allows.
 - Never copy GPL code from Linux. Study the technique and reimplement it.
 - Never use legacy ReactOS code (the ARM3 memory manager, NT4 and NT5-era designs) as a reference.
 

@@ -30,7 +30,7 @@ NT5_DrawLogoffCaptionText(LPWSTR lpText,
     ZeroMemory(&LogFont, sizeof(LOGFONTW));
     LogFont.lfCharSet = DEFAULT_CHARSET;
     LogFont.lfHeight = 22;
-    LogFont.lfWeight = 109; // From WinXP disassembly
+    LogFont.lfWeight = FW_NORMAL;
     StringCchCopyW(LogFont.lfFaceName, _countof(LogFont.lfFaceName), L"Arial");
 
     /* Create it */
@@ -55,7 +55,7 @@ NT5_DrawLogoffCaptionText(LPWSTR lpText,
                   lpText,
                   -1,
                   &TextRect,
-                  DT_NOPREFIX | DT_WORDBREAK | DT_RIGHT); // WinXP disassembly uses 0x812
+                  DT_NOPREFIX | DT_WORDBREAK | DT_RIGHT);
 
         /* Set the previous background mode */
         SetBkMode(hdcMem, PrevBkMode);
