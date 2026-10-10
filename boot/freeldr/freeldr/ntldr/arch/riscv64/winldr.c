@@ -1345,6 +1345,7 @@ WinLdrSetProcessorContext(
             __asm__ __volatile__("wfi");
     }
 
+    RiscvJh7110ResumeDisplay(RiscvLoaderState.DeviceTree, RiscvLoaderState.DeviceTreeSize);
     Satp = RISCV64_SV39_MODE |
            ((ULONG_PTR)RiscvLoaderState.RootTable >> RISCV64_PAGE_SHIFT);
     __asm__ __volatile__("csrci sstatus, 2\n\t"

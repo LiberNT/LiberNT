@@ -52,6 +52,11 @@ BOOLEAN
 RiscvFinalizePageTables(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 
+VOID
+RiscvJh7110ResumeDisplay(
+    _In_reads_bytes_(DeviceTreeSize) const VOID *DeviceTree,
+    _In_ ULONG DeviceTreeSize);
+
 DECLSPEC_NORETURN
 VOID
 RiscvJumpToKernel(

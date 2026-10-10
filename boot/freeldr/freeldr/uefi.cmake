@@ -123,6 +123,7 @@ elseif(ARCH STREQUAL "arm64")
         ntldr/arch/arm64/winldr.c)
 elseif(ARCH STREQUAL "riscv64")
     list(APPEND FREELDR_NTLDR_SOURCE
+        ntldr/arch/riscv64/jh7110.c
         ntldr/arch/riscv64/winldr.c)
 else()
     #TBD
@@ -139,6 +140,10 @@ add_library(uefifreeldr_common
 # longjmp reference with the vcruntime implementation, which needs RtlUnwind.
 target_link_libraries(uefifreeldr_common setjmp bootfont)
 target_link_libraries(uefifreeldr_common fatfs)
+if(ARCH STREQUAL "riscv64")
+    target_include_directories(uefifreeldr_common PRIVATE ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/jh7110disp)
+    target_link_libraries(uefifreeldr_common jh7110disp)
+endif()
 
 target_compile_definitions(uefifreeldr_common PRIVATE _FRLDRLIB_ UEFIBOOT)
 if(FREELDR_HTTP_BOOT)
