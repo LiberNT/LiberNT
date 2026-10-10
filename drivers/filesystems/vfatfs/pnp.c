@@ -30,6 +30,8 @@ VfatPnp(
         case IRP_MN_SURPRISE_REMOVAL:
         case IRP_MN_REMOVE_DEVICE:
         case IRP_MN_CANCEL_REMOVE_DEVICE:
+            /* FIXME: Lock the volume on query remove, dismount it on surprise removal and removal,
+             * forward each request to the storage device and release the volume when its handles are closed. */
             Status = STATUS_NOT_IMPLEMENTED;
             break;
 
