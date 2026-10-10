@@ -1,4 +1,4 @@
-  3 stub GetProxyDllInfo
+  3 stdcall -private GetProxyDllInfo(ptr ptr)
 400 stub @
 402 stub @
 403 stub @
