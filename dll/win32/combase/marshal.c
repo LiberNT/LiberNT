@@ -794,11 +794,20 @@ HRESULT WINAPI CoUnmarshalInterface(IStream *stream, REFIID riid, void **ppv)
     IUnknown *object;
     HRESULT hr;
     IID iid;
+#ifdef __REACTOS__
+    struct apartment *apt;
+#endif
 
     TRACE("%p, %s, %p\n", stream, debugstr_guid(riid), ppv);
 
     if (!stream || !ppv)
         return E_INVALIDARG;
+
+#ifdef __REACTOS__
+    if (!(apt = apartment_get_current_or_mta()))
+        return CO_E_NOTINITIALIZED;
+    apartment_release(apt);
+#endif
 
     hr = get_unmarshaler_from_stream(stream, &marshal, &iid);
     if (hr == S_FALSE)
