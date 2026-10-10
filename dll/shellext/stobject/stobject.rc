@@ -12,6 +12,7 @@ IDI_VOLUME  ICON "resources/tray/speaker_2.ico"
 IDI_VOLMUTE ICON "resources/tray/speaker_mute.ico"
 IDI_VOLUME0 ICON "resources/tray/speaker_0.ico"
 IDI_VOLUME1 ICON "resources/tray/speaker_1.ico"
+IDI_VOLUME3 ICON "resources/tray/speaker_3.ico"
 
 IDI_BATTCAP0 ICON "resources/tray/battery_0.ico"
 IDI_BATTCAP1 ICON "resources/tray/battery_1.ico"

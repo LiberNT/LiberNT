@@ -37,7 +37,19 @@ file(GLOB explorer_rc_deps res/*.*)
 add_rc_deps(explorer.rc ${explorer_rc_deps}
     ${REACTOS_SOURCE_DIR}/media/graphics/start-button/default.png
     ${REACTOS_SOURCE_DIR}/media/graphics/start-button/hover.png
-    ${REACTOS_SOURCE_DIR}/media/graphics/start-button/pressed.png)
+    ${REACTOS_SOURCE_DIR}/media/graphics/start-button/pressed.png
+    ${REACTOS_SOURCE_DIR}/dll/shellext/netshell/res/tray/wifi_1.ico
+    ${REACTOS_SOURCE_DIR}/dll/shellext/netshell/res/tray/wifi_2.ico
+    ${REACTOS_SOURCE_DIR}/dll/shellext/netshell/res/tray/wifi_3.ico
+    ${REACTOS_SOURCE_DIR}/dll/shellext/netshell/res/tray/wifi_4.ico
+    ${REACTOS_SOURCE_DIR}/dll/shellext/netshell/res/tray/wifi_x.ico
+    ${REACTOS_SOURCE_DIR}/dll/shellext/netshell/res/tray/wifi_warn.ico
+    ${REACTOS_SOURCE_DIR}/dll/shellext/netshell/res/tray/wired.ico
+    ${REACTOS_SOURCE_DIR}/dll/shellext/stobject/resources/tray/speaker_0.ico
+    ${REACTOS_SOURCE_DIR}/dll/shellext/stobject/resources/tray/speaker_1.ico
+    ${REACTOS_SOURCE_DIR}/dll/shellext/stobject/resources/tray/speaker_2.ico
+    ${REACTOS_SOURCE_DIR}/dll/shellext/stobject/resources/tray/speaker_3.ico
+    ${REACTOS_SOURCE_DIR}/dll/shellext/stobject/resources/tray/speaker_mute.ico)
 add_executable(explorer ${SOURCE} explorer.rc)
 target_link_libraries(explorer uuid wine cpprt atl_classes)
 set_module_type(explorer win32gui UNICODE)

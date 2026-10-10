@@ -8787,7 +8787,7 @@ public:
     {
         switch (pTile->Kind)
         {
-            case TFY_QSTILE_WIFI: return pTile->bOn ? IDI_FLU_WIFI4 : IDI_FLU_WIFIOFF;
+            case TFY_QSTILE_WIFI: return pTile->bOn ? IDI_FLU_WIFI1 : IDI_FLU_WIFIOFF;
             case TFY_QSTILE_NETWORK: return IDI_FLU_NETADAPTER;
             case TFY_QSTILE_AIRPLANE: return IDI_FLU_AIRPLANE;
             default: return IDI_FLU_TRAYACCESS;
@@ -8909,14 +8909,16 @@ public:
         FillRect(hdc, &m_rcSep, hbr);
         DeleteObject(hbr);
 
-        if (m_bMute || m_nMaster == 0)
+        if (m_bMute)
             nSpeaker = IDI_FLU_SPKMUTE;
-        else if (m_nMaster < 34)
+        else if (m_nMaster == 0)
             nSpeaker = IDI_FLU_SPK0;
-        else if (m_nMaster < 67)
+        else if (m_nMaster < 34)
             nSpeaker = IDI_FLU_SPK1;
-        else
+        else if (m_nMaster < 67)
             nSpeaker = IDI_FLU_SPK2;
+        else
+            nSpeaker = IDI_FLU_SPK3;
         DrawButtonPill(hdc, &m_rcMute, TFY_QSHIT_MUTE);
         DrawGlyph(hdc, &m_rcMute, nSpeaker);
         DrawSlider(hdc);

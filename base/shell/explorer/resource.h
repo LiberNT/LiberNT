@@ -40,6 +40,7 @@
 #define IDI_FLU_SPK1        310
 #define IDI_FLU_SPK2        311
 #define IDI_FLU_SPKMUTE     312
+#define IDI_FLU_SPK3        313
 #define IDI_FLU_SQUARE       320
 #define IDI_FLU_SQUAREMULTI  321
 #define IDI_FLU_GRID         322

@@ -33,6 +33,7 @@ static int g_VolPercent = 50;
 static BOOL g_VolCacheValid = FALSE;
 static HICON g_hIconVolume0 = NULL;
 static HICON g_hIconVolume1 = NULL;
+static HICON g_hIconVolume3 = NULL;
 
 class CVolumeNotify : public IAudioEndpointVolumeCallback
 {
@@ -223,7 +224,9 @@ static int Volume_Level()
             return 0;
         if (g_VolPercent < 34)
             return 1;
-        return 2;
+        if (g_VolPercent < 67)
+            return 2;
+        return 3;
     }
 
     if (g_mixerId == (UINT)-1 || g_volControlID == (DWORD)-1)
@@ -249,7 +252,9 @@ static int Volume_Level()
         return 0;
     if (g_VolPercent < 34)
         return 1;
-    return 2;
+    if (g_VolPercent < 67)
+        return 2;
+    return 3;
 }
 
 static VOID Volume_Tooltip(_Out_writes_(cch) LPWSTR pszTip, _In_ UINT cch)
@@ -274,6 +279,8 @@ static HICON Volume_PickIcon()
         return g_hIconVolume0;
     if (g_VolLevel == 1 && g_hIconVolume1)
         return g_hIconVolume1;
+    if (g_VolLevel == 3 && g_hIconVolume3)
+        return g_hIconVolume3;
     return g_hIconVolume;
 }
 
@@ -331,6 +338,7 @@ HRESULT STDMETHODCALLTYPE Volume_Init(_In_ CSysTray * pSysTray)
     g_hIconMute = StoLoadTrayIcon(g_hInstance, IDI_VOLMUTE);
     g_hIconVolume0 = StoLoadTrayIcon(g_hInstance, IDI_VOLUME0);
     g_hIconVolume1 = StoLoadTrayIcon(g_hInstance, IDI_VOLUME1);
+    g_hIconVolume3 = StoLoadTrayIcon(g_hInstance, IDI_VOLUME3);
 
     Volume_IsMute();
     g_VolLevel = Volume_Level();

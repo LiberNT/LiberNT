@@ -243,57 +243,46 @@ def bars(lit, badge=None):
     return draw
 
 
-def bracket(c, apex, cy, half, steps):
-    pts = []
-    run = half - steps
-    for dy in range(-half, half + 1):
-        back = max(0, abs(dy) - run)
+def arc(c, x0, cy, r, rows):
+    pts = set()
+    for dy in range(-rows, rows + 1):
+        x = x0 + int(math.floor(math.sqrt(r * r - dy * dy) + 0.5))
         for e in range(c.w):
-            pts.append((apex - back - e, cy + dy))
+            pts.add((x - e, cy + dy))
     c.cells("white", pts)
 
 
 def speaker(waves, mute=False):
     def draw(c):
         w = c.w
-        T = near(15 * c.H / 14.0, 1)
-        if c.yb - T < c.h:
-            T = c.yb - c.h - (c.yb - c.h + 1) % 2
-        u = T / 15.0
-        f = max(1, round(2 * u))
-        lip = max(1, round(2 * u))
-        box = T - 2 * f - 2 * lip
-        bw = round(7 * u)
-        lw = max(2, round(2 * u))
-        inner = max(2, round(3 * u))
-        half_in = max(2, round(2 * u))
-        step_in = max(1, round(u))
-        half_out = max(3, round(4 * u))
-        step_out = max(2, round(2 * u))
-        n = max(2, round(2 * u))
-        while True:
-            outer = inner + max(2, round(2 * u))
-            width = bw + lw + max(outer + w, inner + 1 + n + w)
-            if width <= c.s - 2 * c.mx or inner <= 2:
-                break
-            inner -= 1
-        x0 = (c.s - width) // 2
-        yt = c.yb - T
-        cy = yt + T // 2
-        xl = x0 + bw
-        xr = xl + lw
-        c.rect("white", xl, yt, xr, yt + T)
-        c.rect("white", x0, cy - box // 2, xl, cy + box // 2 + 1)
-        for i in range(1, f + 1):
-            xs = xl - f - 1 + i
-            c.rect("white", xs, cy - box // 2 - i, xl, cy - box // 2 - i + 1)
-            c.rect("white", xs, cy + box // 2 + i, xl, cy + box // 2 + i + 1)
-        if waves >= 1:
-            bracket(c, xr + inner + w - 1, cy, half_in, step_in)
-        if waves >= 2:
-            bracket(c, xr + outer + w - 1, cy, half_out, step_out)
+        k = c.k
+        T = near(11 * k, 1)
+        bh = near(0.45 * T, 1)
+        rise = (T - bh) // 2
+        step = max(1, round(k))
+        cols = -(-rise // step)
+        cy0 = c.m + (c.H - T) // 2
+        cy = cy0 + T // 2
+        gap = max(1, round(k))
+        r1 = round(4 * k)
+        dr = max(w + 2, round(3 * k))
+        rows1 = min(int(r1 * 0.72), (c.H - 1) // 2)
+        lead = gap + w - int(math.floor(math.sqrt(r1 * r1 - rows1 * rows1) + 0.5))
+        width = w + gap + cols * w + lead + r1 + 2 * dr
+        x0 = c.mx + (c.s - 2 * c.mx - width) // 2
+        c.rect("white", x0, cy - bh // 2, x0 + w, cy - bh // 2 + bh)
+        xc = x0 + w + gap
+        for i in range(cols):
+            hh = min(T, bh + 2 * step * (i + 1))
+            c.rect("white", xc + i * w, cy - hh // 2, xc + (i + 1) * w, cy - hh // 2 + hh)
+        xe = xc + cols * w
+        ax = xe + lead - w
+        for j in range(waves):
+            r = r1 + j * dr
+            arc(c, ax, cy, r, min(int(r * 0.72), (c.H - 1) // 2))
         if mute:
-            c.cells("white", cross(xr + inner + 1, cy, n, w))
+            n = max(2, round(2 * k))
+            c.cells("white", cross(xe + gap + round(2 * k) + n, cy, n, w))
     return draw
 
 
@@ -385,6 +374,7 @@ ICONS = (
     (STOBJECT + "speaker_0.ico", speaker(0)),
     (STOBJECT + "speaker_1.ico", speaker(1)),
     (STOBJECT + "speaker_2.ico", speaker(2)),
+    (STOBJECT + "speaker_3.ico", speaker(3)),
     (STOBJECT + "speaker_mute.ico", speaker(0, True)),
     (STOBJECT + "usb.ico", usb),
 )
