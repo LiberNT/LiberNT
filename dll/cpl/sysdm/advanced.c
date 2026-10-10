@@ -15,6 +15,7 @@
 static TCHAR ReportAsWorkstationKey[] = _T("SYSTEM\\CurrentControlSet\\Control\\ReactOS\\Settings\\Version");
 static TCHAR DataCollectionKey[] = _T("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection");
 
+#define DIAGDATA_LEVEL_OFF 0
 #define DIAGDATA_LEVEL_REQUIRED 1
 #define DIAGDATA_LEVEL_OPTIONAL 3
 
@@ -63,8 +64,10 @@ ErrorReportingDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             switch (LOWORD(wParam))
             {
                 case IDOK:
-                    WriteDiagnosticDataLevel(IsDlgButtonChecked(hwndDlg, IDC_SENDOPTIONAL) == BST_CHECKED ?
-                                        DIAGDATA_LEVEL_OPTIONAL : DIAGDATA_LEVEL_REQUIRED);
+                    if (IsDlgButtonChecked(hwndDlg, IDC_SENDOPTIONAL) == BST_CHECKED)
+                        WriteDiagnosticDataLevel(DIAGDATA_LEVEL_OPTIONAL);
+                    else if (ReadDiagnosticDataLevel() != DIAGDATA_LEVEL_OFF)
+                        WriteDiagnosticDataLevel(DIAGDATA_LEVEL_REQUIRED);
                     EndDialog(hwndDlg, IDOK);
                     return TRUE;
 

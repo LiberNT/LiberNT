@@ -25,6 +25,7 @@
 #define DIAGDATA_AGENT L"LiberNT-DiagnosticData/1"
 #define DIAGDATA_SETTLE_MS 30000
 #define DIAGDATA_PNP_POLL_MS 500
+#define DIAGDATA_OFF_LEVEL 0
 #define DIAGDATA_OPTIONAL_LEVEL 3
 #define DIAGDATA_DATACOLLECTION_KEY L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection"
 #define DIAGDATA_SPOOL_SUBDIR L"\\DiagnosticData\\spool"
@@ -1271,6 +1272,9 @@ static VOID WINAPI ServiceMain(_In_ DWORD ArgumentCount, _In_reads_(ArgumentCoun
     ServiceStatusHandle = RegisterServiceCtrlHandlerExW(ServiceName, ServiceControlHandler, NULL);
     if (ServiceStatusHandle == NULL)
         return;
+
+    if (DiagDataLevel() == DIAGDATA_OFF_LEVEL)
+        goto Stop;
 
     StopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (StopEvent == NULL ||
