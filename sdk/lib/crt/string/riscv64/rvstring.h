@@ -16,6 +16,10 @@ typedef unsigned long long RV_WORD;
 #define RV_HIGHS 0x8080808080808080ULL
 #define RV_HAS_ZERO(Value) ((((Value) - RV_ONES) & ~(Value) & RV_HIGHS) != 0)
 #define RV_MISALIGNMENT(Pointer) ((size_t)(Pointer) & (sizeof(RV_WORD) - 1))
+#define RV_WIDE_ONES  0x0001000100010001ULL
+#define RV_WIDE_HIGHS 0x8000800080008000ULL
+#define RV_HAS_ZERO_WIDE(Value) ((((Value) - RV_WIDE_ONES) & ~(Value) & RV_WIDE_HIGHS) != 0)
+#define RV_WORD_WCHARS (sizeof(RV_WORD) / sizeof(wchar_t))
 
 static __inline int
 RvCompareBytes(unsigned int Left, unsigned int Right)
@@ -245,6 +249,291 @@ RvMemsetRva20(void *Destination, int Value, size_t Length)
     while (Length--)
         *Target++ = Byte;
     return Destination;
+}
+
+static __inline size_t
+RvStrnlenRva20(const char *String, size_t Count)
+{
+    const char *Position = String;
+    const RV_WORD *Word;
+
+    if (!String)
+        return 0;
+    while (Count && RV_MISALIGNMENT(Position))
+    {
+        if (!*Position)
+            return (size_t)(Position - String);
+        Position++;
+        Count--;
+    }
+    Word = (const RV_WORD *)Position;
+    while (Count >= sizeof(RV_WORD) && !RV_HAS_ZERO(*Word))
+    {
+        Word++;
+        Count -= sizeof(RV_WORD);
+    }
+    Position = (const char *)Word;
+    while (Count && *Position)
+    {
+        Position++;
+        Count--;
+    }
+    return (size_t)(Position - String);
+}
+
+static __inline char *
+RvStrchrRva20(const char *String, int Character)
+{
+    const char Needle = (char)Character;
+    const RV_WORD Pattern = (unsigned char)Needle * RV_ONES;
+    const RV_WORD *Word;
+
+    while (RV_MISALIGNMENT(String))
+    {
+        if (*String == Needle)
+            return (char *)String;
+        if (!*String)
+            return NULL;
+        String++;
+    }
+    Word = (const RV_WORD *)String;
+    while (!RV_HAS_ZERO(*Word) && !RV_HAS_ZERO(*Word ^ Pattern))
+        Word++;
+    for (String = (const char *)Word; *String != Needle; String++)
+    {
+        if (!*String)
+            return NULL;
+    }
+    return (char *)String;
+}
+
+static __inline char *
+RvStrrchrRva20(const char *String, int Character)
+{
+    const char Needle = (char)Character;
+    const RV_WORD Pattern = (unsigned char)Needle * RV_ONES;
+    const char *Last = NULL;
+    const RV_WORD *Word;
+
+    while (RV_MISALIGNMENT(String))
+    {
+        if (*String == Needle)
+            Last = String;
+        if (!*String)
+            return (char *)Last;
+        String++;
+    }
+    for (Word = (const RV_WORD *)String; !RV_HAS_ZERO(*Word); Word++)
+    {
+        if (RV_HAS_ZERO(*Word ^ Pattern))
+        {
+            const char *Byte = (const char *)Word;
+            size_t Index;
+
+            for (Index = 0; Index < sizeof(RV_WORD); Index++)
+            {
+                if (Byte[Index] == Needle)
+                    Last = &Byte[Index];
+            }
+        }
+    }
+    for (String = (const char *)Word; ; String++)
+    {
+        if (*String == Needle)
+            Last = String;
+        if (!*String)
+            return (char *)Last;
+    }
+}
+
+static __inline size_t
+RvWcslenRva20(const wchar_t *String)
+{
+    const wchar_t *Position = String;
+    const RV_WORD *Word;
+
+    while (RV_MISALIGNMENT(Position))
+    {
+        if (!*Position)
+            return (size_t)(Position - String);
+        Position++;
+    }
+    Word = (const RV_WORD *)Position;
+    while (!RV_HAS_ZERO_WIDE(*Word))
+        Word++;
+    Position = (const wchar_t *)Word;
+    while (*Position)
+        Position++;
+    return (size_t)(Position - String);
+}
+
+static __inline size_t
+RvWcsnlenRva20(const wchar_t *String, size_t Count)
+{
+    const wchar_t *Position = String;
+    const RV_WORD *Word;
+
+    if (!String)
+        return 0;
+    while (Count && RV_MISALIGNMENT(Position))
+    {
+        if (!*Position)
+            return (size_t)(Position - String);
+        Position++;
+        Count--;
+    }
+    Word = (const RV_WORD *)Position;
+    while (Count >= RV_WORD_WCHARS && !RV_HAS_ZERO_WIDE(*Word))
+    {
+        Word++;
+        Count -= RV_WORD_WCHARS;
+    }
+    Position = (const wchar_t *)Word;
+    while (Count && *Position)
+    {
+        Position++;
+        Count--;
+    }
+    return (size_t)(Position - String);
+}
+
+static __inline wchar_t *
+RvWcschrRva20(const wchar_t *String, wchar_t Character)
+{
+    const RV_WORD Pattern = (unsigned short)Character * RV_WIDE_ONES;
+    const RV_WORD *Word;
+
+    while (RV_MISALIGNMENT(String))
+    {
+        if (*String == Character)
+            return (wchar_t *)String;
+        if (!*String)
+            return NULL;
+        String++;
+    }
+    Word = (const RV_WORD *)String;
+    while (!RV_HAS_ZERO_WIDE(*Word) && !RV_HAS_ZERO_WIDE(*Word ^ Pattern))
+        Word++;
+    for (String = (const wchar_t *)Word; *String != Character; String++)
+    {
+        if (!*String)
+            return NULL;
+    }
+    return (wchar_t *)String;
+}
+
+static __inline wchar_t *
+RvWcsrchrRva20(const wchar_t *String, wchar_t Character)
+{
+    const RV_WORD Pattern = (unsigned short)Character * RV_WIDE_ONES;
+    const wchar_t *Last = NULL;
+    const RV_WORD *Word;
+
+    while (RV_MISALIGNMENT(String))
+    {
+        if (*String == Character)
+            Last = String;
+        if (!*String)
+            return (wchar_t *)Last;
+        String++;
+    }
+    for (Word = (const RV_WORD *)String; !RV_HAS_ZERO_WIDE(*Word); Word++)
+    {
+        if (RV_HAS_ZERO_WIDE(*Word ^ Pattern))
+        {
+            const wchar_t *Char = (const wchar_t *)Word;
+            size_t Index;
+
+            for (Index = 0; Index < RV_WORD_WCHARS; Index++)
+            {
+                if (Char[Index] == Character)
+                    Last = &Char[Index];
+            }
+        }
+    }
+    for (String = (const wchar_t *)Word; ; String++)
+    {
+        if (*String == Character)
+            Last = String;
+        if (!*String)
+            return (wchar_t *)Last;
+    }
+}
+
+static __inline int
+RvWcscmpRva20(const wchar_t *First, const wchar_t *Second)
+{
+    if (RV_MISALIGNMENT(First) == RV_MISALIGNMENT(Second))
+    {
+        const RV_WORD *FirstWord;
+        const RV_WORD *SecondWord;
+
+        while (RV_MISALIGNMENT(First))
+        {
+            if (*First != *Second || !*First)
+                return *First - *Second;
+            First++;
+            Second++;
+        }
+        FirstWord = (const RV_WORD *)First;
+        SecondWord = (const RV_WORD *)Second;
+        while (*FirstWord == *SecondWord && !RV_HAS_ZERO_WIDE(*FirstWord))
+        {
+            FirstWord++;
+            SecondWord++;
+        }
+        First = (const wchar_t *)FirstWord;
+        Second = (const wchar_t *)SecondWord;
+    }
+    while (*First && *First == *Second)
+    {
+        First++;
+        Second++;
+    }
+    return *First - *Second;
+}
+
+static __inline int
+RvWcsncmpRva20(const wchar_t *First, const wchar_t *Second, size_t Count)
+{
+    if (!Count)
+        return 0;
+    if (RV_MISALIGNMENT(First) == RV_MISALIGNMENT(Second))
+    {
+        const RV_WORD *FirstWord;
+        const RV_WORD *SecondWord;
+
+        while (RV_MISALIGNMENT(First))
+        {
+            if (*First != *Second || !*First)
+                return *First - *Second;
+            First++;
+            Second++;
+            if (!--Count)
+                return 0;
+        }
+        FirstWord = (const RV_WORD *)First;
+        SecondWord = (const RV_WORD *)Second;
+        while (Count >= RV_WORD_WCHARS && *FirstWord == *SecondWord && !RV_HAS_ZERO_WIDE(*FirstWord))
+        {
+            FirstWord++;
+            SecondWord++;
+            Count -= RV_WORD_WCHARS;
+        }
+        if (!Count)
+            return 0;
+        First = (const wchar_t *)FirstWord;
+        Second = (const wchar_t *)SecondWord;
+    }
+    for (;;)
+    {
+        if (*First != *Second || !*First)
+            return *First - *Second;
+        First++;
+        Second++;
+        if (!--Count)
+            return 0;
+    }
 }
 
 static __inline RV_WORD

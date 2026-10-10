@@ -87,22 +87,13 @@ elseif(ARCH STREQUAL "riscv64")
     list(APPEND LIBCNTPR_STRING_SOURCE
         string/riscv64/rvbase.c
         string/strcat.c
-        string/strchr.c
         string/strncat.c
         string/strncmp.c
         string/strncpy.c
-        string/strnlen.c
-        string/strrchr.c
         string/wcscat.c
-        string/wcschr.c
-        string/wcscmp.c
         string/wcscpy.c
-        string/wcslen.c
         string/wcsncat.c
-        string/wcsncmp.c
         string/wcsncpy.c
-        string/wcsnlen.c
-        string/wcsrchr.c
     )
     set_source_files_properties(string/riscv64/rvbase.c PROPERTIES COMPILE_OPTIONS "-fno-builtin")
 elseif(ARCH STREQUAL "amd64")
