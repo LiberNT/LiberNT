@@ -310,7 +310,8 @@ SetUserEnvironment(PWSTR* Environment,
                           &hEnvKey);
     if (Error != ERROR_SUCCESS)
     {
-        DPRINT1("RegOpenKeyExW() failed (Error %ld)\n", Error);
+        if (Error != ERROR_FILE_NOT_FOUND)
+            DPRINT1("RegOpenKeyExW() failed (Error %ld)\n", Error);
         SetLastError((DWORD)Error);
         return FALSE;
     }

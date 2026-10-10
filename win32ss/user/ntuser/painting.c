@@ -1568,7 +1568,7 @@ IntEndPaint(PWND Wnd, PPAINTSTRUCT Ps)
 
    if (Wnd->state2 & WNDS2_ENDPAINTINVALIDATE)
    {
-      ERR("EP: Another thread invalidated this window\n");
+      TRACE("EP: Another thread invalidated this window\n");
       Wnd->state2 &= ~WNDS2_ENDPAINTINVALIDATE;
    }
 

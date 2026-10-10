@@ -998,7 +998,10 @@ IntResolveDesktop(
                                 (PHANDLE)&hTempWinSta);
     if (!NT_SUCCESS(Status))
     {
-        ERR("Failed to open the window station '%wZ', Status 0x%08lx\n", ObjectName, Status);
+        if (bUseDefaultWinSta)
+            TRACE("Failed to open the window station '%wZ', Status 0x%08lx\n", ObjectName, Status);
+        else
+            ERR("Failed to open the window station '%wZ', Status 0x%08lx\n", ObjectName, Status);
     }
     else
     {
@@ -3551,7 +3554,7 @@ IntSetThreadDesktop(IN HDESK hDesktop,
     {
         if (pdesk)
             ObDereferenceObject(pdesk);
-        ERR("Attempted to change thread desktop although the thread has windows!\n");
+        WARN("Attempted to change thread desktop although the thread has windows!\n");
         EngSetLastError(ERROR_BUSY);
         return FALSE;
     }

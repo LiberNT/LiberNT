@@ -1284,7 +1284,8 @@ BOOLEAN NTAPI KdpInitializeDedicatedCrashDump(_In_ PFILE_OBJECT BootFileObject)
     return TRUE;
 
 Failure:
-    DPRINT1("KD: Raw crash dump target initialization failed while %s (0x%08lx)\n", KdpCrashDumpInitializationStage, Status);
+    if (Status != STATUS_NOT_FOUND)
+        DPRINT1("KD: Raw crash dump target initialization failed while %s (0x%08lx)\n", KdpCrashDumpInitializationStage, Status);
     KdpCrashDumpInitializationStatus = Status;
     KdpCleanupCrashDumpTarget();
     return FALSE;

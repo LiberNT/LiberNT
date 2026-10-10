@@ -651,7 +651,7 @@ IopIsFirmwareMapperDisabled(VOID)
                 DPRINT1("Failed to allocate memory for registry query\n");
             }
         }
-        else
+        else if (Status != STATUS_OBJECT_NAME_NOT_FOUND)
         {
             DPRINT1("ZwQueryValueKey(%wZ%wZ) failed with status 0x%08lx\n", &KeyPathU, &KeyNameU, Status);
         }

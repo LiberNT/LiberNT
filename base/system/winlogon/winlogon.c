@@ -165,7 +165,8 @@ UpdateTcpIpInformation(VOID)
                            &hKey);
     if (lError != ERROR_SUCCESS)
     {
-        ERR("WL: RegOpenKeyExW(\"HKLM\\System\\CurrentControlSet\\Services\\Tcpip\\Parameters\") failed (error %lu)\n", lError);
+        if (lError != ERROR_FILE_NOT_FOUND)
+            ERR("WL: RegOpenKeyExW(\"HKLM\\System\\CurrentControlSet\\Services\\Tcpip\\Parameters\") failed (error %lu)\n", lError);
         return;
     }
 

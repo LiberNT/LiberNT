@@ -218,7 +218,7 @@ UserInitKeyboard(HANDLE hKeyboardDevice)
 
     if (!NT_SUCCESS(Status))
     {
-        ERR("NtDeviceIoControlFile() failed, ignored\n");
+        WARN("NtDeviceIoControlFile() failed, ignored (Status 0x%08lx)\n", Status);
     }
     TRACE("Keyboard type %u, subtype %u and number of func keys %u\n",
              gKeyboardInfo.KeyboardIdentifier.Type,
