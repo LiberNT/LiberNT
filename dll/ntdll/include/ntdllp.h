@@ -589,4 +589,12 @@ RtlpUserThreadStart(
     PVOID StartAddress,
     PVOID Parameter);
 
+BOOLEAN
+RtlpArchQueryPerformanceCounter(
+    _Out_ PLARGE_INTEGER Counter);
+
+BOOLEAN
+RtlpArchQueryPerformanceFrequency(
+    _Out_ PLARGE_INTEGER Frequency);
+
 /* EOF */

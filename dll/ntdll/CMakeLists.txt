@@ -93,6 +93,14 @@ elseif(ARCH STREQUAL "ppc")
         rtl/ppc/rtlexcpt.c)
 endif()
 
+if(ARCH STREQUAL "arm64")
+    list(APPEND SOURCE rtl/arm64/perfctr.c)
+elseif(ARCH STREQUAL "riscv64")
+    list(APPEND SOURCE rtl/riscv64/perfctr.c)
+else()
+    list(APPEND SOURCE rtl/noperfctr.c)
+endif()
+
 add_asm_files(ntdll_asm ${ASM_SOURCE})
 
 list(APPEND PCH_SKIP_SOURCE
