@@ -2528,6 +2528,19 @@ interface IExecuteCommand : IUnknown
 
 
 /*****************************************************************************
+ * IInitializeWithItem interface (Vista+)
+ */
+[
+    uuid(7f73be3f-fb79-493c-a6c7-7ee14e245841),
+    object,
+    pointer_default(unique)
+]
+interface IInitializeWithItem : IUnknown
+{
+    HRESULT Initialize([in] IShellItem *psi, [in] DWORD grfMode);
+};
+
+/*****************************************************************************
  * IObjectWithSelection interface (Vista+)
  */
 [

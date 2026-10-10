@@ -1227,6 +1227,52 @@ DECLARE_INTERFACE_(IPersistString2, IPersist) // {3C44BA76-DE0E-4049-B6E4-6B31A5
 #endif
 
 /*****************************************************************************
+ * IFolderType interface
+ */
+#define INTERFACE IFolderType
+DECLARE_INTERFACE_(IFolderType, IUnknown) // {053B4A86-0DC9-40A3-B7ED-BC6A2E951F48}
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** IFolderType ***/
+    STDMETHOD(GetFolderType)(THIS_ FOLDERTYPEID *pftid) PURE;
+};
+#undef INTERFACE
+
+#ifdef COBJMACROS
+#define IFolderType_QueryInterface(T,a,b) (T)->lpVtbl->QueryInterface(T,a,b)
+#define IFolderType_AddRef(T) (T)->lpVtbl->AddRef(T)
+#define IFolderType_Release(T) (T)->lpVtbl->Release(T)
+#define IFolderType_GetFolderType(T,a) (T)->lpVtbl->GetFolderType(T,a)
+#endif
+
+/*****************************************************************************
+ * IBackReferencedObject interface
+ */
+#define INTERFACE IBackReferencedObject
+DECLARE_INTERFACE_(IBackReferencedObject, IUnknown) // {C938B119-D3AD-4D02-B5EE-164C2EC8160E}
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** IBackReferencedObject ***/
+    STDMETHOD(Unknown1)(THIS) PURE;
+    STDMETHOD(Unknown2)(THIS) PURE;
+};
+#undef INTERFACE
+
+#ifdef COBJMACROS
+#define IBackReferencedObject_QueryInterface(T,a,b) (T)->lpVtbl->QueryInterface(T,a,b)
+#define IBackReferencedObject_AddRef(T) (T)->lpVtbl->AddRef(T)
+#define IBackReferencedObject_Release(T) (T)->lpVtbl->Release(T)
+#define IBackReferencedObject_Unknown1(T) (T)->lpVtbl->Unknown1(T)
+#define IBackReferencedObject_Unknown2(T) (T)->lpVtbl->Unknown2(T)
+#endif
+
+/*****************************************************************************
  * IObjectWithRegistryKeyOld interface
  *
  * @see IObjectWithRegistryKey
