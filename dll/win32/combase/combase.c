@@ -1437,7 +1437,7 @@ static BOOL guid_from_string(LPCWSTR s, GUID *id)
 }
 
 #ifdef __REACTOS__
-static HRESULT clsid_from_string_reg(LPCOLESTR progid, CLSID *clsid)
+static HRESULT clsid_from_progid_reg(LPCOLESTR progid, CLSID *clsid, BOOL *found)
 {
     WCHAR buf2[CHARS_IN_GUID];
     LONG buf2len, len;
@@ -1446,6 +1446,7 @@ static HRESULT clsid_from_string_reg(LPCOLESTR progid, CLSID *clsid)
     unsigned int count = 0, i;
     HRESULT hr = CO_E_CLASSSTRING;
 
+    *found = FALSE;
     memset(clsid, 0, sizeof(*clsid));
     name = malloc((lstrlenW(progid) + 1) * sizeof(WCHAR));
     if (!name) return E_OUTOFMEMORY;
@@ -1458,6 +1459,7 @@ static HRESULT clsid_from_string_reg(LPCOLESTR progid, CLSID *clsid)
             if (!wcsicmp(visited[i], name))
             {
                 free(name);
+                hr = REGDB_E_INVALIDVALUE;
                 goto done;
             }
         }
@@ -1484,6 +1486,7 @@ static HRESULT clsid_from_string_reg(LPCOLESTR progid, CLSID *clsid)
         if (!open_classes_key(HKEY_CLASSES_ROOT, buf, MAXIMUM_ALLOWED, &xhkey))
         {
             free(buf);
+            *found = TRUE;
             buf2len = sizeof(buf2);
             if (!RegQueryValueW(xhkey, NULL, buf2, &buf2len))
                 hr = guid_from_string(buf2, clsid) ? S_OK : CO_E_CLASSSTRING;
@@ -1502,6 +1505,7 @@ static HRESULT clsid_from_string_reg(LPCOLESTR progid, CLSID *clsid)
             goto done;
         }
         free(buf);
+        *found = TRUE;
 
         len = 0;
         if (RegQueryValueW(xhkey, NULL, NULL, &len) || len <= (LONG)sizeof(WCHAR) ||
@@ -1525,6 +1529,14 @@ done:
         free(visited[i]);
     free(visited);
     return hr;
+}
+
+static HRESULT clsid_from_string_reg(LPCOLESTR progid, CLSID *clsid)
+{
+    BOOL found;
+    HRESULT hr = clsid_from_progid_reg(progid, clsid, &found);
+
+    return hr == REGDB_E_INVALIDVALUE ? CO_E_CLASSSTRING : hr;
 }
 #else
 static HRESULT clsid_from_string_reg(LPCOLESTR progid, CLSID *clsid)
@@ -1603,13 +1615,26 @@ HRESULT WINAPI CLSIDFromString(LPCOLESTR str, LPCLSID clsid)
     if (!clsid)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    CLSID saved_id = *clsid;
+    BOOL found;
+#endif
+
     if (guid_from_string(str, clsid))
         return S_OK;
 
+#ifdef __REACTOS__
+    hr = clsid_from_progid_reg(str, &tmp_id, &found);
+    if (SUCCEEDED(hr))
+        *clsid = tmp_id;
+    else if (found)
+        *clsid = saved_id;
+#else
     /* It appears a ProgID is also valid */
     hr = clsid_from_string_reg(str, &tmp_id);
     if (SUCCEEDED(hr))
         *clsid = tmp_id;
+#endif
 
     return hr;
 }
