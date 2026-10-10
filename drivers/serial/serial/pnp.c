@@ -430,7 +430,8 @@ SerialPnp(
 			DeviceExtension = DeviceObject->DeviceExtension;
 			DeviceExtension->PnpState = dsSurpriseRemoved;
 
-			IoSetDeviceInterfaceState(&DeviceExtension->SerialInterfaceName, FALSE);
+			if (!NT_SUCCESS(IoSetDeviceInterfaceState(&DeviceExtension->SerialInterfaceName, FALSE)))
+				WARN_(SERIAL, "IoSetDeviceInterfaceState() failed\n");
 
 			if (DeviceExtension->Interrupt)
 			{
