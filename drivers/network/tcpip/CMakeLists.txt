@@ -6,6 +6,9 @@ set(LWIP_INCLUDE_DIRS
 )
 include(${LWIP_DIR}/src/Filelists.cmake)
 add_dependencies(lwipcore xdk)
+if(ARCH STREQUAL "arm64")
+    target_compile_definitions(lwipcore PRIVATE LWIP_CHKSUM=tcpip_chksum)
+endif()
 add_subdirectory(ip)
 
 add_definitions(
@@ -41,6 +44,12 @@ add_library(tcpip MODULE
 target_include_directories(tcpip BEFORE
     PRIVATE ${LWIP_INCLUDE_DIRS}
     PRIVATE include)
+
+if(ARCH STREQUAL "arm64")
+    target_sources(tcpip PRIVATE tcpip/arm64/chksum.S)
+else()
+    target_sources(tcpip PRIVATE tcpip/chksum.c)
+endif()
 
 target_link_libraries(tcpip ip ${PSEH_LIB})
 set_module_type(tcpip kernelmodedriver)

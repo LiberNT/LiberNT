@@ -29,6 +29,9 @@ realloc(void *mem, size_t size);
 /* Checksum calculation algorithm choice */
 #define LWIP_CHKSUM_ALGORITHM 3
 
+unsigned short
+tcpip_chksum(const void *dataptr, int len);
+
 /* Diagnostics */
 #define LWIP_PLATFORM_DIAG(x) (DbgPrint x)
 #define LWIP_PLATFORM_ASSERT(x) ASSERTMSG(x, FALSE)

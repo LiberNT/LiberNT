@@ -10,6 +10,11 @@
 ULONG ChecksumFold(
   ULONG Sum);
 
+unsigned short
+tcpip_chksum(
+  const void *dataptr,
+  int len);
+
 ULONG ChecksumCompute(
     PVOID Data,
     UINT Count,
