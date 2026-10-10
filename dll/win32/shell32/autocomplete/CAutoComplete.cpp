@@ -1589,7 +1589,7 @@ LRESULT CAutoComplete::OnNCDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL
 
     // destroy controls
     if (m_hwndList) m_hwndList.DestroyWindow();
-    if (m_hwndScrollBar) m_hwndScrollBar.DestroyWindow();
+    m_hwndScrollBar.Detach();
     if (m_hwndSizeBox) m_hwndSizeBox.DestroyWindow();
 
     // clean up
