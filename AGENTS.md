@@ -4,7 +4,7 @@ This file introduces LiberNT and sets the working rules and engineering criteria
 
 ## About LiberNT
 
-LiberNT is a free NT operating system. It is a fork of ReactOS with extensive changes to kernel-space components and drivers, aimed at stability and modern hardware. It focuses on 64-bit platforms, amd64, arm64 and riscv64, and targets NT10/Windows 11 compatibility. Behavior is proven here first, then refined into patches for upstream ReactOS.
+LiberNT is a free NT operating system. It is a fork of ReactOS with extensive changes to kernel-space components and drivers, aimed at stability and modern hardware. It focuses on 64-bit platforms, amd64, arm64 and riscv64, and targets NT10/Windows 11 compatibility. LiberNT may collaborate with ReactOS occasionally, but the code written here is written for LiberNT first: never shape a change around sending it to ReactOS.
 
 - Target architectures: amd64, i386 and arm64, with RISC-V64/PPC in progress.
 - Windows 11 is the compatibility reference.
