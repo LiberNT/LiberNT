@@ -108,6 +108,9 @@ MempMapSinglePage(ULONG64 VirtualAddress, ULONG64 PhysicalAddress)
     Index = VAtoPTI(VirtualAddress);
     if (PteBase[Index].Valid)
     {
+        if (PteBase[Index].PageFrameNumber == PhysicalAddress / PAGE_SIZE)
+            return TRUE;
+
         ERR("!!!Already mapped %ld\n", Index);
         return FALSE;
     }
