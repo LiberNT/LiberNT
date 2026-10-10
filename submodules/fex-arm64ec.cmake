@@ -93,8 +93,7 @@ set(_fex_sdk_cmake_args
     -DREACTOS_SDK_BUILD_DIR:PATH=${REACTOS_BINARY_DIR}
     -DREACTOS_SDK_CXX_RUNTIME:PATH=${REACTOS_LIBCXX_ROOT}
     -DREACTOS:BOOL=ON
-    -DREACTOS_SDK:BOOL=ON
-    -DREACTOS_SDK_CRT:STRING=ucrtbase)
+    -DREACTOS_SDK:BOOL=ON)
 
 function(fex_discard_stale_build _name _binary_dir)
     set(_cache "${_binary_dir}/CMakeCache.txt")
@@ -127,6 +126,7 @@ ExternalProject_Add(fex-arm64ec-build
     CMAKE_ARGS
         -DCMAKE_BUILD_TYPE=${FEX_ARM64EC_BUILD_TYPE}
         ${_fex_sdk_cmake_args}
+        -DREACTOS_SDK_CRT:STRING=ucrtbase
         -DREACTOS_SDK_ARCH:STRING=arm64ec
         -DREACTOS_SDK_TRIPLE:STRING=arm64ec-w64-mingw32
         -DREACTOS_SDK_LIBDIR:PATH=${FEX_ARM64EC_SDK_LIBDIR}
@@ -180,6 +180,7 @@ ExternalProject_Add(fex-wow64-build
     CMAKE_ARGS
         -DCMAKE_BUILD_TYPE=${FEX_ARM64EC_BUILD_TYPE}
         ${_fex_sdk_cmake_args}
+        -DREACTOS_SDK_CRT:STRING=none
         -DREACTOS_SDK_ARCH:STRING=aarch64
         -DREACTOS_SDK_TRIPLE:STRING=aarch64-w64-mingw32
         -DREACTOS_SDK_LIBDIR:PATH=${FEX_WOW64_SDK_LIBDIR}
