@@ -1,0 +1,17 @@
+/*
+ * PROJECT:     LiberNT ActiveX proxy
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Proxies for the Image Mastering API version 1 interfaces
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep proxy
+#pragma makedep register
+
+#include "imapi.idl"
+
+[
+    threading(both),
+    uuid(b8da6310-e19b-11d0-933c-00a0c90dcaa9)
+]
+coclass PSFactoryBuffer { interface IPSFactoryBuffer; }

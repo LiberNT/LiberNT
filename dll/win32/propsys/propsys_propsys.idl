@@ -1,0 +1,17 @@
+/*
+ * PROJECT:     LiberNT Property System
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Proxies for the property system interfaces
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep proxy
+#pragma makedep register
+
+#include "propsys.idl"
+
+[
+    threading(both),
+    uuid(f562a2c8-e850-4f05-8e7a-e7192e4e6c23)
+]
+coclass PSFactoryBuffer { interface IPSFactoryBuffer; }

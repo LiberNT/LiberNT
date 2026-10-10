@@ -48,6 +48,11 @@ InitializePropertySheetPage(LPWSTR resname, DLGPROC dlgproc, LPARAM lParam, LPWS
 extern "C"
 {
 
+BOOL WINAPI netshell_ps_DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved);
+HRESULT WINAPI netshell_ps_DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv);
+HRESULT WINAPI netshell_ps_DllRegisterServer(void);
+HRESULT WINAPI netshell_ps_DllUnregisterServer(void);
+
 BOOL
 WINAPI
 DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID fImpLoad)
@@ -58,6 +63,7 @@ DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID fImpLoad)
             netshell_hInstance = hinstDLL;
             DisableThreadLibraryCalls(netshell_hInstance);
             gModule.Init(ObjectMap, netshell_hInstance, NULL);
+            netshell_ps_DllMain(hinstDLL, fdwReason, fImpLoad);
             break;
     default:
         break;
@@ -86,7 +92,7 @@ DllRegisterServer(void)
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
-    return S_OK;
+    return netshell_ps_DllRegisterServer();
 }
 
 STDAPI
@@ -102,7 +108,7 @@ DllUnregisterServer(void)
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
-    return S_OK;
+    return netshell_ps_DllUnregisterServer();
 }
 
 STDAPI
@@ -111,7 +117,10 @@ DllGetClassObject(
   REFIID riid,
   LPVOID *ppv)
 {
-    return gModule.DllGetClassObject(rclsid, riid, ppv);
+    HRESULT hr = gModule.DllGetClassObject(rclsid, riid, ppv);
+    if (hr == CLASS_E_CLASSNOTAVAILABLE)
+        hr = netshell_ps_DllGetClassObject(rclsid, riid, ppv);
+    return hr;
 }
 
 VOID

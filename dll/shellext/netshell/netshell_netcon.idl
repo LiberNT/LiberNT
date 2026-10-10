@@ -1,0 +1,17 @@
+/*
+ * PROJECT:     LiberNT Network Connections Shell
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     Proxies for the network connection interfaces
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep proxy
+#pragma makedep register
+
+#include "netcon.idl"
+
+[
+    threading(both),
+    uuid(33c4643c-7811-46fa-a89a-768597bd7223)
+]
+coclass PSFactoryBuffer { interface IPSFactoryBuffer; }

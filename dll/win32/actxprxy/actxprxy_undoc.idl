@@ -1,0 +1,70 @@
+/*
+ * PROJECT:     LiberNT ActiveX proxy
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Proxies for shell interfaces declared in shlobj_undoc.h
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep proxy
+#pragma makedep register
+
+import "objidl.idl";
+import "shtypes.idl";
+
+[
+    object,
+    uuid(7bc28ac2-0d9c-4941-bb9a-72becb184fac),
+    local
+]
+interface IQuerySource : IUnknown
+{
+}
+
+[
+    object,
+    uuid(053b4a86-0dc9-40a3-b7ed-bc6a2e951f48),
+    pointer_default(unique)
+]
+interface IFolderType : IUnknown
+{
+    HRESULT GetFolderType([out] FOLDERTYPEID *pftid);
+}
+
+[
+    object,
+    uuid(c938b119-d3ad-4d02-b5ee-164c2ec8160e),
+    pointer_default(unique)
+]
+interface IBackReferencedObject : IUnknown
+{
+    HRESULT Unknown1();
+    HRESULT Unknown2();
+}
+
+[
+    object,
+    uuid(b3dcb623-4280-4eb1-84b3-8d07e84f299a),
+    pointer_default(unique)
+]
+interface IObjectWithQuerySource : IUnknown
+{
+    HRESULT SetSource([in] IQuerySource *pSource);
+    HRESULT GetSource([in] REFIID riid, [out, iid_is(riid)] void **ppSource);
+}
+
+[
+    object,
+    uuid(3c44ba76-de0e-4049-b6e4-6b31a5262707),
+    pointer_default(unique)
+]
+interface IPersistString2 : IPersist
+{
+    HRESULT SetString([in, string] LPCWSTR psz);
+    HRESULT GetString([out, string] LPWSTR *ppsz);
+}
+
+[
+    threading(both),
+    uuid(b8da6310-e19b-11d0-933c-00a0c90dcaa9)
+]
+coclass PSFactoryBuffer { interface IPSFactoryBuffer; }

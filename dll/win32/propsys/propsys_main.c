@@ -116,6 +116,10 @@ static const IClassFactoryVtbl PropertySystemFactoryVtbl =
 
 static IClassFactory PropertySystemFactory = { &PropertySystemFactoryVtbl };
 
+#ifdef __REACTOS__
+HRESULT WINAPI propsys_ps_DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv);
+#endif
+
 HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
 {
     if(IsEqualGUID(&CLSID_InMemoryPropertyStore, rclsid)) {
@@ -127,6 +131,11 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
         TRACE("(CLSID_PropertySystem %s %p)\n", debugstr_guid(riid), ppv);
         return IClassFactory_QueryInterface(&PropertySystemFactory, riid, ppv);
     }
+
+#ifdef __REACTOS__
+    if (propsys_ps_DllGetClassObject(rclsid, riid, ppv) == S_OK)
+        return S_OK;
+#endif
 
     FIXME("%s %s %p\n", debugstr_guid(rclsid), debugstr_guid(riid), ppv);
     return CLASS_E_CLASSNOTAVAILABLE;
