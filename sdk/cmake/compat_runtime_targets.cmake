@@ -28,6 +28,7 @@ set(COMPAT_RUNTIME_MODULES
     comdlg32
     coml2
     compstui
+    credui
     crypt32
     cryptnet
     cryptsp
@@ -52,6 +53,7 @@ set(COMPAT_RUNTIME_MODULES
     devmgr
     dhcpcsvc
     dinput8
+    directmanipulation
     dnsapi
     dsound
     dui70
@@ -116,6 +118,7 @@ set(COMPAT_RUNTIME_MODULES
     normaliz
     nsi
     ntdll_vista
+    ntdsapi
     ntmarta
     ntobjshex
     odbccp32
@@ -124,6 +127,7 @@ set(COMPAT_RUNTIME_MODULES
     oleaut32
     oledlg
     opengl32
+    pdh
     powrprof
     printui
     profapi

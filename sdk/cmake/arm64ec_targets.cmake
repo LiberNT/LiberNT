@@ -8,7 +8,6 @@
 include("${CMAKE_CURRENT_LIST_DIR}/compat_runtime_targets.cmake")
 
 set(ARM64EC_RUNTIME_MODULES ${COMPAT_RUNTIME_MODULES}
-    directmanipulation
     ntdll_chpe
     windows_media
     windows_networking_connectivity)
