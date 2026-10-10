@@ -11,6 +11,12 @@ if(NOT EXISTS "${MESA_SOURCE_DIR}/CMakeLists.txt")
 endif()
 # Parallelism is inherited at build time; discard the old fixed job limit.
 unset(MESA_BUILD_JOBS CACHE)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(_mesa_assertions_default OFF)
+else()
+    set(_mesa_assertions_default ON)
+endif()
+set(MESA_GALLIUM_ASSERTIONS ${_mesa_assertions_default} CACHE BOOL "Build Mesa with its assertions enabled")
 
 if(ARCH STREQUAL "riscv64" AND NOT SPACEMIT_K1_SUPPORT)
     return()
@@ -95,11 +101,7 @@ export_sdk_libraries(mesa_reactos_sdk_libs "${MESA_SDK_LIBDIR}"
     LIBRARIES ${_mesa_sdk_targets}
     DEPENDS ${_mesa_sdk_targets} ucrtoldnames_target ${_mesa_support_targets})
 
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(_mesa_assertions OFF)
-else()
-    set(_mesa_assertions ON)
-endif()
+set(_mesa_assertions ${MESA_GALLIUM_ASSERTIONS})
 
 set(MESA_WGL_DLL "${MESA_BINARY_DIR}/src/gallium/targets/wgl/mesa_gallium.dll")
 set(_mesa_build_targets mesa_gallium)
