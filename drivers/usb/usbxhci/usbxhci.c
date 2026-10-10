@@ -5799,14 +5799,13 @@ XHCI_ServiceEventRing(
         BOOLEAN SetBusy = (Processed != 0) || AcknowledgeInterrupt;
 
         Interrupter = &Extension->RuntimeRegisters->Interrupter[0];
-        XHCI_WRITE_REGISTER_ULONG(&Interrupter->ErdpHigh,
-                             (ULONG)(Extension->EventRingDequeuePointer >> 32));
-
         ErdpLow = (ULONG)(Extension->EventRingDequeuePointer & 0xFFFFFFFF);
         if (SetBusy)
             ErdpLow |= XHCI_ERDP_BUSY;
 
         XHCI_WRITE_REGISTER_ULONG(&Interrupter->ErdpLow, ErdpLow);
+        XHCI_WRITE_REGISTER_ULONG(&Interrupter->ErdpHigh,
+                             (ULONG)(Extension->EventRingDequeuePointer >> 32));
     }
     KeReleaseSpinLock(&Extension->EventRingLock, OldIrql);
 
@@ -9903,11 +9902,11 @@ XHCI_ProgramInterrupterState(
                              (ULONG)(Extension->ErstTablePhysical.QuadPart >> 32));
         /* Program ERDP to the event ring base and set EHB (BUSY) to clear state */
         Extension->EventRingDequeuePointer = Extension->EventRingPhysical.QuadPart;
-        XHCI_WRITE_REGISTER_ULONG(&Interrupter->ErdpHigh,
-                             (ULONG)(Extension->EventRingDequeuePointer >> 32));
         XHCI_WRITE_REGISTER_ULONG(&Interrupter->ErdpLow,
                              ((ULONG)(Extension->EventRingDequeuePointer & 0xFFFFFFFF)) |
                              XHCI_ERDP_BUSY);
+        XHCI_WRITE_REGISTER_ULONG(&Interrupter->ErdpHigh,
+                             (ULONG)(Extension->EventRingDequeuePointer >> 32));
 
         /* Enable interrupter: set IE and clear any pending IP (RW1C) */
         XHCI_WRITE_REGISTER_ULONG(&Interrupter->Iman, XHCI_IMAN_IE | XHCI_IMAN_IP);
