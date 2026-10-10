@@ -126,12 +126,19 @@ HRESULT WINAPI DllRegisterServer(void)
     if (FAILED(res))
         return res;
 
+#ifdef __REACTOS__
+    {
+        WCHAR KeyName[48] = L"CLSID\\";
+        HKEY hKey;
+
+        StringFromGUID2(&CLSID_FilterMapper2, KeyName + 6, ARRAY_SIZE(KeyName) - 6);
+        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, KeyName, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+            return S_OK;
+        RegCloseKey(hKey);
+    }
+#endif
     res = CoCreateInstance(&CLSID_FilterMapper2, NULL, CLSCTX_INPROC,
                            &IID_IFilterMapper2,  &mapvptr);
-#ifdef __REACTOS__
-    if (res == REGDB_E_CLASSNOTREG)
-        return S_OK;
-#endif
     if (SUCCEEDED(res))
     {
         pMapper = mapvptr;
