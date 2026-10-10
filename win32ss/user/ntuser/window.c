@@ -4119,6 +4119,15 @@ co_IntSetWindowLongPtr(HWND hWnd, DWORD Index, LONG_PTR NewValue, BOOL Ansi, ULO
          goto Exit;
       }
 
+      if ((Window->head.pti->TIF_flags & TIF_CSRSSTHREAD) &&
+          Window->pcls->atomClassName == gaGuiConsoleWndClass &&
+          Window->head.pti->ppi != PsGetCurrentProcessWin32Process())
+      {
+         EngSetLastError(ERROR_ACCESS_DENIED);
+         OldValue = 0;
+         goto Exit;
+      }
+
       PVOID Address = (PUCHAR)(&Window[1]) + Index;
 
 #ifdef _WIN64
@@ -4464,6 +4473,14 @@ NtUserSetWindowWord(HWND hWnd, INT Index, WORD NewValue)
    if ((ULONG)Index > (Window->cbwndExtra - sizeof(WORD)))
    {
       EngSetLastError(ERROR_INVALID_INDEX);
+      goto Exit; // Return 0
+   }
+
+   if ((Window->head.pti->TIF_flags & TIF_CSRSSTHREAD) &&
+       Window->pcls->atomClassName == gaGuiConsoleWndClass &&
+       Window->head.pti->ppi != PsGetCurrentProcessWin32Process())
+   {
+      EngSetLastError(ERROR_ACCESS_DENIED);
       goto Exit; // Return 0
    }
 
