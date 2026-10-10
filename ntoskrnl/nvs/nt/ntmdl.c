@@ -553,8 +553,8 @@ MmAllocatePagesForMdlEx(
             if (!(Flags & MM_DONT_ZERO_ALLOCATION))
                 MI_ZERO_PAGE(MiArchMapFrame(Frame));
 
-            if (CacheFlags == 0 || !NT_SUCCESS(MiPfnSetCache(&MiSystem.Pfn, Frame, CacheFlags)))
-                MiSystem.Pfn.Pfn[Frame].CacheFlags = CacheFlags;
+            if (CacheFlags == 0)
+                MiSystem.Pfn.Pfn[Frame].CacheFlags = 0;
 
             Pages[Got++] = Frame;
         }
@@ -573,8 +573,8 @@ MmAllocatePagesForMdlEx(
         if (!(Flags & MM_DONT_ZERO_ALLOCATION))
             MI_ZERO_PAGE(MiArchMapFrame(Frame));
 
-        if (CacheFlags == 0 || !NT_SUCCESS(MiPfnSetCache(&MiSystem.Pfn, Frame, CacheFlags)))
-            MiSystem.Pfn.Pfn[Frame].CacheFlags = CacheFlags;
+        if (CacheFlags == 0)
+            MiSystem.Pfn.Pfn[Frame].CacheFlags = 0;
 
         Pages[Got++] = Frame;
     }
@@ -591,6 +591,9 @@ MmAllocatePagesForMdlEx(
         ExFreePoolWithTag(Mdl, TAG_MDL);
         return NULL;
     }
+
+    if (CacheFlags != 0)
+        MiPfnSetCacheFrames(&MiSystem.Pfn, (const MI_FRAME_NUMBER *)Pages, (ULONG)Got, CacheFlags);
 
     if (Got != Wanted)
         Pages[Got] = MI_MDL_PFN_END;
@@ -649,10 +652,12 @@ MmFreePagesFromMdl(
     ASSERT(!(Mdl->MdlFlags & MDL_IO_SPACE));
 
     for (i = 0; i < Count && Pages[i] != MI_MDL_PFN_END; i++)
+        ;
+    Count = i;
+    MiPfnSetCacheFrames(&MiSystem.Pfn, (const MI_FRAME_NUMBER *)Pages, Count, 0);
+
+    for (i = 0; i < Count; i++)
     {
-        if (MiSystem.Pfn.Pfn[Pages[i]].CacheFlags != 0)
-            MiPfnSetCache(&MiSystem.Pfn, (ULONG)Pages[i], 0);
-        MiSystem.Pfn.Pfn[Pages[i]].CacheFlags = 0;
         MiPfnShareDecrement(&MiSystem.Pfn, (ULONG)Pages[i], TRUE);
         MiReturnCommit(&MiSystem.SystemSpace, 1);
         Pages[i] = MI_MDL_PFN_END;

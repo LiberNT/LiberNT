@@ -47,6 +47,7 @@ typedef struct _MACHINE
     PUCHAR Ram;
     int *FrameBusy;
     ULONG *FrameCache;
+    ULONG FrameCacheCalls;
     ULONG64 FrameCount;
     ULONG64 SystemRoot;
     ULONG CpuCount;

@@ -221,61 +221,109 @@ MiClampBytes(
     return (Value < Minimum) ? Minimum : ((Value > Maximum) ? Maximum : Value);
 }
 
-NTSTATUS
-MiSetDirectFrameCache(ULONG Frame, ULONG Flags)
+#define MI_DIRECT_CACHE_RUN 64
+
+static NTSTATUS
+MiSetDirectRunCache(ULONG Frame, ULONG Count, ULONG Flags)
 {
-    ULONG64 Addresses[2];
-    PMI_PTE Slots[2] = { NULL, NULL };
-    MI_PTE Entries[2], Updated[2];
-    ULONG Index;
+    ULONG64 Bases[2];
+    PMI_PTE Slots[2][MI_DIRECT_CACHE_RUN];
+    MI_PTE Updated[2][MI_DIRECT_CACHE_RUN];
+    BOOLEAN Changed[2] = { FALSE, FALSE };
+    ULONG Index, Page;
 
-    if (Frame >= MiSystem.Pfn.DirectFrames)
-        return STATUS_SUCCESS;
-    Addresses[0] = (ULONG64)(ULONG_PTR)MiArchMapFrame(Frame);
-    Addresses[1] = MiArchBootFrameAlias(Frame);
+    Bases[0] = (ULONG64)(ULONG_PTR)MiArchMapFrame(Frame);
+    Bases[1] = MiArchBootFrameAlias(Frame);
 
-    for (Index = 0; Index < RTL_NUMBER_OF(Addresses); Index++)
+    for (Page = 0; Page < Count; Page++)
     {
-        ULONG64 Physical;
+        ULONG64 Addresses[2];
 
-        if (Index != 0 && (Addresses[Index] == 0 || Addresses[Index] == Addresses[0]))
-            continue;
-        Slots[Index] = MiPtLookup(&MiSystem.SystemSpace, Addresses[Index], NULL);
-        if (Slots[Index] == NULL)
-        {
-            if (Index == 0 ||
-                (MiPtTranslate(&MiSystem.SystemSpace, Addresses[Index], &Physical, NULL) &&
-                 (Physical >> PAGE_SHIFT) == Frame))
-                return STATUS_NOT_SUPPORTED;
-            continue;
-        }
-        Entries[Index] = MiArchPteRead(Slots[Index]);
-        if (!MiArchPteIsValid(Entries[Index]) || MiArchPteFrame(Entries[Index]) != Frame)
-        {
-            if (Index == 0)
-                return STATUS_NOT_SUPPORTED;
-            Slots[Index] = NULL;
-            continue;
-        }
-        Updated[Index] = MiArchPteWithCache(Entries[Index], Flags);
-        if ((MiArchPteLeafFlags(Updated[Index]) & MI_LEAF_CACHE_MASK) != Flags)
+        Addresses[0] = (ULONG64)(ULONG_PTR)MiArchMapFrame(Frame + Page);
+        Addresses[1] = MiArchBootFrameAlias(Frame + Page);
+        if (Addresses[0] != Bases[0] + ((ULONG64)Page << PAGE_SHIFT))
             return STATUS_NOT_SUPPORTED;
-    }
-    for (Index = 0; Index < RTL_NUMBER_OF(Addresses); Index++)
-    {
-        if (Slots[Index] != NULL && Updated[Index] != Entries[Index])
-            KeInvalidateRangeAllCaches((PVOID)(ULONG_PTR)Addresses[Index], PAGE_SIZE);
-    }
-    for (Index = 0; Index < RTL_NUMBER_OF(Addresses); Index++)
-    {
-        if (Slots[Index] != NULL && Updated[Index] != Entries[Index])
+        if ((Addresses[1] == 0 || Addresses[1] == Addresses[0]) != (Bases[1] == 0 || Bases[1] == Bases[0]))
+            return STATUS_NOT_SUPPORTED;
+        if (Bases[1] != 0 && Bases[1] != Bases[0] && Addresses[1] != Bases[1] + ((ULONG64)Page << PAGE_SHIFT))
+            return STATUS_NOT_SUPPORTED;
+
+        for (Index = 0; Index < RTL_NUMBER_OF(Addresses); Index++)
         {
-            MiArchPteWrite(Slots[Index], 0);
-            MiArchTlbInvalidate(Addresses[Index], 1, TRUE);
-            MiArchPteWrite(Slots[Index], Updated[Index]);
+            ULONG64 Physical;
+            MI_PTE Entry;
+
+            Slots[Index][Page] = NULL;
+            if (Index != 0 && (Addresses[Index] == 0 || Addresses[Index] == Addresses[0]))
+                continue;
+            Slots[Index][Page] = MiPtLookup(&MiSystem.SystemSpace, Addresses[Index], NULL);
+            if (Slots[Index][Page] == NULL)
+            {
+                if (Index == 0 ||
+                    (MiPtTranslate(&MiSystem.SystemSpace, Addresses[Index], &Physical, NULL) &&
+                     (Physical >> PAGE_SHIFT) == Frame + Page))
+                    return STATUS_NOT_SUPPORTED;
+                continue;
+            }
+            Entry = MiArchPteRead(Slots[Index][Page]);
+            if (!MiArchPteIsValid(Entry) || MiArchPteFrame(Entry) != Frame + Page)
+            {
+                if (Index == 0)
+                    return STATUS_NOT_SUPPORTED;
+                Slots[Index][Page] = NULL;
+                continue;
+            }
+            Updated[Index][Page] = MiArchPteWithCache(Entry, Flags);
+            if ((MiArchPteLeafFlags(Updated[Index][Page]) & MI_LEAF_CACHE_MASK) != Flags)
+                return STATUS_NOT_SUPPORTED;
+            if (Updated[Index][Page] == Entry)
+                Slots[Index][Page] = NULL;
+            else
+                Changed[Index] = TRUE;
+        }
+    }
+    for (Index = 0; Index < RTL_NUMBER_OF(Bases); Index++)
+    {
+        if (Changed[Index])
+            KeInvalidateRangeAllCaches((PVOID)(ULONG_PTR)Bases[Index], Count << PAGE_SHIFT);
+    }
+    for (Index = 0; Index < RTL_NUMBER_OF(Bases); Index++)
+    {
+        if (!Changed[Index])
+            continue;
+        for (Page = 0; Page < Count; Page++)
+        {
+            if (Slots[Index][Page] != NULL)
+                MiArchPteWrite(Slots[Index][Page], 0);
+        }
+        MiArchTlbInvalidate(Bases[Index], Count, TRUE);
+        for (Page = 0; Page < Count; Page++)
+        {
+            if (Slots[Index][Page] != NULL)
+                MiArchPteWrite(Slots[Index][Page], Updated[Index][Page]);
         }
     }
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+MiSetDirectFrameCache(ULONG Frame, ULONG Count, ULONG Flags)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (Frame >= MiSystem.Pfn.DirectFrames)
+        return STATUS_SUCCESS;
+    if (Count > MiSystem.Pfn.DirectFrames - Frame)
+        Count = MiSystem.Pfn.DirectFrames - Frame;
+    while (Count != 0 && NT_SUCCESS(Status))
+    {
+        ULONG Run = (Count < MI_DIRECT_CACHE_RUN) ? Count : MI_DIRECT_CACHE_RUN;
+
+        Status = MiSetDirectRunCache(Frame, Run, Flags);
+        Frame += Run;
+        Count -= Run;
+    }
+    return Status;
 }
 
 static NTSTATUS

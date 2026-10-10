@@ -214,10 +214,62 @@ HighMemUser(void)
     WorldDestroy(&World);
 }
 
+static void
+HighMemCacheRuns(void)
+{
+    static TEST_WORLD World;
+    MI_FRAME_NUMBER Frames[6];
+    PMI_PFN_DATABASE Db;
+    ULONG First, Single, High, Calls, i;
+
+    WorldCreateZoned(&World, HM_FRAMES, HM_DIRECT, 1, 100000);
+    Db = &World.System.Pfn;
+
+    First = MiPfnAllocateContiguous(Db, 6, 0, HM_DIRECT - 1, 0);
+    High = MiPfnAllocatePage(Db, MI_ALLOCATE_HIGH);
+    CHECK(First != MI_FRAME_INVALID && High != MI_FRAME_INVALID);
+    CHECK(First + 6 <= HM_DIRECT && High >= HM_DIRECT);
+    Single = First + 5;
+    for (i = 0; i < 4; i++)
+        Frames[i] = First + i;
+    Frames[4] = Single;
+    Frames[5] = High;
+
+    Calls = World.Machine.FrameCacheCalls;
+    MiPfnSetCacheFrames(Db, Frames, RTL_NUMBER_OF(Frames), MI_LEAF_WRITECOMBINE);
+    CHECK(World.Machine.FrameCacheCalls == Calls + 2);
+    for (i = 0; i < RTL_NUMBER_OF(Frames); i++)
+    {
+        CHECK((ULONG)Db->Pfn[Frames[i]].CacheFlags == MI_LEAF_WRITECOMBINE);
+        CHECK(World.Machine.FrameCache[Frames[i]] == (Frames[i] < HM_DIRECT ? MI_LEAF_WRITECOMBINE : 0));
+    }
+
+    MiPfnSetCacheFrames(Db, Frames, RTL_NUMBER_OF(Frames), MI_LEAF_WRITECOMBINE);
+    CHECK(World.Machine.FrameCacheCalls == Calls + 2);
+
+    CHECK(MiPfnSetCache(Db, First + 1, 0) == STATUS_SUCCESS);
+    Calls = World.Machine.FrameCacheCalls;
+    MiPfnSetCacheFrames(Db, Frames, RTL_NUMBER_OF(Frames), 0);
+    CHECK(World.Machine.FrameCacheCalls == Calls + 3);
+    for (i = 0; i < RTL_NUMBER_OF(Frames); i++)
+    {
+        CHECK(Db->Pfn[Frames[i]].CacheFlags == 0);
+        CHECK(World.Machine.FrameCache[Frames[i]] == 0);
+    }
+
+    for (i = 0; i < RTL_NUMBER_OF(Frames); i++)
+        MiPfnShareDecrement(Db, (ULONG)Frames[i], TRUE);
+    MiPfnShareDecrement(Db, First + 4, TRUE);
+    CHECK(MiPfnDbCheck(Db) == 0);
+    WorldExpectClean(&World, HM_FRAMES);
+    WorldDestroy(&World);
+}
+
 void
 TestHighMem(void)
 {
     HighMemZones();
     HighMemWindow();
     HighMemUser();
+    HighMemCacheRuns();
 }

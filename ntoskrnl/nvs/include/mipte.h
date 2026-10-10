@@ -162,7 +162,7 @@ VOID MiArchBootClearUserHalf(_In_ ULONG64 RootFrame);
 PVOID MiArchMapFrame(_In_ ULONG64 Frame);
 PVOID MiArchDebugMapFrame(_In_ ULONG64 Frame);
 VOID MiArchUnmapFrame(_In_ PVOID Mapping);
-NTSTATUS MiArchSetFrameCache(_In_ ULONG Frame, _In_ ULONG Flags);
+NTSTATUS MiArchSetFrameCache(_In_ ULONG Frame, _In_ ULONG Count, _In_ ULONG Flags);
 ULONG64 MiArchBootFrameAlias(_In_ ULONG Frame);
 VOID MiArchWriteBootPte(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value);
 MI_PTE MiArchPteRead(_In_ PMI_PTE Slot);

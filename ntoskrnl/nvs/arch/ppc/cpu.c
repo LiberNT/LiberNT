@@ -36,9 +36,10 @@ MiArchSyncInstructionCache(
 }
 
 NTSTATUS
-MiArchSetFrameCache(ULONG Frame, ULONG Flags)
+MiArchSetFrameCache(ULONG Frame, ULONG Count, ULONG Flags)
 {
     UNREFERENCED_PARAMETER(Frame);
+    UNREFERENCED_PARAMETER(Count);
     return Flags == 0 ? STATUS_SUCCESS : STATUS_NOT_SUPPORTED;
 }
 

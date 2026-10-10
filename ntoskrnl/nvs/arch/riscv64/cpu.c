@@ -41,10 +41,10 @@ MiArchSyncInstructionCache(
 }
 
 NTSTATUS
-MiArchSetFrameCache(ULONG Frame, ULONG Flags)
+MiArchSetFrameCache(ULONG Frame, ULONG Count, ULONG Flags)
 {
     if (MiRiscvPbmtEnabled)
-        return MiSetDirectFrameCache(Frame, Flags);
+        return MiSetDirectFrameCache(Frame, Count, Flags);
     return Flags == 0 ? STATUS_SUCCESS : STATUS_NOT_SUPPORTED;
 }
 

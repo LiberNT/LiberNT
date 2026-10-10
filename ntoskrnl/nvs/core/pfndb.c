@@ -273,10 +273,42 @@ MiPfnSetCache(PMI_PFN_DATABASE Db, ULONG Frame, ULONG Flags)
 
     if (Flags & ~MI_LEAF_CACHE_MASK)
         return STATUS_INVALID_PARAMETER;
-    Status = (Frame < Db->DirectFrames) ? MiArchSetFrameCache(Frame, Flags) : STATUS_SUCCESS;
+    Status = (Frame < Db->DirectFrames) ? MiArchSetFrameCache(Frame, 1, Flags) : STATUS_SUCCESS;
     if (NT_SUCCESS(Status))
         MI_ATOMIC_WRITE32(&Db->Pfn[Frame].CacheFlags, Flags);
     return Status;
+}
+
+VOID
+MiPfnSetCacheFrames(PMI_PFN_DATABASE Db, const MI_FRAME_NUMBER *Frames, ULONG Count, ULONG Flags)
+{
+    ULONG Index = 0;
+
+    while (Index < Count)
+    {
+        ULONG First = (ULONG)Frames[Index];
+        ULONG Run = 1, Page;
+
+        if ((ULONG)MI_ATOMIC_READ32(&Db->Pfn[First].CacheFlags) == Flags)
+        {
+            Index++;
+            continue;
+        }
+        while (Index + Run < Count && Frames[Index + Run] == (MI_FRAME_NUMBER)First + Run &&
+               (First + Run < Db->DirectFrames) == (First < Db->DirectFrames) &&
+               (ULONG)MI_ATOMIC_READ32(&Db->Pfn[First + Run].CacheFlags) != Flags)
+        {
+            Run++;
+        }
+        if (First < Db->DirectFrames && !NT_SUCCESS(MiArchSetFrameCache(First, Run, Flags)))
+        {
+            for (Page = 0; Page < Run; Page++)
+                MiArchSetFrameCache(First + Page, 1, Flags);
+        }
+        for (Page = 0; Page < Run; Page++)
+            MI_ATOMIC_WRITE32(&Db->Pfn[First + Page].CacheFlags, Flags);
+        Index += Run;
+    }
 }
 
 static VOID

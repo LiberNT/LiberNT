@@ -159,11 +159,15 @@ MiArchUnmapFrame(_In_ PVOID Mapping)
 }
 
 NTSTATUS
-MiArchSetFrameCache(ULONG Frame, ULONG Flags)
+MiArchSetFrameCache(ULONG Frame, ULONG Count, ULONG Flags)
 {
-    if (Frame >= MachineCurrent->FrameCount)
+    ULONG Index;
+
+    if (Frame >= MachineCurrent->FrameCount || Count > MachineCurrent->FrameCount - Frame)
         return STATUS_INVALID_PARAMETER;
-    __atomic_store_n(&MachineCurrent->FrameCache[Frame], Flags, __ATOMIC_RELEASE);
+    for (Index = 0; Index < Count; Index++)
+        __atomic_store_n(&MachineCurrent->FrameCache[Frame + Index], Flags, __ATOMIC_RELEASE);
+    __atomic_fetch_add(&MachineCurrent->FrameCacheCalls, 1, __ATOMIC_RELAXED);
     return STATUS_SUCCESS;
 }
 

@@ -21,9 +21,9 @@ MiArchSyncInstructionCache(
 }
 
 NTSTATUS
-MiArchSetFrameCache(ULONG Frame, ULONG Flags)
+MiArchSetFrameCache(ULONG Frame, ULONG Count, ULONG Flags)
 {
-    return MiSetDirectFrameCache(Frame, Flags);
+    return MiSetDirectFrameCache(Frame, Count, Flags);
 }
 
 ULONG64
