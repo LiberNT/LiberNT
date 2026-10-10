@@ -148,6 +148,7 @@ static const IClassFactoryVtbl ObjrefMonikerCFVtbl =
 
 static IClassFactory ObjrefMonikerCF = { &ObjrefMonikerCFVtbl };
 
+#ifndef __REACTOS__
 static const IClassFactoryVtbl ComCatCFVtbl =
 {
     ClassFactory_QueryInterface,
@@ -158,6 +159,7 @@ static const IClassFactoryVtbl ComCatCFVtbl =
 };
 
 static IClassFactory ComCatCF = { &ComCatCFVtbl };
+#endif
 
 static const IClassFactoryVtbl GlobalInterfaceTableCFVtbl =
 {
@@ -213,8 +215,10 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID iid,LPVOID *ppv)
         return IClassFactory_QueryInterface(&ObjrefMonikerCF, iid, ppv);
     if (IsEqualCLSID(rclsid, &CLSID_PointerMoniker))
         return IClassFactory_QueryInterface(&PointerMonikerCF, iid, ppv);
+#ifndef __REACTOS__
     if (IsEqualGUID(rclsid, &CLSID_StdComponentCategoriesMgr))
         return IClassFactory_QueryInterface(&ComCatCF, iid, ppv);
+#endif
 
     hr = OLE32_DllGetClassObject(rclsid, iid, ppv);
     if (SUCCEEDED(hr))

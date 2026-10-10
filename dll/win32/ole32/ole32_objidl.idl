@@ -111,9 +111,11 @@ coclass PSFactoryBuffer { interface IPSFactoryBuffer; }
 ]
 coclass ObjrefMoniker { interface IMoniker; }
 
+#ifndef __REACTOS__
 [
     helpstring("Component Categories Manager"),
     threading(both),
     uuid(0002e005-0000-0000-c000-000000000046)
 ]
 coclass StdComponentCategoriesMgr { interface ICatRegister; interface ICatInformation; }
+#endif

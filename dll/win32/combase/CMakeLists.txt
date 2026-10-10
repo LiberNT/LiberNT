@@ -9,6 +9,7 @@ add_rpc_files(client irpcss.idl)
 list(APPEND SOURCE
     apartment.c
     combase.c
+    comcat.c
     errorinfo.c
     hglobalstream.c
     malloc.c

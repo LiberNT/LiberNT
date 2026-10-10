@@ -31,7 +31,11 @@
 
 #include "ole2.h"
 #include "comcat.h"
+#ifdef __REACTOS__
+#include "combase_private.h"
+#else
 #include "compobj_private.h"
+#endif
 
 #include "wine/debug.h"
 

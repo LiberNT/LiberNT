@@ -26,7 +26,6 @@ list(APPEND SOURCE
     bindctx.c
     classmoniker.c
     clipboard.c
-    comcat.c
     compobj.c
     compositemoniker.c
     datacache.c

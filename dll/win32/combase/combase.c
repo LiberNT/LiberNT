@@ -25,6 +25,9 @@
 #include "ctxtcall.h"
 #include "oleauto.h"
 #include "dde.h"
+#ifdef __REACTOS__
+#include "comcat.h"
+#endif
 #include "winternl.h"
 
 #include "dcom.h"
@@ -292,7 +295,11 @@ static HKEY create_classes_root_hkey(DWORD access)
 
 static HKEY get_classes_root_hkey(HKEY hkey, REGSAM access);
 
+#ifdef __REACTOS__
+LSTATUS create_classes_key(HKEY hkey, const WCHAR *name, REGSAM access, HKEY *retkey)
+#else
 static LSTATUS create_classes_key(HKEY hkey, const WCHAR *name, REGSAM access, HKEY *retkey)
+#endif
 {
     OBJECT_ATTRIBUTES attr;
     UNICODE_STRING nameW;
@@ -335,7 +342,11 @@ static HKEY get_classes_root_hkey(HKEY hkey, REGSAM access)
     return ret;
 }
 
+#ifdef __REACTOS__
+LSTATUS open_classes_key(HKEY hkey, const WCHAR *name, REGSAM access, HKEY *retkey)
+#else
 static LSTATUS open_classes_key(HKEY hkey, const WCHAR *name, REGSAM access, HKEY *retkey)
+#endif
 {
     OBJECT_ATTRIBUTES attr;
     UNICODE_STRING nameW;
@@ -594,6 +605,19 @@ static const IClassFactoryVtbl global_options_factory_vtbl =
 };
 
 static IClassFactory global_options_factory = { &global_options_factory_vtbl };
+
+#ifdef __REACTOS__
+static const IClassFactoryVtbl comcat_factory_vtbl =
+{
+    class_factory_QueryInterface,
+    class_factory_AddRef,
+    class_factory_Release,
+    ComCat_CreateInstance,
+    class_factory_LockServer
+};
+
+static IClassFactory comcat_factory = { &comcat_factory_vtbl };
+#endif
 
 static HRESULT get_builtin_class_factory(REFCLSID rclsid, REFIID riid, void **obj)
 {
@@ -3962,6 +3986,10 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void **obj)
 
     if (IsEqualCLSID(rclsid, &CLSID_GlobalOptions))
         return IClassFactory_QueryInterface(&global_options_factory, riid, obj);
+#ifdef __REACTOS__
+    if (IsEqualCLSID(rclsid, &CLSID_StdComponentCategoriesMgr))
+        return IClassFactory_QueryInterface(&comcat_factory, riid, obj);
+#endif
 
     return CLASS_E_CLASSNOTAVAILABLE;
 }

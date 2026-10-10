@@ -266,6 +266,12 @@ struct stub_manager
     BOOL              disconnected; /* CoDisconnectObject has been called (CS lock) */
 };
 
+#ifdef __REACTOS__
+HRESULT WINAPI ComCat_CreateInstance(IClassFactory *iface, IUnknown *pUnk, REFIID riid, void **ppv);
+LSTATUS create_classes_key(HKEY hkey, const WCHAR *name, REGSAM access, HKEY *retkey);
+LSTATUS open_classes_key(HKEY hkey, const WCHAR *name, REGSAM access, HKEY *retkey);
+#endif
+
 ULONG stub_manager_int_release(struct stub_manager *stub_manager);
 struct stub_manager * get_stub_manager_from_object(struct apartment *apt, IUnknown *object, BOOL alloc);
 void stub_manager_disconnect(struct stub_manager *m);
