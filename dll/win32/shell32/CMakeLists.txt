@@ -98,6 +98,7 @@ list(APPEND SOURCE
     CFolderItems.cpp
     CAutomationCM.cpp
     CFadeTask.cpp
+    CFolderShortcut.cpp
     CShellFolderViewOC.cpp
     CShellSearchExt.cpp
     CThumbnail.cpp

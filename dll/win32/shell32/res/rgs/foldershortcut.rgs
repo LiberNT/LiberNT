@@ -4,19 +4,23 @@ HKCR
 	{
 		ForceRemove {0AFACED1-E828-11D1-9187-B532F1E9575D} = s 'Folder Shortcut'
 		{
-			val Details = s 'prop:Name;LinkTarget'
+			val FriendlyTypeName = s '@shell32.dll,-10540'
+			val PreviewDetails = s 'prop:System.Link.TargetParsingPath'
 			InprocServer32 = s '%MODULE%'
 			{
 				val ThreadingModel = s 'Apartment'
 			}
-			'shellex'
+			shellex
 			{
 				IconHandler = s '{0AFACED1-E828-11D1-9187-B532F1E9575D}'
+				{000214EE-0000-0000-C000-000000000046} = s '{0AFACED1-E828-11D1-9187-B532F1E9575D}'
+				{000214F9-0000-0000-C000-000000000046} = s '{0AFACED1-E828-11D1-9187-B532F1E9575D}'
+				{00021500-0000-0000-C000-000000000046} = s '{0AFACED1-E828-11D1-9187-B532F1E9575D}'
 			}
-			'ShellFolder'
+			ShellFolder
 			{
-				val Attributes = d '&H60410137'
-				val CallForAttributes = d '&Hf0000000'
+				val Attributes = d '1610678583'
+				val CallForAttributes = d '4026531840'
 			}
 		}
 	}

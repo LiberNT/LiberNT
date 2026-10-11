@@ -1614,6 +1614,45 @@ interface ICommDlgBrowser3 : ICommDlgBrowser2
  * IFolderFilterSite & IFolderFilter interfaces
  */
 [
+    uuid(10DF43C8-1DBE-11d3-8B34-006097DF5BD4),
+    object,
+    local
+]
+interface IBrowserFrameOptions : IUnknown
+{
+    typedef [unique] IBrowserFrameOptions *LPBROWSERFRAMEOPTIONS;
+
+    [v1_enum] enum _BROWSERFRAMEOPTIONS
+    {
+        BFO_NONE                             = 0x00000000,
+        BFO_BROWSER_PERSIST_SETTINGS         = 0x00000001,
+        BFO_RENAME_FOLDER_OPTIONS_TOINTERNET = 0x00000002,
+        BFO_BOTH_OPTIONS                     = 0x00000004,
+        BIF_PREFER_INTERNET_SHORTCUT         = 0x00000008,
+        BFO_BROWSE_NO_IN_NEW_PROCESS         = 0x00000010,
+        BFO_ENABLE_HYPERLINK_TRACKING        = 0x00000020,
+        BFO_USE_IE_OFFLINE_SUPPORT           = 0x00000040,
+        BFO_SUBSTITUE_INTERNET_START_PAGE    = 0x00000080,
+        BFO_USE_IE_LOGOBANDING               = 0x00000100,
+        BFO_ADD_IE_TOCAPTIONBAR              = 0x00000200,
+        BFO_USE_DIALUP_REF                   = 0x00000400,
+        BFO_USE_IE_TOOLBAR                   = 0x00000800,
+        BFO_NO_PARENT_FOLDER_SUPPORT         = 0x00001000,
+        BFO_NO_REOPEN_NEXT_RESTART           = 0x00002000,
+        BFO_GO_HOME_PAGE                     = 0x00004000,
+        BFO_PREFER_IEPROCESS                 = 0x00008000,
+        BFO_SHOW_NAVIGATION_CANCELLED        = 0x00010000,
+        BFO_USE_IE_STATUSBAR                 = 0x00020000,
+        BFO_QUERY_ALL                        = (int)0xFFFFFFFF,
+    };
+    typedef DWORD BROWSERFRAMEOPTIONS;
+
+    HRESULT GetFrameOptions(
+        [in] BROWSERFRAMEOPTIONS dwMask,
+        [out] BROWSERFRAMEOPTIONS *pdwOptions);
+}
+
+[
     uuid(1ea58f02-d55a-411d-b09e-9e65ac21605b),
     local
 ]

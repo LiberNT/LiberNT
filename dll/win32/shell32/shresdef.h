@@ -391,6 +391,7 @@
 #define IDS_COMPUTER_FOLDERS                        60023
 #define IDS_FILE_EXPLORER                           60030
 #define IDS_SEARCHBAND_COMMAND                      12708
+#define IDS_FOLDERSHORTCUT_TYPE                     10540
 
 #define IDS_LOG_OFF_DESC                            35000
 #define IDS_SWITCH_USER_DESC                        35001
