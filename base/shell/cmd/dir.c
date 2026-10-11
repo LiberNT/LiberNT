@@ -1856,10 +1856,9 @@ ResolvePattern(
     }
     else if (pszPatternPart == NULL)
     {
-        ASSERT(pszFullPath[_tcslen(pszFullPath)-1] == _T('\\'));
-
         /* Anything NOT being "." or ".." (the special directories) must be fully restored */
-        if (*pNextDir && !IsDotDirectory(pNextDir))
+        if (pszFullPath[_tcslen(pszFullPath)-1] == _T('\\') &&
+            *pNextDir && !IsDotDirectory(pNextDir))
         {
             pszPatternPart = &pszFullPath[_tcslen(pszFullPath)];
             _tcscpy(pszPatternPart, pNextDir);
