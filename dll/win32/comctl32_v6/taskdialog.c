@@ -1128,8 +1128,19 @@ static void taskdialog_layout(struct taskdialog_info *dialog_info)
 
     /* Add height for spacing, title height and frame height */
     dialog_height += v_spacing;
+#ifdef __REACTOS__
+    {
+        RECT window_rect = { 0, 0, dialog_width, dialog_height };
+
+        AdjustWindowRectEx(&window_rect, GetWindowLongW(dialog_info->hwnd, GWL_STYLE), FALSE,
+                           GetWindowLongW(dialog_info->hwnd, GWL_EXSTYLE));
+        dialog_width = window_rect.right - window_rect.left;
+        dialog_height = window_rect.bottom - window_rect.top;
+    }
+#else
     dialog_height += GetSystemMetrics(SM_CYCAPTION);
     dialog_height += GetSystemMetrics(SM_CXDLGFRAME);
+#endif
 
     if (!dialog_info->had_first_layout)
     {
