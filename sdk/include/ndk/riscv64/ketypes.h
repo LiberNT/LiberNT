@@ -33,6 +33,9 @@
 
 #define NUMBER_POOL_LOOKASIDE_LISTS 32
 
+#define PRCB_BUILD_DEBUG        1
+#define PRCB_BUILD_UNIPROCESSOR 2
+
 /* Shared IPI request bit indices, not hardware interrupt identifiers. */
 #define IPI_APC           1
 #define IPI_DPC           2
@@ -219,6 +222,7 @@ struct _KPRCB
     ULONG AdjustDpcThreshold;
     UCHAR SkipTick;
     KIRQL DebuggerSavedIRQL;
+    UCHAR BuildType;
     PROCESSOR_POWER_STATE PowerState;
 
     /* Logical processor topology, independent of platform hart identifiers. */

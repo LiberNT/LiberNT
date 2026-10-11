@@ -75,6 +75,12 @@ KiRiscvInitializePcr(PKPCR Pcr, PKTHREAD Thread, ULONG_PTR HartId,
     Prcb->IdleThread = Thread;
     Prcb->DpcStack = DpcStack;
     Prcb->Number = Number;
+#ifndef CONFIG_SMP
+    Prcb->BuildType |= PRCB_BUILD_UNIPROCESSOR;
+#endif
+#if DBG
+    Prcb->BuildType |= PRCB_BUILD_DEBUG;
+#endif
     Prcb->SetMember = AFFINITY_MASK(Number);
     Prcb->ParentNode = &KiNode0;
     Prcb->MultiThreadProcessorSet = Prcb->SetMember;
