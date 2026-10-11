@@ -458,4 +458,5 @@
  @ stdcall NdisAllocateNetBufferMdlAndData(ptr)
 ; NDIS 6.20 processor topology (implemented in 60processor.c)
  @ stdcall NdisCurrentProcessorIndex()
+ @ stdcall NdisGetProcessorInformation(ptr)
  @ stdcall NdisGetProcessorInformationEx(ptr ptr ptr)

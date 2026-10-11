@@ -46,8 +46,32 @@ typedef struct _NDIS_SYSTEM_PROCESSOR_INFO_EX
     ULONG               ProcessorInfoEntrySize;
 } NDIS_SYSTEM_PROCESSOR_INFO_EX, *PNDIS_SYSTEM_PROCESSOR_INFO_EX;
 
+typedef struct _NDIS_PROCESSOR_INFO
+{
+    ULONG               CpuNumber;
+    ULONG               PhysicalPackageId;
+    ULONG               CoreId;
+    ULONG               HyperThreadID;
+} NDIS_PROCESSOR_INFO, *PNDIS_PROCESSOR_INFO;
+
+typedef struct _NDIS_SYSTEM_PROCESSOR_INFO
+{
+    NDIS_OBJECT_HEADER  Header;
+    ULONG               Flags;
+    NDIS_PROCESSOR_VENDOR ProcessorVendor;
+    ULONG               NumPhysicalPackages;
+    ULONG               NumCores;
+    ULONG               NumCoresPerPhysicalPackage;
+    ULONG               MaxHyperThreadingCpusPerCore;
+    ULONG               RssBaseCpu;
+    ULONG               RssCpuCount;
+    PUCHAR              RssProcessors;
+    NDIS_PROCESSOR_INFO CpuInfo[MAXIMUM_PROC_PER_GROUP];
+} NDIS_SYSTEM_PROCESSOR_INFO, *PNDIS_SYSTEM_PROCESSOR_INFO;
+
 C_ASSERT(sizeof(NDIS_PROCESSOR_INFO_EX) == 20);
 C_ASSERT(sizeof(NDIS_SYSTEM_PROCESSOR_INFO_EX) == 40);
+C_ASSERT(sizeof(NDIS_PROCESSOR_INFO) == 16);
 
 #define NDIS_SYSTEM_PROCESSOR_INFO_EX_REVISION_1  1
 
@@ -118,7 +142,7 @@ NdisGetRssProcessorInformation(
     }
 
     RtlZeroMemory(RssProcessorInfo, Required);
-    RssProcessorInfo->Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    RssProcessorInfo->Header.Type = NDIS_OBJECT_TYPE_RSS_PROCESSOR_INFO;
     RssProcessorInfo->Header.Revision = NDIS_RSS_PROCESSOR_INFO_REVISION_2;
     RssProcessorInfo->Header.Size = NDIS_SIZEOF_RSS_PROCESSOR_INFO_REVISION_2;
     RssProcessorInfo->MaxNumRssProcessors = Count;
@@ -306,5 +330,64 @@ NdisGetProcessorInformationEx(
     *Size = Required;
     ExFreePoolWithTag(CoresPerSocket, NDIS6_PROCESSOR_TAG);
     ExFreePoolWithTag(Topology, NDIS6_PROCESSOR_TAG);
+    return NDIS_STATUS_SUCCESS;
+}
+
+NDIS_STATUS
+NTAPI
+NdisGetProcessorInformation(
+    _Inout_ PNDIS_SYSTEM_PROCESSOR_INFO SystemProcessorInfo)
+{
+    PNDIS_SYSTEM_PROCESSOR_INFO_EX InfoEx;
+    PNDIS_PROCESSOR_INFO_EX Cpu;
+    NDIS_STATUS Status;
+    SIZE_T Size = 0;
+    ULONG Index, Count = 0;
+
+    PAGED_CODE();
+
+    if (SystemProcessorInfo == NULL)
+        return NDIS_STATUS_INVALID_PARAMETER;
+
+    Status = NdisGetProcessorInformationEx(NULL, NULL, &Size);
+    if (Status != NDIS_STATUS_BUFFER_TOO_SHORT)
+        return NDIS_STATUS_FAILURE;
+
+    InfoEx = ExAllocatePoolWithTag(NonPagedPool, Size, NDIS6_PROCESSOR_TAG);
+    if (InfoEx == NULL)
+        return NDIS_STATUS_RESOURCES;
+
+    Status = NdisGetProcessorInformationEx(NULL, InfoEx, &Size);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        ExFreePoolWithTag(InfoEx, NDIS6_PROCESSOR_TAG);
+        return Status;
+    }
+
+    SystemProcessorInfo->Flags = 0;
+    SystemProcessorInfo->ProcessorVendor = InfoEx->ProcessorVendor;
+    SystemProcessorInfo->NumPhysicalPackages = InfoEx->NumSockets;
+    SystemProcessorInfo->NumCores = InfoEx->NumCores;
+    SystemProcessorInfo->NumCoresPerPhysicalPackage = InfoEx->NumCoresPerSocket;
+    SystemProcessorInfo->MaxHyperThreadingCpusPerCore = InfoEx->MaxHyperThreadingProcsPerCore;
+    RtlZeroMemory(SystemProcessorInfo->CpuInfo, sizeof(SystemProcessorInfo->CpuInfo));
+
+    Cpu = (PNDIS_PROCESSOR_INFO_EX)((PUCHAR)InfoEx + InfoEx->ProcessorInfoOffset);
+    for (Index = 0; Index < InfoEx->NumberOfProcessors; ++Index)
+    {
+        if (Cpu[Index].ProcNum.Group != 0 || Cpu[Index].ProcNum.Number >= MAXIMUM_PROC_PER_GROUP)
+            continue;
+        SystemProcessorInfo->CpuInfo[Count].CpuNumber = Cpu[Index].ProcNum.Number;
+        SystemProcessorInfo->CpuInfo[Count].PhysicalPackageId = Cpu[Index].SocketId;
+        SystemProcessorInfo->CpuInfo[Count].CoreId = Cpu[Index].CoreId;
+        SystemProcessorInfo->CpuInfo[Count].HyperThreadID = Cpu[Index].HyperThreadId;
+        if (SystemProcessorInfo->RssProcessors != NULL)
+            SystemProcessorInfo->RssProcessors[Count] = Cpu[Index].ProcNum.Number;
+        ++Count;
+    }
+    SystemProcessorInfo->RssBaseCpu = Count != 0 ? SystemProcessorInfo->CpuInfo[0].CpuNumber : 0;
+    SystemProcessorInfo->RssCpuCount = Count;
+
+    ExFreePoolWithTag(InfoEx, NDIS6_PROCESSOR_TAG);
     return NDIS_STATUS_SUCCESS;
 }

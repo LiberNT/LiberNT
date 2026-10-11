@@ -575,6 +575,11 @@ typedef struct _NDIS_CO_LINK_SPEED {
 #define NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_HARDWARE_ASSIST_ATTRIBUTES    0xAF
 
 #endif
+#if ((NDIS_SUPPORT_NDIS620))
+
+#define NDIS_OBJECT_TYPE_RSS_PROCESSOR_INFO                             0xB1
+
+#endif
 #if ((NDIS_SUPPORT_NDIS630))
 
 #define NDIS_OBJECT_TYPE_QOS_CAPABILITIES                               0xB5

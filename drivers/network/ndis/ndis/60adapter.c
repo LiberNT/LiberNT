@@ -865,7 +865,7 @@ Ndis6CallMiniportInitializeEx(
     }
 
     RtlZeroMemory(&Params, sizeof(Params));
-    Params.Header.Type     = NDIS_OBJECT_TYPE_DEFAULT;
+    Params.Header.Type     = NDIS_OBJECT_TYPE_MINIPORT_INIT_PARAMETERS;
     Params.Header.Revision = NDIS_MINIPORT_INIT_PARAMETERS_REVISION_1;
     Params.Header.Size     = sizeof(Params);
 
