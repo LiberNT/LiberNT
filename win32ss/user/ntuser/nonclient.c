@@ -421,12 +421,12 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
          break; // Exit on Return or Esc
 
       if (!g_bWindowSnapEnabled && (msg.message == WM_LBUTTONUP ||
-         (msg.message == WM_MOUSEMOVE && (msg.wParam & MK_LBUTTON) == 0)))
+         (msg.message == WM_MOUSEMOVE && (MsqGetDownKeyState(pti->MessageQueue) & MK_LBUTTON) == 0)))
       { // If no WindowSnapEnabled: Exit on button-up immediately
          break;
       }
       else if (g_bWindowSnapEnabled && (msg.message == WM_LBUTTONUP ||
-              (msg.message == WM_MOUSEMOVE && (msg.wParam & MK_LBUTTON) == 0)))
+              (msg.message == WM_MOUSEMOVE && (MsqGetDownKeyState(pti->MessageQueue) & MK_LBUTTON) == 0)))
       { // If WindowSnapEnabled: Decide whether to snap before exiting
          if (hittest == HTCAPTION && thickframe && /* Check for snapping if was moved by caption */
              IntIsSnapAllowedForWindow(pwnd) && (ExStyle & WS_EX_MDICHILD) == 0)
