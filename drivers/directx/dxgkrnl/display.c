@@ -4281,7 +4281,7 @@ DxgkpDisplayDispatch(
                 Status = STATUS_DEVICE_NOT_READY;
                 break;
             }
-            if (DXGK_CB_FULL(EscapeAdapter, DxgkDdiEscape) == NULL)
+            if (DXGK_CB(EscapeAdapter, DxgkDdiEscape) == NULL)
             {
                 Status = STATUS_NOT_SUPPORTED;
                 break;
@@ -4298,7 +4298,7 @@ DxgkpDisplayDispatch(
             }
             _SEH2_TRY
             {
-                Status = DXGK_CB_FULL(EscapeAdapter, DxgkDdiEscape)(EscapeAdapter->MiniportDeviceContext, &EscapeArgs);
+                Status = DXGK_CB(EscapeAdapter, DxgkDdiEscape)(EscapeAdapter->MiniportDeviceContext, &EscapeArgs);
             }
             _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
             {

@@ -5408,7 +5408,7 @@ DxgkpEscapeCaptured(
         }
     }
 
-    if (DXGK_CB_FULL(Adapter, DxgkDdiEscape) == NULL)
+    if (DXGK_CB(Adapter, DxgkDdiEscape) == NULL)
     {
         DXGKRNL_WARN("DxgkEscape: miniport has no DxgkDdiEscape\n");
         Status = STATUS_NOT_SUPPORTED;
@@ -5462,7 +5462,7 @@ DxgkpEscapeCaptured(
     }
     _SEH2_TRY
     {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiEscape)(Adapter->MiniportDeviceContext, &EscapeArgs);
+        Status = DXGK_CB(Adapter, DxgkDdiEscape)(Adapter->MiniportDeviceContext, &EscapeArgs);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
