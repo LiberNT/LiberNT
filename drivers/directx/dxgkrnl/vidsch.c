@@ -3935,6 +3935,7 @@ VidSchSubmitCommandTrackedMeasured(
         VidSchpReleaseCall(Adapter);
         return Status;
     }
+    DxgkStampTrackedDmaBufferReferences(Adapter, Reservation);
     if (Packet->Context != NULL)
     {
         OrderedContext = (PDXGKRNL_CONTEXT)Packet->Context;

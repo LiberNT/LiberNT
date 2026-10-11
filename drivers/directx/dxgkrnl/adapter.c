@@ -3285,6 +3285,59 @@ DxgkPrepareTrackedDmaBuffer(
     return STATUS_SUCCESS;
 }
 
+static VOID
+DxgkpStampTrackedDmaReferencesLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry)
+{
+    UINT RefIndex;
+
+    if (Entry->NodeOrdinal >= DXGK_MAX_TRACKED_NODES ||
+        Entry->AllocationReferenceList == NULL)
+    {
+        return;
+    }
+    for (RefIndex = 0; RefIndex < Entry->AllocationReferenceCount; ++RefIndex)
+    {
+        PDXGKVMM_ALLOCATION Referenced =
+            Entry->AllocationReferenceList[RefIndex];
+
+        if (Referenced == NULL)
+            continue;
+        LONG Epoch =
+            InterlockedCompareExchange(&Adapter->SubmittedFenceIdentityEpoch, 0, 0);
+
+        if (Referenced->LastRefEpoch != Epoch)
+        {
+            /* Older stamps name fence ids from a reset timeline. */
+            RtlZeroMemory((PVOID)Referenced->LastRefFenceId,
+                          sizeof(Referenced->LastRefFenceId));
+            Referenced->LastRefEpoch = Epoch;
+        }
+        if (Referenced->LastRefFenceId[Entry->NodeOrdinal] == 0 ||
+            !DxgkpFenceIdReached(Referenced->LastRefFenceId[Entry->NodeOrdinal],
+                                 Entry->SubmissionFenceId))
+        {
+            Referenced->LastRefFenceId[Entry->NodeOrdinal] =
+                Entry->SubmissionFenceId;
+        }
+    }
+}
+
+VOID
+DxgkStampTrackedDmaBufferReferences(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry)
+{
+    KIRQL OldIrql;
+
+    if (Adapter == NULL || Entry == NULL || Entry->Adapter != Adapter)
+        return;
+    KeAcquireSpinLock(&Adapter->SubmitDmaLock, &OldIrql);
+    DxgkpStampTrackedDmaReferencesLocked(Adapter, Entry);
+    KeReleaseSpinLock(&Adapter->SubmitDmaLock, OldIrql);
+}
+
 VOID
 NTAPI
 DxgkCommitTrackedDmaBuffer(
@@ -3304,37 +3357,7 @@ DxgkCommitTrackedDmaBuffer(
      * fence, so destruction can wait for the work that actually touches the
      * allocation rather than for the destroying device's queue alone.
      */
-    if (Entry->NodeOrdinal < DXGK_MAX_TRACKED_NODES &&
-        Entry->AllocationReferenceList != NULL)
-    {
-        UINT RefIndex;
-
-        for (RefIndex = 0; RefIndex < Entry->AllocationReferenceCount; ++RefIndex)
-        {
-            PDXGKVMM_ALLOCATION Referenced =
-                Entry->AllocationReferenceList[RefIndex];
-
-            if (Referenced == NULL)
-                continue;
-            LONG Epoch =
-                InterlockedCompareExchange(&Adapter->SubmittedFenceIdentityEpoch, 0, 0);
-
-            if (Referenced->LastRefEpoch != Epoch)
-            {
-                /* Older stamps name fence ids from a reset timeline. */
-                RtlZeroMemory((PVOID)Referenced->LastRefFenceId,
-                              sizeof(Referenced->LastRefFenceId));
-                Referenced->LastRefEpoch = Epoch;
-            }
-            if (Referenced->LastRefFenceId[Entry->NodeOrdinal] == 0 ||
-                !DxgkpFenceIdReached(Referenced->LastRefFenceId[Entry->NodeOrdinal],
-                                     Entry->SubmissionFenceId))
-            {
-                Referenced->LastRefFenceId[Entry->NodeOrdinal] =
-                    Entry->SubmissionFenceId;
-            }
-        }
-    }
+    DxgkpStampTrackedDmaReferencesLocked(Adapter, Entry);
     NodeFence = Adapter->NodeLastCompletedFenceId[Entry->NodeOrdinal];
     CompletionAlreadyReached = NodeFence != 0 && DxgkpFenceIdReached(NodeFence, Entry->SubmissionFenceId);
     if (!DxgkTrackedWorkCoreCommit(&Entry->TrackedWork, CompletionAlreadyReached, &RetiredNow))

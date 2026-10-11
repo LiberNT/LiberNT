@@ -4443,6 +4443,11 @@ DxgkPrepareTrackedDmaBuffer(
     _Out_ PDXGKRNL_SUBMIT_DMA_BUFFER *OutEntry);
 
 VOID
+DxgkStampTrackedDmaBufferReferences(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry);
+
+VOID
 NTAPI
 DxgkCommitTrackedDmaBuffer(
     _In_ PDXGKRNL_ADAPTER Adapter,
