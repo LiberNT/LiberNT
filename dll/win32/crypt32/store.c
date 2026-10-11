@@ -1393,6 +1393,21 @@ static LONG CRYPT_OpenParentStore(DWORD dwFlags,
     return RegOpenKeyExW(root, base, 0, KEY_READ, key);
 }
 
+#ifdef __REACTOS__
+static const LPCWSTR CRYPT_CurrentUserSystemStores[] =
+{
+    L"My", L"Root", L"Trust", L"CA", L"UserDS", L"TrustedPublisher",
+    L"Disallowed", L"AuthRoot", L"TrustedPeople", L"ClientAuthIssuer"
+};
+
+static const LPCWSTR CRYPT_LocalMachineSystemStores[] =
+{
+    L"My", L"Root", L"Trust", L"CA", L"TrustedPublisher", L"Disallowed",
+    L"AuthRoot", L"TrustedPeople", L"ClientAuthIssuer", L"FlightRoot",
+    L"TestSignRoot"
+};
+#endif
+
 BOOL WINAPI CertEnumSystemStore(DWORD dwFlags, void *pvSystemStoreLocationPara,
     void *pvArg, PFN_CERT_ENUM_SYSTEM_STORE pfnEnum)
 {
@@ -1400,10 +1415,33 @@ BOOL WINAPI CertEnumSystemStore(DWORD dwFlags, void *pvSystemStoreLocationPara,
     LONG rc;
     HKEY key;
     CERT_SYSTEM_STORE_INFO info = { sizeof(info) };
+#ifdef __REACTOS__
+    const LPCWSTR *predefined = NULL;
+    DWORD predefinedCount = 0, i;
+#endif
 
     TRACE("(%08lx, %p, %p, %p)\n", dwFlags, pvSystemStoreLocationPara, pvArg,
         pfnEnum);
 
+#ifdef __REACTOS__
+    switch (dwFlags & CERT_SYSTEM_STORE_LOCATION_MASK)
+    {
+    case CERT_SYSTEM_STORE_CURRENT_USER:
+        predefined = CRYPT_CurrentUserSystemStores;
+        predefinedCount = ARRAY_SIZE(CRYPT_CurrentUserSystemStores);
+        break;
+    case CERT_SYSTEM_STORE_LOCAL_MACHINE:
+        predefined = CRYPT_LocalMachineSystemStores;
+        predefinedCount = ARRAY_SIZE(CRYPT_LocalMachineSystemStores);
+        break;
+    }
+    ret = TRUE;
+    for (i = 0; ret && i < predefinedCount; i++)
+        ret = pfnEnum(predefined[i], dwFlags, &info, NULL, pvArg);
+    if (!ret)
+        return FALSE;
+    ret = predefinedCount != 0;
+#endif
     rc = CRYPT_OpenParentStore(dwFlags, pvArg, &key);
     if (!rc)
     {
@@ -1416,20 +1454,42 @@ BOOL WINAPI CertEnumSystemStore(DWORD dwFlags, void *pvSystemStoreLocationPara,
 
             rc = RegEnumKeyExW(key, index++, name, &size, NULL, NULL, NULL,
                 NULL);
+#ifdef __REACTOS__
+            if (!rc)
+            {
+                for (i = 0; i < predefinedCount; i++)
+                {
+                    if (!wcsicmp(name, predefined[i]))
+                        break;
+                }
+                if (i == predefinedCount)
+                    ret = pfnEnum(name, dwFlags, &info, NULL, pvArg);
+            }
+#else
             if (!rc)
                 ret = pfnEnum(name, dwFlags, &info, NULL, pvArg);
+#endif
         } while (ret && !rc);
         if (ret && rc != ERROR_NO_MORE_ITEMS)
             SetLastError(rc);
+#ifdef __REACTOS__
+        RegCloseKey(key);
+#endif
     }
+#ifdef __REACTOS__
+    else if (!predefinedCount)
+#else
     else
+#endif
         SetLastError(rc);
+#ifndef __REACTOS__
     /* Include root store for the local machine location (it isn't in the
      * registry)
      */
     if (ret && (dwFlags & CERT_SYSTEM_STORE_LOCATION_MASK) ==
      CERT_SYSTEM_STORE_LOCAL_MACHINE)
         ret = pfnEnum(L"Root", dwFlags, &info, NULL, pvArg);
+#endif
     return ret;
 }
 

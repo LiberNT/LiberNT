@@ -69,7 +69,22 @@ static const LPCWSTR LocalizedKeys[] =
     L"CA",
     L"ADDRESSBOOK",
     L"TrustedPublisher",
+#ifdef __REACTOS__
+    L"Disallowed",
+    L"Trust",
+    L"UserDS",
+    L"AuthRoot",
+    L"TrustedPeople",
+    L"ClientAuthIssuer",
+    L"SmartCardRoot",
+    L"Request",
+    L"Remote Desktop",
+    L"TrustedDevices",
+    L"FlightRoot",
+    L".Default"
+#else
     L"Disallowed"
+#endif
 };
 static WCHAR LocalizedNames[ARRAY_SIZE(LocalizedKeys)][256];
 
