@@ -4222,11 +4222,13 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateBlendState1(const D3D11_BLEND_DESC
          * false for a D3D11.0 DDI.  The 11.1 runtime interface still exists,
          * but must not manufacture logic-op support that the UMD did not
          * advertise. */
-        if (source.LogicOpEnable) return E_INVALIDARG;
+        if (source.LogicOpEnable && (!wddm20 || !options_caps.OutputMergerLogicOp || input->IndependentBlendEnable
+                || source.BlendEnable || source.LogicOp > D3D11_LOGIC_OP_OR_INVERTED))
+            return E_INVALIDARG;
 
         target.BlendEnable = driver_target.BlendEnable = !!source.BlendEnable;
-        target.LogicOpEnable = FALSE;
-        target.LogicOp = D3D11_LOGIC_OP_COPY;
+        target.LogicOpEnable = !!source.LogicOpEnable;
+        target.LogicOp = source.LogicOpEnable ? source.LogicOp : D3D11_LOGIC_OP_COPY;
         target.RenderTargetWriteMask = driver_target.RenderTargetWriteMask = source.RenderTargetWriteMask;
         if (driver_target.BlendEnable)
         {
@@ -4258,12 +4260,21 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateBlendState1(const D3D11_BLEND_DESC
     if (!state) return E_OUTOFMEMORY;
     state->desc = desc;
     state->destroy = functions.pfnDestroyBlendState;
-    SIZE_T size = functions.pfnCalcPrivateBlendStateSize(driver_device, ddi_desc);
+    D3D11_1_DDI_BLEND_DESC wide_desc = NativeWddm20Convert(*ddi_desc);
+    for (UINT i = 0; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
+    {
+        wide_desc.RenderTarget[i].LogicOpEnable = desc.RenderTarget[i].LogicOpEnable;
+        wide_desc.RenderTarget[i].LogicOp = static_cast<D3D11_1_DDI_LOGIC_OP>(desc.RenderTarget[i].LogicOp);
+    }
+    bool wide = wddm20 && wddm20_functions.pfnCalcPrivateBlendStateSize && wddm20_functions.pfnCreateBlendState;
+    SIZE_T size = wide ? wddm20_functions.pfnCalcPrivateBlendStateSize(driver_device, &wide_desc)
+            : functions.pfnCalcPrivateBlendStateSize(driver_device, ddi_desc);
     state->handle.pDrvPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size ? size : 1);
     if (!state->handle.pDrvPrivate) { state->Release(); return E_OUTOFMEMORY; }
     D3D10DDI_HRTBLENDSTATE runtime_state = {state};
     BeginCall();
-    functions.pfnCreateBlendState(driver_device, ddi_desc, state->handle, runtime_state);
+    if (wide) wddm20_functions.pfnCreateBlendState(driver_device, &wide_desc, state->handle, runtime_state);
+    else functions.pfnCreateBlendState(driver_device, ddi_desc, state->handle, runtime_state);
     HRESULT hr = operation_error;
     if (FAILED(hr)) { state->Release(); return hr; }
     state->created = true;
