@@ -2888,6 +2888,20 @@ HRESULT NativeDevice::CreateTexture(const D3D11_TEXTURE2D_DESC *input,
             || input->Width > dimension_limit || input->Height > dimension_limit
             || input->ArraySize > array_limit
             || !input->SampleDesc.Count || input->Format == DXGI_FORMAT_UNKNOWN) return E_INVALIDARG;
+    switch (input->Format)
+    {
+        case DXGI_FORMAT_NV12: case DXGI_FORMAT_P010: case DXGI_FORMAT_P016: case DXGI_FORMAT_420_OPAQUE:
+            if ((input->Width | input->Height) & 1) return E_INVALIDARG;
+            break;
+        case DXGI_FORMAT_YUY2: case DXGI_FORMAT_Y210: case DXGI_FORMAT_Y216:
+            if (input->Width & 1) return E_INVALIDARG;
+            break;
+        case DXGI_FORMAT_NV11:
+            if (input->Width & 3) return E_INVALIDARG;
+            break;
+        default:
+            break;
+    }
     HRESULT validation = ValidateTextureBindings(input->Format, input->BindFlags, D3D10DDIRESOURCE_TEXTURE2D);
     if (FAILED(validation)) return validation;
     if (input->Usage > D3D11_USAGE_STAGING) return E_INVALIDARG;
@@ -3240,13 +3254,13 @@ static bool NativeViewFormatCompatible(const NativeTextureInfo &texture, DXGI_FO
 {
     DXGI_FORMAT family = NativeFormatFamily(format);
     if (format == DXGI_FORMAT_UNKNOWN || format == family) return false;
-    if (format == texture.desc.Format || family == texture.desc.Format) return true;
     if (texture.desc.Format == DXGI_FORMAT_NV12 || texture.desc.Format == DXGI_FORMAT_NV11)
         return format == DXGI_FORMAT_R8_UNORM || format == DXGI_FORMAT_R8_UINT
                 || format == DXGI_FORMAT_R8G8_UNORM || format == DXGI_FORMAT_R8G8_UINT;
     if (texture.desc.Format == DXGI_FORMAT_P010 || texture.desc.Format == DXGI_FORMAT_P016)
         return format == DXGI_FORMAT_R16_UNORM || format == DXGI_FORMAT_R16_UINT
                 || format == DXGI_FORMAT_R16G16_UNORM || format == DXGI_FORMAT_R16G16_UINT;
+    if (format == texture.desc.Format || family == texture.desc.Format) return true;
     if (texture.desc.Format == DXGI_FORMAT_AYUV || texture.desc.Format == DXGI_FORMAT_YUY2)
         return format == DXGI_FORMAT_R8G8B8A8_UNORM || format == DXGI_FORMAT_R8G8B8A8_UINT;
     if (texture.desc.Format == DXGI_FORMAT_Y410)
