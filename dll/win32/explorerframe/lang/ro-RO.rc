@@ -337,3 +337,8 @@ BEGIN
     IDS_PARSE_ADDR_ERR_TITLE "Navigatorul LiberNT"
     IDS_PARSE_ADDR_ERR_TEXT "Navigatorul LiberNT nu poate găsi '%1'. Verificați ortografia și încercați din nou."
 END
+
+STRINGTABLE
+BEGIN
+    IDS_BROWSER_NAME "File Explorer"
+END

@@ -351,3 +351,8 @@ BEGIN
     IDS_PARSE_ADDR_ERR_TITLE "LiberNT 资源管理器"
     IDS_PARSE_ADDR_ERR_TEXT "LiberNT 资源管理器找不到“%1”。请检查拼写，然后重试。"
 END
+
+STRINGTABLE
+BEGIN
+    IDS_BROWSER_NAME "File Explorer"
+END

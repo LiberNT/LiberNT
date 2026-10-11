@@ -650,7 +650,9 @@ interface IShellWindows : IDispatch
 }
 
 [
+#ifndef __REACTOS__
     threading(apartment),
+#endif
     uuid(9ba05972-f6a8-11cf-a442-00a0c90a8f39)
 ]
 coclass ShellWindows

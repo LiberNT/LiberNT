@@ -317,6 +317,12 @@ private:
     ShellSettings m_settings;
     SBFOLDERSETTINGS m_deffoldersettings;
     DWORD m_BrowserSvcFlags;
+    LONG m_ShellWindowsCookie;
+    VARIANT_BOOL m_bOffline;
+    VARIANT_BOOL m_bSilent;
+    CComBSTR m_StatusText;
+    CSimpleArray<CComBSTR> m_PropertyNames;
+    CSimpleArray<CComVariant> m_PropertyValues;
     bool m_Destroyed;
     BYTE m_NonFullscreenState;
 
@@ -466,6 +472,10 @@ public:
     STDMETHOD(OnHttpEquiv)(IShellView *psv, BOOL fDone, VARIANT *pvarargIn, VARIANT *pvarargOut) override;
     STDMETHOD(GetPalette)(HPALETTE *hpal) override;
     STDMETHOD(RegisterWindow)(BOOL fForceRegister, int swc) override;
+    HRESULT GetBrowserWindowRect(RECT *prc);
+    HRESULT GetWebBrowserTypeInfo(ITypeInfo **ppTInfo);
+    int FindProperty(BSTR Property);
+    HRESULT SetBrowserWindowRect(const RECT &rc);
 
     // *** IBrowserService2 methods ***
     STDMETHOD_(LRESULT, WndProcBS)(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) override;
@@ -754,6 +764,9 @@ extern HRESULT CreateProgressDialog(REFIID riid, void **ppv);
 CShellBrowser::CShellBrowser()
 {
     m_BrowserSvcFlags = BSF_RESIZABLE | BSF_CANMAXIMIZE;
+    m_ShellWindowsCookie = 0;
+    m_bOffline = VARIANT_FALSE;
+    m_bSilent = VARIANT_FALSE;
     m_Destroyed = false;
     fCurrentShellViewWindow = NULL;
     fCurrentDirectoryPIDL = NULL;
@@ -790,6 +803,8 @@ HRESULT CShellBrowser::Initialize()
     Create(HWND_DESKTOP);
     if (m_hWnd == NULL)
         return E_FAIL;
+
+    RegisterWindow(FALSE, SWC_BROWSER);
 
     hResult = CInternetToolbar_CreateInstance(IID_PPV_ARG(IUnknown, &clientBar));
     if (FAILED_UNEXPECTEDLY(hResult))
@@ -1174,6 +1189,14 @@ HRESULT CShellBrowser::BrowseToPath(IShellFolder *newShellFolder,
     else
     {
         FireNavigateComplete(L"ERROR");
+    }
+
+    if (m_ShellWindowsCookie && fCurrentDirectoryPIDL)
+    {
+        CComPtr<IShellWindows> pShellWindows;
+        pShellWindows.Attach(WinList_GetShellWindows(FALSE));
+        if (pShellWindows)
+            WinList_NotifyNewLocation(pShellWindows, m_ShellWindowsCookie, fCurrentDirectoryPIDL);
     }
 
     UpdateWindowTitle();
@@ -2075,24 +2098,28 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::QueryStatus(const GUID *pguidCmdGroup,
     CComPtr<IOleCommandTarget>              commandTarget;
     HRESULT                                 hResult;
 
-    if (prgCmds == NULL)
-        return E_INVALIDARG;
     if (pguidCmdGroup == NULL)
     {
+        if (prgCmds == NULL)
+            return OLECMDERR_E_NOTSUPPORTED;
+        for (ULONG i = 0; i < cCmds; i++)
+            prgCmds[i].cmdf = 0;
         if (fCurrentShellView.p != NULL)
         {
             hResult = fCurrentShellView->QueryInterface(IID_PPV_ARG(IOleCommandTarget, &commandTarget));
             if (SUCCEEDED(hResult) && commandTarget.p != NULL)
-                return commandTarget->QueryStatus(NULL, 1, prgCmds, pCmdText);
+                commandTarget->QueryStatus(NULL, cCmds, prgCmds, pCmdText);
         }
-        while (cCmds != 0)
+        for (ULONG i = 0; i < cCmds; i++)
         {
-            prgCmds->cmdf = 0;
-            prgCmds++;
-            cCmds--;
+            if (prgCmds[i].cmdID == OLECMDID_UPDATECOMMANDS)
+                prgCmds[i].cmdf |= OLECMDF_ENABLED;
         }
+        return OLECMDERR_E_NOTSUPPORTED;
     }
-    else if (IsEqualIID(*pguidCmdGroup, CGID_Explorer))
+    if (prgCmds == NULL)
+        return E_INVALIDARG;
+    if (IsEqualIID(*pguidCmdGroup, CGID_Explorer))
     {
         while (cCmds != 0)
         {
@@ -2155,6 +2182,8 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::Exec(const GUID *pguidCmdGroup, DWORD n
 {
     if (!pguidCmdGroup)
     {
+        if (nCmdID == OLECMDID_UPDATECOMMANDS)
+            return FireCommandStateChangeAll();
         TRACE("Unhandled null CGID %d %d %p %p\n", nCmdID, nCmdexecopt, pvaIn, pvaOut);
         return E_NOTIMPL;
     }
@@ -2578,26 +2607,52 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::GetPropertyBag(long flags, REFIID riid,
     return hr;
 }
 
+HRESULT CShellBrowser::GetWebBrowserTypeInfo(ITypeInfo **ppTInfo)
+{
+    CComPtr<ITypeLib> pTypeLib;
+    HRESULT hr = LoadRegTypeLib(LIBID_SHDocVw, 1, 1, LOCALE_NEUTRAL, &pTypeLib);
+    if (FAILED(hr))
+        return hr;
+    return pTypeLib->GetTypeInfoOfGuid(IID_IWebBrowser2, ppTInfo);
+}
+
 HRESULT STDMETHODCALLTYPE CShellBrowser::GetTypeInfoCount(UINT *pctinfo)
 {
-    return E_NOTIMPL;
+    if (!pctinfo)
+        return E_POINTER;
+    *pctinfo = 1;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::GetTypeInfo(UINT iTInfo, LCID lcid, ITypeInfo **ppTInfo)
 {
-    return E_NOTIMPL;
+    if (!ppTInfo)
+        return E_POINTER;
+    *ppTInfo = NULL;
+    if (iTInfo != 0)
+        return DISP_E_BADINDEX;
+    return GetWebBrowserTypeInfo(ppTInfo);
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames,
     UINT cNames, LCID lcid, DISPID *rgDispId)
 {
-    return E_NOTIMPL;
+    CComPtr<ITypeInfo> pTypeInfo;
+    HRESULT hr = GetWebBrowserTypeInfo(&pTypeInfo);
+    if (FAILED(hr))
+        return hr;
+    return DispGetIDsOfNames(pTypeInfo, rgszNames, cNames, rgDispId);
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid,
     WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
 {
-    return E_NOTIMPL;
+    CComPtr<ITypeInfo> pTypeInfo;
+    HRESULT hr = GetWebBrowserTypeInfo(&pTypeInfo);
+    if (FAILED(hr))
+        return hr;
+    return DispInvoke(static_cast<IWebBrowser2 *>(this), pTypeInfo, dispIdMember, wFlags,
+                      pDispParams, pVarResult, pExcepInfo, puArgErr);
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::GetParentSite(IOleInPlaceSite **ppipsite)
@@ -2686,6 +2741,17 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::IsControlWindowShown(UINT id, BOOL *pfS
         case FCW_ADDRESSBAR:
             shown = (hr = IsInternetToolbarBandShown(ITID_ADDRESSBANDSHOWN)) == S_OK;
             break;
+        case FCW_TOOLBAR:
+            shown = (hr = IsInternetToolbarBandShown(ITID_TOOLBARBANDSHOWN)) == S_OK;
+            break;
+        case FCW_INTERNETBAR:
+        {
+            HWND hwndBar = NULL;
+            if (fClientBars[BIInternetToolbar].clientBar)
+                IUnknown_GetWindow(fClientBars[BIInternetToolbar].clientBar, &hwndBar);
+            shown = hwndBar && ::IsWindowVisible(hwndBar);
+            break;
+        }
         default:
             hr = E_NOTIMPL;
     }
@@ -2837,7 +2903,27 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::GetPalette(HPALETTE *hpal)
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::RegisterWindow(BOOL fForceRegister, int swc)
 {
-    return E_NOTIMPL;
+    CComPtr<IShellWindows> pShellWindows;
+    HRESULT hr;
+
+    if (m_ShellWindowsCookie && !fForceRegister)
+        return S_OK;
+
+    pShellWindows.Attach(WinList_GetShellWindows(TRUE));
+    if (!pShellWindows)
+        return E_FAIL;
+
+    if (m_ShellWindowsCookie)
+    {
+        pShellWindows->Revoke(m_ShellWindowsCookie);
+        m_ShellWindowsCookie = 0;
+    }
+
+    hr = pShellWindows->Register(static_cast<IDispatch *>(static_cast<IWebBrowser2 *>(this)),
+                                 HandleToLong(m_hWnd), swc, &m_ShellWindowsCookie);
+    if (SUCCEEDED(hr) && fCurrentDirectoryPIDL)
+        WinList_NotifyNewLocation(pShellWindows, m_ShellWindowsCookie, fCurrentDirectoryPIDL);
+    return hr;
 }
 
 LRESULT STDMETHODCALLTYPE CShellBrowser::WndProcBS(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -3274,91 +3360,199 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::Stop()
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Application(IDispatch **ppDisp)
 {
-    return E_NOTIMPL;
+    if (!ppDisp)
+        return E_POINTER;
+    return QueryInterface(IID_PPV_ARG(IDispatch, ppDisp));
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Parent(IDispatch **ppDisp)
 {
-    return E_NOTIMPL;
+    if (!ppDisp)
+        return E_POINTER;
+    return QueryInterface(IID_PPV_ARG(IDispatch, ppDisp));
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Container(IDispatch **ppDisp)
 {
-    return E_NOTIMPL;
+    if (!ppDisp)
+        return E_POINTER;
+    *ppDisp = NULL;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Document(IDispatch **ppDisp)
 {
-    return E_NOTIMPL;
+    if (!ppDisp)
+        return E_POINTER;
+    *ppDisp = NULL;
+    if (!fCurrentShellView)
+        return E_FAIL;
+    return fCurrentShellView->GetItemObject(SVGIO_BACKGROUND, IID_PPV_ARG(IDispatch, ppDisp));
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_TopLevelContainer(VARIANT_BOOL *pBool)
 {
-    return E_NOTIMPL;
+    if (!pBool)
+        return E_POINTER;
+    *pBool = VARIANT_TRUE;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Type(BSTR *Type)
 {
-    return E_NOTIMPL;
+    if (!Type)
+        return E_POINTER;
+    *Type = NULL;
+    return E_NOINTERFACE;
 }
 #ifdef __exdisp_h__
 #define long LONG
 #endif
+HRESULT CShellBrowser::GetBrowserWindowRect(RECT *prc)
+{
+    HWND hWnd = GetTopLevelBrowserWindow();
+    if (!hWnd || !::GetWindowRect(hWnd, prc))
+        return E_FAIL;
+    return S_OK;
+}
+
+HRESULT CShellBrowser::SetBrowserWindowRect(const RECT &rc)
+{
+    HWND hWnd = GetTopLevelBrowserWindow();
+    if (!hWnd)
+        return E_FAIL;
+    ::SetWindowPos(hWnd, NULL, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+                   SWP_NOZORDER | SWP_NOACTIVATE);
+    return S_OK;
+}
+
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Left(long *pl)
 {
-    return E_NOTIMPL;
+    RECT rc;
+    if (!pl)
+        return E_POINTER;
+    HRESULT hr = GetBrowserWindowRect(&rc);
+    if (SUCCEEDED(hr))
+        *pl = rc.left;
+    return hr;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::put_Left(long Left)
 {
-    return E_NOTIMPL;
+    RECT rc;
+    HRESULT hr = GetBrowserWindowRect(&rc);
+    if (FAILED(hr))
+        return hr;
+    OffsetRect(&rc, Left - rc.left, 0);
+    return SetBrowserWindowRect(rc);
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Top(long *pl)
 {
-    return E_NOTIMPL;
+    RECT rc;
+    if (!pl)
+        return E_POINTER;
+    HRESULT hr = GetBrowserWindowRect(&rc);
+    if (SUCCEEDED(hr))
+        *pl = rc.top;
+    return hr;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::put_Top(long Top)
 {
-    return E_NOTIMPL;
+    RECT rc;
+    HRESULT hr = GetBrowserWindowRect(&rc);
+    if (FAILED(hr))
+        return hr;
+    OffsetRect(&rc, 0, Top - rc.top);
+    return SetBrowserWindowRect(rc);
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Width(long *pl)
 {
-    return E_NOTIMPL;
+    RECT rc;
+    if (!pl)
+        return E_POINTER;
+    HRESULT hr = GetBrowserWindowRect(&rc);
+    if (SUCCEEDED(hr))
+        *pl = rc.right - rc.left;
+    return hr;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::put_Width(long Width)
 {
-    return E_NOTIMPL;
+    RECT rc;
+    HRESULT hr = GetBrowserWindowRect(&rc);
+    if (FAILED(hr))
+        return hr;
+    rc.right = rc.left + Width;
+    return SetBrowserWindowRect(rc);
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Height(long *pl)
 {
-    return E_NOTIMPL;
+    RECT rc;
+    if (!pl)
+        return E_POINTER;
+    HRESULT hr = GetBrowserWindowRect(&rc);
+    if (SUCCEEDED(hr))
+        *pl = rc.bottom - rc.top;
+    return hr;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::put_Height(long Height)
 {
-    return E_NOTIMPL;
+    RECT rc;
+    HRESULT hr = GetBrowserWindowRect(&rc);
+    if (FAILED(hr))
+        return hr;
+    rc.bottom = rc.top + Height;
+    return SetBrowserWindowRect(rc);
 }
 #ifdef __exdisp_h__
 #undef long
 #endif
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_LocationName(BSTR *LocationName)
 {
-    return E_NOTIMPL;
+    WCHAR szName[MAX_PATH];
+
+    if (!LocationName)
+        return E_POINTER;
+    *LocationName = NULL;
+    if (!fCurrentDirectoryPIDL)
+        return S_FALSE;
+    HRESULT hr = IEGetNameAndFlags(fCurrentDirectoryPIDL, SHGDN_NORMAL, szName, _countof(szName), NULL);
+    if (FAILED(hr))
+        return hr;
+    *LocationName = SysAllocString(szName);
+    return *LocationName ? S_OK : E_OUTOFMEMORY;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_LocationURL(BSTR *LocationURL)
 {
-    return E_NOTIMPL;
+    WCHAR szPath[MAX_PATH], szUrl[L_MAX_URL_LENGTH];
+    DWORD cchUrl = _countof(szUrl);
+
+    if (!LocationURL)
+        return E_POINTER;
+    *LocationURL = NULL;
+    if (!fCurrentDirectoryPIDL)
+        return S_FALSE;
+    if (!SHGetPathFromIDListW(fCurrentDirectoryPIDL, szPath) ||
+        FAILED(UrlCreateFromPathW(szPath, szUrl, &cchUrl, 0)))
+    {
+        szUrl[0] = UNICODE_NULL;
+    }
+    *LocationURL = SysAllocString(szUrl);
+    return *LocationURL ? S_OK : E_OUTOFMEMORY;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Busy(VARIANT_BOOL *pBool)
 {
-    return E_NOTIMPL;
+    if (!pBool)
+        return E_POINTER;
+    *pBool = VARIANT_FALSE;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::Quit()
@@ -3369,22 +3563,70 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::Quit()
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::ClientToWindow(int *pcx, int *pcy)
 {
-    return E_NOTIMPL;
+    RECT rcWindow, rcClient;
+    HWND hWnd = GetTopLevelBrowserWindow();
+
+    if (!pcx || !pcy)
+        return E_POINTER;
+    if (!hWnd || !fCurrentShellViewWindow ||
+        !::GetWindowRect(hWnd, &rcWindow) || !::GetClientRect(fCurrentShellViewWindow, &rcClient))
+    {
+        return E_FAIL;
+    }
+    *pcx += (rcWindow.right - rcWindow.left) - (rcClient.right - rcClient.left);
+    *pcy += (rcWindow.bottom - rcWindow.top) - (rcClient.bottom - rcClient.top);
+    return S_OK;
+}
+
+int CShellBrowser::FindProperty(BSTR Property)
+{
+    for (int i = 0; i < m_PropertyNames.GetSize(); i++)
+    {
+        if (!wcscmp(m_PropertyNames[i] ? (BSTR)m_PropertyNames[i] : L"", Property ? Property : L""))
+            return i;
+    }
+    return -1;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::PutProperty(BSTR Property, VARIANT vtValue)
 {
-    return E_NOTIMPL;
+    int i = FindProperty(Property);
+    if (i < 0)
+    {
+        if (!m_PropertyNames.Add(CComBSTR(Property ? Property : L"")))
+            return E_OUTOFMEMORY;
+        if (!m_PropertyValues.Add(CComVariant()))
+        {
+            m_PropertyNames.RemoveAt(m_PropertyNames.GetSize() - 1);
+            return E_OUTOFMEMORY;
+        }
+        i = m_PropertyValues.GetSize() - 1;
+    }
+    return m_PropertyValues[i].Copy(&vtValue);
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::GetProperty(BSTR Property, VARIANT *pvtValue)
 {
-    return E_NOTIMPL;
+    if (!pvtValue)
+        return E_POINTER;
+    VariantInit(pvtValue);
+    int i = FindProperty(Property);
+    if (i < 0)
+        return S_OK;
+    return VariantCopy(pvtValue, &m_PropertyValues[i]);
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Name(BSTR *Name)
 {
-    return E_NOTIMPL;
+    WCHAR szName[MAX_PATH];
+
+    if (!Name)
+        return E_POINTER;
+    *Name = NULL;
+    if (!LoadStringW(_AtlBaseModule.GetResourceInstance(), IDS_BROWSER_NAME, szName, _countof(szName)))
+        return HRESULT_FROM_WIN32(GetLastError());
+    *Name = SysAllocString(szName);
+    return *Name ? S_OK : E_OUTOFMEMORY;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_HWND(SHANDLE_PTR *pHWND)
@@ -3395,12 +3637,30 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::get_HWND(SHANDLE_PTR *pHWND)
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_FullName(BSTR *FullName)
 {
-    return E_NOTIMPL;
+    WCHAR szPath[MAX_PATH];
+
+    if (!FullName)
+        return E_POINTER;
+    *FullName = NULL;
+    if (!GetModuleFileNameW(NULL, szPath, _countof(szPath)))
+        return HRESULT_FROM_WIN32(GetLastError());
+    *FullName = SysAllocString(szPath);
+    return *FullName ? S_OK : E_OUTOFMEMORY;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Path(BSTR *Path)
 {
-    return E_NOTIMPL;
+    WCHAR szPath[MAX_PATH];
+
+    if (!Path)
+        return E_POINTER;
+    *Path = NULL;
+    if (!GetModuleFileNameW(NULL, szPath, _countof(szPath)))
+        return HRESULT_FROM_WIN32(GetLastError());
+    PathRemoveFileSpecW(szPath);
+    PathAddBackslashW(szPath);
+    *Path = SysAllocString(szPath);
+    return *Path ? S_OK : E_OUTOFMEMORY;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Visible(VARIANT_BOOL *pBool)
@@ -3438,11 +3698,15 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::put_StatusBar(VARIANT_BOOL Value)
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_StatusText(BSTR *StatusText)
 {
-    return E_NOTIMPL;
+    if (!StatusText)
+        return E_POINTER;
+    *StatusText = SysAllocString(m_StatusText ? (BSTR)m_StatusText : L"");
+    return *StatusText ? S_OK : E_OUTOFMEMORY;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::put_StatusText(BSTR StatusText)
 {
+    m_StatusText = StatusText;
     SendControlMsg(FCW_STATUS, SB_SETTEXTW, 0, (LPARAM)StatusText, NULL);
     return S_OK;
 }
@@ -3553,27 +3817,38 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::ShowBrowserBar(VARIANT *pvaClsid, VARIA
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_ReadyState(READYSTATE *plReadyState)
 {
-    return E_NOTIMPL;
+    if (!plReadyState)
+        return E_POINTER;
+    *plReadyState = READYSTATE_COMPLETE;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Offline(VARIANT_BOOL *pbOffline)
 {
-    return E_NOTIMPL;
+    if (!pbOffline)
+        return E_POINTER;
+    *pbOffline = m_bOffline;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::put_Offline(VARIANT_BOOL bOffline)
 {
-    return E_NOTIMPL;
+    m_bOffline = bOffline ? VARIANT_TRUE : VARIANT_FALSE;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Silent(VARIANT_BOOL *pbSilent)
 {
-    return E_NOTIMPL;
+    if (!pbSilent)
+        return E_POINTER;
+    *pbSilent = m_bSilent;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::put_Silent(VARIANT_BOOL bSilent)
 {
-    return E_NOTIMPL;
+    m_bSilent = bSilent ? VARIANT_TRUE : VARIANT_FALSE;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_RegisterAsBrowser(VARIANT_BOOL *pbRegister)
@@ -3632,7 +3907,7 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::put_AddressBar(VARIANT_BOOL Value)
 HRESULT STDMETHODCALLTYPE CShellBrowser::get_Resizable(VARIANT_BOOL *Value)
 {
     *Value = (m_BrowserSvcFlags & BSF_RESIZABLE) ? VARIANT_TRUE : VARIANT_FALSE;
-    return E_NOTIMPL;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::put_Resizable(VARIANT_BOOL Value)
@@ -3776,6 +4051,12 @@ LRESULT CShellBrowser::OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &
             put_StatusBar(VARIANT_TRUE);
     }
     SaveViewState();
+
+    if (m_ShellWindowsCookie)
+    {
+        WinList_Revoke(m_ShellWindowsCookie);
+        m_ShellWindowsCookie = 0;
+    }
 
     /* The current thread is about to go down so render any IDataObject that may be left in the clipboard */
     OleFlushClipboard();

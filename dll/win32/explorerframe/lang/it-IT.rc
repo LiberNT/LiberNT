@@ -329,3 +329,8 @@ BEGIN
     IDS_PARSE_ADDR_ERR_TITLE "LiberNT Explorer"
     IDS_PARSE_ADDR_ERR_TEXT "LiberNT Explorer non è in grado di trovare '%1'. Controlla la digitazione e riprova."
 END
+
+STRINGTABLE
+BEGIN
+    IDS_BROWSER_NAME "File Explorer"
+END

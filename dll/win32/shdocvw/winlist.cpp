@@ -12,6 +12,76 @@ WINE_DEFAULT_DEBUG_CHANNEL(shdocvw);
 
 static VARIANT s_vaEmpty = { VT_EMPTY };
 
+static IShellWindows *s_pShellWindows = NULL;
+static DWORD s_dwClassCookie = 0;
+static DWORD s_dwGitCookie = 0;
+
+class CShellWindowsClassFactory : public IClassFactory
+{
+public:
+    STDMETHOD(QueryInterface)(REFIID riid, void **ppv) override
+    {
+        if (!ppv)
+            return E_POINTER;
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_IClassFactory))
+        {
+            *ppv = static_cast<IClassFactory *>(this);
+            return S_OK;
+        }
+        *ppv = NULL;
+        return E_NOINTERFACE;
+    }
+
+    STDMETHOD_(ULONG, AddRef)() override
+    {
+        return 2;
+    }
+
+    STDMETHOD_(ULONG, Release)() override
+    {
+        return 1;
+    }
+
+    STDMETHOD(CreateInstance)(IUnknown *pUnkOuter, REFIID riid, void **ppv) override
+    {
+        if (!ppv)
+            return E_POINTER;
+        *ppv = NULL;
+        if (pUnkOuter)
+            return CLASS_E_NOAGGREGATION;
+        if (!s_pShellWindows)
+            return E_UNEXPECTED;
+        return s_pShellWindows->QueryInterface(riid, ppv);
+    }
+
+    STDMETHOD(LockServer)(BOOL fLock) override
+    {
+        return S_OK;
+    }
+};
+
+static CShellWindowsClassFactory s_ShellWindowsClassFactory;
+
+static HRESULT
+CreateShellWindowsInstance(IShellWindows **ppShellWindows)
+{
+    typedef HRESULT (WINAPI *PFN_DLLGETCLASSOBJECT)(REFCLSID, REFIID, LPVOID *);
+    CComPtr<IClassFactory> pFactory;
+
+    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+    if (!hShell32)
+        hShell32 = LoadLibraryW(L"shell32.dll");
+    PFN_DLLGETCLASSOBJECT pfnGetClassObject = hShell32 ?
+        (PFN_DLLGETCLASSOBJECT)GetProcAddress(hShell32, "DllGetClassObject") : NULL;
+    if (!pfnGetClassObject)
+        return HRESULT_FROM_WIN32(GetLastError());
+
+    HRESULT hr = pfnGetClassObject(CLSID_ShellWindows, IID_PPV_ARG(IClassFactory, &pFactory));
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+    return pFactory->CreateInstance(NULL, IID_PPV_ARG(IShellWindows, ppShellWindows));
+}
+
 static HRESULT
 InitVariantFromBuffer(
     _Out_ LPVARIANTARG pvarg,
@@ -78,8 +148,31 @@ EXTERN_C
 BOOL WINAPI
 WinList_Init(VOID)
 {
-    FIXME("()\n");
-    return FALSE;
+    CComPtr<IGlobalInterfaceTable> pGIT;
+    HRESULT hr;
+
+    TRACE("()\n");
+
+    if (s_pShellWindows)
+        return TRUE;
+
+    hr = CreateShellWindowsInstance(&s_pShellWindows);
+    if (FAILED_UNEXPECTEDLY(hr))
+        return FALSE;
+
+    hr = CoCreateInstance(CLSID_StdGlobalInterfaceTable, NULL, CLSCTX_INPROC_SERVER,
+                          IID_PPV_ARG(IGlobalInterfaceTable, &pGIT));
+    if (SUCCEEDED(hr))
+        hr = pGIT->RegisterInterfaceInGlobal(s_pShellWindows, IID_IShellWindows, &s_dwGitCookie);
+    if (FAILED_UNEXPECTEDLY(hr))
+        s_dwGitCookie = 0;
+
+    hr = CoRegisterClassObject(CLSID_ShellWindows, &s_ShellWindowsClassFactory, CLSCTX_LOCAL_SERVER,
+                               REGCLS_MULTIPLEUSE, &s_dwClassCookie);
+    if (FAILED_UNEXPECTEDLY(hr))
+        s_dwClassCookie = 0;
+
+    return TRUE;
 }
 
 /*************************************************************************
@@ -91,7 +184,28 @@ EXTERN_C
 VOID WINAPI
 WinList_Terminate(VOID)
 {
-    FIXME("()\n");
+    TRACE("()\n");
+
+    if (s_dwClassCookie)
+    {
+        CoRevokeClassObject(s_dwClassCookie);
+        s_dwClassCookie = 0;
+    }
+    if (s_dwGitCookie)
+    {
+        CComPtr<IGlobalInterfaceTable> pGIT;
+        if (SUCCEEDED(CoCreateInstance(CLSID_StdGlobalInterfaceTable, NULL, CLSCTX_INPROC_SERVER,
+                                       IID_PPV_ARG(IGlobalInterfaceTable, &pGIT))))
+        {
+            pGIT->RevokeInterfaceFromGlobal(s_dwGitCookie);
+        }
+        s_dwGitCookie = 0;
+    }
+    if (s_pShellWindows)
+    {
+        s_pShellWindows->Release();
+        s_pShellWindows = NULL;
+    }
 }
 
 /*************************************************************************
@@ -105,8 +219,27 @@ IShellWindows* WINAPI
 WinList_GetShellWindows(
     _In_ BOOL bCreate)
 {
-    FIXME("(%d)\n", bCreate);
-    return NULL;
+    IShellWindows *pShellWindows = NULL;
+
+    TRACE("(%d)\n", bCreate);
+
+    if (s_dwGitCookie)
+    {
+        CComPtr<IGlobalInterfaceTable> pGIT;
+        if (SUCCEEDED(CoCreateInstance(CLSID_StdGlobalInterfaceTable, NULL, CLSCTX_INPROC_SERVER,
+                                       IID_PPV_ARG(IGlobalInterfaceTable, &pGIT))) &&
+            SUCCEEDED(pGIT->GetInterfaceFromGlobal(s_dwGitCookie, IID_PPV_ARG(IShellWindows, &pShellWindows))))
+        {
+            return pShellWindows;
+        }
+    }
+
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_LOCAL_SERVER,
+                                IID_PPV_ARG(IShellWindows, &pShellWindows))))
+    {
+        return NULL;
+    }
+    return pShellWindows;
 }
 
 /*************************************************************************

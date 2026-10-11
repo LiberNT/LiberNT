@@ -348,3 +348,8 @@ BEGIN
     IDS_PARSE_ADDR_ERR_TITLE "Penjelajah LiberNT"
     IDS_PARSE_ADDR_ERR_TEXT "Penjelajah LiberNT tidak menemukan '%1'. Cek pengejaannya dan coba lagi."
 END
+
+STRINGTABLE
+BEGIN
+    IDS_BROWSER_NAME "File Explorer"
+END

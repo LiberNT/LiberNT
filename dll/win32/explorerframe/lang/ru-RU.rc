@@ -338,3 +338,8 @@ BEGIN
     IDS_PARSE_ADDR_ERR_TITLE "Проводник LiberNT"
     IDS_PARSE_ADDR_ERR_TEXT "Проводник LiberNT не может найти '%1'. Проверьте правильность написания и попробуйте снова."
 END
+
+STRINGTABLE
+BEGIN
+    IDS_BROWSER_NAME "File Explorer"
+END

@@ -338,3 +338,8 @@ BEGIN
     IDS_PARSE_ADDR_ERR_TITLE "Eksplorator LiberNT"
     IDS_PARSE_ADDR_ERR_TEXT "Eksplorator systemu LiberNT nie może znaleźć elementu '%1'. Sprawdź pisownię i ponów próbę."
 END
+
+STRINGTABLE
+BEGIN
+    IDS_BROWSER_NAME "File Explorer"
+END

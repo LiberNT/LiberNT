@@ -339,3 +339,8 @@ BEGIN
     IDS_PARSE_ADDR_ERR_TITLE "LiberNT Gezgini"
     IDS_PARSE_ADDR_ERR_TEXT "LiberNT Gezgini '%1' ögesini bulamadı. Girdiğiniz değeri kontrol edin ve yeniden arayın."
 END
+
+STRINGTABLE
+BEGIN
+    IDS_BROWSER_NAME "File Explorer"
+END
