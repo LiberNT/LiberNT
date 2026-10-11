@@ -979,6 +979,8 @@ IntCompositionCreateSharedBuffer(_In_ LONG cx, _In_ LONG cy,
                                  _Out_ PULONG pGlobalShare)
 {
     LARGE_INTEGER liSize;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE hSection;
     PVOID pSection = NULL, pView = NULL;
     SIZE_T cbView;
     PSURFACE psurf;
@@ -1036,7 +1038,12 @@ IntCompositionCreateSharedBuffer(_In_ LONG cx, _In_ LONG cy,
     }
 
     liSize.QuadPart = Bytes;
-    Status = MmCreateSection(&pSection, SECTION_ALL_ACCESS, NULL, &liSize, PAGE_READWRITE, SEC_COMMIT, NULL, NULL);
+    InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwCreateSection(&hSection, SECTION_ALL_ACCESS, &ObjectAttributes, &liSize, PAGE_READWRITE, SEC_COMMIT, NULL);
+    if (!NT_SUCCESS(Status))
+        return NULL;
+    Status = ObReferenceObjectByHandle(hSection, SECTION_ALL_ACCESS, MmSectionObjectType, KernelMode, &pSection, NULL);
+    ZwClose(hSection);
     if (!NT_SUCCESS(Status))
         return NULL;
 
