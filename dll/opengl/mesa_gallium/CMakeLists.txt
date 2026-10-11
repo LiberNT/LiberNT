@@ -76,6 +76,13 @@ if(ENABLE_MESA_LLVMPIPE)
         -DMESA_LAVAPIPE:BOOL=${_mesa_lavapipe_enabled}
         -DMESA_LLVM_ROOT:PATH=${MESA_LLVM_PREFIX}
         -DMESA_DIRECTX_HEADERS_ROOT:PATH=${REACTOS_BINARY_DIR}/submodules/mesa-llvmpipe/directx-headers-install)
+    if(_mesa_lavapipe_enabled)
+        find_program(MESA_GLSLANG_VALIDATOR NAMES glslangValidator HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
+        if(NOT MESA_GLSLANG_VALIDATOR)
+            message(FATAL_ERROR "Lavapipe needs glslangValidator to compile its shaders: install glslang-tools (Debian/Ubuntu), glslang (Homebrew) or the Vulkan SDK (Windows), or set MESA_GLSLANG_VALIDATOR to its path.")
+        endif()
+        list(APPEND _mesa_features -DMESA_GLSLANG_VALIDATOR:FILEPATH=${MESA_GLSLANG_VALIDATOR})
+    endif()
 endif()
 
 include("${REACTOS_SOURCE_DIR}/submodules/mesa-cmake.cmake")

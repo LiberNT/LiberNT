@@ -193,7 +193,7 @@ sync_glmark2_submodule() {
 install_host_packages() {
 	[ "${ROSBE_DOCKER_ACTIVE:-0}" = "1" ] && return 0
 	HOST_PACKAGES_MISSING=
-	for HOST_TOOL in cmake:cmake ninja:ninja-build flex:flex bison:bison ccache:ccache wget:wget xz:xz-utils tar:tar python3:python3; do
+	for HOST_TOOL in cmake:cmake ninja:ninja-build flex:flex bison:bison ccache:ccache wget:wget xz:xz-utils tar:tar python3:python3 glslangValidator:glslang-tools; do
 		command -v "${HOST_TOOL%%:*}" >/dev/null 2>&1 ||
 			HOST_PACKAGES_MISSING="$HOST_PACKAGES_MISSING ${HOST_TOOL#*:}"
 	done
