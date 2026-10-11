@@ -117,6 +117,14 @@ HRESULT CEnumMergedFolder::SetSources(IShellFolder * userLocal, IShellFolder * a
     m_UserLocalFolder = userLocal;
     m_AllUSersFolder = allUSers;
 
+    if (m_hDsa)
+    {
+        DSA_EnumCallback(m_hDsa, s_DsaDeleteCallback, this);
+        DSA_Destroy(m_hDsa);
+        m_hDsa = NULL;
+        m_hDsaCount = 0;
+    }
+
     TRACE("SetSources %p %p\n", userLocal, allUSers);
     return S_OK;
 }
@@ -136,12 +144,18 @@ HRESULT CEnumMergedFolder::Begin(HWND hwndOwner, SHCONTF flags)
     CComPtr<IEnumIDList> userLocal;
     CComPtr<IEnumIDList> allUsers;
 
-    hr = m_UserLocalFolder->EnumObjects(hwndOwner, flags, &userLocal);
-    if (FAILED_UNEXPECTEDLY(hr))
-        return hr;
-    hr = m_AllUSersFolder->EnumObjects(hwndOwner, flags, &allUsers);
-    if (FAILED_UNEXPECTEDLY(hr))
-        return hr;
+    if (m_UserLocalFolder)
+    {
+        hr = m_UserLocalFolder->EnumObjects(hwndOwner, flags, &userLocal);
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+    }
+    if (m_AllUSersFolder)
+    {
+        hr = m_AllUSersFolder->EnumObjects(hwndOwner, flags, &allUsers);
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+    }
 
     if (!m_hDsa)
     {
@@ -154,7 +168,7 @@ HRESULT CEnumMergedFolder::Begin(HWND hwndOwner, SHCONTF flags)
 
     // The sources are not ordered so load all of the items for the user folder first
     TRACE("Loading Local entries...\n");
-    for (;;)
+    while (userLocal)
     {
         hr = userLocal->Next(1, &pidl, NULL);
         if (FAILED_UNEXPECTEDLY(hr))
@@ -189,7 +203,7 @@ HRESULT CEnumMergedFolder::Begin(HWND hwndOwner, SHCONTF flags)
 
     // Then load the items for the common folder
     TRACE("Loading Common entries...\n");
-    for (;;)
+    while (allUsers)
     {
         hr = allUsers->Next(1, &pidl, NULL);
         if (FAILED_UNEXPECTEDLY(hr))
@@ -393,6 +407,8 @@ CMergedFolder::CMergedFolder() :
     m_UserLocalGuid(GUID_NULL),
     m_AllUsersGuid(GUID_NULL)
 {
+    m_EnumSource = new CComObject<CEnumMergedFolder>();
+    m_EnumSource->SetSources(NULL, NULL);
 }
 
 CMergedFolder::~CMergedFolder()
@@ -413,7 +429,7 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::AddNameSpace(const GUID *pguidObject, I
         m_UserLocal = psf;
         m_UserLocalPidl = ILClone(pcidl);
         m_UserLocalGuid = pguidObject ? *pguidObject : GUID_NULL;
-        return S_OK;
+        return m_EnumSource->SetSources(m_UserLocal, NULL);
     }
 
     if (m_AllUsers)
@@ -423,7 +439,6 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::AddNameSpace(const GUID *pguidObject, I
     m_AllUsersPidl = ILClone(pcidl);
     m_AllUsersGuid = pguidObject ? *pguidObject : GUID_NULL;
 
-    m_EnumSource = new CComObject<CEnumMergedFolder>();
     return m_EnumSource->SetSources(m_UserLocal, m_AllUsers);
 }
 
@@ -435,14 +450,30 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::GetNameSpaceID(PCUITEMID_CHILD pidl, GU
 
 HRESULT STDMETHODCALLTYPE CMergedFolder::QueryNameSpace(ULONG uNameSpace, GUID *pguidOut, IShellFolder **ppsf)
 {
-    UNIMPLEMENTED;
-    return E_NOTIMPL;
+    IShellFolder *psf = (uNameSpace == 0) ? m_UserLocal.p : (uNameSpace == 1) ? m_AllUsers.p : NULL;
+
+    if (!psf)
+        return E_INVALIDARG;
+    if (pguidOut)
+        *pguidOut = (uNameSpace == 0) ? m_UserLocalGuid : m_AllUsersGuid;
+    if (ppsf)
+    {
+        *ppsf = psf;
+        psf->AddRef();
+    }
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CMergedFolder::EnumNameSpace(ULONG uNameSpace, ULONG *pdwID)
 {
-    UNIMPLEMENTED;
-    return E_NOTIMPL;
+    ULONG cNameSpaces = (m_UserLocal ? 1 : 0) + (m_AllUsers ? 1 : 0);
+
+    if (!pdwID)
+        return E_POINTER;
+    if (uNameSpace >= cNameSpaces)
+        return HRESULT_FROM_WIN32(ERROR_NO_MORE_ITEMS);
+    *pdwID = uNameSpace;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CMergedFolder::UnWrapIDList(PCUITEMID_CHILD pidl, LONG cPidls, IShellFolder **ppsf, PIDLIST_ABSOLUTE *ppidlFolder, PIDLIST_ABSOLUTE *ppidlItem, LONG *pcPidls)
@@ -1039,11 +1070,7 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::SetStateBits(DWORD grfStateBits, DWORD 
 
 HRESULT STDMETHODCALLTYPE CMergedFolder::Stat(STATSTG *pstatstg, DWORD grfStatFlag)
 {
-    CComPtr<IStorage> pstg;
-    HRESULT hr = _GetNameSpaceStorage(0, &pstg);
-    if (FAILED(hr))
-        return hr;
-    return pstg->Stat(pstatstg, grfStatFlag);
+    return E_NOINTERFACE;
 }
 
 extern "C"
