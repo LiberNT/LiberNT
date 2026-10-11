@@ -4843,10 +4843,28 @@ DxgkDisplayRegister(
         DxgkpRegWriteDisplayDrivers(hDriverKey, DisplayDriverName);
 
         /* Write Device Description */
-        DxgkpRegWriteString(hDriverKey, L"Device Description",
-                            (DisplayDriverName[0] == L'c')
-                                ? L"WDDM Display Adapter (dxgkrnl/cdd)"
-                                : L"WDDM Display-Only Adapter (dxgkrnl/framebuf)");
+        {
+            WCHAR AdapterDescription[128] = { 0 };
+            ULONG DescriptionLength;
+
+            if (Adapter->PhysicalDeviceObject != NULL &&
+                NT_SUCCESS(IoGetDeviceProperty(Adapter->PhysicalDeviceObject,
+                                               DevicePropertyDeviceDescription,
+                                               sizeof(AdapterDescription) - sizeof(WCHAR),
+                                               AdapterDescription,
+                                               &DescriptionLength)) &&
+                AdapterDescription[0] != UNICODE_NULL)
+            {
+                DxgkpRegWriteString(hDriverKey, L"Device Description", AdapterDescription);
+            }
+            else
+            {
+                DxgkpRegWriteString(hDriverKey, L"Device Description",
+                                    (DisplayDriverName[0] == L'c')
+                                        ? L"WDDM Display Adapter (dxgkrnl/cdd)"
+                                        : L"WDDM Display-Only Adapter (dxgkrnl/framebuf)");
+            }
+        }
 
         /* Write default display settings using POST display resolution. */
         {
