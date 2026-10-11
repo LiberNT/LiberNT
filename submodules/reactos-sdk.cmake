@@ -48,6 +48,7 @@ reactos_sdk_flags(_reactos_sdk
 set(CMAKE_C_FLAGS "${_reactos_sdk_C_FLAGS}" CACHE STRING "C flags" FORCE)
 set(CMAKE_CXX_FLAGS "${_reactos_sdk_CXX_FLAGS}" CACHE STRING "C++ flags" FORCE)
 set(CMAKE_ASM_FLAGS_INIT "${REACTOS_SDK_ARCH_FLAGS}")
+string(APPEND CMAKE_RC_FLAGS_INIT " ${_reactos_sdk_RC_FLAGS}")
 set(_reactos_sdk_windows_libraries)
 if(REACTOS_SDK_CRT STREQUAL "full")
     set(_reactos_sdk_windows_libraries "-lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 ")
