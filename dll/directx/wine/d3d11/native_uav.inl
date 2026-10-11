@@ -171,9 +171,15 @@ void NativeContext::RefreshOutputBindings(const UINT *initial)
         counts[i] = initial ? initial[i] : ~0u;
     }
     if (depth_view) depth = static_cast<NativeDepthView *>(depth_view)->handle;
+    UINT uav_end = 0;
+    for (UINT i = 0; i < 8; ++i)
+        if (uavs[i].pDrvPrivate) uav_end = i + 1;
+    UINT uav_count = max(uav_end, driver_uav_end);
+    uav_count = uav_count > render_target_count ? uav_count - render_target_count : 0;
     device->functions.pfnSetRenderTargets(device->driver_device, targets, render_target_count, 8 - render_target_count,
             depth, uavs + render_target_count, counts + render_target_count, render_target_count,
-            8 - render_target_count, 0, 8);
+            uav_count, 0, 8);
+    driver_uav_end = uav_end;
 }
 
 template<class View> static void NativeUnbindInputs(NativeContext *context, View *view)
