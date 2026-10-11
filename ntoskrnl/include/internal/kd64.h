@@ -269,6 +269,16 @@ KdpPrintToCallbacks(
     _In_ KPROCESSOR_MODE PreviousMode
 );
 
+BOOLEAN
+NTAPI
+KdpPromptBuffersAccessible(
+    _In_reads_bytes_(PromptLength) PCHAR PromptString,
+    _In_ USHORT PromptLength,
+    _In_ PCHAR ResponseString,
+    _In_ USHORT MaximumResponseLength,
+    _In_ KPROCESSOR_MODE PreviousMode
+);
+
 USHORT
 NTAPI
 KdpPrompt(

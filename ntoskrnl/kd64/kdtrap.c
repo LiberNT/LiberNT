@@ -246,6 +246,16 @@ KdpTrap(IN PKTRAP_FRAME TrapFrame,
             /* DbgPrompt */
             case BREAKPOINT_PROMPT:
 
+                if (!KdpPromptBuffersAccessible((PCHAR)ExceptionRecord->ExceptionInformation[1],
+                                                (USHORT)ExceptionRecord->ExceptionInformation[2],
+                                                (PCHAR)KdpGetParameterThree(ContextRecord),
+                                                (USHORT)KdpGetParameterFour(ContextRecord),
+                                                PreviousMode))
+                {
+                    Handled = FALSE;
+                    break;
+                }
+
                 /* Call the worker routine */
                 ReturnLength = KdpPrompt((PCHAR)ExceptionRecord->ExceptionInformation[1],
                                          (USHORT)ExceptionRecord->ExceptionInformation[2],

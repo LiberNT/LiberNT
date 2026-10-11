@@ -560,6 +560,37 @@ KdpSymbol(IN PSTRING DllPath,
     KdExitDebugger(Enable);
 }
 
+BOOLEAN
+NTAPI
+KdpPromptBuffersAccessible(
+    _In_reads_bytes_(PromptLength) PCHAR PromptString,
+    _In_ USHORT PromptLength,
+    _In_ PCHAR ResponseString,
+    _In_ USHORT MaximumResponseLength,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    BOOLEAN Accessible = TRUE;
+
+    if (PreviousMode == KernelMode)
+        return TRUE;
+
+    PromptLength = min(PromptLength, KD_PRINT_MAX_BYTES);
+    MaximumResponseLength = min(MaximumResponseLength, KD_PRINT_MAX_BYTES);
+
+    _SEH2_TRY
+    {
+        ProbeForRead(PromptString, PromptLength, 1);
+        ProbeForWrite(ResponseString, MaximumResponseLength, 1);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Accessible = FALSE;
+    }
+    _SEH2_END;
+
+    return Accessible;
+}
+
 USHORT
 NTAPI
 KdpPrompt(
@@ -697,6 +728,7 @@ KdpPrintFromUser(
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
         /* Bad string pointer, bail out */
+        *Handled = TRUE;
         _SEH2_YIELD(return STATUS_ACCESS_VIOLATION);
     }
     _SEH2_END;
