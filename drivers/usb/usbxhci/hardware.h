@@ -26,7 +26,6 @@
 
 #define XHCI_HCS1_MAX_SLOTS(x)     ((x) & 0xFF)
 #define XHCI_HCS1_MAX_INTERRUPTS(x)(((x) >> 8) & 0x7FF)
-#define XHCI_HCS1_PPC(x)          (((x) >> 3) & 0x1)
 #define XHCI_HCS1_MAX_PORTS(x)     (((x) >> 24) & 0xFF)
 
 #define XHCI_HCS2_IST(x)           ((x) & 0xF)
@@ -38,6 +37,7 @@
 
 #define XHCI_HCC_64BIT_ADDR(x)     ((x) & 0x1)
 #define XHCI_HCC_64B_CONTEXT(x)    (((x) >> 2) & 0x1)
+#define XHCI_HCC_PORT_POWER_CONTROL(x) (((x) >> 3) & 0x1)
 #define XHCI_HCC_PORT_INDICATORS(x)(((x) >> 4) & 0x1)
 #define XHCI_HCC_LIGHT_RESET(x)    (((x) >> 5) & 0x1)
 #define XHCI_HCC_MAX_PSTREAMS(x)   (((x) >> 12) & 0xF)

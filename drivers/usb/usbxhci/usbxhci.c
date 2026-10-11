@@ -13038,7 +13038,7 @@ XHCI_StartController(PVOID MiniPortExtension,
                 XHCI_MAX_PORTS);
         Extension->NumberOfPorts = XHCI_MAX_PORTS;
     }
-    Extension->PortPowerControl = (BOOLEAN)XHCI_HCS1_PPC(HcsParams1);
+    Extension->PortPowerControl = (BOOLEAN)XHCI_HCC_PORT_POWER_CONTROL(HccParams);
     XHCI_BuildProtocolPortMap(Extension);
 
     Extension->MaxScratchpadBuffers = XHCI_HCS2_MAX_SCRATCH(HcsParams2);
