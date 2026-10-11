@@ -9,7 +9,7 @@ STRINGTABLE
 
 STRINGTABLE
 {
-2000, "Windows 8 Light"
+2000, "LiberNT varsayılan Light"
 }
 
 STRINGTABLE
@@ -28,7 +28,7 @@ STRINGTABLE
 
 STRINGTABLE
 {
-5000, "Windows 8"
+5000, "LiberNT varsayılan"
 5001, "Görsel Biçim"
 5002, "ReactOS Vakfı"
 5003, "Foxlet, Lautus tabanlı"

@@ -7,7 +7,7 @@ STRINGTABLE
 
 STRINGTABLE
 {
-2000, "Windows 8 světlé"
+2000, "LiberNT výchozí světlé"
 }
 
 STRINGTABLE
@@ -26,7 +26,7 @@ STRINGTABLE
 
 STRINGTABLE
 {
-5000, "Windows 8"
+5000, "LiberNT výchozí"
 5001, "Motiv"
 5002, "Nadace ReactOS"
 5003, "Foxlet, založeno na Lautus"

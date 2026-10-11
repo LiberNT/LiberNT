@@ -7,7 +7,7 @@ STRINGTABLE
 
 STRINGTABLE
 {
-2000, "Windows 8 Light"
+2000, "LiberNT par défaut Light"
 }
 
 STRINGTABLE
@@ -26,7 +26,7 @@ STRINGTABLE
 
 STRINGTABLE
 {
-5000, "Windows 8"
+5000, "LiberNT par défaut"
 5001, "Style Visuel"
 5002, "Projet ReactOS"
 5003, "Foxlet, basé sur Lautus"

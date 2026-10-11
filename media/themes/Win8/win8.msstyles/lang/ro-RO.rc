@@ -9,7 +9,7 @@ STRINGTABLE
 
 STRINGTABLE
 {
-2000, "Windows 8 Light"
+2000, "LiberNT implicit Light"
 }
 
 STRINGTABLE
@@ -28,7 +28,7 @@ STRINGTABLE
 
 STRINGTABLE
 {
-5000, "Windows 8"
+5000, "LiberNT implicit"
 5001, "Stil vizual"
 5002, "Fundația ReactOS"
 5003, "Foxlet, bazat pe Lautus"

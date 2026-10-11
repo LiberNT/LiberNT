@@ -10,7 +10,7 @@ STRINGTABLE
 
 STRINGTABLE
 {
-2000, "Windows 8 Light"
+2000, "LiberNT 默认 Light"
 }
 
 STRINGTABLE
@@ -29,7 +29,7 @@ STRINGTABLE
 
 STRINGTABLE
 {
-5000, "Windows 8"
+5000, "LiberNT 默认"
 5001, "视觉样式"
 5002, "ReactOS 基金会"
 5003, "Foxlet，基于 Lautus 项目"
