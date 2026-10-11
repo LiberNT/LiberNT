@@ -496,6 +496,18 @@ ThemeDefWindowProcA(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
                         g_user32ApiHook.DefWindowProcA);
 }
 
+static VOID
+ThemeDwmUpdateThemedFrame(HWND hWnd)
+{
+    if (GetAncestor(hWnd, GA_PARENT) != GetDesktopWindow())
+        return;
+
+    if (UXTHEME_IsAppThemed() && GetNCCaptionTheme(hWnd, GetWindowLongW(hWnd, GWL_STYLE)))
+        SetPropW(hWnd, DWM_PROP_THEMED_FRAME, (HANDLE)1);
+    else
+        RemovePropW(hWnd, DWM_PROP_THEMED_FRAME);
+}
+
 static LRESULT CALLBACK
 ThemePreWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, ULONG_PTR ret,PDWORD unknown)
 {
@@ -528,6 +540,8 @@ ThemePreWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, ULONG_PTR 
         case WM_SIZE:
         case WM_WINDOWPOSCHANGED:
         {
+            if (Msg == WM_STYLECHANGED)
+                ThemeDwmUpdateThemedFrame(hWnd);
             if(UXTHEME_IsAppThemed() && (GetThemeAppProperties() & STAP_ALLOW_NONCLIENT))
                 ThemeCalculateCaptionButtonsPos(hWnd, NULL);
             break;
@@ -566,6 +580,7 @@ ThemePreWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, ULONG_PTR 
                 pwndData->hthemeScrollbar = NULL;
             }
 
+            ThemeDwmUpdateThemedFrame(hWnd);
             if(UXTHEME_IsAppThemed() && (GetThemeAppProperties() & STAP_ALLOW_NONCLIENT))
                 ThemeCalculateCaptionButtonsPos(hWnd, NULL);
 
@@ -578,6 +593,7 @@ ThemePreWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, ULONG_PTR 
             if (pwndData == NULL)
                 return 0;
             pwndData->DirtyThemeRegion = TRUE;
+            ThemeDwmUpdateThemedFrame(hWnd);
         }
     }
 

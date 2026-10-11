@@ -63,6 +63,7 @@ extern ATOM AtomDwmCaptionState;
 extern ATOM AtomDwmSheetOfGlass;
 extern ATOM AtomDwmCornerRadius;
 extern ATOM AtomDwmCornerPreference;
+extern ATOM AtomDwmThemedFrame;
 extern ATOM AtomDwmTransition;
 extern ATOM AtomDwmTransitionFromLT;
 extern ATOM AtomDwmTransitionFromRB;

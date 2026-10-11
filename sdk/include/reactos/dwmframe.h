@@ -266,6 +266,7 @@ typedef struct _DXGK_REDIRECTION_SURFACES_SYNC
 #define DWM_PROP_FRAME_EXTEND_TOP     L"ReactOS.Dwm.FrameExtendTop"
 #define DWM_PROP_CORNER_RADIUS        L"ReactOS.Dwm.CornerRadius"
 #define DWM_PROP_WINDOW_CORNER_PREFERENCE L"ReactOS.Dwm.WindowCornerPreference"
+#define DWM_PROP_THEMED_FRAME         L"ReactOS.Dwm.ThemedFrame"
 #define DWM_PROP_TRANSITION           L"ReactOS.Dwm.Transition"
 #define DWM_PROP_TRANSITION_FROM_LT   L"ReactOS.Dwm.TransitionFromLT"
 #define DWM_PROP_TRANSITION_FROM_RB   L"ReactOS.Dwm.TransitionFromRB"
