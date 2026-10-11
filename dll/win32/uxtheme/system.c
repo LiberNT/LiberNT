@@ -780,6 +780,11 @@ static void UXTHEME_ApplyLiquidProperties(HWND hwnd, LPCWSTR classList,
     colorization = color;
     GetThemeColor(liquid, 0, 0, TMT_COLORIZATIONCOLOR, &colorization);
     MSSTYLES_CloseThemeClass(liquid);
+    if (region == DWM_BACKDROP_REGION_NONCLIENT && GetPropW(hwnd, DWM_PROP_CONTENT_BACKDROP))
+    {
+        SetPropW(hwnd, DWM_PROP_BACKDROP_COLORIZATION, (HANDLE)(ULONG_PTR)((ULONG)color + 1));
+        return;
+    }
     if (region == DWM_BACKDROP_REGION_NONCLIENT &&
         (ULONG_PTR)GetPropW(hwnd, DWM_PROP_BACKDROP_REGION) == DWM_BACKDROP_REGION_WINDOW)
         region = DWM_BACKDROP_REGION_WINDOW;

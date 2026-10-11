@@ -61,12 +61,17 @@ DwmSettingsLoadSchemeMaterial(DWORD Scheme, COLORREF *Fill, INT *Opacity)
 static __inline BOOL
 DwmSettingsSetContentBackdrop(HWND Window, COLORREF Fill, INT Opacity)
 {
+    ULONG_PTR Frame = (ULONG_PTR)GetPropW(Window, GetPropW(Window, DWM_PROP_CONTENT_BACKDROP) ?
+                                                  DWM_PROP_BACKDROP_COLORIZATION :
+                                                  DWM_PROP_BACKDROP_COLOR);
+
+    if (Frame == 0)
+        Frame = (ULONG)Fill + 1;
     if (SetPropW(Window, DWM_PROP_SYSTEM_BACKDROP_TYPE,
                  (HANDLE)(ULONG_PTR)DWM_BACKDROP_TRANSIENT) &&
         SetPropW(Window, DWM_PROP_BACKDROP_OPACITY, (HANDLE)(ULONG_PTR)(Opacity + 1)) &&
         SetPropW(Window, DWM_PROP_BACKDROP_COLOR, (HANDLE)(ULONG_PTR)((ULONG)Fill + 1)) &&
-        SetPropW(Window, DWM_PROP_BACKDROP_COLORIZATION,
-                 (HANDLE)(ULONG_PTR)((ULONG)Fill + 1)) &&
+        SetPropW(Window, DWM_PROP_BACKDROP_COLORIZATION, (HANDLE)Frame) &&
         SetPropW(Window, DWM_PROP_BACKDROP_REGION,
                  (HANDLE)(ULONG_PTR)DWM_BACKDROP_REGION_WINDOW) &&
         SetPropW(Window, DWM_PROP_CONTENT_BACKDROP, (HANDLE)1))
