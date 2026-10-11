@@ -125,6 +125,7 @@ class NativeShaderResourceView;
 static UINT NativeVertexFormatSize(DXGI_FORMAT format);
 static UINT NativeBufferFormatSize(DXGI_FORMAT format);
 static bool NativeTypedUavFormat(DXGI_FORMAT format);
+static DXGI_FORMAT NativeFormatFamily(DXGI_FORMAT format);
 static bool NativeUploadFormat(DXGI_FORMAT, UINT, UINT, UINT *, UINT *);
 static void NativeRetainResource(ID3D11Resource *resource);
 static void NativeDropResource(ID3D11Resource *resource);
@@ -2697,13 +2698,20 @@ HRESULT NativeDevice::ValidateTextureBindings(DXGI_FORMAT format, UINT bind, D3D
     if (typed_depth && (bind & ~D3D11_BIND_DEPTH_STENCIL)) return E_INVALIDARG;
     if (depth_stencil_family && (bind & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS))) return E_INVALIDARG;
     if ((bind & D3D11_BIND_UNORDERED_ACCESS) && feature_level < D3D_FEATURE_LEVEL_11_0) return E_INVALIDARG;
-    if (bind & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS))
+    if (bind & D3D11_BIND_RENDER_TARGET)
     {
         UINT support = 0;
         HRESULT hr = CheckFormatSupport(NativeColorViewFormat(format), &support);
         if (FAILED(hr)) return hr;
-        if ((bind & D3D11_BIND_RENDER_TARGET) && !(support & D3D11_FORMAT_SUPPORT_RENDER_TARGET)) return E_INVALIDARG;
-        if ((bind & D3D11_BIND_UNORDERED_ACCESS) && !(support & D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW)) return E_INVALIDARG;
+        if (!(support & D3D11_FORMAT_SUPPORT_RENDER_TARGET)) return E_INVALIDARG;
+    }
+    if (bind & D3D11_BIND_UNORDERED_ACCESS)
+    {
+        UINT support = 0;
+        DXGI_FORMAT family = NativeFormatFamily(format);
+        HRESULT hr = CheckFormatSupport(NativeColorViewFormat(family == DXGI_FORMAT_UNKNOWN ? format : family), &support);
+        if (FAILED(hr)) return hr;
+        if (!(support & D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW)) return E_INVALIDARG;
     }
     return S_OK;
 }
