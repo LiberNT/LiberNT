@@ -45,6 +45,8 @@ add_executable(rtl_unittest
     ldrstubs.c)
 if(ARCH STREQUAL "ppc")
     target_sources(rtl_unittest PRIVATE ppc/rtlhooks.c)
+elseif(ARCH STREQUAL "riscv64")
+    target_sources(rtl_unittest PRIVATE riscv64/rtlhooks.c)
 endif()
 target_compile_definitions(rtl_unittest PRIVATE _RTL_TEST _NTSYSTEM_ TEST_STATIC)
 target_link_libraries(rtl_unittest rtl_test_lib rtl rtl_um rtl_vista wine uuid ${PSEH_LIB})
