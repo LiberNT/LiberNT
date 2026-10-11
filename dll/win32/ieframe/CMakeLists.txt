@@ -13,12 +13,14 @@ list(APPEND SOURCE
     iexplore.c
     inetfolder.c
     intshcut.c
+    intshcut_ext.c
     navigate.c
     oleobject.c
     persist.c
     shellbrowser.c
     shelluihelper.c
     urlhist.c
+    urlsearchhook.c
     view.c
     webbrowser.c
     webbrowserext.c
@@ -35,6 +37,8 @@ add_library(ieframe MODULE
 list(APPEND ieframe_rc_deps
     ${CMAKE_CURRENT_SOURCE_DIR}/ieframe.manifest
     ${CMAKE_CURRENT_SOURCE_DIR}/ieframe.rgs
+    ${CMAKE_CURRENT_SOURCE_DIR}/intshcut.rgs
+    ${CMAKE_CURRENT_SOURCE_DIR}/urlsearchhook.rgs
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/ietoolbar.bmp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/pages.ico)
 

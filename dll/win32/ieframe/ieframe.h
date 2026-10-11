@@ -67,6 +67,9 @@ typedef struct {
     ITargetFrame2  ITargetFrame2_iface;
     ITargetFramePriv2 ITargetFramePriv2_iface;
     IWebBrowserPriv2IE9 IWebBrowserPriv2IE9_iface;
+#ifdef __REACTOS__
+    IWebBrowserPriv IWebBrowserPriv_iface;
+#endif
 
     IUnknown *outer;
     DocHost *doc_host;
@@ -361,6 +364,7 @@ HRESULT get_typeinfo(tid_t,ITypeInfo**);
 HRESULT WINAPI CUrlHistory_Create(IClassFactory*,IUnknown*,REFIID,void**);
 #ifdef __REACTOS__
 HRESULT WINAPI ShellUIHelper_Create(IClassFactory*,IUnknown*,REFIID,void**);
+HRESULT WINAPI URLSearchHook_Create(IClassFactory*,IUnknown*,REFIID,void**);
 #endif
 HRESULT WINAPI InternetExplorer_Create(IClassFactory*,IUnknown*,REFIID,void**);
 HRESULT WINAPI InternetShortcut_Create(IClassFactory*,IUnknown*,REFIID,void**);

@@ -56,6 +56,20 @@
 #ifdef __REACTOS__
 #define IDS_INTERNET                   880
 #define IDS_INTERNET_DESCRIPTION       881
+#define IDS_INTSHCUT_OPEN              882
+#define IDS_INTSHCUT_NEWNAME           883
+#define IDS_INTSHCUT_RUN_NORMAL        884
+#define IDS_INTSHCUT_RUN_MINIMIZED     885
+#define IDS_INTSHCUT_RUN_MAXIMIZED     886
+#define IDS_INTSHCUT_OPEN_HELP         887
+
+#define IDD_INTSHCUT_PROP              890
+#define IDC_INTSHCUT_ICON              891
+#define IDC_INTSHCUT_NAME              892
+#define IDC_INTSHCUT_URL               893
+#define IDC_INTSHCUT_HOTKEY            894
+#define IDC_INTSHCUT_SHOWCMD           895
+#define IDC_INTSHCUT_CHANGEICON        896
 #endif
 
 #define IDS_TB_BACK                    1100

@@ -188,6 +188,16 @@ static const IClassFactoryVtbl ShellUIHelperFactoryVtbl = {
 };
 
 static IClassFactory ShellUIHelperFactory = { &ShellUIHelperFactoryVtbl };
+
+static const IClassFactoryVtbl URLSearchHookFactoryVtbl = {
+    ClassFactory_QueryInterface,
+    ClassFactory_AddRef,
+    ClassFactory_Release,
+    URLSearchHook_Create,
+    ClassFactory_LockServer
+};
+
+static IClassFactory URLSearchHookFactory = { &URLSearchHookFactoryVtbl };
 #endif
 
 /******************************************************************
@@ -236,6 +246,9 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
 #ifdef __REACTOS__
     if(IsEqualGUID(&CLSID_ShellUIHelper, rclsid))
         return IClassFactory_QueryInterface(&ShellUIHelperFactory, riid, ppv);
+
+    if(IsEqualGUID(&CLSID_CURLSearchHook, rclsid))
+        return IClassFactory_QueryInterface(&URLSearchHookFactory, riid, ppv);
 #endif
 
     if(IsEqualGUID(&CLSID_CUrlHistory, rclsid)) {

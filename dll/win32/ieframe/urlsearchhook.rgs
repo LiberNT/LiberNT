@@ -1,0 +1,13 @@
+HKCR
+{
+    NoRemove CLSID
+    {
+        ForceRemove {CFBFAE00-17A6-11D0-99CB-00C04FD64497} = s 'Microsoft Url Search Hook'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val 'ThreadingModel' = s 'Apartment'
+            }
+        }
+    }
+}

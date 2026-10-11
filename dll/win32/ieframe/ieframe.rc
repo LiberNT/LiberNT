@@ -95,3 +95,8 @@ IDC_PAGEICO ICON "resources/pages.ico"
 
 /* @makedep: ieframe.rgs */
 2 WINE_REGISTRY "ieframe.rgs"
+
+#ifdef __REACTOS__
+3 WINE_REGISTRY "intshcut.rgs"
+4 WINE_REGISTRY "urlsearchhook.rgs"
+#endif

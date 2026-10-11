@@ -43,6 +43,9 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(ieframe);
 
+#ifdef __REACTOS__
+#include "intshcut_ext.h"
+#else
 typedef struct
 {
     IUniformResourceLocatorA IUniformResourceLocatorA_iface;
@@ -57,6 +60,7 @@ typedef struct
     BOOLEAN isDirty;
     LPOLESTR currentFile;
 } InternetShortcut;
+#endif
 
 /* utility functions */
 
@@ -156,6 +160,13 @@ static HRESULT Unknown_QueryInterface(InternetShortcut *This, REFIID riid, PVOID
         *ppvObject = &This->IPersistFile_iface;
     else if (IsEqualGUID(&IID_IPropertySetStorage, riid))
         *ppvObject = &This->IPropertySetStorage_iface;
+#ifdef __REACTOS__
+    else if (FAILED(InternetShortcutExt_QueryInterface(This, riid, ppvObject)))
+    {
+        FIXME("Interface with GUID %s not yet implemented by InternetShortcut\n", debugstr_guid(riid));
+        return E_NOINTERFACE;
+    }
+#else
     else if (IsEqualGUID(&IID_IShellLinkA, riid))
     {
         FIXME("The IShellLinkA interface is not yet supported by InternetShortcut\n");
@@ -171,6 +182,7 @@ static HRESULT Unknown_QueryInterface(InternetShortcut *This, REFIID riid, PVOID
         FIXME("Interface with GUID %s not yet implemented by InternetShortcut\n", debugstr_guid(riid));
         return E_NOINTERFACE;
     }
+#endif
     IUnknown_AddRef((IUnknown*)*ppvObject);
     return S_OK;
 }
@@ -188,6 +200,9 @@ static ULONG Unknown_Release(InternetShortcut *This)
     count = InterlockedDecrement(&This->refCount);
     if (count == 0)
     {
+#ifdef __REACTOS__
+        InternetShortcutExt_Free(This);
+#endif
         CoTaskMemFree(This->url);
         CoTaskMemFree(This->currentFile);
         IPropertySetStorage_Release(This->property_set_storage);
@@ -518,7 +533,11 @@ static HRESULT WINAPI PersistFile_Load(IPersistFile *pFile, LPCOLESTR pszFileNam
         ps.ulKind = PRSPEC_PROPID;
         ps.propid = PID_IS_ICONINDEX;
         pv.vt = VT_I4;
+#ifdef __REACTOS__
+        pv.lVal = iconindex;
+#else
         pv.iVal = iconindex;
+#endif
         hr = IPropertyStorage_WriteMultiple(pPropStg, 1, &ps, &pv, 0);
         if (FAILED(hr))
            TRACE("Failed to store the iconindex to our property storage.  hr = 0x%lx\n", hr);
@@ -526,6 +545,9 @@ static HRESULT WINAPI PersistFile_Load(IPersistFile *pFile, LPCOLESTR pszFileNam
     CoTaskMemFree(iconindexstring);
 
     IPropertyStorage_Release(pPropStg);
+#ifdef __REACTOS__
+    InternetShortcutExt_LoadFile(This, pszFileName);
+#endif
     return hr;
 }
 
@@ -629,6 +651,9 @@ static HRESULT WINAPI PersistFile_Save(IPersistFile *pFile, LPCOLESTR pszFileNam
             }
 
             CloseHandle(file);
+#ifdef __REACTOS__
+            InternetShortcutExt_SaveFile(This, pszFileName);
+#endif
             if (pszFileName == NULL || fRemember)
                 This->isDirty = FALSE;
             StartLinkProcessor(pszFileName);
@@ -796,6 +821,9 @@ static InternetShortcut *create_shortcut(void)
         newshortcut->IUniformResourceLocatorW_iface.lpVtbl = &uniformResourceLocatorWVtbl;
         newshortcut->IPersistFile_iface.lpVtbl = &persistFileVtbl;
         newshortcut->IPropertySetStorage_iface.lpVtbl = &propertySetStorageVtbl;
+#ifdef __REACTOS__
+        InternetShortcutExt_Init(newshortcut);
+#endif
         newshortcut->refCount = 1;
         hr = StgCreateStorageEx(NULL, STGM_CREATE | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_DELETEONRELEASE,
                                 STGFMT_STORAGE, 0, NULL, NULL, &IID_IPropertySetStorage, (void **) &newshortcut->property_set_storage);

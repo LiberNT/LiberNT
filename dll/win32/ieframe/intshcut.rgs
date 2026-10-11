@@ -1,0 +1,26 @@
+HKCR
+{
+    NoRemove InternetShortcut
+    {
+        CLSID = s '{FBF23B40-E3F0-101B-8488-00AA003E56F8}'
+        NoRemove shell
+        {
+            NoRemove open
+            {
+                val 'LegacyDisable' = s ''
+            }
+        }
+        NoRemove ShellEx
+        {
+            NoRemove ContextMenuHandlers
+            {
+                ForceRemove {FBF23B40-E3F0-101B-8488-00AA003E56F8}
+            }
+            IconHandler = s '{FBF23B40-E3F0-101B-8488-00AA003E56F8}'
+            NoRemove PropertySheetHandlers
+            {
+                ForceRemove {FBF23B40-E3F0-101B-8488-00AA003E56F8}
+            }
+        }
+    }
+}

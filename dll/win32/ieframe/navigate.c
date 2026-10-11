@@ -1690,6 +1690,66 @@ static const IWebBrowserPriv2IE9Vtbl WebBrowserPriv2IE9Vtbl = {
     WebBrowserPriv2IE9_NavigateWithBindCtx2
 };
 
+#ifdef __REACTOS__
+static inline HlinkFrame *impl_from_IWebBrowserPriv(IWebBrowserPriv *iface)
+{
+    return CONTAINING_RECORD(iface, HlinkFrame, IWebBrowserPriv_iface);
+}
+
+static HRESULT WINAPI WebBrowserPriv_QueryInterface(IWebBrowserPriv *iface, REFIID riid, void **ppv)
+{
+    HlinkFrame *This = impl_from_IWebBrowserPriv(iface);
+    return IUnknown_QueryInterface(This->outer, riid, ppv);
+}
+
+static ULONG WINAPI WebBrowserPriv_AddRef(IWebBrowserPriv *iface)
+{
+    HlinkFrame *This = impl_from_IWebBrowserPriv(iface);
+    return IUnknown_AddRef(This->outer);
+}
+
+static ULONG WINAPI WebBrowserPriv_Release(IWebBrowserPriv *iface)
+{
+    HlinkFrame *This = impl_from_IWebBrowserPriv(iface);
+    return IUnknown_Release(This->outer);
+}
+
+static HRESULT WINAPI WebBrowserPriv_NavigateWithBindCtx(IWebBrowserPriv *iface, VARIANT *uri, VARIANT *flags,
+        VARIANT *target_frame, VARIANT *post_data, VARIANT *headers, IBindCtx *bind_ctx, LPOLESTR url_fragment)
+{
+    HlinkFrame *This = impl_from_IWebBrowserPriv(iface);
+
+    TRACE("(%p)->(%s %s %s %s %s %p %s)\n", This, debugstr_variant(uri), debugstr_variant(flags),
+          debugstr_variant(target_frame), debugstr_variant(post_data), debugstr_variant(headers), bind_ctx,
+          debugstr_w(url_fragment));
+
+    if(!uri || V_VT(uri) != VT_BSTR || !V_BSTR(uri))
+        return E_INVALIDARG;
+
+    if(url_fragment && *url_fragment) {
+        FIXME("url fragment %s not supported\n", debugstr_w(url_fragment));
+        return E_NOTIMPL;
+    }
+
+    return navigate_url(This->doc_host, V_BSTR(uri), flags, target_frame, post_data, headers);
+}
+
+static HRESULT WINAPI WebBrowserPriv_OnClose(IWebBrowserPriv *iface)
+{
+    HlinkFrame *This = impl_from_IWebBrowserPriv(iface);
+    FIXME("(%p)\n", This);
+    return E_NOTIMPL;
+}
+
+static const IWebBrowserPrivVtbl WebBrowserPrivVtbl = {
+    WebBrowserPriv_QueryInterface,
+    WebBrowserPriv_AddRef,
+    WebBrowserPriv_Release,
+    WebBrowserPriv_NavigateWithBindCtx,
+    WebBrowserPriv_OnClose
+};
+#endif
+
 BOOL HlinkFrame_QI(HlinkFrame *This, REFIID riid, void **ppv)
 {
     if(IsEqualGUID(&IID_IHlinkFrame, riid)) {
@@ -1710,6 +1770,11 @@ BOOL HlinkFrame_QI(HlinkFrame *This, REFIID riid, void **ppv)
     }else if(IsEqualGUID(&IID_IWebBrowserPriv2IE9, riid)) {
         TRACE("(%p)->(IID_IWebBrowserPriv2IE9 %p)\n", This, ppv);
         *ppv = &This->IWebBrowserPriv2IE9_iface;
+#ifdef __REACTOS__
+    }else if(IsEqualGUID(&IID_IWebBrowserPriv, riid)) {
+        TRACE("(%p)->(IID_IWebBrowserPriv %p)\n", This, ppv);
+        *ppv = &This->IWebBrowserPriv_iface;
+#endif
     }else {
         return FALSE;
     }
@@ -1725,6 +1790,9 @@ void HlinkFrame_Init(HlinkFrame *This, IUnknown *outer, DocHost *doc_host)
     This->ITargetFrame2_iface.lpVtbl = &TargetFrame2Vtbl;
     This->ITargetFramePriv2_iface.lpVtbl = &TargetFramePriv2Vtbl;
     This->IWebBrowserPriv2IE9_iface.lpVtbl = &WebBrowserPriv2IE9Vtbl;
+#ifdef __REACTOS__
+    This->IWebBrowserPriv_iface.lpVtbl = &WebBrowserPrivVtbl;
+#endif
 
     This->outer = outer;
     This->doc_host = doc_host;
