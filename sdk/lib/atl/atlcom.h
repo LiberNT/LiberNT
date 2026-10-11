@@ -53,6 +53,14 @@ public:
     {
     }
 
+    static HRESULT WINAPI _Delegate(void *pv, REFIID riid, void **ppvObject, DWORD_PTR dw)
+    {
+        IUnknown *pUnk = *reinterpret_cast<IUnknown **>(reinterpret_cast<DWORD_PTR>(pv) + dw);
+        if (!pUnk)
+            return E_NOINTERFACE;
+        return pUnk->QueryInterface(riid, ppvObject);
+    }
+
     void SetVoid(void *)
     {
     }
@@ -666,7 +674,7 @@ public:                                                                         
 
 #define COM_INTERFACE_ENTRY_AGGREGATE(iid, punk)                                \
     {&iid,                                                                      \
-    (DWORD_PTR)offsetof(_ComMapClass, punk),                                    \
+    reinterpret_cast<DWORD_PTR>(&reinterpret_cast<_ComMapClass *>(_ATL_PACKING)->punk) - _ATL_PACKING, \
     _Delegate},
 
 #define DECLARE_GET_CONTROLLING_UNKNOWN()                                        \
