@@ -79,6 +79,10 @@ struct proxy_manager
     void *dest_context_data;  /* reserved context value (LOCK) */
 #ifdef __REACTOS__
     DWORD imp_level;
+    IRpcOptions IRpcOptions_iface;
+    ICallFactory ICallFactory_iface;
+    IForegroundTransfer IForegroundTransfer_iface;
+    ULONG_PTR rpc_timeout;
 #endif
 };
 
@@ -1723,6 +1727,169 @@ static const IClientSecurityVtbl ProxyCliSec_Vtbl =
     ProxyCliSec_CopyProxy
 };
 
+#ifdef __REACTOS__
+static inline struct proxy_manager *impl_from_IRpcOptions(IRpcOptions *iface)
+{
+    return CONTAINING_RECORD(iface, struct proxy_manager, IRpcOptions_iface);
+}
+
+static HRESULT WINAPI ProxyRpcOptions_QueryInterface(IRpcOptions *iface, REFIID riid, void **ppv)
+{
+    struct proxy_manager *This = impl_from_IRpcOptions(iface);
+    return IMultiQI_QueryInterface(&This->IMultiQI_iface, riid, ppv);
+}
+
+static ULONG WINAPI ProxyRpcOptions_AddRef(IRpcOptions *iface)
+{
+    struct proxy_manager *This = impl_from_IRpcOptions(iface);
+    return IMultiQI_AddRef(&This->IMultiQI_iface);
+}
+
+static ULONG WINAPI ProxyRpcOptions_Release(IRpcOptions *iface)
+{
+    struct proxy_manager *This = impl_from_IRpcOptions(iface);
+    return IMultiQI_Release(&This->IMultiQI_iface);
+}
+
+static HRESULT WINAPI ProxyRpcOptions_Set(IRpcOptions *iface, IUnknown *proxy, DWORD property, ULONG_PTR value)
+{
+    struct proxy_manager *This = impl_from_IRpcOptions(iface);
+
+    TRACE("%p, %p, %lu, %Iu.\n", iface, proxy, property, value);
+
+    if (property != COMBND_RPCTIMEOUT)
+        return E_INVALIDARG;
+
+    InterlockedExchangePointer((void **)&This->rpc_timeout, (void *)value);
+    return S_OK;
+}
+
+static HRESULT WINAPI ProxyRpcOptions_Query(IRpcOptions *iface, IUnknown *proxy, DWORD property, ULONG_PTR *value)
+{
+    struct proxy_manager *This = impl_from_IRpcOptions(iface);
+
+    TRACE("%p, %p, %lu, %p.\n", iface, proxy, property, value);
+
+    if (!value)
+        return E_POINTER;
+
+    switch (property)
+    {
+    case COMBND_RPCTIMEOUT:
+        *value = This->rpc_timeout;
+        return S_OK;
+
+    case COMBND_SERVER_LOCALITY:
+        if (This->dest_context == MSHCTX_DIFFERENTMACHINE)
+            *value = SERVER_LOCALITY_REMOTE;
+        else if (This->oxid_info.dwPid == GetCurrentProcessId())
+            *value = SERVER_LOCALITY_PROCESS_LOCAL;
+        else
+            *value = SERVER_LOCALITY_MACHINE_LOCAL;
+        return S_OK;
+    }
+
+    return E_INVALIDARG;
+}
+
+static const IRpcOptionsVtbl ProxyRpcOptions_Vtbl =
+{
+    ProxyRpcOptions_QueryInterface,
+    ProxyRpcOptions_AddRef,
+    ProxyRpcOptions_Release,
+    ProxyRpcOptions_Set,
+    ProxyRpcOptions_Query
+};
+
+static inline struct proxy_manager *impl_from_ICallFactory(ICallFactory *iface)
+{
+    return CONTAINING_RECORD(iface, struct proxy_manager, ICallFactory_iface);
+}
+
+static HRESULT WINAPI ProxyCallFactory_QueryInterface(ICallFactory *iface, REFIID riid, void **ppv)
+{
+    struct proxy_manager *This = impl_from_ICallFactory(iface);
+    return IMultiQI_QueryInterface(&This->IMultiQI_iface, riid, ppv);
+}
+
+static ULONG WINAPI ProxyCallFactory_AddRef(ICallFactory *iface)
+{
+    struct proxy_manager *This = impl_from_ICallFactory(iface);
+    return IMultiQI_AddRef(&This->IMultiQI_iface);
+}
+
+static ULONG WINAPI ProxyCallFactory_Release(ICallFactory *iface)
+{
+    struct proxy_manager *This = impl_from_ICallFactory(iface);
+    return IMultiQI_Release(&This->IMultiQI_iface);
+}
+
+static HRESULT WINAPI ProxyCallFactory_CreateCall(ICallFactory *iface, REFIID riid, IUnknown *outer, REFIID riid2,
+        IUnknown **ppv)
+{
+    TRACE("%p, %s, %p, %s, %p.\n", iface, debugstr_guid(riid), outer, debugstr_guid(riid2), ppv);
+
+    if (!ppv)
+        return E_POINTER;
+
+    *ppv = NULL;
+    return E_NOINTERFACE;
+}
+
+static const ICallFactoryVtbl ProxyCallFactory_Vtbl =
+{
+    ProxyCallFactory_QueryInterface,
+    ProxyCallFactory_AddRef,
+    ProxyCallFactory_Release,
+    ProxyCallFactory_CreateCall
+};
+
+static inline struct proxy_manager *impl_from_IForegroundTransfer(IForegroundTransfer *iface)
+{
+    return CONTAINING_RECORD(iface, struct proxy_manager, IForegroundTransfer_iface);
+}
+
+static HRESULT WINAPI ProxyForegroundTransfer_QueryInterface(IForegroundTransfer *iface, REFIID riid, void **ppv)
+{
+    struct proxy_manager *This = impl_from_IForegroundTransfer(iface);
+    return IMultiQI_QueryInterface(&This->IMultiQI_iface, riid, ppv);
+}
+
+static ULONG WINAPI ProxyForegroundTransfer_AddRef(IForegroundTransfer *iface)
+{
+    struct proxy_manager *This = impl_from_IForegroundTransfer(iface);
+    return IMultiQI_AddRef(&This->IMultiQI_iface);
+}
+
+static ULONG WINAPI ProxyForegroundTransfer_Release(IForegroundTransfer *iface)
+{
+    struct proxy_manager *This = impl_from_IForegroundTransfer(iface);
+    return IMultiQI_Release(&This->IMultiQI_iface);
+}
+
+static HRESULT WINAPI ProxyForegroundTransfer_AllowForegroundTransfer(IForegroundTransfer *iface, void *reserved)
+{
+    struct proxy_manager *This = impl_from_IForegroundTransfer(iface);
+
+    TRACE("%p, %p.\n", iface, reserved);
+
+    if (reserved)
+        return E_INVALIDARG;
+
+    if (!AllowSetForegroundWindow(This->oxid_info.dwPid))
+        return HRESULT_FROM_WIN32(GetLastError());
+    return S_OK;
+}
+
+static const IForegroundTransferVtbl ProxyForegroundTransfer_Vtbl =
+{
+    ProxyForegroundTransfer_QueryInterface,
+    ProxyForegroundTransfer_AddRef,
+    ProxyForegroundTransfer_Release,
+    ProxyForegroundTransfer_AllowForegroundTransfer
+};
+#endif
+
 static HRESULT ifproxy_get_public_ref(struct ifproxy * This)
 {
     HRESULT hr = S_OK;
@@ -1874,6 +2041,12 @@ static HRESULT proxy_manager_construct(
     This->IMultiQI_iface.lpVtbl = &ClientIdentity_Vtbl;
     This->IMarshal_iface.lpVtbl = &ProxyMarshal_Vtbl;
     This->IClientSecurity_iface.lpVtbl = &ProxyCliSec_Vtbl;
+#ifdef __REACTOS__
+    This->IRpcOptions_iface.lpVtbl = &ProxyRpcOptions_Vtbl;
+    This->ICallFactory_iface.lpVtbl = &ProxyCallFactory_Vtbl;
+    This->IForegroundTransfer_iface.lpVtbl = &ProxyForegroundTransfer_Vtbl;
+    This->rpc_timeout = RPC_C_BINDING_DEFAULT_TIMEOUT;
+#endif
 
     list_init(&This->entry);
     list_init(&This->interfaces);
@@ -2006,6 +2179,32 @@ static HRESULT proxy_manager_query_local_interface(struct proxy_manager * This, 
         IClientSecurity_AddRef(&This->IClientSecurity_iface);
         return S_OK;
     }
+#ifdef __REACTOS__
+    if (IsEqualIID(riid, &IID_IMarshal2))
+    {
+        *ppv = &This->IMarshal_iface;
+        IMarshal_AddRef(&This->IMarshal_iface);
+        return S_OK;
+    }
+    if (IsEqualIID(riid, &IID_IRpcOptions))
+    {
+        *ppv = &This->IRpcOptions_iface;
+        IRpcOptions_AddRef(&This->IRpcOptions_iface);
+        return S_OK;
+    }
+    if (IsEqualIID(riid, &IID_ICallFactory))
+    {
+        *ppv = &This->ICallFactory_iface;
+        ICallFactory_AddRef(&This->ICallFactory_iface);
+        return S_OK;
+    }
+    if (IsEqualIID(riid, &IID_IForegroundTransfer))
+    {
+        *ppv = &This->IForegroundTransfer_iface;
+        IForegroundTransfer_AddRef(&This->IForegroundTransfer_iface);
+        return S_OK;
+    }
+#endif
 
     hr = proxy_manager_find_ifproxy(This, riid, &ifproxy);
     if (hr == S_OK)
