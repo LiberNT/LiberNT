@@ -14694,6 +14694,17 @@ DxgkVidMmAcquireSubmissionResidencyPinExImpl(
 
     if (Allocation == NULL || ExpectedAdapter == NULL || Allocation->Adapter != ExpectedAdapter)
         return STATUS_INVALID_PARAMETER;
+    if (KeGetCurrentIrql() == PASSIVE_LEVEL &&
+        !Allocation->ApertureMapped &&
+        ExpectedAdapter->Segments != NULL &&
+        Allocation->SegmentId >= 1 &&
+        Allocation->SegmentId <= ExpectedAdapter->SegmentCount &&
+        VidMmSegmentIsAperture(&ADAPTER_SEGMENTS(ExpectedAdapter)[Allocation->SegmentId - 1]))
+    {
+        Status = DxgkVidMmEnsureReferencedAllocationApertureMapped(Allocation);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
     /* Eviction, relocation and idle preparation all refuse a pinned
      * allocation, so while another pin is held the placement it validated
      * stays valid and one more pin needs only the count. */
