@@ -734,8 +734,9 @@ if(STARFIVE_JH7110_SUPPORT)
     list(APPEND _preinstall_boot_partition_files
         -mkdir dtb
         -mkdir dtb/starfive
-        -add ${STARFIVE_JH7110_DTB} dtb/starfive/jh7110-orangepi-rv.dtb)
-    list(APPEND _preinstall_partition_deps ${STARFIVE_JH7110_DTB})
+        -add ${STARFIVE_JH7110_DTB} dtb/starfive/jh7110-orangepi-rv.dtb
+        -add ${STARFIVE_JH7110_UENV} vf2_uEnv.txt)
+    list(APPEND _preinstall_partition_deps ${STARFIVE_JH7110_DTB} ${STARFIVE_JH7110_UENV})
 endif()
 if(FREELDR_HAS_OFW_BOOT)
     # The firmware boot partition is advertised as FAT32 LBA (0x0c).
