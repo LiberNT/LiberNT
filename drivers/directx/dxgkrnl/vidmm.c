@@ -7327,7 +7327,9 @@ DxgkpVidMmRetireBatch(
         }
     }
 
-    if (NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status) &&
+        DxgkPagingOperationSupported(Adapter, DxgkPagingOpUpdatePageTable) &&
+        DxgkPagingOperationSupported(Adapter, DxgkPagingOpFlushTlb))
     {
         for (Index = 0; Index < Batch->AllocationCount; ++Index)
         {
