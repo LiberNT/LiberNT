@@ -64,6 +64,106 @@ interface IPersistString2 : IPersist
 }
 
 [
+    object,
+    uuid(d8f6ad5b-b44f-4bcc-88fd-eb3473db7502),
+    local
+]
+interface IAssociationElement : IUnknown
+{
+}
+
+[
+    object,
+    uuid(e9ead8e6-2a25-410e-9b58-a9fbef1dd1a2),
+    pointer_default(unique)
+]
+interface IUserEventTimerCallback : IUnknown
+{
+    HRESULT UserEventTimerProc([in] ULONG uUserEventTimerID, [in] UINT uTimerElapse);
+}
+
+[
+    object,
+    uuid(da22171f-70b4-43db-b38f-296741d1494c),
+    pointer_default(unique)
+]
+interface ICustomizeInfoTip : IUnknown
+{
+    HRESULT SetPrefixText([in, string] LPCWSTR pszPrefix);
+    HRESULT SetExtraProperties([in, size_is(cProps)] const PROPERTYKEY *pkey, [in] UINT cProps);
+}
+
+[
+    object,
+    uuid(02468693-e7e5-4c6b-9995-64ce5f51cec4),
+    pointer_default(unique)
+]
+interface IDelegateHostItemContainer : IUnknown
+{
+    HRESULT SetRemoteComputer([in, string] LPCWSTR pszComputer);
+}
+
+[
+    object,
+    uuid(52b14a6a-58f1-45bd-b00a-dce7403d951e),
+    pointer_default(unique)
+]
+interface IRootAndRelativeParsingFolder : IUnknown
+{
+    HRESULT GetRoot([out] PIDLIST_ABSOLUTE *ppidl);
+}
+
+[
+    object,
+    uuid(e157c3a1-a532-4de2-9480-1452b7426eee),
+    pointer_default(unique)
+]
+interface IObjectWithAssociationElement : IUnknown
+{
+    HRESULT SetAssocElement([in, unique] IAssociationElement *pae);
+    HRESULT GetAssocElement([in] REFIID riid, [out, iid_is(riid)] void **ppv);
+}
+
+[
+    object,
+    uuid(176c11b1-4302-4164-8430-d5a9f0eeacdb),
+    pointer_default(unique)
+]
+interface IFrameLayoutDefinition : IUnknown
+{
+    HRESULT GetLayoutDefinition([out] IUnknown **ppunk);
+    HRESULT GetPossibleRedirectTarget([in] REFGUID guid, [out] BOOL *pfRedirect, [out] PIDLIST_ABSOLUTE *ppidl);
+}
+
+[
+    object,
+    uuid(3ec36f3e-5ba3-4c3d-bf39-10f76c3f7cc6),
+    pointer_default(unique)
+]
+interface IDriveFolderExt : IUnknown
+{
+    HRESULT Initialize([in] int iDrive);
+    HRESULT DriveSupportsBurning([in] int iDrive);
+    HRESULT Bind([in] PCIDLIST_ABSOLUTE pidl, [in, unique] IBindCtx *pbc, [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    HRESULT GetSpace([out] ULONGLONG *pullFree, [out] ULONGLONG *pullTotal);
+}
+
+[
+    object,
+    uuid(0f504b94-6e42-42e6-99e0-e20fafe52ab4),
+    pointer_default(unique)
+]
+interface IUserEventTimer : IUnknown
+{
+    HRESULT SetUserEventTimer([in] HWND hWnd, [in] UINT uCallbackMessage, [in] UINT uTimerElapse,
+                              [in, unique] IUserEventTimerCallback *pUserEventTimerCallback,
+                              [in, out] ULONG *puUserEventTimerID);
+    HRESULT KillUserEventTimer([in] HWND hWnd, [in] ULONG uUserEventTimerID);
+    HRESULT GetUserEventTimerElapsed([in] HWND hWnd, [in] ULONG uUserEventTimerID, [out] UINT *puTimerElapsed);
+    HRESULT InitTimerTickInterval([in] UINT uTimerTickIntervalMs);
+}
+
+[
     threading(both),
     uuid(b8da6310-e19b-11d0-933c-00a0c90dcaa9)
 ]
