@@ -17,7 +17,6 @@ class CFSFolder :
     public IShellFolder2,
     public IPersistFolder3,
     public IContextMenuCB,
-    public IShellFolderViewCB,
     public IItemNameLimits,
     public IShellIcon,
     public IShellIconOverlay,
@@ -97,8 +96,7 @@ class CFSFolder :
         // IContextMenuCB
         STDMETHOD(CallBack)(IShellFolder *psf, HWND hwndOwner, IDataObject *pdtobj, UINT uMsg, WPARAM wParam, LPARAM lParam) override;
 
-        // IShellFolderViewCB
-        STDMETHOD(MessageSFVCB)(UINT uMsg, WPARAM wParam, LPARAM lParam) override;
+        HRESULT WINAPI MessageSFVCB(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
         /*** IItemNameLimits methods ***/
 
@@ -180,7 +178,6 @@ class CFSFolder :
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder2, IPersistFolder2)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder3, IPersistFolder3)
         COM_INTERFACE_ENTRY2_IID(IID_IPersist, IPersist, IPersistFolder3)
-        COM_INTERFACE_ENTRY_IID(IID_IShellFolderViewCB, IShellFolderViewCB)
         COM_INTERFACE_ENTRY_IID(IID_IItemNameLimits, IItemNameLimits)
         COM_INTERFACE_ENTRY_IID(IID_IContextMenuCB, IContextMenuCB)
         COM_INTERFACE_ENTRY_IID(IID_IShellIcon, IShellIcon)
@@ -212,6 +209,33 @@ class CFSFolder :
                 return _wcsicmp(a, b);
             return SHELL_StrCmpLogical(a, b);
         }
+};
+
+class CFSFolderViewCB :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IShellFolderViewCB
+{
+        CComPtr<IShellFolder2> m_pFolder;
+        CFSFolder *m_pFSFolder;
+
+    public:
+        CFSFolderViewCB() : m_pFSFolder(NULL) {}
+        void Initialize(CFSFolder *pFolder)
+        {
+            m_pFSFolder = pFolder;
+            m_pFolder = static_cast<IShellFolder2 *>(pFolder);
+        }
+
+        STDMETHOD(MessageSFVCB)(UINT uMsg, WPARAM wParam, LPARAM lParam) override
+        {
+            return m_pFSFolder ? m_pFSFolder->MessageSFVCB(uMsg, wParam, lParam) : E_NOTIMPL;
+        }
+
+        DECLARE_NO_REGISTRY()
+        DECLARE_NOT_AGGREGATABLE(CFSFolderViewCB)
+        BEGIN_COM_MAP(CFSFolderViewCB)
+        COM_INTERFACE_ENTRY_IID(IID_IShellFolderViewCB, IShellFolderViewCB)
+        END_COM_MAP()
 };
 
 #endif /* _CFSFOLDER_H_ */

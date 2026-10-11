@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "Painel de Controle"
     IDS_ADMINISTRATIVETOOLS "Ferramentas Administrativas"
     IDS_PROGRAM_FILES "Arquivos de programas"
+    IDS_SHORTCUT_INFOTIP_LOCATION "Local: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Arquivos de programas\\Arquivos comuns"
 END

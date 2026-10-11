@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "Крило за управление"
     IDS_ADMINISTRATIVETOOLS "Управнически средства"
     IDS_PROGRAM_FILES "Program Files"
+    IDS_SHORTCUT_INFOTIP_LOCATION "Място: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
 END

@@ -1354,6 +1354,30 @@ DECLARE_INTERFACE_(IBackReferencedObject, IUnknown) // {C938B119-D3AD-4D02-B5EE-
 #endif
 
 /*****************************************************************************
+ * ICustomizeInfoTip interface
+ */
+#define INTERFACE ICustomizeInfoTip
+DECLARE_INTERFACE_(ICustomizeInfoTip, IUnknown) // {DA22171F-70B4-43DB-B38F-296741D1494C}
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** ICustomizeInfoTip ***/
+    STDMETHOD(SetPrefixText)(THIS_ LPCWSTR pszPrefix) PURE;
+    STDMETHOD(SetExtraProperties)(THIS_ const PROPERTYKEY *pkey, UINT cProps) PURE;
+};
+#undef INTERFACE
+
+#ifdef COBJMACROS
+#define ICustomizeInfoTip_QueryInterface(T,a,b) (T)->lpVtbl->QueryInterface(T,a,b)
+#define ICustomizeInfoTip_AddRef(T) (T)->lpVtbl->AddRef(T)
+#define ICustomizeInfoTip_Release(T) (T)->lpVtbl->Release(T)
+#define ICustomizeInfoTip_SetPrefixText(T,a) (T)->lpVtbl->SetPrefixText(T,a)
+#define ICustomizeInfoTip_SetExtraProperties(T,a,b) (T)->lpVtbl->SetExtraProperties(T,a,b)
+#endif
+
+/*****************************************************************************
  * IDelegateHostItemContainer interface
  */
 #define INTERFACE IDelegateHostItemContainer

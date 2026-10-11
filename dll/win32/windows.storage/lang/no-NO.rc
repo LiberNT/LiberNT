@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "Kontrollpanel"
     IDS_ADMINISTRATIVETOOLS "Administrative verktøy"
     IDS_PROGRAM_FILES "Programfiler"
+    IDS_SHORTCUT_INFOTIP_LOCATION "Plassering: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Programfiler\\Fellesfiler"
 END

@@ -1049,8 +1049,25 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(IStream *stm, BOOL fClearDirty)
  */
 HRESULT STDMETHODCALLTYPE CShellLink::GetSizeMax(ULARGE_INTEGER *pcbSize)
 {
+    CComPtr<IStream> pStream;
+    STATSTG stat;
+    HRESULT hr;
+
     TRACE("(%p)\n", this);
-    return E_NOTIMPL;
+
+    if (!pcbSize)
+        return E_POINTER;
+    pStream.Attach(SHCreateMemStream(NULL, 0));
+    if (!pStream)
+        return E_OUTOFMEMORY;
+    hr = Save(pStream.p, FALSE);
+    if (FAILED(hr))
+        return hr;
+    hr = pStream->Stat(&stat, STATFLAG_NONAME);
+    if (FAILED(hr))
+        return hr;
+    pcbSize->QuadPart = stat.cbSize.QuadPart;
+    return S_OK;
 }
 
 static BOOL SHELL_ExistsFileW(LPCWSTR path)
@@ -2750,6 +2767,220 @@ HRESULT STDMETHODCALLTYPE CShellLink::GetCommandString(UINT_PTR idCmd, UINT uTyp
     if (uType & GCS_UNICODE)
         return StringCchCopyW((LPWSTR)pszName, cchMax, Text);
     return WideCharToMultiByte(CP_ACP, 0, Text, -1, pszName, cchMax, NULL, NULL) ? S_OK : HRESULT_FROM_WIN32(GetLastError());
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::HandleMenuMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::HandleMenuMsg2(UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *plResult)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::GetInfoTip(DWORD dwFlags, WCHAR **ppwszTip)
+{
+    CStringW strTip;
+
+    *ppwszTip = NULL;
+    if (m_sDescription && *m_sDescription)
+    {
+        strTip = m_sDescription;
+    }
+    else if (m_pPidl && !_ILIsDesktop(m_pPidl))
+    {
+        CComHeapPtr<WCHAR> pszName, pszFolder;
+        PIDLIST_ABSOLUTE pidlParent = ILClone(m_pPidl);
+
+        if (!pidlParent)
+            return E_OUTOFMEMORY;
+        ILRemoveLastID(pidlParent);
+        if (SUCCEEDED(SHGetNameFromIDList(m_pPidl, SIGDN_NORMALDISPLAY, &pszName)) &&
+            (SUCCEEDED(SHGetNameFromIDList(pidlParent, SIGDN_FILESYSPATH, &pszFolder)) ||
+             SUCCEEDED(SHGetNameFromIDList(pidlParent, SIGDN_DESKTOPABSOLUTEEDITING, &pszFolder))))
+        {
+            strTip.Format(IDS_SHORTCUT_INFOTIP_LOCATION, (PCWSTR)pszName, (PCWSTR)pszFolder);
+        }
+        ILFree(pidlParent);
+    }
+
+    if (strTip.IsEmpty())
+        return S_FALSE;
+    if (m_pszInfoTipPrefix && *m_pszInfoTipPrefix)
+        strTip = CStringW(m_pszInfoTipPrefix) + L"\r\n" + strTip;
+    return SHStrDupW(strTip, ppwszTip);
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::GetInfoFlags(DWORD *pdwFlags)
+{
+    *pdwFlags = 0;
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::SetPrefixText(LPCWSTR pszPrefix)
+{
+    m_pszInfoTipPrefix.Free();
+    if (pszPrefix)
+        return SHStrDupW(pszPrefix, &m_pszInfoTipPrefix);
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::SetExtraProperties(const PROPERTYKEY *pkey, UINT cProps)
+{
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::GetLocation(LPWSTR pszPathBuffer, DWORD cch, DWORD *pdwPriority, const SIZE *prgSize, DWORD dwRecClrDepth, DWORD *pdwFlags)
+{
+    HRESULT hr = E_FAIL;
+
+    m_pExtractImage.Release();
+    if (m_pPidl)
+        hr = SHELL_GetUIObjectOfAbsoluteItem(NULL, m_pPidl, IID_PPV_ARG(IExtractImage, &m_pExtractImage));
+    if (FAILED(hr))
+    {
+        m_pExtractImage.Release();
+        if (pszPathBuffer && cch)
+            *pszPathBuffer = UNICODE_NULL;
+        if (pdwPriority)
+            *pdwPriority = 0;
+        return E_FAIL;
+    }
+    return m_pExtractImage->GetLocation(pszPathBuffer, cch, pdwPriority, prgSize, dwRecClrDepth, pdwFlags);
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::Extract(HBITMAP *phBmpThumbnail)
+{
+    if (!m_pExtractImage)
+        return E_FAIL;
+    return m_pExtractImage->Extract(phBmpThumbnail);
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::GetDateStamp(FILETIME *pDateStamp)
+{
+    CComPtr<IExtractImage2> pExtractImage2;
+
+    if (!m_pExtractImage || FAILED(m_pExtractImage->QueryInterface(IID_PPV_ARG(IExtractImage2, &pExtractImage2))))
+        return E_FAIL;
+    return pExtractImage2->GetDateStamp(pDateStamp);
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::InitNew()
+{
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::Load(IPropertyBag *pPropBag, IErrorLog *pErrorLog)
+{
+    WCHAR szFolder[MAX_PATH], szValue[MAX_PATH], szTarget[MAX_PATH], szPath[MAX_PATH];
+    BOOL bHaveFolder = FALSE, bHaveTarget = FALSE;
+    INT csidl;
+
+    if (!pPropBag)
+        return E_INVALIDARG;
+
+    if (SUCCEEDED(SHPropertyBag_ReadInt(pPropBag, L"TargetSpecialFolder", &csidl)) &&
+        SUCCEEDED(SHGetFolderPathW(NULL, csidl, NULL, SHGFP_TYPE_CURRENT, szFolder)))
+    {
+        bHaveFolder = TRUE;
+    }
+    if (SUCCEEDED(SHPropertyBag_ReadStr(pPropBag, L"TargetKnownFolder", szValue, _countof(szValue))) && !bHaveFolder)
+    {
+        KNOWNFOLDERID kfid;
+        CComHeapPtr<WCHAR> pszKnownFolder;
+
+        if (SUCCEEDED(CLSIDFromString(szValue, &kfid)) &&
+            SUCCEEDED(SHGetKnownFolderPath(kfid, KF_FLAG_DEFAULT, NULL, &pszKnownFolder)) &&
+            SUCCEEDED(StringCchCopyW(szFolder, _countof(szFolder), pszKnownFolder)))
+        {
+            bHaveFolder = TRUE;
+        }
+    }
+    if (SUCCEEDED(SHPropertyBag_ReadStr(pPropBag, L"Target", szValue, _countof(szValue))) && szValue[0])
+    {
+        if (!ExpandEnvironmentStringsW(szValue, szTarget, _countof(szTarget)))
+            return HRESULT_FROM_WIN32(GetLastError());
+        if (bHaveFolder)
+        {
+            if (!PathCombineW(szPath, szFolder, szTarget))
+                return E_FAIL;
+        }
+        else
+        {
+            StringCchCopyW(szPath, _countof(szPath), szTarget);
+        }
+        bHaveTarget = TRUE;
+    }
+    else if (bHaveFolder)
+    {
+        StringCchCopyW(szPath, _countof(szPath), szFolder);
+        bHaveTarget = TRUE;
+    }
+
+    if (!bHaveTarget)
+        return E_FAIL;
+    return SetPath(szPath);
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::Save(IPropertyBag *pPropBag, BOOL fClearDirty, BOOL fSaveAllProperties)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::QueryService(REFGUID guidService, REFIID riid, void **ppvObject)
+{
+    if (!ppvObject)
+        return E_POINTER;
+    *ppvObject = NULL;
+    if (IsEqualGUID(guidService, SID_LinkSite))
+        return QueryInterface(riid, ppvObject);
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::GetUnmarshalClass(REFIID riid, void *pv, DWORD dwDestContext, void *pvDestContext, DWORD mshlflags, CLSID *pCid)
+{
+    *pCid = CLSID_ShellLink;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::GetMarshalSizeMax(REFIID riid, void *pv, DWORD dwDestContext, void *pvDestContext, DWORD mshlflags, DWORD *pSize)
+{
+    ULARGE_INTEGER cbSize;
+    HRESULT hr = GetSizeMax(&cbSize);
+    if (SUCCEEDED(hr))
+        *pSize = cbSize.LowPart;
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::MarshalInterface(IStream *pStm, REFIID riid, void *pv, DWORD dwDestContext, void *pvDestContext, DWORD mshlflags)
+{
+    return Save(pStm, FALSE);
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::UnmarshalInterface(IStream *pStm, REFIID riid, void **ppv)
+{
+    HRESULT hr;
+
+    *ppv = NULL;
+    hr = Load(pStm);
+    if (FAILED(hr))
+        return hr;
+    return QueryInterface(riid, ppv);
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::ReleaseMarshalData(IStream *pStm)
+{
+    CComPtr<IPersistStream> pPersistStream;
+
+    if (SUCCEEDED(ShellObjectCreator<CShellLink>(IID_PPV_ARG(IPersistStream, &pPersistStream))))
+        pPersistStream->Load(pStm);
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::DisconnectObject(DWORD dwReserved)
+{
+    return S_OK;
 }
 
 INT_PTR CALLBACK ExtendedShortcutProc(HWND hwndDlg, UINT uMsg,

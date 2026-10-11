@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "Systemsteuerung"
     IDS_ADMINISTRATIVETOOLS "Verwaltung"
     IDS_PROGRAM_FILES "Programme"
+    IDS_SHORTCUT_INFOTIP_LOCATION "Ort: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Programme\\Gemeinsame Dateien"
 END

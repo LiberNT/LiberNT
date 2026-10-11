@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "कंट्रोल पैनल"
     IDS_ADMINISTRATIVETOOLS "प्रशासनिक उपकरण"
     IDS_PROGRAM_FILES "प्रोग्राम फाइलें"
+    IDS_SHORTCUT_INFOTIP_LOCATION "स्थान: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "प्रोग्राम फाइलें\\सामान्य फाइलें"
 END

@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "Panel Kontrol"
     IDS_ADMINISTRATIVETOOLS "Alat Administratif"
     IDS_PROGRAM_FILES "Berkas Program"
+    IDS_SHORTCUT_INFOTIP_LOCATION "Lokasi: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Berkas Program\\Berkas Umum"
 END

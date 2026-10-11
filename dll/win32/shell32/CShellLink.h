@@ -33,18 +33,18 @@ class CShellLink :
     public IPersistStream,
     public IPersistFile,
     public IShellExtInit,
-    public IContextMenu, // Technically it should be IContextMenu3 (inherits from IContextMenu2 and IContextMenu)
+    public IContextMenu3,
     public IDropTarget,
-//  public IQueryInfo,
+    public IQueryInfo,
     public IShellLinkDataList,
     public IExtractIconA,
     public IExtractIconW,
-//  public IExtractImage2, // Inherits from IExtractImage
-//  public IPersistPropertyBag,
-//  public IServiceProvider,
-//  public IFilter,
+    public IExtractImage2,
+    public IPersistPropertyBag,
+    public IServiceProvider,
     public IObjectWithSite,
-//  public ICustomizeInfoTip,
+    public ICustomizeInfoTip,
+    public IMarshal,
     public IShellPropSheetExt
 {
 public:
@@ -97,6 +97,8 @@ private:
 
     CComPtr<IUnknown>    m_site;
     CComPtr<IDropTarget> m_DropTarget;
+    CComPtr<IExtractImage> m_pExtractImage;
+    CComHeapPtr<WCHAR>   m_pszInfoTipPrefix;
 
     VOID Reset();
 
@@ -196,6 +198,31 @@ public:
     STDMETHOD(QueryContextMenu)(HMENU hmenu, UINT indexMenu, UINT idCmdFirst, UINT idCmdLast, UINT uFlags) override;
     STDMETHOD(InvokeCommand)(LPCMINVOKECOMMANDINFO lpici) override;
     STDMETHOD(GetCommandString)(UINT_PTR idCmd, UINT uType, UINT *pwReserved, LPSTR pszName, UINT cchMax) override;
+    STDMETHOD(HandleMenuMsg)(UINT uMsg, WPARAM wParam, LPARAM lParam) override;
+    STDMETHOD(HandleMenuMsg2)(UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *plResult) override;
+
+    STDMETHOD(GetInfoTip)(DWORD dwFlags, WCHAR **ppwszTip) override;
+    STDMETHOD(GetInfoFlags)(DWORD *pdwFlags) override;
+
+    STDMETHOD(SetPrefixText)(LPCWSTR pszPrefix) override;
+    STDMETHOD(SetExtraProperties)(const PROPERTYKEY *pkey, UINT cProps) override;
+
+    STDMETHOD(GetLocation)(LPWSTR pszPathBuffer, DWORD cch, DWORD *pdwPriority, const SIZE *prgSize, DWORD dwRecClrDepth, DWORD *pdwFlags) override;
+    STDMETHOD(Extract)(HBITMAP *phBmpThumbnail) override;
+    STDMETHOD(GetDateStamp)(FILETIME *pDateStamp) override;
+
+    STDMETHOD(InitNew)() override;
+    STDMETHOD(Load)(IPropertyBag *pPropBag, IErrorLog *pErrorLog) override;
+    STDMETHOD(Save)(IPropertyBag *pPropBag, BOOL fClearDirty, BOOL fSaveAllProperties) override;
+
+    STDMETHOD(QueryService)(REFGUID guidService, REFIID riid, void **ppvObject) override;
+
+    STDMETHOD(GetUnmarshalClass)(REFIID riid, void *pv, DWORD dwDestContext, void *pvDestContext, DWORD mshlflags, CLSID *pCid) override;
+    STDMETHOD(GetMarshalSizeMax)(REFIID riid, void *pv, DWORD dwDestContext, void *pvDestContext, DWORD mshlflags, DWORD *pSize) override;
+    STDMETHOD(MarshalInterface)(IStream *pStm, REFIID riid, void *pv, DWORD dwDestContext, void *pvDestContext, DWORD mshlflags) override;
+    STDMETHOD(UnmarshalInterface)(IStream *pStm, REFIID riid, void **ppv) override;
+    STDMETHOD(ReleaseMarshalData)(IStream *pStm) override;
+    STDMETHOD(DisconnectObject)(DWORD dwReserved) override;
 
     // IShellPropSheetExt
     STDMETHOD(AddPages)(LPFNADDPROPSHEETPAGE pfnAddPage, LPARAM lParam) override;
@@ -223,18 +250,21 @@ BEGIN_COM_MAP(CShellLink)
     COM_INTERFACE_ENTRY_IID(IID_IPersistFile, IPersistFile)
     COM_INTERFACE_ENTRY_IID(IID_IPersistStream, IPersistStream)
     COM_INTERFACE_ENTRY_IID(IID_IShellExtInit, IShellExtInit)
-    COM_INTERFACE_ENTRY_IID(IID_IContextMenu, IContextMenu) // Technically it should be IContextMenu3
+    COM_INTERFACE_ENTRY_IID(IID_IContextMenu3, IContextMenu3)
+    COM_INTERFACE_ENTRY_IID(IID_IContextMenu2, IContextMenu2)
+    COM_INTERFACE_ENTRY_IID(IID_IContextMenu, IContextMenu)
     COM_INTERFACE_ENTRY_IID(IID_IDropTarget, IDropTarget)
-//  COM_INTERFACE_ENTRY_IID(IID_IQueryInfo, IQueryInfo)
+    COM_INTERFACE_ENTRY_IID(IID_IQueryInfo, IQueryInfo)
     COM_INTERFACE_ENTRY_IID(IID_IShellLinkDataList, IShellLinkDataList)
     COM_INTERFACE_ENTRY_IID(IID_IExtractIconA, IExtractIconA)
     COM_INTERFACE_ENTRY_IID(IID_IExtractIconW, IExtractIconW)
-//  COM_INTERFACE_ENTRY_IID(IID_IExtractImage2, IExtractImage2)
-//  COM_INTERFACE_ENTRY_IID(IID_IPersistPropertyBag, IPersistPropertyBag)
-//  COM_INTERFACE_ENTRY_IID(IID_IServiceProvider, IServiceProvider)
-//  COM_INTERFACE_ENTRY_IID(IID_IFilter, IFilter)
+    COM_INTERFACE_ENTRY_IID(IID_IExtractImage2, IExtractImage2)
+    COM_INTERFACE_ENTRY_IID(IID_IExtractImage, IExtractImage)
+    COM_INTERFACE_ENTRY_IID(IID_IPersistPropertyBag, IPersistPropertyBag)
+    COM_INTERFACE_ENTRY_IID(IID_IServiceProvider, IServiceProvider)
     COM_INTERFACE_ENTRY_IID(IID_IObjectWithSite, IObjectWithSite)
-//  COM_INTERFACE_ENTRY_IID(IID_ICustomizeInfoTip, ICustomizeInfoTip)
+    COM_INTERFACE_ENTRY_IID(IID_ICustomizeInfoTip, ICustomizeInfoTip)
+    COM_INTERFACE_ENTRY_IID(IID_IMarshal, IMarshal)
     COM_INTERFACE_ENTRY_IID(IID_IShellPropSheetExt, IShellPropSheetExt)
 END_COM_MAP()
 };

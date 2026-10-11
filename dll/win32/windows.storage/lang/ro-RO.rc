@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "Panou de control"
     IDS_ADMINISTRATIVETOOLS "Instrumente de administrare"
     IDS_PROGRAM_FILES "Fişiere de program"
+    IDS_SHORTCUT_INFOTIP_LOCATION "Locaţie: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Fişiere de program\\Fişiere comune"
 END

@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "Kontrollpanelen"
     IDS_ADMINISTRATIVETOOLS "Administrativa verktyg"
     IDS_PROGRAM_FILES "Program"
+    IDS_SHORTCUT_INFOTIP_LOCATION "Plats: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Program\\Delade filer"
 END

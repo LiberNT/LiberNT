@@ -25,11 +25,17 @@
 class CShellItem :
     public CComCoClass<CShellItem, &CLSID_ShellItem>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
-    public IShellItem,
-    public IPersistIDList
+    public IShellItem2,
+    public IPersistIDList,
+    public IPersistStream,
+    public IParentAndItem,
+    public IMarshal,
+    public IObjectWithBackReferences
 {
 private:
     LPITEMIDLIST        m_pidl;
+
+    HRESULT GetDefaultPropertyStore(IPropertyStore **ppStore);
 
 public:
     CShellItem();
@@ -45,10 +51,41 @@ public:
     STDMETHOD(GetAttributes)(SFGAOF sfgaoMask, SFGAOF *psfgaoAttribs) override;
     STDMETHOD(Compare)(IShellItem *oth, SICHINTF hint, int *piOrder) override;
 
+    STDMETHOD(GetPropertyStore)(GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv) override;
+    STDMETHOD(GetPropertyStoreWithCreateObject)(GETPROPERTYSTOREFLAGS flags, IUnknown *punkCreateObject, REFIID riid, void **ppv) override;
+    STDMETHOD(GetPropertyStoreForKeys)(const PROPERTYKEY *rgKeys, UINT cKeys, GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv) override;
+    STDMETHOD(GetPropertyDescriptionList)(REFPROPERTYKEY keyType, REFIID riid, void **ppv) override;
+    STDMETHOD(Update)(IBindCtx *pbc) override;
+    STDMETHOD(GetProperty)(REFPROPERTYKEY key, PROPVARIANT *ppropvar) override;
+    STDMETHOD(GetCLSID)(REFPROPERTYKEY key, CLSID *pclsid) override;
+    STDMETHOD(GetFileTime)(REFPROPERTYKEY key, FILETIME *pft) override;
+    STDMETHOD(GetInt32)(REFPROPERTYKEY key, int *pi) override;
+    STDMETHOD(GetString)(REFPROPERTYKEY key, LPWSTR *ppsz) override;
+    STDMETHOD(GetUInt32)(REFPROPERTYKEY key, ULONG *pui) override;
+    STDMETHOD(GetUInt64)(REFPROPERTYKEY key, ULONGLONG *pull) override;
+    STDMETHOD(GetBool)(REFPROPERTYKEY key, BOOL *pf) override;
+
     // IPersistIDList
     STDMETHOD(GetClassID)(CLSID *pClassID) override;
     STDMETHOD(SetIDList)(PCIDLIST_ABSOLUTE pidl) override;
     STDMETHOD(GetIDList)(PIDLIST_ABSOLUTE *ppidl) override;
+
+    STDMETHOD(IsDirty)() override;
+    STDMETHOD(Load)(IStream *pStm) override;
+    STDMETHOD(Save)(IStream *pStm, BOOL fClearDirty) override;
+    STDMETHOD(GetSizeMax)(ULARGE_INTEGER *pcbSize) override;
+
+    STDMETHOD(SetParentAndItem)(PCIDLIST_ABSOLUTE pidlParent, IShellFolder *psf, PCUITEMID_CHILD pidlChild) override;
+    STDMETHOD(GetParentAndItem)(PIDLIST_ABSOLUTE *ppidlParent, IShellFolder **ppsf, PITEMID_CHILD *ppidlChild) override;
+
+    STDMETHOD(GetUnmarshalClass)(REFIID riid, void *pv, DWORD dwDestContext, void *pvDestContext, DWORD mshlflags, CLSID *pCid) override;
+    STDMETHOD(GetMarshalSizeMax)(REFIID riid, void *pv, DWORD dwDestContext, void *pvDestContext, DWORD mshlflags, DWORD *pSize) override;
+    STDMETHOD(MarshalInterface)(IStream *pStm, REFIID riid, void *pv, DWORD dwDestContext, void *pvDestContext, DWORD mshlflags) override;
+    STDMETHOD(UnmarshalInterface)(IStream *pStm, REFIID riid, void **ppv) override;
+    STDMETHOD(ReleaseMarshalData)(IStream *pStm) override;
+    STDMETHOD(DisconnectObject)(DWORD dwReserved) override;
+
+    STDMETHOD(RemoveBackReferences)() override;
 
 DECLARE_NO_REGISTRY()
 DECLARE_NOT_AGGREGATABLE(CShellItem)
@@ -56,8 +93,14 @@ DECLARE_NOT_AGGREGATABLE(CShellItem)
 DECLARE_PROTECT_FINAL_CONSTRUCT()
 
 BEGIN_COM_MAP(CShellItem)
+    COM_INTERFACE_ENTRY_IID(IID_IShellItem2, IShellItem2)
     COM_INTERFACE_ENTRY_IID(IID_IShellItem, IShellItem)
     COM_INTERFACE_ENTRY_IID(IID_IPersistIDList, IPersistIDList)
+    COM_INTERFACE_ENTRY2_IID(IID_IPersist, IPersist, IPersistIDList)
+    COM_INTERFACE_ENTRY_IID(IID_IPersistStream, IPersistStream)
+    COM_INTERFACE_ENTRY_IID(IID_IParentAndItem, IParentAndItem)
+    COM_INTERFACE_ENTRY_IID(IID_IMarshal, IMarshal)
+    COM_INTERFACE_ENTRY_IID(IID_IObjectWithBackReferences, IObjectWithBackReferences)
 END_COM_MAP()
 };
 

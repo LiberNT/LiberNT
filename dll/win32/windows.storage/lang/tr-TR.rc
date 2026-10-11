@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "Denetim Masası"
     IDS_ADMINISTRATIVETOOLS "Yönetim Araçları"
     IDS_PROGRAM_FILES "Program Dosyaları"
+    IDS_SHORTCUT_INFOTIP_LOCATION "Konum: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Program Dosyaları\\Ortak Dosyalar"
 END

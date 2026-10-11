@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "コントロール パネル"
     IDS_ADMINISTRATIVETOOLS "管理ツール"
     IDS_PROGRAM_FILES "Program Files"
+    IDS_SHORTCUT_INFOTIP_LOCATION "場所: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
 END

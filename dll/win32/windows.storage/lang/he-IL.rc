@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "לוח הבקרה"
     IDS_ADMINISTRATIVETOOLS "כלי ניהול"
     IDS_PROGRAM_FILES "Program Files"
+    IDS_SHORTCUT_INFOTIP_LOCATION "מיקום: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
 END

@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "Vezérlőpult"
     IDS_ADMINISTRATIVETOOLS "Felügyeleti eszközök"
     IDS_PROGRAM_FILES "Programfájlok"
+    IDS_SHORTCUT_INFOTIP_LOCATION "Hely: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Programfájlok\\Common Files"
 END

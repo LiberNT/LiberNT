@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "Ovládací panely"
     IDS_ADMINISTRATIVETOOLS "Nástroje pro správu"
     IDS_PROGRAM_FILES "Program Files"
+    IDS_SHORTCUT_INFOTIP_LOCATION "Umístění: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
 END

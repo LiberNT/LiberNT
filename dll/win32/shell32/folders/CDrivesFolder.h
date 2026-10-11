@@ -29,14 +29,27 @@ class CDrivesFolder :
     public IShellFolder2,
     public IPersistFolder2,
     public IContextMenuCB,
-    public IShellFolderViewCB, // Only exists so DefView can get IFolderFilter
-    public IFolderFilter
+    public IFolderFilter,
+    public IPersistPropertyBag,
+    public IItemNameLimits,
+    public IShellIcon,
+    public IShellIconOverlay,
+    public IStorage,
+    public IObjectWithSite,
+    public IObjectWithBackReferences,
+    public IBackReferencedObject,
+    public IDelegateHostItemContainer
 {
     private:
         /* both paths are parsible from the desktop */
         LPITEMIDLIST pidlRoot;    /* absolute pidl */
         CComPtr<IShellFolder2> m_regFolder;
         INT8 m_DriveDisplayMode;
+        CComPtr<IUnknown> m_site;
+        LONG m_cBackReferences;
+        CComHeapPtr<WCHAR> m_pszRemoteComputer;
+        BOOL m_bHideNonRemovableDrives;
+        BOOL m_bForceAllDrivesRemovable;
 
     public:
         CDrivesFolder();
@@ -44,6 +57,7 @@ class CDrivesFolder :
         HRESULT WINAPI FinalConstruct();
 
         static HRESULT SetDriveLabel(HWND hwndOwner, PCWSTR DrivePath, PCWSTR Label);
+        BOOL ShouldEnumDrive(PCWSTR DrivePath);
 
         // IShellFolder
         STDMETHOD(ParseDisplayName)(HWND hwndOwner, LPBC pbc, LPOLESTR lpszDisplayName, DWORD *pchEaten, PIDLIST_RELATIVE *ppidl, DWORD *pdwAttributes) override;
@@ -78,12 +92,49 @@ class CDrivesFolder :
         // IContextMenuCB
         STDMETHOD(CallBack)(IShellFolder *psf, HWND hwndOwner, IDataObject *pdtobj, UINT uMsg, WPARAM wParam, LPARAM lParam) override;
 
-        // IShellFolderViewCB
-        STDMETHODIMP MessageSFVCB(UINT uMsg, WPARAM wParam, LPARAM lParam) override;
+        HRESULT WINAPI MessageSFVCB(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
         // IFolderFilter
         STDMETHOD(ShouldShow)(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, PCUITEMID_CHILD pidlItem) override;
-        STDMETHODIMP GetEnumFlags(IShellFolder*, PCIDLIST_ABSOLUTE, HWND*, DWORD*) override { return E_NOTIMPL; }
+        STDMETHOD(GetEnumFlags)(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, HWND *phwnd, DWORD *pgrfFlags) override;
+
+        STDMETHOD(InitNew)() override;
+        STDMETHOD(Load)(IPropertyBag *pPropBag, IErrorLog *pErrorLog) override;
+        STDMETHOD(Save)(IPropertyBag *pPropBag, BOOL fClearDirty, BOOL fSaveAllProperties) override;
+
+        STDMETHOD(GetValidCharacters)(LPWSTR *ppwszValidChars, LPWSTR *ppwszInvalidChars) override;
+        STDMETHOD(GetMaxLength)(LPCWSTR pszName, int *piMaxNameLen) override;
+
+        STDMETHOD(GetIconOf)(PCUITEMID_CHILD pidl, UINT flags, int *pIconIndex) override;
+
+        STDMETHOD(GetOverlayIndex)(PCUITEMID_CHILD pidl, int *pIndex) override;
+        STDMETHOD(GetOverlayIconIndex)(PCUITEMID_CHILD pidl, int *pIconIndex) override;
+
+        STDMETHOD(CreateStream)(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStream **ppstm) override;
+        STDMETHOD(OpenStream)(LPCOLESTR pwcsName, void *reserved1, DWORD grfMode, DWORD reserved2, IStream **ppstm) override;
+        STDMETHOD(CreateStorage)(LPCOLESTR pwcsName, DWORD grfMode, DWORD dwStgFmt, DWORD reserved2, IStorage **ppstg) override;
+        STDMETHOD(OpenStorage)(LPCOLESTR pwcsName, IStorage *pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage **ppstg) override;
+        STDMETHOD(CopyTo)(DWORD ciidExclude, const IID *rgiidExclude, SNB snbExclude, IStorage *pstgDest) override;
+        STDMETHOD(MoveElementTo)(LPCOLESTR pwcsName, IStorage *pstgDest, LPCOLESTR pwcsNewName, DWORD grfFlags) override;
+        STDMETHOD(Commit)(DWORD grfCommitFlags) override;
+        STDMETHOD(Revert)() override;
+        STDMETHOD(EnumElements)(DWORD reserved1, void *reserved2, DWORD reserved3, IEnumSTATSTG **ppenum) override;
+        STDMETHOD(DestroyElement)(LPCOLESTR pwcsName) override;
+        STDMETHOD(RenameElement)(LPCOLESTR pwcsOldName, LPCOLESTR pwcsNewName) override;
+        STDMETHOD(SetElementTimes)(LPCOLESTR pwcsName, const FILETIME *pctime, const FILETIME *patime, const FILETIME *pmtime) override;
+        STDMETHOD(SetClass)(REFCLSID clsid) override;
+        STDMETHOD(SetStateBits)(DWORD grfStateBits, DWORD grfMask) override;
+        STDMETHOD(Stat)(STATSTG *pstatstg, DWORD grfStatFlag) override;
+
+        STDMETHOD(SetSite)(IUnknown *pUnkSite) override;
+        STDMETHOD(GetSite)(REFIID riid, void **ppvSite) override;
+
+        STDMETHOD(RemoveBackReferences)() override;
+
+        STDMETHOD(AddRefBackReference)() override;
+        STDMETHOD(ReleaseBackReference)() override;
+
+        STDMETHOD(SetRemoteComputer)(LPCWSTR pszComputer) override;
 
         DECLARE_REGISTRY_RESOURCEID(IDR_MYCOMPUTER)
         DECLARE_CENTRAL_INSTANCE_NOT_AGGREGATABLE(CDrivesFolder)
@@ -95,8 +146,51 @@ class CDrivesFolder :
         COM_INTERFACE_ENTRY_IID(IID_IShellFolder, IShellFolder)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder, IPersistFolder)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder2, IPersistFolder2)
-        COM_INTERFACE_ENTRY_IID(IID_IPersist, IPersist)
+        COM_INTERFACE_ENTRY2_IID(IID_IPersist, IPersist, IPersistFolder2)
         COM_INTERFACE_ENTRY_IID(IID_IContextMenuCB, IContextMenuCB)
+        COM_INTERFACE_ENTRY_IID(IID_IFolderFilter, IFolderFilter)
+        COM_INTERFACE_ENTRY_IID(IID_IPersistPropertyBag, IPersistPropertyBag)
+        COM_INTERFACE_ENTRY_IID(IID_IItemNameLimits, IItemNameLimits)
+        COM_INTERFACE_ENTRY_IID(IID_IShellIcon, IShellIcon)
+        COM_INTERFACE_ENTRY_IID(IID_IShellIconOverlay, IShellIconOverlay)
+        COM_INTERFACE_ENTRY_IID(IID_IStorage, IStorage)
+        COM_INTERFACE_ENTRY_IID(IID_IObjectWithSite, IObjectWithSite)
+        COM_INTERFACE_ENTRY_IID(IID_IObjectWithBackReferences, IObjectWithBackReferences)
+        COM_INTERFACE_ENTRY_IID(IID_IBackReferencedObject, IBackReferencedObject)
+        COM_INTERFACE_ENTRY_IID(IID_IDelegateHostItemContainer, IDelegateHostItemContainer)
+        END_COM_MAP()
+};
+
+class CDrivesFolderViewCB :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IShellFolderViewCB,
+    public IFolderFilter
+{
+        CComPtr<IShellFolder2> m_pFolder;
+        CDrivesFolder *m_pDrivesFolder;
+
+    public:
+        CDrivesFolderViewCB() : m_pDrivesFolder(NULL) {}
+        void Initialize(CDrivesFolder *pFolder)
+        {
+            m_pDrivesFolder = pFolder;
+            m_pFolder = static_cast<IShellFolder2 *>(pFolder);
+        }
+
+        STDMETHOD(MessageSFVCB)(UINT uMsg, WPARAM wParam, LPARAM lParam) override
+        {
+            return m_pDrivesFolder ? m_pDrivesFolder->MessageSFVCB(uMsg, wParam, lParam) : E_NOTIMPL;
+        }
+
+        STDMETHOD(ShouldShow)(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, PCUITEMID_CHILD pidlItem) override
+        {
+            return m_pDrivesFolder ? m_pDrivesFolder->ShouldShow(psf, pidlFolder, pidlItem) : S_OK;
+        }
+        STDMETHODIMP GetEnumFlags(IShellFolder*, PCIDLIST_ABSOLUTE, HWND*, DWORD*) override { return E_NOTIMPL; }
+
+        DECLARE_NO_REGISTRY()
+        DECLARE_NOT_AGGREGATABLE(CDrivesFolderViewCB)
+        BEGIN_COM_MAP(CDrivesFolderViewCB)
         COM_INTERFACE_ENTRY_IID(IID_IShellFolderViewCB, IShellFolderViewCB)
         COM_INTERFACE_ENTRY_IID(IID_IFolderFilter, IFolderFilter)
         END_COM_MAP()

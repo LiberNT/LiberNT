@@ -713,7 +713,7 @@ class CDrivesFolderEnum :
                 DWORD dwDrivemap = GetLogicalDrives() & ~SHRestricted(REST_NODRIVES);
                 for (; wszDriveName[0] <= 'Z'; wszDriveName[0]++)
                 {
-                    if (dwDrivemap & 1)
+                    if ((dwDrivemap & 1) && folder->ShouldEnumDrive(wszDriveName))
                         AddToEnumList(_ILCreateDrive(wszDriveName));
                     dwDrivemap >>= 1;
                 }
@@ -756,6 +756,9 @@ CDrivesFolder::CDrivesFolder()
 {
     pidlRoot = NULL;
     m_DriveDisplayMode = -1;
+    m_cBackReferences = 0;
+    m_bHideNonRemovableDrives = FALSE;
+    m_bForceAllDrivesRemovable = FALSE;
 }
 
 CDrivesFolder::~CDrivesFolder()
@@ -1024,8 +1027,13 @@ HRESULT WINAPI CDrivesFolder::CreateViewObject(HWND hwndOwner, REFIID riid, LPVO
     }
     else if (IsEqualIID(riid, IID_IShellView))
     {
-        SFV_CREATE sfvparams = { sizeof(SFV_CREATE), this, NULL, this };
-        hr = SHCreateShellFolderView(&sfvparams, (IShellView**)ppvOut);
+        CComPtr<CDrivesFolderViewCB> sfviewcb;
+        if (SUCCEEDED(hr = ShellObjectCreator(sfviewcb)))
+        {
+            sfviewcb->Initialize(this);
+            SFV_CREATE sfvparams = { sizeof(SFV_CREATE), this, NULL, sfviewcb };
+            hr = SHCreateShellFolderView(&sfvparams, (IShellView**)ppvOut);
+        }
     }
     TRACE("-- (%p)->(interface=%p)\n", this, ppvOut);
     return hr;
@@ -1490,6 +1498,230 @@ HRESULT WINAPI CDrivesFolder::GetCurFolder(PIDLIST_ABSOLUTE *pidl)
     return S_OK;
 }
 
+BOOL CDrivesFolder::ShouldEnumDrive(PCWSTR DrivePath)
+{
+    if (!m_bHideNonRemovableDrives || m_bForceAllDrivesRemovable)
+        return TRUE;
+    return GetDriveTypeW(DrivePath) == DRIVE_REMOVABLE;
+}
+
+HRESULT WINAPI CDrivesFolder::GetEnumFlags(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, HWND *phwnd, DWORD *pgrfFlags)
+{
+    if (phwnd)
+        *phwnd = NULL;
+    if (pgrfFlags)
+        *pgrfFlags = 0;
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CDrivesFolder::InitNew()
+{
+    return S_OK;
+}
+
+HRESULT WINAPI CDrivesFolder::Load(IPropertyBag *pPropBag, IErrorLog *pErrorLog)
+{
+    BOOL bValue;
+
+    if (!pPropBag)
+        return E_INVALIDARG;
+    if (SUCCEEDED(SHPropertyBag_ReadBOOL(pPropBag, L"HideNonRemovableDrives", &bValue)))
+        m_bHideNonRemovableDrives = bValue;
+    if (SUCCEEDED(SHPropertyBag_ReadBOOL(pPropBag, L"ForceAllDrivesRemovable", &bValue)))
+        m_bForceAllDrivesRemovable = bValue;
+    return S_OK;
+}
+
+HRESULT WINAPI CDrivesFolder::Save(IPropertyBag *pPropBag, BOOL fClearDirty, BOOL fSaveAllProperties)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CDrivesFolder::GetValidCharacters(LPWSTR *ppwszValidChars, LPWSTR *ppwszInvalidChars)
+{
+    if (ppwszValidChars)
+        *ppwszValidChars = NULL;
+    if (ppwszInvalidChars)
+        *ppwszInvalidChars = NULL;
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CDrivesFolder::GetMaxLength(LPCWSTR pszName, int *piMaxNameLen)
+{
+    WCHAR szRoot[4], szFileSystem[MAX_PATH];
+
+    if (!pszName || !piMaxNameLen)
+        return E_INVALIDARG;
+    if (!(PathGetDriveNumberW(pszName) >= 0 && (!pszName[2] || (pszName[2] == L'\\' && !pszName[3]))))
+        return E_INVALIDARG;
+
+    StringCchPrintfW(szRoot, _countof(szRoot), L"%c:\\", pszName[0]);
+    if (!GetVolumeInformationW(szRoot, NULL, 0, NULL, NULL, NULL, szFileSystem, _countof(szFileSystem)))
+        return HResultFromWin32(GetLastError());
+
+    if (!_wcsnicmp(szFileSystem, L"FAT", 3) || !_wcsicmp(szFileSystem, L"exFAT"))
+        *piMaxNameLen = 11;
+    else
+        *piMaxNameLen = 32;
+    return S_OK;
+}
+
+HRESULT WINAPI CDrivesFolder::GetIconOf(PCUITEMID_CHILD pidl, UINT flags, int *pIconIndex)
+{
+    CComPtr<IExtractIconW> pei;
+    WCHAR szIconFile[MAX_PATH];
+    INT iIcon = 0;
+    UINT uFlags = 0;
+    HRESULT hr;
+
+    if (!pidl || !pIconIndex)
+        return E_INVALIDARG;
+
+    hr = GetUIObjectOf(NULL, 1, &pidl, IID_NULL_PPV_ARG(IExtractIconW, &pei));
+    if (FAILED(hr))
+        return S_FALSE;
+    hr = pei->GetIconLocation(flags, szIconFile, _countof(szIconFile), &iIcon, &uFlags);
+    if (hr != S_OK || (uFlags & (GIL_NOTFILENAME | GIL_DONTCACHE | GIL_PERINSTANCE)))
+        return S_FALSE;
+
+    *pIconIndex = SIC_GetIconIndex(szIconFile, iIcon, uFlags);
+    return (*pIconIndex >= 0) ? S_OK : S_FALSE;
+}
+
+HRESULT WINAPI CDrivesFolder::GetOverlayIndex(PCUITEMID_CHILD pidl, int *pIndex)
+{
+    return SHELL32_GetItemOverlay(static_cast<IShellFolder2 *>(this), pidlRoot, pidl, pIndex, FALSE);
+}
+
+HRESULT WINAPI CDrivesFolder::GetOverlayIconIndex(PCUITEMID_CHILD pidl, int *pIconIndex)
+{
+    return SHELL32_GetItemOverlay(static_cast<IShellFolder2 *>(this), pidlRoot, pidl, pIconIndex, TRUE);
+}
+
+HRESULT WINAPI CDrivesFolder::CreateStream(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStream **ppstm)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::OpenStream(LPCOLESTR pwcsName, void *reserved1, DWORD grfMode, DWORD reserved2, IStream **ppstm)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::CreateStorage(LPCOLESTR pwcsName, DWORD grfMode, DWORD dwStgFmt, DWORD reserved2, IStorage **ppstg)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::OpenStorage(LPCOLESTR pwcsName, IStorage *pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage **ppstg)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::CopyTo(DWORD ciidExclude, const IID *rgiidExclude, SNB snbExclude, IStorage *pstgDest)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::MoveElementTo(LPCOLESTR pwcsName, IStorage *pstgDest, LPCOLESTR pwcsNewName, DWORD grfFlags)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::Commit(DWORD grfCommitFlags)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::Revert()
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::EnumElements(DWORD reserved1, void *reserved2, DWORD reserved3, IEnumSTATSTG **ppenum)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::DestroyElement(LPCOLESTR pwcsName)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::RenameElement(LPCOLESTR pwcsOldName, LPCOLESTR pwcsNewName)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::SetElementTimes(LPCOLESTR pwcsName, const FILETIME *pctime, const FILETIME *patime, const FILETIME *pmtime)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::SetClass(REFCLSID clsid)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::SetStateBits(DWORD grfStateBits, DWORD grfMask)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::Stat(STATSTG *pstatstg, DWORD grfStatFlag)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::SetSite(IUnknown *pUnkSite)
+{
+    m_site = pUnkSite;
+    return S_OK;
+}
+
+HRESULT WINAPI CDrivesFolder::GetSite(REFIID riid, void **ppvSite)
+{
+    if (!ppvSite)
+        return E_POINTER;
+    *ppvSite = NULL;
+    if (!m_site)
+        return E_FAIL;
+    return m_site->QueryInterface(riid, ppvSite);
+}
+
+HRESULT WINAPI CDrivesFolder::RemoveBackReferences()
+{
+    SetSite(NULL);
+    return S_OK;
+}
+
+HRESULT WINAPI CDrivesFolder::AddRefBackReference()
+{
+    InterlockedIncrement(&m_cBackReferences);
+    return S_OK;
+}
+
+HRESULT WINAPI CDrivesFolder::ReleaseBackReference()
+{
+    LONG cRefs = m_cBackReferences;
+    while (cRefs > 0)
+    {
+        LONG cPrev = InterlockedCompareExchange(&m_cBackReferences, cRefs - 1, cRefs);
+        if (cPrev == cRefs)
+            break;
+        cRefs = cPrev;
+    }
+    return S_OK;
+}
+
+HRESULT WINAPI CDrivesFolder::SetRemoteComputer(LPCWSTR pszComputer)
+{
+    m_pszRemoteComputer.Free();
+    if (pszComputer)
+        return SHStrDupW(pszComputer, &m_pszRemoteComputer);
+    return S_OK;
+}
+
 /**************************************************************************
  *    CDrivesFolder::ShouldShow
  */
@@ -1503,7 +1735,7 @@ HRESULT WINAPI CDrivesFolder::ShouldShow(IShellFolder *psf, PCIDLIST_ABSOLUTE pi
 /**************************************************************************
  *    CDrivesFolder::MessageSFVCB (IShellFolderViewCB)
  */
-STDMETHODIMP CDrivesFolder::MessageSFVCB(UINT uMsg, WPARAM wParam, LPARAM lParam)
+HRESULT WINAPI CDrivesFolder::MessageSFVCB(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {

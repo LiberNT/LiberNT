@@ -1428,8 +1428,13 @@ HRESULT WINAPI CFSFolder::CreateViewObject(HWND hwndOwner,
             }
             else if (bIsShellView)
             {
-                SFV_CREATE sfvparams = { sizeof(SFV_CREATE), this, NULL, this };
-                hr = SHCreateShellFolderView(&sfvparams, (IShellView**)ppvOut);
+                CComPtr<CFSFolderViewCB> sfviewcb;
+                if (SUCCEEDED(hr = ShellObjectCreator(sfviewcb)))
+                {
+                    sfviewcb->Initialize(this);
+                    SFV_CREATE sfvparams = { sizeof(SFV_CREATE), this, NULL, sfviewcb };
+                    hr = SHCreateShellFolderView(&sfvparams, (IShellView**)ppvOut);
+                }
             }
             else if (IsEqualIID(riid, IID_IContextMenu))
             {

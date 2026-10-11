@@ -42,5 +42,6 @@ BEGIN
     IDS_CONTROLPANEL "Pannello di controllo"
     IDS_ADMINISTRATIVETOOLS "Strumenti di amministrazione"
     IDS_PROGRAM_FILES "Programmi"
+    IDS_SHORTCUT_INFOTIP_LOCATION "Posizione: %s (%s)"
     IDS_PROGRAM_FILES_COMMON "Programmi\\File Comuni"
 END
