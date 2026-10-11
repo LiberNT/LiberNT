@@ -40,6 +40,9 @@ struct apartment
     HWND host_apt_hwnd;      /* handle to apartment window of host apartment (CS cs) */
     struct local_server *local_server; /* A marshallable object exposing local servers (CS cs) */
     BOOL being_destroyed;    /* is currently being destroyed */
+#ifdef __REACTOS__
+    BOOL leaving;
+#endif
 
     /* FIXME: OIDs should be given out by RPCSS */
     OID oidc;                /* object ID counter, starts at 1, zero is invalid OID (CS cs) */

@@ -126,6 +126,9 @@ struct message_state
     /* client only */
     HWND target_hwnd;
     DWORD target_tid;
+#ifdef __REACTOS__
+    OXID target_oxid;
+#endif
     struct dispatch_params params;
 };
 
@@ -1289,6 +1292,9 @@ static HRESULT WINAPI ClientRpcChannelBuffer_GetBuffer(LPRPCCHANNELBUFFER iface,
     message_state->channel_hook_info.pObject = NULL; /* only present on server-side */
     message_state->target_hwnd = NULL;
     message_state->target_tid = 0;
+#ifdef __REACTOS__
+    message_state->target_oxid = 0;
+#endif
     memset(&message_state->params, 0, sizeof(message_state->params));
 
     extensions_size = ChannelHooks_ClientGetSize(&message_state->channel_hook_info,
@@ -1324,6 +1330,9 @@ static HRESULT WINAPI ClientRpcChannelBuffer_GetBuffer(LPRPCCHANNELBUFFER iface,
             message_state->params.bypass_rpcrt = TRUE;
             message_state->target_hwnd = apartment_getwindow(apt);
             message_state->target_tid = apt->tid;
+#ifdef __REACTOS__
+            message_state->target_oxid = apartment_getoxid(apt);
+#endif
             /* we assume later on that this being non-NULL is the indicator that
              * means call directly instead of going through RPC runtime */
             if (!message_state->target_hwnd)
@@ -1503,10 +1512,27 @@ static HRESULT WINAPI ClientRpcChannelBuffer_SendReceive(LPRPCCHANNELBUFFER ifac
     message_state->params.msg = olemsg;
     if (message_state->params.bypass_rpcrt)
     {
+#ifdef __REACTOS__
+        struct apartment *target_apt;
+        BOOL posted = FALSE;
+#endif
         TRACE("Calling apartment thread %#lx...\n", message_state->target_tid);
 
         msg->ProcNum &= ~RPC_FLAGS_VALID_BIT;
 
+#ifdef __REACTOS__
+        target_apt = apartment_findfromoxid(message_state->target_oxid);
+        if (target_apt)
+        {
+            EnterCriticalSection(&target_apt->cs);
+            posted = !target_apt->leaving &&
+                     PostMessageW(message_state->target_hwnd, DM_EXECUTERPC, 0, (LPARAM)&message_state->params);
+            LeaveCriticalSection(&target_apt->cs);
+            apartment_release(target_apt);
+        }
+        if (!posted)
+            hr = RPC_E_DISCONNECTED;
+#else
         if (!PostMessageW(message_state->target_hwnd, DM_EXECUTERPC, 0,
                           (LPARAM)&message_state->params))
         {
@@ -1517,6 +1543,7 @@ static HRESULT WINAPI ClientRpcChannelBuffer_SendReceive(LPRPCCHANNELBUFFER ifac
 
             hr = HRESULT_FROM_WIN32(GetLastError());
         }
+#endif
     }
     else
     {
@@ -2126,10 +2153,22 @@ static void __RPC_STUB dispatch_rpc(RPC_MESSAGE *msg)
      * apartment (i.e. the one that pumps messages to the window) */
     if (!apt->multi_threaded)
     {
+#ifdef __REACTOS__
+        BOOL posted;
+#endif
         params->handle = CreateEventW(NULL, FALSE, FALSE, NULL);
 
         TRACE("Calling apartment thread %#lx...\n", apt->tid);
 
+#ifdef __REACTOS__
+        EnterCriticalSection(&apt->cs);
+        posted = !apt->leaving && PostMessageW(apartment_getwindow(apt), DM_EXECUTERPC, 0, (LPARAM)params);
+        LeaveCriticalSection(&apt->cs);
+        if (posted)
+            WaitForSingleObject(params->handle, INFINITE);
+        else
+            params->hr = RPC_E_DISCONNECTED;
+#else
         if (PostMessageW(apartment_getwindow(apt), DM_EXECUTERPC, 0, (LPARAM)params))
             WaitForSingleObject(params->handle, INFINITE);
         else
@@ -2138,6 +2177,7 @@ static void __RPC_STUB dispatch_rpc(RPC_MESSAGE *msg)
             IRpcChannelBuffer_Release(params->chan);
             IRpcStubBuffer_Release(params->stub);
         }
+#endif
         CloseHandle(params->handle);
     }
     else

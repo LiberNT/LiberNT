@@ -1224,8 +1224,31 @@ HRESULT enter_apartment(struct tlsdata *data, DWORD model)
     return hr;
 }
 
+#ifdef __REACTOS__
+static void apartment_dispatch_pending_calls(struct apartment *apt)
+{
+    MSG msg;
+
+    if (apt->multi_threaded)
+        return;
+
+    EnterCriticalSection(&apt->cs);
+    apt->leaving = TRUE;
+    LeaveCriticalSection(&apt->cs);
+
+    if (!apt->win)
+        return;
+    while (PeekMessageW(&msg, apt->win, DM_EXECUTERPC, DM_EXECUTERPC, PM_REMOVE))
+        DispatchMessageW(&msg);
+}
+#endif
+
 void leave_apartment(struct tlsdata *data)
 {
+#ifdef __REACTOS__
+    if (data->inits == 1)
+        apartment_dispatch_pending_calls(data->apt);
+#endif
     if (!--data->inits)
     {
         if (data->ole_inits)
