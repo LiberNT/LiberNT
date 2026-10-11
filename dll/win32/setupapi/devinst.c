@@ -7308,18 +7308,14 @@ SetupDiInstallDevice(
 
     /* Open/Create driver key information */
 #if _WIN32_WINNT >= 0x502
-    hKey = SETUPDI_OpenDrvKey(set->HKLM, deviceInfo, KEY_READ | KEY_WRITE);
+    hKey = SETUPDI_CreateDrvKey(set->HKLM, deviceInfo, (UUID*)&ClassGuid, KEY_READ | KEY_WRITE);
 #else
-    hKey = SETUPDI_OpenDrvKey(set->HKLM, deviceInfo, KEY_ALL_ACCESS);
-#endif
-    if (hKey == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND)
-#if _WIN32_WINNT >= 0x502
-        hKey = SETUPDI_CreateDrvKey(set->HKLM, deviceInfo, (UUID*)&DeviceInfoData->ClassGuid, KEY_READ | KEY_WRITE);
-#else
-        hKey = SETUPDI_CreateDrvKey(set->HKLM, deviceInfo, (UUID*)&DeviceInfoData->ClassGuid, KEY_ALL_ACCESS);
+    hKey = SETUPDI_CreateDrvKey(set->HKLM, deviceInfo, (UUID*)&ClassGuid, KEY_ALL_ACCESS);
 #endif
     if (hKey == INVALID_HANDLE_VALUE)
         goto cleanup;
+    memcpy(&deviceInfo->ClassGuid, &ClassGuid, sizeof(GUID));
+    memcpy(&DeviceInfoData->ClassGuid, &ClassGuid, sizeof(GUID));
 
     PreviouslyInstalled = RegQueryValueExW(hKey, REGSTR_VAL_INFPATH, NULL, NULL, NULL, NULL) == ERROR_SUCCESS;
 
@@ -7579,6 +7575,25 @@ HKEY SETUPDI_CreateDrvKey(HKEY RootKey, struct DeviceInfo *devInfo, UUID *ClassG
     {
         SetLastError(rc);
         goto cleanup;
+    }
+
+    rc = RegQueryValueExW(hDeviceKey, REGSTR_VAL_DRIVER, NULL, NULL, NULL, &dwSize);
+    if (rc == ERROR_SUCCESS && UuidToStringW(ClassGuid, &lpGuidString) == RPC_S_OK)
+    {
+        DriverKey = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dwSize + sizeof(WCHAR));
+        if (DriverKey &&
+            RegQueryValueExW(hDeviceKey, REGSTR_VAL_DRIVER, NULL, NULL, (LPBYTE)DriverKey, &dwSize) == ERROR_SUCCESS &&
+            (DriverKey[0] != '{' ||
+             strncmpiW(&DriverKey[1], lpGuidString, strlenW(lpGuidString)) != 0 ||
+             DriverKey[1 + strlenW(lpGuidString)] != '}'))
+        {
+            RegDeleteTreeW(hClassKey, DriverKey);
+            RegDeleteValueW(hDeviceKey, REGSTR_VAL_DRIVER);
+        }
+        HeapFree(GetProcessHeap(), 0, DriverKey);
+        DriverKey = NULL;
+        RpcStringFreeW(&lpGuidString);
+        lpGuidString = NULL;
     }
 
     rc = RegQueryValueExW(hDeviceKey, REGSTR_VAL_DRIVER, NULL, NULL, NULL, &dwSize);
