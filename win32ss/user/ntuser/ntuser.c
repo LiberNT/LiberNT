@@ -46,6 +46,7 @@ ATOM AtomDwmCaptionRow;
 ATOM AtomDwmCaptionState;
 ATOM AtomDwmSheetOfGlass;
 ATOM AtomDwmCornerRadius;
+ATOM AtomDwmCornerPreference;
 ATOM AtomDwmTransition;
 ATOM AtomDwmTransitionFromLT;
 ATOM AtomDwmTransitionFromRB;
@@ -183,6 +184,7 @@ InitUserAtoms(VOID)
     AtomDwmCaptionState = IntAddUserPropertyAtom(DWM_PROP_CAPTION_STATE);
     AtomDwmSheetOfGlass = IntAddUserPropertyAtom(DWM_PROP_SHEET_OF_GLASS);
     AtomDwmCornerRadius = IntAddUserPropertyAtom(DWM_PROP_CORNER_RADIUS);
+    AtomDwmCornerPreference = IntAddUserPropertyAtom(DWM_PROP_WINDOW_CORNER_PREFERENCE);
     AtomDwmTransition = IntAddUserPropertyAtom(DWM_PROP_TRANSITION);
     AtomDwmTransitionFromLT = IntAddUserPropertyAtom(DWM_PROP_TRANSITION_FROM_LT);
     AtomDwmTransitionFromRB = IntAddUserPropertyAtom(DWM_PROP_TRANSITION_FROM_RB);

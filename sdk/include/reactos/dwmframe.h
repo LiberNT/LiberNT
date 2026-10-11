@@ -265,6 +265,7 @@ typedef struct _DXGK_REDIRECTION_SURFACES_SYNC
 #define DWM_PROP_SHEET_OF_GLASS       L"ReactOS.Dwm.SheetOfGlass"
 #define DWM_PROP_FRAME_EXTEND_TOP     L"ReactOS.Dwm.FrameExtendTop"
 #define DWM_PROP_CORNER_RADIUS        L"ReactOS.Dwm.CornerRadius"
+#define DWM_PROP_WINDOW_CORNER_PREFERENCE L"ReactOS.Dwm.WindowCornerPreference"
 #define DWM_PROP_TRANSITION           L"ReactOS.Dwm.Transition"
 #define DWM_PROP_TRANSITION_FROM_LT   L"ReactOS.Dwm.TransitionFromLT"
 #define DWM_PROP_TRANSITION_FROM_RB   L"ReactOS.Dwm.TransitionFromRB"
@@ -283,6 +284,14 @@ typedef struct _DXGK_REDIRECTION_SURFACES_SYNC
 #define DWM_BACKDROP_MAIN       2u
 #define DWM_BACKDROP_TRANSIENT  3u
 #define DWM_BACKDROP_TABBED     4u
+
+#define DWM_CORNER_DEFAULT      0u
+#define DWM_CORNER_DONOTROUND   1u
+#define DWM_CORNER_ROUND        2u
+#define DWM_CORNER_ROUNDSMALL   3u
+
+#define DWM_CORNER_RADIUS_96        7u
+#define DWM_CORNER_RADIUS_SMALL_96  4u
 
 #define DWM_CAPTION_BUTTON_CLOSE    0u
 #define DWM_CAPTION_BUTTON_MAXIMIZE 1u

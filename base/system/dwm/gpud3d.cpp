@@ -1444,6 +1444,13 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
     Data.ClientRect[3] = (FLOAT)Interior.bottom;
     BOOL Frame = !Client && (Window->LayerFlags & DWM_WINDOW_FRAME_ALPHA) != 0;
     ID3D11ShaderResourceView *Buttons = NULL;
+    if (!Client)
+    {
+        Data.FrameClient[0] = (FLOAT)Window->ClientX;
+        Data.FrameClient[1] = (FLOAT)Window->ClientY;
+        Data.FrameClient[2] = (FLOAT)((LONGLONG)Window->ClientX + Window->ClientWidth);
+        Data.FrameClient[3] = (FLOAT)((LONGLONG)Window->ClientY + Window->ClientHeight);
+    }
     if (Frame)
     {
         ULONG Key = DwmFrameKey(Window);
@@ -1453,10 +1460,6 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
         Data.FrameKey[1] = ((Key >> 8) & 0xFFu) / 255.0f;
         Data.FrameKey[2] = (Key & 0xFFu) / 255.0f;
         Data.FrameKey[3] = 1.0f;
-        Data.FrameClient[0] = (FLOAT)Window->ClientX;
-        Data.FrameClient[1] = (FLOAT)Window->ClientY;
-        Data.FrameClient[2] = (FLOAT)((LONGLONG)Window->ClientX + Window->ClientWidth);
-        Data.FrameClient[3] = (FLOAT)((LONGLONG)Window->ClientY + Window->ClientHeight);
         Buttons = FrameButtonsView(Window, Key, &ButtonBounds);
         if (Buttons != NULL)
         {

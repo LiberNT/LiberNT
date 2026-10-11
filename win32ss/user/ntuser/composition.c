@@ -186,6 +186,40 @@ IntCompositionIsFrameAtom(_In_ ATOM Atom)
             Atom == AtomDwmCaptionState);
 }
 
+static ULONG
+IntCompositionCornerRadius(_In_ PWND Wnd)
+{
+    ULONG_PTR Radius = (ULONG_PTR)UserGetProp(Wnd, AtomDwmCornerRadius, FALSE);
+    ULONG_PTR Preference = DWM_CORNER_DEFAULT;
+    ULONG Dpi = (gpsi && gpsi->dmLogPixels) ? gpsi->dmLogPixels : 96;
+    BYTE Alpha;
+    COLORREF Key;
+    DWORD Flags = 0;
+
+    if (Radius != 0 && Radius <= 64)
+        return (ULONG)Radius;
+    if ((Wnd->style & (WS_MINIMIZE | WS_MAXIMIZE)) || Wnd->hrgnClip != NULL ||
+        IntGetWindowSnapEdge(Wnd) != HTNOWHERE)
+        return 0;
+    if (IntCompositionGetLayered(Wnd, &Alpha, &Key, &Flags) &&
+        (Flags & DWM_WINDOW_PREMULTIPLIED_ALPHA))
+        return 0;
+    if (AtomDwmCornerPreference != 0)
+        Preference = (ULONG_PTR)UserGetProp(Wnd, AtomDwmCornerPreference, FALSE);
+    switch (Preference)
+    {
+        case DWM_CORNER_DONOTROUND:
+            return 0;
+        case DWM_CORNER_ROUND:
+            return DWM_CORNER_RADIUS_96 * Dpi / 96;
+        case DWM_CORNER_ROUNDSMALL:
+            return DWM_CORNER_RADIUS_SMALL_96 * Dpi / 96;
+        default:
+            return (Wnd->style & WS_CAPTION) == WS_CAPTION ?
+                   DWM_CORNER_RADIUS_96 * Dpi / 96 : 0;
+    }
+}
+
 /* dwm.exe is the ONLY compositor (Windows model — win32k tracks redirection
  * and damage, never composes). Attach enables redirection; detach or a
  * silent dwm (watchdog on g_DwmLastFrameTime, bumped by every GetFrame)
@@ -3093,13 +3127,7 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         RtlZeroMemory(g_DwmFrameWindows[count].CaptionButtons,
                       sizeof(g_DwmFrameWindows[count].CaptionButtons));
         g_DwmFrameWindows[count].CaptionState = 0;
-        g_DwmFrameWindows[count].CornerRadius = 0;
-        {
-            ULONG_PTR Radius = (ULONG_PTR)UserGetProp(w, AtomDwmCornerRadius,
-                                                      FALSE);
-            if (Radius != 0 && Radius <= 64)
-                g_DwmFrameWindows[count].CornerRadius = (ULONG)Radius;
-        }
+        g_DwmFrameWindows[count].CornerRadius = IntCompositionCornerRadius(w);
         {
             const RECTL *Client = Held ? &e->Redirect.rcFrontClient : &e->Redirect.rcClient;
 

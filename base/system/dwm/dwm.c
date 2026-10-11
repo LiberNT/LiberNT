@@ -1421,6 +1421,61 @@ DwmCornerAlpha(LONG x, LONG y, LONG cx, LONG cy, ULONG Radius)
 }
 
 static ULONG
+DwmCornerEdgePixel(const BYTE *Pixels, const DWM_WIN *Window, LONG x, LONG y, ULONG Source)
+{
+    LONG r = (LONG)Window->CornerRadius, Width, Lines, Index, Column, Next;
+    BOOL Left, Top;
+    double dx, dy, Depth, Fraction;
+    const ULONG *Line;
+    ULONG Outer, Inner, Fill, Result = 0, Shift;
+
+    if (r * 2 > Window->cx)
+        r = Window->cx / 2;
+    if (r * 2 > Window->cy)
+        r = Window->cy / 2;
+    if (r <= 0 || (x >= r && x < Window->cx - r) || (y >= r && y < Window->cy - r))
+        return Source;
+    Left = x < r;
+    Top = y < r;
+    Width = Left ? Window->ClientX : Window->cx - Window->ClientX - (LONG)Window->ClientWidth;
+    if (Width > r)
+        Width = r;
+    if (Width <= 0)
+        return Source;
+    dx = Left ? (double)r - ((double)x + 0.5) : ((double)x + 0.5) - (double)(Window->cx - r);
+    dy = Top ? (double)r - ((double)y + 0.5) : ((double)y + 0.5) - (double)(Window->cy - r);
+    Depth = (double)r - sqrt(dx * dx + dy * dy);
+    if (Depth >= (double)Width + 0.5)
+        return Source;
+    Line = (const ULONG *)(Pixels + (SIZE_T)(Top ? r : Window->cy - 1 - r) * Window->Stride);
+    Fill = Line[Left ? Width - 1 : Window->cx - Width] & 0x00FFFFFFu;
+    for (Lines = Width; Lines > 0; --Lines)
+    {
+        if ((Line[Left ? Lines - 1 : Window->cx - Lines] & 0x00FFFFFFu) != Fill)
+            break;
+    }
+    if (Lines == 0 || Depth >= (double)Lines + 0.5)
+        return Source;
+    Depth -= 0.5;
+    if (Depth < 0.0)
+        Depth = 0.0;
+    Index = (LONG)Depth;
+    Fraction = Depth - (double)Index;
+    Column = Left ? Index : Window->cx - 1 - Index;
+    Next = Left ? Index + 1 : Window->cx - 2 - Index;
+    Outer = Line[Column];
+    Inner = Index + 1 < Lines ? Line[Next] : Source;
+    for (Shift = 0; Shift < 32; Shift += 8)
+    {
+        double Channel = (double)((Outer >> Shift) & 0xFFu) * (1.0 - Fraction) +
+                         (double)((Inner >> Shift) & 0xFFu) * Fraction;
+
+        Result |= (ULONG)(Channel + 0.5) << Shift;
+    }
+    return Result;
+}
+
+static ULONG
 DwmBuildRoundedRects(RECTL *Rects, ULONG Max, LONG cx, LONG cy, ULONG Radius)
 {
     LONG r = (LONG)Radius, y;
@@ -2407,6 +2462,7 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
     LONGLONG right, bottom;
     BOOL useKey = (w->LayerFlags & DWM_LWA_COLORKEY) != 0;
     BOOL useCorner = w->CornerRadius != 0;
+    LONG cornerRows = (LONG)min(w->CornerRadius, (ULONG)min(w->cx / 2, w->cy / 2));
     BOOL useAlpha = (w->LayerFlags & DWM_LWA_ALPHA) != 0 && w->Alpha < 255;
     BOOL usePremultiplied = (w->LayerFlags & DWM_WINDOW_PREMULTIPLIED_ALPHA) != 0;
     BOOL usePixelAlpha = usePremultiplied || (w->BlurFlags & DWM_BLUR_ENABLE) != 0;
@@ -2540,7 +2596,8 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
         }
 
         if (!useKey && !useAlpha && !usePixelAlpha && !useBackdrop &&
-            !useCorner && bandCount == 0)
+            (!useCorner || (r >= cornerRows && r < w->cy - cornerRows)) &&
+            bandCount == 0)
         {
             RtlCopyMemory(dstrow, srcrow, (SIZE_T)width * 4);
             continue;
@@ -2679,8 +2736,11 @@ next_segment:
             ULONG materialWeight = 0, materialKey = 0, edge = 0;
 
             if (useCorner)
+            {
                 cornerAlpha = DwmCornerAlpha(sourceX, r, w->cx, w->cy,
                                              w->CornerRadius);
+                s = DwmCornerEdgePixel(pix, w, sourceX, r, s);
+            }
             if (useEdge)
             {
                 ULONG inner;
