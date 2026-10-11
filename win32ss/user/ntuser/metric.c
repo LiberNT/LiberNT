@@ -124,9 +124,9 @@ InitMetrics(VOID)
     piSysMet[SM_CXMINSPACING] = piSysMet[SM_CXMINIMIZED] + gspv.mm.iHorzGap;
     piSysMet[SM_CYMINSPACING] = piSysMet[SM_CYMINIMIZED] + gspv.mm.iVertGap;
     piSysMet[SM_CXMAXTRACK] = piSysMet[SM_CXVIRTUALSCREEN] + 4
-                              + 2 * piSysMet[SM_CXFRAME];
+                              + 2 * (piSysMet[SM_CXFRAME] + piSysMet[SM_CXPADDEDBORDER]);
     piSysMet[SM_CYMAXTRACK] = piSysMet[SM_CYVIRTUALSCREEN] + 4
-                              + 2 * piSysMet[SM_CYFRAME];
+                              + 2 * (piSysMet[SM_CYFRAME] + piSysMet[SM_CXPADDEDBORDER]);
 
     /* Icon */
     piSysMet[SM_CXVSCROLL] = gspv.ncm.iScrollWidth;     // 16;
