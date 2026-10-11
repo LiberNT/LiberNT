@@ -1307,7 +1307,8 @@ DrawClassicFrame(PDRAW_CONTEXT context, RECT* prcCurrent)
     }
 
     /* Firstly the "thick" frame */
-    if (((context->wi.dwStyle & WS_THICKFRAME) || (context->wi.dwStyle & WS_CAPTION) == WS_CAPTION) &&
+    if (((context->wi.dwStyle & WS_THICKFRAME) ||
+         ((context->wi.dwStyle & WS_CAPTION) == WS_CAPTION && GetSystemMetrics(SM_CXPADDEDBORDER))) &&
         !(context->wi.dwStyle & WS_MINIMIZE))
     {
         INT Width =

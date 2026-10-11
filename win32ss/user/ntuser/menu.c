@@ -4932,7 +4932,7 @@ intGetTitleBarInfo(PWND pWindowObject, PTITLEBARINFO bti)
                 RECTL_vInflateRect( &bti->rcTitleBar, -UserGetSystemMetrics(SM_CXFRAME), -UserGetSystemMetrics(SM_CYFRAME) );
                 RECTL_vInflateRect( &bti->rcTitleBar, -UserGetSystemMetrics(SM_CXPADDEDBORDER), -UserGetSystemMetrics(SM_CXPADDEDBORDER) );
             }
-            else if ((dwStyle & WS_CAPTION) == WS_CAPTION)
+            else if ((dwStyle & WS_CAPTION) == WS_CAPTION && UserGetSystemMetrics(SM_CXPADDEDBORDER))
             {
                 RECTL_vInflateRect( &bti->rcTitleBar, -(UserGetSystemMetrics(SM_CXFRAME) + UserGetSystemMetrics(SM_CXPADDEDBORDER)),
                                     -(UserGetSystemMetrics(SM_CYFRAME) + UserGetSystemMetrics(SM_CXPADDEDBORDER)) );

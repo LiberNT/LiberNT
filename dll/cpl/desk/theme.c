@@ -259,6 +259,7 @@ LoadSchemeFromReg(OUT COLOR_SCHEME *scheme, IN PTHEME_SELECTION pSelectedTheme)
     if (result != ERROR_SUCCESS) return FALSE;
 
     scheme->bFlatMenus = SHRegGetIntW(hkScheme, L"FlatMenus", 0);
+    scheme->ncMetrics.iPaddedBorderWidth = 0;
 
     for (i = 0; i < NUM_COLORS; i++)
     {
@@ -1002,6 +1003,7 @@ LoadSchemeFromTheme(OUT PCOLOR_SCHEME scheme, IN PTHEME_SELECTION pSelectedTheme
     scheme->ncMetrics.iSmCaptionHeight = GetThemeSysSize(hTheme, SM_CYSMSIZE);
     scheme->ncMetrics.iMenuWidth = GetThemeSysSize(hTheme, SM_CXMENUSIZE);
     scheme->ncMetrics.iMenuHeight = GetThemeSysSize(hTheme, SM_CYMENUSIZE);
+    scheme->ncMetrics.iPaddedBorderWidth = GetThemeSysSize(hTheme, SM_CXPADDEDBORDER);
 
     /* Load fonts */
     GetThemeSysFont(hTheme, TMT_CAPTIONFONT, &scheme->ncMetrics.lfCaptionFont);

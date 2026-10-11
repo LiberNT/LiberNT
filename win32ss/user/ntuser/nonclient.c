@@ -93,7 +93,7 @@ NC_GetInsideRect(PWND Wnd, RECT *rect)
         /* FIXME: this isn't in NC_AdjustRect? why not? */
         if (ExStyle & WS_EX_DLGMODALFRAME)
             RECTL_vInflateRect( rect, -1, 0 );
-        if ((Style & WS_CAPTION) == WS_CAPTION)
+        if ((Style & WS_CAPTION) == WS_CAPTION && UserGetSystemMetrics(SM_CXPADDEDBORDER))
             RECTL_vInflateRect(rect,
                                -(UserGetSystemMetrics(SM_CXFRAME) - UserGetSystemMetrics(SM_CXDLGFRAME) +
                                  UserGetSystemMetrics(SM_CXPADDEDBORDER)),
@@ -970,7 +970,9 @@ VOID
 NC_DrawFrame( HDC hDC, RECT *CurrentRect, BOOL Active, DWORD Style, DWORD ExStyle)
 {
    /* Firstly the "thick" frame */
-   if (((Style & WS_THICKFRAME) || (Style & WS_CAPTION) == WS_CAPTION) && !(Style & WS_MINIMIZE))
+   if (((Style & WS_THICKFRAME) ||
+        ((Style & WS_CAPTION) == WS_CAPTION && UserGetSystemMetrics(SM_CXPADDEDBORDER))) &&
+       !(Style & WS_MINIMIZE))
    {
       LONG Width =
          (UserGetSystemMetrics(SM_CXFRAME) - UserGetSystemMetrics(SM_CXDLGFRAME)) *
@@ -2136,7 +2138,7 @@ GetNCHitEx(PWND pWnd, POINT pt)
     }
     else  /* No thick frame */
     {
-        if ((Style & WS_CAPTION) == WS_CAPTION)
+        if ((Style & WS_CAPTION) == WS_CAPTION && UserGetSystemMetrics(SM_CXPADDEDBORDER))
             RECTL_vInflateRect(&rcWindow, -(UserGetSystemMetrics(SM_CXFRAME) + UserGetSystemMetrics(SM_CXPADDEDBORDER)),
                                -(UserGetSystemMetrics(SM_CYFRAME) + UserGetSystemMetrics(SM_CXPADDEDBORDER)));
         else if (HAS_DLGFRAME( Style, ExStyle ))

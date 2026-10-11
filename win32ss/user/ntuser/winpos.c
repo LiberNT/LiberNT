@@ -950,7 +950,8 @@ UserGetWindowBorders(DWORD Style, DWORD ExStyle, SIZE *Size, BOOL WithClient)
    if (Style & WS_CAPTION || ExStyle & WS_EX_DLGMODALFRAME)
       Border ++; /* The other border */
    Size->cx = Size->cy = Border;
-   if (((Style & WS_THICKFRAME) || (Style & WS_CAPTION) == WS_CAPTION) &&
+   if (((Style & WS_THICKFRAME) ||
+        ((Style & WS_CAPTION) == WS_CAPTION && UserGetSystemMetrics(SM_CXPADDEDBORDER))) &&
        !(Style & WS_MINIMIZE)) /* The resize border */
    {
       Size->cx += UserGetSystemMetrics(SM_CXFRAME) - UserGetSystemMetrics(SM_CXDLGFRAME);
@@ -958,7 +959,8 @@ UserGetWindowBorders(DWORD Style, DWORD ExStyle, SIZE *Size, BOOL WithClient)
    }
    Size->cx *= UserGetSystemMetrics(SM_CXBORDER);
    Size->cy *= UserGetSystemMetrics(SM_CYBORDER);
-   if (((Style & WS_THICKFRAME) || (Style & WS_CAPTION) == WS_CAPTION) &&
+   if (((Style & WS_THICKFRAME) ||
+        ((Style & WS_CAPTION) == WS_CAPTION && UserGetSystemMetrics(SM_CXPADDEDBORDER))) &&
        !(Style & WS_MINIMIZE))
    {
       Size->cx += UserGetSystemMetrics(SM_CXPADDEDBORDER);

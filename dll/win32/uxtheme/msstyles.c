@@ -944,6 +944,12 @@ static BOOL parse_handle_nonclient_size (struct PARSENONCLIENTSTATE* state,
                 state->metrics.iMenuHeight = size;
                 state->metricsDirty = TRUE;
                 break;
+#ifdef __REACTOS__
+            case TMT_PADDEDBORDERWIDTH:
+                state->metrics.iPaddedBorderWidth = size;
+                state->metricsDirty = TRUE;
+                break;
+#endif
         }
         return TRUE;
     }
