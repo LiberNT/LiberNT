@@ -163,6 +163,29 @@ interface IUserEventTimer : IUnknown
     HRESULT InitTimerTickInterval([in] UINT uTimerTickIntervalMs);
 }
 
+typedef struct tagDOMAIN_RELATIVE_OBJECTID
+{
+    GUID guidVolume;
+    GUID guidObject;
+} DOMAIN_RELATIVE_OBJECTID;
+
+typedef struct tagMACHINE_ID
+{
+    CHAR szMachine[16];
+} MACHINE_ID;
+
+[
+    object,
+    uuid(7c9e512f-41d7-11d1-8e2e-00c04fb9386d),
+    pointer_default(unique)
+]
+interface ISLTracker : IUnknown
+{
+    HRESULT Resolve([in] HWND hwnd, [in] ULONG fFlags, [in] ULONG fRestrictions);
+    HRESULT GetIDs([out] DOMAIN_RELATIVE_OBJECTID *pdroidCurrent, [out] DOMAIN_RELATIVE_OBJECTID *pdroidBirth, [out] MACHINE_ID *pmcid);
+    HRESULT CancelSearch();
+}
+
 [
     threading(both),
     uuid(b8da6310-e19b-11d0-933c-00a0c90dcaa9)
