@@ -877,6 +877,58 @@ HalpDmaInitializeEisaAdapter(IN PADAPTER_OBJECT AdapterObject,
 }
 
 #ifndef _MINIHAL_
+static
+ULONGLONG
+HalpGetDeviceMaximumPhysicalAddress(IN PDEVICE_DESCRIPTION DeviceDescription)
+{
+    BOOLEAN Dma32BitAddresses = DeviceDescription->Dma32BitAddresses;
+    BOOLEAN Dma64BitAddresses = DeviceDescription->Dma64BitAddresses;
+
+    if ((DeviceDescription->Version >= DEVICE_DESCRIPTION_VERSION3) &&
+        (DeviceDescription->DmaAddressWidth != 0))
+    {
+        if (DeviceDescription->DmaAddressWidth >= 32)
+            Dma32BitAddresses = TRUE;
+        if (DeviceDescription->DmaAddressWidth >= 64)
+            Dma64BitAddresses = TRUE;
+    }
+
+    if (DeviceDescription->Master)
+    {
+        if (Dma64BitAddresses)
+            return 0xFFFFFFFFFFFFFFFFULL;
+        if (Dma32BitAddresses)
+            return 0xFFFFFFFF;
+    }
+    return 0xFFFFFF;
+}
+
+static
+ULONGLONG
+HalpGetHighestPhysicalAddress(VOID)
+{
+    static ULONGLONG HighestAddress;
+    PPHYSICAL_MEMORY_RANGE Ranges;
+    ULONG i;
+
+    if (HighestAddress)
+        return HighestAddress;
+
+    Ranges = MmGetPhysicalMemoryRanges();
+    if (!Ranges)
+        return 0xFFFFFFFFFFFFFFFFULL;
+
+    for (i = 0; Ranges[i].NumberOfBytes.QuadPart != 0; i++)
+    {
+        ULONGLONG End = Ranges[i].BaseAddress.QuadPart + Ranges[i].NumberOfBytes.QuadPart - 1;
+
+        if (End > HighestAddress)
+            HighestAddress = End;
+    }
+    ExFreePool(Ranges);
+    return HighestAddress;
+}
+
 /**
  * @name HalGetAdapter
  *
@@ -949,7 +1001,8 @@ HalGetAdapter(IN PDEVICE_DESCRIPTION DeviceDescription,
     MaximumLength = DeviceDescription->MaximumLength & MAXLONG;
     if ((DeviceDescription->ScatterGather) &&
         ((DeviceDescription->InterfaceType == Eisa) ||
-         (DeviceDescription->InterfaceType == PCIBus)))
+         (DeviceDescription->InterfaceType == PCIBus)) &&
+        (HalpGetDeviceMaximumPhysicalAddress(DeviceDescription) >= HalpGetHighestPhysicalAddress()))
     {
         MapRegisters = 0;
     }
