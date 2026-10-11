@@ -876,7 +876,7 @@ static NTSTATUS present_32to64(const D3DKMT_PRESENT32 *desc32, D3DKMT_PRESENT *d
 
     memset(desc, 0, sizeof(*desc));
     desc->hContext = desc32->hContext;
-    desc->hWindow = UlongToHandle(desc32->hWindow);
+    desc->hWindow = Handle32ToHandle(desc32->hWindow);
     desc->VidPnSourceId = desc32->VidPnSourceId;
     desc->hSource = desc32->hSource;
     desc->hDestination = desc32->hDestination;
@@ -890,7 +890,7 @@ static NTSTATUS present_32to64(const D3DKMT_PRESENT32 *desc32, D3DKMT_PRESENT *d
     desc->Flags = desc32->Flags;
     desc->BroadcastContextCount = desc32->BroadcastContextCount;
     memcpy(desc->BroadcastContext, desc32->BroadcastContext, sizeof(desc->BroadcastContext));
-    desc->PresentLimitSemaphore = UlongToHandle(desc32->PresentLimitSemaphore);
+    desc->PresentLimitSemaphore = Handle32ToHandle(desc32->PresentLimitSemaphore);
 
     regions32 = ULongToPtr(desc32->pPresentRegions);
     if (regions32)
@@ -1522,7 +1522,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenResourceFromNtHandle(UINT *args)
     if (!desc32) return STATUS_INVALID_PARAMETER;
     memset(&desc, 0, sizeof(desc));
     desc.hDevice = desc32->hDevice;
-    desc.hNtHandle = UlongToHandle(desc32->hNtHandle);
+    desc.hNtHandle = Handle32ToHandle(desc32->hNtHandle);
     desc.NumAllocations = desc32->NumAllocations;
     desc.PrivateRuntimeDataSize = desc32->PrivateRuntimeDataSize;
     desc.pPrivateRuntimeData = ULongToPtr(desc32->pPrivateRuntimeData);
@@ -1964,7 +1964,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDISignalSynchronizationObject2(UINT *args)
     if (!desc32) return STATUS_INVALID_PARAMETER;
     memcpy(&desc, desc32, sizeof(desc));
     if (desc32->Flags.EnqueueCpuEvent)
-        desc.CpuEventHandle = UlongToHandle(desc32->CpuEventHandle);
+        desc.CpuEventHandle = Handle32ToHandle(desc32->CpuEventHandle);
     return NtGdiDdDDISignalSynchronizationObject2(&desc);
 }
 
@@ -1995,7 +1995,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDISignalSynchronizationObjectFromGpu2(UINT *args)
     desc.BroadcastContextCount = desc32->BroadcastContextCount;
     desc.BroadcastContextArray = ULongToPtr(desc32->BroadcastContextArray);
     if (desc32->Flags.EnqueueCpuEvent)
-        desc.CpuEventHandle = UlongToHandle(desc32->CpuEventHandle);
+        desc.CpuEventHandle = Handle32ToHandle(desc32->CpuEventHandle);
     else
         desc.MonitoredFenceValueArray = ULongToPtr(desc32->MonitoredFenceValueArray);
     return NtGdiDdDDISignalSynchronizationObjectFromGpu2(&desc);
@@ -2250,7 +2250,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIWaitForVerticalBlankEvent2(UINT *args)
     desc.VidPnSourceId = desc32->VidPnSourceId;
     desc.NumObjects = desc32->NumObjects;
     for (i = 0; i < D3DKMT_MAX_WAITFORVERTICALBLANK_OBJECTS; i++)
-        desc.ObjectHandleArray[i] = UlongToHandle(desc32->ObjectHandleArray[i]);
+        desc.ObjectHandleArray[i] = Handle32ToHandle(desc32->ObjectHandleArray[i]);
     return NtGdiDdDDIWaitForVerticalBlankEvent2(&desc);
 }
 
@@ -2263,7 +2263,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIGetSharedResourceAdapterLuid(UINT *args)
     if (!desc32) return STATUS_INVALID_PARAMETER;
     memset(&desc, 0, sizeof(desc));
     desc.hGlobalShare = desc32->hGlobalShare;
-    desc.hNtHandle = UlongToHandle(desc32->hNtHandle);
+    desc.hNtHandle = Handle32ToHandle(desc32->hNtHandle);
 
     status = NtGdiDdDDIGetSharedResourceAdapterLuid(&desc);
     desc32->AdapterLuid = desc.AdapterLuid;

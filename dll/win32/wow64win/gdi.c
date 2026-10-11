@@ -500,7 +500,11 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICheckOcclusion( UINT *args )
     {
         ULONG hWnd;
     } *desc32 = get_ptr( &args );
+#ifdef __REACTOS__
+    D3DKMT_CHECKOCCLUSION desc = {.hWnd = Handle32ToHandle( desc32->hWnd )};
+#else
     D3DKMT_CHECKOCCLUSION desc = {.hWnd = UlongToHandle( desc32->hWnd )};
+#endif
     return NtGdiDdDDICheckOcclusion( &desc );
 }
 
@@ -764,10 +768,19 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICreateDCFromMemory( UINT *args )
     desc.Width = desc32->Width;
     desc.Height = desc32->Height;
     desc.Pitch = desc32->Pitch;
+#ifdef __REACTOS__
+    desc.hDeviceDc = Handle32ToHandle( desc32->hDeviceDc );
+#else
     desc.hDeviceDc = UlongToHandle( desc32->hDeviceDc );
+#endif
     desc.pColorTable = UlongToPtr( desc32->pColorTable );
+#ifdef __REACTOS__
+    desc.hDc = Handle32ToHandle( desc32->hDc );
+    desc.hBitmap = Handle32ToHandle( desc32->hBitmap );
+#else
     desc.hDc = UlongToHandle( desc32->hDc );
     desc.hBitmap = UlongToHandle( desc32->hBitmap );
+#endif
 
     if (!(status = NtGdiDdDDICreateDCFromMemory( &desc )))
     {
@@ -858,7 +871,11 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICreateSynchronizationObject2( UINT *args )
     if (desc->Info.Type == D3DDDI_CPU_NOTIFICATION)
     {
         ULONG event = HandleToUlong( desc->Info.CPUNotification.Event );
+#ifdef __REACTOS__
+        desc->Info.CPUNotification.Event = Handle32ToHandle( event );
+#else
         desc->Info.CPUNotification.Event = UlongToHandle( event );
+#endif
     }
 
     return NtGdiDdDDICreateSynchronizationObject2( desc );
@@ -912,8 +929,13 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIDestroyDCFromMemory( UINT *args )
     D3DKMT_DESTROYDCFROMMEMORY desc;
 
     if (!desc32) return STATUS_INVALID_PARAMETER;
+#ifdef __REACTOS__
+    desc.hDc = Handle32ToHandle( desc32->hDc );
+    desc.hBitmap = Handle32ToHandle( desc32->hBitmap );
+#else
     desc.hDc = UlongToHandle( desc32->hDc );
     desc.hBitmap = UlongToHandle( desc32->hBitmap );
+#endif
 
     return NtGdiDdDDIDestroyDCFromMemory( &desc );
 }
@@ -1039,7 +1061,11 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenAdapterFromHdc( UINT *args )
     NTSTATUS status;
 
     if (!desc32) return STATUS_INVALID_PARAMETER;
+#ifdef __REACTOS__
+    desc.hDc = Handle32ToHandle( desc32->hDc );
+#else
     desc.hDc = UlongToHandle( desc32->hDc );
+#endif
     desc.hAdapter = desc32->hAdapter;
     desc.AdapterLuid = desc32->AdapterLuid;
     desc.VidPnSourceId = desc32->VidPnSourceId;
@@ -1099,7 +1125,11 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenKeyedMutexFromNtHandle( UINT *args )
     D3DKMT_OPENKEYEDMUTEXFROMNTHANDLE desc;
     NTSTATUS status;
 
+#ifdef __REACTOS__
+    desc.hNtHandle = Handle32ToHandle( desc32->hNtHandle );
+#else
     desc.hNtHandle = UlongToHandle( desc32->hNtHandle );
+#endif
     desc.hKeyedMutex = desc32->hKeyedMutex;
     desc.pPrivateRuntimeData = UlongToPtr( desc32->pPrivateRuntimeData );
     desc.PrivateRuntimeDataSize = desc32->PrivateRuntimeDataSize;
@@ -1122,7 +1152,11 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenNtHandleFromName( UINT *args )
 
     desc.dwDesiredAccess = desc32->dwDesiredAccess;
     desc.pObjAttrib = objattr_32to64( &attr, UlongToPtr( desc32->pObjAttrib ) );
+#ifdef __REACTOS__
+    desc.hNtHandle = Handle32ToHandle( desc32->hNtHandle );
+#else
     desc.hNtHandle = UlongToHandle( desc32->hNtHandle );
+#endif
     status = NtGdiDdDDIOpenNtHandleFromName( &desc );
     desc32->hNtHandle = HandleToUlong( desc.hNtHandle );
     return status;
@@ -1294,7 +1328,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenResourceFromNtHandle( UINT *args )
     UINT i;
 
     desc.hDevice = desc32->hDevice;
-    desc.hNtHandle = UlongToHandle( desc32->hNtHandle );
+    desc.hNtHandle = Handle32ToHandle( desc32->hNtHandle );
     desc.NumAllocations = desc32->NumAllocations;
     allocs32 = UlongToPtr( desc32->pOpenAllocationInfo2 );
     desc.pOpenAllocationInfo2 = NULL;
@@ -1350,7 +1384,11 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenSyncObjectFromNtHandle( UINT *args )
     D3DKMT_OPENSYNCOBJECTFROMNTHANDLE desc;
     NTSTATUS status;
 
+#ifdef __REACTOS__
+    desc.hNtHandle = Handle32ToHandle( desc32->hNtHandle );
+#else
     desc.hNtHandle = UlongToHandle( desc32->hNtHandle );
+#endif
     desc.hSyncObject = desc32->hSyncObject;
     status = NtGdiDdDDIOpenSyncObjectFromNtHandle( &desc );
     desc32->hSyncObject = desc.hSyncObject;
@@ -1379,7 +1417,11 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenSyncObjectFromNtHandle2( UINT *args )
     D3DKMT_OPENSYNCOBJECTFROMNTHANDLE2 desc;
     NTSTATUS status;
 
+#ifdef __REACTOS__
+    desc.hNtHandle = Handle32ToHandle( desc32->hNtHandle );
+#else
     desc.hNtHandle = ULongToHandle( desc32->hNtHandle );
+#endif
     desc.hDevice = desc32->hDevice;
     desc.Flags = desc32->Flags;
     desc.hSyncObject = desc32->hSyncObject;
@@ -1408,7 +1450,11 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenSyncObjectNtHandleFromName( UINT *args )
 
     desc.dwDesiredAccess = desc32->dwDesiredAccess;
     desc.pObjAttrib = objattr_32to64( &attr, UlongToPtr( desc32->pObjAttrib ) );
+#ifdef __REACTOS__
+    desc.hNtHandle = Handle32ToHandle( desc32->hNtHandle );
+#else
     desc.hNtHandle = UlongToHandle( desc32->hNtHandle );
+#endif
     status = NtGdiDdDDIOpenSyncObjectNtHandleFromName( &desc );
     desc32->hNtHandle = HandleToUlong( desc.hNtHandle );
     return status;
@@ -1487,7 +1533,11 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIQueryResourceInfoFromNtHandle( UINT *args )
     NTSTATUS status;
 
     desc.hDevice = desc32->hDevice;
+#ifdef __REACTOS__
+    desc.hNtHandle = Handle32ToHandle( desc32->hNtHandle );
+#else
     desc.hNtHandle = UlongToHandle( desc32->hNtHandle );
+#endif
     desc.pPrivateRuntimeData = UlongToPtr( desc32->pPrivateRuntimeData );
     desc.PrivateRuntimeDataSize = desc32->PrivateRuntimeDataSize;
     desc.TotalPrivateDriverDataSize = desc32->TotalPrivateDriverDataSize;
@@ -1610,7 +1660,11 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIShareObjects( UINT *args )
     ULONG *handle_ptr = get_ptr( &args );
 
     struct object_attr64 attr;
+#ifdef __REACTOS__
+    HANDLE handle = Handle32ToHandle( *handle_ptr );
+#else
     HANDLE handle = UlongToHandle( *handle_ptr );
+#endif
     NTSTATUS status;
 
     status = NtGdiDdDDIShareObjects( count, handles, objattr_32to64( &attr, attr32 ), access, &handle );
@@ -1658,7 +1712,11 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIWaitForSynchronizationObjectFromCpu( UINT *args 
     desc.ObjectCount = desc32->ObjectCount;
     desc.ObjectHandleArray = UlongToPtr( desc32->ObjectHandleArray );
     desc.FenceValueArray = UlongToPtr( desc32->FenceValueArray );
+#ifdef __REACTOS__
+    desc.hAsyncEvent = Handle32ToHandle( desc32->hAsyncEvent );
+#else
     desc.hAsyncEvent = UlongToHandle( desc32->hAsyncEvent );
+#endif
     desc.Flags = desc32->Flags;
 
     return NtGdiDdDDIWaitForSynchronizationObjectFromCpu( &desc );
@@ -3442,7 +3500,7 @@ NTSTATUS WINAPI wow64_NtGdiPolyPatBlt( UINT *args )
             poly[i].y = poly32[i].y;
             poly[i].cx = poly32[i].cx;
             poly[i].cy = poly32[i].cy;
-            poly[i].brush = ULongToHandle( poly32[i].brush );
+            poly[i].brush = Handle32ToHandle( poly32[i].brush );
         }
     }
 
