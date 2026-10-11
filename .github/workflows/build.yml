@@ -47,16 +47,13 @@ jobs:
             profile: profile_spacemit_k1
           - compiler: clang
             arch: riscv64
-            config: Release
+            config: Debug
             ntver: '0xA00'
-            profile: profile_spacemit_k1
+            profile: profile_starfive_jh7110
+            variant: jh7110
           - compiler: clang
             arch: ppc
             config: Debug
-            ntver: '0xA00'
-          - compiler: clang
-            arch: ppc
-            config: Release
             ntver: '0xA00'
       fail-fast: false
     runs-on: ubuntu-24.04
@@ -133,7 +130,7 @@ jobs:
 
     - name: Name artifacts
       id: images
-      run: echo "tag=${{matrix.compiler}}-${{matrix.arch}}-${{matrix.config}}-target${{matrix.ntver}}-${GITHUB_SHA::11}" >> "$GITHUB_OUTPUT"
+      run: echo "tag=${{matrix.compiler}}-${{matrix.arch}}${{matrix.variant}}-${{matrix.config}}-target${{matrix.ntver}}-${GITHUB_SHA::11}" >> "$GITHUB_OUTPUT"
 
     - name: Upload bootcd.iso
       uses: actions/upload-artifact@v7
