@@ -45,7 +45,7 @@ class CShellLink :
     public IObjectWithSite,
     public ICustomizeInfoTip,
     public IMarshal,
-    public IShellPropSheetExt
+    public IPropertyStore
 {
 public:
     /* Link file formats */
@@ -86,8 +86,6 @@ private:
     BOOL          m_bRunAs;
     BOOL          m_bDirty;
     LPDBLIST      m_pDBList; /* Optional data block list (in the extra data section) */
-    BOOL          m_bInInit;    // in initialization or not
-    HICON         m_hIcon;
 
     /* Pointers to strings inside Logo3/Darwin info blocks, cached for debug info purposes only */
     LPWSTR sProduct;
@@ -99,6 +97,9 @@ private:
     CComPtr<IDropTarget> m_DropTarget;
     CComPtr<IExtractImage> m_pExtractImage;
     CComHeapPtr<WCHAR>   m_pszInfoTipPrefix;
+    CComPtr<IPropertyStore> m_pPropertyStore;
+    CComHeapPtr<BYTE>    m_pHiddenStorages;
+    ULONG                m_cbHiddenStorages;
 
     VOID Reset();
 
@@ -106,20 +107,14 @@ private:
     HRESULT SetAdvertiseInfo(LPCWSTR str);
     HRESULT WriteAdvertiseInfo(LPCWSTR string, DWORD dwSig);
     HRESULT SetTargetFromPIDLOrPath(LPCITEMIDLIST pidl, LPCWSTR pszFile);
-    HICON CreateShortcutIcon(LPCWSTR wszIconPath, INT IconIndex);
 
+    HRESULT EnsurePropertyStore();
     HRESULT DoOpen(LPCMINVOKECOMMANDINFO lpici, PCWSTR pszVerb = NULL);
     HRESULT DoOpenFileLocation();
 
 public:
     CShellLink();
     ~CShellLink();
-    static INT_PTR CALLBACK SH_ShellLinkDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-
-    BOOL OnInitDialog(HWND hwndDlg, HWND hwndFocus, LPARAM lParam);
-    void OnCommand(HWND hwndDlg, int id, HWND hwndCtl, UINT codeNotify);
-    LRESULT OnNotify(HWND hwndDlg, int idFrom, LPNMHDR pnmhdr);
-    void OnDestroy(HWND hwndDlg);
 
     // IPersistFile
     STDMETHOD(GetClassID)(CLSID *pclsid) override;
@@ -224,9 +219,11 @@ public:
     STDMETHOD(ReleaseMarshalData)(IStream *pStm) override;
     STDMETHOD(DisconnectObject)(DWORD dwReserved) override;
 
-    // IShellPropSheetExt
-    STDMETHOD(AddPages)(LPFNADDPROPSHEETPAGE pfnAddPage, LPARAM lParam) override;
-    STDMETHOD(ReplacePage)(UINT uPageID, LPFNADDPROPSHEETPAGE pfnReplacePage, LPARAM lParam) override;
+    STDMETHOD(GetCount)(DWORD *cProps) override;
+    STDMETHOD(GetAt)(DWORD iProp, PROPERTYKEY *pkey) override;
+    STDMETHOD(GetValue)(REFPROPERTYKEY key, PROPVARIANT *pv) override;
+    STDMETHOD(SetValue)(REFPROPERTYKEY key, REFPROPVARIANT propvar) override;
+    STDMETHOD(Commit)() override;
 
     // IObjectWithSite
     STDMETHOD(SetSite)(IUnknown *punk) override;
@@ -265,7 +262,7 @@ BEGIN_COM_MAP(CShellLink)
     COM_INTERFACE_ENTRY_IID(IID_IObjectWithSite, IObjectWithSite)
     COM_INTERFACE_ENTRY_IID(IID_ICustomizeInfoTip, ICustomizeInfoTip)
     COM_INTERFACE_ENTRY_IID(IID_IMarshal, IMarshal)
-    COM_INTERFACE_ENTRY_IID(IID_IShellPropSheetExt, IShellPropSheetExt)
+    COM_INTERFACE_ENTRY_IID(IID_IPropertyStore, IPropertyStore)
 END_COM_MAP()
 };
 

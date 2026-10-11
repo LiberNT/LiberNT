@@ -1597,6 +1597,10 @@ CFileDefExt::AddPages(LPFNADDPROPSHEETPAGE pfnAddPage, LPARAM lParam)
     if (m_bMultifile)
         return S_OK;
 
+    UINT uStartPage = 0;
+    if (!m_bDir && SHELL32_AddShellLinkPropPage(m_wszPath, pfnAddPage, lParam) == S_OK)
+        uStartPage = 2;
+
     if (!m_bDir && GetFileVersionInfoSizeW(m_wszPath, NULL))
     {
         hPage = SH_CreatePropertySheetPage(IDD_FILE_VERSION,
@@ -1615,7 +1619,7 @@ CFileDefExt::AddPages(LPFNADDPROPSHEETPAGE pfnAddPage, LPARAM lParam)
         AddPropSheetPage(hPage, pfnAddPage, lParam);
     }
 
-    return S_OK;
+    return uStartPage;
 }
 
 HRESULT WINAPI

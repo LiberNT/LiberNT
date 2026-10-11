@@ -182,6 +182,8 @@ EXTERN_C HRESULT
 SHELL32_ShowShellExtensionProperties(const CLSID *pClsid, IDataObject *pDO);
 EXTERN_C HRESULT
 SHELL_ShowItemIDListProperties(LPCITEMIDLIST pidl);
+HRESULT
+SHELL32_AddShellLinkPropPage(PCWSTR pszLinkPath, LPFNADDPROPSHEETPAGE pfnAddPage, LPARAM lParam);
 EXTERN_C BOOL
 IsDriveFloppyW(LPCWSTR pszDriveRoot);
 

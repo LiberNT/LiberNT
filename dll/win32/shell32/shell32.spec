@@ -663,7 +663,6 @@
 @ stdcall StrRetToStrNW(ptr long ptr ptr)
 @ cdecl SHELL32_EnumDefaultVerbList(wstr long ptr long)
 @ stdcall SHELL32_RunControlPanel(wstr ptr)
-@ cdecl SH_CreatePropertySheetPageEx(long ptr long wstr ptr)
 @ cdecl SIC_GetIconIndex(wstr long long)
 @ stdcall _InsertMenuItemW(ptr long long long long wstr long)
 @ cdecl IDataObject_Constructor(ptr ptr ptr long long ptr)

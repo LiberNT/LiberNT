@@ -140,6 +140,7 @@
 #include "precomp.h"
 
 #include <appmgmt.h>
+#include <propvarutil.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
 
@@ -238,6 +239,10 @@ VOID CShellLink::Reset()
     ILFree(m_pPidl);
     m_pPidl = NULL;
 
+    m_pPropertyStore.Release();
+    m_pHiddenStorages.Free();
+    m_cbHiddenStorages = 0;
+
     HeapFree(GetProcessHeap(), 0, m_sPath);
     m_sPath = NULL;
     ZeroMemory(&volume, sizeof(volume));
@@ -292,8 +297,7 @@ CShellLink::CShellLink()
     m_bRunAs = FALSE;
     m_bDirty = FALSE;
     m_pDBList = NULL;
-    m_bInInit = FALSE;
-    m_hIcon = NULL;
+    m_cbHiddenStorages = 0;
 
     m_sLinkPath = NULL;
 
@@ -2505,6 +2509,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::GetFlags(DWORD *pdwFlags)
 
 HRESULT STDMETHODCALLTYPE CShellLink::SetFlags(DWORD dwFlags)
 {
+    m_bRunAs = (dwFlags & SLDF_RUNAS_USER) != 0;
     if (m_Header.dwFlags == dwFlags)
         return S_FALSE;
     m_Header.dwFlags = dwFlags;
@@ -2983,457 +2988,282 @@ HRESULT STDMETHODCALLTYPE CShellLink::DisconnectObject(DWORD dwReserved)
     return S_OK;
 }
 
-INT_PTR CALLBACK ExtendedShortcutProc(HWND hwndDlg, UINT uMsg,
-                                      WPARAM wParam, LPARAM lParam)
+#define PROPSTORAGE_VERSION 0x53505331
+
+static const FMTID FMTID_NamedProperties =
+    {0xd5cdd505, 0x2e9c, 0x101b, {0x93, 0x97, 0x08, 0x00, 0x2b, 0x2c, 0xf9, 0xae}};
+static const FMTID FMTID_LinkOwner =
+    {0x46588ae2, 0x4cbc, 0x4338, {0xbb, 0xfc, 0x13, 0x93, 0x26, 0x98, 0x6d, 0xce}};
+
+static BOOL IsCommentKey(REFPROPERTYKEY key)
 {
-    switch(uMsg)
-    {
-        case WM_INITDIALOG:
-            if (lParam)
-            {
-                HWND hDlgCtrl = GetDlgItem(hwndDlg, IDC_SHORTEX_RUN_DIFFERENT);
-                SendMessage(hDlgCtrl, BM_SETCHECK, BST_CHECKED, 0);
-            }
-            return TRUE;
-        case WM_COMMAND:
-        {
-            HWND hDlgCtrl = GetDlgItem(hwndDlg, IDC_SHORTEX_RUN_DIFFERENT);
-            if (LOWORD(wParam) == IDOK)
-            {
-                if (SendMessage(hDlgCtrl, BM_GETCHECK, 0, 0) == BST_CHECKED)
-                    EndDialog(hwndDlg, 1);
-                else
-                    EndDialog(hwndDlg, 0);
-            }
-            else if (LOWORD(wParam) == IDCANCEL)
-            {
-                EndDialog(hwndDlg, -1);
-            }
-            else if (LOWORD(wParam) == IDC_SHORTEX_RUN_DIFFERENT)
-            {
-                if (SendMessage(hDlgCtrl, BM_GETCHECK, 0, 0) == BST_CHECKED)
-                    SendMessage(hDlgCtrl, BM_SETCHECK, BST_UNCHECKED, 0);
-                else
-                    SendMessage(hDlgCtrl, BM_SETCHECK, BST_CHECKED, 0);
-            }
-        }
-    }
-    return FALSE;
+    return IsEqualGUID(key.fmtid, FMTID_SummaryInformation) && key.pid == PIDSI_COMMENTS;
 }
 
-static void GetTypeDescriptionByPath(PCWSTR pszFullPath, DWORD fAttributes, PWSTR szBuf, UINT cchBuf)
+HRESULT CShellLink::EnsurePropertyStore()
 {
-    if (fAttributes == INVALID_FILE_ATTRIBUTES && !PathFileExistsAndAttributesW(pszFullPath, &fAttributes))
-        fAttributes = 0;
+    const EXP_PROPERTYSTORAGE *pBlock;
+    const BYTE *pb, *pbEnd;
+    HRESULT hr;
 
-    SHFILEINFOW fi;
-    if (!SHGetFileInfoW(pszFullPath, fAttributes, &fi, sizeof(fi), SHGFI_TYPENAME | SHGFI_USEFILEATTRIBUTES))
-    {
-        ERR("SHGetFileInfoW failed for %ls (%lu)\n", pszFullPath, GetLastError());
-        fi.szTypeName[0] = UNICODE_NULL;
-    }
+    if (m_pPropertyStore)
+        return S_OK;
 
-    BOOL fFolder = (fAttributes & FILE_ATTRIBUTE_DIRECTORY);
-    LPCWSTR pwszExt = fFolder ? L"" : PathFindExtensionW(pszFullPath);
-    if (pwszExt[0])
-    {
-        if (!fi.szTypeName[0])
-            StringCchPrintfW(szBuf, cchBuf, L"%s", pwszExt + 1);
-        else
-            StringCchPrintfW(szBuf, cchBuf, L"%s (%s)", fi.szTypeName, pwszExt);
-    }
-    else
-    {
-        StringCchPrintfW(szBuf, cchBuf, L"%s", fi.szTypeName);
-    }
-}
-
-BOOL CShellLink::OnInitDialog(HWND hwndDlg, HWND hwndFocus, LPARAM lParam)
-{
-    TRACE("CShellLink::OnInitDialog(hwnd %p hwndFocus %p lParam %p)\n", hwndDlg, hwndFocus, lParam);
-
-    Resolve(0, SLR_NO_UI | SLR_NOUPDATE | SLR_NOSEARCH | SLR_NOTRACK);
-
-    TRACE("m_sArgs: %S sComponent: %S m_sDescription: %S m_sIcoPath: %S m_sPath: %S m_sPathRel: %S sProduct: %S m_sWorkDir: %S\n", m_sArgs, sComponent, m_sDescription,
-          m_sIcoPath, m_sPath, m_sPathRel, sProduct, m_sWorkDir);
-
-    m_bInInit = TRUE;
-    UINT darwin = m_Header.dwFlags & (SLDF_HAS_DARWINID);
-
-    /* Get file information */
-    // FIXME! FIXME! Shouldn't we use m_sIcoPath, m_Header.nIconIndex instead???
-    SHFILEINFOW fi;
-    if (!SHGetFileInfoW(m_sLinkPath, 0, &fi, sizeof(fi), SHGFI_TYPENAME | SHGFI_ICON))
-    {
-        ERR("SHGetFileInfoW failed for %ls (%lu)\n", m_sLinkPath, GetLastError());
-        fi.szTypeName[0] = L'\0';
-        fi.hIcon = NULL;
-    }
-
-    if (fi.hIcon)
-    {
-        if (m_hIcon)
-            DestroyIcon(m_hIcon);
-        m_hIcon = fi.hIcon;
-        SendDlgItemMessageW(hwndDlg, IDC_SHORTCUT_ICON, STM_SETICON, (WPARAM)m_hIcon, 0);
-    }
-    else
-    {
-        ERR("ExtractIconW failed %ls %d\n", m_sIcoPath, m_Header.nIconIndex);
-    }
-
-    if (!SHGetFileInfoW(m_sLinkPath, 0, &fi, sizeof(fi), SHGFI_DISPLAYNAME))
-        fi.szDisplayName[0] = UNICODE_NULL;
-    SetDlgItemTextW(hwndDlg, IDC_SHORTCUT_TEXT, fi.szDisplayName);
-
-    /* Target type */
-    if (m_sPath)
-    {
-        WCHAR buf[MAX_PATH];
-        GetTypeDescriptionByPath(m_sPath, m_Header.dwFileAttributes, buf, _countof(buf));
-        SetDlgItemTextW(hwndDlg, IDC_SHORTCUT_TYPE_EDIT, buf);
-    }
-
-    /* Target location */
-    if (m_sPath)
-    {
-        WCHAR target[MAX_PATH];
-        StringCchCopyW(target, _countof(target), m_sPath);
-        PathRemoveFileSpecW(target);
-        SetDlgItemTextW(hwndDlg, IDC_SHORTCUT_LOCATION_EDIT, PathFindFileNameW(target));
-    }
-
-    /* Target path */
-    if (m_sPath)
-    {
-        WCHAR newpath[MAX_PATH * 2];
-        newpath[0] = UNICODE_NULL;
-        if (wcschr(m_sPath, ' '))
-            StringCchPrintfExW(newpath, _countof(newpath), NULL, NULL, 0, L"\"%ls\"", m_sPath);
-        else
-            StringCchCopyExW(newpath, _countof(newpath), m_sPath, NULL, NULL, 0);
-
-        if (m_sArgs && m_sArgs[0])
-        {
-            StringCchCatW(newpath, _countof(newpath), L" ");
-            StringCchCatW(newpath, _countof(newpath), m_sArgs);
-        }
-        SetDlgItemTextW(hwndDlg, IDC_SHORTCUT_TARGET_TEXT, newpath);
-    }
-
-    /* Working dir */
-    if (m_sWorkDir)
-        SetDlgItemTextW(hwndDlg, IDC_SHORTCUT_START_IN_EDIT, m_sWorkDir);
-
-    /* Description */
-    if (m_sDescription)
-        SetDlgItemTextW(hwndDlg, IDC_SHORTCUT_COMMENT_EDIT, m_sDescription);
-
-    /* Hot key */
-    SendDlgItemMessageW(hwndDlg, IDC_SHORTCUT_KEY_HOTKEY, HKM_SETHOTKEY, m_Header.wHotKey, 0);
-
-    /* Run */
-    const WORD runstrings[] = { IDS_SHORTCUT_RUN_NORMAL, IDS_SHORTCUT_RUN_MIN, IDS_SHORTCUT_RUN_MAX };
-    const DWORD runshowcmd[] = { SW_SHOWNORMAL, SW_SHOWMINNOACTIVE, SW_SHOWMAXIMIZED };
-    HWND hRunCombo = GetDlgItem(hwndDlg, IDC_SHORTCUT_RUN_COMBO);
-    for (UINT i = 0; i < _countof(runstrings); ++i)
-    {
-        WCHAR buf[MAX_PATH];
-        if (!LoadStringW(shell32_hInstance, runstrings[i], buf, _countof(buf)))
-            break;
-
-        int index = SendMessageW(hRunCombo, CB_ADDSTRING, 0, (LPARAM)buf);
-        if (index < 0)
-            continue;
-        SendMessageW(hRunCombo, CB_SETITEMDATA, index, runshowcmd[i]);
-        if (!i || m_Header.nShowCommand == runshowcmd[i])
-            SendMessageW(hRunCombo, CB_SETCURSEL, index, 0);
-    }
-
-    BOOL disablecontrols = FALSE;
-    if (darwin)
-    {
-        disablecontrols = TRUE;
-        EnableWindow(GetDlgItem(hwndDlg, IDC_SHORTCUT_FIND), FALSE);
-        EnableWindow(GetDlgItem(hwndDlg, IDC_SHORTCUT_CHANGE_ICON), FALSE);
-    }
-    else
-    {
-        WCHAR path[MAX_PATH * 2];
-        path[0] = UNICODE_NULL;
-        HRESULT hr = GetPath(path, _countof(path), NULL, SLGP_RAWPATH);
-        if (FAILED(hr))
-            hr = GetPath(path, _countof(path), NULL, 0);
-#if DBG
-        if (GetKeyState(VK_CONTROL) < 0) // Allow inspection of PIDL parsing path
-        {
-            hr = S_OK;
-            path[0] = UNICODE_NULL;
-        }
-#endif
-        if (hr != S_OK)
-        {
-            disablecontrols = TRUE;
-            LPITEMIDLIST pidl;
-            if (GetIDList(&pidl) == S_OK)
-            {
-                path[0] = UNICODE_NULL;
-                SHGetNameAndFlagsW(pidl, SHGDN_FORADDRESSBAR | SHGDN_FORPARSING, path, _countof(path), NULL);
-                SetDlgItemTextW(hwndDlg, IDC_SHORTCUT_TYPE_EDIT, path);
-                SetDlgItemTextW(hwndDlg, IDC_SHORTCUT_TARGET_TEXT, path);
-                ILRemoveLastID(pidl);
-                path[0] = UNICODE_NULL;
-                SetDlgItemTextW(hwndDlg, IDC_SHORTCUT_START_IN_EDIT, path);
-                SHGetNameAndFlagsW(pidl, SHGDN_NORMAL, path, _countof(path), NULL);
-                SetDlgItemTextW(hwndDlg, IDC_SHORTCUT_LOCATION_EDIT, path);
-                ILFree(pidl);
-            }
-            EnableWindow(GetDlgItem(hwndDlg, IDC_SHORTCUT_ADVANCED), FALSE);
-            EnableWindow(GetDlgItem(hwndDlg, IDC_SHORTCUT_START_IN_EDIT), FALSE);
-        }
-        else
-        {
-            ASSERT(FAILED(hr) || !(path[0] == ':' && path[1] == ':' && path[2] == '{'));
-        }
-    }
-
-    HWND hWndTarget = GetDlgItem(hwndDlg, IDC_SHORTCUT_TARGET_TEXT);
-    EnableWindow(hWndTarget, !disablecontrols);
-    PostMessage(hWndTarget, EM_SETSEL, 0, -1); // Fix caret bug when first opening the tab [CORE-20016]
-
-    /* auto-completion */
-    SHAutoComplete(hWndTarget, SHACF_DEFAULT);
-    SHAutoComplete(GetDlgItem(hwndDlg, IDC_SHORTCUT_START_IN_EDIT), SHACF_DEFAULT);
-
-    m_bInInit = FALSE;
-
-    return TRUE;
-}
-
-void CShellLink::OnCommand(HWND hwndDlg, int id, HWND hwndCtl, UINT codeNotify)
-{
-    switch (id)
-    {
-        case IDC_SHORTCUT_FIND:
-            SHOpenFolderAndSelectItems(m_pPidl, 0, NULL, 0);
-            return;
-
-        case IDC_SHORTCUT_CHANGE_ICON:
-        {
-            SHFILEINFOW fi;
-            INT IconIndex = m_Header.nIconIndex;
-            WCHAR wszPath[MAX_PATH];
-            *wszPath = UNICODE_NULL;
-
-            if (!StrIsNullOrEmpty(m_sIcoPath))
-            {
-                PWSTR pszPath = m_sIcoPath;
-                if (*m_sIcoPath == '.') // Extension-only icon location, we need a fake path
-                {
-                    if (SUCCEEDED(StringCchPrintfW(wszPath, _countof(wszPath), L"x:\\x%s", m_sIcoPath)) &&
-                        SHGetFileInfoW(wszPath, 0, &fi, sizeof(fi), SHGFI_ICONLOCATION | SHGFI_USEFILEATTRIBUTES))
-                    {
-                        pszPath = fi.szDisplayName; // The path is now a generic icon based
-                        IconIndex = fi.iIcon;       // on the registry info of the file extension.
-                    }
-                }
-
-                if (FAILED(StringCchCopyW(wszPath, _countof(wszPath), pszPath)))
-                    *wszPath = UNICODE_NULL;
-            }
-            else if (!StrIsNullOrEmpty(m_sPath))
-            {
-                FindExecutableW(m_sPath, NULL, wszPath);
-            }
-
-            if (!*wszPath && m_pPidl)
-            {
-                if (SHGetFileInfoW((PWSTR)m_pPidl, 0, &fi, sizeof(fi), SHGFI_ICONLOCATION | SHGFI_PIDL) &&
-                    SUCCEEDED(StringCchCopyW(wszPath, _countof(wszPath), fi.szDisplayName)))
-                {
-                    IconIndex = fi.iIcon;
-                }
-            }
-
-            if (PickIconDlg(hwndDlg, wszPath, _countof(wszPath), &IconIndex))
-            {
-                SetIconLocation(wszPath, IconIndex);
-                PropSheet_Changed(GetParent(hwndDlg), hwndDlg);
-
-                HICON hIconLarge = CreateShortcutIcon(wszPath, IconIndex);
-                if (hIconLarge)
-                {
-                    if (m_hIcon)
-                        DestroyIcon(m_hIcon);
-                    m_hIcon = hIconLarge;
-                    SendDlgItemMessageW(hwndDlg, IDC_SHORTCUT_ICON, STM_SETICON, (WPARAM)m_hIcon, 0);
-                }
-            }
-            return;
-        }
-
-        case IDC_SHORTCUT_ADVANCED:
-        {
-            INT_PTR result = DialogBoxParamW((HINSTANCE)GetWindowLongPtrW(hwndDlg, GWLP_HINSTANCE), MAKEINTRESOURCEW(IDD_SHORTCUT_EXTENDED_PROPERTIES), hwndDlg, ExtendedShortcutProc, (LPARAM)m_bRunAs);
-            if (result == 1 || result == 0)
-            {
-                if (m_bRunAs != result)
-                {
-                    PropSheet_Changed(GetParent(hwndDlg), hwndDlg);
-                }
-
-                m_bRunAs = result;
-            }
-            return;
-        }
-    }
-    if (codeNotify == EN_CHANGE || codeNotify == CBN_SELCHANGE)
-    {
-        if (!m_bInInit)
-            PropSheet_Changed(GetParent(hwndDlg), hwndDlg);
-    }
-}
-
-LRESULT CShellLink::OnNotify(HWND hwndDlg, int idFrom, LPNMHDR pnmhdr)
-{
-    WCHAR wszBuf[MAX_PATH];
-    LPPSHNOTIFY lppsn = (LPPSHNOTIFY)pnmhdr;
-
-    if (lppsn->hdr.code == PSN_APPLY)
-    {
-        /* set working directory */
-        GetDlgItemTextW(hwndDlg, IDC_SHORTCUT_START_IN_EDIT, wszBuf, _countof(wszBuf));
-        SetWorkingDirectory(wszBuf);
-
-        /* set link destination */
-        HWND hWndTarget = GetDlgItem(hwndDlg, IDC_SHORTCUT_TARGET_TEXT);
-        GetWindowTextW(hWndTarget, wszBuf, _countof(wszBuf));
-        // Only set the path and arguments for filesystem targets (we can't verify other targets)
-        if (IsWindowEnabled(hWndTarget))
-        {
-            LPWSTR lpszArgs = NULL;
-            LPWSTR unquoted = wszBuf;
-            StrTrimW(unquoted, L" ");
-
-            if (!PathFileExistsW(unquoted))
-            {
-                lpszArgs = PathGetArgsW(unquoted);
-                PathRemoveArgsW(unquoted);
-                StrTrimW(lpszArgs, L" ");
-            }
-            if (unquoted[0] == '"' && unquoted[wcslen(unquoted) - 1] == '"')
-                PathUnquoteSpacesW(unquoted);
-
-            WCHAR *pwszExt = PathFindExtensionW(unquoted);
-            if (!_wcsicmp(pwszExt, L".lnk"))
-            {
-                // TODO: SLDF_ALLOW_LINK_TO_LINK (Win7+)
-                // FIXME load localized error msg
-                MessageBoxW(hwndDlg, L"You cannot create a link to a shortcut", NULL, MB_ICONERROR);
-                SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, PSNRET_INVALID_NOCHANGEPAGE);
-                return TRUE;
-            }
-
-            if (!PathFileExistsW(unquoted))
-            {
-                // FIXME load localized error msg
-                MessageBoxW(hwndDlg, L"The specified file name in the target box is invalid", NULL, MB_ICONERROR);
-                SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, PSNRET_INVALID_NOCHANGEPAGE);
-                return TRUE;
-            }
-
-            SetPath(unquoted);
-            SetArguments(lpszArgs ? lpszArgs : L"\0");
-        }
-
-        m_Header.wHotKey = (WORD)SendDlgItemMessageW(hwndDlg, IDC_SHORTCUT_KEY_HOTKEY, HKM_GETHOTKEY, 0, 0);
-
-        int index = (int)SendDlgItemMessageW(hwndDlg, IDC_SHORTCUT_RUN_COMBO, CB_GETCURSEL, 0, 0);
-        if (index != CB_ERR)
-        {
-            m_Header.nShowCommand = (UINT)SendDlgItemMessageW(hwndDlg, IDC_SHORTCUT_RUN_COMBO, CB_GETITEMDATA, index, 0);
-        }
-
-        TRACE("This %p m_sLinkPath %S\n", this, m_sLinkPath);
-        Save(m_sLinkPath, TRUE);
-        SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, m_sLinkPath, NULL);
-        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, PSNRET_NOERROR);
-        return TRUE;
-    }
-    return FALSE;
-}
-
-void CShellLink::OnDestroy(HWND hwndDlg)
-{
-    if (m_hIcon)
-    {
-        DestroyIcon(m_hIcon);
-        m_hIcon = NULL;
-    }
-}
-
-/**************************************************************************
- * SH_ShellLinkDlgProc
- *
- * dialog proc of the shortcut property dialog
- */
-
-INT_PTR CALLBACK
-CShellLink::SH_ShellLinkDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    LPPROPSHEETPAGEW ppsp;
-    CShellLink *pThis = reinterpret_cast<CShellLink *>(GetWindowLongPtr(hwndDlg, DWLP_USER));
-
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
-            ppsp = (LPPROPSHEETPAGEW)lParam;
-            if (ppsp == NULL)
-                break;
-
-            pThis = reinterpret_cast<CShellLink *>(ppsp->lParam);
-            SetWindowLongPtr(hwndDlg, DWLP_USER, (LONG_PTR)pThis);
-            return pThis->OnInitDialog(hwndDlg, (HWND)(wParam), lParam);
-
-        case WM_NOTIFY:
-            return pThis->OnNotify(hwndDlg, (int)wParam, (NMHDR *)lParam);
-
-        case WM_COMMAND:
-            pThis->OnCommand(hwndDlg, LOWORD(wParam), (HWND)lParam, HIWORD(wParam));
-            break;
-
-        case WM_DESTROY:
-            pThis->OnDestroy(hwndDlg);
-            break;
-
-        default:
-            break;
-    }
-
-    return FALSE;
-}
-
-/**************************************************************************
- * ShellLink_IShellPropSheetExt interface
- */
-
-HRESULT STDMETHODCALLTYPE CShellLink::AddPages(LPFNADDPROPSHEETPAGE pfnAddPage, LPARAM lParam)
-{
-    HPROPSHEETPAGE hPage = SH_CreatePropertySheetPageEx(IDD_SHORTCUT_PROPERTIES, SH_ShellLinkDlgProc,
-                                                        (LPARAM)this, NULL, &PropSheetPageLifetimeCallback<CShellLink>);
-    HRESULT hr = AddPropSheetPage(hPage, pfnAddPage, lParam);
-    if (FAILED_UNEXPECTEDLY(hr))
+    hr = PSCreateMemoryPropertyStore(IID_PPV_ARG(IPropertyStore, &m_pPropertyStore));
+    if (FAILED(hr))
         return hr;
-    else
-        AddRef(); // For PropSheetPageLifetimeCallback
-    enum { CShellLink_PageIndex_Shortcut = 0 };
-    return 1 + CShellLink_PageIndex_Shortcut; // Make this page the default (one-based)
+
+    pBlock = (const EXP_PROPERTYSTORAGE *)SHFindDataBlock(m_pDBList, EXP_PROPERTYSTORAGE_SIG);
+    if (!pBlock || pBlock->cbSize < FIELD_OFFSET(EXP_PROPERTYSTORAGE, abPropertyStorage))
+        return S_OK;
+
+    pb = pBlock->abPropertyStorage;
+    pbEnd = (const BYTE *)pBlock + pBlock->cbSize;
+    while (pbEnd - pb >= (LONG_PTR)sizeof(DWORD))
+    {
+        DWORD cbStorage, dwVersion;
+        FMTID fmtid;
+
+        CopyMemory(&cbStorage, pb, sizeof(cbStorage));
+        if (!cbStorage)
+            break;
+        if (cbStorage < 2 * sizeof(DWORD) + sizeof(FMTID) || cbStorage > (ULONG)(pbEnd - pb))
+            break;
+        CopyMemory(&dwVersion, pb + sizeof(DWORD), sizeof(dwVersion));
+        if (dwVersion != PROPSTORAGE_VERSION)
+            break;
+        CopyMemory(&fmtid, pb + 2 * sizeof(DWORD), sizeof(fmtid));
+
+        if (IsEqualGUID(fmtid, FMTID_NamedProperties) || IsEqualGUID(fmtid, FMTID_LinkOwner))
+        {
+            BYTE *pNew = (BYTE *)CoTaskMemRealloc(m_pHiddenStorages, m_cbHiddenStorages + cbStorage);
+            if (!pNew)
+                return E_OUTOFMEMORY;
+            m_pHiddenStorages.Detach();
+            m_pHiddenStorages.Attach(pNew);
+            CopyMemory(pNew + m_cbHiddenStorages, pb, cbStorage);
+            m_cbHiddenStorages += cbStorage;
+        }
+        else
+        {
+            const BYTE *pv = pb + 2 * sizeof(DWORD) + sizeof(FMTID);
+            const BYTE *pvEnd = pb + cbStorage;
+
+            while (pvEnd - pv >= (LONG_PTR)sizeof(DWORD))
+            {
+                const ULONG cbHeader = 2 * sizeof(DWORD) + sizeof(BYTE);
+                DWORD cbValue;
+                PROPERTYKEY key;
+                PROPVARIANT var;
+
+                CopyMemory(&cbValue, pv, sizeof(cbValue));
+                if (!cbValue || cbValue <= cbHeader || cbValue > (ULONG)(pvEnd - pv))
+                    break;
+                key.fmtid = fmtid;
+                CopyMemory(&key.pid, pv + sizeof(DWORD), sizeof(key.pid));
+                if (SUCCEEDED(StgDeserializePropVariant((const SERIALIZEDPROPERTYVALUE *)(pv + cbHeader),
+                                                        cbValue - cbHeader, &var)))
+                {
+                    m_pPropertyStore->SetValue(key, var);
+                    PropVariantClear(&var);
+                }
+                pv += cbValue;
+            }
+        }
+        pb += cbStorage;
+    }
+    return S_OK;
 }
 
-HRESULT STDMETHODCALLTYPE CShellLink::ReplacePage(UINT uPageID, LPFNADDPROPSHEETPAGE pfnReplacePage, LPARAM lParam)
+HRESULT STDMETHODCALLTYPE CShellLink::GetCount(DWORD *cProps)
 {
-    TRACE("(%p) (uPageID %u, pfnReplacePage %p lParam %p\n", this, uPageID, pfnReplacePage, lParam);
-    return E_NOTIMPL;
+    HRESULT hr;
+
+    if (!cProps)
+        return E_POINTER;
+    *cProps = 0;
+    hr = EnsurePropertyStore();
+    if (FAILED(hr))
+        return hr;
+    hr = m_pPropertyStore->GetCount(cProps);
+    if (SUCCEEDED(hr) && m_sDescription && *m_sDescription)
+        ++*cProps;
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::GetAt(DWORD iProp, PROPERTYKEY *pkey)
+{
+    DWORD cStored = 0;
+    HRESULT hr;
+
+    if (!pkey)
+        return E_POINTER;
+    hr = EnsurePropertyStore();
+    if (FAILED(hr))
+        return hr;
+    m_pPropertyStore->GetCount(&cStored);
+    if (iProp < cStored)
+        return m_pPropertyStore->GetAt(iProp, pkey);
+    if (iProp == cStored && m_sDescription && *m_sDescription)
+    {
+        pkey->fmtid = FMTID_SummaryInformation;
+        pkey->pid = PIDSI_COMMENTS;
+        return S_OK;
+    }
+    return E_INVALIDARG;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::GetValue(REFPROPERTYKEY key, PROPVARIANT *pv)
+{
+    HRESULT hr;
+
+    if (!pv)
+        return E_POINTER;
+    PropVariantInit(pv);
+    if (IsCommentKey(key))
+    {
+        if (m_sDescription && *m_sDescription)
+            return InitPropVariantFromString(m_sDescription, pv);
+        return S_OK;
+    }
+    hr = EnsurePropertyStore();
+    if (FAILED(hr))
+        return hr;
+    return m_pPropertyStore->GetValue(key, pv);
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::SetValue(REFPROPERTYKEY key, REFPROPVARIANT propvar)
+{
+    HRESULT hr;
+
+    if (IsCommentKey(key))
+    {
+        if (propvar.vt == VT_EMPTY)
+            return SetDescription(L"");
+        if (propvar.vt == VT_LPWSTR)
+            return SetDescription(propvar.pwszVal ? propvar.pwszVal : L"");
+        return E_INVALIDARG;
+    }
+    hr = EnsurePropertyStore();
+    if (FAILED(hr))
+        return hr;
+    hr = m_pPropertyStore->SetValue(key, propvar);
+    if (SUCCEEDED(hr))
+        m_bDirty = TRUE;
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::Commit()
+{
+    CComPtr<IStream> pStream;
+    DWORD cProps = 0, dwZero = 0;
+    STATSTG stat;
+    HRESULT hr;
+
+    hr = EnsurePropertyStore();
+    if (FAILED(hr))
+        return hr;
+
+    pStream.Attach(SHCreateMemStream(NULL, 0));
+    if (!pStream)
+        return E_OUTOFMEMORY;
+
+    m_pPropertyStore->GetCount(&cProps);
+    CAtlArray<FMTID> Formats;
+    for (DWORD i = 0; i < cProps; ++i)
+    {
+        PROPERTYKEY key;
+        BOOL bFound = FALSE;
+
+        if (FAILED(m_pPropertyStore->GetAt(i, &key)))
+            continue;
+        for (size_t j = 0; j < Formats.GetCount(); ++j)
+        {
+            if (IsEqualGUID(Formats[j], key.fmtid))
+            {
+                bFound = TRUE;
+                break;
+            }
+        }
+        if (!bFound)
+            Formats.Add(key.fmtid);
+    }
+
+    for (size_t j = 0; j < Formats.GetCount(); ++j)
+    {
+        LARGE_INTEGER liZero = {}, liPos;
+        ULARGE_INTEGER uliStart, uliEnd;
+        DWORD dwVersion = PROPSTORAGE_VERSION, cbStorage;
+
+        pStream->Seek(liZero, STREAM_SEEK_CUR, &uliStart);
+        pStream->Write(&dwZero, sizeof(dwZero), NULL);
+        pStream->Write(&dwVersion, sizeof(dwVersion), NULL);
+        pStream->Write(&Formats[j], sizeof(FMTID), NULL);
+
+        for (DWORD i = 0; i < cProps; ++i)
+        {
+            PROPERTYKEY key;
+            PROPVARIANT var;
+            SERIALIZEDPROPERTYVALUE *pSerialized;
+            ULONG cbSerialized;
+            BYTE bReserved = 0;
+
+            if (FAILED(m_pPropertyStore->GetAt(i, &key)) || !IsEqualGUID(key.fmtid, Formats[j]))
+                continue;
+            if (FAILED(m_pPropertyStore->GetValue(key, &var)))
+                continue;
+            hr = StgSerializePropVariant(&var, &pSerialized, &cbSerialized);
+            PropVariantClear(&var);
+            if (FAILED(hr))
+                continue;
+
+            DWORD cbValue = 2 * sizeof(DWORD) + sizeof(BYTE) + cbSerialized;
+            pStream->Write(&cbValue, sizeof(cbValue), NULL);
+            pStream->Write(&key.pid, sizeof(key.pid), NULL);
+            pStream->Write(&bReserved, sizeof(bReserved), NULL);
+            pStream->Write(pSerialized, cbSerialized, NULL);
+            CoTaskMemFree(pSerialized);
+        }
+        pStream->Write(&dwZero, sizeof(dwZero), NULL);
+
+        pStream->Seek(liZero, STREAM_SEEK_CUR, &uliEnd);
+        cbStorage = (DWORD)(uliEnd.QuadPart - uliStart.QuadPart);
+        liPos.QuadPart = uliStart.QuadPart;
+        pStream->Seek(liPos, STREAM_SEEK_SET, NULL);
+        pStream->Write(&cbStorage, sizeof(cbStorage), NULL);
+        liPos.QuadPart = uliEnd.QuadPart;
+        pStream->Seek(liPos, STREAM_SEEK_SET, NULL);
+    }
+
+    if (m_cbHiddenStorages)
+        pStream->Write(m_pHiddenStorages, m_cbHiddenStorages, NULL);
+
+    hr = pStream->Stat(&stat, STATFLAG_NONAME);
+    if (FAILED(hr))
+        return hr;
+
+    SHRemoveDataBlock(&m_pDBList, EXP_PROPERTYSTORAGE_SIG);
+    if (stat.cbSize.QuadPart)
+    {
+        DWORD cbStore = (DWORD)stat.cbSize.QuadPart + sizeof(dwZero);
+        DWORD cbBlock = FIELD_OFFSET(EXP_PROPERTYSTORAGE, abPropertyStorage) + cbStore;
+        CComHeapPtr<EXP_PROPERTYSTORAGE> pBlock;
+        LARGE_INTEGER liZero = {};
+
+        if (!pBlock.AllocateBytes(cbBlock))
+            return E_OUTOFMEMORY;
+        pBlock->cbSize = cbBlock;
+        pBlock->dwSignature = EXP_PROPERTYSTORAGE_SIG;
+        pStream->Write(&dwZero, sizeof(dwZero), NULL);
+        pStream->Seek(liZero, STREAM_SEEK_SET, NULL);
+        hr = pStream->Read(pBlock->abPropertyStorage, cbStore, NULL);
+        if (FAILED(hr))
+            return hr;
+        if (!SHAddDataBlock(&m_pDBList, (DATABLOCK_HEADER *)(EXP_PROPERTYSTORAGE *)pBlock))
+            return E_OUTOFMEMORY;
+    }
+    m_bDirty = TRUE;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CShellLink::SetSite(IUnknown *punk)
@@ -3532,72 +3362,3 @@ HRESULT WINAPI IShellLink_ConstructFromFile(IShellFolder * psf, LPCITEMIDLIST pi
     return IShellLink_ConstructFromPath(path, riid, ppv);
 }
 
-HICON CShellLink::CreateShortcutIcon(LPCWSTR wszIconPath, INT IconIndex)
-{
-    const INT cx = GetSystemMetrics(SM_CXICON), cy = GetSystemMetrics(SM_CYICON);
-    const COLORREF crMask = GetSysColor(COLOR_3DFACE);
-    WCHAR wszLnkIcon[MAX_PATH];
-    int lnk_idx;
-    HDC hDC;
-    HIMAGELIST himl = ImageList_Create(cx, cy, ILC_COLOR32 | ILC_MASK, 1, 1);
-    HICON hIcon = NULL, hNewIcon = NULL, hShortcut;
-
-    if (HLM_GetIconW(IDI_SHELL_SHORTCUT - 1, wszLnkIcon, _countof(wszLnkIcon), &lnk_idx))
-    {
-        ::ExtractIconExW(wszLnkIcon, lnk_idx, &hShortcut, NULL, 1);
-    }
-    else
-    {
-        ::ExtractIconExW(swShell32Name, -IDI_SHELL_SHORTCUT, &hShortcut, NULL, 1);
-    }
-
-    ::ExtractIconExW(wszIconPath, IconIndex, &hIcon, NULL, 1);
-    if (!hIcon || !hShortcut || !himl)
-        goto cleanup;
-
-    hDC = CreateCompatibleDC(NULL);
-    if (hDC)
-    {
-        // create 32bpp bitmap
-        BITMAPINFO bi;
-        ZeroMemory(&bi, sizeof(bi));
-        bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bi.bmiHeader.biWidth = cx;
-        bi.bmiHeader.biHeight = cy;
-        bi.bmiHeader.biPlanes = 1;
-        bi.bmiHeader.biBitCount = 32;
-        LPVOID pvBits;
-        HBITMAP hbm = CreateDIBSection(hDC, &bi, DIB_RGB_COLORS, &pvBits, NULL, 0);
-        if (hbm)
-        {
-            // draw the icon image
-            HGDIOBJ hbmOld = SelectObject(hDC, hbm);
-            {
-                HBRUSH hbr = CreateSolidBrush(crMask);
-                RECT rc = { 0, 0, cx, cy };
-                FillRect(hDC, &rc, hbr);
-                DeleteObject(hbr);
-
-                DrawIconEx(hDC, 0, 0, hIcon, cx, cy, 0, NULL, DI_NORMAL);
-                DrawIconEx(hDC, 0, 0, hShortcut, cx, cy, 0, NULL, DI_NORMAL);
-            }
-            SelectObject(hDC, hbmOld);
-
-            INT iAdded = ImageList_AddMasked(himl, hbm, crMask);
-            hNewIcon = ImageList_GetIcon(himl, iAdded, ILD_NORMAL | ILD_TRANSPARENT);
-
-            DeleteObject(hbm);
-        }
-        DeleteDC(hDC);
-    }
-
-cleanup:
-    if (hIcon)
-        DestroyIcon(hIcon);
-    if (hShortcut)
-        DestroyIcon(hShortcut);
-    if (himl)
-        ImageList_Destroy(himl);
-
-    return hNewIcon;
-}

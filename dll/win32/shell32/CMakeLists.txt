@@ -30,6 +30,7 @@ list(APPEND SOURCE
     dialogs/filetypes.cpp
     dialogs/folder_options.cpp
     dialogs/item_prop.cpp
+    dialogs/linkprop.cpp
     dialogs/general.cpp
     dialogs/recycler_prop.cpp
     dialogs/view.cpp

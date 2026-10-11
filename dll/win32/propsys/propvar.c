@@ -1416,3 +1416,319 @@ HRESULT WINAPI PropVariantToUInt32Vector(REFPROPVARIANT propvar, ULONG *buffer, 
     }
     return E_NOTIMPL;
 }
+
+#ifdef __REACTOS__
+static ULONG serialized_align(ULONG cb)
+{
+    return (cb + 3) & ~3u;
+}
+
+static HRESULT serialized_value_size(const PROPVARIANT *propvar, ULONG *size)
+{
+    ULONG i, cb;
+
+    switch (propvar->vt)
+    {
+    case VT_EMPTY:
+    case VT_NULL:
+        *size = 0;
+        return S_OK;
+    case VT_I1:
+    case VT_UI1:
+    case VT_I2:
+    case VT_UI2:
+    case VT_BOOL:
+    case VT_I4:
+    case VT_UI4:
+    case VT_INT:
+    case VT_UINT:
+    case VT_R4:
+    case VT_ERROR:
+        *size = 4;
+        return S_OK;
+    case VT_I8:
+    case VT_UI8:
+    case VT_R8:
+    case VT_CY:
+    case VT_DATE:
+    case VT_FILETIME:
+        *size = 8;
+        return S_OK;
+    case VT_CLSID:
+        if (!propvar->puuid)
+            return E_INVALIDARG;
+        *size = sizeof(GUID);
+        return S_OK;
+    case VT_LPWSTR:
+        cb = propvar->pwszVal ? (lstrlenW(propvar->pwszVal) + 1) * sizeof(WCHAR) : sizeof(WCHAR);
+        *size = sizeof(DWORD) + serialized_align(cb);
+        return S_OK;
+    case VT_LPSTR:
+        cb = propvar->pszVal ? lstrlenA(propvar->pszVal) + 1 : 1;
+        *size = sizeof(DWORD) + serialized_align(cb);
+        return S_OK;
+    case VT_BLOB:
+        *size = sizeof(DWORD) + serialized_align(propvar->blob.cbSize);
+        return S_OK;
+    case VT_VECTOR | VT_LPWSTR:
+        cb = sizeof(DWORD);
+        for (i = 0; i < propvar->calpwstr.cElems; i++)
+        {
+            ULONG cch = propvar->calpwstr.pElems[i] ? lstrlenW(propvar->calpwstr.pElems[i]) + 1 : 1;
+            cb += sizeof(DWORD) + serialized_align(cch * sizeof(WCHAR));
+        }
+        *size = cb;
+        return S_OK;
+    default:
+        FIXME("Unsupported type %d.\n", propvar->vt);
+        return E_INVALIDARG;
+    }
+}
+
+static BYTE *serialize_string(BYTE *ptr, const void *data, ULONG count, ULONG cb)
+{
+    *(DWORD *)ptr = count;
+    ptr += sizeof(DWORD);
+    memset(ptr, 0, serialized_align(cb));
+    if (data)
+        memcpy(ptr, data, cb);
+    return ptr + serialized_align(cb);
+}
+
+HRESULT WINAPI StgSerializePropVariant(const PROPVARIANT *propvar, SERIALIZEDPROPERTYVALUE **ret, ULONG *size)
+{
+    SERIALIZEDPROPERTYVALUE *prop;
+    ULONG cbValue, i;
+    HRESULT hr;
+    BYTE *ptr;
+
+    TRACE("(%p, %p, %p)\n", propvar, ret, size);
+
+    if (!propvar || !ret || !size)
+        return E_INVALIDARG;
+    *ret = NULL;
+    *size = 0;
+
+    hr = serialized_value_size(propvar, &cbValue);
+    if (FAILED(hr))
+        return hr;
+
+    prop = CoTaskMemAlloc(sizeof(DWORD) + cbValue);
+    if (!prop)
+        return E_OUTOFMEMORY;
+    prop->dwType = propvar->vt;
+    ptr = (BYTE *)prop + sizeof(DWORD);
+    memset(ptr, 0, cbValue);
+
+    switch (propvar->vt)
+    {
+    case VT_EMPTY:
+    case VT_NULL:
+        break;
+    case VT_I1:
+    case VT_UI1:
+        *ptr = propvar->bVal;
+        break;
+    case VT_I2:
+    case VT_UI2:
+    case VT_BOOL:
+        *(USHORT *)ptr = propvar->uiVal;
+        break;
+    case VT_I4:
+    case VT_UI4:
+    case VT_INT:
+    case VT_UINT:
+    case VT_R4:
+    case VT_ERROR:
+        *(ULONG *)ptr = propvar->ulVal;
+        break;
+    case VT_I8:
+    case VT_UI8:
+    case VT_R8:
+    case VT_CY:
+    case VT_DATE:
+    case VT_FILETIME:
+        memcpy(ptr, &propvar->uhVal, sizeof(ULONGLONG));
+        break;
+    case VT_CLSID:
+        memcpy(ptr, propvar->puuid, sizeof(GUID));
+        break;
+    case VT_LPWSTR:
+        if (propvar->pwszVal)
+            serialize_string(ptr, propvar->pwszVal, lstrlenW(propvar->pwszVal) + 1, (lstrlenW(propvar->pwszVal) + 1) * sizeof(WCHAR));
+        else
+            serialize_string(ptr, NULL, 1, sizeof(WCHAR));
+        break;
+    case VT_LPSTR:
+        if (propvar->pszVal)
+            serialize_string(ptr, propvar->pszVal, lstrlenA(propvar->pszVal) + 1, lstrlenA(propvar->pszVal) + 1);
+        else
+            serialize_string(ptr, NULL, 1, 1);
+        break;
+    case VT_BLOB:
+        serialize_string(ptr, propvar->blob.pBlobData, propvar->blob.cbSize, propvar->blob.cbSize);
+        break;
+    case VT_VECTOR | VT_LPWSTR:
+        *(DWORD *)ptr = propvar->calpwstr.cElems;
+        ptr += sizeof(DWORD);
+        for (i = 0; i < propvar->calpwstr.cElems; i++)
+        {
+            const WCHAR *str = propvar->calpwstr.pElems[i];
+            ULONG cch = str ? lstrlenW(str) + 1 : 1;
+            ptr = serialize_string(ptr, str, cch, str ? cch * sizeof(WCHAR) : sizeof(WCHAR));
+        }
+        break;
+    }
+
+    *ret = prop;
+    *size = sizeof(DWORD) + cbValue;
+    return S_OK;
+}
+
+static HRESULT deserialize_string(const BYTE **ptr, const BYTE *end, ULONG elemsize, void **data, ULONG *count)
+{
+    ULONG n, cb;
+
+    if (end - *ptr < (LONG_PTR)sizeof(DWORD))
+        return E_INVALIDARG;
+    memcpy(&n, *ptr, sizeof(n));
+    *ptr += sizeof(DWORD);
+    if (n > (ULONG)(end - *ptr) / elemsize)
+        return E_INVALIDARG;
+    cb = n * elemsize;
+    *data = CoTaskMemAlloc(max(cb, elemsize));
+    if (!*data)
+        return E_OUTOFMEMORY;
+    memset(*data, 0, max(cb, elemsize));
+    memcpy(*data, *ptr, cb);
+    *ptr += min(serialized_align(cb), (ULONG)(end - *ptr));
+    *count = n;
+    return S_OK;
+}
+
+HRESULT WINAPI StgDeserializePropVariant(const SERIALIZEDPROPERTYVALUE *prop, ULONG max_size, PROPVARIANT *propvar)
+{
+    const BYTE *ptr, *end;
+    ULONG count, i, need;
+    DWORD type;
+    void *data;
+    HRESULT hr;
+
+    TRACE("(%p, %lu, %p)\n", prop, max_size, propvar);
+
+    if (!prop || !propvar || max_size < sizeof(DWORD))
+        return E_INVALIDARG;
+
+    PropVariantInit(propvar);
+    ptr = (const BYTE *)prop + sizeof(DWORD);
+    end = (const BYTE *)prop + max_size;
+    memcpy(&type, prop, sizeof(type));
+    propvar->vt = (VARTYPE)type;
+
+    switch (propvar->vt)
+    {
+    case VT_EMPTY:
+    case VT_NULL:
+        return S_OK;
+    case VT_I1:
+    case VT_UI1:
+        need = 1;
+        break;
+    case VT_I2:
+    case VT_UI2:
+    case VT_BOOL:
+        need = 2;
+        break;
+    case VT_I4:
+    case VT_UI4:
+    case VT_INT:
+    case VT_UINT:
+    case VT_R4:
+    case VT_ERROR:
+        need = 4;
+        break;
+    case VT_I8:
+    case VT_UI8:
+    case VT_R8:
+    case VT_CY:
+    case VT_DATE:
+    case VT_FILETIME:
+        need = 8;
+        break;
+    case VT_CLSID:
+        if (end - ptr < (LONG_PTR)sizeof(GUID))
+            goto invalid;
+        propvar->puuid = CoTaskMemAlloc(sizeof(GUID));
+        if (!propvar->puuid)
+            goto nomem;
+        memcpy(propvar->puuid, ptr, sizeof(GUID));
+        return S_OK;
+    case VT_LPWSTR:
+        hr = deserialize_string(&ptr, end, sizeof(WCHAR), &data, &count);
+        if (FAILED(hr))
+        {
+            propvar->vt = VT_EMPTY;
+            return hr;
+        }
+        propvar->pwszVal = data;
+        return S_OK;
+    case VT_LPSTR:
+        hr = deserialize_string(&ptr, end, 1, &data, &count);
+        if (FAILED(hr))
+        {
+            propvar->vt = VT_EMPTY;
+            return hr;
+        }
+        propvar->pszVal = data;
+        return S_OK;
+    case VT_BLOB:
+        hr = deserialize_string(&ptr, end, 1, &data, &count);
+        if (FAILED(hr))
+        {
+            propvar->vt = VT_EMPTY;
+            return hr;
+        }
+        propvar->blob.pBlobData = data;
+        propvar->blob.cbSize = count;
+        return S_OK;
+    case VT_VECTOR | VT_LPWSTR:
+        if (end - ptr < (LONG_PTR)sizeof(DWORD))
+            goto invalid;
+        memcpy(&count, ptr, sizeof(count));
+        ptr += sizeof(DWORD);
+        if (count > (ULONG)(end - ptr) / sizeof(DWORD))
+            goto invalid;
+        propvar->calpwstr.pElems = CoTaskMemAlloc(max(count, 1) * sizeof(WCHAR *));
+        if (!propvar->calpwstr.pElems)
+            goto nomem;
+        propvar->calpwstr.cElems = 0;
+        for (i = 0; i < count; i++)
+        {
+            ULONG cch;
+            hr = deserialize_string(&ptr, end, sizeof(WCHAR), &data, &cch);
+            if (FAILED(hr))
+            {
+                PropVariantClear(propvar);
+                return hr;
+            }
+            propvar->calpwstr.pElems[propvar->calpwstr.cElems++] = data;
+        }
+        return S_OK;
+    default:
+        FIXME("Unsupported type %d.\n", propvar->vt);
+        goto invalid;
+    }
+
+    if ((ULONG)(end - ptr) < need)
+        goto invalid;
+    memcpy(&propvar->uhVal, ptr, need);
+    return S_OK;
+
+invalid:
+    PropVariantInit(propvar);
+    return E_INVALIDARG;
+nomem:
+    PropVariantInit(propvar);
+    return E_OUTOFMEMORY;
+}
+#endif
