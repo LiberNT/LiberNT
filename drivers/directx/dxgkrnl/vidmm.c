@@ -5858,6 +5858,8 @@ DxgkpVidMmCreateAllocationTracked(
     BOOLEAN                     Placed;
     BOOLEAN                     MiniportAllocationCreated = FALSE;
     BOOLEAN                     KmdTransactionStarted = FALSE;
+    PVOID                       RequestedPrivateDriverData;
+    UINT                        RequestedPrivateDriverDataSize;
     SIZE_T                      RoundedAllocationSize;
     SIZE_T                      RoundedPitchAlignedSize = 0;
 
@@ -5917,6 +5919,8 @@ DxgkpVidMmCreateAllocationTracked(
      *   AllocInfo->Flags             — capability flags
      *   AllocInfo->AllocationPriority
      * ----------------------------------------------------------------------- */
+    RequestedPrivateDriverData = AllocInfo->pPrivateDriverData;
+    RequestedPrivateDriverDataSize = AllocInfo->PrivateDriverDataSize;
     RtlZeroMemory(&CreateArgs, sizeof(CreateArgs));
     CreateArgs.pAllocationInfo       = AllocInfo;
     CreateArgs.NumAllocations        = 1;
@@ -6094,16 +6098,16 @@ DxgkpVidMmCreateAllocationTracked(
     Alloc->Resident           = FALSE;
     Alloc->Resource           = NULL;
 
-    if (AllocInfo->PrivateDriverDataSize != 0)
+    if (RequestedPrivateDriverDataSize != 0)
     {
-        if (AllocInfo->pPrivateDriverData == NULL)
+        if (RequestedPrivateDriverData == NULL)
         {
             Status = STATUS_INVALID_PARAMETER;
             goto FailTrackedAllocation;
         }
 
         Alloc->PrivateDriverData = ExAllocatePoolWithTag(NonPagedPool,
-                                                         AllocInfo->PrivateDriverDataSize,
+                                                         RequestedPrivateDriverDataSize,
                                                          TAG_VIDMM_ALLOC);
         if (Alloc->PrivateDriverData == NULL)
         {
@@ -6112,9 +6116,9 @@ DxgkpVidMmCreateAllocationTracked(
         }
 
         RtlCopyMemory(Alloc->PrivateDriverData,
-                      AllocInfo->pPrivateDriverData,
-                      AllocInfo->PrivateDriverDataSize);
-        Alloc->PrivateDriverDataSize = AllocInfo->PrivateDriverDataSize;
+                      RequestedPrivateDriverData,
+                      RequestedPrivateDriverDataSize);
+        Alloc->PrivateDriverDataSize = RequestedPrivateDriverDataSize;
     }
 
     /* -----------------------------------------------------------------------
