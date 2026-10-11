@@ -11,6 +11,31 @@
 #include "netcon.idl"
 
 [
+    object,
+    uuid(c08956a5-1cd3-11d1-b1c5-00805fc1270e),
+    pointer_default(unique)
+]
+interface INetConnectionCommonUi : IUnknown
+{
+    [local]
+    HRESULT ChooseConnection([in] void *pChooseConn, [out] INetConnection **ppCon);
+    [call_as(ChooseConnection)]
+    HRESULT RemoteChooseConnection([out] INetConnection **ppCon);
+    HRESULT ShowConnectionProperties([in] HWND hwndParent, [in] INetConnection *pCon);
+    HRESULT StartNewConnectionWizard([in] HWND hwndParent, [out] INetConnection **ppCon);
+}
+
+[
+    object,
+    uuid(c08956a6-1cd3-11d1-b1c5-00805fc1270e),
+    pointer_default(unique)
+]
+interface INetConnectionCommonUi2 : INetConnectionCommonUi
+{
+    HRESULT SetPropertiesStartPage([in] DWORD dwPage);
+}
+
+[
     threading(both),
     uuid(33c4643c-7811-46fa-a89a-768597bd7223)
 ]

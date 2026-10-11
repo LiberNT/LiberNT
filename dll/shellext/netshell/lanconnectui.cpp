@@ -6,6 +6,7 @@
  */
 
 #include "precomp.h"
+#include "connectionui.h"
 
 CNetConnectionPropertyUi::CNetConnectionPropertyUi() :
     m_pProperties(NULL)
@@ -465,6 +466,9 @@ CNetConnectionPropertyUi::AddPages(
     HRESULT hr = E_FAIL;
     INITCOMMONCONTROLSEX initEx;
 
+    if (!m_pCon)
+        return E_UNEXPECTED;
+
     initEx.dwSize = sizeof(initEx);
     initEx.dwICC = ICC_LISTVIEW_CLASSES;
     if (!InitCommonControlsEx(&initEx))
@@ -496,7 +500,10 @@ CNetConnectionPropertyUi::GetIcon(
     DWORD dwSize,
     HICON *phIcon)
 {
-    return E_NOTIMPL;
+    if (!phIcon)
+        return E_POINTER;
+    *phIcon = LoadNetConnectionIcon(m_pCon, dwSize);
+    return *phIcon ? S_OK : HRESULT_FROM_WIN32(GetLastError());
 }
 
 HRESULT
@@ -511,9 +518,6 @@ HRESULT
 WINAPI
 CNetConnectionPropertyUi::SetConnection(INetConnection* pCon)
 {
-    if (!pCon)
-        return E_POINTER;
-
     m_pCon = pCon;
     return S_OK;
 }
@@ -525,7 +529,7 @@ CNetConnectionPropertyUi::Connect(
     DWORD dwFlags)
 {
     if (!m_pCon)
-        return E_POINTER; //FIXME
+        return E_UNEXPECTED;
 
     if (dwFlags & NCUC_NO_UI)
         return m_pCon->Connect();
@@ -539,9 +543,8 @@ CNetConnectionPropertyUi::Disconnect(
     HWND hwndParent,
     DWORD dwFlags)
 {
-    WCHAR szBuffer[100];
-    _swprintf(szBuffer, L"INetConnectionConnectUi_fnDisconnect flags %x\n", dwFlags);
-    MessageBoxW(NULL, szBuffer, NULL, MB_OK);
+    if (!m_pCon)
+        return E_UNEXPECTED;
 
-    return S_OK;
+    return m_pCon->Disconnect();
 }

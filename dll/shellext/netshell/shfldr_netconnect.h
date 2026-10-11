@@ -129,4 +129,4 @@ class CNetConUiObject:
         DECLARE_PROTECT_FINAL_CONSTRUCT()
 };
 
-HRESULT ShowNetConnectionProperties(INetConnection * pNetConnect, HWND hwnd);
+HRESULT ShowNetConnectionProperties(INetConnection * pNetConnect, HWND hwnd, UINT nStartPage = 0);

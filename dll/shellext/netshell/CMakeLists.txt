@@ -13,9 +13,11 @@ list(APPEND SOURCE
     connectmanager.cpp
     lanconnectui.cpp
     lanstatusui.cpp
+    connectionui.cpp
     setup.cpp)
 
 list(APPEND PCH_SKIP_SOURCE
+    netshell_ps.c
     ${CMAKE_CURRENT_BINARY_DIR}/netshell_netcon_i.c
     ${CMAKE_CURRENT_BINARY_DIR}/netshell_netcon_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/proxy.dlldata.c

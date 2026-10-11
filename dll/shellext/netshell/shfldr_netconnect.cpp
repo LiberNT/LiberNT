@@ -572,7 +572,8 @@ PropSheetProc(HWND hwndDlg, UINT uMsg, LPARAM lParam)
 HRESULT
 ShowNetConnectionProperties(
     INetConnection *pNetConnect,
-    HWND hwnd)
+    HWND hwnd,
+    UINT nStartPage)
 {
     HRESULT hr;
     CLSID ClassID;
@@ -611,6 +612,7 @@ ShowNetConnectionProperties(
         pinfo.phpage = hppages;
         pinfo.hwndParent = hwnd;
         pinfo.pfnCallback = PropSheetProc;
+        pinfo.nStartPage = nStartPage;
 
         pinfo.pszCaption = pProperties->pszwName;
         hr = pNCP->AddPages(hwnd, PropSheetExCallback, (LPARAM)&pinfo);
