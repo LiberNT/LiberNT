@@ -29,7 +29,7 @@
 
 #include <crtdefs.h>
 
-const char _CRT_ALIGN(16) __L_2_by_pi_bits[] =
+const unsigned char _CRT_ALIGN(16) __L_2_by_pi_bits[] =
 {
     224, 241,  27, 193,  12,  88,  33, 116,
     53, 126, 196, 126, 237, 175, 169,  75,
