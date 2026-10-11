@@ -2081,7 +2081,7 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
         static_cast<NativeWddm20DeviceHeader *>(driver_device_storage)->device = this;
         NativeWddm20InitializeCallbacks(this);
     }
-    core_callbacks.pfnSetErrorCb = NativeSetError;
+    NativeInitializeCoreLayerCallbacks(core_callbacks);
     dxgi_callbacks.pfnPresentCb = NativePresent;
     D3D10DDIARG_CREATEDEVICE create_args = {};
     create_args.hRTDevice.handle = runtime_device;

@@ -328,12 +328,9 @@ static void APIENTRY NativeWddm20StateTextFilterSize(D3D10DDI_HRTCORELAYER layer
         device->wddm20_functions.pfnSetTextFilterSize(device->driver_device, 0, 0);
 }
 
-static void NativeWddm20InitializeCallbacks(NativeDevice *device)
+template<class Callbacks> static void NativeInitializeCoreLayerCallbacks(Callbacks &callbacks)
 {
-    auto &callbacks = device->wddm20_callbacks;
     callbacks.pfnSetErrorCb = NativeSetError;
-    callbacks.pfnCreateContextCb = NativeWddm20CreateContext;
-    callbacks.pfnCreateContextVirtualCb = NativeWddm20CreateContextVirtual;
     callbacks.pfnDisableDeferredStagingResourceDestruction = NativeWddm20NoDeferredWork;
     callbacks.pfnPerformAmortizedProcessingCb = NativeWddm20NoDeferredWork;
 #define REFRESH(Name) callbacks.pfnState##Name##Cb = NativeWddm20State##Name
@@ -349,6 +346,14 @@ static void NativeWddm20InitializeCallbacks(NativeDevice *device)
     REFRESH(CsShader); REFRESH(CsConstBuf); REFRESH(CsSrv); REFRESH(CsSampler); REFRESH(CsUav);
     REFRESH(SoTargets); REFRESH(TextFilterSize);
 #undef REFRESH
+}
+
+static void NativeWddm20InitializeCallbacks(NativeDevice *device)
+{
+    auto &callbacks = device->wddm20_callbacks;
+    NativeInitializeCoreLayerCallbacks(callbacks);
+    callbacks.pfnCreateContextCb = NativeWddm20CreateContext;
+    callbacks.pfnCreateContextVirtualCb = NativeWddm20CreateContextVirtual;
 }
 
 
