@@ -108,16 +108,18 @@ InitMetrics(VOID)
     pPrimary = UserGetPrimaryMonitor();
     if (pPrimary)
     {
-        piSysMet[SM_CXMAXIMIZED] = pPrimary->rcWork.right - pPrimary->rcWork.left + 2 * piSysMet[SM_CXFRAME];
-        piSysMet[SM_CYMAXIMIZED] = pPrimary->rcWork.bottom - pPrimary->rcWork.top + 2 * piSysMet[SM_CYFRAME];
+        piSysMet[SM_CXMAXIMIZED] = pPrimary->rcWork.right - pPrimary->rcWork.left
+                                   + 2 * (piSysMet[SM_CXFRAME] + piSysMet[SM_CXPADDEDBORDER]);
+        piSysMet[SM_CYMAXIMIZED] = pPrimary->rcWork.bottom - pPrimary->rcWork.top
+                                   + 2 * (piSysMet[SM_CYFRAME] + piSysMet[SM_CXPADDEDBORDER]);
     }
     else
     {
-        piSysMet[SM_CXMAXIMIZED] = piSysMet[SM_CXSCREEN] + 2 * piSysMet[SM_CXFRAME];
-        piSysMet[SM_CYMAXIMIZED] = piSysMet[SM_CYSCREEN] + 2 * piSysMet[SM_CYFRAME];
+        piSysMet[SM_CXMAXIMIZED] = piSysMet[SM_CXSCREEN] + 2 * (piSysMet[SM_CXFRAME] + piSysMet[SM_CXPADDEDBORDER]);
+        piSysMet[SM_CYMAXIMIZED] = piSysMet[SM_CYSCREEN] + 2 * (piSysMet[SM_CYFRAME] + piSysMet[SM_CXPADDEDBORDER]);
     }
-    piSysMet[SM_CXFULLSCREEN] = piSysMet[SM_CXMAXIMIZED] - 2 * piSysMet[SM_CXFRAME];
-    piSysMet[SM_CYFULLSCREEN] = piSysMet[SM_CYMAXIMIZED] - piSysMet[SM_CYMIN];
+    piSysMet[SM_CXFULLSCREEN] = piSysMet[SM_CXMAXIMIZED] - 2 * (piSysMet[SM_CXFRAME] + piSysMet[SM_CXPADDEDBORDER]);
+    piSysMet[SM_CYFULLSCREEN] = piSysMet[SM_CYMAXIMIZED] - piSysMet[SM_CYMIN] - 2 * piSysMet[SM_CXPADDEDBORDER];
     piSysMet[SM_CYKANJIWINDOW] = 0;
     piSysMet[SM_CXMINIMIZED] = gspv.mm.iWidth + 6;
     piSysMet[SM_CYMINIMIZED] = piSysMet[SM_CYCAPTION] + 5;
