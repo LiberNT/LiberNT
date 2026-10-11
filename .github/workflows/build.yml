@@ -98,6 +98,14 @@ jobs:
         echo "CCACHE_MAXSIZE=1G" >> $GITHUB_ENV
         echo "CCACHE_SLOPPINESS=time_macros" >> $GITHUB_ENV
 
+    - name: Cache Mesa LLVM
+      id: cache_llvm
+      if: ${{ matrix.compiler == 'clang' && (matrix.arch == 'amd64' || matrix.arch == 'arm64') }}
+      uses: actions/cache@v5
+      with:
+        path: ~/mesa-llvm
+        key: mesa-llvm-22.1.8-${{matrix.arch}}-${{steps.rosbe_spec.outputs.sha}}-${{hashFiles('submodules/mesa-llvmpipe.cmake', 'submodules/llvm-*.patch', 'submodules/mesa-llvm-extract.py', 'submodules/reactos-sdk.cmake', 'submodules/reactos-sdk-flags.cmake')}}
+
     - name: Configure
       id: configure
       run: |
@@ -107,6 +115,11 @@ jobs:
         [ "${{matrix.compiler}}" = "gcc" ] && FLAGS="$FLAGS --gcc"
         [ "${{matrix.config}}" = "Release" ] && FLAGS="$FLAGS -r"
         [ -n "${{matrix.profile}}" ] && FLAGS="$FLAGS -DROSCONFIG_PROFILE=${{matrix.profile}}"
+        [ "${{matrix.compiler}}" = "clang" ] && case "${{matrix.arch}}" in amd64|arm64) FLAGS="$FLAGS -DENABLE_MESA_LLVMPIPE=ON" ;; esac
+        if [ "${{steps.cache_llvm.outputs.cache-hit}}" = "true" ]; then
+          FLAGS="$FLAGS -DMESA_LLVM_ROOT=$HOME/mesa-llvm/native -DMESA_LLVM_LICENSE_FILE=$HOME/mesa-llvm/LICENSE.TXT"
+          [ -d "$HOME/mesa-llvm/arm64ec" ] && FLAGS="$FLAGS -DMESA_ARM64EC_LLVM_ROOT=$HOME/mesa-llvm/arm64ec -DMESA_ARM64EC_LLVM_LICENSE_FILE=$HOME/mesa-llvm/LICENSE.TXT"
+        fi
         ./configure.sh $FLAGS -a ${{matrix.arch}} \
           -DREACTOS_TARGET_NT=${{matrix.ntver}} \
           -DDIAGDATA_CHANNEL= \
@@ -119,6 +132,17 @@ jobs:
       run: |
         . "$HOME/.local/opt/rosbe/rosbe-env.sh"
         ninja -C ${{steps.configure.outputs.outdir}} submodules
+
+    - name: Keep Mesa LLVM for the cache
+      if: ${{ steps.cache_llvm.outcome == 'success' && steps.cache_llvm.outputs.cache-hit != 'true' }}
+      run: |
+        OUT=${{steps.configure.outputs.outdir}}
+        mkdir -p ~/mesa-llvm
+        cp -R "$OUT/submodules/mesa-llvmpipe/llvm-install" ~/mesa-llvm/native
+        cp "$OUT/submodules/mesa-llvmpipe/llvm-source/llvm/LICENSE.TXT" ~/mesa-llvm/LICENSE.TXT
+        if [ -d "$OUT/_fex_arm64ec/submodules/mesa-llvmpipe/llvm-install" ]; then
+          cp -R "$OUT/_fex_arm64ec/submodules/mesa-llvmpipe/llvm-install" ~/mesa-llvm/arm64ec
+        fi
 
     - name: Build images
       run: |
