@@ -162,6 +162,14 @@ static void WINAPI NdrRangeFree(PMIDL_STUB_MESSAGE, unsigned char *, PFORMAT_STR
 
 static ULONG WINAPI NdrByteCountPointerMemorySize(PMIDL_STUB_MESSAGE, PFORMAT_STRING);
 
+#ifdef __REACTOS__
+static unsigned char *WINAPI NdrSystemHandleMarshall(PMIDL_STUB_MESSAGE, unsigned char *, PFORMAT_STRING);
+static unsigned char *WINAPI NdrSystemHandleUnmarshall(PMIDL_STUB_MESSAGE, unsigned char **, PFORMAT_STRING, unsigned char);
+static void WINAPI NdrSystemHandleBufferSize(PMIDL_STUB_MESSAGE, unsigned char *, PFORMAT_STRING);
+static ULONG WINAPI NdrSystemHandleMemorySize(PMIDL_STUB_MESSAGE, PFORMAT_STRING);
+static void WINAPI NdrSystemHandleFree(PMIDL_STUB_MESSAGE, unsigned char *, PFORMAT_STRING);
+
+#endif
 static unsigned char * ComplexBufferSize(PMIDL_STUB_MESSAGE pStubMsg,
                                          unsigned char *pMemory,
                                          PFORMAT_STRING pFormat,
@@ -225,7 +233,13 @@ const NDR_MARSHALL NdrMarshaller[NDR_TABLE_SIZE] = {
   /* 0xb7 */
   NdrRangeMarshall,
   NdrBaseTypeMarshall,
+#ifdef __REACTOS__
+  NdrBaseTypeMarshall,
+  0, 0,
+  NdrSystemHandleMarshall
+#else
   NdrBaseTypeMarshall
+#endif
 };
 const NDR_UNMARSHALL NdrUnmarshaller[NDR_TABLE_SIZE] = {
   0,
@@ -269,7 +283,13 @@ const NDR_UNMARSHALL NdrUnmarshaller[NDR_TABLE_SIZE] = {
   /* 0xb7 */
   NdrRangeUnmarshall,
   NdrBaseTypeUnmarshall,
+#ifdef __REACTOS__
+  NdrBaseTypeUnmarshall,
+  0, 0,
+  NdrSystemHandleUnmarshall
+#else
   NdrBaseTypeUnmarshall
+#endif
 };
 const NDR_BUFFERSIZE NdrBufferSizer[NDR_TABLE_SIZE] = {
   0,
@@ -313,7 +333,13 @@ const NDR_BUFFERSIZE NdrBufferSizer[NDR_TABLE_SIZE] = {
   /* 0xb7 */
   NdrRangeBufferSize,
   NdrBaseTypeBufferSize,
+#ifdef __REACTOS__
+  NdrBaseTypeBufferSize,
+  0, 0,
+  NdrSystemHandleBufferSize
+#else
   NdrBaseTypeBufferSize
+#endif
 };
 const NDR_MEMORYSIZE NdrMemorySizer[NDR_TABLE_SIZE] = {
   0,
@@ -357,7 +383,13 @@ const NDR_MEMORYSIZE NdrMemorySizer[NDR_TABLE_SIZE] = {
   /* 0xb7 */
   NdrRangeMemorySize,
   NdrBaseTypeMemorySize,
+#ifdef __REACTOS__
+  NdrBaseTypeMemorySize,
+  0, 0,
+  NdrSystemHandleMemorySize
+#else
   NdrBaseTypeMemorySize
+#endif
 };
 const NDR_FREE NdrFreer[NDR_TABLE_SIZE] = {
   0,
@@ -400,7 +432,13 @@ const NDR_FREE NdrFreer[NDR_TABLE_SIZE] = {
   /* 0xb7 */
   NdrRangeFree,
   NdrBaseTypeFree,
+#ifdef __REACTOS__
+  NdrBaseTypeFree,
+  0, 0,
+  NdrSystemHandleFree
+#else
   NdrBaseTypeFree
+#endif
 };
 
 typedef struct _NDR_MEMORY_LIST
@@ -2833,6 +2871,10 @@ static ULONG EmbeddedComplexSize(MIDL_STUB_MESSAGE *pStubMsg,
     return *(const SHORT*)pFormat;
   case FC_IP:
     return sizeof(void *);
+#ifdef __REACTOS__
+  case FC_SYSTEM_HANDLE:
+    return sizeof(HANDLE);
+#endif
   case FC_WSTRING:
     return *(const WORD*)&pFormat[2] * 2;
   default:
@@ -7422,3 +7464,106 @@ void WINAPI NdrCorrelationFree(PMIDL_STUB_MESSAGE pStubMsg)
 {
     /* FIXME: free memory  */
 }
+#ifdef __REACTOS__
+
+static unsigned char *WINAPI NdrSystemHandleMarshall(PMIDL_STUB_MESSAGE pStubMsg,
+                                                     unsigned char *pMemory,
+                                                     PFORMAT_STRING pFormat)
+{
+    HANDLE handle = *(HANDLE *)pMemory;
+    ULONG data[2];
+
+    TRACE("(%p, %p, %p)\n", pStubMsg, pMemory, pFormat);
+
+    data[0] = handle ? GetCurrentProcessId() : 0;
+    data[1] = HandleToULong(handle);
+    align_pointer_clear(&pStubMsg->Buffer, 4);
+    if (pStubMsg->Buffer + sizeof(data) > ndr_buffer_end(pStubMsg))
+        RpcRaiseException(RPC_X_BAD_STUB_DATA);
+    copy_to_buffer(pStubMsg, data, sizeof(data));
+    if (!pStubMsg->IsClient)
+        *(HANDLE *)pMemory = NULL;
+    return NULL;
+}
+
+static unsigned char *WINAPI NdrSystemHandleUnmarshall(PMIDL_STUB_MESSAGE pStubMsg,
+                                                       unsigned char **ppMemory,
+                                                       PFORMAT_STRING pFormat,
+                                                       unsigned char fMustAlloc)
+{
+    HANDLE handle = NULL, process;
+    ULONG data[2], access;
+    DWORD options;
+
+    TRACE("(%p, %p, %p, %d)\n", pStubMsg, ppMemory, pFormat, fMustAlloc);
+
+    align_pointer(&pStubMsg->Buffer, 4);
+    safe_copy_from_buffer(pStubMsg, data, sizeof(data));
+    if (data[1])
+    {
+        memcpy(&access, &pFormat[2], sizeof(access));
+        options = access ? 0 : DUPLICATE_SAME_ACCESS;
+        if (pStubMsg->IsClient)
+            options |= DUPLICATE_CLOSE_SOURCE;
+        if (data[0] == GetCurrentProcessId())
+            process = GetCurrentProcess();
+        else if (!(process = OpenProcess(PROCESS_DUP_HANDLE, FALSE, data[0])))
+            RpcRaiseException(GetLastError());
+        if (!DuplicateHandle(process, ULongToHandle(data[1]), GetCurrentProcess(), &handle,
+                             access, FALSE, options))
+        {
+            DWORD error = GetLastError();
+            if (process != GetCurrentProcess())
+                CloseHandle(process);
+            RpcRaiseException(error);
+        }
+        if (process != GetCurrentProcess())
+            CloseHandle(process);
+    }
+
+    if (fMustAlloc || !*ppMemory)
+        *ppMemory = NdrAllocateZero(pStubMsg, sizeof(HANDLE));
+    *(HANDLE *)*ppMemory = handle;
+    return NULL;
+}
+
+static void WINAPI NdrSystemHandleBufferSize(PMIDL_STUB_MESSAGE pStubMsg,
+                                             unsigned char *pMemory,
+                                             PFORMAT_STRING pFormat)
+{
+    TRACE("(%p, %p, %p)\n", pStubMsg, pMemory, pFormat);
+
+    align_length(&pStubMsg->BufferLength, 4);
+    safe_buffer_length_increment(pStubMsg, 2 * sizeof(ULONG));
+}
+
+static ULONG WINAPI NdrSystemHandleMemorySize(PMIDL_STUB_MESSAGE pStubMsg,
+                                              PFORMAT_STRING pFormat)
+{
+    TRACE("(%p, %p)\n", pStubMsg, pFormat);
+
+    align_pointer(&pStubMsg->Buffer, 4);
+    safe_buffer_increment(pStubMsg, 2 * sizeof(ULONG));
+    align_length(&pStubMsg->MemorySize, sizeof(HANDLE));
+    pStubMsg->MemorySize += sizeof(HANDLE);
+    return sizeof(HANDLE);
+}
+
+static void WINAPI NdrSystemHandleFree(PMIDL_STUB_MESSAGE pStubMsg,
+                                       unsigned char *pMemory,
+                                       PFORMAT_STRING pFormat)
+{
+    HANDLE handle;
+
+    TRACE("(%p, %p, %p)\n", pStubMsg, pMemory, pFormat);
+
+    if (!pMemory)
+        return;
+    handle = *(HANDLE *)pMemory;
+    if (handle)
+    {
+        CloseHandle(handle);
+        *(HANDLE *)pMemory = NULL;
+    }
+}
+#endif

@@ -216,6 +216,11 @@ static DWORD calc_arg_size(MIDL_STUB_MESSAGE *pStubMsg, PFORMAT_STRING pFormat)
         size = *(const WORD *)(pFormat + 8 + pStubMsg->CorrDespIncrement + offset);
         break;
     }
+#ifdef __REACTOS__
+    case FC_SYSTEM_HANDLE:
+        size = sizeof(HANDLE);
+        break;
+#endif
     default:
         FIXME("Unhandled type %02x\n", *pFormat);
         /* fallthrough */

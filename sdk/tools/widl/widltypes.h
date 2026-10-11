@@ -176,6 +176,9 @@ enum attr_type
     ATTR_STRING,
     ATTR_SWITCHIS,
     ATTR_SWITCHTYPE,
+#ifdef __REACTOS__
+    ATTR_SYSTEMHANDLE,
+#endif
     ATTR_THREADING,
     ATTR_TRANSMITAS,
     ATTR_UIDEFAULT,
@@ -662,6 +665,14 @@ struct _statement_t {
     unsigned int is_defined : 1;
 };
 
+#ifdef __REACTOS__
+typedef struct _system_handle_attr_t
+{
+    unsigned char handle_type;
+    unsigned int access;
+} system_handle_attr_t;
+
+#endif
 struct _version_t {
     unsigned short major;
     unsigned short minor;

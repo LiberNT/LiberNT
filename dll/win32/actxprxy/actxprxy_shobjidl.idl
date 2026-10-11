@@ -21,6 +21,9 @@
 #pragma makedep proxy
 #pragma makedep register
 
+#ifdef __REACTOS__
+#define BUILD_ICONTEXTMENU_ISHELLEXTINIT_REMOTE_INTERFACE
+#endif
 #include "shobjidl.idl"
 
 [

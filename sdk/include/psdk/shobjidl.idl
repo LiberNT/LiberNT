@@ -1407,17 +1407,37 @@ cpp_quote("#define IShellLink WINELIB_NAME_AW(IShellLink)")
 [
     object,
     uuid(000214e8-0000-0000-c000-000000000046),
+#ifdef __REACTOS__
+#ifndef BUILD_ICONTEXTMENU_ISHELLEXTINIT_REMOTE_INTERFACE
+    local,
+#endif
+    pointer_default(unique)
+#else
     pointer_default(unique),
     local
+#endif
 ]
 interface IShellExtInit : IUnknown
 {
     typedef IShellExtInit *LPSHELLEXTINIT;
 
+#ifdef __REACTOS__
+    [local]
+#endif
     HRESULT Initialize(
         [in] PCIDLIST_ABSOLUTE pidlFolder,
         [in] IDataObject *pdtobj,
         [in] HKEY hkeyProgID);
+#ifdef __REACTOS__
+#ifdef BUILD_ICONTEXTMENU_ISHELLEXTINIT_REMOTE_INTERFACE
+
+    [call_as(Initialize)]
+    HRESULT RemoteInitialize(
+        [in, unique] PCIDLIST_ABSOLUTE pidlFolder,
+        [in, unique] IDataObject *pdtobj,
+        [in, unique, system_handle(sh_reg_key)] HANDLE hkeyProgID);
+#endif
+#endif
 }
 
 [
@@ -1831,14 +1851,43 @@ interface IDropTargetHelper : IUnknown
 }
 
 
+#ifdef __REACTOS__
+typedef struct CMINVOKECOMMANDINFOEX_REMOTE
+{
+    DWORD cbSize;
+    DWORD fMask;
+    HWND hwnd;
+    LPCSTR lpVerbString;
+    LPCSTR lpParameters;
+    LPCSTR lpDirectory;
+    INT nShow;
+    DWORD dwHotKey;
+    LPCSTR lpTitle;
+    LPCWSTR lpVerbWString;
+    LPCWSTR lpParametersW;
+    LPCWSTR lpDirectoryW;
+    LPCWSTR lpTitleW;
+    POINT ptInvoke;
+    UINT lpVerbInt;
+    UINT lpVerbWInt;
+} CMINVOKECOMMANDINFOEX_REMOTE;
+
+#endif
 /*****************************************************************************
  * IContextMenu interface
  */
 [
     object,
     uuid(000214e4-0000-0000-c000-000000000046),
+#ifdef __REACTOS__
+#ifndef BUILD_ICONTEXTMENU_ISHELLEXTINIT_REMOTE_INTERFACE
+    local,
+#endif
+    pointer_default(unique)
+#else
     pointer_default(unique),
     local
+#endif
 ]
 interface IContextMenu : IUnknown
 {
@@ -1943,6 +1992,9 @@ cpp_quote("#define CMIC_MASK_NOZONECHECKS   SEE_MASK_NOZONECHECKS")
         POINT ptInvoke;
     } CMINVOKECOMMANDINFOEX, *LPCMINVOKECOMMANDINFOEX;
 
+#ifdef __REACTOS__
+    [local]
+#endif
     HRESULT QueryContextMenu(
         [in] HMENU hmenu,
         [in] UINT indexMenu,
@@ -1950,14 +2002,46 @@ cpp_quote("#define CMIC_MASK_NOZONECHECKS   SEE_MASK_NOZONECHECKS")
         [in] UINT idCmdLast,
         [in] UINT uFlags);
 
+#ifdef __REACTOS__
+    [local]
+#endif
     HRESULT InvokeCommand( [in] LPCMINVOKECOMMANDINFO lpici );
 
+#ifdef __REACTOS__
+    [local]
+#endif
     HRESULT GetCommandString(
         [in] UINT_PTR idCmd,
         [in] UINT uType,
         [out] UINT *pwReserved,
         [out, size_is(cchMax)] LPSTR pszName,
         [in] UINT cchMax);
+#ifdef __REACTOS__
+#ifdef BUILD_ICONTEXTMENU_ISHELLEXTINIT_REMOTE_INTERFACE
+
+    [call_as(QueryContextMenu)]
+    HRESULT RemoteQueryContextMenu(
+        [in] HMENU hmenu,
+        [in] UINT indexMenu,
+        [in] UINT idCmdFirst,
+        [in] UINT idCmdLast,
+        [in] UINT uFlags,
+        [out] UINT *fileMappingHandlesCount,
+        [out, system_handle(sh_section), size_is(, *fileMappingHandlesCount)] HANDLE **fileMappingHandles,
+        [out, size_is(, *fileMappingHandlesCount)] ULONG **bitmapIndices);
+
+    [call_as(InvokeCommand)]
+    HRESULT RemoteInvokeCommand([in] const CMINVOKECOMMANDINFOEX_REMOTE *pici);
+
+    [call_as(GetCommandString)]
+    HRESULT RemoteGetCommandString(
+        [in] UINT_PTR idCmd,
+        [in] UINT uType,
+        [in] UINT *pReserved,
+        [out] CHAR *pszName,
+        [in] UINT cchMax);
+#endif
+#endif
 }
 
 
@@ -1967,17 +2051,37 @@ cpp_quote("#define CMIC_MASK_NOZONECHECKS   SEE_MASK_NOZONECHECKS")
 [
     object,
     uuid(000214f4-0000-0000-c000-000000000046),
+#ifdef __REACTOS__
+#ifndef BUILD_ICONTEXTMENU_ISHELLEXTINIT_REMOTE_INTERFACE
+    local,
+#endif
+    pointer_default(unique)
+#else
     pointer_default(unique),
     local
+#endif
 ]
 interface IContextMenu2 : IContextMenu
 {
     typedef IContextMenu2 *LPCONTEXTMENU2;
 
+#ifdef __REACTOS__
+    [local]
+#endif
     HRESULT HandleMenuMsg(
         [in] UINT uMsg,
         [in] WPARAM wParam,
         [in] LPARAM lParam);
+#ifdef __REACTOS__
+#ifdef BUILD_ICONTEXTMENU_ISHELLEXTINIT_REMOTE_INTERFACE
+
+    [call_as(HandleMenuMsg)]
+    HRESULT RemoteHandleMenuMsg(
+        [in] UINT uMsg,
+        [in] WPARAM wParam,
+        [in] LPARAM lParam);
+#endif
+#endif
 }
 
 
@@ -1987,18 +2091,39 @@ interface IContextMenu2 : IContextMenu
 [
     object,
     uuid(bcfce0a0-ec17-11d0-8d10-00a0c90f2719),
+#ifdef __REACTOS__
+#ifndef BUILD_ICONTEXTMENU_ISHELLEXTINIT_REMOTE_INTERFACE
+    local,
+#endif
+    pointer_default(unique)
+#else
     pointer_default(unique),
     local
+#endif
 ]
 interface IContextMenu3 : IContextMenu2
 {
     typedef IContextMenu3 *LPCONTEXTMENU3;
 
+#ifdef __REACTOS__
+    [local]
+#endif
     HRESULT HandleMenuMsg2(
         [in] UINT uMsg,
         [in] WPARAM wParam,
         [in] LPARAM lParam,
         [out] LRESULT *plResult);
+#ifdef __REACTOS__
+#ifdef BUILD_ICONTEXTMENU_ISHELLEXTINIT_REMOTE_INTERFACE
+
+    [call_as(HandleMenuMsg2)]
+    HRESULT RemoteHandleMenuMsg2(
+        [in] UINT uMsg,
+        [in] WPARAM wParam,
+        [in] LPARAM lParam,
+        [out] LRESULT *plResult);
+#endif
+#endif
 }
 
 /*****************************************************************************

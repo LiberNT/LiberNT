@@ -357,6 +357,7 @@ static void winrt_enable(void)
     string                                      { return tSTRING; }
     switch_is                                   { return tSWITCHIS; }
     switch_type                                 { return tSWITCHTYPE; }
+    system_handle                               { return tSYSTEMHANDLE; }
     threading                                   { return tTHREADING; }
     transmit_as                                 { return tTRANSMITAS; }
     uidefault                                   { return tUIDEFAULT; }

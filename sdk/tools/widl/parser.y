@@ -60,6 +60,10 @@ static void append_chain_type(declarator_t *decl, type_t *type, enum type_qualif
 static void append_chain_callconv( struct location where, type_t *chain, char *callconv );
 static warning_list_t *append_warning(warning_list_t *, int);
 static version_t *make_version( unsigned short major, unsigned short minor );
+#ifdef __REACTOS__
+static system_handle_attr_t *make_system_handle_attr( struct location where, const char *name, const expr_t *access );
+static type_t *make_system_handle_type( const type_t *handle, attr_t *attr );
+#endif
 
 static type_t *reg_typedefs( struct location where, decl_spec_t *decl_spec, var_list_t *names, attr_list_t *attrs );
 static type_t *find_type_or_error(struct namespace *parent, const char *name);
@@ -277,6 +281,7 @@ PARSER_LTYPE pop_import(void);
 %token tSTRICTCONTEXTHANDLE
 %token tSTRING tSTRUCT
 %token tSWITCH tSWITCHIS tSWITCHTYPE
+%token tSYSTEMHANDLE
 %token tTHREADING tTRANSMITAS
 %token tTRUE
 %token tTYPEDEF
@@ -759,6 +764,9 @@ attribute
         | tSTRING                               { $$ = attr_int( @$, ATTR_STRING, 0 ); }
         | tSWITCHIS '(' expr ')'                { $$ = attr_ptr( @$, ATTR_SWITCHIS, $3 ); }
         | tSWITCHTYPE '(' type ')'              { $$ = attr_ptr( @$, ATTR_SWITCHTYPE, $3 ); }
+        | tSYSTEMHANDLE '(' aIDENTIFIER ')'     { $$ = attr_ptr( @$, ATTR_SYSTEMHANDLE, make_system_handle_attr( @3, $3, NULL ) ); }
+        | tSYSTEMHANDLE '(' aIDENTIFIER ',' expr_int_const ')'
+                                                { $$ = attr_ptr( @$, ATTR_SYSTEMHANDLE, make_system_handle_attr( @3, $3, $5 ) ); }
         | tTRANSMITAS '(' type ')'              { $$ = attr_ptr( @$, ATTR_TRANSMITAS, $3 ); }
         | tTHREADING '(' threading_type ')'     { $$ = attr_int( @$, ATTR_THREADING, $3 ); }
         | tUIDEFAULT                            { $$ = attr_int( @$, ATTR_UIDEFAULT, 0 ); }
@@ -1867,12 +1875,94 @@ static var_t *declare_var(attr_list_t *attrs, decl_spec_t *decl_spec, declarator
       error_loc("%s: too many expressions in length_is attribute\n", v->name);
   }
 
+#ifdef __REACTOS__
+  if (is_attr(v->attrs, ATTR_SYSTEMHANDLE))
+  {
+    attr_t *attr;
+
+    ptype = &v->declspec.type;
+    for (;;)
+    {
+      if (type_is_alias(*ptype))
+        break;
+      if (is_ptr(*ptype))
+        ptype = &(*ptype)->details.pointer.ref.type;
+      else if (is_array(*ptype))
+        ptype = &(*ptype)->details.array.elem.type;
+      else
+        break;
+    }
+    if (!is_ptr(*ptype) || type_get_type(type_pointer_get_ref_type(*ptype)) != TYPE_VOID)
+      error_loc("%s: system_handle attribute applied to a non-handle type\n", v->name);
+    LIST_FOR_EACH_ENTRY(attr, v->attrs, attr_t, entry)
+      if (attr->type == ATTR_SYSTEMHANDLE)
+      {
+        *ptype = make_system_handle_type(*ptype, attr);
+        break;
+      }
+  }
+
+#endif
   if (decl->bits)
     v->declspec.type = type_new_bitfield(v->declspec.type, decl->bits);
 
   return v;
 }
 
+#ifdef __REACTOS__
+static system_handle_attr_t *make_system_handle_attr( struct location where, const char *name, const expr_t *access )
+{
+  static const struct
+  {
+    const char *name;
+    unsigned char type;
+  }
+  handle_types[] =
+  {
+    { "sh_file", 0 },
+    { "sh_semaphore", 1 },
+    { "sh_event", 2 },
+    { "sh_mutex", 3 },
+    { "sh_process", 4 },
+    { "sh_token", 5 },
+    { "sh_section", 6 },
+    { "sh_reg_key", 7 },
+    { "sh_thread", 8 },
+    { "sh_composition", 9 },
+    { "sh_socket", 10 },
+    { "sh_job", 11 },
+    { "sh_pipe", 12 },
+  };
+  system_handle_attr_t *sh = xmalloc( sizeof(*sh) );
+  unsigned int i;
+
+  for (i = 0; i < ARRAY_SIZE(handle_types); i++)
+    if (!strcmp( name, handle_types[i].name )) break;
+  if (i == ARRAY_SIZE(handle_types))
+    error_at( &where, "unknown system handle type %s\n", name );
+  sh->handle_type = i < ARRAY_SIZE(handle_types) ? handle_types[i].type : 0xff;
+  sh->access = access ? access->cval : 0;
+  return sh;
+}
+
+static type_t *make_system_handle_type( const type_t *handle, attr_t *attr )
+{
+  type_t *t;
+
+  if (type_is_alias( handle ))
+    t = type_new_alias( &handle->details.alias.aliasee, handle->name );
+  else
+  {
+    decl_spec_t ds;
+    init_declspec( &ds, (type_t *)handle );
+    t = type_new_alias( &ds, "HANDLE" );
+  }
+  t->attrs = append_attr( t->attrs, attr_ptr( attr->where, ATTR_SYSTEMHANDLE, attr->u.pval ) );
+  t->defined = TRUE;
+  return t;
+}
+
+#endif
 static var_list_t *set_var_types(attr_list_t *attrs, decl_spec_t *decl_spec, declarator_list_t *decls)
 {
   declarator_t *decl, *next;
@@ -2546,6 +2636,9 @@ static void check_field_common(const type_t *container_type,
             if (!type_is_complete(type))
                 error_at( &arg->where, "undefined type declaration \"enum %s\"\n", type->name );
         case TGT_USER_TYPE:
+#ifdef __REACTOS__
+        case TGT_SYSTEM_HANDLE:
+#endif
         case TGT_IFACE_POINTER:
         case TGT_BASIC:
         case TGT_RANGE:
@@ -2713,6 +2806,9 @@ static void check_remoting_args(const var_t *func)
             case TGT_UNION:
             case TGT_CTXT_HANDLE:
             case TGT_USER_TYPE:
+#ifdef __REACTOS__
+            case TGT_SYSTEM_HANDLE:
+#endif
                 error_at( &arg->where, "out parameter \'%s\' of function \'%s\' is not a pointer\n", arg->name, funcname );
                 break;
             case TGT_IFACE_POINTER:

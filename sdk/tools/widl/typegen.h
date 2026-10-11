@@ -58,6 +58,9 @@ enum typegen_type
     TGT_STRUCT,
     TGT_UNION,
     TGT_RANGE,
+#ifdef __REACTOS__
+    TGT_SYSTEM_HANDLE,
+#endif
 };
 
 typedef int (*type_pred_t)(const type_t *);
