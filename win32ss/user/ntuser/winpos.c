@@ -1029,8 +1029,7 @@ co_WinPosGetMinMaxInfo(PWND Window, POINT* MaxSize, POINT* MaxPos,
 
         rc_work = monitor->rcMonitor;
 
-        if ((style & WS_MAXIMIZEBOX) && !(style & WS_CHILD) &&
-            ((style & WS_CAPTION) == WS_CAPTION || !(style & WS_POPUP)))
+        if ((style & WS_MAXIMIZEBOX) && (style & WS_CAPTION) == WS_CAPTION && !(style & WS_CHILD))
             rc_work = monitor->rcWork;
 
         if (MinMax.ptMaxSize.x == UserGetSystemMetrics(SM_CXSCREEN) + 2 * xinc &&
