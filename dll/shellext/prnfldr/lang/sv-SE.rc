@@ -1,0 +1,13 @@
+LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Skrivare"
+    IDS_PRINTERS_INFOTIP   "Shows installed printers and fax printers and helps you add new ones."
+    IDS_COLUMN_NAME        "Namn"
+    IDS_COLUMN_DOCUMENTS   "Dokument"
+    IDS_COLUMN_STATUS      "Status"
+    IDS_COLUMN_COMMENTS    "Kommentar"
+    IDS_COLUMN_LOCATION    "Plats"
+    IDS_COLUMN_MODEL       "Modell"
+END

@@ -1,0 +1,13 @@
+LANGUAGE LANG_PORTUGUESE, SUBLANG_PORTUGUESE_BRAZILIAN
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Impressoras"
+    IDS_PRINTERS_INFOTIP   "Shows installed printers and fax printers and helps you add new ones."
+    IDS_COLUMN_NAME        "Nome"
+    IDS_COLUMN_DOCUMENTS   "Documentos"
+    IDS_COLUMN_STATUS      "Estado"
+    IDS_COLUMN_COMMENTS    "Comentários"
+    IDS_COLUMN_LOCATION    "Local"
+    IDS_COLUMN_MODEL       "Modelo"
+END

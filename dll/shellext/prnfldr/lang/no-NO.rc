@@ -1,0 +1,13 @@
+LANGUAGE LANG_NORWEGIAN, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Skrivere"
+    IDS_PRINTERS_INFOTIP   "Shows installed printers and fax printers and helps you add new ones."
+    IDS_COLUMN_NAME        "Navn"
+    IDS_COLUMN_DOCUMENTS   "Dokumenter"
+    IDS_COLUMN_STATUS      "Status"
+    IDS_COLUMN_COMMENTS    "Kommentarer"
+    IDS_COLUMN_LOCATION    "Plassering"
+    IDS_COLUMN_MODEL       "Modell"
+END

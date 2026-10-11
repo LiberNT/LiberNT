@@ -1,0 +1,13 @@
+LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Printer"
+    IDS_PRINTERS_INFOTIP   "Menampilkan printer terpasang dan printer faks serta membantu Anda menambahkan yang baru."
+    IDS_COLUMN_NAME        "Nama"
+    IDS_COLUMN_DOCUMENTS   "Dokumen"
+    IDS_COLUMN_STATUS      "Status"
+    IDS_COLUMN_COMMENTS    "Komentar"
+    IDS_COLUMN_LOCATION    "Lokasi"
+    IDS_COLUMN_MODEL       "Model"
+END

@@ -1,0 +1,13 @@
+LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Stampanti"
+    IDS_PRINTERS_INFOTIP   "Shows installed printers and fax printers and helps you add new ones."
+    IDS_COLUMN_NAME        "Nome"
+    IDS_COLUMN_DOCUMENTS   "Documenti"
+    IDS_COLUMN_STATUS      "Stato"
+    IDS_COLUMN_COMMENTS    "Commenti"
+    IDS_COLUMN_LOCATION    "Posizione"
+    IDS_COLUMN_MODEL       "Modello"
+END

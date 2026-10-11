@@ -1,0 +1,13 @@
+LANGUAGE LANG_CZECH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Tiskárny"
+    IDS_PRINTERS_INFOTIP   "Zobrazí instalované tiskárny a faxy a pomůže přidat další."
+    IDS_COLUMN_NAME        "Jméno"
+    IDS_COLUMN_DOCUMENTS   "Dokumenty"
+    IDS_COLUMN_STATUS      "Stav"
+    IDS_COLUMN_COMMENTS    "Komentáře"
+    IDS_COLUMN_LOCATION    "Umístění"
+    IDS_COLUMN_MODEL       "Model"
+END

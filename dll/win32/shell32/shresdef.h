@@ -952,7 +952,6 @@
 #define IDR_MYDOCUMENTS         137
 #define IDR_NETWORKPLACES       138
 #define IDR_NEWMENU             139
-#define IDR_PRINTERS            140
 #define IDR_RECYCLEBIN          141
 #define IDR_SHELLDESKTOP        142
 #define IDR_SHELLFSFOLDER       143

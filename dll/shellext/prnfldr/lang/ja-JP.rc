@@ -1,0 +1,13 @@
+LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "プリンタ"
+    IDS_PRINTERS_INFOTIP   "インストール済みのプリンタや FAX プリンタを表示し、新しいのを追加するのを助けます。"
+    IDS_COLUMN_NAME        "作成者"
+    IDS_COLUMN_DOCUMENTS   "ドキュメント"
+    IDS_COLUMN_STATUS      "状態"
+    IDS_COLUMN_COMMENTS    "コメント"
+    IDS_COLUMN_LOCATION    "場所"
+    IDS_COLUMN_MODEL       "モデル"
+END

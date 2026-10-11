@@ -1,0 +1,13 @@
+LANGUAGE LANG_ALBANIAN, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Printera"
+    IDS_PRINTERS_INFOTIP   "Shows installed printers and fax printers and helps you add new ones."
+    IDS_COLUMN_NAME        "Emri"
+    IDS_COLUMN_DOCUMENTS   "Dokumentë"
+    IDS_COLUMN_STATUS      "Gjëndje"
+    IDS_COLUMN_COMMENTS    "Komente"
+    IDS_COLUMN_LOCATION    "Vendnodhje"
+    IDS_COLUMN_MODEL       "Modeli"
+END

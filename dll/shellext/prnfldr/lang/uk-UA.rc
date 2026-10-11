@@ -1,0 +1,13 @@
+LANGUAGE LANG_UKRAINIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Принтери"
+    IDS_PRINTERS_INFOTIP   "Показує встановлені принтери та принтери факсів і допомагає додавати нові."
+    IDS_COLUMN_NAME        "Ім'я"
+    IDS_COLUMN_DOCUMENTS   "Документи"
+    IDS_COLUMN_STATUS      "Стан"
+    IDS_COLUMN_COMMENTS    "Примітки"
+    IDS_COLUMN_LOCATION    "Розташування"
+    IDS_COLUMN_MODEL       "Модель"
+END

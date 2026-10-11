@@ -79,7 +79,6 @@
 #include "folders/CMyDocsFolder.h"
 #include "folders/CNetFolder.h"
 #include "folders/CFontsFolder.h"
-#include "folders/CPrinterFolder.h"
 #include "folders/CRecycleBin.h"
 #include "folders/CRecycleBinFolderViewCB.h"
 #include "droptargets/CexeDropHandler.h"

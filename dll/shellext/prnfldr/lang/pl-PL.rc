@@ -1,0 +1,13 @@
+LANGUAGE LANG_POLISH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Drukarki"
+    IDS_PRINTERS_INFOTIP   "Dodawaj lub usuwaj drukarki, wyświetlaj kolejki wydruku lub zarządzaj nimi, zmieniaj ustawienia drukarek i preferencje drukowania."
+    IDS_COLUMN_NAME        "Nazwa"
+    IDS_COLUMN_DOCUMENTS   "Dokumenty"
+    IDS_COLUMN_STATUS      "Stan"
+    IDS_COLUMN_COMMENTS    "Komentarze"
+    IDS_COLUMN_LOCATION    "Lokalizacja"
+    IDS_COLUMN_MODEL       "Model"
+END

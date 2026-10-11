@@ -1,0 +1,13 @@
+LANGUAGE LANG_BASQUE, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Imprimagailuak"
+    IDS_PRINTERS_INFOTIP   "Instalatutako inprimagailu eta fax-inprimagailuak erakusten ditu, eta gehiago instalatzen lagundu."
+    IDS_COLUMN_NAME        "Izena"
+    IDS_COLUMN_DOCUMENTS   "Dokumentuak"
+    IDS_COLUMN_STATUS      "Egoera"
+    IDS_COLUMN_COMMENTS    "Azalpenak"
+    IDS_COLUMN_LOCATION    "Kokalekua"
+    IDS_COLUMN_MODEL       "Eredu"
+END

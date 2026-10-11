@@ -1,0 +1,13 @@
+LANGUAGE LANG_HUNGARIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Nyomtatók"
+    IDS_PRINTERS_INFOTIP   "Telepített nyomtatók és faxok megtekintése és újak hozzáadása."
+    IDS_COLUMN_NAME        "Név"
+    IDS_COLUMN_DOCUMENTS   "Dokumentumok"
+    IDS_COLUMN_STATUS      "Állapot"
+    IDS_COLUMN_COMMENTS    "Megjegyzések"
+    IDS_COLUMN_LOCATION    "Hely"
+    IDS_COLUMN_MODEL       "Modell"
+END

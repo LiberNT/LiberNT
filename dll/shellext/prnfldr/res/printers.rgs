@@ -2,15 +2,15 @@ HKCR
 {
 	NoRemove CLSID
 	{
-		ForceRemove {2227A280-3AEA-1069-A2DE-08002B30309D} = s 'Printers and Faxes'
+		ForceRemove {2227A280-3AEA-1069-A2DE-08002B30309D} = s 'Printers'
 		{
 			val '{305CA226-D286-468e-B848-2B2E8E697B74} 2' = d '2'
 			val 'System.ApplicationName' = s 'Microsoft.Printers'
 			val 'System.ControlPanel.Category' = s '2'
 			val 'System.Software.TasksFileUrl' = s 'Internal'
-			val InfoTip = e '@%%SystemRoot%%\system32\SHELL32.dll,-12696'
+			val InfoTip = e '@%%SystemRoot%%\system32\prnfldr.dll,-8062'
 			val IntroText = e '@%%SystemRoot%%\system32\SHELL32.dll,-31757'
-			val LocalizedString = e '@%%SystemRoot%%\system32\SHELL32.dll,-9319'
+			val LocalizedString = e '@%%SystemRoot%%\system32\prnfldr.dll,-8036'
 			DefaultIcon = e '%%SystemRoot%%\System32\shell32.dll,-138'
 			InprocServer32 = s '%MODULE%'
 			{
@@ -19,6 +19,7 @@ HKCR
 			'ShellFolder'
 			{
 				val 'Attributes' = d '&H20000004'
+				val 'FolderValueFlags' = d '0'
 			}
 		}
 	}

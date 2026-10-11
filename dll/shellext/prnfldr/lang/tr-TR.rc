@@ -1,0 +1,13 @@
+LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Yazıcılar"
+    IDS_PRINTERS_INFOTIP   "Kurulu yazıcıları ve faks yazıcılarını gösterir ve bunların yenilerini eklemenize yardımcı olur."
+    IDS_COLUMN_NAME        "Ad"
+    IDS_COLUMN_DOCUMENTS   "Belgeler"
+    IDS_COLUMN_STATUS      "Durum"
+    IDS_COLUMN_COMMENTS    "Açıklamalar"
+    IDS_COLUMN_LOCATION    "Konum"
+    IDS_COLUMN_MODEL       "Model"
+END

@@ -1,0 +1,13 @@
+LANGUAGE LANG_ROMANIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Imprimante"
+    IDS_PRINTERS_INFOTIP   "Se vizualizează lista imprimantelor şi imprimantelor fax instalate."
+    IDS_COLUMN_NAME        "Nume"
+    IDS_COLUMN_DOCUMENTS   "Documente"
+    IDS_COLUMN_STATUS      "Stare"
+    IDS_COLUMN_COMMENTS    "Comentarii"
+    IDS_COLUMN_LOCATION    "Locaţie"
+    IDS_COLUMN_MODEL       "Model"
+END

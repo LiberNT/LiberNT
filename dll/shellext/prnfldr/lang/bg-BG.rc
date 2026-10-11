@@ -1,0 +1,13 @@
+LANGUAGE LANG_BULGARIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Печатачи"
+    IDS_PRINTERS_INFOTIP   "Shows installed printers and fax printers and helps you add new ones."
+    IDS_COLUMN_NAME        "Име"
+    IDS_COLUMN_DOCUMENTS   "Книжа"
+    IDS_COLUMN_STATUS      "Състояние"
+    IDS_COLUMN_COMMENTS    "Забележки"
+    IDS_COLUMN_LOCATION    "Място"
+    IDS_COLUMN_MODEL       "Модел"
+END

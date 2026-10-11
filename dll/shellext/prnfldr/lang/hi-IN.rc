@@ -1,0 +1,13 @@
+LANGUAGE LANG_HINDI, SUBLANG_HINDI_INDIA
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "प्रिंटर"
+    IDS_PRINTERS_INFOTIP   "स्थापित प्रिंटर और फ़ैक्स प्रिंटर दिखाता है और आपको नए ऐड करने में मदद करता है।"
+    IDS_COLUMN_NAME        "नाम"
+    IDS_COLUMN_DOCUMENTS   "डॉक्यूमेंट"
+    IDS_COLUMN_STATUS      "स्थिति"
+    IDS_COLUMN_COMMENTS    "टिप्पणियाँ"
+    IDS_COLUMN_LOCATION    "स्थान"
+    IDS_COLUMN_MODEL       "मॉडल"
+END

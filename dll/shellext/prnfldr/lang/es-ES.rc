@@ -1,0 +1,13 @@
+LANGUAGE LANG_SPANISH, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Impresoras"
+    IDS_PRINTERS_INFOTIP   "Muestra impresoras y faxes instalados y le ayuda a configurar nuevos."
+    IDS_COLUMN_NAME        "Nombre"
+    IDS_COLUMN_DOCUMENTS   "Documentos"
+    IDS_COLUMN_STATUS      "Estado"
+    IDS_COLUMN_COMMENTS    "Comentarios"
+    IDS_COLUMN_LOCATION    "Ubicación"
+    IDS_COLUMN_MODEL       "Modelo"
+END

@@ -1,0 +1,13 @@
+LANGUAGE LANG_SLOVAK, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Tlačiarne"
+    IDS_PRINTERS_INFOTIP   "Shows installed printers and fax printers and helps you add new ones."
+    IDS_COLUMN_NAME        "Názov"
+    IDS_COLUMN_DOCUMENTS   "Dokumenty"
+    IDS_COLUMN_STATUS      "Stav"
+    IDS_COLUMN_COMMENTS    "Poznámky"
+    IDS_COLUMN_LOCATION    "Location"
+    IDS_COLUMN_MODEL       "Model"
+END

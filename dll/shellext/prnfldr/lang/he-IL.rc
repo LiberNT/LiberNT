@@ -1,0 +1,13 @@
+LANGUAGE LANG_HEBREW, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "מדפסות"
+    IDS_PRINTERS_INFOTIP   "Shows installed printers and fax printers and helps you add new ones."
+    IDS_COLUMN_NAME        "שם"
+    IDS_COLUMN_DOCUMENTS   "מסמכים"
+    IDS_COLUMN_STATUS      "מצב"
+    IDS_COLUMN_COMMENTS    "הערות"
+    IDS_COLUMN_LOCATION    "מיקום"
+    IDS_COLUMN_MODEL       "דגם"
+END

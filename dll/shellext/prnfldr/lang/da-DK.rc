@@ -1,0 +1,13 @@
+LANGUAGE LANG_DANISH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Printers"
+    IDS_PRINTERS_INFOTIP   "Shows installed printers and fax printers and helps you add new ones."
+    IDS_COLUMN_NAME        "Navn"
+    IDS_COLUMN_DOCUMENTS   "Documents"
+    IDS_COLUMN_STATUS      "Status"
+    IDS_COLUMN_COMMENTS    "Kommentar"
+    IDS_COLUMN_LOCATION    "Location"
+    IDS_COLUMN_MODEL       "Model"
+END

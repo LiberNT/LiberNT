@@ -1,0 +1,13 @@
+LANGUAGE LANG_ESTONIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Printerid"
+    IDS_PRINTERS_INFOTIP   "Kuvab installitud printerid ja faksprinterid ja aitab teil uusi lisada."
+    IDS_COLUMN_NAME        "Nimi"
+    IDS_COLUMN_DOCUMENTS   "Dokumendid"
+    IDS_COLUMN_STATUS      "Olek"
+    IDS_COLUMN_COMMENTS    "Kommentaarid"
+    IDS_COLUMN_LOCATION    "Asukoht"
+    IDS_COLUMN_MODEL       "Mudel"
+END

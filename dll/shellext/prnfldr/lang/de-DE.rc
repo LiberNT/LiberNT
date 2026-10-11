@@ -1,0 +1,13 @@
+LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_PRINTERS_FOLDER    "Drucker"
+    IDS_PRINTERS_INFOTIP   "Anzeigen und Hinzufügen von Drucker und Faxgeräten."
+    IDS_COLUMN_NAME        "Name"
+    IDS_COLUMN_DOCUMENTS   "Dokumente"
+    IDS_COLUMN_STATUS      "Status"
+    IDS_COLUMN_COMMENTS    "Kommentare"
+    IDS_COLUMN_LOCATION    "Ort"
+    IDS_COLUMN_MODEL       "Modell"
+END
