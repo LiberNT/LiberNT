@@ -96,6 +96,7 @@ list(APPEND SOURCE
     CShellDispatch.cpp
     CFolder.cpp
     CFolderItems.cpp
+    CShellWindows.cpp
     CFolderItemVerbs.cpp)
 
 list(APPEND WINE_SOURCE

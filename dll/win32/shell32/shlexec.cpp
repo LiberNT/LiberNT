@@ -1896,6 +1896,80 @@ static HRESULT ShellExecute_ContextMenuVerb(LPSHELLEXECUTEINFOW sei)
 }
 
 
+static HRESULT SHELL_InvokeDelegateExecute(LPCWSTR pszCommandKey, LPSHELLEXECUTEINFOW sei, LPCITEMIDLIST pidl, LPCWSTR pszFile)
+{
+    WCHAR szClsid[42], szVerbKey[MAX_PATH];
+    DWORD cb = sizeof(szClsid);
+    CLSID clsid;
+
+    if (RegGetValueW(HKEY_CLASSES_ROOT, pszCommandKey, L"DelegateExecute", RRF_RT_REG_SZ, NULL, szClsid, &cb) != ERROR_SUCCESS ||
+        FAILED(CLSIDFromString(szClsid, &clsid)))
+    {
+        return S_FALSE;
+    }
+
+    CCoInit coInit;
+    if (FAILED_UNEXPECTEDLY(coInit.hr))
+        return coInit.hr;
+
+    CComPtr<IExecuteCommand> pEC;
+    HRESULT hr = CoCreateInstance(clsid, NULL, CLSCTX_ALL, IID_PPV_ARG(IExecuteCommand, &pEC));
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+
+    hr = StringCchCopyW(szVerbKey, _countof(szVerbKey), pszCommandKey);
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+    PathRemoveFileSpecW(szVerbKey);
+
+    CComPtr<IPropertyBag> pPB;
+    HKEY hkVerb;
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, szVerbKey, 0, KEY_READ, &hkVerb) == ERROR_SUCCESS)
+    {
+        SHCreatePropertyBagOnRegKey(hkVerb, NULL, STGM_READ, IID_PPV_ARG(IPropertyBag, &pPB));
+        RegCloseKey(hkVerb);
+    }
+
+    CComHeapPtr<ITEMIDLIST> pidlFile;
+    if (!pidl)
+    {
+        hr = SHParseDisplayName(pszFile, NULL, &pidlFile, 0, NULL);
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+        pidl = pidlFile;
+    }
+
+    CComPtr<IShellItemArray> pSIA;
+    hr = SHCreateShellItemArrayFromIDLists(1, &pidl, &pSIA);
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+
+    CMINVOKECOMMANDINFOEX ici = { sizeof(ici) };
+    ici.fMask = SeeFlagsToCmicFlags(sei->fMask) | CMIC_MASK_UNICODE;
+    ici.nShow = sei->nShow;
+    ici.hwnd = sei->hwnd;
+    ici.lpParametersW = sei->lpParameters;
+    ici.lpDirectoryW = sei->lpDirectory;
+    return InvokeIExecuteCommand(pEC, PathFindFileNameW(szVerbKey), pPB, pSIA, &ici, NULL);
+}
+
+static HRESULT SHELL_InvokeRegItemDelegateExecute(LPSHELLEXECUTEINFOW sei, LPCWSTR pszParsingName)
+{
+    WCHAR szKey[MAX_PATH];
+
+    if (StrIsNullOrEmpty(sei->lpVerb) || !pszParsingName)
+        return S_FALSE;
+
+    LPCWSTR pszLast = StrRStrIW(pszParsingName, NULL, L"::{");
+    if (!pszLast || lstrlenW(pszLast) != 2 + 38)
+        return S_FALSE;
+
+    HRESULT hr = StringCchPrintfW(szKey, _countof(szKey), L"CLSID\\%s\\shell\\%s\\command", pszLast + 2, sei->lpVerb);
+    if (FAILED(hr))
+        return S_FALSE;
+    return SHELL_InvokeDelegateExecute(szKey, sei, (LPCITEMIDLIST)sei->lpIDList, NULL);
+}
+
 /*************************************************************************
  *    ShellExecute_FromContextMenu [Internal]
  */
@@ -2416,6 +2490,22 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
         }
         appKnownSingular = TRUE;
         TRACE("-- idlist=%p (%s)\n", sei_tmp.lpIDList, debugstr_w(wszApplicationName));
+
+        if (SUCCEEDED(hr))
+        {
+            hr = SHELL_InvokeRegItemDelegateExecute(&sei_tmp, wszApplicationName);
+            if (hr != S_FALSE)
+            {
+                if (SUCCEEDED(hr))
+                {
+                    sei->hInstApp = (HINSTANCE)42;
+                    return TRUE;
+                }
+                UINT err = HRESULT_FACILITY(hr) == FACILITY_WIN32 ? HRESULT_CODE(hr) : GetLastError();
+                SetLastError(err ? err : ERROR_ACCESS_DENIED);
+                return ExecuteFailed(retval, *sei, NULL, FALSE) > 32;
+            }
+        }
     }
 
     if ((sei_tmp.fMask & SEE_MASK_DOENVSUBST) && !StrIsNullOrEmpty(sei_tmp.lpFile))
@@ -2598,6 +2688,23 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
     CHeapPtr<WCHAR, CLocalAllocator> env;
     wcmd[0] = UNICODE_NULL;
     retval = SHELL_FindExecutable(sei_tmp.lpDirectory, lpFile, sei_tmp.lpVerb, wcmd, wcmdLen, wszKeyname, &env, (LPITEMIDLIST)sei_tmp.lpIDList, sei_tmp.lpParameters);
+    if (retval > 32)
+    {
+        hr = SHELL_InvokeDelegateExecute(wszKeyname, &sei_tmp,
+                                         (sei->fMask & SEE_MASK_IDLIST) ? (LPCITEMIDLIST)sei->lpIDList : NULL,
+                                         wszApplicationName);
+        if (hr != S_FALSE)
+        {
+            if (SUCCEEDED(hr))
+            {
+                sei->hInstApp = (HINSTANCE)42;
+                return TRUE;
+            }
+            UINT err = HRESULT_FACILITY(hr) == FACILITY_WIN32 ? HRESULT_CODE(hr) : GetLastError();
+            SetLastError(err ? err : ERROR_ACCESS_DENIED);
+            return ExecuteFailed(retval, *sei, NULL, FALSE) > 32;
+        }
+    }
     if (retval > 32)  /* Found */
     {
         WCHAR wszDocument[MAX_PATH], wszCurDir[MAX_PATH];

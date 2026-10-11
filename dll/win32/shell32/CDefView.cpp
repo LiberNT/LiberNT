@@ -38,6 +38,7 @@ TODO:
 #include <atlwin.h>
 #include <ui/rosctrls.h>
 #include <vssym32.h>
+#include <shdispid.h>
 #include <reactos/dwmsettings.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
@@ -294,7 +295,7 @@ class CDefView :
     public CWindowImpl<CDefView, CWindow, CControlWinTraits>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public IShellView3,
-    public IFolderView,
+    public IFolderView2,
     public IShellFolderView,
     public IOleCommandTarget,
     public IDropTarget,
@@ -381,6 +382,7 @@ private:
     void _DoCopyToMoveToFolder(BOOL bCopy);
     HRESULT ContinueFillList(ULONG Generation);
     void FinishFillList();
+    void FireFolderViewEvent(DISPID dispid);
     void CancelFillList();
     bool IsComputerTileView() const;
     UINT ComputerViewDpi() const;
@@ -452,6 +454,9 @@ public:
     void DoActivate(UINT uState);
     HRESULT drag_notify_subitem(DWORD grfKeyState, POINTL pt, DWORD *pdwEffect);
     HRESULT InvokeContextMenuCommand(CComPtr<IContextMenu>& pCM, LPCSTR lpVerb, POINT* pt = NULL, bool TryMapVerb = false);
+    HRESULT GetViewItems(UINT uFlags, CSimpleArray<PCUITEMID_CHILD> &Items);
+    HRESULT FindListColumnByKey(REFPROPERTYKEY key, int *pListCol);
+    void ApplyFolderFlags(DWORD dwOldFlags);
     LRESULT OnExplorerCommand(UINT uCommand, BOOL bUseSelection);
     FOLDERVIEWMODE GetDefaultViewMode();
     HRESULT GetDefaultViewStream(DWORD Stgm, IStream **ppStream);
@@ -527,6 +532,32 @@ public:
     STDMETHOD(GetAutoArrange)() override;
     STDMETHOD(SelectItem)(int iItem, DWORD dwFlags) override;
     STDMETHOD(SelectAndPositionItems)(UINT cidl, PCUITEMID_CHILD_ARRAY apidl, POINT *apt, DWORD dwFlags) override;
+
+    // *** IFolderView2 methods ***
+    STDMETHOD(SetGroupBy)(REFPROPERTYKEY key, BOOL ascending) override;
+    STDMETHOD(GetGroupBy)(PROPERTYKEY *pkey, BOOL *ascending) override;
+    STDMETHOD(SetViewProperty)(PCUITEMID_CHILD pidl, REFPROPERTYKEY propkey, REFPROPVARIANT propvar) override;
+    STDMETHOD(GetViewProperty)(PCUITEMID_CHILD pidl, REFPROPERTYKEY propkey, PROPVARIANT *propvar) override;
+    STDMETHOD(SetTileViewProperties)(PCUITEMID_CHILD pidl, LPCWSTR prop_list) override;
+    STDMETHOD(SetExtendedTileViewProperties)(PCUITEMID_CHILD pidl, LPCWSTR prop_list) override;
+    STDMETHOD(SetText)(FVTEXTTYPE type, LPCWSTR text) override;
+    STDMETHOD(SetCurrentFolderFlags)(DWORD mask, DWORD flags) override;
+    STDMETHOD(GetCurrentFolderFlags)(DWORD *flags) override;
+    STDMETHOD(GetSortColumnCount)(int *columns) override;
+    STDMETHOD(SetSortColumns)(const SORTCOLUMN *columns, int count) override;
+    STDMETHOD(GetSortColumns)(SORTCOLUMN *columns, int count) override;
+    STDMETHOD(GetItem)(int item, REFIID riid, void **ppv) override;
+    STDMETHOD(GetVisibleItem)(int start, BOOL previous, int *item) override;
+    STDMETHOD(GetSelectedItem)(int start, int *item) override;
+    STDMETHOD(GetSelection)(BOOL none_implies_folder, IShellItemArray **array) override;
+    STDMETHOD(GetSelectionState)(PCUITEMID_CHILD pidl, DWORD *flags) override;
+    STDMETHOD(InvokeVerbOnSelection)(LPCSTR verb) override;
+    STDMETHOD(SetViewModeAndIconSize)(FOLDERVIEWMODE mode, int size) override;
+    STDMETHOD(GetViewModeAndIconSize)(FOLDERVIEWMODE *mode, int *size) override;
+    STDMETHOD(SetGroupSubsetCount)(UINT visible_rows) override;
+    STDMETHOD(GetGroupSubsetCount)(UINT *visible_rows) override;
+    STDMETHOD(IsMoveInSameFolder)() override;
+    STDMETHOD(DoRename)() override;
 
     // *** IShellFolderView methods ***
     STDMETHOD(Rearrange)(LPARAM sort) override;
@@ -682,6 +713,7 @@ public:
     COM_INTERFACE_ENTRY_IID(IID_IShellView2, IShellView2)
     COM_INTERFACE_ENTRY_IID(IID_IShellView3, IShellView3)
     COM_INTERFACE_ENTRY_IID(IID_IFolderView, IFolderView)
+    COM_INTERFACE_ENTRY_IID(IID_IFolderView2, IFolderView2)
     COM_INTERFACE_ENTRY_IID(IID_IShellFolderView, IShellFolderView)
     COM_INTERFACE_ENTRY_IID(IID_IOleCommandTarget, IOleCommandTarget)
     COM_INTERFACE_ENTRY_IID(IID_IDropTarget, IDropTarget)
@@ -2212,6 +2244,34 @@ void CDefView::FinishFillList()
     _DoFolderViewCB(SFVM_LISTREFRESHED, 0, 0);
 
     ArrangeComputerView();
+    FireFolderViewEvent(DISPID_FILELISTENUMDONE);
+}
+
+void CDefView::FireFolderViewEvent(DISPID dispid)
+{
+    CComPtr<IConnectionPointContainer> pCPC;
+    CComPtr<IConnectionPoint> pCP;
+    CComPtr<IEnumConnections> pEnum;
+    CONNECTDATA cd;
+
+    if (!m_pShellFolderViewDual ||
+        FAILED(m_pShellFolderViewDual->QueryInterface(IID_PPV_ARG(IConnectionPointContainer, &pCPC))) ||
+        FAILED(pCPC->FindConnectionPoint(DIID_DShellFolderViewEvents, &pCP)) ||
+        FAILED(pCP->EnumConnections(&pEnum)))
+    {
+        return;
+    }
+
+    while (pEnum->Next(1, &cd, NULL) == S_OK)
+    {
+        CComPtr<IDispatch> pDispatch;
+        if (SUCCEEDED(cd.pUnk->QueryInterface(IID_PPV_ARG(IDispatch, &pDispatch))))
+        {
+            DISPPARAMS params = {};
+            pDispatch->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &params, NULL, NULL, NULL);
+        }
+        cd.pUnk->Release();
+    }
 }
 
 HRESULT CDefView::ContinueFillList(ULONG Generation)
@@ -3541,6 +3601,8 @@ LRESULT CDefView::OnNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandl
                     PostMessage(SHV_UPDATESTATUSBAR, 0, 0);
                 }
                 _DoFolderViewCB(SFVM_SELECTIONCHANGED, NULL/* FIXME */, NULL/* FIXME */);
+                if ((lpnmlv->uOldState ^ lpnmlv->uNewState) & LVIS_SELECTED)
+                    FireFolderViewEvent(DISPID_SELECTIONCHANGED);
             }
             break;
         case LVN_BEGINDRAG:
@@ -4044,6 +4106,14 @@ HRESULT WINAPI CDefView::DestroyViewWindow()
     if (m_hWnd)
         DestroyWindow();
 
+    if (m_pShellFolderViewDual)
+    {
+        CComPtr<IShellService> pShellService;
+        if (SUCCEEDED(m_pShellFolderViewDual->QueryInterface(IID_PPV_ARG(IShellService, &pShellService))))
+            pShellService->SetOwner(NULL);
+        m_pShellFolderViewDual.Release();
+    }
+
     m_pShellBrowser.Release();
     m_pCommDlgBrowser.Release();
 
@@ -4350,9 +4420,13 @@ HRESULT WINAPI CDefView::GetItemObject(UINT uItem, REFIID riid, LPVOID *ppvOut)
             {
                 if (m_pShellFolderViewDual == NULL)
                 {
-                    hr = CDefViewDual_Constructor(riid, (LPVOID*)&m_pShellFolderViewDual);
+                    hr = CDefViewDual_Constructor(IID_PPV_ARG(IShellFolderViewDual, &m_pShellFolderViewDual));
                     if (FAILED_UNEXPECTEDLY(hr))
                         return hr;
+
+                    CComPtr<IShellService> pShellService;
+                    if (SUCCEEDED(m_pShellFolderViewDual->QueryInterface(IID_PPV_ARG(IShellService, &pShellService))))
+                        pShellService->SetOwner(static_cast<IShellView *>(this));
                 }
                 hr = m_pShellFolderViewDual->QueryInterface(riid, ppvOut);
             }
@@ -4473,9 +4547,77 @@ HRESULT STDMETHODCALLTYPE CDefView::ItemCount(UINT uFlags, int *pcItems)
     return S_OK;
 }
 
+HRESULT CDefView::GetViewItems(UINT uFlags, CSimpleArray<PCUITEMID_CHILD> &Items)
+{
+    int lvIndex = -1;
+
+    if (!m_ListView)
+        return E_FAIL;
+
+    switch (uFlags & SVGIO_TYPE_MASK)
+    {
+        case SVGIO_SELECTION:
+            while ((lvIndex = m_ListView.GetNextItem(lvIndex, LVNI_SELECTED)) > -1)
+            {
+                if (!Items.Add(_PidlByItem(lvIndex)))
+                    return E_OUTOFMEMORY;
+            }
+            return S_OK;
+        case SVGIO_ALLVIEW:
+        case SVGIO_CHECKED:
+            for (lvIndex = 0; lvIndex < m_ListView.GetItemCount(); lvIndex++)
+            {
+                if ((uFlags & SVGIO_TYPE_MASK) == SVGIO_CHECKED && !ListView_GetCheckState(m_ListView, lvIndex))
+                    continue;
+                if (!Items.Add(_PidlByItem(lvIndex)))
+                    return E_OUTOFMEMORY;
+            }
+            return S_OK;
+    }
+    return E_INVALIDARG;
+}
+
 HRESULT STDMETHODCALLTYPE CDefView::Items(UINT uFlags, REFIID riid, void **ppv)
 {
-    return E_NOTIMPL;
+    CSimpleArray<PCUITEMID_CHILD> items;
+    HRESULT hr;
+
+    if (!ppv)
+        return E_POINTER;
+    *ppv = NULL;
+
+    hr = GetViewItems(uFlags, items);
+    if (FAILED(hr))
+        return hr;
+
+    if (IsEqualIID(riid, IID_IEnumIDList))
+    {
+        CComPtr<CEnumIDListBase> pEnum;
+        hr = ShellObjectCreator(pEnum);
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+        for (int i = 0; i < items.GetSize(); i++)
+        {
+            LPITEMIDLIST pidl = ILClone(items[i]);
+            if (!pidl || !pEnum->AddToEnumList(pidl))
+            {
+                ILFree(pidl);
+                return E_OUTOFMEMORY;
+            }
+        }
+        return pEnum->QueryInterface(riid, ppv);
+    }
+
+    if (!items.GetSize())
+        return HRESULT_FROM_WIN32(ERROR_NO_DATA);
+
+    if (IsEqualIID(riid, IID_IDataObject))
+        return m_pSFParent->GetUIObjectOf(m_hWnd, items.GetSize(), items.GetData(), riid, NULL, ppv);
+
+    if (IsEqualIID(riid, IID_IShellItemArray))
+        return SHCreateShellItemArray(m_pidlParent, m_pSFParent, items.GetSize(), items.GetData(), (IShellItemArray **)ppv);
+
+    return E_NOINTERFACE;
 }
 
 HRESULT STDMETHODCALLTYPE CDefView::GetSelectionMarkedItem(int *piItem)
@@ -4594,6 +4736,326 @@ HRESULT STDMETHODCALLTYPE CDefView::SelectAndPositionItems(UINT cidl, PCUITEMID_
     return S_OK;
 }
 
+
+// IFolderView2 implementation
+
+HRESULT STDMETHODCALLTYPE CDefView::SetGroupBy(REFPROPERTYKEY key, BOOL ascending)
+{
+    if (IsEqualGUID(key.fmtid, GUID_NULL) && key.pid == 0)
+        return S_OK;
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetGroupBy(PROPERTYKEY *pkey, BOOL *ascending)
+{
+    if (!pkey)
+        return E_POINTER;
+    pkey->fmtid = GUID_NULL;
+    pkey->pid = 0;
+    if (ascending)
+        *ascending = TRUE;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::SetViewProperty(PCUITEMID_CHILD pidl, REFPROPERTYKEY propkey, REFPROPVARIANT propvar)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetViewProperty(PCUITEMID_CHILD pidl, REFPROPERTYKEY propkey, PROPVARIANT *propvar)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::SetTileViewProperties(PCUITEMID_CHILD pidl, LPCWSTR prop_list)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::SetExtendedTileViewProperties(PCUITEMID_CHILD pidl, LPCWSTR prop_list)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::SetText(FVTEXTTYPE type, LPCWSTR text)
+{
+    return E_NOTIMPL;
+}
+
+void CDefView::ApplyFolderFlags(DWORD dwOldFlags)
+{
+    DWORD dwChanged = dwOldFlags ^ m_FolderSettings.fFlags;
+    DWORD dwFlags = m_FolderSettings.fFlags;
+
+    if (!m_ListView)
+        return;
+
+    if ((dwChanged & FWF_AUTOARRANGE) && !IsComputerTileView())
+        m_ListView.ModifyStyle((dwFlags & FWF_AUTOARRANGE) ? 0 : LVS_AUTOARRANGE, (dwFlags & FWF_AUTOARRANGE) ? LVS_AUTOARRANGE : 0);
+    if (dwChanged & FWF_SINGLESEL)
+        m_ListView.ModifyStyle((dwFlags & FWF_SINGLESEL) ? 0 : LVS_SINGLESEL, (dwFlags & FWF_SINGLESEL) ? LVS_SINGLESEL : 0);
+    if (dwChanged & FWF_NOCOLUMNHEADER)
+        m_ListView.ModifyStyle((dwFlags & FWF_NOCOLUMNHEADER) ? 0 : LVS_NOCOLUMNHEADER, (dwFlags & FWF_NOCOLUMNHEADER) ? LVS_NOCOLUMNHEADER : 0);
+    if (dwChanged & FWF_SNAPTOGRID)
+        m_ListView.SetExtendedListViewStyle(LVS_EX_SNAPTOGRID, (dwFlags & FWF_SNAPTOGRID) ? LVS_EX_SNAPTOGRID : 0);
+    if (dwChanged & FWF_FULLROWSELECT)
+        m_ListView.SetExtendedListViewStyle(LVS_EX_FULLROWSELECT, (dwFlags & FWF_FULLROWSELECT) ? LVS_EX_FULLROWSELECT : 0);
+    if (dwChanged & FWF_CHECKSELECT)
+        m_ListView.SetExtendedListViewStyle(LVS_EX_CHECKBOXES, (dwFlags & FWF_CHECKSELECT) ? LVS_EX_CHECKBOXES : 0);
+    if (dwChanged & FWF_NOCLIENTEDGE)
+        m_ListView.ModifyStyleEx((dwFlags & FWF_NOCLIENTEDGE) ? WS_EX_CLIENTEDGE : 0, (dwFlags & FWF_NOCLIENTEDGE) ? 0 : WS_EX_CLIENTEDGE, SWP_FRAMECHANGED);
+    if (dwChanged & (FWF_AUTOARRANGE | FWF_SNAPTOGRID))
+        m_ListView.Arrange(LVA_DEFAULT);
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::SetCurrentFolderFlags(DWORD mask, DWORD flags)
+{
+    DWORD dwOldFlags = m_FolderSettings.fFlags;
+
+    m_FolderSettings.fFlags = (dwOldFlags & ~mask) | (flags & mask);
+    ApplyFolderFlags(dwOldFlags);
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetCurrentFolderFlags(DWORD *flags)
+{
+    if (!flags)
+        return E_POINTER;
+    *flags = m_FolderSettings.fFlags;
+    return S_OK;
+}
+
+HRESULT CDefView::FindListColumnByKey(REFPROPERTYKEY key, int *pListCol)
+{
+    if (!m_pSF2Parent)
+        return E_NOTIMPL;
+
+    for (UINT FoldCol = 0;; FoldCol++)
+    {
+        SHCOLUMNID scid;
+        if (FAILED(m_pSF2Parent->MapColumnToSCID(FoldCol, &scid)))
+            break;
+        if (!IsEqualGUID(scid.fmtid, key.fmtid) || scid.pid != key.pid)
+            continue;
+        HRESULT hr = MapFolderColumnToListColumn(FoldCol);
+        if (FAILED(hr))
+            return hr;
+        *pListCol = hr;
+        return S_OK;
+    }
+    return E_INVALIDARG;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetSortColumnCount(int *columns)
+{
+    if (!columns)
+        return E_POINTER;
+    *columns = (m_sortInfo.ListColumn != LISTVIEW_SORT_INFO::UNSPECIFIEDCOLUMN) ? 1 : 0;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::SetSortColumns(const SORTCOLUMN *columns, int count)
+{
+    int ListCol;
+    HRESULT hr;
+
+    if (!columns || count < 1)
+        return E_INVALIDARG;
+
+    hr = FindListColumnByKey(columns[0].propkey, &ListCol);
+    if (FAILED(hr))
+        return hr;
+
+    if (!_Sort(ListCol))
+        return E_FAIL;
+    if ((m_sortInfo.Direction > 0) != (columns[0].direction == SORT_ASCENDING) && !_Sort(ListCol))
+        return E_FAIL;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetSortColumns(SORTCOLUMN *columns, int count)
+{
+    SHCOLUMNID scid;
+    HRESULT hr;
+
+    if (!columns || count < 1)
+        return E_INVALIDARG;
+    if (m_sortInfo.ListColumn == LISTVIEW_SORT_INFO::UNSPECIFIEDCOLUMN || !m_pSF2Parent)
+        return E_FAIL;
+
+    hr = m_pSF2Parent->MapColumnToSCID(MapListColumnToFolderColumn(m_sortInfo.ListColumn), &scid);
+    if (FAILED(hr))
+        return hr;
+    columns[0].propkey.fmtid = scid.fmtid;
+    columns[0].propkey.pid = scid.pid;
+    columns[0].direction = (m_sortInfo.Direction < 0) ? SORT_DESCENDING : SORT_ASCENDING;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetItem(int item, REFIID riid, void **ppv)
+{
+    if (!ppv)
+        return E_POINTER;
+    *ppv = NULL;
+
+    PCUITEMID_CHILD pidl = _PidlByItem(item);
+    if (!pidl)
+        return E_INVALIDARG;
+
+    CComPtr<IShellItem> psi;
+    HRESULT hr = SHCreateShellItem(m_pidlParent, m_pSFParent, pidl, &psi);
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+    return psi->QueryInterface(riid, ppv);
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetVisibleItem(int start, BOOL previous, int *item)
+{
+    int count, next;
+
+    if (!item)
+        return E_POINTER;
+    *item = -1;
+    if (!m_ListView)
+        return E_FAIL;
+
+    count = m_ListView.GetItemCount();
+    if (previous)
+        next = (start < 0) ? count - 1 : start - 1;
+    else
+        next = start + 1;
+    if (next < 0 || next >= count)
+        return S_FALSE;
+    *item = next;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetSelectedItem(int start, int *item)
+{
+    if (!item)
+        return E_POINTER;
+    *item = -1;
+    if (!m_ListView)
+        return E_FAIL;
+
+    *item = m_ListView.GetNextItem(start, LVNI_SELECTED);
+    return (*item == -1) ? S_FALSE : S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetSelection(BOOL none_implies_folder, IShellItemArray **array)
+{
+    CSimpleArray<PCUITEMID_CHILD> items;
+    HRESULT hr;
+
+    if (!array)
+        return E_POINTER;
+    *array = NULL;
+
+    hr = GetViewItems(SVGIO_SELECTION, items);
+    if (FAILED(hr))
+        return hr;
+
+    if (items.GetSize())
+        return SHCreateShellItemArray(m_pidlParent, m_pSFParent, items.GetSize(), items.GetData(), array);
+    if (none_implies_folder && m_pidlParent)
+        return SHCreateShellItemArrayFromIDLists(1, (PCIDLIST_ABSOLUTE_ARRAY)&m_pidlParent, array);
+    return E_FAIL;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetSelectionState(PCUITEMID_CHILD pidl, DWORD *flags)
+{
+    if (!flags)
+        return E_POINTER;
+    *flags = 0;
+    if (!m_ListView)
+        return E_FAIL;
+
+    int lvIndex = LV_FindItemByPidl(pidl);
+    if (lvIndex == -1)
+        return E_INVALIDARG;
+
+    UINT state = m_ListView.GetItemState(lvIndex, LVIS_SELECTED | LVIS_FOCUSED);
+    if (state & LVIS_SELECTED)
+        *flags |= SVSI_SELECT;
+    if (state & LVIS_FOCUSED)
+        *flags |= SVSI_FOCUSED;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::InvokeVerbOnSelection(LPCSTR verb)
+{
+    if (!verb)
+        return OpenSelectedItems(NULL);
+
+    if (m_ListView.GetSelectedCount() == 0)
+        return S_OK;
+
+    HMENU hMenu = CreatePopupMenu();
+    if (!hMenu)
+        return E_OUTOFMEMORY;
+
+    CComPtr<IContextMenu> pCM;
+    HRESULT hr = GetItemObject(SVGIO_SELECTION, IID_PPV_ARG(IContextMenu, &pCM));
+    MenuCleanup _(pCM, hMenu);
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+
+    hr = pCM->QueryContextMenu(hMenu, 0, DVIDM_CONTEXTMENU_FIRST, DVIDM_CONTEXTMENU_LAST,
+                               CMF_NORMAL | GetContextMenuFlags(m_pShellBrowser, 0));
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+    return InvokeContextMenuCommand(pCM, verb, NULL);
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::SetViewModeAndIconSize(FOLDERVIEWMODE mode, int size)
+{
+    return SetCurrentViewMode(mode);
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetViewModeAndIconSize(FOLDERVIEWMODE *mode, int *size)
+{
+    if (!mode && !size)
+        return E_POINTER;
+    if (mode)
+        *mode = (FOLDERVIEWMODE)m_FolderSettings.ViewMode;
+    if (size)
+    {
+        int cx = 0, cy = 0;
+        HIMAGELIST himl = m_ListView ? ListView_GetImageList(m_ListView, m_FolderSettings.ViewMode == FVM_ICON ? LVSIL_NORMAL : LVSIL_SMALL) : NULL;
+        if (!himl || !ImageList_GetIconSize(himl, &cx, &cy))
+            cx = GetSystemMetrics(m_FolderSettings.ViewMode == FVM_ICON ? SM_CXICON : SM_CXSMICON);
+        *size = cx;
+    }
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::SetGroupSubsetCount(UINT visible_rows)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::GetGroupSubsetCount(UINT *visible_rows)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::IsMoveInSameFolder()
+{
+    return m_pSourceDataObject ? S_OK : S_FALSE;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::DoRename()
+{
+    if (!m_ListView)
+        return E_FAIL;
+
+    int lvIndex = m_ListView.GetNextItem(-1, LVNI_FOCUSED);
+    if (lvIndex == -1)
+        lvIndex = m_ListView.GetNextItem(-1, LVNI_SELECTED);
+    if (lvIndex == -1 || !(GetItemAttributes(lvIndex, SFGAO_CANRENAME) & SFGAO_CANRENAME))
+        return E_FAIL;
+    return m_ListView.EditLabel(lvIndex) ? S_OK : E_FAIL;
+}
 
 // IShellView2 implementation
 
@@ -4990,14 +5452,11 @@ HRESULT WINAPI CDefView::QueryStatus(const GUID *pguidCmdGroup, ULONG cCmds, OLE
     FIXME("(%p)->(%p(%s) 0x%08x %p %p\n",
           this, pguidCmdGroup, debugstr_guid(pguidCmdGroup), cCmds, prgCmds, pCmdText);
 
-    if (!prgCmds)
-        return E_INVALIDARG;
+    if (pguidCmdGroup || !prgCmds)
+        return OLECMDERR_E_UNKNOWNGROUP;
 
     for (UINT i = 0; i < cCmds; i++)
-    {
-        FIXME("\tprgCmds[%d].cmdID = %d\n", i, prgCmds[i].cmdID);
-        prgCmds[i].cmdf = 0;
-    }
+        prgCmds[i].cmdf = (prgCmds[i].cmdID == OLECMDID_REFRESH) ? OLECMDF_ENABLED : 0;
 
     return OLECMDERR_E_UNKNOWNGROUP;
 }
@@ -5012,7 +5471,7 @@ HRESULT WINAPI CDefView::Exec(const GUID *pguidCmdGroup, DWORD nCmdID, DWORD nCm
           this, debugstr_guid(pguidCmdGroup), nCmdID, nCmdexecopt, pvaIn, pvaOut);
 
     if (!pguidCmdGroup)
-        return OLECMDERR_E_UNKNOWNGROUP;
+        return (nCmdID == OLECMDID_REFRESH) ? Refresh() : OLECMDERR_E_UNKNOWNGROUP;
 
     if (IsEqualCLSID(*pguidCmdGroup, m_Category))
     {

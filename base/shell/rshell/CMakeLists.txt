@@ -36,10 +36,13 @@ add_importlibs(rshell
     comctl32
     gdi32
     ole32
+    oleaut32
     user32
     msvcrt
     kernel32
     ntdll)
+
+add_delay_importlibs(rshell shdocvw)
 
 add_custom_command(TARGET rshell POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E copy

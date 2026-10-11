@@ -827,8 +827,10 @@ HRESULT WINAPI CRecycleBin::CreateViewObject(HWND hwndOwner, REFIID riid, void *
     }
     else if (IsEqualIID (riid, IID_IContextMenu) || IsEqualIID (riid, IID_IContextMenu2))
     {
-        m_IsBackgroundMenu = true;
-        hr = this->QueryInterface(riid, ppv);
+        CRegKeyHandleArray keys;
+        AddClassKeyToArray(L"CLSID\\{645FF040-5081-101B-9F08-00AA002F954E}", keys, keys);
+        DEFCONTEXTMENU dcm = { hwndOwner, this, pidl, this, 0, NULL, NULL, keys, keys };
+        hr = SHCreateDefaultContextMenu(&dcm, riid, ppv);
     }
     else if (IsEqualIID (riid, IID_IShellView))
     {
@@ -1056,65 +1058,35 @@ HRESULT WINAPI CRecycleBin::MapColumnToSCID(UINT iColumn, SHCOLUMNID *pscid)
 }
 
 /*************************************************************************
- * RecycleBin IContextMenu interface
+ * RecycleBin IContextMenuCB interface
  */
 
-enum { IDC_EMPTYRECYCLEBIN = 1, IDC_PROPERTIES };
-static const CMVERBMAP g_BBFolderVerbMap[] =
+HRESULT WINAPI CRecycleBin::CallBack(IShellFolder *psf, HWND hwndOwner, IDataObject *pdtobj, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    { "empty", IDC_EMPTYRECYCLEBIN },
-    { "properties", IDC_PROPERTIES },
-    { NULL }
-};
+    enum { IDC_PROPERTIES };
 
-HRESULT WINAPI CRecycleBin::QueryContextMenu(HMENU hMenu, UINT indexMenu, UINT idCmdFirst, UINT idCmdLast, UINT uFlags)
-{
-    TRACE("QueryContextMenu %p %p %u %u %u %u\n", this, hMenu, indexMenu, idCmdFirst, idCmdLast, uFlags );
-
-    if (!hMenu)
-        return E_INVALIDARG;
-
-    UINT idHigh = 0, id;
-
-    WORD state = IsRecycleBinEmpty(this) ? MFS_DISABLED : MFS_ENABLED;
-    id = idCmdFirst + IDC_EMPTYRECYCLEBIN;
-    if (_InsertMenuItemW(hMenu, indexMenu, TRUE, id, MFT_STRING, MAKEINTRESOURCEW(IDS_EMPTY_BITBUCKET), state))
+    if (uMsg == DFM_MERGECONTEXTMENU && !pdtobj)
     {
-        idHigh = max(idHigh, id);
-        if (m_IsBackgroundMenu && !SHRestricted(REST_BITBUCKNOPROP))
-        {
-            id = idCmdFirst + IDC_PROPERTIES;
-            if (_InsertMenuItemW(hMenu, ++indexMenu, TRUE, id, MFT_STRING, MAKEINTRESOURCEW(IDS_PROPERTIES), 0))
-            {
-                idHigh = max(idHigh, id);
-                _InsertMenuItemW(hMenu, indexMenu++, TRUE, -1, MFT_SEPARATOR, NULL, 0);
-            }
-        }
+        if (SHRestricted(REST_BITBUCKNOPROP))
+            return S_OK;
+
+        QCMINFO *pqcminfo = (QCMINFO *)lParam;
+        HMENU hpopup = CreatePopupMenu();
+        _InsertMenuItemW(hpopup, 0, TRUE, IDC_PROPERTIES, MFT_STRING, MAKEINTRESOURCEW(IDS_PROPERTIES), MFS_ENABLED);
+        pqcminfo->idCmdFirst = Shell_MergeMenus(pqcminfo->hmenu, hpopup, pqcminfo->indexMenu, pqcminfo->idCmdFirst,
+                                                pqcminfo->idCmdLast, MM_ADDSEPARATOR);
+        DestroyMenu(hpopup);
+        return S_OK;
     }
-    return idHigh ? MAKE_HRESULT(SEVERITY_SUCCESS, 0, idHigh - idCmdFirst + 1) : S_OK;
-}
-
-HRESULT WINAPI CRecycleBin::InvokeCommand(LPCMINVOKECOMMANDINFO lpcmi)
-{
-    TRACE("%p %p verb %p\n", this, lpcmi, lpcmi ? lpcmi->lpVerb : NULL);
-    int CmdId = SHELL_MapContextMenuVerbToCmdId(lpcmi, g_BBFolderVerbMap);
-    if (CmdId == IDC_EMPTYRECYCLEBIN)
-    {
-        HRESULT hr = SHEmptyRecycleBinW(lpcmi->hwnd, NULL, 0);
-        TRACE("result %x\n", hr);
-        return hr;
-    }
-    else if (CmdId == IDC_PROPERTIES)
-    {
+    if (uMsg == DFM_INVOKECOMMAND && !pdtobj && wParam == IDC_PROPERTIES)
         return SHELL_ShowItemIDListProperties((LPITEMIDLIST)CSIDL_BITBUCKET);
+    if ((uMsg == DFM_GETVERBA || uMsg == DFM_GETVERBW) && !pdtobj && LOWORD(wParam) == IDC_PROPERTIES)
+    {
+        if (uMsg == DFM_GETVERBW)
+            return StringCchCopyW((LPWSTR)lParam, HIWORD(wParam), L"properties");
+        return StringCchCopyA((LPSTR)lParam, HIWORD(wParam), "properties");
     }
-    return E_INVALIDARG;
-}
-
-HRESULT WINAPI CRecycleBin::GetCommandString(UINT_PTR idCommand, UINT uFlags, UINT *lpReserved, LPSTR lpszName, UINT uMaxNameLen)
-{
-    TRACE("%p %lu %u %p %p %u\n", this, idCommand, uFlags, lpReserved, lpszName, uMaxNameLen);
-    return SHELL_GetCommandStringImpl(idCommand, uFlags, lpszName, uMaxNameLen, g_BBFolderVerbMap);
+    return SHELL32_DefaultContextMenuCallBack(psf, pdtobj, uMsg);
 }
 
 /*************************************************************************
@@ -1141,7 +1113,114 @@ HRESULT WINAPI CRecycleBin::ReplacePage(EXPPS uPageID, LPFNSVADDPROPSHEETPAGE pf
 HRESULT WINAPI CRecycleBin::Initialize(PCIDLIST_ABSOLUTE pidlFolder, IDataObject *pdtobj, HKEY hkeyProgID)
 {
     TRACE("%p %p %p %p\n", this, pidlFolder, pdtobj, hkeyProgID );
-    m_IsBackgroundMenu = false;
+    return S_OK;
+}
+
+/*************************************************************************
+ * RecycleBin IObjectWithBackReferences interface
+ */
+
+HRESULT WINAPI CRecycleBin::RemoveBackReferences()
+{
+    return S_OK;
+}
+
+/*************************************************************************
+ * Empty Recycle Bin verb
+ */
+
+HRESULT WINAPI CRecycleBinEmptyCommand::SetKeyState(DWORD grfKeyState)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI CRecycleBinEmptyCommand::SetParameters(LPCWSTR pszParameters)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI CRecycleBinEmptyCommand::SetPosition(POINT pt)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI CRecycleBinEmptyCommand::SetShowWindow(int nShow)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI CRecycleBinEmptyCommand::SetNoShowUI(BOOL fNoShowUI)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI CRecycleBinEmptyCommand::SetDirectory(LPCWSTR pszDirectory)
+{
+    return S_OK;
+}
+
+static DWORD WINAPI EmptyRecycleBinThreadProc(void *pArg)
+{
+    SHEmptyRecycleBinW((HWND)pArg, NULL, 0);
+    return 0;
+}
+
+HRESULT WINAPI CRecycleBinEmptyCommand::Execute()
+{
+    HWND hwnd = NULL;
+
+    if (m_pSite)
+        IUnknown_GetWindow(m_pSite, &hwnd);
+    if (!SHCreateThread(EmptyRecycleBinThreadProc, hwnd, CTF_COINIT | CTF_PROCESS_REF, NULL))
+        return HRESULT_FROM_WIN32(GetLastError());
+    return S_OK;
+}
+
+HRESULT WINAPI CRecycleBinEmptyCommand::SetSelection(IShellItemArray *psia)
+{
+    m_pSelection = psia;
+    return S_OK;
+}
+
+HRESULT WINAPI CRecycleBinEmptyCommand::GetSelection(REFIID riid, void **ppv)
+{
+    if (!ppv)
+        return E_POINTER;
+    *ppv = NULL;
+    if (!m_pSelection)
+        return E_FAIL;
+    return m_pSelection->QueryInterface(riid, ppv);
+}
+
+HRESULT WINAPI CRecycleBinEmptyCommand::SetSite(IUnknown *pUnkSite)
+{
+    m_pSite = pUnkSite;
+    return S_OK;
+}
+
+HRESULT WINAPI CRecycleBinEmptyCommand::GetSite(REFIID riid, void **ppvSite)
+{
+    if (!ppvSite)
+        return E_POINTER;
+    *ppvSite = NULL;
+    if (!m_pSite)
+        return E_FAIL;
+    return m_pSite->QueryInterface(riid, ppvSite);
+}
+
+/*************************************************************************
+ * Empty Recycle Bin verb state
+ */
+
+HRESULT WINAPI CRecycleBinEmptyState::GetState(IShellItemArray *psiItemArray, BOOL fOkToBeSlow, EXPCMDSTATE *pCmdState)
+{
+    SHQUERYRBINFO info = { sizeof(info) };
+
+    if (!pCmdState)
+        return E_POINTER;
+    if (FAILED(SHQueryRecycleBinW(NULL, &info)))
+        info.i64NumItems = 0;
+    *pCmdState = info.i64NumItems ? ECS_ENABLED : ECS_DISABLED;
     return S_OK;
 }
 
@@ -1463,14 +1542,16 @@ HRESULT WINAPI SHQueryRecycleBinW(LPCWSTR pszRootPath, LPSHQUERYRBINFO pSHQueryR
 {
     TRACE("%s, %p\n", debugstr_w(pszRootPath), pSHQueryRBInfo);
 
-    if (!pszRootPath || (pszRootPath[0] == 0) ||
-        !pSHQueryRBInfo || (pSHQueryRBInfo->cbSize < sizeof(SHQUERYRBINFO)))
+    if (!pSHQueryRBInfo || (pSHQueryRBInfo->cbSize < sizeof(SHQUERYRBINFO)))
     {
         return E_INVALIDARG;
     }
 
     pSHQueryRBInfo->i64Size = 0;
     pSHQueryRBInfo->i64NumItems = 0;
+
+    if (pszRootPath && !pszRootPath[0])
+        pszRootPath = NULL;
 
     CComPtr<IRecycleBin> spRecycleBin;
     HRESULT hr;

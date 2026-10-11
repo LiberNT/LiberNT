@@ -1097,3 +1097,8 @@ BEGIN
     IDS_LOG_OFF_TITLE "Amaitu saioa"
     IDS_SWITCH_USER_TITLE "Aldatu erabiltzailea"
 END
+
+STRINGTABLE
+BEGIN
+    IDS_FILE_EXPLORER "File Explorer"
+END

@@ -332,6 +332,8 @@ class CDefaultContextMenu :
         HRESULT DoCreateNewFolder(LPCMINVOKECOMMANDINFOEX lpici);
         HRESULT InvokeShellExt(LPCMINVOKECOMMANDINFOEX lpcmi);
         HRESULT InvokeRegVerb(LPCMINVOKECOMMANDINFOEX lpcmi);
+        HRESULT GetSelectionItemArray(IShellItemArray **ppSIA);
+        HRESULT GetStaticCommandState(HKEY hkVerb, PCWSTR pszVerb, EXPCMDSTATE *pState);
         DWORD BrowserFlagsFromVerb(LPCMINVOKECOMMANDINFOEX lpcmi, PStaticShellEntry pEntry);
         HRESULT TryToBrowse(LPCMINVOKECOMMANDINFOEX lpcmi, LPCITEMIDLIST pidl, DWORD wFlags);
         HRESULT InvokePidl(LPCMINVOKECOMMANDINFOEX lpcmi, LPCITEMIDLIST pidl, PStaticShellEntry pEntry);
@@ -810,11 +812,23 @@ CDefaultContextMenu::AddStaticContextMenusToMenu(
             if (RegValueExists(hkVerb, L"SeparatorAfter"))
                 cmdFlags |= ECF_SEPARATORAFTER;
 
+            EXPCMDSTATE CmdState;
+            if (!hide && SUCCEEDED(GetStaticCommandState(hkVerb, info.Verb, &CmdState)))
+            {
+                if (CmdState & ECS_HIDDEN)
+                    hide = true;
+                if (CmdState & ECS_DISABLED)
+                    fState = (fState & ~MFS_DEFAULT) | MFS_DISABLED;
+                if (CmdState & ECS_CHECKED)
+                    fState |= MFS_CHECKED;
+            }
+
             RegCloseKey(hkVerb);
         }
 
         if (((uFlags & CMF_NODEFAULT) && ntver >= _WIN32_WINNT_VISTA) ||
-            ((uFlags & CMF_DONOTPICKDEFAULT) && ntver >= _WIN32_WINNT_WIN7))
+            ((uFlags & CMF_DONOTPICKDEFAULT) && ntver >= _WIN32_WINNT_WIN7) ||
+            !m_cidl)
         {
             fState &= ~MFS_DEFAULT;
         }
@@ -1035,7 +1049,8 @@ CDefaultContextMenu::QueryContextMenu(
         DestroyMenu(hmenuDefault);
     }
 
-    TryPickDefault(hMenu, idCmdFirst, idDefaultOffset, uFlags);
+    if (!isBackgroundMenu)
+        TryPickDefault(hMenu, idCmdFirst, idDefaultOffset, uFlags);
 
     // TODO: DFM_MERGECONTEXTMENU_TOP
 
@@ -1517,6 +1532,39 @@ CDefaultContextMenu::InvokePidl(LPCMINVOKECOMMANDINFOEX lpcmi, LPCITEMIDLIST pid
 }
 
 HRESULT
+CDefaultContextMenu::GetSelectionItemArray(IShellItemArray **ppSIA)
+{
+    *ppSIA = NULL;
+    if (m_pDataObj)
+        return SHCreateShellItemArrayFromDataObject(m_pDataObj, IID_PPV_ARG(IShellItemArray, ppSIA));
+    if (m_pidlFolder)
+        return SHCreateShellItemArrayFromIDLists(1, (PCIDLIST_ABSOLUTE_ARRAY)&m_pidlFolder, ppSIA);
+    return E_FAIL;
+}
+
+HRESULT
+CDefaultContextMenu::GetStaticCommandState(HKEY hkVerb, PCWSTR pszVerb, EXPCMDSTATE *pState)
+{
+    CComPtr<IExplorerCommandState> pECS;
+    CComPtr<IShellItemArray> pSIA;
+    CComPtr<IPropertyBag> pPB;
+    CLSID clsid;
+
+    HRESULT hr = SHELL_GetRegCLSID(hkVerb, NULL, L"CommandStateHandler", clsid);
+    if (FAILED(hr))
+        return hr;
+    hr = CoCreateInstance(clsid, NULL, CLSCTX_ALL, IID_PPV_ARG(IExplorerCommandState, &pECS));
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
+
+    CScopedSetObjectWithSite site(pECS, static_cast<IContextMenu*>(this));
+    SHCreatePropertyBagOnRegKey(hkVerb, NULL, STGM_READ, IID_PPV_ARG(IPropertyBag, &pPB));
+    IUnknown_InitializeCommand(pECS, pszVerb, pPB);
+    GetSelectionItemArray(&pSIA);
+    return pECS->GetState(pSIA, TRUE, pState);
+}
+
+HRESULT
 CDefaultContextMenu::InvokeRegVerb(
     LPCMINVOKECOMMANDINFOEX lpcmi)
 {
@@ -1534,7 +1582,7 @@ CDefaultContextMenu::InvokeRegVerb(
     CRegKey VerbKey;
     WCHAR VerbKeyPath[sizeof("shell\\") + MAX_VERB];
     hr = StringCbPrintfW(VerbKeyPath, sizeof(VerbKeyPath), L"shell\\%s", pEntry->Verb.GetString());
-    if (SUCCEEDED(hr) && m_pDataObj &&
+    if (SUCCEEDED(hr) && (m_pDataObj || m_pidlFolder) &&
         VerbKey.Open(pEntry->hkClass, VerbKeyPath, KEY_READ) == ERROR_SUCCESS)
     {
         CLSID clsid;
@@ -1558,12 +1606,19 @@ CDefaultContextMenu::InvokeRegVerb(
         {
             CComPtr<IPropertyBag> pPB;
             SHCreatePropertyBagOnRegKey(VerbKey, NULL, STGM_READ, IID_PPV_ARG(IPropertyBag, &pPB));
-            return InvokeIExecuteCommandWithDataObject(pEC, pEntry->Verb.GetString(), pPB, m_pDataObj,
-                                                       lpcmi, static_cast<IContextMenu*>(this));
+            if (m_pDataObj)
+                return InvokeIExecuteCommandWithDataObject(pEC, pEntry->Verb.GetString(), pPB, m_pDataObj,
+                                                           lpcmi, static_cast<IContextMenu*>(this));
+            CComPtr<IShellItemArray> pSIA;
+            hr = GetSelectionItemArray(&pSIA);
+            if (FAILED_UNEXPECTEDLY(hr))
+                return hr;
+            return InvokeIExecuteCommand(pEC, pEntry->Verb.GetString(), pPB, pSIA,
+                                         lpcmi, static_cast<IContextMenu*>(this));
         }
 
         CComPtr<IDropTarget> pDT;
-        hr = SHELL_GetRegCLSID(VerbKey, L"DropTarget", L"CLSID", clsid);
+        hr = m_pDataObj ? SHELL_GetRegCLSID(VerbKey, L"DropTarget", L"CLSID", clsid) : E_FAIL;
         if (SUCCEEDED(hr))
             hr = CoCreateInstance(clsid, NULL, CLSCTX_ALL, IID_PPV_ARG(IDropTarget, &pDT));
         if (SUCCEEDED(hr))
@@ -1753,10 +1808,11 @@ CDefaultContextMenu::GetCommandString(
 
     UINT CmdId = LOWORD(idCommand);
 
-    if (uFlags == GCS_VERBA || uFlags == GCS_VERBW)
+    if ((uFlags == GCS_VERBA || uFlags == GCS_VERBW) &&
+        m_iIdCBFirst != m_iIdCBLast && CmdId >= m_iIdCBFirst && CmdId < m_iIdCBLast)
     {
         UINT uMsg = (uFlags == GCS_VERBA) ? DFM_GETVERBA : DFM_GETVERBW;
-        WPARAM wParam = MAKEWPARAM(idCommand, uMaxNameLen);
+        WPARAM wParam = MAKEWPARAM(CmdId - m_iIdCBFirst, uMaxNameLen);
         HRESULT hr = _DoCallback(uMsg, wParam, lpszName);
         if (hr == S_OK)
             return S_OK;

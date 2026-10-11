@@ -1102,3 +1102,8 @@ BEGIN
     IDS_LOG_OFF_TITLE "Oturumu Kapat"
     IDS_SWITCH_USER_TITLE "Kullanıcı Değiştir"
 END
+
+STRINGTABLE
+BEGIN
+    IDS_FILE_EXPLORER "File Explorer"
+END

@@ -140,4 +140,59 @@ BEGIN_COM_MAP(CFolderItems)
 END_COM_MAP()
 };
 
+class CFolderItemsFDF:
+    public CComCoClass<CFolderItemsFDF, &CLSID_FolderItemsFDF>,
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IDispatchImpl<FolderItems3, &IID_FolderItems3>,
+    public IPersistFolder
+{
+private:
+    CComHeapPtr<ITEMIDLIST> m_idlist;
+    CComPtr<Folder> m_Folder;
+    CSimpleArray<PITEMID_CHILD> m_Items;
+    LONG m_Contf = SHCONTF_FOLDERS | SHCONTF_NONFOLDERS;
+    BSTR m_bstrFilter = NULL;
+
+    BOOL IncludeItem(PCUITEMID_CHILD pidl);
+    PCUITEMID_CHILD GetVisibleItem(long index);
+    long GetVisibleCount();
+    HRESULT GetContextMenu(IContextMenu **ppcm);
+
+public:
+    CFolderItemsFDF();
+    ~CFolderItemsFDF();
+
+    HRESULT SetItems(PCIDLIST_ABSOLUTE pidlFolder, UINT cidl, PCUITEMID_CHILD_ARRAY apidl);
+
+    // *** FolderItems methods ***
+    STDMETHOD(get_Count)(long *plCount) override;
+    STDMETHOD(get_Application)(IDispatch **ppid) override;
+    STDMETHOD(get_Parent)(IDispatch **ppid) override;
+    STDMETHOD(Item)(VARIANT index, FolderItem **ppid) override;
+    STDMETHOD(_NewEnum)(IUnknown **ppunk) override;
+    // *** FolderItems2 methods ***
+    STDMETHOD(InvokeVerbEx)(VARIANT vVerb, VARIANT vArgs) override;
+    // *** FolderItems3 methods ***
+    STDMETHOD(Filter)(LONG grfFlags, BSTR bstrFilter) override;
+    STDMETHOD(get_Verbs)(FolderItemVerbs **ppfic) override;
+
+    // *** IPersist methods ***
+    STDMETHOD(GetClassID)(CLSID *pClassID) override;
+
+    // *** IPersistFolder methods ***
+    STDMETHOD(Initialize)(PCIDLIST_ABSOLUTE pidl) override;
+
+DECLARE_REGISTRY_RESOURCEID(IDR_FOLDERITEMSFDF)
+DECLARE_NOT_AGGREGATABLE(CFolderItemsFDF)
+DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+BEGIN_COM_MAP(CFolderItemsFDF)
+    COM_INTERFACE_ENTRY_IID(IID_FolderItems, FolderItems)
+    COM_INTERFACE_ENTRY_IID(IID_FolderItems3, FolderItems3)
+    COM_INTERFACE_ENTRY_IID(IID_IDispatch, IDispatch)
+    COM_INTERFACE_ENTRY_IID(IID_IPersistFolder, IPersistFolder)
+    COM_INTERFACE_ENTRY_IID(IID_IPersist, IPersist)
+END_COM_MAP()
+};
+
 #endif

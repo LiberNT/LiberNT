@@ -31,14 +31,14 @@ class CRecycleBin :
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public IShellFolder2,
     public IPersistFolder2,
-    public IContextMenu,
+    public IContextMenuCB,
     public IShellPropSheetExt,
-    public IShellExtInit
+    public IShellExtInit,
+    public IObjectWithBackReferences
 {
     private:
         LPITEMIDLIST pidl;
         IShellFolder *m_pFSFolders[RECYCLEBINMAXDRIVECOUNT];
-        bool m_IsBackgroundMenu;
 
         IShellFolder* GetFSFolderForItem(LPCITEMIDLIST pidl);
 
@@ -77,10 +77,8 @@ class CRecycleBin :
         STDMETHOD(GetDetailsOf)(PCUITEMID_CHILD pidl, UINT iColumn, SHELLDETAILS *psd) override;
         STDMETHOD(MapColumnToSCID)(UINT column, SHCOLUMNID *pscid) override;
 
-        // IContextMenu
-        STDMETHOD(QueryContextMenu)(HMENU hMenu, UINT indexMenu, UINT idCmdFirst, UINT idCmdLast, UINT uFlags) override;
-        STDMETHOD(InvokeCommand)(LPCMINVOKECOMMANDINFO lpcmi) override;
-        STDMETHOD(GetCommandString)(UINT_PTR idCommand, UINT uFlags, UINT *lpReserved, LPSTR lpszName, UINT uMaxNameLen) override;
+        // IContextMenuCB
+        STDMETHOD(CallBack)(IShellFolder *psf, HWND hwndOwner, IDataObject *pdtobj, UINT uMsg, WPARAM wParam, LPARAM lParam) override;
 
         // IShellPropSheetExt
         STDMETHOD(AddPages)(LPFNSVADDPROPSHEETPAGE pfnAddPage, LPARAM lParam) override;
@@ -88,6 +86,9 @@ class CRecycleBin :
 
         // IShellExtInit
         STDMETHOD(Initialize)(PCIDLIST_ABSOLUTE pidlFolder, IDataObject *pdtobj, HKEY hkeyProgID) override;
+
+        // IObjectWithBackReferences
+        STDMETHOD(RemoveBackReferences)() override;
 
         DECLARE_REGISTRY_RESOURCEID(IDR_RECYCLEBIN)
         DECLARE_NOT_AGGREGATABLE(CRecycleBin)
@@ -100,9 +101,68 @@ class CRecycleBin :
         COM_INTERFACE_ENTRY2_IID(IID_IPersist, IPersist, IPersistFolder2)
         COM_INTERFACE_ENTRY_IID(IID_IShellFolder, IShellFolder)
         COM_INTERFACE_ENTRY_IID(IID_IShellFolder2, IShellFolder2)
-        COM_INTERFACE_ENTRY_IID(IID_IContextMenu, IContextMenu)
+        COM_INTERFACE_ENTRY_IID(IID_IContextMenuCB, IContextMenuCB)
         COM_INTERFACE_ENTRY_IID(IID_IShellPropSheetExt, IShellPropSheetExt)
         COM_INTERFACE_ENTRY_IID(IID_IShellExtInit, IShellExtInit)
+        COM_INTERFACE_ENTRY_IID(IID_IObjectWithBackReferences, IObjectWithBackReferences)
+        END_COM_MAP()
+};
+
+class CRecycleBinEmptyCommand :
+    public CComCoClass<CRecycleBinEmptyCommand, &CLSID_RecycleBinEmptyCommand>,
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IExecuteCommand,
+    public IObjectWithSelection,
+    public IObjectWithSite
+{
+    private:
+        CComPtr<IShellItemArray> m_pSelection;
+        CComPtr<IUnknown> m_pSite;
+
+    public:
+        // IExecuteCommand
+        STDMETHOD(SetKeyState)(DWORD grfKeyState) override;
+        STDMETHOD(SetParameters)(LPCWSTR pszParameters) override;
+        STDMETHOD(SetPosition)(POINT pt) override;
+        STDMETHOD(SetShowWindow)(int nShow) override;
+        STDMETHOD(SetNoShowUI)(BOOL fNoShowUI) override;
+        STDMETHOD(SetDirectory)(LPCWSTR pszDirectory) override;
+        STDMETHOD(Execute)() override;
+
+        // IObjectWithSelection
+        STDMETHOD(SetSelection)(IShellItemArray *psia) override;
+        STDMETHOD(GetSelection)(REFIID riid, void **ppv) override;
+
+        // IObjectWithSite
+        STDMETHOD(SetSite)(IUnknown *pUnkSite) override;
+        STDMETHOD(GetSite)(REFIID riid, void **ppvSite) override;
+
+        DECLARE_REGISTRY_RESOURCEID(IDR_RECYCLEBINEMPTYCMD)
+        DECLARE_NOT_AGGREGATABLE(CRecycleBinEmptyCommand)
+        DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+        BEGIN_COM_MAP(CRecycleBinEmptyCommand)
+        COM_INTERFACE_ENTRY_IID(IID_IExecuteCommand, IExecuteCommand)
+        COM_INTERFACE_ENTRY_IID(IID_IObjectWithSelection, IObjectWithSelection)
+        COM_INTERFACE_ENTRY_IID(IID_IObjectWithSite, IObjectWithSite)
+        END_COM_MAP()
+};
+
+class CRecycleBinEmptyState :
+    public CComCoClass<CRecycleBinEmptyState, &CLSID_RecycleBinEmptyState>,
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IExplorerCommandState
+{
+    public:
+        // IExplorerCommandState
+        STDMETHOD(GetState)(IShellItemArray *psiItemArray, BOOL fOkToBeSlow, EXPCMDSTATE *pCmdState) override;
+
+        DECLARE_REGISTRY_RESOURCEID(IDR_RECYCLEBINEMPTYSTATE)
+        DECLARE_NOT_AGGREGATABLE(CRecycleBinEmptyState)
+        DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+        BEGIN_COM_MAP(CRecycleBinEmptyState)
+        COM_INTERFACE_ENTRY_IID(IID_IExplorerCommandState, IExplorerCommandState)
         END_COM_MAP()
 };
 

@@ -21,14 +21,20 @@ HKCR
 				val 'Attributes' = b '40010020'
 				val 'CallForAttributes' = d '&H00000040'
 			}
-			'shellex'
+			'shell'
 			{
-				'ContextMenuHandlers'
+				'empty'
 				{
-					'{645FF040-5081-101B-9F08-00AA002F954E}'
+					val 'MUIVerb' = e '@%%SystemRoot%%\system32\shell32.dll,-172'
+					val 'CommandStateHandler' = s '{C9298EEF-69DD-4CDD-B153-BDBC38486781}'
+					'command'
 					{
+						val 'DelegateExecute' = s '{48527BB3-E8DE-450B-8910-8C4099CB8624}'
 					}
 				}
+			}
+			'shellex'
+			{
 				'PropertySheetHandlers'
 				{
 					'{645FF040-5081-101B-9F08-00AA002F954E}'

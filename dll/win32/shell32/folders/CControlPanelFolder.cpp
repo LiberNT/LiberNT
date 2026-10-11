@@ -404,8 +404,13 @@ HRESULT WINAPI CControlPanelFolder::CreateViewObject(HWND hwndOwner, REFIID riid
             WARN("IContextMenu not implemented\n");
             hr = E_NOTIMPL;
         } else if (IsEqualIID(riid, IID_IShellView)) {
-            SFV_CREATE sfvparams = { sizeof(SFV_CREATE), this , NULL, this };
-            hr = SHCreateShellFolderView(&sfvparams, (IShellView**)ppvOut);
+            CComPtr<CControlPanelFolderViewCB> sfviewcb;
+            hr = ShellObjectCreator(sfviewcb);
+            if (SUCCEEDED(hr))
+            {
+                SFV_CREATE sfvparams = { sizeof(SFV_CREATE), this , NULL, sfviewcb };
+                hr = SHCreateShellFolderView(&sfvparams, (IShellView**)ppvOut);
+            }
         }
     }
     TRACE("--(%p)->(interface=%p)\n", this, ppvOut);
@@ -740,7 +745,7 @@ HRESULT WINAPI CControlPanelFolder::GetCurFolder(PIDLIST_ABSOLUTE * pidl)
     return S_OK;
 }
 
-HRESULT WINAPI CControlPanelFolder::MessageSFVCB(UINT uMsg, WPARAM wParam, LPARAM lParam)
+HRESULT WINAPI CControlPanelFolderViewCB::MessageSFVCB(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {

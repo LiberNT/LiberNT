@@ -1092,3 +1092,8 @@ BEGIN
     IDS_LOG_OFF_TITLE "Fermer"
     IDS_SWITCH_USER_TITLE "Changer d'utilisateur"
 END
+
+STRINGTABLE
+BEGIN
+    IDS_FILE_EXPLORER "File Explorer"
+END

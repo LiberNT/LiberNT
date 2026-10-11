@@ -1101,3 +1101,8 @@ BEGIN
     IDS_LOG_OFF_TITLE "Выход"
     IDS_SWITCH_USER_TITLE "Сменить пользователя"
 END
+
+STRINGTABLE
+BEGIN
+    IDS_FILE_EXPLORER "File Explorer"
+END
