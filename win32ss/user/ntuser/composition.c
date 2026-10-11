@@ -140,7 +140,8 @@ IntCompositionReadFrameExtension(_In_ PWND Wnd, _Inout_ PDWM_WIN Window)
     ULONG_PTR Row, Span, State;
     ULONG Index;
 
-    if (IntCompositionFrameProperty(Wnd, AtomDwmFrameAlpha) == 0)
+    if (IntCompositionFrameProperty(Wnd, AtomDwmFrameAlpha) == 0 ||
+        !UserHasWindowEdge(Wnd->style, Wnd->ExStyle))
         return;
 
     Window->LayerFlags |= DWM_WINDOW_FRAME_ALPHA;
