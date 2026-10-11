@@ -149,7 +149,7 @@ ScmGetDriverStatus(PSERVICE lpService,
     DWORD dwPreviousState;
     DWORD dwInitialState = lpService->Status.dwCurrentState;
 
-    DPRINT1("ScmGetDriverStatus() called\n");
+    DPRINT("ScmGetDriverStatus() called\n");
 
     /* Zero output buffer if any */
     if (lpServiceStatus != NULL)
@@ -219,8 +219,8 @@ ScmGetDriverStatus(PSERVICE lpService,
         if (_wcsicmp(lpService->lpServiceName, DirInfo->Name.Buffer) == 0)
         {
             /* That's our driver, bail out! */
-            DPRINT1("Found: '%S'  '%wZ'\n",
-                    lpService->lpServiceName, &DirInfo->Name);
+            DPRINT("Found: '%S'  '%wZ'\n",
+                   lpService->lpServiceName, &DirInfo->Name);
             bFound = TRUE;
 
             break;
@@ -308,7 +308,7 @@ ScmGetDriverStatus(PSERVICE lpService,
                       sizeof(SERVICE_STATUS));
     }
 
-    DPRINT1("ScmGetDriverStatus() done (Error: %lu)\n", dwError);
+    DPRINT("ScmGetDriverStatus() done (Error: %lu)\n", dwError);
 
     return ERROR_SUCCESS;
 }

@@ -1726,6 +1726,9 @@ RQueryServiceStatus(
         return ERROR_INVALID_HANDLE;
     }
 
+    if (lpService->Status.dwServiceType & SERVICE_DRIVER)
+        ScmControlDriver(lpService, SERVICE_CONTROL_INTERROGATE, NULL);
+
     /* Lock the service database shared */
     ScmLockDatabaseShared();
 
@@ -6232,6 +6235,9 @@ RQueryServiceStatusEx(
         DPRINT("lpService == NULL\n");
         return ERROR_INVALID_HANDLE;
     }
+
+    if (lpService->Status.dwServiceType & SERVICE_DRIVER)
+        ScmControlDriver(lpService, SERVICE_CONTROL_INTERROGATE, NULL);
 
     /* Lock the service database shared */
     ScmLockDatabaseShared();
