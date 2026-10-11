@@ -1005,3 +1005,4 @@
 #define IDR_FADETASK            190
 #define IDR_THUMBNAIL           191
 #define IDR_SHELLFOLDERVIEWOC   192
+#define IDR_CDBURN              193

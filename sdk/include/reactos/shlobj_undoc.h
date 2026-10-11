@@ -1338,6 +1338,19 @@ DECLARE_INTERFACE_(IInitializeLoadTrust, IUnknown) // {C2AA8366-6694-47F9-A15B-3
 };
 #undef INTERFACE
 
+#define INTERFACE IDriveFolderExt
+DECLARE_INTERFACE_(IDriveFolderExt, IUnknown)
+{
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    STDMETHOD(Initialize)(THIS_ int iDrive) PURE;
+    STDMETHOD(DriveSupportsBurning)(THIS_ int iDrive) PURE;
+    STDMETHOD(Bind)(THIS_ PCIDLIST_ABSOLUTE pidl, IBindCtx *pbc, REFIID riid, void **ppv) PURE;
+    STDMETHOD(GetSpace)(THIS_ ULONGLONG *pullFree, ULONGLONG *pullTotal) PURE;
+};
+#undef INTERFACE
+
 #ifdef __cplusplus
 typedef struct QUERYNAMESPACEINFO QUERYNAMESPACEINFO;
 

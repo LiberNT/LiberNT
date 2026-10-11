@@ -4765,6 +4765,14 @@ library ShellObjects
     }
 
     [
+        uuid(fbeb8a05-beee-4442-804e-409d6c4515e9)
+    ]
+    coclass CDBurn
+    {
+        interface ICDBurn;
+    }
+
+    [
         uuid(AE054212-3535-4430-83ED-D501AA6680E6)
     ]
     coclass NamespaceTreeControl

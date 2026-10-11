@@ -63,5 +63,6 @@ IDR_SEARCHBAND REGISTRY "res/rgs/searchband.rgs"
 IDR_FADETASK REGISTRY "res/rgs/fadetask.rgs"
 IDR_THUMBNAIL REGISTRY "res/rgs/thumbnail.rgs"
 IDR_SHELLFOLDERVIEWOC REGISTRY "res/rgs/shellfolderviewoc.rgs"
+IDR_CDBURN REGISTRY "res/rgs/cdburn.rgs"
 /* Derived from Wine 11.14 shell32_classes.idl, Copyright 2011 Alexandre Julliard, LGPL-2.1-or-later. */
 IDR_WINECLASSES REGISTRY "res/rgs/wineclasses.rgs"
