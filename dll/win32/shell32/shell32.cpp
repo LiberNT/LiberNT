@@ -503,9 +503,16 @@ static HRESULT UpdateRegistryFromResource(BOOL Register)
         IDR_SYSTEMFILEASSOC,
         IDR_SEARCHBAND,
     };
+    _ATL_REGMAP_ENTRY typelibMap[] =
+    {
+        { L"PLATFORM", sizeof(void *) == 8 ? L"win64" : L"win32" },
+        { NULL, NULL }
+    };
     HRESULT hr = S_OK;
     for (SIZE_T i = 0; i < _countof(resid) && SUCCEEDED(hr); ++i)
         hr = gModule.UpdateRegistryFromResource(resid[i], Register, NULL);
+    if (SUCCEEDED(hr))
+        hr = gModule.UpdateRegistryFromResource(IDR_SHELL32TYPELIB, Register, typelibMap);
     return hr;
 }
 
@@ -516,7 +523,7 @@ STDAPI DllRegisterServer()
 {
     HRESULT hr;
 
-    hr = gModule.DllRegisterServer(TRUE);
+    hr = gModule.DllRegisterServer(FALSE);
     if (FAILED(hr))
         return hr;
 
@@ -537,7 +544,7 @@ STDAPI DllUnregisterServer()
 {
     HRESULT hr;
 
-    hr = gModule.DllUnregisterServer(TRUE);
+    hr = gModule.DllUnregisterServer(FALSE);
     if (FAILED(hr))
         return hr;
 

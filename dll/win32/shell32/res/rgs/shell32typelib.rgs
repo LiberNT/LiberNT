@@ -1,0 +1,205 @@
+HKCR
+{
+    NoRemove TypeLib
+    {
+        '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+        {
+            '1.0' = s 'Microsoft Shell Controls And Automation'
+            {
+                '0'
+                {
+                    %PLATFORM% = s '%MODULE%'
+                }
+                FLAGS = s '0'
+                HELPDIR = s '%MODULE%'
+            }
+        }
+    }
+    NoRemove Interface
+    {
+        '{62112AA2-EBE4-11CF-A5FB-0020AFE7292D}' = s 'DShellFolderViewEvents'
+        {
+            ProxyStubClsid32 = s '{00020420-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{BBCBDE60-C3FF-11CE-8350-444553540000}' = s 'Folder'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{F0D2D8EF-3890-11D2-BF8B-00C04FB93661}' = s 'Folder2'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{A7AE5F64-C4D7-4D7F-9307-4D24EE54B841}' = s 'Folder3'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{FAC32C80-CBE4-11CE-8350-444553540000}' = s 'FolderItem'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{EDC817AA-92B8-11D1-B075-00C04FC33AA5}' = s 'FolderItem2'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{744129E0-CBE5-11CE-8350-444553540000}' = s 'FolderItems'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{C94F0AD0-F363-11D2-A327-00C04F8EEC7F}' = s 'FolderItems2'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{EAA7C309-BBEC-49D5-821D-64D966CB667F}' = s 'FolderItems3'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{08EC3E00-50B0-11CF-960C-0080C7F4EE85}' = s 'FolderItemVerb'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{1F8352C0-50B0-11CF-960C-0080C7F4EE85}' = s 'FolderItemVerbs'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{2D91EEA1-9932-11D2-BE86-00A0C9A83DA1}' = s 'IFileSearchBand'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{9BA05970-F6A8-11CF-A442-00A0C90A8F39}' = s 'IFolderViewOC'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{D8F015C0-C278-11CE-A49E-444553540000}' = s 'IShellDispatch'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{A4C6892C-3BA9-11D2-9DEA-00C04FB16162}' = s 'IShellDispatch2'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{177160CA-BB5A-411C-841D-BD38FACDEAA0}' = s 'IShellDispatch3'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{EFD84B2D-4BCF-4298-BE25-EB542A59FBDA}' = s 'IShellDispatch4'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{866738B9-6CF2-4DE8-8767-F794EBE74F4E}' = s 'IShellDispatch5'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{E7A1AF80-4D96-11CF-960C-0080C7F4EE85}' = s 'IShellFolderViewDual'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{31C147B6-0ADE-4A3C-B514-DDF932EF6D17}' = s 'IShellFolderViewDual2'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{29EC8E6C-46D3-411F-BAAA-611A6C9CAC66}' = s 'IShellFolderViewDual3'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{88A05C00-F000-11CE-8350-444553540000}' = s 'IShellLinkDual'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+        '{317EE249-F12E-11D2-B1E4-00C04F8EEB3E}' = s 'IShellLinkDual2'
+        {
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+            {
+                val Version = s '1.0'
+            }
+        }
+    }
+}
