@@ -33,7 +33,8 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateUnorderedAccessView(ID3D11Resource
         if (texture->read_only) return E_INVALIDARG;
     if (!functions.pfnCalcPrivateUnorderedAccessViewSize || !functions.pfnCreateUnorderedAccessView
             || !functions.pfnDestroyUnorderedAccessView) return E_NOTIMPL;
-    D3D11_UNORDERED_ACCESS_VIEW_DESC desc = {};
+    D3D11_UNORDERED_ACCESS_VIEW_DESC desc;
+    ZeroMemory(&desc, sizeof(desc));
     D3D11DDIARG_CREATEUNORDEREDACCESSVIEW args = {};
     if (input) desc = *input;
     if (NativeBuffer *buffer = GetNativeBuffer(resource, this))

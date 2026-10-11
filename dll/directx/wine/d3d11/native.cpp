@@ -3343,7 +3343,8 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateRenderTargetView(ID3D11Resource *r
     NativeTextureInfo info;
     NativeTextureInfo *texture = GetNativeTexture(resource, this, &info);
     if (!texture || !(texture->desc.BindFlags & D3D11_BIND_RENDER_TARGET)) return E_INVALIDARG;
-    D3D11_RENDER_TARGET_VIEW_DESC desc = {};
+    D3D11_RENDER_TARGET_VIEW_DESC desc;
+    ZeroMemory(&desc, sizeof(desc));
     if (input) desc = *input;
     else
     {
@@ -7029,7 +7030,8 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateDepthStencilView(ID3D11Resource *r
             || !(texture->desc.BindFlags & D3D11_BIND_DEPTH_STENCIL)) return E_INVALIDARG;
     if (!functions.pfnCalcPrivateDepthStencilViewSize || !functions.pfnCreateDepthStencilView
             || !functions.pfnDestroyDepthStencilView) return E_NOTIMPL;
-    D3D11_DEPTH_STENCIL_VIEW_DESC desc = {};
+    D3D11_DEPTH_STENCIL_VIEW_DESC desc;
+    ZeroMemory(&desc, sizeof(desc));
     if (input) desc = *input;
     else
     {
