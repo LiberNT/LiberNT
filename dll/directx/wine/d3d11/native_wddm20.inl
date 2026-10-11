@@ -357,6 +357,104 @@ static void NativeWddm20InitializeCallbacks(NativeDevice *device)
 }
 
 
+static BOOL APIENTRY NativeDdi11_1Flush(D3D10DDI_HDEVICE h, UINT, UINT flags)
+{
+    return NativeWddm20Device(h)->ddi11_1_functions.pfnFlush(h, flags);
+}
+
+static void APIENTRY NativeDdi11_1CheckMultisampleQualityLevels(D3D10DDI_HDEVICE h, DXGI_FORMAT format, UINT samples,
+        UINT flags, UINT *quality)
+{
+    if (flags) { *quality = 0; return; }
+    NativeWddm20Device(h)->ddi11_1_functions.pfnCheckMultisampleQualityLevels(h, format, samples, quality);
+}
+
+static D3D11_1_DDI_RASTERIZER_DESC NativeDdi11_1Convert(const D3DWDDM2_0DDI_RASTERIZER_DESC &wide)
+{
+    D3D11_1_DDI_RASTERIZER_DESC value;
+    static_assert(offsetof(D3DWDDM2_0DDI_RASTERIZER_DESC, ConservativeRasterizationMode) == sizeof(value), "Rasterizer prefix");
+    memcpy(&value, &wide, sizeof(value));
+    return value;
+}
+
+static SIZE_T APIENTRY NativeDdi11_1CalcPrivateRasterizerStateSize(D3D10DDI_HDEVICE h, const D3DWDDM2_0DDI_RASTERIZER_DESC *desc)
+{
+    D3D11_1_DDI_RASTERIZER_DESC value = NativeDdi11_1Convert(*desc);
+    return NativeWddm20Device(h)->ddi11_1_functions.pfnCalcPrivateRasterizerStateSize(h, &value);
+}
+
+static void APIENTRY NativeDdi11_1CreateRasterizerState(D3D10DDI_HDEVICE h, const D3DWDDM2_0DDI_RASTERIZER_DESC *desc,
+        D3D10DDI_HRASTERIZERSTATE state, D3D10DDI_HRTRASTERIZERSTATE runtime)
+{
+    D3D11_1_DDI_RASTERIZER_DESC value = NativeDdi11_1Convert(*desc);
+    NativeWddm20Device(h)->ddi11_1_functions.pfnCreateRasterizerState(h, &value, state, runtime);
+}
+
+static void NativeDdi11_1BridgeFunctions(NativeDevice *device)
+{
+    const auto &d = device->ddi11_1_functions;
+    auto &m = device->wddm20_functions;
+#define SAME(Name) m.pfn##Name = d.pfn##Name
+    SAME(DefaultConstantBufferUpdateSubresourceUP); SAME(VsSetConstantBuffers); SAME(PsSetShaderResources);
+    SAME(PsSetShader); SAME(PsSetSamplers); SAME(VsSetShader); SAME(DrawIndexed); SAME(Draw);
+    SAME(DynamicIABufferMapNoOverwrite); SAME(DynamicIABufferUnmap); SAME(DynamicConstantBufferMapDiscard);
+    SAME(DynamicIABufferMapDiscard); SAME(DynamicConstantBufferUnmap); SAME(PsSetConstantBuffers);
+    SAME(IaSetInputLayout); SAME(IaSetVertexBuffers); SAME(IaSetIndexBuffer); SAME(DrawIndexedInstanced);
+    SAME(DrawInstanced); SAME(DynamicResourceMapDiscard); SAME(DynamicResourceUnmap); SAME(GsSetConstantBuffers);
+    SAME(GsSetShader); SAME(IaSetTopology); SAME(StagingResourceMap); SAME(StagingResourceUnmap);
+    SAME(VsSetShaderResources); SAME(VsSetSamplers); SAME(GsSetShaderResources); SAME(GsSetSamplers);
+    SAME(SetRenderTargets); SAME(ShaderResourceViewReadAfterWriteHazard); SAME(ResourceReadAfterWriteHazard);
+    SAME(SetBlendState); SAME(SetDepthStencilState); SAME(SetRasterizerState); SAME(QueryEnd); SAME(QueryBegin);
+    SAME(ResourceCopyRegion); SAME(ResourceUpdateSubresourceUP); SAME(SoSetTargets); SAME(DrawAuto);
+    SAME(SetViewports); SAME(SetScissorRects); SAME(ClearRenderTargetView); SAME(ClearDepthStencilView);
+    SAME(SetPredication); SAME(QueryGetData); SAME(GenMips); SAME(ResourceCopy); SAME(ResourceResolveSubresource);
+    SAME(ResourceMap); SAME(ResourceUnmap); SAME(ResourceIsStagingBusy); SAME(CalcPrivateResourceSize);
+    SAME(CalcPrivateOpenedResourceSize); SAME(CreateResource); SAME(OpenResource); SAME(DestroyResource);
+    SAME(DestroyShaderResourceView); SAME(DestroyRenderTargetView); SAME(CalcPrivateDepthStencilViewSize);
+    SAME(CreateDepthStencilView); SAME(DestroyDepthStencilView); SAME(CalcPrivateElementLayoutSize);
+    SAME(CreateElementLayout); SAME(DestroyElementLayout); SAME(CalcPrivateBlendStateSize); SAME(CreateBlendState);
+    SAME(DestroyBlendState); SAME(CalcPrivateDepthStencilStateSize); SAME(CreateDepthStencilState);
+    SAME(DestroyDepthStencilState); SAME(DestroyRasterizerState); SAME(CalcPrivateShaderSize);
+    SAME(CreateVertexShader); SAME(CreateGeometryShader); SAME(CreatePixelShader);
+    SAME(CalcPrivateGeometryShaderWithStreamOutput); SAME(CreateGeometryShaderWithStreamOutput); SAME(DestroyShader);
+    SAME(CalcPrivateSamplerSize); SAME(CreateSampler); SAME(DestroySampler); SAME(DestroyQuery);
+    SAME(CheckFormatSupport); SAME(CheckCounterInfo); SAME(CheckCounter); SAME(DestroyDevice);
+    SAME(SetTextFilterSize); SAME(ResourceConvert); SAME(ResourceConvertRegion); SAME(DrawIndexedInstancedIndirect);
+    SAME(DrawInstancedIndirect); SAME(CommandListExecute); SAME(HsSetShaderResources); SAME(HsSetShader);
+    SAME(HsSetSamplers); SAME(HsSetConstantBuffers); SAME(DsSetShaderResources); SAME(DsSetShader);
+    SAME(DsSetSamplers); SAME(DsSetConstantBuffers); SAME(CreateHullShader); SAME(CreateDomainShader);
+    SAME(CheckDeferredContextHandleSizes); SAME(CalcDeferredContextHandleSize); SAME(CalcPrivateDeferredContextSize);
+    SAME(CreateDeferredContext); SAME(AbandonCommandList); SAME(CalcPrivateCommandListSize); SAME(CreateCommandList);
+    SAME(DestroyCommandList); SAME(CalcPrivateTessellationShaderSize); SAME(PsSetShaderWithIfaces);
+    SAME(VsSetShaderWithIfaces); SAME(GsSetShaderWithIfaces); SAME(HsSetShaderWithIfaces);
+    SAME(DsSetShaderWithIfaces); SAME(CsSetShaderWithIfaces); SAME(CreateComputeShader); SAME(CsSetShader);
+    SAME(CsSetShaderResources); SAME(CsSetSamplers); SAME(CsSetConstantBuffers); SAME(DestroyUnorderedAccessView);
+    SAME(ClearUnorderedAccessViewUint); SAME(ClearUnorderedAccessViewFloat); SAME(CsSetUnorderedAccessViews);
+    SAME(Dispatch); SAME(DispatchIndirect); SAME(SetResourceMinLOD); SAME(CopyStructureCount);
+    SAME(RecycleCommandList); SAME(RecycleCreateCommandList); SAME(RecycleCreateDeferredContext);
+    SAME(RecycleDestroyCommandList); SAME(Discard); SAME(AssignDebugBinary);
+    SAME(DynamicConstantBufferMapNoOverwrite); SAME(CheckDirectFlipSupport); SAME(ClearView);
+#undef SAME
+    m.pfnFlush = d.pfnFlush ? NativeDdi11_1Flush : NULL;
+    m.pfnCheckMultisampleQualityLevels = d.pfnCheckMultisampleQualityLevels ? NativeDdi11_1CheckMultisampleQualityLevels : NULL;
+    m.pfnCalcPrivateRasterizerStateSize = d.pfnCalcPrivateRasterizerStateSize ? NativeDdi11_1CalcPrivateRasterizerStateSize : NULL;
+    m.pfnCreateRasterizerState = d.pfnCreateRasterizerState ? NativeDdi11_1CreateRasterizerState : NULL;
+}
+
+static void NativeDdi11_1InstallViewFunctions(NativeDevice *device)
+{
+    const auto &d = device->ddi11_1_functions;
+    auto &f = device->functions;
+    f.pfnCalcPrivateShaderResourceViewSize = d.pfnCalcPrivateShaderResourceViewSize;
+    f.pfnCreateShaderResourceView = d.pfnCreateShaderResourceView;
+    f.pfnCalcPrivateRenderTargetViewSize = d.pfnCalcPrivateRenderTargetViewSize;
+    f.pfnCreateRenderTargetView = d.pfnCreateRenderTargetView;
+    f.pfnCalcPrivateUnorderedAccessViewSize = d.pfnCalcPrivateUnorderedAccessViewSize;
+    f.pfnCreateUnorderedAccessView = d.pfnCreateUnorderedAccessView;
+    f.pfnCalcPrivateQuerySize = d.pfnCalcPrivateQuerySize;
+    f.pfnCreateQuery = d.pfnCreateQuery;
+}
+
 static void NativeWddm20InstallFunctions(NativeDevice *device)
 {
     /* Copy only identical signatures. Changed slots use typed adapters below;

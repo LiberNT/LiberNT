@@ -220,11 +220,13 @@ public:
     D3D10_2DDI_ADAPTERFUNCS adapter_functions = {};
     D3D11DDI_DEVICEFUNCS functions = {};
     D3DWDDM2_0DDI_DEVICEFUNCS wddm20_functions = {};
+    D3D11_1DDI_DEVICEFUNCS ddi11_1_functions = {};
     D3DWDDM2_0DDI_CORELAYER_DEVICECALLBACKS wddm20_callbacks = {};
     DXGI1_4_DDI_BASE_FUNCTIONS wddm20_dxgi = {};
     PFND3D10DDI_RETRIEVESUBOBJECT retrieve_subobject = NULL;
     void *driver_device_storage = NULL;
     bool wddm20 = false;
+    bool ddi11_1 = false;
     ROS_UMD_ADAPTER_CALLBACKS adapter_callbacks = {};
     D3DDDI_DEVICECALLBACKS kernel_callbacks = {};
     D3D11DDI_CORELAYER_DEVICECALLBACKS core_callbacks = {};
@@ -304,7 +306,7 @@ public:
     void BeginCall() { operation_error = S_OK; }
     bool MapOnDefaultBuffers() const
     {
-        return wddm20 && feature_level >= D3D_FEATURE_LEVEL_11_0
+        return wddm20 && !ddi11_1 && feature_level >= D3D_FEATURE_LEVEL_11_0
                 && functions.pfnResourceMap && functions.pfnResourceUnmap;
     }
 
@@ -1968,15 +1970,17 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
     if (!versions) return E_OUTOFMEMORY;
     UINT capacity = versions_count;
     hr = adapter_functions.pfnGetSupportedVersions(driver_adapter, &versions_count, versions);
-    bool supported = false;
+    bool supported = false, supported11_1 = false;
     if (SUCCEEDED(hr) && versions_count <= capacity)
         for (UINT i = 0; i < versions_count; ++i)
         {
             if (versions[i] == ((UINT64)D3D11_0_DDI_INTERFACE_VERSION << 32 | (UINT64)D3D11_0_DDI_BUILD_VERSION << 16)) supported = true;
+            if (versions[i] == D3D11_1_DDI_SUPPORTED) supported11_1 = true;
             if (versions[i] == ((UINT64)NATIVE_WDDM20_INTERFACE << 32 | (UINT64)NATIVE_WDDM20_BUILD << 16))
                 wddm20 = true;
         }
     HeapFree(GetProcessHeap(), 0, versions);
+    if (!wddm20 && supported11_1) wddm20 = ddi11_1 = true;
     if (!supported && !wddm20) return DXGI_ERROR_UNSUPPORTED;
 
     D3D11DDI_3DPIPELINESUPPORT_CAPS pipeline = {};
@@ -2005,6 +2009,9 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
         QueryAdapterCaps(D3D11_1DDICAPS_D3D11_OPTIONS, &options_caps, sizeof(options_caps));
         QueryAdapterCaps(D3D11_1DDICAPS_ARCHITECTURE_INFO, &architecture_caps, sizeof(architecture_caps));
         QueryAdapterCaps(D3D11_1DDICAPS_SHADER_MIN_PRECISION_SUPPORT, &precision_caps, sizeof(precision_caps));
+    }
+    if (wddm20 && !ddi11_1)
+    {
         QueryAdapterCaps(D3DWDDM1_3DDICAPS_D3D11_OPTIONS1, &options1_caps, sizeof(options1_caps));
         QueryAdapterCaps(D3DWDDM2_0DDICAPS_D3D11_OPTIONS2, &options2_caps, sizeof(options2_caps));
         QueryAdapterCaps(D3DWDDM2_0DDICAPS_D3D11_OPTIONS3, &options3_caps, sizeof(options3_caps));
@@ -2027,6 +2034,7 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
             default: continue;
         }
         if (level > D3D11DDI_3DPIPELINELEVEL_11_0 && !wddm20) continue;
+        if (level > D3D11_1DDI_3DPIPELINELEVEL_11_1 && ddi11_1) continue;
         if (!(pipeline.Caps & D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(level))) continue;
         feature_level = levels[i];
         pipeline_level = level;
@@ -2061,8 +2069,8 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
     if (FAILED(hr = create_callbacks(km_adapter, km_device, &kernel_callbacks, &runtime_device))) return hr;
 
     D3D10DDIARG_CALCPRIVATEDEVICESIZE size_args = {};
-    size_args.Interface = wddm20 ? NATIVE_WDDM20_INTERFACE : D3D11_0_DDI_INTERFACE_VERSION;
-    size_args.Version = (wddm20 ? NATIVE_WDDM20_BUILD : D3D11_0_DDI_BUILD_VERSION) << 16;
+    size_args.Interface = ddi11_1 ? D3D11_1_DDI_INTERFACE_VERSION : wddm20 ? NATIVE_WDDM20_INTERFACE : D3D11_0_DDI_INTERFACE_VERSION;
+    size_args.Version = (ddi11_1 ? D3D11_1_DDI_BUILD_VERSION : wddm20 ? NATIVE_WDDM20_BUILD : D3D11_0_DDI_BUILD_VERSION) << 16;
     size_args.Flags = ((pipeline_level << D3D11DDI_CREATEDEVICE_FLAG_3DPIPELINESUPPORT_SHIFT)
             & D3D11DDI_CREATEDEVICE_FLAG_3DPIPELINESUPPORT_MASK)
             | ((pipeline_level << D3D11DDI_CREATEDEVICE_FLAG_3DPIPELINESUPPORT_SHIFT2)
@@ -2089,10 +2097,11 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
     create_args.Version = size_args.Version;
     create_args.Flags = size_args.Flags;
     create_args.pKTCallbacks = &kernel_callbacks;
-    create_args.p11DeviceFuncs = wddm20 ? reinterpret_cast<D3D11DDI_DEVICEFUNCS *>(&wddm20_functions) : &functions;
+    create_args.p11DeviceFuncs = ddi11_1 ? reinterpret_cast<D3D11DDI_DEVICEFUNCS *>(&ddi11_1_functions)
+            : wddm20 ? reinterpret_cast<D3D11DDI_DEVICEFUNCS *>(&wddm20_functions) : &functions;
     create_args.hDrvDevice = driver_device;
     create_args.hRTCoreLayer.handle = this;
-    create_args.p11UMCallbacks = wddm20 ? reinterpret_cast<D3D11DDI_CORELAYER_DEVICECALLBACKS *>(&wddm20_callbacks) : &core_callbacks;
+    create_args.p11UMCallbacks = wddm20 && !ddi11_1 ? reinterpret_cast<D3D11DDI_CORELAYER_DEVICECALLBACKS *>(&wddm20_callbacks) : &core_callbacks;
     create_args.DXGIBaseDDI.pDXGIBaseCallbacks = &dxgi_callbacks;
     create_args.DXGIBaseDDI.pDXGIDDIBaseFunctions2 = wddm20 ? reinterpret_cast<DXGI1_1_DDI_BASE_FUNCTIONS *>(&wddm20_dxgi) : &dxgi_functions;
     if (wddm20) create_args.ppfnRetrieveSubObject = &retrieve_subobject;
@@ -2102,7 +2111,9 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
         return hr;
     }
     driver_created = true;
+    if (ddi11_1) NativeDdi11_1BridgeFunctions(this);
     if (wddm20) NativeWddm20InstallFunctions(this);
+    if (ddi11_1) NativeDdi11_1InstallViewFunctions(this);
     if (!functions.pfnDestroyDevice || !functions.pfnCalcPrivateResourceSize
             || !functions.pfnCreateResource || !functions.pfnDestroyResource
             || !functions.pfnCalcPrivateRenderTargetViewSize || !functions.pfnCreateRenderTargetView

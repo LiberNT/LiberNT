@@ -165,7 +165,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateRenderTargetView1(ID3D11Resource *
                 break;
         }
     }
-    if (plane && !wddm20) return E_INVALIDARG;
+    if (plane && (!wddm20 || ddi11_1)) return E_INVALIDARG;
     NativeLock guard(this);
     ID3D11RenderTargetView *view = NULL;
     plane_slice = plane;
@@ -207,7 +207,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateShaderResourceView1(ID3D11Resource
                 break;
         }
     }
-    if (plane && !wddm20) return E_INVALIDARG;
+    if (plane && (!wddm20 || ddi11_1)) return E_INVALIDARG;
     NativeLock guard(this);
     ID3D11ShaderResourceView *view = NULL;
     plane_slice = plane;
@@ -247,7 +247,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateUnorderedAccessView1(ID3D11Resourc
                 break;
         }
     }
-    if (plane && !wddm20) return E_INVALIDARG;
+    if (plane && (!wddm20 || ddi11_1)) return E_INVALIDARG;
     NativeLock guard(this);
     ID3D11UnorderedAccessView *view = NULL;
     plane_slice = plane;

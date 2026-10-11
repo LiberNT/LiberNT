@@ -445,6 +445,191 @@ typedef HRESULT ( APIENTRY* PFND3DWDDM2_0DDI_RETRIEVE_SHADER_COMMENT )(
 typedef void ( APIENTRY* PFND3DWDDM2_0DDI_SETHARDWAREPROTECTIONSTATE )(
     D3D10DDI_HDEVICE, BOOL HwProtectionEnable );
 
+typedef struct D3D11_1_DDI_RASTERIZER_DESC
+{
+    D3D10_DDI_FILL_MODE FillMode;
+    D3D10_DDI_CULL_MODE CullMode;
+    BOOL FrontCounterClockwise;
+    INT DepthBias;
+    FLOAT DepthBiasClamp;
+    FLOAT SlopeScaledDepthBias;
+    BOOL DepthClipEnable;
+    BOOL ScissorEnable;
+    BOOL MultisampleEnable;
+    BOOL AntialiasedLineEnable;
+    UINT ForcedSampleCount;
+} D3D11_1_DDI_RASTERIZER_DESC;
+
+struct D3D11_1DDI_DEVICEFUNCS;
+
+typedef BOOL ( APIENTRY* PFND3D11_1DDI_FLUSH )(
+    D3D10DDI_HDEVICE, UINT FlushFlags );
+typedef VOID ( APIENTRY* PFND3D11_1DDI_RELOCATEDEVICEFUNCS )(
+    D3D10DDI_HDEVICE, _In_ struct D3D11_1DDI_DEVICEFUNCS* );
+typedef SIZE_T ( APIENTRY* PFND3D11_1DDI_CALCPRIVATERASTERIZERSTATESIZE )(
+    D3D10DDI_HDEVICE, _In_ CONST D3D11_1_DDI_RASTERIZER_DESC* );
+typedef VOID ( APIENTRY* PFND3D11_1DDI_CREATERASTERIZERSTATE )(
+    D3D10DDI_HDEVICE, _In_ CONST D3D11_1_DDI_RASTERIZER_DESC*, D3D10DDI_HRASTERIZERSTATE, D3D10DDI_HRTRASTERIZERSTATE );
+
+typedef struct D3D11_1DDI_DEVICEFUNCS
+{
+    PFND3D11_1DDI_RESOURCEUPDATESUBRESOURCEUP               pfnDefaultConstantBufferUpdateSubresourceUP;
+    PFND3D11_1DDI_SETCONSTANTBUFFERS                        pfnVsSetConstantBuffers;
+    PFND3D10DDI_SETSHADERRESOURCES                          pfnPsSetShaderResources;
+    PFND3D10DDI_SETSHADER                                   pfnPsSetShader;
+    PFND3D10DDI_SETSAMPLERS                                 pfnPsSetSamplers;
+    PFND3D10DDI_SETSHADER                                   pfnVsSetShader;
+    PFND3D10DDI_DRAWINDEXED                                 pfnDrawIndexed;
+    PFND3D10DDI_DRAW                                        pfnDraw;
+    PFND3D10DDI_RESOURCEMAP                                 pfnDynamicIABufferMapNoOverwrite;
+    PFND3D10DDI_RESOURCEUNMAP                               pfnDynamicIABufferUnmap;
+    PFND3D10DDI_RESOURCEMAP                                 pfnDynamicConstantBufferMapDiscard;
+    PFND3D10DDI_RESOURCEMAP                                 pfnDynamicIABufferMapDiscard;
+    PFND3D10DDI_RESOURCEUNMAP                               pfnDynamicConstantBufferUnmap;
+    PFND3D11_1DDI_SETCONSTANTBUFFERS                        pfnPsSetConstantBuffers;
+    PFND3D10DDI_SETINPUTLAYOUT                              pfnIaSetInputLayout;
+    PFND3D10DDI_IA_SETVERTEXBUFFERS                         pfnIaSetVertexBuffers;
+    PFND3D10DDI_IA_SETINDEXBUFFER                           pfnIaSetIndexBuffer;
+    PFND3D10DDI_DRAWINDEXEDINSTANCED                        pfnDrawIndexedInstanced;
+    PFND3D10DDI_DRAWINSTANCED                               pfnDrawInstanced;
+    PFND3D10DDI_RESOURCEMAP                                 pfnDynamicResourceMapDiscard;
+    PFND3D10DDI_RESOURCEUNMAP                               pfnDynamicResourceUnmap;
+    PFND3D11_1DDI_SETCONSTANTBUFFERS                        pfnGsSetConstantBuffers;
+    PFND3D10DDI_SETSHADER                                   pfnGsSetShader;
+    PFND3D10DDI_IA_SETTOPOLOGY                              pfnIaSetTopology;
+    PFND3D10DDI_RESOURCEMAP                                 pfnStagingResourceMap;
+    PFND3D10DDI_RESOURCEUNMAP                               pfnStagingResourceUnmap;
+    PFND3D10DDI_SETSHADERRESOURCES                          pfnVsSetShaderResources;
+    PFND3D10DDI_SETSAMPLERS                                 pfnVsSetSamplers;
+    PFND3D10DDI_SETSHADERRESOURCES                          pfnGsSetShaderResources;
+    PFND3D10DDI_SETSAMPLERS                                 pfnGsSetSamplers;
+    PFND3D11DDI_SETRENDERTARGETS                            pfnSetRenderTargets;
+    PFND3D10DDI_SHADERRESOURCEVIEWREADAFTERWRITEHAZARD      pfnShaderResourceViewReadAfterWriteHazard;
+    PFND3D10DDI_RESOURCEREADAFTERWRITEHAZARD                pfnResourceReadAfterWriteHazard;
+    PFND3D10DDI_SETBLENDSTATE                               pfnSetBlendState;
+    PFND3D10DDI_SETDEPTHSTENCILSTATE                        pfnSetDepthStencilState;
+    PFND3D10DDI_SETRASTERIZERSTATE                          pfnSetRasterizerState;
+    PFND3D10DDI_QUERYEND                                    pfnQueryEnd;
+    PFND3D10DDI_QUERYBEGIN                                  pfnQueryBegin;
+    PFND3D11_1DDI_RESOURCECOPYREGION                        pfnResourceCopyRegion;
+    PFND3D11_1DDI_RESOURCEUPDATESUBRESOURCEUP               pfnResourceUpdateSubresourceUP;
+    PFND3D10DDI_SO_SETTARGETS                               pfnSoSetTargets;
+    PFND3D10DDI_DRAWAUTO                                    pfnDrawAuto;
+    PFND3D10DDI_SETVIEWPORTS                                pfnSetViewports;
+    PFND3D10DDI_SETSCISSORRECTS                             pfnSetScissorRects;
+    PFND3D10DDI_CLEARRENDERTARGETVIEW                       pfnClearRenderTargetView;
+    PFND3D10DDI_CLEARDEPTHSTENCILVIEW                       pfnClearDepthStencilView;
+    PFND3D10DDI_SETPREDICATION                              pfnSetPredication;
+    PFND3D10DDI_QUERYGETDATA                                pfnQueryGetData;
+    PFND3D11_1DDI_FLUSH                                     pfnFlush;
+    PFND3D10DDI_GENMIPS                                     pfnGenMips;
+    PFND3D10DDI_RESOURCECOPY                                pfnResourceCopy;
+    PFND3D10DDI_RESOURCERESOLVESUBRESOURCE                  pfnResourceResolveSubresource;
+    PFND3D10DDI_RESOURCEMAP                                 pfnResourceMap;
+    PFND3D10DDI_RESOURCEUNMAP                               pfnResourceUnmap;
+    PFND3D10DDI_RESOURCEISSTAGINGBUSY                       pfnResourceIsStagingBusy;
+    PFND3D11_1DDI_RELOCATEDEVICEFUNCS                       pfnRelocateDeviceFuncs;
+    PFND3D11DDI_CALCPRIVATERESOURCESIZE                     pfnCalcPrivateResourceSize;
+    PFND3D10DDI_CALCPRIVATEOPENEDRESOURCESIZE               pfnCalcPrivateOpenedResourceSize;
+    PFND3D11DDI_CREATERESOURCE                              pfnCreateResource;
+    PFND3D10DDI_OPENRESOURCE                                pfnOpenResource;
+    PFND3D10DDI_DESTROYRESOURCE                             pfnDestroyResource;
+    PFND3D11DDI_CALCPRIVATESHADERRESOURCEVIEWSIZE           pfnCalcPrivateShaderResourceViewSize;
+    PFND3D11DDI_CREATESHADERRESOURCEVIEW                    pfnCreateShaderResourceView;
+    PFND3D10DDI_DESTROYSHADERRESOURCEVIEW                   pfnDestroyShaderResourceView;
+    PFND3D10DDI_CALCPRIVATERENDERTARGETVIEWSIZE             pfnCalcPrivateRenderTargetViewSize;
+    PFND3D10DDI_CREATERENDERTARGETVIEW                      pfnCreateRenderTargetView;
+    PFND3D10DDI_DESTROYRENDERTARGETVIEW                     pfnDestroyRenderTargetView;
+    PFND3D11DDI_CALCPRIVATEDEPTHSTENCILVIEWSIZE             pfnCalcPrivateDepthStencilViewSize;
+    PFND3D11DDI_CREATEDEPTHSTENCILVIEW                      pfnCreateDepthStencilView;
+    PFND3D10DDI_DESTROYDEPTHSTENCILVIEW                     pfnDestroyDepthStencilView;
+    PFND3D10DDI_CALCPRIVATEELEMENTLAYOUTSIZE                pfnCalcPrivateElementLayoutSize;
+    PFND3D10DDI_CREATEELEMENTLAYOUT                         pfnCreateElementLayout;
+    PFND3D10DDI_DESTROYELEMENTLAYOUT                        pfnDestroyElementLayout;
+    PFND3D11_1DDI_CALCPRIVATEBLENDSTATESIZE                 pfnCalcPrivateBlendStateSize;
+    PFND3D11_1DDI_CREATEBLENDSTATE                          pfnCreateBlendState;
+    PFND3D10DDI_DESTROYBLENDSTATE                           pfnDestroyBlendState;
+    PFND3D10DDI_CALCPRIVATEDEPTHSTENCILSTATESIZE            pfnCalcPrivateDepthStencilStateSize;
+    PFND3D10DDI_CREATEDEPTHSTENCILSTATE                     pfnCreateDepthStencilState;
+    PFND3D10DDI_DESTROYDEPTHSTENCILSTATE                    pfnDestroyDepthStencilState;
+    PFND3D11_1DDI_CALCPRIVATERASTERIZERSTATESIZE            pfnCalcPrivateRasterizerStateSize;
+    PFND3D11_1DDI_CREATERASTERIZERSTATE                     pfnCreateRasterizerState;
+    PFND3D10DDI_DESTROYRASTERIZERSTATE                      pfnDestroyRasterizerState;
+    PFND3D11_1DDI_CALCPRIVATESHADERSIZE                     pfnCalcPrivateShaderSize;
+    PFND3D11_1DDI_CREATEVERTEXSHADER                        pfnCreateVertexShader;
+    PFND3D11_1DDI_CREATEGEOMETRYSHADER                      pfnCreateGeometryShader;
+    PFND3D11_1DDI_CREATEPIXELSHADER                         pfnCreatePixelShader;
+    PFND3D11_1DDI_CALCPRIVATEGEOMETRYSHADERWITHSTREAMOUTPUT pfnCalcPrivateGeometryShaderWithStreamOutput;
+    PFND3D11_1DDI_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT      pfnCreateGeometryShaderWithStreamOutput;
+    PFND3D10DDI_DESTROYSHADER                               pfnDestroyShader;
+    PFND3D10DDI_CALCPRIVATESAMPLERSIZE                      pfnCalcPrivateSamplerSize;
+    PFND3D10DDI_CREATESAMPLER                               pfnCreateSampler;
+    PFND3D10DDI_DESTROYSAMPLER                              pfnDestroySampler;
+    PFND3D10DDI_CALCPRIVATEQUERYSIZE                        pfnCalcPrivateQuerySize;
+    PFND3D10DDI_CREATEQUERY                                 pfnCreateQuery;
+    PFND3D10DDI_DESTROYQUERY                                pfnDestroyQuery;
+    PFND3D10DDI_CHECKFORMATSUPPORT                          pfnCheckFormatSupport;
+    PFND3D10DDI_CHECKMULTISAMPLEQUALITYLEVELS               pfnCheckMultisampleQualityLevels;
+    PFND3D10DDI_CHECKCOUNTERINFO                            pfnCheckCounterInfo;
+    PFND3D10DDI_CHECKCOUNTER                                pfnCheckCounter;
+    PFND3D10DDI_DESTROYDEVICE                               pfnDestroyDevice;
+    PFND3D10DDI_SETTEXTFILTERSIZE                           pfnSetTextFilterSize;
+    PFND3D10DDI_RESOURCECOPY                                pfnResourceConvert;
+    PFND3D11_1DDI_RESOURCECOPYREGION                        pfnResourceConvertRegion;
+    PFND3D11DDI_DRAWINDEXEDINSTANCEDINDIRECT                pfnDrawIndexedInstancedIndirect;
+    PFND3D11DDI_DRAWINSTANCEDINDIRECT                       pfnDrawInstancedIndirect;
+    PFND3D11DDI_COMMANDLISTEXECUTE                          pfnCommandListExecute;
+    PFND3D10DDI_SETSHADERRESOURCES                          pfnHsSetShaderResources;
+    PFND3D10DDI_SETSHADER                                   pfnHsSetShader;
+    PFND3D10DDI_SETSAMPLERS                                 pfnHsSetSamplers;
+    PFND3D11_1DDI_SETCONSTANTBUFFERS                        pfnHsSetConstantBuffers;
+    PFND3D10DDI_SETSHADERRESOURCES                          pfnDsSetShaderResources;
+    PFND3D10DDI_SETSHADER                                   pfnDsSetShader;
+    PFND3D10DDI_SETSAMPLERS                                 pfnDsSetSamplers;
+    PFND3D11_1DDI_SETCONSTANTBUFFERS                        pfnDsSetConstantBuffers;
+    PFND3D11_1DDI_CREATEHULLSHADER                          pfnCreateHullShader;
+    PFND3D11_1DDI_CREATEDOMAINSHADER                        pfnCreateDomainShader;
+    PFND3D11DDI_CHECKDEFERREDCONTEXTHANDLESIZES             pfnCheckDeferredContextHandleSizes;
+    PFND3D11DDI_CALCDEFERREDCONTEXTHANDLESIZE               pfnCalcDeferredContextHandleSize;
+    PFND3D11DDI_CALCPRIVATEDEFERREDCONTEXTSIZE              pfnCalcPrivateDeferredContextSize;
+    PFND3D11DDI_CREATEDEFERREDCONTEXT                       pfnCreateDeferredContext;
+    PFND3D11DDI_ABANDONCOMMANDLIST                          pfnAbandonCommandList;
+    PFND3D11DDI_CALCPRIVATECOMMANDLISTSIZE                  pfnCalcPrivateCommandListSize;
+    PFND3D11DDI_CREATECOMMANDLIST                           pfnCreateCommandList;
+    PFND3D11DDI_DESTROYCOMMANDLIST                          pfnDestroyCommandList;
+    PFND3D11_1DDI_CALCPRIVATETESSELLATIONSHADERSIZE         pfnCalcPrivateTessellationShaderSize;
+    PFND3D11DDI_SETSHADER_WITH_IFACES                       pfnPsSetShaderWithIfaces;
+    PFND3D11DDI_SETSHADER_WITH_IFACES                       pfnVsSetShaderWithIfaces;
+    PFND3D11DDI_SETSHADER_WITH_IFACES                       pfnGsSetShaderWithIfaces;
+    PFND3D11DDI_SETSHADER_WITH_IFACES                       pfnHsSetShaderWithIfaces;
+    PFND3D11DDI_SETSHADER_WITH_IFACES                       pfnDsSetShaderWithIfaces;
+    PFND3D11DDI_SETSHADER_WITH_IFACES                       pfnCsSetShaderWithIfaces;
+    PFND3D11DDI_CREATECOMPUTESHADER                         pfnCreateComputeShader;
+    PFND3D10DDI_SETSHADER                                   pfnCsSetShader;
+    PFND3D10DDI_SETSHADERRESOURCES                          pfnCsSetShaderResources;
+    PFND3D10DDI_SETSAMPLERS                                 pfnCsSetSamplers;
+    PFND3D11_1DDI_SETCONSTANTBUFFERS                        pfnCsSetConstantBuffers;
+    PFND3D11DDI_CALCPRIVATEUNORDEREDACCESSVIEWSIZE          pfnCalcPrivateUnorderedAccessViewSize;
+    PFND3D11DDI_CREATEUNORDEREDACCESSVIEW                   pfnCreateUnorderedAccessView;
+    PFND3D11DDI_DESTROYUNORDEREDACCESSVIEW                  pfnDestroyUnorderedAccessView;
+    PFND3D11DDI_CLEARUNORDEREDACCESSVIEWUINT                pfnClearUnorderedAccessViewUint;
+    PFND3D11DDI_CLEARUNORDEREDACCESSVIEWFLOAT               pfnClearUnorderedAccessViewFloat;
+    PFND3D11DDI_SETUNORDEREDACCESSVIEWS                     pfnCsSetUnorderedAccessViews;
+    PFND3D11DDI_DISPATCH                                    pfnDispatch;
+    PFND3D11DDI_DISPATCHINDIRECT                            pfnDispatchIndirect;
+    PFND3D11DDI_SETRESOURCEMINLOD                           pfnSetResourceMinLOD;
+    PFND3D11DDI_COPYSTRUCTURECOUNT                          pfnCopyStructureCount;
+    PFND3D11DDI_RECYCLECOMMANDLIST                          pfnRecycleCommandList;
+    PFND3D11DDI_RECYCLECREATECOMMANDLIST                    pfnRecycleCreateCommandList;
+    PFND3D11DDI_RECYCLECREATEDEFERREDCONTEXT                pfnRecycleCreateDeferredContext;
+    PFND3D11DDI_DESTROYCOMMANDLIST                          pfnRecycleDestroyCommandList;
+    PFND3D11_1DDI_DISCARD                                   pfnDiscard;
+    PFND3D11_1DDI_ASSIGNDEBUGBINARY                         pfnAssignDebugBinary;
+    PFND3D10DDI_RESOURCEMAP                                 pfnDynamicConstantBufferMapNoOverwrite;
+    PFND3D11_1DDI_CHECKDIRECTFLIPSUPPORT                    pfnCheckDirectFlipSupport;
+    PFND3D11_1DDI_CLEARVIEW                                 pfnClearView;
+} D3D11_1DDI_DEVICEFUNCS;
+
 typedef struct D3DWDDM2_0DDI_DEVICEFUNCS
 {
 
@@ -753,6 +938,7 @@ typedef struct DXGI1_4_DDI_BASE_FUNCTIONS
     HRESULT ( APIENTRY  * pfnPresentMultiplaneOverlay1 )        (DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY1*);
 }DXGI1_4_DDI_BASE_FUNCTIONS;
 
+static_assert(sizeof(D3D11_1DDI_DEVICEFUNCS) == 155 * sizeof(void *), "D3D11.1 function table");
 static_assert(sizeof(D3DWDDM2_0DDI_DEVICEFUNCS) == 168 * sizeof(void *), "WDDM 2.0 function table");
 static_assert(sizeof(D3DWDDM2_0DDI_CORELAYER_DEVICECALLBACKS) == 42 * sizeof(void *), "WDDM 2.0 core callbacks");
 static_assert(sizeof(DXGI1_4_DDI_BASE_FUNCTIONS) == 21 * sizeof(void *), "DXGI 1.4 function table");
