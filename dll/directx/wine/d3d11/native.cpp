@@ -581,7 +581,7 @@ public:
     ID3D11RenderTargetView *render_targets[8] = {};
     ID3D11DepthStencilView *depth_view = NULL;
     ID3D11UnorderedAccessView *compute_uavs[8] = {}, *pixel_uavs[8] = {};
-    UINT render_target_count = 0, driver_uav_end = 0;
+    UINT render_target_count = 0, driver_uav_end = 0, driver_target_count = 0;
     ID3D11Buffer *stream_outputs[4] = {};
     void RefreshStreamOutput();
     void RefreshOutputBindings(const UINT *initial = NULL);
