@@ -5281,7 +5281,8 @@ DxgkpEscapeCaptured(
     if (pEscape->hDevice != 0)
     {
         EscDevice = DxgkLookupDeviceByHandle(pEscape->hDevice, &EscDeviceAdapter);
-        if (EscDevice == NULL || EscDeviceAdapter != Adapter)
+        if (EscDevice == NULL || EscDeviceAdapter != Adapter ||
+            Adapter->MiniportContext->IsDisplayOnlyDriver)
         {
             Status = STATUS_INVALID_PARAMETER;
             goto Cleanup;

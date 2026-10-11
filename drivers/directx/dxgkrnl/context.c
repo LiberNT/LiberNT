@@ -2054,7 +2054,7 @@ DxgkpCreateDevice(
         DXGKRNL_ERR("DxgkCreateDevice: invalid adapter %p\n", Adapter);
         return STATUS_INVALID_PARAMETER;
     }
-    if (Adapter->MiniportContext == NULL || Adapter->MiniportContext->UseDodLayout || Adapter->MiniportContext->IsDisplayOnlyDriver)
+    if (Adapter->MiniportContext == NULL)
     {
         DxgkDereferenceAdapter(Adapter);
         return STATUS_NOT_SUPPORTED;
@@ -2212,7 +2212,7 @@ DxgkpCreateDevice(
         }
         DXGKRNL_TRACE("DxgkCreateDevice: miniport device handle %p\n", Device->hMiniportDevice);
     }
-    else
+    else if (!Adapter->MiniportContext->IsDisplayOnlyDriver)
     {
         DXGKRNL_WARN("DxgkCreateDevice: miniport has no DxgkDdiCreateDevice\n");
         DxgkDereferenceProcessRecord(Device->ProcessRecord);
@@ -2564,7 +2564,8 @@ DxgkpCreateContextCaptured(
         DXGKRNL_ERR("DxgkCreateContext: invalid device handle 0x%08X\n", pCreateContext->hDevice);
         return STATUS_INVALID_PARAMETER;
     }
-    if (pCreateContext->NodeOrdinal >= Adapter->NodeCount)
+    if (pCreateContext->NodeOrdinal >= Adapter->NodeCount &&
+        !(Adapter->MiniportContext->IsDisplayOnlyDriver && pCreateContext->NodeOrdinal == 0))
     {
         DxgkDereferenceDevice(Device);
         return STATUS_INVALID_PARAMETER;
@@ -2685,7 +2686,7 @@ DxgkpCreateContextCaptured(
         pCreateContext->pPatchLocationList = (D3DDDI_PATCHLOCATIONLIST *)((PUCHAR)Context->RenderRingUser + Context->RenderPatchLocationListOffset);
         pCreateContext->PatchLocationListSize = Context->RenderPatchLocationListSize;
     }
-    else
+    else if (!Adapter->MiniportContext->IsDisplayOnlyDriver)
     {
         DXGKRNL_WARN("DxgkCreateContext: miniport has no DxgkDdiCreateContext\n");
         ExFreePoolWithTag(Context, TAG_DXGK_CONTEXT);
@@ -2693,7 +2694,7 @@ DxgkpCreateContextCaptured(
         return STATUS_NOT_SUPPORTED;
     }
 
-    Status = DxgkpCreateContextStream(Context);
+    Status = Adapter->MiniportContext->IsDisplayOnlyDriver ? STATUS_SUCCESS : DxgkpCreateContextStream(Context);
     if (!NT_SUCCESS(Status))
     {
         DxgkpRollbackCreatedContext(Context);
