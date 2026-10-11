@@ -119,7 +119,8 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateDeviceContextState(UINT state_flag
             || ((flags & D3D11_CREATE_DEVICE_SINGLETHREADED)
                 && !(state_flags & D3D11_1_CREATE_DEVICE_CONTEXT_STATE_SINGLETHREADED))
             || sdk_version != D3D11_SDK_VERSION
-            || (!IsEqualGUID(emulated, IID_ID3D11Device) && !IsEqualGUID(emulated, IID_ID3D11Device1)))
+            || (!IsEqualGUID(emulated, IID_ID3D11Device) && !IsEqualGUID(emulated, IID_ID3D11Device1)
+                && !IsEqualGUID(emulated, IID_ID3D10Device) && !IsEqualGUID(emulated, IID_ID3D10Device1)))
         return E_INVALIDARG;
 
     D3D_FEATURE_LEVEL selected = static_cast<D3D_FEATURE_LEVEL>(0);

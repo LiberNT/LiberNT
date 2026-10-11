@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <winternl.h>
 #include <d3d11_4.h>
+#include <d3d10_1.h>
 #include <d3d11on12.h>
 #include <dxgi1_4.h>
 #include <d3dkmthk.h>
