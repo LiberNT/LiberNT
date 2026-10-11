@@ -237,7 +237,7 @@ static void MRUList_PidlList_0(void)
     SHGetSpecialFolderLocation(NULL, CSIDL_PERSONAL, &pidl2);
 
     UINT uNodeSlot1 = 0xDEADFACE;
-    hr = pList->UsePidl(pidl1, &uNodeSlot1);
+    hr = pList->UsePidl(pidl1, &uNodeSlot1, NULL);
     ok_hex(uNodeSlot1, 1);
 
     // "NodeSlot" value
@@ -247,7 +247,7 @@ static void MRUList_PidlList_0(void)
     ok_int(MRUList_Check(SUBKEY0, L"NodeSlots", "\x02", 1), TRUE);
 
     UINT uNodeSlot2 = 0xDEADFACE;
-    hr = pList->UsePidl(pidl2, &uNodeSlot2);
+    hr = pList->UsePidl(pidl2, &uNodeSlot2, NULL);
     ok_hex(uNodeSlot2, 2);
 
     // "0" value
