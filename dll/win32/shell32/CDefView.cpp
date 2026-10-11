@@ -301,7 +301,8 @@ class CDefView :
     public IDropTarget,
     public IDropSource,
     public IViewObject,
-    public IServiceProvider
+    public IServiceProvider,
+    public IFolderFilterSite
 {
 private:
     CComPtr<IShellFolder>     m_pSFParent;
@@ -616,6 +617,9 @@ public:
     // *** IServiceProvider methods ***
     STDMETHOD(QueryService)(REFGUID guidService, REFIID riid, void **ppvObject) override;
 
+    // *** IFolderFilterSite methods ***
+    STDMETHOD(SetFilter)(IUnknown *punk) override;
+
     // Message handlers
     LRESULT OnShowWindow(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnGetDlgCode(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
@@ -714,6 +718,7 @@ public:
     COM_INTERFACE_ENTRY_IID(IID_IShellView3, IShellView3)
     COM_INTERFACE_ENTRY_IID(IID_IFolderView, IFolderView)
     COM_INTERFACE_ENTRY_IID(IID_IFolderView2, IFolderView2)
+    COM_INTERFACE_ENTRY_IID(IID_IFolderFilterSite, IFolderFilterSite)
     COM_INTERFACE_ENTRY_IID(IID_IShellFolderView, IShellFolderView)
     COM_INTERFACE_ENTRY_IID(IID_IOleCommandTarget, IOleCommandTarget)
     COM_INTERFACE_ENTRY_IID(IID_IDropTarget, IDropTarget)
@@ -6024,6 +6029,20 @@ HRESULT WINAPI CDefView::GetAdvise(DWORD *pAspects, DWORD *pAdvf, IAdviseSink **
     if (pAdvf)
         *pAdvf = m_dwAdvf;
 
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDefView::SetFilter(IUnknown *punk)
+{
+    m_pFolderFilter.Release();
+    if (punk)
+    {
+        HRESULT hr = punk->QueryInterface(IID_PPV_ARG(IFolderFilter, &m_pFolderFilter));
+        if (FAILED(hr))
+            return hr;
+    }
+    if (m_ListView)
+        Refresh();
     return S_OK;
 }
 

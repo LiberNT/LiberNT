@@ -1614,6 +1614,18 @@ interface ICommDlgBrowser3 : ICommDlgBrowser2
  * IFolderFilterSite & IFolderFilter interfaces
  */
 [
+    uuid(1ea58f02-d55a-411d-b09e-9e65ac21605b),
+    local
+]
+interface IFolderViewHost : IUnknown
+{
+    HRESULT Initialize(
+        [in] HWND hwndParent,
+        [in] IDataObject *pdo,
+        [in] RECT *prc);
+}
+
+[
     object,
     uuid(C0A651F5-B48B-11d2-B5ED-006097C686F6),
     pointer_default(unique)
@@ -4703,6 +4715,14 @@ library ShellObjects
     coclass FileSaveDialog
     {
         interface IFileSaveDialog;
+    }
+
+    [
+        uuid(20b1cb23-6968-4eb9-b7d4-a66d00d07cee)
+    ]
+    coclass FolderViewHost
+    {
+        interface IFolderViewHost;
     }
 
     [

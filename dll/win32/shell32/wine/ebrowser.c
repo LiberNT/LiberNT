@@ -32,6 +32,13 @@
 
 #include "shell32_main.h"
 #include "pidl.h"
+#ifdef __REACTOS__
+#include <olectl.h>
+#include <perhist.h>
+#include <urlhist.h>
+#include <shlobj_undoc.h>
+#include <shlguid_undoc.h>
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
 
@@ -94,6 +101,18 @@ typedef struct _ExplorerBrowserImpl {
     ICommDlgBrowser2 *pcdb2_site;
     ICommDlgBrowser3 *pcdb3_site;
     IExplorerPaneVisibility *pepv_site;
+#ifdef __REACTOS__
+    IFolderViewHost IFolderViewHost_iface;
+    IServiceProvider IServiceProvider_iface;
+    IOleInPlaceUIWindow IOleInPlaceUIWindow_iface;
+    IConnectionPointContainer IConnectionPointContainer_iface;
+    IPersistHistory IPersistHistory_iface;
+    IFolderFilterSite IFolderFilterSite_iface;
+    IUrlHistoryNotify IUrlHistoryNotify_iface;
+    INamespaceWalkCB2 INamespaceWalkCB2_iface;
+    IShellBrowserService IShellBrowserService_iface;
+    IUnknown *punk_filter;
+#endif
 } ExplorerBrowserImpl;
 
 static void initialize_navpane(ExplorerBrowserImpl *This, HWND hwnd_parent, RECT *rc);
@@ -355,6 +374,17 @@ static HRESULT create_new_shellview(ExplorerBrowserImpl *This, IShellItem *psi)
         hr = IShellFolder_CreateViewObject(psf, This->hwnd_main, &IID_IShellView, (void**)&psv);
         if(SUCCEEDED(hr))
         {
+#ifdef __REACTOS__
+            if(This->punk_filter)
+            {
+                IFolderFilterSite *pffs;
+                if(SUCCEEDED(IShellView_QueryInterface(psv, &IID_IFolderFilterSite, (void**)&pffs)))
+                {
+                    IFolderFilterSite_SetFilter(pffs, This->punk_filter);
+                    IFolderFilterSite_Release(pffs);
+                }
+            }
+#endif
             if(This->hwnd_sv)
             {
                 IShellView_DestroyViewWindow(This->psv);
@@ -794,6 +824,47 @@ static HRESULT WINAPI IExplorerBrowser_fnQueryInterface(IExplorerBrowser *iface,
     {
         *ppvObject = &This->IInputObject_iface;
     }
+#ifdef __REACTOS__
+    else if(IsEqualIID(riid, &IID_IFolderViewHost))
+    {
+        *ppvObject = &This->IFolderViewHost_iface;
+    }
+    else if(IsEqualIID(riid, &IID_IServiceProvider))
+    {
+        *ppvObject = &This->IServiceProvider_iface;
+    }
+    else if(IsEqualIID(riid, &IID_IOleInPlaceUIWindow))
+    {
+        *ppvObject = &This->IOleInPlaceUIWindow_iface;
+    }
+    else if(IsEqualIID(riid, &IID_IConnectionPointContainer))
+    {
+        *ppvObject = &This->IConnectionPointContainer_iface;
+    }
+    else if(IsEqualIID(riid, &IID_IPersistHistory) ||
+            IsEqualIID(riid, &IID_IPersist))
+    {
+        *ppvObject = &This->IPersistHistory_iface;
+    }
+    else if(IsEqualIID(riid, &IID_IFolderFilterSite))
+    {
+        *ppvObject = &This->IFolderFilterSite_iface;
+    }
+    else if(IsEqualIID(riid, &IID_IUrlHistoryNotify) ||
+            IsEqualIID(riid, &IID_IOleCommandTarget))
+    {
+        *ppvObject = &This->IUrlHistoryNotify_iface;
+    }
+    else if(IsEqualIID(riid, &IID_INamespaceWalkCB2) ||
+            IsEqualIID(riid, &IID_INamespaceWalkCB))
+    {
+        *ppvObject = &This->INamespaceWalkCB2_iface;
+    }
+    else if(IsEqualIID(riid, &IID_IShellBrowserService))
+    {
+        *ppvObject = &This->IShellBrowserService_iface;
+    }
+#endif
 
     if(*ppvObject)
     {
@@ -827,6 +898,10 @@ static ULONG WINAPI IExplorerBrowser_fnRelease(IExplorerBrowser *iface)
             IExplorerBrowser_Destroy(iface);
 
         IObjectWithSite_SetSite(&This->IObjectWithSite_iface, NULL);
+#ifdef __REACTOS__
+        if(This->punk_filter)
+            IUnknown_Release(This->punk_filter);
+#endif
 
         free(This);
     }
@@ -2056,6 +2131,609 @@ static IInputObjectVtbl vt_IInputObject = {
     IInputObject_fnTranslateAcceleratorIO
 };
 
+#ifdef __REACTOS__
+static inline ExplorerBrowserImpl *impl_from_IFolderViewHost(IFolderViewHost *iface)
+{
+    return CONTAINING_RECORD(iface, ExplorerBrowserImpl, IFolderViewHost_iface);
+}
+
+static HRESULT WINAPI IFolderViewHost_fnQueryInterface(IFolderViewHost *iface, REFIID riid, void **ppvObject)
+{
+    ExplorerBrowserImpl *This = impl_from_IFolderViewHost(iface);
+    return IExplorerBrowser_QueryInterface(&This->IExplorerBrowser_iface, riid, ppvObject);
+}
+
+static ULONG WINAPI IFolderViewHost_fnAddRef(IFolderViewHost *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IFolderViewHost(iface);
+    return IExplorerBrowser_AddRef(&This->IExplorerBrowser_iface);
+}
+
+static ULONG WINAPI IFolderViewHost_fnRelease(IFolderViewHost *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IFolderViewHost(iface);
+    return IExplorerBrowser_Release(&This->IExplorerBrowser_iface);
+}
+
+static HRESULT WINAPI IFolderViewHost_fnInitialize(IFolderViewHost *iface, HWND hwndParent, IDataObject *pdo, RECT *prc)
+{
+    ExplorerBrowserImpl *This = impl_from_IFolderViewHost(iface);
+    FORMATETC fmt = { 0, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    STGMEDIUM medium;
+    HRESULT hr;
+
+    TRACE("%p (%p, %p, %p)\n", This, hwndParent, pdo, prc);
+
+    if(!hwndParent || !prc)
+        return E_INVALIDARG;
+
+    hr = IExplorerBrowser_Initialize(&This->IExplorerBrowser_iface, hwndParent, prc, NULL);
+    if(FAILED(hr) || !pdo)
+        return hr;
+
+    fmt.cfFormat = RegisterClipboardFormatW(CFSTR_SHELLIDLISTW);
+    hr = IDataObject_GetData(pdo, &fmt, &medium);
+    if(FAILED(hr))
+        return hr;
+    {
+        CIDA *pcida = GlobalLock(medium.hGlobal);
+        if(pcida)
+        {
+            PCIDLIST_ABSOLUTE pidlFolder = (PCIDLIST_ABSOLUTE)((LPBYTE)pcida + pcida->aoffset[0]);
+            hr = IExplorerBrowser_BrowseToIDList(&This->IExplorerBrowser_iface, pidlFolder, SBSP_ABSOLUTE);
+            GlobalUnlock(medium.hGlobal);
+        }
+        else
+        {
+            hr = E_OUTOFMEMORY;
+        }
+    }
+    ReleaseStgMedium(&medium);
+    return hr;
+}
+
+static const IFolderViewHostVtbl vt_IFolderViewHost = {
+    IFolderViewHost_fnQueryInterface,
+    IFolderViewHost_fnAddRef,
+    IFolderViewHost_fnRelease,
+    IFolderViewHost_fnInitialize
+};
+
+static inline ExplorerBrowserImpl *impl_from_IServiceProvider(IServiceProvider *iface)
+{
+    return CONTAINING_RECORD(iface, ExplorerBrowserImpl, IServiceProvider_iface);
+}
+
+static HRESULT WINAPI IServiceProvider_fnQueryInterface(IServiceProvider *iface, REFIID riid, void **ppvObject)
+{
+    ExplorerBrowserImpl *This = impl_from_IServiceProvider(iface);
+    return IExplorerBrowser_QueryInterface(&This->IExplorerBrowser_iface, riid, ppvObject);
+}
+
+static ULONG WINAPI IServiceProvider_fnAddRef(IServiceProvider *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IServiceProvider(iface);
+    return IExplorerBrowser_AddRef(&This->IExplorerBrowser_iface);
+}
+
+static ULONG WINAPI IServiceProvider_fnRelease(IServiceProvider *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IServiceProvider(iface);
+    return IExplorerBrowser_Release(&This->IExplorerBrowser_iface);
+}
+
+static HRESULT WINAPI IServiceProvider_fnQueryService(IServiceProvider *iface, REFGUID guidService, REFIID riid, void **ppv)
+{
+    ExplorerBrowserImpl *This = impl_from_IServiceProvider(iface);
+
+    TRACE("%p (%s, %s, %p)\n", This, shdebugstr_guid(guidService), shdebugstr_guid(riid), ppv);
+
+    if(!ppv)
+        return E_POINTER;
+    *ppv = NULL;
+    if(IsEqualGUID(guidService, &SID_STopLevelBrowser) || IsEqualGUID(guidService, &SID_SShellBrowser))
+        return IExplorerBrowser_QueryInterface(&This->IExplorerBrowser_iface, riid, ppv);
+    if(IsEqualGUID(guidService, &IID_IFolderFilter) && This->punk_filter)
+        return IUnknown_QueryInterface(This->punk_filter, riid, ppv);
+    if(This->punk_site)
+        return IUnknown_QueryService(This->punk_site, guidService, riid, ppv);
+    return E_NOINTERFACE;
+}
+
+static const IServiceProviderVtbl vt_IServiceProvider = {
+    IServiceProvider_fnQueryInterface,
+    IServiceProvider_fnAddRef,
+    IServiceProvider_fnRelease,
+    IServiceProvider_fnQueryService
+};
+
+static inline ExplorerBrowserImpl *impl_from_IOleInPlaceUIWindow(IOleInPlaceUIWindow *iface)
+{
+    return CONTAINING_RECORD(iface, ExplorerBrowserImpl, IOleInPlaceUIWindow_iface);
+}
+
+static HRESULT WINAPI IOleInPlaceUIWindow_fnQueryInterface(IOleInPlaceUIWindow *iface, REFIID riid, void **ppvObject)
+{
+    ExplorerBrowserImpl *This = impl_from_IOleInPlaceUIWindow(iface);
+    return IExplorerBrowser_QueryInterface(&This->IExplorerBrowser_iface, riid, ppvObject);
+}
+
+static ULONG WINAPI IOleInPlaceUIWindow_fnAddRef(IOleInPlaceUIWindow *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IOleInPlaceUIWindow(iface);
+    return IExplorerBrowser_AddRef(&This->IExplorerBrowser_iface);
+}
+
+static ULONG WINAPI IOleInPlaceUIWindow_fnRelease(IOleInPlaceUIWindow *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IOleInPlaceUIWindow(iface);
+    return IExplorerBrowser_Release(&This->IExplorerBrowser_iface);
+}
+
+static HRESULT WINAPI IOleInPlaceUIWindow_fnGetWindow(IOleInPlaceUIWindow *iface, HWND *phwnd)
+{
+    ExplorerBrowserImpl *This = impl_from_IOleInPlaceUIWindow(iface);
+    return IShellBrowser_GetWindow(&This->IShellBrowser_iface, phwnd);
+}
+
+static HRESULT WINAPI IOleInPlaceUIWindow_fnContextSensitiveHelp(IOleInPlaceUIWindow *iface, BOOL fEnterMode)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IOleInPlaceUIWindow_fnGetBorder(IOleInPlaceUIWindow *iface, LPRECT lprectBorder)
+{
+    ExplorerBrowserImpl *This = impl_from_IOleInPlaceUIWindow(iface);
+    if(!lprectBorder)
+        return E_INVALIDARG;
+    if(!This->hwnd_main || !GetClientRect(This->hwnd_main, lprectBorder))
+        return E_FAIL;
+    return S_OK;
+}
+
+static HRESULT WINAPI IOleInPlaceUIWindow_fnRequestBorderSpace(IOleInPlaceUIWindow *iface, LPCBORDERWIDTHS pborderwidths)
+{
+    if(pborderwidths && (pborderwidths->left || pborderwidths->top || pborderwidths->right || pborderwidths->bottom))
+        return INPLACE_E_NOTOOLSPACE;
+    return S_OK;
+}
+
+static HRESULT WINAPI IOleInPlaceUIWindow_fnSetBorderSpace(IOleInPlaceUIWindow *iface, LPCBORDERWIDTHS pborderwidths)
+{
+    return IOleInPlaceUIWindow_fnRequestBorderSpace(iface, pborderwidths);
+}
+
+static HRESULT WINAPI IOleInPlaceUIWindow_fnSetActiveObject(IOleInPlaceUIWindow *iface, IOleInPlaceActiveObject *pActiveObject, LPCOLESTR pszObjName)
+{
+    return S_OK;
+}
+
+static const IOleInPlaceUIWindowVtbl vt_IOleInPlaceUIWindow = {
+    IOleInPlaceUIWindow_fnQueryInterface,
+    IOleInPlaceUIWindow_fnAddRef,
+    IOleInPlaceUIWindow_fnRelease,
+    IOleInPlaceUIWindow_fnGetWindow,
+    IOleInPlaceUIWindow_fnContextSensitiveHelp,
+    IOleInPlaceUIWindow_fnGetBorder,
+    IOleInPlaceUIWindow_fnRequestBorderSpace,
+    IOleInPlaceUIWindow_fnSetBorderSpace,
+    IOleInPlaceUIWindow_fnSetActiveObject
+};
+
+typedef struct
+{
+    IEnumConnectionPoints IEnumConnectionPoints_iface;
+    LONG ref;
+} EmptyEnumConnectionPoints;
+
+static HRESULT WINAPI EmptyEnumCP_QueryInterface(IEnumConnectionPoints *iface, REFIID riid, void **ppv)
+{
+    if(IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IEnumConnectionPoints))
+    {
+        *ppv = iface;
+        IEnumConnectionPoints_AddRef(iface);
+        return S_OK;
+    }
+    *ppv = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI EmptyEnumCP_AddRef(IEnumConnectionPoints *iface)
+{
+    EmptyEnumConnectionPoints *This = CONTAINING_RECORD(iface, EmptyEnumConnectionPoints, IEnumConnectionPoints_iface);
+    return InterlockedIncrement(&This->ref);
+}
+
+static ULONG WINAPI EmptyEnumCP_Release(IEnumConnectionPoints *iface)
+{
+    EmptyEnumConnectionPoints *This = CONTAINING_RECORD(iface, EmptyEnumConnectionPoints, IEnumConnectionPoints_iface);
+    LONG ref = InterlockedDecrement(&This->ref);
+    if(!ref)
+        free(This);
+    return ref;
+}
+
+static HRESULT WINAPI EmptyEnumCP_Next(IEnumConnectionPoints *iface, ULONG cConnections, IConnectionPoint **ppCP, ULONG *pcFetched)
+{
+    if(pcFetched)
+        *pcFetched = 0;
+    return cConnections ? S_FALSE : S_OK;
+}
+
+static HRESULT WINAPI EmptyEnumCP_Skip(IEnumConnectionPoints *iface, ULONG cConnections)
+{
+    return cConnections ? S_FALSE : S_OK;
+}
+
+static HRESULT WINAPI EmptyEnumCP_Reset(IEnumConnectionPoints *iface)
+{
+    return S_OK;
+}
+
+static HRESULT create_empty_enum_cp(IEnumConnectionPoints **ppEnum);
+
+static HRESULT WINAPI EmptyEnumCP_Clone(IEnumConnectionPoints *iface, IEnumConnectionPoints **ppEnum)
+{
+    return create_empty_enum_cp(ppEnum);
+}
+
+static const IEnumConnectionPointsVtbl vt_EmptyEnumCP = {
+    EmptyEnumCP_QueryInterface,
+    EmptyEnumCP_AddRef,
+    EmptyEnumCP_Release,
+    EmptyEnumCP_Next,
+    EmptyEnumCP_Skip,
+    EmptyEnumCP_Reset,
+    EmptyEnumCP_Clone
+};
+
+static HRESULT create_empty_enum_cp(IEnumConnectionPoints **ppEnum)
+{
+    EmptyEnumConnectionPoints *ret;
+    if(!ppEnum)
+        return E_POINTER;
+    ret = calloc(1, sizeof(*ret));
+    if(!ret)
+    {
+        *ppEnum = NULL;
+        return E_OUTOFMEMORY;
+    }
+    ret->IEnumConnectionPoints_iface.lpVtbl = &vt_EmptyEnumCP;
+    ret->ref = 1;
+    *ppEnum = &ret->IEnumConnectionPoints_iface;
+    return S_OK;
+}
+
+static inline ExplorerBrowserImpl *impl_from_IConnectionPointContainer(IConnectionPointContainer *iface)
+{
+    return CONTAINING_RECORD(iface, ExplorerBrowserImpl, IConnectionPointContainer_iface);
+}
+
+static HRESULT WINAPI ICPC_fnQueryInterface(IConnectionPointContainer *iface, REFIID riid, void **ppvObject)
+{
+    ExplorerBrowserImpl *This = impl_from_IConnectionPointContainer(iface);
+    return IExplorerBrowser_QueryInterface(&This->IExplorerBrowser_iface, riid, ppvObject);
+}
+
+static ULONG WINAPI ICPC_fnAddRef(IConnectionPointContainer *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IConnectionPointContainer(iface);
+    return IExplorerBrowser_AddRef(&This->IExplorerBrowser_iface);
+}
+
+static ULONG WINAPI ICPC_fnRelease(IConnectionPointContainer *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IConnectionPointContainer(iface);
+    return IExplorerBrowser_Release(&This->IExplorerBrowser_iface);
+}
+
+static HRESULT WINAPI ICPC_fnEnumConnectionPoints(IConnectionPointContainer *iface, IEnumConnectionPoints **ppEnum)
+{
+    return create_empty_enum_cp(ppEnum);
+}
+
+static HRESULT WINAPI ICPC_fnFindConnectionPoint(IConnectionPointContainer *iface, REFIID riid, IConnectionPoint **ppCP)
+{
+    if(!ppCP)
+        return E_POINTER;
+    *ppCP = NULL;
+    return CONNECT_E_NOCONNECTION;
+}
+
+static const IConnectionPointContainerVtbl vt_IConnectionPointContainer = {
+    ICPC_fnQueryInterface,
+    ICPC_fnAddRef,
+    ICPC_fnRelease,
+    ICPC_fnEnumConnectionPoints,
+    ICPC_fnFindConnectionPoint
+};
+
+static inline ExplorerBrowserImpl *impl_from_IPersistHistory(IPersistHistory *iface)
+{
+    return CONTAINING_RECORD(iface, ExplorerBrowserImpl, IPersistHistory_iface);
+}
+
+static HRESULT WINAPI IPersistHistory_fnQueryInterface(IPersistHistory *iface, REFIID riid, void **ppvObject)
+{
+    ExplorerBrowserImpl *This = impl_from_IPersistHistory(iface);
+    return IExplorerBrowser_QueryInterface(&This->IExplorerBrowser_iface, riid, ppvObject);
+}
+
+static ULONG WINAPI IPersistHistory_fnAddRef(IPersistHistory *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IPersistHistory(iface);
+    return IExplorerBrowser_AddRef(&This->IExplorerBrowser_iface);
+}
+
+static ULONG WINAPI IPersistHistory_fnRelease(IPersistHistory *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IPersistHistory(iface);
+    return IExplorerBrowser_Release(&This->IExplorerBrowser_iface);
+}
+
+static HRESULT WINAPI IPersistHistory_fnGetClassID(IPersistHistory *iface, CLSID *pClassID)
+{
+    if(!pClassID)
+        return E_POINTER;
+    *pClassID = CLSID_ExplorerBrowser;
+    return S_OK;
+}
+
+static HRESULT WINAPI IPersistHistory_fnLoadHistory(IPersistHistory *iface, IStream *pStream, IBindCtx *pbc)
+{
+    ExplorerBrowserImpl *This = impl_from_IPersistHistory(iface);
+    LPITEMIDLIST pidl = NULL;
+    HRESULT hr;
+
+    if(!pStream)
+        return E_INVALIDARG;
+    hr = ILLoadFromStream(pStream, &pidl);
+    if(FAILED(hr))
+        return hr;
+    hr = IExplorerBrowser_BrowseToIDList(&This->IExplorerBrowser_iface, pidl, SBSP_ABSOLUTE);
+    ILFree(pidl);
+    return hr;
+}
+
+static HRESULT WINAPI IPersistHistory_fnSaveHistory(IPersistHistory *iface, IStream *pStream)
+{
+    ExplorerBrowserImpl *This = impl_from_IPersistHistory(iface);
+    if(!pStream)
+        return E_INVALIDARG;
+    if(!This->current_pidl)
+        return E_FAIL;
+    return ILSaveToStream(pStream, This->current_pidl);
+}
+
+static HRESULT WINAPI IPersistHistory_fnSetPositionCookie(IPersistHistory *iface, DWORD dwPositioncookie)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IPersistHistory_fnGetPositionCookie(IPersistHistory *iface, DWORD *pdwPositioncookie)
+{
+    return E_NOTIMPL;
+}
+
+static const IPersistHistoryVtbl vt_IPersistHistory = {
+    IPersistHistory_fnQueryInterface,
+    IPersistHistory_fnAddRef,
+    IPersistHistory_fnRelease,
+    IPersistHistory_fnGetClassID,
+    IPersistHistory_fnLoadHistory,
+    IPersistHistory_fnSaveHistory,
+    IPersistHistory_fnSetPositionCookie,
+    IPersistHistory_fnGetPositionCookie
+};
+
+static inline ExplorerBrowserImpl *impl_from_IFolderFilterSite(IFolderFilterSite *iface)
+{
+    return CONTAINING_RECORD(iface, ExplorerBrowserImpl, IFolderFilterSite_iface);
+}
+
+static HRESULT WINAPI IFolderFilterSite_fnQueryInterface(IFolderFilterSite *iface, REFIID riid, void **ppvObject)
+{
+    ExplorerBrowserImpl *This = impl_from_IFolderFilterSite(iface);
+    return IExplorerBrowser_QueryInterface(&This->IExplorerBrowser_iface, riid, ppvObject);
+}
+
+static ULONG WINAPI IFolderFilterSite_fnAddRef(IFolderFilterSite *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IFolderFilterSite(iface);
+    return IExplorerBrowser_AddRef(&This->IExplorerBrowser_iface);
+}
+
+static ULONG WINAPI IFolderFilterSite_fnRelease(IFolderFilterSite *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IFolderFilterSite(iface);
+    return IExplorerBrowser_Release(&This->IExplorerBrowser_iface);
+}
+
+static HRESULT WINAPI IFolderFilterSite_fnSetFilter(IFolderFilterSite *iface, IUnknown *punk)
+{
+    ExplorerBrowserImpl *This = impl_from_IFolderFilterSite(iface);
+    IFolderFilterSite *pffs;
+
+    TRACE("%p (%p)\n", This, punk);
+
+    if(This->punk_filter)
+        IUnknown_Release(This->punk_filter);
+    This->punk_filter = punk;
+    if(punk)
+        IUnknown_AddRef(punk);
+
+    if(This->psv && SUCCEEDED(IShellView_QueryInterface(This->psv, &IID_IFolderFilterSite, (void**)&pffs)))
+    {
+        IFolderFilterSite_SetFilter(pffs, punk);
+        IFolderFilterSite_Release(pffs);
+    }
+    return S_OK;
+}
+
+static const IFolderFilterSiteVtbl vt_IFolderFilterSite = {
+    IFolderFilterSite_fnQueryInterface,
+    IFolderFilterSite_fnAddRef,
+    IFolderFilterSite_fnRelease,
+    IFolderFilterSite_fnSetFilter
+};
+
+static inline ExplorerBrowserImpl *impl_from_IUrlHistoryNotify(IUrlHistoryNotify *iface)
+{
+    return CONTAINING_RECORD(iface, ExplorerBrowserImpl, IUrlHistoryNotify_iface);
+}
+
+static HRESULT WINAPI IUrlHistoryNotify_fnQueryInterface(IUrlHistoryNotify *iface, REFIID riid, void **ppvObject)
+{
+    ExplorerBrowserImpl *This = impl_from_IUrlHistoryNotify(iface);
+    return IExplorerBrowser_QueryInterface(&This->IExplorerBrowser_iface, riid, ppvObject);
+}
+
+static ULONG WINAPI IUrlHistoryNotify_fnAddRef(IUrlHistoryNotify *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IUrlHistoryNotify(iface);
+    return IExplorerBrowser_AddRef(&This->IExplorerBrowser_iface);
+}
+
+static ULONG WINAPI IUrlHistoryNotify_fnRelease(IUrlHistoryNotify *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IUrlHistoryNotify(iface);
+    return IExplorerBrowser_Release(&This->IExplorerBrowser_iface);
+}
+
+static HRESULT WINAPI IUrlHistoryNotify_fnQueryStatus(IUrlHistoryNotify *iface, const GUID *pguidCmdGroup,
+                                                      ULONG cCmds, OLECMD prgCmds[], OLECMDTEXT *pCmdText)
+{
+    ULONG i;
+    if(pguidCmdGroup)
+        return OLECMDERR_E_UNKNOWNGROUP;
+    if(!prgCmds)
+        return E_INVALIDARG;
+    for(i = 0; i < cCmds; i++)
+        prgCmds[i].cmdf = 0;
+    return OLECMDERR_E_NOTSUPPORTED;
+}
+
+static HRESULT WINAPI IUrlHistoryNotify_fnExec(IUrlHistoryNotify *iface, const GUID *pguidCmdGroup, DWORD nCmdID,
+                                               DWORD nCmdexecopt, VARIANT *pvaIn, VARIANT *pvaOut)
+{
+    if(pguidCmdGroup)
+        return OLECMDERR_E_UNKNOWNGROUP;
+    return OLECMDERR_E_NOTSUPPORTED;
+}
+
+static const IUrlHistoryNotifyVtbl vt_IUrlHistoryNotify = {
+    IUrlHistoryNotify_fnQueryInterface,
+    IUrlHistoryNotify_fnAddRef,
+    IUrlHistoryNotify_fnRelease,
+    IUrlHistoryNotify_fnQueryStatus,
+    IUrlHistoryNotify_fnExec
+};
+
+static inline ExplorerBrowserImpl *impl_from_INamespaceWalkCB2(INamespaceWalkCB2 *iface)
+{
+    return CONTAINING_RECORD(iface, ExplorerBrowserImpl, INamespaceWalkCB2_iface);
+}
+
+static HRESULT WINAPI INamespaceWalkCB2_fnQueryInterface(INamespaceWalkCB2 *iface, REFIID riid, void **ppvObject)
+{
+    ExplorerBrowserImpl *This = impl_from_INamespaceWalkCB2(iface);
+    return IExplorerBrowser_QueryInterface(&This->IExplorerBrowser_iface, riid, ppvObject);
+}
+
+static ULONG WINAPI INamespaceWalkCB2_fnAddRef(INamespaceWalkCB2 *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_INamespaceWalkCB2(iface);
+    return IExplorerBrowser_AddRef(&This->IExplorerBrowser_iface);
+}
+
+static ULONG WINAPI INamespaceWalkCB2_fnRelease(INamespaceWalkCB2 *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_INamespaceWalkCB2(iface);
+    return IExplorerBrowser_Release(&This->IExplorerBrowser_iface);
+}
+
+static HRESULT WINAPI INamespaceWalkCB2_fnFoundItem(INamespaceWalkCB2 *iface, IShellFolder *psf, PCUITEMID_CHILD pidl)
+{
+    return S_OK;
+}
+
+static HRESULT WINAPI INamespaceWalkCB2_fnEnterFolder(INamespaceWalkCB2 *iface, IShellFolder *psf, PCUITEMID_CHILD pidl)
+{
+    return S_OK;
+}
+
+static HRESULT WINAPI INamespaceWalkCB2_fnLeaveFolder(INamespaceWalkCB2 *iface, IShellFolder *psf, PCUITEMID_CHILD pidl)
+{
+    return S_OK;
+}
+
+static HRESULT WINAPI INamespaceWalkCB2_fnInitializeProgressDialog(INamespaceWalkCB2 *iface, LPWSTR *ppszTitle, LPWSTR *ppszCancel)
+{
+    if(ppszTitle)
+        *ppszTitle = NULL;
+    if(ppszCancel)
+        *ppszCancel = NULL;
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI INamespaceWalkCB2_fnWalkComplete(INamespaceWalkCB2 *iface, HRESULT hr)
+{
+    return S_OK;
+}
+
+static const INamespaceWalkCB2Vtbl vt_INamespaceWalkCB2 = {
+    INamespaceWalkCB2_fnQueryInterface,
+    INamespaceWalkCB2_fnAddRef,
+    INamespaceWalkCB2_fnRelease,
+    INamespaceWalkCB2_fnFoundItem,
+    INamespaceWalkCB2_fnEnterFolder,
+    INamespaceWalkCB2_fnLeaveFolder,
+    INamespaceWalkCB2_fnInitializeProgressDialog,
+    INamespaceWalkCB2_fnWalkComplete
+};
+
+static inline ExplorerBrowserImpl *impl_from_IShellBrowserService(IShellBrowserService *iface)
+{
+    return CONTAINING_RECORD(iface, ExplorerBrowserImpl, IShellBrowserService_iface);
+}
+
+static HRESULT WINAPI IShellBrowserService_fnQueryInterface(IShellBrowserService *iface, REFIID riid, void **ppvObject)
+{
+    ExplorerBrowserImpl *This = impl_from_IShellBrowserService(iface);
+    return IExplorerBrowser_QueryInterface(&This->IExplorerBrowser_iface, riid, ppvObject);
+}
+
+static ULONG WINAPI IShellBrowserService_fnAddRef(IShellBrowserService *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IShellBrowserService(iface);
+    return IExplorerBrowser_AddRef(&This->IExplorerBrowser_iface);
+}
+
+static ULONG WINAPI IShellBrowserService_fnRelease(IShellBrowserService *iface)
+{
+    ExplorerBrowserImpl *This = impl_from_IShellBrowserService(iface);
+    return IExplorerBrowser_Release(&This->IExplorerBrowser_iface);
+}
+
+static HRESULT WINAPI IShellBrowserService_fnGetPropertyBag(IShellBrowserService *iface, long flags, REFIID riid, void **ppvObject)
+{
+    ExplorerBrowserImpl *This = impl_from_IShellBrowserService(iface);
+    if(!ppvObject)
+        return E_POINTER;
+    *ppvObject = NULL;
+    if(!This->current_pidl)
+        return E_FAIL;
+    return SHGetViewStatePropertyBag(This->current_pidl, L"Shell", flags, riid, ppvObject);
+}
+
+static const IShellBrowserServiceVtbl vt_IShellBrowserService = {
+    IShellBrowserService_fnQueryInterface,
+    IShellBrowserService_fnAddRef,
+    IShellBrowserService_fnRelease,
+    IShellBrowserService_fnGetPropertyBag
+};
+#endif
+
 HRESULT WINAPI ExplorerBrowser_Constructor(IUnknown *pUnkOuter, REFIID riid, void **ppv)
 {
     ExplorerBrowserImpl *eb;
@@ -2076,6 +2754,17 @@ HRESULT WINAPI ExplorerBrowser_Constructor(IUnknown *pUnkOuter, REFIID riid, voi
     eb->IObjectWithSite_iface.lpVtbl  = &vt_IObjectWithSite;
     eb->INameSpaceTreeControlEvents_iface.lpVtbl = &vt_INameSpaceTreeControlEvents;
     eb->IInputObject_iface.lpVtbl     = &vt_IInputObject;
+#ifdef __REACTOS__
+    eb->IFolderViewHost_iface.lpVtbl = &vt_IFolderViewHost;
+    eb->IServiceProvider_iface.lpVtbl = &vt_IServiceProvider;
+    eb->IOleInPlaceUIWindow_iface.lpVtbl = &vt_IOleInPlaceUIWindow;
+    eb->IConnectionPointContainer_iface.lpVtbl = &vt_IConnectionPointContainer;
+    eb->IPersistHistory_iface.lpVtbl = &vt_IPersistHistory;
+    eb->IFolderFilterSite_iface.lpVtbl = &vt_IFolderFilterSite;
+    eb->IUrlHistoryNotify_iface.lpVtbl = &vt_IUrlHistoryNotify;
+    eb->INamespaceWalkCB2_iface.lpVtbl = &vt_INamespaceWalkCB2;
+    eb->IShellBrowserService_iface.lpVtbl = &vt_IShellBrowserService;
+#endif
 
     /* Default settings */
     eb->navpane.show = TRUE;

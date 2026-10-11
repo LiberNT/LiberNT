@@ -23,6 +23,13 @@ HKCR
                 val ThreadingModel = s 'Apartment'
             }
         }
+        ForceRemove {20B1CB23-6968-4EB9-B7D4-A66D00D07CEE} = s 'Folder View Host'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Apartment'
+            }
+        }
         ForceRemove {AE054212-3535-4430-83ED-D501AA6680E6} = s 'Namespace Tree Control'
         {
             InprocServer32 = s '%MODULE%'
