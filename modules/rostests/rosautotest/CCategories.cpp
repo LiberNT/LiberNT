@@ -448,6 +448,7 @@ static const CATEGORY_RULE Rules[] =
     { "shlwapi_winetest", "*", "shell:shell32" },
     { "apphelp_apitest", "*", "system:compat" },
     { "appshim_apitest", "*", "system:compat" },
+    { "appsmoke_apitest", "*", "system:appcompat" },
     { "cfg_apitest", "*", "system:compat" },
     { "utildll_apitest", "*", "system:compat" },
     { "version_apitest", "*", "system:compat" },
