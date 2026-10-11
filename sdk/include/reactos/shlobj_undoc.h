@@ -10,6 +10,7 @@
 #pragma once
 
 #include <winreg.h> /* REGSAM */
+#include <shdeprecated.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -774,7 +775,25 @@ DECLARE_INTERFACE_(IShellBrowserService, IUnknown)
 	STDMETHOD_(ULONG,AddRef)(THIS) PURE;
 	STDMETHOD_(ULONG,Release)(THIS) PURE;
 	 /*** IShellBrowserService ***/
-	STDMETHOD(GetPropertyBag)(THIS_ long flags, REFIID riid, void **ppvObject) PURE;
+	STDMETHOD(Unknown)(THIS_ PVOID,PVOID,PVOID) PURE;
+	STDMETHOD(GetTravelLog)(THIS_ ITravelLog **pptl) PURE;
+	STDMETHOD(ShowControlWindow)(THIS_ UINT id, BOOL fShow) PURE;
+	STDMETHOD(IsControlWindowShown)(THIS_ UINT id, BOOL *pfShown) PURE;
+	STDMETHOD(DisplayParseError)(THIS_ HRESULT hres, LPCWSTR pwszPath) PURE;
+	STDMETHOD(SetNavigateState)(THIS_ BNSTATE bnstate) PURE;
+	STDMETHOD(GetNavigateState)(THIS_ BNSTATE *pbnstate) PURE;
+	STDMETHOD(UpdateWindowList)(THIS) PURE;
+	STDMETHOD(UpdateBackForwardState)(THIS) PURE;
+	STDMETHOD(SetFlags)(THIS_ DWORD dwFlags, DWORD dwFlagMask) PURE;
+	STDMETHOD(GetFlags)(THIS_ DWORD *pdwFlags) PURE;
+	STDMETHOD(GetPidl)(THIS_ PIDLIST_ABSOLUTE *ppidl) PURE;
+	STDMETHOD_(DWORD,GetBrowserIndex)(THIS) PURE;
+	STDMETHOD(GetHistoryObject)(THIS_ IOleObject **ppole, IStream **pstm, IBindCtx **ppbc) PURE;
+	STDMETHOD(GetPalette)(THIS_ HPALETTE *hpal) PURE;
+	STDMETHOD(RegisterWindow)(THIS_ BOOL fForceRegister, int swc) PURE;
+	STDMETHOD(GetPropertyBag)(THIS_ DWORD flags, REFIID riid, void **ppvObject) PURE;
+	STDMETHOD(SetAsDefFolderSettings)(THIS) PURE;
+	STDMETHOD(CreateViewWindow)(THIS_ IShellItem *psi, IShellView *psvNew, IShellView *psvOld, RECT *prcView, HWND *phwnd) PURE;
 };
 #undef INTERFACE
 
@@ -782,6 +801,8 @@ DECLARE_INTERFACE_(IShellBrowserService, IUnknown)
 #define IShellBrowserService_QueryInterface(T,a,b) (T)->lpVtbl->QueryInterface(T,a,b)
 #define IShellBrowserService_AddRef(T) (T)->lpVtbl->AddRef(T)
 #define IShellBrowserService_Release(T) (T)->lpVtbl->Release(T)
+#define IShellBrowserService_GetTravelLog(T,a) (T)->lpVtbl->GetTravelLog(T,a)
+#define IShellBrowserService_GetPidl(T,a) (T)->lpVtbl->GetPidl(T,a)
 #define IShellBrowserService_GetPropertyBag(T,a,b,c) (T)->lpVtbl->GetPropertyBag(T,a,b,c)
 #endif
 
@@ -1327,6 +1348,46 @@ DECLARE_INTERFACE_(IFolderType, IUnknown) // {053B4A86-0DC9-40A3-B7ED-BC6A2E951F
 #define IFolderType_AddRef(T) (T)->lpVtbl->AddRef(T)
 #define IFolderType_Release(T) (T)->lpVtbl->Release(T)
 #define IFolderType_GetFolderType(T,a) (T)->lpVtbl->GetFolderType(T,a)
+#endif
+
+#define INTERFACE INewItemAdvisor
+DECLARE_INTERFACE_(INewItemAdvisor, IUnknown)
+{
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    STDMETHOD(IsTypeSupported)(THIS_ LPCWSTR pszType) PURE;
+    STDMETHOD(GetPropertiesToApply)(THIS_ IPropertyStore *pps, REFIID riid, void **ppv) PURE;
+    STDMETHOD(CreateNewIDList)(THIS_ LPCWSTR pszType, PCIDLIST_ABSOLUTE pidlFolder, PITEMID_CHILD *ppidl) PURE;
+};
+#undef INTERFACE
+
+#ifdef COBJMACROS
+#define INewItemAdvisor_QueryInterface(T,a,b) (T)->lpVtbl->QueryInterface(T,a,b)
+#define INewItemAdvisor_AddRef(T) (T)->lpVtbl->AddRef(T)
+#define INewItemAdvisor_Release(T) (T)->lpVtbl->Release(T)
+#define INewItemAdvisor_IsTypeSupported(T,a) (T)->lpVtbl->IsTypeSupported(T,a)
+#define INewItemAdvisor_GetPropertiesToApply(T,a,b,c) (T)->lpVtbl->GetPropertiesToApply(T,a,b,c)
+#define INewItemAdvisor_CreateNewIDList(T,a,b,c) (T)->lpVtbl->CreateNewIDList(T,a,b,c)
+#endif
+
+typedef struct tagControlPanelCategoryInfo ControlPanelCategoryInfo;
+
+#define INTERFACE IRegItemCustomAttributes
+DECLARE_INTERFACE_(IRegItemCustomAttributes, IUnknown)
+{
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    STDMETHOD(GetCustomAttributes)(THIS_ PCUITEMID_CHILD pidl, DWORD dwFlags, ControlPanelCategoryInfo *pInfo, DWORD *pdwAttributes) PURE;
+};
+#undef INTERFACE
+
+#ifdef COBJMACROS
+#define IRegItemCustomAttributes_QueryInterface(T,a,b) (T)->lpVtbl->QueryInterface(T,a,b)
+#define IRegItemCustomAttributes_AddRef(T) (T)->lpVtbl->AddRef(T)
+#define IRegItemCustomAttributes_Release(T) (T)->lpVtbl->Release(T)
+#define IRegItemCustomAttributes_GetCustomAttributes(T,a,b,c,d) (T)->lpVtbl->GetCustomAttributes(T,a,b,c,d)
 #endif
 
 /*****************************************************************************

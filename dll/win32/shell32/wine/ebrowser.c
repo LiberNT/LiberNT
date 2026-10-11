@@ -2715,7 +2715,87 @@ static ULONG WINAPI IShellBrowserService_fnRelease(IShellBrowserService *iface)
     return IExplorerBrowser_Release(&This->IExplorerBrowser_iface);
 }
 
-static HRESULT WINAPI IShellBrowserService_fnGetPropertyBag(IShellBrowserService *iface, long flags, REFIID riid, void **ppvObject)
+static HRESULT WINAPI IShellBrowserService_fnUnknown(IShellBrowserService *iface, PVOID p1, PVOID p2, PVOID p3)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnGetTravelLog(IShellBrowserService *iface, ITravelLog **pptl)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnShowControlWindow(IShellBrowserService *iface, UINT id, BOOL fShow)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnIsControlWindowShown(IShellBrowserService *iface, UINT id, BOOL *pfShown)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnDisplayParseError(IShellBrowserService *iface, HRESULT hres, LPCWSTR pwszPath)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnSetNavigateState(IShellBrowserService *iface, BNSTATE bnstate)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnGetNavigateState(IShellBrowserService *iface, BNSTATE *pbnstate)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnUpdateWindowList(IShellBrowserService *iface)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnUpdateBackForwardState(IShellBrowserService *iface)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnSetFlags(IShellBrowserService *iface, DWORD dwFlags, DWORD dwFlagMask)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnGetFlags(IShellBrowserService *iface, DWORD *pdwFlags)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnGetPidl(IShellBrowserService *iface, PIDLIST_ABSOLUTE *ppidl)
+{
+    return E_NOTIMPL;
+}
+
+static DWORD WINAPI IShellBrowserService_fnGetBrowserIndex(IShellBrowserService *iface)
+{
+    return 0;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnGetHistoryObject(IShellBrowserService *iface, IOleObject **ppole, IStream **pstm, IBindCtx **ppbc)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnGetPalette(IShellBrowserService *iface, HPALETTE *hpal)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnRegisterWindow(IShellBrowserService *iface, BOOL fForceRegister, int swc)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnGetPropertyBag(IShellBrowserService *iface, DWORD flags, REFIID riid, void **ppvObject)
 {
     ExplorerBrowserImpl *This = impl_from_IShellBrowserService(iface);
     if(!ppvObject)
@@ -2726,11 +2806,39 @@ static HRESULT WINAPI IShellBrowserService_fnGetPropertyBag(IShellBrowserService
     return SHGetViewStatePropertyBag(This->current_pidl, L"Shell", flags, riid, ppvObject);
 }
 
+static HRESULT WINAPI IShellBrowserService_fnSetAsDefFolderSettings(IShellBrowserService *iface)
+{
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI IShellBrowserService_fnCreateViewWindow(IShellBrowserService *iface, IShellItem *psi, IShellView *psvNew, IShellView *psvOld, RECT *prcView, HWND *phwnd)
+{
+    return E_NOTIMPL;
+}
+
 static const IShellBrowserServiceVtbl vt_IShellBrowserService = {
     IShellBrowserService_fnQueryInterface,
     IShellBrowserService_fnAddRef,
     IShellBrowserService_fnRelease,
-    IShellBrowserService_fnGetPropertyBag
+    IShellBrowserService_fnUnknown,
+    IShellBrowserService_fnGetTravelLog,
+    IShellBrowserService_fnShowControlWindow,
+    IShellBrowserService_fnIsControlWindowShown,
+    IShellBrowserService_fnDisplayParseError,
+    IShellBrowserService_fnSetNavigateState,
+    IShellBrowserService_fnGetNavigateState,
+    IShellBrowserService_fnUpdateWindowList,
+    IShellBrowserService_fnUpdateBackForwardState,
+    IShellBrowserService_fnSetFlags,
+    IShellBrowserService_fnGetFlags,
+    IShellBrowserService_fnGetPidl,
+    IShellBrowserService_fnGetBrowserIndex,
+    IShellBrowserService_fnGetHistoryObject,
+    IShellBrowserService_fnGetPalette,
+    IShellBrowserService_fnRegisterWindow,
+    IShellBrowserService_fnGetPropertyBag,
+    IShellBrowserService_fnSetAsDefFolderSettings,
+    IShellBrowserService_fnCreateViewWindow
 };
 #endif
 

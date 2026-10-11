@@ -9,7 +9,11 @@
 #pragma makedep register
 
 import "objidl.idl";
+import "oleidl.idl";
 import "shtypes.idl";
+import "propsys.idl";
+import "objectarray.idl";
+import "shdeprecated.idl";
 
 [
     object,
@@ -184,6 +188,103 @@ interface ISLTracker : IUnknown
     HRESULT Resolve([in] HWND hwnd, [in] ULONG fFlags, [in] ULONG fRestrictions);
     HRESULT GetIDs([out] DOMAIN_RELATIVE_OBJECTID *pdroidCurrent, [out] DOMAIN_RELATIVE_OBJECTID *pdroidBirth, [out] MACHINE_ID *pmcid);
     HRESULT CancelSearch();
+}
+
+[
+    object,
+    uuid(fca2857d-1760-4ad3-8c63-c9b602fcbaea),
+    local
+]
+interface IFilterCondition : IPersistStream
+{
+}
+
+[
+    object,
+    uuid(24d16ee5-10f5-4de3-8766-d23779ba7a6d),
+    pointer_default(unique)
+]
+interface INewItemAdvisor : IUnknown
+{
+    HRESULT IsTypeSupported([in, string] LPCWSTR pszType);
+    HRESULT GetPropertiesToApply([in, unique] IPropertyStore *pps, [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    HRESULT CreateNewIDList([in, string] LPCWSTR pszType, [in] PCIDLIST_ABSOLUTE pidlFolder, [out] PITEMID_CHILD *ppidl);
+}
+
+[
+    object,
+    uuid(7fcbeb25-ed60-45c9-9f5e-57b48493c4dd),
+    pointer_default(unique)
+]
+interface IItemFilter : IUnknown
+{
+    HRESULT HasFilter([in] BOOL fFlag, [out] BOOL *pfHasFilter);
+    HRESULT GetTextFilterCondition([in] DWORD options, [out] IFilterCondition **ppCondition);
+    HRESULT GetTextPropKeys([out, size_is(, *pcKeys)] PROPERTYKEY **ppKeys, [out] UINT *pcKeys);
+    HRESULT GetFilterCondition([out] IFilterCondition **ppCondition);
+    HRESULT GetPropertyFilter([out] PROPERTYKEY *pkey, [out] IFilterCondition **ppCondition);
+    HRESULT GetIDListFilters([out] IObjectCollection **ppFilters);
+}
+
+[
+    object,
+    uuid(7e1af054-83a6-47fc-ab27-a58ae8d9c705),
+    pointer_default(unique)
+]
+interface IItemFilterOwner : IItemFilter
+{
+    HRESULT SetTextFilterCondition([in, unique] IFilterCondition *pCondition);
+    HRESULT SetTextPropKeys([in, size_is(cKeys)] const PROPERTYKEY *pKeys, [in] UINT cKeys);
+    HRESULT SetFilterCondition([in, unique] IFilterCondition *pCondition);
+    HRESULT SetPropertyFilter([in] REFPROPERTYKEY key, [in, unique] IFilterCondition *pCondition);
+}
+
+[
+    object,
+    uuid(d72ff553-ae8f-4dae-9ee8-833a9e025cb0),
+    pointer_default(unique)
+]
+interface ICommonLayoutDefinition : IUnknown
+{
+    HRESULT ChooseLayout([in] DWORD layout);
+}
+
+[
+    object,
+    uuid(5dd6b79a-3ab7-49c0-ab82-6b2da7d78d75),
+    pointer_default(unique)
+]
+interface IDeskBandEx : IUnknown
+{
+    HRESULT Unknown();
+}
+
+[
+    object,
+    uuid(dfbc7e30-f9e5-455f-88f8-fa98c1e494ca),
+    pointer_default(unique)
+]
+interface IShellBrowserService : IUnknown
+{
+    [local] HRESULT Unknown([in] void *p1, [in] void *p2, [in] void *p3);
+    HRESULT GetTravelLog([out] ITravelLog **pptl);
+    [local] HRESULT ShowControlWindow([in] UINT id, [in] BOOL fShow);
+    [local] HRESULT IsControlWindowShown([in] UINT id, [out] BOOL *pfShown);
+    [local] HRESULT DisplayParseError([in] HRESULT hres, [in] LPCWSTR pwszPath);
+    [local] HRESULT SetNavigateState([in] BNSTATE bnstate);
+    [local] HRESULT GetNavigateState([out] BNSTATE *pbnstate);
+    [local] HRESULT UpdateWindowList();
+    HRESULT UpdateBackForwardState();
+    [local] HRESULT SetFlags([in] DWORD dwFlags, [in] DWORD dwFlagMask);
+    [local] HRESULT GetFlags([out] DWORD *pdwFlags);
+    [local] HRESULT GetPidl([out] PIDLIST_ABSOLUTE *ppidl);
+    [local] DWORD GetBrowserIndex();
+    [local] HRESULT GetHistoryObject([out] IOleObject **ppole, [out] IStream **pstm, [out] IBindCtx **ppbc);
+    [local] HRESULT GetPalette([out] HPALETTE *hpal);
+    [local] HRESULT RegisterWindow([in] BOOL fForceRegister, [in] int swc);
+    [local] HRESULT GetPropertyBag([in] DWORD flags, [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    [local] HRESULT SetAsDefFolderSettings();
+    [local] HRESULT CreateViewWindow([in] IShellItem *psi, [in] IShellView *psvNew, [in] IShellView *psvOld, [in] RECT *prcView, [out] HWND *phwnd);
 }
 
 [

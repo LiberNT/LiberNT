@@ -180,117 +180,144 @@ cpp_quote("#define HLNF_NEWWINDOWSMANAGED           0x80000000")
 
 [
     pointer_default(unique),
-    local,
     object,
     uuid(02ba3b52-0547-11d1-b833-00c04fc9b31f)
 ]
 interface IBrowserService : IUnknown
 {
+    [local]
     HRESULT GetParentSite(
         [out] IOleInPlaceSite **ppipsite);
 
+    [local]
     HRESULT SetTitle(
         [in] IShellView *psv,
         [in] LPCWSTR pszName);
 
+    [local]
     HRESULT GetTitle(
         [in] IShellView *psv,
         [out, size_is(cchName)] LPWSTR pszName,
         [in] DWORD cchName);
 
+    [local]
     HRESULT GetOleObject(
         [out] IOleObject **ppobjv);
 
     HRESULT GetTravelLog(
         [out, optional] ITravelLog **pptl);
 
+    [local]
     HRESULT ShowControlWindow(
         [in] UINT id,
         [in] BOOL fShow);
 
+    [local]
     HRESULT IsControlWindowShown(
         [in] UINT id,
         [out] BOOL *pfShown);
 
+    [local]
     HRESULT IEGetDisplayName(
         [in] PCIDLIST_ABSOLUTE pidl,
         [out] LPWSTR pwszName,
         [in] UINT uFlags);
 
+    [local]
     HRESULT IEParseDisplayName(
         [in] UINT uiCP,
         [in] LPCWSTR pwszPath,
         [out] PIDLIST_ABSOLUTE *ppidlOut);
 
+    [local]
     HRESULT DisplayParseError(
         [in] HRESULT hres,
         [in] LPCWSTR pwszPath);
 
+    [local]
     HRESULT NavigateToPidl(
         [in] PCIDLIST_ABSOLUTE pidl,
         [in] DWORD grfHLNF);
 
+    [local]
     HRESULT SetNavigateState(
         [in] BNSTATE bnstate);
 
+    [local]
     HRESULT GetNavigateState(
         [out] BNSTATE *pbnstate);
 
+    [local]
     HRESULT NotifyRedirect(
         [in] IShellView *psv,
         [in] PCIDLIST_ABSOLUTE pidl,
         [out] BOOL *pfDidBrowse);
 
+    [local]
     HRESULT UpdateWindowList();
 
     HRESULT UpdateBackForwardState();
 
+    [local]
     HRESULT SetFlags(
         [in] DWORD dwFlags,
         [in] DWORD dwFlagMask);
 
+    [local]
     HRESULT GetFlags(
         [out] DWORD *pdwFlags);
 
+    [local]
     HRESULT CanNavigateNow();
 
+    [local]
     HRESULT GetPidl(
         [out] PIDLIST_ABSOLUTE *ppidl);
 
+    [local]
     HRESULT SetReferrer(
         [in] PCIDLIST_ABSOLUTE pidl);
 
+    [local]
     DWORD GetBrowserIndex();
 
+    [local]
     HRESULT GetBrowserByIndex(
         [in] DWORD dwID,
         [out] IUnknown **ppunk);
 
+    [local]
     HRESULT GetHistoryObject(
         [out] IOleObject **ppole,
         [out] IStream **pstm,
         [out] IBindCtx **ppbc);
 
+    [local]
     HRESULT SetHistoryObject(
         [in] IOleObject *pole,
         [in] BOOL fIsLocalAnchor);
 
+    [local]
     HRESULT CacheOLEServer(
         [in] IOleObject *pole);
 
+    [local]
     HRESULT GetSetCodePage(
         [in] VARIANT *pvarIn,
         [out] VARIANT *pvarOut);
 
+    [local]
     HRESULT OnHttpEquiv(
         [in] IShellView *psv,
         [in] BOOL fDone,
         [in] VARIANT *pvarargIn,
         [out] VARIANT *pvarargOut);
 
+    [local]
     HRESULT GetPalette(
         [out] HPALETTE *hpal);
 
+    [local]
     HRESULT RegisterWindow(
         [in] BOOL fForceRegister,
         [in] int swc);

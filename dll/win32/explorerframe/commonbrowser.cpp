@@ -585,7 +585,18 @@ HRESULT STDMETHODCALLTYPE CCommonBrowser::SetToolbarItems(LPTBBUTTON lpButtons, 
     return E_NOTIMPL;
 }
 
-HRESULT STDMETHODCALLTYPE CCommonBrowser::GetPropertyBag(long flags, REFIID riid, void **ppvObject)
+HRESULT STDMETHODCALLTYPE CCommonBrowser::Unknown(PVOID p1, PVOID p2, PVOID p3)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CCommonBrowser::GetPropertyBag(DWORD flags, REFIID riid, void **ppvObject)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CCommonBrowser::CreateViewWindow(
+    IShellItem *psi, IShellView *psvNew, IShellView *psvOld, RECT *prcView, HWND *phwnd)
 {
     return E_NOTIMPL;
 }

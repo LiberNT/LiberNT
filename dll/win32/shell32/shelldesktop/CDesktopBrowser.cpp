@@ -98,7 +98,25 @@ public:
     STDMETHOD(SetToolbarItems)(LPTBBUTTON lpButtons, UINT nButtons, UINT uFlags) override;
 
     // *** IShellBrowserService methods ***
-    STDMETHOD(GetPropertyBag)(long flags, REFIID riid, void **ppv) override;
+    STDMETHOD(Unknown)(PVOID p1, PVOID p2, PVOID p3) override;
+    STDMETHOD(GetTravelLog)(ITravelLog **pptl) override;
+    STDMETHOD(ShowControlWindow)(UINT id, BOOL fShow) override;
+    STDMETHOD(IsControlWindowShown)(UINT id, BOOL *pfShown) override;
+    STDMETHOD(DisplayParseError)(HRESULT hres, LPCWSTR pwszPath) override;
+    STDMETHOD(SetNavigateState)(BNSTATE bnstate) override;
+    STDMETHOD(GetNavigateState)(BNSTATE *pbnstate) override;
+    STDMETHOD(UpdateWindowList)() override;
+    STDMETHOD(UpdateBackForwardState)() override;
+    STDMETHOD(SetFlags)(DWORD dwFlags, DWORD dwFlagMask) override;
+    STDMETHOD(GetFlags)(DWORD *pdwFlags) override;
+    STDMETHOD(GetPidl)(PIDLIST_ABSOLUTE *ppidl) override;
+    STDMETHOD_(DWORD, GetBrowserIndex)() override;
+    STDMETHOD(GetHistoryObject)(IOleObject **ppole, IStream **pstm, IBindCtx **ppbc) override;
+    STDMETHOD(GetPalette)(HPALETTE *hpal) override;
+    STDMETHOD(RegisterWindow)(BOOL fForceRegister, int swc) override;
+    STDMETHOD(GetPropertyBag)(DWORD flags, REFIID riid, void **ppv) override;
+    STDMETHOD(SetAsDefFolderSettings)() override;
+    STDMETHOD(CreateViewWindow)(IShellItem *psi, IShellView *psvNew, IShellView *psvOld, RECT *prcView, HWND *phwnd) override;
 
     // *** IBrowserService2 methods (fake for now) ***
     inline void SetTopBrowser() const {}
@@ -468,10 +486,100 @@ HRESULT STDMETHODCALLTYPE CDesktopBrowser::SetToolbarItems(LPTBBUTTON lpButtons,
     return E_NOTIMPL;
 }
 
-HRESULT STDMETHODCALLTYPE CDesktopBrowser::GetPropertyBag(long flags, REFIID riid, void **ppv)
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::Unknown(PVOID p1, PVOID p2, PVOID p3)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::GetTravelLog(ITravelLog **pptl)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::ShowControlWindow(UINT id, BOOL fShow)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::IsControlWindowShown(UINT id, BOOL *pfShown)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::DisplayParseError(HRESULT hres, LPCWSTR pwszPath)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::SetNavigateState(BNSTATE bnstate)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::GetNavigateState(BNSTATE *pbnstate)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::UpdateWindowList()
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::UpdateBackForwardState()
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::SetFlags(DWORD dwFlags, DWORD dwFlagMask)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::GetFlags(DWORD *pdwFlags)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::GetPidl(PIDLIST_ABSOLUTE *ppidl)
+{
+    return E_NOTIMPL;
+}
+
+DWORD STDMETHODCALLTYPE CDesktopBrowser::GetBrowserIndex()
+{
+    return 0;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::GetHistoryObject(IOleObject **ppole, IStream **pstm, IBindCtx **ppbc)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::GetPalette(HPALETTE *hpal)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::RegisterWindow(BOOL fForceRegister, int swc)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::GetPropertyBag(DWORD flags, REFIID riid, void **ppv)
 {
     ITEMIDLIST deskpidl = {};
     return SHGetViewStatePropertyBag(&deskpidl, L"Desktop", flags | SHGVSPB_ROAM, riid, ppv);
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::SetAsDefFolderSettings()
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CDesktopBrowser::CreateViewWindow(IShellItem *psi, IShellView *psvNew, IShellView *psvOld, RECT *prcView, HWND *phwnd)
+{
+    return E_NOTIMPL;
 }
 
 HRESULT STDMETHODCALLTYPE CDesktopBrowser::QueryService(REFGUID guidService, REFIID riid, PVOID *ppv)

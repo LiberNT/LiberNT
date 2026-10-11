@@ -32,6 +32,7 @@ class CControlPanelFolder :
     public IStorage,
     public IContextMenuCB,
     public IFolderType,
+    public IRegItemCustomAttributes,
     public IObjectWithBackReferences,
     public IBackReferencedObject,
     public IDelegateHostItemContainer
@@ -110,6 +111,8 @@ class CControlPanelFolder :
         // IFolderType
         STDMETHOD(GetFolderType)(FOLDERTYPEID *pftid) override;
 
+        STDMETHOD(GetCustomAttributes)(PCUITEMID_CHILD pidl, DWORD dwFlags, ControlPanelCategoryInfo *pInfo, DWORD *pdwAttributes) override;
+
         // IObjectWithBackReferences
         STDMETHOD(RemoveBackReferences)() override;
 
@@ -136,6 +139,7 @@ class CControlPanelFolder :
         COM_INTERFACE_ENTRY_IID(IID_IStorage, IStorage)
         COM_INTERFACE_ENTRY_IID(IID_IContextMenuCB, IContextMenuCB)
         COM_INTERFACE_ENTRY_IID(IID_IFolderType, IFolderType)
+        COM_INTERFACE_ENTRY_IID(IID_IRegItemCustomAttributes, IRegItemCustomAttributes)
         COM_INTERFACE_ENTRY_IID(IID_IObjectWithBackReferences, IObjectWithBackReferences)
         COM_INTERFACE_ENTRY_IID(IID_IBackReferencedObject, IBackReferencedObject)
         COM_INTERFACE_ENTRY_IID(IID_IDelegateHostItemContainer, IDelegateHostItemContainer)

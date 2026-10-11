@@ -15,6 +15,7 @@ add_rpcproxy_files(
     actxprxy_ocmm.idl
     actxprxy_servprov.idl
     actxprxy_shldisp.idl
+    actxprxy_shdeprecated.idl
     actxprxy_shobjidl.idl
     actxprxy_undoc.idl
     actxprxy_urlhist.idl)
@@ -32,6 +33,7 @@ list(APPEND SOURCE
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_ocmm_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_servprov_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_shldisp_p.c
+    ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_shdeprecated_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_shobjidl_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_undoc_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_urlhist_p.c
@@ -55,6 +57,7 @@ add_idl_reg_scripts(actxprxy registry
     actxprxy_ocmm.idl
     actxprxy_servprov.idl
     actxprxy_shldisp.idl
+    actxprxy_shdeprecated.idl
     actxprxy_shobjidl.idl
     actxprxy_undoc.idl
     actxprxy_urlhist.idl)

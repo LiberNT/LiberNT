@@ -161,7 +161,9 @@ public:
     STDMETHOD(SetToolbarItems)(LPTBBUTTON lpButtons, UINT nButtons, UINT uFlags) override;
 
     // *** IShellBowserService methods ***
-    STDMETHOD(GetPropertyBag)(long flags, REFIID riid, void **ppvObject) override;
+    STDMETHOD(Unknown)(PVOID p1, PVOID p2, PVOID p3) override;
+    STDMETHOD(GetPropertyBag)(DWORD flags, REFIID riid, void **ppvObject) override;
+    STDMETHOD(CreateViewWindow)(IShellItem *psi, IShellView *psvNew, IShellView *psvOld, RECT *prcView, HWND *phwnd) override;
 
     // *** IOleWindow methods ***
     STDMETHOD(GetWindow)(HWND *lphwnd) override;

@@ -51,3 +51,81 @@ typedef [v1_enum] enum tagCONDITION_OPERATION
     COP_WORD_STARTSWITH,
     COP_APPLICATION_SPECIFIC
 } CONDITION_OPERATION;
+
+[
+    object,
+    uuid(4fdef69c-dbc9-454e-9910-b34f3c64b510),
+    pointer_default(unique)
+]
+interface IRichChunk : IUnknown
+{
+    [local]
+    HRESULT GetData([out, unique] ULONG *pFirstPos,
+                    [out, unique] ULONG *pLength,
+                    [out, unique] LPWSTR *ppsz,
+                    [out, unique] PROPVARIANT *pValue);
+
+    [call_as(GetData)]
+    HRESULT RemoteGetData([out] ULONG *pFirstPos,
+                          [out] ULONG *pLength,
+                          [out] LPWSTR *ppsz,
+                          [out] PROPVARIANT *pValue);
+}
+
+[
+    object,
+    uuid(0fc988d4-c935-4b97-a973-46282ea175c8),
+    pointer_default(unique)
+]
+interface ICondition : IPersistStream
+{
+    HRESULT GetConditionType([out, retval] CONDITION_TYPE *pNodeType);
+
+    HRESULT GetSubConditions([in] REFIID riid, [out, retval, iid_is(riid)] void **ppv);
+
+    [local]
+    HRESULT GetComparisonInfo([out, unique] LPWSTR *ppszPropertyName,
+                              [out, unique] CONDITION_OPERATION *pcop,
+                              [out, unique] PROPVARIANT *ppropvar);
+
+    [call_as(GetComparisonInfo)]
+    HRESULT RemoteGetComparisonInfo([out] LPWSTR *ppszPropertyName,
+                                    [out] CONDITION_OPERATION *pcop,
+                                    [out] PROPVARIANT *ppropvar);
+
+    HRESULT GetValueType([out, retval] LPWSTR *ppszValueTypeName);
+
+    HRESULT GetValueNormalization([out, retval] LPWSTR *ppszNormalization);
+
+    [local]
+    HRESULT GetInputTerms([out, unique] IRichChunk **ppPropertyTerm,
+                          [out, unique] IRichChunk **ppOperationTerm,
+                          [out, unique] IRichChunk **ppValueTerm);
+
+    [call_as(GetInputTerms)]
+    HRESULT RemoteGetInputTerms([out] IRichChunk **ppPropertyTerm,
+                                [out] IRichChunk **ppOperationTerm,
+                                [out] IRichChunk **ppValueTerm);
+
+    HRESULT Clone([out, retval] ICondition **ppc);
+}
+
+[
+    uuid(0db8851d-2e5b-47eb-9208-d28c325a01d7),
+    object,
+    pointer_default(unique)
+]
+interface ICondition2 : ICondition
+{
+    HRESULT GetLocale([out] LPWSTR *ppszLocaleName);
+
+    [local]
+    HRESULT GetLeafConditionInfo([out] PROPERTYKEY *ppropkey,
+                                 [out] CONDITION_OPERATION *pcop,
+                                 [out] PROPVARIANT *ppropvar);
+
+    [call_as(GetLeafConditionInfo)]
+    HRESULT RemoteGetLeafConditionInfo([out] PROPERTYKEY *ppropkey,
+                                       [out] CONDITION_OPERATION *pcop,
+                                       [out] PROPVARIANT *ppropvar);
+}

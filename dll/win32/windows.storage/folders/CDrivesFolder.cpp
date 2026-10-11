@@ -1566,6 +1566,25 @@ HRESULT WINAPI CDrivesFolder::GetMaxLength(LPCWSTR pszName, int *piMaxNameLen)
     return S_OK;
 }
 
+HRESULT WINAPI CDrivesFolder::IsTypeSupported(LPCWSTR pszType)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CDrivesFolder::GetPropertiesToApply(IPropertyStore *pps, REFIID riid, void **ppv)
+{
+    if (ppv)
+        *ppv = NULL;
+    return S_FALSE;
+}
+
+HRESULT WINAPI CDrivesFolder::CreateNewIDList(LPCWSTR pszType, PCIDLIST_ABSOLUTE pidlFolder, PITEMID_CHILD *ppidl)
+{
+    if (ppidl)
+        *ppidl = NULL;
+    return E_NOTIMPL;
+}
+
 HRESULT WINAPI CDrivesFolder::GetIconOf(PCUITEMID_CHILD pidl, UINT flags, int *pIconIndex)
 {
     CComPtr<IExtractIconW> pei;

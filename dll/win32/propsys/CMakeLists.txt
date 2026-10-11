@@ -1,7 +1,7 @@
 
 add_definitions(-D_PROPSYS_)
 spec2def(propsys.dll propsys.spec ADD_IMPORTLIB)
-add_rpcproxy_files(propsys_propsys.idl)
+add_rpcproxy_files(propsys_propsys.idl propsys_undoc.idl)
 generate_idl_iids(propsys_propsys.idl)
 
 list(APPEND SOURCE
@@ -15,6 +15,7 @@ list(APPEND PROXY_SOURCE
     propsys_proxy.c
     ${CMAKE_CURRENT_BINARY_DIR}/propsys_propsys_i.c
     ${CMAKE_CURRENT_BINARY_DIR}/propsys_propsys_p.c
+    ${CMAKE_CURRENT_BINARY_DIR}/propsys_undoc_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/proxy.dlldata.c)
 
 set_source_files_properties(${PROXY_SOURCE} PROPERTIES
@@ -26,7 +27,7 @@ add_library(propsys MODULE
     ${PROXY_SOURCE}
     ${CMAKE_CURRENT_BINARY_DIR}/propsys.def)
 
-add_idl_reg_scripts(propsys registry propsys_classes.idl propsys_propsys.idl)
+add_idl_reg_scripts(propsys registry propsys_classes.idl propsys_propsys.idl propsys_undoc.idl)
 target_compile_definitions(propsys PRIVATE _FORCENAMELESSUNION)
 set_module_type(propsys win32dll)
 target_link_libraries(propsys uuid wine wine_dll_register wine_dll_canunload)

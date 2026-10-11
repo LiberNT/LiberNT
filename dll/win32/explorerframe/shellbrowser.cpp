@@ -431,7 +431,9 @@ public:
     STDMETHOD(QueryService)(REFGUID guidService, REFIID riid, void **ppvObject) override;
 
     // *** IShellBrowserService methods ***
-    STDMETHOD(GetPropertyBag)(long flags, REFIID riid, void **ppvObject) override;
+    STDMETHOD(Unknown)(PVOID p1, PVOID p2, PVOID p3) override;
+    STDMETHOD(GetPropertyBag)(DWORD flags, REFIID riid, void **ppvObject) override;
+    STDMETHOD(CreateViewWindow)(IShellItem *psi, IShellView *psvNew, IShellView *psvOld, RECT *prcView, HWND *phwnd) override;
 
     // *** IDispatch methods ***
     STDMETHOD(GetTypeInfoCount)(UINT *pctinfo) override;
@@ -2584,7 +2586,12 @@ static BOOL _ILIsNetworkPlace(LPCITEMIDLIST pidl)
     return SHGetPathFromIDListWrapW(pidl, szPath) && PathIsUNCW(szPath);
 }
 
-HRESULT STDMETHODCALLTYPE CShellBrowser::GetPropertyBag(long flags, REFIID riid, void **ppvObject)
+HRESULT STDMETHODCALLTYPE CShellBrowser::Unknown(PVOID p1, PVOID p2, PVOID p3)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CShellBrowser::GetPropertyBag(DWORD flags, REFIID riid, void **ppvObject)
 {
     if (ppvObject == NULL)
         return E_POINTER;
@@ -2995,6 +3002,12 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::ActivatePendingView()
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::CreateViewWindow(
     IShellView *psvNew, IShellView *psvOld, LPRECT prcView, HWND *phwnd)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CShellBrowser::CreateViewWindow(
+    IShellItem *psi, IShellView *psvNew, IShellView *psvOld, RECT *prcView, HWND *phwnd)
 {
     return E_NOTIMPL;
 }

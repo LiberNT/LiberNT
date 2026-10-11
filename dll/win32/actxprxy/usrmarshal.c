@@ -294,3 +294,120 @@ HRESULT __RPC_STUB IEnumObjects_Next_Stub(IEnumObjects *This, ULONG celt, REFIID
     hr = IEnumObjects_Next(This, celt, riid, rgelt, pceltFetched);
     return hr;
 }
+
+#ifdef __REACTOS__
+#define PIDL_ALIGN_LENGTH(len, align) (((len) + (align)) & ~(align))
+#define PIDL_ALIGN_POINTER(ptr, align) ((unsigned char *)PIDL_ALIGN_LENGTH((ULONG_PTR)(ptr), (align)))
+
+static ULONG pidl_get_size(const ITEMIDLIST *pidl)
+{
+    const BYTE *ptr = (const BYTE *)pidl;
+    ULONG size = sizeof(USHORT);
+    USHORT cb;
+
+    for (;;)
+    {
+        memcpy(&cb, ptr, sizeof(cb));
+        if (!cb)
+            break;
+        size += cb;
+        ptr += cb;
+    }
+    return size;
+}
+
+static ULONG pidl_user_size(ULONG start, const ITEMIDLIST *pidl)
+{
+    ULONG size = PIDL_ALIGN_LENGTH(start, 3) + sizeof(ULONG);
+
+    if (pidl)
+        size += 2 * sizeof(ULONG) + pidl_get_size(pidl);
+    return size;
+}
+
+static unsigned char *pidl_user_marshal(unsigned char *buffer, const ITEMIDLIST *pidl)
+{
+    ULONG cb;
+
+    buffer = PIDL_ALIGN_POINTER(buffer, 3);
+    *(ULONG *)buffer = pidl ? 0x20000 : 0;
+    buffer += sizeof(ULONG);
+    if (!pidl)
+        return buffer;
+
+    cb = pidl_get_size(pidl);
+    *(ULONG *)buffer = cb;
+    buffer += sizeof(ULONG);
+    *(ULONG *)buffer = cb;
+    buffer += sizeof(ULONG);
+    memcpy(buffer, pidl, cb);
+    return buffer + cb;
+}
+
+static unsigned char *pidl_user_unmarshal(ULONG *flags, unsigned char *buffer, ITEMIDLIST **pidl)
+{
+    MIDL_STUB_MESSAGE *stub = ((USER_MARSHAL_CB *)flags)->pStubMsg;
+    ULONG referent, count, cb;
+    ITEMIDLIST *copy;
+
+    buffer = PIDL_ALIGN_POINTER(buffer, 3);
+    if (buffer + sizeof(ULONG) > stub->BufferEnd)
+        RpcRaiseException(RPC_X_BAD_STUB_DATA);
+    referent = *(ULONG *)buffer;
+    buffer += sizeof(ULONG);
+    if (!referent)
+    {
+        *pidl = NULL;
+        return buffer;
+    }
+
+    if (buffer + 2 * sizeof(ULONG) > stub->BufferEnd)
+        RpcRaiseException(RPC_X_BAD_STUB_DATA);
+    count = *(ULONG *)buffer;
+    buffer += sizeof(ULONG);
+    cb = *(ULONG *)buffer;
+    buffer += sizeof(ULONG);
+    if (cb != count || cb < sizeof(USHORT) || cb > (ULONG)(stub->BufferEnd - buffer))
+        RpcRaiseException(RPC_X_BAD_STUB_DATA);
+
+    copy = CoTaskMemAlloc(cb);
+    if (!copy)
+        RpcRaiseException(E_OUTOFMEMORY);
+    memcpy(copy, buffer, cb);
+    *pidl = copy;
+    return buffer + cb;
+}
+
+#define DEFINE_PIDL_USER_MARSHAL(type) \
+ULONG __RPC_USER type##_UserSize(ULONG *flags, ULONG start, type *pidl) \
+{ \
+    return pidl_user_size(start, (const ITEMIDLIST *)*pidl); \
+} \
+unsigned char * __RPC_USER type##_UserMarshal(ULONG *flags, unsigned char *buffer, type *pidl) \
+{ \
+    return pidl_user_marshal(buffer, (const ITEMIDLIST *)*pidl); \
+} \
+unsigned char * __RPC_USER type##_UserUnmarshal(ULONG *flags, unsigned char *buffer, type *pidl) \
+{ \
+    return pidl_user_unmarshal(flags, buffer, (ITEMIDLIST **)pidl); \
+} \
+void __RPC_USER type##_UserFree(ULONG *flags, type *pidl) \
+{ \
+    CoTaskMemFree((void *)*pidl); \
+    *pidl = NULL; \
+}
+
+DEFINE_PIDL_USER_MARSHAL(LPITEMIDLIST)
+DEFINE_PIDL_USER_MARSHAL(LPCITEMIDLIST)
+DEFINE_PIDL_USER_MARSHAL(PIDLIST_ABSOLUTE)
+DEFINE_PIDL_USER_MARSHAL(PCIDLIST_ABSOLUTE)
+DEFINE_PIDL_USER_MARSHAL(PCUIDLIST_ABSOLUTE)
+DEFINE_PIDL_USER_MARSHAL(PIDLIST_RELATIVE)
+DEFINE_PIDL_USER_MARSHAL(PCIDLIST_RELATIVE)
+DEFINE_PIDL_USER_MARSHAL(PUIDLIST_RELATIVE)
+DEFINE_PIDL_USER_MARSHAL(PCUIDLIST_RELATIVE)
+DEFINE_PIDL_USER_MARSHAL(PITEMID_CHILD)
+DEFINE_PIDL_USER_MARSHAL(PCITEMID_CHILD)
+DEFINE_PIDL_USER_MARSHAL(PUITEMID_CHILD)
+DEFINE_PIDL_USER_MARSHAL(PCUITEMID_CHILD)
+#endif

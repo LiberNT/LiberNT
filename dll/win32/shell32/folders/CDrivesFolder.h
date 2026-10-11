@@ -32,6 +32,7 @@ class CDrivesFolder :
     public IFolderFilter,
     public IPersistPropertyBag,
     public IItemNameLimits,
+    public INewItemAdvisor,
     public IShellIcon,
     public IShellIconOverlay,
     public IStorage,
@@ -105,6 +106,10 @@ class CDrivesFolder :
         STDMETHOD(GetValidCharacters)(LPWSTR *ppwszValidChars, LPWSTR *ppwszInvalidChars) override;
         STDMETHOD(GetMaxLength)(LPCWSTR pszName, int *piMaxNameLen) override;
 
+        STDMETHOD(IsTypeSupported)(LPCWSTR pszType) override;
+        STDMETHOD(GetPropertiesToApply)(IPropertyStore *pps, REFIID riid, void **ppv) override;
+        STDMETHOD(CreateNewIDList)(LPCWSTR pszType, PCIDLIST_ABSOLUTE pidlFolder, PITEMID_CHILD *ppidl) override;
+
         STDMETHOD(GetIconOf)(PCUITEMID_CHILD pidl, UINT flags, int *pIconIndex) override;
 
         STDMETHOD(GetOverlayIndex)(PCUITEMID_CHILD pidl, int *pIndex) override;
@@ -151,6 +156,7 @@ class CDrivesFolder :
         COM_INTERFACE_ENTRY_IID(IID_IFolderFilter, IFolderFilter)
         COM_INTERFACE_ENTRY_IID(IID_IPersistPropertyBag, IPersistPropertyBag)
         COM_INTERFACE_ENTRY_IID(IID_IItemNameLimits, IItemNameLimits)
+        COM_INTERFACE_ENTRY_IID(IID_INewItemAdvisor, INewItemAdvisor)
         COM_INTERFACE_ENTRY_IID(IID_IShellIcon, IShellIcon)
         COM_INTERFACE_ENTRY_IID(IID_IShellIconOverlay, IShellIconOverlay)
         COM_INTERFACE_ENTRY_IID(IID_IStorage, IStorage)

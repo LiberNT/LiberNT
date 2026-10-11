@@ -868,6 +868,13 @@ HRESULT WINAPI CControlPanelFolder::GetFolderType(FOLDERTYPEID *pftid)
     return S_OK;
 }
 
+HRESULT WINAPI CControlPanelFolder::GetCustomAttributes(PCUITEMID_CHILD pidl, DWORD dwFlags, ControlPanelCategoryInfo *pInfo, DWORD *pdwAttributes)
+{
+    if (pdwAttributes)
+        *pdwAttributes &= ~(SFGAO_CANMOVE | SFGAO_CANDELETE);
+    return S_OK;
+}
+
 HRESULT WINAPI CControlPanelFolder::RemoveBackReferences()
 {
     CComPtr<IObjectWithBackReferences> pobr;
