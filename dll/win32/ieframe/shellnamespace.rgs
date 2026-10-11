@@ -1,0 +1,18 @@
+HKCR
+{
+    NoRemove CLSID
+    {
+        NoRemove {55136805-B2DE-11D1-B9F2-00A0C98BC547}
+        {
+            MiscStatus = s '0'
+            {
+                '1' = s '131473'
+            }
+        }
+    }
+    NoRemove 'ShellNameSpace.ShellNameSpace' = s 'Shell Name Space'
+    {
+        CurVer = s 'ShellNameSpace.ShellNameSpace.1'
+    }
+    NoRemove 'ShellNameSpace.ShellNameSpace.1' = s 'Shell Name Space'
+}

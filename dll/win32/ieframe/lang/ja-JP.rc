@@ -88,6 +88,8 @@ STRINGTABLE
     IDS_INTSHCUT_RUN_MINIMIZED  "Minimized"
     IDS_INTSHCUT_RUN_MAXIMIZED  "Maximized"
     IDS_INTSHCUT_OPEN_HELP      "Opens this page."
+    IDS_COMMBAND_REFRESH        "&Refresh"
+    IDS_COMMBAND_OPENWINDOW     "&Open in window"
 }
 
 IDD_INTSHCUT_PROP DIALOGEX 0, 0, 252, 218

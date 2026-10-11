@@ -99,4 +99,6 @@ IDC_PAGEICO ICON "resources/pages.ico"
 #ifdef __REACTOS__
 3 WINE_REGISTRY "intshcut.rgs"
 4 WINE_REGISTRY "urlsearchhook.rgs"
+5 WINE_REGISTRY "commband.rgs"
+6 WINE_REGISTRY "shellnamespace.rgs"
 #endif

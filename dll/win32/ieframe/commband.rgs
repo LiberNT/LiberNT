@@ -1,0 +1,13 @@
+HKCR
+{
+    NoRemove CLSID
+    {
+        ForceRemove {4D5C8C2A-D075-11D0-B416-00C04FB90376} = s 'Microsoft CommBand'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val 'ThreadingModel' = s 'Apartment'
+            }
+        }
+    }
+}

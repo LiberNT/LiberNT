@@ -319,19 +319,19 @@ DECLARE_INTERFACE_(INscTree, IUnknown)
 	STDMETHOD_(ULONG,AddRef)(THIS) PURE;
 	STDMETHOD_(ULONG,Release)(THIS) PURE;
     /*** INscTree ***/
-	STDMETHOD(CreateTree)(THIS_ long paramC, long param10, long param14) PURE;
-	STDMETHOD(Initialize)(THIS_ long paramC, long param10, long param14) PURE;
-	STDMETHOD(ShowWindow)(THIS_ long paramC) PURE;
+	STDMETHOD(CreateTree)(THIS_ HWND hwndParent, DWORD dwStyles, HWND *phwnd) PURE;
+	STDMETHOD(Initialize)(THIS_ PCIDLIST_ABSOLUTE pidlRoot, DWORD grfEnumFlags, DWORD dwFlags) PURE;
+	STDMETHOD(ShowWindow)(THIS_ BOOL fShow) PURE;
 	STDMETHOD(Refresh)(THIS) PURE;
-	STDMETHOD(GetSelectedItem)(THIS_ long paramC, long param10) PURE;
-	STDMETHOD(SetSelectedItem)(THIS_ long paramC, long param10, long param14, long param18) PURE;
-	STDMETHOD(GetNscMode)(THIS_ long paramC) PURE;
-	STDMETHOD(SetNscMode)(THIS_ long paramC) PURE;
-	STDMETHOD(GetSelectedItemName)(THIS_ long paramC, long param10) PURE;
-	STDMETHOD(BindToSelectedItemParent)(THIS_ long paramC, long param10, long param14) PURE;
-	STDMETHOD(InLabelEdit)(THIS) PURE;
-	STDMETHOD(RightPaneNavigationStarted)(THIS_ long paramC) PURE;
-	STDMETHOD(RightPaneNavigationFinished)(THIS_ long paramC) PURE;
+	STDMETHOD(GetSelectedItem)(THIS_ PIDLIST_ABSOLUTE *ppidl, int nItem) PURE;
+	STDMETHOD(SetSelectedItem)(THIS_ PCIDLIST_ABSOLUTE pidl, BOOL fCreate, BOOL fReinsert, int nItem) PURE;
+	STDMETHOD(GetNscMode)(THIS_ UINT *pnMode) PURE;
+	STDMETHOD(SetNscMode)(THIS_ UINT nMode) PURE;
+	STDMETHOD(GetSelectedItemName)(THIS_ LPWSTR pszName, DWORD cchName) PURE;
+	STDMETHOD(BindToSelectedItemParent)(THIS_ REFIID riid, void **ppv, PITEMID_CHILD *ppidlLast) PURE;
+	STDMETHOD_(BOOL,InLabelEdit)(THIS) PURE;
+	STDMETHOD(RightPaneNavigationStarted)(THIS_ PCIDLIST_ABSOLUTE pidl) PURE;
+	STDMETHOD(RightPaneNavigationFinished)(THIS_ PCIDLIST_ABSOLUTE pidl) PURE;
 };
 #undef INTERFACE
 
@@ -365,21 +365,23 @@ DECLARE_INTERFACE_(INscTree2, INscTree)
 	STDMETHOD_(ULONG,AddRef)(THIS) PURE;
 	STDMETHOD_(ULONG,Release)(THIS) PURE;
 	/*** INscTree ***/
-	STDMETHOD(CreateTree)(THIS_ long paramC, long param10, long param14) PURE;
-	STDMETHOD(Initialize)(THIS_ long paramC, long param10, long param14) PURE;
-	STDMETHOD(ShowWindow)(THIS_ long paramC) PURE;
+	STDMETHOD(CreateTree)(THIS_ HWND hwndParent, DWORD dwStyles, HWND *phwnd) PURE;
+	STDMETHOD(Initialize)(THIS_ PCIDLIST_ABSOLUTE pidlRoot, DWORD grfEnumFlags, DWORD dwFlags) PURE;
+	STDMETHOD(ShowWindow)(THIS_ BOOL fShow) PURE;
 	STDMETHOD(Refresh)(THIS) PURE;
-	STDMETHOD(GetSelectedItem)(THIS_ long paramC, long param10) PURE;
-	STDMETHOD(SetSelectedItem)(THIS_ long paramC, long param10, long param14, long param18) PURE;
-	STDMETHOD(GetNscMode)(THIS_ long paramC) PURE;
-	STDMETHOD(SetNscMode)(THIS_ long paramC) PURE;
-	STDMETHOD(GetSelectedItemName)(THIS_ long paramC, long param10) PURE;
-	STDMETHOD(BindToSelectedItemParent)(THIS_ long paramC, long param10, long param14) PURE;
-	STDMETHOD(InLabelEdit)(THIS) PURE;
-	STDMETHOD(RightPaneNavigationStarted)(THIS_ long paramC) PURE;
-	STDMETHOD(RightPaneNavigationFinished)(THIS_ long paramC) PURE;
+	STDMETHOD(GetSelectedItem)(THIS_ PIDLIST_ABSOLUTE *ppidl, int nItem) PURE;
+	STDMETHOD(SetSelectedItem)(THIS_ PCIDLIST_ABSOLUTE pidl, BOOL fCreate, BOOL fReinsert, int nItem) PURE;
+	STDMETHOD(GetNscMode)(THIS_ UINT *pnMode) PURE;
+	STDMETHOD(SetNscMode)(THIS_ UINT nMode) PURE;
+	STDMETHOD(GetSelectedItemName)(THIS_ LPWSTR pszName, DWORD cchName) PURE;
+	STDMETHOD(BindToSelectedItemParent)(THIS_ REFIID riid, void **ppv, PITEMID_CHILD *ppidlLast) PURE;
+	STDMETHOD_(BOOL,InLabelEdit)(THIS) PURE;
+	STDMETHOD(RightPaneNavigationStarted)(THIS_ PCIDLIST_ABSOLUTE pidl) PURE;
+	STDMETHOD(RightPaneNavigationFinished)(THIS_ PCIDLIST_ABSOLUTE pidl) PURE;
 	/*** INscTree2 ***/
-	STDMETHOD(CreateTree2)(THIS_ long paramC, long param10, long param14, long param18) PURE;
+	STDMETHOD(CreateTree2)(THIS_ HWND hwndParent, DWORD dwStyles, DWORD dwExStyles, HWND *phwnd) PURE;
+	STDMETHOD(InvalidateDisplayInfo)(THIS_ PIDLIST_ABSOLUTE pidl) PURE;
+	STDMETHOD(AdjustLineSpacing)(THIS_ UINT uSpacing, BOOL fApply) PURE;
 };
 #undef INTERFACE
 
@@ -401,6 +403,8 @@ DECLARE_INTERFACE_(INscTree2, INscTree)
 #define INscTree2_RightPaneNavigationStarted(T,a) (T)->lpVtbl->RightPaneNavigationStarted(T,a)
 #define INscTree2_RightPaneNavigationFinished(T,a) (T)->lpVtbl->RightPaneNavigationFinished(T,a)
 #define INscTree2_CreateTree2(T,a,b,c,d) (T)->lpVtbl->CreateTree2(T,a,b,c,d)
+#define INscTree2_InvalidateDisplayInfo(T,a) (T)->lpVtbl->InvalidateDisplayInfo(T,a)
+#define INscTree2_AdjustLineSpacing(T,a,b) (T)->lpVtbl->AdjustLineSpacing(T,a,b)
 #endif
 
 /*****************************************************************************

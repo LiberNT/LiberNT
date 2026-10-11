@@ -23,6 +23,9 @@
 #include "shlguid.h"
 #include "isguids.h"
 #include "ieautomation.h"
+#ifdef __REACTOS__
+#include "shlguid_undoc.h"
+#endif
 
 #include "wine/debug.h"
 
@@ -198,6 +201,11 @@ static const IClassFactoryVtbl URLSearchHookFactoryVtbl = {
 };
 
 static IClassFactory URLSearchHookFactory = { &URLSearchHookFactoryVtbl };
+
+VOID IEFRAME_InitObjects(HINSTANCE hInstance);
+VOID IEFRAME_TermObjects(VOID);
+HRESULT IEFRAME_GetObjectsClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv);
+BOOL IEFRAME_ObjectsInUse(VOID);
 #endif
 
 /******************************************************************
@@ -212,10 +220,16 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
     case DLL_PROCESS_ATTACH:
         ieframe_instance = hInstDLL;
         register_iewindow_class();
+#ifdef __REACTOS__
+        IEFRAME_InitObjects(hInstDLL);
+#endif
         DisableThreadLibraryCalls(ieframe_instance);
         break;
     case DLL_PROCESS_DETACH:
         if (lpv) break;
+#ifdef __REACTOS__
+        IEFRAME_TermObjects();
+#endif
         unregister_iewindow_class();
         release_typelib();
     }
@@ -249,6 +263,9 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
 
     if(IsEqualGUID(&CLSID_CURLSearchHook, rclsid))
         return IClassFactory_QueryInterface(&URLSearchHookFactory, riid, ppv);
+
+    if(IsEqualGUID(&CLSID_CommBand, rclsid) || IsEqualGUID(&CLSID_ShellNameSpace, rclsid))
+        return IEFRAME_GetObjectsClassObject(rclsid, riid, ppv);
 #endif
 
     if(IsEqualGUID(&CLSID_CUrlHistory, rclsid)) {
@@ -286,6 +303,10 @@ IClassFactory InternetExplorerManagerFactory = { &InternetExplorerManagerFactory
 HRESULT WINAPI DllCanUnloadNow(void)
 {
     TRACE("()\n");
+#ifdef __REACTOS__
+    if(IEFRAME_ObjectsInUse())
+        return S_FALSE;
+#endif
     return module_ref ? S_FALSE : S_OK;
 }
 
