@@ -166,6 +166,11 @@ static __inline__ __int64 __riscv_interlockedor64(__int64 volatile *Value, __int
     return __atomic_fetch_or(Value, Mask, __ATOMIC_SEQ_CST);
 }
 
+static __inline__ __int64 __riscv_interlockedxor64(__int64 volatile *Value, __int64 Mask)
+{
+    return __atomic_fetch_xor(Value, Mask, __ATOMIC_SEQ_CST);
+}
+
 #define _InterlockedAdd __riscv_interlockedadd
 #define _InterlockedExchangeAdd64 __riscv_interlockedexchangeadd64
 #define _InterlockedAdd64 __riscv_interlockedadd64
@@ -174,3 +179,4 @@ static __inline__ __int64 __riscv_interlockedor64(__int64 volatile *Value, __int
 #define _InterlockedDecrement64 __riscv_interlockeddecrement64
 #define _InterlockedExchange64 __riscv_interlockedexchange64
 #define _InterlockedOr64 __riscv_interlockedor64
+#define _InterlockedXor64 __riscv_interlockedxor64
