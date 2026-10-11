@@ -1355,8 +1355,6 @@ DxgkpPopulateDefaultPath(
 
     Path->ContentTransformation.Scaling  = D3DKMDT_VPPS_IDENTITY;
     Path->ContentTransformation.ScalingSupport.Identity = 1;
-    Path->ContentTransformation.ScalingSupport.Centered = 1;
-    Path->ContentTransformation.ScalingSupport.Stretched = 1;
 
     Path->ContentTransformation.Rotation = D3DKMDT_VPPR_IDENTITY;
     Path->ContentTransformation.RotationSupport.Identity = 1;
@@ -1367,7 +1365,7 @@ DxgkpPopulateDefaultPath(
     Path->GammaRamp.Type = D3DDDI_GAMMARAMP_DEFAULT;
     Path->GammaRamp.DataSize = 0;
 
-    Path->VidPnTargetColorBasis = D3DKMDT_CB_SCRGB;
+    Path->VidPnTargetColorBasis = D3DKMDT_CB_SRGB;
     Path->VidPnTargetColorCoeffDynamicRanges.FirstChannel  = 8;
     Path->VidPnTargetColorCoeffDynamicRanges.SecondChannel = 8;
     Path->VidPnTargetColorCoeffDynamicRanges.ThirdChannel  = 8;
