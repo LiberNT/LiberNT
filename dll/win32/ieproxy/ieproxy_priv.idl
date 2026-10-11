@@ -10,6 +10,7 @@
 
 import "oaidl.idl";
 import "objidl.idl";
+import "urlmon.idl";
 
 [
     object,
@@ -22,6 +23,16 @@ interface IWebBrowserPriv : IUnknown
                                 [in] VARIANT *post_data, [in] VARIANT *headers, [in] IBindCtx *bind_ctx,
                                 [in] BSTR url_fragment);
     HRESULT OnClose();
+}
+
+[
+    object,
+    uuid(fc8afc62-f788-4b36-8889-fd073fdd2fd9),
+    pointer_default(unique)
+]
+interface ISecMgrCacheSeedTarget : IUnknown
+{
+    HRESULT SeedSecMgrCache([in] IUri *uri, [in] DWORD flags);
 }
 
 [

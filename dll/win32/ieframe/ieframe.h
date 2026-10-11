@@ -69,6 +69,7 @@ typedef struct {
     IWebBrowserPriv2IE9 IWebBrowserPriv2IE9_iface;
 #ifdef __REACTOS__
     IWebBrowserPriv IWebBrowserPriv_iface;
+    ISecMgrCacheSeedTarget ISecMgrCacheSeedTarget_iface;
 #endif
 
     IUnknown *outer;

@@ -30634,3 +30634,15 @@ interface IWebBrowserPriv2IE9 : IUnknown
             VARIANT *headers, IBindCtx *bind_ctx, LPOLESTR url_fragment, DWORD unused);
     /* Probably more */
 }
+
+#ifdef __REACTOS__
+[
+    object,
+    uuid(fc8afc62-f788-4b36-8889-fd073fdd2fd9),
+    local
+]
+interface ISecMgrCacheSeedTarget : IUnknown
+{
+    HRESULT SeedSecMgrCache(IUri *uri, DWORD flags);
+}
+#endif

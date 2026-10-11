@@ -1748,6 +1748,45 @@ static const IWebBrowserPrivVtbl WebBrowserPrivVtbl = {
     WebBrowserPriv_NavigateWithBindCtx,
     WebBrowserPriv_OnClose
 };
+
+static inline HlinkFrame *impl_from_ISecMgrCacheSeedTarget(ISecMgrCacheSeedTarget *iface)
+{
+    return CONTAINING_RECORD(iface, HlinkFrame, ISecMgrCacheSeedTarget_iface);
+}
+
+static HRESULT WINAPI SecMgrCacheSeedTarget_QueryInterface(ISecMgrCacheSeedTarget *iface, REFIID riid, void **ppv)
+{
+    HlinkFrame *This = impl_from_ISecMgrCacheSeedTarget(iface);
+    return IUnknown_QueryInterface(This->outer, riid, ppv);
+}
+
+static ULONG WINAPI SecMgrCacheSeedTarget_AddRef(ISecMgrCacheSeedTarget *iface)
+{
+    HlinkFrame *This = impl_from_ISecMgrCacheSeedTarget(iface);
+    return IUnknown_AddRef(This->outer);
+}
+
+static ULONG WINAPI SecMgrCacheSeedTarget_Release(ISecMgrCacheSeedTarget *iface)
+{
+    HlinkFrame *This = impl_from_ISecMgrCacheSeedTarget(iface);
+    return IUnknown_Release(This->outer);
+}
+
+static HRESULT WINAPI SecMgrCacheSeedTarget_SeedSecMgrCache(ISecMgrCacheSeedTarget *iface, IUri *uri, DWORD flags)
+{
+    HlinkFrame *This = impl_from_ISecMgrCacheSeedTarget(iface);
+
+    TRACE("(%p)->(%p %lx)\n", This, uri, flags);
+
+    return RPC_E_CALL_COMPLETE;
+}
+
+static const ISecMgrCacheSeedTargetVtbl SecMgrCacheSeedTargetVtbl = {
+    SecMgrCacheSeedTarget_QueryInterface,
+    SecMgrCacheSeedTarget_AddRef,
+    SecMgrCacheSeedTarget_Release,
+    SecMgrCacheSeedTarget_SeedSecMgrCache
+};
 #endif
 
 BOOL HlinkFrame_QI(HlinkFrame *This, REFIID riid, void **ppv)
@@ -1774,6 +1813,9 @@ BOOL HlinkFrame_QI(HlinkFrame *This, REFIID riid, void **ppv)
     }else if(IsEqualGUID(&IID_IWebBrowserPriv, riid)) {
         TRACE("(%p)->(IID_IWebBrowserPriv %p)\n", This, ppv);
         *ppv = &This->IWebBrowserPriv_iface;
+    }else if(IsEqualGUID(&IID_ISecMgrCacheSeedTarget, riid)) {
+        TRACE("(%p)->(IID_ISecMgrCacheSeedTarget %p)\n", This, ppv);
+        *ppv = &This->ISecMgrCacheSeedTarget_iface;
 #endif
     }else {
         return FALSE;
@@ -1792,6 +1834,7 @@ void HlinkFrame_Init(HlinkFrame *This, IUnknown *outer, DocHost *doc_host)
     This->IWebBrowserPriv2IE9_iface.lpVtbl = &WebBrowserPriv2IE9Vtbl;
 #ifdef __REACTOS__
     This->IWebBrowserPriv_iface.lpVtbl = &WebBrowserPrivVtbl;
+    This->ISecMgrCacheSeedTarget_iface.lpVtbl = &SecMgrCacheSeedTargetVtbl;
 #endif
 
     This->outer = outer;
