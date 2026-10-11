@@ -2704,6 +2704,8 @@ NdisIPnPStopDevice(
 
   MiniStopHangTimer(Adapter);
 
+  ndisUnbindProtocolsFromAdapter(Adapter);
+
   /* Set this here so MiniportISR will be forced to run for interrupts generated in MiniportHalt */
   Adapter->NdisMiniportBlock.OldPnPDeviceState = Adapter->NdisMiniportBlock.PnPDeviceState;
   Adapter->NdisMiniportBlock.PnPDeviceState = NdisPnPDeviceStopped;
@@ -2823,6 +2825,8 @@ NdisIPnPRemoveDevice(
      * (calls Ndis6CallMiniportHaltEx then Ndis6DestroyLogicalAdapter).
      * This legacy path must never run for NDIS 6 adapters. */
     ASSERT(!Adapter->IsNdis6);
+
+    ndisUnbindProtocolsFromAdapter(Adapter);
 
     if (Adapter->NdisMiniportBlock.SymbolicLinkName.Buffer)
     {

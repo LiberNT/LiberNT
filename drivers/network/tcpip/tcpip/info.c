@@ -50,7 +50,7 @@ VOID RemoveEntityByContext(PVOID Context)
 
    TcpipAcquireSpinLock(&EntityListLock, &OldIrql);
 
-   for (i = 0; i < EntityCount; i++) {
+   for (i = 0; i < EntityCount; ) {
 	if( EntityList[i].context == Context ) {
 	    if( i != EntityCount - 1 ) {
 		memcpy( &EntityList[i],
@@ -59,6 +59,8 @@ VOID RemoveEntityByContext(PVOID Context)
 	    } else {
 		EntityCount--;
 	    }
+	} else {
+	    i++;
 	}
     }
 

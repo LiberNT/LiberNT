@@ -1292,6 +1292,7 @@ Ndis6DispatchPnp(
                 if (NdisStatus == NDIS_STATUS_SUCCESS)
                 {
                     Status = STATUS_SUCCESS;
+                    ndisQueueProtocolBinding();
                 }
                 else
                 {

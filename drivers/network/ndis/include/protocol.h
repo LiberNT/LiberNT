@@ -66,6 +66,11 @@ typedef struct _NDIS_REQUEST_MAC_BLOCK {
 
 #define GET_ADAPTER_BINDING(Handle)((PADAPTER_BINDING)Handle)
 
+typedef struct _NDIS_UNBIND_CONTEXT {
+    KEVENT      Event;
+    NDIS_STATUS Status;
+} NDIS_UNBIND_CONTEXT, *PNDIS_UNBIND_CONTEXT;
+
 PLOGICAL_ADAPTER
 Ndis6AdapterFromBindingHandle(
     NDIS_HANDLE NdisBindingHandle);
@@ -104,5 +109,13 @@ proSendPacketToMiniport(PLOGICAL_ADAPTER Adapter, PNDIS_PACKET Packet);
 VOID
 NTAPI
 ndisBindMiniportsToProtocol(OUT PNDIS_STATUS Status, IN PPROTOCOL_BINDING Protocol);
+
+VOID
+NTAPI
+ndisUnbindProtocolsFromAdapter(IN PLOGICAL_ADAPTER Adapter);
+
+VOID
+NTAPI
+ndisQueueProtocolBinding(VOID);
 
 /* EOF */

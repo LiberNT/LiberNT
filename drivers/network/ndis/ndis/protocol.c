@@ -225,18 +225,107 @@ NdisCompleteUnbindAdapter(
     IN  NDIS_HANDLE UnbindAdapterContext,
     IN  NDIS_STATUS Status)
 {
-  /* We probably need to do more here but for now we just do
-   * the opposite of what NdisCompleteBindAdapter does
-   */
+  PNDIS_UNBIND_CONTEXT Context = (PNDIS_UNBIND_CONTEXT)UnbindAdapterContext;
 
-  PROTOCOL_BINDING *Protocol = (PROTOCOL_BINDING *)UnbindAdapterContext;
+  Context->Status = Status;
+  KeSetEvent(&Context->Event, IO_NO_INCREMENT, FALSE);
+}
 
-  if (!NT_SUCCESS(Status)) {
-      NDIS_DbgPrint(MIN_TRACE, ("Unbinding failed (%x)\n", Status));
+static VOID
+NTAPI
+ndisProtocolBindingWorker(IN PVOID Context)
+{
+  PPROTOCOL_BINDING *Protocols;
+  PLIST_ENTRY CurrentEntry;
+  NDIS_STATUS Status;
+  ULONG Count = 0, i;
+  KIRQL OldIrql;
+
+  ExFreePoolWithTag(Context, NDIS_TAG);
+
+  KeAcquireSpinLock(&ProtocolListLock, &OldIrql);
+  for (CurrentEntry = ProtocolListHead.Flink; CurrentEntry != &ProtocolListHead; CurrentEntry = CurrentEntry->Flink)
+      Count++;
+  KeReleaseSpinLock(&ProtocolListLock, OldIrql);
+  if (!Count)
       return;
-  }
 
-  ExInterlockedRemoveEntryList(&Protocol->ListEntry, &ProtocolListLock);
+  Protocols = ExAllocatePoolWithTag(NonPagedPool, Count * sizeof(*Protocols), NDIS_TAG);
+  if (!Protocols)
+      return;
+
+  KeAcquireSpinLock(&ProtocolListLock, &OldIrql);
+  i = 0;
+  for (CurrentEntry = ProtocolListHead.Flink; CurrentEntry != &ProtocolListHead && i < Count; CurrentEntry = CurrentEntry->Flink)
+      Protocols[i++] = CONTAINING_RECORD(CurrentEntry, PROTOCOL_BINDING, ListEntry);
+  Count = i;
+  KeReleaseSpinLock(&ProtocolListLock, OldIrql);
+
+  for (i = 0; i < Count; i++)
+      ndisBindMiniportsToProtocol(&Status, Protocols[i]);
+
+  ExFreePoolWithTag(Protocols, NDIS_TAG);
+}
+
+VOID
+NTAPI
+ndisQueueProtocolBinding(VOID)
+{
+  PWORK_QUEUE_ITEM WorkItem;
+
+  WorkItem = ExAllocatePoolWithTag(NonPagedPool, sizeof(*WorkItem), NDIS_TAG);
+  if (!WorkItem)
+      return;
+
+  ExInitializeWorkItem(WorkItem, ndisProtocolBindingWorker, WorkItem);
+  ExQueueWorkItem(WorkItem, DelayedWorkQueue);
+}
+
+VOID
+NTAPI
+ndisUnbindProtocolsFromAdapter(IN PLOGICAL_ADAPTER Adapter)
+{
+  PADAPTER_BINDING AdapterBinding, Previous = NULL;
+  NDIS_UNBIND_CONTEXT UnbindContext;
+  UNBIND_HANDLER UnbindHandler;
+  NDIS_STATUS Status;
+  KIRQL OldIrql;
+
+  ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+  for (;;)
+    {
+      KeAcquireSpinLock(&Adapter->NdisMiniportBlock.Lock, &OldIrql);
+      if (IsListEmpty(&Adapter->ProtocolListHead))
+        {
+          KeReleaseSpinLock(&Adapter->NdisMiniportBlock.Lock, OldIrql);
+          return;
+        }
+      AdapterBinding = CONTAINING_RECORD(Adapter->ProtocolListHead.Flink, ADAPTER_BINDING, AdapterListEntry);
+      KeReleaseSpinLock(&Adapter->NdisMiniportBlock.Lock, OldIrql);
+
+      UnbindHandler = AdapterBinding->ProtocolBinding->Chars.UnbindAdapterHandler;
+      if (AdapterBinding == Previous || !UnbindHandler)
+        {
+          NDIS_DbgPrint(MIN_TRACE, ("%wZ did not close its binding to %wZ\n",
+                                    &AdapterBinding->ProtocolBinding->Chars.Name,
+                                    &Adapter->NdisMiniportBlock.MiniportName));
+          return;
+        }
+      Previous = AdapterBinding;
+
+      KeInitializeEvent(&UnbindContext.Event, NotificationEvent, FALSE);
+      UnbindContext.Status = NDIS_STATUS_SUCCESS;
+      Status = NDIS_STATUS_SUCCESS;
+      UnbindHandler(&Status, AdapterBinding->NdisOpenBlock.ProtocolBindingContext, &UnbindContext);
+      if (Status == NDIS_STATUS_PENDING)
+        {
+          KeWaitForSingleObject(&UnbindContext.Event, Executive, KernelMode, FALSE, NULL);
+          Status = UnbindContext.Status;
+        }
+      if (Status != NDIS_STATUS_SUCCESS)
+          NDIS_DbgPrint(MIN_TRACE, ("Unbinding failed (%x)\n", Status));
+    }
 }
 
 NDIS_STATUS

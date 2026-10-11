@@ -1012,6 +1012,7 @@ Ndis6CallMiniportHaltEx(
     /* Native protocols and filters sit above the miniport and must release
      * their per-adapter state while OID/close entry points are still valid. */
     Ndis6UnbindAllProtocolsFromAdapter(Adapter);
+    ndisUnbindProtocolsFromAdapter(Adapter);
     Ndis6DetachFiltersFromAdapter(Adapter);
 
     ExWaitForRundownProtectionRelease(&Ext->LegacyRequestRundown);
@@ -1441,6 +1442,7 @@ Ndis6DestroyLogicalAdapter(
     /* The normal halt path already emptied these lists. Keep destruction
      * symmetric for partial initialization and failed-start paths too. */
     Ndis6UnbindAllProtocolsFromAdapter(Adapter);
+    ndisUnbindProtocolsFromAdapter(Adapter);
 
     /* Phase 7B: detach any NDIS 6 filter modules attached to this adapter
      * BEFORE we tear anything else down — filters may try to issue OID
