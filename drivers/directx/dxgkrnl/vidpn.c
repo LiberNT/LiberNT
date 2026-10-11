@@ -3406,10 +3406,10 @@ DxgkpRecommendHotPlugCandidate(
     }
     if (!NT_SUCCESS(Status))
     {
-        DXGKRNL_ERR("DxgkDdiRecommendFunctionalVidPn failed 0x%08lX for target %u; "
-                    "the rebuild has no topology to commit\n",
-                    Status, Snapshot->TargetId);
-        return Status;
+        DXGKRNL_WARN("DxgkDdiRecommendFunctionalVidPn refused 0x%08lX for target %u\n",
+                     Status, Snapshot->TargetId);
+        return DxgkpRecommendTopologyFallback(Adapter, VidPn, Snapshot,
+                                              DXGK_RVT_AUGMENTATION_NOLKG);
     }
     return DxgkpValidateRecommendedTopology(VidPn);
 }
