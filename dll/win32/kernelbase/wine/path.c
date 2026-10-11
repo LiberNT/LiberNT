@@ -4333,7 +4333,11 @@ static HRESULT url_guess_scheme(const WCHAR *url, WCHAR *out, DWORD *out_len)
             j = ChrCmpIW(Wxx, Wyy);
             if (j) break;
         }
+#ifdef __REACTOS__
+        if ((i == value_len) && !j && url[value_len])
+#else
         if ((i == value_len) && !j)
+#endif
         {
             if (lstrlenW(data) + lstrlenW(url) + 1 > *out_len)
             {
