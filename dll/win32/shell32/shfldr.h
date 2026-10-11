@@ -136,6 +136,7 @@ HRESULT SHELL32_GetFSItemAttributes(IShellFolder * psf, LPCITEMIDLIST pidl, LPDW
 
 HRESULT SHELL32_GetItemOverlay(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, PCUITEMID_CHILD pidl, int *pIndex, BOOL bIconIndex);
 INT SIC_GetOverlaySlot(INT iImage);
+HRESULT SHELL32_GetInstanceObjectFactory(REFCLSID rclsid, REFIID riid, LPVOID *ppv);
 
 HRESULT SHELL32_CompareDetails(IShellFolder2* isf, LPARAM lParam, LPCITEMIDLIST pidl1, LPCITEMIDLIST pidl2);
 

@@ -488,6 +488,8 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
     hResult = gModule.DllGetClassObject(rclsid, riid, ppv);
     if (hResult == CLASS_E_CLASSNOTAVAILABLE)
         hResult = WineShell32_GetClassObject(rclsid, riid, ppv);
+    if (hResult == CLASS_E_CLASSNOTAVAILABLE)
+        hResult = SHELL32_GetInstanceObjectFactory(rclsid, riid, ppv);
     TRACE("-- pointer to class factory: %p\n", *ppv);
     return hResult;
 }
@@ -500,6 +502,7 @@ static HRESULT UpdateRegistryFromResource(BOOL Register)
         IDR_FOLDEROPTIONS,
         IDR_EXPLORER,
         IDR_SYSTEMFILEASSOC,
+        IDR_SEARCHBAND,
     };
     HRESULT hr = S_OK;
     for (SIZE_T i = 0; i < _countof(resid) && SUCCEEDED(hr); ++i)

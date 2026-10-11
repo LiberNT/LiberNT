@@ -1,0 +1,23 @@
+HKCR
+{
+	NoRemove CLSID
+	{
+		ForceRemove {9BA05971-F6A8-11CF-A442-00A0C90A8F39} = s 'Microsoft Shell Folder View Router'
+		{
+			Control
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Apartment'
+			}
+			MiscStatus = s '0'
+			{
+				'1' = s '17408'
+			}
+			ProgID = s 'Shell.FolderView.1'
+			ToolboxBitmap32 = e '%%SystemRoot%%\system32\shell32.dll, 260'
+			TypeLib = s '{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}'
+			Version = s '1.0'
+			VersionIndependentProgID = s 'Shell.FolderView'
+		}
+	}
+}

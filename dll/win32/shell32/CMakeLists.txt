@@ -96,6 +96,11 @@ list(APPEND SOURCE
     CShellDispatch.cpp
     CFolder.cpp
     CFolderItems.cpp
+    CAutomationCM.cpp
+    CFadeTask.cpp
+    CShellFolderViewOC.cpp
+    CShellSearchExt.cpp
+    CThumbnail.cpp
     CShellWindows.cpp
     CFolderItemVerbs.cpp)
 

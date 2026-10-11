@@ -390,6 +390,7 @@
 #define IDS_COMPUTER_FREE_SPACE                     60022
 #define IDS_COMPUTER_FOLDERS                        60023
 #define IDS_FILE_EXPLORER                           60030
+#define IDS_SEARCHBAND_COMMAND                      12708
 
 #define IDS_LOG_OFF_DESC                            35000
 #define IDS_SWITCH_USER_DESC                        35001
@@ -997,3 +998,9 @@
 #define IDR_RECYCLEBINEMPTYSTATE 184
 #define IDR_SHELLFOLDERVIEW     185
 #define IDR_SHELLWINDOWS        186
+#define IDR_SHELLSEARCHEXT      187
+#define IDR_AUTOMATIONCM        188
+#define IDR_SEARCHBAND          189
+#define IDR_FADETASK            190
+#define IDR_THUMBNAIL           191
+#define IDR_SHELLFOLDERVIEWOC   192

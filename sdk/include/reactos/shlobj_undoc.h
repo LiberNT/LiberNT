@@ -1290,6 +1290,54 @@ DECLARE_INTERFACE_(IDelegateHostItemContainer, IUnknown) // {02468693-E7E5-4C6B-
 };
 #undef INTERFACE
 
+/*****************************************************************************
+ * IFadeTask interface
+ */
+#define INTERFACE IFadeTask
+DECLARE_INTERFACE_(IFadeTask, IUnknown) // {FADB55B4-D382-4FC4-81D7-ABB325C7F12A}
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** IFadeTask ***/
+    STDMETHOD(FadeRect)(THIS_ const RECT *prc) PURE;
+};
+#undef INTERFACE
+
+/*****************************************************************************
+ * IThumbnail3 interface
+ */
+#define INTERFACE IThumbnail3
+DECLARE_INTERFACE_(IThumbnail3, IUnknown)
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** IThumbnail3 ***/
+    STDMETHOD(Init)(THIS_ HWND hwnd, UINT uMsg) PURE;
+    STDMETHOD(GetBitmap)(THIS_ LPCWSTR pszFile, DWORD dwItemID, LONG lWidth, LONG lHeight) PURE;
+    STDMETHOD(GetBitmapFromIDList)(THIS_ PCIDLIST_ABSOLUTE pidl, DWORD dwItemID, LONG lWidth, LONG lHeight) PURE;
+    STDMETHOD(GetBitmapFromShellItem)(THIS_ IShellItem *psi, DWORD dwItemID, LONG lWidth, LONG lHeight) PURE;
+};
+#undef INTERFACE
+
+/*****************************************************************************
+ * IInitializeLoadTrust interface
+ */
+#define INTERFACE IInitializeLoadTrust
+DECLARE_INTERFACE_(IInitializeLoadTrust, IUnknown) // {C2AA8366-6694-47F9-A15B-324D6A75D4CD}
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** IInitializeLoadTrust ***/
+    STDMETHOD(LoadingDataFromRegistry)(THIS) PURE;
+};
+#undef INTERFACE
+
 #ifdef __cplusplus
 typedef struct QUERYNAMESPACEINFO QUERYNAMESPACEINFO;
 

@@ -1,0 +1,35 @@
+HKCR
+{
+	NoRemove CLSID
+	{
+		ForceRemove {2559A1F0-21D7-11D4-BDAF-00C04F60B9F0} = s 'Search'
+		{
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Apartment'
+			}
+			Instance
+			{
+				val CLSID = s '{3F454F0E-42AE-4D7C-8EA3-328250D6E272}'
+				InitPropertyBag
+				{
+					val CLSID = s '{13709620-C279-11CE-A49E-444553540000}'
+					val command = s '@shell32.dll,-12708'
+					val method = s 'FindFiles'
+				}
+			}
+			shellex
+			{
+				ContextMenuHandlers
+				{
+					{2559A1F0-21D7-11D4-BDAF-00C04F60B9F0}
+				}
+				MayChangeDefaultMenu
+			}
+			ShellFolder
+			{
+				val Attributes = d '0'
+			}
+		}
+	}
+}
