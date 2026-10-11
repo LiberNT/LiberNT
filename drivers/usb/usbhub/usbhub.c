@@ -2576,6 +2576,14 @@ USBH_ProcessPortStateChange(IN PUSBHUB_FDO_EXTENSION HubExtension,
         RequestValue = USBHUB_FEATURE_C_PORT_OVER_CURRENT;
         PortData->PortStatus = *PortStatus;
         USBH_SyncClearPortStatus(HubExtension, Port, RequestValue);
+
+        if (!PortStatus->PortStatus.Usb20PortStatus.OverCurrent &&
+            !(SuperSpeedHub ? PortStatus->PortStatus.Usb30PortStatus.PortPower :
+                              PortStatus->PortStatus.Usb20PortStatus.PortPower))
+        {
+            USBH_Wait(100);
+            USBH_SyncPowerOnPort(HubExtension, Port, TRUE);
+        }
         return;
     }
 }
