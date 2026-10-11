@@ -755,11 +755,116 @@ BOOL WINAPI GetDisplayAutoRotationPreferences( ORIENTATION_PREFERENCE *orientati
 /***********************************************************************
  *              SetDisplayConfig (USER32.@)
  */
+static LONG
+DisplayConfigApplySource(
+    const DISPLAYCONFIG_LOCAL_PATH *Local,
+    const DISPLAYCONFIG_SOURCE_MODE *Source,
+    DWORD ChangeFlags)
+{
+    DEVMODEW Mode;
+    LONG Change;
+
+    memset(&Mode, 0, sizeof(Mode));
+    Mode.dmSize = sizeof(Mode);
+    Mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_POSITION;
+    Mode.dmPelsWidth = Source->width;
+    Mode.dmPelsHeight = Source->height;
+    Mode.dmPosition.x = Source->position.x;
+    Mode.dmPosition.y = Source->position.y;
+    switch (Source->pixelFormat)
+    {
+        case DISPLAYCONFIG_PIXELFORMAT_8BPP:  Mode.dmBitsPerPel = 8;  break;
+        case DISPLAYCONFIG_PIXELFORMAT_16BPP: Mode.dmBitsPerPel = 16; break;
+        case DISPLAYCONFIG_PIXELFORMAT_24BPP: Mode.dmBitsPerPel = 24; break;
+        case DISPLAYCONFIG_PIXELFORMAT_32BPP: Mode.dmBitsPerPel = 32; break;
+        default: break;
+    }
+    if (Mode.dmBitsPerPel)
+        Mode.dmFields |= DM_BITSPERPEL;
+
+    Change = ChangeDisplaySettingsExW(Local->GdiDeviceName, &Mode, NULL, ChangeFlags, NULL);
+    if (Change == DISP_CHANGE_SUCCESSFUL || Change == DISP_CHANGE_RESTART)
+        return ERROR_SUCCESS;
+    if (Change == DISP_CHANGE_BADMODE)
+        return ERROR_BAD_CONFIGURATION;
+    return ERROR_GEN_FAILURE;
+}
+
 LONG WINAPI SetDisplayConfig(UINT32 path_info_count, DISPLAYCONFIG_PATH_INFO *path_info, UINT32 mode_info_count,
         DISPLAYCONFIG_MODE_INFO *mode_info, UINT32 flags)
 {
-    FIXME("path_info_count %u, path_info %p, mode_info_count %u, mode_info %p, flags %#x stub.\n",
-            path_info_count, path_info, mode_info_count, mode_info, flags);
+    DISPLAYCONFIG_LOCAL_PATH Paths[DISPLAYCONFIG_MAX_PATHS];
+    DWORD ChangeFlags;
+    UINT32 Index, ModeIndex;
+    LONG Result;
+    int Count, Local;
+
+    TRACE("path_info_count %u, path_info %p, mode_info_count %u, mode_info %p, flags %#x\n",
+          path_info_count, path_info, mode_info_count, mode_info, flags);
+
+    if (!(flags & (SDC_APPLY | SDC_VALIDATE)))
+        return ERROR_INVALID_PARAMETER;
+
+    if (!(flags & SDC_USE_SUPPLIED_DISPLAY_CONFIG))
+    {
+        if (!(flags & SDC_TOPOLOGY_SUPPLIED) && (path_info_count || path_info || mode_info_count || mode_info))
+            return ERROR_INVALID_PARAMETER;
+        return ERROR_SUCCESS;
+    }
+
+    if (!path_info_count || !path_info || (mode_info_count && !mode_info))
+        return ERROR_INVALID_PARAMETER;
+
+    Count = DisplayConfigCollectPaths(Paths, ARRAY_SIZE(Paths));
+    if (Count < 0)
+        return ERROR_GEN_FAILURE;
+
+    if (flags & SDC_VALIDATE)
+        ChangeFlags = CDS_TEST;
+    else
+        ChangeFlags = (flags & SDC_SAVE_TO_DATABASE) ? CDS_UPDATEREGISTRY : 0;
+
+    for (Index = 0; Index < path_info_count; Index++)
+    {
+        const DISPLAYCONFIG_PATH_INFO *Path = &path_info[Index];
+        const DISPLAYCONFIG_MODE_INFO *Source;
+
+        if (!(Path->flags & DISPLAYCONFIG_PATH_ACTIVE))
+            continue;
+
+        for (Local = 0; Local < Count; Local++)
+        {
+            if (Paths[Local].AdapterId.LowPart == Path->sourceInfo.adapterId.LowPart &&
+                Paths[Local].AdapterId.HighPart == Path->sourceInfo.adapterId.HighPart &&
+                Paths[Local].SourceId == Path->sourceInfo.id)
+                break;
+        }
+        if (Local == Count)
+            return ERROR_INVALID_PARAMETER;
+
+        if (flags & SDC_VIRTUAL_MODE_AWARE)
+        {
+            ModeIndex = Path->sourceInfo.sourceModeInfoIdx;
+            if (ModeIndex == DISPLAYCONFIG_PATH_SOURCE_MODE_IDX_INVALID)
+                continue;
+        }
+        else
+        {
+            ModeIndex = Path->sourceInfo.modeInfoIdx;
+            if (ModeIndex == DISPLAYCONFIG_PATH_MODE_IDX_INVALID)
+                continue;
+        }
+        if (ModeIndex >= mode_info_count)
+            return ERROR_INVALID_PARAMETER;
+
+        Source = &mode_info[ModeIndex];
+        if (Source->infoType != DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE)
+            return ERROR_INVALID_PARAMETER;
+
+        Result = DisplayConfigApplySource(&Paths[Local], &Source->sourceMode, ChangeFlags);
+        if (Result != ERROR_SUCCESS)
+            return Result;
+    }
 
     return ERROR_SUCCESS;
 }
