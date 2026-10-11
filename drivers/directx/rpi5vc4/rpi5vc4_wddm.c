@@ -2803,6 +2803,13 @@ Rpi5Vc4DdiRender(
         Render->pPatchLocationListOut = Out;
     }
 
+    if (Render->pDmaBufferPrivateData != NULL &&
+        Render->DmaBufferPrivateDataSize >= sizeof(RPI5VC4_DMA_PRIVATE_DATA))
+    {
+        Render->pDmaBufferPrivateData = (PUCHAR)Render->pDmaBufferPrivateData +
+                                        sizeof(RPI5VC4_DMA_PRIVATE_DATA);
+    }
+
     Render->pDmaBuffer = (PUCHAR)Render->pDmaBuffer + Render->CommandLength;
     Render->MultipassOffset = 0;
 
@@ -2979,6 +2986,7 @@ Rpi5Vc4DdiPresent(
         Data.VirtualAddress = Packet;
         Data.Size = (ULONG)((PUCHAR)Present->pDmaBuffer - (PUCHAR)Packet);
         RtlCopyMemory(Present->pDmaBufferPrivateData, &Data, sizeof(Data));
+        Present->pDmaBufferPrivateData = (PUCHAR)Present->pDmaBufferPrivateData + sizeof(Data);
     }
 
     Present->MultipassOffset = 0;

@@ -860,6 +860,7 @@ Rpi3Vc4ValidateRender(
         RtlCopyMemory(Render->pDmaBufferPrivateData,
                       Packet,
                       sizeof(*Packet));
+        Render->pDmaBufferPrivateData = (PUCHAR)Render->pDmaBufferPrivateData + sizeof(*Packet);
     }
     Render->pDmaBuffer = Validation->Arena + Validation->ArenaCursor;
     Render->MultipassOffset = 0;

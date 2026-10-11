@@ -35,6 +35,27 @@
 #define DXGKP_RENDER_MAX_PRIVATE_DATA   (64 * 1024)
 #define DXGKP_RENDER_MAX_COMMAND_BYTES  (1024 * 1024)
 
+BOOLEAN
+DxgkMeasureDmaPrivateData(
+    _In_opt_ PVOID PrivateData,
+    _In_ ULONG PrivateDataSize,
+    _In_opt_ PVOID Next,
+    _In_ ULONG NextSize,
+    _Out_ PULONG Used)
+{
+    *Used = 0;
+    if (PrivateData == NULL || PrivateDataSize == 0)
+        return Next == PrivateData && NextSize == PrivateDataSize;
+    if ((PUCHAR)Next < (PUCHAR)PrivateData ||
+        (PUCHAR)Next > (PUCHAR)PrivateData + PrivateDataSize ||
+        NextSize > PrivateDataSize)
+    {
+        return FALSE;
+    }
+    *Used = max((ULONG)((PUCHAR)Next - (PUCHAR)PrivateData), PrivateDataSize - NextSize);
+    return TRUE;
+}
+
 VOID
 DxgkContextRenderTeardown(
     _Inout_ PDXGKRNL_CONTEXT Context)
@@ -485,6 +506,15 @@ DxgkRender(
             goto Cleanup;
         }
         DmaBytesUsed = (UINT)((PUCHAR)RenderArgs.pDmaBuffer - (PUCHAR)DmaBuffer->VirtualAddress);
+        if (!DxgkMeasureDmaPrivateData(DmaBufferPrivateData,
+                                       DmaBufferPrivateDataSize,
+                                       RenderArgs.pDmaBufferPrivateData,
+                                       RenderArgs.DmaBufferPrivateDataSize,
+                                       &DmaBuffer->PrivateDataUsed))
+        {
+            Status = STATUS_INVALID_PARAMETER;
+            goto Cleanup;
+        }
         if (RenderArgs.pPatchLocationListOut < PatchOut ||
             (SIZE_T)(RenderArgs.pPatchLocationListOut - PatchOut) > RTL_NUMBER_OF(PatchOut))
         {
@@ -528,7 +558,7 @@ DxgkRender(
             goto Cleanup;
         }
 
-        if (DmaBytesUsed == 0)
+        if (DmaBytesUsed == 0 && DmaBuffer->PrivateDataUsed == 0)
         {
             /* The miniport translated this part of the stream to no
              * hardware work. */

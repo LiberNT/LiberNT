@@ -3109,7 +3109,7 @@ DxgkpPresentSubmitDirect(
         PatchArgs.pDmaBufferPrivateData = DmaBufferPrivateData;
         PatchArgs.DmaBufferPrivateDataSize = DmaBufferPrivateDataSize;
         PatchArgs.DmaBufferPrivateDataSubmissionStartOffset = 0;
-        PatchArgs.DmaBufferPrivateDataSubmissionEndOffset = DmaBufferPrivateDataSize;
+        PatchArgs.DmaBufferPrivateDataSubmissionEndOffset = min(DmaBuffer->PrivateDataUsed, DmaBufferPrivateDataSize);
         PatchArgs.pAllocationList = PresentAllocationList;
         PatchArgs.AllocationListSize = DXGK_PRESENT_MAX_INDEX + 1;
         PatchArgs.pPatchLocationList = PatchLocationList;
@@ -3156,7 +3156,7 @@ DxgkpPresentSubmitDirect(
     SubmitArgs.pDmaBufferPrivateData = DmaBufferPrivateData;
     SubmitArgs.DmaBufferPrivateDataSize = DmaBufferPrivateDataSize;
     SubmitArgs.DmaBufferPrivateDataSubmissionStartOffset = 0;
-    SubmitArgs.DmaBufferPrivateDataSubmissionEndOffset = DmaBufferPrivateDataSize;
+    SubmitArgs.DmaBufferPrivateDataSubmissionEndOffset = min(DmaBuffer->PrivateDataUsed, DmaBufferPrivateDataSize);
     SubmitArgs.DmaBufferSubmissionStartOffset = DmaBuffer->SubmissionStartOffset;
     SubmitArgs.DmaBufferSubmissionEndOffset = DmaBuffer->SubmissionEndOffset;
     SubmitArgs.SubmissionFenceId = SubmissionFenceId;
@@ -3785,8 +3785,11 @@ DxgkpExecuteFullPresentMeasured(
             break;
 
         /* ---- A partial pass: check what the driver wrote ---- */
-        if (PresentArgs.pDmaBufferPrivateData != DmaBufferPrivateData ||
-            PresentArgs.DmaBufferPrivateDataSize != DmaBufferPrivateDataSize)
+        if (!DxgkMeasureDmaPrivateData(DmaBufferPrivateData,
+                                       DmaBufferPrivateDataSize,
+                                       PresentArgs.pDmaBufferPrivateData,
+                                       PresentArgs.DmaBufferPrivateDataSize,
+                                       &DmaBuffer->PrivateDataUsed))
         {
             Status = STATUS_INVALID_PARAMETER;
             goto PresentCleanup;
@@ -3844,7 +3847,7 @@ DxgkpExecuteFullPresentMeasured(
         }
 
         /* ---- Submit it as plain present work ---- */
-        if (PassBytes != 0)
+        if (PassBytes != 0 || DmaBuffer->PrivateDataUsed != 0)
         {
             DXGKRNL_TRACK_DMA_ARGS PassTrack;
             DXGK_SUBMITCOMMANDFLAGS PassFlags;
@@ -3948,10 +3951,13 @@ RetryPassSubmit:
     }
 
     if (NT_SUCCESS(Status) &&
-        (PresentArgs.pDmaBufferPrivateData != DmaBufferPrivateData ||
-         PresentArgs.DmaBufferPrivateDataSize != DmaBufferPrivateDataSize))
+        !DxgkMeasureDmaPrivateData(DmaBufferPrivateData,
+                                   DmaBufferPrivateDataSize,
+                                   PresentArgs.pDmaBufferPrivateData,
+                                   PresentArgs.DmaBufferPrivateDataSize,
+                                   &DmaBuffer->PrivateDataUsed))
     {
-        DXGKRNL_WARN("DxgkpExecuteFullPresent: private data changed "
+        DXGKRNL_WARN("DxgkpExecuteFullPresent: private data outside the buffer "
                      "%p/%lu -> %p/%u\n",
                      DmaBufferPrivateData, DmaBufferPrivateDataSize,
                      PresentArgs.pDmaBufferPrivateData,

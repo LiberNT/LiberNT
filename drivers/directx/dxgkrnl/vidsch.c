@@ -2776,7 +2776,7 @@ VidSchpKickEngine(
         SubmitArgs.pDmaBufferPrivateData = Packet->DriverPrivateData;
         SubmitArgs.DmaBufferPrivateDataSize = Packet->DriverPrivateDataSize;
         SubmitArgs.DmaBufferPrivateDataSubmissionStartOffset = 0;
-        SubmitArgs.DmaBufferPrivateDataSubmissionEndOffset = Packet->DriverPrivateDataSize;
+        SubmitArgs.DmaBufferPrivateDataSubmissionEndOffset = Packet->DriverPrivateDataSubmissionEndOffset;
         SubmitArgs.SubmissionFenceId = Packet->SubmissionFenceId;
         SubmitArgs.VidPnSourceId = Packet->VidPnSourceId;
         SubmitArgs.FlipInterval = Packet->FlipInterval;
@@ -3753,6 +3753,7 @@ VidSchSubmitCommandTrackedMeasured(
         RtlCopyMemory(Packet->OwnedDriverPrivateData, DriverPrivateData, DriverPrivateDataSize);
         Packet->DriverPrivateData = Packet->OwnedDriverPrivateData;
         Packet->DriverPrivateDataSize = DriverPrivateDataSize;
+        Packet->DriverPrivateDataSubmissionEndOffset = min(DmaBuffer->PrivateDataUsed, DriverPrivateDataSize);
     }
 
     LocalTrackArgs = *TrackArgs;
@@ -3830,7 +3831,7 @@ VidSchSubmitCommandTrackedMeasured(
         PatchArgs.pDmaBufferPrivateData = Packet->DriverPrivateData;
         PatchArgs.DmaBufferPrivateDataSize = Packet->DriverPrivateDataSize;
         PatchArgs.DmaBufferPrivateDataSubmissionStartOffset = 0;
-        PatchArgs.DmaBufferPrivateDataSubmissionEndOffset = Packet->DriverPrivateDataSize;
+        PatchArgs.DmaBufferPrivateDataSubmissionEndOffset = Packet->DriverPrivateDataSubmissionEndOffset;
         /* Patch completes before this call returns. The caller's captured
          * lists remain valid here; only DMA/private data and residency pins
          * must survive asynchronous scheduler dispatch and retirement. */

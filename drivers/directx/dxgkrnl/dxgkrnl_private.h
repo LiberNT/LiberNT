@@ -4427,6 +4427,14 @@ NTAPI
 DxgkFlushDmaBufferForSubmission(
     _In_ PDXGKRNL_DMA_BUFFER DmaBuffer);
 
+BOOLEAN
+DxgkMeasureDmaPrivateData(
+    _In_opt_ PVOID PrivateData,
+    _In_ ULONG PrivateDataSize,
+    _In_opt_ PVOID Next,
+    _In_ ULONG NextSize,
+    _Out_ PULONG Used);
+
 NTSTATUS
 NTAPI
 DxgkPrepareTrackedDmaBuffer(
