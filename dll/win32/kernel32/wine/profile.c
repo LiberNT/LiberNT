@@ -2317,7 +2317,7 @@ BOOL WINAPI GetPrivateProfileStructW (LPCWSTR section, LPCWSTR key,
     int val;
     WCHAR *p, *buffer;
 
-    if (len > (MAXDWORD - 4) / 2 || len > ((SIZE_T)-1 / sizeof(WCHAR) - 4) / 2)
+    if (len > min( (MAXDWORD - 4) / 2, ((SIZE_T)-1 / sizeof(WCHAR) - 4) / 2 ))
     {
         SetLastError( ERROR_BAD_LENGTH );
         return FALSE;
