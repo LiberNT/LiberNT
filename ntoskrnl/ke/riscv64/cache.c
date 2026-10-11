@@ -173,10 +173,8 @@ KeFlushIoRectangle(
     _In_ ULONG Stride,
     _In_ BOOLEAN ReadOperation)
 {
-    PPFN_NUMBER Pages = MmGetMdlPfnArray(Mdl);
     ULONG StartOffset = (ULONG)((ULONG_PTR)Start - (ULONG_PTR)MmGetMdlVirtualAddress(Mdl));
-    ULONG_PTR Offset;
-    ULONG Row, Remaining, InPage, Chunk;
+    ULONG Row;
 
     if (!Width || !Height)
         return;
@@ -184,17 +182,7 @@ KeFlushIoRectangle(
     if (KiRiscvQueryCacheBlockSize())
     {
         for (Row = 0; Row < Height; ++Row)
-        {
-            Offset = Mdl->ByteOffset + StartOffset + (ULONG_PTR)Row * Stride;
-            for (Remaining = Width; Remaining; Remaining -= Chunk, Offset += Chunk)
-            {
-                InPage = (ULONG)(Offset & (PAGE_SIZE - 1));
-                Chunk = min(Remaining, PAGE_SIZE - InPage);
-                KiRiscvFlushDmaRange(((ULONG64)Pages[Offset >> PAGE_SHIFT] << PAGE_SHIFT) + InPage,
-                                     Chunk,
-                                     ReadOperation);
-            }
-        }
+            KiRiscvMaintainRange((ULONG_PTR)Start + (ULONG_PTR)Row * Stride, Width, ReadOperation);
     }
     if (HalFlushIoRectangleExternalCache)
         HalFlushIoRectangleExternalCache(Mdl, StartOffset, Width, Height, Stride, ReadOperation);
