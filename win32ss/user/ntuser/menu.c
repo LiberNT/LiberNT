@@ -4930,6 +4930,12 @@ intGetTitleBarInfo(PWND pWindowObject, PTITLEBARINFO bti)
             {
                 /* FIXME: Note this value should exists in pWindowObject for UserGetSystemMetrics(SM_CXFRAME) and UserGetSystemMetrics(SM_CYFRAME) */
                 RECTL_vInflateRect( &bti->rcTitleBar, -UserGetSystemMetrics(SM_CXFRAME), -UserGetSystemMetrics(SM_CYFRAME) );
+                RECTL_vInflateRect( &bti->rcTitleBar, -UserGetSystemMetrics(SM_CXPADDEDBORDER), -UserGetSystemMetrics(SM_CXPADDEDBORDER) );
+            }
+            else if ((dwStyle & WS_CAPTION) == WS_CAPTION)
+            {
+                RECTL_vInflateRect( &bti->rcTitleBar, -(UserGetSystemMetrics(SM_CXFRAME) + UserGetSystemMetrics(SM_CXPADDEDBORDER)),
+                                    -(UserGetSystemMetrics(SM_CYFRAME) + UserGetSystemMetrics(SM_CXPADDEDBORDER)) );
             }
             else if (HAS_DLGFRAME( dwStyle, dwExStyle ))
             {

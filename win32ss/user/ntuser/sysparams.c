@@ -475,7 +475,7 @@ SpiUpdatePerUserSystemParameters(VOID)
     gspv.ncm.iMenuWidth = SpiLoadMetric(L"MenuWidth", 18);
     gspv.ncm.iMenuHeight = SpiLoadMetric(L"MenuHeight", 18);
 #if (WINVER >= 0x0600)
-    gspv.ncm.iPaddedBorderWidth = SpiLoadMetric(L"PaddedBorderWidth", 0);
+    gspv.ncm.iPaddedBorderWidth = SpiLoadMetric(L"PaddedBorderWidth", 3);
 #endif
     SpiLoadFont(&gspv.ncm.lfCaptionFont, L"CaptionFont", &lf1);
     SpiLoadFont(&gspv.ncm.lfSmCaptionFont, L"SmCaptionFont", &lf1);

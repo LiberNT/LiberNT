@@ -63,13 +63,20 @@ UserGetWindowBorders(DWORD Style, DWORD ExStyle, SIZE *Size, BOOL WithClient)
    if (Style & WS_CAPTION || ExStyle & WS_EX_DLGMODALFRAME)
       Border ++;
    Size->cx = Size->cy = Border;
-   if ((Style & WS_THICKFRAME) && !(Style & WS_MINIMIZE))
+   if (((Style & WS_THICKFRAME) || (Style & WS_CAPTION) == WS_CAPTION) &&
+       !(Style & WS_MINIMIZE))
    {
       Size->cx += GetSystemMetrics(SM_CXFRAME) - GetSystemMetrics(SM_CXDLGFRAME);
       Size->cy += GetSystemMetrics(SM_CYFRAME) - GetSystemMetrics(SM_CYDLGFRAME);
    }
    Size->cx *= GetSystemMetrics(SM_CXBORDER);
    Size->cy *= GetSystemMetrics(SM_CYBORDER);
+   if (((Style & WS_THICKFRAME) || (Style & WS_CAPTION) == WS_CAPTION) &&
+       !(Style & WS_MINIMIZE))
+   {
+      Size->cx += GetSystemMetrics(SM_CXPADDEDBORDER);
+      Size->cy += GetSystemMetrics(SM_CXPADDEDBORDER);
+   }
 }
 
 /*

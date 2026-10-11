@@ -950,13 +950,20 @@ UserGetWindowBorders(DWORD Style, DWORD ExStyle, SIZE *Size, BOOL WithClient)
    if (Style & WS_CAPTION || ExStyle & WS_EX_DLGMODALFRAME)
       Border ++; /* The other border */
    Size->cx = Size->cy = Border;
-   if ((Style & WS_THICKFRAME) && !(Style & WS_MINIMIZE)) /* The resize border */
+   if (((Style & WS_THICKFRAME) || (Style & WS_CAPTION) == WS_CAPTION) &&
+       !(Style & WS_MINIMIZE)) /* The resize border */
    {
       Size->cx += UserGetSystemMetrics(SM_CXFRAME) - UserGetSystemMetrics(SM_CXDLGFRAME);
       Size->cy += UserGetSystemMetrics(SM_CYFRAME) - UserGetSystemMetrics(SM_CYDLGFRAME);
    }
    Size->cx *= UserGetSystemMetrics(SM_CXBORDER);
    Size->cy *= UserGetSystemMetrics(SM_CYBORDER);
+   if (((Style & WS_THICKFRAME) || (Style & WS_CAPTION) == WS_CAPTION) &&
+       !(Style & WS_MINIMIZE))
+   {
+      Size->cx += UserGetSystemMetrics(SM_CXPADDEDBORDER);
+      Size->cy += UserGetSystemMetrics(SM_CXPADDEDBORDER);
+   }
 }
 
 UINT FASTCALL

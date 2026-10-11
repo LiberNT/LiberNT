@@ -85,6 +85,7 @@ NC_GetInsideRect(PWND Wnd, RECT *rect)
     if (UserHasThickFrameStyle(Style, ExStyle))
     {
         RECTL_vInflateRect(rect, -UserGetSystemMetrics(SM_CXFRAME), -UserGetSystemMetrics(SM_CYFRAME));
+        RECTL_vInflateRect(rect, -UserGetSystemMetrics(SM_CXPADDEDBORDER), -UserGetSystemMetrics(SM_CXPADDEDBORDER));
     }
     else if (UserHasDlgFrameStyle(Style, ExStyle))
     {
@@ -92,6 +93,12 @@ NC_GetInsideRect(PWND Wnd, RECT *rect)
         /* FIXME: this isn't in NC_AdjustRect? why not? */
         if (ExStyle & WS_EX_DLGMODALFRAME)
             RECTL_vInflateRect( rect, -1, 0 );
+        if ((Style & WS_CAPTION) == WS_CAPTION)
+            RECTL_vInflateRect(rect,
+                               -(UserGetSystemMetrics(SM_CXFRAME) - UserGetSystemMetrics(SM_CXDLGFRAME) +
+                                 UserGetSystemMetrics(SM_CXPADDEDBORDER)),
+                               -(UserGetSystemMetrics(SM_CYFRAME) - UserGetSystemMetrics(SM_CYDLGFRAME) +
+                                 UserGetSystemMetrics(SM_CXPADDEDBORDER)));
     }
     else if (UserHasThinFrameStyle(Style, ExStyle))
     {
@@ -963,15 +970,15 @@ VOID
 NC_DrawFrame( HDC hDC, RECT *CurrentRect, BOOL Active, DWORD Style, DWORD ExStyle)
 {
    /* Firstly the "thick" frame */
-   if ((Style & WS_THICKFRAME) && !(Style & WS_MINIMIZE))
+   if (((Style & WS_THICKFRAME) || (Style & WS_CAPTION) == WS_CAPTION) && !(Style & WS_MINIMIZE))
    {
       LONG Width =
          (UserGetSystemMetrics(SM_CXFRAME) - UserGetSystemMetrics(SM_CXDLGFRAME)) *
-         UserGetSystemMetrics(SM_CXBORDER);
+         UserGetSystemMetrics(SM_CXBORDER) + UserGetSystemMetrics(SM_CXPADDEDBORDER);
 
       LONG Height =
          (UserGetSystemMetrics(SM_CYFRAME) - UserGetSystemMetrics(SM_CYDLGFRAME)) *
-         UserGetSystemMetrics(SM_CYBORDER);
+         UserGetSystemMetrics(SM_CYBORDER) + UserGetSystemMetrics(SM_CXPADDEDBORDER);
 
       NtGdiSelectBrush(hDC, IntGetSysColorBrush(Active ? COLOR_ACTIVEBORDER : COLOR_INACTIVEBORDER));
 
@@ -2094,6 +2101,7 @@ GetNCHitEx(PWND pWnd, POINT pt)
    if (HAS_THICKFRAME( Style, ExStyle ))
    {
       RECTL_vInflateRect(&rcWindow, -UserGetSystemMetrics(SM_CXFRAME), -UserGetSystemMetrics(SM_CYFRAME) );
+      RECTL_vInflateRect(&rcWindow, -UserGetSystemMetrics(SM_CXPADDEDBORDER), -UserGetSystemMetrics(SM_CXPADDEDBORDER));
       if (!RECTL_bPointInRect(&rcWindow, pt.x, pt.y ))
       {
             /* Check top sizing border */
@@ -2128,7 +2136,10 @@ GetNCHitEx(PWND pWnd, POINT pt)
     }
     else  /* No thick frame */
     {
-        if (HAS_DLGFRAME( Style, ExStyle ))
+        if ((Style & WS_CAPTION) == WS_CAPTION)
+            RECTL_vInflateRect(&rcWindow, -(UserGetSystemMetrics(SM_CXFRAME) + UserGetSystemMetrics(SM_CXPADDEDBORDER)),
+                               -(UserGetSystemMetrics(SM_CYFRAME) + UserGetSystemMetrics(SM_CXPADDEDBORDER)));
+        else if (HAS_DLGFRAME( Style, ExStyle ))
             RECTL_vInflateRect(&rcWindow, -UserGetSystemMetrics(SM_CXDLGFRAME), -UserGetSystemMetrics(SM_CYDLGFRAME));
         else if (HAS_THINFRAME( Style, ExStyle ))
             RECTL_vInflateRect(&rcWindow, -UserGetSystemMetrics(SM_CXBORDER), -UserGetSystemMetrics(SM_CYBORDER));

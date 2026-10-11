@@ -1306,14 +1306,15 @@ DrawClassicFrame(PDRAW_CONTEXT context, RECT* prcCurrent)
     }
 
     /* Firstly the "thick" frame */
-    if ((context->wi.dwStyle & WS_THICKFRAME) && !(context->wi.dwStyle & WS_MINIMIZE))
+    if (((context->wi.dwStyle & WS_THICKFRAME) || (context->wi.dwStyle & WS_CAPTION) == WS_CAPTION) &&
+        !(context->wi.dwStyle & WS_MINIMIZE))
     {
         INT Width =
             (GetSystemMetrics(SM_CXFRAME) - GetSystemMetrics(SM_CXDLGFRAME)) *
-            GetSystemMetrics(SM_CXBORDER);
+            GetSystemMetrics(SM_CXBORDER) + GetSystemMetrics(SM_CXPADDEDBORDER);
         INT Height =
             (GetSystemMetrics(SM_CYFRAME) - GetSystemMetrics(SM_CYDLGFRAME)) *
-            GetSystemMetrics(SM_CYBORDER);
+            GetSystemMetrics(SM_CYBORDER) + GetSystemMetrics(SM_CXPADDEDBORDER);
 
         SelectObject(context->hDC, GetSysColorBrush(
                      context->Active ? COLOR_ACTIVEBORDER : COLOR_INACTIVEBORDER));
