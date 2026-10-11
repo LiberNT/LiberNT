@@ -729,7 +729,7 @@ CConsoleWnd::GetItem(LPSCOPEDATAITEM item)
 }
 
 STDMETHODIMP
-CConsoleWnd::GetChildItem(HSCOPEITEM item, HSCOPEITEM *pItemChild, LONG *plCookie)
+CConsoleWnd::GetChildItem(HSCOPEITEM item, HSCOPEITEM *pItemChild, MMC_COOKIE *plCookie)
 {
     DPRINT("%s()\n", __FUNCTION__);
     __debugbreak();
@@ -737,7 +737,7 @@ CConsoleWnd::GetChildItem(HSCOPEITEM item, HSCOPEITEM *pItemChild, LONG *plCooki
 }
 
 STDMETHODIMP
-CConsoleWnd::GetNextItem(HSCOPEITEM item, HSCOPEITEM *pItemNext, LONG *plCookie)
+CConsoleWnd::GetNextItem(HSCOPEITEM item, HSCOPEITEM *pItemNext, MMC_COOKIE *plCookie)
 {
     DPRINT("%s()\n", __FUNCTION__);
     __debugbreak();
@@ -745,7 +745,7 @@ CConsoleWnd::GetNextItem(HSCOPEITEM item, HSCOPEITEM *pItemNext, LONG *plCookie)
 }
 
 STDMETHODIMP
-CConsoleWnd::GetParentItem(HSCOPEITEM item, HSCOPEITEM *pItemParent, LONG *plCookie)
+CConsoleWnd::GetParentItem(HSCOPEITEM item, HSCOPEITEM *pItemParent, MMC_COOKIE *plCookie)
 {
     DPRINT("%s()\n", __FUNCTION__);
     __debugbreak();

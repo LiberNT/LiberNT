@@ -1,0 +1,49 @@
+HKCR
+{
+    NoRemove CLSID
+    {
+        ForceRemove {53D6AB1D-2488-11D1-A28C-00C04FB94F17}
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'both'
+            }
+        }
+    }
+}
+HKLM
+{
+    NoRemove Software
+    {
+        NoRemove Microsoft
+        {
+            NoRemove MMC
+            {
+                NoRemove SnapIns
+                {
+                    ForceRemove {53D6AB1D-2488-11D1-A28C-00C04FB94F17}
+                    {
+                        val About = s '{69A25C12-1811-11D2-A52B-0000F803A951}'
+                        val NameString = s 'Certificates'
+                        val NameStringIndirect = s '@certmgr.dll,-288'
+                        val NodeType = s '{53D6AB16-2488-11d1-A28C-00C04FB94F17}'
+                        val Provider = s 'LiberNT'
+                        NodeTypes
+                        {
+                            {53D6AB16-2488-11d1-A28C-00C04FB94F17}
+                            {53D6AB17-2488-11d1-A28C-00C04FB94F17}
+                            {53D6AB1A-2488-11d1-A28C-00C04FB94F17}
+                        }
+                        StandAlone
+                    }
+                }
+                NoRemove NodeTypes
+                {
+                    {53D6AB16-2488-11d1-A28C-00C04FB94F17}
+                    {53D6AB17-2488-11d1-A28C-00C04FB94F17}
+                    {53D6AB1A-2488-11d1-A28C-00C04FB94F17}
+                }
+            }
+        }
+    }
+}

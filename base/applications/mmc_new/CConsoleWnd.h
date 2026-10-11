@@ -158,9 +158,9 @@ public:
     STDMETHODIMP DeleteItem(HSCOPEITEM hItem, LONG fDeleteThis);
     STDMETHODIMP SetItem(LPSCOPEDATAITEM item);
     STDMETHODIMP GetItem(LPSCOPEDATAITEM item);
-    STDMETHODIMP GetChildItem(HSCOPEITEM item, HSCOPEITEM *pItemChild, LONG *plCookie);
-    STDMETHODIMP GetNextItem(HSCOPEITEM item, HSCOPEITEM *pItemNext, LONG *plCookie);
-    STDMETHODIMP GetParentItem(HSCOPEITEM item, HSCOPEITEM *pItemParent, LONG *plCookie);
+    STDMETHODIMP GetChildItem(HSCOPEITEM item, HSCOPEITEM *pItemChild, MMC_COOKIE *plCookie);
+    STDMETHODIMP GetNextItem(HSCOPEITEM item, HSCOPEITEM *pItemNext, MMC_COOKIE *plCookie);
+    STDMETHODIMP GetParentItem(HSCOPEITEM item, HSCOPEITEM *pItemParent, MMC_COOKIE *plCookie);
     // -IConsoleNameSpace
 
     // +IConsoleNameSpace2

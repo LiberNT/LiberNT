@@ -24,6 +24,12 @@ interface IToolbar;
 interface IImageList;
 interface IConsoleVerb;
 interface ISnapinAbout;
+interface IResultData;
+interface IContextMenuCallback;
+interface IExtendContextMenu;
+interface ISnapinHelp;
+interface ISnapinHelp2;
+interface IResultDataCompare;
 
 
 typedef IComponent *LPCOMPONENT;
@@ -43,6 +49,12 @@ typedef IImageList *LPIMAGELIST;
 typedef IConsoleVerb *LPCONSOLEVERB;
 typedef ISnapinAbout *LPSNAPABOUT;
 typedef ISnapinAbout *LPSNAPINABOUT;
+typedef IResultData *LPRESULTDATA;
+typedef IContextMenuCallback *LPCONTEXTMENUCALLBACK;
+typedef IExtendContextMenu *LPEXTENDCONTEXTMENU;
+typedef ISnapinHelp *LPSNAPINHELP;
+typedef ISnapinHelp2 *LPSNAPINHELP2;
+typedef IResultDataCompare *LPRESULTDATACOMPARE;
 
 
 typedef enum _MMC_NOTIFY_TYPE { 
@@ -168,6 +180,79 @@ typedef struct _MMCBUTTON {
 
 typedef LONG_PTR MMC_COOKIE;
 
+cpp_quote("#define MMC_CALLBACK ((LPOLESTR)-1)")
+cpp_quote("#define MMC_IMAGECALLBACK (-1)")
+cpp_quote("#define MMC_TEXTCALLBACK MMC_CALLBACK")
+
+const DWORD RDI_STR     = 0x0002;
+const DWORD RDI_IMAGE   = 0x0004;
+const DWORD RDI_STATE   = 0x0008;
+const DWORD RDI_PARAM   = 0x0010;
+const DWORD RDI_INDEX   = 0x0020;
+const DWORD RDI_INDENT  = 0x0040;
+
+cpp_quote("typedef enum _MMC_RESULT_VIEW_STYLE")
+cpp_quote("{")
+cpp_quote("    MMC_SINGLESEL           = 0x0001,")
+cpp_quote("    MMC_SHOWSELALWAYS       = 0x0002,")
+cpp_quote("    MMC_NOSORTHEADER        = 0x0004,")
+cpp_quote("    MMC_ENSUREFOCUSVISIBLE  = 0x0008")
+cpp_quote("} MMC_RESULT_VIEW_STYLE;")
+cpp_quote("#if 0")
+typedef enum _MMC_RESULT_VIEW_STYLE
+{
+    _MMC_VIEW_STYLE__dummy_
+} MMC_RESULT_VIEW_STYLE;
+cpp_quote("#endif")
+
+const long MMC_VIEW_OPTIONS_NONE        = 0x00000000;
+const long MMC_VIEW_OPTIONS_NOLISTVIEWS = 0x00000001;
+const long MMC_VIEW_OPTIONS_MULTISELECT = 0x00000002;
+
+typedef struct _CONTEXTMENUITEM
+{
+    LPWSTR strName;
+    LPWSTR strStatusBarText;
+    LONG   lCommandID;
+    LONG   lInsertionPointID;
+    LONG   fFlags;
+    LONG   fSpecialFlags;
+} CONTEXTMENUITEM;
+
+typedef CONTEXTMENUITEM *LPCONTEXTMENUITEM;
+
+enum
+{
+    CCM_INSERTIONPOINTID_MASK_SPECIAL        = 0xFFFF0000,
+    CCM_INSERTIONPOINTID_MASK_SHARED         = 0x80000000,
+    CCM_INSERTIONPOINTID_MASK_CREATE_PRIMARY = 0x40000000,
+    CCM_INSERTIONPOINTID_MASK_ADD_PRIMARY    = 0x20000000,
+    CCM_INSERTIONPOINTID_MASK_ADD_3RDPARTY   = 0x10000000,
+    CCM_INSERTIONPOINTID_MASK_RESERVED       = 0x0FFF0000,
+    CCM_INSERTIONPOINTID_MASK_FLAGINDEX      = 0x0000001F,
+    CCM_INSERTIONPOINTID_PRIMARY_TOP         = 0xA0000000,
+    CCM_INSERTIONPOINTID_PRIMARY_NEW         = 0xA0000001,
+    CCM_INSERTIONPOINTID_PRIMARY_TASK        = 0xA0000002,
+    CCM_INSERTIONPOINTID_PRIMARY_VIEW        = 0xA0000003,
+    CCM_INSERTIONPOINTID_PRIMARY_HELP        = 0xA0000004,
+    CCM_INSERTIONPOINTID_3RDPARTY_NEW        = 0x90000001,
+    CCM_INSERTIONPOINTID_3RDPARTY_TASK       = 0x90000002,
+    CCM_INSERTIONPOINTID_ROOT_MENU           = 0x80000000
+};
+
+enum
+{
+    CCM_INSERTIONALLOWED_TOP  = 0x00000001,
+    CCM_INSERTIONALLOWED_NEW  = 0x00000002,
+    CCM_INSERTIONALLOWED_TASK = 0x00000004,
+    CCM_INSERTIONALLOWED_VIEW = 0x00000008
+};
+
+cpp_quote("#define CCF_NODETYPE L\"CCF_NODETYPE\"")
+cpp_quote("#define CCF_SZNODETYPE L\"CCF_SZNODETYPE\"")
+cpp_quote("#define CCF_DISPLAY_NAME L\"CCF_DISPLAY_NAME\"")
+cpp_quote("#define CCF_SNAPIN_CLASSID L\"CCF_SNAPIN_CLASSID\"")
+
 
 [
     object,
@@ -193,7 +278,7 @@ interface IComponentData : IUnknown
     HRESULT Destroy();
 
     HRESULT QueryDataObject(
-        [in]  long              cookie,
+        [in]  MMC_COOKIE        cookie,
         [in]  DATA_OBJECT_TYPES type,
         [out] LPDATAOBJECT      *ppDataObject
     );
@@ -226,17 +311,17 @@ interface IComponent : IUnknown
     );
 
     HRESULT Destroy(
-        LONG cookie
+        [in] MMC_COOKIE cookie
     );
 
     HRESULT QueryDataObject(
-        [in]  long              cookie,
+        [in]  MMC_COOKIE        cookie,
         [in]  DATA_OBJECT_TYPES type,
         [out] LPDATAOBJECT      *ppDataObject
     );
 
     HRESULT GetResultViewType(
-        [in]  long     cookie,
+        [in]  MMC_COOKIE cookie,
         [out] LPOLESTR *ppViewType,
         [out] long     *pViewOptions
     );
@@ -355,19 +440,19 @@ interface IConsoleNameSpace : IUnknown
     HRESULT GetChildItem(
         [in]  HSCOPEITEM item,
         [out] HSCOPEITEM *pItemChild,
-        [out] long       *plCookie
+        [out] MMC_COOKIE *pCookie
     );
 
     HRESULT GetNextItem(
         [in]  HSCOPEITEM item,
         [out] HSCOPEITEM *pItemNext,
-        [out] long       *plCookie
+        [out] MMC_COOKIE *pCookie
     );
 
     HRESULT GetParentItem(
         [in]  HSCOPEITEM item,
         [out] HSCOPEITEM *pItemParent,
-        [out] long       *plCookie
+        [out] MMC_COOKIE *pCookie
     );
 }
 
@@ -644,6 +729,132 @@ interface ISnapinAbout : IUnknown
     );
 }
 
+[
+    object,
+    uuid(31da5fa0-e0eb-11cf-9f21-00aa003ca9f6),
+    pointer_default(unique)
+]
+interface IResultData : IUnknown
+{
+    HRESULT InsertItem(
+        [in, out] LPRESULTDATAITEM item
+    );
+    HRESULT DeleteItem(
+        [in] HRESULTITEM itemID,
+        [in] int         nCol
+    );
+    HRESULT FindItemByLParam(
+        [in]  LPARAM      lParam,
+        [out] HRESULTITEM *pItemID
+    );
+    HRESULT DeleteAllRsltItems();
+    HRESULT SetItem(
+        [in] LPRESULTDATAITEM item
+    );
+    HRESULT GetItem(
+        [in, out] LPRESULTDATAITEM item
+    );
+    HRESULT GetNextItem(
+        [in, out] LPRESULTDATAITEM item
+    );
+    HRESULT ModifyItemState(
+        [in] int         nIndex,
+        [in] HRESULTITEM itemID,
+        [in] UINT        uAdd,
+        [in] UINT        uRemove
+    );
+    HRESULT ModifyViewStyle(
+        [in] MMC_RESULT_VIEW_STYLE add,
+        [in] MMC_RESULT_VIEW_STYLE remove
+    );
+    HRESULT SetViewMode(
+        [in] long lViewMode
+    );
+    HRESULT GetViewMode(
+        [out] long *lViewMode
+    );
+    HRESULT UpdateItem(
+        [in] HRESULTITEM itemID
+    );
+    HRESULT Sort(
+        [in] int    nColumn,
+        [in] DWORD  dwSortOptions,
+        [in] LPARAM lUserParam
+    );
+    HRESULT SetDescBarText(
+        [in] LPOLESTR DescText
+    );
+    HRESULT SetItemCount(
+        [in] int   nItemCount,
+        [in] DWORD dwOptions
+    );
+}
 
+[
+    object,
+    uuid(43136eb7-d36c-11cf-adbc-00aa00a80033),
+    pointer_default(unique)
+]
+interface IContextMenuCallback : IUnknown
+{
+    HRESULT AddItem(
+        [in] CONTEXTMENUITEM *pItem
+    );
+}
 
+[
+    object,
+    uuid(4f3b7a4f-cfac-11cf-b8e3-00c04fd8d5b0),
+    pointer_default(unique)
+]
+interface IExtendContextMenu : IUnknown
+{
+    HRESULT AddMenuItems(
+        [in]      LPDATAOBJECT          piDataObject,
+        [in]      LPCONTEXTMENUCALLBACK piCallback,
+        [in, out] long                  *pInsertionAllowed
+    );
+    HRESULT Command(
+        [in] long         lCommandID,
+        [in] LPDATAOBJECT piDataObject
+    );
+}
 
+[
+    object,
+    uuid(e8315a52-7a1a-11d0-a2d2-00c04fd909dd),
+    pointer_default(unique)
+]
+interface IResultDataCompare : IUnknown
+{
+    HRESULT Compare(
+        [in]      LPARAM     lUserParam,
+        [in]      MMC_COOKIE cookieA,
+        [in]      MMC_COOKIE cookieB,
+        [in, out] int        *pnResult
+    );
+}
+
+[
+    object,
+    uuid(a6b15ace-df59-11d0-a7dd-00c04fd909dd),
+    pointer_default(unique)
+]
+interface ISnapinHelp : IUnknown
+{
+    HRESULT GetHelpTopic(
+        [out] LPOLESTR *lpCompiledHelpFile
+    );
+}
+
+[
+    object,
+    uuid(4861a010-20f9-11d2-a510-00c04fb6dd2c),
+    pointer_default(unique)
+]
+interface ISnapinHelp2 : ISnapinHelp
+{
+    HRESULT GetLinkedTopics(
+        [out] LPOLESTR *lpCompiledHelpFiles
+    );
+}

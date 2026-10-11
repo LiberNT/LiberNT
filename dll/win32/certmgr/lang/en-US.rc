@@ -1,0 +1,18 @@
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+STRINGTABLE
+BEGIN
+    IDS_SNAPIN_NAME          "Certificates"
+    IDS_SNAPIN_DESCRIPTION   "Browse the certificates stored for your user account."
+    IDS_SNAPIN_PROVIDER      "LiberNT"
+    IDS_ROOT_CURRENT_USER    "Certificates - Current User"
+    IDS_COLUMN_ISSUED_TO     "Issued To"
+    IDS_COLUMN_ISSUED_BY     "Issued By"
+    IDS_COLUMN_EXPIRATION    "Expiration Date"
+    IDS_COLUMN_PURPOSES      "Intended Purposes"
+    IDS_COLUMN_FRIENDLY_NAME "Friendly Name"
+    IDS_COLUMN_OBJECT_TYPE   "Object Type"
+    IDS_FOLDER_CERTIFICATES  "Certificates"
+    IDS_PURPOSES_ALL         "<All>"
+    IDS_FRIENDLY_NAME_NONE   "<None>"
+END
