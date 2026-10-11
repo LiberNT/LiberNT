@@ -19,7 +19,8 @@ add_rpcproxy_files(
     dcom.idl
     ole32_unknwn.idl
     ole32_objidl.idl
-    ole32_oleidl.idl)
+    ole32_oleidl.idl
+    ole32_propidl.idl)
 
 list(APPEND SOURCE
     antimoniker.c
@@ -58,6 +59,7 @@ list(APPEND PCH_SKIP_SOURCE
     ${CMAKE_CURRENT_BINARY_DIR}/dcom_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/ole32_objidl_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/ole32_oleidl_p.c
+    ${CMAKE_CURRENT_BINARY_DIR}/ole32_propidl_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/ole32_unknwn_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/ole32_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/proxy.dlldata.c)
@@ -78,7 +80,7 @@ if(MSVC)
 endif()
 
 set_module_type(ole32 win32dll)
-add_idl_reg_scripts(ole32 registry dcom.idl ole32_objidl.idl ole32_oleidl.idl ole32_unknwn.idl)
+add_idl_reg_scripts(ole32 registry dcom.idl ole32_objidl.idl ole32_oleidl.idl ole32_propidl.idl ole32_unknwn.idl)
 target_link_libraries(ole32 wine uuid pathcch_static ${PSEH_LIB} oldnames)
 add_delay_importlibs(ole32 oleaut32)
 target_compile_definitions(ole32 PRIVATE STATIC_PATHCCH)

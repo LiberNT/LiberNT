@@ -1,0 +1,19 @@
+/*
+ * PROJECT:     LiberNT OLE32
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Proxies for the property storage interfaces
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep proxy
+#pragma makedep register
+
+cpp_quote("#if 0")
+#include "propidl.idl"
+cpp_quote("#endif")
+
+[
+    threading(both),
+    uuid(00000320-0000-0000-c000-000000000046)
+]
+coclass PSFactoryBuffer { interface IPSFactoryBuffer; }
