@@ -19,7 +19,6 @@
 #include "windef.h"
 #include "resource.h"
 
-IDR_SHDOCVW WINE_REGISTRY "res/shdocvw.rgs"
 IDR_FAVBAND REGISTRY "res/favband.rgs"
 IDR_EXPLORERBAND REGISTRY "res/explorerband.rgs"
 IDR_SHELLDOCOBJVIEW REGISTRY "res/shelldocobjview.rgs"

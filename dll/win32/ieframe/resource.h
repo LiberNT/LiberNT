@@ -63,6 +63,7 @@
 #define IDS_INTSHCUT_RUN_MAXIMIZED     886
 #define IDS_INTSHCUT_OPEN_HELP         887
 #define IDS_COMMBAND_REFRESH           888
+#define IDS_INTERNET_FOLDER            5723
 #define IDS_COMMBAND_OPENWINDOW        889
 
 #define IDD_INTSHCUT_PROP              890

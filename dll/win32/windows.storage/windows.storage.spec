@@ -103,7 +103,7 @@
 @ stub CFSFolder_IsCommonItem
 @ stub CFileOperationRecorder_CreateInstance
 @ stub CFreeThreadedItemContainer_CreateInstance
-@ stub CMruLongList_CreateInstance
+@ cdecl CMruLongList_CreateInstance(ptr ptr ptr)
 @ stub CPrivateProfileCache_Save
 @ stub CRegFolder_CreateAndInit
 @ stub CRegFolder_CreateInstance

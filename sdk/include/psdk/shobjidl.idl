@@ -5109,6 +5109,18 @@ interface IEnumObjects : IUnknown
     HRESULT Clone([out] IEnumObjects **ppenum);
 }
 
+cpp_quote("#define TOID_NULL                    GUID_NULL")
+cpp_quote("#define ITSAT_DEFAULT_LPARAM         ((DWORD_PTR)-1)")
+cpp_quote("#define ITSAT_DEFAULT_PRIORITY       0x10000000")
+cpp_quote("#define ITSAT_MAX_PRIORITY           0x7fffffff")
+cpp_quote("#define ITSAT_MIN_PRIORITY           0x00000000")
+cpp_quote("#define ITSSFLAG_COMPLETE_ON_DESTROY 0x0000")
+cpp_quote("#define ITSSFLAG_KILL_ON_DESTROY     0x0001")
+cpp_quote("#define ITSSFLAG_FLAGS_MASK          0x0003")
+cpp_quote("#define ITSS_THREAD_DESTROY_DEFAULT_TIMEOUT  (10*1000)")
+cpp_quote("#define ITSS_THREAD_TERMINATE_TIMEOUT        (INFINITE)")
+cpp_quote("#define ITSS_THREAD_TIMEOUT_NO_CHANGE        (INFINITE - 1)")
+
 [
     uuid(6CCB7BE0-6807-11d0-B810-00C04FD706EC),
     object,

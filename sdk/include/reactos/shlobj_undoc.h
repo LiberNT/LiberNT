@@ -798,10 +798,43 @@ DECLARE_INTERFACE_(IMruDataList, IUnknown)
     /*** IMruDataList ***/
     STDMETHOD(InitData)(THIS_ UINT, UINT, HKEY, LPCWSTR, SLOTCOMPARE) PURE;
     STDMETHOD(AddData)(THIS_ LPCVOID , DWORD, UINT*) PURE;
+    STDMETHOD(InsertData)(THIS_ LPCVOID, UINT, DWORD, UINT*) PURE;
     STDMETHOD(FindData)(THIS_ LPCVOID , DWORD, UINT*) PURE;
     STDMETHOD(GetData)(THIS_ UINT, LPVOID, DWORD) PURE;
     STDMETHOD(QueryInfo)(THIS_ UINT, UINT*, DWORD*) PURE;
     STDMETHOD(Delete)(THIS_ UINT) PURE;
+};
+#undef INTERFACE
+
+#define INTERFACE IMruDataCompare
+DECLARE_INTERFACE_(IMruDataCompare, IUnknown)
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** IMruDataCompare ***/
+    STDMETHOD(CompareItems)(THIS_ const BYTE*, INT, const BYTE*, INT) PURE;
+};
+#undef INTERFACE
+
+#define INTERFACE IMruDataList2
+DECLARE_INTERFACE_(IMruDataList2, IMruDataList)
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** IMruDataList ***/
+    STDMETHOD(InitData)(THIS_ UINT, UINT, HKEY, LPCWSTR, SLOTCOMPARE) PURE;
+    STDMETHOD(AddData)(THIS_ LPCVOID , DWORD, UINT*) PURE;
+    STDMETHOD(InsertData)(THIS_ LPCVOID, UINT, DWORD, UINT*) PURE;
+    STDMETHOD(FindData)(THIS_ LPCVOID , DWORD, UINT*) PURE;
+    STDMETHOD(GetData)(THIS_ UINT, LPVOID, DWORD) PURE;
+    STDMETHOD(QueryInfo)(THIS_ UINT, UINT*, DWORD*) PURE;
+    STDMETHOD(Delete)(THIS_ UINT) PURE;
+    /*** IMruDataList2 ***/
+    STDMETHOD(InitData2)(THIS_ UINT, UINT, HKEY, LPCWSTR, IMruDataCompare*) PURE;
 };
 #undef INTERFACE
 
@@ -811,11 +844,52 @@ DECLARE_INTERFACE_(IMruDataList, IUnknown)
 #define IMruDataList_Release(T)             (T)->lpVtbl->Release(T)
 #define IMruDataList_InitData(T,a,b,c,d,e)  (T)->lpVtbl->InitData(T,a,b,c,d,e)
 #define IMruDataList_AddData(T,a,b,c)       (T)->lpVtbl->AddData(T,a,b,c)
+#define IMruDataList_InsertData(T,a,b,c,d)  (T)->lpVtbl->InsertData(T,a,b,c,d)
 #define IMruDataList_FindData(T,a,b,c)      (T)->lpVtbl->FindData(T,a,b,c)
 #define IMruDataList_GetData(T,a,b,c)       (T)->lpVtbl->GetData(T,a,b,c)
 #define IMruDataList_QueryInfo(T,a,b,c)     (T)->lpVtbl->QueryInfo(T,a,b,c)
 #define IMruDataList_Delete(T,a)            (T)->lpVtbl->Delete(T,a)
 #endif
+
+/*****************************************************************************
+ * IShellTaskScheduler2 interface
+ */
+#define INTERFACE IShellTaskScheduler2
+DECLARE_INTERFACE_(IShellTaskScheduler2, IShellTaskScheduler)
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** IShellTaskScheduler ***/
+    STDMETHOD(AddTask)(THIS_ IRunnableTask*, REFGUID, DWORD_PTR, DWORD) PURE;
+    STDMETHOD(RemoveTasks)(THIS_ REFGUID, DWORD_PTR, BOOL) PURE;
+    STDMETHOD_(UINT,CountTasks)(THIS_ REFGUID) PURE;
+    STDMETHOD(Status)(THIS_ DWORD, DWORD) PURE;
+    /*** IShellTaskScheduler2 ***/
+    STDMETHOD(AddTask2)(THIS_ IRunnableTask*, REFGUID, DWORD_PTR, DWORD, DWORD) PURE;
+    STDMETHOD(MoveTask)(THIS_ REFGUID, DWORD_PTR, DWORD, DWORD) PURE;
+};
+#undef INTERFACE
+
+/*****************************************************************************
+ * IShellTaskSchedulerSettings interface
+ */
+#define INTERFACE IShellTaskSchedulerSettings
+DECLARE_INTERFACE_(IShellTaskSchedulerSettings, IUnknown)
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** IShellTaskSchedulerSettings ***/
+    STDMETHOD(SetWorkerThreadCountMax)(THIS_ INT) PURE;
+    STDMETHOD(GetWorkerThreadCountMax)(THIS_ INT*) PURE;
+    STDMETHOD(SetWorkerThreadPriority)(THIS_ INT) PURE;
+    STDMETHOD(SetFlags)(THIS_ DWORD, DWORD) PURE;
+    STDMETHOD(GetFlags)(THIS_ DWORD*) PURE;
+};
+#undef INTERFACE
 
 /*****************************************************************************
  * IMruPidlList interface
@@ -829,7 +903,7 @@ DECLARE_INTERFACE_(IMruPidlList, IUnknown)
     STDMETHOD_(ULONG,Release)(THIS) PURE;
     /*** IMruPidlList ***/
     STDMETHOD(InitList)(THIS_ UINT, HKEY, LPCWSTR) PURE;
-    STDMETHOD(UsePidl)(THIS_ LPCITEMIDLIST, UINT*) PURE;
+    STDMETHOD(UsePidl)(THIS_ LPCITEMIDLIST, UINT*, INT*) PURE;
     STDMETHOD(QueryPidl)(THIS_ LPCITEMIDLIST, UINT, UINT*, UINT*) PURE;
     STDMETHOD(PruneKids)(THIS_ LPCITEMIDLIST) PURE;
 };
@@ -840,7 +914,7 @@ DECLARE_INTERFACE_(IMruPidlList, IUnknown)
 #define IMruPidlList_AddRef(T)              (T)->lpVtbl->AddRef(T)
 #define IMruPidlList_Release(T)             (T)->lpVtbl->Release(T)
 #define IMruPidlList_InitList(T,a,b,c)      (T)->lpVtbl->InitList(T,a,b,c)
-#define IMruPidlList_UsePidl(T,a,b)         (T)->lpVtbl->UsePidl(T,a,b)
+#define IMruPidlList_UsePidl(T,a,b,c)       (T)->lpVtbl->UsePidl(T,a,b,c)
 #define IMruPidlList_QueryPidl(T,a,b,c,d)   (T)->lpVtbl->QueryPidl(T,a,b,c,d)
 #define IMruPidlList_PruneKids(T,a)         (T)->lpVtbl->PruneKids(T,a)
 #endif

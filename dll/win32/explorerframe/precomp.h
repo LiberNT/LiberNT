@@ -51,7 +51,6 @@
 #include "internettoolbar.h"
 #include "commonbrowser.h"
 #include "globalfoldersettings.h"
-#include "CShellTaskScheduler.h"
 #include "CTaskbarList.h"
 #include "browseui.h"
 #include <stdio.h>

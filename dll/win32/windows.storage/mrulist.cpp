@@ -1,7 +1,7 @@
 /*
- * PROJECT:     ReactOS shdocvw
+ * PROJECT:     LiberNT Windows Storage
  * LICENSE:     LGPL-2.0-or-later (https://spdx.org/licenses/LGPL-2.0-or-later)
- * PURPOSE:     Implement MRU List of shdocvw.dll
+ * PURPOSE:     Implement MRU List of windows.storage.dll
  * COPYRIGHT:   Copyright 2023 Katayama Hirofumi MZ <katayama.hirofumi.mz@gmail.com>
  */
 
@@ -12,7 +12,7 @@
 #include <strsafe.h>
 
 #include <wine/debug.h>
-WINE_DEFAULT_DEBUG_CHANNEL(shdocvw);
+WINE_DEFAULT_DEBUG_CHANNEL(storage);
 
 class CSafeMutex;
 class CMruBase;
@@ -63,7 +63,7 @@ public:
 };
 
 class CMruBase
-    : public IMruDataList
+    : public IMruDataList2
 {
 protected:
     LONG            m_cRefs         = 1;        // Reference count
@@ -74,6 +74,7 @@ protected:
     DWORD           m_cSlotRooms    = 0;        // Rooms for slots
     DWORD           m_cSlots        = 0;        // The # of slots
     SLOTCOMPARE     m_fnCompare     = NULL;     // The comparison function
+    CComPtr<IMruDataCompare> m_pCompare;
     SLOTITEMDATA *  m_pSlots        = NULL;     // Slot data
 
     HRESULT _LoadItem(UINT iSlot);
@@ -102,10 +103,15 @@ public:
                           LPCWSTR pszSubKey OPTIONAL,
                           SLOTCOMPARE fnCompare OPTIONAL) override;
     STDMETHODIMP AddData(LPCVOID pvData, DWORD cbData, UINT *piSlot) override;
+    STDMETHODIMP InsertData(LPCVOID pvData, UINT iPos, DWORD cbData, UINT *piSlot) override;
     STDMETHODIMP FindData(LPCVOID pvData, DWORD cbData, UINT *piSlot) override;
     STDMETHODIMP GetData(UINT iSlot, LPVOID pvData, DWORD cbData) override;
     STDMETHODIMP QueryInfo(UINT iSlot, UINT *piGotSlot, DWORD *pcbData) override;
     STDMETHODIMP Delete(UINT iSlot) override;
+
+    // IMruDataList2 methods
+    STDMETHODIMP InitData2(UINT cCapacity, UINT flags, HKEY hKey, LPCWSTR pszSubKey,
+                           IMruDataCompare *pCompare) override;
 
     // Non-standard methods
     virtual BOOL _IsEqual(const SLOTITEMDATA *pItem, LPCVOID pvData, UINT cbData) const;
@@ -116,6 +122,7 @@ public:
     virtual void _SlotString(UINT iSlot, LPWSTR psz, DWORD cch) = 0;
     virtual HRESULT _GetSlot(UINT iSlot, UINT *puSlot) = 0;
     virtual HRESULT _RemoveSlot(UINT iSlot, UINT *puSlot) = 0;
+    virtual HRESULT _InsertSlot(UINT iPos, UINT *puSlot) = 0;
 
     static void* operator new(size_t size)
     {
@@ -129,7 +136,7 @@ public:
 
 CMruBase::CMruBase()
 {
-    SHDOCVW_LockModule();
+    WSTORAGE_LockModule();
 }
 
 CMruBase::~CMruBase()
@@ -150,16 +157,17 @@ CMruBase::~CMruBase()
         m_pSlots = (SLOTITEMDATA*)::LocalFree(m_pSlots);
     }
 
-    SHDOCVW_UnlockModule();
+    WSTORAGE_UnlockModule();
 }
 
 STDMETHODIMP CMruBase::QueryInterface(REFIID riid, void **ppvObj)
 {
     if (!ppvObj)
         return E_POINTER;
-    if (IsEqualGUID(riid, IID_IMruDataList) || IsEqualGUID(riid, IID_IUnknown))
+    if (IsEqualGUID(riid, IID_IMruDataList2) || IsEqualGUID(riid, IID_IMruDataList) ||
+        IsEqualGUID(riid, IID_IUnknown))
     {
-        *ppvObj = static_cast<IMruDataList*>(this);
+        *ppvObj = static_cast<IMruDataList2*>(this);
         AddRef();
         return S_OK;
     }
@@ -320,6 +328,35 @@ STDMETHODIMP CMruBase::AddData(LPCVOID pvData, DWORD cbData, UINT *piSlot)
     return hr;
 }
 
+STDMETHODIMP CMruBase::InsertData(LPCVOID pvData, UINT iPos, DWORD cbData, UINT *piSlot)
+{
+    UINT uSlot;
+    HRESULT hr;
+
+    hr = _InsertSlot(iPos, &uSlot);
+    if (FAILED(hr))
+        return hr;
+
+    hr = _AddItem(uSlot, pvData, cbData);
+    if (FAILED(hr))
+        return hr;
+
+    if (piSlot)
+        *piSlot = uSlot;
+
+    return S_OK;
+}
+
+STDMETHODIMP CMruBase::InitData2(UINT cCapacity, UINT flags, HKEY hKey, LPCWSTR pszSubKey,
+                                 IMruDataCompare *pCompare)
+{
+    HRESULT hr = InitData(cCapacity, flags, hKey, pszSubKey, NULL);
+    if (FAILED(hr))
+        return hr;
+    m_pCompare = pCompare;
+    return S_OK;
+}
+
 STDMETHODIMP CMruBase::FindData(LPCVOID pvData, DWORD cbData, UINT *piSlot)
 {
     if (m_cSlots <= 0)
@@ -385,6 +422,8 @@ STDMETHODIMP CMruBase::Delete(UINT iSlot)
 
 BOOL CMruBase::_IsEqual(const SLOTITEMDATA *pItem, LPCVOID pvData, UINT cbData) const
 {
+    if (m_pCompare.p)
+        return m_pCompare.p->CompareItems((const BYTE *)pvData, cbData, (const BYTE *)pItem->pvData, pItem->cbData) == S_OK;
     if (m_fnCompare)
         return m_fnCompare(pvData, pItem->pvData, cbData) == 0;
 
@@ -449,6 +488,7 @@ protected:
     void _SlotString(UINT iSlot, LPWSTR psz, DWORD cch) override;
     HRESULT _GetSlot(UINT iSlot, UINT *puSlot) override;
     HRESULT _RemoveSlot(UINT iSlot, UINT *puSlot) override;
+    HRESULT _InsertSlot(UINT iPos, UINT *puSlot) override;
     friend class CMruLongList;
 
 public:
@@ -550,10 +590,28 @@ HRESULT CMruShortList::_RemoveSlot(UINT iSlot, UINT *puSlot)
 
     MoveMemory(&m_pszSlotData[iSlot], &m_pszSlotData[iSlot + 1], (m_cSlots - iSlot) * sizeof(WCHAR));
     --m_cSlots;
-    m_pSlots->dwFlags &= ~SLOT_SET;
+    m_pSlots[*puSlot].dwFlags &= ~SLOT_SET;
     m_bNeedSave = TRUE;
 
     return hr;
+}
+
+HRESULT CMruShortList::_InsertSlot(UINT iPos, UINT *puSlot)
+{
+    UINT iData;
+
+    if (iPos > m_cSlots)
+        return E_FAIL;
+
+    if (FAILED(_UseEmptySlot(&iData)))
+        return E_FAIL;
+    MoveMemory(&m_pszSlotData[iPos + 1], &m_pszSlotData[iPos], (m_cSlots - 1 - iPos) * sizeof(WCHAR));
+
+    m_pszSlotData[iPos] = (WCHAR)(L'a' + iData);
+    m_pszSlotData[m_cSlots] = UNICODE_NULL;
+    m_bNeedSave = TRUE;
+    *puSlot = iData;
+    return S_OK;
 }
 
 class CMruLongList
@@ -570,6 +628,7 @@ protected:
     void _SlotString(UINT iSlot, LPWSTR psz, DWORD cch) override;
     HRESULT _GetSlot(UINT iSlot, UINT *puSlot) override;
     HRESULT _RemoveSlot(UINT iSlot, UINT *puSlot) override;
+    HRESULT _InsertSlot(UINT iPos, UINT *puSlot) override;
 
 public:
     CMruLongList()
@@ -667,10 +726,28 @@ HRESULT CMruLongList::_RemoveSlot(UINT iSlot, UINT *puSlot)
 
     MoveMemory(&m_puSlotData[iSlot], &m_puSlotData[iSlot + 1], (m_cSlots - iSlot) * sizeof(UINT));
     --m_cSlots;
-    m_pSlots[0].dwFlags &= ~SLOT_SET;
+    m_pSlots[*puSlot].dwFlags &= ~SLOT_SET;
     m_bNeedSave = TRUE;
 
     return hr;
+}
+
+HRESULT CMruLongList::_InsertSlot(UINT iPos, UINT *puSlot)
+{
+    UINT uSlotData;
+
+    if (iPos > m_cSlots)
+        return E_FAIL;
+
+    if (FAILED(_UseEmptySlot(&uSlotData)))
+        return E_FAIL;
+    MoveMemory(&m_puSlotData[iPos + 1], &m_puSlotData[iPos], (m_cSlots - 1 - iPos) * sizeof(UINT));
+
+    m_puSlotData[iPos] = uSlotData;
+    m_puSlotData[m_cSlots] = MAXDWORD;
+    m_bNeedSave = TRUE;
+    *puSlot = uSlotData;
+    return S_OK;
 }
 
 void CMruLongList::_ImportShortList()
@@ -1004,7 +1081,7 @@ public:
 
     // IMruPidlList methods
     STDMETHODIMP InitList(UINT cMRUSize, HKEY hKey, LPCWSTR pszSubKey) override;
-    STDMETHODIMP UsePidl(LPCITEMIDLIST pidl, UINT *pnNodeSlot) override;
+    STDMETHODIMP UsePidl(LPCITEMIDLIST pidl, UINT *pnNodeSlot, INT *pnUsed) override;
     STDMETHODIMP QueryPidl(
         LPCITEMIDLIST pidl,
         UINT cSlots,
@@ -1129,9 +1206,12 @@ STDMETHODIMP CMruPidlList::InitList(UINT cMRUSize, HKEY hKey, LPCWSTR pszSubKey)
     return hr;
 }
 
-STDMETHODIMP CMruPidlList::UsePidl(LPCITEMIDLIST pidl, UINT *pnNodeSlot)
+STDMETHODIMP CMruPidlList::UsePidl(LPCITEMIDLIST pidl, UINT *pnNodeSlot, INT *pnUsed)
 {
-    TRACE("%p -> %p %p\n", this, pidl, pnNodeSlot);
+    TRACE("%p -> %p %p %p\n", this, pidl, pnNodeSlot, pnUsed);
+
+    if (pnUsed)
+        *pnUsed = 0;
 
     CSafeMutex mutex;
     HRESULT hr = mutex.Enter(m_hMutex);
@@ -1298,15 +1378,16 @@ class CMruClassFactory : public IClassFactory
 {
 protected:
     LONG m_cRefs = 1;
+    CLSID m_clsid;
 
 public:
-    CMruClassFactory()
+    CMruClassFactory(REFCLSID rclsid) : m_clsid(rclsid)
     {
-        SHDOCVW_LockModule();
+        WSTORAGE_LockModule();
     }
     virtual ~CMruClassFactory()
     {
-        SHDOCVW_UnlockModule();
+        WSTORAGE_UnlockModule();
     }
 
     // IUnknown methods
@@ -1358,27 +1439,36 @@ STDMETHODIMP CMruClassFactory::CreateInstance(IUnknown *pUnkOuter, REFIID riid, 
     if (pUnkOuter)
         return CLASS_E_NOAGGREGATION;
 
-    if (IsEqualGUID(riid, IID_IMruDataList))
-        return CMruLongList_CreateInstance(0, ppvObject, 0);
+    if (!ppvObject)
+        return E_POINTER;
+    *ppvObject = NULL;
 
-    if (IsEqualGUID(riid, IID_IMruPidlList))
-        return CMruPidlList_CreateInstance(0, ppvObject, 0);
+    IUnknown *pUnk;
+    HRESULT hr;
+    if (IsEqualCLSID(m_clsid, CLSID_MruLongList))
+        hr = CMruLongList_CreateInstance(0, (void **)&pUnk, 0);
+    else
+        hr = CMruPidlList_CreateInstance(0, (void **)&pUnk, 0);
+    if (FAILED(hr))
+        return hr;
 
-    return E_NOINTERFACE;
+    hr = pUnk->QueryInterface(riid, ppvObject);
+    pUnk->Release();
+    return hr;
 }
 
 STDMETHODIMP CMruClassFactory::LockServer(BOOL fLock)
 {
     if (fLock)
-        SHDOCVW_LockModule();
+        WSTORAGE_LockModule();
     else
-        SHDOCVW_UnlockModule();
+        WSTORAGE_UnlockModule();
     return S_OK;
 }
 
-EXTERN_C HRESULT CMruClassFactory_CreateInstance(REFIID riid, void **ppv)
+EXTERN_C HRESULT CMruClassFactory_CreateInstance(REFCLSID rclsid, REFIID riid, void **ppv)
 {
-    CMruClassFactory *pFactory = new CMruClassFactory();
+    CMruClassFactory *pFactory = new CMruClassFactory(rclsid);
     if (!pFactory)
         return E_OUTOFMEMORY;
 

@@ -11,7 +11,6 @@ list(APPEND SOURCE
     ${CMAKE_CURRENT_BINARY_DIR}/shdocvw_stubs.c)
 
 list(APPEND shdocvw_rc_deps
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/shdocvw.rgs
     ${CMAKE_CURRENT_SOURCE_DIR}/res/favband.rgs
     ${CMAKE_CURRENT_SOURCE_DIR}/res/explorerband.rgs
     ${CMAKE_CURRENT_SOURCE_DIR}/res/shelldocobjview.rgs
@@ -44,7 +43,6 @@ add_library(shdocvw_sublib OBJECT
     CFavBand.cpp
     CNSCBand.cpp
     CShellDocObjView.cpp
-    mrulist.cpp
     objects.cpp
     utility.cpp
     winlist.cpp)

@@ -11,7 +11,6 @@ list(APPEND SOURCE
     ieframe_main.c
     iehtmlwnd.c
     iexplore.c
-    inetfolder.c
     intshcut.c
     intshcut_ext.c
     navigate.c
@@ -27,7 +26,6 @@ list(APPEND SOURCE
     precomp.h
     ${CMAKE_CURRENT_BINARY_DIR}/ieframe_stubs.c)
 
-set_source_files_properties(inetfolder.c PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
 add_library(ieframe MODULE
     ${SOURCE}

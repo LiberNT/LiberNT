@@ -1,0 +1,62 @@
+HKCR
+{
+    NoRemove CLSID
+    {
+        '{53BD6B4E-3780-4693-AFC3-7161C2F3EE9C}' = s 'MruLongList'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Apartment'
+            }
+        }
+        '{42AEDC87-2188-41FD-B9A3-0C966FEABEC1}' = s 'MruPidlList'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Apartment'
+            }
+        }
+        '{603D3800-BD81-11D0-A3A5-00C04FD706EC}' = s 'Background Task Scheduler'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Apartment'
+            }
+        }
+        '{603D3801-BD81-11D0-A3A5-00C04FD706EC}' = s 'Shared Task Scheduler'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Apartment'
+            }
+        }
+        '{871C5380-42A0-1069-A2EA-08002B30309D}' = s 'Internet Folder'
+        {
+            val InfoTip = e '@%%SystemRoot%%\system32\ieframe.dll,-881'
+            val LocalizedString = e '@%%SystemRoot%%\system32\ieframe.dll,-5723'
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Apartment'
+            }
+            shell = s 'OpenHomePage'
+            {
+                NoAddOns = s 'Start Without Add-ons'
+                {
+                    val LegacyDisable = s ''
+                    Command = e '"%%SystemRoot%%\iexplore.exe" -extoff'
+                }
+                OpenHomePage = s 'Open &Home Page'
+                {
+                    val LegacyDisable = s ''
+                    Command = e '"%%SystemRoot%%\iexplore.exe"'
+                }
+            }
+            ShellFolder
+            {
+                val Attributes = d '36'
+                val FolderValueFlags = d '131602'
+                val HideAsDeletePerUser = s ''
+            }
+        }
+    }
+}

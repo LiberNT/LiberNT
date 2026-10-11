@@ -13,8 +13,6 @@ list(APPEND SOURCE
     brandband.cpp
     browseui.cpp
     browseuiord.cpp
-    CShellTaskScheduler.cpp
-    CShellTaskScheduler.h
     CTaskbarList.cpp
     CTaskbarList.h
     commonbrowser.cpp

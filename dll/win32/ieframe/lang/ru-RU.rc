@@ -93,6 +93,7 @@ STRINGTABLE
     IDS_INTSHCUT_OPEN_HELP      "Opens this page."
     IDS_COMMBAND_REFRESH        "&Refresh"
     IDS_COMMBAND_OPENWINDOW     "&Open in window"
+    IDS_INTERNET_FOLDER         "The Internet"
 }
 
 IDD_INTSHCUT_PROP DIALOGEX 0, 0, 252, 218
