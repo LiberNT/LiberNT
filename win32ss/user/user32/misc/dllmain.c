@@ -275,6 +275,7 @@ static VOID
 InitDefaultSysColors(VOID)
 {
     WCHAR Root[MAX_PATH + 1], Image[MAX_PATH];
+    DWORD Size = ARRAYSIZE(Image);
     UINT Length;
 
     Length = GetSystemWindowsDirectoryW(Root, MAX_PATH);
@@ -285,7 +286,10 @@ InitDefaultSysColors(VOID)
         Root[Length++] = L'\\';
         Root[Length] = UNICODE_NULL;
     }
-    if (GetModuleFileNameW(NULL, Image, ARRAYSIZE(Image)) == 0 || !_wcsnicmp(Image, Root, Length))
+    if (!QueryFullProcessImageNameW(GetCurrentProcess(), 0, Image, &Size) &&
+        GetModuleFileNameW(NULL, Image, ARRAYSIZE(Image)) == 0)
+        return;
+    if (!_wcsnicmp(Image, Root, Length))
         return;
 
     NtUserCallOneParam(TRUE, ONEPARAM_ROUTINE_ROS_USEDEFAULTSYSCOLORS);
