@@ -546,7 +546,8 @@ UserEnumDisplaySettings(
     /* let's politely ask the driver for an updated mode list,
        just in case there's something new in there (vbox) */
 
-    PDEVOBJ_vRefreshModeList(ppdev);
+    if (iModeNum == 0)
+        PDEVOBJ_vRefreshModeList(ppdev);
     PDEVOBJ_vRelease(ppdev);
 
     iFoundMode = 0;
@@ -853,6 +854,8 @@ UserChangeDisplaySettings(
 
     if ((dm.dmFields & DM_DISPLAYFREQUENCY) && (dm.dmDisplayFrequency == 0))
         dm.dmDisplayFrequency = ppdev->pdmwDev->dmDisplayFrequency;
+
+    PDEVOBJ_vRefreshModeList(ppdev);
 
     /* Look for the requested DEVMODE */
     if (!LDEVOBJ_bProbeAndCaptureDevmode(ppdev->pGraphicsDevice, &dm, &newDevMode, FALSE))
