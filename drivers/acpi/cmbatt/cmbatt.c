@@ -733,6 +733,7 @@ CmBattIoctl(IN PDEVICE_OBJECT DeviceObject,
     PIO_STACK_LOCATION IoStackLocation;
     ULONG IoControlCode, OutputBufferLength, InputBufferLength;
     BOOLEAN ExtendedData;
+    PVOID ClassData;
     PAGED_CODE();
     if (CmBattDebug & 2) DbgPrint("CmBattIoctl\n");
 
@@ -756,8 +757,17 @@ CmBattIoctl(IN PDEVICE_OBJECT DeviceObject,
         return Status;
     }
 
+    ClassData = InterlockedCompareExchangePointer(&DeviceExtension->ClassData, NULL, NULL);
+    if (!ClassData)
+    {
+        Irp->IoStatus.Status = STATUS_DEVICE_NOT_READY;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        IoReleaseRemoveLock(&DeviceExtension->RemoveLock, Irp);
+        return STATUS_DEVICE_NOT_READY;
+    }
+
     /* Send to class driver */
-    Status = BatteryClassIoctl(DeviceExtension->ClassData, Irp);
+    Status = BatteryClassIoctl(ClassData, Irp);
     if (Status == STATUS_NOT_SUPPORTED)
     {
         /* Read IOCTL information from IRP stack */
