@@ -174,6 +174,7 @@ set(COMPAT_RUNTIME_MODULES
     wevtapi
     win32u
     winusb
+    windows_storage
     windows_ui
     windowscodecs
     winhttp
