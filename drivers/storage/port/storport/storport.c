@@ -352,6 +352,41 @@ PortMiniportTimerDpc(
 }
 
 static
+BOOLEAN
+PortGetSrbSenseBuffer(
+    _In_ PVOID Srb,
+    _Out_ PVOID *SenseBuffer,
+    _Out_ PULONG SenseLength)
+{
+    PSTORAGE_REQUEST_BLOCK ExtendedSrb;
+    PSRBEX_DATA_SCSI_CDB16 ScsiData;
+
+    *SenseBuffer = NULL;
+    *SenseLength = 0;
+    if (!PortIsExtendedSrb(Srb))
+    {
+        *SenseBuffer = ((PSCSI_REQUEST_BLOCK)Srb)->SenseInfoBuffer;
+        *SenseLength = ((PSCSI_REQUEST_BLOCK)Srb)->SenseInfoBufferLength;
+    }
+    else
+    {
+        ExtendedSrb = (PSTORAGE_REQUEST_BLOCK)Srb;
+        if (ExtendedSrb->NumSrbExData == 0 ||
+            ExtendedSrb->SrbExDataOffset[0] < sizeof(*ExtendedSrb) ||
+            ExtendedSrb->SrbExDataOffset[0] + sizeof(*ScsiData) > ExtendedSrb->SrbLength)
+        {
+            return FALSE;
+        }
+        ScsiData = (PSRBEX_DATA_SCSI_CDB16)((PUCHAR)ExtendedSrb + ExtendedSrb->SrbExDataOffset[0]);
+        if (ScsiData->Type != SrbExDataTypeScsiCdb16)
+            return FALSE;
+        *SenseBuffer = ScsiData->SenseInfoBuffer;
+        *SenseLength = ScsiData->SenseInfoBufferLength;
+    }
+    return (*SenseBuffer != NULL && *SenseLength != 0);
+}
+
+static
 VOID
 PortCompleteRequest(
     _In_opt_ PFDO_DEVICE_EXTENSION DeviceExtension,
@@ -2477,6 +2512,8 @@ StorPortGetPhysicalAddress(
     PMINIPORT_DEVICE_EXTENSION MiniportExtension;
     PFDO_DEVICE_EXTENSION DeviceExtension;
     STOR_PHYSICAL_ADDRESS PhysicalAddress;
+    PVOID SenseBuffer;
+    ULONG SenseLength;
 
     DPRINT("StorPortGetPhysicalAddress(%p %p %p %p)\n",
            HwDeviceExtension, Srb, VirtualAddress, Length);
@@ -2511,6 +2548,16 @@ StorPortGetPhysicalAddress(
                 return PhysicalAddress;
             }
             Offset -= Sgl->List[Index].Length;
+        }
+
+        if (PortGetSrbSenseBuffer(Srb, &SenseBuffer, &SenseLength) &&
+            (ULONG_PTR)VirtualAddress >= (ULONG_PTR)SenseBuffer &&
+            (ULONG_PTR)VirtualAddress - (ULONG_PTR)SenseBuffer < SenseLength)
+        {
+            PhysicalAddress = MmGetPhysicalAddress(VirtualAddress);
+            *Length = min(SenseLength - (ULONG)((ULONG_PTR)VirtualAddress - (ULONG_PTR)SenseBuffer),
+                          PAGE_SIZE - BYTE_OFFSET(VirtualAddress));
+            return PhysicalAddress;
         }
     }
 
