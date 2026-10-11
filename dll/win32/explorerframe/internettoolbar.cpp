@@ -26,18 +26,6 @@ toolbar, and address band for an explorer window
 #include "precomp.h"
 #include <vsstyle.h>
 
-#if 1
-
-interface IAugmentedShellFolder : public IShellFolder
-{
-    STDMETHOD(AddNameSpace)(LPGUID, IShellFolder *, LPCITEMIDLIST, ULONG) PURE;
-    STDMETHOD(GetNameSpaceID)(LPCITEMIDLIST, LPGUID) PURE;
-    STDMETHOD(QueryNameSpace)(ULONG, LPGUID, IShellFolder **) PURE;
-    STDMETHOD(EnumNameSpace)(ULONG, PULONG) PURE;
-};
-
-#endif
-
 // navigation controls and menubar just send a message to parent window
 /*
 TODO:
@@ -458,11 +446,11 @@ static HRESULT GetFavoritesFolder(IShellFolder ** ppsfFavorites, LPITEMIDLIST * 
         return hr;
     }
 
-    hr = pasf->AddNameSpace(NULL, psfUserFavorites, pidlUserFavorites, 0xFF00);
+    hr = pasf->AddNameSpace(NULL, psfUserFavorites, pidlUserFavorites, 0xFF00, 0);
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
-    hr = pasf->AddNameSpace(NULL, psfCommonFavorites, pidlCommonFavorites, 0);
+    hr = pasf->AddNameSpace(NULL, psfCommonFavorites, pidlCommonFavorites, 0, 0);
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 

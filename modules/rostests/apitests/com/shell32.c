@@ -172,7 +172,7 @@ static const CLASS_AND_INTERFACES ExpectedInterfaces[] =
     {
         ID_NAME(CLSID_CRegTreeOptions, NTDDI_WIN7, NTDDI_MAX),
         {
-            { NTDDI_WIN7,         NTDDI_WIN7SP1,      &IID_IRegTreeOptions },
+            { NTDDI_WIN7,         NTDDI_WIN7SP1,      &IID_IRegTreeOptionsOld },
 
             { NTDDI_WIN7,         NTDDI_MAX,          &IID_IUnknown },
             { NTDDI_WIN7,         NTDDI_MAX,          &IID_IObjectWithSite },
@@ -416,7 +416,7 @@ static const CLASS_AND_INTERFACES ExpectedInterfaces[] =
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IItemNameLimits },
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_ITranslateShellChangeNotify },
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IAugmentedShellFolder2 },
-            { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IAugmentedShellFolder },
+            { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IAugmentedShellFolderOld },
 
             { NTDDI_MIN,          NTDDI_MAX,          &IID_IShellFolder2 },
             { NTDDI_MIN,          NTDDI_MAX,          &IID_IStorage },

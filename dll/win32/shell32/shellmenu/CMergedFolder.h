@@ -19,29 +19,7 @@
  */
 #pragma once
 
-interface IAugmentedShellFolder : public IShellFolder
-{
-    STDMETHOD(AddNameSpace)(LPGUID, IShellFolder *, LPCITEMIDLIST, ULONG) PURE;
-    STDMETHOD(GetNameSpaceID)(LPCITEMIDLIST, LPGUID) PURE;
-    STDMETHOD(QueryNameSpace)(ULONG, LPGUID, IShellFolder **) PURE;
-    STDMETHOD(EnumNameSpace)(ULONG, PULONG) PURE;
-};
-
-interface IAugmentedShellFolder2 : public IAugmentedShellFolder
-{
-    STDMETHOD(UnWrapIDList)(LPCITEMIDLIST, LONG, IShellFolder **, LPITEMIDLIST *, LPITEMIDLIST *, LONG *) PURE;
-};
-
-/* No idea what QUERYNAMESPACEINFO struct contains, yet */
-struct QUERYNAMESPACEINFO
-{
-    BYTE unknown[1];
-};
-
-interface IAugmentedShellFolder3 : public IAugmentedShellFolder2
-{
-    STDMETHOD(QueryNameSpace2)(ULONG, QUERYNAMESPACEINFO *) PURE;
-};
+#include <shdeprecated.h>
 
 class CEnumMergedFolder;
 
@@ -50,8 +28,11 @@ class CMergedFolder :
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public IShellFolder2,
     public IPersistFolder2,
-    public IItemNameLimits,
-    public IAugmentedShellFolder3     // -- undocumented
+    public IAugmentedShellFolder,
+    public IFolderType,
+    public IObjectWithBackReferences,
+    public IShellService,
+    public IStorage
     //public IShellService,              // DEPRECATED IE4 interface: https://learn.microsoft.com/en-us/windows/win32/api/shdeprecated/nn-shdeprecated-ishellservice
     //public ITranslateShellChangeNotify,// -- undocumented
     //public IStorage,
@@ -68,6 +49,11 @@ private:
     LPITEMIDLIST m_UserLocalPidl;
     LPITEMIDLIST m_AllUsersPidl;
     LPITEMIDLIST m_shellPidl;
+    GUID m_UserLocalGuid;
+    GUID m_AllUsersGuid;
+    CComPtr<IUnknown> m_pOwner;
+
+    HRESULT _GetNameSpaceStorage(ULONG uNameSpace, IStorage **ppstg);
 
 public:
     CMergedFolder();
@@ -85,17 +71,11 @@ public:
         COM_INTERFACE_ENTRY_IID(IID_IPersist,        IPersist)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder,  IPersistFolder)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder2, IPersistFolder2)
-        COM_INTERFACE_ENTRY_IID(IID_IItemNameLimits, IItemNameLimits)
-        COM_INTERFACE_ENTRY_IID(IID_IAugmentedShellFolder,  IAugmentedShellFolder)
-        COM_INTERFACE_ENTRY_IID(IID_IAugmentedShellFolder2, IAugmentedShellFolder2)
-        COM_INTERFACE_ENTRY_IID(IID_IAugmentedShellFolder3, IAugmentedShellFolder3)
-        //COM_INTERFACE_ENTRY_IID(IID_IStorage,                   IStorage)
-        //COM_INTERFACE_ENTRY_IID(IID_IShellService,              IShellService)
-        //COM_INTERFACE_ENTRY_IID(IID_ITranslateShellChangeNotify,ITranslateShellChangeNotify)
-        //COM_INTERFACE_ENTRY_IID(IID_IPersistPropertyBag,IPersistPropertyBag)
-        //COM_INTERFACE_ENTRY_IID(IID_IShellIconOverlay,  IShellIconOverlay)
-        //COM_INTERFACE_ENTRY_IID(IID_ICompositeFolder,   ICompositeFolder)
-        //COM_INTERFACE_ENTRY_IID(IID_IItemNameLimits,    IItemNameLimits)
+        COM_INTERFACE_ENTRY_IID(IID_IAugmentedShellFolder, IAugmentedShellFolder)
+        COM_INTERFACE_ENTRY_IID(IID_IFolderType, IFolderType)
+        COM_INTERFACE_ENTRY_IID(IID_IObjectWithBackReferences, IObjectWithBackReferences)
+        COM_INTERFACE_ENTRY_IID(IID_IShellService, IShellService)
+        COM_INTERFACE_ENTRY_IID(IID_IStorage, IStorage)
     END_COM_MAP()
 
     // IShellFolder
@@ -198,34 +178,39 @@ public:
     // IPersistFolder2
     STDMETHOD(GetCurFolder)(PIDLIST_ABSOLUTE * pidl) override;
 
-    /*** IItemNameLimits methods ***/
+    // IAugmentedShellFolder
+    STDMETHOD(AddNameSpace)(const GUID *pguidObject, IShellFolder *psf, PCIDLIST_ABSOLUTE pidl, ULONG dwFlags, UINT uGroupId) override;
+    STDMETHOD(GetNameSpaceID)(PCUITEMID_CHILD pidl, GUID *pguidOut) override;
+    STDMETHOD(QueryNameSpace)(ULONG uNameSpace, GUID *pguidOut, IShellFolder **ppsf) override;
+    STDMETHOD(EnumNameSpace)(ULONG uNameSpace, ULONG *pdwID) override;
+    STDMETHOD(UnWrapIDList)(PCUITEMID_CHILD pidl, LONG cPidls, IShellFolder **ppsf, PIDLIST_ABSOLUTE *ppidlFolder, PIDLIST_ABSOLUTE *ppidlItem, LONG *pcPidls) override;
+    STDMETHOD(QueryNameSpace2)(ULONG uNameSpace, QUERYNAMESPACEINFO *pqnsi) override;
+    STDMETHOD(GetNameSpaceGroupID)(PCUITEMID_CHILD pidl, UINT *puGroupId) override;
+    STDMETHOD(GetFlagsForChild)(PCUITEMID_CHILD pidl, REFGUID guidNameSpace, DWORD *pdwFlags) override;
 
-    STDMETHODIMP GetMaxLength(LPCWSTR pszName, int *piMaxNameLen) override
-    {
-        return E_NOTIMPL;
-    }
+    // IFolderType
+    STDMETHOD(GetFolderType)(FOLDERTYPEID *pftid) override;
 
-    STDMETHODIMP
-    GetValidCharacters(LPWSTR *ppwszValidChars, LPWSTR *ppwszInvalidChars) override
-    {
-        if (ppwszValidChars)
-        {
-            *ppwszValidChars = NULL;
-        }
-        if (ppwszInvalidChars)
-        {
-            SHStrDupW(INVALID_FILETITLE_CHARACTERSW, ppwszInvalidChars);
-        }
-        return S_OK;
-    }
+    // IObjectWithBackReferences
+    STDMETHOD(RemoveBackReferences)() override;
 
-    // IAugmentedShellFolder2
-    STDMETHOD(AddNameSpace)(LPGUID lpGuid, IShellFolder * psf, LPCITEMIDLIST pcidl, ULONG dwUnknown) override;
-    STDMETHOD(GetNameSpaceID)(LPCITEMIDLIST pcidl, LPGUID lpGuid) override;
-    STDMETHOD(QueryNameSpace)(ULONG dwUnknown, LPGUID lpGuid, IShellFolder ** ppsf) override;
-    STDMETHOD(EnumNameSpace)(ULONG dwUnknown, PULONG lpUnknown) override;
-    STDMETHOD(UnWrapIDList)(LPCITEMIDLIST pcidl, LONG lUnknown, IShellFolder ** ppsf, LPITEMIDLIST * ppidl1, LPITEMIDLIST *ppidl2, LONG * lpUnknown) override;
+    // IShellService
+    STDMETHOD(SetOwner)(IUnknown *punkOwner) override;
 
-    // IAugmentedShellFolder3
-    STDMETHOD(QueryNameSpace2)(ULONG, QUERYNAMESPACEINFO *) override;
+    // IStorage
+    STDMETHOD(CreateStream)(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStream **ppstm) override;
+    STDMETHOD(OpenStream)(LPCOLESTR pwcsName, void *reserved1, DWORD grfMode, DWORD reserved2, IStream **ppstm) override;
+    STDMETHOD(CreateStorage)(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStorage **ppstg) override;
+    STDMETHOD(OpenStorage)(LPCOLESTR pwcsName, IStorage *pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage **ppstg) override;
+    STDMETHOD(CopyTo)(DWORD ciidExclude, const IID *rgiidExclude, SNB snbExclude, IStorage *pstgDest) override;
+    STDMETHOD(MoveElementTo)(LPCOLESTR pwcsName, IStorage *pstgDest, LPCOLESTR pwcsNewName, DWORD grfFlags) override;
+    STDMETHOD(Commit)(DWORD grfCommitFlags) override;
+    STDMETHOD(Revert)() override;
+    STDMETHOD(EnumElements)(DWORD reserved1, void *reserved2, DWORD reserved3, IEnumSTATSTG **ppenum) override;
+    STDMETHOD(DestroyElement)(LPCOLESTR pwcsName) override;
+    STDMETHOD(RenameElement)(LPCOLESTR pwcsOldName, LPCOLESTR pwcsNewName) override;
+    STDMETHOD(SetElementTimes)(LPCOLESTR pwcsName, const FILETIME *pctime, const FILETIME *patime, const FILETIME *pmtime) override;
+    STDMETHOD(SetClass)(REFCLSID clsid) override;
+    STDMETHOD(SetStateBits)(DWORD grfStateBits, DWORD grfMask) override;
+    STDMETHOD(Stat)(STATSTG *pstatstg, DWORD grfStatFlag) override;
 };

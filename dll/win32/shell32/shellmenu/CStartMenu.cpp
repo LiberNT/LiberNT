@@ -567,11 +567,11 @@ static HRESULT GetMergedFolder(int folder1, int folder2, IShellFolder ** ppsfSta
         return hr;
     }
 
-    hr = pasf->AddNameSpace(NULL, psfUserStartMenu, pidlUserStartMenu, 0xFF00);
+    hr = pasf->AddNameSpace(NULL, psfUserStartMenu, pidlUserStartMenu, 0xFF00, 0);
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
-    hr = pasf->AddNameSpace(NULL, psfCommonStartMenu, pidlCommonStartMenu, 0);
+    hr = pasf->AddNameSpace(NULL, psfCommonStartMenu, pidlCommonStartMenu, 0, 0);
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 

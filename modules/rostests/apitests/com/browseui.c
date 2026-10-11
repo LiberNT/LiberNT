@@ -79,7 +79,7 @@ static const CLASS_AND_INTERFACES ExpectedInterfaces[] =
         ID_NAME(CLSID_AugmentedShellFolder, NTDDI_MIN, NTDDI_WS03SP4),
         {
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IAugmentedShellFolder2 },
-            { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IAugmentedShellFolder },
+            { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IAugmentedShellFolderOld },
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IShellFolder },
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IUnknown },
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IShellService },
@@ -90,7 +90,7 @@ static const CLASS_AND_INTERFACES ExpectedInterfaces[] =
         ID_NAME(CLSID_AugmentedShellFolder2, NTDDI_MIN, NTDDI_WS03SP4),
         {
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IAugmentedShellFolder2 },
-            { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IAugmentedShellFolder },
+            { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IAugmentedShellFolderOld },
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IShellFolder },
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IUnknown },
             { NTDDI_MIN,          NTDDI_WS03SP4,      &IID_IShellFolder2 },
@@ -201,7 +201,7 @@ static const CLASS_AND_INTERFACES ExpectedInterfaces[] =
     {
         ID_NAME(CLSID_CRegTreeOptions, NTDDI_MIN, NTDDI_VISTASP4),
         {
-            { NTDDI_MIN,          NTDDI_VISTASP4,     &IID_IRegTreeOptions },
+            { NTDDI_MIN,          NTDDI_VISTASP4,     &IID_IRegTreeOptionsOld },
             { NTDDI_MIN,          NTDDI_VISTASP4,     &IID_IUnknown },
             { NTDDI_MIN,          NTDDI_VISTASP4,     &IID_IObjectWithSite },
         }

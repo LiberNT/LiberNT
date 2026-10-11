@@ -522,6 +522,8 @@ typedef enum tagWALK_TREE_CMD
 
 #define HKEY_REGTREEOPTION_GRAYED ( (HKEY)INVALID_HANDLE_VALUE ) /* ROS extension */
 
+typedef struct IRegTreeOptionsEventListener IRegTreeOptionsEventListener;
+
 #define INTERFACE IRegTreeOptions
 DECLARE_INTERFACE_(IRegTreeOptions, IUnknown)
 {
@@ -534,6 +536,7 @@ DECLARE_INTERFACE_(IRegTreeOptions, IUnknown)
 	STDMETHOD(WalkTree)(THIS_ WALK_TREE_CMD Command) PURE;
 	STDMETHOD(ToggleItem)(THIS_ HTREEITEM hTI) PURE;
 	STDMETHOD(ShowHelp)(THIS_ HTREEITEM hTI, unsigned long Unknown) PURE;
+	STDMETHOD(SetEventListener)(THIS_ IRegTreeOptionsEventListener *pListener) PURE;
 };
 #undef INTERFACE
 
@@ -1270,6 +1273,22 @@ DECLARE_INTERFACE_(IBackReferencedObject, IUnknown) // {C938B119-D3AD-4D02-B5EE-
 #define IBackReferencedObject_Release(T) (T)->lpVtbl->Release(T)
 #define IBackReferencedObject_Unknown1(T) (T)->lpVtbl->Unknown1(T)
 #define IBackReferencedObject_Unknown2(T) (T)->lpVtbl->Unknown2(T)
+#endif
+
+#ifdef __cplusplus
+typedef struct QUERYNAMESPACEINFO QUERYNAMESPACEINFO;
+
+interface IAugmentedShellFolder : public IShellFolder // {2F711B17-773C-41D4-93FA-7F23EDCECB66}
+{
+    STDMETHOD(AddNameSpace)(const GUID *pguidObject, IShellFolder *psf, PCIDLIST_ABSOLUTE pidl, ULONG dwFlags, UINT uGroupId) PURE;
+    STDMETHOD(GetNameSpaceID)(PCUITEMID_CHILD pidl, GUID *pguidOut) PURE;
+    STDMETHOD(QueryNameSpace)(ULONG uNameSpace, GUID *pguidOut, IShellFolder **ppsf) PURE;
+    STDMETHOD(EnumNameSpace)(ULONG uNameSpace, ULONG *pdwID) PURE;
+    STDMETHOD(UnWrapIDList)(PCUITEMID_CHILD pidl, LONG cPidls, IShellFolder **ppsf, PIDLIST_ABSOLUTE *ppidlFolder, PIDLIST_ABSOLUTE *ppidlItem, LONG *pcPidls) PURE;
+    STDMETHOD(QueryNameSpace2)(ULONG uNameSpace, QUERYNAMESPACEINFO *pqnsi) PURE;
+    STDMETHOD(GetNameSpaceGroupID)(PCUITEMID_CHILD pidl, UINT *puGroupId) PURE;
+    STDMETHOD(GetFlagsForChild)(PCUITEMID_CHILD pidl, REFGUID guidNameSpace, DWORD *pdwFlags) PURE;
+};
 #endif
 
 /*****************************************************************************

@@ -574,3 +574,9 @@ HRESULT STDMETHODCALLTYPE CRegTreeOptions::ShowHelp(HTREEITEM hTI, unsigned long
 {
     return E_NOTIMPL;
 }
+
+HRESULT STDMETHODCALLTYPE CRegTreeOptions::SetEventListener(IRegTreeOptionsEventListener *pListener)
+{
+    m_pListener = reinterpret_cast<IUnknown *>(pListener);
+    return S_OK;
+}

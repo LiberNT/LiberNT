@@ -389,7 +389,9 @@ CMergedFolder::CMergedFolder() :
     m_EnumSource(NULL),
     m_UserLocalPidl(NULL),
     m_AllUsersPidl(NULL),
-    m_shellPidl(NULL)
+    m_shellPidl(NULL),
+    m_UserLocalGuid(GUID_NULL),
+    m_AllUsersGuid(GUID_NULL)
 {
 }
 
@@ -400,14 +402,8 @@ CMergedFolder::~CMergedFolder()
 }
 
 // IAugmentedShellFolder2
-HRESULT STDMETHODCALLTYPE CMergedFolder::AddNameSpace(LPGUID lpGuid, IShellFolder * psf, LPCITEMIDLIST pcidl, ULONG dwUnknown)
+HRESULT STDMETHODCALLTYPE CMergedFolder::AddNameSpace(const GUID *pguidObject, IShellFolder *psf, PCIDLIST_ABSOLUTE pcidl, ULONG dwFlags, UINT uGroupId)
 {
-    if (lpGuid)
-    {
-        TRACE("FIXME: No idea how to handle the GUID\n");
-        return E_NOTIMPL;
-    }
-
     TRACE("AddNameSpace %p %p\n", m_UserLocal.p, m_AllUsers.p);
 
     // FIXME: Use a DSA to store the list of merged namespaces, together with their related info (psf, pidl, ...)
@@ -416,6 +412,7 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::AddNameSpace(LPGUID lpGuid, IShellFolde
     {
         m_UserLocal = psf;
         m_UserLocalPidl = ILClone(pcidl);
+        m_UserLocalGuid = pguidObject ? *pguidObject : GUID_NULL;
         return S_OK;
     }
 
@@ -424,30 +421,31 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::AddNameSpace(LPGUID lpGuid, IShellFolde
 
     m_AllUsers = psf;
     m_AllUsersPidl = ILClone(pcidl);
+    m_AllUsersGuid = pguidObject ? *pguidObject : GUID_NULL;
 
     m_EnumSource = new CComObject<CEnumMergedFolder>();
     return m_EnumSource->SetSources(m_UserLocal, m_AllUsers);
 }
 
-HRESULT STDMETHODCALLTYPE CMergedFolder::GetNameSpaceID(LPCITEMIDLIST pcidl, LPGUID lpGuid)
+HRESULT STDMETHODCALLTYPE CMergedFolder::GetNameSpaceID(PCUITEMID_CHILD pidl, GUID *pguidOut)
 {
     UNIMPLEMENTED;
     return E_NOTIMPL;
 }
 
-HRESULT STDMETHODCALLTYPE CMergedFolder::QueryNameSpace(ULONG dwUnknown, LPGUID lpGuid, IShellFolder ** ppsf)
+HRESULT STDMETHODCALLTYPE CMergedFolder::QueryNameSpace(ULONG uNameSpace, GUID *pguidOut, IShellFolder **ppsf)
 {
     UNIMPLEMENTED;
     return E_NOTIMPL;
 }
 
-HRESULT STDMETHODCALLTYPE CMergedFolder::EnumNameSpace(ULONG dwUnknown, PULONG lpUnknown)
+HRESULT STDMETHODCALLTYPE CMergedFolder::EnumNameSpace(ULONG uNameSpace, ULONG *pdwID)
 {
     UNIMPLEMENTED;
     return E_NOTIMPL;
 }
 
-HRESULT STDMETHODCALLTYPE CMergedFolder::UnWrapIDList(LPCITEMIDLIST pcidl, LONG lUnknown, IShellFolder ** ppsf, LPITEMIDLIST * ppidl1, LPITEMIDLIST *ppidl2, LONG * lpUnknown)
+HRESULT STDMETHODCALLTYPE CMergedFolder::UnWrapIDList(PCUITEMID_CHILD pidl, LONG cPidls, IShellFolder **ppsf, PIDLIST_ABSOLUTE *ppidlFolder, PIDLIST_ABSOLUTE *ppidlItem, LONG *pcPidls)
 {
     UNIMPLEMENTED;
     return E_NOTIMPL;
@@ -552,11 +550,11 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::BindToObject(
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
-    hr = pasf->AddNameSpace(NULL, fld1, info.pidl, 0xFF00);
+    hr = pasf->AddNameSpace(NULL, fld1, (PCIDLIST_ABSOLUTE)info.pidl, 0xFF00, 0);
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
-    hr = pasf->AddNameSpace(NULL, fld2, info.pidl2, 0x0000);
+    hr = pasf->AddNameSpace(NULL, fld2, (PCIDLIST_ABSOLUTE)info.pidl2, 0x0000, 0);
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
@@ -813,10 +811,239 @@ HRESULT STDMETHODCALLTYPE CMergedFolder::MapColumnToSCID(
 }
 
 // IAugmentedShellFolder3
-HRESULT STDMETHODCALLTYPE CMergedFolder::QueryNameSpace2(ULONG, QUERYNAMESPACEINFO *)
+HRESULT STDMETHODCALLTYPE CMergedFolder::QueryNameSpace2(ULONG uNameSpace, QUERYNAMESPACEINFO *pqnsi)
 {
     UNIMPLEMENTED;
     return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::GetNameSpaceGroupID(PCUITEMID_CHILD pidl, UINT *puGroupId)
+{
+    UNIMPLEMENTED;
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::GetFlagsForChild(PCUITEMID_CHILD pidl, REFGUID guidNameSpace, DWORD *pdwFlags)
+{
+    UNIMPLEMENTED;
+    return E_NOTIMPL;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::GetFolderType(FOLDERTYPEID *pftid)
+{
+    if (!pftid)
+        return E_POINTER;
+    *pftid = FOLDERTYPEID_Generic;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::RemoveBackReferences()
+{
+    m_pOwner.Release();
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::SetOwner(IUnknown *punkOwner)
+{
+    m_pOwner = punkOwner;
+    return S_OK;
+}
+
+HRESULT CMergedFolder::_GetNameSpaceStorage(ULONG uNameSpace, IStorage **ppstg)
+{
+    IShellFolder *psf = (uNameSpace == 0) ? m_UserLocal.p : (uNameSpace == 1) ? m_AllUsers.p : NULL;
+    *ppstg = NULL;
+    if (!psf)
+        return E_NOINTERFACE;
+    return psf->QueryInterface(IID_PPV_ARG(IStorage, ppstg));
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::CreateStream(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStream **ppstm)
+{
+    CComPtr<IStorage> pstg;
+    HRESULT hr = _GetNameSpaceStorage(0, &pstg);
+    if (FAILED(hr))
+        return hr;
+    return pstg->CreateStream(pwcsName, grfMode, reserved1, reserved2, ppstm);
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::OpenStream(LPCOLESTR pwcsName, void *reserved1, DWORD grfMode, DWORD reserved2, IStream **ppstm)
+{
+    HRESULT hr = STG_E_FILENOTFOUND;
+    for (ULONG i = 0; i < 2; i++)
+    {
+        CComPtr<IStorage> pstg;
+        if (FAILED(_GetNameSpaceStorage(i, &pstg)))
+            continue;
+        hr = pstg->OpenStream(pwcsName, reserved1, grfMode, reserved2, ppstm);
+        if (hr != STG_E_FILENOTFOUND)
+            break;
+    }
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::CreateStorage(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStorage **ppstg)
+{
+    CComPtr<IStorage> pstg;
+    HRESULT hr = _GetNameSpaceStorage(0, &pstg);
+    if (FAILED(hr))
+        return hr;
+    return pstg->CreateStorage(pwcsName, grfMode, reserved1, reserved2, ppstg);
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::OpenStorage(LPCOLESTR pwcsName, IStorage *pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage **ppstg)
+{
+    HRESULT hr = STG_E_FILENOTFOUND;
+    for (ULONG i = 0; i < 2; i++)
+    {
+        CComPtr<IStorage> pstg;
+        if (FAILED(_GetNameSpaceStorage(i, &pstg)))
+            continue;
+        hr = pstg->OpenStorage(pwcsName, pstgPriority, grfMode, snbExclude, reserved, ppstg);
+        if (hr != STG_E_FILENOTFOUND)
+            break;
+    }
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::CopyTo(DWORD ciidExclude, const IID *rgiidExclude, SNB snbExclude, IStorage *pstgDest)
+{
+    CComPtr<IStorage> pstg;
+    HRESULT hr = _GetNameSpaceStorage(0, &pstg);
+    if (FAILED(hr))
+        return hr;
+    return pstg->CopyTo(ciidExclude, rgiidExclude, snbExclude, pstgDest);
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::MoveElementTo(LPCOLESTR pwcsName, IStorage *pstgDest, LPCOLESTR pwcsNewName, DWORD grfFlags)
+{
+    HRESULT hr = STG_E_FILENOTFOUND;
+    for (ULONG i = 0; i < 2; i++)
+    {
+        CComPtr<IStorage> pstg;
+        if (FAILED(_GetNameSpaceStorage(i, &pstg)))
+            continue;
+        hr = pstg->MoveElementTo(pwcsName, pstgDest, pwcsNewName, grfFlags);
+        if (hr != STG_E_FILENOTFOUND)
+            break;
+    }
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::Commit(DWORD grfCommitFlags)
+{
+    for (ULONG i = 0; i < 2; i++)
+    {
+        CComPtr<IStorage> pstg;
+        if (SUCCEEDED(_GetNameSpaceStorage(i, &pstg)))
+        {
+            HRESULT hr = pstg->Commit(grfCommitFlags);
+            if (FAILED(hr))
+                return hr;
+        }
+    }
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::Revert()
+{
+    for (ULONG i = 0; i < 2; i++)
+    {
+        CComPtr<IStorage> pstg;
+        if (SUCCEEDED(_GetNameSpaceStorage(i, &pstg)))
+        {
+            HRESULT hr = pstg->Revert();
+            if (FAILED(hr))
+                return hr;
+        }
+    }
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::EnumElements(DWORD reserved1, void *reserved2, DWORD reserved3, IEnumSTATSTG **ppenum)
+{
+    CComPtr<IStorage> pstg;
+    if (!ppenum)
+        return STG_E_INVALIDPOINTER;
+    *ppenum = NULL;
+    for (ULONG i = 0; i < 2; i++)
+    {
+        if (SUCCEEDED(_GetNameSpaceStorage(i, &pstg)))
+            return pstg->EnumElements(reserved1, reserved2, reserved3, ppenum);
+    }
+    return STG_E_FILENOTFOUND;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::DestroyElement(LPCOLESTR pwcsName)
+{
+    HRESULT hr = STG_E_FILENOTFOUND;
+    for (ULONG i = 0; i < 2; i++)
+    {
+        CComPtr<IStorage> pstg;
+        if (FAILED(_GetNameSpaceStorage(i, &pstg)))
+            continue;
+        hr = pstg->DestroyElement(pwcsName);
+        if (hr != STG_E_FILENOTFOUND)
+            break;
+    }
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::RenameElement(LPCOLESTR pwcsOldName, LPCOLESTR pwcsNewName)
+{
+    HRESULT hr = STG_E_FILENOTFOUND;
+    for (ULONG i = 0; i < 2; i++)
+    {
+        CComPtr<IStorage> pstg;
+        if (FAILED(_GetNameSpaceStorage(i, &pstg)))
+            continue;
+        hr = pstg->RenameElement(pwcsOldName, pwcsNewName);
+        if (hr != STG_E_FILENOTFOUND)
+            break;
+    }
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::SetElementTimes(LPCOLESTR pwcsName, const FILETIME *pctime, const FILETIME *patime, const FILETIME *pmtime)
+{
+    HRESULT hr = STG_E_FILENOTFOUND;
+    for (ULONG i = 0; i < 2; i++)
+    {
+        CComPtr<IStorage> pstg;
+        if (FAILED(_GetNameSpaceStorage(i, &pstg)))
+            continue;
+        hr = pstg->SetElementTimes(pwcsName, pctime, patime, pmtime);
+        if (hr != STG_E_FILENOTFOUND)
+            break;
+    }
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::SetClass(REFCLSID clsid)
+{
+    CComPtr<IStorage> pstg;
+    HRESULT hr = _GetNameSpaceStorage(0, &pstg);
+    if (FAILED(hr))
+        return hr;
+    return pstg->SetClass(clsid);
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::SetStateBits(DWORD grfStateBits, DWORD grfMask)
+{
+    CComPtr<IStorage> pstg;
+    HRESULT hr = _GetNameSpaceStorage(0, &pstg);
+    if (FAILED(hr))
+        return hr;
+    return pstg->SetStateBits(grfStateBits, grfMask);
+}
+
+HRESULT STDMETHODCALLTYPE CMergedFolder::Stat(STATSTG *pstatstg, DWORD grfStatFlag)
+{
+    CComPtr<IStorage> pstg;
+    HRESULT hr = _GetNameSpaceStorage(0, &pstg);
+    if (FAILED(hr))
+        return hr;
+    return pstg->Stat(pstatstg, grfStatFlag);
 }
 
 extern "C"

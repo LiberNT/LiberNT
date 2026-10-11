@@ -16,6 +16,7 @@ class CRegTreeOptions :
 private:
     HWND m_hTree;
     HIMAGELIST m_hIL;
+    CComPtr<IUnknown> m_pListener;
 
 public:
     CRegTreeOptions();
@@ -32,6 +33,7 @@ public:
     STDMETHOD(WalkTree)(WALK_TREE_CMD Command) override;
     STDMETHOD(ToggleItem)(HTREEITEM hTI) override;
     STDMETHOD(ShowHelp)(HTREEITEM hTI, unsigned long Unknown) override;
+    STDMETHOD(SetEventListener)(IRegTreeOptionsEventListener *pListener) override;
 
     DECLARE_REGISTRY_RESOURCEID(IDR_REGTREEOPTIONS)
     DECLARE_NOT_AGGREGATABLE(CRegTreeOptions)
