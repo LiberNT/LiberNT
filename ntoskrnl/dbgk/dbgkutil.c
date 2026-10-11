@@ -102,7 +102,7 @@ DbgkpSendWow64SystemDllMessage(IN PETHREAD Thread)
     PTEB Teb;
     NTSTATUS Status;
 
-    if (!PsGetProcessWow64Process(Process) || !InitBlock) return;
+    if (!Process->WoW64Process || !InitBlock) return;
 
     RtlZeroMemory(LoadDll, sizeof(*LoadDll));
     _SEH2_TRY
