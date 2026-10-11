@@ -1831,7 +1831,7 @@ VOID co_IntShellHookNotify(WPARAM Message, WPARAM wParam, LPARAM lParam)
         ExFreePoolWithTag(HwndList, USERTAG_WINDOWLIST);
     }
 
-    if (ISITHOOKED(WH_SHELL))
+    if (ISITHOOKED(WH_SHELL) && Message != HSHELL_FULLSCREENENTER && Message != HSHELL_FULLSCREENEXIT)
     {
         co_HOOK_CallHooks(WH_SHELL, Message, wParam, lParam);
     }

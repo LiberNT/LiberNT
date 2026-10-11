@@ -31,3 +31,4 @@ BOOL FASTCALL co_IntSetForegroundMessageQueue(PWND,PTHREADINFO,BOOL,DWORD );
 VOID FASTCALL IntSetForegroundThread(PTHREADINFO);
 VOID FASTCALL UpdateShellHook(PWND);
 BOOL FASTCALL IntCheckFullscreen(PWND Window);
+VOID FASTCALL co_IntUpdateFullscreenState(PWND Window);

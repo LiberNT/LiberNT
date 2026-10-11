@@ -3243,6 +3243,12 @@ public:
                 StartMenu2_RecordUsage((HWND)lParam);
             break;
 
+        case HSHELL_FULLSCREENENTER:
+        case HSHELL_FULLSCREENEXIT:
+            HandleFullScreenApp(FindRudeApp(NULL));
+            OnWindowActivated((HWND)lParam);
+            break;
+
         case HSHELL_FLASH:
             FlashTask((HWND) lParam);
             break;

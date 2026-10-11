@@ -2075,6 +2075,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
       Window->style &= ~WS_VISIBLE; //IntSetStyle( Window, 0, WS_VISIBLE );
       Window->head.pti->cVisWindows--;
       IntNotifyWinEvent(EVENT_OBJECT_HIDE, Window, OBJID_WINDOW, CHILDID_SELF, WEF_SETBYWNDPTI);
+      co_IntUpdateFullscreenState(Window);
    }
    else if (WinPos.flags & SWP_SHOWWINDOW)
    {
@@ -2105,7 +2106,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
    }
    else
    {
-      IntCheckFullscreen(Window);
+      co_IntUpdateFullscreenState(Window);
    }
 
    if (Window->hrgnUpdate != NULL && Window->hrgnUpdate != HRGN_WINDOW)

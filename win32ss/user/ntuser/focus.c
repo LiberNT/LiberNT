@@ -117,6 +117,9 @@ BOOL FASTCALL IntIsWindowFullscreen(PWND Window)
         return FALSE;
     }
 
+    if ((Window->style & (WS_THICKFRAME | WS_DLGFRAME | WS_BORDER)) == (WS_THICKFRAME | WS_DLGFRAME | WS_BORDER))
+        rclWindow = *(LPRECTL)&Window->rcClient;
+
     pMonitor = UserGetPrimaryMonitor();
     if (!pMonitor)
     {
@@ -149,6 +152,24 @@ BOOL FASTCALL IntCheckFullscreen(PWND Window)
         ghwndOldFullscreen = hWnd;
     }
     return TRUE;
+}
+
+VOID FASTCALL
+co_IntUpdateFullscreenState(PWND Window)
+{
+    HWND hWnd = UserHMGetHandle(Window);
+    BOOL bFullscreen = IntIsWindowFullscreen(Window);
+
+    if (bFullscreen && ghwndOldFullscreen != hWnd)
+    {
+        ghwndOldFullscreen = hWnd;
+        co_IntShellHookNotify(HSHELL_FULLSCREENENTER, (WPARAM)hWnd, 0);
+    }
+    else if (!bFullscreen && ghwndOldFullscreen == hWnd)
+    {
+        ghwndOldFullscreen = NULL;
+        co_IntShellHookNotify(HSHELL_FULLSCREENEXIT, (WPARAM)hWnd, 0);
+    }
 }
 
 VOID FASTCALL
