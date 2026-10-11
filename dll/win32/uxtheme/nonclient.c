@@ -8,6 +8,7 @@
 
 #include "uxthemep.h"
 #include <reactos/dwmframe.h>
+#include <math.h>
 
 #define NC_PREVIEW_MSGBOX_HALF_WIDTH 75
 #define NC_PREVIEW_MSGBOX_OFFSET_X -29
@@ -1989,6 +1990,158 @@ ThemeWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, WNDPROC DefWndPr
     }
 }
 
+static HDC
+NCPreviewCapture(HDC hDC, const RECT *prc, ULONG **Bits)
+{
+    BITMAPINFO bmi;
+    HBITMAP hbmp;
+    HDC hdcCapture;
+
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+    bmi.bmiHeader.biWidth = prc->right - prc->left;
+    bmi.bmiHeader.biHeight = -(prc->bottom - prc->top);
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    if (bmi.bmiHeader.biWidth <= 0 || bmi.bmiHeader.biHeight >= 0)
+        return NULL;
+
+    hdcCapture = CreateCompatibleDC(hDC);
+    if (!hdcCapture)
+        return NULL;
+    hbmp = CreateDIBSection(hDC, &bmi, DIB_RGB_COLORS, (PVOID *)Bits, NULL, 0);
+    if (!hbmp)
+    {
+        DeleteDC(hdcCapture);
+        return NULL;
+    }
+    SelectObject(hdcCapture, hbmp);
+    BitBlt(hdcCapture, 0, 0, prc->right - prc->left, prc->bottom - prc->top, hDC, prc->left, prc->top, SRCCOPY);
+    GdiFlush();
+    return hdcCapture;
+}
+
+static VOID
+NCPreviewRelease(HDC hdcCapture)
+{
+    HBITMAP hbmp;
+
+    if (!hdcCapture)
+        return;
+    hbmp = (HBITMAP)GetCurrentObject(hdcCapture, OBJ_BITMAP);
+    DeleteDC(hdcCapture);
+    DeleteObject(hbmp);
+}
+
+static ULONG
+NCPreviewCornerAlpha(LONG x, LONG y, LONG cx, LONG cy, LONG r)
+{
+    double dx, dy, Cover;
+
+    dx = x < r ? (double)r - ((double)x + 0.5) : ((double)x + 0.5) - (double)(cx - r);
+    dy = y < r ? (double)r - ((double)y + 0.5) : ((double)y + 0.5) - (double)(cy - r);
+    Cover = (double)r - sqrt(dx * dx + dy * dy) + 0.5;
+    if (Cover <= 0.0)
+        return 0;
+    if (Cover >= 1.0)
+        return 255;
+    return (ULONG)(Cover * 255.0);
+}
+
+static ULONG
+NCPreviewCornerEdge(const ULONG *Bits, LONG cx, LONG cy, const RECT *prcClient, LONG r, LONG x, LONG y)
+{
+    BOOL Left = x < r, Top = y < r;
+    LONG Width = Left ? prcClient->left : cx - prcClient->right, Lines, Index, Column, Next;
+    ULONG Source = Bits[y * cx + x], Outer, Inner, Fill, Result = 0, Shift;
+    double dx, dy, Depth, Fraction;
+    const ULONG *Line;
+
+    if (Width > r)
+        Width = r;
+    if (Width <= 0)
+        return Source;
+    dx = Left ? (double)r - ((double)x + 0.5) : ((double)x + 0.5) - (double)(cx - r);
+    dy = Top ? (double)r - ((double)y + 0.5) : ((double)y + 0.5) - (double)(cy - r);
+    Depth = (double)r - sqrt(dx * dx + dy * dy);
+    if (Depth >= (double)Width + 0.5)
+        return Source;
+    Line = Bits + (Top ? r : cy - 1 - r) * cx;
+    Fill = Line[Left ? Width - 1 : cx - Width] & 0x00FFFFFFu;
+    for (Lines = Width; Lines > 0; --Lines)
+    {
+        if ((Line[Left ? Lines - 1 : cx - Lines] & 0x00FFFFFFu) != Fill)
+            break;
+    }
+    if (Lines == 0 || Depth >= (double)Lines + 0.5)
+        return Source;
+    Depth -= 0.5;
+    if (Depth < 0.0)
+        Depth = 0.0;
+    Index = (LONG)Depth;
+    Fraction = Depth - (double)Index;
+    Column = Left ? Index : cx - 1 - Index;
+    Next = Left ? Index + 1 : cx - 2 - Index;
+    Outer = Line[Column];
+    Inner = Index + 1 < Lines ? Line[Next] : Source;
+    for (Shift = 0; Shift < 32; Shift += 8)
+    {
+        double Channel = (double)((Outer >> Shift) & 0xFFu) * (1.0 - Fraction) +
+                         (double)((Inner >> Shift) & 0xFFu) * Fraction;
+
+        Result |= (ULONG)(Channel + 0.5) << Shift;
+    }
+    return Result;
+}
+
+static VOID
+NCPreviewRoundCorners(HDC hDC, const RECT *prcWindow, const RECT *prcClient, HDC hdcUnder, ULONG *Under)
+{
+    LONG cx = prcWindow->right - prcWindow->left, cy = prcWindow->bottom - prcWindow->top;
+    LONG r = (LONG)(DWM_CORNER_RADIUS_96 * GetDpiForSystem() / 96), x, y, Corner;
+    ULONG *Bits, Cover, s, d, Shift, Out;
+    HDC hdcWindow;
+
+    if (r * 2 > cx)
+        r = cx / 2;
+    if (r * 2 > cy)
+        r = cy / 2;
+    if (r <= 0)
+        return;
+
+    hdcWindow = NCPreviewCapture(hDC, prcWindow, &Bits);
+    if (!hdcWindow)
+        return;
+
+    for (Corner = 0; Corner < 4; Corner++)
+    {
+        LONG x0 = (Corner & 1) ? cx - r : 0, y0 = (Corner & 2) ? cy - r : 0;
+
+        for (y = y0; y < y0 + r; y++)
+        {
+            for (x = x0; x < x0 + r; x++)
+            {
+                Cover = NCPreviewCornerAlpha(x, y, cx, cy, r);
+                if (Cover == 0)
+                    continue;
+                s = NCPreviewCornerEdge(Bits, cx, cy, prcClient, r, x, y);
+                d = Under[y * cx + x];
+                Out = 0;
+                for (Shift = 0; Shift < 24; Shift += 8)
+                {
+                    Out |= ((((s >> Shift) & 0xFFu) * Cover +
+                             ((d >> Shift) & 0xFFu) * (255u - Cover)) / 255u) << Shift;
+                }
+                Under[y * cx + x] = Out;
+            }
+        }
+        BitBlt(hDC, prcWindow->left + x0, prcWindow->top + y0, r, r, hdcUnder, x0, y0, SRCCOPY);
+    }
+
+    NCPreviewRelease(hdcWindow);
+}
+
 static
 void
 DrawWindowForNCPreview(
@@ -2014,6 +2167,9 @@ DrawWindowForNCPreview(
 
     RECT rcWindowPrev = { pcontext->wi.rcWindow.left, pcontext->wi.rcWindow.top, pcontext->wi.rcWindow.right, pcontext->wi.rcWindow.bottom };
     RECT rcClientPrev = { pcontext->wi.rcClient.left, pcontext->wi.rcClient.top, pcontext->wi.rcClient.right, pcontext->wi.rcClient.bottom };
+    RECT rcPreviewWindow = { left, top, right, bottom };
+    ULONG *Under = NULL;
+    HDC hdcUnder = IsCompositionActive() ? NCPreviewCapture(hDC, &rcPreviewWindow, &Under) : NULL;
     SetWindowPos(pcontext->hWnd, NULL, left, top, right - left, bottom - top, SWP_NOZORDER | SWP_NOACTIVATE | SWP_DRAWFRAME | SWP_NOCOPYBITS);
     RECT rcWindowNew = { left, top, right, bottom };
     pcontext->wi.rcWindow = rcWindowNew;
@@ -2086,6 +2242,11 @@ DrawWindowForNCPreview(
     pcontext->wi.rcClient = rcClientPrev;
 
     SetViewportOrgEx(hDC, 0, 0, NULL);
+    if (hdcUnder)
+    {
+        NCPreviewRoundCorners(hDC, &rcPreviewWindow, &rcClientNew, hdcUnder, Under);
+        NCPreviewRelease(hdcUnder);
+    }
     if (prcClient != NULL)
     {
         prcClient->left = rcClientNew.left;
