@@ -45,7 +45,8 @@ class CShellLink :
     public IObjectWithSite,
     public ICustomizeInfoTip,
     public IMarshal,
-    public IPropertyStore
+    public IPropertyStore,
+    public ISLTracker
 {
 public:
     /* Link file formats */
@@ -225,6 +226,10 @@ public:
     STDMETHOD(SetValue)(REFPROPERTYKEY key, REFPROPVARIANT propvar) override;
     STDMETHOD(Commit)() override;
 
+    STDMETHOD(Resolve)(HWND hwnd, ULONG fFlags, ULONG fRestrictions) override;
+    STDMETHOD(GetIDs)(DOMAIN_RELATIVE_OBJECTID *pdroidCurrent, DOMAIN_RELATIVE_OBJECTID *pdroidBirth, MACHINE_ID *pmcid) override;
+    STDMETHOD(CancelSearch)() override;
+
     // IObjectWithSite
     STDMETHOD(SetSite)(IUnknown *punk) override;
     STDMETHOD(GetSite)(REFIID iid, void **ppvSite) override;
@@ -263,6 +268,7 @@ BEGIN_COM_MAP(CShellLink)
     COM_INTERFACE_ENTRY_IID(IID_ICustomizeInfoTip, ICustomizeInfoTip)
     COM_INTERFACE_ENTRY_IID(IID_IMarshal, IMarshal)
     COM_INTERFACE_ENTRY_IID(IID_IPropertyStore, IPropertyStore)
+    COM_INTERFACE_ENTRY_IID(IID_ISLTracker, ISLTracker)
 END_COM_MAP()
 };
 

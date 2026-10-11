@@ -1354,6 +1354,43 @@ DECLARE_INTERFACE_(IBackReferencedObject, IUnknown) // {C938B119-D3AD-4D02-B5EE-
 #endif
 
 /*****************************************************************************
+ * ISLTracker interface
+ */
+typedef struct tagDOMAIN_RELATIVE_OBJECTID
+{
+    GUID guidVolume;
+    GUID guidObject;
+} DOMAIN_RELATIVE_OBJECTID;
+
+typedef struct tagMACHINE_ID
+{
+    CHAR szMachine[16];
+} MACHINE_ID;
+
+#define INTERFACE ISLTracker
+DECLARE_INTERFACE_(ISLTracker, IUnknown) // {7C9E512F-41D7-11D1-8E2E-00C04FB9386D}
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** ISLTracker ***/
+    STDMETHOD(Resolve)(THIS_ HWND hwnd, ULONG fFlags, ULONG fRestrictions) PURE;
+    STDMETHOD(GetIDs)(THIS_ DOMAIN_RELATIVE_OBJECTID *pdroidCurrent, DOMAIN_RELATIVE_OBJECTID *pdroidBirth, MACHINE_ID *pmcid) PURE;
+    STDMETHOD(CancelSearch)(THIS) PURE;
+};
+#undef INTERFACE
+
+#ifdef COBJMACROS
+#define ISLTracker_QueryInterface(T,a,b) (T)->lpVtbl->QueryInterface(T,a,b)
+#define ISLTracker_AddRef(T) (T)->lpVtbl->AddRef(T)
+#define ISLTracker_Release(T) (T)->lpVtbl->Release(T)
+#define ISLTracker_Resolve(T,a,b,c) (T)->lpVtbl->Resolve(T,a,b,c)
+#define ISLTracker_GetIDs(T,a,b,c) (T)->lpVtbl->GetIDs(T,a,b,c)
+#define ISLTracker_CancelSearch(T) (T)->lpVtbl->CancelSearch(T)
+#endif
+
+/*****************************************************************************
  * ICustomizeInfoTip interface
  */
 #define INTERFACE ICustomizeInfoTip

@@ -2988,6 +2988,41 @@ HRESULT STDMETHODCALLTYPE CShellLink::DisconnectObject(DWORD dwReserved)
     return S_OK;
 }
 
+HRESULT STDMETHODCALLTYPE CShellLink::Resolve(HWND hwnd, ULONG fFlags, ULONG fRestrictions)
+{
+    return Resolve(hwnd, (DWORD)fFlags);
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::GetIDs(DOMAIN_RELATIVE_OBJECTID *pdroidCurrent, DOMAIN_RELATIVE_OBJECTID *pdroidBirth, MACHINE_ID *pmcid)
+{
+    const EXP_TRACKER *pTracker = (const EXP_TRACKER *)SHFindDataBlock(m_pDBList, EXP_TRACKER_SIG);
+
+    if (!pTracker || pTracker->dbh.cbSize < sizeof(*pTracker) ||
+        pTracker->nLength < sizeof(*pTracker) - sizeof(pTracker->dbh))
+    {
+        return E_UNEXPECTED;
+    }
+
+    if (pdroidCurrent)
+    {
+        pdroidCurrent->guidVolume = pTracker->guidDroidVolume;
+        pdroidCurrent->guidObject = pTracker->guidDroidObject;
+    }
+    if (pdroidBirth)
+    {
+        pdroidBirth->guidVolume = pTracker->guidDroidBirthVolume;
+        pdroidBirth->guidObject = pTracker->guidDroidBirthObject;
+    }
+    if (pmcid)
+        CopyMemory(pmcid->szMachine, pTracker->szMachineID, sizeof(pmcid->szMachine));
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CShellLink::CancelSearch()
+{
+    return S_OK;
+}
+
 #define PROPSTORAGE_VERSION 0x53505331
 
 static const FMTID FMTID_NamedProperties =
