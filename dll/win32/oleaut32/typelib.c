@@ -10825,7 +10825,11 @@ static HRESULT WINAPI ITypeInfo_fnInvoke(
                 {
                     TRACE("[retval] value: %s\n", debugstr_variant(prgpvarg[i]));
 
+#ifdef __REACTOS__
+                    if (pVarResult && !(V_VT(&varresult) == VT_ERROR && FAILED(V_ERROR(&varresult))))
+#else
                     if (pVarResult)
+#endif
                     {
                         VariantInit(pVarResult);
                         /* deref return value */
