@@ -124,6 +124,7 @@ class NativeShaderResourceView;
 
 static UINT NativeVertexFormatSize(DXGI_FORMAT format);
 static UINT NativeBufferFormatSize(DXGI_FORMAT format);
+static bool NativeTypedUavFormat(DXGI_FORMAT format);
 static bool NativeUploadFormat(DXGI_FORMAT, UINT, UINT, UINT *, UINT *);
 static void NativeRetainResource(ID3D11Resource *resource);
 static void NativeDropResource(ID3D11Resource *resource);
@@ -3478,7 +3479,9 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFormatSupport(DXGI_FORMAT format, U
         *support |= D3D11_FORMAT_SUPPORT_IA_VERTEX_BUFFER;
     if (format == DXGI_FORMAT_R16_UINT || format == DXGI_FORMAT_R32_UINT)
         *support |= D3D11_FORMAT_SUPPORT_IA_INDEX_BUFFER;
-    if (ddi_support & 0x200) *support |= D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW;
+    if ((ddi_support & D3D11_1DDI_FORMAT_SUPPORT_UAV_WRITES)
+            || (feature_level >= D3D_FEATURE_LEVEL_11_0 && NativeTypedUavFormat(format)))
+        *support |= D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW;
     if (NativeBufferFormatSize(format) || (ddi_support & D3D11_1DDI_FORMAT_SUPPORT_BUFFER))
         *support |= D3D11_FORMAT_SUPPORT_BUFFER | D3D11_FORMAT_SUPPORT_SHADER_LOAD;
     if (ddi_support & 0x4000) *support |= D3D11_FORMAT_SUPPORT_SHADER_GATHER;
@@ -3548,7 +3551,22 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFeatureSupport(D3D11_FEATURE featur
         case D3D11_FEATURE_FORMAT_SUPPORT2:
         {
             if (!NativeFeatureData(data, size, sizeof(D3D11_FEATURE_DATA_FORMAT_SUPPORT2))) return E_INVALIDARG;
-            static_cast<D3D11_FEATURE_DATA_FORMAT_SUPPORT2 *>(data)->OutFormatSupport2 = 0;
+            D3D11_FEATURE_DATA_FORMAT_SUPPORT2 *caps = static_cast<D3D11_FEATURE_DATA_FORMAT_SUPPORT2 *>(data);
+            caps->OutFormatSupport2 = 0;
+            UINT support = 0;
+            if (SUCCEEDED(CheckFormatSupport(caps->InFormat, &support))
+                    && (support & D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW))
+                caps->OutFormatSupport2 |= D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE;
+            bool integer32 = caps->InFormat == DXGI_FORMAT_R32_UINT || caps->InFormat == DXGI_FORMAT_R32_SINT;
+            if (feature_level >= D3D_FEATURE_LEVEL_11_0 && integer32)
+                caps->OutFormatSupport2 |= D3D11_FORMAT_SUPPORT2_UAV_ATOMIC_ADD
+                        | D3D11_FORMAT_SUPPORT2_UAV_ATOMIC_BITWISE_OPS
+                        | D3D11_FORMAT_SUPPORT2_UAV_ATOMIC_COMPARE_STORE_OR_COMPARE_EXCHANGE
+                        | D3D11_FORMAT_SUPPORT2_UAV_ATOMIC_SIGNED_MIN_OR_MAX
+                        | D3D11_FORMAT_SUPPORT2_UAV_ATOMIC_UNSIGNED_MIN_OR_MAX;
+            if (feature_level >= D3D_FEATURE_LEVEL_11_0 && (integer32 || caps->InFormat == DXGI_FORMAT_R32_FLOAT))
+                caps->OutFormatSupport2 |= D3D11_FORMAT_SUPPORT2_UAV_ATOMIC_EXCHANGE
+                        | D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD;
             return S_OK;
         }
         case D3D11_FEATURE_D3D10_X_HARDWARE_OPTIONS:
@@ -6822,7 +6840,7 @@ static UINT NativeVertexFormatSize(DXGI_FORMAT format)
         case DXGI_FORMAT_R32G32_FLOAT: case DXGI_FORMAT_R32G32_UINT: case DXGI_FORMAT_R32G32_SINT: return 8;
         case DXGI_FORMAT_R10G10B10A2_UNORM: case DXGI_FORMAT_R10G10B10A2_UINT: case DXGI_FORMAT_R11G11B10_FLOAT:
         case DXGI_FORMAT_R8G8B8A8_UNORM: case DXGI_FORMAT_R8G8B8A8_UINT: case DXGI_FORMAT_R8G8B8A8_SNORM: case DXGI_FORMAT_R8G8B8A8_SINT:
-        case DXGI_FORMAT_B8G8R8A8_UNORM:
+        case DXGI_FORMAT_B8G8R8A8_UNORM: case DXGI_FORMAT_B8G8R8X8_UNORM:
         case DXGI_FORMAT_R16G16_FLOAT: case DXGI_FORMAT_R16G16_UNORM: case DXGI_FORMAT_R16G16_UINT:
         case DXGI_FORMAT_R16G16_SNORM: case DXGI_FORMAT_R16G16_SINT:
         case DXGI_FORMAT_R32_FLOAT: case DXGI_FORMAT_R32_UINT: case DXGI_FORMAT_R32_SINT: return 4;
@@ -6831,6 +6849,13 @@ static UINT NativeVertexFormatSize(DXGI_FORMAT format)
         case DXGI_FORMAT_R8_UNORM: case DXGI_FORMAT_R8_UINT: case DXGI_FORMAT_R8_SNORM: case DXGI_FORMAT_R8_SINT: return 1;
         default: return 0;
     }
+}
+
+static bool NativeTypedUavFormat(DXGI_FORMAT format)
+{
+    UINT size = NativeVertexFormatSize(format);
+    return format == DXGI_FORMAT_A8_UNORM || (size && size != 12 && format != DXGI_FORMAT_B8G8R8A8_UNORM
+            && format != DXGI_FORMAT_B8G8R8X8_UNORM);
 }
 
 static UINT NativeBufferFormatSize(DXGI_FORMAT format)
