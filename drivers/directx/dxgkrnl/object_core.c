@@ -245,7 +245,7 @@ DxgkCapsCoreInterfaceVersionPermitted(
 {
     return DxgkCapsCoreInterfaceVersionInRange(
         InterfaceVersion,
-        DXGK_CAPS_CORE_LEVEL_WDDM_2_0,
+        DXGK_CAPS_CORE_LEVEL_WDDM_1_2,
         ConfiguredLevel);
 }
 

@@ -16372,12 +16372,12 @@ DxgkpAddDeviceRegistered(
 
     /* Registration already enforces the Win11 profile.  Keep the same floor
      * at AddDevice so a corrupted or stale registration cannot reintroduce a
-     * pre-WDDM2 miniport through the PnP path. */
+     * pre-WDDM 1.2 miniport through the PnP path. */
     if (!DxgkCapsCoreInterfaceVersionAtLeast(
             MpCtx->InitData.s.Version,
-            DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
+            DXGK_CAPS_CORE_LEVEL_WDDM_1_2))
     {
-        DXGKRNL_WARN("DxgkpAddDevice: pre-WDDM2 miniport version 0x%lX rejected by the Win11 profile\n", MpCtx->InitData.s.Version);
+        DXGKRNL_WARN("DxgkpAddDevice: pre-WDDM 1.2 miniport version 0x%lX rejected by the Win11 profile\n", MpCtx->InitData.s.Version);
         return STATUS_NOT_SUPPORTED;
     }
 
@@ -16923,7 +16923,10 @@ DxgkpFullInitDataPrefixSize(
     if (DxgkCapsCoreInterfaceVersionAtLeast(
             Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
         return DXGKP_FIELD_END(DRIVER_INITIALIZATION_DATA, DxgkDdiSetVideoProtectedRegion);
-    return DXGKP_FIELD_END(DRIVER_INITIALIZATION_DATA, DxgkDdiSetVideoProtectedRegion);
+    if (DxgkCapsCoreInterfaceVersionAtLeast(
+            Version, DXGK_CAPS_CORE_LEVEL_WDDM_1_3))
+        return DXGKP_FIELD_END(DRIVER_INITIALIZATION_DATA, DxgkDdiFormatHistoryBuffer);
+    return DXGKP_FIELD_END(DRIVER_INITIALIZATION_DATA, DxgkDdiNotifySurpriseRemoval);
 }
 
 /* KMDDOD has a distinct layout. WDDM 2.0 appends the final public callback;
@@ -16932,7 +16935,9 @@ static ULONG
 DxgkpDodInitDataPrefixSize(
     _In_ ULONG Version)
 {
-    (VOID)Version;
+    if (!DxgkCapsCoreInterfaceVersionAtLeast(
+            Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
+        return DXGKP_FIELD_END(KMDDOD_INITIALIZATION_DATA, DxgkDdiNotifySurpriseRemoval);
     return DXGKP_FIELD_END(KMDDOD_INITIALIZATION_DATA, DxgkDdiPowerRuntimeSetDeviceHandle);
 }
 
@@ -17146,12 +17151,6 @@ DxgkpInitializeMiniport(
 
     if (UseDodLayout)
     {
-        if (!DxgkCapsCoreInterfaceVersionAtLeast(
-                Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
-        {
-            DXGKRNL_ERR("DxgkpInitializeMiniport: pre-WDDM 2 DOD version 0x%lX is outside the Win11 profile\n", Version);
-            return STATUS_INVALID_PARAMETER;
-        }
         RequiredPrefixSize = DxgkpDodInitDataPrefixSize(Version);
     }
     else
@@ -17162,12 +17161,6 @@ DxgkpInitializeMiniport(
                         Version, VersionLevel,
                         (ULONG)DXGKP_FULL_INIT_DATA_MAX_LEVEL);
             return STATUS_REVISION_MISMATCH;
-        }
-        if (!DxgkCapsCoreInterfaceVersionAtLeast(
-                Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
-        {
-            DXGKRNL_ERR("DxgkpInitializeMiniport: pre-WDDM 2 full-table version 0x%lX is outside the Win11 profile\n", Version);
-            return STATUS_INVALID_PARAMETER;
         }
         RequiredPrefixSize = DxgkpFullInitDataPrefixSize(Version);
     }
