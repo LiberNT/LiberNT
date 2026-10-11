@@ -1067,9 +1067,13 @@ HRESULT WINAPI SHDefExtractIconA(LPCSTR pszIconFile, int iIndex, UINT uFlags,
  */
 EXTERN_C INT WINAPI SHGetIconOverlayIndexA(LPCSTR pszIconPath, INT iIconIndex)
 {
-  FIXME("%s, %d\n", debugstr_a(pszIconPath), iIconIndex);
+  WCHAR szPath[MAX_PATH];
 
-  return -1;
+  if (!pszIconPath)
+    return SHGetIconOverlayIndexW(NULL, iIconIndex);
+  if (!MultiByteToWideChar(CP_ACP, 0, pszIconPath, -1, szPath, _countof(szPath)))
+    return -1;
+  return SHGetIconOverlayIndexW(szPath, iIconIndex);
 }
 
 /****************************************************************************
@@ -1077,9 +1081,94 @@ EXTERN_C INT WINAPI SHGetIconOverlayIndexA(LPCSTR pszIconPath, INT iIconIndex)
  *
  * Returns the index of the overlay icon in the system image list.
  */
+#define SIC_MAX_OVERLAYS 15
+
+static INT s_OverlayImages[SIC_MAX_OVERLAYS];
+static INT s_OverlayIcons[SIC_MAX_OVERLAYS];
+static WCHAR s_OverlayFiles[SIC_MAX_OVERLAYS][MAX_PATH];
+static UINT s_cOverlays;
+
+static INT SIC_FindOverlay(LPCWSTR pszIconPath, INT iIconIndex)
+{
+    for (UINT i = 0; i < s_cOverlays; i++)
+    {
+        if (s_OverlayIcons[i] == iIconIndex && !_wcsicmp(s_OverlayFiles[i], pszIconPath))
+            return s_OverlayImages[i];
+    }
+    return -1;
+}
+
+INT SIC_GetOverlaySlot(INT iImage)
+{
+    INT slot = 0;
+
+    EnterCriticalSection(&SHELL32_SicCS);
+    for (UINT i = 0; i < s_cOverlays; i++)
+    {
+        if (s_OverlayImages[i] == iImage)
+        {
+            slot = i + 1;
+            break;
+        }
+    }
+    LeaveCriticalSection(&SHELL32_SicCS);
+    return slot;
+}
+
 EXTERN_C INT WINAPI SHGetIconOverlayIndexW(LPCWSTR pszIconPath, INT iIconIndex)
 {
-  FIXME("%s, %d\n", debugstr_w(pszIconPath), iIconIndex);
+    LPCWSTR pszKey = pszIconPath ? pszIconPath : L"";
+    INT iShellIcon = -1, iImage;
 
-  return -1;
+    TRACE("%s, %d\n", debugstr_w(pszIconPath), iIconIndex);
+
+    if (!pszIconPath)
+    {
+        if (iIconIndex == (INT)0x0FFFFFFF)
+            iShellIcon = IDI_SHELL_SHARE - 1;
+        else if (iIconIndex == (INT)0x0FFFFFFE)
+            iShellIcon = IDI_SHELL_SHORTCUT - 1;
+        else
+            return -1;
+    }
+
+    if (!sic_hdpa)
+        SIC_Initialize();
+
+    EnterCriticalSection(&SHELL32_SicCS);
+    iImage = SIC_FindOverlay(pszKey, iIconIndex);
+    LeaveCriticalSection(&SHELL32_SicCS);
+    if (iImage >= 0)
+        return iImage;
+
+    iImage = pszIconPath ? SIC_GetIconIndex(pszIconPath, iIconIndex, 0) : SIC_LoadOverlayIcon(iShellIcon);
+    if (iImage < 0)
+        return -1;
+
+    EnterCriticalSection(&SHELL32_SicCS);
+    if (SIC_FindOverlay(pszKey, iIconIndex) < 0)
+    {
+        if (s_cOverlays >= SIC_MAX_OVERLAYS)
+        {
+            iImage = -1;
+        }
+        else
+        {
+            UINT slot = s_cOverlays + 1;
+            if (ImageList_SetOverlayImage(ShellSmallIconList, iImage, slot) &&
+                ImageList_SetOverlayImage(ShellBigIconList, iImage, slot))
+            {
+                s_OverlayImages[s_cOverlays] = iImage;
+                s_OverlayIcons[s_cOverlays] = iIconIndex;
+                StringCchCopyW(s_OverlayFiles[s_cOverlays], MAX_PATH, pszKey);
+                s_cOverlays = slot;
+            }
+            else
+            {
+                iImage = -1;
+            }
+        }
+    }
+    LeaveCriticalSection(&SHELL32_SicCS);
+    return iImage;
 }

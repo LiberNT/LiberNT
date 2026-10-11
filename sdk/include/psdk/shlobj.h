@@ -2780,6 +2780,42 @@ DECLARE_INTERFACE_(IShellIconOverlayIdentifier, IUnknown)
 
 #undef INTERFACE
 
+/*****************************************************************************
+ * IShellIconOverlay interface
+ */
+#define INTERFACE IShellIconOverlay
+DECLARE_INTERFACE_(IShellIconOverlay, IUnknown)
+{
+    /*** IUnknown methods ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID riid, void** ppvObject) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** IShellIconOverlay methods ***/
+    STDMETHOD(GetOverlayIndex)(THIS_ PCUITEMID_CHILD pidl, int *pIndex) PURE;
+    STDMETHOD(GetOverlayIconIndex)(THIS_ PCUITEMID_CHILD pidl, int *pIconIndex) PURE;
+};
+#undef INTERFACE
+
+#if !defined(__cplusplus) || defined(CINTERFACE)
+#define IShellIconOverlay_QueryInterface(p,a,b)     (p)->lpVtbl->QueryInterface(p,a,b)
+#define IShellIconOverlay_AddRef(p)                 (p)->lpVtbl->AddRef(p)
+#define IShellIconOverlay_Release(p)                (p)->lpVtbl->Release(p)
+#define IShellIconOverlay_GetOverlayIndex(p,a,b)    (p)->lpVtbl->GetOverlayIndex(p,a,b)
+#define IShellIconOverlay_GetOverlayIconIndex(p,a,b) (p)->lpVtbl->GetOverlayIconIndex(p,a,b)
+#endif
+
+#define OI_DEFAULT 0x00000000
+#define OI_ASYNC 0xFFFFEEEE
+
+#define IDO_SHGIOI_SHARE    0x0FFFFFFF
+#define IDO_SHGIOI_LINK     0x0FFFFFFE
+#define IDO_SHGIOI_SLOWFILE 0x0FFFFFFFD
+#define IDO_SHGIOI_DEFAULT  0x0FFFFFFFC
+
+int WINAPI SHGetIconOverlayIndexA(LPCSTR pszIconPath, int iIconIndex);
+int WINAPI SHGetIconOverlayIndexW(LPCWSTR pszIconPath, int iIconIndex);
+#define SHGetIconOverlayIndex WINELIB_NAME_AW(SHGetIconOverlayIndex)
+
 /****************************************************************************
  * Travel log
  */

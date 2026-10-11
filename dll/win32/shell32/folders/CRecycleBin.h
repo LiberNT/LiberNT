@@ -34,7 +34,9 @@ class CRecycleBin :
     public IContextMenuCB,
     public IShellPropSheetExt,
     public IShellExtInit,
-    public IObjectWithBackReferences
+    public IObjectWithBackReferences,
+    public IFolderType,
+    public IShellIconOverlay
 {
     private:
         LPITEMIDLIST pidl;
@@ -105,7 +107,29 @@ class CRecycleBin :
         COM_INTERFACE_ENTRY_IID(IID_IShellPropSheetExt, IShellPropSheetExt)
         COM_INTERFACE_ENTRY_IID(IID_IShellExtInit, IShellExtInit)
         COM_INTERFACE_ENTRY_IID(IID_IObjectWithBackReferences, IObjectWithBackReferences)
+        COM_INTERFACE_ENTRY_IID(IID_IFolderType, IFolderType)
+        COM_INTERFACE_ENTRY_IID(IID_IShellIconOverlay, IShellIconOverlay)
         END_COM_MAP()
+
+        // IFolderType
+        STDMETHOD(GetFolderType)(FOLDERTYPEID *pftid) override
+        {
+            if (!pftid)
+                return E_POINTER;
+            *pftid = FOLDERTYPEID_RecycleBin;
+            return S_OK;
+        }
+
+        // IShellIconOverlay
+        STDMETHOD(GetOverlayIndex)(PCUITEMID_CHILD pidlItem, int *pIndex) override
+        {
+            return SHELL32_GetItemOverlay(static_cast<IShellFolder2 *>(this), pidl, pidlItem, pIndex, FALSE);
+        }
+
+        STDMETHOD(GetOverlayIconIndex)(PCUITEMID_CHILD pidlItem, int *pIconIndex) override
+        {
+            return SHELL32_GetItemOverlay(static_cast<IShellFolder2 *>(this), pidl, pidlItem, pIconIndex, TRUE);
+        }
 };
 
 class CRecycleBinEmptyCommand :

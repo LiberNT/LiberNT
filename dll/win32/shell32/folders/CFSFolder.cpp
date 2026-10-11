@@ -754,6 +754,8 @@ CFSFolder::CFSFolder()
     m_sPathTarget = NULL;
     m_pidlRoot = NULL;
     m_bGroupPolicyActive = 0;
+    m_cBackReferences = 0;
+    m_bTargetFromBag = FALSE;
 }
 
 CFSFolder::~CFSFolder()
@@ -2041,6 +2043,9 @@ HRESULT WINAPI CFSFolder::Initialize(PCIDLIST_ABSOLUTE pidl)
     SHFree(m_pidlRoot);     /* free the old pidl */
     m_pidlRoot = ILClone (pidl); /* set my pidl */
 
+    if (m_bTargetFromBag && m_sPathTarget)
+        return S_OK;
+
     SHFree (m_sPathTarget);
     m_sPathTarget = NULL;
 
@@ -2427,3 +2432,684 @@ HRESULT CFSFolder::FormatSize(UINT64 size, LPWSTR Buf, UINT cchBuf)
         *Buf = UNICODE_NULL;
     return E_FAIL;
 }
+
+class CFSEnumSTATSTG :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IEnumSTATSTG
+{
+    CComHeapPtr<WCHAR> m_pszDir;
+    HANDLE m_hFind;
+    WIN32_FIND_DATAW m_fd;
+    BOOL m_bHaveCurrent;
+    ULONG m_cPosition;
+
+    void _Close()
+    {
+        if (m_hFind != INVALID_HANDLE_VALUE)
+            FindClose(m_hFind);
+        m_hFind = INVALID_HANDLE_VALUE;
+        m_bHaveCurrent = FALSE;
+    }
+
+    BOOL _IsDots() const
+    {
+        return !wcscmp(m_fd.cFileName, L".") || !wcscmp(m_fd.cFileName, L"..");
+    }
+
+    void _Advance()
+    {
+        do
+        {
+            m_bHaveCurrent = FindNextFileW(m_hFind, &m_fd);
+        } while (m_bHaveCurrent && _IsDots());
+        m_cPosition++;
+    }
+
+public:
+    CFSEnumSTATSTG() : m_hFind(INVALID_HANDLE_VALUE), m_bHaveCurrent(FALSE), m_cPosition(0) {}
+    ~CFSEnumSTATSTG() { _Close(); }
+
+    HRESULT Initialize(LPCWSTR pszDir)
+    {
+        HRESULT hr = SHStrDupW(pszDir, &m_pszDir);
+        if (FAILED(hr))
+            return hr;
+        return Reset();
+    }
+
+    STDMETHOD(Next)(ULONG celt, STATSTG *rgelt, ULONG *pceltFetched) override
+    {
+        ULONG cFetched = 0;
+        if (!rgelt || (celt > 1 && !pceltFetched))
+            return STG_E_INVALIDPOINTER;
+        while (cFetched < celt && m_bHaveCurrent)
+        {
+            STATSTG *pst = &rgelt[cFetched];
+            ZeroMemory(pst, sizeof(*pst));
+            if (FAILED(SHStrDupW(m_fd.cFileName, &pst->pwcsName)))
+                break;
+            pst->type = (m_fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? STGTY_STORAGE : STGTY_STREAM;
+            pst->cbSize.LowPart = m_fd.nFileSizeLow;
+            pst->cbSize.HighPart = m_fd.nFileSizeHigh;
+            pst->mtime = m_fd.ftLastWriteTime;
+            pst->ctime = m_fd.ftCreationTime;
+            pst->atime = m_fd.ftLastAccessTime;
+            cFetched++;
+            _Advance();
+        }
+        if (pceltFetched)
+            *pceltFetched = cFetched;
+        return (cFetched == celt) ? S_OK : S_FALSE;
+    }
+
+    STDMETHOD(Skip)(ULONG celt) override
+    {
+        while (celt && m_bHaveCurrent)
+        {
+            _Advance();
+            celt--;
+        }
+        return celt ? S_FALSE : S_OK;
+    }
+
+    STDMETHOD(Reset)() override
+    {
+        WCHAR szSpec[MAX_PATH];
+        _Close();
+        if (!PathCombineW(szSpec, m_pszDir, L"*"))
+            return STG_E_PATHNOTFOUND;
+        m_hFind = FindFirstFileW(szSpec, &m_fd);
+        m_bHaveCurrent = (m_hFind != INVALID_HANDLE_VALUE);
+        if (m_bHaveCurrent && _IsDots())
+            _Advance();
+        m_cPosition = 0;
+        return S_OK;
+    }
+
+    STDMETHOD(Clone)(IEnumSTATSTG **ppenum) override
+    {
+        HRESULT hr;
+        if (!ppenum)
+            return STG_E_INVALIDPOINTER;
+        hr = ShellObjectCreatorInit<CFSEnumSTATSTG>((LPCWSTR)m_pszDir, IID_PPV_ARG(IEnumSTATSTG, ppenum));
+        if (SUCCEEDED(hr) && m_cPosition)
+            (*ppenum)->Skip(m_cPosition);
+        return hr;
+    }
+
+    BEGIN_COM_MAP(CFSEnumSTATSTG)
+        COM_INTERFACE_ENTRY_IID(IID_IEnumSTATSTG, IEnumSTATSTG)
+    END_COM_MAP()
+};
+
+static HRESULT SHELL32_HResultFromStgWin32(DWORD dwError)
+{
+    switch (dwError)
+    {
+        case ERROR_FILE_NOT_FOUND:
+            return STG_E_FILENOTFOUND;
+        case ERROR_PATH_NOT_FOUND:
+            return STG_E_PATHNOTFOUND;
+        case ERROR_ACCESS_DENIED:
+            return STG_E_ACCESSDENIED;
+        case ERROR_FILE_EXISTS:
+        case ERROR_ALREADY_EXISTS:
+            return STG_E_FILEALREADYEXISTS;
+        case ERROR_SHARING_VIOLATION:
+            return STG_E_SHAREVIOLATION;
+        default:
+            return HRESULT_FROM_WIN32(dwError);
+    }
+}
+
+HRESULT CFSFolder::_GetElementPath(LPCOLESTR pwcsName, LPWSTR pszPath)
+{
+    if (!pwcsName)
+        return STG_E_INVALIDPOINTER;
+    if (!m_sPathTarget)
+        return E_UNEXPECTED;
+    if (!*pwcsName || wcspbrk(pwcsName, L"\\/:*?\"<>|"))
+        return STG_E_INVALIDNAME;
+    if (!PathCombineW(pszPath, m_sPathTarget, pwcsName))
+        return STG_E_INVALIDNAME;
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::GetIconOf(PCUITEMID_CHILD pidl, UINT flags, int *pIconIndex)
+{
+    CComPtr<IExtractIconW> pei;
+    WCHAR szIconFile[MAX_PATH];
+    INT iIcon = 0;
+    UINT uFlags = 0;
+    HRESULT hr;
+
+    if (!pidl || !pIconIndex)
+        return E_INVALIDARG;
+
+    hr = GetUIObjectOf(NULL, 1, &pidl, IID_NULL_PPV_ARG(IExtractIconW, &pei));
+    if (FAILED(hr))
+        return S_FALSE;
+    hr = pei->GetIconLocation(flags, szIconFile, _countof(szIconFile), &iIcon, &uFlags);
+    if (hr != S_OK || (uFlags & (GIL_NOTFILENAME | GIL_DONTCACHE | GIL_PERINSTANCE)))
+        return S_FALSE;
+
+    *pIconIndex = SIC_GetIconIndex(szIconFile, iIcon, uFlags);
+    return (*pIconIndex >= 0) ? S_OK : S_FALSE;
+}
+
+HRESULT WINAPI CFSFolder::GetOverlayIndex(PCUITEMID_CHILD pidl, int *pIndex)
+{
+    return SHELL32_GetItemOverlay(static_cast<IShellFolder2 *>(this), m_pidlRoot, pidl, pIndex, FALSE);
+}
+
+HRESULT WINAPI CFSFolder::GetOverlayIconIndex(PCUITEMID_CHILD pidl, int *pIconIndex)
+{
+    return SHELL32_GetItemOverlay(static_cast<IShellFolder2 *>(this), m_pidlRoot, pidl, pIconIndex, TRUE);
+}
+
+HRESULT WINAPI CFSFolder::CreateStream(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStream **ppstm)
+{
+    WCHAR szPath[MAX_PATH];
+    HRESULT hr;
+
+    if (!ppstm)
+        return STG_E_INVALIDPOINTER;
+    *ppstm = NULL;
+    hr = _GetElementPath(pwcsName, szPath);
+    if (FAILED(hr))
+        return hr;
+    return SHCreateStreamOnFileEx(szPath, grfMode | STGM_CREATE, FILE_ATTRIBUTE_NORMAL, TRUE, NULL, ppstm);
+}
+
+HRESULT WINAPI CFSFolder::OpenStream(LPCOLESTR pwcsName, void *reserved1, DWORD grfMode, DWORD reserved2, IStream **ppstm)
+{
+    WCHAR szPath[MAX_PATH];
+    DWORD dwAttrs;
+    HRESULT hr;
+
+    if (!ppstm)
+        return STG_E_INVALIDPOINTER;
+    *ppstm = NULL;
+    hr = _GetElementPath(pwcsName, szPath);
+    if (FAILED(hr))
+        return hr;
+    dwAttrs = GetFileAttributesW(szPath);
+    if (dwAttrs == INVALID_FILE_ATTRIBUTES)
+        return SHELL32_HResultFromStgWin32(GetLastError());
+    if (dwAttrs & FILE_ATTRIBUTE_DIRECTORY)
+        return STG_E_FILENOTFOUND;
+    return SHCreateStreamOnFileEx(szPath, grfMode, FILE_ATTRIBUTE_NORMAL, FALSE, NULL, ppstm);
+}
+
+HRESULT WINAPI CFSFolder::CreateStorage(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStorage **ppstg)
+{
+    WCHAR szPath[MAX_PATH];
+    HRESULT hr;
+
+    if (!ppstg)
+        return STG_E_INVALIDPOINTER;
+    *ppstg = NULL;
+    hr = _GetElementPath(pwcsName, szPath);
+    if (FAILED(hr))
+        return hr;
+    if (!CreateDirectoryW(szPath, NULL))
+    {
+        DWORD dwError = GetLastError();
+        if (dwError != ERROR_ALREADY_EXISTS || !(grfMode & STGM_CREATE))
+            return SHELL32_HResultFromStgWin32(dwError);
+    }
+    return OpenStorage(pwcsName, NULL, grfMode & ~STGM_CREATE, NULL, 0, ppstg);
+}
+
+HRESULT WINAPI CFSFolder::OpenStorage(LPCOLESTR pwcsName, IStorage *pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage **ppstg)
+{
+    WCHAR szPath[MAX_PATH];
+    CComHeapPtr<ITEMIDLIST> pidlChild;
+    DWORD dwAttrs;
+    HRESULT hr;
+
+    if (!ppstg)
+        return STG_E_INVALIDPOINTER;
+    *ppstg = NULL;
+    hr = _GetElementPath(pwcsName, szPath);
+    if (FAILED(hr))
+        return hr;
+    dwAttrs = GetFileAttributesW(szPath);
+    if (dwAttrs == INVALID_FILE_ATTRIBUTES)
+        return SHELL32_HResultFromStgWin32(GetLastError());
+    if (!(dwAttrs & FILE_ATTRIBUTE_DIRECTORY))
+        return STG_E_FILENOTFOUND;
+
+    hr = ParseDisplayName(NULL, NULL, const_cast<LPOLESTR>(pwcsName), NULL, &pidlChild, NULL);
+    if (FAILED(hr))
+        return hr;
+    return BindToObject(pidlChild, NULL, IID_PPV_ARG(IStorage, ppstg));
+}
+
+static HRESULT SHELL32_CopyStorageElement(IStorage *pstgSrc, const STATSTG *pst, IStorage *pstgDest, LPCOLESTR pwcsNewName)
+{
+    HRESULT hr;
+
+    if (pst->type == STGTY_STREAM)
+    {
+        CComPtr<IStream> pIn, pOut;
+        ULARGE_INTEGER cb;
+        hr = pstgSrc->OpenStream(pst->pwcsName, NULL, STGM_READ | STGM_SHARE_DENY_WRITE, 0, &pIn);
+        if (FAILED(hr))
+            return hr;
+        hr = pstgDest->CreateStream(pwcsNewName, STGM_WRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pOut);
+        if (FAILED(hr))
+            return hr;
+        cb.QuadPart = ~0ULL;
+        return pIn->CopyTo(pOut, cb, NULL, NULL);
+    }
+    if (pst->type == STGTY_STORAGE)
+    {
+        CComPtr<IStorage> pIn, pOut;
+        hr = pstgSrc->OpenStorage(pst->pwcsName, NULL, STGM_READ | STGM_SHARE_DENY_WRITE, NULL, 0, &pIn);
+        if (FAILED(hr))
+            return hr;
+        hr = pstgDest->CreateStorage(pwcsNewName, STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pOut);
+        if (FAILED(hr))
+            return hr;
+        return pIn->CopyTo(0, NULL, NULL, pOut);
+    }
+    return STG_E_INVALIDFUNCTION;
+}
+
+HRESULT WINAPI CFSFolder::CopyTo(DWORD ciidExclude, const IID *rgiidExclude, SNB snbExclude, IStorage *pstgDest)
+{
+    CComPtr<IEnumSTATSTG> penum;
+    STATSTG st;
+    HRESULT hr;
+
+    if (!pstgDest)
+        return STG_E_INVALIDPOINTER;
+    for (DWORD i = 0; i < ciidExclude; i++)
+    {
+        if (IsEqualIID(rgiidExclude[i], IID_IStorage))
+            return S_OK;
+    }
+    hr = EnumElements(0, NULL, 0, &penum);
+    if (FAILED(hr))
+        return hr;
+    while (penum->Next(1, &st, NULL) == S_OK)
+    {
+        BOOL bExcluded = FALSE;
+        for (SNB snb = snbExclude; snb && *snb && !bExcluded; snb++)
+            bExcluded = !_wcsicmp(*snb, st.pwcsName);
+        hr = bExcluded ? S_OK : SHELL32_CopyStorageElement(static_cast<IStorage *>(this), &st, pstgDest, st.pwcsName);
+        CoTaskMemFree(st.pwcsName);
+        if (FAILED(hr))
+            return hr;
+    }
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::MoveElementTo(LPCOLESTR pwcsName, IStorage *pstgDest, LPCOLESTR pwcsNewName, DWORD grfFlags)
+{
+    WCHAR szPath[MAX_PATH];
+    WIN32_FILE_ATTRIBUTE_DATA fad;
+    STATSTG st = {};
+    HRESULT hr;
+
+    if (!pstgDest || !pwcsNewName)
+        return STG_E_INVALIDPOINTER;
+    hr = _GetElementPath(pwcsName, szPath);
+    if (FAILED(hr))
+        return hr;
+    if (!GetFileAttributesExW(szPath, GetFileExInfoStandard, &fad))
+        return SHELL32_HResultFromStgWin32(GetLastError());
+    st.pwcsName = const_cast<LPOLESTR>(pwcsName);
+    st.type = (fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? STGTY_STORAGE : STGTY_STREAM;
+    hr = SHELL32_CopyStorageElement(static_cast<IStorage *>(this), &st, pstgDest, pwcsNewName);
+    if (SUCCEEDED(hr) && grfFlags == STGMOVE_MOVE)
+        hr = DestroyElement(pwcsName);
+    return hr;
+}
+
+HRESULT WINAPI CFSFolder::Commit(DWORD grfCommitFlags)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::Revert()
+{
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::EnumElements(DWORD reserved1, void *reserved2, DWORD reserved3, IEnumSTATSTG **ppenum)
+{
+    if (!ppenum)
+        return STG_E_INVALIDPOINTER;
+    *ppenum = NULL;
+    if (!m_sPathTarget)
+        return E_UNEXPECTED;
+    return ShellObjectCreatorInit<CFSEnumSTATSTG>((LPCWSTR)m_sPathTarget, IID_PPV_ARG(IEnumSTATSTG, ppenum));
+}
+
+HRESULT WINAPI CFSFolder::DestroyElement(LPCOLESTR pwcsName)
+{
+    WCHAR szPath[MAX_PATH];
+    DWORD dwAttrs;
+    HRESULT hr = _GetElementPath(pwcsName, szPath);
+    if (FAILED(hr))
+        return hr;
+    dwAttrs = GetFileAttributesW(szPath);
+    if (dwAttrs == INVALID_FILE_ATTRIBUTES)
+        return SHELL32_HResultFromStgWin32(GetLastError());
+    if (dwAttrs & FILE_ATTRIBUTE_DIRECTORY)
+    {
+        CComPtr<IStorage> pstg;
+        CComPtr<IEnumSTATSTG> penum;
+        STATSTG st;
+        hr = OpenStorage(pwcsName, NULL, STGM_READWRITE | STGM_SHARE_EXCLUSIVE, NULL, 0, &pstg);
+        if (FAILED(hr))
+            return hr;
+        hr = pstg->EnumElements(0, NULL, 0, &penum);
+        if (FAILED(hr))
+            return hr;
+        while (penum->Next(1, &st, NULL) == S_OK)
+        {
+            hr = pstg->DestroyElement(st.pwcsName);
+            CoTaskMemFree(st.pwcsName);
+            if (FAILED(hr))
+                return hr;
+        }
+        penum.Release();
+        pstg.Release();
+        if (!RemoveDirectoryW(szPath))
+            return SHELL32_HResultFromStgWin32(GetLastError());
+        return S_OK;
+    }
+    if (!DeleteFileW(szPath))
+        return SHELL32_HResultFromStgWin32(GetLastError());
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::RenameElement(LPCOLESTR pwcsOldName, LPCOLESTR pwcsNewName)
+{
+    WCHAR szOld[MAX_PATH], szNew[MAX_PATH];
+    HRESULT hr = _GetElementPath(pwcsOldName, szOld);
+    if (FAILED(hr))
+        return hr;
+    hr = _GetElementPath(pwcsNewName, szNew);
+    if (FAILED(hr))
+        return hr;
+    if (!MoveFileW(szOld, szNew))
+        return SHELL32_HResultFromStgWin32(GetLastError());
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::SetElementTimes(LPCOLESTR pwcsName, const FILETIME *pctime, const FILETIME *patime, const FILETIME *pmtime)
+{
+    WCHAR szPath[MAX_PATH];
+    HANDLE hFile;
+    BOOL bOk;
+    HRESULT hr = _GetElementPath(pwcsName, szPath);
+    if (FAILED(hr))
+        return hr;
+    hFile = CreateFileW(szPath, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (hFile == INVALID_HANDLE_VALUE)
+        return SHELL32_HResultFromStgWin32(GetLastError());
+    bOk = SetFileTime(hFile, pctime, patime, pmtime);
+    hr = bOk ? S_OK : SHELL32_HResultFromStgWin32(GetLastError());
+    CloseHandle(hFile);
+    return hr;
+}
+
+HRESULT WINAPI CFSFolder::SetClass(REFCLSID clsid)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CFSFolder::SetStateBits(DWORD grfStateBits, DWORD grfMask)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CFSFolder::Stat(STATSTG *pstatstg, DWORD grfStatFlag)
+{
+    WIN32_FILE_ATTRIBUTE_DATA fad;
+
+    if (!pstatstg)
+        return STG_E_INVALIDPOINTER;
+    if (!m_sPathTarget)
+        return E_UNEXPECTED;
+    ZeroMemory(pstatstg, sizeof(*pstatstg));
+    if (!GetFileAttributesExW(m_sPathTarget, GetFileExInfoStandard, &fad))
+        return SHELL32_HResultFromStgWin32(GetLastError());
+    pstatstg->type = STGTY_STORAGE;
+    pstatstg->mtime = fad.ftLastWriteTime;
+    pstatstg->ctime = fad.ftCreationTime;
+    pstatstg->atime = fad.ftLastAccessTime;
+    pstatstg->clsid = CLSID_NULL;
+    if (!(grfStatFlag & STATFLAG_NONAME))
+        return SHStrDupW(PathFindFileNameW(m_sPathTarget), &pstatstg->pwcsName);
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::QueryStatus(const GUID *pguidCmdGroup, ULONG cCmds, OLECMD prgCmds[], OLECMDTEXT *pCmdText)
+{
+    if (pguidCmdGroup)
+        return OLECMDERR_E_UNKNOWNGROUP;
+    if (!prgCmds)
+        return E_INVALIDARG;
+    for (ULONG i = 0; i < cCmds; i++)
+        prgCmds[i].cmdf = 0;
+    return OLECMDERR_E_NOTSUPPORTED;
+}
+
+HRESULT WINAPI CFSFolder::Exec(const GUID *pguidCmdGroup, DWORD nCmdID, DWORD nCmdexecopt, VARIANT *pvaIn, VARIANT *pvaOut)
+{
+    if (pguidCmdGroup)
+        return OLECMDERR_E_UNKNOWNGROUP;
+    return OLECMDERR_E_NOTSUPPORTED;
+}
+
+HRESULT WINAPI CFSFolder::InitNew()
+{
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::Load(IPropertyBag *pPropBag, IErrorLog *pErrorLog)
+{
+    WCHAR szValue[MAX_PATH], szPath[MAX_PATH];
+    PERSIST_FOLDER_TARGET_INFO pfti = {};
+    HRESULT hr;
+
+    if (!pPropBag)
+        return E_INVALIDARG;
+
+    pfti.csidl = -1;
+    if (SUCCEEDED(SHPropertyBag_ReadStr(pPropBag, L"Target", szValue, _countof(szValue))) && szValue[0])
+    {
+        if (!ExpandEnvironmentStringsW(szValue, szPath, _countof(szPath)))
+            return HRESULT_FROM_WIN32(GetLastError());
+        StringCchCopyW(pfti.szTargetParsingName, _countof(pfti.szTargetParsingName), szPath);
+    }
+    else if (SUCCEEDED(SHPropertyBag_ReadStr(pPropBag, L"TargetKnownFolder", szValue, _countof(szValue))) && szValue[0])
+    {
+        KNOWNFOLDERID kfid;
+        CComHeapPtr<WCHAR> pszKnown;
+        hr = CLSIDFromString(szValue, &kfid);
+        if (FAILED(hr))
+            return hr;
+        hr = SHGetKnownFolderPath(kfid, KF_FLAG_DEFAULT, NULL, &pszKnown);
+        if (FAILED(hr))
+            return hr;
+        StringCchCopyW(pfti.szTargetParsingName, _countof(pfti.szTargetParsingName), pszKnown);
+    }
+    else
+    {
+        DWORD dwCsidl;
+        if (FAILED(SHPropertyBag_ReadDWORD(pPropBag, L"TargetSpecialFolder", &dwCsidl)))
+            return S_OK;
+        pfti.csidl = (int)dwCsidl;
+    }
+
+    SHFree(m_sPathTarget);
+    m_sPathTarget = NULL;
+    if (pfti.csidl != -1)
+    {
+        if (!SHGetSpecialFolderPathW(NULL, szPath, pfti.csidl, FALSE))
+            return E_FAIL;
+        hr = SHStrDupW(szPath, &m_sPathTarget);
+    }
+    else
+    {
+        hr = SHStrDupW(pfti.szTargetParsingName, &m_sPathTarget);
+    }
+    m_bTargetFromBag = SUCCEEDED(hr);
+    return hr;
+}
+
+HRESULT WINAPI CFSFolder::Save(IPropertyBag *pPropBag, BOOL fClearDirty, BOOL fSaveAllProperties)
+{
+    if (!pPropBag)
+        return E_INVALIDARG;
+    if (!m_sPathTarget)
+        return E_UNEXPECTED;
+    return SHPropertyBag_WriteStr(pPropBag, L"Target", m_sPathTarget);
+}
+
+HRESULT WINAPI CFSFolder::RemoveBackReferences()
+{
+    SetSite(NULL);
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::Initialize(LPCWSTR pszMachine, BOOL bEnumerating)
+{
+    m_pszRemoteComputer.Free();
+    if (pszMachine)
+        return SHStrDupW(pszMachine, &m_pszRemoteComputer);
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::GetFolderType(FOLDERTYPEID *pftid)
+{
+    static const struct
+    {
+        const KNOWNFOLDERID *pkfid;
+        const FOLDERTYPEID *pftid;
+    } s_KnownTypes[] =
+    {
+        { &FOLDERID_Documents, &FOLDERTYPEID_Documents },
+        { &FOLDERID_PublicDocuments, &FOLDERTYPEID_Documents },
+        { &FOLDERID_Pictures, &FOLDERTYPEID_Pictures },
+        { &FOLDERID_PublicPictures, &FOLDERTYPEID_Pictures },
+        { &FOLDERID_Music, &FOLDERTYPEID_Music },
+        { &FOLDERID_PublicMusic, &FOLDERTYPEID_Music },
+        { &FOLDERID_Videos, &FOLDERTYPEID_Videos },
+        { &FOLDERID_PublicVideos, &FOLDERTYPEID_Videos },
+        { &FOLDERID_Contacts, &FOLDERTYPEID_Contacts },
+    };
+    static const struct
+    {
+        LPCWSTR pszName;
+        const FOLDERTYPEID *pftid;
+    } s_NamedTypes[] =
+    {
+        { L"Generic", &FOLDERTYPEID_Generic },
+        { L"Documents", &FOLDERTYPEID_Documents },
+        { L"Pictures", &FOLDERTYPEID_Pictures },
+        { L"Music", &FOLDERTYPEID_Music },
+        { L"Videos", &FOLDERTYPEID_Videos },
+        { L"Contacts", &FOLDERTYPEID_Contacts },
+    };
+    WCHAR szIni[MAX_PATH], szType[64];
+
+    if (!pftid)
+        return E_POINTER;
+    *pftid = FOLDERTYPEID_Generic;
+    if (!m_sPathTarget)
+        return S_OK;
+
+    if (PathCombineW(szIni, m_sPathTarget, L"desktop.ini") &&
+        GetPrivateProfileStringW(L"ViewState", L"FolderType", L"", szType, _countof(szType), szIni))
+    {
+        for (UINT i = 0; i < _countof(s_NamedTypes); i++)
+        {
+            if (!_wcsicmp(szType, s_NamedTypes[i].pszName))
+            {
+                *pftid = *s_NamedTypes[i].pftid;
+                return S_OK;
+            }
+        }
+    }
+
+    for (UINT i = 0; i < _countof(s_KnownTypes); i++)
+    {
+        CComHeapPtr<WCHAR> pszKnown;
+        if (SUCCEEDED(SHGetKnownFolderPath(*s_KnownTypes[i].pkfid, KF_FLAG_DONT_VERIFY, NULL, &pszKnown)) &&
+            !_wcsicmp(pszKnown, m_sPathTarget))
+        {
+            *pftid = *s_KnownTypes[i].pftid;
+            break;
+        }
+    }
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::AddRefBackReference()
+{
+    InterlockedIncrement(&m_cBackReferences);
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::ReleaseBackReference()
+{
+    LONG cRefs = m_cBackReferences;
+    while (cRefs > 0)
+    {
+        LONG cPrev = InterlockedCompareExchange(&m_cBackReferences, cRefs - 1, cRefs);
+        if (cPrev == cRefs)
+            break;
+        cRefs = cPrev;
+    }
+    return S_OK;
+}
+
+HRESULT WINAPI CFSFolder::SetParentAndItem(PCIDLIST_ABSOLUTE pidlParent, IShellFolder *psf, PCUITEMID_CHILD pidlChild)
+{
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CFSFolder::GetParentAndItem(PIDLIST_ABSOLUTE *ppidlParent, IShellFolder **ppsf, PITEMID_CHILD *ppidlChild)
+{
+    PCUIDLIST_RELATIVE pidlLast;
+    CComHeapPtr<ITEMIDLIST> pidlParent;
+    CComPtr<IShellFolder> psfParent;
+    HRESULT hr;
+
+    if (ppidlParent)
+        *ppidlParent = NULL;
+    if (ppsf)
+        *ppsf = NULL;
+    if (ppidlChild)
+        *ppidlChild = NULL;
+    if (!m_pidlRoot || ILIsEmpty(m_pidlRoot))
+        return E_FAIL;
+
+    hr = SHBindToParent(m_pidlRoot, IID_PPV_ARG(IShellFolder, &psfParent), (LPCITEMIDLIST *)&pidlLast);
+    if (FAILED(hr))
+        return hr;
+    pidlParent.Attach(ILClone(m_pidlRoot));
+    if (!pidlParent || !ILRemoveLastID(pidlParent))
+        return E_OUTOFMEMORY;
+
+    if (ppidlChild)
+    {
+        *ppidlChild = ILClone(pidlLast);
+        if (!*ppidlChild)
+            return E_OUTOFMEMORY;
+    }
+    if (ppsf)
+        *ppsf = psfParent.Detach();
+    if (ppidlParent)
+        *ppidlParent = pidlParent.Detach();
+    return S_OK;
+}
+

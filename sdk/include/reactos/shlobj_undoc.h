@@ -1262,8 +1262,8 @@ DECLARE_INTERFACE_(IBackReferencedObject, IUnknown) // {C938B119-D3AD-4D02-B5EE-
     STDMETHOD_(ULONG,AddRef)(THIS) PURE;
     STDMETHOD_(ULONG,Release)(THIS) PURE;
     /*** IBackReferencedObject ***/
-    STDMETHOD(Unknown1)(THIS) PURE;
-    STDMETHOD(Unknown2)(THIS) PURE;
+    STDMETHOD(AddRefBackReference)(THIS) PURE;
+    STDMETHOD(ReleaseBackReference)(THIS) PURE;
 };
 #undef INTERFACE
 
@@ -1271,9 +1271,24 @@ DECLARE_INTERFACE_(IBackReferencedObject, IUnknown) // {C938B119-D3AD-4D02-B5EE-
 #define IBackReferencedObject_QueryInterface(T,a,b) (T)->lpVtbl->QueryInterface(T,a,b)
 #define IBackReferencedObject_AddRef(T) (T)->lpVtbl->AddRef(T)
 #define IBackReferencedObject_Release(T) (T)->lpVtbl->Release(T)
-#define IBackReferencedObject_Unknown1(T) (T)->lpVtbl->Unknown1(T)
-#define IBackReferencedObject_Unknown2(T) (T)->lpVtbl->Unknown2(T)
+#define IBackReferencedObject_AddRefBackReference(T) (T)->lpVtbl->AddRefBackReference(T)
+#define IBackReferencedObject_ReleaseBackReference(T) (T)->lpVtbl->ReleaseBackReference(T)
 #endif
+
+/*****************************************************************************
+ * IDelegateHostItemContainer interface
+ */
+#define INTERFACE IDelegateHostItemContainer
+DECLARE_INTERFACE_(IDelegateHostItemContainer, IUnknown) // {02468693-E7E5-4C6B-9995-64CE5F51CEC4}
+{
+    /*** IUnknown ***/
+    STDMETHOD(QueryInterface)(THIS_ REFIID,PVOID*) PURE;
+    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG,Release)(THIS) PURE;
+    /*** IDelegateHostItemContainer ***/
+    STDMETHOD(SetRemoteComputer)(THIS_ LPCWSTR pszComputer) PURE;
+};
+#undef INTERFACE
 
 #ifdef __cplusplus
 typedef struct QUERYNAMESPACEINFO QUERYNAMESPACEINFO;

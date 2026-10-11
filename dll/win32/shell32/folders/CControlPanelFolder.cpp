@@ -290,6 +290,7 @@ BOOL CControlPanelEnum::CreateCPanelEnumList(DWORD dwFlags)
 CControlPanelFolder::CControlPanelFolder()
 {
     pidlRoot = NULL;    /* absolute pidl */
+    m_cBackReferences = 0;
 }
 
 CControlPanelFolder::~CControlPanelFolder()
@@ -742,6 +743,163 @@ HRESULT WINAPI CControlPanelFolder::GetCurFolder(PIDLIST_ABSOLUTE * pidl)
     if (!pidl)
         return E_POINTER;
     *pidl = ILClone(pidlRoot);
+    return S_OK;
+}
+
+HRESULT WINAPI CControlPanelFolder::GetOverlayIndex(PCUITEMID_CHILD pidl, int *pIndex)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::GetOverlayIconIndex(PCUITEMID_CHILD pidl, int *pIconIndex)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::GetIconOf(PCUITEMID_CHILD pidl, UINT flags, int *pIconIndex)
+{
+    CComPtr<IExtractIconW> pei;
+    WCHAR szIconFile[MAX_PATH];
+    INT iIcon = 0;
+    UINT uFlags = 0;
+    HRESULT hr;
+
+    if (!pidl || !pIconIndex)
+        return E_INVALIDARG;
+
+    hr = GetUIObjectOf(NULL, 1, &pidl, IID_NULL_PPV_ARG(IExtractIconW, &pei));
+    if (FAILED(hr))
+        return S_FALSE;
+    hr = pei->GetIconLocation(flags, szIconFile, _countof(szIconFile), &iIcon, &uFlags);
+    if (hr != S_OK || (uFlags & (GIL_NOTFILENAME | GIL_DONTCACHE)))
+        return S_FALSE;
+
+    *pIconIndex = SIC_GetIconIndex(szIconFile, iIcon, uFlags);
+    return (*pIconIndex >= 0) ? S_OK : S_FALSE;
+}
+
+HRESULT WINAPI CControlPanelFolder::CreateStream(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStream **ppstm)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::OpenStream(LPCOLESTR pwcsName, void *reserved1, DWORD grfMode, DWORD reserved2, IStream **ppstm)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::CreateStorage(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStorage **ppstg)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::OpenStorage(LPCOLESTR pwcsName, IStorage *pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage **ppstg)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::CopyTo(DWORD ciidExclude, const IID *rgiidExclude, SNB snbExclude, IStorage *pstgDest)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::MoveElementTo(LPCOLESTR pwcsName, IStorage *pstgDest, LPCOLESTR pwcsNewName, DWORD grfFlags)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::Commit(DWORD grfCommitFlags)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::Revert()
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::EnumElements(DWORD reserved1, void *reserved2, DWORD reserved3, IEnumSTATSTG **ppenum)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::DestroyElement(LPCOLESTR pwcsName)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::RenameElement(LPCOLESTR pwcsOldName, LPCOLESTR pwcsNewName)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::SetElementTimes(LPCOLESTR pwcsName, const FILETIME *pctime, const FILETIME *patime, const FILETIME *pmtime)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::SetClass(REFCLSID clsid)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::SetStateBits(DWORD grfStateBits, DWORD grfMask)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::Stat(STATSTG *pstatstg, DWORD grfStatFlag)
+{
+    return E_FAIL;
+}
+
+HRESULT WINAPI CControlPanelFolder::CallBack(IShellFolder *psf, HWND hwndOwner, IDataObject *pdtobj, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == DFM_MERGECONTEXTMENU)
+        return S_OK;
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CControlPanelFolder::GetFolderType(FOLDERTYPEID *pftid)
+{
+    if (!pftid)
+        return E_POINTER;
+    *pftid = FOLDERTYPEID_ControlPanelClassic;
+    return S_OK;
+}
+
+HRESULT WINAPI CControlPanelFolder::RemoveBackReferences()
+{
+    CComPtr<IObjectWithBackReferences> pobr;
+    if (m_regFolder && SUCCEEDED(m_regFolder->QueryInterface(IID_PPV_ARG(IObjectWithBackReferences, &pobr))))
+        pobr->RemoveBackReferences();
+    return S_OK;
+}
+
+HRESULT WINAPI CControlPanelFolder::AddRefBackReference()
+{
+    InterlockedIncrement(&m_cBackReferences);
+    return S_OK;
+}
+
+HRESULT WINAPI CControlPanelFolder::ReleaseBackReference()
+{
+    LONG cRefs = m_cBackReferences;
+    while (cRefs > 0)
+    {
+        LONG cPrev = InterlockedCompareExchange(&m_cBackReferences, cRefs - 1, cRefs);
+        if (cPrev == cRefs)
+            break;
+        cRefs = cPrev;
+    }
+    return S_OK;
+}
+
+HRESULT WINAPI CControlPanelFolder::SetRemoteComputer(LPCWSTR pszComputer)
+{
+    m_pszRemoteComputer.Free();
+    if (pszComputer)
+        return SHStrDupW(pszComputer, &m_pszRemoteComputer);
     return S_OK;
 }
 

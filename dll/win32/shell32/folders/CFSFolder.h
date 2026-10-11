@@ -18,7 +18,18 @@ class CFSFolder :
     public IPersistFolder3,
     public IContextMenuCB,
     public IShellFolderViewCB,
-    public IItemNameLimits
+    public IItemNameLimits,
+    public IShellIcon,
+    public IShellIconOverlay,
+    public IStorage,
+    public IOleCommandTarget,
+    public CObjectWithSiteBase,
+    public IPersistPropertyBag,
+    public IObjectWithBackReferences,
+    public IRemoteComputer,
+    public IFolderType,
+    public IBackReferencedObject,
+    public IParentAndItem
 {
     private:
         const CLSID *m_pclsid;
@@ -29,6 +40,10 @@ class CFSFolder :
         LPITEMIDLIST m_pidlRoot; /* absolute pidl */
 
         DWORD m_bGroupPolicyActive;
+        LONG m_cBackReferences;
+        CComHeapPtr<WCHAR> m_pszRemoteComputer;
+        BOOL m_bTargetFromBag;
+        HRESULT _GetElementPath(LPCOLESTR pwcsName, LPWSTR pszPath);
         HRESULT _CreateShellExtInstance(const CLSID *pclsid, LPCITEMIDLIST pidl, REFIID riid, LPVOID *ppvOut);
         HRESULT _CreateExtensionUIObject(LPCITEMIDLIST pidl, REFIID riid, LPVOID *ppvOut);
         HRESULT _GetDropTarget(LPCITEMIDLIST pidl, LPVOID *ppvOut);
@@ -103,6 +118,56 @@ class CFSFolder :
             return S_OK;
         }
 
+        // IShellIcon
+        STDMETHOD(GetIconOf)(PCUITEMID_CHILD pidl, UINT flags, int *pIconIndex) override;
+
+        // IShellIconOverlay
+        STDMETHOD(GetOverlayIndex)(PCUITEMID_CHILD pidl, int *pIndex) override;
+        STDMETHOD(GetOverlayIconIndex)(PCUITEMID_CHILD pidl, int *pIconIndex) override;
+
+        // IStorage
+        STDMETHOD(CreateStream)(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStream **ppstm) override;
+        STDMETHOD(OpenStream)(LPCOLESTR pwcsName, void *reserved1, DWORD grfMode, DWORD reserved2, IStream **ppstm) override;
+        STDMETHOD(CreateStorage)(LPCOLESTR pwcsName, DWORD grfMode, DWORD reserved1, DWORD reserved2, IStorage **ppstg) override;
+        STDMETHOD(OpenStorage)(LPCOLESTR pwcsName, IStorage *pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage **ppstg) override;
+        STDMETHOD(CopyTo)(DWORD ciidExclude, const IID *rgiidExclude, SNB snbExclude, IStorage *pstgDest) override;
+        STDMETHOD(MoveElementTo)(LPCOLESTR pwcsName, IStorage *pstgDest, LPCOLESTR pwcsNewName, DWORD grfFlags) override;
+        STDMETHOD(Commit)(DWORD grfCommitFlags) override;
+        STDMETHOD(Revert)() override;
+        STDMETHOD(EnumElements)(DWORD reserved1, void *reserved2, DWORD reserved3, IEnumSTATSTG **ppenum) override;
+        STDMETHOD(DestroyElement)(LPCOLESTR pwcsName) override;
+        STDMETHOD(RenameElement)(LPCOLESTR pwcsOldName, LPCOLESTR pwcsNewName) override;
+        STDMETHOD(SetElementTimes)(LPCOLESTR pwcsName, const FILETIME *pctime, const FILETIME *patime, const FILETIME *pmtime) override;
+        STDMETHOD(SetClass)(REFCLSID clsid) override;
+        STDMETHOD(SetStateBits)(DWORD grfStateBits, DWORD grfMask) override;
+        STDMETHOD(Stat)(STATSTG *pstatstg, DWORD grfStatFlag) override;
+
+        // IOleCommandTarget
+        STDMETHOD(QueryStatus)(const GUID *pguidCmdGroup, ULONG cCmds, OLECMD prgCmds[], OLECMDTEXT *pCmdText) override;
+        STDMETHOD(Exec)(const GUID *pguidCmdGroup, DWORD nCmdID, DWORD nCmdexecopt, VARIANT *pvaIn, VARIANT *pvaOut) override;
+
+        // IPersistPropertyBag
+        STDMETHOD(InitNew)() override;
+        STDMETHOD(Load)(IPropertyBag *pPropBag, IErrorLog *pErrorLog) override;
+        STDMETHOD(Save)(IPropertyBag *pPropBag, BOOL fClearDirty, BOOL fSaveAllProperties) override;
+
+        // IObjectWithBackReferences
+        STDMETHOD(RemoveBackReferences)() override;
+
+        // IRemoteComputer
+        STDMETHOD(Initialize)(LPCWSTR pszMachine, BOOL bEnumerating) override;
+
+        // IFolderType
+        STDMETHOD(GetFolderType)(FOLDERTYPEID *pftid) override;
+
+        // IBackReferencedObject
+        STDMETHOD(AddRefBackReference)() override;
+        STDMETHOD(ReleaseBackReference)() override;
+
+        // IParentAndItem
+        STDMETHOD(SetParentAndItem)(PCIDLIST_ABSOLUTE pidlParent, IShellFolder *psf, PCUITEMID_CHILD pidlChild) override;
+        STDMETHOD(GetParentAndItem)(PIDLIST_ABSOLUTE *ppidlParent, IShellFolder **ppsf, PITEMID_CHILD *ppidlChild) override;
+
     DECLARE_REGISTRY_RESOURCEID(IDR_SHELLFSFOLDER)
     DECLARE_NOT_AGGREGATABLE(CFSFolder)
 
@@ -114,9 +179,21 @@ class CFSFolder :
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder, IPersistFolder)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder2, IPersistFolder2)
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder3, IPersistFolder3)
-        COM_INTERFACE_ENTRY_IID(IID_IPersist, IPersist)
+        COM_INTERFACE_ENTRY2_IID(IID_IPersist, IPersist, IPersistFolder3)
         COM_INTERFACE_ENTRY_IID(IID_IShellFolderViewCB, IShellFolderViewCB)
         COM_INTERFACE_ENTRY_IID(IID_IItemNameLimits, IItemNameLimits)
+        COM_INTERFACE_ENTRY_IID(IID_IContextMenuCB, IContextMenuCB)
+        COM_INTERFACE_ENTRY_IID(IID_IShellIcon, IShellIcon)
+        COM_INTERFACE_ENTRY_IID(IID_IShellIconOverlay, IShellIconOverlay)
+        COM_INTERFACE_ENTRY_IID(IID_IStorage, IStorage)
+        COM_INTERFACE_ENTRY_IID(IID_IOleCommandTarget, IOleCommandTarget)
+        COM_INTERFACE_ENTRY_IID(IID_IObjectWithSite, IObjectWithSite)
+        COM_INTERFACE_ENTRY_IID(IID_IPersistPropertyBag, IPersistPropertyBag)
+        COM_INTERFACE_ENTRY_IID(IID_IObjectWithBackReferences, IObjectWithBackReferences)
+        COM_INTERFACE_ENTRY_IID(IID_IRemoteComputer, IRemoteComputer)
+        COM_INTERFACE_ENTRY_IID(IID_IFolderType, IFolderType)
+        COM_INTERFACE_ENTRY_IID(IID_IBackReferencedObject, IBackReferencedObject)
+        COM_INTERFACE_ENTRY_IID(IID_IParentAndItem, IParentAndItem)
     END_COM_MAP()
 
     protected:

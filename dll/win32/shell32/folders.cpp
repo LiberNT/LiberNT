@@ -84,6 +84,48 @@ static void InitIconOverlays(void)
     RegCloseKey(hKey);
 }
 
+BOOL GetIconOverlay(LPCITEMIDLIST pidl, WCHAR * wTemp, int* pIndex);
+
+HRESULT SHELL32_GetItemOverlay(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, PCUITEMID_CHILD pidl, int *pIndex, BOOL bIconIndex)
+{
+    WCHAR szOverlay[MAX_PATH];
+    int iOverlayIcon = 0;
+    INT iImage = -1;
+
+    if (!psf || !pidl || !pIndex)
+        return E_INVALIDARG;
+
+    if (!Handlers)
+        InitIconOverlays();
+    if (*pIndex == (int)0xFFFFEEEE && NumIconOverlayHandlers)
+        return E_PENDING;
+
+    if (pidlFolder)
+    {
+        CComHeapPtr<ITEMIDLIST> pidlFull(ILCombine(pidlFolder, pidl));
+        if (pidlFull && GetIconOverlay(pidlFull, szOverlay, &iOverlayIcon))
+            iImage = SHGetIconOverlayIndexW(szOverlay, iOverlayIcon);
+    }
+
+    if (iImage < 0)
+    {
+        SFGAOF attrs = SFGAO_LINK | SFGAO_SHARE;
+        if (SUCCEEDED(psf->GetAttributesOf(1, &pidl, &attrs)))
+        {
+            if (attrs & SFGAO_LINK)
+                iImage = SHGetIconOverlayIndexW(NULL, 0x0FFFFFFE);
+            else if (attrs & SFGAO_SHARE)
+                iImage = SHGetIconOverlayIndexW(NULL, 0x0FFFFFFF);
+        }
+    }
+
+    if (iImage < 0)
+        return S_FALSE;
+
+    *pIndex = bIconIndex ? iImage : SIC_GetOverlaySlot(iImage);
+    return S_OK;
+}
+
 BOOL
 GetIconOverlay(LPCITEMIDLIST pidl, WCHAR * wTemp, int* pIndex)
 {

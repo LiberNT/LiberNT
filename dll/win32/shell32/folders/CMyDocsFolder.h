@@ -27,13 +27,15 @@ class CMyDocsFolder :
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public IShellFolder2,
     public IPersistFolder2,
-    public IItemNameLimits
+    public IItemNameLimits,
+    public IShellIconOverlay
 {
     private:
         CComPtr<IShellFolder2> m_pisfInner;
         LPITEMIDLIST m_pidlInner;
 
         HRESULT EnsureFolder();
+        static HRESULT WINAPI _QueryInnerFolder(void *pv, REFIID riid, LPVOID *ppv, DWORD_PTR dw);
 
     public:
         CMyDocsFolder();
@@ -93,6 +95,10 @@ class CMyDocsFolder :
             return S_OK;
         }
 
+        // IShellIconOverlay
+        STDMETHOD(GetOverlayIndex)(PCUITEMID_CHILD pidl, int *pIndex) override;
+        STDMETHOD(GetOverlayIconIndex)(PCUITEMID_CHILD pidl, int *pIconIndex) override;
+
         DECLARE_REGISTRY_RESOURCEID(IDR_MYDOCUMENTS)
         DECLARE_NOT_AGGREGATABLE(CMyDocsFolder)
 
@@ -105,6 +111,8 @@ class CMyDocsFolder :
         COM_INTERFACE_ENTRY_IID(IID_IPersistFolder2, IPersistFolder2)
         COM_INTERFACE_ENTRY_IID(IID_IPersist, IPersist)
         COM_INTERFACE_ENTRY_IID(IID_IItemNameLimits, IItemNameLimits)
+        COM_INTERFACE_ENTRY_IID(IID_IShellIconOverlay, IShellIconOverlay)
+        COM_INTERFACE_ENTRY_FUNC_BLIND(0, _QueryInnerFolder)
         END_COM_MAP()
 };
 

@@ -37,8 +37,8 @@ interface IFolderType : IUnknown
 ]
 interface IBackReferencedObject : IUnknown
 {
-    HRESULT Unknown1();
-    HRESULT Unknown2();
+    HRESULT AddRefBackReference();
+    HRESULT ReleaseBackReference();
 }
 
 [
