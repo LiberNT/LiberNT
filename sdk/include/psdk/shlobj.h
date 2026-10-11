@@ -2751,35 +2751,6 @@ SHOpenWithDialog(
   _In_opt_ HWND hwndParent,
   _In_ const OPENASINFO *poainfo);
 
-#define INTERFACE   IShellIconOverlayIdentifier
-
-DECLARE_INTERFACE_(IShellIconOverlayIdentifier, IUnknown)
-{
-    STDMETHOD(QueryInterface) (THIS_ REFIID riid, void **ppv) PURE;
-    STDMETHOD_(ULONG,AddRef) (THIS)  PURE;
-    STDMETHOD_(ULONG,Release) (THIS) PURE;
-
-    STDMETHOD (IsMemberOf)(THIS_ _In_ LPCWSTR pwszPath, DWORD dwAttrib) PURE;
-    STDMETHOD (GetOverlayInfo)(THIS_ _Out_writes_(cchMax) LPWSTR pwszIconFile, int cchMax, _Out_ int * pIndex, _Out_ DWORD * pdwFlags) PURE;
-    STDMETHOD (GetPriority)(THIS_ _Out_ int * pIPriority) PURE;
-};
-
-#if !defined(__cplusplus) || defined(CINTERFACE)
-/*** IUnknown methods ***/
-#define IShellIconOverlayIdentifier_QueryInterface(p,a,b)         (p)->lpVtbl->QueryInterface(p,a,b)
-#define IShellIconOverlayIdentifier_AddRef(p)                     (p)->lpVtbl->AddRef(p)
-#define IShellIconOverlayIdentifier_Release(p)                    (p)->lpVtbl->Release(p)
-/*** IShellIconOverlayIdentifier methods ***/
-#define IShellIconOverlayIdentifier_IsMemberOf(p,a,b)             (p)->lpVtbl->IsMemberOf(p,a,b)
-#define IShellIconOverlayIdentifier_GetOverlayInfo(p,a,b,c,d)     (p)->lpVtbl->GetOverlayInfo(p,a,b,c,d)
-#define IShellIconOverlayIdentifier_GetPriority(p,a)              (p)->lpVtbl->GetPriority(p,a)
-#endif
-
-#define ISIOI_ICONFILE  0x00000001
-#define ISIOI_ICONINDEX 0x00000002
-
-#undef INTERFACE
-
 /*****************************************************************************
  * IShellIconOverlay interface
  */

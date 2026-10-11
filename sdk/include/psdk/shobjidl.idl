@@ -1420,6 +1420,29 @@ interface IShellExtInit : IUnknown
         [in] HKEY hkeyProgID);
 }
 
+[
+    object,
+    uuid(0c6c4200-c589-11d0-999a-00c04fd655e1),
+    pointer_default(unique)
+]
+interface IShellIconOverlayIdentifier : IUnknown
+{
+    HRESULT IsMemberOf(
+        [in, string] LPCWSTR pwszPath,
+        [in] DWORD dwAttrib);
+
+    HRESULT GetOverlayInfo(
+        [out, string, size_is(cchMax)] LPWSTR pwszIconFile,
+        [in] int cchMax,
+        [out] int *pIndex,
+        [out] DWORD *pdwFlags);
+
+    HRESULT GetPriority(
+        [out] int *pPriority);
+}
+cpp_quote("#define ISIOI_ICONFILE   0x00000001")
+cpp_quote("#define ISIOI_ICONINDEX  0x00000002")
+
 
 /*******************************************************************************/
 /* Note: the following interfaces are not in shobjidl.idl under Windows, they  */
