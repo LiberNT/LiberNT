@@ -873,12 +873,20 @@ static HRESULT reg_get_typelib_module(REFIID iid, WCHAR *module, DWORD len)
 
     sprintf(typelibkey, "Typelib\\%s\\%s\\0\\win%u", tlguid, ver, sizeof(void *) == 8 ? 64 : 32);
     tlfnlen = sizeof(tlfn);
+#ifdef __REACTOS__
+    if (RegGetValueA(HKEY_CLASSES_ROOT, typelibkey, NULL, RRF_RT_REG_SZ, NULL, tlfn, (DWORD *)&tlfnlen))
+#else
     if (RegQueryValueA(HKEY_CLASSES_ROOT, typelibkey, tlfn, &tlfnlen))
+#endif
     {
 #ifdef _WIN64
         sprintf(typelibkey, "Typelib\\%s\\%s\\0\\win32", tlguid, ver);
         tlfnlen = sizeof(tlfn);
+#ifdef __REACTOS__
+        if (RegGetValueA(HKEY_CLASSES_ROOT, typelibkey, NULL, RRF_RT_REG_SZ, NULL, tlfn, (DWORD *)&tlfnlen))
+#else
         if (RegQueryValueA(HKEY_CLASSES_ROOT, typelibkey, tlfn, &tlfnlen))
+#endif
         {
 #endif
             ERR("Could not get typelib fn?\n");
