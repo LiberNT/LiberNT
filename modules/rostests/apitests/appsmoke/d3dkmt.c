@@ -396,3 +396,45 @@ START_TEST(d3dkmt)
 
     AppSmokeCloseAdapter(&Adapter);
 }
+
+START_TEST(dc_from_memory)
+{
+    static DWORD Pixels[16 * 16];
+    D3DKMT_CREATEDCFROMMEMORY Create;
+    D3DKMT_DESTROYDCFROMMEMORY Destroy;
+    NTSTATUS Status;
+    UINT Round, Failed = 0;
+    HDC Screen;
+
+    Screen = GetDC(NULL);
+    ok(Screen != NULL, "GetDC failed\n");
+    for (Round = 0; Round < 32; Round++)
+    {
+        ZeroMemory(&Create, sizeof(Create));
+        Create.pMemory = Pixels;
+        Create.Format = D3DDDIFMT_A8R8G8B8;
+        Create.Width = 16;
+        Create.Height = 16;
+        Create.Pitch = 16 * sizeof(DWORD);
+        Create.hDeviceDc = Screen;
+        Status = KmtCall("D3DKMTCreateDCFromMemory", &Create);
+        ok(Status == STATUS_SUCCESS, "Creating DC %u: %#lx\n", Round, Status);
+        if (Status != STATUS_SUCCESS)
+            break;
+        ok(GetCurrentObject(Create.hDc, OBJ_BITMAP) == Create.hBitmap,
+           "DC %u holds %p, not its bitmap %p\n", Round, GetCurrentObject(Create.hDc, OBJ_BITMAP), Create.hBitmap);
+
+        Destroy.hDc = Create.hDc;
+        Destroy.hBitmap = Create.hBitmap;
+        Status = KmtCall("D3DKMTDestroyDCFromMemory", &Destroy);
+        if (Status != STATUS_SUCCESS)
+        {
+            Failed++;
+            trace("Destroying DC %p and bitmap %p: %#lx\n", Create.hDc, Create.hBitmap, Status);
+            DeleteDC(Create.hDc);
+            DeleteObject(Create.hBitmap);
+        }
+    }
+    ok(Failed == 0, "D3DKMTDestroyDCFromMemory failed for %u of %u DCs\n", Failed, Round);
+    ReleaseDC(NULL, Screen);
+}

@@ -5,6 +5,7 @@ extern void func_alert_wait(void);
 extern void func_child_start(void);
 extern void func_d3d12_device(void);
 extern void func_d3dkmt(void);
+extern void func_dc_from_memory(void);
 extern void func_display_mode(void);
 extern void func_dll_directory(void);
 extern void func_opencl(void);
@@ -27,6 +28,7 @@ const struct test winetest_testlist[] =
     { "child_start", func_child_start },
     { "d3d12_device", func_d3d12_device },
     { "d3dkmt", func_d3dkmt },
+    { "dc_from_memory", func_dc_from_memory },
     { "display_mode", func_display_mode },
     { "dll_directory", func_dll_directory },
     { "opencl", func_opencl },
