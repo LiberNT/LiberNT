@@ -3643,16 +3643,17 @@ DxgkpDisplayDispatch(
             if (NumModes != NULL &&
                 Stack->Parameters.DeviceIoControl.OutputBufferLength >= sizeof(VIDEO_NUM_MODES))
             {
+                Status = STATUS_NOT_SUPPORTED;
                 if (g_DisplayAdapter != NULL &&
                     g_DisplayAdapter->MiniportContext != NULL &&
-                    !g_DisplayAdapter->MiniportContext->IsDisplayOnlyDriver &&
                     !g_DisplayAdapter->MiniportContext->IsBasicDisplayFallback)
                 {
+                    DxgkVidPnDestroyDisplayModeCache(g_DisplayAdapter);
                     Status = DxgkVidPnQueryVideoModes(g_DisplayAdapter, NULL, 0, &NumModes->NumModes, FALSE);
-                    if (!NT_SUCCESS(Status))
+                    if (!NT_SUCCESS(Status) && !g_DisplayAdapter->MiniportContext->IsDisplayOnlyDriver)
                         break;
                 }
-                else
+                if (!NT_SUCCESS(Status))
                     NumModes->NumModes = 1;
                 NumModes->ModeInformationLength = sizeof(VIDEO_MODE_INFORMATION);
                 BytesReturned = sizeof(VIDEO_NUM_MODES);
@@ -3682,7 +3683,6 @@ DxgkpDisplayDispatch(
             {
                 if (g_DisplayAdapter != NULL &&
                     g_DisplayAdapter->MiniportContext != NULL &&
-                    !g_DisplayAdapter->MiniportContext->IsDisplayOnlyDriver &&
                     !g_DisplayAdapter->MiniportContext->IsBasicDisplayFallback)
                 {
                     ULONG ModeCount;
@@ -3692,7 +3692,8 @@ DxgkpDisplayDispatch(
                                 &ModeCount, Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_VIDEO_QUERY_CURRENT_MODE);
                     if (NT_SUCCESS(Status))
                         BytesReturned = ModeCount * sizeof(*ModeInfo);
-                    break;
+                    if (NT_SUCCESS(Status) || !g_DisplayAdapter->MiniportContext->IsDisplayOnlyDriver)
+                        break;
                 }
                 DxgkpSnapshotCommittedDisplayState(g_DisplayAdapter, &CommittedWidth, &CommittedHeight, NULL);
                 RtlZeroMemory(ModeInfo, sizeof(VIDEO_MODE_INFORMATION));

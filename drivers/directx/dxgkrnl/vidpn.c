@@ -7803,7 +7803,6 @@ DxgkpEnsureDisplayModeCacheLocked(
             goto Cleanup;
     }
     Cache->CanSetMode = Current->NumPaths == 1 && Adapter->MiniportContext != NULL &&
-                        !Adapter->MiniportContext->IsDisplayOnlyDriver &&
                         !Adapter->MiniportContext->IsBasicDisplayFallback &&
                         DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality) != NULL;
     if (Cache->CanSetMode)
@@ -8173,6 +8172,10 @@ DxgkVidPnSetVideoMode(
     Sources->NumModes = 1;
     Sources->PinnedModeId = Entry->Source.Id;
     Sources->NextModeId = Entry->Source.Id + 1;
+    Targets = Candidate->TargetModeSets[TargetIndex];
+    Targets->NumModes = 0;
+    Targets->PinnedModeId = (UINT)-1;
+    Targets->NextModeId = 0;
     if (Cache->HotPlugGeneration != InterlockedCompareExchange64(&Adapter->HotPlugGeneration, 0, 0))
     {
         Status = STATUS_RETRY;
