@@ -67,3 +67,23 @@ Author: Not supplied
 License and redistribution clearance: Not supplied
 Processing: Lanczos resampling to 1920 x 1239; progressive JPEG quality 82
             with Huffman optimization and metadata stripped
+
+Unsplash asset record
+---------------------
+
+File: Misty Forest.jpg
+Source: https://unsplash.com/photos/a-bird-flying-over-a-forest-at-night-JEgC_sk19To
+Title: A bird flying over a forest at night
+Author: Daniil Silantev (https://unsplash.com/@betagamma)
+Published: 2024-10-22
+Retrieved: 2026-10-11, original 4297 x 2792 JPEG
+License: Unsplash License (https://unsplash.com/license), shown on the photo
+         page as "Free to use under the Unsplash License". It grants an
+         irrevocable, nonexclusive, worldwide copyright license to download,
+         copy, modify, distribute, perform and use the photo for free,
+         including for commercial purposes, without permission from or
+         attributing the photographer or Unsplash. It does not permit selling
+         the photo without significant modification, or compiling Unsplash
+         photos to replicate a similar or competing service.
+Processing: Lanczos resampling to 1920 x 1248; progressive JPEG quality 82
+            with Huffman optimization and metadata stripped
