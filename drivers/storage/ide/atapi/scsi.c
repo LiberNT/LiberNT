@@ -228,7 +228,7 @@ AtaReqReleaseResources(
 
         DmaOperations->PutScatterGatherList(DmaAdapter,
                                             Request->SgList,
-                                            !!(Request->Flags & REQUEST_FLAG_DATA_IN));
+                                            !!(Request->Flags & REQUEST_FLAG_DATA_OUT));
     }
     else if (Request->Flags & REQUEST_FLAG_HAS_RESERVED_MAPPING)
     {
@@ -620,7 +620,7 @@ AtaReqGetScatterGatherList(
                                                  Request->DataTransferLength,
                                                  AtaReqPreparePrdTable,
                                                  Request,
-                                                 !!(Request->Flags & REQUEST_FLAG_DATA_IN));
+                                                 !!(Request->Flags & REQUEST_FLAG_DATA_OUT));
     if (NT_SUCCESS(Status))
         return TRUE;
 
