@@ -9,6 +9,7 @@
 /* INCLUDES ******************************************************************/
 
 #include <ntoskrnl.h>
+#include <reactos/wow64shared.h>
 #ifdef KDBG
 #include <kdbg/kdb.h>
 #endif
@@ -83,6 +84,76 @@ DbgkpResumeProcess(VOID)
 
     /* Thaw all the threads */
     KeThawAllThreads();
+}
+
+static
+VOID
+DbgkpSendWow64SystemDllMessage(IN PETHREAD Thread)
+{
+    PEPROCESS Process = PsGetCurrentProcess();
+    UNICODE_STRING Wow64NtDllName = RTL_CONSTANT_STRING(L"\\SystemRoot\\SysWOW64\\ntdll.dll");
+    PSYSTEM_DLL_INIT_BLOCK InitBlock = PspSystemDllInitBlock;
+    DBGKM_MSG ApiMessage;
+    PDBGKM_LOAD_DLL LoadDll = &ApiMessage.LoadDll;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    PIMAGE_NT_HEADERS NtHeader;
+    PVOID Base = NULL;
+    PTEB Teb;
+    NTSTATUS Status;
+
+    if (!PsGetProcessWow64Process(Process) || !InitBlock) return;
+
+    RtlZeroMemory(LoadDll, sizeof(*LoadDll));
+    _SEH2_TRY
+    {
+        ProbeForRead(&InitBlock->ntdll_handle, sizeof(InitBlock->ntdll_handle), sizeof(ULONG));
+        Base = (PVOID)(ULONG_PTR)InitBlock->ntdll_handle;
+        if (Base)
+        {
+            NtHeader = RtlImageNtHeader(Base);
+            if (NtHeader)
+            {
+                LoadDll->DebugInfoFileOffset = NtHeader->FileHeader.PointerToSymbolTable;
+                LoadDll->DebugInfoSize = NtHeader->FileHeader.NumberOfSymbols;
+            }
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Base = NULL;
+    }
+    _SEH2_END;
+    if (!Base) return;
+
+    LoadDll->BaseOfDll = Base;
+    Teb = Thread->Tcb.Teb;
+    if (Teb) LoadDll->NamePointer = &Teb->NtTib.ArbitraryUserPointer;
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &Wow64NtDllName,
+                               OBJ_CASE_INSENSITIVE |
+                               OBJ_KERNEL_HANDLE |
+                               OBJ_FORCE_ACCESS_CHECK,
+                               NULL,
+                               NULL);
+    Status = ZwOpenFile(&LoadDll->FileHandle,
+                        GENERIC_READ | SYNCHRONIZE,
+                        &ObjectAttributes,
+                        &IoStatusBlock,
+                        FILE_SHARE_DELETE |
+                        FILE_SHARE_READ |
+                        FILE_SHARE_WRITE,
+                        FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status)) return;
+
+    ApiMessage.h.u1.Length = sizeof(DBGKM_MSG) << 16 |
+                             (8 + sizeof(DBGKM_LOAD_DLL));
+    ApiMessage.h.u2.ZeroInit = 0;
+    ApiMessage.h.u2.s2.Type = LPC_DEBUG_EVENT;
+    ApiMessage.ApiNumber = DbgKmLoadDllApi;
+    DbgkpSendApiMessage(&ApiMessage, TRUE);
+    ObCloseHandle(LoadDll->FileHandle, KernelMode);
 }
 
 VOID
@@ -291,6 +362,8 @@ DbgkCreateThread(IN PETHREAD Thread,
             /* Close the handle */
             ObCloseHandle(LoadDll->FileHandle, KernelMode);
         }
+
+        DbgkpSendWow64SystemDllMessage(Thread);
     }
     else
     {
