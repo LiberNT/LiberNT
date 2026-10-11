@@ -1178,7 +1178,7 @@ static inline ITypeLibImpl *impl_from_ICreateTypeLib2( ICreateTypeLib2 *iface )
 
 /* ITypeLib methods */
 #ifdef __REACTOS__
-static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength, HRESULT *result);
+static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength, int vft_unit, HRESULT *result);
 static ITypeLib2* ITypeLib2_Constructor_SLTG(LPVOID pLib, DWORD dwTLBLength, HRESULT *result);
 #else
 static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength);
@@ -3173,7 +3173,11 @@ MSFT_DoFuncs(TLBContext*     pcx,
         if (ptfd->funcdesc.funckind == FUNC_DISPATCH)
             ptfd->funcdesc.oVft   =   0;
         else
+#ifdef __REACTOS__
+            ptfd->funcdesc.oVft   =   (unsigned short)(pFuncRec->VtableOffset & ~1) * pTI->pTypeLib->vft_unit / pTI->pTypeLib->ptr_size;
+#else
             ptfd->funcdesc.oVft   =   (unsigned short)(pFuncRec->VtableOffset & ~1) * sizeof(void *) / pTI->pTypeLib->ptr_size;
+#endif
         ptfd->funcdesc.wFuncFlags =   LOWORD(pFuncRec->Flags) ;
 
         /* nameoffset is sometimes -1 on the second half of a propget/propput
@@ -3518,20 +3522,56 @@ static void MSFT_DoImplTypes(TLBContext *pcx, ITypeInfoImpl *pTI, int count,
  * and some structures, and fix the alignment */
 #ifdef __REACTOS__
 static HRESULT TLB_fix_typeinfo_ptr_size(ITypeInfoImpl *info)
-#else
-static void TLB_fix_typeinfo_ptr_size(ITypeInfoImpl *info)
-#endif
 {
-#ifdef __REACTOS__
+    const ULONG unit = info->pTypeLib->vft_unit;
     ULONG size;
     WORD align;
     HRESULT hr;
 
-#endif
     if(info->typeattr.typekind == TKIND_ALIAS){
-#ifdef __REACTOS__
         if (!info->tdescAlias) return TYPE_E_CANTLOADLIBRARY;
-#endif
+        switch(info->tdescAlias->vt){
+        case VT_BSTR:
+        case VT_DISPATCH:
+        case VT_UNKNOWN:
+        case VT_PTR:
+        case VT_SAFEARRAY:
+        case VT_LPSTR:
+        case VT_LPWSTR:
+            info->typeattr.cbSizeInstance = unit;
+            info->typeattr.cbAlignment = unit;
+            break;
+        case VT_CARRAY:
+        case VT_USERDEFINED:
+            hr = TLB_size_instance(info, unit == 8 ? SYS_WIN64 : SYS_WIN32,
+                                  info->tdescAlias, &size, &align);
+            if (FAILED(hr)) return hr;
+            info->typeattr.cbSizeInstance = size;
+            info->typeattr.cbAlignment = align;
+            break;
+        case VT_VARIANT:
+            info->typeattr.cbSizeInstance = unit == 8 ? 24 : 16;
+            info->typeattr.cbAlignment = unit;
+            break;
+        default:
+            if(info->typeattr.cbSizeInstance < unit)
+                info->typeattr.cbAlignment = info->typeattr.cbSizeInstance;
+            else
+                info->typeattr.cbAlignment = unit;
+            break;
+        }
+    }else if(info->typeattr.typekind == TKIND_INTERFACE ||
+            info->typeattr.typekind == TKIND_DISPATCH ||
+            info->typeattr.typekind == TKIND_COCLASS){
+        info->typeattr.cbSizeInstance = unit;
+        info->typeattr.cbAlignment = unit;
+    }
+    return S_OK;
+}
+#else
+static void TLB_fix_typeinfo_ptr_size(ITypeInfoImpl *info)
+{
+    if(info->typeattr.typekind == TKIND_ALIAS){
         switch(info->tdescAlias->vt){
         case VT_BSTR:
         case VT_DISPATCH:
@@ -3545,16 +3585,8 @@ static void TLB_fix_typeinfo_ptr_size(ITypeInfoImpl *info)
             break;
         case VT_CARRAY:
         case VT_USERDEFINED:
-#ifdef __REACTOS__
-            hr = TLB_size_instance(info, is_win64 ? SYS_WIN64 : SYS_WIN32,
-                                  info->tdescAlias, &size, &align);
-            if (FAILED(hr)) return hr;
-            info->typeattr.cbSizeInstance = size;
-            info->typeattr.cbAlignment = align;
-#else
             TLB_size_instance(info, is_win64 ? SYS_WIN64 : SYS_WIN32, info->tdescAlias,
                               &info->typeattr.cbSizeInstance, &info->typeattr.cbAlignment);
-#endif
             break;
         case VT_VARIANT:
             info->typeattr.cbSizeInstance = sizeof(VARIANT);
@@ -3573,10 +3605,8 @@ static void TLB_fix_typeinfo_ptr_size(ITypeInfoImpl *info)
         info->typeattr.cbSizeInstance = sizeof(void*);
         info->typeattr.cbAlignment = sizeof(void*);
     }
-#ifdef __REACTOS__
-    return S_OK;
-#endif
 }
+#endif
 
 /*
  * process a typeinfo record
@@ -3637,7 +3667,7 @@ static ITypeInfoImpl * MSFT_DoTypeInfo(
         goto failed;
 #endif
 #ifdef __REACTOS__
-    ptiRet->typeattr.cbSizeVft = tiBase.cbSizeVft * sizeof(void *) / pLibInfo->ptr_size;
+    ptiRet->typeattr.cbSizeVft = tiBase.cbSizeVft * pLibInfo->vft_unit / pLibInfo->ptr_size;
 #else
     ptiRet->typeattr.cbSizeVft = tiBase.cbSizeVft;
 #endif
@@ -4529,7 +4559,18 @@ static HRESULT TLB_Mapping_Open(LPCWSTR path, LPVOID *ppBase, DWORD *pdwTLBLengt
  */
 
 #define SLTG_SIGNATURE 0x47544c53 /* "SLTG" */
+#ifdef __REACTOS__
+static HRESULT TLB_ReadTypeLibUnit(LPCWSTR pszFileName, LPWSTR pszPath, UINT cchPath, int vft_unit, ITypeLib2 **ppTypeLib);
+
 static HRESULT TLB_ReadTypeLib(LPCWSTR pszFileName, LPWSTR pszPath, UINT cchPath, ITypeLib2 **ppTypeLib)
+{
+    return TLB_ReadTypeLibUnit(pszFileName, pszPath, cchPath, sizeof(void *), ppTypeLib);
+}
+
+static HRESULT TLB_ReadTypeLibUnit(LPCWSTR pszFileName, LPWSTR pszPath, UINT cchPath, int vft_unit, ITypeLib2 **ppTypeLib)
+#else
+static HRESULT TLB_ReadTypeLib(LPCWSTR pszFileName, LPWSTR pszPath, UINT cchPath, ITypeLib2 **ppTypeLib)
+#endif
 {
     ITypeLibImpl *entry;
     HRESULT ret;
@@ -4626,6 +4667,10 @@ static HRESULT TLB_ReadTypeLib(LPCWSTR pszFileName, LPWSTR pszPath, UINT cchPath
     TRACE_(typelib)("File %s index %d\n", debugstr_w(pszPath), index);
 
     /* We look the path up in the typelib cache. If found, we just addref it, and return the pointer. */
+#ifdef __REACTOS__
+    if (vft_unit == sizeof(void *))
+    {
+#endif
     EnterCriticalSection(&cache_section);
     LIST_FOR_EACH_ENTRY(entry, &tlb_cache, ITypeLibImpl, entry)
     {
@@ -4639,6 +4684,9 @@ static HRESULT TLB_ReadTypeLib(LPCWSTR pszFileName, LPWSTR pszPath, UINT cchPath
         }
     }
     LeaveCriticalSection(&cache_section);
+#ifdef __REACTOS__
+    }
+#endif
 
     /* now actually load and parse the typelib */
 
@@ -4654,7 +4702,7 @@ static HRESULT TLB_ReadTypeLib(LPCWSTR pszFileName, LPWSTR pszPath, UINT cchPath
             DWORD dwSignature = FromLEDWord(*((DWORD*) pBase));
             if (dwSignature == MSFT_SIGNATURE)
 #ifdef __REACTOS__
-                *ppTypeLib = ITypeLib2_Constructor_MSFT(pBase, dwTLBLength, &ret);
+                *ppTypeLib = ITypeLib2_Constructor_MSFT(pBase, dwTLBLength, vft_unit, &ret);
 #else
                 *ppTypeLib = ITypeLib2_Constructor_MSFT(pBase, dwTLBLength);
 #endif
@@ -4692,9 +4740,18 @@ static HRESULT TLB_ReadTypeLib(LPCWSTR pszFileName, LPWSTR pszPath, UINT cchPath
         impl->index = index;
 
         /* FIXME: check if it has added already in the meantime */
+#ifdef __REACTOS__
+        if (vft_unit == sizeof(void *))
+        {
+            EnterCriticalSection(&cache_section);
+            list_add_head(&tlb_cache, &impl->entry);
+            LeaveCriticalSection(&cache_section);
+        }
+#else
         EnterCriticalSection(&cache_section);
         list_add_head(&tlb_cache, &impl->entry);
         LeaveCriticalSection(&cache_section);
+#endif
         ret = S_OK;
     }
     else
@@ -4754,7 +4811,7 @@ static ITypeLibImpl* TypeLibImpl_Constructor(void)
  * loading an MSFT typelib from an in-memory image
  */
 #ifdef __REACTOS__
-static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength, HRESULT *result)
+static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength, int vft_unit, HRESULT *result)
 #else
 static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
 #endif
@@ -4863,7 +4920,7 @@ static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
     pTypeLibImpl->syskind = tlbHeader.varflags & 0x0f; /* check the mask */
     pTypeLibImpl->ptr_size = get_ptr_size(pTypeLibImpl->syskind);
 #ifdef __REACTOS__
-    pTypeLibImpl->vft_unit = sizeof(void *);
+    pTypeLibImpl->vft_unit = vft_unit;
 #endif
     pTypeLibImpl->ver_major = LOWORD(tlbHeader.version);
     pTypeLibImpl->ver_minor = HIWORD(tlbHeader.version);
@@ -5242,7 +5299,11 @@ static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
         }
     }
 
+#ifdef __REACTOS__
+    if (pTypeLibImpl->ptr_size != pTypeLibImpl->vft_unit)
+#else
     if (pTypeLibImpl->ptr_size != sizeof(void *))
+#endif
     {
         for(i = 0; i < pTypeLibImpl->TypeInfoCount; ++i)
 #ifdef __REACTOS__
@@ -11325,6 +11386,36 @@ static HRESULT WINAPI ITypeInfo_fnGetRefTypeInfo(
             } else {
                 /* Search in cached typelibs */
                 ITypeLibImpl *entry;
+#ifdef __REACTOS__
+                BSTR regnam;
+
+                result = query_typelib_path(TLB_get_guid_null(ref_type->pImpTLInfo->guid),
+                        ref_type->pImpTLInfo->wVersionMajor,
+                        ref_type->pImpTLInfo->wVersionMinor,
+                        This->pTypeLib->syskind,
+                        ref_type->pImpTLInfo->lcid, &regnam, TRUE);
+                if (SUCCEEDED(result))
+                {
+                    int unit = This->pTypeLib->vft_unit;
+
+                    if (unit == sizeof(void *))
+                    {
+                        result = LoadTypeLib(regnam, &pTLib);
+                    }
+                    else
+                    {
+                        WCHAR regpath[MAX_PATH + 1];
+
+                        result = TLB_ReadTypeLibUnit(regnam, regpath, ARRAY_SIZE(regpath), unit, (ITypeLib2 **)&pTLib);
+                    }
+                    SysFreeString(regnam);
+                    if (FAILED(result))
+                        pTLib = NULL;
+                }
+
+                if (!pTLib)
+                {
+#endif
 
                 EnterCriticalSection(&cache_section);
                 LIST_FOR_EACH_ENTRY(entry, &tlb_cache, ITypeLibImpl, entry)
@@ -11343,6 +11434,17 @@ static HRESULT WINAPI ITypeInfo_fnGetRefTypeInfo(
                     }
                 }
                 LeaveCriticalSection(&cache_section);
+#ifdef __REACTOS__
+                }
+
+                if (!pTLib)
+                {
+                    BSTR libnam = SysAllocString(ref_type->pImpTLInfo->name);
+
+                    result = LoadTypeLib(libnam, &pTLib);
+                    SysFreeString(libnam);
+                }
+#else
 
                 if (!pTLib)
                 {
@@ -11360,6 +11462,7 @@ static HRESULT WINAPI ITypeInfo_fnGetRefTypeInfo(
                     result = LoadTypeLib(libnam, &pTLib);
                     SysFreeString(libnam);
                 }
+#endif
 
                 if(SUCCEEDED(result)) {
                     ref_type->pImpTLInfo->pImpTypeLib = impl_from_ITypeLib(pTLib);
