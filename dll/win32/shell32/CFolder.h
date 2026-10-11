@@ -52,16 +52,8 @@ public:
     STDMETHOD(get_HaveToShowWebViewBarricade)(VARIANT_BOOL *pbHaveToShowWebViewBarricade) override;
     STDMETHOD(DismissedWebViewBarricade)() override;
 
-    static HRESULT CreateInstance(LPCITEMIDLIST pidl, IDispatch *pDispatch, REFIID riid, void **ppv)
-    {
-        return ShellObjectCreatorInit<CFolder>(pidl, pDispatch, riid, ppv);
-    }
-    static HRESULT CreateInstance(LPCITEMIDLIST pidl, Folder &Instance, REFIID riid, void **ppv)
-    {
-        CComPtr<IDispatch> pDisp;
-        HRESULT hr = Instance.get_Application(&pDisp);
-        return SUCCEEDED(hr) ? CreateInstance(pidl, pDisp, riid, ppv) : hr;
-    }
+    static HRESULT CreateInstance(LPCITEMIDLIST pidl, IDispatch *pDispatch, REFIID riid, void **ppv);
+    static HRESULT CreateInstance(LPCITEMIDLIST pidl, Folder &Instance, REFIID riid, void **ppv);
 
 DECLARE_NOT_AGGREGATABLE(CFolder)
 DECLARE_PROTECT_FINAL_CONSTRUCT()

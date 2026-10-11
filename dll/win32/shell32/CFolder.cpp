@@ -41,6 +41,18 @@ CFolder::~CFolder()
 {
 }
 
+HRESULT CFolder::CreateInstance(LPCITEMIDLIST pidl, IDispatch *pDispatch, REFIID riid, void **ppv)
+{
+    return ShellObjectCreatorInit<CFolder>(pidl, pDispatch, riid, ppv);
+}
+
+HRESULT CFolder::CreateInstance(LPCITEMIDLIST pidl, Folder &Instance, REFIID riid, void **ppv)
+{
+    CComPtr<IDispatch> pDisp;
+    HRESULT hr = Instance.get_Application(&pDisp);
+    return SUCCEEDED(hr) ? CreateInstance(pidl, pDisp, riid, ppv) : hr;
+}
+
 HRESULT CFolder::Initialize(LPCITEMIDLIST idlist, IDispatch *pDispatch)
 {
     m_Application = pDispatch;

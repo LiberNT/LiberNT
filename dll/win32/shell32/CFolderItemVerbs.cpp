@@ -89,6 +89,11 @@ CFolderItemVerbs::~CFolderItemVerbs()
     DestroyMenu(m_menu);
 }
 
+HRESULT CFolderItemVerbs::CreateInstance(CComPtr<CFolderItemVerbs> &objref)
+{
+    return ShellObjectCreator(objref);
+}
+
 HRESULT CFolderItemVerbs::Init(IContextMenu &cm)
 {
     m_contextmenu = &cm;

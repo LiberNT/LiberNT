@@ -85,7 +85,7 @@ BEGIN_COM_MAP(CFolderItemVerbs)
     COM_INTERFACE_ENTRY_IID(IID_IDispatch, IDispatch)
 END_COM_MAP()
 
-    static HRESULT CreateInstance(CComPtr<CFolderItemVerbs> &objref) { return ShellObjectCreator(objref); }
+    static HRESULT CreateInstance(CComPtr<CFolderItemVerbs> &objref);
 };
 
 #endif
