@@ -63,7 +63,7 @@ W32KAPI HANDLE WINAPI NtGdiCreateServerMetaFile( DWORD type, ULONG size, BYTE *d
 W32KAPI ULONG WINAPI NtGdiGetServerMetaFileBits( HANDLE handle, ULONG size, BYTE *data, DWORD *type, DWORD *mm,
                                                  DWORD *xext, DWORD *yext );
 W32KAPI BOOL WINAPI NtGdiPolyPatBlt( HDC hdc, DWORD rop, void *poly, DWORD count, DWORD mode );
-static inline HANDLE get_ros_gdi_handle( UINT **args ) { return ULongToHandle( *(*args)++ ); }
+static inline HANDLE get_ros_gdi_handle( UINT **args ) { return Handle32ToHandle( *(*args)++ ); }
 #define get_handle get_ros_gdi_handle
 #endif
 
