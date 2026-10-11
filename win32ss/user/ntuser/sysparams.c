@@ -1385,6 +1385,9 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
                 SpiStoreFont(L"MessageFont", &gspv.ncm.lfMessageFont);
             }
 
+            SpiFixupValues();
+            InitMetrics();
+
             if(!SpiNotifyNCMetricsChanged())
                 return 0;
 
