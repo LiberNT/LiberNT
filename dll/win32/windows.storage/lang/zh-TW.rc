@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Chinese (Traditional) resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "資料夾"
+    IDS_ANY_FILE "%s-檔案"
+    IDS_OPEN_VERB "開啟(&O)"
+    IDS_OPENFILELOCATION "開啟檔案位置(&I)"
+    IDS_RUNAS_VERB "執行身分..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "系統資料夾"
+    IDS_DRIVE_FIXED "本機磁碟"
+    IDS_DRIVE_REMOVABLE "卸除式磁碟"
+    IDS_DRIVE_NETWORK "網路磁碟"
+    IDS_DRIVE_CDROM "CD 光碟機"
+    IDS_DRIVE_FLOPPY "3.5-吋磁片"
+    IDS_CANTLOCKVOLUME "無法鎖定磁碟區。（錯誤碼：%lu）"
+    IDS_CANTDISMOUNTVOLUME "無法卸載磁碟區。（錯誤碼：%lu）"
+    IDS_CANTEJECTMEDIA "無法退出媒體。（錯誤碼：%lu）"
+    IDS_CANTDISCONNECT "無法中斷。（錯誤碼：%lu）"
+    IDS_SHV_COLUMN_NAME "名稱"
+    IDS_SHV_COLUMN_TYPE "類型"
+    IDS_SHV_COLUMN_DISK_CAPACITY "使用空間"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "剩餘空間"
+    IDS_SHV_COLUMN_COMMENTS "評論"
+    IDS_SHV_COLUMN_SIZE "大小"
+    IDS_SHV_COLUMN_MODIFIED "修改"
+    IDS_SHV_COLUMN_ATTRIBUTES "屬性"
+    IDS_DESKTOP "桌面"
+    IDS_MYCOMPUTER "我的電腦"
+    IDS_PERSONAL "我的文件"
+    IDS_RECYCLEBIN_FOLDER_NAME "資源回收筒"
+    IDS_CONTROLPANEL "控制台"
+    IDS_ADMINISTRATIVETOOLS "管理工具"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

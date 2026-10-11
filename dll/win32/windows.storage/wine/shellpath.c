@@ -4859,42 +4859,6 @@ BOOL APIENTRY IsRemovableDrive(DWORD iDrive)
 	########## Combining and Constructing paths ##########
 */
 
-static BOOL WINAPI
-PathSearchOnExtensionsW(
-    _Inout_ LPWSTR pszPath,
-    _In_opt_ LPCWSTR *ppszDirs,
-    _In_ BOOL bDoSearch,
-    _In_ DWORD dwWhich)
-{
-    if (*PathFindExtensionW(pszPath) != 0)
-        return FALSE;
-
-    if (bDoSearch)
-        return PathFindOnPathExW(pszPath, ppszDirs, dwWhich);
-    else
-        return PathFileExistsDefExtW(pszPath, dwWhich);
-}
-
-#if (_WIN32_WINNT >= _WIN32_WINNT_WS03)
-static BOOL WINAPI PathIsAbsoluteW(_In_ LPCWSTR path)
-{
-    return PathIsUNCW(path) || (PathGetDriveNumberW(path) != -1 && path[2] == L'\\');
-}
-
-static BOOL WINAPI PathMakeAbsoluteW(_Inout_ LPWSTR path)
-{
-    WCHAR path1[MAX_PATH];
-    DWORD cch;
-
-    if (path == NULL)
-        return FALSE;
-    cch = GetCurrentDirectoryW(_countof(path1), path1);
-    if (!cch || cch > _countof(path1))
-        return FALSE;
-    return (PathCombineW(path, path1, path) != NULL);
-}
-#endif
-
 BOOL WINAPI IsLFNDriveW(LPCWSTR lpszPath);
 
 static VOID WINAPI

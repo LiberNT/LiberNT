@@ -25,7 +25,7 @@
 25 stdcall ILCombine(ptr ptr)
 26 stdcall ILLoadFromStream(ptr ptr)
 27 stdcall ILSaveToStream(ptr ptr)
-28 stdcall SHILCreateFromPath(ptr ptr ptr) SHILCreateFromPathAW
+28 stdcall SHILCreateFromPath(ptr ptr ptr)
 29 stdcall -noname PathIsRoot(ptr) PathIsRootAW
 30 stdcall -noname PathBuildRoot(ptr long) PathBuildRootW
 31 stdcall -noname PathFindExtension(wstr) PathFindExtensionW
@@ -40,11 +40,11 @@
 40 stdcall -noname PathIsRelative(wstr) PathIsRelativeW
 41 stdcall IsLFNDriveA(str)
 42 stdcall IsLFNDriveW(wstr)
-43 stdcall PathIsExe(ptr) PathIsExeAW
+43 stdcall PathIsExe(ptr)
 44 stub -noname Control_RunDLLNoFallback
 45 stdcall -noname PathFileExists(ptr) PathFileExistsAW # FIXME
 46 stdcall -noname PathMatchSpec(wstr wstr) PathMatchSpecW
-47 stdcall PathMakeUniqueName(ptr long ptr ptr ptr) PathMakeUniqueNameAW
+47 stdcall PathMakeUniqueName(ptr long ptr ptr ptr)
 48 stdcall -noname PathSetDlgItemPath(long long wstr) PathSetDlgItemPathW
 49 stdcall PathQualify(ptr) PathQualifyAW
 50 stdcall -noname PathStripToRoot(wstr) PathStripToRootW
@@ -657,3 +657,21 @@
 904 stdcall -noname -version=0x602+ Shell32Ordinal904(ptr ptr)
 905 stdcall -noname -version=0x602+ Shell32Ordinal905(ptr ptr)
 906 stdcall -noname -version=0x602+ Shell32Ordinal906()
+@ stdcall ParseFieldA(str long ptr long)
+@ stdcall ParseFieldW(wstr long ptr long)
+@ cdecl PathProcessCommandW(wstr ptr long long)
+@ stdcall StrRetToStrNW(ptr long ptr ptr)
+@ cdecl SHELL32_EnumDefaultVerbList(wstr long ptr long)
+@ stdcall SHELL32_RunControlPanel(wstr ptr)
+@ cdecl SH_CreatePropertySheetPageEx(long ptr long wstr ptr)
+@ cdecl SIC_GetIconIndex(wstr long long)
+@ stdcall _InsertMenuItemW(ptr long long long long wstr long)
+@ cdecl IDataObject_Constructor(ptr ptr ptr long long ptr)
+@ cdecl IsDriveFloppyW(wstr)
+@ cdecl SHELL32_GetItemOverlay(ptr ptr ptr ptr long)
+@ cdecl SHELL_SingleFileOperation(ptr long wstr wstr long ptr)
+@ cdecl CFSDropTarget_CreateInstance(ptr ptr ptr)
+@ cdecl SHELL_ShowItemIDListProperties(ptr)
+@ cdecl SHELL32_ShowShellExtensionProperties(ptr ptr)
+@ cdecl SHELL32_ShowFilesystemItemPropertiesDialogAsync(ptr)
+@ cdecl SHELL32_ShowFilesystemItemsPropertiesDialogAsync(ptr ptr)

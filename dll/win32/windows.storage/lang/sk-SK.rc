@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Slovak resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_SLOVAK, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Priečinok"
+    IDS_ANY_FILE "%s File"
+    IDS_OPEN_VERB "&Otvoriť"
+    IDS_OPENFILELOCATION "Open f&ile location"
+    IDS_RUNAS_VERB "Spustiť ako..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "System Folder"
+    IDS_DRIVE_FIXED "Lokálny disk"
+    IDS_DRIVE_REMOVABLE "Removable Disk"
+    IDS_DRIVE_NETWORK "Sieťový disk"
+    IDS_DRIVE_CDROM "Jednotka CD"
+    IDS_DRIVE_FLOPPY "3.5 Floppy"
+    IDS_CANTLOCKVOLUME "Unable to lock volume (Error Code: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Unable to dismount volume (Error Code: %lu)."
+    IDS_CANTEJECTMEDIA "Unable to eject media (Error Code: %lu)."
+    IDS_CANTDISCONNECT "Unable to disconnect (Error Code: %lu)."
+    IDS_SHV_COLUMN_NAME "Názov"
+    IDS_SHV_COLUMN_TYPE "Typ"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Veľkosť"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Veľkosť k dispozícii"
+    IDS_SHV_COLUMN_COMMENTS "Poznámky"
+    IDS_SHV_COLUMN_SIZE "Veľkosť"
+    IDS_SHV_COLUMN_MODIFIED "Modifikovaný"
+    IDS_SHV_COLUMN_ATTRIBUTES "Atribúty"
+    IDS_DESKTOP "Pracovná plocha"
+    IDS_MYCOMPUTER "Tento počítač"
+    IDS_PERSONAL "Moje dokumenty"
+    IDS_RECYCLEBIN_FOLDER_NAME "Kôš"
+    IDS_CONTROLPANEL "Ovládací panel"
+    IDS_ADMINISTRATIVETOOLS "Nástroje na správu"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

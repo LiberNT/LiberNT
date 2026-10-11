@@ -306,25 +306,13 @@ public:
  */
 class CShell32Module : public CComModule
 {
-public:
-    void Term()
-    {
-        CComCreatorCentralInstance< ATL::CComObject< CDrivesFolder > >::Term();
-        CComCreatorCentralInstance< ATL::CComObject< CDesktopFolder > >::Term();
-        CComModule::Term();
-    }
 };
 
 
 BEGIN_OBJECT_MAP(ObjectMap)
     OBJECT_ENTRY(CLSID_ActiveDesktop, CActiveDesktop)
-    OBJECT_ENTRY(CLSID_ShellFSFolder, CFSFolder)
-    OBJECT_ENTRY(CLSID_MyComputer, CDrivesFolder)
-    OBJECT_ENTRY(CLSID_ShellDesktop, CDesktopFolder)
     OBJECT_ENTRY(CLSID_ShellFileDefExt, CFileDefExt)
     OBJECT_ENTRY(CLSID_ShellDrvDefExt, CDrvDefExt)
-    OBJECT_ENTRY(CLSID_ShellItem, CShellItem)
-    OBJECT_ENTRY(CLSID_ShellLink, CShellLink)
     OBJECT_ENTRY(CLSID_Shell, CShellDispatch)
     OBJECT_ENTRY(CLSID_DragDropHelper, CDropTargetHelper)
     OBJECT_ENTRY(CLSID_ControlPanel, CControlPanelFolder)
@@ -350,7 +338,6 @@ BEGIN_OBJECT_MAP(ObjectMap)
     OBJECT_ENTRY(CLSID_MenuDeskBar, CMenuDeskBar)
     OBJECT_ENTRY(CLSID_MergedFolder, CMergedFolder)
     OBJECT_ENTRY(CLSID_ExeDropHandler, CExeDropHandler)
-    OBJECT_ENTRY(CLSID_QueryAssociations, CQueryAssociations)
     OBJECT_ENTRY(CLSID_UserNotification, CUserNotification)
     OBJECT_ENTRY(CLSID_ACLCustomMRU, CACLCustomMRU)
     OBJECT_ENTRY(CLSID_ACLMRU, CACLMRU)

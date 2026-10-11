@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Romanian resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ROMANIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Folder"
+    IDS_ANY_FILE "Fişier-%s"
+    IDS_OPEN_VERB "&Deschidere"
+    IDS_OPENFILELOCATION "&Deschidere locaţie fişier"
+    IDS_RUNAS_VERB "Executare ca…"
+    IDS_SHORTCUT_RUN_NORMAL "Fereastră normală"
+    IDS_SHORTCUT_RUN_MIN "Minimizată"
+    IDS_SHORTCUT_RUN_MAX "Maximizată"
+    IDS_SYSTEMFOLDER "Folder de sistem"
+    IDS_DRIVE_FIXED "Disc local"
+    IDS_DRIVE_REMOVABLE "Disc amovibil"
+    IDS_DRIVE_NETWORK "Unitate de reţea"
+    IDS_DRIVE_CDROM "Unitate CD"
+    IDS_DRIVE_FLOPPY "Dischetă de 3,5"
+    IDS_CANTLOCKVOLUME "Imposibil de blocat volumul (Cod de eroare: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Imposibil de demontat volumul (Cod de eroare: %lu)."
+    IDS_CANTEJECTMEDIA "Imposibil de scos mediului de stocare (Cod de eroare: %lu)."
+    IDS_CANTDISCONNECT "Imposibil de deconectat (Cod de eroare: %lu)."
+    IDS_SHV_COLUMN_NAME "Nume"
+    IDS_SHV_COLUMN_TYPE "Tip"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Capacitate"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Disponibil"
+    IDS_SHV_COLUMN_COMMENTS "Comentarii"
+    IDS_SHV_COLUMN_SIZE "Dimensiune"
+    IDS_SHV_COLUMN_MODIFIED "Data modificării"
+    IDS_SHV_COLUMN_ATTRIBUTES "Atribute"
+    IDS_DESKTOP "Desktop"
+    IDS_MYCOMPUTER "Computerul meu"
+    IDS_PERSONAL "Documentele mele"
+    IDS_RECYCLEBIN_FOLDER_NAME "Coş de reciclare"
+    IDS_CONTROLPANEL "Panou de control"
+    IDS_ADMINISTRATIVETOOLS "Instrumente de administrare"
+    IDS_PROGRAM_FILES "Fişiere de program"
+    IDS_PROGRAM_FILES_COMMON "Fişiere de program\\Fişiere comune"
+END

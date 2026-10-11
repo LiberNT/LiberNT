@@ -206,6 +206,17 @@ end:
 	return hres;
 }
 #else
+static HRESULT SH32_GetStorageClassObject(REFCLSID clsid, REFIID riid, void **obj)
+{
+    typedef HRESULT (WINAPI *get_class_object_func)(REFCLSID, REFIID, void **);
+    get_class_object_func get_class_object;
+    HMODULE module = GetModuleHandleW(L"windows.storage.dll");
+
+    if (!module || !(get_class_object = (get_class_object_func)GetProcAddress(module, "DllGetClassObject")))
+        return CLASS_E_CLASSNOTAVAILABLE;
+    return get_class_object(clsid, riid, obj);
+}
+
 static HRESULT SH32_CoCreateInstance(LPCWSTR aclsid, const CLSID *clsid, IUnknown *outer,
                                      DWORD context, REFIID riid, void **obj)
 {
@@ -240,6 +251,16 @@ static HRESULT SH32_CoCreateInstance(LPCWSTR aclsid, const CLSID *clsid, IUnknow
     SHStringFromGUIDW(requested_clsid, class_id, ARRAY_SIZE(class_id));
     swprintf(key_name, ARRAY_SIZE(key_name), L"CLSID\\%s\\InprocServer32", class_id);
     if (RegOpenKeyExW(HKEY_CLASSES_ROOT, key_name, 0, KEY_READ, &key)) return E_ACCESSDENIED;
+
+    size = sizeof(dll_path);
+    if ((context & CLSCTX_INPROC_SERVER) && !SHQueryValueExW(key, NULL, NULL, NULL, dll_path, &size) &&
+        !lstrcmpiW(PathFindFileNameW(dll_path), L"windows.storage.dll") &&
+        SUCCEEDED(SH32_GetStorageClassObject(requested_clsid, &IID_IClassFactory, (void **)&factory)))
+    {
+        hr = IClassFactory_CreateInstance(factory, outer, riid, obj);
+        IClassFactory_Release(factory);
+        goto done;
+    }
 
     if ((context & CLSCTX_INPROC_SERVER) && !SHQueryValueExW(key, L"LoadWithoutCOM", NULL, NULL, NULL, NULL))
     {

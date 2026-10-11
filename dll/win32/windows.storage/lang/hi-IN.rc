@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Hindi resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_HINDI, SUBLANG_HINDI_INDIA
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "फोल्डर"
+    IDS_ANY_FILE "%s-फ़ाइल"
+    IDS_OPEN_VERB "&ओपन"
+    IDS_OPENFILELOCATION "Open f&ile location"
+    IDS_RUNAS_VERB "रन ऐज़..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "System Folder"
+    IDS_DRIVE_FIXED "लोकल डिस्क"
+    IDS_DRIVE_REMOVABLE "हटायी जा सकने वाली डिस्क"
+    IDS_DRIVE_NETWORK "नेटवर्क डिस्क"
+    IDS_DRIVE_CDROM "सीडी ड्राइव"
+    IDS_DRIVE_FLOPPY "3.5 फ्लॉपी"
+    IDS_CANTLOCKVOLUME "वॉल्यूम लॉक करने में असमर्थ (एरर कोड: %lu)."
+    IDS_CANTDISMOUNTVOLUME "वॉल्यूम को डिस्माउंट करने में असमर्थ (एरर कोड: %lu)."
+    IDS_CANTEJECTMEDIA "मीडिया को इजेक्ट करने में असमर्थ (एरर कोड: %lu)."
+    IDS_CANTDISCONNECT "डिस्कनेक्ट करने में असमर्थ (एरर कोड: %lu)."
+    IDS_SHV_COLUMN_NAME "नाम"
+    IDS_SHV_COLUMN_TYPE "प्रकार"
+    IDS_SHV_COLUMN_DISK_CAPACITY "संपूर्ण साइज़"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "मुक्त साइज़"
+    IDS_SHV_COLUMN_COMMENTS "टिप्पणियाँ"
+    IDS_SHV_COLUMN_SIZE "साइज़"
+    IDS_SHV_COLUMN_MODIFIED "संशोधित"
+    IDS_SHV_COLUMN_ATTRIBUTES "गुण"
+    IDS_DESKTOP "डेस्कटॉप"
+    IDS_MYCOMPUTER "मेरा कंप्यूटर"
+    IDS_PERSONAL "मेरे डॉक्यूमेंट"
+    IDS_RECYCLEBIN_FOLDER_NAME "रीसायकल बिन"
+    IDS_CONTROLPANEL "कंट्रोल पैनल"
+    IDS_ADMINISTRATIVETOOLS "प्रशासनिक उपकरण"
+    IDS_PROGRAM_FILES "प्रोग्राम फाइलें"
+    IDS_PROGRAM_FILES_COMMON "प्रोग्राम फाइलें\\सामान्य फाइलें"
+END

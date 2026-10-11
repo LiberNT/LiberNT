@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Hungarian resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_HUNGARIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Mappa"
+    IDS_ANY_FILE "%s fájl"
+    IDS_OPEN_VERB "&Megnyitás"
+    IDS_OPENFILELOCATION "Tartalmazó &mappa megnyitása"
+    IDS_RUNAS_VERB "Futtatás mint..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "Rendszermappa"
+    IDS_DRIVE_FIXED "Helyi lemez"
+    IDS_DRIVE_REMOVABLE "Eltávolítható lemez"
+    IDS_DRIVE_NETWORK "Hálózati meghajtó"
+    IDS_DRIVE_CDROM "CD-meghajtó"
+    IDS_DRIVE_FLOPPY "3.5 Floppy"
+    IDS_CANTLOCKVOLUME "Nem sikerült zárolni a kötetet (hibakód: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Nem sikerült lecsatolni a kötetet (hibakód: %lu)."
+    IDS_CANTEJECTMEDIA "Nem sikerült kiadni az adathordozót (hibakód: %lu)."
+    IDS_CANTDISCONNECT "Nem sikerült a szétkapcsolódás (hibakód: %lu)."
+    IDS_SHV_COLUMN_NAME "Név"
+    IDS_SHV_COLUMN_TYPE "Típus"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Méret"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Rendelkezésre álló hely"
+    IDS_SHV_COLUMN_COMMENTS "Megjegyzések"
+    IDS_SHV_COLUMN_SIZE "Méret"
+    IDS_SHV_COLUMN_MODIFIED "Módosítva"
+    IDS_SHV_COLUMN_ATTRIBUTES "Attribútumok"
+    IDS_DESKTOP "Asztal"
+    IDS_MYCOMPUTER "Számítógép"
+    IDS_PERSONAL "Dokumentumok"
+    IDS_RECYCLEBIN_FOLDER_NAME "Lomtár"
+    IDS_CONTROLPANEL "Vezérlőpult"
+    IDS_ADMINISTRATIVETOOLS "Felügyeleti eszközök"
+    IDS_PROGRAM_FILES "Programfájlok"
+    IDS_PROGRAM_FILES_COMMON "Programfájlok\\Common Files"
+END

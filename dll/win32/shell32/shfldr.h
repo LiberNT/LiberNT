@@ -71,7 +71,7 @@ typedef struct _REGFOLDERINITDATA
     const REGFOLDERINFO *pInfo;
 } REGFOLDERINITDATA, *PREGFOLDERINITDATA;
 
-HRESULT CRegFolder_CreateInstance(PREGFOLDERINITDATA pInit, LPCITEMIDLIST pidlRoot, REFIID riid, void **ppv);
+EXTERN_C HRESULT CRegFolder_CreateInstance(PREGFOLDERINITDATA pInit, LPCITEMIDLIST pidlRoot, REFIID riid, void **ppv);
 
 #define GET_SHGDN_FOR(dwFlags)         ((DWORD)dwFlags & (DWORD)0x0000FF00)
 #define GET_SHGDN_RELATION(dwFlags)    ((DWORD)dwFlags & (DWORD)0x000000FF)
@@ -134,7 +134,7 @@ HRESULT SHELL32_GetDisplayNameOfChild (IShellFolder2 * psf, LPCITEMIDLIST pidl, 
 
 HRESULT SHELL32_GetFSItemAttributes(IShellFolder * psf, LPCITEMIDLIST pidl, LPDWORD pdwAttributes);
 
-HRESULT SHELL32_GetItemOverlay(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, PCUITEMID_CHILD pidl, int *pIndex, BOOL bIconIndex);
+EXTERN_C HRESULT SHELL32_GetItemOverlay(IShellFolder *psf, PCIDLIST_ABSOLUTE pidlFolder, PCUITEMID_CHILD pidl, int *pIndex, BOOL bIconIndex);
 INT SIC_GetOverlaySlot(INT iImage);
 HRESULT SHELL32_GetInstanceObjectFactory(REFCLSID rclsid, REFIID riid, LPVOID *ppv);
 
@@ -181,8 +181,8 @@ static __inline int SHELL32_GUIDToStringW (REFGUID guid, LPWSTR str)
             guid.Data4[4], guid.Data4[5], guid.Data4[6], guid.Data4[7]);
 }
 
-void SHELL_FS_ProcessDisplayFilename(LPWSTR szPath, DWORD dwFlags);
-BOOL SHELL_FS_HideExtension(LPCWSTR pwszPath);
+EXTERN_C void SHELL_FS_ProcessDisplayFilename(LPWSTR szPath, DWORD dwFlags);
+EXTERN_C BOOL SHELL_FS_HideExtension(LPCWSTR pwszPath);
 
 static inline BOOL IsIllegalFsFileName(PCWSTR Name)
 {

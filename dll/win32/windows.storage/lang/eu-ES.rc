@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Basque resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_BASQUE, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Direktorioa"
+    IDS_ANY_FILE "%s fitxategi"
+    IDS_OPEN_VERB "&Ireki"
+    IDS_OPENFILELOCATION "Ireki &fitxategi kokalekua"
+    IDS_RUNAS_VERB "Exekutatu honela..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "Sistemako Karpeta"
+    IDS_DRIVE_FIXED "Disko lokala"
+    IDS_DRIVE_REMOVABLE "Eurauzgarri diskoa"
+    IDS_DRIVE_NETWORK "Sareko Unitatea"
+    IDS_DRIVE_CDROM "CD Unitatea"
+    IDS_DRIVE_FLOPPY "Diskete"
+    IDS_CANTLOCKVOLUME "Ezin izan da diskoa blokeatu (Error kodea: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Ezin izan da diskoa desmuntatu (Error kodea: %lu)."
+    IDS_CANTEJECTMEDIA "Ezin izan da diskoa kendu (Error kodea: %lu)."
+    IDS_CANTDISCONNECT "Ezin izan da deskonektatu (Error kodea: %lu)."
+    IDS_SHV_COLUMN_NAME "Izena"
+    IDS_SHV_COLUMN_TYPE "Mota"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Tamaina"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Erabilgarri tamaina"
+    IDS_SHV_COLUMN_COMMENTS "Azalpenak"
+    IDS_SHV_COLUMN_SIZE "Tamaina"
+    IDS_SHV_COLUMN_MODIFIED "Aldatze-data"
+    IDS_SHV_COLUMN_ATTRIBUTES "Atributuak"
+    IDS_DESKTOP "Mahaigaina"
+    IDS_MYCOMPUTER "Ordenagailua"
+    IDS_PERSONAL "Nire dokumentuak"
+    IDS_RECYCLEBIN_FOLDER_NAME "Zakarrontzia"
+    IDS_CONTROLPANEL "Kontrol Panela"
+    IDS_ADMINISTRATIVETOOLS "Administrazio-tresnak"
+    IDS_PROGRAM_FILES "Programaren fitxategiak"
+    IDS_PROGRAM_FILES_COMMON "Programaren fitxategiak\\Fitxategi arruntak"
+END

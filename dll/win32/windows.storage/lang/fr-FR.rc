@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     French resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_FRENCH, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Dossier"
+    IDS_ANY_FILE "Fichier %s"
+    IDS_OPEN_VERB "&Ouvrir"
+    IDS_OPENFILELOCATION "Ouvrir l'empla&cement du fichier"
+    IDS_RUNAS_VERB "Exécuter en tant que..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "Dossier système"
+    IDS_DRIVE_FIXED "Disque local"
+    IDS_DRIVE_REMOVABLE "Disque amovible"
+    IDS_DRIVE_NETWORK "Disque réseau"
+    IDS_DRIVE_CDROM "Lecteur CD"
+    IDS_DRIVE_FLOPPY "Disquette 3.5"
+    IDS_CANTLOCKVOLUME "Impossible de verrouiller le volume (code d'erreur : %lu)."
+    IDS_CANTDISMOUNTVOLUME "Impossible de démonter le volume (code d'erreur : %lu)."
+    IDS_CANTEJECTMEDIA "Impossible d'éjecter le média (code d'erreur : %lu)."
+    IDS_CANTDISCONNECT "Impossible de déconnecter (code d'erreur : %lu)."
+    IDS_SHV_COLUMN_NAME "Nom"
+    IDS_SHV_COLUMN_TYPE "Type"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Capacité"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Espace disponible"
+    IDS_SHV_COLUMN_COMMENTS "Commentaires"
+    IDS_SHV_COLUMN_SIZE "Taille"
+    IDS_SHV_COLUMN_MODIFIED "Modifié"
+    IDS_SHV_COLUMN_ATTRIBUTES "Attributs"
+    IDS_DESKTOP "Bureau"
+    IDS_MYCOMPUTER "Poste de travail"
+    IDS_PERSONAL "Mes documents"
+    IDS_RECYCLEBIN_FOLDER_NAME "Corbeille"
+    IDS_CONTROLPANEL "Panneau de configuration"
+    IDS_ADMINISTRATIVETOOLS "Outils d'administration"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Fichiers communs"
+END

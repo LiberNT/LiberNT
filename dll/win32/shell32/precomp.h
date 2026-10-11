@@ -174,14 +174,16 @@ PropSheetPageLifetimeCallback(HWND hWnd, UINT uMsg, PROPSHEETPAGEW *pPSP)
 
 HRESULT
 SHELL32_ShowPropertiesDialog(IDataObject *pdtobj);
-HRESULT
+EXTERN_C HRESULT
 SHELL32_ShowFilesystemItemPropertiesDialogAsync(IDataObject *pDO);
-HRESULT
+EXTERN_C HRESULT
 SHELL32_ShowFilesystemItemsPropertiesDialogAsync(HWND hOwner, IDataObject *pDO);
-HRESULT
+EXTERN_C HRESULT
 SHELL32_ShowShellExtensionProperties(const CLSID *pClsid, IDataObject *pDO);
-HRESULT
+EXTERN_C HRESULT
 SHELL_ShowItemIDListProperties(LPCITEMIDLIST pidl);
+EXTERN_C BOOL
+IsDriveFloppyW(LPCWSTR pszDriveRoot);
 
 typedef HDSA HDCMA; // DynamicContextMenuArray
 typedef struct _DCMENTRY
@@ -361,7 +363,7 @@ struct FILEOP_PROGRESS
 };
 int SHELL32_FileOperation(LPSHFILEOPSTRUCTW lpFileOp, FILEOPCALLBACK Callback, void *CallerData, FILEOP_PROGRESS *Progress = NULL);
 HRESULT SHELL32_CountFileOperation(PCWSTR Path, ULONGLONG *Bytes, ULONGLONG *Items, IOperationsProgressDialog *Dialog = NULL);
-HRESULT SHELL_SingleFileOperation(HWND hWnd, UINT Op, PCWSTR Src, PCWSTR Dest, UINT Flags, PWSTR *ppNewName);
+EXTERN_C HRESULT SHELL_SingleFileOperation(HWND hWnd, UINT Op, PCWSTR Src, PCWSTR Dest, UINT Flags, PWSTR *ppNewName);
 
 #include "CFileOperation.h"
 

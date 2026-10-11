@@ -976,17 +976,24 @@ LONG g_nRestCountValue = -1;
 DWORD g_RestValues[_countof(s_PolicyTable)] = { 0 };
 
 #ifdef __REACTOS__
-int WINAPI SHELL_StrCmpLogicalInit(PCWSTR s1, PCWSTR s2)
+static int WINAPI SHELL_StrCmpLogicalInit(PCWSTR s1, PCWSTR s2);
+
+static int (WINAPI* g_pfnStrCmpLogical)(PCWSTR s1, PCWSTR s2) = SHELL_StrCmpLogicalInit;
+
+static int WINAPI SHELL_StrCmpLogicalInit(PCWSTR s1, PCWSTR s2)
 {
-    SHELL_StrCmpLogical = SHRestricted(REST_NOSTRCMPLOGICAL) ? StrCmpIW : StrCmpLogicalW;
-    return SHELL_StrCmpLogical(s1, s2);
+    g_pfnStrCmpLogical = SHRestricted(REST_NOSTRCMPLOGICAL) ? StrCmpIW : StrCmpLogicalW;
+    return g_pfnStrCmpLogical(s1, s2);
 }
 
-int (WINAPI* SHELL_StrCmpLogical)(PCWSTR s1, PCWSTR s2) = SHELL_StrCmpLogicalInit;
+int WINAPI SHELL_StrCmpLogical(PCWSTR s1, PCWSTR s2)
+{
+    return g_pfnStrCmpLogical(s1, s2);
+}
 
 static void SH32_RestrictionsChanged()
 {
-    SHELL_StrCmpLogical = SHELL_StrCmpLogicalInit;
+    g_pfnStrCmpLogical = SHELL_StrCmpLogicalInit;
 }
 #endif
 

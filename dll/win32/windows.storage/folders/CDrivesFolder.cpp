@@ -1286,16 +1286,6 @@ HRESULT WINAPI CDrivesFolder::SetNameOf(HWND hwndOwner, PCUITEMID_CHILD pidl,
     return m_regFolder->SetNameOf(hwndOwner, pidl, lpName, dwFlags, pPidlOut);
 }
 
-HRESULT CDrivesFolder::SetDriveLabel(HWND hwndOwner, PCWSTR DrivePath, PCWSTR Label)
-{
-    HRESULT hr = SetVolumeLabelW(DrivePath, *Label ? Label : NULL) ? S_OK : HResultFromWin32(GetLastError());
-    if (SUCCEEDED(hr))
-        SHChangeNotify(SHCNE_RENAMEFOLDER, SHCNF_PATHW, DrivePath, DrivePath); // DisplayName changed
-    else if (hwndOwner)
-        SHELL_ErrorBox(hwndOwner, hr);
-    return hr;
-}
-
 HRESULT WINAPI CDrivesFolder::GetDefaultSearchGUID(GUID * pguid)
 {
     FIXME("(%p)\n", this);

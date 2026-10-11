@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Catalan resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_CATALAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Folder"
+    IDS_ANY_FILE "%s File"
+    IDS_OPEN_VERB "&Open"
+    IDS_OPENFILELOCATION "Open f&ile location"
+    IDS_RUNAS_VERB "Run as..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "System Folder"
+    IDS_DRIVE_FIXED "Local Disk"
+    IDS_DRIVE_REMOVABLE "Removable Disk"
+    IDS_DRIVE_NETWORK "Network Disk"
+    IDS_DRIVE_CDROM "CD Drive"
+    IDS_DRIVE_FLOPPY "3.5 Floppy"
+    IDS_CANTLOCKVOLUME "Unable to lock volume (Error Code: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Unable to dismount volume (Error Code: %lu)."
+    IDS_CANTEJECTMEDIA "Unable to eject media (Error Code: %lu)."
+    IDS_CANTDISCONNECT "Unable to disconnect (Error Code: %lu)."
+    IDS_SHV_COLUMN_NAME "Name"
+    IDS_SHV_COLUMN_TYPE "Type"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Size"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Free Space"
+    IDS_SHV_COLUMN_COMMENTS "Comments"
+    IDS_SHV_COLUMN_SIZE "Size"
+    IDS_SHV_COLUMN_MODIFIED "Modified"
+    IDS_SHV_COLUMN_ATTRIBUTES "Attributes"
+    IDS_DESKTOP "Desktop"
+    IDS_MYCOMPUTER "My Computer"
+    IDS_PERSONAL "My Documents"
+    IDS_RECYCLEBIN_FOLDER_NAME "Recycle Bin"
+    IDS_CONTROLPANEL "Control Panel"
+    IDS_ADMINISTRATIVETOOLS "Administrative Tools"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

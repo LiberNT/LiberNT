@@ -1064,7 +1064,7 @@ HRESULT CFSDropTarget::_DoDrop(IDataObject *pDataObject,
                 else
                 {
                     CComPtr<IShellLinkW> pLink;
-                    hr = CShellLink::_CreatorClass::CreateInstance(NULL, IID_PPV_ARG(IShellLinkW, &pLink));
+                    hr = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARG(IShellLinkW, &pLink));
                     if (!FAILED_UNEXPECTEDLY(hr))
                     {
                         hr = pLink->SetIDList(pidlFull);

@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Ukrainian resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_UKRAINIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Папка"
+    IDS_ANY_FILE "%s-файл"
+    IDS_OPEN_VERB "&Відкрити"
+    IDS_OPENFILELOCATION "Open f&ile location"
+    IDS_RUNAS_VERB "Запустити як..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "System Folder"
+    IDS_DRIVE_FIXED "Локальний диск"
+    IDS_DRIVE_REMOVABLE "Знімний диск"
+    IDS_DRIVE_NETWORK "Мережний диск"
+    IDS_DRIVE_CDROM "Привід компакт-дисків"
+    IDS_DRIVE_FLOPPY "Дисковод 3.5"
+    IDS_CANTLOCKVOLUME "Не вдалось заблокувати том (код помилки: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Не вдалось відкючити том (код помилки: %lu)."
+    IDS_CANTEJECTMEDIA "Не вдалось відключити носій (код помилки: %lu)."
+    IDS_CANTDISCONNECT "Не вдалось відключити (код помилки: %lu)."
+    IDS_SHV_COLUMN_NAME "Ім'я"
+    IDS_SHV_COLUMN_TYPE "Тип"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Розмір"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Вільний Розмір"
+    IDS_SHV_COLUMN_COMMENTS "Примітки"
+    IDS_SHV_COLUMN_SIZE "Розмір"
+    IDS_SHV_COLUMN_MODIFIED "Змінено"
+    IDS_SHV_COLUMN_ATTRIBUTES "Атрибути"
+    IDS_DESKTOP "Робочий стіл"
+    IDS_MYCOMPUTER "Мій комп'ютер"
+    IDS_PERSONAL "Мої документи"
+    IDS_RECYCLEBIN_FOLDER_NAME "Кошик"
+    IDS_CONTROLPANEL "Панель керування"
+    IDS_ADMINISTRATIVETOOLS "Адміністрування"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

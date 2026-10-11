@@ -137,6 +137,7 @@ static HRESULT GetStorageClassObject(PFNSTORAGECREATE pfnCreate, REFIID riid, LP
 EXTERN_C VOID
 WSTORAGE_InitObjects(HINSTANCE hInstance)
 {
+    WSTORAGE_InitShell(hInstance);
     gModule.Init(NULL, hInstance, NULL);
 }
 
@@ -146,6 +147,7 @@ WSTORAGE_TermObjects(VOID)
     IUnknown *pShared = (IUnknown *)InterlockedExchangePointer((PVOID *)&g_pSharedScheduler, NULL);
     if (pShared)
         pShared->Release();
+    WSTORAGE_TermShell();
     gModule.Term();
 }
 
@@ -167,7 +169,10 @@ WSTORAGE_GetObjectsClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
 EXTERN_C HRESULT
 WSTORAGE_UpdateRegistry(BOOL bRegister)
 {
-    return gModule.UpdateRegistryFromResource(IDR_STORAGEOBJECTS, bRegister, NULL);
+    HRESULT hr = gModule.UpdateRegistryFromResource(IDR_STORAGEOBJECTS, bRegister, NULL);
+    if (FAILED(hr))
+        return hr;
+    return bRegister ? gModule.RegisterServer(FALSE) : gModule.UnregisterServer(FALSE);
 }
 
 EXTERN_C BOOL

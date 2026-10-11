@@ -16,6 +16,13 @@ HKCR
                 val ThreadingModel = s 'Apartment'
             }
         }
+        '{9AC9FBE1-E0A2-4AD6-B4EE-E212013EA917}' = s 'ShellItem Shell Namespace helper'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Both'
+            }
+        }
         '{603D3800-BD81-11D0-A3A5-00C04FD706EC}' = s 'Background Task Scheduler'
         {
             InprocServer32 = s '%MODULE%'

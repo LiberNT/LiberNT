@@ -8,7 +8,7 @@
 10 stub RegisterChangeNotifications
 11 stub UnregisterChangeNotifications
 27 stdcall ILSaveToStream(ptr ptr)
-28 stdcall SHILCreateFromPath(ptr ptr ptr)
+28 stdcall SHILCreateFromPath(ptr ptr ptr) SHILCreateFromPathAW
 42 stdcall IsLFNDriveW(wstr)
 68 stdcall SHGetSetSettings(ptr long long)
 74 stdcall SHCreateStdEnumFmtEtc(long ptr ptr)
@@ -106,7 +106,7 @@
 @ cdecl CMruLongList_CreateInstance(ptr ptr ptr)
 @ stub CPrivateProfileCache_Save
 @ stub CRegFolder_CreateAndInit
-@ stub CRegFolder_CreateInstance
+@ cdecl CRegFolder_CreateInstance(ptr ptr ptr ptr)
 @ stub CShellItemArrayAsCollection_CreateInstance
 @ stub CShellItemArrayAsVirtualizedObjectArray_CreateInstance
 @ stub CShellItemArrayWithCommonParent_CreateInstance
@@ -176,96 +176,149 @@
 @ stub Global_WindowsStorage_ulNextID
 @ stub GrantPathAccess_FullTrustCaller_ForPackage
 @ stub GrantWorkingDirectoryAccess_FullTrustCaller_ForPackage
+@ cdecl HCR_GetClassNameA(ptr ptr long)
+@ cdecl HCR_GetDefaultVerbW(ptr wstr ptr long)
+@ cdecl HCR_GetExecuteCommandW(ptr wstr wstr ptr long)
+@ cdecl HCR_GetIconW(wstr ptr wstr long ptr)
+@ cdecl HCR_GetProgIdKeyOfExtension(wstr ptr long)
+@ cdecl HCR_MapTypeToValueW(wstr ptr long long)
+@ cdecl HLM_GetIconW(long ptr long ptr)
 @ stub HideExtension
 @ stdcall ILAppendID(ptr ptr long)
 @ stdcall ILClone(ptr)
 @ stdcall ILCloneFirst(ptr)
 @ stdcall ILCombine(ptr ptr)
+@ stdcall ILCreateFromPathA(str)
+@ stdcall ILCreateFromPathAW(ptr)
+@ stdcall ILCreateFromPathW(wstr)
 @ stdcall ILFindChild(ptr ptr)
 @ stdcall ILFindLastID(ptr)
 @ stdcall ILFree(ptr)
+@ stdcall ILGetDisplayName(ptr ptr)
+@ stdcall ILGetDisplayNameEx(ptr ptr ptr long)
+@ cdecl ILGetDisplayNameExW(ptr ptr ptr long)
 @ stdcall ILGetNext(ptr)
 @ stdcall ILGetSize(ptr)
+@ stdcall ILGlobalClone(ptr)
+@ stdcall ILGlobalFree(ptr)
 @ stdcall ILIsEqual(ptr ptr)
 @ stdcall ILIsParent(ptr ptr long)
+@ stdcall ILLoadFromStream(ptr ptr)
 @ stdcall ILRemoveLastID(ptr)
+@ stdcall IShellLink_ConstructFromPath(ptr ptr ptr)
+@ stdcall IsLFNDriveA(str)
+@ stdcall IsLFNDriveAW(ptr)
 @ stub IsLibraryCreatedByPolicy
 @ stub IsLibraryPolicyEnabled
 @ stub IsNameListedUnderKey
+@ stdcall KnownFolderManager_Constructor(ptr ptr ptr)
 @ stub NeverProvidedByJunction
+@ stdcall PathAppendAW(ptr ptr)
 @ stdcall PathCleanupSpec(ptr ptr)
-@ stdcall PathIsExe(ptr)
-@ stdcall PathMakeUniqueName(ptr long ptr ptr ptr)
+@ stdcall PathFileExistsAW(ptr)
+@ stdcall PathGetShortPathAW(ptr)
+@ stdcall PathIsExe(ptr) PathIsExeAW
+@ cdecl PathIsExeW(wstr)
+@ stdcall PathIsRootAW(ptr)
+@ stdcall PathMakeUniqueName(ptr long ptr ptr ptr) PathMakeUniqueNameAW
+@ stdcall PathProcessCommandAW(long long long long)
+@ stdcall PathQualifyAW(ptr)
+@ stdcall PathRemoveFileSpecAW(ptr)
+@ stdcall PathResolveAW(str long long)
+@ stdcall PathResolveW(ptr ptr long)
 @ stub QueryStorageAccess_FullTrustCaller_ForPackage
 @ stub QueryStorageAccess_FullTrustCaller_ForToken
 @ stub RebaseOnDriveLetter
 @ stub RebaseOnVolumeID
 @ stub RegistryVerbs_GetHandlerMultiSelectModel
+@ cdecl SH32_InternalRestricted(long)
 @ stub SHAssocEnumHandlers
 @ stdcall SHAssocEnumHandlersForProtocolByApplication(wstr ptr ptr)
-@ stub SHBindToFolderIDListParent
-@ stub SHBindToFolderIDListParentEx
+@ stdcall SHBindToFolderIDListParent(ptr ptr ptr ptr ptr)
+@ stdcall SHBindToFolderIDListParentEx(ptr ptr ptr ptr ptr ptr)
 @ stdcall SHBindToObject(ptr ptr ptr ptr ptr)
 @ stdcall SHBindToParent(ptr ptr ptr ptr)
 @ stdcall SHChangeNotify(long long ptr ptr)
 @ stub SHChangeNotifyRegisterThread
+@ stdcall SHCloneSpecialIDList(long long long)
 @ stub SHCoCreateInstanceWorker
 @ stub SHCreateAssocHandler
 @ stdcall SHCreateAssociationRegistration(ptr ptr)
 @ stdcall SHCreateDataObject(ptr long ptr ptr ptr ptr)
-@ stub SHCreateDefaultExtractIcon
+@ stdcall SHCreateDefaultExtractIcon(ptr ptr)
 @ stdcall SHCreateDirectory(long ptr)
 @ stdcall SHCreateDirectoryExA(long str ptr)
 @ stdcall SHCreateDirectoryExW(long wstr ptr)
 @ stdcall SHCreateItemFromIDList(ptr ptr ptr)
 @ stdcall SHCreateItemFromParsingName(wstr ptr ptr ptr)
 @ stdcall SHCreateItemFromRelativeName(ptr wstr ptr ptr ptr)
-@ stub SHCreateItemInKnownFolder
-@ stub SHCreateItemWithParent
+@ stdcall SHCreateItemInKnownFolder(ptr long wstr ptr ptr)
+@ stdcall SHCreateItemWithParent(ptr ptr ptr ptr ptr)
 @ stub SHCreateItemWithParentAndChildId
+@ stdcall SHCreateShellItem(ptr ptr ptr ptr)
 @ stdcall SHCreateShellItemArray(ptr ptr long ptr ptr)
 @ stdcall SHCreateShellItemArrayFromDataObject(ptr ptr ptr)
-@ stub SHCreateShellItemArrayFromIDLists
-@ stub SHCreateShellItemArrayFromShellItem
+@ stdcall SHCreateShellItemArrayFromIDLists(long ptr ptr)
+@ stdcall SHCreateShellItemArrayFromShellItem(ptr ptr ptr)
 @ stub SHCreateShellItemArrayWithFolderParent
+@ cdecl SHELL32_AssocGetFSDirectoryDescription(ptr long)
+@ cdecl SHELL32_AssocGetFileDescription(wstr ptr long)
+@ cdecl SHELL32_CreateSimpleIDListFromPath(wstr long)
+@ cdecl SHELL_FS_HideExtension(wstr)
+@ cdecl SHELL_FS_ProcessDisplayFilename(ptr long)
+@ cdecl SHELL_GetCachedGlobalCounter(ptr ptr)
+@ cdecl SHELL_RegisterShellFolders()
+@ stdcall SHELL_StrCmpLogical(wstr wstr)
 @ stub SHFileOperationWithAdditionalFlags
 @ stdcall SHFlushSFCache()
+@ stdcall SHGetDataFromIDListA(ptr ptr long ptr long)
+@ stdcall SHGetDataFromIDListW(ptr ptr long ptr long)
 @ stdcall SHGetDesktopFolder(ptr)
 @ stdcall SHGetFileInfoW(wstr long ptr long long)
 @ stdcall SHGetFolderLocation(long long long long ptr)
 @ stdcall SHGetFolderPathA(long long long long ptr)
 @ stdcall SHGetFolderPathAndSubDirA(long long long long str ptr)
 @ stdcall SHGetFolderPathAndSubDirW(long long long long wstr ptr)
-@ stub SHGetFolderPathEx
+@ stdcall SHGetFolderPathEx(ptr long ptr ptr long)
 @ stdcall SHGetFolderPathW(long long long long ptr)
 @ stdcall SHGetIDListFromObject(ptr ptr)
 @ stdcall SHGetInstanceExplorer(ptr)
+@ stdcall SHGetItemFromDataObject(ptr long ptr ptr)
 @ stdcall SHGetItemFromObject(ptr ptr ptr)
 @ stdcall SHGetKnownFolderIDList(ptr long ptr ptr)
 @ stub SHGetKnownFolderIDList_Internal
 @ stdcall SHGetKnownFolderItem(ptr long long ptr ptr)
 @ stdcall SHGetKnownFolderPath(ptr long ptr ptr)
 @ stdcall SHGetNameFromIDList(ptr long ptr)
-@ stub SHGetPathFromIDListEx
+@ stdcall SHGetPathCchFromIDListW(ptr ptr long)
+@ stdcall SHGetPathFromIDListA(ptr ptr)
+@ stdcall SHGetPathFromIDListEx(ptr ptr long long)
 @ stdcall SHGetPathFromIDListW(ptr ptr)
+@ stdcall SHGetPropertyStoreFromParsingName(wstr ptr long ptr ptr)
 @ stdcall SHGetSpecialFolderLocation(long long ptr)
 @ stdcall SHGetSpecialFolderPathA(long ptr long long)
 @ stdcall SHGetSpecialFolderPathW(long ptr long long)
 @ stdcall SHGetStockIconInfo(long long ptr)
 @ stub SHGetTemporaryPropertyForItem
 @ stdcall SHHandleUpdateImage(ptr)
+@ stdcall SHILCreateFromPathW(wstr ptr ptr)
 @ stub SHKnownFolderFromCSIDL
 @ stub SHKnownFolderToCSIDL
+@ stdcall SHLogILFromFSIL(ptr)
 @ stdcall SHOpenFolderAndSelectItems(ptr long ptr long)
 @ stdcall SHParseDisplayName(wstr ptr ptr long ptr)
+@ stdcall SHPathGetExtensionW(wstr long long)
 @ stub SHPrepareKnownFoldersCommon
 @ stub SHPrepareKnownFoldersUser
 @ stub SHResolveLibrary
 @ stub SHSetFolderPathA
 @ stub SHSetFolderPathW
-@ stub SHSetKnownFolderPath
+@ stdcall SHSetKnownFolderPath(ptr long ptr wstr)
 @ stdcall SHSetLocalizedName(wstr wstr long)
 @ stub SHSetTemporaryPropertyForItem
+@ stdcall SHSettingsChanged(ptr ptr)
+@ stdcall SHSimpleIDListFromPathAW(ptr)
+@ stdcall SHSimpleIDListFromPathW(wstr)
 @ stub SHSysErrorMessageBox
 @ stdcall SHUpdateImageA(str long long long)
 @ stdcall SHUpdateImageW(wstr long long long)
@@ -321,4 +374,27 @@
 @ stub StorageItemHelpers_IsSupportedRemovablePath
 @ stub Storage_Internal_GetAccessListForPackage
 @ stub _CleanRecentDocs
+@ cdecl _ILCopyCidaToaPidl(ptr ptr)
+@ cdecl _ILCopyaPidl(ptr long)
+@ cdecl _ILCreateControlPanel()
+@ cdecl _ILCreateDesktop()
+@ cdecl _ILCreateMyDocuments()
+@ cdecl _ILFreeaPidl(ptr long)
+@ cdecl _ILGetDataPointer(ptr)
+@ cdecl _ILGetDepth(ptr)
+@ cdecl _ILGetDrive(ptr ptr long)
+@ cdecl _ILGetExtension(ptr ptr long)
+@ cdecl _ILGetFileDateTime(ptr ptr)
+@ cdecl _ILGetFileSize(ptr ptr long)
+@ cdecl _ILGetFileStructW(ptr)
+@ cdecl _ILIsCPanelStruct(ptr)
+@ cdecl _ILIsDesktop(ptr)
+@ cdecl _ILIsDrive(ptr)
+@ cdecl _ILIsFolder(ptr)
+@ cdecl _ILIsMyComputer(ptr)
+@ cdecl _ILIsPidlSimple(ptr)
+@ cdecl _ILIsSpecialFolder(ptr)
+@ cdecl _ILIsUnicode(ptr)
+@ cdecl _ILIsValue(ptr)
+@ cdecl _ILSimpleGetTextW(ptr ptr long)
 @ stub _PredictReasonableImpact

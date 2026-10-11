@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Korean resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "폴더"
+    IDS_ANY_FILE "%s File"
+    IDS_OPEN_VERB "&Open"
+    IDS_OPENFILELOCATION "Open f&ile location"
+    IDS_RUNAS_VERB "Run as..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "시스템 폴더"
+    IDS_DRIVE_FIXED "로컬 디스크"
+    IDS_DRIVE_REMOVABLE "이동식 디스크"
+    IDS_DRIVE_NETWORK "네트워크 디스크"
+    IDS_DRIVE_CDROM "CD 드라이브"
+    IDS_DRIVE_FLOPPY "3.5 플로피"
+    IDS_CANTLOCKVOLUME "Unable to lock volume (Error Code: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Unable to dismount volume (Error Code: %lu)."
+    IDS_CANTEJECTMEDIA "Unable to eject media (Error Code: %lu)."
+    IDS_CANTDISCONNECT "Unable to disconnect (Error Code: %lu)."
+    IDS_SHV_COLUMN_NAME "Name"
+    IDS_SHV_COLUMN_TYPE "Type"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Size"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Free Space"
+    IDS_SHV_COLUMN_COMMENTS "Comments"
+    IDS_SHV_COLUMN_SIZE "Size"
+    IDS_SHV_COLUMN_MODIFIED "Modified"
+    IDS_SHV_COLUMN_ATTRIBUTES "Attributes"
+    IDS_DESKTOP "바탕 화면"
+    IDS_MYCOMPUTER "내 컴퓨터"
+    IDS_PERSONAL "내 문서"
+    IDS_RECYCLEBIN_FOLDER_NAME "휴지통"
+    IDS_CONTROLPANEL "제어판"
+    IDS_ADMINISTRATIVETOOLS "관리 도구"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

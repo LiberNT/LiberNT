@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Polish resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_POLISH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Folder"
+    IDS_ANY_FILE "%s-plik"
+    IDS_OPEN_VERB "&Otwórz"
+    IDS_OPENFILELOCATION "O&twórz lokalizację pliku"
+    IDS_RUNAS_VERB "Uruchom jako..."
+    IDS_SHORTCUT_RUN_NORMAL "Normalne okno"
+    IDS_SHORTCUT_RUN_MIN "Zminimalizowane"
+    IDS_SHORTCUT_RUN_MAX "Zmaksymalizowane"
+    IDS_SYSTEMFOLDER "Folder systemowy"
+    IDS_DRIVE_FIXED "Dysk lokalny"
+    IDS_DRIVE_REMOVABLE "Dysk wymienny"
+    IDS_DRIVE_NETWORK "Dysk sieciowy"
+    IDS_DRIVE_CDROM "Stacja dysków CD"
+    IDS_DRIVE_FLOPPY "Stacja dyskietek 3.5"
+    IDS_CANTLOCKVOLUME "Nie można zablokować woluminu (kod błędu: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Nie można odmontować woluminu (kod błędu: %lu)."
+    IDS_CANTEJECTMEDIA "Nie można wysunąć nośnika (kod błędu: %lu)."
+    IDS_CANTDISCONNECT "Nie można odłączyć (kod błędu: %lu)."
+    IDS_SHV_COLUMN_NAME "Nazwa"
+    IDS_SHV_COLUMN_TYPE "Typ"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Całkowity rozmiar"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Wolne miejsce"
+    IDS_SHV_COLUMN_COMMENTS "Komentarze"
+    IDS_SHV_COLUMN_SIZE "Rozmiar"
+    IDS_SHV_COLUMN_MODIFIED "Data modyfikacji"
+    IDS_SHV_COLUMN_ATTRIBUTES "Atrybuty"
+    IDS_DESKTOP "Pulpit"
+    IDS_MYCOMPUTER "Mój komputer"
+    IDS_PERSONAL "Moje dokumenty"
+    IDS_RECYCLEBIN_FOLDER_NAME "Kosz"
+    IDS_CONTROLPANEL "Panel sterowania"
+    IDS_ADMINISTRATIVETOOLS "Narzędzia administracyjne"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

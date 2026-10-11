@@ -89,6 +89,6 @@ struct _DoDropData {
     DWORD pdwEffect;
 };
 
-HRESULT CFSDropTarget_CreateInstance(LPWSTR sPathTarget, REFIID riid, LPVOID * ppvOut);
+EXTERN_C HRESULT CFSDropTarget_CreateInstance(LPWSTR sPathTarget, REFIID riid, LPVOID * ppvOut);
 
 #endif /* _CFSFOLDER_H_ */

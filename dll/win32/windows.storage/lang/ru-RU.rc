@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Russian resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Папка с файлами"
+    IDS_ANY_FILE "%s-файл"
+    IDS_OPEN_VERB "&Открыть"
+    IDS_OPENFILELOCATION "Открыть &расположение объекта"
+    IDS_RUNAS_VERB "Запустить как..."
+    IDS_SHORTCUT_RUN_NORMAL "Обычный размер окна"
+    IDS_SHORTCUT_RUN_MIN "Свёрнутое в значок"
+    IDS_SHORTCUT_RUN_MAX "Развёрнутое на весь экран"
+    IDS_SYSTEMFOLDER "Системная папка"
+    IDS_DRIVE_FIXED "Локальный диск"
+    IDS_DRIVE_REMOVABLE "Съёмный диск"
+    IDS_DRIVE_NETWORK "Сетевой диск"
+    IDS_DRIVE_CDROM "CD-дисковод"
+    IDS_DRIVE_FLOPPY "Дисковод 3.5"
+    IDS_CANTLOCKVOLUME "Не удалось заблокировать том (код ошибки: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Не удалось размонтировать том (код ошибки: %lu)."
+    IDS_CANTEJECTMEDIA "Не удалось извлечь носитель (код ошибки: %lu)."
+    IDS_CANTDISCONNECT "Не удалось отсоединить сетевой диск (код ошибки: %lu)."
+    IDS_SHV_COLUMN_NAME "Название"
+    IDS_SHV_COLUMN_TYPE "Тип"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Полный объем"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Свободно"
+    IDS_SHV_COLUMN_COMMENTS "Комментарии"
+    IDS_SHV_COLUMN_SIZE "Размер"
+    IDS_SHV_COLUMN_MODIFIED "Изменен"
+    IDS_SHV_COLUMN_ATTRIBUTES "Атрибуты"
+    IDS_DESKTOP "Рабочий стол"
+    IDS_MYCOMPUTER "Мой компьютер"
+    IDS_PERSONAL "Мои документы"
+    IDS_RECYCLEBIN_FOLDER_NAME "Корзина"
+    IDS_CONTROLPANEL "Панель управления"
+    IDS_ADMINISTRATIVETOOLS "Администрирование"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

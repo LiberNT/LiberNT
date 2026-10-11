@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Chinese (Simplified) resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "文件夹"
+    IDS_ANY_FILE "%s-文件"
+    IDS_OPEN_VERB "打开(&O)"
+    IDS_OPENFILELOCATION "打开文件位置(&I)"
+    IDS_RUNAS_VERB "运行方式..."
+    IDS_SHORTCUT_RUN_NORMAL "常规窗口"
+    IDS_SHORTCUT_RUN_MIN "最小化"
+    IDS_SHORTCUT_RUN_MAX "最大化"
+    IDS_SYSTEMFOLDER "系统文件夹"
+    IDS_DRIVE_FIXED "本地磁盘"
+    IDS_DRIVE_REMOVABLE "可移动磁盘"
+    IDS_DRIVE_NETWORK "网络驱动器"
+    IDS_DRIVE_CDROM "光盘驱动器"
+    IDS_DRIVE_FLOPPY "3.5 英寸软盘"
+    IDS_CANTLOCKVOLUME "无法锁定卷（错误代码：%lu）。"
+    IDS_CANTDISMOUNTVOLUME "无法卸载卷（错误代码：%lu）。"
+    IDS_CANTEJECTMEDIA "无法弹出媒体（错误代码：%lu）。"
+    IDS_CANTDISCONNECT "无法断开连接（错误代码：%lu）。"
+    IDS_SHV_COLUMN_NAME "名称"
+    IDS_SHV_COLUMN_TYPE "类型"
+    IDS_SHV_COLUMN_DISK_CAPACITY "使用空间"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "剩余空间"
+    IDS_SHV_COLUMN_COMMENTS "备注"
+    IDS_SHV_COLUMN_SIZE "大小"
+    IDS_SHV_COLUMN_MODIFIED "修改"
+    IDS_SHV_COLUMN_ATTRIBUTES "属性"
+    IDS_DESKTOP "桌面"
+    IDS_MYCOMPUTER "我的电脑"
+    IDS_PERSONAL "我的文档"
+    IDS_RECYCLEBIN_FOLDER_NAME "回收站"
+    IDS_CONTROLPANEL "控制面板"
+    IDS_ADMINISTRATIVETOOLS "管理工具"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

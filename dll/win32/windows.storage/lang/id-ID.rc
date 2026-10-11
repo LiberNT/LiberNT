@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Indonesian resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Folder"
+    IDS_ANY_FILE "Berkas %s"
+    IDS_OPEN_VERB "&Buka"
+    IDS_OPENFILELOCATION "&Buka lokasi berkas"
+    IDS_RUNAS_VERB "Jalankan sebagai..."
+    IDS_SHORTCUT_RUN_NORMAL "Jendela Normal"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "Folder Sistem"
+    IDS_DRIVE_FIXED "Disk Lokal"
+    IDS_DRIVE_REMOVABLE "Disk yang bisa dilepas"
+    IDS_DRIVE_NETWORK "Disk Jaringan"
+    IDS_DRIVE_CDROM "CD Drive"
+    IDS_DRIVE_FLOPPY "3.5 Floppy"
+    IDS_CANTLOCKVOLUME "Tidak bisa mengunci volume (Kode Kesalahan: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Tidak bisa mengeluarkan volume (Kode Kesalahan: %lu)."
+    IDS_CANTEJECTMEDIA "Tidak bisa mengeluarkan media (Kode Kesalahan: %lu)."
+    IDS_CANTDISCONNECT "Tidak bisa memutuskan (Kode Kesalahan: %lu)."
+    IDS_SHV_COLUMN_NAME "Nama"
+    IDS_SHV_COLUMN_TYPE "Jenis"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Ukuran Total"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Ruang Bebas"
+    IDS_SHV_COLUMN_COMMENTS "Komentar"
+    IDS_SHV_COLUMN_SIZE "Ukuran"
+    IDS_SHV_COLUMN_MODIFIED "Diubah"
+    IDS_SHV_COLUMN_ATTRIBUTES "Atribut"
+    IDS_DESKTOP "Desktop"
+    IDS_MYCOMPUTER "Komputer Saya"
+    IDS_PERSONAL "Dokumen Saya"
+    IDS_RECYCLEBIN_FOLDER_NAME "Tampungan Daur Ulang"
+    IDS_CONTROLPANEL "Panel Kontrol"
+    IDS_ADMINISTRATIVETOOLS "Alat Administratif"
+    IDS_PROGRAM_FILES "Berkas Program"
+    IDS_PROGRAM_FILES_COMMON "Berkas Program\\Berkas Umum"
+END

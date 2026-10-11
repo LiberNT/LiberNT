@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Norwegian resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_NORWEGIAN, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Mappe"
+    IDS_ANY_FILE "%s fil"
+    IDS_OPEN_VERB "Å&pne"
+    IDS_OPENFILELOCATION "Open f&ile location"
+    IDS_RUNAS_VERB "Kjør som..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "System Folder"
+    IDS_DRIVE_FIXED "Lokal Disk"
+    IDS_DRIVE_REMOVABLE "Removable Disk"
+    IDS_DRIVE_NETWORK "Nettverk disk"
+    IDS_DRIVE_CDROM "CD stasjon"
+    IDS_DRIVE_FLOPPY "3.5 Floppy"
+    IDS_CANTLOCKVOLUME "Unable to lock volume (Error Code: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Unable to dismount volume (Error Code: %lu)."
+    IDS_CANTEJECTMEDIA "Unable to eject media (Error Code: %lu)."
+    IDS_CANTDISCONNECT "Unable to disconnect (Error Code: %lu)."
+    IDS_SHV_COLUMN_NAME "Navn"
+    IDS_SHV_COLUMN_TYPE "Type"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Størrelse"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Ledig plass"
+    IDS_SHV_COLUMN_COMMENTS "Kommentarer"
+    IDS_SHV_COLUMN_SIZE "Størrelse"
+    IDS_SHV_COLUMN_MODIFIED "Endret"
+    IDS_SHV_COLUMN_ATTRIBUTES "Egenskaper"
+    IDS_DESKTOP "Skrivebord"
+    IDS_MYCOMPUTER "Min datamaskin"
+    IDS_PERSONAL "Mine dokumenter"
+    IDS_RECYCLEBIN_FOLDER_NAME "Papirkurv"
+    IDS_CONTROLPANEL "Kontrollpanel"
+    IDS_ADMINISTRATIVETOOLS "Administrative verktøy"
+    IDS_PROGRAM_FILES "Programfiler"
+    IDS_PROGRAM_FILES_COMMON "Programfiler\\Fellesfiler"
+END

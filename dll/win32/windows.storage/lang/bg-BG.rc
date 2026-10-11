@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Bulgarian resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_BULGARIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Папка"
+    IDS_ANY_FILE "%s-file"
+    IDS_OPEN_VERB "&Отваряне"
+    IDS_OPENFILELOCATION "Open f&ile location"
+    IDS_RUNAS_VERB "Изпълняване като..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "System Folder"
+    IDS_DRIVE_FIXED "Местен диск"
+    IDS_DRIVE_REMOVABLE "Removable Disk"
+    IDS_DRIVE_NETWORK "Мрежов диск"
+    IDS_DRIVE_CDROM "КД четец"
+    IDS_DRIVE_FLOPPY "3.5 Floppy"
+    IDS_CANTLOCKVOLUME "Unable to lock volume (Error Code: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Unable to dismount volume (Error Code: %lu)."
+    IDS_CANTEJECTMEDIA "Unable to eject media (Error Code: %lu)."
+    IDS_CANTDISCONNECT "Unable to disconnect (Error Code: %lu)."
+    IDS_SHV_COLUMN_NAME "Име"
+    IDS_SHV_COLUMN_TYPE "Вид"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Размер"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Наличен размер"
+    IDS_SHV_COLUMN_COMMENTS "Забележки"
+    IDS_SHV_COLUMN_SIZE "Размер"
+    IDS_SHV_COLUMN_MODIFIED "Променен"
+    IDS_SHV_COLUMN_ATTRIBUTES "Признак"
+    IDS_DESKTOP "Работна площ"
+    IDS_MYCOMPUTER "Моят компютър"
+    IDS_PERSONAL "Книжа"
+    IDS_RECYCLEBIN_FOLDER_NAME "Кошче"
+    IDS_CONTROLPANEL "Крило за управление"
+    IDS_ADMINISTRATIVETOOLS "Управнически средства"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

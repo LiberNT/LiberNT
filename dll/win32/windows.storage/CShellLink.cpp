@@ -3043,7 +3043,7 @@ void CShellLink::OnCommand(HWND hwndDlg, int id, HWND hwndCtl, UINT codeNotify)
 
         case IDC_SHORTCUT_ADVANCED:
         {
-            INT_PTR result = DialogBoxParamW(shell32_hInstance, MAKEINTRESOURCEW(IDD_SHORTCUT_EXTENDED_PROPERTIES), hwndDlg, ExtendedShortcutProc, (LPARAM)m_bRunAs);
+            INT_PTR result = DialogBoxParamW((HINSTANCE)GetWindowLongPtrW(hwndDlg, GWLP_HINSTANCE), MAKEINTRESOURCEW(IDD_SHORTCUT_EXTENDED_PROPERTIES), hwndDlg, ExtendedShortcutProc, (LPARAM)m_bRunAs);
             if (result == 1 || result == 0)
             {
                 if (m_bRunAs != result)
@@ -3317,8 +3317,7 @@ HICON CShellLink::CreateShortcutIcon(LPCWSTR wszIconPath, INT IconIndex)
     }
     else
     {
-        hShortcut = (HICON)LoadImageW(shell32_hInstance, MAKEINTRESOURCE(IDI_SHELL_SHORTCUT),
-                                      IMAGE_ICON, cx, cy, 0);
+        ::ExtractIconExW(swShell32Name, -IDI_SHELL_SHORTCUT, &hShortcut, NULL, 1);
     }
 
     ::ExtractIconExW(wszIconPath, IconIndex, &hIcon, NULL, 1);

@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Turkish resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Dizin"
+    IDS_ANY_FILE "%s Dosyası"
+    IDS_OPEN_VERB "&Aç"
+    IDS_OPENFILELOCATION "&Dosya konumunu aç"
+    IDS_RUNAS_VERB "Birlikte Aç..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal pencere"
+    IDS_SHORTCUT_RUN_MIN "Simge durumuna küçültülmüş"
+    IDS_SHORTCUT_RUN_MAX "Ekranı kapla"
+    IDS_SYSTEMFOLDER "Sistem Dizini"
+    IDS_DRIVE_FIXED "Yerel Disk"
+    IDS_DRIVE_REMOVABLE "Çıkarılabilir Disk"
+    IDS_DRIVE_NETWORK "Ağ Diski"
+    IDS_DRIVE_CDROM "CD-ROM"
+    IDS_DRIVE_FLOPPY "3,5 Disket"
+    IDS_CANTLOCKVOLUME "Disk birimi kilitlenemiyor (Hata Kodu: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Birim çıkarılamıyor (Hata Kodu: %lu)."
+    IDS_CANTEJECTMEDIA "Birim ayrılamıyor (Hata Kodu: %lu)."
+    IDS_CANTDISCONNECT "Bağlanılamıyor (Hata Kodu: %lu)."
+    IDS_SHV_COLUMN_NAME "Ad"
+    IDS_SHV_COLUMN_TYPE "Tür"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Toplam Boyut"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Kullanılabilir Boyut"
+    IDS_SHV_COLUMN_COMMENTS "Açıklamalar"
+    IDS_SHV_COLUMN_SIZE "Boyut"
+    IDS_SHV_COLUMN_MODIFIED "Değiştirilme"
+    IDS_SHV_COLUMN_ATTRIBUTES "Öznitelikler"
+    IDS_DESKTOP "Masaüstü"
+    IDS_MYCOMPUTER "Bilgisayarım"
+    IDS_PERSONAL "Belgelerim"
+    IDS_RECYCLEBIN_FOLDER_NAME "Geri Dönüşüm Kutusu"
+    IDS_CONTROLPANEL "Denetim Masası"
+    IDS_ADMINISTRATIVETOOLS "Yönetim Araçları"
+    IDS_PROGRAM_FILES "Program Dosyaları"
+    IDS_PROGRAM_FILES_COMMON "Program Dosyaları\\Ortak Dosyalar"
+END

@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Spanish resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_SPANISH, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Directorio"
+    IDS_ANY_FILE "Archivo %s"
+    IDS_OPEN_VERB "&Abrir"
+    IDS_OPENFILELOCATION "Abrir &ubicación del archivo"
+    IDS_RUNAS_VERB "Ejecutar como..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "Carpeta del Sistema"
+    IDS_DRIVE_FIXED "Disco local"
+    IDS_DRIVE_REMOVABLE "Disco extraíble"
+    IDS_DRIVE_NETWORK "Unidad de red"
+    IDS_DRIVE_CDROM "Unidad de CD"
+    IDS_DRIVE_FLOPPY "Disquete"
+    IDS_CANTLOCKVOLUME "No se pudo bloquear la unidad (Código de Error: %lu)."
+    IDS_CANTDISMOUNTVOLUME "No se pudo desmontar la unidad (Código de Error: %lu)."
+    IDS_CANTEJECTMEDIA "No se pudo extraer la unidad (Código de Error: %lu)."
+    IDS_CANTDISCONNECT "No se pudo desconectar (Código de Error: %lu)."
+    IDS_SHV_COLUMN_NAME "Nombre"
+    IDS_SHV_COLUMN_TYPE "Tipo"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Tamaño"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Tamaño disponible"
+    IDS_SHV_COLUMN_COMMENTS "Comentarios"
+    IDS_SHV_COLUMN_SIZE "Tamaño"
+    IDS_SHV_COLUMN_MODIFIED "Modificado"
+    IDS_SHV_COLUMN_ATTRIBUTES "Atributos"
+    IDS_DESKTOP "Escritorio"
+    IDS_MYCOMPUTER "Mi equipo"
+    IDS_PERSONAL "Mis documentos"
+    IDS_RECYCLEBIN_FOLDER_NAME "Papelera"
+    IDS_CONTROLPANEL "Panel de control"
+    IDS_ADMINISTRATIVETOOLS "Herramientas administrativas"
+    IDS_PROGRAM_FILES "Archivos de programa"
+    IDS_PROGRAM_FILES_COMMON "Archivos de programa\\Archivos comunes"
+END

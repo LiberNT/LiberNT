@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Hebrew resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_HEBREW, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "תיקיה"
+    IDS_ANY_FILE "קובץ %s"
+    IDS_OPEN_VERB "&פתח"
+    IDS_OPENFILELOCATION "&פתח מיקום קובץ"
+    IDS_RUNAS_VERB "הרץ בתור..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "System Folder"
+    IDS_DRIVE_FIXED "כונן מקומי"
+    IDS_DRIVE_REMOVABLE "כונן נשלף"
+    IDS_DRIVE_NETWORK "כונן רשת"
+    IDS_DRIVE_CDROM "כונן CD"
+    IDS_DRIVE_FLOPPY "תקליטון 3.5"
+    IDS_CANTLOCKVOLUME "Unable to lock volume (Error Code: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Unable to dismount volume (Error Code: %lu)."
+    IDS_CANTEJECTMEDIA "Unable to eject media (Error Code: %lu)."
+    IDS_CANTDISCONNECT "Unable to disconnect (Error Code: %lu)."
+    IDS_SHV_COLUMN_NAME "שם"
+    IDS_SHV_COLUMN_TYPE "סוג"
+    IDS_SHV_COLUMN_DISK_CAPACITY "גודל"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "גודל פנוי"
+    IDS_SHV_COLUMN_COMMENTS "הערות"
+    IDS_SHV_COLUMN_SIZE "גודל"
+    IDS_SHV_COLUMN_MODIFIED "שונה"
+    IDS_SHV_COLUMN_ATTRIBUTES "תכונות"
+    IDS_DESKTOP "שולחן עבודה"
+    IDS_MYCOMPUTER "המחשב שלי"
+    IDS_PERSONAL "המסמכים שלי"
+    IDS_RECYCLEBIN_FOLDER_NAME "סל המיחזור"
+    IDS_CONTROLPANEL "לוח הבקרה"
+    IDS_ADMINISTRATIVETOOLS "כלי ניהול"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

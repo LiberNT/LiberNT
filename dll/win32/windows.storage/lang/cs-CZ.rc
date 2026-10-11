@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Czech resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_CZECH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Složka"
+    IDS_ANY_FILE "Soubor %s"
+    IDS_OPEN_VERB "&Otevřít"
+    IDS_OPENFILELOCATION "Open f&ile location"
+    IDS_RUNAS_VERB "Spustit jako..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "System Folder"
+    IDS_DRIVE_FIXED "Místní disk"
+    IDS_DRIVE_REMOVABLE "Vyměnitelný disk"
+    IDS_DRIVE_NETWORK "Síťový disk"
+    IDS_DRIVE_CDROM "Jednotka CD"
+    IDS_DRIVE_FLOPPY "3.5 Floppy"
+    IDS_CANTLOCKVOLUME "Unable to lock volume (Error Code: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Unable to dismount volume (Error Code: %lu)."
+    IDS_CANTEJECTMEDIA "Unable to eject media (Error Code: %lu)."
+    IDS_CANTDISCONNECT "Unable to disconnect (Error Code: %lu)."
+    IDS_SHV_COLUMN_NAME "Jméno"
+    IDS_SHV_COLUMN_TYPE "Typ"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Velikost"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Volné místo"
+    IDS_SHV_COLUMN_COMMENTS "Komentáře"
+    IDS_SHV_COLUMN_SIZE "Velikost"
+    IDS_SHV_COLUMN_MODIFIED "Změněno"
+    IDS_SHV_COLUMN_ATTRIBUTES "Atributy"
+    IDS_DESKTOP "Plocha"
+    IDS_MYCOMPUTER "Tento počítač"
+    IDS_PERSONAL "Dokumenty"
+    IDS_RECYCLEBIN_FOLDER_NAME "Koš"
+    IDS_CONTROLPANEL "Ovládací panely"
+    IDS_ADMINISTRATIVETOOLS "Nástroje pro správu"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

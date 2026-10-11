@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Japanese resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "フォルダ"
+    IDS_ANY_FILE "%s ファイル"
+    IDS_OPEN_VERB "開く(&O)"
+    IDS_OPENFILELOCATION "ファイルの場所を開く(&I)"
+    IDS_RUNAS_VERB "別のユーザーとして実行..."
+    IDS_SHORTCUT_RUN_NORMAL "通常のウィンドウ"
+    IDS_SHORTCUT_RUN_MIN "最小化"
+    IDS_SHORTCUT_RUN_MAX "最大化"
+    IDS_SYSTEMFOLDER "システムフォルダ"
+    IDS_DRIVE_FIXED "ローカル ディスク"
+    IDS_DRIVE_REMOVABLE "リムーバブル ディスク"
+    IDS_DRIVE_NETWORK "ネットワーク ディスク"
+    IDS_DRIVE_CDROM "CDドライブ"
+    IDS_DRIVE_FLOPPY "3.5 フロッピー"
+    IDS_CANTLOCKVOLUME "ボリュームをロックできませんでした (エラーコード: %lu)"
+    IDS_CANTDISMOUNTVOLUME "ボリュームをディスマウントできませんでした (エラーコード: %lu)"
+    IDS_CANTEJECTMEDIA "メディアを取り出しできませんでした (エラーコード: %lu)"
+    IDS_CANTDISCONNECT "接続を切れませんでした (エラーコード: %lu)"
+    IDS_SHV_COLUMN_NAME "作成者"
+    IDS_SHV_COLUMN_TYPE "種類"
+    IDS_SHV_COLUMN_DISK_CAPACITY "合計サイズ"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "空き容量"
+    IDS_SHV_COLUMN_COMMENTS "コメント"
+    IDS_SHV_COLUMN_SIZE "サイズ"
+    IDS_SHV_COLUMN_MODIFIED "更新日時"
+    IDS_SHV_COLUMN_ATTRIBUTES "属性"
+    IDS_DESKTOP "デスクトップ"
+    IDS_MYCOMPUTER "マイ コンピュータ"
+    IDS_PERSONAL "マイ ドキュメント"
+    IDS_RECYCLEBIN_FOLDER_NAME "ごみ箱"
+    IDS_CONTROLPANEL "コントロール パネル"
+    IDS_ADMINISTRATIVETOOLS "管理ツール"
+    IDS_PROGRAM_FILES "Program Files"
+    IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
+END

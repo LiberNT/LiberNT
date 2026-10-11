@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Estonian resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ESTONIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Kaust"
+    IDS_ANY_FILE "%s-fail"
+    IDS_OPEN_VERB "&Ava"
+    IDS_OPENFILELOCATION "Open f&ile location"
+    IDS_RUNAS_VERB "Käivita kasutajana..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "System Folder"
+    IDS_DRIVE_FIXED "Kohalik ketas"
+    IDS_DRIVE_REMOVABLE "Irdmäluga seade"
+    IDS_DRIVE_NETWORK "Võrgudraiv"
+    IDS_DRIVE_CDROM "CD-draiv"
+    IDS_DRIVE_FLOPPY "3.5 Floppi"
+    IDS_CANTLOCKVOLUME "Ei saa ketast lukustada (Veateade: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Ei saa ketast väljutada (Veateade: %lu)."
+    IDS_CANTEJECTMEDIA "Ei saa meediumit väljutada (Veateade: %lu)."
+    IDS_CANTDISCONNECT "Ei saa lahti ühendada (Veateade: %lu)."
+    IDS_SHV_COLUMN_NAME "Nimi"
+    IDS_SHV_COLUMN_TYPE "Tüüp"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Kogumaht"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Vaba ruumi"
+    IDS_SHV_COLUMN_COMMENTS "Kommentaarid"
+    IDS_SHV_COLUMN_SIZE "Maht"
+    IDS_SHV_COLUMN_MODIFIED "Muutmiskuupäev"
+    IDS_SHV_COLUMN_ATTRIBUTES "Atribuudid"
+    IDS_DESKTOP "Töölaud"
+    IDS_MYCOMPUTER "Minu arvuti"
+    IDS_PERSONAL "Minu dokumendid"
+    IDS_RECYCLEBIN_FOLDER_NAME "Prügikast"
+    IDS_CONTROLPANEL "Juhtpaneel"
+    IDS_ADMINISTRATIVETOOLS "Haldusriistad"
+    IDS_PROGRAM_FILES "Programmifailid"
+    IDS_PROGRAM_FILES_COMMON "Programmifailid\\Common Files"
+END

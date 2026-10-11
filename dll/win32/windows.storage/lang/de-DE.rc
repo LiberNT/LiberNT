@@ -1,0 +1,46 @@
+/*
+ * PROJECT:     LiberNT Windows Storage
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     German resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_DIRECTORY "Dateiordner"
+    IDS_ANY_FILE "%s-Datei"
+    IDS_OPEN_VERB "Ö&ffnen"
+    IDS_OPENFILELOCATION "Date&ipfad öffnen"
+    IDS_RUNAS_VERB "Ausführen als..."
+    IDS_SHORTCUT_RUN_NORMAL "Normal window"
+    IDS_SHORTCUT_RUN_MIN "Minimized"
+    IDS_SHORTCUT_RUN_MAX "Maximized"
+    IDS_SYSTEMFOLDER "Systemordner"
+    IDS_DRIVE_FIXED "Lokaler Datenträger"
+    IDS_DRIVE_REMOVABLE "Wechseldatenträger"
+    IDS_DRIVE_NETWORK "Netzlaufwerk"
+    IDS_DRIVE_CDROM "CD-Laufwerk"
+    IDS_DRIVE_FLOPPY "3.5 Diskette"
+    IDS_CANTLOCKVOLUME "Sperren des Volumes nicht möglich (Fehlercode: %lu)."
+    IDS_CANTDISMOUNTVOLUME "Ausbinden des Volumes nicht möglich (Fehlercode: %lu)."
+    IDS_CANTEJECTMEDIA "Auswerfen des Mediums nicht möglich (Fehlercode: %lu)."
+    IDS_CANTDISCONNECT "Trennen nicht möglich (Fehlercode: %lu)."
+    IDS_SHV_COLUMN_NAME "Name"
+    IDS_SHV_COLUMN_TYPE "Typ"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Gesamtgröße"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Freier Speicher"
+    IDS_SHV_COLUMN_COMMENTS "Kommentare"
+    IDS_SHV_COLUMN_SIZE "Größe"
+    IDS_SHV_COLUMN_MODIFIED "Geändert"
+    IDS_SHV_COLUMN_ATTRIBUTES "Attribute"
+    IDS_DESKTOP "Desktop"
+    IDS_MYCOMPUTER "Arbeitsplatz"
+    IDS_PERSONAL "Eigene Dateien"
+    IDS_RECYCLEBIN_FOLDER_NAME "Papierkorb"
+    IDS_CONTROLPANEL "Systemsteuerung"
+    IDS_ADMINISTRATIVETOOLS "Verwaltung"
+    IDS_PROGRAM_FILES "Programme"
+    IDS_PROGRAM_FILES_COMMON "Programme\\Gemeinsame Dateien"
+END

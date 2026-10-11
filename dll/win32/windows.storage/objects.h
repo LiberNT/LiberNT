@@ -37,6 +37,8 @@ BOOL WSTORAGE_ObjectsInUse(VOID);
 HRESULT WSTORAGE_UpdateRegistry(BOOL bRegister);
 VOID WSTORAGE_LockModule(VOID);
 VOID WSTORAGE_UnlockModule(VOID);
+VOID WSTORAGE_InitShell(HINSTANCE hInstance);
+VOID WSTORAGE_TermShell(VOID);
 HRESULT WINAPI CInternetFolder_CreateInstance(IClassFactory *iface, IUnknown *outer, REFIID riid, void **ppv);
 
 #ifdef __cplusplus
