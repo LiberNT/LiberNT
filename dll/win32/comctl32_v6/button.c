@@ -1553,6 +1553,11 @@ static BOOL CL_GetIdealSize(BUTTON_INFO *infoPtr, SIZE *size)
     RECT margin;
     WCHAR *text;
 
+#ifdef __REACTOS__
+    if (!is_themed_paint_supported(theme, get_button_type(GetWindowLongW(infoPtr->hwnd, GWL_STYLE))))
+        theme = NULL;
+#endif
+
     /* Get the image size */
     if (infoPtr->u.image || infoPtr->imagelist.himl)
         img_size = BUTTON_GetImageSize(infoPtr);
