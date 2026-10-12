@@ -1092,7 +1092,7 @@ static void init_fw_context(struct pvr_queue *queue, void *fw_ctx_map)
 	struct pvr_cccb *cccb = &queue->cccb;
 
 #ifdef __REACTOS__
-	cctx_fw = (u8 *)fw_ctx_map + queue->ctx_offset;
+	cctx_fw = (void *)((u8 *)fw_ctx_map + queue->ctx_offset);
 #else
 	cctx_fw = fw_ctx_map + queue->ctx_offset;
 #endif

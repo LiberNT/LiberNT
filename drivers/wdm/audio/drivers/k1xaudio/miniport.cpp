@@ -11,15 +11,15 @@ static const ULONG K1xAudioTopologyPinCount = 4;
 
 static KSDATARANGE_AUDIO K1xAudioPcmDataRange =
 {
-    {
+    {{
         sizeof(KSDATARANGE_AUDIO),
         0,
         K1XAUDIO_BLOCK_ALIGN,
         0,
-        STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
-        STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
-        STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
-    },
+        {STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO)},
+        {STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM)},
+        {STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)}
+    }},
     K1XAUDIO_CHANNELS,
     K1XAUDIO_BITS_PER_SAMPLE,
     K1XAUDIO_BITS_PER_SAMPLE,
@@ -33,15 +33,15 @@ static PKSDATARANGE K1xAudioPcmDataRanges[] =
 };
 
 static KSDATARANGE K1xAudioBridgeDataRange =
-{
+{{
     sizeof(KSDATARANGE),
     0,
     0,
     0,
-    STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
-    STATICGUIDOF(KSDATAFORMAT_SUBTYPE_ANALOG),
-    STATICGUIDOF(KSDATAFORMAT_SPECIFIER_NONE)
-};
+    {STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO)},
+    {STATICGUIDOF(KSDATAFORMAT_SUBTYPE_ANALOG)},
+    {STATICGUIDOF(KSDATAFORMAT_SPECIFIER_NONE)}
+}};
 
 static PKSDATARANGE K1xAudioBridgeDataRanges[] =
 {
@@ -462,7 +462,7 @@ static PCPIN_DESCRIPTOR K1xAudioWavePins[] =
             KSPIN_COMMUNICATION_SINK,
             &KSCATEGORY_AUDIO,
             NULL,
-            0
+            {0}
         }
     },
     {
@@ -481,7 +481,7 @@ static PCPIN_DESCRIPTOR K1xAudioWavePins[] =
             KSPIN_COMMUNICATION_NONE,
             &KSCATEGORY_AUDIO,
             NULL,
-            0
+            {0}
         }
     },
     {
@@ -500,7 +500,7 @@ static PCPIN_DESCRIPTOR K1xAudioWavePins[] =
             KSPIN_COMMUNICATION_SINK,
             &KSCATEGORY_AUDIO,
             NULL,
-            0
+            {0}
         }
     },
     {
@@ -519,7 +519,7 @@ static PCPIN_DESCRIPTOR K1xAudioWavePins[] =
             KSPIN_COMMUNICATION_NONE,
             &KSCATEGORY_AUDIO,
             NULL,
-            0
+            {0}
         }
     }
 };
@@ -572,7 +572,7 @@ static PCPIN_DESCRIPTOR K1xAudioTopologyPins[] =
             KSPIN_COMMUNICATION_NONE,
             &KSCATEGORY_AUDIO,
             NULL,
-            0
+            {0}
         }
     },
     {
@@ -591,7 +591,7 @@ static PCPIN_DESCRIPTOR K1xAudioTopologyPins[] =
             KSPIN_COMMUNICATION_NONE,
             &KSNODETYPE_HEADPHONES,
             NULL,
-            0
+            {0}
         }
     },
     {
@@ -610,7 +610,7 @@ static PCPIN_DESCRIPTOR K1xAudioTopologyPins[] =
             KSPIN_COMMUNICATION_NONE,
             &KSNODETYPE_MICROPHONE,
             NULL,
-            0
+            {0}
         }
     },
     {
@@ -629,7 +629,7 @@ static PCPIN_DESCRIPTOR K1xAudioTopologyPins[] =
             KSPIN_COMMUNICATION_NONE,
             &KSCATEGORY_AUDIO,
             NULL,
-            0
+            {0}
         }
     }
 };
