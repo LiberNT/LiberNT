@@ -49,6 +49,12 @@ struct vt_state
     struct vt_pen       pen;
     struct cell_color   cell;
     BOOL                cursor_keys_application;
+    unsigned int        mouse_mode;
+    BOOL                mouse_sgr;
+    int                 mouse_x;
+    int                 mouse_y;
+    BOOL                focus_events;
+    BOOL                bracketed_paste;
     BOOL                has_margins;
     unsigned int        margin_top;
     unsigned int        margin_bottom;
@@ -597,6 +603,23 @@ static void vt_private_mode( struct screen_buffer *screen_buffer, struct vt_stat
         case 25:
             screen_buffer->cursor_visible = enable;
             break;
+        case 9:
+        case 1000:
+        case 1002:
+        case 1003:
+            if (enable) vt->mouse_mode = vt->params[i];
+            else if (vt->mouse_mode == vt->params[i]) vt->mouse_mode = 0;
+            vt->mouse_x = vt->mouse_y = -1;
+            break;
+        case 1004:
+            vt->focus_events = enable;
+            break;
+        case 1006:
+            vt->mouse_sgr = enable;
+            break;
+        case 2004:
+            vt->bracketed_paste = enable;
+            break;
         case 47:
         case 1047:
             vt_alternate_buffer( screen_buffer, vt, enable, rect );
@@ -999,4 +1022,112 @@ BOOL vt_translate_key( struct console *console, const INPUT_RECORD *record )
     else sprintf( text, "\x1b[%u~", number );
     vt_send_key( console, text, max( key->wRepeatCount, 1 ) );
     return TRUE;
+}
+
+BOOL vt_translate_mouse( struct console *console, UINT msg, WPARAM wparam, LPARAM lparam )
+{
+    struct screen_buffer *screen_buffer = console->active;
+    struct vt_state *vt = screen_buffer ? screen_buffer->vt : NULL;
+    POINT pt = { (short)LOWORD(lparam), (short)HIWORD(lparam) };
+    BOOL press = FALSE, release = FALSE, motion = FALSE;
+    unsigned int code;
+    WCHAR legacy[6];
+    char text[32];
+    int x, y;
+
+    if (!vt || !vt->mouse_mode || !(console->mode & ENABLE_VIRTUAL_TERMINAL_INPUT)) return FALSE;
+    if (LOWORD(wparam) & MK_SHIFT) return FALSE;
+
+    switch (msg)
+    {
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDBLCLK:
+        code = 0;
+        press = TRUE;
+        break;
+    case WM_LBUTTONUP:
+        code = 0;
+        release = TRUE;
+        break;
+    case WM_MBUTTONDOWN:
+    case WM_MBUTTONDBLCLK:
+        code = 1;
+        press = TRUE;
+        break;
+    case WM_MBUTTONUP:
+        code = 1;
+        release = TRUE;
+        break;
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONDBLCLK:
+        code = 2;
+        press = TRUE;
+        break;
+    case WM_RBUTTONUP:
+        code = 2;
+        release = TRUE;
+        break;
+    case WM_MOUSEMOVE:
+        if (wparam & MK_LBUTTON) code = 0;
+        else if (wparam & MK_MBUTTON) code = 1;
+        else if (wparam & MK_RBUTTON) code = 2;
+        else code = 3;
+        if (vt->mouse_mode < 1002 || (vt->mouse_mode == 1002 && code == 3)) return TRUE;
+        motion = TRUE;
+        break;
+    case WM_MOUSEWHEEL:
+        ScreenToClient( console->win, &pt );
+        code = (short)HIWORD(wparam) > 0 ? 64 : 65;
+        break;
+    default:
+        return FALSE;
+    }
+    if (vt->mouse_mode == 9 && !press) return TRUE;
+
+    x = pt.x / (int)screen_buffer->font.width;
+    y = pt.y / (int)screen_buffer->font.height;
+    x = max( 0, min( x, screen_buffer->win.right - screen_buffer->win.left ) );
+    y = max( 0, min( y, screen_buffer->win.bottom - screen_buffer->win.top ) );
+    if (motion && x == vt->mouse_x && y == vt->mouse_y) return TRUE;
+    vt->mouse_x = x;
+    vt->mouse_y = y;
+
+    if (press) SetCapture( console->win );
+    else if (release && !(wparam & (MK_LBUTTON | MK_MBUTTON | MK_RBUTTON))) ReleaseCapture();
+
+    if (motion) code += 32;
+    if (GetKeyState( VK_MENU ) < 0) code += 8;
+    if (LOWORD(wparam) & MK_CONTROL) code += 16;
+
+    if (vt->mouse_sgr)
+    {
+        sprintf( text, "\x1b[<%u;%d;%d%c", code, x + 1, y + 1, release ? 'm' : 'M' );
+        vt_reply( console, text );
+        return TRUE;
+    }
+    if (release) code |= 3;
+    legacy[0] = 0x1b;
+    legacy[1] = '[';
+    legacy[2] = 'M';
+    legacy[3] = 32 + code;
+    legacy[4] = 32 + min( x + 1, 223 );
+    legacy[5] = 32 + min( y + 1, 223 );
+    vt_input( console, legacy, ARRAY_SIZE(legacy) );
+    return TRUE;
+}
+
+void vt_focus_event( struct console *console, BOOL focused )
+{
+    struct vt_state *vt = console->active ? console->active->vt : NULL;
+
+    if (vt && vt->focus_events && (console->mode & ENABLE_VIRTUAL_TERMINAL_INPUT))
+        vt_reply( console, focused ? "\x1b[I" : "\x1b[O" );
+}
+
+void vt_bracket_paste( struct console *console, BOOL begin )
+{
+    struct vt_state *vt = console->active ? console->active->vt : NULL;
+
+    if (vt && vt->bracketed_paste && (console->mode & ENABLE_VIRTUAL_TERMINAL_INPUT))
+        vt_reply( console, begin ? "\x1b[200~" : "\x1b[201~" );
 }

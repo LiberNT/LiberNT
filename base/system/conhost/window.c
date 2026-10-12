@@ -270,7 +270,11 @@ static void load_config( const WCHAR *key_name, struct console_config *config )
     config->insert_mode  = 1;
     config->menu_mask    = 0;
     config->popup_attr   = 0xF5;
+#ifdef __REACTOS__
+    config->quick_edit   = 1;
+#else
     config->quick_edit   = 0;
+#endif
     config->sb_height    = 150;
     config->sb_width     = 80;
     config->attr         = 0x000F;
@@ -522,6 +526,17 @@ static void fill_mem_dc( struct console *console, const RECT *update )
                 FillRect( console->window->mem_dc, &r, brush );
                 DeleteObject( brush );
             }
+#ifdef __REACTOS__
+            if ((attr & COMMON_LVB_UNDERSCORE) && (brush = CreateSolidBrush( fg )))
+            {
+                r.left   = i * console->active->font.width;
+                r.top    = (j + 1) * console->active->font.height - console->window->ext_leading - 1;
+                r.right  = k * console->active->font.width;
+                r.bottom = r.top + 1;
+                FillRect( console->window->mem_dc, &r, brush );
+                DeleteObject( brush );
+            }
+#endif
             i = k - 1;
         }
     }
@@ -545,7 +560,11 @@ static void shape_cursor( struct console *console )
 {
     int size = console->active->cursor_size;
 
+#ifdef __REACTOS__
+    if (console->window->cursor_visible && console->win == GetFocus()) DestroyCaret();
+#else
     if (console->active->cursor_visible && console->win == GetFocus()) DestroyCaret();
+#endif
     if (console->window->cursor_bitmap) DeleteObject( console->window->cursor_bitmap );
     console->window->cursor_bitmap = NULL;
     console->window->cursor_visible = FALSE;
@@ -1154,6 +1173,9 @@ static void paste_clipboard( struct console *console )
         ir[0].Event.KeyEvent.dwControlKeyState = 0;
         ir[0].Event.KeyEvent.bKeyDown = TRUE;
 
+#ifdef __REACTOS__
+        vt_bracket_paste( console, TRUE );
+#endif
         /* generate the corresponding input records */
         for (i = 0; i < len; i++)
         {
@@ -1168,6 +1190,9 @@ static void paste_clipboard( struct console *console )
 
             write_console_input( console, ir, 2, i == len - 1 );
         }
+#ifdef __REACTOS__
+        vt_bracket_paste( console, FALSE );
+#endif
         GlobalUnlock( h );
     }
 
@@ -1186,6 +1211,7 @@ static void insert_text( struct console *console, const WCHAR *text, unsigned in
     ir[0].Event.KeyEvent.dwControlKeyState = 0;
     ir[0].Event.KeyEvent.bKeyDown = TRUE;
 
+    vt_bracket_paste( console, TRUE );
     for (i = 0; i < len; i++)
     {
         sh = VkKeyScanW( text[i] );
@@ -1198,6 +1224,7 @@ static void insert_text( struct console *console, const WCHAR *text, unsigned in
 
         write_console_input( console, ir, 2, i == len - 1 );
     }
+    vt_bracket_paste( console, FALSE );
 }
 
 static void drop_files( struct console *console, HDROP drop )
@@ -1903,6 +1930,10 @@ static void apply_config( struct console *console, const struct console_config *
 
     console->window->menu_mask     = config->menu_mask;
     console->window->quick_edit    = config->quick_edit;
+#ifdef __REACTOS__
+    if (config->quick_edit) console->mode |= ENABLE_QUICK_EDIT_MODE | ENABLE_EXTENDED_FLAGS;
+    else console->mode &= ~ENABLE_QUICK_EDIT_MODE;
+#endif
     console->window->close_on_exit = config->close_on_exit;
 
     console->edition_mode = config->edition_mode;
@@ -2200,6 +2231,11 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 {
     struct console *console = (struct console *)GetWindowLongPtrW( hwnd, 0 );
 
+#ifdef __REACTOS__
+    if (console && console->window && !console->window->in_selection &&
+        msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST && vt_translate_mouse( console, msg, wparam, lparam ))
+        return 0;
+#endif
     switch (msg)
     {
     case WM_CREATE:
@@ -2375,11 +2411,17 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
                          console->active->font.width, console->active->font.height );
             update_window_cursor( console );
         }
+#ifdef __REACTOS__
+        if (console->window) vt_focus_event( console, TRUE );
+#endif
         break;
 
     case WM_KILLFOCUS:
         if (console->window && console->active->cursor_visible)
             DestroyCaret();
+#ifdef __REACTOS__
+        if (console->window) vt_focus_event( console, FALSE );
+#endif
         break;
 
     case WM_SIZE:
@@ -2539,6 +2581,13 @@ void update_window_config( struct console *console, BOOL delay )
     else
         PostMessageW( console->win, WM_UPDATE_CONFIG, 0, 0 );
 }
+
+#ifdef __REACTOS__
+void set_window_quick_edit( struct console *console, BOOL enable )
+{
+    if (console->window) console->window->quick_edit = enable;
+}
+#endif
 
 void update_window_region( struct console *console, const RECT *update )
 {

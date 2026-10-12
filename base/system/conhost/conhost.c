@@ -2838,6 +2838,10 @@ static NTSTATUS console_input_ioctl( struct console *console, unsigned int code,
         if (in_size != sizeof(unsigned int) || *out_size) return STATUS_INVALID_PARAMETER;
         console->mode = *(unsigned int *)in_data;
         TRACE( "set %x mode\n", console->mode );
+#ifdef __REACTOS__
+        if (console->mode & ENABLE_EXTENDED_FLAGS)
+            set_window_quick_edit( console, (console->mode & ENABLE_QUICK_EDIT_MODE) != 0 );
+#endif
         return STATUS_SUCCESS;
 
     case IOCTL_CONDRV_IS_UNIX:

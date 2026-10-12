@@ -159,6 +159,9 @@ void resize_cell_colors( struct screen_buffer *screen_buffer, unsigned int new_w
 void vt_write( struct screen_buffer *screen_buffer, const WCHAR *buffer, size_t len, RECT *update_rect );
 void vt_destroy( struct screen_buffer *screen_buffer );
 BOOL vt_translate_key( struct console *console, const INPUT_RECORD *record );
+BOOL vt_translate_mouse( struct console *console, UINT msg, WPARAM wparam, LPARAM lparam );
+void vt_focus_event( struct console *console, BOOL focused );
+void vt_bracket_paste( struct console *console, BOOL begin );
 #endif
 
 /* window.c */
@@ -169,6 +172,9 @@ void init_message_window( struct console *console );
 void update_window_region( struct console *console, const RECT *update );
 void update_window_config( struct console *console, BOOL delay );
 void teardown_window( struct console *console );
+#ifdef __REACTOS__
+void set_window_quick_edit( struct console *console, BOOL enable );
+#endif
 
 static inline void empty_update_rect( struct screen_buffer *screen_buffer, RECT *rect )
 {
