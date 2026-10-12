@@ -760,11 +760,18 @@ NTSTATUS WINAPI wow64_NtQuerySystemInformationEx( UINT *args )
         ULONG size, size32, pos = 0, pos32 = 0;
 
         if (!query || query_len < sizeof(LONG)) return STATUS_INVALID_PARAMETER;
+#ifdef __REACTOS__
+        status = NtQuerySystemInformationEx( class, query, query_len, NULL, 0, &size );
+        if (status != STATUS_INFO_LENGTH_MISMATCH) return status;
+        info = Wow64AllocateTemp( size );
+        status = NtQuerySystemInformationEx( class, query, query_len, info, size, &size );
+#else
         handle = LongToHandle( *(LONG *)query );
         status = NtQuerySystemInformationEx( class, &handle, sizeof(handle), NULL, 0, &size );
         if (status != STATUS_INFO_LENGTH_MISMATCH) return status;
         info = Wow64AllocateTemp( size );
         status = NtQuerySystemInformationEx( class, &handle, sizeof(handle), info, size, &size );
+#endif
         if (!status)
         {
             for (pos = pos32 = 0; pos < size; pos += ex->Size, pos32 += size32)
