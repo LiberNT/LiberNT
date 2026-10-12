@@ -2715,6 +2715,8 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateBuffer(const D3D11_BUFFER_DESC *de
     if (desc->MiscFlags & (D3D11_RESOURCE_MISC_GENERATE_MIPS | D3D11_RESOURCE_MISC_TEXTURECUBE
             | D3D11_RESOURCE_MISC_GDI_COMPATIBLE)) return E_INVALIDARG;
     if (initial && !initial->pSysMem) return E_INVALIDARG;
+    if ((desc->MiscFlags & D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS)
+            && !(desc->BindFlags & (D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS))) return E_INVALIDARG;
     if ((desc->BindFlags & D3D11_BIND_CONSTANT_BUFFER) && (desc->BindFlags != D3D11_BIND_CONSTANT_BUFFER
             || desc->ByteWidth % 16 || desc->ByteWidth > D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16)) return E_INVALIDARG;
     if (desc->Usage == D3D11_USAGE_IMMUTABLE && !initial) return E_INVALIDARG;
