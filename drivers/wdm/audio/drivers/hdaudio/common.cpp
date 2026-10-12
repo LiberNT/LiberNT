@@ -1070,6 +1070,59 @@ CAdapterCommon::Initialize(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PRESO
     return Status;
 }
 
+BOOLEAN
+NTAPI
+CAdapterCommon::FindPinConverter(
+    IN PVOID Node,
+    IN ULONG NodeId,
+    IN UCHAR Digital,
+    IN ULONG Depth,
+    OUT PULONG Converter)
+{
+    CFunctionGroupNode *OutNode = (CFunctionGroupNode *)Node;
+    PNODE_CONTEXT NodeContext = OutNode->FindNodeId(NodeId);
+
+    if (!NodeContext || Depth > 8)
+        return FALSE;
+
+    for (ULONG Index = 0; Index < NodeContext->ConnectionCount; Index++)
+    {
+        PNODE_CONTEXT Connected = OutNode->FindNodeId(NodeContext->Connections[Index]);
+        BOOLEAN Found = FALSE;
+
+        if (!Connected)
+            continue;
+        if (Connected->NodeType == 0x00 && Connected->Digital == Digital)
+        {
+            ULONG Claimed;
+
+            for (Claimed = 0; Claimed < m_ClaimedConverterCount; Claimed++)
+            {
+                if (m_ClaimedConverters[Claimed] == Connected->NodeId)
+                    break;
+            }
+            if (Claimed == m_ClaimedConverterCount && m_ClaimedConverterCount < RTL_NUMBER_OF(m_ClaimedConverters))
+            {
+                m_ClaimedConverters[m_ClaimedConverterCount++] = Connected->NodeId;
+                *Converter = Connected->NodeId;
+                Found = TRUE;
+            }
+        }
+        else if (Connected->NodeType == 0x02 || Connected->NodeType == 0x03)
+        {
+            Found = FindPinConverter(Node, Connected->NodeId, Digital, Depth + 1, Converter);
+        }
+
+        if (Found)
+        {
+            if (NodeContext->ConnectionCount > 1 && NodeContext->NodeType != 0x02)
+                OutNode->SetConnectionSelect(NodeId, (UCHAR)Index);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 NTSTATUS
 NTAPI
 CAdapterCommon::ProcessDacNodes(
@@ -1332,8 +1385,45 @@ CAdapterCommon::ProcessOutputNodes(
             }
 
             // process output nodes
+            ULONG AssociatedPinCount = 0;
+            PULONG AssociatedPins = NULL;
+            ULONG DacNodeCount = 0;
+            PULONG DacNodes = (PULONG)ExAllocatePoolZero(NonPagedPool, sizeof(ULONG) * OutputNodeCount, TAG_HDAUDIO);
+            if (DacNodes &&
+                NT_SUCCESS(OutNode->GetPinNodesWithDefaultAssociation(PinConfiguration.DefaultAssociation,
+                                                                      NodeContext->Digital, &AssociatedPinCount,
+                                                                      &AssociatedPins)))
+            {
+                for (ULONG Sequence = 0; Sequence < 16 && DacNodeCount < OutputNodeCount; Sequence++)
+                {
+                    for (ULONG PinIndex = 0; PinIndex < AssociatedPinCount && DacNodeCount < OutputNodeCount; PinIndex++)
+                    {
+                        PIN_CONFIGURATION_DEFAULT AssociatedConfiguration;
+                        ULONG Converter;
+
+                        if (!NT_SUCCESS(OutNode->GetPinConfigurationDefault(AssociatedPins[PinIndex],
+                                                                            &AssociatedConfiguration)) ||
+                            AssociatedConfiguration.Sequence != Sequence ||
+                            AssociatedConfiguration.PortConnectivity == 0x1 ||
+                            AssociatedConfiguration.DefaultDevice > 7)
+                        {
+                            continue;
+                        }
+                        if (FindPinConverter((PVOID)OutNode, AssociatedPins[PinIndex], NodeContext->Digital, 0,
+                                             &Converter))
+                        {
+                            DacNodes[DacNodeCount++] = Converter;
+                        }
+                    }
+                }
+                if (AssociatedPins)
+                    ExFreePoolWithTag(AssociatedPins, TAG_HDAUDIO);
+            }
             Status = ProcessDacNodes(DeviceObject, Irp, ResourceList, PinConfiguration.DefaultDevice,
-                                     OutputNodeCount, OutputNodes, (PVOID)OutNode);
+                                     DacNodeCount ? DacNodeCount : OutputNodeCount,
+                                     DacNodeCount ? DacNodes : OutputNodes, (PVOID)OutNode);
+            if (DacNodes)
+                ExFreePoolWithTag(DacNodes, TAG_HDAUDIO);
             if (!NT_SUCCESS(Status))
             {
                 DPRINT1("Warning: ProcessDacNodes failed %x\n", Status);

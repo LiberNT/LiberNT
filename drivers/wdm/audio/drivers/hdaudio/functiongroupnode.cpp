@@ -808,6 +808,25 @@ CFunctionGroupNode::SetConverterStream(
 
 NTSTATUS
 NTAPI
+CFunctionGroupNode::SetConnectionSelect(
+    IN ULONG NodeId,
+    IN UCHAR Index)
+{
+    ULONG Verb;
+    ULONG Response = 0;
+    NTSTATUS Status;
+
+    Verb = (m_CodecAddress << 28) | (NodeId << 20) | (AC_VERB_SET_CONNECT_SEL << 8) | Index;
+    Status = m_Adapter->TransferVerb(Verb, &Response);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("HDAUDIO: SetConnectionSelect failed with %x\n", Status);
+    }
+    return Status;
+}
+
+NTSTATUS
+NTAPI
 CFunctionGroupNode::GetPinConfigurationDefault(IN ULONG NodeId, IN PPIN_CONFIGURATION_DEFAULT PinConfiguration)
 {
     ULONG Verb;

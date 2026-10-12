@@ -179,6 +179,7 @@ class CAdapterCommon : public CUnknownImpl<IAdapterPowerManagement>
         IN PULONG AssociatedPins,
         IN UCHAR Digital);
     VOID NTAPI ClearRef(IN ULONG RefValue, IN ULONG NodeCount, IN PULONG Nodes);
+    BOOLEAN NTAPI FindPinConverter(IN PVOID Node, IN ULONG NodeId, IN UCHAR Digital, IN ULONG Depth, OUT PULONG Converter);
     NTSTATUS
     NTAPI
     ProcessDacNodes(
@@ -282,7 +283,7 @@ class CAdapterCommon : public CUnknownImpl<IAdapterPowerManagement>
         Interface(), m_CodecAddress(0), m_FunctionGroupStartNode(0), RevisionId(0), VendorId(0), m_Tags(),
         m_TagIndex(0), m_WaveRTOutPortUnknown(NULL), m_WaveRTInPortUnknown(NULL), m_TopoOutPortUnknown(NULL),
         m_TopoInPortUnknown(NULL), m_WaveInDataRange(), m_WaveInDataRanges(), m_WaveOutDataRange(),
-        m_WaveOutDataRanges()
+        m_WaveOutDataRanges(), m_ClaimedConverters(), m_ClaimedConverterCount(0)
     {
         RtlCopyMemory(m_WaveInPins, WaveInPins, sizeof(m_WaveInPins));
         RtlCopyMemory(m_WaveOutPins, WaveOutPins, sizeof(m_WaveOutPins));
@@ -328,6 +329,8 @@ class CAdapterCommon : public CUnknownImpl<IAdapterPowerManagement>
     PKSDATARANGE m_WaveOutDataRanges[HDAUDIO_MAX_FORMAT_RANGES];
     PCPIN_DESCRIPTOR m_WaveOutPins[RTL_NUMBER_OF(WaveOutPins)];
     PCFILTER_DESCRIPTOR m_WaveOutFilterDescription;
+    ULONG m_ClaimedConverters[32];
+    ULONG m_ClaimedConverterCount;
 };
 
 class CFunctionGroupNode
@@ -397,6 +400,10 @@ class CFunctionGroupNode
     NTSTATUS
     NTAPI
     SetConverterStream(IN ULONG NodeId, IN UCHAR StreamId);
+
+    NTSTATUS
+    NTAPI
+    SetConnectionSelect(IN ULONG NodeId, IN UCHAR Index);
 
     NTSTATUS
     NTAPI
