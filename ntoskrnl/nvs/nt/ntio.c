@@ -225,7 +225,7 @@ MmGetVirtualForPhysical(
         ULONG64 Va, Mapped;
 
         if (Slot != 0 && !(MI_PFN_FLAGS(Entry) & (MI_PFN_FLAG_PROTOTYPE | MI_PFN_FLAG_PAGE_TABLE)) &&
-            MiPtVirtualAddressFromSlot(&MiSystem.SystemSpace, Slot, &Va) &&
+            MiPtVirtualAddressFromSlot(&MiSystem.SystemSpace, Slot, &Va) && MI_IS_SYSTEM_VA(Va) &&
             MiPtTranslate(&MiSystem.SystemSpace, Va, &Mapped, NULL) && (Mapped >> PAGE_SHIFT) == Frame)
         {
             return (PVOID)(ULONG_PTR)(Va + BYTE_OFFSET(PhysicalAddress.LowPart));
