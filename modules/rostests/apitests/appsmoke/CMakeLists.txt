@@ -8,6 +8,7 @@ add_executable(appsmoke_apitest
     graphics.cpp
     opencl.c
     process.c
+    shell.c
     sockets.c
     suite.c
     system.c
@@ -16,5 +17,6 @@ add_executable(appsmoke_apitest
 
 target_include_directories(appsmoke_apitest PRIVATE ${REACTOS_SOURCE_DIR}/modules/rostests/apitests/include)
 set_module_type(appsmoke_apitest win32cui)
-add_importlibs(appsmoke_apitest user32 gdi32 ws2_32 shell32 advapi32 msvcrt kernel32 ntdll)
+target_link_libraries(appsmoke_apitest uuid)
+add_importlibs(appsmoke_apitest user32 gdi32 ws2_32 shell32 shlwapi comdlg32 ole32 advapi32 msvcrt kernel32 ntdll)
 add_rostests_file(TARGET appsmoke_apitest)

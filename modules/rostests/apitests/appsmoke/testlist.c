@@ -8,12 +8,16 @@ extern void func_d3dkmt(void);
 extern void func_dc_from_memory(void);
 extern void func_display_mode(void);
 extern void func_dll_directory(void);
+extern void func_file_dialog(void);
 extern void func_opencl(void);
 extern void func_opengl(void);
 extern void func_opengl_mode_change(void);
 extern void func_program_folders(void);
 extern void func_registry_security(void);
 extern void func_saved_bitmap(void);
+extern void func_shell_links(void);
+extern void func_shell_namespace(void);
+extern void func_shell_windows(void);
 extern void func_os_version(void);
 extern void func_sockets(void);
 extern void func_suite(void);
@@ -31,6 +35,7 @@ const struct test winetest_testlist[] =
     { "dc_from_memory", func_dc_from_memory },
     { "display_mode", func_display_mode },
     { "dll_directory", func_dll_directory },
+    { "file_dialog", func_file_dialog },
     { "opencl", func_opencl },
     { "opengl", func_opengl },
     { "opengl_mode_change", func_opengl_mode_change },
@@ -38,6 +43,9 @@ const struct test winetest_testlist[] =
     { "program_folders", func_program_folders },
     { "registry_security", func_registry_security },
     { "saved_bitmap", func_saved_bitmap },
+    { "shell_links", func_shell_links },
+    { "shell_namespace", func_shell_namespace },
+    { "shell_windows", func_shell_windows },
     { "sockets", func_sockets },
     { "suite", func_suite },
     { "swap_chain", func_swap_chain },
