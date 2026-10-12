@@ -47,9 +47,7 @@ ExArchPostHalInitSystemPhase1(VOID);
 typedef struct _INIT_BUFFER
 {
     WCHAR DebugBuffer[256];
-    CHAR VersionBuffer[256];
     CHAR BootlogHeader[256];
-    CHAR VersionNumber[24];
     RTL_USER_PROCESS_INFORMATION ProcessInfo;
     WCHAR RegistryBuffer[256];
 } INIT_BUFFER, *PINIT_BUFFER;
@@ -1483,7 +1481,7 @@ NTAPI
 Phase1InitializationDiscard(IN PVOID Context)
 {
     PLOADER_PARAMETER_BLOCK LoaderBlock = Context;
-    NTSTATUS Status, MsgStatus;
+    NTSTATUS Status;
     TIME_FIELDS TimeFields;
     LARGE_INTEGER SystemBootTime, UniversalBootTime, OldTime, Timeout;
     BOOLEAN NoGuiBoot, ResetBias = FALSE, AlternateShell = FALSE;
@@ -1491,12 +1489,9 @@ Phase1InitializationDiscard(IN PVOID Context)
     PLDR_DATA_TABLE_ENTRY NtosEntry;
     PMESSAGE_RESOURCE_ENTRY MsgEntry;
     PCHAR CommandLine, Y2KHackRequired, SafeBoot, Environment;
-    PCHAR StringBuffer, EndBuffer, BeginBuffer, MpString = "";
     PINIT_BUFFER InitBuffer;
-    ANSI_STRING TempString;
     ULONG LastTzBias, Length, YearHack = 0, Disposition, MessageCode = 0;
     SIZE_T Size;
-    size_t Remaining;
     PRTL_USER_PROCESS_INFORMATION ProcessInfo;
     KEY_VALUE_PARTIAL_INFORMATION KeyPartialInfo;
     UNICODE_STRING KeyName;
@@ -1539,7 +1534,7 @@ Phase1InitializationDiscard(IN PVOID Context)
     {
         /* It is, display the boot logo and enable printing strings */
         InbvEnableDisplayString(FALSE);
-        DisplayBootBitmap(FALSE);
+        DisplayBootBitmap();
 #ifndef _WINKD_
         KdDisplayTransportKey(FALSE);
 #endif
@@ -1565,90 +1560,6 @@ Phase1InitializationDiscard(IN PVOID Context)
     NtosEntry = CONTAINING_RECORD(LoaderBlock->LoadOrderListHead.Flink,
                                   LDR_DATA_TABLE_ENTRY,
                                   InLoadOrderLinks);
-    /* Find the banner message */
-    MsgStatus = RtlFindMessage(NtosEntry->DllBase,
-                               RT_MESSAGETABLE,
-                               MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
-                               WINDOWS_NT_BANNER,
-                               &MsgEntry);
-
-    /* Setup defaults and check if we have a version string */
-    StringBuffer = InitBuffer->VersionBuffer;
-    BeginBuffer = StringBuffer;
-    EndBuffer = StringBuffer;
-    Remaining = sizeof(InitBuffer->VersionBuffer);
-    if (CmCSDVersionString.Length)
-    {
-        /* Print the version string */
-        Status = RtlStringCbPrintfExA(StringBuffer,
-                                      Remaining,
-                                      &EndBuffer,
-                                      &Remaining,
-                                      0,
-                                      ": %wZ",
-                                      &CmCSDVersionString);
-        if (!NT_SUCCESS(Status))
-        {
-            /* Bugcheck */
-            KeBugCheckEx(PHASE1_INITIALIZATION_FAILED, Status, 7, 0, 0);
-        }
-    }
-    else
-    {
-        /* No version */
-        *EndBuffer = ANSI_NULL; /* Null-terminate the string */
-    }
-
-    /* Skip over the null-terminator to start a new string */
-    ++EndBuffer;
-    --Remaining;
-
-    /* Build the version number */
-    StringBuffer = InitBuffer->VersionNumber;
-    Status = RtlStringCbPrintfA(StringBuffer,
-                                sizeof(InitBuffer->VersionNumber),
-                                "%u.%u",
-                                VER_PRODUCTMAJORVERSION,
-                                VER_PRODUCTMINORVERSION);
-    if (!NT_SUCCESS(Status))
-    {
-        /* Bugcheck */
-        KeBugCheckEx(PHASE1_INITIALIZATION_FAILED, Status, 7, 0, 0);
-    }
-
-    /* Check if we had found a banner message */
-    if (NT_SUCCESS(MsgStatus))
-    {
-        /* Create the banner message */
-        /* ReactOS specific: Report ReactOS version, NtBuildLab information and reported NT kernel version */
-        Status = RtlStringCbPrintfA(EndBuffer,
-                                    Remaining,
-                                    (PCHAR)MsgEntry->Text,
-                                    KERNEL_VERSION_STR,
-                                    NtBuildLab,
-                                    StringBuffer,
-                                    NtBuildNumber & 0xFFFF,
-                                    BeginBuffer);
-        if (!NT_SUCCESS(Status))
-        {
-            /* Bugcheck */
-            KeBugCheckEx(PHASE1_INITIALIZATION_FAILED, Status, 7, 0, 0);
-        }
-    }
-    else
-    {
-        /* Use hard-coded banner message */
-        Status = RtlStringCbCopyA(EndBuffer, Remaining, "LiberNT\r\n");
-        if (!NT_SUCCESS(Status))
-        {
-            /* Bugcheck */
-            KeBugCheckEx(PHASE1_INITIALIZATION_FAILED, Status, 7, 0, 0);
-        }
-    }
-
-    /* Display the version string on-screen */
-    InbvDisplayString(EndBuffer);
-
     /* Initialize Power Subsystem in Phase 0 */
     if (!PoInitSystem(0)) KeBugCheck(INTERNAL_POWER_ERROR);
 
@@ -1773,55 +1684,6 @@ Phase1InitializationDiscard(IN PVOID Context)
 
     /* Initialize all processors */
     if (!HalAllProcessorsStarted()) KeBugCheck(HAL1_INITIALIZATION_FAILED);
-
-#ifdef CONFIG_SMP
-    /* HACK: We should use RtlFindMessage and not only fallback to this */
-    MpString = "MultiProcessor Kernel\r\n";
-#endif
-
-    /* Setup the "MP" String */
-    RtlInitAnsiString(&TempString, MpString);
-
-    /* Make sure to remove the \r\n if we actually have a string */
-    while ((TempString.Length > 0) &&
-           ((TempString.Buffer[TempString.Length - 1] == '\r') ||
-            (TempString.Buffer[TempString.Length - 1] == '\n')))
-    {
-        /* Skip the trailing character */
-        TempString.Length--;
-    }
-
-    /* Get the information string from our resource file */
-    MsgStatus = RtlFindMessage(NtosEntry->DllBase,
-                               RT_MESSAGETABLE,
-                               MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
-                               KeNumberProcessors > 1 ?
-                               WINDOWS_NT_INFO_STRING_PLURAL :
-                               WINDOWS_NT_INFO_STRING,
-                               &MsgEntry);
-
-    /* Get total RAM size, in MiB */
-    /* Round size up. Assumed to better match actual physical RAM size */
-    Size = ALIGN_UP_BY((SIZE_T)MmNumberOfPhysicalPages * PAGE_SIZE, 1024 * 1024) / (1024 * 1024);
-
-    /* Create the string */
-    StringBuffer = InitBuffer->VersionBuffer;
-    Status = RtlStringCbPrintfA(StringBuffer,
-                                sizeof(InitBuffer->VersionBuffer),
-                                NT_SUCCESS(MsgStatus) ?
-                                (PCHAR)MsgEntry->Text :
-                                "%u System Processor [%Iu MB Memory] %Z\r\n",
-                                KeNumberProcessors,
-                                Size,
-                                &TempString);
-    if (!NT_SUCCESS(Status))
-    {
-        /* Bugcheck */
-        KeBugCheckEx(PHASE1_INITIALIZATION_FAILED, Status, 4, 0, 0);
-    }
-
-    /* Display RAM and CPU count */
-    InbvDisplayString(StringBuffer);
 
     /* Update the progress bar */
     InbvUpdateProgressBar(5);

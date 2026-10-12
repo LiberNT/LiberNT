@@ -964,8 +964,7 @@ InbvGopDrawWordmark(
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
-InbvGopHandleBootBitmap(
-    _In_ BOOLEAN TextMode)
+InbvGopHandleBootBitmap(VOID)
 {
     LOADER_PARAMETER_FRAMEBUFFER FbInfo;
     VID_DISPLAY_INFO DisplayInfo;
@@ -981,12 +980,6 @@ InbvGopHandleBootBitmap(
     Height = DisplayInfo.Height;
     if ((Width == 0) || (Height == 0))
         return FALSE;
-
-    if (TextMode)
-    {
-        InbvResetDisplay();
-        return FALSE;
-    }
 
     InbvSetTextColor(BV_COLOR_WHITE);
 

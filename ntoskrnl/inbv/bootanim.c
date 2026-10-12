@@ -253,42 +253,6 @@ BitBltAligned(
     BitBltPalette(Image, NoPalette, X, Y);
 }
 
-static VOID
-BitBltExpandedFooter(IN PVOID Image, IN UCHAR CenterColor, IN PVID_DISPLAY_INFO DisplayInfo, IN ULONG MarginBottom)
-{
-    PBITMAPINFOHEADER BitmapInfoHeader = Image;
-    ULONG FooterWidth, FooterHeight, LeftWidth, RightWidth, Y;
-
-    if ((BitmapInfoHeader->biWidth <= 0) || (BitmapInfoHeader->biHeight <= 0))
-    {
-        return;
-    }
-
-    FooterWidth = BitmapInfoHeader->biWidth;
-    FooterHeight = BitmapInfoHeader->biHeight;
-    if (FooterHeight + MarginBottom > DisplayInfo->Height)
-        return;
-
-    Y = DisplayInfo->Height - FooterHeight - MarginBottom;
-    if (DisplayInfo->Width <= FooterWidth)
-    {
-        BitBltPalette(Image, FALSE, 0, Y);
-        return;
-    }
-
-    /*
-     * Preserve the original gradient at both ends and insert its solid
-     * center color between them. Drawing the complete bitmap at each edge
-     * avoids maintaining duplicate left/right bitmap resources; the center
-     * fill masks the unused half of each copy.
-     */
-    LeftWidth = FooterWidth / 2;
-    RightWidth = FooterWidth - LeftWidth;
-    BitBltPalette(Image, FALSE, 0, Y);
-    BitBltPalette(Image, FALSE, DisplayInfo->Width - FooterWidth, Y);
-    InbvSolidColorFill(LeftWidth, Y, DisplayInfo->Width - RightWidth - 1, Y + FooterHeight - 1, CenterColor);
-}
-
 /* FUNCTIONS *****************************************************************/
 
 CODE_SEG("INIT")
@@ -463,32 +427,6 @@ InbvRotBarInit(VOID)
 }
 #endif // INBV_ROTBAR_IMPLEMENTED
 
-CODE_SEG("INIT")
-static
-VOID
-NTAPI
-DisplayFilter(
-    _Inout_ PCSTR* String)
-{
-    /* Windows hack to skip first dots displayed by AUTOCHK */
-    static BOOLEAN DotHack = TRUE;
-
-    /* If "." is given set *String to empty string */
-    if (DotHack && strcmp(*String, ".") == 0)
-        *String = "";
-
-    if (**String)
-    {
-        /* Remove the filter */
-        InbvInstallDisplayStringFilter(NULL);
-
-        DotHack = FALSE;
-
-        /* Draw text screen */
-        DisplayBootBitmap(TRUE);
-    }
-}
-
 #ifdef REACTOS_FANCY_BOOT
 
 /* Returns TRUE if this is Christmas time, or FALSE if not */
@@ -518,66 +456,15 @@ IsXmasTime(VOID)
 #endif // REACTOS_FANCY_BOOT
 
 CODE_SEG("INIT")
-static VOID
-InitializeWorkstationTextPalette(
-    _In_opt_ PVOID Header,
-    _In_opt_ PVOID Footer)
-{
-    /* RGBQUAD stores blue, green, red: charcoal body, slate bands, soft text. */
-    static const RGBQUAD Palette[16] =
-    {
-        {0x00, 0x00, 0x00, 0}, /*  0: black */
-        {0x36, 0x2C, 0x24, 0}, /*  1: #242C36 header and footer */
-        {0x24, 0x1D, 0x18, 0},
-        {0x28, 0x20, 0x1B, 0},
-        {0x4E, 0x40, 0x34, 0},
-        {0x62, 0x52, 0x44, 0},
-        {0x2D, 0x24, 0x1E, 0},
-        {0x22, 0x1B, 0x17, 0}, /*  7: #171B22 text area */
-        {0x30, 0x27, 0x20, 0},
-        {0x76, 0x65, 0x56, 0},
-        {0x33, 0x2A, 0x22, 0},
-        {0x36, 0x2C, 0x24, 0}, /* 11: footer separator center */
-        {0x91, 0x7F, 0x6E, 0},
-        {0xAA, 0x99, 0x89, 0},
-        {0xBE, 0xAF, 0xA2, 0},
-        {0xCE, 0xC2, 0xB8, 0}, /* 15: #B8C2CE text and wordmark */
-    };
-    struct
-    {
-        BITMAPINFOHEADER Header;
-        RGBQUAD Colors[RTL_NUMBER_OF(Palette)];
-    } PaletteBitmap = {0};
-
-    /* Install the palette before filling any region to avoid a bright flash. */
-    PaletteBitmap.Header.biSize = sizeof(BITMAPINFOHEADER);
-    PaletteBitmap.Header.biPlanes = 1;
-    PaletteBitmap.Header.biBitCount = 4;
-    PaletteBitmap.Header.biClrUsed = RTL_NUMBER_OF(Palette);
-    RtlCopyMemory(PaletteBitmap.Colors, Palette, sizeof(Palette));
-    InbvBitBlt((PUCHAR)&PaletteBitmap, 0, 0);
-
-    /* Both resources must retain the palette while their pixels are drawn. */
-    if (Header)
-        RtlCopyMemory((PUCHAR)Header + ((PBITMAPINFOHEADER)Header)->biSize,
-                      Palette, sizeof(Palette));
-    if (Footer)
-        RtlCopyMemory((PUCHAR)Footer + ((PBITMAPINFOHEADER)Footer)->biSize,
-                      Palette, sizeof(Palette));
-}
-
-CODE_SEG("INIT")
 VOID
 NTAPI
-DisplayBootBitmap(
-    _In_ BOOLEAN TextMode)
+DisplayBootBitmap(VOID)
 {
-    PVOID BootCopy = NULL, BootProgress = NULL, BootLogo = NULL, Header = NULL, Footer = NULL;
+    PVOID BootCopy = NULL, BootProgress = NULL, BootLogo = NULL;
     VID_DISPLAY_INFO DisplayInfo;
     ULONG CanvasLeft, CanvasTop;
-    UCHAR FooterCenterColor;
 
-    if (InbvGopHandleBootBitmap(TextMode))
+    if (InbvGopHandleBootBitmap())
         return;
 
     InbvQueryDisplayInfo(&DisplayInfo);
@@ -609,270 +496,189 @@ DisplayBootBitmap(
 
     ShowProgressBar = FALSE;
 
-    /* Check if this is text mode */
-    if (TextMode)
+    /* Is the boot driver installed? */
+    if (!InbvBootDriverInstalled) return;
+
+    /* Legacy VGA path: full classic boot animation */
+
+#ifdef REACTOS_FANCY_BOOT
+    /* Decide whether this is a good time to change our logo ;^) */
+    BOOLEAN IsXmas = IsXmasTime();
+#endif
+
+    /*
+     * Make the kernel resource section temporarily writable,
+     * as we are going to change the bitmaps' palette in place.
+     */
+    MmChangeKernelResourceSectionProtection(MM_READWRITE);
+
+    /* Load boot screen logo */
+    BootLogo = InbvGetResourceAddress(
+        SELECT_LOGO_ID(IDB_LOGO_DEFAULT, IsXmas, IDB_LOGO_XMAS));
+
+#ifdef REACTOS_SKUS
+    Text = NULL;
+    if (SharedUserData->NtProductType == NtProductWinNt)
     {
-        /*
-         * Make the kernel resource section temporarily writable,
-         * as we are going to change the bitmaps' palette in place.
-         */
-        MmChangeKernelResourceSectionProtection(MM_READWRITE);
-
-        /* Check the type of the OS: workstation or server */
-        if (SharedUserData->NtProductType == NtProductWinNt)
-        {
-            /* Get resources */
-            Header = InbvGetResourceAddress(IDB_WKSTA_HEADER);
-            Footer = InbvGetResourceAddress(IDB_WKSTA_FOOTER);
-            FooterCenterColor = BV_COLOR_YELLOW;
-
-            /* Workstation; apply the dark palette before painting the screen. */
-            InitializeWorkstationTextPalette(Header, Footer);
-            InbvSetTextColor(BV_COLOR_WHITE);
-            InbvSolidColorFill(0, 0, DisplayInfo.Width - 1, DisplayInfo.Height - 1, BV_COLOR_DARK_GRAY);
-            InbvSolidColorFill(0, DisplayInfo.Height - 59, DisplayInfo.Width - 1, DisplayInfo.Height - 1, BV_COLOR_RED);
-
-            if (Header && ((PBITMAPINFOHEADER)Header)->biHeight > 2)
-            {
-                /*
-                 * The fixed header uses palette entry 1 for its solid slate
-                 * background. Leave its last two separator rows in the body
-                 * color and extend both regions across the wider canvas.
-                 */
-                InbvSolidColorFill(0, 0, DisplayInfo.Width - 1, ((PBITMAPINFOHEADER)Header)->biHeight - 3, BV_COLOR_RED);
-            }
-        }
-        else
-        {
-            /* Server; set colors */
-            InbvSetTextColor(BV_COLOR_LIGHT_CYAN);
-            InbvSolidColorFill(0, 0, DisplayInfo.Width - 1, DisplayInfo.Height - 1, BV_COLOR_CYAN);
-            InbvSolidColorFill(0, DisplayInfo.Height - 59, DisplayInfo.Width - 1, DisplayInfo.Height - 1, BV_COLOR_RED);
-
-            /* Get resources */
-            Header = InbvGetResourceAddress(IDB_SERVER_HEADER);
-            Footer = InbvGetResourceAddress(IDB_SERVER_FOOTER);
-            FooterCenterColor = BV_COLOR_LIGHT_GREEN;
-            if (Header && ((PBITMAPINFOHEADER)Header)->biHeight > 2)
-            {
-                /* The server header background is palette entry 2. */
-                InbvSolidColorFill(0, 0, DisplayInfo.Width - 1, ((PBITMAPINFOHEADER)Header)->biHeight - 3, BV_COLOR_GREEN);
-            }
-        }
-
-        /* Set the scrolling region; bootvid reduces it to complete character cells */
-        InbvSetScrollRegion(VID_SCROLL_AREA_LEFT, VID_SCROLL_AREA_TOP, DisplayInfo.Width - (SCREEN_WIDTH - VID_SCROLL_AREA_RIGHT), DisplayInfo.Height - (SCREEN_HEIGHT - VID_SCROLL_AREA_BOTTOM));
-
-        /* Make sure we have resources */
-        if (Header && Footer)
-        {
-            /* BitBlt them on the screen */
-            BitBltExpandedFooter(Footer, FooterCenterColor, &DisplayInfo, 59);
-            BitBltAligned(Header, FALSE, AL_HORIZONTAL_RIGHT, AL_VERTICAL_TOP, 0, 0, 0, 0);
-
-            if ((SharedUserData->NtProductType == NtProductWinNt) &&
-                (((PBITMAPINFOHEADER)Header)->biHeight > 2))
-            {
-                InbvSolidColorFill(0,
-                                   ((PBITMAPINFOHEADER)Header)->biHeight - 2,
-                                   DisplayInfo.Width - 1,
-                                   ((PBITMAPINFOHEADER)Header)->biHeight - 1,
-                                   BV_COLOR_DARK_GRAY);
-            }
-        }
-
-        /* Restore the kernel resource section protection to be read-only */
-        MmChangeKernelResourceSectionProtection(MM_READONLY);
+#ifdef INBV_ROTBAR_IMPLEMENTED
+        /* Workstation product, use appropriate status bar color */
+        Bar = InbvGetResourceAddress(IDB_BAR_WKSTA);
+#endif
     }
     else
     {
-        /* Is the boot driver installed? */
-        if (!InbvBootDriverInstalled) return;
-
-            /* Legacy VGA path: full classic boot animation */
-
-#ifdef REACTOS_FANCY_BOOT
-            /* Decide whether this is a good time to change our logo ;^) */
-            BOOLEAN IsXmas = IsXmasTime();
-#endif
-
-            /*
-             * Make the kernel resource section temporarily writable,
-             * as we are going to change the bitmaps' palette in place.
-             */
-            MmChangeKernelResourceSectionProtection(MM_READWRITE);
-
-            /* Load boot screen logo */
-            BootLogo = InbvGetResourceAddress(
-                SELECT_LOGO_ID(IDB_LOGO_DEFAULT, IsXmas, IDB_LOGO_XMAS));
-
-#ifdef REACTOS_SKUS
-            Text = NULL;
-            if (SharedUserData->NtProductType == NtProductWinNt)
-            {
-#ifdef INBV_ROTBAR_IMPLEMENTED
-                /* Workstation product, use appropriate status bar color */
-                Bar = InbvGetResourceAddress(IDB_BAR_WKSTA);
-#endif
-            }
-            else
-            {
-                /* Display correct branding based on server suite */
-                if (ExVerifySuite(StorageServer))
-                {
-                    /* Storage Server Edition */
-                    Text = InbvGetResourceAddress(IDB_STORAGE_SERVER);
-                }
-                else if (ExVerifySuite(ComputeServer))
-                {
-                    /* Compute Cluster Edition */
-                    Text = InbvGetResourceAddress(IDB_CLUSTER_SERVER);
-                }
-                else
-                {
-                    /* Normal edition */
-                    Text = InbvGetResourceAddress(
-                        SELECT_LOGO_ID(IDB_SERVER_LOGO, IsXmas, IDB_LOGO_XMAS));
-                }
+        /* Display correct branding based on server suite */
+        if (ExVerifySuite(StorageServer))
+        {
+            /* Storage Server Edition */
+            Text = InbvGetResourceAddress(IDB_STORAGE_SERVER);
+        }
+        else if (ExVerifySuite(ComputeServer))
+        {
+            /* Compute Cluster Edition */
+            Text = InbvGetResourceAddress(IDB_CLUSTER_SERVER);
+        }
+        else
+        {
+            /* Normal edition */
+            Text = InbvGetResourceAddress(
+                SELECT_LOGO_ID(IDB_SERVER_LOGO, IsXmas, IDB_LOGO_XMAS));
+        }
 
 #ifdef INBV_ROTBAR_IMPLEMENTED
-                /* Server product, use appropriate status bar color */
-                Bar = InbvGetResourceAddress(IDB_BAR_DEFAULT);
+        /* Server product, use appropriate status bar color */
+        Bar = InbvGetResourceAddress(IDB_BAR_DEFAULT);
 #endif
-            }
+    }
 #else // REACTOS_SKUS
 #ifdef INBV_ROTBAR_IMPLEMENTED
-            /* Use default status bar */
-            Bar = InbvGetResourceAddress(IDB_BAR_WKSTA);
+    /* Use default status bar */
+    Bar = InbvGetResourceAddress(IDB_BAR_WKSTA);
 #endif
 #endif // REACTOS_SKUS
 
-            /* Make sure we have a logo */
-            if (BootLogo)
-            {
-                /* Save the main image palette for implementing the fade-in effect */
-                PBITMAPINFOHEADER BitmapInfoHeader = BootLogo;
-                LPRGBQUAD Palette = (LPRGBQUAD)((PUCHAR)BootLogo + BitmapInfoHeader->biSize);
-                RtlCopyMemory(MainPalette, Palette, sizeof(MainPalette));
+    /* Make sure we have a logo */
+    if (BootLogo)
+    {
+        /* Save the main image palette for implementing the fade-in effect */
+        PBITMAPINFOHEADER BitmapInfoHeader = BootLogo;
+        LPRGBQUAD Palette = (LPRGBQUAD)((PUCHAR)BootLogo + BitmapInfoHeader->biSize);
+        RtlCopyMemory(MainPalette, Palette, sizeof(MainPalette));
 
-                /* Draw the logo at the center of the screen */
-                BitBltAligned(BootLogo,
-                              TRUE,
-                              AL_HORIZONTAL_CENTER,
-                              AL_VERTICAL_CENTER,
-                              0, 0, 0, 34);
+        /* Draw the logo at the center of the screen */
+        BitBltAligned(BootLogo,
+                      TRUE,
+                      AL_HORIZONTAL_CENTER,
+                      AL_VERTICAL_CENTER,
+                      0, 0, 0, 34);
 
 #ifdef INBV_ROTBAR_IMPLEMENTED
-                /* Choose progress bar */
-                TempRotBarSelection = ROT_BAR_DEFAULT_MODE;
+        /* Choose progress bar */
+        TempRotBarSelection = ROT_BAR_DEFAULT_MODE;
 #endif
 
-                /* Set progress bar coordinates and display it */
-                InbvSetProgressBarCoordinates(CanvasLeft + VID_PROGRESS_BAR_LEFT, CanvasTop + VID_PROGRESS_BAR_TOP);
+        /* Set progress bar coordinates and display it */
+        InbvSetProgressBarCoordinates(CanvasLeft + VID_PROGRESS_BAR_LEFT, CanvasTop + VID_PROGRESS_BAR_TOP);
 
 #ifdef REACTOS_SKUS
-                /* Check for non-workstation products */
-                if (SharedUserData->NtProductType != NtProductWinNt)
-                {
-                    /* Overwrite part of the logo for a server product */
-                    InbvScreenToBufferBlt(Buffer, CanvasLeft + VID_SKU_SAVE_AREA_LEFT, CanvasTop + VID_SKU_SAVE_AREA_TOP, 7, 7, 8);
-                    InbvSolidColorFill(CanvasLeft + VID_SKU_AREA_LEFT, CanvasTop + VID_SKU_AREA_TOP, CanvasLeft + VID_SKU_AREA_RIGHT, CanvasTop + VID_SKU_AREA_BOTTOM, BV_COLOR_BLACK);
-                    InbvBufferToScreenBlt(Buffer, CanvasLeft + VID_SKU_SAVE_AREA_LEFT, CanvasTop + VID_SKU_SAVE_AREA_TOP, 7, 7, 8);
+        /* Check for non-workstation products */
+        if (SharedUserData->NtProductType != NtProductWinNt)
+        {
+            /* Overwrite part of the logo for a server product */
+            InbvScreenToBufferBlt(Buffer, CanvasLeft + VID_SKU_SAVE_AREA_LEFT, CanvasTop + VID_SKU_SAVE_AREA_TOP, 7, 7, 8);
+            InbvSolidColorFill(CanvasLeft + VID_SKU_AREA_LEFT, CanvasTop + VID_SKU_AREA_TOP, CanvasLeft + VID_SKU_AREA_RIGHT, CanvasTop + VID_SKU_AREA_BOTTOM, BV_COLOR_BLACK);
+            InbvBufferToScreenBlt(Buffer, CanvasLeft + VID_SKU_SAVE_AREA_LEFT, CanvasTop + VID_SKU_SAVE_AREA_TOP, 7, 7, 8);
 
-                    /* In setup mode, you haven't selected a SKU yet */
-                    if (ExpInTextModeSetup) Text = NULL;
-                }
+            /* In setup mode, you haven't selected a SKU yet */
+            if (ExpInTextModeSetup) Text = NULL;
+        }
 #endif // REACTOS_SKUS
-            }
-
-            /* Load and draw progress bar bitmap */
-            BootProgress = InbvGetResourceAddress(IDB_PROGRESS_BAR);
-            BitBltAligned(BootProgress,
-                          TRUE,
-                          AL_HORIZONTAL_CENTER,
-                          AL_VERTICAL_CENTER,
-                          0, 118, 0, 0);
-
-            /* Load and draw copyright text bitmap */
-            BootCopy = InbvGetResourceAddress(IDB_COPYRIGHT);
-            BitBltAligned(BootCopy,
-                          TRUE,
-                          AL_HORIZONTAL_LEFT,
-                          AL_VERTICAL_BOTTOM,
-                          22, 0, 0, 20);
-
-#ifdef REACTOS_SKUS
-            /* Draw the SKU text if it exists */
-            if (Text)
-                BitBltPalette(Text, TRUE, CanvasLeft + VID_SKU_TEXT_LEFT, CanvasTop + VID_SKU_TEXT_TOP);
-#endif
-
-#ifdef INBV_ROTBAR_IMPLEMENTED
-            if ((TempRotBarSelection == RB_SQUARE_CELLS) && Bar)
-            {
-                /* Save previous screen pixels to buffer */
-                InbvScreenToBufferBlt(Buffer, 0, 0, 22, 9, 24);
-                /* Draw the progress bar bit */
-                BitBltPalette(Bar, TRUE, 0, 0);
-                /* Store it in global buffer */
-                InbvScreenToBufferBlt(RotBarBuffer, 0, 0, 22, 9, 24);
-                /* Restore screen pixels */
-                InbvBufferToScreenBlt(Buffer, 0, 0, 22, 9, 24);
-            }
-
-            /*
-             * Add a rotating bottom horizontal bar when using a progress bar,
-             * to show that ReactOS is still alive when the bar does not
-             * appear to progress.
-             */
-            if (TempRotBarSelection == RB_PROGRESS_BAR)
-            {
-                LineBmp = InbvGetResourceAddress(IDB_ROTATING_LINE);
-                if (LineBmp)
-                {
-                    /* Draw the line and store it in global buffer */
-                    RotLineLeft = CanvasLeft;
-                    RotLineTop = CanvasTop + SCREEN_HEIGHT - 6;
-                    BitBltPalette(LineBmp, TRUE, RotLineLeft, RotLineTop);
-                    InbvScreenToBufferBlt(RotLineBuffer, RotLineLeft, RotLineTop, SCREEN_WIDTH, 6, SCREEN_WIDTH);
-                }
-            }
-            else
-            {
-                /* Hide the simple progress bar if not used */
-                ShowProgressBar = FALSE;
-            }
-#endif // INBV_ROTBAR_IMPLEMENTED
-
-            /* Restore the kernel resource section protection to be read-only */
-            MmChangeKernelResourceSectionProtection(MM_READONLY);
-
-            /* Display the boot logo and fade it in */
-            BootLogoFadeIn();
-
-#ifdef INBV_ROTBAR_IMPLEMENTED
-            if (!RotBarThreadActive && TempRotBarSelection != RB_UNSPECIFIED)
-            {
-                /* Start the animation thread */
-                Status = PsCreateSystemThread(&ThreadHandle,
-                                              0,
-                                              NULL,
-                                              NULL,
-                                              NULL,
-                                              InbvRotationThread,
-                                              NULL);
-                if (NT_SUCCESS(Status))
-                {
-                    /* The thread has started, close the handle as we don't need it */
-                    RotBarThreadActive = TRUE;
-                    ObCloseHandle(ThreadHandle, KernelMode);
-                }
-            }
-#endif // INBV_ROTBAR_IMPLEMENTED
-
-            /* Set filter which will draw text display if needed */
-            InbvInstallDisplayStringFilter(DisplayFilter);
     }
+
+    /* Load and draw progress bar bitmap */
+    BootProgress = InbvGetResourceAddress(IDB_PROGRESS_BAR);
+    BitBltAligned(BootProgress,
+                  TRUE,
+                  AL_HORIZONTAL_CENTER,
+                  AL_VERTICAL_CENTER,
+                  0, 118, 0, 0);
+
+    /* Load and draw copyright text bitmap */
+    BootCopy = InbvGetResourceAddress(IDB_COPYRIGHT);
+    BitBltAligned(BootCopy,
+                  TRUE,
+                  AL_HORIZONTAL_LEFT,
+                  AL_VERTICAL_BOTTOM,
+                  22, 0, 0, 20);
+
+#ifdef REACTOS_SKUS
+    /* Draw the SKU text if it exists */
+    if (Text)
+        BitBltPalette(Text, TRUE, CanvasLeft + VID_SKU_TEXT_LEFT, CanvasTop + VID_SKU_TEXT_TOP);
+#endif
+
+#ifdef INBV_ROTBAR_IMPLEMENTED
+    if ((TempRotBarSelection == RB_SQUARE_CELLS) && Bar)
+    {
+        /* Save previous screen pixels to buffer */
+        InbvScreenToBufferBlt(Buffer, 0, 0, 22, 9, 24);
+        /* Draw the progress bar bit */
+        BitBltPalette(Bar, TRUE, 0, 0);
+        /* Store it in global buffer */
+        InbvScreenToBufferBlt(RotBarBuffer, 0, 0, 22, 9, 24);
+        /* Restore screen pixels */
+        InbvBufferToScreenBlt(Buffer, 0, 0, 22, 9, 24);
+    }
+
+    /*
+     * Add a rotating bottom horizontal bar when using a progress bar,
+     * to show that ReactOS is still alive when the bar does not
+     * appear to progress.
+     */
+    if (TempRotBarSelection == RB_PROGRESS_BAR)
+    {
+        LineBmp = InbvGetResourceAddress(IDB_ROTATING_LINE);
+        if (LineBmp)
+        {
+            /* Draw the line and store it in global buffer */
+            RotLineLeft = CanvasLeft;
+            RotLineTop = CanvasTop + SCREEN_HEIGHT - 6;
+            BitBltPalette(LineBmp, TRUE, RotLineLeft, RotLineTop);
+            InbvScreenToBufferBlt(RotLineBuffer, RotLineLeft, RotLineTop, SCREEN_WIDTH, 6, SCREEN_WIDTH);
+        }
+    }
+    else
+    {
+        /* Hide the simple progress bar if not used */
+        ShowProgressBar = FALSE;
+    }
+#endif // INBV_ROTBAR_IMPLEMENTED
+
+    /* Restore the kernel resource section protection to be read-only */
+    MmChangeKernelResourceSectionProtection(MM_READONLY);
+
+    /* Display the boot logo and fade it in */
+    BootLogoFadeIn();
+
+#ifdef INBV_ROTBAR_IMPLEMENTED
+    if (!RotBarThreadActive && TempRotBarSelection != RB_UNSPECIFIED)
+    {
+        /* Start the animation thread */
+        Status = PsCreateSystemThread(&ThreadHandle,
+                                      0,
+                                      NULL,
+                                      NULL,
+                                      NULL,
+                                      InbvRotationThread,
+                                      NULL);
+        if (NT_SUCCESS(Status))
+        {
+            /* The thread has started, close the handle as we don't need it */
+            RotBarThreadActive = TRUE;
+            ObCloseHandle(ThreadHandle, KernelMode);
+        }
+    }
+#endif // INBV_ROTBAR_IMPLEMENTED
 
 #ifdef INBV_ROTBAR_IMPLEMENTED
     /* Do we have the animation thread? */

@@ -35,11 +35,6 @@ typedef struct tagBITMAPINFOHEADER
 // Positions of areas and images
 //
 
-#define VID_SCROLL_AREA_LEFT       32
-#define VID_SCROLL_AREA_TOP        80
-#define VID_SCROLL_AREA_RIGHT     631
-#define VID_SCROLL_AREA_BOTTOM    400
-
 #define VID_PROGRESS_BAR_LEFT     259
 #define VID_PROGRESS_BAR_TOP      352
 #define VID_PROGRESS_BAR_WIDTH    121
@@ -62,7 +57,6 @@ typedef struct tagBITMAPINFOHEADER
 #define VID_SKU_TEXT_LEFT         180
 #define VID_SKU_TEXT_TOP          121
 
-#define VID_FOOTER_BG_TOP        (SCREEN_HEIGHT - 59)
 
 
 //
@@ -89,8 +83,7 @@ InbvRotBarInit(VOID);
 CODE_SEG("INIT")
 VOID
 NTAPI
-DisplayBootBitmap(
-    _In_ BOOLEAN TextMode);
+DisplayBootBitmap(VOID);
 
 CODE_SEG("INIT")
 VOID

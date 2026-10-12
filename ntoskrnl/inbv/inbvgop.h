@@ -17,8 +17,7 @@ extern "C" {
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
-InbvGopHandleBootBitmap(
-    _In_ BOOLEAN TextMode);
+InbvGopHandleBootBitmap(VOID);
 
 CODE_SEG("INIT")
 BOOLEAN
