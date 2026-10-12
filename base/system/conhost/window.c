@@ -1321,6 +1321,9 @@ static void record_key_input( struct console *console, BOOL down, WPARAM wparam,
     ir.Event.KeyEvent.uChar.UnicodeChar = last;
     if (!down) last = 0; /* FIXME: buggy HACK  */
 
+#ifdef __REACTOS__
+    if ((console->mode & ENABLE_VIRTUAL_TERMINAL_INPUT) && vt_translate_key( console, &ir )) return;
+#endif
     write_console_input( console, &ir, 1, TRUE );
 }
 

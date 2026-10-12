@@ -74,6 +74,9 @@ static void destroy_screen_buffer( struct screen_buffer *screen_buffer )
         screen_buffer->console->active = NULL;
     wine_rb_remove( &screen_buffer_map, &screen_buffer->entry );
     free( screen_buffer->font.face_name );
+#ifdef __REACTOS__
+    vt_destroy( screen_buffer );
+#endif
     free( screen_buffer->data );
     free( screen_buffer );
 }
@@ -2228,6 +2231,19 @@ static NTSTATUS write_console( struct screen_buffer *screen_buffer, const WCHAR 
 
     empty_update_rect( screen_buffer, &update_rect );
 
+#ifdef __REACTOS__
+    if ((screen_buffer->mode & (ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING)) ==
+        (ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+    {
+        vt_write( screen_buffer, buffer, len, &update_rect );
+        scroll_to_cursor( screen_buffer );
+        update_output( screen_buffer, &update_rect );
+        tty_sync( screen_buffer->console );
+        update_window_config( screen_buffer->console, TRUE );
+        return STATUS_SUCCESS;
+    }
+#endif
+
     for (i = 0; i < len; i++)
     {
         if (screen_buffer->mode & ENABLE_PROCESSED_OUTPUT)
@@ -2674,6 +2690,13 @@ static NTSTATUS set_console_title( struct console *console, const WCHAR *in_titl
         SetWindowTextW( console->win, console->title );
     return STATUS_SUCCESS;
 }
+
+#ifdef __REACTOS__
+void set_vt_console_title( struct console *console, const WCHAR *title, size_t size )
+{
+    set_console_title( console, title, size );
+}
+#endif
 
 static NTSTATUS screen_buffer_ioctl( struct screen_buffer *screen_buffer, unsigned int code,
                                      const void *in_data, size_t in_size, size_t *out_size )

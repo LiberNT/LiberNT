@@ -132,6 +132,9 @@ struct screen_buffer
     RECT                   win;                 /* current visible window on the screen buffer */
     struct font_info       font;                /* console font information */
     struct wine_rb_entry   entry;               /* map entry */
+#ifdef __REACTOS__
+    struct vt_state       *vt;
+#endif
 };
 
 /* conhost.c */
@@ -140,6 +143,13 @@ NTSTATUS write_console_input( struct console *console, const INPUT_RECORD *recor
 
 void notify_screen_buffer_size( struct screen_buffer *screen_buffer );
 NTSTATUS change_screen_buffer_size( struct screen_buffer *screen_buffer, int new_width, int new_height );
+#ifdef __REACTOS__
+void set_vt_console_title( struct console *console, const WCHAR *title, size_t size );
+
+void vt_write( struct screen_buffer *screen_buffer, const WCHAR *buffer, size_t len, RECT *update_rect );
+void vt_destroy( struct screen_buffer *screen_buffer );
+BOOL vt_translate_key( struct console *console, const INPUT_RECORD *record );
+#endif
 
 /* window.c */
 void update_console_font( struct console *console, const WCHAR *face_name, size_t face_name_size,

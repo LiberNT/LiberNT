@@ -4,6 +4,7 @@ add_definitions(-D__WINESRC__)
 
 list(APPEND SOURCE
     conhost.c
+    vt.c
     window.c)
 
 add_rc_deps(conhost.rc ${CMAKE_CURRENT_SOURCE_DIR}/conhost.manifest)
