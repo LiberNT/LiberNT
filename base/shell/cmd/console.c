@@ -221,9 +221,18 @@ SHORT GetCursorY(VOID)
 
 VOID SetCursorType(BOOL bInsert, BOOL bVisible)
 {
+    static DWORD dwInsertSize;
     CONSOLE_CURSOR_INFO cci;
 
-    cci.dwSize = bInsert ? 10 : 99;
+    if (!dwInsertSize)
+    {
+        if (GetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cci) && cci.dwSize < 100)
+            dwInsertSize = cci.dwSize;
+        else
+            dwInsertSize = 25;
+    }
+
+    cci.dwSize = bInsert ? dwInsertSize : 99;
     cci.bVisible = bVisible;
 
     SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cci);
