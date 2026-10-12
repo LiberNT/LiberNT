@@ -11,6 +11,7 @@
  */
 
 #include "ndissys.h"
+#include "ndis6_internal.h"
 
 #define SERVICES_KEY L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\"
 #define LINKAGE_KEY  L"\\Linkage"
@@ -1238,7 +1239,10 @@ ndisBindMiniportsToProtocol(OUT PNDIS_STATUS Status, IN PPROTOCOL_BINDING Protoc
         }
 
         /* Make sure the adapter has started */
-        if (!MiniLocateDevice(&DeviceName))
+        Adapter = MiniLocateDevice(&DeviceName);
+        if (!Adapter ||
+            (Adapter->IsNdis6 &&
+             (NDIS6_EXT(Adapter) == NULL || !NDIS6_EXT(Adapter)->Initialized)))
         {
             /* It wasn't in the global miniport list, so skip the bind entry */
             goto next;
