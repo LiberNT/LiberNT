@@ -6699,6 +6699,7 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
     if (requested.BufferUsage & DXGI_USAGE_RENDER_TARGET_OUTPUT) texture_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
     if (requested.BufferUsage & DXGI_USAGE_SHADER_INPUT) texture_desc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
     if (requested.BufferUsage & DXGI_USAGE_UNORDERED_ACCESS) texture_desc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
+    if (requested.Flags & DXGI_SWAP_CHAIN_FLAG_GDI_COMPATIBLE) texture_desc.MiscFlags |= D3D11_RESOURCE_MISC_GDI_COMPATIBLE;
     DXGI_DDI_PRIMARY_DESC primary_desc = {};
     primary_desc.ModeDesc.Width = requested.Width;
     primary_desc.ModeDesc.Height = requested.Height;
