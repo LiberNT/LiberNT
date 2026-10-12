@@ -2256,6 +2256,9 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 
     case WM_TIMER:
     case WM_UPDATE_CONFIG:
+#ifdef __REACTOS__
+        if (msg == WM_TIMER) KillTimer( hwnd, 1 );
+#endif
         if (console->window && console->window->update_state == UPDATE_PENDING)
             update_window( console );
         break;
