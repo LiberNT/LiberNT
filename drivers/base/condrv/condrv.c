@@ -95,6 +95,9 @@ struct _CD_SERVER
     LIST_ENTRY Queue;
     LIST_ENTRY ReadQueue;
     BOOLEAN Busy;
+    LONG ScratchBusy;
+    ULONG ScratchSize;
+    PUCHAR Scratch;
 };
 
 typedef struct _CD_FILE
@@ -130,6 +133,7 @@ typedef struct _CD_REQUEST
 typedef struct _CD_PROCESS
 {
     LIST_ENTRY Entry;
+    LIST_ENTRY HashEntry;
     PEPROCESS Process;
     PCD_CONSOLE Console;
     PFILE_OBJECT Connection;
@@ -162,8 +166,11 @@ typedef struct _CD_DEFERRED_PROCESS
     BOOLEAN Terminate;
 } CD_DEFERRED_PROCESS, *PCD_DEFERRED_PROCESS;
 
+#define CD_PROCESS_BUCKETS 64
+
 static KSPIN_LOCK CdLock;
 static LIST_ENTRY CdProcessList;
+static LIST_ENTRY CdProcessHash[CD_PROCESS_BUCKETS];
 
 static const UNICODE_STRING CdNameServer = RTL_CONSTANT_STRING(L"\\Server");
 static const UNICODE_STRING CdNameConnection = RTL_CONSTANT_STRING(L"\\Connection");
@@ -187,15 +194,26 @@ CdInitDeferred(
 }
 
 static
+PLIST_ENTRY
+CdProcessBucket(
+    _In_ PEPROCESS Process)
+{
+    ULONG_PTR Key = (ULONG_PTR)Process >> 6;
+
+    return &CdProcessHash[(Key ^ (Key >> 6) ^ (Key >> 12)) & (CD_PROCESS_BUCKETS - 1)];
+}
+
+static
 PCD_PROCESS
 CdFindProcess(
     _In_ PEPROCESS Process)
 {
+    PLIST_ENTRY Bucket = CdProcessBucket(Process);
     PLIST_ENTRY Entry;
 
-    for (Entry = CdProcessList.Flink; Entry != &CdProcessList; Entry = Entry->Flink)
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
     {
-        PCD_PROCESS Attached = CONTAINING_RECORD(Entry, CD_PROCESS, Entry);
+        PCD_PROCESS Attached = CONTAINING_RECORD(Entry, CD_PROCESS, HashEntry);
         if (Attached->Process == Process)
             return Attached;
     }
@@ -339,10 +357,6 @@ VOID
 CdFreeRequest(
     _In_ PCD_REQUEST Request)
 {
-    if (Request->Fast && Request->InData)
-        ExFreePoolWithTag(Request->InData, CD_TAG);
-    if (Request->OutBuffer)
-        ExFreePoolWithTag(Request->OutBuffer, CD_TAG);
     ExFreePoolWithTag(Request, CD_TAG);
 }
 
@@ -571,6 +585,7 @@ CdAttachProcess(
     Attached->Connection = Connection;
     Console->RefCount++;
     InsertHeadList(&CdProcessList, &Attached->Entry);
+    InsertHeadList(CdProcessBucket(Process), &Attached->HashEntry);
     return STATUS_SUCCESS;
 }
 
@@ -588,6 +603,7 @@ CdDetachConnection(
         if (Attached->Connection != Connection)
             continue;
         RemoveEntryList(&Attached->Entry);
+        RemoveEntryList(&Attached->HashEntry);
         CdDereferenceConsole(Attached->Console, Deferred);
         CdDeferProcess(Attached->Process, FALSE, Deferred);
         ExFreePoolWithTag(Attached, CD_TAG);
@@ -1001,18 +1017,18 @@ static
 NTSTATUS
 CdServerGetNext(
     _In_ PCD_SERVER Server,
-    _In_ PIRP Irp,
-    _In_ PIO_STACK_LOCATION Stack)
+    _Inout_ PUCHAR Buffer,
+    _In_ ULONG InLength,
+    _In_ ULONG OutLength,
+    _Out_ PULONG_PTR Information)
 {
-    ULONG InLength = Stack->Parameters.DeviceIoControl.InputBufferLength;
-    ULONG OutLength = Stack->Parameters.DeviceIoControl.OutputBufferLength;
-    PUCHAR Buffer = Irp->AssociatedIrp.SystemBuffer;
     CONDRV_NEXT_REQUEST_PARAMS Params;
     CONDRV_NEXT_REQUEST_REPLY Reply;
     PCD_REQUEST Request = NULL;
     CD_DEFERRED Deferred;
     KIRQL OldIrql;
 
+    *Information = 0;
     if (InLength < sizeof(Params) || OutLength < sizeof(Reply))
         return STATUS_INVALID_PARAMETER;
 
@@ -1024,6 +1040,7 @@ CdServerGetNext(
 
     if (!Server->Console)
     {
+        CdUpdateServerEvent(Server);
         KeReleaseSpinLock(&CdLock, OldIrql);
         return STATUS_INVALID_HANDLE;
     }
@@ -1034,6 +1051,7 @@ CdServerGetNext(
     {
         if (IsListEmpty(&Server->ReadQueue))
         {
+            CdUpdateServerEvent(Server);
             KeReleaseSpinLock(&CdLock, OldIrql);
             return STATUS_INVALID_HANDLE;
         }
@@ -1055,7 +1073,7 @@ CdServerGetNext(
             CdUpdateServerEvent(Server);
             KeReleaseSpinLock(&CdLock, OldIrql);
             RtlCopyMemory(Buffer, &Reply, sizeof(Reply));
-            Irp->IoStatus.Information = sizeof(Reply);
+            *Information = sizeof(Reply);
             CdRunDeferred(&Deferred);
             return STATUS_SUCCESS;
         }
@@ -1084,7 +1102,7 @@ CdServerGetNext(
         }
     }
 
-    Irp->IoStatus.Information = sizeof(Reply);
+    *Information = sizeof(Reply);
     if (!IsListEmpty(&Server->Queue))
     {
         Request = CONTAINING_RECORD(Server->Queue.Flink, CD_REQUEST, Entry);
@@ -1096,7 +1114,7 @@ CdServerGetNext(
             Reply.OutSize = Request->OutSize;
             if (Request->InSize)
                 RtlCopyMemory(Buffer + sizeof(Reply), Request->InData, Request->InSize);
-            Irp->IoStatus.Information = sizeof(Reply) + Request->InSize;
+            *Information = sizeof(Reply) + Request->InSize;
             Request->InData = NULL;
             Request->Delivered = TRUE;
             if (CdIsBlockingRead(Request->Code))
@@ -1141,7 +1159,10 @@ CdServerIoctl(
     switch (Code)
     {
         case IOCTL_CONDRV_GET_NEXT_REQUEST:
-            return CdServerGetNext(Server, Irp, Stack);
+            return CdServerGetNext(Server, Irp->AssociatedIrp.SystemBuffer,
+                                   Stack->Parameters.DeviceIoControl.InputBufferLength,
+                                   Stack->Parameters.DeviceIoControl.OutputBufferLength,
+                                   &Irp->IoStatus.Information);
 
         case IOCTL_CONDRV_CTRL_EVENT:
         {
@@ -1580,6 +1601,8 @@ CdDispatchClose(
         case CdFileServer:
             CdDisconnectServer(File->Server, &Deferred);
             File->Server->FileObject = NULL;
+            if (File->Server->Scratch)
+                ExFreePoolWithTag(File->Server->Scratch, CD_TAG);
             ExFreePoolWithTag(File->Server, CD_TAG);
             break;
         case CdFileConsole:
@@ -1839,6 +1862,92 @@ CdDispatchInvalid(
 
 static
 BOOLEAN
+CdFastIoServer(
+    _In_ PCD_SERVER Server,
+    _In_opt_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_opt_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength,
+    _In_ ULONG IoControlCode,
+    _Out_ PIO_STATUS_BLOCK IoStatus)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    ULONG Size = max(InputBufferLength, OutputBufferLength);
+    ULONG_PTR Information = 0;
+    BOOLEAN Scratch = FALSE;
+    PUCHAR Buffer;
+    NTSTATUS Status;
+
+    if (IoControlCode != IOCTL_CONDRV_GET_NEXT_REQUEST || !Size)
+        return FALSE;
+
+    if (!InterlockedExchange(&Server->ScratchBusy, 1))
+    {
+        if (Server->ScratchSize < Size)
+        {
+            if (Server->Scratch)
+                ExFreePoolWithTag(Server->Scratch, CD_TAG);
+            Server->Scratch = ExAllocatePoolWithTag(NonPagedPool, Size, CD_TAG);
+            Server->ScratchSize = Server->Scratch ? Size : 0;
+        }
+        if (Server->Scratch)
+            Scratch = TRUE;
+        else
+            InterlockedExchange(&Server->ScratchBusy, 0);
+    }
+    Buffer = Scratch ? Server->Scratch : ExAllocatePoolWithTag(NonPagedPool, Size, CD_TAG);
+    if (!Buffer)
+        return FALSE;
+
+    Status = STATUS_SUCCESS;
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            if (InputBufferLength)
+                ProbeForRead(InputBuffer, InputBufferLength, sizeof(UCHAR));
+            if (OutputBufferLength)
+                ProbeForWrite(OutputBuffer, OutputBufferLength, sizeof(UCHAR));
+        }
+        if (InputBufferLength)
+            RtlCopyMemory(Buffer, InputBuffer, InputBufferLength);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (NT_SUCCESS(Status))
+        Status = CdServerGetNext(Server, Buffer, InputBufferLength, OutputBufferLength, &Information);
+    if (NT_ERROR(Status))
+        Information = 0;
+    if (Information)
+    {
+        _SEH2_TRY
+        {
+            RtlCopyMemory(OutputBuffer, Buffer, Information);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+            Information = 0;
+        }
+        _SEH2_END;
+    }
+
+    if (Scratch)
+        InterlockedExchange(&Server->ScratchBusy, 0);
+    else
+        ExFreePoolWithTag(Buffer, CD_TAG);
+
+    IoStatus->Status = Status;
+    IoStatus->Information = Information;
+    return TRUE;
+}
+
+static
+BOOLEAN
 NTAPI
 CdFastIoDeviceControl(
     _In_ PFILE_OBJECT FileObject,
@@ -1853,11 +1962,12 @@ CdFastIoDeviceControl(
 {
     PCD_FILE File = FileObject->FsContext;
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
-    PVOID InCopy = NULL, OutCopy = NULL;
-    PCD_REQUEST Request = NULL;
+    PCD_REQUEST Request;
     PCD_SERVER Server = NULL;
     ULONG_PTR Information = 0;
+    BOOLEAN Queued = FALSE;
     LARGE_INTEGER Timeout;
+    ULONG InSpace;
     NTSTATUS Status;
     ULONG Output = 0;
     KIRQL OldIrql;
@@ -1865,31 +1975,31 @@ CdFastIoDeviceControl(
     UNREFERENCED_PARAMETER(Wait);
     UNREFERENCED_PARAMETER(DeviceObject);
 
-    if (!File || File->Type == CdFileServer || File->Type == CdFileConnection)
+    if (!File || File->Type == CdFileConnection)
         return FALSE;
+    if (File->Type == CdFileServer)
+    {
+        return CdFastIoServer(File->Server, InputBuffer, InputBufferLength, OutputBuffer,
+                              OutputBufferLength, IoControlCode, IoStatus);
+    }
     if (DEVICE_TYPE_FROM_CTL_CODE(IoControlCode) != FILE_DEVICE_CONSOLE ||
         METHOD_FROM_CTL_CODE(IoControlCode) != METHOD_BUFFERED ||
         CdIsBlockingRead(IoControlCode) || IoControlCode == IOCTL_CONDRV_CTRL_EVENT)
     {
         return FALSE;
     }
+    if (InputBufferLength > MAXUSHORT * 0x100 || OutputBufferLength > MAXUSHORT * 0x100)
+        return FALSE;
 
+    InSpace = ALIGN_UP_BY(InputBufferLength, sizeof(ULONGLONG));
+    Request = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Request) + InSpace + OutputBufferLength, CD_TAG);
+    if (!Request)
+        return FALSE;
+    RtlZeroMemory(Request, sizeof(*Request));
     if (InputBufferLength)
-    {
-        InCopy = ExAllocatePoolWithTag(NonPagedPool, InputBufferLength, CD_TAG);
-        if (!InCopy)
-            return FALSE;
-    }
+        Request->InData = Request + 1;
     if (OutputBufferLength)
-    {
-        OutCopy = ExAllocatePoolWithTag(NonPagedPool, OutputBufferLength, CD_TAG);
-        if (!OutCopy)
-        {
-            if (InCopy)
-                ExFreePoolWithTag(InCopy, CD_TAG);
-            return FALSE;
-        }
-    }
+        Request->OutBuffer = (PUCHAR)(Request + 1) + InSpace;
 
     Status = STATUS_SUCCESS;
     _SEH2_TRY
@@ -1902,7 +2012,7 @@ CdFastIoDeviceControl(
                 ProbeForWrite(OutputBuffer, OutputBufferLength, sizeof(UCHAR));
         }
         if (InputBufferLength)
-            RtlCopyMemory(InCopy, InputBuffer, InputBufferLength);
+            RtlCopyMemory(Request->InData, InputBuffer, InputBufferLength);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -1920,7 +2030,7 @@ CdFastIoDeviceControl(
             if (!Console)
                 Status = STATUS_INVALID_HANDLE;
             else if (IoControlCode == IOCTL_CONDRV_GET_PROCESS_LIST)
-                Status = CdGetProcessList(Console, OutCopy, OutputBufferLength, &Information);
+                Status = CdGetProcessList(Console, Request->OutBuffer, OutputBufferLength, &Information);
             else if (!Console->Server)
                 Status = STATUS_INVALID_HANDLE;
             else
@@ -1951,32 +2061,20 @@ CdFastIoDeviceControl(
 
         if (Server)
         {
-            Request = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Request), CD_TAG);
-            if (!Request)
-            {
-                Status = STATUS_NO_MEMORY;
-            }
-            else
-            {
-                RtlZeroMemory(Request, sizeof(*Request));
-                Request->Fast = TRUE;
-                Request->Code = IoControlCode;
-                Request->Output = Output;
-                Request->InData = InCopy;
-                Request->InSize = InputBufferLength;
-                Request->OutBuffer = OutCopy;
-                Request->OutSize = OutputBufferLength;
-                KeInitializeEvent(&Request->Done, NotificationEvent, FALSE);
-                InsertTailList(&Server->Queue, &Request->Entry);
-                CdUpdateServerEvent(Server);
-                InCopy = NULL;
-                OutCopy = NULL;
-            }
+            Request->Fast = TRUE;
+            Request->Code = IoControlCode;
+            Request->Output = Output;
+            Request->InSize = InputBufferLength;
+            Request->OutSize = OutputBufferLength;
+            KeInitializeEvent(&Request->Done, NotificationEvent, FALSE);
+            InsertTailList(&Server->Queue, &Request->Entry);
+            CdUpdateServerEvent(Server);
+            Queued = TRUE;
         }
         KeReleaseSpinLock(&CdLock, OldIrql);
     }
 
-    if (Request)
+    if (Queued)
     {
         KeEnterCriticalRegion();
         for (;;)
@@ -2012,19 +2110,16 @@ CdFastIoDeviceControl(
         {
             Status = Request->Status;
             Information = Request->Information;
-            OutCopy = Request->OutBuffer;
-            Request->OutBuffer = NULL;
-            CdFreeRequest(Request);
         }
     }
 
     if (NT_ERROR(Status))
         Information = 0;
-    if (Information && OutCopy)
+    if (Request && Information && Request->OutBuffer)
     {
         _SEH2_TRY
         {
-            RtlCopyMemory(OutputBuffer, OutCopy, Information);
+            RtlCopyMemory(OutputBuffer, Request->OutBuffer, Information);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -2033,10 +2128,8 @@ CdFastIoDeviceControl(
         }
         _SEH2_END;
     }
-    if (InCopy)
-        ExFreePoolWithTag(InCopy, CD_TAG);
-    if (OutCopy)
-        ExFreePoolWithTag(OutCopy, CD_TAG);
+    if (Request)
+        CdFreeRequest(Request);
 
     KeAcquireSpinLock(&CdLock, &OldIrql);
     CdSyncFileEvent(File);
@@ -2077,6 +2170,8 @@ DriverEntry(
 
     KeInitializeSpinLock(&CdLock);
     InitializeListHead(&CdProcessList);
+    for (Index = 0; Index < CD_PROCESS_BUCKETS; Index++)
+        InitializeListHead(&CdProcessHash[Index]);
 
     for (Index = 0; Index <= IRP_MJ_MAXIMUM_FUNCTION; Index++)
         DriverObject->MajorFunction[Index] = CdDispatchInvalid;
