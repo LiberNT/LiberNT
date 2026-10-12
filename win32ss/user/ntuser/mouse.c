@@ -248,6 +248,12 @@ UserSendMouseInputWorker(MOUSEINPUT *pmi, BOOL bInjected)
         }
     }
 
+    if ((dwFlags & MOUSEEVENTF_MOVE) && (bInjected || (dwFlags & MOUSEEVENTF_ABSOLUTE)) &&
+        ptCursor.x == gpsi->ptCursor.x && ptCursor.y == gpsi->ptCursor.y)
+    {
+        dwFlags &= ~MOUSEEVENTF_MOVE;
+    }
+
     /* Init message fields */
     Msg.wParam = UserGetMouseButtonsState();
     Msg.lParam = MAKELPARAM(ptCursor.x, ptCursor.y);
