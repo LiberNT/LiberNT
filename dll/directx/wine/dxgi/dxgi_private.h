@@ -113,6 +113,14 @@ HRESULT dxgi_set_private_data_interface(struct wined3d_private_store *store,
         REFGUID guid, const IUnknown *object);
 
 /* IDXGIFactory */
+#ifdef __REACTOS__
+struct dxgi_window_association
+{
+    HWND window;
+    UINT flags;
+};
+#endif
+
 struct dxgi_factory
 {
     IWineDXGIFactory IWineDXGIFactory_iface;
@@ -122,6 +130,8 @@ struct dxgi_factory
     BOOL extended;
 #ifdef __REACTOS__
     BOOL software;
+    struct dxgi_window_association *associations;
+    SIZE_T association_count, association_size;
 #endif
     HWND device_window;
 };

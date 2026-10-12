@@ -83,6 +83,9 @@ static ULONG STDMETHODCALLTYPE dxgi_factory_Release(IWineDXGIFactory *iface)
 
         wined3d_decref(factory->wined3d);
         wined3d_private_store_cleanup(&factory->private_store);
+#ifdef __REACTOS__
+        free(factory->associations);
+#endif
         free(factory);
     }
 
@@ -181,6 +184,65 @@ static HRESULT STDMETHODCALLTYPE dxgi_factory_EnumAdapters(IWineDXGIFactory *ifa
     return dxgi_factory_EnumAdapters1(iface, adapter_idx, (IDXGIAdapter1 **)adapter);
 }
 
+#ifdef __REACTOS__
+static void dxgi_factory_set_association(struct dxgi_factory *factory, HWND window, UINT flags)
+{
+    struct dxgi_window_association *associations;
+    SIZE_T i, size;
+
+    wined3d_mutex_lock();
+    if (!window)
+    {
+        factory->association_count = 0;
+        wined3d_mutex_unlock();
+        return;
+    }
+    for (i = 0; i < factory->association_count; ++i)
+    {
+        if (factory->associations[i].window == window)
+            break;
+    }
+    if (i == factory->association_size)
+    {
+        size = max(4, factory->association_size * 2);
+        if (!(associations = realloc(factory->associations, size * sizeof(*associations))))
+        {
+            wined3d_mutex_unlock();
+            return;
+        }
+        factory->associations = associations;
+        factory->association_size = size;
+    }
+    if (i == factory->association_count)
+        ++factory->association_count;
+    factory->associations[i].window = window;
+    factory->associations[i].flags = flags;
+    wined3d_mutex_unlock();
+}
+
+BOOL WINAPI RosDxgiGetWindowAssociation(IDXGIFactory *iface, HWND window, UINT *flags)
+{
+    struct dxgi_factory *factory;
+    BOOL found = FALSE;
+    SIZE_T i;
+
+    if (!flags || !(factory = unsafe_impl_from_IDXGIFactory(iface)))
+        return FALSE;
+    wined3d_mutex_lock();
+    for (i = 0; i < factory->association_count; ++i)
+    {
+        if (factory->associations[i].window == window)
+        {
+            *flags = factory->associations[i].flags;
+            found = TRUE;
+            break;
+        }
+    }
+    wined3d_mutex_unlock();
+    return found;
+}
+#endif
+
 static HRESULT STDMETHODCALLTYPE dxgi_factory_MakeWindowAssociation(IWineDXGIFactory *iface,
         HWND window, UINT flags)
 {
@@ -194,11 +256,17 @@ static HRESULT STDMETHODCALLTYPE dxgi_factory_MakeWindowAssociation(IWineDXGIFac
     if (!window)
     {
         wined3d_unregister_windows(factory->wined3d);
+#ifdef __REACTOS__
+        dxgi_factory_set_association(factory, NULL, 0);
+#endif
         return S_OK;
     }
 
     if (!wined3d_register_window(factory->wined3d, window, NULL, flags))
         return E_FAIL;
+#ifdef __REACTOS__
+    dxgi_factory_set_association(factory, window, flags);
+#endif
 
     return S_OK;
 }
