@@ -26,6 +26,7 @@
 
 #include "wine/debug.h"
 #ifdef __REACTOS__
+#include <shellapi.h>
 #include <reactos/dwmsettings.h>
 #endif
 
@@ -1150,6 +1151,56 @@ static void paste_clipboard( struct console *console )
 
     CloseClipboard();
 }
+
+#ifdef __REACTOS__
+static void insert_text( struct console *console, const WCHAR *text, unsigned int len )
+{
+    unsigned int i;
+    INPUT_RECORD ir[2];
+    SHORT sh;
+
+    ir[0].EventType = KEY_EVENT;
+    ir[0].Event.KeyEvent.wRepeatCount = 1;
+    ir[0].Event.KeyEvent.dwControlKeyState = 0;
+    ir[0].Event.KeyEvent.bKeyDown = TRUE;
+
+    for (i = 0; i < len; i++)
+    {
+        sh = VkKeyScanW( text[i] );
+        ir[0].Event.KeyEvent.wVirtualKeyCode   = LOBYTE(sh);
+        ir[0].Event.KeyEvent.wVirtualScanCode  = MapVirtualKeyW( LOBYTE(sh), 0 );
+        ir[0].Event.KeyEvent.uChar.UnicodeChar = text[i];
+
+        ir[1] = ir[0];
+        ir[1].Event.KeyEvent.bKeyDown = FALSE;
+
+        write_console_input( console, ir, 2, i == len - 1 );
+    }
+}
+
+static void drop_files( struct console *console, HDROP drop )
+{
+    UINT len = DragQueryFileW( drop, 0, NULL, 0 );
+    WCHAR *path;
+
+    if (len && (path = malloc( (len + 3) * sizeof(WCHAR) )))
+    {
+        len = DragQueryFileW( drop, 0, path + 1, len + 1 );
+        if (wcschr( path + 1, ' ' ))
+        {
+            path[0] = '"';
+            path[len + 1] = '"';
+            insert_text( console, path, len + 2 );
+        }
+        else
+        {
+            insert_text( console, path + 1, len );
+        }
+        free( path );
+    }
+    DragFinish( drop );
+}
+#endif
 
 /* handle keys while selecting an area */
 static void handle_selection_key( struct console *console, BOOL down, WPARAM wparam, LPARAM lparam )
@@ -2286,6 +2337,12 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
         record_mouse_input( console, get_cell(console, lparam), wparam, DOUBLE_CLICK );
         break;
 
+#ifdef __REACTOS__
+    case WM_DROPFILES:
+        drop_files( console, (HDROP)wparam );
+        break;
+
+#endif
     case WM_SETFOCUS:
         if (console->window && console->active->cursor_visible)
         {
@@ -2522,6 +2579,7 @@ BOOL init_window( struct console *console )
         return FALSE;
 
 #ifdef __REACTOS__
+    DragAcceptFiles( console->win, TRUE );
     if ((!config.face_name[0] || !wcscmp( config.face_name, L"__DefaultTTFont__" )) &&
         !set_default_tt_font( console, &config ))
         set_first_font( console, &config );
