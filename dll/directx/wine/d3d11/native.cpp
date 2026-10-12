@@ -558,6 +558,9 @@ public:
     NativeRecordedCommand *commands = NULL, **command_tail = &commands;
     NativeDeferredMapping *mappings = NULL;
     NativeDeviceContextState *active_state = NULL;
+    bool d3d10_state = false;
+    UINT state_bypass = 0;
+    bool StateCallIgnored() const { return d3d10_state && !state_bypass; }
     template<class F> void Record(const F &call)
     {
         if (recording_disabled || FAILED(recording_error)) return;
@@ -820,6 +823,18 @@ public:
     void STDMETHODCALLTYPE GetHardwareProtectionState(BOOL *enable) override;
     HRESULT STDMETHODCALLTYPE Signal(ID3D11Fence *fence, UINT64 value) override;
     HRESULT STDMETHODCALLTYPE Wait(ID3D11Fence *fence, UINT64 value) override;
+};
+
+class NativeStateBypass
+{
+    NativeContext *context;
+public:
+    explicit NativeStateBypass(NativeContext *target) : context(target) { ++context->state_bypass; }
+    NativeStateBypass(NativeStateBypass &&other) : context(other.context) { other.context = NULL; }
+    NativeStateBypass(const NativeStateBypass &) = delete;
+    NativeStateBypass &operator=(const NativeStateBypass &) = delete;
+    ~NativeStateBypass() { if (context) --context->state_bypass; }
+    NativeContext *operator->() const { return context; }
 };
 
 class NativeD3D10Facet
@@ -2417,7 +2432,7 @@ void NativeDevice::MaybeDestroy()
     clearing = true;
     if (context)
     {
-        context->ClearState();
+        NativeStateBypass(context)->ClearState();
         context->ReleaseContextState();
     }
     clearing = false;
@@ -5307,6 +5322,7 @@ static void ReplaceObject(Interface *&slot, Interface *value)
 #define NATIVE_SET_SHADER(Method, Interface, Object, Member, Function) \
 void STDMETHODCALLTYPE NativeContext::Method(Interface *shader, ID3D11ClassInstance *const *, UINT count) \
 { \
+    if (StateCallIgnored()) return; \
     if (count) { Unimplemented(#Method " class instances"); return; } \
     Object *object = static_cast<Object *>(shader); \
     if ((object && object->device != device) || !device->functions.Function) return; \
@@ -5359,12 +5375,12 @@ void NativeContext::SetConstantBuffers(UINT stage, UINT start, UINT count, ID3D1
     if (!deferred) set(device->driver_device, start, count, handles);
     for (UINT i = 0; i < count; ++i) ReplaceObject(constant_buffers[stage][start + i], buffers[i]);
 }
-void STDMETHODCALLTYPE NativeContext::VSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { SetConstantBuffers(0, start, count, buffers); }
-void STDMETHODCALLTYPE NativeContext::PSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { SetConstantBuffers(1, start, count, buffers); }
-void STDMETHODCALLTYPE NativeContext::GSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { SetConstantBuffers(2, start, count, buffers); }
-void STDMETHODCALLTYPE NativeContext::CSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { SetConstantBuffers(5, start, count, buffers); }
-void STDMETHODCALLTYPE NativeContext::DSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { SetConstantBuffers(4, start, count, buffers); }
-void STDMETHODCALLTYPE NativeContext::HSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { SetConstantBuffers(3, start, count, buffers); }
+void STDMETHODCALLTYPE NativeContext::VSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { if (StateCallIgnored()) return; SetConstantBuffers(0, start, count, buffers); }
+void STDMETHODCALLTYPE NativeContext::PSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { if (StateCallIgnored()) return; SetConstantBuffers(1, start, count, buffers); }
+void STDMETHODCALLTYPE NativeContext::GSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { if (StateCallIgnored()) return; SetConstantBuffers(2, start, count, buffers); }
+void STDMETHODCALLTYPE NativeContext::CSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { if (StateCallIgnored()) return; SetConstantBuffers(5, start, count, buffers); }
+void STDMETHODCALLTYPE NativeContext::DSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { if (StateCallIgnored()) return; SetConstantBuffers(4, start, count, buffers); }
+void STDMETHODCALLTYPE NativeContext::HSSetConstantBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers) { if (StateCallIgnored()) return; SetConstantBuffers(3, start, count, buffers); }
 
 void NativeContext::SetSamplers(UINT stage, UINT start, UINT count, ID3D11SamplerState *const *states)
 {
@@ -5396,12 +5412,12 @@ void NativeContext::SetSamplers(UINT stage, UINT start, UINT count, ID3D11Sample
     if (!deferred) set(device->driver_device, start, count, handles);
     for (UINT i = 0; i < count; ++i) ReplaceObject(samplers[stage][start + i], states[i]);
 }
-void STDMETHODCALLTYPE NativeContext::VSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { SetSamplers(0, start, count, states); }
-void STDMETHODCALLTYPE NativeContext::PSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { SetSamplers(1, start, count, states); }
-void STDMETHODCALLTYPE NativeContext::GSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { SetSamplers(2, start, count, states); }
-void STDMETHODCALLTYPE NativeContext::CSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { SetSamplers(5, start, count, states); }
-void STDMETHODCALLTYPE NativeContext::DSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { SetSamplers(4, start, count, states); }
-void STDMETHODCALLTYPE NativeContext::HSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { SetSamplers(3, start, count, states); }
+void STDMETHODCALLTYPE NativeContext::VSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { if (StateCallIgnored()) return; SetSamplers(0, start, count, states); }
+void STDMETHODCALLTYPE NativeContext::PSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { if (StateCallIgnored()) return; SetSamplers(1, start, count, states); }
+void STDMETHODCALLTYPE NativeContext::GSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { if (StateCallIgnored()) return; SetSamplers(2, start, count, states); }
+void STDMETHODCALLTYPE NativeContext::CSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { if (StateCallIgnored()) return; SetSamplers(5, start, count, states); }
+void STDMETHODCALLTYPE NativeContext::DSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { if (StateCallIgnored()) return; SetSamplers(4, start, count, states); }
+void STDMETHODCALLTYPE NativeContext::HSSetSamplers(UINT start, UINT count, ID3D11SamplerState *const *states) { if (StateCallIgnored()) return; SetSamplers(3, start, count, states); }
 
 void NativeContext::SetShaderResources(UINT stage, UINT start, UINT count, ID3D11ShaderResourceView *const *views)
 {
@@ -5444,12 +5460,12 @@ void NativeContext::SetShaderResources(UINT stage, UINT start, UINT count, ID3D1
     if (!deferred) set(device->driver_device, start, count, handles);
     for (UINT i = 0; i < count; ++i) ReplaceObject(shader_resources[stage][start + i], accepted[i]);
 }
-void STDMETHODCALLTYPE NativeContext::VSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { SetShaderResources(0, start, count, views); }
-void STDMETHODCALLTYPE NativeContext::PSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { SetShaderResources(1, start, count, views); }
-void STDMETHODCALLTYPE NativeContext::GSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { SetShaderResources(2, start, count, views); }
-void STDMETHODCALLTYPE NativeContext::CSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { SetShaderResources(5, start, count, views); }
-void STDMETHODCALLTYPE NativeContext::DSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { SetShaderResources(4, start, count, views); }
-void STDMETHODCALLTYPE NativeContext::HSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { SetShaderResources(3, start, count, views); }
+void STDMETHODCALLTYPE NativeContext::VSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { if (StateCallIgnored()) return; SetShaderResources(0, start, count, views); }
+void STDMETHODCALLTYPE NativeContext::PSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { if (StateCallIgnored()) return; SetShaderResources(1, start, count, views); }
+void STDMETHODCALLTYPE NativeContext::GSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { if (StateCallIgnored()) return; SetShaderResources(2, start, count, views); }
+void STDMETHODCALLTYPE NativeContext::CSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { if (StateCallIgnored()) return; SetShaderResources(5, start, count, views); }
+void STDMETHODCALLTYPE NativeContext::DSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { if (StateCallIgnored()) return; SetShaderResources(4, start, count, views); }
+void STDMETHODCALLTYPE NativeContext::HSSetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView *const *views) { if (StateCallIgnored()) return; SetShaderResources(3, start, count, views); }
 
 void STDMETHODCALLTYPE NativeContext::OMSetRenderTargets(UINT count, ID3D11RenderTargetView *const *targets, ID3D11DepthStencilView *depth)
 {
@@ -5458,6 +5474,7 @@ void STDMETHODCALLTYPE NativeContext::OMSetRenderTargets(UINT count, ID3D11Rende
 
 void STDMETHODCALLTYPE NativeContext::OMSetBlendState(ID3D11BlendState *state, const FLOAT factors[4], UINT mask)
 {
+    if (StateCallIgnored()) return;
     NativeBlend *blend = static_cast<NativeBlend *>(state);
     if ((blend && blend->device != device) || !device->functions.pfnSetBlendState) return;
     NativeLock guard(device);
@@ -5476,6 +5493,7 @@ void STDMETHODCALLTYPE NativeContext::OMSetBlendState(ID3D11BlendState *state, c
 }
 void STDMETHODCALLTYPE NativeContext::OMSetDepthStencilState(ID3D11DepthStencilState *state, UINT reference)
 {
+    if (StateCallIgnored()) return;
     NativeDepthStencil *depth = static_cast<NativeDepthStencil *>(state);
     if ((depth && depth->device != device) || !device->functions.pfnSetDepthStencilState) return;
     NativeLock guard(device);
@@ -5491,6 +5509,7 @@ void STDMETHODCALLTYPE NativeContext::OMSetDepthStencilState(ID3D11DepthStencilS
 }
 void STDMETHODCALLTYPE NativeContext::RSSetState(ID3D11RasterizerState *state)
 {
+    if (StateCallIgnored()) return;
     NativeRasterizer *rasterizer = static_cast<NativeRasterizer *>(state);
     if ((rasterizer && rasterizer->device != device) || !device->functions.pfnSetRasterizerState) return;
     NativeLock guard(device);
@@ -5505,6 +5524,7 @@ void STDMETHODCALLTYPE NativeContext::RSSetState(ID3D11RasterizerState *state)
 }
 void STDMETHODCALLTYPE NativeContext::RSSetViewports(UINT count, const D3D11_VIEWPORT *values)
 {
+    if (StateCallIgnored()) return;
     if (count > 16 || (count && !values) || !device->functions.pfnSetViewports) return;
     NativeLock guard(device);
     UINT old_count = viewport_count;
@@ -5520,6 +5540,7 @@ void STDMETHODCALLTYPE NativeContext::RSSetViewports(UINT count, const D3D11_VIE
 }
 void STDMETHODCALLTYPE NativeContext::RSSetScissorRects(UINT count, const D3D11_RECT *values)
 {
+    if (StateCallIgnored()) return;
     if (count > 16 || (count && !values) || !device->functions.pfnSetScissorRects) return;
     NativeLock guard(device);
     UINT old_count = scissor_count;
@@ -5535,6 +5556,7 @@ void STDMETHODCALLTYPE NativeContext::RSSetScissorRects(UINT count, const D3D11_
 }
 void STDMETHODCALLTYPE NativeContext::IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY value)
 {
+    if (StateCallIgnored()) return;
     if (!device->functions.pfnIaSetTopology) return;
     NativeLock guard(device);
     topology = value;
@@ -5557,6 +5579,7 @@ void STDMETHODCALLTYPE NativeContext::DrawIndexedInstanced(UINT indices, UINT in
 
 void STDMETHODCALLTYPE NativeContext::SetPredication(ID3D11Predicate *value, BOOL expected)
 {
+    if (StateCallIgnored()) return;
     NativeQuery *query = NativeQuery::FromPredicate(value);
     if (query && (query->device != device || !query->is_predicate)) return;
     if (!device->functions.pfnSetPredication) { Unimplemented("SetPredication DDI"); return; }
@@ -5641,6 +5664,7 @@ HRESULT STDMETHODCALLTYPE NativeContext::GetData(ID3D11Asynchronous *async, void
 
 void STDMETHODCALLTYPE NativeContext::ClearState()
 {
+    if (StateCallIgnored()) return;
     NativeLock guard(device);
     if (deferred && !recording_disabled) Record([](NativeContext *context) { context->ClearState(); });
     bool previous = recording_disabled;
@@ -5679,6 +5703,7 @@ void STDMETHODCALLTYPE NativeContext::ClearState()
 
 void STDMETHODCALLTYPE NativeContext::IASetInputLayout(ID3D11InputLayout *layout)
 {
+    if (StateCallIgnored()) return;
     NativeInputLayout *object = static_cast<NativeInputLayout *>(layout);
     if (object && object->device != device) return;
     if (!device->functions.pfnIaSetInputLayout) return;
@@ -7192,7 +7217,7 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
             NativeRenderTargetView *view = static_cast<NativeRenderTargetView *>(device->context->render_targets[i]);
             targets[i] = view && view->texture == buffers[0] ? NULL : view;
         }
-        device->context->OMSetRenderTargets(8, targets, NULL);
+        NativeStateBypass(device->context)->OMSetRenderTargets(8, targets, NULL);
     }
     return S_OK;
 }
@@ -7312,6 +7337,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateInputLayout(const D3D11_INPUT_ELEM
 void STDMETHODCALLTYPE NativeContext::IASetVertexBuffers(UINT start, UINT count, ID3D11Buffer *const *buffers,
         const UINT *strides, const UINT *offsets)
 {
+    if (StateCallIgnored()) return;
     if (start > 32 || count > 32 - start || (buffers && count && (!strides || !offsets))
             || !device->functions.pfnIaSetVertexBuffers) return;
     NativeLock guard(device);
@@ -7346,6 +7372,7 @@ void STDMETHODCALLTYPE NativeContext::IASetVertexBuffers(UINT start, UINT count,
 
 void STDMETHODCALLTYPE NativeContext::IASetIndexBuffer(ID3D11Buffer *buffer, DXGI_FORMAT format, UINT offset)
 {
+    if (StateCallIgnored()) return;
     if (!device->functions.pfnIaSetIndexBuffer) return;
     NativeLock guard(device);
     D3D10DDI_HRESOURCE handle = {};
@@ -7501,7 +7528,8 @@ static void NativeGetSlots(NativeDevice *device, Interface *const (&slots)[capac
 #define NATIVE_STAGE_GETTERS(Prefix, Stage, Interface, Shader) \
 void STDMETHODCALLTYPE NativeContext::Prefix##GetConstantBuffers(UINT start, UINT count, ID3D11Buffer **out) { NativeGetSlots(device, constant_buffers[Stage], start, count, out); } \
 void STDMETHODCALLTYPE NativeContext::Prefix##GetShaderResources(UINT start, UINT count, ID3D11ShaderResourceView **out) { NativeGetSlots(device, shader_resources[Stage], start, count, out); } \
-void STDMETHODCALLTYPE NativeContext::Prefix##GetSamplers(UINT start, UINT count, ID3D11SamplerState **out) { NativeGetSlots(device, samplers[Stage], start, count, out); } \
+void STDMETHODCALLTYPE NativeContext::Prefix##GetSamplers(UINT start, UINT count, ID3D11SamplerState **out) \
+{ if (Stage == 1 && StateCallIgnored()) return; NativeGetSlots(device, samplers[Stage], start, count, out); } \
 void STDMETHODCALLTYPE NativeContext::Prefix##GetShader(Interface **out, ID3D11ClassInstance **, UINT *count) \
 { NativeLock guard(device); NativeReturnObject(Shader, out); if (count) *count = 0; }
 NATIVE_STAGE_GETTERS(VS, 0, ID3D11VertexShader, vertex_shader)

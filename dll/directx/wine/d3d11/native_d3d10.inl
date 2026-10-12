@@ -540,7 +540,7 @@ class NativeD3D10Device final : public ID3D10Device1, public ID3D10Multithread
     NativeDevice *device;
     UINT text_filter_width = 0;
     UINT text_filter_height = 0;
-    ID3D11DeviceContext4 *Context() { return device->context; }
+    NativeStateBypass Context() { return NativeStateBypass(device->context); }
     ID3D11Device5 *Device() { return device; }
 public:
     explicit NativeD3D10Device(NativeDevice *d) : device(d) {}

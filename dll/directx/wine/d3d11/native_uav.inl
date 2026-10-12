@@ -212,6 +212,7 @@ template<class View> static void NativeUnbindInputs(NativeContext *context, View
 void STDMETHODCALLTYPE NativeContext::CSSetUnorderedAccessViews(UINT start, UINT count,
         ID3D11UnorderedAccessView *const *input, const UINT *initial)
 {
+    if (StateCallIgnored()) return;
     UINT capacity = device->feature_level >= D3D_FEATURE_LEVEL_11_0 ? 8 : 1;
     if (start > capacity || count > capacity - start || !device->functions.pfnCsSetUnorderedAccessViews) return;
     NativeLock guard(device);
@@ -279,6 +280,7 @@ void STDMETHODCALLTYPE NativeContext::OMSetRenderTargetsAndUnorderedAccessViews(
         ID3D11RenderTargetView *const *targets, ID3D11DepthStencilView *depth, UINT start, UINT count,
         ID3D11UnorderedAccessView *const *input, const UINT *initial)
 {
+    if (StateCallIgnored()) return;
     bool keep_targets = target_count == D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL;
     bool keep_uavs = count == D3D11_KEEP_UNORDERED_ACCESS_VIEWS;
     if (keep_targets && keep_uavs) return;
@@ -517,6 +519,7 @@ void NativeContext::RefreshStreamOutput()
 
 void STDMETHODCALLTYPE NativeContext::SOSetTargets(UINT count, ID3D11Buffer *const *buffers, const UINT *offsets)
 {
+    if (StateCallIgnored()) return;
     if (count > 4 || (count && (!buffers || !offsets)) || !device->functions.pfnSoSetTargets) return;
     NativeLock guard(device);
     NativeBindingSnapshot<ID3D11RenderTargetView, 8> old_targets(render_targets);

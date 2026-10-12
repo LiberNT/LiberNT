@@ -255,7 +255,7 @@ static void APIENTRY NativeWddm20State##Name(D3D10DDI_HRTCORELAYER layer, UINT c
 { \
     NativeContext *context = static_cast<NativeDevice *>(layer.handle)->context; \
     count = NativeWddm20RefreshCount(count, base, Capacity); \
-    if (context && count) context->Method(Stage, base, count, &context->Member[Stage][base]); \
+    if (context && count) NativeStateBypass(context)->Method(Stage, base, count, &context->Member[Stage][base]); \
 }
 NATIVE_WDDM20_REFRESH_RANGE(VsConstBuf, 0, SetConstantBuffers, constant_buffers, 14)
 NATIVE_WDDM20_REFRESH_RANGE(PsConstBuf, 1, SetConstantBuffers, constant_buffers, 14)
@@ -281,7 +281,7 @@ NATIVE_WDDM20_REFRESH_RANGE(CsSampler, 5, SetSamplers, samplers, 16)
 static void APIENTRY NativeWddm20State##Name(D3D10DDI_HRTCORELAYER layer) \
 { \
     NativeContext *context = static_cast<NativeDevice *>(layer.handle)->context; \
-    if (context) context->Expression; \
+    if (context) NativeStateBypass(context)->Expression; \
 }
 NATIVE_WDDM20_REFRESH(VsShader, VSSetShader(context->vertex_shader, NULL, 0))
 NATIVE_WDDM20_REFRESH(PsShader, PSSetShader(context->pixel_shader, NULL, 0))
@@ -304,7 +304,7 @@ static void APIENTRY NativeWddm20StateIaVertexBuf(D3D10DDI_HRTCORELAYER layer, U
 {
     NativeContext *context = static_cast<NativeDevice *>(layer.handle)->context;
     count = NativeWddm20RefreshCount(count, base, 32);
-    if (context && count) context->IASetVertexBuffers(base, count, &context->vertex_buffers[base],
+    if (context && count) NativeStateBypass(context)->IASetVertexBuffers(base, count, &context->vertex_buffers[base],
             &context->vertex_strides[base], &context->vertex_offsets[base]);
 }
 
@@ -312,7 +312,7 @@ static void APIENTRY NativeWddm20StateCsUav(D3D10DDI_HRTCORELAYER layer, UINT co
 {
     NativeContext *context = static_cast<NativeDevice *>(layer.handle)->context;
     count = NativeWddm20RefreshCount(count, base, 8);
-    if (context && count) context->CSSetUnorderedAccessViews(base, count, context->compute_uavs + base, NULL);
+    if (context && count) NativeStateBypass(context)->CSSetUnorderedAccessViews(base, count, context->compute_uavs + base, NULL);
 }
 
 static void APIENTRY NativeWddm20StateSoTargets(D3D10DDI_HRTCORELAYER layer)

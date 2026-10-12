@@ -46,6 +46,7 @@ public:
     NativeContext saved;
     D3D_FEATURE_LEVEL feature_level;
     UINT flags;
+    bool emulates_d3d10 = false;
 
     NativeDeviceContextState(NativeDevice *owner, D3D_FEATURE_LEVEL level, UINT creation_flags)
         : device(owner), saved(owner, true), feature_level(level), flags(creation_flags)
@@ -140,7 +141,10 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateDeviceContextState(UINT state_flag
         state->Drop();
         *out = state;
         if (IsEqualGUID(emulated, IID_ID3D10Device) || IsEqualGUID(emulated, IID_ID3D10Device1))
+        {
+            state->emulates_d3d10 = true;
             d3d10_feature_level = selected > D3D_FEATURE_LEVEL_10_1 ? D3D_FEATURE_LEVEL_10_1 : selected;
+        }
         d3d10_exposed = true;
     }
     if (chosen) *chosen = selected;
@@ -179,8 +183,10 @@ void STDMETHODCALLTYPE NativeContext::SwapDeviceContextState(ID3DDeviceContextSt
      * state are deliberately outside the pipeline-state copy. */
     next->Retain();
     CopyStateTo(&old->saved);
+    d3d10_state = false;
     next->saved.CopyStateTo(this);
     next->saved.ClearLocalState();
+    d3d10_state = next->emulates_d3d10;
     active_state = next;
     old->Drop();
 }
