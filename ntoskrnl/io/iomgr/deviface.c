@@ -984,6 +984,8 @@ IoGetDeviceInterfaces(IN CONST GUID *InterfaceClassGuid,
 
 
     Status = IopOpenInterfaceKey(InterfaceClassGuid, KEY_ENUMERATE_SUB_KEYS, &InterfaceKey);
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+        goto TerminateList;
     if (!NT_SUCCESS(Status))
     {
         DPRINT("IopOpenInterfaceKey() failed with status 0x%08lx\n", Status);
@@ -1360,6 +1362,7 @@ NextReferenceString:
         DeviceKey = NULL;
     }
 
+TerminateList:
     /* Add final NULL to ReturnBuffer */
     ASSERT(ReturnBuffer.Length <= ReturnBuffer.MaximumLength);
     if (ReturnBuffer.Length >= ReturnBuffer.MaximumLength)
