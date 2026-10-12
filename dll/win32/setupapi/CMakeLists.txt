@@ -34,6 +34,9 @@ list(APPEND SOURCE
 list(APPEND PCH_SKIP_SOURCE
     ${CMAKE_CURRENT_BINARY_DIR}/setupapi_stubs.c)
 
+file(GLOB setupapi_rc_deps res/*.ico)
+add_rc_deps(setupapi.rc ${setupapi_rc_deps})
+
 add_library(setupapi MODULE
     ${SOURCE}
     ${PCH_SKIP_SOURCE}

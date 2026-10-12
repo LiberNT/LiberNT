@@ -41,6 +41,7 @@ HKCR
         {
             val InfoTip = e '@%%SystemRoot%%\system32\ieframe.dll,-881'
             val LocalizedString = e '@%%SystemRoot%%\system32\ieframe.dll,-5723'
+            DefaultIcon = e '%%SystemRoot%%\system32\shell32.dll,-512'
             InprocServer32 = s '%MODULE%'
             {
                 val ThreadingModel = s 'Apartment'

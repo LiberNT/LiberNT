@@ -1,0 +1,10 @@
+https://gitlab.gnome.org/GNOME/adwaita-icon-theme
+
+The following icon is rendered unmodified from the Adwaita icon theme of the
+GNOME Project (http://www.gnome.org), commit
+82d305723107d2ab619c0a4e4ec3136558bb4fe7, licensed under the terms of either
+the GNU LGPL v3 or Creative Commons Attribution-Share Alike 3.0 United States
+License. Please see media/graphics/user-folders/adwaita/COPYING for details
+and media/graphics/user-folders/adwaita for the SVG source.
+
+13.ico   devices/computer

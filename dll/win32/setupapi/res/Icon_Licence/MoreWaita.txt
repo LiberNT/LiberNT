@@ -1,0 +1,9 @@
+https://github.com/somepaulo/MoreWaita
+
+The following icon is rendered unmodified from the MoreWaita icon theme by
+somepaulo, commit 298968f878ce5f529321aecf586bf98061969e9b, released under the
+GNU General Public License version 3. Please see
+media/graphics/user-folders/morewaita/LICENSE for details and
+media/graphics/user-folders/morewaita for the SVG source.
+
+1.ico    devices/device_pci (apps/jockey)

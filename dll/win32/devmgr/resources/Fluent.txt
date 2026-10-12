@@ -1,0 +1,10 @@
+https://github.com/vinceliuice/Fluent-icon-theme
+
+The following icons are rendered unmodified from the scalable icons of the
+Fluent icon theme by Vince Liuice, commit
+c8a244f571ef8fb47812bdc9dbce76546cedce69, released under the GNU General
+Public License version 3. Please see media/graphics/user-folders/fluent/COPYING
+for details and media/graphics/user-folders/fluent for the SVG sources.
+
+toolbar.bmp  mimetypes/application-info, apps/preferences-system-search, 22/emblems/emblem-checked,
+             22/emblems/emblem-remove, 22/emblems/emblem-downloads, places/user-trash

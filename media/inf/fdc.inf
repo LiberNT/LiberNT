@@ -19,7 +19,7 @@ AddReg = FDC.NT.AddReg
 
 [FDC.NT.AddReg]
 HKR, , ,               0, %FDCClassName%
-HKR, , Icon,           0, "-9"
+HKR, , Icon,           0, "-34"
 HKR,,NoInstallClass,,1
 
 [Manufacturer]

@@ -1,0 +1,27 @@
+https://github.com/vinceliuice/Fluent-icon-theme
+
+The following icons are rendered unmodified from the scalable icons of the
+Fluent icon theme by Vince Liuice, commit
+c8a244f571ef8fb47812bdc9dbce76546cedce69, released under the GNU General
+Public License version 3. Please see media/graphics/user-folders/fluent/COPYING
+for details and media/graphics/user-folders/fluent for the SVG sources.
+
+2.ico    devices/input-mouse
+3.ico    devices/input-keyboard
+4.ico    devices/printer
+5.ico    devices/network-card
+9.ico    apps/disk-check
+12.ico   devices/network-server
+18.ico   mimetypes/unknown
+20.ico   devices/media-flash-memory-stick
+21.ico   devices/drive-removable-media
+24.ico   devices/input-touchscreen
+27.ico   devices/computer
+28.ico   devices/cpu
+34.ico   devices/media-floppy
+35.ico   apps/desktop
+39.ico   devices/media-flash
+50.ico   devices/media-floppy
+51.ico   devices/drive-optical
+53.ico   devices/drive-harddisk
+105.ico  devices/media-floppy

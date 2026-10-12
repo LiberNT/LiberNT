@@ -1,0 +1,117 @@
+[
+ {
+  "name": "computer",
+  "file": "scalable/devices/computer.svg",
+  "sha256": "d41a6652c3a8560b84743b6e0d82139c3d8ce7c4886282f44d08806641384a9d"
+ },
+ {
+  "name": "input-mouse",
+  "file": "scalable/devices/input-mouse.svg",
+  "sha256": "8a2e6f377847cafad78ce0a5d9f6ad1acdf809fc2347eda640599635d9b7d965"
+ },
+ {
+  "name": "input-keyboard",
+  "file": "scalable/devices/input-keyboard.svg",
+  "sha256": "703ca1fcb15615b35f478edc8428b2d342f4d4880b1da49941e6dc27f9af7767"
+ },
+ {
+  "name": "printer",
+  "file": "scalable/devices/printer.svg",
+  "sha256": "6c051976ab90ce6fe797a71e7f1deb7d4dafa80bd19b451ca729719578d82cbe"
+ },
+ {
+  "name": "network-card",
+  "file": "scalable/devices/network-card.svg",
+  "sha256": "9fd05a969b2a84652f714921695a6865fe610339366c86ba41a62f170e501f75"
+ },
+ {
+  "name": "network-server",
+  "file": "scalable/devices/network-server.svg",
+  "sha256": "4877de387d12b74ad9d3c3044df922f70c30e9814a59dbef609a9589c08aa968"
+ },
+ {
+  "name": "media-floppy",
+  "file": "scalable/devices/media-floppy.svg",
+  "sha256": "dee29af944c5f19fe1f9c2981b5d09d3007136e051efe428c8eb1b14c0fd7550"
+ },
+ {
+  "name": "media-flash",
+  "file": "scalable/devices/media-flash.svg",
+  "sha256": "37a00db606b75f95d38b66de814b86b1220e9775a6e505d75df22187d2d69cba"
+ },
+ {
+  "name": "media-flash-memory-stick",
+  "file": "scalable/devices/media-flash-memory-stick.svg",
+  "sha256": "04d188ea4aae5fba88b1af44f0ee48b08a2f89a77ffa4b2c155b95c52320eb3a"
+ },
+ {
+  "name": "drive-removable-media",
+  "file": "scalable/devices/drive-removable-media.svg",
+  "sha256": "bc92453157286e71b92b30ef7ef03b44268067634bd2786538f2628ce108c61e"
+ },
+ {
+  "name": "cpu",
+  "file": "scalable/devices/cpu.svg",
+  "sha256": "670da827ae318f4e6fceba1900729cb959660dd730df64e95bc2e2dd1995ffe7"
+ },
+ {
+  "name": "drive-optical",
+  "file": "scalable/devices/drive-optical.svg",
+  "sha256": "ff98640306fb350c448267362cbdabb1633b88b816b2253e1aee104b03e11b37"
+ },
+ {
+  "name": "drive-harddisk",
+  "file": "scalable/devices/drive-harddisk.svg",
+  "sha256": "6556cf717378833c292daef64a2e3951a547c848f185fd864cf553c5288d9bf3"
+ },
+ {
+  "name": "unknown",
+  "file": "scalable/mimetypes/unknown.svg",
+  "sha256": "1500d7ae5c4366a05b70b067d6469a36bd48a205667854a788451250237c2112"
+ },
+ {
+  "name": "desktop",
+  "file": "scalable/apps/desktop.svg",
+  "sha256": "4fce318b7979bffd1e6581d28d6ac9ae25b71eb93a964e7ac424475d15fa803b"
+ },
+ {
+  "name": "disk-check",
+  "file": "scalable/apps/disk-check.svg",
+  "sha256": "d86df9a234fa36f96a3e709dbff32b744304e5a7520aa475541e94ef975cd5cc"
+ },
+ {
+  "name": "preferences-system-search",
+  "file": "scalable/apps/preferences-system-search.svg",
+  "sha256": "21cd22b2d4a58163279ec800961db4b104cf4c0bf226a802db8fc45daeb3ad44"
+ },
+ {
+  "name": "emblem-checked",
+  "file": "22/emblems/emblem-checked.svg",
+  "sha256": "6f93faef67e10680bcfa782f691041daa7b7619eedf5eef57eef930ac95c5553"
+ },
+ {
+  "name": "emblem-remove",
+  "file": "22/emblems/emblem-remove.svg",
+  "sha256": "36f7153dfcf9bd93101474645840d9c747f79f9c33c5e8b89d3f0bac7e764875"
+ },
+ {
+  "name": "emblem-downloads",
+  "file": "22/emblems/emblem-downloads.svg",
+  "sha256": "17bce1568c001fd07cd410e0576925ffc6505dced91a90fca7fcf3af39efcf41"
+ },
+ {
+  "name": "application-info",
+  "file": "scalable/mimetypes/application-info.svg",
+  "sha256": "2f41f00f43d52b14bbc3dfd5cbe862afc47cb9263ebccc43e9830d10324658be"
+ },
+ {
+  "name": "user-trash",
+  "file": "scalable/places/user-trash.svg",
+  "sha256": "ee94664588ebe4a53cedf6574a88e7095e1fb97368df03f095366a8e11078f61"
+ },
+ {
+  "name": "input-touchscreen",
+  "file": "scalable/devices/input-touchscreen.svg",
+  "sha256": "36a851070c419ea661a1daf347ecd674f8b96b254838accd84e3673b5bc25dee"
+ }
+]

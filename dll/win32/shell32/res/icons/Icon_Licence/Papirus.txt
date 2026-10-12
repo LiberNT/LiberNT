@@ -1,0 +1,24 @@
+https://github.com/PapirusDevelopmentTeam/papirus-icon-theme
+
+The following icons are rendered unmodified from the Papirus icon theme,
+commit bf539287ef5dc18529424a02cccee76175920a6f, by the Papirus Development
+Team, released under the GNU General Public License version 3.
+Please see media/graphics/user-folders/papirus/LICENSE for details and
+media/graphics/user-folders for the SVG sources.
+
+4.ico
+5.ico
+9.ico
+16.ico
+18.ico
+32.ico
+33.ico
+35.ico
+137.ico
+152.ico
+235.ico
+236.ico
+237.ico
+238.ico
+512.ico
+downloads.ico

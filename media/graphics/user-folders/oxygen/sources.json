@@ -1,0 +1,44 @@
+[
+ {
+  "name": "computer",
+  "size": "16x16",
+  "file": "16x16/devices/computer.png",
+  "sha256": "5c66e5924942699029636f840df9f7ddf6aa757953a545601114fe25d0d447ff"
+ },
+ {
+  "name": "computer",
+  "size": "32x32",
+  "file": "32x32/devices/computer.png",
+  "sha256": "c0d4f819f791b6c74d3648a36259e9526cc32e534572f61e1a18f4dfa664d4cc"
+ },
+ {
+  "name": "computer",
+  "size": "48x48",
+  "file": "48x48/devices/computer.png",
+  "sha256": "48b8a97dfe70ef65dce78af0ecde7c3f7f0ec20a690d2bf68629f15a2a74b02e"
+ },
+ {
+  "name": "computer",
+  "size": "64x64",
+  "file": "64x64/devices/computer.png",
+  "sha256": "e4056bfb25a1d069e009994d41c5cf954303867d244c1837afe43007d9fb5c87"
+ },
+ {
+  "name": "computer",
+  "size": "128x128",
+  "file": "128x128/devices/computer.png",
+  "sha256": "0e1d054b3abb16f2bbbbee2b5b73b9111dacb648ba1c5472a966b6dd6b9a31d1"
+ },
+ {
+  "name": "computer",
+  "size": "256x256",
+  "file": "256x256/devices/computer.png",
+  "sha256": "b28b49b7fc3e0e21741de5e1b819cc00efea0884965ff105a735414639994a1b"
+ },
+ {
+  "name": "computer",
+  "size": "scalable",
+  "file": "scalable/devices/computer.svgz",
+  "sha256": "ba667c8f5225e708094b0b75c99da1b4446574d2d3705ced0766b003633a224d"
+ }
+]

@@ -1,0 +1,12 @@
+https://invent.kde.org/frameworks/oxygen-icons
+
+The following icon is taken unmodified from the Oxygen icon theme by the
+Oxygen Team (KDE), commit acf76c74a1ab863a6cdf31d36ec29bbc710eed58, released
+under the GNU Lesser General Public License version 3 or later. Please see
+media/graphics/user-folders/oxygen/COPYING for details and
+media/graphics/user-folders/oxygen for the sources. Frames of 16, 32, 48, 64,
+128 and 256 pixels are the Oxygen PNGs of those sizes; the other frames are
+rendered from the scalable Oxygen SVG.
+
+computer.ico devices/computer
+root.bmp     devices/computer (16 pixel PNG)

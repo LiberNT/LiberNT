@@ -23,6 +23,9 @@ list(APPEND SOURCE
     devmgmt/ResourceTypeNode.cpp
     devmgmt/RootNode.cpp)
 
+file(GLOB devmgr_rc_deps resources/*.ico resources/*.bmp)
+add_rc_deps(devmgr.rc ${devmgr_rc_deps})
+
 add_library(devmgr MODULE
     ${SOURCE}
     devmgr.rc

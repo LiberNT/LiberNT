@@ -1,0 +1,734 @@
+[
+ {
+  "name": "folder-yellow",
+  "size": "16x16",
+  "file": "16x16/places/folder-yellow.svg",
+  "sha256": "9a3ce9f7d3df0023afc7e14e08610c4e6a1466117bdca91bdf370ddb9407ebf8"
+ },
+ {
+  "name": "folder-yellow",
+  "size": "22x22",
+  "file": "22x22/places/folder-yellow.svg",
+  "sha256": "e37f20fe022efc2abb05b5396f7459115c9e6f38d6b79220b6965f9efda2ce50"
+ },
+ {
+  "name": "folder-yellow",
+  "size": "24x24",
+  "file": "24x24/places/folder-yellow.svg",
+  "sha256": "e6dddb2322c4f408bc1f319d5953914f5989510a656a8ab4024a059888f4fe90"
+ },
+ {
+  "name": "folder-yellow",
+  "size": "32x32",
+  "file": "32x32/places/folder-yellow.svg",
+  "sha256": "213c889d9b40d9b21811eb68c3ce76f8ddd6eb24e8989583dfcdd7439a19e7e0"
+ },
+ {
+  "name": "folder-yellow",
+  "size": "48x48",
+  "file": "48x48/places/folder-yellow.svg",
+  "sha256": "65a5c43ff52fca417e1bb26366d1e5daf04745fefa224876d82ff8080e5961da"
+ },
+ {
+  "name": "folder-yellow",
+  "size": "64x64",
+  "file": "64x64/places/folder-yellow.svg",
+  "sha256": "b41577782b7028af4b385659551b5078c6bbd51d7aad553484c289878951c9cc"
+ },
+ {
+  "name": "folder-yellow-open",
+  "size": "22x22",
+  "file": "22x22/places/folder-yellow-open.svg",
+  "sha256": "d9dbc54e8ca8b87ae02f6439baf1672017286ac069745ff94af89520570542d0"
+ },
+ {
+  "name": "folder-yellow-open",
+  "size": "24x24",
+  "file": "24x24/places/folder-yellow-open.svg",
+  "sha256": "44ad035686fa91efeb710fc6f64ed17e05e92977eca72b7be2b1a038e6026f9e"
+ },
+ {
+  "name": "folder-yellow-open",
+  "size": "32x32",
+  "file": "32x32/places/folder-yellow-open.svg",
+  "sha256": "6db73f0b120f5ff9e47d5fc8afe7856fe6a3fbcf9a64123630db8cd579916d95"
+ },
+ {
+  "name": "folder-yellow-open",
+  "size": "48x48",
+  "file": "48x48/places/folder-yellow-open.svg",
+  "sha256": "3d5959e38f8246dc0d60cf82d255268942ae76180bfe395e266d0b0b09d74327"
+ },
+ {
+  "name": "folder-yellow-open",
+  "size": "64x64",
+  "file": "64x64/places/folder-yellow-open.svg",
+  "sha256": "5b1c973d895130b4f8a2b82830d367aae6e05d57915dae0b2cae72c54f9ce352"
+ },
+ {
+  "name": "user-teal-home",
+  "size": "22x22",
+  "file": "22x22/places/user-teal-home.svg",
+  "sha256": "fbb5c5b2c32011c802fd5fff4a28a4d39c843bc3d6c55093ec93b738001181e8"
+ },
+ {
+  "name": "user-teal-home",
+  "size": "24x24",
+  "file": "24x24/places/user-teal-home.svg",
+  "sha256": "663c7defff05c943a99187bd5cf5c29d8125fa9db9cf5115796bc1fd87983e19"
+ },
+ {
+  "name": "user-teal-home",
+  "size": "32x32",
+  "file": "32x32/places/user-teal-home.svg",
+  "sha256": "a9049f39b544c29fb6420a0aa9de51e716cb345e9418be2831f0345a0ae907c4"
+ },
+ {
+  "name": "user-teal-home",
+  "size": "48x48",
+  "file": "48x48/places/user-teal-home.svg",
+  "sha256": "c05ca02b59e0bfca9a67dbbb9d4994ef0e673e918a62d45fc17f4515f1a01cdf"
+ },
+ {
+  "name": "user-teal-home",
+  "size": "64x64",
+  "file": "64x64/places/user-teal-home.svg",
+  "sha256": "b9bd1ebaada73ee31e0a01551b07edce28703eee2ab291e062b870562e4f4f08"
+ },
+ {
+  "name": "folder-blue-documents",
+  "size": "22x22",
+  "file": "22x22/places/folder-blue-documents.svg",
+  "sha256": "2fc8782eed657609b9332af74a125327c180d274efd1247029db1300434d12fe"
+ },
+ {
+  "name": "folder-blue-documents",
+  "size": "24x24",
+  "file": "24x24/places/folder-blue-documents.svg",
+  "sha256": "baea1a6526022dccd80a6f22bc0b19747b1b641a1840a1c6a17164cde1c92956"
+ },
+ {
+  "name": "folder-blue-documents",
+  "size": "32x32",
+  "file": "32x32/places/folder-blue-documents.svg",
+  "sha256": "f5888089e7ae1ae8262d5ef10bd8304670dcbfa0618493ce2844d2dd926f3511"
+ },
+ {
+  "name": "folder-blue-documents",
+  "size": "48x48",
+  "file": "48x48/places/folder-blue-documents.svg",
+  "sha256": "6efb87d6fc58a46db52301981ec20c4342dff90e2c281ce0bbbe964ec2ccb94b"
+ },
+ {
+  "name": "folder-blue-documents",
+  "size": "64x64",
+  "file": "64x64/places/folder-blue-documents.svg",
+  "sha256": "70a75a6ab7f4772b2944f25d31950fadaa4b6895b90b5d000d94c1dbba6f102c"
+ },
+ {
+  "name": "folder-green-download",
+  "size": "22x22",
+  "file": "22x22/places/folder-green-download.svg",
+  "sha256": "f42525e6a77f43cec0c74b103edc904acca2323dad7626e213ed7b135090c621"
+ },
+ {
+  "name": "folder-green-download",
+  "size": "24x24",
+  "file": "24x24/places/folder-green-download.svg",
+  "sha256": "9d3d0e27cc77df5cb824e1c89aaeda9456fe215b904ea568a3cc800d045b9126"
+ },
+ {
+  "name": "folder-green-download",
+  "size": "32x32",
+  "file": "32x32/places/folder-green-download.svg",
+  "sha256": "eb7efcaa43adb49551ed484cca2a040c24e685dcb564303a45544c18b4092d8b"
+ },
+ {
+  "name": "folder-green-download",
+  "size": "48x48",
+  "file": "48x48/places/folder-green-download.svg",
+  "sha256": "dead24049dc2f0df912dddced5a625189b899d79b34e4e47ccc0ee984cb7d85a"
+ },
+ {
+  "name": "folder-green-download",
+  "size": "64x64",
+  "file": "64x64/places/folder-green-download.svg",
+  "sha256": "1374cdd8dbea42e7404ea37b2573270bb633f53af0b81ffe53d2904986a1e857"
+ },
+ {
+  "name": "folder-deeporange-music",
+  "size": "22x22",
+  "file": "22x22/places/folder-deeporange-music.svg",
+  "sha256": "104f0d241a8a2de217900740920aa9aa6f3bdf327a1174fcdab8f8b60f6be83d"
+ },
+ {
+  "name": "folder-deeporange-music",
+  "size": "24x24",
+  "file": "24x24/places/folder-deeporange-music.svg",
+  "sha256": "3a9130fda3adf76d4a6ef7b66c01a1053b9ad55e47c0c148afe92eb4e9631c42"
+ },
+ {
+  "name": "folder-deeporange-music",
+  "size": "32x32",
+  "file": "32x32/places/folder-deeporange-music.svg",
+  "sha256": "516e1df74d90f3e766c891829c9434af2ff5c552042f6d286289f1f58b816d5a"
+ },
+ {
+  "name": "folder-deeporange-music",
+  "size": "48x48",
+  "file": "48x48/places/folder-deeporange-music.svg",
+  "sha256": "b4e94f56e4ff4f5d825e7b059e18a60070fc487fd343c24d4825d2d42609254e"
+ },
+ {
+  "name": "folder-deeporange-music",
+  "size": "64x64",
+  "file": "64x64/places/folder-deeporange-music.svg",
+  "sha256": "ed9ce4791927eeebe804e834def67ee263497f71ac3aff83f8cdbeea29f0dcd5"
+ },
+ {
+  "name": "folder-cyan-pictures",
+  "size": "22x22",
+  "file": "22x22/places/folder-cyan-pictures.svg",
+  "sha256": "1cde3bb6e0d4994166c34bf3b40045acac6acbd1ffe51880ea11c9b3cf9355e3"
+ },
+ {
+  "name": "folder-cyan-pictures",
+  "size": "24x24",
+  "file": "24x24/places/folder-cyan-pictures.svg",
+  "sha256": "3c8a41d024a5977d3a4e9acb0df80c09621460b496d41042ef4eb979a9db422c"
+ },
+ {
+  "name": "folder-cyan-pictures",
+  "size": "32x32",
+  "file": "32x32/places/folder-cyan-pictures.svg",
+  "sha256": "2d1b087eef4b7a71ae469b878253780987970ce14d7185e00d74e2ffb96c9872"
+ },
+ {
+  "name": "folder-cyan-pictures",
+  "size": "48x48",
+  "file": "48x48/places/folder-cyan-pictures.svg",
+  "sha256": "5cc8f5461915f448f0d135a744ce8244201bca6181b92caed5b65fb30f22d67a"
+ },
+ {
+  "name": "folder-cyan-pictures",
+  "size": "64x64",
+  "file": "64x64/places/folder-cyan-pictures.svg",
+  "sha256": "a98d641a2344d51727749546501555e256370b1b6b785a86575af159a21c2748"
+ },
+ {
+  "name": "folder-violet-videos",
+  "size": "22x22",
+  "file": "22x22/places/folder-violet-video.svg",
+  "sha256": "62b80c390a17c2686482a66ca259ed50f3775b876afc9253c8b39fdc3cd5952b"
+ },
+ {
+  "name": "folder-violet-videos",
+  "size": "24x24",
+  "file": "24x24/places/folder-violet-video.svg",
+  "sha256": "b3bfda6d6eec5b8f96ea747986a6317e641ee909b9d30a6801c28e5ee159f744"
+ },
+ {
+  "name": "folder-violet-videos",
+  "size": "32x32",
+  "file": "32x32/places/folder-violet-video.svg",
+  "sha256": "5db97d991a0022292706b8be800cc7cd3f8f388cebe9289d007516e8e935ac74"
+ },
+ {
+  "name": "folder-violet-videos",
+  "size": "48x48",
+  "file": "48x48/places/folder-violet-video.svg",
+  "sha256": "3661b1464bf77660657c5a3a6ed3ac19ee8f103e0f1b31c1816a3c386a2b7216"
+ },
+ {
+  "name": "folder-violet-videos",
+  "size": "64x64",
+  "file": "64x64/places/folder-violet-video.svg",
+  "sha256": "adadfecef0b07ec2d30557b04664651ca2ae232eeb4fab4eb609cea9ce979898"
+ },
+ {
+  "name": "folder-blue-development",
+  "size": "22x22",
+  "file": "22x22/places/folder-blue-development.svg",
+  "sha256": "4ed3c76430e5c9c14c6b57dbda6b90984ef2616b5e4d64a5c18c82e4f9b16963"
+ },
+ {
+  "name": "folder-blue-development",
+  "size": "24x24",
+  "file": "24x24/places/folder-blue-development.svg",
+  "sha256": "74c47e53996948377f9ed79b20ca6fb0bb92fe9c310dc128a6fc4d7912d4c4ad"
+ },
+ {
+  "name": "folder-blue-development",
+  "size": "32x32",
+  "file": "32x32/places/folder-blue-development.svg",
+  "sha256": "0c2da718f2e4e25dd43910a61501d32cf658082ca423911b621cc2579b31cd58"
+ },
+ {
+  "name": "folder-blue-development",
+  "size": "48x48",
+  "file": "48x48/places/folder-blue-development.svg",
+  "sha256": "d06fdd2df8d6fe58816b3ec30ac5e5100e106e7c35cc0bb2607c52be6e8bdf62"
+ },
+ {
+  "name": "folder-blue-development",
+  "size": "64x64",
+  "file": "64x64/places/folder-blue-development.svg",
+  "sha256": "f59b8da23568b48f6dd8d357d49cd0d7144fa1f80c18d156d484432316d01317"
+ },
+ {
+  "name": "folder-blue-code",
+  "size": "22x22",
+  "file": "22x22/places/folder-blue-code.svg",
+  "sha256": "7a38732032dac4f609c008a40f6889e09ac0420d9c81871cb82a9c37c716d7a5"
+ },
+ {
+  "name": "folder-blue-code",
+  "size": "24x24",
+  "file": "24x24/places/folder-blue-code.svg",
+  "sha256": "380ad220a63c99c07090834d93a71710698d72c42e26127014323e4244851524"
+ },
+ {
+  "name": "folder-blue-code",
+  "size": "32x32",
+  "file": "32x32/places/folder-blue-code.svg",
+  "sha256": "bc6b090740684bdc51111eb4ff2aa4028d9a44507e6958fe91bde064ffa87f66"
+ },
+ {
+  "name": "folder-blue-code",
+  "size": "48x48",
+  "file": "48x48/places/folder-blue-code.svg",
+  "sha256": "b415c50c94b7747366538c7548f208762ba9d7431afa4808801c5ee09b24e1c4"
+ },
+ {
+  "name": "folder-blue-code",
+  "size": "64x64",
+  "file": "64x64/places/folder-blue-code.svg",
+  "sha256": "41aae39c2e1d92fd55cac74cef04b34564b52f6dbcd5dd825c4af4c3700ad7be"
+ },
+ {
+  "name": "folder-blue-private",
+  "size": "22x22",
+  "file": "22x22/places/folder-blue-private.svg",
+  "sha256": "60001a6e4e1236e76ee9eef1e886be5baba77940f2e8d128349bc21d1725a350"
+ },
+ {
+  "name": "folder-blue-private",
+  "size": "24x24",
+  "file": "24x24/places/folder-blue-private.svg",
+  "sha256": "694539c7583055087d13ba3a92f2934f9e41085956054b49eb82af8d6e12ce35"
+ },
+ {
+  "name": "folder-blue-private",
+  "size": "32x32",
+  "file": "32x32/places/folder-blue-private.svg",
+  "sha256": "cc0186b779d8e88cb8e72d831b0072efd4c3e12824543eaf814232e93c4975d9"
+ },
+ {
+  "name": "folder-blue-private",
+  "size": "48x48",
+  "file": "48x48/places/folder-blue-private.svg",
+  "sha256": "ae85c74d9a1bd43cb64012e5ca86290024ea1def20d1849c45dc1ba66dc00daf"
+ },
+ {
+  "name": "folder-blue-private",
+  "size": "64x64",
+  "file": "64x64/places/folder-blue-private.svg",
+  "sha256": "8ef61a256393d3b1c0f4504111fb789012886023ebacfc826116e26fbb7e1061"
+ },
+ {
+  "name": "network-workgroup",
+  "size": "22x22",
+  "file": "22x22/places/network-workgroup.svg",
+  "sha256": "dab7ef552531f69907126ca14bea20296c47ed4bbb03b845602209b3b0f5de23"
+ },
+ {
+  "name": "network-workgroup",
+  "size": "24x24",
+  "file": "24x24/places/network-workgroup.svg",
+  "sha256": "40fd8202669c3a382ee3e9980aebba3c039ff35f76902a489ec2f16cc444eb3d"
+ },
+ {
+  "name": "network-workgroup",
+  "size": "32x32",
+  "file": "32x32/places/network-workgroup.svg",
+  "sha256": "4202570831f0cca68e4800b2f56a75dc68857741b0d1feffb0e0ada5cdff6270"
+ },
+ {
+  "name": "network-workgroup",
+  "size": "48x48",
+  "file": "48x48/places/network-workgroup.svg",
+  "sha256": "6c042fb6539d926e1df741357fd601d3b44dc23d1a7cb44fa624308152c9c60e"
+ },
+ {
+  "name": "network-workgroup",
+  "size": "64x64",
+  "file": "64x64/places/network-workgroup.svg",
+  "sha256": "0c520ef660f533c494db58c6d4d4488939a2bac9c807ef69624f04667a7082cd"
+ },
+ {
+  "name": "user-trash",
+  "size": "22x22",
+  "file": "22x22/places/user-trash.svg",
+  "sha256": "e6a9e393c842fab0cfe7b92fac3bdb54fcc1ccc946bd70b665ce0edd2eab4925"
+ },
+ {
+  "name": "user-trash",
+  "size": "24x24",
+  "file": "24x24/places/user-trash.svg",
+  "sha256": "6c584c877728a8ac7d5c12084e2fab177192ec4f3f3400457611503f9e302c29"
+ },
+ {
+  "name": "user-trash",
+  "size": "32x32",
+  "file": "32x32/places/user-trash.svg",
+  "sha256": "5f7bab804a0e7a75671338c8593534d410b294adb2e8e343daba5f6aafbc8a15"
+ },
+ {
+  "name": "user-trash",
+  "size": "48x48",
+  "file": "48x48/places/user-trash.svg",
+  "sha256": "4f49d9b728d93f6b3ebbfba4ba8f2985f15aa469001d6afb1302be832306f075"
+ },
+ {
+  "name": "user-trash",
+  "size": "64x64",
+  "file": "64x64/places/user-trash.svg",
+  "sha256": "82ca67cbaa85dcbb465042604d2f7ae087dda504762e00d99e4877ea49902a83"
+ },
+ {
+  "name": "user-trash-full",
+  "size": "22x22",
+  "file": "22x22/places/user-trash-full.svg",
+  "sha256": "bbaeac672d2f7a3e3dceb0cf97bb43d71db7abd7fbbbfb6391cbafda1cbcc523"
+ },
+ {
+  "name": "user-trash-full",
+  "size": "24x24",
+  "file": "24x24/places/user-trash-full.svg",
+  "sha256": "537865f6d4b49ab015522d1903dfda42c637721e205e0838699b2fa1dc45d96a"
+ },
+ {
+  "name": "user-trash-full",
+  "size": "32x32",
+  "file": "32x32/places/user-trash-full.svg",
+  "sha256": "937c9b889aa5b2ebdbd2d77ca9d376a890055c66cd44a749467dc386317e3fd8"
+ },
+ {
+  "name": "user-trash-full",
+  "size": "48x48",
+  "file": "48x48/places/user-trash-full.svg",
+  "sha256": "9cccc190580367763e85a0d28d2d01ee7a566d3522cadffb6bfceeb01676d0a3"
+ },
+ {
+  "name": "user-trash-full",
+  "size": "64x64",
+  "file": "64x64/places/user-trash-full.svg",
+  "sha256": "f76bbdb75ae029b3202bda7b3b3cd9089601c1bc3b1c4ededaed6525c1638b13"
+ },
+ {
+  "name": "drive-harddisk",
+  "size": "22x22",
+  "file": "22x22/devices/drive-harddisk.svg",
+  "sha256": "6e1eedb61bfbc8517eb8991189cb647a4e94aef44d7c02bc917277a6c23d2d80"
+ },
+ {
+  "name": "drive-harddisk",
+  "size": "24x24",
+  "file": "24x24/devices/drive-harddisk.svg",
+  "sha256": "5dc4bc51aad54618a0f7644c7ebbbe930af42e61d2fc1fac3d3421830f3a2694"
+ },
+ {
+  "name": "drive-harddisk",
+  "size": "32x32",
+  "file": "32x32/devices/drive-harddisk.svg",
+  "sha256": "1316d778ef49a471d5e1044057a1f1c3b44de1f3e1aa0266070f2a1f0b0fa41b"
+ },
+ {
+  "name": "drive-harddisk",
+  "size": "48x48",
+  "file": "48x48/devices/drive-harddisk.svg",
+  "sha256": "4fce7b4840e39799547ebee4b2719bdfdfc26a810b28988177f178fb88807d9e"
+ },
+ {
+  "name": "drive-harddisk",
+  "size": "64x64",
+  "file": "64x64/devices/drive-harddisk.svg",
+  "sha256": "f1db31d79bc7e3588a787d53e7f94c85924c1838eccdb12cac9b1c95ec120a91"
+ },
+ {
+  "name": "web-browser",
+  "size": "16x16",
+  "file": "16x16/apps/internet-web-browser.svg",
+  "sha256": "6367f0aa254af7dbf067c9eb849f67f1f9b37b5eccf792328e852692f58e0466"
+ },
+ {
+  "name": "web-browser",
+  "size": "22x22",
+  "file": "22x22/apps/internet-web-browser.svg",
+  "sha256": "4cd1e9fe88e36791ddabef6e0b6c4ac95d06799abe502c706b1129a8fb954342"
+ },
+ {
+  "name": "web-browser",
+  "size": "24x24",
+  "file": "24x24/apps/internet-web-browser.svg",
+  "sha256": "283880095dd7de8982bff8ef822e16f81bf67ba471b23e893eff24c550b6638c"
+ },
+ {
+  "name": "web-browser",
+  "size": "32x32",
+  "file": "32x32/apps/internet-web-browser.svg",
+  "sha256": "66676f946230d18219145882fe81d680512d2208538f5787e0d4689707f67b51"
+ },
+ {
+  "name": "web-browser",
+  "size": "48x48",
+  "file": "48x48/apps/internet-web-browser.svg",
+  "sha256": "db1f3968e3d063fc6b6ac372f611ce132c1eec9099224582d47faf189269bd4c"
+ },
+ {
+  "name": "web-browser",
+  "size": "64x64",
+  "file": "64x64/apps/internet-web-browser.svg",
+  "sha256": "b9efa8c0bf894638e6c520b361f7d6b33338da800409e62cb0cb66ca89d9525b"
+ },
+ {
+  "name": "system-software-install",
+  "size": "16x16",
+  "file": "16x16/apps/system-software-install.svg",
+  "sha256": "7a80e3dd42b5e5a2974394c10e697d7a85556b077fca3f99fea8c55972b8249e"
+ },
+ {
+  "name": "system-software-install",
+  "size": "22x22",
+  "file": "22x22/apps/system-software-install.svg",
+  "sha256": "d5218a1eee394de8dad676f5c9f496dd4610b75fe6ce51818802f257dbce163c"
+ },
+ {
+  "name": "system-software-install",
+  "size": "24x24",
+  "file": "24x24/apps/system-software-install.svg",
+  "sha256": "404b94602cc169a5907362f6e6c29d2064559eae32011f591876fecf459c2068"
+ },
+ {
+  "name": "system-software-install",
+  "size": "32x32",
+  "file": "32x32/apps/system-software-install.svg",
+  "sha256": "059d639c12cea37deea81ca228bd51c6e84377ff7e7e152b227253425b0a3f2a"
+ },
+ {
+  "name": "system-software-install",
+  "size": "48x48",
+  "file": "48x48/apps/system-software-install.svg",
+  "sha256": "ab02823f60accfaa2e960d4811fd8cc4c2613afbdf9cb141f79f2662cb8f8d0e"
+ },
+ {
+  "name": "system-software-install",
+  "size": "64x64",
+  "file": "64x64/apps/system-software-install.svg",
+  "sha256": "121932e110c9ecf8f4e72d8d2143db371fdd5721d0d841ff2f125ab3ab8a7d4d"
+ },
+ {
+  "name": "utilities-terminal",
+  "size": "16x16",
+  "file": "16x16/apps/utilities-terminal.svg",
+  "sha256": "e40aca2924ba20e7c3836bf667623a6a25ddf2b47b2dfcd675bc931394525710"
+ },
+ {
+  "name": "utilities-terminal",
+  "size": "22x22",
+  "file": "22x22/apps/utilities-terminal.svg",
+  "sha256": "9843bf3dbbb0e0ef019c5a4d28f3b49ab4a438460a1a0edc3a6362885821230e"
+ },
+ {
+  "name": "utilities-terminal",
+  "size": "24x24",
+  "file": "24x24/apps/utilities-terminal.svg",
+  "sha256": "dac3902fec9453546433a7094a1791f658b9747930b37c94ad2d152dd87444f6"
+ },
+ {
+  "name": "utilities-terminal",
+  "size": "32x32",
+  "file": "32x32/apps/utilities-terminal.svg",
+  "sha256": "5923c49169d56d685510ab4ac6d6582f1e56c63af7ea85d4f877d1bc59e88961"
+ },
+ {
+  "name": "utilities-terminal",
+  "size": "48x48",
+  "file": "48x48/apps/utilities-terminal.svg",
+  "sha256": "e012085d169034e338c2c143a803b30d32fe1923783503e33adb81d58e30ee6c"
+ },
+ {
+  "name": "utilities-terminal",
+  "size": "64x64",
+  "file": "64x64/apps/utilities-terminal.svg",
+  "sha256": "f67a1fafbe1a5c5eb626f259fdd3538782d1c3d8ff3d49f06c386de7735ee7d0"
+ },
+ {
+  "name": "preferences-system-windows",
+  "size": "16x16",
+  "file": "16x16/apps/preferences-system-windows.svg",
+  "sha256": "c9de4b48a0d3c3dfecfe49ca6f578707548d9c9daafb71b19fd4ff3b5a436cf4"
+ },
+ {
+  "name": "preferences-system-windows",
+  "size": "22x22",
+  "file": "22x22/apps/preferences-system-windows.svg",
+  "sha256": "9df5d4b0c2abe9a523db0045f1b176b9e3c016432e62272f9509bd7d2d512d07"
+ },
+ {
+  "name": "preferences-system-windows",
+  "size": "24x24",
+  "file": "24x24/apps/preferences-system-windows.svg",
+  "sha256": "b98ba7601fb35e5350a8568111d5ef35f62a17a90b80be02bf89d35e009c554a"
+ },
+ {
+  "name": "preferences-system-windows",
+  "size": "32x32",
+  "file": "32x32/apps/preferences-system-windows.svg",
+  "sha256": "5a311c26aeb971cc18bdae75cff7cfa52c1effdfd7462ed38e7f612c4a0344de"
+ },
+ {
+  "name": "preferences-system-windows",
+  "size": "48x48",
+  "file": "48x48/apps/preferences-system-windows.svg",
+  "sha256": "16e5be69615671ade5dcd961d2f22891f6e59bc6c293cdfa13baa40a03099e98"
+ },
+ {
+  "name": "preferences-system-windows",
+  "size": "64x64",
+  "file": "64x64/apps/preferences-system-windows.svg",
+  "sha256": "423e902194b383e33d15aefa29117ecbbf30ef1950206ed46ce36d3d4a74a511"
+ },
+ {
+  "name": "text-x-readme",
+  "size": "16x16",
+  "file": "16x16/mimetypes/text-x-readme.svg",
+  "sha256": "336a21214c60c044e64e025d9c305f5adef585e63022d7de22cd7a3ec427bf91"
+ },
+ {
+  "name": "text-x-readme",
+  "size": "22x22",
+  "file": "22x22/mimetypes/text-x-readme.svg",
+  "sha256": "693281632c04f19e51a80c44a924dd8011cd9afb8176dcfb0181ec309e801a7a"
+ },
+ {
+  "name": "text-x-readme",
+  "size": "24x24",
+  "file": "24x24/mimetypes/text-x-readme.svg",
+  "sha256": "88a54bca961eef9e1888bcaf1956e4b1cb3bf3bcdaad6fe0d886a37ad064411b"
+ },
+ {
+  "name": "text-x-readme",
+  "size": "32x32",
+  "file": "32x32/mimetypes/text-x-readme.svg",
+  "sha256": "b2d4bbfa23c9380767c1d9c3b032a81d9aed81c9d60ded2be522560a506a489f"
+ },
+ {
+  "name": "text-x-readme",
+  "size": "48x48",
+  "file": "48x48/mimetypes/text-x-readme.svg",
+  "sha256": "04fb8d6b884e84f662c1aac2f1340f19d5d2a4c14f45f6e8af294686e2bba7c2"
+ },
+ {
+  "name": "text-x-readme",
+  "size": "64x64",
+  "file": "64x64/mimetypes/text-x-readme.svg",
+  "sha256": "87e4f49b30d84bc3932ad2f2f255e694d7ba4a73d6864a6dd93860e57f72f152"
+ },
+ {
+  "name": "computer",
+  "size": "22x22",
+  "file": "22x22/devices/computer.svg",
+  "sha256": "efce97afa88ee59584913dfe07dd85352a2bb4799dc2dbfe83db014fb513ac53"
+ },
+ {
+  "name": "computer",
+  "size": "24x24",
+  "file": "24x24/devices/computer.svg",
+  "sha256": "ddac3986e2e6c471a3d483cc8afdb72102cd2bf1fb8747d09e31f9531786a115"
+ },
+ {
+  "name": "computer",
+  "size": "32x32",
+  "file": "32x32/devices/computer.svg",
+  "sha256": "062cd15bda9bbf852801a97bb939696c911adfca8e4ce9ba383dd925272acdfa"
+ },
+ {
+  "name": "computer",
+  "size": "48x48",
+  "file": "48x48/devices/computer.svg",
+  "sha256": "25b9735e50c827e3967244bb56de4b2e8283246f37945df4d54ff46e43d72768"
+ },
+ {
+  "name": "computer",
+  "size": "64x64",
+  "file": "64x64/devices/computer.svg",
+  "sha256": "2493ab08444aec1ee57f83314840900f201de92af6bcef1cfe0fb3b839288baa"
+ },
+ {
+  "name": "emblem-system",
+  "size": "16x16",
+  "file": "16x16/emblems/emblem-system.svg",
+  "sha256": "16cea12373b087426fea97726d8fe1e9a9709fce9c2f9ada8ed07e5210d7000a"
+ },
+ {
+  "name": "emblem-system",
+  "size": "22x22",
+  "file": "22x22/emblems/emblem-system.svg",
+  "sha256": "0d7eed030df1f53c015d6bee6684318d0eab19448c2f08b7ce6dfe133fc565ec"
+ },
+ {
+  "name": "emblem-system",
+  "size": "24x24",
+  "file": "24x24/emblems/emblem-system.svg",
+  "sha256": "0eeb88550df0d8852a750fa781e1e912c9aee0cdc0c57f06966602bf3e9043c4"
+ },
+ {
+  "name": "emblem-system",
+  "size": "32x32",
+  "file": "32x32/emblems/emblem-system.svg",
+  "sha256": "8e8a7c1180ea8c16e46199cf27090079e0d45544592a4c3a4c0e9ab63a2c43a5"
+ },
+ {
+  "name": "emblem-system",
+  "size": "48x48",
+  "file": "48x48/emblems/emblem-system.svg",
+  "sha256": "a5eb75e3f74e46023c0dd88b2e9a66fdc50fc19d54afa957a7e2423c18e801b1"
+ },
+ {
+  "name": "com.github.stsdc.monitor",
+  "size": "16x16",
+  "file": "16x16/apps/com.github.stsdc.monitor.svg",
+  "sha256": "9486b7aaed3dbef19be2f05758825ef07ae7797ca4abfd32bb6b32582730044d"
+ },
+ {
+  "name": "com.github.stsdc.monitor",
+  "size": "22x22",
+  "file": "22x22/apps/com.github.stsdc.monitor.svg",
+  "sha256": "66da86e6561f12702b76120c31c9d7e2cdd17a80fd295f76136609539a2100d9"
+ },
+ {
+  "name": "com.github.stsdc.monitor",
+  "size": "24x24",
+  "file": "24x24/apps/com.github.stsdc.monitor.svg",
+  "sha256": "9e56a1245ad0d414ffaea602a8f10ce2ea9e47874610895dd4ad68925b0dc9db"
+ },
+ {
+  "name": "com.github.stsdc.monitor",
+  "size": "32x32",
+  "file": "32x32/apps/com.github.stsdc.monitor.svg",
+  "sha256": "60c1ea43dd614eee46bf024dbfa4e2272088bc7d436069935d3b16e6f68e41b5"
+ },
+ {
+  "name": "com.github.stsdc.monitor",
+  "size": "48x48",
+  "file": "48x48/apps/com.github.stsdc.monitor.svg",
+  "sha256": "e0627131e4f38e528feeba29815791c43d3680ce882ffcbde3f990411b8130cb"
+ },
+ {
+  "name": "com.github.stsdc.monitor",
+  "size": "64x64",
+  "file": "64x64/apps/com.github.stsdc.monitor.svg",
+  "sha256": "ae9d2922e53fb4eb3971ffc47de8af5037e35ecaa1e02b47d67190652f45a9c3"
+ }
+]

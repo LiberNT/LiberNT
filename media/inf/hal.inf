@@ -19,7 +19,7 @@ AddReg = ComputerClass.NT.AddReg
 
 [ComputerClass.NT.AddReg]
 HKR, , ,               0, %ComputerClassName%
-HKR, , Icon,           0, "-27"
+HKR, , Icon,           0, "-13"
 
 [Manufacturer]
 %GenericMfg% = GenericMfg
