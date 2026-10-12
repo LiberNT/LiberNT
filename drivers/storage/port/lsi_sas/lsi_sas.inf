@@ -1,0 +1,85 @@
+;
+; PROJECT:     LiberNT Storage Drivers
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Installs the StorPort miniport for LSI Fusion-MPT SAS controllers
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
+;
+
+[Version]
+Signature  = "$Windows NT$"
+Class      = SCSIAdapter
+ClassGuid  = {4D36E97B-E325-11CE-BFC1-08002BE10318}
+Provider   = %ROS%
+DriverVer  = 10/12/2026,10.0.0.1
+
+[SourceDisksNames]
+1 = %ROS%,,,
+
+[SourceDisksFiles]
+lsi_sas.sys = 1
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%LSI% = LSI
+
+[LSI]
+%DevDesc1064% = LSI_SAS_Inst, PCI\VEN_1000&DEV_0050
+%DevDesc1068% = LSI_SAS_Inst, PCI\VEN_1000&DEV_0054
+%DevDesc1068E% = LSI_SAS_Inst, PCI\VEN_1000&DEV_0058
+%DevDesc1064E% = LSI_SAS_Inst, PCI\VEN_1000&DEV_0056
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[LSI_SAS_Inst]
+CopyFiles = LSI_SAS_CopyFiles
+
+[LSI_SAS_Inst.HW]
+AddReg = LSI_SAS_HW_AddReg
+
+[LSI_SAS_HW_AddReg]
+HKR, "Interrupt Management",, 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties",, 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", "MSISupported", %REG_DWORD%, 0x00000001
+
+[LSI_SAS_Inst.Services]
+AddService = LSI_SAS, %SPSVCINST_ASSOCSERVICE%, LSI_SAS_Service_Inst, Miniport_EventLog_Inst
+
+[LSI_SAS_Service_Inst]
+ServiceType    = %SERVICE_KERNEL_DRIVER%
+StartType      = %SERVICE_BOOT_START%
+ErrorControl   = %SERVICE_ERROR_NORMAL%
+ServiceBinary  = %12%\lsi_sas.sys
+LoadOrderGroup = SCSI Miniport
+AddReg         = LSI_SAS_Service_AddReg
+
+[LSI_SAS_CopyFiles]
+lsi_sas.sys,,,1
+
+[LSI_SAS_Service_AddReg]
+HKR, "Parameters\PnpInterface", "5", %REG_DWORD%, 0x00000001
+HKR, "Parameters", "BusType", %REG_DWORD%, 0x0000000A
+
+[Miniport_EventLog_Inst]
+AddReg = Miniport_EventLog_AddReg
+
+[Miniport_EventLog_AddReg]
+HKR,,EventMessageFile,%REG_EXPAND_SZ%,"%%SystemRoot%%\System32\IoLogMsg.dll"
+HKR,,TypesSupported,%REG_DWORD%,7
+
+[Strings]
+ROS          = "LiberNT"
+LSI          = "LSI"
+DevDesc1064  = "LSI Adapter, SAS 3000 series, 4-port with 1064"
+DevDesc1068  = "LSI Adapter, SAS 3000 series, 8-port with 1068"
+DevDesc1068E = "LSI Adapter, SAS 3000 series, 8-port with 1068E"
+DevDesc1064E = "LSI Adapter, SAS 3000 series, 4-port with 1064E"
+
+SPSVCINST_ASSOCSERVICE = 0x00000002
+SERVICE_KERNEL_DRIVER  = 1
+SERVICE_BOOT_START     = 0
+SERVICE_ERROR_NORMAL   = 1
+REG_EXPAND_SZ          = 0x00020000
+REG_DWORD              = 0x00010001

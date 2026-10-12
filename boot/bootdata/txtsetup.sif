@@ -30,6 +30,10 @@ PCI\VEN_104B&CC_0100 = buslogic
 ;PCI\CC_0105 = uniata
 ;PCI\CC_0106 = uniata
 PCI\CC_010601 = storahci
+PCI\VEN_1000&DEV_0050 = lsi_sas
+PCI\VEN_1000&DEV_0054 = lsi_sas
+PCI\VEN_1000&DEV_0056 = lsi_sas
+PCI\VEN_1000&DEV_0058 = lsi_sas
 ;*PNP0600 = uniata
 USB\CLASS_09 = usbhub
 USB\ROOT_HUB = usbhub
@@ -117,6 +121,7 @@ atapi = atapi.sys
 ;uniata = uniata.sys
 buslogic = buslogic.sys
 storahci = storahci.sys
+lsi_sas = lsi_sas.sys
 disk = disk.sys
 
 [SCSI.Load.x86]
