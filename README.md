@@ -26,6 +26,8 @@ Our goal is a system that stays maintainable in the long run: stable, reliable a
 
 LiberNT is licensed under the [GNU GPL 3.0](COPYING). Code inherited from ReactOS keeps the licence stated in its file headers, most of it GPL 2.0 or later. The GPL 2.0, LGPL 2.1 and BSD texts those files refer to are in [COPYING2](COPYING2), [COPYING.LIB](COPYING.LIB) and [COPYING.ARM](COPYING.ARM).
 
+The changes made in LiberNT are Copyright © 2026 the LiberNT contributors. Code inherited from ReactOS and from third parties keeps the copyright notices of its authors. See [CREDITS.md](CREDITS.md).
+
 ### Status
 
 So far, LiberNT has proven more stable and faster than ReactOS in CPU management, memory management and I/O resource handling. Windows 11 is the compatibility reference.
@@ -125,11 +127,7 @@ LiberNT brings modern hardware and platforms to the NT architecture. The current
 - Board support, including the Raspberry Pi and its RP1 I/O controller
 - Windows 11 (NT10) compatibility and driver-model work
 
-See [INSTALL](INSTALL) for installation instructions. After building:
-
-```sh
-ninja install
-```
+See [INSTALL.md](INSTALL.md) for installation instructions.
 
 ## Contributing
 

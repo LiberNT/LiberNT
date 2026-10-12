@@ -1,22 +1,23 @@
 
 # Commit message example
 # ----------------------
-# [MODULE] A short but descriptive summary (#pr-num)
+# [COMPONENT] A short but descriptive summary
 #
-# A comprehensible description of WHY you did this work. Do not limit
-# yourself here.
-# The width of the description is arbitary, but it is a good idea to
-# wrap the text by 72 chars.
+# Problem: what goes wrong, as it was observed.
 #
-# CORE-XXXX CIDXXXXX
+# Why: the rule, contract or invariant that makes it wrong.
+#
+# How: what the change does.
 # ----------------------
-# * [MODULE] should usually be the name of the CMake module, written
-#   in all caps.
+# * [COMPONENT] should usually be the name of the CMake module, written
+#   in all caps. Use several tags, such as [NTOS:KE][HAL], only when
+#   one change needs them.
 # * Summary should be imperative (not past tense) and not end with a
 #   period.
-# * Description of a commit should explain WHY a change was made.
-# * JIRA, Coverity ID references should be placed at the bottom row.
-# * There must be a newline between summary, description and bug IDs.
-# * GitHub Pull Request ID should be referenced in the summary in
-#   parens. If the resulting summary is longer than 70 chars it may
-#   be placed last in the ID row to prevent hard wrapping on GitHub.
+# * For a short feature commit, start the body with "feat:" instead of
+#   Problem/Why/How. Never put "feat:" in the summary.
+# * A wording, typo or formatting change may keep the summary only.
+# * For ABI and layout changes, name the evidence.
+# * There must be a newline between summary and description.
+# * The width of the description is arbitrary, but it is a good idea
+#   to wrap the text by 72 chars.

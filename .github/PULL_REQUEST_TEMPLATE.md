@@ -2,7 +2,7 @@
 
 _Do a quick recap of your work here._
 
-JIRA issue: [CORE-XXXX](https://jira.reactos.org/browse/CORE-XXXX)
+Issue: #
 
 ## Proposed changes
 
@@ -18,7 +18,9 @@ _Use a TODO when your pull request is Work in Progress._
 - [ ] 
 - [ ] 
 
-## Testbot runs (Filled in by Devs)
+## Testing
 
-- [ ] KVM x86:
-- [ ] KVM x64:
+_Say what you booted or ran, and on which architecture. Tell us which parts AI tools helped with, if any._
+
+- [ ] Builds on amd64, i386 and arm64
+- [ ] Boot or test run:

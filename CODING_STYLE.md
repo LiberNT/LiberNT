@@ -1,19 +1,19 @@
 # Coding Style
 
-This article describes general coding style guidelines, which should be used for new ReactOS code. These guidelines apply exclusively to C and C++ source files. The Members of ReactOS agreed on this document in the October 2013 meeting.
+This article describes general coding style guidelines, which should be used for new LiberNT code. These guidelines apply exclusively to C and C++ source files. They come from the ReactOS coding style, which the members of ReactOS agreed on in their October 2013 meeting.
 
-As much existing ReactOS code as possible should be converted to this style unless there are reasons against doing this (like if the code is going to be rewritten from scratch in the near future). See [Notes on reformatting existing code](#notes-on-reformatting-existing-code) for more details.
+Existing code is not converted to this style as part of an unrelated change. See [Notes on reformatting existing code](#notes-on-reformatting-existing-code) for more details.
 
-Code synchronized with other sources (like Wine) must not be rewritten. [3rd Party Files.txt](https://github.com/reactos/reactos/blob/master/media/doc/3rd%20Party%20Files.txt) and [WINESYNC.txt](https://github.com/reactos/reactos/blob/master/media/doc/WINESYNC.txt) files can be used for tracking synchronized files.
+Code synchronized with other sources (like Wine) must not be rewritten. [3rd Party Files.txt](media/doc/3rd%20Party%20Files.txt) and [WINESYNC.txt](media/doc/WINESYNC.txt) files can be used for tracking synchronized files.
 
 ## File Structure
 
-1. Every ReactOS source code file should include a file header like this:
+1. Every new LiberNT source code file should include a file header like this:
 
 ```
 /*
- * PROJECT:     ReactOS Kernel
- * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Does cool things like Memory Management
  * COPYRIGHT:   Copyright 2017 Arno Nymous <abc@mailaddress.com>
  *              Copyright 2017 Mike Blablabla <mike@blabla.com>
@@ -23,11 +23,11 @@ Code synchronized with other sources (like Wine) must not be rewritten. [3rd Par
 Please use SPDX license identifiers available at https://spdx.org/licenses.
 This makes our source file parseable by licensing tools!
 
-You should add yourself to the `COPYRIGHT` section of a file if you did a major contribution to it and could take responsibility for the whole file or a part of it. Not more than 3 people shall be in that list for each file.
+You should add yourself to the `COPYRIGHT` section of a file if you did a major contribution to it and could take responsibility for the whole file or a part of it. Not more than 3 people shall be in that list for each file. Never remove or change the copyright and licence lines already in a file.
 
 `FILE` line of the old header should be removed.
 
-2. [Doxygen](https://doxygen.reactos.org/) documentation generator is used for ReactOS codebase, so use a proper header for functions, see [API Documentation](https://reactos.org/wiki/Documentation_Guidelines#API_Documentation) for details.
+2. [Doxygen](https://www.doxygen.nl/) documentation generator is used for LiberNT codebase, with the `Doxyfile` in the top level directory, so use a proper header for functions, see [API Documentation](https://reactos.org/wiki/Documentation_Guidelines#API_Documentation) in the ReactOS wiki for details.
 
 ## Indentation and line width
 
@@ -342,15 +342,9 @@ BOOLEAN SentData;
 
 ## Using an automatic code style tool
 
-TO BE ADDED BY User:Zefklop
-
-## Points deliberately left out
-
-Additional ideas were suggested during the discussion of this document, but a consensus couldn't be reached on them. Therefore we refrain from enforcing any rules on these points:
-
-- TO BE ADDED BY User:Hbelusca
+The `.clang-format` file in the top level directory describes this style for clang-format. Use it on new code only, following the notes on reformatting existing code above.
 
 ## See also
 
-- [Kernel Coding Style](https://reactos.org/wiki/Kernel_Coding_Style)
-- [GNU Indent](https://reactos.org/wiki/GNU_Indent)
+- [Kernel Coding Style](https://reactos.org/wiki/Kernel_Coding_Style) in the ReactOS wiki
+- [GNU Indent](https://reactos.org/wiki/GNU_Indent) in the ReactOS wiki
