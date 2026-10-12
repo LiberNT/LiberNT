@@ -122,12 +122,6 @@ WaitForSingleObjectEx(IN HANDLE hHandle,
     /* Get real handle */
     hHandle = TranslateStdHandle(hHandle);
 
-    /* Check for console handle */
-    if ((IsConsoleHandle(hHandle)) && (VerifyConsoleIoHandle(hHandle)))
-    {
-        /* Get the real wait handle */
-        hHandle = GetConsoleInputWaitHandle();
-    }
 
     /* Convert the timeout */
     TimePtr = BaseFormatTimeOut(&Time, dwMilliseconds);
@@ -227,13 +221,6 @@ WaitForMultipleObjectsEx(IN DWORD nCount,
         /* Check what kind of handle this is */
         HandleBuffer[i] = TranslateStdHandle(HandleBuffer[i]);
 
-        /* Check for console handle */
-        if ((IsConsoleHandle(HandleBuffer[i])) &&
-            (VerifyConsoleIoHandle(HandleBuffer[i])))
-        {
-            /* Get the real wait handle */
-            HandleBuffer[i] = GetConsoleInputWaitHandle();
-        }
     }
 
     /* Convert the timeout */
@@ -298,13 +285,6 @@ SignalObjectAndWait(IN HANDLE hObjectToSignal,
     /* Get real handle */
     hObjectToWaitOn = TranslateStdHandle(hObjectToWaitOn);
 
-    /* Check for console handle */
-    if ((IsConsoleHandle(hObjectToWaitOn)) &&
-        (VerifyConsoleIoHandle(hObjectToWaitOn)))
-    {
-        /* Get the real wait handle */
-        hObjectToWaitOn = GetConsoleInputWaitHandle();
-    }
 
     /* Convert the timeout */
     TimePtr = BaseFormatTimeOut(&Time, dwMilliseconds);
@@ -843,12 +823,6 @@ RegisterWaitForSingleObject(OUT PHANDLE phNewWaitObject,
     /* Get real handle */
     hObject = TranslateStdHandle(hObject);
 
-    /* Check for console handle */
-    if ((IsConsoleHandle(hObject)) && (VerifyConsoleIoHandle(hObject)))
-    {
-        /* Get the real wait handle */
-        hObject = GetConsoleInputWaitHandle();
-    }
 
     /* Register the wait now */
     Status = RtlRegisterWait(phNewWaitObject,
@@ -885,12 +859,6 @@ RegisterWaitForSingleObjectEx(IN HANDLE hObject,
     /* Get real handle */
     hObject = TranslateStdHandle(hObject);
 
-    /* Check for console handle */
-    if ((IsConsoleHandle(hObject)) && (VerifyConsoleIoHandle(hObject)))
-    {
-        /* Get the real wait handle */
-        hObject = GetConsoleInputWaitHandle();
-    }
 
     /* Register the wait */
     Status = RtlRegisterWait(&hNewWaitObject,

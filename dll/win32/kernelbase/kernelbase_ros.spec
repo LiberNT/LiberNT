@@ -1830,12 +1830,10 @@
 @ stdcall WriteConsoleInputVDMA(long long long long) kernelbase.WriteConsoleInputVDMA
 @ stdcall WriteConsoleInputVDMW(long long long long) kernelbase.WriteConsoleInputVDMW
 @ stdcall GetConsoleCursorMode(long ptr ptr) kernelbase.GetConsoleCursorMode
-@ stdcall SetConsoleHandleInformation(ptr long long) kernelbase.SetConsoleHandleInformation
 @ stdcall GetConsoleAliasesA(str long str) kernelbase.GetConsoleAliasesA
 @ stdcall RegisterConsoleIME(ptr ptr) kernelbase.RegisterConsoleIME
 @ stdcall GetConsoleInputWaitHandle() kernelbase.GetConsoleInputWaitHandle
 @ stdcall GetConsoleFontInfo(long long long ptr) kernelbase.GetConsoleFontInfo
-@ stdcall GetConsoleHandleInformation(ptr ptr) kernelbase.GetConsoleHandleInformation
 @ stdcall SetConsoleIcon(ptr) kernelbase.SetConsoleIcon
 @ stdcall UnregisterConsoleIME() kernelbase.UnregisterConsoleIME
 @ stdcall ShowConsoleCursor(long long) kernelbase.ShowConsoleCursor
@@ -1850,7 +1848,6 @@
 @ stdcall GetConsoleSelectionInfo(ptr) kernelbase.GetConsoleSelectionInfo
 @ stdcall SetConsoleKeyShortcuts(long long long long) kernelbase.SetConsoleKeyShortcuts
 @ stdcall GetConsoleHardwareState(long long ptr) kernelbase.GetConsoleHardwareState
-@ cdecl IntCheckForConsoleFileName(wstr long) kernelbase.IntCheckForConsoleFileName
 @ stdcall GetConsoleNlsMode(long ptr) kernelbase.GetConsoleNlsMode
 @ stdcall CloseConsoleHandle(long) kernelbase.CloseConsoleHandle
 @ stdcall SetConsoleLocalEUDC(long long long long) kernelbase.SetConsoleLocalEUDC

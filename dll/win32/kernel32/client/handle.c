@@ -47,10 +47,6 @@ GetHandleInformation(IN HANDLE hObject,
 
     hObject = TranslateStdHandle(hObject);
 
-    if (IsConsoleHandle(hObject))
-    {
-        return GetConsoleHandleInformation(hObject, lpdwFlags);
-    }
 
     Status = NtQueryObject(hObject,
                            ObjectHandleFlagInformation,
@@ -85,10 +81,6 @@ SetHandleInformation(IN HANDLE hObject,
 
     hObject = TranslateStdHandle(hObject);
 
-    if (IsConsoleHandle(hObject))
-    {
-        return SetConsoleHandleInformation(hObject, dwMask, dwFlags);
-    }
 
     Status = NtQueryObject(hObject,
                            ObjectHandleFlagInformation,
@@ -132,8 +124,6 @@ CloseHandle(IN HANDLE hObject)
 
     hObject = TranslateStdHandle(hObject);
 
-    if (IsConsoleHandle(hObject)) return CloseConsoleHandle(hObject);
-
     Status = NtClose(hObject);
     if (NT_SUCCESS(Status)) return TRUE;
 
@@ -155,37 +145,8 @@ DuplicateHandle(IN HANDLE hSourceProcessHandle,
                 IN DWORD dwOptions)
 {
     NTSTATUS Status;
-    HANDLE hTargetHandle;
 
     hSourceHandle = TranslateStdHandle(hSourceHandle);
-
-    if ((IsConsoleHandle(hSourceHandle)) &&
-        ((hSourceHandle != NtCurrentProcess()) &&
-         (hSourceHandle != NtCurrentThread())))
-    {
-        /*
-         * We can duplicate console handles only if both the source
-         * and the target processes are in fact the current process.
-         */
-        if ((hSourceProcessHandle != NtCurrentProcess()) ||
-            (hTargetProcessHandle != NtCurrentProcess()))
-        {
-            BaseSetLastNTError(STATUS_INVALID_PARAMETER);
-            return FALSE;
-        }
-
-        hTargetHandle = DuplicateConsoleHandle(hSourceHandle,
-                                               dwDesiredAccess,
-                                               bInheritHandle,
-                                               dwOptions);
-        if (hTargetHandle != INVALID_HANDLE_VALUE)
-        {
-            if (lpTargetHandle) *lpTargetHandle = hTargetHandle;
-            return TRUE;
-        }
-
-        return FALSE;
-    }
 
     Status = NtDuplicateObject(hSourceProcessHandle,
                                hSourceHandle,

@@ -25,6 +25,9 @@
 #include <winreg.h>
 
 #include "wine/debug.h"
+#ifdef __REACTOS__
+#include <reactos/dwmsettings.h>
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(console);
 
@@ -65,6 +68,10 @@ struct console_window
 
     RECT              update;          /* screen buffer update rect */
     enum update_state update_state;    /* update state */
+#ifdef __REACTOS__
+    COLORREF          backdrop;
+    BOOL              backdrop_set;
+#endif
 };
 
 struct console_config
@@ -543,6 +550,22 @@ static void shape_cursor( struct console *console )
     }
 }
 
+#ifdef __REACTOS__
+static void update_content_backdrop( struct console *console )
+{
+    COLORREF fill;
+
+    if (!console->win || !console->active) return;
+    fill = console->active->color_map[(console->active->attr >> 4) & 0x0f];
+    if (console->window->backdrop_set && console->window->backdrop == fill) return;
+    if (DwmSettingsSetContentBackdrop( console->win, fill, 128 ))
+    {
+        console->window->backdrop = fill;
+        console->window->backdrop_set = TRUE;
+    }
+}
+#endif
+
 static void update_window( struct console *console )
 {
     unsigned int win_width, win_height;
@@ -693,6 +716,9 @@ static void update_window( struct console *console )
         update_window_cursor( console );
     }
 
+#ifdef __REACTOS__
+    update_content_backdrop( console );
+#endif
     console->window->update_state = UPDATE_NONE;
 }
 
@@ -864,6 +890,43 @@ static int CALLBACK enum_first_font_proc( const LOGFONTW *lf, const TEXTMETRICW 
     }
     return !ret;
 }
+
+#ifdef __REACTOS__
+static BOOL set_default_tt_font( struct console *console, struct console_config *config )
+{
+    WCHAR face_name[LF_FACESIZE], cp_name[16];
+    DWORD size, type;
+    LOGFONTW lf;
+    HKEY key;
+    LONG ret;
+
+    if (RegOpenKeyExW( HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Console\\TrueTypeFont",
+                       0, KEY_QUERY_VALUE, &key ))
+        return FALSE;
+    swprintf( cp_name, ARRAY_SIZE(cp_name), L"%u", console->output_cp );
+    size = sizeof(face_name) - sizeof(WCHAR);
+    ret = RegQueryValueExW( key, cp_name, NULL, &type, (BYTE *)face_name, &size );
+    if (ret || type != REG_SZ)
+    {
+        size = sizeof(face_name) - sizeof(WCHAR);
+        ret = RegQueryValueExW( key, L"0", NULL, &type, (BYTE *)face_name, &size );
+    }
+    RegCloseKey( key );
+    if (ret || type != REG_SZ || size < sizeof(WCHAR)) return FALSE;
+    face_name[size / sizeof(WCHAR)] = 0;
+
+    fill_logfont( &lf, face_name, wcslen( face_name ) * sizeof(WCHAR), config->cell_height, config->font_weight );
+    if (!set_console_font( console, &lf )) return FALSE;
+
+    config->cell_width  = console->active->font.width;
+    config->cell_height = console->active->font.height;
+    config->font_pitch_family = console->active->font.pitch_family;
+    memcpy( config->face_name, console->active->font.face_name,
+            console->active->font.face_len * sizeof(WCHAR) );
+    config->face_name[console->active->font.face_len] = 0;
+    return TRUE;
+}
+#endif
 
 static void set_first_font( struct console *console, struct console_config *config )
 {
@@ -2071,6 +2134,14 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
         PostQuitMessage( 0 );
         break;
 
+#ifdef __REACTOS__
+    case WM_SETTINGCHANGE:
+        console->window->backdrop_set = FALSE;
+        update_content_backdrop( console );
+        InvalidateRect( hwnd, NULL, TRUE );
+        return DefWindowProcW( hwnd, msg, wparam, lparam );
+#endif
+
     case WM_TIMER:
     case WM_UPDATE_CONFIG:
         if (console->window && console->window->update_state == UPDATE_PENDING)
@@ -2450,8 +2521,14 @@ BOOL init_window( struct console *console )
                         0, 0, 0, 0, wndclass.hInstance, console ))
         return FALSE;
 
+#ifdef __REACTOS__
+    if ((!config.face_name[0] || !wcscmp( config.face_name, L"__DefaultTTFont__" )) &&
+        !set_default_tt_font( console, &config ))
+        set_first_font( console, &config );
+#else
     if (!config.face_name[0])
         set_first_font( console, &config );
+#endif
 
     apply_config( console, &config );
     return TRUE;

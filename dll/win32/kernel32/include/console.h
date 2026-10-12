@@ -28,20 +28,7 @@ WINAPI
 ConDllInitialize(IN ULONG Reason,
                  IN PWSTR SessionDir);
 
-BOOL WINAPI
-GetConsoleHandleInformation(IN HANDLE hHandle,
-                            OUT LPDWORD lpdwFlags);
-
-BOOL WINAPI
-SetConsoleHandleInformation(IN HANDLE hHandle,
-                            IN DWORD dwMask,
-                            IN DWORD dwFlags);
-
 HANDLE
 TranslateStdHandle(HANDLE hHandle);
-
-LPCWSTR
-IntCheckForConsoleFileName(IN LPCWSTR pszName,
-                           IN DWORD dwDesiredAccess);
 
 /* EOF */

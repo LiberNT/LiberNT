@@ -33,12 +33,6 @@ LockFile(IN HANDLE hFile,
     LARGE_INTEGER BytesToLock, Offset;
 
     /* Is this a console handle? */
-    if (IsConsoleHandle(hFile))
-    {
-        /* Can't "lock" a console! */
-        BaseSetLastNTError(STATUS_INVALID_HANDLE);
-        return FALSE;
-    }
 
     /* Setup the parameters in NT style and call the native API */
     BytesToLock.u.LowPart = nNumberOfBytesToLockLow;
@@ -90,12 +84,6 @@ LockFileEx(IN HANDLE hFile,
     NTSTATUS Status;
 
     /* Is this a console handle? */
-    if (IsConsoleHandle(hFile))
-    {
-        /* Can't "lock" a console! */
-        BaseSetLastNTError(STATUS_INVALID_HANDLE);
-        return FALSE;
-    }
 
     /* This parameter should be zero */
     if (dwReserved)
@@ -190,12 +178,6 @@ UnlockFileEx(IN HANDLE hFile,
     NTSTATUS Status;
 
     /* Is this a console handle? */
-    if (IsConsoleHandle(hFile))
-    {
-        /* Can't "unlock" a console! */
-        BaseSetLastNTError(STATUS_INVALID_HANDLE);
-        return FALSE;
-    }
 
     /* This parameter should be zero */
     if (dwReserved)

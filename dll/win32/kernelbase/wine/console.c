@@ -502,6 +502,10 @@ static BOOL alloc_console( BOOL headless )
         console_si.StartupInfo.dwFlags |= STARTF_USESHOWWINDOW;
         console_si.StartupInfo.wShowWindow = app_si.wShowWindow;
     }
+#ifdef __REACTOS__
+    if (app_si.dwFlags & STARTF_TITLEISLINKNAME)
+        console_si.StartupInfo.dwFlags |= STARTF_TITLEISLINKNAME;
+#endif
     if (app_si.lpTitle)
         console_si.StartupInfo.lpTitle = app_si.lpTitle;
     else if (GetModuleFileNameW(0, buffer, ARRAY_SIZE(buffer)))

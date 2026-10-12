@@ -17,7 +17,6 @@
 #include <ndk/kefuncs.h>
 #include <ndk/mmfuncs.h>
 #include <reactos/subsys/csr/csrwow64.h>
-#include <reactos/subsys/win/conmsg.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -1313,119 +1312,12 @@ CsrQueryApiPort(VOID)
 
 #define CSR_WOW64_CAPTURE_TAG 1
 
-static VOID
-CsrpConsoleProperties32To64(CONSOLE_PROPERTIES *Properties, const CONSOLE_PROPERTIES32 *Properties32)
-{
-    Properties->IconIndex = Properties32->IconIndex;
-    Properties->hIcon = ULongToPtr(Properties32->hIcon);
-    Properties->hIconSm = ULongToPtr(Properties32->hIconSm);
-    RtlCopyMemory(&Properties->dwHotKey, &Properties32->dwHotKey, sizeof(*Properties32) - FIELD_OFFSET(CONSOLE_PROPERTIES32, dwHotKey));
-}
-
-static VOID
-CsrpConsoleProperties64To32(PCONSOLE_PROPERTIES32 Properties32, const CONSOLE_PROPERTIES *Properties)
-{
-    Properties32->IconIndex = Properties->IconIndex;
-    Properties32->hIcon = PtrToUlong(Properties->hIcon);
-    Properties32->hIconSm = PtrToUlong(Properties->hIconSm);
-    RtlCopyMemory(&Properties32->dwHotKey, &Properties->dwHotKey, sizeof(*Properties32) - FIELD_OFFSET(CONSOLE_PROPERTIES32, dwHotKey));
-}
-
-static VOID
-CsrpConsoleStartInfo32To64(PCONSOLE_START_INFO StartInfo, const CONSOLE_START_INFO32 *StartInfo32)
-{
-    ULONG Index;
-
-    StartInfo->ConsoleHandle = LongToHandle(StartInfo32->ConsoleHandle);
-    StartInfo->InputWaitHandle = LongToHandle(StartInfo32->InputWaitHandle);
-    StartInfo->InputHandle = LongToHandle(StartInfo32->InputHandle);
-    StartInfo->OutputHandle = LongToHandle(StartInfo32->OutputHandle);
-    StartInfo->ErrorHandle = LongToHandle(StartInfo32->ErrorHandle);
-    for (Index = 0; Index < MAX_INIT_EVENTS; ++Index) StartInfo->InitEvents[Index] = LongToHandle(StartInfo32->InitEvents[Index]);
-    CsrpConsoleProperties32To64((CONSOLE_PROPERTIES *)&StartInfo->IconIndex, &StartInfo32->ConsoleProperties);
-}
-
-static VOID
-CsrpConsoleStartInfo64To32(PCONSOLE_START_INFO32 StartInfo32, const CONSOLE_START_INFO *StartInfo)
-{
-    ULONG Index;
-
-    StartInfo32->ConsoleHandle = HandleToUlong(StartInfo->ConsoleHandle);
-    StartInfo32->InputWaitHandle = HandleToUlong(StartInfo->InputWaitHandle);
-    StartInfo32->InputHandle = HandleToUlong(StartInfo->InputHandle);
-    StartInfo32->OutputHandle = HandleToUlong(StartInfo->OutputHandle);
-    StartInfo32->ErrorHandle = HandleToUlong(StartInfo->ErrorHandle);
-    for (Index = 0; Index < MAX_INIT_EVENTS; ++Index) StartInfo32->InitEvents[Index] = HandleToUlong(StartInfo->InitEvents[Index]);
-    CsrpConsoleProperties64To32(&StartInfo32->ConsoleProperties, (CONSOLE_PROPERTIES *)&StartInfo->IconIndex);
-}
-
-static VOID
-CsrpConsoleConnectInfo32To64(PCONSRV_API_CONNECTINFO ConnectInfo, const CONSRV_API_CONNECTINFO32 *ConnectInfo32)
-{
-    CsrpConsoleStartInfo32To64(&ConnectInfo->ConsoleStartInfo, &ConnectInfo32->ConsoleStartInfo);
-    ConnectInfo->IsConsoleApp = ConnectInfo32->IsConsoleApp;
-    ConnectInfo->IsWindowVisible = ConnectInfo32->IsWindowVisible;
-    ConnectInfo->CtrlRoutine = (LPTHREAD_START_ROUTINE)ULongToPtr(ConnectInfo32->CtrlRoutine);
-    ConnectInfo->PropRoutine = (LPTHREAD_START_ROUTINE)ULongToPtr(ConnectInfo32->PropRoutine);
-    ConnectInfo->ImeRoutine = (LPTHREAD_START_ROUTINE)ULongToPtr(ConnectInfo32->ImeRoutine);
-    ConnectInfo->TitleLength = ConnectInfo32->TitleLength;
-    RtlCopyMemory(ConnectInfo->ConsoleTitle, ConnectInfo32->ConsoleTitle, sizeof(ConnectInfo32->ConsoleTitle));
-    ConnectInfo->DesktopLength = ConnectInfo32->DesktopLength;
-    ConnectInfo->Desktop = ULongToPtr(ConnectInfo32->Desktop);
-    ConnectInfo->AppNameLength = ConnectInfo32->AppNameLength;
-    RtlCopyMemory(ConnectInfo->AppName, ConnectInfo32->AppName, sizeof(ConnectInfo32->AppName));
-    ConnectInfo->CurDirLength = ConnectInfo32->CurDirLength;
-    RtlCopyMemory(ConnectInfo->CurDir, ConnectInfo32->CurDir, sizeof(ConnectInfo32->CurDir));
-}
-
-static VOID
-CsrpConsoleConnectInfo64To32(PCONSRV_API_CONNECTINFO32 ConnectInfo32, const CONSRV_API_CONNECTINFO *ConnectInfo)
-{
-    CsrpConsoleStartInfo64To32(&ConnectInfo32->ConsoleStartInfo, &ConnectInfo->ConsoleStartInfo);
-    ConnectInfo32->IsConsoleApp = ConnectInfo->IsConsoleApp;
-    ConnectInfo32->IsWindowVisible = ConnectInfo->IsWindowVisible;
-    ConnectInfo32->CtrlRoutine = PtrToUlong(ConnectInfo->CtrlRoutine);
-    ConnectInfo32->PropRoutine = PtrToUlong(ConnectInfo->PropRoutine);
-    ConnectInfo32->ImeRoutine = PtrToUlong(ConnectInfo->ImeRoutine);
-    ConnectInfo32->TitleLength = ConnectInfo->TitleLength;
-    RtlCopyMemory(ConnectInfo32->ConsoleTitle, ConnectInfo->ConsoleTitle, sizeof(ConnectInfo32->ConsoleTitle));
-    ConnectInfo32->DesktopLength = ConnectInfo->DesktopLength;
-    ConnectInfo32->Desktop = PtrToUlong(ConnectInfo->Desktop);
-    ConnectInfo32->AppNameLength = ConnectInfo->AppNameLength;
-    RtlCopyMemory(ConnectInfo32->AppName, ConnectInfo->AppName, sizeof(ConnectInfo32->AppName));
-    ConnectInfo32->CurDirLength = ConnectInfo->CurDirLength;
-    RtlCopyMemory(ConnectInfo32->CurDir, ConnectInfo->CurDir, sizeof(ConnectInfo32->CurDir));
-}
-
 static ULONG_PTR
 CsrpGetWow64MessagePointerOffset(PCSR_API_MESSAGE ApiMessage, ULONG Offset32)
 {
     if (!Offset32) return 0;
     if (ApiMessage->ApiNumber == 0 && Offset32 == FIELD_OFFSET(CSR_API_MESSAGE32, Data.CsrClientConnect.ConnectionInfo)) return FIELD_OFFSET(CSR_API_MESSAGE, Data.CsrClientConnect.ConnectionInfo);
     return CsrWow64GetMessagePointerOffset(ApiMessage, Offset32);
-}
-
-static ULONG_PTR
-CsrpGetWow64StartInfoOffset(PCSR_API_MESSAGE ApiMessage)
-{
-    if (ApiMessage->ApiNumber == CSR_CREATE_API_NUMBER(CONSRV_SERVERDLL_INDEX, ConsolepAlloc)) return FIELD_OFFSET(CONSOLE_API_MESSAGE, Data.AllocConsoleRequest.ConsoleStartInfo);
-    if (ApiMessage->ApiNumber == CSR_CREATE_API_NUMBER(CONSRV_SERVERDLL_INDEX, ConsolepAttach)) return FIELD_OFFSET(CONSOLE_API_MESSAGE, Data.AttachConsoleRequest.ConsoleStartInfo);
-    return 0;
-}
-
-static BOOLEAN
-CsrpCaptureStartInfo32(PCSR_API_MESSAGE ApiMessage, PCSR_CAPTURE_BUFFER ServerCaptureBuffer, ULONG_PTR ServerDataAddress, SIZE_T ClientDataLength)
-{
-    ULONG_PTR StartInfoOffset = CsrpGetWow64StartInfoOffset(ApiMessage);
-    PULONG_PTR MessagePointer = (PULONG_PTR)((ULONG_PTR)ApiMessage + StartInfoOffset);
-    PCONSOLE_START_INFO StartInfo = (PCONSOLE_START_INFO)((ULONG_PTR)ServerCaptureBuffer + ServerCaptureBuffer->Size - sizeof(CONSOLE_START_INFO));
-
-    if (!StartInfoOffset || !*MessagePointer) return TRUE;
-    if (ClientDataLength < sizeof(CONSOLE_START_INFO32) || *MessagePointer < ServerDataAddress || *MessagePointer - ServerDataAddress > ClientDataLength - sizeof(CONSOLE_START_INFO32)) return FALSE;
-    CsrpConsoleStartInfo32To64(StartInfo, (PCONSOLE_START_INFO32)*MessagePointer);
-    ServerCaptureBuffer->BufferEnd = (PVOID)*MessagePointer;
-    *MessagePointer = (ULONG_PTR)StartInfo;
-    return TRUE;
 }
 
 static BOOLEAN
@@ -1443,7 +1335,6 @@ CsrpCaptureArguments32(PCSR_THREAD CsrThread, PCSR_API_MESSAGE ApiMessage)
     SIZE_T ServerHeaderSize;
     SIZE_T ServerDataLength;
     SIZE_T ServerLength;
-    BOOLEAN ConsoleConnect;
     ULONG Length = 0;
     ULONG PointerCount = 0;
     ULONG Index;
@@ -1487,21 +1378,6 @@ CsrpCaptureArguments32(PCSR_THREAD CsrThread, PCSR_API_MESSAGE ApiMessage)
 
     ClientDataLength = Length - ClientHeaderSize;
     ServerDataLength = ClientDataLength;
-    ConsoleConnect = ApiMessage->ApiNumber == 0 && ApiMessage->Data.CsrClientConnect.ServerId == CONSRV_SERVERDLL_INDEX;
-    if (ConsoleConnect)
-    {
-        if (ApiMessage->Data.CsrClientConnect.ConnectionInfoSize != sizeof(CONSRV_API_CONNECTINFO32) || ClientDataLength < sizeof(CONSRV_API_CONNECTINFO32))
-        {
-            ApiMessage->Status = STATUS_INVALID_PARAMETER;
-            return FALSE;
-        }
-        ServerDataLength += sizeof(CONSRV_API_CONNECTINFO) - sizeof(CONSRV_API_CONNECTINFO32);
-        ApiMessage->Data.CsrClientConnect.ConnectionInfoSize = sizeof(CONSRV_API_CONNECTINFO);
-    }
-    else if (CsrpGetWow64StartInfoOffset(ApiMessage))
-    {
-        ServerDataLength = ALIGN_UP_BY(ClientDataLength, sizeof(ULONG_PTR)) + sizeof(CONSOLE_START_INFO);
-    }
 
     ServerHeaderSize = FIELD_OFFSET(CSR_CAPTURE_BUFFER, PointerOffsetsArray) + PointerCount * sizeof(ULONG_PTR);
     if (ServerHeaderSize > MAXULONG - ServerDataLength)
@@ -1524,8 +1400,7 @@ CsrpCaptureArguments32(PCSR_THREAD CsrThread, PCSR_API_MESSAGE ApiMessage)
 
     _SEH2_TRY
     {
-        if (ConsoleConnect) CsrpConsoleConnectInfo32To64((PCONSRV_API_CONNECTINFO)ServerDataAddress, (PCONSRV_API_CONNECTINFO32)ClientDataAddress);
-        else RtlMoveMemory((PVOID)ServerDataAddress, (PVOID)ClientDataAddress, ClientDataLength);
+        RtlMoveMemory((PVOID)ServerDataAddress, (PVOID)ClientDataAddress, ClientDataLength);
         for (Index = 0; Index < PointerCount; ++Index)
         {
             ULONG Offset32 = ((volatile CSR_CAPTURE_BUFFER32 *)ClientCaptureBuffer)->PointerOffsetsArray[Index];
@@ -1547,11 +1422,6 @@ CsrpCaptureArguments32(PCSR_THREAD CsrThread, PCSR_API_MESSAGE ApiMessage)
                 _SEH2_YIELD(RtlFreeHeap(CsrHeap, 0, ServerCaptureBuffer); return FALSE);
             }
             *MessagePointer += ServerDataAddress - ClientDataAddress;
-        }
-        if (!CsrpCaptureStartInfo32(ApiMessage, ServerCaptureBuffer, ServerDataAddress, ClientDataLength))
-        {
-            ApiMessage->Status = STATUS_INVALID_PARAMETER;
-            _SEH2_YIELD(RtlFreeHeap(CsrHeap, 0, ServerCaptureBuffer); return FALSE);
         }
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -1578,15 +1448,8 @@ CsrpReleaseCapturedArguments32(PCSR_API_MESSAGE ApiMessage, PCSR_CAPTURE_BUFFER 
     ULONG_PTR ServerDataAddress = (ULONG_PTR)ServerCaptureBuffer + ServerHeaderSize;
     SIZE_T ClientDataLength = ClientCaptureBuffer->Size - ClientHeaderSize;
     SIZE_T ServerDataLength = ServerCaptureBuffer->Size - ServerHeaderSize;
-    BOOLEAN ConsoleConnect = ApiMessage->ApiNumber == 0 && ApiMessage->Data.CsrClientConnect.ServerId == CONSRV_SERVERDLL_INDEX;
     ULONG Index;
 
-    if (ServerCaptureBuffer->BufferEnd)
-    {
-        ServerDataLength -= sizeof(CONSOLE_START_INFO);
-        CsrpConsoleStartInfo64To32((PCONSOLE_START_INFO32)ServerCaptureBuffer->BufferEnd, (PCONSOLE_START_INFO)(ServerDataAddress + ServerDataLength));
-        *(PULONG_PTR)((ULONG_PTR)ApiMessage + CsrpGetWow64StartInfoOffset(ApiMessage)) = (ULONG_PTR)ServerCaptureBuffer->BufferEnd;
-    }
     if (ClientDataLength > ServerDataLength) ClientDataLength = ServerDataLength;
 
     for (Index = 0; Index < PointerCount; ++Index)
@@ -1599,12 +1462,7 @@ CsrpReleaseCapturedArguments32(PCSR_API_MESSAGE ApiMessage, PCSR_CAPTURE_BUFFER 
     ApiMessage->CsrCaptureData = (PCSR_CAPTURE_BUFFER)ClientCaptureBuffer;
     _SEH2_TRY
     {
-        if (ConsoleConnect)
-        {
-            CsrpConsoleConnectInfo64To32((PCONSRV_API_CONNECTINFO32)ClientDataAddress, (PCONSRV_API_CONNECTINFO)ServerDataAddress);
-            ApiMessage->Data.CsrClientConnect.ConnectionInfoSize = sizeof(CONSRV_API_CONNECTINFO32);
-        }
-        else RtlMoveMemory((PVOID)ClientDataAddress, (PVOID)ServerDataAddress, ClientDataLength);
+        RtlMoveMemory((PVOID)ClientDataAddress, (PVOID)ServerDataAddress, ClientDataLength);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {

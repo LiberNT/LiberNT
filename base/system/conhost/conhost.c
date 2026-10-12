@@ -3152,7 +3152,22 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         STARTUPINFOW si;
         if (!init_window( &console )) return 1;
         GetStartupInfoW( &si );
+#ifdef __REACTOS__
+        if (si.lpTitle && (si.dwFlags & STARTF_TITLEISLINKNAME))
+        {
+            WCHAR *name = wcsrchr( si.lpTitle, '\\' );
+            size_t len;
+
+            name = name ? name + 1 : si.lpTitle;
+            len = wcslen( name );
+            if (len > 4 && !_wcsicmp( name + len - 4, L".lnk" )) len -= 4;
+            set_console_title( &console, name, len * sizeof(WCHAR) );
+        }
+        else if (si.lpTitle)
+            set_console_title( &console, si.lpTitle, wcslen( si.lpTitle ) * sizeof(WCHAR) );
+#else
         set_console_title( &console, si.lpTitle, wcslen( si.lpTitle ) * sizeof(WCHAR) );
+#endif
         ShowWindow( console.win, (si.dwFlags & STARTF_USESHOWWINDOW) ? si.wShowWindow : SW_SHOW );
     }
 

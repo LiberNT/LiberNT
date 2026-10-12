@@ -246,11 +246,6 @@ SetFileShortNameW(
     IO_STATUS_BLOCK IoStatusBlock;
     PFILE_NAME_INFORMATION FileNameInfo;
 
-    if(IsConsoleHandle(hFile))
-    {
-        SetLastError(ERROR_INVALID_HANDLE);
-        return FALSE;
-    }
 
     if(!lpShortName)
     {
@@ -298,11 +293,6 @@ SetFileShortNameA(
 {
     PWCHAR ShortNameW;
 
-    if(IsConsoleHandle(hFile))
-    {
-        SetLastError(ERROR_INVALID_HANDLE);
-        return FALSE;
-    }
 
     if(!lpShortName)
     {

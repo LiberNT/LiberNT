@@ -59,8 +59,6 @@
 #include <csr/csr.h>
 #include <win/base.h>
 #include <win/basemsg.h>
-#include <win/console.h>
-#include <win/conmsg.h>
 #include <win/vdm.h>
 
 /* DDK Driver Headers */

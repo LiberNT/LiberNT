@@ -34,14 +34,6 @@ WriteFile(
 
     hFile = TranslateStdHandle(hFile);
 
-    if (IsConsoleHandle(hFile))
-    {
-        return WriteConsoleA(hFile,
-                             lpBuffer,
-                             nNumberOfBytesToWrite,
-                             lpNumberOfBytesWritten,
-                             lpOverlapped);
-    }
 
     if (lpOverlapped != NULL)
     {
@@ -131,26 +123,6 @@ ReadFile(
     if (lpNumberOfBytesRead != NULL) *lpNumberOfBytesRead = 0;
 
     hFile = TranslateStdHandle(hFile);
-
-    if (IsConsoleHandle(hFile))
-    {
-        if (ReadConsoleA(hFile,
-                         lpBuffer,
-                         nNumberOfBytesToRead,
-                         lpNumberOfBytesRead,
-                         NULL))
-        {
-            DWORD dwMode;
-            GetConsoleMode(hFile, &dwMode);
-            if ((dwMode & ENABLE_PROCESSED_INPUT) && *(PCHAR)lpBuffer == 0x1a)
-            {
-                /* EOF character entered; simulate end-of-file */
-                *lpNumberOfBytesRead = 0;
-            }
-            return TRUE;
-        }
-        return FALSE;
-    }
 
     if (lpOverlapped != NULL)
     {

@@ -108,32 +108,6 @@ SetStdHandle(
     return FALSE;
 }
 
-LPCWSTR
-IntCheckForConsoleFileName(
-    _In_ LPCWSTR pszName,
-    _In_ DWORD dwDesiredAccess)
-{
-    LPCWSTR ConsoleName = pszName;
-    ULONG DeviceNameInfo;
-
-    DeviceNameInfo = RtlIsDosDeviceName_U(pszName);
-    if (DeviceNameInfo)
-        ConsoleName = (LPCWSTR)((ULONG_PTR)ConsoleName + ((DeviceNameInfo >> 16) & 0xFFFF));
-
-    if (!_wcsicmp(ConsoleName, L"CONIN$"))
-        return L"CONIN$";
-    if (!_wcsicmp(ConsoleName, L"CONOUT$"))
-        return L"CONOUT$";
-    if (!_wcsicmp(ConsoleName, L"CON"))
-    {
-        if ((dwDesiredAccess & (GENERIC_READ | GENERIC_WRITE)) == GENERIC_READ)
-            return L"CONIN$";
-        if ((dwDesiredAccess & (GENERIC_READ | GENERIC_WRITE)) == GENERIC_WRITE)
-            return L"CONOUT$";
-    }
-    return NULL;
-}
-
 HANDLE
 WINAPI
 OpenConsoleW(
@@ -223,25 +197,6 @@ WINAPI
 GetConsoleInputWaitHandle(VOID)
 {
     return GetStdHandle(STD_INPUT_HANDLE);
-}
-
-BOOL
-WINAPI
-GetConsoleHandleInformation(
-    _In_ HANDLE hHandle,
-    _Out_ LPDWORD lpdwFlags)
-{
-    return GetHandleInformation(hHandle, lpdwFlags);
-}
-
-BOOL
-WINAPI
-SetConsoleHandleInformation(
-    _In_ HANDLE hHandle,
-    _In_ DWORD dwMask,
-    _In_ DWORD dwFlags)
-{
-    return SetHandleInformation(hHandle, dwMask, dwFlags);
 }
 
 BOOL

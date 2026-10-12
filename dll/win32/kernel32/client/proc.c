@@ -5132,29 +5132,15 @@ StartScan:
                                      NULL);
         if (NT_SUCCESS(Status))
         {
-            /* Duplicate standard input unless it's a console handle */
-            if (!IsConsoleHandle(Peb->ProcessParameters->StandardInput))
-            {
-                StuffStdHandle(ProcessHandle,
-                               Peb->ProcessParameters->StandardInput,
-                               &ProcessParameters->StandardInput);
-            }
-
-            /* Duplicate standard output unless it's a console handle */
-            if (!IsConsoleHandle(Peb->ProcessParameters->StandardOutput))
-            {
-                StuffStdHandle(ProcessHandle,
-                               Peb->ProcessParameters->StandardOutput,
-                               &ProcessParameters->StandardOutput);
-            }
-
-            /* Duplicate standard error unless it's a console handle */
-            if (!IsConsoleHandle(Peb->ProcessParameters->StandardError))
-            {
-                StuffStdHandle(ProcessHandle,
-                               Peb->ProcessParameters->StandardError,
-                               &ProcessParameters->StandardError);
-            }
+            StuffStdHandle(ProcessHandle,
+                           Peb->ProcessParameters->StandardInput,
+                           &ProcessParameters->StandardInput);
+            StuffStdHandle(ProcessHandle,
+                           Peb->ProcessParameters->StandardOutput,
+                           &ProcessParameters->StandardOutput);
+            StuffStdHandle(ProcessHandle,
+                           Peb->ProcessParameters->StandardError,
+                           &ProcessParameters->StandardError);
         }
     }
 

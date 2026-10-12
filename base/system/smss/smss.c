@@ -36,14 +36,24 @@ SmpExecuteImage(IN PUNICODE_STRING FileName,
     NTSTATUS Status;
     RTL_USER_PROCESS_INFORMATION LocalProcessInfo;
     PRTL_USER_PROCESS_PARAMETERS ProcessParameters;
+    UNICODE_STRING ImagePathName;
+    static const UNICODE_STRING DosDevicesPrefix = RTL_CONSTANT_STRING(L"\\??\\");
 
     /* Use the input process information if we have it, otherwise use local */
     ProcessInfo = ProcessInformation;
     if (!ProcessInfo) ProcessInfo = &LocalProcessInfo;
 
+    ImagePathName = *FileName;
+    if (RtlPrefixUnicodeString(&DosDevicesPrefix, &ImagePathName, FALSE))
+    {
+        ImagePathName.Buffer += DosDevicesPrefix.Length / sizeof(WCHAR);
+        ImagePathName.Length -= DosDevicesPrefix.Length;
+        ImagePathName.MaximumLength -= DosDevicesPrefix.Length;
+    }
+
     /* Create parameters for the target process */
     Status = RtlCreateProcessParameters(&ProcessParameters,
-                                        FileName,
+                                        &ImagePathName,
                                         SmpDefaultLibPath.Length ?
                                         &SmpDefaultLibPath : NULL,
                                         Directory,

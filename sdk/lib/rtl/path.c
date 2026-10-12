@@ -1200,7 +1200,8 @@ RtlpDosPathNameToRelativeNtPathName_Ustr(IN BOOLEAN HaveRelative,
     // if (!RtlPrefixUnicodeString(&RtlpWin32NtRootSlash, &CapturedDosName, FALSE))
     if ((CapturedDosName.Length <= RtlpWin32NtRootSlash.Length) ||
         (CapturedDosName.Buffer[0] != RtlpWin32NtRootSlash.Buffer[0]) ||
-        (CapturedDosName.Buffer[1] != RtlpWin32NtRootSlash.Buffer[1]) ||
+        ((CapturedDosName.Buffer[1] != RtlpWin32NtRootSlash.Buffer[1]) &&
+         (CapturedDosName.Buffer[1] != RtlpWin32NtRootSlash.Buffer[2])) ||
         (CapturedDosName.Buffer[2] != RtlpWin32NtRootSlash.Buffer[2]) ||
         (CapturedDosName.Buffer[3] != RtlpWin32NtRootSlash.Buffer[3]))
     {

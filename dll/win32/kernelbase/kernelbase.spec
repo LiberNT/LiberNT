@@ -789,9 +789,6 @@
 @ stdcall WriteConsoleInputVDMA(long long long long)
 @ stdcall WriteConsoleInputVDMW(long long long long)
 @ stdcall ConDllInitialize(long wstr)
-@ stdcall GetConsoleHandleInformation(ptr ptr)
-@ stdcall SetConsoleHandleInformation(ptr long long)
-@ cdecl IntCheckForConsoleFileName(wstr long)
 @ stdcall QueryInterruptTime(ptr) kernel32.QueryInterruptTime
 @ stdcall QueryInterruptTimePrecise(ptr) kernel32.QueryInterruptTimePrecise
 @ stdcall QueryUnbiasedInterruptTime(ptr) kernel32.QueryUnbiasedInterruptTime
