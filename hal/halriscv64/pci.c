@@ -548,7 +548,10 @@ HalpRiscvAccessPciConfig(BOOLEAN Write, BOOLEAN Lock, ULONG BusNumber, ULONG Slo
     Config = Host->ConfigMapping + ((BusNumber & 255) - Host->FirstBus) * RISCV_PCI_BUS_SIZE +
              (Slot.u.bits.DeviceNumber << 15) + (Slot.u.bits.FunctionNumber << 12);
     if (Lock)
-        OldIrql = KeAcquireSpinLockRaiseToDpc(&Host->Lock);
+    {
+        KeRaiseIrql(HIGH_LEVEL, &OldIrql);
+        KeAcquireSpinLockAtDpcLevel(&Host->Lock);
+    }
     __asm__ __volatile__("fence iorw, iorw" ::: "memory");
 
     if (Host->Plda && Slot.u.bits.DeviceNumber &&
