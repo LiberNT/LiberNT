@@ -182,7 +182,7 @@ Dxgmms2VidMmCoreSetSegment(
 
     if (!Core->Started || SegmentIndex >= Core->SegmentCount)
         return STATUS_INVALID_PARAMETER;
-    if (Desc->Size == 0)
+    if (Desc->Size == 0 && Desc->Flags != 0)
         return STATUS_INVALID_PARAMETER;
     if (Desc->CommitLimit != 0 && Desc->CommitLimit > Desc->Size)
         return STATUS_INVALID_PARAMETER;
