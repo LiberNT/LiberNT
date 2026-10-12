@@ -1891,7 +1891,18 @@ RSetServiceStatus(
     }
 
     /* Check accepted controls */
-    if (lpServiceStatus->dwControlsAccepted & ~0xFF)
+    if (lpServiceStatus->dwControlsAccepted & ~(SERVICE_ACCEPT_STOP |
+                                                SERVICE_ACCEPT_PAUSE_CONTINUE |
+                                                SERVICE_ACCEPT_SHUTDOWN |
+                                                SERVICE_ACCEPT_PARAMCHANGE |
+                                                SERVICE_ACCEPT_NETBINDCHANGE |
+                                                SERVICE_ACCEPT_HARDWAREPROFILECHANGE |
+                                                SERVICE_ACCEPT_POWEREVENT |
+                                                SERVICE_ACCEPT_SESSIONCHANGE |
+                                                SERVICE_ACCEPT_PRESHUTDOWN |
+                                                SERVICE_ACCEPT_TIMECHANGE |
+                                                SERVICE_ACCEPT_TRIGGEREVENT |
+                                                SERVICE_ACCEPT_USER_LOGOFF))
     {
         DPRINT("Invalid controls accepted\n");
         return ERROR_INVALID_DATA;
