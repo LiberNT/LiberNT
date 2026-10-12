@@ -9008,10 +9008,7 @@ XHCI_DetectHardwareQuirks(
         Extension->Quirks |= XHCI_QUIRK_LIMIT_U1U2;
 
     /* VID/DID logging + QEMU auto-detection. qemu-xhci advertises
-     * VID=0x1b36 (Red Hat) DID=0x000d. On QEMU, MSI interrupt delivery
-     * for interrupt-type endpoints is unreliable, causing HID mouse
-     * cursor lag (~64Hz vs >=125Hz expected). Force the poll fallback
-     * to also cover bulk/interrupt transfers on QEMU. */
+     * VID=0x1b36 (Red Hat) DID=0x000d. */
     if (XHCI_ReadPciConfig(Extension, 0x00, &VendorId, sizeof(VendorId)) &&
         XHCI_ReadPciConfig(Extension, 0x02, &DeviceId, sizeof(DeviceId)))
     {
@@ -9023,11 +9020,10 @@ XHCI_DetectHardwareQuirks(
         if (VendorId == 0x1B36 && DeviceId == 0x000D)
         {
             Extension->Quirks |= XHCI_QUIRK_IS_QEMU_XHCI |
-                                 XHCI_QUIRK_QEMU_POLL_XFERS |
                                  XHCI_QUIRK_IGNORE_STARTUP_HCE |
                                  XHCI_QUIRK_QEMU_CONFIG_EP_ORDER |
                                  XHCI_QUIRK_QEMU_PORT_RESET;
-            DPRINT("usbxhci: detected qemu-xhci, enabling QEMU quirks + poll fallback\n");
+            DPRINT("usbxhci: detected qemu-xhci, enabling QEMU quirks\n");
         }
     }
 
