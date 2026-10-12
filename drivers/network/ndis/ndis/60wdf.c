@@ -467,7 +467,8 @@ NdisWdfMiniportStarted(
         Ext->WdfBindingsStarted = TRUE;
     }
 
-    (VOID)Ndis6RestartDriverStack(Adapter);
+    if (Ndis6RestartDriverStack(Adapter) == NDIS_STATUS_SUCCESS)
+        ndisQueueProtocolBinding();
 }
 
 VOID
