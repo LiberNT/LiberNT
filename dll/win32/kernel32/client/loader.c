@@ -814,7 +814,14 @@ GetModuleFileNameW(HINSTANCE hModule,
 
                 /* Subtract a terminating zero */
                 if (Length == Module->FullDllName.MaximumLength)
+                {
                     Length -= sizeof(WCHAR);
+                    SetLastError(ERROR_SUCCESS);
+                }
+                else
+                {
+                    SetLastError(ERROR_INSUFFICIENT_BUFFER);
+                }
 
                 /* Break out of the loop */
                 break;
