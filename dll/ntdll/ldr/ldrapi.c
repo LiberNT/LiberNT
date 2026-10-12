@@ -687,10 +687,16 @@ LdrGetDllHandleEx(
     BOOLEAN Locked, RedirectedDll;
     ULONG_PTR Cookie;
     ULONG LoadFlag, Length;
+#if defined(_M_ARM64)
+    UNICODE_STRING ChpeString;
+#endif
 
     /* Initialize the strings */
     RtlInitEmptyUnicodeString(&DynamicString, NULL, 0);
     RtlInitEmptyUnicodeString(&RawDllName, NULL, 0);
+#if defined(_M_ARM64)
+    RtlInitEmptyUnicodeString(&ChpeString, NULL, 0);
+#endif
     RedirectName = *DllName;
     pRedirectName = &RedirectName;
 
@@ -729,6 +735,23 @@ LdrGetDllHandleEx(
         DPRINT1("LdrpApplyFileNameRedirection FAILED: (Status 0x%x)\n", Status);
         goto Quickie;
     }
+
+#if defined(_M_ARM64)
+    if (!RedirectedDll && ChpeShouldRedirectDynamicLoad(pRedirectName))
+    {
+        Status = LdrpBuildArm64EcImportName(pRedirectName, &ChpeString);
+        if (!NT_SUCCESS(Status))
+            goto Quickie;
+
+        if (LdrpCheckForLoadedDll(DllPath, &ChpeString, FALSE, TRUE, &LdrEntry))
+        {
+            LdrpGetModuleHandleCache = LdrEntry;
+            Status = STATUS_SUCCESS;
+            goto Quickie;
+        }
+        LdrEntry = NULL;
+    }
+#endif
 
     /* Set default failure code */
     Status = STATUS_DLL_NOT_FOUND;
@@ -912,6 +935,9 @@ Quickie:
 
     /* Free string if needed */
     if (DynamicString.Buffer) RtlFreeUnicodeString(&DynamicString);
+#if defined(_M_ARM64)
+    if (ChpeString.Buffer) RtlFreeHeap(RtlGetProcessHeap(), 0, ChpeString.Buffer);
+#endif
 
     /* Free the raw DLL Name if needed */
     if (RawDllName.Buffer)
