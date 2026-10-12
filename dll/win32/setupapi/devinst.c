@@ -346,11 +346,11 @@ CheckSectionValidEx(
                 MajorVersion, MinorVersion, PlatformInfo->MajorVersion, PlatformInfo->MinorVersion);
             goto cleanup;
         }
-        *ScoreMajorVersion = MajorVersion - PlatformInfo->MajorVersion;
+        *ScoreMajorVersion = PlatformInfo->MajorVersion - MajorVersion;
         if (MajorVersion == PlatformInfo->MajorVersion)
-            *ScoreMinorVersion = MinorVersion - PlatformInfo->MinorVersion;
+            *ScoreMinorVersion = PlatformInfo->MinorVersion - MinorVersion;
         else
-            *ScoreMinorVersion = MinorVersion;
+            *ScoreMinorVersion = ULONG_MAX - MinorVersion;
     }
     else if (Fields[3] && *Fields[3])
     {
@@ -7438,17 +7438,16 @@ SetupDiInstallDevice(
     }
 
     /* Install .HW section */
-    DoAction = 0;
-    if (!(InstallParams.FlagsEx & DI_FLAGSEX_NO_DRVREG_MODIFY))
-        DoAction |= SPINST_REGISTRY;
     strcpyW(pSectionName, DotHW);
-    Result = SETUPAPI_InstallFromInfSectionWithIncludes(InstallParams.hwndParent,
-        SelectedDriver->InfFileDetails->hInf, SectionName,
-        DoAction, hHwKey, NULL, 0,
-        NULL, NULL,
-        DeviceInfoSet, DeviceInfoData);
-    if (!Result)
-        goto cleanup;
+    if (!(InstallParams.FlagsEx & DI_FLAGSEX_NO_DRVREG_MODIFY))
+    {
+        Result = SETUPAPI_InstallHardwareSection(SelectedDriver->InfFileDetails->hInf,
+                                                 SectionName,
+                                                 hHwKey,
+                                                 hKey);
+        if (!Result)
+            goto cleanup;
+    }
     RegCloseKey(hHwKey);
     hHwKey = INVALID_HANDLE_VALUE;
 

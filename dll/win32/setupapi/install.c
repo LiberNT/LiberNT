@@ -67,6 +67,7 @@ struct files_callback_info
 struct registry_callback_info
 {
     HKEY default_root;
+    HKEY device_key;
     BOOL delete;
     BOOL relative_only;
 };
@@ -469,8 +470,9 @@ static BOOL registry_callback( HINF hinf, PCWSTR field, void *arg )
     INFCONTEXT context, security_context;
     PSECURITY_DESCRIPTOR sd = NULL;
     SECURITY_ATTRIBUTES security_attributes = { 0, };
-    HKEY root_key, hkey;
+    HKEY root_key, hkey, target_key;
     DWORD required;
+    BOOL device_value;
 
     BOOL ok = SetupFindFirstLineW( hinf, field, NULL, &context );
     if (!ok)
@@ -523,6 +525,7 @@ static BOOL registry_callback( HINF hinf, PCWSTR field, void *arg )
         /* get key */
         if (!SetupGetStringFieldW( &context, 2, buffer, sizeof(buffer)/sizeof(WCHAR), NULL ))
             *buffer = 0;
+        device_value = info->device_key && root_key == info->default_root && !*buffer;
 
         /* get flags */
         if (!SetupGetIntField( &context, 4, &flags )) flags = 0;
@@ -553,8 +556,13 @@ static BOOL registry_callback( HINF hinf, PCWSTR field, void *arg )
         if (!SetupGetStringFieldW( &context, 3, buffer, sizeof(buffer)/sizeof(WCHAR), NULL ))
             *buffer = 0;
 
+        target_key = hkey;
+        if (device_value && !(flags & (FLG_ADDREG_KEYONLY | FLG_ADDREG_KEYONLY_COMMON)) &&
+            (!strcmpiW( buffer, REGSTR_VAL_UPPERFILTERS ) || !strcmpiW( buffer, REGSTR_VAL_LOWERFILTERS )))
+            target_key = info->device_key;
+
         /* and now do it */
-        if (!do_reg_operation( hkey, buffer, &context, flags ))
+        if (!do_reg_operation( target_key, buffer, &context, flags ))
         {
             if (hkey != root_key) RegCloseKey( hkey );
             if (sd) LocalFree( sd );
@@ -1434,10 +1442,41 @@ BOOL SETUPAPI_RecordRelativeRegistry( HINF hinf, PCWSTR section, HKEY key_root )
 
     iterate_section_fields( hinf, section, Include, include_callback, NULL );
     info.default_root = key_root;
+    info.device_key = NULL;
     info.delete = FALSE;
     info.relative_only = TRUE;
     return iterate_section_fields( hinf, section, Needs, record_needs_callback, &info ) &&
            iterate_section_fields( hinf, section, AddReg, registry_callback, &info );
+}
+
+
+static BOOL hardware_registry_callback( HINF hinf, PCWSTR field, void *arg )
+{
+    struct registry_callback_info *info = arg;
+
+    info->delete = TRUE;
+    if (!iterate_section_fields( hinf, field, DelReg, registry_callback, info ))
+        return FALSE;
+    info->delete = FALSE;
+    return iterate_section_fields( hinf, field, AddReg, registry_callback, info );
+}
+
+
+BOOL SETUPAPI_InstallHardwareSection( HINF hinf, PCWSTR section, HKEY hardware_key, HKEY device_key )
+{
+    struct registry_callback_info info;
+
+    info.default_root = hardware_key;
+    info.device_key = device_key;
+    info.relative_only = FALSE;
+
+    iterate_section_fields( hinf, section, Include, include_callback, NULL );
+    iterate_section_fields( hinf, section, Needs, hardware_registry_callback, &info );
+    if (!hardware_registry_callback( hinf, section, &info ))
+        return FALSE;
+
+    SetLastError( ERROR_SUCCESS );
+    return TRUE;
 }
 
 
@@ -1570,6 +1609,7 @@ BOOL WINAPI SetupInstallFromInfSectionW( HWND owner, HINF hinf, PCWSTR section, 
         struct registry_callback_info info;
 
         info.default_root = key_root;
+        info.device_key = NULL;
         info.relative_only = FALSE;
         info.delete = TRUE;
         if (!iterate_section_fields( hinf, section, DelReg, registry_callback, &info ))

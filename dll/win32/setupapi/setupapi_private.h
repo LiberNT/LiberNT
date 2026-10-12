@@ -510,4 +510,6 @@ BOOL SETUPAPI_InstallFromInfSectionWithIncludes(HWND owner, HINF hinf, PCWSTR se
                                                 PSP_FILE_CALLBACK_W callback, PVOID context,
                                                 HDEVINFO devinfo, PSP_DEVINFO_DATA devinfo_data);
 
+BOOL SETUPAPI_InstallHardwareSection(HINF hinf, PCWSTR section, HKEY hardware_key, HKEY device_key);
+
 #endif /* __SETUPAPI_PRIVATE_H */
