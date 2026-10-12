@@ -165,10 +165,8 @@ RtlpStartWorkerThread(PTHREAD_START_ROUTINE StartRoutine)
 {
     NTSTATUS Status;
     HANDLE ThreadHandle;
-    LARGE_INTEGER Timeout;
     volatile LONG WorkerInitialized = 0;
-
-    Timeout.QuadPart = -10000LL; /* Wait for 100ms */
+    LONG NotInitialized = 0;
 
     /* Start the thread */
     Status = RtlpStartThreadFunc(StartRoutine, (PVOID)&WorkerInitialized, &ThreadHandle);
@@ -176,11 +174,12 @@ RtlpStartWorkerThread(PTHREAD_START_ROUTINE StartRoutine)
     {
         NtResumeThread(ThreadHandle, NULL);
 
-        /* Poll until the thread got a chance to initialize */
         while (WorkerInitialized == 0)
         {
-            NtDelayExecution(FALSE,
-                             &Timeout);
+            RtlWaitOnAddress((PVOID)&WorkerInitialized,
+                             &NotInitialized,
+                             sizeof(WorkerInitialized),
+                             NULL);
         }
 
         NtClose(ThreadHandle);
@@ -589,6 +588,7 @@ InitFailed:
         /* Signal initialization completion */
         InterlockedExchange((PLONG)Parameter,
                             1);
+        RtlWakeAddressAll(Parameter);
 
         RtlpExitThreadFunc(Status);
         return 0;
@@ -603,6 +603,7 @@ InitFailed:
     /* Signal initialization completion */
     InterlockedExchange((PLONG)Parameter,
                          1);
+    RtlWakeAddressAll(Parameter);
 
     for (;;)
     {
@@ -690,6 +691,7 @@ RtlpWorkerThreadProc(IN PVOID Parameter)
         /* Signal initialization completion */
         InterlockedExchange((PLONG)Parameter,
                              1);
+        RtlWakeAddressAll(Parameter);
 
         /* Oops, too many worker threads... */
         RtlpExitThreadFunc(Status);
@@ -699,6 +701,7 @@ RtlpWorkerThreadProc(IN PVOID Parameter)
     /* Signal initialization completion */
     InterlockedExchange((PLONG)Parameter,
                          1);
+    RtlWakeAddressAll(Parameter);
 
     for (;;)
     {
