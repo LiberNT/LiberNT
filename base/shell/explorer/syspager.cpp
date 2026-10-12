@@ -32,6 +32,33 @@ struct InternalIconData : NOTIFYICONDATA
     BOOL bRemoved;
 };
 
+static VOID
+TrayCallbackParams(_In_ CONST InternalIconData *pItem,
+                   _In_ UINT uMsg,
+                   _In_ POINT ptAnchor,
+                   _Out_ WPARAM *pwParam,
+                   _Out_ LPARAM *plParam)
+{
+    if (pItem->uVersionCopy >= NOTIFYICON_VERSION_4)
+    {
+        *pwParam = MAKEWPARAM(ptAnchor.x, ptAnchor.y);
+        *plParam = MAKELPARAM(uMsg, pItem->uID);
+    }
+    else
+    {
+        *pwParam = pItem->uID;
+        *plParam = uMsg;
+    }
+}
+
+static POINT
+TrayCursorAnchor(VOID)
+{
+    DWORD dwPos = GetMessagePos();
+    POINT pt = { GET_X_LPARAM(dwPos), GET_Y_LPARAM(dwPos) };
+    return pt;
+}
+
 #define TRAY_STOBJECT_CLASS    L"SystemTray_Main"
 #define TRAY_STOBJECT_VOLUME   (WM_APP + 0x4CB)
 #define TRAY_STOBJECT_POWER    (WM_APP + 0x4CD)
@@ -318,6 +345,7 @@ public:
     VOID GetIcons(INT Filter, PTRAYICONLIST pList);
     BOOL ForwardIconEvent(CONST TRAYICONEVENT *pEvent);
     BOOL SetPromoted(HWND hWnd, UINT uID, BOOL bPromoted);
+    POINT GetIconAnchor(INT iBtn);
     LRESULT DrawModernItem(NMCUSTOMDRAW *pcd);
     UINT GetLayoutSignature();
 
@@ -1177,7 +1205,9 @@ BOOL CNotifyToolbar::SwitchVersion(_In_ CONST NOTIFYICONDATA *iconData)
         return FALSE;
     }
 
-    if (iconData->uVersion != 0 && iconData->uVersion != NOTIFYICON_VERSION)
+    if (iconData->uVersion != 0 &&
+        iconData->uVersion != NOTIFYICON_VERSION &&
+        iconData->uVersion != NOTIFYICON_VERSION_4)
     {
         WARN("Tried to set the version of icon %d from hWnd %08x, to an unknown value %d. Vista+ program?\n", iconData->uID, iconData->hWnd, iconData->uVersion);
         return FALSE;
@@ -1455,7 +1485,11 @@ BOOL CNotifyToolbar::ForwardIconEvent(CONST TRAYICONEVENT *pEvent)
     {
         if (pItem->uVersionCopy >= NOTIFYICON_VERSION && ::IsWindow(pItem->hWnd))
         {
-            ::SendNotifyMessage(pItem->hWnd, pItem->uCallbackMessage, pItem->uID, pEvent->uMsg);
+            WPARAM wParam;
+            LPARAM lParam;
+
+            TrayCallbackParams(pItem, pEvent->uMsg, TrayCursorAnchor(), &wParam, &lParam);
+            ::SendNotifyMessage(pItem->hWnd, pItem->uCallbackMessage, wParam, lParam);
         }
         return TRUE;
     }
@@ -1598,11 +1632,19 @@ LRESULT CNotifyToolbar::OnCtxMenu(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL&
 
     if (notifyItem->uVersionCopy >= NOTIFYICON_VERSION)
     {
+        POINT ptAnchor = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        WPARAM wCallback;
+        LPARAM lCallback;
+
+        if (lParam == -1)
+            ptAnchor = GetIconAnchor(iBtn);
+        TrayCallbackParams(notifyItem, WM_CONTEXTMENU, ptAnchor, &wCallback, &lCallback);
+
         /* Transmit the WM_CONTEXTMENU message if the notification icon supports it */
         ::SendNotifyMessage(notifyItem->hWnd,
                             notifyItem->uCallbackMessage,
-                            notifyItem->uID,
-                            WM_CONTEXTMENU);
+                            wCallback,
+                            lCallback);
     }
     else if (lParam == -1)
     {
@@ -1643,24 +1685,41 @@ bool CNotifyToolbar::SendNotifyCallback(InternalIconData* notifyItem, UINT uMsg)
     }
 
     DWORD pid;
+    WPARAM wParam;
+    LPARAM lParam;
     GetWindowThreadProcessId(notifyItem->hWnd, &pid);
+    TrayCallbackParams(notifyItem, uMsg, TrayCursorAnchor(), &wParam, &lParam);
 
     if (pid == GetCurrentProcessId() ||
         (uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST))
     {
         ::PostMessage(notifyItem->hWnd,
                       notifyItem->uCallbackMessage,
-                      notifyItem->uID,
-                      uMsg);
+                      wParam,
+                      lParam);
     }
     else
     {
         ::SendMessage(notifyItem->hWnd,
                       notifyItem->uCallbackMessage,
-                      notifyItem->uID,
-                      uMsg);
+                      wParam,
+                      lParam);
     }
     return false;
+}
+
+POINT CNotifyToolbar::GetIconAnchor(INT iBtn)
+{
+    RECT rc;
+    POINT pt = { 0, 0 };
+
+    if (GetItemRect(iBtn, &rc))
+    {
+        pt.x = rc.left;
+        pt.y = rc.top;
+        ClientToScreen(&pt);
+    }
+    return pt;
 }
 
 VOID CNotifyToolbar::SendMouseEvent(IN WORD wIndex, IN UINT uMsg, IN WPARAM wParam)
@@ -2155,11 +2214,17 @@ LRESULT CSysPagerWnd::OnCommand(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& b
 
     if (notifyItem->uVersionCopy >= NOTIFYICON_VERSION)
     {
+        POINT ptAnchor = (lParam == -1) ? Toolbar.GetIconAnchor(iBtn) : TrayCursorAnchor();
+        WPARAM wCallback;
+        LPARAM lCallback;
+
+        TrayCallbackParams(notifyItem, NIN_SELECT, ptAnchor, &wCallback, &lCallback);
+
         /* Use new-style notifications if the notification icon supports them */
         ::SendNotifyMessage(notifyItem->hWnd,
                             notifyItem->uCallbackMessage,
-                            notifyItem->uID,
-                            NIN_SELECT); // TODO: Distinguish with NIN_KEYSELECT
+                            wCallback,
+                            lCallback); // TODO: Distinguish with NIN_KEYSELECT
     }
     else if (lParam == -1)
     {
