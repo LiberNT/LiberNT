@@ -191,13 +191,7 @@ InitUserAtoms(VOID)
     AtomDwmTransitionFromLT = IntAddUserPropertyAtom(DWM_PROP_TRANSITION_FROM_LT);
     AtomDwmTransitionFromRB = IntAddUserPropertyAtom(DWM_PROP_TRANSITION_FROM_RB);
 
-    /*
-     * FIXME: AddPropW uses the global kernel atom table, thus leading to conflicts if we use
-     * the win32k atom table for this one. What is the right thing to do ?
-     */
-    // AtomWndObj = IntAddGlobalAtom(L"SysWNDO", TRUE);
-    NtAddAtom(L"SysWNDO", 14, &AtomWndObj);
-
+    AtomWndObj = IntAddGlobalAtom(L"SysWNDO", TRUE);
     AtomLayer = IntAddGlobalAtom(L"SysLayer", TRUE);
     AtomFlashWndState = IntAddGlobalAtom(L"FlashWState", TRUE);
 
