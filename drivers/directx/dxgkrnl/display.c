@@ -3916,8 +3916,7 @@ DxgkpDisplayDispatch(
                         Status = STATUS_INVALID_BUFFER_SIZE;
                         break;
                     }
-                    if (SharedSurface.ShadowFbPoolOwned)
-                        InterlockedIncrement(&g_DisplayAdapter->ShadowFbMapCount);
+                    InterlockedIncrement(&g_DisplayAdapter->ShadowFbMapCount);
                 }
                 else
                 {
@@ -3990,6 +3989,19 @@ DxgkpDisplayDispatch(
                 {
                     OldFb = g_DisplayAdapter->RetiredShadowFb;
                     g_DisplayAdapter->RetiredShadowFb = NULL;
+                }
+                else if (RequestedVa != NULL && RequestedVa == g_DisplayAdapter->RetiredShadowAllocationFb)
+                {
+                    DxgkpBeginSharedSurfaceMutationLocked(g_DisplayAdapter);
+                    DxgkpDestroyRetiredShadowLocked(g_DisplayAdapter);
+                    DxgkpEndSharedSurfaceMutationLocked(g_DisplayAdapter);
+                }
+                else if (!g_DisplayAdapter->ShadowFbPoolOwned &&
+                         RequestedVa != NULL &&
+                         RequestedVa == g_DisplayAdapter->ShadowFb &&
+                         g_DisplayAdapter->ShadowFbMapCount > 0)
+                {
+                    InterlockedDecrement(&g_DisplayAdapter->ShadowFbMapCount);
                 }
                 else if (g_DisplayAdapter->ShadowFbPoolOwned &&
                          (RequestedVa == NULL || RequestedVa == g_DisplayAdapter->ShadowFb))

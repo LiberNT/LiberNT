@@ -5977,11 +5977,74 @@ DxgkpDestroySharedPrimaryAllocationLocked(
 }
 
 static VOID
-DxgkpDestroySharedPrimaryLocked(
-    _In_ PDXGKRNL_ADAPTER Adapter)
+DxgkpDestroyShadowAllocationLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_opt_ HANDLE AllocationHandle,
+    _In_ D3DKMT_HANDLE ResourceHandle)
 {
     PDXGKVMM_RESOURCE Resource = NULL;
 
+    if (AllocationHandle != NULL && ResourceHandle == 0)
+        DxgkVidMmDestroyAllocation(Adapter, AllocationHandle);
+    if (ResourceHandle != 0 &&
+        NT_SUCCESS(DxgkVidMmReferenceResource(ResourceHandle, FALSE, NULL, &Resource)))
+    {
+        DxgkVidMmDereferenceResource(Resource);
+        if (Resource->Adapter == Adapter)
+            DxgkpVidMmDestroyResourceWrapper(Adapter, Resource);
+    }
+}
+
+VOID
+DxgkpDestroyRetiredShadowLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    if (Adapter->RetiredShadowAllocationHandle == NULL && Adapter->RetiredShadowResourceHandle == 0)
+        return;
+    DxgkpDestroyShadowAllocationLocked(Adapter, Adapter->RetiredShadowAllocationHandle, Adapter->RetiredShadowResourceHandle);
+    Adapter->RetiredShadowAllocationHandle = NULL;
+    Adapter->RetiredShadowResourceHandle = 0;
+    Adapter->RetiredShadowAllocationFb = NULL;
+}
+
+static VOID
+DxgkpRetireSharedShadowLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    BOOLEAN AllocationFb;
+
+    if (Adapter->SharedShadowAllocationHandle == NULL && Adapter->SharedShadowResourceHandle == 0)
+        return;
+    AllocationFb = Adapter->MiniportContext != NULL &&
+                   !Adapter->MiniportContext->IsDisplayOnlyDriver &&
+                   !Adapter->ShadowFbPoolOwned;
+    if (AllocationFb && Adapter->ShadowFb != NULL && Adapter->ShadowFbMapCount > 0)
+    {
+        DxgkpDestroyRetiredShadowLocked(Adapter);
+        Adapter->RetiredShadowAllocationHandle = Adapter->SharedShadowAllocationHandle;
+        Adapter->RetiredShadowResourceHandle = Adapter->SharedShadowResourceHandle;
+        Adapter->RetiredShadowAllocationFb = Adapter->ShadowFb;
+    }
+    else
+    {
+        DxgkpDestroyShadowAllocationLocked(Adapter, Adapter->SharedShadowAllocationHandle, Adapter->SharedShadowResourceHandle);
+    }
+    if (AllocationFb)
+    {
+        Adapter->ShadowFb = NULL;
+        Adapter->ShadowFbPitch = 0;
+        Adapter->ShadowFbSize = 0;
+        Adapter->ShadowFbPoolOwned = FALSE;
+        Adapter->ShadowFbMapCount = 0;
+    }
+    Adapter->SharedShadowAllocationHandle = NULL;
+    Adapter->SharedShadowResourceHandle = 0;
+}
+
+static VOID
+DxgkpDestroySharedPrimaryLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
     if (Adapter == NULL)
         return;
 
@@ -5989,42 +6052,7 @@ DxgkpDestroySharedPrimaryLocked(
 
     DxgkpDestroySharedPrimaryAllocationLocked(Adapter);
 
-    if (Adapter->SharedShadowAllocationHandle != NULL)
-    {
-        /*
-         * Full-WDDM adapters reuse Adapter->ShadowFb as the live CPU VA for
-         * the shadow allocation. Rundown makes clearing it here generation-safe.
-         */
-        if (Adapter->MiniportContext != NULL && !Adapter->MiniportContext->IsDisplayOnlyDriver && !Adapter->ShadowFbPoolOwned)
-        {
-            Adapter->ShadowFb = NULL;
-            Adapter->ShadowFbPitch = 0;
-            Adapter->ShadowFbSize = 0;
-            Adapter->ShadowFbPoolOwned = FALSE;
-        }
-
-        if (Adapter->SharedShadowResourceHandle == 0)
-            DxgkVidMmDestroyAllocation(Adapter, Adapter->SharedShadowAllocationHandle);
-        Adapter->SharedShadowAllocationHandle = NULL;
-    }
-
-    if (Adapter->SharedShadowResourceHandle != 0)
-    {
-        if (NT_SUCCESS(DxgkVidMmReferenceResource(Adapter->SharedShadowResourceHandle, FALSE, NULL, &Resource)))
-        {
-            if (Resource->Adapter != Adapter)
-            {
-                DxgkVidMmDereferenceResource(Resource);
-            }
-            else
-            {
-                DxgkVidMmDereferenceResource(Resource);
-                DxgkpVidMmDestroyResourceWrapper(Adapter, Resource);
-            }
-            Resource = NULL;
-        }
-        Adapter->SharedShadowResourceHandle = 0;
-    }
+    DxgkpRetireSharedShadowLocked(Adapter);
 
     Adapter->SharedShadowGlobalShareHandle = 0;
     Adapter->SharedShadowWidth = 0;
@@ -6572,6 +6600,7 @@ DxgkpEnsureSharedShadowSurfaceLocked(
     }
 
     DxgkpBeginSharedSurfaceMutationLocked(Adapter);
+    DxgkpRetireSharedShadowLocked(Adapter);
     Adapter->SharedShadowResourceHandle = Resource->Handle;
     Adapter->SharedShadowGlobalShareHandle = Resource->GlobalShareHandle;
     Adapter->SharedShadowAllocationHandle = AllocationHandle;
@@ -6592,6 +6621,7 @@ DxgkpEnsureSharedShadowSurfaceLocked(
         Adapter->ShadowFbPitch = SurfaceData.Pitch;
         Adapter->ShadowFbSize = AllocInfo.Size;
         Adapter->ShadowFbPoolOwned = FALSE;
+        Adapter->ShadowFbMapCount = 0;
         StartTimer = Adapter->VidPnCommitted;
         DXGKRNL_TRACE("DxgkpEnsureSharedShadowSurface: ShadowFb=%p pitch=%u (%Iu bytes) for DOD present path\n", ShadowVa, SurfaceData.Pitch, AllocInfo.Size);
     }
@@ -7017,6 +7047,9 @@ DxgkDestroySharedPrimary(
         return;
     (VOID)KeWaitForSingleObject(&Adapter->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
     DxgkpDestroySharedPrimaryLocked(Adapter);
+    DxgkpBeginSharedSurfaceMutationLocked(Adapter);
+    DxgkpDestroyRetiredShadowLocked(Adapter);
+    DxgkpEndSharedSurfaceMutationLocked(Adapter);
     KeReleaseMutex(&Adapter->SharedPrimaryMutex, FALSE);
 }
 
@@ -8327,7 +8360,6 @@ DxgkVidPnSetVideoMode(
     }
     if (SwitchPrimary)
     {
-        (VOID)DxgkpWaitForVerticalBlank(Adapter, NULL, Cache->SourceId, 0, NULL);
         DxgkpDestroyParkedSharedPrimaryLocked(Adapter, &ParkedPrimary, TRUE);
     }
     if (Adapter->SharedPrimaryWidth != Result.CommittedWidth || Adapter->SharedPrimaryHeight != Result.CommittedHeight)

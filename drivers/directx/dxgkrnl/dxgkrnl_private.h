@@ -1129,6 +1129,9 @@ struct _DXGKRNL_ADAPTER
     BOOLEAN                     ShadowFbPoolOwned;
     volatile LONG               ShadowFbMapCount;
     PVOID                       RetiredShadowFb;
+    HANDLE                      RetiredShadowAllocationHandle;
+    D3DKMT_HANDLE               RetiredShadowResourceHandle;
+    PVOID                       RetiredShadowAllocationFb;
 
     /*
      * Desktop geometry. VidPnCommitted denotes a hardware topology;
@@ -3676,6 +3679,10 @@ DxgkOpenResource(
 
 VOID
 DxgkDestroySharedPrimary(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkpDestroyRetiredShadowLocked(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
 NTSTATUS
