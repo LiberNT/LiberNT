@@ -644,6 +644,7 @@ static LRESULT CALLBACK BUTTON_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 break;
             case BS_AUTORADIOBUTTON:
 #ifdef __REACTOS__
+                SendMessageW( hWnd, BM_SETCHECK, BST_CHECKED, 0 );
                 BUTTON_CheckAutoRadioButton( hWnd );
 #else
                 SendMessageW( hWnd, BM_SETCHECK, TRUE, 0 );
