@@ -55,6 +55,7 @@ function(reactos_sdk_flags _prefix)
     set(${_prefix}_CXX_FLAGS
         "${_codegen} -nostdlibinc -nostdinc++ -isystem ${_sdk_CXX_RUNTIME}/include/c++/v1 -D__LARGE_MBSTATE_T ${_defines}${_includes}"
         PARENT_SCOPE)
+    set(${_prefix}_ASM_FLAGS "${_sdk_ARCH_FLAGS} ${_defines}${_includes}" PARENT_SCOPE)
     set(${_prefix}_RC_FLAGS "${_defines}${_rc_includes}" PARENT_SCOPE)
     set(${_prefix}_C_LIBRARIES "${_libraries}" PARENT_SCOPE)
     set(${_prefix}_CXX_LIBRARIES
