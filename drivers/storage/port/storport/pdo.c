@@ -168,6 +168,10 @@ NTSTATUS PortFdoInitializeRequestPools(_In_ PFDO_DEVICE_EXTENSION FdoExtension)
                 (PSLIST_ENTRY)((PUCHAR)FdoExtension->SrbExtensionPool + Index * Size));
         FdoExtension->RequestLimit = Count;
     }
+    else if (FdoExtension->Miniport.PortConfig.MaxNumberOfIO != SP_UNINITIALIZED_VALUE)
+    {
+        FdoExtension->RequestLimit = FdoExtension->Miniport.PortConfig.MaxNumberOfIO;
+    }
 
     MaximumPages = FdoExtension->Miniport.PortConfig.NumberOfPhysicalBreaks + 2;
     FdoExtension->SglLookasideSize = FIELD_OFFSET(STOR_SCATTER_GATHER_LIST, List) + MaximumPages * sizeof(STOR_SCATTER_GATHER_ELEMENT);
