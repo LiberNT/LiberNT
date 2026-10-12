@@ -4028,12 +4028,12 @@ static void CALLBACK rtl_wait_callback( TP_CALLBACK_INSTANCE *instance, void *us
     RtlEnterCriticalSection( &object->pool->cs );
     list_add_tail( &object->u.wait.rtl_callers, &caller.entry );
     RtlLeaveCriticalSection( &object->pool->cs );
-#endif
-    object->u.wait.rtl_callback( userdata, result != STATUS_WAIT_0 );
-#ifdef __REACTOS__
+    RtlpCallWaitOrTimerCallback( object->u.wait.rtl_callback, userdata, result != STATUS_WAIT_0 );
     RtlEnterCriticalSection( &object->pool->cs );
     list_remove( &caller.entry );
     RtlLeaveCriticalSection( &object->pool->cs );
+#else
+    object->u.wait.rtl_callback( userdata, result != STATUS_WAIT_0 );
 #endif
 }
 
