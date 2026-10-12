@@ -47,11 +47,15 @@ co_IntDrawCaret(PWND pWnd, PTHRDCARETINFO CaretInfo)
 
     if (CaretInfo->Bitmap)
     {
-        if (!GreGetBitmapDimension(CaretInfo->Bitmap, &CaretInfo->Size))
+        BITMAP Bitmap;
+
+        if (GreGetObject(CaretInfo->Bitmap, sizeof(Bitmap), &Bitmap) != sizeof(Bitmap))
         {
             ERR("Failed to get bitmap dimensions\n");
             goto cleanup;
         }
+        CaretInfo->Size.cx = Bitmap.bmWidth;
+        CaretInfo->Size.cy = Bitmap.bmHeight;
 
         hdcMem = NtGdiCreateCompatibleDC(hdc);
         if (hdcMem)
