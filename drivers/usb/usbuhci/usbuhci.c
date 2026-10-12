@@ -1196,7 +1196,9 @@ UhciInterruptService(IN PVOID uhciExtension)
         DPRINT1("HcInterruptEnable %X\n", intr);
     }
 
-    if (HcStatus.HcHalted)
+    if (HcStatus.HcHalted &&
+        !HcStatus.HostSystemError &&
+        !HcStatus.HcProcessError)
     {
         DPRINT_UHCI("UhciInterruptService: Hc Halted [%p] HcStatus %X\n",
                     UhciExtension,
@@ -3205,26 +3207,11 @@ UhciDisableInterrupts(IN PVOID uhciExtension)
 {
     PUHCI_EXTENSION UhciExtension = uhciExtension;
     PUHCI_HW_REGISTERS BaseRegister;
-    UHCI_PCI_LEGSUP LegacySupport;
 
     DPRINT("UhciDisableInterrupts: UhciExtension - %p\n", UhciExtension);
 
     BaseRegister = UhciExtension->BaseRegister;
     WRITE_PORT_USHORT(&BaseRegister->HcInterruptEnable.AsUSHORT, 0);
-
-    RegPacket.UsbPortReadWriteConfigSpace(UhciExtension,
-                                          TRUE,
-                                          &LegacySupport.AsUSHORT,
-                                          PCI_LEGSUP,
-                                          sizeof(USHORT));
-
-    LegacySupport.UsbPIRQ = 0;
-
-    RegPacket.UsbPortReadWriteConfigSpace(UhciExtension,
-                                          FALSE,
-                                          &LegacySupport.AsUSHORT,
-                                          PCI_LEGSUP,
-                                          sizeof(USHORT));
 }
 
 VOID
