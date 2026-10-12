@@ -270,24 +270,6 @@ endmenu
 
 menu "Graphics"
 
-config REACTOS_GRAPHICS_DRIVER_MODEL
-    prompt "Display driver model"
-    type choice
-    value XPDM "XPDM / VideoPort (legacy)"
-    value WDDM "WDDM / dxgkrnl (experimental)"
-    default WDDM
-    help
-      Select the display stack that owns graphics devices in the built image.
-
-      XPDM excludes the DirectX graphics kernel stack and restores the legacy
-      VideoPort bind/install path, including the UEFI framebuffer and the
-      Raspberry Pi 5 VC4 XPDM miniport.
-
-      WDDM builds dxgkrnl, its memory managers, WDDM miniports and their
-      user-mode halves against the Windows 11 24H2 (WDDM 3.2) contract.
-      Legacy VGA binaries remain available as recovery components, but WDDM
-      owns normal display enumeration.
-
 config MESA_GALLIUM_FROM_SOURCE
     prompt "Mesa Gallium OpenGL driver"
     type bool

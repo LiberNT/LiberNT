@@ -243,13 +243,8 @@ Visibility follows the build path that actually consumes each setting:
 
 ## Graphics driver model
 
-The `Graphics` menu selects either the legacy XPDM/VideoPort path or the
-experimental WDDM/dxgkrnl path.
-XPDM restores the UEFI framebuffer registration and, for the Raspberry Pi 5
-profile, builds the preserved VC4 XPDM miniport. WDDM builds the DirectX
-graphics kernel stack and selects the WDDM VC4 miniport instead.
-
-WDDM builds target the Windows 11 24H2 (WDDM 3.2) contract; `config.cmake`
+Builds use the WDDM/dxgkrnl display stack; the menu offers no other driver
+model. They target the Windows 11 24H2 (WDDM 3.2) contract; `config.cmake`
 fixes `REACTOS_WDDM_LEVEL` to 3.2, so there is no selectable level. Individual
 features still report only what is implemented end to end.
 
