@@ -865,9 +865,14 @@ BaseInitializeContext(IN PCONTEXT Context,
         ArmContext->Sp = (ULONG_PTR)StackAddress;
         ArmContext->Lr = (ULONG_PTR)ExitThread;
         if (ContextType == 1)
+        {
             ArmContext->Pc = (ULONG_PTR)BaseThreadStartup;
+        }
         else
-            ArmContext->Pc = (ULONG_PTR)BaseProcessStartup;
+        {
+            ArmContext->Pc = (ULONG_PTR)RtlUserThreadStart;
+            ArmContext->Lr = 0;
+        }
         ArmContext->ContextFlags = CONTEXT_ARM64_FULL;
     }
 #elif defined(_M_AMD64)

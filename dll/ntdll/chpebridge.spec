@@ -240,7 +240,7 @@
 41 varargs DbgPrintReturnControlC(str) ChpeDbgPrintReturnControlC
 55 stdcall DbgUserBreakPoint() ChpeDbgUserBreakPoint
 87 varargs EtwTraceMessage(int64 long ptr long) ChpeEtwTraceMessage
-1301 stdcall RtlUserThreadStart(long long) ChpeRtlUserThreadStart
+1301 stdcall RtlUserThreadStart(long long) ntdll.RtlUserThreadStart
 1954 varargs sscanf(str str) ChpeSscanf
 1999 cdecl ChpeVsscanf(str str ptr) ChpeAutoVsscanf
 2000 stdcall ChpeVDbgPrintReturnControlC(str ptr) ChpeAutoVDbgPrintReturnControlC

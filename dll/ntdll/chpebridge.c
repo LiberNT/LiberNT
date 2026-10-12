@@ -3190,18 +3190,11 @@ ChpeRtlSystemTimeToTimeFields(const LARGE_INTEGER *SystemTime, PTIME_FIELDS Time
 }
 
 VOID NTAPI DbgUserBreakPoint(VOID);
-VOID NTAPI RtlUserThreadStart(PVOID StartAddress, PVOID Parameter);
 
 VOID NTAPI
 ChpeDbgUserBreakPoint(VOID)
 {
     DbgUserBreakPoint();
-}
-
-VOID NTAPI
-ChpeRtlUserThreadStart(PVOID StartAddress, PVOID Parameter)
-{
-    RtlUserThreadStart(StartAddress, Parameter);
 }
 
 ULONG CDECL
