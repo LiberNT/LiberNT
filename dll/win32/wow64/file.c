@@ -140,7 +140,7 @@ BOOL get_file_redirect( OBJECT_ATTRIBUTES *attr )
 {
     static const WCHAR * const no_redirect[] =
     {
-        L"system32\\catroot", L"system32\\catroot2", L"system32\\driversstore",
+        L"system32\\catroot", L"system32\\catroot2", L"system32\\driverstore",
         L"system32\\drivers\\etc", L"system32\\logfiles", L"system32\\spool"
     };
 #ifdef __REACTOS__
