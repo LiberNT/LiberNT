@@ -267,12 +267,6 @@ ScConnectControlPipe(HANDLE *hPipe)
     _swprintf(NtControlPipeName, L"\\\\.\\pipe\\net\\NtControlPipe%u", dwServiceCurrent);
     TRACE("PipeName: %S\n", NtControlPipeName);
 
-    if (!WaitNamedPipeW(NtControlPipeName, 30000))
-    {
-        ERR("WaitNamedPipe(%S) failed (Error %lu)\n", NtControlPipeName, GetLastError());
-        return ERROR_FAILED_SERVICE_CONTROLLER_CONNECT;
-    }
-
     *hPipe = CreateFileW(NtControlPipeName,
                          GENERIC_READ | GENERIC_WRITE,
                          FILE_SHARE_READ | FILE_SHARE_WRITE,
