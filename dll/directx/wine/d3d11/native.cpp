@@ -6804,6 +6804,17 @@ HRESULT NativeSwapChain::EnterFullscreen(IDXGIOutput *target, UINT width, UINT h
     if (FAILED(hr)) return hr;
     DXGI_OUTPUT_DESC output_desc;
     hr = output->GetDesc(&output_desc);
+    DXGI_MODE_DESC closest = {};
+    if (SUCCEEDED(hr) && (desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH))
+    {
+        DXGI_MODE_DESC wanted = {};
+        wanted.Width = width;
+        wanted.Height = height;
+        wanted.RefreshRate = refresh;
+        wanted.Format = desc.Format;
+        if (FAILED(output->FindClosestMatchingMode(&wanted, &closest, NULL)))
+            closest = wanted;
+    }
     output->Release();
     if (FAILED(hr)) return hr;
 
@@ -6813,13 +6824,14 @@ HRESULT NativeSwapChain::EnterFullscreen(IDXGIOutput *target, UINT width, UINT h
         DEVMODEW mode = {};
         mode.dmSize = sizeof(mode);
         mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
-        mode.dmPelsWidth = width;
-        mode.dmPelsHeight = height;
+        mode.dmPelsWidth = closest.Width;
+        mode.dmPelsHeight = closest.Height;
         LONG changed = DISP_CHANGE_BADMODE;
-        if (refresh.Numerator && refresh.Denominator)
+        if (closest.RefreshRate.Numerator && closest.RefreshRate.Denominator)
         {
             mode.dmFields |= DM_DISPLAYFREQUENCY;
-            mode.dmDisplayFrequency = (refresh.Numerator + refresh.Denominator / 2) / refresh.Denominator;
+            mode.dmDisplayFrequency = (closest.RefreshRate.Numerator + closest.RefreshRate.Denominator / 2)
+                    / closest.RefreshRate.Denominator;
             changed = ChangeDisplaySettingsExW(output_desc.DeviceName, &mode, NULL, CDS_FULLSCREEN, NULL);
             mode.dmFields &= ~DM_DISPLAYFREQUENCY;
         }
