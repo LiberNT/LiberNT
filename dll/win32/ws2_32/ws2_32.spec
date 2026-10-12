@@ -145,7 +145,7 @@
 @ stdcall -stub -version=0x600+ WSCInstallNameSpaceEx(wstr wstr long long ptr ptr)
 @ stdcall -stub -version=0x600+ -arch=win64 WSCInstallNameSpaceEx32(wstr wstr long long ptr ptr)
 @ stdcall WSCInstallProvider(ptr wstr ptr long ptr)
-@ stdcall -stub -arch=win64 WSCInstallProvider64_32(ptr wstr ptr long ptr)
+@ stdcall -arch=win64 WSCInstallProvider64_32(ptr wstr ptr long ptr)
 @ stdcall -stub -version=0x600+ -arch=win64 WSCInstallProviderAndChains64_32(ptr wstr wstr wstr long ptr long ptr ptr)
 @ stdcall -stub -version=0x600+ WSCSetApplicationCategory(wstr long wstr long long ptr ptr)
 @ stdcall -stub -version=0x600+ WSCSetProviderInfo(ptr long ptr long long ptr)
