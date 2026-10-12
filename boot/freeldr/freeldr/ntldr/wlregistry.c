@@ -246,7 +246,6 @@ static const PCWSTR WinLdrLegacyBootServices[] =
     L"VgaSave",
     L"Sacdrv",
     L"BusLogic",
-    L"usbuhci",
 };
 
 static
