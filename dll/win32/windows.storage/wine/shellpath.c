@@ -6912,6 +6912,25 @@ static HRESULT _SHGetDefaultValue(HANDLE hToken, BYTE folder, LPWSTR pszPath)
     return hr;
 }
 
+#ifdef __REACTOS__
+static LPCWSTR _SHGetCurrentVersionValueName(BYTE folder)
+{
+    switch (folder)
+    {
+        case CSIDL_PROGRAM_FILES:
+            return L"ProgramFilesDir";
+        case CSIDL_PROGRAM_FILESX86:
+            return L"ProgramFilesDir (x86)";
+        case CSIDL_PROGRAM_FILES_COMMON:
+            return L"CommonFilesDir";
+        case CSIDL_PROGRAM_FILES_COMMONX86:
+            return L"CommonFilesDir (x86)";
+        default:
+            return CSIDL_Data[folder].szValueName;
+    }
+}
+
+#endif
 /* Gets the (unexpanded) value of the folder with index folder into pszPath.
  * The folder's type is assumed to be CSIDL_Type_CurrVer.  Its default value
  * can be overridden in the HKLM\\Software\\Microsoft\\Windows\\CurrentVersion key.
@@ -6961,7 +6980,11 @@ static HRESULT _SHGetCurrentVersionPath(DWORD dwFlags, BYTE folder,
         {
             DWORD dwType, dwPathLen = MAX_PATH * sizeof(WCHAR);
 
+#ifndef __REACTOS__
             if (RegQueryValueExW(hKey, CSIDL_Data[folder].szValueName, NULL,
+#else
+            if (RegQueryValueExW(hKey, _SHGetCurrentVersionValueName(folder), NULL,
+#endif
              &dwType, (LPBYTE)pszPath, &dwPathLen) ||
              (dwType != REG_SZ && dwType != REG_EXPAND_SZ))
             {
@@ -6984,7 +7007,11 @@ static HRESULT _SHGetCurrentVersionPath(DWORD dwFlags, BYTE folder,
                     }
                     /* fall through */
                 default:
+#ifndef __REACTOS__
                     RegSetValueExW(hKey, CSIDL_Data[folder].szValueName, 0, dwType,
+#else
+                    RegSetValueExW(hKey, _SHGetCurrentVersionValueName(folder), 0, dwType,
+#endif
                                    (LPBYTE)pszPath, (strlenW(pszPath)+1)*sizeof(WCHAR));
                 }
             }
