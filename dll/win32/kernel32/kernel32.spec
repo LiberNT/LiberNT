@@ -439,7 +439,7 @@
 @ stdcall GetConsoleFontInfo(long long long ptr) kernelbase.GetConsoleFontInfo
 @ stdcall GetConsoleFontSize(long long) kernelbase.GetConsoleFontSize
 @ stdcall GetConsoleHardwareState(long long ptr) kernelbase.GetConsoleHardwareState
-@ stdcall -version=0x600+ GetConsoleHistoryInfo(ptr)
+@ stdcall -version=0x600+ GetConsoleHistoryInfo(ptr) kernelbase.GetConsoleHistoryInfo
 @ stdcall GetConsoleInputExeNameA(long ptr) kernelbase.GetConsoleInputExeNameA
 @ stdcall GetConsoleInputExeNameW(long ptr) kernelbase.GetConsoleInputExeNameW
 @ stdcall GetConsoleInputWaitHandle() kernelbase.GetConsoleInputWaitHandle
@@ -452,7 +452,7 @@
 @ stdcall GetConsoleOutputCP() kernelbase.GetConsoleOutputCP
 @ stdcall GetConsoleProcessList(ptr long) kernelbase.GetConsoleProcessList
 @ stdcall GetConsoleScreenBufferInfo(long ptr) kernelbase.GetConsoleScreenBufferInfo
-@ stdcall -version=0x600+ GetConsoleScreenBufferInfoEx(ptr ptr)
+@ stdcall -version=0x600+ GetConsoleScreenBufferInfoEx(ptr ptr) kernelbase.GetConsoleScreenBufferInfoEx
 @ stdcall GetConsoleSelectionInfo(ptr) kernelbase.GetConsoleSelectionInfo
 @ stdcall GetConsoleTitleA(ptr long) kernelbase.GetConsoleTitleA
 @ stdcall GetConsoleTitleW(ptr long) kernelbase.GetConsoleTitleW
@@ -462,7 +462,7 @@
 @ stdcall GetCurrencyFormatW(long long wstr ptr wstr long)
 @ stdcall GetCurrentActCtx(ptr)
 @ stdcall GetCurrentConsoleFont(long long ptr) kernelbase.GetCurrentConsoleFont
-@ stdcall -version=0x600+ GetCurrentConsoleFontEx(ptr long ptr)
+@ stdcall -version=0x600+ GetCurrentConsoleFontEx(ptr long ptr) kernelbase.GetCurrentConsoleFontEx
 @ stdcall GetCurrentDirectoryA(long ptr)
 @ stdcall GetCurrentDirectoryW(long ptr)
 @ stdcall -version=0x602+ GetCurrentApplicationUserModelId(ptr ptr)
@@ -1110,7 +1110,7 @@
 @ stdcall SetConsoleDisplayMode(long long ptr) kernelbase.SetConsoleDisplayMode
 @ stdcall SetConsoleFont(long long) kernelbase.SetConsoleFont
 @ stdcall SetConsoleHardwareState(long long long) kernelbase.SetConsoleHardwareState
-@ stdcall -version=0x600+ SetConsoleHistoryInfo(ptr)
+@ stdcall -version=0x600+ SetConsoleHistoryInfo(ptr) kernelbase.SetConsoleHistoryInfo
 @ stdcall SetConsoleIcon(ptr) kernelbase.SetConsoleIcon
 @ stdcall SetConsoleInputExeNameA(ptr) kernelbase.SetConsoleInputExeNameA
 @ stdcall SetConsoleInputExeNameW(ptr) kernelbase.SetConsoleInputExeNameW
@@ -1125,14 +1125,14 @@
 @ stdcall SetConsoleOS2OemFormat(long) kernelbase.SetConsoleOS2OemFormat
 @ stdcall SetConsoleOutputCP(long) kernelbase.SetConsoleOutputCP
 @ stdcall SetConsolePalette(long long long) kernelbase.SetConsolePalette
-@ stdcall -version=0x600+ SetConsoleScreenBufferInfoEx(ptr ptr)
+@ stdcall -version=0x600+ SetConsoleScreenBufferInfoEx(ptr ptr) kernelbase.SetConsoleScreenBufferInfoEx
 @ stdcall SetConsoleScreenBufferSize(long long) kernelbase.SetConsoleScreenBufferSize
 @ stdcall SetConsoleTextAttribute(long long) kernelbase.SetConsoleTextAttribute
 @ stdcall SetConsoleTitleA(str) kernelbase.SetConsoleTitleA
 @ stdcall SetConsoleTitleW(wstr) kernelbase.SetConsoleTitleW
 @ stdcall SetConsoleWindowInfo(long long ptr) kernelbase.SetConsoleWindowInfo
 @ stdcall SetCriticalSectionSpinCount(ptr long) ntdll.RtlSetCriticalSectionSpinCount
-@ stub -version=0x600+ SetCurrentConsoleFontEx
+@ stdcall -version=0x600+ SetCurrentConsoleFontEx(ptr long ptr) kernelbase.SetCurrentConsoleFontEx
 @ stdcall SetCurrentDirectoryA(str)
 @ stdcall SetCurrentDirectoryW(wstr)
 @ stdcall SetDefaultCommConfigA(str ptr long)

@@ -13,16 +13,6 @@ add_library(kernel32_shared
 target_link_libraries(kernel32_shared PRIVATE pseh)
 add_dependencies(kernel32_shared psdk)
 
-add_library(kernelbase_console STATIC
-    client/console/alias.c
-    client/console/console.c
-    client/console/history.c
-    client/console/init.c
-    client/console/pseudoconsole.c
-    client/console/readwrite.c)
-target_link_libraries(kernelbase_console PRIVATE ${PSEH_LIB})
-add_dependencies(kernelbase_console psdk)
-
 list(APPEND SOURCE
     client/actctx.c
     client/appcache.c

@@ -308,6 +308,7 @@ GetFileType(HANDLE hFile)
       case FILE_DEVICE_VIRTUAL_DISK:
 	return FILE_TYPE_DISK;
 
+      case FILE_DEVICE_CONSOLE:
       case FILE_DEVICE_KEYBOARD:
       case FILE_DEVICE_MOUSE:
       case FILE_DEVICE_NULL:

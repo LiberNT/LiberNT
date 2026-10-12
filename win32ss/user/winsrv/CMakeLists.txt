@@ -9,7 +9,6 @@ include_directories(
 spec2def(winsrv.dll winsrv.spec)
 
 # The components
-include(consrv.cmake)
 include(usersrv.cmake)
 
 list(APPEND SOURCE
@@ -25,11 +24,11 @@ set_subsystem(winsrv console)
 ################# END  HACK #################
 
 # Add the components
-target_link_libraries(winsrv consrv usersrv)
+target_link_libraries(winsrv usersrv)
 # Add win32ksys because of NtUser...()
-target_link_libraries(winsrv ${CONSRV_TARGET_LINK_LIBS} win32ksys libcntpr ${PSEH_LIB})
+target_link_libraries(winsrv win32ksys libcntpr ${PSEH_LIB})
 
-add_delay_importlibs(winsrv ${CONSRV_DELAY_IMPORT_LIBS} ${USERSRV_DELAY_IMPORT_LIBS} advapi32)
-add_importlibs(winsrv ${CONSRV_IMPORT_LIBS} ${USERSRV_IMPORT_LIBS} csrsrv gdi32 user32 kernel32 ntdll)
+add_delay_importlibs(winsrv ${USERSRV_DELAY_IMPORT_LIBS} advapi32)
+add_importlibs(winsrv ${USERSRV_IMPORT_LIBS} csrsrv gdi32 user32 kernel32 ntdll)
 add_dependencies(winsrv bugcodes xdk)
 add_cd_file(TARGET winsrv DESTINATION reactos/system32 FOR all)

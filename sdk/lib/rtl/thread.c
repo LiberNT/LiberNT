@@ -289,57 +289,43 @@ RtlCreateUserThread(IN HANDLE ProcessHandle,
 {
     NTSTATUS Status;
     HANDLE Handle;
-    CLIENT_ID ThreadCid;
-    INITIAL_TEB InitialTeb;
     OBJECT_ATTRIBUTES ObjectAttributes;
-    CONTEXT Context;
+    THREAD_BASIC_INFORMATION BasicInformation;
 
-    /* First, we'll create the Stack */
-    Status = RtlpCreateUserStack(ProcessHandle,
-                                 StackReserve,
-                                 StackCommit,
-                                 StackZeroBits,
-                                 &InitialTeb);
-    if (!NT_SUCCESS(Status)) return Status;
-
-    /* Next, we'll set up the Initial Context */
-    RtlInitializeContext(ProcessHandle,
-                         &Context,
-                         Parameter,
-                         StartAddress,
-                         InitialTeb.StackBase);
-
-    /* We are now ready to create the Kernel Thread Object */
     InitializeObjectAttributes(&ObjectAttributes,
                                NULL,
                                0,
                                NULL,
                                SecurityDescriptor);
-    Status = ZwCreateThread(&Handle,
-                            THREAD_ALL_ACCESS,
-                            &ObjectAttributes,
-                            ProcessHandle,
-                            &ThreadCid,
-                            &Context,
-                            &InitialTeb,
-                            CreateSuspended);
-    if (!NT_SUCCESS(Status))
+    Status = ZwCreateThreadEx(&Handle,
+                              THREAD_ALL_ACCESS,
+                              &ObjectAttributes,
+                              ProcessHandle,
+                              StartAddress,
+                              Parameter,
+                              CreateSuspended ? THREAD_CREATE_FLAGS_CREATE_SUSPENDED : 0,
+                              StackZeroBits,
+                              StackCommit,
+                              StackReserve,
+                              NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (ClientId)
     {
-        /* Free the stack */
-        RtlpFreeUserStack(ProcessHandle, &InitialTeb);
-    }
-    else
-    {
-        /* Return thread data */
-        if (ThreadHandle)
-            *ThreadHandle = Handle;
-        else
-            NtClose(Handle);
-        if (ClientId) *ClientId = ThreadCid;
+        Status = ZwQueryInformationThread(Handle,
+                                          ThreadBasicInformation,
+                                          &BasicInformation,
+                                          sizeof(BasicInformation),
+                                          NULL);
+        if (NT_SUCCESS(Status)) *ClientId = BasicInformation.ClientId;
     }
 
-    /* Return success or the previous failure */
-    return Status;
+    if (ThreadHandle)
+        *ThreadHandle = Handle;
+    else
+        ZwClose(Handle);
+
+    return STATUS_SUCCESS;
 }
 
 /*

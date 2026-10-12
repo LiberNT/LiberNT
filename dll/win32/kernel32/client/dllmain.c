@@ -210,16 +210,16 @@ DllMain(HANDLE hDll,
                 return FALSE;
             }
 
+            /* Initialize application certification globals */
+            InitializeListHead(&BasepAppCertDllsList);
+            RtlInitializeCriticalSection(&gcsAppCert);
+
             /* Initialize Console Support */
             if (!ConDllInitialize(dwReason, SessionDir))
             {
                 DPRINT1("Failed to set up console\n");
                 return FALSE;
             }
-
-            /* Initialize application certification globals */
-            InitializeListHead(&BasepAppCertDllsList);
-            RtlInitializeCriticalSection(&gcsAppCert);
 
             /* Insert more dll attach stuff here! */
             DllInitialized = TRUE;

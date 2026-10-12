@@ -30,7 +30,6 @@
 #include <limits.h>
 
 #include "ntstatus.h"
-#define WIN32_NO_STATUS
 #include "windef.h"
 #include "winbase.h"
 #include "winnls.h"
@@ -41,6 +40,9 @@
 #include "wine/exception.h"
 #include "wine/debug.h"
 #include "kernelbase.h"
+#ifdef __REACTOS__
+#include <drivers/condrv/condrvhost.h>
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(console);
 
@@ -82,6 +84,15 @@ static BOOL WINAPI default_ctrl_handler( DWORD type )
 static struct ctrl_handler default_handler = { default_ctrl_handler, NULL };
 static struct ctrl_handler *ctrl_handlers = &default_handler;
 
+#ifdef __REACTOS__
+static void get_system_dir( WCHAR *dir, UINT size )
+{
+    if (!GetSystemDirectoryW( dir, size )) lstrcpynW( dir, L"C:\\Windows\\System32", size );
+}
+
+DWORD WINAPI CtrlRoutine( void *arg );
+#endif
+
 static BOOL console_ioctl( HANDLE handle, DWORD code, void *in_buff, DWORD in_count,
                            void *out_buff, DWORD out_count, DWORD *read )
 {
@@ -109,6 +120,15 @@ static BOOL console_ioctl( HANDLE handle, DWORD code, void *in_buff, DWORD in_co
     }
     if (read) *read = 0;
     return set_ntstatus( status );
+}
+
+BOOL is_console_handle( HANDLE handle )
+{
+    IO_STATUS_BLOCK io;
+    DWORD mode;
+
+    return NtDeviceIoControlFile( handle, NULL, NULL, NULL, &io, IOCTL_CONDRV_GET_MODE,
+                                  NULL, 0, &mode, sizeof(mode) ) == STATUS_SUCCESS;
 }
 
 /* map input records to ASCII */
@@ -262,6 +282,22 @@ static HANDLE create_console_reference( HANDLE root )
     return set_ntstatus( status ) ? handle : NULL;
 }
 
+#ifdef __REACTOS__
+static void register_ctrl_routine( void )
+{
+    RTL_USER_PROCESS_PARAMETERS *params = RtlGetCurrentPeb()->ProcessParameters;
+    CONDRV_CTRL_ROUTINE ctrl;
+    IO_STATUS_BLOCK io;
+
+    if (!params->ProcessGroupId) params->ProcessGroupId = GetCurrentProcessId();
+    ctrl.Routine = (ULONG_PTR)CtrlRoutine;
+    ctrl.GroupId = params->ProcessGroupId;
+    ctrl.Reserved = 0;
+    NtDeviceIoControlFile( console_connection, NULL, NULL, NULL, &io, IOCTL_CONDRV_SET_CTRL_ROUTINE,
+                           &ctrl, sizeof(ctrl), NULL, 0 );
+}
+#endif
+
 static BOOL create_console_connection( HANDLE root )
 {
     OBJECT_ATTRIBUTES attr = {sizeof(attr)};
@@ -274,6 +310,9 @@ static BOOL create_console_connection( HANDLE root )
     attr.ObjectName = &string;
     status = NtCreateFile( &console_connection, FILE_WRITE_PROPERTIES | FILE_READ_PROPERTIES | SYNCHRONIZE, &attr,
                            &iosb, NULL, FILE_ATTRIBUTE_NORMAL, 0, FILE_OPEN, FILE_NON_DIRECTORY_FILE, NULL, 0 );
+#ifdef __REACTOS__
+    if (!status && root) register_ctrl_routine();
+#endif
     return set_ntstatus( status );
 }
 
@@ -335,7 +374,11 @@ static BOOL init_console_std_handles( BOOL override_all )
 /******************************************************************
  *	AddConsoleAliasA   (kernelbase.@)
  */
+#ifdef __REACTOS__
+BOOL WINAPI AddConsoleAliasA( LPCSTR source, LPCSTR target, LPCSTR exename )
+#else
 BOOL WINAPI AddConsoleAliasA( LPSTR source, LPSTR target, LPSTR exename )
+#endif
 {
     FIXME( ": (%s, %s, %s) stub!\n", debugstr_a(source), debugstr_a(target), debugstr_a(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
@@ -346,7 +389,11 @@ BOOL WINAPI AddConsoleAliasA( LPSTR source, LPSTR target, LPSTR exename )
 /******************************************************************
  *	AddConsoleAliasW   (kernelbase.@)
  */
+#ifdef __REACTOS__
+BOOL WINAPI AddConsoleAliasW( LPCWSTR source, LPCWSTR target, LPCWSTR exename )
+#else
 BOOL WINAPI AddConsoleAliasW( LPWSTR source, LPWSTR target, LPWSTR exename )
+#endif
 {
     FIXME( ": (%s, %s, %s) stub!\n", debugstr_w(source), debugstr_w(target), debugstr_w(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
@@ -377,6 +424,9 @@ BOOL WINAPI DECLSPEC_HOTPATCH AttachConsole( DWORD pid )
         console_ioctl( console_connection, IOCTL_CONDRV_BIND_PID, &pid, sizeof(pid), NULL, 0, NULL );
     if (ret)
     {
+#ifdef __REACTOS__
+        register_ctrl_routine();
+#endif
         RtlGetCurrentPeb()->ProcessParameters->ConsoleHandle = create_console_reference( console_connection );
         if (RtlGetCurrentPeb()->ProcessParameters->ConsoleHandle)
         {
@@ -400,6 +450,9 @@ static BOOL alloc_console( BOOL headless )
     STARTUPINFOW app_si;
     HANDLE server, console = NULL;
     WCHAR buffer[1024], cmd[256], conhost_path[MAX_PATH];
+#ifdef __REACTOS__
+    WCHAR system_dir[MAX_PATH];
+#endif
     PROCESS_INFORMATION pi;
     SIZE_T size;
     void *redir;
@@ -420,7 +473,12 @@ static BOOL alloc_console( BOOL headless )
     memset( &console_si, 0, sizeof(console_si) );
     console_si.StartupInfo.cb = sizeof(console_si);
     InitializeProcThreadAttributeList( NULL, 1, 0, &size );
-    if (!(console_si.lpAttributeList = HeapAlloc( GetProcessHeap(), 0, size ))) return FALSE;
+    if (!(console_si.lpAttributeList = HeapAlloc( GetProcessHeap(), 0, size )))
+    {
+        RtlLeaveCriticalSection( &console_section );
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return FALSE;
+    }
     InitializeProcThreadAttributeList( console_si.lpAttributeList, 1, 0, &size );
 
     if (!(server = create_console_server()) || !(console = create_console_reference( server ))) goto error;
@@ -455,12 +513,15 @@ static BOOL alloc_console( BOOL headless )
 
     UpdateProcThreadAttribute( console_si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
                                &server, sizeof(server), NULL, NULL );
+#ifdef __REACTOS__
+    get_system_dir( system_dir, ARRAY_SIZE(system_dir) );
+#endif
     swprintf( conhost_path, ARRAY_SIZE(conhost_path), L"%s\\conhost.exe", system_dir );
     swprintf( cmd, ARRAY_SIZE(cmd),  L"\"%s\" --server 0x%x", conhost_path, condrv_handle( server ));
     if (headless) wcscat( cmd, L" --headless" );
     Wow64DisableWow64FsRedirection( &redir );
     ret = CreateProcessW( conhost_path, cmd, NULL, NULL, TRUE, DETACHED_PROCESS | EXTENDED_STARTUPINFO_PRESENT,
-                          NULL, NULL, &console_si.StartupInfo, &pi );
+                          NULL, system_dir, &console_si.StartupInfo, &pi );
     Wow64RevertWow64FsRedirection( redir );
 
     if (!ret || !create_console_connection( console)) goto error;
@@ -498,11 +559,17 @@ BOOL WINAPI AllocConsole(void)
 /******************************************************************************
  *	CreateConsoleScreenBuffer   (kernelbase.@)
  */
+#ifdef __REACTOS__
+HANDLE WINAPI DECLSPEC_HOTPATCH CreateConsoleScreenBuffer( DWORD access, DWORD share,
+                                                           const SECURITY_ATTRIBUTES *sa, DWORD flags,
+                                                           void *data )
+#else
 HANDLE WINAPI DECLSPEC_HOTPATCH CreateConsoleScreenBuffer( DWORD access, DWORD share,
                                                            SECURITY_ATTRIBUTES *sa, DWORD flags,
                                                            void *data )
+#endif
 {
-    OBJECT_ATTRIBUTES attr = {sizeof(attr)};
+    OBJECT_ATTRIBUTES attr;
     IO_STATUS_BLOCK iosb;
     UNICODE_STRING name = RTL_CONSTANT_STRING( L"\\Device\\ConDrv\\ScreenBuffer" );
     HANDLE handle;
@@ -516,8 +583,7 @@ HANDLE WINAPI DECLSPEC_HOTPATCH CreateConsoleScreenBuffer( DWORD access, DWORD s
 	return INVALID_HANDLE_VALUE;
     }
 
-    attr.ObjectName = &name;
-    attr.SecurityDescriptor = sa ? sa->lpSecurityDescriptor : NULL;
+    InitializeObjectAttributes( &attr, &name, 0, 0, sa ? sa->lpSecurityDescriptor : NULL );
     if (sa && sa->bInheritHandle) attr.Attributes |= OBJ_INHERIT;
     status = NtCreateFile( &handle, access, &attr, &iosb, NULL, FILE_ATTRIBUTE_NORMAL, 0, FILE_OPEN,
                            FILE_NON_DIRECTORY_FILE, NULL, 0 );
@@ -552,7 +618,11 @@ DWORD WINAPI CtrlRoutine( void *arg )
         if (caught_by_dbg) return 0;
     }
 
+#ifdef __REACTOS__
+    if (event == CTRL_C_EVENT && (NtCurrentTeb()->Peb->ProcessParameters->ConsoleFlags & 1)) return 0;
+#else
     if (NtCurrentTeb()->Peb->ProcessParameters->ConsoleFlags & 1) return 0;
+#endif
 
     RtlEnterCriticalSection( &console_section );
     for (handler = ctrl_handlers; handler; handler = handler->next)
@@ -677,6 +747,14 @@ BOOL WINAPI DECLSPEC_HOTPATCH FreeConsole(void)
     if (console_flags & CONSOLE_OUTPUT_HANDLE) NtClose( GetStdHandle( STD_OUTPUT_HANDLE ));
     if (console_flags & CONSOLE_ERROR_HANDLE)  NtClose( GetStdHandle( STD_ERROR_HANDLE ));
     console_flags = 0;
+#ifdef __REACTOS__
+    while (ctrl_handlers != &default_handler)
+    {
+        struct ctrl_handler *handler = ctrl_handlers;
+        ctrl_handlers = handler->next;
+        RtlFreeHeap( GetProcessHeap(), 0, handler );
+    }
+#endif
 
     RtlLeaveCriticalSection( &console_section );
     return TRUE;
@@ -708,7 +786,11 @@ BOOL WINAPI DECLSPEC_HOTPATCH GenerateConsoleCtrlEvent( DWORD event, DWORD group
 /******************************************************************
  *	GetConsoleAliasA   (kernelbase.@)
  */
+#ifdef __REACTOS__
+DWORD WINAPI GetConsoleAliasA( LPCSTR source, LPSTR buffer, DWORD len, LPCSTR exename )
+#else
 DWORD WINAPI GetConsoleAliasA( LPSTR source, LPSTR buffer, DWORD len, LPSTR exename )
+#endif
 {
     FIXME( "(%s,%p,%ld,%s): stub\n", debugstr_a(source), buffer, len, debugstr_a(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
@@ -719,7 +801,11 @@ DWORD WINAPI GetConsoleAliasA( LPSTR source, LPSTR buffer, DWORD len, LPSTR exen
 /******************************************************************
  *	GetConsoleAliasW   (kernelbase.@)
  */
+#ifdef __REACTOS__
+DWORD WINAPI GetConsoleAliasW( LPCWSTR source, LPWSTR buffer, DWORD len, LPCWSTR exename )
+#else
 DWORD WINAPI GetConsoleAliasW( LPWSTR source, LPWSTR buffer, DWORD len, LPWSTR exename )
+#endif
 {
     FIXME( "(%s,%p,%ld,%s): stub\n", debugstr_w(source), buffer, len, debugstr_w(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
@@ -752,7 +838,11 @@ DWORD WINAPI GetConsoleAliasExesLengthW(void)
 /******************************************************************
  *	GetConsoleAliasesLengthA   (kernelbase.@)
  */
+#ifdef __REACTOS__
+DWORD WINAPI GetConsoleAliasesLengthA( LPCSTR unknown )
+#else
 DWORD WINAPI GetConsoleAliasesLengthA( LPSTR unknown )
+#endif
 {
     FIXME( ": (%s) stub!\n", debugstr_a(unknown) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
@@ -763,7 +853,11 @@ DWORD WINAPI GetConsoleAliasesLengthA( LPSTR unknown )
 /******************************************************************
  *	GetConsoleAliasesLengthW   (kernelbase.@)
  */
+#ifdef __REACTOS__
+DWORD WINAPI GetConsoleAliasesLengthW( LPCWSTR unknown )
+#else
 DWORD WINAPI GetConsoleAliasesLengthW( LPWSTR unknown )
+#endif
 {
     FIXME( ": (%s) stub!\n", debugstr_w(unknown) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
@@ -988,7 +1082,11 @@ DWORD WINAPI GetConsoleProcessList( DWORD *list, DWORD count )
                                     NULL, 0, list, count * sizeof(DWORD) );
 
     if (!status) return io.Information / sizeof(DWORD);
+#ifdef __REACTOS__
+    if (status == STATUS_BUFFER_TOO_SMALL || status == STATUS_BUFFER_OVERFLOW)
+#else
     if (status == STATUS_BUFFER_TOO_SMALL)
+#endif
     {
         DWORD ret = *list;
         *list = saved;
@@ -1538,7 +1636,11 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetConsoleCtrlHandler( PHANDLER_ROUTINE func, BOOL
 /******************************************************************************
  *	SetConsoleCursorInfo   (kernelbase.@)
  */
+#ifdef __REACTOS__
+BOOL WINAPI DECLSPEC_HOTPATCH SetConsoleCursorInfo( HANDLE handle, const CONSOLE_CURSOR_INFO *info )
+#else
 BOOL WINAPI DECLSPEC_HOTPATCH SetConsoleCursorInfo( HANDLE handle, CONSOLE_CURSOR_INFO *info )
+#endif
 {
     struct condrv_output_info_params params = { SET_CONSOLE_OUTPUT_INFO_CURSOR_GEOM };
 
@@ -1733,7 +1835,11 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetConsoleTitleW( LPCWSTR title )
 /******************************************************************************
  *	SetConsoleWindowInfo   (kernelbase.@)
  */
+#ifdef __REACTOS__
+BOOL WINAPI DECLSPEC_HOTPATCH SetConsoleWindowInfo( HANDLE handle, BOOL absolute, const SMALL_RECT *window )
+#else
 BOOL WINAPI DECLSPEC_HOTPATCH SetConsoleWindowInfo( HANDLE handle, BOOL absolute, SMALL_RECT *window )
+#endif
 {
     struct condrv_output_info_params params = { SET_CONSOLE_OUTPUT_INFO_DISPLAY_WINDOW };
     SMALL_RECT rect = *window;
@@ -2063,7 +2169,11 @@ BOOL WINAPI DECLSPEC_HOTPATCH WriteConsoleOutputCharacterW( HANDLE handle, LPCWS
 /***********************************************************************
  *            ReadConsoleA   (kernelbase.@)
  */
+#ifdef __REACTOS__
+BOOL WINAPI ReadConsoleA( HANDLE handle, void *buffer, DWORD length, DWORD *count, PCONSOLE_READCONSOLE_CONTROL reserved )
+#else
 BOOL WINAPI ReadConsoleA( HANDLE handle, void *buffer, DWORD length, DWORD *count, void *reserved )
+#endif
 {
     if (length > INT_MAX)
     {
@@ -2078,7 +2188,11 @@ BOOL WINAPI ReadConsoleA( HANDLE handle, void *buffer, DWORD length, DWORD *coun
 /***********************************************************************
  *            ReadConsoleW   (kernelbase.@)
  */
+#ifdef __REACTOS__
+BOOL WINAPI ReadConsoleW( HANDLE handle, void *buffer, DWORD length, DWORD *count, PCONSOLE_READCONSOLE_CONTROL reserved )
+#else
 BOOL WINAPI ReadConsoleW( HANDLE handle, void *buffer, DWORD length, DWORD *count, void *reserved )
+#endif
 {
     BOOL ret;
 
@@ -2113,7 +2227,7 @@ BOOL WINAPI ReadConsoleW( HANDLE handle, void *buffer, DWORD length, DWORD *coun
                              tmp, sizeof(DWORD) + length * sizeof(WCHAR), count );
         if (ret)
         {
-            memcpy( &crc->dwConsoleKeyState, tmp, sizeof(DWORD) );
+            memcpy( &crc->dwControlKeyState, tmp, sizeof(DWORD) );
             *count -= sizeof(DWORD);
             memcpy( buffer, tmp + sizeof(DWORD), *count );
         }
@@ -2187,6 +2301,9 @@ static HANDLE create_pseudo_console( COORD size, HANDLE input, HANDLE output, HA
                                      DWORD flags, HANDLE *process )
 {
     WCHAR cmd[MAX_PATH], conhost_path[MAX_PATH];
+#ifdef __REACTOS__
+    WCHAR system_dir[MAX_PATH];
+#endif
     unsigned int inherit_count;
     PROCESS_INFORMATION pi;
     HANDLE server, console;
@@ -2197,6 +2314,9 @@ static HANDLE create_pseudo_console( COORD size, HANDLE input, HANDLE output, HA
     BOOL res;
 
     if (!(server = create_console_server())) return NULL;
+#ifdef __REACTOS__
+    get_system_dir( system_dir, ARRAY_SIZE(system_dir) );
+#endif
 
     console = create_console_reference( server );
     if (!console)
@@ -2241,7 +2361,7 @@ static HANDLE create_pseudo_console( COORD size, HANDLE input, HANDLE output, HA
     }
     Wow64DisableWow64FsRedirection( &redir );
     res = CreateProcessW( conhost_path, cmd, NULL, NULL, TRUE, DETACHED_PROCESS | EXTENDED_STARTUPINFO_PRESENT,
-                          NULL, NULL, &si.StartupInfo, &pi );
+                          NULL, system_dir, &si.StartupInfo, &pi );
     HeapFree( GetProcessHeap(), 0, si.lpAttributeList );
     Wow64RevertWow64FsRedirection( redir );
     NtClose( server );
@@ -2327,8 +2447,8 @@ void WINAPI ClosePseudoConsole( HPCON handle )
  */
 HRESULT WINAPI ResizePseudoConsole( HPCON handle, COORD size )
 {
-    FIXME( "%p (%u,%u)\n", handle, size.X, size.Y );
-    return E_NOTIMPL;
+    FIXME( "%p (%u,%u) stub, faking success\n", handle, size.X, size.Y );
+    return S_OK;
 }
 
 static BOOL is_tty_handle( HANDLE handle )
@@ -2336,9 +2456,22 @@ static BOOL is_tty_handle( HANDLE handle )
     return ((UINT_PTR)handle & 3) == 1;
 }
 
+#ifdef __REACTOS__
+BOOL WINAPI VerifyConsoleIoHandle( HANDLE handle );
+#endif
+
 void init_console( void )
 {
     RTL_USER_PROCESS_PARAMETERS *params = RtlGetCurrentPeb()->ProcessParameters;
+
+#ifdef __REACTOS__
+    if (RtlImageNtHeader( GetModuleHandleW( NULL ) )->OptionalHeader.Subsystem != IMAGE_SUBSYSTEM_WINDOWS_CUI)
+    {
+        if (params->hStdInput && VerifyConsoleIoHandle( params->hStdInput )) params->hStdInput = NULL;
+        if (params->hStdOutput && VerifyConsoleIoHandle( params->hStdOutput )) params->hStdOutput = NULL;
+        if (params->hStdError && VerifyConsoleIoHandle( params->hStdError )) params->hStdError = NULL;
+    }
+#endif
 
     if (params->ConsoleHandle == CONSOLE_HANDLE_SHELL)
     {
@@ -2373,6 +2506,7 @@ void init_console( void )
         if (params->ConsoleHandle && create_console_connection( params->ConsoleHandle ))
         {
             init_console_std_handles( FALSE );
+            console_flags = 0;
         }
     }
     else if (params->ConsoleHandle == CONSOLE_HANDLE_ALLOC ||
@@ -2385,5 +2519,20 @@ void init_console( void )
             alloc_console( no_window );
     }
     else if (params->ConsoleHandle && params->ConsoleHandle != CONSOLE_HANDLE_SHELL_NO_WINDOW)
+    {
+#ifdef __REACTOS__
+        if (RtlImageNtHeader( GetModuleHandleW( NULL ) )->OptionalHeader.Subsystem != IMAGE_SUBSYSTEM_WINDOWS_CUI)
+        {
+            NtClose( params->ConsoleHandle );
+            params->ConsoleHandle = NULL;
+            return;
+        }
+#endif
         create_console_connection( params->ConsoleHandle );
+        if (params->ConsoleFlags & 2)
+        {
+            init_console_std_handles( FALSE );
+            params->ConsoleFlags &= ~2;
+        }
+    }
 }

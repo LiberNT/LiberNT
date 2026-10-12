@@ -48,13 +48,6 @@ list(APPEND SOURCE
     threadpool.c
     vista.c)
 
-# These functions are not exported from kernel32_vista (yet).
-# They are only used when NT6 exports in kernel32 are enabled.
-if(DLL_EXPORT_VERSION GREATER_EQUAL 0x600)
-    list(APPEND SOURCE
-        ../client/console/vista.c)
-endif()
-
 add_library(kernel32_vista_static ${SOURCE})
 target_link_libraries(kernel32_vista_static ${PSEH_LIB})
 add_dependencies(kernel32_vista_static psdk)

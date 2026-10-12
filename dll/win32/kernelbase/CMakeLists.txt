@@ -15,6 +15,7 @@ spec2def(kernelbase.dll kernelbase.spec ADD_IMPORTLIB)
 add_library(kernelbase MODULE
     AppContainer.c
     CancelSynchronousIo.c
+    ConsoleLegacy.c
     CpuSets.c
     DllMain.c
     AppModelToken.c
@@ -31,7 +32,7 @@ add_library(kernelbase MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/kernelbase.def)
 
 set_module_type(kernelbase win32dll ENTRYPOINT DllMain 12)
-target_link_libraries(kernelbase psapi_static kernelbase_static kernelbase_console kernel32_shared win32_registry_hkcr wine chkstk uuid)
+target_link_libraries(kernelbase psapi_static kernelbase_static kernel32_shared win32_registry_hkcr wine chkstk uuid)
 add_importlibs(kernelbase kernel32 kernel32_vista ntdll ntdll_vista)
 add_dependencies(kernelbase psdk errcodes)
 add_cd_file(TARGET kernelbase DESTINATION reactos/system32 FOR all)

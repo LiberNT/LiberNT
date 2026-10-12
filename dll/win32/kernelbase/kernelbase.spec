@@ -93,7 +93,7 @@
 @ stdcall CreateThreadpoolWait(ptr ptr ptr)
 @ stdcall CreateThreadpoolWork(ptr ptr ptr)
 @ stdcall CreateWellKnownSid(long ptr ptr ptr)
-@ stdcall CtrlRoutine(ptr) ConsoleControlDispatcher
+@ stdcall CtrlRoutine(ptr)
 @ stdcall DeriveCapabilitySidsFromName(ptr ptr ptr ptr ptr)
 @ stdcall DeleteAce(ptr long)
 @ stdcall DeleteBoundaryDescriptor(ptr) kernel32.DeleteBoundaryDescriptor
@@ -164,6 +164,7 @@
 @ stdcall GetConsoleCursorInfo(long ptr)
 @ stdcall GetConsoleDisplayMode(ptr)
 @ stdcall GetConsoleFontSize(long long)
+@ stdcall GetConsoleHistoryInfo(ptr)
 @ stdcall GetConsoleInputExeNameA(long ptr)
 @ stdcall GetConsoleInputExeNameW(long ptr)
 @ stdcall GetConsoleMode(long ptr)
@@ -172,11 +173,13 @@
 @ stdcall GetConsoleOutputCP()
 @ stdcall GetConsoleProcessList(ptr long)
 @ stdcall GetConsoleScreenBufferInfo(long ptr)
+@ stdcall GetConsoleScreenBufferInfoEx(ptr ptr)
 @ stdcall GetConsoleTitleA(ptr long)
 @ stdcall GetConsoleTitleW(ptr long)
 @ stdcall GetConsoleWindow()
 @ stdcall GetCurrentApplicationUserModelId(ptr ptr)
 @ stdcall GetCurrentConsoleFont(long long ptr)
+@ stdcall GetCurrentConsoleFontEx(ptr long ptr)
 @ stdcall -norelay GetCurrentProcess() kernel32.GetCurrentProcess
 @ stdcall -norelay GetCurrentProcessId() kernel32.GetCurrentProcessId
 @ stdcall -norelay GetCurrentThread() kernel32.GetCurrentThread
@@ -549,12 +552,15 @@
 @ stdcall SetConsoleCursorInfo(long ptr)
 @ stdcall SetConsoleCursorPosition(long long)
 @ stdcall SetConsoleDisplayMode(long long ptr)
+@ stdcall SetConsoleHistoryInfo(ptr)
 @ stdcall SetConsoleInputExeNameA(ptr)
 @ stdcall SetConsoleInputExeNameW(ptr)
 @ stdcall SetConsoleMode(long long)
 @ stdcall SetConsoleOutputCP(long)
+@ stdcall SetConsoleScreenBufferInfoEx(ptr ptr)
 @ stdcall SetConsoleScreenBufferSize(long long)
 @ stdcall SetConsoleTextAttribute(long long)
+@ stdcall SetCurrentConsoleFontEx(ptr long ptr)
 @ stdcall SetConsoleTitleA(str)
 @ stdcall SetConsoleTitleW(wstr)
 @ stdcall SetConsoleWindowInfo(long long ptr)

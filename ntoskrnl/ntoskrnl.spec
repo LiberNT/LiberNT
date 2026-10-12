@@ -1932,7 +1932,7 @@
 @ stdcall -arch=win64 RtlCopyLuidAndAttributesArray()
 @ stdcall -arch=win64 RtlCopySidAndAttributesArray()
 @ stdcall -arch=win64 RtlCreateUnicodeStringFromAsciiz()
-@ stdcall -arch=win64 RtlCreateUserThread()
+@ stdcall RtlCreateUserThread(ptr ptr long long long long ptr ptr ptr ptr)
 @ stdcall -arch=win64 RtlCultureNameToLCID()
 @ stdcall RtlDowncaseUnicodeChar(long)
 @ stdcall -arch=win64 RtlDuplicateUnicodeString()

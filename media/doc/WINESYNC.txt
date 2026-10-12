@@ -340,6 +340,7 @@ base/applications/wordpad           # Synced to Wine-11.14
 base/applications/write             # Synced to Wine-11.14
 base/services/rpcss                 # Synced to Wine-10.0
 base/services/schedsvc              # Synced to Wine-11.14
+base/system/conhost                 # Synced to Wine-11.14
 base/system/expand                  # Synced to Wine-11.14
 base/system/msiexec                 # Synced to Wine-11.14
 

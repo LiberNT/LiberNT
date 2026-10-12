@@ -40,7 +40,7 @@ if(NOT MSVC)
 endif()
 
 list(APPEND SOURCE_STATIC
-    #console.c #looks like ReactOS console.c is nothing like wine.
+    console.c
     debug.c
     locale.c
     main.c

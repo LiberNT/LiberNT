@@ -1674,7 +1674,7 @@ HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems","Kmode",0x000
 HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems","Optional",0x00010000,"Posix"
 HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems","Posix",0x00020000,"%SystemRoot%\system32\psxss.exe"
 HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems","Required",0x00010000,"Debug","Windows"
-HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems","Windows",0x00020000,"%SystemRoot%\system32\csrss.exe ObjectDirectory=\Windows SharedSection=1024,12288,512 Windows=On SubSystemType=Windows ServerDll=basesrv,1 ServerDll=winsrv:UserServerDllInitialization,3 ServerDll=winsrv:ConServerDllInitialization,2 ProfileControl=Off MaxRequestThreads=16"
+HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems","Windows",0x00020000,"%SystemRoot%\system32\csrss.exe ObjectDirectory=\Windows SharedSection=1024,12288,512 Windows=On SubSystemType=Windows ServerDll=basesrv,1 ServerDll=winsrv:UserServerDllInitialization,3 ProfileControl=Off MaxRequestThreads=16"
 
 ; This is an empty App Compat cache
 HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager\AppCompatCache","AppCompatCache", 0x00000001, \
@@ -1838,6 +1838,13 @@ HKLM,"SYSTEM\CurrentControlSet\Services\Ntfs","Start",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\Ntfs","Type",0x00010001,0x00000002
 ; un-comment the line below to enable EXPERIMENTAL write-support on NTFS volumes:
 HKLM,"SYSTEM\CurrentControlSet\Services\Ntfs","MyDataDoesNotMatterSoEnableExperimentalWriteSupportForEveryNTFSVolume",0x00010001,0x00000001
+; Console device driver
+HKLM,"SYSTEM\CurrentControlSet\Services\ConDrv","ErrorControl",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\ConDrv","Group",0x00000000,"Base"
+HKLM,"SYSTEM\CurrentControlSet\Services\ConDrv","ImagePath",0x00020000,"system32\drivers\condrv.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\ConDrv","Start",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\ConDrv","Type",0x00010001,0x00000001
+
 ; Null device driver
 HKLM,"SYSTEM\CurrentControlSet\Services\Null","ErrorControl",0x00010001,0x00000000
 HKLM,"SYSTEM\CurrentControlSet\Services\Null","Group",0x00000000,"Base"

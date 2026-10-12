@@ -12,6 +12,7 @@
 
 #include <k32.h>
 #include <reactos/emulation.h>
+#include <wow64shared.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -81,6 +82,104 @@ StuffStdHandle(IN HANDLE ProcessHandle,
                          &DuplicatedHandle,
                          sizeof(HANDLE),
                          &NumberOfBytesWritten);
+}
+
+static
+VOID
+BasepStuffChildHandle(IN HANDLE ProcessHandle,
+                      IN HANDLE SourceHandle,
+                      IN PRTL_USER_PROCESS_PARAMETERS RemoteParameters,
+                      IN ULONG_PTR RemoteParameters32,
+                      IN ULONG Offset,
+                      IN ULONG Offset32)
+{
+    HANDLE TargetHandle = NULL;
+    ULONG TargetHandle32;
+
+    if (!NT_SUCCESS(NtDuplicateObject(NtCurrentProcess(),
+                                      SourceHandle,
+                                      ProcessHandle,
+                                      &TargetHandle,
+                                      0,
+                                      0,
+                                      DUPLICATE_SAME_ACCESS | DUPLICATE_SAME_ATTRIBUTES)))
+    {
+        TargetHandle = NULL;
+    }
+
+    NtWriteVirtualMemory(ProcessHandle,
+                         (PUCHAR)RemoteParameters + Offset,
+                         &TargetHandle,
+                         sizeof(TargetHandle),
+                         NULL);
+    if (RemoteParameters32)
+    {
+        TargetHandle32 = HandleToUlong(TargetHandle);
+        NtWriteVirtualMemory(ProcessHandle,
+                             (PVOID)(RemoteParameters32 + Offset32),
+                             &TargetHandle32,
+                             sizeof(TargetHandle32),
+                             NULL);
+    }
+}
+
+static
+VOID
+BasepInheritConsole(IN HANDLE ProcessHandle,
+                    IN PPEB RemotePeb,
+                    IN ULONG_PTR RemotePeb32,
+                    IN HANDLE ConsoleHandle,
+                    IN BOOLEAN DuplicateStdHandles)
+{
+    PRTL_USER_PROCESS_PARAMETERS Parent = NtCurrentPeb()->ProcessParameters;
+    PRTL_USER_PROCESS_PARAMETERS RemoteParameters;
+    ULONG RemoteParameters32 = 0;
+
+    if ((LONG_PTR)ConsoleHandle <= 0 && !DuplicateStdHandles) return;
+
+    if (!NT_SUCCESS(NtReadVirtualMemory(ProcessHandle,
+                                        &RemotePeb->ProcessParameters,
+                                        &RemoteParameters,
+                                        sizeof(RemoteParameters),
+                                        NULL)))
+    {
+        return;
+    }
+    if (RemotePeb32 &&
+        !NT_SUCCESS(NtReadVirtualMemory(ProcessHandle,
+                                        (PVOID)(RemotePeb32 + FIELD_OFFSET(PEB32, ProcessParameters)),
+                                        &RemoteParameters32,
+                                        sizeof(RemoteParameters32),
+                                        NULL)))
+    {
+        RemoteParameters32 = 0;
+    }
+
+    if ((LONG_PTR)ConsoleHandle > 0)
+    {
+        BasepStuffChildHandle(ProcessHandle, ConsoleHandle, RemoteParameters, RemoteParameters32,
+                              FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS, ConsoleHandle),
+                              FIELD_OFFSET(WOW64_USER_PROCESS_PARAMETERS, ConsoleHandle));
+    }
+    if (!DuplicateStdHandles) return;
+    if (Parent->StandardInput)
+    {
+        BasepStuffChildHandle(ProcessHandle, Parent->StandardInput, RemoteParameters, RemoteParameters32,
+                              FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS, StandardInput),
+                              FIELD_OFFSET(WOW64_USER_PROCESS_PARAMETERS, StandardInput));
+    }
+    if (Parent->StandardOutput)
+    {
+        BasepStuffChildHandle(ProcessHandle, Parent->StandardOutput, RemoteParameters, RemoteParameters32,
+                              FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS, StandardOutput),
+                              FIELD_OFFSET(WOW64_USER_PROCESS_PARAMETERS, StandardOutput));
+    }
+    if (Parent->StandardError)
+    {
+        BasepStuffChildHandle(ProcessHandle, Parent->StandardError, RemoteParameters, RemoteParameters32,
+                              FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS, StandardError),
+                              FIELD_OFFSET(WOW64_USER_PROCESS_PARAMETERS, StandardError));
+    }
 }
 
 BOOLEAN
@@ -696,44 +795,30 @@ BasePushProcessParameters(IN ULONG ParameterFlags,
         ProcessParameters->StandardError = StartupInfo->hStdError;
     }
 
-    /* Use Special Flags for ConDllInitialize in Kernel32 */
-    if (CreationFlags & DETACHED_PROCESS)
+    if (CreationFlags & CREATE_NEW_CONSOLE)
     {
-        ProcessParameters->ConsoleHandle = HANDLE_DETACHED_PROCESS;
+        ProcessParameters->ConsoleHandle = CONSOLE_HANDLE_ALLOC;
     }
-    else if (CreationFlags & CREATE_NEW_CONSOLE)
+    else if (CreationFlags & DETACHED_PROCESS)
     {
-        ProcessParameters->ConsoleHandle = HANDLE_CREATE_NEW_CONSOLE;
+        ProcessParameters->ConsoleHandle = NULL;
     }
     else if (CreationFlags & CREATE_NO_WINDOW)
     {
-        ProcessParameters->ConsoleHandle = HANDLE_CREATE_NO_WINDOW;
+        ProcessParameters->ConsoleHandle = CONSOLE_HANDLE_ALLOC_NO_WINDOW;
     }
     else
     {
-        /* Inherit our Console Handle */
-        ProcessParameters->ConsoleHandle = Peb->ProcessParameters->ConsoleHandle;
+        ProcessParameters->ConsoleHandle = Peb->ProcessParameters->ConsoleHandle ?
+                                           Peb->ProcessParameters->ConsoleHandle : CONSOLE_HANDLE_ALLOC;
 
         /* Make sure that the shell isn't trampling on our handles first */
         if (!(StartupInfo->dwFlags &
              (STARTF_USESTDHANDLES | STARTF_USEHOTKEY | STARTF_SHELLPRIVATE)))
         {
-            /* Copy the handle if we are inheriting or if it's a console handle */
-            if ((InheritHandles) ||
-                (IsConsoleHandle(Peb->ProcessParameters->StandardInput)))
-            {
-                ProcessParameters->StandardInput = Peb->ProcessParameters->StandardInput;
-            }
-            if ((InheritHandles) ||
-                (IsConsoleHandle(Peb->ProcessParameters->StandardOutput)))
-            {
-                ProcessParameters->StandardOutput = Peb->ProcessParameters->StandardOutput;
-            }
-            if ((InheritHandles) ||
-                (IsConsoleHandle(Peb->ProcessParameters->StandardError)))
-            {
-                ProcessParameters->StandardError = Peb->ProcessParameters->StandardError;
-            }
+            ProcessParameters->StandardInput = Peb->ProcessParameters->StandardInput;
+            ProcessParameters->StandardOutput = Peb->ProcessParameters->StandardOutput;
+            ProcessParameters->StandardError = Peb->ProcessParameters->StandardError;
         }
     }
 
@@ -2667,7 +2752,7 @@ BasepCaptureExtendedAttributes(
                 SetLastError(ERROR_INVALID_PARAMETER);
                 return FALSE;
             }
-            Extended->PseudoConsole = ((PBASE_PSEUDO_CONSOLE)Attribute->Value)->ConsoleHandle;
+            Extended->PseudoConsole = ((PBASE_PSEUDO_CONSOLE)Attribute->Value)->Reference;
         }
         else if (Attribute->Attribute == PROC_THREAD_ATTRIBUTE_HANDLE_LIST)
         {
@@ -2748,6 +2833,8 @@ BasepCreateUserProcess(IN HANDLE UserToken,
     SECTION_IMAGE_INFORMATION ImageInformation;
     PROCESS_PRIORITY_CLASS LocalPriorityClass;
     RTL_USER_PROCESS_PARAMETERS *ProcessParameters = NULL;
+    HANDLE ChildConsoleHandle;
+    BOOLEAN DuplicateStdHandles = FALSE;
     OBJECT_ATTRIBUTES ProcessObjectAttributes, ThreadObjectAttributes;
     POBJECT_ATTRIBUTES ProcessObjectAttributesPtr, ThreadObjectAttributesPtr;
     UNICODE_STRING DllPath, ImageName, CommandLineString, CurrentDirectory;
@@ -2811,16 +2898,19 @@ BasepCreateUserProcess(IN HANDLE UserToken,
         ProcessParameters->StandardError = StartupInfo->hStdError;
     }
 
-    if (CreationFlags & DETACHED_PROCESS)
-        ProcessParameters->ConsoleHandle = HANDLE_DETACHED_PROCESS;
-    else if (CreationFlags & CREATE_NEW_CONSOLE)
-        ProcessParameters->ConsoleHandle = HANDLE_CREATE_NEW_CONSOLE;
-    else if (CreationFlags & CREATE_NO_WINDOW)
-        ProcessParameters->ConsoleHandle = HANDLE_CREATE_NO_WINDOW;
-    else if (Extended->PseudoConsole)
+    if (Extended->PseudoConsole)
         ProcessParameters->ConsoleHandle = Extended->PseudoConsole;
-    else
+    else if (CreationFlags & CREATE_NEW_CONSOLE)
+        ProcessParameters->ConsoleHandle = CONSOLE_HANDLE_ALLOC;
+    else if (CreationFlags & DETACHED_PROCESS)
+        ProcessParameters->ConsoleHandle = NULL;
+    else if (CreationFlags & CREATE_NO_WINDOW)
+        ProcessParameters->ConsoleHandle = CONSOLE_HANDLE_ALLOC_NO_WINDOW;
+    else if (NtCurrentPeb()->ProcessParameters->ConsoleHandle)
         ProcessParameters->ConsoleHandle = NtCurrentPeb()->ProcessParameters->ConsoleHandle;
+    else
+        ProcessParameters->ConsoleHandle = CONSOLE_HANDLE_ALLOC;
+    ChildConsoleHandle = ProcessParameters->ConsoleHandle;
 
     if (!(CreationFlags & (DETACHED_PROCESS | CREATE_NEW_CONSOLE | CREATE_NO_WINDOW)) &&
         !Extended->PseudoConsole &&
@@ -2828,12 +2918,10 @@ BasepCreateUserProcess(IN HANDLE UserToken,
     {
         PRTL_USER_PROCESS_PARAMETERS Parent = NtCurrentPeb()->ProcessParameters;
 
-        if (InheritHandles || IsConsoleHandle(Parent->StandardInput))
-            ProcessParameters->StandardInput = Parent->StandardInput;
-        if (InheritHandles || IsConsoleHandle(Parent->StandardOutput))
-            ProcessParameters->StandardOutput = Parent->StandardOutput;
-        if (InheritHandles || IsConsoleHandle(Parent->StandardError))
-            ProcessParameters->StandardError = Parent->StandardError;
+        ProcessParameters->StandardInput = Parent->StandardInput;
+        ProcessParameters->StandardOutput = Parent->StandardOutput;
+        ProcessParameters->StandardError = Parent->StandardError;
+        DuplicateStdHandles = !InheritHandles;
     }
 
     if (!(CreationFlags & CREATE_NEW_PROCESS_GROUP) || (CreationFlags & CREATE_NEW_CONSOLE)) ProcessParameters->ConsoleFlags = NtCurrentPeb()->ProcessParameters->ConsoleFlags;
@@ -3007,6 +3095,12 @@ BasepCreateUserProcess(IN HANDLE UserToken,
         Status = STATUS_INVALID_IMAGE_FORMAT;
         goto Failure;
     }
+
+    BasepInheritConsole(ProcessHandle,
+                        (PPEB)(ULONG_PTR)CreateInfo.SuccessState.PebAddressNative,
+                        (ULONG_PTR)CreateInfo.SuccessState.PebAddressWow64,
+                        ChildConsoleHandle,
+                        DuplicateStdHandles);
 
     LocalPriorityClass = *PriorityClass;
     if (LocalPriorityClass.PriorityClass)
@@ -5005,6 +5099,11 @@ StartScan:
                                        IsWowApp ? IMAGE_SUBSYSTEM_WINDOWS_GUI: 0,
                                        AppCompatData,
                                        AppCompatDataSize);
+    if (Result &&
+        !((dwCreationFlags | NoWindow) & (DETACHED_PROCESS | CREATE_NEW_CONSOLE | CREATE_NO_WINDOW)))
+    {
+        BasepInheritConsole(ProcessHandle, RemotePeb, 0, Peb->ProcessParameters->ConsoleHandle, FALSE);
+    }
     if (!Result)
     {
         /* The remote process would have an undefined state, so fail the call */

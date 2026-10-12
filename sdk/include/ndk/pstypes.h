@@ -1211,7 +1211,6 @@ typedef enum _APPCOMPAT_USERFLAGS_HIGHPART
 //
 #include "peb_teb.h"
 
-#ifdef _WIN64
 //
 // Explicit 32 bit PEB/TEB
 //
@@ -1219,6 +1218,7 @@ typedef enum _APPCOMPAT_USERFLAGS_HIGHPART
 #include "peb_teb.h"
 #undef EXPLICIT_32BIT
 
+#ifdef _WIN64
 //
 // Explicit 64 bit PEB/TEB
 //

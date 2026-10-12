@@ -2,6 +2,7 @@
 add_subdirectory(autochk)
 add_subdirectory(bootok)
 add_subdirectory(chkdsk)
+add_subdirectory(conhost)
 add_subdirectory(conime)
 add_subdirectory(diskpart)
 add_subdirectory(dllhost)
