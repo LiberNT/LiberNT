@@ -112,6 +112,14 @@ E1000RegisterInterrupt(
         DPRINT("E1000: Using legacy line-based interrupt\n");
     }
 
+    if (IntChars.MsiSupported)
+    {
+        IntChars.MessageInterruptHandler = E1000MiniportMessageInterrupt;
+        IntChars.MessageInterruptDpcHandler = E1000MiniportMessageInterruptDpc;
+        IntChars.DisableMessageInterruptHandler = E1000MiniportDisableMessageInterrupt;
+        IntChars.EnableMessageInterruptHandler = E1000MiniportEnableMessageInterrupt;
+    }
+
     /* Register interrupt with NDIS */
     Status = NdisMRegisterInterruptEx(
                 Adapter->MiniportAdapterHandle,
@@ -175,6 +183,8 @@ E1000RegisterInterrupt(
                          IntChars.MessageInfoTable->MessageCount,
                          IntChars.MessageInfoTable->UnifiedIrql,
                          IntChars.MessageInfoTable->MessageInfo);
+
+                Adapter->MsixInfo.VectorCount = IntChars.MessageInfoTable->MessageCount;
 
                 if (IntChars.MessageInfoTable->MessageCount > 1)
                 {
@@ -699,7 +709,10 @@ E1000EnableInterrupts(
     Adapter->InterruptMask = InterruptMask;
 
     /* Clear pending interrupts first */
-    E1000_READ_REG(Adapter, E1000_REG_ICR);
+    if (Adapter->InterruptMode != E1000InterruptModeMsix)
+    {
+        E1000_READ_REG(Adapter, E1000_REG_ICR);
+    }
 
     /* Enable interrupts */
     E1000_WRITE_REG(Adapter, E1000_REG_IMS, InterruptMask);
@@ -1087,6 +1100,107 @@ E1000MiniportEnableInterruptEx(
     {
         E1000EnableInterrupts(Adapter);
     }
+}
+
+BOOLEAN
+NTAPI
+E1000MiniportMessageInterrupt(
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _In_ ULONG MessageId,
+    _Out_ PBOOLEAN QueueDefaultInterruptDpc,
+    _Out_ PULONG TargetProcessors
+    )
+{
+    PE1000_ADAPTER Adapter = (PE1000_ADAPTER)MiniportInterruptContext;
+    ULONG Cause;
+
+    if (Adapter == NULL || Adapter->InterruptMode != E1000InterruptModeMsix)
+    {
+        return E1000MiniportInterrupt(MiniportInterruptContext,
+                                      QueueDefaultInterruptDpc,
+                                      TargetProcessors);
+    }
+
+    *QueueDefaultInterruptDpc = FALSE;
+    *TargetProcessors = 0;
+
+    if (Adapter->IoBase == NULL)
+    {
+        return FALSE;
+    }
+
+    if (Adapter->MsixInfo.VectorCount >= 3 && MessageId == 0)
+    {
+        Cause = E1000_IMS_RXQ0;
+    }
+    else if (Adapter->MsixInfo.VectorCount >= 3 && MessageId == 1)
+    {
+        Cause = E1000_IMS_TXQ0;
+    }
+    else if (Adapter->MsixInfo.VectorCount >= 3)
+    {
+        Cause = E1000_IMS_OTHER | E1000_IMS_LSC;
+    }
+    else
+    {
+        Cause = E1000_IMS_RXQ0 | E1000_IMS_TXQ0 | E1000_IMS_OTHER | E1000_IMS_LSC;
+    }
+
+    E1000_WRITE_REG(Adapter, E1000_REG_IMC, 0xFFFFFFFF);
+
+    if (Cause & E1000_IMS_OTHER)
+    {
+        E1000_READ_REG(Adapter, E1000_REG_ICR);
+    }
+
+    InterlockedOr((LONG*)&Adapter->InterruptPending, (LONG)Cause);
+
+    *QueueDefaultInterruptDpc = TRUE;
+    *TargetProcessors = 1;
+
+    return TRUE;
+}
+
+VOID
+NTAPI
+E1000MiniportMessageInterruptDpc(
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _In_ ULONG MessageId,
+    _In_ PVOID MiniportDpcContext,
+    _In_ PVOID ReceiveThrottleParameters,
+    _In_ PVOID NdisReserved2
+    )
+{
+    UNREFERENCED_PARAMETER(MessageId);
+
+    E1000MiniportInterruptDpc(MiniportInterruptContext,
+                              MiniportDpcContext,
+                              ReceiveThrottleParameters,
+                              NdisReserved2);
+}
+
+VOID
+NTAPI
+E1000MiniportDisableMessageInterrupt(
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _In_ ULONG MessageId
+    )
+{
+    UNREFERENCED_PARAMETER(MessageId);
+
+    E1000MiniportDisableInterruptEx(MiniportInterruptContext);
+}
+
+VOID
+NTAPI
+E1000MiniportEnableMessageInterrupt(
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _In_ ULONG MessageId
+    )
+{
+    UNREFERENCED_PARAMETER(MessageId);
+
+    E1000MiniportEnableInterruptEx(MiniportInterruptContext);
 }
 
 
