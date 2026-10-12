@@ -2374,6 +2374,23 @@ RtlpReportInvalidFree(HANDLE HeapPtr, PVOID Ptr)
 
 static
 BOOLEAN
+RtlpIsLinkedFreeEntry(PHEAP Heap, PHEAP_ENTRY HeapEntry)
+{
+    PLIST_ENTRY Link = &((PHEAP_FREE_ENTRY)HeapEntry)->FreeList;
+    PLIST_ENTRY Flink = Link->Flink;
+    PLIST_ENTRY Blink = Link->Blink;
+
+    if (!RtlpHeapSegmentFromAddress(Heap, Flink) ||
+        !RtlpHeapSegmentFromAddress(Heap, Blink))
+    {
+        return FALSE;
+    }
+
+    return Flink->Blink == Link && Blink->Flink == Link;
+}
+
+static
+BOOLEAN
 RtlpIsValidBusyEntry(PHEAP Heap, PHEAP_ENTRY HeapEntry)
 {
     PHEAP_SEGMENT Segment;
@@ -2404,6 +2421,11 @@ RtlpIsValidBusyEntry(PHEAP Heap, PHEAP_ENTRY HeapEntry)
             Neighbor = HeapEntry + HeapEntry->Size;
             if (Neighbor->PreviousSize != HeapEntry->Size)
                 _SEH2_LEAVE;
+            if (!(Neighbor->Flags & HEAP_ENTRY_BUSY) &&
+                !RtlpIsLinkedFreeEntry(Heap, Neighbor))
+            {
+                _SEH2_LEAVE;
+            }
         }
 
         if (HeapEntry->PreviousSize != 0)
@@ -2413,6 +2435,11 @@ RtlpIsValidBusyEntry(PHEAP Heap, PHEAP_ENTRY HeapEntry)
             Neighbor = HeapEntry - HeapEntry->PreviousSize;
             if (Neighbor->Size != HeapEntry->PreviousSize)
                 _SEH2_LEAVE;
+            if (!(Neighbor->Flags & HEAP_ENTRY_BUSY) &&
+                !RtlpIsLinkedFreeEntry(Heap, Neighbor))
+            {
+                _SEH2_LEAVE;
+            }
         }
 
         Valid = TRUE;
