@@ -4147,6 +4147,66 @@ extern "C" HRESULT d3d11_native_create_device(IDXGIAdapter *adapter, UINT flags,
     return S_OK;
 }
 
+class NativeLuidAdapter final : public IDXGIAdapter
+{
+    LONG references = 1;
+    LUID luid;
+public:
+    explicit NativeLuidAdapter(const LUID &adapter_luid) : luid(adapter_luid) {}
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **out) override
+    {
+        if (!out) return E_INVALIDARG;
+        *out = NULL;
+        if (!IsEqualGUID(iid, IID_IUnknown) && !IsEqualGUID(iid, IID_IDXGIObject) && !IsEqualGUID(iid, IID_IDXGIAdapter))
+            return E_NOINTERFACE;
+        *out = static_cast<IDXGIAdapter *>(this);
+        AddRef();
+        return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&references); }
+    ULONG STDMETHODCALLTYPE Release() override
+    {
+        ULONG count = InterlockedDecrement(&references);
+        if (!count) delete this;
+        return count;
+    }
+    HRESULT STDMETHODCALLTYPE SetPrivateData(REFGUID, UINT, const void *) override { return E_NOTIMPL; }
+    HRESULT STDMETHODCALLTYPE SetPrivateDataInterface(REFGUID, const IUnknown *) override { return E_NOTIMPL; }
+    HRESULT STDMETHODCALLTYPE GetPrivateData(REFGUID, UINT *, void *) override { return DXGI_ERROR_NOT_FOUND; }
+    HRESULT STDMETHODCALLTYPE GetParent(REFIID, void **out) override
+    {
+        if (out) *out = NULL;
+        return E_NOINTERFACE;
+    }
+    HRESULT STDMETHODCALLTYPE EnumOutputs(UINT, IDXGIOutput **out) override
+    {
+        if (out) *out = NULL;
+        return DXGI_ERROR_NOT_FOUND;
+    }
+    HRESULT STDMETHODCALLTYPE GetDesc(DXGI_ADAPTER_DESC *desc) override
+    {
+        if (!desc) return E_INVALIDARG;
+        memset(desc, 0, sizeof(*desc));
+        desc->AdapterLuid = luid;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE CheckInterfaceSupport(REFGUID, LARGE_INTEGER *) override { return DXGI_ERROR_UNSUPPORTED; }
+};
+
+extern "C" HRESULT WINAPI RosD3D11CreateDeviceForAdapterLuid(const LUID *luid, UINT flags, ID3D11Device **out)
+{
+    static const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
+            D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0};
+    if (!out) return E_INVALIDARG;
+    *out = NULL;
+    if (!luid) return E_INVALIDARG;
+    NativeLuidAdapter *adapter = new NativeLuidAdapter(*luid);
+    if (!adapter) return E_OUTOFMEMORY;
+    HRESULT hr = d3d11_native_create_device(adapter, flags, levels, ARRAYSIZE(levels), out);
+    adapter->Release();
+    return hr;
+}
+
 HRESULT STDMETHODCALLTYPE NativeDevice::CreateSamplerState(const D3D11_SAMPLER_DESC *input, ID3D11SamplerState **out)
 {
     if (out) *out = NULL;

@@ -113,11 +113,15 @@ typedef HRESULT (WINAPI *PFN_DWM_DX_UPDATE_WINDOW_SHARED_SURFACE)(
     HWND, ULONGLONG, DWORD, HMONITOR, const RECT *);
 typedef HRESULT (WINAPI *PFN_DWM_DX_PUBLISH_WINDOW_SURFACE)(
     HWND, LUID, HANDLE, UINT, UINT, HANDLE, DWORD);
+typedef HRESULT (WINAPI *PFN_DWM_DX_GET_WINDOW_GPU_SURFACE)(HWND, LUID, HANDLE *);
+typedef HRESULT (WINAPI *PFN_DWM_DX_PUBLISH_WINDOW_GPU_SURFACE)(HWND);
 
 static INIT_ONCE DwmDxInitOnce = INIT_ONCE_STATIC_INIT;
 static PFN_DWM_DX_GET_WINDOW_SHARED_SURFACE DwmDxGetWindowSharedSurface;
 static PFN_DWM_DX_UPDATE_WINDOW_SHARED_SURFACE DwmDxUpdateWindowSharedSurface;
 static PFN_DWM_DX_PUBLISH_WINDOW_SURFACE DwmDxPublishWindowSurface;
+static PFN_DWM_DX_GET_WINDOW_GPU_SURFACE DwmDxGetWindowGpuSurface;
+static PFN_DWM_DX_PUBLISH_WINDOW_GPU_SURFACE DwmDxPublishWindowGpuSurface;
 static LONG DwmDxPresentFailureLogged;
 
 typedef struct _WGL_ASYNC_PRESENT
@@ -506,6 +510,12 @@ IntLoadDwmDxCallbacks(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *Context)
     DwmDxPublishWindowSurface =
         (PFN_DWM_DX_PUBLISH_WINDOW_SURFACE)
             GetProcAddress(Module, "DwmpDxPublishWindowSurface");
+    DwmDxGetWindowGpuSurface =
+        (PFN_DWM_DX_GET_WINDOW_GPU_SURFACE)
+            GetProcAddress(Module, "DwmpDxGetWindowGpuSurface");
+    DwmDxPublishWindowGpuSurface =
+        (PFN_DWM_DX_PUBLISH_WINDOW_GPU_SURFACE)
+            GetProcAddress(Module, "DwmpDxPublishWindowGpuSurface");
     return TRUE;
 }
 
@@ -854,6 +864,49 @@ IntPresentRetainedBuffers(HDC hdc, const WGL_PRESENTBUFFERS_CB_RETAINED *Retaine
     return IntPresentRetained(hdc, Window, IcdData, Retained);
 }
 
+static BOOL
+IntPresentGpuSurface(HDC hdc,
+                     HWND Window,
+                     struct ICD_Data *IcdData,
+                     const WGL_PRESENTBUFFERS_CB *CallbackData)
+{
+    WGL_PRESENTBUFFERS PresentData;
+    HANDLE SharedSurface = NULL;
+    HRESULT Result;
+
+    if (DwmDxGetWindowGpuSurface == NULL || DwmDxPublishWindowGpuSurface == NULL)
+    {
+        IntReportDwmDxPresentFailure("gpu_callbacks", E_NOINTERFACE);
+        return FALSE;
+    }
+
+    Result = DwmDxGetWindowGpuSurface(Window, CallbackData->AdapterLuid, &SharedSurface);
+    if (Result == S_FALSE || Result == E_PENDING)
+        return TRUE;
+    if (FAILED(Result) || SharedSurface == NULL)
+    {
+        IntReportDwmDxPresentFailure("gpu_surface", Result);
+        return FALSE;
+    }
+
+    RtlZeroMemory(&PresentData, sizeof(PresentData));
+    PresentData.hSurface = SharedSurface;
+    PresentData.AdapterLuid = CallbackData->AdapterLuid;
+    PresentData.PrivateData = CallbackData->PrivateData;
+    if (!IcdData->DrvPresentBuffers(hdc, &PresentData))
+    {
+        IntReportDwmDxPresentFailure("icd_present_gpu", E_FAIL);
+        return FALSE;
+    }
+    Result = DwmDxPublishWindowGpuSurface(Window);
+    if (FAILED(Result))
+    {
+        IntReportDwmDxPresentFailure("publish_gpu", Result);
+        return FALSE;
+    }
+    return TRUE;
+}
+
 static BOOL APIENTRY
 wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
 {
@@ -943,6 +996,8 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
         return TRUE; /* compositor intentionally dropped this immediate frame */
     if (FAILED(Result))
     {
+        if (Result == HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED))
+            return IntPresentGpuSurface(hdc, Window, IcdData, CallbackData);
         IntReportDwmDxPresentFailure("get_surface", Result);
         if (Result == HRESULT_FROM_WIN32(ERROR_NOT_READY) ||
             Result == DWM_E_COMPOSITIONDISABLED)

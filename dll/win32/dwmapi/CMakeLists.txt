@@ -20,6 +20,6 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
         -Wl,--major-subsystem-version,10
         -Wl,--minor-subsystem-version,0)
 endif()
-target_link_libraries(dwmapi uuid wine)
+target_link_libraries(dwmapi uuid dx10guid wine)
 add_importlibs(dwmapi advapi32 dcomp gdi32 win32u user32_vista user32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET dwmapi DESTINATION reactos/system32 FOR all)

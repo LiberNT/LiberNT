@@ -107,3 +107,5 @@
 206 stdcall DwmUnregisterThumbnail(long)
 207 stdcall DwmUpdateThumbnailProperties(ptr ptr)
 @ stdcall DwmpDxPublishWindowSurface(ptr int64 ptr long long ptr long)
+@ stdcall DwmpDxGetWindowGpuSurface(ptr int64 ptr)
+@ stdcall DwmpDxPublishWindowGpuSurface(ptr)

@@ -43,3 +43,4 @@
 @ stub D3DKMTWaitForVerticalBlankEvent
 @ stub OpenAdapter10
 @ stub OpenAdapter10_2
+@ stdcall -private RosD3D11CreateDeviceForAdapterLuid(ptr long ptr)

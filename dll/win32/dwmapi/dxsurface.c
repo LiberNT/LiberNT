@@ -20,7 +20,9 @@
 #define DXGKDDI_INTERFACE_VERSION 0xF003
 #endif
 
+#define COBJMACROS
 #include <windows.h>
+#include <d3d11.h>
 #include <d3dkmthk.h>
 #include <ndk/rtlfuncs.h>
 #include <reactos/dwmframe.h>
@@ -36,12 +38,15 @@ DWORD_PTR NTAPI NtUserCallOneParam(DWORD_PTR Param, DWORD Routine);
 
 #define DWM_DX_MAX_DEVICES 8
 #define DWM_DX_MAX_SURFACES 128
+#define DWM_DX_GPU_BUFFERS 2
 
 typedef struct _DWM_DX_DEVICE
 {
     LUID Luid;
     D3DKMT_HANDLE hAdapter;
     D3DKMT_HANDLE hDevice;
+    BOOL NoOsSurface;
+    ID3D11Device *GpuDevice;
 } DWM_DX_DEVICE;
 
 typedef struct _DWM_DX_SURFACE
@@ -57,10 +62,30 @@ typedef struct _DWM_DX_SURFACE
     DWM_DX_SHARED_SURFACE_INFO Info;
 } DWM_DX_SURFACE;
 
+typedef struct _DWM_DX_GPU_SURFACE
+{
+    HWND Window;
+    ULONG DeviceIndex;
+    ULONG Width;
+    ULONG Height;
+    ULONG Current;
+    BOOL Ready;
+    BOOL Pending;
+    HRESULT CreateResult;
+    ID3D11Texture2D *Texture[DWM_DX_GPU_BUFFERS];
+    HANDLE SharedSurface[DWM_DX_GPU_BUFFERS];
+    HANDLE ReleaseEvent[DWM_DX_GPU_BUFFERS];
+} DWM_DX_GPU_SURFACE;
+
+typedef HRESULT (WINAPI *PFN_ROS_D3D11_CREATE_DEVICE_FOR_LUID)(const LUID *, UINT, ID3D11Device **);
+
 static INIT_ONCE g_DxInitOnce = INIT_ONCE_STATIC_INIT;
 static CRITICAL_SECTION g_DxLock;
 static DWM_DX_DEVICE g_DxDevices[DWM_DX_MAX_DEVICES];
 static DWM_DX_SURFACE g_DxSurfaces[DWM_DX_MAX_SURFACES];
+static DWM_DX_GPU_SURFACE g_DxGpuSurfaces[DWM_DX_MAX_SURFACES];
+static HMODULE g_D3d11Module;
+static HANDLE g_DxGpuWorkEvent;
 static LONG g_DxFailureLogged;
 
 static VOID
@@ -177,6 +202,190 @@ DwmDxGetDevice(const LUID *Luid, ULONG *DeviceIndex)
     return STATUS_SUCCESS;
 }
 
+static HRESULT
+DwmDxGetGpuDevice(ULONG DeviceIndex, ID3D11Device **Device)
+{
+    PFN_ROS_D3D11_CREATE_DEVICE_FOR_LUID CreateDevice;
+    HRESULT Result;
+
+    *Device = g_DxDevices[DeviceIndex].GpuDevice;
+    if (*Device != NULL)
+        return S_OK;
+    if (g_D3d11Module == NULL)
+        g_D3d11Module = LoadLibraryW(L"d3d11.dll");
+    if (g_D3d11Module == NULL)
+        return HRESULT_FROM_WIN32(GetLastError());
+    CreateDevice = (PFN_ROS_D3D11_CREATE_DEVICE_FOR_LUID)
+        GetProcAddress(g_D3d11Module, "RosD3D11CreateDeviceForAdapterLuid");
+    if (CreateDevice == NULL)
+        return E_NOINTERFACE;
+    Result = CreateDevice(&g_DxDevices[DeviceIndex].Luid, 0, &g_DxDevices[DeviceIndex].GpuDevice);
+    if (FAILED(Result))
+        return Result;
+    *Device = g_DxDevices[DeviceIndex].GpuDevice;
+    return S_OK;
+}
+
+static VOID
+DwmDxDestroyGpuSurface(DWM_DX_GPU_SURFACE *Surface)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < DWM_DX_GPU_BUFFERS; ++Index)
+    {
+        if (Surface->Texture[Index] != NULL)
+            ID3D11Texture2D_Release(Surface->Texture[Index]);
+        if (Surface->ReleaseEvent[Index] != NULL)
+            CloseHandle(Surface->ReleaseEvent[Index]);
+    }
+    RtlZeroMemory(Surface, sizeof(*Surface));
+}
+
+static BOOL
+DwmDxGpuBufferReleased(const DWM_DX_GPU_SURFACE *Surface, ULONG Index)
+{
+    return WaitForSingleObject(Surface->ReleaseEvent[Index], 0) != WAIT_TIMEOUT;
+}
+
+static HRESULT
+DwmDxCreateGpuBuffers(ULONG DeviceIndex,
+                      ULONG Width,
+                      ULONG Height,
+                      DWM_DX_GPU_SURFACE *Buffers)
+{
+    D3D11_TEXTURE2D_DESC Desc;
+    IDXGIResource *Resource;
+    ID3D11Device *Device;
+    ULONG Index;
+    HRESULT Result;
+
+    Result = DwmDxGetGpuDevice(DeviceIndex, &Device);
+    if (FAILED(Result))
+        return Result;
+
+    RtlZeroMemory(&Desc, sizeof(Desc));
+    Desc.Width = Width;
+    Desc.Height = Height;
+    Desc.MipLevels = 1;
+    Desc.ArraySize = 1;
+    Desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    Desc.SampleDesc.Count = 1;
+    Desc.Usage = D3D11_USAGE_DEFAULT;
+    Desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    Desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+    for (Index = 0; Index < DWM_DX_GPU_BUFFERS && SUCCEEDED(Result); ++Index)
+    {
+        Result = ID3D11Device_CreateTexture2D(Device, &Desc, NULL, &Buffers->Texture[Index]);
+        if (SUCCEEDED(Result))
+            Result = ID3D11Texture2D_QueryInterface(Buffers->Texture[Index], &IID_IDXGIResource, (void **)&Resource);
+        if (SUCCEEDED(Result))
+        {
+            Result = IDXGIResource_GetSharedHandle(Resource, &Buffers->SharedSurface[Index]);
+            IDXGIResource_Release(Resource);
+        }
+        if (SUCCEEDED(Result))
+        {
+            Buffers->ReleaseEvent[Index] = CreateEventW(NULL, TRUE, TRUE, NULL);
+            if (Buffers->ReleaseEvent[Index] == NULL)
+                Result = HRESULT_FROM_WIN32(GetLastError());
+        }
+    }
+    if (FAILED(Result))
+        DwmDxDestroyGpuSurface(Buffers);
+    return Result;
+}
+
+static DWORD WINAPI
+DwmDxGpuWorker(PVOID Parameter)
+{
+    DWM_DX_GPU_SURFACE Buffers;
+    DWM_DX_GPU_SURFACE *Surface;
+    HWND Window;
+    ULONG DeviceIndex, Width, Height, Index, Buffer;
+    HRESULT Result;
+
+    UNREFERENCED_PARAMETER(Parameter);
+    for (;;)
+    {
+        WaitForSingleObject(g_DxGpuWorkEvent, INFINITE);
+        for (;;)
+        {
+            EnterCriticalSection(&g_DxLock);
+            for (Index = 0; Index < DWM_DX_MAX_SURFACES && !g_DxGpuSurfaces[Index].Pending; ++Index)
+                ;
+            if (Index == DWM_DX_MAX_SURFACES)
+            {
+                LeaveCriticalSection(&g_DxLock);
+                break;
+            }
+            Window = g_DxGpuSurfaces[Index].Window;
+            DeviceIndex = g_DxGpuSurfaces[Index].DeviceIndex;
+            Width = g_DxGpuSurfaces[Index].Width;
+            Height = g_DxGpuSurfaces[Index].Height;
+            LeaveCriticalSection(&g_DxLock);
+
+            RtlZeroMemory(&Buffers, sizeof(Buffers));
+            Result = DwmDxCreateGpuBuffers(DeviceIndex, Width, Height, &Buffers);
+
+            EnterCriticalSection(&g_DxLock);
+            Surface = &g_DxGpuSurfaces[Index];
+            if (Surface->Pending && Surface->Window == Window &&
+                Surface->DeviceIndex == DeviceIndex &&
+                Surface->Width == Width && Surface->Height == Height)
+            {
+                for (Buffer = 0; Buffer < DWM_DX_GPU_BUFFERS; ++Buffer)
+                {
+                    Surface->Texture[Buffer] = Buffers.Texture[Buffer];
+                    Surface->SharedSurface[Buffer] = Buffers.SharedSurface[Buffer];
+                    Surface->ReleaseEvent[Buffer] = Buffers.ReleaseEvent[Buffer];
+                }
+                Surface->Current = DWM_DX_GPU_BUFFERS - 1;
+                Surface->CreateResult = Result;
+                Surface->Ready = SUCCEEDED(Result);
+                Surface->Pending = FALSE;
+            }
+            else if (SUCCEEDED(Result))
+            {
+                DwmDxDestroyGpuSurface(&Buffers);
+            }
+            LeaveCriticalSection(&g_DxLock);
+        }
+    }
+}
+
+static HRESULT
+DwmDxQueueGpuSurface(DWM_DX_GPU_SURFACE *Surface,
+                     HWND Window,
+                     ULONG DeviceIndex,
+                     ULONG Width,
+                     ULONG Height)
+{
+    HANDLE Thread;
+
+    if (g_DxGpuWorkEvent == NULL)
+    {
+        g_DxGpuWorkEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+        if (g_DxGpuWorkEvent == NULL)
+            return HRESULT_FROM_WIN32(GetLastError());
+        Thread = CreateThread(NULL, 0, DwmDxGpuWorker, NULL, 0, NULL);
+        if (Thread == NULL)
+        {
+            CloseHandle(g_DxGpuWorkEvent);
+            g_DxGpuWorkEvent = NULL;
+            return HRESULT_FROM_WIN32(GetLastError());
+        }
+        CloseHandle(Thread);
+    }
+    DwmDxDestroyGpuSurface(Surface);
+    Surface->Window = Window;
+    Surface->DeviceIndex = DeviceIndex;
+    Surface->Width = Width;
+    Surface->Height = Height;
+    Surface->Pending = TRUE;
+    SetEvent(g_DxGpuWorkEvent);
+    return E_PENDING;
+}
+
 static NTSTATUS
 DwmDxRegisterSurface(HWND Window,
                      const LUID *Luid,
@@ -197,6 +406,8 @@ DwmDxRegisterSurface(HWND Window,
     Status = DwmDxGetDevice(Luid, &DeviceIndex);
     if (!NT_SUCCESS(Status))
         return Status;
+    if (g_DxDevices[DeviceIndex].NoOsSurface)
+        return STATUS_NOT_SUPPORTED;
 
     RtlZeroMemory(&RuntimeInfo, sizeof(RuntimeInfo));
     RuntimeInfo.Magic = DWM_DX_SURFACE_INFO_MAGIC;
@@ -226,6 +437,11 @@ DwmDxRegisterSurface(HWND Window,
     if (!NT_SUCCESS(Status))
     {
         DwmDxReportFailure("create_allocation", Status);
+        if (Status == STATUS_INVALID_PARAMETER || Status == STATUS_NOT_SUPPORTED)
+        {
+            g_DxDevices[DeviceIndex].NoOsSurface = TRUE;
+            Status = STATUS_NOT_SUPPORTED;
+        }
         return Status;
     }
     if (Create.hResource == 0 || Create.hGlobalShare == 0 ||
@@ -674,4 +890,136 @@ DwmpDxPublishWindowSurface(HWND Window,
     Status = (NTSTATUS)NtUserCallOneParam((DWORD_PTR)&Exchange,
                                           DWM_ROUTINE_DXSURFACE);
     return DwmDxStatusToHresult(Status);
+}
+
+HRESULT WINAPI
+DwmpDxGetWindowGpuSurface(HWND Window,
+                          LUID AdapterLuid,
+                          HANDLE *SharedSurface)
+{
+    DWM_DX_GPU_SURFACE *Surface = NULL, *FreeSurface = NULL;
+    RECT ClientRect;
+    ULONG DeviceIndex, Width, Height, Index;
+    NTSTATUS Status;
+    HRESULT Result;
+
+    if (Window == NULL || SharedSurface == NULL)
+        return E_INVALIDARG;
+    *SharedSurface = NULL;
+    if (!InitOnceExecuteOnce(&g_DxInitOnce, DwmDxInitialize, NULL, NULL))
+        return E_FAIL;
+    if (!IsWindow(Window) || !GetClientRect(Window, &ClientRect) ||
+        IsRectEmpty(&ClientRect))
+    {
+        return E_INVALIDARG;
+    }
+    Width = (ULONG)ClientRect.right;
+    Height = (ULONG)ClientRect.bottom;
+
+    EnterCriticalSection(&g_DxLock);
+    Status = DwmDxGetDevice(&AdapterLuid, &DeviceIndex);
+    if (!NT_SUCCESS(Status))
+    {
+        LeaveCriticalSection(&g_DxLock);
+        return DwmDxStatusToHresult(Status);
+    }
+    for (Index = 0; Index < DWM_DX_MAX_SURFACES; ++Index)
+    {
+        DWM_DX_GPU_SURFACE *Entry = &g_DxGpuSurfaces[Index];
+
+        if (Entry->Window != NULL && !Entry->Pending && !IsWindow(Entry->Window))
+            DwmDxDestroyGpuSurface(Entry);
+        if (Entry->Window == Window)
+            Surface = Entry;
+        else if (Entry->Window == NULL && FreeSurface == NULL)
+            FreeSurface = Entry;
+    }
+    if (Surface == NULL)
+    {
+        Result = FreeSurface != NULL ?
+            DwmDxQueueGpuSurface(FreeSurface, Window, DeviceIndex, Width, Height) :
+            E_OUTOFMEMORY;
+        LeaveCriticalSection(&g_DxLock);
+        return Result;
+    }
+
+    if (Surface->DeviceIndex == DeviceIndex &&
+        Surface->Width == Width && Surface->Height == Height)
+    {
+        if (Surface->Pending)
+            Result = E_PENDING;
+        else if (!Surface->Ready)
+            Result = Surface->CreateResult;
+        else
+        {
+            Index = (Surface->Current + 1) % DWM_DX_GPU_BUFFERS;
+            if (DwmDxGpuBufferReleased(Surface, Index))
+            {
+                Surface->Current = Index;
+                *SharedSurface = Surface->SharedSurface[Index];
+                Result = S_OK;
+            }
+            else
+            {
+                Result = S_FALSE;
+            }
+        }
+        LeaveCriticalSection(&g_DxLock);
+        return Result;
+    }
+
+    if (Surface->Ready)
+    {
+        for (Index = 0; Index < DWM_DX_GPU_BUFFERS; ++Index)
+        {
+            if (!DwmDxGpuBufferReleased(Surface, Index))
+            {
+                LeaveCriticalSection(&g_DxLock);
+                return S_FALSE;
+            }
+        }
+    }
+    Result = DwmDxQueueGpuSurface(Surface, Window, DeviceIndex, Width, Height);
+    LeaveCriticalSection(&g_DxLock);
+    return Result;
+}
+
+HRESULT WINAPI
+DwmpDxPublishWindowGpuSurface(HWND Window)
+{
+    DWM_DX_GPU_SURFACE *Surface = NULL;
+    ULONG Index;
+    HRESULT Result;
+
+    if (Window == NULL)
+        return E_INVALIDARG;
+    if (!InitOnceExecuteOnce(&g_DxInitOnce, DwmDxInitialize, NULL, NULL))
+        return E_FAIL;
+
+    EnterCriticalSection(&g_DxLock);
+    for (Index = 0; Index < DWM_DX_MAX_SURFACES; ++Index)
+    {
+        if (g_DxGpuSurfaces[Index].Window == Window)
+        {
+            Surface = &g_DxGpuSurfaces[Index];
+            break;
+        }
+    }
+    if (Surface == NULL || !Surface->Ready)
+    {
+        LeaveCriticalSection(&g_DxLock);
+        return E_INVALIDARG;
+    }
+    ResetEvent(Surface->ReleaseEvent[Surface->Current]);
+    Result = DwmpDxPublishWindowSurface(Window,
+                                        g_DxDevices[Surface->DeviceIndex].Luid,
+                                        Surface->SharedSurface[Surface->Current],
+                                        Surface->Width,
+                                        Surface->Height,
+                                        Surface->ReleaseEvent[Surface->Current],
+                                        0);
+    if (FAILED(Result))
+        SetEvent(Surface->ReleaseEvent[Surface->Current]);
+    LeaveCriticalSection(&g_DxLock);
+    return Result;
 }
