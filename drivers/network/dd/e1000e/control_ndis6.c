@@ -182,6 +182,8 @@ E1000MiniportResetEx(
         return Status;
     }
 
+    E1000RestoreInterruptConfiguration(Adapter);
+
     /* Restore link */
     E1000SetupLink(Adapter);
 

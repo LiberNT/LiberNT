@@ -495,6 +495,7 @@ typedef struct _E1000_ADAPTER
 
     E1000_INTERRUPT_MODE    InterruptMode;
     E1000_MSIX_INFO         MsixInfo;
+    ULONG                   Ivar;
 
     /* Legacy interrupt info */
     ULONG                   InterruptVector;
@@ -803,6 +804,11 @@ E1000DisableInterrupts(
 
 VOID
 E1000EnableInterrupts(
+    _In_ PE1000_ADAPTER Adapter
+    );
+
+VOID
+E1000RestoreInterruptConfiguration(
     _In_ PE1000_ADAPTER Adapter
     );
 

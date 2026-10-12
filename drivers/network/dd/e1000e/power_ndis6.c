@@ -93,6 +93,8 @@ E1000PowerUp(
         return Status;
     }
 
+    E1000RestoreInterruptConfiguration(Adapter);
+
     /* Restore link */
     Status = E1000SetupLink(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)

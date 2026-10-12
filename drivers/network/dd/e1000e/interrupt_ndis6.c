@@ -280,6 +280,7 @@ E1000RegisterInterrupt(
                     Ivar |= (E1000_IVAR_INT_ALLOC_VALID | 0) << E1000_IVAR_OTHER_SHIFT;   /* Other -> Vector 0 */
                     Ivar |= E1000_IVAR_TX_WB_ON_EITR;                                     /* Tx WB on EITR */
 
+                    Adapter->Ivar = Ivar;
                     E1000_WRITE_REG(Adapter, E1000_REG_IVAR, Ivar);
 
                     DPRINT1("E1000: IVAR=0x%08x (single vector mode)\n", Ivar);
@@ -400,10 +401,30 @@ E1000ConfigureIvarRegisters(
     }
 
     /* Write single IVAR register at 0xE4 */
+    Adapter->Ivar = Ivar;
     E1000_WRITE_REG(Adapter, E1000_REG_IVAR, Ivar);
 
     DPRINT1("E1000: IVAR=0x%08x, TxQueues=%u, RxQueues=%u\n",
              Ivar, Adapter->TxQueueCount, Adapter->RxQueueCount);
+}
+
+
+VOID
+E1000RestoreInterruptConfiguration(
+    _In_ PE1000_ADAPTER Adapter
+    )
+{
+    if (Adapter->IoBase == NULL)
+    {
+        return;
+    }
+
+    if (Adapter->Ivar != 0)
+    {
+        E1000_WRITE_REG(Adapter, E1000_REG_IVAR, Adapter->Ivar);
+    }
+
+    E1000WriteItr(Adapter, Adapter->CurrentItr);
 }
 
 
