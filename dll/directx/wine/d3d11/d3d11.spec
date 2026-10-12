@@ -44,3 +44,4 @@
 @ stub OpenAdapter10
 @ stub OpenAdapter10_2
 @ stdcall -private RosD3D11CreateDeviceForAdapterLuid(ptr long ptr)
+@ stdcall -private RosD3D11CreateD3D10Device(ptr long long ptr)

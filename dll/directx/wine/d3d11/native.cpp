@@ -189,10 +189,16 @@ struct NativeRemovedEvent
     DWORD cookie;
 };
 
+class NativeD3D10Device;
+
 class NativeDevice final : public ID3D11Device5, public IDXGIDevice2, public ID3D11Multithread,
         public IWineDXGISwapChainFactory, public NativeAllocation
 {
 public:
+    NativeD3D10Device *d3d10 = NULL;
+    bool d3d10_exposed = false;
+    D3D_FEATURE_LEVEL d3d10_feature_level = D3D_FEATURE_LEVEL_10_0;
+    UINT d3d10_flags = 0;
     NativeRemovedEvent *removed_events = NULL;
     DWORD removed_cookie = 0;
     IUnknown *on12 = NULL;
@@ -431,6 +437,9 @@ public:
     HRESULT STDMETHODCALLTYPE CreateFence(UINT64 initial_value, D3D11_FENCE_FLAG flags, REFIID iid,
             void **fence) override;
 };
+
+void *NativeD3D10DeviceInterface(NativeDevice *device, REFIID iid);
+void NativeD3D10DestroyDevice(NativeD3D10Device *d3d10);
 
 class NativeLock
 {
@@ -812,6 +821,12 @@ public:
     HRESULT STDMETHODCALLTYPE Wait(ID3D11Fence *fence, UINT64 value) override;
 };
 
+class NativeD3D10Facet
+{
+public:
+    virtual ~NativeD3D10Facet() {}
+};
+
 template<class Interface, const GUID *iid>
 class NativeChild : public Interface, public NativeAllocation
 {
@@ -820,9 +835,23 @@ public:
     LONG references = 1;
     LONG private_references = 1;
     NativePrivateData private_data;
+    NativeD3D10Facet *d3d10_facet = NULL;
     explicit NativeChild(NativeDevice *d) : device(d) { device->ChildAddRef(); device->AddRef(); }
-    virtual ~NativeChild() {}
+    virtual ~NativeChild() { delete d3d10_facet; }
     virtual bool Extends(REFIID) { return false; }
+    virtual IUnknown *D3D10Facet(REFIID) { return NULL; }
+    template<class Facet, class... Args> IUnknown *D3D10FacetOf(Args... args)
+    {
+        if (!d3d10_facet)
+        {
+            Facet *created = new Facet(args...);
+            if (!created) return NULL;
+            if (InterlockedCompareExchangePointer(reinterpret_cast<void **>(&d3d10_facet),
+                    static_cast<NativeD3D10Facet *>(created), NULL))
+                delete created;
+        }
+        return static_cast<Facet *>(d3d10_facet)->Interface();
+    }
     void Retain() { InterlockedIncrement(&private_references); }
     void Drop()
     {
@@ -842,7 +871,14 @@ public:
         if (!out) return E_INVALIDARG;
         *out = NULL;
         if (!IsEqualGUID(requested, *iid) && !IsEqualGUID(requested, IID_IUnknown)
-                && !IsEqualGUID(requested, IID_ID3D11DeviceChild) && !Extends(requested)) return E_NOINTERFACE;
+                && !IsEqualGUID(requested, IID_ID3D11DeviceChild) && !Extends(requested))
+        {
+            IUnknown *facet = D3D10Facet(requested);
+            if (!facet) return E_NOINTERFACE;
+            *out = facet;
+            AddRef();
+            return S_OK;
+        }
         *out = static_cast<Interface *>(this);
         AddRef();
         return S_OK;
@@ -918,6 +954,7 @@ public:
 class NativeTexture1D final : public NativeChild<ID3D11Texture1D, &IID_ID3D11Texture1D>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     D3D11_TEXTURE1D_DESC desc = {};
     FLOAT min_lod = 0;
     D3D10DDI_HRESOURCE handle = {};
@@ -963,6 +1000,7 @@ public:
 class NativeTexture2D : public NativeChild<ID3D11Texture2D1, &IID_ID3D11Texture2D>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     D3D11_TEXTURE2D_DESC desc = {};
     bool Extends(REFIID iid) override { return !!IsEqualGUID(iid, IID_ID3D11Texture2D1); }
     void STDMETHODCALLTYPE GetDesc1(D3D11_TEXTURE2D_DESC1 *out) override
@@ -1162,6 +1200,7 @@ HRESULT STDMETHODCALLTYPE NativeTextureResource::GetEvictionPriority(UINT *out) 
 class NativeTexture3D : public NativeChild<ID3D11Texture3D1, &IID_ID3D11Texture3D>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     D3D11_TEXTURE3D_DESC desc = {};
     bool Extends(REFIID iid) override { return !!IsEqualGUID(iid, IID_ID3D11Texture3D1); }
     void STDMETHODCALLTYPE GetDesc1(D3D11_TEXTURE3D_DESC1 *out) override
@@ -1419,6 +1458,7 @@ HRESULT STDMETHODCALLTYPE NativeTextureResource::ReleaseDC(RECT *dirty)
 class NativeRenderTargetView : public NativeChild<ID3D11RenderTargetView1, &IID_ID3D11RenderTargetView>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     ID3D11Resource *texture = NULL;
     D3D10DDI_HRESOURCE resource_handle = {};
     D3D11_RENDER_TARGET_VIEW_DESC desc = {};
@@ -1458,6 +1498,7 @@ public:
 class NativeDepthView : public NativeChild<ID3D11DepthStencilView, &IID_ID3D11DepthStencilView>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     ID3D11Resource *texture = NULL;
     D3D10DDI_HRESOURCE resource_handle = {};
     D3D11_DEPTH_STENCIL_VIEW_DESC desc = {};
@@ -1514,6 +1555,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateClassLinkage(ID3D11ClassLinkage **
 class NativeInputLayout : public NativeChild<ID3D11InputLayout, &IID_ID3D11InputLayout>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     D3D10DDI_HELEMENTLAYOUT handle = {};
     bool created = false;
     explicit NativeInputLayout(NativeDevice *d) : NativeChild(d) {}
@@ -1529,6 +1571,7 @@ template<class Interface, const GUID *iid, class Desc, class Handle>
 class NativeState : public NativeChild<Interface, iid>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     Desc desc = {};
     NativeStateCacheEntry cache_entry;
     Handle handle = {};
@@ -1550,6 +1593,7 @@ using NativeDepthStencil = NativeState<ID3D11DepthStencilState, &IID_ID3D11Depth
 class NativeBlend : public NativeChild<ID3D11BlendState1, &IID_ID3D11BlendState1>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     D3D11_BLEND_DESC1 desc = {};
     NativeStateCacheEntry cache_entry;
     D3D10DDI_HBLENDSTATE handle = {};
@@ -1596,6 +1640,7 @@ public:
 class NativeRasterizer : public NativeChild<ID3D11RasterizerState2, &IID_ID3D11RasterizerState1>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     D3D11_RASTERIZER_DESC2 desc = {};
     bool Extends(REFIID iid) override { return !!IsEqualGUID(iid, IID_ID3D11RasterizerState2); }
     void STDMETHODCALLTYPE GetDesc2(D3D11_RASTERIZER_DESC2 *out) override { if (out) *out = desc; }
@@ -1635,6 +1680,7 @@ template<class Interface, const GUID *iid>
 class NativeShader : public NativeChild<Interface, iid>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     D3D10DDI_HSHADER handle = {};
     bool created = false;
     explicit NativeShader(NativeDevice *d) : NativeChild<Interface, iid>(d) {}
@@ -1658,6 +1704,7 @@ using NativeComputeShader = NativeShader<ID3D11ComputeShader, &IID_ID3D11Compute
 class NativeShaderResourceView : public NativeChild<ID3D11ShaderResourceView1, &IID_ID3D11ShaderResourceView>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     ID3D11Resource *texture = NULL;
     D3D10DDI_HRESOURCE resource_handle = {};
     D3D11_SHADER_RESOURCE_VIEW_DESC desc = {};
@@ -1861,6 +1908,7 @@ template<class A, class B> static bool NativeViewsOverlap(A *a, B *b)
 class NativeQuery : public NativeChild<ID3D11Query1, &IID_ID3D11Query>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     D3D11_QUERY_DESC desc = {};
     D3D11_CONTEXT_TYPE context_type = D3D11_CONTEXT_TYPE_ALL;
     bool Extends(REFIID iid) override { return !!IsEqualGUID(iid, IID_ID3D11Query1); }
@@ -2204,6 +2252,8 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
     adapter = selected_adapter;
     adapter->AddRef();
     flags = creation_flags;
+    d3d10_flags = creation_flags;
+    d3d10_feature_level = feature_level > D3D_FEATURE_LEVEL_10_1 ? D3D_FEATURE_LEVEL_10_1 : feature_level;
     initialized = true;
     TRACE("Native UMD %s created D3D11 device %p, feature level %#x.\n", debugstr_w(name.UmdFileName), this, feature_level);
     return S_OK;
@@ -2214,6 +2264,8 @@ extern "C" void d3d11_native_on12_free(IUnknown *on12);
 NativeDevice::~NativeDevice()
 {
     clearing = true;
+    NativeD3D10DestroyDevice(d3d10);
+    d3d10 = NULL;
     if (on12) d3d11_native_on12_free(on12);
     on12 = NULL;
     while (removed_events)
@@ -2299,7 +2351,10 @@ HRESULT STDMETHODCALLTYPE NativeDevice::QueryInterface(REFIID iid, void **out)
         *out = on12;
     else if (IsEqualGUID(iid, NativeDevicePrivateGuid))
         *out = static_cast<ID3D11Device *>(this);
-    else return E_NOINTERFACE;
+    else if (d3d10_exposed && (IsEqualGUID(iid, IID_ID3D10Device) || IsEqualGUID(iid, IID_ID3D10Device1)
+            || IsEqualGUID(iid, IID_ID3D10Multithread)))
+        *out = NativeD3D10DeviceInterface(this, iid);
+    if (!*out) return E_NOINTERFACE;
     AddRef();
     return S_OK;
 }
@@ -2520,6 +2575,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::EnqueueSetEvent(HANDLE event)
 class NativeBuffer : public NativeChild<ID3D11Buffer, &IID_ID3D11Buffer>
 {
 public:
+    IUnknown *D3D10Facet(REFIID requested) override;
     D3D11_BUFFER_DESC desc = {};
     D3D10DDI_HRESOURCE handle = {};
     D3D10DDI_HRTRESOURCE runtime_handle;
@@ -7405,3 +7461,4 @@ void STDMETHODCALLTYPE NativeContext::RSGetScissorRects(UINT *count, D3D11_RECT 
 #include "native_uav.inl"
 #include "native_commands.inl"
 #include "native_device5.inl"
+#include "native_d3d10.inl"

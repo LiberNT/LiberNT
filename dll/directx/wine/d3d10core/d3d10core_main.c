@@ -46,6 +46,17 @@ HRESULT WINAPI D3D10CoreCreateDevice(IDXGIFactory *factory, IDXGIAdapter *adapte
     TRACE("factory %p, adapter %p, flags %#x, feature_level %#x, device %p.\n",
             factory, adapter, flags, feature_level, device);
 
+#if defined(__REACTOS__)
+    {
+        HRESULT (WINAPI *create_native)(IDXGIAdapter *, UINT, D3D_FEATURE_LEVEL, ID3D10Device **);
+
+        d3d11 = GetModuleHandleA("d3d11.dll");
+        create_native = d3d11 ? (void *)GetProcAddress(d3d11, "RosD3D11CreateD3D10Device") : NULL;
+        if (create_native && (hr = create_native(adapter, flags, feature_level, device)) != DXGI_ERROR_UNSUPPORTED)
+            return hr;
+    }
+#endif
+
     d3d11 = LoadLibraryA("d3d11.dll");
     hr = DXGID3D10CreateDevice(d3d11, factory, adapter, flags, &feature_level, 1, (void **)&dxgi_device);
     FreeLibrary(d3d11);

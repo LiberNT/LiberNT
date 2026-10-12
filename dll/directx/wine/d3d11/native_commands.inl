@@ -139,6 +139,9 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateDeviceContextState(UINT state_flag
         state->AddRef();
         state->Drop();
         *out = state;
+        if (IsEqualGUID(emulated, IID_ID3D10Device) || IsEqualGUID(emulated, IID_ID3D10Device1))
+            d3d10_feature_level = selected > D3D_FEATURE_LEVEL_10_1 ? D3D_FEATURE_LEVEL_10_1 : selected;
+        d3d10_exposed = true;
     }
     if (chosen) *chosen = selected;
     return out ? S_OK : S_FALSE;
