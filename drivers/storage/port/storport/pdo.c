@@ -271,7 +271,7 @@ NTSTATUS PortSrbStatusToNtStatus(_In_ UCHAR SrbStatus)
     }
 }
 
-static NTSTATUS PortDumpSubmit(_In_ PPORT_DUMP_CONTEXT DumpContext, _In_ UCHAR Function, _In_ ULONG64 DiskByteOffset, _In_ PHYSICAL_ADDRESS Buffer, _In_ ULONG Length)
+static NTSTATUS PortDumpSubmitOnce(_In_ PPORT_DUMP_CONTEXT DumpContext, _In_ UCHAR Function, _In_ ULONG64 DiskByteOffset, _In_ PHYSICAL_ADDRESS Buffer, _In_ ULONG Length)
 {
     PFDO_DEVICE_EXTENSION FdoExtension;
     ULONG64 BlockAddress;
@@ -279,10 +279,6 @@ static NTSTATUS PortDumpSubmit(_In_ PPORT_DUMP_CONTEXT DumpContext, _In_ UCHAR F
     ULONG Timeout;
 
     FdoExtension = DumpContext->PdoExtension->FdoExtension;
-    if ((Function == SRB_FUNCTION_EXECUTE_SCSI) && (((DiskByteOffset | Length) % DumpContext->BytesPerSector) != 0 || (Length == 0) || (Length > PAGE_SIZE)))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
 
     RtlZeroMemory(&DumpContext->Srb, sizeof(DumpContext->Srb));
     if (DumpContext->SrbExtension != NULL)
@@ -298,6 +294,9 @@ static NTSTATUS PortDumpSubmit(_In_ PPORT_DUMP_CONTEXT DumpContext, _In_ UCHAR F
     DumpContext->Srb.SrbExtension = DumpContext->SrbExtension;
     DumpContext->Srb.OriginalRequest = DumpContext->Irp;
     DumpContext->Srb.TimeOutValue = 10;
+    RtlZeroMemory(&DumpContext->SenseData, sizeof(DumpContext->SenseData));
+    DumpContext->Srb.SenseInfoBuffer = &DumpContext->SenseData;
+    DumpContext->Srb.SenseInfoBufferLength = sizeof(DumpContext->SenseData);
 
     if (Function == SRB_FUNCTION_EXECUTE_SCSI)
     {
@@ -335,6 +334,60 @@ static NTSTATUS PortDumpSubmit(_In_ PPORT_DUMP_CONTEXT DumpContext, _In_ UCHAR F
     }
 
     return STATUS_IO_TIMEOUT;
+}
+
+static BOOLEAN PortDumpIsUnitAttention(_In_ PPORT_DUMP_CONTEXT DumpContext)
+{
+    PSCSI_REQUEST_BLOCK Srb = &DumpContext->Srb;
+    PUCHAR Sense = (PUCHAR)&DumpContext->SenseData;
+    UCHAR SenseKey;
+
+    if ((SRB_STATUS(Srb->SrbStatus) != SRB_STATUS_ERROR) ||
+        !(Srb->SrbStatus & SRB_STATUS_AUTOSENSE_VALID) ||
+        (Srb->ScsiStatus != SCSISTAT_CHECK_CONDITION) ||
+        (Srb->SenseInfoBufferLength < FIELD_OFFSET(SENSE_DATA, Information)))
+    {
+        return FALSE;
+    }
+
+    switch (Sense[0] & 0x7F)
+    {
+        case SCSI_SENSE_ERRORCODE_FIXED_CURRENT:
+        case SCSI_SENSE_ERRORCODE_FIXED_DEFERRED:
+            SenseKey = Sense[2] & 0x0F;
+            break;
+
+        case SCSI_SENSE_ERRORCODE_DESCRIPTOR_CURRENT:
+        case SCSI_SENSE_ERRORCODE_DESCRIPTOR_DEFERRED:
+            SenseKey = Sense[1] & 0x0F;
+            break;
+
+        default:
+            return FALSE;
+    }
+
+    return SenseKey == SCSI_SENSE_UNIT_ATTENTION;
+}
+
+static NTSTATUS PortDumpSubmit(_In_ PPORT_DUMP_CONTEXT DumpContext, _In_ UCHAR Function, _In_ ULONG64 DiskByteOffset, _In_ PHYSICAL_ADDRESS Buffer, _In_ ULONG Length)
+{
+    NTSTATUS Status;
+    ULONG Attempt;
+
+    if ((Function == SRB_FUNCTION_EXECUTE_SCSI) && (((DiskByteOffset | Length) % DumpContext->BytesPerSector) != 0 || (Length == 0) || (Length > PAGE_SIZE)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    for (Attempt = 0; ; Attempt++)
+    {
+        Status = PortDumpSubmitOnce(DumpContext, Function, DiskByteOffset, Buffer, Length);
+        if (NT_SUCCESS(Status) || (Status == STATUS_IO_TIMEOUT) ||
+            (Attempt >= PORT_DUMP_UNIT_ATTENTION_RETRIES) || !PortDumpIsUnitAttention(DumpContext))
+        {
+            return Status;
+        }
+    }
 }
 
 static NTSTATUS NTAPI PortDumpPrepare(_In_ PVOID Context)
