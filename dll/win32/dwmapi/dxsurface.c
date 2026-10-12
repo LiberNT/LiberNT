@@ -351,6 +351,8 @@ DwmDxGpuWorker(PVOID Parameter)
             LeaveCriticalSection(&g_DxLock);
         }
     }
+
+    return 0;
 }
 
 static HRESULT
