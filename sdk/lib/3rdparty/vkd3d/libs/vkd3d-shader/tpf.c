@@ -3888,6 +3888,8 @@ static void tpf_dcl_texture(struct tpf_compiler *tpf, const struct vkd3d_shader_
     }
 
     instr.dsts[0] = resource->reg;
+    if (!vkd3d_shader_ver_ge(version, 5, 1))
+        instr.dsts[0].reg.dimension = VSIR_DIMENSION_NONE;
     instr.dst_count = 1;
 
     if (vkd3d_shader_ver_ge(version, 5, 1))
