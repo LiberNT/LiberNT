@@ -5800,8 +5800,13 @@ public:
     RECT windowed_rect = {};
     LONG windowed_style = 0, windowed_exstyle = 0;
     WCHAR fullscreen_device[CCHDEVICENAME] = {};
-    HRESULT EnterFullscreen(IDXGIOutput *, UINT, UINT, const DXGI_RATIONAL &);
-    void LeaveFullscreen();
+    IDXGIOutput *target = NULL;
+    LONG in_set_fullscreen_state = 0;
+    HRESULT ApplyFullscreen(BOOL, IDXGIOutput *);
+    HRESULT ChangeMode(IDXGIOutput *, const DXGI_MODE_DESC &);
+    void RestoreMode();
+    HRESULT SetupFullscreenWindow(int, int, int, int);
+    void RestoreWindow(const RECT *);
     bool device_child = false;
     DXGI_FORMAT publish_format = DXGI_FORMAT_UNKNOWN;
 
@@ -5814,7 +5819,7 @@ public:
     ~NativeSwapChain()
     {
         if (latency_semaphore) CloseHandle(latency_semaphore);
-        LeaveFullscreen();
+        Detach();
         DrainPublishes();
         DumpTrace();
         RetirePublication();
@@ -5828,9 +5833,19 @@ public:
         for (UINT i = 0; i < 3; ++i) if (transports[i]) transports[i]->Drop();
         if (resolved) resolved->Drop();
         for (UINT i = 0; i < 16; ++i) if (buffers[i]) buffers[i]->Drop();
-        factory->Release();
         if (device_child) device->ChildRelease();
         else device->Release();
+    }
+    void Detach()
+    {
+        if (!fullscreen_desc.Windowed)
+        {
+            RestoreMode();
+            RestoreWindow(&windowed_rect);
+            fullscreen_desc.Windowed = TRUE;
+        }
+        if (target) { target->Release(); target = NULL; }
+        if (factory) { factory->Release(); factory = NULL; }
     }
     HRESULT AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested);
     static DWORD WINAPI DestroyPending(void *);
@@ -5873,6 +5888,7 @@ public:
     {
         ULONG count = InterlockedDecrement(&references);
         if (count) return count;
+        Detach();
         if (!primary && (queued_publishes || !AllReleased(0))
                 && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
                 reinterpret_cast<LPCWSTR>(DestroyPending), &retirement_module))
@@ -5907,15 +5923,28 @@ public:
     {
         if (composition || (!fullscreen && output)) return DXGI_ERROR_INVALID_CALL;
         if (primary) return fullscreen ? DXGI_ERROR_UNSUPPORTED : S_OK;
-        if (!fullscreen)
+        if (fullscreen && (static_cast<UINT>(fullscreen_desc.ScanlineOrdering) > DXGI_MODE_SCANLINE_ORDER_LOWER_FIELD_FIRST
+                || static_cast<UINT>(fullscreen_desc.Scaling) > DXGI_MODE_SCALING_STRETCHED)) return DXGI_ERROR_INVALID_CALL;
+        HRESULT hr = S_OK;
+        if (output) output->AddRef();
+        else if (FAILED(hr = GetContainingOutput(&output))) return hr;
+        if (InterlockedExchange(&in_set_fullscreen_state, 1))
         {
-            LeaveFullscreen();
-            fullscreen_desc.Windowed = TRUE;
-            return S_OK;
+            output->Release();
+            return !fullscreen_desc.Windowed == !!fullscreen ? S_OK : DXGI_STATUS_MODE_CHANGE_IN_PROGRESS;
         }
-        if (!fullscreen_desc.Windowed) return S_OK;
-        HRESULT hr = EnterFullscreen(output, desc.Width, desc.Height, fullscreen_desc.RefreshRate);
-        if (SUCCEEDED(hr)) fullscreen_desc.Windowed = FALSE;
+        if (FAILED(hr = ApplyFullscreen(fullscreen, output)))
+        {
+            output->Release();
+            hr = DXGI_ERROR_NOT_CURRENTLY_AVAILABLE;
+        }
+        else
+        {
+            if (!fullscreen) { output->Release(); output = NULL; }
+            if (target) target->Release();
+            target = output;
+        }
+        InterlockedExchange(&in_set_fullscreen_state, 0);
         return hr;
     }
     HRESULT STDMETHODCALLTYPE GetFullscreenState(BOOL *fullscreen, IDXGIOutput **output) override
@@ -5925,7 +5954,16 @@ public:
         if (output)
         {
             *output = NULL;
-            if (!fullscreen_desc.Windowed) GetContainingOutput(output);
+            if (!fullscreen_desc.Windowed)
+            {
+                if (!target)
+                {
+                    HRESULT hr = GetContainingOutput(&target);
+                    if (FAILED(hr)) return hr;
+                }
+                target->AddRef();
+                *output = target;
+            }
         }
         return S_OK;
     }
@@ -5953,18 +5991,44 @@ public:
     HRESULT STDMETHODCALLTYPE ResizeTarget(const DXGI_MODE_DESC *mode) override
     {
         if (!mode || composition || primary) return DXGI_ERROR_INVALID_CALL;
-        if (!fullscreen_desc.Windowed)
-            return EnterFullscreen(NULL, mode->Width, mode->Height, mode->RefreshRate);
-        RECT rect = {0, 0, static_cast<LONG>(mode->Width), static_cast<LONG>(mode->Height)};
-        AdjustWindowRectEx(&rect, GetWindowLongW(window, GWL_STYLE), FALSE, GetWindowLongW(window, GWL_EXSTYLE));
-        return SetWindowPos(window, NULL, 0, 0, rect.right - rect.left, rect.bottom - rect.top,
-                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) ? S_OK : DXGI_ERROR_INVALID_CALL;
+        RECT current = {};
+        GetWindowRect(window, &current);
+        if (fullscreen_desc.Windowed)
+        {
+            RECT rect = {0, 0, static_cast<LONG>(mode->Width), static_cast<LONG>(mode->Height)};
+            AdjustWindowRectEx(&rect, GetWindowLongW(window, GWL_STYLE), FALSE, GetWindowLongW(window, GWL_EXSTYLE));
+            MoveWindow(window, current.left, current.top, rect.right - rect.left, rect.bottom - rect.top, TRUE);
+            return S_OK;
+        }
+        IDXGIOutput *output = NULL;
+        DXGI_OUTPUT_DESC output_desc;
+        HRESULT hr = GetContainingOutput(&output);
+        if (SUCCEEDED(hr)) hr = output->GetDesc(&output_desc);
+        if (SUCCEEDED(hr) && (output_desc.DesktopCoordinates.right - output_desc.DesktopCoordinates.left != current.right - current.left
+                || output_desc.DesktopCoordinates.bottom - output_desc.DesktopCoordinates.top != current.bottom - current.top))
+            windowed_rect = current;
+        if (SUCCEEDED(hr) && (desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH))
+        {
+            hr = ChangeMode(output, *mode);
+            if (SUCCEEDED(hr)) hr = output->GetDesc(&output_desc);
+        }
+        if (output) output->Release();
+        if (FAILED(hr)) return hr;
+        const RECT &area = output_desc.DesktopCoordinates;
+        MoveWindow(window, area.left, area.top, area.right - area.left, area.bottom - area.top, TRUE);
+        return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetContainingOutput(IDXGIOutput **out) override
     {
         if (!out) return E_INVALIDARG;
         *out = NULL;
         if (composition) return DXGI_ERROR_INVALID_CALL;
+        if (target)
+        {
+            target->AddRef();
+            *out = target;
+            return S_OK;
+        }
         HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
         for (UINT index = 0;; ++index)
         {
@@ -6841,100 +6905,174 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
 
 static LONG NativeFullscreenStyle(LONG style)
 {
-    return (style | WS_POPUP | WS_SYSMENU) & ~(WS_CAPTION | WS_THICKFRAME);
+    return style & ~(WS_POPUP | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_THICKFRAME | WS_SYSMENU | WS_DLGFRAME | WS_BORDER);
 }
 
 static LONG NativeFullscreenExStyle(LONG exstyle)
 {
-    return exstyle & ~(WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE);
+    return exstyle & ~(WS_EX_DLGMODALFRAME | WS_EX_TOOLWINDOW | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_CONTEXTHELP);
 }
 
-HRESULT NativeSwapChain::EnterFullscreen(IDXGIOutput *target, UINT width, UINT height, const DXGI_RATIONAL &refresh)
+struct NativeWindowState : public NativeAllocation
 {
-    IDXGIOutput *output = target;
-    HRESULT hr = S_OK;
-    if (output) output->AddRef();
-    else hr = GetContainingOutput(&output);
-    if (FAILED(hr)) return hr;
+    HWND window;
+    HWND after;
+    LONG style, exstyle;
+    int x, y, width, height;
+    UINT flags;
+    bool set_style;
+};
+
+static DWORD WINAPI NativeApplyWindowState(void *context)
+{
+    NativeWindowState *state = static_cast<NativeWindowState *>(context);
+    if (state->set_style)
+    {
+        SetWindowLongW(state->window, GWL_STYLE, state->style);
+        SetWindowLongW(state->window, GWL_EXSTYLE, state->exstyle);
+    }
+    SetWindowPos(state->window, state->after, state->x, state->y, state->width, state->height, state->flags);
+    delete state;
+    return 0;
+}
+
+static void NativeSetWindowState(NativeWindowState *state)
+{
+    if (GetWindowThreadProcessId(state->window, NULL) == GetCurrentThreadId())
+    {
+        NativeApplyWindowState(state);
+        return;
+    }
+    HANDLE thread = CreateThread(NULL, 0, NativeApplyWindowState, state, 0, NULL);
+    if (thread) CloseHandle(thread);
+    else delete state;
+}
+
+HRESULT NativeSwapChain::ChangeMode(IDXGIOutput *output, const DXGI_MODE_DESC &requested)
+{
     DXGI_OUTPUT_DESC output_desc;
-    hr = output->GetDesc(&output_desc);
-    DXGI_MODE_DESC closest = {};
-    if (SUCCEEDED(hr) && (desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH))
-    {
-        DXGI_MODE_DESC wanted = {};
-        wanted.Width = width;
-        wanted.Height = height;
-        wanted.RefreshRate = refresh;
-        wanted.Format = desc.Format;
-        if (FAILED(output->FindClosestMatchingMode(&wanted, &closest, NULL)))
-            closest = wanted;
-    }
-    output->Release();
+    HRESULT hr = output->GetDesc(&output_desc);
     if (FAILED(hr)) return hr;
-
-    RECT area = output_desc.DesktopCoordinates;
-    if (desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH)
+    DXGI_MODE_DESC closest = {};
+    if (FAILED(output->FindClosestMatchingMode(&requested, &closest, NULL))) closest = requested;
+    if (fullscreen_mode && lstrcmpiW(fullscreen_device, output_desc.DeviceName)) RestoreMode();
+    DEVMODEW mode = {};
+    mode.dmSize = sizeof(mode);
+    mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
+    mode.dmPelsWidth = closest.Width;
+    mode.dmPelsHeight = closest.Height;
+    LONG changed = DISP_CHANGE_BADMODE;
+    if (closest.RefreshRate.Numerator && closest.RefreshRate.Denominator)
     {
-        DEVMODEW mode = {};
-        mode.dmSize = sizeof(mode);
-        mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
-        mode.dmPelsWidth = closest.Width;
-        mode.dmPelsHeight = closest.Height;
-        LONG changed = DISP_CHANGE_BADMODE;
-        if (closest.RefreshRate.Numerator && closest.RefreshRate.Denominator)
-        {
-            mode.dmFields |= DM_DISPLAYFREQUENCY;
-            mode.dmDisplayFrequency = (closest.RefreshRate.Numerator + closest.RefreshRate.Denominator / 2)
-                    / closest.RefreshRate.Denominator;
-            changed = ChangeDisplaySettingsExW(output_desc.DeviceName, &mode, NULL, CDS_FULLSCREEN, NULL);
-            mode.dmFields &= ~DM_DISPLAYFREQUENCY;
-        }
-        if (changed != DISP_CHANGE_SUCCESSFUL)
-            changed = ChangeDisplaySettingsExW(output_desc.DeviceName, &mode, NULL, CDS_FULLSCREEN, NULL);
-        if (changed != DISP_CHANGE_SUCCESSFUL) return DXGI_ERROR_NOT_CURRENTLY_AVAILABLE;
-        lstrcpynW(fullscreen_device, output_desc.DeviceName, ARRAYSIZE(fullscreen_device));
-        fullscreen_mode = true;
-        MONITORINFO info = {};
-        info.cbSize = sizeof(info);
-        if (GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &info)) area = info.rcMonitor;
+        mode.dmFields |= DM_DISPLAYFREQUENCY;
+        mode.dmDisplayFrequency = (closest.RefreshRate.Numerator + closest.RefreshRate.Denominator / 2)
+                / closest.RefreshRate.Denominator;
+        changed = ChangeDisplaySettingsExW(output_desc.DeviceName, &mode, NULL, CDS_FULLSCREEN, NULL);
+        mode.dmFields &= ~DM_DISPLAYFREQUENCY;
     }
-
-    if (!fullscreen_layout)
-    {
-        GetWindowRect(window, &windowed_rect);
-        windowed_style = GetWindowLongW(window, GWL_STYLE);
-        windowed_exstyle = GetWindowLongW(window, GWL_EXSTYLE);
-        fullscreen_layout = true;
-    }
-    SetWindowLongW(window, GWL_STYLE, NativeFullscreenStyle(windowed_style));
-    SetWindowLongW(window, GWL_EXSTYLE, NativeFullscreenExStyle(windowed_exstyle));
-    SetWindowPos(window, HWND_TOPMOST, area.left, area.top, area.right - area.left, area.bottom - area.top,
-            SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    if (changed != DISP_CHANGE_SUCCESSFUL)
+        changed = ChangeDisplaySettingsExW(output_desc.DeviceName, &mode, NULL, CDS_FULLSCREEN, NULL);
+    if (changed != DISP_CHANGE_SUCCESSFUL) return DXGI_ERROR_NOT_CURRENTLY_AVAILABLE;
+    lstrcpynW(fullscreen_device, output_desc.DeviceName, ARRAYSIZE(fullscreen_device));
+    fullscreen_mode = true;
     return S_OK;
 }
 
-void NativeSwapChain::LeaveFullscreen()
+void NativeSwapChain::RestoreMode()
 {
-    if (fullscreen_mode)
-    {
-        ChangeDisplaySettingsExW(fullscreen_device, NULL, NULL, 0, NULL);
-        fullscreen_mode = false;
-    }
+    if (!fullscreen_mode) return;
+    ChangeDisplaySettingsExW(fullscreen_device, NULL, NULL, 0, NULL);
+    fullscreen_mode = false;
+}
+
+HRESULT NativeSwapChain::SetupFullscreenWindow(int x, int y, int width, int height)
+{
+    if (!IsWindow(window)) return DXGI_ERROR_NOT_CURRENTLY_AVAILABLE;
+    NativeWindowState *state = new NativeWindowState;
+    if (!state) return E_OUTOFMEMORY;
+    windowed_style = GetWindowLongW(window, GWL_STYLE);
+    windowed_exstyle = GetWindowLongW(window, GWL_EXSTYLE);
+    fullscreen_layout = true;
+    state->window = window;
+    state->after = HWND_TOPMOST;
+    state->x = x;
+    state->y = y;
+    state->width = width;
+    state->height = height;
+    state->flags = SWP_FRAMECHANGED | SWP_NOACTIVATE;
+    state->style = NativeFullscreenStyle(windowed_style);
+    state->exstyle = NativeFullscreenExStyle(windowed_exstyle);
+    state->set_style = true;
+    NativeSetWindowState(state);
+    return S_OK;
+}
+
+void NativeSwapChain::RestoreWindow(const RECT *rect)
+{
     if (!fullscreen_layout) return;
     fullscreen_layout = false;
-    if (!IsWindow(window)) return;
+    NativeWindowState *state = new NativeWindowState;
+    if (!state) return;
+    state->window = window;
+    state->after = (windowed_exstyle & WS_EX_TOPMOST) ? HWND_TOPMOST : HWND_NOTOPMOST;
+    state->flags = SWP_FRAMECHANGED | SWP_NOACTIVATE | ((windowed_style & WS_VISIBLE) ? SWP_SHOWWINDOW : SWP_HIDEWINDOW);
     LONG style = GetWindowLongW(window, GWL_STYLE);
     LONG exstyle = GetWindowLongW(window, GWL_EXSTYLE);
-    LONG restored_style = (windowed_style & ~WS_VISIBLE) | (style & WS_VISIBLE);
-    if (style == NativeFullscreenStyle(restored_style)
-            && (exstyle & ~WS_EX_TOPMOST) == (NativeFullscreenExStyle(windowed_exstyle) & ~WS_EX_TOPMOST))
+    windowed_style ^= (windowed_style ^ style) & WS_VISIBLE;
+    windowed_exstyle ^= (windowed_exstyle ^ exstyle) & WS_EX_TOPMOST;
+    state->style = windowed_style;
+    state->exstyle = windowed_exstyle;
+    state->set_style = style == NativeFullscreenStyle(windowed_style) && exstyle == NativeFullscreenExStyle(windowed_exstyle);
+    if (rect)
     {
-        SetWindowLongW(window, GWL_STYLE, restored_style);
-        SetWindowLongW(window, GWL_EXSTYLE, windowed_exstyle);
+        state->x = rect->left;
+        state->y = rect->top;
+        state->width = rect->right - rect->left;
+        state->height = rect->bottom - rect->top;
     }
-    SetWindowPos(window, (windowed_exstyle & WS_EX_TOPMOST) ? HWND_TOPMOST : HWND_NOTOPMOST,
-            windowed_rect.left, windowed_rect.top, windowed_rect.right - windowed_rect.left,
-            windowed_rect.bottom - windowed_rect.top, SWP_FRAMECHANGED | SWP_NOACTIVATE);
+    else
+    {
+        state->x = state->y = state->width = state->height = 0;
+        state->flags |= SWP_NOMOVE | SWP_NOSIZE;
+    }
+    NativeSetWindowState(state);
+}
+
+HRESULT NativeSwapChain::ApplyFullscreen(BOOL fullscreen, IDXGIOutput *output)
+{
+    DXGI_OUTPUT_DESC output_desc;
+    HRESULT hr;
+    if (desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH)
+    {
+        if (fullscreen)
+        {
+            DXGI_MODE_DESC mode = {};
+            mode.Width = desc.Width;
+            mode.Height = desc.Height;
+            mode.RefreshRate = fullscreen_desc.RefreshRate;
+            mode.Format = desc.Format;
+            if (FAILED(hr = ChangeMode(output, mode))) return hr;
+        }
+        else RestoreMode();
+    }
+    if (fullscreen)
+    {
+        if (FAILED(hr = output->GetDesc(&output_desc))) return hr;
+        const RECT &area = output_desc.DesktopCoordinates;
+        if (fullscreen_desc.Windowed)
+        {
+            if (FAILED(hr = SetupFullscreenWindow(area.left, area.top, area.right - area.left, area.bottom - area.top)))
+                return hr;
+        }
+        else
+        {
+            MoveWindow(window, area.left, area.top, area.right - area.left, area.bottom - area.top, TRUE);
+            ShowWindow(window, SW_SHOW);
+        }
+    }
+    else if (!fullscreen_desc.Windowed) RestoreWindow(&windowed_rect);
+    fullscreen_desc.Windowed = !fullscreen;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE NativeDevice::create_swapchain(IDXGIFactory *factory, HWND window,
@@ -6954,6 +7092,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::create_swapchain(IDXGIFactory *factory, 
         if (!swapchain) return E_OUTOFMEMORY;
         swapchain->fullscreen_desc = *fullscreen;
         swapchain->fullscreen_desc.Windowed = TRUE;
+        if (window) GetWindowRect(window, &swapchain->windowed_rect);
         swapchain->composition = !window;
         swapchain->primary = window && GetPropW(window, DWM_PROP_GPU_OUTPUT) != NULL;
         DXGI_SWAP_CHAIN_DESC1 desc = *requested;
