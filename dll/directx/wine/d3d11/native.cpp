@@ -1008,10 +1008,9 @@ public:
     }
     HRESULT GetSharedHandle(HANDLE *out)
     {
-        if (!out) return E_INVALIDARG;
+        if (!out || (desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE)) return E_INVALIDARG;
         *out = NULL;
-        if (!(desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED) || (desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE))
-            return DXGI_ERROR_INVALID_CALL;
+        if (!(desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED)) return S_OK;
         NativeLock guard(device);
         D3DKMT_HANDLE share = 0;
         HRESULT hr = device->get_resource_handles(device->runtime_device, runtime_handle.handle, NULL, &share);
@@ -1024,7 +1023,7 @@ public:
     {
         if (!out) return E_INVALIDARG;
         *out = NULL;
-        if (!(desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE)) return DXGI_ERROR_INVALID_CALL;
+        if (!(desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE)) return E_INVALIDARG;
         if (name)
         {
             FIXME("Named shared handles are not supported.\n");
@@ -1060,10 +1059,9 @@ HRESULT STDMETHODCALLTYPE NativeTextureResource::GetDevice(REFIID iid, void **ou
 HRESULT STDMETHODCALLTYPE NativeTextureResource::GetSharedHandle(HANDLE *out)
 {
     if (!out) return E_INVALIDARG;
-    *out = NULL;
     D3D11_RESOURCE_DIMENSION dimension;
     texture->GetType(&dimension);
-    if (dimension != D3D11_RESOURCE_DIMENSION_TEXTURE2D) return DXGI_ERROR_INVALID_CALL;
+    if (dimension != D3D11_RESOURCE_DIMENSION_TEXTURE2D) { *out = NULL; return DXGI_ERROR_INVALID_CALL; }
     return static_cast<NativeTexture2D *>(static_cast<ID3D11Texture2D *>(texture))->GetSharedHandle(out);
 }
 HRESULT STDMETHODCALLTYPE NativeTextureResource::CreateSubresourceSurface(UINT, IDXGISurface2 **out)
@@ -3045,7 +3043,8 @@ HRESULT NativeDevice::OpenSharedTexture(HANDLE nt_handle, D3DKMT_HANDLE global, 
         D3DKMT_QUERYRESOURCEINFOFROMNTHANDLE nt_query = {};
         nt_query.hDevice = km_device;
         nt_query.hNtHandle = nt_handle;
-        hr = StatusToHresult(D3DKMTQueryResourceInfoFromNtHandle(&nt_query));
+        NTSTATUS status = D3DKMTQueryResourceInfoFromNtHandle(&nt_query);
+        hr = status == STATUS_INVALID_HANDLE ? E_INVALIDARG : StatusToHresult(status);
         query.PrivateRuntimeDataSize = nt_query.PrivateRuntimeDataSize;
         query.TotalPrivateDriverDataSize = nt_query.TotalPrivateDriverDataSize;
         query.ResourcePrivateDriverDataSize = nt_query.ResourcePrivateDriverDataSize;
