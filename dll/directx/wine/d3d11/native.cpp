@@ -344,7 +344,8 @@ public:
         adapter->AddRef();
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE CreateSurface(const DXGI_SURFACE_DESC *, UINT, DXGI_USAGE, const DXGI_SHARED_RESOURCE *, IDXGISurface **out) override { if (out) *out = NULL; return E_NOTIMPL; }
+    HRESULT STDMETHODCALLTYPE CreateSurface(const DXGI_SURFACE_DESC *desc, UINT count, DXGI_USAGE usage,
+            const DXGI_SHARED_RESOURCE *shared, IDXGISurface **out) override;
     HRESULT STDMETHODCALLTYPE QueryResourceResidency(IUnknown *const *, DXGI_RESIDENCY *, UINT) override { return E_NOTIMPL; }
     HRESULT STDMETHODCALLTYPE SetGPUThreadPriority(INT priority) override;
     HRESULT STDMETHODCALLTYPE GetGPUThreadPriority(INT *priority) override;
@@ -2256,6 +2257,40 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
     d3d10_feature_level = feature_level > D3D_FEATURE_LEVEL_10_1 ? D3D_FEATURE_LEVEL_10_1 : feature_level;
     initialized = true;
     TRACE("Native UMD %s created D3D11 device %p, feature level %#x.\n", debugstr_w(name.UmdFileName), this, feature_level);
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE NativeDevice::CreateSurface(const DXGI_SURFACE_DESC *desc, UINT count, DXGI_USAGE usage,
+        const DXGI_SHARED_RESOURCE *shared, IDXGISurface **out)
+{
+    if (!desc || !count || !out) return E_INVALIDARG;
+    if (shared) FIXME("Shared surface resources are not supported.\n");
+    D3D11_TEXTURE2D_DESC texture_desc = {};
+    texture_desc.Width = desc->Width;
+    texture_desc.Height = desc->Height;
+    texture_desc.MipLevels = 1;
+    texture_desc.ArraySize = 1;
+    texture_desc.Format = desc->Format;
+    texture_desc.SampleDesc = desc->SampleDesc;
+    texture_desc.Usage = D3D11_USAGE_DEFAULT;
+    if (usage & DXGI_USAGE_SHADER_INPUT) texture_desc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+    if (usage & DXGI_USAGE_RENDER_TARGET_OUTPUT) texture_desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+    if (usage & DXGI_USAGE_UNORDERED_ACCESS) texture_desc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
+    for (UINT i = 0; i < count; ++i)
+    {
+        ID3D11Texture2D *texture = NULL;
+        HRESULT hr = CreateTexture2D(&texture_desc, NULL, &texture);
+        if (SUCCEEDED(hr))
+        {
+            hr = texture->QueryInterface(IID_IDXGISurface, reinterpret_cast<void **>(&out[i]));
+            texture->Release();
+        }
+        if (FAILED(hr))
+        {
+            while (i--) { out[i]->Release(); out[i] = NULL; }
+            return hr;
+        }
+    }
     return S_OK;
 }
 
