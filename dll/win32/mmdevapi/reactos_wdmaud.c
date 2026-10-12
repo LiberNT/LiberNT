@@ -825,7 +825,7 @@ static BOOL fill_mix_format(const char *device, EDataFlow flow, WAVEFORMATEXTENS
         }
     }
 
-    preferred = channels <= 2 ? RosSoundChooseBestLegacyFormat(formats) : 0;
+    preferred = RosSoundChooseBestLegacyFormat(formats);
     if (preferred)
         RosSoundLegacyFlagToWaveFormatFields(preferred, &samples_per_sec, &bits_per_sample, &channels);
     else if (query_preferred_wave_format(parsed_flow, index, fmt))
@@ -954,11 +954,12 @@ static HRESULT validate_render_client_format(const WAVEFORMATEX *fmt)
 }
 
 static BOOL shared_render_conversion_supported(const WAVEFORMATEX *client,
-                                               const WAVEFORMATEX *device)
+                                               const WAVEFORMATEX *device,
+                                               BOOL convert_channels)
 {
     return SUCCEEDED(validate_render_client_format(client)) &&
            SUCCEEDED(validate_pcm_format(device)) &&
-           client->nChannels == device->nChannels;
+           (client->nChannels == device->nChannels || convert_channels);
 }
 
 static HRESULT shared_render_client_padding(struct reactos_stream *stream, UINT32 *padding)
@@ -1625,6 +1626,32 @@ static void apply_render_volume(struct reactos_stream *stream, BYTE *data,
     }
 }
 
+static UINT render_channel_sources(const struct reactos_stream *stream,
+                                   WORD device_channel, WORD *first,
+                                   WORD *second)
+{
+    WORD source_channels = stream->format.Format.nChannels;
+    WORD device_channels = stream->device_format.Format.nChannels;
+
+    if (device_channels == 1 && source_channels >= 2)
+    {
+        *first = 0;
+        *second = 1;
+        return 2;
+    }
+    if (source_channels == 1 && device_channel < 2)
+    {
+        *first = 0;
+        return 1;
+    }
+    if (device_channel < source_channels)
+    {
+        *first = device_channel;
+        return 1;
+    }
+    return 0;
+}
+
 static void convert_render_frames(const struct reactos_stream *stream,
                                   const BYTE *source, UINT32 frames,
                                   BYTE *destination)
@@ -1646,8 +1673,15 @@ static void convert_render_frames(const struct reactos_stream *stream,
              channel < stream->device_format.Format.nChannels;
              ++channel)
         {
-            INT32 sample = read_render_sample(
-                stream, source_frame + channel * source_sample_size);
+            WORD first = 0, second = 0;
+            UINT count = render_channel_sources(stream, channel, &first, &second);
+            INT32 sample = 0;
+
+            if (count == 1)
+                sample = read_render_sample(stream, source_frame + first * source_sample_size);
+            else if (count == 2)
+                sample = (INT32)(((INT64)read_render_sample(stream, source_frame + first * source_sample_size) +
+                                  read_render_sample(stream, source_frame + second * source_sample_size)) / 2);
 
             write_pcm_sample(destination_frame + channel * destination_sample_size,
                              stream->device_format.Format.wBitsPerSample,
@@ -1686,13 +1720,22 @@ static UINT32 resample_render_frames(struct reactos_stream *stream, const BYTE *
             BYTE *output_frame = destination + (SIZE_T)output++ * stream->device_frame_size;
 
             phase -= source_rate;
-            for (channel = 0; channel < stream->format.Format.nChannels; ++channel)
+            for (channel = 0; channel < stream->device_format.Format.nChannels; ++channel)
             {
-                INT32 current = read_render_sample(stream, input + channel * source_sample_size);
-                INT64 previous = stream->render_history[channel];
-                INT32 sample = previous + ((INT64)current - previous) * (INT64)(destination_rate - phase) / destination_rate;
+                WORD sources[2] = {0, 0};
+                UINT count = render_channel_sources(stream, channel, &sources[0], &sources[1]);
+                INT64 sum = 0;
+                UINT index;
 
-                write_pcm_sample(output_frame + channel * destination_sample_size, stream->device_format.Format.wBitsPerSample, stream->device_format.Samples.wValidBitsPerSample, sample);
+                for (index = 0; index < count; ++index)
+                {
+                    INT32 current = read_render_sample(stream, input + sources[index] * source_sample_size);
+                    INT64 previous = stream->render_history[sources[index]];
+
+                    sum += previous + ((INT64)current - previous) * (INT64)(destination_rate - phase) / destination_rate;
+                }
+
+                write_pcm_sample(output_frame + channel * destination_sample_size, stream->device_format.Format.wBitsPerSample, stream->device_format.Samples.wValidBitsPerSample, count ? (INT32)(sum / count) : 0);
             }
         }
         for (channel = 0; channel < stream->format.Format.nChannels; ++channel)
@@ -2462,7 +2505,8 @@ static NTSTATUS reactos_create_stream(struct create_stream_params *params)
     if (shared_render)
     {
         if (!fill_mix_format(params->device, params->flow, &mix) ||
-            !shared_render_conversion_supported(params->fmt, &mix.Format))
+            !shared_render_conversion_supported(params->fmt, &mix.Format,
+                                                (params->flags & AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM) != 0))
         {
             params->result = AUDCLNT_E_UNSUPPORTED_FORMAT;
             return STATUS_SUCCESS;
@@ -3615,7 +3659,7 @@ static NTSTATUS reactos_is_format_supported(struct is_format_supported_params *p
 
         params->result =
             fill_mix_format(params->device, params->flow, &mix) &&
-            shared_render_conversion_supported(params->fmt_in, &mix.Format) ?
+            shared_render_conversion_supported(params->fmt_in, &mix.Format, FALSE) ?
                 S_OK : AUDCLNT_E_UNSUPPORTED_FORMAT;
         return STATUS_SUCCESS;
     }
