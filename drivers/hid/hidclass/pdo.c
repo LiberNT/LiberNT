@@ -185,6 +185,7 @@ HidClassPDO_HandleQueryHardwareId(
     NTSTATUS Status;
     PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension;
     WCHAR Buffer[200];
+    WCHAR Function[8] = L"";
     ULONG Offset = 0;
     LPWSTR Ptr;
     PHIDP_COLLECTION_DESC CollectionDescription;
@@ -212,21 +213,28 @@ HidClassPDO_HandleQueryHardwareId(
         return Status;
     }
 
+    Ptr = wcsstr((LPWSTR)Irp->IoStatus.Information, L"&MI_");
+    if (Ptr && Ptr[4] && Ptr[5])
+    {
+        RtlCopyMemory(Function, Ptr, 6 * sizeof(WCHAR));
+        Function[6] = UNICODE_NULL;
+    }
+
     if (PDODeviceExtension->Common.DeviceDescription.CollectionDescLength > 1)
     {
         //
         // multi-tlc device
         //
-        Offset = _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X&REV_%04X&Col%02X", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, PDODeviceExtension->Common.Attributes.VersionNumber, PDODeviceExtension->CollectionNumber) + 1;
-        Offset += _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X&Col%02X", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, PDODeviceExtension->CollectionNumber) + 1;
+        Offset = _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X&REV_%04X%ls&Col%02X", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, PDODeviceExtension->Common.Attributes.VersionNumber, Function, PDODeviceExtension->CollectionNumber) + 1;
+        Offset += _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X%ls&Col%02X", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, Function, PDODeviceExtension->CollectionNumber) + 1;
     }
     else
     {
         //
         // single tlc device
         //
-        Offset = _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X&REV_%04X", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, PDODeviceExtension->Common.Attributes.VersionNumber) + 1;
-        Offset += _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID) + 1;
+        Offset = _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X&REV_%04X%ls", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, PDODeviceExtension->Common.Attributes.VersionNumber, Function) + 1;
+        Offset += _swprintf(&Buffer[Offset], L"HID\\VID_%04X&PID_%04X%ls", PDODeviceExtension->Common.Attributes.VendorID, PDODeviceExtension->Common.Attributes.ProductID, Function) + 1;
     }
 
     //
