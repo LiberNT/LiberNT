@@ -24,8 +24,10 @@ enum vt_parse_state
 
 struct vt_pen
 {
-    int  fg;
-    int  bg;
+    int      fg;
+    int      bg;
+    COLORREF fg_rgb;
+    COLORREF bg_rgb;
     BOOL bold;
     BOOL reverse;
     BOOL underline;
@@ -45,6 +47,7 @@ struct vt_state
     unsigned int        string_len;
     unsigned short      default_attr;
     struct vt_pen       pen;
+    struct cell_color   cell;
     BOOL                cursor_keys_application;
     BOOL                has_margins;
     unsigned int        margin_top;
@@ -54,6 +57,7 @@ struct vt_state
     unsigned int        saved_y;
     struct vt_pen       saved_pen;
     char_info_t        *main_data;
+    struct cell_color  *main_colors;
     unsigned int        main_width;
     unsigned int        main_height;
     unsigned int        main_cursor_x;
@@ -78,16 +82,57 @@ static struct vt_state *vt_get_state( struct screen_buffer *screen_buffer )
     vt->default_attr = screen_buffer->attr;
     vt->pen.fg = -1;
     vt->pen.bg = -1;
+    vt->pen.fg_rgb = vt->pen.bg_rgb = CLR_INVALID;
+    vt->cell.fg = vt->cell.bg = CLR_INVALID;
     screen_buffer->vt = vt;
     return vt;
 }
 
 void vt_destroy( struct screen_buffer *screen_buffer )
 {
+    free( screen_buffer->colors );
+    screen_buffer->colors = NULL;
     if (!screen_buffer->vt) return;
     free( screen_buffer->vt->main_data );
+    free( screen_buffer->vt->main_colors );
     free( screen_buffer->vt );
     screen_buffer->vt = NULL;
+}
+
+void resize_cell_colors( struct screen_buffer *screen_buffer, unsigned int new_width, unsigned int new_height )
+{
+    unsigned int copy_width = min( screen_buffer->width, new_width );
+    unsigned int copy_height = min( screen_buffer->height, new_height ), y;
+    struct cell_color *colors;
+
+    if (!screen_buffer->colors) return;
+    if ((colors = malloc( new_width * new_height * sizeof(*colors) )))
+    {
+        memset( colors, 0xff, new_width * new_height * sizeof(*colors) );
+        for (y = 0; y < copy_height; y++)
+            memcpy( &colors[y * new_width], &screen_buffer->colors[y * screen_buffer->width],
+                    copy_width * sizeof(*colors) );
+    }
+    free( screen_buffer->colors );
+    screen_buffer->colors = colors;
+}
+
+static void vt_color_cells( struct screen_buffer *screen_buffer, unsigned int first, unsigned int count )
+{
+    struct vt_state *vt = screen_buffer->vt;
+    unsigned int size = screen_buffer->width * screen_buffer->height, i;
+
+    if (vt->cell.fg == CLR_INVALID && vt->cell.bg == CLR_INVALID)
+    {
+        reset_cell_colors( screen_buffer, first, count );
+        return;
+    }
+    if (!screen_buffer->colors)
+    {
+        if (!(screen_buffer->colors = malloc( size * sizeof(*screen_buffer->colors) ))) return;
+        memset( screen_buffer->colors, 0xff, size * sizeof(*screen_buffer->colors) );
+    }
+    for (i = 0; i < count; i++) screen_buffer->colors[first + i] = vt->cell;
 }
 
 static void vt_touch( RECT *rect, int left, int top, int right, int bottom )
@@ -113,6 +158,7 @@ static void vt_fill( struct screen_buffer *screen_buffer, unsigned int y, unsign
         row[x].ch = ' ';
         row[x].attr = screen_buffer->attr;
     }
+    vt_color_cells( screen_buffer, y * screen_buffer->width + first, last - first + 1 );
     vt_touch( rect, first, y, last, y );
 }
 
@@ -129,11 +175,13 @@ static void vt_scroll_rows( struct screen_buffer *screen_buffer, unsigned int to
     if (count > 0)
     {
         memmove( &data[top * width], &data[(top + n) * width], (rows - n) * width * sizeof(*data) );
+        move_cell_colors( screen_buffer, top * width, (top + n) * width, (rows - n) * width );
         for (y = bottom - n + 1; y <= bottom; y++) vt_fill( screen_buffer, y, 0, width - 1, rect );
     }
     else
     {
         memmove( &data[(top + n) * width], &data[top * width], (rows - n) * width * sizeof(*data) );
+        move_cell_colors( screen_buffer, (top + n) * width, top * width, (rows - n) * width );
         for (y = top; y < top + n; y++) vt_fill( screen_buffer, y, 0, width - 1, rect );
     }
     vt_touch( rect, 0, top, width - 1, bottom );
@@ -206,6 +254,7 @@ static void vt_put( struct screen_buffer *screen_buffer, struct vt_state *vt, WC
     cell = &screen_buffer->data[screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x];
     cell->ch = ch;
     cell->attr = screen_buffer->attr;
+    vt_color_cells( screen_buffer, cell - screen_buffer->data, 1 );
     vt_touch( rect, screen_buffer->cursor_x, screen_buffer->cursor_y,
               screen_buffer->cursor_x, screen_buffer->cursor_y );
     screen_buffer->cursor_x++;
@@ -237,19 +286,27 @@ static unsigned int vt_ansi_color( unsigned int index )
     return ((index & 1) << 2) | (index & 2) | ((index & 4) >> 2) | (index & 8);
 }
 
-static unsigned int vt_indexed_color( struct screen_buffer *screen_buffer, unsigned int index )
+static unsigned int vt_indexed_color( struct screen_buffer *screen_buffer, unsigned int index, COLORREF *rgb )
 {
     static const unsigned char levels[] = { 0, 95, 135, 175, 215, 255 };
     unsigned int grey;
 
-    if (index < 16) return vt_ansi_color( index );
+    if (index < 16)
+    {
+        *rgb = CLR_INVALID;
+        return vt_ansi_color( index );
+    }
     if (index < 232)
     {
         index -= 16;
-        return vt_nearest_color( screen_buffer, levels[index / 36], levels[(index / 6) % 6], levels[index % 6] );
+        *rgb = RGB( levels[index / 36], levels[(index / 6) % 6], levels[index % 6] );
     }
-    grey = 8 + (min( index, 255 ) - 232) * 10;
-    return vt_nearest_color( screen_buffer, grey, grey, grey );
+    else
+    {
+        grey = 8 + (min( index, 255 ) - 232) * 10;
+        *rgb = RGB( grey, grey, grey );
+    }
+    return vt_nearest_color( screen_buffer, GetRValue( *rgb ), GetGValue( *rgb ), GetBValue( *rgb ) );
 }
 
 static void vt_apply_pen( struct screen_buffer *screen_buffer, struct vt_state *vt )
@@ -259,31 +316,35 @@ static void vt_apply_pen( struct screen_buffer *screen_buffer, struct vt_state *
     unsigned int swap;
 
     if (vt->pen.bold) fg |= FOREGROUND_INTENSITY;
+    vt->cell.fg = vt->pen.fg_rgb;
+    vt->cell.bg = vt->pen.bg_rgb;
     if (vt->pen.reverse)
     {
         swap = fg;
         fg = bg;
         bg = swap;
+        vt->cell.fg = vt->pen.bg_rgb;
+        vt->cell.bg = vt->pen.fg_rgb;
     }
     screen_buffer->attr = fg | (bg << 4) | (vt->pen.underline ? COMMON_LVB_UNDERSCORE : 0);
 }
 
 static unsigned int vt_extended_color( struct screen_buffer *screen_buffer, struct vt_state *vt,
-                                       unsigned int *index, int *color )
+                                       unsigned int i, int *color, COLORREF *rgb )
 {
-    unsigned int i = *index;
-
     if (i + 1 >= vt->param_count) return vt->param_count;
     if (vt->params[i + 1] == 5)
     {
-        if (i + 2 < vt->param_count) *color = vt_indexed_color( screen_buffer, vt->params[i + 2] );
+        if (i + 2 < vt->param_count) *color = vt_indexed_color( screen_buffer, vt->params[i + 2], rgb );
         return i + 2;
     }
     if (vt->params[i + 1] == 2)
     {
         if (i + 4 < vt->param_count)
-            *color = vt_nearest_color( screen_buffer, min( vt->params[i + 2], 255 ),
-                                       min( vt->params[i + 3], 255 ), min( vt->params[i + 4], 255 ) );
+        {
+            *rgb = RGB( min( vt->params[i + 2], 255 ), min( vt->params[i + 3], 255 ), min( vt->params[i + 4], 255 ) );
+            *color = vt_nearest_color( screen_buffer, GetRValue( *rgb ), GetGValue( *rgb ), GetBValue( *rgb ) );
+        }
         return i + 4;
     }
     return i + 1;
@@ -304,6 +365,7 @@ static void vt_sgr( struct screen_buffer *screen_buffer, struct vt_state *vt )
         if (!param)
         {
             vt->pen.fg = vt->pen.bg = -1;
+            vt->pen.fg_rgb = vt->pen.bg_rgb = CLR_INVALID;
             vt->pen.bold = vt->pen.reverse = vt->pen.underline = FALSE;
         }
         else if (param == 1) vt->pen.bold = TRUE;
@@ -312,14 +374,20 @@ static void vt_sgr( struct screen_buffer *screen_buffer, struct vt_state *vt )
         else if (param == 24) vt->pen.underline = FALSE;
         else if (param == 7) vt->pen.reverse = TRUE;
         else if (param == 27) vt->pen.reverse = FALSE;
-        else if (param >= 30 && param <= 37) vt->pen.fg = vt_ansi_color( param - 30 );
-        else if (param == 38) i = vt_extended_color( screen_buffer, vt, &i, &vt->pen.fg );
-        else if (param == 39) vt->pen.fg = -1;
-        else if (param >= 40 && param <= 47) vt->pen.bg = vt_ansi_color( param - 40 );
-        else if (param == 48) i = vt_extended_color( screen_buffer, vt, &i, &vt->pen.bg );
-        else if (param == 49) vt->pen.bg = -1;
-        else if (param >= 90 && param <= 97) vt->pen.fg = vt_ansi_color( param - 90 + 8 );
-        else if (param >= 100 && param <= 107) vt->pen.bg = vt_ansi_color( param - 100 + 8 );
+        else if (param == 38) i = vt_extended_color( screen_buffer, vt, i, &vt->pen.fg, &vt->pen.fg_rgb );
+        else if (param == 48) i = vt_extended_color( screen_buffer, vt, i, &vt->pen.bg, &vt->pen.bg_rgb );
+        else if ((param >= 30 && param <= 39) || (param >= 90 && param <= 97))
+        {
+            vt->pen.fg_rgb = CLR_INVALID;
+            if (param == 39) vt->pen.fg = -1;
+            else vt->pen.fg = vt_ansi_color( param < 90 ? param - 30 : param - 90 + 8 );
+        }
+        else if ((param >= 40 && param <= 49) || (param >= 100 && param <= 107))
+        {
+            vt->pen.bg_rgb = CLR_INVALID;
+            if (param == 49) vt->pen.bg = -1;
+            else vt->pen.bg = vt_ansi_color( param < 100 ? param - 40 : param - 100 + 8 );
+        }
     }
     vt_apply_pen( screen_buffer, vt );
 }
@@ -436,11 +504,15 @@ static void vt_shift_chars( struct screen_buffer *screen_buffer, unsigned int co
     if (insert)
     {
         memmove( &row[x + count], &row[x], (width - x - count) * sizeof(*row) );
+        move_cell_colors( screen_buffer, screen_buffer->cursor_y * width + x + count,
+                          screen_buffer->cursor_y * width + x, width - x - count );
         vt_fill( screen_buffer, screen_buffer->cursor_y, x, x + count - 1, rect );
     }
     else
     {
         memmove( &row[x], &row[x + count], (width - x - count) * sizeof(*row) );
+        move_cell_colors( screen_buffer, screen_buffer->cursor_y * width + x,
+                          screen_buffer->cursor_y * width + x + count, width - x - count );
         vt_fill( screen_buffer, screen_buffer->cursor_y, width - count, width - 1, rect );
     }
     vt_touch( rect, x, screen_buffer->cursor_y, width - 1, screen_buffer->cursor_y );
@@ -473,24 +545,29 @@ static void vt_alternate_buffer( struct screen_buffer *screen_buffer, struct vt_
             data[i].attr = screen_buffer->attr;
         }
         vt->main_data = screen_buffer->data;
+        vt->main_colors = screen_buffer->colors;
         vt->main_width = screen_buffer->width;
         vt->main_height = screen_buffer->height;
         vt->main_cursor_x = screen_buffer->cursor_x;
         vt->main_cursor_y = screen_buffer->cursor_y;
         vt->main_win = screen_buffer->win;
         screen_buffer->data = data;
+        screen_buffer->colors = NULL;
         screen_buffer->width = width;
         screen_buffer->height = height;
         screen_buffer->cursor_x = 0;
         screen_buffer->cursor_y = 0;
         SetRect( &screen_buffer->win, 0, 0, width - 1, height - 1 );
+        vt_color_cells( screen_buffer, 0, width * height );
     }
     else
     {
         width = screen_buffer->win.right - screen_buffer->win.left + 1;
         height = screen_buffer->win.bottom - screen_buffer->win.top + 1;
         free( screen_buffer->data );
+        free( screen_buffer->colors );
         screen_buffer->data = vt->main_data;
+        screen_buffer->colors = vt->main_colors;
         screen_buffer->width = vt->main_width;
         screen_buffer->height = vt->main_height;
         screen_buffer->cursor_x = vt->main_cursor_x;
@@ -499,6 +576,7 @@ static void vt_alternate_buffer( struct screen_buffer *screen_buffer, struct vt_
         screen_buffer->win.right = min( screen_buffer->win.left + width, screen_buffer->width ) - 1;
         screen_buffer->win.bottom = min( screen_buffer->win.top + height, screen_buffer->height ) - 1;
         vt->main_data = NULL;
+        vt->main_colors = NULL;
     }
     vt->has_margins = FALSE;
     SetRect( rect, 0, 0, screen_buffer->width - 1, screen_buffer->height - 1 );
@@ -536,6 +614,7 @@ static void vt_private_mode( struct screen_buffer *screen_buffer, struct vt_stat
 static void vt_soft_reset( struct screen_buffer *screen_buffer, struct vt_state *vt )
 {
     vt->pen.fg = vt->pen.bg = -1;
+    vt->pen.fg_rgb = vt->pen.bg_rgb = CLR_INVALID;
     vt->pen.bold = vt->pen.reverse = vt->pen.underline = vt->pen.line_drawing = FALSE;
     vt->has_margins = FALSE;
     vt->cursor_saved = FALSE;

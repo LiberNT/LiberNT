@@ -437,6 +437,10 @@ static void new_line( struct screen_buffer *screen_buffer, RECT *update_rect )
              screen_buffer->width * (screen_buffer->height - 1) * sizeof(*screen_buffer->data) );
     for (i = 0; i < screen_buffer->width; i++)
         screen_buffer->data[screen_buffer->width * (screen_buffer->height - 1) + i] = empty_char_info;
+#ifdef __REACTOS__
+    move_cell_colors( screen_buffer, 0, screen_buffer->width, screen_buffer->width * (screen_buffer->height - 1) );
+    reset_cell_colors( screen_buffer, screen_buffer->width * (screen_buffer->height - 1), screen_buffer->width );
+#endif
     if (is_active( screen_buffer ))
     {
         screen_buffer->console->tty_cursor_y--;
@@ -465,6 +469,9 @@ static void write_char( struct screen_buffer *screen_buffer, WCHAR ch, RECT *upd
 
     screen_buffer->data[screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x].ch = ch;
     screen_buffer->data[screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x].attr = screen_buffer->attr;
+#ifdef __REACTOS__
+    reset_cell_colors( screen_buffer, screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x, 1 );
+#endif
     update_rect->left   = min( update_rect->left,   screen_buffer->cursor_x );
     update_rect->top    = min( update_rect->top,    screen_buffer->cursor_y );
     update_rect->right  = max( update_rect->right,  screen_buffer->cursor_x );
@@ -2094,6 +2101,9 @@ NTSTATUS change_screen_buffer_size( struct screen_buffer *screen_buffer, int new
             memcpy( &new_data[i * new_width], &new_data[old_height * new_width],
                     new_width * sizeof(char_info_t) );
     }
+#ifdef __REACTOS__
+    resize_cell_colors( screen_buffer, new_width, new_height );
+#endif
     free( screen_buffer->data );
     screen_buffer->data   = new_data;
     screen_buffer->width  = new_width;
@@ -2347,9 +2357,15 @@ static NTSTATUS write_output( struct screen_buffer *screen_buffer, const struct 
             break;
         case CHAR_INFO_MODE_ATTR:
             dest->attr = *(const unsigned short *)src;
+#ifdef __REACTOS__
+            reset_cell_colors( screen_buffer, dest - screen_buffer->data, 1 );
+#endif
             break;
         case CHAR_INFO_MODE_TEXTATTR:
             *dest = *(const char_info_t *)src;
+#ifdef __REACTOS__
+            reset_cell_colors( screen_buffer, dest - screen_buffer->data, 1 );
+#endif
             break;
         default:
             return STATUS_INVALID_PARAMETER;
@@ -2509,6 +2525,9 @@ static NTSTATUS fill_output( struct screen_buffer *screen_buffer, const struct c
         break;
     case CHAR_INFO_MODE_ATTR:
         for (i = 0; i < count; i++) dest[i].attr = params->attr;
+#ifdef __REACTOS__
+        reset_cell_colors( screen_buffer, dest - screen_buffer->data, count );
+#endif
         break;
     case CHAR_INFO_MODE_TEXTATTR:
         for (i = 0; i < count; i++)
@@ -2516,6 +2535,9 @@ static NTSTATUS fill_output( struct screen_buffer *screen_buffer, const struct c
             dest[i].ch   = params->ch;
             dest[i].attr = params->attr;
         }
+#ifdef __REACTOS__
+        reset_cell_colors( screen_buffer, dest - screen_buffer->data, count );
+#endif
         break;
     default:
         return STATUS_INVALID_PARAMETER;
@@ -2600,6 +2622,9 @@ static NTSTATUS scroll_output( struct screen_buffer *screen_buffer, const struct
             for (y = h; y > 0; y--)
             {
                 memcpy( pdst, psrc, w * sizeof(*pdst) );
+#ifdef __REACTOS__
+                move_cell_colors( screen_buffer, pdst - screen_buffer->data, psrc - screen_buffer->data, w );
+#endif
                 pdst -= screen_buffer->width;
                 psrc -= screen_buffer->width;
             }
@@ -2615,6 +2640,9 @@ static NTSTATUS scroll_output( struct screen_buffer *screen_buffer, const struct
                  * copies are done on the same row, so the dst and src blocks
                  * can overlap */
                 memmove( pdst, psrc, w * sizeof(*pdst) );
+#ifdef __REACTOS__
+                move_cell_colors( screen_buffer, pdst - screen_buffer->data, psrc - screen_buffer->data, w );
+#endif
                 pdst += screen_buffer->width;
                 psrc += screen_buffer->width;
             }
@@ -2631,6 +2659,9 @@ static NTSTATUS scroll_output( struct screen_buffer *screen_buffer, const struct
             if (dst.Left >= src.Left) right = min( right, dst.Left - 1 );
         }
         for (x = left; x <= right; x++) screen_buffer->data[y * screen_buffer->width + x] = params->fill;
+#ifdef __REACTOS__
+        if (left <= right) reset_cell_colors( screen_buffer, y * screen_buffer->width + left, right - left + 1 );
+#endif
     }
 
     SetRect( &update_rect, min( src.Left, dst.Left ), min( src.Top, dst.Top ),

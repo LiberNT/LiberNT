@@ -112,6 +112,14 @@ struct console
     int                    tty_cursor_visible;  /* tty cursor visibility flag */
 };
 
+#ifdef __REACTOS__
+struct cell_color
+{
+    COLORREF fg;
+    COLORREF bg;
+};
+#endif
+
 struct screen_buffer
 {
     struct console        *console;             /* console reference */
@@ -134,6 +142,7 @@ struct screen_buffer
     struct wine_rb_entry   entry;               /* map entry */
 #ifdef __REACTOS__
     struct vt_state       *vt;
+    struct cell_color     *colors;
 #endif
 };
 
@@ -146,6 +155,7 @@ NTSTATUS change_screen_buffer_size( struct screen_buffer *screen_buffer, int new
 #ifdef __REACTOS__
 void set_vt_console_title( struct console *console, const WCHAR *title, size_t size );
 
+void resize_cell_colors( struct screen_buffer *screen_buffer, unsigned int new_width, unsigned int new_height );
 void vt_write( struct screen_buffer *screen_buffer, const WCHAR *buffer, size_t len, RECT *update_rect );
 void vt_destroy( struct screen_buffer *screen_buffer );
 BOOL vt_translate_key( struct console *console, const INPUT_RECORD *record );
@@ -169,6 +179,21 @@ static inline unsigned int get_bounded_cursor_x( struct screen_buffer *screen_bu
 {
     return min( screen_buffer->cursor_x, screen_buffer->width - 1 );
 }
+
+#ifdef __REACTOS__
+static inline void reset_cell_colors( struct screen_buffer *screen_buffer, unsigned int first, unsigned int count )
+{
+    if (screen_buffer->colors)
+        memset( &screen_buffer->colors[first], 0xff, count * sizeof(*screen_buffer->colors) );
+}
+
+static inline void move_cell_colors( struct screen_buffer *screen_buffer, unsigned int dst, unsigned int src,
+                                     unsigned int count )
+{
+    if (screen_buffer->colors)
+        memmove( &screen_buffer->colors[dst], &screen_buffer->colors[src], count * sizeof(*screen_buffer->colors) );
+}
+#endif
 
 #endif /* RC_INVOKED */
 

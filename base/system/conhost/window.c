@@ -467,6 +467,10 @@ static void fill_mem_dc( struct console *console, const RECT *update )
     WCHAR *line;
     INT *dx;
     RECT r;
+#ifdef __REACTOS__
+    const struct cell_color *colors;
+    COLORREF fg, bg;
+#endif
 
     if (!console->window->font || !console->window->bitmap)
         return;
@@ -478,12 +482,26 @@ static void fill_mem_dc( struct console *console, const RECT *update )
     for (j = update->top; j <= update->bottom; j++)
     {
         cell = &console->active->data[j * console->active->width];
+#ifdef __REACTOS__
+        colors = console->active->colors ? &console->active->colors[j * console->active->width] : NULL;
+#endif
         for (i = update->left; i <= update->right; i++)
         {
             attr = cell[i].attr;
+#ifdef __REACTOS__
+            fg = console->active->color_map[attr & 0x0F];
+            bg = console->active->color_map[(attr >> 4) & 0x0F];
+            if (colors && colors[i].fg != CLR_INVALID) fg = colors[i].fg;
+            if (colors && colors[i].bg != CLR_INVALID) bg = colors[i].bg;
+            SetBkColor( console->window->mem_dc, bg );
+            SetTextColor( console->window->mem_dc, fg );
+            for (k = i; k <= update->right && cell[k].attr == attr &&
+                        (!colors || (colors[k].fg == colors[i].fg && colors[k].bg == colors[i].bg)); k++)
+#else
             SetBkColor( console->window->mem_dc, console->active->color_map[(attr >> 4) & 0x0F] );
             SetTextColor( console->window->mem_dc, console->active->color_map[attr & 0x0F] );
             for (k = i; k <= update->right && cell[k].attr == attr; k++)
+#endif
             {
                 line[k - i] = cell[k].ch;
                 dx[k - i] = console->active->font.width;
@@ -491,7 +509,11 @@ static void fill_mem_dc( struct console *console, const RECT *update )
             ExtTextOutW( console->window->mem_dc, i * console->active->font.width,
                          j * console->active->font.height, 0, NULL, line, k - i, dx );
             if (console->window->ext_leading &&
+#ifdef __REACTOS__
+                (brush = CreateSolidBrush( bg )))
+#else
                 (brush = CreateSolidBrush( console->active->color_map[(attr >> 4) & 0x0F] )))
+#endif
             {
                 r.left   = i * console->active->font.width;
                 r.top    = (j + 1) * console->active->font.height - console->window->ext_leading;
