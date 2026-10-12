@@ -2829,6 +2829,9 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CreateTexture3D(const D3D11_TEXTURE3D_DE
     if ((input->Usage == D3D11_USAGE_DEFAULT || input->Usage == D3D11_USAGE_IMMUTABLE) && input->CPUAccessFlags) return E_INVALIDARG;
     if (input->Usage == D3D11_USAGE_DYNAMIC && (input->CPUAccessFlags != D3D11_CPU_ACCESS_WRITE
             || (input->BindFlags & ~D3D11_BIND_SHADER_RESOURCE))) return E_INVALIDARG;
+    if ((input->MiscFlags & D3D11_RESOURCE_MISC_GENERATE_MIPS)
+            && (input->BindFlags & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE))
+                != (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE)) return E_INVALIDARG;
     UINT maximum_mips = 1;
     for (UINT dimension = max(input->Depth, max(input->Width, input->Height)); dimension > 1; dimension >>= 1) ++maximum_mips;
     UINT mip_count = input->MipLevels ? input->MipLevels : maximum_mips;
@@ -2910,6 +2913,9 @@ HRESULT NativeDevice::CreateTexture(const D3D11_TEXTURE2D_DESC *input,
     if (!NativeUsageValid(input->Usage, input->BindFlags, input->CPUAccessFlags)) return E_INVALIDARG;
     if ((input->Usage == D3D11_USAGE_DEFAULT || input->Usage == D3D11_USAGE_IMMUTABLE) && input->CPUAccessFlags) return E_INVALIDARG;
     if (input->Usage == D3D11_USAGE_DYNAMIC && input->CPUAccessFlags != D3D11_CPU_ACCESS_WRITE) return E_INVALIDARG;
+    if ((input->MiscFlags & D3D11_RESOURCE_MISC_GENERATE_MIPS)
+            && (input->BindFlags & (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE))
+                != (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE)) return E_INVALIDARG;
     if ((input->MiscFlags & D3D11_RESOURCE_MISC_TEXTURECUBE) && (input->Width != input->Height
             || input->ArraySize < 6 || input->SampleDesc.Count != 1
             || (feature_level < D3D_FEATURE_LEVEL_10_1 && input->ArraySize != 6))) return E_INVALIDARG;
@@ -3531,9 +3537,9 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFormatSupport(DXGI_FORMAT format, U
 
 HRESULT STDMETHODCALLTYPE NativeDevice::CheckMultisampleQualityLevels(DXGI_FORMAT format, UINT samples, UINT *quality)
 {
-    if (!quality) return E_INVALIDARG;
+    if (!quality || static_cast<UINT>(format) > DXGI_FORMAT_A4B4G4R4_UNORM) return E_INVALIDARG;
     *quality = 0;
-    if (!samples || samples > D3D11_MAX_MULTISAMPLE_SAMPLE_COUNT) return E_INVALIDARG;
+    if (!samples || samples > D3D11_MAX_MULTISAMPLE_SAMPLE_COUNT) return E_FAIL;
     if (!functions.pfnCheckMultisampleQualityLevels) return E_NOTIMPL;
     NativeLock guard(this);
     BeginCall();
