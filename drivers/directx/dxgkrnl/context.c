@@ -1721,6 +1721,13 @@ DxgkCreatePagingSystemContext(
                  Context->ContextInfo.DmaBufferSize,
                  Context->ContextInfo.DmaBufferSegmentSet,
                  Context->ContextInfo.DmaBufferPrivateDataSize);
+    Status = DxgkPagingInitializeAperturePool(Adapter);
+    if (!NT_SUCCESS(Status))
+    {
+        DXGKRNL_ERR("DxgkCreatePagingSystemContext: aperture paging buffers failed 0x%08lx\n",
+                    Status);
+        goto CreationFailed;
+    }
     return STATUS_SUCCESS;
 
 CreationFailed:
@@ -1748,6 +1755,7 @@ DxgkDestroyPagingSystemContext(
     if (Adapter == NULL)
         return STATUS_INVALID_PARAMETER;
 
+    DxgkPagingReleaseAperturePool(Adapter);
     DxgkGpuVaReleasePageTablePool(Adapter);
     Context = Adapter->PagingSystemContext;
     Device = Adapter->PagingSystemDevice;

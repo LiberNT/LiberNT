@@ -6034,6 +6034,58 @@ DxgkpDestroySharedPrimaryLocked(
     DxgkpEndSharedSurfaceMutationLocked(Adapter);
 }
 
+typedef struct _DXGKP_SHARED_PRIMARY_SLOT
+{
+    D3DKMT_HANDLE ResourceHandle;
+    D3DKMT_HANDLE GlobalShareHandle;
+    HANDLE AllocationHandle;
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId;
+    ULONG Width;
+    ULONG Height;
+    D3DDDIFORMAT Format;
+    BOOLEAN IsGopBacked;
+} DXGKP_SHARED_PRIMARY_SLOT, *PDXGKP_SHARED_PRIMARY_SLOT;
+
+static VOID
+DxgkpExchangeSharedPrimaryLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Inout_ PDXGKP_SHARED_PRIMARY_SLOT Slot)
+{
+    DXGKP_SHARED_PRIMARY_SLOT Current;
+
+    Current.ResourceHandle = Adapter->SharedPrimaryResourceHandle;
+    Current.GlobalShareHandle = Adapter->SharedPrimaryGlobalShareHandle;
+    Current.AllocationHandle = Adapter->SharedPrimaryAllocationHandle;
+    Current.VidPnSourceId = Adapter->SharedPrimaryVidPnSourceId;
+    Current.Width = Adapter->SharedPrimaryWidth;
+    Current.Height = Adapter->SharedPrimaryHeight;
+    Current.Format = Adapter->SharedPrimaryFormat;
+    Current.IsGopBacked = Adapter->SharedPrimaryIsGopBacked;
+    Adapter->SharedPrimaryResourceHandle = Slot->ResourceHandle;
+    Adapter->SharedPrimaryGlobalShareHandle = Slot->GlobalShareHandle;
+    Adapter->SharedPrimaryAllocationHandle = Slot->AllocationHandle;
+    Adapter->SharedPrimaryVidPnSourceId = Slot->VidPnSourceId;
+    Adapter->SharedPrimaryWidth = Slot->Width;
+    Adapter->SharedPrimaryHeight = Slot->Height;
+    Adapter->SharedPrimaryFormat = Slot->Format;
+    Adapter->SharedPrimaryIsGopBacked = Slot->IsGopBacked;
+    *Slot = Current;
+}
+
+static VOID
+DxgkpDestroyParkedSharedPrimaryLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Inout_ PDXGKP_SHARED_PRIMARY_SLOT Slot,
+    _In_ BOOLEAN DestroyShadow)
+{
+    DxgkpExchangeSharedPrimaryLocked(Adapter, Slot);
+    if (DestroyShadow)
+        DxgkpDestroySharedPrimaryLocked(Adapter);
+    else
+        DxgkpDestroySharedPrimaryAllocationLocked(Adapter);
+    DxgkpExchangeSharedPrimaryLocked(Adapter, Slot);
+}
+
 static NTSTATUS
 DxgkpCreateGdiSurface(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -6089,7 +6141,7 @@ DxgkpCreateGdiSurface(
     RtlZeroMemory(&SurfaceData, sizeof(SurfaceData));
     SurfaceData.Width = Create->Width;
     SurfaceData.Height = Create->Height;
-    SurfaceData.Format = D3DDDIFMT_X8R8G8B8;
+    SurfaceData.Format = D3DDDIFMT_A8R8G8B8;
     SurfaceData.Type = SurfaceType;
     SurfaceData.Pitch = Create->Width * sizeof(ULONG);
 
@@ -6585,25 +6637,18 @@ Cleanup:
 }
 
 static NTSTATUS
+DxgkpEnsureSharedPrimarySizeLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ BOOLEAN KeepShadow);
+
+static NTSTATUS
 DxgkpEnsureSharedPrimaryLocked(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId)
 {
-    DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA QueryArgs;
-    D3DKMDT_SHAREDPRIMARYSURFACEDATA SurfaceData;
-    DXGK_ALLOCATIONINFO AllocInfo;
-    DXGK_CREATEALLOCATIONFLAGS CreateFlags;
-    HANDLE AllocationHandle = NULL;
-    HANDLE MiniportResourceHandle = NULL;
-    PDXGKVMM_ALLOCATION Allocation = NULL;
-    PDXGKVMM_RESOURCE Resource = NULL;
-    PVOID AllocationPrivateData = NULL;
-    PVOID ResourcePrivateData = NULL;
-    UINT AllocationPrivateDataSize = 0;
-    UINT ResourcePrivateDataSize = 0;
-    PVOID CpuVa = NULL;
-    BOOLEAN StartTimer = FALSE;
-    BOOLEAN PreserveShadow = FALSE;
     NTSTATUS Status;
 
     if (Adapter == NULL)
@@ -6645,9 +6690,38 @@ DxgkpEnsureSharedPrimaryLocked(
         }
     }
 
+    return DxgkpEnsureSharedPrimarySizeLocked(Adapter, VidPnSourceId,
+                                              Adapter->CommittedWidth, Adapter->CommittedHeight, FALSE);
+}
+
+static NTSTATUS
+DxgkpEnsureSharedPrimarySizeLocked(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ BOOLEAN KeepShadow)
+{
+    DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA QueryArgs;
+    D3DKMDT_SHAREDPRIMARYSURFACEDATA SurfaceData;
+    DXGK_ALLOCATIONINFO AllocInfo;
+    DXGK_CREATEALLOCATIONFLAGS CreateFlags;
+    HANDLE AllocationHandle = NULL;
+    HANDLE MiniportResourceHandle = NULL;
+    PDXGKVMM_ALLOCATION Allocation = NULL;
+    PDXGKVMM_RESOURCE Resource = NULL;
+    PVOID AllocationPrivateData = NULL;
+    PVOID ResourcePrivateData = NULL;
+    UINT AllocationPrivateDataSize = 0;
+    UINT ResourcePrivateDataSize = 0;
+    PVOID CpuVa = NULL;
+    BOOLEAN StartTimer = FALSE;
+    BOOLEAN PreserveShadow = KeepShadow;
+    NTSTATUS Status;
+
     if (Adapter->SharedPrimaryAllocationHandle != NULL &&
-        Adapter->SharedPrimaryWidth == Adapter->CommittedWidth &&
-        Adapter->SharedPrimaryHeight == Adapter->CommittedHeight &&
+        Adapter->SharedPrimaryWidth == Width &&
+        Adapter->SharedPrimaryHeight == Height &&
         Adapter->SharedPrimaryVidPnSourceId == VidPnSourceId)
     {
         BOOLEAN ContentLost;
@@ -6682,8 +6756,8 @@ DxgkpEnsureSharedPrimaryLocked(
         return STATUS_NOT_SUPPORTED;
 
     RtlZeroMemory(&SurfaceData, sizeof(SurfaceData));
-    SurfaceData.Width = Adapter->CommittedWidth;
-    SurfaceData.Height = Adapter->CommittedHeight;
+    SurfaceData.Width = Width;
+    SurfaceData.Height = Height;
     SurfaceData.Format = D3DDDIFMT_X8R8G8B8;
     SurfaceData.RefreshRate.Numerator = 60;
     SurfaceData.RefreshRate.Denominator = 1;
@@ -8082,7 +8156,8 @@ DxgkVidPnSetVideoMode(
     ULONG Index, TargetIndex, OldWidth, OldHeight;
     SIZE_T TargetModeIndex;
     BOOLEAN Transaction = FALSE, Mutation = FALSE, RecoveryRequired = FALSE;
-    BOOLEAN HaveOldTarget = FALSE;
+    BOOLEAN HaveOldTarget = FALSE, SwitchPrimary = FALSE;
+    DXGKP_SHARED_PRIMARY_SLOT ParkedPrimary;
     KIRQL OldIrql;
     NTSTATUS Status, RollbackStatus;
 
@@ -8090,6 +8165,7 @@ DxgkVidPnSetVideoMode(
     if (Adapter == NULL)
         return STATUS_INVALID_PARAMETER;
     ModeIndex &= ~(VIDEO_MODE_NO_ZERO_MEMORY | VIDEO_MODE_MAP_MEM_LINEAR);
+    RtlZeroMemory(&ParkedPrimary, sizeof(ParkedPrimary));
     (VOID)KeWaitForSingleObject(&Adapter->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
     if (ModeIndex == 0)
     {
@@ -8181,9 +8257,23 @@ DxgkVidPnSetVideoMode(
         Status = STATUS_RETRY;
         goto Cleanup;
     }
+    SwitchPrimary = (Entry->Mode.Width != OldWidth || Entry->Mode.Height != OldHeight) &&
+                    DxgkpDisplayCommitSwitchesPrimary(Adapter);
+    if (SwitchPrimary)
+    {
+        DxgkpExchangeSharedPrimaryLocked(Adapter, &ParkedPrimary);
+        Status = DxgkpEnsureSharedPrimarySizeLocked(Adapter, Cache->SourceId, Entry->Mode.Width, Entry->Mode.Height, TRUE);
+        if (!NT_SUCCESS(Status))
+        {
+            DxgkpExchangeSharedPrimaryLocked(Adapter, &ParkedPrimary);
+            goto Cleanup;
+        }
+    }
     Status = DxgkpDisplayCommitVidPnCandidateWithTarget(Adapter, (D3DKMDT_HVIDPN)Candidate, &Entry->Target, &Result);
     if (NT_SUCCESS(Status) && (!Result.VidPnCommitted || Result.CommittedWidth != Entry->Mode.Width || Result.CommittedHeight != Entry->Mode.Height))
         Status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+    if (NT_SUCCESS(Status) && SwitchPrimary)
+        Status = DxgkPresentApplyPendingModeChange(Adapter, Cache->SourceId);
     if (NT_SUCCESS(Status))
     {
         (VOID)KeWaitForSingleObject(&Adapter->VidPnMutex, Executive, KernelMode, FALSE, NULL);
@@ -8209,7 +8299,15 @@ DxgkVidPnSetVideoMode(
     {
         /* A failed commit can have changed hardware partially. Reapply the
          * old pinned source and exact timing before exposing its old state. */
+        if (SwitchPrimary)
+            DxgkpExchangeSharedPrimaryLocked(Adapter, &ParkedPrimary);
         RollbackStatus = DxgkpDisplayCommitVidPnCandidateWithTarget(Adapter, (D3DKMDT_HVIDPN)Rollback, &OldTarget, &RollbackResult);
+        if (NT_SUCCESS(RollbackStatus) && RollbackResult.VidPnCommitted && SwitchPrimary &&
+            Adapter->SharedPrimaryAllocationHandle != NULL &&
+            Adapter->SharedPrimaryWidth == OldWidth && Adapter->SharedPrimaryHeight == OldHeight)
+        {
+            RollbackStatus = DxgkPresentApplyPendingModeChange(Adapter, Cache->SourceId);
+        }
         if (!NT_SUCCESS(RollbackStatus) || !RollbackResult.VidPnCommitted ||
             RollbackResult.CommittedWidth != OldWidth || RollbackResult.CommittedHeight != OldHeight)
         {
@@ -8220,9 +8318,19 @@ DxgkVidPnSetVideoMode(
             RecoveryRequired = TRUE;
             DXGKRNL_ERR("DxgkVidPnSetVideoMode: commit 0x%08lX, rollback 0x%08lX; failing adapter closed\n", Status, RollbackStatus);
         }
+        if (SwitchPrimary)
+        {
+            (VOID)DxgkpWaitForVerticalBlank(Adapter, NULL, Cache->SourceId, 0, NULL);
+            DxgkpDestroyParkedSharedPrimaryLocked(Adapter, &ParkedPrimary, FALSE);
+        }
         goto Cleanup;
     }
-    if (OldWidth != Result.CommittedWidth || OldHeight != Result.CommittedHeight)
+    if (SwitchPrimary)
+    {
+        (VOID)DxgkpWaitForVerticalBlank(Adapter, NULL, Cache->SourceId, 0, NULL);
+        DxgkpDestroyParkedSharedPrimaryLocked(Adapter, &ParkedPrimary, TRUE);
+    }
+    if (Adapter->SharedPrimaryWidth != Result.CommittedWidth || Adapter->SharedPrimaryHeight != Result.CommittedHeight)
         DxgkpDestroySharedPrimaryLocked(Adapter);
     DxgkpDisplayPublishInitialMode(Adapter);
     for (TargetModeIndex = 0;

@@ -132,15 +132,19 @@ DxgkContextRenderInitialize(
     CommandBytes = (ULONG)ROUND_TO_PAGES(CommandBytes);
 
     AllocationCount = Context->ContextInfo.AllocationListSize;
-    if (AllocationCount == 0 || AllocationCount > VIDSCH_INLINE_ALLOCATIONS)
+    if (AllocationCount == 0)
         AllocationCount = VIDSCH_INLINE_ALLOCATIONS;
     PatchCount = Context->ContextInfo.PatchLocationListSize;
-    if (PatchCount == 0 || PatchCount > VIDSCH_INLINE_PATCHES)
+    if (PatchCount == 0)
         PatchCount = VIDSCH_INLINE_PATCHES;
 
+    TotalBytes = (SIZE_T)CommandBytes +
+                 (SIZE_T)AllocationCount * sizeof(D3DDDI_ALLOCATIONLIST) +
+                 (SIZE_T)PatchCount * sizeof(D3DDDI_PATCHLOCATIONLIST);
+    if (TotalBytes > MAXULONG - PAGE_SIZE)
+        return STATUS_INVALID_PARAMETER;
     Context->RenderAllocationListOffset = CommandBytes;
     Context->RenderPatchLocationListOffset = CommandBytes + AllocationCount * (ULONG)sizeof(D3DDDI_ALLOCATIONLIST);
-    TotalBytes = (SIZE_T)Context->RenderPatchLocationListOffset + (SIZE_T)PatchCount * sizeof(D3DDDI_PATCHLOCATIONLIST);
     TotalBytes = ROUND_TO_PAGES(TotalBytes);
 
     Kernel = ExAllocatePoolWithTag(NonPagedPool, TotalBytes, TAG_DXGK_CONTEXT);
@@ -229,12 +233,26 @@ DxgkRender(
     DXGKRNL_TRACK_DMA_ARGS TrackArgs;
     D3DDDI_ALLOCATIONLIST *UserAllocationList;
     D3DDDI_PATCHLOCATIONLIST *UserPatchList;
-    D3DDDI_ALLOCATIONLIST CapturedAllocations[VIDSCH_INLINE_ALLOCATIONS];
-    D3DDDI_PATCHLOCATIONLIST CapturedPatches[VIDSCH_INLINE_PATCHES];
-    D3DDDI_PATCHLOCATIONLIST PatchOut[VIDSCH_INLINE_PATCHES];
-    DXGK_ALLOCATIONLIST KernelAllocations[VIDSCH_INLINE_ALLOCATIONS];
-    PDXGKVMM_ALLOCATION AllocationReferences[VIDSCH_INLINE_ALLOCATIONS];
-    PDXGKVMM_ALLOCATION OpenBindings[VIDSCH_INLINE_ALLOCATIONS];
+    D3DDDI_ALLOCATIONLIST InlineCapturedAllocations[VIDSCH_INLINE_ALLOCATIONS];
+    D3DDDI_PATCHLOCATIONLIST InlineCapturedPatches[VIDSCH_INLINE_PATCHES];
+    D3DDDI_PATCHLOCATIONLIST InlinePatchOut[VIDSCH_INLINE_PATCHES];
+    DXGK_ALLOCATIONLIST InlineKernelAllocations[VIDSCH_INLINE_ALLOCATIONS];
+    PDXGKVMM_ALLOCATION InlineAllocationReferences[VIDSCH_INLINE_ALLOCATIONS];
+    PDXGKVMM_ALLOCATION InlineOpenBindings[VIDSCH_INLINE_ALLOCATIONS];
+    D3DDDI_ALLOCATIONLIST *CapturedAllocations = InlineCapturedAllocations;
+    D3DDDI_PATCHLOCATIONLIST *CapturedPatches = InlineCapturedPatches;
+    D3DDDI_PATCHLOCATIONLIST *PatchOut = InlinePatchOut;
+    DXGK_ALLOCATIONLIST *KernelAllocations = InlineKernelAllocations;
+    PDXGKVMM_ALLOCATION *AllocationReferences = InlineAllocationReferences;
+    PDXGKVMM_ALLOCATION *OpenBindings = InlineOpenBindings;
+    PDXGKVMM_ALLOCATION InlineTrackReferences[VIDSCH_INLINE_ALLOCATIONS];
+    PDXGKVMM_ALLOCATION InlineTrackBindings[VIDSCH_INLINE_ALLOCATIONS];
+    PDXGKVMM_ALLOCATION *TrackReferences = InlineTrackReferences;
+    PDXGKVMM_ALLOCATION *TrackBindings = InlineTrackBindings;
+    UINT TrackCount = 0;
+    UINT AllocationCapacity = VIDSCH_INLINE_ALLOCATIONS;
+    UINT PatchCapacity = VIDSCH_INLINE_PATCHES;
+    PVOID ListStorage = NULL;
     PVOID DmaBufferPrivateData = NULL;
     ULONG DmaBufferPrivateDataSize = 0;
     UINT ReferencedCount = 0;
@@ -253,21 +271,17 @@ DxgkRender(
     PAGED_CODE();
 
     if (pRender == NULL)
-        return STATUS_INVALID_PARAMETER;
 
     if (pRender->hContext == 0)
-        return STATUS_INVALID_PARAMETER;
 
     if (pRender->Flags.RenderKm || pRender->Flags.RenderKmReadback)
         return STATUS_NOT_SUPPORTED;
 
     Context = DxgkLookupContextByHandle(pRender->hContext, &Adapter, &Device);
     if (Context == NULL)
-        return STATUS_INVALID_PARAMETER;
     if (Adapter == NULL || Device == NULL)
     {
         DxgkDereferenceContext(Context);
-        return STATUS_INVALID_PARAMETER;
     }
     if (Adapter->MiniportContext == NULL || Adapter->MiniportContext->UseDodLayout || Adapter->MiniportContext->IsDisplayOnlyDriver)
     {
@@ -285,7 +299,6 @@ DxgkRender(
     {
         /* Virtual contexts submit through SubmitCommandVirtual, not here. */
         DxgkDereferenceContext(Context);
-        return STATUS_INVALID_PARAMETER;
     }
     if (pRender->BroadcastContextCount != 0)
     {
@@ -337,6 +350,42 @@ DxgkRender(
         goto Cleanup;
     }
 
+    if (Context->RenderAllocationListSize > VIDSCH_INLINE_ALLOCATIONS ||
+        Context->RenderPatchLocationListSize > VIDSCH_INLINE_PATCHES)
+    {
+        PUCHAR Cursor;
+
+        AllocationCapacity = max(Context->RenderAllocationListSize, (ULONG)VIDSCH_INLINE_ALLOCATIONS);
+        PatchCapacity = max(Context->RenderPatchLocationListSize, (ULONG)VIDSCH_INLINE_PATCHES);
+        ListStorage = ExAllocatePoolWithTag(NonPagedPool,
+                                            (SIZE_T)AllocationCapacity * (sizeof(DXGK_ALLOCATIONLIST) +
+                                                                          4 * sizeof(PDXGKVMM_ALLOCATION) +
+                                                                          sizeof(D3DDDI_ALLOCATIONLIST)) +
+                                            (SIZE_T)PatchCapacity * 2 * sizeof(D3DDDI_PATCHLOCATIONLIST),
+                                            TAG_DXGK_SUBMITDMA);
+        if (ListStorage == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto Cleanup;
+        }
+        Cursor = (PUCHAR)ListStorage;
+        KernelAllocations = (DXGK_ALLOCATIONLIST *)Cursor;
+        Cursor += (SIZE_T)AllocationCapacity * sizeof(DXGK_ALLOCATIONLIST);
+        AllocationReferences = (PDXGKVMM_ALLOCATION *)Cursor;
+        Cursor += (SIZE_T)AllocationCapacity * sizeof(PDXGKVMM_ALLOCATION);
+        OpenBindings = (PDXGKVMM_ALLOCATION *)Cursor;
+        Cursor += (SIZE_T)AllocationCapacity * sizeof(PDXGKVMM_ALLOCATION);
+        TrackReferences = (PDXGKVMM_ALLOCATION *)Cursor;
+        Cursor += (SIZE_T)AllocationCapacity * sizeof(PDXGKVMM_ALLOCATION);
+        TrackBindings = (PDXGKVMM_ALLOCATION *)Cursor;
+        Cursor += (SIZE_T)AllocationCapacity * sizeof(PDXGKVMM_ALLOCATION);
+        CapturedAllocations = (D3DDDI_ALLOCATIONLIST *)Cursor;
+        Cursor += (SIZE_T)AllocationCapacity * sizeof(D3DDDI_ALLOCATIONLIST);
+        CapturedPatches = (D3DDDI_PATCHLOCATIONLIST *)Cursor;
+        Cursor += (SIZE_T)PatchCapacity * sizeof(D3DDDI_PATCHLOCATIONLIST);
+        PatchOut = (D3DDDI_PATCHLOCATIONLIST *)Cursor;
+    }
+
     if (DXGK_CB_FULL(Adapter, DxgkDdiRender) == NULL || DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand) == NULL)
     {
         Status = STATUS_NOT_SUPPORTED;
@@ -345,11 +394,11 @@ DxgkRender(
 
     /* Snapshot the user-writable lists before validating them so no entry can
      * change between validation and use. */
-    RtlZeroMemory(CapturedAllocations, sizeof(CapturedAllocations));
-    RtlZeroMemory(CapturedPatches, sizeof(CapturedPatches));
-    RtlZeroMemory(KernelAllocations, sizeof(KernelAllocations));
-    RtlZeroMemory(AllocationReferences, sizeof(AllocationReferences));
-    RtlZeroMemory(OpenBindings, sizeof(OpenBindings));
+    RtlZeroMemory(CapturedAllocations, AllocationCapacity * sizeof(*CapturedAllocations));
+    RtlZeroMemory(CapturedPatches, PatchCapacity * sizeof(*CapturedPatches));
+    RtlZeroMemory(KernelAllocations, AllocationCapacity * sizeof(*KernelAllocations));
+    RtlZeroMemory(AllocationReferences, AllocationCapacity * sizeof(*AllocationReferences));
+    RtlZeroMemory(OpenBindings, AllocationCapacity * sizeof(*OpenBindings));
     UserAllocationList = (D3DDDI_ALLOCATIONLIST *)((PUCHAR)Context->RenderRingKernel + Context->RenderAllocationListOffset);
     UserPatchList = (D3DDDI_PATCHLOCATIONLIST *)((PUCHAR)Context->RenderRingKernel + Context->RenderPatchLocationListOffset);
     if (pRender->AllocationCount != 0)
@@ -384,6 +433,11 @@ DxgkRender(
         PDXGKVMM_ALLOCATION Reference = NULL;
         PDXGKVMM_ALLOCATION Binding = NULL;
 
+        if (CapturedAllocations[Index].hAllocation == 0)
+        {
+            ReferencedCount = Index + 1;
+            continue;
+        }
         Status = DxgkVidMmReferenceAllocation((HANDLE)(ULONG_PTR)CapturedAllocations[Index].hAllocation, Adapter, Device, &Reference);
         if (!NT_SUCCESS(Status))
         {
@@ -411,7 +465,10 @@ DxgkRender(
         }
         AllocationReferences[Index] = Reference;
         OpenBindings[Index] = Binding;
-        ReferencedCount++;
+        TrackReferences[TrackCount] = Reference;
+        TrackBindings[TrackCount] = Binding;
+        TrackCount++;
+        ReferencedCount = Index + 1;
     }
 
     Status = DxgkAllocateDmaBufferInSegmentSet(Adapter, max(Context->ContextInfo.DmaBufferSize, pRender->CommandLength), Context->ContextInfo.DmaBufferSegmentSet, &DmaBuffer);
@@ -473,11 +530,11 @@ DxgkRender(
         RenderArgs.pPatchLocationListIn = CapturedPatches;
         RenderArgs.PatchLocationListInSize = pRender->PatchLocationCount;
         RenderArgs.pPatchLocationListOut = PatchOut;
-        RenderArgs.PatchLocationListOutSize = RTL_NUMBER_OF(PatchOut);
+        RenderArgs.PatchLocationListOutSize = PatchCapacity;
         RenderArgs.MultipassOffset = MultipassOffset;
         RenderArgs.DmaBufferSegmentId = DmaBuffer->SegmentId;
         RenderArgs.DmaBufferPhysicalAddress = DmaBuffer->SegmentAddress;
-        RtlZeroMemory(PatchOut, sizeof(PatchOut));
+        RtlZeroMemory(PatchOut, PatchCapacity * sizeof(*PatchOut));
 
         if (!DxgkAcquireKmdCall(Adapter))
         {
@@ -516,7 +573,7 @@ DxgkRender(
             goto Cleanup;
         }
         if (RenderArgs.pPatchLocationListOut < PatchOut ||
-            (SIZE_T)(RenderArgs.pPatchLocationListOut - PatchOut) > RTL_NUMBER_OF(PatchOut))
+            (SIZE_T)(RenderArgs.pPatchLocationListOut - PatchOut) > PatchCapacity)
         {
             Status = STATUS_INVALID_PARAMETER;
             goto Cleanup;
@@ -536,6 +593,8 @@ DxgkRender(
              * and must refuse an offset that would resolve outside it,
              * otherwise a user-mode driver could name a neighbouring
              * allocation's memory. */
+            if (CapturedAllocations[AllocationIndex].hAllocation == 0)
+                continue;
             if (AllocationReferences[AllocationIndex] == NULL ||
                 PatchOut[Index].AllocationOffset >= AllocationReferences[AllocationIndex]->Size)
             {
@@ -558,14 +617,6 @@ DxgkRender(
             goto Cleanup;
         }
 
-        if (DmaBytesUsed == 0 && DmaBuffer->PrivateDataUsed == 0)
-        {
-            /* The miniport translated this part of the stream to no
-             * hardware work. */
-            DxgkFreeDmaBuffer(DmaBuffer);
-            DmaBuffer = NULL;
-        }
-        else
         {
             DmaBuffer->SubmissionStartOffset = 0;
             DmaBuffer->SubmissionEndOffset = DmaBytesUsed;
@@ -574,10 +625,10 @@ DxgkRender(
             TrackArgs.Device = Device;
             TrackArgs.Context = Context;
             TrackArgs.EnforceSubmissionQuota = TRUE;
-            TrackArgs.AllocationReferences = AllocationReferences;
-            TrackArgs.AllocationReferenceCount = ReferencedCount;
-            TrackArgs.OpenBindingReferences = OpenBindings;
-            TrackArgs.OpenBindingReferenceCount = ReferencedCount;
+            TrackArgs.AllocationReferences = TrackReferences;
+            TrackArgs.AllocationReferenceCount = TrackCount;
+            TrackArgs.OpenBindingReferences = TrackBindings;
+            TrackArgs.OpenBindingReferenceCount = TrackCount;
             BackpressureDeadline = 0;
 
 RetryTrackedSubmit:
@@ -654,6 +705,8 @@ Cleanup:
         ExFreePoolWithTag(DmaBufferPrivateData, TAG_DXGK_SUBMITDMA);
     if (DmaBuffer != NULL)
         DxgkFreeDmaBuffer(DmaBuffer);
+    if (ListStorage != NULL)
+        ExFreePoolWithTag(ListStorage, TAG_DXGK_SUBMITDMA);
     if (KmdTransaction)
         DxgkEndKmdTransaction(Adapter);
     if (RingLocked)

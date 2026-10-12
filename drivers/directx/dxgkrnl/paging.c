@@ -28,6 +28,7 @@
 #define DXGKP_PAGING_MIN_BUFFER_BYTES   PAGE_SIZE
 #define DXGKP_PAGING_MAX_BUFFER_BYTES   (1024 * 1024)
 #define DXGKP_PAGING_SYNC_TIMEOUT_MS    2000
+#define DXGKP_PAGING_APERTURE_BUFFERS   16
 
 static ULONG
 DxgkpPagingBufferBytes(
@@ -364,10 +365,19 @@ static NTSTATUS
 DxgkpPagingAllocateDmaBuffer(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ ULONG Bytes,
+    _In_ BOOLEAN Grown,
     _Out_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer)
 {
     if (InterlockedCompareExchange(&Adapter->PagingVirtualReady, 0, 0) != 0)
         return DxgkAcquirePagingDmaBuffer(Adapter, OutDmaBuffer);
+    if (InterlockedCompareExchange(&Adapter->PagingApertureReady, 0, 0) != 0 &&
+        (!Grown || Bytes <= DxgkpPagingBufferBytes(Adapter)))
+    {
+        NTSTATUS Status = DxgkAcquirePagingDmaBuffer(Adapter, OutDmaBuffer);
+
+        if (Status != STATUS_IO_TIMEOUT)
+            return Status;
+    }
     return DxgkAllocateDmaBufferWithPrivateData(Adapter,
                                                 Bytes,
                                                 DxgkVidMmPagingBufferPrivateDataSize(Adapter),
@@ -536,6 +546,7 @@ DxgkPagingExecuteBatch(
     BOOLEAN SignalWrittenByGpu = FALSE;
 #endif
     ULONG BufferBytes;
+    BOOLEAN Grown = FALSE;
     ULONG LastFenceId = 0;
     ULONG OperationIndex;
     ULONG BytesUsed;
@@ -632,6 +643,7 @@ DxgkPagingExecuteBatch(
     {
         BufferBytes = DXGKP_PAGING_MAX_BUFFER_BYTES;
     }
+    Grown = BufferBytes > DxgkpPagingBufferBytes(Adapter);
 
     for (;;)
     {
@@ -639,7 +651,7 @@ DxgkPagingExecuteBatch(
         PUCHAR End;
         BOOLEAN RetryLarger = FALSE;
 
-        Status = DxgkpPagingAllocateDmaBuffer(Adapter, BufferBytes, &DmaBuffer);
+        Status = DxgkpPagingAllocateDmaBuffer(Adapter, BufferBytes, Grown, &DmaBuffer);
         if (!NT_SUCCESS(Status))
             goto Cleanup;
         Cursor = (PUCHAR)DmaBuffer->VirtualAddress;
@@ -878,6 +890,7 @@ DxgkPagingExecuteBatch(
         }
         BufferBytes = min(BufferBytes * 2,
                           (ULONG)DXGKP_PAGING_MAX_BUFFER_BYTES);
+        Grown = TRUE;
     }
 
     ASSERT(FinalCursor != NULL);
@@ -1113,7 +1126,7 @@ DxgkPagingExecute(
         ULONG PreviousMultipassOffset = MultipassOffset;
         ULONG BytesUsed;
 
-        Status = DxgkpPagingAllocateDmaBuffer(Adapter, BufferBytes, &DmaBuffer);
+        Status = DxgkpPagingAllocateDmaBuffer(Adapter, BufferBytes, BufferBytes > DxgkpPagingBufferBytes(Adapter), &DmaBuffer);
         if (!NT_SUCCESS(Status))
             goto Cleanup;
 
@@ -1429,5 +1442,293 @@ DxgkPagingDumpStats(
     }
 }
 
+
+static VOID
+DxgkpPagingUnmapApertureBuffer(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_DMA_BUFFER DmaBuffer)
+{
+    PDXGKRNL_SEGMENT Segment = &((PDXGKRNL_SEGMENT)Adapter->Segments)[DmaBuffer->SegmentId - 1];
+    DXGKARG_BUILDPAGINGBUFFER BuildArgs;
+    DXGKRNL_PAGING_OP Op;
+
+    RtlZeroMemory(&Op, sizeof(Op));
+    Op.Type = DxgkPagingOpUnmapAperture;
+    Op.hMiniportDevice = Adapter->PagingSystemDevice->hMiniportDevice;
+    Op.DestinationSegmentId = DmaBuffer->SegmentId;
+    Op.OffsetInPages = (SIZE_T)(((ULONGLONG)DmaBuffer->SegmentAddress.QuadPart -
+                                 (ULONGLONG)Segment->BaseAddress.QuadPart) / PAGE_SIZE);
+    Op.NumberOfPages = ROUND_TO_PAGES(DmaBuffer->Capacity) / PAGE_SIZE;
+    Op.DummyPage = Segment->DummyPage;
+    DmaBuffer->PrivateDataUsed = 0;
+    RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
+    DxgkpPagingPrepareBuildBuffer(Adapter, DmaBuffer, DmaBuffer->VirtualAddress, &BuildArgs);
+    DxgkpPagingFillBuildArgs(&Op, FALSE, &BuildArgs);
+    if (Adapter->MiniportDeviceStopped ||
+        InterlockedCompareExchange(&Adapter->MiniportCallbacksValid, 0, 0) == 0 ||
+        !DxgkAcquireMiniportCallback(Adapter))
+    {
+        return;
+    }
+    DxgkEnterSchedulerClass(Adapter);
+    _SEH2_TRY
+    {
+        (VOID)DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    _SEH2_END;
+    DxgkLeaveSchedulerClass(Adapter);
+    DxgkReleaseMiniportCallback(Adapter);
+}
+
+static VOID
+DxgkpPagingReleaseApertureBuffer(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_DMA_BUFFER DmaBuffer)
+{
+    DmaBuffer->PagingPoolOwned = FALSE;
+    if (DmaBuffer->PagingApertureMdl != NULL)
+    {
+        IoFreeMdl(DmaBuffer->PagingApertureMdl);
+        DmaBuffer->PagingApertureMdl = NULL;
+        DxgkVidMmReleaseSegmentRange(Adapter,
+                                     DmaBuffer->SegmentId,
+                                     (ULONGLONG)(ULONG_PTR)DmaBuffer);
+    }
+    DmaBuffer->SegmentId = 0;
+    DmaBuffer->SegmentAddress = MmGetPhysicalAddress(DmaBuffer->VirtualAddress);
+    DxgkFreeDmaBuffer(DmaBuffer);
+}
+
+static VOID
+DxgkpPagingDrainAperturePool(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ BOOLEAN Unmap)
+{
+    for (;;)
+    {
+        PDXGKRNL_DMA_BUFFER PagingBuffer = NULL;
+        PLIST_ENTRY Link;
+        KIRQL OldIrql;
+
+        KeAcquireSpinLock(&Adapter->PagingBufferPoolLock, &OldIrql);
+        for (Link = Adapter->PagingBufferPoolList.Flink;
+             Link != &Adapter->PagingBufferPoolList;
+             Link = Link->Flink)
+        {
+            PDXGKRNL_DMA_BUFFER Candidate = CONTAINING_RECORD(Link, DXGKRNL_DMA_BUFFER, CacheListEntry);
+
+            if (Candidate->PagingApertureMdl != NULL)
+            {
+                RemoveEntryList(Link);
+                PagingBuffer = Candidate;
+                break;
+            }
+        }
+        KeReleaseSpinLock(&Adapter->PagingBufferPoolLock, OldIrql);
+        if (PagingBuffer == NULL)
+            break;
+        InitializeListHead(&PagingBuffer->CacheListEntry);
+        if (Unmap)
+            DxgkpPagingUnmapApertureBuffer(Adapter, PagingBuffer);
+        DxgkpPagingReleaseApertureBuffer(Adapter, PagingBuffer);
+        InterlockedDecrement(&Adapter->PagingAperturePoolCount);
+    }
+}
+
+VOID
+DxgkPagingDiscardAperturePool(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PAGED_CODE();
+
+    if (Adapter == NULL ||
+        InterlockedCompareExchange(&Adapter->PagingApertureReady, 0, 0) != 0)
+    {
+        return;
+    }
+    DxgkpPagingDrainAperturePool(Adapter, FALSE);
+}
+
+static NTSTATUS
+DxgkpPagingAddApertureBuffer(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _In_ ULONG Bytes)
+{
+    PDXGKRNL_SEGMENT Segment = &((PDXGKRNL_SEGMENT)Adapter->Segments)[SegmentId - 1];
+    PDXGKRNL_DMA_BUFFER DmaBuffer;
+    DXGKARG_BUILDPAGINGBUFFER BuildArgs;
+    DXGKRNL_PAGING_OP Op;
+    ULONGLONG Offset = 0;
+    PMDL Mdl = NULL;
+    ULONG MapBytes;
+    NTSTATUS BuildStatus = STATUS_UNSUCCESSFUL;
+    NTSTATUS Status;
+
+    Status = DxgkAllocateDmaBufferWithPrivateData(Adapter,
+                                                  Bytes,
+                                                  DxgkVidMmPagingBufferPrivateDataSize(Adapter),
+                                                  &DmaBuffer);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (DmaBuffer->BackingKind != DxgkDmaBackingContiguousMemory ||
+        ((ULONG_PTR)DmaBuffer->VirtualAddress & (PAGE_SIZE - 1)) != 0)
+    {
+        DxgkFreeDmaBuffer(DmaBuffer);
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+
+    MapBytes = (ULONG)ROUND_TO_PAGES(DmaBuffer->Capacity);
+    Status = DxgkVidMmReserveApertureRange(Adapter,
+                                           SegmentId,
+                                           DmaBuffer->VirtualAddress,
+                                           MapBytes,
+                                           PAGE_SIZE,
+                                           (ULONGLONG)(ULONG_PTR)DmaBuffer,
+                                           &Offset,
+                                           &Mdl);
+    if (!NT_SUCCESS(Status))
+    {
+        DxgkFreeDmaBuffer(DmaBuffer);
+        return Status;
+    }
+    DmaBuffer->PagingApertureMdl = Mdl;
+    DmaBuffer->SegmentId = SegmentId;
+    DmaBuffer->SegmentAddress.QuadPart =
+        (LONGLONG)((ULONGLONG)Segment->BaseAddress.QuadPart + Offset);
+
+    RtlZeroMemory(&Op, sizeof(Op));
+    Op.Type = DxgkPagingOpMapAperture;
+    Op.hMiniportDevice = Adapter->PagingSystemDevice->hMiniportDevice;
+    Op.DestinationSegmentId = SegmentId;
+    Op.OffsetInPages = (SIZE_T)(Offset / PAGE_SIZE);
+    Op.NumberOfPages = MapBytes / PAGE_SIZE;
+    Op.SourceMdl = Mdl;
+    RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
+    DxgkpPagingPrepareBuildBuffer(Adapter,
+                                  DmaBuffer,
+                                  DmaBuffer->VirtualAddress,
+                                  &BuildArgs);
+    DxgkpPagingFillBuildArgs(&Op, FALSE, &BuildArgs);
+    if (!DxgkAcquireKmdCall(Adapter))
+    {
+        DxgkpPagingReleaseApertureBuffer(Adapter, DmaBuffer);
+        return STATUS_DELETE_PENDING;
+    }
+    DxgkEnterSchedulerClass(Adapter);
+    _SEH2_TRY
+    {
+        BuildStatus = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        BuildStatus = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    DxgkLeaveSchedulerClass(Adapter);
+    DxgkReleaseKmdCall(Adapter);
+    if (!NT_SUCCESS(BuildStatus))
+    {
+        DxgkpPagingReleaseApertureBuffer(Adapter, DmaBuffer);
+        return BuildStatus;
+    }
+    if (BuildArgs.pDmaBuffer != DmaBuffer->VirtualAddress)
+    {
+        DxgkpPagingUnmapApertureBuffer(Adapter, DmaBuffer);
+        DxgkpPagingReleaseApertureBuffer(Adapter, DmaBuffer);
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    DmaBuffer->PrivateDataUsed = 0;
+    DmaBuffer->PagingPoolOwned = TRUE;
+    InterlockedIncrement(&Adapter->PagingAperturePoolCount);
+    DxgkFreeDmaBuffer(DmaBuffer);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+DxgkPagingInitializeAperturePool(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PDXGKRNL_SEGMENT Segments;
+    PDXGKRNL_SEGMENT Segment;
+    ULONG SegmentId;
+    ULONG Bytes;
+    ULONG Index;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Segments = (PDXGKRNL_SEGMENT)Adapter->Segments;
+    if (Segments == NULL || Adapter->SegmentCount == 0 ||
+        Adapter->GpuMmuCapsValid ||
+        Adapter->PagingSystemDevice == NULL ||
+        Adapter->PagingSystemContext == NULL ||
+        DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer) == NULL ||
+        InterlockedCompareExchange(&Adapter->PagingVirtualReady, 0, 0) != 0 ||
+        InterlockedCompareExchange(&Adapter->PagingApertureReady, 0, 0) != 0)
+    {
+        return STATUS_SUCCESS;
+    }
+    SegmentId = Segments[0].PagingBufferSegmentId;
+    if (SegmentId == 0 || SegmentId > Adapter->SegmentCount)
+        return STATUS_SUCCESS;
+    Segment = &Segments[SegmentId - 1];
+    if (!Segment->Flags.Aperture && !Segment->Flags.Agp)
+        return STATUS_SUCCESS;
+
+    DxgkpPagingDrainAperturePool(Adapter, FALSE);
+    Bytes = DxgkpPagingBufferBytes(Adapter);
+    for (Index = 0; Index < DXGKP_PAGING_APERTURE_BUFFERS; ++Index)
+    {
+        Status = DxgkpPagingAddApertureBuffer(Adapter, SegmentId, Bytes);
+        if (!NT_SUCCESS(Status))
+        {
+            DxgkpPagingDrainAperturePool(Adapter, TRUE);
+            DXGKRNL_WARN("DxgkPaging: aperture segment %lu paging buffers unavailable 0x%08lX; using system memory\n",
+                         SegmentId, Status);
+            return STATUS_SUCCESS;
+        }
+    }
+    InterlockedExchange(&Adapter->PagingApertureReady, 1);
+    DXGKRNL_TRACE("DxgkPaging: %lu paging buffers of 0x%lx bytes in aperture segment %lu\n",
+                  (ULONG)DXGKP_PAGING_APERTURE_BUFFERS, Bytes, SegmentId);
+    return STATUS_SUCCESS;
+}
+
+VOID
+DxgkPagingReleaseAperturePool(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    LARGE_INTEGER Timeout;
+    ULONG Waits;
+
+    PAGED_CODE();
+
+    if (Adapter == NULL ||
+        InterlockedExchange(&Adapter->PagingApertureReady, 0) == 0)
+    {
+        return;
+    }
+    Timeout.QuadPart = -10000LL * 100;
+    for (Waits = 0;; ++Waits)
+    {
+        DxgkpPagingDrainAperturePool(Adapter, TRUE);
+        if (InterlockedCompareExchange(&Adapter->PagingAperturePoolCount, 0, 0) <= 0 ||
+            Waits >= 50)
+        {
+            break;
+        }
+        (VOID)KeWaitForSingleObject(&Adapter->PagingBufferPoolEvent, Executive, KernelMode, FALSE, &Timeout);
+    }
+    if (InterlockedCompareExchange(&Adapter->PagingAperturePoolCount, 0, 0) > 0)
+    {
+        DXGKRNL_WARN("DxgkPaging: %ld aperture paging buffers still in flight at release\n",
+                     Adapter->PagingAperturePoolCount);
+    }
+}
 
 /* EOF */

@@ -395,6 +395,11 @@ DxgkPresentInit(
  *
  * IRQL: PASSIVE_LEVEL
  */
+NTSTATUS
+DxgkPresentApplyPendingModeChange(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId);
+
 VOID
 DxgkPresentTeardown(
     _In_ struct _DXGKRNL_ADAPTER *Adapter);

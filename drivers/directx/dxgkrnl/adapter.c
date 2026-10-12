@@ -2721,6 +2721,7 @@ DxgkpDrainDmaBufferCache(
     LIST_ENTRY FreeList;
     KIRQL OldIrql;
 
+    DxgkPagingDiscardAperturePool(Adapter);
     InitializeListHead(&FreeList);
     InterlockedExchange(&Adapter->DmaBufferCacheStopping, 1);
     KeAcquireSpinLock(&Adapter->DmaBufferCacheLock, &OldIrql);
@@ -4662,6 +4663,29 @@ DxgkpAdapterDpcRoutine(
         DXGKRNL_TRACE("DxgkpAdapterDpcRoutine: seq=%ld no miniport DPC routine\n",
                       Sequence);
     }
+
+    DxgkpDrainDpcNotifications(Adapter);
+    DxgkpReleaseVidSchCallback(Adapter);
+}
+
+static VOID
+NTAPI
+DxgkpNotifyDpcRoutine(
+    _In_     PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    PDXGKRNL_ADAPTER Adapter = (PDXGKRNL_ADAPTER)DeferredContext;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    if (Adapter == NULL)
+        return;
+    if (!DxgkpAcquireVidSchCallback(Adapter))
+        return;
 
     DxgkpDrainDpcNotifications(Adapter);
     DxgkpReleaseVidSchCallback(Adapter);
@@ -7708,7 +7732,7 @@ DxgkCbNotifyDpc(
     if (!DxgkpAcquireVidSchCallback(Adapter))
         return;
 
-    DxgkpDrainDpcNotifications(Adapter);
+    KeInsertQueueDpc(&Adapter->NotifyDpcObject, NULL, NULL);
     DxgkpReleaseVidSchCallback(Adapter);
 }
 
@@ -12801,6 +12825,7 @@ DxgkpRollbackAdapterStart(
     DxgkpDisablePeriodicInterruptHandoff(Adapter);
     DxgkpDisconnectAdapterInterrupt(Adapter);
     KeRemoveQueueDpc(&Adapter->DpcObject);
+    KeRemoveQueueDpc(&Adapter->NotifyDpcObject);
     KeFlushQueuedDpcs();
     DxgkpWaitForVidSchCallbacks(Adapter);
     if (Progress->PagingSystemContextCreated)
@@ -13114,78 +13139,6 @@ DxgkRearmVsyncInterrupt(
 }
 
 /*
- * DxgkpEnableEngineInterrupt
- *
- * Turns on a non-vsync interrupt source.  dxgkrnl only ever enabled
- * DXGK_INTERRUPT_CRTC_VSYNC, so the engine's DMA-completion interrupt was
- * left off and the miniport reported completions from its own periodic check
- * instead -- measured at a fixed ~480 ms per submission, which throttles every
- * present to ~2 Hz and makes windows look hung.
- */
-static NTSTATUS
-DxgkpEnableEngineInterrupt(
-    _In_ PDXGKRNL_ADAPTER Adapter,
-    _In_ DXGK_INTERRUPT_TYPE InterruptType)
-{
-    PDXGKDDI_CONTROLINTERRUPT3 ControlInterrupt3 = NULL;
-    PDXGKDDI_CONTROLINTERRUPT2 ControlInterrupt2 = NULL;
-    PDXGKDDI_CONTROL_INTERRUPT ControlInterrupt;
-    DXGKARG_CONTROLINTERRUPT3 Args3;
-    DXGKARG_CONTROLINTERRUPT2 Args2;
-    ULONG Version;
-    NTSTATUS Status = STATUS_UNSUCCESSFUL;
-
-    PAGED_CODE();
-    if (Adapter == NULL || Adapter->MiniportContext == NULL)
-        return STATUS_INVALID_PARAMETER;
-
-    Version = Adapter->MiniportContext->InitData.s.Version;
-    ControlInterrupt = DXGK_CB(Adapter, DxgkDdiControlInterrupt);
-    if (!Adapter->MiniportContext->UseDodLayout &&
-        DxgkCapsCoreInterfaceVersionAtLeast(Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_7))
-    {
-        ControlInterrupt3 = DXGK_CB_FULL(Adapter, DxgkDdiControlInterrupt3);
-    }
-    if (ControlInterrupt3 == NULL && !Adapter->MiniportContext->UseDodLayout &&
-        DxgkCapsCoreInterfaceVersionAtLeast(Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
-    {
-        ControlInterrupt2 = DXGK_CB_FULL(Adapter, DxgkDdiControlInterrupt2);
-    }
-    if (ControlInterrupt3 == NULL && ControlInterrupt2 == NULL && ControlInterrupt == NULL)
-        return STATUS_NOT_SUPPORTED;
-    if (!DxgkAcquireMiniportCallback(Adapter))
-        return STATUS_DELETE_PENDING;
-
-    _SEH2_TRY
-    {
-        if (ControlInterrupt3 != NULL)
-        {
-            RtlZeroMemory(&Args3, sizeof(Args3));
-            Args3.InterruptType = InterruptType;
-            Status = ControlInterrupt3(Adapter->MiniportDeviceContext, &Args3);
-        }
-        else if (ControlInterrupt2 != NULL)
-        {
-            RtlZeroMemory(&Args2, sizeof(Args2));
-            Args2.InterruptType = InterruptType;
-            Status = ControlInterrupt2(Adapter->MiniportDeviceContext, Args2);
-        }
-        else
-        {
-            Status = ControlInterrupt(Adapter->MiniportDeviceContext,
-                                      InterruptType, TRUE);
-        }
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
-    DxgkReleaseMiniportCallback(Adapter);
-    return Status;
-}
-
-/*
  * DxgkAdapterStart
  *
  * Called from DxgkpMiniportPnpDispatch in response to IRP_MN_START_DEVICE.
@@ -13473,6 +13426,7 @@ DxgkAdapterStart(
             InterlockedExchange(&Adapter->VidSchStopping, 1);
             DxgkpDisconnectAdapterInterrupt(Adapter);
             KeRemoveQueueDpc(&Adapter->DpcObject);
+            KeRemoveQueueDpc(&Adapter->NotifyDpcObject);
             KeFlushQueuedDpcs();
             DxgkpWaitForVidSchCallbacks(Adapter);
             DxgkpReleasePostDisplayMapping(Adapter);
@@ -13520,6 +13474,7 @@ DxgkAdapterStart(
         InterlockedExchange(&Adapter->VidSchStopping, 1);
         DxgkpDisconnectAdapterInterrupt(Adapter);
         KeRemoveQueueDpc(&Adapter->DpcObject);
+        KeRemoveQueueDpc(&Adapter->NotifyDpcObject);
         KeFlushQueuedDpcs();
         DxgkpWaitForVidSchCallbacks(Adapter);
         /*
@@ -13724,22 +13679,6 @@ DxgkAdapterStart(
         {
             DXGKRNL_WARN("DxgkAdapterStart: runtime power management unavailable 0x%08lX\n",
                          PowerStatus);
-        }
-    }
-    if (!Adapter->MiniportContext->IsDisplayOnlyDriver)
-    {
-        /* Enable every non-vsync source the miniport will accept.  dxgkrnl
-         * historically enabled only DXGK_INTERRUPT_CRTC_VSYNC, so any engine
-         * source the driver needs was left masked.  Unsupported types answer
-         * STATUS_NOT_SUPPORTED, which is not an error.  Vsync is owned by
-         * DxgkpSetVsyncInterruptState and is deliberately not touched here. */
-        ULONG InterruptType;
-
-        for (InterruptType = 1; InterruptType <= 20; ++InterruptType)
-        {
-            if (InterruptType == (ULONG)DXGK_INTERRUPT_CRTC_VSYNC)
-                continue;
-            (VOID)DxgkpEnableEngineInterrupt(Adapter, (DXGK_INTERRUPT_TYPE)InterruptType);
         }
     }
     if (Adapter->PageTableLevelsValid)
@@ -14811,6 +14750,7 @@ DxgkpAdapterStopInternal(
     VidSchPrepareForStop(Adapter);
     DxgkpDisablePeriodicInterruptHandoff(Adapter);
     KeRemoveQueueDpc(&Adapter->DpcObject);
+    KeRemoveQueueDpc(&Adapter->NotifyDpcObject);
     KeFlushQueuedDpcs();
     if (InterlockedCompareExchange(&Adapter->TdrOwnershipUncertain, 0, 0) != 0 ||
         DxgkPresentHasScanoutPins(Adapter))
@@ -14999,6 +14939,7 @@ DxgkAdapterRemove(
         VidSchPrepareForStop(Adapter);
         DxgkpDisablePeriodicInterruptHandoff(Adapter);
         KeRemoveQueueDpc(&Adapter->DpcObject);
+        KeRemoveQueueDpc(&Adapter->NotifyDpcObject);
         KeFlushQueuedDpcs();
         DxgkWaitForSubmitDmaReservations(Adapter);
         MiniportCleanupBeforeRemove = Adapter->SurpriseRemovalHandled || Adapter->MiniportDeviceStopped;
@@ -15012,6 +14953,7 @@ DxgkAdapterRemove(
     VidSchPrepareForStop(Adapter);
     DxgkpDisconnectAdapterInterrupt(Adapter);
     KeRemoveQueueDpc(&Adapter->DpcObject);
+    KeRemoveQueueDpc(&Adapter->NotifyDpcObject);
     KeFlushQueuedDpcs();
     DxgkpWaitForVidSchCallbacks(Adapter);
     /* Keep public KMD admission closed through software cleanup and the final
@@ -15649,6 +15591,7 @@ DxgkpMiniportPnpDispatch(
             DxgkWaitForSubmitDmaReservations(Adapter);
             VidSchPrepareForStop(Adapter);
             KeRemoveQueueDpc(&Adapter->DpcObject);
+            KeRemoveQueueDpc(&Adapter->NotifyDpcObject);
             KeFlushQueuedDpcs();
             /* Do not reopen public/KMT admission after hardware removal.
              * RemoveDevice later owns KMD exclusivity for cleanup DDIs. */
@@ -16505,6 +16448,8 @@ DxgkpAddDeviceRegistered(
     InitializeListHead(&Adapter->PagingBufferPoolList);
     KeInitializeEvent(&Adapter->PagingBufferPoolEvent, SynchronizationEvent, FALSE);
     Adapter->PagingVirtualReady = 0;
+    Adapter->PagingApertureReady = 0;
+    Adapter->PagingAperturePoolCount = 0;
     Adapter->InterruptCallbacksBlocked = 1;
     Adapter->InterruptActiveCalls = 0;
     KeInitializeMutex(&Adapter->SharedPrimaryMutex, 0);
@@ -16522,6 +16467,7 @@ DxgkpAddDeviceRegistered(
     Adapter->ReverseCallbackRundownStarted = 0;
     Adapter->MiniportRemoveDeviceComplete = FALSE;
     KeInitializeDpc(&Adapter->DpcObject, DxgkpAdapterDpcRoutine, Adapter);
+    KeInitializeDpc(&Adapter->NotifyDpcObject, DxgkpNotifyDpcRoutine, Adapter);
     Adapter->SubmitDmaRetireWorkQueued = 0;
     Adapter->SubmitDmaRetireActiveWorkers = 0;
     ExInitializeWorkItem(&Adapter->SubmitDmaRetireWorkItem, DxgkpRetireSubmittedDmaBuffersWorker, Adapter);

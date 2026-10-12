@@ -33,6 +33,7 @@
  */
 
 #include "dxgkrnl_private.h"
+#include "vidmm.h"
 #include "present.h"
 #include "presenttrace.h"
 #include "vidpn.h"
@@ -1517,6 +1518,27 @@ DxgkpRecordCommittedMultisampling(
     KeReleaseSpinLock(&Adapter->CommittedMultisampleLock, OldIrql);
 }
 
+static BOOLEAN
+DxgkpDisplayUsesSetTimings(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    return !Adapter->MiniportContext->UseDodLayout &&
+           DxgkCapsCoreInterfaceVersionAtLeast(
+               Adapter->MiniportContext->InitData.s.Version,
+               DXGK_CAPS_CORE_LEVEL_WDDM_2_3) &&
+           DXGK_CB_FULL(Adapter, DxgkDdiSetTimingsFromVidPn) != NULL;
+}
+
+BOOLEAN
+DxgkpDisplayCommitSwitchesPrimary(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    return !Adapter->MiniportContext->IsDisplayOnlyDriver &&
+           !DxgkpDisplayUsesSetTimings(Adapter) &&
+           DXGK_CB(Adapter, DxgkDdiCommitVidPn) != NULL &&
+           DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress) != NULL;
+}
+
 NTSTATUS
 DxgkpDisplayCommitVidPnCandidateWithTarget(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -1556,12 +1578,7 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
     SkipDodVidPnNegotiation = FALSE;
     SetTimingsCallback =
         DXGK_CB_FULL(Adapter, DxgkDdiSetTimingsFromVidPn);
-    UseSetTimings =
-        !Adapter->MiniportContext->UseDodLayout &&
-        DxgkCapsCoreInterfaceVersionAtLeast(
-            Adapter->MiniportContext->InitData.s.Version,
-            DXGK_CAPS_CORE_LEVEL_WDDM_2_3) &&
-        SetTimingsCallback != NULL;
+    UseSetTimings = DxgkpDisplayUsesSetTimings(Adapter);
     ForceDodPresentOnlyPath =
         !UseSetTimings &&
         DXGK_CB(Adapter, DxgkDdiCommitVidPn) == NULL;
@@ -2559,6 +2576,7 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
              DXGK_CB(Adapter, DxgkDdiCommitVidPn) != NULL)
     {
         DXGKARG_COMMITVIDPN CommitArgs;
+        PDXGKVMM_ALLOCATION PrimaryAllocation = NULL;
         RtlZeroMemory(&CommitArgs, sizeof(CommitArgs));
         CommitArgs.hFunctionalVidPn = (D3DKMDT_HVIDPN)VidPn;
         CommitArgs.AffectedVidPnSourceId = ActiveSourceId;
@@ -2570,6 +2588,18 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
         }
         CommitArgs.MonitorConnectivityChecks = D3DKMDT_MCC_IGNORE;
         CommitArgs.hPrimaryAllocation = NULL;
+        if (!TopologyEmpty &&
+            Adapter->SharedPrimaryAllocationHandle != NULL &&
+            CommitArgs.AffectedVidPnSourceId == Adapter->SharedPrimaryVidPnSourceId &&
+            Adapter->SharedPrimaryWidth == NewCommittedWidth &&
+            Adapter->SharedPrimaryHeight == NewCommittedHeight &&
+            NT_SUCCESS(DxgkVidMmReferenceAllocation(Adapter->SharedPrimaryAllocationHandle,
+                                                    Adapter,
+                                                    NULL,
+                                                    &PrimaryAllocation)))
+        {
+            CommitArgs.hPrimaryAllocation = PrimaryAllocation->MiniportHandle;
+        }
         CommitArgs.Flags.PathPowerTransition = 0;
         CommitArgs.Flags.PathPoweredOff = 0;
 
@@ -2577,6 +2607,8 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
                       "(hVidPn=%p)\n", CommitArgs.hFunctionalVidPn);
         if (!DxgkAcquireKmdCall(Adapter))
         {
+            if (PrimaryAllocation != NULL)
+                DxgkVidMmDereferenceAllocation(PrimaryAllocation);
             Status = STATUS_DELETE_PENDING;
             goto Cleanup;
         }
@@ -2584,6 +2616,8 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
                      Adapter->MiniportDeviceContext,
                      &CommitArgs);
         DxgkReleaseKmdCall(Adapter);
+        if (PrimaryAllocation != NULL)
+            DxgkVidMmDereferenceAllocation(PrimaryAllocation);
         DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: CommitVidPn returned 0x%08lX\n",
                       Status);
 
@@ -2597,6 +2631,40 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
         Adapter->CommittedTargetCount = 0;
         for (i = 0; !TopologyEmpty && i < VidPn->NumPaths; i++)
             Adapter->CommittedTargetIds[Adapter->CommittedTargetCount++] = VidPn->Paths[i].VidPnTargetId;
+        if (TopologyEmpty)
+        {
+            InterlockedExchange(&Adapter->ScanoutModeChangePending, 0);
+        }
+        else
+        {
+            for (i = 0; i < VidPn->NumPaths; i++)
+            {
+                D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId = VidPn->Paths[i].VidPnSourceId;
+                PDXGKP_VIDPN_SOURCE_MODESET SourceSet;
+                SIZE_T Mode;
+
+                if (SourceId >= 32 || SourceId >= DXGKP_MAX_SOURCES)
+                    continue;
+                InterlockedAnd(&Adapter->ScanoutModeChangePending, ~(LONG)(1UL << SourceId));
+                SourceSet = VidPn->SourceModeSets[SourceId];
+                if (SourceSet == NULL || SourceSet->PinnedModeId == (UINT)-1)
+                    continue;
+                for (Mode = 0; Mode < SourceSet->NumModes; Mode++)
+                {
+                    if (SourceSet->Modes[Mode].Id != SourceSet->PinnedModeId ||
+                        SourceSet->Modes[Mode].Type != D3DKMDT_RMT_GRAPHICS)
+                    {
+                        continue;
+                    }
+                    Adapter->ScanoutModeChangeWidth[SourceId] =
+                        SourceSet->Modes[Mode].Format.Graphics.PrimSurfSize.cx;
+                    Adapter->ScanoutModeChangeHeight[SourceId] =
+                        SourceSet->Modes[Mode].Format.Graphics.PrimSurfSize.cy;
+                    InterlockedOr(&Adapter->ScanoutModeChangePending, (LONG)(1UL << SourceId));
+                    break;
+                }
+            }
+        }
         DxgkpRecordCommittedMultisampling(Adapter, VidPn, TopologyEmpty);
         /* CommitVidPn has no output colour space: SDR. */
         DxgkpRecordAdvancedColor(Adapter, VidPn, TopologyEmpty, NULL, 0);

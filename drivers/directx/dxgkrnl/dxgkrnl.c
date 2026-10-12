@@ -1493,6 +1493,26 @@ DriverEntry(
         }
     }
 
+    {
+        UNICODE_STRING VideoMapName;
+        OBJECT_ATTRIBUTES VideoMapAttributes;
+        HANDLE VideoMapKey;
+        NTSTATUS MapStatus;
+
+        RtlInitUnicodeString(&VideoMapName,
+                             L"\\Registry\\Machine\\HARDWARE\\DEVICEMAP\\VIDEO");
+        InitializeObjectAttributes(&VideoMapAttributes, &VideoMapName,
+                                   OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                                   NULL, NULL);
+        MapStatus = ZwCreateKey(&VideoMapKey, KEY_ALL_ACCESS, &VideoMapAttributes,
+                                0, NULL, REG_OPTION_VOLATILE, NULL);
+        if (NT_SUCCESS(MapStatus))
+            ZwClose(VideoMapKey);
+        else
+            DXGKRNL_WARN("DriverEntry: ZwCreateKey(DEVICEMAP\\VIDEO) "
+                         "failed 0x%08lX\n", MapStatus);
+    }
+
     ControlDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
     GDxgControlDeviceStatus = STATUS_SUCCESS;
     InterlockedExchange(&GDxgControlDeviceState, 2);

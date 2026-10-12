@@ -5298,7 +5298,7 @@ DxgkVidMmInitializeAdapter(
          * miniports commonly leave it zero for local-memory segments; use
          * Size as their placement limit instead of rejecting the descriptor.
          */
-        if (Seg->Size == 0 ||
+        if ((Seg->Size == 0 && Seg->Flags.Value != 0) ||
             (VidMmSegmentIsAperture(Seg) &&
              (Seg->CommitLimit > Seg->Size || Seg->Flags.PopulatedFromSystemMemory)) ||
             (Seg->Flags.LocalBudgetGroup && Seg->Flags.NonLocalBudgetGroup) ||
@@ -5671,6 +5671,12 @@ DxgkpVidMmRetireOwnerLedger(
                 (VOID)VidMm->ReleasePlacement(VidMm->VidMmHandle, i,
                                               Segments[i].UEFIFrameBufferCookies[Range]);
                 Segments[i].UEFIFrameBufferCookies[Range] = 0;
+            }
+            if (Segments[i].NullPageCookie != 0)
+            {
+                (VOID)VidMm->ReleasePlacement(VidMm->VidMmHandle, i,
+                                              Segments[i].NullPageCookie);
+                Segments[i].NullPageCookie = 0;
             }
         }
     }
@@ -6956,6 +6962,38 @@ DxgkpVidMmDestroyBatchWorker(
          (Batch->DestroyResource &&
           (Resource != NULL ? Resource->MiniportHandle : Batch->MiniportResourceHandle) != NULL)))
     {
+        for (Index = 0; Index < Batch->AllocationCount; ++Index)
+        {
+            PDXGKVMM_ALLOCATION Allocation = Batch->Allocations[Index];
+            DXGKRNL_PAGING_OP UnmapOp;
+            ULONG PagingFenceId = 0;
+            BOOLEAN Queued = FALSE;
+
+            if (Allocation == NULL || !Allocation->ApertureMapped)
+                continue;
+            if (!NT_SUCCESS(DxgkpVidMmFillAperturePagingOperation(Allocation, FALSE, &UnmapOp)))
+                continue;
+            if (NT_SUCCESS(DxgkPagingExecuteBatch(Adapter,
+                                                  Allocation->Device,
+                                                  &UnmapOp,
+                                                  1,
+                                                  &Allocation,
+                                                  1,
+                                                  0,
+                                                  0,
+                                                  &PagingFenceId,
+                                                  &Queued)))
+            {
+                if (Queued)
+                {
+                    (VOID)DxgkPagingWaitForFence(Adapter,
+                                                 PagingFenceId,
+                                                 DXGKP_VIDMM_PAGING_ADMISSION_TIMEOUT_MS);
+                }
+                Allocation->ApertureMapped = FALSE;
+            }
+        }
+
         if (DXGK_CB_FULL(Adapter, DxgkDdiDestroyAllocation) == NULL)
         {
             Status = STATUS_NOT_SUPPORTED;
@@ -13557,9 +13595,8 @@ DxgkVidMmEnsureReferencedAllocationApertureMapped(
  * of the page-table object.
  */
 NTSTATUS
-DxgkVidMmMapPageTableSegment(
+DxgkVidMmReserveApertureRange(
     _In_ PDXGKRNL_ADAPTER Adapter,
-    _In_ HANDLE MiniportDeviceHandle,
     _In_ ULONG SegmentId,
     _In_ PVOID KernelVa,
     _In_ ULONG Size,
@@ -13571,7 +13608,6 @@ DxgkVidMmMapPageTableSegment(
     PDXGMMS2_VIDMM_INTERFACE_V1 VidMm;
     PDXGKRNL_SEGMENT Segment;
     DXGMMS2_VIDMM_RESERVE_INFO_V1 Info;
-    DXGKRNL_PAGING_OP Op;
     PMDL Mdl = NULL;
     ULONGLONG Offset = 0;
     NTSTATUS Status;
@@ -13582,7 +13618,7 @@ DxgkVidMmMapPageTableSegment(
         return STATUS_INVALID_PARAMETER;
     *OutSegmentOffset = 0;
     *OutMdl = NULL;
-    if (Adapter == NULL || MiniportDeviceHandle == NULL ||
+    if (Adapter == NULL ||
         KernelVa == NULL || Size == 0 ||
         (Size & (PAGE_SIZE - 1)) != 0 ||
         ((ULONG_PTR)KernelVa & (PAGE_SIZE - 1)) != 0 ||
@@ -13651,17 +13687,6 @@ DxgkVidMmMapPageTableSegment(
         Mdl->MdlFlags |= MDL_PAGES_LOCKED;
     }
 
-    RtlZeroMemory(&Op, sizeof(Op));
-    Op.Type = DxgkPagingOpMapAperture;
-    Op.hMiniportDevice = MiniportDeviceHandle;
-    Op.DestinationSegmentId = SegmentId;
-    Op.OffsetInPages = (SIZE_T)(Offset / PAGE_SIZE);
-    Op.NumberOfPages = Size / PAGE_SIZE;
-    Op.SourceMdl = Mdl;
-    Status = DxgkPagingExecuteSynchronous(Adapter, NULL, &Op);
-    if (!NT_SUCCESS(Status))
-        goto FreeMdl;
-
     *OutSegmentOffset = Offset;
     *OutMdl = Mdl;
     return STATUS_SUCCESS;
@@ -13673,6 +13698,62 @@ ReleasePlacement:
                                   SegmentId - 1,
                                   OwnerCookie);
     return Status;
+}
+
+NTSTATUS
+DxgkVidMmMapPageTableSegment(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ HANDLE MiniportDeviceHandle,
+    _In_ ULONG SegmentId,
+    _In_ PVOID KernelVa,
+    _In_ ULONG Size,
+    _In_ ULONG Alignment,
+    _In_ ULONGLONG OwnerCookie,
+    _Out_ PULONGLONG OutSegmentOffset,
+    _Out_ PMDL *OutMdl)
+{
+    DXGKRNL_PAGING_OP Op;
+    PMDL Mdl = NULL;
+    ULONGLONG Offset = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (OutSegmentOffset == NULL || OutMdl == NULL)
+        return STATUS_INVALID_PARAMETER;
+    *OutSegmentOffset = 0;
+    *OutMdl = NULL;
+    if (MiniportDeviceHandle == NULL)
+        return STATUS_INVALID_PARAMETER;
+    Status = DxgkVidMmReserveApertureRange(Adapter,
+                                           SegmentId,
+                                           KernelVa,
+                                           Size,
+                                           Alignment,
+                                           OwnerCookie,
+                                           &Offset,
+                                           &Mdl);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&Op, sizeof(Op));
+    Op.Type = DxgkPagingOpMapAperture;
+    Op.hMiniportDevice = MiniportDeviceHandle;
+    Op.DestinationSegmentId = SegmentId;
+    Op.OffsetInPages = (SIZE_T)(Offset / PAGE_SIZE);
+    Op.NumberOfPages = Size / PAGE_SIZE;
+    Op.SourceMdl = Mdl;
+    Status = DxgkPagingExecuteSynchronous(Adapter, NULL, &Op);
+    if (!NT_SUCCESS(Status))
+    {
+        IoFreeMdl(Mdl);
+        DxgkVidMmReleaseSegmentRange(Adapter, SegmentId, OwnerCookie);
+        return Status;
+    }
+
+    *OutSegmentOffset = Offset;
+    *OutMdl = Mdl;
+    return STATUS_SUCCESS;
 }
 
 BOOLEAN
@@ -17667,6 +17748,21 @@ DxgkVidMmPublishSegments(
                 }
             }
             ExReleaseFastMutex(&Seg->Lock);
+        }
+
+        if (Seg->BaseAddress.QuadPart == 0 &&
+            Seg->Size >= PAGE_SIZE &&
+            VidMm->ReserveFixedPlacement != NULL)
+        {
+            DXGMMS2_VIDMM_RESERVE_INFO_V1 Info;
+
+            RtlZeroMemory(&Info, sizeof(Info));
+            Info.Size = PAGE_SIZE;
+            Info.Alignment = 1;
+            Info.OwnerCookie = (ULONGLONG)(ULONG_PTR)&Seg->NullPageCookie;
+            Info.Flags = DXGMMS2_VIDMM_RANGE_PINNED;
+            Status = VidMm->ReserveFixedPlacement(VidMm->VidMmHandle, i, 0, &Info);
+            Seg->NullPageCookie = NT_SUCCESS(Status) ? Info.OwnerCookie : 0;
         }
     }
     return STATUS_SUCCESS;

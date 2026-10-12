@@ -157,6 +157,8 @@ typedef struct _DXGKRNL_SEGMENT
     /* TRUE while the ranges above are blocked. */
     BOOLEAN             UEFIFrameBufferRangesBlocked;
 
+    ULONGLONG           NullPageCookie;
+
     /*
      * ---- CPU host aperture (DXGK_SEGMENTFLAGS.SupportsCpuHostAperture) ----
      *
@@ -1219,6 +1221,17 @@ DxgkVidMmCreateDmaBufferBacking(
     _In_ ULONG Size,
     _In_ ULONG SegmentSet,
     _Out_ PDXGKVMM_ALLOCATION *OutAllocation);
+
+NTSTATUS
+DxgkVidMmReserveApertureRange(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _In_ PVOID KernelVa,
+    _In_ ULONG Size,
+    _In_ ULONG Alignment,
+    _In_ ULONGLONG OwnerCookie,
+    _Out_ PULONGLONG OutSegmentOffset,
+    _Out_ PMDL *OutMdl);
 
 NTSTATUS
 DxgkVidMmMapPageTableSegment(

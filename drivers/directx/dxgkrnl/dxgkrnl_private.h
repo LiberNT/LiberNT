@@ -284,6 +284,7 @@ typedef struct _DXGKRNL_DMA_BUFFER
     ULONG                       PrivateDataSize;
     ULONG                       PrivateDataUsed;
     BOOLEAN                     PagingPoolOwned;
+    PMDL                        PagingApertureMdl;
 } DXGKRNL_DMA_BUFFER, *PDXGKRNL_DMA_BUFFER;
 
 /*
@@ -949,6 +950,7 @@ struct _DXGKRNL_ADAPTER
      * Calls MiniportContext->InitData.DxgkDdiDpcRoutine.
      */
     KDPC                        DpcObject;
+    KDPC                        NotifyDpcObject;
 
     /*
      * Bounded interrupt-path tracing state used to debug init-time stalls.
@@ -1280,6 +1282,9 @@ struct _DXGKRNL_ADAPTER
      * by the adapter DPC for the ordinary presentation queues.
      */
     volatile LONG               VsyncPending;
+    volatile LONG               ScanoutModeChangePending;
+    ULONG                       ScanoutModeChangeWidth[32];
+    ULONG                       ScanoutModeChangeHeight[32];
     /* The ISR records the effective scan address independently of the
      * dynamically allocated present queues. Queue teardown can therefore
      * close admission without racing a DIRQL callback. */
@@ -1428,6 +1433,8 @@ struct _DXGKRNL_ADAPTER
     D3DGPU_VIRTUAL_ADDRESS      PageTablePoolVa;
     BOOLEAN                     PagingProcessInitializing;
     volatile LONG               PagingVirtualReady;
+    volatile LONG               PagingApertureReady;
+    volatile LONG               PagingAperturePoolCount;
     KSPIN_LOCK                  PagingBufferPoolLock;
     LIST_ENTRY                  PagingBufferPoolList;
     KEVENT                      PagingBufferPoolEvent;
@@ -3778,6 +3785,10 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
     _In_opt_ CONST D3DKMDT_VIDEO_SIGNAL_INFO *RequestedTarget,
     _Out_ PDXGKP_DISPLAY_COMMIT_RESULT Result);
 
+BOOLEAN
+DxgkpDisplayCommitSwitchesPrimary(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 NTSTATUS
 DxgkVidPnQueryVideoModes(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -4237,6 +4248,19 @@ DxgkPagingExecuteSynchronous(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_opt_ PDXGKRNL_DEVICE Device,
     _In_ CONST DXGKRNL_PAGING_OP *Op);
+
+
+NTSTATUS
+DxgkPagingInitializeAperturePool(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkPagingReleaseAperturePool(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkPagingDiscardAperturePool(
+    _In_ PDXGKRNL_ADAPTER Adapter);
 
 NTSTATUS
 DxgkPagingWaitForFence(

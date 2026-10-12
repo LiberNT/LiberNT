@@ -3190,7 +3190,9 @@ VidSchpPrepareSubmit(
     PVIDSCH_DMA_PACKET Packet;
     VIDSCH_ENGINE_STATE CurrentState;
 
-    if (Adapter == NULL || Adapter->State != DxgkAdapterStateStarted || InterlockedCompareExchange(&Adapter->SubmitDmaStopping, 0, 0) != 0)
+    if (Adapter == NULL ||
+        (Adapter->State != DxgkAdapterStateStarted && Adapter->State != DxgkAdapterStateStarting) ||
+        InterlockedCompareExchange(&Adapter->SubmitDmaStopping, 0, 0) != 0)
         return STATUS_DELETE_PENDING;
     Ctx = (PVIDSCH_CONTEXT)Adapter->VidSchContext;
     if (Ctx == NULL || !Ctx->Initialized)
@@ -3753,7 +3755,7 @@ VidSchSubmitCommandTrackedMeasured(
         RtlCopyMemory(Packet->OwnedDriverPrivateData, DriverPrivateData, DriverPrivateDataSize);
         Packet->DriverPrivateData = Packet->OwnedDriverPrivateData;
         Packet->DriverPrivateDataSize = DriverPrivateDataSize;
-        Packet->DriverPrivateDataSubmissionEndOffset = min(DmaBuffer->PrivateDataUsed, DriverPrivateDataSize);
+        Packet->DriverPrivateDataSubmissionEndOffset = DmaBuffer->PrivateDataUsed != 0 ? min(DmaBuffer->PrivateDataUsed, DriverPrivateDataSize) : DriverPrivateDataSize;
     }
 
     LocalTrackArgs = *TrackArgs;

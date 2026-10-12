@@ -1390,6 +1390,116 @@ DxgkpProgramScanoutViaMpo(
     return Status;
 }
 
+typedef struct _DXGKP_MMIO_FLIP_CALL
+{
+    PDXGKRNL_ADAPTER Adapter;
+    DXGKARG_SETVIDPNSOURCEADDRESS Args;
+    LONG64 ArmSequence;
+    NTSTATUS Status;
+} DXGKP_MMIO_FLIP_CALL;
+
+static BOOLEAN NTAPI
+DxgkpSetMmioSourceAddress(
+    _In_ PVOID Context);
+
+static NTSTATUS
+DxgkpApplyPendingScanoutModeChange(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _In_ PDXGKVMM_ALLOCATION Allocation,
+    _In_ LARGE_INTEGER PrimaryAddress)
+{
+    PDXGKARG_SETVIDPNSOURCEADDRESS ModeChange;
+    PDXGKVMM_ALLOCATION SharedPrimary;
+    LONG SourceBit;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (VidPnSourceId >= 32)
+        return STATUS_INVALID_PARAMETER;
+    SourceBit = (LONG)(1UL << VidPnSourceId);
+    if ((InterlockedCompareExchange(&Adapter->ScanoutModeChangePending, 0, 0) & SourceBit) == 0)
+        return STATUS_INVALID_DEVICE_STATE;
+    if (DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress) == NULL ||
+        Adapter->SharedPrimaryAllocationHandle == NULL ||
+        Adapter->SharedPrimaryVidPnSourceId != VidPnSourceId ||
+        Adapter->SharedPrimaryWidth != Adapter->ScanoutModeChangeWidth[VidPnSourceId] ||
+        Adapter->SharedPrimaryHeight != Adapter->ScanoutModeChangeHeight[VidPnSourceId] ||
+        !NT_SUCCESS(DxgkVidMmReferenceAllocation(Adapter->SharedPrimaryAllocationHandle,
+                                                 Adapter, NULL, &SharedPrimary)))
+    {
+        return STATUS_INVALID_DEVICE_STATE;
+    }
+    DxgkVidMmDereferenceAllocation(SharedPrimary);
+    if (SharedPrimary != Allocation)
+        return STATUS_INVALID_DEVICE_STATE;
+
+    ModeChange = ExAllocatePoolWithTag(NonPagedPool, sizeof(*ModeChange), TAG_DXGK_PRESENT);
+    if (ModeChange == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(ModeChange, sizeof(*ModeChange));
+    ModeChange->VidPnSourceId = VidPnSourceId;
+    ModeChange->hAllocation = Allocation->MiniportHandle;
+    ModeChange->PrimarySegment = Allocation->SegmentId;
+    ModeChange->PrimaryAddress = PrimaryAddress;
+    ModeChange->Flags.ModeChange = 1;
+    if (!DxgkAcquireKmdCall(Adapter))
+    {
+        ExFreePoolWithTag(ModeChange, TAG_DXGK_PRESENT);
+        return STATUS_DELETE_PENDING;
+    }
+    _SEH2_TRY
+    {
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress)(Adapter->MiniportDeviceContext, ModeChange);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    DxgkReleaseKmdCall(Adapter);
+    ExFreePoolWithTag(ModeChange, TAG_DXGK_PRESENT);
+    if (!NT_SUCCESS(Status))
+    {
+        DXGKRNL_WARN("DxgkpApplyPendingScanoutModeChange: source %u %lux%lu allocation %p segment %u address 0x%I64x mode change failed 0x%08lX\n",
+                     VidPnSourceId, Adapter->SharedPrimaryWidth, Adapter->SharedPrimaryHeight, Allocation->MiniportHandle,
+                     Allocation->SegmentId, PrimaryAddress.QuadPart, Status);
+    }
+    InterlockedAnd(&Adapter->ScanoutModeChangePending, ~SourceBit);
+    return Status;
+}
+
+NTSTATUS
+DxgkPresentApplyPendingModeChange(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId)
+{
+    PDXGKVMM_ALLOCATION Allocation;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Adapter->SharedPrimaryAllocationHandle == NULL ||
+        Adapter->SharedPrimaryVidPnSourceId != VidPnSourceId)
+    {
+        return STATUS_INVALID_DEVICE_STATE;
+    }
+    Status = DxgkVidMmReferenceAllocation(Adapter->SharedPrimaryAllocationHandle, Adapter, NULL, &Allocation);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = DxgkVidMmEnsureAllocationApertureMapped(Allocation);
+    if (NT_SUCCESS(Status))
+    {
+        Status = DxgkpApplyPendingScanoutModeChange(Adapter,
+                                                    VidPnSourceId,
+                                                    Allocation,
+                                                    DxgkVidMmGetAllocationPrimaryAddress(Allocation));
+    }
+    DxgkVidMmDereferenceAllocation(Allocation);
+    return Status;
+}
+
 NTSTATUS
 DxgkpProgramSharedPrimaryScanout(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -1440,6 +1550,8 @@ DxgkpProgramSharedPrimaryScanout(
 
     PrimaryAddress = DxgkVidMmGetAllocationPrimaryAddress(Allocation);
 
+    (VOID)DxgkpApplyPendingScanoutModeChange(Adapter, VidPnSourceId, Allocation, PrimaryAddress);
+
     /* MPO-capable miniports get the flip as a one-plane configuration. */
     Status = DxgkpProgramScanoutViaMpo(Adapter, Allocation, VidPnSourceId, PrimaryAddress, PresentId, FlipInterval);
 
@@ -1481,7 +1593,9 @@ DxgkpProgramSharedPrimaryScanout(
     SetSourceAddress->PrimarySegment = Allocation->SegmentId;
     /* GPU completion need not coincide with a vertical blank. Keep the
      * caller's synchronization request when arming the retired surface. */
-    SetSourceAddress->Flags.FlipImmediate = (FlipInterval == D3DDDI_FLIPINTERVAL_IMMEDIATE);
+    SetSourceAddress->Flags.FlipImmediate = (FlipInterval == D3DDDI_FLIPINTERVAL_IMMEDIATE &&
+                                             (Adapter->FlipCaps.FlipImmediateMmIo ||
+                                              !Adapter->FlipCaps.FlipOnVSyncMmIo));
     SetSourceAddress->Flags.FlipOnNextVSync = !SetSourceAddress->Flags.FlipImmediate;
 
     TraceSeq = InterlockedIncrement(&g_SharedPrimaryScanoutTraceCount);
@@ -1506,7 +1620,23 @@ DxgkpProgramSharedPrimaryScanout(
     _SEH2_TRY
     {
         DPT_SCOPE Trace = DptBegin(&g_DxgPresentTrace, DPT_BLIT);
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress)(Adapter->MiniportDeviceContext, SetSourceAddress);
+        if (SetSourceAddress->Flags.FlipImmediate ? Adapter->FlipCaps.FlipImmediateMmIo
+                                                  : Adapter->FlipCaps.FlipOnVSyncMmIo)
+        {
+            DXGKP_MMIO_FLIP_CALL MmioCall;
+            BOOLEAN Synchronized;
+
+            RtlZeroMemory(&MmioCall, sizeof(MmioCall));
+            MmioCall.Adapter = Adapter;
+            MmioCall.Args = *SetSourceAddress;
+            Status = DxgkSynchronizeScanoutExecution(Adapter, DxgkpSetMmioSourceAddress, &MmioCall, &Synchronized);
+            if (NT_SUCCESS(Status))
+                Status = MmioCall.Status;
+        }
+        else
+        {
+            Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress)(Adapter->MiniportDeviceContext, SetSourceAddress);
+        }
         DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Status), 0);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -3822,8 +3952,7 @@ DxgkpExecuteFullPresentMeasured(
         {
             UINT AllocationIndex = PatchLocationList[PassPatch].AllocationIndex;
 
-            if (AllocationIndex == 0 ||
-                AllocationIndex > DXGK_PRESENT_MAX_INDEX ||
+            if (AllocationIndex > DXGK_PRESENT_MAX_INDEX ||
                 (AllocationIndex == DXGK_PRESENT_SOURCE_INDEX &&
                  SourceDeviceSpecificHandle == NULL) ||
                 (AllocationIndex == DXGK_PRESENT_DESTINATION_INDEX &&
@@ -3989,13 +4118,11 @@ RetryPassSubmit:
     if (NT_SUCCESS(Status) && DmaBytesUsed != 0)
     {
     }
-    if (NT_SUCCESS(Status) && DmaBytesUsed == 0)
-        Status = STATUS_NOT_SUPPORTED;
     if (NT_SUCCESS(Status) &&
         (VirtualPresent ? DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommandVirtual) == NULL :
                           DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand) == NULL))
         Status = STATUS_NOT_SUPPORTED;
-    if (NT_SUCCESS(Status) && DmaBytesUsed != 0)
+    if (NT_SUCCESS(Status))
     {
         DmaBuffer->SubmissionStartOffset = 0;
         DmaBuffer->SubmissionEndOffset = DmaBytesUsed;
@@ -4044,8 +4171,7 @@ RetryPassSubmit:
             UINT AllocationIndex =
                 PatchLocationList[PatchIndex].AllocationIndex;
 
-            if (AllocationIndex == 0 ||
-                AllocationIndex > DXGK_PRESENT_MAX_INDEX ||
+            if (AllocationIndex > DXGK_PRESENT_MAX_INDEX ||
                 (AllocationIndex == DXGK_PRESENT_SOURCE_INDEX &&
                  SourceDeviceSpecificHandle == NULL) ||
                 (AllocationIndex == DXGK_PRESENT_DESTINATION_INDEX &&
@@ -4382,14 +4508,6 @@ DxgkpWaitForMmioScanout(
             return Status;
     }
 }
-
-typedef struct _DXGKP_MMIO_FLIP_CALL
-{
-    PDXGKRNL_ADAPTER Adapter;
-    DXGKARG_SETVIDPNSOURCEADDRESS Args;
-    LONG64 ArmSequence;
-    NTSTATUS Status;
-} DXGKP_MMIO_FLIP_CALL;
 
 static BOOLEAN NTAPI
 DxgkpSetMmioSourceAddress(

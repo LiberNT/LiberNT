@@ -1527,7 +1527,7 @@ DxgkSyncObjectAttachMonitoredPage(
         Status = STATUS_NOT_SUPPORTED;
         goto Fail;
     }
-    else if (!Flags.NoGPUAccess)
+    else if (!Flags.NoGPUAccess && SyncObj->Device->Adapter->GpuMmuCapsValid)
     {
         D3DGPU_VIRTUAL_ADDRESS FenceGpuVa = 0;
 
