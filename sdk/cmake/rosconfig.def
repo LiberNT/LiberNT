@@ -241,21 +241,6 @@ endmenu
 
 menu "System"
 
-config REACTOS_TARGET_NT
-    prompt "Target NT version"
-    type choice
-    value 0x502 "NT 5.2 (Windows Server 2003)"
-    value 0x600 "NT 6.0 (Windows Vista)"
-    value 0x601 "NT 6.1 (Windows 7)"
-    value 0x602 "NT 6.2 (Windows 8)"
-    value 0x603 "NT 6.3 (Windows 8.1)"
-    value 0xA00 "NT 10.0 (Windows 10)"
-    default 0xA00
-    help
-      The NT version ReactOS reports and targets (REACTOS_TARGET_NT).
-      User-mode DLL exports follow this version through
-      DLL_EXPORT_VERSION.
-
 config ENABLE_ALPC
     prompt "ALPC (Advanced Local Procedure Call)"
     type bool
