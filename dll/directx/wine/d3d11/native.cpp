@@ -130,6 +130,7 @@ static DXGI_FORMAT NativeFormatFamily(DXGI_FORMAT format);
 static bool NativeUploadFormat(DXGI_FORMAT, UINT, UINT, UINT *, UINT *);
 static void NativeRetainResource(ID3D11Resource *resource);
 static void NativeDropResource(ID3D11Resource *resource);
+static HRESULT NativeResizeFlags(UINT current, UINT flags);
 
 static DXGI_FORMAT NativeDepthResourceFormat(DXGI_FORMAT format)
 {
@@ -5917,6 +5918,8 @@ public:
         *out = NULL;
         NativeLock guard(device);
         if (index >= desc.BufferCount || !buffers[index]) return DXGI_ERROR_INVALID_CALL;
+        if (index && (desc.SwapEffect == DXGI_SWAP_EFFECT_DISCARD || desc.SwapEffect == DXGI_SWAP_EFFECT_FLIP_DISCARD))
+            return DXGI_ERROR_INVALID_CALL;
         return buffers[index]->QueryInterface(iid, out);
     }
     HRESULT STDMETHODCALLTYPE SetFullscreenState(BOOL fullscreen, IDXGIOutput *output) override
@@ -6127,11 +6130,12 @@ public:
         /* The current compositor and scanout path interpret RGB as SDR. */
         return color_space == DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709 ? S_OK : E_INVALIDARG;
     }
-    HRESULT STDMETHODCALLTYPE ResizeBuffers1(UINT, UINT, UINT, DXGI_FORMAT, UINT,
+    HRESULT STDMETHODCALLTYPE ResizeBuffers1(UINT, UINT, UINT, DXGI_FORMAT, UINT flags,
             const UINT *, IUnknown *const *) override
     {
         /* This entry point requires a D3D12 command-queue-backed chain. */
-        return DXGI_ERROR_INVALID_CALL;
+        HRESULT hr = NativeResizeFlags(desc.Flags, flags);
+        return FAILED(hr) ? hr : DXGI_ERROR_INVALID_CALL;
     }
 };
 
@@ -6836,6 +6840,8 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
         if (FAILED(hr)) break;
         new_buffers[i] = static_cast<NativeTexture2D *>(texture);
         new_buffers[i]->read_only = i && !primary;
+        if (new_buffers[i]->read_only) new_buffers[i]->usage |= DXGI_USAGE_READ_ONLY;
+        if (requested.SwapEffect == DXGI_SWAP_EFFECT_DISCARD) new_buffers[i]->usage |= DXGI_USAGE_DISCARD_ON_PRESENT;
         new_buffers[i]->Retain();
         texture->Release();
     }
@@ -6901,6 +6907,17 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
     if (new_resolved) new_resolved->Drop();
     for (UINT i = 0; i < 16; ++i) if (new_buffers[i]) new_buffers[i]->Drop();
     return hr;
+}
+
+static HRESULT NativeResizeFlags(UINT current, UINT flags)
+{
+    static const UINT creation_only = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
+            | DXGI_SWAP_CHAIN_FLAG_FOREGROUND_LAYER | DXGI_SWAP_CHAIN_FLAG_YUV_VIDEO | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+    if (flags & (DXGI_SWAP_CHAIN_FLAG_NONPREROTATED | DXGI_SWAP_CHAIN_FLAG_DISPLAY_ONLY
+            | DXGI_SWAP_CHAIN_FLAG_FULLSCREEN_VIDEO)) return DXGI_ERROR_INVALID_CALL;
+    if ((flags ^ current) & creation_only) return E_INVALIDARG;
+    if ((current & DXGI_SWAP_CHAIN_FLAG_HW_PROTECTED) && !(flags & DXGI_SWAP_CHAIN_FLAG_HW_PROTECTED)) return E_INVALIDARG;
+    return S_OK;
 }
 
 static LONG NativeFullscreenStyle(LONG style)
@@ -7084,6 +7101,9 @@ HRESULT STDMETHODCALLTYPE NativeDevice::create_swapchain(IDXGIFactory *factory, 
     if (!factory || (window && !IsWindow(window)) || !requested || !fullscreen) return DXGI_ERROR_INVALID_CALL;
     if (output || (!fullscreen->Windowed && !window)) return DXGI_ERROR_UNSUPPORTED;
     if (!dxgi_functions.pfnPresent) return DXGI_ERROR_UNSUPPORTED;
+    if (requested->Flags & (DXGI_SWAP_CHAIN_FLAG_NONPREROTATED | DXGI_SWAP_CHAIN_FLAG_DISPLAY_ONLY
+            | DXGI_SWAP_CHAIN_FLAG_FOREGROUND_LAYER | DXGI_SWAP_CHAIN_FLAG_FULLSCREEN_VIDEO
+            | DXGI_SWAP_CHAIN_FLAG_YUV_VIDEO)) return DXGI_ERROR_INVALID_CALL;
     NativeSwapChain *swapchain;
     HRESULT hr;
     {
@@ -7099,8 +7119,8 @@ HRESULT STDMETHODCALLTYPE NativeDevice::create_swapchain(IDXGIFactory *factory, 
         RECT client = {};
         hr = !window || GetClientRect(window, &client) ? S_OK : DXGI_ERROR_INVALID_CALL;
         if (!window && (!desc.Width || !desc.Height)) hr = DXGI_ERROR_INVALID_CALL;
-        if (!desc.Width) desc.Width = max(1l, client.right - client.left);
-        if (!desc.Height) desc.Height = max(1l, client.bottom - client.top);
+        if (!desc.Width) desc.Width = client.right - client.left > 0 ? client.right - client.left : 8;
+        if (!desc.Height) desc.Height = client.bottom - client.top > 0 ? client.bottom - client.top : 8;
         if (SUCCEEDED(hr)) hr = swapchain->AllocateBuffers(desc);
     }
     if (SUCCEEDED(hr) && !fullscreen->Windowed) hr = swapchain->SetFullscreenState(TRUE, NULL);
@@ -7121,7 +7141,8 @@ HRESULT STDMETHODCALLTYPE NativeSwapChain::ResizeBuffers(UINT count, UINT width,
     requested.Width = width ? width : max(1l, client.right - client.left);
     requested.Height = height ? height : max(1l, client.bottom - client.top);
     if (format != DXGI_FORMAT_UNKNOWN) requested.Format = format;
-    if ((flags ^ desc.Flags) & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT) return E_INVALIDARG;
+    HRESULT hr = NativeResizeFlags(desc.Flags, flags);
+    if (FAILED(hr)) return hr;
     requested.Flags = flags;
     return AllocateBuffers(requested);
 }
