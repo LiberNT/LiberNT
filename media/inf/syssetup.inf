@@ -55,6 +55,7 @@ AddReg=Classes
 11,,acppage.dll,1
 11,,amstream.dll,1
 11,,avifil32.dll,1
+11,,windows.storage.dll,1
 11,,explorerframe.dll,1
 11,,cabview.dll,1
 11,,certmgr.dll,1
