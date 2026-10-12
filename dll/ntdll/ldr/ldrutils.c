@@ -1058,7 +1058,7 @@ LdrpSetProtection(PVOID ViewBase,
 #if defined(_M_ARM64)
 static
 BOOLEAN
-LdrpFindPreMappedChpeBridge(PVOID *BaseAddress, SIZE_T *ImageSize)
+LdrpUsePreMappedChpeBridge(PVOID *BaseAddress, SIZE_T *ImageSize)
 {
     const UNICODE_STRING Suffix = RTL_CONSTANT_STRING(L"\\System32\\arm64ec\\ntdll_chpe.dll");
     struct
@@ -1068,8 +1068,18 @@ LdrpFindPreMappedChpeBridge(PVOID *BaseAddress, SIZE_T *ImageSize)
     } SectionName;
     MEMORY_BASIC_INFORMATION Basic = {0};
     PIMAGE_NT_HEADERS Headers;
-    PVOID Base = (PVOID)(ULONG_PTR)CHPE_BRIDGE_BASE;
+    PVOID Base;
     NTSTATUS Status;
+
+    Headers = RtlImageNtHeader(*BaseAddress);
+    if (Headers == NULL || (Headers->FileHeader.Machine != IMAGE_FILE_MACHINE_ARM64EC &&
+                            Headers->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64))
+    {
+        return FALSE;
+    }
+    Base = (PVOID)(ULONG_PTR)Headers->OptionalHeader.ImageBase;
+    if (Base == *BaseAddress)
+        return FALSE;
 
     Status = NtQueryVirtualMemory(NtCurrentProcess(), Base, MemoryBasicInformation,
                                   &Basic, sizeof(Basic), NULL);
@@ -1087,16 +1097,9 @@ LdrpFindPreMappedChpeBridge(PVOID *BaseAddress, SIZE_T *ImageSize)
         return FALSE;
     }
 
-    Headers = RtlImageNtHeader(Base);
-    if (Headers == NULL || (Headers->FileHeader.Machine != IMAGE_FILE_MACHINE_ARM64EC &&
-                            Headers->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64) ||
-        Headers->OptionalHeader.ImageBase != CHPE_BRIDGE_BASE)
-    {
-        return FALSE;
-    }
-
-    *BaseAddress = Base;
     *ImageSize = Headers->OptionalHeader.SizeOfImage;
+    NtUnmapViewOfSection(NtCurrentProcess(), *BaseAddress);
+    *BaseAddress = Base;
     return TRUE;
 }
 #endif
@@ -1342,14 +1345,6 @@ SkipCheck:
     /* Map the DLL */
     ViewBase = NULL;
     ViewSize = 0;
-#if defined(_M_ARM64)
-    if (RtlEqualUnicodeString(&BaseDllName, &LdrpChpeBridgeName, TRUE) &&
-        LdrpFindPreMappedChpeBridge(&ViewBase, &ViewSize))
-    {
-        Status = STATUS_SUCCESS;
-    }
-    else
-#endif
     Status = NtMapViewOfSection(SectionHandle,
                                 NtCurrentProcess(),
                                 &ViewBase,
@@ -1360,6 +1355,14 @@ SkipCheck:
                                 ViewShare,
                                 0,
                                 PAGE_EXECUTE_WRITECOPY);
+#if defined(_M_ARM64)
+    if (Status == STATUS_IMAGE_NOT_AT_BASE &&
+        RtlEqualUnicodeString(&BaseDllName, &LdrpChpeBridgeName, TRUE) &&
+        LdrpUsePreMappedChpeBridge(&ViewBase, &ViewSize))
+    {
+        Status = STATUS_SUCCESS;
+    }
+#endif
 
     /* Restore */
     Teb->NtTib.ArbitraryUserPointer = ArbitraryUserPointer;

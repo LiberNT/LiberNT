@@ -277,7 +277,7 @@ PspMapChpeBridge(IN PEPROCESS Process)
     HANDLE FileHandle;
     HANDLE SectionHandle;
     PSECTION Section;
-    PVOID Base = (PVOID)(ULONG_PTR)CHPE_BRIDGE_BASE;
+    PVOID Base = NULL;
     SIZE_T ViewSize = 0;
     NTSTATUS Status;
 
