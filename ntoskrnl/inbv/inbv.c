@@ -44,10 +44,6 @@ static INBV_RESET_DISPLAY_PARAMETERS InbvResetDisplayParameters = NULL;
 static BOOLEAN InbvDisplayDebugStrings = FALSE;
 static INBV_DISPLAY_STRING_FILTER InbvDisplayFilter = NULL;
 
-ULONG ProgressBarLeft = 0, ProgressBarTop = 0;
-BOOLEAN ShowProgressBar = FALSE;
-static INBV_PROGRESS_STATE InbvProgressState;
-static BT_PROGRESS_INDICATOR InbvProgressIndicator = {0, 25, 0};
 
 static ULONG ResourceCount = 0;
 static PUCHAR ResourceList[1 + IDB_MAX_RESOURCES]; // First entry == NULL, followed by 'ResourceCount' entries.
@@ -279,11 +275,6 @@ InbvDriverInitialize(
             /* Do the lookup */
             ResourceList[i] = FindBitmapResource(LoaderBlock, i);
         }
-
-        /* Set the progress bar ranges */
-        InbvSetProgressBarSubset(0, 100);
-
-        // BootAnimInitialize(LoaderBlock, Count);
     }
 
     /* Return install state */
@@ -728,125 +719,6 @@ InbvScreenToBufferBlt(
     {
         /* Do the blit */
         VidScreenToBufferBlt(Buffer, X, Y, Width, Height, Stride);
-    }
-}
-
-/**
- * @brief
- * Sets the screen coordinates of the loading progress bar and enable it.
- *
- * @param[in]   Left
- * @param[in]   Top
- * The left/top coordinates.
- *
- * @return None.
- **/
-VOID
-NTAPI
-InbvSetProgressBarCoordinates(
-    _In_ ULONG Left,
-    _In_ ULONG Top)
-{
-    /* Update the coordinates */
-    ProgressBarLeft = Left;
-    ProgressBarTop  = Top;
-
-    /* Enable the progress bar */
-    ShowProgressBar = TRUE;
-}
-
-/**
- * @brief
- * Gives some progress feedback, without specifying any explicit number
- * of progress steps or percentage.
- * The corresponding percentage is derived from the progress indicator's
- * current count, capped to the number of expected calls to be made to
- * this function (default: 25, see @b InbvProgressIndicator.Expected).
- *
- * @return None.
- **/
-CODE_SEG("INIT")
-VOID
-NTAPI
-InbvIndicateProgress(VOID)
-{
-    ULONG Percentage;
-
-    /* Increase progress */
-    InbvProgressIndicator.Count++;
-
-    /* Compute the new percentage - Don't go over 100% */
-    Percentage = 100 * InbvProgressIndicator.Count /
-                       InbvProgressIndicator.Expected;
-    Percentage = min(Percentage, 99);
-
-    if (Percentage != InbvProgressIndicator.Percentage)
-    {
-        /* Percentage has changed, update the progress bar */
-        InbvProgressIndicator.Percentage = Percentage;
-        InbvUpdateProgressBar(Percentage);
-    }
-}
-
-/**
- * @brief
- * Specifies a progress percentage sub-range.
- * Further calls to InbvIndicateProgress() or InbvUpdateProgressBar()
- * will update the progress percentage relative to this sub-range.
- * In particular, the percentage provided to InbvUpdateProgressBar()
- * is relative to this sub-range.
- *
- * @param[in]   Floor
- * The lower bound percentage of the sub-range (default: 0).
- *
- * @param[in]   Ceiling
- * The upper bound percentage of the sub-range (default: 100).
- *
- * @return None.
- **/
-VOID
-NTAPI
-InbvSetProgressBarSubset(
-    _In_ ULONG Floor,
-    _In_ ULONG Ceiling)
-{
-    /* Sanity checks */
-    ASSERT(Floor < Ceiling);
-    ASSERT(Ceiling <= 100);
-
-    /* Update the progress bar state */
-    InbvProgressState.Floor = Floor * 100;
-    InbvProgressState.Ceiling = Ceiling * 100;
-    InbvProgressState.Bias = Ceiling - Floor;
-}
-
-/**
- * @brief
- * Updates the progress bar percentage, relative to the current
- * percentage sub-range previously set by InbvSetProgressBarSubset().
- *
- * @param[in]   Percentage
- * The progress percentage, relative to the current sub-range.
- *
- * @return None.
- **/
-VOID
-NTAPI
-InbvUpdateProgressBar(
-    _In_ ULONG Percentage)
-{
-    ULONG TotalProgress;
-
-    /* Make sure the progress bar is enabled, that we own and are installed */
-    if (ShowProgressBar &&
-        InbvBootDriverInstalled &&
-        (InbvDisplayState == INBV_DISPLAY_STATE_OWNED))
-    {
-        /* Compute the total progress and tick the progress bar */
-        TotalProgress = InbvProgressState.Floor + (Percentage * InbvProgressState.Bias);
-        // TotalProgress /= (100 * 100);
-
-        BootAnimTickProgressBar(TotalProgress);
     }
 }
 

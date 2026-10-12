@@ -1685,9 +1685,6 @@ Phase1InitializationDiscard(IN PVOID Context)
     /* Initialize all processors */
     if (!HalAllProcessorsStarted()) KeBugCheck(HAL1_INITIALIZATION_FAILED);
 
-    /* Update the progress bar */
-    InbvUpdateProgressBar(5);
-
     /* Call OB initialization again */
     if (!ObInitSystem()) KeBugCheck(OBJECT1_INITIALIZATION_FAILED);
 
@@ -1706,9 +1703,6 @@ Phase1InitializationDiscard(IN PVOID Context)
 
     /* Initialize the SRM in Phase 1 */
     if (!SeInitSystem()) KeBugCheck(SECURITY1_INITIALIZATION_FAILED);
-
-    /* Update the progress bar */
-    InbvUpdateProgressBar(10);
 
     /* Create SystemRoot Link */
     Status = ExpCreateSystemRootLink(LoaderBlock);
@@ -1734,9 +1728,6 @@ Phase1InitializationDiscard(IN PVOID Context)
 
     /* Initialize Prefetcher */
     CcPfInitializePrefetcher();
-
-    /* Update progress bar */
-    InbvUpdateProgressBar(15);
 
     /* Update timezone information */
     LastTzBias = ExpLastTimeZoneBias;
@@ -1774,9 +1765,6 @@ Phase1InitializationDiscard(IN PVOID Context)
 
     /* Setup PnP Manager in phase 1 */
     if (!PpInitSystem()) KeBugCheck(PP1_INITIALIZATION_FAILED);
-
-    /* Update progress bar */
-    InbvUpdateProgressBar(20);
 
     /* Initialize LPC */
     if (!LpcInitSystem()) KeBugCheck(LPC_INITIALIZATION_FAILED);
@@ -1871,17 +1859,11 @@ Phase1InitializationDiscard(IN PVOID Context)
     /* Setup the Executive in Phase 2 */
     //ExInitSystemPhase2();
 
-    /* Update progress bar */
-    InbvUpdateProgressBar(25);
-
     /* No KD Time Slip is pending */
     KdpTimeSlipPending = 0;
 
     /* Initialize in-place execution support */
     XIPInit(LoaderBlock);
-
-    /* Set maximum update to 75% */
-    InbvSetProgressBarSubset(25, 75);
 
     /* Create the MiniNT key before I/O init so that boot drivers
      * (e.g. mountmgr) can detect WinPE mode during DriverEntry */
@@ -1921,9 +1903,6 @@ Phase1InitializationDiscard(IN PVOID Context)
 
     /* Initialize the I/O Subsystem */
     if (!IoInitSystem(LoaderBlock)) KeBugCheck(IO1_INITIALIZATION_FAILED);
-
-    /* Set maximum update to 100% */
-    InbvSetProgressBarSubset(0, 100);
 
     /* Are we in safe mode? */
     if (InitSafeBootMode)
@@ -2009,9 +1988,6 @@ Phase1InitializationDiscard(IN PVOID Context)
     /* FIXME: This doesn't do anything for now */
     MmArmInitSystem(2, LoaderBlock);
 
-    /* Update progress bar */
-    InbvUpdateProgressBar(80);
-
     /* Initialize VDM support */
 #if defined(_M_IX86)
     KeI386VdmInitialize();
@@ -2019,9 +1995,6 @@ Phase1InitializationDiscard(IN PVOID Context)
 
     /* Initialize Power Subsystem in Phase 1*/
     if (!PoInitSystem(1)) KeBugCheck(INTERNAL_POWER_ERROR);
-
-    /* Update progress bar */
-    InbvUpdateProgressBar(90);
 
     /* Initialize the Process Manager at Phase 1 */
     if (!PsInitSystem(LoaderBlock)) KeBugCheck(PROCESS1_INITIALIZATION_FAILED);
@@ -2035,9 +2008,6 @@ Phase1InitializationDiscard(IN PVOID Context)
 
     /* Initialize the SRM in phase 1 */
     if (!SeRmInitPhase1()) KeBugCheck(PROCESS1_INITIALIZATION_FAILED);
-
-    /* Update progress bar */
-    InbvUpdateProgressBar(100);
 
     /* Clear the screen */
     if (InbvBootDriverInstalled) FinalizeBootLogo();

@@ -1234,8 +1234,6 @@ IopInitializeBuiltinDriver(IN PLDR_DATA_TABLE_ENTRY BootLdrEntry)
     UNICODE_STRING ServiceName;
     BOOLEAN Success;
 
-    InbvIndicateProgress();
-
     Buffer = ExAllocatePoolWithTag(PagedPool,
                                    ModuleName->Length + sizeof(UNICODE_NULL),
                                    TAG_IO);
@@ -1823,7 +1821,6 @@ IopInitializeSystemDrivers(VOID)
         ExFreePool(*DriverList);
 
         /* Next entry */
-        InbvIndicateProgress();
         DriverList++;
     }
 

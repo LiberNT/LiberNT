@@ -100,34 +100,6 @@ InbvScreenToBufferBlt(
 );
 
 //
-// Progress-Bar Functions
-//
-VOID
-NTAPI
-InbvSetProgressBarCoordinates(
-    _In_ ULONG Left,
-    _In_ ULONG Top
-);
-
-CODE_SEG("INIT")
-VOID
-NTAPI
-InbvIndicateProgress(VOID);
-
-VOID
-NTAPI
-InbvSetProgressBarSubset(
-    _In_ ULONG Floor,
-    _In_ ULONG Ceiling
-);
-
-VOID
-NTAPI
-InbvUpdateProgressBar(
-    _In_ ULONG Percentage
-);
-
-//
 // Headless Terminal Support Functions
 //
 VOID

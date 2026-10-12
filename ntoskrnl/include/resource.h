@@ -17,15 +17,8 @@
 #pragma once
 
 #define IDB_BOOT_SCREEN     1
-#define IDB_HIBERNATE_BAR   2
 #define IDB_SHUTDOWN_MSG    3
-#define IDB_BAR_DEFAULT     4
 #define IDB_LOGO_DEFAULT    5
-
-#define IDB_BAR_WKSTA       8
-#define IDB_BAR_HOME        9
-
-#define IDB_SERVER_LOGO     13
 
 /* Workstation editions Overlays */
 #define IDB_TEXT_PROF       10  // Professional
@@ -43,8 +36,6 @@
 
 /* ReactOS additions */
 #define IDB_LOGO_XMAS       19
-#define IDB_ROTATING_LINE   20
-#define IDB_PROGRESS_BAR    21
 #define IDB_COPYRIGHT       22
 #define IDB_REACTOS_GOP_LOGO 23
 

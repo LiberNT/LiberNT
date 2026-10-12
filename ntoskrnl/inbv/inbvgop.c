@@ -13,7 +13,6 @@
 #include "resource.h"
 #include "inbvgop.h"
 
-extern BOOLEAN ShowProgressBar;
 
 #ifndef BI_RGB
 #define BI_RGB 0
@@ -1001,7 +1000,6 @@ InbvGopHandleBootBitmap(VOID)
         VidDisplayStringXY(LoadingMsg, x, y, TRUE);
     }
 
-    ShowProgressBar = FALSE;
     InbvEnableDisplayString(FALSE);
     return TRUE;
 }
