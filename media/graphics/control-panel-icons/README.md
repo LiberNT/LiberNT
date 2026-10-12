@@ -10,7 +10,6 @@ classic Control Panel items whose existing icon resources they replace.
 | Administrative Tools | `main.cpl,-500` |
 | Console | `console.dll,-40` |
 | Date and Time | `timedate.cpl,-1` |
-| Device Manager | `devmgmt.exe,0` |
 | Display | `desk.cpl,-40` |
 | Ease of Access Center | `access.cpl,-110` |
 | Folder Options | `shell32.dll,-210` |

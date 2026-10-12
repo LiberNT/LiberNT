@@ -12,7 +12,6 @@ TARGETS = (
     ("administrative-tools", ("dll/cpl/main/resources/admintools_folder.ico",)),
     ("console", ("dll/cpl/console/res/terminal.ico",)),
     ("date-and-time", ("dll/cpl/timedate/resources/applet.ico",)),
-    ("device-manager", ("base/applications/mscutils/devmgmt/devmgmt.ico",)),
     ("display", ("dll/cpl/desk/resources/applet.ico",)),
     ("ease-of-access", ("dll/cpl/access/resources/applet.ico",)),
     ("folder-options", ("dll/win32/shell32/res/icons/210.ico",)),

@@ -121,6 +121,11 @@ def write_frames(frames, path):
     path.write_bytes(directory + b"".join(data for _, data in entries))
 
 
+def write_ico(image, path, sizes=SIZES):
+    """Write an RGBA image resized to each frame size as an ICO."""
+    write_frames([image.resize((size, size), Image.Resampling.LANCZOS) for size in sizes], path)
+
+
 def write_bitmap(image, path):
     """Write an RGBA image as a bottom-up 32-bit BI_RGB bitmap keeping its alpha."""
     rgba = np.array(image)
