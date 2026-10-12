@@ -1163,6 +1163,12 @@ DxgkpPresent(
             DxgkpReleasePresentEntry(&Entry);
             return Status;
         }
+        if (!Adapter->MiniportContext->IsDisplayOnlyDriver &&
+            DXGK_CB_FULL(Adapter, DxgkDdiPresent) != NULL)
+        {
+            DxgkpReleasePresentEntry(&Entry);
+            return STATUS_GRAPHICS_PRESENT_OCCLUDED;
+        }
     }
 
     if (Entry.DestinationAllocation != NULL)
