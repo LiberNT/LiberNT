@@ -1193,9 +1193,11 @@ public:
             const D3D10_SO_DECLARATION_ENTRY *entries, UINT count, UINT stride, ID3D10GeometryShader **out) override
     {
         if (out) *out = NULL;
-        if (count > D3D10_SO_SINGLE_BUFFER_COMPONENT_LIMIT * D3D10_SO_BUFFER_SLOT_COUNT || (count && !entries))
+        if (count > D3D10_SO_SINGLE_BUFFER_COMPONENT_LIMIT * D3D10_SO_BUFFER_SLOT_COUNT || (count && !entries)
+                || (!count && stride))
             return E_INVALIDARG;
         D3D11_SO_DECLARATION_ENTRY converted[D3D10_SO_SINGLE_BUFFER_COMPONENT_LIMIT * D3D10_SO_BUFFER_SLOT_COUNT] = {};
+        UINT stride_count = count ? 1 : 0;
         for (UINT i = 0; i < count; ++i)
         {
             converted[i].Stream = 0;
@@ -1204,10 +1206,13 @@ public:
             converted[i].StartComponent = entries[i].StartComponent;
             converted[i].ComponentCount = entries[i].ComponentCount;
             converted[i].OutputSlot = entries[i].OutputSlot;
+            if (!entries[i].OutputSlot) continue;
+            if (stride) return E_INVALIDARG;
+            stride_count = 0;
         }
         ID3D11GeometryShader *shader = NULL;
         HRESULT hr = Device()->CreateGeometryShaderWithStreamOutput(code, length, count ? converted : NULL, count,
-                &stride, stride ? 1 : 0, 0, NULL, out ? &shader : NULL);
+                &stride, stride_count, 0, NULL, out ? &shader : NULL);
         if (SUCCEEDED(hr) && out) *out = NativeAsReleasing<ID3D10GeometryShader>(shader, IID_ID3D10GeometryShader);
         return hr;
     }
