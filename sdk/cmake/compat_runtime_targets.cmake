@@ -108,6 +108,7 @@ set(COMPAT_RUNTIME_MODULES
     msimg32
     mspatcha
     msvcrt
+    msvfw32
     mswsock
     msxml3
     msxml6
