@@ -732,6 +732,15 @@ PortStorageBusType(
 {
     PHW_INITIALIZATION_DATA InitData = FdoExtension->Miniport.InitData;
 
+    if (FdoExtension->AdapterBusType != BusTypeUnknown)
+        return (STORAGE_BUS_TYPE)FdoExtension->AdapterBusType;
+
+    if (FdoExtension->DriverExtension != NULL &&
+        FdoExtension->DriverExtension->BusType != BusTypeUnknown)
+    {
+        return (STORAGE_BUS_TYPE)FdoExtension->DriverExtension->BusType;
+    }
+
     /* The init data copy is zero-filled past the size the miniport passed */
     if (InitData != NULL &&
         (InitData->FeatureSupport & STOR_FEATURE_SUPPORTS_NVME_ADAPTER))
@@ -2169,6 +2178,34 @@ StorPortExtendedFunction(
             break;
         }
 
+        case ExtFunctionSetAdapterBusType:
+        {
+            ULONG BusType = va_arg(Args, ULONG);
+            PMINIPORT_DEVICE_EXTENSION MiniportExtension;
+            PFDO_DEVICE_EXTENSION DeviceExtension;
+
+            if (!HwDeviceExtension)
+            {
+                Status = STOR_STATUS_INVALID_PARAMETER;
+                break;
+            }
+            MiniportExtension = CONTAINING_RECORD(HwDeviceExtension, MINIPORT_DEVICE_EXTENSION, HwDeviceExtension);
+            DeviceExtension = MiniportExtension->Miniport->DeviceExtension;
+            if (!DeviceExtension->InFindAdapter)
+            {
+                Status = STOR_STATUS_UNSUCCESSFUL;
+                break;
+            }
+            if (BusType == BusTypeUnknown || BusType >= BusTypeMax)
+            {
+                Status = STOR_STATUS_INVALID_PARAMETER;
+                break;
+            }
+            DeviceExtension->AdapterBusType = BusType;
+            Status = STOR_STATUS_SUCCESS;
+            break;
+        }
+
         case ExtFunctionGetCurrentIrql:
         {
             PKIRQL Irql = va_arg(Args, PKIRQL);
@@ -2680,6 +2717,46 @@ StorPortGetVirtualAddress(
 }
 
 
+static
+ULONG
+PortReadServiceBusType(
+    _In_ PUNICODE_STRING RegistryPath)
+{
+    UNICODE_STRING ParametersName = RTL_CONSTANT_STRING(L"Parameters");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"BusType");
+    union
+    {
+        KEY_VALUE_PARTIAL_INFORMATION Information;
+        UCHAR Raw[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + sizeof(ULONG)];
+    } Buffer;
+    PKEY_VALUE_PARTIAL_INFORMATION Value = &Buffer.Information;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE ServiceKey;
+    HANDLE ParametersKey;
+    ULONG BusType = BusTypeUnknown;
+    ULONG Length;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, RegistryPath, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwOpenKey(&ServiceKey, KEY_READ, &ObjectAttributes);
+    if (!NT_SUCCESS(Status))
+        return BusTypeUnknown;
+
+    InitializeObjectAttributes(&ObjectAttributes, &ParametersName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, ServiceKey, NULL);
+    Status = ZwOpenKey(&ParametersKey, KEY_READ, &ObjectAttributes);
+    ZwClose(ServiceKey);
+    if (!NT_SUCCESS(Status))
+        return BusTypeUnknown;
+
+    Status = ZwQueryValueKey(ParametersKey, &ValueName, KeyValuePartialInformation, Value, sizeof(Buffer), &Length);
+    ZwClose(ParametersKey);
+    if (NT_SUCCESS(Status) && Value->Type == REG_DWORD && Value->DataLength == sizeof(ULONG))
+        RtlCopyMemory(&BusType, Value->Data, sizeof(ULONG));
+
+    return (BusType < BusTypeMax) ? BusType : BusTypeUnknown;
+}
+
+
 /*
  * @implemented
  */
@@ -2770,6 +2847,7 @@ StorPortInitialize(
         KeInitializeSpinLock(&DriverObjectExtension->AdapterListLock);
 
         InitializeListHead(&DriverObjectExtension->InitDataListHead);
+        DriverObjectExtension->BusType = PortReadServiceBusType(RegistryPath);
 
         /* Set handlers */
         DriverObject->DriverExtension->AddDevice = PortAddDevice;

@@ -337,12 +337,15 @@ MiniportFindAdapter(
     DPRINT("MiniportFindAdapter(%p)\n", Miniport);
 
     /* Call the miniport HwFindAdapter routine */
+    Miniport->DeviceExtension->AdapterBusType = BusTypeUnknown;
+    Miniport->DeviceExtension->InFindAdapter = TRUE;
     Result = ((PHW_FIND_ADAPTER)Miniport->InitData->HwFindAdapter)(&Miniport->MiniportExtension->HwDeviceExtension,
                                                NULL,
                                                NULL,
                                                NULL,
                                                &Miniport->PortConfig,
                                                &Reserved);
+    Miniport->DeviceExtension->InFindAdapter = FALSE;
     DPRINT("HwFindAdapter() returned %lu\n", Result);
 
     /* Convert the result to a status code */

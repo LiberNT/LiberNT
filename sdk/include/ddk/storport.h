@@ -2846,8 +2846,9 @@ typedef struct _DESCRIPTOR_SENSE_DATA {
 #define MAX_SENSE_BUFFER_SIZE 255
 
 #define SCSI_SENSE_ERRORCODE_FIXED_CURRENT        0x70
-
+#define SCSI_SENSE_ERRORCODE_FIXED_DEFERRED       0x71
 #define SCSI_SENSE_ERRORCODE_DESCRIPTOR_CURRENT   0x72
+#define SCSI_SENSE_ERRORCODE_DESCRIPTOR_DEFERRED  0x73
 
 #define SCSI_SENSE_DESCRIPTOR_TYPE_ATA_STATUS_RETURN            0x09
 
@@ -5520,6 +5521,18 @@ StorPortRegistryWriteAdapterKey(
                                     ValueType,
                                     ValueData,
                                     ValueDataLength);
+}
+
+FORCEINLINE
+ULONG
+StorPortSetAdapterBusType(
+    _In_ PVOID HwDeviceExtension,
+    _In_ ULONG BusType
+    )
+{
+    return StorPortExtendedFunction(ExtFunctionSetAdapterBusType,
+                                    HwDeviceExtension,
+                                    BusType);
 }
 
 FORCEINLINE

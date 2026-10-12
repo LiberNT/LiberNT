@@ -1019,6 +1019,9 @@ PortFdoStopAdapter(
 
     MiniportAdapterControl(&DeviceExtension->Miniport, ScsiStopAdapter, NULL);
     MiniportAdapterControl(&DeviceExtension->Miniport, ScsiSetBootConfig, NULL);
+    KeFlushQueuedDpcs();
+    KeCancelTimer(&DeviceExtension->MiniportTimer);
+    KeFlushQueuedDpcs();
     PortFdoDisconnectInterrupt(DeviceExtension);
     DeviceExtension->PnpState = dsStopped;
 }

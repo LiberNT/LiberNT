@@ -75,6 +75,7 @@ typedef struct _DRIVER_OBJECT_EXTENSION
     ULONG AdapterCount;
 
     LIST_ENTRY InitDataListHead;
+    ULONG BusType;
 } DRIVER_OBJECT_EXTENSION, *PDRIVER_OBJECT_EXTENSION;
 
 typedef struct _MINIPORT_DEVICE_EXTENSION
@@ -189,6 +190,8 @@ typedef struct _FDO_DEVICE_EXTENSION
     ULONG PdoCount;
     BOOLEAN BusScanned;
     volatile BOOLEAN DumpMode;
+    BOOLEAN InFindAdapter;
+    ULONG AdapterBusType;
 
     KSPIN_LOCK RequestHoldLock;
     LIST_ENTRY HeldRequests;
@@ -302,7 +305,10 @@ typedef struct _PORT_DUMP_CONTEXT
     volatile LONG Completed;
     NTSTATUS Status;
     ULONG BytesPerSector;
+    SENSE_DATA SenseData;
 } PORT_DUMP_CONTEXT, *PPORT_DUMP_CONTEXT;
+
+#define PORT_DUMP_UNIT_ATTENTION_RETRIES 4
 
 /* pdo.c */
 
