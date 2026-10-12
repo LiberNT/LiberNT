@@ -72,6 +72,7 @@ typedef struct _CD_SCREEN CD_SCREEN, *PCD_SCREEN;
 
 struct _CD_CONSOLE
 {
+    KSPIN_LOCK Lock;
     LONG RefCount;
     PCD_SERVER Server;
     PCD_SCREEN Active;
@@ -172,7 +173,7 @@ typedef struct _CD_DEFERRED_PROCESS
 
 #define CD_PROCESS_BUCKETS 64
 
-static KSPIN_LOCK CdLock;
+static EX_SPIN_LOCK CdLock;
 static LIST_ENTRY CdProcessList;
 static LIST_ENTRY CdProcessHash[CD_PROCESS_BUCKETS];
 
@@ -239,6 +240,11 @@ CdSyncFileEvent(
 {
     if (File->NoEventIrps)
         return;
+    if (File->FileObject->Event.Header.Type == SynchronizationEvent &&
+        File->FileObject->Event.Header.SignalState)
+    {
+        return;
+    }
     File->FileObject->Event.Header.Type = NotificationEvent;
     if (File->Mirror && File->Mirror->Signaled)
         KeSetEvent(&File->FileObject->Event, IO_NO_INCREMENT, FALSE);
@@ -592,6 +598,7 @@ CdCreateConsole(
     if (!Console)
         return NULL;
     RtlZeroMemory(Console, sizeof(*Console));
+    KeInitializeSpinLock(&Console->Lock);
     Console->RefCount = 1;
     InitializeListHead(&Console->Screens);
     InitializeListHead(&Console->Files);
@@ -664,7 +671,6 @@ CdFinishIrp(
 {
     PFILE_OBJECT FileObject = IoGetCurrentIrpStackLocation(Irp)->FileObject;
     BOOLEAN NoEvent = Irp->Tail.Overlay.DriverContext[1] != NULL;
-    KIRQL OldIrql;
 
     if (NoEvent)
         ObReferenceObject(FileObject);
@@ -674,9 +680,7 @@ CdFinishIrp(
         PCD_FILE File = FileObject->FsContext;
 
         KeSetEvent(&FileObject->Event, IO_NO_INCREMENT, FALSE);
-        KeAcquireSpinLock(&CdLock, &OldIrql);
-        File->NoEventIrps--;
-        KeReleaseSpinLock(&CdLock, OldIrql);
+        InterlockedDecrement(&File->NoEventIrps);
         ObDereferenceObject(FileObject);
     }
 }
@@ -719,6 +723,7 @@ CdCancelIrp(
     _Inout_ PDEVICE_OBJECT DeviceObject,
     _Inout_ _IRQL_uses_cancel_ PIRP Irp)
 {
+    PCD_CONSOLE Console;
     PCD_REQUEST Request;
     KIRQL OldIrql;
 
@@ -726,19 +731,25 @@ CdCancelIrp(
 
     IoReleaseCancelSpinLock(Irp->CancelIrql);
 
-    KeAcquireSpinLock(&CdLock, &OldIrql);
-    Request = Irp->Tail.Overlay.DriverContext[0];
-    if (Request)
+    OldIrql = ExAcquireSpinLockShared(&CdLock);
+    if (ReadPointerAcquire(&Irp->Tail.Overlay.DriverContext[0]))
     {
-        Irp->Tail.Overlay.DriverContext[0] = NULL;
-        Request->Irp = NULL;
-        if (!Request->Delivered)
+        Console = Irp->Tail.Overlay.DriverContext[2];
+        KeAcquireSpinLockAtDpcLevel(&Console->Lock);
+        Request = Irp->Tail.Overlay.DriverContext[0];
+        if (Request)
         {
-            RemoveEntryList(&Request->Entry);
-            CdFreeRequest(Request);
+            Irp->Tail.Overlay.DriverContext[0] = NULL;
+            Request->Irp = NULL;
+            if (!Request->Delivered)
+            {
+                RemoveEntryList(&Request->Entry);
+                CdFreeRequest(Request);
+            }
         }
+        KeReleaseSpinLockFromDpcLevel(&Console->Lock);
     }
-    KeReleaseSpinLock(&CdLock, OldIrql);
+    ExReleaseSpinLockShared(&CdLock, OldIrql);
 
     Irp->IoStatus.Status = STATUS_CANCELLED;
     Irp->IoStatus.Information = 0;
@@ -790,6 +801,7 @@ CdQueueIrp(
 
     Irp->Tail.Overlay.DriverContext[0] = Request;
     Irp->Tail.Overlay.DriverContext[1] = NULL;
+    Irp->Tail.Overlay.DriverContext[2] = Server->Console;
     IoSetCancelRoutine(Irp, CdCancelIrp);
     if (Irp->Cancel && IoSetCancelRoutine(Irp, NULL))
     {
@@ -801,7 +813,7 @@ CdQueueIrp(
     if (!Irp->UserEvent || (File->FileObject->Flags & FO_SYNCHRONOUS_IO))
     {
         Irp->Tail.Overlay.DriverContext[1] = (PVOID)1;
-        File->NoEventIrps++;
+        InterlockedIncrement(&File->NoEventIrps);
         if (File->FileObject->Flags & FO_SYNCHRONOUS_IO)
         {
             KeClearEvent(&File->FileObject->Event);
@@ -940,17 +952,17 @@ CdPropagateCtrl(
     Max = CdCountProcesses(Console);
     if (!Max)
     {
-        KeReleaseSpinLock(&CdLock, OldIrql);
+        ExReleaseSpinLockShared(&CdLock, OldIrql);
         return STATUS_SUCCESS;
     }
     Targets = ExAllocatePoolWithTag(NonPagedPool, Max * sizeof(*Targets), CD_TAG);
     if (!Targets)
     {
-        KeReleaseSpinLock(&CdLock, OldIrql);
+        ExReleaseSpinLockShared(&CdLock, OldIrql);
         return STATUS_NO_MEMORY;
     }
     CdCollectCtrlTargets(Console, GroupId, Targets, Max, &Count);
-    KeReleaseSpinLock(&CdLock, OldIrql);
+    ExReleaseSpinLockShared(&CdLock, OldIrql);
 
     for (Index = 0; Index < Count; Index++)
     {
@@ -1037,13 +1049,20 @@ CdConsoleIoctl(
                                     &Irp->IoStatus.Information);
 
         default:
+        {
+            NTSTATUS Status;
+
             if (!Console->Server || DEVICE_TYPE_FROM_CTL_CODE(Code) != FILE_DEVICE_CONSOLE ||
                 METHOD_FROM_CTL_CODE(Code) != METHOD_BUFFERED)
             {
                 return STATUS_INVALID_HANDLE;
             }
-            return CdQueueIrp(Console->Server, File, Irp, Code, 0,
-                              Irp->AssociatedIrp.SystemBuffer, InLength, OutLength);
+            KeAcquireSpinLockAtDpcLevel(&Console->Lock);
+            Status = CdQueueIrp(Console->Server, File, Irp, Code, 0,
+                                Irp->AssociatedIrp.SystemBuffer, InLength, OutLength);
+            KeReleaseSpinLockFromDpcLevel(&Console->Lock);
+            return Status;
+        }
     }
 }
 
@@ -1057,24 +1076,20 @@ CdScreenIoctl(
 {
     ULONG Code = Stack->Parameters.DeviceIoControl.IoControlCode;
     PCD_CONSOLE Console = Screen->Console;
-
-    if (Code == IOCTL_CONDRV_ACTIVATE)
-    {
-        if (!Console)
-            return STATUS_INVALID_HANDLE;
-        CdSetActive(Console, Screen);
-        return STATUS_SUCCESS;
-    }
+    NTSTATUS Status;
 
     if (!Console || !Console->Server || DEVICE_TYPE_FROM_CTL_CODE(Code) != FILE_DEVICE_CONSOLE ||
         METHOD_FROM_CTL_CODE(Code) != METHOD_BUFFERED || CdIsBlockingRead(Code))
     {
         return STATUS_INVALID_HANDLE;
     }
-    return CdQueueIrp(Console->Server, File, Irp, Code, Screen->Id,
-                      Irp->AssociatedIrp.SystemBuffer,
-                      Stack->Parameters.DeviceIoControl.InputBufferLength,
-                      Stack->Parameters.DeviceIoControl.OutputBufferLength);
+    KeAcquireSpinLockAtDpcLevel(&Console->Lock);
+    Status = CdQueueIrp(Console->Server, File, Irp, Code, Screen->Id,
+                        Irp->AssociatedIrp.SystemBuffer,
+                        Stack->Parameters.DeviceIoControl.InputBufferLength,
+                        Stack->Parameters.DeviceIoControl.OutputBufferLength);
+    KeReleaseSpinLockFromDpcLevel(&Console->Lock);
+    return Status;
 }
 
 static
@@ -1089,7 +1104,7 @@ CdServerGetNext(
     CONDRV_NEXT_REQUEST_PARAMS Params;
     CONDRV_NEXT_REQUEST_REPLY Reply;
     PCD_REQUEST Request = NULL;
-    PCD_CONSOLE Release = NULL;
+    PCD_CONSOLE Console;
     ULONG Releases = 0;
     CD_DEFERRED Deferred;
     KIRQL OldIrql;
@@ -1102,23 +1117,25 @@ CdServerGetNext(
     RtlZeroMemory(&Reply, sizeof(Reply));
     CdInitDeferred(&Deferred);
 
-    KeAcquireSpinLock(&CdLock, &OldIrql);
-
-    if (!Server->Console)
+    OldIrql = ExAcquireSpinLockShared(&CdLock);
+    Console = Server->Console;
+    if (!Console)
     {
         CdUpdateServerEvent(Server);
-        KeReleaseSpinLock(&CdLock, OldIrql);
+        ExReleaseSpinLockShared(&CdLock, OldIrql);
         return STATUS_INVALID_HANDLE;
     }
+    KeAcquireSpinLockAtDpcLevel(&Console->Lock);
 
-    CdSignalConsole(Server->Console, Params.Signal != 0);
+    CdSignalConsole(Console, Params.Signal != 0);
 
     if (Params.Read)
     {
         if (IsListEmpty(&Server->ReadQueue))
         {
             CdUpdateServerEvent(Server);
-            KeReleaseSpinLock(&CdLock, OldIrql);
+            KeReleaseSpinLockFromDpcLevel(&Console->Lock);
+            ExReleaseSpinLockShared(&CdLock, OldIrql);
             return STATUS_INVALID_HANDLE;
         }
         Request = CONTAINING_RECORD(RemoveHeadList(&Server->ReadQueue), CD_REQUEST, Entry);
@@ -1137,7 +1154,8 @@ CdServerGetNext(
         if (Params.Read)
         {
             CdUpdateServerEvent(Server);
-            KeReleaseSpinLock(&CdLock, OldIrql);
+            KeReleaseSpinLockFromDpcLevel(&Console->Lock);
+            ExReleaseSpinLockShared(&CdLock, OldIrql);
             RtlCopyMemory(Buffer, &Reply, sizeof(Reply));
             *Information = sizeof(Reply);
             CdRunDeferred(&Deferred);
@@ -1188,7 +1206,6 @@ CdServerGetNext(
                 PLIST_ENTRY Entry = Request->Entry.Flink;
 
                 Server->PendingBytes -= sizeof(*Request) + Request->InSize;
-                Release = Server->Console;
                 Releases = 1;
                 while (Entry != &Server->Queue)
                 {
@@ -1230,9 +1247,21 @@ CdServerGetNext(
     }
 
     CdUpdateServerEvent(Server);
-    while (Releases--)
-        CdDereferenceConsole(Release, &Deferred);
-    KeReleaseSpinLock(&CdLock, OldIrql);
+    while (Releases && Console->RefCount > 1)
+    {
+        Console->RefCount--;
+        Releases--;
+    }
+    KeReleaseSpinLockFromDpcLevel(&Console->Lock);
+    ExReleaseSpinLockShared(&CdLock, OldIrql);
+
+    if (Releases)
+    {
+        OldIrql = ExAcquireSpinLockExclusive(&CdLock);
+        while (Releases--)
+            CdDereferenceConsole(Console, &Deferred);
+        ExReleaseSpinLockExclusive(&CdLock, OldIrql);
+    }
 
     RtlCopyMemory(Buffer, &Reply, sizeof(Reply));
     CdRunDeferred(&Deferred);
@@ -1265,10 +1294,10 @@ CdServerIoctl(
                 return STATUS_INVALID_PARAMETER;
             if (Event->Event < CD_CTRL_C_EVENT || Event->Event > CD_CTRL_SHUTDOWN_EVENT)
                 return STATUS_INVALID_PARAMETER;
-            KeAcquireSpinLock(&CdLock, &OldIrql);
+            OldIrql = ExAcquireSpinLockShared(&CdLock);
             if (!Server->Console)
             {
-                KeReleaseSpinLock(&CdLock, OldIrql);
+                ExReleaseSpinLockShared(&CdLock, OldIrql);
                 return STATUS_INVALID_HANDLE;
             }
             return CdPropagateCtrl(Server->Console, Event->Event, Event->GroupId, OldIrql);
@@ -1311,7 +1340,7 @@ CdConnectionIoctl(
             if (!NT_SUCCESS(Status))
                 return STATUS_INVALID_PARAMETER;
 
-            KeAcquireSpinLock(&CdLock, &OldIrql);
+            OldIrql = ExAcquireSpinLockExclusive(&CdLock);
             if (CdFindProcess(PsGetCurrentProcess()))
             {
                 Status = STATUS_INVALID_HANDLE;
@@ -1324,7 +1353,7 @@ CdConnectionIoctl(
                 else
                     Status = STATUS_ACCESS_DENIED;
             }
-            KeReleaseSpinLock(&CdLock, OldIrql);
+            ExReleaseSpinLockExclusive(&CdLock, OldIrql);
             ObDereferenceObject(Process);
             return Status;
         }
@@ -1335,7 +1364,7 @@ CdConnectionIoctl(
 
             if (InLength != sizeof(*Ctrl))
                 return STATUS_INVALID_PARAMETER;
-            KeAcquireSpinLock(&CdLock, &OldIrql);
+            OldIrql = ExAcquireSpinLockExclusive(&CdLock);
             Attached = CdFindProcess(PsGetCurrentProcess());
             if (Attached)
             {
@@ -1347,7 +1376,7 @@ CdConnectionIoctl(
             {
                 Status = STATUS_INVALID_HANDLE;
             }
-            KeReleaseSpinLock(&CdLock, OldIrql);
+            ExReleaseSpinLockExclusive(&CdLock, OldIrql);
             return Status;
         }
 
@@ -1431,7 +1460,7 @@ CdDispatchCreate(
         Access |= FILE_WRITE_DATA;
 
     CdInitDeferred(&Deferred);
-    KeAcquireSpinLock(&CdLock, &OldIrql);
+    OldIrql = ExAcquireSpinLockExclusive(&CdLock);
     Attached = CdFindProcess(Process);
 
     if (Related && !Name->Length)
@@ -1591,7 +1620,7 @@ CdDispatchCreate(
         if (File->Type != CdFileServer && File->Type != CdFileConnection)
             CdUpdateFileEvent(File);
     }
-    KeReleaseSpinLock(&CdLock, OldIrql);
+    ExReleaseSpinLockExclusive(&CdLock, OldIrql);
     CdRunDeferred(&Deferred);
 
     if (!NT_SUCCESS(Status))
@@ -1641,7 +1670,7 @@ CdDispatchCleanup(
         return CdCompleteDispatch(Irp, STATUS_SUCCESS);
 
     CdInitDeferred(&Deferred);
-    KeAcquireSpinLock(&CdLock, &OldIrql);
+    OldIrql = ExAcquireSpinLockExclusive(&CdLock);
     if (File->Type == CdFileServer)
     {
         PCD_CONSOLE Console = File->Server->Console;
@@ -1663,7 +1692,7 @@ CdDispatchCleanup(
     {
         CdDetachConnection(FileObject, &Deferred);
     }
-    KeReleaseSpinLock(&CdLock, OldIrql);
+    ExReleaseSpinLockExclusive(&CdLock, OldIrql);
     CdRunDeferred(&Deferred);
 
     return CdCompleteDispatch(Irp, STATUS_SUCCESS);
@@ -1687,7 +1716,7 @@ CdDispatchClose(
         return CdCompleteDispatch(Irp, STATUS_SUCCESS);
 
     CdInitDeferred(&Deferred);
-    KeAcquireSpinLock(&CdLock, &OldIrql);
+    OldIrql = ExAcquireSpinLockExclusive(&CdLock);
     CdSetMirror(File, NULL);
     switch (File->Type)
     {
@@ -1711,7 +1740,7 @@ CdDispatchClose(
             break;
     }
     FileObject->FsContext = NULL;
-    KeReleaseSpinLock(&CdLock, OldIrql);
+    ExReleaseSpinLockExclusive(&CdLock, OldIrql);
     CdRunDeferred(&Deferred);
 
     ExFreePoolWithTag(File, CD_TAG);
@@ -1728,7 +1757,6 @@ CdResolveInput(
     Console = CdCurrentConsole();
     if (File->Type == CdFileConsole)
         return (File->Console == Console) ? Console : NULL;
-    CdSetMirror(File, Console);
     return Console;
 }
 
@@ -1746,8 +1774,76 @@ CdResolveOutput(
         return File->Screen;
     }
     Console = CdCurrentConsole();
-    CdSetMirror(File, Console);
     return Console ? Console->Active : NULL;
+}
+
+static
+KIRQL
+CdAcquireForFile(
+    _In_ PCD_FILE File)
+{
+    KIRQL OldIrql;
+
+    for (;;)
+    {
+        OldIrql = ExAcquireSpinLockShared(&CdLock);
+        if ((File->Type != CdFileInput && File->Type != CdFileOutput) ||
+            File->Mirror == CdCurrentConsole())
+        {
+            return OldIrql;
+        }
+        ExReleaseSpinLockShared(&CdLock, OldIrql);
+
+        OldIrql = ExAcquireSpinLockExclusive(&CdLock);
+        CdSetMirror(File, CdCurrentConsole());
+        CdUpdateFileEvent(File);
+        ExReleaseSpinLockExclusive(&CdLock, OldIrql);
+    }
+}
+
+static
+VOID
+CdUpdateFileEventShared(
+    _In_ PCD_FILE File,
+    _In_ BOOLEAN Sync)
+{
+    PCD_CONSOLE Mirror = File->Mirror;
+
+    if (Mirror)
+        KeAcquireSpinLockAtDpcLevel(&Mirror->Lock);
+    if (Sync)
+        CdSyncFileEvent(File);
+    else
+        CdUpdateFileEvent(File);
+    if (Mirror)
+        KeReleaseSpinLockFromDpcLevel(&Mirror->Lock);
+}
+
+static
+NTSTATUS
+CdActivate(
+    _In_ PCD_FILE File)
+{
+    PCD_SCREEN Screen;
+    NTSTATUS Status;
+    KIRQL OldIrql;
+
+    OldIrql = ExAcquireSpinLockExclusive(&CdLock);
+    if (File->Type == CdFileOutput)
+        CdSetMirror(File, CdCurrentConsole());
+    Screen = CdResolveOutput(File);
+    if (!Screen || !Screen->Console)
+    {
+        Status = STATUS_INVALID_HANDLE;
+    }
+    else
+    {
+        CdSetActive(Screen->Console, Screen);
+        Status = STATUS_SUCCESS;
+    }
+    CdUpdateFileEvent(File);
+    ExReleaseSpinLockExclusive(&CdLock, OldIrql);
+    return Status;
 }
 
 static
@@ -1775,9 +1871,16 @@ CdDispatchDeviceControl(
             Status = CdServerIoctl(File->Server, Irp, Stack);
             if (Status != STATUS_PENDING)
             {
-                KeAcquireSpinLock(&CdLock, &OldIrql);
+                PCD_CONSOLE Console;
+
+                OldIrql = ExAcquireSpinLockShared(&CdLock);
+                Console = File->Server->Console;
+                if (Console)
+                    KeAcquireSpinLockAtDpcLevel(&Console->Lock);
                 CdUpdateServerEvent(File->Server);
-                KeReleaseSpinLock(&CdLock, OldIrql);
+                if (Console)
+                    KeReleaseSpinLockFromDpcLevel(&Console->Lock);
+                ExReleaseSpinLockShared(&CdLock, OldIrql);
             }
             return CdCompleteDispatch(Irp, Status);
 
@@ -1789,7 +1892,7 @@ CdDispatchDeviceControl(
         {
             PCD_CONSOLE Console;
 
-            KeAcquireSpinLock(&CdLock, &OldIrql);
+            OldIrql = CdAcquireForFile(File);
             Console = CdResolveInput(File);
             if (!Console)
                 Status = STATUS_INVALID_HANDLE;
@@ -1797,8 +1900,8 @@ CdDispatchDeviceControl(
                 Status = CdConsoleIoctl(File, Console, Irp, Stack, OldIrql, &Unlocked);
             if (!Unlocked)
             {
-                CdUpdateFileEvent(File);
-                KeReleaseSpinLock(&CdLock, OldIrql);
+                CdUpdateFileEventShared(File, FALSE);
+                ExReleaseSpinLockShared(&CdLock, OldIrql);
             }
             return CdCompleteDispatch(Irp, Status);
         }
@@ -1808,11 +1911,14 @@ CdDispatchDeviceControl(
         {
             PCD_SCREEN Screen;
 
-            KeAcquireSpinLock(&CdLock, &OldIrql);
+            if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_CONDRV_ACTIVATE)
+                return CdCompleteDispatch(Irp, CdActivate(File));
+
+            OldIrql = CdAcquireForFile(File);
             Screen = CdResolveOutput(File);
             Status = Screen ? CdScreenIoctl(File, Screen, Irp, Stack) : STATUS_INVALID_HANDLE;
-            CdUpdateFileEvent(File);
-            KeReleaseSpinLock(&CdLock, OldIrql);
+            CdUpdateFileEventShared(File, FALSE);
+            ExReleaseSpinLockShared(&CdLock, OldIrql);
             return CdCompleteDispatch(Irp, Status);
         }
 
@@ -1840,15 +1946,21 @@ CdDispatchRead(
     if (!File || (File->Type != CdFileConsole && File->Type != CdFileInput))
         return CdCompleteDispatch(Irp, STATUS_OBJECT_TYPE_MISMATCH);
 
-    KeAcquireSpinLock(&CdLock, &OldIrql);
+    OldIrql = CdAcquireForFile(File);
     Console = CdResolveInput(File);
     if (!Console || !Console->Server)
+    {
         Status = STATUS_INVALID_HANDLE;
+    }
     else
+    {
+        KeAcquireSpinLockAtDpcLevel(&Console->Lock);
         Status = CdQueueIrp(Console->Server, File, Irp, IOCTL_CONDRV_READ_FILE, 0, NULL, 0,
                             Stack->Parameters.Read.Length);
-    CdUpdateFileEvent(File);
-    KeReleaseSpinLock(&CdLock, OldIrql);
+        KeReleaseSpinLockFromDpcLevel(&Console->Lock);
+    }
+    CdUpdateFileEventShared(File, FALSE);
+    ExReleaseSpinLockShared(&CdLock, OldIrql);
     return CdCompleteDispatch(Irp, Status);
 }
 
@@ -1886,7 +1998,7 @@ CdDispatchWrite(
         }
     }
 
-    KeAcquireSpinLock(&CdLock, &OldIrql);
+    OldIrql = CdAcquireForFile(File);
     Screen = CdResolveOutput(File);
     if (!Screen || !Screen->Console || !Screen->Console->Server)
     {
@@ -1894,9 +2006,12 @@ CdDispatchWrite(
     }
     else
     {
+        PCD_CONSOLE Console = Screen->Console;
+
+        KeAcquireSpinLockAtDpcLevel(&Console->Lock);
         if (Behind)
             Behind->Output = Screen->Id;
-        if (Behind && CdQueueWriteBehind(Screen->Console->Server, Behind))
+        if (Behind && CdQueueWriteBehind(Console->Server, Behind))
         {
             Behind = NULL;
             Irp->IoStatus.Information = Length;
@@ -1904,12 +2019,13 @@ CdDispatchWrite(
         }
         else
         {
-            Status = CdQueueIrp(Screen->Console->Server, File, Irp, IOCTL_CONDRV_WRITE_FILE, Screen->Id,
+            Status = CdQueueIrp(Console->Server, File, Irp, IOCTL_CONDRV_WRITE_FILE, Screen->Id,
                                 Irp->AssociatedIrp.SystemBuffer, Length, 0);
         }
+        KeReleaseSpinLockFromDpcLevel(&Console->Lock);
     }
-    CdUpdateFileEvent(File);
-    KeReleaseSpinLock(&CdLock, OldIrql);
+    CdUpdateFileEventShared(File, FALSE);
+    ExReleaseSpinLockShared(&CdLock, OldIrql);
     if (Behind)
         ExFreePoolWithTag(Behind, CD_TAG);
     return CdCompleteDispatch(Irp, Status);
@@ -1933,7 +2049,7 @@ CdDispatchFlush(
     if (!File || (File->Type != CdFileConsole && File->Type != CdFileInput))
         return CdCompleteDispatch(Irp, STATUS_OBJECT_TYPE_MISMATCH);
 
-    KeAcquireSpinLock(&CdLock, &OldIrql);
+    OldIrql = CdAcquireForFile(File);
     Console = CdResolveInput(File);
     if (!Console || !Console->Server)
     {
@@ -1941,11 +2057,13 @@ CdDispatchFlush(
     }
     else
     {
+        KeAcquireSpinLockAtDpcLevel(&Console->Lock);
         CdQueueNotify(Console->Server, IOCTL_CONDRV_FLUSH, 0);
+        KeReleaseSpinLockFromDpcLevel(&Console->Lock);
         Status = STATUS_SUCCESS;
     }
-    CdUpdateFileEvent(File);
-    KeReleaseSpinLock(&CdLock, OldIrql);
+    CdUpdateFileEventShared(File, FALSE);
+    ExReleaseSpinLockShared(&CdLock, OldIrql);
     return CdCompleteDispatch(Irp, Status);
 }
 
@@ -2088,7 +2206,7 @@ CdFastIoDeviceControl(
     PCD_FILE File = FileObject->FsContext;
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PCD_REQUEST Request;
-    PCD_SERVER Server = NULL;
+    PCD_CONSOLE Console = NULL;
     ULONG_PTR Information = 0;
     BOOLEAN Queued = FALSE;
     LARGE_INTEGER Timeout;
@@ -2115,6 +2233,17 @@ CdFastIoDeviceControl(
     }
     if (InputBufferLength > MAXUSHORT * 0x100 || OutputBufferLength > MAXUSHORT * 0x100)
         return FALSE;
+    if (IoControlCode == IOCTL_CONDRV_ACTIVATE &&
+        (File->Type == CdFileScreen || File->Type == CdFileOutput))
+    {
+        Status = CdActivate(File);
+        OldIrql = ExAcquireSpinLockShared(&CdLock);
+        CdUpdateFileEventShared(File, TRUE);
+        ExReleaseSpinLockShared(&CdLock, OldIrql);
+        IoStatus->Status = Status;
+        IoStatus->Information = 0;
+        return TRUE;
+    }
 
     InSpace = ALIGN_UP_BY(InputBufferLength, sizeof(ULONGLONG));
     Request = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Request) + InSpace + OutputBufferLength, CD_TAG);
@@ -2147,19 +2276,19 @@ CdFastIoDeviceControl(
 
     if (NT_SUCCESS(Status))
     {
-        KeAcquireSpinLock(&CdLock, &OldIrql);
+        OldIrql = CdAcquireForFile(File);
         if (File->Type == CdFileConsole || File->Type == CdFileInput)
         {
-            PCD_CONSOLE Console = CdResolveInput(File);
-
+            Console = CdResolveInput(File);
             if (!Console)
+            {
                 Status = STATUS_INVALID_HANDLE;
+            }
             else if (IoControlCode == IOCTL_CONDRV_GET_PROCESS_LIST)
+            {
                 Status = CdGetProcessList(Console, Request->OutBuffer, OutputBufferLength, &Information);
-            else if (!Console->Server)
-                Status = STATUS_INVALID_HANDLE;
-            else
-                Server = Console->Server;
+                Console = NULL;
+            }
         }
         else
         {
@@ -2169,42 +2298,46 @@ CdFastIoDeviceControl(
             {
                 Status = STATUS_INVALID_HANDLE;
             }
-            else if (IoControlCode == IOCTL_CONDRV_ACTIVATE)
+            else
             {
-                CdSetActive(Screen->Console, Screen);
+                Console = Screen->Console;
+                Output = Screen->Id;
             }
-            else if (!Screen->Console->Server)
+        }
+
+        if (Console)
+        {
+            PCD_SERVER Server;
+
+            KeAcquireSpinLockAtDpcLevel(&Console->Lock);
+            Server = Console->Server;
+            if (!Server)
             {
                 Status = STATUS_INVALID_HANDLE;
             }
             else
             {
-                Server = Screen->Console->Server;
-                Output = Screen->Id;
+                Request->Code = IoControlCode;
+                Request->Output = Output;
+                Request->InSize = InputBufferLength;
+                Request->OutSize = OutputBufferLength;
+                if ((IoControlCode == IOCTL_CONDRV_WRITE_CONSOLE || IoControlCode == IOCTL_CONDRV_WRITE_FILE) &&
+                    InputBufferLength && !OutputBufferLength && CdQueueWriteBehind(Server, Request))
+                {
+                    Request = NULL;
+                }
+                else
+                {
+                    Request->Fast = TRUE;
+                    KeInitializeEvent(&Request->Done, NotificationEvent, FALSE);
+                    InsertTailList(&Server->Queue, &Request->Entry);
+                    CdUpdateServerEvent(Server);
+                    Queued = TRUE;
+                }
             }
+            KeReleaseSpinLockFromDpcLevel(&Console->Lock);
         }
-
-        if (Server)
-        {
-            Request->Code = IoControlCode;
-            Request->Output = Output;
-            Request->InSize = InputBufferLength;
-            Request->OutSize = OutputBufferLength;
-            if ((IoControlCode == IOCTL_CONDRV_WRITE_CONSOLE || IoControlCode == IOCTL_CONDRV_WRITE_FILE) &&
-                InputBufferLength && !OutputBufferLength && CdQueueWriteBehind(Server, Request))
-            {
-                Request = NULL;
-            }
-            else
-            {
-                Request->Fast = TRUE;
-                KeInitializeEvent(&Request->Done, NotificationEvent, FALSE);
-                InsertTailList(&Server->Queue, &Request->Entry);
-                CdUpdateServerEvent(Server);
-                Queued = TRUE;
-            }
-        }
-        KeReleaseSpinLock(&CdLock, OldIrql);
+        ExReleaseSpinLockShared(&CdLock, OldIrql);
     }
 
     if (Queued)
@@ -2217,10 +2350,17 @@ CdFastIoDeviceControl(
                 break;
             if (!PsIsThreadTerminating(PsGetCurrentThread()))
                 continue;
-            KeAcquireSpinLock(&CdLock, &OldIrql);
+            OldIrql = ExAcquireSpinLockShared(&CdLock);
             if (KeReadStateEvent(&Request->Done))
             {
-                KeReleaseSpinLock(&CdLock, OldIrql);
+                ExReleaseSpinLockShared(&CdLock, OldIrql);
+                break;
+            }
+            KeAcquireSpinLockAtDpcLevel(&Console->Lock);
+            if (KeReadStateEvent(&Request->Done))
+            {
+                KeReleaseSpinLockFromDpcLevel(&Console->Lock);
+                ExReleaseSpinLockShared(&CdLock, OldIrql);
                 break;
             }
             if (Request->Delivered)
@@ -2232,7 +2372,8 @@ CdFastIoDeviceControl(
                 RemoveEntryList(&Request->Entry);
                 CdFreeRequest(Request);
             }
-            KeReleaseSpinLock(&CdLock, OldIrql);
+            KeReleaseSpinLockFromDpcLevel(&Console->Lock);
+            ExReleaseSpinLockShared(&CdLock, OldIrql);
             Request = NULL;
             Status = STATUS_THREAD_IS_TERMINATING;
             break;
@@ -2264,9 +2405,9 @@ CdFastIoDeviceControl(
     if (Request)
         CdFreeRequest(Request);
 
-    KeAcquireSpinLock(&CdLock, &OldIrql);
-    CdSyncFileEvent(File);
-    KeReleaseSpinLock(&CdLock, OldIrql);
+    OldIrql = ExAcquireSpinLockShared(&CdLock);
+    CdUpdateFileEventShared(File, TRUE);
+    ExReleaseSpinLockShared(&CdLock, OldIrql);
 
     IoStatus->Status = Status;
     IoStatus->Information = Information;
@@ -2301,7 +2442,7 @@ DriverEntry(
 
     UNREFERENCED_PARAMETER(RegistryPath);
 
-    KeInitializeSpinLock(&CdLock);
+    CdLock = 0;
     InitializeListHead(&CdProcessList);
     for (Index = 0; Index < CD_PROCESS_BUCKETS; Index++)
         InitializeListHead(&CdProcessHash[Index]);
