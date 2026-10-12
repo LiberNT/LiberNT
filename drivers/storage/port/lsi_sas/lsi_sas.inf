@@ -29,6 +29,7 @@ DefaultDestDir = 12
 %DevDesc1068% = LSI_SAS_Inst, PCI\VEN_1000&DEV_0054
 %DevDesc1068E% = LSI_SAS_Inst, PCI\VEN_1000&DEV_0058
 %DevDesc1064E% = LSI_SAS_Inst, PCI\VEN_1000&DEV_0056
+%DevDesc1030% = LSI_SAS_Inst, PCI\VEN_1000&DEV_0030
 
 [ControlFlags]
 ExcludeFromSelect = *
@@ -76,6 +77,7 @@ DevDesc1064  = "LSI Adapter, SAS 3000 series, 4-port with 1064"
 DevDesc1068  = "LSI Adapter, SAS 3000 series, 8-port with 1068"
 DevDesc1068E = "LSI Adapter, SAS 3000 series, 8-port with 1068E"
 DevDesc1064E = "LSI Adapter, SAS 3000 series, 4-port with 1064E"
+DevDesc1030  = "LSI Adapter, Ultra320 SCSI 2000 series, w/1020/1030"
 
 SPSVCINST_ASSOCSERVICE = 0x00000002
 SERVICE_KERNEL_DRIVER  = 1

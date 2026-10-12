@@ -204,6 +204,13 @@ LsiHwFindAdapter(
     if (!LsiStartIoc(Device))
         return SP_RETURN_ERROR;
 
+    if (Device->PortType == MPI_PORTFACTS_PORTTYPE_SCSI)
+    {
+        StorPortSetAdapterBusType(Device, BusTypeScsi);
+        if (Device->PortMaxDevices != 0)
+            Device->TargetCount = min(Device->TargetCount, (ULONG)Device->PortMaxDevices);
+    }
+
     ConfigInfo->NumberOfBuses = (UCHAR)Device->BusCount;
     ConfigInfo->MaximumNumberOfTargets = (UCHAR)Device->TargetCount;
     ConfigInfo->MaximumNumberOfLogicalUnits = SCSI_MAXIMUM_LOGICAL_UNITS;
@@ -222,6 +229,59 @@ LsiHwFindAdapter(
 }
 
 static
+VOID
+NTAPI
+LsiHwTimer(
+    _In_ PVOID DeviceExtension)
+{
+    PLSI_DEVICE_EXTENSION Device = (PLSI_DEVICE_EXTENSION)DeviceExtension;
+    STOR_LOCK_HANDLE LockHandle;
+    BOOLEAN Rearm = TRUE;
+    ULONG Doorbell;
+
+    StorPortAcquireSpinLock(Device, InterruptLock, NULL, &LockHandle);
+    InterlockedExchange(&Device->WatchdogBusy, 1);
+    KeMemoryBarrier();
+    if (InterlockedCompareExchange(&Device->WatchdogActive, 0, 0) != 0)
+    {
+        Doorbell = LsiReadRegister(Device, MPI_DOORBELL_OFFSET);
+        if (Doorbell != MAXULONG && (Doorbell & MPI_IOC_STATE_MASK) == MPI_IOC_STATE_FAULT)
+        {
+            DPRINT1("lsi_sas: IOC fault code 0x%04lx, reinitializing the IOC\n", Doorbell & MPI_DOORBELL_DATA_MASK);
+            if (!LsiReinitializeIoc(Device))
+            {
+                DPRINT1("lsi_sas: IOC recovery failed, doorbell 0x%08lx\n", LsiReadRegister(Device, MPI_DOORBELL_OFFSET));
+                Rearm = FALSE;
+            }
+        }
+        if (Rearm)
+            StorPortNotification(RequestTimerCall, Device, LsiHwTimer, LSI_WATCHDOG_INTERVAL_US);
+    }
+    InterlockedExchange(&Device->WatchdogBusy, 0);
+    StorPortReleaseSpinLock(Device, &LockHandle);
+}
+
+static
+VOID
+LsiStartWatchdog(
+    _In_ PLSI_DEVICE_EXTENSION Device)
+{
+    InterlockedExchange(&Device->WatchdogActive, 1);
+    StorPortNotification(RequestTimerCall, Device, LsiHwTimer, LSI_WATCHDOG_INTERVAL_US);
+}
+
+static
+VOID
+LsiStopWatchdog(
+    _In_ PLSI_DEVICE_EXTENSION Device)
+{
+    InterlockedExchange(&Device->WatchdogActive, 0);
+    KeMemoryBarrier();
+    while (InterlockedCompareExchange(&Device->WatchdogBusy, 0, 0) != 0)
+        StorPortStallExecution(10);
+}
+
+static
 BOOLEAN
 NTAPI
 LsiHwInitialize(
@@ -234,6 +294,7 @@ LsiHwInitialize(
 
     Device->InterruptsEnabled = TRUE;
     LsiWriteRegister(Device, MPI_HOST_INTERRUPT_MASK_OFFSET, MPI_HIM_DIM);
+    LsiStartWatchdog(Device);
     return TRUE;
 }
 
@@ -315,6 +376,7 @@ LsiHwAdapterControl(
             return ScsiAdapterControlSuccess;
 
         case ScsiStopAdapter:
+            LsiStopWatchdog(Device);
             LsiStopIoc(Device);
             return ScsiAdapterControlSuccess;
 
@@ -323,6 +385,7 @@ LsiHwAdapterControl(
                 return ScsiAdapterControlUnsuccessful;
             Device->InterruptsEnabled = TRUE;
             LsiWriteRegister(Device, MPI_HOST_INTERRUPT_MASK_OFFSET, MPI_HIM_DIM);
+            LsiStartWatchdog(Device);
             return ScsiAdapterControlSuccess;
 
         default:

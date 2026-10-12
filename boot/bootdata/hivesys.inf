@@ -1964,6 +1964,7 @@ HKLM,"SYSTEM\CurrentControlSet\Services\LSI_SAS","ImagePath",0x00020000,"system3
 HKLM,"SYSTEM\CurrentControlSet\Services\LSI_SAS","Start",0x00010001,0x00000000
 HKLM,"SYSTEM\CurrentControlSet\Services\LSI_SAS","Type",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\LSI_SAS","Tag",0x00010001,0x00000007
+HKLM,"SYSTEM\CurrentControlSet\Services\LSI_SAS\Parameters","BusType",0x00010001,0x0000000A
 
 ; SD Bus driver (bus FDO on SD Host Controller, creates child PDOs for cards)
 HKLM,"SYSTEM\CurrentControlSet\Services\sdbus","ErrorControl",0x00010001,0x00000001

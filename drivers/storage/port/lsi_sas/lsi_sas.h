@@ -9,6 +9,7 @@
 
 #include <ntddk.h>
 #include <storport.h>
+#include <ntddstor.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -30,6 +31,7 @@
 #define LSI_DIAG_RESET_TIMEOUT_MS   5000
 #define LSI_PORT_ENABLE_TIMEOUT_MS  300000
 #define LSI_TASK_TIMEOUT_MS         30000
+#define LSI_WATCHDOG_INTERVAL_US    1000000
 
 #define LSI_SLOT_FREE               0
 #define LSI_SLOT_SCSI               1
@@ -73,10 +75,14 @@ typedef struct _LSI_DEVICE_EXTENSION
     UCHAR MaxDevices;
     UCHAR MaxBuses;
     USHORT PortSCSIID;
+    USHORT PortMaxDevices;
+    UCHAR PortType;
     BOOLEAN Operational;
     BOOLEAN InterruptsEnabled;
     BOOLEAN InternalTaskDone;
     BOOLEAN InternalTaskSucceeded;
+    volatile LONG WatchdogActive;
+    volatile LONG WatchdogBusy;
     LSI_SLOT Slots[LSI_MAX_SLOTS];
 } LSI_DEVICE_EXTENSION, *PLSI_DEVICE_EXTENSION;
 

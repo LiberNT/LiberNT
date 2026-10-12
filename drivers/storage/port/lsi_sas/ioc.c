@@ -300,6 +300,8 @@ LsiStartIoc(
         return FALSE;
     }
     Device->PortSCSIID = PortFacts.PortSCSIID;
+    Device->PortType = PortFacts.PortType;
+    Device->PortMaxDevices = PortFacts.MaxDevices;
 
     RtlZeroMemory(&Init, sizeof(Init));
     Init.WhoInit = MPI_WHOINIT_HOST_DRIVER;

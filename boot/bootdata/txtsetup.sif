@@ -34,6 +34,7 @@ PCI\VEN_1000&DEV_0050 = lsi_sas
 PCI\VEN_1000&DEV_0054 = lsi_sas
 PCI\VEN_1000&DEV_0056 = lsi_sas
 PCI\VEN_1000&DEV_0058 = lsi_sas
+PCI\VEN_1000&DEV_0030 = lsi_sas
 ;*PNP0600 = uniata
 USB\CLASS_09 = usbhub
 USB\ROOT_HUB = usbhub
