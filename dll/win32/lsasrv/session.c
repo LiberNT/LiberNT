@@ -69,7 +69,8 @@ LsapSetLogonSessionData(
     _In_ ULONG LogonType,
     _In_ PUNICODE_STRING UserName,
     _In_ PUNICODE_STRING LogonDomain,
-    _In_ PSID Sid)
+    _In_ PSID Sid,
+    _In_ ULONG SessionId)
 {
     NTSTATUS Status;
     PLSAP_LOGON_SESSION Session;
@@ -83,6 +84,8 @@ LsapSetLogonSessionData(
 
     TRACE("LogonType %lu\n", LogonType);
     Session->LogonType = LogonType;
+    Session->Session = SessionId;
+    NtQuerySystemTime(&Session->LogonTime);
 
     Status = RtlValidateUnicodeString(0, UserName);
     if (!NT_SUCCESS(Status) || UserName == NULL)
@@ -476,7 +479,7 @@ LsapGetLogonSessionData(IN OUT PLSA_API_MSG RequestMsg)
     }
 
     LocalSessionData->LogonType = Session->LogonType;
-    LocalSessionData->Session = 0;
+    LocalSessionData->Session = Session->Session;
 
     /* Sid */
     if (Session->Sid != NULL)

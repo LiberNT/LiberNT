@@ -1416,6 +1416,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
 
     PUNICODE_STRING UserName = NULL;
     PUNICODE_STRING LogonDomainName = NULL;
+    PROCESS_SESSION_INFORMATION ClientSession;
 //    UNICODE_STRING LogonServer;
 
 
@@ -1697,11 +1698,19 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
         LogonDomainName = AuthenticatingAuthority;
     }
 
+    ClientSession.SessionId = 0;
+    NtQueryInformationProcess(LogonContext->ClientProcessHandle,
+                              ProcessSessionInformation,
+                              &ClientSession,
+                              sizeof(ClientSession),
+                              NULL);
+
     Status = LsapSetLogonSessionData(&RequestMsg->LogonUser.Reply.LogonId,
                                      LogonType,
                                      UserName,
                                      LogonDomainName,
-                                     TokenInfo1->User.User.Sid);
+                                     TokenInfo1->User.User.Sid,
+                                     ClientSession.SessionId);
     if (!NT_SUCCESS(Status))
     {
         ERR("LsapSetLogonSessionData failed (Status 0x%08lx)\n", Status);
