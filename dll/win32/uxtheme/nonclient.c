@@ -26,6 +26,7 @@ static const WCHAR immersive_dark_mode_propW[] = L"ReactOS.Dwm.ImmersiveDarkMode
 #define CAPTION_BUTTON_HEIGHT_UNITS 32
 #define CAPTION_BUTTON_HOT_LIFT     24
 #define CAPTION_BUTTON_PRESSED_LIFT 14
+#define CAPTION_BUTTON_EDGE_UNITS   4
 
 static BOOL
 ThemeGetGlassKey(HWND hWnd, COLORREF *pcrKey)
@@ -869,6 +870,46 @@ ThemeDrawDarkCaptionButton(PDRAW_CONTEXT pcontext,
     DeleteObject(pen);
 }
 
+static VOID
+ThemeDrawCaptionGroupStart(PDRAW_CONTEXT pcontext, INT iPartId, INT iStateId, const RECT *prc)
+{
+    INT cx = prc->right - prc->left, cy = prc->bottom - prc->top, edge, i;
+    RECT rc = { 0, 0, cx, cy };
+    HBITMAP hbmp;
+    HGDIOBJ old;
+    HDC hdcMem;
+    SIZE size;
+
+    if (FAILED(GetThemePartSize(pcontext->theme, NULL, iPartId, 0, NULL, TS_MIN, &size)) || size.cx <= 0)
+        goto plain;
+    edge = MulDiv(CAPTION_BUTTON_EDGE_UNITS, cx, size.cx);
+    if (edge <= 0 || edge * 2 > cx)
+        goto plain;
+
+    hdcMem = CreateCompatibleDC(pcontext->hDC);
+    hbmp = hdcMem ? CreateCompatibleBitmap(pcontext->hDC, cx, cy) : NULL;
+    if (!hbmp)
+    {
+        if (hdcMem)
+            DeleteDC(hdcMem);
+        goto plain;
+    }
+    old = SelectObject(hdcMem, hbmp);
+    for (i = 0; i < cx; i++)
+        BitBlt(hdcMem, cx - 1 - i, 0, 1, cy, pcontext->hDC, prc->left + i, prc->top, SRCCOPY);
+    DrawThemeBackground(pcontext->theme, pcontext->hDC, iPartId, iStateId, prc, NULL);
+    DrawThemeBackground(pcontext->theme, hdcMem, iPartId, iStateId, &rc, NULL);
+    for (i = 0; i < edge; i++)
+        BitBlt(pcontext->hDC, prc->left + i, prc->top, 1, cy, hdcMem, cx - 1 - i, 0, SRCCOPY);
+    SelectObject(hdcMem, old);
+    DeleteObject(hbmp);
+    DeleteDC(hdcMem);
+    return;
+
+plain:
+    DrawThemeBackground(pcontext->theme, pcontext->hDC, iPartId, iStateId, prc, NULL);
+}
+
 static void
 ThemeDrawCaptionButton(PDRAW_CONTEXT pcontext,
                        RECT* prcCurrent,
@@ -938,6 +979,8 @@ ThemeDrawCaptionButton(PDRAW_CONTEXT pcontext,
     if (pcontext->DarkMode)
         ThemeDrawDarkCaptionButton(pcontext, buttonId, iStateId,
                                    &pwndData->rcCaptionButtons[buttonId]);
+    else if (iPartId == WP_CLOSEBUTTON && !(pcontext->wi.dwStyle & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX)))
+        ThemeDrawCaptionGroupStart(pcontext, iPartId, iStateId, &pwndData->rcCaptionButtons[buttonId]);
     else
         DrawThemeBackground(pcontext->theme, pcontext->hDC, iPartId, iStateId,
                             &pwndData->rcCaptionButtons[buttonId], NULL);
