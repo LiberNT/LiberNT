@@ -5767,6 +5767,8 @@ public:
     void DumpTrace();
     bool primary = false;
     bool composition = false;
+    HANDLE latency_semaphore = NULL;
+    UINT max_latency = 1;
     bool transport_valid = false;
     bool fullscreen_layout = false;
     bool fullscreen_mode = false;
@@ -5786,6 +5788,7 @@ public:
     }
     ~NativeSwapChain()
     {
+        if (latency_semaphore) CloseHandle(latency_semaphore);
         LeaveFullscreen();
         DrainPublishes();
         DumpTrace();
@@ -5981,9 +5984,31 @@ public:
         *width = desc.Width; *height = desc.Height;
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE SetMaximumFrameLatency(UINT) override { return DXGI_ERROR_INVALID_CALL; }
-    HRESULT STDMETHODCALLTYPE GetMaximumFrameLatency(UINT *) override { return DXGI_ERROR_INVALID_CALL; }
-    HANDLE STDMETHODCALLTYPE GetFrameLatencyWaitableObject() override { return NULL; }
+    HRESULT STDMETHODCALLTYPE SetMaximumFrameLatency(UINT latency) override
+    {
+        NativeLock guard(device);
+        if (!latency_semaphore || !latency || latency > DXGI_MAX_SWAP_CHAIN_BUFFERS) return DXGI_ERROR_INVALID_CALL;
+        if (latency > max_latency) ReleaseSemaphore(latency_semaphore, latency - max_latency, NULL);
+        max_latency = latency;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetMaximumFrameLatency(UINT *latency) override
+    {
+        NativeLock guard(device);
+        if (!latency_semaphore || !latency) return DXGI_ERROR_INVALID_CALL;
+        *latency = max_latency;
+        return S_OK;
+    }
+    HANDLE STDMETHODCALLTYPE GetFrameLatencyWaitableObject() override
+    {
+        NativeLock guard(device);
+        HANDLE handle = NULL;
+        if (latency_semaphore)
+            DuplicateHandle(GetCurrentProcess(), latency_semaphore, GetCurrentProcess(), &handle, 0, FALSE,
+                    DUPLICATE_SAME_ACCESS);
+        return handle;
+    }
+    void SignalFrameLatency();
     HRESULT STDMETHODCALLTYPE SetMatrixTransform(const DXGI_MATRIX_3X2_F *matrix) override
     {
         if (!composition) return DXGI_ERROR_INVALID_CALL;
@@ -6672,10 +6697,13 @@ static bool NativeDisplayFormat(DXGI_FORMAT format)
 HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
 {
     if (!NativeDisplayFormat(requested.Format)) return E_INVALIDARG;
-    if (requested.Flags & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT) return DXGI_ERROR_UNSUPPORTED;
     if (!requested.Width || !requested.Height || !requested.BufferCount || requested.BufferCount > 16
             || !requested.SampleDesc.Count || requested.Stereo) return DXGI_ERROR_INVALID_CALL;
     bool flip = requested.SwapEffect == DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL || requested.SwapEffect == DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    if ((requested.Flags & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT) && !flip) return DXGI_ERROR_INVALID_CALL;
+    if ((requested.Flags & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT) && !latency_semaphore
+            && !(latency_semaphore = CreateSemaphoreW(NULL, 1, LONG_MAX, NULL)))
+        return HRESULT_FROM_WIN32(GetLastError());
     bool multisampled = requested.SampleDesc.Count > 1;
     UINT quality_levels = 1;
     if (multisampled && (flip || primary || composition
@@ -6929,6 +6957,7 @@ HRESULT STDMETHODCALLTYPE NativeSwapChain::ResizeBuffers(UINT count, UINT width,
     requested.Width = width ? width : max(1l, client.right - client.left);
     requested.Height = height ? height : max(1l, client.bottom - client.top);
     if (format != DXGI_FORMAT_UNKNOWN) requested.Format = format;
+    if ((flags ^ desc.Flags) & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT) return E_INVALIDARG;
     requested.Flags = flags;
     return AllocateBuffers(requested);
 }
@@ -6940,6 +6969,7 @@ HRESULT STDMETHODCALLTYPE NativeSwapChain::Present1(UINT interval, UINT flags, c
     trace_submit = trace_poll = trace_sleeps = 0;
     HRESULT hr = PresentMeasured(interval, flags, parameters);
     ULONGLONG end = NativeTraceNow();
+    if (hr == S_OK && !(flags & DXGI_PRESENT_TEST)) SignalFrameLatency();
     if (hr == S_OK && !(flags & DXGI_PRESENT_TEST))
     {
         if (trace_count < ARRAYSIZE(trace_frames))
@@ -6958,6 +6988,46 @@ HRESULT STDMETHODCALLTYPE NativeSwapChain::Present1(UINT interval, UINT flags, c
         trace_previous = end;
     }
     return hr;
+}
+
+struct NativeLatencyWait
+{
+    HANDLE event;
+    HANDLE semaphore;
+    HANDLE wait;
+};
+
+static VOID CALLBACK NativeLatencyRetired(PVOID context, BOOLEAN)
+{
+    NativeLatencyWait *wait = static_cast<NativeLatencyWait *>(context);
+    ReleaseSemaphore(wait->semaphore, 1, NULL);
+    UnregisterWait(wait->wait);
+    CloseHandle(wait->event);
+    CloseHandle(wait->semaphore);
+    HeapFree(GetProcessHeap(), 0, wait);
+}
+
+void NativeSwapChain::SignalFrameLatency()
+{
+    NativeLock guard(device);
+    if (!latency_semaphore) return;
+    NativeLatencyWait *wait = static_cast<NativeLatencyWait *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*wait)));
+    if (wait && (wait->event = CreateEventW(NULL, FALSE, FALSE, NULL))
+            && DuplicateHandle(GetCurrentProcess(), latency_semaphore, GetCurrentProcess(), &wait->semaphore, 0, FALSE,
+                    DUPLICATE_SAME_ACCESS)
+            && RegisterWaitForSingleObject(&wait->wait, wait->event, NativeLatencyRetired, wait, INFINITE,
+                    WT_EXECUTEONLYONCE))
+    {
+        if (FAILED(device->EnqueueSetEvent(wait->event))) SetEvent(wait->event);
+        return;
+    }
+    ReleaseSemaphore(latency_semaphore, 1, NULL);
+    if (wait)
+    {
+        if (wait->event) CloseHandle(wait->event);
+        if (wait->semaphore) CloseHandle(wait->semaphore);
+        HeapFree(GetProcessHeap(), 0, wait);
+    }
 }
 
 void NativeSwapChain::DumpTrace()
