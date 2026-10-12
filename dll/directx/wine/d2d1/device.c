@@ -2153,9 +2153,23 @@ static D2D1_SIZE_U * STDMETHODCALLTYPE d2d_device_context_GetPixelSize(ID2D1Devi
 
 static UINT32 STDMETHODCALLTYPE d2d_device_context_GetMaximumBitmapSize(ID2D1DeviceContext6 *iface)
 {
+    struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
+
     TRACE("iface %p.\n", iface);
 
-    return D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+    switch (ID3D11Device1_GetFeatureLevel(context->d3d_device))
+    {
+        case D3D_FEATURE_LEVEL_9_1:
+        case D3D_FEATURE_LEVEL_9_2:
+            return D3D_FL9_1_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+        case D3D_FEATURE_LEVEL_9_3:
+            return D3D_FL9_3_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+        case D3D_FEATURE_LEVEL_10_0:
+        case D3D_FEATURE_LEVEL_10_1:
+            return D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+        default:
+            return D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+    }
 }
 
 static BOOL STDMETHODCALLTYPE d2d_device_context_IsSupported(ID2D1DeviceContext6 *iface,
