@@ -2995,6 +2995,12 @@ DxgkAcquirePagingDmaBuffer(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _Out_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer);
 
+NTSTATUS
+DxgkTakePagingDmaBufferAtLeast(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG Bytes,
+    _Out_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer);
+
 VOID
 DxgkQueueEngineKick(
     _In_ PDXGKRNL_ADAPTER Adapter);

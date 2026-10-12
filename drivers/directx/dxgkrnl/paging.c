@@ -362,19 +362,37 @@ DxgkpPagingWaitAllocationIdle(
 }
 
 static NTSTATUS
+DxgkpPagingAddApertureBuffer(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _In_ ULONG Bytes,
+    _Out_opt_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer);
+
+static NTSTATUS
 DxgkpPagingAllocateDmaBuffer(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ ULONG Bytes,
     _In_ BOOLEAN Grown,
     _Out_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer)
 {
+    NTSTATUS Status;
+
     if (InterlockedCompareExchange(&Adapter->PagingVirtualReady, 0, 0) != 0)
         return DxgkAcquirePagingDmaBuffer(Adapter, OutDmaBuffer);
     if (InterlockedCompareExchange(&Adapter->PagingApertureReady, 0, 0) != 0 &&
-        (!Grown || Bytes <= DxgkpPagingBufferBytes(Adapter)))
+        Grown && Bytes > DxgkpPagingBufferBytes(Adapter))
     {
-        NTSTATUS Status = DxgkAcquirePagingDmaBuffer(Adapter, OutDmaBuffer);
-
+        Status = DxgkTakePagingDmaBufferAtLeast(Adapter, Bytes, OutDmaBuffer);
+        if (NT_SUCCESS(Status))
+            return Status;
+        return DxgkpPagingAddApertureBuffer(Adapter,
+                                            ((PDXGKRNL_SEGMENT)Adapter->Segments)[0].PagingBufferSegmentId,
+                                            Bytes,
+                                            OutDmaBuffer);
+    }
+    while (InterlockedCompareExchange(&Adapter->PagingApertureReady, 0, 0) != 0)
+    {
+        Status = DxgkAcquirePagingDmaBuffer(Adapter, OutDmaBuffer);
         if (Status != STATUS_IO_TIMEOUT)
             return Status;
     }
@@ -643,6 +661,8 @@ DxgkPagingExecuteBatch(
     {
         BufferBytes = DXGKP_PAGING_MAX_BUFFER_BYTES;
     }
+    if (InterlockedCompareExchange(&Adapter->PagingApertureReady, 0, 0) != 0)
+        BufferBytes = DxgkpPagingBufferBytes(Adapter);
     Grown = BufferBytes > DxgkpPagingBufferBytes(Adapter);
 
     for (;;)
@@ -1556,7 +1576,8 @@ static NTSTATUS
 DxgkpPagingAddApertureBuffer(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ ULONG SegmentId,
-    _In_ ULONG Bytes)
+    _In_ ULONG Bytes,
+    _Out_opt_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer)
 {
     PDXGKRNL_SEGMENT Segment = &((PDXGKRNL_SEGMENT)Adapter->Segments)[SegmentId - 1];
     PDXGKRNL_DMA_BUFFER DmaBuffer;
@@ -1645,6 +1666,13 @@ DxgkpPagingAddApertureBuffer(
     DmaBuffer->PrivateDataUsed = 0;
     DmaBuffer->PagingPoolOwned = TRUE;
     InterlockedIncrement(&Adapter->PagingAperturePoolCount);
+    if (OutDmaBuffer != NULL)
+    {
+        if (DmaBuffer->PrivateData != NULL)
+            RtlZeroMemory(DmaBuffer->PrivateData, DmaBuffer->PrivateDataSize);
+        *OutDmaBuffer = DmaBuffer;
+        return STATUS_SUCCESS;
+    }
     DxgkFreeDmaBuffer(DmaBuffer);
     return STATUS_SUCCESS;
 }
@@ -1684,7 +1712,7 @@ DxgkPagingInitializeAperturePool(
     Bytes = DxgkpPagingBufferBytes(Adapter);
     for (Index = 0; Index < DXGKP_PAGING_APERTURE_BUFFERS; ++Index)
     {
-        Status = DxgkpPagingAddApertureBuffer(Adapter, SegmentId, Bytes);
+        Status = DxgkpPagingAddApertureBuffer(Adapter, SegmentId, Bytes, NULL);
         if (!NT_SUCCESS(Status))
         {
             DxgkpPagingDrainAperturePool(Adapter, TRUE);

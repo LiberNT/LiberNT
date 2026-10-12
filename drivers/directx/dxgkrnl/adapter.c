@@ -14263,6 +14263,44 @@ DxgkQueueEngineKick(
 }
 
 NTSTATUS
+DxgkTakePagingDmaBufferAtLeast(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG Bytes,
+    _Out_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer)
+{
+    PLIST_ENTRY Link;
+    PDXGKRNL_DMA_BUFFER DmaBuffer = NULL;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    *OutDmaBuffer = NULL;
+    KeAcquireSpinLock(&Adapter->PagingBufferPoolLock, &OldIrql);
+    for (Link = Adapter->PagingBufferPoolList.Flink; Link != &Adapter->PagingBufferPoolList; Link = Link->Flink)
+    {
+        PDXGKRNL_DMA_BUFFER Candidate = CONTAINING_RECORD(Link, DXGKRNL_DMA_BUFFER, CacheListEntry);
+
+        if (Candidate->Capacity >= Bytes)
+        {
+            RemoveEntryList(Link);
+            DmaBuffer = Candidate;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&Adapter->PagingBufferPoolLock, OldIrql);
+    if (DmaBuffer == NULL)
+        return STATUS_NO_MORE_ENTRIES;
+    InitializeListHead(&DmaBuffer->CacheListEntry);
+    DmaBuffer->SubmissionStartOffset = 0;
+    DmaBuffer->SubmissionEndOffset = 0;
+    DmaBuffer->PrivateDataUsed = 0;
+    if (DmaBuffer->PrivateData != NULL)
+        RtlZeroMemory(DmaBuffer->PrivateData, DmaBuffer->PrivateDataSize);
+    *OutDmaBuffer = DmaBuffer;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 DxgkAcquirePagingDmaBuffer(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _Out_ PDXGKRNL_DMA_BUFFER *OutDmaBuffer)
