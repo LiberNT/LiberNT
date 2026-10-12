@@ -470,6 +470,22 @@ static void write_char( struct screen_buffer *screen_buffer, WCHAR ch, RECT *upd
 }
 
 #ifdef __REACTOS__
+static LONG request_busy;
+static char *request_in, *request_out;
+static size_t request_in_size, request_out_size;
+
+static BOOL grow_request_buffer( char **buf, size_t *size, size_t len )
+{
+    char *new_buf;
+
+    if (*size >= len) return TRUE;
+    if (!(new_buf = malloc( len ))) return FALSE;
+    free( *buf );
+    *buf = new_buf;
+    *size = len;
+    return TRUE;
+}
+
 static NTSTATUS get_next_request( struct console *console, int signal, int read, NTSTATUS status,
                                   const void *data1, size_t size1, const void *data2, size_t size2,
                                   void *reply_buf, size_t reply_size, unsigned int *code,
@@ -480,13 +496,29 @@ static NTSTATUS get_next_request( struct console *console, int signal, int read,
     size_t in_len = sizeof(*params) + size1 + size2;
     size_t out_len = sizeof(*reply) + reply_size;
     IO_STATUS_BLOCK io;
+    BOOL cached;
     char *in, *out;
 
-    if (!(in = malloc( in_len ))) return STATUS_NO_MEMORY;
-    if (!(out = malloc( out_len )))
+    cached = !InterlockedExchange( &request_busy, 1 );
+    if (cached && (!grow_request_buffer( &request_in, &request_in_size, in_len ) ||
+                   !grow_request_buffer( &request_out, &request_out_size, out_len )))
     {
-        free( in );
-        return STATUS_NO_MEMORY;
+        InterlockedExchange( &request_busy, 0 );
+        cached = FALSE;
+    }
+    if (cached)
+    {
+        in = request_in;
+        out = request_out;
+    }
+    else
+    {
+        if (!(in = malloc( in_len ))) return STATUS_NO_MEMORY;
+        if (!(out = malloc( out_len )))
+        {
+            free( in );
+            return STATUS_NO_MEMORY;
+        }
     }
     params = (CONDRV_NEXT_REQUEST_PARAMS *)in;
     params->Signal = signal;
@@ -512,8 +544,15 @@ static NTSTATUS get_next_request( struct console *console, int signal, int read,
             if (reply_buf) memcpy( reply_buf, out + sizeof(*reply), io.Information - sizeof(*reply) );
         }
     }
-    free( in );
-    free( out );
+    if (cached)
+    {
+        InterlockedExchange( &request_busy, 0 );
+    }
+    else
+    {
+        free( in );
+        free( out );
+    }
     return status;
 }
 #endif

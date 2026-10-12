@@ -21,6 +21,7 @@
 #define IOCTL_CONDRV_FLUSH                 CTL_CODE(FILE_DEVICE_CONSOLE, 21, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_CONDRV_GET_PROCESS_LIST      CTL_CODE(FILE_DEVICE_CONSOLE, 23, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_CONDRV_READ_CONSOLE_CONTROL  CTL_CODE(FILE_DEVICE_CONSOLE, 24, METHOD_BUFFERED, FILE_READ_ACCESS)
+#define IOCTL_CONDRV_WRITE_CONSOLE         CTL_CODE(FILE_DEVICE_CONSOLE, 30, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 #define IOCTL_CONDRV_WRITE_FILE            CTL_CODE(FILE_DEVICE_CONSOLE, 31, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 #define IOCTL_CONDRV_ACTIVATE              CTL_CODE(FILE_DEVICE_CONSOLE, 36, METHOD_BUFFERED, FILE_WRITE_ACCESS)
 #define IOCTL_CONDRV_BIND_PID              CTL_CODE(FILE_DEVICE_CONSOLE, 51, METHOD_BUFFERED, FILE_ANY_ACCESS)
@@ -29,6 +30,7 @@
 #define IOCTL_CONDRV_CLOSE_OUTPUT          CTL_CODE(FILE_DEVICE_CONSOLE, 91, METHOD_BUFFERED, 0)
 
 #define CD_ATTACH_PARENT_PROCESS ((ULONG)-1)
+#define CD_WRITE_BEHIND_LIMIT    (1024 * 1024)
 #define CD_CTRL_C_EVENT        0
 #define CD_CTRL_BREAK_EVENT    1
 #define CD_CTRL_SHUTDOWN_EVENT 6
@@ -95,6 +97,7 @@ struct _CD_SERVER
     LIST_ENTRY Queue;
     LIST_ENTRY ReadQueue;
     BOOLEAN Busy;
+    ULONG PendingBytes;
     LONG ScratchBusy;
     ULONG ScratchSize;
     PUCHAR Scratch;
@@ -124,6 +127,7 @@ typedef struct _CD_REQUEST
     BOOLEAN Delivered;
     BOOLEAN Fast;
     BOOLEAN Abandoned;
+    BOOLEAN Async;
     NTSTATUS Status;
     ULONG_PTR Information;
     PVOID OutBuffer;
@@ -417,21 +421,39 @@ CdDeferProcess(
 
 static
 VOID
+CdDereferenceConsole(
+    _In_ PCD_CONSOLE Console,
+    _Inout_ PCD_DEFERRED Deferred);
+
+static
+VOID
 CdDisconnectServer(
     _In_ PCD_SERVER Server,
     _Inout_ PCD_DEFERRED Deferred)
 {
+    PCD_CONSOLE Console = Server->Console;
+    ULONG Pending = 0;
+
     while (!IsListEmpty(&Server->Queue))
-        CdAbortRequest(CONTAINING_RECORD(RemoveHeadList(&Server->Queue), CD_REQUEST, Entry), Deferred);
+    {
+        PCD_REQUEST Request = CONTAINING_RECORD(RemoveHeadList(&Server->Queue), CD_REQUEST, Entry);
+
+        if (Request->Async && !Request->Delivered)
+            Pending++;
+        CdAbortRequest(Request, Deferred);
+    }
     while (!IsListEmpty(&Server->ReadQueue))
         CdAbortRequest(CONTAINING_RECORD(RemoveHeadList(&Server->ReadQueue), CD_REQUEST, Entry), Deferred);
     Server->Busy = FALSE;
-    if (Server->Console)
+    Server->PendingBytes = 0;
+    if (Console)
     {
-        Server->Console->Server = NULL;
+        Console->Server = NULL;
         Server->Console = NULL;
     }
     CdUpdateServerEvent(Server);
+    while (Console && Pending--)
+        CdDereferenceConsole(Console, Deferred);
 }
 
 static
@@ -697,6 +719,24 @@ CdCancelIrp(
     Irp->IoStatus.Status = STATUS_CANCELLED;
     Irp->IoStatus.Information = 0;
     CdFinishIrp(Irp);
+}
+
+static
+BOOLEAN
+CdQueueWriteBehind(
+    _In_ PCD_SERVER Server,
+    _In_ PCD_REQUEST Request)
+{
+    ULONG Cost = sizeof(*Request) + Request->InSize;
+
+    if (!Server->Console || Request->InSize > CD_WRITE_BEHIND_LIMIT || Cost > CD_WRITE_BEHIND_LIMIT - Server->PendingBytes)
+        return FALSE;
+    Request->Async = TRUE;
+    Server->PendingBytes += Cost;
+    Server->Console->RefCount++;
+    InsertTailList(&Server->Queue, &Request->Entry);
+    CdUpdateServerEvent(Server);
+    return TRUE;
 }
 
 static
@@ -1025,6 +1065,8 @@ CdServerGetNext(
     CONDRV_NEXT_REQUEST_PARAMS Params;
     CONDRV_NEXT_REQUEST_REPLY Reply;
     PCD_REQUEST Request = NULL;
+    PCD_CONSOLE Release = NULL;
+    ULONG Releases = 0;
     CD_DEFERRED Deferred;
     KIRQL OldIrql;
 
@@ -1117,6 +1159,31 @@ CdServerGetNext(
             *Information = sizeof(Reply) + Request->InSize;
             Request->InData = NULL;
             Request->Delivered = TRUE;
+            if (Request->Async)
+            {
+                PLIST_ENTRY Entry = Request->Entry.Flink;
+
+                Server->PendingBytes -= sizeof(*Request) + Request->InSize;
+                Release = Server->Console;
+                Releases = 1;
+                while (Entry != &Server->Queue)
+                {
+                    PCD_REQUEST Next = CONTAINING_RECORD(Entry, CD_REQUEST, Entry);
+
+                    if (!Next->Async || Next->Code != Request->Code || Next->Output != Request->Output ||
+                        Next->InSize > OutLength - *Information)
+                    {
+                        break;
+                    }
+                    RtlCopyMemory(Buffer + *Information, Next->InData, Next->InSize);
+                    *Information += Next->InSize;
+                    Server->PendingBytes -= sizeof(*Next) + Next->InSize;
+                    Entry = Entry->Flink;
+                    RemoveEntryList(&Next->Entry);
+                    CdFreeRequest(Next);
+                    Releases++;
+                }
+            }
             if (CdIsBlockingRead(Request->Code))
             {
                 RemoveEntryList(&Request->Entry);
@@ -1139,6 +1206,8 @@ CdServerGetNext(
     }
 
     CdUpdateServerEvent(Server);
+    while (Releases--)
+        CdDereferenceConsole(Release, &Deferred);
     KeReleaseSpinLock(&CdLock, OldIrql);
 
     RtlCopyMemory(Buffer, &Reply, sizeof(Reply));
@@ -1768,6 +1837,8 @@ CdDispatchWrite(
 {
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     PCD_FILE File = Stack->FileObject->FsContext;
+    ULONG Length = Stack->Parameters.Write.Length;
+    PCD_REQUEST Behind = NULL;
     PCD_SCREEN Screen;
     NTSTATUS Status;
     KIRQL OldIrql;
@@ -1778,15 +1849,45 @@ CdDispatchWrite(
     if (!File || (File->Type != CdFileScreen && File->Type != CdFileOutput))
         return CdCompleteDispatch(Irp, STATUS_OBJECT_TYPE_MISMATCH);
 
+    if (Length && Length <= CD_WRITE_BEHIND_LIMIT)
+    {
+        Behind = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Behind) + Length, CD_TAG);
+        if (Behind)
+        {
+            RtlZeroMemory(Behind, sizeof(*Behind));
+            Behind->Code = IOCTL_CONDRV_WRITE_FILE;
+            Behind->InData = Behind + 1;
+            Behind->InSize = Length;
+            RtlCopyMemory(Behind->InData, Irp->AssociatedIrp.SystemBuffer, Length);
+        }
+    }
+
     KeAcquireSpinLock(&CdLock, &OldIrql);
     Screen = CdResolveOutput(File);
     if (!Screen || !Screen->Console || !Screen->Console->Server)
+    {
         Status = STATUS_INVALID_HANDLE;
+    }
     else
-        Status = CdQueueIrp(Screen->Console->Server, File, Irp, IOCTL_CONDRV_WRITE_FILE, Screen->Id,
-                            Irp->AssociatedIrp.SystemBuffer, Stack->Parameters.Write.Length, 0);
+    {
+        if (Behind)
+            Behind->Output = Screen->Id;
+        if (Behind && CdQueueWriteBehind(Screen->Console->Server, Behind))
+        {
+            Behind = NULL;
+            Irp->IoStatus.Information = Length;
+            Status = STATUS_SUCCESS;
+        }
+        else
+        {
+            Status = CdQueueIrp(Screen->Console->Server, File, Irp, IOCTL_CONDRV_WRITE_FILE, Screen->Id,
+                                Irp->AssociatedIrp.SystemBuffer, Length, 0);
+        }
+    }
     CdUpdateFileEvent(File);
     KeReleaseSpinLock(&CdLock, OldIrql);
+    if (Behind)
+        ExFreePoolWithTag(Behind, CD_TAG);
     return CdCompleteDispatch(Irp, Status);
 }
 
@@ -2061,15 +2162,23 @@ CdFastIoDeviceControl(
 
         if (Server)
         {
-            Request->Fast = TRUE;
             Request->Code = IoControlCode;
             Request->Output = Output;
             Request->InSize = InputBufferLength;
             Request->OutSize = OutputBufferLength;
-            KeInitializeEvent(&Request->Done, NotificationEvent, FALSE);
-            InsertTailList(&Server->Queue, &Request->Entry);
-            CdUpdateServerEvent(Server);
-            Queued = TRUE;
+            if ((IoControlCode == IOCTL_CONDRV_WRITE_CONSOLE || IoControlCode == IOCTL_CONDRV_WRITE_FILE) &&
+                InputBufferLength && !OutputBufferLength && CdQueueWriteBehind(Server, Request))
+            {
+                Request = NULL;
+            }
+            else
+            {
+                Request->Fast = TRUE;
+                KeInitializeEvent(&Request->Done, NotificationEvent, FALSE);
+                InsertTailList(&Server->Queue, &Request->Entry);
+                CdUpdateServerEvent(Server);
+                Queued = TRUE;
+            }
         }
         KeReleaseSpinLock(&CdLock, OldIrql);
     }
