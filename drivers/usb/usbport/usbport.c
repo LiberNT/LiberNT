@@ -912,8 +912,10 @@ USBPORT_MiniportInterrupts(IN PDEVICE_OBJECT FdoDevice,
 
     IsLock = (Packet->MiniPortFlags & USB_MINIPORT_FLAGS_NOT_LOCK_INT) == 0;
 
+    KeAcquireSpinLock(&FdoExtension->MiniportInterruptsSpinLock, &OldIrql);
+
     if (IsLock)
-        KeAcquireSpinLock(&FdoExtension->MiniportSpinLock, &OldIrql);
+        KeAcquireSpinLockAtDpcLevel(&FdoExtension->MiniportSpinLock);
 
     if (IsEnable)
     {
@@ -927,7 +929,9 @@ USBPORT_MiniportInterrupts(IN PDEVICE_OBJECT FdoDevice,
     }
 
     if (IsLock)
-        KeReleaseSpinLock(&FdoExtension->MiniportSpinLock, OldIrql);
+        KeReleaseSpinLockFromDpcLevel(&FdoExtension->MiniportSpinLock);
+
+    KeReleaseSpinLock(&FdoExtension->MiniportInterruptsSpinLock, OldIrql);
 }
 
 static BOOLEAN
