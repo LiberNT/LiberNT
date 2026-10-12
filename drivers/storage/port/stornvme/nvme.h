@@ -30,6 +30,8 @@
 #define NVME_CAP_HIGH_MPSMIN(High)  (((High) >> 16) & 0xF)
 #define NVME_CAP_HIGH_MPSMAX(High)  (((High) >> 20) & 0xF)
 
+#define NVME_VERSION(Major, Minor)  (((Major) << 16) | ((Minor) << 8))
+
 #define NVME_CC_EN          0x00000001
 #define NVME_CC_CSS_NVM     0x00000000
 #define NVME_CC_SHN_NORMAL  0x00004000

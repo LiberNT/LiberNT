@@ -134,6 +134,7 @@ NvmeFindAdapter(_In_ PVOID DeviceExtension,
 
     CapLow = NvmeReadRegister(Device, NVME_REG_CAP);
     CapHigh = NvmeReadRegister(Device, NVME_REG_CAP + 4);
+    Device->Version = NvmeReadRegister(Device, NVME_REG_VS);
     Device->DoorbellStride = 4 << NVME_CAP_HIGH_DSTRD(CapHigh);
     if ((NVME_CAP_HIGH_CSS(CapHigh) & 1) == 0 ||
         NVME_CAP_HIGH_MPSMIN(CapHigh) > PAGE_SHIFT - 12 ||

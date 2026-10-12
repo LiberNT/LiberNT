@@ -109,6 +109,7 @@ typedef struct _NVME_NAMESPACE
 typedef struct _NVME_DEVICE_EXTENSION
 {
     PUCHAR Bar0;
+    ULONG Version;
     ULONG DoorbellStride;
     ULONG TimeoutMilliseconds;
     ULONG SystemIoBusNumber;
