@@ -8,7 +8,6 @@
 #include <freeldr.h>
 
 #include <debug.h>
-DBG_DEFAULT_CHANNEL(HWDETECT);
 
 PPPC_STAGE0_INFO OfwStage0Info;
 OFW_HANDLE OfwStdin;
