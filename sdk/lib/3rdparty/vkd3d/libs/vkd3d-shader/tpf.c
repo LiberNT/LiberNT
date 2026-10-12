@@ -3416,6 +3416,7 @@ struct sm4_instruction
 
     struct vsir_src_operand srcs[5];
     unsigned int src_count;
+    bool select_component;
 
     unsigned int byte_stride;
 
@@ -3543,13 +3544,14 @@ static void sm4_write_dst_register(const struct tpf_compiler *tpf, const struct 
         sm4_write_register_index(tpf, &dst->reg, j);
 }
 
-static void sm4_write_src_register(struct tpf_compiler *tpf, const struct vsir_src_operand *src)
+static void sm4_write_src_register(struct tpf_compiler *tpf, const struct vsir_src_operand *src,
+        enum vkd3d_sm4_swizzle_type swizzle_type)
 {
     struct vkd3d_bytecode_buffer *buffer = tpf->buffer;
     uint32_t token = 0, mod_token = 0;
     unsigned int j;
 
-    token = sm4_encode_register(tpf, &src->reg, VKD3D_SM4_SWIZZLE_DEFAULT, swizzle_to_sm4(src->swizzle));
+    token = sm4_encode_register(tpf, &src->reg, swizzle_type, swizzle_to_sm4(src->swizzle));
 
     switch (src->modifiers)
     {
@@ -3674,7 +3676,8 @@ static void write_sm4_instruction(struct tpf_compiler *tpf, const struct sm4_ins
         sm4_write_dst_register(tpf, &instr->dsts[i]);
 
     for (i = 0; i < instr->src_count; ++i)
-        sm4_write_src_register(tpf, &instr->srcs[i]);
+        sm4_write_src_register(tpf, &instr->srcs[i],
+                instr->select_component ? VKD3D_SM4_SWIZZLE_SCALAR : VKD3D_SM4_SWIZZLE_DEFAULT);
 
     if (instr->byte_stride)
         put_u32(buffer, instr->byte_stride);
@@ -4179,6 +4182,7 @@ static void tpf_simple_instruction(struct tpf_compiler *tpf, const struct vkd3d_
     {
         if (ins->flags == VKD3D_SHADER_CONDITIONAL_OP_NZ)
             instr.extra_bits = VKD3D_SM4_CONDITIONAL_NZ;
+        instr.select_component = true;
     }
 
     write_sm4_instruction(tpf, &instr);
