@@ -493,7 +493,7 @@ NTAPI
 InbvNotifyDisplayOwnershipLost(
     _In_ INBV_RESET_DISPLAY_PARAMETERS Callback)
 {
-    InbvGopSpinnerStop();
+    InbvGopLogoStop();
 
     /*
      * Dim the boot screen out before handing the framebuffer over, so the

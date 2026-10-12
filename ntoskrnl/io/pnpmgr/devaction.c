@@ -2074,6 +2074,7 @@ PiStartDeviceFinal(
     IopQueueTargetDeviceEvent(&GUID_DEVICE_ARRIVAL, &DeviceNode->InstancePath);
 
     PiSetDevNodeState(DeviceNode, DeviceNodeStarted);
+    InbvIndicateProgress();
     PopFxNotifyDeviceStarted(DeviceNode->PhysicalDeviceObject);
 
     /* A started dock device means the machine has docked: the hardware

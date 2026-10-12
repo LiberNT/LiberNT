@@ -264,6 +264,8 @@ FinalizeBootLogo(VOID)
      * display driver takes the framebuffer over and InbvNotifyDisplayOwnershipLost
      * fades it out.
      */
+    InbvGopLogoComplete();
+
     InbvAcquireLock();
     if (!InbvBootFadeEnabled && InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
     {

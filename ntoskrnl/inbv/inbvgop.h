@@ -27,7 +27,11 @@ InbvQueryBgrtInfo(
 
 VOID
 NTAPI
-InbvGopSpinnerStop(VOID);
+InbvGopLogoComplete(VOID);
+
+VOID
+NTAPI
+InbvGopLogoStop(VOID);
 
 #ifdef __cplusplus
 }

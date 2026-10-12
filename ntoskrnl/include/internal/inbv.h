@@ -99,6 +99,10 @@ InbvScreenToBufferBlt(
     _In_ ULONG Stride
 );
 
+VOID
+NTAPI
+InbvIndicateProgress(VOID);
+
 //
 // Headless Terminal Support Functions
 //
