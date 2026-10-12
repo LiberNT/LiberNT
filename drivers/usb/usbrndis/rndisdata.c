@@ -244,28 +244,6 @@ RndisBuildNcmNtbMulti(
 }
 
 /*
- * RndisBuildNcmNtb
- *
- * Build a CDC-NCM NTB (Network Transfer Block) containing a single Ethernet frame.
- * This is a convenience wrapper around RndisBuildNcmNtbMulti for single-datagram case.
- */
-static
-ULONG
-RndisBuildNcmNtb(
-    IN PRNDIS_ADAPTER Adapter,
-    IN PUCHAR EthernetData,
-    IN ULONG EthernetLength,
-    OUT PUCHAR OutputBuffer)
-{
-    NCM_TX_DATAGRAM Datagram;
-
-    Datagram.Data = EthernetData;
-    Datagram.Length = EthernetLength;
-
-    return RndisBuildNcmNtbMulti(Adapter, &Datagram, 1, OutputBuffer);
-}
-
-/*
  * RndisBuildPacketMessage
  *
  * Wrap an Ethernet frame in an RNDIS_PACKET_MSG header.
@@ -344,7 +322,6 @@ RndisIndicateReceiveNblEx(
     IN PRNDIS_TCPIP_CSUM_INFO ChecksumInfo OPTIONAL)
 {
     PNET_BUFFER_LIST Nbl;
-    PNET_BUFFER Nb;
     PMDL Mdl;
     PUCHAR DataCopy;
 
@@ -885,7 +862,6 @@ RndisSendNetBufferListsInternal(
     PVOID VirtualAddress;
     ULONG DataLength;
     ULONG DataOffset;
-    ULONG PacketLength;
     ULONG TotalLength;
     NTSTATUS Status;
     BOOLEAN DispatchLevel;
@@ -1605,7 +1581,6 @@ RndisReturnNetBufferLists(
     _In_ PNET_BUFFER_LIST NetBufferLists,
     _In_ ULONG ReturnFlags)
 {
-    PRNDIS_ADAPTER Adapter = (PRNDIS_ADAPTER)MiniportAdapterContext;
     PNET_BUFFER_LIST CurrentNbl;
     PNET_BUFFER_LIST NextNbl;
     PNET_BUFFER Nb;

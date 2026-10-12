@@ -66,14 +66,14 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(metafile);
 
-#include "pshpack1.h"
+#pragma pack(push, 1)
 typedef struct
 {
     DWORD dw1, dw2, dw3;
     WORD w4;
     CHAR filename[0x100];
 } METAHEADERDISK;
-#include "poppack.h"
+#pragma pack(pop)
 
 
 /******************************************************************

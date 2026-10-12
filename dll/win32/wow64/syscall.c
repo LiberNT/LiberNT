@@ -217,8 +217,10 @@ static BOOLEAN  (WINAPI *pBTCpuIsProcessorFeaturePresent)(UINT);
 static void     (WINAPI *pBTCpuProcessInit)(void);
 static NTSTATUS (WINAPI *pBTCpuSetContext)(HANDLE,HANDLE,void *,void *);
 static void     (WINAPI *pBTCpuThreadInit)(void);
-static void     (WINAPI *pBTCpuSimulate)(void) __attribute__((used));
+void     (WINAPI *pBTCpuSimulate)(void) = NULL;
+#ifndef __REACTOS__
 static void *   (WINAPI *p__wine_get_unix_opcode)(void);
+#endif
 static void *   (WINAPI *pKiRaiseUserExceptionDispatcher)(void);
 void     (WINAPI *pBTCpuFlushInstructionCache2)( const void *, SIZE_T ) = NULL;
 void     (WINAPI *pBTCpuFlushInstructionCacheHeavy)( const void *, SIZE_T ) = NULL;
@@ -1182,8 +1184,9 @@ static DWORD WINAPI process_init( RTL_RUN_ONCE *once, void *param, void **contex
     GET_PTR( BTCpuThreadTerm );
 #ifdef __REACTOS__
     GET_PTR( BTCpuSuspendLocalThread );
-#endif
+#else
     GET_PTR( __wine_get_unix_opcode );
+#endif
 
     module = load_64bit_module( L"wow64win.dll" );
     GET_PTR( sdwhwin32 );

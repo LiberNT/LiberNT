@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef union _SCSI_SENSE_CODE
 {
@@ -84,7 +84,7 @@ typedef struct _MODE_CONTROL_EXTENSION_PAGE
 
 C_ASSERT(sizeof(MODE_CONTROL_EXTENSION_PAGE) == 32);
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define SCSI_ADSENSE_ADDRESS_MARK_NOT_FOUND_FOR_DATA_FIELD  0x13
 

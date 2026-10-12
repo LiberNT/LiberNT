@@ -7,8 +7,6 @@
 
 #include "msctfime.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(msctfime);
-
 /***********************************************************************/
 
 UINT WM_MSIME_SERVICE = 0;

@@ -667,7 +667,7 @@ K1ButtonStop(_In_ PK1XPMIC_BUTTON_EXTENSION Button)
 
     if (Button->InterfaceName.Buffer)
     {
-        IoSetDeviceInterfaceState(&Button->InterfaceName, FALSE);
+        (VOID)IoSetDeviceInterfaceState(&Button->InterfaceName, FALSE);
         RtlFreeUnicodeString(&Button->InterfaceName);
     }
     if (Button->Started && Parent)

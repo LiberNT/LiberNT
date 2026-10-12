@@ -8,8 +8,6 @@
 #include "precomp.h"
 #include <exdispid.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 static const GUID LIBID_ShellWindowsTypeLib = { 0xeab22ac0, 0x30c1, 0x11cf, { 0xa7, 0xeb, 0x00, 0x00, 0xc0, 0x5b, 0xae, 0x0b } };
 
 class CVariantCopyPolicy

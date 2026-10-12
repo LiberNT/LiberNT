@@ -157,7 +157,7 @@ IoGetCurrentIrpStackLocation(PIRP Irp)
 
 /* ACPI DEFINITIONS ***********************************************************/
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _IDE_ACPI_TIMING_MODE_BLOCK
 {
     struct
@@ -168,7 +168,7 @@ typedef struct _IDE_ACPI_TIMING_MODE_BLOCK
 
     ULONG ModeFlags;
 } IDE_ACPI_TIMING_MODE_BLOCK, *PIDE_ACPI_TIMING_MODE_BLOCK;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define STM_ID_BLOCK_SIZE    512
 

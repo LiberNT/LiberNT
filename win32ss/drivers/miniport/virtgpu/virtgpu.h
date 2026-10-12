@@ -137,7 +137,7 @@ typedef enum _VIRTGPU_FORMAT
     VIRTGPU_FORMAT_R8G8B8X8_UNORM = 134
 } VIRTGPU_FORMAT;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VIRTGPU_CTRL_HDR
 {
     ULONG Type;
@@ -411,7 +411,7 @@ typedef struct _VIRTGPU_UPDATE_CURSOR
     ULONG HotY;
     ULONG Padding;
 } VIRTGPU_UPDATE_CURSOR, *PVIRTGPU_UPDATE_CURSOR;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(sizeof(VIRTGPU_CTRL_HDR) == 24);
 C_ASSERT(sizeof(VIRTGPU_MEM_ENTRY) == 16);

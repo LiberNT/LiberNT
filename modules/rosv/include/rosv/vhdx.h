@@ -180,7 +180,7 @@ typedef struct _ROSV_VM ROSV_VM, *PROSV_VM;
 /* On-disk structures (packed, little-endian)                                   */
 /* ========================================================================== */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /* --- File Type Identifier (offset 0, 64KB) --- */
 
@@ -325,7 +325,7 @@ typedef struct _VHDX_LOG_DATA_SECTOR {
 
 C_ASSERT(sizeof(VHDX_LOG_DATA_SECTOR) == 4096);
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* ========================================================================== */
 /* Disk backend type                                                           */

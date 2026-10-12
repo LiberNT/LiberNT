@@ -44,7 +44,7 @@ static UNICODE_STRING AppCompatCacheValue = RTL_CONSTANT_STRING(L"AppCompatCache
 #define INVALID_HANDLE_VALUE (HANDLE)(-1)
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct SHIM_PERSISTENT_CACHE_HEADER_52
 {
@@ -60,7 +60,7 @@ typedef struct SHIM_PERSISTENT_CACHE_ENTRY_52
     LARGE_INTEGER FileSize;
 } SHIM_PERSISTENT_CACHE_ENTRY_52, *PSHIM_PERSISTENT_CACHE_ENTRY_52;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define CACHE_MAGIC_NT_52 0xbadc0ffe
 #define CACHE_HEADER_SIZE_NT_52 0x8

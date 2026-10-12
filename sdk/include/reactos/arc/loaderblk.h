@@ -13,7 +13,7 @@
 #define SMBIOS3_TABLE_GUID \
     { 0xf2fd1544, 0x9794, 0x4a2c, { 0x99, 0x2e, 0xe5, 0xbb, 0xcf, 0x20, 0xe3, 0x94 } }
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _SMBIOS_ENTRY_POINT
 {
@@ -67,7 +67,7 @@ typedef struct _SMBIOS_SYSTEM_INFO
     UCHAR Family;
 } SMBIOS_SYSTEM_INFO, *PSMBIOS_SYSTEM_INFO;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _SMBIOS_BIOS_DATA
 {

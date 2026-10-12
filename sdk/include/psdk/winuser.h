@@ -3203,7 +3203,7 @@ typedef struct tagDELETEITEMSTRUCT {
 	ULONG_PTR itemData;
 } DELETEITEMSTRUCT,*PDELETEITEMSTRUCT,*LPDELETEITEMSTRUCT;
 
-#include <pshpack2.h>
+#pragma pack(push, 2)
 typedef struct {
 	DWORD style;
 	DWORD dwExtendedStyle;
@@ -3238,7 +3238,7 @@ typedef LPCDLGTEMPLATEW LPCDLGTEMPLATE;
 #else
 typedef LPCDLGTEMPLATEA LPCDLGTEMPLATE;
 #endif // UNICODE
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct tagDRAWITEMSTRUCT {
 	UINT CtlType;

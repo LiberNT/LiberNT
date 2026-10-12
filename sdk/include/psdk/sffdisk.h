@@ -106,7 +106,7 @@ typedef enum _SFFDISK_PARTITION_ACCESS {
 #define EMMC_GENERAL_PURPOSE_PARTITION_3 6
 #define EMMC_GENERAL_PURPOSE_PARTITION_4 7
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _SFFDISK_DEVICE_RPMB_DATA_FRAME {
     UCHAR Stuff[196];
@@ -120,7 +120,7 @@ typedef struct _SFFDISK_DEVICE_RPMB_DATA_FRAME {
     UCHAR RequestOrResponseType[2];
 } SFFDISK_DEVICE_RPMB_DATA_FRAME, *PSFFDISK_DEVICE_RPMB_DATA_FRAME;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _SFFDISK_DEVICE_PARTITION_ACCESS_DATA {
     ULONG Size;

@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #define BMREQUEST_HOST_TO_DEVICE          0
 #define BMREQUEST_DEVICE_TO_HOST          1
@@ -223,7 +223,7 @@ typedef struct _USB_INTERFACE_POWER_DESCRIPTOR {
   USHORT TransitionTimeFromD3;
 } USB_INTERFACE_POWER_DESCRIPTOR, *PUSB_INTERFACE_POWER_DESCRIPTOR;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #ifdef __cplusplus
 }

@@ -54,12 +54,20 @@ static DECLSPEC_ALIGN(KDB_STACK_ALIGN) CHAR KdbStack[KDB_STACK_SIZE];
 static ULONG KdbBreakPointCount = 0;  /* Number of used breakpoints in the array */
 static KDB_BREAKPOINT KdbBreakPoints[KDB_MAXIMUM_BREAKPOINT_COUNT] = {{0}};  /* Breakpoint array */
 static ULONG KdbSwBreakPointCount = 0;  /* Number of enabled software breakpoints */
+#if !defined(_M_RISCV64)
 static ULONG KdbHwBreakPointCount = 0;  /* Number of enabled hardware breakpoints */
+#endif
 static PKDB_BREAKPOINT KdbSwBreakPoints[KDB_MAXIMUM_SW_BREAKPOINT_COUNT]; /* Enabled software breakpoints, orderless */
+#if !defined(_M_RISCV64)
 static PKDB_BREAKPOINT KdbHwBreakPoints[KDB_MAXIMUM_HW_BREAKPOINT_COUNT]; /* Enabled hardware breakpoints, orderless */
+#endif
+#if !defined(_M_ARM64)
 static PKDB_BREAKPOINT KdbBreakPointToReenable = NULL; /* Set to a breakpoint struct when single stepping after
                                                           a software breakpoint was hit, to reenable it */
+#endif
+#if !defined(_M_ARM64) && !defined(_M_RISCV64)
 static BOOLEAN KdbpEvenThoughWeHaveABreakPointToReenableWeAlsoHaveARealSingleStep;
+#endif
 LONG KdbLastBreakPointNr = -1;  /* Index of the breakpoint which cause KDB to be entered */
 ULONG KdbNumSingleSteps = 0; /* How many single steps to do */
 BOOLEAN KdbSingleStepOver = FALSE; /* Whether to step over calls/reps. */

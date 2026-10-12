@@ -29,3 +29,11 @@ add_importlibs(xaudio2_9 mfplat mfreadwrite propsys advapi32 ole32 user32 msvcrt
 add_dependencies(xaudio2_9 xaudio2_9_idlheader)
 add_cd_file(TARGET xaudio2_9 DESTINATION reactos/system32 FOR all)
 set_wine_module(xaudio2_9)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    set_property(SOURCE
+        xapo.c
+        xapofx.c
+        xaudio_dll.c
+        APPEND PROPERTY COMPILE_OPTIONS -Wno-pragma-pack)
+endif()

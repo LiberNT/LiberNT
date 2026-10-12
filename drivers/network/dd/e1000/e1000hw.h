@@ -51,7 +51,7 @@ typedef enum _E1000_RCVBUF_SIZE
 
 
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 
 /* 3.2.3 Receive Descriptor Format */
@@ -96,7 +96,7 @@ typedef struct _E1000_TRANSMIT_DESCRIPTOR
 
 } E1000_TRANSMIT_DESCRIPTOR, *PE1000_TRANSMIT_DESCRIPTOR;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 
 C_ASSERT(sizeof(E1000_RECEIVE_DESCRIPTOR) == 16);

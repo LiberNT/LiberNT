@@ -12,7 +12,6 @@
 
 static LIST_ENTRY LsapLogonContextList;
 
-static HANDLE PortThreadHandle = NULL;
 static HANDLE AuthPortHandle = NULL;
 
 
@@ -368,6 +367,7 @@ StartAuthenticationPort(VOID)
     DWORD ThreadId;
     UNICODE_STRING EventName;
     HANDLE EventHandle;
+    HANDLE ThreadHandle;
     NTSTATUS Status;
 
     TRACE("StartAuthenticationPort()\n");
@@ -451,12 +451,14 @@ StartAuthenticationPort(VOID)
         return Status;
     }
 
-    PortThreadHandle = CreateThread(NULL,
-                                    0x1000,
-                                    (LPTHREAD_START_ROUTINE)AuthPortThreadRoutine,
-                                    NULL,
-                                    0,
-                                    &ThreadId);
+    ThreadHandle = CreateThread(NULL,
+                                0x1000,
+                                (LPTHREAD_START_ROUTINE)AuthPortThreadRoutine,
+                                NULL,
+                                0,
+                                &ThreadId);
+    if (ThreadHandle != NULL)
+        CloseHandle(ThreadHandle);
 
 
     return STATUS_SUCCESS;

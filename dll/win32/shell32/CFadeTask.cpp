@@ -7,8 +7,6 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 #define FADE_DURATION_MS 350
 #define FADE_STEP_MS 10
 

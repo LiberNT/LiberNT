@@ -24,7 +24,7 @@
 
 #include "check/dosfsck.h"
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _FAT16_BOOT_SECTOR
 {
     unsigned char  Jump[3];                     // 0
@@ -94,7 +94,7 @@ typedef struct _FAT32_FSINFO
     unsigned long  Res2[3];          // 496
     unsigned long  TrailSig;         // 508
 } FAT32_FSINFO, *PFAT32_FSINFO;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define FSINFO_SECTOR_BEGIN_SIGNATURE   0x41615252  // 'RRaA'
 #define FSINFO_SECTOR_END_SIGNATURE     0xAA550000

@@ -56,6 +56,7 @@ static USHORT SupportedDevices[] =
     0x10D3,     // Intel 82574L Gigabit Network Connection
 };
 
+#ifdef NDIS51_MINIPORT
 static ULONG PacketFilterToMask(ULONG PacketFilter)
 {
     ULONG FilterMask = 0;
@@ -113,6 +114,7 @@ static ULONG RcvBufRegisterMask(E1000_RCVBUF_SIZE BufSize)
 
     return Mask;
 }
+#endif
 
 #if 0
 /* This function works, but the driver does not use PHY register access right now */
@@ -251,6 +253,7 @@ static USHORT PCIeDevices[] =
     0x150C,     // Intel 82583V Gigabit Network Connection
 };
 
+#ifdef NDIS51_MINIPORT
 /*
  * E1000DetectPCIeDevice - Detect whether this is a PCIe device
  *
@@ -352,6 +355,7 @@ static VOID E1000ReadDeviceSerialNumber(IN PE1000_ADAPTER Adapter)
         }
     }
 }
+#endif
 
 
 /* ============================================================================

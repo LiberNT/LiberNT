@@ -21,8 +21,6 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL (fprop);
-
 static const LPCWSTR s_pszExplorerKey = REGSTR_PATH_EXPLORER;
 
 enum { UNDERLINE_ON, UNDERLINE_OFF, UNDERLINE_HOVER, UNDERLINE_IE };

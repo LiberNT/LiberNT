@@ -17,7 +17,7 @@ include <basetsd.h> from winnt.h so that this typedef is not necessary
 typedef unsigned long ULONG_PTR, *PULONG_PTR;
 #endif
 
-#include <pshpack4.h>
+#pragma pack(push, 4)
 
 #define RAS_MaxDeviceType     16
 #define RAS_MaxPhoneNumber    128
@@ -1031,5 +1031,5 @@ DWORD APIENTRY  RasDeleteSubEntryW(LPCWSTR pszPhonebook, LPCWSTR pszEntry, DWORD
 #ifdef __cplusplus
 }
 #endif
-#include <poppack.h>
+#pragma pack(pop)
 #endif /* _RAS_H */

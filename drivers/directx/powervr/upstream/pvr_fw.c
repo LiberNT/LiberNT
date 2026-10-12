@@ -1102,7 +1102,11 @@ pvr_fw_structure_cleanup(struct pvr_device *pvr_dev, u32 type, struct pvr_fw_obj
 			 u32 offset)
 {
 	struct rogue_fwif_kccb_cmd cmd;
+#ifdef __REACTOS__
+	u32 slot_nr;
+#else
 	int slot_nr;
+#endif
 	int idx;
 	int err;
 	u32 rtn;

@@ -12,8 +12,7 @@ if(DBG)
 endif()
 
 # Silence GCC/Clang warnings
-if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR
-   CMAKE_C_COMPILER_ID STREQUAL "Clang")
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     add_compile_options(
         -Wno-builtin-declaration-mismatch
         -Wno-unused-function

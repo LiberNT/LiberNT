@@ -23,8 +23,6 @@
 
 #include "mmdevapi_private.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(mmdevapi);
-
 #define SESSION_REGISTRY_MAGIC 0x53534152 /* RASS */
 #define SESSION_REGISTRY_VERSION 2
 #define SESSION_REGISTRY_CAPACITY 128

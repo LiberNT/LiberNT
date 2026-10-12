@@ -272,10 +272,6 @@ static char* da_strpcatregv(char* restrict dst, unsigned idx) {
   return da_strpcat4(dst, vstr + 4 * idx, idx >= 10 ? 3 : 2);
 }
 
-static VOID da64_format(const struct Da64Inst* ddi, char* buf128) {
-  da64_format_abs(ddi, 0, buf128);
-}
-
 static VOID da64_format_abs(const struct Da64Inst* ddi, ULONGLONG addr, char* buf128) {
   if (ddi->mnem == DA64I_UNKNOWN) {
     *buf128 = '\0';

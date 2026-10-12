@@ -94,7 +94,7 @@ typedef struct _L2CAP_CONFIG_VALUE_RANGE
     USHORT Max;
 } L2CAP_CONFIG_VALUE_RANGE, *PL2CAP_CONFIG_VALUE_RANGE;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _L2CAP_FLOWSPEC
 {
     UCHAR Flags;
@@ -105,11 +105,11 @@ typedef struct _L2CAP_FLOWSPEC
     ULONG Latency;
     ULONG DelayVariation;
 } L2CAP_FLOWSPEC, *PL2CAP_FLOWSPEC;
-#include <poppack.h>
+#pragma pack(pop)
 
 #if ((NTDDI_VERSION >= NTDDI_WIN8))
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _L2CAP_RETRANSMISSION_AND_FLOW_CONTROL
 {
     UCHAR Mode;
@@ -119,9 +119,9 @@ typedef struct _L2CAP_RETRANSMISSION_AND_FLOW_CONTROL
     USHORT MonitorTO;
     USHORT MaxPDUSize;
 } L2CAP_RETRANSMISSION_AND_FLOW_CONTROL, *PL2CAP_RETRANSMISSION_AND_FLOW_CONTROL;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _L2CAP_EXTENDED_FLOW_SPEC
 {
     UCHAR Identifier;
@@ -131,7 +131,7 @@ typedef struct _L2CAP_EXTENDED_FLOW_SPEC
     ULONG AccessLatency;
     ULONG FlushTimeout;
 } L2CAP_EXTENDED_FLOW_SPEC, *PL2CAP_EXTENDED_FLOW_SPEC;
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif
 
@@ -163,13 +163,13 @@ typedef USHORT CO_EXTENDED_WINDOW_SIZE, *PCO_EXTENDED_WINDOW_SIZE;
 
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _CO_HEADER
 {
     CO_TYPE Type;
     CO_LENGTH Length;
 } CO_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef USHORT CONNECTION_HANDLE, *PCONNECTION_HANDLE;
 

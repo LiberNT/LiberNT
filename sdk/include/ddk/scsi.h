@@ -998,7 +998,7 @@ extern "C" {
 #define GET_LAST_SESSION 0x01
 #define GET_SESSION_DATA 0x02
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef union _CDB {
     struct _CDB6GENERIC {
        UCHAR  OperationCode;
@@ -2222,7 +2222,7 @@ typedef union _CDB {
     ULONG AsUlong[4];
     UCHAR AsByte[16];
 } CDB, *PCDB;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _NOTIFICATION_EVENT_STATUS_HEADER {
   UCHAR EventDataLength[2];
@@ -3475,7 +3475,7 @@ typedef struct _TAPE_POSITION_DATA {
   UCHAR NumberOfBytes[4];
 } TAPE_POSITION_DATA, *PTAPE_POSITION_DATA;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _UNMAP_BLOCK_DESCRIPTOR {
   UCHAR StartingLba[8];
   UCHAR LbaCount[4];
@@ -3490,7 +3490,7 @@ typedef struct _UNMAP_LIST_HEADER {
   UNMAP_BLOCK_DESCRIPTOR Descriptors[0];
 #endif
 } UNMAP_LIST_HEADER, *PUNMAP_LIST_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define LOG_PAGE_CODE_SUPPORTED_LOG_PAGES           0x00
 #define LOG_PAGE_CODE_WRITE_ERROR_COUNTERS          0x02
@@ -3504,7 +3504,7 @@ typedef struct _UNMAP_LIST_HEADER {
 #define LOG_PAGE_CODE_INFORMATIONAL_EXCEPTIONS      0x2F
 
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _LOG_PARAMETER_HEADER {
   UCHAR ParameterCode[2];
   union {
@@ -3590,7 +3590,7 @@ typedef struct _LOG_PAGE {
 
 } LOG_PAGE, *PLOG_PAGE;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define LOG_PAGE_LBP_PARAMETER_CODE_AVAILABLE   0x1
 #define LOG_PAGE_LBP_PARAMETER_CODE_USED        0x2
@@ -3815,7 +3815,7 @@ typedef struct _MODE_CDROM_WRITE_PARAMETERS_PAGE {
 } MODE_CDROM_WRITE_PARAMETERS_PAGE, *PMODE_CDROM_WRITE_PARAMETERS_PAGE;
 
 #if (NTDDI_VERSION >= NTDDI_WIN8)
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #define BLOCK_DEVICE_TOKEN_SIZE         512
 
@@ -3904,7 +3904,7 @@ typedef enum _TRANSFER_COUNT_UNITS {
   TRANSFER_COUNT_UNITS_NUMBER_BLOCKS = 0xF1
 } TRANSFER_COUNT_UNITS, *PTRANSFER_COUNT_UNITS;
 
-#include <poppack.h>
+#pragma pack(pop)
 #endif /* (NTDDI_VERSION >= NTDDI_WIN8) */
 
 // SCSI utility functions

@@ -43,7 +43,7 @@
 #define USBPORT_RESOURCES_MEMORY    4
 
 #ifndef _WIN64
-#include <pshpack4.h>
+#pragma pack(push, 4)
 #endif
 
 typedef struct _USBPORT_RESOURCES {
@@ -86,7 +86,7 @@ typedef struct _USBPORT_RESOURCES {
 } USBPORT_RESOURCES, *PUSBPORT_RESOURCES;
 
 #ifndef _WIN64
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 C_ASSERT(sizeof(USBPORT_RESOURCES) == 56 + 7 * sizeof(PVOID));

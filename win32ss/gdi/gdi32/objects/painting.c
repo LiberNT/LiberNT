@@ -518,7 +518,9 @@ PatBlt(
     _In_ INT nHeight,
     _In_ DWORD dwRop)
 {
+#ifndef WOW64_I386_RUNTIME
     PDC_ATTR pdcattr;
+#endif
 
     HANDLE_METADC(BOOL, PatBlt, FALSE, hdc, nXLeft, nYLeft, nWidth, nHeight, dwRop);
 

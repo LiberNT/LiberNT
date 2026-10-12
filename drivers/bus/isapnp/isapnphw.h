@@ -82,7 +82,7 @@ extern "C" {
 #define RANGE_LENGTH_TO_LENGTH(RangeLength) ((~(RangeLength) + 1) & 0xFFFFFF)
 #define LENGTH_TO_RANGE_LENGTH(Length) (~(Length) + 1)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _ISAPNP_IDENTIFIER
 {
@@ -157,7 +157,7 @@ typedef struct _ISAPNP_FIXEDMEMRANGE_DESCRIPTION
     ULONG Length;
 } ISAPNP_FIXEDMEMRANGE_DESCRIPTION, *PISAPNP_FIXEDMEMRANGE_DESCRIPTION;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #ifdef __cplusplus
 }

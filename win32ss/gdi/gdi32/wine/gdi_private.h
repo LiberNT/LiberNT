@@ -168,7 +168,7 @@ extern HMETAFILE MF_Create_HMETAFILE(METAHEADER *mh) DECLSPEC_HIDDEN;
 extern METAHEADER *MF_CreateMetaHeaderDisk(METAHEADER *mr, LPCVOID filename, BOOL unicode ) DECLSPEC_HIDDEN;
 
 /* Format of comment record added by GetWinMetaFileBits */
-#include <pshpack2.h>
+#pragma pack(push, 2)
 typedef struct
 {
     DWORD magic;        /* WMFC */
@@ -182,7 +182,7 @@ typedef struct
     DWORD emf_size;
     BYTE emf_data[1];
 } emf_in_wmf_comment;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define WMFC_MAGIC 0x43464d57
 /* palette.c */

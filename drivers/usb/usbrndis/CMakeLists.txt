@@ -29,10 +29,12 @@ set_module_type(usbrndis kernelmodedriver)
 target_link_libraries(usbrndis ${PSEH_LIB})
 
 # Suppress warnings during development
-target_compile_options(usbrndis PRIVATE
-    -Wno-unused-function
-    -Wno-unused-variable
-    -Wno-unused-but-set-variable)
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(usbrndis PRIVATE
+        -Wno-unused-function
+        -Wno-unused-variable
+        -Wno-unused-but-set-variable)
+endif()
 
 add_importlibs(usbrndis ndis ntoskrnl hal usbd)
 add_pch(usbrndis usbrndis.h "${PCH_SKIP_SOURCE}")

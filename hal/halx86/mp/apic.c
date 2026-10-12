@@ -55,7 +55,7 @@ ULONG lastregw[MAX_CPU];
 ULONG lastvalw[MAX_CPU];
 
 #ifdef CONFIG_SMP
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _COMMON_AREA_INFO
 {
    ULONG Stack;		    /* Location of AP stack */
@@ -64,7 +64,7 @@ typedef struct _COMMON_AREA_INFO
    ULONG PaeModeEnabled;    /* PAE mode is enabled */
    ULONG Debug[16];	    /* For debugging */
 } COMMON_AREA_INFO, *PCOMMON_AREA_INFO;
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 extern CHAR *APstart, *APend;

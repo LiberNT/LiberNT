@@ -17,7 +17,7 @@
 #define ARM64_ACPI_MADT_TYPE_GENERIC_REDISTRIBUTOR  0x0E
 #define ARM64_ACPI_MADT_TYPE_GENERIC_TRANSLATOR     0x0F
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _ARM64_ACPI_MADT_SUBTABLE
 {
@@ -108,4 +108,4 @@ typedef struct _ARM64_ACPI_MADT_NMI_SOURCE
     ULONG GlobalSystemInterrupt;
 } ARM64_ACPI_MADT_NMI_SOURCE, *PARM64_ACPI_MADT_NMI_SOURCE;
 
-#include <poppack.h>
+#pragma pack(pop)

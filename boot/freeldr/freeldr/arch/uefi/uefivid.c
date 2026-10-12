@@ -96,7 +96,7 @@ typedef enum _UEFI_GOP_SCROLL_RESULT
 #define BGRT_ORIENTATION_180          2
 #define BGRT_ORIENTATION_270          3
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _BMP_FILE_HEADER
 {
     USHORT Type;
@@ -120,7 +120,7 @@ typedef struct _BMP_INFO_HEADER
     ULONG ClrUsed;
     ULONG ClrImportant;
 } BMP_INFO_HEADER, *PBMP_INFO_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(sizeof(BMP_FILE_HEADER) == 14);
 C_ASSERT(sizeof(BMP_INFO_HEADER) == 40);

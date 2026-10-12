@@ -48,7 +48,7 @@
 #define MSDOS_DOTDOT "..         "	/* "..", padded to MSDOS_NAME chars */
 
 #ifdef __REACTOS__
-#include <pshpack1.h>
+#pragma pack(push, 1)
 #endif
 
 struct msdos_dir_entry {
@@ -65,7 +65,7 @@ struct msdos_dir_entry {
 } __attribute__ ((packed));
 
 #ifdef __REACTOS__
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 #endif /* _MSDOS_FS_H */

@@ -1839,7 +1839,7 @@ InstallBootManagerAndBootEntries(
             LARGE_INTEGER DiskSize;
             DISK_PARTITION_INFO Partition;
             /* Followed by: DISK_DETECTION_INFO Detection; unused here */
-        } DISK_GEOMETRY_EX_INTERNAL, *PDISK_GEOMETRY_EX_INTERNAL;
+        } DISK_GEOMETRY_EX_INTERNAL;
 
         DISK_GEOMETRY_EX_INTERNAL DiskGeoEx;
         PARTITION_INFORMATION PartitionInfo;

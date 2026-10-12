@@ -59,7 +59,7 @@ BasepApplyThreadAttributeList(
 
 #define debugstr_a
 #define debugstr_w
-#define debugstr_wn
+#define debugstr_wn(s, n) (s)
 #define wine_dbgstr_w
 #define debugstr_guid
 

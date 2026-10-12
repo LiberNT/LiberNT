@@ -39,7 +39,6 @@
 #define KDP_DUMP_SMALL 3
 #define KDP_DUMP_AUTOMATIC 7
 
-static LONG KdpLiveDumpActive;
 static LONG KdpCrashDumpActive;
 static volatile NTSTATUS KdpCrashDumpInitializationStatus = STATUS_DEVICE_NOT_READY;
 static volatile PCSTR KdpCrashDumpInitializationStage = "initialization not started";
@@ -378,6 +377,7 @@ static ULONG_PTR NTAPI KdpCaptureLiveDumpContext(_In_ ULONG_PTR Argument)
 }
 #endif
 
+#if (NTDDI_VERSION >= NTDDI_WINBLUE) && defined(_M_AMD64)
 static NTSTATUS KdpWriteDumpFileChunk(_In_ HANDLE FileHandle, _In_ HANDLE EventHandle, _In_reads_bytes_(Length) PVOID Buffer, _In_ ULONG Length, _Inout_ PLARGE_INTEGER FileOffset)
 {
     IO_STATUS_BLOCK IoStatus;
@@ -401,6 +401,7 @@ static NTSTATUS KdpWriteDumpFileChunk(_In_ HANDLE FileHandle, _In_ HANDLE EventH
     FileOffset->QuadPart += Length;
     return STATUS_SUCCESS;
 }
+#endif
 
 static VOID KdpQueryCrashControlPolicy(_Out_ PULONG DumpType, _Out_ PBOOLEAN IncludeUserPages)
 {
@@ -1700,6 +1701,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
 NTSTATUS NTAPI KdpWriteLiveKernelDump(_In_ PSYSDBG_LIVEDUMP_CONTROL Control, _In_ KPROCESSOR_MODE PreviousMode)
 {
 #if defined(_M_AMD64)
+    static LONG KdpLiveDumpActive;
     OBJECT_ATTRIBUTES ObjectAttributes;
     FILE_END_OF_FILE_INFORMATION EndOfFile;
     IO_STATUS_BLOCK IoStatus;

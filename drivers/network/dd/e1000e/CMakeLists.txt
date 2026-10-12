@@ -41,11 +41,13 @@ add_library(e1000e MODULE ${SOURCE} e1000e.rc)
 add_pch(e1000e e1000.h SOURCE)
 set_module_type(e1000e kernelmodedriver)
 
-target_compile_options(e1000e PRIVATE
-    -Wno-unused-function
-    -Wno-unused-variable
-    -Wno-unused-but-set-variable
-    -Wno-enum-compare)
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(e1000e PRIVATE
+        -Wno-unused-function
+        -Wno-unused-variable
+        -Wno-unused-but-set-variable
+        -Wno-enum-compare)
+endif()
 
 target_link_libraries(e1000e wdmguid)
 add_importlibs(e1000e ndis ntoskrnl hal)

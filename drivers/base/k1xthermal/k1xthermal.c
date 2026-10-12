@@ -169,7 +169,7 @@ K1ThermalStop(_In_ PK1XTHERMAL_EXTENSION Extension)
 {
     if (Extension->InterfaceName.Buffer)
     {
-        IoSetDeviceInterfaceState(&Extension->InterfaceName, FALSE);
+        (VOID)IoSetDeviceInterfaceState(&Extension->InterfaceName, FALSE);
         RtlFreeUnicodeString(&Extension->InterfaceName);
     }
     if (Extension->Registers)

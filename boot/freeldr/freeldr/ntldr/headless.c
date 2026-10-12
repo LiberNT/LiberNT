@@ -18,7 +18,7 @@
 /* Note: Move these to some smbios.h header */
 #define SYSID_TYPE_UUID "_UUID_"
 #define SYSID_UUID_DATA_SIZE 16
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _SYSID_UUID_ENTRY
 {
     UCHAR Type[6];
@@ -26,7 +26,7 @@ typedef struct _SYSID_UUID_ENTRY
     USHORT Length;
     UCHAR UUID[SYSID_UUID_DATA_SIZE];
 } SYSID_UUID_ENTRY, *PSYSID_UUID_ENTRY;
-#include <poppack.h>
+#pragma pack(pop)
 
 /* GLOBALS ********************************************************************/
 

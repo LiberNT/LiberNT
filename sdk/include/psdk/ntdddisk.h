@@ -688,7 +688,7 @@ typedef struct _IDEREGS {
     UCHAR  bReserved;
 } IDEREGS, *PIDEREGS, *LPIDEREGS;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _SENDCMDINPARAMS {
     ULONG  cBufferSize;
     IDEREGS  irDriveRegs;
@@ -697,7 +697,7 @@ typedef struct _SENDCMDINPARAMS {
     ULONG  dwReserved[4];
     UCHAR  bBuffer[1];
 } SENDCMDINPARAMS, *PSENDCMDINPARAMS, *LPSENDCMDINPARAMS;
-#include <poppack.h>
+#pragma pack(pop)
 
 /* DRIVERSTATUS.bDriverError constants */
 #define SMART_NO_ERROR                    0
@@ -731,13 +731,13 @@ typedef struct _DRIVERSTATUS {
 #define READ_THRESHOLD_BUFFER_SIZE        512
 #define SMART_LOG_SECTOR_SIZE             512
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _SENDCMDOUTPARAMS {
     ULONG  cBufferSize;
     DRIVERSTATUS  DriverStatus;
     UCHAR  bBuffer[1];
 } SENDCMDOUTPARAMS, *PSENDCMDOUTPARAMS, *LPSENDCMDOUTPARAMS;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define READ_ATTRIBUTES                   0xD0
 #define READ_THRESHOLDS                   0xD1

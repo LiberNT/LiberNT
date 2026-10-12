@@ -29,12 +29,12 @@
 #define SEG_ACCESS_UNUSABLE     0x10000 /* Unusable segment */
 
 /* Helper to read GDT/IDT base and limit */
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _DESCRIPTOR_TABLE_REG {
     USHORT Limit;
     ULONG64 Base;
 } DESCRIPTOR_TABLE_REG;
-#include <poppack.h>
+#pragma pack(pop)
 
 static
 ULONG

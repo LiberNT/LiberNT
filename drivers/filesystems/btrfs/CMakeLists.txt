@@ -83,3 +83,7 @@ add_importlibs(btrfs ntoskrnl hal)
 add_cd_file(TARGET btrfs DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_driver_inf(btrfs btrfs.inf)
 add_registry_inf(btrfs_reg.inf)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(btrfs PRIVATE -Wno-unused-but-set-variable)
+endif()

@@ -66,7 +66,7 @@ typedef struct _X87FLOATING_SAVE_AREA
     ULONG Cr0NpxState;
 } X87FLOATING_SAVE_AREA, *PX87FLOATING_SAVE_AREA;
 
-#include "pshpack4.h"
+#pragma pack(push, 4)
 /*
  * x86 CPU Context Frame
  */
@@ -132,6 +132,6 @@ typedef struct _X86CONTEXT
      */
     UCHAR ExtendedRegisters[MAXIMUM_SUPPORTED_EXTENSION];
 } X86CONTEXT;
-#include "poppack.h"
+#pragma pack(pop)
 
 #endif /* __X86CONTEXT_H__ */

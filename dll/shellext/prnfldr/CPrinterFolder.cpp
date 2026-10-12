@@ -11,12 +11,10 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(prnfldr);
-
 #define SHELL32_IDI_SHELL_PRINTER 17
 #define SHELL32_IDI_SHELL_SHARE   29
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _PRINTER_ITEM
 {
     WORD cb;
@@ -26,7 +24,7 @@ typedef struct _PRINTER_ITEM
     WORD offsServer;
     WCHAR szName[1];
 } PRINTER_ITEM, *PPRINTER_ITEM;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define PRINTER_ITEM_TYPE   0x00
 #define PRINTER_ITEM_MARKER 0xFF

@@ -1983,7 +1983,7 @@ typedef CContainedWindowT<CWindow> CContainedWindow;
 
 #define BEGIN_MSG_MAP(theClass)     \
 public:                             \
-    BOOL ProcessWindowMessage(HWND GCCU(hWnd), UINT GCCU(uMsg), WPARAM GCCU(wParam), LPARAM GCCU(lParam), LRESULT &GCCU(lResult), DWORD dwMsgMapID = 0) \
+    BOOL ProcessWindowMessage(HWND GCCU(hWnd), UINT GCCU(uMsg), WPARAM GCCU(wParam), LPARAM GCCU(lParam), LRESULT &GCCU(lResult), DWORD dwMsgMapID = 0) override \
     {                               \
         BOOL GCCU(bHandled) = TRUE; \
         Unused(hWnd);               \

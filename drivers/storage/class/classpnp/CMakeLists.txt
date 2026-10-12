@@ -53,3 +53,7 @@ set_module_type(classpnp kernelmodedriver)
 target_link_libraries(classpnp ntoskrnl_vista libcntpr ${PSEH_LIB})
 add_importlibs(classpnp ntoskrnl hal)
 add_cd_file(TARGET classpnp DESTINATION reactos/system32/drivers NO_CAB FOR all)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(classpnp PRIVATE -Wno-unused-but-set-variable)
+endif()

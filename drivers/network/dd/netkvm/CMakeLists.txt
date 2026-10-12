@@ -33,3 +33,7 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(netkvm PRIVATE -Wno-old-style-declaration -Wno-unused-but-set-variable)
 endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(netkvm PRIVATE -Wno-pragma-pack -Wno-unused-but-set-variable)
+endif()

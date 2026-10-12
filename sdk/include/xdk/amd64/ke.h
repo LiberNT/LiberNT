@@ -334,14 +334,13 @@ KeGetPcr(VOID)
     return (PKPCR)__readgsqword(FIELD_OFFSET(KPCR, Self));
 }
 
-#if (NTDDI_VERSION >= NTDDI_WIN7)
-_CRT_DEPRECATE_TEXT("KeGetCurrentProcessorNumber is deprecated. Use KeGetCurrentProcessorNumberEx or KeGetCurrentProcessorIndex instead.")
-#endif
+#if (NTDDI_VERSION < NTDDI_WIN7) || !defined(NT_PROCESSOR_GROUPS)
 FORCEINLINE
 ULONG
 KeGetCurrentProcessorNumber(VOID)
 {
     return __readgsbyte(0x184);
 }
+#endif
 
 $endif /* _NTDDK_ */

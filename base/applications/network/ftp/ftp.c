@@ -311,8 +311,7 @@ char reply_string[BUFSIZ];		/* last line of previous reply */
 #include <ctype.h>
 
 int
-getreply(expecteof)
-	int expecteof;
+getreply(int expecteof)
 {
 	register int c, n;
 	register int dig;
@@ -413,9 +412,7 @@ getreply(expecteof)
 }
 
 static int
-empty(mask, sec)
-	struct fd_set *mask;
-	int sec;
+empty(struct fd_set *mask, int sec)
 {
 	struct timeval t;
 
@@ -444,7 +441,7 @@ void sendrequest(const char *cmd, const char *local, const char *remote, int pri
 {
 	FILE *fin;
 	int dout = 0;
-	int (*closefunc)();
+	int (*closefunc)(FILE *);
 	sig_t (*oldintr)(), (*oldintp)();
 	char buf[BUFSIZ], *bufp;
 	long bytes = 0, hashbytes = HASHBYTES;
@@ -719,7 +716,7 @@ void recvrequest(const char *cmd, const char *local, const char *remote, const c
 {
 	FILE *fout = stdout;
 	int din = 0;
-	int (*closefunc)();
+	int (*closefunc)(FILE *);
 	void (*oldintr)(int), (*oldintp)(int);
 	int oldverbose = 0, oldtype = 0, is_retr, tcrflag, nfnd, bare_lfs = 0;
 	char msg;
@@ -1261,10 +1258,7 @@ int dataconn(const char *mode)
 	return (data);
 }
 
-void ptransfer(direction, bytes, t0, t1)
-	const char *direction;
-	long bytes;
-	struct timeval *t0, *t1;
+void ptransfer(const char *direction, long bytes, struct timeval *t0, struct timeval *t1)
 {
 	struct timeval td;
 	double s, bs;
@@ -1290,8 +1284,7 @@ void ptransfer(direction, bytes, t0, t1)
 		tsum->tv_sec++, tsum->tv_usec -= 1000000;
 } */
 
-void tvsub(tdiff, t1, t0)
-	struct timeval *tdiff, *t1, *t0;
+void tvsub(struct timeval *tdiff, struct timeval *t1, struct timeval *t0)
 {
 
 	tdiff->tv_sec = t1->tv_sec - t0->tv_sec;
@@ -1415,8 +1408,7 @@ abortpt()
 }
 #endif
 
-void proxtrans(cmd, local, remote)
-	const char *cmd, *local, *remote;
+void proxtrans(const char *cmd, const char *local, const char *remote)
 {
 //	void (*oldintr)(int);
 	int tmptype, oldtype = 0, secndflag = 0, nfnd;

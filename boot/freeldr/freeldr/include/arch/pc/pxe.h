@@ -10,7 +10,7 @@ typedef UINT16 SEGSEL;
 typedef UINT16 UDP_PORT;
 typedef UINT32 ADDR32;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #define IP_ADDR_LEN 4
 typedef union
@@ -451,7 +451,7 @@ typedef struct bootph
     } vendor;
 } BOOTPLAYER;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* Exit codes returned in AX by a PXENV API service */
 #define PXENV_EXIT_SUCCESS  0x0000

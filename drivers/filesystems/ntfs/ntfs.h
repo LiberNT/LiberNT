@@ -21,7 +21,7 @@
 
 #define DEVICE_NAME L"\\Ntfs"
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _BIOS_PARAMETERS_BLOCK
 {
     USHORT    BytesPerSector;			// 0x0B
@@ -58,7 +58,7 @@ typedef struct _BOOT_SECTOR
     UCHAR     BootStrap[426];			// 0x54
     USHORT    EndSector;				// 0x1FE
 } BOOT_SECTOR, *PBOOT_SECTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
 //typedef struct _BootSector BootSector;
 

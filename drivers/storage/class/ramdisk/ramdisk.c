@@ -44,7 +44,7 @@
 #define RAMDISK_BOOT_PFN_PROBE_LIMIT              256
 #define RAMDISK_BOOT_PFN_REQUIRED_RUN             4
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _RAMDISK_MBR_PARTITION_ENTRY
 {
     UCHAR BootIndicator;
@@ -67,7 +67,7 @@ typedef struct _RAMDISK_MASTER_BOOT_RECORD
     RAMDISK_MBR_PARTITION_ENTRY PartitionTable[4];
     USHORT Magic;
 } RAMDISK_MASTER_BOOT_RECORD, *PRAMDISK_MASTER_BOOT_RECORD;
-#include <poppack.h>
+#pragma pack(pop)
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 static __inline BOOLEAN

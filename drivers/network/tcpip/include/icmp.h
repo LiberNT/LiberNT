@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct ICMP_HEADER {
     UINT8 Type;        /* ICMP message type */
     UINT8 Code;        /* ICMP message code */
@@ -15,7 +15,7 @@ typedef struct ICMP_HEADER {
     UINT16 Identifier; /* ICMP Echo message identifier */
     UINT16 Seq;        /* ICMP Echo message sequence num */
 } ICMP_HEADER, *PICMP_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
 /* ICMP message types */
 #define ICMP_TYPE_ECHO_REPLY        0  /* Echo reply */

@@ -7,8 +7,6 @@
 
 #include "msctfime.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(msctfime);
-
 /// @implemented
 CicBridge::CicBridge()
     : m_cRefs(1)

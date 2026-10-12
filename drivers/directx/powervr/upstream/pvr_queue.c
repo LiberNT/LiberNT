@@ -1091,7 +1091,11 @@ static void init_fw_context(struct pvr_queue *queue, void *fw_ctx_map)
 	struct rogue_fwif_fwcommoncontext *cctx_fw;
 	struct pvr_cccb *cccb = &queue->cccb;
 
+#ifdef __REACTOS__
+	cctx_fw = (u8 *)fw_ctx_map + queue->ctx_offset;
+#else
 	cctx_fw = fw_ctx_map + queue->ctx_offset;
+#endif
 	cctx_fw->ccbctl_fw_addr = cccb->ctrl_fw_addr;
 	cctx_fw->ccb_fw_addr = cccb->cccb_fw_addr;
 

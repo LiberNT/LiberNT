@@ -5,9 +5,9 @@
  * PURPOSE:     RISC-V64 stack walking through the shared RVUW decoder
  */
 
+#include "ntstatus.h"
 #include "dbghelp_private.h"
 #include "winerror.h"
-#include "ntstatus.h"
 #include "riscv64/unwind.h"
 
 static BOOL

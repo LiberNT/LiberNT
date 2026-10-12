@@ -23,7 +23,7 @@ typedef struct _DISK_INFORMATION
     ULONGLONG SectorCount;
 } DISK_INFORMATION, *PDISK_INFORMATION;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _EFI_PARTITION_HEADER
 {
     ULONGLONG Signature;         // 0
@@ -42,7 +42,7 @@ typedef struct _EFI_PARTITION_HEADER
     ULONG PartitionEntryCRC32;   // 88
 } EFI_PARTITION_HEADER, *PEFI_PARTITION_HEADER;
 C_ASSERT(sizeof(EFI_PARTITION_HEADER) == 92);
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _EFI_PARTITION_ENTRY
 {
@@ -70,7 +70,7 @@ typedef struct _PARTITION_TABLE_ENTRY
 } PARTITION_TABLE_ENTRY, *PPARTITION_TABLE_ENTRY;
 C_ASSERT(sizeof(PARTITION_TABLE_ENTRY) == 16);
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _MASTER_BOOT_RECORD
 {
     UCHAR MasterBootRecordCodeAndData[0x1B8]; // 0
@@ -80,7 +80,7 @@ typedef struct _MASTER_BOOT_RECORD
     USHORT MasterBootRecordMagic;             // 510
 } MASTER_BOOT_RECORD, *PMASTER_BOOT_RECORD;
 C_ASSERT(sizeof(MASTER_BOOT_RECORD) == 512);
-#include <poppack.h>
+#pragma pack(pop)
 
 /* Partition entry size (bytes) - FIXME: It's hardcoded as Microsoft does, but according to specs, it shouldn't be */
 #define PARTITION_ENTRY_SIZE 128

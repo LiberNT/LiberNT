@@ -19,8 +19,6 @@
 
 #include "legacy/quartz_private.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(quartz);
-
 const char *qzdebugstr_guid(const GUID *id)
 {
     return debugstr_guid(id);

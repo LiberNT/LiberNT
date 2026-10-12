@@ -114,9 +114,9 @@ AtaFdoAllocateLocalBuffer(
 
     PhysicalAddress = MmGetPhysicalAddress(PortData->LocalBuffer);
 
-    PortData->LocalSgList.NumberOfElements = 1;
-    PortData->LocalSgList.Elements[0].Length = ATA_LOCAL_BUFFER_SIZE;
-    PortData->LocalSgList.Elements[0].Address.QuadPart = PhysicalAddress.QuadPart;
+    ((PSCATTER_GATHER_LIST)PortData->LocalSgListBuffer)->NumberOfElements = 1;
+    ((PSCATTER_GATHER_LIST)PortData->LocalSgListBuffer)->Elements[0].Length = ATA_LOCAL_BUFFER_SIZE;
+    ((PSCATTER_GATHER_LIST)PortData->LocalSgListBuffer)->Elements[0].Address.QuadPart = PhysicalAddress.QuadPart;
 
     return STATUS_SUCCESS;
 }

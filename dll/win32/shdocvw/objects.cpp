@@ -8,7 +8,6 @@
 #include "objects.h"
 
 #include <wine/debug.h>
-WINE_DEFAULT_DEBUG_CHANNEL(shdocvw);
 
 void *operator new(size_t size)
 {

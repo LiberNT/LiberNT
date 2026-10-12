@@ -1874,7 +1874,7 @@ SerialMapHWResources(
             pDevExt->DebugPortInUse = TRUE;
         }
     }
-#endif !SERIAL_IS_DONT_CHANGE_HW
+#endif
 
     if (pDevExt->DebugPortInUse) {
 

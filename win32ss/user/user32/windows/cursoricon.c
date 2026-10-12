@@ -14,7 +14,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(cursor);
 WINE_DECLARE_DEBUG_CHANNEL(icon);
 //WINE_DECLARE_DEBUG_CHANNEL(resource);
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _CURSORICONFILEDIRENTRY
 {
     BYTE bWidth;
@@ -42,7 +42,7 @@ typedef struct _CURSORICONFILEDIR
     WORD idCount;
     CURSORICONFILEDIRENTRY idEntries[1];
 } CURSORICONFILEDIR;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define PNG_CHECK_SIG_SIZE 8 /* Check signature size */
 
@@ -1196,7 +1196,7 @@ static BOOL CURSORICON_GetCursorDataFromIconInfo(
 #define ANI_FLAG_ICON       0x1
 #define ANI_FLAG_SEQUENCE   0x2
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct {
     DWORD header_size;
     DWORD num_frames;
@@ -1213,7 +1213,7 @@ typedef struct {
     DWORD           data_size;
     const unsigned char   *data;
 } riff_chunk_t;
-#include <poppack.h>
+#pragma pack(pop)
 
 static void dump_ani_header( const ani_header *header )
 {

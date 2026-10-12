@@ -172,22 +172,6 @@ HalpArm64AllocateMsiRoutingVector(
  * Base HAL Functions (Windows 2000+)
  * These are deprecated legacy functions - drivers should use DMA_OPERATIONS instead.
  */
-VOID
-FASTCALL
-HalExamineMBR(
-    _In_ PDEVICE_OBJECT DeviceObject,
-    _In_ ULONG SectorSize,
-    _In_ ULONG MBRTypeIdentifier,
-    _Out_ PVOID *Buffer)
-{
-    DPRINT1("HalExamineMBR: STUB (deprecated API - use disk class driver)\n");
-    UNREFERENCED_PARAMETER(DeviceObject);
-    UNREFERENCED_PARAMETER(SectorSize);
-    UNREFERENCED_PARAMETER(MBRTypeIdentifier);
-    if (Buffer)
-        *Buffer = NULL;
-}
-
 ULONG
 NTAPI
 HalGetDmaAlignment(

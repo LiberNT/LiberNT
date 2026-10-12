@@ -672,7 +672,7 @@ typedef struct _USB_BUS_INTERFACE_HUB_SELECTIVE_SUSPEND {
   PUSB_BUSIFFN_RESUME_HUB ResumeHub;
 } USB_BUS_INTERFACE_HUB_SELECTIVE_SUSPEND, *PUSB_BUS_INTERFACE_HUB_SELECTIVE_SUSPEND;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _USB_PIPE_INFORMATION_0 {
   USB_ENDPOINT_DESCRIPTOR EndpointDescriptor;
@@ -752,6 +752,6 @@ typedef struct _USB_DEVICE_PERFORMANCE_INFO_0 {
   ULONG TransferErrors;
 } USB_DEVICE_PERFORMANCE_INFO_0, *PUSB_DEVICE_PERFORMANCE_INFO_0;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif /* (NTDDI_VERSION >= NTDDI_WINXP) */

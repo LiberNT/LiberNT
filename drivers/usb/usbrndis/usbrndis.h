@@ -395,7 +395,7 @@ typedef struct DECLSPEC_CACHEALIGN _RNDIS_RX_HOT {
     URB RxUrb;                          /* RX URB structure */
 } RNDIS_RX_HOT, *PRNDIS_RX_HOT;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /*
  * CDC-NCM NTH16 (NCM Transfer Header - 16-bit)
@@ -692,7 +692,7 @@ typedef struct _RNDIS_TCPIP_CSUM_INFO {
     };
 } RNDIS_TCPIP_CSUM_INFO, *PRNDIS_TCPIP_CSUM_INFO;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(sizeof(RNDIS_INIT_MSG) == 24);
 C_ASSERT(sizeof(RNDIS_PACKET_MSG) == 44);

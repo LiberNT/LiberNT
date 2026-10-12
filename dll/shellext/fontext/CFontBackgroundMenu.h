@@ -15,7 +15,6 @@ class CFontBackgroundMenu
     CFontExt* m_pFontExt = nullptr;
     CComPtr<IShellFolder> m_psf;
     CComPtr<IContextMenuCB> m_pmcb;
-    LPFNDFMCALLBACK m_pfnmcb = nullptr;
 
 public:
     CFontBackgroundMenu();

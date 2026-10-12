@@ -246,9 +246,9 @@ NTAPI
 KiSwapProcess(IN PKPROCESS NewProcess,
               IN PKPROCESS OldProcess)
 {
+#ifdef CONFIG_SMP
     PKIPCR Pcr = (PKIPCR)KeGetPcr();
 
-#ifdef CONFIG_SMP
     if (NewProcess != OldProcess)
     {
         InterlockedOr64((PLONG64)&NewProcess->ActiveProcessors,

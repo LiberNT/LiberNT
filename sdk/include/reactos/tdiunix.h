@@ -11,7 +11,7 @@
 #define AFUNIX_DEVICE_NAME L"\\Device\\Afunix"
 #define AFUNIX_PATH_LENGTH 108
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _TDI_ADDRESS_UNIX {
     CHAR sun_path[AFUNIX_PATH_LENGTH];
 } TDI_ADDRESS_UNIX, *PTDI_ADDRESS_UNIX;
@@ -24,7 +24,7 @@ typedef struct _TA_UNIX_ADDRESS {
         TDI_ADDRESS_UNIX Address[1];
     } Address[1];
 } TA_UNIX_ADDRESS, *PTA_UNIX_ADDRESS;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define TDI_ADDRESS_LENGTH_UNIX sizeof(TDI_ADDRESS_UNIX)
 

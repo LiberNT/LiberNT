@@ -40,7 +40,7 @@ typedef struct _KIRQ_TRAPFRAME
 /* MP Floating Pointer Structure */
 #define MPF_SIGNATURE (('_' << 24) | ('P' << 16) | ('M' << 8) | '_')
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _MP_FLOATING_POINTER
 {
 	ULONG Signature;     /* _MP_ */
@@ -180,7 +180,7 @@ typedef struct _MP_CONFIGURATION_INTLOCAL
 	UCHAR DstApicId;    /* Destination local APIC ID */
 	UCHAR DstApicLInt;  /* Destination local APIC interrupt */
 } MP_CONFIGURATION_INTLOCAL, *PMP_CONFIGURATION_INTLOCAL;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define MP_APIC_ALL	0xFF
 

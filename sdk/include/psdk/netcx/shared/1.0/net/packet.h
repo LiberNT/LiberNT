@@ -49,7 +49,7 @@ typedef enum _NET_PACKET_LAYER4_TYPE
     NetPacketLayer4TypeIPNotFragment,
 } NET_PACKET_LAYER4_TYPE;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _NET_PACKET_LAYOUT
 {
     UINT16
@@ -74,7 +74,7 @@ typedef struct _NET_PACKET_LAYOUT
         Reserved0 : 4;
 
 } NET_PACKET_LAYOUT;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(sizeof(NET_PACKET_LAYOUT) == 5);
 

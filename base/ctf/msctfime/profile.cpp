@@ -7,8 +7,6 @@
 
 #include "msctfime.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(msctfime);
-
 // The callback function type
 typedef HRESULT (CALLBACK *FN_LanguageProfilesCallback)(TF_LANGUAGEPROFILE profile, LPARAM lParam);
 

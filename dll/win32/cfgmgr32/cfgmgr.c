@@ -31,21 +31,6 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(cfgmgr32);
 
-/* Registry key and value names */
-static const WCHAR BackslashOpenBrace[] = {'\\', '{', 0};
-static const WCHAR CloseBrace[] = {'}', 0};
-static const WCHAR Class[]  = {'C','l','a','s','s',0};
-
-static const WCHAR ControlClass[] = {'S','y','s','t','e','m','\\',
-                                     'C','u','r','r','e','n','t','C','o','n','t','r','o','l','S','e','t','\\',
-                                     'C','o','n','t','r','o','l','\\',
-                                     'C','l','a','s','s',0};
-
-static const WCHAR DeviceClasses[] = {'S','y','s','t','e','m','\\',
-                                      'C','u','r','r','e','n','t','C','o','n','t','r','o','l','S','e','t','\\',
-                                      'C','o','n','t','r','o','l','\\',
-                                      'D','e','v','i','c','e','C','l','a','s','s','e','s',0};
-
 typedef struct _MACHINE_INFO
 {
     RPC_BINDING_HANDLE BindingHandle;

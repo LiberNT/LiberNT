@@ -166,7 +166,7 @@ typedef struct _RESULTDATAITEM {
 } RESULTDATAITEM, *LPRESULTDATAITEM;
 
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 typedef struct _MMCBUTTON {
   int      nBitmap;
   int      idCommand;
@@ -175,7 +175,7 @@ typedef struct _MMCBUTTON {
   LPOLESTR lpButtonText;
   LPOLESTR lpTooltipText;
 } MMCBUTTON, *LPMMCBUTTON;
-#include <poppack.h>
+#pragma pack(pop)
 
 
 typedef LONG_PTR MMC_COOKIE;

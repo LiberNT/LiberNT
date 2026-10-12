@@ -102,7 +102,7 @@
 #define E1K_TXD_CMD_RS      0x08
 #define E1K_TXD_STATUS_DD   0x01
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _E1K_RX_DESCRIPTOR
 {
@@ -125,7 +125,7 @@ typedef struct _E1K_TX_DESCRIPTOR
     USHORT Special;
 } E1K_TX_DESCRIPTOR, *PE1K_TX_DESCRIPTOR;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _E1K_RX_ADVANCED_DESCRIPTOR
 {

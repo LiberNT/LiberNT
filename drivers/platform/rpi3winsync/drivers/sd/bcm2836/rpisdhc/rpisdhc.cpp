@@ -1700,7 +1700,11 @@ void SDHC::completeRequest (
         this->sdhcStats.LongFsmStateWaitCount += this->currRequestStats.LongFsmStateWaitCount;
         this->sdhcStats.TotalLongFsmStateWaitTimeUs += this->currRequestStats.LongFsmStateWaitTimeUs;
 
+#ifdef __REACTOS__
+        if (RequestPtr->Command.TransferDirection == SdTransferDirectionWrite) {
+#else
         if ((RequestPtr->Command.TransferDirection == SdTransferDirectionWrite)) {
+#endif
             this->sdhcStats.BlocksWrittenCount += this->currRequestStats.BlockCount;
 
             if (RequestPtr->Command.Length == PAGE_SIZE) {
@@ -1851,6 +1855,11 @@ SDHC::_CMD SDHC::buildCommand (
     case SdTransferDirectionWrite:
         cmd.Fields.WriteCmd = 1;
         break;
+#ifdef __REACTOS__
+
+    case SdTransferDirectionUndefined:
+        break;
+#endif
     } // switch (TransferDirection)
 
     cmd.Fields.NewFlag = 1;
@@ -2110,8 +2119,13 @@ SDHC::SDHC (
     basePhysicalAddress(BasePhysicalAddress),
     basePtr(BasePtr),
     baseSpaceSize(BaseSpaceSize),
+#ifdef __REACTOS__
+    sdhcCapabilities(),
+    outstandingRequestPtr(nullptr),
+#else
     outstandingRequestPtr(nullptr),
     sdhcCapabilities(),
+#endif
     crashdumpMode(CrashdumpMode)
 {
 } // ...::SDHC (...)

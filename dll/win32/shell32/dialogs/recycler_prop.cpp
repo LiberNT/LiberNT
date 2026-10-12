@@ -21,8 +21,6 @@
 
 #include <precomp.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(CRecycleBin);
-
 typedef struct
 {
     ULARGE_INTEGER FreeBytesAvailable;

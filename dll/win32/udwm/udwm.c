@@ -52,8 +52,6 @@ static const GUID IID_IDwmApplicationHost =
     {0x3ae5dff1, 0x7681, 0x484a, {0x95, 0x6a, 0x6f, 0xd0, 0x6c, 0x8e, 0x67, 0x1e}};
 
 static IUnknown *g_ApplicationHost;
-static IDwmChannelPrivate *g_Channel;
-static IDwmCursorController *g_CursorController;
 static UINT g_ComposedEventId;
 
 static HRESULT STDMETHODCALLTYPE
@@ -116,8 +114,6 @@ DllMain(HINSTANCE Instance, DWORD Reason, LPVOID Reserved)
     if (Reason == DLL_PROCESS_DETACH)
     {
         g_ApplicationHost = NULL;
-        g_Channel = NULL;
-        g_CursorController = NULL;
         g_ComposedEventId = 0;
     }
     return TRUE;
@@ -208,7 +204,5 @@ DwmClientStartup(struct IUnknown *ApplicationHost)
     }
 
     g_ApplicationHost = HostInterface;
-    g_Channel = Channel;
-    g_CursorController = CursorController;
     return S_OK;
 }

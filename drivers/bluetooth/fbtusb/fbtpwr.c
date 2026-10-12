@@ -245,7 +245,6 @@ NTSTATUS NTAPI HandleSystemQueryPower(IN PDEVICE_OBJECT DeviceObject, IN PIRP Ir
 
 NTSTATUS NTAPI HandleSystemSetPower(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp )
 {
-    NTSTATUS           ntStatus;
     PDEVICE_EXTENSION  deviceExtension;
     SYSTEM_POWER_STATE systemState;
     PIO_STACK_LOCATION irpStack;
@@ -270,7 +269,7 @@ NTSTATUS NTAPI HandleSystemSetPower(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp 
             TRUE,
             TRUE);
 
-    ntStatus = PoCallDriver(deviceExtension->TopOfStackDeviceObject, Irp);
+    PoCallDriver(deviceExtension->TopOfStackDeviceObject, Irp);
     FreeBT_DbgPrint(3, ("FBTUSB: HandleSystemSetPower: Leaving\n"));
 
     return STATUS_PENDING;
@@ -644,16 +643,13 @@ NTSTATUS NTAPI FinishDevPoUpIrp(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN 
 NTSTATUS NTAPI SetDeviceFunctional(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PDEVICE_EXTENSION DeviceExtension)
 {
     KIRQL              oldIrql;
-    NTSTATUS           ntStatus;
     POWER_STATE        newState;
     PIO_STACK_LOCATION irpStack;
-    DEVICE_POWER_STATE newDevState, oldDevState;
+    DEVICE_POWER_STATE newDevState;
 
-    ntStatus = Irp->IoStatus.Status;
     irpStack = IoGetCurrentIrpStackLocation(Irp);
     newState = irpStack->Parameters.Power.State;
     newDevState = newState.DeviceState;
-    oldDevState = DeviceExtension->DevPower;
 
     FreeBT_DbgPrint(3, ("FBTUSB: SetDeviceFunctional: Entered\n"));
 
@@ -990,7 +986,6 @@ VOID NTAPI WaitWakeCallback(
     IN PVOID Context,
     IN PIO_STATUS_BLOCK IoStatus)
 {
-    NTSTATUS               ntStatus;
     POWER_STATE            powerState;
     PDEVICE_EXTENSION      deviceExtension;
 
@@ -1019,12 +1014,12 @@ VOID NTAPI WaitWakeCallback(
     FreeBT_IoIncrement(deviceExtension);
 
     powerState.DeviceState = PowerDeviceD0;
-    ntStatus = PoRequestPowerIrp(deviceExtension->PhysicalDeviceObject,
-                                 IRP_MN_SET_POWER,
-                                 powerState,
-                                 (PREQUEST_POWER_COMPLETE) WWIrpCompletionFunc,
-                                 deviceExtension,
-                                 NULL);
+    PoRequestPowerIrp(deviceExtension->PhysicalDeviceObject,
+                      IRP_MN_SET_POWER,
+                      powerState,
+                      (PREQUEST_POWER_COMPLETE) WWIrpCompletionFunc,
+                      deviceExtension,
+                      NULL);
 
     if(deviceExtension->WaitWakeEnable)
     {

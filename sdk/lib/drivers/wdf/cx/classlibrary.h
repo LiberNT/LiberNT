@@ -291,7 +291,7 @@ WdfCxEvtDriverUnload(
     UNREFERENCED_PARAMETER(Driver);
 }
 
-static
+static __inline
 NTSTATUS
 WdfCxRegisterLibrary(
     _In_ PDRIVER_OBJECT DriverObject,

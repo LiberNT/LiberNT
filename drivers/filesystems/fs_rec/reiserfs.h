@@ -7,7 +7,7 @@
  *                   Pierre Schweitzer (pierre@reactos.org)
  */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 struct journal_params {
     // Block number of the block containing the first journal node.
     UINT32 jp_journal_1st_block;	      /* where does journal start from on its device */
@@ -64,7 +64,7 @@ typedef struct _RFSD_SUPER_BLOCK
                                      * device, we need to keep after
                                      * making fs with non-standard journal */
 } RFSD_SUPER_BLOCK, *PRFSD_SUPER_BLOCK;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(FIELD_OFFSET(RFSD_SUPER_BLOCK, s_blocksize) == 44);
 C_ASSERT(FIELD_OFFSET(RFSD_SUPER_BLOCK, s_magic) == 52);

@@ -102,3 +102,7 @@ target_include_directories(vkd3d_compiler PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/libs/vkd3d-utils
     ${CMAKE_CURRENT_SOURCE_DIR}/libs/vkd3d)
 target_link_libraries(vkd3d_compiler PUBLIC vkd3d)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(vkd3d PRIVATE -Wno-unused-but-set-variable)
+endif()

@@ -1,7 +1,5 @@
 #include "frame.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(explorer11);
-
 HINSTANCE g_hInstance = NULL;
 
 static BOOL
@@ -179,7 +177,7 @@ public:
     int StatusH() const { return Sc(24); }
 
     // *** IUnknown ***
-    STDMETHODIMP QueryInterface(REFIID riid, void **ppv)
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppv) override
     {
         if (!ppv)
             return E_POINTER;
@@ -196,27 +194,27 @@ public:
         return S_OK;
     }
 
-    STDMETHODIMP_(ULONG) AddRef() { return InterlockedIncrement(&m_cRef); }
-    STDMETHODIMP_(ULONG) Release() { return InterlockedDecrement(&m_cRef); }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_cRef); }
+    STDMETHODIMP_(ULONG) Release() override { return InterlockedDecrement(&m_cRef); }
 
     // *** IOleWindow ***
-    STDMETHODIMP GetWindow(HWND *phwnd)
+    STDMETHODIMP GetWindow(HWND *phwnd) override
     {
         *phwnd = m_hWnd;
         return S_OK;
     }
 
-    STDMETHODIMP ContextSensitiveHelp(BOOL fEnterMode) { return E_NOTIMPL; }
+    STDMETHODIMP ContextSensitiveHelp(BOOL fEnterMode) override { return E_NOTIMPL; }
 
     // *** IShellBrowser ***
-    STDMETHODIMP InsertMenusSB(HMENU hmenuShared, LPOLEMENUGROUPWIDTHS lpMenuWidths) { return E_NOTIMPL; }
-    STDMETHODIMP SetMenuSB(HMENU hmenuShared, HOLEMENU holemenuRes, HWND hwndActiveObject) { return S_OK; }
-    STDMETHODIMP RemoveMenusSB(HMENU hmenuShared) { return S_OK; }
-    STDMETHODIMP SetStatusTextSB(LPCOLESTR pszStatusText) { return S_OK; }
-    STDMETHODIMP EnableModelessSB(BOOL fEnable) { return S_OK; }
-    STDMETHODIMP TranslateAcceleratorSB(MSG *pmsg, WORD wID) { return S_FALSE; }
+    STDMETHODIMP InsertMenusSB(HMENU hmenuShared, LPOLEMENUGROUPWIDTHS lpMenuWidths) override { return E_NOTIMPL; }
+    STDMETHODIMP SetMenuSB(HMENU hmenuShared, HOLEMENU holemenuRes, HWND hwndActiveObject) override { return S_OK; }
+    STDMETHODIMP RemoveMenusSB(HMENU hmenuShared) override { return S_OK; }
+    STDMETHODIMP SetStatusTextSB(LPCOLESTR pszStatusText) override { return S_OK; }
+    STDMETHODIMP EnableModelessSB(BOOL fEnable) override { return S_OK; }
+    STDMETHODIMP TranslateAcceleratorSB(MSG *pmsg, WORD wID) override { return S_FALSE; }
 
-    STDMETHODIMP BrowseObject(PCUIDLIST_RELATIVE pidl, UINT wFlags)
+    STDMETHODIMP BrowseObject(PCUIDLIST_RELATIVE pidl, UINT wFlags) override
     {
         if (wFlags & SBSP_NAVIGATEBACK)
             return NavigateBack();
@@ -238,26 +236,26 @@ public:
         return BrowseTo((PCIDLIST_ABSOLUTE)pidl, TRUE);
     }
 
-    STDMETHODIMP GetViewStateStream(DWORD grfMode, IStream **ppStrm)
+    STDMETHODIMP GetViewStateStream(DWORD grfMode, IStream **ppStrm) override
     {
         *ppStrm = NULL;
         return E_NOTIMPL;
     }
 
-    STDMETHODIMP GetControlWindow(UINT id, HWND *phwnd)
+    STDMETHODIMP GetControlWindow(UINT id, HWND *phwnd) override
     {
         *phwnd = NULL;
         return S_FALSE;
     }
 
-    STDMETHODIMP SendControlMsg(UINT id, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *pret)
+    STDMETHODIMP SendControlMsg(UINT id, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *pret) override
     {
         if (pret)
             *pret = 0;
         return S_FALSE;
     }
 
-    STDMETHODIMP QueryActiveShellView(IShellView **ppshv)
+    STDMETHODIMP QueryActiveShellView(IShellView **ppshv) override
     {
         *ppshv = m_pShellView;
         if (m_pShellView)
@@ -268,11 +266,11 @@ public:
         return E_FAIL;
     }
 
-    STDMETHODIMP OnViewWindowActive(IShellView *pshv) { return S_OK; }
-    STDMETHODIMP SetToolbarItems(LPTBBUTTONSB lpButtons, UINT nButtons, UINT uFlags) { return S_OK; }
+    STDMETHODIMP OnViewWindowActive(IShellView *pshv) override { return S_OK; }
+    STDMETHODIMP SetToolbarItems(LPTBBUTTONSB lpButtons, UINT nButtons, UINT uFlags) override { return S_OK; }
 
     // *** IServiceProvider ***
-    STDMETHODIMP QueryService(REFGUID guidService, REFIID riid, void **ppv)
+    STDMETHODIMP QueryService(REFGUID guidService, REFIID riid, void **ppv) override
     {
         if (guidService == SID_SShellBrowser || guidService == SID_STopLevelBrowser)
             return QueryInterface(riid, ppv);

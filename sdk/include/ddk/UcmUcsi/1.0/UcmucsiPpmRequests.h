@@ -41,7 +41,7 @@ typedef enum _UCMUCSI_PPM_IOCTL {
 
 #pragma warning(push)
 #pragma warning(disable:4201)
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _UCMUCSI_PPM_SEND_UCSI_DATA_BLOCK_IN_PARAMS
 {
@@ -59,7 +59,7 @@ typedef struct _UCMUCSI_PPM_GET_UCSI_DATA_BLOCK_OUT_PARAMS
     UCSI_DATA_BLOCK UcmUcsiDataBlock;
 } UCMUCSI_PPM_GET_UCSI_DATA_BLOCK_OUT_PARAMS, *PUCMUCSI_PPM_GET_UCSI_DATA_BLOCK_OUT_PARAMS;
 
-#include <poppack.h>
+#pragma pack(pop)
 #pragma warning(pop)
 
 WDF_EXTERN_C_END

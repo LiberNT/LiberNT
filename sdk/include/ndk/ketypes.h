@@ -920,7 +920,7 @@ extern NTSYSAPI struct _KUSER_SHARED_DATA *MmWriteableSharedUserData;
 //
 // VDM Structures
 //
-#include "pshpack1.h"
+#pragma pack(push, 1)
 typedef struct _VdmVirtualIca
 {
     LONG ica_count[8];
@@ -935,7 +935,7 @@ typedef struct _VdmVirtualIca
     UCHAR ica_imr;
     UCHAR ica_ssr;
 } VDMVIRTUALICA, *PVDMVIRTUALICA;
-#include "poppack.h"
+#pragma pack(pop)
 
 typedef struct _VdmIcaUserData
 {

@@ -10,8 +10,6 @@
 #include <strsafe.h>
 #include <wine/debug.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(shdocvw);
-
 CAttachmentServices::CAttachmentServices()
     : m_ClientGuid(GUID_NULL)
     , m_HasClientGuid(FALSE)

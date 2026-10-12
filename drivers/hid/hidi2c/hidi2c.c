@@ -42,7 +42,7 @@ DEFINE_GUID(HIDI2C_DSM_GUID, 0x3cdff6f7, 0x4267, 0x4555, 0xad, 0x05, 0xb3, 0x0a,
 #define HIDI2C_DSM_REVISION 1
 #define HIDI2C_DSM_FUNCTION_DESCRIPTOR_ADDRESS 1
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _HIDI2C_DESCRIPTOR
 {
     USHORT wHIDDescLength;
@@ -60,7 +60,7 @@ typedef struct _HIDI2C_DESCRIPTOR
     USHORT wVersionID;
     ULONG Reserved;
 } HIDI2C_DESCRIPTOR, *PHIDI2C_DESCRIPTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(sizeof(HIDI2C_DESCRIPTOR) == 30);
 

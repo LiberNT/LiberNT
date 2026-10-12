@@ -664,7 +664,7 @@ typedef struct _BOOTDISK_INFORMATION_LITE {
 
 #endif /* (NTDDI_VERSION >= NTDDI_WIN7) */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _EISA_MEMORY_TYPE {
   UCHAR ReadWrite:1;
@@ -755,7 +755,7 @@ typedef struct _CM_EISA_FUNCTION_INFORMATION {
   UCHAR InitializationData[60];
 } CM_EISA_FUNCTION_INFORMATION, *PCM_EISA_FUNCTION_INFORMATION;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* CM_EISA_FUNCTION_INFORMATION.FunctionFlags */
 
@@ -3799,7 +3799,7 @@ typedef struct _ACPI_INTERFACE_STANDARD2 {
 } ACPI_INTERFACE_STANDARD2, *PACPI_INTERFACE_STANDARD2;
 
 #if !defined(_WIN64) && !defined(_ARM_)
-#include <pshpack4.h>
+#pragma pack(push, 4)
 #endif
 
 typedef struct _IO_STACK_LOCATION {
@@ -4011,7 +4011,7 @@ typedef struct _IO_STACK_LOCATION {
 } IO_STACK_LOCATION, *PIO_STACK_LOCATION;
 
 #if !defined(_WIN64) && !defined(_ARM_)
-#include "poppack.h"
+#pragma pack(pop)
 #endif
 
 

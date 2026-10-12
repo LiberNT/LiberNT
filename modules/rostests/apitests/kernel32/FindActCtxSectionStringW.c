@@ -51,7 +51,7 @@ struct dllredirect_data
     DWORD res[3];
 };
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 struct assemply_data
 {
@@ -69,7 +69,7 @@ struct assemply_data
     DWORD unk4[3];  /* In win10 there are two more fields */
 };
 
-#include <poppack.h>
+#pragma pack(pop)
 
 HANDLE _CreateActCtxFromFile(LPCWSTR FileName, int line)
 {

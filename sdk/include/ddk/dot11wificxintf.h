@@ -394,7 +394,7 @@ typedef struct _WDI_FRAME_METADATA
 
 typedef NDIS_HANDLE TAL_TXRX_HANDLE, *PTAL_TXRX_HANDLE;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef
 void
@@ -1544,7 +1544,7 @@ Wdi_NdisMIndicateStatusEx(
 }
 #endif
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif
 #pragma endregion

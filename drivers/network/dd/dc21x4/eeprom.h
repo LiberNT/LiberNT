@@ -7,14 +7,14 @@
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _DC_SROM_COMPACT_BLOCK
 {
     USHORT SelectedConnectionType;
     UCHAR GpioDirection; /* 21140 only */
     UCHAR BlockCount;
 } DC_SROM_COMPACT_BLOCK, *PDC_SROM_COMPACT_BLOCK;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _DC_SROM_REPAIR_ENTRY
 {

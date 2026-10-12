@@ -49,14 +49,14 @@
 
 #define ETH_ALEN 6
 #define ETHER_ADDR_LEN  ETH_ALEN
-#include <pshpack1.h>
+#pragma pack(push, 1)
 struct ether_header
 {
   u_int8_t  ether_dhost[ETH_ALEN];      /* destination eth addr */
   u_int8_t  ether_shost[ETH_ALEN];      /* source ether addr    */
   u_int16_t ether_type;                 /* packet type ID field */
 };
-#include <poppack.h>
+#pragma pack(pop)
 
 struct ip
   {

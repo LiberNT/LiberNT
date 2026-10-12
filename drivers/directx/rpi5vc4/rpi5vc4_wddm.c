@@ -4048,13 +4048,13 @@ typedef struct _RPI5VC4_ESC_CMD
     ULONG PayloadBytes;
 } RPI5VC4_ESC_CMD;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _RPI5VC4_ESC_SIGNAL
 {
     ULONG hSyncObject;      /* D3DKMT_HANDLE — ignored (synchronous) */
     ULONG64 FenceValue;     /* ignored (synchronous) */
 } RPI5VC4_ESC_SIGNAL;
-#include <poppack.h>
+#pragma pack(pop)
 
 static NTSTATUS
 Rpi5Vc4QueueEscapeJob(

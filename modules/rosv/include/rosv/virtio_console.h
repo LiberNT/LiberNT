@@ -43,7 +43,7 @@
 
 /* ---- Virtio-console config space (Section 5.3.4) ------------------------ */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _VIRTIO_CONSOLE_CONFIG {
     USHORT Cols;                /* Console width (if VIRTIO_CONSOLE_F_SIZE) */
@@ -60,7 +60,7 @@ typedef struct _VIRTIO_CONSOLE_CONTROL {
     USHORT Value;               /* Event-specific value */
 } VIRTIO_CONSOLE_CONTROL, *PVIRTIO_CONSOLE_CONTROL;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(sizeof(VIRTIO_CONSOLE_CONTROL) == 8);
 

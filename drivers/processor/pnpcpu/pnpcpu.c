@@ -609,9 +609,11 @@ PnpcpuQueryMat(
     PACPI_EVAL_OUTPUT_BUFFER OutputBuffer;
     PACPI_METHOD_ARGUMENT Argument;
     ULONG OutputLength;
+#if defined(_M_IX86) || defined(_M_AMD64) || defined(_M_ARM64)
     ULONG Flags;
     ULONG MatUid;
     PUCHAR Data;
+#endif
     NTSTATUS Status;
 
 #if defined(_M_IX86) || defined(_M_AMD64)
@@ -630,7 +632,9 @@ PnpcpuQueryMat(
     Argument = &OutputBuffer->Argument[0];
     if (Argument->Type != ACPI_METHOD_ARGUMENT_BUFFER || Argument->DataLength < 2)
         goto Exit;
+#if defined(_M_IX86) || defined(_M_AMD64) || defined(_M_ARM64)
     Data = Argument->Data;
+#endif
 #if defined(_M_IX86) || defined(_M_AMD64)
     if (Data[0] == 0 && Data[1] >= 8 && Argument->DataLength >= 8)
     {
@@ -844,7 +848,9 @@ PnpcpuFindProcessorNumber(
     _Inout_ PPNPCPU_DEVICE_EXTENSION DeviceExtension)
 {
     ULONG ActiveProcessors = PnpcpuQueryActiveProcessorCount();
+#if defined(_M_IX86) || defined(_M_AMD64) || defined(_M_ARM64)
     ULONG Index;
+#endif
 
     DeviceExtension->ProcessorNumberValid = FALSE;
     if (ActiveProcessors > MAXIMUM_PROCESSORS)
@@ -1263,6 +1269,7 @@ PnpcpuSetPerfLevel(
     return Status;
 }
 
+#if defined(_M_IX86) || defined(_M_AMD64)
 static
 NTSTATUS
 NTAPI
@@ -1300,6 +1307,7 @@ PnpcpuPowerSettingCallback(
 
     return STATUS_NOT_SUPPORTED;
 }
+#endif
 
 static
 VOID

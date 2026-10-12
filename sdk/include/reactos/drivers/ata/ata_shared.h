@@ -29,7 +29,7 @@
 /** Minimum DMA buffer alignment because of the reserved PRDT byte 0 */
 #define ATA_MIN_BUFFER_ALIGNMENT      FILE_WORD_ALIGNMENT
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /** IDE channel timing information block */
 typedef struct _IDE_ACPI_TIMING_MODE_BLOCK
@@ -65,7 +65,7 @@ typedef struct _ATA_ACPI_TASK_FILE
     UCHAR Command;
 } ATA_ACPI_TASK_FILE, *PATA_ACPI_TASK_FILE;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _ATA_DEVICE_REQUEST     ATA_DEVICE_REQUEST, *PATA_DEVICE_REQUEST;
 

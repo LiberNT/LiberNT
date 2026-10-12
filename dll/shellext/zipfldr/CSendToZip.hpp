@@ -33,47 +33,47 @@ public:
     }
 
     // *** IShellFolder2 methods ***
-    STDMETHODIMP DragEnter(IDataObject *pDataObj, DWORD grfKeyState, POINTL pt, DWORD *pdwEffect);
-    STDMETHODIMP DragOver(DWORD grfKeyState, POINTL pt, DWORD *pdwEffect);
-    STDMETHODIMP DragLeave();
-    STDMETHODIMP Drop(IDataObject *pDataObj, DWORD grfKeyState, POINTL pt, DWORD *pdwEffect);
+    STDMETHODIMP DragEnter(IDataObject *pDataObj, DWORD grfKeyState, POINTL pt, DWORD *pdwEffect) override;
+    STDMETHODIMP DragOver(DWORD grfKeyState, POINTL pt, DWORD *pdwEffect) override;
+    STDMETHODIMP DragLeave() override;
+    STDMETHODIMP Drop(IDataObject *pDataObj, DWORD grfKeyState, POINTL pt, DWORD *pdwEffect) override;
 
     // *** IPersistFile methods ***
-    STDMETHODIMP IsDirty()
+    STDMETHODIMP IsDirty() override
     {
         return S_FALSE;
     }
-    STDMETHODIMP Load(LPCOLESTR pszFileName, DWORD dwMode)
+    STDMETHODIMP Load(LPCOLESTR pszFileName, DWORD dwMode) override
     {
         return S_OK;
     }
-    STDMETHODIMP Save(LPCOLESTR pszFileName, BOOL fRemember)
+    STDMETHODIMP Save(LPCOLESTR pszFileName, BOOL fRemember) override
     {
         return E_NOTIMPL;
     }
-    STDMETHODIMP SaveCompleted(LPCOLESTR pszFileName)
+    STDMETHODIMP SaveCompleted(LPCOLESTR pszFileName) override
     {
         return E_NOTIMPL;
     }
-    STDMETHODIMP GetCurFile(LPOLESTR *ppszFileName)
+    STDMETHODIMP GetCurFile(LPOLESTR *ppszFileName) override
     {
         return E_NOTIMPL;
     }
 
     // *** IPersist methods ***
-    STDMETHODIMP GetClassID(CLSID *pclsid)
+    STDMETHODIMP GetClassID(CLSID *pclsid) override
     {
         *pclsid = CLSID_ZipFolderSendTo;
         return S_OK;
     }
 
     // *** IObjectWithSite methods ***
-    STDMETHODIMP SetSite(IUnknown *pUnkSite)
+    STDMETHODIMP SetSite(IUnknown *pUnkSite) override
     {
         m_pSite = pUnkSite;
         return S_OK;
     }
-    STDMETHODIMP GetSite(REFIID riid, void **ppvSite)
+    STDMETHODIMP GetSite(REFIID riid, void **ppvSite) override
     {
         if (!ppvSite)
             return E_POINTER;

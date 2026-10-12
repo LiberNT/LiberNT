@@ -35,6 +35,19 @@ def check_file(filename):
     cur_packing = []
     with open (filename, 'rb') as input_file:
         for line_nr, line in enumerate(input_file):
+            res = re.search(rb'#[\s]*pragma[\s]+pack[\s]*\([\s]*push[\s]*,[\s]*(\w+)[\s]*\)', line)
+            if res:
+                header = f'pack({res.group(1).decode("utf-8")})'
+                if cur_packing:
+                    print_warning(filename, line_nr + 1, f'Overrides packing from {cur_packing[-1][0]} to {header}')
+                cur_packing.append([header, line_nr + 1])
+                continue
+            if re.search(rb'#[\s]*pragma[\s]+pack[\s]*\([\s]*pop[\s]*\)', line):
+                if cur_packing:
+                    cur_packing.pop()
+                else:
+                    print_error(filename, line_nr + 1, 'Unexpected "#pragma pack(pop)"')
+                continue
             res = re.search(rb'#[\s]*include[\s]+[<"]([^[">]+)[">]', line)
             if res:
                 header = res.group(1).decode('utf-8')

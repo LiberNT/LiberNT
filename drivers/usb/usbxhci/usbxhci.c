@@ -6341,10 +6341,6 @@ XHCI_Ep0BringupCallback(
 {
     UNREFERENCED_PARAMETER(MiniportExtension);
     PXHCI_EP0_BRINGUP_CTX Arg = (PXHCI_EP0_BRINGUP_CTX)CallBackContext;
-    typedef struct _XHCI_EP0_WORK_WRAP {
-        WORK_QUEUE_ITEM Item;
-        XHCI_EP0_BRINGUP_CTX Ctx;
-    } XHCI_EP0_WORK_WRAP, *PXHCI_EP0_WORK_WRAP;
 
     if (!Arg)
         return;

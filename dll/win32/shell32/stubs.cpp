@@ -1008,13 +1008,11 @@ Shell32Ordinal896(PVOID Arg1)
     return E_NOTIMPL;
 }
 
-static PVOID g_Shell32Ordinal899Value;
-
 EXTERN_C HRESULT
 WINAPI
 Shell32Ordinal899(PVOID Arg1)
 {
-    g_Shell32Ordinal899Value = Arg1;
+    UNREFERENCED_PARAMETER(Arg1);
     return S_OK;
 }
 

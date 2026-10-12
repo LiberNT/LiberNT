@@ -7,8 +7,6 @@
 
 #include "private.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(sensorsapi);
-
 typedef HRESULT (*create_instance_fn)(REFIID iid, void **out);
 
 struct class_factory

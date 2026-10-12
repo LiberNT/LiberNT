@@ -54,10 +54,6 @@ add_library(portcls MODULE
     portcls.rc
     ${CMAKE_CURRENT_BINARY_DIR}/portcls.def)
 
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(portcls PRIVATE "-Wno-missing-braces")
-endif()
-
 target_link_libraries(portcls libcntpr ${PSEH_LIB})
 set_module_type(portcls kernelmodedriver ENTRYPOINT 0 )
 add_pch(portcls private.hpp "${PCH_SKIP_SOURCE}")

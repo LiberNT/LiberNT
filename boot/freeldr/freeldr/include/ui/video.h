@@ -7,14 +7,14 @@
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _PALETTE_ENTRY
 {
     UCHAR Red;
     UCHAR Green;
     UCHAR Blue;
 } PALETTE_ENTRY, *PPALETTE_ENTRY;
-#include <poppack.h>
+#pragma pack(pop)
 
 // extern PVOID VideoOffScreenBuffer;
 

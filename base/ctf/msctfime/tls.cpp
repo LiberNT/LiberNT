@@ -7,8 +7,6 @@
 
 #include "msctfime.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(msctfime);
-
 DWORD TLS::s_dwTlsIndex = (DWORD)-1;
 
 /// @implemented

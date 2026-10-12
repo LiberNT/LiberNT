@@ -34,7 +34,7 @@
 #define ROUND_UP_64(n, align) \
     ROUND_DOWN_64(((ULONGLONG)n) + (align) - 1LL, (align))
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 struct _BootSector
 {
     unsigned char  magic0, res0, magic1;
@@ -195,7 +195,7 @@ struct _slot
 
 typedef struct _slot slot;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define VFAT_CASE_LOWER_BASE	8  		// base is lower case
 #define VFAT_CASE_LOWER_EXT 	16 		// extension is lower case

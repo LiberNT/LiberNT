@@ -52,7 +52,7 @@ typedef enum _E1000_RCVBUF_SIZE
 
 
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 
 /* 3.2.3 Receive Descriptor Format */
@@ -162,7 +162,7 @@ typedef struct _E1000_CONTEXT_DESCRIPTOR
 #define E1000_TXD_CMD_IP        0x02000000  /* IP packet */
 #define E1000_TXD_CMD_TSE       0x04000000  /* TCP Seg enable */
 
-#include <poppack.h>
+#pragma pack(pop)
 
 
 C_ASSERT(sizeof(E1000_RECEIVE_DESCRIPTOR) == 16);

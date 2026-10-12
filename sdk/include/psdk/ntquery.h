@@ -21,7 +21,7 @@
 
 /* FIXME: #include <stgprop.h> */
 
-#include <pshpack4.h>
+#pragma pack(push, 4)
 
 typedef struct _CI_STATE
 {
@@ -42,7 +42,7 @@ typedef struct _CI_STATE
     DWORD dwPropCacheSize;
 } CI_STATE;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define PSGUID_STORAGE {0xb725f130, 0x47ef, 0x101a, {0xa5, 0xf1, 0x02, 0x60, 0x8c, 0x9e, 0xeb, 0xac}}
 #define PID_STG_DIRECTORY      ((PROPID)0x02)

@@ -79,7 +79,6 @@ InitializeChkDskDialog(HWND hwndDlg, LPCWSTR pwszDrive)
 }
 
 static HWND hChkdskDrvDialog = NULL;
-static BOOLEAN bChkdskSuccess = FALSE;
 
 static BOOLEAN NTAPI
 ChkdskCallback(
@@ -88,7 +87,6 @@ ChkdskCallback(
     IN PVOID ActionInfo)
 {
     PDWORD Progress;
-    PBOOLEAN pSuccess;
     switch(Command)
     {
         case PROGRESS:
@@ -96,15 +94,12 @@ ChkdskCallback(
             SendDlgItemMessageW(hChkdskDrvDialog, 14002, PBM_SETPOS, (WPARAM)*Progress, 0);
             break;
         case DONE:
-            pSuccess = (PBOOLEAN)ActionInfo;
-            bChkdskSuccess = (*pSuccess);
             break;
 
         case VOLUMEINUSE:
         case INSUFFICIENTRIGHTS:
         case FSNOTSUPPORTED:
         case CLUSTERSIZETOOSMALL:
-            bChkdskSuccess = FALSE;
             FIXME("\n");
             break;
 
@@ -148,12 +143,10 @@ ChkDskNow(HWND hwndDlg, LPCWSTR pwszDrive)
         bScanDrive = TRUE;
 
     hChkdskDrvDialog = hwndDlg;
-    bChkdskSuccess = FALSE;
     SendDlgItemMessageW(hwndDlg, 14002, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
     Chkdsk((LPWSTR)pwszDrive, (LPWSTR)wszFs, bCorrectErrors, TRUE, FALSE, bScanDrive, NULL, NULL, ChkdskCallback); // FIXME: casts
 
     hChkdskDrvDialog = NULL;
-    bChkdskSuccess = FALSE;
 }
 
 static INT_PTR CALLBACK

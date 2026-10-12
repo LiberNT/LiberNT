@@ -58,7 +58,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(shell);
 extern HINSTANCE netshell_hInstance;
 
 /* enumlist.c */
-#include <pshpack1.h>
+#pragma pack(push, 1)
 #define NETCONIDSTRUCT_SIG 0x4EFF
 typedef struct tagNETCONIDSTRUCT
 {
@@ -72,7 +72,7 @@ typedef struct tagNETCONIDSTRUCT
     ULONG            uNameOffset;
     ULONG            uDeviceNameOffset;
 } NETCONIDSTRUCT, *PNETCONIDSTRUCT;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(2 + FIELD_OFFSET(NETCONIDSTRUCT, clsidThisObject) == 2 + (2 + 8));
 C_ASSERT(2 + FIELD_OFFSET(NETCONIDSTRUCT, guidId) == 2 + (2 + 8 + 16));

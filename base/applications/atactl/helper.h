@@ -20,7 +20,7 @@ typedef struct _IDEREGS {
 #define ID_CMD                            0xEC
 #define SMART_CMD                         0xB0
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _SENDCMDOUTPARAMS {
 	ULONG  cBufferSize;
 	DRIVERSTATUS  DriverStatus;
@@ -35,4 +35,4 @@ typedef struct _SENDCMDINPARAMS {
 	ULONG  dwReserved[4];
 	UCHAR  bBuffer[1];
 } SENDCMDINPARAMS, *PSENDCMDINPARAMS, *LPSENDCMDINPARAMS;
-#include <poppack.h>
+#pragma pack(pop)

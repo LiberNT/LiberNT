@@ -1686,7 +1686,7 @@ int WINAPI DrawShadowText(HDC hdc, LPCWSTR text, UINT length, RECT *rect, DWORD 
 }
 
 #ifdef __REACTOS__
-#include <pshpack2.h>
+#pragma pack(push, 2)
 typedef struct
 {
     BYTE bWidth;
@@ -1726,7 +1726,7 @@ typedef struct
     WORD idCount;
     SCALEDOWN_ICONFILEDIRENTRY idEntries[1];
 } SCALEDOWN_ICONFILEDIR;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define SCALEDOWN_MAX_FRAMES 64
 

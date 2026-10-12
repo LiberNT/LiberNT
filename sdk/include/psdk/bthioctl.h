@@ -102,7 +102,7 @@ typedef ULONGLONG HANDLE_SDP, *PHANDLE_SDP;
 
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _BTH_SDP_CONNECT
 {
     BTH_ADDR     bthAddress;
@@ -110,16 +110,16 @@ typedef struct _BTH_SDP_CONNECT
     HANDLE_SDP_TYPE HANDLE_SDP_FIELD_NAME;
     UCHAR       requestTimeout;
 } BTH_SDP_CONNECT,  *PBTH_SDP_CONNECT;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _BTH_SDP_DISCONNECT
 {
     HANDLE_SDP_TYPE HANDLE_SDP_FIELD_NAME;
 } BTH_SDP_DISCONNECT, *PBTH_SDP_DISCONNECT;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _BTH_SDP_SERVICE_ATTRIBUTE_SEARCH_REQUEST
 {
     HANDLE_SDP_TYPE HANDLE_SDP_FIELD_NAME;
@@ -128,29 +128,29 @@ typedef struct _BTH_SDP_SERVICE_ATTRIBUTE_SEARCH_REQUEST
     SdpAttributeRange range[1];
 } BTH_SDP_SERVICE_ATTRIBUTE_SEARCH_REQUEST,
   *PBTH_SDP_SERVICE_ATTRIBUTE_SEARCH_REQUEST;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _BTH_SDP_STREAM_RESPONSE
 {
     ULONG requiredSize;
     ULONG responseSize;
     UCHAR response[1];
 } BTH_SDP_STREAM_RESPONSE, *PBTH_SDP_STREAM_RESPONSE;
-#include <poppack.h>
+#pragma pack(pop)
 
 #if ((NTDDI_VERSION >= NTDDI_WIN8))
 
 #define BTH_HOST_FEATURE_ENHANCED_RETRANSMISSION_MODE          (0x0000000000000001)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _BTH_HOST_FEATURE_MASK
 {
     ULONGLONG Mask;
     ULONGLONG Reserved1;
     ULONGLONG Reserved2;
 } BTH_HOST_FEATURE_MASK, *PBTH_HOST_FEATURE_MASK;
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif
 #endif

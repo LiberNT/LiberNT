@@ -27,8 +27,6 @@ TODO:
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 CBandProxy::CBandProxy()
 {
 }

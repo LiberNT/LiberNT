@@ -14,7 +14,7 @@
 
 /* TYPES ****************************************************************/
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _FATX_BOOT_SECTOR
 {
     UCHAR SysType[4];
@@ -24,7 +24,7 @@ typedef struct _FATX_BOOT_SECTOR
     ULONG Reserved;
     UCHAR Unused[4078];
 } FATX_BOOT_SECTOR, *PFATX_BOOT_SECTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
 /* FUNCTIONS ****************************************************************/
 

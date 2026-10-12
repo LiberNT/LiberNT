@@ -9,8 +9,8 @@
 #include <ntifs.h>
 
 // attributes.h needs to be included before this one.
-#include <pshpack1.h>
-#include <poppack.h>
+#pragma pack(push, 1)
+#pragma pack(pop)
 
 #define GetDisposition(x) ((x >> 24) & 0xFF)
 #define GetCreateOptions(x) (x & 0xFFFFFF)

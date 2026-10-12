@@ -318,7 +318,11 @@ done:
     // Log new UART control information
     //
     {
+#ifdef __REACTOS__
+        static const char* updateModeStrings[] = {
+#else
         static char* updateModeStrings[] = {
+#endif
             "INVALID",
             "BITMASK_SET",
             "BITMASK_CLEAR",

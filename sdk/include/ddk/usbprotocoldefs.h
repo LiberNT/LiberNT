@@ -1,6 +1,6 @@
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #define USB_UnConnected_Device_Address 0
 #define USB_UNCONNECTED_ADDRESS(address) ( USB_UnConnected_Device_Address == (address))
@@ -678,4 +678,4 @@ typedef struct _USBHUBPORTDATA {
 
 #endif /* !defined(MIDL_PASS) */
 
-#include <poppack.h>
+#pragma pack(pop)

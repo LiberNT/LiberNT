@@ -44,3 +44,7 @@ if(MSVC)
     # Disable warning C4267: 'initializing': conversion from 'size_t' to 'uint16', possible loss of data
     target_compile_options(mstsc PRIVATE /wd4267)
 endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(mstsc PRIVATE -Wno-unused-but-set-global)
+endif()

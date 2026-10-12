@@ -68,7 +68,7 @@ if(STACK_PROTECTOR)
 endif()
 
 # Compiler Core
-add_compile_options(-pipe -fms-extensions -fno-strict-aliasing -fno-common)
+add_compile_options(-pipe -fms-extensions -Wno-microsoft-anon-tag -fno-strict-aliasing -fno-common)
 
 if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
     add_compile_options(-mlong-double-64)
@@ -88,8 +88,6 @@ execute_process(COMMAND ${CMAKE_C_COMPILER} -print-resource-dir OUTPUT_VARIABLE 
 set(CLANG_RESOURCE_INCLUDE_FLAG "-isystem ${CLANG_RESOURCE_DIR}/include")
 
 # Clang-specific options
-add_compile_options("$<$<COMPILE_LANGUAGE:C>:-Wno-microsoft>")
-add_compile_options(-Wno-pragma-pack)
 add_compile_options(-fno-associative-math)
 
 # disable "libcall optimization"
@@ -125,42 +123,14 @@ else()
 endif()
 
 # Warnings, errors
-# Clang builds don't use -Werror
-add_compile_options(-Wall -Wpointer-arith)
+add_compile_options(-Werror -Wall -Wpointer-arith "-Wno-error=#pragma-messages")
 
-# Disable some overzealous warnings
-add_compile_options(
-    -Wno-unknown-warning-option
-    -Wno-unknown-pragmas
-    -Wno-ignored-pragmas
-    -Wno-multichar
-    -Wno-unused-const-variable
-    -Wno-unused-local-typedefs
-    -Wno-unused-value
-    -Wno-unused-variable
-    -Wno-unused-function
-    -Wno-unused-private-field
-    -Wno-deprecated
-    -Wno-deprecated-declarations
-    -Wno-deprecated-non-prototype
-    -Wno-missing-braces
-    -Wno-unused-but-set-variable
-    -Wno-inconsistent-missing-override
-    -Wno-main
-    "-Wno-#pragma-messages"
-    -Wunused-comparison
-    -Wunused-result
-)
-
-if(ARCH STREQUAL "arm")
-    add_compile_options(-Wno-attributes)
-endif()
+add_compile_options(-Wunused-comparison -Wunused-result)
 
 # Optimizations
 # FIXME: Revisit this to see if we even need these levels
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_options(-O2 -DNDEBUG=)
-    add_compile_options(-Wno-unused-variable)
 else()
     if(OPTIMIZE STREQUAL "1")
         add_compile_options(-Os)
@@ -190,8 +160,6 @@ if(ARCH STREQUAL "i386")
     if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_compile_options(-momit-leaf-frame-pointer)
     endif()
-elseif(ARCH STREQUAL "amd64")
-    add_compile_options(-Wno-error)
 elseif(ARCH STREQUAL "arm64")
     add_compile_options(-fno-optimize-sibling-calls -fno-omit-frame-pointer)
     add_compile_options("$<$<NOT:$<COMPILE_LANGUAGE:ASM>>:-ffixed-x18>")
@@ -529,7 +497,7 @@ function(spec2def _dllname _spec_file)
         COMMAND native-spec2def -n=${_dllname} -a=${ARCH2} -d=${CMAKE_CURRENT_BINARY_DIR}/${_file}.def -s=${CMAKE_CURRENT_BINARY_DIR}/${_file}_stubs.c ${__with_relay_arg} ${__version_arg} ${__dbg_arg} ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file} native-spec2def)
 
-    set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${_file}_stubs.c PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${_file}_stubs.c PROPERTIES SKIP_PRECOMPILE_HEADERS ON COMPILE_OPTIONS -fno-builtin)
 
     if(__spec2def_ADD_IMPORTLIB)
         set(_extraflags)

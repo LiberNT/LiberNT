@@ -19,7 +19,6 @@ CSimpleArray<DEVINST> g_devList;
 CString g_strHotplugTooltip;
 static HICON g_hIconHotplug = NULL;
 static WCHAR g_strMenuSel[DISPLAY_NAME_LEN];
-static BOOL g_IsRemoving = FALSE;
 
 /*++
 * @name EnumHotpluggedDevices
@@ -115,9 +114,6 @@ HRESULT NotifyBalloon(CSysTray* pSysTray, LPCWSTR szTitle = NULL, LPCWSTR szInfo
     StringCchCopy(nim.szInfoTitle, _countof(nim.szInfoTitle), L"");
     StringCchCopy(nim.szInfo, _countof(nim.szInfo), L"");
     ret = Shell_NotifyIcon(NIM_MODIFY, &nim);
-    g_IsRemoving = FALSE; /* This flag is used to prevent instant icon hiding after last device is removed.
-                             The above timer maintains the required state for the same.
-                          */
     return ret ? S_OK : E_FAIL;
 }
 
@@ -200,7 +196,6 @@ static void _ShowContextMenu(CSysTray * pSysTray)
         else
         {
             //MessageBox(0, L"Device ejected successfully!! You can safely remove the device now!", L"Safely Remove Hardware", MB_OK | MB_ICONINFORMATION);
-            g_IsRemoving = TRUE;
             g_devList.RemoveAt(id); /* thing is.. even after removing id at this point, the devnode_change occurs after some seconds of sucessful removal
                                        and since pendrive is still plugged in it gets enumerated, if problem number is not filtered.
                                     */

@@ -1,7 +1,7 @@
 KIRQL irql;
 KAFFINITY affinity;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct
 {
 	unsigned char		rID[4]	;					//4	0
@@ -19,7 +19,7 @@ typedef struct
 	unsigned int 		dLen ;
 	unsigned char* 	data;
 }WAVE_HDR;
-#include <poppack.h>
+#pragma pack(pop)
 
 void sb16_play(WAVE_HDR* wave);
 void dump_wav(WAVE_HDR* wave);

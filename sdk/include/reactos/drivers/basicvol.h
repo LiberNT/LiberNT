@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef union _BASIC_VOLUME_UNIQUE_ID
 {
     struct
@@ -21,7 +21,7 @@ typedef union _BASIC_VOLUME_UNIQUE_ID
         GUID PartitionGuid;
     } Gpt;
 } BASIC_VOLUME_UNIQUE_ID, *PBASIC_VOLUME_UNIQUE_ID;
-#include <poppack.h>
+#pragma pack(pop)
 C_ASSERT(RTL_FIELD_SIZE(BASIC_VOLUME_UNIQUE_ID, Mbr) == 0x0C);
 C_ASSERT(RTL_FIELD_SIZE(BASIC_VOLUME_UNIQUE_ID, Gpt) == 0x18);
 

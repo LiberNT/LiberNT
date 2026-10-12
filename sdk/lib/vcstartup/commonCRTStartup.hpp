@@ -18,14 +18,14 @@
 // Defined in winnt.h
 #define FAST_FAIL_FATAL_APP_EXIT 7
 
-extern "C" int __cdecl main(int, char**, char**);
+int __cdecl main(int, char**, char**);
 extern "C" int __cdecl wmain(int, wchar_t**, wchar_t**);
 
 template<typename Tmain>
-static int call_main();
+static inline int call_main();
 
 template<>
-int call_main<decltype(main)>()
+inline int call_main<decltype(main)>()
 {
     _configure_narrow_argv(_crt_argv_unexpanded_arguments);
 
@@ -33,7 +33,7 @@ int call_main<decltype(main)>()
 }
 
 template<>
-int call_main<decltype(wmain)>()
+inline int call_main<decltype(wmain)>()
 {
     _configure_wide_argv(_crt_argv_unexpanded_arguments);
 

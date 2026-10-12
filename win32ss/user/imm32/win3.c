@@ -8,8 +8,6 @@
 #include "precomp.h"
 #include <ime.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(imm);
-
 #ifdef IMM_WIN3_SUPPORT /* 3.x support */
 
 #define ALIGN_DWORD(len)      (((len) + 3) & ~3)

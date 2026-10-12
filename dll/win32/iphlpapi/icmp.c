@@ -8,8 +8,6 @@
 
 #include "iphlpapi_private.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(iphlpapi);
-
 HANDLE
 WINAPI
 Icmp6CreateFile(void)

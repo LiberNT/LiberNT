@@ -623,7 +623,7 @@ typedef struct _PLUGPLAY_BUS_INSTANCE
 //
 // Partial Resource Descriptor and List for Hardware
 //
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR
 {
     UCHAR Type;
@@ -786,7 +786,7 @@ typedef struct _CM_DISK_GEOMETRY_DEVICE_DATA
     ULONG NumberOfHeads;
 } CM_DISK_GEOMETRY_DEVICE_DATA, *PCM_DISK_GEOMETRY_DEVICE_DATA;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif // _!NTOS_MODE_USER
 

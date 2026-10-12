@@ -24,8 +24,6 @@
 #include "../iphlpapi/ipstats.h"
 #include "nsi_reactos.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(nsi);
-
 typedef DWORD (*nsi_enumerate_func)(struct nsi_enumerate_all_ex *params);
 typedef DWORD (*nsi_get_func)(struct nsi_get_all_parameters_ex *params);
 

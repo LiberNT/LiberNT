@@ -40,24 +40,6 @@ TmpRecordResponse(
     Enlistment->NextHistory++;
 }
 
-static
-BOOLEAN
-TmpEnlistmentFinished(
-    _In_ PKENLISTMENT Enlistment)
-{
-    switch (Enlistment->State)
-    {
-        case KEnlistmentReadOnly:
-        case KEnlistmentAborted:
-        case KEnlistmentCommitted:
-        case KEnlistmentForgotten:
-            return TRUE;
-
-        default:
-            return FALSE;
-    }
-}
-
 VOID
 TmpAbandonEnlistment(
     _In_ PKENLISTMENT Enlistment,

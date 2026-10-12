@@ -52,7 +52,7 @@
 //
 // DOS Image Header Format
 //
-#include <pshpack2.h>
+#pragma pack(push, 2)
 typedef struct _IMAGE_DOS_HEADER {
   USHORT e_magic;
   USHORT e_cblp;
@@ -107,12 +107,12 @@ typedef struct _IMAGE_OS2_HEADER {
   USHORT ne_swaparea;
   USHORT ne_expver;
 } IMAGE_OS2_HEADER, *PIMAGE_OS2_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
 //
 // Export/Import Format
 //
-#include <pshpack4.h>
+#pragma pack(push, 4)
 typedef struct _IMAGE_EXPORT_DIRECTORY {
   ULONG Characteristics;
   ULONG TimeDateStamp;
@@ -541,7 +541,7 @@ typedef struct _IMAGE_IMPORT_BY_NAME {
   UCHAR Name[1];
 } IMAGE_IMPORT_BY_NAME, *PIMAGE_IMPORT_BY_NAME;
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 typedef struct _IMAGE_THUNK_DATA64 {
   union {
     ULONGLONG ForwarderString;
@@ -550,7 +550,7 @@ typedef struct _IMAGE_THUNK_DATA64 {
     ULONGLONG AddressOfData;
   } u1;
 } IMAGE_THUNK_DATA64, *PIMAGE_THUNK_DATA64;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _IMAGE_THUNK_DATA32 {
   union {
@@ -625,7 +625,7 @@ typedef struct _IMAGE_IMPORT_DESCRIPTOR {
   ULONG FirstThunk;
 } IMAGE_IMPORT_DESCRIPTOR, *PIMAGE_IMPORT_DESCRIPTOR;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #ifndef __IMAGE_COR20_HEADER_DEFINED__
 #define __IMAGE_COR20_HEADER_DEFINED__

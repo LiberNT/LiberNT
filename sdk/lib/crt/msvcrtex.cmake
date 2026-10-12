@@ -106,8 +106,10 @@ target_compile_definitions(msvcrtex PRIVATE _DLL _MSVCRTEX_)
 # msvcrtex depends on msvcrt and kernel32
 target_link_libraries(msvcrtex INTERFACE libmsvcrt libkernel32)
 
-if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(msvcrtex PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wno-main>)
+endif()
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     if(LTCG)
         target_compile_options(msvcrtex PRIVATE -fno-lto)
     endif()

@@ -147,7 +147,7 @@ HvpApplyIncrementalLog(
 
     if (Apply)
     {
-        DPRINT1("Applied %lu hive log entries up to sequence 0x%lx\n", Applied, Sequence - 1);
+        DPRINT1("Applied %lu hive log entries up to sequence 0x%lx\n", (unsigned long)Applied, (unsigned long)(Sequence - 1));
         BaseBlock->Type = HFILE_TYPE_PRIMARY;
         BaseBlock->Sequence1 = Sequence - 1;
         BaseBlock->Sequence2 = Sequence - 1;

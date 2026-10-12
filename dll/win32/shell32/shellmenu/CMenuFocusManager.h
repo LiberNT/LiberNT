@@ -23,7 +23,8 @@ class CMenuBand;
 
 class CMenuFocusManager :
     public CComCoClass<CMenuFocusManager>,
-    public CComObjectRootEx<CComMultiThreadModelNoCS>
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IUnknown
 {
 private:
     static DWORD TlsIndex;

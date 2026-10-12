@@ -57,7 +57,7 @@ public:
     }
 };
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 union PNGSIGNATURE { UINT64 number; BYTE bytes[8]; };
 struct PNGCHUNKHEADER { UINT length, type; };
 struct PNGCHUNKFOOTER { UINT crc; };
@@ -70,7 +70,7 @@ struct PNGSIGANDIHDR
     PNGCHUNKFOOTER chunkfooter;
 };
 struct PNGFOOTER { PNGCHUNKHEADER chunkheader; PNGCHUNKFOOTER footer; };
-#include <poppack.h>
+#pragma pack(pop)
 
 static inline bool IsPngSignature(const void* buffer)
 {

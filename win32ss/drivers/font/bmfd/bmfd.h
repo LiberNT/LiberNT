@@ -48,7 +48,7 @@
 
 #define IMAGE_DOS_MAGIC 0x594D // FIXME: hack hack hack
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct
 {
     WORD offset;
@@ -192,7 +192,7 @@ typedef union
     GLYPHENTRY30 ge30;
 } GLYPHENTRY, *PGLYPHENTRY;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 
 /** Driver specific types *****************************************************/

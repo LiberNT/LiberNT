@@ -13,5 +13,5 @@ target_include_directories(ci PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REACTOS_SOUR
 target_compile_definitions(ci PRIVATE MBEDTLS_CONFIG_FILE="ci_config.h")
 
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(ci PRIVATE -Wno-tautological-constant-compare)
+    set_property(SOURCE ${REACTOS_SOURCE_DIR}/dll/3rdparty/mbedtls/bignum.c APPEND PROPERTY COMPILE_OPTIONS -Wno-unused-but-set-variable)
 endif()

@@ -27,7 +27,7 @@ DBG_DEFAULT_CHANNEL(DISK);
 /* Enable this line if you want to support multi-drive caching (increases FreeLdr size!) */
 // #define CACHE_MULTI_DRIVES
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct
 {
@@ -90,7 +90,7 @@ typedef struct _EXTENDED_GEOMETRY
     ULONG       PDPTE;
 } EXTENDED_GEOMETRY, *PEXTENDED_GEOMETRY;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _PC_DISK_DRIVE
 {

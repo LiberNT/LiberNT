@@ -120,7 +120,7 @@ LRESULT CALLBACK MainWndProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lPa
 }
 
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct DLGTEMPLATEEX
 {
     WORD dlgVer;
@@ -134,7 +134,7 @@ typedef struct DLGTEMPLATEEX
     short cx;
     short cy;
 } DLGTEMPLATEEX, *LPDLGTEMPLATEEX;
-#include <poppack.h>
+#pragma pack(pop)
 
 int CALLBACK PropSheetCallback(HWND hDlg, UINT message, LPARAM lParam)
 {

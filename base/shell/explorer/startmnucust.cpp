@@ -209,7 +209,7 @@ static VOID AddCustomItem(HWND hTreeView, const CUSTOM_ENTRY *entry)
     BOOL bChecked = entry->fnGetValue(entry);
     TRACE("%p: %d\n", entry->id, bChecked);
 
-    TV_INSERTSTRUCT Insert = { TVI_ROOT, TVI_LAST, { TVIF_TEXT | TVIF_STATE | TVIF_PARAM } };
+    TV_INSERTSTRUCT Insert = { TVI_ROOT, TVI_LAST, { { TVIF_TEXT | TVIF_STATE | TVIF_PARAM } } };
     Insert.item.pszText = szText;
     Insert.item.lParam = entry->id;
     Insert.item.stateMask = TVIS_STATEIMAGEMASK;

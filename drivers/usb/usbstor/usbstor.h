@@ -68,7 +68,7 @@
 #define CBW_SIGNATURE 0x43425355
 #define CSW_SIGNATURE 0x53425355
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct
 {
@@ -98,7 +98,7 @@ typedef struct
 
 C_ASSERT(sizeof(CSW) <= SYSTEM_CACHE_ALIGNMENT_SIZE);
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct
 {

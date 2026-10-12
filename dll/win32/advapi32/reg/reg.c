@@ -59,10 +59,12 @@ NTSTATUS WINAPI RemapPredefinedHandleInternal(HKEY hkey, HKEY override);
 
 /* FUNCTIONS ****************************************************************/
 /* check if value type needs string conversion (Ansi<->Unicode) */
+#ifndef _ADVAPI32_VISTA_
 __inline static int is_string( DWORD type )
 {
     return (type == REG_SZ) || (type == REG_EXPAND_SZ) || (type == REG_MULTI_SZ);
 }
+#endif
 
 /************************************************************************
  *  RegInitDefaultHandles

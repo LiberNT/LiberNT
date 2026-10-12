@@ -9,7 +9,7 @@
 #include <windows.h>
 #include <commctrl.h>
 
-#include <pshpack2.h>
+#pragma pack(push, 2)
 typedef struct
 {
     BYTE bWidth;
@@ -29,7 +29,7 @@ typedef struct
     WORD idCount;
     TEST_ICONDIRENTRY idEntries[2];
 } TEST_ICONDIR;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define SMALL_FRAME 16
 #define LARGE_FRAME 32

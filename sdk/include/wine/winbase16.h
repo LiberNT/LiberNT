@@ -26,7 +26,7 @@
 #include <wine/windef16.h>
 #include <wine/library.h>
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /* Process database (i.e. a normal DOS PSP) */
 typedef struct
@@ -217,7 +217,7 @@ enum arg_types
     ARG_VARARG    /* start of varargs */
 };
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define INVALID_HANDLE_VALUE16  ((HANDLE16) -1)
 #define INFINITE16      0xFFFF

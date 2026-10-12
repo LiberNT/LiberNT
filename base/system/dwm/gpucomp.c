@@ -52,7 +52,6 @@ static PFNGLCREATESHADERPROC            pglCreateShader;
 static PFNGLSHADERSOURCEPROC            pglShaderSource;
 static PFNGLCOMPILESHADERPROC           pglCompileShader;
 static PFNGLGETSHADERIVPROC             pglGetShaderiv;
-static PFNGLGETSHADERINFOLOGPROC        pglGetShaderInfoLog;
 static PFNGLDELETESHADERPROC            pglDeleteShader;
 static PFNGLCREATEPROGRAMPROC           pglCreateProgram;
 static PFNGLATTACHSHADERPROC            pglAttachShader;
@@ -182,8 +181,6 @@ DwmGpuLoadEntryPoints(void)
     pglShaderSource = (PFNGLSHADERSOURCEPROC)DwmGpuGetProc("glShaderSource");
     pglCompileShader = (PFNGLCOMPILESHADERPROC)DwmGpuGetProc("glCompileShader");
     pglGetShaderiv = (PFNGLGETSHADERIVPROC)DwmGpuGetProc("glGetShaderiv");
-    pglGetShaderInfoLog =
-        (PFNGLGETSHADERINFOLOGPROC)DwmGpuGetProc("glGetShaderInfoLog");
     pglDeleteShader = (PFNGLDELETESHADERPROC)DwmGpuGetProc("glDeleteShader");
     pglCreateProgram = (PFNGLCREATEPROGRAMPROC)DwmGpuGetProc("glCreateProgram");
     pglAttachShader = (PFNGLATTACHSHADERPROC)DwmGpuGetProc("glAttachShader");

@@ -60,7 +60,7 @@ static const columninfo RecycleBinColumns[] =
 
 // The ROS Recycle Bin PIDL format starts with a NT4/2000 Unicode FS PIDL followed by
 // BBITEMDATA and BBITEMFOOTER. This makes it compatible with SHChangeNotify listeners.
-#include "pshpack1.h"
+#pragma pack(push, 1)
 #define BBITEMFILETYPE (PT_FS | PT_FS_UNICODE_FLAG | PT_FS_FILE_FLAG)
 #define BBITEMFOLDERTYPE (PT_FS | PT_FS_UNICODE_FLAG | PT_FS_FOLDER_FLAG)
 struct BBITEMDATA
@@ -79,7 +79,7 @@ struct BBITEMFOOTER
     WORD DataSize;
     WORD EndSignature;
 };
-#include "poppack.h"
+#pragma pack(pop)
 
 static inline BOOL IsFolder(LPCITEMIDLIST pidl)
 {

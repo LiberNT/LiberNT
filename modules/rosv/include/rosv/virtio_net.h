@@ -43,7 +43,7 @@
 #define VIRTIO_NET_S_LINK_UP            1       /* Link is up */
 #define VIRTIO_NET_S_ANNOUNCE           2       /* Announcement needed */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _VIRTIO_NET_CONFIG {
     UCHAR  Mac[6];              /* MAC address */
@@ -63,7 +63,7 @@ typedef struct _VIRTIO_NET_HDR {
     USHORT NumBuffers;          /* Only with VIRTIO_NET_F_MRG_RXBUF */
 } VIRTIO_NET_HDR, *PVIRTIO_NET_HDR;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(sizeof(VIRTIO_NET_HDR) == 12);
 

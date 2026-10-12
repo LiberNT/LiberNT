@@ -1148,7 +1148,7 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     if (LoaderBlock == NULL)
     {
-        KeBugCheckEx(PHASE0_INITIALIZATION_FAILED, 'A64K', 'LDR', 0, 0);
+        KeBugCheckEx(PHASE0_INITIALIZATION_FAILED, 'A64K', ('L' << 16 | 'D' << 8 | 'R'), 0, 0);
     }
 
     /*

@@ -54,3 +54,7 @@ add_dependencies(ldap psdk)
 target_include_directories(ldap PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_definitions(ldap PRIVATE _DLL __USE_CRTIMP _CRT_DECLARE_NONSTDC_NAMES=1 strcasecmp=_stricmp strncasecmp=_strnicmp)
 target_link_libraries(ldap oldnames)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ldap PRIVATE -Wno-unused-but-set-variable)
+endif()

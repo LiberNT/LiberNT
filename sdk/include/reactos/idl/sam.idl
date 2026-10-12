@@ -197,7 +197,7 @@ typedef struct _DOMAIN_MODIFIED_INFORMATION2
 } DOMAIN_MODIFIED_INFORMATION2, *PDOMAIN_MODIFIED_INFORMATION2;
 cpp_quote("#endif")
 
-cpp_quote("#include <pshpack4.h>")
+cpp_quote("#pragma pack(push, 4)")
 typedef struct _SAMPR_DOMAIN_GENERAL_INFORMATION
 {
     OLD_LARGE_INTEGER ForceLogoff;
@@ -220,7 +220,7 @@ typedef struct _SAMPR_DOMAIN_GENERAL_INFORMATION2
     LARGE_INTEGER LockoutObservationWindow;
     unsigned short LockoutThreshold;
 } SAMPR_DOMAIN_GENERAL_INFORMATION2, *PSAMPR_DOMAIN_GENERAL_INFORMATION2;
-cpp_quote("#include <poppack.h>")
+cpp_quote("#pragma pack(pop)")
 
 typedef struct _SAMPR_DOMAIN_OEM_INFORMATION
 {

@@ -9,7 +9,6 @@
 #include "CCommBand.h"
 
 #include <wine/debug.h>
-WINE_DEFAULT_DEBUG_CHANNEL(ieframe);
 
 #define COMMBAND_CMD_REFRESH      1
 #define COMMBAND_CMD_OPENWINDOW   2

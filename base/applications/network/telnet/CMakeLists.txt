@@ -30,7 +30,7 @@ if (MSVC)
     target_compile_options(telnet PRIVATE /wd4838)
 endif()
 
-if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(telnet PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-narrowing>)
 endif()
 

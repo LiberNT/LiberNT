@@ -8,6 +8,7 @@
  * entry points are not available on this architecture.
  */
 
+#include <stdarg.h>
 #include <intrin.h>
 #include "include/fpieee.h"
 #include "ntstatus.h"

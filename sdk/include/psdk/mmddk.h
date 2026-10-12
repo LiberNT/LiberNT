@@ -48,7 +48,7 @@ extern "C" {
  *   Multimedia DDK compatible part
  * ================================== */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #define DRVM_INIT		100
 #define DRVM_EXIT		101
@@ -482,7 +482,7 @@ DWORD   WINAPI mmGetCurrentTask(void);
 #define  WAVE_DIRECTSOUND               0x0080
 
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #ifdef __cplusplus
 } // extern "C"

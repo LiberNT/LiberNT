@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /* MS Windows 2000/XP/2003 */
 typedef struct _DELETED_FILE_RECORD
@@ -20,7 +20,7 @@ typedef struct _DELETED_FILE_RECORD
     WCHAR FileNameW[MAX_PATH];
 } DELETED_FILE_RECORD, *PDELETED_FILE_RECORD;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* COM interface */
 

@@ -7,8 +7,6 @@
 
 #include "private.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(portabledev);
-
 struct value_entry
 {
     PROPERTYKEY key;

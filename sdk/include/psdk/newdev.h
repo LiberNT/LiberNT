@@ -28,7 +28,7 @@
 extern "C" {
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /* UpdateDriverForPlugAndPlayDevices.InstallFlags constants */
 #define INSTALLFLAG_FORCE                 0x00000001
@@ -151,7 +151,7 @@ DiUninstallDevice(
   PBOOL NeedReboot OPTIONAL);
 #endif /* (WINVER >= _WIN32_WINNT_WIN7) */
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #ifdef __cplusplus
 }

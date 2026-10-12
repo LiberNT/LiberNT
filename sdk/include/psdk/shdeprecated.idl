@@ -357,7 +357,7 @@ enum {
     SECURELOCK_SUGGEST_SECURE128BIT     = 13,
 };
 
-cpp_quote("#include <pshpack8.h>")
+cpp_quote("#pragma pack(push, 8)")
 typedef struct basebrowserdataxp
 {
     HWND                _hwnd;
@@ -428,7 +428,7 @@ typedef struct basebrowserdatalh
     HWND                _hwndFrame;
     LONG                _lPhishingFilterStatus;
 } BASEBROWSERDATALH, *LPBASEBROWSERDATALH;
-cpp_quote("#include <poppack.h>")
+cpp_quote("#pragma pack(pop)")
 
 typedef BASEBROWSERDATAXP BASEBROWSERDATA;
 

@@ -37,7 +37,7 @@
 
 /* #define VBE12_SUPPORT */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /*
  * VBE Command Definitions
@@ -186,7 +186,7 @@ typedef struct
 
 #define MAX_SIZE_OF_EDID 256
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct
 {

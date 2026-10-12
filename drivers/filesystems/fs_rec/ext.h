@@ -6,7 +6,7 @@
  * PROGRAMMER:       Pierre Schweitzer (pierre@reactos.org)
  */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _EXT_SUPER_BLOCK {
     ULONG InodesCount;
     ULONG BlocksCount;
@@ -35,7 +35,7 @@ typedef struct _EXT_SUPER_BLOCK {
     USHORT DefResGid;
         // Partial
 } EXT_SUPER_BLOCK, *PEXT_SUPER_BLOCK;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(FIELD_OFFSET(EXT_SUPER_BLOCK, FreeInodesCount) == 0x10);
 C_ASSERT(FIELD_OFFSET(EXT_SUPER_BLOCK, BlocksPerGroup) == 0x20);

@@ -388,7 +388,7 @@ typedef struct _TDI_ADDRESS_INFO {
   TRANSPORT_ADDRESS  Address;
 } TDI_ADDRESS_INFO, *PTDI_ADDRESS_INFO;
 
-#include "pshpack1.h"
+#pragma pack(push, 1)
 
 typedef struct _TDI_ADDRESS_8022 {
   UCHAR  MACAddress[6];
@@ -582,7 +582,7 @@ typedef struct _TA_ADDRESS_NETBIOS_UNICODE_EX {
   } Address [1];
 } TA_NETBIOS_UNICODE_EX_ADDRESS, *PTA_NETBIOS_UNICODE_EX_ADDRESS;
 
-#include "poppack.h"
+#pragma pack(pop)
 
 #ifdef __cplusplus
 }

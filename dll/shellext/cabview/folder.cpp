@@ -37,7 +37,7 @@ static const struct FOLDERCOLUMN
     { IDS_COL_ATT, LVCFMT_RIGHT, 10, SHCOLSTATE_TYPE_STR, &FMTID_Storage, PID_STG_ATTRIBUTES },
 };
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 struct CABITEM
 {
     WORD cb;
@@ -64,7 +64,7 @@ struct CABITEM
         return p && p->cb > FIELD_OFFSET(CABITEM, Path[1]) && p->Unknown == 0 ? p : NULL;
     }
 };
-#include <poppack.h>
+#pragma pack(pop)
 
 static CABITEM* CreateItem(LPCWSTR Path, UINT Attrib, UINT Size, UINT DateTime)
 {

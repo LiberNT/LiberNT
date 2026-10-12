@@ -1212,8 +1212,13 @@ pvr_get_uobj_array(const struct drm_pvr_obj_array *in, u32 min_stride, u32 obj_s
 				   (unsigned long)obj_size * in->count))
 			ret = -EFAULT;
 	} else {
+#ifdef __REACTOS__
+		u8 __user *in_ptr = u64_to_user_ptr(in->array);
+		u8 *out_ptr = out_alloc;
+#else
 		void __user *in_ptr = u64_to_user_ptr(in->array);
 		void *out_ptr = out_alloc;
+#endif
 
 		for (u32 i = 0; i < in->count; i++) {
 			ret = copy_struct_from_user(out_ptr, obj_size, in_ptr, in->stride);
@@ -1250,8 +1255,13 @@ pvr_set_uobj_array(const struct drm_pvr_obj_array *out, u32 min_stride, u32 obj_
 			return -EFAULT;
 	} else {
 		u32 cpy_elem_size = min_t(u32, out->stride, obj_size);
+#ifdef __REACTOS__
+		u8 __user *out_ptr = u64_to_user_ptr(out->array);
+		const u8 *in_ptr = in;
+#else
 		void __user *out_ptr = u64_to_user_ptr(out->array);
 		const void *in_ptr = in;
+#endif
 
 		for (u32 i = 0; i < out->count; i++) {
 			if (copy_to_user(out_ptr, in_ptr, cpy_elem_size))

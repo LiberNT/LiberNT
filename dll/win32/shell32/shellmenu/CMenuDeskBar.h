@@ -53,7 +53,7 @@ private:
 
     BOOL m_didAddRef;
 
-    virtual void OnFinalMessage(HWND hWnd);
+    virtual void OnFinalMessage(HWND hWnd) override;
 public:
     CMenuDeskBar();
     virtual ~CMenuDeskBar();

@@ -67,7 +67,7 @@
 //
 // PCI IRQ Routing Table in BIOS/Registry (Signature: PIR$)
 //
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _PIN_INFO
 {
     UCHAR Link;
@@ -97,7 +97,7 @@ typedef struct _PCI_IRQ_ROUTING_TABLE
     UCHAR Checksum;
     SLOT_INFO Slot[ANYSIZE_ARRAY];
 } PCI_IRQ_ROUTING_TABLE, *PPCI_IRQ_ROUTING_TABLE;
-#include <poppack.h>
+#pragma pack(pop)
 
 //
 // PCI Registry Information

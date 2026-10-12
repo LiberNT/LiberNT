@@ -18,7 +18,7 @@
 
 PCWSTR DiskFormat = L"\\Device\\Harddisk%lu\\Partition%lu";
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct {
     unsigned char  magic0, res0, magic1;
     unsigned char  OEMName[8];
@@ -92,7 +92,7 @@ typedef struct {
     PARTITION_TABLE_ENTRY PartitionTable[4];
     USHORT MasterBootRecordMagic;
 } MASTER_BOOT_RECORD, *PMASTER_BOOT_RECORD;
-#include <poppack.h>
+#pragma pack(pop)
 
 BOOL CheckAgainstFAT(PFATBootSector Sector)
 {

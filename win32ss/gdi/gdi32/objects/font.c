@@ -18,15 +18,6 @@
 #define NDEBUG
 #include <debug.h>
 
-/* Rounds a floating point number to integer. The world-to-viewport
- * transformation process is done in floating point internally. This function
- * is then used to round these coordinates to integer values.
- */
-static __inline INT GDI_ROUND(FLOAT val)
-{
-   return (int)floor(val + 0.5);
-}
-
 /*
  *  For TranslateCharsetInfo
  */
@@ -2268,7 +2259,7 @@ RemoveFontResourceExA(
 static const char FotDosString[0x40] = "This is a TrueType resource file";
 static const char FotFontRes[] = {'F','O','N','T','R','E','S',':'};
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _FOT_FONTDIR
 {
     WORD num_of_resources;
@@ -2303,9 +2294,9 @@ typedef struct _FOT_FONTDIR
     DWORD dfReserved;
     CHAR szFaceName[LF_FACESIZE];
 } FOT_FONTDIR;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack2.h>
+#pragma pack(push, 2)
 typedef struct _FOT_NE_TYPEINFO
 {
     WORD type_id;
@@ -2332,7 +2323,7 @@ typedef struct _FOT_RSRC_TAB
     WORD end_of_rsrc;
     BYTE fontdir_res_name[8];
 } FOT_RSRC_TAB;
-#include <poppack.h>
+#pragma pack(pop)
 
 static PVOID
 IntMapFontResourceFile(

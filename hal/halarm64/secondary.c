@@ -23,8 +23,6 @@
 #define HALP_SECONDARY_DEFAULT_IRQL 12
 #define HALP_ARM64_LPI_BASE         8192
 
-NTSTATUS NTAPI KeInitializeSecondaryInterruptServices(VOID);
-BOOLEAN NTAPI KeDispatchSecondaryInterrupt(_In_ ULONG Vector, _In_ ULONG_PTR Flags, _In_opt_ PVOID Reserved);
 
 extern BOOLEAN HalpGicItsEnabled;
 extern ULONG HalpGicLpiCount;

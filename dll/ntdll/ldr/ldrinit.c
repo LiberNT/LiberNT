@@ -46,7 +46,6 @@ PLDR_DATA_TABLE_ENTRY LdrpNtDllDataTableEntry;
 
 static NTSTATUS (WINAPI *Kernel32ProcessInitPostImportFunction)(VOID);
 PVOID Kernel32ThreadInitThunkFunction;
-static BOOL (WINAPI *Kernel32BaseQueryModuleData)(IN LPSTR ModuleName, IN LPSTR Unk1, IN PVOID Unk2, IN PVOID Unk3, IN PVOID Unk4);
 
 RTL_BITMAP TlsBitMap;
 RTL_BITMAP TlsExpansionBitMap;
@@ -2498,7 +2497,6 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     RTL_HEAP_PARAMETERS HeapParameters;
     ULONG ComSectionSize;
     ANSI_STRING BaseProcessInitPostImportName = RTL_CONSTANT_STRING("BaseProcessInitPostImport");
-    ANSI_STRING BaseQueryModuleDataName = RTL_CONSTANT_STRING("BaseQueryModuleData");
     ANSI_STRING BaseThreadInitThunkName = RTL_CONSTANT_STRING("BaseThreadInitThunk");
     PVOID OldShimData;
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -3175,27 +3173,6 @@ LdrpInitializeProcess(IN PCONTEXT Context,
         {
             Kernel32ThreadInitThunkFunction = FunctionAddress;
         }
-
-        Status = LdrGetProcedureAddress(Kernel32BaseAddress,
-                                        &BaseQueryModuleDataName,
-                                        0,
-                                        &FunctionAddress);
-
-        if (!NT_SUCCESS(Status))
-        {
-            if (ShowSnaps)
-                DPRINT1("LDR: Unable to find BaseQueryModuleData, Status=0x%08lx\n", Status);
-            return Status;
-        }
-#if defined(_M_ARM64)
-        if (ChpeGetImageMachine(Kernel32BaseAddress) == IMAGE_FILE_MACHINE_ARM64EC)
-        {
-            if (!ChpeGetArm64EcNativeFunction(Kernel32BaseAddress, (ULONG_PTR)FunctionAddress, &NativeFunctionAddress))
-                return STATUS_INVALID_IMAGE_FORMAT;
-            FunctionAddress = (PVOID)NativeFunctionAddress;
-        }
-#endif
-        Kernel32BaseQueryModuleData = FunctionAddress;
     }
 
     /* Walk the IAT and load all the DLLs */

@@ -25,8 +25,6 @@
 
 #include <wine/debug.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(wlanapi);
-
 /* One registration per opened client handle. */
 typedef struct _WLAN_NOTIF_REG
 {

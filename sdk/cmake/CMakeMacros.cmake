@@ -777,8 +777,7 @@ function(add_arm64ec_x64_source OUTPUT_VAR SOURCE_FILE)
             -fno-strict-aliasing
             -fno-common
             -nostdlibinc
-            -Wno-microsoft
-            -Wno-pragma-pack
+            -Wno-microsoft-anon-tag
             -O1
             -fno-optimize-sibling-calls
             -fno-omit-frame-pointer

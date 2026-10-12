@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 struct FontPidlEntry
 {
     WORD cb;
@@ -20,7 +20,7 @@ struct FontPidlEntry
     LPCWSTR Name() const { return (LPCWSTR)((PBYTE)this + ibName); }
     LPCWSTR FileName() const { return (LPCWSTR)((PBYTE)this + ibFileName); }
 };
-#include <poppack.h>
+#pragma pack(pop)
 
 PITEMID_CHILD _ILCreate(LPCWSTR lpName, LPCWSTR lpFileName);
 const FontPidlEntry* _FontFromIL(PCITEMID_CHILD pidl);

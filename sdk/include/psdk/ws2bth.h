@@ -4,7 +4,7 @@
 
 #include <bthdef.h>
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #define BT_PORT_ANY          ((ULONG)-1)
 #define BT_PORT_MIN          0x1
@@ -228,6 +228,6 @@ typedef struct _BTH_SET_SERVICE BTHNS_SETBLOB, *PBTHNS_SETBLOB;
 typedef struct _BTH_QUERY_DEVICE BTHNS_INQUIRYBLOB, *PBTHNS_INQUIRYBLOB;
 typedef struct _BTH_QUERY_SERVICE BTHNS_RESTRICTIONBLOB, *PBTHNS_RESTRICTIONBLOB;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif /* (NTDDI_VERSION >= NTDDI_WINXPSP2) */

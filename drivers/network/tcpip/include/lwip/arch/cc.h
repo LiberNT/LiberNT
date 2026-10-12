@@ -43,5 +43,11 @@ tcpip_chksum(const void *dataptr, int len);
 
 /* Compiler hints for packing structures */
 #define PACK_STRUCT_STRUCT
-#define PACK_STRUCT_USE_INCLUDES
+#ifdef _MSC_VER
+#define PACK_STRUCT_BEGIN __pragma(pack(push, 1))
+#define PACK_STRUCT_END __pragma(pack(pop))
+#else
+#define PACK_STRUCT_BEGIN _Pragma("pack(push, 1)")
+#define PACK_STRUCT_END _Pragma("pack(pop)")
+#endif
 

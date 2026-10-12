@@ -136,7 +136,7 @@ class CAdapterCommon : public CUnknownImpl<IAdapterPowerManagement>
     VOID NTAPI GetResourceInformation();
     NTSTATUS NTAPI GetVendorRevisionId();
     NTSTATUS NTAPI TransferInitVerbs(IN PDEVICE_OBJECT DeviceObject);
-    NTSTATUS NTAPI ReadRegistryKey(IN PDEVICE_OBJECT DeviceObject, IN LPWSTR KeyName, IN ULONG BufferLength, OUT PREGISTRYKEY * ParentKey, OUT PULONG Type, OUT PVOID Value);
+    NTSTATUS NTAPI ReadRegistryKey(IN PDEVICE_OBJECT DeviceObject, IN LPCWSTR KeyName, IN ULONG BufferLength, OUT PREGISTRYKEY * ParentKey, OUT PULONG Type, OUT PVOID Value);
     NTSTATUS NTAPI TransferVerb(ULONG Verb, PULONG Response);
     NTSTATUS NTAPI InstallDevice(
         IN PDEVICE_OBJECT DeviceObject,
@@ -446,8 +446,7 @@ class CMiniportTopology : public CUnknownImpl<IMiniportTopology>
         CFunctionGroupNode *Node,
         CAdapterCommon *Adapter,
         PPCFILTER_DESCRIPTOR Filter)
-        : m_Port(0), m_AssociatedPinCount(AssociatedPinCount), m_AssociatedPins(AssociatedPinIds), m_Node(Node),
-          m_Adapter(Adapter), m_FilterDescription(Filter)
+        : m_Port(0), m_Node(Node), m_FilterDescription(Filter)
     {
     }
     virtual ~CMiniportTopology()
@@ -468,13 +467,8 @@ class CMiniportTopology : public CUnknownImpl<IMiniportTopology>
 
   private:
     PPORTTOPOLOGY m_Port;
-    ULONG m_AssociatedPinCount;
-    PULONG m_AssociatedPins;
     CFunctionGroupNode *m_Node;
-    CAdapterCommon *m_Adapter;
     PPCFILTER_DESCRIPTOR m_FilterDescription;
-    PIN_CONFIGURATION_DEFAULT m_PinConfiguration;
-    HDAUDIO_BUS_INTERFACE_V2 m_Interface;
 };
 
 class CMiniportWaveRT : public CUnknownImpl<IMiniportWaveRT>
@@ -510,8 +504,6 @@ class CMiniportWaveRT : public CUnknownImpl<IMiniportWaveRT>
     CFunctionGroupNode *m_Node;
     CAdapterCommon *m_Adapter;
     PPCFILTER_DESCRIPTOR m_FilterDescription;
-    PIN_CONFIGURATION_DEFAULT m_PinConfiguration;
-    HDAUDIO_BUS_INTERFACE_V2 m_Interface;
 };
 
 class CMiniportWaveRTStream : public CUnknownImpl<IMiniportWaveRTStreamNotification>
@@ -530,8 +522,8 @@ class CMiniportWaveRTStream : public CUnknownImpl<IMiniportWaveRTStreamNotificat
         ULONG NodeCount,
         PULONG Nodes,
         PPCFILTER_DESCRIPTOR FilterDescription)
-        : m_Adapter(Adapter), m_OutNode(OutNode), m_Pin(Pin), m_Capture(Capture), m_DmaEngine(DmaEngine),
-          m_BufferSize(0), m_NodeCount(NodeCount), m_Nodes(Nodes), m_FilterDescription(FilterDescription)
+        : m_OutNode(OutNode), m_Capture(Capture), m_DmaEngine(DmaEngine),
+          m_BufferSize(0), m_NodeCount(NodeCount), m_Nodes(Nodes)
     {
        RtlCopyMemory(&m_Interface, Interface, sizeof(HDAUDIO_BUS_INTERFACE_V2));
        RtlCopyMemory(&m_StreamFormat, StreamFormat, sizeof(HDAUDIO_STREAM_FORMAT));
@@ -547,9 +539,7 @@ class CMiniportWaveRTStream : public CUnknownImpl<IMiniportWaveRTStreamNotificat
     IMP_IMiniportWaveRTStreamNotification;
 
   private:
-    CAdapterCommon *m_Adapter;
     CFunctionGroupNode *m_OutNode;
-    ULONG m_Pin;
     BOOLEAN m_Capture;
     HDAUDIO_STREAM_FORMAT m_StreamFormat;
     HDAUDIO_CONVERTER_FORMAT m_Converter;
@@ -560,7 +550,6 @@ class CMiniportWaveRTStream : public CUnknownImpl<IMiniportWaveRTStreamNotificat
     ULONG m_BufferSize;
     ULONG m_NodeCount;
     PULONG m_Nodes;
-    PPCFILTER_DESCRIPTOR m_FilterDescription;
 };
 
 NTSTATUS

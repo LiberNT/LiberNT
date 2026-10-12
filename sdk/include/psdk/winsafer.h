@@ -73,7 +73,7 @@ DECLARE_HANDLE(SAFER_LEVEL_HANDLE);
 #define SAFER_POLICY_UIFLAGS_MASK               0x000000FF
 
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 typedef struct _SAFER_CODE_PROPERTIES_V1
 {
@@ -101,7 +101,7 @@ typedef struct _SAFER_CODE_PROPERTIES_V2
     BOOL PackageIsFramework;
 } SAFER_CODE_PROPERTIES_V2, *PSAFER_CODE_PROPERTIES_V2;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* NOTE: MS defines SAFER_CODE_PROPERTIES as V2 unconditionally,
  * which is... not smart */
@@ -151,7 +151,7 @@ typedef enum _SAFER_IDENTIFICATION_TYPES
     SaferIdentityTypeCertificate = 4,
 } SAFER_IDENTIFICATION_TYPES;
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 typedef struct _SAFER_IDENTIFICATION_HEADER
 {
@@ -196,7 +196,7 @@ typedef struct _SAFER_URLZONE_IDENTIFICATION
     DWORD dwSaferFlags;
 } SAFER_URLZONE_IDENTIFICATION, *PSAFER_URLZONE_IDENTIFICATION;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 
 WINADVAPI

@@ -40,7 +40,7 @@ DwmGpuScaleWindowEdge(LONGLONG Edge, LONG SourceSize, LONG DestinationSize)
     return Edge * DestinationSize / SourceSize;
 }
 
-static BOOL
+static inline BOOL
 DwmGpuClipClient(const DWM_WIN *Window, const DWM_GPU_WINDOW_GEOMETRY *Owner, RECT *Bounds)
 {
     LONGLONG Left = Window->DxClip.left, Top = Window->DxClip.top;

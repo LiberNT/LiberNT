@@ -220,3 +220,7 @@ foreach(GLMARK2_DATA_FILE IN LISTS GLMARK2_DATA_FILES)
             FOR all)
     endif()
 endforeach()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(glmark2-zlib PRIVATE -Wno-deprecated-declarations -Wno-deprecated-non-prototype)
+endif()

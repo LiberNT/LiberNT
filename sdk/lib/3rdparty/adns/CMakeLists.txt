@@ -30,3 +30,7 @@ endif()
 
 add_dependencies(adns psdk)
 add_pch(adns src/internal.h SOURCE)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(adns PRIVATE -Wno-unused-but-set-variable)
+endif()

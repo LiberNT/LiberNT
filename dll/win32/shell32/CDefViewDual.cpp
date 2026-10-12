@@ -21,8 +21,6 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 class CDefViewDual :
     public CComCoClass<CDefViewDual, &CLSID_ShellFolderView>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,

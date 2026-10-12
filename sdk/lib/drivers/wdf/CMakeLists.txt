@@ -228,3 +228,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
         PRIVATE -Wno-write-strings -Wno-unknown-pragmas -Wno-switch
         PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-reorder -Wno-invalid-offsetof>)
 endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(wdf01000 PRIVATE -Wno-missing-braces -Wno-multichar -Wno-unused-but-set-variable)
+endif()

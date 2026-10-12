@@ -9,7 +9,6 @@
 #include "../precomp.h"
 
 #include "wine/debug.h"
-WINE_DEFAULT_DEBUG_CHANNEL(ntlm);
 
 /* globals */
 NTLM_MODE NtlmMode = NtlmUnknownMode;

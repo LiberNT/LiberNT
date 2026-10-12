@@ -350,7 +350,7 @@ typedef enum _AHCI_PORT_REGISTER
 #define AHCI_BOHC_OS_OWNERSHIP_CHANGE        0x00000008
 #define AHCI_BOHC_BIOS_BUSY                  0x00000010
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _AHCI_FIS_HOST_TO_DEVICE
 {
@@ -519,7 +519,7 @@ typedef struct _AHCI_COMMAND_TABLE
 
 C_ASSERT(FIELD_OFFSET(AHCI_COMMAND_TABLE, PrdTable) == 128);
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define AHCI_PORT_BASE(HbaIoBase, PortNumber) \
     (PULONG)((ULONG_PTR)(HbaIoBase) + (PortNumber) * 0x80 + 0x100)

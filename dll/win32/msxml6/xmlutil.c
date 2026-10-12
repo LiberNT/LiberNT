@@ -9,8 +9,6 @@
 
 #include "wine/debug.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(msxml);
-
 HRESULT bstr_to_hstring( BSTR str, HSTRING *out )
 {
     return WindowsCreateString( str, SysStringLen( str ), out );

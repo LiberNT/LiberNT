@@ -3680,7 +3680,7 @@ RxCommonSetInformation(
     FcbAcquired = FALSE;
     NetRoot = (PNET_ROOT)Fcb->pNetRoot;
 
-#define _SEH2_TRY_RETURN(S) S; goto try_exit
+#define _SEH2_TRY_RETURN(S) (void)(S); goto try_exit
 
     _SEH2_TRY
     {
@@ -4101,7 +4101,7 @@ RxCommonWrite(
     PostIrp = FALSE;
     ContextReferenced = FALSE;
 
-#define _SEH2_TRY_RETURN(S) S; goto try_exit
+#define _SEH2_TRY_RETURN(S) (void)(S); goto try_exit
 
     _SEH2_TRY
     {

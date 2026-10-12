@@ -53,6 +53,8 @@ endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     set_source_files_properties(math.c PROPERTIES COMPILE_OPTIONS "-Wno-incompatible-library-redeclaration")
+    set_property(SOURCE except.c APPEND PROPERTY COMPILE_OPTIONS -Wno-unused-variable -Wno-unused-function)
+    set_property(SOURCE string.c APPEND PROPERTY COMPILE_OPTIONS -Wno-unused-function)
 elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     set_source_files_properties(math.c PROPERTIES COMPILE_OPTIONS "-Wno-builtin-declaration-mismatch")
 endif()

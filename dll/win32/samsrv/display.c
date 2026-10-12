@@ -22,7 +22,6 @@ typedef struct _USER_ENTRY
 
 static LIST_ENTRY UserListHead;
 static BOOLEAN UserListFilled = FALSE;
-static ULONG UserListCount = 0;
 
 //static LIST_HEAD MachineListHead;
 //static LIST_HEAD GroupListHead;
@@ -119,7 +118,6 @@ SampFillUserDisplayCache(
                         /* FIXME: Add remaining attributes */
 
                         InsertTailList(&UserListHead, &UserEntry->ListEntry);
-                        UserListCount++;
                     }
                 }
             }
@@ -146,7 +144,6 @@ SampInitializeDisplayCache(VOID)
 
     InitializeListHead(&UserListHead);
     UserListFilled = FALSE;
-    UserListCount = 0;
 
 //    InitializeListHead(&MachineListHead);
 //    MachineListFilled = FALSE;

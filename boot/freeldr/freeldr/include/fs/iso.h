@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _DIR_RECORD
 {
     UCHAR  RecordLength;            // 1
@@ -87,7 +87,7 @@ typedef struct _PVD
 
     /* more data ... */
 } PVD, *PPVD;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define ISO_ATTR_HIDDEN     0x01    // CD_ATTRIBUTE_HIDDEN
 #define ISO_ATTR_DIRECTORY  0x02    // CD_ATTRIBUTE_DIRECTORY

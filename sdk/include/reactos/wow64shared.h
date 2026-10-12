@@ -53,7 +53,7 @@ typedef struct _WOW64_FLOATING_SAVE_AREA
     ULONG Cr0NpxState;
 } WOW64_FLOATING_SAVE_AREA;
 
-#include <pshpack4.h>
+#pragma pack(push, 4)
 typedef struct _WOW64_CONTEXT
 {
     ULONG ContextFlags;
@@ -82,7 +82,7 @@ typedef struct _WOW64_CONTEXT
     ULONG SegSs;
     UCHAR ExtendedRegisters[WOW64_MAXIMUM_SUPPORTED_EXTENSION];
 } WOW64_CONTEXT, *PWOW64_CONTEXT;
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 /* Undocumented layout of WOW64INFO.CrossProcessWorkList. */

@@ -1349,7 +1349,7 @@ void shell(int argc, const char *argv[])
  */
 void user(int argc, const char *argv[])
 {
-	char acct[80], *getpass();
+	char acct[80];
 	int n, aflag = 0;
 
 	if (argc < 2) {
@@ -1689,7 +1689,7 @@ int globulize(const char **cpp)
 
 void account(int argc, const char *argv[])
 {
-	char acct[50], *getpass(), *ap;
+	char acct[50], *ap;
 
 	if (argc > 1) {
 		++argv;
@@ -1734,7 +1734,6 @@ proxabort()
 void doproxy(int argc, const char *argv[])
 {
 	register struct cmd *c;
-	struct cmd *getcmd();
 //	extern struct cmd cmdtab[];
 	extern jmp_buf abortprox;
 

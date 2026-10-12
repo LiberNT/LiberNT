@@ -7,7 +7,7 @@
 
 #include "precomp.h"
 
-#define FORMINFOSIG '.2'
+#define FORMINFOSIG ('.' << 8 | '2')
 #define FORMMAXNAMESIZE CCHDEVICENAME-1
 
 typedef struct _FORM_INFO_LIST

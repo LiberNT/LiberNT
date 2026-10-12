@@ -662,8 +662,8 @@ AtaReqSendRequest(
         if (Request->Flags & REQUEST_FLAG_PROGRAM_DMA)
         {
             /* DMA transfer */
-            Device->PortData->LocalSgList.Elements[0].Length = Request->DataTransferLength;
-            AtaReqPreparePrdTable(NULL, NULL, &Device->PortData->LocalSgList, Request);
+            ((PSCATTER_GATHER_LIST)Device->PortData->LocalSgListBuffer)->Elements[0].Length = Request->DataTransferLength;
+            AtaReqPreparePrdTable(NULL, NULL, (PSCATTER_GATHER_LIST)Device->PortData->LocalSgListBuffer, Request);
         }
         else
         {

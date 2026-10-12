@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _FAT_BOOTSECTOR
 {
     UCHAR        JumpBoot[3];                // Jump instruction to boot code
@@ -141,7 +141,7 @@ typedef struct
     USHORT    LastAccessTime;    /* Time file was last accessed */
     USHORT    LastAccessDate;    /* Date file was last accessed */
 } FATX_DIRENTRY, * PFATX_DIRENTRY;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define FAT_ATTR_NORMAL     0x00
 #define FAT_ATTR_READONLY   0x01

@@ -180,7 +180,7 @@ void DrawIconAt(HDC hdc, int x, int y, HICON hIcon, int cx, BOOL bEnabled)
         return;
     }
     HDC hdcMem = CreateCompatibleDC(hdc);
-    BITMAPINFO bmi = { 0 };
+    BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
     bmi.bmiHeader.biWidth = cx;
     bmi.bmiHeader.biHeight = -cx;

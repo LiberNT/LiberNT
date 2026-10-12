@@ -27,7 +27,7 @@
 #define PARTITION_GPT                   0xEE      // GPT protective partition
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /* GPT Table Header */
 typedef struct _GPT_TABLE_HEADER
@@ -61,4 +61,4 @@ typedef struct _GPT_PARTITION_ENTRY
 } GPT_PARTITION_ENTRY, *PGPT_PARTITION_ENTRY;
 C_ASSERT(sizeof(GPT_PARTITION_ENTRY) == 128);
 
-#include <poppack.h>
+#pragma pack(pop)

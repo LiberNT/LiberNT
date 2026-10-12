@@ -87,7 +87,7 @@
 /* ---- Linux boot protocol structures ------------------------------------- */
 /* Based on Documentation/x86/boot.rst from Linux kernel source */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _E820_ENTRY {
     ULONG64 Address;
@@ -220,7 +220,7 @@ typedef struct _LINUX_BOOT_PARAMS {
     UCHAR Pad7[816];
 } LINUX_BOOT_PARAMS, *PLINUX_BOOT_PARAMS;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* Verify the structure is exactly one page */
 C_ASSERT(sizeof(LINUX_BOOT_PARAMS) == 4096);

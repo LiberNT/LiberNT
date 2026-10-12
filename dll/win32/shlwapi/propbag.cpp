@@ -102,7 +102,7 @@ public:
     STDMETHODIMP Write(
         _In_ ULONG cProperties,
         _In_ PROPBAG2 *pPropBag,
-        _In_ VARIANT *pvarValue)
+        _In_ VARIANT *pvarValue) override
     {
         return E_NOTIMPL;
     }
@@ -516,7 +516,7 @@ CRegPropertyBag::Write(_In_z_ LPCWSTR pszPropName, _In_ VARIANT *pvari)
 
     HRESULT hr;
     LONG error;
-    VARIANTARG vargTemp = { 0 };
+    VARIANTARG vargTemp = {};
     switch (V_VT(pvari))
     {
         case VT_EMPTY:
@@ -934,7 +934,7 @@ CIniPropertyBag::Write(_In_z_ LPCWSTR pszPropName, _In_ VARIANT *pvari)
 
     HRESULT hr;
     BSTR bstr;
-    VARIANTARG vargTemp = { 0 };
+    VARIANTARG vargTemp = {};
     switch (V_VT(pvari))
     {
         case VT_EMPTY:

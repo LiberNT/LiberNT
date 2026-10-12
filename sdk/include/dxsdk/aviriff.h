@@ -20,7 +20,7 @@
 #pragma once
 
 /* All definitions here are packed structures of on-disk formats */
-#include <pshpack2.h>
+#pragma pack(push, 2)
 
 typedef struct _riffchunk
 {
@@ -323,4 +323,4 @@ typedef struct _avifieldindex_chunk {
     } aIndex[ANYSIZE_ARRAY];
 } AVIFIELDINDEX, * PAVIFIELDINDEX;
 
-#include <poppack.h>
+#pragma pack(pop)

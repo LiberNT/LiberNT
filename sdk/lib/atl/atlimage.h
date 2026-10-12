@@ -867,7 +867,6 @@ private:
         ULONG_PTR m_dwToken;
         CRITICAL_SECTION m_sect;
         LONG m_nCImageObjects;
-        DWORD m_dwLastError;
 
         void _clear_funs() noexcept
         {
@@ -914,7 +913,6 @@ private:
             : m_hInst(NULL)
             , m_dwToken(0)
             , m_nCImageObjects(0)
-            , m_dwLastError(ERROR_SUCCESS)
         {
             _clear_funs();
             ::InitializeCriticalSection(&m_sect);

@@ -336,7 +336,6 @@ E1000IndicateReceive(
     PNET_BUFFER_LIST NblChain = NULL;
     PNET_BUFFER_LIST LastNbl = NULL;
     PNET_BUFFER_LIST Nbl;
-    PNET_BUFFER Nb;
     PMDL Mdl;
     ULONG Head;
     ULONG PacketLength;

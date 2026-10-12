@@ -36,12 +36,12 @@ extern "C" {
 #endif /* defined(__cplusplus) */
 
 /* Except for specific structs, this header is byte packed */
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #include <shtypes.h>
 #include <shobjidl.h>
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 typedef struct
 {
@@ -84,7 +84,7 @@ typedef struct
 typedef SHFOLDERCUSTOMSETTINGSW SHFOLDERCUSTOMSETTINGS;
 typedef LPSHFOLDERCUSTOMSETTINGSW LPSHFOLDERCUSTOMSETTINGS;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define FCS_READ       0x00000001
 #define FCS_FORCEWRITE 0x00000002
@@ -865,7 +865,7 @@ DECLARE_INTERFACE_(IShellFolderViewCB,IUnknown)
  * IShellFolderView interface
  */
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 typedef struct _ITEMSPACING
 {
@@ -875,7 +875,7 @@ typedef struct _ITEMSPACING
     int cyLarge;
 } ITEMSPACING;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define INTERFACE IShellFolderView
 DEFINE_GUID(IID_IShellFolderView,0x37a378c0,0xf82d,0x11ce,0xae,0x65,0x08,0x00,0x2b,0x2e,0x12,0x62);
@@ -1225,7 +1225,7 @@ void WINAPI SHAddToRecentDocs(UINT, _In_opt_ LPCVOID);
  */
 typedef INT (CALLBACK *BFFCALLBACK)(HWND,UINT,LPARAM,LPARAM);
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 typedef struct tagBROWSEINFOA {
     HWND                hwndOwner;
@@ -1253,7 +1253,7 @@ typedef struct tagBROWSEINFOW {
 #define PBROWSEINFO  WINELIB_NAME_AW(PBROWSEINFO)
 #define LPBROWSEINFO WINELIB_NAME_AW(LPBROWSEINFO)
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* Browsing for directory. */
 #define BIF_RETURNONLYFSDIRS   0x0001
@@ -1311,7 +1311,7 @@ typedef HRESULT
   WPARAM wParam,
   LPARAM lParam);
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 typedef struct _CSFV
 {
@@ -1324,7 +1324,7 @@ typedef struct _CSFV
   FOLDERVIEWMODE       fvm;
 } CSFV, *LPCSFV;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 HRESULT
 WINAPI
@@ -1392,7 +1392,7 @@ SHCreateShellFolderViewEx(
 #define SFVM_GET_WEBVIEW_THEME        86 /* undocumented */
 #define SFVM_GETDEFERREDVIEWSETTINGS  92 /* undocumented */
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 typedef struct _SFV_CREATE
 {
@@ -1402,7 +1402,7 @@ typedef struct _SFV_CREATE
     IShellFolderViewCB *psfvcb;
 } SFV_CREATE;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 HRESULT
 WINAPI
@@ -1411,7 +1411,7 @@ SHCreateShellFolderView(
   _Outptr_ IShellView **ppsv);
 
 /* Types and definitions for the SFM_* parameters */
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 #define QCMINFO_PLACE_BEFORE          0
 #define QCMINFO_PLACE_AFTER           1
@@ -1450,7 +1450,7 @@ typedef struct _TBINFO
     UINT uFlags;
 } TBINFO, *LPTBINFO;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /****************************************************************************
 *	SHShellFolderView_Message API
@@ -1516,14 +1516,14 @@ SHShellFolderView_Message(
 #define SHDID_COMPUTER_AUDIO        19
 #define SHDID_COMPUTER_SHAREDDOCS   20
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 typedef struct _SHDESCRIPTIONID
 {   DWORD   dwDescriptionId;
     CLSID   clsid;
 } SHDESCRIPTIONID, *LPSHDESCRIPTIONID;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 HRESULT
 WINAPI
@@ -2571,7 +2571,7 @@ static inline BOOL ILIsEmpty(_In_opt_ PCUIDLIST_RELATIVE pidl)
     return !(pidl && pidl->mkid.cb);
 }
 
-#include <poppack.h>
+#pragma pack(pop)
 
 
 /* menu merging */
@@ -2844,7 +2844,7 @@ typedef void (CALLBACK *PFNASYNCICONTASKBALLBACK)(LPCITEMIDLIST pidl, LPVOID pvD
 #define ISFB_STATE_QLINKSMODE 0x00000020
 #define ISFB_STATE_NOSHOWTEXT 0x00000004
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 typedef struct {
     DWORD       dwMask;
@@ -2859,7 +2859,7 @@ typedef struct {
     PIDLIST_ABSOLUTE pidl;
 } BANDINFOSFB, *PBANDINFOSFB;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #undef INTERFACE
 #define INTERFACE IShellFolderBand

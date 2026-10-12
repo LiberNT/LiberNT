@@ -7,7 +7,7 @@
  *                   Pierre Schweitzer (pierre@reactos.org)
  */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /*
  * The path name on which the file system is mounted is maintained
@@ -273,7 +273,7 @@ typedef struct disklabel {
 		} __partition_u1;
 	} d_partitions[MAXPARTITIONS];	/* actually may be more */
 } FFSD_DISKLABEL, *PFFSD_DISKLABEL;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(FIELD_OFFSET(FFSD_SUPER_BLOCK, fs_cgsize) == 160);
 C_ASSERT(FIELD_OFFSET(FFSD_SUPER_BLOCK, fs_fmod) == 208);

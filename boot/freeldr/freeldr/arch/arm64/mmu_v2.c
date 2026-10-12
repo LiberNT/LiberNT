@@ -908,16 +908,6 @@ static BOOLEAN allocate_page_table_memory(VOID)
     return TRUE;
 }
 
-static inline UINT64 read_ttbr1(BOOLEAN el12)
-{
-    UINT64 value;
-    if (el12)
-        __asm__ volatile("mrs %0, " TTBR1_EL12_SYSREG : "=r"(value));
-    else
-        __asm__ volatile("mrs %0, ttbr1_el1" : "=r"(value));
-    return value;
-}
-
 static inline VOID write_ttbr1(BOOLEAN el12, UINT64 value)
 {
     if (el12)

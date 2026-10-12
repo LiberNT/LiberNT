@@ -54,7 +54,11 @@
 // This is exported from the kernel.  It is used to point
 // to the address that the kernel debugger is using.
 //
+#ifdef __REACTOS__
+extern "C" PUCHAR* KdComPortInUse;
+#else
 extern "C" extern PUCHAR* KdComPortInUse;
+#endif
 
 
 //

@@ -128,7 +128,7 @@
 #define NVME_SCT_COMMAND        0x1
 #define NVME_SCT_MEDIA          0x2
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _NVME_COMMAND
 {
@@ -310,7 +310,7 @@ typedef struct _NVME_DSM_RANGE
     ULONGLONG StartingLba;
 } NVME_DSM_RANGE, *PNVME_DSM_RANGE;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define NVME_COMMAND_SET_OPCODE(Command, Opcode, CommandId) \
     ((Command)->CDW0 = ((ULONG)(Opcode)) | (((ULONG)(CommandId)) << 16))

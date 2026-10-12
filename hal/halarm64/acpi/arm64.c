@@ -32,7 +32,7 @@
 #define ACPI_FADT_PSCI_USE_HVC    0x00000002
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _ACPI_TABLE_GTDT
 {
     DESCRIPTION_HEADER Header;
@@ -174,7 +174,7 @@ typedef struct _ACPI_PPTT_CACHE
     USHORT LineSize;
 } ACPI_PPTT_CACHE, *PACPI_PPTT_CACHE;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 HALP_ARM64_GIC_INFO HalpArm64GicInfo;
 HALP_ARM64_GTDT_INFO HalpArm64GtdtInfo;

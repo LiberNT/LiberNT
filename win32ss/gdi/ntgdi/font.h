@@ -23,7 +23,7 @@ typedef struct _FONT_ENTRY_COLL_MEM
     FONT_ENTRY_MEM *Entry;
 } FONT_ENTRY_COLL_MEM, *PFONT_ENTRY_COLL_MEM;
 
-#include <pshpack1.h> /* We don't like padding for these structures for hashing */
+#pragma pack(push, 1) /* We don't like padding for these structures for hashing */
 
 typedef struct _FONT_ASPECT
 {
@@ -50,7 +50,7 @@ typedef struct _FONT_CACHE_HASHED
     FT_Matrix matTransform;
 } FONT_CACHE_HASHED, *PFONT_CACHE_HASHED;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _FONT_CACHE_ENTRY
 {

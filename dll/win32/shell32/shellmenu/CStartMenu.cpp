@@ -462,7 +462,7 @@ public:
         LPSMDATA psmd,
         UINT uMsg,
         WPARAM wParam,
-        LPARAM lParam)
+        LPARAM lParam) override
     {
         switch (uMsg)
         {

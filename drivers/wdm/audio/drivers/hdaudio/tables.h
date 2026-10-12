@@ -127,13 +127,13 @@ static PCCONNECTION_DESCRIPTOR TopoOutConnections[] = {{KSFILTER_NODE, 0, 0, 1},
 
 static KSDATARANGE DataRangeBridge[] =
 {
-   {
+   {{
       sizeof(KSDATARANGE),
       0, 0, 0,
-      STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
-      STATICGUIDOF(KSDATAFORMAT_SUBTYPE_ANALOG),
-      STATICGUIDOF(KSDATAFORMAT_SPECIFIER_NONE)
-   }
+      {STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO)},
+      {STATICGUIDOF(KSDATAFORMAT_SUBTYPE_ANALOG)},
+      {STATICGUIDOF(KSDATAFORMAT_SPECIFIER_NONE)}
+   }}
 };
 
 static PKSDATARANGE DataRangesBridge[] =
@@ -157,7 +157,7 @@ static PCPIN_DESCRIPTOR WaveInPins[] =
             KSPIN_COMMUNICATION_SINK,                   // Communication
             &PINNAME_CAPTURE,                           // Category
             &KSAUDFNAME_RECORDING_CONTROL,              // Name
-            0                                           // Reserved
+            {0}                                         // Reserved
         }
     },
     {   // Pin 1 -- WaveIn Bridge
@@ -174,7 +174,7 @@ static PCPIN_DESCRIPTOR WaveInPins[] =
             KSPIN_COMMUNICATION_NONE,                   // Communication
             &KSCATEGORY_AUDIO,                          // Category
             NULL,                                       // Name
-            0                                           // Reserved
+            {0}                                         // Reserved
         }
     }
 };
@@ -195,7 +195,7 @@ static PCPIN_DESCRIPTOR WaveOutPins[] =
             KSPIN_COMMUNICATION_SINK,                   // Communication
             &KSCATEGORY_AUDIO,                          // Category
             &KSAUDFNAME_PC_SPEAKER,                     // Name
-            0                                           // Reserved
+            {0}                                         // Reserved
         }
     },
     {   // Pin 1 -- WaveOut Bridge
@@ -212,7 +212,7 @@ static PCPIN_DESCRIPTOR WaveOutPins[] =
             KSPIN_COMMUNICATION_NONE,                   // Communication
             &KSCATEGORY_AUDIO,                          // Category
             NULL,                                       // Name
-            0                                           // Reserved
+            {0}                                         // Reserved
         }
     }
 };
@@ -233,7 +233,7 @@ static PCPIN_DESCRIPTOR TopoInPins[] =
             KSPIN_COMMUNICATION_NONE,                   // Communication
             &KSCATEGORY_AUDIO,                          // Category
             NULL,                                       // Name
-            0                                           // Reserved
+            {0}                                         // Reserved
         }
     },
     {   // Pin 1 -- Mic Source
@@ -250,7 +250,7 @@ static PCPIN_DESCRIPTOR TopoInPins[] =
             KSPIN_COMMUNICATION_NONE,                   // Communication
             &KSNODETYPE_MICROPHONE,                     // Category
             &KSNODETYPE_MICROPHONE,                     // Name
-            0                                           // Reserved
+            {0}                                         // Reserved
         }
     }
 };
@@ -271,7 +271,7 @@ static PCPIN_DESCRIPTOR TopoOutPins[] =
             KSPIN_COMMUNICATION_NONE,                   // Communication
             &KSCATEGORY_AUDIO,                          // Category
             NULL,                                       // Name
-            0                                           // Reserved
+            {0}                                         // Reserved
         }
     },
     {   // Pin 1 -- Speakers Dest
@@ -288,73 +288,81 @@ static PCPIN_DESCRIPTOR TopoOutPins[] =
             KSPIN_COMMUNICATION_NONE,                   // Communication
             &KSNODETYPE_SPEAKER,                        // Category
             &KSAUDFNAME_PC_SPEAKER,                     // Name
-            0                                           // Reserved
+            {0}                                         // Reserved
         }
     }
 };
 
 static PCFILTER_DESCRIPTOR WaveInFilterDescription[] =
 {
-    0,                                  // Version
-    NULL,                               // AutomationTable
-    sizeof(PCPIN_DESCRIPTOR),           // PinSize
-    2,                                  // PinCount
-    WaveInPins,                         // Pins
-    sizeof(PCNODE_DESCRIPTOR),          // NodeSize
-    1,                                  // NodeCount
-    AdcNode,                            // Nodes
-    2,                                  // ConnectionCount
-    AdcConnections,                     // Connections
-    0,                                  // CategoryCount
-    NULL                                // Categories: NULL->use defaults (audio, render, capture)
+    {
+        0,                                  // Version
+        NULL,                               // AutomationTable
+        sizeof(PCPIN_DESCRIPTOR),           // PinSize
+        2,                                  // PinCount
+        WaveInPins,                         // Pins
+        sizeof(PCNODE_DESCRIPTOR),          // NodeSize
+        1,                                  // NodeCount
+        AdcNode,                            // Nodes
+        2,                                  // ConnectionCount
+        AdcConnections,                     // Connections
+        0,                                  // CategoryCount
+        NULL                                // Categories: NULL->use defaults (audio, render, capture)
+    }
 };
 
 static PCFILTER_DESCRIPTOR WaveOutFilterDescription[] =
 {
-    0,                                  // Version
-    NULL,                               // AutomationTable
-    sizeof(PCPIN_DESCRIPTOR),           // PinSize
-    2,                                  // PinCount
-    WaveOutPins,                        // Pins
-    sizeof(PCNODE_DESCRIPTOR),          // NodeSize
-    1,                                  // NodeCount
-    DacNode,                            // Nodes
-    2,                                  // ConnectionCount
-    DacConnections,                     // Connections
-    0,                                  // CategoryCount
-    NULL                                // Categories: NULL->use defaults (audio, render, capture)
+    {
+        0,                                  // Version
+        NULL,                               // AutomationTable
+        sizeof(PCPIN_DESCRIPTOR),           // PinSize
+        2,                                  // PinCount
+        WaveOutPins,                        // Pins
+        sizeof(PCNODE_DESCRIPTOR),          // NodeSize
+        1,                                  // NodeCount
+        DacNode,                            // Nodes
+        2,                                  // ConnectionCount
+        DacConnections,                     // Connections
+        0,                                  // CategoryCount
+        NULL                                // Categories: NULL->use defaults (audio, render, capture)
+    }
 };
 
 static PCFILTER_DESCRIPTOR TopoInFilterDescription[] =
 {
-    0,                                  // Version
-    &TopologyAutomationTable,           // AutomationTable
-    sizeof(PCPIN_DESCRIPTOR),           // PinSize
-    2,                                  // PinCount
-    TopoInPins,                         // Pins
-    sizeof(PCNODE_DESCRIPTOR),          // NodeSize
-    2,                                  // NodeCount
-    TopoInNodes,                        // Nodes
-    3,                                  // ConnectionCount
-    TopoInConnections,                  // Connections
-    0,                                  // CategoryCount
-    NULL                                // Categories: NULL->use defaults (audio, render, capture)
+    {
+        0,                                  // Version
+        &TopologyAutomationTable,           // AutomationTable
+        sizeof(PCPIN_DESCRIPTOR),           // PinSize
+        2,                                  // PinCount
+        TopoInPins,                         // Pins
+        sizeof(PCNODE_DESCRIPTOR),          // NodeSize
+        2,                                  // NodeCount
+        TopoInNodes,                        // Nodes
+        3,                                  // ConnectionCount
+        TopoInConnections,                  // Connections
+        0,                                  // CategoryCount
+        NULL                                // Categories: NULL->use defaults (audio, render, capture)
+    }
 };
 
 static PCFILTER_DESCRIPTOR TopoOutFilterDescription[] =
 {
-    0,                                  // Version
-    &TopologyAutomationTable,           // AutomationTable
-    sizeof(PCPIN_DESCRIPTOR),           // PinSize
-    2,                                  // PinCount
-    TopoOutPins,                        // Pins
-    sizeof(PCNODE_DESCRIPTOR),          // NodeSize
-    2,                                  // NodeCount
-    TopoOutNodes,                       // Nodes
-    3,                                  // ConnectionCount
-    TopoOutConnections,                 // Connections
-    0,                                  // CategoryCount
-    NULL                                // Categories: NULL->use defaults (audio, render, capture)
+    {
+        0,                                  // Version
+        &TopologyAutomationTable,           // AutomationTable
+        sizeof(PCPIN_DESCRIPTOR),           // PinSize
+        2,                                  // PinCount
+        TopoOutPins,                        // Pins
+        sizeof(PCNODE_DESCRIPTOR),          // NodeSize
+        2,                                  // NodeCount
+        TopoOutNodes,                       // Nodes
+        3,                                  // ConnectionCount
+        TopoOutConnections,                 // Connections
+        0,                                  // CategoryCount
+        NULL                                // Categories: NULL->use defaults (audio, render, capture)
+    }
 };
 
 #endif // _TABLES_H_

@@ -33,3 +33,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 
 add_dependencies(faudio psdk)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(faudio PRIVATE -Wno-unused-but-set-variable -Wno-unused-function -Wno-unused-variable)
+endif()

@@ -347,7 +347,7 @@ typedef struct _CYW_DLOAD_DATA
 #define CYW_LINK_SPEED_BPS              54000000ULL
 #define CYW_MAX_LINK_SPEED_BPS          433300000ULL
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _CYW_BCDC_DCMD
 {
     ULONG Cmd;
@@ -498,7 +498,7 @@ typedef struct _CYW_ESCAN_RESULT_LE
     USHORT BssCount;
     CYW_BSS_INFO_LE BssInfo[1];
 } CYW_ESCAN_RESULT_LE, *PCYW_ESCAN_RESULT_LE;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(sizeof(CYW_BCDC_HEADER) == BCDC_HEADER_LEN);
 C_ASSERT(sizeof(CYW_ETHER_HEADER) == 14);

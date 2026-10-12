@@ -86,8 +86,6 @@ RasPhonebookDlgW(LPWSTR lpszPhonebook, LPWSTR lpszEntry, LPRASPBDLGW lpInfo)
 	return 0;
 }
 
-static HINSTANCE hDllInstance;
-
 BOOL WINAPI
 DllMain(IN HINSTANCE hinstDLL,
         IN DWORD dwReason,
@@ -96,7 +94,6 @@ DllMain(IN HINSTANCE hinstDLL,
     switch (dwReason)
     {
         case DLL_PROCESS_ATTACH:
-            hDllInstance = hinstDLL;
             DisableThreadLibraryCalls(hinstDLL);
             break;
     }

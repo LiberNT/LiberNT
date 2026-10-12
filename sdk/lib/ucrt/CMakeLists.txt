@@ -64,6 +64,9 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR
     )
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-reorder>)
 endif()
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(-Wno-unused-but-set-variable -Wno-multichar)
+endif()
 
 include(conio/conio.cmake)
 include(convert/convert.cmake)

@@ -27,7 +27,7 @@
     } while (0)
 
 #else
-#define TRACE
+#define TRACE(fmt, ...) do { if (0) DbgPrint(fmt, ##__VA_ARGS__); } while (0)
 #endif
 
 #ifdef DEBUG_INFO
@@ -38,7 +38,7 @@
     } while (0)
 
 #else
-#define INFO
+#define INFO(fmt, ...) do { if (0) DbgPrint(fmt, ##__VA_ARGS__); } while (0)
 #endif
 
 #ifdef DEBUG_INFO_VERB
@@ -49,7 +49,7 @@
     } while (0)
 
 #else
-#define INFO_VERB
+#define INFO_VERB(fmt, ...) do { if (0) DbgPrint(fmt, ##__VA_ARGS__); } while (0)
 #endif
 
 #ifdef DEBUG_WARN
@@ -60,7 +60,7 @@
     } while (0)
 
 #else
-#define WARN
+#define WARN(fmt, ...) do { if (0) DbgPrint(fmt, ##__VA_ARGS__); } while (0)
 #endif
 
 #ifdef DEBUG_ERR
@@ -71,7 +71,7 @@
     } while (0)
 
 #else
-#define ERR
+#define ERR(fmt, ...) do { if (0) DbgPrint(fmt, ##__VA_ARGS__); } while (0)
 #endif
 
 PCSTR
@@ -85,12 +85,12 @@ DcDbgBusError(
 
 #else
 
-#define TRACE
-#define INFO
-#define INFO_VERB
-#define WARN
-#define ERR
-#define MediaNumber2Str
-#define DcDbgBusError
+#define TRACE(fmt, ...) do { if (0) DbgPrint(fmt, ##__VA_ARGS__); } while (0)
+#define INFO(fmt, ...) do { if (0) DbgPrint(fmt, ##__VA_ARGS__); } while (0)
+#define INFO_VERB(fmt, ...) do { if (0) DbgPrint(fmt, ##__VA_ARGS__); } while (0)
+#define WARN(fmt, ...) do { if (0) DbgPrint(fmt, ##__VA_ARGS__); } while (0)
+#define ERR(fmt, ...) do { if (0) DbgPrint(fmt, ##__VA_ARGS__); } while (0)
+#define MediaNumber2Str(Adapter, MediaNumber) ((void)(Adapter), (void)(MediaNumber), "")
+#define DcDbgBusError(InterruptStatus) ((void)(InterruptStatus), "")
 
 #endif

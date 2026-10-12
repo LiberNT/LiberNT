@@ -20,7 +20,6 @@ RtlpRiscv64ReadScope(_In_ PDISPATCHER_CONTEXT Dispatcher,
 NTSTATUS NTAPI RtlpRiscv64PrimaryEntry(ULONG64 ImageBase,
                                      PRUNTIME_FUNCTION *Entry);
 
-VOID NTAPI RtlRestoreContext(PCONTEXT Context, PEXCEPTION_RECORD ExceptionRecord);
 NTSTATUS NTAPI RtlVirtualUnwind2(ULONG HandlerType, ULONG_PTR ImageBase,
     ULONG_PTR ControlPc, PRUNTIME_FUNCTION FunctionEntry, PCONTEXT Context,
     PBOOLEAN MachineFrameUnwound, PVOID *HandlerData, PULONG_PTR EstablisherFrame,

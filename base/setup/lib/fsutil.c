@@ -32,7 +32,7 @@
 
 /* TYPEDEFS *****************************************************************/
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _FAT_BOOTSECTOR
 {
     UCHAR       JumpBoot[3];                // Jump instruction to boot code
@@ -142,7 +142,7 @@ C_ASSERT(sizeof(NTFS_BOOTSECTOR) == NTFS_BOOTSECTOR_SIZE);
 
 // TODO: Add more bootsector structures!
 
-#include <poppack.h>
+#pragma pack(pop)
 
 
 /* LOCALS *******************************************************************/

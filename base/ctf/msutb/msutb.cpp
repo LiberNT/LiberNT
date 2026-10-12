@@ -1469,7 +1469,6 @@ class CTipbarWnd
     DWORD m_dwTipbarWndFlags;
     LONG m_ButtonWidth;
     DWORD m_dwShowType;
-    DWORD m_dwUnknown21;
     INT m_cxSmallIcon;
     INT m_cySmallIcon;
     INT m_cxDlgFrameX2;
@@ -1478,7 +1477,6 @@ class CTipbarWnd
     HFONT m_hTextFont;
     ITfLangBarMgr_P *m_pLangBarMgr;
     DWORD m_dwUnknown23;
-    CTipbarCtrlButtonHolder *m_pTipbarCtrlButtonHolder;
     DWORD m_dwUnknown23_1[8];
     CUIFWindow *m_pBalloon;
     DWORD m_dwChangingThreadId;
@@ -1598,9 +1596,9 @@ public:
     }
 
     // IUnknown methods
-    STDMETHOD(QueryInterface)(REFIID riid, void **ppvObj);
-    STDMETHOD_(ULONG, AddRef)();
-    STDMETHOD_(ULONG, Release)();
+    STDMETHOD(QueryInterface)(REFIID riid, void **ppvObj) override;
+    STDMETHOD_(ULONG, AddRef)() override;
+    STDMETHOD_(ULONG, Release)() override;
 
     // ITfLangBarEventSink methods
     STDMETHOD(OnSetFocus)(DWORD dwThreadId) override;

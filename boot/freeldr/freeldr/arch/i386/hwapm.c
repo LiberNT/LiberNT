@@ -25,7 +25,7 @@ FindApmBios(VOID)
     RegsIn.w.bx = 0x0000;
     Int386(0x15, &RegsIn, &RegsOut);
 #endif
-    if (INT386_SUCCESS(RegsOut) && RegsOut.w.bx == 'PM')
+    if (INT386_SUCCESS(RegsOut) && RegsOut.w.bx == ('P' << 8 | 'M'))
     {
         TRACE("Found APM BIOS\n");
         TRACE("AH: %x\n", RegsOut.b.ah);

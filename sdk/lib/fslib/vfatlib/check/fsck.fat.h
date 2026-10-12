@@ -80,7 +80,7 @@ typedef unsigned __int64 __u64;
 #define FAT_STATE_DIRTY 0x01
 
 #ifdef __REACTOS__
-#include <pshpack1.h>
+#pragma pack(push, 1)
 #endif
 
 /* ++roman: Use own definition of boot sector structure -- the kernel headers'
@@ -176,7 +176,7 @@ typedef struct {
 } __attribute__ ((packed)) DIR_ENT;
 
 #ifdef __REACTOS__
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 typedef struct _dos_file {

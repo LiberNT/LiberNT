@@ -41,3 +41,7 @@ target_link_libraries(fastfat ${PSEH_LIB} memcmp)
 add_importlibs(fastfat ntoskrnl hal)
 add_pch(fastfat fatprocs.h SOURCE)
 add_cd_file(TARGET fastfat DESTINATION reactos/system32/drivers NO_CAB FOR all)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(fastfat PRIVATE -Wno-unused-value)
+endif()

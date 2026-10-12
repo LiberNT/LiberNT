@@ -82,7 +82,7 @@ if(ARCH STREQUAL "i386")
             arch/i386/xbox/xboxmem.c
             arch/i386/xbox/xboxrtc.c
             arch/i386/xbox/xboxvideo.c)
-        if(NOT MSVC)
+        if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
             # Prevent a warning when doing a memcmp with address 0
             set_source_files_properties(arch/i386/xbox/xboxmem.c PROPERTIES COMPILE_OPTIONS "-Wno-nonnull")
         endif()

@@ -11,17 +11,17 @@ struct CEmptyVolumeCacheCallBack
     : public IEmptyVolumeCacheCallBack
 {
 
-    STDMETHOD_(ULONG, AddRef)() throw()
+    STDMETHOD_(ULONG, AddRef)() throw() override
     {
         return 2;
     }
-    STDMETHOD_(ULONG, Release)() throw()
+    STDMETHOD_(ULONG, Release)() throw() override
     {
         return 1;
     }
     STDMETHOD(QueryInterface)(
         REFIID riid,
-        _COM_Outptr_ void** ppvObject) throw()
+        _COM_Outptr_ void** ppvObject) throw() override
     {
         if (riid == IID_IUnknown || riid == IID_IEmptyVolumeCacheCallBack)
         {

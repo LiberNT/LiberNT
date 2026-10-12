@@ -10,8 +10,6 @@
 #include <taskbarpinlock.h>
 #include <taskbarpinicon.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 #define TASKBAR_PIN_CHANGED_MESSAGE L"TaskbarPinningChanged"
 
 enum

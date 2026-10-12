@@ -75,7 +75,7 @@
 
 #define NTFS_MFT_MASK 0x0000FFFFFFFFFFFFULL
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct
 {
     UCHAR        JumpBoot[3];            // Jump to the boot loader routine
@@ -233,7 +233,7 @@ typedef struct
     USHORT            Reserved;
     NTFS_FILE_NAME_ATTR    FileName;
 } NTFS_INDEX_ENTRY, *PNTFS_INDEX_ENTRY;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct
 {

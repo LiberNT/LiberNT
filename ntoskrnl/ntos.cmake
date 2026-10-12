@@ -22,6 +22,11 @@ if((ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_ID STRE
     set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/bug.c APPEND PROPERTY COMPILE_OPTIONS -Xclang -fasync-exceptions)
 endif()
 
+if(ARCH STREQUAL "arm64")
+    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/irql.c ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/spinlock.c PROPERTY SKIP_PRECOMPILE_HEADERS ON)
+    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/irql.c ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/spinlock.c APPEND PROPERTY COMPILE_DEFINITIONS _NTHALDLL_)
+endif()
+
 list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntoskrnl/config/cmalloc.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/config/cmapi.c

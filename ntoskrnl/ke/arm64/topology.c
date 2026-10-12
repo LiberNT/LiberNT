@@ -25,7 +25,7 @@
 #define KI_ARM64_MPIDR_PACKAGE        0xFF00FF0000ULL
 #define KI_ARM64_NUMA_MM_MAX_NODES    1
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _KI_ARM64_SRAT_SUBTABLE
 {
     UCHAR Type;
@@ -52,7 +52,7 @@ typedef struct _KI_ARM64_SRAT_MEMORY_AFFINITY
     ULONG Flags;
     ULONGLONG Reserved3;
 } KI_ARM64_SRAT_MEMORY_AFFINITY, *PKI_ARM64_SRAT_MEMORY_AFFINITY;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _KI_ARM64_CPU_NUMA_TOPOLOGY
 {

@@ -31,7 +31,7 @@
 
 #include "usb100.h"
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef enum _USB_DEVICE_TYPE {
   Usb11Device = 0,
@@ -476,4 +476,4 @@ C_ASSERT(sizeof(USB_HUB_STATUS_AND_CHANGE) == sizeof(ULONG));
 #define USB_DEVICE_CLASS_APPLICATION_SPECIFIC 0xFE
 #define USB_DEVICE_CLASS_VENDOR_SPECIFIC      0xFF
 
-#include <poppack.h>
+#pragma pack(pop)

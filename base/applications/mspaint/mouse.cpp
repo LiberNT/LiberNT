@@ -913,7 +913,7 @@ struct BezierTool : ToolBase
 {
     BOOL m_bLeftButton = FALSE;
 
-    void OnDrawOverlayOnImage(HDC hdc)
+    void OnDrawOverlayOnImage(HDC hdc) override
     {
         HBRUSH hBrush = (m_bLeftButton ? toolsModel.GetFgBrush() : toolsModel.GetBgBrush());
         switch (s_cPoints)
@@ -1006,7 +1006,7 @@ struct ShapeTool : ToolBase
     BOOL m_bLeftButton = FALSE;
     BOOL m_bClosed = FALSE;
 
-    void OnDrawOverlayOnImage(HDC hdc)
+    void OnDrawOverlayOnImage(HDC hdc) override
     {
         if (s_cPoints <= 0)
             return;

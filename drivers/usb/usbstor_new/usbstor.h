@@ -85,7 +85,7 @@ typedef struct
 #define USB_BULK_GET_MAX_LUN             0xFE
 #define USB_BULK_RESET_DEVICE             0xFF
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct
 {
     ULONG Signature;                                                 // CBW signature
@@ -312,7 +312,7 @@ typedef struct
     UCHAR Bytes[16];
 }UFI_UNKNOWN_CMD, *PUFI_UNKNOWN_CMD;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct
 {

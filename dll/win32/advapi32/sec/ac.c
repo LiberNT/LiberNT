@@ -7,7 +7,6 @@
 
 #include <advapi32.h>
 #include <lm.h>
-WINE_DEFAULT_DEBUG_CHANNEL(advapi);
 
 /* --- ACE --- */
 

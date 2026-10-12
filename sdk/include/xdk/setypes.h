@@ -69,12 +69,12 @@ typedef struct _ACL {
                                          SE_PRIVILEGE_REMOVED            | \
                                          SE_PRIVILEGE_USED_FOR_ACCESS)
 
-#include <pshpack4.h>
+#pragma pack(push, 4)
 typedef struct _LUID_AND_ATTRIBUTES {
   LUID Luid;
   $ULONG Attributes;
 } LUID_AND_ATTRIBUTES, *PLUID_AND_ATTRIBUTES;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef LUID_AND_ATTRIBUTES LUID_AND_ATTRIBUTES_ARRAY[ANYSIZE_ARRAY];
 typedef LUID_AND_ATTRIBUTES_ARRAY *PLUID_AND_ATTRIBUTES_ARRAY;
@@ -1297,7 +1297,7 @@ typedef struct _TOKEN_SOURCE {
   LUID SourceIdentifier;
 } TOKEN_SOURCE, *PTOKEN_SOURCE;
 
-#include <pshpack4.h>
+#pragma pack(push, 4)
 typedef struct _TOKEN_STATISTICS {
   LUID TokenId;
   LUID AuthenticationId;
@@ -1310,7 +1310,7 @@ typedef struct _TOKEN_STATISTICS {
   $ULONG PrivilegeCount;
   LUID ModifiedId;
 } TOKEN_STATISTICS, *PTOKEN_STATISTICS;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _TOKEN_CONTROL {
   LUID TokenId;

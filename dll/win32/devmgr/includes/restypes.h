@@ -4,7 +4,7 @@
 /* Physical Addresses are always treated as 64-bit wide */
 typedef LARGE_INTEGER PHYSICAL_ADDRESS, *PPHYSICAL_ADDRESS;
 
-#include <pshpack4.h>
+#pragma pack(push, 4)
 typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR {
   UCHAR Type;
   UCHAR ShareDisposition;
@@ -92,7 +92,7 @@ typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR {
 #endif
   } u;
 } CM_PARTIAL_RESOURCE_DESCRIPTOR, *PCM_PARTIAL_RESOURCE_DESCRIPTOR;
-#include <poppack.h>
+#pragma pack(pop)
 typedef struct _CM_PARTIAL_RESOURCE_LIST {
   USHORT Version;
   USHORT Revision;

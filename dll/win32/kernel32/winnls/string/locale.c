@@ -61,11 +61,13 @@ extern HMODULE kernel32_handle;
 #define WC_FLAGSMASK (WC_DISCARDNS|WC_SEPCHARS|WC_DEFAULTCHAR|WC_ERR_INVALID_CHARS|\
                       WC_COMPOSITECHECK|WC_NO_BEST_FIT_CHARS)
 
+#ifndef __REACTOS__
 /* current code pages */
 static const union cptable *ansi_cptable;
 static const union cptable *oem_cptable;
 static const union cptable *mac_cptable;
 static const union cptable *unix_cptable;  /* NULL if UTF8 */
+#endif
 
 static const WCHAR szLocaleKeyName[] = {
     '\\','R','e','g','i','s','t','r','y','\\','M','a','c','h','i','n','e','\\','S','y','s','t','e','m','\\',
@@ -79,69 +81,6 @@ static const WCHAR szLangGroupsKeyName[] = {
     'C','o','n','t','r','o','l','\\','N','l','s','\\',
     'L','a','n','g','u','a','g','e',' ','G','r','o','u','p','s',0
 };
-
-#if (WINVER >= 0x0600)
-/* Charset to codepage map, sorted by name. */
-static const struct charset_entry
-{
-    const char *charset_name;
-    UINT        codepage;
-} charset_names[] =
-{
-    { "BIG5", 950 },
-    { "CP1250", 1250 },
-    { "CP1251", 1251 },
-    { "CP1252", 1252 },
-    { "CP1253", 1253 },
-    { "CP1254", 1254 },
-    { "CP1255", 1255 },
-    { "CP1256", 1256 },
-    { "CP1257", 1257 },
-    { "CP1258", 1258 },
-    { "CP932", 932 },
-    { "CP936", 936 },
-    { "CP949", 949 },
-    { "CP950", 950 },
-    { "EUCJP", 20932 },
-    { "GB2312", 936 },
-    { "IBM037", 37 },
-    { "IBM1026", 1026 },
-    { "IBM424", 424 },
-    { "IBM437", 437 },
-    { "IBM500", 500 },
-    { "IBM850", 850 },
-    { "IBM852", 852 },
-    { "IBM855", 855 },
-    { "IBM857", 857 },
-    { "IBM860", 860 },
-    { "IBM861", 861 },
-    { "IBM862", 862 },
-    { "IBM863", 863 },
-    { "IBM864", 864 },
-    { "IBM865", 865 },
-    { "IBM866", 866 },
-    { "IBM869", 869 },
-    { "IBM874", 874 },
-    { "IBM875", 875 },
-    { "ISO88591", 28591 },
-    { "ISO885910", 28600 },
-    { "ISO885913", 28603 },
-    { "ISO885914", 28604 },
-    { "ISO885915", 28605 },
-    { "ISO885916", 28606 },
-    { "ISO88592", 28592 },
-    { "ISO88593", 28593 },
-    { "ISO88594", 28594 },
-    { "ISO88595", 28595 },
-    { "ISO88596", 28596 },
-    { "ISO88597", 28597 },
-    { "ISO88598", 28598 },
-    { "ISO88599", 28599 },
-    { "KOI8R", 20866 },
-    { "KOI8U", 21866 },
-    { "UTF8", CP_UTF8 }
-};
-#endif
 
 
 struct locale_name
@@ -160,7 +99,9 @@ struct locale_name
 /* locale ids corresponding to the various Unix locale parameters */
 static LCID lcid_LC_COLLATE;
 static LCID lcid_LC_CTYPE;
+#ifndef __REACTOS__
 static LCID lcid_LC_MESSAGES;
+#endif
 static LCID lcid_LC_MONETARY;
 static LCID lcid_LC_NUMERIC;
 static LCID lcid_LC_TIME;
@@ -370,6 +311,67 @@ static const union cptable *get_codepage_table( unsigned int codepage )
 
 #if (WINVER >= 0x0600)
 #if 0 // See kernel32_vista
+/* Charset to codepage map, sorted by name. */
+static const struct charset_entry
+{
+    const char *charset_name;
+    UINT        codepage;
+} charset_names[] =
+{
+    { "BIG5", 950 },
+    { "CP1250", 1250 },
+    { "CP1251", 1251 },
+    { "CP1252", 1252 },
+    { "CP1253", 1253 },
+    { "CP1254", 1254 },
+    { "CP1255", 1255 },
+    { "CP1256", 1256 },
+    { "CP1257", 1257 },
+    { "CP1258", 1258 },
+    { "CP932", 932 },
+    { "CP936", 936 },
+    { "CP949", 949 },
+    { "CP950", 950 },
+    { "EUCJP", 20932 },
+    { "GB2312", 936 },
+    { "IBM037", 37 },
+    { "IBM1026", 1026 },
+    { "IBM424", 424 },
+    { "IBM437", 437 },
+    { "IBM500", 500 },
+    { "IBM850", 850 },
+    { "IBM852", 852 },
+    { "IBM855", 855 },
+    { "IBM857", 857 },
+    { "IBM860", 860 },
+    { "IBM861", 861 },
+    { "IBM862", 862 },
+    { "IBM863", 863 },
+    { "IBM864", 864 },
+    { "IBM865", 865 },
+    { "IBM866", 866 },
+    { "IBM869", 869 },
+    { "IBM874", 874 },
+    { "IBM875", 875 },
+    { "ISO88591", 28591 },
+    { "ISO885910", 28600 },
+    { "ISO885913", 28603 },
+    { "ISO885914", 28604 },
+    { "ISO885915", 28605 },
+    { "ISO885916", 28606 },
+    { "ISO88592", 28592 },
+    { "ISO88593", 28593 },
+    { "ISO88594", 28594 },
+    { "ISO88595", 28595 },
+    { "ISO88596", 28596 },
+    { "ISO88597", 28597 },
+    { "ISO88598", 28598 },
+    { "ISO88599", 28599 },
+    { "KOI8R", 20866 },
+    { "KOI8U", 21866 },
+    { "UTF8", CP_UTF8 }
+};
+
 /***********************************************************************
  *              charset_cmp (internal)
  */

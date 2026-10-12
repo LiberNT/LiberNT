@@ -8,8 +8,6 @@
 #include "precomp.h"
 #include <atlstr.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(certmgr);
-
 #define CERTMGR_COLUMN_COUNT 5
 #define CERTMGR_PRIVATE_FORMAT L"LiberNT Certificates Snap-in Cookie"
 

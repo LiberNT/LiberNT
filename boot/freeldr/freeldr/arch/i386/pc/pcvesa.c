@@ -22,7 +22,7 @@
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(HWDETECT);
 
-#include <pshpack2.h>
+#pragma pack(push, 2)
 typedef struct
 {
     UCHAR Signature[4];             // (ret) signature ("VESA")
@@ -51,7 +51,7 @@ typedef struct
     UCHAR Reserved[216];            // Reserved for VBE implementation
     UCHAR ScratchPad[256];          // OEM scratchpad (for OEM strings, etc.)
 } VESA_SVGA_INFO, *PVESA_SVGA_INFO;
-#include <poppack.h>
+#pragma pack(pop)
 
 // Bitfields for VESA capabilities:
 //

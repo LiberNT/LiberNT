@@ -26,11 +26,10 @@ typedef struct _DPT_SCOPE
 
 #if defined(__GNUC__) || defined(__clang__)
 #define DPT_READ(p) __atomic_load_n((p), __ATOMIC_ACQUIRE)
-#define DPT_READ64(p) __atomic_load_n((p), __ATOMIC_RELAXED)
 #else
 #define DPT_READ(p) InterlockedCompareExchange((p), 0, 0)
-#define DPT_READ64(p) InterlockedCompareExchange64((volatile LONG64 *)(p), 0, 0)
 #endif
+#define DPT_READ64(p) InterlockedCompareExchange64((volatile LONG64 *)(p), 0, 0)
 
 static __inline ULONGLONG DptNow(void)
 {

@@ -207,7 +207,11 @@ update_logtype(struct pvr_device *pvr_dev, u32 group_mask)
 	struct rogue_fwif_kccb_cmd cmd;
 	int idx;
 	int err;
+#ifdef __REACTOS__
+	u32 slot;
+#else
 	int slot;
+#endif
 
 	/* No change in group_mask => nothing to update. */
 	if (fw_trace->group_mask == group_mask)

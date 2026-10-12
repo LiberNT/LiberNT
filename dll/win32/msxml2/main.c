@@ -24,14 +24,11 @@
 #include "objbase.h"
 #include "rpcproxy.h"
 
-static HINSTANCE instance;
-
 BOOL WINAPI DllMain(HINSTANCE hinstance, DWORD reason, LPVOID reserved)
 {
     switch (reason)
     {
     case DLL_PROCESS_ATTACH:
-        instance = hinstance;
         DisableThreadLibraryCalls(hinstance);
         break;
     }

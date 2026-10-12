@@ -15,3 +15,7 @@ if(NOT MSVC)
         -Wno-unknown-pragmas
         -Wno-attributes)
 endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(virtio PRIVATE -Wno-pragma-pack)
+endif()

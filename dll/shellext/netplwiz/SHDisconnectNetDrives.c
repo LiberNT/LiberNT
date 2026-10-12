@@ -8,8 +8,6 @@
 #include "netplwiz.h"
 #include <wine/debug.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(netplwiz);
-
 HINSTANCE hInstance;
 
 VOID InitializeListView(HWND hDlg)

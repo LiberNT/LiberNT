@@ -817,7 +817,7 @@ Ndis6FilterTerminalStatus(
             PNDIS6_PROTOCOL_BINDING Binding;
             NDIS_HANDLE                Context;
             PROTOCOL_STATUS_EX_HANDLER StatusHandlerEx;
-        } NDIS6_STATUSEX_SNAPSHOT_ENTRY, *PNDIS6_STATUSEX_SNAPSHOT_ENTRY;
+        } *PNDIS6_STATUSEX_SNAPSHOT_ENTRY;
         PNDIS6_STATUSEX_SNAPSHOT_ENTRY Snapshot = NULL;
         SIZE_T SnapshotCapacity = 0;
         SIZE_T SnapCount = 0;
@@ -1010,7 +1010,7 @@ Ndis6FilterTerminalStatus(
             PVOID                Context;
             STATUS_HANDLER       StatusHandler;
             STATUS_COMPLETE_HANDLER StatusCompleteHandler;
-        } NDIS6_STATUS_SNAPSHOT_ENTRY, *PNDIS6_STATUS_SNAPSHOT_ENTRY;
+        } *PNDIS6_STATUS_SNAPSHOT_ENTRY;
         PNDIS6_STATUS_SNAPSHOT_ENTRY Snapshot = NULL;
         SIZE_T SnapshotCapacity = 0;
         SIZE_T SnapCount = 0;

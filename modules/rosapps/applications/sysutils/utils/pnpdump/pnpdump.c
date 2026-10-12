@@ -10,7 +10,7 @@
 
 #include <ntddk.h>
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _CM_PNP_BIOS_DEVICE_NODE
 {
@@ -38,7 +38,7 @@ typedef struct _CM_PNP_BIOS_INSTALLATION_CHECK
   ULONG ProtectedModeDataBaseAddress;
 } CM_PNP_BIOS_INSTALLATION_CHECK, *PCM_PNP_BIOS_INSTALLATION_CHECK;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _PNP_ID_NAME_
 {

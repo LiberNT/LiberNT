@@ -7,14 +7,14 @@
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _ETH_HEADER
 {
     UCHAR Destination[ETH_LENGTH_OF_ADDRESS];
     UCHAR Source[ETH_LENGTH_OF_ADDRESS];
     USHORT PayloadType;
 } ETH_HEADER, *PETH_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define ETH_IS_LOCALLY_ADMINISTERED(Address) \
     ((BOOLEAN)(((PUCHAR)(Address))[0] & ((UCHAR)0x02)))

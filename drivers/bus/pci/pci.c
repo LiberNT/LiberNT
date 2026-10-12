@@ -25,7 +25,6 @@ static PFILE_OBJECT AcpiInterfaceFileObject = NULL;
 static PDEVICE_OBJECT AcpiInterfaceDeviceObject = NULL;
 static BOOLEAN AcpiInterfaceInitialized = FALSE;
 static FAST_MUTEX AcpiInterfaceMutex;
-static BOOLEAN AcpiInterfaceMutexInitialized = FALSE;
 
 static DRIVER_DISPATCH PciDispatchDeviceControl;
 static NTSTATUS NTAPI PciDispatchDeviceControl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp);
@@ -1113,7 +1112,6 @@ DriverEntry(
 
     /* Initialize the ACPI interface mutex for lazy initialization synchronization */
     ExInitializeFastMutex(&AcpiInterfaceMutex);
-    AcpiInterfaceMutexInitialized = TRUE;
 
     /* Hook HAL dispatch table for PCI bus address translation and slot resources */
     PciHookHal();

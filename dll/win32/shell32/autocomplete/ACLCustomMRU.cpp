@@ -8,8 +8,6 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 #define TYPED_URLS_KEY L"Software\\Microsoft\\Internet Explorer\\TypedURLs"
 
 CACLCustomMRU::CACLCustomMRU()

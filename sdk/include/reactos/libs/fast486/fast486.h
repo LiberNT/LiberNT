@@ -291,7 +291,7 @@ typedef struct _FAST486_TASK_REG
     BOOLEAN Modern;
 } FAST486_TASK_REG, *PFAST486_TASK_REG;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct
 {
@@ -421,7 +421,7 @@ typedef struct _FAST486_LEGACY_TSS
     USHORT Ldtr;
 } FAST486_LEGACY_TSS, *PFAST486_LEGACY_TSS;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _FAST486_TABLE_REG
 {

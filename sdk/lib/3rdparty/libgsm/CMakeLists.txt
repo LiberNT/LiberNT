@@ -16,3 +16,7 @@ add_library(libgsm
 
 target_include_directories(libgsm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/inc)
 target_compile_definitions(libgsm PRIVATE WAV49)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(libgsm PRIVATE -Wno-unused-const-variable)
+endif()

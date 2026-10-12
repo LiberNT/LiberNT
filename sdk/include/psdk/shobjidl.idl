@@ -916,7 +916,7 @@ interface IShellView2 : IShellView
 cpp_quote("#define SV2GV_CURRENTVIEW ((UINT)-1)")
 cpp_quote("#define SV2GV_DEFAULTVIEW ((UINT)-2)")
 
-cpp_quote("#include <pshpack8.h>")
+cpp_quote("#pragma pack(push, 8)")
     typedef struct _SV2CVW2_PARAMS
     {
         DWORD cbSize;
@@ -927,7 +927,7 @@ cpp_quote("#include <pshpack8.h>")
         SHELLVIEWID const *pvid;
         HWND hwndView;
     } SV2CVW2_PARAMS, *LPSV2CVW2_PARAMS;
-cpp_quote("#include <poppack.h>")
+cpp_quote("#pragma pack(pop)")
 
     HRESULT GetView(
         [in, out] SHELLVIEWID *view_guid,
@@ -2457,7 +2457,7 @@ typedef [v1_enum] enum THUMBBUTTONMASK {
 
 cpp_quote("DEFINE_ENUM_FLAG_OPERATORS(THUMBBUTTONMASK)")
 
-cpp_quote("#include <pshpack8.h>")
+cpp_quote("#pragma pack(push, 8)")
 typedef struct THUMBBUTTON {
     THUMBBUTTONMASK dwMask;
     UINT iId;
@@ -2466,7 +2466,7 @@ typedef struct THUMBBUTTON {
     WCHAR szTip[260];
     THUMBBUTTONFLAGS dwFlags;
 } THUMBBUTTON, *LPTHUMBBUTTON;
-cpp_quote("#include <poppack.h>")
+cpp_quote("#pragma pack(pop)")
 
 [
     uuid(ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf),
@@ -2852,7 +2852,7 @@ cpp_quote("#define DBIM_TITLE      0x0010")
 cpp_quote("#define DBIM_MODEFLAGS  0x0020")
 cpp_quote("#define DBIM_BKCOLOR    0x0040")
 
-cpp_quote("#include <pshpack8.h>")
+cpp_quote("#pragma pack(push, 8)")
 
 typedef struct tagDESKBANDINFO
 {
@@ -2866,7 +2866,7 @@ typedef struct tagDESKBANDINFO
     COLORREF    crBkgnd;
 } DESKBANDINFO;
 
-cpp_quote("#include <poppack.h>")
+cpp_quote("#pragma pack(pop)")
 
 cpp_quote("#define DBIMF_NORMAL            0x0000")
 cpp_quote("#define DBIMF_FIXED             0x0001")
@@ -2995,7 +2995,7 @@ cpp_quote("#if (_WIN32_IE >= _WIN32_IE_IE40)")
 /*****************************************************************************
  * IBandSite interface
  */
-cpp_quote("#include <pshpack8.h>")
+cpp_quote("#pragma pack(push, 8)")
 
 typedef struct tagBANDSITEINFO
 {
@@ -3004,7 +3004,7 @@ typedef struct tagBANDSITEINFO
     DWORD dwStyle;
 } BANDSITEINFO;
 
-cpp_quote("#include <poppack.h>")
+cpp_quote("#pragma pack(pop)")
 
 
 enum tagBANDSITECID {
@@ -3099,7 +3099,7 @@ interface IMenuBand : IUnknown
 /*****************************************************************************
  * IShellMenuCallback interface
  */
-cpp_quote("#include <pshpack8.h>")
+cpp_quote("#pragma pack(push, 8)")
 
 typedef struct tagSMDATA
 {
@@ -3136,7 +3136,7 @@ typedef struct tagSHCSCHANGENOTIFYSTRUCT
 	PCIDLIST_ABSOLUTE	pidl2;
 } SMCSHCHANGENOTIFYSTRUCT, *PSMCSHCHANGENOTIFYSTRUCT;
 
-cpp_quote("#include <poppack.h>")
+cpp_quote("#pragma pack(pop)")
 
 enum
 {

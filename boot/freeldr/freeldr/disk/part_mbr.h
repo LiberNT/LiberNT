@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /*
  * Define the structure of a partition table entry
@@ -41,7 +41,7 @@ typedef struct _MASTER_BOOT_RECORD
 } MASTER_BOOT_RECORD, *PMASTER_BOOT_RECORD;
 C_ASSERT(sizeof(MASTER_BOOT_RECORD) == 512);
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /*
  * Partition type defines (of PSDK)

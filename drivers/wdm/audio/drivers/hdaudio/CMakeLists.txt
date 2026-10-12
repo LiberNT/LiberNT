@@ -17,7 +17,7 @@ add_library(hdaudio MODULE
     hdaudio.rc)
 
 set_module_type(hdaudio kernelmodedriver)
-if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(hdaudio PRIVATE -Wno-unused-variable -Wno-unused-but-set-variable -Wno-sign-compare -Wno-unknown-pragmas -Wno-switch -Wno-write-strings)
 endif()
 target_link_libraries(hdaudio ntoskrnl_vista libcntpr ${PSEH_LIB})

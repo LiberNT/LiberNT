@@ -51,7 +51,7 @@ DBG_DEFAULT_CHANNEL(UI);
 #define VERTRES_350_SCANLINES        0x01
 #define VERTRES_400_SCANLINES        0x02
 
-#include <pshpack2.h>
+#pragma pack(push, 2)
 typedef struct
 {
     USHORT ModeAttributes;             /* Mode attributes (see #00080) */
@@ -107,7 +107,7 @@ typedef struct
     UCHAR  Reserved2[190];             /* 190 BYTEs  reserved (0) */
 } SVGA_MODE_INFORMATION, *PSVGA_MODE_INFORMATION;
 C_ASSERT(sizeof(SVGA_MODE_INFORMATION) == 256);
-#include <poppack.h>
+#pragma pack(pop)
 
 UCHAR MachDefaultTextColor = COLOR_GRAY;
 

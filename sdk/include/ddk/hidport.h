@@ -28,7 +28,7 @@ typedef struct _HID_DEVICE_ATTRIBUTES
     USHORT          Reserved[11];
 }HID_DEVICE_ATTRIBUTES, * PHID_DEVICE_ATTRIBUTES;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _HID_DESCRIPTOR
 {
@@ -45,7 +45,7 @@ typedef struct _HID_DESCRIPTOR
     }DescriptorList [1];
 }HID_DESCRIPTOR, * PHID_DESCRIPTOR;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define HID_HID_DESCRIPTOR_TYPE             0x21
 #define HID_REPORT_DESCRIPTOR_TYPE          0x22

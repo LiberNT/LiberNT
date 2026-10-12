@@ -263,6 +263,7 @@ PathIsUNCEx(
 // #pragma deprecated(PathIsVolumeGUIDWorker)
 // #pragma deprecated(IsValidExtensionWorker)
 
+#ifdef _MSC_VER
 #pragma deprecated(PathAddBackslash)
 #pragma deprecated(PathAddBackslashA)
 #pragma deprecated(PathAddBackslashW)
@@ -286,6 +287,7 @@ PathIsUNCEx(
 #pragma deprecated(PathRenameExtension)
 #pragma deprecated(PathRenameExtensionA)
 #pragma deprecated(PathRenameExtensionW)
+#endif
 
 #else // !DEPRECATE_SUPPORTED
 

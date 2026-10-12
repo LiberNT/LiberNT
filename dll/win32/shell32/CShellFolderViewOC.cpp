@@ -7,8 +7,6 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 class CShellFolderViewOC;
 
 class CShellFolderViewOCSink :
@@ -368,6 +366,7 @@ public:
         return S_OK;
     }
 
+    using IConnectionPointImpl<CShellFolderViewOC, &DIID_DShellFolderViewEvents>::Advise;
     STDMETHOD(Advise)(IAdviseSink *pAdvSink, DWORD *pdwConnection) override
     {
         if (!m_pAdviseHolder)

@@ -51,7 +51,6 @@ MSSTYLES_TryLoadPng(
         }
     }
 
-    UnlockResource(pData);
     FreeResource(hAlloc);
     return ret;
 }

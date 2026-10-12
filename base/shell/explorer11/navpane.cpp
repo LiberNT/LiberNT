@@ -1,7 +1,5 @@
 #include "frame.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(explorer11);
-
 CNavPane::~CNavPane()
 {
     FreeItems();

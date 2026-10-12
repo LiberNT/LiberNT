@@ -103,7 +103,7 @@ typedef struct _KIDT_INIT
     PVOID ServiceRoutine;
 } KIDT_INIT, *PKIDT_INIT;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _KI_INTERRUPT_DISPATCH_ENTRY
 {
     UCHAR _Op_nop;
@@ -112,7 +112,7 @@ typedef struct _KI_INTERRUPT_DISPATCH_ENTRY
     UCHAR _Op_jmp;
     ULONG RelativeAddress;
 } KI_INTERRUPT_DISPATCH_ENTRY, *PKI_INTERRUPT_DISPATCH_ENTRY;
-#include <poppack.h>
+#pragma pack(pop)
 
 extern ULONG KeI386NpxPresent;
 extern ULONG KeI386XMMIPresent;

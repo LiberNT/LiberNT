@@ -26,8 +26,6 @@ private:
 
     HICON m_hIcon;
 
-    BOOL m_Loaded;
-
 public:
     CSnapinCacheEntry(const CAtlString& guidString, const CAtlString& aboutGuidString, const CAtlString& name, HIMAGELIST hImageList);
     ~CSnapinCacheEntry();

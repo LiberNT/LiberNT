@@ -226,7 +226,7 @@ typedef struct _USB_TOPOLOGY_ADDRESS {
 
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef enum _USB_HUB_NODE {
   UsbHub,
@@ -800,11 +800,11 @@ typedef struct _USB_DEVICE_PERFORMANCE_INFO {
 
 #endif
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #if (NTDDI_VERSION >= NTDDI_WIN10_RS3) || defined(__REACTOS__)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #define USB_TRANSPORT_CHARACTERISTICS_VERSION_1                 0x01
 #define USB_TRANSPORT_CHARACTERISTICS_LATENCY_AVAILABLE         0x1
@@ -876,7 +876,7 @@ typedef struct _USB_FRAME_NUMBER_AND_QPC_FOR_TIME_SYNC_INFORMATION {
 
 #endif
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif
 

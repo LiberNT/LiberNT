@@ -111,3 +111,7 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(mbedtls PRIVATE -Wno-tautological-constant-compare)
 endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    set_property(SOURCE bignum.c APPEND PROPERTY COMPILE_OPTIONS -Wno-unused-but-set-variable)
+endif()

@@ -35,7 +35,7 @@
 #include <ddraw.h>
 
 #ifdef __i386__
-#include <pshpack4.h>
+#pragma pack(push, 4)
 #endif
 
 #define D3DVALP(val, prec)      ((float)(val))
@@ -1421,7 +1421,7 @@ typedef enum _D3DTEXTURETRANSFORMFLAGS {
 #define D3DFVF_TEXCOORDSIZE1(CoordIndex) (D3DFVF_TEXTUREFORMAT1 << (CoordIndex*2 + 16))
 
 #ifdef __i386__
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 #endif /* (DIRECT3D_VERSION < 0x0800) */

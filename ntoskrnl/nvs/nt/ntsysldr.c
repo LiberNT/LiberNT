@@ -1717,7 +1717,7 @@ MiLocateKernelSections(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
                 ExPoolCodeStart = DllBase + SectionHeader->VirtualAddress;
                 ExPoolCodeEnd = ExPoolCodeStart + Size;
             }
-            else if (*(PUSHORT)&SectionHeader->Name[4] == 'MI')
+            else if (*(PUSHORT)&SectionHeader->Name[4] == ('I' << 8 | 'M'))
             {
                 MmPoolCodeStart = DllBase + SectionHeader->VirtualAddress;
                 MmPoolCodeEnd = MmPoolCodeStart + Size;

@@ -159,7 +159,7 @@ static inline BYTE _ILGetFSType(LPCITEMIDLIST pidl)
     return (type & PT_FOLDERTYPEMASK) == PT_FS ? type : 0;
 }
 
-#include "pshpack1.h"
+#pragma pack(push, 1)
 typedef BYTE PIDLTYPE;
 
 typedef struct tagPIDLCPanelStruct
@@ -261,7 +261,7 @@ typedef struct tagPIDLDATA
 #endif
 	}u;
 } PIDLDATA, *LPPIDLDATA;
-#include "poppack.h"
+#pragma pack(pop)
 
 /*
  * getting special values from simple pidls

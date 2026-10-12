@@ -138,7 +138,6 @@ static const DM_ACTION_ENTRY DmActionTable[] =
     { IDM_HELP_ABOUT,               IDS_HINT_HELP_ABOUT,               IDS_STATUS_READY,               DmActionRequiresNone,       FALSE }
 };
 
-static const WCHAR DmActionStubPrefix[] = L"Disk Management";
 static const GUID DmActionGptBasicDataPartitionGuid =
 { 0xEBD0A0A2, 0xB9E5, 0x4433, { 0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7 } };
 static const GUID DmActionGptSystemPartitionGuid =

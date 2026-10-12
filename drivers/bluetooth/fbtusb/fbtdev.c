@@ -28,7 +28,6 @@ NTSTATUS NTAPI FreeBT_DispatchCreate(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp
     PDEVICE_EXTENSION           deviceExtension;
     PIO_STACK_LOCATION          irpStack;
     //PFREEBT_PIPE_CONTEXT        pipeContext;
-    PUSBD_INTERFACE_INFORMATION interface;
 
     PAGED_CODE();
 
@@ -47,7 +46,6 @@ NTSTATUS NTAPI FreeBT_DispatchCreate(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp
 
     if (deviceExtension->UsbInterface)
     {
-        interface = deviceExtension->UsbInterface;
 
     }
 
@@ -102,16 +100,12 @@ FreeBT_DispatchCreate_Exit:
 NTSTATUS NTAPI FreeBT_DispatchClose(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 {
     NTSTATUS               ntStatus;
-    PFILE_OBJECT           fileObject;
     PDEVICE_EXTENSION      deviceExtension;
-    PIO_STACK_LOCATION     irpStack;
     //PFREEBT_PIPE_CONTEXT  pipeContext;
     //PUSBD_PIPE_INFORMATION pipeInformation;
 
     PAGED_CODE();
 
-    irpStack = IoGetCurrentIrpStackLocation(Irp);
-    fileObject = irpStack->FileObject;
     //pipeContext = NULL;
     //pipeInformation = NULL;
     deviceExtension = (PDEVICE_EXTENSION) DeviceObject->DeviceExtension;
@@ -285,7 +279,6 @@ NTSTATUS NTAPI FreeBT_HCIEventCompletion(IN PDEVICE_OBJECT DeviceObject, IN PIRP
 {
     //ULONG               stageLength;
     NTSTATUS            ntStatus;
-    PIO_STACK_LOCATION  nextStack;
     PURB                urb;
 
     FreeBT_DbgPrint(3, ("FBTUSB: FreeBT_HCIEventCompletion, status=0x%08X\n", Irp->IoStatus.Status));
@@ -297,7 +290,6 @@ NTSTATUS NTAPI FreeBT_HCIEventCompletion(IN PDEVICE_OBJECT DeviceObject, IN PIRP
     urb=(PURB)Context;
     ntStatus = Irp->IoStatus.Status;
     Irp->IoStatus.Information = urb->UrbBulkOrInterruptTransfer.TransferBufferLength;
-    nextStack = IoGetNextIrpStackLocation(Irp);
 
     ExFreePool(Context);
     FreeBT_IoDecrement(DeviceObject->DeviceExtension);
@@ -415,12 +407,10 @@ NTSTATUS NTAPI FreeBT_DispatchDevCtrl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Ir
     PVOID              ioBuffer;
     ULONG              inputBufferLength;
     ULONG              outputBufferLength;
-    ULONG              info;
     NTSTATUS           ntStatus;
     PDEVICE_EXTENSION  deviceExtension;
     PIO_STACK_LOCATION irpStack;
 
-    info = 0;
     irpStack = IoGetCurrentIrpStackLocation(Irp);
     code = irpStack->Parameters.DeviceIoControl.IoControlCode;
     deviceExtension = (PDEVICE_EXTENSION) DeviceObject->DeviceExtension;
@@ -507,10 +497,8 @@ NTSTATUS NTAPI FreeBT_ResetPipe(IN PDEVICE_OBJECT DeviceObject, IN USBD_PIPE_HAN
 {
     PURB              urb;
     NTSTATUS          ntStatus;
-    PDEVICE_EXTENSION deviceExtension;
 
     urb = NULL;
-    deviceExtension = (PDEVICE_EXTENSION) DeviceObject->DeviceExtension;
 
     urb = (PURB)ExAllocatePool(NonPagedPool, sizeof(struct _URB_PIPE_REQUEST));
     if (urb)

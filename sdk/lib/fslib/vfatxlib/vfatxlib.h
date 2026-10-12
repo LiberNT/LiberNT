@@ -14,7 +14,7 @@
 #include <ndk/iofuncs.h>
 #include <fmifs/fmifs.h>
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _FATX_BOOT_SECTOR
 {
    unsigned char SysType[4];        // 0
@@ -24,7 +24,7 @@ typedef struct _FATX_BOOT_SECTOR
    unsigned long Unknown;           // 14
    unsigned char Unused[4078];      // 18
 } FATX_BOOT_SECTOR, *PFATX_BOOT_SECTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _FORMAT_CONTEXT
 {

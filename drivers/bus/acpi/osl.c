@@ -1086,8 +1086,6 @@ AcpiOsRemoveInterruptHandler (
 {
     DPRINT("AcpiOsRemoveInterruptHandler()\n");
 
-    UNREFERENCED_PARAMETER(InterruptNumber);
-
     if (!ServiceRoutine)
     {
         DPRINT1("Bad parameter\n");
@@ -1096,6 +1094,9 @@ AcpiOsRemoveInterruptHandler (
 
     if (AcpiInterruptHandlerRegistered)
     {
+        if (InterruptNumber != AcpiIrqNumber || ServiceRoutine != AcpiIrqHandler)
+            return AE_BAD_PARAMETER;
+
 #if (NTDDI_VERSION >= NTDDI_WIN7)
         IO_DISCONNECT_INTERRUPT_PARAMETERS DisconnectParameters;
 

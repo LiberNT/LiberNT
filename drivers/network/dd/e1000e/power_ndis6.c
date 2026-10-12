@@ -173,7 +173,6 @@ E1000ConfigureWakeOnLan(
     )
 {
     ULONG WucValue = 0;
-    ULONG CtrlValue;
 
     if (Adapter->IoBase == NULL)
     {
@@ -182,9 +181,6 @@ E1000ConfigureWakeOnLan(
 
     DPRINT("E1000: Configuring Wake-on-LAN - Magic=%d, Link=%d\n",
              Adapter->WakeOnMagicPacket, Adapter->WakeOnLinkChange);
-
-    /* Read current CTRL register */
-    CtrlValue = E1000_READ_REG(Adapter, E1000_REG_CTRL);
 
     /* Build WUC (Wake Up Control) register value */
     WucValue = E1000_WUC_PME_EN;  /* Enable PME# assertion */

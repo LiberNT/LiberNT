@@ -197,7 +197,7 @@ DEFINE_KSPROPERTY_TABLE(TopologySet) {\
 /* ──────────────────────────────────────────────────────────────────
  *  USB Audio Class descriptor structures (pshpack1)
  * ────────────────────────────────────────────────────────────────── */
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /* ── UAC1 Control Interface Descriptor (CS_INTERFACE) ───────────── */
 typedef struct
@@ -484,7 +484,7 @@ typedef struct
 } USB_AUDIO3_OUTPUT_TERMINAL_DESCRIPTOR,
   *PUSB_AUDIO3_OUTPUT_TERMINAL_DESCRIPTOR;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* ──────────────────────────────────────────────────────────────────
  *  Internal structures

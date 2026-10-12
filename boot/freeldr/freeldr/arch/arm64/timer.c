@@ -35,8 +35,8 @@ static ULONGLONG timer_frequency = 0;
 static BOOLEAN timer_initialized = FALSE;
 
 /* Workaround flags for known timer erratas */
-static BOOLEAN fsl_erratum_a008585 = FALSE;
 #ifndef UEFIBOOT
+static BOOLEAN fsl_erratum_a008585 = FALSE;
 static BOOLEAN sunxi_a64_erratum = FALSE;
 #endif
 
@@ -178,11 +178,6 @@ VOID Arm64InitializeTimer(VOID)
             }
         }
     }
-#else
-    /* Under UEFI, skip CPU detection to avoid system register traps */
-    /* Use conservative defaults for safety */
-    fsl_erratum_a008585 = TRUE; /* Enable safe counter read by default under UEFI */
-    /* No TRACE here under UEFI to avoid recursion */
 #endif
     
 #ifndef UEFIBOOT

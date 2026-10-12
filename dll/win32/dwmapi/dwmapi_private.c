@@ -31,8 +31,6 @@
 #include "dwmapi.h"
 #include "wine/debug.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(dwmapi);
-
 #ifndef SECURITY_WINDOW_MANAGER_BASE_RID
 #define SECURITY_WINDOW_MANAGER_BASE_RID 0x0000005aL
 #endif

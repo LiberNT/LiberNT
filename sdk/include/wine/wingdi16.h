@@ -25,7 +25,7 @@
 #include <wingdi.h>
 #include <wine/winbase16.h>
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct
 {
@@ -67,6 +67,6 @@ typedef struct
     COLORREF lopnColor;
 } LOGPEN16, *LPLOGPEN16;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif /* __WINE_WINE_WINGDI16_H */

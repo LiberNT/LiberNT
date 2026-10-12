@@ -119,7 +119,7 @@ if(MSVC)
 
     # Disable warning C4267: 'initializing': conversion from 'size_t' to 'DWORD', possible loss of data
     set_source_files_properties(winnls/string/locale.c PROPERTIES COMPILE_OPTIONS "/wd4267")
-else()
+elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     # Disable warning: 'variable' defined but not used
     set_source_files_properties(winnls/string/locale.c PROPERTIES COMPILE_OPTIONS "-Wno-unused-variable")
 endif()

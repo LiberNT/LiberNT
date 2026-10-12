@@ -50,7 +50,7 @@
 #define CM_KEY_VALUE_BIG                0x3FD8
 #define CM_KEY_VALUE_SPECIAL_SIZE       0x80000000
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 //
 // For memory-mapped Hives
@@ -155,7 +155,7 @@ typedef struct _CM_BIG_DATA
     HCELL_INDEX List;
 } CM_BIG_DATA, *PCM_BIG_DATA;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 //
 // Generic Index Entry

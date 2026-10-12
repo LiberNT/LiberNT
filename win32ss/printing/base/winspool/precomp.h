@@ -29,7 +29,7 @@
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(winspool);
 
-#define SPOOLER_HANDLE_SIG 'gg'
+#define SPOOLER_HANDLE_SIG ('g' << 8 | 'g')
 
 // Structures
 /*

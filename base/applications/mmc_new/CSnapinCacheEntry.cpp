@@ -13,7 +13,7 @@
 #define IID_PPV_ARG(Itype, ppType) IID_##Itype, reinterpret_cast<void**>((static_cast<Itype**>(ppType)))
 
 CSnapinCacheEntry::CSnapinCacheEntry(const CAtlString& guidString, const CAtlString& aboutGuidString, const CAtlString& name, HIMAGELIST hImageList)
-    :m_GuidString(guidString), m_AboutGuidString(aboutGuidString), m_Name(name), m_Loaded(FALSE)
+    :m_GuidString(guidString), m_AboutGuidString(aboutGuidString), m_Name(name)
 {
     ::CLSIDFromString(m_GuidString, &m_Guid);
     ::CLSIDFromString(m_AboutGuidString, &m_AboutGuid);

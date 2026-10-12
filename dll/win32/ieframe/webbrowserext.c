@@ -21,7 +21,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(ieframe);
 #define WB_DEFAULT_WIDTH     300
 #define WB_DEFAULT_HEIGHT    150
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct
 {
     DWORD cbSize;
@@ -36,7 +36,7 @@ typedef struct
     DWORD browser_flags;
     DWORD reserved5;
 } WB_PERSIST_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(sizeof(WB_PERSIST_HEADER) == 76);
 

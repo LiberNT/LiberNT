@@ -1,11 +1,9 @@
 #include "libm.h"
 
-static const float_t tointf = 1 / FLT_EPSILON;
-static const double_t toint = 1 / DBL_EPSILON;
-
 double __cdecl rint(double x)
 {
 #if defined(__SSE_MATH__)
+    static const double_t toint = 1 / DBL_EPSILON;
     union {double f; uint64_t i;} u = {x};
     int e = u.i>>52 & 0x7ff;
     int s = u.i>>63;
@@ -21,6 +19,7 @@ double __cdecl rint(double x)
         return s ? -0.0 : 0;
     return y;
 #else
+    static const float_t tointf = 1 / FLT_EPSILON;
     union {double f; uint64_t i;} u = {x};
     int e = (u.i >> 52 & 0x7ff) - 0x3ff;
     int s = u.i>>63;

@@ -134,44 +134,57 @@ static __inline__ long __ppc_interlockedadd(long volatile *Addend, long Value)
     return __atomic_add_fetch(Addend, Value, __ATOMIC_SEQ_CST);
 }
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+unsigned long long __atomic_fetch_add_8(volatile void *Pointer, unsigned long long Value, int Order);
+unsigned long long __atomic_fetch_sub_8(volatile void *Pointer, unsigned long long Value, int Order);
+unsigned long long __atomic_fetch_and_8(volatile void *Pointer, unsigned long long Value, int Order);
+unsigned long long __atomic_fetch_or_8(volatile void *Pointer, unsigned long long Value, int Order);
+unsigned long long __atomic_fetch_xor_8(volatile void *Pointer, unsigned long long Value, int Order);
+unsigned long long __atomic_exchange_8(volatile void *Pointer, unsigned long long Value, int Order);
+#ifdef __cplusplus
+}
+#endif
+
 static __inline__ __int64 __ppc_interlockedexchangeadd64(__int64 volatile *Addend, __int64 Value)
 {
-    return __atomic_fetch_add(Addend, Value, __ATOMIC_SEQ_CST);
+    return (__int64)__atomic_fetch_add_8(Addend, (unsigned long long)Value, __ATOMIC_SEQ_CST);
 }
 
 static __inline__ __int64 __ppc_interlockedadd64(__int64 volatile *Addend, __int64 Value)
 {
-    return __atomic_add_fetch(Addend, Value, __ATOMIC_SEQ_CST);
+    return (__int64)(__atomic_fetch_add_8(Addend, (unsigned long long)Value, __ATOMIC_SEQ_CST) + (unsigned long long)Value);
 }
 
 static __inline__ __int64 __ppc_interlockedand64(__int64 volatile *Value, __int64 Mask)
 {
-    return __atomic_fetch_and(Value, Mask, __ATOMIC_SEQ_CST);
+    return (__int64)__atomic_fetch_and_8(Value, (unsigned long long)Mask, __ATOMIC_SEQ_CST);
 }
 
 static __inline__ __int64 __ppc_interlockedor64(__int64 volatile *Value, __int64 Mask)
 {
-    return __atomic_fetch_or(Value, Mask, __ATOMIC_SEQ_CST);
+    return (__int64)__atomic_fetch_or_8(Value, (unsigned long long)Mask, __ATOMIC_SEQ_CST);
 }
 
 static __inline__ __int64 __ppc_interlockedxor64(__int64 volatile *Value, __int64 Mask)
 {
-    return __atomic_fetch_xor(Value, Mask, __ATOMIC_SEQ_CST);
+    return (__int64)__atomic_fetch_xor_8(Value, (unsigned long long)Mask, __ATOMIC_SEQ_CST);
 }
 
 static __inline__ __int64 __ppc_interlockedincrement64(__int64 volatile *Addend)
 {
-    return __atomic_add_fetch(Addend, 1, __ATOMIC_SEQ_CST);
+    return (__int64)(__atomic_fetch_add_8(Addend, 1, __ATOMIC_SEQ_CST) + 1);
 }
 
 static __inline__ __int64 __ppc_interlockeddecrement64(__int64 volatile *Addend)
 {
-    return __atomic_sub_fetch(Addend, 1, __ATOMIC_SEQ_CST);
+    return (__int64)(__atomic_fetch_sub_8(Addend, 1, __ATOMIC_SEQ_CST) - 1);
 }
 
 static __inline__ __int64 __ppc_interlockedexchange64(__int64 volatile *Target, __int64 Value)
 {
-    return __atomic_exchange_n(Target, Value, __ATOMIC_SEQ_CST);
+    return (__int64)__atomic_exchange_8(Target, (unsigned long long)Value, __ATOMIC_SEQ_CST);
 }
 
 #define _InterlockedAdd __ppc_interlockedadd

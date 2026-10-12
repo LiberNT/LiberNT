@@ -16,9 +16,6 @@
 /* Global NDIS Miniport Driver Handle */
 static NDIS_HANDLE g_NdisMiniportDriverHandle = NULL;
 
-/* Driver object for unload */
-static PDRIVER_OBJECT g_DriverObject = NULL;
-
 /*
  * RndisAllocateMemory
  *
@@ -1182,8 +1179,6 @@ DriverEntry(
     DPRINT1("USBRNDIS: ========== DRIVER ENTRY ==========\n");
     DPRINT1("USBRNDIS: ReactOS USB RNDIS NDIS 6.x Driver\n");
     DPRINT1("USBRNDIS: NDIS Version: %u.%u\n", NDIS_MINIPORT_MAJOR_VERSION, NDIS_MINIPORT_MINOR_VERSION);
-
-    g_DriverObject = DriverObject;
 
     /* Initialize miniport characteristics structure */
     NdisZeroMemory(&MiniportChars, sizeof(MiniportChars));

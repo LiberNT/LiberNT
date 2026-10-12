@@ -28,7 +28,7 @@
 #define SOFTGPU_CMD_MAGIC   0x444D4753UL
 #define SOFTGPU_CMD_OP_NOP  1
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _TEST_SOFTGPU_CMD
 {
     ULONG       Magic;
@@ -49,7 +49,7 @@ typedef struct _TEST_SOFTGPU_CMD
     ULONGLONG   FenceGpuVa;
     ULONGLONG   FenceValue;
 } TEST_SOFTGPU_CMD;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define RENDERPATH_SUBMISSIONS 16
 

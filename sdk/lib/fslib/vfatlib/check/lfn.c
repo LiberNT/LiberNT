@@ -27,7 +27,7 @@
 #include <debug.h>
 
 #ifdef __REACTOS__
-#include <pshpack1.h>
+#pragma pack(push, 1)
 #endif
 
 typedef struct {
@@ -42,7 +42,7 @@ typedef struct {
 } LFN_ENT;
 
 #ifdef __REACTOS__
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 #define LFN_ID_START	0x40

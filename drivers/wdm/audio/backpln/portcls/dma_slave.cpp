@@ -38,7 +38,7 @@ public:
         m_MaxMapRegisters(0),
         m_AllocatedBufferSize(0),
         m_BufferSize(0),
-        m_Address({0}),
+        m_Address(),
         m_Buffer(nullptr),
         m_Mdl(nullptr),
         m_WriteToDevice(FALSE)

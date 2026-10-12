@@ -92,14 +92,14 @@ DBG_DEFAULT_CHANNEL(HWDETECT);
 /* Timeout in ms for sending to keyboard controller. */
 #define CONTROLLER_TIMEOUT                              250
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _PNP_DOCK_INFO
 {
     ULONG DockLocationID;
     ULONG SerialNumber;
     USHORT Capabilities;
 } PNP_DOCK_INFO, *PPNP_DOCK_INFO;
-#include <poppack.h>
+#pragma pack(pop)
 
 /* FIXME: Abstract things better so we don't need to place define here */
 #if !defined(SARCH_XBOX)

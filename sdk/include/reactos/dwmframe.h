@@ -106,7 +106,7 @@ typedef struct _CDD_PRESENT_SOURCE
     CTL_CODE(FILE_DEVICE_VIDEO, 0x929, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_VIDEO_DXGK_CAPTURE_DESKTOP \
     CTL_CODE(FILE_DEVICE_VIDEO, 0x92b, METHOD_BUFFERED, FILE_ANY_ACCESS)
-#include <pshpack4.h>
+#pragma pack(push, 4)
 
 /* Kernel-only CDD readback. Destination is a caller-owned kernel bitmap,
  * valid for the synchronous request. Flags is zero on input; HAS_IMAGE on
@@ -532,7 +532,7 @@ typedef struct _DWM_DX_SURFACE_EXCHANGE
     RECTL LayerClip;
 } DWM_DX_SURFACE_EXCHANGE, *PDWM_DX_SURFACE_EXCHANGE;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* Fixed layout: window descriptors followed by bounded variable region data;
  * pixels continue to live in the per-window sections. */

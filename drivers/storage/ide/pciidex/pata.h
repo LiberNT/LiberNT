@@ -198,7 +198,7 @@ C_ASSERT(CMD_FLAG_DATA_IN == REQUEST_FLAG_DATA_IN);
 C_ASSERT(CMD_FLAG_DATA_OUT == REQUEST_FLAG_DATA_OUT);
 C_ASSERT(CMD_FLAG_AWAIT_INTERRUPT == REQUEST_FLAG_POLL);
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 /**
  * Physical Region Descriptor Table Entry
  */
@@ -209,7 +209,7 @@ typedef struct _PCIIDE_PRD_TABLE_ENTRY
 #define PCIIDE_PRD_LENGTH_MASK    0xFFFF
 #define PCIIDE_PRD_END_OF_TABLE   0x80000000
 } PCIIDE_PRD_TABLE_ENTRY, *PPCIIDE_PRD_TABLE_ENTRY;
-#include <poppack.h>
+#pragma pack(pop)
 
 /** 64 kB boundary */
 #define PCIIDE_PRD_LIMIT          0x10000

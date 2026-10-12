@@ -60,7 +60,6 @@ static INT  ScrollTrackingPos = 0;
 static INT  ScrollTrackingVal = 0;
  /* Hit test code of the last button-down event */
 static DWORD ScrollTrackHitTest = SCROLL_NOWHERE;
-static BOOL ScrollTrackVertical;
 
  /* Is the moving thumb being displayed? */
 static BOOL ScrollMovingThumb = FALSE;
@@ -842,7 +841,6 @@ IntScrollHandleScrollEvent(HWND Wnd, INT SBType, UINT Msg, POINT Pt)
   {
       case WM_LBUTTONDOWN:  /* Initialise mouse tracking */
         HideCaret(Wnd);     /* hide caret while holding down LBUTTON */
-        ScrollTrackVertical = Vertical;
         ScrollTrackHitTest  = HitTest = IntScrollHitTest(&ScrollBarInfo, Vertical, Pt, FALSE );
         LastClickPos  = Vertical ? (Pt.y - ScrollBarInfo.rcScrollBar.top)
                         : (Pt.x - ScrollBarInfo.rcScrollBar.left);

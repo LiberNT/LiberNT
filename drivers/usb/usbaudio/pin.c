@@ -605,7 +605,7 @@ USBAudioSelectAudioStreamingInterface(
     PUSB_INTERFACE_DESCRIPTOR InterfaceDescriptor;
     PUSB_ENDPOINT_DESCRIPTOR EndpointDescriptor;
     NTSTATUS Status;
-    ULONG Found, Index;
+    ULONG Found;
 
     PUSB_AUDIO_STREAMING_INTERFACE_DESCRIPTOR StreamingInterfaceDescriptor;
     PUSB_AUDIO_STREAMING_FORMAT_TYPE_DESCRIPTOR FormatDescriptor;
@@ -627,7 +627,6 @@ USBAudioSelectAudioStreamingInterface(
     }
 
     Found = FALSE;
-    Index = 0;
 
     /* selects the interface which has an audio streaming interface descriptor associated to the input / output terminal at the given format index */
     while (InterfaceDescriptor != NULL)
@@ -656,7 +655,6 @@ USBAudioSelectAudioStreamingInterface(
                         break;
                     }
 
-                    Index++;
                 }
             }
         }

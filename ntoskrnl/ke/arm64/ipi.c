@@ -246,6 +246,7 @@ KiIpiServiceRoutine(
     return TRUE;
 }
 
+#ifdef CONFIG_SMP
 static
 VOID
 KiArm64ServicePendingIpi(VOID)
@@ -263,6 +264,7 @@ KiArm64ServicePendingIpi(VOID)
     KiIpiServiceRoutine(NULL, NULL);
     KfLowerIrql(OldIrql);
 }
+#endif
 
 ULONG_PTR
 NTAPI

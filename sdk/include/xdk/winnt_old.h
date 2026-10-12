@@ -2734,7 +2734,7 @@ typedef struct _WOW64_FLOATING_SAVE_AREA
     DWORD   Cr0NpxState;
 } WOW64_FLOATING_SAVE_AREA, *PWOW64_FLOATING_SAVE_AREA;
 
-#include "pshpack4.h"
+#pragma pack(push, 4)
 typedef struct _WOW64_CONTEXT
 {
     DWORD ContextFlags;
@@ -2763,7 +2763,7 @@ typedef struct _WOW64_CONTEXT
     DWORD SegSs;
     BYTE ExtendedRegisters[WOW64_MAXIMUM_SUPPORTED_EXTENSION];
 } WOW64_CONTEXT, *PWOW64_CONTEXT;
-#include "poppack.h"
+#pragma pack(pop)
 
 
 #define EXCEPTION_MAXIMUM_PARAMETERS 15
@@ -3200,7 +3200,7 @@ typedef struct _RTL_CRITICAL_SECTION_DEBUG {
   };
 } RTL_CRITICAL_SECTION_DEBUG, *PRTL_CRITICAL_SECTION_DEBUG, RTL_RESOURCE_DEBUG, *PRTL_RESOURCE_DEBUG;
 
-#include "pshpack8.h"
+#pragma pack(push, 8)
 typedef struct _RTL_CRITICAL_SECTION {
   PRTL_CRITICAL_SECTION_DEBUG DebugInfo;
   LONG LockCount;
@@ -3209,7 +3209,7 @@ typedef struct _RTL_CRITICAL_SECTION {
   HANDLE LockSemaphore;
   ULONG_PTR SpinCount;
 } RTL_CRITICAL_SECTION, *PRTL_CRITICAL_SECTION;
-#include "poppack.h"
+#pragma pack(pop)
 
 NTSYSAPI
 WORD
@@ -3345,7 +3345,7 @@ typedef struct _OSVERSIONINFOEXW {
   BYTE wReserved;
 } OSVERSIONINFOEXW, *POSVERSIONINFOEXW, *LPOSVERSIONINFOEXW, RTL_OSVERSIONINFOEXW, *PRTL_OSVERSIONINFOEXW;
 
-#include <pshpack2.h>
+#pragma pack(push, 2)
 
 typedef struct _IMAGE_VXD_HEADER {
   WORD e32_magic;
@@ -3456,7 +3456,7 @@ typedef struct _IMAGE_OS2_HEADER {
   WORD ne_expver;
 } IMAGE_OS2_HEADER, *PIMAGE_OS2_HEADER;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _IMAGE_FILE_HEADER {
   WORD Machine;
@@ -3601,7 +3601,7 @@ typedef struct _IMAGE_SECTION_HEADER {
   DWORD Characteristics;
 } IMAGE_SECTION_HEADER, *PIMAGE_SECTION_HEADER;
 
-#include <pshpack2.h>
+#pragma pack(push, 2)
 
 typedef struct _IMAGE_SYMBOL {
   union {
@@ -3684,7 +3684,7 @@ typedef struct _IMAGE_RELOCATION {
   WORD Type;
 } IMAGE_RELOCATION, UNALIGNED *PIMAGE_RELOCATION;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #ifndef __IMAGE_COR20_HEADER_DEFINED__
 #define __IMAGE_COR20_HEADER_DEFINED__
@@ -3782,7 +3782,7 @@ typedef struct _IMAGE_IMPORT_BY_NAME {
   BYTE Name[1];
 } IMAGE_IMPORT_BY_NAME, *PIMAGE_IMPORT_BY_NAME;
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 typedef struct _IMAGE_THUNK_DATA64 {
   union {
     ULONGLONG ForwarderString;
@@ -3791,7 +3791,7 @@ typedef struct _IMAGE_THUNK_DATA64 {
     ULONGLONG AddressOfData;
   } u1;
 } IMAGE_THUNK_DATA64, *PIMAGE_THUNK_DATA64;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _IMAGE_THUNK_DATA32 {
   union {
@@ -4947,7 +4947,7 @@ typedef struct _ACTIVATION_CONTEXT_RUN_LEVEL_INFORMATION {
   DWORD UiAccess;
 } ACTIVATION_CONTEXT_RUN_LEVEL_INFORMATION, *PACTIVATION_CONTEXT_RUN_LEVEL_INFORMATION;
 
-#include <pshpack4.h>
+#pragma pack(push, 4)
 typedef struct _ACTIVATION_CONTEXT_DATA_ASSEMBLY_GLOBAL_INFORMATION
 {
     ULONG Size;
@@ -4991,7 +4991,7 @@ typedef struct _ACTIVATION_CONTEXT_DATA_ASSEMBLY_INFORMATION
     ACTCTX_REQUESTED_RUN_LEVEL RunLevel;
     ULONG UiAccess;
 } ACTIVATION_CONTEXT_DATA_ASSEMBLY_INFORMATION, *PACTIVATION_CONTEXT_DATA_ASSEMBLY_INFORMATION;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _ACTIVATION_CONTEXT_DATA_DLL_REDIRECTION
 {

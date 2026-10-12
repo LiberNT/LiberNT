@@ -700,7 +700,6 @@ GuessInstallerType(LPCWSTR Installer, UINT &ExtraInfo)
             {
                 if (p[0] == 'r' && p[1] == 'D' && p[2] == 'l' && p[3] == 'P' && p[4] == 't' && p[5] == 'S')
                     it = INSTALLER_INNO;
-                UnlockResource((void*)p);
             }
         }
         FreeLibrary(hMod);

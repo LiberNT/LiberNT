@@ -57,7 +57,7 @@ typedef enum _VCHIQ_BULK_MODE_T
     VCHIQ_BULK_MODE_NOCALLBACK
 } VCHIQ_BULK_MODE_T;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _VCHIQ_HEADER_T
 {
@@ -127,7 +127,7 @@ typedef struct _VCHIQ_AWAIT_COMPLETION_T
     VOID *driver_completion_handle;
 } VCHIQ_AWAIT_COMPLETION_T;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* These are the native ARM64 ioctl layouts in vchiq_ioctl.h. Unlike the MMAL
  * wire protocol below, their pointers are user virtual addresses and remain
@@ -286,7 +286,7 @@ typedef struct _VD3_CONFIGURE_DPB
  * The VideoCore MMAL worker is a 32-bit endpoint. Pointer-looking members in
  * its protocol are opaque cookies and must remain four bytes on ARM64 hosts.
  */
-#include <pshpack4.h>
+#pragma pack(push, 4)
 
 typedef struct _MMAL_WORKER_HEADER32
 {
@@ -527,7 +527,7 @@ typedef struct _MMAL_EVENT_FORMAT_CHANGED32
     UINT32 Format;
 } MMAL_EVENT_FORMAT_CHANGED32;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(sizeof(MMAL_WORKER_HEADER32) == 24);
 C_ASSERT(sizeof(MMAL_ES_FORMAT32) == 32);

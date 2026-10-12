@@ -55,13 +55,8 @@ elseif(ARCH STREQUAL "arm64")
     set_target_properties(ucrtbase PROPERTIES REACTOS_LSE_ATOMICS lse_atomics_um)
 endif()
 
-if(NOT MSVC)
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(ucrtbase PRIVATE -Wno-builtin-declaration-mismatch)
-endif()
-
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    # Silence warnings in ucrtbase_stubs.c
-    target_compile_options(ucrtbase PRIVATE -Wno-incompatible-library-redeclaration)
 endif()
 
 set_entrypoint(ucrtbase __acrt_DllMain 12)

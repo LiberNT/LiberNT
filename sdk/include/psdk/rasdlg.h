@@ -26,7 +26,7 @@ extern "C" {
 #define RASDDFLAG_PositionDlg  1
 
 #ifndef RC_INVOKED
-#include <pshpack4.h>
+#pragma pack(push, 4)
 
 typedef struct tagRASENTRYDLGA
 {
@@ -129,7 +129,7 @@ typedef struct tagRASNOUSERW
     WCHAR szDomain[DNLEN + 1];
 } RASNOUSERW, *LPRASNOUSERW ;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 BOOL APIENTRY RasDialDlgA(LPSTR,LPSTR,LPSTR,LPRASDIALDLG);
 BOOL APIENTRY RasDialDlgW(LPWSTR,LPWSTR,LPWSTR,LPRASDIALDLG);

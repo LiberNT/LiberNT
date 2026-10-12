@@ -6,4 +6,4 @@
 
 #pragma once
 
-#include <poppack.h>
+#pragma pack(pop)

@@ -26,7 +26,6 @@ private:
     int m_iTreeViewWidth;
     int m_iActionsPaneWidth;
     int m_iSplitterWidth;
-    int m_iSplitOffset;
     int m_iSplitSide;
     int m_iStatusBarHeight;
     BOOL m_bTreeViewVisible;
@@ -130,42 +129,42 @@ public:
     VOID SaveView(MscFile *mscFile, IXMLDOMElement *pParentElement);
 
     // +IConsole
-    STDMETHODIMP QueryInterface(REFIID riid, void **ppvObject);
-    STDMETHODIMP_(ULONG) AddRef();
-    STDMETHODIMP_(ULONG) Release();
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppvObject) override;
+    STDMETHODIMP_(ULONG) AddRef() override;
+    STDMETHODIMP_(ULONG) Release() override;
 
-    STDMETHODIMP SetHeader(LPHEADERCTRL pHeader);
-    STDMETHODIMP SetToolbar(LPTOOLBAR pToolbar);
-    STDMETHODIMP QueryResultView(LPUNKNOWN *pUnknown);
-    STDMETHODIMP QueryScopeImageList(LPIMAGELIST *ppImageList);
-    STDMETHODIMP QueryResultImageList(LPIMAGELIST *ppImageList);
-    STDMETHODIMP UpdateAllViews(LPDATAOBJECT lpDataObject, LPARAM data, LONG_PTR hint);
-    STDMETHODIMP MessageBox(LPCWSTR lpszText, LPCWSTR lpszTitle, UINT fuStyle, int *piRetval);
-    STDMETHODIMP QueryConsoleVerb(LPCONSOLEVERB *ppConsoleVerb);
-    STDMETHODIMP SelectScopeItem(HSCOPEITEM hScopeItem);
-    STDMETHODIMP GetMainWindow(HWND *phwnd);
-    STDMETHODIMP NewWindow(HSCOPEITEM hScopeItem, ULONG lOptions);
+    STDMETHODIMP SetHeader(LPHEADERCTRL pHeader) override;
+    STDMETHODIMP SetToolbar(LPTOOLBAR pToolbar) override;
+    STDMETHODIMP QueryResultView(LPUNKNOWN *pUnknown) override;
+    STDMETHODIMP QueryScopeImageList(LPIMAGELIST *ppImageList) override;
+    STDMETHODIMP QueryResultImageList(LPIMAGELIST *ppImageList) override;
+    STDMETHODIMP UpdateAllViews(LPDATAOBJECT lpDataObject, LPARAM data, LONG_PTR hint) override;
+    STDMETHODIMP MessageBox(LPCWSTR lpszText, LPCWSTR lpszTitle, UINT fuStyle, int *piRetval) override;
+    STDMETHODIMP QueryConsoleVerb(LPCONSOLEVERB *ppConsoleVerb) override;
+    STDMETHODIMP SelectScopeItem(HSCOPEITEM hScopeItem) override;
+    STDMETHODIMP GetMainWindow(HWND *phwnd) override;
+    STDMETHODIMP NewWindow(HSCOPEITEM hScopeItem, ULONG lOptions) override;
     // -IConsole
 
     // +IConsole2
-    STDMETHODIMP Expand(HSCOPEITEM hItem, BOOL bExpand);
-    STDMETHODIMP IsTaskpadViewPreferred();
-    STDMETHODIMP SetStatusText(LPOLESTR pszStatusText);
+    STDMETHODIMP Expand(HSCOPEITEM hItem, BOOL bExpand) override;
+    STDMETHODIMP IsTaskpadViewPreferred() override;
+    STDMETHODIMP SetStatusText(LPOLESTR pszStatusText) override;
     // -IConsole2
 
     // +IConsoleNameSpace
-    STDMETHODIMP InsertItem(LPSCOPEDATAITEM item);
-    STDMETHODIMP DeleteItem(HSCOPEITEM hItem, LONG fDeleteThis);
-    STDMETHODIMP SetItem(LPSCOPEDATAITEM item);
-    STDMETHODIMP GetItem(LPSCOPEDATAITEM item);
-    STDMETHODIMP GetChildItem(HSCOPEITEM item, HSCOPEITEM *pItemChild, MMC_COOKIE *plCookie);
-    STDMETHODIMP GetNextItem(HSCOPEITEM item, HSCOPEITEM *pItemNext, MMC_COOKIE *plCookie);
-    STDMETHODIMP GetParentItem(HSCOPEITEM item, HSCOPEITEM *pItemParent, MMC_COOKIE *plCookie);
+    STDMETHODIMP InsertItem(LPSCOPEDATAITEM item) override;
+    STDMETHODIMP DeleteItem(HSCOPEITEM hItem, LONG fDeleteThis) override;
+    STDMETHODIMP SetItem(LPSCOPEDATAITEM item) override;
+    STDMETHODIMP GetItem(LPSCOPEDATAITEM item) override;
+    STDMETHODIMP GetChildItem(HSCOPEITEM item, HSCOPEITEM *pItemChild, MMC_COOKIE *plCookie) override;
+    STDMETHODIMP GetNextItem(HSCOPEITEM item, HSCOPEITEM *pItemNext, MMC_COOKIE *plCookie) override;
+    STDMETHODIMP GetParentItem(HSCOPEITEM item, HSCOPEITEM *pItemParent, MMC_COOKIE *plCookie) override;
     // -IConsoleNameSpace
 
     // +IConsoleNameSpace2
-    STDMETHODIMP Expand(HSCOPEITEM hItem);
-    STDMETHODIMP AddExtension(HSCOPEITEM hItem, LPCLSID lpClsid);
+    STDMETHODIMP Expand(HSCOPEITEM hItem) override;
+    STDMETHODIMP AddExtension(HSCOPEITEM hItem, LPCLSID lpClsid) override;
     // -IConsoleNameSpace2
 };
 

@@ -7,7 +7,7 @@
 
 #include "wfp.h"
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _WFP_IPV4_HEADER
 {
     UCHAR VersionAndLength;
@@ -21,7 +21,7 @@ typedef struct _WFP_IPV4_HEADER
     ULONG SourceAddress;
     ULONG DestinationAddress;
 } WFP_IPV4_HEADER, *PWFP_IPV4_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define WFP_DEFAULT_TTL 128
 

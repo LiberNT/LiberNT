@@ -233,7 +233,7 @@ typedef PCONFLICT_DETAILS_A PCONFLICT_DETAILS;
 
 typedef ULONG REGDISPOSITION;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /* MEM_DES.MD_Flags constants */
 #define mMD_MemoryType              0x1
@@ -652,7 +652,7 @@ typedef HWPROFILEINFO_A HWPROFILEINFO;
 typedef PHWPROFILEINFO_A PHWPROFILEINFO;
 #endif
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define ResType_All                       0x00000000
 #define ResType_None                      0x00000000

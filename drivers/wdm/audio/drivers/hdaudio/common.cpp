@@ -149,7 +149,7 @@ NTSTATUS
 NTAPI
 CAdapterCommon::ReadRegistryKey(
     IN PDEVICE_OBJECT DeviceObject,
-    IN LPWSTR KeyName,
+    IN LPCWSTR KeyName,
     IN ULONG BufferLength,
     OUT PREGISTRYKEY *ParentKey,
     OUT PULONG Type,

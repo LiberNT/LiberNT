@@ -317,12 +317,6 @@ HidClassPDO_HandleQueryHardwareId(
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS NTAPI
-HidClass_GetParentInstanceId_Completion(
-    IN PDEVICE_OBJECT DeviceObject,
-    IN PIRP Irp,
-    IN PVOID Context);
-
 NTSTATUS
 HidClassPDO_HandleQueryInstanceId(
     IN PDEVICE_OBJECT DeviceObject,

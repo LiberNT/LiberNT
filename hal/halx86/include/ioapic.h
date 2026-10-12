@@ -36,7 +36,7 @@
 #define IOAPIC_TBL_DF1      (0xFF<< 56) /* Destination Field (logical mode) */
 #define IOAPIC_TBL_VECTOR   (0xFF << 0) /* Vector (10h - FEh) */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _IOAPIC_ROUTE_ENTRY {
    ULONG vector	    :  8,
    delivery_mode    :  3,   /* 000: FIXED
@@ -63,7 +63,7 @@ typedef struct _IOAPIC_ROUTE_ENTRY {
       } logical;
    } dest;
 } IOAPIC_ROUTE_ENTRY, *PIOAPIC_ROUTE_ENTRY;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _IOAPIC_INFO
 {

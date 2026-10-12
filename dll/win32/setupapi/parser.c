@@ -26,11 +26,8 @@
 #include <ndk/obfuncs.h>
 
 /* Unicode constants */
-static const WCHAR BackSlash[] = {'\\',0};
 static const WCHAR Class[]  = {'C','l','a','s','s',0};
 static const WCHAR ClassGUID[]  = {'C','l','a','s','s','G','U','I','D',0};
-static const WCHAR InfDirectory[] = {'i','n','f','\\',0};
-static const WCHAR InfFileSpecification[] = {'*','.','i','n','f',0};
 
 #define CONTROL_Z  '\x1a'
 #define MAX_SECTION_NAME_LEN  255

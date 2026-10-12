@@ -108,3 +108,7 @@ add_importlibs(libtirpc user32 advapi32 kernel32_vista ws2_32 msvcrt kernel32 nt
 add_delay_importlibs(libtirpc secur32)
 add_pch(libtirpc precomp.h SOURCE)
 add_cd_file(TARGET libtirpc DESTINATION reactos/system32 FOR all)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(libtirpc PRIVATE -Wno-deprecated-non-prototype)
+endif()

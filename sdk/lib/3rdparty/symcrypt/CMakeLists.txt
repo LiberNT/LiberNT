@@ -181,3 +181,8 @@ target_include_directories(symcrypt
 target_include_directories(symcrypt_km
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/inc
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(symcrypt PRIVATE -Wno-missing-braces -Wno-unused-but-set-variable -Wno-unused-function)
+    target_compile_options(symcrypt_km PRIVATE -Wno-missing-braces -Wno-unused-but-set-variable -Wno-unused-function)
+endif()

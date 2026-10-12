@@ -21,8 +21,6 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL (fprop);
-
 static inline CFolderOptions*
 GetFolderOptions(HWND hwndDlg)
 {

@@ -3270,7 +3270,7 @@ typedef struct tagNMBCDROPDOWN {
 
 #define LV_KEYDOWN NMLVKEYDOWN
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
   typedef struct tagLVKEYDOWN {
     NMHDR hdr;
@@ -3278,7 +3278,7 @@ typedef struct tagNMBCDROPDOWN {
     UINT flags;
   } NMLVKEYDOWN,*LPNMLVKEYDOWN;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define LVN_MARQUEEBEGIN (LVN_FIRST-56)
 
@@ -3877,7 +3877,7 @@ typedef struct tagTVDISPINFOEXW {
     int iRetImageIndex;
   } NMTVASYNCDRAW;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
   typedef struct tagTVKEYDOWN {
     NMHDR hdr;
@@ -3885,7 +3885,7 @@ typedef struct tagTVDISPINFOEXW {
     UINT flags;
   } NMTVKEYDOWN,*LPNMTVKEYDOWN;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define TVN_SELCHANGING __MINGW_NAME_AW(TVN_SELCHANGING)
 #define TVN_SELCHANGED __MINGW_NAME_AW(TVN_SELCHANGED)
@@ -4275,7 +4275,7 @@ typedef struct tagTVDISPINFOEXW {
 
 #define TC_KEYDOWN NMTCKEYDOWN
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
   typedef struct tagTCKEYDOWN {
     NMHDR hdr;
@@ -4283,7 +4283,7 @@ typedef struct tagTVDISPINFOEXW {
     UINT flags;
   } NMTCKEYDOWN;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define TCN_SELCHANGE (TCN_FIRST - 1)
 #define TCN_SELCHANGING (TCN_FIRST - 2)
@@ -4720,7 +4720,7 @@ typedef struct {
 #define PGK_CONTROL 2
 #define PGK_MENU 4
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
   typedef struct {
     NMHDR hdr;
@@ -4732,7 +4732,7 @@ typedef struct {
     int iScroll;
   }NMPGSCROLL,*LPNMPGSCROLL;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define PGN_CALCSIZE (PGN_FIRST-2)
 
@@ -5261,7 +5261,7 @@ typedef const void*
 
 #ifndef NOTASKDIALOG
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 enum _TASKDIALOG_FLAGS
 {
@@ -5408,7 +5408,7 @@ TaskDialogIndirect(
   _Out_opt_ int *,
   _Out_opt_ BOOL *);
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif /* !NOTASKDIALOG */
 

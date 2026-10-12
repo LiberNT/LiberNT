@@ -25,7 +25,7 @@ extern const LPCWSTR ObjectTypeNames[];
 #define NT_OBJECT_PIDL_MAGIC (USHORT)0x9A03
 #define REGISTRY_PIDL_MAGIC (USHORT)0x5364
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 // NT OBJECT browser
 struct NtPidlEntry
@@ -82,7 +82,7 @@ struct RegPidlEntry
 };
 
 
-#include <poppack.h>
+#pragma pack(pop)
 
 HRESULT ReadRegistryValue(HKEY root, PCWSTR path, PCWSTR valueName, PVOID * valueData, PDWORD valueLength);
 

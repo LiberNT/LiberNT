@@ -157,7 +157,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(shell);
 
 /* link file formats */
 
-#include "pshpack1.h"
+#pragma pack(push, 1)
 
 struct LOCATION_INFO
 {
@@ -185,7 +185,7 @@ struct volume_info
     WCHAR        label[12];  /* assume 8.3 */
 };
 
-#include "poppack.h"
+#pragma pack(pop)
 
 /* IShellLink Implementation */
 

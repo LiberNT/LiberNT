@@ -18,7 +18,7 @@
 #include <gdiplus.h>
 #include <math.h>
 
-#define SEARCH_TIMER_ID 'SR'
+#define SEARCH_TIMER_ID ('S' << 8 | 'R')
 #define TREEVIEW_ICON_SIZE 24
 
 class CSideTreeView : public CUiWindow<CTreeView>

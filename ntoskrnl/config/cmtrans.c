@@ -24,8 +24,6 @@ static LIST_ENTRY CmpTransactionListHead;
 static LIST_ENTRY CmpTransUoWListHead;
 static EX_PUSH_LOCK CmpTransLock;
 static KGUARDED_MUTEX CmpTransEnlistLock;
-static HANDLE CmpTransTmHandle;
-static HANDLE CmpTransRmHandle;
 static PKRESOURCEMANAGER CmpTransRm;
 
 static
@@ -1154,8 +1152,6 @@ CmpTransCreateResourceManager(VOID)
         if (NT_SUCCESS(Status) &&
             InterlockedCompareExchangePointer((PVOID *)&CmpTransRm, ResourceManager, NULL) == NULL)
         {
-            CmpTransTmHandle = TmHandle;
-            CmpTransRmHandle = RmHandle;
             return STATUS_SUCCESS;
         }
         ObDereferenceObject(ResourceManager);
@@ -1531,7 +1527,7 @@ CmpTransFormatValue(
     ULONG NameLength = Value->Header.NameLength;
     ULONG DataSize = Value->Header.DataSize;
     PVOID Data = CmpTransValueData(Value);
-    ULONG Minimum, Size, DataOffset, Copy;
+    ULONG Minimum, DataOffset, Copy;
     NTSTATUS Status = STATUS_SUCCESS;
 
     switch (KeyValueInformationClass)

@@ -7,8 +7,6 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 EXTERN_C HRESULT
 SHELL_GetShellExtensionRegCLSID(HKEY hKey, LPCWSTR KeyName, CLSID *pClsId)
 {

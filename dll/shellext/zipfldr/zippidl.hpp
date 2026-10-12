@@ -12,7 +12,7 @@ enum ZipPidlType
     ZIP_PIDL_FILE
 };
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 struct ZipPidlEntry
 {
     WORD cb; // This must be a WORD to keep compatibility to SHITEMID
@@ -28,7 +28,7 @@ struct ZipPidlEntry
 
     bool IsDirectory() const { return ZipType == ZIP_PIDL_DIRECTORY; }
 };
-#include <poppack.h>
+#pragma pack(pop)
 
 LPITEMIDLIST _ILCreateZipItem(ZipPidlType Type, PCWSTR lpString, unz_file_info64& info);
 const ZipPidlEntry* _ZipFromIL(LPCITEMIDLIST pidl);

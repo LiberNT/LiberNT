@@ -131,7 +131,7 @@ typedef enum
     Volatile = 1
 } HSTORAGE_TYPE;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /**
  * @name HBASE_BLOCK
@@ -233,7 +233,7 @@ typedef struct _HCELL
     LONG Size;
 } HCELL, *PHCELL;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _HV_LOG_ENTRY
 {

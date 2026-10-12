@@ -9,7 +9,7 @@
 
 #define WDI_VERSION_MIN_SUPPORTED WDI_VERSION_1_0
 
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 typedef struct _TLV_CONTEXT
 {
@@ -79,4 +79,4 @@ extern "C" {
 }
 #endif
 
-#include <poppack.h>
+#pragma pack(pop)

@@ -319,7 +319,7 @@ Cyw43455SdioStopHardware(
                           NULL);
     if (DeviceExtension->InterfaceEnabled)
     {
-        IoSetDeviceInterfaceState(&DeviceExtension->InterfaceName, FALSE);
+        (VOID)IoSetDeviceInterfaceState(&DeviceExtension->InterfaceName, FALSE);
         DeviceExtension->InterfaceEnabled = FALSE;
     }
     if (DeviceExtension->ControlFunctionEnabled)

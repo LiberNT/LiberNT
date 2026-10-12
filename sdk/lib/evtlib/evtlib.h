@@ -56,7 +56,7 @@ extern "C" {
  * structures are absent from winnt.h .
  */
 
-#include <pshpack4.h> // pshpack1
+#pragma pack(push, 4) // pshpack1
 
 // ELF_LOGFILE_HEADER
 typedef struct _EVENTLOGHEADER
@@ -139,7 +139,7 @@ typedef struct _EVENTLOGEOF
 #define EVENTLOGEOF_SIZE_FIXED  (5 * sizeof(ULONG))
 C_ASSERT(EVENTLOGEOF_SIZE_FIXED == FIELD_OFFSET(EVENTLOGEOF, BeginRecord));
 
-#include <poppack.h>
+#pragma pack(pop)
 
 
 typedef struct _EVENT_OFFSET_INFO

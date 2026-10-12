@@ -994,7 +994,14 @@ void write_args(FILE *h, const var_list_t *args, const char *name, int method, i
                         expr = &bstr;
                     }
 
+#ifdef __REACTOS__
+                    if (get_type_vt(arg->declspec.type) == VT_BSTR && expr->type == EXPR_WSTRLIT)
+                        fprintf(h, " = (BSTR)");
+                    else
+                        fprintf(h, " = ");
+#else
                     fprintf(h, " = ");
+#endif
                     write_expr( h, expr, 0, 1, NULL, NULL, "" );
                     break;
                 }

@@ -49,7 +49,7 @@ typedef enum _DC_CHIP_TYPE
 #define DC_SETUP_FRAME_ENTRY(Value)   ((Value) << 16)
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /*
  * Transmit Buffer Descriptor
@@ -162,7 +162,7 @@ typedef union _DC_PATTERN_FILTER_BLOCK
 
 C_ASSERT(sizeof(DC_PATTERN_FILTER_BLOCK) == 32);
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /*
  * NIC Control and Status Registers

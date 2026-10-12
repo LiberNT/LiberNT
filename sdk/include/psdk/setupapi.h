@@ -5,9 +5,9 @@
 #include <devpropdef.h>
 
 #if defined(_WIN64)
-#include <pshpack8.h>
+#pragma pack(push, 8)
 #else
-#include <pshpack1.h>
+#pragma pack(push, 1)
 #endif
 #ifdef __cplusplus
 extern "C" {
@@ -2816,5 +2816,5 @@ WINSETUPAPI PSTR WINAPI UnicodeToMultiByte(PCWSTR lpUnicodeStr, UINT uCodePage);
 }
 #endif
 
-#include <poppack.h>
+#pragma pack(pop)
 #endif /* _SETUPAPI_H_ */

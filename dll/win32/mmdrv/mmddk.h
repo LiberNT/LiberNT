@@ -51,7 +51,7 @@ DWORD       APIENTRY mmGetCurrentTask(VOID);
  *   Multimedia DDK compatible part
  * ================================== */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #define DRVM_INIT		100
 #define DRVM_EXIT		101
@@ -465,6 +465,6 @@ BOOL		 	WINAPI	DriverCallback(DWORD dwCallBack, UINT uFlags, HDRVR hDev,
 #define  WAVE_DIRECTSOUND               0x0080
 #endif
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif /* __MMDDK_H */

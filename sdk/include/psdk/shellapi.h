@@ -10,7 +10,7 @@ extern "C" {
 #endif
 
 #if !defined(_WIN64)
-#include <pshpack1.h>
+#pragma pack(push, 1)
 #endif
 
 #ifndef WINSHELLAPI
@@ -775,7 +775,7 @@ typedef LPSHNAMEMAPPINGA LPSHNAMEMAPPING;
 #if (NTDDI_VERSION >= NTDDI_VISTA)
 
 #if !defined(_WIN64)
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 #define WC_NETADDRESS L"msctls_netaddress"
@@ -804,7 +804,7 @@ typedef struct tagNC_ADDRESS
     ((HRESULT)SNDMSG((hwnd), NCM_DISPLAYERRORTIP, 0, 0))
 
 #if !defined(_WIN64)
-#include <pshpack1.h>
+#pragma pack(push, 1)
 #endif
 
 typedef struct _SHSTOCKICONINFO {
@@ -941,7 +941,7 @@ typedef enum SHSTOCKICONID
 #endif /* (NTDDI_VERSION >= NTDDI_VISTA) */
 
 #if !defined(_WIN64)
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 #ifdef _MSC_VER

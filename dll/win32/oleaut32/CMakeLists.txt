@@ -67,3 +67,7 @@ add_importlibs(oleaut32 ole32 rpcrt4 user32 gdi32 advapi32 kernel32_vista ucrtba
 add_pch(oleaut32 precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET oleaut32 DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(oleaut32) # CORE-5743: No ARRAY_SIZE and CONST_VTABLE
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    set_property(SOURCE typelib.c APPEND PROPERTY COMPILE_OPTIONS -Wno-unused-function)
+endif()

@@ -5,7 +5,7 @@
  * PURPOSE:     RISC-V64 exception-runtime failure boundaries
  */
 
-#include <intrin.h>
+#include <stdarg.h>
 #include "include/fpieee.h"
 #include "ntstatus.h"
 #include "windef.h"

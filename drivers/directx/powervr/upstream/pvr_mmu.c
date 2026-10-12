@@ -425,7 +425,11 @@ pvr_mmu_backing_page_sync(struct pvr_mmu_backing_page *page, u32 flags)
  */
 struct pvr_page_table_l2_entry_raw {
 	u32 val;
+#ifdef __REACTOS__
+};
+#else
 } __packed;
+#endif
 static_assert(sizeof(struct pvr_page_table_l2_entry_raw) * 8 ==
 	      ROGUE_MMUCTRL_ENTRY_SIZE_PC_VALUE);
 
@@ -548,7 +552,11 @@ pvr_page_table_l2_entry_raw_clear(struct pvr_page_table_l2_entry_raw *entry)
  */
 struct pvr_page_table_l1_entry_raw {
 	u64 val;
+#ifdef __REACTOS__
+};
+#else
 } __packed;
+#endif
 static_assert(sizeof(struct pvr_page_table_l1_entry_raw) * 8 ==
 	      ROGUE_MMUCTRL_ENTRY_SIZE_PD_VALUE);
 
@@ -690,7 +698,11 @@ pvr_page_table_l1_entry_raw_clear(struct pvr_page_table_l1_entry_raw *entry)
  */
 struct pvr_page_table_l0_entry_raw {
 	u64 val;
+#ifdef __REACTOS__
+};
+#else
 } __packed;
+#endif
 static_assert(sizeof(struct pvr_page_table_l0_entry_raw) * 8 ==
 	      ROGUE_MMUCTRL_ENTRY_SIZE_PT_VALUE);
 

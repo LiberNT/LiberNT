@@ -21,3 +21,7 @@ target_link_libraries(nfs41_np ${PSEH_LIB})
 add_importlibs(nfs41_np msvcrt kernel32)
 add_pch(nfs41_np precomp.h SOURCE)
 add_cd_file(TARGET nfs41_np DESTINATION reactos/system32 FOR all)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    set_property(SOURCE options.c APPEND PROPERTY COMPILE_OPTIONS -Wno-multichar)
+endif()

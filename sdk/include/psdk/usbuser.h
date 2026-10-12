@@ -30,7 +30,7 @@ extern "C" {
 
 #include "usbiodef.h"
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #define USBUSER_VERSION                   0x0004
 
@@ -341,7 +341,7 @@ typedef struct _USBUSER_REFRESH_HCT_REG {
   ULONG Flags;
 } USBUSER_REFRESH_HCT_REG, *PUSBUSER_REFRESH_HCT_REG;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif /* _WIN32_WINNT >= 0x0501 */
 

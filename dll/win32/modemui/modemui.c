@@ -15,7 +15,6 @@
 
 //#include "resource.h"
 
-static HINSTANCE hDllInstance;
 
 INT_PTR CALLBACK
 ModemCplDlgProc(IN HWND hwndDlg,
@@ -67,7 +66,6 @@ DllMain(IN HINSTANCE hinstDLL,
     switch (dwReason)
     {
         case DLL_PROCESS_ATTACH:
-            hDllInstance = hinstDLL;
             DisableThreadLibraryCalls(hinstDLL);
             break;
     }

@@ -196,7 +196,7 @@
 #define RTL8211F_RX_DELAY_REGISTER 0x15
 #define RTL8211F_RX_DELAY (1u << 3)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _K1XEMAC_DESCRIPTOR
 {
     volatile ULONG Status;
@@ -205,7 +205,7 @@ typedef struct _K1XEMAC_DESCRIPTOR
     volatile ULONG Buffer2;
     ULONG Skipped[12];
 } K1XEMAC_DESCRIPTOR, *PK1XEMAC_DESCRIPTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(sizeof(K1XEMAC_DESCRIPTOR) == K1XEMAC_CACHE_LINE);
 #define K1XEMAC_DESCRIPTOR_SKIP_WORDS (RTL_FIELD_SIZE(K1XEMAC_DESCRIPTOR, Skipped) / sizeof(ULONG))

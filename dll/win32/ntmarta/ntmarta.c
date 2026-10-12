@@ -193,12 +193,6 @@ AccpGetAceStructureSize(IN PACE_HEADER AceHeader)
     return Size;
 }
 
-static PSID
-AccpGetAceSid(IN PACE_HEADER AceHeader)
-{
-    return (PSID)((ULONG_PTR)AceHeader + AccpGetAceStructureSize(AceHeader));
-}
-
 static ACCESS_MASK
 AccpGetAceAccessMask(IN PACE_HEADER AceHeader)
 {
@@ -2617,7 +2611,7 @@ AccRewriteSetEntriesInAcl(ULONG cCountOfExplicitEntries,
         if (ObjectsPresent) Revision = ACL_REVISION_DS;
         Needed = 0;
 
-        switch (pListOfExplicitEntries[i].grfAccessMode)
+        switch ((ULONG)pListOfExplicitEntries[i].grfAccessMode)
         {
             case REVOKE_ACCESS:
             case SET_ACCESS:

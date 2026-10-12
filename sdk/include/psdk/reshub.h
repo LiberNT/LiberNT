@@ -56,7 +56,7 @@ typedef struct _RH_QUERY_CONNECTION_PROPERTIES_OUTPUT_BUFFER
     UCHAR ConnectionProperties[ANYSIZE_ARRAY];
 } RH_QUERY_CONNECTION_PROPERTIES_OUTPUT_BUFFER, *PRH_QUERY_CONNECTION_PROPERTIES_OUTPUT_BUFFER;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _PNP_SERIAL_BUS_DESCRIPTOR
 {
     UCHAR Tag;
@@ -69,7 +69,7 @@ typedef struct _PNP_SERIAL_BUS_DESCRIPTOR
     UCHAR TypeSpecificRevisionId;
     USHORT TypeDataLength;
 } PNP_SERIAL_BUS_DESCRIPTOR, *PPNP_SERIAL_BUS_DESCRIPTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define PNP_SERIAL_BUS_DESCRIPTOR_LENGTH sizeof(PNP_SERIAL_BUS_DESCRIPTOR)
 

@@ -32,7 +32,7 @@ static inline HRESULT HResultFromWin32(DWORD hr)
 
 /* Structures on disk */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _INFO2_HEADER
 {
@@ -43,7 +43,7 @@ typedef struct _INFO2_HEADER
     DWORD dwTotalLogicalSize;
 } INFO2_HEADER, *PINFO2_HEADER;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* Prototypes */
 

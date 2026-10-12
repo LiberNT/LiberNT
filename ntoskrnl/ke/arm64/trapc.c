@@ -254,6 +254,7 @@ KiArm64DumpKernelWalk(
             HwPte.u.Hard.Owner);
 }
 
+#if defined(ARM64_USER_ABORT_TRACE)
 static
 BOOLEAN
 KiArm64ShouldTraceSystemDllAddress(
@@ -273,6 +274,7 @@ KiArm64ShouldTraceSystemDllAddress(
     Base = (ULONG_PTR)PspSystemDllBase;
     return ((Address >= Base) && (Address < (Base + 0x200000)));
 }
+#endif
 
 static
 VOID

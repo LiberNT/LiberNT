@@ -7,8 +7,6 @@
 
 #include "msctfime.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(msctfime);
-
 /// @implemented
 CCompartmentEventSink::CCompartmentEventSink(FN_EVENTSINK fnEventSink, LPVOID pUserData)
     : m_array()

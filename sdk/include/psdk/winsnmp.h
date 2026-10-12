@@ -28,7 +28,7 @@
 #include <windows.h>
 #endif
 
-#include <pshpack4.h>
+#pragma pack(push, 4)
 
 #ifndef WINSNMPAPI
 #define WINSNMPAPI WINAPI
@@ -322,5 +322,5 @@ SNMPAPI_STATUS WINSNMPAPI SnmpPasswordToKey(smiLPOCTETS,smiINT32,smiLPOCTETS);
 #ifdef __cplusplus
 }
 #endif
-#include <poppack.h>
+#pragma pack(pop)
 #endif

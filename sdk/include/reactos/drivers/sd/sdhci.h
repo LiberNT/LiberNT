@@ -377,7 +377,7 @@ SDHCI_CALC_CLK_DIVIDER(
 #define SDHCI_ADMA2_MAX_LENGTH          0x10000
 
 /* 32-bit ADMA2 descriptor */
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _SDHCI_ADMA2_DESCRIPTOR_32 {
     USHORT Attributes;
     USHORT Length;
@@ -391,7 +391,7 @@ typedef struct _SDHCI_ADMA2_DESCRIPTOR_64 {
     ULONG  AddressLow;
     ULONG  AddressHigh;
 } SDHCI_ADMA2_DESCRIPTOR_64, *PSDHCI_ADMA2_DESCRIPTOR_64;
-#include <poppack.h>
+#pragma pack(pop)
 
 /**
  * @brief Auto CMD Error Status Register (0x3C)

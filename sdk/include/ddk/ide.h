@@ -31,7 +31,7 @@ extern "C" {
 #define MAX_IDE_LINE      2
 #define MAX_IDE_DEVICE    2
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _IDENTIFY_DATA {
   USHORT GeneralConfiguration;       /* 00 */
   USHORT NumCylinders;               /* 02 */
@@ -170,7 +170,7 @@ typedef struct _EXTENDED_IDENTIFY_DATA {
   USHORT Reserved10:7;               /*  -  */
   USHORT Reserved11[128];            /* 256 */
 } EXTENDED_IDENTIFY_DATA, *PEXTENDED_IDENTIFY_DATA;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _PCIIDE_TRANSFER_MODE_SELECT
 {

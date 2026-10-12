@@ -470,7 +470,6 @@ NTSTATUS WINAPI wow64_NtCreateThread( UINT *args )
 
 #ifdef __REACTOS__
     struct object_attr64 attr;
-    CONTEXT ctx;
     INITIAL_TEB teb;
     CLIENT_ID id;
     HANDLE handle = 0;
@@ -482,6 +481,8 @@ NTSTATUS WINAPI wow64_NtCreateThread( UINT *args )
     if (!context || !initial_teb32) return STATUS_INVALID_PARAMETER;
 
 #ifdef __x86_64__
+    CONTEXT ctx;
+
     memset( &ctx, 0, sizeof(ctx) );
     ctx.ContextFlags = CONTEXT_FULL;
     ctx.Rip = context->Eip;

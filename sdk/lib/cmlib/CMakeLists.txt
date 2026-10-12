@@ -41,7 +41,10 @@ else()
     target_include_directories(cmlibhost INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
     if(NOT MSVC)
-        target_compile_options(cmlibhost PRIVATE -fshort-wchar -Wno-multichar)
+        target_compile_options(cmlibhost PRIVATE -fshort-wchar)
+    endif()
+    if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(cmlibhost PRIVATE -Wno-multichar)
     endif()
 
     target_link_libraries(cmlibhost PRIVATE host_includes)

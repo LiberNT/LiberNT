@@ -86,7 +86,7 @@
 
 #define VBE_GETRETURNCODE(x) (x & 0xFFFF)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /*
  * VBE specification defined structure for general adapter info
@@ -173,7 +173,7 @@ typedef struct _VBE_MODE_INFO
    CHAR Reserved4[190];
 } VBE_MODE_INFO, *PVBE_MODE_INFO;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _VBE_INFO
 {

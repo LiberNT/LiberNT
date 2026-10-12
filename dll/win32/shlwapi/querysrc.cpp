@@ -12,8 +12,6 @@
 #include <shlguid_undoc.h>
 #include <new>
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 static HRESULT SHAllocBlob(ULONG cbData, const BYTE *pbData, FLAGGED_BYTE_BLOB** ppBlob)
 {
     FLAGGED_BYTE_BLOB* pBlob =

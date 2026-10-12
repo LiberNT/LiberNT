@@ -14,8 +14,6 @@
 #include <wchar.h>
 #include <reactos/cpuaudit.h>
 
-WINBASEAPI DWORD WINAPI GetCurrentProcessorNumber(VOID);
-
 typedef LONG (NTAPI *QUERY_SYSTEM)(ULONG, PVOID, ULONG, PULONG);
 typedef struct
 {

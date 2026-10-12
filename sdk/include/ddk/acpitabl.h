@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _ACPI_PLD_BUFFER {
     UINT32 Revision:7;
     UINT32 IgnoreColor:1;
@@ -65,9 +65,9 @@ typedef struct _ACPI_PLD_V2_BUFFER {
     UINT32 VerticalOffset:16;
     UINT32 HorizontalOffset:16;
 } ACPI_PLD_V2_BUFFER, *PACPI_PLD_V2_BUFFER;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef enum _ACPI_PLD_PANEL {
     AcpiPldPanelTop     = 0,
     AcpiPldPanelBottom  = 1,
@@ -77,11 +77,11 @@ typedef enum _ACPI_PLD_PANEL {
     AcpiPldPanelBack    = 5,
     AcpiPldPanelUnknown = 6,
 } ACPI_PLD_PANEL, *PACPI_PLD_PANEL;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef ACPI_PLD_PANEL AcpiPldPanel;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef enum _ACPI_PLD_ROTATION {
     AcpiPldRotation0      = 0,
     AcpiPldRotation45     = 1,
@@ -92,7 +92,7 @@ typedef enum _ACPI_PLD_ROTATION {
     AcpiPldRotation270    = 6,
     AcpiPldRotation315    = 7,
 } ACPI_PLD_ROTATION, *PACPI_PLD_ROTATION;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef ACPI_PLD_ROTATION AcpiPldRotation;
 

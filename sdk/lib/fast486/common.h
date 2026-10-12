@@ -89,7 +89,7 @@ typedef enum _FAST486_TASK_SWITCH_TYPE
     FAST486_TASK_RETURN
 } FAST486_TASK_SWITCH_TYPE, *PFAST486_TASK_SWITCH_TYPE;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef union _FAST486_PAGE_DIR
 {
@@ -132,7 +132,7 @@ typedef union _FAST486_PAGE_TABLE
 
 C_ASSERT(sizeof(FAST486_PAGE_DIR) == sizeof(ULONG));
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* FUNCTIONS ******************************************************************/
 

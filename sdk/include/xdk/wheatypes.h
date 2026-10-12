@@ -2,7 +2,7 @@
  *                 Windows Hardware Error Architecture Types                  *
  ******************************************************************************/
 $if (_NTDDK_)
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef union _WHEA_ERROR_RECORD_SECTION_DESCRIPTOR_FLAGS
 {
@@ -99,7 +99,7 @@ typedef struct _WHEA_PROCESSOR_GENERIC_ERROR_SECTION
     ULONGLONG InstructionPointer;
 } WHEA_PROCESSOR_GENERIC_ERROR_SECTION, *PWHEA_PROCESSOR_GENERIC_ERROR_SECTION;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _WHEA_RECOVERY_CONTEXT
 {
@@ -116,7 +116,7 @@ typedef struct _WHEA_RECOVERY_CONTEXT
     UINT32 VpIndex;
 } WHEA_RECOVERY_CONTEXT, *PWHEA_RECOVERY_CONTEXT;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef enum _WHEA_ERROR_TYPE {
     WheaErrTypeProcessor = 0,
@@ -128,7 +128,7 @@ typedef enum _WHEA_ERROR_TYPE {
     WheaErrTypeGeneric
 } WHEA_ERROR_TYPE, *PWHEA_ERROR_TYPE;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef enum _WHEA_ERROR_SOURCE_TYPE {
     WheaErrSrcTypeMCE = 0,
@@ -146,7 +146,7 @@ typedef enum _WHEA_ERROR_SOURCE_TYPE {
     WheaErrSrcTypeMax
 } WHEA_ERROR_SOURCE_TYPE, *PWHEA_ERROR_SOURCE_TYPE;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef union _WHEA_ERROR_PACKET_FLAGS {
     struct {
@@ -204,6 +204,6 @@ typedef WHEA_ERROR_PACKET_V2 *PWHEA_ERROR_PACKET;
 
 #endif /* (NTDDI_VERSION >= NTDDI_WIN7) */
 
-#include <poppack.h>
+#pragma pack(pop)
 
 $endif (_NTDDK_)

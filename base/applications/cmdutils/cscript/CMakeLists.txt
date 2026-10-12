@@ -21,3 +21,7 @@ add_dependencies(cscript stdole2 cscript_idlheader)
 add_pch(cscript ${wscript_folder}/precomp.h SOURCE)
 add_cd_file(TARGET cscript DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(cscript) # CORE-5743: No ARRAY_SIZE macro
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(cscript PRIVATE -Wno-unused-value)
+endif()

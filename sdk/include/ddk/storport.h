@@ -644,7 +644,7 @@ typedef _Struct_size_bytes_(SrbLength) struct SRB_ALIGN _STORAGE_REQUEST_BLOCK {
 
 #endif
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef union _CDB {
     struct _CDB6GENERIC {
        UCHAR  OperationCode;
@@ -1868,7 +1868,7 @@ typedef union _CDB {
     ULONG AsUlong[4];
     UCHAR AsByte[16];
 } CDB, *PCDB;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define CDB6GENERIC_LENGTH                   6
 
@@ -2385,7 +2385,7 @@ typedef struct _INQUIRYDATA {
 #endif
 #if !((NTDDI_VERSION < NTDDI_WINXP))
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _INQUIRYDATA {
     UCHAR DeviceType : 5;
     UCHAR DeviceTypeQualifier : 3;
@@ -2450,7 +2450,7 @@ typedef struct _INQUIRYDATA {
     VERSION_DESCRIPTOR VersionDescriptors[8];
     UCHAR Reserved4[30];
 } INQUIRYDATA, *PINQUIRYDATA;
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif
 
@@ -2494,7 +2494,7 @@ typedef struct _INQUIRYDATA {
 
 #define DEVICE_CONNECTED 0x00
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VPD_MEDIA_SERIAL_NUMBER_PAGE {
     UCHAR DeviceType : 5;
     UCHAR DeviceTypeQualifier : 3;
@@ -2505,9 +2505,9 @@ typedef struct _VPD_MEDIA_SERIAL_NUMBER_PAGE {
     UCHAR SerialNumber[0];
 #endif
 } VPD_MEDIA_SERIAL_NUMBER_PAGE, *PVPD_MEDIA_SERIAL_NUMBER_PAGE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VPD_SERIAL_NUMBER_PAGE {
     UCHAR DeviceType : 5;
     UCHAR DeviceTypeQualifier : 3;
@@ -2518,18 +2518,18 @@ typedef struct _VPD_SERIAL_NUMBER_PAGE {
     UCHAR SerialNumber[0];
 #endif
 } VPD_SERIAL_NUMBER_PAGE, *PVPD_SERIAL_NUMBER_PAGE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef enum _VPD_CODE_SET {
     VpdCodeSetReserved = 0,
     VpdCodeSetBinary = 1,
     VpdCodeSetAscii = 2,
     VpdCodeSetUTF8 = 3
 } VPD_CODE_SET, *PVPD_CODE_SET;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef enum _VPD_ASSOCIATION {
     VpdAssocDevice = 0,
     VpdAssocPort = 1,
@@ -2537,9 +2537,9 @@ typedef enum _VPD_ASSOCIATION {
     VpdAssocReserved1 = 3,
     VpdAssocReserved2 = 4
 } VPD_ASSOCIATION, *PVPD_ASSOCIATION;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef enum _VPD_IDENTIFIER_TYPE {
     VpdIdentifierTypeVendorSpecific = 0,
     VpdIdentifierTypeVendorId = 1,
@@ -2551,9 +2551,9 @@ typedef enum _VPD_IDENTIFIER_TYPE {
     VpdIdentifierTypeMD5LogicalUnitId = 7,
     VpdIdentifierTypeSCSINameString = 8
 } VPD_IDENTIFIER_TYPE, *PVPD_IDENTIFIER_TYPE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VPD_IDENTIFICATION_DESCRIPTOR {
     UCHAR CodeSet : 4;
     UCHAR Reserved : 4;
@@ -2566,9 +2566,9 @@ typedef struct _VPD_IDENTIFICATION_DESCRIPTOR {
     UCHAR Identifier[0];
 #endif
 } VPD_IDENTIFICATION_DESCRIPTOR, *PVPD_IDENTIFICATION_DESCRIPTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VPD_IDENTIFICATION_PAGE {
     UCHAR DeviceType : 5;
     UCHAR DeviceTypeQualifier : 3;
@@ -2579,9 +2579,9 @@ typedef struct _VPD_IDENTIFICATION_PAGE {
     UCHAR Descriptors[0];
 #endif
 } VPD_IDENTIFICATION_PAGE, *PVPD_IDENTIFICATION_PAGE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VPD_EXTENDED_INQUIRY_DATA_PAGE {
     UCHAR DeviceType : 5;
     UCHAR DeviceTypeQualifier : 3;
@@ -2633,9 +2633,9 @@ typedef struct _VPD_EXTENDED_INQUIRY_DATA_PAGE {
     UCHAR MaxModePageChangeLogs[2];
     UCHAR Reserved8[45];
 } VPD_EXTENDED_INQUIRY_DATA_PAGE, *PVPD_EXTENDED_INQUIRY_DATA_PAGE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VPD_ATA_INFORMATION_PAGE {
     UCHAR DeviceType : 5;
     UCHAR DeviceTypeQualifier : 3;
@@ -2650,9 +2650,9 @@ typedef struct _VPD_ATA_INFORMATION_PAGE {
     UCHAR Reserved1[3];
     UCHAR IdentifyDeviceData[512];
 } VPD_ATA_INFORMATION_PAGE, *PVPD_ATA_INFORMATION_PAGE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VPD_BLOCK_LIMITS_PAGE {
     UCHAR DeviceType : 5;
     UCHAR DeviceTypeQualifier : 3;
@@ -2686,9 +2686,9 @@ typedef struct _VPD_BLOCK_LIMITS_PAGE {
 #endif
     };
 } VPD_BLOCK_LIMITS_PAGE, *PVPD_BLOCK_LIMITS_PAGE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VPD_BLOCK_DEVICE_CHARACTERISTICS_PAGE {
     UCHAR DeviceType : 5;
     UCHAR DeviceTypeQualifier : 3;
@@ -2711,9 +2711,9 @@ typedef struct _VPD_BLOCK_DEVICE_CHARACTERISTICS_PAGE {
     UCHAR DepopulationTime[4];
     UCHAR Reserved4[48];
 } VPD_BLOCK_DEVICE_CHARACTERISTICS_PAGE, *PVPD_BLOCK_DEVICE_CHARACTERISTICS_PAGE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VPD_LOGICAL_BLOCK_PROVISIONING_PAGE {
     UCHAR DeviceType          : 5;
     UCHAR DeviceTypeQualifier : 3;
@@ -2734,9 +2734,9 @@ typedef struct _VPD_LOGICAL_BLOCK_PROVISIONING_PAGE {
     UCHAR ProvisioningGroupDescr[0];
 #endif
 } VPD_LOGICAL_BLOCK_PROVISIONING_PAGE, *PVPD_LOGICAL_BLOCK_PROVISIONING_PAGE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VPD_SUPPORTED_PAGES_PAGE {
     UCHAR DeviceType : 5;
     UCHAR DeviceTypeQualifier : 3;
@@ -2747,7 +2747,7 @@ typedef struct _VPD_SUPPORTED_PAGES_PAGE {
     UCHAR SupportedPageList[0];
 #endif
 } VPD_SUPPORTED_PAGES_PAGE, *PVPD_SUPPORTED_PAGES_PAGE;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define VPD_SUPPORTED_PAGES                0x00
 
@@ -2781,7 +2781,7 @@ typedef struct _VPD_SUPPORTED_PAGES_PAGE {
 
 #define SCSI_WRITE_BUFFER_MODE_0D_MODE_SPECIFIC_PO_ACT    0x04
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _SENSE_DATA {
     UCHAR ErrorCode:7;
     UCHAR Valid:1;
@@ -2799,16 +2799,16 @@ typedef struct _SENSE_DATA {
     UCHAR FieldReplaceableUnitCode;
     UCHAR SenseKeySpecific[3];
 } SENSE_DATA, *PSENSE_DATA;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _SCSI_SENSE_DESCRIPTOR_HEADER {
     UCHAR DescriptorType;
     UCHAR AdditionalLength;
 } SCSI_SENSE_DESCRIPTOR_HEADER, *PSCSI_SENSE_DESCRIPTOR_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _SCSI_SENSE_DESCRIPTOR_ATA_STATUS_RETURN {
     SCSI_SENSE_DESCRIPTOR_HEADER Header;
     UCHAR Extend:1;
@@ -2825,9 +2825,9 @@ typedef struct _SCSI_SENSE_DESCRIPTOR_ATA_STATUS_RETURN {
     UCHAR Device;
     UCHAR Status;
 } SCSI_SENSE_DESCRIPTOR_ATA_STATUS_RETURN, *PSCSI_SENSE_DESCRIPTOR_ATA_STATUS_RETURN;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _DESCRIPTOR_SENSE_DATA {
     UCHAR ErrorCode:7;
     UCHAR Reserved1:1;
@@ -2839,7 +2839,7 @@ typedef struct _DESCRIPTOR_SENSE_DATA {
     UCHAR AdditionalSenseLength;
     UCHAR DescriptorBuffer[ANYSIZE_ARRAY];
 } DESCRIPTOR_SENSE_DATA, *PDESCRIPTOR_SENSE_DATA;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define SENSE_BUFFER_SIZE sizeof(SENSE_DATA)
 
@@ -2937,21 +2937,21 @@ typedef struct _DESCRIPTOR_SENSE_DATA {
 
 #define IOCTL_SCSI_MINIPORT_DSM_GENERAL                 ((FILE_DEVICE_SCSI << 16) + 0x0721)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _READ_CAPACITY_DATA {
     ULONG LogicalBlockAddress;
     ULONG BytesPerBlock;
 } READ_CAPACITY_DATA, *PREAD_CAPACITY_DATA;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _READ_CAPACITY_DATA_EX {
     LARGE_INTEGER LogicalBlockAddress;
     ULONG BytesPerBlock;
 } READ_CAPACITY_DATA_EX, *PREAD_CAPACITY_DATA_EX;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _READ_CAPACITY16_DATA {
     LARGE_INTEGER LogicalBlockAddress;
     ULONG BytesPerBlock;
@@ -2967,18 +2967,18 @@ typedef struct _READ_CAPACITY16_DATA {
     UCHAR LowestAlignedBlock_LSB;
     UCHAR Reserved3[16];
 } READ_CAPACITY16_DATA, *PREAD_CAPACITY16_DATA;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _MODE_PARAMETER_HEADER {
     UCHAR ModeDataLength;
     UCHAR MediumType;
     UCHAR DeviceSpecificParameter;
     UCHAR BlockDescriptorLength;
 }MODE_PARAMETER_HEADER, *PMODE_PARAMETER_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _MODE_PARAMETER_HEADER10 {
     UCHAR ModeDataLength[2];
     UCHAR MediumType;
@@ -2986,22 +2986,22 @@ typedef struct _MODE_PARAMETER_HEADER10 {
     UCHAR Reserved[2];
     UCHAR BlockDescriptorLength[2];
 }MODE_PARAMETER_HEADER10, *PMODE_PARAMETER_HEADER10;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define MODE_DSP_FUA_SUPPORTED  0x10
 
 #define MODE_DSP_WRITE_PROTECT  0x80
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _MODE_PARAMETER_BLOCK {
     UCHAR DensityCode;
     UCHAR NumberOfBlocks[3];
     UCHAR Reserved;
     UCHAR BlockLength[3];
 }MODE_PARAMETER_BLOCK, *PMODE_PARAMETER_BLOCK;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _MODE_CACHING_PAGE {
     UCHAR PageCode : 6;
     UCHAR Reserved : 1;
@@ -3018,9 +3018,9 @@ typedef struct _MODE_CACHING_PAGE {
     UCHAR MaximumPrefetch[2];
     UCHAR MaximumPrefetchCeiling[2];
 }MODE_CACHING_PAGE, *PMODE_CACHING_PAGE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _LUN_LIST {
     UCHAR LunListLength[4];
     UCHAR Reserved[4];
@@ -3028,17 +3028,17 @@ typedef struct _LUN_LIST {
     UCHAR Lun[0][8];
 #endif
 } LUN_LIST, *PLUN_LIST;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _UNMAP_BLOCK_DESCRIPTOR {
     UCHAR StartingLba[8];
     UCHAR LbaCount[4];
     UCHAR Reserved[4];
 } UNMAP_BLOCK_DESCRIPTOR, *PUNMAP_BLOCK_DESCRIPTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _UNMAP_LIST_HEADER {
     UCHAR DataLength[2];
     UCHAR BlockDescrDataLength[2];
@@ -3047,9 +3047,9 @@ typedef struct _UNMAP_LIST_HEADER {
     UNMAP_BLOCK_DESCRIPTOR Descriptors[0];
 #endif
 } UNMAP_LIST_HEADER, *PUNMAP_LIST_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef union _EIGHT_BYTE {
     struct {
         UCHAR Byte0;
@@ -3063,9 +3063,9 @@ typedef union _EIGHT_BYTE {
     };
     ULONGLONG AsULongLong;
 } EIGHT_BYTE, *PEIGHT_BYTE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef union _FOUR_BYTE {
     struct {
         UCHAR Byte0;
@@ -3075,9 +3075,9 @@ typedef union _FOUR_BYTE {
     };
     ULONG AsULong;
 } FOUR_BYTE, *PFOUR_BYTE;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef union _TWO_BYTE {
     struct {
         UCHAR Byte0;
@@ -3085,7 +3085,7 @@ typedef union _TWO_BYTE {
     };
     USHORT AsUShort;
 } TWO_BYTE, *PTWO_BYTE;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define REVERSE_BYTES_QUAD REVERSE_BYTES_8
 
@@ -3168,7 +3168,7 @@ typedef struct STOR_ADDRESS_ALIGN _STOR_ADDR_BTL8 {
     UCHAR Reserved;
 } STOR_ADDR_BTL8, *PSTOR_ADDR_BTL8;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _PHYSICAL_ELEMENT_STATUS_DATA_DESCRIPTOR {
     UCHAR Reserved1[4];
     UCHAR ElementIdentifier[4];
@@ -3178,9 +3178,9 @@ typedef struct _PHYSICAL_ELEMENT_STATUS_DATA_DESCRIPTOR {
     UCHAR AssociatedCapacity[8];
     UCHAR Reserved3[8];
 } PHYSICAL_ELEMENT_STATUS_DATA_DESCRIPTOR, *PPHYSICAL_ELEMENT_STATUS_DATA_DESCRIPTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _PHYSICAL_ELEMENT_STATUS_PARAMETER_DATA {
     UCHAR DescriptorCount[4];
     UCHAR ReturnedDescriptorCount[4];
@@ -3188,7 +3188,7 @@ typedef struct _PHYSICAL_ELEMENT_STATUS_PARAMETER_DATA {
     UCHAR Reserved[20];
     PHYSICAL_ELEMENT_STATUS_DATA_DESCRIPTOR Descriptors[ANYSIZE_ARRAY];
 } PHYSICAL_ELEMENT_STATUS_PARAMETER_DATA, *PPHYSICAL_ELEMENT_STATUS_PARAMETER_DATA;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define READ_BUFFER_MODE_ERROR_HISTORY                                              0x1C
 
@@ -3202,7 +3202,7 @@ typedef struct _PHYSICAL_ELEMENT_STATUS_PARAMETER_DATA {
 
 #define BUFFER_SOURCE_CREATED_DUE_TO_CURRENT_COMMAND                                0x3
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _ERROR_HISTORY_DIRECTORY_ENTRY {
     UCHAR SupportedBufferId;
     UCHAR BufferFormat;
@@ -3211,9 +3211,9 @@ typedef struct _ERROR_HISTORY_DIRECTORY_ENTRY {
     UCHAR Reserved1;
     UCHAR MaxAvailableLength[4];
 } ERROR_HISTORY_DIRECTORY_ENTRY, *PERROR_HISTORY_DIRECTORY_ENTRY;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _ERROR_HISTORY_DIRECTORY {
     UCHAR T10VendorId[8];
     UCHAR ErrorHistoryVersion;
@@ -3225,9 +3225,9 @@ typedef struct _ERROR_HISTORY_DIRECTORY {
     UCHAR DirectoryLength[2];
     ERROR_HISTORY_DIRECTORY_ENTRY ErrorHistoryDirectoryList[ANYSIZE_ARRAY];
 } ERROR_HISTORY_DIRECTORY, *PERROR_HISTORY_DIRECTORY;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _CURRENT_INTERNAL_STATUS_PARAMETER_DATA {
     UCHAR Reserved0[4];
     UCHAR IEEECompanyId[4];
@@ -3241,7 +3241,7 @@ typedef struct _CURRENT_INTERNAL_STATUS_PARAMETER_DATA {
     UCHAR CurrentReasonIdentifier[128];
     UCHAR CurrentInternalStatusData[ANYSIZE_ARRAY];
 } CURRENT_INTERNAL_STATUS_PARAMETER_DATA, *PCURRENT_INTERNAL_STATUS_PARAMETER_DATA;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef PHYSICAL_ADDRESS STOR_PHYSICAL_ADDRESS, *PSTOR_PHYSICAL_ADDRESS;
 

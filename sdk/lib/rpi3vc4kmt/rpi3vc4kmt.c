@@ -69,13 +69,13 @@ typedef struct _RPI3VC4KMT_COMMAND_PACKET_HEADER
     UINT PayloadBytes;
 } RPI3VC4KMT_COMMAND_PACKET_HEADER;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _RPI3VC4KMT_SIGNAL_BLOCK
 {
     D3DKMT_HANDLE hSyncObject;
     ULONG64 FenceValue;
 } RPI3VC4KMT_SIGNAL_BLOCK;
-#include <poppack.h>
+#pragma pack(pop)
 
 struct _RPI3VC4KMT_DEVICE
 {

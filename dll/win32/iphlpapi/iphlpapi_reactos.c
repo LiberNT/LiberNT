@@ -12,8 +12,6 @@
 #include <netiodef.h>
 #include <wine/nsi.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(iphlpapi);
-
 #ifdef __REACTOS__
 static DWORD get_interface_alias(const GUID *guid, WCHAR *name, ULONG *size)
 {

@@ -7,7 +7,7 @@
  *                   Pierre Schweitzer (pierre@reactos.org)
  */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct {
     UINT8 uuid[16];
 } BTRFS_UUID;
@@ -20,7 +20,7 @@ typedef struct _BTRFS_SUPER_BLOCK {
     UINT64 magic;
         // Partial
 } BTRFS_SUPER_BLOCK, *PBTRFS_SUPER_BLOCK;
-#include <poppack.h>
+#pragma pack(pop)
 
 C_ASSERT(FIELD_OFFSET(BTRFS_SUPER_BLOCK, uuid) == 0x20);
 C_ASSERT(FIELD_OFFSET(BTRFS_SUPER_BLOCK, sb_phys_addr) == 0x30);

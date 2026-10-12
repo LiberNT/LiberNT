@@ -210,7 +210,7 @@ typedef enum _TIMER_DV
     TIMER_DV_DivideBy1 = 11,
 } TIMER_DV;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef union _APIC_BASE_ADDRESS_REGISTER
 {
     UINT64 LongLong;
@@ -337,7 +337,7 @@ typedef union _IOAPIC_REDIRECTION_REGISTER
         UINT64 Destination:8;
     };
 } IOAPIC_REDIRECTION_REGISTER;
-#include <poppack.h>
+#pragma pack(pop)
 
 FORCEINLINE
 ULONG

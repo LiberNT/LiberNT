@@ -134,6 +134,8 @@ pre_cpp_init (void)
 #else
   argret = __getmainargs(&argc,&argv,&envp,_dowildcard,&startinfo);
 #endif
+  if (argret < 0)
+    _amsg_exit (8);
 }
 
 static int __cdecl __tmainCRTStartup (void);

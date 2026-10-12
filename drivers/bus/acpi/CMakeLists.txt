@@ -7,6 +7,9 @@ include_directories(
 
 if(ARCH MATCHES "64$")
     add_definitions(-DWIN64)
+    if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        add_compile_definitions("ACPI_UNUSED_VAR=__attribute__((unused))")
+    endif()
 endif()
 
 list(APPEND ACPICA_SOURCE
@@ -230,3 +233,7 @@ add_pch(acpi precomp.h ACPI_SOURCE)
 set_source_files_properties(gpioint.c PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 add_cd_file(TARGET acpi DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_driver_inf(acpi acpi.inf)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(acpica PRIVATE -Wno-unused-but-set-variable)
+endif()

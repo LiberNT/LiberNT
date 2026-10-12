@@ -159,6 +159,6 @@ add_dependencies(linux_compat bugcodes xdk)
 target_include_directories(linux_compat PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${LINUX_COMPAT_GENERATED_INCLUDE})
-if(NOT MSVC)
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(linux_compat PRIVATE -Wno-unused-function)
 endif()

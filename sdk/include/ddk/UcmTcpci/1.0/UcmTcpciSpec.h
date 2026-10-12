@@ -147,7 +147,7 @@ typedef enum _UCMTCPCI_PORT_CONTROLLER_CC_STATUS_CONNECT_RESULT {
 #pragma warning(push)
 #pragma warning(disable:4201)
 #pragma warning(disable:4214)
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef union _UCMTCPCI_PORT_CONTROLLER_DEVICE_CAPABILITIES_1
 {
@@ -483,7 +483,7 @@ typedef struct _UCMTCPCI_PORT_CONTROLLER_RECEIVE_BUFFER
 C_ASSERT(sizeof(UCMTCPCI_PORT_CONTROLLER_RECEIVE_BUFFER) == 32);
 
 #pragma warning(pop)
-#include <poppack.h>
+#pragma pack(pop)
 
 WDF_EXTERN_C_END
 

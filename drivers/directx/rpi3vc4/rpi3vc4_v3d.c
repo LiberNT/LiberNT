@@ -44,7 +44,7 @@
 #define RPI3VC4_PACKET_TILE_COORDINATES              115U
 #define RPI3VC4_RENDER_CONFIG_FORMAT_RGBA8888        (1U << 2)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _RPI3VC4_MAILBOX_POWER_DOMAIN
 {
     ULONG TotalBuffer;
@@ -56,7 +56,7 @@ typedef struct _RPI3VC4_MAILBOX_POWER_DOMAIN
     ULONG State;
     ULONG EndTag;
 } RPI3VC4_MAILBOX_POWER_DOMAIN, *PRPI3VC4_MAILBOX_POWER_DOMAIN;
-#include <poppack.h>
+#pragma pack(pop)
 
 NTSYSAPI
 NTSTATUS

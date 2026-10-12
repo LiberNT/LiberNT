@@ -42,7 +42,7 @@ set_module_type(virtgpuogl win32dll ENTRYPOINT DllMain 12)
 add_importlibs(virtgpuogl gdi32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET virtgpuogl DESTINATION reactos/system32 FOR all)
 
-if(NOT MSVC)
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(virtgpu PRIVATE
         -Wno-unused-function)
     target_compile_options(virtgpu_disp PRIVATE

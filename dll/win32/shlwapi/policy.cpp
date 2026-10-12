@@ -16,8 +16,6 @@
 #include <new>
 #include <wine/debug.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(policy);
-
 typedef enum tagPOLICY_STATE
 {
     POLICY_STATE_UNCACHED  = 0, // Uncached

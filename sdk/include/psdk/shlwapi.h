@@ -12,7 +12,7 @@
 #include <specstrings.h>
 #include <objbase.h>
 #include <shtypes.h>
-#include <pshpack8.h>
+#pragma pack(push, 8)
 
 #ifndef WINSHLWAPI
 #ifdef __GNUC__
@@ -1284,7 +1284,7 @@ LWSTDAPI StrFormatByteSizeEx(ULONGLONG ull, SFBS_FLAGS flags, _Out_writes_(cchBu
 }
 #endif // __cplusplus
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif // NOSHLWAPI
 #endif // _INC_SHLWAPI

@@ -351,7 +351,7 @@ typedef enum _NVNET_REGISTER
     NvRegPatternMask3Ex = 0x614
 } NVNET_REGISTER;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _NVNET_DESCRIPTOR_32
 {
     ULONG Address;
@@ -365,7 +365,7 @@ typedef struct _NVNET_DESCRIPTOR_64
     ULONG VlanTag;
     ULONG FlagsLength;
 } NVNET_DESCRIPTOR_64, *PNVNET_DESCRIPTOR_64;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define FLAG_MASK_V1 0xffff0000
 #define FLAG_MASK_V2 0xffffc000

@@ -545,6 +545,7 @@ MMixerGetConnectedFromLogicalTopologyPins(
     OUT PULONG OutPins);
 
 VOID
-MMixerPrintTopology();
+MMixerPrintTopology(
+    PTOPOLOGY Topology);
 
 #endif /* _MMIXER_PCH_ */

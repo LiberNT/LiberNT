@@ -99,7 +99,7 @@ WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(GPIOCLX_DEVICE_CONTEXT, GpioCxGetDeviceContex
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(GPIOCLX_INTERRUPT_CONTEXT, GpioCxGetInterruptContext)
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(GPIOCLX_FILE_CONTEXT, GpioCxGetFileContext)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _GPIOCLX_ACPI_GPIO_DESCRIPTOR
 {
     UCHAR Tag;
@@ -122,7 +122,7 @@ static NTSTATUS GpioCxParseDescriptor(_In_ PGPIOCLX_DEVICE_CONTEXT Device,
                                       _In_ PRH_QUERY_CONNECTION_PROPERTIES_OUTPUT_BUFFER Properties,
                                       _In_ UCHAR ExpectedType,
                                       _Inout_ PGPIOCLX_FILE_CONTEXT File);
-#include <poppack.h>
+#pragma pack(pop)
 
 #define GPIOCLX_ACPI_GPIO_TAG 0x8C
 #define GPIOCLX_ACPI_GPIO_CONNECTION_INT 0x00

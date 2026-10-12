@@ -25,7 +25,7 @@ _STATIC_ASSERT(sizeof(float) == 4);
 _STATIC_ASSERT(sizeof(double) == 8);
 _STATIC_ASSERT(sizeof(long double) == 8);
 
-_Check_return_ int __cdecl _isnanf(_In_ float _X);
+_Check_return_ _CRTIMP int __cdecl _isnanf(_In_ float _X);
 double __cdecl __acrt_math_error(int type, const char *name, double arg1, double arg2, double retval);
 double __cdecl log1p(double);
 float __cdecl log1pf(float);

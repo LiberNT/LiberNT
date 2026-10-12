@@ -222,7 +222,6 @@ struct Da64Inst {
 
 static enum Da64InstKind da64_classify(ULONG inst);
 static VOID da64_decode(ULONG inst, struct Da64Inst* ddi);
-static VOID da64_format(const struct Da64Inst* ddi, char* buf128);
 /// Format decoded instruction with absolute address as base.
 static VOID da64_format_abs(const struct Da64Inst* ddi, ULONGLONG addr, char* buf128);
 

@@ -669,7 +669,7 @@ DEFINE_GUIDSTRUCT("47A4FA20-A251-11D1-A050-0000F8004788", KSCATEGORY_WDMAUD_USE_
 
 #if defined(_INC_MMSYSTEM) || defined(_INC_MMREG)
 #if !defined( PACK_PRAGMAS_NOT_SUPPORTED )
-#include <pshpack1.h>
+#pragma pack(push, 1)
 #endif
 typedef struct {
     KSDATAFORMAT    DataFormat;
@@ -712,7 +712,7 @@ typedef struct {
 } KSDATAFORMAT_DSOUND, *PKSDATAFORMAT_DSOUND;
 
 #if !defined( PACK_PRAGMAS_NOT_SUPPORTED )
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 #endif

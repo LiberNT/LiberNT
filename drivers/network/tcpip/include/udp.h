@@ -11,7 +11,7 @@
 #define UDP_DYNAMIC_PORTS 0x8000
 
 /* UDPv4 header structure */
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct UDP_HEADER {
   USHORT SourcePort; /* Source port */
   USHORT DestPort;   /* Destination port */
@@ -27,7 +27,7 @@ typedef struct UDP_PSEUDO_HEADER {
   UCHAR Protocol;      /* Protocol */
   USHORT UDPLength;    /* Size of UDP datagram */
 } UDP_PSEUDO_HEADER, *PUDP_PSEUDO_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct UDP_STATISTICS {
   ULONG InputDatagrams;

@@ -62,13 +62,13 @@ typedef struct _BTHX_CAPABILITIES {
     BOOLEAN             IsDeviceWakeCapable;
 } BTHX_CAPABILITIES, *PBTHX_CAPABILITIES;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _BTHX_HCI_READ_WRITE_CONTEXT {
     ULONG   DataLen;
     UCHAR   Type;
     _Field_size_bytes_(DataLen) UCHAR   Data[1];
 } BTHX_HCI_READ_WRITE_CONTEXT, *PBTHX_HCI_READ_WRITE_CONTEXT;
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif
 

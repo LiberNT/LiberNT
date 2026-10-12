@@ -1,7 +1,7 @@
 #ifndef _CPL_H
 #define _CPL_H
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,6 +57,6 @@ typedef NEWCPLINFOA NEWCPLINFO,*LPNEWCPLINFO;
 #ifdef __cplusplus
 }
 #endif
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 

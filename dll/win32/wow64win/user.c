@@ -580,6 +580,7 @@ static MOUSEHOOKSTRUCTEX32 *mousehookstruct_64to32( const MOUSEHOOKSTRUCTEX *hoo
     return hook32;
 }
 
+#ifndef __REACTOS__
 static NTSTATUS dispatch_callback( ULONG id, void *args, ULONG len )
 {
     void *ret_ptr;
@@ -646,6 +647,7 @@ static NTSTATUS WINAPI wow64_NtUserCallWinEventHook( void *arg, ULONG size )
     if (size) memcpy( params32.module, params->module, size );
     return dispatch_callback( NtUserCallWinEventHook, &params32, FIELD_OFFSET( struct win_event_hook_params32, module ) + size);
 }
+#endif
 
 static size_t packed_message_64to32( UINT message, WPARAM wparam,
                                      const void *params64, void *params32, size_t size )
@@ -961,6 +963,7 @@ static size_t packed_result_32to64( UINT message, WPARAM wparam, const void *par
     return size;
 }
 
+#ifndef __REACTOS__
 static NTSTATUS WINAPI wow64_NtUserCallWinProc( void *arg, ULONG size )
 {
     struct win_proc_params *params = arg;
@@ -992,6 +995,7 @@ static NTSTATUS WINAPI wow64_NtUserCallWinProc( void *arg, ULONG size )
 
     return NtCallbackReturn( &result, sizeof(result), status );
 }
+#endif
 
 static UINT hook_lparam_64to32( int id, int code, const void *lp, size_t size, void *lp32 )
 {
@@ -1115,6 +1119,7 @@ static UINT hook_lparam_64to32( int id, int code, const void *lp, size_t size, v
     return size;
 }
 
+#ifndef __REACTOS__
 static NTSTATUS WINAPI wow64_NtUserCallWindowsHook( void *arg, ULONG size )
 {
     struct win_hook_params *params = arg;
@@ -1507,6 +1512,7 @@ static NTSTATUS WINAPI wow64_NtUserDragDropPost( void *arg, ULONG size )
     memcpy( &params32->drop, &params->drop, params->drop_size );
     return dispatch_callback( NtUserDragDropPost, params32, size );
 }
+#endif
 
 #ifndef __REACTOS__
 ntuser_callback user_callbacks[NtUserCallCount] =

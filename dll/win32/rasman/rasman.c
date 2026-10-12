@@ -28,8 +28,6 @@
 #include <wine/debug.h>
 #include <rasshost.h>
 
-static HINSTANCE hDllInstance;
-
 WINE_DEFAULT_DEBUG_CHANNEL(rasman);
 
 VOID WINAPI
@@ -84,7 +82,6 @@ DllMain(IN HINSTANCE hinstDLL,
     switch (dwReason)
     {
         case DLL_PROCESS_ATTACH:
-            hDllInstance = hinstDLL;
             DisableThreadLibraryCalls(hinstDLL);
             break;
     }

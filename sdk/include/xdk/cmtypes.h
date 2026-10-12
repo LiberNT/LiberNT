@@ -142,7 +142,7 @@ typedef int CM_RESOURCE_TYPE;
                  REG_NOTIFY_CHANGE_LAST_SET      |\
                  REG_NOTIFY_CHANGE_SECURITY)
 
-#include <pshpack4.h>
+#pragma pack(push, 4)
 typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR {
   UCHAR Type;
   UCHAR ShareDisposition;
@@ -246,7 +246,7 @@ typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR {
     } Connection;
   } u;
 } CM_PARTIAL_RESOURCE_DESCRIPTOR, *PCM_PARTIAL_RESOURCE_DESCRIPTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
 /* CM_PARTIAL_RESOURCE_DESCRIPTOR.Type */
 #define CmResourceTypeNull                0
@@ -397,7 +397,7 @@ typedef struct _PNP_BUS_INFORMATION {
   ULONG BusNumber;
 } PNP_BUS_INFORMATION, *PPNP_BUS_INFORMATION;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _CM_INT13_DRIVE_PARAMETER {
   USHORT DriveSelect;
@@ -439,7 +439,7 @@ typedef struct _CM_PNP_BIOS_INSTALLATION_CHECK {
   ULONG ProtectedModeDataBaseAddress;
 } CM_PNP_BIOS_INSTALLATION_CHECK, *PCM_PNP_BIOS_INSTALLATION_CHECK;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _CM_DISK_GEOMETRY_DEVICE_DATA {
   ULONG BytesPerSector;

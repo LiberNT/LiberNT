@@ -418,6 +418,7 @@ public:
     STDMETHOD(GetUserType)(DWORD dwFormOfType, LPOLESTR *pszUserType) override;
     STDMETHOD(SetExtent)(DWORD dwDrawAspect, SIZEL *psizel) override;
     STDMETHOD(GetExtent)(DWORD dwDrawAspect, SIZEL *psizel) override;
+    using IConnectionPointImpl<CShellNameSpace, &DIID_DShellNameSpaceEvents>::Advise;
     STDMETHOD(Advise)(IAdviseSink *pAdvSink, DWORD *pdwConnection) override;
     STDMETHOD(Unadvise)(DWORD dwConnection) override;
     STDMETHOD(EnumAdvise)(IEnumSTATDATA **ppenumAdvise) override;

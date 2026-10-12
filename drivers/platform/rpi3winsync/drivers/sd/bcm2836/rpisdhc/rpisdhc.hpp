@@ -51,7 +51,11 @@ __forceinline void* __cdecl operator new ( size_t, void* Ptr ) throw ()
     return Ptr;
 } // operator new ( size_t, void* )
 
+#ifdef __REACTOS__
+void __cdecl operator delete ( void* Ptr ) throw ()
+#else
 __forceinline void __cdecl operator delete ( void* Ptr ) throw ()
+#endif
 {
     NT_ASSERT(!"Unexpected call!");
     if (Ptr) ::ExFreePool(Ptr);

@@ -7,8 +7,6 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 
 CLSID CLSID_RecycleBinCleaner = { 0x5ef4af3a, 0xf726, 0x11d0, { 0xb8, 0xa2, 0x00, 0xc0, 0x4f, 0xc3, 0x09, 0xa4 } };
 
@@ -34,7 +32,7 @@ public:
         _In_ LPCWSTR pcwszVolume,
         _Out_ LPWSTR* ppwszDisplayName,
         _Out_ LPWSTR* ppwszDescription,
-        _Out_ DWORD* pdwFlags)
+        _Out_ DWORD* pdwFlags) override
     {
         if (!pdwFlags)
             return E_POINTER;
@@ -49,7 +47,7 @@ public:
 
     STDMETHODIMP GetSpaceUsed(
         _Out_ DWORDLONG* pdwlSpaceUsed,
-        _In_opt_ IEmptyVolumeCacheCallBack* picb)
+        _In_opt_ IEmptyVolumeCacheCallBack* picb) override
     {
         if (!pdwlSpaceUsed)
             return E_POINTER;
@@ -71,7 +69,7 @@ public:
 
     STDMETHODIMP Purge(
         _In_ DWORDLONG dwlSpaceToFree,
-        _In_opt_ IEmptyVolumeCacheCallBack *picb)
+        _In_opt_ IEmptyVolumeCacheCallBack *picb) override
     {
         DWORDLONG dwlPrevious = 0;
         GetSpaceUsed(&dwlPrevious, NULL);
@@ -86,7 +84,7 @@ public:
     }
 
     STDMETHODIMP ShowProperties(
-        _In_ HWND hwnd)
+        _In_ HWND hwnd) override
     {
         CComHeapPtr<ITEMIDLIST> pidl;
         HRESULT hr;
@@ -105,7 +103,7 @@ public:
     }
 
     STDMETHODIMP Deactivate(
-        _Out_ DWORD* pdwFlags)
+        _Out_ DWORD* pdwFlags) override
     {
         if (!pdwFlags)
             return E_POINTER;
@@ -125,7 +123,7 @@ public:
         _Out_ LPWSTR* ppwszDisplayName,
         _Out_ LPWSTR* ppwszDescription,
         _Out_ LPWSTR* ppwszBtnText,
-        _Out_ DWORD* pdwFlags)
+        _Out_ DWORD* pdwFlags) override
     {
         OutputResourceString(IDS_RECYCLE_CLEANER_BUTTON_TEXT, ppwszBtnText);
 

@@ -36,7 +36,7 @@
 #define INTELPMC_POWER_ROLLBACK_ON_FAILURE 1
 #define INTELPMC_POWER_RESUME 2
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _INTELPMC_ACPI_TABLE_HEADER
 {
     CHAR Signature[4];
@@ -77,7 +77,7 @@ typedef struct _INTELPMC_LPIT_NATIVE
     INTELPMC_ACPI_GENERIC_ADDRESS ResidencyCounter;
     ULONGLONG CounterFrequency;
 } INTELPMC_LPIT_NATIVE, *PINTELPMC_LPIT_NATIVE;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _INTELPMC_DEVICE_EXTENSION
 {

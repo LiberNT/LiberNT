@@ -6,7 +6,7 @@
 #ifndef _WS2ATM_H_
 #define _WS2ATM_H_
 
-#include <pshpack4.h>
+#pragma pack(push, 4)
 
 #define ATMPROTO_AALUSER 0x00
 #define ATMPROTO_AAL1 0x01
@@ -329,5 +329,5 @@ typedef struct {
   QOS PvcQos;
 } ATM_PVC_PARAMS;
 
-#include <poppack.h>
+#pragma pack(pop)
 #endif

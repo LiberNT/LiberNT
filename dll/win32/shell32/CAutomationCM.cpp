@@ -7,8 +7,6 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 class CAutomationCM :
     public CComCoClass<CAutomationCM, &CLSID_AutomationCM>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,

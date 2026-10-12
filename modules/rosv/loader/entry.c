@@ -20,7 +20,7 @@
 #include <rosv/vm.h>
 
 /* GDT entry structure (8 bytes, packed) */
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _GDT_ENTRY {
     USHORT LimitLow;
     USHORT BaseLow;
@@ -29,7 +29,7 @@ typedef struct _GDT_ENTRY {
     UCHAR Granularity;     /* includes limit[19:16] in bits 3:0 */
     UCHAR BaseHigh;
 } GDT_ENTRY, *PGDT_ENTRY;
-#include <poppack.h>
+#pragma pack(pop)
 
 /* Segment access rights for VMCS encoding */
 /* Format: Type(4) | S(1) | DPL(2) | P(1) | reserved(4) | AVL(1) | L(1) | D/B(1) | G(1) */

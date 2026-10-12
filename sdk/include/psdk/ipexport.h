@@ -166,14 +166,14 @@ typedef struct _IP_ADAPTER_ORDER_MAP {
 
 #if (NTDDI_VERSION >= NTDDI_WINXP)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _IPV6_ADDRESS_EX {
   USHORT sin6_port;
   ULONG sin6_flowinfo;
   USHORT sin6_addr[8];
   ULONG sin6_scope_id;
 } IPV6_ADDRESS_EX, *PIPV6_ADDRESS_EX;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _ICMPV6_ECHO_REQUEST
 {

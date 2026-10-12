@@ -79,7 +79,7 @@ typedef struct _DOCKING_STATE_INFORMATION
     USHORT ReturnCode;
 } DOCKING_STATE_INFORMATION, *PDOCKING_STATE_INFORMATION;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct
 {
     unsigned long    eax;
@@ -156,7 +156,7 @@ typedef union
     WORDREGS    w;
     BYTEREGS    b;
 } REGS;
-#include <poppack.h>
+#pragma pack(pop)
 
 // Int386()
 //

@@ -90,13 +90,13 @@ typedef struct _VC4KMT_COMMAND_PACKET_HEADER
     UINT PayloadBytes;
 } VC4KMT_COMMAND_PACKET_HEADER;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _VC4KMT_SIGNAL_BLOCK
 {
     D3DKMT_HANDLE hSyncObject;
     ULONG64 FenceValue;
 } VC4KMT_SIGNAL_BLOCK;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _VC4KMT_SUBMIT_SIGNAL_VIEW
 {

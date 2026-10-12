@@ -123,7 +123,11 @@ struct pvr_device {
 	 * These are mapped into memory when the device is initialized; that
 	 * location is where this pointer points.
 	 */
+#ifdef __REACTOS__
+	u8 __iomem *regs;
+#else
 	void __iomem *regs;
+#endif
 
 	/**
 	 * @core_clk: General core clock.

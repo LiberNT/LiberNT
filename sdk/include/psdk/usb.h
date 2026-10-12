@@ -316,7 +316,7 @@ typedef enum _USBD_ENDPOINT_OFFLOAD_MODE {
   UsbdEndpointOffloadHardwareAssisted
 } USBD_ENDPOINT_OFFLOAD_MODE;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _USBD_ENDPOINT_OFFLOAD_INFORMATION {
   ULONG Size;
   USHORT EndpointAddress;
@@ -339,7 +339,7 @@ typedef struct _USBD_ENDPOINT_OFFLOAD_INFORMATION {
   SIZE_T EventRingSize;
   ULONG EventRingInitialCycleBit;
 } USBD_ENDPOINT_OFFLOAD_INFORMATION, *PUSBD_ENDPOINT_OFFLOAD_INFORMATION;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct _USBD_INTERFACE_INFORMATION {
   USHORT Length;

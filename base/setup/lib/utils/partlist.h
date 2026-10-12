@@ -201,7 +201,7 @@ typedef struct _PARTLIST
 /* Defines system type for MBR showing that a GPT is following */
 #define EFI_PMBR_OSTYPE_EFI 0xEE
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _PARTITION
 {
@@ -226,7 +226,7 @@ typedef struct _PARTITION_SECTOR
     USHORT Magic;                            /* 0x1FE */
 } PARTITION_SECTOR, *PPARTITION_SECTOR;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct
 {

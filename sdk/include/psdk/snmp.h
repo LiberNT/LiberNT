@@ -24,7 +24,7 @@
 # include <windef.h>
 #endif
 
-#include <pshpack4.h>
+#pragma pack(push, 4)
 
 typedef struct {
     BYTE *stream;
@@ -82,7 +82,7 @@ typedef struct {
     UINT         len;
 } SnmpVarBindList;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #define ASN_UNIVERSAL   0x00
 #define ASN_APPLICATION 0x40

@@ -84,7 +84,7 @@ typedef struct
     UCHAR Tag:4;
 }ITEM_PREFIX, *PITEM_PREFIX;
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct
 {
     ITEM_PREFIX Prefix;
@@ -100,7 +100,7 @@ typedef struct
     }Data;
 
 }SHORT_ITEM, *PSHORT_ITEM;
-#include <poppack.h>
+#pragma pack(pop)
 
 typedef struct
 {

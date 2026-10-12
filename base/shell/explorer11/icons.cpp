@@ -6,8 +6,6 @@
 
 #include "frame.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(explorer11);
-
 #define E11_SS 3
 
 typedef struct _E11AA

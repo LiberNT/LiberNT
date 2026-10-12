@@ -11,8 +11,6 @@
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(msctf);
 
-static HINSTANCE MSCTF_hinstance;
-
 typedef struct
 {
     DWORD id;
@@ -606,7 +604,6 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD fdwReason, LPVOID fImpLoad)
     switch (fdwReason)
     {
         case DLL_PROCESS_ATTACH:
-            MSCTF_hinstance = hinst;
             return ProcessAttach(hinst);
 
         case DLL_PROCESS_DETACH:

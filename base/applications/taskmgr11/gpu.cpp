@@ -609,7 +609,7 @@ static void CollectEngines(GpuSnapshot* gpu, D3DKMT_HANDLE hAdapter,
         ULONGLONG previous = engine->runningTime;
         BOOL previousValid = engine->counterValid;
         ULONGLONG current;
-        LARGE_INTEGER sample = {0};
+        LARGE_INTEGER sample = {};
         double dt = 0.0;
         double util;
 

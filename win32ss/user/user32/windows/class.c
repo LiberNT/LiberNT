@@ -686,6 +686,7 @@ IntGetWndProc(PWND pWnd, BOOL Ansi)
     return (gcpd ? gcpd : Ret);
 }
 
+#ifndef WOW64_I386_RUNTIME
 static ULONG_PTR FASTCALL
 IntGetClassLongA(PWND Wnd, PCLS Class, int nIndex, UINT Size)
 {
@@ -838,6 +839,7 @@ IntGetClassLongW(PWND Wnd, PCLS Class, int nIndex, UINT Size)
 
     return Ret;
 }
+#endif
 
 /*
  * @implemented

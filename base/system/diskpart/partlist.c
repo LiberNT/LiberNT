@@ -38,7 +38,7 @@
 
 #define MBR_MAGIC 0xAA55
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct _PARTITION
 {
@@ -63,7 +63,7 @@ typedef struct _PARTITION_SECTOR
     USHORT Magic;                            /* 0x1FE */
 } PARTITION_SECTOR, *PPARTITION_SECTOR;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 
 /* GLOBALS ********************************************************************/

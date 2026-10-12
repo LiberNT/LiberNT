@@ -184,7 +184,7 @@ HvpWriteLog(
     Buffer = RegistryHive->Allocate(BufferSize, TRUE, TAG_CM);
     if (!Buffer)
     {
-        DPRINT1("Failed to allocate 0x%lx bytes for the hive log entry\n", BufferSize);
+        DPRINT1("Failed to allocate 0x%lx bytes for the hive log entry\n", (unsigned long)BufferSize);
         return FALSE;
     }
     RtlZeroMemory(Buffer, BufferSize);

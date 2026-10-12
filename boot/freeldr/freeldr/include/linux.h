@@ -45,7 +45,7 @@
 
 #define LINUX_MAX_INITRD_ADDRESS        0x38000000
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct
 {
     UCHAR        BootCode1[0x20];
@@ -126,7 +126,7 @@ typedef struct
 
 
 } LINUX_SETUPSECTOR, *PLINUX_SETUPSECTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
 // Implemented in linux.S
 DECLSPEC_NORETURN

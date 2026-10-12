@@ -6,8 +6,6 @@
 
 #include "frame.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(explorer11);
-
 typedef struct _E11_SEARCHJOB
 {
     HWND hwndNotify;

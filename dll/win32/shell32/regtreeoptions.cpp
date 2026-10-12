@@ -7,8 +7,6 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 #define HKEY_GRAYED HKEY_REGTREEOPTION_GRAYED
 #define MAXVALUEDATA 100 // Max size for CheckedValue/UncheckedValue/DefaultValue
 

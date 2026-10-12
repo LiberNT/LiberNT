@@ -1,7 +1,7 @@
 #ifndef _NTATA_
 #define _NTATA_
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _IDENTIFY_DEVICE_DATA {
   struct {
     USHORT Reserved1  :1;
@@ -608,7 +608,7 @@ typedef struct _GP_LOG_NCQ_COMMAND_ERROR {
   UCHAR Vendor[255];
   UCHAR Checksum;
 } GP_LOG_NCQ_COMMAND_ERROR, *PGP_LOG_NCQ_COMMAND_ERROR;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define IDE_LBA_MODE                          (1 << 6)
 
@@ -748,7 +748,7 @@ typedef struct _GP_LOG_NCQ_COMMAND_ERROR {
 
 #define IDE_NCQ_SEND_HYBRID_EVICT                       0x01
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef union _ATA_HYBRID_INFO_FIELDS {
     struct {
         UCHAR   HybridPriority  : 4;
@@ -758,7 +758,7 @@ typedef union _ATA_HYBRID_INFO_FIELDS {
     };
     UCHAR   AsUchar;
 } ATA_HYBRID_INFO_FIELDS, *PATA_HYBRID_INFO_FIELDS;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define IDE_GP_LOG_DIRECTORY_ADDRESS                0x00
 
@@ -810,16 +810,16 @@ typedef union _ATA_HYBRID_INFO_FIELDS {
 
 #define IDE_GP_LOG_IDENTIFY_DEVICE_DATA_SATA_PAGE                       0x08
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _IDENTIFY_DEVICE_DATA_LOG_PAGE_HEADER {
     ULONGLONG   RevisionNumber : 16;
     ULONGLONG   PageNumber : 8;
     ULONGLONG   Reserved : 39;
     ULONGLONG   Valid : 1;
 } IDENTIFY_DEVICE_DATA_LOG_PAGE_HEADER, *PIDENTIFY_DEVICE_DATA_LOG_PAGE_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _IDENTIFY_DEVICE_DATA_LOG_PAGE_SUPPORTED_CAPABILITIES {
     IDENTIFY_DEVICE_DATA_LOG_PAGE_HEADER Header;
     struct {
@@ -948,11 +948,11 @@ typedef struct _IDENTIFY_DEVICE_DATA_LOG_PAGE_SUPPORTED_CAPABILITIES {
     } SupportedZacCapabilities;
     UCHAR  Reserved[392];
 } IDENTIFY_DEVICE_DATA_LOG_PAGE_SUPPORTED_CAPABILITIES, *PIDENTIFY_DEVICE_DATA_LOG_PAGE_SUPPORTED_CAPABILITIES;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define CURRENT_DEVICE_INTERNAL_STATUS_DATA_LOG_ADDRESS 0x24
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _CURRENT_DEVICE_INTERNAL_STATUS_LOG {
     UCHAR   LogAddress;
     UCHAR   Reserved0[3];
@@ -965,19 +965,19 @@ typedef struct _CURRENT_DEVICE_INTERNAL_STATUS_LOG {
     UCHAR   SavedDataGenerationNumber;
     UCHAR   ReasonIdentifier[128];
 } CURRENT_DEVICE_INTERNAL_STATUS_LOG, *PCURRENT_DEVICE_INTERNAL_STATUS_LOG;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define IDE_GP_LOG_DEVICE_STATISTICS_GENERAL_PAGE           0x01
 
 #define IDE_GP_LOG_DEVICE_STATISTICS_TEMPERATURE_PAGE       0x05
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _DEVICE_STATISTICS_LOG_PAGE_HEADER {
     ULONGLONG   RevisionNumber : 16;
     ULONGLONG   PageNumber : 8;
     ULONGLONG   Reserved : 40;
 } DEVICE_STATISTICS_LOG_PAGE_HEADER, *PDEVICE_STATISTICS_LOG_PAGE_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define GP_LOG_DEVICE_STATISTICS_FLAGS \
     ULONGLONG ReservedFlags : 3; \
@@ -987,7 +987,7 @@ typedef struct _DEVICE_STATISTICS_LOG_PAGE_HEADER {
     ULONGLONG ValidValue    : 1; \
     ULONGLONG Supported     : 1
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _GP_LOG_GENERAL_STATISTICS {
     DEVICE_STATISTICS_LOG_PAGE_HEADER Header;
     struct {
@@ -1045,9 +1045,9 @@ typedef struct _GP_LOG_GENERAL_STATISTICS {
     } UtilizationUsageRate;
     UCHAR Reserved[424];
 } GP_LOG_GENERAL_STATISTICS, *PGP_LOG_GENERAL_STATISTICS;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _GP_LOG_TEMPERATURE_STATISTICS {
     DEVICE_STATISTICS_LOG_PAGE_HEADER Header;
     struct {
@@ -1117,9 +1117,9 @@ typedef struct _GP_LOG_TEMPERATURE_STATISTICS {
     } SpecifiedMinimumOperatingTemperature;
     UCHAR Reserved[400];
 } GP_LOG_TEMPERATURE_STATISTICS, *PGP_LOG_TEMPERATURE_STATISTICS;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _GP_LOG_NCQ_NON_DATA {
     struct {
         ULONG   AbortNcq            : 1;
@@ -1182,9 +1182,9 @@ typedef struct _GP_LOG_NCQ_NON_DATA {
     } SubCmdF;
     ULONG   Reserved[112];
 } GP_LOG_NCQ_NON_DATA, *PGP_LOG_NCQ_NON_DATA;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _GP_LOG_NCQ_SEND_RECEIVE {
     struct {
         ULONG   DataSetManagement   : 1;
@@ -1197,7 +1197,7 @@ typedef struct _GP_LOG_NCQ_SEND_RECEIVE {
     } DataSetManagement;
     ULONG   Reserved[126];
 } GP_LOG_NCQ_SEND_RECEIVE, *PGP_LOG_NCQ_SEND_RECEIVE;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define HYBRID_INFORMATION_DISABLED             0x00
 
@@ -1205,7 +1205,7 @@ typedef struct _GP_LOG_NCQ_SEND_RECEIVE {
 
 #define HYBRID_INFORMATION_ENABLED              0xFF
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _GP_LOG_HYBRID_INFORMATION_HEADER {
     USHORT  HybridInfoDescrCount        : 4;
     USHORT  Reserved0                   : 12;
@@ -1232,9 +1232,9 @@ typedef struct _GP_LOG_HYBRID_INFORMATION_HEADER {
     USHORT  MaximumEvictionDataBlocks;
     UCHAR   Reserved[28];
 } GP_LOG_HYBRID_INFORMATION_HEADER, *PGP_LOG_HYBRID_INFORMATION_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _GP_LOG_HYBRID_INFORMATION_DESCRIPTOR {
     UCHAR   HybridPriority;
     UCHAR   ConsumedNVMSizeFraction;
@@ -1243,20 +1243,20 @@ typedef struct _GP_LOG_HYBRID_INFORMATION_DESCRIPTOR {
     UCHAR   ConsumedMappingResourcesForDirtyDataFraction;
     UCHAR   Reserved[11];
 } GP_LOG_HYBRID_INFORMATION_DESCRIPTOR, *PGP_LOG_HYBRID_INFORMATION_DESCRIPTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _GP_LOG_HYBRID_INFORMATION {
     GP_LOG_HYBRID_INFORMATION_HEADER        Header;
     GP_LOG_HYBRID_INFORMATION_DESCRIPTOR    Descriptor[0];
 } GP_LOG_HYBRID_INFORMATION, *PGP_LOG_HYBRID_INFORMATION;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define ATA_DEVICE_SIGNATURE_ATA                0x00000101
 
 #define ATA_DEVICE_SIGNATURE_ATAPI              0xEB140101
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _ATA_PHYSICAL_ELEMENT_STATUS_DESCRIPTOR {
     UCHAR Reserved1[4];
     ULONG ElementIdentifier;
@@ -1266,9 +1266,9 @@ typedef struct _ATA_PHYSICAL_ELEMENT_STATUS_DESCRIPTOR {
     ULONGLONG AssociatedCapacity;
     UCHAR Reserved3[8];
 } ATA_PHYSICAL_ELEMENT_STATUS_DESCRIPTOR, *PATA_PHYSICAL_ELEMENT_STATUS_DESCRIPTOR;
-#include <poppack.h>
+#pragma pack(pop)
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _ATA_GET_PHYSICAL_ELEMENT_STATUS_PARAMETER_DATA {
     ULONG NumberOfDescriptors;
     ULONG NumberOfDescriptorsReturned;
@@ -1276,6 +1276,6 @@ typedef struct _ATA_GET_PHYSICAL_ELEMENT_STATUS_PARAMETER_DATA {
     UCHAR Reserved[20];
     ATA_PHYSICAL_ELEMENT_STATUS_DESCRIPTOR Descriptors[ANYSIZE_ARRAY];
 } ATA_GET_PHYSICAL_ELEMENT_STATUS_PARAMETER_DATA, *PATA_GET_PHYSICAL_ELEMENT_STATUS_PARAMETER_DATA;
-#include <poppack.h>
+#pragma pack(pop)
 
 #endif

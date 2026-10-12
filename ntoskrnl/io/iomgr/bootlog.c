@@ -17,7 +17,6 @@
 
 static BOOLEAN IopBootLogCreate = FALSE;
 static BOOLEAN IopBootLogEnabled = FALSE;
-static BOOLEAN IopLogFileEnabled = FALSE;
 static ULONG IopLogEntryCount = 0;
 static ERESOURCE IopBootLogResource;
 
@@ -399,7 +398,6 @@ IopSaveBootLogToFile(VOID)
 
     ExFreePool(KeyInfo);
 
-    IopLogFileEnabled = TRUE;
     ExReleaseResourceLite(&IopBootLogResource);
 
     DPRINT("IopSaveBootLogToFile() done\n");

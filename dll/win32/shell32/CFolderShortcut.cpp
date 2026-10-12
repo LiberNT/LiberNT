@@ -7,8 +7,6 @@
 
 #include "precomp.h"
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 #define FOLDERSHORTCUT_LINK L"target.lnk"
 #define FOLDERSHORTCUT_INI L"desktop.ini"
 

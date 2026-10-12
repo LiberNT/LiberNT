@@ -10,8 +10,6 @@
 #include <commoncontrols.h>
 #include <uxtheme.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(shell);
-
 #define NAMESPACE_TREE_CLASS L"ReactOS Namespace Tree Control"
 
 class CNamespaceShellItemArray :
@@ -813,7 +811,7 @@ private:
             case NM_DBLCLK:
             case NM_RCLICK:
             {
-                TVHITTESTINFO Hit = {0};
+                TVHITTESTINFO Hit = {};
                 NSTCEHITTEST NamespaceHit = NSTCEHT_NOWHERE;
                 NSTCECLICKTYPE ClickType;
 
@@ -1303,7 +1301,7 @@ public:
 
     STDMETHODIMP HitTest(POINT *Point, IShellItem **Item) override
     {
-        TVHITTESTINFO Hit = {0};
+        TVHITTESTINFO Hit = {};
         TreeItemData *Data;
 
         if (!Point || !Item)

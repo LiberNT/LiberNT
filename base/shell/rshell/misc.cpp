@@ -207,7 +207,7 @@ public:
     }
 
     /* IClassFactory */
-    virtual HRESULT WINAPI CreateInstance(LPUNKNOWN pUnkOuter, REFIID riid, LPVOID *ppvObject)
+    virtual HRESULT WINAPI CreateInstance(LPUNKNOWN pUnkOuter, REFIID riid, LPVOID *ppvObject) override
     {
         *ppvObject = NULL;
 
@@ -232,7 +232,7 @@ public:
         return E_NOINTERFACE;
     }
 
-    virtual HRESULT WINAPI LockServer(BOOL fLock)
+    virtual HRESULT WINAPI LockServer(BOOL fLock) override
     {
         return E_NOTIMPL;
     }

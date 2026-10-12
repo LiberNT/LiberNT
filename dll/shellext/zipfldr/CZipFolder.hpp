@@ -76,7 +76,7 @@ public:
     void Close();
 
     // *** IZip methods ***
-    STDMETHODIMP_(unzFile) getZip();
+    STDMETHODIMP_(unzFile) getZip() override;
 
     // *** IShellFolder2 methods ***
     STDMETHODIMP GetDefaultSearchGUID(GUID *pguid) override

@@ -59,3 +59,7 @@ add_cd_file(TARGET nfsd DESTINATION reactos/system32 FOR all)
 add_cd_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/netconfig" DESTINATION reactos/system32/drivers/etc FOR all)
 add_cd_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/ms-nfs41-idmap.conf" DESTINATION reactos/system32/drivers/etc FOR all)
 add_registry_inf(nfsd_reg.inf)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(nfsd PRIVATE -Wno-unused-but-set-variable)
+endif()

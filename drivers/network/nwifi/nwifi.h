@@ -46,7 +46,7 @@
 
 /* 3-address 802.11 MAC header; Addr1/2/3 are interpreted per the ToDS/FromDS
  * bits.  Only the non-QoS 3-address data form is generated/parsed. */
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _IEEE80211_MAC_HEADER
 {
     UCHAR  FrameControl[2];
@@ -67,7 +67,7 @@ typedef struct _RFC1042_SNAP_HEADER
     UCHAR  Oui[3];      /* 0x00 0x00 0x00 (or 0x00-00-F8 for bridge tunnel) */
     UCHAR  EtherType[2];
 } RFC1042_SNAP_HEADER, *PRFC1042_SNAP_HEADER;
-#include <poppack.h>
+#pragma pack(pop)
 
 #define IEEE80211_MAC_HEADER_LEN    sizeof(IEEE80211_MAC_HEADER)
 #define RFC1042_SNAP_HEADER_LEN     sizeof(RFC1042_SNAP_HEADER)

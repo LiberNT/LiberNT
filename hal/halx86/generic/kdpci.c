@@ -24,7 +24,7 @@ ULONG (*DPRINT0)(_In_ _Printf_format_string_ PCSTR Format, ...);
 #if defined(_MSC_VER)
 #define DPRINT0   __noop
 #else
-#define DPRINT0
+#define DPRINT0(...) do { if (0) DbgPrint(__VA_ARGS__); } while (0)
 #endif
 #endif
 

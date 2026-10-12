@@ -12,7 +12,7 @@
 #ifdef SHELL32_NOPROPSYSLIB
 #ifdef SHELL32_PROP_IMPL
 #ifndef PSGUID_SUMMARYINFORMATION
-#define PSGUID_SUMMARYINFORMATION { 0xf29f85e0L, 0x4ff9, 0x1068, 0xab, 0x91, 0x08, 0x00, 0x2b, 0x27, 0xb3, 0xd9 }
+#define PSGUID_SUMMARYINFORMATION { 0xf29f85e0L, 0x4ff9, 0x1068, { 0xab, 0x91, 0x08, 0x00, 0x2b, 0x27, 0xb3, 0xd9 } }
 #endif
 #define DEFINE_SHELL32PROPERTYKEY(name, psguid, pid) \
         EXTERN_C const PROPERTYKEY DECLSPEC_SELECTANY name = { psguid, pid }

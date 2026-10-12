@@ -116,13 +116,13 @@ typedef struct _FREELDR_MEMORY_DESCRIPTOR
 #define HEAP_PAGES    0x400
 #define STACK_PAGES    0x00
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct
 {
     TYPE_OF_MEMORY    PageAllocated;                    // Type of allocated memory (LoaderFree if this memory is free)
     PFN_NUMBER            PageAllocationLength;            // Number of pages allocated (or zero if this isn't the first page in the chain)
 } PAGE_LOOKUP_TABLE_ITEM, *PPAGE_LOOKUP_TABLE_ITEM;
-#include <poppack.h>
+#pragma pack(pop)
 
 //
 // Define this to 1 if you want the entire contents

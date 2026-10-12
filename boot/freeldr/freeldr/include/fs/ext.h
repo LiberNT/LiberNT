@@ -40,7 +40,7 @@
  *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #define EXT_SUPERBLOCK_MAGIC 0xEF53
 #define EXT_DYNAMIC_REVISION 1
@@ -192,7 +192,7 @@ typedef struct _ExtDirEntry
     CHAR Name[EXT_DIR_ENTRY_MAX_NAME_LENGTH];
 } EXT_DIR_ENTRY, *PEXT_DIR_ENTRY;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* Special inode numbers.  */
 #define EXT_ROOT_INODE 2

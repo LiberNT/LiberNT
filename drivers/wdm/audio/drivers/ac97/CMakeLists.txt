@@ -28,3 +28,7 @@ endif()
 
 add_cd_file(TARGET ac97 DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(ac97 ac97.inf)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ac97 PRIVATE -Wno-missing-braces)
+endif()

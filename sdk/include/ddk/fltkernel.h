@@ -147,7 +147,7 @@ typedef struct _KTRANSACTION *PKTRANSACTION;
 #endif
 
 #if !defined(_WIN64) && !defined(_ARM_)
-#include <pshpack4.h>
+#pragma pack(push, 4)
 #endif
 typedef union _FLT_PARAMETERS {
     struct {
@@ -466,7 +466,7 @@ typedef union _FLT_PARAMETERS {
     } Others;
 } FLT_PARAMETERS, *PFLT_PARAMETERS;
 #if !defined(_WIN64) && !defined(_ARM_)
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 typedef struct _FLT_IO_PARAMETER_BLOCK {

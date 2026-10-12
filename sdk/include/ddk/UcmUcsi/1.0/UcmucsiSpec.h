@@ -136,7 +136,7 @@ typedef enum _UCSI_USB_TYPEC_CURRENT {
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 #pragma warning(push)
 #pragma warning(disable:4201)
@@ -796,7 +796,7 @@ static_assert(sizeof(UCSI_DATA_BLOCK) == 48, "Incorrect size");
 
 #pragma warning(pop)
 
-#include <poppack.h>
+#pragma pack(pop)
 
 WDF_EXTERN_C_END
 

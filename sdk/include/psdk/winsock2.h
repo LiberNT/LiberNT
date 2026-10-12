@@ -7,7 +7,7 @@
 #define _GNU_H_WINDOWS32_SOCKETS
 
 #if (!defined(_WIN64) && !defined(WIN32))
-#include <pshpack4.h>
+#pragma pack(push, 4)
 #define _NEED_POPPACK
 #endif
 
@@ -2729,7 +2729,7 @@ typedef struct timeval FAR *LPTIMEVAL;
 #endif
 
 #ifdef _NEED_POPPACK
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 /* FIXME :

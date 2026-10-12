@@ -70,7 +70,7 @@ typedef enum _BGRT_IMAGE_TYPE
 //
 // ACPI Generic Register Address
 //
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct _GEN_ADDR
 {
     UCHAR AddressSpaceID;
@@ -222,7 +222,7 @@ typedef struct _XSDT
     PHYSICAL_ADDRESS Tables[ANYSIZE_ARRAY];
 } XSDT;
 typedef XSDT *PXSDT;
-#include <poppack.h>
+#pragma pack(pop)
 
 //
 // Microsoft-specific (pretty much) ACPI Tables, normal MS ABI packing

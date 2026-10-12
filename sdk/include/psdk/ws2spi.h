@@ -29,7 +29,7 @@ extern "C" {
 #endif
 
 #if !defined(_WIN64)
-#include <pshpack4.h>
+#pragma pack(push, 4)
 #endif
 
 #define WSPDESCRIPTION_LEN 255
@@ -1123,7 +1123,7 @@ NSPStartup(
   _Inout_ LPNSP_ROUTINE lpnspRoutines);
 
 #if !defined(_WIN64)
-#include <poppack.h>
+#pragma pack(pop)
 #endif
 
 #ifdef __cplusplus

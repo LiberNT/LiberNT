@@ -192,7 +192,7 @@ typedef struct _SHCNF_PRINTJOB_INFO
 HRESULT WINAPI SHUpdateRecycleBinIcon(void);
 
 // Used in SHChangeNotify(SHCNE_UPDATEIMAGE)
-#include <pshpack1.h>
+#pragma pack(push, 1)
 typedef struct tagSHCNF_UPDATEIMAGE_DATA_1
 {
     WORD   cbSize;
@@ -212,7 +212,7 @@ typedef struct tagSHCNF_UPDATEIMAGE_DATA_2
     WCHAR szHashItem[MAX_PATH];
     USHORT terminator;
 } SHCNF_UPDATEIMAGE_DATA_2, *PSHCNF_UPDATEIMAGE_DATA_2;
-#include <poppack.h>
+#pragma pack(pop)
 
 /****************************************************************************
  * Shell Common Dialogs
@@ -1109,7 +1109,7 @@ SHGetComputerDisplayNameW(
 /*****************************************************************************
  * Shell Link
  */
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 typedef struct tagSHELL_LINK_HEADER
 {
@@ -1328,7 +1328,7 @@ typedef struct SFVM_CUSTOMVIEWINFO_DATA
     COLORREF clrTextBack;
 } SFVM_CUSTOMVIEWINFO_DATA, *LPSFVM_CUSTOMVIEWINFO_DATA;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 #if defined(_WIN64) || defined(BUILD_WOW6432)
     typedef UINT64 APPBAR_OUTPUT;
@@ -1344,7 +1344,7 @@ typedef struct SFVM_CUSTOMVIEWINFO_DATA
  * See also: https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle
  * > DuplicateHandle can be used to duplicate a handle between a 32-bit process and a 64-bit process.
  */
-#include <pshpack8.h>
+#pragma pack(push, 8)
 typedef struct tagAPPBARDATAINTEROP
 {
     DWORD cbSize; /* == sizeof(APPBARDATAINTEROP) */
@@ -1361,7 +1361,7 @@ typedef struct tagAPPBAR_COMMAND
     APPBAR_OUTPUT hOutput; /* For shlwapi!SHAllocShared */
     DWORD dwProcessId;
 } APPBAR_COMMAND, *PAPPBAR_COMMAND;
-#include <poppack.h>
+#pragma pack(pop)
 
 #if defined(_WIN64) || defined(BUILD_WOW6432)
 C_ASSERT(sizeof(APPBAR_COMMAND) == 0x40);

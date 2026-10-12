@@ -17,7 +17,6 @@
 #include "evalcmd.h"
 
 #include <wine/debug.h>
-WINE_DEFAULT_DEBUG_CHANNEL(evalcmd);
 
 #define PATH_VALID_CHARS \
     (PATH_CHAR_CLASS_DOT | PATH_CHAR_CLASS_SEMICOLON | PATH_CHAR_CLASS_COMMA | \

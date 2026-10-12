@@ -93,8 +93,18 @@ typedef PVOID PKSWORKER;
 #define DEFINE_GUIDSTRUCT(guid, name) struct __declspec(uuid(guid)) name
 #define DEFINE_GUIDNAMED(name) __uuidof(struct name)
 #else
+extern "C++" {
+constexpr GUID __KsGuid(ULONG l, USHORT w1, USHORT w2, UCHAR b1, UCHAR b2, UCHAR b3, UCHAR b4, UCHAR b5, UCHAR b6, UCHAR b7, UCHAR b8)
+{
+    return GUID{l, w1, w2, {b1, b2, b3, b4, b5, b6, b7, b8}};
+}
+constexpr GUID __KsGuid(ULONG l, USHORT w1, USHORT w2, const UCHAR (&b)[8])
+{
+    return GUID{l, w1, w2, {b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]}};
+}
+}
 #define DEFINE_GUIDSTRUCT(guid, name) \
-  extern const DECLSPEC_SELECTANY GUID __uuid__##name={STATIC_##name};
+  extern const DECLSPEC_SELECTANY GUID __uuid__##name = __KsGuid(STATIC_##name);
 #define DEFINE_GUIDNAMED(name) __uuid__##name
 #endif
 

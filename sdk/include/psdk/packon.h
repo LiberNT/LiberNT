@@ -6,4 +6,4 @@
 
 #pragma once
 
-#include <pshpack1.h>
+#pragma pack(push, 1)

@@ -97,7 +97,7 @@
 /* Used ring flags */
 #define VRING_USED_F_NO_NOTIFY          0x01    /* Suppress notifications */
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /* Virtqueue descriptor (16 bytes) */
 typedef struct _VRING_DESC {
@@ -129,7 +129,7 @@ typedef struct _VRING_USED {
     /* VRING_USED_ELEM Ring[]; -- variable length array */
 } VRING_USED, *PVRING_USED;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* ---- Virtio-blk request header (Section 5.2.6) ------------------------- */
 
@@ -143,7 +143,7 @@ typedef struct _VRING_USED {
 #define VIRTIO_BLK_S_IOERR             1
 #define VIRTIO_BLK_S_UNSUPP            2
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 /* Block request header (16 bytes) */
 typedef struct _VIRTIO_BLK_REQ_HDR {
@@ -196,7 +196,7 @@ typedef struct _VIRTIO_BLK_CONFIG {
     USHORT  NumQueues;      /* Number of request queues (if VIRTIO_BLK_F_MQ) */
 } VIRTIO_BLK_CONFIG, *PVIRTIO_BLK_CONFIG;
 
-#include <poppack.h>
+#pragma pack(pop)
 
 /* ---- Virtqueue state ---------------------------------------------------- */
 

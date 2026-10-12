@@ -13,7 +13,6 @@
 
 #define FAVORITES_MENU_POSITION 3
 static WCHAR s_szFavoritesRegKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Applets\\Regedit\\Favorites";
-static BOOL bInMenuLoop = FALSE;        /* Tells us if we are in the menu loop */
 extern WCHAR Suggestions[256];
 
 static UINT ErrorBox(HWND hWnd, UINT Error)
@@ -114,13 +113,11 @@ static void OnEnterMenuLoop(HWND hWnd)
     /* Update the status bar pane sizes */
     nParts = -1;
     SendMessageW(hStatusBar, SB_SETPARTS, 1, (LPARAM)&nParts);
-    bInMenuLoop = TRUE;
     SendMessageW(hStatusBar, SB_SETTEXTW, (WPARAM)0, (LPARAM)L"");
 }
 
 static void OnExitMenuLoop(HWND hWnd)
 {
-    bInMenuLoop = FALSE;
     /* Update the status bar pane sizes*/
     SetupStatusBar(hWnd, TRUE);
     UpdateStatusBar();

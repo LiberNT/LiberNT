@@ -84,7 +84,7 @@ typedef u64 __u64;
 
 #define ROOT_DIR_WORD 0x002f
 
-#include <pshpack1.h>
+#pragma pack(push, 1)
 
 struct btrfs_disk_key {
     __u64 objectid;
@@ -379,7 +379,7 @@ struct btrfs_super_block {
     __u8 sys_chunk_array[BTRFS_SYSTEM_CHUNK_ARRAY_SIZE];
 };
 
-#include <poppack.h>
+#pragma pack(pop)
 
 union tree_buf {
     struct btrfs_header header;

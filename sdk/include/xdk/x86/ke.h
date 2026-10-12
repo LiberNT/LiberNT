@@ -253,7 +253,7 @@ typedef struct _FLOATING_SAVE_AREA {
   ULONG Cr0NpxState;
 } FLOATING_SAVE_AREA, *PFLOATING_SAVE_AREA;
 
-#include "pshpack4.h"
+#pragma pack(push, 4)
 typedef struct _CONTEXT {
   ULONG ContextFlags;
   ULONG Dr0;
@@ -281,7 +281,7 @@ typedef struct _CONTEXT {
   ULONG SegSs;
   UCHAR ExtendedRegisters[MAXIMUM_SUPPORTED_EXTENSION];
 } CONTEXT;
-#include "poppack.h"
+#pragma pack(pop)
 
 #define PCR_MINOR_VERSION 1
 #define PCR_MAJOR_VERSION 1
