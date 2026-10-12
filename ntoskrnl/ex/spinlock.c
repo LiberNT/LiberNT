@@ -25,12 +25,29 @@ ExpValidateExecutiveSpinLock(
     }
 }
 
+#define EXP_SPIN_LOCK_EXCLUSIVE ((LONG)0x80000000)
+#define EXP_SPIN_LOCK_SHARED    0x7FFFFFFF
+
 static
 VOID
 ExpAcquireExecutiveSpinLockExclusive(
     _Inout_ PEX_SPIN_LOCK SpinLock)
 {
-    while (InterlockedCompareExchange((PLONG)SpinLock, -1, 0) != 0)
+    LONG Value;
+
+    for (;;)
+    {
+        Value = ReadAcquire((PLONG)SpinLock);
+        if (Value >= 0 &&
+            InterlockedCompareExchange((PLONG)SpinLock, Value | EXP_SPIN_LOCK_EXCLUSIVE, Value) == Value)
+        {
+            break;
+        }
+
+        YieldProcessor();
+    }
+
+    while (ReadAcquire((PLONG)SpinLock) & EXP_SPIN_LOCK_SHARED)
     {
         YieldProcessor();
     }
@@ -108,7 +125,7 @@ ExTryConvertSharedSpinLockExclusive(
     _Inout_ PEX_SPIN_LOCK SpinLock)
 {
     ExpValidateExecutiveSpinLock(SpinLock);
-    return InterlockedCompareExchange((PLONG)SpinLock, -1, 1) == 1;
+    return InterlockedCompareExchange((PLONG)SpinLock, EXP_SPIN_LOCK_EXCLUSIVE, 1) == 1;
 }
 
 LOGICAL
@@ -140,7 +157,7 @@ ExTryAcquireSpinLockExclusiveAtDpcLevel(
     _Inout_ PEX_SPIN_LOCK SpinLock)
 {
     ExpValidateExecutiveSpinLock(SpinLock);
-    return InterlockedCompareExchange((PLONG)SpinLock, -1, 0) == 0;
+    return InterlockedCompareExchange((PLONG)SpinLock, EXP_SPIN_LOCK_EXCLUSIVE, 0) == 0;
 }
 
 VOID
@@ -167,7 +184,7 @@ ExReleaseSpinLockShared(
     _Inout_ PEX_SPIN_LOCK SpinLock,
     _In_ KIRQL OldIrql)
 {
-    ASSERT(ReadAcquire((PLONG)SpinLock) > 0);
+    ASSERT(ReadAcquire((PLONG)SpinLock) & EXP_SPIN_LOCK_SHARED);
     InterlockedDecrement((PLONG)SpinLock);
     KeLowerIrql(OldIrql);
 }
@@ -177,6 +194,6 @@ NTAPI
 ExReleaseSpinLockSharedFromDpcLevel(
     _Inout_ PEX_SPIN_LOCK SpinLock)
 {
-    ASSERT(ReadAcquire((PLONG)SpinLock) > 0);
+    ASSERT(ReadAcquire((PLONG)SpinLock) & EXP_SPIN_LOCK_SHARED);
     InterlockedDecrement((PLONG)SpinLock);
 }
