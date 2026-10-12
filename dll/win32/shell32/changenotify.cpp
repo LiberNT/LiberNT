@@ -295,12 +295,12 @@ CreateRegistrationParam(ULONG nRegID, HWND hwnd, UINT wMsg, INT fSources, LONG f
     pRegEntry->dwMagic = REGENTRY_MAGIC;
     pRegEntry->cbSize = cbSize;
     pRegEntry->nRegID = nRegID;
-    pRegEntry->hwnd = hwnd;
+    pRegEntry->hwnd = HandleToLong(hwnd);
     pRegEntry->uMsg = wMsg;
     pRegEntry->fSources = fSources;
     pRegEntry->fEvents = fEvents;
     pRegEntry->fRecursive = fRecursive;
-    pRegEntry->hwndBroker = hwndBroker;
+    pRegEntry->hwndBroker = HandleToLong(hwndBroker);
     pRegEntry->ibPidl = 0;
     if (pidl)
     {

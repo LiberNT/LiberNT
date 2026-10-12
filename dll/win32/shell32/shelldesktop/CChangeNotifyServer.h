@@ -68,12 +68,12 @@ typedef struct REGENTRY
     DWORD dwMagic;      /* same as REGENTRY_MAGIC */
     DWORD cbSize;       /* the real size of this structure */
     UINT nRegID;        /* the registration ID */
-    HWND hwnd;          /* the target window */
+    LONG hwnd;          /* the target window */
     UINT uMsg;          /* the message ID used in notification */
     INT fSources;       /* the source flags */
     LONG fEvents;       /* the event flags */
     BOOL fRecursive;    /* is it recursive? */
-    HWND hwndBroker;    /* broker window (if any) */
+    LONG hwndBroker;    /* broker window (if any) */
     UINT ibPidl;        /* offset to the PIDL */
     /* followed by a PIDL */
 } REGENTRY, *LPREGENTRY;

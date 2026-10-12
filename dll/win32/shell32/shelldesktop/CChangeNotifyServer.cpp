@@ -200,7 +200,7 @@ CreateDirectoryWatcherFromRegEntry(LPREGENTRY pRegEntry)
 
     // create a CDirectoryWatcher
     CDirectoryWatcher *pDirectoryWatcher =
-        CDirectoryWatcher::Create(pRegEntry->hwnd, szPath, pRegEntry->fRecursive);
+        CDirectoryWatcher::Create((HWND)LongToHandle(pRegEntry->hwnd), szPath, pRegEntry->fRecursive);
     if (pDirectoryWatcher == NULL)
         return NULL;
 
@@ -234,10 +234,10 @@ LRESULT CChangeNotifyServer::OnRegister(UINT uMsg, WPARAM wParam, LPARAM lParam,
 
     // get the user PID; that is the process ID of the target window
     DWORD dwUserPID;
-    GetWindowThreadProcessId(pRegEntry->hwnd, &dwUserPID);
+    GetWindowThreadProcessId((HWND)LongToHandle(pRegEntry->hwnd), &dwUserPID);
 
     // get broker if any
-    HWND hwndBroker = pRegEntry->hwndBroker;
+    HWND hwndBroker = (HWND)LongToHandle(pRegEntry->hwndBroker);
 
     // clone the registration entry
     LPREGENTRY pNewEntry = (LPREGENTRY)SHAlloc(pRegEntry->cbSize);
@@ -384,8 +384,8 @@ BOOL CChangeNotifyServer::DeliverNotification(HANDLE hTicket, DWORD dwOwnerPID)
         {
             // do notify
             TRACE("Notifying: %p, 0x%x, %p, %lu\n",
-                  pRegEntry->hwnd, pRegEntry->uMsg, hTicket, dwOwnerPID);
-            SendMessageW(pRegEntry->hwnd, pRegEntry->uMsg, (WPARAM)hTicket, dwOwnerPID);
+                  LongToHandle(pRegEntry->hwnd), pRegEntry->uMsg, hTicket, dwOwnerPID);
+            SendMessageW((HWND)LongToHandle(pRegEntry->hwnd), pRegEntry->uMsg, (WPARAM)hTicket, dwOwnerPID);
             TRACE("GetLastError(): %ld\n", ::GetLastError());
         }
     }
