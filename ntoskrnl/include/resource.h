@@ -35,7 +35,6 @@
 #define IDB_STORAGE_SERVER2 18
 
 /* ReactOS additions */
-#define IDB_LOGO_XMAS       19
 #define IDB_COPYRIGHT       22
 #define IDB_REACTOS_GOP_LOGO 23
 
