@@ -90,6 +90,9 @@ InitFontsFromSettings(_Inout_ PGUI_CONSOLE_DATA GuiData, _In_opt_ UINT CodePage,
 VOID
 DeleteFonts(PGUI_CONSOLE_DATA GuiData);
 
+VOID
+GetConWndFrameSize(PGUI_CONSOLE_DATA GuiData, PLONG Width, PLONG Height);
+
 
 /* fullscreen.c */
 

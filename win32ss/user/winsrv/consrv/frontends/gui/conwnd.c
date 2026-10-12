@@ -464,16 +464,29 @@ UpdateConsoleScrollBars(PGUI_CONSOLE_DATA GuiData,
     }
 }
 
+VOID
+GetConWndFrameSize(PGUI_CONSOLE_DATA GuiData, PLONG Width, PLONG Height)
+{
+    RECT Rect = {0, 0, 0, 0};
+
+    AdjustWindowRectEx(&Rect,
+                       GetWindowLongPtrW(GuiData->hWindow, GWL_STYLE),
+                       FALSE,
+                       GetWindowLongPtrW(GuiData->hWindow, GWL_EXSTYLE));
+    *Width  = Rect.right - Rect.left;
+    *Height = Rect.bottom - Rect.top;
+}
+
 static VOID
 ResizeConWnd(PGUI_CONSOLE_DATA GuiData, DWORD WidthUnit, DWORD HeightUnit)
 {
     PCONSOLE_SCREEN_BUFFER Buff = GuiData->ActiveBuffer;
     DWORD Width, Height;
+    LONG FrameWidth, FrameHeight;
 
-    Width  = Buff->ViewSize.X * WidthUnit  +
-             2 * GetSystemMetrics(SM_CXFRAME);
-    Height = Buff->ViewSize.Y * HeightUnit +
-             2 * GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CYCAPTION);
+    GetConWndFrameSize(GuiData, &FrameWidth, &FrameHeight);
+    Width  = Buff->ViewSize.X * WidthUnit  + FrameWidth;
+    Height = Buff->ViewSize.Y * HeightUnit + FrameHeight;
 
     UpdateConsoleScrollBars(GuiData, &Width, &Height);
 
@@ -2128,21 +2141,23 @@ OnGetMinMaxInfo(PGUI_CONSOLE_DATA GuiData, PMINMAXINFO minMaxInfo)
     PCONSOLE_SCREEN_BUFFER ActiveBuffer;
     DWORD windx, windy;
     UINT  WidthUnit, HeightUnit;
+    LONG  FrameWidth, FrameHeight;
 
     if (!ConDrvValidateConsoleUnsafe((PCONSOLE)Console, CONSOLE_RUNNING, TRUE)) return;
 
     ActiveBuffer = GuiData->ActiveBuffer;
 
     GetScreenBufferSizeUnits(ActiveBuffer, GuiData, &WidthUnit, &HeightUnit);
+    GetConWndFrameSize(GuiData, &FrameWidth, &FrameHeight);
 
-    windx = CONGUI_MIN_WIDTH  * WidthUnit  + 2 * GetSystemMetrics(SM_CXFRAME);
-    windy = CONGUI_MIN_HEIGHT * HeightUnit + 2 * GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CYCAPTION);
+    windx = CONGUI_MIN_WIDTH  * WidthUnit  + FrameWidth;
+    windy = CONGUI_MIN_HEIGHT * HeightUnit + FrameHeight;
 
     minMaxInfo->ptMinTrackSize.x = windx;
     minMaxInfo->ptMinTrackSize.y = windy;
 
-    windx = (ActiveBuffer->ScreenBufferSize.X) * WidthUnit  + 2 * GetSystemMetrics(SM_CXFRAME);
-    windy = (ActiveBuffer->ScreenBufferSize.Y) * HeightUnit + 2 * GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CYCAPTION);
+    windx = (ActiveBuffer->ScreenBufferSize.X) * WidthUnit  + FrameWidth;
+    windy = (ActiveBuffer->ScreenBufferSize.Y) * HeightUnit + FrameHeight;
 
     if (ActiveBuffer->ViewSize.X < ActiveBuffer->ScreenBufferSize.X) windy += GetSystemMetrics(SM_CYHSCROLL); // Window currently has a horizontal scrollbar
     if (ActiveBuffer->ViewSize.Y < ActiveBuffer->ScreenBufferSize.Y) windx += GetSystemMetrics(SM_CXVSCROLL); // Window currently has a vertical scrollbar

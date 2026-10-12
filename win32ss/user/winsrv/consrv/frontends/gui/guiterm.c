@@ -955,6 +955,7 @@ GuiGetLargestConsoleWindowSize(IN OUT PFRONTEND This,
     HMONITOR hMonitor;
     MONITORINFO MonitorInfo;
     LONG Width, Height;
+    LONG FrameWidth, FrameHeight;
     UINT WidthUnit, HeightUnit;
 
     if (!pSize) return;
@@ -998,8 +999,9 @@ GuiGetLargestConsoleWindowSize(IN OUT PFRONTEND This,
         WidthUnit = HeightUnit = 1;
 #endif
 
-    Width  -= (2 * GetSystemMetrics(SM_CXFRAME));
-    Height -= (2 * GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CYCAPTION));
+    GetConWndFrameSize(GuiData, &FrameWidth, &FrameHeight);
+    Width  -= FrameWidth;
+    Height -= FrameHeight;
 
     if (Width  < 0) Width  = 0;
     if (Height < 0) Height = 0;
