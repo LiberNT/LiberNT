@@ -204,10 +204,14 @@ static void queue_timer_expire(struct timer_queue *q)
             ++t->runcount;
             if (t->period)
             {
+#ifdef __REACTOS__
+                next = now + t->period;
+#else
                 next = t->expire + t->period;
                 /* avoid trigger cascade if overloaded / hibernated */
                 if (next < now)
                     next = now + t->period;
+#endif
             }
             else
                 next = EXPIRE_NEVER;
