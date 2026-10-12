@@ -94,7 +94,7 @@ static const PCSTR ReactOSOptionsPrompt =
     "\n"
     "Examples:\n"
     "/DEBUG /DEBUGPORT=COM1 /BAUDRATE=115200\n"
-    "/FASTDETECT /SOS /NOGUIBOOT\n"
+    "/FASTDETECT /NOGUIBOOT\n"
     "/BASEVIDEO /MAXMEM=64\n"
     "/KERNEL=NTKRNLMP.EXE /HAL=HALMPS.DLL";
 static const PCSTR ReactOSSetupOptionsPrompt =

@@ -35,7 +35,6 @@ PLOADER_SYSTEM_BLOCK WinLdrSystemBlock;
 PCWSTR BootFileSystem = NULL;
 
 BOOLEAN VirtualBias = FALSE;
-BOOLEAN SosEnabled = FALSE;
 BOOLEAN BootLogo = FALSE;
 
 extern ULONG InitSafeBootMode;
@@ -62,9 +61,6 @@ NtLdrOutputLoadMsg(
     _In_opt_ PCSTR Description)
 {
     CHAR ProgressString[256];
-
-    if (SosEnabled)
-        return;
 
     /* Inform the user we load a file */
     RtlStringCbPrintfA(ProgressString, sizeof(ProgressString),
@@ -568,7 +564,6 @@ WinLdrLoadBootDrivers(PLOADER_PARAMETER_BLOCK LoaderBlock,
     PBOOT_DRIVER_LIST_ENTRY BootDriver;
     BOOLEAN Success;
     BOOLEAN ret = TRUE;
-    CHAR ProgressString[256];
 
     /* Walk through the boot drivers list */
     NextBd = LoaderBlock->BootDriverListHead.Flink;
@@ -589,11 +584,6 @@ WinLdrLoadBootDrivers(PLOADER_PARAMETER_BLOCK LoaderBlock,
         // Paths are relative (FIXME: Are they always relative?)
 
         /* Load it */
-        if (SosEnabled)
-        {
-            RtlStringCbPrintfA(ProgressString, sizeof(ProgressString), "Loading: %wZ", &BootDriver->FilePath);
-            UiSetProgressBarText(ProgressString);
-        }
         UiIndicateProgress();
         Success = WinLdrLoadDeviceDriver(&LoaderBlock->LoadOrderListHead,
                                          BootPath,
@@ -1714,9 +1704,6 @@ LoadAndBootWindows(
         }
     }
 
-    /* Handle the SOS option */
-    SosEnabled = !!NtLdrGetOption(BootOptions, "SOS");
-
     /* Allocate and minimally-initialize the Loader Parameter Block */
     AllocateAndInitLPB(OperatingSystemVersion, &LoaderBlock);
 
@@ -1838,33 +1825,6 @@ LoadAndBootWindowsCommon(
     /* Save entry-point pointer and Loader block VAs */
     KiSystemStartup = (KERNEL_ENTRY_POINT)KernelDTE->EntryPoint;
     LoaderBlockVA = PaToVa(LoaderBlock);
-
-    /* Show the "debug mode" notice if needed */
-    /* Match KdInitSystem() conditions */
-    if (!NtLdrGetOption(BootOptions, "CRASHDEBUG") &&
-        !NtLdrGetOption(BootOptions, "NODEBUG") &&
-        !!NtLdrGetOption(BootOptions, "DEBUG"))
-    {
-        /* Check whether there is a DEBUGPORT option */
-        PCSTR DebugPort;
-        ULONG DebugPortLength = 0;
-        DebugPort = NtLdrGetOptionEx(BootOptions, "DEBUGPORT=", &DebugPortLength);
-        if (DebugPort != NULL && DebugPortLength > 10)
-        {
-            /* Move to the debug port name */
-            DebugPort += 10; DebugPortLength -= 10;
-        }
-        else
-        {
-            /* Default to COM */
-            DebugPort = "COM"; DebugPortLength = 3;
-        }
-
-        /* It is booting in debug mode, show the banner */
-        TuiPrintf("You need to connect a debugger on port %.*s\n"
-                  "For more information, visit https://reactos.org/wiki/Debugging.\n",
-                  DebugPortLength, DebugPort);
-    }
 
     /* Debugging... */
     //DumpMemoryAllocMap();

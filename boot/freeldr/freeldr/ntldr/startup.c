@@ -25,13 +25,13 @@ static const struct
     {"Boot normally", NULL, NULL},
     {"Boot with serial debugging", "DEBUG DEBUGPORT=COM1 BAUDRATE=115200", "/NODEBUG/DEBUGPORT=/BAUDRATE="},
     {"Boot with file logging", "DEBUG DEBUGPORT=FILE", "/NODEBUG/DEBUGPORT="},
-    {"Boot with screen debugging", "DEBUG DEBUGPORT=SCREEN SOS", "/NODEBUG/DEBUGPORT="},
-    {"Boot with network assistance", "DEBUG DEBUGPORT=NET HOST_NAME=libernt.com HOST_PORT=50000 SOS", "/NODEBUG/DEBUGPORT=NET/HOST_IP=/HOST_NAME=/HOST_PORT="},
+    {"Boot with screen debugging", "DEBUG DEBUGPORT=SCREEN", "/NODEBUG/DEBUGPORT="},
+    {"Boot with network assistance", "DEBUG DEBUGPORT=NET HOST_NAME=libernt.com HOST_PORT=50000", "/NODEBUG/DEBUGPORT=NET/HOST_IP=/HOST_NAME=/HOST_PORT="},
     {"Boot with one processor", "NUMPROC=1", "/NUMPROC=/ONECPU"},
     {"Boot with processor diagnostics", "DEBUG DEBUGPORT=COM1 BAUDRATE=115200 SMPDIAG", "/NODEBUG/DEBUGPORT=/BAUDRATE=/NUMPROC=/ONECPU"},
     {"Boot without RAM disk", NULL, "/RDPATH=/RDRAMSIZE=/RDIMAGEOFFSET=/RDIMAGELENGTH=", TRUE},
-    {"Boot without RAM disk with screen debugging", "DEBUG DEBUGPORT=SCREEN SOS", "/NODEBUG/DEBUGPORT=/RDPATH=/RDRAMSIZE=/RDIMAGEOFFSET=/RDIMAGELENGTH=", TRUE},
-    {"Boot without RAM disk with network assistance", "DEBUG DEBUGPORT=NET HOST_NAME=libernt.com HOST_PORT=50000 SOS", "/NODEBUG/DEBUGPORT=NET/HOST_IP=/HOST_NAME=/HOST_PORT=/RDPATH=/RDRAMSIZE=/RDIMAGEOFFSET=/RDIMAGELENGTH=", TRUE}
+    {"Boot without RAM disk with screen debugging", "DEBUG DEBUGPORT=SCREEN", "/NODEBUG/DEBUGPORT=/RDPATH=/RDRAMSIZE=/RDIMAGEOFFSET=/RDIMAGELENGTH=", TRUE},
+    {"Boot without RAM disk with network assistance", "DEBUG DEBUGPORT=NET HOST_NAME=libernt.com HOST_PORT=50000", "/NODEBUG/DEBUGPORT=NET/HOST_IP=/HOST_NAME=/HOST_PORT=/RDPATH=/RDRAMSIZE=/RDIMAGEOFFSET=/RDIMAGELENGTH=", TRUE}
 };
 
 static PCSTR StartupModes[] =
@@ -155,9 +155,9 @@ AppendBootTimeOptions(PSTR BootOptions, SIZE_T BootOptionsSize)
     static const PCSTR Modes[] =
     {
         NULL,
-        "SAFEBOOT:MINIMAL SOS NOGUIBOOT",
-        "SAFEBOOT:NETWORK SOS NOGUIBOOT",
-        "SAFEBOOT:MINIMAL(ALTERNATESHELL) SOS NOGUIBOOT"
+        "SAFEBOOT:MINIMAL NOGUIBOOT",
+        "SAFEBOOT:NETWORK NOGUIBOOT",
+        "SAFEBOOT:MINIMAL(ALTERNATESHELL) NOGUIBOOT"
     };
     PCSTR Add[2] = {NULL, NULL};
     PCSTR Remove[2] = {NULL, NULL};

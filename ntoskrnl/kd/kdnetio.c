@@ -237,9 +237,7 @@ KdpNetInit(
         KdpNetReady = TRUE;
         HalDisplayString("   Network debugging enabled\r\n");
         KdpNetDisplayStatus();
-        KdDisplayTransportKey(SharedUserData->NtProductType == NtProductWinNt &&
-                              strstr(KeLoaderBlock->LoadOptions, "SOS") &&
-                              !strstr(KeLoaderBlock->LoadOptions, "NOGUIBOOT"));
+        KdDisplayTransportKey(FALSE);
         KdpNetPublishKey();
         KdQueryTransportStatus(Status, sizeof(Status));
         DbgPrint("%s\n", Status);

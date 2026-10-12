@@ -594,78 +594,6 @@ IopNormalizeRegistryPathCase(
     }
 }
 
-/**
- * @brief   Determines whether String1 may be a suffix of String2.
- * @return  TRUE if String2 contains String1 as a suffix.
- **/
-static BOOLEAN
-IopSuffixUnicodeString(
-    _In_ PCUNICODE_STRING String1,
-    _In_ PCUNICODE_STRING String2,
-    _In_ BOOLEAN CaseInSensitive)
-{
-    PWCHAR pc1, pc2;
-    ULONG NumChars;
-
-    if (String2->Length < String1->Length)
-        return FALSE;
-
-    NumChars = String1->Length / sizeof(WCHAR);
-    pc1 = String1->Buffer;
-    pc2 = &String2->Buffer[String2->Length / sizeof(WCHAR) - NumChars];
-
-    if (pc1 && pc2)
-    {
-        if (CaseInSensitive)
-        {
-            while (NumChars--)
-            {
-                if (RtlUpcaseUnicodeChar(*pc1++) !=
-                    RtlUpcaseUnicodeChar(*pc2++))
-                {
-                    return FALSE;
-                }
-            }
-        }
-        else
-        {
-            while (NumChars--)
-            {
-                if (*pc1++ != *pc2++)
-                    return FALSE;
-            }
-        }
-
-        return TRUE;
-    }
-
-    return FALSE;
-}
-
-/**
- * @brief   Displays a driver-loading message in SOS mode.
- **/
-static VOID
-FASTCALL
-IopDisplayLoadingMessage(
-    _In_ PCUNICODE_STRING ServiceName)
-{
-    extern BOOLEAN SosEnabled; // See ex/init.c
-    static const UNICODE_STRING DotSys = RTL_CONSTANT_STRING(L".SYS");
-    CHAR TextBuffer[256];
-
-    if (!SosEnabled) return;
-    if (!KeLoaderBlock) return;
-    RtlStringCbPrintfA(TextBuffer, sizeof(TextBuffer),
-                       "%s%sSystem32\\Drivers\\%wZ%s\r\n",
-                       KeLoaderBlock->ArcBootDeviceName,
-                       KeLoaderBlock->NtBootPathName,
-                       ServiceName,
-                       IopSuffixUnicodeString(&DotSys, ServiceName, TRUE)
-                           ? "" : ".SYS");
-    HalDisplayString(TextBuffer);
-}
-
 /*
  * IopNormalizeImagePath
  *
@@ -1306,10 +1234,6 @@ IopInitializeBuiltinDriver(IN PLDR_DATA_TABLE_ENTRY BootLdrEntry)
     UNICODE_STRING ServiceName;
     BOOLEAN Success;
 
-    /*
-     * Display 'Loading XXX...' message
-     */
-    IopDisplayLoadingMessage(ModuleName);
     InbvIndicateProgress();
 
     Buffer = ExAllocatePoolWithTag(PagedPool,
@@ -3072,33 +2996,6 @@ IopLoadDriverWithImage(
         DPRINT("MmLoadSystemImage() failed (Status %lx)\n", Status);
         IopReleaseDriverLoadSlot(LoadSlot);
         return Status;
-    }
-
-    // Display the loading message
-    ULONG infoLength;
-    Status = ZwQueryKey(ServiceHandle, KeyBasicInformation, NULL, 0, &infoLength);
-    if (Status == STATUS_BUFFER_TOO_SMALL)
-    {
-        PKEY_BASIC_INFORMATION servName = ExAllocatePoolWithTag(PagedPool, infoLength, TAG_IO);
-        if (servName)
-        {
-            Status = ZwQueryKey(ServiceHandle,
-                                KeyBasicInformation,
-                                servName,
-                                infoLength,
-                                &infoLength);
-            if (NT_SUCCESS(Status))
-            {
-                UNICODE_STRING serviceName = {
-                    .Length = servName->NameLength,
-                    .MaximumLength = servName->NameLength,
-                    .Buffer = servName->Name
-                };
-
-                IopDisplayLoadingMessage(&serviceName);
-            }
-            ExFreePoolWithTag(servName, TAG_IO);
-        }
     }
 
     NTSTATUS driverEntryStatus = STATUS_SUCCESS;

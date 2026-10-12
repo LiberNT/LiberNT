@@ -723,9 +723,6 @@ LoadReactOSSetup(
     BootOptions = UserBootOptions;
     TRACE("BootOptions(2): '%s'\n", BootOptions);
 
-    /* Handle the SOS option */
-    SosEnabled = !!NtLdrGetOption(BootOptions, "SOS");
-
     /* Allocate and minimally-initialize the Loader Parameter Block */
     AllocateAndInitLPB(OperatingSystemVersion, &LoaderBlock);
 
