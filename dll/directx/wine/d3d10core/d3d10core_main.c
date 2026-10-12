@@ -50,9 +50,14 @@ HRESULT WINAPI D3D10CoreCreateDevice(IDXGIFactory *factory, IDXGIAdapter *adapte
     {
         HRESULT (WINAPI *create_native)(IDXGIAdapter *, UINT, D3D_FEATURE_LEVEL, ID3D10Device **);
 
-        d3d11 = GetModuleHandleA("d3d11.dll");
+        d3d11 = LoadLibraryA("d3d11.dll");
         create_native = d3d11 ? (void *)GetProcAddress(d3d11, "RosD3D11CreateD3D10Device") : NULL;
-        if (create_native && (hr = create_native(adapter, flags, feature_level, device)) != DXGI_ERROR_UNSUPPORTED)
+        hr = create_native ? create_native(adapter, flags, feature_level, device) : DXGI_ERROR_UNSUPPORTED;
+        if (SUCCEEDED(hr))
+            return hr;
+        if (d3d11)
+            FreeLibrary(d3d11);
+        if (hr != DXGI_ERROR_UNSUPPORTED)
             return hr;
     }
 #endif
