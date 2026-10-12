@@ -83,6 +83,17 @@ static BOOL WINAPI default_ctrl_handler( DWORD type )
 
 static struct ctrl_handler default_handler = { default_ctrl_handler, NULL };
 static struct ctrl_handler *ctrl_handlers = &default_handler;
+#ifdef __REACTOS__
+static void reset_ctrl_handlers(void)
+{
+    while (ctrl_handlers != &default_handler)
+    {
+        struct ctrl_handler *handler = ctrl_handlers;
+        ctrl_handlers = handler->next;
+        RtlFreeHeap( GetProcessHeap(), 0, handler );
+    }
+}
+#endif
 
 #ifdef __REACTOS__
 static void get_system_dir( WCHAR *dir, UINT size )
@@ -433,6 +444,9 @@ BOOL WINAPI DECLSPEC_HOTPATCH AttachConsole( DWORD pid )
             STARTUPINFOW si;
             GetStartupInfoW( &si );
             init_console_std_handles( !(si.dwFlags & STARTF_USESTDHANDLES) );
+#ifdef __REACTOS__
+            reset_ctrl_handlers();
+#endif
         }
         else ret = FALSE;
     }
@@ -533,6 +547,9 @@ static BOOL alloc_console( BOOL headless )
 
     RtlGetCurrentPeb()->ProcessParameters->ConsoleHandle = console;
     TRACE( "Started conhost pid=%08lx tid=%08lx\n", pi.dwProcessId, pi.dwThreadId );
+#ifdef __REACTOS__
+    reset_ctrl_handlers();
+#endif
 
     HeapFree( GetProcessHeap(), 0, console_si.lpAttributeList );
     CloseHandle( server );
@@ -752,12 +769,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH FreeConsole(void)
     if (console_flags & CONSOLE_ERROR_HANDLE)  NtClose( GetStdHandle( STD_ERROR_HANDLE ));
     console_flags = 0;
 #ifdef __REACTOS__
-    while (ctrl_handlers != &default_handler)
-    {
-        struct ctrl_handler *handler = ctrl_handlers;
-        ctrl_handlers = handler->next;
-        RtlFreeHeap( GetProcessHeap(), 0, handler );
-    }
+    reset_ctrl_handlers();
 #endif
 
     RtlLeaveCriticalSection( &console_section );

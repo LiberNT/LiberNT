@@ -533,6 +533,30 @@ CdSetActive(
 }
 
 static
+VOID
+CdCloseScreen(
+    _In_ PCD_SCREEN Screen)
+{
+    PCD_CONSOLE Console = Screen->Console;
+    PLIST_ENTRY Entry;
+
+    if (Console && Console->Active == Screen && Screen->RefCount == 2)
+    {
+        for (Entry = Console->Screens.Flink; Entry != &Console->Screens; Entry = Entry->Flink)
+        {
+            PCD_SCREEN Other = CONTAINING_RECORD(Entry, CD_SCREEN, Entry);
+
+            if (Other != Screen)
+            {
+                CdSetActive(Console, Other);
+                break;
+            }
+        }
+    }
+    CdDereferenceScreen(Screen);
+}
+
+static
 PCD_SCREEN
 CdCreateScreen(
     _In_ PCD_CONSOLE Console)
@@ -1678,7 +1702,7 @@ CdDispatchClose(
             CdDereferenceConsole(File->Console, &Deferred);
             break;
         case CdFileScreen:
-            CdDereferenceScreen(File->Screen);
+            CdCloseScreen(File->Screen);
             break;
         case CdFileConnection:
             CdDetachConnection(FileObject, &Deferred);

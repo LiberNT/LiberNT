@@ -1651,6 +1651,16 @@ NTSTATUS write_console_input( struct console *console, const INPUT_RECORD *recor
     TRACE( "%u\n", count );
 
     if (!count) return STATUS_SUCCESS;
+#ifdef __REACTOS__
+    if (count == 1 && records[0].EventType == MOUSE_EVENT &&
+        records[0].Event.MouseEvent.dwEventFlags == MOUSE_MOVED && console->record_count &&
+        console->records[console->record_count - 1].EventType == MOUSE_EVENT &&
+        console->records[console->record_count - 1].Event.MouseEvent.dwEventFlags == MOUSE_MOVED)
+    {
+        console->records[console->record_count - 1] = records[0];
+        return flush ? process_console_input( console ) : STATUS_SUCCESS;
+    }
+#endif
     if (console->record_count + count > console->record_size)
     {
         INPUT_RECORD *new_rec;
