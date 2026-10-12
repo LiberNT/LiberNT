@@ -119,6 +119,28 @@ done:
     return hr;
 }
 
+BOOL dxgi_wddm_adapter_has_d3d11_umd(LUID luid)
+{
+    D3DKMT_OPENADAPTERFROMLUID open_adapter = {0};
+    D3DKMT_CLOSEADAPTER close_adapter;
+    D3DKMT_QUERYADAPTERINFO query = {0};
+    D3DKMT_UMDFILENAMEINFO name = {0};
+    BOOL found;
+
+    open_adapter.AdapterLuid = luid;
+    if (!NT_SUCCESS(D3DKMTOpenAdapterFromLuid(&open_adapter)))
+        return FALSE;
+    name.Version = KMTUMDVERSION_DX11;
+    query.hAdapter = open_adapter.hAdapter;
+    query.Type = KMTQAITYPE_UMDRIVERNAME;
+    query.pPrivateDriverData = &name;
+    query.PrivateDriverDataSize = sizeof(name);
+    found = NT_SUCCESS(D3DKMTQueryAdapterInfo(&query)) && name.UmdFileName[0];
+    close_adapter.hAdapter = open_adapter.hAdapter;
+    D3DKMTCloseAdapter(&close_adapter);
+    return found;
+}
+
 static unsigned int dxgi_get_wddm_adapter_priority(const D3DKMT_ADAPTERINFO *adapter)
 {
     D3DKMT_QUERYADAPTERINFO query_info = {0};

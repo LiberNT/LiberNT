@@ -255,6 +255,18 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_CheckInterfaceSupport(IWineDXGIAda
     adapter_id.driver_size = 0;
     adapter_id.description_size = 0;
 
+#if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
+    wined3d_mutex_lock();
+    hr = wined3d_adapter_get_identifier(adapter->wined3d_adapter, 0, &adapter_id);
+    wined3d_mutex_unlock();
+    if (SUCCEEDED(hr) && !adapter->factory->software && dxgi_wddm_adapter_has_d3d11_umd(adapter_id.adapter_luid))
+    {
+        if (umd_version)
+            *umd_version = adapter_id.driver_version;
+        return S_OK;
+    }
+#endif
+
     wined3d_mutex_lock();
     hr = wined3d_get_device_caps(adapter->wined3d_adapter, WINED3D_DEVICE_TYPE_HAL, &caps);
     if (SUCCEEDED(hr))
