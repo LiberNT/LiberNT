@@ -2677,7 +2677,7 @@ static BOOL canonicalize_hierpart(const parse_data *data, Uri *uri, DWORD flags,
         } else {
             if(!computeOnly)
                 uri->path_start = uri->canon_len;
-            uri->path_len = canonicalize_path_hierarchical(data->path, data->path_len, data->scheme_type, data->host_len != 0,
+            uri->path_len = canonicalize_path_hierarchical(data->path, data->path_len, data->scheme_type, uri->host_len != 0,
                     flags, data->has_implicit_scheme, computeOnly ? NULL : uri->canon_uri+uri->canon_len);
             uri->canon_len += uri->path_len;
             if(!computeOnly && !uri->path_len)
