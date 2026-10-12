@@ -114,6 +114,7 @@ typedef struct _CD_FILE
     PCD_CONSOLE Mirror;
     LIST_ENTRY MirrorEntry;
     LONG NoEventIrps;
+    BOOLEAN Opening;
 } CD_FILE, *PCD_FILE;
 
 typedef struct _CD_REQUEST
@@ -240,6 +241,23 @@ CdSyncFileEvent(
 {
     if (File->NoEventIrps)
         return;
+    if (File->Opening)
+    {
+        if (!(File->FileObject->Flags & FO_HANDLE_CREATED))
+        {
+            if (File->Mirror && File->Mirror->Signaled)
+            {
+                File->FileObject->Event.Header.Type = NotificationEvent;
+                KeSetEvent(&File->FileObject->Event, IO_NO_INCREMENT, FALSE);
+            }
+            else
+            {
+                File->FileObject->Event.Header.Type = SynchronizationEvent;
+            }
+            return;
+        }
+        File->Opening = FALSE;
+    }
     if (File->FileObject->Event.Header.Type == SynchronizationEvent &&
         File->FileObject->Event.Header.SignalState)
     {
@@ -1618,7 +1636,11 @@ CdDispatchCreate(
                 break;
         }
         if (File->Type != CdFileServer && File->Type != CdFileConnection)
-            CdUpdateFileEvent(File);
+        {
+            KeInitializeEvent(&FileObject->Event, SynchronizationEvent, FALSE);
+            File->Opening = TRUE;
+            CdSyncFileEvent(File);
+        }
     }
     ExReleaseSpinLockExclusive(&CdLock, OldIrql);
     CdRunDeferred(&Deferred);
@@ -1641,7 +1663,6 @@ CdDispatchCreate(
     }
     else if (File->Type != CdFileConnection)
     {
-        KeInitializeEvent(&FileObject->Event, SynchronizationEvent, FALSE);
         Irp->IoStatus.Status = STATUS_SUCCESS;
         IoMarkIrpPending(Irp);
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
