@@ -18,8 +18,8 @@ DesktopPtrToUser(PVOID Ptr)
     pdi = pci->pDeskInfo;
 
     ASSERT(Ptr != NULL);
-    ASSERT(pdi != NULL);
-    if ((ULONG_PTR)Ptr >= (ULONG_PTR)pdi->pvDesktopBase &&
+    if (pdi != NULL &&
+        (ULONG_PTR)Ptr >= (ULONG_PTR)pdi->pvDesktopBase &&
         (ULONG_PTR)Ptr < (ULONG_PTR)pdi->pvDesktopLimit)
     {
         return (PVOID)((ULONG_PTR)Ptr - pci->ulClientDelta);
