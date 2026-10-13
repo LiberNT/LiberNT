@@ -429,6 +429,20 @@ EvalConvertParameterObjects(
             break;
         }
 
+        case ACPI_METHOD_ARGUMENT_PACKAGE_EX:
+        {
+            if (Argument->DataLength != 0)
+            {
+                DPRINT1("Extended package argument of %u bytes is not supported\n", Argument->DataLength);
+                return STATUS_NOT_SUPPORTED;
+            }
+
+            Arg->Type = ACPI_TYPE_PACKAGE;
+            Arg->Package.Count = 0;
+            Arg->Package.Elements = NULL;
+            break;
+        }
+
         default:
         {
             DPRINT1("Unknown argument type %u\n", Argument->Type);
@@ -1124,16 +1138,16 @@ EvalResolvePath(
  * The extended request names the method by a NUL-terminated path, absolute
  * or relative to the device, instead of a four-character name.
  */
+static
 NTSTATUS
-NTAPI
-Bus_PDO_EvalMethodEx(
-    _In_ PPDO_DEVICE_DATA DeviceData,
+EvalMethodExOnHandle(
+    _In_ ACPI_HANDLE BaseHandle,
+    _In_ PACPI_EVAL_INPUT_BUFFER_EX ExBuffer,
+    _In_ PIO_STACK_LOCATION IoStack,
     _Inout_ PIRP Irp)
 {
     PACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_EX SimpleInt;
     PACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_EX SimpleStr;
-    PACPI_EVAL_INPUT_BUFFER_EX ExBuffer;
-    PIO_STACK_LOCATION IoStack;
     ACPI_OBJECT_LIST ParamList = { 0, NULL };
     ACPI_HANDLE Handle;
     ACPI_STATUS AcpiStatus;
@@ -1142,8 +1156,6 @@ Bus_PDO_EvalMethodEx(
     NTSTATUS Status;
     ACPI_BUFFER ReturnBuffer = { ACPI_ALLOCATE_BUFFER, NULL };
 
-    IoStack = IoGetCurrentIrpStackLocation(Irp);
-    ExBuffer = Irp->AssociatedIrp.SystemBuffer;
     InputLength = IoStack->Parameters.DeviceIoControl.InputBufferLength;
     SimpleInt = (PVOID)ExBuffer;
     SimpleStr = (PVOID)ExBuffer;
@@ -1183,7 +1195,7 @@ Bus_PDO_EvalMethodEx(
     if (ExBuffer->MethodName[0] == ANSI_NULL)
         return STATUS_NO_SUCH_DEVICE;
 
-    Status = EvalResolvePath(DeviceData->AcpiHandle, ExBuffer->MethodName, &Handle);
+    Status = EvalResolvePath(BaseHandle, ExBuffer->MethodName, &Handle);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -1229,6 +1241,15 @@ Bus_PDO_EvalMethodEx(
         AcpiOsFree(ReturnBuffer.Pointer);
 
     return Status;
+}
+
+NTSTATUS
+NTAPI
+Bus_PDO_EvalMethodEx(
+    _In_ PPDO_DEVICE_DATA DeviceData,
+    _Inout_ PIRP Irp)
+{
+    return EvalMethodExOnHandle(DeviceData->AcpiHandle, Irp->AssociatedIrp.SystemBuffer, IoGetCurrentIrpStackLocation(Irp), Irp);
 }
 
 typedef struct _ACPI_ENUM_CHILDREN_CONTEXT
@@ -1636,6 +1657,15 @@ AcpiEvalMethodForPciDeviceIoctl(
                                       &AcpiHandle))
     {
         return STATUS_NOT_FOUND;
+    }
+
+    switch (EvalInputBuffer->Signature)
+    {
+        case ACPI_EVAL_INPUT_BUFFER_SIGNATURE_EX:
+        case ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_SIGNATURE_EX:
+        case ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_SIGNATURE_EX:
+        case ACPI_EVAL_INPUT_BUFFER_COMPLEX_SIGNATURE_EX:
+            return EvalMethodExOnHandle(AcpiHandle, (PACPI_EVAL_INPUT_BUFFER_EX)EvalInputBuffer, &SyntheticIoStack, Irp);
     }
 
     Status = EvalMethodOnHandleInternal(AcpiHandle, EvalInputBuffer, &SyntheticIoStack, Irp);

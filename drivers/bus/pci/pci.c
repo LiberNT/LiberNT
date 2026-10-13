@@ -586,6 +586,7 @@ PciDispatchDeviceControl(
         switch (IrpSp->Parameters.DeviceIoControl.IoControlCode)
         {
             case IOCTL_ACPI_EVAL_METHOD:
+            case IOCTL_ACPI_EVAL_METHOD_EX:
             {
                 PPDO_DEVICE_EXTENSION PdoExtension;
                 PFDO_DEVICE_EXTENSION FdoExtension;
