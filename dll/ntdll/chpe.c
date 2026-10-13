@@ -2330,6 +2330,8 @@ ChpeRtlUserThreadStart(PVOID StartAddress, PVOID Parameter)
     NTSTATUS InitStatus;
     ULONG_PTR Status = 0;
 
+    StartAddress = LdrpGetThreadStartAddress(StartAddress);
+
     _SEH2_TRY
     {
         if (ChpeIsChpeProcess() && ChpeIsEmulatorReady())

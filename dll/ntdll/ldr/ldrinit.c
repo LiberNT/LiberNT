@@ -26,6 +26,7 @@ UNICODE_STRING ImageExecOptionsString = RTL_CONSTANT_STRING(L"\\Registry\\Machin
 UNICODE_STRING Wow64OptionsString = RTL_CONSTANT_STRING(L"");
 UNICODE_STRING NtDllString = RTL_CONSTANT_STRING(L"ntdll.dll");
 UNICODE_STRING Kernel32String = RTL_CONSTANT_STRING(L"kernel32.dll");
+UNICODE_STRING MscoreeString = RTL_CONSTANT_STRING(L"mscoree.dll");
 const UNICODE_STRING LdrpDotLocal = RTL_CONSTANT_STRING(L".Local");
 
 BOOLEAN LdrpInLdrInit;
@@ -46,6 +47,8 @@ PLDR_DATA_TABLE_ENTRY LdrpNtDllDataTableEntry;
 
 static NTSTATUS (WINAPI *Kernel32ProcessInitPostImportFunction)(VOID);
 PVOID Kernel32ThreadInitThunkFunction;
+PVOID LdrpCorImageEntryPoint;
+PVOID LdrpCorExeMainFunction;
 
 RTL_BITMAP TlsBitMap;
 RTL_BITMAP TlsExpansionBitMap;
@@ -2499,6 +2502,8 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     ULONG ComSectionSize;
     ANSI_STRING BaseProcessInitPostImportName = RTL_CONSTANT_STRING("BaseProcessInitPostImport");
     ANSI_STRING BaseThreadInitThunkName = RTL_CONSTANT_STRING("BaseThreadInitThunk");
+    ANSI_STRING CorExeMainName = RTL_CONSTANT_STRING("_CorExeMain");
+    PIMAGE_COR20_HEADER CorHeader;
     PVOID OldShimData;
     OBJECT_ATTRIBUTES ObjectAttributes;
     //UNICODE_STRING LocalFileName, FullImageName;
@@ -2507,6 +2512,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     UNICODE_STRING CommandLine, NtSystemRoot, ImagePathName, FullPath, ImageFileName, KnownDllString;
     PPEB Peb = NtCurrentPeb();
     BOOLEAN IsDotNetImage = FALSE;
+    BOOLEAN IsCorILOnlyImage = FALSE;
     BOOLEAN FreeCurDir = FALSE;
     //HANDLE CompatKey;
     PRTL_USER_PROCESS_PARAMETERS ProcessParameters;
@@ -2581,13 +2587,20 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     Status = LdrpInitializeExecutionOptions(&ImagePathName, Peb, &OptionsKey);
 
     /* Check if this is a .NET executable */
-    if (RtlImageDirectoryEntryToData(Peb->ImageBaseAddress,
-                                     TRUE,
-                                     IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR,
-                                     &ComSectionSize))
+    CorHeader = RtlImageDirectoryEntryToData(Peb->ImageBaseAddress,
+                                             TRUE,
+                                             IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR,
+                                             &ComSectionSize);
+    if (CorHeader)
     {
         /* Remember this for later */
         IsDotNetImage = TRUE;
+        if (ComSectionSize >= sizeof(*CorHeader) &&
+            CorHeader->cb >= sizeof(*CorHeader) &&
+            (CorHeader->Flags & COMIMAGE_FLAGS_ILONLY))
+        {
+            IsCorILOnlyImage = TRUE;
+        }
     }
 
     /* Save the NTDLL Base address */
@@ -3122,12 +3135,6 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 
     }
 
-    if (IsDotNetImage)
-    {
-        /* FIXME */
-        DPRINT1("We don't support .NET applications yet\n");
-    }
-
     if (NtHeader->OptionalHeader.Subsystem == IMAGE_SUBSYSTEM_WINDOWS_GUI ||
         NtHeader->OptionalHeader.Subsystem == IMAGE_SUBSYSTEM_WINDOWS_CUI)
     {
@@ -3178,6 +3185,34 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 
     /* Walk the IAT and load all the DLLs */
     ImportStatus = LdrpWalkImportDescriptor(LdrpDefaultPath.Buffer, LdrpImageEntry);
+
+    if (NT_SUCCESS(ImportStatus) && IsCorILOnlyImage)
+    {
+        PVOID MscoreeBaseAddress;
+        PVOID FunctionAddress;
+
+        Status = LdrLoadDll(NULL, NULL, &MscoreeString, &MscoreeBaseAddress);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("LDR: Unable to load %wZ for a managed image, Status=0x%08lx\n", &MscoreeString, Status);
+            return Status;
+        }
+
+        Status = LdrGetProcedureAddress(MscoreeBaseAddress,
+                                        &CorExeMainName,
+                                        0,
+                                        &FunctionAddress);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("LDR: Unable to find %Z in %wZ, Status=0x%08lx\n", &CorExeMainName, &MscoreeString, Status);
+            return Status;
+        }
+
+        LdrpCorImageEntryPoint = (PVOID)((ULONG_PTR)Peb->ImageBaseAddress +
+                                         NtHeader->OptionalHeader.AddressOfEntryPoint);
+        LdrpCorExeMainFunction = FunctionAddress;
+        LdrpImageEntry->EntryPoint = FunctionAddress;
+    }
 
     /* Check if relocation is needed */
     if (Peb->ImageBaseAddress != (PVOID)NtHeader->OptionalHeader.ImageBase)
@@ -3617,6 +3652,17 @@ RtlpUserThreadFilter(
     return Filter ? Filter(ExceptionInfo) : EXCEPTION_CONTINUE_SEARCH;
 }
 
+PVOID
+NTAPI
+LdrpGetThreadStartAddress(
+    _In_ PVOID StartAddress)
+{
+    if (LdrpCorExeMainFunction && StartAddress == LdrpCorImageEntryPoint)
+        return LdrpCorExeMainFunction;
+
+    return StartAddress;
+}
+
 VOID
 NTAPI
 RtlpUserThreadStart(
@@ -3624,6 +3670,8 @@ RtlpUserThreadStart(
     _In_ PVOID Parameter)
 {
     NTSTATUS Status = STATUS_SUCCESS;
+
+    StartAddress = LdrpGetThreadStartAddress(StartAddress);
 
     _SEH2_TRY
     {

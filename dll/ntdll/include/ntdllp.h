@@ -583,6 +583,11 @@ ChpeRtlUserThreadStart(
 
 #endif /* _M_ARM64 */
 
+PVOID
+NTAPI
+LdrpGetThreadStartAddress(
+    PVOID StartAddress);
+
 VOID
 NTAPI
 RtlpUserThreadStart(

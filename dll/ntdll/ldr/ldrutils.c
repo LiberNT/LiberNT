@@ -1391,7 +1391,7 @@ SkipCheck:
                                   &ImageInformation,
                                   sizeof(ImageInformation),
                                   NULL)) &&
-        !ImageInformation.ImageContainsCode)
+        (!ImageInformation.ImageContainsCode || ImageInformation.ComPlusNativeReady))
     {
         DataImage = TRUE;
         Status = STATUS_SUCCESS;
