@@ -580,12 +580,13 @@ CODE_SEG("INIT")
 static
 VOID
 HalppDumpExtendedCapabilities(
-    _In_ PUCHAR EcamBase,
+    _In_ ULONGLONG EcamPhysBase,
     _In_ ULONG Bus,
     _In_ ULONG Device,
     _In_ ULONG Function,
     _In_ UCHAR StartBus)
 {
+    PHYSICAL_ADDRESS PhysAddr;
     PUCHAR DeviceBase;
     ULONG CapHeader;
     USHORT CapId;
@@ -596,10 +597,13 @@ HalppDumpExtendedCapabilities(
     PUCHAR Sn;
 
     /* Calculate device base in ECAM space */
-    DeviceBase = EcamBase +
-                 ((ULONG)(Bus - StartBus) << 20) +
-                 ((ULONG)Device << 15) +
-                 ((ULONG)Function << 12);
+    PhysAddr.QuadPart = EcamPhysBase +
+                        ((ULONGLONG)(Bus - StartBus) << 20) +
+                        ((ULONG)Device << 15) +
+                        ((ULONG)Function << 12);
+    DeviceBase = (PUCHAR)HalpMapPhysicalMemory64(PhysAddr, 1);
+    if (!DeviceBase)
+        return;
 
     /* Extended capabilities start at offset 0x100 */
     Offset = 0x100;
@@ -621,6 +625,8 @@ HalppDumpExtendedCapabilities(
                 break;
 
             case 0x0003: /* Device Serial Number */
+                if (Offset > 0x1000 - 12)
+                    break;
                 SerialNumber = *(volatile ULONGLONG *)(DeviceBase + Offset + 4);
                 Sn = (PUCHAR)&SerialNumber;
                 DbgPrint("    Capabilities: [%03x] Device Serial Number"
@@ -640,6 +646,8 @@ HalppDumpExtendedCapabilities(
         if (NextOffset == 0) break;
         Offset = NextOffset;
     }
+
+    HalpUnmapVirtualAddress(DeviceBase, 1);
 }
 
 CODE_SEG("INIT")
@@ -652,7 +660,7 @@ HalppDumpDevice(
     _In_ ULONG Device,
     _In_ ULONG Function,
     _In_ PPCI_COMMON_CONFIG PciData,
-    _In_opt_ PUCHAR EcamBase,
+    _In_ ULONGLONG EcamPhysBase,
     _In_ UCHAR EcamStartBus)
 {
     UCHAR HeaderType;
@@ -743,9 +751,9 @@ HalppDumpDevice(
     HalppDumpCapabilities(BusHandler, PciSlot, PciData);
 
     /* Dump PCIe extended capabilities if ECAM is available */
-    if (EcamBase)
+    if (EcamPhysBase)
     {
-        HalppDumpExtendedCapabilities(EcamBase, Bus, Device, Function,
+        HalppDumpExtendedCapabilities(EcamPhysBase, Bus, Device, Function,
                                       EcamStartBus);
     }
 }
@@ -765,11 +773,10 @@ HalpAcpiPcieInitializeExtendedConfig(VOID)
     PDESCRIPTION_HEADER McfgHeader;
     PMCFG_ALLOCATION McfgAlloc;
     ULONG McfgEntries;
-    PUCHAR EcamBase = NULL;
     UCHAR EcamStartBus = 0;
+    UCHAR EcamEndBus = 0;
     ULONGLONG EcamPhysBase = 0;
-    ULONG EcamPages = 0;
-    PHYSICAL_ADDRESS PhysAddr;
+    ULONGLONG EcamBusBase;
     BOOLEAN WildcardSegment = FALSE;
     ULONG VendorDword;
     USHORT VendorWord;
@@ -796,24 +803,12 @@ HalpAcpiPcieInitializeExtendedConfig(VOID)
             /* Use the first allocation entry */
             EcamPhysBase = McfgAlloc->BaseAddress;
             EcamStartBus = McfgAlloc->StartBusNumber;
+            EcamEndBus = McfgAlloc->EndBusNumber;
 
             /* Check if wildcard segment was used */
             if (McfgAlloc->PciSegmentGroup == 0)
             {
                 WildcardSegment = TRUE;
-            }
-
-            /* Calculate pages needed: 4K per function, 256 buses max */
-            EcamPages = (ULONG)(((ULONGLONG)(McfgAlloc->EndBusNumber -
-                         McfgAlloc->StartBusNumber + 1) << 20) >> PAGE_SHIFT);
-
-            /* Map the ECAM region */
-            PhysAddr.QuadPart = EcamPhysBase;
-            EcamBase = (PUCHAR)HalpMapPhysicalMemory64(PhysAddr, EcamPages);
-            if (!EcamBase)
-            {
-                DbgPrint("HAL: Failed to map ECAM region at %llx\n",
-                         EcamPhysBase);
             }
         }
     }
@@ -828,6 +823,7 @@ HalpAcpiPcieInitializeExtendedConfig(VOID)
         /* Setup a temporary bus handler for this bus */
         RtlCopyMemory(&TempHandler, &HalpFakePciBusHandler, sizeof(BUS_HANDLER));
         TempHandler.BusNumber = Bus;
+        EcamBusBase = (Bus >= EcamStartBus && Bus <= EcamEndBus) ? EcamPhysBase : 0;
 
         for (Device = 0; Device < 32; Device++)
         {
@@ -857,14 +853,14 @@ HalpAcpiPcieInitializeExtendedConfig(VOID)
                     {
                         /* Single-function device: dump it and move to next device */
                         HalppDumpDevice(&TempHandler, PciSlot, Bus, Device,
-                                        Function, PciData, EcamBase, EcamStartBus);
+                                        Function, PciData, EcamBusBase, EcamStartBus);
                         break;
                     }
                 }
 
                 /* Dump this device/function */
                 HalppDumpDevice(&TempHandler, PciSlot, Bus, Device, Function,
-                                PciData, EcamBase, EcamStartBus);
+                                PciData, EcamBusBase, EcamStartBus);
             }
         }
     }
@@ -896,12 +892,6 @@ HalpAcpiPcieInitializeExtendedConfig(VOID)
         {
             DbgPrint("HAL:   ECAM note: callers used wildcard segment selection.\n");
         }
-    }
-
-    /* Unmap ECAM if it was mapped */
-    if (EcamBase)
-    {
-        HalpUnmapVirtualAddress(EcamBase, EcamPages);
     }
 
     /* Print footer */
