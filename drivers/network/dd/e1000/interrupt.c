@@ -159,6 +159,8 @@ NextReceiveDescriptor:
         /* Clear out these interrupts */
         InterruptPending &= ~(E1000_IMS_TXD_LOW | E1000_IMS_TXDW | E1000_IMS_TXQE);
 
+        NdisDprAcquireSpinLock(&Adapter->TransmitLock);
+
         while ((Adapter->TxFull || Adapter->LastTxDesc != Adapter->CurrentTxDesc) && NumPackets < ARRAYSIZE(AckPackets))
         {
             TransmitDescriptor = Adapter->TransmitDescriptors + Adapter->LastTxDesc;
@@ -180,6 +182,8 @@ NextReceiveDescriptor:
                 break;
             }
         }
+
+        NdisDprReleaseSpinLock(&Adapter->TransmitLock);
 
         if (NumPackets)
         {

@@ -79,6 +79,7 @@ typedef struct _E1000_ADAPTER
     ULONG CurrentTxDesc;
     ULONG LastTxDesc;
     BOOLEAN TxFull;
+    NDIS_SPIN_LOCK TransmitLock;
 
 
     /* Receive */

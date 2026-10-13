@@ -42,6 +42,8 @@ MiniportHalt(
     /* Finally, free other resources (Ports, IO ranges,...) */
     NICReleaseIoResources(Adapter);
 
+    NdisFreeSpinLock(&Adapter->TransmitLock);
+
     /* Destroy the adapter context */
     NdisFreeMemory(Adapter, sizeof(*Adapter), 0);
 }
@@ -94,6 +96,7 @@ MiniportInitialize(
 
     RtlZeroMemory(Adapter, sizeof(*Adapter));
     Adapter->AdapterHandle = MiniportAdapterHandle;
+    NdisAllocateSpinLock(&Adapter->TransmitLock);
 
     /* Notify NDIS of some characteristics of our NIC */
     NdisMSetAttributesEx(MiniportAdapterHandle,
