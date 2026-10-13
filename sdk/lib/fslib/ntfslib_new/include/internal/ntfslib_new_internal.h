@@ -477,6 +477,9 @@ NtfsWriteVolumeContext(_In_opt_ void* Context,
                        _In_ ULONG Length,
                        _Inout_ PUCHAR Buffer);
 
+NTSTATUS
+NtfsFlushVolumeContext(_In_opt_ void* Context);
+
 #ifdef __cplusplus
 }
 #endif
@@ -694,6 +697,8 @@ public:
     NTSTATUS WriteVolume(_In_    ULONGLONG Offset,
                          _In_    ULONG Length,
                          _Inout_ PUCHAR Buffer);
+
+    NTSTATUS FlushVolume();
 
     NTSTATUS
     Initialize(_In_ PUCHAR BootSectorData,
@@ -1811,7 +1816,8 @@ NtfsGenerateShortName(
      DirtyPageTableDump                   = 0x1F,
      TransactionTableDump                 = 0x20,
      UpdateRecordDataInRoot               = 0x21,
-     UpdateRecordDataInAllocationBuffer   = 0x22
+     UpdateRecordDataInAllocationBuffer   = 0x22,
+     ZeroEndOfFileRecord                  = 0x25
  };
 
  typedef struct NtfsLogRecord
@@ -2114,6 +2120,7 @@ typedef class LogFileService
 public:
     ULONG ClientMajorVersion;
     ULONG ClientMinorVersion;
+    BOOLEAN VolumeRecovered = FALSE;
 
     LogFileService(_In_ PVolume TargetVolume);
     ~LogFileService();
@@ -2130,6 +2137,7 @@ private:
 
     PLfsRestartPage RestartPage1;
     PLfsRestartPage RestartPage2;
+    PLfsRestartPage SelectedRestartPage = NULL;
 
     // Call when creating LFS Object
     NTSTATUS PerformFileSystemRecovery();

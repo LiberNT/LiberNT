@@ -315,6 +315,16 @@ Volume::Initialize(_In_ PUCHAR BootSectorData,
         IsReadOnly = TRUE;
         Status = STATUS_SUCCESS;
     }
+    else if (NT_SUCCESS(Status) && LFS->VolumeRecovered)
+    {
+        delete MFT;
+        MFT = new(PagedPool, TAG_MFT) MasterFileTable(this,
+                                                      PartitionBootSector->MFTLCN,
+                                                      PartitionBootSector->MFTMirrLCN,
+                                                      PartitionBootSector->ClustersPerFileRecord);
+        if (!MFT)
+            return STATUS_INSUFFICIENT_RESOURCES;
+    }
 
     return Status;
 }

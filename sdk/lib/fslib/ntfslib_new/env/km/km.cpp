@@ -951,6 +951,18 @@ NtfsReadVolumeContext(_In_opt_ void* Context,
 }
 
 NTSTATUS
+NtfsFlushVolumeContext(_In_opt_ void* Context)
+{
+    PDEVICE_OBJECT DeviceObject;
+
+    DeviceObject = Context ? static_cast<PDEVICE_OBJECT>(Context) : PartDeviceObj;
+    if (!DeviceObject)
+        return STATUS_INVALID_PARAMETER;
+
+    return NtfsCacheFlushAll(DeviceObject);
+}
+
+NTSTATUS
 NtfsWriteVolumeContext(_In_opt_ void* Context,
                        _In_ ULONG SectorBytes,
                        _In_ ULONGLONG Offset,

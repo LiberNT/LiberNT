@@ -4560,6 +4560,7 @@ PrintUsage(const char* Program)
             "  %s [--show-metadata] --ea IMAGE PATH\n"
             "  %s [--show-metadata] --security IMAGE PATH\n"
             "  %s [--show-metadata] --basic IMAGE PATH\n"
+            "  %s --recover IMAGE\n"
             "  %s --set-label IMAGE LABEL\n"
             "  %s --set-basic IMAGE PATH CREATION ACCESS WRITE CHANGE ATTRS\n"
             "  %s --set-security IMAGE PATH SOURCE\n"
@@ -4589,6 +4590,7 @@ PrintUsage(const char* Program)
             "  %s [--show-metadata] --streams IMAGE PATH\n"
             "  %s [--show-metadata] [--writable] IMAGE MOUNTPOINT"
             " [FUSE options]\n",
+            Program,
             Program,
             Program,
             Program,
@@ -4953,6 +4955,29 @@ main(int Argc, char** Argv)
         Result = PrintBasicInformation(
             &State,
             Argv[First + 2]);
+        CloseImage(&State);
+        return Result;
+    }
+
+    if (strcmp(Argv[First], "--recover") == 0)
+    {
+        if (First + 2 != Argc || ShowMetadata)
+        {
+            PrintUsage(Argv[0]);
+            return 2;
+        }
+        Status = OpenImageWritable(Argv[First + 1], &State);
+        if (!NT_SUCCESS(Status))
+        {
+            fprintf(stderr,
+                    "%s: ntfslib status 0x%08" PRIx32 " (%s)\n",
+                    Argv[First + 1],
+                    (uint32_t)Status,
+                    strerror(NtStatusToErrno(Status)));
+            return 1;
+        }
+        Result = NtfsVolumeIsReadOnly(State.Volume) ? 3 : 0;
+        printf("%s\n", Result ? "read-only" : "writable");
         CloseImage(&State);
         return Result;
     }

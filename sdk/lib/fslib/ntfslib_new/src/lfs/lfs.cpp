@@ -177,6 +177,24 @@ LogFileService::InitializeLFS()
                                 &LogFileEmpty);
         if (!NT_SUCCESS(Status))
             goto Done;
+        if (!LogFileEmpty)
+        {
+            LogFileEmpty = TRUE;
+            for (ULONG Index = 0; Index < LogFileDataSize; Index++)
+            {
+                if (LogFileData[Index] != 0xff)
+                {
+                    LogFileEmpty = FALSE;
+                    break;
+                }
+            }
+            if (LogFileEmpty)
+            {
+                Status = PerformFileSystemRecovery();
+                if (!NT_SUCCESS(Status))
+                    goto Done;
+            }
+        }
         if (LogFileEmpty)
         {
             ClientMajorVersion = 0;
@@ -253,6 +271,26 @@ LogFileService::InitializeLFS()
     ClientMajorVersion = SelectedPage->MajorVersion;
     ClientMinorVersion = SelectedPage->MinorVersion;
 
+    if (ClientMajorVersion == 2 && ClientMinorVersion == 0)
+    {
+        SelectedRestartPage = SelectedPage;
+        Status = PerformFileSystemRecovery();
+        SelectedRestartPage = NULL;
+        RestartPage1 = NULL;
+        RestartPage2 = NULL;
+        delete[] LogFileData;
+        LogFileData = NULL;
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("Log recovery failed (Status %lx)\n", Status);
+            Status = STATUS_LOG_BLOCK_VERSION;
+            goto Done;
+        }
+        ClientMajorVersion = 0;
+        ClientMinorVersion = 0;
+        goto Done;
+    }
+
     if (!IsSupportedClientVersion())
     {
         DPRINT1("Client version not supported! (%ld.%ld)\n", ClientMajorVersion, ClientMinorVersion);
@@ -264,30 +302,10 @@ LogFileService::InitializeLFS()
         goto Done;
     }
 
-    // Perform file system recovery.
-    Status = PerformFileSystemRecovery();
-
-    if (!NT_SUCCESS(Status))
-        DPRINT1("Failed to perform self-healing!\n");
-
 Done:
     delete LogFile;
     LogFile = NULL;
     return Status;
-}
-
-NTSTATUS
-LogFileService::PerformFileSystemRecovery()
-{
-    /* Scan $LogFile and the file system for issues.
-     *     - If gBugCheckOnCorrupt is FALSE (default):
-     *         Fix found issues, if possible.
-     *     - If gBugCheckOnCorrupt is TRUE:
-     *         Bugcheck on found issues.
-     */
-
-    DPRINT1("PerformFileSystemRecovery() is a STUB!\n");
-    return STATUS_SUCCESS;
 }
 
 NTSTATUS

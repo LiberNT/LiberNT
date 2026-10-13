@@ -196,6 +196,15 @@ NtfsReadVolumeContext(_In_opt_ void* Context,
 }
 
 NTSTATUS
+NtfsFlushVolumeContext(_In_opt_ void* Context)
+{
+    IO_STATUS_BLOCK IoStatus;
+
+    UNREFERENCED_PARAMETER(Context);
+    return NtFlushBuffersFile(VolumeHandle, &IoStatus);
+}
+
+NTSTATUS
 NtfsWriteVolumeContext(_In_opt_ void* Context,
                        _In_ ULONG BytesPerSector,
                        _In_ ULONGLONG Offset,

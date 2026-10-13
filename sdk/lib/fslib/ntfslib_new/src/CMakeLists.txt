@@ -28,6 +28,7 @@ target_sources(ntfslib_new PRIVATE
     filerecord/filerecord.cpp
     filerecord/fixup.cpp
     lfs/lfs.cpp
+    lfs/recovery.cpp
     mft/get.cpp
     mft/create.cpp
     mft/mft.cpp

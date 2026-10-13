@@ -56,3 +56,9 @@ Volume::WriteVolume(_In_    ULONGLONG Offset,
                                   Length,
                                   Buffer);
 }
+
+NTSTATUS
+Volume::FlushVolume()
+{
+    return NtfsFlushVolumeContext(IoContext);
+}

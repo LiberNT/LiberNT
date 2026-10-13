@@ -251,6 +251,15 @@ NtfsWriteVolume(_In_ ULONGLONG Offset,
 }
 
 extern "C" NTSTATUS
+NtfsFlushVolumeContext(_In_opt_ void* Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    if (NtfsImageFd < 0)
+        return STATUS_INVALID_DEVICE_STATE;
+    return fsync(NtfsImageFd) == 0 ? STATUS_SUCCESS : STATUS_INVALID_DEVICE_STATE;
+}
+
+extern "C" NTSTATUS
 NtfsReadVolumeContext(_In_opt_ void* Context,
                       _In_ ULONG BytesPerSector,
                       _In_ ULONGLONG Offset,

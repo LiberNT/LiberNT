@@ -45,6 +45,7 @@ add_library(ntfslib_linux STATIC
     "${NTFSLIB_ROOT}/src/filerecord/filerecord.cpp"
     "${NTFSLIB_ROOT}/src/filerecord/fixup.cpp"
     "${NTFSLIB_ROOT}/src/lfs/lfs.cpp"
+    "${NTFSLIB_ROOT}/src/lfs/recovery.cpp"
     "${NTFSLIB_ROOT}/src/mft/get.cpp"
     "${NTFSLIB_ROOT}/src/mft/create.cpp"
     "${NTFSLIB_ROOT}/src/mft/mft.cpp"
