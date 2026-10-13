@@ -131,6 +131,8 @@ add_compile_options(-Wunused-comparison -Wunused-result)
 # FIXME: Revisit this to see if we even need these levels
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_options(-O2 -DNDEBUG=)
+    add_compile_options(-Wno-unused-variable)
+    add_compile_options(-Wno-unused-but-set-variable)
 else()
     if(OPTIMIZE STREQUAL "1")
         add_compile_options(-Os)
