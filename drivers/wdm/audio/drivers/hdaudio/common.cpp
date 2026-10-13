@@ -365,13 +365,15 @@ CAdapterCommon::ChooseSubdeviceName(UCHAR DefaultDevice, UCHAR Wave, OUT LPWSTR 
         L"eOther"             // 0xF
     };
 
-    if (Wave)
+    UCHAR Ordinal = ++m_SubdeviceNames[Wave ? 1 : 0][DefaultDevice];
+
+    if (Ordinal > 1)
     {
-        RtlStringCchPrintfW(Buffer, RTL_NUMBER_OF(Buffer), L"%s%s", DeviceTypes[DefaultDevice], L"Wave");
+        RtlStringCchPrintfW(Buffer, RTL_NUMBER_OF(Buffer), L"%s%u%s", DeviceTypes[DefaultDevice], Ordinal, Wave ? L"Wave" : L"Topo");
     }
     else
     {
-        RtlStringCchPrintfW(Buffer, RTL_NUMBER_OF(Buffer), L"%s%s", DeviceTypes[DefaultDevice], L"Topo");
+        RtlStringCchPrintfW(Buffer, RTL_NUMBER_OF(Buffer), L"%s%s", DeviceTypes[DefaultDevice], Wave ? L"Wave" : L"Topo");
     }
     LPWSTR Name = (LPWSTR)ExAllocatePoolZero(NonPagedPool, (wcslen(Buffer) + 1) * sizeof(WCHAR), TAG_HDAUDIO);
     if (!Name)
@@ -990,21 +992,6 @@ CAdapterCommon::Initialize(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PRESO
         return Status;
     }
 
-    // register waveout connection
-    Status = PcRegisterPhysicalConnection(DeviceObject, m_WaveRTOutPortUnknown, 1, m_TopoOutPortUnknown, 0);
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("HDAUDIO: PcRegisterPhysicalConnection failed with %x\n", Status);
-        delete OutNode;
-        if (InputNodes)
-            ExFreePool(InputNodes);
-        if (OutputNodes)
-            ExFreePool(OutputNodes);
-        if (PinNodes)
-            ExFreePool(PinNodes);
-        return Status;
-    }
-
     if (PinNodes)
         ExFreePool(PinNodes);
     PinNodes = NULL;
@@ -1037,24 +1024,6 @@ CAdapterCommon::Initialize(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PRESO
             if (PinNodes)
                 ExFreePool(PinNodes);
             return Status;
-        }
-
-        // register wavein connection when the codec exposes a capture path
-        if (m_TopoInPortUnknown && m_WaveRTInPortUnknown)
-        {
-            Status = PcRegisterPhysicalConnection(DeviceObject, m_TopoInPortUnknown, 0, m_WaveRTInPortUnknown, 1);
-            if (!NT_SUCCESS(Status))
-            {
-                DPRINT1("HDAUDIO: PcRegisterPhysicalConnection failed with %x\n", Status);
-                delete OutNode;
-                if (InputNodes)
-                    ExFreePool(InputNodes);
-                if (OutputNodes)
-                    ExFreePool(OutputNodes);
-                if (PinNodes)
-                    ExFreePool(PinNodes);
-                return Status;
-            }
         }
     }
 
@@ -1137,6 +1106,12 @@ CAdapterCommon::ProcessDacNodes(
     CFunctionGroupNode *OutNode = (CFunctionGroupNode *)Node;
     NTSTATUS Status;
 
+    if (m_WaveRTOutPortUnknown)
+    {
+        m_WaveRTOutPortUnknown->Release();
+        m_WaveRTOutPortUnknown = NULL;
+    }
+
     for (ULONG NodeIndex = 0; NodeIndex < DacNodeCount; NodeIndex++)
     {
         // Set GPIO registers (required by some codecs)
@@ -1194,6 +1169,12 @@ CAdapterCommon::ProcessAdcNodes(
 {
     CFunctionGroupNode *OutNode = (CFunctionGroupNode *)Node;
     NTSTATUS Status;
+
+    if (m_WaveRTInPortUnknown)
+    {
+        m_WaveRTInPortUnknown->Release();
+        m_WaveRTInPortUnknown = NULL;
+    }
 
     for (ULONG NodeIndex = 0; NodeIndex < AdcNodeCount; NodeIndex++)
     {
@@ -1626,7 +1607,7 @@ CAdapterCommon::ProcessInputNodes(
         // retrieve pin configuration
         PIN_CONFIGURATION_DEFAULT PinConfiguration;
         Status = OutNode->GetPinConfigurationDefault(PinNodes[NodeIndex], &PinConfiguration);
-        if (!NT_SUCCESS(Status) || PinConfiguration.DefaultDevice < 0x8)
+        if (!NT_SUCCESS(Status) || PinConfiguration.DefaultDevice < 0x8 || PinConfiguration.PortConnectivity == 0x1)
         {
             // ignoring
             DPRINT1("Ignoring Pin %u DefaultDevice %u\n", PinNodes[NodeIndex], PinConfiguration.DefaultDevice);
@@ -1706,7 +1687,7 @@ CAdapterCommon::ProcessInputNodes(
         if (FilteredInputNodeCount && PinsOfSameTypeCount)
         {
             // process input nodes
-            Status = ProcessAdcNodes(DeviceObject, Irp, ResourceList, 0x0A,
+            Status = ProcessAdcNodes(DeviceObject, Irp, ResourceList, (UCHAR)DeviceType,
                                      FilteredInputNodeCount, FilteredInputNodes, (PVOID)OutNode);
             if (!NT_SUCCESS(Status))
             {
@@ -1800,6 +1781,25 @@ CAdapterCommon::BuildInstallFilter(
             DPRINT1("HDAUDIO: InstallDevice failed with %x\n", Status);
             return Status;
         }
+
+        PUNKNOWN *WavePort = bOutput ? &m_WaveRTOutPortUnknown : &m_WaveRTInPortUnknown;
+        PUNKNOWN *TopoPort = bOutput ? &m_TopoOutPortUnknown : &m_TopoInPortUnknown;
+
+        if (*WavePort)
+        {
+            if (bOutput)
+                Status = PcRegisterPhysicalConnection(DeviceObject, *WavePort, 1, *TopoPort, 0);
+            else
+                Status = PcRegisterPhysicalConnection(DeviceObject, *TopoPort, 0, *WavePort, 1);
+            if (!NT_SUCCESS(Status))
+            {
+                DPRINT1("HDAUDIO: PcRegisterPhysicalConnection failed with %x\n", Status);
+            }
+            (*WavePort)->Release();
+            *WavePort = NULL;
+        }
+        (*TopoPort)->Release();
+        *TopoPort = NULL;
     }
     else
     {
