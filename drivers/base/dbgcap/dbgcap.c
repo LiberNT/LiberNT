@@ -7,6 +7,8 @@
 
 #include <ntddk.h>
 #include <wdmsec.h>
+#include <ndk/kdfuncs.h>
+#include <wdbgexts.h>
 #include <drivers/dbgcap.h>
 
 #define NDEBUG
@@ -28,8 +30,13 @@ typedef struct _DBGCAP_CONTEXT
     KSPIN_LOCK Lock;
     KDPC Dpc;
     KEVENT DataEvent;
+    PCHAR *KernelLog;
+    PULONG KernelLogSize;
+    PCHAR *KernelLogWritePointer;
+    PULONG KernelLogRolloverCount;
     BOOLEAN Registered;
     BOOLEAN Opened;
+    BOOLEAN Seeded;
 } DBGCAP_CONTEXT, *PDBGCAP_CONTEXT;
 
 static DBGCAP_CONTEXT DbgCap;
@@ -85,30 +92,17 @@ DbgCapRingCopy(
 
 static
 VOID
-DbgCapPrintCallback(
-    _In_ PSTRING Output,
-    _In_ ULONG ComponentId,
-    _In_ ULONG Level)
+DbgCapAppend(
+    _Inout_ PDBGCAP_RECORD Header,
+    _In_reads_bytes_(Length) const CHAR *Text,
+    _In_ USHORT Length)
 {
-    DBGCAP_RECORD Header;
-    USHORT Length;
-    ULONG Size, Oldest;
-    KIRQL OldIrql;
-    BOOLEAN Wake;
+    ULONG Size = DBGCAP_RECORD_SIZE(Length), Oldest;
     static const UCHAR Padding[8] = { 0 };
 
-    Length = min(Output->Length, DBGCAP_MAX_TEXT);
-    Size = DBGCAP_RECORD_SIZE(Length);
+    Header->Size = Size;
+    Header->Length = Length;
 
-    RtlZeroMemory(&Header, sizeof(Header));
-    Header.Size = Size;
-    Header.ProcessId = HandleToUlong(PsGetCurrentProcessId());
-    KeQuerySystemTimePrecise(&Header.SystemTime);
-    Header.ComponentId = ComponentId;
-    Header.Level = Level;
-    Header.Length = Length;
-
-    OldIrql = DbgCapAcquire();
     while (DbgCap.Used + Size > DBGCAP_RING_SIZE)
     {
         DbgCapRingCopy(DbgCap.Tail, &Oldest, sizeof(Oldest));
@@ -121,10 +115,131 @@ DbgCapPrintCallback(
             DbgCap.Lost++;
         }
     }
-    DbgCapRingWrite(&Header, FIELD_OFFSET(DBGCAP_RECORD, Text));
-    DbgCapRingWrite(Output->Buffer, Length);
+    DbgCapRingWrite(Header, FIELD_OFFSET(DBGCAP_RECORD, Text));
+    DbgCapRingWrite(Text, Length);
     DbgCapRingWrite(Padding, Size - FIELD_OFFSET(DBGCAP_RECORD, Text) - Length);
     DbgCap.Unread += Size;
+}
+
+static
+VOID
+DbgCapSeed(
+    _In_ LARGE_INTEGER SystemTime)
+{
+    DBGCAP_RECORD Header;
+    PCHAR Log, End, Write, Source;
+    ULONG LogSize, Available;
+    USHORT Length;
+
+    if (DbgCap.Seeded)
+        return;
+    DbgCap.Seeded = TRUE;
+
+    if (!DbgCap.KernelLog)
+        return;
+
+    Log = *DbgCap.KernelLog;
+    LogSize = *DbgCap.KernelLogSize;
+    Write = *DbgCap.KernelLogWritePointer;
+    if (!Log || !LogSize || Write < Log || Write >= Log + LogSize)
+        return;
+    End = Log + LogSize;
+
+    if (*DbgCap.KernelLogRolloverCount == 0)
+    {
+        Source = Log;
+        Available = (ULONG)(Write - Log);
+    }
+    else
+    {
+        Source = Write;
+        Available = LogSize;
+    }
+
+    RtlZeroMemory(&Header, sizeof(Header));
+    Header.SystemTime = SystemTime;
+    Header.ComponentId = DPFLTR_DEFAULT_ID;
+    Header.Level = DPFLTR_INFO_LEVEL;
+
+    while (Available)
+    {
+        Length = (USHORT)min(min(Available, DBGCAP_MAX_TEXT), (ULONG)(End - Source));
+        DbgCapAppend(&Header, Source, Length);
+        Available -= Length;
+        Source += Length;
+        if (Source == End)
+            Source = Log;
+    }
+}
+
+static
+PVOID
+DbgCapDataPointer(
+    _In_ const ULPTR64 *Field)
+{
+    ULONG_PTR Pointer;
+
+    RtlCopyMemory(&Pointer, Field, sizeof(Pointer));
+    return (PVOID)Pointer;
+}
+
+static
+VOID
+DbgCapLocateKernelLog(VOID)
+{
+    DBGKD_GET_VERSION64 Version;
+    PLIST_ENTRY Head, Entry;
+    PDBGKD_DEBUG_DATA_HEADER64 Header;
+    PKDDEBUGGER_DATA64 Data;
+    NTSTATUS Status;
+
+    Status = KdSystemDebugControl(SysDbgQueryVersion, NULL, 0, &Version, sizeof(Version), NULL, KernelMode);
+    if (!NT_SUCCESS(Status) || !(Version.Flags & DBGKD_VERS_FLAG_DATA))
+        return;
+
+    Head = (PLIST_ENTRY)(ULONG_PTR)Version.DebuggerDataList;
+    if (!Head)
+        return;
+
+    for (Entry = Head->Flink; Entry != Head; Entry = Entry->Flink)
+    {
+        Header = CONTAINING_RECORD(Entry, DBGKD_DEBUG_DATA_HEADER64, List);
+        if (Header->OwnerTag != KDBG_TAG ||
+            Header->Size < RTL_SIZEOF_THROUGH_FIELD(KDDEBUGGER_DATA64, KdPrintBufferSize))
+        {
+            continue;
+        }
+
+        Data = CONTAINING_RECORD(Header, KDDEBUGGER_DATA64, Header);
+        DbgCap.KernelLogSize = DbgCapDataPointer(&Data->KdPrintBufferSize);
+        DbgCap.KernelLogWritePointer = DbgCapDataPointer(&Data->KdPrintWritePointer);
+        DbgCap.KernelLogRolloverCount = DbgCapDataPointer(&Data->KdPrintRolloverCount);
+        if (DbgCap.KernelLogSize && DbgCap.KernelLogWritePointer && DbgCap.KernelLogRolloverCount)
+            DbgCap.KernelLog = DbgCapDataPointer(&Data->KdPrintCircularBufferPtr);
+        return;
+    }
+}
+
+static
+VOID
+DbgCapPrintCallback(
+    _In_ PSTRING Output,
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level)
+{
+    DBGCAP_RECORD Header;
+    KIRQL OldIrql;
+    BOOLEAN Wake;
+
+    RtlZeroMemory(&Header, sizeof(Header));
+    Header.ProcessId = HandleToUlong(PsGetCurrentProcessId());
+    KeQuerySystemTimePrecise(&Header.SystemTime);
+    Header.ComponentId = ComponentId;
+    Header.Level = Level;
+
+    OldIrql = DbgCapAcquire();
+    DbgCapSeed(Header.SystemTime);
+    DbgCapAppend(&Header, Output->Buffer, min(Output->Length, DBGCAP_MAX_TEXT));
     Wake = DbgCap.Opened;
     DbgCapRelease(OldIrql);
 
@@ -306,6 +421,8 @@ DriverEntry(
     UNICODE_STRING DosName = RTL_CONSTANT_STRING(DBGCAP_DOS_DEVICE_NAME);
     UNICODE_STRING Sddl = RTL_CONSTANT_STRING(L"D:P(A;;GA;;;SY)(A;;GA;;;BA)");
     PDEVICE_OBJECT DeviceObject;
+    LARGE_INTEGER SystemTime;
+    KIRQL OldIrql;
     NTSTATUS Status;
 
     UNREFERENCED_PARAMETER(RegistryPath);
@@ -313,6 +430,8 @@ DriverEntry(
     DbgCap.Ring = ExAllocatePoolWithTag(NonPagedPool, DBGCAP_RING_SIZE, DBGCAP_TAG);
     if (!DbgCap.Ring)
         return STATUS_INSUFFICIENT_RESOURCES;
+
+    DbgCapLocateKernelLog();
 
     KeInitializeSpinLock(&DbgCap.Lock);
     KeInitializeDpc(&DbgCap.Dpc, DbgCapDpcRoutine, NULL);
@@ -360,6 +479,11 @@ DriverEntry(
         return Status;
     }
     DbgCap.Registered = TRUE;
+
+    KeQuerySystemTimePrecise(&SystemTime);
+    OldIrql = DbgCapAcquire();
+    DbgCapSeed(SystemTime);
+    DbgCapRelease(OldIrql);
 
     return STATUS_SUCCESS;
 }

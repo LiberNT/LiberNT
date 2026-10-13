@@ -81,6 +81,16 @@ KdpNotifyPrintCallbacks(
     KdpReleasePrintCallbackLock(OldIrql);
 }
 
+static
+USHORT
+NTAPI
+KdpBuildTimestampPrefix(
+    _Out_writes_bytes_(BufferSize) PCHAR Buffer,
+    _In_ SIZE_T BufferSize,
+    _In_reads_bytes_(TextLength) PCHAR Text,
+    _In_ USHORT TextLength,
+    _In_ BOOLEAN UserText);
+
 VOID
 NTAPI
 KdpPrintToCallbacks(
@@ -91,8 +101,11 @@ KdpPrintToCallbacks(
     _In_ KPROCESSOR_MODE PreviousMode)
 {
     CHAR CapturedString[KD_PRINT_MAX_BYTES];
+    CHAR OutputBuffer[KD_PRINT_MAX_BYTES + KD_PRINT_PREFIX_BYTES];
+    STRING OutputString;
+    USHORT PrefixLength;
 
-    if (InterlockedCompareExchange(&KdpPrintCallbackCount, 0, 0) == 0 ||
+    if (!KdpDebuggerDataListHead.Flink ||
         NtQueryDebugFilterState(ComponentId, Level) == (NTSTATUS)FALSE)
     {
         return;
@@ -115,6 +128,16 @@ KdpPrintToCallbacks(
     }
 
     KdpNotifyPrintCallbacks(String, Length, ComponentId, Level);
+
+    PrefixLength = KdpBuildTimestampPrefix(OutputBuffer,
+                                           KD_PRINT_PREFIX_BYTES,
+                                           String,
+                                           Length,
+                                           PreviousMode != KernelMode);
+    RtlCopyMemory(OutputBuffer + PrefixLength, String, Length);
+    OutputString.Buffer = OutputBuffer;
+    OutputString.Length = OutputString.MaximumLength = PrefixLength + Length;
+    KdLogDbgPrint(&OutputString);
 }
 
 NTSTATUS
@@ -920,5 +943,6 @@ KdpDprintf(
     KdLogDbgPrint(&String);
 
     /* Send it to the debugger directly */
-    KdpPrintString(&String);
+    if (KdDebuggerEnabled)
+        KdpPrintString(&String);
 }

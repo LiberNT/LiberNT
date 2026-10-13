@@ -532,10 +532,10 @@ wmain(
         {
             if (SinceBoot && StartedService)
             {
-                fputws(L"dbglog: the DbgCap driver was not loaded at boot, nothing was captured before now\n", stderr);
+                fputws(L"dbglog: the DbgCap driver was not loaded at boot, printing what the kernel debug log still holds\n", stderr);
             }
-            else if (SinceBoot &&
-                     !DeviceIoControl(Device, IOCTL_DBGCAP_REWIND, NULL, 0, NULL, 0, &Returned, NULL))
+            if (SinceBoot &&
+                !DeviceIoControl(Device, IOCTL_DBGCAP_REWIND, NULL, 0, NULL, 0, &Returned, NULL))
             {
                 fwprintf(stderr, L"dbglog: cannot read the output captured since boot (error %lu)\n", GetLastError());
             }

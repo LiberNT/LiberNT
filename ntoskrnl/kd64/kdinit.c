@@ -474,6 +474,9 @@ KdInitSystem(
     {
         /* Disable debugger */
         KdDebuggerNotPresent = TRUE;
+
+        if (LoaderBlock)
+            KdpPrintBanner();
     }
 
     /* Return initialized */
