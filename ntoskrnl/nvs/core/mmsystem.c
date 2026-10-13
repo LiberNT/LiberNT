@@ -142,7 +142,7 @@ MiSystemAttachFrameWindow(
     if (Db->DirectFrames >= Db->FrameCount || Db->Window.SlotCount != 0)
         return STATUS_SUCCESS;
 
-    Status = MiPtPinSystemRange(&System->SystemSpace, Base, (ULONG64)SlotCount << PAGE_SHIFT);
+    Status = MiPtPinSystemRange(&System->SystemSpace, Base, (ULONG64)SlotCount << PAGE_SHIFT, NULL, NULL);
     if (!NT_SUCCESS(Status))
         return Status;
 

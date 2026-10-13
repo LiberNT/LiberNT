@@ -93,6 +93,7 @@ MmAllocateContiguousNodeMemory(
                                                         : ((Protect & PAGE_WRITECOMBINE) ? MiCacheWriteCombined
                                                                                          : MiCacheFull);
     ULONG Attempts = 0;
+    ULONG WaitAttempts = 0;
     NTSTATUS Status;
     ULONG64 Va;
 
@@ -103,8 +104,9 @@ MmAllocateContiguousNodeMemory(
         Status = MiAllocateContiguousMemory(&MiSystem, NumberOfBytes, (ULONG64)LowestAcceptableAddress.QuadPart,
                                             (ULONG64)HighestAcceptableAddress.QuadPart,
                                             (ULONG64)BoundaryAddressMultiple.QuadPart, CacheType, &Va);
-    } while (Status == STATUS_INSUFFICIENT_RESOURCES && Attempts++ < 2 &&
-             MiBalanceMemory(&MiSystem, &MiProcessManager) != 0);
+    } while ((Status == STATUS_NO_MEMORY && NT_SUCCESS(MiWaitForMemory(Status, &WaitAttempts))) ||
+             (Status == STATUS_INSUFFICIENT_RESOURCES && Attempts++ < 2 &&
+              MiBalanceMemory(&MiSystem, &MiProcessManager) != 0));
 
     return NT_SUCCESS(Status) ? (PVOID)(ULONG_PTR)Va : NULL;
 }

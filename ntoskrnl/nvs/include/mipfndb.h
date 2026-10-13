@@ -15,7 +15,7 @@ typedef ULONG_PTR MI_FRAME_NUMBER, *PMI_FRAME_NUMBER;
 #define MI_PFN_SHARDS             16
 #define MI_PFN_ZONES              2
 #define MI_PFN_SHARD_SHIFT        10
-#define MI_PFN_LIST_SHARD_SHIFT   4
+#define MI_PFN_LIST_SHARD_SHIFT   10
 #define MI_PFN_CPU_CACHES         64
 #define MI_PFN_CACHE_DEPTH        64
 #define MI_PFN_CACHE_BATCH        32

@@ -129,7 +129,7 @@ MiSystemPtesInitialize(
 
         while (Va < End)
         {
-            Status = MiPtPinSystemRange(&System->SystemSpace, Va, PAGE_SIZE);
+            Status = MiPtPinSystemRange(&System->SystemSpace, Va, PAGE_SIZE, NULL, NULL);
             if (!NT_SUCCESS(Status))
             {
                 MiSystemRegionDelete(System, Ptes->Vad, TRUE);
@@ -153,6 +153,9 @@ MiSystemPtesUninitialize(
 
     if (Ptes == NULL)
         return;
+
+    while (Ptes->SpareTableCount != 0)
+        MiPfnFreePage(&System->Pfn, Ptes->SpareTable[--Ptes->SpareTableCount]);
 
     for (Cpu = 0; Cpu < MI_SYSPTE_CPU_CACHES; Cpu++)
     {
@@ -269,7 +272,9 @@ MiReserveSystemPtesEx(
         MI_SPIN_ACQUIRE(&Ptes->PopulateLock, &OldIrql);
         Status = MiPtPinSystemRange(&System->SystemSpace,
                                     Ptes->Base + (Index << PAGE_SHIFT),
-                                    Pages << PAGE_SHIFT);
+                                    Pages << PAGE_SHIFT,
+                                    Ptes->SpareTable,
+                                    &Ptes->SpareTableCount);
         MI_SPIN_RELEASE(&Ptes->PopulateLock, OldIrql);
         if (!NT_SUCCESS(Status))
         {
@@ -280,6 +285,45 @@ MiReserveSystemPtesEx(
     MI_ATOMIC_ADD64(&Ptes->FreePages, -(LONG64)Pages);
     *Base = Ptes->Base + (Index << PAGE_SHIFT);
     return STATUS_SUCCESS;
+}
+
+ULONG
+MiSystemPtesRefillTables(
+    _Inout_ PMI_SYSTEM System)
+{
+    PMI_SYSTEM_PTES Ptes = System->SystemPtes;
+    ULONG Added = 0;
+
+    if (Ptes == NULL)
+        return 0;
+
+    while (MI_PEEK(Ptes->SpareTableCount) < MI_SYSPTE_SPARE_TABLES)
+    {
+        ULONG Frame = MiPfnAllocatePage(&System->Pfn, MI_ALLOCATE_ZEROED);
+        BOOLEAN Stored = FALSE;
+        KIRQL OldIrql;
+
+        if (Frame == MI_FRAME_INVALID)
+            break;
+
+        MI_SPIN_ACQUIRE(&Ptes->PopulateLock, &OldIrql);
+        if (Ptes->SpareTableCount < MI_SYSPTE_SPARE_TABLES)
+        {
+            Ptes->SpareTable[Ptes->SpareTableCount++] = Frame;
+            Stored = TRUE;
+        }
+        MI_SPIN_RELEASE(&Ptes->PopulateLock, OldIrql);
+
+        if (!Stored)
+        {
+            MiPfnFreePage(&System->Pfn, Frame);
+            break;
+        }
+
+        Added++;
+    }
+
+    return Added;
 }
 
 ULONG64

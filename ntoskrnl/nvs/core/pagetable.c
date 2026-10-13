@@ -24,6 +24,8 @@ MiPtWalk(
     _In_ BOOLEAN Create,
     _In_ ULONG TargetLevel,
     _In_ ULONG AllocationFlags,
+    _Inout_updates_opt_(*SpareCount) PULONG SpareFrames,
+    _Inout_opt_ PULONG SpareCount,
     _Out_opt_ PULONG TableFrame)
 {
     PMI_SYSTEM System = Space->System;
@@ -52,6 +54,9 @@ MiPtWalk(
                 return NULL;
 
             Table = MiPfnAllocatePage(&System->Pfn, MI_ALLOCATE_ZEROED | AllocationFlags);
+            if (Table == MI_FRAME_INVALID && SpareCount != NULL && *SpareCount != 0)
+                Table = SpareFrames[--*SpareCount];
+
             if (Table == MI_FRAME_INVALID)
             {
                 Entry = MiArchPteRead(Slot);
@@ -162,7 +167,7 @@ MiPtLookup(
     _In_ ULONG64 VirtualAddress,
     _Out_opt_ PULONG TableFrame)
 {
-    return MiPtWalk(Space, VirtualAddress, FALSE, 0, 0, TableFrame);
+    return MiPtWalk(Space, VirtualAddress, FALSE, 0, 0, NULL, NULL, TableFrame);
 }
 
 PMI_PTE
@@ -171,19 +176,19 @@ MiPtEnsure(
     _In_ ULONG64 VirtualAddress,
     _Out_ PULONG TableFrame)
 {
-    return MiPtWalk(Space, VirtualAddress, TRUE, 0, 0, TableFrame);
+    return MiPtWalk(Space, VirtualAddress, TRUE, 0, 0, NULL, NULL, TableFrame);
 }
 
 PMI_PTE
 MiPtLookupLevel(PMI_ADDRESS_SPACE Space, ULONG64 VirtualAddress, ULONG Level, PULONG TableFrame)
 {
-    return MiPtWalk(Space, VirtualAddress, FALSE, Level, 0, TableFrame);
+    return MiPtWalk(Space, VirtualAddress, FALSE, Level, 0, NULL, NULL, TableFrame);
 }
 
 PMI_PTE
 MiPtEnsureLevel(PMI_ADDRESS_SPACE Space, ULONG64 VirtualAddress, ULONG Level, PULONG TableFrame)
 {
-    return MiPtWalk(Space, VirtualAddress, TRUE, Level, 0, TableFrame);
+    return MiPtWalk(Space, VirtualAddress, TRUE, Level, 0, NULL, NULL, TableFrame);
 }
 
 ULONG64
@@ -458,7 +463,9 @@ NTSTATUS
 MiPtPinSystemRange(
     _Inout_ PMI_ADDRESS_SPACE Space,
     _In_ ULONG64 VirtualAddress,
-    _In_ ULONG64 Length)
+    _In_ ULONG64 Length,
+    _Inout_updates_opt_(*SpareCount) PULONG SpareFrames,
+    _Inout_opt_ PULONG SpareCount)
 {
     ULONG64 End = VirtualAddress + Length;
     ULONG64 Va = VirtualAddress;
@@ -467,7 +474,7 @@ MiPtPinSystemRange(
     {
         ULONG TableFrame;
 
-        if (MiPtWalk(Space, Va, TRUE, 0, MI_ALLOCATE_NO_RECLAIM, &TableFrame) == NULL)
+        if (MiPtWalk(Space, Va, TRUE, 0, MI_ALLOCATE_NO_RECLAIM, SpareFrames, SpareCount, &TableFrame) == NULL)
             return STATUS_NO_MEMORY;
 
         MI_ATOMIC_OR8(&Space->System->Pfn.Pfn[TableFrame].Flags, MI_PFN_FLAG_PINNED);

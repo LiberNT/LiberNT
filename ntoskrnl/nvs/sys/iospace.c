@@ -93,6 +93,7 @@ MiAllocateContiguousMemory(
     ULONG First;
     ULONG64 Base;
     ULONG64 i;
+    NTSTATUS Status;
 
     *VirtualAddress = 0;
 
@@ -112,8 +113,8 @@ MiAllocateContiguousMemory(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    Base = MiReserveSystemPtes(System, (ULONG)Pages + 1);
-    if (Base != 0)
+    Status = MiReserveSystemPtesEx(System, (ULONG)Pages + 1, &Base);
+    if (NT_SUCCESS(Status))
     {
         MiArchPteWrite(MiPtLookup(Space, Base, NULL), (MI_PTE)Pages << 1);
         Base += PAGE_SIZE;
@@ -139,7 +140,7 @@ MiAllocateContiguousMemory(
             MiPfnShareDecrement(&System->Pfn, First + (ULONG)i, TRUE);
 
         MiReturnCommit(Space, (LONG64)Pages);
-        return STATUS_INSUFFICIENT_RESOURCES;
+        return NT_SUCCESS(Status) ? STATUS_INSUFFICIENT_RESOURCES : Status;
     }
 
     *VirtualAddress = Base;

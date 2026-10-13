@@ -80,6 +80,9 @@ MiWaitForMemory(
     if (++*Attempts > 64 || KeGetCurrentIrql() > APC_LEVEL)
         return STATUS_NO_MEMORY;
 
+    if (MiSystemPtesRefillTables(&MiSystem) != 0)
+        return STATUS_SUCCESS;
+
     Available = MiPfnAvailablePages(&MiSystem.Pfn);
     if (Available > MiPfnListCount(&MiSystem.Pfn, MiPageStandby))
     {

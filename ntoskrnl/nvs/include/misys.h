@@ -15,6 +15,7 @@
 #define MI_SYSPTE_CLASS_MAX_PAGES (1u << (MI_SYSPTE_CLASSES - 1))
 #define MI_SYSPTE_CACHE_DEPTH     16
 #define MI_SYSPTE_CPU_CACHES      64
+#define MI_SYSPTE_SPARE_TABLES    32
 
 #define MI_KSTACK_CACHE_DEPTH     4
 
@@ -51,6 +52,8 @@ typedef struct _MI_SYSTEM_PTES
     MI_SPINLOCK Lock;
     MI_VAD_ROOT Allocations;
     MI_SPINLOCK PopulateLock;
+    ULONG SpareTableCount;
+    ULONG SpareTable[MI_SYSPTE_SPARE_TABLES];
     volatile LONG64 FreePages;
     ULONG CacheCount;
     ULONG DefaultStackPages;
@@ -90,6 +93,7 @@ NTSTATUS MiSystemProtect(_Inout_ PMI_SYSTEM System, _In_ ULONG64 VirtualAddress,
 
 NTSTATUS MiSystemPtesInitialize(_Inout_ PMI_SYSTEM System, _In_ ULONG64 PageCount, _In_ ULONG CpuCount);
 VOID MiSystemPtesUninitialize(_Inout_ PMI_SYSTEM System);
+ULONG MiSystemPtesRefillTables(_Inout_ PMI_SYSTEM System);
 ULONG64 MiReserveSystemPtes(_Inout_ PMI_SYSTEM System, _In_ ULONG PageCount);
 NTSTATUS MiReserveSystemPtesEx(_Inout_ PMI_SYSTEM System, _In_ ULONG PageCount, _Out_ PULONG64 Base);
 ULONG64 MiSystemPteCacheHits(_In_ PMI_SYSTEM System);
