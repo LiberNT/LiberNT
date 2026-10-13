@@ -221,10 +221,19 @@ CreateSymbolicLinkW(IN LPCWSTR lpSymlinkFileName,
     NTSTATUS Status;
     ULONG dwCreateOptions;
     DWORD dwErr;
+    ULONG Privilege = SE_CREATE_SYMBOLIC_LINK_PRIVILEGE;
+    PVOID PrivilegeState = NULL;
 
     if(!lpSymlinkFileName || !lpTargetFileName || (dwFlags | SYMBOLIC_LINK_FLAG_DIRECTORY) != SYMBOLIC_LINK_FLAG_DIRECTORY)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    Status = RtlAcquirePrivilege(&Privilege, 1, 0, &PrivilegeState);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
         return FALSE;
     }
 
@@ -377,6 +386,7 @@ Cleanup:
     if(hSymlink)
         NtClose(hSymlink);
 
+    RtlReleasePrivilege(PrivilegeState);
     RtlFreeUnicodeString(&SymlinkFileName);
     if (bAllocatedTarget)
     {
