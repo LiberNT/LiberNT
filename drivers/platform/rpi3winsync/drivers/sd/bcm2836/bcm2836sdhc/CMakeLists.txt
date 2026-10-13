@@ -10,7 +10,7 @@ get_filename_component(_rpi3winsync_root "${CMAKE_CURRENT_SOURCE_DIR}/../../../.
 target_include_directories(bcm2836sdhc BEFORE PRIVATE
     ${_rpi3winsync_root}/reactos-compat
     ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_options(bcm2836sdhc PRIVATE -Wno-unknown-pragmas -Wno-missing-braces)
+target_compile_options(bcm2836sdhc PRIVATE -Wno-unknown-pragmas -Wno-missing-braces -Wno-microsoft-string-literal-from-predefined -Wno-unused-value)
 target_link_libraries(bcm2836sdhc libcntpr ${PSEH_LIB})
 add_importlibs(bcm2836sdhc sdport ntoskrnl hal)
 add_cd_file(TARGET bcm2836sdhc DESTINATION reactos/system32/drivers FOR all)

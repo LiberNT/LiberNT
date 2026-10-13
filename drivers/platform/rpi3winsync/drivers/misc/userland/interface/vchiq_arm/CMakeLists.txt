@@ -19,6 +19,7 @@ target_compile_definitions(vchiq_arm_kern PRIVATE
     WIN32DLL_EXPORTS
     USE_VCHIQ_ARM
     WDF_DEVICE_NO_WDMSEC_H)
+target_compile_options(vchiq_arm_kern PRIVATE -Wno-unknown-pragmas -Wno-pragma-pack)
 
 target_link_libraries(vchiq_arm_kern
     vcos_win32_kern

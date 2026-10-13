@@ -33,7 +33,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
         -Wno-unknown-pragmas
         -Wno-microsoft-anon-tag
         -Wno-missing-braces
-        -Wno-write-strings)
+        -Wno-write-strings
+        -Wno-unused-private-field)
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")

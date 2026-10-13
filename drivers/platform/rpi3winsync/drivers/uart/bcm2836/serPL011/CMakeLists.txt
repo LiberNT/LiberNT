@@ -23,7 +23,7 @@ target_include_directories(SerPL011 BEFORE PRIVATE
     ${_rpi3winsync_root}/drivers/include
     ${_rpi3winsync_root}/drivers/shared/acpi
     ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_options(SerPL011 PRIVATE -Wno-unknown-pragmas -Wno-missing-braces)
+target_compile_options(SerPL011 PRIVATE -Wno-unknown-pragmas -Wno-missing-braces -Wno-pragma-pack -Wno-unused-variable -Wno-unused-but-set-variable)
 target_link_libraries(SerPL011 sercx2stubs ntoskrnl_vista libcntpr ${PSEH_LIB})
 add_importlibs(SerPL011 ntoskrnl hal)
 add_cd_file(TARGET SerPL011 DESTINATION reactos/system32/drivers FOR all)

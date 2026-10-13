@@ -24,7 +24,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
     target_compile_options(bcm2836pwm PRIVATE
         -Wno-unknown-pragmas
         -Wno-microsoft-anon-tag
-        -Wno-missing-braces)
+        -Wno-missing-braces
+        -Wno-unused-but-set-variable)
 endif()
 
 target_link_libraries(bcm2836pwm ntoskrnl_vista libcntpr ${PSEH_LIB})

@@ -37,7 +37,11 @@ target_include_directories(pi_miniuart BEFORE PRIVATE
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(pi_miniuart PRIVATE
         -Wno-unknown-pragmas
-        -Wno-missing-braces)
+        -Wno-missing-braces
+        -Wno-pragma-pack
+        -Wno-unused-value
+        -Wno-unused-const-variable
+        -Wno-microsoft-string-literal-from-predefined)
 endif()
 
 target_link_libraries(pi_miniuart ntoskrnl_vista rtlver libcntpr ${PSEH_LIB})

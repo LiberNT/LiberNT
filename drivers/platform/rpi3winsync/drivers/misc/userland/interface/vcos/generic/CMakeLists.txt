@@ -28,5 +28,6 @@ target_compile_definitions(vcos_win32_kern_generic PRIVATE
     WIN32DLL_EXPORTS
     VCOS_PROVIDER
     WDF_DEVICE_NO_WDMSEC_H)
+target_compile_options(vcos_win32_kern_generic PRIVATE -Wno-unknown-pragmas)
 
 set_target_properties(vcos_win32_kern_generic PROPERTIES FOLDER "Drivers/Platform/Raspberry Pi 3")

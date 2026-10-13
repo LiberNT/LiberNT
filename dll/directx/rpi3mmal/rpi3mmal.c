@@ -1689,7 +1689,6 @@ Rpi3MmalConsumeReadyOutput(
     RPI3_MMAL_OUTPUT_SLOT *Slot;
     BYTE *ReceiveData;
     BOOL QueueBulk = FALSE;
-    UINT32 Token;
     UINT TransferSize;
     UINT Index;
     HRESULT Result = S_OK;

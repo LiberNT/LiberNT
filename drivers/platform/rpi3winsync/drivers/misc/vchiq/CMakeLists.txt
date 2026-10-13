@@ -27,7 +27,10 @@ target_include_directories(vchiq BEFORE PRIVATE
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(vchiq PRIVATE
         -Wno-microsoft-anon-tag
-        -Wno-missing-braces)
+        -Wno-missing-braces
+        -Wno-unknown-pragmas
+        -Wno-pragma-pack
+        -Wno-unused-but-set-variable)
 endif()
 
 target_link_libraries(vchiq ntoskrnl_vista libcntpr ${PSEH_LIB})

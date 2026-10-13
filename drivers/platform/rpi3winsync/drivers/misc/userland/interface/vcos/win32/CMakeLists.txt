@@ -17,6 +17,7 @@ target_compile_definitions(vcos_win32_kern PRIVATE
     WIN32DLL_EXPORTS
     VCOS_PROVIDER
     WDF_DEVICE_NO_WDMSEC_H)
+target_compile_options(vcos_win32_kern PRIVATE -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-unused-but-set-global -Wno-unused-function)
 
 target_link_libraries(vcos_win32_kern
     vcos_win32_kern_generic

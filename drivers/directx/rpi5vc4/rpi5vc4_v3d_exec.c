@@ -3585,8 +3585,6 @@ Rpi5V3dBuildShadowPrimitiveData(
     _In_ ULONG VertexCount,
     _In_ BOOLEAN FlipY)
 {
-    ULONG Index;
-
     Rpi5V3dBuildPrimitiveData(DeviceExtension,
                               Width,
                               Height,

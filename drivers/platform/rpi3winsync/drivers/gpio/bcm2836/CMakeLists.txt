@@ -10,7 +10,7 @@ get_filename_component(_rpi3winsync_root "${CMAKE_CURRENT_SOURCE_DIR}/../../.." 
 target_include_directories(bcmgpio BEFORE PRIVATE
     ${_rpi3winsync_root}/reactos-compat
     ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_options(bcmgpio PRIVATE -Wno-unknown-pragmas -Wno-missing-braces)
+target_compile_options(bcmgpio PRIVATE -Wno-unknown-pragmas -Wno-missing-braces -Wno-pragma-pack)
 target_link_libraries(bcmgpio msgpioclxstub ntoskrnl_vista libcntpr ${PSEH_LIB})
 add_importlibs(bcmgpio ntoskrnl hal)
 add_cd_file(TARGET bcmgpio DESTINATION reactos/system32/drivers FOR all)

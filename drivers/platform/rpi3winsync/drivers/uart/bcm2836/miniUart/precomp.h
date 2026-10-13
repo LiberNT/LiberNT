@@ -25,7 +25,11 @@
 #include <wmidata.h>
 #include "serial.h"
 #include "serialp.h"
+#ifdef __REACTOS__
+#include "Trace.h"
+#else
 #include "trace.h"
+#endif
 
 #define RESHUB_USE_HELPER_ROUTINES
 #include <reshub.h>

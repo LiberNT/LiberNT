@@ -13,7 +13,7 @@ typedef struct _RPI3VC4_DAMAGE
     RECT Rects[RPI3VC4_DAMAGE_RECTS];
 } RPI3VC4_DAMAGE;
 
-static VOID
+static __inline VOID
 Rpi3Vc4AddDamageRect(RPI3VC4_DAMAGE *Damage, const RECT *Rect)
 {
     ULONGLONG Area, BestGrowth = ~(ULONGLONG)0;

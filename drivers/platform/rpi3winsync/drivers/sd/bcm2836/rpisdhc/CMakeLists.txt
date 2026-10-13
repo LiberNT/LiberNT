@@ -10,7 +10,7 @@ get_filename_component(_rpi3winsync_root "${CMAKE_CURRENT_SOURCE_DIR}/../../../.
 target_include_directories(rpisdhc BEFORE PRIVATE
     ${_rpi3winsync_root}/reactos-compat
     ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_options(rpisdhc PRIVATE -Wno-unknown-pragmas -Wno-missing-braces)
+target_compile_options(rpisdhc PRIVATE -Wno-unknown-pragmas -Wno-missing-braces -Wno-unused-variable -Wno-unused-but-set-variable -Wno-reorder-ctor)
 target_link_libraries(rpisdhc libcntpr ${PSEH_LIB})
 add_importlibs(rpisdhc sdport ntoskrnl hal)
 add_cd_file(TARGET rpisdhc DESTINATION reactos/system32/drivers FOR all)

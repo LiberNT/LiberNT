@@ -25,7 +25,9 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(rpiq PRIVATE
         -Wno-unknown-pragmas
         -Wno-microsoft-anon-tag
-        -Wno-missing-braces)
+        -Wno-missing-braces
+        -Wno-pragma-pack
+        -Wno-unused-but-set-variable)
 endif()
 
 target_link_libraries(rpiq ntoskrnl_vista libcntpr ${PSEH_LIB})

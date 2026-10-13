@@ -441,7 +441,6 @@ static int vc4_rcl_surface_setup(struct vc4_exec_info *exec,
 	uint8_t format = VC4_GET_FIELD(surf->bits,
 				       VC4_LOADSTORE_TILE_BUFFER_FORMAT);
 	int cpp;
-	int ret;
 
 	if (surf->flags & ~VC4_SUBMIT_RCL_SURFACE_READ_IS_FULL_RES) {
 		DRM_ERROR("Extra flags set\n");

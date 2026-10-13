@@ -7744,15 +7744,6 @@ Rpi5OglEndTransformFeedback(VOID)
     State->TransformFeedbackActive = FALSE;
 }
 
-static BOOL
-Rpi5OglGl2QueryTargetValid(
-    _In_ GLenum Target)
-{
-    return Target == GL_SAMPLES_PASSED ||
-           Target == GL_PRIMITIVES_GENERATED ||
-           Target == GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN;
-}
-
 static GLuint *
 Rpi5OglGl2ActiveQueryName(
     _Inout_ PRPI5VC4_OGL_GL2_STATE State,

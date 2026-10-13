@@ -11,15 +11,15 @@ static const ULONG Rpi5HdmiTopologyPinCount = 2;
 
 static KSDATARANGE_AUDIO Rpi5HdmiPcmDataRange =
 {
-    {
+    {{
         sizeof(KSDATARANGE_AUDIO),
         0,
         RPI5HDMI_BLOCK_ALIGN,
         0,
-        STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
-        STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
-        STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
-    },
+        {STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO)},
+        {STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM)},
+        {STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)}
+    }},
     RPI5HDMI_CHANNELS,
     RPI5HDMI_BITS_PER_SAMPLE,
     RPI5HDMI_BITS_PER_SAMPLE,
@@ -33,15 +33,15 @@ static PKSDATARANGE Rpi5HdmiPcmDataRanges[] =
 };
 
 static KSDATARANGE Rpi5HdmiBridgeDataRange =
-{
+{{
     sizeof(KSDATARANGE),
     0,
     0,
     0,
-    STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
-    STATICGUIDOF(KSDATAFORMAT_SUBTYPE_ANALOG),
-    STATICGUIDOF(KSDATAFORMAT_SPECIFIER_NONE)
-};
+    {STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO)},
+    {STATICGUIDOF(KSDATAFORMAT_SUBTYPE_ANALOG)},
+    {STATICGUIDOF(KSDATAFORMAT_SPECIFIER_NONE)}
+}};
 
 static PKSDATARANGE Rpi5HdmiBridgeDataRanges[] =
 {
@@ -467,7 +467,7 @@ static PCPIN_DESCRIPTOR Rpi5HdmiWavePins[] =
             KSPIN_COMMUNICATION_SINK,
             &KSCATEGORY_AUDIO,
             NULL,
-            0
+            {0}
         }
     },
     {
@@ -486,7 +486,7 @@ static PCPIN_DESCRIPTOR Rpi5HdmiWavePins[] =
             KSPIN_COMMUNICATION_NONE,
             &KSCATEGORY_AUDIO,
             NULL,
-            0
+            {0}
         }
     }
 };
@@ -536,7 +536,7 @@ static PCPIN_DESCRIPTOR Rpi5HdmiTopologyPins[] =
             KSPIN_COMMUNICATION_NONE,
             &KSCATEGORY_AUDIO,
             NULL,
-            0
+            {0}
         }
     },
     {
@@ -555,7 +555,7 @@ static PCPIN_DESCRIPTOR Rpi5HdmiTopologyPins[] =
             KSPIN_COMMUNICATION_NONE,
             &KSNODETYPE_SPDIF_INTERFACE,
             NULL,
-            0
+            {0}
         }
     }
 };

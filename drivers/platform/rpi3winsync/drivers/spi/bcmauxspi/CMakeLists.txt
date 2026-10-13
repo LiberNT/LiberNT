@@ -11,7 +11,7 @@ target_include_directories(bcmauxspi BEFORE PRIVATE
     ${_rpi3winsync_root}/reactos-compat
     ${_rpi3winsync_root}/drivers/mailbox/bcm2836
     ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_options(bcmauxspi PRIVATE -Wno-unknown-pragmas -Wno-missing-braces)
+target_compile_options(bcmauxspi PRIVATE -Wno-unknown-pragmas -Wno-missing-braces -Wno-pragma-pack -Wno-unused-variable -Wno-unused-private-field)
 target_link_libraries(bcmauxspi spbcxstubs ntoskrnl_vista libcntpr ${PSEH_LIB})
 add_importlibs(bcmauxspi ntoskrnl hal)
 add_cd_file(TARGET bcmauxspi DESTINATION reactos/system32/drivers FOR all)
