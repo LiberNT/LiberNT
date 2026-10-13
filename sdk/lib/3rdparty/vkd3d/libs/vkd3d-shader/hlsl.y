@@ -4221,6 +4221,40 @@ static bool intrinsic_fwidth(struct hlsl_ctx *ctx,
     return !!add_user_call(ctx, func, params, loc);
 }
 
+static bool intrinsic_isfinite(struct hlsl_ctx *ctx,
+        const struct parse_initializer *params, const struct vkd3d_shader_location *loc)
+{
+    struct hlsl_ir_function_decl *func;
+    struct hlsl_type *type, *bool_type;
+    char *body;
+
+    static const char template[] =
+            "%s isfinite(%s x)\n"
+            "{\n"
+            "    return (asuint(x) & 0x7f800000) != 0x7f800000;\n"
+            "}";
+
+    if (hlsl_version_lt(ctx, 4, 0))
+    {
+        hlsl_fixme(ctx, loc, "isfinite() below shader model 4.");
+        return false;
+    }
+
+    if (!elementwise_intrinsic_float_convert_args(ctx, params, loc))
+        return false;
+    type = params->args[0]->data_type;
+    bool_type = hlsl_change_base_type(ctx, type, HLSL_TYPE_BOOL);
+
+    if (!(body = hlsl_sprintf_alloc(ctx, template, bool_type->name, type->name)))
+        return false;
+    func = hlsl_compile_internal_function(ctx, "isfinite", body);
+    vkd3d_free(body);
+    if (!func)
+        return false;
+
+    return !!add_user_call(ctx, func, params, loc);
+}
+
 static bool intrinsic_isinf(struct hlsl_ctx *ctx,
         const struct parse_initializer *params, const struct vkd3d_shader_location *loc)
 {
@@ -5614,6 +5648,7 @@ intrinsic_functions[] =
     {"frac",                                1, true,  intrinsic_frac},
     {"frexp",                               2, true,  intrinsic_frexp},
     {"fwidth",                              1, true,  intrinsic_fwidth},
+    {"isfinite",                            1, true,  intrinsic_isfinite},
     {"isinf",                               1, true,  intrinsic_isinf},
     {"ldexp",                               2, true,  intrinsic_ldexp},
     {"length",                              1, true,  intrinsic_length},
