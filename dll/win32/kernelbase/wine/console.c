@@ -104,6 +104,63 @@ static void get_system_dir( WCHAR *dir, UINT size )
 DWORD WINAPI CtrlRoutine( void *arg );
 #endif
 
+#ifdef __REACTOS__
+static BOOL is_client_request_ioctl( DWORD code )
+{
+    switch (code)
+    {
+    case IOCTL_CONDRV_GET_MODE:
+    case IOCTL_CONDRV_SET_MODE:
+    case IOCTL_CONDRV_WRITE_INPUT:
+    case IOCTL_CONDRV_PEEK:
+    case IOCTL_CONDRV_GET_INPUT_INFO:
+    case IOCTL_CONDRV_SET_INPUT_INFO:
+    case IOCTL_CONDRV_FLUSH:
+    case IOCTL_CONDRV_GET_INPUT_COUNT:
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
+static NTSTATUS console_client_request( HANDLE handle, DWORD code, void *in_buff, DWORD in_count,
+                                        void *out_buff, DWORD out_count, IO_STATUS_BLOCK *io )
+{
+    struct
+    {
+        CONDRV_CLIENT_REQUEST header;
+        char data[248];
+    } buffer;
+    CONDRV_CLIENT_REQUEST *request = &buffer.header;
+    NTSTATUS status;
+
+    if (in_count > sizeof(buffer.data) &&
+        !(request = RtlAllocateHeap( GetProcessHeap(), 0, sizeof(*request) + in_count )))
+        return STATUS_NOT_SUPPORTED;
+
+    request->Handle = HandleToULong( handle );
+    request->Code = code;
+    if (in_count) memcpy( request + 1, in_buff, in_count );
+    status = NtDeviceIoControlFile( console_connection, NULL, NULL, NULL, io, IOCTL_CONDRV_CLIENT_REQUEST,
+                                    request, sizeof(*request) + in_count, out_buff, out_count );
+    if (request != &buffer.header) RtlFreeHeap( GetProcessHeap(), 0, request );
+    return status;
+}
+
+static NTSTATUS console_request( HANDLE handle, DWORD code, void *in_buff, DWORD in_count,
+                                 void *out_buff, DWORD out_count, IO_STATUS_BLOCK *io )
+{
+    NTSTATUS status = STATUS_NOT_SUPPORTED;
+
+    if (console_connection && is_client_request_ioctl( code ))
+        status = console_client_request( handle, code, in_buff, in_count, out_buff, out_count, io );
+    if (status == STATUS_NOT_SUPPORTED)
+        status = NtDeviceIoControlFile( handle, NULL, NULL, NULL, io, code, in_buff, in_count,
+                                        out_buff, out_count );
+    return status;
+}
+#endif
+
 static BOOL console_ioctl( HANDLE handle, DWORD code, void *in_buff, DWORD in_count,
                            void *out_buff, DWORD out_count, DWORD *read )
 {
@@ -116,8 +173,12 @@ static BOOL console_ioctl( HANDLE handle, DWORD code, void *in_buff, DWORD in_co
         SetLastError( ERROR_INVALID_ACCESS );
         return FALSE;
     }
+#ifdef __REACTOS__
+    status = console_request( handle, code, in_buff, in_count, out_buff, out_count, &io );
+#else
     status = NtDeviceIoControlFile( handle, NULL, NULL, NULL, &io, code, in_buff, in_count,
                                     out_buff, out_count );
+#endif
     switch( status )
     {
     case STATUS_SUCCESS:
@@ -1988,8 +2049,18 @@ BOOL WINAPI DECLSPEC_HOTPATCH WriteConsoleInputW( HANDLE handle, const INPUT_REC
         return FALSE;
     }
 
+#ifdef __REACTOS__
+    {
+        IO_STATUS_BLOCK io;
+
+        if (!set_ntstatus( console_request( handle, IOCTL_CONDRV_WRITE_INPUT, (void *)buffer,
+                                            count * sizeof(*buffer), NULL, 0, &io )))
+            return FALSE;
+    }
+#else
     if (!DeviceIoControl( handle, IOCTL_CONDRV_WRITE_INPUT, (void *)buffer, count * sizeof(*buffer), NULL, 0, NULL, NULL ))
         return FALSE;
+#endif
 
     if (!written)
     {

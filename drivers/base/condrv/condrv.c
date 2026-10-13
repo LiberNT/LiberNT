@@ -2210,6 +2210,79 @@ CdFastIoServer(
     return TRUE;
 }
 
+static FAST_IO_DEVICE_CONTROL CdFastIoDeviceControl;
+
+static
+BOOLEAN
+CdFastIoClientRequest(
+    _In_opt_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_opt_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength,
+    _Out_ PIO_STATUS_BLOCK IoStatus,
+    _In_ PDEVICE_OBJECT DeviceObject)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    CONDRV_CLIENT_REQUEST Header;
+    PFILE_OBJECT Target;
+    PCD_FILE File;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    IoStatus->Information = 0;
+    if (InputBufferLength < sizeof(Header))
+    {
+        IoStatus->Status = STATUS_INVALID_PARAMETER;
+        return TRUE;
+    }
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+            ProbeForRead(InputBuffer, sizeof(Header), sizeof(UCHAR));
+        RtlCopyMemory(&Header, InputBuffer, sizeof(Header));
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (NT_SUCCESS(Status))
+    {
+        Status = ObReferenceObjectByHandle(UlongToHandle(Header.Handle),
+                                           (ACCESS_MASK)((Header.Code >> 14) & 3),
+                                           *IoFileObjectType,
+                                           PreviousMode,
+                                           (PVOID*)&Target,
+                                           NULL);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        IoStatus->Status = Status;
+        return TRUE;
+    }
+
+    File = Target->FsContext;
+    if (IoGetRelatedDeviceObject(Target) != DeviceObject ||
+        !File || File->Type == CdFileConnection || File->Type == CdFileServer ||
+        !CdFastIoDeviceControl(Target,
+                               TRUE,
+                               (PUCHAR)InputBuffer + sizeof(Header),
+                               InputBufferLength - sizeof(Header),
+                               OutputBuffer,
+                               OutputBufferLength,
+                               Header.Code,
+                               IoStatus,
+                               DeviceObject))
+    {
+        IoStatus->Status = STATUS_NOT_SUPPORTED;
+        IoStatus->Information = 0;
+    }
+
+    ObDereferenceObject(Target);
+    return TRUE;
+}
+
 static
 BOOLEAN
 NTAPI
@@ -2239,8 +2312,15 @@ CdFastIoDeviceControl(
     UNREFERENCED_PARAMETER(Wait);
     UNREFERENCED_PARAMETER(DeviceObject);
 
-    if (!File || File->Type == CdFileConnection)
+    if (!File)
         return FALSE;
+    if (File->Type == CdFileConnection)
+    {
+        if (IoControlCode != IOCTL_CONDRV_CLIENT_REQUEST)
+            return FALSE;
+        return CdFastIoClientRequest(InputBuffer, InputBufferLength, OutputBuffer,
+                                     OutputBufferLength, IoStatus, DeviceObject);
+    }
     if (File->Type == CdFileServer)
     {
         return CdFastIoServer(File->Server, InputBuffer, InputBufferLength, OutputBuffer,
