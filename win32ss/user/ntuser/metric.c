@@ -10,7 +10,9 @@
 #include <win32k.h>
 DBG_DEFAULT_CHANNEL(UserSysparams);
 
+#if DBG
 static BOOL Setup = FALSE;
+#endif
 
 /* FUNCTIONS *****************************************************************/
 
@@ -217,7 +219,9 @@ InitMetrics(VOID)
     if (UserIsCTFIMEEnabled())
         gpsi->dwSRVIFlags |= SRVINFO_CTFIME_ENABLED; /* CTF IME support */
 
+#if DBG
     Setup = TRUE;
+#endif
 
     return TRUE;
 }

@@ -16,7 +16,7 @@
 #ifndef NDEBUG
 #define DPRINT DbgPrint
 #else
-#define DPRINT
+#define DPRINT(...) do { if (0) DbgPrint(__VA_ARGS__); } while (0)
 #endif
 #define DPRINT1 DbgPrint
 

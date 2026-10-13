@@ -112,7 +112,6 @@ C_ASSERT(sizeof(SVGA_MODE_INFORMATION) == 256);
 UCHAR MachDefaultTextColor = COLOR_GRAY;
 
 static ULONG VideoCard = VIDEOCARD_CGA_OR_OTHER;        /* Type of video card installed on the system */
-static USHORT BiosVideoMode = VIDEOMODE_NORMAL_TEXT;    /* Current video mode as known by BIOS */
 static ULONG ScreenWidth = 80;                          /* Screen Width in characters */
 static ULONG ScreenHeight = 25;                         /* Screen Height in characters */
 static ULONG BytesPerScanLine = (80 * 2);               /* Number of bytes per scanline (delta) */
@@ -393,7 +392,6 @@ PcVideoGetDisplayMode(VOID)
         ScreenWidth = VesaVideoModeInformation.WidthInPixels;
         ScreenHeight = VesaVideoModeInformation.HeightInPixels;
         BytesPerScanLine = VesaVideoModeInformation.BytesPerScanLine;
-        BiosVideoMode = Mode;
         DisplayMode = (0x0108 <= Mode && Mode <= 0x010C) ? VideoTextMode : VideoGraphicsMode;
         VesaVideoMode = TRUE;
     }
@@ -408,7 +406,6 @@ PcVideoGetDisplayMode(VOID)
          */
         UCHAR BiosMode = (*(PUCHAR)0x449) & 0x7F; /* Current video mode */
         ASSERT(BiosMode == Mode);
-        BiosVideoMode = Mode;
         TRACE("BIOS mode detected\n");
 
         ScreenWidth = *(PUSHORT)0x44A; /* Number of screen columns */
@@ -423,7 +420,7 @@ PcVideoGetDisplayMode(VOID)
         /* Set the values for the default text mode.
          * If a graphics mode is set, these values will be changed. */
         TRACE("Fallback mode detected\n");
-        BiosVideoMode = VIDEOMODE_NORMAL_TEXT;
+        Mode = VIDEOMODE_NORMAL_TEXT;
         ScreenWidth = 80;
         ScreenHeight = 25;
         BytesPerScanLine = (ScreenWidth * 2);
@@ -432,7 +429,7 @@ PcVideoGetDisplayMode(VOID)
     }
 
     TRACE("This is a %s video mode\n", VesaVideoMode ? "VESA" : "BIOS");
-    TRACE("BiosVideoMode    = 0x%x\n", BiosVideoMode);
+    TRACE("BiosVideoMode    = 0x%x\n", Mode);
     TRACE("DisplayMode      = %sMode\n", DisplayMode == VideoTextMode ? "Text" : "Graphics");
     TRACE("ScreenWidth      = %lu\n", ScreenWidth);
     TRACE("ScreenHeight     = %lu\n", ScreenHeight);
@@ -867,7 +864,6 @@ PcVideoSetMode(USHORT NewMode)
     /* Set the values for the default text modes
      * If they are setting a graphics mode then
      * these values will be changed. */
-    BiosVideoMode = NewMode;
     ScreenWidth = 80;
     ScreenHeight = 25;
     BytesPerScanLine = (ScreenWidth * 2);
@@ -901,7 +897,6 @@ PcVideoSetMode(USHORT NewMode)
         ScreenWidth = 640;
         ScreenHeight = 480;
         BytesPerScanLine = 80;
-        BiosVideoMode = NewMode;
         DisplayMode = VideoGraphicsMode;
 
         return TRUE;
@@ -913,7 +908,6 @@ PcVideoSetMode(USHORT NewMode)
         ScreenWidth = 320;
         ScreenHeight = 200;
         BytesPerScanLine = 320;
-        BiosVideoMode = NewMode;
         DisplayMode = VideoGraphicsMode;
 
         return TRUE;
@@ -930,7 +924,6 @@ PcVideoSetMode(USHORT NewMode)
         ScreenWidth = VesaVideoModeInformation.WidthInPixels;
         ScreenHeight = VesaVideoModeInformation.HeightInPixels;
         BytesPerScanLine = VesaVideoModeInformation.BytesPerScanLine;
-        BiosVideoMode = NewMode;
         DisplayMode = (0x0108 <= NewMode && NewMode <= 0x010C) ? VideoTextMode : VideoGraphicsMode;
         VesaVideoMode = TRUE;
 
@@ -1381,7 +1374,6 @@ PcVideoInitializeBootFramebuffer(
     ScreenWidth = Best.WidthInPixels;
     ScreenHeight = Best.HeightInPixels;
     BytesPerScanLine = Pitch;
-    BiosVideoMode = BestMode | 0x4000;
     DisplayMode = VideoGraphicsMode;
     VesaVideoMode = TRUE;
 
