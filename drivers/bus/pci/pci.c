@@ -389,6 +389,7 @@ PciAcpiEvalMethodInternal(
 
     /* Initialize event for synchronous IRP */
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    IoStatusBlock.Information = 0;
 
     /* Build the IOCTL IRP */
     Irp = IoBuildDeviceIoControlRequest(
