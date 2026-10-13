@@ -31,6 +31,7 @@
 #define KDP_RAW_LOG_VERSION 1
 #define KDP_RAW_LOG_FLAG_ROLLED 0x00000001
 #define KDP_RAW_LOG_FLAG_TRUNCATED 0x00000002
+#define KDP_BOOT_DUMP_FILE_RESERVE (256ULL * 1024 * 1024)
 
 /* CrashControl!CrashDumpEnabled values, matching Windows */
 #define KDP_DUMP_DISABLED 0
@@ -773,6 +774,48 @@ BOOLEAN NTAPI KdpReleaseCrashDumpFile(VOID)
     return TRUE;
 }
 
+static NTSTATUS KdpSizeBootDumpFile(_In_ HANDLE FileHandle)
+{
+    FILE_FS_SIZE_INFORMATION SizeInfo;
+    FILE_ALLOCATION_INFORMATION Allocation;
+    FILE_END_OF_FILE_INFORMATION EndOfFile;
+    IO_STATUS_BLOCK IoStatus;
+    ULONG64 Available;
+    ULONG64 Minimum;
+    ULONG64 Size;
+    NTSTATUS Status;
+
+    Status = ZwQueryVolumeInformationFile(FileHandle, &IoStatus, &SizeInfo, sizeof(SizeInfo), FileFsSizeInformation);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Available = (ULONG64)SizeInfo.AvailableAllocationUnits.QuadPart * SizeInfo.SectorsPerAllocationUnit * SizeInfo.BytesPerSector;
+    if (Available <= KDP_BOOT_DUMP_FILE_RESERVE)
+        return STATUS_DISK_FULL;
+
+    Size = (ULONG64)KdpCrashDumpState.Header->RequiredDumpSpace.QuadPart + KdpCrashDumpState.SummarySize;
+    if (KdpCrashDumpState.DumpType == DUMP_TYPE_FULL)
+        Minimum = Size;
+    else
+        Minimum = DUMP_HEADER64_SIZE + KdpCrashDumpState.SummarySize + PAGE_SIZE;
+
+    Size = min(Size, Available - KDP_BOOT_DUMP_FILE_RESERVE);
+    for (Size = ALIGN_DOWN_BY(Size, PAGE_SIZE); Size >= Minimum; Size = ALIGN_DOWN_BY(Size / 2, PAGE_SIZE))
+    {
+        Allocation.AllocationSize.QuadPart = Size;
+        Status = ZwSetInformationFile(FileHandle, &IoStatus, &Allocation, sizeof(Allocation), FileAllocationInformation);
+        if (!NT_SUCCESS(Status))
+            continue;
+
+        EndOfFile.EndOfFile.QuadPart = Size;
+        Status = ZwSetInformationFile(FileHandle, &IoStatus, &EndOfFile, sizeof(EndOfFile), FileEndOfFileInformation);
+        if (NT_SUCCESS(Status))
+            return STATUS_SUCCESS;
+    }
+
+    return STATUS_DISK_FULL;
+}
+
 BOOLEAN NTAPI KdpInitializeBootPageFileCrashDump(_In_ PCUNICODE_STRING BootDeviceName)
 {
     static const UNICODE_STRING PageFileName = RTL_CONSTANT_STRING(L"\\pagefile.sys");
@@ -783,6 +826,7 @@ BOOLEAN NTAPI KdpInitializeBootPageFileCrashDump(_In_ PCUNICODE_STRING BootDevic
     PDUMP_HEADER64 Header = NULL;
     HANDLE FileHandle = NULL;
     NTSTATUS Status;
+    BOOLEAN Created = FALSE;
     BOOLEAN Result;
     PAGED_CODE();
 
@@ -791,7 +835,7 @@ BOOLEAN NTAPI KdpInitializeBootPageFileCrashDump(_In_ PCUNICODE_STRING BootDevic
     if (!KdpCrashDumpState.CoreInitialized)
         return FALSE;
 
-    KdpCrashDumpInitializationStage = "opening the previous paging file";
+    KdpCrashDumpInitializationStage = "opening the paging file on the boot volume";
     FilePath.Length = 0;
     FilePath.MaximumLength = BootDeviceName->Length + PageFileName.Length + sizeof(UNICODE_NULL);
     FilePath.Buffer = ExAllocatePoolWithTag(PagedPool, FilePath.MaximumLength, TAG_CRASH_DUMP);
@@ -804,13 +848,13 @@ BOOLEAN NTAPI KdpInitializeBootPageFileCrashDump(_In_ PCUNICODE_STRING BootDevic
     RtlAppendUnicodeStringToString(&FilePath, &PageFileName);
 
     InitializeObjectAttributes(&ObjectAttributes, &FilePath, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
-    Status = ZwOpenFile(&FileHandle, FILE_READ_DATA | FILE_WRITE_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus, FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_NO_INTERMEDIATE_BUFFERING);
-    ExFreePoolWithTag(FilePath.Buffer, TAG_CRASH_DUMP);
+    Status = ZwCreateFile(&FileHandle, FILE_READ_DATA | FILE_WRITE_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus, NULL, FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN, FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN_IF, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_NO_INTERMEDIATE_BUFFERING, NULL, 0);
     if (!NT_SUCCESS(Status))
     {
         FileHandle = NULL;
         goto Failure;
     }
+    Created = (IoStatus.Information == FILE_CREATED);
 
     Header = MmAllocateNonCachedMemory(DUMP_HEADER64_SIZE);
     if (Header == NULL)
@@ -819,24 +863,44 @@ BOOLEAN NTAPI KdpInitializeBootPageFileCrashDump(_In_ PCUNICODE_STRING BootDevic
         goto Failure;
     }
 
-    KdpCrashDumpInitializationStage = "reading the previous paging file";
     Offset.QuadPart = 0;
-    Status = ZwReadFile(FileHandle, NULL, NULL, NULL, &IoStatus, Header, DUMP_HEADER64_SIZE, &Offset, NULL);
-    if (NT_SUCCESS(Status) && (IoStatus.Information != DUMP_HEADER64_SIZE))
-        Status = STATUS_END_OF_FILE;
-    if (!NT_SUCCESS(Status))
-        goto Failure;
-
-    if ((Header->Signature == DUMP_SIGNATURE64) && (Header->ValidDump == DUMP_VALID_DUMP64))
+    if (Created)
     {
-        KdpCrashDumpInitializationStage = "keeping the previous crash dump until it is saved";
-        Status = STATUS_DEVICE_BUSY;
-        goto Failure;
+        KdpCrashDumpInitializationStage = "reserving space for the dump on the boot volume";
+        Status = KdpSizeBootDumpFile(FileHandle);
+        if (!NT_SUCCESS(Status))
+            goto Failure;
+
+        RtlZeroMemory(Header, DUMP_HEADER64_SIZE);
+        Status = ZwWriteFile(FileHandle, NULL, NULL, NULL, &IoStatus, Header, DUMP_HEADER64_SIZE, &Offset, NULL);
+        if (NT_SUCCESS(Status))
+            Status = ZwFlushBuffersFile(FileHandle, &IoStatus);
+        if (!NT_SUCCESS(Status))
+            goto Failure;
+    }
+    else
+    {
+        KdpCrashDumpInitializationStage = "reading the previous paging file";
+        Status = ZwReadFile(FileHandle, NULL, NULL, NULL, &IoStatus, Header, DUMP_HEADER64_SIZE, &Offset, NULL);
+        if (NT_SUCCESS(Status) && (IoStatus.Information != DUMP_HEADER64_SIZE))
+            Status = STATUS_END_OF_FILE;
+        if (!NT_SUCCESS(Status))
+            goto Failure;
+
+        if ((Header->Signature == DUMP_SIGNATURE64) && (Header->ValidDump == DUMP_VALID_DUMP64))
+        {
+            KdpCrashDumpInitializationStage = "keeping the previous crash dump until it is saved";
+            Status = STATUS_DEVICE_BUSY;
+            goto Failure;
+        }
     }
 
     MmFreeNonCachedMemory(Header, DUMP_HEADER64_SIZE);
     Result = KdpInitializeCrashDump(FileHandle);
     ZwClose(FileHandle);
+    if (!Result && Created)
+        ZwDeleteFile(&ObjectAttributes);
+    ExFreePoolWithTag(FilePath.Buffer, TAG_CRASH_DUMP);
     return Result;
 
 Failure:
@@ -846,6 +910,10 @@ Failure:
         MmFreeNonCachedMemory(Header, DUMP_HEADER64_SIZE);
     if (FileHandle != NULL)
         ZwClose(FileHandle);
+    if (Created)
+        ZwDeleteFile(&ObjectAttributes);
+    if (FilePath.Buffer != NULL)
+        ExFreePoolWithTag(FilePath.Buffer, TAG_CRASH_DUMP);
     return FALSE;
 }
 
