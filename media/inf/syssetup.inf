@@ -254,6 +254,7 @@ IECopy=16422,Internet Explorer
 [Finalize] ; Executed by RunOnceEx on first normal boot
 ; FIXME: This should be moved to ie.inf,DefaultInstall and executed by [Infs.Always]
 CopyFiles=IECopy
+AddReg=IEAssoc
 RegisterDlls=IEReg,MonoReg
 
 [MonoReg]
@@ -261,6 +262,15 @@ RegisterDlls=IEReg,MonoReg
 
 [IECopy]
 iexplore.exe,..\iexplore.exe,,0x00002000
+
+[IEAssoc]
+HKCR,"ftp\shell\open\command",,,"""%16422%\Internet Explorer\iexplore.exe"" ""%1"""
+HKCR,"gopher\shell\open\command",,,"""%16422%\Internet Explorer\iexplore.exe"" ""%1"""
+HKCR,"http\shell\open\command",,,"""%16422%\Internet Explorer\iexplore.exe"" ""%1"""
+HKCR,"https\shell\open\command",,,"""%16422%\Internet Explorer\iexplore.exe"" ""%1"""
+HKCR,"htmlfile\shell\open\command",,,"""%16422%\Internet Explorer\iexplore.exe"" ""%1"""
+HKCR,"htafile\shell\open\command",,,"""%16422%\Internet Explorer\iexplore.exe"" %1"
+HKCR,"Applications\iexplore.exe\shell\open\command",,,"""%16422%\Internet Explorer\iexplore.exe"" ""%1"""
 
 [IEReg]
 16422,Internet Explorer,iexplore.exe
