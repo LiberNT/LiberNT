@@ -6099,7 +6099,10 @@ DxgkpVidMmCreateAllocationTracked(
     Alloc->ExplicitResidencyNotification = (AllocInfo->Flags.ExplicitResidencyNotification != 0);
     Alloc->Capture            = (AllocInfo->FlagsWddm2.Capture != 0);
     /* The backing of a new swizzled allocation holds no linear content. */
-    Alloc->Swizzled           = (AllocInfo->Flags.Swizzled != 0);
+    Alloc->Swizzled           = (AllocInfo->Flags.Swizzled != 0 &&
+                                 !DxgkCapsCoreInterfaceVersionAtLeast(
+                                      Adapter->MiniportContext->InitData.s.Version,
+                                      DXGK_CAPS_CORE_LEVEL_WDDM_2_0));
     Alloc->BackingLinear      = FALSE;
     Alloc->Resident           = FALSE;
     Alloc->Resource           = NULL;
