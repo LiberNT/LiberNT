@@ -3682,6 +3682,14 @@ static bool NativeSnormFormat(DXGI_FORMAT format)
     }
 }
 
+static bool NativeTexture1DFormat(DXGI_FORMAT format)
+{
+    if (format == DXGI_FORMAT_R1_UNORM || format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM) return false;
+    return format <= DXGI_FORMAT_G8R8_G8B8_UNORM
+            || (format >= DXGI_FORMAT_B5G6R5_UNORM && format <= DXGI_FORMAT_B8G8R8X8_UNORM_SRGB)
+            || format == DXGI_FORMAT_B4G4R4A4_UNORM;
+}
+
 HRESULT STDMETHODCALLTYPE NativeDevice::CheckFormatSupport(DXGI_FORMAT format, UINT *support)
 {
     if (!support) return E_INVALIDARG;
@@ -3730,6 +3738,11 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFormatSupport(DXGI_FORMAT format, U
      * its output-merger role follows from the format itself. */
     if (!(ddi_support & 0x80000000) && NativeDepthResourceFormat(format) != DXGI_FORMAT_UNKNOWN)
         *support |= D3D11_FORMAT_SUPPORT_DEPTH_STENCIL | D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_MIP;
+    if (*support & D3D11_FORMAT_SUPPORT_TEXTURE2D)
+    {
+        if (NativeTexture1DFormat(format)) *support |= D3D11_FORMAT_SUPPORT_TEXTURE1D;
+        if (format != DXGI_FORMAT_NV12) *support |= D3D11_FORMAT_SUPPORT_CPU_LOCKABLE;
+    }
     if (NativeDisplayFormat(format) && (*support & D3D11_FORMAT_SUPPORT_RENDER_TARGET))
         *support |= D3D11_FORMAT_SUPPORT_DISPLAY;
     return *support ? S_OK : E_FAIL;
