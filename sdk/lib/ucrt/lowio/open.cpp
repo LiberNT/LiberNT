@@ -91,12 +91,12 @@ static int __cdecl common_open(
 
     _VALIDATE_RETURN(path != nullptr, EINVAL, -1);
 
-    int fh = -1;
-    int unlock_flag = 0;
-    errno_t error_code = 0;
+    int volatile fh = -1;
+    int volatile unlock_flag = 0;
+    errno_t volatile error_code = 0;
     __try
     {
-        error_code = traits::tsopen_nolock(&unlock_flag, &fh, path, oflag, _SH_DENYNO, pmode, 0);
+        error_code = traits::tsopen_nolock(const_cast<int*>(&unlock_flag), const_cast<int*>(&fh), path, oflag, _SH_DENYNO, pmode, 0);
     }
     __finally
     {
@@ -166,11 +166,11 @@ static errno_t __cdecl common_sopen_dispatch(
     }
 
 
-    int unlock_flag = 0;
-    errno_t error_code = 0;
+    int volatile unlock_flag = 0;
+    errno_t volatile error_code = 0;
     __try
     {
-        error_code = traits::tsopen_nolock(&unlock_flag, pfh, path, oflag, shflag, pmode, secure);
+        error_code = traits::tsopen_nolock(const_cast<int*>(&unlock_flag), pfh, path, oflag, shflag, pmode, secure);
     }
     __finally
     {

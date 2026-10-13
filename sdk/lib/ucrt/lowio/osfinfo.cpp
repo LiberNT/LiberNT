@@ -307,7 +307,7 @@ extern "C" int __cdecl _open_osfhandle(intptr_t const osfhandle, int const sourc
         return -1;
     }
 
-    bool success = false;
+    bool volatile success = false;
     __try
     {
         // The file is open. now set the info in _osfhnd array:

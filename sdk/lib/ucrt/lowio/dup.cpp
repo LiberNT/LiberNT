@@ -55,7 +55,7 @@ static int __cdecl _dup_nolock_internal(int const fh, __crt_cached_ptd_host& ptd
         return -1;
     }
 
-    int return_value = -1;
+    int volatile return_value = -1;
     __try
     {
         return_value = duplicate_osfhnd(fh, new_fh, ptd);
