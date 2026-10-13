@@ -5601,6 +5601,7 @@ NTSTATUS WINAPI wow64_NtUserSystemParametersInfo( UINT *args )
             HIGHCONTRASTW info;
 
             if (info32->cbSize != sizeof(*info32)) return FALSE;
+            if (val == sizeof(*info32)) val = sizeof(info);
             info.cbSize = sizeof(info);
             if (!NtUserSystemParametersInfo( action, val, &info, winini )) return FALSE;
             info32->dwFlags = info.dwFlags;
