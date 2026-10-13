@@ -881,6 +881,7 @@ ClassPnp(
 			return Status;
 
 		case IRP_MN_STOP_DEVICE:
+		case IRP_MN_SURPRISE_REMOVAL:
 			if (DeviceExtension->FileHandle)
 			{
 				ZwClose(DeviceExtension->FileHandle);

@@ -1590,6 +1590,8 @@ PiRequeryDevNodeRequirements(
     DeviceNode->ResourceRequirements = Requirements;
 }
 
+static volatile LONG PiDuplicateInstancePending;
+
 static
 VOID
 PiResetRemovedDevNode(
@@ -1656,6 +1658,13 @@ PiInitializeDevNode(
     if (OldDeviceObject != NULL)
     {
         PDEVICE_NODE OldDeviceNode = IopGetDeviceNode(OldDeviceObject);
+        BOOLEAN OldDeviceGone = OldDeviceNode != DeviceNode && (OldDeviceNode->Flags & DNF_DEVICE_GONE);
+
+        if (OldDeviceGone)
+        {
+            InterlockedExchange(&PiDuplicateInstancePending, 1);
+            KeMemoryBarrier();
+        }
 
         if (OldDeviceNode == DeviceNode)
         {
@@ -1670,6 +1679,14 @@ PiInitializeDevNode(
             /* PDO deletion reclaims the devnode after its references drain. */
             OldDeviceNode->InstancePath.Length = 0;
             ObDereferenceObject(OldDeviceObject);
+        }
+        else if (OldDeviceGone)
+        {
+            ObDereferenceObject(OldDeviceObject);
+            ExReleaseResourceLite(&IopDeviceTreeResource);
+            KeLeaveCriticalRegion();
+            RtlFreeUnicodeString(&InstancePathU);
+            return STATUS_DEVICE_BUSY;
         }
         else
         {
@@ -2193,6 +2210,9 @@ IopSendRemoveDevice(IN PDEVICE_OBJECT DeviceObject)
     }
 
     PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
+    KeMemoryBarrier();
+    if (InterlockedExchange(&PiDuplicateInstancePending, 0))
+        PiQueueDeviceAction(IopRootDeviceNode->PhysicalDeviceObject, PiActionEnumRootDevices, NULL, NULL);
     if (!Notified)
         PiNotifyTargetDeviceChange(&GUID_TARGET_DEVICE_REMOVE_COMPLETE, DeviceObject, NULL);
     if (Undocked)
