@@ -494,7 +494,7 @@ static VOID
 VidFbPrintFramebufferInfo(VOID)
 {
     TRACE("Framebuffer format:\n");
-    TRACE("    BaseAddress       : 0x%X\n", framebufInfo.BaseAddress);
+    TRACE("    BaseAddress       : %p\n", (PVOID)framebufInfo.BaseAddress);
     TRACE("    BufferSize        : %lu\n", framebufInfo.BufferSize);
     TRACE("    ScreenWidth       : %lu\n", framebufInfo.ScreenWidth);
     TRACE("    ScreenHeight      : %lu\n", framebufInfo.ScreenHeight);
