@@ -106,6 +106,7 @@ set(COMPAT_RUNTIME_MODULES
     msctfime
     msi
     msimg32
+    msisip
     mspatcha
     msvcrt
     msvfw32
