@@ -832,12 +832,24 @@ DwmpDxUpdateWindowSharedSurface(HWND Window,
         return E_INVALIDARG;
     }
 
+    if ((Flags & DWM_DX_REDIRECTION_GDI_SURFACE) != 0 &&
+        (Flags & DWM_DX_UPDATE_CANCEL) != 0)
+    {
+        DwmDxCancelGdiSurface(Window, UpdateId);
+        return S_OK;
+    }
+
     RtlZeroMemory(&Exchange, sizeof(Exchange));
     Exchange.StructSize = sizeof(Exchange);
     Exchange.Action = DWM_DX_SURFACE_UPDATE;
     Exchange.Window = (ULONGLONG)(ULONG_PTR)Window;
     Exchange.UpdateId = UpdateId;
     Exchange.Flags = Flags;
+    if ((Flags & DWM_DX_REDIRECTION_GDI_SURFACE) != 0)
+    {
+        Exchange.Action = DWM_DX_SURFACE_UPDATE_GDI;
+        Exchange.Flags = 0;
+    }
     if (UpdateRect != NULL)
         Exchange.UpdateRect = *(const RECTL *)UpdateRect;
     Status = (NTSTATUS)NtUserCallOneParam((DWORD_PTR)&Exchange,

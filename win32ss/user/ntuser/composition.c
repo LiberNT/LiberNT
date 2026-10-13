@@ -4310,6 +4310,53 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
             Entry->Redirect.GdiConsumedUpdateId = Request.UpdateId;
             break;
 
+        case DWM_DX_SURFACE_UPDATE_GDI:
+        {
+            PPDEVOBJ ppdev;
+            RECT DirtyRect;
+
+            if (Request.UpdateId == 0 ||
+                Request.UpdateId != Entry->Redirect.GdiIssuedUpdateId ||
+                Request.UpdateId <= Entry->Redirect.GdiConsumedUpdateId ||
+                Entry->Redirect.GdiAdmittedUpdateId == Request.UpdateId ||
+                Entry->Redirect.GdiPublishedUpdateId >= Request.UpdateId ||
+                Request.UpdateRect.left < Entry->Redirect.rcClient.left ||
+                Request.UpdateRect.top < Entry->Redirect.rcClient.top ||
+                Request.UpdateRect.right > Entry->Redirect.rcClient.right ||
+                Request.UpdateRect.bottom > Entry->Redirect.rcClient.bottom ||
+                Request.UpdateRect.left >= Request.UpdateRect.right ||
+                Request.UpdateRect.top >= Request.UpdateRect.bottom)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+            DirtyRect.left = Request.UpdateRect.left;
+            DirtyRect.top = Request.UpdateRect.top;
+            DirtyRect.right = Request.UpdateRect.right;
+            DirtyRect.bottom = Request.UpdateRect.bottom;
+            if (!DxgkEngAddRedirBitmapD3DDirtyRgn((ULONG_PTR)Entry->Redirect.hbmp,
+                                                  &DirtyRect, 1, NULL, 0))
+            {
+                return STATUS_UNSUCCESSFUL;
+            }
+            ppdev = IntCompositionLockDevice();
+            if (ppdev == NULL)
+                return STATUS_DEVICE_NOT_READY;
+            IntCompositionDamageBacking(Entry->Redirect.psurf, &Request.UpdateRect);
+            IntCompositionUnlockDevice(ppdev);
+            Entry->Redirect.GdiPublishedUpdateId = Request.UpdateId;
+            InterlockedExchange(&Entry->BackingDrawn, TRUE);
+            if (Request.UpdateRect.left == Entry->Redirect.rcClient.left &&
+                Request.UpdateRect.top == Entry->Redirect.rcClient.top &&
+                Request.UpdateRect.right == Entry->Redirect.rcClient.right &&
+                Request.UpdateRect.bottom == Entry->Redirect.rcClient.bottom)
+            {
+                InterlockedExchange(&Entry->BackComplete, TRUE);
+            }
+            Entry->Damaged = TRUE;
+            IntCompositionMarkDamage(FALSE);
+            break;
+        }
+
         case DWM_DX_SURFACE_UPDATE:
             if (Entry->Redirect.DxGlobalShare == 0)
                 return STATUS_NOT_FOUND;

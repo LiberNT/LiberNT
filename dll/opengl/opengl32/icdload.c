@@ -276,7 +276,8 @@ IntPublishDwmDxPresentRecycle(PWGL_ASYNC_PRESENT Present)
     {
         (void)DwmDxUpdateWindowSharedSurface(Present->Window,
                                              Present->UpdateId,
-                                             DWM_DX_UPDATE_CANCEL,
+                                             DWM_DX_UPDATE_CANCEL |
+                                             (Present->Flags & DWM_DX_REDIRECTION_GDI_SURFACE),
                                              NULL,
                                              NULL);
     }
@@ -923,6 +924,7 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
     HANDLE SharedSurface = NULL;
     ULONGLONG UpdateId = 0;
     UINT Format = 0;
+    DWORD SurfaceFlags;
     HRESULT Result;
 
     if (hdc == NULL || CallbackData == NULL ||
@@ -985,13 +987,33 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
         return wglPresentBuffersDirect(hdc, IcdData, CallbackData);
     }
 
+    SurfaceFlags = CallbackData->SyncType;
+    if (ClientOrigin.x != WindowRect.left || ClientOrigin.y != WindowRect.top ||
+        ClientRect.right != WindowRect.right - WindowRect.left ||
+        ClientRect.bottom != WindowRect.bottom - WindowRect.top)
+    {
+        SurfaceFlags |= DWM_DX_REDIRECTION_GDI_SURFACE;
+    }
     Result = DwmDxGetWindowSharedSurface(Window,
                                          CallbackData->AdapterLuid,
                                          NULL,
-                                         CallbackData->SyncType,
+                                         SurfaceFlags,
                                          &Format,
                                          &SharedSurface,
                                          &UpdateId);
+    if (FAILED(Result) && (SurfaceFlags & DWM_DX_REDIRECTION_GDI_SURFACE) != 0)
+    {
+        SurfaceFlags = CallbackData->SyncType;
+        Result = DwmDxGetWindowSharedSurface(Window,
+                                             CallbackData->AdapterLuid,
+                                             NULL,
+                                             SurfaceFlags,
+                                             &Format,
+                                             &SharedSurface,
+                                             &UpdateId);
+    }
+    if ((SurfaceFlags & DWM_DX_REDIRECTION_GDI_SURFACE) != 0)
+        UpdateRect = CallbackData->UpdateRect;
     if (Result == S_FALSE)
         return TRUE; /* compositor intentionally dropped this immediate frame */
     if (FAILED(Result))
@@ -1033,7 +1055,7 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
         {
             AsyncPresent->Window = Window;
             AsyncPresent->UpdateId = UpdateId;
-            AsyncPresent->Flags = CallbackData->SyncType;
+            AsyncPresent->Flags = SurfaceFlags;
             AsyncPresent->UpdateRect = UpdateRect;
         }
     }
@@ -1068,7 +1090,7 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
 
     Result = DwmDxUpdateWindowSharedSurface(Window,
                                              UpdateId,
-                                             CallbackData->SyncType,
+                                             SurfaceFlags,
                                              NULL,
                                              &UpdateRect);
     if (SUCCEEDED(Result))
@@ -1082,7 +1104,8 @@ Cancel:
         IntReleaseDwmDxPublishRecord(AsyncPresent);
     (void)DwmDxUpdateWindowSharedSurface(Window,
                                          UpdateId,
-                                         DWM_DX_UPDATE_CANCEL,
+                                         DWM_DX_UPDATE_CANCEL |
+                                         (SurfaceFlags & DWM_DX_REDIRECTION_GDI_SURFACE),
                                          NULL,
                                          NULL);
     return FALSE;
