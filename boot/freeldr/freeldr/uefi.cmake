@@ -20,6 +20,7 @@ list(APPEND UEFILDR_ARC_SOURCE
     arch/uefi/uefidisk.c
     arch/uefi/uefihw.c
     arch/uefi/uefiinput.c
+    arch/uefi/uefilog.c
     arch/uefi/uefimem.c
     arch/uefi/uefireboot.c
     arch/uefi/uefisetup.c

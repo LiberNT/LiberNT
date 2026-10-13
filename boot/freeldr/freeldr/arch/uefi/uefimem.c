@@ -515,6 +515,7 @@ UefiExitBootServices(VOID)
     }
 
     UefiVideoPrepareForExitBootServices();
+    UefiLogClose();
 
     Status = PUEFI_LoadMemoryMap(&MapKey,
                                  &MapSize,

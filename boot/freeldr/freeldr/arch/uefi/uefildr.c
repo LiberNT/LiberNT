@@ -33,6 +33,10 @@ EfiEntry(
     GlobalSystemTable = SystemTable;
     UefiFirmwareStackFrame = &CmdLine;
 
+#if DBG
+    UefiLogInitialize();
+#endif
+
     /* Load the default settings from the command-line */
     LoadSettings(CmdLine);
 

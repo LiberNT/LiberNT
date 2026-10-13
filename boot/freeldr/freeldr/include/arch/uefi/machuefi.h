@@ -105,6 +105,16 @@ VOID
 UefiSerialDisableFirmware(VOID);
 
 VOID
+UefiLogInitialize(VOID);
+
+VOID
+UefiLogPutChar(
+    _In_ UCHAR Character);
+
+VOID
+UefiLogClose(VOID);
+
+VOID
 UefiStopFirmwareWatchdogs(VOID);
 
 PFREELDR_MEMORY_DESCRIPTOR

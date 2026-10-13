@@ -27,6 +27,9 @@
 BOOLEAN UefiSerialInitialize(VOID);
 VOID UefiSerialPutChar(_In_ UCHAR Character);
 #endif
+#if defined(UEFIBOOT)
+VOID UefiLogPutChar(_In_ UCHAR Character);
+#endif
 
 #if DBG
 
@@ -232,6 +235,9 @@ VOID DebugPrintChar(UCHAR Character)
     if (Character == '\n')
         DebugStartOfLine = TRUE;
 
+#if defined(UEFIBOOT)
+    UefiLogPutChar(Character);
+#endif
     if (DebugPort & RS232)
     {
 #if defined(UEFIBOOT) && (defined(_M_ARM64) || defined(_M_RISCV64))
