@@ -567,6 +567,14 @@ UefiInitializeBgrtLogo(VOID)
         return;
     }
 
+    TRACE("BGRT table: version %u, status 0x%02x, type %u, image 0x%llx, offset (%lu,%lu)\n",
+          BgrtTable->Version,
+          BgrtTable->Status,
+          BgrtTable->ImageType,
+          BgrtTable->LogoAddress,
+          BgrtTable->OffsetX,
+          BgrtTable->OffsetY);
+
     if (BgrtTable->ImageType != BgrtImageTypeBitmap)
     {
         WARN("Unsupported BGRT image type %u\n", BgrtTable->ImageType);
@@ -595,6 +603,15 @@ UefiInitializeBgrtLogo(VOID)
     }
 
     InfoHeader = (PBMP_INFO_HEADER)(FileHeader + 1);
+    TRACE("BGRT BMP: file size %lu, bits offset %lu, header size %lu, %ldx%ld, planes %u, %u bpp, compression %lu\n",
+          FileHeader->Size,
+          FileHeader->BitsOffset,
+          InfoHeader->Size,
+          InfoHeader->Width,
+          InfoHeader->Height,
+          InfoHeader->Planes,
+          InfoHeader->BitCount,
+          InfoHeader->Compression);
     if ((InfoHeader->Size < sizeof(*InfoHeader)) ||
         (InfoHeader->Size > FileHeader->Size - sizeof(*FileHeader)))
     {
@@ -1227,6 +1244,14 @@ UefiInitializeGop(VOID)
     }
 
     UefiLoadEdidForGop(gop);
+
+    TRACE("Firmware GOP mode %u of %u: %ux%u, pixel format %u, stride %u\n",
+          gop->Mode->Mode,
+          gop->Mode->MaxMode,
+          gop->Mode->Info->HorizontalResolution,
+          gop->Mode->Info->VerticalResolution,
+          gop->Mode->Info->PixelFormat,
+          gop->Mode->Info->PixelsPerScanLine);
 
     if (UefiGetEdidPreferredResolution(&PreferredWidth, &PreferredHeight))
     {
