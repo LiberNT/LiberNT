@@ -924,6 +924,7 @@ SmpCreateVolumeDescriptors(VOID)
     FILE_FS_SIZE_INFORMATION SizeInfo;
     PSMP_VOLUME_DESCRIPTOR Volume;
     LARGE_INTEGER FreeSpace, FinalFreeSpace;
+    ULONG Unsuitable;
     WCHAR Buffer[32];
 
     /* We should be starting with an empty list */
@@ -1001,10 +1002,10 @@ SmpCreateVolumeDescriptors(VOID)
         }
 
         /* Check if this is a fixed disk */
-        if (DeviceInfo.Characteristics & (FILE_FLOPPY_DISKETTE |
-                                          FILE_READ_ONLY_DEVICE |
-                                          FILE_REMOTE_DEVICE |
-                                          FILE_REMOVABLE_MEDIA))
+        Unsuitable = FILE_FLOPPY_DISKETTE | FILE_READ_ONLY_DEVICE | FILE_REMOTE_DEVICE;
+        if (!IsBootVolume)
+            Unsuitable |= FILE_REMOVABLE_MEDIA;
+        if (DeviceInfo.Characteristics & Unsuitable)
         {
             /* It isn't, so skip it */
             DPRINT1("SMSS:PFILE: Volume `%wZ' (%X) cannot store a paging file\n",
