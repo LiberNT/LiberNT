@@ -348,7 +348,7 @@ USBPORT_RemoveIrpFromTable(IN PUSBPORT_IRP_TABLE IrpTable,
         continue;
     }
 
-    DPRINT1("USBPORT_RemoveIrpFromTable: return NULL. ix - %x\n", ix);
+    DPRINT_CORE("USBPORT_RemoveIrpFromTable: return NULL. ix - %x\n", ix);
     return NULL;
 }
 
