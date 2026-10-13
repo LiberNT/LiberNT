@@ -2201,7 +2201,7 @@ IopSendRemoveDevice(IN PDEVICE_OBJECT DeviceObject)
         PiNotifyHardwareProfileChange(&GUID_HWPROFILE_CHANGE_COMPLETE);
     }
     LONG_PTR refCount = ObDereferenceObject(DeviceObject);
-    if (refCount != 0)
+    if (refCount != 0 && (DeviceNode->Flags & DNF_DEVICE_GONE))
     {
         DPRINT1("Leaking device %wZ, refCount = %d\n", &DeviceNode->InstancePath, (INT32)refCount);
     }
