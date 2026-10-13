@@ -68,6 +68,13 @@ int ExpandBuildPlan(EXPAND_DEVICE* Device,
 
 int ExpandApplyPlan(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan);
 
+#define EXPAND_WORKSPACE_BYTES  (128 * 1024)
+
+int ExpandGrowVolume(EXPAND_DEVICE* Device,
+                     uint64_t VolumeStart,
+                     uint64_t NewVolumeSectors,
+                     void* Workspace);
+
 const char* ExpandStatusText(int Status);
 
 #endif /* _LNTEXPANDSTORAGE_CORE_H_ */

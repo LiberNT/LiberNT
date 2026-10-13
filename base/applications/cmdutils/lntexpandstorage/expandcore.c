@@ -7,14 +7,17 @@
 
 #include "expandcore.h"
 
+#include <string.h>
+
+#ifndef EXPAND_VOLUME_ONLY
 #include <stdarg.h>
 #include <stdio.h>
-#include <string.h>
 
 #ifdef _WIN32
 #define ExpandVsnprintf _vsnprintf
 #else
 #define ExpandVsnprintf vsnprintf
+#endif
 #endif
 
 #define ALIGN_UP8(x) (((x) + 7) & ~(uint64_t)7)
@@ -174,9 +177,21 @@ typedef struct _NTFS_RUN
     int Sparse;
 } NTFS_RUN;
 
+typedef struct _NTFS_WORKSPACE
+{
+    uint8_t Record[MAX_RECORD_SIZE];
+    uint8_t Chunk[BITMAP_CHUNK];
+    uint8_t Encoded[MAX_MAPPING_PAIRS];
+    uint8_t Boot[MAX_SECTOR_SIZE];
+    NTFS_RUN Runs[MAX_RUNS];
+} NTFS_WORKSPACE;
+
+typedef char NTFS_WORKSPACE_FITS[sizeof(NTFS_WORKSPACE) <= EXPAND_WORKSPACE_BYTES ? 1 : -1];
+
 typedef struct _NTFS_CONTEXT
 {
     EXPAND_DEVICE* Device;
+    NTFS_WORKSPACE* Work;
     uint64_t PartitionStart;
     uint64_t MftLcn;
     uint64_t OldClusters;
@@ -210,6 +225,7 @@ ExpandStatusText(int Status)
     }
 }
 
+#ifndef EXPAND_VOLUME_ONLY
 static void
 Report(EXPAND_DEVICE* Device, const char* Format, ...)
 {
@@ -225,6 +241,7 @@ Report(EXPAND_DEVICE* Device, const char* Format, ...)
     Line[sizeof(Line) - 1] = 0;
     Device->Log(Device->Context, Line);
 }
+#endif
 
 static int
 IsPowerOfTwo(uint64_t Value)
@@ -524,7 +541,7 @@ ReplaceRuns(NTFS_CONTEXT* Context,
             uint64_t DataSize,
             uint64_t InitializedSize)
 {
-    uint8_t Encoded[MAX_MAPPING_PAIRS];
+    uint8_t* Encoded = Context->Work->Encoded;
     NTFS_FILE_RECORD_HEADER* Header = (NTFS_FILE_RECORD_HEADER*)Record;
     uint32_t AttributeOffset = (uint32_t)((uint8_t*)Attribute - Record);
     uint32_t RunsOffset = Attribute->DataRunsOffset;
@@ -534,7 +551,7 @@ ReplaceRuns(NTFS_CONTEXT* Context,
     if (RunsOffset < ATTR_NONRESIDENT_HEADER_SIZE || RunsOffset >= Context->RecordSize)
         return EXPAND_CORRUPT;
 
-    EncodedLength = EncodeRuns(Runs, RunCount, Encoded, sizeof(Encoded));
+    EncodedLength = EncodeRuns(Runs, RunCount, Encoded, MAX_MAPPING_PAIRS);
     if (EncodedLength == 0)
         return EXPAND_CORRUPT;
 
@@ -624,6 +641,7 @@ RunsTransfer(NTFS_CONTEXT* Context,
     return EXPAND_OK;
 }
 
+#ifndef EXPAND_VOLUME_ONLY
 static int
 ReadMbr(EXPAND_DEVICE* Device, uint8_t* Sector)
 {
@@ -1259,13 +1277,14 @@ ExpandFinishPlan(EXPAND_DEVICE* Device, EXPAND_PLAN* Plan, uint64_t MinimumGain)
 
     return EXPAND_OK;
 }
+#endif
 
 static int
 GrowBitmap(NTFS_CONTEXT* Context, uint32_t* ExtraClusters)
 {
-    uint8_t Record[MAX_RECORD_SIZE];
-    uint8_t Chunk[BITMAP_CHUNK];
-    NTFS_RUN Runs[MAX_RUNS];
+    uint8_t* Record = Context->Work->Record;
+    uint8_t* Chunk = Context->Work->Chunk;
+    NTFS_RUN* Runs = Context->Work->Runs;
     NTFS_ATTRIBUTE* Attribute;
     uint32_t RunCount = 0;
     uint32_t ClusterSize = Context->ClusterSize;
@@ -1409,8 +1428,8 @@ static int
 GrowBadClusters(NTFS_CONTEXT* Context)
 {
     static const uint16_t BadName[4] = { '$', 'B', 'a', 'd' };
-    uint8_t Record[MAX_RECORD_SIZE];
-    NTFS_RUN Runs[MAX_RUNS];
+    uint8_t* Record = Context->Work->Record;
+    NTFS_RUN* Runs = Context->Work->Runs;
     NTFS_ATTRIBUTE* Attribute;
     uint32_t RunCount = 0;
     uint64_t Mapped = 0;
@@ -1476,33 +1495,12 @@ GrowBadClusters(NTFS_CONTEXT* Context)
     return WriteRecord(Context, NTFS_RECORD_BADCLUS, Record);
 }
 
-int
-ExpandApplyPlan(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan)
+static int
+LocateRecords(NTFS_CONTEXT* Context, const NTFS_BOOT_SECTOR* BootSector)
 {
-    NTFS_CONTEXT Context;
-    NTFS_BOOT_SECTOR* BootSector;
-    uint8_t Sector[MAX_SECTOR_SIZE];
-    uint8_t Boot[MAX_SECTOR_SIZE];
-    MBR_ENTRY* Table;
-    uint32_t Extra = 0;
-    int Status;
-
-    memset(&Context, 0, sizeof(Context));
-    Context.Device = Device;
-    Context.PartitionStart = Plan->PartitionStart;
-    Context.BytesPerSector = Plan->BytesPerSector;
-    Context.ClusterSize = Plan->ClusterSize;
-    Context.OldClusters = Plan->OldClusters;
-    Context.NewClusters = Plan->NewClusters;
-
-    if (!Device->Read(Device->Context, Plan->PartitionStart, Plan->BytesPerSector, Boot))
-        return EXPAND_IO_ERROR;
-
-    BootSector = (NTFS_BOOT_SECTOR*)Boot;
-
     if (BootSector->ClustersPerFileRecord >= 0)
     {
-        Context.RecordSize = (uint32_t)BootSector->ClustersPerFileRecord * Context.ClusterSize;
+        Context->RecordSize = (uint32_t)BootSector->ClustersPerFileRecord * Context->ClusterSize;
     }
     else
     {
@@ -1510,17 +1508,128 @@ ExpandApplyPlan(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan)
 
         if (Shift >= 31)
             return EXPAND_CORRUPT;
-        Context.RecordSize = 1u << Shift;
+        Context->RecordSize = 1u << Shift;
     }
 
-    if (Context.RecordSize < Context.BytesPerSector ||
-        Context.RecordSize > MAX_RECORD_SIZE ||
-        (Context.RecordSize % Context.BytesPerSector) != 0)
+    if (Context->RecordSize < Context->BytesPerSector ||
+        Context->RecordSize > MAX_RECORD_SIZE ||
+        (Context->RecordSize % Context->BytesPerSector) != 0)
     {
         return EXPAND_CORRUPT;
     }
 
-    Context.MftLcn = BootSector->MftLcn;
+    Context->MftLcn = BootSector->MftLcn;
+    return EXPAND_OK;
+}
+
+static int
+WriteBootSectors(NTFS_CONTEXT* Context, uint64_t NewVolumeSectors)
+{
+    EXPAND_DEVICE* Device = Context->Device;
+    uint8_t* Boot = Context->Work->Boot;
+
+    ((NTFS_BOOT_SECTOR*)Boot)->SectorsInVolume = NewVolumeSectors;
+
+    if (!Device->Write(Device->Context,
+                       Context->PartitionStart + NewVolumeSectors * Context->BytesPerSector,
+                       Context->BytesPerSector,
+                       Boot))
+    {
+        return EXPAND_IO_ERROR;
+    }
+
+    if (!Device->Write(Device->Context, Context->PartitionStart, Context->BytesPerSector, Boot))
+        return EXPAND_IO_ERROR;
+
+    return EXPAND_OK;
+}
+
+int
+ExpandGrowVolume(EXPAND_DEVICE* Device,
+                 uint64_t VolumeStart,
+                 uint64_t NewVolumeSectors,
+                 void* Workspace)
+{
+    NTFS_CONTEXT Context;
+    NTFS_BOOT_SECTOR* BootSector;
+    uint32_t Extra = 0;
+    int Status;
+
+    if (!Workspace || Device->SectorSize < 512 || Device->SectorSize > MAX_SECTOR_SIZE)
+        return EXPAND_BAD_PARAMETER;
+
+    memset(&Context, 0, sizeof(Context));
+    Context.Device = Device;
+    Context.Work = (NTFS_WORKSPACE*)Workspace;
+    Context.PartitionStart = VolumeStart;
+
+    if (!Device->Read(Device->Context, VolumeStart, Device->SectorSize, Context.Work->Boot))
+        return EXPAND_IO_ERROR;
+
+    BootSector = (NTFS_BOOT_SECTOR*)Context.Work->Boot;
+
+    if (memcmp(BootSector->OemId, "NTFS    ", 8) != 0)
+        return EXPAND_NOT_NTFS;
+
+    if (BootSector->BytesPerSector != Device->SectorSize ||
+        !IsPowerOfTwo(BootSector->SectorsPerCluster) ||
+        BootSector->SectorsPerCluster > 128 ||
+        BootSector->SectorsInVolume == 0)
+    {
+        return EXPAND_CORRUPT;
+    }
+
+    Context.BytesPerSector = BootSector->BytesPerSector;
+    Context.ClusterSize = (uint32_t)BootSector->BytesPerSector * BootSector->SectorsPerCluster;
+    Context.OldClusters = BootSector->SectorsInVolume / BootSector->SectorsPerCluster;
+    Context.NewClusters = NewVolumeSectors / BootSector->SectorsPerCluster;
+
+    if (Context.NewClusters < Context.OldClusters)
+        return EXPAND_BAD_PARAMETER;
+    if (Context.NewClusters == Context.OldClusters)
+        return EXPAND_NOTHING_TO_DO;
+
+    Status = LocateRecords(&Context, BootSector);
+    if (Status != EXPAND_OK)
+        return Status;
+
+    Status = GrowBitmap(&Context, &Extra);
+    if (Status != EXPAND_OK)
+        return Status;
+
+    Status = GrowBadClusters(&Context);
+    if (Status != EXPAND_OK)
+        return Status;
+
+    return WriteBootSectors(&Context, NewVolumeSectors);
+}
+
+#ifndef EXPAND_VOLUME_ONLY
+int
+ExpandApplyPlan(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan)
+{
+    static NTFS_WORKSPACE Work;
+    NTFS_CONTEXT Context;
+    uint8_t Sector[MAX_SECTOR_SIZE];
+    MBR_ENTRY* Table;
+    uint32_t Extra = 0;
+    int Status;
+
+    memset(&Context, 0, sizeof(Context));
+    Context.Device = Device;
+    Context.Work = &Work;
+    Context.PartitionStart = Plan->PartitionStart;
+    Context.BytesPerSector = Plan->BytesPerSector;
+    Context.ClusterSize = Plan->ClusterSize;
+    Context.OldClusters = Plan->OldClusters;
+    Context.NewClusters = Plan->NewClusters;
+
+    if (!Device->Read(Device->Context, Plan->PartitionStart, Plan->BytesPerSector, Work.Boot))
+        return EXPAND_IO_ERROR;
+
+    Status = LocateRecords(&Context, (NTFS_BOOT_SECTOR*)Work.Boot);
+    if (Status != EXPAND_OK)
+        return Status;
 
     if (Plan->RewriteVolume)
     {
@@ -1567,18 +1676,9 @@ ExpandApplyPlan(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan)
 
     if (Plan->RewriteVolume)
     {
-        BootSector->SectorsInVolume = Plan->NewVolumeSectors;
-
-        if (!Device->Write(Device->Context,
-                           Plan->PartitionStart + Plan->NewVolumeSectors * Plan->BytesPerSector,
-                           Plan->BytesPerSector,
-                           Boot))
-        {
-            return EXPAND_IO_ERROR;
-        }
-
-        if (!Device->Write(Device->Context, Plan->PartitionStart, Plan->BytesPerSector, Boot))
-            return EXPAND_IO_ERROR;
+        Status = WriteBootSectors(&Context, Plan->NewVolumeSectors);
+        if (Status != EXPAND_OK)
+            return Status;
 
         Report(Device,
                "$Boot now declares %llu sector(s)\n",
@@ -1587,3 +1687,4 @@ ExpandApplyPlan(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan)
 
     return EXPAND_OK;
 }
+#endif

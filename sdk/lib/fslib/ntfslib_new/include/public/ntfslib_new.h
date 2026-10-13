@@ -919,6 +919,10 @@ NtfsVolumeGetClustersInVolume(
     _In_ PNtfsVolume DiskVolume);
 
 NTSTATUS
+NtfsVolumeReloadSize(
+    _In_ PNtfsVolume DiskVolume);
+
+NTSTATUS
 NtfsVolumeGetFreeClusters(
     _In_ PNtfsVolume DiskVolume,
     _Out_ PLARGE_INTEGER FreeClusters);

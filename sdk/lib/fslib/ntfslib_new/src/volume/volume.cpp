@@ -320,6 +320,46 @@ Volume::Initialize(_In_ PUCHAR BootSectorData,
 }
 
 NTSTATUS
+Volume::ReloadSize()
+{
+    BootSector* PartitionBootSector;
+    PUCHAR BootSectorData;
+    NTSTATUS Status;
+
+    BootSectorData = new(NonPagedPool) UCHAR[BytesPerSector];
+    if (!BootSectorData)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = NtfsReadVolumeContext(IoContext,
+                                   BytesPerSector,
+                                   0,
+                                   BytesPerSector,
+                                   BootSectorData);
+    if (NT_SUCCESS(Status))
+        Status = NtfsProbePartition(BytesPerSector, BootSectorData);
+    if (NT_SUCCESS(Status))
+    {
+        PartitionBootSector = (BootSector*)BootSectorData;
+        if (PartitionBootSector->BytesPerSector != BytesPerSector ||
+            PartitionBootSector->SectorsPerCluster != SectorsPerCluster)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+        }
+        else
+        {
+            delete CachedBitmapFile;
+            CachedBitmapFile = NULL;
+            CachedBitmapData = NULL;
+            SectorsInVolume = PartitionBootSector->SectorsInVolume;
+            ClustersInVolume = SectorsInVolume / SectorsPerCluster;
+        }
+    }
+
+    delete[] BootSectorData;
+    return Status;
+}
+
+NTSTATUS
 Volume::QueryInformation(
     _Out_ PNtfsVolumeInformation Information)
 {

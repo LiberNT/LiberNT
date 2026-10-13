@@ -1209,3 +1209,37 @@ NtfsDiskFlushRangeKm(_In_ PDEVICE_OBJECT DeviceObject,
         return STATUS_INVALID_PARAMETER;
     return NtfsCacheFlushRange(DeviceObject, Offset, Length);
 }
+
+extern "C"
+NTSTATUS
+NtfsDiskReadKm(_In_ PDEVICE_OBJECT DeviceObject,
+               _In_ ULONG SectorBytes,
+               _In_ ULONGLONG Offset,
+               _In_ ULONG Length,
+               _Out_writes_bytes_(Length) PVOID Buffer)
+{
+    if (!DeviceObject || !Buffer || !Length || Offset > ~(ULONGLONG)0 - Length)
+        return STATUS_INVALID_PARAMETER;
+    return NtfsReadVolumeContext(DeviceObject,
+                                 SectorBytes,
+                                 Offset,
+                                 Length,
+                                 (PUCHAR)Buffer);
+}
+
+extern "C"
+NTSTATUS
+NtfsDiskWriteKm(_In_ PDEVICE_OBJECT DeviceObject,
+                _In_ ULONG SectorBytes,
+                _In_ ULONGLONG Offset,
+                _In_ ULONG Length,
+                _In_reads_bytes_(Length) const VOID* Buffer)
+{
+    if (!DeviceObject || !Buffer || !Length || Offset > ~(ULONGLONG)0 - Length)
+        return STATUS_INVALID_PARAMETER;
+    return NtfsWriteVolumeContext(DeviceObject,
+                                  SectorBytes,
+                                  Offset,
+                                  Length,
+                                  (PUCHAR)Buffer);
+}

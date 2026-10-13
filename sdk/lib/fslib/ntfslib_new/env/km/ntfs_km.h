@@ -36,6 +36,20 @@ NtfsDiskFlushRangeKm(_In_ PDEVICE_OBJECT DeviceObject,
                     _In_ ULONGLONG Offset,
                     _In_ ULONG Length);
 
+NTSTATUS
+NtfsDiskReadKm(_In_ PDEVICE_OBJECT DeviceObject,
+               _In_ ULONG SectorBytes,
+               _In_ ULONGLONG Offset,
+               _In_ ULONG Length,
+               _Out_writes_bytes_(Length) PVOID Buffer);
+
+NTSTATUS
+NtfsDiskWriteKm(_In_ PDEVICE_OBJECT DeviceObject,
+                _In_ ULONG SectorBytes,
+                _In_ ULONGLONG Offset,
+                _In_ ULONG Length,
+                _In_reads_bytes_(Length) const VOID* Buffer);
+
 /* Declared here rather than in the public header because
  * FILE_BOTH_DIR_INFORMATION is a kernel-mode type.
  */

@@ -700,6 +700,9 @@ public:
                _In_opt_ void* Context);
 
     NTSTATUS
+    ReloadSize();
+
+    NTSTATUS
     GetADSPreference(_In_  PUNICODE_STRING FileName,
                      _Out_ AttributeType* RequestedType,
                      _Out_ PWSTR* RequestedStream);

@@ -7,6 +7,7 @@
  */
 
  #include "ntfspch.h"
+#include "expandcore.h"
 
 #ifndef FSCTL_DELETE_EXTERNAL_BACKING
 #define FSCTL_DELETE_EXTERNAL_BACKING \
@@ -1041,6 +1042,8 @@ NtfsGetVolumeBitmap(
         return STATUS_INSUFFICIENT_RESOURCES;
 
     Length = Capacity;
+    KeEnterCriticalRegion();
+    NtfsAcquireMetadata(VolCB);
     Status = NtfsVolumeReadBitmap(
         VolCB->DiskVolume,
         (ULONGLONG)Input.StartingLcn.QuadPart,
@@ -1048,6 +1051,8 @@ NtfsGetVolumeBitmap(
         &BitmapSize,
         Bitmap,
         &Length);
+    NtfsReleaseMetadata(VolCB);
+    KeLeaveCriticalRegion();
     if (NT_SUCCESS(Status) ||
         Status == STATUS_BUFFER_OVERFLOW)
     {
@@ -1117,9 +1122,13 @@ NtfsGetNtfsVolumeData(
     if (!Output)
         return STATUS_INVALID_USER_BUFFER;
 
+    KeEnterCriticalRegion();
+    NtfsAcquireMetadata(VolCB);
     Status = NtfsVolumeQueryInformation(
         VolCB->DiskVolume,
         &Information);
+    NtfsReleaseMetadata(VolCB);
+    KeLeaveCriticalRegion();
     if (!NT_SUCCESS(Status))
         return Status;
     if (Information.NumberSectors > MAXLONGLONG ||
@@ -1509,6 +1518,143 @@ NtfsDismountVolume(
     return Status;
 }
 
+typedef struct _NTFS_EXTEND_IO
+{
+    PDEVICE_OBJECT StorageDevice;
+    ULONG SectorBytes;
+    NTSTATUS Status;
+} NTFS_EXTEND_IO, *PNTFS_EXTEND_IO;
+
+static
+int
+NtfsExtendRead(void* Context, uint64_t Offset, uint32_t Length, void* Buffer)
+{
+    PNTFS_EXTEND_IO Io = (PNTFS_EXTEND_IO)Context;
+
+    Io->Status = NtfsDiskReadKm(Io->StorageDevice,
+                                Io->SectorBytes,
+                                Offset,
+                                Length,
+                                Buffer);
+    return NT_SUCCESS(Io->Status);
+}
+
+static
+int
+NtfsExtendWrite(void* Context, uint64_t Offset, uint32_t Length, const void* Buffer)
+{
+    PNTFS_EXTEND_IO Io = (PNTFS_EXTEND_IO)Context;
+
+    Io->Status = NtfsDiskWriteKm(Io->StorageDevice,
+                                 Io->SectorBytes,
+                                 Offset,
+                                 Length,
+                                 Buffer);
+    return NT_SUCCESS(Io->Status);
+}
+
+static
+NTSTATUS
+NtfsExtendVolume(
+    _In_ PDEVICE_OBJECT VolumeDeviceObject,
+    _Inout_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IrpSp)
+{
+    PFileContextBlock FileCB = NtfsGetFileContext(IrpSp->FileObject);
+    PVolumeContextBlock VolCB =
+        (PVolumeContextBlock)VolumeDeviceObject->DeviceExtension;
+    GET_LENGTH_INFORMATION PartitionLength;
+    NTFS_EXTEND_IO Io;
+    EXPAND_DEVICE Device;
+    ULONGLONG PartitionSectors;
+    LONGLONG NewSectors;
+    PVOID Workspace;
+    ULONG Size;
+    NTSTATUS Status;
+
+    if (!FileCB || !FileCB->IsVolumeOpen || !VolCB || !VolCB->DiskVolume)
+        return STATUS_INVALID_PARAMETER;
+    if (IrpSp->Parameters.FileSystemControl.InputBufferLength < sizeof(NewSectors) ||
+        !Irp->AssociatedIrp.SystemBuffer)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (VolCB->Dismounted)
+        return STATUS_VOLUME_DISMOUNTED;
+    if (NtfsVolumeIsReadOnly(VolCB->DiskVolume))
+        return STATUS_MEDIA_WRITE_PROTECTED;
+
+    RtlCopyMemory(&NewSectors, Irp->AssociatedIrp.SystemBuffer, sizeof(NewSectors));
+
+    Size = sizeof(PartitionLength);
+    Status = DeviceIoControl(VolCB->StorageDevice,
+                             IOCTL_DISK_GET_LENGTH_INFO,
+                             NULL,
+                             0,
+                             &PartitionLength,
+                             &Size,
+                             TRUE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Io.StorageDevice = VolCB->StorageDevice;
+    Io.SectorBytes = NtfsVolumeGetBytesPerSector(VolCB->DiskVolume);
+    Io.Status = STATUS_SUCCESS;
+
+    PartitionSectors = (ULONGLONG)PartitionLength.Length.QuadPart / Io.SectorBytes;
+    if (NewSectors <= 0 || (ULONGLONG)NewSectors > PartitionSectors)
+        return STATUS_INVALID_PARAMETER;
+    NewSectors--;
+
+    Workspace = ExAllocatePoolWithTag(NonPagedPool, EXPAND_WORKSPACE_BYTES, TAG_NTFS);
+    if (!Workspace)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Device.Context = &Io;
+    Device.Read = NtfsExtendRead;
+    Device.Write = NtfsExtendWrite;
+    Device.Log = NULL;
+    Device.DiskSize = (uint64_t)PartitionLength.Length.QuadPart;
+    Device.SectorSize = Io.SectorBytes;
+
+    KeEnterCriticalRegion();
+    NtfsAcquireMetadata(VolCB);
+    switch (ExpandGrowVolume(&Device, 0, (uint64_t)NewSectors, Workspace))
+    {
+        case EXPAND_OK:
+            Status = NtfsVolumeReloadSize(VolCB->DiskVolume);
+            break;
+
+        case EXPAND_IO_ERROR:
+            Status = Io.Status;
+            break;
+
+        case EXPAND_NOTHING_TO_DO:
+            Status = STATUS_SUCCESS;
+            break;
+
+        case EXPAND_BAD_PARAMETER:
+            Status = STATUS_INVALID_PARAMETER;
+            break;
+
+        case EXPAND_NO_ROOM:
+            Status = STATUS_DISK_FULL;
+            break;
+
+        default:
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            break;
+    }
+    NtfsReleaseMetadata(VolCB);
+    KeLeaveCriticalRegion();
+
+    ExFreePoolWithTag(Workspace, TAG_NTFS);
+
+    if (NT_SUCCESS(Status))
+        Status = NtfsDiskFlushVolumeKm(VolCB->StorageDevice);
+    return Status;
+}
+
 /* INCOMPLETE */
 _Function_class_(IRP_MJ_FILE_SYSTEM_CONTROL)
 _Function_class_(DRIVER_DISPATCH)
@@ -1674,6 +1820,14 @@ NtfsFsdFileSystemControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                     case FSCTL_GET_NTFS_FILE_RECORD:
                         Irp->IoStatus.Status =
                             NtfsGetNtfsFileRecord(
+                                VolumeDeviceObject,
+                                Irp,
+                                IrpSp);
+                        break;
+
+                    case FSCTL_EXTEND_VOLUME:
+                        Irp->IoStatus.Status =
+                            NtfsExtendVolume(
                                 VolumeDeviceObject,
                                 Irp,
                                 IrpSp);

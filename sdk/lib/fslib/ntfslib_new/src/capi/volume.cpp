@@ -88,6 +88,15 @@ NtfsVolumeGetClustersInVolume(
 }
 
 NTSTATUS
+NtfsVolumeReloadSize(
+    _In_ PNtfsVolume DiskVolume)
+{
+    if (!DiskVolume)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PVolume>(DiskVolume)->ReloadSize();
+}
+
+NTSTATUS
 NtfsVolumeGetFreeClusters(
     _In_ PNtfsVolume DiskVolume,
     _Out_ PLARGE_INTEGER FreeClusters)
