@@ -945,7 +945,6 @@ GreGetDIBitsInternal(
     USHORT i;
     int bitmap_type;
     RGBQUAD* rgbQuads;
-    VOID* colorPtr;
 
     DPRINT("Entered GreGetDIBitsInternal()\n");
 
@@ -984,8 +983,7 @@ GreGetDIBitsInternal(
         goto done;
     }
 
-    colorPtr = (LPBYTE)Info + Info->bmiHeader.biSize;
-    rgbQuads = colorPtr;
+    rgbQuads = Info->bmiColors;
 
     bitmap_type = DIB_GetBitmapInfo(&Info->bmiHeader,
                                     &width,
@@ -1016,6 +1014,10 @@ GreGetDIBitsInternal(
             goto done;
         }
         rgbQuads = Info->bmiColors;
+    }
+    else
+    {
+        Info->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     }
 
     /* Validate input:
