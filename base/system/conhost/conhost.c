@@ -2718,7 +2718,11 @@ static NTSTATUS set_console_title( struct console *console, const WCHAR *in_titl
         tty_sync( console );
     }
     if (console->win)
+#ifdef __REACTOS__
+        update_window_title( console );
+#else
         SetWindowTextW( console->win, console->title );
+#endif
     return STATUS_SUCCESS;
 }
 

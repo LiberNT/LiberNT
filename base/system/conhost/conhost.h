@@ -174,6 +174,7 @@ void update_window_config( struct console *console, BOOL delay );
 void teardown_window( struct console *console );
 #ifdef __REACTOS__
 void set_window_quick_edit( struct console *console, BOOL enable );
+void update_window_title( struct console *console );
 #endif
 
 static inline void empty_update_rect( struct screen_buffer *screen_buffer, RECT *rect )

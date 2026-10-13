@@ -72,6 +72,8 @@ struct console_window
 #ifdef __REACTOS__
     COLORREF          backdrop;
     BOOL              backdrop_set;
+    WCHAR            *title;
+    BOOL              title_pending;
 #endif
 };
 
@@ -605,6 +607,21 @@ static void update_content_backdrop( struct console *console )
         console->window->backdrop = fill;
         console->window->backdrop_set = TRUE;
     }
+}
+#endif
+
+#ifdef __REACTOS__
+#define TITLE_TIMER       2
+#define TITLE_TIMER_DELAY 16
+
+static void apply_window_title( struct console *console )
+{
+    console->window->title_pending = FALSE;
+    if (!console->title) return;
+    if (console->window->title && !wcscmp( console->window->title, console->title )) return;
+    free( console->window->title );
+    console->window->title = wcsdup( console->title );
+    SetWindowTextW( console->win, console->title );
 }
 #endif
 
@@ -2257,6 +2274,12 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
     case WM_TIMER:
     case WM_UPDATE_CONFIG:
 #ifdef __REACTOS__
+        if (msg == WM_TIMER && wparam == TITLE_TIMER)
+        {
+            KillTimer( hwnd, TITLE_TIMER );
+            if (console->window) apply_window_title( console );
+            break;
+        }
         if (msg == WM_TIMER) KillTimer( hwnd, 1 );
 #endif
         if (console->window && console->window->update_state == UPDATE_PENDING)
@@ -2589,6 +2612,18 @@ void update_window_config( struct console *console, BOOL delay )
 void set_window_quick_edit( struct console *console, BOOL enable )
 {
     if (console->window) console->window->quick_edit = enable;
+}
+
+void update_window_title( struct console *console )
+{
+    if (!console->window)
+    {
+        SetWindowTextW( console->win, console->title );
+        return;
+    }
+    if (console->window->title_pending) return;
+    console->window->title_pending = TRUE;
+    SetTimer( console->win, TITLE_TIMER, TITLE_TIMER_DELAY, NULL );
 }
 #endif
 
