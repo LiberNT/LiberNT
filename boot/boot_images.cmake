@@ -618,11 +618,57 @@ if(PREINSTALL_WINE_GECKO)
     endwhile()
 endif()
 
+option(PREINSTALL_WINE_MONO
+       "Preinstall the Wine Mono runtime that mscoree uses in the preinstalled disk image" ON)
+if(PREINSTALL_WINE_MONO)
+    set(_wine_mono_version 11.2.0)
+    set(_wine_mono_sha256 c9fb2e2823acf30b000b8806177db0f40751786136dd3f8fb2be7897b1643d06)
+    set(_wine_mono_dir "${REACTOS_BINARY_DIR}/wine-mono")
+    set(_wine_mono_name "wine-mono-${_wine_mono_version}")
+    set(_wine_mono_archive "${_wine_mono_dir}/${_wine_mono_name}-x86.tar.xz")
+    set(_wine_mono_stamp "${_wine_mono_dir}/${_wine_mono_name}.extracted")
+    file(DOWNLOAD "https://dl.winehq.org/wine/wine-mono/${_wine_mono_version}/${_wine_mono_name}-x86.tar.xz"
+         "${_wine_mono_archive}" EXPECTED_HASH SHA256=${_wine_mono_sha256} STATUS _wine_mono_status)
+    list(GET _wine_mono_status 0 _wine_mono_result)
+    if(NOT _wine_mono_result EQUAL 0)
+        message(FATAL_ERROR "Downloading ${_wine_mono_name}-x86.tar.xz failed: ${_wine_mono_status}. "
+                            "Set PREINSTALL_WINE_MONO=OFF to build the image without Wine Mono.")
+    endif()
+    set(_wine_mono_extracted)
+    if(EXISTS "${_wine_mono_stamp}")
+        file(READ "${_wine_mono_stamp}" _wine_mono_extracted)
+    endif()
+    if(NOT _wine_mono_extracted STREQUAL _wine_mono_sha256)
+        file(REMOVE_RECURSE "${_wine_mono_dir}/${_wine_mono_name}" "${_wine_mono_stamp}")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xf "${_wine_mono_archive}"
+                        WORKING_DIRECTORY "${_wine_mono_dir}" RESULT_VARIABLE _wine_mono_result)
+        if(NOT _wine_mono_result EQUAL 0)
+            message(FATAL_ERROR "Extracting ${_wine_mono_name}-x86.tar.xz failed: ${_wine_mono_result}")
+        endif()
+        file(WRITE "${_wine_mono_stamp}" "${_wine_mono_sha256}")
+    endif()
+    file(GLOB_RECURSE _wine_mono_files RELATIVE "${_wine_mono_dir}/${_wine_mono_name}"
+         "${_wine_mono_dir}/${_wine_mono_name}/*")
+    foreach(_wine_mono_file IN LISTS _wine_mono_files)
+        set(_wine_mono_source "${_wine_mono_dir}/${_wine_mono_name}/${_wine_mono_file}")
+        set_property(GLOBAL APPEND PROPERTY PREINSTALL_OVERLAY_FILE_LIST
+            "reactos/mono/mono-2.0/${_wine_mono_file}=${_wine_mono_source}")
+        list(APPEND _preinstall_overlay_deps "${_wine_mono_source}")
+    endforeach()
+endif()
+
 # Disk image size configuration (in MiB). The 1-GiB default provides a
 # 959-MiB NTFS partition after the 1-MiB alignment gap and 64-MiB FAT boot
 # partition.
 set(_preinstall_image_size_default 1024)
+if(PREINSTALL_WINE_MONO)
+    set(_preinstall_image_size_default 1536)
+endif()
 set(PREINSTALL_IMAGE_SIZE_MB ${_preinstall_image_size_default} CACHE STRING "Disk image size in MB, including the alignment gap, boot partition, and system partition")
+if(PREINSTALL_WINE_MONO AND PREINSTALL_IMAGE_SIZE_MB LESS _preinstall_image_size_default)
+    message(STATUS "PREINSTALL_IMAGE_SIZE_MB raised from ${PREINSTALL_IMAGE_SIZE_MB} to ${_preinstall_image_size_default} to hold Wine Mono")
+    set(PREINSTALL_IMAGE_SIZE_MB ${_preinstall_image_size_default})
+endif()
 set(_rosprofiler_package_pdbs_default OFF)
 if(MSVC AND (CMAKE_BUILD_TYPE MATCHES "^[Dd]ebug$" OR
              CMAKE_CONFIGURATION_TYPES))

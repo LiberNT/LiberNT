@@ -254,7 +254,10 @@ IECopy=16422,Internet Explorer
 [Finalize] ; Executed by RunOnceEx on first normal boot
 ; FIXME: This should be moved to ie.inf,DefaultInstall and executed by [Infs.Always]
 CopyFiles=IECopy
-RegisterDlls=IEReg
+RegisterDlls=IEReg,MonoReg
+
+[MonoReg]
+11,,mscoree.dll,1
 
 [IECopy]
 iexplore.exe,..\iexplore.exe,,0x00002000

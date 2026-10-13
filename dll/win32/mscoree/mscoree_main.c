@@ -724,7 +724,6 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv)
     return hr;
 }
 
-#ifndef __REACTOS__
 static void parse_msi_version_string(const char *version, int *parts)
 {
     const char *minor_start, *build_start;
@@ -761,6 +760,9 @@ static int compare_versions(const char *a, const char *b)
 
 static BOOL invoke_appwiz(void)
 {
+#ifdef __REACTOS__
+    return FALSE;
+#else
     PROCESS_INFORMATION pi;
     STARTUPINFOW si;
     WCHAR app[MAX_PATH];
@@ -795,6 +797,7 @@ static BOOL invoke_appwiz(void)
     }
 
     return ret;
+#endif
 }
 
 static BOOL get_support_msi(LPCWSTR mono_path, LPWSTR msi_path)
@@ -953,13 +956,10 @@ end:
         CoUninitialize();
     return ret;
 }
-#endif
 
 HRESULT WINAPI DllRegisterServer(void)
 {
-#ifndef __REACTOS__
     install_wine_mono();
-#endif
 
     return __wine_register_resources();
 }

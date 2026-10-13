@@ -47,6 +47,8 @@ set(COMPAT_RUNTIME_MODULES
     d3dcompiler_43
     d3dcompiler_47
     d3dumdrt
+    d3dx9_43
+    d3dxof
     dxdiagn
     dcomp
     ddraw
@@ -102,6 +104,7 @@ set(COMPAT_RUNTIME_MODULES
     mpr
     msacm32
     msafd
+    mscoree
     msctf
     msctfime
     msi
