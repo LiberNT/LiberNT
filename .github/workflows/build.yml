@@ -147,7 +147,7 @@ jobs:
     - name: Build images
       run: |
         . "$HOME/.local/opt/rosbe/rosbe-env.sh"
-        ninja -C ${{steps.configure.outputs.outdir}} bootcd reactosimg reactosvhd -k0
+        ninja -C ${{steps.configure.outputs.outdir}} bootcd liberntimg liberntvhd -k0
 
     - name: Print ccache statistics
       run: ccache -s
@@ -162,14 +162,14 @@ jobs:
         name: bootcd-iso-${{steps.images.outputs.tag}}
         path: ${{steps.configure.outputs.outdir}}/bootcd.iso
 
-    - name: Upload ReactOS.img
+    - name: Upload LiberNT.img
       uses: actions/upload-artifact@v7
       with:
         name: LiberNT-img-${{steps.images.outputs.tag}}
-        path: ${{steps.configure.outputs.outdir}}/ReactOS.img
+        path: ${{steps.configure.outputs.outdir}}/LiberNT.img
 
-    - name: Upload ReactOS.vhd
+    - name: Upload LiberNT.vhd
       uses: actions/upload-artifact@v7
       with:
         name: LiberNT-vhd-${{steps.images.outputs.tag}}
-        path: ${{steps.configure.outputs.outdir}}/ReactOS.vhd
+        path: ${{steps.configure.outputs.outdir}}/LiberNT.vhd

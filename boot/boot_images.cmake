@@ -484,15 +484,15 @@ else()
 endif()
 
 
-## ReactOSImg
+## LiberNTImg
 # Create the file list
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/preinstall.cmake.lst "")
 # The NTFS image importer requires every entry to map an image path to a host path.
 
 set(_preinstall_boot_partition_file ${CMAKE_CURRENT_BINARY_DIR}/partition.boot.fat)
 set(_preinstall_system_partition_file ${CMAKE_CURRENT_BINARY_DIR}/partition.ntfs)
-set(_preinstall_image_file ${REACTOS_BINARY_DIR}/ReactOS.img)
-set(_preinstall_vhd_file ${REACTOS_BINARY_DIR}/ReactOS.vhd)
+set(_preinstall_image_file ${REACTOS_BINARY_DIR}/LiberNT.img)
+set(_preinstall_vhd_file ${REACTOS_BINARY_DIR}/LiberNT.vhd)
 # Keep ROSBOOT as an active MBR ESP. UEFI discovers it by type, while the BIOS
 # MBR follows the active flag and loads its FAT32 boot sector. The Raspberry Pi
 # 1-3 boot ROM only scans for FAT MBR ids and skips 0xEF, so the Raspberry Pi
@@ -743,14 +743,14 @@ if(_preinstall_rpi_overlays)
 endif()
 set(_preinstall_partition_deps native-fatten native-ntfsimg
     ${_preinstall_overlay_deps} ${ARM64_BOOT_FILE_DEPS})
-set(_reactosimg_mbr_args)
-set(_reactosimg_deps native-mkdiskimg)
-set(_reactosimg_leading_args)
-set(_reactosimg_boot_partition_args)
-set(_reactosimg_system_partition_args)
+set(_liberntimg_mbr_args)
+set(_liberntimg_deps native-mkdiskimg)
+set(_liberntimg_leading_args)
+set(_liberntimg_boot_partition_args)
+set(_liberntimg_system_partition_args)
 if(SPACEMIT_K1_SUPPORT)
-    list(APPEND _reactosimg_mbr_args -gpt -mbr ${SPACEMIT_K1_BOOTINFO})
-    list(APPEND _reactosimg_leading_args
+    list(APPEND _liberntimg_mbr_args -gpt -mbr ${SPACEMIT_K1_BOOTINFO})
+    list(APPEND _liberntimg_leading_args
         -data ${SPACEMIT_K1_OPENSBI}
         -start ${SPACEMIT_K1_OPENSBI_START}
         -type da
@@ -766,13 +766,13 @@ if(SPACEMIT_K1_SUPPORT)
         -raw ${SPACEMIT_K1_FSBL}
         -at ${SPACEMIT_K1_FSBL_BACKUP_SECTOR})
     set(_preinstall_boot_partition_fs fat32)
-    list(APPEND _reactosimg_boot_partition_args -name bootfs)
-    list(APPEND _reactosimg_system_partition_args -name ReactOS)
+    list(APPEND _liberntimg_boot_partition_args -name bootfs)
+    list(APPEND _liberntimg_system_partition_args -name ReactOS)
     list(APPEND _preinstall_boot_partition_files
         -add ${SPACEMIT_K1_UBOOT_ENV} env_k1-x.txt)
     list(APPEND _preinstall_partition_deps
         ${SPACEMIT_K1_UBOOT_ENV})
-    list(APPEND _reactosimg_deps
+    list(APPEND _liberntimg_deps
         ${SPACEMIT_K1_BOOTINFO} ${SPACEMIT_K1_FSBL} ${SPACEMIT_K1_OPENSBI} ${SPACEMIT_K1_UBOOT})
 endif()
 if(STARFIVE_JH7110_SUPPORT)
@@ -802,8 +802,8 @@ if(FREELDR_HAS_BIOS_BOOT)
         -add ${_freeldr_file} freeldr.sys
         -add $<TARGET_FILE:rosload> rosload.exe)
     list(APPEND _preinstall_partition_deps fat32 freeldr rosload)
-    list(APPEND _reactosimg_mbr_args -mbr ${_dosmbr_file})
-    list(APPEND _reactosimg_deps dosmbr)
+    list(APPEND _liberntimg_mbr_args -mbr ${_dosmbr_file})
+    list(APPEND _liberntimg_deps dosmbr)
 endif()
 if(DEFINED EFI_PLATFORM_ID)
     list(APPEND _preinstall_boot_partition_files
@@ -859,23 +859,23 @@ add_custom_target(preinstall_partition
     DEPENDS ${_preinstall_partition_deps}
     VERBATIM)
 
-add_custom_target(reactosimg
+add_custom_target(liberntimg
     COMMAND ${CMAKE_COMMAND} -E rm -f ${_preinstall_image_file}
     COMMAND native-mkdiskimg
         -o ${_preinstall_image_file}
-        ${_reactosimg_mbr_args}
-        ${_reactosimg_leading_args}
+        ${_liberntimg_mbr_args}
+        ${_liberntimg_leading_args}
         -partition ${_preinstall_boot_partition_file}
         -start ${_preinstall_boot_partition_start}
         -type ${_preinstall_boot_partition_type}
-        ${_reactosimg_boot_partition_args}
+        ${_liberntimg_boot_partition_args}
         -partition ${_preinstall_system_partition_file}
         -start ${_preinstall_system_partition_start}
         -type 07
-        ${_reactosimg_system_partition_args}
-    DEPENDS ${_reactosimg_deps}
+        ${_liberntimg_system_partition_args}
+    DEPENDS ${_liberntimg_deps}
     VERBATIM)
-add_dependencies(reactosimg preinstall_partition)
+add_dependencies(liberntimg preinstall_partition)
 
 if(STARFIVE_JH7110_SUPPORT)
     set(_jh7110_boot_partition_file ${CMAKE_CURRENT_BINARY_DIR}/jh7110-bootfs.img)
@@ -908,27 +908,27 @@ if(STARFIVE_JH7110_SUPPORT)
             ${STARFIVE_JH7110_SPL} ${STARFIVE_JH7110_UBOOT}
             ${STARFIVE_JH7110_BOOT_SCRIPT} ${STARFIVE_JH7110_BOOT_SCRIPT_SOURCE}
         VERBATIM)
-    add_dependencies(reactosimg jh7110sdimg)
+    add_dependencies(liberntimg jh7110sdimg)
 endif()
 
-add_custom_target(reactosvhd
+add_custom_target(liberntvhd
     COMMAND ${CMAKE_COMMAND} -E rm -f ${_preinstall_vhd_file}
     COMMAND native-mkdiskimg
         -o ${_preinstall_vhd_file}
-        ${_reactosimg_mbr_args}
-        ${_reactosimg_leading_args}
+        ${_liberntimg_mbr_args}
+        ${_liberntimg_leading_args}
         -partition ${_preinstall_boot_partition_file}
         -start ${_preinstall_boot_partition_start}
         -type ${_preinstall_boot_partition_type}
-        ${_reactosimg_boot_partition_args}
+        ${_liberntimg_boot_partition_args}
         -partition ${_preinstall_system_partition_file}
         -start ${_preinstall_system_partition_start}
         -type 07
-        ${_reactosimg_system_partition_args}
+        ${_liberntimg_system_partition_args}
         -vhd
-    DEPENDS ${_reactosimg_deps}
+    DEPENDS ${_liberntimg_deps}
     VERBATIM)
-add_dependencies(reactosvhd preinstall_partition)
+add_dependencies(liberntvhd preinstall_partition)
 
 
 if(DEFINED EFI_PLATFORM_ID)

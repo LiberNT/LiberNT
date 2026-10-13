@@ -6,7 +6,7 @@ set -eu
 
 usage()
 {
-    echo "Usage: $0 [--dry-run] [ReactOS.img]" >&2
+    echo "Usage: $0 [--dry-run] [LiberNT.img]" >&2
     exit 2
 }
 
@@ -40,7 +40,7 @@ if [ "$#" -gt 1 ]; then
     usage
 fi
 
-image_path=${1:-ReactOS.img}
+image_path=${1:-LiberNT.img}
 [ -f "$image_path" ] || fail "image not found: $image_path"
 [ -r "$image_path" ] || fail "image is not readable: $image_path"
 

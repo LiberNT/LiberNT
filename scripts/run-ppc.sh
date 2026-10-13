@@ -58,8 +58,8 @@ if [ -z "${QEMU_MODULE_DIR:-}" ]; then
     done
 fi
 
-target=reactosimg
-image=${disk_image:-"$build_dir/ReactOS.img"}
+target=liberntimg
+image=${disk_image:-"$build_dir/LiberNT.img"}
 if [ "$media" = iso ]; then
     target=livecd
     image="$build_dir/livecd.iso"

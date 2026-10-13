@@ -117,7 +117,7 @@ Most of the tree is still shared with ReactOS, and the components synchronised w
 
 - Reuse the existing build directories and artifacts. Do not duplicate build caches, executables or disk images, or create per-test, per-session, dated or prefixed output paths.
 - Run builds with `CCACHE_DISABLE=1`; compiler caching is disabled to avoid duplicate artifacts.
-- Keep one working log, overwritten in place. Use the existing build's `ReactOS.img` and one fixed test payload image. Pass the raw payload image to `--apps`; passing a directory creates additional cached images and overlays.
+- Keep one working log, overwritten in place. Use the existing build's `LiberNT.img` and one fixed test payload image. Pass the raw payload image to `--apps`; passing a directory creates additional cached images and overlays.
 - Run `vm_monitor.py` with `--timeout 30 --stall 6`. Never use a timeout above 30 seconds or a stall timeout above 6 seconds.
 - Run without a display by setting `ROS_QEMU_DISPLAY=none`; omit screen arguments.
 - Never rebuild or repack a disk image while a VM is using it.

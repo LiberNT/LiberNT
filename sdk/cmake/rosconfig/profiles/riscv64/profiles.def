@@ -10,14 +10,14 @@ config PROFILE_RISCV64
     help
       Generic builds the architecture-independent RISC-V target.
 
-      SpacemiT K1 (Banana Pi BPI-F3) builds ReactOS.img as an SD card the K1
+      SpacemiT K1 (Banana Pi BPI-F3) builds LiberNT.img as an SD card the K1
       boot ROM starts: U-Boot SPL, OpenSBI and U-Boot, which runs FreeLoader
       from the FAT boot partition.
       It compiles for the RVA22U64 profile, lets user-mode modules use
       misaligned scalar accesses, which the K1's X60 harts perform in
       hardware, and binds msvcrt to its vector (V) string routines.
 
-      StarFive JH7110 (Orange Pi RV) builds ReactOS.img for a USB disk the
+      StarFive JH7110 (Orange Pi RV) builds LiberNT.img for a USB disk the
       firmware starts through UEFI, and JH7110-SD.img, an SD card that holds
       only U-Boot SPL, OpenSBI and U-Boot with a script that runs FreeLoader
       from the USB disk.

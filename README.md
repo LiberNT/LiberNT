@@ -106,14 +106,14 @@ Go to the output folder and run Ninja with the target you want:
 
 ```sh
 cd output-Clang-amd64-debug
-ninja reactosimg
+ninja liberntimg
 ```
 
 | Command | Creates | Use it to |
 |---|---|---|
 | `ninja bootcd` | `bootcd.iso` | Install LiberNT from a CD image, in a virtual machine or on a PC. |
-| `ninja reactosimg` | `ReactOS.img` | Boot a disk with LiberNT already installed. Start it in a virtual machine such as QEMU, or write it to a USB drive or SD card. It boots with UEFI or BIOS. |
-| `ninja reactosvhd` | `ReactOS.vhd` | Use the same preinstalled disk in virtual machines that take VHD disks, such as Hyper-V and VirtualBox. |
+| `ninja liberntimg` | `LiberNT.img` | Boot a disk with LiberNT already installed. Start it in a virtual machine such as QEMU, or write it to a USB drive or SD card. It boots with UEFI or BIOS. |
+| `ninja liberntvhd` | `LiberNT.vhd` | Use the same preinstalled disk in virtual machines that take VHD disks, such as Hyper-V and VirtualBox. |
 
 Each target builds everything it needs first, and the files are written to the output folder.
 
