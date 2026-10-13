@@ -6951,6 +6951,7 @@ struct NativeWindowState : public NativeAllocation
     int x, y, width, height;
     UINT flags;
     bool set_style;
+    bool foreground;
 };
 
 static DWORD WINAPI NativeApplyWindowState(void *context)
@@ -6962,6 +6963,7 @@ static DWORD WINAPI NativeApplyWindowState(void *context)
         SetWindowLongW(state->window, GWL_EXSTYLE, state->exstyle);
     }
     SetWindowPos(state->window, state->after, state->x, state->y, state->width, state->height, state->flags);
+    if (state->foreground) SetForegroundWindow(state->window);
     delete state;
     return 0;
 }
@@ -7033,6 +7035,7 @@ HRESULT NativeSwapChain::SetupFullscreenWindow(int x, int y, int width, int heig
     state->style = NativeFullscreenStyle(windowed_style);
     state->exstyle = NativeFullscreenExStyle(windowed_exstyle);
     state->set_style = true;
+    state->foreground = true;
     NativeSetWindowState(state);
     return S_OK;
 }
@@ -7044,6 +7047,7 @@ void NativeSwapChain::RestoreWindow(const RECT *rect)
     NativeWindowState *state = new NativeWindowState;
     if (!state) return;
     state->window = window;
+    state->foreground = false;
     state->after = (windowed_exstyle & WS_EX_TOPMOST) ? HWND_TOPMOST : HWND_NOTOPMOST;
     state->flags = SWP_FRAMECHANGED | SWP_NOACTIVATE | ((windowed_style & WS_VISIBLE) ? SWP_SHOWWINDOW : SWP_HIDEWINDOW);
     LONG style = GetWindowLongW(window, GWL_STYLE);
