@@ -22,10 +22,8 @@
  * describes it in the architecture header, mirroring its HAL:
  *   IOP_LINE_INTERRUPT_LIMIT  - flexible line requirements stay below it;
  *   IOP_FIXED_INTERRUPT_LIMIT - firmware-fixed lines (minimum == maximum)
- *                               must be below it;
- *   IOP_MESSAGE_VECTOR_BASE   - a line interrupt whose vector is at or above
- *                               it was left by firmware inside the message
- *                               pool and is dropped. */
+ *                               must be below it; a line at or above it
+ *                               was left by firmware and is dropped. */
 
 static
 BOOLEAN
@@ -52,9 +50,8 @@ IopGetNextResourceList(
  *
  * Two classes of garbage are removed:
  *
- *   1. Where the interrupt controller has a message vector pool, ghost
- *      line IRQs planted by firmware with a Vector already inside it
- *      (Vector >= IOP_MESSAGE_VECTOR_BASE).
+ *   1. Ghost line IRQs planted by firmware past the controller range
+ *      (Vector >= IOP_FIXED_INTERRUPT_LIMIT).
  *      A legal legacy IRQ must never land there; such descriptors
  *      are leftover artifacts from boot routing tables and confuse
  *      drivers that iterate the list.
@@ -111,14 +108,14 @@ IopConsolidateInterruptDescriptors(
             if (Desc->Type == CmResourceTypeInterrupt &&
                 !(Desc->Flags & CM_RESOURCE_INTERRUPT_MESSAGE))
             {
-#ifdef IOP_MESSAGE_VECTOR_BASE
-                if (Desc->u.Interrupt.Vector >= IOP_MESSAGE_VECTOR_BASE &&
+#ifdef IOP_FIXED_INTERRUPT_LIMIT
+                if (Desc->u.Interrupt.Vector >= IOP_FIXED_INTERRUPT_LIMIT &&
                     (HalIsInterruptTypeSecondary == NULL ||
                      !HalIsInterruptTypeSecondary(0, Desc->u.Interrupt.Level)))
                 {
                     DPRINT1("IopConsolidateInterruptDescriptors: dropping ghost "
                             "legacy interrupt vec=0x%x level=%lu "
-                            "(firmware planted in MSI pool)\n",
+                            "(past the controller range)\n",
                             Desc->u.Interrupt.Vector, Desc->u.Interrupt.Level);
                     Drop = TRUE;
                 }
@@ -2028,9 +2025,9 @@ IopAssignDeviceResources(
 
        RtlCopyMemory(DeviceNode->ResourceList, DeviceNode->BootResources, ListSize);
 
-#ifdef IOP_MESSAGE_VECTOR_BASE
+#ifdef IOP_FIXED_INTERRUPT_LIMIT
        /* First consolidation pass: drop firmware-planted line
-        * interrupts whose vector is inside the MSI pool. This runs
+        * interrupts past the controller range. This runs
         * before arbitration so the boot resources are clean when the
         * arbiter matches requirements against them. */
        IopConsolidateInterruptDescriptors(DeviceNode->ResourceList);
