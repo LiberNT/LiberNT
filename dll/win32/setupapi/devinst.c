@@ -6690,6 +6690,49 @@ HasAssociatedService(
 }
 
 static BOOL
+HasOtherDriver(
+        IN HKEY hDriverKey,
+        IN PCWSTR InfFileName,
+        IN PCWSTR SectionName)
+{
+    WCHAR Installed[2 * MAX_PATH];
+    DWORD Type, Size, Length;
+    LONG rc;
+
+    Size = MAX_PATH * sizeof(WCHAR);
+    rc = RegQueryValueExW(hDriverKey, REGSTR_VAL_INFPATH, NULL, &Type, (PBYTE)Installed, &Size);
+    if (rc == ERROR_FILE_NOT_FOUND)
+        return FALSE;
+    if (rc != ERROR_SUCCESS || Type != REG_SZ)
+        return TRUE;
+    Installed[Size / sizeof(WCHAR)] = UNICODE_NULL;
+    if (strcmpiW(Installed, InfFileName) != 0)
+        return TRUE;
+
+    Size = MAX_PATH * sizeof(WCHAR);
+    if (RegQueryValueExW(hDriverKey, REGSTR_VAL_INFSECTION, NULL, &Type, (PBYTE)Installed, &Size) != ERROR_SUCCESS ||
+        Type != REG_SZ)
+    {
+        return TRUE;
+    }
+    Installed[Size / sizeof(WCHAR)] = UNICODE_NULL;
+
+    Length = strlenW(Installed);
+    Size = (MAX_PATH - 1) * sizeof(WCHAR);
+    if (RegQueryValueExW(hDriverKey, REGSTR_VAL_INFSECTIONEXT, NULL, &Type, (PBYTE)&Installed[Length], &Size) == ERROR_SUCCESS &&
+        Type == REG_SZ)
+    {
+        Installed[Length + Size / sizeof(WCHAR)] = UNICODE_NULL;
+    }
+    else
+    {
+        Installed[Length] = UNICODE_NULL;
+    }
+
+    return strcmpiW(Installed, SectionName) != 0;
+}
+
+static BOOL
 StopDevice(
         IN HDEVINFO DeviceInfoSet,
         IN PSP_DEVINFO_DATA DeviceInfoData)
@@ -7317,7 +7360,7 @@ SetupDiInstallDevice(
     memcpy(&deviceInfo->ClassGuid, &ClassGuid, sizeof(GUID));
     memcpy(&DeviceInfoData->ClassGuid, &ClassGuid, sizeof(GUID));
 
-    PreviouslyInstalled = RegQueryValueExW(hKey, REGSTR_VAL_INFPATH, NULL, NULL, NULL, NULL) == ERROR_SUCCESS;
+    PreviouslyInstalled = HasOtherDriver(hKey, SelectedDriver->InfFileDetails->FileName, SectionName);
 
     /* Install main section */
     DoAction = 0;
