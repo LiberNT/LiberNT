@@ -222,9 +222,8 @@ SdBusOpenInterface(
                               KernelMode,
                               FALSE,
                               NULL);
+        Status = IoStatus.Status;
     }
-
-    Status = IoStatus.Status;
 
     return Status;
 }
