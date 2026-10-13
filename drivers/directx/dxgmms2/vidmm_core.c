@@ -203,8 +203,8 @@ Dxgmms2VidMmCoreSetSegment(
 /*
  * Dxgmms2VidMmCoreReserve
  *
- * Prefer the high-water cursor, then search recycled gaps when the tail is
- * exhausted. The range list must stay sorted for that first-fit search.
+ * Take the lowest gap that fits, then the space above the last range. The
+ * range list must stay sorted for that first-fit search.
  */
 NTSTATUS
 Dxgmms2VidMmCoreReserve(
@@ -236,33 +236,22 @@ Dxgmms2VidMmCoreReserve(
         return STATUS_NO_MEMORY;
     if (Segment->UsedSize > Limit || AlignedSize > Limit - Segment->UsedSize)
         return STATUS_NO_MEMORY;
-    if (Dxgmms2VidMmAlignUp(Segment->BumpOffset, Info->Alignment, &Aligned) &&
-        Aligned <= Limit && AlignedSize <= Limit - Aligned)
+    for (Entry = Segment->RangeList.Flink; Entry != &Segment->RangeList; Entry = Entry->Flink)
     {
-        Candidate = Aligned;
-        Segment->BumpOffset = Aligned + AlignedSize;
-        Found = TRUE;
-    }
+        PDXGMMS2_VIDMM_RANGE Existing = CONTAINING_RECORD(Entry, DXGMMS2_VIDMM_RANGE, Entry);
 
-    if (!Found)
-    {
-        for (Entry = Segment->RangeList.Flink; Entry != &Segment->RangeList; Entry = Entry->Flink)
+        if (!Dxgmms2VidMmAlignUp(Candidate, Info->Alignment, &Aligned))
+            return STATUS_INTEGER_OVERFLOW;
+        if (Aligned <= Existing->Offset && AlignedSize <= Existing->Offset - Aligned)
         {
-            PDXGMMS2_VIDMM_RANGE Existing = CONTAINING_RECORD(Entry, DXGMMS2_VIDMM_RANGE, Entry);
-
-            if (!Dxgmms2VidMmAlignUp(Candidate, Info->Alignment, &Aligned))
-                return STATUS_INTEGER_OVERFLOW;
-            if (Aligned <= Existing->Offset && AlignedSize <= Existing->Offset - Aligned)
-            {
-                Candidate = Aligned;
-                Found = TRUE;
-                break;
-            }
-            if (Existing->Offset > Limit || Existing->AlignedSize > Limit - Existing->Offset)
-                return STATUS_DATA_ERROR;
-            if (Existing->Offset + Existing->AlignedSize > Candidate)
-                Candidate = Existing->Offset + Existing->AlignedSize;
+            Candidate = Aligned;
+            Found = TRUE;
+            break;
         }
+        if (Existing->Offset > Limit || Existing->AlignedSize > Limit - Existing->Offset)
+            return STATUS_DATA_ERROR;
+        if (Existing->Offset + Existing->AlignedSize > Candidate)
+            Candidate = Existing->Offset + Existing->AlignedSize;
     }
 
     if (!Found)
@@ -277,6 +266,8 @@ Dxgmms2VidMmCoreReserve(
 
     if (!Found)
         return STATUS_NO_MEMORY;
+    if (Candidate + AlignedSize > Segment->BumpOffset)
+        Segment->BumpOffset = Candidate + AlignedSize;
 
     Range = Dxgmms2VidMmAcquireRange(Core);
     if (Range == NULL)

@@ -146,10 +146,10 @@ TestStartAndSegmentDescription(
 }
 
 /*
- * Virgin space first, then first-fit over the gaps once the tail is exhausted.
+ * The lowest gap that fits first, then the space above the last range.
  */
 static VOID
-TestVirginSpaceThenFirstFit(
+TestLowestGapFirst(
     _Inout_ PDXGMMS2_VIDMM_TEST_STATE State)
 {
     DXGMMS2_VIDMM_SEGMENT_STATUS_V1 Status;
@@ -173,18 +173,18 @@ TestVirginSpaceThenFirstFit(
 
     ok_eq_ulonglong(SegmentUsedSize(State, 0), DXGMMS2_VIDMM_TEST_PAGE * 3);
 
-    /* Freeing the middle leaves a hole, but virgin space is still preferred. */
+    /* Freeing the middle leaves a hole, and the next placement takes it. */
     NtStatus = Dxgmms2VidMmCoreRelease(&State->Core, 0, 0x1002);
     ok_eq_hex(NtStatus, STATUS_SUCCESS);
     ok_eq_ulonglong(SegmentUsedSize(State, 0), DXGMMS2_VIDMM_TEST_PAGE * 2);
 
     NtStatus = ReserveSimple(State, 0, DXGMMS2_VIDMM_TEST_PAGE, 0x1004, &Recycled);
     ok_eq_hex(NtStatus, STATUS_SUCCESS);
-    ok_eq_ulonglong(Recycled, DXGMMS2_VIDMM_TEST_PAGE * 3);
+    ok_eq_ulonglong(Recycled, DXGMMS2_VIDMM_TEST_PAGE);
 
     InitSegmentStatus(&Status);
     (VOID)Dxgmms2VidMmCoreQuerySegment(&State->Core, 0, &Status);
-    ok_eq_ulonglong(Status.BumpOffset, DXGMMS2_VIDMM_TEST_PAGE * 4);
+    ok_eq_ulonglong(Status.BumpOffset, DXGMMS2_VIDMM_TEST_PAGE * 3);
     ok_eq_ulong(Status.PlacementCount, 3UL);
 
     /* Releasing something that was never placed is reported, not ignored. */
@@ -528,7 +528,7 @@ START_TEST(Dxgmms2VidMm)
     RtlZeroMemory(State, sizeof(*State));
 
     TestStartAndSegmentDescription(State);
-    TestVirginSpaceThenFirstFit(State);
+    TestLowestGapFirst(State);
     TestFirstFitReusesHoles(State);
     TestAlignmentAndCommitLimit(State);
     TestSegmentRedescriptionIsGuarded(State);
