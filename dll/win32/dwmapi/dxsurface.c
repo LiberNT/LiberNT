@@ -689,23 +689,6 @@ DwmpDxGetWindowSharedSurface(HWND Window,
         return HRESULT_FROM_NT(Status);
     }
 
-    EnterCriticalSection(&g_DxLock);
-    for (Index = 0; Index < DWM_DX_MAX_SURFACES; ++Index)
-    {
-        if (g_DxSurfaces[Index].Window == Window)
-        {
-            Surface = &g_DxSurfaces[Index];
-            break;
-        }
-    }
-    if (Surface != NULL && Surface->ReadyEvent != NULL &&
-        WaitForSingleObject(Surface->ReadyEvent, 0) == WAIT_TIMEOUT)
-    {
-        LeaveCriticalSection(&g_DxLock);
-        return S_FALSE;
-    }
-    LeaveCriticalSection(&g_DxLock);
-
     if (!IsWindow(Window) || !GetClientRect(Window, &ClientRect) ||
         ClientRect.right <= ClientRect.left ||
         ClientRect.bottom <= ClientRect.top)
@@ -740,16 +723,16 @@ DwmpDxGetWindowSharedSurface(HWND Window,
     {
         DWM_DX_DEVICE *Device = &g_DxDevices[Surface->DeviceIndex];
 
-        if (Surface->ReadyEvent != NULL &&
-            WaitForSingleObject(Surface->ReadyEvent, 0) == WAIT_TIMEOUT)
-        {
-            LeaveCriticalSection(&g_DxLock);
-            return S_FALSE;
-        }
-
         if (Surface->Width != Width || Surface->Height != Height ||
             !DwmDxLuidEqual(&Device->Luid, &AdapterLuid))
         {
+            if (Surface->ReadyEvent != NULL &&
+                WaitForSingleObject(Surface->ReadyEvent, 0) == WAIT_TIMEOUT)
+            {
+                LeaveCriticalSection(&g_DxLock);
+                return S_FALSE;
+            }
+
             FreeSurface = Surface;
             Surface = NULL;
         }

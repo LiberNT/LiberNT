@@ -4248,7 +4248,9 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
                 return STATUS_INVALID_PARAMETER;
             }
             if (Entry->Redirect.DxIssuedUpdateId >
-                Entry->Redirect.DxConsumedUpdateId)
+                Entry->Redirect.DxConsumedUpdateId &&
+                Entry->Redirect.DxPublishedUpdateId !=
+                Entry->Redirect.DxIssuedUpdateId)
             {
                 return STATUS_DEVICE_BUSY;
             }
@@ -4271,7 +4273,9 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
                 return STATUS_NOT_SUPPORTED;
             }
             if (Entry->Redirect.GdiIssuedUpdateId >
-                Entry->Redirect.GdiConsumedUpdateId)
+                Entry->Redirect.GdiConsumedUpdateId &&
+                Entry->Redirect.GdiPublishedUpdateId !=
+                Entry->Redirect.GdiIssuedUpdateId)
             {
                 return STATUS_DEVICE_BUSY;
             }
