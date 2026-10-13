@@ -210,6 +210,9 @@ CallNextHookEx(
   WPARAM wParam,
   LPARAM lParam)
 {
+#ifdef WOW64_I386_RUNTIME
+  return NtUserCallNextHookEx(Code, wParam, lParam, FALSE);
+#else
   PCLIENTINFO ClientInfo;
   DWORD Flags, Save;
   PHOOK pHook, phkNext;
@@ -268,6 +271,7 @@ CallNextHookEx(
      lResult = NtUserCallNextHookEx(Code, wParam, lParam, pHook->Ansi);
 
   return lResult;
+#endif
 }
 
 

@@ -1818,6 +1818,136 @@ NTSTATUS WINAPI wow64_NtUserCallMsgFilter( UINT *args )
     return ret;
 }
 
+#ifdef __REACTOS__
+static LRESULT ros_call_next_hook( INT code, WPARAM wparam, LPARAM lparam, BOOL ansi )
+{
+    return ((ROS_NTUSER_CALL_NEXT_HOOK_EX)NtUserCallNextHookEx)( code, wparam, lparam, ansi );
+}
+
+static LRESULT ros_call_next_mouse_hook( INT code, WPARAM wparam, const MOUSEHOOKSTRUCTEX32 *hook32, BOOL ansi )
+{
+    MOUSEHOOKSTRUCTEX hook;
+
+    if (!hook32) return ros_call_next_hook( code, wparam, 0, ansi );
+
+    memset( &hook, 0, sizeof(hook) );
+    hook.MOUSEHOOKSTRUCT.pt           = hook32->pt;
+    hook.MOUSEHOOKSTRUCT.hwnd         = LongToHandle( hook32->hwnd );
+    hook.MOUSEHOOKSTRUCT.wHitTestCode = hook32->wHitTestCode;
+    hook.MOUSEHOOKSTRUCT.dwExtraInfo  = hook32->dwExtraInfo;
+    return ros_call_next_hook( code, wparam, (LPARAM)&hook, ansi );
+}
+
+NTSTATUS WINAPI wow64_NtUserCallNextHookEx( UINT *args )
+{
+    INT code = get_ulong( &args );
+    WPARAM wparam = get_ulong( &args );
+    void *lparam32 = get_ptr( &args );
+    BOOL ansi = get_ulong( &args );
+    ULONG_PTR current = NtUserCallNoParam( ROS_NOPARAM_ROUTINE_GETCURRENTHOOK );
+    LRESULT ret;
+
+    if (!current) return 0;
+
+    switch ((INT)current + WH_MINHOOK - 1)
+    {
+    case WH_CALLWNDPROC:
+    case WH_CALLWNDPROCRET:
+    case WH_JOURNALRECORD:
+    case WH_JOURNALPLAYBACK:
+    case WH_DEBUG:
+        return 0;
+
+    case WH_MSGFILTER:
+    case WH_SYSMSGFILTER:
+    case WH_GETMESSAGE:
+        {
+            MSG msg;
+
+            if (!lparam32) break;
+            ret = ros_call_next_hook( code, wparam, (LPARAM)msg_32to64( &msg, lparam32 ), ansi );
+            msg_64to32( &msg, lparam32 );
+            return ret;
+        }
+
+    case WH_MOUSE:
+        return ros_call_next_mouse_hook( code, wparam, lparam32, ansi );
+
+    case WH_MOUSE_LL:
+        {
+            const MSLLHOOKSTRUCT32 *hook32 = lparam32;
+            MSLLHOOKSTRUCT hook;
+
+            if (!hook32) break;
+            hook.pt          = hook32->pt;
+            hook.mouseData   = hook32->mouseData;
+            hook.flags       = hook32->flags;
+            hook.time        = hook32->time;
+            hook.dwExtraInfo = hook32->dwExtraInfo;
+            return ros_call_next_hook( code, wparam, (LPARAM)&hook, ansi );
+        }
+
+    case WH_KEYBOARD_LL:
+        {
+            const KBDLLHOOKSTRUCT32 *hook32 = lparam32;
+            KBDLLHOOKSTRUCT hook;
+
+            if (!hook32) break;
+            hook.vkCode      = hook32->vkCode;
+            hook.scanCode    = hook32->scanCode;
+            hook.flags       = hook32->flags;
+            hook.time        = hook32->time;
+            hook.dwExtraInfo = hook32->dwExtraInfo;
+            return ros_call_next_hook( code, wparam, (LPARAM)&hook, ansi );
+        }
+
+    case WH_CBT:
+        switch (code)
+        {
+        case HCBT_CREATEWND:
+            {
+                struct
+                {
+                    ULONG lpcs;
+                    ULONG hwndInsertAfter;
+                } *cbt32 = lparam32;
+                CREATESTRUCT32 *cs32;
+                CBT_CREATEWNDW cbt;
+                CREATESTRUCTW cs;
+
+                if (!cbt32 || !(cs32 = UlongToPtr( cbt32->lpcs ))) break;
+                createstruct_32to64( cs32, &cs );
+                cbt.lpcs = &cs;
+                cbt.hwndInsertAfter = LongToHandle( cbt32->hwndInsertAfter );
+                ret = ros_call_next_hook( code, wparam, (LPARAM)&cbt, ansi );
+                cs32->x = cs.x;
+                cs32->y = cs.y;
+                cs32->cx = cs.cx;
+                cs32->cy = cs.cy;
+                cbt32->hwndInsertAfter = HandleToUlong( cbt.hwndInsertAfter );
+                return ret;
+            }
+
+        case HCBT_ACTIVATE:
+            {
+                const CBTACTIVATESTRUCT32 *cbt32 = lparam32;
+                CBTACTIVATESTRUCT cbt;
+
+                if (!cbt32) break;
+                cbt.fMouse     = cbt32->fMouse;
+                cbt.hWndActive = LongToHandle( cbt32->hWndActive );
+                return ros_call_next_hook( code, wparam, (LPARAM)&cbt, ansi );
+            }
+
+        case HCBT_CLICKSKIPPED:
+            return ros_call_next_mouse_hook( code, wparam, lparam32, ansi );
+        }
+        break;
+    }
+
+    return ros_call_next_hook( code, wparam, (LPARAM)lparam32, ansi );
+}
+#else
 NTSTATUS WINAPI wow64_NtUserCallNextHookEx( UINT *args )
 {
     HHOOK hhook = get_handle( &args );
@@ -1827,6 +1957,7 @@ NTSTATUS WINAPI wow64_NtUserCallNextHookEx( UINT *args )
 
     return NtUserCallNextHookEx( hhook, code, wparam, lparam );
 }
+#endif
 
 NTSTATUS WINAPI wow64_NtUserCallNoParam( UINT *args )
 {

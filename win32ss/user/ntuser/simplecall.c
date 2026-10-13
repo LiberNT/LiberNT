@@ -82,6 +82,7 @@ NtUserCallNoParam(DWORD Routine)
         case NOPARAM_ROUTINE_GETIMESHOWSTATUS:
         case NOPARAM_ROUTINE_ISCONSOLEMODE:
         case NOPARAM_ROUTINE_ROS_ISDEFAULTSYSCOLORS:
+        case NOPARAM_ROUTINE_ROS_GETCURRENTHOOK:
         case NOPARAM_ROUTINE_MSQCLEARWAKEMASK:
             UserEnterShared();
             break;
@@ -155,6 +156,15 @@ NtUserCallNoParam(DWORD Routine)
             PPROCESSINFO ppi = PsGetCurrentProcessWin32Process();
 
             Result = ppi && (ppi->W32PF_flags & W32PF_DEFAULTSYSCOLORS);
+            break;
+        }
+
+        case NOPARAM_ROUTINE_ROS_GETCURRENTHOOK:
+        {
+            PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
+
+            if (pti && pti->sphkCurrent)
+                Result = pti->sphkCurrent->HookId - WH_MINHOOK + 1;
             break;
         }
 
