@@ -2637,6 +2637,39 @@ void update_window_region( struct console *console, const RECT *update )
     update_window_config( console, TRUE );
 }
 
+#ifdef __REACTOS__
+static void set_client_icon( struct console *console, WPARAM type, int width, int height,
+                             const WCHAR *path )
+{
+    HICON icon = NULL;
+
+    if (PrivateExtractIconsW( path, 0, width, height, &icon, NULL, 1, 0 ) == 1 && icon)
+        SendMessageW( console->win, WM_SETICON, type, (LPARAM)icon );
+}
+
+static void set_client_icons( struct console *console )
+{
+    PROCESS_BASIC_INFORMATION info;
+    WCHAR path[MAX_PATH];
+    DWORD size = ARRAY_SIZE(path);
+    HANDLE process;
+
+    if (NtQueryInformationProcess( GetCurrentProcess(), ProcessBasicInformation, &info, sizeof(info), NULL ))
+        return;
+    if (!(process = OpenProcess( PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                 (DWORD)info.InheritedFromUniqueProcessId )))
+        return;
+    if (QueryFullProcessImageNameW( process, 0, path, &size ))
+    {
+        set_client_icon( console, ICON_BIG, GetSystemMetrics( SM_CXICON ),
+                         GetSystemMetrics( SM_CYICON ), path );
+        set_client_icon( console, ICON_SMALL, GetSystemMetrics( SM_CXSMICON ),
+                         GetSystemMetrics( SM_CYSMICON ), path );
+    }
+    CloseHandle( process );
+}
+#endif
+
 BOOL init_window( struct console *console )
 {
     struct console_config config;
@@ -2692,6 +2725,7 @@ BOOL init_window( struct console *console )
 
 #ifdef __REACTOS__
     DragAcceptFiles( console->win, TRUE );
+    set_client_icons( console );
     if ((!config.face_name[0] || !wcscmp( config.face_name, L"__DefaultTTFont__" )) &&
         !set_default_tt_font( console, &config ))
         set_first_font( console, &config );
