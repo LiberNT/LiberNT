@@ -321,7 +321,7 @@ It8613StopHardware(
     DeviceExtension->ChannelCount = 0;
     DeviceExtension->VinMask = 0;
     KeReleaseSpinLock(&DeviceExtension->PortLock, OldIrql);
-    IoSetDeviceInterfaceState(&DeviceExtension->InterfaceName, FALSE);
+    (VOID)IoSetDeviceInterfaceState(&DeviceExtension->InterfaceName, FALSE);
 }
 
 static
