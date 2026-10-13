@@ -2133,6 +2133,7 @@ D3DKMTLock2(
     Lock.hDevice = Captured.hDevice;
     Lock.hAllocation = Captured.hAllocation;
     Lock.Flags.LockEntire = 1;
+    Lock.Flags.IgnoreSync = 1;
     Status = WddmBridgeSendIoctlWithInformation(IOCTL_D3DKMT_LOCK, &Lock, sizeof(Lock), &Lock, sizeof(Lock), &Information);
     if (!NT_SUCCESS(Status))
         return Status;
