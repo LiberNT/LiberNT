@@ -15,12 +15,16 @@
 #include <infhost.h>
 
 #define DATABASE_KEY "SYSTEM\\DriverDatabase"
+#define SERVICES_KEY "SYSTEM\\CurrentControlSet\\Services"
 #define SIGNERSCORE_INBOX 0x0D000003
 #define SPSVCINST_ASSOCSERVICE 0x00000002
 #define FLG_ADDREG_BINVALUETYPE 0x00000001
 #define FLG_ADDREG_DELVAL 0x00000004
 #define FLG_ADDREG_KEYONLY 0x00000010
 #define FLG_ADDREG_DELREG_BIT 0x00008000
+#define FLG_ADDREG_TYPE_EXPAND_SZ 0x00020000
+#define SERVICE_KERNEL_DRIVER 0x00000001
+#define SERVICE_DEMAND_START 0x00000003
 #define CONFIGFLAG_FINISH_INSTALL 0x00000400
 #define MAX_SET_INFS 16
 
@@ -56,6 +60,8 @@ static size_t FileCount;
 static const char *Arch;
 static unsigned ArchNumber;
 static FILE *Out;
+static STRING_LIST BaseServices;
+static STRING_LIST DefinedServices;
 
 static void *
 Allocate(size_t Size)
@@ -747,6 +753,137 @@ EmitRelativeRegistry(INF_SET *Set, const char *Section, const char *Prefix)
 }
 
 static void
+CollectBaseServices(HINF Inf)
+{
+    static const char Prefix[] = SERVICES_KEY "\\";
+    PINFCONTEXT Context;
+    char *SubKey, *End;
+    int Found;
+
+    if (!FindFirst(Inf, "AddReg", NULL, &Context))
+        return;
+
+    for (Found = 1; Found; Found = InfHostFindNextLine(Context, Context) == 0)
+    {
+        SubKey = Field(Context, 2);
+        if (SubKey && EqualPrefix(SubKey, Prefix, sizeof(Prefix) - 1))
+        {
+            End = strchr(SubKey + sizeof(Prefix) - 1, '\\');
+            if (End)
+                *End = 0;
+            if (SubKey[sizeof(Prefix) - 1])
+                ListAdd(&BaseServices, SubKey + sizeof(Prefix) - 1);
+        }
+        free(SubKey);
+    }
+    InfHostFreeContext(Context);
+}
+
+static char *
+SetLineField(INF_SET *Set, const char *Section, const char *Key)
+{
+    PINFCONTEXT Context;
+    char *Value;
+
+    if (!SetFindFirst(Set, Section, Key, &Context))
+        return NULL;
+
+    Value = Field(Context, 1);
+    InfHostFreeContext(Context);
+    return Value;
+}
+
+static int
+SetLineInteger(INF_SET *Set, const char *Section, const char *Key, long *Value)
+{
+    PINFCONTEXT Context;
+    int Found;
+
+    if (!SetFindFirst(Set, Section, Key, &Context))
+        return 0;
+
+    Found = IntField(Context, 1, Value);
+    InfHostFreeContext(Context);
+    return Found;
+}
+
+static char *
+DriverImagePath(const char *Binary)
+{
+    static const char *const Directories[][2] =
+    {
+        { "%10%", "\\SystemRoot" },
+        { "%11%", "\\SystemRoot\\System32" },
+        { "%12%", "\\SystemRoot\\System32\\drivers" },
+    };
+    size_t Index;
+
+    for (Index = 0; Index < sizeof(Directories) / sizeof(Directories[0]); Index++)
+    {
+        if (EqualPrefix(Binary, Directories[Index][0], 4) && Binary[4] == '\\' && !strchr(Binary + 4, '%'))
+            return Format("%s%s", Directories[Index][1], Binary + 4);
+    }
+    return NULL;
+}
+
+static void
+EmitServiceDefinition(INF_SET *Set, const char *Service, const char *Section)
+{
+    char *Key, *Binary, *Path, *Text;
+    long Type, Start, ErrorControl;
+
+    if (ListContains(&BaseServices, Service) || ListContains(&DefinedServices, Service))
+        return;
+
+    if (!SetLineInteger(Set, Section, "ServiceType", &Type) || Type != SERVICE_KERNEL_DRIVER ||
+        !SetLineInteger(Set, Section, "StartType", &Start) || Start != SERVICE_DEMAND_START ||
+        !SetLineInteger(Set, Section, "ErrorControl", &ErrorControl))
+    {
+        return;
+    }
+
+    Text = SetLineField(Set, Section, "Dependencies");
+    if (Text && *Text)
+    {
+        free(Text);
+        return;
+    }
+    free(Text);
+
+    Binary = SetLineField(Set, Section, "ServiceBinary");
+    Path = Binary ? DriverImagePath(Binary) : NULL;
+    free(Binary);
+    if (!Path)
+    {
+        fprintf(stderr, "mkdrvdb: warning: service %s has no usable ServiceBinary in [%s]\n", Service, Section);
+        return;
+    }
+
+    ListAdd(&DefinedServices, Service);
+    Key = Format(SERVICES_KEY "\\%s", Service);
+    PutDword(Key, "Type", (unsigned long)Type);
+    PutDword(Key, "Start", (unsigned long)Start);
+    PutDword(Key, "ErrorControl", (unsigned long)ErrorControl);
+    PutValue(Key, "ImagePath", FLG_ADDREG_TYPE_EXPAND_SZ);
+    fputc(',', Out);
+    PutString(Path);
+    fputc('\n', Out);
+
+    Text = SetLineField(Set, Section, "DisplayName");
+    if (Text && *Text)
+        PutSz(Key, "DisplayName", Text);
+    free(Text);
+
+    Text = SetLineField(Set, Section, "LoadOrderGroup");
+    if (Text && *Text)
+        PutSz(Key, "Group", Text);
+    free(Text);
+
+    free(Path);
+    free(Key);
+}
+
+static void
 EmitFilter(HINF Inf, const char *ConfigurationKey, PINFCONTEXT AddFilter)
 {
     char *Name = Field(AddFilter, 1), *Section = Field(AddFilter, 3), *Level = NULL, *Key = NULL;
@@ -823,6 +960,7 @@ EmitConfiguration(INF_FILE *File, const char *PackageKey, const char *Section)
             ServiceSection = Field(Context, 3);
             if (ServiceSection && *ServiceSection)
             {
+                EmitServiceDefinition(&Set, Service, ServiceSection);
                 Prefix = Format("%s\\Services\\%s", Key, Service);
                 EmitRelativeRegistry(&Set, ServiceSection, Prefix);
                 free(Prefix);
@@ -1254,9 +1392,9 @@ main(int argc, char **argv)
     FILE *List;
     size_t Index;
 
-    if (argc != 4)
+    if (argc != 4 && argc != 5)
     {
-        fprintf(stderr, "usage: mkdrvdb <architecture> <output.inf> <inf-list.txt>\n");
+        fprintf(stderr, "usage: mkdrvdb <architecture> <output.inf> <inf-list.txt> [registry-inf-list.txt]\n");
         return 1;
     }
 
@@ -1296,6 +1434,35 @@ main(int argc, char **argv)
         FileCount++;
     }
     fclose(List);
+
+    if (argc == 5)
+    {
+        HINF Registry;
+
+        List = fopen(argv[4], "r");
+        if (!List)
+        {
+            fprintf(stderr, "mkdrvdb: cannot open %s\n", argv[4]);
+            return 1;
+        }
+        while (fgets(Line, sizeof(Line), List))
+        {
+            End = Line + strlen(Line);
+            while (End > Line && (End[-1] == '\n' || End[-1] == '\r' || End[-1] == ' '))
+                *--End = 0;
+            if (!Line[0])
+                continue;
+
+            if (InfHostOpenFile(&Registry, Line, 0, &ErrorLine) != 0)
+            {
+                fprintf(stderr, "mkdrvdb: cannot parse %s (line %lu)\n", Line, (unsigned long)ErrorLine);
+                return 1;
+            }
+            CollectBaseServices(Registry);
+            InfHostCloseFile(Registry);
+        }
+        fclose(List);
+    }
 
     Out = fopen(argv[2], "w");
     if (!Out)

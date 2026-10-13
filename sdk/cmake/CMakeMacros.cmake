@@ -854,10 +854,13 @@ function(create_registry_hives)
     set(_driver_database_inf "${CMAKE_BINARY_DIR}/boot/bootdata/driverdb.inf")
     string(REPLACE ";" "\n" _driver_database_text "${_driver_infs}")
     file(GENERATE OUTPUT ${_driver_database_list} CONTENT "${_driver_database_text}\n")
+    set(_driver_database_registry_list "${CMAKE_BINARY_DIR}/boot/bootdata/driverdb_registry_infs.txt")
+    string(REPLACE ";" "\n" _driver_database_registry_text "${_converted_files}")
+    file(GENERATE OUTPUT ${_driver_database_registry_list} CONTENT "${_driver_database_registry_text}\n")
     add_custom_command(
         OUTPUT ${_driver_database_inf}
-        COMMAND native-mkdrvdb ${_driver_database_arch} ${_driver_database_inf} ${_driver_database_list}
-        DEPENDS native-mkdrvdb ${_driver_database_list} ${_driver_infs} ${_driver_inf_targets}
+        COMMAND native-mkdrvdb ${_driver_database_arch} ${_driver_database_inf} ${_driver_database_list} ${_driver_database_registry_list}
+        DEPENDS native-mkdrvdb ${_driver_database_list} ${_driver_database_registry_list} ${_driver_infs} ${_driver_inf_targets} ${_converted_files}
         VERBATIM)
     utf16le_convert(${_driver_database_inf} ${CMAKE_BINARY_DIR}/boot/bootdata/driverdb_utf16.inf)
     list(APPEND _converted_files ${CMAKE_BINARY_DIR}/boot/bootdata/driverdb_utf16.inf)
