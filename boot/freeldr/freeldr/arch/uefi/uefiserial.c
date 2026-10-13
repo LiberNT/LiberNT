@@ -9,6 +9,8 @@
 extern EFI_SYSTEM_TABLE* GlobalSystemTable;
 extern volatile BOOLEAN BootServicesExitedFlag;
 
+extern EFI_GUID EfiGraphicsOutputProtocol;
+
 static EFI_GUID EfiSerialIoProtocolGuid = EFI_SERIAL_IO_PROTOCOL_GUID;
 static EFI_SERIAL_IO_PROTOCOL* UefiSerial = NULL;
 static BOOLEAN UefiSerialTried = FALSE;
@@ -18,6 +20,7 @@ BOOLEAN
 UefiSerialInitialize(VOID)
 {
     EFI_STATUS Status;
+    VOID *GraphicsOutput = NULL;
 
     if (BootServicesExitedFlag)
         return FALSE;
@@ -40,7 +43,11 @@ UefiSerialInitialize(VOID)
     {
         UefiSerial = NULL;
         UefiSerialUseConOut = (GlobalSystemTable->ConOut != NULL) &&
-                              (GlobalSystemTable->ConOut->OutputString != NULL);
+                              (GlobalSystemTable->ConOut->OutputString != NULL) &&
+                              EFI_ERROR(GlobalSystemTable->BootServices->LocateProtocol(
+                                            &EfiGraphicsOutputProtocol,
+                                            NULL,
+                                            &GraphicsOutput));
         return UefiSerialUseConOut;
     }
 
@@ -70,6 +77,9 @@ UefiSerialPutChar(
     _In_ UCHAR Character)
 {
     UINTN Size = 1;
+
+    if ((UefiSerial == NULL) && UefiArchSerialPutChar(Character))
+        return;
 
     if (BootServicesExitedFlag)
         return;

@@ -99,6 +99,10 @@ UefiSerialInitialize(VOID);
 VOID
 UefiSerialPutChar(
     _In_ UCHAR Character);
+
+BOOLEAN
+UefiArchSerialPutChar(
+    _In_ UCHAR Character);
 #endif
 
 VOID

@@ -776,3 +776,11 @@ EarlyUartInitializeWithInterface(
 
     return TRUE;
 }
+
+BOOLEAN
+UefiArchSerialPutChar(
+    _In_ UCHAR Character)
+{
+    UNREFERENCED_PARAMETER(Character);
+    return FALSE;
+}
