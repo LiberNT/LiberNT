@@ -540,6 +540,17 @@ DxgkSynchronizeRedirectionSurfaces(
     {
         for (Index = 0; Index < Sync->SurfaceCount; ++Index)
         {
+            Status = DxgkVidMmWaitForTrackedSubmissions(
+                         Snapshots[Index].Allocation, FALSE);
+            if (!NT_SUCCESS(Status))
+                break;
+        }
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        for (Index = 0; Index < Sync->SurfaceCount; ++Index)
+        {
             Status = DxgkVidMmInvalidateReferencedAllocationCache(
                          Snapshots[Index].Allocation,
                          Snapshots[Index].CacheOffset,
