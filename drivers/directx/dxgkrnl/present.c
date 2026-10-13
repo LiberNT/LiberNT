@@ -5122,6 +5122,7 @@ DxgkpExecuteMmioFlip(
     BOOLEAN PinOwned = FALSE;
     BOOLEAN KmdTransaction = FALSE;
     BOOLEAN DriverCalled = FALSE;
+    BOOLEAN PresentRefused = FALSE;
     BOOLEAN ScanoutLease = FALSE;
     BOOLEAN Synchronized;
     ULONG FlipRetry;
@@ -5272,6 +5273,7 @@ DxgkpExecuteMmioFlip(
     _SEH2_TRY
     {
         Status = DXGK_CB_FULL(Adapter, DxgkDdiPresent)(PresentContext, &PresentArgs);
+        PresentRefused = !NT_SUCCESS(Status);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -5529,7 +5531,21 @@ DxgkpExecuteMmioFlip(
 Cleanup:
     if (KmdTransaction)
         DxgkEndKmdTransaction(Adapter);
-    if (!NT_SUCCESS(Status) && DriverCalled)
+    if (PresentRefused)
+    {
+        Entry->SourceAllocation = Queue->MmioPendingAllocation;
+        PinOwned = TRUE;
+        for (OverlayIndex = 0; OverlayIndex < Entry->OverlayCount; ++OverlayIndex)
+        {
+            Entry->Overlays[OverlayIndex] = Queue->MmioPendingOverlays[OverlayIndex];
+            OverlayPinned[OverlayIndex] = TRUE;
+        }
+        RtlZeroMemory(Queue->MmioPendingOverlays, sizeof(Queue->MmioPendingOverlays));
+        Queue->MmioPendingAllocation = NULL;
+        Queue->MmioPendingHandle = 0;
+        DxgkpReleaseScanoutOwner(&Queue->MmioPendingOwner);
+    }
+    else if (!NT_SUCCESS(Status) && DriverCalled)
     {
         /* STATUS_RETRY is the driver saying "not now"; this present fails,
          * but the queue stays open for the next one. */
