@@ -542,31 +542,25 @@ UefiNetAnyDriverLoaded(VOID)
 }
 
 static BOOLEAN
-UefiNetEscapePressed(VOID)
+UefiNetKeyPressed(VOID)
 {
-    int Key;
-
     if (!MachConsKbHit())
         return FALSE;
 
-    Key = MachConsGetCh();
-    if (Key == KEY_EXTENDED)
-    {
+    if (MachConsGetCh() == KEY_EXTENDED)
         MachConsGetCh();
-        return FALSE;
-    }
 
-    return Key == KEY_ESC;
+    return TRUE;
 }
 
-static BOOLEAN
+BOOLEAN
 UefiNetWaitForRetry(VOID)
 {
     UINTN Elapsed = 0;
 
     while (Elapsed < UEFI_NETWORK_RETRY_DELAY_US)
     {
-        if (UefiNetEscapePressed())
+        if (UefiNetKeyPressed())
             return FALSE;
 
         GlobalSystemTable->BootServices->Stall(
@@ -871,6 +865,8 @@ UefiNetPrepare(
 
     RtlZeroMemory(Context, sizeof(*Context));
     NetworkFeatures = Features;
+    while (UefiNetKeyPressed())
+        NOTHING;
 
     /*
      * Expose PCI I/O handles, apply the board's RTL8168 preparation before
@@ -954,7 +950,7 @@ UefiNetPrepare(
             UefiConnectHttpPriority();
         UefiConnectAllControllers(Snp != NULL);
 
-        if (UefiNetEscapePressed())
+        if (UefiNetKeyPressed())
             goto Cancelled;
 
         if (!Snp && !(Mask & (NET_STAGE_NII | NET_STAGE_SNP)))

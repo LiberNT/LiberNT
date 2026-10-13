@@ -836,7 +836,8 @@ UefiHttpBootDownload(
         Features |= UEFI_NET_FEATURE_DNS;
 
     TRACE("UEFI HttpBoot: starting download from %s\n", Url);
-    UiDrawStatusText("Waiting for network... Press ESC to return to the boot menu.");
+    UiDrawStatusText("Waiting for network... Press any key to go back to the main menu.");
+    UiUpdateProgressBar(0, "Waiting for network... Press any key to go back to the main menu");
     if (!UefiNetPrepare(&Context, Features, Cancelled))
     {
         return FALSE;
@@ -893,8 +894,8 @@ UefiHttpBootDownload(
                     TRACE("UEFI HttpBoot: no address to inherit after %lu attempts, giving up\n", (unsigned long)FailedAttempts);
                     return FALSE;
                 }
-                GlobalSystemTable->BootServices->Stall(
-                    UEFI_NETWORK_RETRY_DELAY_US);
+                if (!UefiNetWaitForRetry())
+                    goto Cancelled;
                 continue;
             }
             AddressConfigured = TRUE;
@@ -907,8 +908,8 @@ UefiHttpBootDownload(
                 TRACE("UEFI HttpBoot: cannot open an HTTP session after %lu attempts, giving up\n", (unsigned long)FailedAttempts);
                 return FALSE;
             }
-            GlobalSystemTable->BootServices->Stall(
-                UEFI_NETWORK_RETRY_DELAY_US);
+            if (!UefiNetWaitForRetry())
+                goto Cancelled;
             continue;
         }
 
@@ -940,8 +941,8 @@ UefiHttpBootDownload(
             MediaPresent = UefiNetMediaPresent(&Context);
             if (!MediaPresent)
                 AddressConfigured = FALSE;
-            GlobalSystemTable->BootServices->Stall(
-                UEFI_NETWORK_RETRY_DELAY_US);
+            if (!UefiNetWaitForRetry())
+                goto Cancelled;
             continue;
         }
 
@@ -971,8 +972,8 @@ UefiHttpBootDownload(
             MediaPresent = UefiNetMediaPresent(&Context);
             if (!MediaPresent)
                 AddressConfigured = FALSE;
-            GlobalSystemTable->BootServices->Stall(
-                UEFI_NETWORK_RETRY_DELAY_US);
+            if (!UefiNetWaitForRetry())
+                goto Cancelled;
             continue;
         }
 
@@ -1017,4 +1018,10 @@ UefiHttpBootDownload(
               (unsigned long)gInitRamDiskSize);
         return TRUE;
     }
+
+Cancelled:
+    TRACE("UEFI HttpBoot: cancelled by user\n");
+    if (Cancelled)
+        *Cancelled = TRUE;
+    return FALSE;
 }

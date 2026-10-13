@@ -54,6 +54,9 @@ UefiNetPrepare(
     _Out_opt_ PBOOLEAN Cancelled);
 
 BOOLEAN
+UefiNetWaitForRetry(VOID);
+
+BOOLEAN
 UefiNetMediaPresent(
     _In_ PUEFI_NET_CONTEXT Context);
 
