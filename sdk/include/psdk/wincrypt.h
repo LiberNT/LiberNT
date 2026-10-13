@@ -3196,6 +3196,8 @@ typedef struct _CTL_FIND_SUBJECT_PARA
 #define szOID_RSA_messageDigest             "1.2.840.113549.1.9.4"
 #define szOID_RSA_signingTime               "1.2.840.113549.1.9.5"
 #define szOID_RSA_counterSign               "1.2.840.113549.1.9.6"
+#define szOID_TIMESTAMP_TOKEN               "1.2.840.113549.1.9.16.1.4"
+#define szOID_RFC3161_counterSign           "1.3.6.1.4.1.311.3.3.1"
 #define szOID_RSA_challengePwd              "1.2.840.113549.1.9.7"
 #define szOID_RSA_unstructAddr              "1.2.840.113549.1.9.9"
 #define szOID_RSA_extCertAttrs              "1.2.840.113549.1.9.9"

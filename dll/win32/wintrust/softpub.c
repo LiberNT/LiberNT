@@ -697,6 +697,55 @@ static BOOL WINTRUST_GetTimeFromCounterSigner(
     return foundTimeStamp;
 }
 
+static BOOL WINTRUST_GetTimeFromTimeStampToken(const CRYPT_ATTR_BLOB *token,
+ FILETIME *time)
+{
+    static const DWORD encoding = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
+    char contentType[sizeof(szOID_TIMESTAMP_TOKEN)];
+    CRYPT_SEQUENCE_OF_ANY *info = NULL;
+    CRYPT_DATA_BLOB *octets = NULL;
+    const BYTE *encoded;
+    BYTE *content = NULL;
+    DWORD size, encodedSize;
+    HCRYPTMSG msg;
+    BOOL ret = FALSE;
+
+    msg = CryptMsgOpenToDecode(encoding, 0, 0, 0, NULL, NULL);
+    if (!msg)
+        return FALSE;
+    size = sizeof(contentType);
+    if (!CryptMsgUpdate(msg, token->pbData, token->cbData, TRUE) ||
+     !CryptMsgGetParam(msg, CMSG_INNER_CONTENT_TYPE_PARAM, 0, contentType,
+     &size) || strcmp(contentType, szOID_TIMESTAMP_TOKEN) ||
+     !CryptMsgGetParam(msg, CMSG_CONTENT_PARAM, 0, NULL, &encodedSize) ||
+     !(content = malloc(encodedSize)) ||
+     !CryptMsgGetParam(msg, CMSG_CONTENT_PARAM, 0, content, &encodedSize))
+        goto done;
+    encoded = content;
+    if (CryptDecodeObjectEx(encoding, X509_OCTET_STRING, content, encodedSize,
+     CRYPT_DECODE_ALLOC_FLAG, NULL, &octets, &size))
+    {
+        encoded = octets->pbData;
+        encodedSize = octets->cbData;
+    }
+    if (CryptDecodeObjectEx(encoding, X509_SEQUENCE_OF_ANY, encoded,
+     encodedSize, CRYPT_DECODE_ALLOC_FLAG, NULL, &info, &size) &&
+     info->cValue > 4)
+    {
+        size = sizeof(*time);
+        ret = CryptDecodeObjectEx(encoding, X509_CHOICE_OF_TIME,
+         info->rgValue[4].pbData, info->rgValue[4].cbData, 0, NULL, time,
+         &size);
+    }
+
+done:
+    LocalFree(info);
+    LocalFree(octets);
+    free(content);
+    CryptMsgClose(msg);
+    return ret;
+}
+
 static LPCSTR filetime_to_str(const FILETIME *time)
 {
     static char date[80];
@@ -743,6 +792,16 @@ static FILETIME WINTRUST_GetTimeFromSigner(const CRYPT_PROVIDER_DATA *data,
                     LocalFree(counterSignerInfo);
                 }
             }
+        }
+        else if (!strcmp(signerInfo->UnauthAttrs.rgAttr[i].pszObjId,
+         szOID_RFC3161_counterSign))
+        {
+            const CRYPT_ATTRIBUTE *attr = &signerInfo->UnauthAttrs.rgAttr[i];
+            DWORD j;
+
+            for (j = 0; !foundTimeStamp && j < attr->cValue; j++)
+                foundTimeStamp = WINTRUST_GetTimeFromTimeStampToken(
+                 &attr->rgValue[j], &time);
         }
     }
     if (!foundTimeStamp)
