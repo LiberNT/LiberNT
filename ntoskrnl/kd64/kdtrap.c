@@ -364,6 +364,7 @@ KdpStub(IN PKTRAP_FRAME TrapFrame,
                                 (PCHAR)ExceptionRecord->ExceptionInformation[1],
                                 (USHORT)ExceptionRecord->ExceptionInformation[2],
                                 PreviousMode);
+            KeSetContextReturnRegister(ContextRecord, STATUS_SUCCESS);
         }
 
         /* This we can handle: simply bump the Program Counter */
