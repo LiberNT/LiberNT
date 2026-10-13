@@ -17,9 +17,15 @@
 
 #include "expandcore.h"
 
+#ifndef FSCTL_EXTEND_VOLUME
+#define FSCTL_EXTEND_VOLUME \
+    CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 60, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#endif
+
 #define DEFAULT_PAD_MB 1
 #define DEFAULT_MIN_MB 100
 #define SCRATCH_SIZE   (1024 * 1024)
+#define MAX_PARTITION_NUMBER 128
 
 typedef struct _DISK_CONTEXT
 {
@@ -65,24 +71,10 @@ DiskSeekRead(DISK_CONTEXT* Disk, ULONGLONG Offset, ULONG Length, PVOID Buffer)
     return Transferred == Length;
 }
 
-static BOOL
-DiskSeekWrite(DISK_CONTEXT* Disk, ULONGLONG Offset, ULONG Length, const void* Buffer)
-{
-    LARGE_INTEGER Position;
-    DWORD Transferred;
-
-    Position.QuadPart = (LONGLONG)Offset;
-    if (!SetFilePointerEx(Disk->Handle, Position, NULL, FILE_BEGIN))
-        return FALSE;
-    if (!WriteFile(Disk->Handle, Buffer, Length, &Transferred, NULL))
-        return FALSE;
-
-    return Transferred == Length;
-}
-
 static int
-DiskTransfer(DISK_CONTEXT* Disk, ULONGLONG Offset, ULONG Length, PUCHAR Buffer, BOOL Write)
+DeviceRead(void* Context, uint64_t Offset, uint32_t Length, void* Buffer)
 {
+    DISK_CONTEXT* Disk = (DISK_CONTEXT*)Context;
     ULONG SectorSize = Disk->SectorSize;
     ULONG Done = 0;
 
@@ -99,44 +91,116 @@ DiskTransfer(DISK_CONTEXT* Disk, ULONGLONG Offset, ULONG Length, PUCHAR Buffer, 
 
         Span = (Skew + Wanted + SectorSize - 1) & ~(SectorSize - 1);
 
-        if (Write && (Skew != 0 || Wanted != Span))
-        {
-            if (!DiskSeekRead(Disk, Aligned, Span, Disk->Scratch))
-                return 0;
-        }
-        else if (!Write)
-        {
-            if (!DiskSeekRead(Disk, Aligned, Span, Disk->Scratch))
-                return 0;
-        }
+        if (!DiskSeekRead(Disk, Aligned, Span, Disk->Scratch))
+            return 0;
 
-        if (Write)
-        {
-            memcpy(Disk->Scratch + Skew, Buffer + Done, Wanted);
-            if (!DiskSeekWrite(Disk, Aligned, Span, Disk->Scratch))
-                return 0;
-        }
-        else
-        {
-            memcpy(Buffer + Done, Disk->Scratch + Skew, Wanted);
-        }
-
+        memcpy((PUCHAR)Buffer + Done, Disk->Scratch + Skew, Wanted);
         Done += Wanted;
     }
 
     return 1;
 }
 
-static int
-DeviceRead(void* Context, uint64_t Offset, uint32_t Length, void* Buffer)
+static HANDLE
+OpenPartition(ULONG DriveNumber, ULONG PartitionNumber, DWORD Access)
 {
-    return DiskTransfer((DISK_CONTEXT*)Context, Offset, Length, (PUCHAR)Buffer, FALSE);
+    WCHAR Path[96];
+
+    _snwprintf(Path,
+               sizeof(Path) / sizeof(Path[0]),
+               L"\\\\?\\GLOBALROOT\\Device\\Harddisk%lu\\Partition%lu",
+               DriveNumber,
+               PartitionNumber);
+
+    return CreateFileW(Path,
+                       Access,
+                       FILE_SHARE_READ | FILE_SHARE_WRITE,
+                       NULL,
+                       OPEN_EXISTING,
+                       0,
+                       NULL);
 }
 
-static int
-DeviceWrite(void* Context, uint64_t Offset, uint32_t Length, const void* Buffer)
+static BOOL
+QueryPartitionNumber(ULONG DriveNumber, ULONGLONG StartingOffset, PULONG PartitionNumber)
 {
-    return DiskTransfer((DISK_CONTEXT*)Context, Offset, Length, (PUCHAR)Buffer, TRUE);
+    PARTITION_INFORMATION_EX Information;
+    HANDLE Partition;
+    DWORD Returned;
+    ULONG Number;
+    BOOL Result;
+
+    for (Number = 1; Number <= MAX_PARTITION_NUMBER; Number++)
+    {
+        Partition = OpenPartition(DriveNumber, Number, 0);
+        if (Partition == INVALID_HANDLE_VALUE)
+            continue;
+
+        Result = DeviceIoControl(Partition,
+                                 IOCTL_DISK_GET_PARTITION_INFO_EX,
+                                 NULL,
+                                 0,
+                                 &Information,
+                                 sizeof(Information),
+                                 &Returned,
+                                 NULL);
+        CloseHandle(Partition);
+
+        if (Result && (ULONGLONG)Information.StartingOffset.QuadPart == StartingOffset)
+        {
+            *PartitionNumber = Number;
+            return TRUE;
+        }
+    }
+
+    SetLastError(ERROR_NOT_FOUND);
+    return FALSE;
+}
+
+static BOOL
+GrowPartition(DISK_CONTEXT* Disk, ULONG PartitionNumber, ULONGLONG Bytes)
+{
+    DISK_GROW_PARTITION Grow;
+    DWORD Returned;
+
+    Grow.PartitionNumber = PartitionNumber;
+    Grow.BytesToGrow.QuadPart = (LONGLONG)Bytes;
+
+    return DeviceIoControl(Disk->Handle,
+                           IOCTL_DISK_GROW_PARTITION,
+                           &Grow,
+                           sizeof(Grow),
+                           NULL,
+                           0,
+                           &Returned,
+                           NULL);
+}
+
+static BOOL
+ExtendVolume(ULONG DriveNumber, ULONG PartitionNumber, ULONGLONG Sectors)
+{
+    LONGLONG NewSectors = (LONGLONG)Sectors;
+    HANDLE Volume;
+    DWORD Returned;
+    DWORD Error;
+    BOOL Result;
+
+    Volume = OpenPartition(DriveNumber, PartitionNumber, GENERIC_READ | GENERIC_WRITE);
+    if (Volume == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    Result = DeviceIoControl(Volume,
+                             FSCTL_EXTEND_VOLUME,
+                             &NewSectors,
+                             sizeof(NewSectors),
+                             NULL,
+                             0,
+                             &Returned,
+                             NULL);
+    Error = GetLastError();
+    CloseHandle(Volume);
+    SetLastError(Error);
+    return Result;
 }
 
 static BOOL
@@ -300,6 +364,7 @@ main(int argc, char* argv[])
     ULONG DriveNumber = 0;
     ULONG SystemPartition = 0;
     ULONG PartitionNumber = 0;
+    ULONG LivePartition = 0;
     ULONGLONG PadMb = DEFAULT_PAD_MB;
     ULONGLONG MinMb = DEFAULT_MIN_MB;
     BOOL HaveDrive = FALSE;
@@ -414,7 +479,7 @@ main(int argc, char* argv[])
 
     Device.Context = &Disk;
     Device.Read = DeviceRead;
-    Device.Write = DeviceWrite;
+    Device.Write = NULL;
     Device.Log = LogLine;
     Device.DiskSize = DiskSize;
     Device.SectorSize = SectorSize;
@@ -483,21 +548,49 @@ main(int argc, char* argv[])
         }
     }
 
-    Status = ExpandApplyPlan(&Device, &Plan);
-
-    if (Status != EXPAND_OK)
+    if (!QueryPartitionNumber(DriveNumber, Plan.PartitionStart, &LivePartition))
     {
-        Print("lntexpandstorage: %s\n", ExpandStatusText(Status));
+        Print("lntexpandstorage: cannot find the partition at offset %llu (error %lu)\n",
+              (unsigned long long)Plan.PartitionStart,
+              GetLastError());
         VirtualFree(Disk.Scratch, 0, MEM_RELEASE);
         CloseHandle(Disk.Handle);
         return 1;
     }
 
-    FlushFileBuffers(Disk.Handle);
+    if (Plan.RewritePartitionTable)
+    {
+        if (!GrowPartition(&Disk, LivePartition, Plan.PartitionGain))
+        {
+            Print("lntexpandstorage: cannot grow partition %lu (error %lu)\n",
+                  Plan.PartitionNumber,
+                  GetLastError());
+            VirtualFree(Disk.Scratch, 0, MEM_RELEASE);
+            CloseHandle(Disk.Handle);
+            return 1;
+        }
+
+        Print("  partition %lu now spans %llu sector(s)\n",
+              Plan.PartitionNumber,
+              (unsigned long long)(Plan.NewPartitionBytes / SectorSize));
+    }
+
     VirtualFree(Disk.Scratch, 0, MEM_RELEASE);
     CloseHandle(Disk.Handle);
 
-    Print("Done. The new size takes effect on the next boot.\n");
+    if (Plan.RewriteVolume)
+    {
+        if (!ExtendVolume(DriveNumber, LivePartition, Plan.NewVolumeSectors + 1))
+        {
+            Print("lntexpandstorage: cannot extend the volume (error %lu)\n", GetLastError());
+            return 1;
+        }
+
+        Print("  volume now spans %llu sector(s)\n",
+              (unsigned long long)Plan.NewVolumeSectors);
+    }
+
+    Print("Done.\n");
 
     if (Reboot && !RebootSystem())
         Print("lntexpandstorage: reboot request failed (error %lu)\n", GetLastError());
