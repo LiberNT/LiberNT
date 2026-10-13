@@ -100,6 +100,18 @@ VidFbPresent(
     _In_ ULONG Width,
     _In_ ULONG Height);
 
+typedef
+BOOLEAN
+(*PVIDFB_KEEP_RECT_QUERY)(
+    _Out_ PULONG Left,
+    _Out_ PULONG Top,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height);
+
+VOID
+VidFbSetPresentKeepRectQuery(
+    _In_opt_ PVIDFB_KEEP_RECT_QUERY Query);
+
 VOID
 VidFbScrollUp(
     _In_ UINT32 Color,

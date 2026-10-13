@@ -63,6 +63,7 @@ static ULONG VidFbDirtyLeft = 0;
 static ULONG VidFbDirtyTop = 0;
 static ULONG VidFbDirtyRight = 0;
 static ULONG VidFbDirtyBottom = 0;
+static PVIDFB_KEEP_RECT_QUERY VidFbPresentKeepRectQuery = NULL;
 
 static VOID
 FbConsReleaseTextCache(VOID);
@@ -315,6 +316,8 @@ VidFbPresent(
     _In_ ULONG Height)
 {
     ULONG X, Y, Color;
+    ULONG KeepLeft, KeepTop, KeepWidth, KeepHeight;
+    BOOLEAN KeepRow;
     PULONG Destination;
 
     if (!Pixels || Left >= framebufInfo.ScreenWidth ||
@@ -323,13 +326,23 @@ VidFbPresent(
         return;
     }
 
+    if (!VidFbPresentKeepRectQuery ||
+        !VidFbPresentKeepRectQuery(&KeepLeft, &KeepTop, &KeepWidth, &KeepHeight))
+    {
+        KeepLeft = KeepTop = KeepWidth = KeepHeight = 0;
+    }
+
     Width = min(Width, framebufInfo.ScreenWidth - Left);
     Height = min(Height, framebufInfo.ScreenHeight - Top);
     for (Y = Top; Y < Top + Height; ++Y)
     {
+        KeepRow = (Y >= KeepTop) && (Y - KeepTop < KeepHeight);
         Destination = (PULONG)(framebufInfo.BaseAddress + Y * framebufInfo.Delta);
         for (X = Left; X < Left + Width; ++X)
         {
+            if (KeepRow && (X >= KeepLeft) && (X - KeepLeft < KeepWidth))
+                continue;
+
             Color = Pixels[Y * framebufInfo.ScreenWidth + X];
             Destination[X] = VidFbComposePixel((UCHAR)(Color >> 16),
                                                (UCHAR)(Color >> 8),
@@ -338,6 +351,13 @@ VidFbPresent(
     }
     FbConsCachedTextBufferValid = FALSE;
     FbConsMarkDirtyRect(Left, Top, Width, Height);
+}
+
+VOID
+VidFbSetPresentKeepRectQuery(
+    _In_opt_ PVIDFB_KEEP_RECT_QUERY Query)
+{
+    VidFbPresentKeepRectQuery = Query;
 }
 
 static

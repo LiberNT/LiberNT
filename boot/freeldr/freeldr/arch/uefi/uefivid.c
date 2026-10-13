@@ -507,6 +507,30 @@ UefiGetLogoPixelAddress(
 }
 
 static
+BOOLEAN
+UefiQueryKeptLogoRect(
+    _Out_ PULONG Left,
+    _Out_ PULONG Top,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height)
+{
+    if (!UefiBgrtLogo.Valid ||
+        (!UiKeepFirmwareScreen && !UiProgressBar.Show) ||
+        (UefiBgrtLogo.DrawWidth == 0) ||
+        (UefiBgrtLogo.DrawHeight == 0) ||
+        (UefiRenderAddress == 0))
+    {
+        return FALSE;
+    }
+
+    *Left = UefiBgrtLogo.PositionX;
+    *Top = UefiBgrtLogo.PositionY;
+    *Width = UefiBgrtLogo.DrawWidth;
+    *Height = UefiBgrtLogo.DrawHeight;
+    return TRUE;
+}
+
+static
 VOID
 UefiInitializeBgrtLogo(VOID)
 {
@@ -685,6 +709,8 @@ UefiInitializeBgrtLogo(VOID)
           UefiBgrtLogo.PositionX, UefiBgrtLogo.PositionY,
           UefiBgrtLogo.SourceX, UefiBgrtLogo.SourceY,
           UefiBgrtLogo.DrawWidth, UefiBgrtLogo.DrawHeight);
+
+    VidFbSetPresentKeepRectQuery(UefiQueryKeptLogoRect);
 }
 
 static
