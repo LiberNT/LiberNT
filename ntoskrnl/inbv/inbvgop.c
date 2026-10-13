@@ -797,10 +797,10 @@ InbvGopHandleBootBitmap(VOID)
     if (!InbvGopQueryInfo(&FbInfo))
         return FALSE;
 
-    /* BootVid uses logical dimensions after rotation and DPI scaling. */
+    /* Native 32-bit blits use physical dimensions after rotation. */
     InbvQueryDisplayInfo(&DisplayInfo);
-    Width = DisplayInfo.Width;
-    Height = DisplayInfo.Height;
+    Width = DisplayInfo.PhysicalWidth;
+    Height = DisplayInfo.PhysicalHeight;
     if ((Width == 0) || (Height == 0))
         return FALSE;
 
