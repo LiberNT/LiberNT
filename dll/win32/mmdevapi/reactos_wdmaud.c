@@ -3670,9 +3670,24 @@ static NTSTATUS reactos_is_format_supported(struct is_format_supported_params *p
     return STATUS_SUCCESS;
 }
 
+static void float_mix_format_from_device(WAVEFORMATEXTENSIBLE *fmt)
+{
+    fmt->Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+    fmt->Format.wBitsPerSample = 8 * sizeof(float);
+    fmt->Format.nBlockAlign = fmt->Format.nChannels * sizeof(float);
+    fmt->Format.nAvgBytesPerSec = fmt->Format.nSamplesPerSec * fmt->Format.nBlockAlign;
+    fmt->Format.cbSize = sizeof(*fmt) - sizeof(fmt->Format);
+    fmt->Samples.wValidBitsPerSample = fmt->Format.wBitsPerSample;
+    if (!fmt->dwChannelMask)
+        fmt->dwChannelMask = channel_mask_from_count(fmt->Format.nChannels);
+    fmt->SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+}
+
 static NTSTATUS reactos_get_mix_format(struct get_mix_format_params *params)
 {
     fill_mix_format(params->device, params->flow, params->fmt);
+    if (params->flow == eRender)
+        float_mix_format_from_device(params->fmt);
     params->result = S_OK;
     return STATUS_SUCCESS;
 }
