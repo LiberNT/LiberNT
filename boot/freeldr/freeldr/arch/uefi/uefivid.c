@@ -543,12 +543,6 @@ UefiInitializeBgrtLogo(VOID)
         return;
     }
 
-    if ((BgrtTable->Status & BGRT_STATUS_IMAGE_VALID) == 0)
-    {
-        TRACE("BGRT image is not marked valid\n");
-        return;
-    }
-
     if (BgrtTable->ImageType != BgrtImageTypeBitmap)
     {
         WARN("Unsupported BGRT image type %u\n", BgrtTable->ImageType);
