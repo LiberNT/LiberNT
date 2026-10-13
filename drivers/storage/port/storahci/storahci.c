@@ -315,9 +315,16 @@ BOOLEAN AhciStartPort(__in PAHCI_PORT_EXTENSION PortExtension)
      * A real presence transition will raise PCS/PRCS and can be enumerated by
      * the hot-plug path when that support is added.
      */
-    ssts.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SSTS);
+    for (index = 0; index < AHCI_PORT_PRESENCE_DETECT_MS; index++)
+    {
+        ssts.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SSTS);
+        if (ssts.DET != 0) break;
+        StorPortStallExecution(1000);
+    }
+
     if ((ssts.DET == 0) || (ssts.DET == 4))
     {
+        DPRINT("\tPort %u: no device (SSTS=%08x)\n", PortExtension->PortNumber, ssts.Status);
         return FALSE;
     }
 
@@ -327,7 +334,7 @@ BOOLEAN AhciStartPort(__in PAHCI_PORT_EXTENSION PortExtension)
     {
         ssts.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SSTS);
         if (ssts.DET == 0x3) break;
-        if ((ssts.DET == 0) || (ssts.DET == 4)) return FALSE;
+        if (ssts.DET == 4) return FALSE;
         StorPortStallExecution(10000);
     }
 
@@ -411,6 +418,7 @@ BOOLEAN AhciStartPort(__in PAHCI_PORT_EXTENSION PortExtension)
                 {
                     tfd.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->TFD);
                     if ((tfd.STS.BSY == 0) && (tfd.STS.DRQ == 0)) break;
+                    StorPortWriteRegisterUlong(AdapterExtension, &PortExtension->Port->SERR, (ULONG)~0);
                     StorPortStallExecution(10000);
                 }
 
@@ -590,7 +598,10 @@ BOOLEAN NTAPI AhciHwPassiveInitialize(__in PVOID DeviceExtension)
             PortExtension = &AdapterExtension->PortExtension[index];
             StorPortInitializeDpc(AdapterExtension, &PortExtension->CommandCompletion, AhciCommandCompletionDpcRoutine);
             StorPortInitializeDpc(AdapterExtension, &PortExtension->ErrorRecovery, AhciErrorRecoveryDpcRoutine);
-            PortExtension->DeviceParams.IsActive = AhciStartPort(PortExtension);
+            if (PortExtension->DeviceParams.IsActive)
+            {
+                PortExtension->DeviceParams.IsActive = AhciStartPort(PortExtension);
+            }
         }
     }
 
@@ -2308,7 +2319,7 @@ ULONG NTAPI AhciHwFindAdapter(__in PVOID DeviceExtension, __in PVOID HwContext, 
     for (index = 0; index < adapterExtension->PortCount; index++)
     {
         if ((adapterExtension->PortImplemented & (0x1 << index)) != 0)
-            AhciPortInitialize(&adapterExtension->PortExtension[index]);
+            adapterExtension->PortExtension[index].DeviceParams.IsActive = AhciPortInitialize(&adapterExtension->PortExtension[index]);
     }
 
     return SP_RETURN_FOUND;
