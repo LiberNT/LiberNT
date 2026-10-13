@@ -589,11 +589,29 @@ ThemePlaceCaptionButton(RECT *ButtonRect, const RECT *WindowRect, const RECT *Ca
            ButtonRect->right <= WindowRect->right && ButtonRect->bottom <= WindowRect->bottom;
 }
 
+static INT
+ThemeGetMaximizedTopOverhang(const WINDOWINFO *wi)
+{
+    MONITORINFO mi = { sizeof(mi) };
+    HMONITOR hMonitor;
+    INT overhang;
+
+    if (!(wi->dwStyle & WS_MAXIMIZE) || (wi->dwStyle & WS_CHILD))
+        return 0;
+
+    hMonitor = MonitorFromRect(&wi->rcWindow, MONITOR_DEFAULTTONEAREST);
+    if (!hMonitor || !GetMonitorInfoW(hMonitor, &mi))
+        return 0;
+
+    overhang = mi.rcWork.top - wi->rcWindow.top;
+    return max(0, min(overhang, (INT)wi->cyWindowBorders));
+}
+
 static void ThemeCalculateCaptionButtonsPosEx(WINDOWINFO* wi, HWND hWnd, HTHEME htheme, INT buttonHeight)
 {
     PWND_DATA pwndData;
     DWORD style;
-    INT captionBtnWidth, captionBtnHeight, iPartId, i;
+    INT captionBtnWidth, captionBtnHeight, iPartId, i, topOverhang;
     RECT rcCurrent, rcWindow, rcLastButton;
     SIZE ButtonSize;
     BOOL hasLastButton = FALSE;
@@ -638,6 +656,7 @@ static void ThemeCalculateCaptionButtonsPosEx(WINDOWINFO* wi, HWND hWnd, HTHEME 
     dpi = MSSTYLES_GetThemeDPI((PTHEME_CLASS)htheme);
     if (!dpi)
         dpi = 96;
+    topOverhang = ThemeGetMaximizedTopOverhang(wi);
 
     for (i = CLOSEBUTTON; i <= HELPBUTTON; i++)
     {
@@ -685,6 +704,11 @@ static void ThemeCalculateCaptionButtonsPosEx(WINDOWINFO* wi, HWND hWnd, HTHEME 
                     rcCurrent.top,
                     rcCurrent.right,
                     rcCurrent.top + captionBtnHeight);
+        }
+        if (pwndData->rcCaptionButtons[i].top < topOverhang)
+        {
+            OffsetRect(&pwndData->rcCaptionButtons[i], 0,
+                       topOverhang - pwndData->rcCaptionButtons[i].top);
         }
 
         rcLastButton = pwndData->rcCaptionButtons[i];
