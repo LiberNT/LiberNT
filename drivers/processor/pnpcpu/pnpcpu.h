@@ -125,6 +125,8 @@ typedef struct _PNPCPU_DEVICE_EXTENSION
     volatile LONG IdleMonitor;
 #endif
     BOOLEAN IdleFallback;
+    PACPI_EVAL_OUTPUT_BUFFER CstOutput;
+    ULONG Ppc;
     ULONG IdleStateCount;
     PNPCPU_IDLE_STATE IdleStates[PNPCPU_MAX_IDLE_STATES];
     ULONG PerfMode;

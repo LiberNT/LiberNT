@@ -19,6 +19,7 @@ typedef struct _PNPCPU_WORK_CONTEXT
 {
     WORK_QUEUE_ITEM WorkItem;
     PPNPCPU_DEVICE_EXTENSION DeviceExtension;
+    ULONG NotifyCode;
 } PNPCPU_WORK_CONTEXT, *PPNPCPU_WORK_CONTEXT;
 
 static PPNPCPU_DEVICE_EXTENSION PnpcpuProcessors[MAXIMUM_PROCESSORS];
@@ -919,6 +920,12 @@ PnpcpuReleasePowerConfiguration(
     PnpcpuReleaseRegister(&DeviceExtension->CppcMaximum);
     PnpcpuReleaseRegister(&DeviceExtension->CppcEnable);
     PnpcpuReleaseRegister(&DeviceExtension->CppcAutonomous);
+    if (DeviceExtension->CstOutput)
+    {
+        ExFreePoolWithTag(DeviceExtension->CstOutput, PNPCPU_TAG);
+        DeviceExtension->CstOutput = NULL;
+    }
+    DeviceExtension->Ppc = 0;
     RtlZeroMemory(DeviceExtension->IdleStates, sizeof(DeviceExtension->IdleStates));
     RtlZeroMemory(DeviceExtension->PerfStates, sizeof(DeviceExtension->PerfStates));
     DeviceExtension->IdleStateCount = 0;
@@ -998,7 +1005,7 @@ PnpcpuParseCst(
         DeviceExtension->IdleStateCount++;
     }
 Exit:
-    ExFreePoolWithTag(OutputBuffer, PNPCPU_TAG);
+    DeviceExtension->CstOutput = OutputBuffer;
 Fallback:
     if (DeviceExtension->IdleStateCount == 0)
     {
@@ -1102,6 +1109,7 @@ PnpcpuParsePss(
     if (!NT_SUCCESS(Status))
         goto PctExit;
     PnpcpuQueryInteger(DeviceExtension, PNPCPU_METHOD('_', 'P', 'P', 'C'), &Ppc);
+    DeviceExtension->Ppc = Ppc;
     if (Ppc >= PssOutput->Count)
         Ppc = 0;
     for (Index = Ppc; Index < PssOutput->Count && DeviceExtension->PerfStateCount < PNPCPU_MAX_PERF_STATES; Index++)
@@ -1805,6 +1813,33 @@ PnpcpuRefreshCapabilities(
 }
 
 static
+BOOLEAN
+PnpcpuConfigurationChanged(
+    _In_ PPNPCPU_DEVICE_EXTENSION DeviceExtension,
+    _In_ ULONG NotifyCode)
+{
+    PACPI_EVAL_OUTPUT_BUFFER OutputBuffer;
+    ULONG OutputLength;
+    ULONG Ppc = 0;
+    BOOLEAN Changed;
+
+    if (!DeviceExtension->ProcessorNumberValid)
+        return FALSE;
+    if (NotifyCode == 0x80)
+    {
+        if (DeviceExtension->PerfMode != PNPCPU_PERF_PSS)
+            return FALSE;
+        PnpcpuQueryInteger(DeviceExtension, PNPCPU_METHOD('_', 'P', 'P', 'C'), &Ppc);
+        return Ppc != DeviceExtension->Ppc;
+    }
+    if (!NT_SUCCESS(PnpcpuEvaluateMethod(DeviceExtension, PNPCPU_METHOD('_', 'C', 'S', 'T'), &OutputBuffer, &OutputLength)))
+        return DeviceExtension->CstOutput != NULL;
+    Changed = !DeviceExtension->CstOutput || OutputBuffer->Length != DeviceExtension->CstOutput->Length || !RtlEqualMemory(OutputBuffer, DeviceExtension->CstOutput, OutputBuffer->Length);
+    ExFreePoolWithTag(OutputBuffer, PNPCPU_TAG);
+    return Changed;
+}
+
+static
 VOID
 NTAPI
 PnpcpuWorker(
@@ -1812,15 +1847,23 @@ PnpcpuWorker(
 {
     PPNPCPU_WORK_CONTEXT WorkContext = Context;
     PPNPCPU_DEVICE_EXTENSION DeviceExtension = WorkContext->DeviceExtension;
+    BOOLEAN Refresh = FALSE;
 
     KeWaitForSingleObject(&DeviceExtension->ConfigurationLock, Executive, KernelMode, FALSE, NULL);
     if (DeviceExtension->Started && !DeviceExtension->Removing)
     {
         if (!DeviceExtension->ProcessorNumberValid)
+        {
             PnpcpuFindProcessorNumber(DeviceExtension);
-        PnpcpuRefreshCapabilities(DeviceExtension);
-        PnpcpuRefreshPowerConfiguration(DeviceExtension);
-        PnpcpuPublishProperties(DeviceExtension);
+            Refresh = DeviceExtension->ProcessorNumberValid;
+        }
+        if (Refresh || PnpcpuConfigurationChanged(DeviceExtension, WorkContext->NotifyCode))
+        {
+            DPRINT1("PNPCPU: ACPI notification 0x%02lx; refreshing processor capabilities\n", WorkContext->NotifyCode);
+            PnpcpuRefreshCapabilities(DeviceExtension);
+            PnpcpuRefreshPowerConfiguration(DeviceExtension);
+            PnpcpuPublishProperties(DeviceExtension);
+        }
     }
     KeReleaseMutex(&DeviceExtension->ConfigurationLock, FALSE);
     if (InterlockedDecrement(&DeviceExtension->WorkCount) == 0)
@@ -1839,7 +1882,7 @@ PnpcpuNotification(
     PPNPCPU_DEVICE_EXTENSION DeviceExtension = Context;
     PPNPCPU_WORK_CONTEXT WorkContext;
 
-    if (NotifyCode != 0x80 && NotifyCode != 0x81 && NotifyCode != 0x82)
+    if (NotifyCode != 0x80 && NotifyCode != 0x81)
         return;
     if (!DeviceExtension->Started || DeviceExtension->Removing)
         return;
@@ -1852,10 +1895,10 @@ PnpcpuNotification(
         return;
     }
     WorkContext->DeviceExtension = DeviceExtension;
+    WorkContext->NotifyCode = NotifyCode;
     ExInitializeWorkItem(&WorkContext->WorkItem, PnpcpuWorker, WorkContext);
     if (InterlockedIncrement(&DeviceExtension->WorkCount) == 1)
         KeClearEvent(&DeviceExtension->WorkIdleEvent);
-    DPRINT1("PNPCPU: ACPI notification 0x%02lx; refreshing processor capabilities\n", NotifyCode);
     ExQueueWorkItem(&WorkContext->WorkItem, DelayedWorkQueue);
 }
 
