@@ -1364,6 +1364,7 @@ typedef struct _WINPOS_ENTRY
    BOOL bActive;
    BOOL bRequest;
    BOOL bChained;
+   BOOL bSilent;
    BOOL bPointerInWindow;
    UINT Flags;
    HWND hwndBand;
@@ -2133,7 +2134,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
    }
 
    // Change or update, set send non-client paint flag.
-   if ( Window->style & WS_VISIBLE &&
+   if ( !Entry->bSilent && Window->style & WS_VISIBLE &&
        (WinPos.flags & SWP_STATECHANGED || (!(Window->state2 & WNDS2_WIN31COMPAT) && WinPos.flags & SWP_NOREDRAW ) ) )
    {
       TRACE("Set WNDS_SENDNCPAINT %p\n",Window);
@@ -2144,7 +2145,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
     * Request a full non-client repaint when the frame geometry changes.
     * Otherwise, copied bits can retain parts of the old frame. CORE-20769.
     */
-   if ((Window->style & WS_VISIBLE) &&
+   if (!Entry->bSilent && (Window->style & WS_VISIBLE) &&
        ((WinPos.flags & SWP_FRAMECHANGED) ||
         (OldWindowRect.right - OldWindowRect.left) != (NewWindowRect.right - NewWindowRect.left) ||
         (OldWindowRect.bottom - OldWindowRect.top) != (NewWindowRect.bottom - NewWindowRect.top)))
@@ -2561,7 +2562,8 @@ co_WinPosBatchChanged(PWINPOS_ENTRY Entry)
 
    TRACE("\tstatus hwnd %p flags = %04x\n", Window ? UserHMGetHandle(Window) : NULL, WinPos.flags & SWP_AGG_STATUSFLAGS);
 
-   if (((WinPos.flags & SWP_AGG_STATUSFLAGS) != SWP_AGG_NOPOSCHANGE)
+   if (!Entry->bSilent &&
+       ((WinPos.flags & SWP_AGG_STATUSFLAGS) != SWP_AGG_NOPOSCHANGE)
             && !((flags & SWP_AGG_NOCLIENTCHANGE) && (flags & SWP_SHOWWINDOW)))
    {
       /* WM_WINDOWPOSCHANGED is sent even if SWP_NOSENDCHANGING is set
@@ -2637,6 +2639,8 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
 
       Entry->bPointerInWindow = IntPtInWindow(Entry->Window, gpsi->ptCursor.x, gpsi->ptCursor.y);
 
+      if (Entry->bSilent)
+         Entry->WinPos.flags |= SWP_NOSENDCHANGING;
       co_WinPosDoWinPosChanging(Entry->Window, &Entry->WinPos, &Entry->NewWindowRect, &Entry->NewClientRect);
 
       if (!IntIsWindow(Entry->WinPos.hwnd))
@@ -2652,6 +2656,28 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
       }
 
       WinPosFixupFlags(&Entry->WinPos, Entry->Window, Entry->bChained);
+
+      if (Entry->bSilent)
+      {
+         PWND Window = Entry->Window;
+
+         Entry->NewClientRect.right += (Entry->NewWindowRect.right - Entry->NewWindowRect.left) -
+                                       (Window->rcWindow.right - Window->rcWindow.left);
+         Entry->NewClientRect.bottom += (Entry->NewWindowRect.bottom - Entry->NewWindowRect.top) -
+                                        (Window->rcWindow.bottom - Window->rcWindow.top);
+         if (Entry->NewClientRect.left != Window->rcClient.left ||
+             Entry->NewClientRect.top != Window->rcClient.top)
+         {
+            Entry->WinPos.flags &= ~SWP_NOCLIENTMOVE;
+         }
+         if (Entry->NewClientRect.right - Entry->NewClientRect.left != Window->rcClient.right - Window->rcClient.left ||
+             Entry->NewClientRect.bottom - Entry->NewClientRect.top != Window->rcClient.bottom - Window->rcClient.top)
+         {
+            Entry->WinPos.flags &= ~SWP_NOCLIENTSIZE;
+         }
+         Entry->WvrFlags = 0;
+         continue;
+      }
 
       Entry->WvrFlags = co_WinPosDoNCCALCSize(Entry->Window, &Entry->WinPos, &Entry->NewWindowRect, &Entry->NewClientRect, ValidRects);
    }
@@ -2731,6 +2757,32 @@ co_WinPosSetWindowPos(
 
    WinPosBatchInit(&Batch);
    WinPosBatchAddRequest(&Batch, Window, WndInsertAfter, x, y, cx, cy, flags);
+   Ret = co_WinPosBatchRun(&Batch);
+   WinPosBatchFree(&Batch);
+   return Ret;
+}
+
+BOOLEAN FASTCALL
+co_WinPosSetWindowPosSilent(
+   PWND Window,
+   INT x,
+   INT y,
+   INT cx,
+   INT cy,
+   UINT flags
+   )
+{
+   WINPOS_BATCH Batch;
+   PWINPOS_ENTRY Entry;
+   BOOLEAN Ret;
+
+   ASSERT_REFS_CO(Window);
+
+   WinPosBatchInit(&Batch);
+   WinPosBatchAddRequest(&Batch, Window, NULL, x, y, cx, cy, flags);
+   Entry = WinPosBatchFind(&Batch, Window);
+   if (Entry)
+      Entry->bSilent = TRUE;
    Ret = co_WinPosBatchRun(&Batch);
    WinPosBatchFree(&Batch);
    return Ret;
