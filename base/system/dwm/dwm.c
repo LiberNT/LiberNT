@@ -2026,6 +2026,23 @@ DwmApplyBackdropBlur(ULONG *Composition, LONG Width, LONG Height,
     return NULL;
 }
 
+static LONG
+DwmShadowCornerInset(const DWM_WIN *Window, LONG y)
+{
+    LONG r = (LONG)min(Window->CornerRadius, (ULONG)min(Window->cx / 2, Window->cy / 2));
+    LONG x;
+
+    if (r <= 0 || (y >= r && y < Window->cy - r))
+        return 0;
+
+    for (x = 0; x < r; ++x)
+    {
+        if (DwmCornerAlpha(x, y, Window->cx, Window->cy, Window->CornerRadius) == 255)
+            break;
+    }
+    return x;
+}
+
 static void
 DwmBlendShadowSpan(ULONG *Row, LONG X0, LONG X1, ULONG WideY, ULONG TightY)
 {
@@ -2228,10 +2245,13 @@ DwmBlendShadow(ULONG *comp, LONG scrW, LONG scrH,
 
         if ((LONGLONG)y >= ownerY && (LONGLONG)y < ownerBottom)
         {
-            LONG leftEnd = (ownerX <= x0) ? x0 :
-                           (ownerX >= x1) ? x1 : (LONG)ownerX;
-            LONG rightStart = (ownerRight <= x0) ? x0 :
-                              (ownerRight >= x1) ? x1 : (LONG)ownerRight;
+            LONG inset = DwmShadowCornerInset(w, (LONG)((LONGLONG)y - ownerY));
+            LONGLONG coverLeft = ownerX + inset;
+            LONGLONG coverRight = ownerRight - inset;
+            LONG leftEnd = (coverLeft <= x0) ? x0 :
+                           (coverLeft >= x1) ? x1 : (LONG)coverLeft;
+            LONG rightStart = (coverRight <= x0) ? x0 :
+                              (coverRight >= x1) ? x1 : (LONG)coverRight;
 
             DwmBlendShadowSpan(row, x0, leftEnd, WideY, TightY);
             DwmBlendShadowSpan(row, rightStart, x1, WideY, TightY);
