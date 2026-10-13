@@ -283,7 +283,7 @@ LogFileService::InitializeLFS()
         if (!NT_SUCCESS(Status))
         {
             DPRINT1("Log recovery failed (Status %lx)\n", Status);
-            Status = STATUS_LOG_BLOCK_VERSION;
+            Status = STATUS_VOLUME_DIRTY;
             goto Done;
         }
         ClientMajorVersion = 0;

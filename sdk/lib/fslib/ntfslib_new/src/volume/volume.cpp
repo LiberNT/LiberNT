@@ -236,6 +236,27 @@ Volume::~Volume()
     delete[] UpcaseTable;
 }
 
+static
+BOOLEAN
+VolumeIsHibernated(_In_ PVolume DiskVolume)
+{
+    WCHAR Name[] = L"hiberfil.sys";
+    PFileRecord File = NULL;
+    UCHAR Signature[4];
+    ULONG Remaining = sizeof(Signature);
+    BOOLEAN Hibernated = FALSE;
+
+    if (!NT_SUCCESS(DiskVolume->MFT->GetFileRecordFromQuery(Name, &File)))
+        return FALSE;
+    if (NT_SUCCESS(File->CopyData(TypeData, NULL, Signature, &Remaining)) && Remaining == 0)
+    {
+        Hibernated = (Signature[0] == 'h' && Signature[1] == 'i' && Signature[2] == 'b' && Signature[3] == 'r') ||
+                     (Signature[0] == 'H' && Signature[1] == 'I' && Signature[2] == 'B' && Signature[3] == 'R');
+    }
+    delete File;
+    return Hibernated;
+}
+
 NTSTATUS
 Volume::Initialize(_In_ PUCHAR BootSectorData,
                    _In_opt_ void* Context)
@@ -298,6 +319,13 @@ Volume::Initialize(_In_ PUCHAR BootSectorData,
     if (IsReadOnly)
         return STATUS_SUCCESS;
 
+    if (VolumeIsHibernated(this))
+    {
+        DPRINT1("The volume holds a hibernated system. Opening disk as readonly.\n");
+        IsReadOnly = TRUE;
+        return STATUS_SUCCESS;
+    }
+
     // Initialize Log File Service
     LFS = new(PagedPool, TAG_LOG_FILE_SERVICE) LogFileService(this);
 
@@ -312,6 +340,12 @@ Volume::Initialize(_In_ PUCHAR BootSectorData,
         * Open volume as readonly.
         */
         DPRINT1("LFS version is incompatible. Opening disk as readonly.\n");
+        IsReadOnly = TRUE;
+        Status = STATUS_SUCCESS;
+    }
+    else if (Status == STATUS_VOLUME_DIRTY)
+    {
+        DPRINT1("Log recovery failed. Opening disk as readonly.\n");
         IsReadOnly = TRUE;
         Status = STATUS_SUCCESS;
     }
