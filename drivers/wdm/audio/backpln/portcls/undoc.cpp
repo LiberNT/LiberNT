@@ -879,6 +879,7 @@ PropertyItemDispatch(
     IN PKSIDENTIFIER  Request,
     IN OUT PVOID  Data)
 {
+    PPROPERTY_REQUEST_CONTEXT Context;
     PPCPROPERTY_REQUEST PropertyRequest;
     PSUBDEVICE_DESCRIPTOR Descriptor;
     PKSPROPERTY Property;
@@ -893,9 +894,11 @@ PropertyItemDispatch(
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
 
     // allocate a property request
-    PropertyRequest = (PPCPROPERTY_REQUEST)AllocateItem(NonPagedPool, sizeof(PCPROPERTY_REQUEST), TAG_PORTCLASS);
-    if (!PropertyRequest)
+    Context = (PPROPERTY_REQUEST_CONTEXT)AllocateItem(NonPagedPool, sizeof(PROPERTY_REQUEST_CONTEXT), TAG_PORTCLASS);
+    if (!Context)
         return STATUS_INSUFFICIENT_RESOURCES;
+    PropertyRequest = &Context->Request;
+    Context->References = 2;
 
     // grab device descriptor
     Descriptor = (PSUBDEVICE_DESCRIPTOR)KSPROPERTY_ITEM_IRP_STORAGE(Irp);
@@ -1042,12 +1045,18 @@ PropertyItemDispatch(
         if (Status != STATUS_PENDING)
         {
             // free property request
-            FreeItem(PropertyRequest, TAG_PORTCLASS);
+            FreeItem(Context, TAG_PORTCLASS);
+        }
+        else
+        {
+            IoMarkIrpPending(Irp);
+            if (InterlockedDecrement(&Context->References) == 0)
+                PcCompletePropertyRequestContext(Context);
         }
     }
     else
     {
-        FreeItem(PropertyRequest, TAG_PORTCLASS);
+        FreeItem(Context, TAG_PORTCLASS);
         Status = STATUS_NOT_FOUND;
     }
 

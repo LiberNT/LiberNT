@@ -197,26 +197,36 @@ PcUnregisterIoTimeout(
         return STATUS_NOT_FOUND;
 }
 
+VOID
+PcCompletePropertyRequestContext(
+    IN PPROPERTY_REQUEST_CONTEXT Context)
+{
+    PIRP Irp = Context->Request.Irp;
+
+    Irp->IoStatus.Information = Context->Request.ValueSize;
+    Irp->IoStatus.Status = Context->Status;
+    FreeItem(Context, TAG_PORTCLASS);
+    IoCompleteRequest(Irp, IO_SOUND_INCREMENT);
+}
+
 NTSTATUS
 NTAPI
 PcCompletePendingPropertyRequest(
     IN  PPCPROPERTY_REQUEST PropertyRequest,
     IN  NTSTATUS NtStatus)
 {
+    PPROPERTY_REQUEST_CONTEXT Context;
+
     // sanity checks
     PC_ASSERT_IRQL(DISPATCH_LEVEL);
 
     if (!PropertyRequest || !PropertyRequest->Irp || NtStatus == STATUS_PENDING)
         return STATUS_INVALID_PARAMETER;
 
-    // set the final status code
-    PropertyRequest->Irp->IoStatus.Status = NtStatus;
-
-    // complete the irp
-    IoCompleteRequest(PropertyRequest->Irp, IO_SOUND_INCREMENT);
-
-    // free the property request
-    FreeItem(PropertyRequest, TAG_PORTCLASS);
+    Context = CONTAINING_RECORD(PropertyRequest, PROPERTY_REQUEST_CONTEXT, Request);
+    Context->Status = NtStatus;
+    if (InterlockedDecrement(&Context->References) == 0)
+        PcCompletePropertyRequestContext(Context);
 
     // return success
     return STATUS_SUCCESS;

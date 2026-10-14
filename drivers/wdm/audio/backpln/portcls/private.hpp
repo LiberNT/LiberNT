@@ -481,6 +481,17 @@ typedef struct
     PPOWERNOTIFY PowerNotify;
 }ENTRY_POWER_NOTIFY, *PENTRY_POWER_NOTIFY;
 
+typedef struct
+{
+    PCPROPERTY_REQUEST Request;
+    LONG References;
+    NTSTATUS Status;
+}PROPERTY_REQUEST_CONTEXT, *PPROPERTY_REQUEST_CONTEXT;
+
+VOID
+PcCompletePropertyRequestContext(
+    IN PPROPERTY_REQUEST_CONTEXT Context);
+
 template<typename... Interfaces>
 class CUnknownImpl : public Interfaces...
 {
