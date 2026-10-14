@@ -160,6 +160,9 @@ START_TEST(NtCreateThread)
     TestThreadProcPtr = TestThreadProc;
 
     RtlFillMemory(&TestThreadStartupContext, sizeof(TestThreadStartupContext), 0xCC);
+#ifdef _M_AMD64
+    RtlZeroMemory(&TestThreadStartupContext.FltSave, sizeof(TestThreadStartupContext.FltSave));
+#endif
     InitializeTestContext(&Context);
 
     Status = NtCreateThread(&ThreadHandle,
@@ -224,7 +227,9 @@ START_TEST(NtCreateThread)
     ok_eq_hex(TestThreadStartupContext.FltSave.DataSelector, 0x0000);
     ok_eq_hex(TestThreadStartupContext.FltSave.Reserved3, 0x0000);
     ok_eq_hex(TestThreadStartupContext.FltSave.MxCsr, INITIAL_MXCSR);
-    ok_eq_hex(TestThreadStartupContext.FltSave.MxCsr_Mask, 0x0002FFFF);
+    CONTEXT CurrentContext;
+    RtlCaptureContext(&CurrentContext);
+    ok_eq_hex(TestThreadStartupContext.FltSave.MxCsr_Mask, CurrentContext.FltSave.MxCsr_Mask);
     for (ULONG i = 0; i < ARRAYSIZE(TestThreadStartupContext.FltSave.FloatRegisters); i++)
     {
         ok_eq_hex64(TestThreadStartupContext.FltSave.FloatRegisters[i].Low, 0x0000000000000000ull);

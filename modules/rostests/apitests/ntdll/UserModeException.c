@@ -27,6 +27,7 @@ static BOOL g_IsArm64Host;
 #define CPU_FEATURE_VMX 0x01
 #define CPU_FEATURE_HV 0x02
 #define CPU_FEATURE_KVM 0x04
+#define CPU_FEATURE_TCG 0x08
 
 typedef void (*PFUNC)(void);
 
@@ -120,6 +121,7 @@ DetermineCpuFeatures(void)
     {
         __cpuid(CpuInfo, 0x40000000);
         if (memcmp(&CpuInfo[1], "KVMKVMKVM\0\0\0", 12) == 0) Features |= CPU_FEATURE_KVM;
+        if (memcmp(&CpuInfo[1], "TCGTCGTCGTCG", 12) == 0) Features |= CPU_FEATURE_TCG;
     }
 
     g_CpuFeatures = Features;
@@ -308,6 +310,9 @@ void Test_SingleInstruction(
 #ifdef _M_AMD64
         /* Emulation reports the accessed address, not a native x64 #GP sentinel. */
         if (g_IsArm64Host && (Flags & FL_NONCANONICAL))
+            ExpectedAccessAddress = 0x1000000000000000ULL;
+        else if ((g_CpuFeatures & CPU_FEATURE_TCG) && (Flags & FL_NONCANONICAL) &&
+                 ExceptionRecord.ExceptionInformation[1] == 0x1000000000000000ULL)
             ExpectedAccessAddress = 0x1000000000000000ULL;
 #endif
         ok_dec_(__FILE__, TestEntry->Line, ExceptionRecord.NumberParameters, 2);
