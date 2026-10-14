@@ -3466,6 +3466,16 @@ void CDECL wined3d_device_apply_stateblock(struct wined3d_device *device,
                                 state->rs[WINED3D_RS_ENABLEADAPTIVETESSELLATION]);
                     break;
 
+#ifdef __REACTOS__
+                case WINED3D_RS_POINTSIZE:
+                    if (state->rs[idx] == WINED3D_RESZ_CODE)
+                    {
+                        TRACE("RESZ multisampled depth buffer resolve triggered.\n");
+                        resolve_depth_buffer(device);
+                    }
+                    break;
+
+#endif
                 default:
                     wined3d_device_set_render_state(device, idx, state->rs[idx]);
                     break;
