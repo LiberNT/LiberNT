@@ -36,7 +36,7 @@ FindSetjmpFrame(
         if (Function == NULL)
             return 0;
 
-        if (Unwound && Context.Sp == Buffer->Sp && ImageBase == TargetImage &&
+        if (Context.Sp == Buffer->Sp && ImageBase == TargetImage &&
             Function->BeginAddress == Target->BeginAddress)
         {
             RtlVirtualUnwind(UNW_FLAG_UHANDLER, ImageBase, ControlPc, Function, &Context, &HandlerData,
