@@ -1933,6 +1933,7 @@ static HBITMAP ghbmScaledWallpaper;
 static HANDLE ghbmScaledWallpaperSource;
 static RECTL grcScaledWallpaperSource;
 static SIZEL gsizlScaledWallpaper;
+static PPDEVOBJ gppdevScaledWallpaper;
 
 static VOID
 IntFreeScaledWallpaper(VOID)
@@ -1942,6 +1943,37 @@ IntFreeScaledWallpaper(VOID)
     GreSetObjectOwner(ghbmScaledWallpaper, GDI_OBJ_HMGR_POWNED);
     GreDeleteObject(ghbmScaledWallpaper);
     ghbmScaledWallpaper = NULL;
+}
+
+static HBITMAP
+IntCreateScaledWallpaperBitmap(
+    _In_ PPDEVOBJ ppdev,
+    _In_ INT cx,
+    _In_ INT cy)
+{
+    HBITMAP hbm;
+    PSURFACE psurf;
+    PPALETTE ppal;
+
+    hbm = GreCreateBitmap(cx, cy, 1, ppdev->gdiinfo.cBitsPixel, NULL);
+    if (hbm == NULL)
+        return NULL;
+    psurf = SURFACE_ShareLockSurface(hbm);
+    if (psurf == NULL)
+    {
+        GreDeleteObject(hbm);
+        return NULL;
+    }
+    ppal = PALETTE_ShareLockPalette(ppdev->devinfo.hpalDefault);
+    if (ppal != NULL)
+    {
+        SURFACE_vSetPalette(psurf, ppal);
+        PALETTE_ShareUnlockPalette(ppal);
+    }
+    psurf->flags = API_BITMAP;
+    psurf->SurfObj.hdev = (HDEV)ppdev;
+    SURFACE_ShareUnlockSurface(psurf);
+    return hbm;
 }
 
 static BOOL
@@ -1959,12 +1991,21 @@ IntDrawScaledWallpaper(
 {
     HDC hScaledDC;
     HBITMAP hOldBitmap;
+    PPDEVOBJ ppdev;
+    PDC pdc;
     BOOL Ret;
 
     if (!UserIsEnteredExclusive())
         return NtGdiStretchBlt(hDC, x, y, cx, cy, hWallpaperDC, xSrc, ySrc, cxSrc, cySrc, SRCCOPY, CLR_INVALID);
 
-    if (ghbmScaledWallpaperSource != gspv.hbmWallpaper ||
+    pdc = DC_LockDc(hDC);
+    if (pdc == NULL)
+        return FALSE;
+    ppdev = pdc->ppdev;
+    DC_UnlockDc(pdc);
+
+    if (gppdevScaledWallpaper != ppdev ||
+        ghbmScaledWallpaperSource != gspv.hbmWallpaper ||
         gsizlScaledWallpaper.cx != cx || gsizlScaledWallpaper.cy != cy ||
         grcScaledWallpaperSource.left != xSrc || grcScaledWallpaperSource.top != ySrc ||
         grcScaledWallpaperSource.right != xSrc + cxSrc ||
@@ -1979,7 +2020,7 @@ IntDrawScaledWallpaper(
 
     if (ghbmScaledWallpaper == NULL)
     {
-        HBITMAP hbmScaled = NtGdiCreateCompatibleBitmap(hDC, cx, cy);
+        HBITMAP hbmScaled = IntCreateScaledWallpaperBitmap(ppdev, cx, cy);
 
         hOldBitmap = hbmScaled ? NtGdiSelectBitmap(hScaledDC, hbmScaled) : NULL;
         if (hOldBitmap != NULL)
@@ -1997,6 +2038,7 @@ IntDrawScaledWallpaper(
                 grcScaledWallpaperSource.bottom = ySrc + cySrc;
                 gsizlScaledWallpaper.cx = cx;
                 gsizlScaledWallpaper.cy = cy;
+                gppdevScaledWallpaper = ppdev;
                 hbmScaled = NULL;
             }
             else
