@@ -7774,6 +7774,11 @@ end:
         WCHAR szIconLocation[MAX_PATH];
         DWORD dwAttributes;
 
+        StringCchCopyW(szIconLocation, _countof(szIconLocation), szBuildPath);
+        PathAppendW(szIconLocation, L"desktop.ini");
+        if (GetFileAttributesW(szIconLocation) != INVALID_FILE_ATTRIBUTES)
+            goto done;
+
         /* make the directory a read-only folder */
         dwAttributes = GetFileAttributesW(szBuildPath);
         dwAttributes |= FILE_ATTRIBUTE_READONLY;
@@ -7798,6 +7803,7 @@ end:
         dwAttributes |= FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN;
         SetFileAttributesW(szBuildPath, dwAttributes);
     }
+done:
 #endif
 
     TRACE("returning 0x%08x (final path is %s)\n", hr, debugstr_w(szBuildPath));
