@@ -49,7 +49,7 @@ AddService = parport, 0x00000002, parport_Service_Inst
 
 [parport_Service_Inst]
 ServiceType   = 1
-StartType     = 1
+StartType     = 3
 ErrorControl  = 0
 ServiceBinary = %12%\parport.sys
 LoadOrderGroup = Extended base
@@ -75,7 +75,7 @@ AddService = serenum, , serenum_Service_Inst
 
 [serial_Service_Inst]
 ServiceType   = 1
-StartType     = 1
+StartType     = 3
 ErrorControl  = 0
 ServiceBinary = %12%\serial.sys
 LoadOrderGroup = Extended base
