@@ -1,77 +1,45 @@
-﻿========================
-ReactOS™ Version 0.4.x
-Updated October 9, 2021
-========================
-
-1. What is ReactOS?
+1. What's LiberNT?
 -------------------
+LiberNT is a free NT operating system, built out of love for the NT architecture. The name says it: liber is Latin for free. LiberNT targets Windows® 11 compatibility, with room for freestyle and experimental features.
 
-ReactOS™ is an Open Source effort to develop a quality operating system that is
-compatible with applications and drivers written for the Microsoft® Windows™ NT
-family of operating systems (NT4, 2000, XP, 2003, Vista, 7).
+LiberNT is based on ReactOS, the Open Source effort to develop an operating system that is compatible with applications and drivers written for the Microsoft Windows NT family of operating systems. It is a fork with extensive changes to kernel-space components and drivers, aimed at stability and modern hardware, and it focuses on 64-bit platforms: amd64, arm64 and riscv64.
 
-More information is available at: https://reactos.org
+Our goal is a system that stays maintainable in the long run: stable, reliable and efficient, running on embedded devices too, and able to support every feature a modern operating system should have.
 
-
-2. Relationship with the WINE project
--------------------------------------
-
-ReactOS has always intended to work with the WINE project to share as much
-programming effort as possible. This mainly concerns User Mode DLLs and
-still happens to a degree today. Other areas of cooperation lie in
-applications and testing suites.
-
-
-3. Future compatibility
+2. What LiberNT Enables
 -----------------------
 
-The ReactOS project, although currently focused on Windows Server 2003
-compatibility, is always keeping an eye toward compatibility with
-Windows Vista and future Windows NT releases.
+LiberNT brings modern hardware and platforms to the NT architecture. The current focus is:
+
+    - 64-bit platform support on amd64, arm64 and riscv64: kernel, HAL and FreeLoader
+    - UEFI boot, GOP framebuffer, and early display support
+    - PCIe, PCI, PnP, USB/xHCI, SD/eMMC, and storage/bus drivers
+    - Board support, including the Raspberry Pi and its RP1 I/O controller
+    - Windows 11 (NT10) compatibility and driver-model work
+
+This means it can potentially work on modern hardware, but it's not recommended to use it as your main operating system, because it's still an experiment at this stage.
 
 
-4. Supporting other System Applications
----------------------------------------
+3. Differences Between LiberNT and Upstream ReactOS
+---------------------------------------------------
 
-The Windows NT architecture allows for subsystems, as does the ReactOS
-architecture. A subsystem is an implementation of the APIs of another
-operating system, allowing ReactOS to run applications from other systems.
-We are already looking at subsystems for: Java, OS/2, and DOS and possibly
-others in the future.
+Most of the source tree is shared with ReactOS, because it's a direct fork of ReactOS.
 
+However, there are some differences between the two:
 
-5. Is ReactOS legal?
---------------------
-
-Yes we are.
-All the code of ReactOS has been written from scratch by our developers.
-We go to great lengths to ensure that the code our developers create is clean,
-same applies to the variety of methods we use to understand Windows internals,
-including clean room reverse engineering, using existing documentation freely
-available both in books and on the web, using extensive tests (tens of millions)
-which apply black box engineering methods against both public and private APIs
-exposed by the operating system.
+    - Memory Management: NVS (NT Virtual Memory Subsystem) is LiberNT's clean-room virtual memory manager and kernel pool implementation, accompanied by a new cache manager that replaces the corresponding components inherited from ReactOS.
+    - ARM64 Support: The kernel, hardware abstraction layer (HAL), and the bootloader can run on ARM64-powered devices.
+    - App Compatibility: LiberNT uses WoW64 to allow running 32-bit apps on 64-bit processors. On ARM64-powered devices, x86 apps run through the FEX emulator with ARM64EC support.
+    - Graphics: The more modern WDDM display driver model and DWM desktop composition is used, like in Windows 11.
+    - USB: Generic USB RNDIS networking is supported. LiberNT also supports controllers like the PlayStation 5 DualSense, PlayStation 5 DualSense Edge, and the XBOX Series X|S controller.
+    - Single-Board Computers: Raspberry Pi display, network and audio drivers, with much more coming.
 
 
-6. Tutorials
-------------
+4. AI Usage in LiberNT
+----------------------
 
-Developer and User Tutorials: https://reactos.org/wiki
-
-The tutorials contain more information on the project, compiling and testing
-ReactOS - amongst other topics. Contributors to the project are always welcome.
+A lot of LiberNT's code is reviewed and generated with the assistance of AI. However, the code that the AI writes is reviewed, run, and validated with end-to-end tests by a real person before it reaches the main branch. We care about this project too much to let a regression slip through.
+It also helps us read documentation, extract definitions and fix bugs. For any given bug, it compares what the official Microsoft Learn documentation says with what our function actually does, so we can see exactly where our behavior differs.
 
 
-7. Frequently Asked Questions
------------------------------
 
-Some of your questions may be answered in: https://reactos.org/faq
-In addition, the ReactOS forum: https://reactos.org/forum
-may contain complementary, yet non-official, information.
-
-
-8. Authors
-----------
-
-This document was originally written by Jason Filby (jasonfilby@yahoo.com)
-and is now occasionally updated by various contributors.
