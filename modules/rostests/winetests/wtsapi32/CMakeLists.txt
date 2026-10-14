@@ -1,8 +1,0 @@
-
-add_definitions(-DUSE_WINE_TODOS)
-add_executable(wtsapi32_winetest wtsapi.c notification.c testlist.c)
-target_compile_definitions(wtsapi32_winetest PRIVATE __WINESRC__ WINETEST_USE_DBGSTR_LONGLONG)
-set_module_type(wtsapi32_winetest win32cui)
-target_link_libraries(wtsapi32_winetest win32ksys)
-add_importlibs(wtsapi32_winetest wtsapi32 user32 advapi32 psapi msvcrt kernel32 ntdll)
-add_rostests_file(TARGET wtsapi32_winetest)
