@@ -130,6 +130,7 @@ struct dxgi_factory
     BOOL extended;
 #ifdef __REACTOS__
     BOOL software;
+    BOOL null_driver;
     struct dxgi_window_association *associations;
     SIZE_T association_count, association_size;
 #endif
@@ -208,6 +209,7 @@ struct d3d11_swapchain
     DXGI_USAGE usage;
     DXGI_SCALING scaling;
     DXGI_RGBA background;
+    BOOL null_driver;
 #endif
     IDXGIOutput *target;
     LONG present_count;

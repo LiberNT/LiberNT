@@ -804,6 +804,14 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_GetContainingOutput(IDXGISwapCh
 
     TRACE("iface %p, output %p.\n", iface, output);
 
+#ifdef __REACTOS__
+    if (swapchain->null_driver)
+    {
+        *output = NULL;
+        return DXGI_ERROR_UNSUPPORTED;
+    }
+#endif
+
     if (swapchain->target)
     {
         IDXGIOutput_AddRef(*output = swapchain->target);
@@ -1393,6 +1401,9 @@ HRESULT d3d11_swapchain_init(struct d3d11_swapchain *swapchain, struct dxgi_devi
 
     if (desc->backbuffer_format == WINED3DFMT_UNKNOWN)
         return E_INVALIDARG;
+#ifdef __REACTOS__
+    swapchain->null_driver = unsafe_impl_from_IDXGIAdapter((IDXGIAdapter *)device->adapter)->factory->null_driver;
+#endif
 
     if (FAILED(hr = IWineDXGIAdapter_GetParent(device->adapter,
             &IID_IWineDXGIFactory, (void **)&swapchain->factory)))

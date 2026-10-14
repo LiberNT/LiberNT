@@ -811,6 +811,7 @@ static HRESULT dxgi_factory_init_software(struct dxgi_factory *factory, unsigned
 
     factory->extended = TRUE;
     factory->software = TRUE;
+    factory->null_driver = !!(flags & WINED3D_NULL_DRIVER);
     return S_OK;
 }
 

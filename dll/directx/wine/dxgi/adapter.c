@@ -138,6 +138,14 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_EnumOutputs(IWineDXGIAdapter *ifac
     if (!output)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    if (adapter->factory->null_driver)
+    {
+        *output = NULL;
+        return DXGI_ERROR_NOT_FOUND;
+    }
+#endif
+
 #if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
     if (!adapter->factory->software && FAILED(hr = dxgi_get_wddm_output_index(
             adapter->wined3d_adapter, adapter->wddm_foreign ? &adapter->wddm_luid : NULL, output_idx, &output_idx)))
@@ -203,6 +211,14 @@ static HRESULT dxgi_adapter_get_desc(struct dxgi_adapter *adapter, DXGI_ADAPTER_
         desc->VendorId = 0x1414;
         desc->DeviceId = 0x008c;
         desc->Flags = DXGI_ADAPTER_FLAG3_SOFTWARE;
+        if (adapter->factory->null_driver)
+        {
+            memset(desc->Description, 0, sizeof(desc->Description));
+            desc->VendorId = 0;
+            desc->DeviceId = 0;
+            desc->DedicatedVideoMemory = 0;
+            desc->SharedSystemMemory = 0;
+        }
     }
     else
 #endif
