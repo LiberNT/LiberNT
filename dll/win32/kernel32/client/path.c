@@ -2335,6 +2335,8 @@ GetTempPath2W(IN DWORD BufferLength,
     WCHAR TempPath[MAX_PATH];
     UINT Length;
 
+    SetLastError(ERROR_SUCCESS);
+
     if (!BasepIsLocalSystemProcess())
         return GetTempPathW(BufferLength, Buffer);
 
