@@ -162,6 +162,7 @@ HalpQueryPartitionType(
     PIRP Irp;
     KEVENT Event;
     NTSTATUS Status;
+    BOOLEAN Removable;
     PFILE_OBJECT FileObject;
     PDEVICE_OBJECT DeviceObject;
     IO_STATUS_BLOCK IoStatusBlock;
@@ -184,12 +185,7 @@ HalpQueryPartitionType(
     ObDereferenceObject(FileObject);
 
     /* Assume logical partition for removable devices */
-    if (BooleanFlagOn(DeviceObject->Characteristics, FILE_REMOVABLE_MEDIA))
-    {
-        ObDereferenceObject(DeviceObject);
-        *PartitionType = LogicalPartition;
-        return STATUS_SUCCESS;
-    }
+    Removable = BooleanFlagOn(DeviceObject->Characteristics, FILE_REMOVABLE_MEDIA);
 
     /* For the others, query partition info */
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
@@ -221,6 +217,12 @@ HalpQueryPartitionType(
 
     /* We're done with the device */
     ObDereferenceObject(DeviceObject);
+
+    if (Removable && (!NT_SUCCESS(Status) || PartitionInfo.PartitionStyle != PARTITION_STYLE_GPT))
+    {
+        *PartitionType = LogicalPartition;
+        return STATUS_SUCCESS;
+    }
 
     /* If we failed querying partition info, try to return something
      * if caller didn't provide a precise layout, assume logical
