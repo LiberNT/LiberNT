@@ -179,10 +179,11 @@ void NativeContext::RefreshOutputBindings(const UINT *initial)
     uav_count = uav_count > render_target_count ? uav_count - render_target_count : 0;
     if (uav_count && render_target_count > driver_target_count)
         device->functions.pfnSetRenderTargets(device->driver_device, targets, render_target_count, 8 - render_target_count,
-                depth, uavs + render_target_count, counts + render_target_count, render_target_count, 0, 0, 8);
+                depth, uavs + render_target_count, counts + render_target_count, render_target_count, 0,
+                render_target_count, 8 - render_target_count);
     device->functions.pfnSetRenderTargets(device->driver_device, targets, render_target_count, 8 - render_target_count,
             depth, uavs + render_target_count, counts + render_target_count, render_target_count,
-            uav_count, 0, 8);
+            uav_count, render_target_count, uav_count);
     driver_uav_end = uav_end;
     driver_target_count = render_target_count;
 }
