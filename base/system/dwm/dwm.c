@@ -2531,7 +2531,8 @@ static void
 DwmBlitWindow(ULONG *comp, LONG scrW,
               LONG clipL, LONG clipT, LONG clipR, LONG clipB,
               const BYTE *pix, const ULONG *wallpaper,
-              const ULONG *backdropBase, const DWM_WIN *w)
+              const ULONG *backdropBase, const DWM_WIN *w,
+              const ULONG *const *FrameButtons)
 {
     LONG r, r0, r1, x0, x1, srcx0, dy, x, width;
     LONGLONG wx = (LONGLONG)w->x - g_originX;
@@ -2600,7 +2601,8 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
         if (useAlpha)
             frameAlpha = a;
         for (button = 0; button < DWM_CAPTION_BUTTONS; ++button)
-            frameButtons[button] = DwmFrameButtonImage(w, button, frameKey);
+            frameButtons[button] = FrameButtons != NULL ? FrameButtons[button] :
+                                   DwmFrameButtonImage(w, button, frameKey);
     }
 
     for (r = r0; r < r1; r++)
@@ -2615,7 +2617,7 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
         const BYTE *reflection = NULL;
         LONG bandStart[2], bandEnd[2], bandCount = 0, band = 0, segEnd;
 
-        if (g_frameStats) g_statBlitPixels += width;
+        if (g_frameStats) InterlockedExchangeAdd64((volatile LONG64 *)&g_statBlitPixels, width);
         dy = (LONG)(wy + r);
         srcrow = (const ULONG *)(pix + (SIZE_T)r * w->Stride) + srcx0;
         dstrow = comp + (SIZE_T)dy * scrW + x0;
@@ -2785,10 +2787,10 @@ next_segment:
                                              w->BackdropOpacity, Weight, reflection + x);
                         if (g_frameStats)
                         {
-                            g_statGlassPixels += End - x;
-                            g_statConstantGlassPixels += End - x;
+                            InterlockedExchangeAdd64((volatile LONG64 *)&g_statGlassPixels, End - x);
+                            InterlockedExchangeAdd64((volatile LONG64 *)&g_statConstantGlassPixels, End - x);
                             if (Weight == 255)
-                                g_statFullWeightGlassPixels += End - x;
+                                InterlockedExchangeAdd64((volatile LONG64 *)&g_statFullWeightGlassPixels, End - x);
                         }
                         x = End - 1;
                         continue;
@@ -2802,7 +2804,7 @@ next_segment:
                                       End - x,
                                       backdropKey, colorizationKey,
                                       w->BackdropOpacity, reflection + x);
-                    if (g_frameStats) g_statGlassPixels += End - x;
+                    if (g_frameStats) InterlockedExchangeAdd64((volatile LONG64 *)&g_statGlassPixels, End - x);
                     x = End - 1;
                     continue;
                 }
@@ -3056,6 +3058,178 @@ DwmFindOpaqueCover(const DWM_WIN *Windows, ULONG Count, ULONG Index,
     return BestArea != 0;
 }
 
+#define DWM_BLIT_MAX_WORKERS 7
+#define DWM_BLIT_PARALLEL_PIXELS 65536
+#define DWM_BLIT_BAND_ROWS 16
+
+typedef struct _DWM_BLIT_JOB
+{
+    ULONG *Composition;
+    LONG Width;
+    LONG Left, Top, Right, Bottom;
+    const BYTE *Pixels;
+    const ULONG *Wallpaper;
+    const ULONG *BackdropBase;
+    const DWM_WIN *Window;
+    const ULONG *FrameButtons[DWM_CAPTION_BUTTONS];
+    LONG BandRows;
+    LONG Bands;
+    volatile LONG NextBand;
+    volatile LONG Active;
+} DWM_BLIT_JOB;
+
+static HANDLE g_blitThreads[DWM_BLIT_MAX_WORKERS];
+static ULONG g_blitWorkers;
+static HANDLE g_blitStart;
+static HANDLE g_blitDone;
+static DWM_BLIT_JOB *g_blitJob;
+static volatile LONG g_blitStop;
+
+static BOOL
+DwmBlitRunBands(DWM_BLIT_JOB *Job)
+{
+    LONG Band;
+
+    while ((Band = InterlockedIncrement(&Job->NextBand) - 1) < Job->Bands)
+    {
+        LONG Top = Job->Top + Band * Job->BandRows;
+        LONG Bottom = Top + Job->BandRows;
+
+        if (Bottom > Job->Bottom)
+            Bottom = Job->Bottom;
+        DwmBlitWindow(Job->Composition, Job->Width, Job->Left, Top,
+                      Job->Right, Bottom, Job->Pixels, Job->Wallpaper,
+                      Job->BackdropBase, Job->Window, Job->FrameButtons);
+    }
+    return InterlockedDecrement(&Job->Active) == 0;
+}
+
+static DWORD WINAPI
+DwmBlitWorker(LPVOID Parameter)
+{
+    UNREFERENCED_PARAMETER(Parameter);
+
+    for (;;)
+    {
+        if (WaitForSingleObject(g_blitStart, INFINITE) != WAIT_OBJECT_0 ||
+            g_blitStop)
+            return 0;
+        if (DwmBlitRunBands(g_blitJob))
+            SetEvent(g_blitDone);
+    }
+}
+
+static void
+DwmBlitStartWorkers(void)
+{
+    SYSTEM_INFO Info;
+    ULONG Count, Index;
+
+    GetSystemInfo(&Info);
+    Count = Info.dwNumberOfProcessors > 1 ? Info.dwNumberOfProcessors - 1 : 0;
+    if (Count > DWM_BLIT_MAX_WORKERS)
+        Count = DWM_BLIT_MAX_WORKERS;
+    if (Count == 0)
+        return;
+
+    g_blitStop = FALSE;
+    g_blitStart = CreateSemaphoreW(NULL, 0, DWM_BLIT_MAX_WORKERS, NULL);
+    g_blitDone = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (g_blitStart == NULL || g_blitDone == NULL)
+    {
+        if (g_blitStart != NULL)
+            CloseHandle(g_blitStart);
+        if (g_blitDone != NULL)
+            CloseHandle(g_blitDone);
+        g_blitStart = g_blitDone = NULL;
+        return;
+    }
+    for (Index = 0; Index < Count; ++Index)
+    {
+        g_blitThreads[Index] = CreateThread(NULL, 0, DwmBlitWorker, NULL, 0, NULL);
+        if (g_blitThreads[Index] == NULL)
+            break;
+    }
+    g_blitWorkers = Index;
+}
+
+static void
+DwmBlitStopWorkers(void)
+{
+    ULONG Index;
+
+    if (g_blitWorkers != 0)
+    {
+        g_blitStop = TRUE;
+        ReleaseSemaphore(g_blitStart, (LONG)g_blitWorkers, NULL);
+        WaitForMultipleObjects(g_blitWorkers, g_blitThreads, TRUE, INFINITE);
+        for (Index = 0; Index < g_blitWorkers; ++Index)
+            CloseHandle(g_blitThreads[Index]);
+        g_blitWorkers = 0;
+    }
+    if (g_blitStart != NULL)
+        CloseHandle(g_blitStart);
+    if (g_blitDone != NULL)
+        CloseHandle(g_blitDone);
+    g_blitStart = g_blitDone = NULL;
+}
+
+static void
+DwmBlitWindowBands(ULONG *Composition, LONG Width,
+                   LONG Left, LONG Top, LONG Right, LONG Bottom,
+                   const BYTE *Pixels, const ULONG *Wallpaper,
+                   const ULONG *BackdropBase, const DWM_WIN *Window)
+{
+    LONGLONG WindowLeft = (LONGLONG)Window->x - g_originX;
+    LONGLONG WindowTop = (LONGLONG)Window->y - g_originY;
+    LONGLONG RowTop = WindowTop > Top ? WindowTop : Top;
+    LONGLONG RowBottom = WindowTop + Window->cy < Bottom ? WindowTop + Window->cy : Bottom;
+    LONGLONG ColumnLeft = WindowLeft > Left ? WindowLeft : Left;
+    LONGLONG ColumnRight = WindowLeft + Window->cx < Right ? WindowLeft + Window->cx : Right;
+    DWM_BLIT_JOB Job;
+    LONG Rows, Wake;
+    ULONG Button;
+
+    if (g_blitWorkers == 0 || RowBottom <= RowTop || ColumnRight <= ColumnLeft ||
+        (RowBottom - RowTop) * (ColumnRight - ColumnLeft) < DWM_BLIT_PARALLEL_PIXELS ||
+        RowBottom - RowTop < 2 * DWM_BLIT_BAND_ROWS)
+    {
+        DwmBlitWindow(Composition, Width, Left, Top, Right, Bottom,
+                      Pixels, Wallpaper, BackdropBase, Window, NULL);
+        return;
+    }
+
+    Rows = (LONG)(RowBottom - RowTop);
+    Job.Composition = Composition;
+    Job.Width = Width;
+    Job.Left = Left;
+    Job.Top = (LONG)RowTop;
+    Job.Right = Right;
+    Job.Bottom = (LONG)RowBottom;
+    Job.Pixels = Pixels;
+    Job.Wallpaper = Wallpaper;
+    Job.BackdropBase = BackdropBase;
+    Job.Window = Window;
+    for (Button = 0; Button < DWM_CAPTION_BUTTONS; ++Button)
+        Job.FrameButtons[Button] = (Window->LayerFlags & DWM_WINDOW_FRAME_ALPHA) ?
+            DwmFrameButtonImage(Window, Button, DwmFrameKey(Window)) : NULL;
+    Job.Bands = (LONG)(g_blitWorkers + 1) * 4;
+    if (Job.Bands > Rows / DWM_BLIT_BAND_ROWS)
+        Job.Bands = Rows / DWM_BLIT_BAND_ROWS;
+    Job.BandRows = (Rows + Job.Bands - 1) / Job.Bands;
+    Job.Bands = (Rows + Job.BandRows - 1) / Job.BandRows;
+    Wake = Job.Bands - 1;
+    if (Wake > (LONG)g_blitWorkers)
+        Wake = (LONG)g_blitWorkers;
+    Job.NextBand = 0;
+    Job.Active = Wake + 1;
+    g_blitJob = &Job;
+    if (!ReleaseSemaphore(g_blitStart, Wake, NULL))
+        Job.Active = 1;
+    if (!DwmBlitRunBands(&Job))
+        WaitForSingleObject(g_blitDone, INFINITE);
+}
+
 static void
 DwmBlitWindowVisible(ULONG *Composition, LONG Width,
                      LONG Left, LONG Top, LONG Right, LONG Bottom,
@@ -3065,18 +3239,18 @@ DwmBlitWindowVisible(ULONG *Composition, LONG Width,
 {
     if (Cover == NULL)
     {
-        DwmBlitWindow(Composition, Width, Left, Top, Right, Bottom,
-                      Pixels, Wallpaper, BackdropBase, Window);
+        DwmBlitWindowBands(Composition, Width, Left, Top, Right, Bottom,
+                           Pixels, Wallpaper, BackdropBase, Window);
         return;
     }
-    DwmBlitWindow(Composition, Width, Left, Top, Right, Cover->top,
-                  Pixels, Wallpaper, BackdropBase, Window);
-    DwmBlitWindow(Composition, Width, Left, Cover->bottom, Right, Bottom,
-                  Pixels, Wallpaper, BackdropBase, Window);
-    DwmBlitWindow(Composition, Width, Left, Cover->top, Cover->left, Cover->bottom,
-                  Pixels, Wallpaper, BackdropBase, Window);
-    DwmBlitWindow(Composition, Width, Cover->right, Cover->top, Right, Cover->bottom,
-                  Pixels, Wallpaper, BackdropBase, Window);
+    DwmBlitWindowBands(Composition, Width, Left, Top, Right, Cover->top,
+                       Pixels, Wallpaper, BackdropBase, Window);
+    DwmBlitWindowBands(Composition, Width, Left, Cover->bottom, Right, Bottom,
+                       Pixels, Wallpaper, BackdropBase, Window);
+    DwmBlitWindowBands(Composition, Width, Left, Cover->top, Cover->left, Cover->bottom,
+                       Pixels, Wallpaper, BackdropBase, Window);
+    DwmBlitWindowBands(Composition, Width, Cover->right, Cover->top, Right, Cover->bottom,
+                       Pixels, Wallpaper, BackdropBase, Window);
 }
 
 #define DWM_ANIM_TAPS 4
@@ -3865,6 +4039,7 @@ DwmComposeLoop(HANDLE hStopEvent)
     if (DwmSettingsRead(&Settings.Effects) != ERROR_SUCCESS)
         DwmLog("DWM: could not read effect preferences\n");
     SettingsWindow = DwmSettingsCreateWindow(GetModuleHandleW(NULL), &Settings);
+    DwmBlitStartWorkers();
 
     for (;;)
     {
@@ -4090,9 +4265,17 @@ DwmComposeLoop(HANDLE hStopEvent)
                     wr = wl + wins[i].AnimCx;
                     wb = wt + wins[i].AnimCy;
                 }
-                if (wr <= pl || wl >= pr || wb <= pt || wt >= pb)
+                margin = 2 * (((DwmBlurRadius() + 1) / 2) * DWM_BLUR_PASSES + 2);
+                if (wr <= pl - margin || wl >= pr + margin ||
+                    wb <= pt - margin || wt >= pb + margin)
                     continue;
-                margin = DwmBlurRadius() * DWM_BLUR_PASSES + 1;
+                if (!DwmGpuComposeIsActive())
+                {
+                    pl = max(pl - margin, 0);
+                    pt = max(pt - margin, 0);
+                    pr = min(pr + margin, g_W);
+                    pb = min(pb + margin, g_H);
+                }
                 cl = pl - margin; ct = pt - margin;
                 cr = pr + margin; cb = pb + margin;
                 if (cl < 0) cl = 0;
@@ -4497,6 +4680,7 @@ DwmComposeLoop(HANDLE hStopEvent)
     }
 
     DwmSetTimerPrecision(FALSE);
+    DwmBlitStopWorkers();
     if (SettingsWindow != NULL)
         DestroyWindow(SettingsWindow);
     DwmGpuComposeShutdown();
