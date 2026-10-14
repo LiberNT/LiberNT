@@ -301,6 +301,7 @@ Arm64ChpeTestNativeProcessorInformation(VOID)
         case IMAGE_FILE_MACHINE_AMD64: ExpectedArchitecture = PROCESSOR_ARCHITECTURE_AMD64; break;
         case IMAGE_FILE_MACHINE_ARMNT: ExpectedArchitecture = PROCESSOR_ARCHITECTURE_ARM; break;
         case IMAGE_FILE_MACHINE_ARM64: ExpectedArchitecture = PROCESSOR_ARCHITECTURE_ARM64; break;
+        case IMAGE_FILE_MACHINE_RISCV64: ExpectedArchitecture = PROCESSOR_ARCHITECTURE_RISCV64; break;
         default:
             ok(FALSE, "Unexpected native machine %x\n", NativeMachine);
             return;
