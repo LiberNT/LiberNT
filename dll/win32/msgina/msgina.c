@@ -1104,6 +1104,14 @@ WlxShutdown(
 
     TRACE("WlxShutdown(%p %lx)\n", pWlxContext, ShutdownType);
 
+    if (pgContext->hStatusWindow)
+    {
+        PostThreadMessageW(GetWindowThreadProcessId(pgContext->hStatusWindow, NULL),
+                           WM_HIDESTATUSCURSOR,
+                           0,
+                           0);
+    }
+
     /* Close the LSA handle */
     pgContext->AuthenticationPackage = 0;
     Status = LsaDeregisterLogonProcess(pgContext->LsaHandle);

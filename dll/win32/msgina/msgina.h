@@ -29,6 +29,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(msgina);
 
 #include "resource.h"
 
+#define WM_HIDESTATUSCURSOR (WM_APP + 1)
 
 typedef struct
 {

@@ -200,6 +200,12 @@ StartupWindowThread(LPVOID lpParam)
     {
         while (GetMessageW(&Message, NULL, 0, 0) > 0)
         {
+            if (!Message.hwnd && Message.message == WM_HIDESTATUSCURSOR)
+            {
+                ShowCursor(FALSE);
+                continue;
+            }
+
             TranslateMessage(&Message);
             DispatchMessageW(&Message);
         }
