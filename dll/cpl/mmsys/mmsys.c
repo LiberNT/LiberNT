@@ -324,44 +324,39 @@ BOOL
 IsSoftwareBusPnpEnumeratorInstalled()
 {
     HDEVINFO hDevInfo;
-    SP_DEVICE_INTERFACE_DATA DeviceInterfaceData;
-    GUID SWBusGuid = {STATIC_BUSID_SoftwareDeviceEnumerator};
-    PSP_DEVICE_INTERFACE_DETAIL_DATA_W DeviceInterfaceDetailData;
+    SP_DEVINFO_DATA DeviceInfoData;
+    WCHAR HardwareIds[MAX_PATH];
+    PCWSTR HardwareId;
+    DWORD Index;
+    BOOL Found = FALSE;
 
-    hDevInfo = SetupDiGetClassDevsW(&SWBusGuid, NULL, NULL, DIGCF_DEVICEINTERFACE | DIGCF_PRESENT);
-    if (!hDevInfo)
+    hDevInfo = SetupDiGetClassDevsW(NULL, L"ROOT", NULL, DIGCF_ALLCLASSES);
+    if (hDevInfo == INVALID_HANDLE_VALUE)
     {
-        // failed
         return FALSE;
     }
 
-    DeviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
-    if (!SetupDiEnumDeviceInterfaces(hDevInfo, NULL, &SWBusGuid, 0, &DeviceInterfaceData))
+    DeviceInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+    for (Index = 0; !Found && SetupDiEnumDeviceInfo(hDevInfo, Index, &DeviceInfoData); Index++)
     {
-        // failed
-        SetupDiDestroyDeviceInfoList(hDevInfo);
-        return FALSE;
+        ZeroMemory(HardwareIds, sizeof(HardwareIds));
+        if (!SetupDiGetDeviceRegistryPropertyW(hDevInfo, &DeviceInfoData, SPDRP_HARDWAREID, NULL, (PBYTE)HardwareIds, sizeof(HardwareIds) - 2 * sizeof(WCHAR), NULL))
+        {
+            continue;
+        }
+
+        for (HardwareId = HardwareIds; *HardwareId != UNICODE_NULL; HardwareId += wcslen(HardwareId) + 1)
+        {
+            if (!_wcsicmp(HardwareId, L"ROOT\\SWENUM"))
+            {
+                Found = TRUE;
+                break;
+            }
+        }
     }
 
-    DeviceInterfaceDetailData = (PSP_DEVICE_INTERFACE_DETAIL_DATA_W)HeapAlloc(GetProcessHeap(), 0, (MAX_PATH * sizeof(WCHAR)) + sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W));
-    if (!DeviceInterfaceDetailData)
-    {
-        // failed
-        SetupDiDestroyDeviceInfoList(hDevInfo);
-        return FALSE;
-    }
-
-    DeviceInterfaceDetailData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
-    if (!SetupDiGetDeviceInterfaceDetailW(hDevInfo, &DeviceInterfaceData, DeviceInterfaceDetailData, (MAX_PATH * sizeof(WCHAR)) + sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W), NULL, NULL))
-    {
-        // failed
-        HeapFree(GetProcessHeap(), 0, DeviceInterfaceDetailData);
-        SetupDiDestroyDeviceInfoList(hDevInfo);
-        return FALSE;
-    }
-    HeapFree(GetProcessHeap(), 0, DeviceInterfaceDetailData);
     SetupDiDestroyDeviceInfoList(hDevInfo);
-    return TRUE;
+    return Found;
 }
 
 DWORD
@@ -454,6 +449,7 @@ MMSYS_InstallDevice(HDEVINFO hDevInfo, PSP_DEVINFO_DATA pspDevInfoData)
     HKEY hKey;
     DWORD BufferSize;
     ULONG Index;
+    HANDLE hMutex;
 
     if (!IsEqualIID(&pspDevInfoData->ClassGuid, &GUID_DEVCLASS_SOUND) &&
         !IsEqualIID(&pspDevInfoData->ClassGuid, &GUID_DEVCLASS_MEDIA))
@@ -507,18 +503,30 @@ MMSYS_InstallDevice(HDEVINFO hDevInfo, PSP_DEVINFO_DATA pspDevInfoData)
     SetupTermDefaultQueueCallback(Context);
     SetupCloseInfFile(hInf);
 
+    Length = GetWindowsDirectoryW(szBuffer, _countof(szBuffer));
+    if (!Length || Length >= _countof(szBuffer) - CONST_STR_LEN(L"\\inf\\machine.inf"))
+    {
+        return ERROR_GEN_FAILURE;
+    }
+
+    //PathCchAppend(szBuffer, _countof(szBuffer), L"inf\\machine.inf");
+    StringCchCatW(szBuffer, _countof(szBuffer), L"\\inf\\machine.inf");
+
+    hMutex = CreateMutexW(NULL, FALSE, L"Global\\MmsysSoftwareBusPnpEnumerator");
+    if (hMutex)
+    {
+        WaitForSingleObject(hMutex, INFINITE);
+    }
+
     if (!IsSoftwareBusPnpEnumeratorInstalled())
     {
-        Length = GetWindowsDirectoryW(szBuffer, _countof(szBuffer));
-        if (!Length || Length >= _countof(szBuffer) - CONST_STR_LEN(L"\\inf\\machine.inf"))
-        {
-            return ERROR_GEN_FAILURE;
-        }
-
-        //PathCchAppend(szBuffer, _countof(szBuffer), L"inf\\machine.inf");
-        StringCchCatW(szBuffer, _countof(szBuffer), L"\\inf\\machine.inf");
-
         InstallSoftwareBusPnpEnumerator(szBuffer, L"ROOT\\SWENUM\0");
+    }
+
+    if (hMutex)
+    {
+        ReleaseMutex(hMutex);
+        CloseHandle(hMutex);
     }
 
     hSCManager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
