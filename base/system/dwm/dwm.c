@@ -1860,8 +1860,9 @@ DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
     CurrentArea = (ULONGLONG)(Current.right - Current.left) *
                   (ULONGLONG)(Current.bottom - Current.top);
     if (((Window->LayerFlags & DWM_LWA_ALPHA) && Window->Alpha < 255) ||
-        (Pixels >= DWM_BLUR_LARGE_PIXELS * 4ull ?
-             g_blurLargeUseGpu : g_blurUseGpu) != 0 || Pixels < 65536 ||
+        (DwmGpuIsActive() &&
+         (Pixels >= DWM_BLUR_LARGE_PIXELS * 4ull ?
+              g_blurLargeUseGpu : g_blurUseGpu) != 0) || Pixels < 65536 ||
         Pixels < CurrentArea / 2 || !DwmEnsureBackdropCache(Width, Height))
     {
         DwmApplyBlur(Composition, Composition, Width, Height,
@@ -3076,6 +3077,7 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
     BOOL premultiplied = material != NULL &&
                          (material->LayerFlags & DWM_WINDOW_PREMULTIPLIED_ALPHA) != 0;
     LONG matCx0 = 0, matCy0 = 0, matCx1 = 0, matCy1 = 0;
+    ULONG lastColor = 0xFFFFFFFFu, lastKey = 0, lastWeight = 0;
 
     if (material != NULL &&
         material->BackdropType >= DWM_BACKDROP_MAIN &&
@@ -3137,6 +3139,9 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
         LONG sy0 = (LONG)(((LONGLONG)(y - dstY) * srcCy) / dstCy);
         LONG sy1 = (LONG)(((LONGLONG)(y - dstY + 1) * srcCy) / dstCy);
         LONG stepY;
+        BOOL cornerRow = cornerRadius != 0 &&
+                         (y - dstY < (LONG)cornerRadius ||
+                          y - dstY >= dstCy - (LONG)cornerRadius);
 
         if (sy1 <= sy0) sy1 = sy0 + 1;
         if (sy1 > srcCy) sy1 = srcCy;
@@ -3150,35 +3155,46 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
             ULONG taps = 0, rb = 0, g = 0, sourceAlpha = 0, s, d, inverse, recip;
             ULONG cover = 255, prior = dstrow[x];
 
-            if (cornerRadius != 0)
+            if (cornerRow)
             {
                 cover = DwmCornerAlpha(x - dstX, y - dstY, dstCx, dstCy, cornerRadius);
                 if (cover == 0)
                     continue;
             }
 
-            for (sy = sy0; sy < sy1; sy += stepY)
+            if (sy1 - sy0 <= stepY && sx1 - sx0 <= stepX)
             {
-                const ULONG *srcrow =
-                    (const ULONG *)(pix + (SIZE_T)sy * srcStride);
+                ULONG c = ((const ULONG *)(pix + (SIZE_T)sy0 * srcStride))[sx0];
 
-                for (sx = sx0; sx < sx1; sx += stepX)
-                {
-                    ULONG c = srcrow[sx];
-
-                    rb += c & 0xFF00FFu;
-                    g += c & 0xFF00u;
-                    sourceAlpha += c >> 24;
-                    taps++;
-                }
+                s = c & 0x00FFFFFFu;
+                sourceAlpha = c >> 24;
+                recip = 65536u;
             }
-            if (taps == 0)
-                continue;
-            recip = (taps <= DWM_ANIM_TAPS * DWM_ANIM_TAPS) ? TapRecip[taps]
-                                                            : 65536u / taps;
-            s = ((((rb >> 16) & 0xFFFFu) * recip >> 16) << 16) |
-                ((((g >> 8) & 0xFFFFu) * recip >> 16) << 8) |
-                ((rb & 0xFFFFu) * recip >> 16);
+            else
+            {
+                for (sy = sy0; sy < sy1; sy += stepY)
+                {
+                    const ULONG *srcrow =
+                        (const ULONG *)(pix + (SIZE_T)sy * srcStride);
+
+                    for (sx = sx0; sx < sx1; sx += stepX)
+                    {
+                        ULONG c = srcrow[sx];
+
+                        rb += c & 0xFF00FFu;
+                        g += c & 0xFF00u;
+                        sourceAlpha += c >> 24;
+                        taps++;
+                    }
+                }
+                if (taps == 0)
+                    continue;
+                recip = (taps <= DWM_ANIM_TAPS * DWM_ANIM_TAPS) ? TapRecip[taps]
+                                                                : 65536u / taps;
+                s = ((((rb >> 16) & 0xFFFFu) * recip >> 16) << 16) |
+                    ((((g >> 8) & 0xFFFFu) * recip >> 16) << 8) |
+                    ((rb & 0xFFFFu) * recip >> 16);
+            }
             if (premultiplied)
             {
                 ULONG pixelAlpha = (sourceAlpha * recip >> 16) * alpha / 255u;
@@ -3201,25 +3217,62 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
                 continue;
             }
             if (matKey != 0xFFFFFFFFu &&
-                ((s & 0x00FFFFFFu) == matKey ||
-                 (s & 0x00FFFFFFu) == matKey2) &&
                 (matWholeWindow ||
                  sx0 < matCx0 || sx0 >= matCx1 ||
                  sy0 < matCy0 || sy0 >= matCy1))
             {
-                ULONG ma = matOpacity * alpha / 255u;
-                ULONG mi = 255u - ma;
+                ULONG Key = lastKey, Weight = lastWeight;
 
-                d = backdropBase != NULL ? backdropBase[(SIZE_T)y * scrW + x] : dstrow[x];
-                dstrow[x] =
-                    ((((s >> 16) & 0xFFu) * ma +
-                      ((d >> 16) & 0xFFu) * mi) / 255u << 16) |
-                    ((((s >> 8) & 0xFFu) * ma +
-                      ((d >> 8) & 0xFFu) * mi) / 255u << 8) |
-                    (((s & 0xFFu) * ma + (d & 0xFFu) * mi) / 255u);
-                if (cover < 255)
-                    dstrow[x] = DwmCoverPixel(prior, dstrow[x], cover);
-                continue;
+                if (s != lastColor)
+                {
+                    ULONG Near = DwmChannelDistance(s, matKey);
+                    ULONG Other = DwmChannelDistance(s, matKey2);
+
+                    Key = matKey;
+                    Weight = 0;
+                    if (Other < Near)
+                    {
+                        Near = Other;
+                        Key = matKey2;
+                    }
+                    if (Near <= DWM_MATERIAL_TINT_BAND)
+                        Weight = 255;
+                    else if (Near < DWM_MATERIAL_FRINGE)
+                        Weight = (DWM_MATERIAL_FRINGE - Near) * 255u /
+                                 (DWM_MATERIAL_FRINGE - DWM_MATERIAL_TINT_BAND);
+                    lastColor = s;
+                    lastKey = Key;
+                    lastWeight = Weight;
+                }
+                if (Weight != 0)
+                {
+                    ULONG Shift = (255u - matOpacity) * Weight / 255u;
+                    LONG sr = (LONG)((s >> 16) & 0xFFu);
+                    LONG sg = (LONG)((s >> 8) & 0xFFu);
+                    LONG sb = (LONG)(s & 0xFFu);
+
+                    d = backdropBase != NULL ? backdropBase[(SIZE_T)y * scrW + x] : dstrow[x];
+                    sr += ((LONG)((d >> 16) & 0xFFu) -
+                           (LONG)((Key >> 16) & 0xFFu)) * (LONG)Shift / 255;
+                    sg += ((LONG)((d >> 8) & 0xFFu) -
+                           (LONG)((Key >> 8) & 0xFFu)) * (LONG)Shift / 255;
+                    sb += ((LONG)(d & 0xFFu) -
+                           (LONG)(Key & 0xFFu)) * (LONG)Shift / 255;
+                    if (material->BackdropType == DWM_BACKDROP_TRANSIENT)
+                    {
+                        LONG glow = (LONG)(DWM_MATERIAL_REFLECT_STRENGTH *
+                                           DwmReflection(x, y) *
+                                           Weight / (255u * 255u));
+
+                        sr += glow;
+                        sg += glow;
+                        sb += glow;
+                    }
+                    if (sr < 0) sr = 0; else if (sr > 255) sr = 255;
+                    if (sg < 0) sg = 0; else if (sg > 255) sg = 255;
+                    if (sb < 0) sb = 0; else if (sb > 255) sb = 255;
+                    s = ((ULONG)sr << 16) | ((ULONG)sg << 8) | (ULONG)sb;
+                }
             }
             if (alpha >= 255)
             {
@@ -3964,13 +4017,6 @@ DwmComposeLoop(HANDLE hStopEvent)
                 break;
             }
 
-            /* A GPU redraw covering the screen does not change wallpaper.
-             * Repainting/uploading it here makes large window moves perform
-             * a full-screen CPU copy on every frame. Explicit full damage
-             * and surface recreation still refresh the cached wallpaper. */
-            if (!DwmGpuComposeIsActive() &&
-                cl == 0 && ct == 0 && cr == g_W && cb == g_H)
-                refreshBackdrop = TRUE;
             forceFull = FALSE;
 
             if (pr > pl && pb > pt)
