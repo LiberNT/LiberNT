@@ -25,6 +25,7 @@
 #include <strsafe.h>
 #include <shdocvw_undoc.h>
 #include <reactos/dwmframe.h>
+#include <reactos/dwmsettings.h>
 
 extern HRESULT IUnknown_ShowDW(IUnknown * punk, BOOL fShow);
 
@@ -298,6 +299,7 @@ private:
     static const int                        BIHorizontalBaseBar = 2;
 
     HWND                                    fCurrentShellViewWindow;    // our currently hosted shell view window
+    HBRUSH                                  m_hbrPendingContent;
     CComPtr<IShellFolder>                   fCurrentShellFolder;        //
     CComPtr<IShellView>                     fCurrentShellView;          //
     LPITEMIDLIST                            fCurrentDirectoryPIDL;      //
@@ -637,6 +639,7 @@ public:
     // message handlers
     LRESULT OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
+    LRESULT OnEraseBackground(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnInitMenuPopup(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnSetFocus(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
@@ -691,6 +694,7 @@ public:
     BEGIN_MSG_MAP(CShellBrowser)
         MESSAGE_HANDLER(WM_CREATE, OnCreate)
         MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
+        MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBackground)
         MESSAGE_HANDLER(WM_SIZE, OnSize)
         MESSAGE_HANDLER(WM_INITMENUPOPUP, OnInitMenuPopup)
         MESSAGE_HANDLER(WM_SETFOCUS, OnSetFocus)
@@ -772,6 +776,7 @@ CShellBrowser::CShellBrowser()
     m_bSilent = VARIANT_FALSE;
     m_Destroyed = false;
     fCurrentShellViewWindow = NULL;
+    m_hbrPendingContent = NULL;
     fCurrentDirectoryPIDL = NULL;
     fStatusBar = NULL;
     fCurrentMenuBar = NULL;
@@ -847,6 +852,17 @@ HRESULT CShellBrowser::Initialize()
     fStatusBar = ::CreateWindowExW(0, STATUSCLASSNAMEW, NULL, dwStatusStyle,
                                    0, 0, 500, 20, m_hWnd, (HMENU)IDC_STATUSBAR,
                                    _AtlBaseModule.GetModuleInstance(), 0);
+
+    COLORREF contentFill;
+    INT contentOpacity;
+    HIGHCONTRASTW highContrast = { sizeof(highContrast) };
+    if (!(SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(highContrast), &highContrast, 0) &&
+          (highContrast.dwFlags & HCF_HIGHCONTRASTON)) &&
+        DwmSettingsLoadSchemeMaterial(DwmSettingsReadColorScheme(), &contentFill, &contentOpacity) &&
+        DwmSettingsSetContentBackdrop(m_hWnd, contentFill, contentOpacity))
+    {
+        m_hbrPendingContent = CreateSolidBrush(contentFill);
+    }
 
     ShowWindow(SW_SHOWNORMAL);
     UpdateWindow();
@@ -1168,6 +1184,17 @@ HRESULT CShellBrowser::BrowseToPath(IShellFolder *newShellFolder,
     saveCurrentShellFolder.Release();
 
     hResult = newShellView->UIActivate((flags & BTP_ACTIVATE_NOFOCUS) ? SVUIA_ACTIVATE_NOFOCUS : SVUIA_ACTIVATE_FOCUS);
+
+    if (m_hbrPendingContent)
+    {
+        if (!GetPropW(m_hWnd, L"ReactOS.Shell.ExplorerContentBackdropOwner"))
+        {
+            DwmSettingsClearContentBackdrop(m_hWnd);
+            RedrawWindow(NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ERASE | RDW_ALLCHILDREN);
+        }
+        DeleteObject(m_hbrPendingContent);
+        m_hbrPendingContent = NULL;
+    }
 
     // leave updating section
     if (windowUpdateIsLocked)
@@ -4049,9 +4076,28 @@ LRESULT CShellBrowser::OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &b
     return 0;
 }
 
+LRESULT CShellBrowser::OnEraseBackground(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+{
+    RECT clientRect;
+
+    if (!m_hbrPendingContent || fCurrentShellViewWindow)
+    {
+        bHandled = FALSE;
+        return 0;
+    }
+    GetClientRect(&clientRect);
+    FillRect((HDC)wParam, &clientRect, m_hbrPendingContent);
+    return 1;
+}
+
 LRESULT CShellBrowser::OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
 {
     HRESULT hr;
+    if (m_hbrPendingContent)
+    {
+        DeleteObject(m_hbrPendingContent);
+        m_hbrPendingContent = NULL;
+    }
     if (m_BrowserSvcFlags & (BSF_THEATERMODE | BSF_ROS_KIOSK))
     {
         if (m_NonFullscreenState & FSF_MBAR)
