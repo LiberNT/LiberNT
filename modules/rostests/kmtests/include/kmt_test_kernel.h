@@ -140,6 +140,10 @@ BOOLEAN KmtAreInterruptsEnabled(VOID)
     __asm__ __volatile__("mrs %0, daif" : "=r"(Daif));
     return (Daif & 0x80) == 0;
 #endif
+#elif defined(_M_RISCV64)
+    ULONG_PTR Status;
+    __asm__ __volatile__("csrr %0, sstatus" : "=r"(Status));
+    return (Status & 2) != 0;
 #else
 #pragma message(__FILE__ ": warning : 'KmtAreInterruptsEnabled()' is UNIMPLEMENTED for this architecture")
     return FALSE;

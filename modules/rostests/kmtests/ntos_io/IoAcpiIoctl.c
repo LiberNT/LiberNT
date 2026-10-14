@@ -187,6 +187,14 @@ START_TEST(IoAcpiIoctl)
     ULONG Index, Count, Round;
     NTSTATUS Status;
     size_t Length;
+    UNICODE_STRING AcpiName = RTL_CONSTANT_STRING(L"\\Driver\\ACPI");
+    PDRIVER_OBJECT AcpiDriver;
+
+    Status = ObReferenceObjectByName(&AcpiName, OBJ_CASE_INSENSITIVE, NULL, 0, IoDriverObjectType, KernelMode, NULL,
+                                     (PVOID *)&AcpiDriver);
+    if (skip(NT_SUCCESS(Status), "ACPI driver not loaded: status=%lx\n", Status))
+        return;
+    ObDereferenceObject(AcpiDriver);
 
     Status = IoGetDeviceInterfaces(&GUID_DEVICE_PROCESSOR, NULL, 0, &List);
     ok(NT_SUCCESS(Status) && List != NULL && List[0] != UNICODE_NULL, "no processor device interface: status=%lx\n", Status);

@@ -622,6 +622,7 @@ TestPhysicalMemorySection(VOID)
     } *UserStruct;
     PVOID UserMem;
     SIZE_T UserSize;
+    PPHYSICAL_MEMORY_RANGE Ranges;
 
     MyPage = ExAllocatePoolWithTag(NonPagedPool, PAGE_SIZE, 'MPmK');
     if (skip(MyPage != NULL, "Out of memory\n"))
@@ -638,7 +639,17 @@ TestPhysicalMemorySection(VOID)
         ExFreePoolWithTag(MyPage, 'MPmK');
         return;
     }
-    ZeroPagePhysical.QuadPart = 0;
+    Ranges = MmGetPhysicalMemoryRanges();
+    if (skip(Ranges != NULL && Ranges[0].NumberOfBytes.QuadPart != 0, "No physical memory ranges\n"))
+    {
+        if (Ranges != NULL)
+            ExFreePool(Ranges);
+        ExFreePoolWithTag(ZeroPageContents, 'ZPmK');
+        ExFreePoolWithTag(MyPage, 'MPmK');
+        return;
+    }
+    ZeroPagePhysical = Ranges[0].BaseAddress;
+    ExFreePool(Ranges);
 
     Mapping = MmMapIoSpace(ZeroPagePhysical, PAGE_SIZE, MmCached);
     if (skip(Mapping != NULL, "Failed to map zero page\n"))

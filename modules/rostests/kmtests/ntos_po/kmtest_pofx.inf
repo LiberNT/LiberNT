@@ -10,7 +10,7 @@ CatalogFile=kmtest_pofx.cat
 PnpLockdown=1
 
 [Manufacturer]
-%Provider%=Models,NTx86,NTamd64,NTarm64
+%Provider%=Models,NTx86,NTamd64,NTarm64,NTriscv64
 
 [Models.NTx86]
 %Device%=Fixture,ROOT\KMTESTPOFX
@@ -19,6 +19,9 @@ PnpLockdown=1
 %Device%=Fixture,ROOT\KMTESTPOFX
 
 [Models.NTarm64]
+%Device%=Fixture,ROOT\KMTESTPOFX
+
+[Models.NTriscv64]
 %Device%=Fixture,ROOT\KMTESTPOFX
 
 [Fixture.NT]
