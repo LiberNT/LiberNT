@@ -16,12 +16,21 @@
 
     .globl _changestack
 _changestack:
+    addi sp, sp, -16
+    sd s0, 0(sp)
+    sd ra, 8(sp)
+    mv s0, sp
     /* a0 is the firmware-owned stack passed to ExecuteLoaderCleanly. */
     mv a0, sp
     la t0, BasicStack
     ld sp, 0(t0)
     andi sp, sp, -16
-    tail ExecuteLoaderCleanly
+    call ExecuteLoaderCleanly
+    mv sp, s0
+    ld ra, 8(sp)
+    ld s0, 0(sp)
+    addi sp, sp, 16
+    ret
 
     .globl _exituefi
 _exituefi:

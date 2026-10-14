@@ -151,10 +151,12 @@ _exituefi:
  * void _changestack(VOID)
  *
  * Switch to BasicStack and call ExecuteLoaderCleanly.
- * This function does not return under normal operation.
  */
 .globl _changestack
 _changestack:
+    stp x19, x30, [sp, #-16]!
+    mov x19, sp
+
     /* Save old stack pointer as first argument for ExecuteLoaderCleanly */
     mov x0, sp
 
@@ -171,9 +173,8 @@ _changestack:
     /* Call ExecuteLoaderCleanly with old stack as parameter */
     bl ExecuteLoaderCleanly
 
-    /* Should not return, but if it does, halt */
-1:
-    wfe
-    b 1b
+    mov sp, x19
+    ldp x19, x30, [sp], #16
+    ret
 
 /* End of file */
