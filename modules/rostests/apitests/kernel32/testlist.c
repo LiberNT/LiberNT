@@ -32,6 +32,7 @@ extern void func_GetOsSafeBootMode(void);
 extern void func_GetPackageFamilyName(void);
 extern void func_GetSystemWow64Directory(void);
 extern void func_GetTempFileName(void);
+extern void func_GetTempPath2(void);
 extern void func_GetVolumeInformation(void);
 extern void func_InitOnce(void);
 extern void func_interlck(void);
@@ -114,6 +115,7 @@ const struct test winetest_testlist[] =
     { "GetPackageFamilyName",        func_GetPackageFamilyName },
     { "GetSystemWow64Directory",     func_GetSystemWow64Directory },
     { "GetTempFileName",             func_GetTempFileName },
+    { "GetTempPath2",                func_GetTempPath2 },
     { "GetVolumeInformation",        func_GetVolumeInformation },
     { "InitOnce",                    func_InitOnce },
     { "interlck",                    func_interlck },

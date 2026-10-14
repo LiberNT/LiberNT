@@ -33,6 +33,7 @@ list(APPEND SOURCE
     GetPackageFamilyName.c
     GetSystemWow64Directory.c
     GetTempFileName.c
+    GetTempPath2.c
     GetVolumeInformation.c
     InitOnce.c
     interlck.c
