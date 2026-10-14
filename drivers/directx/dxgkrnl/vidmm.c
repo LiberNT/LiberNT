@@ -2056,6 +2056,7 @@ DxgkVidMmDumpContextImages(
 
 VOID
 DxgkVidMmNoteApertureOp(
+    _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ BOOLEAN Map,
     _In_ ULONG SegmentId,
     _In_ ULONGLONG OffsetInPages,
@@ -2085,6 +2086,7 @@ DxgkVidMmNoteApertureOp(
         DXGKP_CONTEXT_ALLOCATION_RANGE *Range = &DxgkpContextAllocationRanges[Index];
 
         if (Range->Allocation == NULL || Range->SegmentId != SegmentId ||
+            ((PDXGKVMM_ALLOCATION)Range->Allocation)->Adapter != Adapter ||
             Range->hAllocation == hAllocation ||
             OffsetInPages >= Range->OffsetInPages + Range->Pages ||
             Range->OffsetInPages >= OffsetInPages + Pages)
@@ -13396,7 +13398,7 @@ DxgkpVidMmReleaseApertureMapping(
             BuildArgs.UnmapApertureSegment.OffsetInPages = (SIZE_T)(Allocation->SegmentOffset / PAGE_SIZE);
             BuildArgs.UnmapApertureSegment.NumberOfPages = ADDRESS_AND_SIZE_TO_SPAN_PAGES(Allocation->SystemMemory, Allocation->Size);
             BuildArgs.UnmapApertureSegment.DummyPage = Segment->DummyPage;
-            DxgkVidMmNoteApertureOp(FALSE, Allocation->SegmentId, BuildArgs.UnmapApertureSegment.OffsetInPages,
+            DxgkVidMmNoteApertureOp(Adapter, FALSE, Allocation->SegmentId, BuildArgs.UnmapApertureSegment.OffsetInPages,
                                     BuildArgs.UnmapApertureSegment.NumberOfPages, Allocation->MiniportHandle, Allocation);
             DxgkEnterSchedulerClass(Adapter);
             Status = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
@@ -17239,7 +17241,7 @@ DxgkVidMmSubmitAperturePagingPacket(
         BuildArgs.UnmapApertureSegment.OffsetInPages = (SIZE_T)(Allocation->SegmentOffset / PAGE_SIZE);
         BuildArgs.UnmapApertureSegment.NumberOfPages = NumberOfPages;
     }
-    DxgkVidMmNoteApertureOp(Map, Allocation->SegmentId, Allocation->SegmentOffset / PAGE_SIZE,
+    DxgkVidMmNoteApertureOp(Adapter, Map, Allocation->SegmentId, Allocation->SegmentOffset / PAGE_SIZE,
                             NumberOfPages, Allocation->MiniportHandle, Allocation);
 
     if (!DxgkAcquireKmdCall(Adapter))

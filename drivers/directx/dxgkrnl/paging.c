@@ -159,6 +159,7 @@ DxgkpPagingMonitoredFenceSignalSupported(
  */
 static VOID
 DxgkpPagingFillBuildArgs(
+    _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ CONST DXGKRNL_PAGING_OP *Op,
     _In_ BOOLEAN Idle,
     _Inout_ DXGKARG_BUILDPAGINGBUFFER *BuildArgs)
@@ -217,7 +218,7 @@ DxgkpPagingFillBuildArgs(
             BuildArgs->MapApertureSegment.NumberOfPages = Op->NumberOfPages;
             BuildArgs->MapApertureSegment.pMdl = Op->SourceMdl;
             BuildArgs->MapApertureSegment.MdlOffset = Op->MdlOffset;
-            DxgkVidMmNoteApertureOp(TRUE, Op->DestinationSegmentId, Op->OffsetInPages, Op->NumberOfPages, Op->hMiniportAllocation, NULL);
+            DxgkVidMmNoteApertureOp(Adapter, TRUE, Op->DestinationSegmentId, Op->OffsetInPages, Op->NumberOfPages, Op->hMiniportAllocation, NULL);
             break;
 
         case DxgkPagingOpUnmapAperture:
@@ -228,7 +229,7 @@ DxgkpPagingFillBuildArgs(
             BuildArgs->UnmapApertureSegment.OffsetInPages = Op->OffsetInPages;
             BuildArgs->UnmapApertureSegment.NumberOfPages = Op->NumberOfPages;
             BuildArgs->UnmapApertureSegment.DummyPage = Op->DummyPage;
-            DxgkVidMmNoteApertureOp(FALSE, Op->DestinationSegmentId, Op->OffsetInPages, Op->NumberOfPages, Op->hMiniportAllocation, NULL);
+            DxgkVidMmNoteApertureOp(Adapter, FALSE, Op->DestinationSegmentId, Op->OffsetInPages, Op->NumberOfPages, Op->hMiniportAllocation, NULL);
             break;
 
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_0)
@@ -429,7 +430,7 @@ DxgkpPagingBuildImmediate(
 
     RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
     BuildArgs.hSystemContext = Adapter->PagingSystemContext->hMiniportContext;
-    DxgkpPagingFillBuildArgs(Op, FALSE, &BuildArgs);
+    DxgkpPagingFillBuildArgs(Adapter, Op, FALSE, &BuildArgs);
     if (!DxgkAcquireKmdCall(Adapter))
         return STATUS_DELETE_PENDING;
     DxgkEnterSchedulerClass(Adapter);
@@ -709,7 +710,7 @@ DxgkPagingExecuteBatch(
                                                   Cursor,
                                                   &BuildArgs);
                     BuildArgs.MultipassOffset = MultipassOffset;
-                    DxgkpPagingFillBuildArgs(&Operations[OperationIndex],
+                    DxgkpPagingFillBuildArgs(Adapter, &Operations[OperationIndex],
                                              Idle,
                                              &BuildArgs);
 
@@ -1158,7 +1159,7 @@ DxgkPagingExecute(
                                           DmaBuffer->VirtualAddress,
                                           &BuildArgs);
             BuildArgs.MultipassOffset = MultipassOffset;
-            DxgkpPagingFillBuildArgs(Op, Idle, &BuildArgs);
+            DxgkpPagingFillBuildArgs(Adapter, Op, Idle, &BuildArgs);
 
             if (!DxgkAcquireKmdCall(Adapter))
             {
@@ -1483,7 +1484,7 @@ DxgkpPagingUnmapApertureBuffer(
     DmaBuffer->PrivateDataUsed = 0;
     RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
     DxgkpPagingPrepareBuildBuffer(Adapter, DmaBuffer, DmaBuffer->VirtualAddress, &BuildArgs);
-    DxgkpPagingFillBuildArgs(&Op, FALSE, &BuildArgs);
+    DxgkpPagingFillBuildArgs(Adapter, &Op, FALSE, &BuildArgs);
     if (Adapter->MiniportDeviceStopped ||
         InterlockedCompareExchange(&Adapter->MiniportCallbacksValid, 0, 0) == 0 ||
         !DxgkAcquireMiniportCallback(Adapter))
@@ -1633,7 +1634,7 @@ DxgkpPagingAddApertureBuffer(
                                   DmaBuffer,
                                   DmaBuffer->VirtualAddress,
                                   &BuildArgs);
-    DxgkpPagingFillBuildArgs(&Op, FALSE, &BuildArgs);
+    DxgkpPagingFillBuildArgs(Adapter, &Op, FALSE, &BuildArgs);
     if (!DxgkAcquireKmdCall(Adapter))
     {
         DxgkpPagingReleaseApertureBuffer(Adapter, DmaBuffer);

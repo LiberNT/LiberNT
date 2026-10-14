@@ -4574,7 +4574,7 @@ DxgkDebugInit(VOID);
 
 VOID DxgkDumpRecentKmtIoctls(VOID);
 VOID DxgkKmtReportStuckIoctls(_In_ ULONGLONG Now100ns);
-VOID DxgkVidMmNoteApertureOp(_In_ BOOLEAN Map, _In_ ULONG SegmentId, _In_ ULONGLONG OffsetInPages, _In_ ULONGLONG Pages, _In_opt_ HANDLE hAllocation, _In_opt_ PVOID Allocation);
+VOID DxgkVidMmNoteApertureOp(_In_ PDXGKRNL_ADAPTER Adapter, _In_ BOOLEAN Map, _In_ ULONG SegmentId, _In_ ULONGLONG OffsetInPages, _In_ ULONGLONG Pages, _In_opt_ HANDLE hAllocation, _In_opt_ PVOID Allocation);
 VOID DxgkVidMmDumpApertureOps(VOID);
 VOID DxgkPagingDumpRecentOps(VOID);
 VOID DxgkPagingNoteBuffer(_In_ ULONG Type, _In_ ULONG Node, _In_ ULONG Bytes, _In_reads_bytes_(Bytes) const VOID *Buffer);
