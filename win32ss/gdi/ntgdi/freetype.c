@@ -222,6 +222,19 @@ static PFAST_MUTEX      g_FreeTypeLock;
 
 static RTL_STATIC_LIST_HEAD(g_FontListHead);
 static LONG             g_FontInstanceId;
+
+#define FONT_MATCH_CACHE_SIZE 32
+
+typedef struct _FONT_MATCH_ENTRY
+{
+    LOGFONTW LogFont;
+    FONTGDI *Font;
+    ULONG Penalty;
+} FONT_MATCH_ENTRY, *PFONT_MATCH_ENTRY;
+
+static FONT_MATCH_ENTRY g_FontMatchCache[FONT_MATCH_CACHE_SIZE];
+static ULONG g_FontMatchCount;
+static ULONG g_FontMatchNext;
 static BOOL             g_RenderingEnabled = TRUE;
 
 #define ASSERT_FREETYPE_LOCK_HELD() \
@@ -1089,6 +1102,7 @@ FreeFontSupport(VOID)
 
     // Free font list
     pHead = &g_FontListHead;
+    g_FontMatchCount = 0;
     while (!IsListEmpty(pHead))
     {
         pEntry = RemoveHeadList(pHead);
@@ -1960,6 +1974,7 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
     {
         /* global font */
         InsertTailList(&g_FontListHead, &Entry->ListEntry);
+        g_FontMatchCount = 0;
     }
     IntUnLockFreeType();
 
@@ -2648,6 +2663,7 @@ IntGdiRemoveFontResourceSingle(
         ret = IntUnlinkFontEntriesByFileTitle(&g_FontListHead,
                                               pszFileTitle,
                                               &RemovedList);
+        g_FontMatchCount = 0;
     }
     IntUnLockFreeType();
 
@@ -7092,11 +7108,41 @@ FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
     OUTLINETEXTMETRICW *Otm = NULL;
     UINT OtmSize, OldOtmSize = 0;
     FT_Face Face;
+    FONTGDI *BestFont = NULL;
+    ULONG BestPenalty = MAXULONG;
+    LOGFONTW Key;
+    ULONG Index;
+    PFONT_MATCH_ENTRY Match;
 
     ASSERT(FontObj);
     ASSERT(MatchPenalty);
     ASSERT(LogFont);
     ASSERT(Head);
+
+    Key = *LogFont;
+    Index = 0;
+    while (Index < LF_FACESIZE && Key.lfFaceName[Index])
+        Index++;
+    RtlZeroMemory(&Key.lfFaceName[Index], (LF_FACESIZE - Index) * sizeof(WCHAR));
+
+    if (Head == &g_FontListHead)
+    {
+        ASSERT_FREETYPE_LOCK_HELD();
+        for (Index = 0; Index < g_FontMatchCount; Index++)
+        {
+            Match = &g_FontMatchCache[Index];
+            if (!RtlEqualMemory(&Match->LogFont, &Key, sizeof(Key)))
+                continue;
+
+            IntRequestFontSize(Match->Font, LogFont->lfWidth, LogFont->lfHeight);
+            if (*MatchPenalty == MAXULONG || Match->Penalty < *MatchPenalty)
+            {
+                *FontObj = GDIToObj(Match->Font, FONT);
+                *MatchPenalty = Match->Penalty;
+            }
+            return;
+        }
+    }
 
     /* Start with a pretty big buffer */
     OldOtmSize = 0x200;
@@ -7135,16 +7181,36 @@ FindBestFontFromList(FONTOBJ **FontObj, ULONG *MatchPenalty,
             OldOtmSize = OtmSize;
 
             Penalty = GetFontPenalty(LogFont, Otm, Face->style_name);
-            if (*MatchPenalty == MAXULONG || Penalty < *MatchPenalty)
+            if (!BestFont || Penalty < BestPenalty)
             {
-                *FontObj = GDIToObj(FontGDI, FONT);
-                *MatchPenalty = Penalty;
+                BestFont = FontGDI;
+                BestPenalty = Penalty;
             }
         }
     }
 
     if (Otm)
         ExFreePoolWithTag(Otm, GDITAG_TEXT);
+
+    if (!BestFont)
+        return;
+
+    if (Head == &g_FontListHead)
+    {
+        if (g_FontMatchCount < FONT_MATCH_CACHE_SIZE)
+            Match = &g_FontMatchCache[g_FontMatchCount++];
+        else
+            Match = &g_FontMatchCache[g_FontMatchNext++ % FONT_MATCH_CACHE_SIZE];
+        Match->LogFont = Key;
+        Match->Font = BestFont;
+        Match->Penalty = BestPenalty;
+    }
+
+    if (*MatchPenalty == MAXULONG || BestPenalty < *MatchPenalty)
+    {
+        *FontObj = GDIToObj(BestFont, FONT);
+        *MatchPenalty = BestPenalty;
+    }
 }
 
 static
