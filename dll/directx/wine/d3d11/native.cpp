@@ -5767,7 +5767,7 @@ public:
     HWND window;
     DXGI_SWAP_CHAIN_DESC1 desc = {};
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullscreen_desc = {};
-    DXGI_RGBA background = {};
+    DXGI_RGBA background = {0.0f, 0.0f, 0.0f, 1.0f};
     NativePrivateData private_data;
     NativeTexture2D *buffers[16] = {};
     /* A chain whose buffers cannot be handed to DWM copies each frame into
@@ -6089,8 +6089,8 @@ public:
     HRESULT STDMETHODCALLTYPE GetCoreWindow(REFIID, void **out) override { if (out) *out = NULL; return DXGI_ERROR_INVALID_CALL; }
     BOOL STDMETHODCALLTYPE IsTemporaryMonoSupported() override { return FALSE; }
     HRESULT STDMETHODCALLTYPE GetRestrictToOutput(IDXGIOutput **out) override { if (!out) return E_INVALIDARG; *out = NULL; return S_OK; }
-    HRESULT STDMETHODCALLTYPE SetBackgroundColor(const DXGI_RGBA *value) override { if (!value) return E_INVALIDARG; NativeLock guard(device); background = *value; return S_OK; }
-    HRESULT STDMETHODCALLTYPE GetBackgroundColor(DXGI_RGBA *out) override { if (!out) return E_INVALIDARG; NativeLock guard(device); *out = background; return S_OK; }
+    HRESULT STDMETHODCALLTYPE SetBackgroundColor(const DXGI_RGBA *value) override { if (!value) return DXGI_ERROR_INVALID_CALL; NativeLock guard(device); background = *value; return S_OK; }
+    HRESULT STDMETHODCALLTYPE GetBackgroundColor(DXGI_RGBA *out) override { if (!out) return DXGI_ERROR_INVALID_CALL; NativeLock guard(device); *out = background; return S_OK; }
     HRESULT STDMETHODCALLTYPE SetRotation(DXGI_MODE_ROTATION rotation) override { return rotation == DXGI_MODE_ROTATION_IDENTITY ? S_OK : DXGI_ERROR_UNSUPPORTED; }
     HRESULT STDMETHODCALLTYPE GetRotation(DXGI_MODE_ROTATION *out) override { if (!out) return E_INVALIDARG; *out = DXGI_MODE_ROTATION_IDENTITY; return S_OK; }
     HRESULT STDMETHODCALLTYPE SetSourceSize(UINT width, UINT height) override
