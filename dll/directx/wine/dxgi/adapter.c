@@ -140,7 +140,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_EnumOutputs(IWineDXGIAdapter *ifac
 
 #if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
     if (!adapter->factory->software && FAILED(hr = dxgi_get_wddm_output_index(
-            adapter->wined3d_adapter, output_idx, &output_idx)))
+            adapter->wined3d_adapter, adapter->wddm_foreign ? &adapter->wddm_luid : NULL, output_idx, &output_idx)))
     {
         *output = NULL;
         return hr;
@@ -196,6 +196,8 @@ static HRESULT dxgi_adapter_get_desc(struct dxgi_adapter *adapter, DXGI_ADAPTER_
     desc->SharedSystemMemory = adapter_id.shared_system_memory;
     desc->AdapterLuid = adapter_id.adapter_luid;
 #ifdef __REACTOS__
+    if (adapter->wddm_foreign)
+        desc->AdapterLuid = adapter->wddm_luid;
     if (adapter->factory->software)
     {
         desc->VendorId = 0x1414;
@@ -259,7 +261,8 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_CheckInterfaceSupport(IWineDXGIAda
     wined3d_mutex_lock();
     hr = wined3d_adapter_get_identifier(adapter->wined3d_adapter, 0, &adapter_id);
     wined3d_mutex_unlock();
-    if (SUCCEEDED(hr) && !adapter->factory->software && dxgi_wddm_adapter_has_d3d11_umd(adapter_id.adapter_luid))
+    if (SUCCEEDED(hr) && !adapter->factory->software && dxgi_wddm_adapter_has_d3d11_umd(
+            adapter->wddm_foreign ? adapter->wddm_luid : adapter_id.adapter_luid))
     {
         if (umd_version)
             *umd_version = adapter_id.driver_version;
@@ -415,6 +418,19 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_get_adapter_info(IWineDXGIAdapter 
         info->vendor_id = adapter_id.vendor_id;
         info->device_id = adapter_id.device_id;
         info->luid = adapter_id.adapter_luid;
+#ifdef __REACTOS__
+        if (adapter->wddm_foreign)
+        {
+            DXGI_ADAPTER_DESC3 desc;
+
+            if (SUCCEEDED(dxgi_adapter_get_desc(adapter, &desc)))
+            {
+                info->vendor_id = desc.VendorId;
+                info->device_id = desc.DeviceId;
+                info->luid = desc.AdapterLuid;
+            }
+        }
+#endif
     }
 
     return hr;
@@ -477,6 +493,10 @@ static void dxgi_adapter_init(struct dxgi_adapter *adapter, struct dxgi_factory 
     wined3d_private_store_init(&adapter->private_store);
     adapter->ordinal = ordinal;
     adapter->factory = factory;
+#ifdef __REACTOS__
+    memset(&adapter->wddm_luid, 0, sizeof(adapter->wddm_luid));
+    adapter->wddm_foreign = FALSE;
+#endif
     IWineDXGIFactory_AddRef(&adapter->factory->IWineDXGIFactory_iface);
 }
 

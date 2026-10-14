@@ -13,7 +13,8 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dxgi);
 
-HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, UINT output_idx, UINT *wined3d_output_idx)
+HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, const LUID *luid, UINT output_idx,
+        UINT *wined3d_output_idx)
 {
     struct wined3d_adapter_identifier identifier = {0};
     struct wined3d_output_desc desc;
@@ -28,6 +29,8 @@ HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, UINT output_
     wined3d_mutex_unlock();
     if (FAILED(hr))
         return hr;
+    if (luid)
+        identifier.adapter_luid = *luid;
 
     /* WineD3D uses desktop outputs to host its GL contexts, including when
      * the ICD renders on a different adapter. DXGI must enumerate only the
@@ -162,20 +165,90 @@ static unsigned int dxgi_get_wddm_adapter_priority(const D3DKMT_ADAPTERINFO *ada
     return 1;
 }
 
+DXGI_GPU_PREFERENCE dxgi_get_user_gpu_preference(void)
+{
+    WCHAR path[MAX_PATH], setting[256];
+    DWORD size = sizeof(setting) - sizeof(WCHAR), type = 0, length;
+    const WCHAR *value;
+    HKEY key;
+    LONG ret;
+
+    length = GetModuleFileNameW(NULL, path, ARRAY_SIZE(path));
+    if (!length || length >= ARRAY_SIZE(path))
+        return DXGI_GPU_PREFERENCE_UNSPECIFIED;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\DirectX\\UserGpuPreferences", 0,
+            KEY_QUERY_VALUE, &key))
+        return DXGI_GPU_PREFERENCE_UNSPECIFIED;
+    memset(setting, 0, sizeof(setting));
+    ret = RegQueryValueExW(key, path, NULL, &type, (BYTE *)setting, &size);
+    RegCloseKey(key);
+    if (ret || type != REG_SZ || !(value = wcsstr(setting, L"GpuPreference=")))
+        return DXGI_GPU_PREFERENCE_UNSPECIFIED;
+    switch (value[14])
+    {
+        case '1': return DXGI_GPU_PREFERENCE_MINIMUM_POWER;
+        case '2': return DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE;
+        default: return DXGI_GPU_PREFERENCE_UNSPECIFIED;
+    }
+}
+
+struct dxgi_wddm_candidate
+{
+    unsigned int index;
+    unsigned int priority;
+    BOOL integrated;
+    ULONGLONG dedicated_memory;
+};
+
+static void dxgi_describe_wddm_candidate(const D3DKMT_ADAPTERINFO *adapter, struct dxgi_wddm_candidate *candidate)
+{
+    D3DKMT_QUERYADAPTERINFO query = {0};
+    D3DKMT_SEGMENTSIZEINFO segments = {0};
+    D3DKMT_ADAPTERTYPE type = {0};
+
+    candidate->priority = dxgi_get_wddm_adapter_priority(adapter);
+    query.hAdapter = adapter->hAdapter;
+    query.Type = KMTQAITYPE_ADAPTERTYPE;
+    query.pPrivateDriverData = &type;
+    query.PrivateDriverDataSize = sizeof(type);
+    if (NT_SUCCESS(D3DKMTQueryAdapterInfo(&query)))
+        candidate->integrated = type.HybridIntegrated;
+    query.Type = KMTQAITYPE_GETSEGMENTSIZE;
+    query.pPrivateDriverData = &segments;
+    query.PrivateDriverDataSize = sizeof(segments);
+    if (NT_SUCCESS(D3DKMTQueryAdapterInfo(&query)))
+        candidate->dedicated_memory = segments.DedicatedVideoMemorySize;
+}
+
+static BOOL dxgi_wddm_candidate_precedes(const struct dxgi_wddm_candidate *a, const struct dxgi_wddm_candidate *b,
+        DXGI_GPU_PREFERENCE preference)
+{
+    if (a->priority != b->priority)
+        return a->priority < b->priority;
+    if (a->priority || preference == DXGI_GPU_PREFERENCE_UNSPECIFIED)
+        return a->index < b->index;
+    if (a->integrated != b->integrated)
+        return preference == DXGI_GPU_PREFERENCE_MINIMUM_POWER ? a->integrated : b->integrated;
+    if (a->dedicated_memory != b->dedicated_memory)
+        return preference == DXGI_GPU_PREFERENCE_MINIMUM_POWER ? a->dedicated_memory < b->dedicated_memory
+                : a->dedicated_memory > b->dedicated_memory;
+    return a->index < b->index;
+}
+
 /* Keep D3DKMT as the authoritative adapter set while returning complete Wine
  * DXGI adapter objects.  Preserve order within capability classes, with
  * hardware render adapters before display-only and software fallbacks. */
-HRESULT dxgi_get_wddm_adapter_index(struct wined3d *wined3d, UINT wddm_adapter_idx, UINT *wined3d_adapter_idx)
+HRESULT dxgi_get_wddm_adapter(struct wined3d *wined3d, UINT wddm_adapter_idx, DXGI_GPU_PREFERENCE preference,
+        UINT *wined3d_adapter_idx, LUID *luid, BOOL *foreign)
 {
     struct wined3d_adapter_identifier identifier = {0};
     D3DKMT_ENUMADAPTERS2 enum_adapters = {0};
+    struct dxgi_wddm_candidate *candidates = NULL;
     D3DKMT_ADAPTERINFO *adapters;
     unsigned int adapter_count;
     unsigned int capacity;
-    unsigned int requested_idx;
-    unsigned int selected_idx = ~0u;
-    unsigned int priority;
-    unsigned int i;
+    unsigned int selected_idx;
+    unsigned int i, j;
     NTSTATUS status;
     HRESULT hr;
 
@@ -208,34 +281,31 @@ HRESULT dxgi_get_wddm_adapter_index(struct wined3d *wined3d, UINT wddm_adapter_i
         goto done;
     }
 
-    requested_idx = wddm_adapter_idx;
-    for (priority = 0; priority != 3; ++priority)
+    if (!(candidates = calloc(enum_adapters.NumAdapters, sizeof(*candidates))))
     {
-        for (i = 0; i < enum_adapters.NumAdapters; ++i)
-        {
-            if (dxgi_get_wddm_adapter_priority(&adapters[i]) != priority)
-                continue;
-            if (requested_idx-- == 0)
-            {
-                selected_idx = i;
-                break;
-            }
-        }
-        if (selected_idx != ~0u)
-            break;
-    }
-
-    if (selected_idx == ~0u)
-    {
-        hr = DXGI_ERROR_NOT_FOUND;
+        hr = E_OUTOFMEMORY;
         goto done;
     }
+    for (i = 0; i < enum_adapters.NumAdapters; ++i)
+    {
+        struct dxgi_wddm_candidate candidate = {0};
+
+        candidate.index = i;
+        dxgi_describe_wddm_candidate(&adapters[i], &candidate);
+        for (j = i; j && dxgi_wddm_candidate_precedes(&candidate, &candidates[j - 1], preference); --j)
+            candidates[j] = candidates[j - 1];
+        candidates[j] = candidate;
+    }
+    selected_idx = candidates[wddm_adapter_idx].index;
 
     wined3d_mutex_lock();
     adapter_count = wined3d_get_adapter_count(wined3d);
     wined3d_mutex_unlock();
 
-    hr = DXGI_ERROR_NOT_FOUND;
+    *luid = adapters[selected_idx].AdapterLuid;
+    *foreign = TRUE;
+    *wined3d_adapter_idx = 0;
+    hr = adapter_count ? S_OK : DXGI_ERROR_NOT_FOUND;
     for (i = 0; i < adapter_count; ++i)
     {
         if (FAILED(wined3d_adapter_get_identifier(wined3d_get_adapter(wined3d, i), 0, &identifier)))
@@ -244,7 +314,7 @@ HRESULT dxgi_get_wddm_adapter_index(struct wined3d *wined3d, UINT wddm_adapter_i
         if (identifier.adapter_luid.LowPart == adapters[selected_idx].AdapterLuid.LowPart && identifier.adapter_luid.HighPart == adapters[selected_idx].AdapterLuid.HighPart)
         {
             *wined3d_adapter_idx = i;
-            hr = S_OK;
+            *foreign = FALSE;
             break;
         }
     }
@@ -259,6 +329,7 @@ done:
         close_adapter.hAdapter = adapters[i].hAdapter;
         D3DKMTCloseAdapter(&close_adapter);
     }
+    free(candidates);
     free(adapters);
     return hr;
 }

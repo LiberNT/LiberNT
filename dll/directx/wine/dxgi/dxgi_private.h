@@ -180,6 +180,10 @@ struct dxgi_adapter
     struct wined3d_private_store private_store;
     UINT ordinal;
     struct dxgi_factory *factory;
+#ifdef __REACTOS__
+    LUID wddm_luid;
+    BOOL wddm_foreign;
+#endif
 };
 
 HRESULT dxgi_adapter_create(struct dxgi_factory *factory, UINT ordinal,
@@ -218,8 +222,11 @@ HRESULT d3d12_swapchain_create(IWineDXGIFactory *factory, ID3D12CommandQueue *qu
 #if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
 HRESULT dxgi_get_wddm_adapter_desc(LUID luid, DXGI_ADAPTER_DESC3 *desc);
 BOOL dxgi_wddm_adapter_has_d3d11_umd(LUID luid);
-HRESULT dxgi_get_wddm_adapter_index(struct wined3d *wined3d, UINT wddm_adapter_idx, UINT *wined3d_adapter_idx);
-HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, UINT output_idx, UINT *wined3d_output_idx);
+HRESULT dxgi_get_wddm_adapter(struct wined3d *wined3d, UINT wddm_adapter_idx, DXGI_GPU_PREFERENCE preference,
+        UINT *wined3d_adapter_idx, LUID *luid, BOOL *foreign);
+DXGI_GPU_PREFERENCE dxgi_get_user_gpu_preference(void);
+HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, const LUID *luid, UINT output_idx,
+        UINT *wined3d_output_idx);
 void dxgi_get_wddm_output_color(const WCHAR *device_name, DXGI_OUTPUT_DESC1 *desc);
 #endif
 
