@@ -90,6 +90,8 @@ typedef struct _PARTITION_INPUT
     unsigned char Type;
     unsigned char TypeGuid[16];
     int HasTypeGuid;
+    unsigned char UniqueGuid[16];
+    int HasUniqueGuid;
     int Bootable;
     FILE* File;
     long Size;
@@ -119,7 +121,7 @@ typedef struct _PARTITION_ENTRY
 
 static void print_usage(const char* name)
 {
-    printf("Usage: %s -o <output> [-gpt] [-mbr <mbr.bin>] {-partition <part.img>|-data <file>|-blank <sectors>} [-start <sector>] [-type <hex>] [-size <sectors>] [-name <label>] [-guid <type>] [-bootable] ... [-raw <file> -at <sector>] ... [-format <raw|vhd>] [-vhd]\n\n", name);
+    printf("Usage: %s -o <output> [-gpt] [-mbr <mbr.bin>] {-partition <part.img>|-data <file>|-blank <sectors>} [-start <sector>] [-type <hex>] [-size <sectors>] [-name <label>] [-guid <type>] [-id <guid>] [-diskid <guid>] [-signature <hex>] [-bootable] ... [-raw <file> -at <sector>] ... [-format <raw|vhd>] [-vhd]\n\n", name);
     printf("  -gpt                Write a GUID partition table behind a protective MBR\n");
     printf("  -o <output>         Output image file\n");
     printf("  -mbr <mbr.bin>      MBR boot code binary (first 440 bytes used; shorter files are zero-padded).\n");
@@ -132,6 +134,9 @@ static void print_usage(const char* name)
     printf("  -size <sectors>     Sectors reserved for the preceding -data partition\n");
     printf("  -name <label>       GPT name of the preceding partition\n");
     printf("  -guid <type>        GPT type GUID of the preceding partition (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)\n");
+    printf("  -id <guid>          GPT unique GUID of the preceding partition (derived from the layout when omitted)\n");
+    printf("  -diskid <guid>      GPT disk GUID (derived from the layout when omitted)\n");
+    printf("  -signature <hex>    MBR disk signature (zero when omitted)\n");
     printf("  -bootable           Set the GPT legacy BIOS bootable attribute of the preceding partition\n");
     printf("  -raw <file>         Data written outside the partitions at the sector given by -at\n");
     printf("  -at <sector>        Start sector of the preceding -raw data (not sector 0)\n");
@@ -319,6 +324,10 @@ static const unsigned char gpt_type_basic_data[16] =
 static const unsigned char gpt_type_linux_data[16] =
     {0xAF, 0x3D, 0xC6, 0x0F, 0x83, 0x84, 0x72, 0x47, 0x8E, 0x79, 0x3D, 0x69, 0xD8, 0x47, 0x7D, 0xE4};
 
+static unsigned char disk_guid[16];
+static int has_disk_guid;
+static unsigned int disk_signature;
+
 static void make_gpt_guid(unsigned char guid[16], unsigned int index, const PARTITION_INPUT* partition)
 {
     unsigned char seed[16];
@@ -364,7 +373,10 @@ static void build_gpt_entries(unsigned char* entries, const PARTITION_INPUT* par
         else if (partition->Type == 0x07 || partition->Type == 0x0B || partition->Type == 0x0C)
             type = gpt_type_basic_data;
         memcpy(entry, type, 16);
-        make_gpt_guid(entry + 16, index + 1, partition);
+        if (partition->HasUniqueGuid)
+            memcpy(entry + 16, partition->UniqueGuid, 16);
+        else
+            make_gpt_guid(entry + 16, index + 1, partition);
         write_le64(entry + 32, partition->StartSector);
         write_le64(entry + 40, (unsigned long long)partition->StartSector + partition->SectorCount - 1);
         if (partition->Bootable)
@@ -389,7 +401,10 @@ static void build_gpt_header(unsigned char sector[SECTOR_SIZE],
     write_le64(sector + 32, other_lba);
     write_le64(sector + 40, GPT_FIRST_USABLE_SECTOR);
     write_le64(sector + 48, last_lba - GPT_ENTRY_SECTORS - 1);
-    make_gpt_guid(sector + 56, 0, NULL);
+    if (has_disk_guid)
+        memcpy(sector + 56, disk_guid, 16);
+    else
+        make_gpt_guid(sector + 56, 0, NULL);
     write_le64(sector + 72, entries_lba);
     write_le32(sector + 80, GPT_ENTRY_COUNT);
     write_le32(sector + 84, GPT_ENTRY_SIZE);
@@ -1176,6 +1191,29 @@ int main(int argc, char* argv[])
             }
             partitions[current_partition].HasTypeGuid = 1;
         }
+        else if (strcmp(argv[i], "-id") == 0 && i + 1 < argc)
+        {
+            if (current_partition < 0 ||
+                parse_guid(argv[++i], partitions[current_partition].UniqueGuid) != 0)
+            {
+                fprintf(stderr, "Error: -id needs a partition GUID after a partition.\n");
+                goto cleanup;
+            }
+            partitions[current_partition].HasUniqueGuid = 1;
+        }
+        else if (strcmp(argv[i], "-diskid") == 0 && i + 1 < argc)
+        {
+            if (parse_guid(argv[++i], disk_guid) != 0)
+            {
+                fprintf(stderr, "Error: -diskid needs a disk GUID.\n");
+                goto cleanup;
+            }
+            has_disk_guid = 1;
+        }
+        else if (strcmp(argv[i], "-signature") == 0 && i + 1 < argc)
+        {
+            disk_signature = (unsigned int)strtoul(argv[++i], NULL, 16);
+        }
         else if (strcmp(argv[i], "-bootable") == 0)
         {
             if (current_partition < 0)
@@ -1225,9 +1263,9 @@ int main(int argc, char* argv[])
 
     for (index = 0; !gpt && index < partition_count; index++)
     {
-        if (partitions[index].HasTypeGuid || partitions[index].Bootable)
+        if (partitions[index].HasTypeGuid || partitions[index].HasUniqueGuid || partitions[index].Bootable)
         {
-            fprintf(stderr, "Error: -guid and -bootable need -gpt.\n");
+            fprintf(stderr, "Error: -guid, -id and -bootable need -gpt.\n");
             goto cleanup;
         }
     }
@@ -1423,6 +1461,7 @@ int main(int argc, char* argv[])
         goto cleanup;
     }
     total_size = (long)(total_sectors * SECTOR_SIZE);
+    write_le32(mbr_sector + MBR_BOOT_CODE_SIZE, disk_signature);
     mbr_sector[MBR_SIGNATURE_OFFSET] = 0x55;
     mbr_sector[MBR_SIGNATURE_OFFSET + 1] = 0xAA;
 
