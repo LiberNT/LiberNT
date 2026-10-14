@@ -531,6 +531,11 @@ static HRESULT STDMETHODCALLTYPE dxgi_swapchain_factory_create_swapchain(IWineDX
     object->alpha_mode = desc->AlphaMode;
     object->flags = desc->Flags;
     object->usage = desc->BufferUsage;
+    object->scaling = desc->Scaling;
+    object->background.r = 0.0f;
+    object->background.g = 0.0f;
+    object->background.b = 0.0f;
+    object->background.a = 1.0f;
 #endif
 
     TRACE("Created swapchain %p.\n", object);

@@ -206,6 +206,8 @@ struct d3d11_swapchain
     DXGI_ALPHA_MODE alpha_mode;
     UINT flags;
     DXGI_USAGE usage;
+    DXGI_SCALING scaling;
+    DXGI_RGBA background;
 #endif
     IDXGIOutput *target;
     LONG present_count;

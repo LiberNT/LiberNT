@@ -594,7 +594,11 @@ HRESULT wined3d_swapchain_desc_from_dxgi(struct wined3d_swapchain_desc *wined3d_
     struct dxgi_output *dxgi_output = unsafe_impl_from_IDXGIOutput(dxgi_containing_output);
     bool allow_latency_waitable = false;
 
+#ifdef __REACTOS__
+    if (dxgi_desc->Scaling > DXGI_SCALING_ASPECT_RATIO_STRETCH)
+#else
     if (dxgi_desc->Scaling != DXGI_SCALING_STRETCH)
+#endif
         FIXME("Ignoring scaling %#x.\n", dxgi_desc->Scaling);
     if (dxgi_desc->AlphaMode != DXGI_ALPHA_MODE_UNSPECIFIED && dxgi_desc->AlphaMode != DXGI_ALPHA_MODE_IGNORE
 #ifdef __REACTOS__

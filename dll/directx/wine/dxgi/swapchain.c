@@ -79,6 +79,13 @@ BOOL dxgi_validate_swapchain_desc(const DXGI_SWAP_CHAIN_DESC1 *desc)
         case DXGI_SWAP_EFFECT_DISCARD:
         case DXGI_SWAP_EFFECT_SEQUENTIAL:
             min_buffer_count = 1;
+#ifdef __REACTOS__
+            if (desc->Scaling == DXGI_SCALING_NONE)
+            {
+                WARN("Scaling none requires a flip swap effect.\n");
+                return FALSE;
+            }
+#endif
             break;
 
         case DXGI_SWAP_EFFECT_FLIP_DISCARD:
@@ -366,6 +373,9 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
         unsigned int sync_interval, unsigned int flags, const RECT *src_rect,
         const RECT *dst_rect)
 {
+#ifdef __REACTOS__
+    RECT unscaled_rect;
+#endif
     HRESULT hr;
 
     if (sync_interval > 4)
@@ -398,6 +408,35 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
         WARN("Returning S_OK for DXGI_PRESENT_TEST.\n");
         return S_OK;
     }
+
+#ifdef __REACTOS__
+    if (!dst_rect && swapchain->scaling == DXGI_SCALING_NONE)
+    {
+        struct wined3d_swapchain_desc wined3d_desc;
+        HWND window = d3d11_swapchain_get_hwnd(swapchain);
+        RECT client;
+
+        wined3d_mutex_lock();
+        wined3d_swapchain_get_desc(swapchain->wined3d_swapchain, &wined3d_desc);
+        wined3d_mutex_unlock();
+        if (GetClientRect(window, &client))
+        {
+            unscaled_rect.top = 0;
+            unscaled_rect.bottom = wined3d_desc.backbuffer_height;
+            if (GetWindowLongW(window, GWL_EXSTYLE) & WS_EX_LAYOUTRTL)
+            {
+                unscaled_rect.right = client.right;
+                unscaled_rect.left = client.right - (LONG)wined3d_desc.backbuffer_width;
+            }
+            else
+            {
+                unscaled_rect.left = 0;
+                unscaled_rect.right = wined3d_desc.backbuffer_width;
+            }
+            dst_rect = &unscaled_rect;
+        }
+    }
+#endif
 
     if (SUCCEEDED(hr = wined3d_swapchain_present(swapchain->wined3d_swapchain,
             src_rect, dst_rect, NULL, sync_interval, 0)))
@@ -814,7 +853,9 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_GetDesc1(IDXGISwapChain4 *iface
     wined3d_swapchain_get_desc(swapchain->wined3d_swapchain, &wined3d_desc);
     wined3d_mutex_unlock();
 
+#ifndef __REACTOS__
     FIXME("Ignoring Stereo and Scaling.\n");
+#endif
 
     desc->Width = wined3d_desc.backbuffer_width;
     desc->Height = wined3d_desc.backbuffer_height;
@@ -828,7 +869,11 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_GetDesc1(IDXGISwapChain4 *iface
     desc->BufferUsage = dxgi_usage_from_wined3d_bind_flags(wined3d_desc.backbuffer_bind_flags);
 #endif
     desc->BufferCount = wined3d_desc.backbuffer_count;
+#ifdef __REACTOS__
+    desc->Scaling = swapchain->scaling;
+#else
     desc->Scaling = DXGI_SCALING_STRETCH;
+#endif
     desc->SwapEffect = dxgi_swap_effect_from_wined3d(wined3d_desc.swap_effect);
 #ifdef __REACTOS__
     desc->AlphaMode = swapchain->alpha_mode;
@@ -953,16 +998,42 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_GetRestrictToOutput(IDXGISwapCh
 
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_SetBackgroundColor(IDXGISwapChain4 *iface, const DXGI_RGBA *color)
 {
+#ifdef __REACTOS__
+    struct d3d11_swapchain *swapchain = d3d11_swapchain_from_IDXGISwapChain4(iface);
+
+    TRACE("iface %p, color %p.\n", iface, color);
+
+    if (!color)
+        return DXGI_ERROR_INVALID_CALL;
+    wined3d_mutex_lock();
+    swapchain->background = *color;
+    wined3d_mutex_unlock();
+    return S_OK;
+#else
     FIXME("iface %p, color %p stub!\n", iface, color);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_GetBackgroundColor(IDXGISwapChain4 *iface, DXGI_RGBA *color)
 {
+#ifdef __REACTOS__
+    struct d3d11_swapchain *swapchain = d3d11_swapchain_from_IDXGISwapChain4(iface);
+
+    TRACE("iface %p, color %p.\n", iface, color);
+
+    if (!color)
+        return DXGI_ERROR_INVALID_CALL;
+    wined3d_mutex_lock();
+    *color = swapchain->background;
+    wined3d_mutex_unlock();
+    return S_OK;
+#else
     FIXME("iface %p, color %p stub!\n", iface, color);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_SetRotation(IDXGISwapChain4 *iface, DXGI_MODE_ROTATION rotation)
@@ -3561,6 +3632,10 @@ static HRESULT d3d12_swapchain_init(struct d3d12_swapchain *swapchain, IWineDXGI
         WARN("D3D12 swapchain cannot be created on desktop window.\n");
         return E_ACCESSDENIED;
     }
+#ifdef __REACTOS__
+    if (swapchain_desc->Scaling != DXGI_SCALING_STRETCH)
+        FIXME("Ignoring scaling %#x.\n", swapchain_desc->Scaling);
+#endif
 
     swapchain->IDXGISwapChain4_iface.lpVtbl = &d3d12_swapchain_vtbl;
     swapchain->state_parent.ops = &d3d12_swapchain_state_parent_ops;
