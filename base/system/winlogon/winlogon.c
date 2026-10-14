@@ -455,19 +455,18 @@ WinMain(
 
     hAppInstance = hInstance;
 
+    if (!RegisterLogonProcess(GetCurrentProcessId(), TRUE))
+    {
+        ERR("WL: Could not register logon process\n");
+        ExitProcess(1);
+    }
+
     /* Make us critical */
     RtlSetProcessIsCritical(TRUE, NULL, FALSE);
     RtlSetThreadIsCritical(TRUE, NULL, FALSE);
 
     /* Update the cached TCP/IP Information in the registry */
     UpdateTcpIpInformation();
-
-    if (!RegisterLogonProcess(GetCurrentProcessId(), TRUE))
-    {
-        ERR("WL: Could not register logon process\n");
-        NtRaiseHardError(STATUS_SYSTEM_PROCESS_TERMINATED, 0, 0, NULL, OptionOk, &HardErrorResponse);
-        ExitProcess(1);
-    }
 
     WLSession = (PWLSESSION)HeapAlloc(GetProcessHeap(), 0, sizeof(WLSESSION));
     if (!WLSession)
