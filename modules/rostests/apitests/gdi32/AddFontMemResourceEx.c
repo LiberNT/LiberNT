@@ -352,7 +352,6 @@ START_TEST(AddFontMemResourceEx)
             }
         }
 
-        UnlockResource(hTemplate);
         FreeResource(hTemplate);
     }
 

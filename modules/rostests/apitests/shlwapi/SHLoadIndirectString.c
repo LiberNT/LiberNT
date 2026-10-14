@@ -100,7 +100,6 @@ BOOL extract_resource(const WCHAR* Filename, LPCWSTR ResourceName)
     CloseHandle(Handle);
     Success = Success && (dwWritten == Size);
 
-    UnlockResource(pData);
     return Success;
 }
 

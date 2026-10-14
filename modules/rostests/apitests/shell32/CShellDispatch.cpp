@@ -43,7 +43,7 @@ template<class T> static HRESULT CreateFolderFromNameSpace(T Dir, Folder **ppsdf
     if (FAILED(hr))
         return -1; // Special return value so we know to skip
 
-    VARIANT vDir = { VT_I4 };
+    VARIANT vDir = { { { VT_I4 } } };
     V_I4(&vDir) = (UINT)(SIZE_T)Dir;
     if (!IS_INTRESOURCE((SIZE_T)Dir))
     {

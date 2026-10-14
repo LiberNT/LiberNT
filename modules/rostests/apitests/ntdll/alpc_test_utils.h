@@ -35,7 +35,7 @@ typedef struct _ALPC_TEST_RESERVE_OUTPUT
     ULONG Guard;
 } ALPC_TEST_RESERVE_OUTPUT, *PALPC_TEST_RESERVE_OUTPUT;
 
-static
+static inline
 BOOLEAN
 AlpcTestIsChildMode(
     _In_ PCSTR Mode)
@@ -47,7 +47,7 @@ AlpcTestIsChildMode(
     return ArgumentCount >= 3 && !strcmp(Arguments[2], Mode);
 }
 
-static
+static inline
 BOOLEAN
 AlpcTestRunIsolatedCase(
     _In_ PCWSTR TestName,
@@ -214,7 +214,7 @@ AlpcTestConnectThread(
     return 0;
 }
 
-static
+static inline
 NTSTATUS
 AlpcTestCreateConnectedPorts(
     _In_ PUNICODE_STRING PortName,
@@ -319,7 +319,7 @@ AlpcTestCreateConnectedPorts(
     return Status;
 }
 
-static
+static inline
 VOID
 AlpcTestCloseConnectedPorts(
     _In_opt_ HANDLE ConnectionPort,
@@ -340,7 +340,7 @@ AlpcTestCloseConnectedPorts(
         NtClose(ConnectionPort);
 }
 
-static
+static inline
 BOOLEAN
 AlpcTestNativeObservationEnabled(VOID)
 {
@@ -349,7 +349,7 @@ AlpcTestNativeObservationEnabled(VOID)
     return GetEnvironmentVariableW(ALPC_TEST_OBSERVATION_VARIABLE, Value, RTL_NUMBER_OF(Value)) != 0;
 }
 
-static
+static inline
 VOID
 AlpcTestTraceBufferMutation(
     _In_ PCSTR Label,

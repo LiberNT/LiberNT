@@ -39,9 +39,10 @@ if(MSVC)
         /utf-8)
 endif()
 
-if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR
-   CMAKE_C_COMPILER_ID STREQUAL "Clang")
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(shlwapi_winetest PRIVATE -Wno-discarded-qualifiers)
+elseif(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(shlwapi_winetest PRIVATE -Wno-incompatible-pointer-types-discards-qualifiers)
 endif()
 
 add_pch(shlwapi_winetest precomp.h "${PCH_SKIP_SOURCE}")

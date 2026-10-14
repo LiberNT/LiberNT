@@ -30,8 +30,11 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     -UNTDDI_VERSION -DNTDDI_VERSION=0x0A000000
     -U_WIN32_WINNT -D_WIN32_WINNT=0x0A00
     -UWINVER -DWINVER=0x0A00
-    -Wno-unused-function
-    -Wno-old-style-declaration)
+    -Wno-unused-function)
+endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(advapi32_winetest PRIVATE -Wno-old-style-declaration)
 endif()
 
 set_module_type(advapi32_winetest win32cui)

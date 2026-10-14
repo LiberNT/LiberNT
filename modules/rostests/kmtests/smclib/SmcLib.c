@@ -765,12 +765,6 @@ static const T1_STEP T1IfsRefused[] =
     { "0000029000" },
 };
 
-static const T1_STEP T1Crc[] =
-{
-    { "=00E101FE0000" },
-    { "=00000290000000" },
-};
-
 static const T1_STEP T1Overflow[] =
 {
     { "00E101FE" },
@@ -973,7 +967,6 @@ TestT1(VOID)
     }
 }
 
-static ULONG CallbackIndex;
 static NTSTATUS CallbackStatus;
 static CHAR CallbackText[300];
 static PIRP CallbackIrp;
@@ -992,7 +985,6 @@ Callback(
     PSCARD_CARD_CAPABILITIES Card = &SmartcardExtension->CardCapabilities;
     size_t Used = strlen(CallbackText);
 
-    CallbackIndex = Index;
     RtlStringCbPrintfA(CallbackText + Used, sizeof(CallbackText) - Used,
                        " cb=%lu@%u mn=%lx in=%lu:%s out=%lu irp=%u%u s=%lu p=%lx pts=%u/%u/%u/%lu/%lu",
                        Index, KeGetCurrentIrql(), SmartcardExtension->MinorIoControlCode,
@@ -1081,7 +1073,6 @@ Ioctl(
     Completed = FALSE;
     CompletedStatus = 0x77777777;
     CompletedInformation = 0x77;
-    CallbackIndex = 99;
     CallbackText[0] = ANSI_NULL;
     CallbackIrp = Irp;
     Status = SmartcardDeviceControl(&Extension, Irp);
@@ -1489,11 +1480,10 @@ VOID
 TestIoctl(VOID)
 {
     const IOCTL_CASE *Case;
-    ULONG Index, Pass;
+    ULONG Index;
     UCHAR Input[16];
     NTSTATUS Status;
     PIRP Irp, SecondIrp;
-    KIRQL Irql;
 
     Irp = IoAllocateIrp(2, FALSE);
     SecondIrp = IoAllocateIrp(2, FALSE);

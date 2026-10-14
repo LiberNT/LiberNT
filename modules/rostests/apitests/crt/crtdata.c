@@ -19,10 +19,12 @@ static OSVERSIONINFOW s_osvi;
 extern char __ImageBase;
 static void* s_ImageEnd;
 
+#if !defined(_M_ARM) && !defined(_M_ARM64)
 static void* GetMsvcrtExport(const char* Name)
 {
     return (void*)GetProcAddress(GetModuleHandleA("msvcrt.dll"), Name);
 }
+#endif
 
 int IsLocalSymbol(void* Address)
 {

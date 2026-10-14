@@ -26,7 +26,6 @@ static CHAR     selfnameA[MAX_PATH];    // Path to this executable
 static WCHAR    selfnameW[MAX_PATH];
 static LPSTR    exenameA;               // Executable's name
 static LPWSTR   exenameW;
-static INT      myARGC;
 static LPSTR*   myARGV;
 
 
@@ -539,7 +538,7 @@ static int init(void)
     LPSTR p;
     size_t i;
 
-    myARGC = winetest_get_mainargs(&myARGV);
+    winetest_get_mainargs(&myARGV);
     if (!GetCurrentDirectoryA(_countof(baseA), baseA)) return 0;
     strcpy(selfnameA, myARGV[0]);
 

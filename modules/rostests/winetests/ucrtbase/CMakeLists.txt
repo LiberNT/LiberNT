@@ -68,3 +68,7 @@ endif()
 add_importlibs(ucrtbase_winetest ucrtbase kernel32 ntdll)
 add_dependencies(ucrtbase_winetest threaddll)
 add_rostests_file(TARGET ucrtbase_winetest)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ucrtbase_winetest PRIVATE -Wno-unused-but-set-global)
+endif()

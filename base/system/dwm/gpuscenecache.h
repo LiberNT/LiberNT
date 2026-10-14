@@ -22,7 +22,7 @@ typedef struct _DWM_GPU_SCENE_CACHE
     BOOL Valid;
 } DWM_GPU_SCENE_CACHE;
 
-static BOOL
+static inline BOOL
 DwmGpuSceneHasSurface(const DWM_WIN *Windows, ULONG Count,
                       ULONG SurfaceId, BOOL Client)
 {

@@ -8,10 +8,10 @@
 
 #include <kmt_test.h>
 
-static BOOLEAN g_IsPae;
 static BOOLEAN g_IsReactOS;
 
 #ifdef _M_IX86
+static BOOLEAN g_IsPae;
 
 #define IS_PAE() (g_IsPae)
 
@@ -358,7 +358,9 @@ START_TEST(MmReservedMapping)
 {
     PVOID Mapping;
 
+#ifdef _M_IX86
     g_IsPae = ExIsProcessorFeaturePresent(PF_PAE_ENABLED);
+#endif
     g_IsReactOS = *(PULONG)(KI_USER_SHARED_DATA + PAGE_SIZE - sizeof(ULONG)) == 0x8eac705;
     if (!g_IsReactOS)
         trace("Not ReactOS\n");

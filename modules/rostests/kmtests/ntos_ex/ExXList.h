@@ -9,6 +9,8 @@ TestXListFunctional(
     USHORT ExpectedSequence = 0;
     PXLIST_ENTRY Ret;
 
+    DBG_UNREFERENCED_LOCAL_VARIABLE(ExpectedSequence);
+
     Ret = FlushXList(ListHead);
     ok_eq_pointer(Ret, NULL);
     CheckXListHeader(ListHead, NULL, 0);

@@ -59,10 +59,12 @@ DWORD (WINAPI *pSdbGetAppCompatDataSize)(PVOID pData);
 
 
 static HSDB g_LayerDB;
-static DWORD g_ShimDataSize;
 static DWORD g_ModuleVersion;
+#ifdef _M_IX86
+static DWORD g_ShimDataSize;
 static const SDBQUERYRESULT_VISTA empty_result = { { 0 } };
 static const SDBQUERYRESULT_VISTA almost_empty = { { 0 }, { 0 }, { 0 }, 0, 0, 0, 0, { 0 }, SHIMREG_DISABLE_LAYER, 0 };
+#endif
 
 
 #define SHIMDATA_MAGIC  0xAC0DEDAB
@@ -1432,7 +1434,9 @@ START_TEST(env)
     QueryOffset.dwSize_7_10 = 2;
     QueryOffset.dwSize_10_v2 = 3;
 
+#ifdef _M_IX86
     g_ShimDataSize = g_WinVersion < WINVER_WIN8 ? 4096 : 8192;
+#endif
     _SEH2_TRY
     {
 #ifdef _M_IX86

@@ -24,8 +24,6 @@
 #define TEARDOWN_ROUNDS  64
 #define TEARDOWN_MAX_DEVICES 512
 
-static PFN_D3DKMTCloseAdapter pfnClose;
-
 /* ------------------------------------------------------------------ *
  * A destroyed object's handle must never be honoured again.  The
  * dangerous outcome is not the second destroy failing, it is the second
@@ -453,8 +451,6 @@ static void Test_CloseAdapterWithLiveDevices(void)
 
 START_TEST(teardown)
 {
-    pfnClose = (PFN_D3DKMTCloseAdapter)LoadD3DKMTProc("D3DKMTCloseAdapter");
-
     Test_StaleHandlesAreRefused();
     Test_DestroyDeviceWithLiveAllocations();
     Test_HandleTableExhaustion();

@@ -508,7 +508,7 @@ START_TEST(RtlVirtualUnwindChainedHandler)
         Handler = RtlVirtualUnwind(HandlerType, (ULONG_PTR)&g_Image,
                 (ULONG_PTR)&g_Image + Func.BeginAddress + 4, &Func, &Ctx,
                 &HandlerData, &Frame, NULL);
-        ok_eq_pointer(Handler, g_Image.Code + 0x800);
+        ok_eq_pointer((PVOID)Handler, (PVOID)(g_Image.Code + 0x800));
         ok_eq_pointer(HandlerData, &HandlerWords[1]);
         ok_eq_hex64(Frame, Stack);
         ok_eq_hex64(Ctx.Rbp, 0x1122334455667788ULL);

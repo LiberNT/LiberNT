@@ -12,7 +12,6 @@
 #include "resource.h"
 
 static HINSTANCE g_hInstance = NULL;
-static HWND g_hMainWnd = NULL;
 
 static void SetEditAlign(HWND hwndEdit, LONG_PTR add_style)
 {
@@ -54,7 +53,6 @@ DialogProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         case WM_INITDIALOG:
         {
-            g_hMainWnd = hwnd;
             SetDlgItemText(hwnd, edt1, TEXT("Text"));
             CheckRadioButton(hwnd, rad1, rad3, rad1);
             return TRUE;

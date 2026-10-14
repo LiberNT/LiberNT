@@ -89,12 +89,13 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
         -U_WIN32_WINNT -D_WIN32_WINNT=0x0A00
         -UWINVER -DWINVER=0x0A00
         -Wno-int-conversion
-        -Wno-old-style-declaration
         -Wno-unused)
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(kernel32_winetest PRIVATE -Wno-format-overflow)
+    target_compile_options(kernel32_winetest PRIVATE -Wno-format-overflow -Wno-old-style-declaration)
+elseif(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(kernel32_winetest PRIVATE -Wno-pragma-pack)
 endif()
 
 set_module_type(kernel32_winetest win32cui)

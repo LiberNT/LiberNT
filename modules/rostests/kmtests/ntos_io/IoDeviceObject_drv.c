@@ -160,14 +160,12 @@ TestDriverObject(
     UNICODE_STRING DriverName = RTL_CONSTANT_STRING(L"\\Driver\\Kmtest-IoDeviceObject");
     UNICODE_STRING ServiceKeyName = RTL_CONSTANT_STRING(L"Kmtest-IoDeviceObject");
     BOOLEAN Equal;
-    ULONG DriverNameTag;
 
     ok(DriverObject->Size == sizeof(DRIVER_OBJECT), "Size does not match, got %x\n",DriverObject->Size);
     ok(DriverObject->Type == 4, "Type does not match 4. got %d\n", DriverObject->Type);
 
     if (DriverStatus == DriverStatusEntry)
     {
-        DriverNameTag = (GetNTDDIVersion() >= NTDDI_WIN11_GE) ? '1NoI' : '  oI';
         ok(DriverObject->DeviceObject == NULL, "Expected DeviceObject pointer to be 0, got %p\n",
             DriverObject->DeviceObject);
         ok (DriverObject->Flags == DRVO_LEGACY_DRIVER,

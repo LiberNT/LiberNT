@@ -948,20 +948,23 @@ static LONG WINAPI winetest_trace_exception( EXCEPTION_POINTERS *info )
     void *addr = record->ExceptionAddress;
     DWORD length;
 
-    printf( "winetest: exception %08lx at %p", record->ExceptionCode, addr );
+    printf( "winetest: exception %08x at %p", (unsigned int)record->ExceptionCode, addr );
     if (GetModuleHandleExA( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                             GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             (const char *)addr, &module ))
     {
         length = GetModuleFileNameA( module, name, sizeof(name) );
         if (length && length < sizeof(name))
-            printf( " (%s+0x%Ix)", name, (ULONG_PTR)addr - (ULONG_PTR)module );
+            printf( " (%s+0x%Ix)", name, (size_t)((ULONG_PTR)addr - (ULONG_PTR)module) );
     }
     if (record->NumberParameters >= 2)
         printf( " info %p", (void *)record->ExceptionInformation[1] );
     printf( "\n" );
     return EXCEPTION_CONTINUE_SEARCH;
 }
+#ifdef __cplusplus
+}
+#endif
 #endif
 
 int main( int argc, char **argv )
@@ -998,6 +1001,10 @@ int main( int argc, char **argv )
     }
     return run_test(argv[1]);
 }
+
+#if defined(__REACTOS__) && defined(__cplusplus)
+extern "C" {
+#endif
 
 #endif  /* STANDALONE */
 

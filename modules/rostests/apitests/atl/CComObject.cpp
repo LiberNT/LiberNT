@@ -36,13 +36,13 @@ public:
     }
 
     // *** IPersist methods ***
-    virtual HRESULT STDMETHODCALLTYPE GetClassID(CLSID *pClassID)
+    HRESULT STDMETHODCALLTYPE GetClassID(CLSID *pClassID) override
     {
         return E_NOTIMPL;
     }
 
     // *** IStdMarshalInfo methods ***
-    virtual HRESULT STDMETHODCALLTYPE GetClassForHandler(DWORD dwDestContext, void *pvDestContext, CLSID *pClsid)
+    HRESULT STDMETHODCALLTYPE GetClassForHandler(DWORD dwDestContext, void *pvDestContext, CLSID *pClsid) override
     {
         return E_NOTIMPL;
     }

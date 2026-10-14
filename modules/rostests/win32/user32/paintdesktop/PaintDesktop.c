@@ -14,7 +14,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-static HINSTANCE hInst;
 static PWSTR szTitle       = L"PaintDesktop";
 static PWSTR szWindowClass = L"PAINTDESKTOP";
 
@@ -67,8 +66,6 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
     HWND hWnd;
-
-    hInst = hInstance;
 
     hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
                         CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);

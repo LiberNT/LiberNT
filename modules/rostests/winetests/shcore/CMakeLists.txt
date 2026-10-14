@@ -9,3 +9,7 @@ target_compile_definitions(shcore_winetest PRIVATE CONST_VTABLE STANDALONE WINET
 target_link_libraries(shcore_winetest uuid)
 add_importlibs(shcore_winetest user32 advapi32 ws2_32 crypt32 secur32 msvcrt kernel32 ntdll)
 add_rostests_file(TARGET shcore_winetest)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(shcore_winetest PRIVATE -Wno-unused-but-set-global)
+endif()

@@ -31,26 +31,19 @@ static DWORD (APIENTRY *fpLpkPSMTextOut) (LPVOID,LPVOID,LPVOID,LPVOID,LPVOID,LPV
 static DWORD (APIENTRY *fpLpkDrawTextEx) (LPVOID,LPVOID,LPVOID,LPVOID,LPVOID,LPVOID,LPVOID,LPVOID,LPVOID,LPVOID);
 static PLPK_LPEDITCONTROL_LIST (APIENTRY *fpLpkEditControl) ();
 
-static int Count_myLpkTabbedTextOut = 0;
-static int Count_myLpkPSMTextOut = 0;
-static int Count_myLpkDrawTextEx = 0;
-
 DWORD WINAPI myLpkTabbedTextOut (LPVOID x1,LPVOID x2,LPVOID x3, LPVOID x4, LPVOID x5, LPVOID x6, LPVOID x7, LPVOID x8,
                                    LPVOID x9, LPVOID x10, LPVOID x11, LPVOID x12)
 {
-    Count_myLpkTabbedTextOut++;
     return fpLpkTabbedTextOut(x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12);
 }
 
 DWORD myLpkPSMTextOut (LPVOID x1,LPVOID x2,LPVOID x3,LPVOID x4,LPVOID x5,LPVOID x6)
 {
-    Count_myLpkPSMTextOut++;
     return fpLpkPSMTextOut ( x1,  x2,  x3,  x4,  x5,  x6);
 }
 
 DWORD myLpkDrawTextEx(LPVOID x1,LPVOID x2,LPVOID x3,LPVOID x4,LPVOID x5, LPVOID x6, LPVOID x7, LPVOID x8, LPVOID x9,LPVOID x10)
 {
-    Count_myLpkDrawTextEx++;
     return fpLpkDrawTextEx(x1, x2, x3, x4, x5, x6, x7, x8, x9, x10);
 }
 

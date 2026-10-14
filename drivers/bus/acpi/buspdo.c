@@ -44,6 +44,7 @@ ACPI_TABLE_FADT AcpiGbl_FADT;
 
 /* =============================== Helpers =============================== */
 
+#ifndef UNIT_TEST
 static
 BOOLEAN
 BuspIsProcessorDevice(
@@ -76,6 +77,7 @@ BuspFormatVendorDeviceId(
     Buffer[Written++] = UNICODE_NULL;
     return Written;
 }
+#endif
 
 static
 BOOLEAN
@@ -212,14 +214,6 @@ BuspApplyTrackedPciRootInfo(
         DeviceData->PciRootMaxBus = MaxBus;
         DeviceData->HasPciRootBusRange = TRUE;
     }
-}
-#else
-static
-VOID
-BuspApplyTrackedPciRootInfo(
-    _Inout_ PPDO_DEVICE_DATA DeviceData)
-{
-    UNREFERENCED_PARAMETER(DeviceData);
 }
 #endif
 
@@ -471,6 +465,7 @@ BuspUseAddress64Resource(
     return TRUE;
 }
 
+#ifndef UNIT_TEST
 /*
  * Stores a memory length in a resource descriptor, switching to the
  * large-memory form when it does not fit the 32-bit field.  A PCI root
@@ -509,6 +504,7 @@ BuspSetMemoryDescriptorLength(
         Descriptor->u.Memory64.Length64 = (ULONG)(AddressLength >> 32);
     }
 }
+#endif
 
 static
 VOID
@@ -1953,6 +1949,7 @@ BuspCreateRequirementsListFromAcpiResources(
     return STATUS_SUCCESS;
 }
 
+#ifndef UNIT_TEST
 static
 NTSTATUS
 BuspCreateResourceListFromAcpiResources(
@@ -2627,7 +2624,6 @@ BuspCreateResourceListFromAcpiResources(
     return STATUS_SUCCESS;
 }
 
-#ifndef UNIT_TEST
 static
 VOID
 BuspPublishLegacyScsiportConfig(
@@ -2864,7 +2860,6 @@ Cleanup:
     if (driverKeyName.Buffer)
         ExFreePool(driverKeyName.Buffer);
 }
-#endif /* !UNIT_TEST */
 
 /* Build a stable instance ID string for devices that lack _UID.
  * Strategy: prefer _UID; then PCI root segment (if tracked); then bus_address (_ADR);
@@ -2933,8 +2928,6 @@ BuspBuildStableInstanceId(
 }
 
 /* ============================== PDO PnP ================================ */
-
-#ifndef UNIT_TEST
 
 NTSTATUS
 Bus_PDO_PnP (

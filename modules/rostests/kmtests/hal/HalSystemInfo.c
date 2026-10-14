@@ -10,6 +10,7 @@
 #define NDEBUG
 #include <debug.h>
 
+#if defined(_M_IX86) || defined(_M_AMD64)
 static HAL_AMLI_BAD_IO_ADDRESS_LIST ExpectedList[] =
 {
     { 0x0000, 0x10, 1, NULL },
@@ -147,6 +148,7 @@ TestAMLIllegalIOPortAddresses(void)
     }
     ExFreePoolWithTag(AddressList, 'OImK');
 }
+#endif
 
 #if defined(_M_ARM64)
 static

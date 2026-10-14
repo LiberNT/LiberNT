@@ -13,9 +13,6 @@
 #define WND_PARENT_ID  1
 #define WND_POPUP_ID   2
 
-static BOOL (WINAPI *pGetCurrentActCtx)(HANDLE *);
-static BOOL (WINAPI *pQueryActCtxW)(DWORD, HANDLE, void *, ULONG, void *, SIZE_T, SIZE_T *);
-
 static BOOL test_DestroyWindow_flag;
 static HWINEVENTHOOK hEvent_hook;
 static HHOOK hKBD_hook;
@@ -726,19 +723,8 @@ static void test_menu_messages(void)
     DestroyWindow(hwnd);
 }
 
-static void init_funcs(void)
-{
-    HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
-
-#define X(f) p##f = (void*)GetProcAddress(hKernel32, #f)
-    X(GetCurrentActCtx);
-    X(QueryActCtxW);
-#undef X
-}
-
 static void init_tests()
 {
-    init_funcs();
 
     InitializeCriticalSection(&sequence_cs);
     init_procs();

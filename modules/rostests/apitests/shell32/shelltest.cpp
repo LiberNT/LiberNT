@@ -13,13 +13,13 @@ class CFileSysBindData :
     public IFileSystemBindData
 {
 public:
-    virtual HRESULT STDMETHODCALLTYPE SetFindData(const WIN32_FIND_DATAW *pfd)
+    HRESULT STDMETHODCALLTYPE SetFindData(const WIN32_FIND_DATAW *pfd) override
     {
         m_Data = *pfd;
         return S_OK;
     }
 
-    virtual HRESULT STDMETHODCALLTYPE GetFindData(WIN32_FIND_DATAW *pfd)
+    HRESULT STDMETHODCALLTYPE GetFindData(WIN32_FIND_DATAW *pfd) override
     {
         *pfd = m_Data;
         return S_OK;

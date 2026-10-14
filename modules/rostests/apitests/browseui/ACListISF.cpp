@@ -127,7 +127,6 @@ test_ExpectFolders_imp(CComPtr<IEnumString>& EnumStr, LPITEMIDLIST pidlTarget, c
 
     WCHAR Buffer[512];
     CComHeapPtr<ITEMIDLIST> pidl;
-    INT Count = 0;
     while (spEnumIDList->Next(1, &pidl, NULL) == S_OK)
     {
         CComHeapPtr<WCHAR> DisplayName;
@@ -147,7 +146,6 @@ test_ExpectFolders_imp(CComPtr<IEnumString>& EnumStr, LPITEMIDLIST pidlTarget, c
         winetest_ok(!wcscmp(Buffer, Result), "Expected %s, got %s\n", wine_dbgstr_w(Buffer), wine_dbgstr_w(Result));
 
         pidl.Free();
-        Count++;
     }
     if (options & CheckLast)
     {

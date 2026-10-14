@@ -41,7 +41,6 @@ TestMessageHandler(
 
 
 /* Globals */
-static PDRIVER_OBJECT TestDriverObject;
 
 
 
@@ -87,7 +86,6 @@ TestEntry(
     DPRINT("Entry!\n");
 
     ok_irql(PASSIVE_LEVEL);
-    TestDriverObject = DriverObject;
 
     *DeviceName = L"FltMgrLoad";
 

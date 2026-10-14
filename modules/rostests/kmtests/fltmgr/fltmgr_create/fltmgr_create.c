@@ -33,7 +33,6 @@ TestFilterPostOperation(
 
 
 /* Globals */
-static PDRIVER_OBJECT TestDriverObject;
 
 
 CONST FLT_OPERATION_REGISTRATION Callbacks[] =
@@ -64,7 +63,6 @@ TestEntry(
     DPRINT("Entry!\n");
 
     ok_irql(PASSIVE_LEVEL);
-    TestDriverObject = DriverObject;
 
     *DeviceName = L"fltmgr_create";
 

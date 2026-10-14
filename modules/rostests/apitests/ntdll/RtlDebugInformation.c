@@ -97,7 +97,6 @@ static void Test_ProcessModules(void)
     Status = LdrQueryProcessModuleInformation(NULL, 0, &RequiredSize);
     ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
 
-    RequiredSize;
     ExpectedModules = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, RequiredSize);
 
     Status = LdrQueryProcessModuleInformation(ExpectedModules, RequiredSize, &RequiredSize);

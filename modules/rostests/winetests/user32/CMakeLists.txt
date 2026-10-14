@@ -62,3 +62,7 @@ set_module_type(user32_winetest win32cui)
 add_importlibs(user32_winetest user32 gdi32 advapi32 imm32 hid msvcrt kernel32 ntdll)
 add_pch(user32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET user32_winetest)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(user32_winetest PRIVATE -Wno-pragma-pack -Wno-unused-const-variable)
+endif()

@@ -6,3 +6,7 @@ target_compile_definitions(dbghelp_winetest PRIVATE __WINESRC__ WINETEST_USE_DBG
 set_module_type(dbghelp_winetest win32cui)
 add_importlibs(dbghelp_winetest dbghelp gdi32 user32 msvcrt kernel32 ntdll)
 add_rostests_file(TARGET dbghelp_winetest)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(dbghelp_winetest PRIVATE -Wno-format)
+endif()

@@ -67,7 +67,6 @@ BOOL extract_resource(WCHAR* Filename, LPCWSTR ResourceName, WCHAR* ParentFolder
         return FALSE;
 
     BOOL Written = write_raw_file(Filename, pData, Size);
-    UnlockResource(pData);
     return Written;
 }
 

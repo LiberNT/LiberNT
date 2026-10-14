@@ -34,7 +34,6 @@ TestRegFilterUnload(
 );
 
 /* Globals */
-static PDRIVER_OBJECT TestDriverObject;
 static FLT_REGISTRATION FilterRegistration;
 static PFLT_FILTER TestFilter = NULL;
 
@@ -227,7 +226,6 @@ TestEntry(
     *Flags = TESTENTRY_NO_ALL;
 
     ok_irql(PASSIVE_LEVEL);
-    TestDriverObject = DriverObject;
 
 
     /* Run the tests */

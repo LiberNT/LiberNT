@@ -13,5 +13,7 @@ protected:
     CTestList(CTest* Test);
 
 public:
+    virtual ~CTestList() {}
+
     virtual CTestInfo* GetNextTestInfo() = 0;
 };

@@ -1176,6 +1176,7 @@ static void test_CheckDatabaseManually(void)
     DeleteFileA("test_db.sdb");
 }
 
+#ifdef _M_IX86
 static void test_is_testdb(PDB pdb)
 {
     if (pdb)
@@ -1431,6 +1432,7 @@ void test_MatchApplications(void)
     ret = RemoveDirectoryW(workdir);
     ok(ret, "RemoveDirectoryW error: %lu\n", GetLastError());
 }
+#endif
 
 static BOOL write_raw_file(const WCHAR* FileName, const void* Data, DWORD Size)
 {
@@ -1467,7 +1469,6 @@ static bool extract_resource(const WCHAR* Filename, LPCWSTR ResourceName)
         return false;
 
     BOOL Written = write_raw_file(Filename, pData, Size);
-    UnlockResource(pData);
     return Written;
 }
 

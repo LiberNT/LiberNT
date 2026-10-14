@@ -18,7 +18,7 @@
 #ifdef _MSC_VER
 #pragma optimize("gst", on)
 #pragma auto_inline(on)
-#else
+#elif !defined(__clang__)
 #pragma GCC optimize("O3")
 #endif
 

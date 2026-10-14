@@ -11,8 +11,6 @@ static BYTE ContextContinue;
 static BYTE ContextStop;
 
 static int EnumProcCalls;
-static ENUMLOGFONTA LastFontA;
-static ENUMLOGFONTW LastFontW;
 
 typedef int WRAP_ENUM_FONT_FAMILIES(_In_ HDC, _In_ PCWSTR, _In_ PVOID, _In_ LPARAM);
 typedef WRAP_ENUM_FONT_FAMILIES *PWRAP_ENUM_FONT_FAMILIES;
@@ -91,7 +89,6 @@ EnumProcA(
        "Context is %p, expected %p or %p\n",
        (PVOID)lParam, &ContextContinue, &ContextStop);
 
-    LastFontA = *(ENUMLOGFONTA *)elf;
     return lParam == (LPARAM)&ContextContinue ? 7 : 0;
 }
 
@@ -111,7 +108,6 @@ EnumProcW(
        "Context is %p, expected %p or %p\n",
        (PVOID)lParam, &ContextContinue, &ContextStop);
 
-    LastFontW = *(ENUMLOGFONTW *)elf;
     return lParam == (LPARAM)&ContextContinue ? 7 : 0;
 }
 

@@ -100,7 +100,6 @@ RunChild(BOOL ExpectAccess)
 static void
 TestBoundaryDescriptors(void)
 {
-    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
     SID_IDENTIFIER_AUTHORITY WorldAuthority = {SECURITY_WORLD_SID_AUTHORITY};
     HANDLE Boundary;
     PSID World = NULL, Label;

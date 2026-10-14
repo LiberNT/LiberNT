@@ -22,9 +22,6 @@ typedef struct _TEST_FCB
 static KMT_IRP_HANDLER TestIrpHandler;
 static KMT_MESSAGE_HANDLER TestMessageHandler;
 
-static PFILE_OBJECT TestFileObject;
-static PDEVICE_OBJECT TestDeviceObject;
-
 NTSTATUS
 TestEntry(
     _In_ PDRIVER_OBJECT DriverObject,
@@ -84,11 +81,6 @@ TestIrpHandler(
         ok((IoStack->Parameters.Create.Options & FILE_OPEN_REPARSE_POINT) == 0, "FILE_OPEN_REPARSE_POINT set\n");
         ok((IoStack->Flags == 0 && !gNoLinks) || (IoStack->Flags == SL_STOP_ON_SYMLINK && gNoLinks), "IoStack->Flags = %lx\n", IoStack->Flags);
 
-        if (IoStack->FileObject->FileName.Length >= 2 * sizeof(WCHAR))
-        {
-            TestDeviceObject = DeviceObject;
-            TestFileObject = IoStack->FileObject;
-        }
         if (IoStack->FileObject->FileName.Length >= 2 * sizeof(WCHAR) &&
             IoStack->FileObject->FileName.Buffer[1] == 'M')
         {

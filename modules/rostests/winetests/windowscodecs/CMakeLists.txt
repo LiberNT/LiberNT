@@ -44,3 +44,7 @@ target_link_libraries(windowscodecs_winetest uuid)
 
 add_pch(windowscodecs_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET windowscodecs_winetest)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(windowscodecs_winetest PRIVATE -Wno-constant-conversion -Wno-incompatible-pointer-types-discards-qualifiers)
+endif()

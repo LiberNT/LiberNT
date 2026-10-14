@@ -24,9 +24,11 @@ VOID
     _Inout_ PFAST_MUTEX FastMutex
 );
 
+#ifndef _M_AMD64
 static VOID    (FASTCALL *pExiAcquireFastMutex)(IN OUT PFAST_MUTEX FastMutex);
 static VOID    (FASTCALL *pExiReleaseFastMutex)(IN OUT PFAST_MUTEX FastMutex);
 static BOOLEAN (FASTCALL *pExiTryToAcquireFastMutex)(IN OUT PFAST_MUTEX FastMutex);
+#endif
 
 static BOOLEAN KmtFmApcBaseline = FALSE;
 #if defined(_M_ARM64)
@@ -358,9 +360,11 @@ START_TEST(ExFastMutex)
     pExEnterCriticalRegionAndAcquireFastMutexUnsafe = KmtGetSystemRoutineAddress(L"ExEnterCriticalRegionAndAcquireFastMutexUnsafe");
     pExReleaseFastMutexUnsafeAndLeaveCriticalRegion = KmtGetSystemRoutineAddress(L"ExReleaseFastMutexUnsafeAndLeaveCriticalRegion");
 
+#ifndef _M_AMD64
     pExiAcquireFastMutex = KmtGetSystemRoutineAddress(L"ExiAcquireFastMutex");
     pExiReleaseFastMutex = KmtGetSystemRoutineAddress(L"ExiReleaseFastMutex");
     pExiTryToAcquireFastMutex = KmtGetSystemRoutineAddress(L"ExiTryToAcquireFastMutex");
+#endif
 
     memset(&Mutex, 0x55, sizeof Mutex);
     ExInitializeFastMutex(&Mutex);

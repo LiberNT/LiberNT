@@ -74,3 +74,7 @@ target_compile_definitions(emulation_winetest PRIVATE wcsnicmp=_wcsnicmp)
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(emulation_winetest PRIVATE -Wno-int-conversion -Wno-unused-variable)
 endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ntdll_winetest PRIVATE -Wno-unused-but-set-global -Wno-unused-function)
+endif()

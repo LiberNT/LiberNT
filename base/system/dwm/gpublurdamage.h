@@ -62,7 +62,7 @@ DwmGpuDamageUnion(RECT *Damage, const RECT *Bounds)
     }
 }
 
-static void
+static inline void
 DwmGpuDamageExpandBlur(RECT *Damage, LONG Width, LONG Height,
                        const DWM_WIN *Windows, ULONG Count,
                        LONG OriginX, LONG OriginY, ULONG BlurRadius,

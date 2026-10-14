@@ -35,7 +35,6 @@ typedef struct _FILTER_DATA
 DRIVER_INITIALIZE DriverEntry;
 
 /* Globals */
-static PDRIVER_OBJECT TestDriverObject;
 static PDEVICE_OBJECT KmtestDeviceObject;
 static PMDL ResultBufferMdl;
 static FILTER_DATA FilterData;
@@ -152,7 +151,6 @@ DriverEntry(
     Prcb = KeGetCurrentPrcb();
     KmtIsCheckedBuild = (Prcb->BuildType & PRCB_BUILD_DEBUG) != 0;
     KmtIsMultiProcessorBuild = (Prcb->BuildType & PRCB_BUILD_UNIPROCESSOR) == 0;
-    TestDriverObject = DriverObject;
 
     /* get the Kmtest device, so that we get a ResultBuffer pointer */
     RtlInitUnicodeString(&KmtestDeviceName, KMTEST_DEVICE_DRIVER_PATH);

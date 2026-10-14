@@ -1364,7 +1364,6 @@ RunConflict(
     HANDLE Handle, Plain;
     BOOLEAN Waited;
     NTSTATUS Status, OpStatus;
-    ULONG Target;
 
     Status = OpenTestFile(&TestFileName, TEST_FILE_SIZE, &Section);
     ok_eq_hex(Status, STATUS_SUCCESS);
@@ -1440,7 +1439,6 @@ RunConflict(
                 KeWaitForSingleObject(&WorkDone, Executive, KernelMode, FALSE, &Timeout);
             }
 
-            Target = Record.FileObject == FileObject ? 1 : Record.FileObject == Section.FileObject ? 2 : 0;
             ok(OpStatus == Expected->Status && (ULONG)Record.Count == Expected->Count && Record.Major == Expected->Major &&
                Record.Detail == Expected->Detail && Waited == Expected->Waited,
                "%s/%s: status=0x%08lx count=%ld major=0x%02x detail=0x%lx waited=%d\n",

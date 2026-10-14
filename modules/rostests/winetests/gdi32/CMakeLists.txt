@@ -49,3 +49,7 @@ endif()
 
 #add_pch(gdi32_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET gdi32_winetest)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(gdi32_winetest PRIVATE -Wno-pragma-pack)
+endif()

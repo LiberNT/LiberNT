@@ -49,6 +49,8 @@ add_dependencies(ole32_winetest ole32_testlib)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 	target_compile_options(ole32_winetest PRIVATE -Wno-format-overflow -Wno-discarded-qualifiers)
+elseif(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+	target_compile_options(ole32_winetest PRIVATE -Wno-incompatible-pointer-types-discards-qualifiers)
 endif()
 
 add_pch(ole32_winetest precomp.h "${PCH_SKIP_SOURCE}")

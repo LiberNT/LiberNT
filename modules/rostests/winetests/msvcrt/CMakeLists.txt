@@ -51,3 +51,7 @@ target_link_libraries(msvcrt_winetest oldnames)
 
 add_pch(msvcrt_winetest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET msvcrt_winetest)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(msvcrt_winetest PRIVATE -Wno-fortify-source)
+endif()
