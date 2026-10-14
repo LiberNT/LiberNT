@@ -1680,12 +1680,8 @@ QSI_DEF(SystemHandleInformation)
 
                         HandleInformation->Handles[Index].CreatorBackTraceIndex = 0;
 
-#if 0 /* FIXME!!! Type field corrupted */
                         HandleInformation->Handles[Index].ObjectTypeIndex =
                             ObpGetObjectTypeFromHeader(ObjectHeader)->Index;
-#else
-                        HandleInformation->Handles[Index].ObjectTypeIndex = 0;
-#endif
 
                         HandleInformation->Handles[Index].HandleAttributes =
                             HandleTableEntry->ObAttributes & OBJ_HANDLE_ATTRIBUTES;
@@ -2958,12 +2954,8 @@ QSI_DEF(SystemExtendedHandleInformation)
 
                         HandleInformation->Handles[Index].CreatorBackTraceIndex = 0;
 
-#if 0 /* FIXME!!! Type field corrupted */
                         HandleInformation->Handles[Index].ObjectTypeIndex =
                             ObpGetObjectTypeFromHeader(ObjectHeader)->Index;
-#else
-                        HandleInformation->Handles[Index].ObjectTypeIndex = 0;
-#endif
 
                         HandleInformation->Handles[Index].HandleAttributes =
                             HandleTableEntry->ObAttributes & OBJ_HANDLE_ATTRIBUTES;
