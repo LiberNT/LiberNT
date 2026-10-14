@@ -2415,7 +2415,7 @@ RtlGetFullPathName_UstrEx(IN PUNICODE_STRING FileName,
     if (StringUsed) *StringUsed = NULL;
     if (LengthNeeded) *LengthNeeded = 0;
     if (FilePartSize) *FilePartSize = 0;
-    LocalPathType = *PathType;
+    LocalPathType = *(volatile RTL_PATH_TYPE *)PathType;
 
     /* Check for invalid parameters */
     if ((DynamicString) && !(StringUsed) && (StaticString))
