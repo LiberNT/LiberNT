@@ -10,6 +10,7 @@
 #include <win32k.h>
 #include <immdev.h>
 #include <unaligned.h>
+#include <ndk/inbvfuncs.h>
 
 DBG_DEFAULT_CHANNEL(UserWnd);
 
@@ -4070,6 +4071,12 @@ NtUserSetShellWindowEx(HWND hwndShell, HWND hwndListView)
    ti->pDeskInfo->ppiShellProcess = ti->ppi;
 
    UserRegisterHotKey(WndShell, SC_TASKLIST, MOD_CONTROL, VK_ESCAPE);
+
+   if (InbvCheckDisplayOwnership())
+   {
+      InbvNotifyDisplayOwnershipLost(NULL);
+      UserRedrawDesktop();
+   }
 
    UserDerefObjectCo(WndShell);
 

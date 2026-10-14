@@ -11978,7 +11978,8 @@ TransferOwnership:
     if (TransferFromInbv)
     {
         StepStart100ns = DxgkpTraceNow100ns();
-        InbvNotifyDisplayOwnershipLost(NULL);
+        if (InterlockedCompareExchange(&g_BootLogDisplay, 0, 0) == 0)
+            InbvNotifyDisplayOwnershipLost(NULL);
         OwnershipUs = DxgkpTraceElapsedUs(StepStart100ns);
     }
 

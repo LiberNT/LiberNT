@@ -3086,6 +3086,8 @@ DxgkpPresentSourceRects(
 
     if (Adapter == NULL)
         return STATUS_INVALID_PARAMETER;
+    if (DxgkpBootLogHoldsDisplay())
+        return STATUS_SUCCESS;
     Status = DxgkpAcquireSharedSurfaceSnapshot(Adapter, &SharedSurface);
     if (!NT_SUCCESS(Status))
         return Status;
