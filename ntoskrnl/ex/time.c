@@ -214,9 +214,7 @@ ExpUpdateTimerResolution(VOID)
 
     if (DesiredTime != KeTimeIncrement)
     {
-        KeSetSystemAffinityThread(1);
         KeTimeIncrement = HalSetTimeIncrement(DesiredTime);
-        KeRevertToUserAffinityThread();
     }
 
     return KeTimeIncrement;
