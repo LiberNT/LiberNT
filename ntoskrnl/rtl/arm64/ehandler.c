@@ -57,6 +57,63 @@ RtlUnwindEx(
 typedef EXCEPTION_DISPOSITION (__cdecl *PTERMINATION_HANDLER)(BOOLEAN, PVOID);
 typedef EXCEPTION_DISPOSITION (__cdecl *PEXCEPTION_FILTER)(PEXCEPTION_POINTERS, PVOID);
 
+LONG
+RtlpArm64ExecuteHandler(
+    _In_ PVOID Argument,
+    _In_ PVOID EstablisherFrame,
+    _In_ PVOID Handler,
+    _In_ PUCHAR NonVolatileRegisters);
+
+static
+LONG
+RtlpArm64CallScopeHandler(
+    _In_ PDISPATCHER_CONTEXT DispatcherContext,
+    _In_ PVOID Argument,
+    _In_ PVOID EstablisherFrame,
+    _In_ PVOID Handler)
+{
+    if (DispatcherContext->NonVolatileRegisters != NULL)
+    {
+        return RtlpArm64ExecuteHandler(Argument,
+                                       EstablisherFrame,
+                                       Handler,
+                                       DispatcherContext->NonVolatileRegisters);
+    }
+
+    return ((PEXCEPTION_FILTER)Handler)((PEXCEPTION_POINTERS)Argument, EstablisherFrame);
+}
+
+static
+BOOLEAN
+RtlpArm64IsTargetInScope(
+    _In_ PSCOPE_TABLE ScopeTable,
+    _In_ ULONG Scope,
+    _In_ ULONG64 TargetIpOffset)
+{
+    ULONG Index;
+
+    if ((ScopeTable->ScopeRecord[Scope].JumpTarget != 0) &&
+        (ScopeTable->ScopeRecord[Scope].JumpTarget == TargetIpOffset))
+    {
+        return TRUE;
+    }
+
+    for (Index = 0; Index < ScopeTable->Count; Index++)
+    {
+        if ((TargetIpOffset >= ScopeTable->ScopeRecord[Index].BeginAddress) &&
+            (TargetIpOffset < ScopeTable->ScopeRecord[Index].EndAddress) &&
+            (ScopeTable->ScopeRecord[Index].HandlerAddress ==
+             ScopeTable->ScopeRecord[Scope].HandlerAddress) &&
+            (ScopeTable->ScopeRecord[Index].JumpTarget ==
+             ScopeTable->ScopeRecord[Scope].JumpTarget))
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 static LONG KiSehAbnormalTerminationFlag[MAXIMUM_PROCESSORS];
 
 LONG *
@@ -137,8 +194,7 @@ __C_specific_handler(
         {
             if (ExceptionRecord->ExceptionFlags & EXCEPTION_TARGET_UNWIND)
             {
-                if ((TargetIpOffset >= BeginAddress) &&
-                    (TargetIpOffset < EndAddress))
+                if (RtlpArm64IsTargetInScope(ScopeTable, i, TargetIpOffset))
                 {
                     return ExceptionContinueSearch;
                 }
@@ -151,12 +207,8 @@ __C_specific_handler(
 
                 PreviousAbnormalState = *AbnormalFlagPtr;
                 *AbnormalFlagPtr = TRUE;
-                TerminationHandler(TRUE, EstablisherFrame);
+                RtlpArm64CallScopeHandler(DispatcherContext, (PVOID)(ULONG_PTR)TRUE, EstablisherFrame, (PVOID)TerminationHandler);
                 *AbnormalFlagPtr = PreviousAbnormalState;
-            }
-            else if (ScopeTable->ScopeRecord[i].JumpTarget == TargetIpOffset)
-            {
-                return ExceptionContinueSearch;
             }
         }
         else
@@ -177,7 +229,7 @@ __C_specific_handler(
                 ExceptionFilter = (PEXCEPTION_FILTER)(ImageBase + Handler);
                 PreviousAbnormalState = *AbnormalFlagPtr;
                 *AbnormalFlagPtr = FALSE;
-                FilterResult = ExceptionFilter(&ExceptionPointers, EstablisherFrame);
+                FilterResult = RtlpArm64CallScopeHandler(DispatcherContext, &ExceptionPointers, EstablisherFrame, (PVOID)ExceptionFilter);
                 *AbnormalFlagPtr = PreviousAbnormalState;
             }
 

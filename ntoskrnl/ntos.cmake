@@ -405,6 +405,7 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/usercall_asm.S
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/bootstack.S
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/zeropage.S
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/rtl/arm64/ehandler_asm.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcpy.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/wcscmp.S)
     list(APPEND SOURCE

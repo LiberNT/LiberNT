@@ -636,7 +636,6 @@ RtlVirtualUnwind(
     PVOID LocalHandlerData = NULL;
     BOOLEAN FinalPcFromLr = TRUE;
     BOOLEAN UsedFp = FALSE;
-    ULONG64 OriginalFp = Context->Fp;
 
     if (HandlerData)
         *HandlerData = NULL;
@@ -660,7 +659,7 @@ RtlVirtualUnwind(
     if (FinalPcFromLr)
         Context->Pc = Context->Lr;
 
-    *EstablisherFrame = UsedFp ? OriginalFp : Context->Sp;
+    *EstablisherFrame = Context->Sp;
 
     if (Handler != NULL && (HandlerType & (UNW_FLAG_EHANDLER | UNW_FLAG_UHANDLER)))
     {
