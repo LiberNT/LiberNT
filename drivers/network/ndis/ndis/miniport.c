@@ -3524,7 +3524,7 @@ NdisMSleep(
 
   PAGED_CODE();
 
-  DueTime.QuadPart = (-1) * 10 * MicrosecondsToSleep;
+  DueTime.QuadPart = -10LL * MicrosecondsToSleep;
 
   KeInitializeTimer(&Timer);
   KeSetTimer(&Timer, DueTime, 0);
