@@ -31,6 +31,7 @@
 
 NTSTATUS find_entry( PVOID BaseAddress, LDR_RESOURCE_INFO *info,
                      ULONG level, void **ret, int want_dir );
+PVOID NTAPI RtlpGetResourceModuleForEntry( PVOID BaseAddress, PVOID Entry );
 
 /* FUNCTIONS ****************************************************************/
 
@@ -222,6 +223,7 @@ static NTSTATUS LdrpAccessResource( PVOID BaseAddress, IMAGE_RESOURCE_DATA_ENTRY
     {
         ULONG dirsize;
 
+        BaseAddress = RtlpGetResourceModuleForEntry( BaseAddress, entry );
         if (!RtlImageDirectoryEntryToData( BaseAddress, TRUE, IMAGE_DIRECTORY_ENTRY_RESOURCE, &dirsize ))
             status = STATUS_RESOURCE_DATA_NOT_FOUND;
         else

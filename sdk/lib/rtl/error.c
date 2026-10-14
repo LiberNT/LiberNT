@@ -32,7 +32,7 @@ struct error_table
     const DWORD *table;
 };
 
-static const struct error_table error_table[25];
+static const struct error_table error_table[26];
 
 /**************************************************************************
  *           RtlNtStatusToDosErrorNoTeb (NTDLL.@)
@@ -1465,6 +1465,16 @@ static const DWORD table_c00a0001[54] =
    ERROR_CTX_SHADOW_NOT_RUNNING            /* c00a0036 (STATUS_CTX_SHADOW_NOT_RUNNING) */
 };
 
+static const DWORD table_c00b0001[6] =
+{
+   ERROR_MUI_FILE_NOT_FOUND,
+   ERROR_MUI_INVALID_FILE,
+   ERROR_MUI_INVALID_RC_CONFIG,
+   ERROR_MUI_INVALID_LOCALE_NAME,
+   ERROR_MUI_INVALID_ULTIMATEFALLBACK_NAME,
+   ERROR_MUI_FILE_NOT_LOADED
+};
+
 static const DWORD table_c0130001[22] =
 {
    ERROR_CLUSTER_INVALID_NODE,             /* c0130001 (STATUS_CLUSTER_INVALID_NODE) */
@@ -1584,6 +1594,7 @@ static const struct error_table error_table[] =
     { 0xc0030001, 0xc003000d, table_c0030001 },
     { 0xc0030059, 0xc0030062, table_c0030059 },
     { 0xc00a0001, 0xc00a0037, table_c00a0001 },
+    { 0xc00b0001, 0xc00b0007, table_c00b0001 },
     { 0xc0130001, 0xc0130017, table_c0130001 },
     { 0xc0150001, 0xc0150028, table_c0150001 },
     { 0, 0, NULL }  /* last entry */

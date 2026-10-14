@@ -1862,21 +1862,7 @@ NTAPI
 LdrUnloadAlternateResourceModule(
     _In_ PVOID BaseAddress)
 {
-    ULONG_PTR Cookie;
-
-    /* Acquire the loader lock */
-    LdrLockLoaderLock(LDR_LOCK_LOADER_LOCK_FLAG_RAISE_ON_ERRORS, NULL, &Cookie);
-
-    /* Check if there's any alternate resources loaded */
-    if (AlternateResourceModuleCount)
-    {
-        UNIMPLEMENTED;
-    }
-
-    /* Release the loader lock */
-    LdrUnlockLoaderLock(LDR_UNLOCK_LOADER_LOCK_FLAG_RAISE_ON_ERRORS, Cookie);
-
-    /* All done */
+    LdrpUnloadAlternateResourceModule(BaseAddress);
     return TRUE;
 }
 
@@ -1887,8 +1873,7 @@ BOOLEAN
 NTAPI
 LdrFlushAlternateResourceModules(VOID)
 {
-    UNIMPLEMENTED;
-    return FALSE;
+    return LdrpFlushAlternateResourceModules();
 }
 
 /*

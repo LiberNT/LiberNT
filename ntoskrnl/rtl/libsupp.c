@@ -753,6 +753,16 @@ IMAGE_RESOURCE_DIRECTORY *find_entry_by_id( IMAGE_RESOURCE_DIRECTORY *dir,
 IMAGE_RESOURCE_DIRECTORY *find_first_entry( IMAGE_RESOURCE_DIRECTORY *dir,
                                             void *root, int want_dir );
 
+PVOID
+NTAPI
+RtlpGetResourceModuleForEntry(
+    _In_ PVOID BaseAddress,
+    _In_ PVOID Entry)
+{
+    UNREFERENCED_PARAMETER(Entry);
+    return BaseAddress;
+}
+
 /**********************************************************************
  *  find_entry
  *

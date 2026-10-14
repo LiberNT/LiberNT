@@ -613,8 +613,8 @@ int push_language( USHORT *list, ULONG pos, WORD lang );
  *
  * Find a resource entry
  */
-NTSTATUS find_entry( PVOID BaseAddress, LDR_RESOURCE_INFO *info,
-                     ULONG level, void **ret, int want_dir )
+NTSTATUS LdrpFindModuleResourceEntry( PVOID BaseAddress, LDR_RESOURCE_INFO *info,
+                                      ULONG level, void **ret, BOOLEAN want_dir )
 {
     ULONG size;
     void *root;
@@ -696,6 +696,39 @@ NTSTATUS find_entry( PVOID BaseAddress, LDR_RESOURCE_INFO *info,
 done:
     *ret = resdirptr;
     return STATUS_SUCCESS;
+}
+
+NTSTATUS find_entry( PVOID BaseAddress, LDR_RESOURCE_INFO *info,
+                     ULONG level, void **ret, int want_dir )
+{
+    NTSTATUS Status, MuiStatus;
+    PVOID ResourceBase;
+
+    Status = LdrpFindModuleResourceEntry( BaseAddress, info, level, ret, !!want_dir );
+    if (want_dir ||
+        (Status != STATUS_RESOURCE_TYPE_NOT_FOUND &&
+         Status != STATUS_RESOURCE_NAME_NOT_FOUND &&
+         Status != STATUS_RESOURCE_LANG_NOT_FOUND))
+    {
+        return Status;
+    }
+
+    MuiStatus = LdrpGetAlternateResourceModule( BaseAddress, &ResourceBase );
+    if (MuiStatus == STATUS_RESOURCE_DATA_NOT_FOUND)
+        return Status;
+    if (!NT_SUCCESS(MuiStatus))
+        return MuiStatus;
+
+    return LdrpFindModuleResourceEntry( ResourceBase, info, level, ret, FALSE );
+}
+
+PVOID
+NTAPI
+RtlpGetResourceModuleForEntry(
+    _In_ PVOID BaseAddress,
+    _In_ PVOID Entry)
+{
+    return LdrpGetResourceModuleForEntry(BaseAddress, Entry);
 }
 
 /*
