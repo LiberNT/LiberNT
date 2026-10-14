@@ -2182,6 +2182,42 @@ static NTSTATUS set_output_info( struct screen_buffer *screen_buffer,
     }
     if (params->mask & SET_CONSOLE_OUTPUT_INFO_DISPLAY_WINDOW)
     {
+#ifdef __REACTOS__
+        int left = info->win_left, top = info->win_top;
+        int right = info->win_right, bottom = info->win_bottom;
+        int max_width = screen_buffer->max_width, max_height = screen_buffer->max_height;
+
+        enter_absolute_mode( screen_buffer->console );
+        if (left < 0)
+        {
+            right -= left;
+            left = 0;
+        }
+        if (top < 0)
+        {
+            bottom -= top;
+            top = 0;
+        }
+        if (params->mask & SET_CONSOLE_OUTPUT_INFO_MAX_SIZE)
+        {
+            max_width  = info->max_width;
+            max_height = info->max_height;
+        }
+        if (left > right || right >= screen_buffer->width ||
+            top > bottom || bottom >= screen_buffer->height ||
+            right - left >= max_width || bottom - top >= max_height)
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+        if (screen_buffer->win.left != left || screen_buffer->win.top != top ||
+            screen_buffer->win.right != right || screen_buffer->win.bottom != bottom)
+        {
+            screen_buffer->win.left   = left;
+            screen_buffer->win.top    = top;
+            screen_buffer->win.right  = right;
+            screen_buffer->win.bottom = bottom;
+        }
+#else
         enter_absolute_mode( screen_buffer->console );
         if (info->win_left < 0 || info->win_left > info->win_right ||
             info->win_right >= screen_buffer->width ||
@@ -2198,6 +2234,7 @@ static NTSTATUS set_output_info( struct screen_buffer *screen_buffer,
             screen_buffer->win.right  = info->win_right;
             screen_buffer->win.bottom = info->win_bottom;
         }
+#endif
     }
     if (params->mask & SET_CONSOLE_OUTPUT_INFO_MAX_SIZE)
     {
