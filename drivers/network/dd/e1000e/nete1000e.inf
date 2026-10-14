@@ -92,6 +92,7 @@ DefaultDestDir = 12
 %IntelE1000E_10F6.DeviceDesc% = E1000_Inst.ndi,PCI\VEN_8086&DEV_10F6
 %IntelE1000E_1502.DeviceDesc% = E1000_Inst.ndi,PCI\VEN_8086&DEV_1502
 %IntelE1000E_1503.DeviceDesc% = E1000_Inst.ndi,PCI\VEN_8086&DEV_1503
+%IntelE1000E_15F9.DeviceDesc% = E1000_Inst.ndi,PCI\VEN_8086&DEV_15F9
 
 ;----------------------------- E1000 DRIVER -----------------------------
 
@@ -207,6 +208,7 @@ IntelE1000E_10F5.DeviceDesc = "Intel 82567LM Gigabit Ethernet"
 IntelE1000E_10F6.DeviceDesc = "Intel 82574L Gigabit Network Connection (IT)"
 IntelE1000E_1502.DeviceDesc = "Intel 82579LM Gigabit Ethernet"
 IntelE1000E_1503.DeviceDesc = "Intel 82579V Gigabit Ethernet"
+IntelE1000E_15F9.DeviceDesc = "Intel Ethernet Connection (14) I219-LM"
 
 [Strings.0415]
 IntelE1000_1000.DeviceDesc = "Karta Intel 82542-based PCI Ethernet Adapter"

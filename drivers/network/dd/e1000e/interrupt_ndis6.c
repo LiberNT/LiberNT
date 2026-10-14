@@ -1055,6 +1055,8 @@ E1000MiniportInterruptDpc(
     if (LinkChange)
     {
         E1000UpdateLinkStatus(Adapter);
+        if (Adapter->IsPchLan)
+            E1000PchLinkChanged(Adapter);
     }
 
     /*

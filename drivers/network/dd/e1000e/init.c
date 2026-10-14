@@ -400,6 +400,8 @@ E1000MiniportInitializeEx(
 Cleanup:
     if (Adapter != NULL)
     {
+        if (Adapter->IsPchLan)
+            E1000PchHalt(Adapter);
         E1000FreeAdapterResources(Adapter);
         NdisFreeSpinLock(&Adapter->SendLock);
         NdisFreeSpinLock(&Adapter->ResetLock);
@@ -451,6 +453,9 @@ E1000MiniportHaltEx(
         E1000_WRITE_REG(Adapter, E1000_REG_TCTL, 0);
         E1000_WRITE_REG(Adapter, E1000_REG_RCTL, 0);
     }
+
+    if (Adapter->IsPchLan)
+        E1000PchHalt(Adapter);
 
     /* Free TX queues */
     for (i = 0; i < Adapter->TxQueueCount; i++)

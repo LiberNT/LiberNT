@@ -468,6 +468,12 @@ typedef struct _E1000_ADAPTER
     /* Device type flags */
     BOOLEAN                 IsPCIe;             /* PCIe vs PCI device */
     BOOLEAN                 HasFlash;           /* Has flash NVM */
+    BOOLEAN                 IsPchLan;
+    BOOLEAN                 PchHalting;
+    ULONG                   PchPhyId;
+    volatile LONG           PchPhyBusy;
+    volatile LONG           PchLinkWorkState;
+    NDIS_HANDLE             PchLinkWorkItem;
 
     /* ========== Hardware Resources ========== */
 
@@ -993,5 +999,7 @@ E1000IsAdapterStarted(
     return (InterlockedCompareExchange(&Adapter->Flags, 0, 0) &
             E1000_FLAG_ADAPTER_STARTED) != 0;
 }
+
+#include "pchlan.h"
 
 /* End of e1000.h */

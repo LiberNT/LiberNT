@@ -25,6 +25,7 @@ add_definitions(
 list(APPEND SOURCE
     init.c
     hardware.c
+    pchlan.c
     interrupt_ndis6.c
     send_ndis6.c
     receive_ndis6.c
@@ -35,6 +36,7 @@ list(APPEND SOURCE
     power_ndis6.c
     e1000.h
     e1000hw.h
+    pchlan.h
     ndis6_compat.h)
 
 add_library(e1000e MODULE ${SOURCE} e1000e.rc)

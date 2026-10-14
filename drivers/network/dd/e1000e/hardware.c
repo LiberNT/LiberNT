@@ -1995,6 +1995,12 @@ E1000RecognizeHardware(
         return FALSE;
     }
 
+    if (E1000PchRecognize(Adapter))
+    {
+        DPRINT1("E1000: Device recognized: Intel I219 chipset LAN DeviceId=0x%04x\n", Adapter->DeviceId);
+        return TRUE;
+    }
+
     for (n = 0; n < ARRAYSIZE(SupportedDevices); ++n)
     {
         if (SupportedDevices[n] == Adapter->DeviceId)
@@ -2044,6 +2050,9 @@ E1000ResetHardware(
         DPRINT1("E1000: ResetHardware - IoBase not mapped\n");
         return NDIS_STATUS_HARD_ERRORS;
     }
+
+    if (Adapter->IsPchLan)
+        return E1000PchResetHardware(Adapter);
 
     /* Disable interrupts */
     E1000_WRITE_REG(Adapter, E1000_REG_IMC, 0xFFFFFFFF);
@@ -2111,7 +2120,10 @@ E1000SetupLink(
 
     /* Configure for auto-negotiation */
     CtrlValue = E1000_READ_REG(Adapter, E1000_REG_CTRL);
-    CtrlValue |= E1000_CTRL_ASDE | E1000_CTRL_SLU;
+    if (Adapter->IsPchLan)
+        CtrlValue |= E1000_CTRL_SLU;
+    else
+        CtrlValue |= E1000_CTRL_ASDE | E1000_CTRL_SLU;
     CtrlValue &= ~(E1000_CTRL_FRCSPD | E1000_CTRL_FRCDPLX);
     E1000_WRITE_REG(Adapter, E1000_REG_CTRL, CtrlValue);
 
@@ -2123,8 +2135,11 @@ E1000SetupLink(
     E1000_WRITE_REG(Adapter, E1000_REG_TCTL, TctlValue);
 
     /* Configure IPG (Inter-Packet Gap) */
-    E1000_WRITE_REG(Adapter, E1000_REG_TIPG,
-                    E1000_TIPG_IPGT_DEF | E1000_TIPG_IPGR1_DEF | E1000_TIPG_IPGR2_DEF);
+    if (!Adapter->IsPchLan)
+    {
+        E1000_WRITE_REG(Adapter, E1000_REG_TIPG,
+                        E1000_TIPG_IPGT_DEF | E1000_TIPG_IPGR1_DEF | E1000_TIPG_IPGR2_DEF);
+    }
 
     /* Enable receiver with default filter */
     RctlValue = E1000_RCTL_EN |          /* Enable RX */
@@ -2132,6 +2147,9 @@ E1000SetupLink(
                 E1000_RCTL_BAM |         /* Accept broadcast */
                 (E1000_RCTL_BSIZE_2048 << E1000_RCTL_BSIZE_SHIFT);
     E1000_WRITE_REG(Adapter, E1000_REG_RCTL, RctlValue);
+
+    if (Adapter->IsPchLan)
+        E1000PchSetupLink(Adapter);
 
     /* Update link status */
     E1000UpdateLinkStatus(Adapter);
@@ -2368,6 +2386,12 @@ E1000SetMulticastList(
     if (MulticastCount > E1000_MAX_MULTICAST)
     {
         return NDIS_STATUS_MULTICAST_FULL;
+    }
+
+    if (Adapter->IsPchLan)
+    {
+        E1000PchSetMulticastList(Adapter, MulticastList, MulticastCount);
+        return NDIS_STATUS_SUCCESS;
     }
 
     /* Program multicast addresses into RAR entries (starting at index 1) */
