@@ -315,6 +315,7 @@ private:
     IStream                                 *fHistoryStream;
     IBindCtx                                *fHistoryBindContext;
     HDSA menuDsa;
+    HMENU m_hExplorerBandsMenu;
     HACCEL m_hAccel;
     ShellSettings m_settings;
     SBFOLDERSETTINGS m_deffoldersettings;
@@ -777,6 +778,7 @@ CShellBrowser::CShellBrowser()
     m_Destroyed = false;
     fCurrentShellViewWindow = NULL;
     m_hbrPendingContent = NULL;
+    m_hExplorerBandsMenu = NULL;
     fCurrentDirectoryPIDL = NULL;
     fStatusBar = NULL;
     fCurrentMenuBar = NULL;
@@ -2404,7 +2406,6 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::SetMenuSB(HMENU hmenuShared, HOLEMENU h
     if (FAILED_UNEXPECTEDLY(hResult))
         return hResult;
     fCurrentMenuBar = hmenuShared;
-    BuildExplorerBandMenu();
     return S_OK;
 }
 
@@ -4214,6 +4215,9 @@ LRESULT CShellBrowser::OnInitMenuPopup(UINT uMsg, WPARAM wParam, LPARAM lParam, 
     }
     else if (theMenu == SHGetMenuFromID(fCurrentMenuBar, FCIDM_MENU_VIEW))
     {
+        HMENU hBandsMenu = SHGetMenuFromID(fCurrentMenuBar, IDM_VIEW_EXPLORERBAR);
+        if (hBandsMenu && hBandsMenu != m_hExplorerBandsMenu && SUCCEEDED(BuildExplorerBandMenu()))
+            m_hExplorerBandsMenu = hBandsMenu;
         UpdateViewMenu(theMenu);
         menuIndex = 2;
     }
