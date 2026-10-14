@@ -1670,6 +1670,8 @@ UserRedrawDesktop(VOID)
                          RDW_INVALIDATE | RDW_ALLCHILDREN);
 
     REGION_Delete(Rgn);
+
+    IntCompositionDamageWindow(Window);
 }
 
 
