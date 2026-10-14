@@ -211,7 +211,7 @@ TmpPumpTransaction(
     PTMP_DELIVERY Deliveries;
     PKENLISTMENT Candidate;
     ULONG Capacity, Count, Index;
-    BOOLEAN Queued = FALSE, Nested = FALSE, Stale;
+    BOOLEAN Queued = FALSE, Nested = FALSE, Stale, Complete = FALSE;
     TMP_PUMP Pump;
     KIRQL OldIrql;
 
@@ -262,7 +262,7 @@ TmpPumpTransaction(
             Transaction->Outcome = KTxOutcomeAborted;
             Transaction->Flags &= ~KTRANSACTION_FLAG_SINGLE_PHASE;
             TmpRecordHistory(Transaction, KTransactionAborted, 0);
-            TmpCompleteTransaction(Transaction);
+            Complete = TRUE;
             Count = TmpCollectPhase(Transaction,
                                     KEnlistmentUninitialized,
                                     TRANSACTION_NOTIFY_ROLLBACK,
@@ -396,6 +396,11 @@ TmpPumpTransaction(
         }
 
         TmpAcquireMutex(&Transaction->Mutex);
+        if (Complete)
+        {
+            TmpCompleteTransaction(Transaction);
+            Complete = FALSE;
+        }
         continue;
 
 Idle:
