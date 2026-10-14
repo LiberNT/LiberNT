@@ -52,6 +52,7 @@
 #include "commonbrowser.h"
 #include "globalfoldersettings.h"
 #include "CTaskbarList.h"
+#include "executefolder.h"
 #include "browseui.h"
 #include <stdio.h>
 

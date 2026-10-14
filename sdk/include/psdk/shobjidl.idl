@@ -4985,6 +4985,14 @@ library ShellObjects
     }
 
     [
+        uuid(11dbb47c-a525-400b-9e80-a54615a090c0)
+    ]
+    coclass ExecuteFolder
+    {
+        interface IExecuteCommand;
+    }
+
+    [
         uuid(A2A9545D-A0C2-42B4-9708-A0B2BADD77C8)
     ]
     coclass StartMenuPin

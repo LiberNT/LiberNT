@@ -1970,6 +1970,30 @@ static HRESULT SHELL_InvokeRegItemDelegateExecute(LPSHELLEXECUTEINFOW sei, LPCWS
     return SHELL_InvokeDelegateExecute(szKey, sei, (LPCITEMIDLIST)sei->lpIDList, NULL);
 }
 
+static HRESULT SHELL_InvokeFolderDelegateExecute(LPSHELLEXECUTEINFOW sei, LPCWSTR pszParsingName)
+{
+    WCHAR szKey[MAX_PATH], szVerb[VERBKEY_CCHMAX];
+    HKEY hkFolder;
+    BOOL bVerb;
+
+    if (StrIsNullOrEmpty(pszParsingName))
+        return S_FALSE;
+    if (pszParsingName[0] != ':' || pszParsingName[1] != ':')
+    {
+        DWORD attribs = GetFileAttributesW(pszParsingName);
+        if (attribs == INVALID_FILE_ATTRIBUTES || !(attribs & FILE_ATTRIBUTE_DIRECTORY))
+            return S_FALSE;
+    }
+
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L"Folder", 0, KEY_READ, &hkFolder) != ERROR_SUCCESS)
+        return S_FALSE;
+    bVerb = HCR_GetDefaultVerbW(hkFolder, sei->lpVerb, szVerb, _countof(szVerb));
+    RegCloseKey(hkFolder);
+    if (!bVerb || FAILED(StringCchPrintfW(szKey, _countof(szKey), L"Folder\\shell\\%s\\command", szVerb)))
+        return S_FALSE;
+    return SHELL_InvokeDelegateExecute(szKey, sei, (LPCITEMIDLIST)sei->lpIDList, NULL);
+}
+
 /*************************************************************************
  *    ShellExecute_FromContextMenu [Internal]
  */
@@ -2494,6 +2518,11 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
         if (SUCCEEDED(hr))
         {
             hr = SHELL_InvokeRegItemDelegateExecute(&sei_tmp, wszApplicationName);
+            if (hr == S_FALSE && SHELL_InvokeFolderDelegateExecute(&sei_tmp, wszApplicationName) == S_OK)
+            {
+                sei->hInstApp = (HINSTANCE)42;
+                return TRUE;
+            }
             if (hr != S_FALSE)
             {
                 if (SUCCEEDED(hr))

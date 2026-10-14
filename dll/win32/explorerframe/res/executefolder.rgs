@@ -1,0 +1,13 @@
+HKCR
+{
+	NoRemove CLSID
+	{
+		ForceRemove {11DBB47C-A525-400B-9E80-A54615A090C0} = s 'Execute Folder'
+		{
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Apartment'
+			}
+		}
+	}
+}

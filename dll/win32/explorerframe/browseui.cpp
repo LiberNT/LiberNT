@@ -150,6 +150,7 @@ OBJECT_ENTRY(CLSID_TaskbarList, CTaskbarList)
 OBJECT_ENTRY(CLSID_FileSearchBand, CSearchBar)
 OBJECT_ENTRY(CLSID_FindFolder, CFindFolder)
 OBJECT_ENTRY(CLSID_CDockingBarPropertyBag, CDockingBarPropertyBag)
+OBJECT_ENTRY(CLSID_ExecuteFolder, CExecuteFolder)
 END_OBJECT_MAP()
 
 CBrowseUIModule                             gModule;

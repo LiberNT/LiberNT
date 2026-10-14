@@ -105,6 +105,7 @@
 #define IDR_USERASSIST           148
 #define IDR_ACLHISTORY           150
 #define IDR_DOCKINGBARPROPERTYBAG 151
+#define IDR_EXECUTEFOLDER        152
 
 #define IDS_SMALLICONS           12301
 #define IDS_LARGEICONS           12302

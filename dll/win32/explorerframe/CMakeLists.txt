@@ -17,6 +17,7 @@ list(APPEND SOURCE
     CTaskbarList.h
     commonbrowser.cpp
     desktopipc.cpp
+    executefolder.cpp
     globalfoldersettings.cpp
     internettoolbar.cpp
     parsecmdline.cpp
