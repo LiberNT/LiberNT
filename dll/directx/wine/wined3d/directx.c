@@ -3952,6 +3952,12 @@ static void wined3d_adapter_no3d_init_d3d_info(struct wined3d_adapter *adapter, 
     d3d_info->limits.texture_size = 4096;
     d3d_info->limits.pointsize_max = 1.0f;
     d3d_info->feature_level = WINED3D_FEATURE_LEVEL_9_1;
+    if (wined3d_creation_flags & WINED3D_NULL_DRIVER)
+    {
+        d3d_info->limits.max_rt_count = 8;
+        d3d_info->limits.texture_size = 16384;
+        d3d_info->feature_level = WINED3D_FEATURE_LEVEL_11_1;
+    }
 #else
     d3d_info->feature_level = WINED3D_FEATURE_LEVEL_5;
 #endif

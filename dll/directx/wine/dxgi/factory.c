@@ -22,7 +22,7 @@
 WINE_DEFAULT_DEBUG_CHANNEL(dxgi);
 
 #ifdef __REACTOS__
-static HRESULT dxgi_factory_create_warp_adapter(REFIID iid, void **adapter);
+static HRESULT dxgi_factory_create_warp_adapter(unsigned int flags, REFIID iid, void **adapter);
 #endif
 
 static inline struct dxgi_factory *impl_from_IWineDXGIFactory(IWineDXGIFactory *iface)
@@ -587,7 +587,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_factory_EnumWarpAdapter(IWineDXGIFactory *
     if (!adapter)
         return DXGI_ERROR_INVALID_CALL;
 
-    return dxgi_factory_create_warp_adapter(iid, adapter);
+    return dxgi_factory_create_warp_adapter(0, iid, adapter);
 #else
     IDXGIAdapter1 *adapter_object;
     HRESULT hr;
@@ -794,14 +794,14 @@ static HRESULT dxgi_factory_init(struct dxgi_factory *factory, BOOL extended)
 }
 
 #ifdef __REACTOS__
-static HRESULT dxgi_factory_init_software(struct dxgi_factory *factory)
+static HRESULT dxgi_factory_init_software(struct dxgi_factory *factory, unsigned int flags)
 {
     factory->IWineDXGIFactory_iface.lpVtbl = &dxgi_factory_vtbl;
     factory->refcount = 1;
     wined3d_private_store_init(&factory->private_store);
 
     wined3d_mutex_lock();
-    factory->wined3d = wined3d_create(WINED3D_NO3D);
+    factory->wined3d = wined3d_create(WINED3D_NO3D | flags);
     wined3d_mutex_unlock();
     if (!factory->wined3d)
     {
@@ -814,7 +814,7 @@ static HRESULT dxgi_factory_init_software(struct dxgi_factory *factory)
     return S_OK;
 }
 
-static HRESULT dxgi_factory_create_warp_adapter(REFIID iid, void **adapter)
+static HRESULT dxgi_factory_create_warp_adapter(unsigned int flags, REFIID iid, void **adapter)
 {
     struct dxgi_adapter *adapter_object;
     struct dxgi_factory *factory;
@@ -824,7 +824,7 @@ static HRESULT dxgi_factory_create_warp_adapter(REFIID iid, void **adapter)
     if (!(factory = calloc(1, sizeof(*factory))))
         return E_OUTOFMEMORY;
 
-    if (FAILED(hr = dxgi_factory_init_software(factory)))
+    if (FAILED(hr = dxgi_factory_init_software(factory, flags)))
     {
         free(factory);
         return hr;
@@ -841,6 +841,16 @@ static HRESULT dxgi_factory_create_warp_adapter(REFIID iid, void **adapter)
     IWineDXGIAdapter_Release(&adapter_object->IWineDXGIAdapter_iface);
     IWineDXGIFactory_Release(&factory->IWineDXGIFactory_iface);
     return hr;
+}
+
+HRESULT WINAPI RosDxgiCreateNullAdapter(REFIID iid, void **adapter)
+{
+    TRACE("iid %s, adapter %p.\n", debugstr_guid(iid), adapter);
+
+    if (!adapter)
+        return DXGI_ERROR_INVALID_CALL;
+
+    return dxgi_factory_create_warp_adapter(WINED3D_NULL_DRIVER, iid, adapter);
 }
 #endif
 

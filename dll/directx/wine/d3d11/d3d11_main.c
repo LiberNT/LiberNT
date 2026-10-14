@@ -151,6 +151,19 @@ HRESULT WINAPI D3D11CoreCreateDevice(IDXGIFactory *factory, IDXGIAdapter *adapte
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static HRESULT d3d11_create_null_adapter(IDXGIAdapter **adapter)
+{
+    HRESULT (WINAPI *create)(REFIID iid, void **adapter);
+
+    create = (void *)GetProcAddress(GetModuleHandleW(L"dxgi.dll"), "RosDxgiCreateNullAdapter");
+    if (!create)
+        return E_FAIL;
+
+    return create(&IID_IDXGIAdapter, (void **)adapter);
+}
+#endif
+
 static HRESULT d3d11_create_device(IDXGIAdapter *adapter, D3D_DRIVER_TYPE driver_type, HMODULE swrast, UINT flags,
         const D3D_FEATURE_LEVEL *feature_levels, UINT levels, UINT sdk_version, ID3D11Device **device_out,
         D3D_FEATURE_LEVEL *obtained_feature_level, ID3D11DeviceContext **immediate_context)
@@ -214,6 +227,9 @@ static HRESULT d3d11_create_device(IDXGIAdapter *adapter, D3D_DRIVER_TYPE driver
 
         switch(driver_type)
         {
+#ifdef __REACTOS__
+            case D3D_DRIVER_TYPE_NULL:
+#endif
             case D3D_DRIVER_TYPE_WARP:
 #ifdef __REACTOS__
             {
@@ -223,7 +239,9 @@ static HRESULT d3d11_create_device(IDXGIAdapter *adapter, D3D_DRIVER_TYPE driver
                         (void **)&factory4);
                 if (SUCCEEDED(hr))
                 {
-                    hr = IDXGIFactory4_EnumWarpAdapter(factory4,
+                    hr = driver_type == D3D_DRIVER_TYPE_NULL
+                            ? d3d11_create_null_adapter(&adapter)
+                            : IDXGIFactory4_EnumWarpAdapter(factory4,
                             &IID_IDXGIAdapter, (void **)&adapter);
                     IDXGIFactory4_Release(factory4);
                 }
@@ -259,9 +277,11 @@ static HRESULT d3d11_create_device(IDXGIAdapter *adapter, D3D_DRIVER_TYPE driver
                 break;
             }
 
+#ifndef __REACTOS__
             case D3D_DRIVER_TYPE_NULL:
                 FIXME("NULL device not implemented, falling back to refrast.\n");
                 /* fall through, for now */
+#endif
             case D3D_DRIVER_TYPE_REFERENCE:
             {
                 HMODULE refrast = LoadLibraryA("d3d11ref.dll");
@@ -313,7 +333,8 @@ static HRESULT d3d11_create_device(IDXGIAdapter *adapter, D3D_DRIVER_TYPE driver
         levels = ARRAY_SIZE(default_feature_levels);
     }
 #if defined(__REACTOS__) && defined(REACTOS_D3D11_NATIVE_UMD)
-    hr = d3d11_native_create_device(adapter, flags, feature_levels, levels, &device);
+    hr = driver_type == D3D_DRIVER_TYPE_NULL ? DXGI_ERROR_UNSUPPORTED
+            : d3d11_native_create_device(adapter, flags, feature_levels, levels, &device);
     if (hr == DXGI_ERROR_UNSUPPORTED)
 #endif
         hr = D3D11CoreCreateDevice(factory, adapter, flags, feature_levels, levels, &device);

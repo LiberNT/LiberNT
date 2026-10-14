@@ -5,3 +5,4 @@
 @ stdcall DXGID3D10RegisterLayers(ptr long)
 @ stdcall DXGIGetDebugInterface1(long ptr ptr)
 @ stdcall -private RosDxgiGetWindowAssociation(ptr ptr ptr)
+@ stdcall -private RosDxgiCreateNullAdapter(ptr ptr)
