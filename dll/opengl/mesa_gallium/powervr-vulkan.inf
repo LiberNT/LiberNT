@@ -1,7 +1,0 @@
-; SPDX-License-Identifier: GPL-3.0-or-later
-; SPDX-FileCopyrightText: 2026 Ahmed ARIF
-; Imagination PowerVR Vulkan ICD over the D3DKMT transport.
-
-[AddReg]
-HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%SystemRoot%\System32\powervr_mesa_icd.json",0x00010001,0
-HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager\Environment","PVR_I_WANT_A_BROKEN_VULKAN_DRIVER",0x00000000,"1"

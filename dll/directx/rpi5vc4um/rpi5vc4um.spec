@@ -1,1 +1,0 @@
-@ stdcall OpenAdapter(ptr)
