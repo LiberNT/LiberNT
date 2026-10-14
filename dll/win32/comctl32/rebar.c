@@ -3052,10 +3052,12 @@ REBAR_Destroy (REBAR_INFO *infoPtr)
     DPA_Destroy (infoPtr->bands);
     infoPtr->bands = NULL;
 
+#ifndef __REACTOS__
     DestroyCursor (infoPtr->hcurArrow);
     DestroyCursor (infoPtr->hcurHorz);
     DestroyCursor (infoPtr->hcurVert);
     DestroyCursor (infoPtr->hcurDrag);
+#endif
     if (infoPtr->hDefaultFont) DeleteObject (infoPtr->hDefaultFont);
     SetWindowLongPtrW (infoPtr->hwndSelf, 0, 0);
 
