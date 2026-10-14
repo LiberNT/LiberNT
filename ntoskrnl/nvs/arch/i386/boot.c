@@ -59,11 +59,15 @@ MiI386BootMap(MI_I386_BOOT_ALLOCATOR *Allocator, ULONG Frame)
     if (!MiArchPteIsValid(MiArchPteRead(&Root[Index])))
     {
         ULONG Child;
+        NTSTATUS Status;
         if (!MiI386BootAllocate(Allocator, &Child))
             return STATUS_NO_MEMORY;
         MiArchPteWrite(&Root[Index], MiArchPteMakeTable(Child, 0));
         __invlpg(Table);
         RtlZeroMemory(Table, PAGE_SIZE);
+        Status = MiI386BootMap(Allocator, Child);
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
     else if (MiArchPteIsBlock(MiArchPteRead(&Root[Index]), 1))
     {
