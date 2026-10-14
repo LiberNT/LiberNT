@@ -3325,13 +3325,7 @@ WSPSetSockOpt(
                                    NULL,
                                    NULL,
                                    NULL);
-              GetSocketInformation(Socket,
-                                   AFD_INFO_SEND_WINDOW_SIZE,
-                                   NULL,
-                                   &Socket->SharedData->SizeOfSendBuffer,
-                                   NULL,
-                                   NULL,
-                                   NULL);
+              Socket->SharedData->SizeOfSendBuffer = *(PULONG)optval;
 
               return NO_ERROR;
 
@@ -3357,13 +3351,7 @@ WSPSetSockOpt(
                                        NULL,
                                        NULL);
               }
-              GetSocketInformation(Socket,
-                                   AFD_INFO_RECEIVE_WINDOW_SIZE,
-                                   NULL,
-                                   &Socket->SharedData->SizeOfRecvBuffer,
-                                   NULL,
-                                   NULL,
-                                   NULL);
+              Socket->SharedData->SizeOfRecvBuffer = *(PULONG)optval;
 
               return NO_ERROR;
 

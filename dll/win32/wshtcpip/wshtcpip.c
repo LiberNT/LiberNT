@@ -257,6 +257,8 @@ WSHGetSocketInformation(
         *OptionLength = sizeof(ULONG);
         return NO_ERROR;
     }
+    if (Level == IPPROTO_IP && OptionName == IP_HDRINCL && Context->SocketType != SOCK_RAW)
+        return WSAEINVAL;
     if (Level == IPPROTO_IPV6 && OptionName == IPV6_V6ONLY)
     {
         if (!OptionLength || !OptionValue || *OptionLength < sizeof(DWORD))
@@ -806,6 +808,7 @@ WSHSetSocketInformation(
     INT Status;
     PTCP_REQUEST_SET_INFORMATION_EX Info;
     PQUEUED_REQUEST Queued, NextQueued;
+    ULONG MulticastValue;
 
     DPRINT("WSHSetSocketInformation\n");
 
@@ -843,20 +846,35 @@ WSHSetSocketInformation(
             switch (OptionName)
             {
                 case IP_MULTICAST_IF:
-                case IP_MULTICAST_TTL:
                     if (Context->SocketType != SOCK_DGRAM && Context->SocketType != SOCK_RAW)
                         return WSAENOPROTOOPT;
                     if (!OptionValue || OptionLength < sizeof(ULONG))
                         return WSAEFAULT;
-                    Status = OptionName == IP_MULTICAST_IF ? ValidateMulticastInterface(*(ULONG *)OptionValue) :
-                                                           (*(ULONG *)OptionValue > 255 ? WSAEINVAL : NO_ERROR);
+                    Status = ValidateMulticastInterface(*(ULONG *)OptionValue);
                     if (Status) return Status;
                     OptionLength = sizeof(ULONG);
                     break;
 
+                case IP_MULTICAST_TTL:
+                    if (Context->SocketType != SOCK_DGRAM && Context->SocketType != SOCK_RAW)
+                        return WSAENOPROTOOPT;
+                    if (!OptionValue || OptionLength < 1)
+                        return WSAEFAULT;
+                    MulticastValue = 0;
+                    memcpy(&MulticastValue, OptionValue, min(OptionLength, (INT)sizeof(ULONG)));
+                    if (MulticastValue > 255)
+                        return WSAEINVAL;
+                    OptionValue = (PCHAR)&MulticastValue;
+                    OptionLength = sizeof(ULONG);
+                    break;
+
+                case IP_HDRINCL:
+                    if (Context->SocketType != SOCK_RAW)
+                        return WSAEINVAL;
+                    break;
+
                 case IP_TTL:
                 case IP_DONTFRAGMENT:
-                case IP_HDRINCL:
                     /* Send these to TCPIP */
                     break;
 
@@ -894,9 +912,13 @@ WSHSetSocketInformation(
             Context->V6Only = *(DWORD *)OptionValue != 0;
             return 0;
 
-        default:
+        case IPPROTO_UDP:
             DPRINT1("Set: Received unexpected %d option %d\n", Level, OptionName);
             return 0;
+
+        default:
+            DPRINT1("Set: Received unexpected %d option %d\n", Level, OptionName);
+            return WSAEINVAL;
     }
 
     /* If we get here, GetAddressOption must return something valid */
