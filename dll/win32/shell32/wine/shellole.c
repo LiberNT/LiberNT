@@ -217,6 +217,34 @@ static HRESULT SH32_GetStorageClassObject(REFCLSID clsid, REFIID riid, void **ob
     return get_class_object(clsid, riid, obj);
 }
 
+static SRWLOCK storage_class_lock = SRWLOCK_INIT;
+static CLSID storage_classes[16];
+static ULONG storage_class_count;
+
+static BOOL SH32_IsStorageClass(const CLSID *clsid)
+{
+    BOOL found = FALSE;
+    ULONG i;
+
+    AcquireSRWLockShared(&storage_class_lock);
+    for (i = 0; i < storage_class_count && !found; i++)
+        found = IsEqualCLSID(&storage_classes[i], clsid);
+    ReleaseSRWLockShared(&storage_class_lock);
+    return found;
+}
+
+static void SH32_AddStorageClass(const CLSID *clsid)
+{
+    ULONG i;
+
+    AcquireSRWLockExclusive(&storage_class_lock);
+    for (i = 0; i < storage_class_count; i++)
+        if (IsEqualCLSID(&storage_classes[i], clsid)) break;
+    if (i == storage_class_count && i < ARRAY_SIZE(storage_classes))
+        storage_classes[storage_class_count++] = *clsid;
+    ReleaseSRWLockExclusive(&storage_class_lock);
+}
+
 static HRESULT SH32_CoCreateInstance(LPCWSTR aclsid, const CLSID *clsid, IUnknown *outer,
                                      DWORD context, REFIID riid, void **obj)
 {
@@ -241,6 +269,14 @@ static HRESULT SH32_CoCreateInstance(LPCWSTR aclsid, const CLSID *clsid, IUnknow
     TRACE("(%p,%s,unk:%p,%s,%p)\n", aclsid, shdebugstr_guid(requested_clsid), outer,
           shdebugstr_guid(riid), obj);
 
+    if ((context & CLSCTX_INPROC_SERVER) && SH32_IsStorageClass(requested_clsid) &&
+        SUCCEEDED(SH32_GetStorageClassObject(requested_clsid, &IID_IClassFactory, (void **)&factory)))
+    {
+        hr = IClassFactory_CreateInstance(factory, outer, riid, obj);
+        IClassFactory_Release(factory);
+        goto done;
+    }
+
     if (SUCCEEDED(DllGetClassObject(requested_clsid, &IID_IClassFactory, (void **)&factory)))
     {
         hr = IClassFactory_CreateInstance(factory, outer, riid, obj);
@@ -257,6 +293,7 @@ static HRESULT SH32_CoCreateInstance(LPCWSTR aclsid, const CLSID *clsid, IUnknow
         !lstrcmpiW(PathFindFileNameW(dll_path), L"windows.storage.dll") &&
         SUCCEEDED(SH32_GetStorageClassObject(requested_clsid, &IID_IClassFactory, (void **)&factory)))
     {
+        SH32_AddStorageClass(requested_clsid);
         hr = IClassFactory_CreateInstance(factory, outer, riid, obj);
         IClassFactory_Release(factory);
         goto done;
