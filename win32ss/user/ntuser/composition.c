@@ -3109,6 +3109,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         g_DwmFrameWindows[count].DxClientY = e->Redirect.DxClientY;
         g_DwmFrameWindows[count].DxWidth = e->Redirect.DxInfo.Width;
         g_DwmFrameWindows[count].DxHeight = e->Redirect.DxInfo.Height;
+        g_DwmFrameWindows[count].DxDrawWidth = e->Redirect.DxDrawWidth ? e->Redirect.DxDrawWidth : e->Redirect.DxInfo.Width;
+        g_DwmFrameWindows[count].DxDrawHeight = e->Redirect.DxDrawHeight ? e->Redirect.DxDrawHeight : e->Redirect.DxInfo.Height;
         g_DwmFrameWindows[count].DxPitch = e->Redirect.DxInfo.Pitch;
         g_DwmFrameWindows[count].DxFormat = e->Redirect.DxInfo.Format;
         g_DwmFrameWindows[count].BaseGlobalShare =
@@ -3883,12 +3885,15 @@ IntCompositionUpdateDxPlacement(
     LONG Height = SourceWnd->rcClient.bottom - SourceWnd->rcClient.top;
 
     if (Width <= 0 || Height <= 0 ||
-        (ULONG)Width != Redirect->DxInfo.Width ||
-        (ULONG)Height != Redirect->DxInfo.Height)
+        (Redirect->DxInfo.Version != DWM_DX_SURFACE_INFO_VERSION_GPU &&
+         ((ULONG)Width != Redirect->DxInfo.Width ||
+          (ULONG)Height != Redirect->DxInfo.Height)))
     {
         return FALSE;
     }
 
+    Redirect->DxDrawWidth = (ULONG)Width;
+    Redirect->DxDrawHeight = (ULONG)Height;
     IntCompositionSetDxLayer(SourceWnd, TopWnd, NULL, Redirect);
     return TRUE;
 }
@@ -4022,8 +4027,8 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
                 Request.ReadyEvent > (ULONGLONG)MAXULONG_PTR ||
                 Request.Info.Magic != DWM_DX_SURFACE_INFO_MAGIC ||
                 Request.Info.Width == 0 || Request.Info.Height == 0 ||
-                (!Layer && (Request.Info.Width != ClientWidth ||
-                            Request.Info.Height != ClientHeight)) ||
+                (!Layer && !Publish && (Request.Info.Width != ClientWidth ||
+                                        Request.Info.Height != ClientHeight)) ||
                 (Layer && !IntCompositionValidDxLayer(&Request)) ||
                 Request.Info.Width > MAXLONG || Request.Info.Height > MAXLONG)
             {
@@ -4162,6 +4167,8 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
             Entry->Redirect.DxGlobalShare = Request.GlobalShare;
             Entry->Redirect.DxAdapterLuid = Request.AdapterLuid;
             Entry->Redirect.DxInfo = Request.Info;
+            Entry->Redirect.DxDrawWidth = Layer ? Request.Info.Width : ClientWidth;
+            Entry->Redirect.DxDrawHeight = Layer ? Request.Info.Height : ClientHeight;
             Entry->Redirect.DxFlags = Publish ? Request.Flags : 0;
             Entry->Redirect.DxWindow = Request.Window;
             IntCompositionSetDxLayer(SourceWnd, TopWnd, Layer ? &Request : NULL,

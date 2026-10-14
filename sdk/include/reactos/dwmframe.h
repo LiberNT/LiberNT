@@ -388,6 +388,8 @@ typedef struct _DWM_WIN
     ULONG BackdropNcExtendBottom;
     RECTL CaptionButtons[DWM_CAPTION_BUTTONS];
     ULONG CaptionState;
+    ULONG DxDrawWidth;
+    ULONG DxDrawHeight;
 } DWM_WIN, *PDWM_WIN;
 
 typedef struct _DWM_FRAME_HEADER

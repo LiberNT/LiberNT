@@ -71,10 +71,10 @@ DwmGpuClientGeometry(const DWM_WIN *Window, const DWM_GPU_WINDOW_GEOMETRY *Owner
                       DWM_GPU_WINDOW_GEOMETRY *Client)
 {
     LONGLONG Left = Window->DxClientX, Top = Window->DxClientY;
-    LONGLONG Right = Left + Window->DxWidth, Bottom = Top + Window->DxHeight;
+    LONGLONG Right = Left + Window->DxDrawWidth, Bottom = Top + Window->DxDrawHeight;
 
-    if (Window->DxWidth == 0 || Window->DxHeight == 0 ||
-        Window->DxWidth > MAXLONG || Window->DxHeight > MAXLONG)
+    if (Window->DxDrawWidth == 0 || Window->DxDrawHeight == 0 ||
+        Window->DxDrawWidth > MAXLONG || Window->DxDrawHeight > MAXLONG)
         return FALSE;
     if (Window->AnimFlags != 0)
     {

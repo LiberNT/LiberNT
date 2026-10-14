@@ -78,6 +78,8 @@ typedef struct _WND_REDIRECT
     ULONGLONG DxWindow;      /* HWND whose client owns the shared allocation */
     LONG      DxClientX;     /* source client origin in top-level backing    */
     LONG      DxClientY;
+    ULONG     DxDrawWidth;
+    ULONG     DxDrawHeight;
     LONG      DxLayerX;
     LONG      DxLayerY;
     RECTL     DxLayerClip;

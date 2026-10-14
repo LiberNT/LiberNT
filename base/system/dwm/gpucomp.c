@@ -1373,8 +1373,8 @@ DwmGpuComposeLayerMeasured(const DWM_WIN *Window, const BYTE *Pixels,
          Window->BackdropRegion == DWM_BACKDROP_REGION_NONCLIENT) &&
         DwmGpuDamageBounds(&Cover, g_composeWidth, g_composeHeight,
             Geometry.Left + Window->DxClientX, Geometry.Top + Window->DxClientY,
-            Geometry.Left + Window->DxClientX + Window->DxWidth,
-            Geometry.Top + Window->DxClientY + Window->DxHeight))
+            Geometry.Left + Window->DxClientX + Window->DxDrawWidth,
+            Geometry.Top + Window->DxClientY + Window->DxDrawHeight))
         OpaqueClient = &Cover;
 
     if (Window->BackdropType == DWM_BACKDROP_TRANSIENT ||
@@ -1437,7 +1437,8 @@ DwmGpuComposeWindowMeasured(const DWM_WIN *Window, const BYTE *Pixels,
     g_composeBlurOwnerValid = FALSE;
     if (Window->DxGlobalShare == 0 || Window->DxUpdateId == 0)
         return TRUE;
-    if (Window->DxWidth > MAXLONG || Window->DxHeight > MAXLONG)
+    if (Window->DxWidth > MAXLONG || Window->DxHeight > MAXLONG ||
+        Window->DxDrawWidth > MAXLONG || Window->DxDrawHeight > MAXLONG)
         return FALSE;
     Client = *Window;
     if (Window->AnimFlags == 0)
@@ -1450,8 +1451,8 @@ DwmGpuComposeWindowMeasured(const DWM_WIN *Window, const BYTE *Pixels,
         Client.x = (LONG)X;
         Client.y = (LONG)Y;
     }
-    Client.cx = Window->DxWidth;
-    Client.cy = Window->DxHeight;
+    Client.cx = Window->DxDrawWidth;
+    Client.cy = Window->DxDrawHeight;
     Client.Stride = Window->DxPitch;
     Client.BaseGlobalShare = Window->DxGlobalShare;
     Client.BaseGeneration = Window->DxGeneration;
@@ -1469,8 +1470,8 @@ DwmGpuComposeWindowMeasured(const DWM_WIN *Window, const BYTE *Pixels,
             return TRUE;
         Left = DwmGpuScaleWindowEdge(Window->DxClientX, Window->cx, Window->AnimCx);
         Top = DwmGpuScaleWindowEdge(Window->DxClientY, Window->cy, Window->AnimCy);
-        Right = DwmGpuScaleWindowEdge((LONGLONG)Window->DxClientX + Window->DxWidth, Window->cx, Window->AnimCx);
-        Bottom = DwmGpuScaleWindowEdge((LONGLONG)Window->DxClientY + Window->DxHeight, Window->cy, Window->AnimCy);
+        Right = DwmGpuScaleWindowEdge((LONGLONG)Window->DxClientX + Window->DxDrawWidth, Window->cx, Window->AnimCx);
+        Bottom = DwmGpuScaleWindowEdge((LONGLONG)Window->DxClientY + Window->DxDrawHeight, Window->cy, Window->AnimCy);
         if (Right <= Left || Bottom <= Top)
             return TRUE;
         if ((LONGLONG)Window->AnimX + Left < (LONG)MINLONG || (LONGLONG)Window->AnimX + Left > MAXLONG ||

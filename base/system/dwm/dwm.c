@@ -3400,8 +3400,8 @@ DwmBlitWindowAnimated(ULONG *comp, LONG scrW,
 
     if (dxpix != NULL && w->DxWidth != 0 && w->DxHeight != 0)
     {
-        LONG cx = (LONG)((LONGLONG)w->DxWidth * w->AnimCx / w->cx);
-        LONG cy = (LONG)((LONGLONG)w->DxHeight * w->AnimCy / w->cy);
+        LONG cx = (LONG)((LONGLONG)w->DxDrawWidth * w->AnimCx / w->cx);
+        LONG cy = (LONG)((LONGLONG)w->DxDrawHeight * w->AnimCy / w->cy);
 
         clipL = max(clipL, dstX + (LONG)((LONGLONG)w->DxClip.left * w->AnimCx / w->cx));
         clipT = max(clipT, dstY + (LONG)((LONGLONG)w->DxClip.top * w->AnimCy / w->cy));
