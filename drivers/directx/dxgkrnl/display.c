@@ -410,6 +410,160 @@ DxgkpPinSupportedPathTransformations(
     return STATUS_SUCCESS;
 }
 
+static BOOLEAN
+DxgkpPathSourceMatchesTarget(
+    _In_ PDXGKP_VIDPN VidPn,
+    _In_ CONST D3DKMDT_VIDPN_PRESENT_PATH *Path,
+    _Out_ PBOOLEAN Match)
+{
+    PDXGKP_VIDPN_SOURCE_MODESET Sources;
+    PDXGKP_VIDPN_TARGET_MODESET Targets;
+    CONST D3DKMDT_VIDPN_SOURCE_MODE *Source = NULL;
+    CONST D3DKMDT_VIDPN_TARGET_MODE *Target = NULL;
+    D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation = Path->ContentTransformation.Rotation;
+    ULONG Slot = DxgkVidPnTargetIndexFromId(VidPn, Path->VidPnTargetId);
+    SIZE_T Index;
+    UINT Width, Height;
+
+    *Match = TRUE;
+    if (Path->VidPnSourceId >= DXGKP_MAX_SOURCES ||
+        (Sources = VidPn->SourceModeSets[Path->VidPnSourceId]) == NULL ||
+        Slot == MAXULONG || (Targets = VidPn->TargetModeSets[Slot]) == NULL)
+    {
+        return FALSE;
+    }
+    for (Index = 0; Index < Sources->NumModes; Index++)
+    {
+        if (Sources->Modes[Index].Id == Sources->PinnedModeId)
+            Source = &Sources->Modes[Index];
+    }
+    for (Index = 0; Index < Targets->NumModes; Index++)
+    {
+        if (Targets->Modes[Index].Id == Targets->PinnedModeId)
+            Target = &Targets->Modes[Index];
+    }
+    if (Source == NULL || Target == NULL)
+        return FALSE;
+    DxgkpGetTargetModeDimensions(Target, &Width, &Height);
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM1_3_PATH_INDEPENDENT_ROTATION)
+    Rotation = D3DKMDT_VPPR_GET_CONTENT_ROTATION(Rotation);
+#endif
+    if (Rotation == D3DKMDT_VPPR_ROTATE90 || Rotation == D3DKMDT_VPPR_ROTATE270)
+    {
+        UINT Swap = Width;
+
+        Width = Height;
+        Height = Swap;
+    }
+    *Match = (UINT)Source->Format.Graphics.PrimSurfSize.cx == Width &&
+             (UINT)Source->Format.Graphics.PrimSurfSize.cy == Height;
+    return TRUE;
+}
+
+static BOOLEAN
+DxgkpPathScalingSupported(
+    _In_ CONST D3DKMDT_VIDPN_PRESENT_PATH *Path,
+    _In_ D3DKMDT_VIDPN_PRESENT_PATH_SCALING Scaling)
+{
+    switch (Scaling)
+    {
+        case D3DKMDT_VPPS_IDENTITY:
+            return Path->ContentTransformation.ScalingSupport.Identity != 0;
+        case D3DKMDT_VPPS_CENTERED:
+            return Path->ContentTransformation.ScalingSupport.Centered != 0;
+        case D3DKMDT_VPPS_STRETCHED:
+            return Path->ContentTransformation.ScalingSupport.Stretched != 0;
+        case D3DKMDT_VPPS_ASPECTRATIOCENTEREDMAX:
+            return Path->ContentTransformation.ScalingSupport.AspectRatioCenteredMax != 0;
+        case D3DKMDT_VPPS_CUSTOM:
+            return Path->ContentTransformation.ScalingSupport.Custom != 0;
+        default:
+            return FALSE;
+    }
+}
+
+static NTSTATUS
+DxgkpPinPathScalingForPinnedModes(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Inout_ PDXGKP_VIDPN VidPn)
+{
+    static CONST D3DKMDT_VIDPN_PRESENT_PATH_SCALING Order[] =
+    {
+        D3DKMDT_VPPS_ASPECTRATIOCENTEREDMAX,
+        D3DKMDT_VPPS_STRETCHED,
+        D3DKMDT_VPPS_ASPECTRATIOCENTEREDMAX,
+        D3DKMDT_VPPS_CENTERED,
+    };
+    DXGKARG_ENUMVIDPNCOFUNCMODALITY EnumArgs;
+    BOOLEAN Enumerate = FALSE, Match;
+    SIZE_T Index, Choice;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    for (Index = 0; Index < VidPn->NumPaths; Index++)
+    {
+        D3DKMDT_VIDPN_PRESENT_PATH *Path = &VidPn->Paths[Index];
+
+        if (!DxgkpPathSourceMatchesTarget(VidPn, Path, &Match))
+            continue;
+        if (Match)
+        {
+            if (Path->ContentTransformation.Scaling != D3DKMDT_VPPS_CUSTOM)
+                Path->ContentTransformation.Scaling = D3DKMDT_VPPS_IDENTITY;
+        }
+        else if (Path->ContentTransformation.Scaling == D3DKMDT_VPPS_IDENTITY ||
+                 !DxgkpVidPnPathScalingIsPinned(Path))
+        {
+            Path->ContentTransformation.Scaling = D3DKMDT_VPPS_UNPINNED;
+            RtlZeroMemory(&Path->ContentTransformation.ScalingSupport,
+                          sizeof(Path->ContentTransformation.ScalingSupport));
+            Enumerate = TRUE;
+        }
+    }
+    if (!Enumerate)
+        return STATUS_SUCCESS;
+
+    RtlZeroMemory(&EnumArgs, sizeof(EnumArgs));
+    EnumArgs.hConstrainingVidPn = (D3DKMDT_HVIDPN)VidPn;
+    EnumArgs.EnumPivotType = D3DKMDT_EPT_NOPIVOT;
+    if (!DxgkAcquireKmdCall(Adapter))
+        return STATUS_DELETE_PENDING;
+    _SEH2_TRY
+    {
+        Status = DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality)(Adapter->MiniportDeviceContext, &EnumArgs);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    DxgkReleaseKmdCall(Adapter);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    for (Index = 0; Index < VidPn->NumPaths; Index++)
+    {
+        D3DKMDT_VIDPN_PRESENT_PATH *Path = &VidPn->Paths[Index];
+
+        if (Path->ContentTransformation.Scaling != D3DKMDT_VPPS_UNPINNED)
+            continue;
+        for (Choice = 0; Choice < RTL_NUMBER_OF(Order); Choice++)
+        {
+            if (DxgkpPathScalingSupported(Path, Order[Choice]))
+            {
+                Path->ContentTransformation.Scaling = Order[Choice];
+                break;
+            }
+        }
+        if (Path->ContentTransformation.Scaling == D3DKMDT_VPPS_UNPINNED)
+        {
+            if (!DxgkpPathScalingSupported(Path, D3DKMDT_VPPS_IDENTITY))
+                return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+            Path->ContentTransformation.Scaling = D3DKMDT_VPPS_IDENTITY;
+        }
+    }
+    return STATUS_SUCCESS;
+}
+
 /*
  * Pins the timing of a path other than the desktop path.  A clone of the
  * desktop source takes a timing whose active size is the source's (no
@@ -2352,6 +2506,17 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
             Status = DxgkpPinSupportedPathTransformations(VidPn);
             if (!NT_SUCCESS(Status))
                 goto Cleanup;
+        }
+    }
+
+    if (!TopologyEmpty && FullMiniportNegotiatesModes && !ForceDodPresentOnlyPath &&
+        DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality) != NULL)
+    {
+        Status = DxgkpPinPathScalingForPinnedModes(Adapter, VidPn);
+        if (!NT_SUCCESS(Status))
+        {
+            DXGKRNL_WARN("DxgkpCommitVidPnToMiniport: no scaling for the pinned modes (0x%08lX)\n", Status);
+            goto Cleanup;
         }
     }
 
