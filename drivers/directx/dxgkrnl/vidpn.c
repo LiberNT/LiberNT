@@ -7624,9 +7624,7 @@ DxgkVidPnQueryCurrentDisplayMode(
         TargetMode->VideoSignalInfo.VSyncFreq.Denominator != 0)
     {
         Mode.RefreshRate = TargetMode->VideoSignalInfo.VSyncFreq;
-        Mode.IntegerRefreshRate = (UINT)(((ULONGLONG)Mode.RefreshRate.Numerator +
-                                          (Mode.RefreshRate.Denominator / 2)) /
-                                         Mode.RefreshRate.Denominator);
+        Mode.IntegerRefreshRate = Mode.RefreshRate.Numerator / Mode.RefreshRate.Denominator;
         Mode.ScanLineOrdering = TargetMode->VideoSignalInfo.ScanLineOrdering;
     }
 
@@ -7711,7 +7709,7 @@ DxgkpDisplayModeFromVidPnModes(
     if (Target->VSyncFreq.Numerator != 0 && Target->VSyncFreq.Denominator != 0)
     {
         Mode->RefreshRate = Target->VSyncFreq;
-        Mode->IntegerRefreshRate = (UINT)(((ULONGLONG)Mode->RefreshRate.Numerator + Mode->RefreshRate.Denominator / 2) / Mode->RefreshRate.Denominator);
+        Mode->IntegerRefreshRate = Mode->RefreshRate.Numerator / Mode->RefreshRate.Denominator;
     }
     Mode->ScanLineOrdering = Target->ScanLineOrdering;
 }
@@ -7731,7 +7729,7 @@ static BOOLEAN
 DxgkpDisplayModeSupportsGdi(
     _In_ CONST DXGKP_DISPLAY_MODE_ENTRY *Entry)
 {
-    return Entry->Mode.Format == D3DDDIFMT_X8R8G8B8 || Entry->Mode.Format == D3DDDIFMT_A8R8G8B8;
+    return Entry->Mode.Format == D3DDDIFMT_A8R8G8B8;
 }
 
 static NTSTATUS
@@ -8026,6 +8024,43 @@ DxgkpVideoModeFromDisplayMode(
     VideoMode->DriverSpecificAttributeFlags = 1; /* DXGK_DISP_DRIVERSPEC_SYSMEM_FB */
 }
 
+static BOOLEAN
+DxgkpDisplayModeGdiAlias(
+    _In_ CONST DXGKP_DISPLAY_MODE_CACHE *Cache,
+    _In_ ULONG Index,
+    _Out_ PULONG Frequency)
+{
+    CONST D3DKMT_DISPLAYMODE *Mode = &Cache->Entries[Index].Mode;
+    ULONG Other;
+    UINT Rounded;
+
+    *Frequency = 0;
+    if (Mode->RefreshRate.Denominator == 0 || Mode->RefreshRate.Numerator % Mode->RefreshRate.Denominator == 0)
+        return FALSE;
+    Rounded = (UINT)(((ULONGLONG)Mode->RefreshRate.Numerator + Mode->RefreshRate.Denominator / 2) /
+                     Mode->RefreshRate.Denominator);
+    if (Rounded == Mode->IntegerRefreshRate)
+        return FALSE;
+    for (Other = 0; Other < Cache->Count; ++Other)
+    {
+        CONST D3DKMT_DISPLAYMODE *Candidate = &Cache->Entries[Other].Mode;
+
+        if (Other == Index || !DxgkpDisplayModeSupportsGdi(&Cache->Entries[Other]) ||
+            Candidate->Width != Mode->Width || Candidate->Height != Mode->Height ||
+            Candidate->ScanLineOrdering != Mode->ScanLineOrdering)
+            continue;
+        if (Candidate->IntegerRefreshRate == Rounded)
+            return FALSE;
+        if (Other < Index && Candidate->RefreshRate.Denominator != 0 &&
+            Candidate->RefreshRate.Numerator % Candidate->RefreshRate.Denominator != 0 &&
+            (UINT)(((ULONGLONG)Candidate->RefreshRate.Numerator + Candidate->RefreshRate.Denominator / 2) /
+                   Candidate->RefreshRate.Denominator) == Rounded)
+            return FALSE;
+    }
+    *Frequency = Rounded;
+    return TRUE;
+}
+
 NTSTATUS
 DxgkVidPnQueryVideoModes(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -8036,7 +8071,7 @@ DxgkVidPnQueryVideoModes(
 {
     DXGKP_DISPLAY_MODE_CACHE *Cache;
     D3DKMT_CURRENTDISPLAYMODE Current;
-    ULONG Index, Required = 0, Output = 0;
+    ULONG Index, Required = 0, Output = 0, Alias;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -8060,7 +8095,11 @@ DxgkVidPnQueryVideoModes(
     {
         if (DxgkpDisplayModeSupportsGdi(&Cache->Entries[Index]) &&
             (!CurrentOnly || DxgkpDisplayModesEqual(&Cache->Entries[Index].Mode, &Current.DisplayMode)))
+        {
             ++Required;
+            if (!CurrentOnly && DxgkpDisplayModeGdiAlias(Cache, Index, &Alias))
+                ++Required;
+        }
     }
     *Count = Required;
     if (Required == 0)
@@ -8082,6 +8121,12 @@ DxgkVidPnQueryVideoModes(
         {
             DxgkpVideoModeFromDisplayMode(&Modes[Output++], &Cache->Entries[Index],
                                           (Cache->Generation << DXGKP_DISPLAY_MODE_INDEX_BITS) | Index);
+            if (!CurrentOnly && DxgkpDisplayModeGdiAlias(Cache, Index, &Alias))
+            {
+                DxgkpVideoModeFromDisplayMode(&Modes[Output], &Cache->Entries[Index],
+                                              (Cache->Generation << DXGKP_DISPLAY_MODE_INDEX_BITS) | Index);
+                Modes[Output++].Frequency = Alias;
+            }
         }
     }
 Cleanup:
