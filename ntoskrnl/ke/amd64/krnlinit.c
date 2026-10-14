@@ -17,6 +17,7 @@ extern ULONG_PTR MainSSDT[];
 extern UCHAR MainSSPT[];
 
 extern BOOLEAN RtlpUse16ByteSLists;
+extern KSPIN_LOCK KiFreezeExecutionLock;
 
 /* FUNCTIONS *****************************************************************/
 
@@ -208,6 +209,16 @@ KiSystemStartupBootStack(VOID)
     KiAcquirePrcbLock(Prcb);
     if (!Prcb->NextThread) KiIdleSummary |= (ULONG_PTR)1 << Prcb->Number;
     KiReleasePrcbLock(Prcb);
+
+    if (Prcb->Number != 0)
+    {
+        while (InterlockedBitTestAndSet64((PLONG64)&KiFreezeExecutionLock, 0))
+        {
+            while ((*(volatile KSPIN_LOCK*)&KiFreezeExecutionLock) & 1);
+        }
+        KeActiveProcessors |= Prcb->SetMember;
+        InterlockedAnd64((PLONG64)&KiFreezeExecutionLock, 0);
+    }
 
     /* Raise back to HIGH_LEVEL and clear the PRCB for the loader block */
     KfRaiseIrql(HIGH_LEVEL);

@@ -560,7 +560,8 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     HalInitializeProcessor(Cpu, KeLoaderBlock);
 
     /* Set processor as active */
-    KeActiveProcessors |= 1ULL << Cpu;
+    if (Cpu == 0)
+        KeActiveProcessors |= 1ULL << Cpu;
 
     /* Release lock */
     InterlockedAnd64((PLONG64)&KiFreezeExecutionLock, 0);
