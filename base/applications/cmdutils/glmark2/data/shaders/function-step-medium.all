@@ -1,2 +1,0 @@
-    d = fract(3.0 * d) * fract(3.0 * d);
-    d = fract(sqrt(d));
