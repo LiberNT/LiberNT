@@ -30,7 +30,7 @@
 #define OLD_BEHAVIOR
 #endif
 
-#if defined(_M_ARM64)
+#if defined(_M_ARM64) || defined(_M_RISCV64)
 #define SATURATING_BEHAVIOR
 #endif
 
