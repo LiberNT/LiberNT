@@ -2031,8 +2031,6 @@ DwmD3dWindow(const DWM_WIN *Window, const BYTE *Pixels, LONG OriginX, LONG Origi
         DPT_SCOPE Trace = DptBegin(&g_DwmPresentTrace, DPT_TEXTURE);
         Client = Import(Window, TRUE);
         DptEnd(&g_DwmPresentTrace, Trace, Client != NULL, 0);
-        if (Client == NULL)
-            return FALSE;
     }
     if (Window->BaseUpdateId != 0 && !DrawLayer(Window, Pixels, FALSE, OriginX, OriginY))
         return FALSE;
