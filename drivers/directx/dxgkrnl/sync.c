@@ -745,7 +745,8 @@ DxgkSyncNotifyMonitoredFence(
         return STATUS_INVALID_PARAMETER;
     }
 
-    DxgkpSyncShareInitialize();
+    if (InterlockedCompareExchange(&DxgkSyncShareInitialized, 2, 2) != 2)
+        return STATUS_NOT_FOUND;
     Sequence =
         (ULONG)InterlockedIncrement(
             &DxgkSyncMonitoredInterruptSequence);
