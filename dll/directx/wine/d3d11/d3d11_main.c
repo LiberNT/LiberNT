@@ -287,9 +287,15 @@ static HRESULT d3d11_create_device(IDXGIAdapter *adapter, D3D_DRIVER_TYPE driver
                 HMODULE refrast = LoadLibraryA("d3d11ref.dll");
                 if (!refrast)
                 {
+#ifdef __REACTOS__
+                    WARN("Failed to load refrast, returning DXGI_ERROR_UNSUPPORTED.\n");
+                    IDXGIFactory_Release(factory);
+                    return DXGI_ERROR_UNSUPPORTED;
+#else
                     WARN("Failed to load refrast, returning E_FAIL.\n");
                     IDXGIFactory_Release(factory);
                     return E_FAIL;
+#endif
                 }
                 hr = IDXGIFactory_CreateSoftwareAdapter(factory, refrast, &adapter);
                 FreeLibrary(refrast);
