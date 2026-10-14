@@ -1579,6 +1579,10 @@ CDefaultContextMenu::InvokeRegVerb(
 
     PStaticShellEntry pEntry = &m_StaticEntries.GetAt(it);
 
+    DWORD wFlags = BrowserFlagsFromVerb(lpcmi, pEntry);
+    if (wFlags && m_cidl == 1 && SUCCEEDED(TryToBrowse(lpcmi, m_apidl[0], wFlags)))
+        return S_OK;
+
     CRegKey VerbKey;
     WCHAR VerbKeyPath[sizeof("shell\\") + MAX_VERB];
     hr = StringCbPrintfW(VerbKeyPath, sizeof(VerbKeyPath), L"shell\\%s", pEntry->Verb.GetString());
@@ -1633,8 +1637,6 @@ CDefaultContextMenu::InvokeRegVerb(
     }
 
     /* Get the browse flags to see if we need to browse */
-    DWORD wFlags = BrowserFlagsFromVerb(lpcmi, pEntry);
-
     for (i=0; i < m_cidl; i++)
     {
         /* Check if we need to browse */
