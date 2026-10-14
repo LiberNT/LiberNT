@@ -1425,7 +1425,6 @@ LONG WINAPI NdrStubCall2(
                 break;
             }
         case FC_BIND_GENERIC: /* explicit generic */
-            BindingHandleOffset = ((NDR_EHD_GENERIC*)pFormat)->offset;
             pFormat += sizeof(NDR_EHD_GENERIC);
             break;
         case FC_BIND_CONTEXT: /* explicit context */
