@@ -45,6 +45,8 @@ public:
     LONG_PTR saved_style = 0;
     LONG_PTR saved_ex_style = 0;
     RECT saved_rect = {};
+    WCHAR fullscreen_device[32] = {};
+    bool fullscreen_mode = false;
     SRWLOCK lock = SRWLOCK_INIT;
     UINT current = 0;
     UINT present_count = 0;
@@ -68,6 +70,8 @@ public:
 
     HRESULT AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested);
     void ReleaseBuffers();
+    HRESULT ChangeMode(IDXGIOutput *output, const DXGI_MODE_DESC &requested);
+    void RestoreMode();
     HRESULT RetirePublication();
     HRESULT WaitForQueue();
 
@@ -123,6 +127,7 @@ public:
             fullscreen_output->Release();
             fullscreen_output = NULL;
             fullscreen_desc.Windowed = TRUE;
+            RestoreMode();
             SetWindowLongPtrW(window, GWL_STYLE, saved_style);
             SetWindowLongPtrW(window, GWL_EXSTYLE, saved_ex_style);
             SetWindowPos(window, HWND_NOTOPMOST, saved_rect.left, saved_rect.top, saved_rect.right - saved_rect.left,
@@ -134,6 +139,19 @@ public:
         if (target) target->AddRef();
         else hr = GetContainingOutput(&target);
         if (FAILED(hr)) return DXGI_ERROR_NOT_CURRENTLY_AVAILABLE;
+        if (desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH)
+        {
+            DXGI_MODE_DESC mode = {};
+            mode.Width = desc.Width;
+            mode.Height = desc.Height;
+            mode.RefreshRate = fullscreen_desc.RefreshRate;
+            mode.Format = desc.Format;
+            if (FAILED(ChangeMode(target, mode)))
+            {
+                target->Release();
+                return DXGI_ERROR_NOT_CURRENTLY_AVAILABLE;
+            }
+        }
         DXGI_OUTPUT_DESC output_desc;
         if (FAILED(hr = target->GetDesc(&output_desc)))
         {
@@ -190,7 +208,19 @@ public:
     HRESULT STDMETHODCALLTYPE ResizeTarget(const DXGI_MODE_DESC *mode) override
     {
         if (!mode) return DXGI_ERROR_INVALID_CALL;
-        if (fullscreen_output || !mode->Width || !mode->Height) return S_OK;
+        if (fullscreen_output)
+        {
+            if (!(desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH)) return S_OK;
+            DXGI_OUTPUT_DESC output_desc;
+            HRESULT hr = ChangeMode(fullscreen_output, *mode);
+            if (SUCCEEDED(hr)) hr = fullscreen_output->GetDesc(&output_desc);
+            if (FAILED(hr)) return hr;
+            const RECT &area = output_desc.DesktopCoordinates;
+            SetWindowPos(window, HWND_TOPMOST, area.left, area.top, area.right - area.left, area.bottom - area.top,
+                    SWP_NOACTIVATE);
+            return S_OK;
+        }
+        if (!mode->Width || !mode->Height) return S_OK;
         RECT rect = {0, 0, static_cast<LONG>(mode->Width), static_cast<LONG>(mode->Height)};
         AdjustWindowRectEx(&rect, static_cast<DWORD>(GetWindowLongPtrW(window, GWL_STYLE)), GetMenu(window) != NULL,
                 static_cast<DWORD>(GetWindowLongPtrW(window, GWL_EXSTYLE)));
@@ -358,6 +388,43 @@ void Native12SwapChain::ReleaseBuffers()
         if (release_events[i]) CloseHandle(release_events[i]);
         release_events[i] = NULL;
     }
+}
+
+HRESULT Native12SwapChain::ChangeMode(IDXGIOutput *output, const DXGI_MODE_DESC &requested)
+{
+    DXGI_OUTPUT_DESC output_desc;
+    HRESULT hr = output->GetDesc(&output_desc);
+    if (FAILED(hr)) return hr;
+    DXGI_MODE_DESC closest = {};
+    if (FAILED(output->FindClosestMatchingMode(&requested, &closest, NULL))) closest = requested;
+    if (fullscreen_mode && lstrcmpiW(fullscreen_device, output_desc.DeviceName)) RestoreMode();
+    DEVMODEW mode = {};
+    mode.dmSize = sizeof(mode);
+    mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
+    mode.dmPelsWidth = closest.Width;
+    mode.dmPelsHeight = closest.Height;
+    LONG changed = DISP_CHANGE_BADMODE;
+    if (closest.RefreshRate.Numerator && closest.RefreshRate.Denominator)
+    {
+        mode.dmFields |= DM_DISPLAYFREQUENCY;
+        mode.dmDisplayFrequency = (closest.RefreshRate.Numerator + closest.RefreshRate.Denominator / 2)
+                / closest.RefreshRate.Denominator;
+        changed = ChangeDisplaySettingsExW(output_desc.DeviceName, &mode, NULL, CDS_FULLSCREEN, NULL);
+        mode.dmFields &= ~DM_DISPLAYFREQUENCY;
+    }
+    if (changed != DISP_CHANGE_SUCCESSFUL)
+        changed = ChangeDisplaySettingsExW(output_desc.DeviceName, &mode, NULL, CDS_FULLSCREEN, NULL);
+    if (changed != DISP_CHANGE_SUCCESSFUL) return DXGI_ERROR_NOT_CURRENTLY_AVAILABLE;
+    lstrcpynW(fullscreen_device, output_desc.DeviceName, ARRAYSIZE(fullscreen_device));
+    fullscreen_mode = true;
+    return S_OK;
+}
+
+void Native12SwapChain::RestoreMode()
+{
+    if (!fullscreen_mode) return;
+    ChangeDisplaySettingsExW(fullscreen_device, NULL, NULL, 0, NULL);
+    fullscreen_mode = false;
 }
 
 HRESULT Native12SwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
