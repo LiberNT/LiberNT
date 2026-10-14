@@ -279,7 +279,11 @@ static void load_config( const WCHAR *key_name, struct console_config *config )
 #endif
     config->sb_height    = 150;
     config->sb_width     = 80;
+#ifdef __REACTOS__
+    config->attr         = FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED;
+#else
     config->attr         = 0x000F;
+#endif
     config->win_height   = 25;
     config->win_width    = 80;
     config->win_pos.X    = 0;
