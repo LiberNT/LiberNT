@@ -31,8 +31,12 @@ ScmGetClientAccountName(OUT LPWSTR Owner,
                         IN DWORD OwnerLength)
 {
     WCHAR Name[UNLEN + 1], Domain[MAX_PATH], Computer[MAX_COMPUTERNAME_LENGTH + 1];
-    BYTE Buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
-    PTOKEN_USER User = (PTOKEN_USER)Buffer;
+    union
+    {
+        TOKEN_USER User;
+        BYTE Buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    } TokenInfo;
+    PTOKEN_USER User = &TokenInfo.User;
     DWORD NameLength = RTL_NUMBER_OF(Name);
     DWORD DomainLength = RTL_NUMBER_OF(Domain);
     DWORD ComputerLength = RTL_NUMBER_OF(Computer);
@@ -49,7 +53,7 @@ ScmGetClientAccountName(OUT LPWSTR Owner,
     if (!Success)
         return FALSE;
 
-    Success = GetTokenInformation(Token, TokenUser, User, sizeof(Buffer), &Length);
+    Success = GetTokenInformation(Token, TokenUser, User, sizeof(TokenInfo), &Length);
     CloseHandle(Token);
     if (!Success)
         return FALSE;
