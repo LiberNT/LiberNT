@@ -523,11 +523,9 @@ ACPIDispatchDeviceControl(
     PCOMMON_DEVICE_DATA     commonData;
     ULONG Caps = 0;
     HANDLE ThreadHandle;
-    BOOLEAN IsThermalQuery;
 
     irpStack = IoGetCurrentIrpStackLocation (Irp);
     ASSERT (IRP_MJ_DEVICE_CONTROL == irpStack->MajorFunction);
-    IsThermalQuery = irpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_THERMAL_QUERY_INFORMATION;
 
     commonData = (PCOMMON_DEVICE_DATA) DeviceObject->DeviceExtension;
 
@@ -581,10 +579,6 @@ ACPIDispatchDeviceControl(
         {
             Irp->IoStatus.Status = status;
             IoCompleteRequest(Irp, IO_NO_INCREMENT);
-        }
-        else
-        {
-            IoMarkIrpPending(Irp);
         }
 
         return status;
@@ -725,11 +719,6 @@ ACPIDispatchDeviceControl(
     {
         Irp->IoStatus.Status = status;
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
-    }
-    else
-    {
-        if (!IsThermalQuery)
-            IoMarkIrpPending(Irp);
     }
 
     return status;
