@@ -22,6 +22,7 @@ extern HANDLE KmtestHandle;
 typedef struct _KMT_USER_CALLBACK_CONTEXT
 {
     volatile LONG StopRequested;
+    HANDLE ReadyEvent;
 } KMT_USER_CALLBACK_CONTEXT, *PKMT_USER_CALLBACK_CONTEXT;
 
 /**
@@ -50,6 +51,8 @@ KmtUserCallbackThread(
     LocalKmtHandle = CreateFile(KMTEST_DEVICE_PATH, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
     if (LocalKmtHandle == INVALID_HANDLE_VALUE)
         error_goto(Error, cleanup);
+
+    SetEvent(Context->ReadyEvent);
 
     while (!InterlockedCompareExchange(&Context->StopRequested, 0, 0))
     {
@@ -154,7 +157,13 @@ KmtRunKernelTest(
     DWORD Error = ERROR_SUCCESS;
     DWORD BytesRead;
 
+    CallbackContext.ReadyEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     CallbackThread = CreateThread(NULL, 0, KmtUserCallbackThread, &CallbackContext, 0, NULL);
+    if (CallbackThread != NULL && CallbackContext.ReadyEvent != NULL)
+    {
+        HANDLE Handles[2] = { CallbackContext.ReadyEvent, CallbackThread };
+        WaitForMultipleObjects(2, Handles, FALSE, INFINITE);
+    }
 
     if (!DeviceIoControl(KmtestHandle, IOCTL_KMTEST_RUN_TEST, (PVOID)TestName, (DWORD)strlen(TestName), NULL, 0, &BytesRead, NULL))
         error(Error);
@@ -167,6 +176,8 @@ KmtRunKernelTest(
         if (!DeviceIoControl(KmtestHandle, IOCTL_KMTEST_USERMODE_RESET_WAIT, NULL, 0, NULL, 0, &BytesRead, NULL)) error(Error);
         CloseHandle(CallbackThread);
     }
+    if (CallbackContext.ReadyEvent != NULL)
+        CloseHandle(CallbackContext.ReadyEvent);
 
     return Error;
 }
