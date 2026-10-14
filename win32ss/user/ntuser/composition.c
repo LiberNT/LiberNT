@@ -50,6 +50,7 @@ typedef struct _REDIRECT_ENTRY
     PTHREADINFO  BatchOwner;
     LONGLONG     BatchStart;
     BOOL         BatchFlushing;
+    LONGLONG     TreePendingStart;
     BOOL         Damaged;      /* this window's backing changed since compose  */
     volatile LONG BackingDrawn;/* at least one GDI operation reached backing   */
     volatile LONG BackComplete;/* a complete GL client frame reached BACK      */
@@ -2961,6 +2962,12 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
             BOOL bBackingDirty =
                 InterlockedCompareExchange(&e->Redirect.BackDirtyValid, FALSE, FALSE) != FALSE;
             BOOL bTreePending = IntCompositionTreeHasPendingPaint(w);
+            if (!bTreePending)
+                e->TreePendingStart = 0;
+            else if (e->TreePendingStart == 0)
+                e->TreePendingStart = now;
+            else if (now - e->TreePendingStart >= COMPOSITION_FRAME_HOLD_100NS)
+                bTreePending = FALSE;
             /* An OpenGL client can publish its first complete shared surface
              * without ever drawing through GDI. Waiting for BackingDrawn in
              * that case excludes the window from GETFRAME forever, so DWM
