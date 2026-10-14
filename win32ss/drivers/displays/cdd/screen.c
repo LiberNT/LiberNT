@@ -138,6 +138,10 @@ RcddInitScreenInfo(
    }
    else
    {
+      PVIDEO_MODE_INFORMATION FirstMatch = NULL;
+      BOOL Interlaced = (pDevMode->dmFields & DM_DISPLAYFLAGS) &&
+                        (pDevMode->dmDisplayFlags & DM_INTERLACED);
+
       ModeInfoPtr = ModeInfo;
       while (ModeCount-- > 0)
       {
@@ -151,13 +155,20 @@ RcddInitScreenInfo(
               pDevMode->dmDisplayFrequency == 1 ||
               pDevMode->dmDisplayFrequency == ModeInfoPtr->Frequency))
          {
-            SelectedMode = ModeInfoPtr;
-            break;
+            if (FirstMatch == NULL)
+               FirstMatch = ModeInfoPtr;
+            if (!Interlaced == !(ModeInfoPtr->AttributeFlags & VIDEO_MODE_INTERLACED))
+            {
+               SelectedMode = ModeInfoPtr;
+               break;
+            }
          }
 
          ModeInfoPtr = (PVIDEO_MODE_INFORMATION)
             (((PUCHAR)ModeInfoPtr) + ModeInfoSize);
       }
+      if (SelectedMode == NULL)
+         SelectedMode = FirstMatch;
    }
 
    if (SelectedMode == NULL)
@@ -382,7 +393,7 @@ RcddGetModes(
       pdm->dmPelsWidth = ModeInfoPtr->VisScreenWidth;
       pdm->dmPelsHeight = ModeInfoPtr->VisScreenHeight;
       pdm->dmDisplayFrequency = ModeInfoPtr->Frequency;
-      pdm->dmDisplayFlags = 0;
+      pdm->dmDisplayFlags = (ModeInfoPtr->AttributeFlags & VIDEO_MODE_INTERLACED) ? DM_INTERLACED : 0;
       pdm->dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT |
                       DM_DISPLAYFREQUENCY | DM_DISPLAYFLAGS;
 
