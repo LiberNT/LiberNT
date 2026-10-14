@@ -19,6 +19,7 @@ list(APPEND SOURCE
     DeferWindowPos.c
     DestroyCursorIcon.c
     DestroyWindow.c
+    DialogDpiChangeBehavior.c
     DM_REPOSITION.c
     Dpi.c
     DrawIconEx.c

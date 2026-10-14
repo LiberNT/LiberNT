@@ -17,6 +17,7 @@ extern void func_CreateWindowEx(void);
 extern void func_DeferWindowPos(void);
 extern void func_DestroyCursorIcon(void);
 extern void func_DestroyWindow(void);
+extern void func_DialogDpiChangeBehavior(void);
 extern void func_DM_REPOSITION(void);
 extern void func_Dpi(void);
 extern void func_DrawIconEx(void);
@@ -116,6 +117,7 @@ const struct test winetest_testlist[] =
     { "DeferWindowPos", func_DeferWindowPos },
     { "DestroyCursorIcon", func_DestroyCursorIcon },
     { "DestroyWindow", func_DestroyWindow },
+    { "DialogDpiChangeBehavior", func_DialogDpiChangeBehavior },
     { "DM_REPOSITION", func_DM_REPOSITION },
     { "Dpi", func_Dpi },
     { "DrawIconEx", func_DrawIconEx },
