@@ -48,6 +48,19 @@ void Call_NtRaiseException(PEXCEPTION_RECORD ExceptionRecord, PCONTEXT Context, 
 #endif // _M_AMD64
 #endif // __REACTOS__
 
+#if defined(__REACTOS__) && (defined(__i386__) || defined(__x86_64__))
+static BOOL is_qemu_tcg(void)
+{
+    int regs[4];
+
+    __cpuid(regs, 1);
+    if (!(regs[2] & (1u << 31)))
+        return FALSE;
+    __cpuid(regs, 0x40000000);
+    return !memcmp(&regs[1], "TCGTCGTCGTCG", 12);
+}
+#endif
+
 static void *code_mem;
 static HMODULE hntdll;
 static BOOL is_arm64ec;
@@ -3338,6 +3351,13 @@ static void test_simd_exceptions(void)
         skip("system doesn't support SSE\n");
         return;
     }
+#ifdef __REACTOS__
+    if (is_qemu_tcg())
+    {
+        skip("QEMU TCG does not raise SIMD floating-point exceptions\n");
+        return;
+    }
+#endif
 
     /* generate a SIMD exception */
     stage = 2;
@@ -3360,6 +3380,13 @@ static void test_prot_fault(void)
 
     for (i = 0; i < ARRAY_SIZE(exceptions); i++)
     {
+#ifdef __REACTOS__
+        if (is_qemu_tcg() && (i == 14 || i == 37))
+        {
+            skip("%u: QEMU TCG does not emulate this instruction like x64 hardware\n", i);
+            continue;
+        }
+#endif
         got_exception = 0;
         run_exception_test(prot_fault_handler, &exceptions[i], &exceptions[i].code,
                            sizeof(exceptions[i].code), 0);
@@ -9870,6 +9897,9 @@ static DWORD test_extended_context_handler(EXCEPTION_RECORD *rec, EXCEPTION_REGI
     }
     else
     {
+#ifdef __REACTOS__
+        if (!is_qemu_tcg())
+#endif
         ok((xs->Mask & 7) == (xsaveopt_enabled ? 0 : 4), "Got unexpected Mask %#I64x.\n", xs->Mask);
         /* The save area has garbage if xsaveopt is available, so we can't test
          * its contents. */
@@ -10933,6 +10963,9 @@ static void test_extended_context(void)
     expected_compaction = compaction_enabled ? ((ULONG64)1 << 63) | (xstate_supported_features & ~(UINT64)3) : 0;
 
     xs = (XSTATE *)((BYTE *)context_ex + context_ex->XState.Offset);
+#ifdef __REACTOS__
+    if (!is_qemu_tcg())
+#endif
     ok((xs->Mask & supported_features) == (xsaveopt_enabled ? 0 : 4), "Got unexpected Mask %#I64x.\n", xs->Mask);
     ok((xs->CompactionMask & (supported_features | ((ULONG64)1 << 63))) == expected_compaction,
             "Got unexpected CompactionMask %s (expected %#I64x).\n", wine_dbgstr_longlong(xs->CompactionMask), expected_compaction);
@@ -11011,6 +11044,9 @@ static void test_extended_context(void)
     bret = GetThreadContext(thread, context);
     ok(bret, "Got unexpected bret %#x, GetLastError() %lu.\n", bret, GetLastError());
     todo_wine_if (!xsaveopt_enabled)
+#ifdef __REACTOS__
+    if (!is_qemu_tcg())
+#endif
     ok((xs->Mask & supported_features) == (xsaveopt_enabled ? 0 : 4), "Got unexpected Mask %#I64x.\n", xs->Mask);
     ok((xs->CompactionMask & supported_compaction_mask) == expected_compaction,
             "Got unexpected CompactionMask %I64x, expected %I64x.\n", xs->CompactionMask,
@@ -11075,6 +11111,9 @@ static void test_extended_context(void)
     memset(&xs->YmmContext, 0xcc, sizeof(xs->YmmContext));
     bret = GetThreadContext(thread, context);
     ok(bret, "Got unexpected bret %#x, GetLastError() %lu.\n", bret, GetLastError());
+#ifdef __REACTOS__
+    if (!is_qemu_tcg())
+#endif
     todo_wine_if (!xsaveopt_enabled && sizeof(void *) != 4)
         ok((xs->Mask & supported_features) == (xsaveopt_enabled ? 0 : 4)
                 || (sizeof(void *) == 4 && (xs->Mask & supported_features) == 4),

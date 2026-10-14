@@ -9,6 +9,7 @@
 
 #if defined(_M_IX86) || defined(_M_AMD64)
 #include <xmmintrin.h>
+#include <intrin.h>
 #endif
 
 /*
@@ -105,6 +106,18 @@ static LONG WINAPI ExceptionFilterSSEException(LPEXCEPTION_POINTERS exp)
     return EXCEPTION_CONTINUE_EXECUTION;
 }
 
+static
+BOOL IsQemuTcg(VOID)
+{
+    int Regs[4];
+
+    __cpuid(Regs, 1);
+    if (!(Regs[2] & (1u << 31)))
+        return FALSE;
+    __cpuid(Regs, 0x40000000);
+    return !memcmp(&Regs[1], "TCGTCGTCGTCG", 12);
+}
+
 #if defined(__clang__) || defined(__GNUC__)
 __attribute__((__target__("sse")))
 #endif
@@ -143,6 +156,13 @@ VOID TestSSEExceptions(VOID)
         }
     }
 #endif /* !defined(_M_AMD64) */
+
+    if (IsQemuTcg())
+    {
+        skip("QEMU TCG does not raise SIMD floating-point exceptions\n");
+        SetUnhandledExceptionFilter(NULL);
+        return;
+    }
 
     /* Deliberately throw a divide by 0 exception */
     p = SetUnhandledExceptionFilter(ExceptionFilterSSEException);
