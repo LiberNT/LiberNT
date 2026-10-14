@@ -461,7 +461,8 @@ done:
       }
    }
    //ERR("WinPosActivateOtherWindow Set Active  0x%p\n",WndTo);
-   if (!UserSetActiveWindow(WndTo))  /* Ok for WndTo to be NULL here */
+   if (IoGetRemainingStackSize() >= 3 * PAGE_SIZE &&
+       !UserSetActiveWindow(WndTo))  /* Ok for WndTo to be NULL here */
    {
       //ERR("WPAOW SA 1\n");
       UserSetActiveWindow(NULL);
