@@ -801,7 +801,7 @@ Tpm2TisSubmit(
 Finished:
     InterlockedExchange(&DeviceExtension->CommandActive, 0);
 Ready:
-    Tpm2TisCommandReady(DeviceExtension);
+    WRITE_REGISTER_UCHAR((PUCHAR)DeviceExtension->TisRegisters + TIS_STATUS, TIS_STATUS_COMMAND_READY);
 Cleanup:
     Tpm2TisRelinquishLocality(DeviceExtension);
     return Status;
