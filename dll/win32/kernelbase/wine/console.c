@@ -2539,6 +2539,9 @@ void WINAPI ClosePseudoConsole( HPCON handle )
  */
 HRESULT WINAPI ResizePseudoConsole( HPCON handle, COORD size )
 {
+#ifdef __REACTOS__
+    if (!handle) return E_INVALIDARG;
+#endif
     FIXME( "%p (%u,%u) stub, faking success\n", handle, size.X, size.Y );
     return S_OK;
 }
