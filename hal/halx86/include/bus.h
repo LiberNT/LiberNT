@@ -652,6 +652,14 @@ HalpGetSystemInterruptVector(
     OUT PKAFFINITY Affinity
 );
 
+VOID
+NTAPI
+HalpPciSetExtendedConfigWindow(
+    _In_ ULONGLONG BaseAddress,
+    _In_ ULONG StartBus,
+    _In_ ULONG EndBus
+);
+
 extern ULONG HalpBusType;
 extern BOOLEAN HalpPCIConfigInitialized;
 extern BUS_HANDLER HalpFakePciBusHandler;

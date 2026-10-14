@@ -25,17 +25,6 @@
 /* Interrupt vector redirect table (IRQ -> GSI mapping from MADT) */
 extern ULONG HalpPicVectorRedirect[];
 
-/* MCFG (PCI Express Enhanced Configuration Access Mechanism) table */
-#define MCFG_SIGNATURE 'GFCM'
-
-typedef struct _MCFG_ALLOCATION {
-    ULONGLONG BaseAddress;
-    USHORT PciSegmentGroup;
-    UCHAR StartBusNumber;
-    UCHAR EndBusNumber;
-    ULONG Reserved;
-} MCFG_ALLOCATION, *PMCFG_ALLOCATION;
-
 /* PRIVATE FUNCTIONS **********************************************************/
 
 #if DBG

@@ -255,8 +255,32 @@ VOID
 NTAPI
 HalpInitializePciBus(VOID)
 {
+    PDESCRIPTION_HEADER Mcfg;
+    PMCFG_ALLOCATION Allocation;
+    ULONG Count;
+
     /* Setup the PCI stub support */
     HalpInitializePciStubs();
+
+    Mcfg = HalAcpiGetTable(NULL, MCFG_SIGNATURE);
+    if (Mcfg && Mcfg->Length > sizeof(DESCRIPTION_HEADER) + sizeof(ULONGLONG))
+    {
+        Allocation = (PMCFG_ALLOCATION)((PUCHAR)Mcfg + sizeof(DESCRIPTION_HEADER) + sizeof(ULONGLONG));
+        for (Count = (Mcfg->Length - sizeof(DESCRIPTION_HEADER) - sizeof(ULONGLONG)) / sizeof(MCFG_ALLOCATION);
+             Count != 0;
+             Count--, Allocation++)
+        {
+            if (Allocation->PciSegmentGroup == 0 &&
+                Allocation->BaseAddress != 0 &&
+                Allocation->StartBusNumber <= Allocation->EndBusNumber)
+            {
+                HalpPciSetExtendedConfigWindow(Allocation->BaseAddress,
+                                               Allocation->StartBusNumber,
+                                               Allocation->EndBusNumber);
+                break;
+            }
+        }
+    }
 
     /* Initialize PCIe extended config via ACPI MCFG/ECAM (later we will use APIC in x86) */
 #ifdef _M_AMD64

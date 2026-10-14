@@ -222,6 +222,15 @@ typedef struct _XSDT
     PHYSICAL_ADDRESS Tables[ANYSIZE_ARRAY];
 } XSDT;
 typedef XSDT *PXSDT;
+
+typedef struct _MCFG_ALLOCATION
+{
+    ULONGLONG BaseAddress;
+    USHORT PciSegmentGroup;
+    UCHAR StartBusNumber;
+    UCHAR EndBusNumber;
+    ULONG Reserved;
+} MCFG_ALLOCATION, *PMCFG_ALLOCATION;
 #pragma pack(pop)
 
 //
