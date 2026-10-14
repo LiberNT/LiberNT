@@ -51,6 +51,37 @@ flt_to_u32(float x)
     return *(UINT32*)(&x);
 }
 
+static
+__inline
+BOOLEAN
+dbl_result_matches(UINT64 result, UINT64 expected)
+{
+    if (result == expected)
+        return TRUE;
+#if defined(_M_RISCV64)
+    if ((expected & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL &&
+        (expected & 0x000fffffffffffffULL) != 0)
+    {
+        return result == 0x7ff8000000000000ULL;
+    }
+#endif
+    return FALSE;
+}
+
+static
+__inline
+BOOLEAN
+flt_result_matches(UINT32 result, UINT32 expected)
+{
+    if (result == expected)
+        return TRUE;
+#if defined(_M_RISCV64)
+    if ((expected & 0x7f800000) == 0x7f800000 && (expected & 0x007fffff) != 0)
+        return result == 0x7fc00000;
+#endif
+    return FALSE;
+}
+
 typedef struct _TESTENTRY_DBL
 {
     unsigned long long x;
@@ -178,7 +209,7 @@ static __inline int64_t ulp_error_precise(PRECISE_VALUE *expected, double result
         double x = u64_to_dbl(ullx); \
         unsigned long long ullz = dbl_to_u64(z); \
         double exp = u64_to_dbl(ullexp); \
-        ok_(file, line)(ullz == ullexp, "Wrong value for '%s(%f)' [0x%016I64x], expected: %f [0x%016I64x], got: %f [0x%016I64x]\n", \
+        ok_(file, line)(dbl_result_matches(ullz, ullexp), "Wrong value for '%s(%f)' [0x%016I64x], expected: %f [0x%016I64x], got: %f [0x%016I64x]\n", \
            func, x, ullx, exp, ullexp, z, ullz); \
     }
 #define ok_eq_dbl_exact(func, ullx, z, ullexp) ok_eq_dbl_exact_(__FILE__, __LINE__, func, ullx, z, ullexp)
@@ -188,7 +219,7 @@ static __inline int64_t ulp_error_precise(PRECISE_VALUE *expected, double result
         float x = u32_to_flt(ux); \
         unsigned int uz = flt_to_u32(z); \
         float exp = u32_to_flt(uexp); \
-        ok_(file, line)(uz == uexp, "Wrong value for '%s(%f)' [0x%08x], expected: %f [0x%08x], got: %f [0x%08x]\n", \
+        ok_(file, line)(flt_result_matches(uz, (UINT32)uexp), "Wrong value for '%s(%f)' [0x%08x], expected: %f [0x%08x], got: %f [0x%08x]\n", \
            func, x, (unsigned)ux, exp, (unsigned)uexp, z, (unsigned)uz); \
     }
 #define ok_eq_flt_exact(func, ux, z, uexp) ok_eq_flt_exact_(__FILE__, __LINE__, func, ux, z, uexp)
