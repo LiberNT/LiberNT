@@ -7,6 +7,7 @@
  */
 
 #include <win32k.h>
+#include <reactos/dwmframe.h>
 DBG_DEFAULT_CHANNEL(UserMenu);
 
 /* INTERNAL ******************************************************************/
@@ -3160,6 +3161,32 @@ static BOOL FASTCALL MENU_ShowPopup(PWND pwndOwner, PMENU menu, UINT id, UINT fl
 
     /* Display the window */
     UserRefObjectCo(pWnd, &Ref);
+    if (!(flags & TPM_NOANIMATION) && (gspv.dwUserPrefMask & UPM_MENUANIMATION) &&
+        AtomDwmTransition != 0 && AtomDwmTransitionFromLT != 0 && AtomDwmTransitionFromRB != 0)
+    {
+        static UCHAR MenuTransitionSeq;
+        LONG dx = 0, dy = 0, Distance = min(height, 12);
+
+        if (++MenuTransitionSeq == 0)
+            MenuTransitionSeq = 1;
+        if (!(gspv.dwUserPrefMask & UPM_MENUFADE))
+        {
+            if (flags & TPM_HORPOSANIMATION)
+                dx = -Distance;
+            else if (flags & TPM_HORNEGANIMATION)
+                dx = Distance;
+            else if (flags & TPM_VERNEGANIMATION)
+                dy = Distance;
+            else
+                dy = -Distance;
+        }
+        UserSetProp(pWnd, AtomDwmTransitionFromLT,
+                    (HANDLE)(ULONG_PTR)DWM_TRANSITION_POINT(x + dx, y + dy), FALSE);
+        UserSetProp(pWnd, AtomDwmTransitionFromRB,
+                    (HANDLE)(ULONG_PTR)DWM_TRANSITION_POINT(x + dx + width, y + dy + height), FALSE);
+        UserSetProp(pWnd, AtomDwmTransition,
+                    (HANDLE)(ULONG_PTR)DWM_TRANSITION_PACK(MenuTransitionSeq, 0, 255, 150), FALSE);
+    }
     co_WinPosSetWindowPos( pWnd, HWND_TOPMOST, x, y, width, height, SWP_SHOWWINDOW | SWP_NOACTIVATE);
 
     co_IntUpdateWindows(pWnd, RDW_ALLCHILDREN, FALSE);
