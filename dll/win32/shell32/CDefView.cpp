@@ -2245,6 +2245,7 @@ void CDefView::FinishFillList()
 
     if (m_FillListIsRefresh)
         UpdateStatusbarLocation();
+    UpdateStatusbar();
 
     _DoFolderViewCB(SFVM_LISTREFRESHED, 0, 0);
 
