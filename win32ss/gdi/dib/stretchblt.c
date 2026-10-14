@@ -39,6 +39,18 @@ DIB_BilinearColor(
   return (ULONG)(((Blue + 0x80000000ULL) >> 32) | (((Green + 0x80000000ULL) >> 32) << 8) | (((Red + 0x80000000ULL) >> 32) << 16));
 }
 
+static ULONG
+DIB_DirectPixel(
+    PBYTE Row,
+    LONG X,
+    LONG BytesPerPixel)
+{
+  if (BytesPerPixel == 4)
+    return ((PULONG)Row)[X];
+  Row += X * 3;
+  return Row[0] | ((ULONG)Row[1] << 8) | ((ULONG)Row[2] << 16);
+}
+
 BOOLEAN DIB_XXBPP_StretchBlt(SURFOBJ *DestSurf, SURFOBJ *SourceSurf, SURFOBJ *MaskSurf,
                             SURFOBJ *PatternSurface,
                             RECTL *DestRect, RECTL *SourceRect,
@@ -76,8 +88,9 @@ BOOLEAN DIB_XXBPP_StretchBlt(SURFOBJ *DestSurf, SURFOBJ *SourceSurf, SURFOBJ *Ma
   LONG DestDelta = 0;
   LONG SourceCx = 0;
   PULONG DestRow = NULL;
-  PULONG SourceRow0 = NULL;
-  PULONG SourceRow1 = NULL;
+  PBYTE SourceRow0 = NULL;
+  PBYTE SourceRow1 = NULL;
+  LONG SourceBytes = 4;
   LONG QuotX = 0;
   LONG RemX = 0;
   LONG AccX = 0;
@@ -147,8 +160,13 @@ BOOLEAN DIB_XXBPP_StretchBlt(SURFOBJ *DestSurf, SURFOBJ *SourceSurf, SURFOBJ *Ma
 
   UseDirect32Bpp = (ROP == ROP4_SRCCOPY && !MaskSurf && !PatternSurface &&
                     DestSurf->iBitmapFormat == BMF_32BPP &&
-                    SourceSurf->iBitmapFormat == BMF_32BPP &&
-                    (!ColorTranslation || (ColorTranslation->flXlate & XO_TRIVIAL)) &&
+                    (SourceSurf->iBitmapFormat == BMF_32BPP ||
+                     SourceSurf->iBitmapFormat == BMF_24BPP) &&
+                    (!ColorTranslation || (ColorTranslation->flXlate & XO_TRIVIAL) ||
+                     (SourceSurf->iBitmapFormat == BMF_24BPP &&
+                      XLATEOBJ_iXlate(ColorTranslation, 0xFF0000) == 0xFF0000 &&
+                      XLATEOBJ_iXlate(ColorTranslation, 0x00FF00) == 0x00FF00 &&
+                      XLATEOBJ_iXlate(ColorTranslation, 0x0000FF) == 0x0000FF)) &&
                     !bLeftToRight && !bTopToBottom &&
                     SrcWidth > 0 && SrcHeight > 0 && DstWidth > 0 && DstHeight > 0 &&
                     (Mode == COLORONCOLOR || UseHalftone) &&
@@ -162,6 +180,7 @@ BOOLEAN DIB_XXBPP_StretchBlt(SURFOBJ *DestSurf, SURFOBJ *SourceSurf, SURFOBJ *Ma
     SourceDelta = SourceSurf->lDelta;
     DestDelta = DestSurf->lDelta;
     SourceCx = SourceSurf->sizlBitmap.cx;
+    SourceBytes = SourceSurf->iBitmapFormat == BMF_24BPP ? 3 : 4;
     QuotX = SrcWidth / DstWidth;
     RemX = SrcWidth % DstWidth;
   }
@@ -229,8 +248,8 @@ BOOLEAN DIB_XXBPP_StretchBlt(SURFOBJ *DestSurf, SURFOBJ *SourceSurf, SURFOBJ *Ma
         FractionY = (ULONG)((SourceFixedY >> 16) & 0xffff);
         if (UseDirect32Bpp)
         {
-          SourceRow0 = (PULONG)(SourceBits + (LONG_PTR)sy * SourceDelta);
-          SourceRow1 = (PULONG)(SourceBits + (LONG_PTR)sy1 * SourceDelta);
+          SourceRow0 = SourceBits + (LONG_PTR)sy * SourceDelta;
+          SourceRow1 = SourceBits + (LONG_PTR)sy1 * SourceDelta;
           SourceFixedX = 0;
         }
       }
@@ -246,7 +265,7 @@ BOOLEAN DIB_XXBPP_StretchBlt(SURFOBJ *DestSurf, SURFOBJ *SourceSurf, SURFOBJ *Ma
       if (UseDirect32Bpp && !UseHalftone)
       {
         SourceRow0 = (sy >= 0 && sy < SourceCy) ?
-                     (PULONG)(SourceBits + (LONG_PTR)sy * SourceDelta) : NULL;
+                     SourceBits + (LONG_PTR)sy * SourceDelta : NULL;
         sx = SourceRect->left;
         AccX = 0;
       }
@@ -285,10 +304,10 @@ BOOLEAN DIB_XXBPP_StretchBlt(SURFOBJ *DestSurf, SURFOBJ *SourceSurf, SURFOBJ *Ma
           FractionX = (ULONG)((SourceFixedX >> 16) & 0xffff);
           if (UseDirect32Bpp)
           {
-            Color00 = SourceRow0[sx];
-            Color01 = SourceRow0[sx1];
-            Color10 = SourceRow1[sx];
-            Color11 = SourceRow1[sx1];
+            Color00 = DIB_DirectPixel(SourceRow0, sx, SourceBytes);
+            Color01 = DIB_DirectPixel(SourceRow0, sx1, SourceBytes);
+            Color10 = DIB_DirectPixel(SourceRow1, sx, SourceBytes);
+            Color11 = DIB_DirectPixel(SourceRow1, sx1, SourceBytes);
             SourceFixedX += StepX;
           }
           else
@@ -298,12 +317,15 @@ BOOLEAN DIB_XXBPP_StretchBlt(SURFOBJ *DestSurf, SURFOBJ *SourceSurf, SURFOBJ *Ma
             Color10 = XLATEOBJ_iXlate(ColorTranslation, fnSource_GetPixel(SourceSurf, sx, sy1));
             Color11 = XLATEOBJ_iXlate(ColorTranslation, fnSource_GetPixel(SourceSurf, sx1, sy1));
           }
-          Source = DIB_BilinearColor(Color00, Color01, Color10, Color11, FractionX, FractionY);
+          if (Color00 == Color01 && Color00 == Color10 && Color00 == Color11)
+            Source = Color00 & 0x00FFFFFF;
+          else
+            Source = DIB_BilinearColor(Color00, Color01, Color10, Color11, FractionX, FractionY);
         }
         else if (UseDirect32Bpp)
         {
           if (SourceRow0 && sx >= 0 && sx < SourceCx)
-            Source = SourceRow0[sx];
+            Source = DIB_DirectPixel(SourceRow0, sx, SourceBytes);
           else
             CanDraw = FALSE;
 
@@ -323,12 +345,12 @@ BOOLEAN DIB_XXBPP_StretchBlt(SURFOBJ *DestSurf, SURFOBJ *SourceSurf, SURFOBJ *Ma
         {
           sx = SourceRect->left + (DesX - DestRect->left) * SrcWidth / DstWidth;
         }
-        if (!UseHalftone && sx >= 0 && sy >= 0 &&
+        if (!UseHalftone && !UseDirect32Bpp && sx >= 0 && sy >= 0 &&
           SourceSurf->sizlBitmap.cx > sx && SourceCy > sy)
         {
           Source = XLATEOBJ_iXlate(ColorTranslation, fnSource_GetPixel(SourceSurf, sx, sy));
         }
-        else if (!UseHalftone)
+        else if (!UseHalftone && !UseDirect32Bpp)
         {
           Source = 0;
           CanDraw = ((ROP & 0xFF) != R3_OPINDEX_SRCCOPY);
