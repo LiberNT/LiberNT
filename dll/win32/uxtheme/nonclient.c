@@ -1577,12 +1577,14 @@ ThemePaintWindow(PDRAW_CONTEXT pcontext, RECT* prcCurrent, BOOL bDoDoubleBufferi
  */
 
 static LRESULT
-ThemeHandleNCPaint(HWND hWnd, HRGN hRgn)
+ThemeHandleNCPaint(HWND hWnd, HRGN hRgn, const BOOL *pActive)
 {
     DRAW_CONTEXT context;
     RECT rcCurrent;
 
     ThemeInitDrawContext(&context, hWnd, hRgn);
+    if (pActive)
+        context.Active = *pActive;
 
     ThemeCalculateCaptionButtonsPosEx(&context.wi, hWnd, context.theme,
                                       context.CaptionHeight - context.wi.cyWindowBorders);
@@ -1990,7 +1992,7 @@ ThemeWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, WNDPROC DefWndPr
     case WM_NCPAINT:
     {
         DWORD dwLastError = GetLastError();
-        LRESULT Result = ThemeHandleNCPaint(hWnd, (HRGN)wParam);
+        LRESULT Result = ThemeHandleNCPaint(hWnd, (HRGN)wParam, NULL);
         ThemeDwmRepaintCaptionButtons(hWnd);
         SetLastError(dwLastError);
         return Result;
@@ -2010,7 +2012,8 @@ ThemeWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, WNDPROC DefWndPr
 
     {
         DWORD dwLastError = GetLastError();
-        ThemeHandleNCPaint(hWnd, (HRGN)1);
+        BOOL Active = (wParam & DC_ACTIVE) != 0;
+        ThemeHandleNCPaint(hWnd, (HRGN)1, Msg == WM_NCACTIVATE ? &Active : NULL);
         ThemeDwmRepaintCaptionButtons(hWnd);
         SetLastError(dwLastError);
         return TRUE;
