@@ -14879,6 +14879,16 @@ DxgkpAdapterStopInternal(
 
     /* Unregister the display device from win32ss. */
     DxgkDisplayUnregister(Adapter);
+    if (Adapter->DeviceInterfaceEnabled &&
+        NT_SUCCESS(IoSetDeviceInterfaceState(&Adapter->DeviceInterfaceName, FALSE)))
+    {
+        Adapter->DeviceInterfaceEnabled = FALSE;
+    }
+    if (Adapter->DisplayAdapterInterfaceEnabled &&
+        NT_SUCCESS(IoSetDeviceInterfaceState(&Adapter->DisplayAdapterInterfaceName, FALSE)))
+    {
+        Adapter->DisplayAdapterInterfaceEnabled = FALSE;
+    }
 
     /* Tear down the VidPN and its published mode indices. */
     DxgkpDestroyAdapterVidPn(Adapter);
