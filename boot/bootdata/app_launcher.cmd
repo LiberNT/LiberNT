@@ -52,9 +52,10 @@ for %%F in ("!APPDRIVE!\shortcuts\*") do (
 exit /b 0
 
 :say
-if exist "%DBGPRINT%" (
-    "%DBGPRINT%" %*
-) else (
-    echo %*
-)
+if not exist "%DBGPRINT%" goto say_echo
+"%DBGPRINT%" %*
+exit /b 0
+
+:say_echo
+echo %*
 exit /b 0
