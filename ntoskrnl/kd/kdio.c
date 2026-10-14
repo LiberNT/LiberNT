@@ -481,6 +481,17 @@ KdpScreenAcquire(VOID)
     return DisplayAcquired;
 }
 
+BOOLEAN
+NTAPI
+KdShowShutdownLog(VOID)
+{
+    if (!KdpDebugMode.Screen || !InbvIsBootDriverInstalled())
+        return FALSE;
+
+    (VOID)KdpScreenAcquire();
+    return TRUE;
+}
+
 // extern VOID NTAPI InbvSetDisplayOwnership(IN BOOLEAN DisplayOwned);
 
 VOID

@@ -18,6 +18,7 @@
 /* GLOBALS *******************************************************************/
 
 ULONG PopShutdownPowerOffPolicy;
+BOOLEAN PopShutdownLog;
 KEVENT PopShutdownEvent;
 PPOP_SHUTDOWN_WAIT_ENTRY PopShutdownThreadList;
 LIST_ENTRY PopShutdownQueue;
@@ -149,6 +150,9 @@ PopDisplayShutdownScreen(VOID)
     /* Stop all interrupts */
     KeRaiseIrqlToDpcLevel();
     _disable();
+
+    if (PopShutdownLog)
+        return;
 
     /* Do we have boot video */
     if (InbvIsBootDriverInstalled())

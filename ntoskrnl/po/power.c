@@ -2095,6 +2095,11 @@ NtSetSystemPowerState(IN POWER_ACTION SystemAction,
         /* Check if we're still in an invalid status */
         if (!NT_SUCCESS(Status)) break;
 
+#ifndef _WINKD_
+        if (PopAction.Shutdown && !PopShutdownLog)
+            PopShutdownLog = KdShowShutdownLog();
+#endif
+
         /* Flush all volumes and the registry */
         DPRINT("Flushing volumes\n");
         PopFlushVolumes(PopAction.Shutdown);

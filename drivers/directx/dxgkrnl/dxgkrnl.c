@@ -429,12 +429,16 @@ DxgkpLoadTdrConfig(VOID)
 }
 
 LONG g_BootLogDisplay = 0;
+static LONG g_ScreenLogDisplay = 0;
 
 BOOLEAN
 DxgkpBootLogHoldsDisplay(VOID)
 {
     if (InterlockedCompareExchange(&g_BootLogDisplay, 0, 0) == 0)
-        return FALSE;
+    {
+        return InterlockedCompareExchange(&g_ScreenLogDisplay, 0, 0) != 0 &&
+               InbvCheckDisplayOwnership();
+    }
     if (InbvCheckDisplayOwnership())
         return TRUE;
 
@@ -525,6 +529,7 @@ DxgkpLoadBootLogDisplay(VOID)
             if (RtlEqualUnicodeString(&Option, &ScreenOption, TRUE))
             {
                 InterlockedExchange(&g_BootLogDisplay, 1);
+                InterlockedExchange(&g_ScreenLogDisplay, 1);
                 DXGKRNL_INFO("The kernel debug log keeps the boot display until the shell starts\n");
                 break;
             }
