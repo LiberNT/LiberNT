@@ -7,6 +7,7 @@
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <usp10.h>
 #include <tlhelp32.h>
 #include <d3dkmthk.h>
 #include <GL/gl.h>
@@ -1604,6 +1605,7 @@ RunTaskmgrTimerComparison(VOID)
 #include "damage_probe.h"
 #include "gpu_stats_probe.h"
 #include "taskmgr_motion_probe.h"
+#include "overlap_probe.h"
 
 static INT
 RunDesktopPerf(HWND Owner, ULONG SampleCount)
@@ -1845,6 +1847,8 @@ main(int argc, char **argv)
         return RunBlurCacheProbe(&WorkArea);
     if (argc > 1 && !strcmp(argv[1], "--damageprobe"))
         return RunDamageProbe(&WorkArea);
+    if (argc > 1 && !strcmp(argv[1], "--overlapprobe"))
+        return RunOverlapProbe(&WorkArea, argc > 2 ? argv[2] : NULL);
     if (argc > 1 && !strcmp(argv[1], "--taskmgrflicker"))
         return RunTaskmgrMotionProbe(&WorkArea, FALSE);
     if (argc > 1 && !strcmp(argv[1], "--taskmgrpacing"))
