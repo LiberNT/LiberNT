@@ -1033,7 +1033,8 @@ function(create_registry_hives)
         FOR preinstall)
 
     # BCD hive (for EFI-compatible platforms)
-    if(NOT ARCH STREQUAL "i386" OR NOT (SARCH STREQUAL "pc98" OR SARCH STREQUAL "xbox"))
+    get_property(_bootloader_uefi GLOBAL PROPERTY BOOTLOADER_UEFI)
+    if(NOT _bootloader_uefi AND (NOT ARCH STREQUAL "i386" OR NOT (SARCH STREQUAL "pc98" OR SARCH STREQUAL "xbox")))
         add_custom_command(
             OUTPUT ${CMAKE_BINARY_DIR}/boot/bootdata/BCD
             COMMAND native-mkhive -h:BCD -u -d:${CMAKE_BINARY_DIR}/boot/bootdata ${CMAKE_BINARY_DIR}/boot/bootdata/hivebcd_utf16.inf

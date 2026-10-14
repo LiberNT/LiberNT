@@ -416,6 +416,7 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
 
     #begin with boot so reactos_cab target is defined before all other modules
     add_subdirectory(boot)
+    add_subdirectory(bootloader)
     add_subdirectory(base)
     add_subdirectory(dll)
     set(FEX_ARM64EC_AVAILABLE OFF)

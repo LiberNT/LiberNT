@@ -160,10 +160,34 @@ else()
     message(FATAL_ERROR "Unknown ARCH '" ${ARCH} "', cannot generate a valid UEFI boot image filename.")
 endif()
 
+if(DEFINED EFI_PLATFORM_ID AND EXISTS "${REACTOS_SOURCE_DIR}/bootloader/arch/${ARCH}")
+    set(BOOTLOADER_UEFI TRUE)
+    set(_uefi_loader bootmgfw)
+    if(FREELDR_WIM_RAMDISK)
+        set(_uefi_media_store mediawim)
+    else()
+        set(_uefi_media_store media)
+    endif()
+    set(_uefi_loader_files
+        -mkdir EFI/LiberNT
+        -mkdir EFI/LiberNT/Boot
+        -add $<TARGET_FILE:winload> EFI/LiberNT/Boot/winload.efi
+        -add ${REACTOS_BINARY_DIR}/bootloader/image/${_uefi_media_store}/BCD EFI/LiberNT/Boot/BCD)
+    set(_uefi_loader_deps bootmgfw winload bootloader${_uefi_media_store}bcd)
+    set(_efisys_sectors 16384)
+    set_property(GLOBAL PROPERTY BOOTLOADER_UEFI TRUE)
+else()
+    set(BOOTLOADER_UEFI FALSE)
+    set(_uefi_loader uefildr)
+    set(_uefi_loader_files)
+    set(_uefi_loader_deps uefildr)
+    set(_efisys_sectors 5760)
+endif()
+
 ## efisys.bin
 if(DEFINED EFI_PLATFORM_ID)
     set(_efisys_boot_options)
-    set(_efisys_depends native-fatten uefildr)
+    set(_efisys_depends native-fatten ${_uefi_loader_deps})
     set(_uefi_driver_fatten_options)
     set(_uefi_driver_files)
     if(FREELDR_HAS_BIOS_BOOT)
@@ -194,9 +218,11 @@ if(DEFINED EFI_PLATFORM_ID)
     endif()
 
     add_custom_target(efisys
-        COMMAND native-fatten ${CMAKE_CURRENT_BINARY_DIR}/efisys.bin -format 5760 EFIBOOT
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_CURRENT_BINARY_DIR}/efisys.bin
+        COMMAND native-fatten ${CMAKE_CURRENT_BINARY_DIR}/efisys.bin -format ${_efisys_sectors} EFIBOOT
             ${_efisys_boot_options}
-            -mkdir EFI -mkdir EFI/BOOT -add $<TARGET_FILE:uefildr> EFI/BOOT/boot${EFI_PLATFORM_ID}.efi
+            -mkdir EFI -mkdir EFI/BOOT -add $<TARGET_FILE:${_uefi_loader}> EFI/BOOT/boot${EFI_PLATFORM_ID}.efi
+            ${_uefi_loader_files}
             ${_uefi_driver_fatten_options}
         DEPENDS ${_efisys_depends}
         VERBATIM)
@@ -784,6 +810,23 @@ if(STARFIVE_JH7110_SUPPORT)
         -add ${STARFIVE_JH7110_UENV} vf2_uEnv.txt)
     list(APPEND _preinstall_partition_deps ${STARFIVE_JH7110_DTB} ${STARFIVE_JH7110_UENV})
 endif()
+macro(libernt_standard_disk_ids)
+    string(UUID _standard_disk NAMESPACE 354fa6e5-5e45-49af-91bf-1fd2754e470a NAME "LiberNT standard disk" TYPE SHA1)
+    string(SUBSTRING "${_standard_disk}" 0 8 _standard_signature)
+    string(UUID _standard_system NAMESPACE 354fa6e5-5e45-49af-91bf-1fd2754e470a NAME "LiberNT standard system partition" TYPE SHA1)
+    if(";${_liberntimg_mbr_args};" MATCHES ";-gpt;")
+        list(APPEND _liberntimg_mbr_args -diskid ${_standard_disk})
+        list(APPEND _liberntimg_system_partition_args -id ${_standard_system})
+        set_property(GLOBAL PROPERTY LIBERNT_STANDARD_GPT_DISK ${_standard_disk})
+        set_property(GLOBAL PROPERTY LIBERNT_STANDARD_GPT_SYSTEM ${_standard_system})
+    else()
+        list(APPEND _liberntimg_mbr_args -signature ${_standard_signature})
+    endif()
+    set_property(GLOBAL PROPERTY LIBERNT_STANDARD_SIGNATURE ${_standard_signature})
+    set_property(GLOBAL PROPERTY LIBERNT_STANDARD_SYSTEM_START ${_preinstall_system_partition_start})
+    set_property(GLOBAL PROPERTY LIBERNT_STANDARD_OPTIONS "${FREELDR_PREINSTALL_OPTIONS}")
+endmacro()
+
 if(FREELDR_HAS_OFW_BOOT)
     # The firmware boot partition is advertised as FAT32 LBA (0x0c).
     set(_preinstall_boot_partition_fs fat32)
@@ -791,6 +834,14 @@ if(FREELDR_HAS_OFW_BOOT)
     list(APPEND _preinstall_boot_partition_files -add ${_ofw_boot_file} ppcboot.bin)
     list(APPEND _preinstall_partition_deps ppcboot)
     add_dependencies(livecd ppcboot)
+    if(EXISTS "${REACTOS_SOURCE_DIR}/bootloader/arch/${ARCH}")
+        list(APPEND _preinstall_boot_partition_files
+            -mkdir Boot
+            -add ${REACTOS_BINARY_DIR}/bootloader/bootmgr.bin bootmgr.bin
+            -add ${REACTOS_BINARY_DIR}/bootloader/image/standard/BCD Boot/BCD)
+        list(APPEND _preinstall_partition_deps bootmgrppc bootloaderstandardbcd)
+        libernt_standard_disk_ids()
+    endif()
 endif()
 if(FREELDR_HAS_BIOS_BOOT)
     set(_dosmbr_file ${CMAKE_CURRENT_BINARY_DIR}/freeldr/bootsect/dosmbr.bin)
@@ -809,8 +860,17 @@ if(DEFINED EFI_PLATFORM_ID)
     list(APPEND _preinstall_boot_partition_files
         -mkdir EFI
         -mkdir EFI/BOOT
-        -add $<TARGET_FILE:uefildr> EFI/BOOT/boot${EFI_PLATFORM_ID}.efi)
-    list(APPEND _preinstall_partition_deps uefildr)
+        -add $<TARGET_FILE:${_uefi_loader}> EFI/BOOT/boot${EFI_PLATFORM_ID}.efi)
+    list(APPEND _preinstall_partition_deps ${_uefi_loader})
+    if(BOOTLOADER_UEFI)
+        list(APPEND _preinstall_boot_partition_files
+            -mkdir EFI/LiberNT
+            -mkdir EFI/LiberNT/Boot
+            -add $<TARGET_FILE:bootmgfw> EFI/LiberNT/Boot/bootmgfw.efi
+            -add ${REACTOS_BINARY_DIR}/bootloader/image/standard/BCD EFI/LiberNT/Boot/BCD)
+        list(APPEND _preinstall_partition_deps bootloaderstandardbcd)
+        libernt_standard_disk_ids()
+    endif()
     if(_uefi_driver_files)
         list(APPEND _preinstall_boot_partition_files -mkdir EFI/BOOT/drivers)
         foreach(_driver ${_uefi_driver_files})
@@ -934,7 +994,7 @@ add_dependencies(liberntvhd preinstall_partition)
 if(DEFINED EFI_PLATFORM_ID)
     # For devices such as USB drives, add also the EFI boot image into efi/boot.
     add_cd_file(TARGET efisys FILE ${CMAKE_CURRENT_BINARY_DIR}/efisys.bin DESTINATION loader NO_CAB FOR bootcd livecd)
-    add_cd_file(TARGET uefildr DESTINATION efi/boot NO_CAB NAME_ON_CD boot${EFI_PLATFORM_ID}.efi FOR bootcd livecd)
+    add_cd_file(TARGET ${_uefi_loader} DESTINATION efi/boot NO_CAB NAME_ON_CD boot${EFI_PLATFORM_ID}.efi FOR bootcd livecd)
     if(_uefi_driver_files)
         foreach(_driver ${_uefi_driver_files})
             get_filename_component(_driver_name "${_driver}" NAME)
