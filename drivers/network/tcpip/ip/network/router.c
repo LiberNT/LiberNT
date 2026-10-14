@@ -283,6 +283,39 @@ PFIB_ENTRY RouterAddRoute(
 }
 
 
+static PNEIGHBOR_CACHE_ENTRY RouterRenewNeighbor(PNEIGHBOR_CACHE_ENTRY Removed)
+{
+    KIRQL OldIrql;
+    PLIST_ENTRY CurrentEntry;
+    PFIB_ENTRY Current;
+    PNEIGHBOR_CACHE_ENTRY NCE;
+
+    NCE = NBFindOrCreateNeighbor(Removed->Interface, &Removed->Address, TRUE);
+    if (!NCE)
+        return Removed;
+
+    TcpipAcquireSpinLock(&FIBLock, &OldIrql);
+
+    for (CurrentEntry = FIBListHead.Flink;
+         CurrentEntry != &FIBListHead;
+         CurrentEntry = CurrentEntry->Flink)
+    {
+        Current = CONTAINING_RECORD(CurrentEntry, FIB_ENTRY, ListEntry);
+
+        if (Current->Router == Removed)
+        {
+            NBReferenceNeighbor(NCE);
+            Current->Router = NCE;
+            NBDereferenceNeighbor(Removed);
+        }
+    }
+
+    TcpipReleaseSpinLock(&FIBLock, OldIrql);
+
+    NBDereferenceNeighbor(Removed);
+    return NCE;
+}
+
 PNEIGHBOR_CACHE_ENTRY RouterGetRoute(PIP_ADDRESS Destination)
 /*
  * FUNCTION: Finds a router to use to get to Destination
@@ -340,6 +373,9 @@ PNEIGHBOR_CACHE_ENTRY RouterGetRoute(PIP_ADDRESS Destination)
         NBReferenceNeighbor(BestNCE);
 
     TcpipReleaseSpinLock(&FIBLock, OldIrql);
+
+    if (BestNCE && BestNCE->Removed)
+        BestNCE = RouterRenewNeighbor(BestNCE);
 
     if( BestNCE ) {
 	TI_DbgPrint(DEBUG_ROUTER,("Routing to %s\n", A2S(&BestNCE->Address)));
