@@ -821,14 +821,19 @@ DxgkSyncNotifyMonitoredFence(
                         SyncObj->MonitoredValueKernelVa,
                     0,
                     0);
-            Status =
-                DxgkpSyncObjectPublishRetiredFence(
-                    SyncObj,
-                    ObservedValue);
-            if (NT_SUCCESS(Status))
-                OverallStatus = STATUS_SUCCESS;
-            else if (OverallStatus == STATUS_NOT_FOUND)
-                OverallStatus = Status;
+            if (ObservedValue >
+                (UINT64)InterlockedCompareExchange64(
+                    &SyncObj->FenceValue, 0, 0))
+            {
+                Status =
+                    DxgkpSyncObjectPublishRetiredFence(
+                        SyncObj,
+                        ObservedValue);
+                if (NT_SUCCESS(Status))
+                    OverallStatus = STATUS_SUCCESS;
+                else if (OverallStatus == STATUS_NOT_FOUND)
+                    OverallStatus = Status;
+            }
         }
         ExReleaseRundownProtection(
             &SyncObj->MonitoredInterruptRundown);
@@ -2752,6 +2757,24 @@ DxgkSyncObjectCpuWaitBatch(
     Request->ObjectCount = ObjectCount;
     for (Index = 0; Index < ObjectCount; ++Index)
     {
+#if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
+        if (InterlockedCompareExchange(&Request->Objects[Index]->Destroying, 0, 0) == 0 &&
+            ExAcquireRundownProtection(&Request->Objects[Index]->MonitoredInterruptRundown))
+        {
+            if (Request->Objects[Index]->MonitoredValueKernelVa != NULL &&
+                !Request->Objects[Index]->Flags.NoSignal)
+            {
+                UINT64 ObservedValue;
+
+                KeMemoryBarrier();
+                ObservedValue = (UINT64)InterlockedCompareExchange64(
+                                    (volatile LONG64 *)Request->Objects[Index]->MonitoredValueKernelVa, 0, 0);
+                if (ObservedValue > (UINT64)InterlockedCompareExchange64(&Request->Objects[Index]->FenceValue, 0, 0))
+                    (VOID)DxgkpSyncObjectPublishRetiredFence(Request->Objects[Index], ObservedValue);
+            }
+            ExReleaseRundownProtection(&Request->Objects[Index]->MonitoredInterruptRundown);
+        }
+#endif
         Request->Targets[Index].Object = Request->Objects[Index];
         Request->Targets[Index].FenceValue = &Request->Objects[Index]->FenceValue;
         Request->Targets[Index].TargetValue = FenceValues[Index];

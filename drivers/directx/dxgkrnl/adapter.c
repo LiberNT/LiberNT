@@ -7587,6 +7587,16 @@ DxgkCbNotifyInterrupt(
             NotifyInterruptData->MonitoredFenceSignaled.NodeOrdinal,
             NotifyInterruptData->MonitoredFenceSignaled.EngineOrdinal);
     }
+    else if (NotifyInterruptData->InterruptType ==
+             DXGK_INTERRUPT_DMA_COMPLETED &&
+             Adapter->NotifyInterruptTypeCount[
+                 DXGK_INTERRUPT_MONITORED_FENCE_SIGNALED] == 0)
+    {
+        (VOID)DxgkpQueueMonitoredFenceEvaluation(
+            Adapter,
+            NotifyInterruptData->DmaCompleted.NodeOrdinal,
+            NotifyInterruptData->DmaCompleted.EngineOrdinal);
+    }
 #endif
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_2)
     if (NotifyInterruptData->InterruptType ==
