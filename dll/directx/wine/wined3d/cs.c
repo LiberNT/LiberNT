@@ -3526,13 +3526,21 @@ static void wined3d_cs_exec_execute_command_list(struct wined3d_cs *cs, const vo
 
     TRACE("Executing command list %p.\n", op->list);
 
+#ifdef __REACTOS__
+    queue = cs->queue ? &cs->queue[WINED3D_CS_QUEUE_MAP] : NULL;
+#else
     queue = &cs->queue[WINED3D_CS_QUEUE_MAP];
+#endif
     while (start < end)
     {
         const struct wined3d_cs_packet *packet;
         enum wined3d_cs_op opcode;
 
+#ifdef __REACTOS__
+        while (queue && !wined3d_cs_queue_is_empty(cs, queue))
+#else
         while (!wined3d_cs_queue_is_empty(cs, queue))
+#endif
             wined3d_cs_execute_next(cs, queue);
 
         packet = wined3d_next_cs_packet(cs_data, &start, WINED3D_CS_QUEUE_MASK);
@@ -3672,6 +3680,15 @@ struct wined3d_cs *wined3d_cs_create(struct wined3d_device *device,
     {
         cs->c.ops = &wined3d_cs_mt_ops;
 
+#ifdef __REACTOS__
+        if (!(cs->queue = calloc(WINED3D_CS_QUEUE_COUNT, sizeof(*cs->queue))))
+        {
+            ERR("Failed to allocate command stream queues.\n");
+            free(cs->data);
+            goto fail;
+        }
+#endif
+
         if (!pNtAlertThreadByThreadId)
         {
             HANDLE ntdll = GetModuleHandleW(L"ntdll.dll");
@@ -3712,6 +3729,9 @@ struct wined3d_cs *wined3d_cs_create(struct wined3d_device *device,
     return cs;
 
 fail:
+#ifdef __REACTOS__
+    free(cs->queue);
+#endif
     wined3d_state_destroy(cs->c.state);
     state_cleanup(&cs->state);
     free(cs);
@@ -3731,6 +3751,9 @@ void wined3d_cs_destroy(struct wined3d_cs *cs)
     wined3d_state_destroy(cs->c.state);
     state_cleanup(&cs->state);
     free(cs->data);
+#ifdef __REACTOS__
+    free(cs->queue);
+#endif
     free(cs);
 }
 

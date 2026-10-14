@@ -3707,7 +3707,11 @@ struct wined3d_cs
     DWORD thread_id;
     BOOL serialize_commands;
 
+#ifdef __REACTOS__
+    struct wined3d_cs_queue *queue;
+#else
     struct wined3d_cs_queue queue[WINED3D_CS_QUEUE_COUNT];
+#endif
     size_t data_size, start, end;
     void *data;
     struct list query_poll_list;
@@ -3852,7 +3856,11 @@ void wined3d_device_context_push_constants(struct wined3d_device_context *contex
 static inline void wined3d_resource_reference(struct wined3d_resource *resource)
 {
     const struct wined3d_cs *cs = resource->device->cs;
+#ifdef __REACTOS__
+    resource->access_time = cs->queue ? cs->queue[WINED3D_CS_QUEUE_DEFAULT].head : 0;
+#else
     resource->access_time = cs->queue[WINED3D_CS_QUEUE_DEFAULT].head;
+#endif
 }
 
 #define WINED3D_PAUSE_SPIN_COUNT 200u
