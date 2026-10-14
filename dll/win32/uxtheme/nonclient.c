@@ -607,6 +607,31 @@ ThemeGetMaximizedTopOverhang(const WINDOWINFO *wi)
     return max(0, min(overhang, (INT)wi->cyWindowBorders));
 }
 
+static BOOL
+ThemeCaptionButtonIsLeft(INT OffsetType, const RECT *ButtonRect, const RECT *WindowRect, BOOL LastButtonLeft)
+{
+    switch (OffsetType)
+    {
+        case OT_TOPLEFT:
+        case OT_BOTTOMLEFT:
+        case OT_MIDDLELEFT:
+        case OT_LEFTOFCAPTION:
+            return TRUE;
+        case OT_TOPRIGHT:
+        case OT_BOTTOMRIGHT:
+        case OT_MIDDLERIGHT:
+        case OT_RIGHTOFCAPTION:
+            return FALSE;
+        case OT_LEFTOFLASTBUTTON:
+        case OT_RIGHTOFLASTBUTTON:
+        case OT_ABOVELASTBUTTON:
+        case OT_BELOWLASTBUTTON:
+            return LastButtonLeft;
+        default:
+            return (ButtonRect->left + ButtonRect->right) / 2 < (WindowRect->left + WindowRect->right) / 2;
+    }
+}
+
 static void ThemeCalculateCaptionButtonsPosEx(WINDOWINFO* wi, HWND hWnd, HTHEME htheme, INT buttonHeight)
 {
     PWND_DATA pwndData;
@@ -615,6 +640,7 @@ static void ThemeCalculateCaptionButtonsPosEx(WINDOWINFO* wi, HWND hWnd, HTHEME 
     RECT rcCurrent, rcWindow, rcLastButton;
     SIZE ButtonSize;
     BOOL hasLastButton = FALSE;
+    BOOL lastButtonLeft = FALSE;
     BOOL composited;
     UINT dpi;
 
@@ -664,6 +690,7 @@ static void ThemeCalculateCaptionButtonsPosEx(WINDOWINFO* wi, HWND hWnd, HTHEME 
         POINT offset;
         INT offsetType;
         BOOL hasPlacement;
+        BOOL buttonLeft = FALSE;
 
         iPartId = rgPart[i - CLOSEBUTTON];
         if (i == CLOSEBUTTON && (wi->dwExStyle & WS_EX_TOOLWINDOW))
@@ -705,15 +732,22 @@ static void ThemeCalculateCaptionButtonsPosEx(WINDOWINFO* wi, HWND hWnd, HTHEME 
                     rcCurrent.right,
                     rcCurrent.top + captionBtnHeight);
         }
+        else
+        {
+            buttonLeft = ThemeCaptionButtonIsLeft(offsetType, &pwndData->rcCaptionButtons[i],
+                                                  &rcWindow, lastButtonLeft);
+        }
         if (pwndData->rcCaptionButtons[i].top < topOverhang)
         {
             OffsetRect(&pwndData->rcCaptionButtons[i], 0,
                        topOverhang - pwndData->rcCaptionButtons[i].top);
         }
 
+        pwndData->CaptionButtonLeft[i] = buttonLeft;
         rcLastButton = pwndData->rcCaptionButtons[i];
         hasLastButton = TRUE;
-        if ((rcLastButton.left + rcLastButton.right) / 2 < rcWindow.right / 2)
+        lastButtonLeft = buttonLeft;
+        if (buttonLeft)
             rcCurrent.left = max(rcCurrent.left, rcLastButton.right);
         else
             rcCurrent.right = min(rcCurrent.right, rcLastButton.left);
@@ -992,9 +1026,8 @@ ThemeDrawCaptionButton(PDRAW_CONTEXT pcontext,
     if (prcCurrent)
     {
         const RECT *ButtonRect = &pwndData->rcCaptionButtons[buttonId];
-        INT WindowMiddle = (pcontext->wi.rcWindow.right - pcontext->wi.rcWindow.left) / 2;
 
-        if ((ButtonRect->left + ButtonRect->right) / 2 < WindowMiddle)
+        if (pwndData->CaptionButtonLeft[buttonId])
             prcCurrent->left = max(prcCurrent->left, ButtonRect->right);
         else
             prcCurrent->right = min(prcCurrent->right, ButtonRect->left);

@@ -71,6 +71,7 @@ typedef struct _WND_DATA
     HTHEME hthemeTab;
 
     RECT rcCaptionButtons[4];
+    BOOL CaptionButtonLeft[4];
     ULONG DwmCaption[DWM_CAPTION_BUTTONS + 2];
     UINT lastHitTest;
     BOOL HasAppDefinedRgn;
