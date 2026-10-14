@@ -1521,7 +1521,8 @@
 @ stdcall -stub -version=0x600+ WinSqmEventWrite(long long long) ; stub on Win11?
 @ stdcall -version=0x600+ WinSqmIncrementDWORD(long long long)
 @ stdcall -version=0x600+ WinSqmIsOptedIn() ; stub on Win11?
-@ stdcall -stub -version=0x600+ WinSqmSetDWORD(ptr long long)
+@ stdcall -version=0x600+ WinSqmSetDWORD(ptr long long)
+@ stdcall -version=0x600+ WinSqmSetDWORD64(ptr long int64)
 @ stdcall -stub -version=0x600+ WinSqmSetString(ptr long ptr) ; stub on Win11?
 @ stdcall -stub -version=0x600+ WinSqmStartSession(ptr) ; stub on Win11?
 @ stdcall ZwAcceptConnectPort(ptr long ptr long long ptr)

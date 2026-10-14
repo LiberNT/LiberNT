@@ -122,6 +122,30 @@ WinSqmIncrementDWORD(
     UNREFERENCED_PARAMETER(Unknown3);
 }
 
+VOID
+NTAPI
+WinSqmSetDWORD(
+    _In_opt_ HANDLE Session,
+    _In_ ULONG DatapointId,
+    _In_ ULONG Value)
+{
+    UNREFERENCED_PARAMETER(Session);
+    UNREFERENCED_PARAMETER(DatapointId);
+    UNREFERENCED_PARAMETER(Value);
+}
+
+VOID
+NTAPI
+WinSqmSetDWORD64(
+    _In_opt_ HANDLE Session,
+    _In_ ULONG DatapointId,
+    _In_ ULONGLONG Value)
+{
+    UNREFERENCED_PARAMETER(Session);
+    UNREFERENCED_PARAMETER(DatapointId);
+    UNREFERENCED_PARAMETER(Value);
+}
+
 BOOL
 NTAPI
 WinSqmIsOptedIn(VOID)

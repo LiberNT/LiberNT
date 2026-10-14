@@ -7712,9 +7712,24 @@ BOOL NTAPI ChpeAutoWinSqmIsOptedIn(VOID)
     return WinSqmIsOptedIn();
 }
 
-ULONG_PTR NTAPI ChpeStubWinSqmSetDWORD(PVOID a0, ULONG a1, ULONG a2)
+/* Native definition: dll/ntdll/rtl/wnf.c */
+#ifdef WinSqmSetDWORD
+#undef WinSqmSetDWORD
+#endif
+VOID NTAPI WinSqmSetDWORD(PVOID a0, ULONG a1, ULONG a2);
+VOID NTAPI ChpeAutoWinSqmSetDWORD(PVOID a0, ULONG a1, ULONG a2)
 {
-    return 0;
+    WinSqmSetDWORD(a0, a1, a2);
+}
+
+/* Native definition: dll/ntdll/rtl/wnf.c */
+#ifdef WinSqmSetDWORD64
+#undef WinSqmSetDWORD64
+#endif
+VOID NTAPI WinSqmSetDWORD64(PVOID a0, ULONG a1, ULONGLONG a2);
+VOID NTAPI ChpeAutoWinSqmSetDWORD64(PVOID a0, ULONG a1, ULONGLONG a2)
+{
+    WinSqmSetDWORD64(a0, a1, a2);
 }
 
 ULONG_PTR NTAPI ChpeStubWinSqmSetString(PVOID a0, ULONG a1, PVOID a2)
