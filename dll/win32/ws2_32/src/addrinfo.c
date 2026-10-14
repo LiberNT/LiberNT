@@ -90,76 +90,19 @@ WINAPI
 ParseV4Address(IN PCWSTR AddressString,
                OUT PDWORD pAddress)
 {
-    CHAR AnsiAddressString[MAX_HOSTNAME_LEN];
-    CHAR * cp = AnsiAddressString;
-    DWORD val, base;
-    unsigned char c;
-    DWORD parts[4], *pp = parts;
+    PCWSTR Terminator;
+    IN_ADDR Address;
+
     if (!AddressString)
         return FALSE;
-    WideCharToMultiByte(CP_ACP,
-                        0,
-                        AddressString,
-                        -1,
-                        AnsiAddressString,
-                        sizeof(AnsiAddressString),
-                        NULL,
-                        0);
-    if (!isdigit(*cp)) return FALSE;
-
-again:
-    /*
-    * Collect number up to ``.''.
-    * Values are specified as for C:
-    * 0x=hex, 0=octal, other=decimal.
-    */
-    val = 0; base = 10;
-    if (*cp == '0') {
-        if (*++cp == 'x' || *cp == 'X')
-            base = 16, cp++;
-        else
-            base = 8;
+    if (!NT_SUCCESS(RtlIpv4StringToAddressW(AddressString, TRUE, &Terminator, &Address)) ||
+        *Terminator != UNICODE_NULL)
+    {
+        return FALSE;
     }
-    while ((c = *cp)) {
-        if (isdigit(c)) {
-            val = (val * base) + (c - '0');
-            cp++;
-            continue;
-        }
-        if (base == 16 && isxdigit(c)) {
-            val = (val << 4) + (c + 10 - (islower(c) ? 'a' : 'A'));
-            cp++;
-            continue;
-        }
-        break;
-    }
-    if (*cp == '.') {
-        /*
-        * Internet format:
-        *    a.b.c.d
-        */
-        if (pp >= parts + 4) return FALSE;
-        *pp++ = val;
-        cp++;
-        goto again;
-    }
-    /*
-    * Check for trailing characters.
-    */
-    if (*cp) return FALSE;
-
-    if (pp >= parts + 4) return FALSE;
-    *pp++ = val;
-    /*
-    * Concoct the address according to
-    * the number of parts specified.
-    */
-    if ((DWORD)(pp - parts) != 4) return FALSE;
-    if (parts[0] > 0xff || parts[1] > 0xff || parts[2] > 0xff || parts[3] > 0xff) return FALSE;
-    val = (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3];
 
     if (pAddress)
-        *pAddress = htonl(val);
+        *pAddress = Address.S_un.S_addr;
 
     return TRUE;
 }

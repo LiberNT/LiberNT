@@ -51,13 +51,13 @@ TestNodeName(VOID)
         { "7.8.9.10",                       "7.8.9.10",         AI_NUMERICHOST },
         { "0.0.0.0",                        "0.0.0.0",          AI_NUMERICHOST },
         { "255.255.255.255",                "255.255.255.255",  AI_NUMERICHOST },
-        { "0.0.0.0 ",                       "0.0.0.0",    /* no AI_NUMERICHOST */ },
+        { "0.0.0.0 ",                       NULL },
         { "0.0.0.0:80",                     NULL },
         { "0.0.0.0.0",                      NULL },
         { "1.1.1.256",                      NULL },
         { "1.2.3",                          NULL },
-        { "1.2.3.0x4",                      "1.2.3.4",          AI_NUMERICHOST },
-        { "1.2.3.010",                      "1.2.3.8",          AI_NUMERICHOST },
+        { "1.2.3.0x4",                      NULL },
+        { "1.2.3.010",                      NULL },
         /* let's just assume this one doesn't change any time soon ;) */
         { "google-public-dns-a.google.com", "8.8.8.8" },
     };
