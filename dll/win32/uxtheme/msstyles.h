@@ -113,6 +113,9 @@ PTHEME_PARTSTATE MSSTYLES_FindPartState(PTHEME_CLASS tc, int iPartId, int iState
 PTHEME_PROPERTY MSSTYLES_FindProperty(PTHEME_CLASS tc, int iPartId, int iStateId, int iPropertyPrimitive, int iPropertyId);
 PTHEME_PROPERTY MSSTYLES_FindMetric(PTHEME_CLASS tc, int iPropertyPrimitive, int iPropertyId);
 HBITMAP MSSTYLES_LoadBitmap(PTHEME_CLASS tc, LPCWSTR lpFilename, BOOL* hasAlpha, BOOL *hasDefaultTransparentColour);
+#ifdef __REACTOS__
+extern CRITICAL_SECTION MSSTYLES_ImageLock;
+#endif
 
 #if defined(__REACTOS__) && defined(ENABLE_PNG_SUPPORT)
 EXTERN_C BOOL MSSTYLES_TryLoadPng(HINSTANCE theme, LPCWSTR file, LPCWSTR type,

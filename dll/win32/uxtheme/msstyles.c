@@ -1489,7 +1489,19 @@ static BOOL prepare_alpha (HBITMAP bmp, BOOL* hasAlpha, BOOL *hasDefaultTranspar
     return TRUE;
 }
 
+#ifdef __REACTOS__
+static CRITICAL_SECTION_DEBUG MSSTYLES_ImageLockDebug =
+{
+    0, 0, &MSSTYLES_ImageLock,
+    { &MSSTYLES_ImageLockDebug.ProcessLocksList, &MSSTYLES_ImageLockDebug.ProcessLocksList },
+      0, 0, { (DWORD_PTR)(__FILE__ ": MSSTYLES_ImageLock") }
+};
+CRITICAL_SECTION MSSTYLES_ImageLock = { &MSSTYLES_ImageLockDebug, -1, 0, 0, 0, 0 };
+
+static HBITMAP MSSTYLES_LoadBitmapLocked (PTHEME_CLASS tc, LPCWSTR lpFilename, BOOL* hasAlpha, BOOL *hasDefaultTransparentColour)
+#else
 HBITMAP MSSTYLES_LoadBitmap (PTHEME_CLASS tc, LPCWSTR lpFilename, BOOL* hasAlpha, BOOL *hasDefaultTransparentColour)
+#endif
 {
     WCHAR szFile[MAX_PATH];
     LPWSTR tmp;
@@ -1545,6 +1557,18 @@ HBITMAP MSSTYLES_LoadBitmap (PTHEME_CLASS tc, LPCWSTR lpFilename, BOOL* hasAlpha
     TRACE ("new %p %s: %p\n", img, debugstr_w (img->name), img->image);
     return img->image;
 }
+
+#ifdef __REACTOS__
+HBITMAP MSSTYLES_LoadBitmap (PTHEME_CLASS tc, LPCWSTR lpFilename, BOOL* hasAlpha, BOOL *hasDefaultTransparentColour)
+{
+    HBITMAP image;
+
+    EnterCriticalSection(&MSSTYLES_ImageLock);
+    image = MSSTYLES_LoadBitmapLocked(tc, lpFilename, hasAlpha, hasDefaultTransparentColour);
+    LeaveCriticalSection(&MSSTYLES_ImageLock);
+    return image;
+}
+#endif
 
 static BOOL MSSTYLES_GetNextLong(LPCWSTR lpStringStart, LPCWSTR lpStringEnd, LPCWSTR *lpValEnd, LONG *value)
 {

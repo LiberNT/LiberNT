@@ -672,6 +672,7 @@ HRESULT GetDiaogTextureBrush(HTHEME theme, HWND hwnd, HDC hdc, HBRUSH* result, B
             y = (rcWindow.top - rcParent.top) % bmpRect.bottom;
 
             hdcPattern = CreateCompatibleDC(hdc);
+            EnterCriticalSection(&MSSTYLES_ImageLock);
             hbmpOld1 = (HBITMAP)SelectObject(hdcPattern, hbmp);
 
             hdcHackPattern = CreateCompatibleDC(hdc);
@@ -683,6 +684,7 @@ HRESULT GetDiaogTextureBrush(HTHEME theme, HWND hwnd, HDC hdc, HBRUSH* result, B
 
             hbmpold2 = (HBITMAP)SelectObject(hdcHackPattern, hbmpold2);
             hbmpOld1 = (HBITMAP)SelectObject(hdcPattern, hbmpOld1);
+            LeaveCriticalSection(&MSSTYLES_ImageLock);
 
             DeleteDC(hdcPattern);
             DeleteDC(hdcHackPattern);

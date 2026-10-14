@@ -608,6 +608,9 @@ static HRESULT UXTHEME_DrawImageGlyph(HTHEME hTheme, HDC hdc, int iPartId,
         hr = HRESULT_FROM_WIN32(GetLastError());
         return hr;
     }
+#ifdef __REACTOS__
+    EnterCriticalSection(&MSSTYLES_ImageLock);
+#endif
     oldSrc = SelectObject(hdcSrc, bmpSrc);
 
     dstSize.x = pRect->right-pRect->left;
@@ -634,6 +637,9 @@ static HRESULT UXTHEME_DrawImageGlyph(HTHEME hTheme, HDC hdc, int iPartId,
     }
 
     SelectObject(hdcSrc, oldSrc);
+#ifdef __REACTOS__
+    LeaveCriticalSection(&MSSTYLES_ImageLock);
+#endif
     DeleteDC(hdcSrc);
 
     /* Don't transfer alpha values from the glyph when drawing opaque background */
@@ -792,6 +798,9 @@ static HRESULT UXTHEME_DrawImageBackground(HTHEME hTheme, HDC hdc, int iPartId,
         hr = HRESULT_FROM_WIN32(GetLastError());
         return hr;
     }
+#ifdef __REACTOS__
+    EnterCriticalSection(&MSSTYLES_ImageLock);
+#endif
     oldSrc = SelectObject(hdcSrc, bmpSrc);
 
     rcDst = *pRect;
@@ -951,6 +960,9 @@ draw_error:
         SetViewportOrgEx (hdcDst, org.x, org.y, NULL);
     }
     SelectObject(hdcSrc, oldSrc);
+#ifdef __REACTOS__
+    LeaveCriticalSection(&MSSTYLES_ImageLock);
+#endif
     DeleteDC(hdcSrc);
     *pRect = rcDst;
     return hr;
