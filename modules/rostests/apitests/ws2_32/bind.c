@@ -198,13 +198,11 @@ START_TEST(bind)
         ok_dec(WSAGetLastError(), WSAEFAULT);
         closesocket(Socket);
     EndSeh(STATUS_SUCCESS);
+    Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     StartSeh()
-        Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        Error = bind(Socket, InvalidPointer, sizeof(Addr));
-        ok_dec(Error, SOCKET_ERROR);
-        ok_dec(WSAGetLastError(), WSAEFAULT);
-        closesocket(Socket);
-    EndSeh(STATUS_SUCCESS);
+        bind(Socket, InvalidPointer, sizeof(Addr));
+    EndSeh(STATUS_ACCESS_VIOLATION);
+    closesocket(Socket);
     StartSeh()
         Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         Error = bind(Socket, (const struct sockaddr *) &Addr, 0);
