@@ -145,11 +145,8 @@ RtlpRiscv64UnwindHandler(PEXCEPTION_RECORD Record, PVOID Frame,
     DISPATCHER_CONTEXT Active;
     ULONG64 Target = Dc->TargetPc;
     UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(Record);
     ReadActive(Frame, &Active);
-    if (!(Record->ExceptionFlags & EXCEPTION_UNWIND)) {
-        Dc->EstablisherFrame = Active.EstablisherFrame;
-        return ExceptionNestedException;
-    }
     *Dc = Active;
     Dc->TargetPc = Target;
     return ExceptionCollidedUnwind;
@@ -161,7 +158,7 @@ RtlDispatchException(PEXCEPTION_RECORD Record, PCONTEXT Context)
     CONTEXT Current = *Context, Next;
     DISPATCHER_CONTEXT Dc = {0};
     RISCV64_NONVOLATILE_CONTEXT_V1 Nv;
-    ULONG Frames;
+    ULONG Frames, Collisions;
     ULONG64 Nested = 0;
     EXCEPTION_DISPOSITION Disposition;
     NTSTATUS Status;
@@ -178,8 +175,10 @@ RtlDispatchException(PEXCEPTION_RECORD Record, PCONTEXT Context)
             Record->ExceptionFlags |= EXCEPTION_STACK_INVALID;
             return FALSE;
         }
-        if (Dc.LanguageHandler) {
+        for (Collisions = 0; Dc.LanguageHandler; Collisions++) {
             ULONG64 Frame = Dc.EstablisherFrame;
+            ULONG ScopeIndex;
+            if (Collisions == MAX_FRAMES) Corruption(STATUS_BAD_STACK);
             Disposition = RtlpExecuteHandlerForException(Record, (PVOID)Frame,
                 Context, &Dc, Dc.LanguageHandler);
             if (Frame == Nested) {
@@ -198,9 +197,22 @@ RtlDispatchException(PEXCEPTION_RECORD Record, PCONTEXT Context)
                 Nested = max(Nested, Dc.EstablisherFrame);
                 Record->ExceptionFlags |= EXCEPTION_NESTED_CALL;
                 break;
+            case ExceptionCollidedUnwind:
+                ScopeIndex = Dc.ScopeIndex;
+                if (!NT_SUCCESS(RtlpRiscv64ReadMemory(&Current, Dc.ContextRecord,
+                                                   sizeof(Current))))
+                    Corruption(STATUS_BAD_STACK);
+                Status = Step(UNW_FLAG_EHANDLER, &Current, &Next, &Dc, &Nv);
+                if (!NT_SUCCESS(Status)) {
+                    Record->ExceptionFlags |= EXCEPTION_STACK_INVALID;
+                    return FALSE;
+                }
+                Dc.ScopeIndex = ScopeIndex;
+                continue;
             default:
                 Corruption(STATUS_INVALID_DISPOSITION);
             }
+            break;
         }
         Current = Next;
     }
@@ -338,6 +350,23 @@ VOID NTAPI RtlpStepContextToCaller(PCONTEXT Context)
     *Context = Next;
 }
 
+static BOOLEAN TargetInScope(PDISPATCHER_CONTEXT Dc, ULONG Count,
+                             const RISCV64_SCOPE_RECORD *Scope, ULONG64 Target)
+{
+    RISCV64_SCOPE_RECORD Other;
+    ULONG Index, OtherCount;
+
+    if (Scope->JumpTarget && Target == Scope->JumpTarget) return TRUE;
+    for (Index = 0; Index < Count; Index++) {
+        if (!NT_SUCCESS(RtlpRiscv64ReadScope(Dc, Index, &OtherCount, &Other)) || OtherCount != Count)
+            Corruption(STATUS_BAD_FUNCTION_TABLE);
+        if (Target >= Other.BeginAddress && Target < Other.EndAddress &&
+            Other.HandlerAddress == Scope->HandlerAddress && Other.JumpTarget == Scope->JumpTarget)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 EXCEPTION_DISPOSITION __cdecl
 __C_specific_handler(PEXCEPTION_RECORD Record, PVOID Frame,
                      PCONTEXT Context, PDISPATCHER_CONTEXT Dc)
@@ -382,8 +411,7 @@ __C_specific_handler(PEXCEPTION_RECORD Record, PVOID Frame,
         if (Pc < Scope.BeginAddress || Pc >= Scope.EndAddress) continue;
         if (Record->ExceptionFlags & EXCEPTION_UNWIND) {
             if ((Record->ExceptionFlags & EXCEPTION_TARGET_UNWIND) &&
-                ((Target >= Scope.BeginAddress && Target < Scope.EndAddress) ||
-                 (Scope.JumpTarget && Target == Scope.JumpTarget)))
+                TargetInScope(Dc, Count, &Scope, Target))
                 return ExceptionContinueSearch;
             if (!Scope.JumpTarget)
                 RtlpRiscv64CallFunclet((PVOID)1, Frame,
