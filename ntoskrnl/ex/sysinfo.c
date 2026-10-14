@@ -415,7 +415,7 @@ ExpSendAcpiTableIoctl(
     {
         if (InterfaceList != NULL)
             ExFreePool(InterfaceList);
-        return STATUS_NOT_SUPPORTED;
+        return STATUS_NOT_FOUND;
     }
 
     RtlInitUnicodeString(&InterfaceName, InterfaceList);
@@ -3263,6 +3263,12 @@ QSI_DEF(SystemFirmwareTableInformation)
                         break;
                     }
                     Capacity = (ULONG)(Information / sizeof(*Entries));
+                }
+
+                if (Status == STATUS_NOT_FOUND)
+                {
+                    Information = 0;
+                    Status = STATUS_SUCCESS;
                 }
 
                 if (!NT_SUCCESS(Status))
