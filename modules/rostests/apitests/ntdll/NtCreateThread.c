@@ -151,6 +151,11 @@ START_TEST(NtCreateThread)
 
     ok_hex(Status, STATUS_ACCESS_VIOLATION);
 
+#if !defined(_M_IX86) && !defined(_M_AMD64)
+    skip(FALSE, "No thread startup thunk for this architecture\n");
+    return;
+#endif
+
     InitialTeb.PreviousStackBase = NULL;
     InitialTeb.PreviousStackLimit = NULL;
     InitialTeb.StackBase = StackPtr;
