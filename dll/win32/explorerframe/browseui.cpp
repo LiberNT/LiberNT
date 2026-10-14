@@ -173,6 +173,8 @@ STDAPI_(BOOL) DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID fImpLoad)
     }
     else if (dwReason == DLL_PROCESS_DETACH)
     {
+        if (!fImpLoad)
+            FreeToolbarImages();
         gModule.Term();
     }
     return TRUE;

@@ -198,7 +198,7 @@ static const int moveToImageIndex = 44;
 static const int copyToImageIndex = 45;
 static const int folderOptionsImageIndex = 46;
 
-static HIMAGELIST LoadToolbarImages(UINT bitmapId)
+static HIMAGELIST CreateToolbarImages(UINT bitmapId)
 {
     HINSTANCE instance = _AtlBaseModule.GetResourceInstance();
     HBITMAP bitmap = (HBITMAP)LoadImageW(instance, MAKEINTRESOURCEW(bitmapId),
@@ -250,6 +250,31 @@ static HIMAGELIST LoadToolbarImages(UINT bitmapId)
         }
     }
     return images;
+}
+
+static SRWLOCK g_ToolbarImagesLock = SRWLOCK_INIT;
+static HIMAGELIST g_ToolbarImages[2];
+
+static HIMAGELIST LoadToolbarImages(UINT bitmapId)
+{
+    HIMAGELIST &master = g_ToolbarImages[bitmapId == IDB_SHELL_EXPLORER_LG_HOT];
+
+    AcquireSRWLockExclusive(&g_ToolbarImagesLock);
+    if (!master)
+        master = CreateToolbarImages(bitmapId);
+    HIMAGELIST images = master ? ImageList_Duplicate(master) : NULL;
+    ReleaseSRWLockExclusive(&g_ToolbarImagesLock);
+    return images;
+}
+
+void FreeToolbarImages()
+{
+    for (UINT i = 0; i < _countof(g_ToolbarImages); ++i)
+    {
+        if (g_ToolbarImages[i])
+            ImageList_Destroy(g_ToolbarImages[i]);
+        g_ToolbarImages[i] = NULL;
+    }
 }
 
 enum StandardToolbarButtons {
