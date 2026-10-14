@@ -33,6 +33,7 @@
 GUID MountedDevicesGuid = {0x53F5630D, 0xB6BF, 0x11D0, {0x94, 0xF2, 0x00, 0xA0, 0xC9, 0x1E, 0xFB, 0x8B}};
 static const GUID MountMgrBootRamdiskGuid = {0xD9B257FC, 0x684E, 0x4DCB, {0xAB, 0x79, 0x03, 0xCF, 0xA2, 0xF6, 0xB7, 0x50}};
 static const GUID MountMgrEfiSystemPartitionGuid = {0xC12A7328, 0xF81F, 0x11D2, {0xBA, 0x4B, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B}};
+static const GUID MountMgrBasicDataPartitionGuid = {0xEBD0A0A2, 0xB9E5, 0x4433, {0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7}};
 /* ntdddisk.h currently truncates this GPT attribute to 32 bits. */
 static const ULONGLONG MountMgrGptNoDriveLetterAttribute = ((ULONGLONG)1 << 63);
 
@@ -574,7 +575,11 @@ QueryDeviceInformation(
                 *DriveLetterAllowed = FALSE;
         }
         else if (PartitionInfo.PartitionStyle == PARTITION_STYLE_GPT)
+        {
             IsEfiSystemPartition = IsEqualGUID(&PartitionInfo.Gpt.PartitionType, &MountMgrEfiSystemPartitionGuid);
+            if (!IsEqualGUID(&PartitionInfo.Gpt.PartitionType, &MountMgrBasicDataPartitionGuid))
+                *DriveLetterAllowed = FALSE;
+        }
 
         /* Unknown MBR types, EFI system partitions, and fixed GPT volumes marked no-drive-letter stay unassigned. */
         if (IsEfiSystemPartition || (!IsRemovable && PartitionInfo.PartitionStyle == PARTITION_STYLE_GPT && (PartitionInfo.Gpt.Attributes & MountMgrGptNoDriveLetterAttribute)))
