@@ -3212,7 +3212,9 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
             {
                 lf |= DWM_WINDOW_PREMULTIPLIED_ALPHA;
             }
-            if (!(w->style & (WS_MINIMIZE | WS_MAXIMIZE)) &&
+            if ((!(w->style & (WS_MINIMIZE | WS_MAXIMIZE)) ||
+                 ((w->style & WS_MAXIMIZE) &&
+                  g_DwmFrameWindows[count].AnimFlags == DWM_ANIM_MOVE)) &&
                 UserHasWindowEdge(w->style, w->ExStyle))
             {
                 lf |= DWM_WINDOW_NC_SHADOW;
