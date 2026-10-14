@@ -4429,7 +4429,8 @@ DxgkpDrainMonitoredFenceInterruptHandoff(
                 0);
         if (!NT_SUCCESS(Status) &&
             Status != STATUS_NOT_FOUND &&
-            Status != STATUS_DELETE_PENDING)
+            Status != STATUS_DELETE_PENDING &&
+            Status != STATUS_DEVICE_REMOVED)
         {
             DXGKRNL_WARN(
                 "DXGKRNL: monitored-fence interrupt for node %lu "
