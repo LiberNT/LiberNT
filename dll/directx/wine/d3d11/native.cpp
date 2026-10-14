@@ -5684,24 +5684,32 @@ void STDMETHODCALLTYPE NativeContext::ClearState()
     bool previous = recording_disabled;
     recording_disabled = true;
     SetPredication(NULL, FALSE);
-    VSSetShader(NULL, NULL, 0);
-    PSSetShader(NULL, NULL, 0);
-    GSSetShader(NULL, NULL, 0);
-    HSSetShader(NULL, NULL, 0);
-    DSSetShader(NULL, NULL, 0);
-    CSSetShader(NULL, NULL, 0);
+    if (vertex_shader) VSSetShader(NULL, NULL, 0);
+    if (pixel_shader) PSSetShader(NULL, NULL, 0);
+    if (geometry_shader) GSSetShader(NULL, NULL, 0);
+    if (hull_shader) HSSetShader(NULL, NULL, 0);
+    if (domain_shader) DSSetShader(NULL, NULL, 0);
+    if (compute_shader) CSSetShader(NULL, NULL, 0);
     ID3D11ShaderResourceView *views[128] = {};
     ID3D11SamplerState *states[16] = {};
     ID3D11Buffer *buffers[14] = {};
     for (UINT i = 0; i < 6; ++i)
     {
-        SetShaderResources(i, 0, 128, views);
-        SetSamplers(i, 0, 16, states);
-        SetConstantBuffers(i, 0, 14, buffers);
+        UINT bound = ARRAYSIZE(shader_resources[i]);
+        while (bound && !shader_resources[i][bound - 1]) --bound;
+        if (bound) SetShaderResources(i, 0, bound, views);
+        bound = ARRAYSIZE(samplers[i]);
+        while (bound && !samplers[i][bound - 1]) --bound;
+        if (bound) SetSamplers(i, 0, bound, states);
+        bound = ARRAYSIZE(constant_buffers[i]);
+        while (bound && !constant_buffers[i][bound - 1]) --bound;
+        if (bound) SetConstantBuffers(i, 0, bound, buffers);
     }
     ID3D11UnorderedAccessView *uavs[8] = {};
-    CSSetUnorderedAccessViews(0, device->feature_level >= D3D_FEATURE_LEVEL_11_0 ? 8 : 1, uavs, NULL);
-    SOSetTargets(0, NULL, NULL);
+    UINT bound_uavs = device->feature_level >= D3D_FEATURE_LEVEL_11_0 ? 8 : 1;
+    while (bound_uavs && !compute_uavs[bound_uavs - 1]) --bound_uavs;
+    if (bound_uavs) CSSetUnorderedAccessViews(0, bound_uavs, uavs, NULL);
+    if (stream_outputs[0] || stream_outputs[1] || stream_outputs[2] || stream_outputs[3]) SOSetTargets(0, NULL, NULL);
     OMSetRenderTargetsAndUnorderedAccessViews(0, NULL, NULL, 0, 0, NULL, NULL);
     OMSetBlendState(NULL, NULL, ~0u);
     OMSetDepthStencilState(NULL, 0);
