@@ -273,7 +273,8 @@ KiInitializeXStateConfiguration(
        enabled in XCR0 and thus match our calculation. But VBox doesn't handle
        this correctly and simply returns the full size of all *supported*
        features, independent of XCR0. We check and warn. */
-    if (ExtStateMain.Ebx > SharedUserData->XState.Size)
+    if (!SharedUserData->XState.CompactionEnabled &&
+        ExtStateMain.Ebx > SharedUserData->XState.Size)
     {
         DPRINT1("Processor %lu, CPUID 0xD, leaf 0, EBX returns 0x%x, but we calculated 0x%lx\n",
                 ProcessorNumber,
@@ -397,7 +398,19 @@ ULONG
 NTAPI
 KiGetUserXStateScratchSize(VOID)
 {
-    return SharedUserData->XState.Size + 63;
+    ULONG64 Features = KiGetUserXStateFeatures();
+    ULONG Length = sizeof(XSAVE_AREA);
+    ULONG Index, End;
+
+    for (Index = 2; Index < MAXIMUM_XSTATE_FEATURES; Index++)
+    {
+        if (!(Features & (1ULL << Index)))
+            continue;
+        End = KiGetXStateStandardOffset(Index) + SharedUserData->XState.Features[Index].Size;
+        if (End > Length)
+            Length = End;
+    }
+    return Length + 63;
 }
 
 ULONG64
