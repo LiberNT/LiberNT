@@ -9,6 +9,9 @@
 
 #define OSL_MAX_DESCRIPTORS 2048
 
+extern ULONG_PTR VramAddress;
+extern ULONG VramSize;
+
 static PMEMORY_ALLOCATION_DESCRIPTOR OslDescriptors;
 static ULONG OslDescriptorCount;
 
@@ -97,6 +100,37 @@ OslAddDescriptor(
     return TRUE;
 }
 
+static
+VOID
+OslReserveFrameBuffer(VOID)
+{
+    PPAGE_LOOKUP_TABLE_ITEM Table;
+    PFN_NUMBER Count, Page, End;
+    TYPE_OF_MEMORY Type;
+
+    if (VramAddress == 0 || VramSize == 0)
+        return;
+
+    Table = MmGetMemoryMap(&Count);
+    if (!Table)
+        return;
+
+    Page = (PFN_NUMBER)(VramAddress >> MM_PAGE_SHIFT);
+    End = Page + MM_SIZE_TO_PAGES((VramAddress & (MM_PAGE_SIZE - 1)) + VramSize);
+    Page = max(Page, MmLowestPhysicalPage);
+    End = min(End, MmLowestPhysicalPage + Count);
+
+    for (; Page < End; Page++)
+    {
+        Type = Table[Page - MmLowestPhysicalPage].PageAllocated;
+        if (Type == LoaderFree || Type == LoaderFirmwareTemporary ||
+            Type == LoaderLoadedProgram || Type == LoaderOsloaderStack)
+        {
+            Table[Page - MmLowestPhysicalPage].PageAllocated = LoaderFirmwarePermanent;
+        }
+    }
+}
+
 BOOLEAN
 WinLdrSetupMemoryLayout(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
@@ -111,6 +145,8 @@ WinLdrSetupMemoryLayout(
                                               LoaderMemoryData);
     if (!OslDescriptors || !MmSynchronizeFirmwareMap())
         return FALSE;
+
+    OslReserveFrameBuffer();
 
     Table = MmGetMemoryMap(&Count);
     if (!Table || Count == 0 || !MempSetupPaging(0, 1, FALSE))
