@@ -15066,6 +15066,11 @@ DxgkpVidMmBuildAllocationUserMdl(
         }
         else
         {
+            if (Segment->CpuTranslatedAddress.QuadPart != 0)
+            {
+                HostAperturePhysical.QuadPart = Segment->CpuTranslatedAddress.QuadPart +
+                                                (LONGLONG)Allocation->SegmentOffset;
+            }
             Coherent = (BOOLEAN)Segment->Flags.CacheCoherent;
         }
     }
