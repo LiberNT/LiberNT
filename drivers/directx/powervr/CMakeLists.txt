@@ -55,7 +55,7 @@ target_include_directories(powervr_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/glue
     ${CMAKE_CURRENT_SOURCE_DIR}/upstream)
 if(NOT MSVC)
-    target_compile_options(powervr_core PRIVATE -Wno-unused-function)
+    set_property(SOURCE upstream/pvr_fw_trace.c APPEND PROPERTY COMPILE_OPTIONS -Wno-unused-function)
 endif()
 
 add_library(powervr MODULE ${SOURCE} powervr.rc)

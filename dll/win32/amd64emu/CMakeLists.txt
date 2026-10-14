@@ -31,7 +31,8 @@ target_compile_definitions(felix86_core PRIVATE
 target_compile_options(felix86_core PRIVATE
     -O2
     "SHELL:-include ${_felix86_adapter}/compat/felix86_nt.h"
-    "SHELL:-include ${FELIX86_SOURCE_DIR}/src/felix86/common/assert_override.hpp"
+    "SHELL:-include ${FELIX86_SOURCE_DIR}/src/felix86/common/assert_override.hpp")
+set_property(SOURCE ${FELIX86_CORE_SOURCES} ${FELIX86_BISCUIT_SOURCES} APPEND PROPERTY COMPILE_OPTIONS
     -Wno-format
     -Wno-unused-function
     -Wno-unused-variable
@@ -49,7 +50,7 @@ target_compile_definitions(felix86_zydis PRIVATE
     ZYDIS_DISABLE_ENCODER
     ZYDIS_DISABLE_AVX512
     ZYDIS_DISABLE_KNC)
-target_compile_options(felix86_zydis PRIVATE -O2 -Wno-unused-function)
+target_compile_options(felix86_zydis PRIVATE -O2 -Wno-unused-function -Wno-unused-local-typedef)
 
 add_library(felix86_softfloat OBJECT ${FELIX86_SOFTFLOAT_SOURCES})
 target_include_directories(felix86_softfloat PRIVATE ${FELIX86_INCLUDE_DIRECTORIES})
@@ -58,6 +59,8 @@ target_compile_options(felix86_softfloat PRIVATE
     -O2
     -Wno-unused-function
     -Wno-unused-variable
+    -Wno-unused-label
+    -Wno-uninitialized-const-pointer
     -Wno-parentheses
     -Wno-implicit-fallthrough)
 
@@ -108,7 +111,6 @@ target_compile_definitions(amd64emu PRIVATE
     NTDDI_VERSION=${REACTOS_TARGET_NTDDI}
     _CRT_DECLARE_NONSTDC_NAMES=1
     _CRT_NONSTDC_NO_DEPRECATE)
-target_compile_options(amd64emu PRIVATE -Wno-microsoft-anon-tag -Wno-unused-function)
 target_link_libraries(amd64emu
     $<TARGET_FILE:libstdc++>
     $<TARGET_FILE:libsupc++>

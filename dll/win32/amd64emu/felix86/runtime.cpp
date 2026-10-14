@@ -102,16 +102,16 @@ void __throw_bad_alloc() {
 
 }
 
-_LIBCPP_BEGIN_NAMESPACE_STD
-_LIBCPP_BEGIN_EXPLICIT_ABI_ANNOTATIONS
+namespace std {
+inline namespace _LIBCPP_ABI_NAMESPACE {
 
 void __libcpp_verbose_abort(const char* format, ...) noexcept {
     Felix86NtPrint(format);
     Felix86NtTerminate(NT_STATUS_FATAL_APP_EXIT);
 }
 
-_LIBCPP_END_EXPLICIT_ABI_ANNOTATIONS
-_LIBCPP_END_NAMESPACE_STD
+}
+}
 
 static void* allocate(size_t size) {
     void* block = malloc(size ? size : 1);
