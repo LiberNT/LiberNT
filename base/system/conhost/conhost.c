@@ -450,8 +450,128 @@ static void new_line( struct screen_buffer *screen_buffer, RECT *update_rect )
     }
 }
 
+#ifdef __REACTOS__
+int break_wide_cell( struct screen_buffer *screen_buffer, unsigned int index )
+{
+    char_info_t *data = screen_buffer->data;
+    unsigned int size = screen_buffer->width * screen_buffer->height;
+    int blanked = 0;
+
+    if (index >= size) return 0;
+    if ((data[index].attr & COMMON_LVB_LEADING_BYTE) && index + 1 < size &&
+        (data[index + 1].attr & COMMON_LVB_TRAILING_BYTE))
+    {
+        data[index + 1].ch = ' ';
+        data[index + 1].attr &= ~CELL_WIDE_FLAGS;
+        blanked = 1;
+    }
+    else if ((data[index].attr & COMMON_LVB_TRAILING_BYTE) && index &&
+             (data[index - 1].attr & COMMON_LVB_LEADING_BYTE))
+    {
+        data[index - 1].ch = ' ';
+        data[index - 1].attr &= ~CELL_WIDE_FLAGS;
+        blanked = -1;
+    }
+    data[index].attr &= ~CELL_WIDE_FLAGS;
+    return blanked;
+}
+
+unsigned int put_char_cells( struct screen_buffer *screen_buffer, unsigned int index, WCHAR lead, WCHAR trail,
+                             unsigned short attr, unsigned int width )
+{
+    char_info_t *data = screen_buffer->data;
+    unsigned int blanked = 0;
+    int side;
+
+    attr &= ~CELL_WIDE_FLAGS;
+    side = break_wide_cell( screen_buffer, index );
+    if (side < 0) blanked |= PUT_CELLS_LEFT;
+    if (side > 0 && width == 1) blanked |= PUT_CELLS_RIGHT;
+    if (width == 2)
+    {
+        if (break_wide_cell( screen_buffer, index + 1 ) > 0) blanked |= PUT_CELLS_RIGHT;
+        data[index].ch = lead;
+        data[index].attr = attr | COMMON_LVB_LEADING_BYTE;
+        data[index + 1].ch = trail;
+        data[index + 1].attr = attr | COMMON_LVB_TRAILING_BYTE;
+    }
+    else
+    {
+        data[index].ch = lead;
+        data[index].attr = attr;
+    }
+    return blanked;
+}
+
+static void write_text_char( struct screen_buffer *screen_buffer, WCHAR lead, WCHAR trail, unsigned int width,
+                             RECT *update_rect, unsigned int *home_y )
+{
+    unsigned int index, blanked;
+
+    if (width == 2 && screen_buffer->width < 2) width = 1;
+    if (screen_buffer->cursor_x == screen_buffer->width)
+    {
+        screen_buffer->cursor_x = 0;
+        screen_buffer->cursor_y++;
+    }
+    if (screen_buffer->cursor_y == screen_buffer->height)
+    {
+        if (home_y)
+        {
+            if (!*home_y) return;
+            (*home_y)--;
+        }
+        new_line( screen_buffer, update_rect );
+    }
+    if (width == 2 && screen_buffer->cursor_x == screen_buffer->width - 1)
+    {
+        if (!(screen_buffer->mode & ENABLE_WRAP_AT_EOL_OUTPUT))
+        {
+            screen_buffer->cursor_x = update_rect->left;
+            if (screen_buffer->cursor_x >= screen_buffer->width - 1) width = 1;
+        }
+        else
+        {
+            index = screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x;
+            blanked = put_char_cells( screen_buffer, index, ' ', ' ', screen_buffer->attr, 1 );
+            reset_cell_colors( screen_buffer, index, 1 );
+            update_rect->left   = min( update_rect->left,   (LONG)screen_buffer->cursor_x -
+                                                    !!(screen_buffer->cursor_x && (blanked & PUT_CELLS_LEFT)) );
+            update_rect->top    = min( update_rect->top,    screen_buffer->cursor_y );
+            update_rect->right  = max( update_rect->right,  screen_buffer->cursor_x );
+            update_rect->bottom = max( update_rect->bottom, screen_buffer->cursor_y );
+            screen_buffer->cursor_x = 0;
+            if (++screen_buffer->cursor_y == screen_buffer->height)
+            {
+                if (home_y)
+                {
+                    if (!*home_y) return;
+                    (*home_y)--;
+                }
+                new_line( screen_buffer, update_rect );
+            }
+        }
+    }
+
+    index = screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x;
+    blanked = put_char_cells( screen_buffer, index, lead, trail, screen_buffer->attr, width );
+    reset_cell_colors( screen_buffer, index, width );
+    update_rect->left   = min( update_rect->left,   (LONG)screen_buffer->cursor_x -
+                                                    !!(screen_buffer->cursor_x && (blanked & PUT_CELLS_LEFT)) );
+    update_rect->top    = min( update_rect->top,    screen_buffer->cursor_y );
+    update_rect->right  = max( update_rect->right,  (LONG)min( screen_buffer->cursor_x + width - 1 +
+                                                         !!(blanked & PUT_CELLS_RIGHT), screen_buffer->width - 1 ) );
+    update_rect->bottom = max( update_rect->bottom, screen_buffer->cursor_y );
+    screen_buffer->cursor_x += width;
+}
+#endif
+
 static void write_char( struct screen_buffer *screen_buffer, WCHAR ch, RECT *update_rect, unsigned int *home_y )
 {
+#ifdef __REACTOS__
+    write_text_char( screen_buffer, ch, ch, (ch >= 0xd800 && ch <= 0xdfff) ? 1 : console_char_width( ch ),
+                     update_rect, home_y );
+#else
     if (screen_buffer->cursor_x == screen_buffer->width)
     {
         screen_buffer->cursor_x = 0;
@@ -469,14 +589,12 @@ static void write_char( struct screen_buffer *screen_buffer, WCHAR ch, RECT *upd
 
     screen_buffer->data[screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x].ch = ch;
     screen_buffer->data[screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x].attr = screen_buffer->attr;
-#ifdef __REACTOS__
-    reset_cell_colors( screen_buffer, screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x, 1 );
-#endif
     update_rect->left   = min( update_rect->left,   screen_buffer->cursor_x );
     update_rect->top    = min( update_rect->top,    screen_buffer->cursor_y );
     update_rect->right  = max( update_rect->right,  screen_buffer->cursor_x );
     update_rect->bottom = max( update_rect->bottom, screen_buffer->cursor_y );
     screen_buffer->cursor_x++;
+#endif
 }
 
 #ifdef __REACTOS__
@@ -2326,6 +2444,17 @@ static NTSTATUS write_console( struct screen_buffer *screen_buffer, const WCHAR 
         }
         if (screen_buffer->cursor_x == screen_buffer->width && !(screen_buffer->mode & ENABLE_WRAP_AT_EOL_OUTPUT))
             screen_buffer->cursor_x = update_rect.left;
+#ifdef __REACTOS__
+        if (IS_HIGH_SURROGATE( buffer[i] ) && i + 1 < len && IS_LOW_SURROGATE( buffer[i + 1] ))
+        {
+            unsigned int width = console_char_width( 0x10000 + ((buffer[i] - 0xd800) << 10) + (buffer[i + 1] - 0xdc00) );
+
+            if (width == 2) write_text_char( screen_buffer, buffer[i], buffer[i + 1], 2, &update_rect, NULL );
+            else write_text_char( screen_buffer, 0xfffd, 0xfffd, 1, &update_rect, NULL );
+            i++;
+            continue;
+        }
+#endif
         write_char( screen_buffer, buffer[i], &update_rect, NULL );
     }
 
@@ -2371,6 +2500,57 @@ static NTSTATUS write_output( struct screen_buffer *screen_buffer, const struct 
         return STATUS_SUCCESS;
     }
 
+#ifdef __REACTOS__
+    if (params->mode == CHAR_INFO_MODE_TEXT && !params->width)
+    {
+        const WCHAR *text = (const WCHAR *)(params + 1);
+        unsigned int size = screen_buffer->width * screen_buffer->height;
+        unsigned int pos = params->y * screen_buffer->width + params->x, first = pos, width;
+        WCHAR lead, trail;
+
+        for (i = 0; i < entry_cnt && pos < size; i++)
+        {
+            lead = trail = text[i];
+            if (IS_HIGH_SURROGATE( lead ) && i + 1 < entry_cnt && IS_LOW_SURROGATE( text[i + 1] ))
+            {
+                width = console_char_width( 0x10000 + ((lead - 0xd800) << 10) + (text[i + 1] - 0xdc00) );
+                if (width == 2) trail = text[i + 1];
+                else lead = trail = 0xfffd;
+                i++;
+            }
+            else width = (lead >= 0xd800 && lead <= 0xdfff) ? 1 : console_char_width( lead );
+            if (width == 2 && pos % screen_buffer->width == screen_buffer->width - 1)
+            {
+                put_char_cells( screen_buffer, pos, ' ', ' ', screen_buffer->data[pos].attr, 1 );
+                pos++;
+            }
+            if (pos + width > size) break;
+            put_char_cells( screen_buffer, pos, lead, trail, screen_buffer->data[pos].attr, width );
+            pos += width;
+        }
+        if (i && is_active( screen_buffer ))
+        {
+            RECT update_rect;
+
+            update_rect.top    = first / screen_buffer->width;
+            update_rect.bottom = (pos - 1) / screen_buffer->width;
+            update_rect.left   = update_rect.top == update_rect.bottom ? (first % screen_buffer->width) : 0;
+            update_rect.right  = update_rect.top == update_rect.bottom ? ((pos - 1) % screen_buffer->width)
+                                                                       : screen_buffer->width - 1;
+            if (update_rect.left) update_rect.left--;
+            if (update_rect.right < screen_buffer->width - 1) update_rect.right++;
+            update_output( screen_buffer, &update_rect );
+            tty_sync( screen_buffer->console );
+        }
+        {
+            DWORD *result;
+            if (!(result = alloc_ioctl_buffer( sizeof(*result) ))) return STATUS_NO_MEMORY;
+            *result = i;
+        }
+        return STATUS_SUCCESS;
+    }
+#endif
+
     for (i = 0, src = (char *)(params + 1); i < entry_cnt; i++, src += entry_size)
     {
         if (params->width)
@@ -2393,9 +2573,11 @@ static NTSTATUS write_output( struct screen_buffer *screen_buffer, const struct 
             dest->ch = *(const WCHAR *)src;
             break;
         case CHAR_INFO_MODE_ATTR:
-            dest->attr = *(const unsigned short *)src;
 #ifdef __REACTOS__
+            dest->attr = (*(const unsigned short *)src & ~CELL_WIDE_FLAGS) | (dest->attr & CELL_WIDE_FLAGS);
             reset_cell_colors( screen_buffer, dest - screen_buffer->data, 1 );
+#else
+            dest->attr = *(const unsigned short *)src;
 #endif
             break;
         case CHAR_INFO_MODE_TEXTATTR:
@@ -2489,7 +2671,28 @@ static NTSTATUS read_output( struct screen_buffer *screen_buffer, const struct c
                          *out_size / sizeof(*data) );
             *out_size = count * sizeof(*data);
             if (!(data = alloc_ioctl_buffer( *out_size ))) return STATUS_NO_MEMORY;
+#ifdef __REACTOS__
+            {
+                unsigned int out = 0;
+
+                for (i = 0; i < count; i++)
+                {
+                    if ((src[i].attr & COMMON_LVB_LEADING_BYTE) && i + 1 < count &&
+                        (src[i + 1].attr & COMMON_LVB_TRAILING_BYTE))
+                    {
+                        data[out++] = src[i].ch;
+                        if (IS_HIGH_SURROGATE( src[i].ch ) && IS_LOW_SURROGATE( src[i + 1].ch ))
+                            data[out++] = src[i + 1].ch;
+                        i++;
+                    }
+                    else if (src[i].attr & CELL_WIDE_FLAGS) data[out++] = ' ';
+                    else data[out++] = src[i].ch;
+                }
+                *out_size = out * sizeof(*data);
+            }
+#else
             for (i = 0; i < count; i++) data[i] = src[i].ch;
+#endif
         }
         break;
     case CHAR_INFO_MODE_ATTR:
@@ -2506,7 +2709,21 @@ static NTSTATUS read_output( struct screen_buffer *screen_buffer, const struct c
                          *out_size / sizeof(*data) );
             *out_size = count * sizeof(*data);
             if (!(data = alloc_ioctl_buffer( *out_size ))) return STATUS_NO_MEMORY;
+#ifdef __REACTOS__
+            for (i = 0; i < count; i++)
+            {
+                if ((src[i].attr & COMMON_LVB_LEADING_BYTE) && i + 1 < count &&
+                    (src[i + 1].attr & COMMON_LVB_TRAILING_BYTE))
+                {
+                    data[i] = src[i].attr;
+                    data[i + 1] = src[i + 1].attr;
+                    i++;
+                }
+                else data[i] = src[i].attr & ~CELL_WIDE_FLAGS;
+            }
+#else
             for (i = 0; i < count; i++) data[i] = src[i].attr;
+#endif
         }
         break;
     case CHAR_INFO_MODE_TEXTATTR:
@@ -2529,6 +2746,12 @@ static NTSTATUS read_output( struct screen_buffer *screen_buffer, const struct c
                 memcpy( &data[i * width], &screen_buffer->data[(y + i) * screen_buffer->width + x],
                         width * sizeof(*data) );
             }
+#ifdef __REACTOS__
+            for (i = 0; i < width * count; i++)
+            {
+                if (data[i].ch >= 0xd800 && data[i].ch <= 0xdfff) data[i].ch = 0xfffd;
+            }
+#endif
         }
         break;
     default:
@@ -2558,12 +2781,52 @@ static NTSTATUS fill_output( struct screen_buffer *screen_buffer, const struct c
     switch(params->mode)
     {
     case CHAR_INFO_MODE_TEXT:
+#ifdef __REACTOS__
+        if (!(params->ch >= 0xd800 && params->ch <= 0xdfff) && console_char_width( params->ch ) == 2 &&
+            screen_buffer->width >= 2)
+        {
+            unsigned int pos = dest - screen_buffer->data, size = screen_buffer->width * screen_buffer->height;
+            unsigned int written = 0, start = pos;
+
+            while (written < params->count && pos < size)
+            {
+                if (pos % screen_buffer->width == screen_buffer->width - 1)
+                {
+                    put_char_cells( screen_buffer, pos, ' ', ' ', screen_buffer->data[pos].attr, 1 );
+                    pos++;
+                    continue;
+                }
+                put_char_cells( screen_buffer, pos, params->ch, params->ch, screen_buffer->data[pos].attr, 2 );
+                pos += 2;
+                written++;
+            }
+            if (pos > start && is_active( screen_buffer ))
+            {
+                RECT update_rect;
+                SetRect( &update_rect, 0, start / screen_buffer->width, screen_buffer->width - 1,
+                         (pos - 1) / screen_buffer->width );
+                update_output( screen_buffer, &update_rect );
+                tty_sync( screen_buffer->console );
+            }
+            if (!(result = alloc_ioctl_buffer( sizeof(*result) ))) return STATUS_NO_MEMORY;
+            *result = written;
+            return STATUS_SUCCESS;
+        }
+        for (i = 0; i < count; i++)
+        {
+            break_wide_cell( screen_buffer, dest - screen_buffer->data + i );
+            dest[i].ch = params->ch;
+        }
+#else
         for (i = 0; i < count; i++) dest[i].ch = params->ch;
+#endif
         break;
     case CHAR_INFO_MODE_ATTR:
-        for (i = 0; i < count; i++) dest[i].attr = params->attr;
 #ifdef __REACTOS__
+        for (i = 0; i < count; i++) dest[i].attr = (params->attr & ~CELL_WIDE_FLAGS) | (dest[i].attr & CELL_WIDE_FLAGS);
         reset_cell_colors( screen_buffer, dest - screen_buffer->data, count );
+#else
+        for (i = 0; i < count; i++) dest[i].attr = params->attr;
 #endif
         break;
     case CHAR_INFO_MODE_TEXTATTR:

@@ -55,6 +55,7 @@ struct vt_state
     int                 mouse_y;
     BOOL                focus_events;
     BOOL                bracketed_paste;
+    WCHAR               high_surrogate;
     BOOL                has_margins;
     unsigned int        margin_top;
     unsigned int        margin_bottom;
@@ -243,10 +244,12 @@ static void vt_reverse_index( struct screen_buffer *screen_buffer, struct vt_sta
         screen_buffer->cursor_y--;
 }
 
-static void vt_put( struct screen_buffer *screen_buffer, struct vt_state *vt, WCHAR ch, RECT *rect )
+static void vt_put_cells( struct screen_buffer *screen_buffer, struct vt_state *vt, WCHAR lead, WCHAR trail,
+                          unsigned int width, RECT *rect )
 {
-    char_info_t *cell;
+    unsigned int index;
 
+    if (width == 2 && screen_buffer->width < 2) width = 1;
     if (screen_buffer->cursor_x >= screen_buffer->width)
     {
         if (screen_buffer->mode & ENABLE_WRAP_AT_EOL_OUTPUT)
@@ -256,14 +259,50 @@ static void vt_put( struct screen_buffer *screen_buffer, struct vt_state *vt, WC
         }
         else screen_buffer->cursor_x = screen_buffer->width - 1;
     }
+    if (width == 2 && screen_buffer->cursor_x == screen_buffer->width - 1)
+    {
+        if (screen_buffer->mode & ENABLE_WRAP_AT_EOL_OUTPUT)
+        {
+            index = screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x;
+            put_char_cells( screen_buffer, index, ' ', ' ', screen_buffer->attr, 1 );
+            vt_color_cells( screen_buffer, index, 1 );
+            vt_touch( rect, screen_buffer->cursor_x - 1, screen_buffer->cursor_y,
+                      screen_buffer->cursor_x, screen_buffer->cursor_y );
+            screen_buffer->cursor_x = 0;
+            vt_index( screen_buffer, vt, rect );
+        }
+        else screen_buffer->cursor_x--;
+    }
+    index = screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x;
+    put_char_cells( screen_buffer, index, lead, trail, screen_buffer->attr, width );
+    vt_color_cells( screen_buffer, index, width );
+    vt_touch( rect, screen_buffer->cursor_x ? screen_buffer->cursor_x - 1 : 0, screen_buffer->cursor_y,
+              min( screen_buffer->cursor_x + width, screen_buffer->width - 1 ), screen_buffer->cursor_y );
+    screen_buffer->cursor_x += width;
+}
+
+static void vt_put( struct screen_buffer *screen_buffer, struct vt_state *vt, WCHAR ch, RECT *rect )
+{
+    WCHAR high = vt->high_surrogate;
+
+    vt->high_surrogate = 0;
+    if (IS_HIGH_SURROGATE( ch ))
+    {
+        if (high) vt_put_cells( screen_buffer, vt, 0xfffd, 0xfffd, 1, rect );
+        vt->high_surrogate = ch;
+        return;
+    }
+    if (IS_LOW_SURROGATE( ch ))
+    {
+        if (high && console_char_width( 0x10000 + ((high - 0xd800) << 10) + (ch - 0xdc00) ) == 2)
+            vt_put_cells( screen_buffer, vt, high, ch, 2, rect );
+        else
+            vt_put_cells( screen_buffer, vt, 0xfffd, 0xfffd, 1, rect );
+        return;
+    }
+    if (high) vt_put_cells( screen_buffer, vt, 0xfffd, 0xfffd, 1, rect );
     if (vt->pen.line_drawing && ch >= 0x60 && ch <= 0x7e) ch = line_drawing_map[ch - 0x60];
-    cell = &screen_buffer->data[screen_buffer->cursor_y * screen_buffer->width + screen_buffer->cursor_x];
-    cell->ch = ch;
-    cell->attr = screen_buffer->attr;
-    vt_color_cells( screen_buffer, cell - screen_buffer->data, 1 );
-    vt_touch( rect, screen_buffer->cursor_x, screen_buffer->cursor_y,
-              screen_buffer->cursor_x, screen_buffer->cursor_y );
-    screen_buffer->cursor_x++;
+    vt_put_cells( screen_buffer, vt, ch, ch, console_char_width( ch ), rect );
 }
 
 static unsigned int vt_nearest_color( struct screen_buffer *screen_buffer, unsigned int r,

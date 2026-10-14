@@ -201,6 +201,29 @@ static VOID test_CP_ThreadLang(VOID)
 }
 
 
+static COORD
+WideCharCursor(COORD Start, int Count, SHORT Width)
+{
+    COORD Cursor = Start;
+    int n;
+
+    for (n = 0; n < Count; ++n)
+    {
+        if (Cursor.X >= Width - 1)
+        {
+            Cursor.X = 0;
+            Cursor.Y++;
+        }
+        Cursor.X += 2;
+    }
+    if (Cursor.X == Width)
+    {
+        Cursor.X = 0;
+        Cursor.Y++;
+    }
+    return Cursor;
+}
+
 /* Russian Code Page 855 */
 // NOTE that CP 866 can also be used
 static void test_cp855(HANDLE hConOut)
@@ -314,9 +337,8 @@ static void test_cp855(HANDLE hConOut)
         }
 
         /* Check cursor */
-        len = count;        /* u9580 is normal width in Russian */
-        c.X = (SHORT)(len % csbi.dwSize.X);
-        c.Y = (SHORT)(len / csbi.dwSize.X);
+        c.X = c.Y = 0;
+        c = WideCharCursor(c, count, csbi.dwSize.X);
         okCURSOR(hConOut, c);
 
         /* Check cursor */
@@ -344,22 +366,22 @@ static void test_cp855(HANDLE hConOut)
         }
 
         /* Check cursor */
-        len = 1 + count;
-        c.X = (SHORT)(len % csbi.dwSize.X);
-        c.Y = (SHORT)(len / csbi.dwSize.X);
+        c.X = 1;
+        c.Y = 0;
+        c = WideCharCursor(c, count, csbi.dwSize.X);
         okCURSOR(hConOut, c);
 
         /* Fill by ideograph space */
         c.X = c.Y = 0;
         ret = FillConsoleOutputCharacterW(hConOut, ideograph_space, csbi.dwSize.X * csbi.dwSize.Y, c, &len);
         ok(ret, "FillConsoleOutputCharacterW failed\n");
-        ok_long(len, csbi.dwSize.X * csbi.dwSize.Y);
+        ok_long(len, (csbi.dwSize.X / 2) * csbi.dwSize.Y);
 
         /* Read characters at (0,0) */
         c.X = c.Y = 0;
         ret = ReadConsoleOutputCharacterW(hConOut, str, 3 * sizeof(WCHAR), c, &len);
         ok(ret, "ReadConsoleOutputCharacterW failed\n");
-        ok_long(len, 6);
+        ok_long(len, 3);
         ok(str[0] == ideograph_space || str[0] == L'?', "str[0] was: 0x%04X\n", str[0]);
         ok(str[1] == ideograph_space || str[1] == L'?', "str[1] was: 0x%04X\n", str[1]);
         ok(str[2] == ideograph_space || str[2] == L'?', "str[2] was: 0x%04X\n", str[2]);
@@ -369,15 +391,15 @@ static void test_cp855(HANDLE hConOut)
         ret = ReadConsoleOutputAttribute(hConOut, attrs, 6, c, &len);
         ok(ret, "ReadConsoleOutputAttribute failed\n");
         ok_long(len, 6);
-        ok_int(attrs[0], ATTR);
+        ok_int(attrs[0], ATTR | COMMON_LVB_LEADING_BYTE);
 
         /* Read characters at (1,0) */
         c.X = 1;
         c.Y = 0;
         ret = ReadConsoleOutputCharacterW(hConOut, str, 3 * sizeof(WCHAR), c, &len);
         ok(ret, "ReadConsoleOutputCharacterW failed\n");
-        ok_long(len, 6);
-        ok(str[0] == ideograph_space || str[0] == L'?', "str[0] was: 0x%04X\n", str[0]);
+        ok_long(len, 4);
+        ok_int(str[0], L' ');
         ok(str[1] == ideograph_space || str[1] == L'?', "str[1] was: 0x%04X\n", str[1]);
         ok(str[2] == ideograph_space || str[2] == L'?', "str[2] was: 0x%04X\n", str[2]);
 
@@ -398,7 +420,7 @@ static void test_cp855(HANDLE hConOut)
         ok_int(attrs[0], ATTR);
 
         /* Check cursor */
-        c.X = 2;
+        c.X = 3;
         c.Y = 0;
         okCURSOR(hConOut, c);
 
@@ -406,10 +428,10 @@ static void test_cp855(HANDLE hConOut)
         c.X = c.Y = 0;
         ret = ReadConsoleOutputCharacterW(hConOut, str, 3 * sizeof(WCHAR), c, &len);
         ok(ret, "ReadConsoleOutputCharacterW failed\n");
-        ok_long(len, 6);
-        ok(str[0] == ideograph_space || str[0] == L'?', "str[0] was: 0x%04X\n", str[0]);
+        ok_long(len, 4);
+        ok_int(str[0], L' ');
         ok(str[1] == u9580[0] || str[1] == L'?', "str[1] was: 0x%04X\n", str[1]);
-        ok(str[2] == ideograph_space || str[2] == L'?', "str[2] was: 0x%04X\n", str[2]);
+        ok_int(str[2], L' ');
     }
 
     /* Restore code page */
