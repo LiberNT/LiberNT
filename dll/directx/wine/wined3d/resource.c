@@ -31,6 +31,10 @@ WINE_DECLARE_DEBUG_CHANNEL(d3d_perf);
 static void resource_check_usage(uint32_t usage, unsigned int access)
 {
     static const uint32_t handled = WINED3DUSAGE_DYNAMIC
+#ifdef __REACTOS__
+            | WINED3DUSAGE_SOFTWAREPROCESSING
+            | WINED3DUSAGE_POINTS
+#endif
             | WINED3DUSAGE_STATICDECL
             | WINED3DUSAGE_OVERLAY
             | WINED3DUSAGE_SCRATCH
