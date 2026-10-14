@@ -4267,17 +4267,9 @@ DwmComposeLoop(HANDLE hStopEvent)
                     wr = wl + wins[i].AnimCx;
                     wb = wt + wins[i].AnimCy;
                 }
-                margin = 2 * (((DwmBlurRadius() + 1) / 2) * DWM_BLUR_PASSES + 2);
-                if (wr <= pl - margin || wl >= pr + margin ||
-                    wb <= pt - margin || wt >= pb + margin)
+                if (wr <= pl || wl >= pr || wb <= pt || wt >= pb)
                     continue;
-                if (!DwmGpuComposeIsActive())
-                {
-                    pl = max(pl - margin, 0);
-                    pt = max(pt - margin, 0);
-                    pr = min(pr + margin, g_W);
-                    pb = min(pb + margin, g_H);
-                }
+                margin = DwmBlurRadius() * DWM_BLUR_PASSES + 1;
                 cl = pl - margin; ct = pt - margin;
                 cr = pr + margin; cb = pb + margin;
                 if (cl < 0) cl = 0;
