@@ -35,6 +35,7 @@ typedef struct _KMT_USER_WORK_LIST
     LIST_ENTRY ListHead;
     FAST_MUTEX Lock;
     KEVENT NewWorkEvent;
+    KEVENT WaiterReadyEvent;
     volatile LONG CancelWait;
 } KMT_USER_WORK_LIST, *PKMT_USER_WORK_LIST;
 
@@ -123,6 +124,7 @@ DriverEntry(
 
     ExInitializeFastMutex(&WorkList.Lock);
     KeInitializeEvent(&WorkList.NewWorkEvent, NotificationEvent, FALSE);
+    KeInitializeEvent(&WorkList.WaiterReadyEvent, NotificationEvent, FALSE);
     InitializeListHead(&WorkList.ListHead);
     WorkList.CancelWait = FALSE;
     KmtPoFxInitializePnp(DriverObject, MainDeviceObject);
@@ -364,6 +366,7 @@ DriverIoControl(
         {
             ANSI_STRING TestName;
             PCKMT_TEST TestEntry;
+            LARGE_INTEGER ReadyTimeout;
 
             DPRINT("DriverIoControl. IOCTL_KMTEST_RUN_TEST, inlen=%lu, outlen=%lu\n",
                      IoStackLocation->Parameters.DeviceIoControl.InputBufferLength,
@@ -371,6 +374,9 @@ DriverIoControl(
             TestName.Length = TestName.MaximumLength = (USHORT)min(IoStackLocation->Parameters.DeviceIoControl.InputBufferLength, USHRT_MAX);
             TestName.Buffer = Irp->AssociatedIrp.SystemBuffer;
             DPRINT("DriverIoControl. Run test: %Z\n", &TestName);
+
+            ReadyTimeout.QuadPart = -5LL * 1000 * 1000 * 10;
+            KeWaitForSingleObject(&WorkList.WaiterReadyEvent, Executive, KernelMode, FALSE, &ReadyTimeout);
 
             for (TestEntry = TestList; TestEntry->TestName; ++TestEntry)
             {
@@ -472,6 +478,7 @@ resultbuffer_done:
 
             /* TODO: prevent multiple concurrent invocations */
             Timeout.QuadPart = TimeoutDuration;
+            KeSetEvent(&WorkList.WaiterReadyEvent, IO_NO_INCREMENT, FALSE);
             Status = KeWaitForSingleObject(&WorkList.NewWorkEvent, UserRequest, UserMode, FALSE, &Timeout);
 
             if (InterlockedExchange(&WorkList.CancelWait, FALSE))
@@ -516,6 +523,7 @@ resultbuffer_done:
         {
             InterlockedExchange(&WorkList.CancelWait, FALSE);
             KeClearEvent(&WorkList.NewWorkEvent);
+            KeClearEvent(&WorkList.WaiterReadyEvent);
             break;
         }
         case IOCTL_KMTEST_USERMODE_SEND_RESPONSE:
