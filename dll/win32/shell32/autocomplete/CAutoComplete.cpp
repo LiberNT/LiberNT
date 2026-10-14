@@ -1800,7 +1800,9 @@ LRESULT CAutoComplete::OnNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &b
             LPNMLISTVIEW pListView = reinterpret_cast<LPNMLISTVIEW>(pnmh);
             INT iItem = pListView->iItem;
             TRACE("LVN_HOTTRACK: iItem:%d\n", iItem);
+            m_bInSelectItem = TRUE;
             m_hwndList.SetCurSel(iItem);
+            m_bInSelectItem = FALSE;
             m_hwndList.EnsureVisible(iItem, FALSE);
             return TRUE;
         }
