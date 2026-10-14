@@ -611,6 +611,7 @@ CheckForCurrentHostname(CONST CHAR * Name, PFIXED_INFO network_info)
     {
         return 0;
     }
+    ret = htonl(INADDR_LOOPBACK);
     /* get adapter info */
     AdapterAddressesSize = 0;
     GetAdaptersAddresses(AF_INET,
@@ -621,9 +622,13 @@ CheckForCurrentHostname(CONST CHAR * Name, PFIXED_INFO network_info)
                          &AdapterAddressesSize);
     if (!AdapterAddressesSize)
     {
-        return 0;
+        return ret;
     }
     Addresses = RtlAllocateHeap(RtlGetProcessHeap(), 0, AdapterAddressesSize);
+    if (!Addresses)
+    {
+        return ret;
+    }
     Status = GetAdaptersAddresses(AF_INET,
                                   GAA_FLAG_SKIP_FRIENDLY_NAME | GAA_FLAG_SKIP_DNS_SERVER |
                                   GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST,
@@ -633,16 +638,17 @@ CheckForCurrentHostname(CONST CHAR * Name, PFIXED_INFO network_info)
     if (Status)
     {
         RtlFreeHeap(RtlGetProcessHeap(), 0, Addresses);
-        return 0;
+        return ret;
     }
     for (pip = Addresses; pip != NULL; pip = pip->Next) {
+        if (!pip->FirstUnicastAddress)
+            continue;
         Address = ((LPSOCKADDR_IN)pip->FirstUnicastAddress->Address.lpSockaddr)->sin_addr.S_un.S_addr;
-        if (Address != ntohl(INADDR_LOOPBACK))
+        if (Address && Address != htonl(INADDR_LOOPBACK))
+        {
+            ret = Address;
             break;
-    }
-    if (Address && Address != ntohl(INADDR_LOOPBACK))
-    {
-        ret = Address;
+        }
     }
     RtlFreeHeap(RtlGetProcessHeap(), 0, Addresses);
     return ret;
