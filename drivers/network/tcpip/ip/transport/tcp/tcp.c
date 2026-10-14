@@ -662,7 +662,7 @@ UINT TCPAllocatePort(const UINT HintPort)
         }
     }
     else
-        return AllocatePortFromRange( &TCPPorts, 1024, 5000 );
+        return AllocatePortFromRange( &TCPPorts, DYNAMIC_PORT_FIRST, DYNAMIC_PORT_LAST );
 }
 
 VOID TCPFreePort(const UINT Port)

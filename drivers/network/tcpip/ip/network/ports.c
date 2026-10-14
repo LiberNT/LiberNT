@@ -15,6 +15,7 @@ NTSTATUS PortsStartup( PPORT_SET PortSet,
 		   UINT PortsToManage ) {
     PortSet->StartingPort = StartingPort;
     PortSet->PortsToOversee = PortsToManage;
+    PortSet->NextPort = 0;
 
     PortSet->ProtoBitBuffer =
 	ExAllocatePoolWithTag( NonPagedPool, (PortSet->PortsToOversee + 7) / 8,
@@ -84,10 +85,10 @@ ULONG AllocateAnyPort( PPORT_SET PortSet ) {
 }
 
 ULONG AllocatePortFromRange( PPORT_SET PortSet, ULONG Lowest, ULONG Highest ) {
-    ULONG AllocatedPort;
+    ULONG AllocatedPort, Start;
     KIRQL OldIrql;
 
-    if ((Lowest < PortSet->StartingPort) ||
+    if ((Lowest < PortSet->StartingPort) || (Lowest > Highest) ||
         (Highest >= PortSet->StartingPort + PortSet->PortsToOversee))
     {
         return -1;
@@ -97,9 +98,18 @@ ULONG AllocatePortFromRange( PPORT_SET PortSet, ULONG Lowest, ULONG Highest ) {
     Highest -= PortSet->StartingPort;
 
     KeAcquireSpinLock( &PortSet->Lock, &OldIrql );
-    AllocatedPort = RtlFindClearBits( &PortSet->ProtoBitmap, 1, Lowest );
-    if( AllocatedPort != (ULONG)-1 && AllocatedPort <= Highest) {
+    Start = PortSet->NextPort;
+    if (Start < Lowest || Start > Highest) Start = Lowest;
+    AllocatedPort = RtlFindClearBits( &PortSet->ProtoBitmap, 1, Start );
+    if (AllocatedPort == (ULONG)-1 || AllocatedPort < Lowest || AllocatedPort > Highest)
+    {
+        AllocatedPort = RtlFindClearBits( &PortSet->ProtoBitmap, 1, Lowest );
+        if (AllocatedPort != (ULONG)-1 && (AllocatedPort < Lowest || AllocatedPort > Highest))
+            AllocatedPort = (ULONG)-1;
+    }
+    if( AllocatedPort != (ULONG)-1 ) {
 	RtlSetBit( &PortSet->ProtoBitmap, AllocatedPort );
+	PortSet->NextPort = AllocatedPort + 1;
 	AllocatedPort += PortSet->StartingPort;
 	KeReleaseSpinLock( &PortSet->Lock, OldIrql );
 	return htons(AllocatedPort);

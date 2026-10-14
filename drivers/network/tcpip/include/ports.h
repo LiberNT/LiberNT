@@ -10,11 +10,15 @@
 
 #pragma once
 
+#define DYNAMIC_PORT_FIRST 49152
+#define DYNAMIC_PORT_LAST  65535
+
 typedef struct _PORT_SET {
     RTL_BITMAP ProtoBitmap;
     PVOID ProtoBitBuffer;
     UINT StartingPort;
     UINT PortsToOversee;
+    UINT NextPort;
     KSPIN_LOCK Lock;
 } PORT_SET, *PPORT_SET;
 
