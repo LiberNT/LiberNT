@@ -20,6 +20,7 @@
  */
 
 #include "precomp.h"
+#include <ime/indicml.h>
 
 #define BALLOON_MAXWIDTH 340
 
@@ -172,7 +173,9 @@ TrayLoadPromoted(_In_ const InternalIconData *pItem)
     if (RegQueryValueExW(hKey, L"IsPromoted", NULL, NULL, (LPBYTE)&dwValue, &cbValue) != ERROR_SUCCESS)
     {
         DWORD dwUID = pItem->uID;
-        dwValue = 0;
+        WCHAR szClass[16];
+        dwValue = GetClassNameW(pItem->hWnd, szClass, _countof(szClass)) &&
+                  !wcscmp(szClass, INDICATOR_CLASSW);
         RegSetValueExW(hKey, L"ExecutablePath", 0, REG_SZ, (const BYTE *)szPath,
                        (DWORD)((wcslen(szPath) + 1) * sizeof(WCHAR)));
         RegSetValueExW(hKey, L"UID", 0, REG_DWORD, (const BYTE *)&dwUID, sizeof(dwUID));
