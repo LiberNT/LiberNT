@@ -14,11 +14,19 @@
 #include "bootui_logo.h"
 #include <debug.h>
 
-#define BOOTUI_BACKGROUND 0x202020
 #define BOOTUI_TEXT 0xF3F6F8
 #define BOOTUI_MUTED 0x9EABC3
 #define BOOTUI_ACCENT 0x7AAAF0
 #define BOOTUI_PANEL 0x101A2B
+#define BOOTUI_GLYPH_ARENA (512 * 1024)
+
+typedef struct
+{
+    ULONG Offset;
+    USHORT Width, Rows;
+    SHORT Left, Top, Advance;
+    BOOLEAN Loaded;
+} BOOTUI_GLYPH;
 
 static PULONG BootUiPixels;
 static ULONG BootUiWidth, BootUiHeight, BootUiFontSize;
@@ -30,11 +38,41 @@ static CHAR BootUiProgressText[260];
 static MACH_POINTER_STATE BootUiPointer;
 static BOOLEAN BootUiPointerVisible;
 static BOOLEAN BootUiTabletMode;
+static BOOTUI_GLYPH BootUiGlyphs[8][256];
+static ULONG BootUiGlyphSizes[RTL_NUMBER_OF(BootUiGlyphs)];
+static PUCHAR BootUiGlyphPixels;
+static ULONG BootUiGlyphUsed;
+static LONG BootUiClipLeft, BootUiClipTop, BootUiClipRight, BootUiClipBottom;
 
 typedef struct
 {
     ULONG Left, Top, Width, RowHeight, First, Visible;
+    ULONG Rank, PointerX, PointerY;
+    LONG TimeOut;
+    BOOLEAN Valid, PointerVisible, TabletMode;
 } BOOTUI_MENU_LAYOUT;
+
+static VOID
+BootUiSetClip(LONG Left, LONG Top, LONG Right, LONG Bottom)
+{
+    BootUiClipLeft = max(Left, 0);
+    BootUiClipTop = max(Top, 0);
+    BootUiClipRight = max(min(Right, (LONG)BootUiWidth), BootUiClipLeft);
+    BootUiClipBottom = max(min(Bottom, (LONG)BootUiHeight), BootUiClipTop);
+}
+
+static VOID
+BootUiInvalidate(LONG Left, LONG Top, LONG Right, LONG Bottom)
+{
+    if (BootUiClipRight > BootUiClipLeft && BootUiClipBottom > BootUiClipTop)
+    {
+        Left = min(Left, BootUiClipLeft);
+        Top = min(Top, BootUiClipTop);
+        Right = max(Right, BootUiClipRight);
+        Bottom = max(Bottom, BootUiClipBottom);
+    }
+    BootUiSetClip(Left, Top, Right, Bottom);
+}
 
 static ULONG
 BootUiBlend(ULONG Background, ULONG Foreground, ULONG Alpha)
@@ -50,8 +88,8 @@ static VOID
 BootUiPixel(LONG X, LONG Y, ULONG Color, ULONG Alpha)
 {
     PULONG Pixel;
-    if (!BootUiPixels || X < 0 || Y < 0 ||
-        (ULONG)X >= BootUiWidth || (ULONG)Y >= BootUiHeight)
+    if (!BootUiPixels || !Alpha || X < BootUiClipLeft || Y < BootUiClipTop ||
+        X >= BootUiClipRight || Y >= BootUiClipBottom)
         return;
     Pixel = &BootUiPixels[Y * BootUiWidth + X];
     *Pixel = Alpha == 255 ? Color : BootUiBlend(*Pixel, Color, Alpha);
@@ -64,9 +102,9 @@ BootUiRect(LONG X, LONG Y, ULONG Width, ULONG Height, ULONG Radius,
     LONG Row, Col, Dx, Dy;
     ULONG Coverage;
     Radius = min(Radius, min(Width, Height) / 2);
-    for (Row = max(Y, 0); Row < min(Y + (LONG)Height, (LONG)BootUiHeight); ++Row)
+    for (Row = max(Y, BootUiClipTop); Row < min(Y + (LONG)Height, BootUiClipBottom); ++Row)
     {
-        for (Col = max(X, 0); Col < min(X + (LONG)Width, (LONG)BootUiWidth); ++Col)
+        for (Col = max(X, BootUiClipLeft); Col < min(X + (LONG)Width, BootUiClipRight); ++Col)
         {
             Dx = max((LONG)Radius - (Col - X), Col - (X + (LONG)Width - 1 - (LONG)Radius));
             Dy = max((LONG)Radius - (Row - Y), Row - (Y + (LONG)Height - 1 - (LONG)Radius));
@@ -96,7 +134,11 @@ BootUiPresentRegion(ULONG Top, ULONG Height)
 static VOID
 BootUiPresent(VOID)
 {
-    BootUiPresentRegion(0, BootUiHeight);
+    if (!BootUiPixels)
+        return;
+    VidFbPresent(BootUiPixels, BootUiClipLeft, BootUiClipTop,
+                 BootUiClipRight - BootUiClipLeft, BootUiClipBottom - BootUiClipTop);
+    MachVideoSync();
 }
 
 static VOID
@@ -105,25 +147,68 @@ BootUiDrawErrors(ULONG Height);
 static VOID
 BootUiBackground(ULONG Height)
 {
-    ULONG Index, Count = min(Height, BootUiHeight) * BootUiWidth;
+    LONG Row, Bottom = min((LONG)min(Height, BootUiHeight), BootUiClipBottom);
     if (!BootUiPixels)
         return;
-    for (Index = 0; Index < Count; ++Index)
-        BootUiPixels[Index] = (UiKeepFirmwareScreen || UiProgressBar.Show) ? 0 : BOOTUI_BACKGROUND;
+    for (Row = BootUiClipTop; Row < Bottom; ++Row)
+        RtlZeroMemory(&BootUiPixels[Row * BootUiWidth + BootUiClipLeft],
+                      (BootUiClipRight - BootUiClipLeft) * sizeof(ULONG));
     BootUiDrawErrors(min(Height, BootUiHeight));
+}
+
+static const BOOTUI_GLYPH*
+BootUiGlyph(UCHAR Character, ULONG Size)
+{
+    FT_GlyphSlot Slot;
+    BOOTUI_GLYPH* Glyph;
+    ULONG Index, Row, Bytes;
+    for (Index = 0; Index < RTL_NUMBER_OF(BootUiGlyphSizes); ++Index)
+        if (BootUiGlyphSizes[Index] == Size || !BootUiGlyphSizes[Index])
+            break;
+    if (Index < RTL_NUMBER_OF(BootUiGlyphSizes) && BootUiGlyphs[Index][Character].Loaded)
+        return &BootUiGlyphs[Index][Character];
+    if (FT_Set_Pixel_Sizes(BootUiFace, 0, Size) ||
+        FT_Load_Char(BootUiFace, Character, FT_LOAD_RENDER))
+        return NULL;
+    Slot = BootUiFace->glyph;
+    Bytes = Slot->bitmap.width * Slot->bitmap.rows;
+    if (Bytes > BOOTUI_GLYPH_ARENA)
+        return NULL;
+    if (Index == RTL_NUMBER_OF(BootUiGlyphSizes) || Bytes > BOOTUI_GLYPH_ARENA - BootUiGlyphUsed)
+    {
+        RtlZeroMemory(BootUiGlyphs, sizeof(BootUiGlyphs));
+        RtlZeroMemory(BootUiGlyphSizes, sizeof(BootUiGlyphSizes));
+        BootUiGlyphUsed = 0;
+        Index = 0;
+    }
+    BootUiGlyphSizes[Index] = Size;
+    Glyph = &BootUiGlyphs[Index][Character];
+    Glyph->Offset = BootUiGlyphUsed;
+    Glyph->Width = (USHORT)Slot->bitmap.width;
+    Glyph->Rows = (USHORT)Slot->bitmap.rows;
+    Glyph->Left = (SHORT)Slot->bitmap_left;
+    Glyph->Top = (SHORT)Slot->bitmap_top;
+    Glyph->Advance = (SHORT)((Slot->advance.x + 32) >> 6);
+    for (Row = 0; Row < Slot->bitmap.rows; ++Row)
+        RtlCopyMemory(BootUiGlyphPixels + BootUiGlyphUsed + Row * Slot->bitmap.width,
+                      Slot->bitmap.buffer + Row * Slot->bitmap.pitch, Slot->bitmap.width);
+    BootUiGlyphUsed += Bytes;
+    Glyph->Loaded = TRUE;
+    return Glyph;
 }
 
 static ULONG
 BootUiTextWidth(PCSTR Text, ULONG Size, ULONG Count)
 {
+    const BOOTUI_GLYPH* Glyph;
     ULONG Width = 0, I;
     if (!Text || !BootUiFace)
         return 0;
-    FT_Set_Pixel_Sizes(BootUiFace, 0, Size);
     for (I = 0; Text[I] && Text[I] != '\n' && I < Count; ++I)
     {
-        if (!FT_Load_Char(BootUiFace, (UCHAR)Text[I], FT_LOAD_DEFAULT))
-            Width += (BootUiFace->glyph->advance.x + 32) >> 6;
+        Glyph = BootUiGlyph((UCHAR)Text[I], Size);
+        if (Glyph)
+            Width += Glyph->Advance;
     }
     return Width;
 }
@@ -132,28 +217,28 @@ static VOID
 BootUiText(LONG X, LONG Y, PCSTR Text, ULONG Size, ULONG Color,
            ULONG Width, ULONG Count)
 {
-    FT_GlyphSlot Glyph;
+    const BOOTUI_GLYPH* Glyph;
     ULONG I, Row, Col;
     LONG Cursor = X;
-    if (!Text || !BootUiFace)
+    if (!Text || !BootUiFace || Y - (LONG)Size >= BootUiClipBottom ||
+        Y + 2 * (LONG)Size <= BootUiClipTop)
         return;
-    FT_Set_Pixel_Sizes(BootUiFace, 0, Size);
     for (I = 0; Text[I] && Text[I] != '\n' && I < Count; ++I)
     {
-        if (FT_Load_Char(BootUiFace, (UCHAR)Text[I], FT_LOAD_RENDER))
+        Glyph = BootUiGlyph((UCHAR)Text[I], Size);
+        if (!Glyph)
             continue;
-        Glyph = BootUiFace->glyph;
-        if (Cursor + ((Glyph->advance.x + 32) >> 6) > X + (LONG)Width)
+        if (Cursor + Glyph->Advance > X + (LONG)Width)
             break;
-        for (Row = 0; Row < Glyph->bitmap.rows; ++Row)
+        for (Row = 0; Row < Glyph->Rows; ++Row)
         {
-            const UCHAR* Pixels = Glyph->bitmap.buffer + Row * Glyph->bitmap.pitch;
-            for (Col = 0; Col < Glyph->bitmap.width; ++Col)
-                BootUiPixel(Cursor + Glyph->bitmap_left + Col,
-                            Y + Size - Glyph->bitmap_top + Row,
+            const UCHAR* Pixels = BootUiGlyphPixels + Glyph->Offset + Row * Glyph->Width;
+            for (Col = 0; Col < Glyph->Width; ++Col)
+                BootUiPixel(Cursor + Glyph->Left + Col,
+                            Y + Size - Glyph->Top + Row,
                             Color, Pixels[Col]);
         }
-        Cursor += (Glyph->advance.x + 32) >> 6;
+        Cursor += Glyph->Advance;
     }
 }
 
@@ -256,9 +341,15 @@ BootUiUnInitialize(VOID)
         FT_Done_FreeType(BootUiLibrary);
     if (BootUiPixels)
         MmFreeMemory(BootUiPixels);
+    if (BootUiGlyphPixels)
+        MmFreeMemory(BootUiGlyphPixels);
+    RtlZeroMemory(BootUiGlyphs, sizeof(BootUiGlyphs));
+    RtlZeroMemory(BootUiGlyphSizes, sizeof(BootUiGlyphSizes));
+    BootUiGlyphUsed = 0;
     BootUiFace = NULL;
     BootUiLibrary = NULL;
     BootUiPixels = NULL;
+    BootUiGlyphPixels = NULL;
 }
 
 static BOOLEAN
@@ -273,12 +364,14 @@ BootUiInitialize(VOID)
         return FALSE;
     BootUiPixels = MmAllocateMemoryWithType(BootUiWidth * BootUiHeight * sizeof(ULONG),
                                             LoaderFirmwareTemporary);
-    if (!BootUiPixels || FT_Init_FreeType(&BootUiLibrary) ||
+    BootUiGlyphPixels = MmAllocateMemoryWithType(BOOTUI_GLYPH_ARENA, LoaderFirmwareTemporary);
+    if (!BootUiPixels || !BootUiGlyphPixels || FT_Init_FreeType(&BootUiLibrary) ||
         FT_New_Memory_Face(BootUiLibrary, bootui_font, sizeof(bootui_font), 0, &BootUiFace))
     {
         BootUiUnInitialize();
         return FALSE;
     }
+    BootUiSetClip(0, 0, BootUiWidth, BootUiHeight);
     FbConsGetCellSize(&BootUiCellWidth, &BootUiCellHeight);
     BootUiFontSize = max(16, min(32, BootUiHeight / 38));
     BootUiStatus[0] = 0;
@@ -652,8 +745,7 @@ BootUiDialog(PCSTR Message, PCHAR Edit, ULONG Length)
             MachSetInputTimer(0);
             UiKeepFirmwareScreen = KeepFirmwareScreen;
             UiProgressBar.Show = ShowProgress;
-            BootUiRect(Left, Top, Width, PanelHeight, 0,
-                       (UiKeepFirmwareScreen || UiProgressBar.Show) ? 0 : BOOTUI_BACKGROUND, 255);
+            BootUiRect(Left, Top, Width, PanelHeight, 0, 0, 255);
             VidFbPresent(BootUiPixels, Left, Top, Width, PanelHeight);
             MachVideoSync();
             return Key == KEY_ENTER;
@@ -793,9 +885,27 @@ BootUiRenderMenu(PUI_MENU_INFO Menu, LONG TimeOut, BOOLEAN CanEscape, BOOTUI_MEN
         First = Count - Visible;
     Top = (BootUiHeight - Visible * RowHeight) / 2;
     Size = max(14, BootUiFontSize - 5);
-    BootUiBackground(BootUiHeight);
-    BootUiBrand();
-    BootUiInputLabel();
+    if (Layout && Layout->Valid && Layout->TabletMode == BootUiTabletMode)
+    {
+        BootUiSetClip(0, 0, 0, 0);
+        if (Layout->Rank != Rank && Total > Visible)
+            BootUiInvalidate(Left, Top, Left + Width, Top + Visible * RowHeight + 12 + 2 * Size);
+        else if (Layout->Rank != Rank)
+            BootUiInvalidate(Left, Top + min(Rank, Layout->Rank) * RowHeight, Left + Width,
+                             Top + (max(Rank, Layout->Rank) + 1) * RowHeight);
+        if (Layout->TimeOut != TimeOut || (TimeOut > 0 && Layout->Rank != Rank))
+            BootUiInvalidate(0, BootUiHeight - 104 - Size / 4, BootUiWidth, BootUiHeight - 104 + 2 * Size);
+        if (Layout->PointerVisible != BootUiPointerVisible ||
+            Layout->PointerX != BootUiPointer.X || Layout->PointerY != BootUiPointer.Y)
+        {
+            if (Layout->PointerVisible)
+                BootUiInvalidate((LONG)Layout->PointerX - 6, (LONG)Layout->PointerY - 3,
+                                 (LONG)Layout->PointerX + 18, (LONG)Layout->PointerY + 21);
+            if (BootUiPointerVisible)
+                BootUiInvalidate((LONG)BootUiPointer.X - 6, (LONG)BootUiPointer.Y - 3,
+                                 (LONG)BootUiPointer.X + 18, (LONG)BootUiPointer.Y + 21);
+        }
+    }
     if (Layout)
     {
         Layout->Left = Left;
@@ -804,7 +914,17 @@ BootUiRenderMenu(PUI_MENU_INFO Menu, LONG TimeOut, BOOLEAN CanEscape, BOOTUI_MEN
         Layout->RowHeight = RowHeight;
         Layout->First = First;
         Layout->Visible = Visible;
+        Layout->Rank = Rank;
+        Layout->PointerX = BootUiPointer.X;
+        Layout->PointerY = BootUiPointer.Y;
+        Layout->TimeOut = TimeOut;
+        Layout->Valid = TRUE;
+        Layout->PointerVisible = BootUiPointerVisible;
+        Layout->TabletMode = BootUiTabletMode;
     }
+    BootUiBackground(BootUiHeight);
+    BootUiBrand();
+    BootUiInputLabel();
     BootUiCentered(Top - 52, Menu->MenuHeader, Size, BOOTUI_MUTED);
     Count = 0;
     for (I = 0; I < Menu->MenuItemCount; ++I)
@@ -871,6 +991,7 @@ BootUiRenderMenu(PUI_MENU_INFO Menu, LONG TimeOut, BOOLEAN CanEscape, BOOTUI_MEN
                    Size, BOOTUI_MUTED);
     BootUiCursor();
     BootUiPresent();
+    BootUiSetClip(0, 0, BootUiWidth, BootUiHeight);
 }
 
 static VOID
@@ -880,16 +1001,19 @@ BootUiDrawMenu(PUI_MENU_INFO Menu)
 }
 
 static VOID
-BootUiDrawCountdown(LONG TimeOut)
+BootUiDrawCountdown(LONG TimeOut, BOOLEAN Update)
 {
     CHAR Text[80];
     ULONG Size = max(14, BootUiFontSize - 3);
+    if (Update)
+        BootUiSetClip(0, BootUiHeight - 100 - Size / 4, BootUiWidth, BootUiHeight - 100 + 2 * Size);
     BootUiBackground(BootUiHeight);
     RtlStringCbPrintfA(Text, sizeof(Text), "Starting in %ld %s", TimeOut,
                        TimeOut == 1 ? "second" : "seconds");
     BootUiCentered(BootUiHeight - 100, Text, Size, BOOTUI_TEXT);
     BootUiCentered(BootUiHeight - 56, "Press a key, a volume button, or tap to open the boot menu", Size, BOOTUI_MUTED);
     BootUiPresent();
+    BootUiSetClip(0, 0, BootUiWidth, BootUiHeight);
 }
 
 static ULONG
@@ -927,7 +1051,7 @@ BootUiDisplayMenu(PCSTR Header, PCSTR Footer, PCSTR Items[], ULONG Count,
     MACH_POINTER_STATE Previous;
     ULONG Key, I, Second, Hit, Pressed = MAXULONG;
     LONG DragY = 0;
-    BOOLEAN Extended, Redraw = TRUE, Timer, Dragged = FALSE, Result = TRUE;
+    BOOLEAN Extended, Redraw = TRUE, Timer, Dragged = FALSE, Result = TRUE, Counting = FALSE;
     if (!Count || !Items)
         return FALSE;
     if (Default >= Count || !Items[Default])
@@ -954,7 +1078,10 @@ BootUiDisplayMenu(PCSTR Header, PCSTR Footer, PCSTR Items[], ULONG Count,
         if (Redraw)
         {
             if (UiKeepFirmwareScreen)
-                BootUiDrawCountdown(TimeOut);
+            {
+                BootUiDrawCountdown(TimeOut, Counting);
+                Counting = TRUE;
+            }
             else
                 BootUiRenderMenu(&Menu, TimeOut, CanEscape, &Layout);
             Redraw = FALSE;
@@ -987,6 +1114,7 @@ BootUiDisplayMenu(PCSTR Header, PCSTR Footer, PCSTR Items[], ULONG Count,
             {
                 TimeOut = -1;
                 MachSetInputTimer(0);
+                Layout.Valid = FALSE;
                 continue;
             }
             if (!Extended && Key == KEY_ENTER)
@@ -1070,7 +1198,8 @@ CheckTimeout:
             Timer = MachSetInputTimer(TimeOut > 0 ? 1000 : 0);
             Redraw = TRUE;
         }
-        MachHwIdle();
+        if (!Redraw)
+            MachHwIdle();
     }
     MachSetInputTimer(0);
     if (Result && Selected)
