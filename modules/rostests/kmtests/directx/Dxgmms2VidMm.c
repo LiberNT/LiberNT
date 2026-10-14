@@ -117,6 +117,10 @@ TestStartAndSegmentDescription(
 
     InitSegmentDesc(&Desc, 0, 0, 0);
     NtStatus = Dxgmms2VidMmCoreSetSegment(&State->Core, 0, &Desc);
+    ok_eq_hex(NtStatus, STATUS_SUCCESS);
+
+    InitSegmentDesc(&Desc, 0, 0, 1);
+    NtStatus = Dxgmms2VidMmCoreSetSegment(&State->Core, 0, &Desc);
     ok_eq_hex(NtStatus, STATUS_INVALID_PARAMETER);
 
     /* A commit limit above the segment is a miniport description error. */
