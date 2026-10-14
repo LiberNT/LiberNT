@@ -96,7 +96,6 @@ EmuInitializeProcess(
     if (!NT_SUCCESS(Status)) return Status;
 
     Status = EmuGetGuestExport("LdrInitializeThunk", &EmuProcess.LdrInitializeThunk);
-    if (NT_SUCCESS(Status)) Status = EmuGetGuestExport("KiUserApcDispatcher", &EmuProcess.KiUserApcDispatcher);
     if (NT_SUCCESS(Status)) Status = EmuGetGuestExport("KiUserExceptionDispatcher", &EmuProcess.KiUserExceptionDispatcher);
     if (NT_SUCCESS(Status)) Status = EmuGetGuestExport("RtlUserThreadStart", &EmuProcess.RtlUserThreadStart);
     if (!NT_SUCCESS(Status)) return Status;

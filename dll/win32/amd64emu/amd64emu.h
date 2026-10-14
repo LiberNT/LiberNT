@@ -94,7 +94,6 @@ typedef struct _EMU_PROCESS
     PPEB GuestPeb;
     PVOID GuestNtdll;
     ULONG64 LdrInitializeThunk;
-    ULONG64 KiUserApcDispatcher;
     ULONG64 KiUserExceptionDispatcher;
     ULONG64 RtlUserThreadStart;
     ULONG_PTR NativeRtlUserThreadStart;

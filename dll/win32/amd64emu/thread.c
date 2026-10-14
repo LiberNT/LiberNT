@@ -22,6 +22,7 @@ EmuStartGuest(
     _In_ const AMD64_CONTEXT *Start)
 {
     PAMD64_APC_FRAME Frame = (PVOID)((Start->Rsp - sizeof(*Frame)) & ~(ULONG64)15);
+    PULONG64 ReturnAddress = (PULONG64)&Frame->Context - 1;
     AMD64_CONTEXT Context;
     NTSTATUS Status = STATUS_SUCCESS;
 
@@ -29,15 +30,12 @@ EmuStartGuest(
     {
         RtlZeroMemory(Frame, sizeof(*Frame));
         Frame->Context = *Start;
-        Frame->Context.P1Home = 0;
-        Frame->Context.P2Home = (ULONG64)EmuProcess.GuestNtdll;
-        Frame->Context.P3Home = 0;
-        Frame->Context.P4Home = EmuProcess.LdrInitializeThunk;
         Frame->MachineFrame.Rip = Start->Rip;
         Frame->MachineFrame.SegCs = Start->SegCs;
         Frame->MachineFrame.EFlags = Start->EFlags;
         Frame->MachineFrame.Rsp = Start->Rsp;
         Frame->MachineFrame.SegSs = Start->SegSs;
+        *ReturnAddress = 0;
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -47,8 +45,10 @@ EmuStartGuest(
     if (!NT_SUCCESS(Status)) return Status;
 
     Context = *Start;
-    Context.Rip = EmuProcess.KiUserApcDispatcher;
-    Context.Rsp = (ULONG64)Frame;
+    Context.Rip = EmuProcess.LdrInitializeThunk;
+    Context.Rsp = (ULONG64)ReturnAddress;
+    Context.Rcx = (ULONG64)&Frame->Context;
+    Context.Rdx = (ULONG64)EmuProcess.GuestNtdll;
     EmuCoreSetContext(Thread->Cpu, &Context);
     return STATUS_SUCCESS;
 }
