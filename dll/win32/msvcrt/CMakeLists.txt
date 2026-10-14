@@ -98,10 +98,12 @@ elseif(ARCH STREQUAL "arm64")
 elseif(ARCH STREQUAL "riscv64")
     list(APPEND SHARED_SOURCE
         except_riscv64.c
+        fpu_riscv64.c
     )
 elseif(ARCH STREQUAL "ppc")
     list(APPEND SHARED_SOURCE
         except_ppc.c
+        fpu_ppc.c
     )
 endif()
 

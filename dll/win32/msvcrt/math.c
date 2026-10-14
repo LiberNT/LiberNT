@@ -1215,9 +1215,13 @@ static void _setfp( unsigned int *cw, unsigned int cw_mask,
     if (old_fpscr != fpscr)
         __asm__ __volatile__( "vmsr fpscr, %0" :: "r" (fpscr) );
 #else
+#ifdef __REACTOS__
+    msvcrt_arch_setfp( cw, cw_mask, sw, sw_mask );
+#else
     FIXME("not implemented\n");
     if (cw) *cw = 0;
     if (sw) *sw = 0;
+#endif
 #endif
 }
 
