@@ -1163,6 +1163,18 @@ GpuVaLevelDesc(
 
 FORCEINLINE
 ULONG
+GpuVaLevelSegmentId(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_PROCESS Process,
+    _In_ ULONG Level)
+{
+    if (Adapter->PagingSystemDevice != NULL && Adapter->PagingSystemDevice->ProcessRecord == Process)
+        return GpuVaLevelDesc(Adapter, Level)->PagingProcessPageTableSegmentId;
+    return GpuVaLevelDesc(Adapter, Level)->PageTableSegmentId;
+}
+
+FORCEINLINE
+ULONG
 GpuVaLevelCount(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
@@ -1241,7 +1253,7 @@ GpuVaAllocPageTable(
     if (Adapter == NULL || !Adapter->PageTableLevelsValid || Level >= GpuVaLevelCount(Adapter))
         return NULL;
 
-    SegmentId = GpuVaLevelDesc(Adapter, Level)->PageTableSegmentId;
+    SegmentId = GpuVaLevelSegmentId(Adapter, Process, Level);
     if (SegmentId != 0)
     {
         PDXGKRNL_SEGMENT Segment;
@@ -1536,6 +1548,20 @@ GpuVaFreePageTables(
                   sizeof(Process->RootPageTableAddress));
 }
 
+static BOOLEAN
+GpuVaPagingProcessTablesCpuReachable(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    ULONG Level;
+
+    for (Level = 0; Level < GpuVaLevelCount(Adapter); ++Level)
+    {
+        if (!DxgkVidMmPageTableSegmentCpuReachable(Adapter, GpuVaLevelDesc(Adapter, Level)->PagingProcessPageTableSegmentId))
+            return FALSE;
+    }
+    return TRUE;
+}
+
 BOOLEAN
 DxgkGpuVaCpuUpdatable(
     _In_opt_ PDXGKRNL_ADAPTER Adapter)
@@ -1548,6 +1574,10 @@ DxgkGpuVaCpuUpdatable(
         return TRUE;
     if (Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_GPU_VIRTUAL)
         return FALSE;
+    if (!GpuVaPagingProcessTablesCpuReachable(Adapter))
+        return FALSE;
+    if (Adapter->PageTablePoolVa != 0 || Adapter->PagingProcessInitializing)
+        return TRUE;
     for (Level = 0; Level < GpuVaLevelCount(Adapter); ++Level)
     {
         if (!DxgkVidMmPageTableSegmentCpuReachable(Adapter, GpuVaLevelDesc(Adapter, Level)->PageTableSegmentId))
@@ -3943,7 +3973,7 @@ DxgkGpuVaInitializePageTablePool(
     if (Adapter == NULL || !Adapter->GpuMmuCapsValid || !Adapter->PageTableLevelsValid ||
         Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_GPU_VIRTUAL ||
         Adapter->PagingSystemDevice == NULL || Adapter->PagingSystemContext == NULL ||
-        Adapter->PageTablePoolVa != 0 || !DxgkGpuVaCpuUpdatable(Adapter))
+        Adapter->PageTablePoolVa != 0 || !GpuVaPagingProcessTablesCpuReachable(Adapter))
     {
         return STATUS_SUCCESS;
     }
