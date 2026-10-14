@@ -94,8 +94,24 @@ static HRESULT d3d10_create_device(IDXGIAdapter *adapter, D3D10_DRIVER_TYPE driv
             }
 
             case D3D10_DRIVER_TYPE_NULL:
+#ifdef __REACTOS__
+            {
+                HRESULT (WINAPI *create_null_adapter)(REFIID iid, void **adapter);
+
+                create_null_adapter = (void *)GetProcAddress(GetModuleHandleW(L"dxgi.dll"), "RosDxgiCreateNullAdapter");
+                hr = create_null_adapter ? create_null_adapter(&IID_IDXGIAdapter, (void **)&adapter) : E_FAIL;
+                if (FAILED(hr))
+                {
+                    WARN("Failed to create a null adapter, returning %#lx.\n", hr);
+                    IDXGIFactory_Release(factory);
+                    return hr;
+                }
+                break;
+            }
+#else
                 FIXME("NULL device not implemented, falling back to refrast.\n");
                 /* fall through, for now */
+#endif
             case D3D10_DRIVER_TYPE_REFERENCE:
             {
                 HMODULE refrast = LoadLibraryA("d3d10ref.dll");
