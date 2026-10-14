@@ -261,10 +261,34 @@ HalpRiscvQuerySystemInformation(
     _Out_ PULONG ReturnedLength)
 {
     PHAL_PROFILE_SOURCE_INFORMATION Information = Buffer;
+    PHAL_ACPI_ROOT_POINTER_INFORMATION AcpiInformation = Buffer;
     ULONG Index;
 
-    if (InformationClass != HalProfileSourceInformation)
-        return HalpRiscvDefaultQuerySystemInformation(InformationClass, BufferSize, Buffer, ReturnedLength);
+    if (ReturnedLength)
+        *ReturnedLength = 0;
+
+    switch (InformationClass)
+    {
+        case HalProfileSourceInformation:
+            break;
+
+        case HalAcpiAuditInformation:
+            if (BufferSize < sizeof(*AcpiInformation))
+                return STATUS_INFO_LENGTH_MISMATCH;
+            AcpiInformation->RsdpPhysicalAddress.QuadPart = 0;
+            if (ReturnedLength)
+                *ReturnedLength = sizeof(*AcpiInformation);
+            return STATUS_NOT_FOUND;
+
+        case HalFrameBufferCachingInformation:
+        case HalDisplayBiosInformation:
+        case HalQueryAMLIIllegalIOPortAddresses:
+            return STATUS_INVALID_LEVEL;
+
+        default:
+            return HalpRiscvDefaultQuerySystemInformation(InformationClass, BufferSize, Buffer, ReturnedLength);
+    }
+
     if (BufferSize < sizeof(*Information))
         return STATUS_INFO_LENGTH_MISMATCH;
 

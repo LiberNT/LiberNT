@@ -150,16 +150,18 @@ TestAMLIllegalIOPortAddresses(void)
 }
 #endif
 
-#if defined(_M_ARM64)
+#ifdef _WIN64
 static
 void
-TestArm64SystemInformation(void)
+TestNativeSystemInformation(void)
 {
     static const HAL_QUERY_INFORMATION_CLASS UnsupportedClasses[] =
     {
+#if !defined(_M_AMD64)
         HalFrameBufferCachingInformation,
         HalDisplayBiosInformation,
         HalQueryAMLIIllegalIOPortAddresses,
+#endif
         (HAL_QUERY_INFORMATION_CLASS)MAXULONG
     };
     HAL_ACPI_ROOT_POINTER_INFORMATION AcpiInformation;
@@ -191,9 +193,10 @@ START_TEST(HalSystemInfo)
 {
 #if defined(_M_IX86) || defined(_M_AMD64)
     TestAMLIllegalIOPortAddresses();
-#elif defined(_M_ARM64)
-    TestArm64SystemInformation();
-#else
+#endif
+#ifdef _WIN64
+    TestNativeSystemInformation();
+#elif !defined(_M_IX86)
     skip(FALSE, "HalSystemInfo is not implemented for this architecture\n");
 #endif
 }

@@ -341,4 +341,12 @@ HalReportResourceUsage(VOID)
     HalpRegisterPciDebuggingDeviceInfo();
 }
 
+BOOLEAN
+HalpQueryAcpiRootPointer(
+    _Out_ PPHYSICAL_ADDRESS Address)
+{
+    *Address = HalpAcpiRsdpAddress;
+    return (HalpAcpiRsdpAddress.QuadPart != 0);
+}
+
 /* EOF */

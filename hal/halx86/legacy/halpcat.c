@@ -83,6 +83,14 @@ HalpIs16BitPortDecodeSupported(VOID)
     return (HalpBusType == MACHINE_TYPE_EISA) ? CM_RESOURCE_PORT_16_BIT_DECODE : 0;
 }
 
+BOOLEAN
+HalpQueryAcpiRootPointer(
+    _Out_ PPHYSICAL_ADDRESS Address)
+{
+    Address->QuadPart = 0;
+    return FALSE;
+}
+
 #if 0
 CODE_SEG("INIT")
 NTSTATUS

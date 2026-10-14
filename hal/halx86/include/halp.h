@@ -553,6 +553,11 @@ HalpIs16BitPortDecodeSupported(
     VOID
 );
 
+BOOLEAN
+HalpQueryAcpiRootPointer(
+    _Out_ PPHYSICAL_ADDRESS Address
+);
+
 NTSTATUS
 NTAPI
 HalpQueryAcpiResourceRequirements(
