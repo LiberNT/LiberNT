@@ -200,6 +200,8 @@ MiSelectBottomUpBase(
     ULONG DllCharacteristics = Control->ImageInformation.DllCharacteristics;
     ULONG64 Floor = Space->LowestVa;
     ULONG64 Slots = MI_NT_BOTTOM_UP_SLOTS;
+    ULONG64 TopDownCeiling = 0;
+    ULONG64 HighEntropyLimit;
     ULONG Seed;
 
     if (!Control->Image || !(DllCharacteristics & IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE))
@@ -208,10 +210,15 @@ MiSelectBottomUpBase(
         return;
     }
 
-    if (Control->Image64 && (DllCharacteristics & IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA))
+    if (Control->Image64 && Space->HighestVa > MI_NT_TOP_DOWN_GAP)
+        TopDownCeiling = Space->HighestVa - MI_NT_TOP_DOWN_GAP;
+
+    HighEntropyLimit = min(MI_NT_HIGH_ENTROPY_LIMIT, (TopDownCeiling + 1) / 2);
+    if (Control->Image64 && (DllCharacteristics & IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA) &&
+        HighEntropyLimit > MI_NT_HIGH_ENTROPY_FLOOR)
     {
         Floor = MI_NT_HIGH_ENTROPY_FLOOR;
-        Slots = (MI_NT_HIGH_ENTROPY_LIMIT - MI_NT_HIGH_ENTROPY_FLOOR) / MI_ALLOCATION_GRANULARITY;
+        Slots = (HighEntropyLimit - MI_NT_HIGH_ENTROPY_FLOOR) / MI_ALLOCATION_GRANULARITY;
     }
 
     if (Floor < Space->LowestVa || Floor + Slots * MI_ALLOCATION_GRANULARITY > Space->HighestVa)
@@ -226,9 +233,9 @@ MiSelectBottomUpBase(
     Seed = KeQueryPerformanceCounter(NULL).LowPart ^ (ULONG)KeQueryInterruptTime() ^ (ULONG)(ULONG_PTR)Process;
     Space->BottomUpVa = Floor + (RtlRandomEx(&Seed) % Slots) * MI_ALLOCATION_GRANULARITY;
 
-    if (Control->Image64 && MI_NT_TOP_DOWN_CEILING <= Space->HighestVa)
+    if (TopDownCeiling != 0)
     {
-        Space->TopDownVa = MI_NT_TOP_DOWN_CEILING -
+        Space->TopDownVa = TopDownCeiling -
                            (RtlRandomEx(&Seed) % MI_NT_BOTTOM_UP_SLOTS) * MI_ALLOCATION_GRANULARITY;
     }
 }
