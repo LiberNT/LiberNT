@@ -1579,14 +1579,22 @@ DwmBackdropInteriorBottom(const DWM_WIN *Window)
  * changed content therefore takes the ordinary blur path with no stale
  * result. A source snapshot also lets the exposed edge strips be filtered
  * independently without one strip feeding another one's convolution. */
-static ULONG *g_backdropCacheInput, *g_backdropCacheOutput;
-static LONG g_backdropCacheWidth, g_backdropCacheHeight;
-static LONG g_backdropCacheRadius;
-static RECTL g_backdropCacheBounds, g_backdropCacheSource;
-static BOOL g_backdropCacheValid;
-static DWM_WIN g_backdropCacheLower[DWM_MAX_WINDOWS];
-static ULONG g_backdropCacheLowerCount;
-static ULONG g_backdropCacheOwnerId, g_backdropCacheOwnerGeneration;
+typedef struct
+{
+    ULONG *Input, *Output;
+    LONG Width, Height;
+    LONG Radius;
+    RECTL Bounds, Source;
+    BOOL Valid;
+    DWM_WIN Lower[DWM_MAX_WINDOWS];
+    ULONG LowerCount;
+    ULONG OwnerId, OwnerGeneration;
+    ULONGLONG Used;
+} DWM_BACKDROP_CACHE;
+
+static DWM_BACKDROP_CACHE g_backdropCaches[3];
+static DWM_BACKDROP_CACHE *g_backdropCache = g_backdropCaches;
+static ULONGLONG g_backdropCacheUses;
 static ULONGLONG g_statBackdropCacheHits, g_statBackdropCachePartials;
 static ULONGLONG g_statBackdropCacheMisses;
 static ULONGLONG g_statBackdropMetadataHits;
@@ -1594,14 +1602,14 @@ static ULONGLONG g_statBackdropMetadataHits;
 static void
 DwmFreeBackdropCache(void)
 {
-    if (g_backdropCacheInput != NULL)
-        VirtualFree(g_backdropCacheInput, 0, MEM_RELEASE);
-    if (g_backdropCacheOutput != NULL)
-        VirtualFree(g_backdropCacheOutput, 0, MEM_RELEASE);
-    g_backdropCacheInput = g_backdropCacheOutput = NULL;
-    g_backdropCacheValid = FALSE;
-    g_backdropCacheWidth = g_backdropCacheHeight = 0;
-    g_backdropCacheLowerCount = 0;
+    if (g_backdropCache->Input != NULL)
+        VirtualFree(g_backdropCache->Input, 0, MEM_RELEASE);
+    if (g_backdropCache->Output != NULL)
+        VirtualFree(g_backdropCache->Output, 0, MEM_RELEASE);
+    g_backdropCache->Input = g_backdropCache->Output = NULL;
+    g_backdropCache->Valid = FALSE;
+    g_backdropCache->Width = g_backdropCache->Height = 0;
+    g_backdropCache->LowerCount = 0;
 }
 
 static BOOL
@@ -1612,27 +1620,27 @@ DwmEnsureBackdropCache(LONG Width, LONG Height)
     if (Width <= 0 || Height <= 0 ||
         (SIZE_T)Width > (SIZE_T)-1 / (SIZE_T)Height)
         return FALSE;
-    if (g_backdropCacheInput != NULL && g_backdropCacheOutput != NULL &&
-        g_backdropCacheWidth == Width && g_backdropCacheHeight == Height)
+    if (g_backdropCache->Input != NULL && g_backdropCache->Output != NULL &&
+        g_backdropCache->Width == Width && g_backdropCache->Height == Height)
         return TRUE;
     DwmFreeBackdropCache();
     Pixels = (SIZE_T)Width * Height;
     if (Pixels > (SIZE_T)-1 / sizeof(ULONG))
         return FALSE;
     Bytes = Pixels * sizeof(ULONG);
-    g_backdropCacheInput = VirtualAlloc(NULL, Bytes,
+    g_backdropCache->Input = VirtualAlloc(NULL, Bytes,
                                         MEM_COMMIT | MEM_RESERVE,
                                         PAGE_READWRITE);
-    g_backdropCacheOutput = VirtualAlloc(NULL, Bytes,
+    g_backdropCache->Output = VirtualAlloc(NULL, Bytes,
                                          MEM_COMMIT | MEM_RESERVE,
                                          PAGE_READWRITE);
-    if (g_backdropCacheInput == NULL || g_backdropCacheOutput == NULL)
+    if (g_backdropCache->Input == NULL || g_backdropCache->Output == NULL)
     {
         DwmFreeBackdropCache();
         return FALSE;
     }
-    g_backdropCacheWidth = Width;
-    g_backdropCacheHeight = Height;
+    g_backdropCache->Width = Width;
+    g_backdropCache->Height = Height;
     return TRUE;
 }
 
@@ -1702,7 +1710,7 @@ DwmBackdropInputEqual(const ULONG *Current, LONG Width, const RECTL *Rect)
     for (y = Rect->top; y < Rect->bottom; ++y)
     {
         SIZE_T Offset = (SIZE_T)y * Width + Rect->left;
-        if (memcmp(Current + Offset, g_backdropCacheInput + Offset, Bytes))
+        if (memcmp(Current + Offset, g_backdropCache->Input + Offset, Bytes))
             return FALSE;
     }
     return TRUE;
@@ -1715,9 +1723,9 @@ DwmBackdropSceneEqual(const DWM_WIN *Window, const DWM_WIN *Lower,
     ULONG Index;
 
     if (Window == NULL || Lower == NULL || LowerCount > DWM_MAX_WINDOWS ||
-        Window->SurfaceId != g_backdropCacheOwnerId ||
-        Window->Generation != g_backdropCacheOwnerGeneration ||
-        LowerCount != g_backdropCacheLowerCount)
+        Window->SurfaceId != g_backdropCache->OwnerId ||
+        Window->Generation != g_backdropCache->OwnerGeneration ||
+        LowerCount != g_backdropCache->LowerCount)
         return FALSE;
     for (Index = 0; Index < LowerCount; ++Index)
     {
@@ -1729,7 +1737,7 @@ DwmBackdropSceneEqual(const DWM_WIN *Window, const DWM_WIN *Lower,
         if (Current.Damaged || Current.BlurRectCount != 0)
             return FALSE;
         Current.Damaged = 0;
-        if (memcmp(&Current, &g_backdropCacheLower[Index], sizeof(Current)))
+        if (memcmp(&Current, &g_backdropCache->Lower[Index], sizeof(Current)))
             return FALSE;
     }
     return TRUE;
@@ -1743,17 +1751,17 @@ DwmBackdropStoreScene(const DWM_WIN *Window, const DWM_WIN *Lower,
 
     if (Window == NULL || LowerCount > DWM_MAX_WINDOWS)
     {
-        g_backdropCacheLowerCount = 0;
+        g_backdropCache->LowerCount = 0;
         return;
     }
     for (Index = 0; Index < LowerCount; ++Index)
     {
-        g_backdropCacheLower[Index] = Lower[Index];
-        g_backdropCacheLower[Index].Damaged = 0;
+        g_backdropCache->Lower[Index] = Lower[Index];
+        g_backdropCache->Lower[Index].Damaged = 0;
     }
-    g_backdropCacheOwnerId = Window->SurfaceId;
-    g_backdropCacheOwnerGeneration = Window->Generation;
-    g_backdropCacheLowerCount = LowerCount;
+    g_backdropCache->OwnerId = Window->SurfaceId;
+    g_backdropCache->OwnerGeneration = Window->Generation;
+    g_backdropCache->LowerCount = LowerCount;
 }
 
 static void
@@ -1838,6 +1846,27 @@ DwmBackdropBlurBounds(LONG Width, LONG Height,
     return Found;
 }
 
+static BOOL
+DwmSelectBackdropCache(const DWM_WIN *Window, LONG Width, LONG Height)
+{
+    DWM_BACKDROP_CACHE *Cache, *Selected = g_backdropCaches;
+
+    for (Cache = g_backdropCaches;
+         Cache < g_backdropCaches + ARRAYSIZE(g_backdropCaches); ++Cache)
+    {
+        if (Cache->Valid && Cache->OwnerId == Window->SurfaceId)
+        {
+            Selected = Cache;
+            break;
+        }
+        if (Cache->Used < Selected->Used)
+            Selected = Cache;
+    }
+    g_backdropCache = Selected;
+    g_backdropCache->Used = ++g_backdropCacheUses;
+    return DwmEnsureBackdropCache(Width, Height);
+}
+
 static const ULONG *
 DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
                            LONG ClipLeft, LONG ClipTop, LONG ClipRight,
@@ -1863,7 +1892,8 @@ DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
         (DwmGpuIsActive() &&
          (Pixels >= DWM_BLUR_LARGE_PIXELS * 4ull ?
               g_blurLargeUseGpu : g_blurUseGpu) != 0) || Pixels < 65536 ||
-        Pixels < CurrentArea / 2 || !DwmEnsureBackdropCache(Width, Height))
+        Pixels < CurrentArea / 2 ||
+        !DwmSelectBackdropCache(Window, Width, Height))
     {
         DwmApplyBlur(Composition, Composition, Width, Height,
                      ClipLeft, ClipTop, ClipRight, ClipBottom,
@@ -1871,15 +1901,15 @@ DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
         return NULL;
     }
 
-    Overlap.left = Current.left > g_backdropCacheBounds.left ?
-                   Current.left : g_backdropCacheBounds.left;
-    Overlap.top = Current.top > g_backdropCacheBounds.top ?
-                  Current.top : g_backdropCacheBounds.top;
-    Overlap.right = Current.right < g_backdropCacheBounds.right ?
-                    Current.right : g_backdropCacheBounds.right;
-    Overlap.bottom = Current.bottom < g_backdropCacheBounds.bottom ?
-                     Current.bottom : g_backdropCacheBounds.bottom;
-    if (g_backdropCacheValid && g_backdropCacheRadius == Radius &&
+    Overlap.left = Current.left > g_backdropCache->Bounds.left ?
+                   Current.left : g_backdropCache->Bounds.left;
+    Overlap.top = Current.top > g_backdropCache->Bounds.top ?
+                  Current.top : g_backdropCache->Bounds.top;
+    Overlap.right = Current.right < g_backdropCache->Bounds.right ?
+                    Current.right : g_backdropCache->Bounds.right;
+    Overlap.bottom = Current.bottom < g_backdropCache->Bounds.bottom ?
+                     Current.bottom : g_backdropCache->Bounds.bottom;
+    if (g_backdropCache->Valid && g_backdropCache->Radius == Radius &&
         Overlap.right > Overlap.left && Overlap.bottom > Overlap.top)
     {
         OverlapArea = (ULONGLONG)(Overlap.right - Overlap.left) *
@@ -1888,20 +1918,20 @@ DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
                                                 Width, Height);
         SceneEqual = DwmBackdropSceneEqual(Window, Lower, LowerCount);
         Reuse = OverlapArea * 2 >= CurrentArea &&
-                DwmRectContains(&g_backdropCacheSource, &OverlapSource) &&
+                DwmRectContains(&g_backdropCache->Source, &OverlapSource) &&
                 (SceneEqual ||
                  DwmBackdropInputEqual(Composition, Width, &OverlapSource));
         if (Reuse && SceneEqual && g_frameStats)
             ++g_statBackdropMetadataHits;
     }
     CurrentSource = DwmBackdropSourceBounds(&Current, Radius, Width, Height);
-    if (Reuse && DwmRectContains(&g_backdropCacheBounds, &Current))
+    if (Reuse && DwmRectContains(&g_backdropCache->Bounds, &Current))
     {
         DwmBackdropStoreScene(Window, Lower, LowerCount);
         if (g_frameStats) ++g_statBackdropCacheHits;
         if (Direct)
-            return g_backdropCacheOutput;
-        DwmCopyBackdropShape(Composition, g_backdropCacheOutput, Width, Height,
+            return g_backdropCache->Output;
+        DwmCopyBackdropShape(Composition, g_backdropCache->Output, Width, Height,
                              ClipLeft, ClipTop, ClipRight, ClipBottom,
                              Window, Rectangles);
         return NULL;
@@ -1910,10 +1940,10 @@ DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
     /* Preserve the complete lower-layer input before either cached pixels or
      * newly filtered strips are written into the composition surface. */
     if (Reuse)
-        DwmCopyBackdropDifference(g_backdropCacheInput, Composition, Width,
+        DwmCopyBackdropDifference(g_backdropCache->Input, Composition, Width,
                                   &CurrentSource, &OverlapSource);
     else
-        DwmCopyBackdropRect(g_backdropCacheInput, Composition, Width,
+        DwmCopyBackdropRect(g_backdropCache->Input, Composition, Width,
                             &CurrentSource);
     CacheWindow = *Window;
     CacheWindow.BlurFlags = DWM_BLUR_ENABLE |
@@ -1921,7 +1951,7 @@ DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
     CacheWindow.BlurRectCount = 0;
     if (!Reuse)
     {
-        DwmApplyBlur(g_backdropCacheInput, g_backdropCacheOutput,
+        DwmApplyBlur(g_backdropCache->Input, g_backdropCache->Output,
                      Width, Height, Current.left, Current.top,
                      Current.right, Current.bottom, &CacheWindow, NULL,
                      Radius);
@@ -1942,7 +1972,7 @@ DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
             if (Missing[Index].right <= Missing[Index].left ||
                 Missing[Index].bottom <= Missing[Index].top)
                 continue;
-            DwmApplyBlur(g_backdropCacheInput, g_backdropCacheOutput,
+            DwmApplyBlur(g_backdropCache->Input, g_backdropCache->Output,
                          Width, Height,
                          Missing[Index].left, Missing[Index].top,
                          Missing[Index].right, Missing[Index].bottom,
@@ -1950,14 +1980,14 @@ DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
         }
         if (g_frameStats) ++g_statBackdropCachePartials;
     }
-    g_backdropCacheBounds = Current;
-    g_backdropCacheSource = CurrentSource;
-    g_backdropCacheRadius = Radius;
-    g_backdropCacheValid = TRUE;
+    g_backdropCache->Bounds = Current;
+    g_backdropCache->Source = CurrentSource;
+    g_backdropCache->Radius = Radius;
+    g_backdropCache->Valid = TRUE;
     DwmBackdropStoreScene(Window, Lower, LowerCount);
     if (Direct)
-        return g_backdropCacheOutput;
-    DwmCopyBackdropShape(Composition, g_backdropCacheOutput, Width, Height,
+        return g_backdropCache->Output;
+    DwmCopyBackdropShape(Composition, g_backdropCache->Output, Width, Height,
                          ClipLeft, ClipTop, ClipRight, ClipBottom,
                          Window, Rectangles);
     return NULL;
@@ -3142,11 +3172,21 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
         BOOL cornerRow = cornerRadius != 0 &&
                          (y - dstY < (LONG)cornerRadius ||
                           y - dstY >= dstCy - (LONG)cornerRadius);
+        LONG reflectStart = (y * 6) / 5;
+        const BYTE *reflectRow = NULL;
+        const ULONG *glassRow = NULL;
 
         if (sy1 <= sy0) sy1 = sy0 + 1;
         if (sy1 > srcCy) sy1 = srcCy;
         stepY = (sy1 - sy0 + DWM_ANIM_TAPS - 1) / DWM_ANIM_TAPS;
         if (stepY < 1) stepY = 1;
+        if (g_reflectLut != NULL && reflectStart >= 0 &&
+            reflectStart <= g_reflectLen - scrW)
+            reflectRow = g_reflectLut + reflectStart;
+        if (reflectRow != NULL && !cornerRow && !premultiplied && alpha >= 255 &&
+            matWholeWindow && sy1 - sy0 <= stepY &&
+            material->BackdropType == DWM_BACKDROP_TRANSIENT)
+            glassRow = (const ULONG *)(pix + (SIZE_T)sy0 * srcStride);
 
         for (x = x0; x < x1; x++)
         {
@@ -3244,6 +3284,23 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
                     lastKey = Key;
                     lastWeight = Weight;
                 }
+                if (Weight != 0 && glassRow != NULL && sx1 - sx0 <= stepX)
+                {
+                    LONG End = x + 1;
+
+                    while (End < x1 && sx1Tab[End] - sx0Tab[End] <= stepXTab[End] &&
+                           (glassRow[sx0Tab[End]] & 0x00FFFFFFu) == s)
+                        ++End;
+                    if (End - x >= 8)
+                    {
+                        DwmBlendConstantGlass(
+                            dstrow + x,
+                            (backdropBase != NULL ? backdropBase + (SIZE_T)y * scrW : dstrow) + x,
+                            End - x, s, Key, matOpacity, Weight, reflectRow + x);
+                        x = End - 1;
+                        continue;
+                    }
+                }
                 if (Weight != 0)
                 {
                     ULONG Shift = (255u - matOpacity) * Weight / 255u;
@@ -3252,12 +3309,12 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
                     LONG sb = (LONG)(s & 0xFFu);
 
                     d = backdropBase != NULL ? backdropBase[(SIZE_T)y * scrW + x] : dstrow[x];
-                    sr += ((LONG)((d >> 16) & 0xFFu) -
-                           (LONG)((Key >> 16) & 0xFFu)) * (LONG)Shift / 255;
-                    sg += ((LONG)((d >> 8) & 0xFFu) -
-                           (LONG)((Key >> 8) & 0xFFu)) * (LONG)Shift / 255;
-                    sb += ((LONG)(d & 0xFFu) -
-                           (LONG)(Key & 0xFFu)) * (LONG)Shift / 255;
+                    sr += DwmDivideChannel255(((LONG)((d >> 16) & 0xFFu) -
+                                               (LONG)((Key >> 16) & 0xFFu)) * (LONG)Shift);
+                    sg += DwmDivideChannel255(((LONG)((d >> 8) & 0xFFu) -
+                                               (LONG)((Key >> 8) & 0xFFu)) * (LONG)Shift);
+                    sb += DwmDivideChannel255(((LONG)(d & 0xFFu) -
+                                               (LONG)(Key & 0xFFu)) * (LONG)Shift);
                     if (material->BackdropType == DWM_BACKDROP_TRANSIENT)
                     {
                         LONG glow = (LONG)(DWM_MATERIAL_REFLECT_STRENGTH *
@@ -4030,7 +4087,8 @@ DwmComposeLoop(HANDLE hStopEvent)
                      * taskbar. Present the whole refreshed scene. */
                     pl = cl = 0; pt = ct = 0;
                     pr = cr = g_W; pb = cb = g_H;
-                    g_backdropCacheValid = FALSE;
+                    for (i = 0; i < ARRAYSIZE(g_backdropCaches); i++)
+                        g_backdropCaches[i].Valid = FALSE;
                     if (!PaintDesktop(g_hdcBackdrop) &&
                         !FillRect(g_hdcBackdrop, &fullBackdrop,
                                   GetSysColorBrush(COLOR_DESKTOP)))
@@ -4274,6 +4332,8 @@ DwmComposeLoop(HANDLE hStopEvent)
                         animatedBackdrop = DwmApplyBackdropBlur(
                             (ULONG *)g_compBits, g_W, g_H,
                             pl, pt, pr, pb, &Animated, wins, i);
+                        DwmBlendShadow((ULONG *)g_compBits, g_W, g_H,
+                                       cl, ct, cr, cb, &wins[i]);
                         DwmStatCounter(&stgA);
                         DwmBlitWindowAnimated((ULONG *)g_compBits, g_W,
                                               cl, ct, cr, cb, pix,
@@ -4412,7 +4472,13 @@ DwmComposeLoop(HANDLE hStopEvent)
     if (SettingsWindow != NULL)
         DestroyWindow(SettingsWindow);
     DwmGpuComposeShutdown();
-    DwmFreeBackdropCache();
+    for (g_backdropCache = g_backdropCaches;
+         g_backdropCache < g_backdropCaches + ARRAYSIZE(g_backdropCaches);
+         ++g_backdropCache)
+    {
+        DwmFreeBackdropCache();
+    }
+    g_backdropCache = g_backdropCaches;
     DwmDxCleanupSurfaces();
     for (ViewIndex = 0; ViewIndex < DWM_VIEW_CACHE_SIZE; ++ViewIndex)
         DwmDropView(&g_views[ViewIndex]);
