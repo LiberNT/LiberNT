@@ -1523,7 +1523,9 @@ Phase1InitializationDiscard(IN PVOID Context)
     CommandLine = (LoaderBlock->LoadOptions ? _strupr(LoaderBlock->LoadOptions) : NULL);
 
     /* Check if GUI Boot is enabled */
-    NoGuiBoot = (CommandLine && strstr(CommandLine, "NOGUIBOOT") != NULL);
+    NoGuiBoot = (CommandLine &&
+                 (strstr(CommandLine, "NOGUIBOOT") != NULL ||
+                  strstr(CommandLine, "DEBUGPORT=SCREEN") != NULL));
 
     /* Setup the boot video driver */
     InbvEnableBootDriver(!NoGuiBoot);
