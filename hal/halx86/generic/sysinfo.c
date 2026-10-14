@@ -105,7 +105,8 @@ HaliQuerySystemInformation(IN HAL_QUERY_INFORMATION_CLASS InformationClass,
                            IN OUT PVOID Buffer,
                            OUT PULONG ReturnedLength)
 {
-    *ReturnedLength = 0;
+    if (ReturnedLength)
+        *ReturnedLength = 0;
 
 #define REPORT_THIS_CASE(X) case X: DPRINT1("Unhandled case: %s\n", #X); break
     switch (InformationClass)
@@ -119,10 +120,7 @@ HaliQuerySystemInformation(IN HAL_QUERY_INFORMATION_CLASS InformationClass,
         REPORT_THIS_CASE(HalMapRegisterInformation);
         REPORT_THIS_CASE(HalMcaLogInformation);
         case HalFrameBufferCachingInformation:
-        {
-            /* FIXME: TODO */
-            return STATUS_NOT_IMPLEMENTED;
-        }
+            return STATUS_INVALID_LEVEL;
         REPORT_THIS_CASE(HalDisplayBiosInformation);
         REPORT_THIS_CASE(HalProcessorFeatureInformation);
         REPORT_THIS_CASE(HalNumaTopologyInterface);

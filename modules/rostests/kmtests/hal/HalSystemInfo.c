@@ -157,8 +157,8 @@ TestNativeSystemInformation(void)
 {
     static const HAL_QUERY_INFORMATION_CLASS UnsupportedClasses[] =
     {
-#if !defined(_M_AMD64)
         HalFrameBufferCachingInformation,
+#if !defined(_M_AMD64)
         HalDisplayBiosInformation,
         HalQueryAMLIIllegalIOPortAddresses,
 #endif
