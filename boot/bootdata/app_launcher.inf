@@ -1,7 +1,0 @@
-[Version]
-Signature = "$Windows NT$"
-
-[AddReg]
-
-; Included only when app_launcher.cmd contains manually added commands.
-HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Run","AppLauncher",0x00020000,"%SystemRoot%\system32\cmd.exe /c ""%SystemRoot%\system32\app_launcher.cmd"""
