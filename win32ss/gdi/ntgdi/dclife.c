@@ -648,7 +648,9 @@ DC_vFinishBlitInternal(PDC pdc1, PDC pdc2, BOOL WriteDest)
     if (WriteDest && (pdc1->fs & DC_REDIRECTION))
         IntCompositionDamageBacking(pdc1->dclevel.pSurface,
                                       &pdc1->erclRedirectionDraw);
-    else if (WriteDest && pdc1->dctype == DCTYPE_DIRECT)
+    else if (WriteDest && pdc1->dctype == DCTYPE_DIRECT &&
+             pdc1->erclClip.right > pdc1->erclClip.left &&
+             pdc1->erclClip.bottom > pdc1->erclClip.top)
         IntCompositionDamageFromGdi();
 
     if (pdc1->dctype == DCTYPE_DIRECT)
