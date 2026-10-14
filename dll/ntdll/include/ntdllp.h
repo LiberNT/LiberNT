@@ -639,6 +639,8 @@ NTSTATUS
 NTAPI
 LdrpGetAlternateResourceModule(
     _In_ PVOID BaseAddress,
+    _In_ ULONG_PTR Type,
+    _In_ USHORT LanguageId,
     _Out_ PVOID *ResourceBase);
 
 PVOID

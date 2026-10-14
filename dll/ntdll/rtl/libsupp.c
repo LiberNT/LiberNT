@@ -713,7 +713,10 @@ NTSTATUS find_entry( PVOID BaseAddress, LDR_RESOURCE_INFO *info,
         return Status;
     }
 
-    MuiStatus = LdrpGetAlternateResourceModule( BaseAddress, &ResourceBase );
+    if (!level)
+        return Status;
+
+    MuiStatus = LdrpGetAlternateResourceModule( BaseAddress, info->Type, level > 2 ? (USHORT)info->Language : 0, &ResourceBase );
     if (MuiStatus == STATUS_RESOURCE_DATA_NOT_FOUND)
         return Status;
     if (!NT_SUCCESS(MuiStatus))

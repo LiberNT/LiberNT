@@ -11,23 +11,48 @@
 #define NDEBUG
 #include <debug.h>
 
+#define LDRP_MUI_MAX_LANGUAGES 16
+#define LDRP_MUI_LANGUAGE_LENGTH (LOCALE_NAME_MAX_LENGTH + 1)
+
+#define LDRP_MUI_RC_SIGNATURE 0xFECDFECD
+#define LDRP_MUI_RC_HEADER_SIZE 0x88
+#define LDRP_MUI_RC_FILE_TYPE 0x10
+#define LDRP_MUI_RC_CHECKSUM 0x2C
+#define LDRP_MUI_RC_MUI_TYPE_NAMES 0x64
+#define LDRP_MUI_RC_MUI_TYPE_IDS 0x6C
+#define LDRP_MUI_RC_LANGUAGE 0x74
+#define LDRP_MUI_RC_FALLBACK_LANGUAGE 0x7C
+#define LDRP_MUI_RC_CHECKSUM_SIZE 16
+#define LDRP_MUI_FILE_LANGUAGE_NEUTRAL 0x11
+#define LDRP_MUI_FILE_LANGUAGE_SPECIFIC 0x12
+
+typedef struct _LDRP_MUI_CONFIG
+{
+    ULONG FileType;
+    PUCHAR Checksum;
+    PCWSTR MuiTypeNames;
+    ULONG MuiTypeNamesSize;
+    PULONG MuiTypeIds;
+    ULONG MuiTypeIdCount;
+    PCWSTR Language;
+    ULONG LanguageSize;
+    PCWSTR FallbackLanguage;
+    ULONG FallbackLanguageSize;
+} LDRP_MUI_CONFIG, *PLDRP_MUI_CONFIG;
+
 typedef struct _LDRP_MUI_MODULE
 {
     LIST_ENTRY Links;
     PVOID BaseAddress;
     ULONG TimeDateStamp;
     ULONG SizeOfImage;
+    WCHAR LanguageKey[LDRP_MUI_LANGUAGE_LENGTH];
     PVOID ResourceBase;
     SIZE_T ViewSize;
 } LDRP_MUI_MODULE, *PLDRP_MUI_MODULE;
 
-#define LDRP_MUI_MAX_LANGUAGES 16
-#define LDRP_MUI_LANGUAGE_LENGTH (LOCALE_NAME_MAX_LENGTH + 1)
-
 static LIST_ENTRY LdrpMuiModuleList = { &LdrpMuiModuleList, &LdrpMuiModuleList };
 static RTL_SRWLOCK LdrpMuiLock = RTL_SRWLOCK_INIT;
-
-NTSTATUS LdrpFindModuleResourceEntry(PVOID BaseAddress, LDR_RESOURCE_INFO *Info, ULONG Level, PVOID *Entry, BOOLEAN WantDirectory);
 
 static
 PVOID
@@ -37,19 +62,146 @@ LdrpUntagResourceBase(
     return (PVOID)((ULONG_PTR)BaseAddress & ~(ULONG_PTR)3);
 }
 
+static
 BOOLEAN
-NTAPI
-LdrpModuleHasMuiConfiguration(
-    _In_ PVOID BaseAddress)
+LdrpMuiRange(
+    _In_ PUCHAR Data,
+    _In_ ULONG Size,
+    _In_ ULONG Field,
+    _Out_ PVOID *Pointer,
+    _Out_ PULONG Length)
+{
+    ULONG Offset = *(PULONG)(Data + Field);
+    ULONG Bytes = *(PULONG)(Data + Field + sizeof(ULONG));
+
+    *Pointer = NULL;
+    *Length = 0;
+    if (!Offset || !Bytes)
+        return TRUE;
+    if (Offset > Size || Bytes > Size - Offset)
+        return FALSE;
+
+    *Pointer = Data + Offset;
+    *Length = Bytes;
+    return TRUE;
+}
+
+static
+BOOLEAN
+LdrpGetMuiConfig(
+    _In_ PVOID BaseAddress,
+    _Out_ PLDRP_MUI_CONFIG Config)
 {
     static const WCHAR MuiType[] = L"MUI";
     LDR_RESOURCE_INFO Info;
-    PVOID Entry;
+    PIMAGE_RESOURCE_DATA_ENTRY Entry;
+    PUCHAR Data;
+    ULONG Size, Length;
+    PVOID Pointer;
+
+    RtlZeroMemory(Config, sizeof(*Config));
 
     Info.Type = (ULONG_PTR)MuiType;
     Info.Name = 1;
     Info.Language = 0;
-    return NT_SUCCESS(LdrpFindModuleResourceEntry(BaseAddress, &Info, 3, &Entry, FALSE));
+    if (!NT_SUCCESS(LdrpFindModuleResourceEntry(BaseAddress, &Info, 3, (PVOID *)&Entry, FALSE)) ||
+        !NT_SUCCESS(LdrAccessResource(BaseAddress, Entry, (PVOID *)&Data, &Size)))
+    {
+        return FALSE;
+    }
+
+    _SEH2_TRY
+    {
+        if (Size < LDRP_MUI_RC_HEADER_SIZE ||
+            *(PULONG)Data != LDRP_MUI_RC_SIGNATURE ||
+            *(PULONG)(Data + sizeof(ULONG)) > Size)
+        {
+            _SEH2_YIELD(return FALSE);
+        }
+        Size = *(PULONG)(Data + sizeof(ULONG));
+
+        Config->FileType = *(PULONG)(Data + LDRP_MUI_RC_FILE_TYPE);
+        Config->Checksum = Data + LDRP_MUI_RC_CHECKSUM;
+
+        if (!LdrpMuiRange(Data, Size, LDRP_MUI_RC_MUI_TYPE_NAMES, &Pointer, &Length))
+            _SEH2_YIELD(return FALSE);
+        Config->MuiTypeNames = Pointer;
+        Config->MuiTypeNamesSize = Length;
+
+        if (!LdrpMuiRange(Data, Size, LDRP_MUI_RC_MUI_TYPE_IDS, &Pointer, &Length))
+            _SEH2_YIELD(return FALSE);
+        Config->MuiTypeIds = Pointer;
+        Config->MuiTypeIdCount = Length / sizeof(ULONG);
+
+        if (!LdrpMuiRange(Data, Size, LDRP_MUI_RC_LANGUAGE, &Pointer, &Length))
+            _SEH2_YIELD(return FALSE);
+        Config->Language = Pointer;
+        Config->LanguageSize = Length;
+
+        if (!LdrpMuiRange(Data, Size, LDRP_MUI_RC_FALLBACK_LANGUAGE, &Pointer, &Length))
+            _SEH2_YIELD(return FALSE);
+        Config->FallbackLanguage = Pointer;
+        Config->FallbackLanguageSize = Length;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return FALSE);
+    }
+    _SEH2_END;
+
+    return TRUE;
+}
+
+static
+BOOLEAN
+LdrpIsMuiResourceType(
+    _In_ PLDRP_MUI_CONFIG Config,
+    _In_ ULONG_PTR Type)
+{
+    ULONG Index;
+
+    if (IS_INTRESOURCE(Type))
+    {
+        for (Index = 0; Index < Config->MuiTypeIdCount; Index++)
+        {
+            if (Config->MuiTypeIds[Index] == (ULONG)Type)
+                return TRUE;
+        }
+    }
+    else if (Config->MuiTypeNames)
+    {
+        PCWSTR Name = Config->MuiTypeNames;
+        PCWSTR End = (PCWSTR)((PUCHAR)Config->MuiTypeNames + Config->MuiTypeNamesSize);
+
+        while (Name < End && *Name)
+        {
+            SIZE_T Length = 0;
+
+            while (Name + Length < End && Name[Length])
+                Length++;
+            if (Name + Length >= End)
+                break;
+            if (!_wcsicmp(Name, (PCWSTR)Type))
+                return TRUE;
+            Name += Length + 1;
+        }
+    }
+
+    return FALSE;
+}
+
+static
+BOOLEAN
+LdrpMuiLanguageEquals(
+    _In_ PLDRP_MUI_CONFIG Config,
+    _In_ PCWSTR Language)
+{
+    SIZE_T Length = wcslen(Language);
+
+    if (!Config->Language || Config->LanguageSize < (Length + 1) * sizeof(WCHAR))
+        return FALSE;
+
+    return !_wcsnicmp(Config->Language, Language, Length) && Config->Language[Length] == UNICODE_NULL;
 }
 
 static
@@ -130,15 +282,40 @@ LdrpBuildMuiFallbackList(
 }
 
 static
+BOOLEAN
+LdrpGetLanguageKey(
+    _In_ USHORT LanguageId,
+    _Out_writes_(LDRP_MUI_LANGUAGE_LENGTH) PWSTR LanguageKey)
+{
+    UNICODE_STRING Name;
+
+    LanguageKey[0] = UNICODE_NULL;
+    if (PRIMARYLANGID(LanguageId) == LANG_NEUTRAL)
+        return TRUE;
+
+    Name.Buffer = LanguageKey;
+    Name.Length = 0;
+    Name.MaximumLength = (LDRP_MUI_LANGUAGE_LENGTH - 1) * sizeof(WCHAR);
+    if (!NT_SUCCESS(RtlLcidToLocaleName(MAKELCID(LanguageId, SORT_DEFAULT), &Name, RTL_LOCALE_ALLOW_NEUTRAL_NAMES, FALSE)))
+        return FALSE;
+
+    LanguageKey[Name.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    return TRUE;
+}
+
+static
 NTSTATUS
 LdrpMapMuiFile(
     _In_ PCUNICODE_STRING Path,
+    _In_ PLDRP_MUI_CONFIG ModuleConfig,
+    _In_ PCWSTR Language,
     _Out_ PVOID *ViewBase,
     _Out_ PSIZE_T ViewSize)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;
     HANDLE FileHandle, SectionHandle;
+    LDRP_MUI_CONFIG Config;
     NTSTATUS Status;
 
     *ViewBase = NULL;
@@ -180,7 +357,10 @@ LdrpMapMuiFile(
         return Status;
 
     if (!RtlImageNtHeader(*ViewBase) ||
-        !LdrpModuleHasMuiConfiguration((PVOID)((ULONG_PTR)*ViewBase | 1)))
+        !LdrpGetMuiConfig((PVOID)((ULONG_PTR)*ViewBase | 1), &Config) ||
+        Config.FileType != LDRP_MUI_FILE_LANGUAGE_SPECIFIC ||
+        RtlCompareMemory(Config.Checksum, ModuleConfig->Checksum, LDRP_MUI_RC_CHECKSUM_SIZE) != LDRP_MUI_RC_CHECKSUM_SIZE ||
+        !LdrpMuiLanguageEquals(&Config, Language))
     {
         NtUnmapViewOfSection(NtCurrentProcess(), *ViewBase);
         *ViewBase = NULL;
@@ -195,17 +375,17 @@ static
 NTSTATUS
 LdrpLoadMuiFile(
     _In_ PVOID BaseAddress,
+    _In_ PLDRP_MUI_CONFIG ModuleConfig,
+    _In_ PCWSTR Language,
     _Out_ PVOID *ViewBase,
     _Out_ PSIZE_T ViewSize)
 {
     static const WCHAR Extension[] = L".mui";
     UCHAR NameBuffer[sizeof(MEMORY_SECTION_NAME) + (MAX_PATH * 2 * sizeof(WCHAR))];
     PMEMORY_SECTION_NAME SectionName = (PMEMORY_SECTION_NAME)NameBuffer;
-    PWSTR Languages;
-    UNICODE_STRING Path;
+    UNICODE_STRING Path, Directory, Name, LanguageName;
     PWSTR FileName;
     USHORT DirectoryLength, FileNameLength;
-    ULONG Count, Index;
     SIZE_T ReturnLength;
     NTSTATUS Status;
 
@@ -219,7 +399,7 @@ LdrpLoadMuiFile(
                                   sizeof(NameBuffer),
                                   &ReturnLength);
     if (!NT_SUCCESS(Status))
-        return Status;
+        return STATUS_MUI_FILE_NOT_FOUND;
 
     FileName = SectionName->SectionFileName.Buffer + SectionName->SectionFileName.Length / sizeof(WCHAR);
     while (FileName > SectionName->SectionFileName.Buffer && FileName[-1] != L'\\')
@@ -229,53 +409,35 @@ LdrpLoadMuiFile(
     if (!DirectoryLength || !FileNameLength)
         return STATUS_MUI_FILE_NOT_FOUND;
 
-    Languages = RtlAllocateHeap(RtlGetProcessHeap(), 0, LDRP_MUI_MAX_LANGUAGES * LDRP_MUI_LANGUAGE_LENGTH * sizeof(WCHAR));
-    if (!Languages)
-        return STATUS_NO_MEMORY;
-
     Path.MaximumLength = DirectoryLength + (LDRP_MUI_LANGUAGE_LENGTH + 1) * sizeof(WCHAR) +
                          FileNameLength + sizeof(Extension);
     Path.Buffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, Path.MaximumLength);
     if (!Path.Buffer)
-    {
-        RtlFreeHeap(RtlGetProcessHeap(), 0, Languages);
         return STATUS_NO_MEMORY;
-    }
 
-    Status = STATUS_MUI_FILE_NOT_FOUND;
-    Count = LdrpBuildMuiFallbackList(Languages);
-    for (Index = 0; Index < Count; Index++)
-    {
-        UNICODE_STRING Directory, Name, Language;
+    Directory.Buffer = SectionName->SectionFileName.Buffer;
+    Directory.Length = Directory.MaximumLength = DirectoryLength;
+    Name.Buffer = FileName;
+    Name.Length = Name.MaximumLength = FileNameLength;
+    RtlInitUnicodeString(&LanguageName, Language);
 
-        Directory.Buffer = SectionName->SectionFileName.Buffer;
-        Directory.Length = Directory.MaximumLength = DirectoryLength;
-        Name.Buffer = FileName;
-        Name.Length = Name.MaximumLength = FileNameLength;
-        RtlInitUnicodeString(&Language, &Languages[Index * LDRP_MUI_LANGUAGE_LENGTH]);
+    Path.Length = 0;
+    RtlAppendUnicodeStringToString(&Path, &Directory);
+    RtlAppendUnicodeStringToString(&Path, &LanguageName);
+    RtlAppendUnicodeToString(&Path, L"\\");
+    RtlAppendUnicodeStringToString(&Path, &Name);
+    RtlAppendUnicodeToString(&Path, Extension);
 
-        Path.Length = 0;
-        RtlAppendUnicodeStringToString(&Path, &Directory);
-        RtlAppendUnicodeStringToString(&Path, &Language);
-        RtlAppendUnicodeToString(&Path, L"\\");
-        RtlAppendUnicodeStringToString(&Path, &Name);
-        RtlAppendUnicodeToString(&Path, Extension);
-
-        Status = LdrpMapMuiFile(&Path, ViewBase, ViewSize);
-        if (NT_SUCCESS(Status))
-            break;
-        Status = STATUS_MUI_FILE_NOT_FOUND;
-    }
-
+    Status = LdrpMapMuiFile(&Path, ModuleConfig, Language, ViewBase, ViewSize);
     RtlFreeHeap(RtlGetProcessHeap(), 0, Path.Buffer);
-    RtlFreeHeap(RtlGetProcessHeap(), 0, Languages);
-    return Status;
+    return NT_SUCCESS(Status) ? Status : STATUS_MUI_FILE_NOT_FOUND;
 }
 
 static
 PLDRP_MUI_MODULE
 LdrpLookupMuiModule(
-    _In_ PVOID BaseAddress)
+    _In_ PVOID BaseAddress,
+    _In_ PCWSTR LanguageKey)
 {
     PLIST_ENTRY Entry;
 
@@ -283,7 +445,7 @@ LdrpLookupMuiModule(
     {
         PLDRP_MUI_MODULE Module = CONTAINING_RECORD(Entry, LDRP_MUI_MODULE, Links);
 
-        if (Module->BaseAddress == BaseAddress)
+        if (Module->BaseAddress == BaseAddress && !_wcsicmp(Module->LanguageKey, LanguageKey))
             return Module;
     }
 
@@ -300,43 +462,41 @@ LdrpFreeMuiModule(
     RtlFreeHeap(RtlGetProcessHeap(), 0, Module);
 }
 
+static
 NTSTATUS
-NTAPI
-LdrpGetAlternateResourceModule(
+LdrpGetMuiModuleForLanguage(
     _In_ PVOID BaseAddress,
-    _Out_ PVOID *ResourceBase)
+    _In_ PLDRP_MUI_CONFIG Config,
+    _In_ ULONG TimeDateStamp,
+    _In_ ULONG SizeOfImage,
+    _In_ PCWSTR Language,
+    _Out_ PVOID *ResourceBase,
+    _Out_ PBOOLEAN Attempted)
 {
     PVOID Base = LdrpUntagResourceBase(BaseAddress);
-    PIMAGE_NT_HEADERS NtHeaders;
-    PLDRP_MUI_MODULE Module, Stale = NULL;
-    ULONG TimeDateStamp, SizeOfImage;
+    PLDRP_MUI_MODULE Module, Existing, Stale = NULL;
     PVOID ViewBase;
-    SIZE_T ViewSize;
+    SIZE_T ViewSize, Length;
     NTSTATUS Status;
 
     *ResourceBase = NULL;
-
-    NtHeaders = RtlImageNtHeader(Base);
-    if (!NtHeaders || !LdrpModuleHasMuiConfiguration(BaseAddress))
-        return STATUS_RESOURCE_DATA_NOT_FOUND;
-
-    TimeDateStamp = NtHeaders->FileHeader.TimeDateStamp;
-    SizeOfImage = NtHeaders->OptionalHeader.SizeOfImage;
+    *Attempted = FALSE;
 
     RtlAcquireSRWLockShared(&LdrpMuiLock);
-    Module = LdrpLookupMuiModule(Base);
+    Module = LdrpLookupMuiModule(Base, Language);
     if (Module && Module->TimeDateStamp == TimeDateStamp && Module->SizeOfImage == SizeOfImage)
     {
-        *ResourceBase = Module->ResourceBase;
+        if (Module->ResourceBase)
+            *ResourceBase = (PVOID)((ULONG_PTR)Module->ResourceBase | 1);
         RtlReleaseSRWLockShared(&LdrpMuiLock);
-        if (!*ResourceBase)
-            return STATUS_MUI_FILE_NOT_LOADED;
-        *ResourceBase = (PVOID)((ULONG_PTR)*ResourceBase | 1);
-        return STATUS_SUCCESS;
+        return *ResourceBase ? STATUS_SUCCESS : STATUS_MUI_FILE_NOT_LOADED;
     }
     RtlReleaseSRWLockShared(&LdrpMuiLock);
 
-    Status = LdrpLoadMuiFile(BaseAddress, &ViewBase, &ViewSize);
+    *Attempted = TRUE;
+    Status = LdrpLoadMuiFile(BaseAddress, Config, Language, &ViewBase, &ViewSize);
+    if (Status == STATUS_NO_MEMORY)
+        return Status;
     if (!NT_SUCCESS(Status))
     {
         ViewBase = NULL;
@@ -353,32 +513,30 @@ LdrpGetAlternateResourceModule(
     Module->BaseAddress = Base;
     Module->TimeDateStamp = TimeDateStamp;
     Module->SizeOfImage = SizeOfImage;
+    Length = wcslen(Language);
+    if (Length >= LDRP_MUI_LANGUAGE_LENGTH)
+        Length = LDRP_MUI_LANGUAGE_LENGTH - 1;
+    RtlCopyMemory(Module->LanguageKey, Language, Length * sizeof(WCHAR));
+    Module->LanguageKey[Length] = UNICODE_NULL;
     Module->ResourceBase = ViewBase;
     Module->ViewSize = ViewSize;
 
     RtlAcquireSRWLockExclusive(&LdrpMuiLock);
+    Existing = LdrpLookupMuiModule(Base, Language);
+    if (Existing && Existing->TimeDateStamp == TimeDateStamp && Existing->SizeOfImage == SizeOfImage)
     {
-        PLDRP_MUI_MODULE Existing = LdrpLookupMuiModule(Base);
-
-        if (Existing && Existing->TimeDateStamp == TimeDateStamp && Existing->SizeOfImage == SizeOfImage)
-        {
-            *ResourceBase = Existing->ResourceBase;
-            RtlReleaseSRWLockExclusive(&LdrpMuiLock);
-            LdrpFreeMuiModule(Module);
-            if (!*ResourceBase)
-                return STATUS_MUI_FILE_NOT_LOADED;
-            *ResourceBase = (PVOID)((ULONG_PTR)*ResourceBase | 1);
-            return STATUS_SUCCESS;
-        }
-
-        if (Existing)
-        {
-            RemoveEntryList(&Existing->Links);
-            Stale = Existing;
-        }
-
-        InsertTailList(&LdrpMuiModuleList, &Module->Links);
+        if (Existing->ResourceBase)
+            *ResourceBase = (PVOID)((ULONG_PTR)Existing->ResourceBase | 1);
+        RtlReleaseSRWLockExclusive(&LdrpMuiLock);
+        LdrpFreeMuiModule(Module);
+        return *ResourceBase ? STATUS_SUCCESS : STATUS_MUI_FILE_NOT_FOUND;
     }
+    if (Existing)
+    {
+        RemoveEntryList(&Existing->Links);
+        Stale = Existing;
+    }
+    InsertTailList(&LdrpMuiModuleList, &Module->Links);
     RtlReleaseSRWLockExclusive(&LdrpMuiLock);
 
     if (Stale)
@@ -389,6 +547,78 @@ LdrpGetAlternateResourceModule(
 
     *ResourceBase = (PVOID)((ULONG_PTR)ViewBase | 1);
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+LdrpGetAlternateResourceModule(
+    _In_ PVOID BaseAddress,
+    _In_ ULONG_PTR Type,
+    _In_ USHORT LanguageId,
+    _Out_ PVOID *ResourceBase)
+{
+    PVOID Base = LdrpUntagResourceBase(BaseAddress);
+    WCHAR LanguageKey[LDRP_MUI_LANGUAGE_LENGTH];
+    PIMAGE_NT_HEADERS NtHeaders;
+    LDRP_MUI_CONFIG Config;
+    PWSTR Languages;
+    ULONG Count, Index;
+    BOOLEAN Attempted, AnyAttempted = FALSE;
+    NTSTATUS Status = STATUS_MUI_FILE_NOT_LOADED;
+
+    *ResourceBase = NULL;
+
+    NtHeaders = RtlImageNtHeader(Base);
+    if (!NtHeaders ||
+        !LdrpGetMuiConfig(BaseAddress, &Config) ||
+        Config.FileType != LDRP_MUI_FILE_LANGUAGE_NEUTRAL ||
+        !LdrpIsMuiResourceType(&Config, Type) ||
+        !LdrpGetLanguageKey(LanguageId, LanguageKey))
+    {
+        return STATUS_RESOURCE_DATA_NOT_FOUND;
+    }
+
+    Languages = RtlAllocateHeap(RtlGetProcessHeap(), 0, LDRP_MUI_MAX_LANGUAGES * LDRP_MUI_LANGUAGE_LENGTH * sizeof(WCHAR));
+    if (!Languages)
+        return STATUS_NO_MEMORY;
+
+    if (LanguageKey[0])
+    {
+        Count = LdrpAddMuiLanguage(Languages, 0, LanguageKey, wcslen(LanguageKey));
+    }
+    else
+    {
+        Count = LdrpBuildMuiFallbackList(Languages);
+        if (Config.FallbackLanguage)
+        {
+            SIZE_T Length = 0;
+
+            while ((Length + 1) * sizeof(WCHAR) <= Config.FallbackLanguageSize && Config.FallbackLanguage[Length])
+                Length++;
+            Count = LdrpAddMuiLanguage(Languages, Count, Config.FallbackLanguage, Length);
+        }
+    }
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        Status = LdrpGetMuiModuleForLanguage(BaseAddress,
+                                             &Config,
+                                             NtHeaders->FileHeader.TimeDateStamp,
+                                             NtHeaders->OptionalHeader.SizeOfImage,
+                                             &Languages[Index * LDRP_MUI_LANGUAGE_LENGTH],
+                                             ResourceBase,
+                                             &Attempted);
+        if (Attempted)
+            AnyAttempted = TRUE;
+        if (NT_SUCCESS(Status) || Status == STATUS_NO_MEMORY)
+            break;
+    }
+
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Languages);
+
+    if (NT_SUCCESS(Status) || Status == STATUS_NO_MEMORY)
+        return Status;
+    return AnyAttempted ? STATUS_MUI_FILE_NOT_FOUND : STATUS_MUI_FILE_NOT_LOADED;
 }
 
 PVOID
@@ -424,18 +654,30 @@ LdrpUnloadAlternateResourceModule(
     _In_ PVOID BaseAddress)
 {
     PVOID Base = LdrpUntagResourceBase(BaseAddress);
-    PLDRP_MUI_MODULE Module;
+    LIST_ENTRY Detached;
+    PLIST_ENTRY Entry, Next;
 
+    InitializeListHead(&Detached);
     RtlAcquireSRWLockExclusive(&LdrpMuiLock);
-    Module = LdrpLookupMuiModule(Base);
-    if (Module)
-        RemoveEntryList(&Module->Links);
+    for (Entry = LdrpMuiModuleList.Flink; Entry != &LdrpMuiModuleList; Entry = Next)
+    {
+        PLDRP_MUI_MODULE Module = CONTAINING_RECORD(Entry, LDRP_MUI_MODULE, Links);
+
+        Next = Entry->Flink;
+        if (Module->BaseAddress == Base)
+        {
+            RemoveEntryList(Entry);
+            InsertTailList(&Detached, Entry);
+        }
+    }
     RtlReleaseSRWLockExclusive(&LdrpMuiLock);
 
-    if (!Module)
+    if (IsListEmpty(&Detached))
         return FALSE;
 
-    LdrpFreeMuiModule(Module);
+    while (!IsListEmpty(&Detached))
+        LdrpFreeMuiModule(CONTAINING_RECORD(RemoveHeadList(&Detached), LDRP_MUI_MODULE, Links));
+
     return TRUE;
 }
 
@@ -455,9 +697,7 @@ LdrpFlushAlternateResourceModules(VOID)
     RtlReleaseSRWLockExclusive(&LdrpMuiLock);
 
     while (!IsListEmpty(&Detached))
-    {
         LdrpFreeMuiModule(CONTAINING_RECORD(RemoveHeadList(&Detached), LDRP_MUI_MODULE, Links));
-    }
 
     return TRUE;
 }
