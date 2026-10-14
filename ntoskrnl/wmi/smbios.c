@@ -191,7 +191,7 @@ WmipGetRawSMBiosTableData(
         TableSize = WmipSMBiosTableSize;
         BiosTablesHeader = WmipSMBiosHeader;
     }
-    else
+    else if (ExpFirmwareType != FirmwareTypeUefi)
     {
     /* This is where the range for the entry point starts */
     PhysicalAddress.QuadPart = 0xF0000;
