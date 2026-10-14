@@ -76,7 +76,8 @@ BmStartEntry(
         return;
 
     FbGuiVtbl.UnInitialize();
-    GuiShowFirmwareLogo();
+    if (!UiKeepFirmwareScreen)
+        GuiShowFirmwareLogo();
     BmStartApplication(&BmEntries[Index], BmStorePath, &Startup);
     GuiInitialize();
 }

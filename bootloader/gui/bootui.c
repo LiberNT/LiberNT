@@ -999,17 +999,31 @@ BootUiDrawMenu(PUI_MENU_INFO Menu)
 }
 
 static VOID
-BootUiDrawCountdown(LONG TimeOut, BOOLEAN Update)
+BootUiCountdownClip(ULONG Size)
+{
+    BootUiSetClip(0, BootUiHeight - 100 - Size / 4, BootUiWidth, BootUiHeight - 56 + 2 * Size);
+}
+
+static VOID
+BootUiEraseCountdown(VOID)
+{
+    BootUiCountdownClip(max(14, BootUiFontSize - 3));
+    BootUiBackground(BootUiHeight);
+    BootUiPresent();
+    BootUiSetClip(0, 0, BootUiWidth, BootUiHeight);
+}
+
+static VOID
+BootUiDrawCountdown(LONG TimeOut)
 {
     CHAR Text[80];
     ULONG Size = max(14, BootUiFontSize - 3);
-    if (Update)
-        BootUiSetClip(0, BootUiHeight - 100 - Size / 4, BootUiWidth, BootUiHeight - 100 + 2 * Size);
+    BootUiCountdownClip(Size);
     BootUiBackground(BootUiHeight);
     RtlStringCbPrintfA(Text, sizeof(Text), "Starting in %ld %s", TimeOut,
                        TimeOut == 1 ? "second" : "seconds");
     BootUiCentered(BootUiHeight - 100, Text, Size, BOOTUI_TEXT);
-    BootUiCentered(BootUiHeight - 56, "Press a key, a volume button, or tap to open the boot menu", Size, BOOTUI_MUTED);
+    BootUiCentered(BootUiHeight - 56, "Press a key, a volume button, or tap to open the boot menu", Size, BOOTUI_TEXT);
     BootUiPresent();
     BootUiSetClip(0, 0, BootUiWidth, BootUiHeight);
 }
@@ -1049,7 +1063,7 @@ BootUiDisplayMenu(PCSTR Header, PCSTR Footer, PCSTR Items[], ULONG Count,
     MACH_POINTER_STATE Previous;
     ULONG Key, I, Second, Hit, Pressed = MAXULONG;
     LONG DragY = 0;
-    BOOLEAN Extended, Redraw = TRUE, Timer, Dragged = FALSE, Result = TRUE, Counting = FALSE;
+    BOOLEAN Extended, Redraw = TRUE, Timer, Dragged = FALSE, Result = TRUE;
     if (!Count || !Items)
         return FALSE;
     if (Default >= Count || !Items[Default])
@@ -1076,10 +1090,7 @@ BootUiDisplayMenu(PCSTR Header, PCSTR Footer, PCSTR Items[], ULONG Count,
         if (Redraw)
         {
             if (UiKeepFirmwareScreen)
-            {
-                BootUiDrawCountdown(TimeOut, Counting);
-                Counting = TRUE;
-            }
+                BootUiDrawCountdown(TimeOut);
             else
                 BootUiRenderMenu(&Menu, TimeOut, CanEscape, &Layout);
             Redraw = FALSE;
@@ -1187,7 +1198,11 @@ BootUiDisplayMenu(PCSTR Header, PCSTR Footer, PCSTR Items[], ULONG Count,
         }
 CheckTimeout:
         if (!TimeOut)
+        {
+            if (UiKeepFirmwareScreen)
+                BootUiEraseCountdown();
             break;
+        }
         if (TimeOut > 0 &&
                  (Timer ? MachInputTimerExpired() : ArcGetTime()->Second != Second))
         {
