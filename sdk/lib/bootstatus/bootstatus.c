@@ -16,6 +16,8 @@
 
 #define BOOT_STATUS_CLASS_NAME L"ReactOSBootStatusWindow"
 #define BOOT_STATUS_COPYDATA_TAG 0x53544252 /* 'RBTS' */
+#define BOOT_STATUS_DOTS_TIMER 1
+#define BOOT_STATUS_DOTS_PERIOD 500
 
 typedef struct _BOOT_STATUS_UPDATE_DATA
 {
@@ -36,6 +38,8 @@ typedef struct _BOOT_STATUS_CONTEXT
     BOOL FirstPaintComplete;
     INT Width;
     INT Height;
+    ULONG Dots;
+    BOOL DotsTimer;
 } BOOT_STATUS_CONTEXT, *PBOOT_STATUS_CONTEXT;
 
 static VOID
@@ -134,13 +138,30 @@ BootStatusGetLayout(
     }
 }
 
+static INT
+BootStatusEllipsisBase(
+    _In_ PCWSTR Text)
+{
+    INT Length = lstrlenW(Text);
+
+    if (Length > 3 && Text[Length - 1] == L'.' && Text[Length - 2] == L'.' &&
+        Text[Length - 3] == L'.')
+    {
+        return Length - 3;
+    }
+    if (Length > 1 && Text[Length - 1] == 0x2026)
+        return Length - 1;
+    return 0;
+}
+
 static VOID
 BootStatusDrawTextLine(
     _In_ HDC Dc,
     _In_ HFONT Font,
     _In_ PCWSTR Text,
     _In_ PRECT TextRect,
-    _In_ COLORREF TextColor)
+    _In_ COLORREF TextColor,
+    _In_ UINT Align)
 {
     RECT ShadowRect;
     HGDIOBJ OldFont;
@@ -157,14 +178,44 @@ BootStatusDrawTextLine(
               Text,
               -1,
               &ShadowRect,
-              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+              Align | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
     SetTextColor(Dc, TextColor);
     DrawTextW(Dc,
               Text,
               -1,
               TextRect,
-              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+              Align | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
     SelectObject(Dc, OldFont);
+}
+
+static VOID
+BootStatusDrawDotsLine(
+    _In_ HDC Dc,
+    _In_ HFONT Font,
+    _In_ PCWSTR Text,
+    _In_ INT BaseLength,
+    _In_ ULONG Dots,
+    _In_ PRECT TextRect,
+    _In_ COLORREF TextColor)
+{
+    WCHAR Line[ARRAYSIZE(((PBOOT_STATUS_UPDATE_DATA)0)->PhaseText) + 3];
+    HGDIOBJ OldFont;
+    SIZE Full;
+    RECT Rect;
+
+    lstrcpynW(Line, Text, BaseLength + 1);
+    lstrcatW(Line, L"...");
+    OldFont = SelectObject(Dc, Font);
+    if (!GetTextExtentPoint32W(Dc, Line, lstrlenW(Line), &Full))
+        Full.cx = TextRect->right - TextRect->left;
+    SelectObject(Dc, OldFont);
+
+    Line[BaseLength + Dots] = UNICODE_NULL;
+    Rect = *TextRect;
+    Rect.left = (TextRect->left + TextRect->right - Full.cx) / 2;
+    if (Rect.left < TextRect->left)
+        Rect.left = TextRect->left;
+    BootStatusDrawTextLine(Dc, Font, Line, &Rect, TextColor, DT_LEFT);
 }
 
 static VOID
@@ -213,16 +264,31 @@ BootStatusDrawText(
                   ARRAYSIZE(DetailText));
     }
 
-    BootStatusDrawTextLine(Dc,
-                           Context->PhaseFont,
-                           Context->Status.PhaseText,
-                           &PhaseRect,
-                           RGB(250, 251, 253));
+    if (BootStatusEllipsisBase(Context->Status.PhaseText))
+    {
+        BootStatusDrawDotsLine(Dc,
+                               Context->PhaseFont,
+                               Context->Status.PhaseText,
+                               BootStatusEllipsisBase(Context->Status.PhaseText),
+                               Context->Dots,
+                               &PhaseRect,
+                               RGB(250, 251, 253));
+    }
+    else
+    {
+        BootStatusDrawTextLine(Dc,
+                               Context->PhaseFont,
+                               Context->Status.PhaseText,
+                               &PhaseRect,
+                               RGB(250, 251, 253),
+                               DT_CENTER);
+    }
     BootStatusDrawTextLine(Dc,
                            Context->DetailFont,
                            DetailText,
                            &DetailRect,
-                           RGB(220, 226, 235));
+                           RGB(220, 226, 235),
+                           DT_CENTER);
 }
 
 static VOID
@@ -305,6 +371,20 @@ BootStatusApplyUpdate(
                    0,
                    (LPARAM)Context->Status.PhaseText);
 
+    if (BootStatusEllipsisBase(Context->Status.PhaseText))
+    {
+        if (!Context->DotsTimer)
+        {
+            Context->DotsTimer = SetTimer(Window, BOOT_STATUS_DOTS_TIMER,
+                                          BOOT_STATUS_DOTS_PERIOD, NULL) != 0;
+        }
+    }
+    else if (Context->DotsTimer)
+    {
+        KillTimer(Window, BOOT_STATUS_DOTS_TIMER);
+        Context->DotsTimer = FALSE;
+    }
+
     BootStatusGetLayout(Context, &PhaseRect, &DetailRect);
     UnionRect(&TextRect, &PhaseRect, &DetailRect);
     InvalidateRect(Window, &TextRect, FALSE);
@@ -338,6 +418,7 @@ BootStatusWindowProc(
 
             Context->Width = GetSystemMetrics(SM_CXSCREEN);
             Context->Height = GetSystemMetrics(SM_CYSCREEN);
+            Context->Dots = 1;
 
             Dc = GetDC(NULL);
             if (Dc)
@@ -401,6 +482,18 @@ BootStatusWindowProc(
             return TRUE;
         }
 
+        case WM_TIMER:
+            if (Context && wParam == BOOT_STATUS_DOTS_TIMER)
+            {
+                RECT PhaseRect;
+
+                Context->Dots = Context->Dots % 3 + 1;
+                BootStatusGetLayout(Context, &PhaseRect, NULL);
+                InvalidateRect(Window, &PhaseRect, FALSE);
+                return 0;
+            }
+            break;
+
         case WM_ERASEBKGND:
             return TRUE;
 
@@ -425,6 +518,7 @@ BootStatusWindowProc(
             return 0;
 
         case WM_DESTROY:
+            KillTimer(Window, BOOT_STATUS_DOTS_TIMER);
             PostQuitMessage(0);
             return 0;
 
