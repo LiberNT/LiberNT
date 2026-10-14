@@ -72,6 +72,10 @@ FbConsPutChar(
     _In_ ULONG Row);
 
 BOOLEAN
+BmUiWaitForKey(
+    _In_ LONG Seconds);
+
+BOOLEAN
 BmUiInitialize(VOID);
 
 VOID

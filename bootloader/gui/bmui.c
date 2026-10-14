@@ -272,6 +272,21 @@ BmUiReadKey(
 }
 
 BOOLEAN
+BmUiWaitForKey(
+    _In_ LONG Seconds)
+{
+    BOOLEAN Extended;
+
+    while (Seconds > 0)
+    {
+        if (BmUiReadKey(&Seconds, &Extended) >= 0)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+BOOLEAN
 BmUiInitialize(VOID)
 {
     ULONG Depth;

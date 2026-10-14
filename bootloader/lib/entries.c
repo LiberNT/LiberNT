@@ -58,18 +58,6 @@ BmEnumerateEntries(
 }
 
 BOOLEAN
-BmGetTimeout(
-    _Out_ PULONGLONG Seconds)
-{
-    BCD_OBJECT BootMgr;
-
-    if (!BcdOpenObject(BCD_ID_BOOTMGR, &BootMgr))
-        return FALSE;
-
-    return BcdGetInteger(&BootMgr, BcdBootMgrInteger_Timeout, Seconds);
-}
-
-BOOLEAN
 BmGetDescription(
     _Out_writes_z_(Chars) PWSTR Description,
     _In_ ULONG Chars)
@@ -80,13 +68,3 @@ BmGetDescription(
            BcdGetString(&BootMgr, BcdLibraryString_Description, Description, Chars);
 }
 
-BOOLEAN
-BmGetDisplayBootMenu(VOID)
-{
-    BCD_OBJECT BootMgr;
-    BOOLEAN Display;
-
-    return BcdOpenObject(BCD_ID_BOOTMGR, &BootMgr) &&
-           BcdGetBoolean(&BootMgr, BcdBootMgrBoolean_DisplayBootMenu, &Display) &&
-           Display;
-}

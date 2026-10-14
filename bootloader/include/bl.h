@@ -182,13 +182,6 @@ BmStartApplication(
     _In_ PBM_STARTUP Startup);
 
 BOOLEAN
-BmGetDisplayBootMenu(VOID);
-
-BOOLEAN
-BmGetTimeout(
-    _Out_ PULONGLONG Seconds);
-
-BOOLEAN
 BmGetDescription(
     _Out_writes_z_(Chars) PWSTR Description,
     _In_ ULONG Chars);
