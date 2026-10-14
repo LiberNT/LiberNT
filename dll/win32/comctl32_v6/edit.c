@@ -3761,7 +3761,7 @@ static void EDIT_WM_NCPaint(HWND hwnd, HRGN region)
         OffsetRect(&r, -r.left, -r.top);
 
 #ifdef __REACTOS__ /* r73789 */
-        dc = GetWindowDC(hwnd);
+        dc = GetDCEx(hwnd, region, DCX_WINDOW|DCX_CACHE|DCX_INTERSECTRGN);
         /* Exclude client part */
         ExcludeClipRect(dc,
                         r.left + cxEdge,

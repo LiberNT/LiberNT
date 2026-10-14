@@ -3571,7 +3571,12 @@ LRESULT COMCTL32_NCPaint(HWND hwnd, WPARAM wp, LPARAM lp, const WCHAR *theme_cla
         CombineRgn(clipRgn, clipRgn, region, RGN_AND);
     OffsetRect(&r, -r.left, -r.top);
 
+#ifdef __REACTOS__
+    dc = GetDCEx(hwnd, region, DCX_WINDOW | DCX_CACHE | DCX_INTERSECTRGN);
+    ExcludeClipRect(dc, r.left + cxEdge, r.top + cyEdge, r.right - cxEdge, r.bottom - cyEdge);
+#else
     dc = GetDCEx(hwnd, region, DCX_WINDOW | DCX_INTERSECTRGN);
+#endif
     if (IsThemeBackgroundPartiallyTransparent(theme, 0, 0))
         DrawThemeParentBackground(hwnd, dc, &r);
     DrawThemeBackground(theme, dc, 0, 0, &r, 0);

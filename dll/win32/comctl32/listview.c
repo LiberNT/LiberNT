@@ -10958,7 +10958,12 @@ static LRESULT LISTVIEW_NCPaint(const LISTVIEW_INFO *infoPtr, HRGN region)
     if (region != (HRGN)1)
         CombineRgn (cliprgn, cliprgn, region, RGN_AND);
 
+#ifdef __REACTOS__
+    dc = GetDCEx(infoPtr->hwndSelf, region, DCX_WINDOW | DCX_CACHE | DCX_INTERSECTRGN);
+    ExcludeClipRect(dc, cxEdge, cyEdge, r.right - r.left - cxEdge, r.bottom - r.top - cyEdge);
+#else
     dc = GetDCEx(infoPtr->hwndSelf, region, DCX_WINDOW | DCX_INTERSECTRGN);
+#endif
     if (infoPtr->hwndHeader && LISTVIEW_IsHeaderEnabled(infoPtr))
     {
         GetWindowRect(infoPtr->hwndHeader, &window_rect);
