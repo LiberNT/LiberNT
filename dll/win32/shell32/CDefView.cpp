@@ -356,6 +356,19 @@ private:
     bool                      m_HasCutItems;
     bool                      m_IsComputerFolder;
     bool                      m_ComputerNeedsFinalArrange;
+    struct COMPUTER_TILE
+    {
+        PITEMID_CHILD pidl;
+        INT iconSize;
+        HICON icon;
+        INT drawWidth;
+        INT drawHeight;
+        WCHAR name[MAX_PATH];
+        BOOL hasSpace;
+        ULARGE_INTEGER freeBytes;
+        ULARGE_INTEGER totalBytes;
+    };
+    CSimpleArray<COMPUTER_TILE> m_ComputerTiles;
     bool                      m_ExplorerMaterialActive;
     COLORREF                  m_ExplorerMaterialBack;
     INT                       m_ExplorerMaterialOpacity;
@@ -393,6 +406,8 @@ private:
     COLORREF ComputerViewBackgroundColor() const;
     COLORREF ExplorerContentTextColor() const;
     HICON GetComputerItemIcon(PCUITEMID_CHILD pidl, INT size, INT &drawWidth, INT &drawHeight);
+    const COMPUTER_TILE *GetComputerTile(PCUITEMID_CHILD pidl, INT iconSize);
+    void ClearComputerTiles();
     void ArrangeComputerView();
     INT ComputerItemFromPoint(POINT point);
     void DrawComputerHeader(HDC hdc, const RECT &rect, UINT id, UINT count);
@@ -1188,6 +1203,52 @@ void CDefView::DrawComputerHeader(HDC hdc, const RECT &rect, UINT id, UINT count
         DeleteObject(headingFont);
 }
 
+const CDefView::COMPUTER_TILE *CDefView::GetComputerTile(PCUITEMID_CHILD pidl, INT iconSize)
+{
+    UINT size = ILGetSize(pidl);
+    for (int i = 0; i < m_ComputerTiles.GetSize(); i++)
+    {
+        const COMPUTER_TILE &tile = m_ComputerTiles[i];
+        if (tile.iconSize == iconSize && ILGetSize(tile.pidl) == size && !memcmp(tile.pidl, pidl, size))
+            return &m_ComputerTiles[i];
+    }
+
+    COMPUTER_TILE tile = {};
+    tile.pidl = ILClone(pidl);
+    if (!tile.pidl)
+        return NULL;
+    tile.iconSize = iconSize;
+    tile.icon = GetComputerItemIcon(pidl, iconSize, tile.drawWidth, tile.drawHeight);
+
+    SHELLDETAILS details;
+    if (SUCCEEDED(GetDetailsByFolderColumn(pidl, 0, details)))
+        StrRetToStrNW(tile.name, _countof(tile.name), &details.str, NULL);
+
+    WCHAR drive[MAX_PATH];
+    if (IsComputerDriveItem(pidl) && _ILGetDrive(pidl, drive, _countof(drive)))
+        tile.hasSpace = GetDiskFreeSpaceExW(drive, &tile.freeBytes, &tile.totalBytes, NULL) && tile.totalBytes.QuadPart;
+
+    if (!m_ComputerTiles.Add(tile))
+    {
+        if (tile.icon)
+            DestroyIcon(tile.icon);
+        ILFree(tile.pidl);
+        return NULL;
+    }
+    return &m_ComputerTiles[m_ComputerTiles.GetSize() - 1];
+}
+
+void CDefView::ClearComputerTiles()
+{
+    for (int i = 0; i < m_ComputerTiles.GetSize(); i++)
+    {
+        if (m_ComputerTiles[i].icon)
+            DestroyIcon(m_ComputerTiles[i].icon);
+        ILFree(m_ComputerTiles[i].pidl);
+    }
+    m_ComputerTiles.RemoveAll();
+}
+
 void CDefView::DrawComputerItem(NMLVCUSTOMDRAW *pDraw)
 {
     const INT item = (INT)pDraw->nmcd.dwItemSpec;
@@ -1237,20 +1298,13 @@ void CDefView::DrawComputerItem(NMLVCUSTOMDRAW *pDraw)
         DeleteObject(fillBrush);
     }
 
-    INT drawWidth, drawHeight;
-    HICON icon = GetComputerItemIcon(pidl, iconSize, drawWidth, drawHeight);
-    const INT iconLeft = itemRect.left + ((iconSize - drawWidth) / 2);
-    const INT iconTop = itemRect.top + ((itemRect.bottom - itemRect.top - drawHeight) / 2);
-    if (icon)
-    {
-        DrawIconEx(pDraw->nmcd.hdc, iconLeft, iconTop, icon, drawWidth, drawHeight, 0, NULL, DI_NORMAL);
-        DestroyIcon(icon);
-    }
-
-    WCHAR name[MAX_PATH] = L"";
-    SHELLDETAILS details;
-    if (SUCCEEDED(GetDetailsByFolderColumn(pidl, 0, details)))
-        StrRetToStrNW(name, _countof(name), &details.str, NULL);
+    const COMPUTER_TILE *tile = GetComputerTile(pidl, iconSize);
+    if (!tile)
+        return;
+    const INT iconLeft = itemRect.left + ((iconSize - tile->drawWidth) / 2);
+    const INT iconTop = itemRect.top + ((itemRect.bottom - itemRect.top - tile->drawHeight) / 2);
+    if (tile->icon)
+        DrawIconEx(pDraw->nmcd.hdc, iconLeft, iconTop, tile->icon, tile->drawWidth, tile->drawHeight, 0, NULL, DI_NORMAL);
 
     RECT textRect = itemRect;
     textRect.left += iconSize + textGap;
@@ -1262,13 +1316,12 @@ void CDefView::DrawComputerItem(NMLVCUSTOMDRAW *pDraw)
     if (!IsComputerDriveItem(pidl))
         nameRect.top += ((nameRect.bottom - nameRect.top) - MulDiv(20, dpi, 96)) / 2;
     nameRect.bottom = nameRect.top + MulDiv(20, dpi, 96);
-    DrawTextW(pDraw->nmcd.hdc, name, -1, &nameRect, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+    DrawTextW(pDraw->nmcd.hdc, tile->name, -1, &nameRect, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
 
     if (IsComputerDriveItem(pidl))
     {
-        WCHAR drive[MAX_PATH];
-        ULARGE_INTEGER freeBytes, totalBytes;
-        if (_ILGetDrive(pidl, drive, _countof(drive)) && GetDiskFreeSpaceExW(drive, &freeBytes, &totalBytes, NULL) && totalBytes.QuadPart)
+        ULARGE_INTEGER freeBytes = tile->freeBytes, totalBytes = tile->totalBytes;
+        if (tile->hasSpace)
         {
             RECT barRect = textRect;
             barRect.top += MulDiv(24, dpi, 96);
@@ -2358,6 +2411,7 @@ HRESULT CDefView::FillList(BOOL IsRefreshCommand)
     TRACE("%p\n", this);
 
     CancelFillList();
+    ClearComputerTiles();
     m_FillListIsRefresh = IsRefreshCommand;
     if (IsComputerTileView())
         m_ComputerNeedsFinalArrange = true;
@@ -2429,6 +2483,7 @@ LRESULT CDefView::OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHand
         m_Destroyed = TRUE;
         ClearExplorerContentBackdrop(true);
         CancelFillList();
+        ClearComputerTiles();
         RevokeDragDrop(m_hWnd);
         SHChangeNotifyDeregister(m_hNotify);
         m_hNotify = NULL;
@@ -3785,6 +3840,12 @@ LRESULT CDefView::OnChangeNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &
     lEvent &= ~SHCNE_INTERRUPT;
     TRACE("(%p)(%p,%p,%p) %#x\n", this, Pidls[0], Pidls[1], lParam, lEvent);
 
+    if (m_ComputerTiles.GetSize())
+    {
+        ClearComputerTiles();
+        m_ListView.InvalidateRect(NULL, FALSE);
+    }
+
     if (_DoFolderViewCB(SFVM_FSNOTIFY, (WPARAM)Pidls, lEvent) == S_FALSE)
     {
         SHChangeNotification_Unlock(hLock);
@@ -3885,6 +3946,8 @@ LRESULT CDefView::OnMenuMessage(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &b
 
 LRESULT CDefView::OnSettingChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
 {
+    ClearComputerTiles();
+
     /* Wallpaper setting affects drop shadows effect */
     if (wParam == SPI_SETDESKWALLPAPER ||
         wParam == SPI_SETHIGHCONTRAST || wParam == 0)
