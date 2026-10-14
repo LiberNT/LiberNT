@@ -73,6 +73,26 @@ AddKeyToBothDirInfo(_In_     PBTreeKey Key,
     return STATUS_SUCCESS;
 }
 
+static
+BOOLEAN
+NameContainsWildCards(_In_ PUNICODE_STRING Name)
+{
+    for (USHORT Index = 0; Index < Name->Length / sizeof(WCHAR); Index++)
+    {
+        WCHAR Character = Name->Buffer[Index];
+
+        if (Character == L'*' ||
+            Character == L'?' ||
+            Character == DOS_STAR ||
+            Character == DOS_QM ||
+            Character == DOS_DOT)
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 BOOLEAN
 Directory::IsEligibleForFileDir(PBTreeKey Key,
                                 PUNICODE_STRING FileNameFilter)
@@ -117,7 +137,7 @@ Directory::IsEligibleForFileDir(PIndexEntry Entry,
 
         if (!DirectEnumeration ||
             FileNameData->NameType != NAME_TYPE_WIN32 ||
-            !NT_SUCCESS(FindDirectShortName(Entry->Data.Directory.IndexedFile,
+            !NT_SUCCESS(FindDirectShortName(Entry,
                                             ShortName,
                                             &ShortNameLength)) ||
             ShortNameLength == 0)
@@ -488,79 +508,246 @@ Directory::GetNextDirectEntry(_Out_ PIndexEntry* Entry)
 }
 
 NTSTATUS
+Directory::SeekDirectEnumeration(
+    _In_ PUNICODE_STRING Name,
+    _In_ BOOLEAN After)
+{
+    NTSTATUS Status;
+
+    Status = ResetDirectEnumeration();
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    for (;;)
+    {
+        DirectEnumerationFrame* Frame =
+            &EnumerationState->Stack[EnumerationDepth - 1];
+        PIndexNodeHeader Header;
+        PIndexEntry Current;
+        ULONG HeaderBytes;
+        ULONGLONG ChildVCN;
+        BOOLEAN Matched = FALSE;
+
+        Status = LoadDirectNode(
+            EnumerationDepth - 1,
+            &Header,
+            &HeaderBytes);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        for (;;)
+        {
+            ULONG Remaining =
+                Header->TotalIndexSize - Frame->EntryOffset;
+            PFileNameEx EntryName;
+            UNICODE_STRING EntryString;
+            LONG CompareResult;
+
+            Current = (PIndexEntry)(
+                (PUCHAR)Header + Frame->EntryOffset);
+            if (!NtfsIsDirectoryIndexEntryValid(
+                    Current,
+                    Remaining))
+            {
+                return STATUS_FILE_CORRUPT_ERROR;
+            }
+            if (Current->Flags & INDEX_ENTRY_END)
+                break;
+
+            EntryName = (PFileNameEx)Current->IndexStream;
+            EntryString = NtfsMakeCountedUnicodeString(
+                EntryName->Name,
+                EntryName->NameLength * sizeof(WCHAR));
+            Status = DiskVolume->CompareFileNames(
+                &EntryString,
+                Name,
+                &CompareResult);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            if (CompareResult == 0 && !After)
+            {
+                Matched = TRUE;
+                break;
+            }
+            if (CompareResult > 0)
+                break;
+
+            if (Current->EntryLength > Remaining)
+                return STATUS_FILE_CORRUPT_ERROR;
+            Frame->EntryOffset += Current->EntryLength;
+        }
+
+        if (Matched)
+        {
+            Frame->ChildVisited = TRUE;
+            return STATUS_SUCCESS;
+        }
+        if (!(Current->Flags & INDEX_ENTRY_NODE))
+            return STATUS_SUCCESS;
+
+        ChildVCN = *GetSubnodeVCN(Current);
+        if (EnumerationDepth ==
+            RTL_NUMBER_OF(EnumerationState->Stack))
+        {
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        for (ULONG Index = 0;
+             Index < EnumerationDepth;
+             Index++)
+        {
+            if (!EnumerationState->Stack[Index].IsRoot &&
+                EnumerationState->Stack[Index].VCN == ChildVCN)
+            {
+                return STATUS_FILE_CORRUPT_ERROR;
+            }
+        }
+
+        Frame->ChildVisited = TRUE;
+        EnumerationState->Stack[EnumerationDepth].VCN =
+            ChildVCN;
+        EnumerationState->Stack[EnumerationDepth].EntryOffset =
+            MAXULONG;
+        EnumerationState->Stack[EnumerationDepth].IsRoot =
+            FALSE;
+        EnumerationState->Stack[EnumerationDepth].ChildVisited =
+            FALSE;
+        EnumerationDepth++;
+    }
+}
+
+NTSTATUS
+Directory::FindDirectExactEntry(
+    _In_ PUNICODE_STRING Name,
+    _Out_ PIndexEntry* Entry)
+{
+    WCHAR LongNameBuffer[NTFS_MAX_FILE_NAME_LENGTH];
+    UNICODE_STRING Target = *Name;
+    NTSTATUS Status;
+
+    *Entry = NULL;
+
+    for (ULONG Pass = 0; ; Pass++)
+    {
+        PFileNameEx FileNameData;
+        UNICODE_STRING EntryString;
+        PFileRecord File;
+        ULONGLONG FileNumber;
+        LONG CompareResult;
+
+        Status = SeekDirectEnumeration(&Target, FALSE);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Status = GetNextDirectEntry(Entry);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        FileNameData = (PFileNameEx)(*Entry)->IndexStream;
+        EntryString = NtfsMakeCountedUnicodeString(
+            FileNameData->Name,
+            FileNameData->NameLength * sizeof(WCHAR));
+        Status = DiskVolume->CompareFileNames(
+            &EntryString,
+            &Target,
+            &CompareResult);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (CompareResult != 0)
+        {
+            *Entry = NULL;
+            return STATUS_NO_MORE_FILES;
+        }
+        if (Pass != 0 || FileNameData->NameType != NAME_TYPE_DOS)
+            return STATUS_SUCCESS;
+
+        FileNumber = GetFRNFromFileRef(
+            (*Entry)->Data.Directory.IndexedFile);
+        if (FileNumber > MAXULONG)
+            return STATUS_FILE_CORRUPT_ERROR;
+        Status = DiskVolume->MFT->GetFileRecord(
+            (ULONG)FileNumber,
+            &File);
+        if (NT_SUCCESS(Status))
+        {
+            Status = DiskVolume->MFT->GetLinkName(
+                File,
+                FileNameData->ParentFileReference,
+                &EntryString,
+                &Target);
+            if (NT_SUCCESS(Status) &&
+                Target.Length > sizeof(LongNameBuffer))
+            {
+                Status = STATUS_FILE_CORRUPT_ERROR;
+            }
+            if (NT_SUCCESS(Status))
+            {
+                RtlCopyMemory(LongNameBuffer,
+                              Target.Buffer,
+                              Target.Length);
+                Target.Buffer = LongNameBuffer;
+                Target.MaximumLength = Target.Length;
+            }
+            delete File;
+        }
+        *Entry = NULL;
+        if (Status == STATUS_NOT_FOUND)
+            return STATUS_NO_MORE_FILES;
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+}
+
+NTSTATUS
 Directory::FindDirectShortName(
-    _In_ ULONGLONG FileReference,
+    _In_ PIndexEntry Entry,
     _Out_ PWCHAR ShortName,
     _Out_ PUCHAR ShortNameLength)
 {
-    ULONG SavedDepth = EnumerationDepth;
+    PFileNameEx FileNameData;
+    UNICODE_STRING Name;
+    UNICODE_STRING Alias;
+    PFileRecord File;
+    ULONGLONG FileNumber;
     NTSTATUS Status;
 
-    if (!ShortName || !ShortNameLength)
+    if (!Entry || !ShortName || !ShortNameLength)
         return STATUS_INVALID_PARAMETER;
 
-    RtlCopyMemory(
-        EnumerationState->SavedStack,
-        EnumerationState->Stack,
-        sizeof(EnumerationState->SavedStack));
     *ShortNameLength = 0;
     RtlZeroMemory(
         ShortName,
         MAX_SHORTNAME_LENGTH * sizeof(WCHAR));
 
-    Status = ResetDirectEnumeration();
+    FileNumber = GetFRNFromFileRef(Entry->Data.Directory.IndexedFile);
+    if (FileNumber > MAXULONG)
+        return STATUS_FILE_CORRUPT_ERROR;
+
+    Status = DiskVolume->MFT->GetFileRecord((ULONG)FileNumber, &File);
+    if (Status == STATUS_NOT_FOUND)
+        return STATUS_SUCCESS;
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    FileNameData = (PFileNameEx)Entry->IndexStream;
+    Name = NtfsMakeCountedUnicodeString(
+        FileNameData->Name,
+        FileNameData->NameLength * sizeof(WCHAR));
+    Status = DiskVolume->MFT->GetLinkShortName(
+        File,
+        FileNameData->ParentFileReference,
+        &Name,
+        &Alias);
+    if (NT_SUCCESS(Status) &&
+        Alias.Length > MAX_SHORTNAME_LENGTH * sizeof(WCHAR))
+    {
+        Status = STATUS_FILE_CORRUPT_ERROR;
+    }
     if (NT_SUCCESS(Status))
     {
-        PIndexEntry Entry;
-
-        while (NT_SUCCESS(
-            Status = GetNextDirectEntry(&Entry)))
-        {
-            PFileNameEx FileNameData =
-                (PFileNameEx)Entry->IndexStream;
-
-            if (Entry->Data.Directory.IndexedFile ==
-                    FileReference &&
-                FileNameData->NameType == NAME_TYPE_DOS)
-            {
-                if (FileNameData->NameLength >
-                    MAX_SHORTNAME_LENGTH)
-                {
-                    Status =
-                        STATUS_FILE_CORRUPT_ERROR;
-                    break;
-                }
-
-                *ShortNameLength = (UCHAR)
-                    GetWStrLength(
-                        FileNameData->NameLength);
-                RtlCopyMemory(
-                    ShortName,
-                    FileNameData->Name,
-                    *ShortNameLength);
-                Status = STATUS_SUCCESS;
-                break;
-            }
-        }
-        if (Status == STATUS_NO_MORE_FILES)
-            Status = STATUS_SUCCESS;
+        RtlCopyMemory(ShortName, Alias.Buffer, Alias.Length);
+        *ShortNameLength = (UCHAR)Alias.Length;
     }
-
-    RtlCopyMemory(
-        EnumerationState->Stack,
-        EnumerationState->SavedStack,
-        sizeof(EnumerationState->Stack));
-    EnumerationDepth = SavedDepth;
-    EnumerationLoadedDepth = -1;
-    EnumerationLoadedVCN = ~(ULONGLONG)0;
-    if (NT_SUCCESS(Status) && EnumerationDepth != 0)
-    {
-        PIndexNodeHeader Header;
-        ULONG HeaderBytes;
-
-        Status = LoadDirectNode(EnumerationDepth - 1, &Header, &HeaderBytes);
-    }
-    return Status;
+    delete File;
+    return Status == STATUS_NOT_FOUND ? STATUS_SUCCESS : Status;
 }
 
 NTSTATUS
@@ -575,7 +762,8 @@ Directory::GetFileBothDirInfoDirect(
     PFILE_NAMES_INFORMATION PreviousBuffer = NULL;
     ULONG EntrySize = 0;
     ULONG TotalBufferLength = *BufferLength;
-    BOOLEAN SkipToResume = FALSE;
+    BOOLEAN ExactName = FileNameFilter && !NameContainsWildCards(FileNameFilter);
+    BOOLEAN ExactLookedUp = FALSE;
     NTSTATUS Status;
 
     if (RestartScan)
@@ -595,10 +783,17 @@ Directory::GetFileBothDirInfoDirect(
          * the last name handed out and let the index's own ordering say what
          * comes next.
          */
-        Status = ResetDirectEnumeration();
+        UNICODE_STRING ResumeString;
+
+        if (ExactName)
+            return STATUS_NO_MORE_FILES;
+
+        ResumeString.Buffer = EnumerationState->ResumeName;
+        ResumeString.Length = (USHORT)(ResumeNameLength * sizeof(WCHAR));
+        ResumeString.MaximumLength = ResumeString.Length;
+        Status = SeekDirectEnumeration(&ResumeString, TRUE);
         if (!NT_SUCCESS(Status))
             return Status;
-        SkipToResume = TRUE;
     }
     else if (EnumerationDepth == 0)
     {
@@ -626,7 +821,17 @@ Directory::GetFileBothDirInfoDirect(
     {
         PIndexEntry IndexEntry;
 
-        Status = GetNextDirectEntry(&IndexEntry);
+        if (ExactName)
+        {
+            Status = ExactLookedUp
+                ? STATUS_NO_MORE_FILES
+                : FindDirectExactEntry(FileNameFilter, &IndexEntry);
+            ExactLookedUp = TRUE;
+        }
+        else
+        {
+            Status = GetNextDirectEntry(&IndexEntry);
+        }
         if (Status == STATUS_NO_MORE_FILES)
         {
             if (TotalBufferLength == *BufferLength)
@@ -636,28 +841,6 @@ Directory::GetFileBothDirInfoDirect(
         }
         if (!NT_SUCCESS(Status))
             break;
-
-        if (SkipToResume)
-        {
-            PFileNameEx EntryName = (PFileNameEx)IndexEntry->IndexStream;
-            UNICODE_STRING EntryString;
-            UNICODE_STRING ResumeString;
-            LONG CompareResult;
-
-            EntryString.Buffer = EntryName->Name;
-            EntryString.Length = (USHORT)(EntryName->NameLength * sizeof(WCHAR));
-            EntryString.MaximumLength = EntryString.Length;
-            ResumeString.Buffer = EnumerationState->ResumeName;
-            ResumeString.Length = (USHORT)(ResumeNameLength * sizeof(WCHAR));
-            ResumeString.MaximumLength = ResumeString.Length;
-
-            Status = DiskVolume->CompareFileNames(&EntryString, &ResumeString, &CompareResult);
-            if (!NT_SUCCESS(Status))
-                break;
-            if (CompareResult <= 0)
-                continue;
-            SkipToResume = FALSE;
-        }
 
         if (IsEligibleForFileDir(
                 IndexEntry,
@@ -707,7 +890,7 @@ Directory::GetFileBothDirInfoDirect(
                 UCHAR ShortNameLength;
 
                 Status = FindDirectShortName(
-                    IndexEntry->Data.Directory.IndexedFile,
+                    IndexEntry,
                     static_cast<PFILE_BOTH_DIR_INFORMATION>(Buffer)->ShortName,
                     &ShortNameLength);
                 if (!NT_SUCCESS(Status))

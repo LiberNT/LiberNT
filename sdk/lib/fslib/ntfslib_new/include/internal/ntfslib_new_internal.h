@@ -1381,7 +1381,6 @@ private:
     struct DirectEnumerationState
     {
         DirectEnumerationFrame Stack[64];
-        DirectEnumerationFrame SavedStack[64];
         WCHAR ResumeName[NTFS_MAX_FILE_NAME_LENGTH + 1];
     };
 
@@ -1483,8 +1482,16 @@ private:
     NTSTATUS
     GetNextDirectEntry(_Out_ PIndexEntry* Entry);
     NTSTATUS
+    SeekDirectEnumeration(
+        _In_ PUNICODE_STRING Name,
+        _In_ BOOLEAN After);
+    NTSTATUS
+    FindDirectExactEntry(
+        _In_ PUNICODE_STRING Name,
+        _Out_ PIndexEntry* Entry);
+    NTSTATUS
     FindDirectShortName(
-        _In_ ULONGLONG FileReference,
+        _In_ PIndexEntry Entry,
         _Out_ PWCHAR ShortName,
         _Out_ PUCHAR ShortNameLength);
     NTSTATUS
