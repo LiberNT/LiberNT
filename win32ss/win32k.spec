@@ -195,11 +195,11 @@
 @ stdcall PATHOBJ_vEnumStartClipLines(ptr ptr ptr ptr)
 @ stdcall PATHOBJ_vGetBounds(ptr ptr)
 @ stdcall RtlAnsiCharToUnicodeChar(ptr) NTOSKRNL.RtlAnsiCharToUnicodeChar
-@ stdcall -arch=x86_64,arm RtlCaptureContext(ptr) NTOSKRNL.RtlCaptureContext
+@ stdcall -arch=x86_64,arm,riscv64 RtlCaptureContext(ptr) NTOSKRNL.RtlCaptureContext
 @ stdcall -arch=x86_64,arm RtlCopyMemory(ptr ptr int64) NTOSKRNL.RtlCopyMemory
 @ stdcall -arch=x86_64,arm RtlCopyMemoryNonTemporal(ptr ptr int64) NTOSKRNL.RtlCopyMemoryNonTemporal
 @ stdcall -arch=x86_64,arm RtlFillMemory(ptr long long) NTOSKRNL.RtlFillMemory
-@ cdecl -arch=x86_64,arm RtlLookupFunctionEntry(double ptr ptr) NTOSKRNL.RtlLookupFunctionEntry
+@ cdecl -arch=x86_64,arm,riscv64 RtlLookupFunctionEntry(double ptr ptr) NTOSKRNL.RtlLookupFunctionEntry
 @ stdcall -arch=x86_64,arm RtlMoveMemory(ptr ptr long) NTOSKRNL.RtlMoveMemory
 @ stdcall RtlMultiByteToUnicodeN(ptr long ptr ptr long) NTOSKRNL.RtlMultiByteToUnicodeN
 @ cdecl -arch=x86_64,arm RtlPcToFileHeader(ptr ptr) NTOSKRNL.RtlPcToFileHeader
@@ -211,7 +211,7 @@
 @ stdcall -arch=x86_64,arm RtlUnwindEx(ptr ptr ptr ptr ptr ptr) NTOSKRNL.RtlUnwindEx
 @ stdcall RtlUpcaseUnicodeChar(long) NTOSKRNL.RtlUpcaseUnicodeChar
 @ stdcall RtlUpcaseUnicodeToMultiByteN(ptr long ptr ptr long) NTOSKRNL.RtlUpcaseUnicodeToMultiByteN
-@ stdcall -arch=x86_64,arm RtlVirtualUnwind(long int64 int64 ptr ptr ptr ptr ptr) NTOSKRNL.RtlVirtualUnwind
+@ stdcall -arch=x86_64,arm,riscv64 RtlVirtualUnwind(long int64 int64 ptr ptr ptr ptr ptr) NTOSKRNL.RtlVirtualUnwind
 @ stdcall -arch=x86_64,arm RtlZeroMemory(ptr long) NTOSKRNL.RtlZeroMemory
 @ stdcall STROBJ_bEnum(ptr ptr ptr)
 @ stdcall STROBJ_bEnumPositionsOnly(ptr ptr ptr)

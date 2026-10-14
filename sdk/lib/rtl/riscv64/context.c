@@ -8,6 +8,15 @@
 
 DECLSPEC_NORETURN VOID NTAPI RtlpRiscv64RestoreContext(PCONTEXT Context);
 
+typedef struct _RISCV64_JUMP_BUFFER
+{
+    ULONG64 Frame;
+    ULONG64 Ra;
+    ULONG64 Sp;
+    ULONG64 S[12];
+    ULONG64 Reserved;
+} RISCV64_JUMP_BUFFER;
+
 VOID NTAPI
 RtlRestoreContext(PCONTEXT ContextRecord, PEXCEPTION_RECORD ExceptionRecord)
 {
@@ -25,6 +34,25 @@ RtlRestoreContext(PCONTEXT ContextRecord, PEXCEPTION_RECORD ExceptionRecord)
         !NT_SUCCESS(RtlpRiscv64ReadMemory(&Record, ExceptionRecord, sizeof(Record))))
         RtlpRiscv64RaiseFatal(STATUS_INVALID_PARAMETER);
 
+    if (ExceptionRecord && Record.ExceptionCode == STATUS_LONGJUMP)
+    {
+        RISCV64_JUMP_BUFFER JumpBuffer;
+        ULONG Index;
+
+        if (Record.NumberParameters < 1 ||
+            !NT_SUCCESS(RtlpRiscv64ReadMemory(&JumpBuffer, (PVOID)Record.ExceptionInformation[0],
+                                              sizeof(JumpBuffer))))
+            RtlpRiscv64RaiseFatal(STATUS_INVALID_PARAMETER);
+
+        Context.Pc = JumpBuffer.Ra;
+        Context.Ra = JumpBuffer.Ra;
+        Context.Sp = JumpBuffer.Sp;
+        Context.S0 = JumpBuffer.S[0];
+        Context.S1 = JumpBuffer.S[1];
+        for (Index = 2; Index < RTL_NUMBER_OF(JumpBuffer.S); Index++)
+            Context.X[16 + Index] = JumpBuffer.S[Index];
+    }
+
     RtlpGetStackLimits(&Low, &High);
     if ((Context.ContextFlags & Required) != Required ||
         (Context.ContextFlags & ~Allowed) ||
@@ -32,9 +60,7 @@ RtlRestoreContext(PCONTEXT ContextRecord, PEXCEPTION_RECORD ExceptionRecord)
         (LONG64)Context.Pc >> 38 != ((Context.Pc >> 38) & 1 ? -1 : 0) ||
         (LONG64)Context.Sp >> 38 != ((Context.Sp >> 38) & 1 ? -1 : 0) ||
         (Context.Sp & 15) || Context.Sp < Low || Context.Sp > High ||
-        (ExceptionRecord &&
-         (Record.ExceptionCode == STATUS_UNWIND_CONSOLIDATE ||
-          Record.ExceptionCode == STATUS_LONGJUMP)))
+        (ExceptionRecord && Record.ExceptionCode == STATUS_UNWIND_CONSOLIDATE))
         RtlpRiscv64RaiseFatal(STATUS_INVALID_PARAMETER);
 
     RtlpRiscv64PrepareContextRestore(&Context);
