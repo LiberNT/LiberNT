@@ -257,6 +257,7 @@
 @ stdcall GetVolumeNameForVolumeMountPointW(wstr ptr long) kernel32.GetVolumeNameForVolumeMountPointW
 @ stdcall GetWindowsAccountDomainSid(ptr ptr ptr)
 @ stdcall -arch=x86_64,arm64ec GetXStateFeaturesMask(ptr ptr)
+@ stdcall GlobalAlloc(long long) kernel32.GlobalAlloc
 @ stdcall GlobalFree(long) kernel32.GlobalFree
 @ stdcall HashData(ptr long ptr long)
 @ stdcall IdnToAscii(long wstr long ptr long)
@@ -311,6 +312,7 @@
 @ stdcall LoadStringA(long long ptr long)
 @ stdcall LoadStringW(long long ptr long)
 @ stdcall LocalAlloc(long long) kernel32.LocalAlloc
+@ stdcall LocalFree(long) kernel32.LocalFree
 @ stdcall LocaleNameToLCID(wstr long)
 @ stdcall -arch=x86_64,arm64ec LocateXStateFeature(ptr long ptr)
 @ stdcall MakeAbsoluteSD(ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr)
