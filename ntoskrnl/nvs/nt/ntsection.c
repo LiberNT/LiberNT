@@ -1504,7 +1504,7 @@ MiCreateSectionWithMode(
         if (Size == 0)
             return STATUS_INVALID_PARAMETER_4;
 
-        if (Size > (ULONG64)(ULONG_PTR)MM_HIGHEST_VAD_ADDRESS + 1)
+        if (Size > MI_NT_MAXIMUM_PAGEFILE_SECTION_SIZE)
             return STATUS_SECTION_TOO_BIG;
 
         if (Size > SizeLimit)
