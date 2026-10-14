@@ -2693,6 +2693,17 @@ unsigned int OpenType_apply_GPOS_lookup(const ScriptCache *script_cache, const O
             lookup_index, glyphs, glyph_index, glyph_count, goffset);
 }
 
+#ifdef __REACTOS__
+static CRITICAL_SECTION cs_opentype_cache;
+static CRITICAL_SECTION_DEBUG cs_opentype_cache_dbg =
+{
+    0, 0, &cs_opentype_cache,
+    { &cs_opentype_cache_dbg.ProcessLocksList, &cs_opentype_cache_dbg.ProcessLocksList },
+      0, 0, { (DWORD_PTR)(__FILE__ ": opentype_cache") }
+};
+static CRITICAL_SECTION cs_opentype_cache = { &cs_opentype_cache_dbg, -1, 0, 0, 0, 0 };
+#endif
+
 static LoadedScript *usp10_script_cache_add_script(ScriptCache *script_cache, OPENTYPE_TAG tag)
 {
     LoadedScript *script;
@@ -2758,8 +2769,17 @@ static void _initialize_script_cache(ScriptCache *script_cache)
     const GPOS_Header *gpos_header;
     const GSUB_Header *gsub_header;
 
+#ifdef __REACTOS__
+    EnterCriticalSection(&cs_opentype_cache);
+    if (script_cache->scripts_initialized)
+    {
+        LeaveCriticalSection(&cs_opentype_cache);
+        return;
+    }
+#else
     if (script_cache->scripts_initialized)
         return;
+#endif
 
     if ((gsub_header = script_cache->GSUB_Table))
         usp10_script_cache_add_script_list(script_cache, USP10_SCRIPT_TABLE_GSUB,
@@ -2770,6 +2790,9 @@ static void _initialize_script_cache(ScriptCache *script_cache)
                 (const OT_ScriptList *)((const BYTE *)gpos_header + GET_BE_WORD(gpos_header->ScriptList)));
 
     script_cache->scripts_initialized = TRUE;
+#ifdef __REACTOS__
+    LeaveCriticalSection(&cs_opentype_cache);
+#endif
 }
 
 HRESULT OpenType_GetFontScriptTags(ScriptCache *psc, OPENTYPE_TAG searchingFor, int cMaxTags, OPENTYPE_TAG *pScriptTags, int *pcTags)
@@ -2875,8 +2898,17 @@ static void _initialize_language_cache(LoadedScript *script)
 {
     const OT_Script *list;
 
+#ifdef __REACTOS__
+    EnterCriticalSection(&cs_opentype_cache);
+    if (script->languages_initialized)
+    {
+        LeaveCriticalSection(&cs_opentype_cache);
+        return;
+    }
+#else
     if (script->languages_initialized)
         return;
+#endif
 
     if ((list = script->table[USP10_SCRIPT_TABLE_GSUB]))
         usp10_script_add_language_list(script, USP10_LANGUAGE_TABLE_GSUB, list);
@@ -2884,6 +2916,9 @@ static void _initialize_language_cache(LoadedScript *script)
         usp10_script_add_language_list(script, USP10_LANGUAGE_TABLE_GPOS, list);
 
     script->languages_initialized = TRUE;
+#ifdef __REACTOS__
+    LeaveCriticalSection(&cs_opentype_cache);
+#endif
 }
 
 HRESULT OpenType_GetFontLanguageTags(ScriptCache *psc, OPENTYPE_TAG script_tag, OPENTYPE_TAG searchingFor, int cMaxTags, OPENTYPE_TAG *pLanguageTags, int *pcTags)
@@ -2979,8 +3014,17 @@ static void _initialize_feature_cache(ScriptCache *psc, LoadedLanguage *language
     const OT_FeatureList *feature_list;
     const OT_LangSys *lang;
 
+#ifdef __REACTOS__
+    EnterCriticalSection(&cs_opentype_cache);
+    if (language->features_initialized)
+    {
+        LeaveCriticalSection(&cs_opentype_cache);
+        return;
+    }
+#else
     if (language->features_initialized)
         return;
+#endif
 
     if ((lang = language->table[USP10_LANGUAGE_TABLE_GSUB]))
     {
@@ -2995,6 +3039,9 @@ static void _initialize_feature_cache(ScriptCache *psc, LoadedLanguage *language
     }
 
     language->features_initialized = TRUE;
+#ifdef __REACTOS__
+    LeaveCriticalSection(&cs_opentype_cache);
+#endif
 }
 
 HRESULT OpenType_GetFontFeatureTags(ScriptCache *psc, OPENTYPE_TAG script_tag, OPENTYPE_TAG language_tag, BOOL filtered, OPENTYPE_TAG searchingFor, char tableType, int cMaxTags, OPENTYPE_TAG *pFeatureTags, int *pcTags, LoadedFeature** feature)
