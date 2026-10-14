@@ -282,6 +282,11 @@ CdUpdateFileEvent(
 
 static
 VOID
+CdDereferenceScreen(
+    _In_ PCD_SCREEN Screen);
+
+static
+VOID
 CdSetMirror(
     _In_ PCD_FILE File,
     _In_opt_ PCD_CONSOLE Console)
@@ -295,6 +300,16 @@ CdSetMirror(
         InsertTailList(&Console->Files, &File->MirrorEntry);
     else
         InitializeListHead(&File->MirrorEntry);
+    if (File->Type == CdFileOutput)
+    {
+        PCD_SCREEN Old = File->Screen;
+
+        File->Screen = Console ? Console->Active : NULL;
+        if (File->Screen)
+            File->Screen->RefCount++;
+        if (Old)
+            CdDereferenceScreen(Old);
+    }
 }
 
 static
@@ -1795,7 +1810,11 @@ CdResolveOutput(
         return File->Screen;
     }
     Console = CdCurrentConsole();
-    return Console ? Console->Active : NULL;
+    if (!Console)
+        return NULL;
+    if (File->Screen && File->Screen->Console == Console)
+        return File->Screen;
+    return Console->Active;
 }
 
 static
