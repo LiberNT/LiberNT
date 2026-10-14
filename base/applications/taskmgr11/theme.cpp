@@ -6,6 +6,7 @@
  */
 
 #include "app.h"
+#include <reactos/dwmsettings.h>
 
 Theme g_t;
 
@@ -86,6 +87,9 @@ void Theme_Apply(BOOL dark, int dpi)
     Theme_Free();
     ZeroMemory(&g_t, sizeof(g_t));
     g_t.dark = dark;
+    if (!DwmSettingsLoadMaterial(dark ? L"TaskBar::Liquid" : DWM_COLOR_SCHEME_MATERIAL(DWM_COLOR_SCHEME_LIGHT),
+                                 &g_t.material, &g_t.materialOpacity))
+        g_t.materialOpacity = -1;
 
     if (!dark)
     {
@@ -121,28 +125,32 @@ void Theme_Apply(BOOL dark, int dpi)
     }
     else
     {
-        g_t.winBg        = RGB(0x20, 0x20, 0x20);
-        g_t.captionText  = RGB(0xFF, 0xFF, 0xFF);
-        g_t.cardBg       = RGB(0x2B, 0x2B, 0x2B);
-        g_t.cardBorder   = RGB(0x1D, 0x1D, 0x1D);
-        g_t.listBg       = RGB(0x24, 0x24, 0x24);
-        g_t.headerBg     = RGB(0x20, 0x20, 0x20);
-        g_t.hoverBg      = RGB(0x2D, 0x2D, 0x2D);
-        g_t.selBg        = RGB(0x2C, 0x44, 0x59);
-        g_t.railHover    = RGB(0x2D, 0x2D, 0x2D);
-        g_t.railSel      = RGB(0x32, 0x32, 0x32);
-        g_t.textMain     = RGB(0xFF, 0xFF, 0xFF);
+        COLORREF base = g_t.materialOpacity >= 0 ? g_t.material : RGB(0x00, 0x00, 0x00);
+        COLORREF white = RGB(0xFF, 0xFF, 0xFF);
+        COLORREF highlight = GetSysColor(COLOR_HIGHLIGHT);
+
+        g_t.winBg        = base;
+        g_t.captionText  = white;
+        g_t.cardBg       = Blend(base, white, 6);
+        g_t.cardBorder   = Blend(base, white, 11);
+        g_t.listBg       = Blend(base, white, 3);
+        g_t.headerBg     = base;
+        g_t.hoverBg      = Blend(base, highlight, 22);
+        g_t.selBg        = Blend(base, highlight, 38);
+        g_t.railHover    = g_t.hoverBg;
+        g_t.railSel      = g_t.selBg;
+        g_t.textMain     = white;
         g_t.textSec      = RGB(0xC5, 0xC5, 0xC5);
         g_t.textDis      = RGB(0x71, 0x71, 0x71);
-        g_t.accent       = RGB(0x4C, 0xC2, 0xFF);
-        g_t.accentHover  = RGB(0x47, 0xB1, 0xE8);
-        g_t.accentPressed= RGB(0x42, 0xA1, 0xD2);
+        g_t.accent       = Blend(highlight, white, 43);
+        g_t.accentHover  = Blend(g_t.accent, base, 8);
+        g_t.accentPressed= Blend(g_t.accent, base, 16);
         g_t.accentText   = RGB(0x00, 0x00, 0x00);
-        g_t.divider      = RGB(0x3A, 0x3A, 0x3A);
-        g_t.inputBg      = RGB(0x2D, 0x2D, 0x2D);
-        g_t.inputBorder  = RGB(0x45, 0x45, 0x45);
-        g_t.scrollThumb  = RGB(0x4D, 0x4D, 0x4D);
-        g_t.scrollThumbHot = RGB(0x6A, 0x6A, 0x6A);
+        g_t.divider      = Blend(base, white, 11);
+        g_t.inputBg      = Blend(base, white, 6);
+        g_t.inputBorder  = Blend(base, white, 15);
+        g_t.scrollThumb  = Blend(base, white, 19);
+        g_t.scrollThumbHot = Blend(base, white, 31);
         g_t.closeHover   = RGB(0xC4, 0x2B, 0x1C);
         g_t.dangerText   = RGB(0xFF, 0x99, 0xA4);
         g_t.graph[GR_CPU]  = RGB(0x4F, 0xA3, 0xE3);

@@ -41,9 +41,9 @@ DwmSettingsReadColorScheme(void)
 }
 
 static __inline BOOL
-DwmSettingsLoadSchemeMaterial(DWORD Scheme, COLORREF *Fill, INT *Opacity)
+DwmSettingsLoadMaterial(LPCWSTR ClassList, COLORREF *Fill, INT *Opacity)
 {
-    HTHEME Theme = OpenThemeData(NULL, DWM_COLOR_SCHEME_MATERIAL(Scheme));
+    HTHEME Theme = OpenThemeData(NULL, ClassList);
     BOOL Composited = FALSE;
     BOOL Loaded;
 
@@ -56,6 +56,12 @@ DwmSettingsLoadSchemeMaterial(DWORD Scheme, COLORREF *Fill, INT *Opacity)
              SUCCEEDED(GetThemeColor(Theme, 0, 0, TMT_FILLCOLOR, Fill));
     CloseThemeData(Theme);
     return Loaded;
+}
+
+static __inline BOOL
+DwmSettingsLoadSchemeMaterial(DWORD Scheme, COLORREF *Fill, INT *Opacity)
+{
+    return DwmSettingsLoadMaterial(DWM_COLOR_SCHEME_MATERIAL(Scheme), Fill, Opacity);
 }
 
 static __inline BOOL

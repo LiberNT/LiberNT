@@ -454,12 +454,8 @@ void Frame_UpdateCommandStates(void)
 
 static void ApplyBackdropRegion(HWND hwnd)
 {
-    COLORREF fill;
-    INT opacity;
-
-    if (DwmSettingsLoadSchemeMaterial(g_t.dark ? DWM_COLOR_SCHEME_DARK : DWM_COLOR_SCHEME_LIGHT,
-                                      &fill, &opacity))
-        DwmSettingsSetContentBackdrop(hwnd, fill, opacity);
+    if (g_t.materialOpacity >= 0)
+        DwmSettingsSetContentBackdrop(hwnd, g_t.material, g_t.materialOpacity);
     else
         DwmSettingsClearContentBackdrop(hwnd);
 }
@@ -916,6 +912,8 @@ static LRESULT CALLBACK FrameProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
 
     case WM_SETTINGCHANGE:
+    case WM_THEMECHANGED:
+    case WM_SYSCOLORCHANGE:
         App_ApplyTheme();
         return 0;
 

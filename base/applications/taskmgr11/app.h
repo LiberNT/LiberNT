@@ -137,6 +137,8 @@ private:
 struct Theme
 {
     BOOL     dark;
+    COLORREF material;
+    INT      materialOpacity;
 
     COLORREF winBg;         /* window / mica base                     */
     COLORREF captionText;
