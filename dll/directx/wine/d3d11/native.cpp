@@ -5803,6 +5803,11 @@ public:
     ULONGLONG trace_previous = 0, trace_consumed = 0, trace_producer = 0, trace_driver = 0;
     ULONGLONG trace_submit = 0, trace_poll = 0, trace_sleeps = 0;
     HRESULT PresentMeasured(UINT, UINT, const DXGI_PRESENT_PARAMETERS *);
+    bool foreign = false, foreign_known = false;
+    D3DKMT_HANDLE foreign_share = 0;
+    NativeTexture2D *foreign_target = NULL;
+    bool ForeignAdapter();
+    HRESULT PublishForeign(NativeTexture2D *);
     void DumpTrace();
     bool primary = false;
     bool composition = false;
@@ -5857,6 +5862,7 @@ public:
         for (UINT i = 0; i < 16; ++i) if (publish_records[i].completion) CloseHandle(publish_records[i].completion);
         if (publishes_drained) CloseHandle(publishes_drained);
         for (UINT i = 0; i < 3; ++i) if (transports[i]) transports[i]->Drop();
+        if (foreign_target) foreign_target->Drop();
         if (resolved) resolved->Drop();
         for (UINT i = 0; i < 16; ++i) if (buffers[i]) buffers[i]->Drop();
         if (device_child) device->ChildRelease();
@@ -6594,6 +6600,98 @@ HRESULT NativeSwapChain::FillTransport(UINT flags, const DXGI_PRESENT_PARAMETERS
     return S_OK;
 }
 
+bool NativeSwapChain::ForeignAdapter()
+{
+    if (foreign_known) return foreign;
+    foreign_known = true;
+    foreign = false;
+    if (primary || composition || !window) return false;
+    DXGI_ADAPTER_DESC adapter_desc;
+    MONITORINFOEXW info = {};
+    info.cbSize = sizeof(info);
+    HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY);
+    if (FAILED(device->adapter->GetDesc(&adapter_desc)) || !monitor || !GetMonitorInfoW(monitor, reinterpret_cast<MONITORINFO *>(&info))) return false;
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME open = {};
+    lstrcpynW(open.DeviceName, info.szDevice, ARRAYSIZE(open.DeviceName));
+    if (D3DKMTOpenAdapterFromGdiDisplayName(&open) < 0) return false;
+    D3DKMT_CLOSEADAPTER close = {};
+    close.hAdapter = open.hAdapter;
+    D3DKMTCloseAdapter(&close);
+    foreign = open.AdapterLuid.LowPart != adapter_desc.AdapterLuid.LowPart
+            || open.AdapterLuid.HighPart != adapter_desc.AdapterLuid.HighPart;
+    return foreign;
+}
+
+HRESULT NativeSwapChain::PublishForeign(NativeTexture2D *texture)
+{
+    typedef HRESULT (WINAPI *GetSurface)(HWND, LUID, HMONITOR, DWORD, UINT *, HANDLE *, ULONGLONG *);
+    typedef HRESULT (WINAPI *UpdateSurface)(HWND, ULONGLONG, DWORD, HMONITOR, const RECT *);
+    static GetSurface get_surface;
+    static UpdateSurface update_surface;
+    if (!get_surface || !update_surface)
+    {
+        HMODULE dwmapi = LoadLibraryW(L"dwmapi.dll");
+        if (!dwmapi) return HRESULT_FROM_WIN32(GetLastError());
+        get_surface = reinterpret_cast<GetSurface>(GetProcAddress(dwmapi, reinterpret_cast<LPCSTR>(static_cast<ULONG_PTR>(100))));
+        update_surface = reinterpret_cast<UpdateSurface>(GetProcAddress(dwmapi, reinterpret_cast<LPCSTR>(static_cast<ULONG_PTR>(101))));
+        if (!get_surface || !update_surface) return DXGI_ERROR_UNSUPPORTED;
+    }
+    DXGI_ADAPTER_DESC adapter_desc;
+    HRESULT hr = device->adapter->GetDesc(&adapter_desc);
+    if (FAILED(hr)) return hr;
+    UINT format = 0;
+    HANDLE shared = NULL;
+    ULONGLONG update = 0;
+    hr = get_surface(window, adapter_desc.AdapterLuid, NULL, 0, &format, &shared, &update);
+    if (hr == S_FALSE) return S_OK;
+    if (FAILED(hr)) return hr;
+    D3DKMT_HANDLE share = static_cast<D3DKMT_HANDLE>(reinterpret_cast<ULONG_PTR>(shared));
+    if (!foreign_target || share != foreign_share)
+    {
+        if (foreign_target) foreign_target->Drop();
+        foreign_target = NULL;
+        foreign_share = 0;
+        ID3D11Texture2D *opened = NULL;
+        hr = device->OpenSharedResource(shared, __uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&opened));
+        if (SUCCEEDED(hr))
+        {
+            foreign_target = static_cast<NativeTexture2D *>(opened);
+            foreign_target->Retain();
+            opened->Release();
+            foreign_share = share;
+        }
+    }
+    RECT rect = {};
+    if (SUCCEEDED(hr))
+    {
+        rect.right = foreign_target->desc.Width;
+        rect.bottom = foreign_target->desc.Height;
+        bool convert = NativeFormatFamily(foreign_target->desc.Format) != NativeFormatFamily(texture->desc.Format);
+        bool stretch = foreign_target->desc.Width != texture->desc.Width || foreign_target->desc.Height != texture->desc.Height;
+        if (!convert && !stretch)
+            device->context->CopyResource(foreign_target, texture);
+        else if (device->dxgi_functions.pfnBlt)
+        {
+            DXGI_DDI_ARG_BLT blt = {};
+            blt.hDevice = reinterpret_cast<DXGI_DDI_HDEVICE>(device->driver_device.pDrvPrivate);
+            blt.hDstResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(foreign_target->handle.pDrvPrivate);
+            blt.DstRight = foreign_target->desc.Width;
+            blt.DstBottom = foreign_target->desc.Height;
+            blt.hSrcResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(texture->handle.pDrvPrivate);
+            blt.Flags.Convert = convert;
+            blt.Flags.Stretch = stretch;
+            blt.Rotate = DXGI_DDI_MODE_ROTATION_IDENTITY;
+            hr = device->dxgi_functions.pfnBlt(&blt);
+        }
+        else
+            hr = DXGI_ERROR_UNSUPPORTED;
+        if (SUCCEEDED(hr) && FAILED(device->operation_error)) hr = device->operation_error;
+        if (SUCCEEDED(hr)) device->context->Flush();
+    }
+    HRESULT update_hr = update_surface(window, update, FAILED(hr) ? DWM_DX_UPDATE_CANCEL : 0, NULL, FAILED(hr) ? NULL : &rect);
+    return FAILED(hr) ? hr : update_hr;
+}
+
 HRESULT NativeSwapChain::Publish(NativeTexture2D *texture)
 {
     DXGI_FORMAT format = texture->desc.Format;
@@ -6928,6 +7026,10 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
         desc = requested;
         publish_format = new_publish_format;
         CloseReleaseEvents();
+        if (foreign_target) foreign_target->Drop();
+        foreign_target = NULL;
+        foreign_share = 0;
+        foreign_known = false;
     }
     for (UINT i = 0; i < 3; ++i) if (new_transports[i]) new_transports[i]->Drop();
     if (new_resolved) new_resolved->Drop();
@@ -7483,7 +7585,7 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
          * publishes it when a visual first acquires a target window. */
         if (window)
         {
-            hr = Publish(source);
+            hr = ForeignAdapter() ? PublishForeign(source) : Publish(source);
             if (FAILED(hr)) return hr;
         }
     }
