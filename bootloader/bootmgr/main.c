@@ -75,6 +75,7 @@ BmStartEntry(
         return;
 
     FbGuiVtbl.UnInitialize();
+    GuiShowFirmwareLogo();
     BmStartApplication(&BmEntries[Index], BmStorePath, &Startup);
     GuiInitialize();
 }
@@ -276,6 +277,7 @@ BmRunTextMenu(
 
         Timeout = -1;
         BmUiShutdown();
+        GuiShowFirmwareLogo();
         BmStartApplication(&BmEntries[BmSelected], BmStorePath, &Startup);
     }
 }

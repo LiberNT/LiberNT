@@ -200,6 +200,9 @@ UiInitProgressBar(
 BOOLEAN
 GuiInitialize(VOID);
 
+VOID
+GuiShowFirmwareLogo(VOID);
+
 BOOLEAN
 UiDisplayMenu(
     IN PCSTR MenuHeader,
