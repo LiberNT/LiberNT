@@ -9,20 +9,16 @@
 #include <bmui.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
-#include "bootui_font.h"
 #include "bootui_mono.h"
 
 #define BMUI_GRAPHICS_COLUMNS   100
 #define BMUI_TEXT_COLUMNS       80
 #define BMUI_ROWS               25
-#define BMUI_REFERENCE_WIDTH    800
-#define BMUI_REFERENCE_HEIGHT   600
 #define BMUI_MONO_EM_NUMERATOR  2
 #define BMUI_MONO_EM_DENOMINATOR 3
 #define BMUI_BLACK              0x000000
 #define BMUI_GRAY               0xBFBFBF
 #define BMUI_WHITE              0xFFFFFF
-#define BMUI_BLUE               0x2067B2
 #define BMUI_POLL_MICROSECONDS  10000
 #define BMUI_POLLS_PER_SECOND   100
 #define BMUI_TEXT_CHARS         128
@@ -38,22 +34,6 @@
 #define BMUI_ENTRY_RIGHT_MARGIN 10
 #define BMUI_MAX_ENTRIES        (BMUI_ROW_ADVANCED - BMUI_ROW_ENTRIES - 1)
 
-#define BMUI_SETTINGS_LEFT      140
-#define BMUI_SETTINGS_TITLE     45
-#define BMUI_SETTINGS_TITLE_PX  31
-#define BMUI_SETTINGS_PROMPT    96
-#define BMUI_SETTINGS_HINT      130
-#define BMUI_SETTINGS_HINT_PX   12
-#define BMUI_SETTINGS_ITEMS     174
-#define BMUI_SETTINGS_LINE      24
-#define BMUI_SETTINGS_BODY_PX   16
-#define BMUI_SETTINGS_FOOTER    462
-#define BMUI_SETTINGS_TEXT_LEFT 8
-#define BMUI_SETTINGS_TEXT_TOP  2
-#define BMUI_SETTINGS_TEXT_HINT 4
-#define BMUI_SETTINGS_TEXT_ITEM 6
-#define BMUI_SETTINGS_TEXT_FOOT 20
-
 static ULONG BmUiWidth;
 static ULONG BmUiHeight;
 static ULONG BmUiColumns;
@@ -63,24 +43,7 @@ static PULONG BmUiPixels;
 static SIZE_T BmUiPixelBytes;
 static FT_Library BmUiLibrary;
 static FT_Face BmUiMono;
-static FT_Face BmUiSans;
 static BOOLEAN BmUiGraphics;
-
-static
-ULONG
-BmUiScaleX(
-    _In_ ULONG Value)
-{
-    return (ULONG)((ULONGLONG)Value * BmUiWidth / BMUI_REFERENCE_WIDTH);
-}
-
-static
-ULONG
-BmUiScaleY(
-    _In_ ULONG Value)
-{
-    return (ULONG)((ULONGLONG)Value * BmUiHeight / BMUI_REFERENCE_HEIGHT);
-}
 
 static
 VOID
@@ -327,8 +290,7 @@ BmUiInitialize(VOID)
 
     if (!BmUiLibrary &&
         (FT_Init_FreeType(&BmUiLibrary) != FT_Err_Ok ||
-         FT_New_Memory_Face(BmUiLibrary, bootui_mono, bootui_mono_SIZE, 0, &BmUiMono) != FT_Err_Ok ||
-         FT_New_Memory_Face(BmUiLibrary, bootui_font, bootui_font_SIZE, 0, &BmUiSans) != FT_Err_Ok))
+         FT_New_Memory_Face(BmUiLibrary, bootui_mono, bootui_mono_SIZE, 0, &BmUiMono) != FT_Err_Ok))
     {
         FwFreePages(BmUiPixels, BmUiPixelBytes);
         BmUiPixels = NULL;
@@ -389,6 +351,52 @@ BmUiDrawEntries(
     }
 }
 
+static
+VOID
+BmUiDrawFrame(
+    _In_ PCWSTR Title,
+    _In_ PCWSTR Heading,
+    _In_ PCWSTR Escape)
+{
+    WCHAR Footer[BMUI_TEXT_CHARS];
+    ULONG TitleColumn, Length, i;
+
+    if (BmUiGraphics)
+        BmUiSetMonoSize();
+
+    BmUiClear(BMUI_BLACK, BMUI_ATTR_NORMAL);
+    TitleColumn = (BmUiColumns - min((ULONG)wcslen(Title), BmUiColumns)) / 2;
+    BmUiPutRow(BMUI_ROW_TITLE, NULL, BMUI_ATTR_INVERSE);
+    BmUiPutText(BMUI_ROW_TITLE, TitleColumn, BmUiColumns - TitleColumn, Title, BMUI_ATTR_INVERSE);
+    BmUiPutRow(BMUI_ROW_HEADING, Heading, BMUI_ATTR_BRIGHT);
+    BmUiPutRow(BMUI_ROW_HINT, L"(Use the arrow keys to highlight your choice, then press ENTER.)", BMUI_ATTR_NORMAL);
+
+    for (i = 0; i < BmUiColumns; i++)
+        Footer[i] = L' ';
+    Footer[BmUiColumns] = UNICODE_NULL;
+    RtlCopyMemory(Footer, L"ENTER=Choose", sizeof(L"ENTER=Choose") - sizeof(WCHAR));
+    Length = (ULONG)wcslen(Escape);
+    RtlCopyMemory(&Footer[BmUiColumns - Length], Escape, Length * sizeof(WCHAR));
+    BmUiPutRow(BMUI_ROW_FOOTER, Footer, BMUI_ATTR_INVERSE);
+}
+
+static
+VOID
+BmUiMoveSelection(
+    _In_ int Key,
+    _In_ ULONG Count,
+    _Inout_ PULONG Selected)
+{
+    if (Key == KEY_UP && *Selected > 0)
+        (*Selected)--;
+    else if (Key == KEY_DOWN && *Selected + 1 < Count)
+        (*Selected)++;
+    else if (Key == KEY_HOME)
+        *Selected = 0;
+    else if (Key == KEY_END)
+        *Selected = Count - 1;
+}
+
 BM_UI_ACTION
 BmUiChooseEntry(
     _In_ PCWSTR Title,
@@ -398,8 +406,6 @@ BmUiChooseEntry(
     _In_ LONG Timeout)
 {
     WCHAR Text[BMUI_TEXT_CHARS];
-    WCHAR Footer[BMUI_TEXT_CHARS];
-    ULONG TitleColumn, i;
     BOOLEAN Extended;
     int Key;
 
@@ -407,25 +413,8 @@ BmUiChooseEntry(
     if (*Selected >= Count)
         *Selected = 0;
 
-    if (BmUiGraphics)
-        BmUiSetMonoSize();
-
-    BmUiClear(BMUI_BLACK, BMUI_ATTR_NORMAL);
-    TitleColumn = (BmUiColumns - min((ULONG)wcslen(Title), BmUiColumns)) / 2;
-    BmUiPutRow(BMUI_ROW_TITLE, NULL, BMUI_ATTR_INVERSE);
-    BmUiPutText(BMUI_ROW_TITLE, TitleColumn, BmUiColumns - TitleColumn, Title, BMUI_ATTR_INVERSE);
-    BmUiPutRow(BMUI_ROW_HEADING, L"Choose an operating system to start:", BMUI_ATTR_BRIGHT);
-    BmUiPutRow(BMUI_ROW_HINT, L"(Use the arrow keys to highlight your choice, then press ENTER.)", BMUI_ATTR_NORMAL);
-    BmUiPutRow(BMUI_ROW_ADVANCED, L"To specify an advanced option for this choice, press F8.", BMUI_ATTR_NORMAL);
-
-    for (i = 0; i < BmUiColumns; i++)
-        Footer[i] = L' ';
-    Footer[BmUiColumns] = UNICODE_NULL;
-    RtlCopyMemory(Footer, L"ENTER=Choose", sizeof(L"ENTER=Choose") - sizeof(WCHAR));
-    RtlCopyMemory(&Footer[BmUiColumns - (RTL_NUMBER_OF(L"ESC=Exit") - 1)],
-                  L"ESC=Exit",
-                  sizeof(L"ESC=Exit") - sizeof(WCHAR));
-    BmUiPutRow(BMUI_ROW_FOOTER, Footer, BMUI_ATTR_INVERSE);
+    BmUiDrawFrame(Title, L"Choose an operating system to start:", L"ESC=Exit");
+    BmUiPutRow(BMUI_ROW_ADVANCED, L"To choose a startup option for this choice, press F8.", BMUI_ATTR_NORMAL);
 
     for (;;)
     {
@@ -467,110 +456,48 @@ BmUiChooseEntry(
         if (Key == KEY_F8)
             return BmUiActionAdvanced;
 
-        if (Key == KEY_UP && *Selected > 0)
-            (*Selected)--;
-        else if (Key == KEY_DOWN && *Selected + 1 < Count)
-            (*Selected)++;
-        else if (Key == KEY_HOME)
-            *Selected = 0;
-        else if (Key == KEY_END)
-            *Selected = Count - 1;
+        BmUiMoveSelection(Key, Count, Selected);
     }
 }
 
-static
-VOID
-BmUiSettingsLine(
-    _In_ ULONG Top,
-    _In_ ULONG PixelHeight,
-    _In_ ULONG TextRow,
-    _In_ PCSTR Text)
-{
-    WCHAR Line[BMUI_TEXT_CHARS];
-    ULONG i;
-
-    for (i = 0; Text[i] != ANSI_NULL && i < RTL_NUMBER_OF(Line) - 1; i++)
-        Line[i] = (UCHAR)Text[i];
-    Line[i] = UNICODE_NULL;
-
-    if (!BmUiGraphics)
-    {
-        BmUiPutText(TextRow, BMUI_SETTINGS_TEXT_LEFT, BmUiColumns - BMUI_SETTINGS_TEXT_LEFT, Line,
-                    BMUI_ATTR_SETTINGS);
-        return;
-    }
-
-    FT_Set_Pixel_Sizes(BmUiSans, 0, BmUiScaleY(PixelHeight));
-    BmUiDrawText(BmUiSans,
-                 (LONG)BmUiScaleX(BMUI_SETTINGS_LEFT),
-                 (LONG)BmUiScaleY(Top) + (BmUiSans->size->metrics.ascender >> 6),
-                 Line,
-                 BMUI_WHITE);
-}
-
-BM_UI_SETTING
+BOOLEAN
 BmUiStartupSettings(
-    _In_reads_(StandardCount) PCSTR* Standard,
-    _In_ ULONG StandardCount,
-    _In_reads_(MoreCount) PCSTR* More,
-    _In_ ULONG MoreCount,
+    _In_reads_(Count) PCSTR* Names,
+    _In_ ULONG Count,
     _Out_ PULONG Choice)
 {
-    CHAR Item[BMUI_TEXT_CHARS];
-    BOOLEAN ShowMore = FALSE;
+    WCHAR Text[BMUI_MAX_ENTRIES][BMUI_TEXT_CHARS];
+    PCWSTR Lines[BMUI_MAX_ENTRIES];
     BOOLEAN Extended;
-    PCSTR* Items;
-    ULONG Count, i;
+    ULONG i, j;
     int Key;
 
+    Count = min(Count, BMUI_MAX_ENTRIES);
+    for (i = 0; i < Count; i++)
+    {
+        for (j = 0; Names[i][j] != ANSI_NULL && j < BMUI_TEXT_CHARS - 1; j++)
+            Text[i][j] = (UCHAR)Names[i][j];
+        Text[i][j] = UNICODE_NULL;
+        Lines[i] = Text[i];
+    }
+
     *Choice = 0;
+    BmUiDrawFrame(L"Startup options", L"Choose a startup option:", L"ESC=Back");
 
     for (;;)
     {
-        Items = ShowMore ? More : Standard;
-        Count = ShowMore ? MoreCount : StandardCount;
-
-        BmUiClear(BMUI_BLUE, BMUI_ATTR_SETTINGS);
-        BmUiSettingsLine(BMUI_SETTINGS_TITLE, BMUI_SETTINGS_TITLE_PX, BMUI_SETTINGS_TEXT_TOP, "Startup Settings");
-        BmUiSettingsLine(BMUI_SETTINGS_PROMPT, BMUI_SETTINGS_BODY_PX, BMUI_SETTINGS_TEXT_TOP + 1,
-                         "Press a number to choose from the options below:");
-        BmUiSettingsLine(BMUI_SETTINGS_HINT, BMUI_SETTINGS_HINT_PX, BMUI_SETTINGS_TEXT_HINT,
-                         "Use number keys or functions keys F1-F9.");
-
-        for (i = 0; i < Count; i++)
-        {
-            RtlStringCbPrintfA(Item, sizeof(Item), "%lu) %s", i + 1, Items[i]);
-            BmUiSettingsLine(BMUI_SETTINGS_ITEMS + i * BMUI_SETTINGS_LINE,
-                             BMUI_SETTINGS_BODY_PX,
-                             BMUI_SETTINGS_TEXT_ITEM + i,
-                             Item);
-        }
-
-        BmUiSettingsLine(BMUI_SETTINGS_FOOTER, BMUI_SETTINGS_BODY_PX, BMUI_SETTINGS_TEXT_FOOT,
-                         "Press F10 or 0 for more options");
-        BmUiSettingsLine(BMUI_SETTINGS_FOOTER + BMUI_SETTINGS_LINE, BMUI_SETTINGS_BODY_PX,
-                         BMUI_SETTINGS_TEXT_FOOT + 1, "Press Enter to return to your operating system");
+        BmUiDrawEntries(Lines, Count, *Choice);
         BmUiPresent(0, BmUiHeight);
 
         Key = BmUiReadKey(NULL, &Extended);
 
         if (!Extended && Key == KEY_ENTER)
-            return BmUiSettingNone;
+            return TRUE;
 
-        if ((!Extended && Key == '0') || (Extended && Key == KEY_F10))
-        {
-            ShowMore = !ShowMore;
-            continue;
-        }
+        if (!Extended && Key == KEY_ESC)
+            return FALSE;
 
-        if (!Extended && Key >= '1' && Key <= '9')
-            *Choice = (ULONG)(Key - '1');
-        else if (Extended && Key >= KEY_F1 && Key <= KEY_F9)
-            *Choice = (ULONG)(Key - KEY_F1);
-        else
-            continue;
-
-        if (*Choice < Count)
-            return ShowMore ? BmUiSettingMore : BmUiSettingStandard;
+        if (Extended)
+            BmUiMoveSelection(Key, Count, Choice);
     }
 }

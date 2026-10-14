@@ -104,11 +104,7 @@ BOOLEAN
 OslLoadBootDrivers(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock,
     _In_ PDK_DEVICE Device,
-    _In_ PCSTR SystemRoot,
-    _In_ BOOLEAN SkipEarlyLaunch);
-
-VOID
-OslDisableAutoReboot(VOID);
+    _In_ PCSTR SystemRoot);
 
 BOOLEAN
 WinLdrSetupMemoryLayout(

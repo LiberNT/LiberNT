@@ -32,7 +32,6 @@
 #define BMUI_ATTR_NORMAL    0x07
 #define BMUI_ATTR_BRIGHT    0x0F
 #define BMUI_ATTR_INVERSE   0x70
-#define BMUI_ATTR_SETTINGS  0x1F
 
 typedef enum _BM_UI_ACTION
 {
@@ -40,13 +39,6 @@ typedef enum _BM_UI_ACTION
     BmUiActionAdvanced,
     BmUiActionExit
 } BM_UI_ACTION;
-
-typedef enum _BM_UI_SETTING
-{
-    BmUiSettingNone,
-    BmUiSettingStandard,
-    BmUiSettingMore
-} BM_UI_SETTING;
 
 BOOLEAN
 FwKeyAvailable(VOID);
@@ -93,10 +85,8 @@ BmUiChooseEntry(
     _Inout_ PULONG Selected,
     _In_ LONG Timeout);
 
-BM_UI_SETTING
+BOOLEAN
 BmUiStartupSettings(
-    _In_reads_(StandardCount) PCSTR* Standard,
-    _In_ ULONG StandardCount,
-    _In_reads_(MoreCount) PCSTR* More,
-    _In_ ULONG MoreCount,
+    _In_reads_(Count) PCSTR* Names,
+    _In_ ULONG Count,
     _Out_ PULONG Choice);

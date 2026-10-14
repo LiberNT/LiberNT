@@ -74,21 +74,12 @@ OslParseStartup(
     _In_reads_(Chars) PCWSTR Text,
     _In_ ULONG Chars)
 {
-    PULONG Fields[] = {&OslStartup.Profile, &OslStartup.Mode, &OslStartup.Flags};
-    ULONG Field = 0;
     ULONG i;
 
     RtlZeroMemory(&OslStartup, sizeof(OslStartup));
 
-    for (i = 0; i < Chars && Field < RTL_NUMBER_OF(Fields); i++)
-    {
-        if (Text[i] == L',')
-            Field++;
-        else if (Text[i] >= L'0' && Text[i] <= L'9')
-            *Fields[Field] = *Fields[Field] * 10 + (Text[i] - L'0');
-        else
-            break;
-    }
+    for (i = 0; i < Chars && Text[i] >= L'0' && Text[i] <= L'9'; i++)
+        OslStartup.Profile = OslStartup.Profile * 10 + (Text[i] - L'0');
 }
 
 static
@@ -353,10 +344,7 @@ OslMain(VOID)
         return;
     }
 
-    if (OslStartup.Flags & BOOT_NO_AUTO_REBOOT)
-        OslDisableAutoReboot();
-
-    if (!OslLoadBootDrivers(LoaderBlock, &OsDevice, SystemRoot, (OslStartup.Flags & BOOT_NO_EARLY_LAUNCH) != 0))
+    if (!OslLoadBootDrivers(LoaderBlock, &OsDevice, SystemRoot))
     {
         FwPrint(L"The boot driver list could not be built.\r\n");
         return;

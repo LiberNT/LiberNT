@@ -330,25 +330,12 @@ OslLoadNlsData(
     return TRUE;
 }
 
-VOID
-OslDisableAutoReboot(VOID)
-{
-    PUCHAR Data;
-    ULONG Type, Length;
-
-    Data = BlRegValue(OslSystemHive, OslOpenControlKey(L"Control", L"CrashControl", NULL), L"AutoReboot", &Type, &Length);
-    if (Data && Type == REG_DWORD && Length == sizeof(ULONG))
-        RtlZeroMemory(Data, sizeof(ULONG));
-}
-
 BOOLEAN
 OslLoadBootDrivers(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock,
     _In_ PDK_DEVICE Device,
-    _In_ PCSTR SystemRoot,
-    _In_ BOOLEAN SkipEarlyLaunch)
+    _In_ PCSTR SystemRoot)
 {
-    UNICODE_STRING EarlyLaunch = RTL_CONSTANT_STRING(L"Early-Launch");
     CHAR Directory[OSL_PATH_CHARS], RelativePath[OSL_PATH_CHARS];
     PLIST_ENTRY Head = &LoaderBlock->BootDriverListHead;
     PLIST_ENTRY Link, Next;
@@ -369,12 +356,6 @@ OslLoadBootDrivers(
         Next = Link->Flink;
         Node = CONTAINING_RECORD(Link, BOOT_DRIVER_NODE, ListEntry.Link);
         Driver = &Node->ListEntry;
-
-        if (SkipEarlyLaunch && RtlEqualUnicodeString(&Node->Group, &EarlyLaunch, TRUE))
-        {
-            RemoveEntryList(Link);
-            continue;
-        }
 
         if (!NT_SUCCESS(RtlStringCbPrintfA(RelativePath, sizeof(RelativePath), "%wZ", &Driver->FilePath)))
         {

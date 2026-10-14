@@ -108,13 +108,11 @@ BmStartApplication(
     {
         RtlStringCchPrintfW(Options,
                             RTL_NUMBER_OF(Options),
-                            L"%s %s %s%lu,%lu,%lu",
+                            L"%s %s %s%lu",
                             Entry->Id,
                             StorePath,
                             BM_STARTUP_OPTION,
-                            Startup->Profile,
-                            Startup->Mode,
-                            Startup->Flags);
+                            Startup->Profile);
         Started = FwStartImage(Image, Size, Options);
         if (!Started)
             FwPrint(L"%s did not start the operating system.\r\n", Path);

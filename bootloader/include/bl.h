@@ -151,27 +151,9 @@ typedef struct _BM_ENTRY
 #define BM_FILE_NAME_CHARS 64
 #define BM_STARTUP_OPTION  L"STARTUP="
 
-enum SAFEBOOT_MODE
-{
-    NO_OPTION = 0,
-    SAFEBOOT,
-    SAFEBOOT_NETWORK,
-    SAFEBOOT_ALTSHELL,
-    SAFEBOOT_DSREPAIR
-};
-
-#define BOOT_LOGGING   (1 << 0)
-#define BOOT_VGA_MODE  (1 << 1)
-#define BOOT_DEBUGGING (1 << 2)
-#define BOOT_NO_INTEGRITY_CHECKS (1 << 3)
-#define BOOT_NO_EARLY_LAUNCH     (1 << 4)
-#define BOOT_NO_AUTO_REBOOT      (1 << 5)
-
 typedef struct _BM_STARTUP
 {
     ULONG Profile;
-    ULONG Mode;
-    ULONG Flags;
 } BM_STARTUP, *PBM_STARTUP;
 
 typedef struct _OSL_PARAMETERS
@@ -211,8 +193,9 @@ BmGetDescription(
     _Out_writes_z_(Chars) PWSTR Description,
     _In_ ULONG Chars);
 
-VOID
+BOOLEAN
 BmChooseStartupSettings(
+    _In_ BOOLEAN Graphical,
     _Out_ PBM_STARTUP Startup);
 
 BOOLEAN

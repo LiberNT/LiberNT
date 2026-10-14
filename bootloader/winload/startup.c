@@ -15,8 +15,7 @@ static const struct
 {
     {NULL, NULL},
     {"DEBUG DEBUGPORT=FILE DEBUGPORT=SCREEN", "/NODEBUG/DEBUGPORT="},
-    {"DEBUG DEBUGPORT=NET HOST_NAME=libernt.com HOST_PORT=50000", "/NODEBUG/DEBUGPORT=NET/HOST_IP=/HOST_NAME=/HOST_PORT="},
-    {"DEBUG DEBUGPORT=FILE DEBUGPORT=SCREEN", "/NODEBUG/DEBUGPORT=/RDPATH=/RDRAMSIZE=/RDIMAGEOFFSET=/RDIMAGELENGTH="}
+    {"DEBUG DEBUGPORT=NET HOST_NAME=libernt.com HOST_PORT=50000", "/NODEBUG/DEBUGPORT=NET/HOST_IP=/HOST_NAME=/HOST_PORT="}
 };
 
 static
@@ -101,14 +100,6 @@ AppendBootTimeOptions(
     _In_ SIZE_T BootOptionsSize,
     _In_ PBM_STARTUP Startup)
 {
-    static const PCSTR Modes[] =
-    {
-        NULL,
-        "SAFEBOOT:MINIMAL NOGUIBOOT",
-        "SAFEBOOT:NETWORK NOGUIBOOT",
-        "SAFEBOOT:MINIMAL(ALTERNATESHELL) NOGUIBOOT"
-    };
-
     if (BootOptionsSize < sizeof(CHAR))
         return;
 
@@ -119,19 +110,4 @@ AppendBootTimeOptions(
                              StartupProfiles[Startup->Profile].Options,
                              StartupProfiles[Startup->Profile].Remove);
     }
-
-    if (Startup->Mode > NO_OPTION && Startup->Mode < RTL_NUMBER_OF(Modes))
-        StartupUpdateOptions(BootOptions, BootOptionsSize, Modes[Startup->Mode], "/SAFEBOOT/SAFEBOOT:");
-
-    if ((Startup->Flags & BOOT_LOGGING) || Startup->Mode != NO_OPTION)
-        StartupUpdateOptions(BootOptions, BootOptionsSize, "BOOTLOG", NULL);
-
-    if (Startup->Flags & BOOT_VGA_MODE)
-        StartupUpdateOptions(BootOptions, BootOptionsSize, "BASEVIDEO", NULL);
-
-    if (Startup->Flags & BOOT_DEBUGGING)
-        StartupUpdateOptions(BootOptions, BootOptionsSize, "DEBUG", "/NODEBUG");
-
-    if (Startup->Flags & BOOT_NO_INTEGRITY_CHECKS)
-        StartupUpdateOptions(BootOptions, BootOptionsSize, "DISABLE_INTEGRITY_CHECKS", "/DISABLE_INTEGRITY_CHECKS");
 }

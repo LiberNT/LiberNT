@@ -64,33 +64,17 @@ BmReadStore(
 
 static
 VOID
-BmStartupSettings(
-    _Out_ PBM_STARTUP Startup)
-{
-    RtlZeroMemory(Startup, sizeof(*Startup));
-
-    if (!BmUiInitialize())
-        return;
-
-    BmChooseStartupSettings(Startup);
-    BmUiShutdown();
-}
-
-static
-VOID
 BmStartEntry(
     _In_ ULONG Index,
     _In_ BOOLEAN AskStartup)
 {
     BM_STARTUP Startup;
 
+    RtlZeroMemory(&Startup, sizeof(Startup));
+    if (AskStartup && !BmChooseStartupSettings(TRUE, &Startup))
+        return;
+
     FbGuiVtbl.UnInitialize();
-
-    if (AskStartup)
-        BmStartupSettings(&Startup);
-    else
-        RtlZeroMemory(&Startup, sizeof(Startup));
-
     BmStartApplication(&BmEntries[Index], BmStorePath, &Startup);
     GuiInitialize();
 }
@@ -278,7 +262,12 @@ BmRunTextMenu(
                 return;
 
             case BmUiActionAdvanced:
-                BmChooseStartupSettings(&Startup);
+                if (!BmChooseStartupSettings(FALSE, &Startup))
+                {
+                    Timeout = -1;
+                    BmUiShutdown();
+                    continue;
+                }
                 break;
 
             default:
