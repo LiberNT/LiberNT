@@ -48,6 +48,78 @@ NtUserSetProcessDpiAwarenessContext(ULONG DpiContext, ULONG Flags);
 ULONG APIENTRY
 NtUserSetThreadDpiAwarenessContext(ULONG DpiContext);
 
+static volatile LONG DpiCacheContextSlot = TLS_OUT_OF_INDEXES;
+static volatile LONG DpiCacheGenerationSlot = TLS_OUT_OF_INDEXES;
+static volatile LONG DpiCacheGeneration = 1;
+
+static VOID
+DpiCacheAllocSlot(volatile LONG *Slot)
+{
+    DWORD Index = TlsAlloc();
+
+    if (Index == TLS_OUT_OF_INDEXES)
+        Index = TLS_OUT_OF_INDEXES - 1;
+    if (InterlockedCompareExchange(Slot, (LONG)Index, (LONG)TLS_OUT_OF_INDEXES) != (LONG)TLS_OUT_OF_INDEXES &&
+        Index != TLS_OUT_OF_INDEXES - 1)
+    {
+        TlsFree(Index);
+    }
+}
+
+static BOOL
+DpiCacheReady(VOID)
+{
+    if (DpiCacheContextSlot == (LONG)TLS_OUT_OF_INDEXES)
+        DpiCacheAllocSlot(&DpiCacheContextSlot);
+    if (DpiCacheGenerationSlot == (LONG)TLS_OUT_OF_INDEXES)
+        DpiCacheAllocSlot(&DpiCacheGenerationSlot);
+    return DpiCacheContextSlot != (LONG)(TLS_OUT_OF_INDEXES - 1) &&
+           DpiCacheGenerationSlot != (LONG)(TLS_OUT_OF_INDEXES - 1);
+}
+
+ULONG
+WINAPI
+IntGetThreadDpiContext(VOID)
+{
+    LONG Generation = DpiCacheGeneration;
+    DWORD Error = GetLastError();
+    ULONG_PTR Cached;
+    ULONG Context;
+
+    if (!DpiCacheReady())
+        return NtUserGetThreadDpiAwarenessContext();
+
+    Cached = (ULONG_PTR)TlsGetValue(DpiCacheContextSlot);
+    if (Cached != 0 &&
+        (LONG)(ULONG_PTR)TlsGetValue(DpiCacheGenerationSlot) == Generation)
+    {
+        SetLastError(Error);
+        return (ULONG)(Cached - 1);
+    }
+
+    Context = NtUserGetThreadDpiAwarenessContext();
+    TlsSetValue(DpiCacheGenerationSlot, (PVOID)(ULONG_PTR)(ULONG)Generation);
+    TlsSetValue(DpiCacheContextSlot, (PVOID)((ULONG_PTR)Context + 1));
+    SetLastError(Error);
+    return Context;
+}
+
+ULONG
+WINAPI
+IntSetThreadDpiContext(ULONG Context)
+{
+    ULONG Previous = NtUserSetThreadDpiAwarenessContext(Context);
+    DWORD Error = GetLastError();
+
+    if (DpiCacheContextSlot != (LONG)TLS_OUT_OF_INDEXES &&
+        DpiCacheContextSlot != (LONG)(TLS_OUT_OF_INDEXES - 1))
+    {
+        TlsSetValue(DpiCacheContextSlot, NULL);
+    }
+    SetLastError(Error);
+    return Previous;
+}
+
 BOOL WINAPI
 SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT DpiContext);
 
@@ -261,8 +333,7 @@ SetThreadDpiAwarenessContext(
         return 0;
     }
 
-    return (DPI_AWARENESS_CONTEXT)(ULONG_PTR)
-        NtUserSetThreadDpiAwarenessContext(Context);
+    return (DPI_AWARENESS_CONTEXT)(ULONG_PTR)IntSetThreadDpiContext(Context);
 }
 
 BOOL
@@ -402,7 +473,9 @@ SetProcessDpiAwarenessContext(_In_ DPI_AWARENESS_CONTEXT Context)
         return FALSE;
     }
 
-    return !!NtUserSetProcessDpiAwarenessContext(Value, 0);
+    Value = NtUserSetProcessDpiAwarenessContext(Value, 0);
+    InterlockedIncrement(&DpiCacheGeneration);
+    return !!Value;
 }
 
 BOOL

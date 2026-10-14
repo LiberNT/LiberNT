@@ -1572,6 +1572,9 @@ SetMessageExtraInfo(
   return NtUserxSetMessageExtraInfo(lParam);
 }
 
+ULONG WINAPI IntGetThreadDpiContext(VOID);
+ULONG WINAPI IntSetThreadDpiContext(ULONG Context);
+
 static ULONG
 IntSetWindowDpiContext(PWND pWnd, PBOOL Changed)
 {
@@ -1581,11 +1584,11 @@ IntSetWindowDpiContext(PWND pWnd, PBOOL Changed)
   if (!pWnd || !pWnd->DpiContext)
       return 0;
 
-  Current = NtUserGetThreadDpiAwarenessContext();
+  Current = IntGetThreadDpiContext();
   if ((Current & ~DPI_CONTEXT_FLAG_PROCESS) == (pWnd->DpiContext & ~DPI_CONTEXT_FLAG_PROCESS))
       return 0;
 
-  Current = NtUserSetThreadDpiAwarenessContext(pWnd->DpiContext);
+  Current = IntSetThreadDpiContext(pWnd->DpiContext);
   if (Current)
       *Changed = TRUE;
 
@@ -1754,7 +1757,7 @@ IntCallWindowProcW(BOOL IsAnsiProc,
 Exit:
   if (Hook) EndUserApiHook();
   if (DpiContextChanged)
-      NtUserSetThreadDpiAwarenessContext(PreviousDpiContext);
+      IntSetThreadDpiContext(PreviousDpiContext);
   return Result;
 }
 
@@ -1923,7 +1926,7 @@ IntCallWindowProcA(BOOL IsAnsiProc,
 Exit:
   if (Hook) EndUserApiHook();
   if (DpiContextChanged)
-      NtUserSetThreadDpiAwarenessContext(PreviousDpiContext);
+      IntSetThreadDpiContext(PreviousDpiContext);
   return Result;
 }
 
