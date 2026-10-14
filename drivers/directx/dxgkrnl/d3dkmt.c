@@ -2443,7 +2443,7 @@ DxgkpOpenAdapterByDeviceObjectName(
     ULONG Count;
     ULONG RenderPairCount = 0;
     ULONG i;
-    NTSTATUS Status = STATUS_NO_SUCH_DEVICE;
+    NTSTATUS Status = STATUS_INVALID_PARAMETER;
 
     *OutHandle = 0;
     RtlZeroMemory(OutLuid, sizeof(*OutLuid));
