@@ -619,7 +619,7 @@ if(PREINSTALL_WINE_GECKO)
 endif()
 
 option(PREINSTALL_WINE_MONO
-       "Preinstall the Wine Mono runtime that mscoree uses in the preinstalled disk image" ON)
+       "Preinstall the Wine Mono runtime that mscoree uses in the preinstalled disk image" OFF)
 if(PREINSTALL_WINE_MONO)
     set(_wine_mono_version 11.2.0)
     set(_wine_mono_sha256 c9fb2e2823acf30b000b8806177db0f40751786136dd3f8fb2be7897b1643d06)
