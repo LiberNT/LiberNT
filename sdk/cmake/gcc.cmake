@@ -202,13 +202,15 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     add_compile_options(
         -Wno-unknown-pragmas
     )
+    if((ARCH STREQUAL "i386" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 15)
+        add_compile_options("$<$<COMPILE_LANGUAGE:C>:-Wno-old-style-declaration>")
+    endif()
     if((ARCH STREQUAL "i386" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
         # GCC 16 diagnoses dead compatibility paths that are intentionally
         # retained in the 32-bit build and MS-style declarations in headers.
         add_compile_options(
             -Wno-attributes
             -Wno-dangling-pointer
-            "$<$<COMPILE_LANGUAGE:C>:-Wno-old-style-declaration>"
             -Wno-switch
             -Wno-unused-but-set-variable
             -Wno-unused-function
