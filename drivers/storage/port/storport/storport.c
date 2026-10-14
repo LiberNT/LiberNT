@@ -556,6 +556,7 @@ PortAddDevice(
     UNICODE_STRING DeviceName;
     PDEVICE_OBJECT Fdo = NULL;
     KLOCK_QUEUE_HANDLE LockHandle;
+    ULONG Number;
     NTSTATUS Status;
 
     DPRINT("PortAddDevice(%p %p)\n",
@@ -564,11 +565,11 @@ PortAddDevice(
     ASSERT(DriverObject);
     ASSERT(PhysicalDeviceObject);
 
+    Number = (ULONG)InterlockedIncrement((PLONG)&PortNumber) - 1;
     _swprintf(NameBuffer,
               L"\\Device\\RaidPort%lu",
-              PortNumber);
+              Number);
     RtlInitUnicodeString(&DeviceName, NameBuffer);
-    PortNumber++;
 
     DPRINT("Creating device: %wZ\n", &DeviceName);
 
@@ -600,7 +601,7 @@ PortAddDevice(
 
     DeviceExtension->Device = Fdo;
     DeviceExtension->PhysicalDevice = PhysicalDeviceObject;
-    DeviceExtension->PortNumber = PortNumber - 1;
+    DeviceExtension->PortNumber = Number;
 
     DeviceExtension->PnpState = dsStopped;
 
