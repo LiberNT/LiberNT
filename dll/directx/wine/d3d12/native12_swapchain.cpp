@@ -47,6 +47,22 @@ public:
     RECT saved_rect = {};
     WCHAR fullscreen_device[32] = {};
     bool fullscreen_mode = false;
+    bool foreign = false;
+    bool foreign_known = false;
+    D3DKMT_HANDLE foreign_share = 0;
+    D3DKMT_HANDLE foreign_resource = 0;
+    D3DKMT_HANDLE foreign_allocation = 0;
+    UINT foreign_width = 0;
+    UINT foreign_height = 0;
+    UINT foreign_pitch = 0;
+    ID3D12Resource *readback = NULL;
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT readback_layout = {};
+    UINT64 readback_size = 0;
+    ID3D12CommandAllocator *copy_allocator = NULL;
+    ID3D12GraphicsCommandList *copy_list = NULL;
+    ID3D12Fence *copy_fence = NULL;
+    UINT64 copy_value = 0;
+    HANDLE copy_event = NULL;
     SRWLOCK lock = SRWLOCK_INIT;
     UINT current = 0;
     UINT present_count = 0;
@@ -61,6 +77,7 @@ public:
     {
         if (fullscreen_output) SetFullscreenState(FALSE, NULL);
         RetirePublication();
+        ReleaseForeign();
         ReleaseBuffers();
         if (completion) CloseHandle(completion);
         if (latency) CloseHandle(latency);
@@ -72,6 +89,13 @@ public:
     void ReleaseBuffers();
     HRESULT ChangeMode(IDXGIOutput *output, const DXGI_MODE_DESC &requested);
     void RestoreMode();
+    bool ForeignAdapter();
+    HRESULT OpenForeignSurface(D3DKMT_HANDLE share);
+    void CloseForeignSurface();
+    HRESULT ReadBack();
+    HRESULT WriteForeign(RECT *rect);
+    HRESULT PublishForeign();
+    void ReleaseForeign();
     HRESULT RetirePublication();
     HRESULT WaitForQueue();
 
@@ -427,8 +451,248 @@ void Native12SwapChain::RestoreMode()
     fullscreen_mode = false;
 }
 
+bool Native12SwapChain::ForeignAdapter()
+{
+    if (foreign_known) return foreign;
+    foreign_known = true;
+    foreign = false;
+    DXGI_ADAPTER_DESC adapter_desc;
+    MONITORINFOEXW info = {};
+    info.cbSize = sizeof(info);
+    HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY);
+    if (FAILED(device->adapter->GetDesc(&adapter_desc)) || !monitor
+            || !GetMonitorInfoW(monitor, reinterpret_cast<MONITORINFO *>(&info))) return false;
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME open = {};
+    lstrcpynW(open.DeviceName, info.szDevice, ARRAYSIZE(open.DeviceName));
+    if (D3DKMTOpenAdapterFromGdiDisplayName(&open) < 0) return false;
+    D3DKMT_CLOSEADAPTER close = {};
+    close.hAdapter = open.hAdapter;
+    D3DKMTCloseAdapter(&close);
+    foreign = open.AdapterLuid.LowPart != adapter_desc.AdapterLuid.LowPart
+            || open.AdapterLuid.HighPart != adapter_desc.AdapterLuid.HighPart;
+    return foreign;
+}
+
+HRESULT Native12SwapChain::OpenForeignSurface(D3DKMT_HANDLE share)
+{
+    DWM_DX_SHARED_SURFACE_INFO info = {};
+    D3DKMT_QUERYRESOURCEINFO query = {};
+    query.hDevice = device->km_device;
+    query.hGlobalShare = share;
+    query.pPrivateRuntimeData = &info;
+    query.PrivateRuntimeDataSize = sizeof(info);
+    if (D3DKMTQueryResourceInfo(&query) < 0 || query.NumAllocations != 1 || query.PrivateRuntimeDataSize != sizeof(info)
+            || info.Magic != DWM_DX_SURFACE_INFO_MAGIC || info.Version != DWM_DX_SURFACE_INFO_VERSION
+            || info.Format != DWM_DX_FORMAT_B8G8R8A8_UNORM || !info.Width || !info.Height
+            || info.Pitch / sizeof(UINT32) < info.Width) return DXGI_ERROR_UNSUPPORTED;
+    void *resource_private = query.ResourcePrivateDriverDataSize
+            ? HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, query.ResourcePrivateDriverDataSize) : NULL;
+    void *total_private = query.TotalPrivateDriverDataSize
+            ? HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, query.TotalPrivateDriverDataSize) : NULL;
+    HRESULT hr = S_OK;
+    if ((query.ResourcePrivateDriverDataSize && !resource_private) || (query.TotalPrivateDriverDataSize && !total_private))
+        hr = E_OUTOFMEMORY;
+    D3DDDI_OPENALLOCATIONINFO allocation = {};
+    D3DKMT_OPENRESOURCE open = {};
+    if (SUCCEEDED(hr))
+    {
+        open.hDevice = device->km_device;
+        open.hGlobalShare = share;
+        open.NumAllocations = 1;
+        open.pOpenAllocationInfo = &allocation;
+        open.pPrivateRuntimeData = &info;
+        open.PrivateRuntimeDataSize = sizeof(info);
+        open.pResourcePrivateDriverData = resource_private;
+        open.ResourcePrivateDriverDataSize = query.ResourcePrivateDriverDataSize;
+        open.pTotalPrivateDriverDataBuffer = total_private;
+        open.TotalPrivateDriverDataBufferSize = query.TotalPrivateDriverDataSize;
+        hr = Native12StatusToHresult(D3DKMTOpenResource(&open));
+        if (SUCCEEDED(hr) && (!open.hResource || !allocation.hAllocation)) hr = E_FAIL;
+    }
+    if (resource_private) HeapFree(GetProcessHeap(), 0, resource_private);
+    if (total_private) HeapFree(GetProcessHeap(), 0, total_private);
+    if (FAILED(hr)) return hr;
+    foreign_share = share;
+    foreign_resource = open.hResource;
+    foreign_allocation = allocation.hAllocation;
+    foreign_width = info.Width;
+    foreign_height = info.Height;
+    foreign_pitch = info.Pitch;
+    return S_OK;
+}
+
+void Native12SwapChain::CloseForeignSurface()
+{
+    if (foreign_resource)
+    {
+        D3DKMT_DESTROYALLOCATION destroy = {};
+        destroy.hDevice = device->km_device;
+        destroy.hResource = foreign_resource;
+        D3DKMTDestroyAllocation(&destroy);
+    }
+    foreign_share = 0;
+    foreign_resource = 0;
+    foreign_allocation = 0;
+}
+
+HRESULT Native12SwapChain::ReadBack()
+{
+    ID3D12Resource *source = buffers[current];
+    if (!source) return DXGI_ERROR_INVALID_CALL;
+    D3D12_RESOURCE_DESC source_desc = source->GetDesc();
+    HRESULT hr;
+    if (!readback || readback_layout.Footprint.Width != source_desc.Width
+            || readback_layout.Footprint.Height != source_desc.Height || readback_layout.Footprint.Format != source_desc.Format)
+    {
+        if (readback) readback->Release();
+        readback = NULL;
+        device->GetCopyableFootprints(&source_desc, 0, 1, 0, &readback_layout, NULL, NULL, &readback_size);
+        D3D12_HEAP_PROPERTIES heap = {};
+        heap.Type = D3D12_HEAP_TYPE_READBACK;
+        D3D12_RESOURCE_DESC buffer = {};
+        buffer.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        buffer.Width = readback_size;
+        buffer.Height = 1;
+        buffer.DepthOrArraySize = 1;
+        buffer.MipLevels = 1;
+        buffer.SampleDesc.Count = 1;
+        buffer.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        if (FAILED(hr = device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &buffer,
+                D3D12_RESOURCE_STATE_COPY_DEST, NULL, __uuidof(ID3D12Resource), reinterpret_cast<void **>(&readback))))
+            return hr;
+    }
+    if (!copy_allocator && FAILED(hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+            __uuidof(ID3D12CommandAllocator), reinterpret_cast<void **>(&copy_allocator)))) return hr;
+    if (!copy_list)
+    {
+        if (FAILED(hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, copy_allocator, NULL,
+                __uuidof(ID3D12GraphicsCommandList), reinterpret_cast<void **>(&copy_list)))) return hr;
+    }
+    else if (FAILED(hr = copy_allocator->Reset()) || FAILED(hr = copy_list->Reset(copy_allocator, NULL))) return hr;
+    if (!copy_fence && FAILED(hr = device->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence),
+            reinterpret_cast<void **>(&copy_fence)))) return hr;
+    if (!copy_event && !(copy_event = CreateEventW(NULL, FALSE, FALSE, NULL))) return HRESULT_FROM_WIN32(GetLastError());
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = source;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    copy_list->ResourceBarrier(1, &barrier);
+    D3D12_TEXTURE_COPY_LOCATION destination = {}, origin = {};
+    destination.pResource = readback;
+    destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    destination.PlacedFootprint = readback_layout;
+    origin.pResource = source;
+    origin.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    copy_list->CopyTextureRegion(&destination, 0, 0, 0, &origin, NULL);
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+    copy_list->ResourceBarrier(1, &barrier);
+    if (FAILED(hr = copy_list->Close())) return hr;
+    ID3D12CommandList *lists[] = {copy_list};
+    queue->ExecuteCommandLists(1, lists);
+    if (FAILED(hr = queue->Signal(copy_fence, ++copy_value))) return hr;
+    if (FAILED(hr = copy_fence->SetEventOnCompletion(copy_value, copy_event))) return hr;
+    return WaitForSingleObject(copy_event, NATIVE12_SWAPCHAIN_WAIT) == WAIT_OBJECT_0 ? S_OK : DXGI_ERROR_WAS_STILL_DRAWING;
+}
+
+HRESULT Native12SwapChain::WriteForeign(RECT *rect)
+{
+    D3DKMT_LOCK lock_args = {};
+    lock_args.hDevice = device->km_device;
+    lock_args.hAllocation = foreign_allocation;
+    lock_args.Flags.WriteOnly = 1;
+    lock_args.Flags.LockEntire = 1;
+    if (D3DKMTLock(&lock_args) < 0 || !lock_args.pData) return DXGI_ERROR_UNSUPPORTED;
+    void *mapped = NULL;
+    D3D12_RANGE range = {0, static_cast<SIZE_T>(readback_size)};
+    HRESULT hr = readback->Map(0, &range, &mapped);
+    if (SUCCEEDED(hr))
+    {
+        const BYTE *source = static_cast<const BYTE *>(mapped) + readback_layout.Offset;
+        BYTE *target = static_cast<BYTE *>(lock_args.pData);
+        UINT width = readback_layout.Footprint.Width, height = readback_layout.Footprint.Height;
+        bool swap = readback_layout.Footprint.Format == DXGI_FORMAT_R8G8B8A8_UNORM;
+        for (UINT y = 0; y < foreign_height; ++y)
+        {
+            const UINT32 *row = reinterpret_cast<const UINT32 *>(source
+                    + static_cast<UINT64>(y) * height / foreign_height * readback_layout.Footprint.RowPitch);
+            UINT32 *out = reinterpret_cast<UINT32 *>(target + static_cast<SIZE_T>(y) * foreign_pitch);
+            for (UINT x = 0; x < foreign_width; ++x)
+            {
+                UINT32 pixel = row[static_cast<UINT64>(x) * width / foreign_width];
+                out[x] = swap ? (pixel & 0xff00ff00) | ((pixel >> 16) & 0xff) | ((pixel & 0xff) << 16) : pixel;
+            }
+        }
+        D3D12_RANGE written = {0, 0};
+        readback->Unmap(0, &written);
+    }
+    D3DKMT_UNLOCK unlock = {};
+    unlock.hDevice = device->km_device;
+    unlock.NumAllocations = 1;
+    unlock.phAllocations = &foreign_allocation;
+    D3DKMTUnlock(&unlock);
+    if (SUCCEEDED(hr)) SetRect(rect, 0, 0, foreign_width, foreign_height);
+    return hr;
+}
+
+HRESULT Native12SwapChain::PublishForeign()
+{
+    typedef HRESULT (WINAPI *GetSurface)(HWND, LUID, HMONITOR, DWORD, UINT *, HANDLE *, ULONGLONG *);
+    typedef HRESULT (WINAPI *UpdateSurface)(HWND, ULONGLONG, DWORD, HMONITOR, const RECT *);
+    static GetSurface get_surface;
+    static UpdateSurface update_surface;
+    if (!get_surface || !update_surface)
+    {
+        HMODULE dwmapi = LoadLibraryW(L"dwmapi.dll");
+        if (!dwmapi) return HRESULT_FROM_WIN32(GetLastError());
+        get_surface = reinterpret_cast<GetSurface>(GetProcAddress(dwmapi, reinterpret_cast<LPCSTR>(static_cast<ULONG_PTR>(100))));
+        update_surface = reinterpret_cast<UpdateSurface>(GetProcAddress(dwmapi, reinterpret_cast<LPCSTR>(static_cast<ULONG_PTR>(101))));
+        if (!get_surface || !update_surface) return DXGI_ERROR_UNSUPPORTED;
+    }
+    if (desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM && desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM)
+        return DXGI_ERROR_UNSUPPORTED;
+    DXGI_ADAPTER_DESC adapter_desc;
+    HRESULT hr = device->adapter->GetDesc(&adapter_desc);
+    if (FAILED(hr)) return hr;
+    UINT format = 0;
+    HANDLE shared = NULL;
+    ULONGLONG update = 0;
+    hr = get_surface(window, adapter_desc.AdapterLuid, NULL, 0, &format, &shared, &update);
+    if (hr == S_FALSE) return S_OK;
+    if (FAILED(hr)) return hr;
+    D3DKMT_HANDLE share = static_cast<D3DKMT_HANDLE>(reinterpret_cast<ULONG_PTR>(shared));
+    if (share != foreign_share)
+    {
+        CloseForeignSurface();
+        hr = OpenForeignSurface(share);
+    }
+    RECT rect = {};
+    if (SUCCEEDED(hr)) hr = ReadBack();
+    if (SUCCEEDED(hr)) hr = WriteForeign(&rect);
+    HRESULT update_hr = update_surface(window, update, FAILED(hr) ? DWM_DX_UPDATE_CANCEL : 0, NULL, FAILED(hr) ? NULL : &rect);
+    return FAILED(hr) ? hr : update_hr;
+}
+
+void Native12SwapChain::ReleaseForeign()
+{
+    CloseForeignSurface();
+    if (readback) readback->Release();
+    if (copy_list) copy_list->Release();
+    if (copy_allocator) copy_allocator->Release();
+    if (copy_fence) copy_fence->Release();
+    if (copy_event) CloseHandle(copy_event);
+    readback = NULL;
+    copy_list = NULL;
+    copy_allocator = NULL;
+    copy_fence = NULL;
+    copy_event = NULL;
+}
+
 HRESULT Native12SwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
 {
+    foreign_known = false;
     Native12Resource *created[NATIVE12_SWAPCHAIN_BUFFERS] = {};
     D3DKMT_HANDLE created_shares[NATIVE12_SWAPCHAIN_BUFFERS] = {};
     HANDLE created_events[NATIVE12_SWAPCHAIN_BUFFERS] = {};
@@ -559,7 +823,9 @@ HRESULT STDMETHODCALLTYPE Native12SwapChain::Present1(UINT interval, UINT flags,
 
     AcquireSRWLockExclusive(&lock);
     HRESULT hr = WaitForQueue();
-    if (SUCCEEDED(hr))
+    if (SUCCEEDED(hr) && ForeignAdapter())
+        hr = PublishForeign();
+    else if (SUCCEEDED(hr))
     {
         DXGI_ADAPTER_DESC adapter_desc;
         DWM_DX_SURFACE_EXCHANGE exchange = {};
