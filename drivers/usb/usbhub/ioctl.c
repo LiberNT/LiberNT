@@ -15,8 +15,8 @@
 
 static NTSTATUS USBH_GetDumpInterface(_In_ PUSBHUB_PORT_PDO_EXTENSION PortExtension, _Inout_ PROS_USB_DUMP_INTERFACE Interface)
 {
-    PUSBHUB_FDO_EXTENSION RootHubExtension;
-    PDEVICE_OBJECT LowerDevice;
+    PUSBHUB_FDO_EXTENSION HubExtension;
+    PDEVICE_OBJECT RootHubPdo;
     PIO_STACK_LOCATION IoStack;
     IO_STATUS_BLOCK IoStatus;
     KEVENT Event;
@@ -29,22 +29,22 @@ static NTSTATUS USBH_GetDumpInterface(_In_ PUSBHUB_PORT_PDO_EXTENSION PortExtens
         return STATUS_INVALID_PARAMETER;
     }
 
-    RootHubExtension = PortExtension->RootHubExtension;
-    if ((RootHubExtension == NULL) || (RootHubExtension->LowerDevice == NULL))
+    HubExtension = PortExtension->HubExtension;
+    if ((HubExtension == NULL) || (HubExtension->RootHubPdo2 == NULL))
     {
         return STATUS_DEVICE_NOT_READY;
     }
 
     Interface->DeviceHandle = PortExtension->DeviceHandle;
-    LowerDevice = RootHubExtension->LowerDevice;
+    RootHubPdo = HubExtension->RootHubPdo2;
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
-    Irp = IoBuildDeviceIoControlRequest(IOCTL_INTERNAL_REACTOS_USB_GET_DUMP_INTERFACE, LowerDevice, NULL, 0, NULL, 0, TRUE, &Event, &IoStatus);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_INTERNAL_REACTOS_USB_GET_DUMP_INTERFACE, RootHubPdo, NULL, 0, NULL, 0, TRUE, &Event, &IoStatus);
     if (Irp == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
 
     IoStack = IoGetNextIrpStackLocation(Irp);
     IoStack->Parameters.Others.Argument1 = Interface;
-    Status = IoCallDriver(LowerDevice, Irp);
+    Status = IoCallDriver(RootHubPdo, Irp);
     if (Status == STATUS_PENDING)
     {
         KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
