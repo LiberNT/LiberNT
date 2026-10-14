@@ -154,7 +154,6 @@ KsReadFile(
     PIRP Irp;
     NTSTATUS Status;
     BOOLEAN Result;
-    KEVENT LocalEvent;
 
     if (Event)
     {
@@ -189,6 +188,7 @@ KsReadFile(
 
     /* fast-io read is only available for kernel mode clients */
     if (RequestorMode == KernelMode && ExGetPreviousMode() == KernelMode &&
+        DeviceObject->DriverObject->FastIoDispatch &&
         DeviceObject->DriverObject->FastIoDispatch->FastIoRead)
     {
         /* call fast io write */
@@ -202,13 +202,6 @@ KsReadFile(
     }
 
     /* do the slow way */
-    if (!Event)
-    {
-        /* initialize temp event */
-        KeInitializeEvent(&LocalEvent, NotificationEvent, FALSE);
-        Event = &LocalEvent;
-    }
-
     /* build the irp packet */
     Irp = IoBuildSynchronousFsdRequest(IRP_MJ_READ, DeviceObject, Buffer, Length, &FileObject->CurrentByteOffset, Event, IoStatusBlock);
     if (!Irp)
@@ -227,6 +220,11 @@ KsReadFile(
     IoStack->FileObject = FileObject;
     IoStack->Parameters.Read.Key = Key;
 
+    if (Event)
+        ObReferenceObject(Event);
+    ObReferenceObject(FileObject);
+    KeClearEvent(&FileObject->Event);
+
     /* send the packet */
     Status = IoCallDriver(DeviceObject, Irp);
 
@@ -236,8 +234,8 @@ KsReadFile(
         if (FileObject->Flags & FO_SYNCHRONOUS_IO)
         {
             /* it is so wait */
-            KeWaitForSingleObject(Event, Executive, RequestorMode, FALSE, NULL);
-            Status = IoStatusBlock->Status;
+            KeWaitForSingleObject(&FileObject->Event, Executive, RequestorMode, FALSE, NULL);
+            Status = FileObject->FinalStatus;
         }
     }
     /* return result */
@@ -265,7 +263,6 @@ KsWriteFile(
     PIRP Irp;
     NTSTATUS Status;
     BOOLEAN Result;
-    KEVENT LocalEvent;
 
     if (Event)
     {
@@ -300,6 +297,7 @@ KsWriteFile(
 
     /* fast-io write is only available for kernel mode clients */
     if (RequestorMode == KernelMode && ExGetPreviousMode() == KernelMode &&
+        DeviceObject->DriverObject->FastIoDispatch &&
         DeviceObject->DriverObject->FastIoDispatch->FastIoWrite)
     {
         /* call fast io write */
@@ -313,13 +311,6 @@ KsWriteFile(
     }
 
     /* do the slow way */
-    if (!Event)
-    {
-        /* initialize temp event */
-        KeInitializeEvent(&LocalEvent, NotificationEvent, FALSE);
-        Event = &LocalEvent;
-    }
-
     /* build the irp packet */
     Irp = IoBuildSynchronousFsdRequest(IRP_MJ_WRITE, DeviceObject, Buffer, Length, &FileObject->CurrentByteOffset, Event, IoStatusBlock);
     if (!Irp)
@@ -338,6 +329,11 @@ KsWriteFile(
     IoStack->FileObject = FileObject;
     IoStack->Parameters.Write.Key = Key;
 
+    if (Event)
+        ObReferenceObject(Event);
+    ObReferenceObject(FileObject);
+    KeClearEvent(&FileObject->Event);
+
     /* send the packet */
     Status = IoCallDriver(DeviceObject, Irp);
 
@@ -347,8 +343,8 @@ KsWriteFile(
         if (FileObject->Flags & FO_SYNCHRONOUS_IO)
         {
             /* it is so wait */
-            KeWaitForSingleObject(Event, Executive, RequestorMode, FALSE, NULL);
-            Status = IoStatusBlock->Status;
+            KeWaitForSingleObject(&FileObject->Event, Executive, RequestorMode, FALSE, NULL);
+            Status = FileObject->FinalStatus;
         }
     }
     /* return result */
@@ -598,7 +594,7 @@ KsStreamIo(
         if (ObjectHeader)
         {
             /* there is a object header */
-            if (Flags == KSSTREAM_READ)
+            if (!(Flags & KSSTREAM_WRITE))
             {
                 /* is fast read supported */
                 if (ObjectHeader->DispatchTable.FastRead)
@@ -613,7 +609,7 @@ KsStreamIo(
                     }
                 }
             }
-            else if (Flags == KSSTREAM_WRITE)
+            else
             {
                 /* is fast write supported */
                 if (ObjectHeader->DispatchTable.FastWrite)
@@ -651,19 +647,25 @@ KsStreamIo(
     Irp->Overlay.AsynchronousParameters.UserApcContext = PortContext;
     Irp->Tail.Overlay.OriginalFileObject = FileObject;
     Irp->UserBuffer = StreamHeaders;
+    if (Flags & KSSTREAM_SYNCHRONOUS)
+        Irp->Flags |= IRP_SYNCHRONOUS_API;
 
     /* get next irp stack location */
     IoStack = IoGetNextIrpStackLocation(Irp);
     /* setup stack parameters */
     IoStack->FileObject = FileObject;
     IoStack->Parameters.DeviceIoControl.OutputBufferLength = Length;
-    IoStack->Parameters.DeviceIoControl.IoControlCode = (Flags == KSSTREAM_READ ? IOCTL_KS_READ_STREAM : IOCTL_KS_WRITE_STREAM);
+    IoStack->Parameters.DeviceIoControl.IoControlCode = ((Flags & KSSTREAM_WRITE) ? IOCTL_KS_WRITE_STREAM : IOCTL_KS_READ_STREAM);
 
     if (CompletionRoutine)
     {
         /* setup completion routine for async processing */
         IoSetCompletionRoutine(Irp, CompletionRoutine, CompletionContext, (CompletionInvocationFlags & KsInvokeOnSuccess), (CompletionInvocationFlags & KsInvokeOnError), (CompletionInvocationFlags & KsInvokeOnCancel));
     }
+
+    if (Event && !(Flags & KSSTREAM_SYNCHRONOUS))
+        ObReferenceObject(Event);
+    ObReferenceObject(FileObject);
 
     /* now call the driver */
     Status = IoCallDriver(DeviceObject, Irp);
