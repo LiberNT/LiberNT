@@ -425,7 +425,7 @@ HRESULT Native12Resource::Initialize(const D3D12_HEAP_PROPERTIES *properties, D3
     resident.pPagingFenceValue = &paging_fence;
     resident.WaitMask = 1;
     hr = device->functions.pfnMakeResident(device->driver_device, &resident);
-    if (FAILED(hr))
+    if (FAILED(hr) && hr != E_PENDING)
     {
         WARN("The driver failed to make a new heap resident, hr %#lx.\n", hr);
         return hr;
