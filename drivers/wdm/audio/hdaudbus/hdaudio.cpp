@@ -583,6 +583,11 @@ HDA_AllocateDmaBufferWithNotification(
 	if (!mdl) {
 		return STATUS_NO_MEMORY;
 	}
+	if (MmGetMdlByteCount(mdl) < allocSize) {
+		MmFreePagesFromMdl(mdl);
+		ExFreePool(mdl);
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
 
 	WdfInterruptAcquireLock(devData->FdoContext->Interrupt);
 	stream->mdlBuf = mdl;
