@@ -12,7 +12,8 @@ set(EMU_AMD64_MODULES
     ntdll
     ntdll_vista
     rpcrt4
-    sechost)
+    sechost
+    ucrtbase)
 
 set(EMU_AMD64_EXECUTABLES
     cmd
