@@ -667,8 +667,13 @@ HANDLE WINAPI DECLSPEC_HOTPATCH CreateConsoleScreenBuffer( DWORD access, DWORD s
 
     InitializeObjectAttributes( &attr, &name, 0, 0, sa ? sa->lpSecurityDescriptor : NULL );
     if (sa && sa->bInheritHandle) attr.Attributes |= OBJ_INHERIT;
+#ifdef __REACTOS__
+    status = NtCreateFile( &handle, access | SYNCHRONIZE, &attr, &iosb, NULL, FILE_ATTRIBUTE_NORMAL, 0, FILE_OPEN,
+                           FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0 );
+#else
     status = NtCreateFile( &handle, access, &attr, &iosb, NULL, FILE_ATTRIBUTE_NORMAL, 0, FILE_OPEN,
                            FILE_NON_DIRECTORY_FILE, NULL, 0 );
+#endif
     return set_ntstatus( status ) ? handle : INVALID_HANDLE_VALUE;
 }
 
