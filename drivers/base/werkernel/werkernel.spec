@@ -1,5 +1,0 @@
-@ stdcall WerLiveKernelCancelReport(ptr)
-@ stdcall WerLiveKernelCloseHandle(ptr)
-@ stdcall WerLiveKernelCreateReport(wstr ptr ptr)
-@ stdcall WerLiveKernelOpenDumpFile(ptr ptr)
-@ stdcall WerLiveKernelSubmitReport(ptr long)

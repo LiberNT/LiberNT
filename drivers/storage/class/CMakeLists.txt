@@ -1,7 +1,0 @@
-add_subdirectory(cdrom)
-add_subdirectory(classpnp)
-add_subdirectory(disk)
-add_subdirectory(ramdisk)
-add_subdirectory(sffdisk)
-add_subdirectory(sffp_sd)
-#add_subdirectory(sfloppy)
