@@ -32,6 +32,8 @@
 PWSTR GenericUSBDeviceString = NULL;
 LONG USBH_NextDebugBusNumber = 0;
 static LONG USBH_BootDeviceDiscoveryActive = TRUE;
+static LIST_ENTRY USBH_SerialNumberList;
+static FAST_MUTEX USBH_SerialNumberMutex;
 
 BOOLEAN
 NTAPI
@@ -2366,7 +2368,6 @@ USBH_ProcessPortStateChange(IN PUSBHUB_FDO_EXTENSION HubExtension,
     USB_30_PORT_CHANGE PortStatusChange30;
     PDEVICE_OBJECT PortDevice;
     PUSBHUB_PORT_PDO_EXTENSION PortExtension;
-    PVOID SerialNumber;
     PVOID DeviceHandle;
     USHORT RequestValue;
     KIRQL Irql;
@@ -2449,13 +2450,7 @@ USBH_ProcessPortStateChange(IN PUSBHUB_FDO_EXTENSION HubExtension,
 
             KeReleaseSpinLock(&HubExtension->RelationsWorkerSpinLock, Irql);
 
-            SerialNumber = InterlockedExchangePointer((PVOID)&PortExtension->SerialNumber,
-                                                      NULL);
-
-            if (SerialNumber)
-            {
-                ExFreePoolWithTag(SerialNumber, USB_HUB_TAG);
-            }
+            USBH_ReleaseSerialNumber(PortExtension);
 
             USBH_FreeCachedStrings(PortExtension);
 
@@ -5260,54 +5255,93 @@ USBH_ProcessDeviceInformation(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
 
 BOOLEAN
 NTAPI
-USBH_CheckDeviceIDUnique(IN PUSBHUB_FDO_EXTENSION HubExtension,
-                         IN USHORT idVendor,
+USBH_CheckDeviceIDUnique(IN USHORT idVendor,
                          IN USHORT idProduct,
                          IN PVOID SerialNumber,
                          IN USHORT SN_DescriptorLength)
 {
-    PDEVICE_OBJECT PortDevice;
+    PLIST_ENTRY Entry;
     PUSBHUB_PORT_PDO_EXTENSION PortExtension;
-    ULONG Port;
     SIZE_T NumberBytes;
 
     DPRINT("USBH_CheckDeviceIDUnique: idVendor - 0x%04X, idProduct - 0x%04X\n",
            idVendor,
            idProduct);
 
-    if (!HubExtension->HubDescriptor->bNumberOfPorts)
+    for (Entry = USBH_SerialNumberList.Flink;
+         Entry != &USBH_SerialNumberList;
+         Entry = Entry->Flink)
     {
-        return TRUE;
-    }
+        PortExtension = CONTAINING_RECORD(Entry,
+                                          USBHUB_PORT_PDO_EXTENSION,
+                                          SerialNumberLink);
 
-    for (Port = 0; Port < HubExtension->HubDescriptor->bNumberOfPorts; Port++)
-    {
-        PortDevice = HubExtension->PortData[Port].DeviceObject;
-
-        if (PortDevice)
+        if (PortExtension->DeviceDescriptor.idVendor == idVendor &&
+            PortExtension->DeviceDescriptor.idProduct == idProduct &&
+            PortExtension->SN_DescriptorLength == SN_DescriptorLength)
         {
-            PortExtension = PortDevice->DeviceExtension;
+            NumberBytes = RtlCompareMemory(PortExtension->SerialNumber,
+                                           SerialNumber,
+                                           SN_DescriptorLength);
 
-            if (PortExtension->DeviceDescriptor.idVendor == idVendor &&
-                PortExtension->DeviceDescriptor.idProduct == idProduct &&
-                PortExtension->SN_DescriptorLength == SN_DescriptorLength)
+            if (NumberBytes == SN_DescriptorLength)
             {
-                if (PortExtension->SerialNumber)
-                {
-                    NumberBytes = RtlCompareMemory(PortExtension->SerialNumber,
-                                                   SerialNumber,
-                                                   SN_DescriptorLength);
-
-                    if (NumberBytes == SN_DescriptorLength)
-                    {
-                        return FALSE;
-                    }
-                }
+                return FALSE;
             }
         }
     }
 
     return TRUE;
+}
+
+static
+VOID
+USBH_PublishSerialNumber(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
+                         IN LPWSTR SerialNumber)
+{
+    ExAcquireFastMutex(&USBH_SerialNumberMutex);
+
+    if (USBH_CheckDeviceIDUnique(PortExtension->DeviceDescriptor.idVendor,
+                                 PortExtension->DeviceDescriptor.idProduct,
+                                 SerialNumber,
+                                 PortExtension->SN_DescriptorLength))
+    {
+        InsertTailList(&USBH_SerialNumberList, &PortExtension->SerialNumberLink);
+        InterlockedExchangePointer((PVOID)&PortExtension->SerialNumber,
+                                   SerialNumber);
+        SerialNumber = NULL;
+    }
+
+    ExReleaseFastMutex(&USBH_SerialNumberMutex);
+
+    if (SerialNumber)
+    {
+        ExFreePoolWithTag(SerialNumber, USB_HUB_TAG);
+    }
+}
+
+VOID
+NTAPI
+USBH_ReleaseSerialNumber(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
+{
+    PVOID SerialNumber;
+
+    ExAcquireFastMutex(&USBH_SerialNumberMutex);
+
+    SerialNumber = InterlockedExchangePointer((PVOID)&PortExtension->SerialNumber,
+                                              NULL);
+
+    if (SerialNumber)
+    {
+        RemoveEntryList(&PortExtension->SerialNumberLink);
+    }
+
+    ExReleaseFastMutex(&USBH_SerialNumberMutex);
+
+    if (SerialNumber)
+    {
+        ExFreePoolWithTag(SerialNumber, USB_HUB_TAG);
+    }
 }
 
 BOOLEAN
@@ -6191,20 +6225,11 @@ USBH_CreateDevice(IN PUSBHUB_FDO_EXTENSION HubExtension,
                 SerialNumberBuffer = NULL;
             }
 
-            if (SerialNumberBuffer &&
-                !USBH_CheckDeviceIDUnique(HubExtension,
-                                          PortExtension->DeviceDescriptor.idVendor,
-                                          PortExtension->DeviceDescriptor.idProduct,
-                                          SerialNumberBuffer,
-                                          PortExtension->SN_DescriptorLength))
+            if (SerialNumberBuffer)
             {
-                ExFreePoolWithTag(SerialNumberBuffer, USB_HUB_TAG);
-                SerialNumberBuffer = NULL;
+                USBH_PublishSerialNumber(PortExtension, SerialNumberBuffer);
             }
         }
-
-        InterlockedExchangePointer((PVOID)&PortExtension->SerialNumber,
-                                   SerialNumberBuffer);
     }
 
     USBH_LogNewDevice(PortExtension);
@@ -6230,13 +6255,7 @@ ErrorExit:
         USBD_RemoveDeviceEx(HubExtension, DeviceHandle, 0);
     }
 
-    SerialNumberBuffer = InterlockedExchangePointer((PVOID)&PortExtension->SerialNumber,
-                                                     NULL);
-
-    if (SerialNumberBuffer)
-    {
-        ExFreePoolWithTag(SerialNumberBuffer, USB_HUB_TAG);
-    }
+    USBH_ReleaseSerialNumber(PortExtension);
 
     USBH_FreeCachedStrings(PortExtension);
 
@@ -6866,6 +6885,9 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
     DriverObject->MajorFunction[IRP_MJ_PNP] = USBH_HubDispatch;
     DriverObject->MajorFunction[IRP_MJ_POWER] = USBH_HubDispatch;
     DriverObject->MajorFunction[IRP_MJ_SYSTEM_CONTROL] = USBH_HubDispatch;
+
+    InitializeListHead(&USBH_SerialNumberList);
+    ExInitializeFastMutex(&USBH_SerialNumberMutex);
 
     USBH_RegQueryGenericUSBDeviceString(&GenericUSBDeviceString);
 

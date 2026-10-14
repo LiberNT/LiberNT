@@ -1128,7 +1128,6 @@ USBH_EnumerateHubPorts(
     PDEVICE_OBJECT PdoDevice;
     PUSBHUB_PORT_PDO_EXTENSION PdoExtension;
     NTSTATUS NtStatus;
-    PVOID SerialNumber;
     PVOID DeviceHandle;
     USB_PORT_STATUS UsbPortStatus;
     ULONG Length;
@@ -1406,13 +1405,7 @@ EnumStart:
                     PdoExtension->PortPdoFlags |= USBHUB_PDO_FLAG_DELETE_PENDING;
                     PdoExtension->EnumFlags &= ~USBHUB_ENUM_FLAG_DEVICE_PRESENT;
 
-                    SerialNumber = InterlockedExchangePointer((PVOID)&PdoExtension->SerialNumber,
-                                                              NULL);
-
-                    if (SerialNumber)
-                    {
-                        ExFreePoolWithTag(SerialNumber, USB_HUB_TAG);
-                    }
+                    USBH_ReleaseSerialNumber(PdoExtension);
 
                     USBH_FreeCachedStrings(PdoExtension);
 
@@ -2792,7 +2785,6 @@ USBH_PdoRemoveDevice(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
     PIRP WakeIrp;
     PVOID DeviceHandle;
     PDEVICE_OBJECT Pdo;
-    PVOID SerialNumber;
     USHORT Port;
     KIRQL Irql;
 
@@ -2925,13 +2917,7 @@ USBH_PdoRemoveDevice(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
         {
             PortExtension->PortPdoFlags |= USBHUB_PDO_FLAG_NOT_CONNECTED;
 
-            SerialNumber = InterlockedExchangePointer((PVOID)&PortExtension->SerialNumber,
-                                                      NULL);
-
-            if (SerialNumber)
-            {
-                ExFreePoolWithTag(SerialNumber, USB_HUB_TAG);
-            }
+            USBH_ReleaseSerialNumber(PortExtension);
 
             USBH_FreeCachedStrings(PortExtension);
 

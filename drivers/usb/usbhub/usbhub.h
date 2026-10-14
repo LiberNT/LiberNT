@@ -280,6 +280,7 @@ typedef struct _USBHUB_PORT_PDO_EXTENSION {
   USHORT SN_DescriptorLength;
   BOOL IgnoringHwSerial;
   LPWSTR SerialNumber; // serial number string
+  LIST_ENTRY SerialNumberLink;
   USHORT SelectedLanguageId;
   BOOLEAN LanguageIdCached;
   PWSTR ProductString;
@@ -800,6 +801,11 @@ USBH_CacheDeviceStrings(
 VOID
 NTAPI
 USBH_FreeCachedStrings(
+  IN PUSBHUB_PORT_PDO_EXTENSION PortExtension);
+
+VOID
+NTAPI
+USBH_ReleaseSerialNumber(
   IN PUSBHUB_PORT_PDO_EXTENSION PortExtension);
 
 NTSTATUS
