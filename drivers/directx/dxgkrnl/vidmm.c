@@ -437,10 +437,9 @@ static VOID DxgkpVidMmNotifyResidency(_In_ PDXGKVMM_ALLOCATION Allocation, _In_ 
  * write-combined D3DKMTLock view into a cached one: user-mode writes would
  * sit in the CPU cache while the GPU, whose page-table entries for a
  * non-cached allocation do not snoop, reads the memory directly.  Cached
- * allocations (snooped by the GPU) keep cached pages.  Pages are taken below
- * 4 GB physical when possible; the fallback for a write-combined allocation
- * is contiguous write-combined memory, and nonpaged pool (cached) is the
- * last resort.  The caller zeroes the memory.
+ * allocations (snooped by the GPU) keep cached pages.  The fallback for a
+ * write-combined allocation is contiguous write-combined memory, and nonpaged
+ * pool (cached) is the last resort.  The caller zeroes the memory.
  */
 static PVOID
 DxgkpVidMmAllocateBacking(
@@ -451,48 +450,36 @@ DxgkpVidMmAllocateBacking(
     MEMORY_CACHING_TYPE CacheType;
     PMDL Mdl;
     PVOID Va;
-    static LONG LowCount = 0, HighCount = 0, PoolCount = 0, WcContiguousCount = 0;
-    ULONG Pass;
+    static LONG PoolCount = 0, WcContiguousCount = 0;
+    BOOLEAN Chunked = FALSE;
 
     CacheType = Allocation->Cached ? MmCached : MmWriteCombined;
     Allocation->SysMem64KBacking = FALSE;
     Low.QuadPart = 0;
     Skip.QuadPart = 0;
-    /*
-     * Prefer pages below 4 GB, but do not require them.  Memory under 4 GB is
-     * a small pool shared with every other driver that needs it, and a client
-     * that keeps creating render targets exhausts it: the allocation then
-     * falls through to contiguous write-combined memory and finally nonpaged
-     * pool, both far scarcer, and the client sees an out-of-memory failure
-     * while plenty of memory remains.  Nothing here needs a 32-bit physical
-     * address -- the GPU addresses this memory through its own page tables --
-     * so retry unconstrained before resorting to the scarcer allocators.
-     */
-    for (Pass = 0; Pass < 2; ++Pass)
+    High.QuadPart = MAXLONGLONG;
+    if (Allocation->Adapter != NULL && Allocation->Adapter->HighestAcceptableAddress.QuadPart > 0)
+        High = Allocation->Adapter->HighestAcceptableAddress;
+    Mdl = NULL;
+    if (Allocation->Adapter != NULL &&
+        Allocation->Adapter->GpuMmuCapsValid &&
+        Allocation->Adapter->GpuMmuCaps.SysMem64KBPageSupported &&
+        Bytes >= DXGKP_GPU_PAGE_64K &&
+        Bytes <= MAXULONG - DXGKP_GPU_PAGE_64K)
     {
-        BOOLEAN Chunked = FALSE;
+        PHYSICAL_ADDRESS ChunkBytes;
 
-        High.QuadPart = (Pass == 0) ? 0xFFFFFFFFLL : MAXLONGLONG;
-        Mdl = NULL;
-        if (Allocation->Adapter != NULL &&
-            Allocation->Adapter->GpuMmuCapsValid &&
-            Allocation->Adapter->GpuMmuCaps.SysMem64KBPageSupported &&
-            Bytes >= DXGKP_GPU_PAGE_64K &&
-            Bytes <= MAXULONG - DXGKP_GPU_PAGE_64K)
-        {
-            PHYSICAL_ADDRESS ChunkBytes;
-
-            ChunkBytes.QuadPart = DXGKP_GPU_PAGE_64K;
-            Mdl = MmAllocatePagesForMdlEx(Low, High, ChunkBytes,
-                                          (Bytes + DXGKP_GPU_PAGE_64K - 1) & ~(SIZE_T)(DXGKP_GPU_PAGE_64K - 1),
-                                          CacheType,
-                                          MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
-            Chunked = Mdl != NULL;
-        }
-        if (Mdl == NULL)
-            Mdl = MmAllocatePagesForMdlEx(Low, High, Skip, Bytes, CacheType, 0);
-        if (Mdl == NULL)
-            continue;
+        ChunkBytes.QuadPart = DXGKP_GPU_PAGE_64K;
+        Mdl = MmAllocatePagesForMdlEx(Low, High, ChunkBytes,
+                                      (Bytes + DXGKP_GPU_PAGE_64K - 1) & ~(SIZE_T)(DXGKP_GPU_PAGE_64K - 1),
+                                      CacheType,
+                                      MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
+        Chunked = Mdl != NULL;
+    }
+    if (Mdl == NULL)
+        Mdl = MmAllocatePagesForMdlEx(Low, High, Skip, Bytes, CacheType, 0);
+    if (Mdl != NULL)
+    {
         if (MmGetMdlByteCount(Mdl) >= Bytes)
         {
             Va = MmMapLockedPagesSpecifyCache(Mdl, KernelMode, CacheType, NULL, FALSE, NormalPagePriority);
@@ -505,15 +492,6 @@ DxgkpVidMmAllocateBacking(
                  * back later over what user mode or the GPU has written. */
                 if (CacheType != MmCached)
                     DxgkpVidMmFlushCpuCache(Va, Bytes);
-                if (Pass == 0)
-                {
-                    if ((InterlockedIncrement(&LowCount) % 256) == 1)
-                        DPRINT("VidMm backing: %ld low (<4G) MDL allocations, %ld high, %ld contiguous WC, %ld pool fallbacks\n", LowCount, HighCount, WcContiguousCount, PoolCount);
-                }
-                else if ((InterlockedIncrement(&HighCount) % 256) == 1)
-                {
-                    DPRINT1("VidMm backing: low memory exhausted, %ld allocations placed above 4 GB (low=%ld)\n", HighCount, LowCount);
-                }
                 return Va;
             }
         }
