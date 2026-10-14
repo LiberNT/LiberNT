@@ -2229,33 +2229,14 @@ GetTempPathA(IN DWORD nBufferLength,
  *
  * ripped from wine
  */
+static
 DWORD
-WINAPI
-GetTempPathW(IN DWORD count,
-             OUT LPWSTR path)
+BasepFormatTempPath(IN PCWSTR tmp_path,
+                    IN DWORD count,
+                    OUT LPWSTR path)
 {
-    static const WCHAR tmp[]  = { 'T', 'M', 'P', 0 };
-    static const WCHAR temp[] = { 'T', 'E', 'M', 'P', 0 };
-    static const WCHAR userprofile[] = { 'U','S','E','R','P','R','O','F','I','L','E',0 };
-    WCHAR tmp_path[MAX_PATH];
     WCHAR full_tmp_path[MAX_PATH];
     UINT ret;
-
-    DPRINT("%u,%p\n", count, path);
-
-    if (!(ret = GetEnvironmentVariableW( tmp, tmp_path, MAX_PATH )) &&
-        !(ret = GetEnvironmentVariableW( temp, tmp_path, MAX_PATH )) &&
-        !(ret = GetEnvironmentVariableW( userprofile, tmp_path, MAX_PATH )) &&
-        !(ret = GetWindowsDirectoryW( tmp_path, MAX_PATH )))
-    {
-        return 0;
-    }
-
-    if (ret > MAX_PATH)
-    {
-        SetLastError(ERROR_FILENAME_EXCED_RANGE);
-        return 0;
-    }
 
     ret = GetFullPathNameW(tmp_path, MAX_PATH, full_tmp_path, NULL);
     if (!ret) return 0;
@@ -2290,6 +2271,109 @@ GetTempPathW(IN DWORD count,
 
     DPRINT("GetTempPathW returning %u, %S\n", ret, path);
     return ret;
+}
+
+DWORD
+WINAPI
+GetTempPathW(IN DWORD count,
+             OUT LPWSTR path)
+{
+    static const WCHAR tmp[]  = { 'T', 'M', 'P', 0 };
+    static const WCHAR temp[] = { 'T', 'E', 'M', 'P', 0 };
+    static const WCHAR userprofile[] = { 'U','S','E','R','P','R','O','F','I','L','E',0 };
+    WCHAR tmp_path[MAX_PATH];
+    UINT ret;
+
+    DPRINT("%u,%p\n", count, path);
+
+    if (!(ret = GetEnvironmentVariableW( tmp, tmp_path, MAX_PATH )) &&
+        !(ret = GetEnvironmentVariableW( temp, tmp_path, MAX_PATH )) &&
+        !(ret = GetEnvironmentVariableW( userprofile, tmp_path, MAX_PATH )) &&
+        !(ret = GetWindowsDirectoryW( tmp_path, MAX_PATH )))
+    {
+        return 0;
+    }
+
+    if (ret > MAX_PATH)
+    {
+        SetLastError(ERROR_FILENAME_EXCED_RANGE);
+        return 0;
+    }
+
+    return BasepFormatTempPath(tmp_path, count, path);
+}
+
+static
+BOOLEAN
+BasepIsLocalSystemProcess(VOID)
+{
+    static SID LocalSystemSid = { SID_REVISION, 1, { SECURITY_NT_AUTHORITY }, { SECURITY_LOCAL_SYSTEM_RID } };
+    UCHAR Buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    PTOKEN_USER User = (PTOKEN_USER)Buffer;
+    HANDLE TokenHandle;
+    ULONG ReturnLength;
+    NTSTATUS Status;
+
+    Status = NtOpenProcessToken(NtCurrentProcess(), TOKEN_QUERY, &TokenHandle);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    Status = NtQueryInformationToken(TokenHandle, TokenUser, User, sizeof(Buffer), &ReturnLength);
+    NtClose(TokenHandle);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    return RtlEqualSid(User->User.Sid, &LocalSystemSid);
+}
+
+DWORD
+WINAPI
+GetTempPath2W(IN DWORD BufferLength,
+              OUT LPWSTR Buffer)
+{
+    static const WCHAR SystemTemp[] = L"\\SystemTemp";
+    WCHAR TempPath[MAX_PATH];
+    UINT Length;
+
+    if (!BasepIsLocalSystemProcess())
+        return GetTempPathW(BufferLength, Buffer);
+
+    Length = GetSystemWindowsDirectoryW(TempPath, MAX_PATH);
+    if (!Length)
+        return 0;
+
+    if (Length + RTL_NUMBER_OF(SystemTemp) > MAX_PATH)
+    {
+        SetLastError(ERROR_FILENAME_EXCED_RANGE);
+        return 0;
+    }
+
+    if (TempPath[Length - 1] == L'\\')
+        Length--;
+    RtlCopyMemory(&TempPath[Length], SystemTemp, sizeof(SystemTemp));
+
+    return BasepFormatTempPath(TempPath, BufferLength, Buffer);
+}
+
+DWORD
+WINAPI
+GetTempPath2A(IN DWORD BufferLength,
+              OUT LPSTR Buffer)
+{
+    WCHAR BufferW[MAX_PATH];
+    DWORD ret;
+
+    ret = GetTempPath2W(MAX_PATH, BufferW);
+
+    if (!ret) return 0;
+
+    if (ret > MAX_PATH)
+    {
+        SetLastError(ERROR_FILENAME_EXCED_RANGE);
+        return 0;
+    }
+
+    return FilenameW2A_FitOrFail(Buffer, BufferLength, BufferW, ret+1);
 }
 
 /*

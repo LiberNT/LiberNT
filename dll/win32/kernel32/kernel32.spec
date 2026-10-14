@@ -686,6 +686,8 @@
 @ stdcall GetTempFileNameW(wstr wstr long ptr)
 @ stdcall GetTempPathA(long ptr)
 @ stdcall GetTempPathW(long ptr)
+@ stdcall -version=0xA00+ GetTempPath2A(long ptr)
+@ stdcall -version=0xA00+ GetTempPath2W(long ptr)
 @ stdcall GetThreadContext(long ptr)
 @ stdcall -version=0x602+ GetThreadInformation(long long ptr long) kernelbase.GetThreadInformation
 @ stdcall -version=0x600+ GetThreadErrorMode() kernelbase.GetThreadErrorMode

@@ -236,6 +236,8 @@
 @ stdcall GetStringTypeW(long wstr long ptr)
 @ stdcall GetSystemCpuSetInformation(ptr long ptr ptr long)
 @ stdcall GetSystemPreferredUILanguages(long ptr ptr ptr)
+@ stdcall GetTempPath2A(long ptr) kernel32.GetTempPath2A
+@ stdcall GetTempPath2W(long ptr) kernel32.GetTempPath2W
 @ stdcall GetThreadDescription(ptr ptr)
 @ stdcall GetThreadErrorMode()
 @ stdcall GetThreadId(ptr) kernel32.GetThreadId
@@ -252,8 +254,10 @@
 @ stdcall GetVersionExA(ptr)
 @ stdcall GetVersionExW(ptr)
 @ stdcall GetVolumeInformationByHandleW(ptr ptr long ptr ptr ptr ptr long)
+@ stdcall GetVolumeNameForVolumeMountPointW(wstr ptr long) kernel32.GetVolumeNameForVolumeMountPointW
 @ stdcall GetWindowsAccountDomainSid(ptr ptr ptr)
 @ stdcall -arch=x86_64,arm64ec GetXStateFeaturesMask(ptr ptr)
+@ stdcall GlobalFree(long) kernel32.GlobalFree
 @ stdcall HashData(ptr long ptr long)
 @ stdcall IdnToAscii(long wstr long ptr long)
 @ stdcall IdnToNameprepUnicode(long wstr long ptr long)
@@ -306,6 +310,7 @@
 @ stdcall LCMapStringW(long long wstr long ptr long)
 @ stdcall LoadStringA(long long ptr long)
 @ stdcall LoadStringW(long long ptr long)
+@ stdcall LocalAlloc(long long) kernel32.LocalAlloc
 @ stdcall LocaleNameToLCID(wstr long)
 @ stdcall -arch=x86_64,arm64ec LocateXStateFeature(ptr long ptr)
 @ stdcall MakeAbsoluteSD(ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr)
