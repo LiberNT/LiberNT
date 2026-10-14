@@ -4051,6 +4051,8 @@ DwmComposeLoop(HANDLE hStopEvent)
         MSG message;
         DPT_SCOPE FetchTrace;
 
+        DwmDxReleaseRedirectionMappings();
+
         /* This thread owns the GPU carrier. Service sent messages even
          * while composition is idle, so broadcasts cannot block Explorer. */
         while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE))

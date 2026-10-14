@@ -78,6 +78,7 @@ typedef struct _DWM_DX_VIEW
     D3DKMT_HANDLE hResource;
     D3DKMT_HANDLE hAllocation;
     BYTE *Snapshot;
+    BYTE *Mapped;
     ULONG Bytes;
     ULONGLONG LastUpdateId;
 } DWM_DX_VIEW;
@@ -176,9 +177,25 @@ DwmDxGetDevice(const LUID *Luid, ULONG *DeviceIndex)
     return STATUS_SUCCESS;
 }
 
+static void
+DwmDxUnlockView(DWM_DX_VIEW *View)
+{
+    D3DKMT_UNLOCK Unlock;
+
+    if (View->Mapped == NULL)
+        return;
+    RtlZeroMemory(&Unlock, sizeof(Unlock));
+    Unlock.hDevice = g_Devices[View->DeviceIndex].hDevice;
+    Unlock.NumAllocations = 1;
+    Unlock.phAllocations = &View->hAllocation;
+    (void)D3DKMTUnlock(&Unlock);
+    View->Mapped = NULL;
+}
+
 static BOOL
 DwmDxDropView(DWM_DX_VIEW *View)
 {
+    DwmDxUnlockView(View);
     if (View->hResource != 0 &&
         View->DeviceIndex < DWM_DX_MAX_DEVICES &&
         g_Devices[View->DeviceIndex].hDevice != 0)
@@ -316,8 +333,9 @@ DwmDxOpenView(const DWM_DX_SOURCE *Source, DWM_DX_VIEW *View)
         goto Failure;
     }
 
-    View->Snapshot = HeapAlloc(GetProcessHeap(), 0, (SIZE_T)Bytes);
-    if (View->Snapshot == NULL)
+    if (!Source->Redirection)
+        View->Snapshot = HeapAlloc(GetProcessHeap(), 0, (SIZE_T)Bytes);
+    if (!Source->Redirection && View->Snapshot == NULL)
     {
         D3DKMT_DESTROYALLOCATION Destroy;
 
@@ -352,6 +370,61 @@ Failure:
     if (Allocations != NULL)
         HeapFree(GetProcessHeap(), 0, Allocations);
     return FALSE;
+}
+
+static NTSTATUS
+DwmDxInvalidateView(DWM_DX_VIEW *View)
+{
+    DWM_D3DKMT_INVALIDATECACHE Invalidate;
+
+    if (!g_InvalidateCacheResolved)
+    {
+        HMODULE Gdi32 = GetModuleHandleW(L"gdi32.dll");
+
+        if (Gdi32 != NULL)
+        {
+            g_InvalidateCache =
+                (PFN_DWM_D3DKMT_INVALIDATECACHE)GetProcAddress(
+                    Gdi32, "D3DKMTInvalidateCache");
+        }
+        g_InvalidateCacheResolved = TRUE;
+    }
+    if (g_InvalidateCache == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    RtlZeroMemory(&Invalidate, sizeof(Invalidate));
+    Invalidate.hDevice = g_Devices[View->DeviceIndex].hDevice;
+    Invalidate.hAllocation = View->hAllocation;
+    Invalidate.Length = View->Bytes;
+    return g_InvalidateCache(&Invalidate);
+}
+
+static const BYTE *
+DwmDxMapRedirection(const DWM_DX_SOURCE *Source, DWM_DX_VIEW *View)
+{
+    if (View->Mapped == NULL)
+    {
+        D3DKMT_LOCK Lock;
+        NTSTATUS Status;
+
+        RtlZeroMemory(&Lock, sizeof(Lock));
+        Lock.hDevice = g_Devices[View->DeviceIndex].hDevice;
+        Lock.hAllocation = View->hAllocation;
+        Lock.Flags.ReadOnly = 1;
+        Lock.Flags.LockEntire = 1;
+        Status = D3DKMTLock(&Lock);
+        if (!NT_SUCCESS(Status) || Lock.pData == NULL)
+            return NULL;
+        View->Mapped = Lock.pData;
+    }
+
+    if (Source->UpdateId != View->LastUpdateId)
+    {
+        if (!NT_SUCCESS(DwmDxInvalidateView(View)))
+            return View->LastUpdateId != 0 ? View->Mapped : NULL;
+        View->LastUpdateId = Source->UpdateId;
+    }
+    return View->Mapped;
 }
 
 static const BYTE *
@@ -408,6 +481,9 @@ DwmDxGetSnapshot(const DWM_DX_SOURCE *Source)
             return NULL;
     }
     View->LastSeenFrame = g_CurrentFrame;
+
+    if (View->Redirection)
+        return DwmDxMapRedirection(Source, View);
 
     if (Source->UpdateId != View->LastUpdateId)
     {
@@ -718,6 +794,15 @@ DwmDxSweepSurfaces(const DWM_WIN *Windows, ULONG Count)
         if (!Present)
             DwmDxDropView(View);
     }
+}
+
+void
+DwmDxReleaseRedirectionMappings(void)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < DWM_DX_MAX_VIEWS; ++Index)
+        DwmDxUnlockView(&g_Views[Index]);
 }
 
 void

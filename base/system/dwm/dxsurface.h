@@ -18,3 +18,4 @@ void DwmDxReleaseRetiredFrames(void);
 void DwmDxSetScanoutSurfaces(const ULONG *SurfaceIds, ULONG Count);
 void DwmDxSweepSurfaces(const DWM_WIN *Windows, ULONG Count);
 void DwmDxCleanupSurfaces(void);
+void DwmDxReleaseRedirectionMappings(void);
