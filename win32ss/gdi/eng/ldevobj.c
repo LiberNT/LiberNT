@@ -563,6 +563,39 @@ cleanup:
     return cbSize;
 }
 
+static
+BOOL
+LDEVOBJ_bModeListedByEarlierDriver(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice,
+    _In_ ULONG cListed,
+    _In_ PDEVMODEINFO pdminfo,
+    _In_ PDEVMODEW pdm)
+{
+    PDEVMODEW pdmListed;
+    ULONG i;
+
+    for (i = 0; i < cListed; i++)
+    {
+        pdmListed = pGraphicsDevice->pDevModeList[i].pdm;
+        if ((PCHAR)pdmListed >= (PCHAR)pdminfo->adevmode &&
+            (PCHAR)pdmListed < (PCHAR)pdminfo->adevmode + pdminfo->cbdevmode)
+        {
+            break;
+        }
+        if (pdmListed->dmPelsWidth == pdm->dmPelsWidth &&
+            pdmListed->dmPelsHeight == pdm->dmPelsHeight &&
+            pdmListed->dmBitsPerPel == pdm->dmBitsPerPel &&
+            pdmListed->dmDisplayFrequency == pdm->dmDisplayFrequency &&
+            pdmListed->dmDisplayFlags == pdm->dmDisplayFlags &&
+            pdmListed->dmDisplayOrientation == pdm->dmDisplayOrientation &&
+            pdmListed->dmDisplayFixedOutput == pdm->dmDisplayFixedOutput)
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 BOOL
 LDEVOBJ_bBuildDevmodeList(
     _Inout_ PGRAPHICS_DEVICE pGraphicsDevice)
@@ -672,12 +705,19 @@ LDEVOBJ_bBuildDevmodeList(
                   pdm->dmBitsPerPel,
                   pdm->dmDisplayFrequency);
 
+            if (pdminfo != pGraphicsDevice->pdevmodeInfo &&
+                LDEVOBJ_bModeListedByEarlierDriver(pGraphicsDevice, i, pdminfo, pdm))
+            {
+                continue;
+            }
+
             /* Initialize the entry */
             pGraphicsDevice->pDevModeList[i].dwFlags = 0;
             pGraphicsDevice->pDevModeList[i].pdm = pdm;
             i++;
         }
     }
+    pGraphicsDevice->cDevModes = i;
     TRACE("Prepared %lu modes for %ls\n", pGraphicsDevice->cDevModes, pGraphicsDevice->pwszDescription);
     return TRUE;
 }
