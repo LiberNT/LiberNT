@@ -99,12 +99,10 @@ MiWaitForMemory(
         }
     }
 
-    if (MiBalanceMemory(&MiSystem, &MiProcessManager) != 0)
-        return STATUS_SUCCESS;
-
     if (!MiMemoryEventReady)
-        return STATUS_NO_MEMORY;
+        return MiBalanceMemory(&MiSystem, &MiProcessManager) != 0 ? STATUS_SUCCESS : STATUS_NO_MEMORY;
 
+    MiWakeBalanceSetManager();
     Timeout.QuadPart = -10 * 1000 * 10;
     KeWaitForSingleObject(&MiMemoryAvailableEvent, WrFreePage, KernelMode, FALSE, &Timeout);
     return STATUS_SUCCESS;
