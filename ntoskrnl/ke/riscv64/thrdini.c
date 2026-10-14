@@ -237,7 +237,8 @@ BOOLEAN
 KiRiscvIdleWorkPending(_In_ PKPRCB Prcb)
 {
     return Prcb->NextThread || Prcb->DpcData[0].DpcQueueDepth || Prcb->TimerRequest ||
-           Prcb->DeferredReadyListHead.Next || ReadNoFence(&Prcb->RequestSummary);
+           Prcb->DeferredReadyListHead.Next || ReadNoFence(&Prcb->RequestSummary) ||
+           KiIsDpcInterruptRequested(Prcb);
 }
 
 static
@@ -314,7 +315,8 @@ KiIdleLoop(VOID)
         _disable();
         if ((Prcb->DpcData[0].DpcQueueDepth) ||
             (Prcb->TimerRequest) ||
-            (Prcb->DeferredReadyListHead.Next))
+            (Prcb->DeferredReadyListHead.Next) ||
+            KiIsDpcInterruptRequested(Prcb))
         {
             HalClearSoftwareInterrupt(DISPATCH_LEVEL);
             KiRetireDpcListInDpcStack(Prcb, Prcb->DpcStack);
@@ -354,11 +356,18 @@ KiIdleLoop(VOID)
         _disable();
         KeMemoryBarrier();
         if (Prcb->NextThread || Prcb->DpcData[0].DpcQueueDepth ||
-            Prcb->TimerRequest || Prcb->DeferredReadyListHead.Next)
+            Prcb->TimerRequest || Prcb->DeferredReadyListHead.Next ||
+            KiIsDpcInterruptRequested(Prcb))
             continue;
         if (Pcr->InterruptEnable && KiRiscvIdlePoll(Pcr, Prcb))
             continue;
         Prcb->Sleeping = TRUE;
+        KeMemoryBarrier();
+        if (KiRiscvIdleWorkPending(Prcb))
+        {
+            Prcb->Sleeping = FALSE;
+            continue;
+        }
         if (Pcr->InterruptEnable)
             HalpRiscvSuspendClockTick();
         KiRiscvIdleWait(Pcr);
