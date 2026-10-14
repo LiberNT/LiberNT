@@ -519,13 +519,34 @@ WSASocketW(IN INT af,
     /* Find a Provider for the Catalog ID */
     if (lpProtocolInfo)
     {
-        /* Get the catalog ID */
-        CatalogId = lpProtocolInfo->dwCatalogEntryId;
+        if (af == FROM_PROTOCOL_INFO || !af) af = lpProtocolInfo->iAddressFamily;
+        if (type == FROM_PROTOCOL_INFO || !type) type = lpProtocolInfo->iSocketType;
+        if (protocol == FROM_PROTOCOL_INFO || !protocol) protocol = lpProtocolInfo->iProtocol;
 
-        /* Get the Catalog Entry */
-        ErrorCode = WsTcGetEntryFromCatalogEntryId(Catalog,
-                                                   CatalogId,
-                                                   &CatalogEntry);
+        if (af == AF_UNSPEC)
+        {
+            ErrorCode = WSAEAFNOSUPPORT;
+        }
+        else
+        {
+            ErrorCode = WsTcGetEntryFromTriplet(Catalog, af, type, protocol, 0, &CatalogEntry);
+            if (ErrorCode == ERROR_SUCCESS)
+            {
+                WsTcEntryDereference(CatalogEntry);
+
+                /* Get the catalog ID */
+                CatalogId = lpProtocolInfo->dwCatalogEntryId;
+
+                /* Get the Catalog Entry */
+                ErrorCode = WsTcGetEntryFromCatalogEntryId(Catalog,
+                                                           CatalogId,
+                                                           &CatalogEntry);
+            }
+        }
+    }
+    else if (af == AF_UNSPEC && !protocol)
+    {
+        ErrorCode = WSAEINVAL;
     }
     else
     {

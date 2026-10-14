@@ -505,6 +505,7 @@ WsTcGetEntryFromTriplet(IN PTCATALOG Catalog,
                         IN PTCATALOG_ENTRY *CatalogEntry)
 {
     INT ErrorCode = WSAEINVAL;
+    INT MatchLevel = 0;
     PLIST_ENTRY NextEntry;
     PTCATALOG_ENTRY Entry;
     DPRINT("WsTcGetEntryFromTriplet: %lx, %lx, %lx, %lx\n", af, type, protocol, StartId);
@@ -542,9 +543,13 @@ WsTcGetEntryFromTriplet(IN PTCATALOG Catalog,
         /* Check if Address Family Matches or if it's wildcard */
         if ((Entry->ProtocolInfo.iAddressFamily == af) || (af == AF_UNSPEC))
         {
+            if (MatchLevel < 1) MatchLevel = 1;
+
             /* Check if Socket Type Matches or if it's wildcard */
             if ((Entry->ProtocolInfo.iSocketType == type) || (type == 0))
             {
+                if (MatchLevel < 2) MatchLevel = 2;
+
                 /* Check if Protocol is In Range or if it's wildcard */
                 if (((Entry->ProtocolInfo.iProtocol <= protocol) &&
                     ((Entry->ProtocolInfo.iProtocol +
@@ -567,20 +572,12 @@ WsTcGetEntryFromTriplet(IN PTCATALOG Catalog,
                     ErrorCode = ERROR_SUCCESS;
                     break;
                 }
-                else
-                {
-                    ErrorCode = WSAEPROTONOSUPPORT;
-                }
-            }
-            else
-            {
-                ErrorCode = WSAESOCKTNOSUPPORT;
             }
         }
-        else
-        {
-            ErrorCode = WSAEAFNOSUPPORT;
-        }
+
+        if (MatchLevel == 2) ErrorCode = WSAEPROTONOSUPPORT;
+        else if (MatchLevel == 1) ErrorCode = WSAESOCKTNOSUPPORT;
+        else ErrorCode = WSAEAFNOSUPPORT;
     }
 
     /* Release the catalog */
