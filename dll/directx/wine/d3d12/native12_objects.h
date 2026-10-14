@@ -158,6 +158,7 @@ struct Native12SharedTextureData
     UINT signature;
     UINT version;
     D3D11_TEXTURE2D_DESC desc;
+    D3DKMT_HANDLE keyed_mutex;
 };
 
 class Native12Resource final : public Native12Child<ID3D12Resource2>
