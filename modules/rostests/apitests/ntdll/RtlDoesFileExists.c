@@ -172,8 +172,8 @@ START_TEST(RtlDoesFileExists)
         { L"\\??\\",                                    FALSE },
         { L"\\??\\C",                                   FALSE },
         { L"\\??\\C:",                                  FALSE },
-        { L"\\??\\C:\\",                                FALSE }, // TRUE on Win7
-        { L"\\??\\C:\\%ls\\ThisFolderExists",           FALSE }, // TRUE on Win7
+        { L"\\??\\C:\\",                                TRUE },  // TRUE on Win7
+        { L"\\??\\C:\\%ls\\ThisFolderExists",           TRUE },  // TRUE on Win7
     };
     ULONG i;
     WCHAR FileName[MAX_PATH];

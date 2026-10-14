@@ -463,7 +463,7 @@ int main()
 	test(PREP1 "CON:"          , "CON:"            , "CON:");
 	test(PREP2 "CON:"          , "CON:"            , "CON:");
 
-	sprintf(szTmp, "%s\\%s", cd.szCD, "NUL:\\");
+	sprintf(szTmp, "%s%s", cd.szCDPlusSlash, "NUL:\\");
 	test(PREP0 "NUL:\\"        , szTmp             , NULL);
 	test(PREP1 "NUL:\\"        , "NUL:\\"          , NULL);
 	test(PREP2 "NUL:\\"        , "NUL:\\"          , NULL);
