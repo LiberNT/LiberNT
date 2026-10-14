@@ -181,7 +181,7 @@ RvMemmoveRva20(void *Destination, const void *Source, size_t Length)
     unsigned char *Target = (unsigned char *)Destination;
     const unsigned char *From = (const unsigned char *)Source;
 
-    if (Target == From || Length == 0)
+    if (Length == 0)
         return Destination;
     if (Target < From || Target >= From + Length)
         return RvMemcpyRva20(Destination, Source, Length);
