@@ -29,7 +29,7 @@ strcpy(char *Destination, const char *Source)
 void * __cdecl
 memcpy(void *Destination, const void *Source, size_t Length)
 {
-    return RvMemcpyRva20(Destination, Source, Length);
+    return RvMemmoveRva20(Destination, Source, Length);
 }
 
 void * __cdecl

@@ -221,7 +221,7 @@ RvMemmoveScalar(void *Destination, const void *Source, size_t Length)
 void * __cdecl
 memcpy(void *Destination, const void *Source, size_t Length)
 {
-    return RvMemcpy(Destination, Source, Length);
+    return RvMemmove(Destination, Source, Length);
 }
 
 void * __cdecl

@@ -108,10 +108,6 @@ memset:
 
     .p2align 2
     .global RvMemcpyRva23
-#if defined(RV_CRT_RVA23) && !defined(RV_CRT_FAST_UNALIGNED)
-    .global memcpy
-memcpy:
-#endif
 RvMemcpyRva23:
     li t1, 64
     bgtu a2, t1, 3f
@@ -156,6 +152,10 @@ RvMemcpyRva23:
 
     .p2align 2
     .global RvMemmoveRva23
+#if defined(RV_CRT_RVA23) && !defined(RV_CRT_FAST_UNALIGNED)
+    .global memcpy
+memcpy:
+#endif
 #if defined(RV_CRT_RVA23) && defined(RV_CRT_VECTOR_MEMMOVE) && !defined(RV_CRT_FAST_UNALIGNED)
     .global memmove
 memmove:
