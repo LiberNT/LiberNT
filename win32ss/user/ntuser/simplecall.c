@@ -1351,6 +1351,63 @@ NtUserCallHwndParam(
         case HWNDPARAM_ROUTINE_ROS_GETDIRECTSENDPROC:
             return IntGetDirectSendProc(hWnd, (PROS_DIRECTSENDPROC)Param);
 
+        case HWNDPARAM_ROUTINE_ROS_SETDPICHANGEBEHAVIOR:
+        {
+            PWND Window;
+            ULONG Mask = (ULONG)((Param >> 16) & 0x7FFF);
+            ULONG Values = (ULONG)(Param & Mask);
+            BOOL Ret = FALSE;
+
+            UserEnterExclusive();
+            Window = UserGetWindowObject(hWnd);
+            if (Window)
+            {
+                if (Window->head.pti->ppi != PsGetCurrentProcessWin32Process())
+                {
+                    EngSetLastError(ERROR_ACCESS_DENIED);
+                }
+                else if (Param & ROS_DPI_CHANGE_BEHAVIOR_DIALOG)
+                {
+                    if (!(Window->state & WNDS_DIALOGWINDOW))
+                    {
+                        EngSetLastError(ERROR_WINDOW_NOT_DIALOG);
+                    }
+                    else
+                    {
+                        Window->DialogDpiChangeBehavior = (Window->DialogDpiChangeBehavior & ~Mask) | Values;
+                        Ret = TRUE;
+                    }
+                }
+                else
+                {
+                    Window->DialogControlDpiChangeBehavior = (Window->DialogControlDpiChangeBehavior & ~Mask) | Values;
+                    Ret = TRUE;
+                }
+            }
+            UserLeave();
+            return Ret;
+        }
+
+        case HWNDPARAM_ROUTINE_ROS_GETDPICHANGEBEHAVIOR:
+        {
+            PWND Window;
+            DWORD Ret = 0;
+
+            UserEnterShared();
+            Window = UserGetWindowObject(hWnd);
+            if (Window)
+            {
+                if (!(Param & ROS_DPI_CHANGE_BEHAVIOR_DIALOG))
+                    Ret = Window->DialogControlDpiChangeBehavior;
+                else if (Window->state & WNDS_DIALOGWINDOW)
+                    Ret = Window->DialogDpiChangeBehavior;
+                else
+                    EngSetLastError(ERROR_WINDOW_NOT_DIALOG);
+            }
+            UserLeave();
+            return Ret;
+        }
+
         case HWNDPARAM_ROUTINE_ROS_GETWINDOWLONGA:
         case HWNDPARAM_ROUTINE_ROS_GETWINDOWLONGW:
         case HWNDPARAM_ROUTINE_ROS_GETWINDOWWORD:

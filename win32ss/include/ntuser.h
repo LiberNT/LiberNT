@@ -836,6 +836,8 @@ typedef struct _WND
 
     PVOID DialogPointer;
     ULONG DpiContext; /* Awareness context captured from the creating thread. */
+    ULONG DialogDpiChangeBehavior;
+    ULONG DialogControlDpiChangeBehavior;
 } WND, *PWND;
 
 #define PWND_BOTTOM ((PWND)1)
@@ -3837,6 +3839,9 @@ NtUserYieldTask(VOID);
 #define HWNDPARAM_ROUTINE_ROS_GETCLASSLONGW 0x1009
 #define HWNDPARAM_ROUTINE_ROS_GETCLASSWORD 0x100a
 #define HWNDPARAM_ROUTINE_ROS_GETDIRECTSENDPROC 0x100b
+#define HWNDPARAM_ROUTINE_ROS_SETDPICHANGEBEHAVIOR 0x100c
+#define HWNDPARAM_ROUTINE_ROS_GETDPICHANGEBEHAVIOR 0x100d
+#define ROS_DPI_CHANGE_BEHAVIOR_DIALOG 0x80000000
 
 typedef struct _ROS_DIRECTSENDPROC
 {

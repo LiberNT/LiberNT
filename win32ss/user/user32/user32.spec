@@ -290,6 +290,8 @@
 # GetDbgTagFlags
 @ stdcall GetDesktopWindow()
 @ stdcall GetDialogBaseUnits()
+@ stdcall -version=0xA00+ GetDialogControlDpiChangeBehavior(ptr)
+@ stdcall -version=0xA00+ GetDialogDpiChangeBehavior(ptr)
 @ stdcall -version=0x602+ GetDisplayAutoRotationPreferences(ptr)
 @ stdcall -version=0x600+ GetDisplayConfigBufferSizes(long ptr ptr)
 @ stdcall -version=0xA00+ GetAwarenessFromDpiAwarenessContext(long)
@@ -676,6 +678,8 @@
 # SetDbgTag
 @ stdcall SetDebugErrorLevel(long)
 @ stdcall SetDeskWallpaper(ptr)
+@ stdcall -version=0xA00+ SetDialogControlDpiChangeBehavior(ptr long long)
+@ stdcall -version=0xA00+ SetDialogDpiChangeBehavior(ptr long long)
 @ stdcall -version=0x602+ SetDisplayAutoRotationPreferences(long)
 @ stdcall -version=0x600+ SetDisplayConfig(long ptr long ptr long)
 @ stdcall SetDlgItemInt(long long long long)

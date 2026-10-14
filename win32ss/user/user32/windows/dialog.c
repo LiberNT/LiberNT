@@ -3017,3 +3017,48 @@ CheckRadioButton(
 
   return EnumChildWindows(hDlg, CheckRB, (LPARAM)&radioGroup);
 }
+
+static
+BOOL
+IntSetDpiChangeBehavior(HWND hWnd, ULONG Kind, ULONG ValidMask, ULONG Mask, ULONG Values)
+{
+    Mask &= ValidMask;
+    return (BOOL)NtUserCallHwndParam(hWnd, Kind | (Mask << 16) | (Values & Mask), HWNDPARAM_ROUTINE_ROS_SETDPICHANGEBEHAVIOR);
+}
+
+BOOL
+WINAPI
+SetDialogControlDpiChangeBehavior(
+    HWND hWnd,
+    DIALOG_CONTROL_DPI_CHANGE_BEHAVIORS mask,
+    DIALOG_CONTROL_DPI_CHANGE_BEHAVIORS values)
+{
+    return IntSetDpiChangeBehavior(hWnd, 0, DCDC_DISABLE_FONT_UPDATE | DCDC_DISABLE_RELAYOUT, mask, values);
+}
+
+DIALOG_CONTROL_DPI_CHANGE_BEHAVIORS
+WINAPI
+GetDialogControlDpiChangeBehavior(
+    HWND hWnd)
+{
+    return (DIALOG_CONTROL_DPI_CHANGE_BEHAVIORS)NtUserCallHwndParam(hWnd, 0, HWNDPARAM_ROUTINE_ROS_GETDPICHANGEBEHAVIOR);
+}
+
+BOOL
+WINAPI
+SetDialogDpiChangeBehavior(
+    HWND hDlg,
+    DIALOG_DPI_CHANGE_BEHAVIORS mask,
+    DIALOG_DPI_CHANGE_BEHAVIORS values)
+{
+    return IntSetDpiChangeBehavior(hDlg, ROS_DPI_CHANGE_BEHAVIOR_DIALOG,
+                                   DDC_DISABLE_ALL | DDC_DISABLE_RESIZE | DDC_DISABLE_CONTROL_RELAYOUT, mask, values);
+}
+
+DIALOG_DPI_CHANGE_BEHAVIORS
+WINAPI
+GetDialogDpiChangeBehavior(
+    HWND hDlg)
+{
+    return (DIALOG_DPI_CHANGE_BEHAVIORS)NtUserCallHwndParam(hDlg, ROS_DPI_CHANGE_BEHAVIOR_DIALOG, HWNDPARAM_ROUTINE_ROS_GETDPICHANGEBEHAVIOR);
+}
