@@ -21,6 +21,7 @@ EXTERN KiNpxNotAvailableFaultHandler:PROC
 EXTERN KiGeneralProtectionFaultHandler:PROC
 EXTERN KiInvalidOpcodeFaultHandler:PROC
 EXTERN KiXmmExceptionHandler:PROC
+EXTERN KiMcheckAbortHandler:PROC
 EXTERN KiDeliverApc:PROC
 EXTERN KiDpcInterruptHandler:PROC
 EXTERN KiIpiInterruptHandler:PROC
@@ -734,6 +735,9 @@ PUBLIC KiMcheckAbort
 FUNC KiMcheckAbort
     /* Push pseudo error code */
     EnterTrap TF_SAVE_ALL
+
+    mov rcx, rbp
+    call KiMcheckAbortHandler
 
     /* Bugcheck */
     Fatal HEX(12)

@@ -35,6 +35,7 @@ extern "C" {
 #define X86_FEATURE_PSE         0x00000008 /* Page Size Extension is present */
 #define X86_FEATURE_TSC         0x00000010 /* time stamp counters are present */
 #define X86_FEATURE_PAE         0x00000040 /* physical address extension is present */
+#define X86_FEATURE_MCE         0x00000080
 #define X86_FEATURE_CX8         0x00000100 /* CMPXCHG8B instruction present */
 #define X86_FEATURE_SYSCALL     0x00000800 /* SYSCALL/SYSRET support present */
 #define X86_FEATURE_MTRR        0x00001000 /* Memory type range registers are present */

@@ -1225,6 +1225,14 @@ If this is the first time you have seen this error screen, read
 If problems continue, remove all nonfree software from your computer.
 .
 
+MessageId=0x9C
+Severity=Success
+Facility=System
+SymbolicName=MACHINE_CHECK_EXCEPTION
+Language=English
+MACHINE_CHECK_EXCEPTION
+.
+
 MessageId=0x9F
 Severity=Success
 Facility=System

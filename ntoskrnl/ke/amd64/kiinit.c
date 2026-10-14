@@ -490,6 +490,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     PKTHREAD InitialThread;
     ULONG64 InitialStack;
     PKIPCR Pcr;
+    CPU_INFO CpuInfo;
 
     /* Boot cycles timestamp */
     BootCycles = __rdtsc();
@@ -543,6 +544,10 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         /* Initialize the kernel VA layout */
         MiInitializeKernelVaLayout(LoaderBlock);
     }
+
+    KiCpuId(&CpuInfo, 1);
+    if (CpuInfo.Edx & X86_FEATURE_MCE)
+        __writecr4(__readcr4() | CR4_MCE);
 
     /* Acquire lock */
     while (InterlockedBitTestAndSet64((PLONG64)&KiFreezeExecutionLock, 0))

@@ -819,6 +819,48 @@ KiGeneralProtectionFaultHandler(
     return STATUS_UNSUCCESSFUL;
 }
 
+DECLSPEC_NORETURN
+VOID
+NTAPI
+KiMcheckAbortHandler(
+    IN PKTRAP_FRAME TrapFrame)
+{
+    ULONG64 Status, Address, Misc, ReportedStatus = 0;
+    ULONG Bank, BankCount, ReportedBank = 0;
+    BOOLEAN Found = FALSE;
+
+    BankCount = (ULONG)(__readmsr(MSR_MCG_CAP) & 0xFF);
+    DbgPrint("Machine check on processor %lu, global status 0x%I64x\n",
+             KeGetCurrentProcessorNumber(),
+             __readmsr(MSR_MCG_STATUS));
+
+    for (Bank = 0; Bank < BankCount; Bank++)
+    {
+        Status = __readmsr(MSR_MC0_STATUS + 4 * Bank);
+        if (!(Status & (1ULL << 63)))
+            continue;
+
+        Address = (Status & (1ULL << 58)) ? __readmsr(MSR_MC0_ADDR + 4 * Bank) : 0;
+        Misc = (Status & (1ULL << 59)) ? __readmsr(MSR_MC0_MISC + 4 * Bank) : 0;
+        DbgPrint("Machine check bank %lu: status 0x%I64x, address 0x%I64x, misc 0x%I64x\n",
+                 Bank, Status, Address, Misc);
+
+        if (!Found || ((Status & (1ULL << 61)) && !(ReportedStatus & (1ULL << 61))))
+        {
+            Found = TRUE;
+            ReportedBank = Bank;
+            ReportedStatus = Status;
+        }
+    }
+
+    KeBugCheckWithTf(MACHINE_CHECK_EXCEPTION,
+                     ReportedBank,
+                     0,
+                     (ULONG_PTR)(ReportedStatus >> 32),
+                     (ULONG_PTR)(ReportedStatus & 0xFFFFFFFF),
+                     TrapFrame);
+}
+
 NTSTATUS
 NTAPI
 KiXmmExceptionHandler(
