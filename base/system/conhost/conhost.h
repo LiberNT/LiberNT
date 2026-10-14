@@ -117,6 +117,7 @@ struct cell_color
 {
     COLORREF fg;
     COLORREF bg;
+    COLORREF underline;
 };
 #endif
 
@@ -143,6 +144,7 @@ struct screen_buffer
 #ifdef __REACTOS__
     struct vt_state       *vt;
     struct cell_color     *colors;
+    unsigned int           vt_cursor_size;
 #endif
 };
 

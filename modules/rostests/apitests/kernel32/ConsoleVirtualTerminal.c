@@ -286,8 +286,8 @@ TestEditStartup(HANDLE Input,
 
     ok(ReadCell(Output, MarkerPosition.X, MarkerPosition.Y) == L' ',
        "Primary-screen marker remained visible on the alternate screen\n");
-    ok(ReadCell(Output, 0, 0) == 0x2026,
-       "Expected the UTF-8 ellipsis at the alternate-screen origin\n");
+    ok(ReadCell(Output, 0, MarkerPosition.Y) == 0x2026,
+       "Expected the UTF-8 ellipsis at the start of the cursor row\n");
 
     RecordsRead = 0;
     CharacterCount = ReadVtCharacters(ReadConsoleInputExW_,
@@ -296,16 +296,15 @@ TestEditStartup(HANDLE Input,
                                       ARRAYSIZE(Responses),
                                       &RecordsRead);
     trace("Edit startup returned %lu input records\n", RecordsRead);
-    ok(CountOccurrences(Responses, CharacterCount, L"\x1b]4;") == 16,
-       "Expected 16 OSC 4 palette replies\n");
-    ok(Contains(Responses, CharacterCount, L"\x1b]10;rgb:"),
-       "Missing OSC 10 foreground-colour reply\n");
-    ok(Contains(Responses, CharacterCount, L"\x1b]11;rgb:"),
-       "Missing OSC 11 background-colour reply\n");
-    ok(Contains(Responses, CharacterCount, L"\x1b[1;2R") ||
-       Contains(Responses, CharacterCount, L"\x1b[1;3R"),
+    ok(CountOccurrences(Responses, CharacterCount, L"\x1b]4;") == 0,
+       "Unexpected OSC 4 palette replies\n");
+    ok(!Contains(Responses, CharacterCount, L"\x1b]10;"),
+       "Unexpected OSC 10 foreground-colour reply\n");
+    ok(!Contains(Responses, CharacterCount, L"\x1b]11;"),
+       "Unexpected OSC 11 background-colour reply\n");
+    ok(Contains(Responses, CharacterCount, L"\x1b[4;2R"),
        "Missing cursor-position reply for the ambiguous-width probe\n");
-    ok(Contains(Responses, CharacterCount, L"\x1b[?1;0c"),
+    ok(Contains(Responses, CharacterCount, L"\x1b[?61;1;6;7;21;22;23;24;28;32;42c"),
        "Missing primary device-attributes reply\n");
 
     WriteVt(Output, EditRestore, sizeof(EditRestore) - 1);
@@ -326,8 +325,8 @@ TestEditStartup(HANDLE Input,
     }
 
     WRITE_VT(Output, "\x1b[?1047h");
-    ok(ReadCell(Output, MarkerPosition.X, MarkerPosition.Y) == L' ',
-       "Primary-screen marker remained visible in DECSET 1047\n");
+    ok(ReadCell(Output, MarkerPosition.X, MarkerPosition.Y) == L'P',
+       "DECSET 1047 switched away from the primary screen\n");
     WRITE_VT(Output, "A\x1b[?1047l");
     ok(ReadCell(Output, MarkerPosition.X, MarkerPosition.Y) == L'P',
        "DECSET 1047 did not restore the primary screen\n");
@@ -424,8 +423,8 @@ TestEditRendering(HANDLE Output)
     ok(ReadCell(Output, 2, 1) == L'E',
        "True-colour SGR sequence did not render its text at column 3, row 2\n");
     Attribute = ReadCellAttribute(Output, 2, 1);
-    ok((Attribute & COMMON_LVB_UNDERSCORE) != 0,
-       "SGR 4 did not apply the underline attribute\n");
+    ok((Attribute & COMMON_LVB_UNDERSCORE) == 0,
+       "SGR 4 set the legacy underline attribute\n");
     ok(ReadCell(Output, 3, 1) == L'F',
        "SGR reset sequence did not render the following character\n");
     Attribute = ReadCellAttribute(Output, 3, 1);
@@ -440,7 +439,8 @@ TestEditRendering(HANDLE Output)
         Success = GetConsoleCursorInfo(Output, &Cursor);
         ok(Success, "GetConsoleCursorInfo failed with error %lu\n", GetLastError());
         if (Success)
-            ok(Cursor.dwSize == 100, "Block cursor size is %lu, expected 100\n", Cursor.dwSize);
+            ok(Cursor.dwSize == DefaultCursor.dwSize, "Block cursor size is %lu, expected %lu\n",
+               Cursor.dwSize, DefaultCursor.dwSize);
 
         WRITE_VT(Output, "\x1b[5 q");
         Success = GetConsoleCursorInfo(Output, &Cursor);

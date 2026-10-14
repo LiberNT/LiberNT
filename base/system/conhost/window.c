@@ -506,7 +506,8 @@ static void fill_mem_dc( struct console *console, const RECT *update )
             SetBkColor( console->window->mem_dc, bg );
             SetTextColor( console->window->mem_dc, fg );
             for (k = i; k <= update->right && cell[k].attr == attr &&
-                        (!colors || (colors[k].fg == colors[i].fg && colors[k].bg == colors[i].bg)); k++)
+                        (!colors || (colors[k].fg == colors[i].fg && colors[k].bg == colors[i].bg &&
+                                     colors[k].underline == colors[i].underline)); k++)
 #else
             SetBkColor( console->window->mem_dc, console->active->color_map[(attr >> 4) & 0x0F] );
             SetTextColor( console->window->mem_dc, console->active->color_map[attr & 0x0F] );
@@ -533,7 +534,8 @@ static void fill_mem_dc( struct console *console, const RECT *update )
                 DeleteObject( brush );
             }
 #ifdef __REACTOS__
-            if ((attr & COMMON_LVB_UNDERSCORE) && (brush = CreateSolidBrush( fg )))
+            if (((attr & COMMON_LVB_UNDERSCORE) || (colors && colors[i].underline != CLR_INVALID)) &&
+                (brush = CreateSolidBrush( fg )))
             {
                 r.left   = i * console->active->font.width;
                 r.top    = (j + 1) * console->active->font.height - console->window->ext_leading - 1;
@@ -564,7 +566,11 @@ static void update_window_cursor( struct console *console )
 /* sets a new shape for the cursor */
 static void shape_cursor( struct console *console )
 {
+#ifdef __REACTOS__
+    int size = console->active->vt_cursor_size ? console->active->vt_cursor_size : console->active->cursor_size;
+#else
     int size = console->active->cursor_size;
+#endif
 
 #ifdef __REACTOS__
     if (console->window->cursor_visible && console->win == GetFocus()) DestroyCaret();
@@ -749,11 +755,21 @@ static void update_window( struct console *console )
         UpdateWindow( console->win );
     }
 
+#ifdef __REACTOS__
+    if (update_all || (console->active->vt_cursor_size ? console->active->vt_cursor_size : console->active->cursor_size) !=
+                      console->window->cursor_size)
+    {
+        console->window->cursor_size = console->active->vt_cursor_size ? console->active->vt_cursor_size
+                                                                         : console->active->cursor_size;
+        shape_cursor( console );
+    }
+#else
     if (update_all || console->active->cursor_size != console->window->cursor_size)
     {
         console->window->cursor_size = console->active->cursor_size;
         shape_cursor( console );
     }
+#endif
 
     if (console->active->cursor_visible != console->window->cursor_visible)
     {
