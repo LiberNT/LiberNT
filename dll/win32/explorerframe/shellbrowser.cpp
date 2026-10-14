@@ -318,6 +318,7 @@ private:
     SBFOLDERSETTINGS m_deffoldersettings;
     DWORD m_BrowserSvcFlags;
     LONG m_ShellWindowsCookie;
+    CComPtr<IShellWindows> m_ShellWindows;
     VARIANT_BOOL m_bOffline;
     VARIANT_BOOL m_bSilent;
     CComBSTR m_StatusText;
@@ -1193,13 +1194,8 @@ HRESULT CShellBrowser::BrowseToPath(IShellFolder *newShellFolder,
         FireNavigateComplete(L"ERROR");
     }
 
-    if (m_ShellWindowsCookie && fCurrentDirectoryPIDL)
-    {
-        CComPtr<IShellWindows> pShellWindows;
-        pShellWindows.Attach(WinList_GetShellWindows(FALSE));
-        if (pShellWindows)
-            WinList_NotifyNewLocation(pShellWindows, m_ShellWindowsCookie, fCurrentDirectoryPIDL);
-    }
+    if (m_ShellWindowsCookie && fCurrentDirectoryPIDL && m_ShellWindows)
+        WinList_NotifyNewLocation(m_ShellWindows, m_ShellWindowsCookie, fCurrentDirectoryPIDL);
 
     UpdateWindowTitle();
 
@@ -2910,26 +2906,26 @@ HRESULT STDMETHODCALLTYPE CShellBrowser::GetPalette(HPALETTE *hpal)
 
 HRESULT STDMETHODCALLTYPE CShellBrowser::RegisterWindow(BOOL fForceRegister, int swc)
 {
-    CComPtr<IShellWindows> pShellWindows;
     HRESULT hr;
 
     if (m_ShellWindowsCookie && !fForceRegister)
         return S_OK;
 
-    pShellWindows.Attach(WinList_GetShellWindows(TRUE));
-    if (!pShellWindows)
+    if (!m_ShellWindows)
+        m_ShellWindows.Attach(WinList_GetShellWindows(TRUE));
+    if (!m_ShellWindows)
         return E_FAIL;
 
     if (m_ShellWindowsCookie)
     {
-        pShellWindows->Revoke(m_ShellWindowsCookie);
+        m_ShellWindows->Revoke(m_ShellWindowsCookie);
         m_ShellWindowsCookie = 0;
     }
 
-    hr = pShellWindows->Register(static_cast<IDispatch *>(static_cast<IWebBrowser2 *>(this)),
-                                 HandleToLong(m_hWnd), swc, &m_ShellWindowsCookie);
+    hr = m_ShellWindows->Register(static_cast<IDispatch *>(static_cast<IWebBrowser2 *>(this)),
+                                  HandleToLong(m_hWnd), swc, &m_ShellWindowsCookie);
     if (SUCCEEDED(hr) && fCurrentDirectoryPIDL)
-        WinList_NotifyNewLocation(pShellWindows, m_ShellWindowsCookie, fCurrentDirectoryPIDL);
+        WinList_NotifyNewLocation(m_ShellWindows, m_ShellWindowsCookie, fCurrentDirectoryPIDL);
     return hr;
 }
 
@@ -4065,11 +4061,10 @@ LRESULT CShellBrowser::OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &
     }
     SaveViewState();
 
-    if (m_ShellWindowsCookie)
-    {
-        WinList_Revoke(m_ShellWindowsCookie);
-        m_ShellWindowsCookie = 0;
-    }
+    if (m_ShellWindowsCookie && m_ShellWindows)
+        m_ShellWindows->Revoke(m_ShellWindowsCookie);
+    m_ShellWindowsCookie = 0;
+    m_ShellWindows.Release();
 
     /* The current thread is about to go down so render any IDataObject that may be left in the clipboard */
     OleFlushClipboard();

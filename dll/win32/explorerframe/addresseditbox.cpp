@@ -94,9 +94,7 @@ HRESULT CAddressEditBox::RefreshAddress()
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
-    /* Fill the combobox */
     ATLASSERT(absolutePIDL != NULL);
-    PopulateComboBox(absolutePIDL);
 
     /* Get pShellFolder and pidlChild */
     CComPtr<IShellFolder> pShellFolder;
@@ -402,6 +400,12 @@ HRESULT STDMETHODCALLTYPE CAddressEditBox::OnWinEvent(
                     m_pidlLastParsed.Attach(ILClone(pidl));
 
                 Execute(0);
+            }
+            else if (HIWORD(wParam) == CBN_DROPDOWN && fCombobox == (HWND)lParam)
+            {
+                CComHeapPtr<ITEMIDLIST> absolutePIDL;
+                if (SUCCEEDED(GetAbsolutePidl(&absolutePIDL)))
+                    PopulateComboBox(absolutePIDL);
             }
             break;
         }
