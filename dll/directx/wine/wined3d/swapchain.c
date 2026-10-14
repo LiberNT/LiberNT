@@ -1562,6 +1562,23 @@ static const struct wined3d_swapchain_ops swapchain_no3d_ops =
     swapchain_gdi_frontbuffer_updated,
 };
 
+#ifdef __REACTOS__
+static void swapchain_null_present(struct wined3d_swapchain *swapchain,
+        const RECT *src_rect, const RECT *dst_rect, unsigned int swap_interval, uint32_t flags)
+{
+}
+
+static void swapchain_null_frontbuffer_updated(struct wined3d_swapchain *swapchain)
+{
+}
+
+static const struct wined3d_swapchain_ops swapchain_null_ops =
+{
+    swapchain_null_present,
+    swapchain_null_frontbuffer_updated,
+};
+#endif
+
 static void wined3d_swapchain_apply_sample_count_override(const struct wined3d_swapchain *swapchain,
         enum wined3d_format_id format_id, enum wined3d_multisample_type *type, unsigned int *quality)
 {
@@ -1726,7 +1743,11 @@ static HRESULT swapchain_create_texture(struct wined3d_swapchain *swapchain,
     texture_desc.multisample_type = swapchain_desc->multisample_type;
     texture_desc.multisample_quality = swapchain_desc->multisample_quality;
     texture_desc.usage = 0;
+#ifdef __REACTOS__
+    if (!depth && (device->wined3d->flags & WINED3D_NO3D) && !(device->wined3d->flags & WINED3D_NULL_DRIVER))
+#else
     if (!depth && (device->wined3d->flags & WINED3D_NO3D))
+#endif
         texture_desc.usage |= WINED3DUSAGE_OWNDC;
     if (device->wined3d->flags & WINED3D_NO3D)
         texture_desc.access = WINED3D_RESOURCE_ACCESS_CPU;
@@ -1976,6 +1997,11 @@ HRESULT wined3d_swapchain_no3d_init(struct wined3d_swapchain *swapchain_no3d, st
     TRACE("swapchain_no3d %p, device %p, desc %p, state_parent %p, parent %p, parent_ops %p.\n",
             swapchain_no3d, device, desc, state_parent, parent, parent_ops);
 
+#ifdef __REACTOS__
+    if (device->wined3d->flags & WINED3D_NULL_DRIVER)
+        return wined3d_swapchain_init(swapchain_no3d, device, desc, state_parent, parent, parent_ops,
+                &swapchain_null_ops);
+#endif
     return wined3d_swapchain_init(swapchain_no3d, device, desc, state_parent, parent, parent_ops,
             &swapchain_no3d_ops);
 }
