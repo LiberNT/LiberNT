@@ -496,6 +496,8 @@
 @ stdcall IsWindow(long)
 @ stdcall -version=0xA00+ IsWindowArranged(long)
 @ stdcall -stub -version=0xA00+ InjectSyntheticPointerInput(ptr ptr long)
+@ stdcall -version=0x602+ InitializeTouchInjection(long long)
+@ stdcall -version=0x602+ InjectTouchInput(long ptr)
 @ stdcall IsWindowEnabled(long)
 @ stdcall IsWindowInDestroy(long)
 @ stdcall -version=0x600+ IsWindowRedirectedForPrint(long)

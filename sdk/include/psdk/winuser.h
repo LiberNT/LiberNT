@@ -5064,6 +5064,15 @@ BOOL WINAPI GetPointerDevice(_In_ HANDLE, _Out_ POINTER_DEVICE_INFO*);
 BOOL WINAPI GetPointerFrameTouchInfo(_In_ UINT32 pointerId, _Inout_ UINT32 *pointerCount, _Out_writes_opt_(*pointerCount) POINTER_TOUCH_INFO *touchInfo);
 BOOL WINAPI GetPointerPenInfo(_In_ UINT32, _Out_ POINTER_PEN_INFO*);
 BOOL WINAPI GetPointerType(_In_ UINT32, _Out_ POINTER_INPUT_TYPE*);
+
+#define MAX_TOUCH_COUNT 256
+
+#define TOUCH_FEEDBACK_DEFAULT 0x1
+#define TOUCH_FEEDBACK_INDIRECT 0x2
+#define TOUCH_FEEDBACK_NONE 0x3
+
+BOOL WINAPI InitializeTouchInjection(_In_ UINT32 maxCount, _In_ DWORD dwMode);
+BOOL WINAPI InjectTouchInput(_In_ UINT32 count, _In_reads_(count) CONST POINTER_TOUCH_INFO *contacts);
 #endif
 
 #if (WINVER >= 0x0602) && (NTDDI_VERSION >= NTDDI_WIN10_RS5)

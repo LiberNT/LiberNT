@@ -119,6 +119,38 @@ GetPointerPenInfoHistory(
 
 BOOL
 WINAPI
+InitializeTouchInjection(
+    _In_ UINT32 maxCount,
+    _In_ DWORD dwMode)
+{
+    if (maxCount == 0 || maxCount > MAX_TOUCH_COUNT ||
+        (dwMode != TOUCH_FEEDBACK_DEFAULT && dwMode != TOUCH_FEEDBACK_INDIRECT && dwMode != TOUCH_FEEDBACK_NONE))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+BOOL
+WINAPI
+InjectTouchInput(
+    _In_ UINT32 count,
+    _In_reads_(count) const POINTER_TOUCH_INFO *contacts)
+{
+    if (count == 0 || count > MAX_TOUCH_COUNT || contacts == NULL)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    return FALSE;
+}
+
+BOOL
+WINAPI
 SkipPointerFrameMessages(
     _In_ UINT32 pointerId)
 {
