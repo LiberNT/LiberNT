@@ -587,14 +587,20 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     UINT64 *versions = static_cast<UINT64 *>(HeapAlloc(GetProcessHeap(), 0, version_count * sizeof(*versions)));
     if (!versions) return E_OUTOFMEMORY;
     UINT32 capacity = version_count;
-    bool supported = false;
+    bool offers_0110 = false, offers_0102 = false;
     if (SUCCEEDED(adapter_functions.pfnGetSupportedVersions(driver_adapter, &version_count, versions)))
         for (UINT32 i = 0; i < version_count && i < capacity; ++i)
-            if (versions[i] == D3D12DDI_SUPPORTED_0110) supported = true;
+        {
+            if (versions[i] == D3D12DDI_SUPPORTED_0110) offers_0110 = true;
+            if (versions[i] == D3D12DDI_SUPPORTED_0102) offers_0102 = true;
+        }
     HeapFree(GetProcessHeap(), 0, versions);
-    if (!supported)
+    if (offers_0110) ddi_build = D3D12DDI_BUILD_VERSION_0110;
+    else if (offers_0102) ddi_build = D3D12DDI_BUILD_VERSION_0102;
+    else
     {
-        WARN("The driver does not offer D3D12 DDI build %u.\n", NATIVE12_DDI_BUILD);
+        WARN("The driver offers neither D3D12 DDI build %u nor %u.\n", D3D12DDI_BUILD_VERSION_0110,
+                D3D12DDI_BUILD_VERSION_0102);
         return DXGI_ERROR_UNSUPPORTED;
     }
 
@@ -667,7 +673,7 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
 
     D3D12DDIARG_CALCPRIVATEDEVICESIZE size_args = {};
     size_args.Interface = NATIVE12_DDI_INTERFACE;
-    size_args.Version = NATIVE12_DDI_BUILD << 16;
+    size_args.Version = ddi_build << 16;
     SIZE_T private_size = adapter_functions.pfnCalcPrivateDeviceSize(driver_adapter, &size_args);
     if (!private_size) return E_FAIL;
     driver_device_storage = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, private_size);
@@ -694,14 +700,15 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     create_args.p12UMCallbacks_0062 = &core_callbacks;
     if (FAILED(hr = adapter_functions.pfnCreateDevice(driver_adapter, &create_args)))
     {
-        WARN("The driver failed to create a DDI build %u device, hr %#lx.\n", NATIVE12_DDI_BUILD, hr);
+        WARN("The driver failed to create a DDI build %u device, hr %#lx.\n", ddi_build, hr);
         return hr;
     }
     driver_created = true;
 
     D3D12DDI_HRTTABLE table = {};
     if (FAILED(hr = adapter_functions.pfnFillDDITable(driver_adapter, D3D12DDI_TABLE_TYPE_DEVICE_CORE,
-            &functions, sizeof(functions), 0, table)))
+            &functions, ddi_build >= D3D12DDI_BUILD_VERSION_0110 ? sizeof(functions)
+                    : FIELD_OFFSET(NATIVE12_DEVICE_FUNCS, pfnGetProgramIdentifier), 0, table)))
     {
         WARN("The driver failed to fill the device table, hr %#lx.\n", hr);
         return hr;
@@ -714,7 +721,8 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     }
     table.handle = &list_functions;
     if (FAILED(hr = adapter_functions.pfnFillDDITable(driver_adapter, D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D,
-            &list_functions, sizeof(list_functions), 0, table)))
+            &list_functions, ddi_build >= D3D12DDI_BUILD_VERSION_0110 ? sizeof(list_functions)
+                    : FIELD_OFFSET(NATIVE12_LIST_FUNCS, pfnSetProgram), 0, table)))
     {
         WARN("The driver failed to fill the command list table, hr %#lx.\n", hr);
         return hr;
