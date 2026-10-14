@@ -16,6 +16,7 @@
 #endif
 #include <wmidata.h>
 #include <wmistr.h>
+#include <drivers/acpi/acpi.h>
 #include <drivers/acpi/acpisystem.h>
 #define NDEBUG
 #include <debug.h>
@@ -3249,20 +3250,18 @@ QSI_DEF(SystemFirmwareTableInformation)
                                                    Entries,
                                                    Capacity * sizeof(*Entries),
                                                    &Information);
-                    if (Status != STATUS_BUFFER_TOO_SMALL)
+                    if (Status != STATUS_BUFFER_OVERFLOW)
                         break;
 
                     ExFreePoolWithTag(Entries, 'tfwA');
                     Entries = NULL;
 
-                    if (Information <= (ULONG_PTR)(Capacity * sizeof(*Entries)) ||
-                        Information > EXP_ACPI_TABLE_LIMIT ||
-                        Information % sizeof(*Entries) != 0)
+                    if (Capacity * sizeof(*Entries) >= EXP_ACPI_TABLE_LIMIT)
                     {
                         Status = STATUS_ACPI_INVALID_DATA;
                         break;
                     }
-                    Capacity = (ULONG)(Information / sizeof(*Entries));
+                    Capacity *= 2;
                 }
 
                 if (Status == STATUS_NOT_FOUND)
@@ -3306,6 +3305,7 @@ QSI_DEF(SystemFirmwareTableInformation)
             else if (SysFirmwareInfo->Action == SystemFirmwareTable_Get)
             {
                 ACPI_GET_SYSTEM_TABLE_INPUT Input;
+                DESCRIPTION_HEADER Header;
                 ULONG_PTR Information = 0;
 
                 RtlZeroMemory(&Input, sizeof(Input));
@@ -3317,19 +3317,49 @@ QSI_DEF(SystemFirmwareTableInformation)
                 Status = ExpSendAcpiTableIoctl(IOCTL_ACPI_GET_SYSTEM_TABLE,
                                                &Input,
                                                sizeof(Input),
-                                               SysFirmwareInfo->TableBuffer,
-                                               DataBufSize,
+                                               &Header,
+                                               sizeof(Header),
                                                &Information);
-                if (Information > EXP_ACPI_TABLE_LIMIT)
+                if (Status == STATUS_BUFFER_OVERFLOW)
                 {
-                    Status = STATUS_ACPI_INVALID_DATA;
-                    break;
+                    if (Information != sizeof(Header) ||
+                        Header.Length <= sizeof(Header) ||
+                        Header.Length > EXP_ACPI_TABLE_LIMIT)
+                    {
+                        Status = STATUS_ACPI_INVALID_DATA;
+                        break;
+                    }
+
+                    DataSize = Header.Length;
+                    Status = STATUS_SUCCESS;
+                    if (DataSize <= DataBufSize)
+                    {
+                        Status = ExpSendAcpiTableIoctl(IOCTL_ACPI_GET_SYSTEM_TABLE,
+                                                       &Input,
+                                                       sizeof(Input),
+                                                       SysFirmwareInfo->TableBuffer,
+                                                       DataBufSize,
+                                                       &Information);
+                        if (NT_SUCCESS(Status) && Information != DataSize)
+                            Status = STATUS_ACPI_INVALID_DATA;
+                    }
+                }
+                else if (NT_SUCCESS(Status))
+                {
+                    if (Information != sizeof(Header))
+                    {
+                        Status = STATUS_ACPI_INVALID_DATA;
+                        break;
+                    }
+
+                    DataSize = sizeof(Header);
+                    if (DataSize <= DataBufSize)
+                        RtlCopyMemory(SysFirmwareInfo->TableBuffer, &Header, DataSize);
                 }
 
-                if (Status == STATUS_BUFFER_TOO_SMALL)
-                    Status = STATUS_SUCCESS;
+                if (!NT_SUCCESS(Status))
+                    break;
 
-                DataSize = (ULONG)Information;
                 SysFirmwareInfo->TableBufferLength = DataSize;
                 *ReqSize += DataSize;
             }

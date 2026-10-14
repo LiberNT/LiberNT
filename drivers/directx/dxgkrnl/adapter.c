@@ -63,6 +63,7 @@
 #include "adapter_start_core.h"
 
 #include <ndk/inbvfuncs.h>
+#include <drivers/acpi/acpi.h>
 #include <drivers/acpi/acpisystem.h>
 #include <reactos/arc/arc.h>
 #include <reactos/drivers/acpi/acpipci.h>
@@ -10765,18 +10766,15 @@ DxgkpFirmwareTableEnumTables(
                                              Entries,
                                              Capacity * EntrySize,
                                              &Information);
-        if (Status != STATUS_BUFFER_TOO_SMALL)
+        if (Status != STATUS_BUFFER_OVERFLOW)
             break;
 
         ExFreePoolWithTag(Entries, TAG_DXGK_RESOURCES);
         Entries = NULL;
 
-        if (Information <= (ULONG_PTR)(Capacity * EntrySize) ||
-            Information > DXGKP_FIRMWARE_TABLE_LIMIT)
-        {
+        if (Capacity * EntrySize >= DXGKP_FIRMWARE_TABLE_LIMIT)
             return STATUS_ACPI_INVALID_DATA;
-        }
-        Capacity = (ULONG)(Information / EntrySize);
+        Capacity *= 2;
     }
 
     if (!NT_SUCCESS(Status))
@@ -10818,6 +10816,7 @@ DxgkpFirmwareTableReadTable(
     _Out_ PULONG RequiredSize)
 {
     ACPI_GET_SYSTEM_TABLE_INPUT Input;
+    DESCRIPTION_HEADER Header;
     ULONG_PTR Information = 0;
     NTSTATUS Status;
 
@@ -10842,9 +10841,35 @@ DxgkpFirmwareTableReadTable(
     Status = DxgkpFirmwareTableSendIoctl(IOCTL_ACPI_GET_SYSTEM_TABLE,
                                          &Input,
                                          sizeof(Input),
-                                         Buffer,
-                                         BufferSize,
+                                         &Header,
+                                         sizeof(Header),
                                          &Information);
+    if (Status == STATUS_BUFFER_OVERFLOW)
+    {
+        if (Information != sizeof(Header) || Header.Length <= sizeof(Header))
+            return STATUS_ACPI_INVALID_DATA;
+
+        Information = Header.Length;
+        Status = STATUS_BUFFER_TOO_SMALL;
+        if (BufferSize >= Header.Length)
+        {
+            Status = DxgkpFirmwareTableSendIoctl(IOCTL_ACPI_GET_SYSTEM_TABLE,
+                                                 &Input,
+                                                 sizeof(Input),
+                                                 Buffer,
+                                                 BufferSize,
+                                                 &Information);
+            if (NT_SUCCESS(Status) && Information != Header.Length)
+                return STATUS_ACPI_INVALID_DATA;
+        }
+    }
+    else if (NT_SUCCESS(Status))
+    {
+        if (BufferSize < Information)
+            Status = STATUS_BUFFER_TOO_SMALL;
+        else
+            RtlCopyMemory(Buffer, &Header, Information);
+    }
 
     if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_TOO_SMALL)
         DXGKRNL_WARN("firmware table '%.4s' provider '%.4s' failed 0x%08lx\n",

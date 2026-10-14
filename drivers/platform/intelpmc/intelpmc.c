@@ -184,6 +184,7 @@ IntelPmcReadAcpiTable(
     PWSTR InterfaceList = NULL;
     PUCHAR Buffer = NULL;
     ULONG BufferLength = 256;
+    ULONG NewLength;
     ULONG_PTR Information = 0;
     NTSTATUS Status;
 
@@ -212,16 +213,17 @@ IntelPmcReadAcpiTable(
             break;
         }
         Status = IntelPmcSendIoctlSynchronously(DeviceObject, IOCTL_ACPI_GET_SYSTEM_TABLE, &Input, sizeof(Input), Buffer, BufferLength, &Information);
-        if (Status != STATUS_BUFFER_TOO_SMALL)
+        if (Status != STATUS_BUFFER_OVERFLOW)
             break;
+        NewLength = Information >= sizeof(INTELPMC_ACPI_TABLE_HEADER) ? ((PINTELPMC_ACPI_TABLE_HEADER)Buffer)->Length : 0;
         ExFreePoolWithTag(Buffer, INTELPMC_TAG);
         Buffer = NULL;
-        if (Information <= BufferLength || Information > INTELPMC_ACPI_TABLE_LIMIT)
+        if (NewLength <= BufferLength || NewLength > INTELPMC_ACPI_TABLE_LIMIT)
         {
             Status = STATUS_ACPI_INVALID_DATA;
             break;
         }
-        BufferLength = (ULONG)Information;
+        BufferLength = NewLength;
     }
     if (NT_SUCCESS(Status))
     {

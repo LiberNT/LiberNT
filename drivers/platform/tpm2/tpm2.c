@@ -6,6 +6,7 @@
 
 #include <ntddk.h>
 #include <acpiioct.h>
+#include <reactos/drivers/acpi/acpi.h>
 #include <reactos/drivers/acpi/acpisystem.h>
 #include <reactos/drivers/tpm2.h>
 
@@ -319,6 +320,7 @@ Tpm2ReadAcpiTable(
     PWSTR InterfaceList = NULL;
     PUCHAR Buffer = NULL;
     ULONG BufferLength = 256;
+    ULONG NewLength;
     ULONG_PTR Information;
     NTSTATUS Status;
 
@@ -347,16 +349,17 @@ Tpm2ReadAcpiTable(
             break;
         }
         Status = Tpm2SendIoctlSynchronously(DeviceObject, IOCTL_ACPI_GET_SYSTEM_TABLE, &Input, sizeof(Input), Buffer, BufferLength, &Information);
-        if (Status != STATUS_BUFFER_TOO_SMALL)
+        if (Status != STATUS_BUFFER_OVERFLOW)
             break;
+        NewLength = Information >= sizeof(DESCRIPTION_HEADER) ? ((PDESCRIPTION_HEADER)Buffer)->Length : 0;
         ExFreePoolWithTag(Buffer, TPM2_TAG);
         Buffer = NULL;
-        if (Information <= BufferLength || Information > TPM2_ACPI_TABLE_LIMIT)
+        if (NewLength <= BufferLength || NewLength > TPM2_ACPI_TABLE_LIMIT)
         {
             Status = STATUS_ACPI_INVALID_DATA;
             break;
         }
-        BufferLength = (ULONG)Information;
+        BufferLength = NewLength;
     }
     if (NT_SUCCESS(Status))
     {

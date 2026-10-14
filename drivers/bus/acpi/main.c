@@ -48,13 +48,20 @@ AcpiGetSystemTableIoctl(
         AcpiPutTable(Table);
         return STATUS_ACPI_INVALID_DATA;
     }
-    Irp->IoStatus.Information = TableLength;
     if (OutputLength < TableLength)
     {
+        if (OutputLength < sizeof(*Table))
+        {
+            AcpiPutTable(Table);
+            return STATUS_BUFFER_TOO_SMALL;
+        }
+        RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, Table, sizeof(*Table));
+        Irp->IoStatus.Information = sizeof(*Table);
         AcpiPutTable(Table);
-        return STATUS_BUFFER_TOO_SMALL;
+        return STATUS_BUFFER_OVERFLOW;
     }
     RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, Table, TableLength);
+    Irp->IoStatus.Information = TableLength;
     AcpiPutTable(Table);
     return STATUS_SUCCESS;
 }
@@ -116,10 +123,13 @@ AcpiEnumSystemTablesIoctl(
         Count++;
     }
 
-    Irp->IoStatus.Information = Count * sizeof(*Entries);
     if (Count > Capacity)
-        return STATUS_BUFFER_TOO_SMALL;
+    {
+        Irp->IoStatus.Information = Capacity * sizeof(*Entries);
+        return STATUS_BUFFER_OVERFLOW;
+    }
 
+    Irp->IoStatus.Information = Count * sizeof(*Entries);
     return STATUS_SUCCESS;
 }
 
