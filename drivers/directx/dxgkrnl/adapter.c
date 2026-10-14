@@ -1019,8 +1019,10 @@ DxgkpTdrWorker(
      * Full batch, page-table, aperture and context-image dumps can take longer
      * than TdrDdiDelay before the miniport even gets to reset the GPU. Their
      * diagnostic records remain available to the debugger. */
+    DxgkpDisarmTdrDdiDeadline(Adapter);
     VidSchDumpEngineDiagnostics(Adapter, FALSE);
     DxgkGpuVaDumpRecentEvents();
+    DxgkpArmTdrDdiDeadline(Adapter);
 
     DxgkPresentBeginReset(Adapter);
     PresentResetStarted = TRUE;
