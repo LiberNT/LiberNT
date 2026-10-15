@@ -2833,6 +2833,17 @@ static void create_cache_entry(http_request_t *req)
 }
 
 /* read some more data into the read buffer (the read section must be held) */
+#ifdef __REACTOS__
+static DWORD http_netcon_recv( http_request_t *req, void *buf, size_t len, BOOL blocking, int *recvd )
+{
+    DWORD res = NETCON_recv( req->netconn, buf, len, blocking, recvd );
+
+    if(res == ERROR_SUCCESS)
+        req->net_received += *recvd;
+    return res;
+}
+
+#endif
 static DWORD read_more_data( http_request_t *req, int maxlen )
 {
     DWORD res;
@@ -2848,8 +2859,13 @@ static DWORD read_more_data( http_request_t *req, int maxlen )
 
     if (maxlen == -1) maxlen = sizeof(req->read_buf);
 
+#ifdef __REACTOS__
+    res = http_netcon_recv( req, req->read_buf + req->read_size,
+                            maxlen - req->read_size, TRUE, &len );
+#else
     res = NETCON_recv( req->netconn, req->read_buf + req->read_size,
                        maxlen - req->read_size, TRUE, &len );
+#endif
     if(res == ERROR_SUCCESS)
         req->read_size += len;
 
@@ -2975,7 +2991,11 @@ static DWORD netconn_read(data_stream_t *stream, http_request_t *req, BYTE *buf,
     size = min(size, netconn_stream->content_length-netconn_stream->content_read);
 
     if(size && is_valid_netconn(req->netconn)) {
+#ifdef __REACTOS__
+        res = http_netcon_recv(req, buf, size, allow_blocking, &ret);
+#else
         res = NETCON_recv(req->netconn, buf, size, allow_blocking, &ret);
+#endif
         if(res == ERROR_SUCCESS) {
             if(!ret)
                 netconn_stream->content_length = netconn_stream->content_read;
@@ -3070,7 +3090,11 @@ static DWORD chunked_read(data_stream_t *stream, http_request_t *req, BYTE *buf,
             case CHUNKED_STREAM_STATE_READING_CHUNK_SIZE:
             case CHUNKED_STREAM_STATE_DISCARD_EOL_AFTER_DATA:
                 chunked_stream->buf_pos = 0;
+#ifdef __REACTOS__
+                res = http_netcon_recv(req, chunked_stream->buf, sizeof(chunked_stream->buf), blocking_read, &read_bytes);
+#else
                 res = NETCON_recv(req->netconn, chunked_stream->buf, sizeof(chunked_stream->buf), blocking_read, &read_bytes);
+#endif
                 if(res == ERROR_SUCCESS && read_bytes) {
                     chunked_stream->buf_size += read_bytes;
                 }else if(res == WSAEWOULDBLOCK) {
@@ -3133,8 +3157,13 @@ static DWORD chunked_read(data_stream_t *stream, http_request_t *req, BYTE *buf,
                 chunked_stream->buf_pos += read_bytes;
                 chunked_stream->buf_size -= read_bytes;
             }else {
+#ifdef __REACTOS__
+                res = http_netcon_recv(req, (char*)buf+ret_read, read_bytes,
+                                       allow_blocking, (int*)&read_bytes);
+#else
                 res = NETCON_recv(req->netconn, (char*)buf+ret_read, read_bytes,
                                   allow_blocking, (int*)&read_bytes);
+#endif
                 if(res != ERROR_SUCCESS) {
                     continue_read = FALSE;
                     break;
@@ -3467,6 +3496,10 @@ static void async_read_file_proc(task_header_t *hdr)
 
     if(task->buf) {
         DWORD read_bytes;
+#ifdef __REACTOS__
+        if(!task->read_pos)
+            req->net_received = 0;
+#endif
         while (read < task->size) {
             res = HTTPREQ_Read(req, (char*)task->buf + read, task->size - read, &read_bytes, TRUE);
             if (res != ERROR_SUCCESS || !read_bytes)
@@ -3475,6 +3508,9 @@ static void async_read_file_proc(task_header_t *hdr)
         }
     }else {
         EnterCriticalSection(&req->read_section);
+#ifdef __REACTOS__
+        req->net_received = 0;
+#endif
         res = refill_read_buffer(req, TRUE, &read);
         LeaveCriticalSection(&req->read_section);
 
@@ -3489,8 +3525,13 @@ static void async_read_file_proc(task_header_t *hdr)
     if(task->ret_read)
         *task->ret_read = read;
 
+#ifdef __REACTOS__
+    INTERNET_SendCallback(&req->hdr, req->hdr.dwContext, INTERNET_STATUS_RESPONSE_RECEIVED,
+                          &req->net_received, sizeof(req->net_received));
+#else
     /* FIXME: We should report bytes transferred before decoding content. */
     INTERNET_SendCallback(&req->hdr, req->hdr.dwContext, INTERNET_STATUS_RESPONSE_RECEIVED, &read, sizeof(read));
+#endif
 
     if(res != ERROR_SUCCESS)
         complete_arg = res;
@@ -3611,6 +3652,9 @@ static DWORD HTTPREQ_ReadFile(object_header_t *hdr, void *buf, DWORD size, DWORD
             req->state = ERROR_INTERNET_INTERNAL_ERROR;
         else
             res = req->state;
+#ifdef __REACTOS__
+        req->net_received = 0;
+#endif
 
         if(res == ERROR_SUCCESS && req->read_size) {
             read = min(size, req->read_size);
@@ -3665,8 +3709,13 @@ static DWORD HTTPREQ_ReadFile(object_header_t *hdr, void *buf, DWORD size, DWORD
         return res;
 
     if(notify_received)
+#ifdef __REACTOS__
+        INTERNET_SendCallback(&req->hdr, req->hdr.dwContext, INTERNET_STATUS_RESPONSE_RECEIVED,
+                &req->net_received, sizeof(req->net_received));
+#else
         INTERNET_SendCallback(&req->hdr, req->hdr.dwContext, INTERNET_STATUS_RESPONSE_RECEIVED,
                 &read, sizeof(read));
+#endif
     return error;
 }
 
@@ -3711,6 +3760,9 @@ static DWORD HTTPREQ_QueryDataAvailable(object_header_t *hdr, DWORD *available, 
             LeaveCriticalSection( &req->read_section );
             return req->state;
         }
+#ifdef __REACTOS__
+        req->net_received = 0;
+#endif
 
         avail = req->read_size;
         if(req->cache_size > req->content_pos)
@@ -3743,8 +3795,13 @@ static DWORD HTTPREQ_QueryDataAvailable(object_header_t *hdr, DWORD *available, 
 
     *available = avail;
     if(notify_received)
+#ifdef __REACTOS__
+        INTERNET_SendCallback(&req->hdr, req->hdr.dwContext, INTERNET_STATUS_RESPONSE_RECEIVED,
+                &req->net_received, sizeof(req->net_received));
+#else
         INTERNET_SendCallback(&req->hdr, req->hdr.dwContext, INTERNET_STATUS_RESPONSE_RECEIVED,
                 &avail, sizeof(avail));
+#endif
     return error;
 }
 
@@ -5633,9 +5690,15 @@ static DWORD create_request(http_request_t *request, void *optional, DWORD optle
             }
 #endif
 
+#ifdef __REACTOS__
+            INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
+                                INTERNET_STATUS_RESPONSE_RECEIVED, &request->net_received,
+                                sizeof(DWORD));
+#else
             INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
                                 INTERNET_STATUS_RESPONSE_RECEIVED, &responseLen,
                                 sizeof(DWORD));
+#endif
 
             http_process_keep_alive(request);
             HTTP_ProcessCookies(request);
@@ -6095,8 +6158,13 @@ static DWORD HTTP_HttpEndRequestW(http_request_t *request, DWORD dwFlags, DWORD_
     if (HTTP_GetResponseHeaders(request, &responseLen) || !responseLen)
         res = ERROR_HTTP_HEADER_NOT_FOUND;
 
+#ifdef __REACTOS__
+    INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
+                  INTERNET_STATUS_RESPONSE_RECEIVED, &request->net_received, sizeof(DWORD));
+#else
     INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
                   INTERNET_STATUS_RESPONSE_RECEIVED, &responseLen, sizeof(DWORD));
+#endif
 
     /* process cookies here. Is this right? */
     http_process_keep_alive(request);
@@ -6847,6 +6915,7 @@ static DWORD HTTP_GetResponseHeaders(http_request_t *request, INT *len)
 
     NETCON_set_timeout( request->netconn, FALSE, request->hdr.receive_timeout );
 #ifdef __REACTOS__
+    request->net_received = 0;
     request->no_headers = FALSE;
     if (!response_has_status_line( request ))
     {

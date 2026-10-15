@@ -435,6 +435,7 @@ typedef struct
 #ifdef __REACTOS__
     BOOL awaiting_response;
     BOOL no_headers;
+    DWORD net_received;
 #endif
 
     CRITICAL_SECTION headers_section;  /* section to protect the headers array */
