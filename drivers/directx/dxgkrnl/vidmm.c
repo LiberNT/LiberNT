@@ -12535,6 +12535,7 @@ typedef struct _DXGKP_VIDMM_BATCH_ENTRY
     BOOLEAN AperturePagingRequired;
     BOOLEAN EvictionRequired;
     BOOLEAN ApertureUnmapRequired;
+    BOOLEAN ReleaseImplicitReference;
 } DXGKP_VIDMM_BATCH_ENTRY, *PDXGKP_VIDMM_BATCH_ENTRY;
 
 static ULONG
@@ -13387,6 +13388,11 @@ DxgkVidMmEvictBatch(
                               &Allocation->ResidencyReferenceCount,
                               0,
                               0);
+        Entries[EntryIndex].ReleaseImplicitReference =
+            Allocation->ImplicitResidencyReference &&
+            Device == Allocation->Device &&
+            DeviceReferences > 1 &&
+            DeviceReferences - 1 == (LONG)Entries[EntryIndex].RequestReferenceCount;
         {
             BOOLEAN TrimCandidate;
 
@@ -13395,7 +13401,8 @@ DxgkVidMmEvictBatch(
             Status = DxgkResidencyCorePlanEvict(
                          DeviceReferences,
                          TotalReferences,
-                         Entries[EntryIndex].RequestReferenceCount,
+                         Entries[EntryIndex].RequestReferenceCount +
+                             (Entries[EntryIndex].ReleaseImplicitReference ? 1 : 0),
                          Allocation->Resident,
                          EvictOnlyIfNecessary,
                          &Entries[EntryIndex].EvictionRequired,
@@ -13507,7 +13514,8 @@ DxgkVidMmEvictBatch(
             goto Cleanup;
         ASSERT(Allocation->ResidencyTransactionOwner == &OwnerToken);
         for (ReleaseIndex = 0;
-             ReleaseIndex < Entries[EntryIndex].RequestReferenceCount;
+             ReleaseIndex < Entries[EntryIndex].RequestReferenceCount +
+                                (Entries[EntryIndex].ReleaseImplicitReference ? 1 : 0);
              ++ReleaseIndex)
         {
             BOOLEAN Released =
@@ -13525,7 +13533,8 @@ DxgkVidMmEvictBatch(
                 DxgkpVidMmReleaseProcessBudgetReferences(
                     Allocation,
                     Device->OwnerProcess,
-                    Entries[EntryIndex].RequestReferenceCount);
+                    Entries[EntryIndex].RequestReferenceCount +
+                        (Entries[EntryIndex].ReleaseImplicitReference ? 1 : 0));
 
             ASSERT(NT_SUCCESS(BudgetStatus) ||
                    BudgetStatus == STATUS_NOT_FOUND);
