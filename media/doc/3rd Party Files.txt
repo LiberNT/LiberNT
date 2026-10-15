@@ -54,6 +54,13 @@ License: libtiff (https://spdx.org/licenses/libtiff.html)
 URL: http://www.simplesystems.org/libtiff/
 Modifications: added .spec file
 
+Title: DirectX-Headers (DXCore)
+Path: sdk/include/psdk/dxcore.h
+Path: sdk/include/psdk/dxcore_interface.h
+Used Version: 461ef5138bd30922b44fbad77c4e47662812d2d5
+License: MIT (https://spdx.org/licenses/MIT.html)
+URL: https://github.com/microsoft/DirectX-Headers
+
 Title: JPEG XR reference codec
 Path: sdk/lib/3rdparty/jxr
 Used Version: Wine 11.14 libs/jxr (1012f3d99507b80d4869eabf0853567660a7ecbb)
