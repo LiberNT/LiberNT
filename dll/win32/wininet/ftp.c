@@ -978,6 +978,21 @@ static HINTERNET FTP_FindFirstFile(HINTERNET hConnect, LPCWSTR lpszSearchFile, v
         goto lend;
     }
 
+#ifdef __REACTOS__
+    {
+        object_header_t *child;
+
+        LIST_FOR_EACH_ENTRY(child, &lpwfs->hdr.children, object_header_t, entry)
+        {
+            if (child->htype == WH_HFTPFINDNEXT && child->valid_handle)
+            {
+                INTERNET_SetLastError(ERROR_FTP_TRANSFER_IN_PROGRESS);
+                goto lend;
+            }
+        }
+    }
+
+#endif
     hIC = lpwfs->lpAppInfo;
     if (hIC->hdr.dwFlags & INTERNET_FLAG_ASYNC)
     {
@@ -1976,7 +1991,7 @@ HINTERNET WINAPI FtpOpenFileW(HINTERNET hFtpSession,
     appinfo_t *hIC = NULL;
     HINTERNET r = NULL;
 #ifdef __REACTOS__
-    DWORD error;
+    DWORD error = ERROR_SUCCESS;
 #endif
 
     TRACE("(%p,%s,0x%08lx,0x%08lx,0x%08Ix)\n", hFtpSession,
@@ -2054,7 +2069,7 @@ HINTERNET WINAPI FtpOpenFileW(HINTERNET hFtpSession,
 
 lend:
 #ifdef __REACTOS__
-    error = INTERNET_GetLastError();
+    if (!r) error = INTERNET_GetLastError();
 #endif
     WININET_Release( &lpwfs->hdr );
 #ifdef __REACTOS__
