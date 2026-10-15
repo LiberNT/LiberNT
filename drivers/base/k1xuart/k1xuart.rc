@@ -1,0 +1,12 @@
+/*
+ * PROJECT:     LiberNT SpacemiT K1 UART driver
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     SpacemiT K1 UART driver version resource
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION "SpacemiT K1 UART controller driver"
+#define REACTOS_STR_INTERNAL_NAME "k1xuart"
+#define REACTOS_STR_ORIGINAL_FILENAME "k1xuart.sys"
+#include <reactos/version.rc>

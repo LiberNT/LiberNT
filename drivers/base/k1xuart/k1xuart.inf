@@ -1,0 +1,49 @@
+; PROJECT:     LiberNT SpacemiT K1 UART driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     SpacemiT K1 UART driver installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=System
+ClassGUID={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+CatalogFile=k1xuart.cat
+DriverVer=10/15/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=SpacemitMfg,NTRISCV64
+
+[SpacemitMfg.NTRISCV64]
+%K1XUART.DeviceDesc%=K1XUART_Inst,FDT\spacemit_pxa-uart
+
+[K1XUART_Inst.NT]
+CopyFiles=K1XUART_CopyFiles.NT
+
+[K1XUART_CopyFiles.NT]
+k1xuart.sys
+
+[K1XUART_Inst.NT.Services]
+AddService=k1xuart,0x00000002,K1XUART_Service_Inst
+
+[K1XUART_Service_Inst]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\k1xuart.sys
+LoadOrderGroup=Extended Base
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+k1xuart.sys=1
+
+[Strings]
+ProviderName="Ahmed ARIF"
+ManufacturerName="SpacemiT"
+DiskName="SpacemiT K1 UART Driver Disk"
+K1XUART.DeviceDesc="SpacemiT K1 UART"
