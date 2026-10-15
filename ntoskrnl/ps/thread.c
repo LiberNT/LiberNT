@@ -1115,7 +1115,6 @@ NtCreateThreadEx(OUT PHANDLE ThreadHandle,
     PETHREAD Thread;
     PPS_ATTRIBUTE Attribute;
     HANDLE ProcessKernelHandle;
-    ULONG_PTR Wow64Peb = 0;
     PVOID StackAllocation;
     PVOID Teb = NULL;
     PVOID Value;
@@ -1169,22 +1168,12 @@ NtCreateThreadEx(OUT PHANDLE ThreadHandle,
     ObDereferenceObject(Process);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = ZwQueryInformationProcess(ProcessKernelHandle,
-                                       ProcessWow64Information,
-                                       &Wow64Peb,
-                                       sizeof(Wow64Peb),
-                                       NULL);
-    if (NT_SUCCESS(Status) && Wow64Peb) Status = STATUS_NOT_SUPPORTED;
-
-    if (NT_SUCCESS(Status))
-    {
-        Status = PspAllocateUserStack(ProcessKernelHandle,
-                                      ZeroBits,
-                                      MaximumStackSize ? MaximumStackSize : ImageInformation.MaximumStackSize,
-                                      StackSize ? StackSize : ImageInformation.CommittedStackSize,
-                                      MM_USER_STACK_GUARD_PAGES * PAGE_SIZE,
-                                      &InitialTeb);
-    }
+    Status = PspAllocateUserStack(ProcessKernelHandle,
+                                  ZeroBits,
+                                  MaximumStackSize ? MaximumStackSize : ImageInformation.MaximumStackSize,
+                                  StackSize ? StackSize : ImageInformation.CommittedStackSize,
+                                  MM_USER_STACK_GUARD_PAGES * PAGE_SIZE,
+                                  &InitialTeb);
 
     if (NT_SUCCESS(Status))
     {
