@@ -243,10 +243,7 @@ test_GetNetworkParams(VOID)
     }
     else
         ok(strcmp(FixedInfo->HostName, OrigHostname) == 0, "FixedInfo->HostName is wrong '%s' != '%s'\n", FixedInfo->HostName, OrigHostname);
-    if (!OrigDhcpDomainNameExists)
-        ok(strcmp(FixedInfo->DomainName, ROSTESTDHCPDOMAIN) == 0, "FixedInfo->DomainName is wrong '%s' != '%s'\n", FixedInfo->DomainName, ROSTESTDHCPDOMAIN);
-    else
-        ok(strcmp(FixedInfo->DomainName, OrigDomainName) == 0, "FixedInfo->DomainName is wrong '%s' != '%s'\n", FixedInfo->DomainName, OrigDomainName);
+    ok(strcmp(FixedInfo->DomainName, OrigDomainName) == 0, "FixedInfo->DomainName is wrong '%s' != '%s'\n", FixedInfo->DomainName, OrigDomainName);
 
     HeapFree(GetProcessHeap(), 0, FixedInfo);
 }
