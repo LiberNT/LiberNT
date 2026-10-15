@@ -18,8 +18,8 @@ spec2def(BasicDisplay.sys ${SOFTGPU_ENGINE_SPEC} ADD_IMPORTLIB)
 # dxgkrnl/CMakeLists.txt exactly.
 remove_definitions(-D_WIN32_WINNT=${REACTOS_TARGET_NT})
 remove_definitions(-DWINVER=${REACTOS_TARGET_NT})
-add_definitions(-D_WIN32_WINNT=0x0601 -DWINVER=0x0601)
-add_definitions(-DNTDDI_VERSION=0x06010000)    # NTDDI_WIN7
+add_definitions(-D_WIN32_WINNT=0x0603 -DWINVER=0x0603)
+add_definitions(-DNTDDI_VERSION=0x06030000)    # NTDDI_WINBLUE
 
 # The global default selector gates out newer ABI fields. Compile the audited
 # declaration surface; runtime capability claims remain separately gated.

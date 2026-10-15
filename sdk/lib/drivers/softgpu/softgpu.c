@@ -1184,9 +1184,8 @@ SoftGpuDdiStartDevice(
             Engine->DpcInitialized = TRUE;
         }
     }
-    KeInitializeTimer(&Device->VsyncTimer);
-    KeInitializeDpc(&Device->VsyncDpc, SoftGpuVsyncDpcRoutine, Device);
-    Device->VsyncTimerInitialized = TRUE;
+    Device->VsyncTimer = ExAllocateTimer(SoftGpuVsyncTimerCallback, Device, EX_TIMER_HIGH_RESOLUTION);
+    Device->VsyncTimerInitialized = Device->VsyncTimer != NULL;
     InterlockedExchange(&Device->VsyncPhaseEnabled, 0);
     InterlockedExchange(&Device->VsyncEnabled, 0);
     KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
@@ -1264,8 +1263,9 @@ SoftGpuDdiStopDevice(
     InterlockedExchange(&Device->VsyncPhaseEnabled, 0);
     if (Device->VsyncTimerInitialized)
     {
-        KeCancelTimer(&Device->VsyncTimer);
         Device->VsyncTimerInitialized = FALSE;
+        ExDeleteTimer(Device->VsyncTimer, TRUE, TRUE, NULL);
+        Device->VsyncTimer = NULL;
     }
     {
         ULONG NodeOrdinal;
@@ -1283,7 +1283,6 @@ SoftGpuDdiStopDevice(
         }
         if (Removed)
         {
-            KeRemoveQueueDpc(&Device->VsyncDpc);
             KeFlushQueuedDpcs();
         }
     }
@@ -2877,14 +2876,14 @@ SoftGpuSetVsyncState(
         if (InterlockedExchange(&Device->VsyncPhaseEnabled, 1) == 0)
         {
             Due.QuadPart = -166667;
-            KeSetTimerEx(&Device->VsyncTimer, Due, 16, &Device->VsyncDpc);
+            ExSetTimer(Device->VsyncTimer, Due.QuadPart, -Due.QuadPart, NULL);
         }
     }
     else
     {
         InterlockedExchange(&Device->VsyncPhaseEnabled, 0);
         if (Policy.CancelTimer)
-            KeCancelTimer(&Device->VsyncTimer);
+            ExCancelTimer(Device->VsyncTimer, NULL);
     }
 
     return STATUS_SUCCESS;

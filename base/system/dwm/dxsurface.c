@@ -106,6 +106,10 @@ static PFN_DWM_D3DKMT_GETSHAREDRESOURCEADAPTERLUID g_GetSharedResourceAdapterLui
 static BOOL g_GetSharedResourceAdapterLuidResolved;
 static PFN_DWM_D3DKMT_OPENADAPTERFROMLUID g_OpenAdapterFromLuid;
 static BOOL g_OpenAdapterFromLuidResolved;
+static D3DKMT_HANDLE g_VBlankAdapter;
+static D3DDDI_VIDEO_PRESENT_SOURCE_ID g_VBlankSource;
+static DWORD g_VBlankRetryTick;
+static BOOL g_VBlankFailed;
 
 static BOOL
 DwmDxLuidEqual(const LUID *Left, const LUID *Right)
@@ -805,6 +809,60 @@ DwmDxReleaseRedirectionMappings(void)
         DwmDxUnlockView(&g_Views[Index]);
 }
 
+static void
+DwmDxCloseVBlankAdapter(void)
+{
+    D3DKMT_CLOSEADAPTER CloseAdapter;
+
+    if (g_VBlankAdapter == 0)
+        return;
+    RtlZeroMemory(&CloseAdapter, sizeof(CloseAdapter));
+    CloseAdapter.hAdapter = g_VBlankAdapter;
+    (void)D3DKMTCloseAdapter(&CloseAdapter);
+    g_VBlankAdapter = 0;
+}
+
+BOOL
+DwmDxWaitForVBlank(void)
+{
+    D3DKMT_WAITFORVERTICALBLANKEVENT Wait;
+    NTSTATUS Status;
+
+    if (g_VBlankAdapter == 0)
+    {
+        D3DKMT_OPENADAPTERFROMHDC Open;
+        HDC Dc;
+
+        if (g_VBlankFailed && GetTickCount() - g_VBlankRetryTick < 1000)
+            return FALSE;
+        g_VBlankFailed = TRUE;
+        g_VBlankRetryTick = GetTickCount();
+        Dc = GetDC(NULL);
+        if (Dc == NULL)
+            return FALSE;
+        RtlZeroMemory(&Open, sizeof(Open));
+        Open.hDc = Dc;
+        Status = D3DKMTOpenAdapterFromHdc(&Open);
+        ReleaseDC(NULL, Dc);
+        if (!NT_SUCCESS(Status) || Open.hAdapter == 0)
+            return FALSE;
+        g_VBlankAdapter = Open.hAdapter;
+        g_VBlankSource = Open.VidPnSourceId;
+    }
+
+    RtlZeroMemory(&Wait, sizeof(Wait));
+    Wait.hAdapter = g_VBlankAdapter;
+    Wait.VidPnSourceId = g_VBlankSource;
+    Status = D3DKMTWaitForVerticalBlankEvent(&Wait);
+    if (NT_SUCCESS(Status))
+    {
+        g_VBlankFailed = FALSE;
+        return TRUE;
+    }
+    DwmDxCloseVBlankAdapter();
+    return FALSE;
+}
+
 void
 DwmDxCleanupSurfaces(void)
 {
@@ -848,4 +906,5 @@ DwmDxCleanupSurfaces(void)
         RtlZeroMemory(Device, sizeof(*Device));
     }
     g_CurrentFrame = 0;
+    DwmDxCloseVBlankAdapter();
 }

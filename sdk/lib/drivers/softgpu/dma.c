@@ -1207,21 +1207,17 @@ SoftGpuDpcRoutine(
 
 VOID
 NTAPI
-SoftGpuVsyncDpcRoutine(
-    _In_     PKDPC   Dpc,
-    _In_opt_ PVOID   DeferredContext,
-    _In_opt_ PVOID   SystemArgument1,
-    _In_opt_ PVOID   SystemArgument2)
+SoftGpuVsyncTimerCallback(
+    _In_     PEX_TIMER Timer,
+    _In_opt_ PVOID     Context)
 {
-    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)DeferredContext;
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)Context;
     DXGKARGCB_NOTIFY_INTERRUPT_DATA NotifyData;
     KIRQL OldIrql;
     BOOLEAN PhaseActive;
     BOOLEAN Deliver;
 
-    UNREFERENCED_PARAMETER(Dpc);
-    UNREFERENCED_PARAMETER(SystemArgument1);
-    UNREFERENCED_PARAMETER(SystemArgument2);
+    UNREFERENCED_PARAMETER(Timer);
 
     if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
         return;

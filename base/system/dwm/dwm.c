@@ -21,22 +21,6 @@
 #include "settings.h"
 
 DWORD_PTR NTAPI NtUserCallOneParam(DWORD_PTR Param, DWORD Routine);
-LONG NTAPI NtSetTimerResolution(ULONG DesiredResolution, BOOLEAN SetResolution,
-                                PULONG CurrentResolution);
-
-static BOOL g_timerPrecise;
-
-static void
-DwmSetTimerPrecision(BOOL Precise)
-{
-    ULONG Res = 0;
-
-    if (Precise == g_timerPrecise)
-        return;
-    if (NtSetTimerResolution(10000, (BOOLEAN)Precise, &Res) >= 0)
-        g_timerPrecise = Precise;
-}
-
 static void DwmLog(const char *s) { OutputDebugStringA(s); }
 
 static BOOL g_frameStats;
@@ -4080,7 +4064,6 @@ DwmComposeLoop(HANDLE hStopEvent)
             /* Keep servicing this thread's windows while an exclusive owner
              * has the output. Dirty notifications must not turn suspension
              * into a render loop; only test output availability periodically. */
-            DwmSetTimerPrecision(FALSE);
             if (Elapsed < 200)
             {
                 if (MsgWaitForMultipleObjects(1, &hStopEvent, FALSE,
@@ -4125,8 +4108,12 @@ DwmComposeLoop(HANDLE hStopEvent)
 
                 if (WaitMs != 0)
                 {
-                    DwmSetTimerPrecision(TRUE);
-                    if (WaitForSingleObject(hStopEvent, WaitMs) == WAIT_OBJECT_0)
+                    if (DwmDxWaitForVBlank())
+                    {
+                        if (WaitForSingleObject(hStopEvent, 0) == WAIT_OBJECT_0)
+                            break;
+                    }
+                    else if (WaitForSingleObject(hStopEvent, WaitMs) == WAIT_OBJECT_0)
                         break;
                 }
             }
@@ -4194,7 +4181,6 @@ DwmComposeLoop(HANDLE hStopEvent)
         {
             HANDLE WaitHandles[2] = {hStopEvent, hWake};
 
-            DwmSetTimerPrecision(FALSE);
             if (MsgWaitForMultipleObjects(ARRAYSIZE(WaitHandles), WaitHandles,
                                           FALSE, 200, QS_ALLINPUT) == WAIT_OBJECT_0)
                 break;
@@ -4673,7 +4659,6 @@ DwmComposeLoop(HANDLE hStopEvent)
             DwmSweepViews();
     }
 
-    DwmSetTimerPrecision(FALSE);
     DwmBlitStopWorkers();
     if (SettingsWindow != NULL)
         DestroyWindow(SettingsWindow);

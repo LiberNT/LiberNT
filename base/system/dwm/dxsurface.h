@@ -19,3 +19,4 @@ void DwmDxSetScanoutSurfaces(const ULONG *SurfaceIds, ULONG Count);
 void DwmDxSweepSurfaces(const DWM_WIN *Windows, ULONG Count);
 void DwmDxCleanupSurfaces(void);
 void DwmDxReleaseRedirectionMappings(void);
+BOOL DwmDxWaitForVBlank(void);

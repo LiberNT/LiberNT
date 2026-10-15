@@ -44,11 +44,11 @@
  * the WDDM2 structures in dispmprt.h are gated on NTDDI_WIN7, so raise the
  * version both here and on the command line (see CMakeLists.txt). */
 #undef  _WIN32_WINNT
-#define _WIN32_WINNT  0x0601    /* Windows 7 */
+#define _WIN32_WINNT  0x0603    /* Windows 8.1 */
 #undef  WINVER
-#define WINVER        0x0601
+#define WINVER        0x0603
 #undef  NTDDI_VERSION
-#define NTDDI_VERSION 0x06010000 /* NTDDI_WIN7 */
+#define NTDDI_VERSION 0x06030000 /* NTDDI_WINBLUE */
 
 /* ---- WDDM DDI interface version: WDDM 2.0 (Win10) ----------------------- *
  * CMakeLists.txt passes -DDXGKDDI_INTERFACE_VERSION=0x5023; default it here
@@ -347,8 +347,7 @@ typedef struct _SOFTGPU_DEVICE
     /* The adapter's GPU nodes, indexed by node ordinal. */
     SOFTGPU_ENGINE      Engines[SOFTGPU_ENGINE_COUNT];
 
-    KTIMER              VsyncTimer;
-    KDPC                VsyncDpc;
+    PEX_TIMER           VsyncTimer;
     volatile LONG       VsyncPhaseEnabled;
     volatile LONG       VsyncEnabled;
     BOOLEAN             VsyncTimerInitialized;
@@ -930,11 +929,9 @@ SoftGpuDpcRoutine(
 
 VOID
 NTAPI
-SoftGpuVsyncDpcRoutine(
-    _In_     PKDPC   Dpc,
-    _In_opt_ PVOID   DeferredContext,
-    _In_opt_ PVOID   SystemArgument1,
-    _In_opt_ PVOID   SystemArgument2);
+SoftGpuVsyncTimerCallback(
+    _In_     PEX_TIMER Timer,
+    _In_opt_ PVOID     Context);
 
 NTSTATUS
 APIENTRY
