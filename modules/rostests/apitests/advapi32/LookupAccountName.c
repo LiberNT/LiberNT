@@ -24,6 +24,16 @@ static const ACCOUNT_TEST Tests[] =
     { L"NETWORK SERVICE", L"S-1-5-20", L"NT AUTHORITY", SidTypeWellKnownGroup },
     { L"Everyone", L"S-1-1-0", L"", SidTypeWellKnownGroup },
     { L"Administrators", L"S-1-5-32-544", L"BUILTIN", SidTypeAlias },
+    { L"ALL APPLICATION PACKAGES", L"S-1-15-2-1", L"APPLICATION PACKAGE AUTHORITY", SidTypeWellKnownGroup },
+    { L"ALL RESTRICTED APPLICATION PACKAGES", L"S-1-15-2-2", L"APPLICATION PACKAGE AUTHORITY", SidTypeWellKnownGroup },
+    { L"Your Internet connection", L"S-1-15-3-1", L"APPLICATION PACKAGE AUTHORITY", SidTypeWellKnownGroup },
+};
+
+static const PCWSTR UnmappedNames[] =
+{
+    L"APPLICATION PACKAGE AUTHORITY\\ALL APPLICATION PACKAGES",
+    L"APPLICATION PACKAGE AUTHORITY\\Your Internet connection",
+    L"APPLICATION PACKAGE AUTHORITY",
 };
 
 static void
@@ -62,10 +72,27 @@ TestAccount(const ACCOUNT_TEST *Test)
         LocalFree(SidString);
 }
 
+static void
+TestUnmappedName(PCWSTR Name)
+{
+    BYTE SidBuffer[SECURITY_MAX_SID_SIZE];
+    WCHAR Domain[256];
+    DWORD cbSid = sizeof(SidBuffer), cchDomain = ARRAYSIZE(Domain);
+    SID_NAME_USE Use;
+    BOOL Ret;
+
+    SetLastError(0xdeadbeef);
+    Ret = LookupAccountNameW(NULL, Name, SidBuffer, &cbSid, Domain, &cchDomain, &Use);
+    ok(!Ret, "%s: lookup succeeded\n", wine_dbgstr_w(Name));
+    ok(GetLastError() == ERROR_NONE_MAPPED, "%s: error %lu\n", wine_dbgstr_w(Name), GetLastError());
+}
+
 START_TEST(LookupAccountName)
 {
     ULONG i;
 
     for (i = 0; i < ARRAYSIZE(Tests); i++)
         TestAccount(&Tests[i]);
+    for (i = 0; i < ARRAYSIZE(UnmappedNames); i++)
+        TestUnmappedName(UnmappedNames[i]);
 }

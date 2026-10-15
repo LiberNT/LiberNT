@@ -10,6 +10,7 @@ list(APPEND SOURCE
     IsTextUnicode.c
     LockServiceDatabase.c
     LookupAccountName.c
+    LookupAccountSid.c
     QueryServiceConfig2.c
     RegCreateKeyEx.c
     RegEnumKey.c
