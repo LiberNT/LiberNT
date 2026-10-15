@@ -89,7 +89,7 @@ d3d12_create_vkd3d_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_l
 
     memset(&application_info, 0, sizeof(application_info));
     application_info.type = VKD3D_STRUCTURE_TYPE_APPLICATION_INFO;
-    application_info.api_version = VKD3D_API_VERSION_1_0;
+    application_info.api_version = VKD3D_API_VERSION_1_2;
 
     memset(&optional_instance_extensions_info, 0, sizeof(optional_instance_extensions_info));
     optional_instance_extensions_info.type = VKD3D_STRUCTURE_TYPE_OPTIONAL_INSTANCE_EXTENSIONS_INFO;

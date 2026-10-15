@@ -1186,8 +1186,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
         {
             D3D12_FEATURE_DATA_ROOT_SIGNATURE *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
-            if (caps->HighestVersion > D3D_ROOT_SIGNATURE_VERSION_1_1)
-                caps->HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
+            if (caps->HighestVersion > D3D_ROOT_SIGNATURE_VERSION_1_2) return E_INVALIDARG;
             return S_OK;
         }
         case D3D12_FEATURE_PROTECTED_RESOURCE_SESSION_SUPPORT:

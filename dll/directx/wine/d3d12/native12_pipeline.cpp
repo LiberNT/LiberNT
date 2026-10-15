@@ -35,7 +35,7 @@ static HRESULT Native12AddRegisterRange(Native12RegisterRange *ranges, UINT capa
     return S_OK;
 }
 
-static HRESULT Native12ValidateRootSignature(const D3D12_ROOT_SIGNATURE_DESC1 *desc)
+static HRESULT Native12ValidateRootSignature(const D3D12_ROOT_SIGNATURE_DESC2 *desc)
 {
     UINT capacity = desc->NumStaticSamplers, count = 0, cost = 0;
     HRESULT hr = S_OK;
@@ -136,14 +136,14 @@ HRESULT Native12RootSignature::Initialize(const void *bytecode, SIZE_T length)
     HRESULT hr = D3D12CreateVersionedRootSignatureDeserializer(bytecode, length,
             IID_ID3D12VersionedRootSignatureDeserializer, reinterpret_cast<void **>(&deserializer));
     if (FAILED(hr)) return hr;
-    hr = deserializer->GetRootSignatureDescAtVersion(D3D_ROOT_SIGNATURE_VERSION_1_1, &versioned);
+    hr = deserializer->GetRootSignatureDescAtVersion(D3D_ROOT_SIGNATURE_VERSION_1_2, &versioned);
     if (FAILED(hr) || !versioned)
     {
         deserializer->Release();
         return FAILED(hr) ? hr : E_FAIL;
     }
 
-    const D3D12_ROOT_SIGNATURE_DESC1 *source = &versioned->Desc_1_1;
+    const D3D12_ROOT_SIGNATURE_DESC2 *source = &versioned->Desc_1_2;
     if (FAILED(hr = Native12ValidateRootSignature(source)))
     {
         deserializer->Release();
@@ -203,7 +203,7 @@ HRESULT Native12RootSignature::Initialize(const void *bytecode, SIZE_T length)
         }
         for (UINT i = 0; i < source->NumStaticSamplers; ++i)
         {
-            const D3D12_STATIC_SAMPLER_DESC &input = source->pStaticSamplers[i];
+            const D3D12_STATIC_SAMPLER_DESC1 &input = source->pStaticSamplers[i];
             samplers[i].Filter = static_cast<D3D12DDI_FILTER>(input.Filter);
             samplers[i].AddressU = static_cast<D3D12DDI_TEXTURE_ADDRESS_MODE>(input.AddressU);
             samplers[i].AddressV = static_cast<D3D12DDI_TEXTURE_ADDRESS_MODE>(input.AddressV);
@@ -217,6 +217,7 @@ HRESULT Native12RootSignature::Initialize(const void *bytecode, SIZE_T length)
             samplers[i].ShaderRegister = input.ShaderRegister;
             samplers[i].RegisterSpace = input.RegisterSpace;
             samplers[i].ShaderVisibility = static_cast<D3D12DDI_SHADER_VISIBILITY>(input.ShaderVisibility);
+            samplers[i].Flags = static_cast<D3D12DDI_SAMPLER_FLAGS_0096>(input.Flags);
         }
     }
 
