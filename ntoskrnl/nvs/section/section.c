@@ -918,6 +918,8 @@ MiSegmentMaterialize(
     if (!NT_SUCCESS(Status))
     {
         MiPfnShareDecrement(&System->Pfn, Frame, TRUE);
+        if (Status == STATUS_INSUFFICIENT_RESOURCES || Status == STATUS_NO_MEMORY)
+            return STATUS_NO_MEMORY;
         return STATUS_IN_PAGE_ERROR;
     }
 

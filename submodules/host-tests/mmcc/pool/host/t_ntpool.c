@@ -37,6 +37,7 @@ PEPROCESS PsGetCurrentProcess(VOID) { return &TestProcess; }
 VOID ObReferenceObject(PEPROCESS Process) { Process->References++; }
 VOID ObDereferenceObject(PEPROCESS Process) { Process->References--; }
 VOID MiWakeBalanceSetManager(VOID) { }
+NTSTATUS MiWaitForMemory(NTSTATUS Status, PULONG Attempts) { return Status; }
 
 NTSTATUS PsChargeProcessPoolQuota(PEPROCESS Process, ULONG Type, SIZE_T Size)
 {

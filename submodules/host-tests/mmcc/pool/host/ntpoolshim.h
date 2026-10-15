@@ -73,6 +73,7 @@ VOID ObDereferenceObject(PEPROCESS Process);
 NTSTATUS MiSystemCommitPinned(int *System, ULONG64 Base, ULONG Pages, ULONG Protection);
 VOID MiSystemDecommitPinned(int *System, ULONG64 Base, ULONG Pages);
 VOID MiWakeBalanceSetManager(VOID);
+NTSTATUS MiWaitForMemory(NTSTATUS Status, PULONG Attempts);
 VOID InitializePool(POOL_TYPE Type, ULONG Threshold);
 PVOID ExAllocatePoolWithTag(POOL_TYPE Type, SIZE_T Size, ULONG Tag);
 PVOID ExAllocatePool2(POOL_FLAGS Flags, SIZE_T Size, ULONG Tag);

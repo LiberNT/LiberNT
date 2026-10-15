@@ -217,12 +217,19 @@ MmAccessFaultEx(
         Space = MiSpaceOfProcess(Process);
     }
 
-    do
+    for (;;)
     {
         Status = MiFaultWithWriteAllowance(Space, (ULONG64)(ULONG_PTR)Address, Access,
                                            (BOOLEAN)(Mode != KernelMode),
                                            AllowExecutableWrite);
-    } while (NT_SUCCESS(MiWaitForMemory(Status, &Attempts)) && Status == STATUS_NO_MEMORY);
+        if (Status != STATUS_NO_MEMORY)
+            break;
+
+        if (MiPfnAvailablePages(&MiSystem.Pfn) < MiProcessManager.AvailableLow)
+            Attempts = 0;
+        if (!NT_SUCCESS(MiWaitForMemory(Status, &Attempts)))
+            break;
+    }
 
     if (Process != NULL)
     {

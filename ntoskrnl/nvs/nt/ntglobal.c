@@ -87,7 +87,7 @@ MiWaitForMemory(
     if (Available > MiPfnListCount(&MiSystem.Pfn, MiPageStandby))
     {
         if (Available >= MiProcessManager.AvailableLow)
-            return STATUS_NO_MEMORY;
+            return STATUS_SUCCESS;
     }
     else
     {

@@ -26,9 +26,15 @@ PoolBackCommit(
     _In_ SIZE_T Bytes)
 {
     NTSTATUS Status;
+    ULONG Attempts = 0;
 
-    Status = MiSystemCommitPinned(&MiSystem, (ULONG64)(ULONG_PTR)Base, (ULONG)(Bytes >> PAGE_SHIFT),
-                                  (ULONG)(ULONG_PTR)Context);
+    for (;;)
+    {
+        Status = MiSystemCommitPinned(&MiSystem, (ULONG64)(ULONG_PTR)Base, (ULONG)(Bytes >> PAGE_SHIFT),
+                                      (ULONG)(ULONG_PTR)Context);
+        if (Status != STATUS_NO_MEMORY || !NT_SUCCESS(MiWaitForMemory(Status, &Attempts)))
+            break;
+    }
 
     if (Status == STATUS_NO_MEMORY || Status == STATUS_COMMITMENT_LIMIT)
         MiWakeBalanceSetManager();
