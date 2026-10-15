@@ -14310,33 +14310,6 @@ DxgkpVidMmTransferAllocationContent(
 }
 
 static NTSTATUS
-DxgkpVidMmNotifyLostMemoryPlacement(
-    _In_ PDXGKVMM_ALLOCATION Allocation)
-{
-    PDXGKRNL_ADAPTER Adapter = Allocation->Adapter;
-    DXGKARG_BUILDPAGINGBUFFER BuildArgs;
-    NTSTATUS Status;
-
-    if (Adapter == NULL || Adapter->MiniportContext == NULL || Adapter->MiniportDeviceContext == NULL)
-        return STATUS_DEVICE_NOT_READY;
-    if (DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer) == NULL)
-        return STATUS_NOT_SUPPORTED;
-    if (!DxgkAcquireMiniportCallback(Adapter))
-        return STATUS_DEVICE_NOT_READY;
-    RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
-    BuildArgs.Operation = DXGK_OPERATION_DISCARD_CONTENT;
-    BuildArgs.DiscardContent.hAllocation = Allocation->MiniportHandle;
-    BuildArgs.DiscardContent.Flags.AllocationIsIdle = 1;
-    BuildArgs.DiscardContent.SegmentId = Allocation->SegmentId;
-    BuildArgs.DiscardContent.SegmentAddress.QuadPart = (LONGLONG)Allocation->SegmentOffset;
-    DxgkEnterSchedulerClass(Adapter);
-    Status = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
-    DxgkLeaveSchedulerClass(Adapter);
-    DxgkReleaseMiniportCallback(Adapter);
-    return Status;
-}
-
-static NTSTATUS
 DxgkpVidMmUnmapUserMappings(
     _In_ PDXGKVMM_ALLOCATION Allocation,
     _In_ BOOLEAN IncludeActive)
@@ -14396,6 +14369,18 @@ DxgkpVidMmUnmapUserMappings(
     }
 }
 
+static VOID
+DxgkpVidMmForgetApertureMapping(
+    _In_ PDXGKVMM_ALLOCATION Allocation)
+{
+    if (Allocation->ApertureMdl != NULL)
+    {
+        IoFreeMdl(Allocation->ApertureMdl);
+        Allocation->ApertureMdl = NULL;
+    }
+    Allocation->ApertureMapped = FALSE;
+}
+
 static NTSTATUS
 DxgkpVidMmRecoverAllocationOwned(
     _In_ PDXGKVMM_ALLOCATION Allocation)
@@ -14405,24 +14390,18 @@ DxgkpVidMmRecoverAllocationOwned(
     NTSTATUS Status = STATUS_SUCCESS;
     NTSTATUS CleanupStatus;
 
+    DxgkpVidMmForgetApertureMapping(Allocation);
     if (!Allocation->Resident)
-    {
-        if (Allocation->ApertureMapped || Allocation->ApertureMdl != NULL)
-            return DxgkpVidMmReleaseApertureMapping(Allocation, TRUE);
         return STATUS_SUCCESS;
-    }
     if (Adapter == NULL || Adapter->Segments == NULL || Allocation->SegmentId < 1 || Allocation->SegmentId > Adapter->SegmentCount)
     {
-        if (Allocation->ApertureMapped || Allocation->ApertureMdl != NULL)
-            Status = DxgkpVidMmReleaseApertureMapping(Allocation, TRUE);
         DxgkpVidMmReleaseSegmentPlacement(Allocation);
-        return NT_SUCCESS(Status) ? STATUS_INVALID_DEVICE_STATE : Status;
+        return STATUS_INVALID_DEVICE_STATE;
     }
 
     Segment = &ADAPTER_SEGMENTS(Adapter)[Allocation->SegmentId - 1];
     if (VidMmSegmentIsAperture(Segment))
     {
-        Status = DxgkpVidMmReleaseApertureMapping(Allocation, TRUE);
         DxgkpVidMmReleaseSegmentPlacement(Allocation);
         Allocation->ContentLost = FALSE;
         if (Allocation->SystemMemory != NULL)
@@ -14430,11 +14409,6 @@ DxgkpVidMmRecoverAllocationOwned(
         return Status;
     }
 
-    if (Allocation->ApertureMapped || Allocation->ApertureMdl != NULL)
-        Status = DxgkpVidMmReleaseApertureMapping(Allocation, TRUE);
-    CleanupStatus = DxgkpVidMmNotifyLostMemoryPlacement(Allocation);
-    if (NT_SUCCESS(Status) && !NT_SUCCESS(CleanupStatus))
-        Status = CleanupStatus;
     CleanupStatus = DxgkpVidMmUnmapUserMappings(Allocation, TRUE);
     if (NT_SUCCESS(Status) && !NT_SUCCESS(CleanupStatus))
         Status = CleanupStatus;
