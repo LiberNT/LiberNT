@@ -7501,11 +7501,13 @@ void NativeSwapChain::DumpTrace()
 HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_PRESENT_PARAMETERS *parameters)
 {
     if (interval > 4 || (flags & ~(DXGI_PRESENT_TEST | DXGI_PRESENT_DO_NOT_WAIT | DXGI_PRESENT_RESTART
-            | DXGI_PRESENT_DO_NOT_SEQUENCE))) return DXGI_ERROR_INVALID_CALL;
+            | DXGI_PRESENT_DO_NOT_SEQUENCE | DXGI_PRESENT_ALLOW_TEARING))) return DXGI_ERROR_INVALID_CALL;
     if (parameters && ((parameters->DirtyRectsCount && !parameters->pDirtyRects)
             || (!!parameters->pScrollRect != !!parameters->pScrollOffset))) return DXGI_ERROR_INVALID_CALL;
     if (parameters && parameters->pScrollRect) return E_NOTIMPL;
     NativeLock guard(device);
+    if ((flags & DXGI_PRESENT_ALLOW_TEARING) && (interval || !(desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING)
+            || !fullscreen_desc.Windowed)) return DXGI_ERROR_INVALID_CALL;
     HRESULT device_status = device->GetDeviceRemovedReason();
     if (FAILED(device_status)) return device_status;
     if (!(composition && !window) && !IsWindow(window)) return DXGI_ERROR_INVALID_CALL;
