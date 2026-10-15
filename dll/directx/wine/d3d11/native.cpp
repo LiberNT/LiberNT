@@ -4160,16 +4160,25 @@ void STDMETHODCALLTYPE NativeContext::ResolveSubresource(ID3D11Resource *dst, UI
 
     NativeTexture2D *d = NativeTexture(dst, device), *s = NativeTexture(src, device);
     if (!d || !s || d == s || !device->functions.pfnResourceResolveSubresource
-            || d->desc.SampleDesc.Count != 1 || s->desc.SampleDesc.Count <= 1
+            || d->desc.SampleDesc.Count != 1
             || d->desc.Usage != D3D11_USAGE_DEFAULT || !NativeResolveFormatValid(format, d->desc.Format)
             || !NativeResolveFormatValid(format, s->desc.Format)
             || NativeDepthResourceFormat(format) != DXGI_FORMAT_UNKNOWN
             || dst_subresource >= d->desc.MipLevels * d->desc.ArraySize
             || src_subresource >= s->desc.MipLevels * s->desc.ArraySize
-            || max(1u, d->desc.Width >> (dst_subresource % d->desc.MipLevels)) != s->desc.Width
-            || max(1u, d->desc.Height >> (dst_subresource % d->desc.MipLevels)) != s->desc.Height) return;
+            || max(1u, d->desc.Width >> (dst_subresource % d->desc.MipLevels))
+                    != max(1u, s->desc.Width >> (src_subresource % s->desc.MipLevels))
+            || max(1u, d->desc.Height >> (dst_subresource % d->desc.MipLevels))
+                    != max(1u, s->desc.Height >> (src_subresource % s->desc.MipLevels))) return;
     NativeLock guard(device);
     device->BeginCall();
+    if (s->desc.SampleDesc.Count == 1)
+    {
+        if (device->functions.pfnResourceCopyRegion)
+            device->functions.pfnResourceCopyRegion(device->driver_device, d->handle, dst_subresource, 0, 0, 0,
+                    s->handle, src_subresource, NULL);
+        return;
+    }
     device->functions.pfnResourceResolveSubresource(device->driver_device, d->handle, dst_subresource,
             s->handle, src_subresource, format);
 }
