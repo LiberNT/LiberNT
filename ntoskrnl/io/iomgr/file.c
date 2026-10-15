@@ -1158,6 +1158,8 @@ IopParseDevice(IN PVOID ParseObject,
 
         /* Initialize the File Object event and set the FO */
         KeInitializeEvent(&FileObject->Event, NotificationEvent, FALSE);
+        KeInitializeSpinLock(&FileObject->IrpListLock);
+        InitializeListHead(&FileObject->IrpList);
         OpenPacket->FileObject = FileObject;
 
         /* Queue the IRP and call the driver */
@@ -2458,6 +2460,12 @@ IopCancelIoFileExInThread(
     _In_ BOOLEAN PortOnly,
     _Out_ PBOOLEAN Found);
 
+static
+VOID
+IopClaimThreadAgnosticIrps(
+    _In_ PFILE_OBJECT FileObject,
+    _In_opt_ PIO_STATUS_BLOCK IoRequestToCancel);
+
 VOID
 NTAPI
 IopCloseFile(IN PEPROCESS Process OPTIONAL,
@@ -2557,6 +2565,12 @@ IopCloseFile(IN PEPROCESS Process OPTIONAL,
     {
         PETHREAD Thread;
         BOOLEAN Found;
+
+        if ((Process == PsGetCurrentProcess()) &&
+            !PsIsThreadTerminating(PsGetCurrentThread()))
+        {
+            IopClaimThreadAgnosticIrps(FileObject, NULL);
+        }
 
         for (Thread = PsGetNextProcessThread(Process, NULL);
              Thread != NULL;
@@ -3586,6 +3600,8 @@ IoCreateStreamFileObjectEx(IN PFILE_OBJECT FileObject OPTIONAL,
 
     /* Initialize the wait event */
     KeInitializeEvent(&CreatedFileObject->Event, SynchronizationEvent, FALSE);
+    KeInitializeSpinLock(&CreatedFileObject->IrpListLock);
+    InitializeListHead(&CreatedFileObject->IrpList);
 
     /* Insert it to create a handle for it */
     Status = ObInsertObject(CreatedFileObject,
@@ -3683,6 +3699,8 @@ IoCreateStreamFileObjectLite(IN PFILE_OBJECT FileObject OPTIONAL,
 
     /* Initialize the wait event */
     KeInitializeEvent(&CreatedFileObject->Event, SynchronizationEvent, FALSE);
+    KeInitializeSpinLock(&CreatedFileObject->IrpListLock);
+    InitializeListHead(&CreatedFileObject->IrpList);
 
     /* Destroy create information */
     ObFreeObjectCreateInfoBuffer(OBJECT_TO_OBJECT_HEADER(CreatedFileObject)->
@@ -4662,6 +4680,39 @@ IopCancelMatchingIrpsInCurrentThread(
 
 static
 VOID
+IopClaimThreadAgnosticIrps(
+    _In_ PFILE_OBJECT FileObject,
+    _In_opt_ PIO_STATUS_BLOCK IoRequestToCancel)
+{
+    PETHREAD Thread = PsGetCurrentThread();
+    PLIST_ENTRY NextEntry;
+    KIRQL OldIrql, LockIrql;
+    PIRP Irp;
+
+    KeRaiseIrql(APC_LEVEL, &OldIrql);
+    KeAcquireSpinLock(&FileObject->IrpListLock, &LockIrql);
+
+    NextEntry = FileObject->IrpList.Flink;
+    while (NextEntry != &FileObject->IrpList)
+    {
+        Irp = CONTAINING_RECORD(NextEntry, IRP, ThreadListEntry);
+        NextEntry = NextEntry->Flink;
+
+        if ((Irp->CurrentLocation <= (Irp->StackCount + 1)) &&
+            (!IoRequestToCancel || (Irp->UserIosb == IoRequestToCancel)))
+        {
+            RemoveEntryList(&Irp->ThreadListEntry);
+            Irp->Tail.Overlay.Thread = Thread;
+            InsertHeadList(&Thread->IrpList, &Irp->ThreadListEntry);
+        }
+    }
+
+    KeReleaseSpinLock(&FileObject->IrpListLock, LockIrql);
+    KeLowerIrql(OldIrql);
+}
+
+static
+VOID
 NTAPI
 IopCancelIoFileExKernelApc(
     _In_ PKAPC Apc,
@@ -4798,6 +4849,9 @@ NtCancelIoFileEx(IN HANDLE FileHandle,
         return Status;
 
     IopUpdateOperationCount(IopOtherTransfer);
+
+    if (FileObject->CompletionContext)
+        IopClaimThreadAgnosticIrps(FileObject, IoRequestToCancel);
 
     Process = PsGetCurrentProcess();
     Thread = PsGetNextProcessThread(Process, NULL);

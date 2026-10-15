@@ -206,6 +206,38 @@ IopDisassociateThreadIrp(VOID)
     }
 }
 
+static
+BOOLEAN
+IopMakeIrpThreadAgnostic(IN PIRP Irp)
+{
+    PFILE_OBJECT FileObject = Irp->Tail.Overlay.OriginalFileObject;
+    KIRQL OldIrql;
+    BOOLEAN Moved = FALSE;
+
+    if (!(FileObject) ||
+        !(FileObject->CompletionContext) ||
+        (Irp->RequestorMode == KernelMode) ||
+        (Irp->UserEvent) ||
+        (Irp->Flags & (IRP_SYNCHRONOUS_API | IRP_CREATE_OPERATION | IRP_CLOSE_OPERATION | IRP_PAGING_IO)) ||
+        (Irp->Overlay.AsynchronousParameters.UserApcRoutine) ||
+        !(Irp->Overlay.AsynchronousParameters.UserApcContext))
+    {
+        return FALSE;
+    }
+
+    KeAcquireSpinLock(&FileObject->IrpListLock, &OldIrql);
+    if (Irp->CurrentLocation <= (Irp->StackCount + 1))
+    {
+        RemoveEntryList(&Irp->ThreadListEntry);
+        Irp->Tail.Overlay.Thread = NULL;
+        InsertTailList(&FileObject->IrpList, &Irp->ThreadListEntry);
+        Moved = TRUE;
+    }
+    KeReleaseSpinLock(&FileObject->IrpListLock, OldIrql);
+
+    return Moved;
+}
+
 VOID
 NTAPI
 IopCleanupIrp(IN PIRP Irp,
@@ -251,6 +283,21 @@ IopCleanupIrp(IN PIRP Irp,
 
     /* Free the IRP */
     IoFreeIrp(Irp);
+}
+
+VOID
+NTAPI
+IopAbandonThreadAgnosticIrp(IN PIRP Irp)
+{
+    PFILE_OBJECT FileObject = Irp->Tail.Overlay.OriginalFileObject;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&FileObject->IrpListLock, &OldIrql);
+    RemoveEntryList(&Irp->ThreadListEntry);
+    InitializeListHead(&Irp->ThreadListEntry);
+    KeReleaseSpinLock(&FileObject->IrpListLock, OldIrql);
+
+    IopCleanupIrp(Irp, FileObject);
 }
 
 VOID
@@ -1238,6 +1285,14 @@ IoCancelThreadIo(IN PETHREAD Thread)
     /* Raise to APC to protect the IrpList */
     KeRaiseIrql(APC_LEVEL, &OldIrql);
 
+    NextEntry = Thread->IrpList.Flink;
+    while (NextEntry != &Thread->IrpList)
+    {
+        Irp = CONTAINING_RECORD(NextEntry, IRP, ThreadListEntry);
+        NextEntry = NextEntry->Flink;
+        IopMakeIrpThreadAgnostic(Irp);
+    }
+
     /* Start by cancelling all the IRPs in the current thread queue. */
     ListHead = &Thread->IrpList;
     NextEntry = ListHead->Flink;
@@ -1651,6 +1706,23 @@ IofCompleteRequest(IN PIRP Irp,
     /* Get the thread and file object */
     Thread = Irp->Tail.Overlay.Thread;
     FileObject = Irp->Tail.Overlay.OriginalFileObject;
+
+    if ((FileObject) && (FileObject->CompletionContext))
+    {
+        KIRQL OldIrql;
+        BOOLEAN ThreadAgnostic;
+
+        KeAcquireSpinLock(&FileObject->IrpListLock, &OldIrql);
+        Thread = Irp->Tail.Overlay.Thread;
+        ThreadAgnostic = !(Thread) && !IsListEmpty(&Irp->ThreadListEntry);
+        KeReleaseSpinLock(&FileObject->IrpListLock, OldIrql);
+
+        if (ThreadAgnostic)
+        {
+            IopQueueThreadAgnosticIrp(Irp, FileObject);
+            return;
+        }
+    }
 
     /* Make sure the IRP isn't canceled */
     if (!Irp->Cancel)

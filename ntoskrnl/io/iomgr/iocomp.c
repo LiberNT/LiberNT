@@ -174,7 +174,10 @@ IopDeleteIoCompletion(PVOID ObjectBody)
             {
                 /* Get the IRP and free it */
                 Irp = CONTAINING_RECORD(Packet, IRP, Tail.Overlay.ListEntry);
-                IopFreeCompletionIrp(Irp, FALSE);
+                if (!IsListEmpty(&Irp->ThreadListEntry))
+                    IopAbandonThreadAgnosticIrp(Irp);
+                else
+                    IopFreeCompletionIrp(Irp, FALSE);
             }
             else
             {
@@ -183,6 +186,63 @@ IopDeleteIoCompletion(PVOID ObjectBody)
             }
         } while (FirstEntry != CurrentEntry);
     }
+}
+
+VOID
+NTAPI
+IopQueueThreadAgnosticIrp(IN PIRP Irp,
+                          IN PFILE_OBJECT FileObject)
+{
+    PKQUEUE Queue = FileObject->CompletionContext->Port;
+    BOOLEAN Inserted = FALSE;
+    KIRQL OldIrql;
+
+    Irp->Tail.Overlay.PacketType = IopCompletionPacketIrp;
+
+    OldIrql = KeRaiseIrqlToSynchLevel();
+    KiAcquireDispatcherObject(&Queue->Header);
+    if (!Queue->Header.Abandoned)
+    {
+        KiInsertQueue(Queue, &Irp->Tail.Overlay.ListEntry, FALSE);
+        Inserted = TRUE;
+    }
+    KiReleaseDispatcherObject(&Queue->Header);
+    KiExitDispatcher(OldIrql);
+
+    if (!Inserted) IopAbandonThreadAgnosticIrp(Irp);
+}
+
+static
+BOOLEAN
+IopCompleteThreadAgnosticIrp(IN PLIST_ENTRY ListEntry)
+{
+    PIOP_MINI_COMPLETION_PACKET Packet;
+    PKNORMAL_ROUTINE NormalRoutine = NULL;
+    PVOID NormalContext = NULL, DataBuffer = NULL;
+    PFILE_OBJECT FileObject;
+    PIRP Irp;
+    KIRQL OldIrql;
+
+    Packet = CONTAINING_RECORD(ListEntry, IOP_MINI_COMPLETION_PACKET, ListEntry);
+    if (Packet->PacketType != IopCompletionPacketIrp) return FALSE;
+
+    Irp = CONTAINING_RECORD(ListEntry, IRP, Tail.Overlay.ListEntry);
+    if (IsListEmpty(&Irp->ThreadListEntry)) return FALSE;
+
+    FileObject = Irp->Tail.Overlay.OriginalFileObject;
+    KeAcquireSpinLock(&FileObject->IrpListLock, &OldIrql);
+    RemoveEntryList(&Irp->ThreadListEntry);
+    InitializeListHead(&Irp->ThreadListEntry);
+    KeReleaseSpinLock(&FileObject->IrpListLock, OldIrql);
+
+    KeRaiseIrql(APC_LEVEL, &OldIrql);
+    IopCompleteRequest(&Irp->Tail.Apc,
+                       &NormalRoutine,
+                       &NormalContext,
+                       (PVOID *)&FileObject,
+                       &DataBuffer);
+    KeLowerIrql(OldIrql);
+    return TRUE;
 }
 
 VOID
@@ -557,7 +617,13 @@ NtRemoveIoCompletion(IN HANDLE IoCompletionHandle,
     if (NT_SUCCESS(Status))
     {
         /* Remove queue */
-        ListEntry = KeRemoveQueue(Queue, PreviousMode, Timeout);
+        do
+        {
+            ListEntry = KeRemoveQueue(Queue, PreviousMode, Timeout);
+        } while (((NTSTATUS)(ULONG_PTR)ListEntry != STATUS_TIMEOUT) &&
+                 ((NTSTATUS)(ULONG_PTR)ListEntry != STATUS_USER_APC) &&
+                 ((NTSTATUS)(ULONG_PTR)ListEntry != STATUS_ABANDONED) &&
+                 IopCompleteThreadAgnosticIrp(ListEntry));
 
         /* If we got a wait status back, return it */
         if (((NTSTATUS)(ULONG_PTR)ListEntry == STATUS_TIMEOUT) ||
@@ -749,6 +815,9 @@ NtRemoveIoCompletionEx(IN HANDLE IoCompletionHandle,
                 Status == STATUS_ALERTED || Status == STATUS_ABANDONED)
                 break;
             Status = STATUS_SUCCESS;
+
+            if (IopCompleteThreadAgnosticIrp(ListEntry))
+                continue;
 
             Packet = CONTAINING_RECORD(ListEntry,
                                        IOP_MINI_COMPLETION_PACKET,

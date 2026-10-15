@@ -1280,6 +1280,12 @@ IopCompleteRequest(
     IN PVOID* SystemArgument2
 );
 
+VOID
+NTAPI
+IopAbandonThreadAgnosticIrp(
+    IN PIRP Irp
+);
+
 //
 // Error Logging Routines
 //
@@ -1662,6 +1668,13 @@ VOID
 NTAPI
 IopDeleteIoCompletion(
     PVOID ObjectBody
+);
+
+VOID
+NTAPI
+IopQueueThreadAgnosticIrp(
+    IN PIRP Irp,
+    IN PFILE_OBJECT FileObject
 );
 
 VOID
