@@ -1,5 +1,6 @@
 
 add_executable(dxgi_apitest
+    adapter_removal.c
     dxgi.c
     texture_dimensions.cpp
     composition.cpp
