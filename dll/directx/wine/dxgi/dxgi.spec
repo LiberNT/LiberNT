@@ -3,6 +3,7 @@
 @ stdcall CreateDXGIFactory2(long ptr ptr)
 @ stdcall DXGID3D10CreateDevice(ptr ptr ptr long ptr long ptr)
 @ stdcall DXGID3D10RegisterLayers(ptr long)
+@ stdcall DXGIDeclareAdapterRemovalSupport()
 @ stdcall DXGIGetDebugInterface1(long ptr ptr)
 @ stdcall -private RosDxgiGetWindowAssociation(ptr ptr ptr)
 @ stdcall -private RosDxgiCreateNullAdapter(ptr ptr)

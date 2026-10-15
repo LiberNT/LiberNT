@@ -390,4 +390,13 @@ void dxgi_get_wddm_output_color(const WCHAR *device_name, DXGI_OUTPUT_DESC1 *des
     }
 }
 
+static LONG dxgi_adapter_removal_support;
+
+HRESULT WINAPI DXGIDeclareAdapterRemovalSupport(void)
+{
+    if (InterlockedExchange(&dxgi_adapter_removal_support, 1))
+        return DXGI_ERROR_ALREADY_EXISTS;
+    return S_OK;
+}
+
 #endif /* __REACTOS__ */
