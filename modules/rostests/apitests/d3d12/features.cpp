@@ -17,6 +17,26 @@ template <typename T> static void TestFeature(ID3D12Device *device, D3D12_FEATUR
     ok(hr == E_INVALIDARG, "feature %u: short size: %#lx\n", feature, hr);
 }
 
+template <typename T> static void TestLongFeature(ID3D12Device *device, D3D12_FEATURE feature)
+{
+    BYTE data[sizeof(T) + 4] = {};
+    HRESULT hr = device->CheckFeatureSupport(feature, data, sizeof(data));
+    ok(hr == E_INVALIDARG, "feature %u: long size: %#lx\n", feature, hr);
+}
+
+template <typename T> static void TestGenericOnlyFeature(ID3D12Device *device, D3D12_FEATURE feature)
+{
+    T data;
+    memset(&data, 0x55, sizeof(data));
+    HRESULT hr = device->CheckFeatureSupport(feature, &data, sizeof(data));
+    ok(hr == E_UNEXPECTED, "feature %u: %#lx\n", feature, hr);
+    ok(*reinterpret_cast<const BYTE *>(&data) == 0x55 && reinterpret_cast<const BYTE *>(&data)[sizeof(data) - 1] == 0x55,
+            "feature %u: output written\n", feature);
+    hr = device->CheckFeatureSupport(feature, &data, sizeof(data) - 1);
+    ok(hr == E_INVALIDARG, "feature %u: short size: %#lx\n", feature, hr);
+    TestLongFeature<T>(device, feature);
+}
+
 static void RunFeatures(void *)
 {
     static const D3D_FEATURE_LEVEL level = D3D_FEATURE_LEVEL_11_0;
@@ -28,6 +48,10 @@ static void RunFeatures(void *)
     D3D12_FEATURE_DATA_ROOT_SIGNATURE root_signature = {};
     D3D12_FEATURE_DATA_COMMAND_QUEUE_PRIORITY priority = {};
     D3D12_FEATURE_DATA_D3D12_OPTIONS18 options18 = {};
+    D3D12_FEATURE_DATA_D3D12_OPTIONS19 options19 = {};
+    D3D12_FEATURE_DATA_D3D12_OPTIONS20 options20 = {};
+    D3D12_FEATURE_DATA_D3D12_OPTIONS21 options21 = {};
+    D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO placed = {};
     ID3D12Device *device;
     BYTE buffer[256] = {};
     HRESULT hr;
@@ -86,6 +110,46 @@ static void RunFeatures(void *)
 
     hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS18, &options18, sizeof(options18));
     ok(hr == S_OK && options18.RenderPassesValid, "RenderPassesValid %d, hr %#lx\n", options18.RenderPassesValid, hr);
+
+    TestFeature(device, D3D12_FEATURE_D3D12_OPTIONS19, D3D12_FEATURE_DATA_D3D12_OPTIONS19());
+    TestFeature(device, D3D12_FEATURE_D3D12_OPTIONS20, D3D12_FEATURE_DATA_D3D12_OPTIONS20());
+    TestFeature(device, D3D12_FEATURE_D3D12_OPTIONS21, D3D12_FEATURE_DATA_D3D12_OPTIONS21());
+    TestLongFeature<D3D12_FEATURE_DATA_D3D12_OPTIONS19>(device, D3D12_FEATURE_D3D12_OPTIONS19);
+    TestLongFeature<D3D12_FEATURE_DATA_D3D12_OPTIONS20>(device, D3D12_FEATURE_D3D12_OPTIONS20);
+    TestLongFeature<D3D12_FEATURE_DATA_D3D12_OPTIONS21>(device, D3D12_FEATURE_D3D12_OPTIONS21);
+
+    hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS19, &options19, sizeof(options19));
+    ok(hr == S_OK, "options19: %#lx\n", hr);
+    ok(options19.SupportedSampleCountsWithNoOutputs & 1, "sample counts with no outputs %#x\n",
+            options19.SupportedSampleCountsWithNoOutputs);
+    ok(options19.MaxSamplerDescriptorHeapSize >= D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE,
+            "sampler heap size %u\n", options19.MaxSamplerDescriptorHeapSize);
+    ok(options19.MaxSamplerDescriptorHeapSizeWithStaticSamplers >= D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE,
+            "sampler heap size with static samplers %u\n", options19.MaxSamplerDescriptorHeapSizeWithStaticSamplers);
+    ok(options19.MaxViewDescriptorHeapSize >= D3D12_MAX_SHADER_VISIBLE_DESCRIPTOR_HEAP_SIZE_TIER_2,
+            "view heap size %u\n", options19.MaxViewDescriptorHeapSize);
+    hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS20, &options20, sizeof(options20));
+    ok(hr == S_OK && (options20.RecreateAtTier == D3D12_RECREATE_AT_TIER_NOT_SUPPORTED
+            || options20.RecreateAtTier == D3D12_RECREATE_AT_TIER_1), "recreate-at tier %d, hr %#lx\n",
+            options20.RecreateAtTier, hr);
+    hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS21, &options21, sizeof(options21));
+    ok(hr == S_OK, "options21: %#lx\n", hr);
+    ok(options21.ExecuteIndirectTier == D3D12_EXECUTE_INDIRECT_TIER_1_0
+            || options21.ExecuteIndirectTier == D3D12_EXECUTE_INDIRECT_TIER_1_1,
+            "execute indirect tier %d\n", options21.ExecuteIndirectTier);
+    ok(options21.WorkGraphsTier == D3D12_WORK_GRAPHS_TIER_NOT_SUPPORTED
+            || options21.WorkGraphsTier == D3D12_WORK_GRAPHS_TIER_1_0, "work graphs tier %d\n", options21.WorkGraphsTier);
+
+    TestGenericOnlyFeature<D3D12_FEATURE_DATA_PREDICATION>(device, D3D12_FEATURE_PREDICATION);
+    TestGenericOnlyFeature<D3D12_FEATURE_DATA_HARDWARE_COPY>(device, D3D12_FEATURE_HARDWARE_COPY);
+    TestGenericOnlyFeature<D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO>(device,
+            D3D12_FEATURE_PLACED_RESOURCE_SUPPORT_INFO);
+    placed.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    placed.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    placed.DestHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+    placed.Supported = 0x55;
+    hr = device->CheckFeatureSupport(D3D12_FEATURE_PLACED_RESOURCE_SUPPORT_INFO, &placed, sizeof(placed));
+    ok(hr == E_UNEXPECTED && placed.Supported == 0x55, "placed resource support %d, hr %#lx\n", placed.Supported, hr);
 
     shader_model.HighestShaderModel = static_cast<D3D_SHADER_MODEL>(0x69);
     hr = device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shader_model, sizeof(shader_model));
