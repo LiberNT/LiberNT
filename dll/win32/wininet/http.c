@@ -3545,8 +3545,31 @@ static DWORD HTTPREQ_SetFilePointer(object_header_t *hdr, LONG lDistanceToMove, 
             res = req->content_pos + lDistanceToMove;
             break;
         case FILE_END:
+#ifdef __REACTOS__
+        {
+            int index;
+            BOOL ranges = FALSE;
+
+            EnterCriticalSection(&req->headers_section);
+            index = HTTP_GetCustomHeaderIndex(req, L"Accept-Ranges", 0, FALSE);
+            if(index != -1)
+                ranges = !wcsicmp(req->custHeaders[index].lpszValue, L"bytes");
+            LeaveCriticalSection(&req->headers_section);
+            if(!ranges || req->contentLength == ~0) {
+                err = ERROR_INTERNET_INVALID_OPERATION;
+                break;
+            }
+        }
+            if(req->contentLength && lDistanceToMove < 0) {
+                err = ERROR_NEGATIVE_SEEK;
+                break;
+            }
+            res = req->contentLength + lDistanceToMove;
+            break;
+#else
             FIXME("dwMoveContext FILE_END not implemented\n");
             /* fallthrough */
+#endif
         default:
             err = ERROR_INTERNET_INVALID_OPERATION;
             break;
