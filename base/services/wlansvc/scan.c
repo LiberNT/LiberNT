@@ -605,7 +605,7 @@ WlanSvcBuildBssList(PWLANSVC_INTERFACE Iface,
         out->ullTimestamp = bss->BeaconTimestamp;
         out->ullHostTimestamp = bss->HostTimestamp;
         out->usCapabilityInformation = bss->CapabilityInformation;
-        out->ulChCenterFrequency = bss->ChCenterFrequency;
+        out->ulChCenterFrequency = bss->ChCenterFrequency * 1000;
         out->wlanRateSet.uRateSetLength = bss->RateCount;
         for (r = 0; r < bss->RateCount; r++)
             out->wlanRateSet.usRateSet[r] = bss->Rates[r];

@@ -427,6 +427,7 @@ DWORD WINAPI WlanConnect(IN HANDLE hClientHandle, IN const GUID *pInterfaceGuid,
 DWORD WINAPI WlanDisconnect(IN HANDLE hClientHandle, IN const GUID *pInterfaceGuid, PVOID pReserved);
 DWORD WINAPI WlanEnumInterfaces(IN HANDLE hClientHandle, PVOID pReserved, OUT PWLAN_INTERFACE_INFO_LIST *ppInterfaceList);
 DWORD WINAPI WlanGetAvailableNetworkList(IN HANDLE hClientHandle, IN const GUID *pInterfaceGuid, IN DWORD dwFlags, PVOID pReserved, OUT PWLAN_AVAILABLE_NETWORK_LIST *ppAvailableNetworkList);
+DWORD WINAPI WlanGetNetworkBssList(IN HANDLE hClientHandle, IN const GUID *pInterfaceGuid, IN const PDOT11_SSID pDot11Ssid, IN DOT11_BSS_TYPE dot11BssType, IN BOOL bSecurityEnabled, PVOID pReserved, OUT PWLAN_BSS_LIST *ppWlanBssList);
 DWORD WINAPI WlanGetInterfaceCapability(IN HANDLE hClientHandle, IN const GUID *pInterfaceGuid, PVOID pReserved, OUT PWLAN_INTERFACE_CAPABILITY *ppCapability);
 DWORD WINAPI WlanDeleteProfile(IN HANDLE hClientHandle, IN const GUID *pInterfaceGuid, IN LPCWSTR strProfileName, PVOID pReserved);
 DWORD WINAPI WlanGetProfile(IN HANDLE hClientHandle, IN const GUID *pInterfaceGuid, IN LPCWSTR strProfileName, PVOID pReserved, OUT LPWSTR *pstrProfileXml, DWORD *pdwFlags, PDWORD pdwGrantedAccess);
