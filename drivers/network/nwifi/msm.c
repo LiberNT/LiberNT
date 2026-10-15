@@ -617,8 +617,7 @@ NwifiMsmConnect(
             Params->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
         {
             Status = NwifiSupplicantSeedFirmware(Msm);
-            if (Status == NDIS_STATUS_NOT_SUPPORTED &&
-                Params->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK)
+            if (Status == NDIS_STATUS_NOT_SUPPORTED)
             {
                 Status = NwifiSupplicantStart(Msm);
             }
@@ -1033,6 +1032,49 @@ NwifiMsmRxData(
  *  BSS list export to wlansvc (IOCTL_NWIFI_GET_BSS_LIST)
  * ===========================================================================
  */
+BOOLEAN
+NwifiMsmBssUsesSaeH2e(
+    _In_ PNWIFI_MSM Msm,
+    _In_reads_bytes_(IEEE80211_ADDR_LEN) const UCHAR *Bssid)
+{
+    BOOLEAN H2e = FALSE;
+    ULONG i, Off, j;
+    PUCHAR Ie;
+    UCHAR Id, Len;
+
+    NwifiAggregateBssList(Msm);
+
+    NdisAcquireSpinLock(&Msm->Lock);
+    for (i = 0; i < Msm->BssCount && !H2e; i++)
+    {
+        if (!Msm->BssCache[i].Valid ||
+            RtlCompareMemory(Msm->BssCache[i].Bssid, Bssid, IEEE80211_ADDR_LEN) != IEEE80211_ADDR_LEN)
+        {
+            continue;
+        }
+        Ie = Msm->BssCache[i].Ie;
+        for (Off = 0; Off + 2 <= Msm->BssCache[i].IeLength && !H2e; Off += 2 + Len)
+        {
+            Id = Ie[Off];
+            Len = Ie[Off + 1];
+            if (Off + 2 + Len > Msm->BssCache[i].IeLength)
+                break;
+            if (Id == IEEE80211_ELEMENT_RSNXE && Len >= 1 && (Ie[Off + 2] & IEEE80211_RSNXE_SAE_H2E))
+                H2e = TRUE;
+            if (Id == IEEE80211_ELEMENT_RATES || Id == IEEE80211_ELEMENT_EXT_RATES)
+            {
+                for (j = 0; j < Len; j++)
+                {
+                    if (Ie[Off + 2 + j] == (0x80 | IEEE80211_SELECTOR_SAE_H2E_ONLY))
+                        H2e = TRUE;
+                }
+            }
+        }
+    }
+    NdisReleaseSpinLock(&Msm->Lock);
+    return H2e;
+}
+
 NDIS_STATUS
 NwifiMsmGetBssList(
     _In_ PNWIFI_MSM Msm,

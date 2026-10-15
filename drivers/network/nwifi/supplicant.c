@@ -9,6 +9,8 @@
 
 /* The RSNA supplicant library API (pure crypto + 4-way handshake FSM). */
 #include <rsna_supplicant.h>
+#include <rsna_sae.h>
+#include <nwifi_sae.h>
 #include <bcrypt.h>
 
 #define NDEBUG
@@ -35,6 +37,11 @@ typedef struct _NWIFI_SUPPLICANT
     ULONG     RandomAvailable;
     ULONG     InstalledGroupSerial;
     BOOLEAN   GroupInstallQueued;
+    BOOLEAN   SaePending;
+    BOOLEAN   SaeH2e;
+    UCHAR     SaeBssid[IEEE80211_ADDR_LEN];
+    USHORT    SaeSendConfirm;
+    RSNA_SAE  Sae;
 } NWIFI_SUPPLICANT;
 
 typedef struct _NWIFI_INSTALL_KEYS_CONTEXT
@@ -518,6 +525,7 @@ NwifiSupplicantStart(
         0x01, 0x00, 0x00, 0x0F, 0xAC, 0x02,
         0x00, 0x00
     };
+    static const UCHAR NoPmk[RSNA_PMK_LEN] = { 0 };
 
     RtlZeroMemory(&NewCtx, sizeof(NewCtx));
     RtlZeroMemory(Credential, sizeof(Credential));
@@ -543,15 +551,23 @@ NwifiSupplicantStart(
     MulticastCipher = Msm->Connect.MulticastCipher;
     NdisReleaseSpinLock(&Msm->Lock);
 
-    if (AuthAlgorithm != DOT11_AUTH_ALGO_RSNA_PSK)
+    if (AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
+    {
+        RStatus = RsnaInitWithPmk(&NewCtx, Ssid.ucSSID, Ssid.uSSIDLength, NoPmk);
+        RsnIe[19] = RSNA_AKM_SAE;
+        RsnIe[20] = 0xC0;
+    }
+    else if (AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK)
+    {
+        RStatus = NwifiInitRsnaContext(&NewCtx,
+                                       &Ssid,
+                                       Credential,
+                                       CredentialLength);
+    }
+    else
     {
         RStatus = RSNA_ERR_PARAM;
-        goto StartFailed;
     }
-    RStatus = NwifiInitRsnaContext(&NewCtx,
-                                   &Ssid,
-                                   Credential,
-                                   CredentialLength);
     if (RStatus != RSNA_OK)
     {
         goto StartFailed;
@@ -619,7 +635,10 @@ NwifiSupplicantStart(
     RtlCopyMemory(Sup->RandomPool, RandomPool, sizeof(RandomPool));
     Sup->RandomAvailable = sizeof(RandomPool);
     Sup->Generation++;
-    Sup->Initialised = TRUE;
+    Sup->Initialised = AuthAlgorithm != DOT11_AUTH_ALGO_WPA3_SAE;
+    Sup->SaePending = AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE;
+    Sup->SaeH2e = FALSE;
+    RsnaSaeClear(&Sup->Sae);
     Sup->KeysInstalled = FALSE;
     Sup->InstallQueued = 0;
     Sup->InstalledGroupSerial = 0;
@@ -639,6 +658,327 @@ StartFailed:
     DPRINT1("NWIFI: supplicant initialization failed %d\n", RStatus);
     return (RStatus == RSNA_ERR_PARAM) ? NDIS_STATUS_INVALID_DATA
                                       : NDIS_STATUS_FAILURE;
+}
+
+static
+int
+NwifiSaeRandom(
+    _In_ void *Context,
+    _Out_writes_bytes_(Length) rsna_u8 *Buffer,
+    _In_ rsna_size Length)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return NT_SUCCESS(BCryptGenRandom(NULL, Buffer, (ULONG)Length, BCRYPT_USE_SYSTEM_PREFERRED_RNG)) ? 0 : -1;
+}
+
+static
+NDIS_STATUS
+NwifiSaeSendParams(
+    _In_ PNWIFI_MSM Msm,
+    _In_ PNWIFI_SAE_PARAMS Params)
+{
+    UCHAR Message[NWIFI_SAE_MAX_MESSAGE];
+    ULONG Length;
+    NDIS_STATUS Status;
+
+    Length = NwifiSaeBuildParams(Message, sizeof(Message), Params);
+    if (Length == 0)
+        return NDIS_STATUS_INVALID_LENGTH;
+
+    Status = NwifiProtocolDoRequest(Msm->Adapter,
+                                    NdisRequestSetInformation,
+                                    OID_WDI_SET_SAE_AUTH_PARAMS,
+                                    Message,
+                                    Length,
+                                    NULL);
+    RtlSecureZeroMemory(Message, sizeof(Message));
+    return Status;
+}
+
+VOID
+NwifiSupplicantSaeIndication(
+    _In_ PNWIFI_MSM Msm,
+    _In_reads_bytes_(Length) const UCHAR *Message,
+    _In_ ULONG Length)
+{
+    PNWIFI_SUPPLICANT Sup;
+    PNWIFI_SAE_PARAMS Params;
+    RSNA_SAE *Sae;
+    UCHAR Bssid[IEEE80211_ADDR_LEN], OwnMac[IEEE80211_ADDR_LEN];
+    UCHAR Password[NWIFI_CREDENTIAL_MAX];
+    UCHAR Pt[RSNA_SAE_ELEMENT_LEN];
+    DOT11_SSID Ssid;
+    const UCHAR *Frame;
+    ULONG IndicationType, FrameLength, PasswordLength, Generation, CommitRequest;
+    USHORT FrameStatus, SendConfirm = 0;
+    BOOLEAN Done = FALSE, Success = FALSE, H2e;
+
+    if (!NwifiSaeParseIndication(Message, Length, Bssid, &IndicationType, &Frame, &FrameLength))
+        return;
+
+    Params = (PNWIFI_SAE_PARAMS)NwifiAllocate(sizeof(*Params));
+    Sae = (RSNA_SAE *)NwifiAllocate(sizeof(*Sae));
+    if (Params == NULL || Sae == NULL)
+    {
+        if (Params)
+            NwifiFree(Params);
+        if (Sae)
+            NwifiFree(Sae);
+        return;
+    }
+    RtlZeroMemory(Params, sizeof(*Params));
+    RtlCopyMemory(Params->Bssid, Bssid, IEEE80211_ADDR_LEN);
+    Params->RequestType = WDI_SAE_REQUEST_TYPE_FAILURE;
+    Params->HaveStatus = TRUE;
+    Params->Status = WDI_SAE_STATUS_FAILURE;
+
+    NdisAcquireSpinLock(&Msm->Lock);
+    Sup = Msm->Supplicant;
+    if (Sup == NULL || !Sup->SaePending || !Sup->PassphraseSet ||
+        Sup->PassphraseLen == 0 || Sup->PassphraseLen > sizeof(Password))
+    {
+        NdisReleaseSpinLock(&Msm->Lock);
+        Params->Status = WDI_SAE_STATUS_INITIALIZATION_NO_KEY;
+        goto Reply;
+    }
+    PasswordLength = Sup->PassphraseLen;
+    RtlCopyMemory(Password, Sup->Passphrase, PasswordLength);
+    RtlCopyMemory(OwnMac, Msm->Adapter->MacAddress, IEEE80211_ADDR_LEN);
+    *Sae = Sup->Sae;
+    SendConfirm = Sup->SaeSendConfirm;
+    Generation = Sup->Generation;
+    H2e = Sup->SaeH2e;
+    Ssid = Msm->Connect.Ssid;
+    NdisReleaseSpinLock(&Msm->Lock);
+
+    switch (IndicationType)
+    {
+        case WDI_SAE_INDICATION_TYPE_COMMIT_REQUEST_PARAMS_NEEDED:
+            RsnaSaeClear(Sae);
+            H2e = NwifiMsmBssUsesSaeH2e(Msm, Bssid);
+            if (H2e)
+            {
+                if (!RsnaSaeDerivePt(Pt, Ssid.ucSSID, Ssid.uSSIDLength, Password, PasswordLength, NULL, 0) ||
+                    !RsnaSaeDerivePweFromPt(Sae, Pt, OwnMac, Bssid))
+                {
+                    Params->Status = WDI_SAE_STATUS_COMMIT_MESSAGE_INTERNAL_COMPUTATION_ERROR;
+                    break;
+                }
+            }
+            else if (!RsnaSaeDerivePwe(Sae, OwnMac, Bssid, Password, PasswordLength))
+            {
+                Params->Status = WDI_SAE_STATUS_COMMIT_MESSAGE_INTERNAL_COMPUTATION_ERROR;
+                break;
+            }
+            if (!RsnaSaeGenerateCommit(Sae, NwifiSaeRandom, NULL))
+            {
+                Params->Status = WDI_SAE_STATUS_COMMIT_MESSAGE_INTERNAL_COMPUTATION_ERROR;
+                break;
+            }
+            SendConfirm = 0;
+            Params->RequestType = H2e ? WDI_SAE_REQUEST_TYPE_COMMIT_H2E_PARAMS : WDI_SAE_REQUEST_TYPE_COMMIT_PARAMS;
+            break;
+
+        case WDI_SAE_INDICATION_TYPE_COMMIT_FRAME:
+            if (Frame == NULL || FrameLength < 8 || !Sae->HaveCommit)
+            {
+                Params->Status = WDI_SAE_STATUS_COMMIT_MESSAGE_MALFORMED_AUTH_FRAME;
+                break;
+            }
+            FrameStatus = (USHORT)(Frame[4] | (Frame[5] << 8));
+            CommitRequest = H2e ? WDI_SAE_REQUEST_TYPE_COMMIT_H2E_PARAMS : WDI_SAE_REQUEST_TYPE_COMMIT_PARAMS;
+            if (FrameStatus == IEEE80211_STATUS_SAE_ANTI_CLOGGING)
+            {
+                const UCHAR *Token = Frame + 8;
+                ULONG TokenLength = FrameLength - 8;
+
+                if (H2e)
+                {
+                    if (TokenLength < 3 || Token[0] != IEEE80211_ELEMENT_EXTENSION ||
+                        Token[2] != IEEE80211_EXT_ANTI_CLOGGING_TOKEN || Token[1] < 1 ||
+                        (ULONG)Token[1] + 2 > TokenLength)
+                    {
+                        Params->Status = WDI_SAE_STATUS_COMMIT_MESSAGE_MALFORMED_AUTH_FRAME;
+                        break;
+                    }
+                    TokenLength = Token[1] - 1;
+                    Token += 3;
+                }
+                if (TokenLength > NWIFI_SAE_MAX_TOKEN)
+                {
+                    Params->Status = WDI_SAE_STATUS_COMMIT_MESSAGE_MALFORMED_AUTH_FRAME;
+                    break;
+                }
+                Params->TokenLength = TokenLength;
+                RtlCopyMemory(Params->Token, Token, TokenLength);
+                Params->RequestType = CommitRequest;
+                break;
+            }
+            if (FrameStatus != (H2e ? IEEE80211_STATUS_SAE_HASH_TO_ELEMENT : 0))
+            {
+                Params->Status = FrameStatus == IEEE80211_STATUS_SAE_UNSUPPORTED_GROUP ?
+                                 WDI_SAE_STATUS_COMMIT_MESSAGE_UNSUPPORTED_FINITE_GROUP :
+                                 WDI_SAE_STATUS_COMMIT_MESSAGE_FAILURE_FROM_PEER;
+                break;
+            }
+            if ((Frame[6] | (Frame[7] << 8)) != NWIFI_SAE_GROUP_P256)
+            {
+                Params->Status = WDI_SAE_STATUS_COMMIT_MESSAGE_UNSUPPORTED_FINITE_GROUP;
+                break;
+            }
+            if (FrameLength < 8 + NWIFI_SAE_SCALAR_LENGTH + NWIFI_SAE_ELEMENT_LENGTH)
+            {
+                Params->Status = WDI_SAE_STATUS_COMMIT_MESSAGE_INVALID_SCALAR_ELEMENT_SIZE;
+                break;
+            }
+            if (!RsnaSaeProcessCommit(Sae, Frame + 8, Frame + 8 + NWIFI_SAE_SCALAR_LENGTH))
+            {
+                Params->Status = WDI_SAE_STATUS_COMMIT_MESSAGE_INTERNAL_COMPUTATION_ERROR;
+                break;
+            }
+            SendConfirm++;
+            Params->HaveConfirm = TRUE;
+            Params->SendConfirm = SendConfirm;
+            RsnaSaeComputeConfirm(Sae, SendConfirm, Params->Confirm);
+            Params->RequestType = WDI_SAE_REQUEST_TYPE_CONFIRM_PARAMS;
+            break;
+
+        case WDI_SAE_INDICATION_TYPE_CONFIRM_REQUEST_RESEND_REQUEST:
+            if (!Sae->HaveKeys)
+            {
+                Params->Status = WDI_SAE_STATUS_CONFIRM_MESSAGE_RECEIVED_IN_INVALID_STATE;
+                break;
+            }
+            SendConfirm++;
+            Params->HaveConfirm = TRUE;
+            Params->SendConfirm = SendConfirm;
+            RsnaSaeComputeConfirm(Sae, SendConfirm, Params->Confirm);
+            Params->RequestType = WDI_SAE_REQUEST_TYPE_CONFIRM_PARAMS;
+            break;
+
+        case WDI_SAE_INDICATION_TYPE_CONFIRM_FRAME:
+            if (Frame == NULL || FrameLength < 8 + NWIFI_SAE_CONFIRM_LENGTH || !Sae->HaveKeys)
+            {
+                Params->Status = WDI_SAE_STATUS_CONFIRM_MESSAGE_MALFORMED_AUTH_FRAME;
+                break;
+            }
+            if (Frame[4] | (Frame[5] << 8))
+            {
+                Params->Status = WDI_SAE_STATUS_CONFIRM_MESSAGE_FAILURE_FROM_PEER;
+                break;
+            }
+            if (!RsnaSaeVerifyConfirm(Sae, (USHORT)(Frame[6] | (Frame[7] << 8)), Frame + 8))
+            {
+                Params->Status = WDI_SAE_STATUS_CONFIRM_MESSAGE_VERIFICATION_FAILED;
+                break;
+            }
+            Params->RequestType = WDI_SAE_REQUEST_TYPE_SUCCESS;
+            Params->Status = WDI_SAE_STATUS_SUCCESS;
+            Success = TRUE;
+            break;
+
+        default:
+            Done = TRUE;
+            break;
+    }
+
+    if (Params->RequestType == WDI_SAE_REQUEST_TYPE_COMMIT_PARAMS ||
+        Params->RequestType == WDI_SAE_REQUEST_TYPE_COMMIT_H2E_PARAMS)
+    {
+        Params->HaveCommit = TRUE;
+        Params->HaveStatus = FALSE;
+        Params->Group = NWIFI_SAE_GROUP_P256;
+        RtlCopyMemory(Params->Scalar, Sae->Scalar, NWIFI_SAE_SCALAR_LENGTH);
+        RtlCopyMemory(Params->Element, Sae->Element, NWIFI_SAE_ELEMENT_LENGTH);
+    }
+    else if (Params->RequestType == WDI_SAE_REQUEST_TYPE_CONFIRM_PARAMS)
+    {
+        Params->HaveStatus = FALSE;
+    }
+
+    NdisAcquireSpinLock(&Msm->Lock);
+    if (Msm->Supplicant == Sup && Sup->Generation == Generation && Sup->SaePending)
+    {
+        Sup->Sae = *Sae;
+        Sup->SaeSendConfirm = SendConfirm;
+        Sup->SaeH2e = H2e;
+        RtlCopyMemory(Sup->SaeBssid, Bssid, IEEE80211_ADDR_LEN);
+        if (Success)
+        {
+            RsnaSetPmk(&Sup->Ctx, Sae->Pmk);
+            Sup->Initialised = TRUE;
+            Sup->SaePending = FALSE;
+        }
+    }
+    else
+    {
+        Params->RequestType = WDI_SAE_REQUEST_TYPE_FAILURE;
+        Params->HaveCommit = FALSE;
+        Params->HaveConfirm = FALSE;
+        Params->HaveStatus = TRUE;
+        Params->Status = WDI_SAE_STATUS_CONNECTION_CLEANED_UP;
+    }
+    NdisReleaseSpinLock(&Msm->Lock);
+
+Reply:
+    if (!Done)
+    {
+        DPRINT1("NWIFI: SAE indication %lu -> request %lu status %lu\n",
+                IndicationType, Params->RequestType, Params->HaveStatus ? Params->Status : 0);
+        NwifiSaeSendParams(Msm, Params);
+    }
+    RtlSecureZeroMemory(Password, sizeof(Password));
+    RtlSecureZeroMemory(Pt, sizeof(Pt));
+    RtlSecureZeroMemory(Params, sizeof(*Params));
+    RtlSecureZeroMemory(Sae, sizeof(*Sae));
+    NwifiFree(Params);
+    NwifiFree(Sae);
+}
+
+typedef struct _NWIFI_SAE_WORK
+{
+    PNWIFI_MSM Msm;
+    ULONG Length;
+    UCHAR Message[NWIFI_SAE_MAX_MESSAGE];
+} NWIFI_SAE_WORK, *PNWIFI_SAE_WORK;
+
+static
+VOID
+NTAPI
+NwifiSupplicantSaeWorker(
+    _In_opt_ PVOID WorkItemContext,
+    _In_     NDIS_HANDLE NdisIoWorkItemHandle)
+{
+    PNWIFI_SAE_WORK Work = (PNWIFI_SAE_WORK)WorkItemContext;
+    PNWIFI_MSM Msm;
+
+    if (Work == NULL)
+        return;
+    Msm = Work->Msm;
+    NwifiSupplicantSaeIndication(Msm, Work->Message, Work->Length);
+    RtlSecureZeroMemory(Work, sizeof(*Work));
+    NwifiFree(Work);
+    NwifiMsmCompleteWorkItem(Msm, NdisIoWorkItemHandle);
+}
+
+VOID
+NwifiSupplicantQueueSaeIndication(
+    _In_ PNWIFI_MSM Msm,
+    _In_reads_bytes_(Length) const VOID *Message,
+    _In_ ULONG Length)
+{
+    PNWIFI_SAE_WORK Work;
+
+    if (Length > NWIFI_SAE_MAX_MESSAGE)
+        return;
+    Work = (PNWIFI_SAE_WORK)NwifiAllocate(sizeof(*Work));
+    if (Work == NULL)
+        return;
+    Work->Msm = Msm;
+    Work->Length = Length;
+    RtlCopyMemory(Work->Message, Message, Length);
+    if (!NwifiMsmQueueWorkItem(Msm, NwifiSupplicantSaeWorker, Work))
+        NwifiFree(Work);
 }
 
 NDIS_STATUS
@@ -758,16 +1098,16 @@ NwifiSupplicantSetAssociation(
     if (Sup != NULL && Sup->Initialised)
     {
         RsnaSetApAddr(&Sup->Ctx, ApMac);
+        RsnaSetRsnxe(&Sup->Ctx, NULL, 0);
         while (RequestIes != NULL && Offset + 2 <= RequestIeLength)
         {
             Length = RequestIes[Offset + 1];
             if (Offset + 2 + Length > RequestIeLength)
                 break;
             if (RequestIes[Offset] == IEEE80211_ELEMENT_RSN)
-            {
                 RsnaSetRsnIe(&Sup->Ctx, RequestIes + Offset, Length + 2);
-                break;
-            }
+            else if (RequestIes[Offset] == IEEE80211_ELEMENT_RSNXE)
+                RsnaSetRsnxe(&Sup->Ctx, RequestIes + Offset, Length + 2);
             Offset += 2 + Length;
         }
     }
@@ -1084,7 +1424,6 @@ NwifiSupplicantRxEapol(
 
     DPRINT1("NWIFI: sup eapol in %lu out %lu state %d err %d\n",
             Length, (ULONG)OutLen, NewState, Error);
-
     if (OutLen != 0 && !DeferReply)
     {
         SendStatus = NwifiInjectL2Frame(Msm->Adapter,

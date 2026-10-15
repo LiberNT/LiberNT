@@ -6,6 +6,7 @@
  */
 
 #include "nwifi.h"
+#include <dot11wificxintf.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -700,6 +701,15 @@ NwifiProtocolStatusEx(
 
         case NDIS_STATUS_DOT11_PHY_STATE_CHANGED:
             DPRINT("NWIFI: dot11 PHY state changed\n");
+            break;
+
+        case NDIS_STATUS_WDI_INDICATION_SAE_AUTH_PARAMS_NEEDED:
+            if (Adapter->MsmContext != NULL && StatusIndication->StatusBuffer != NULL)
+            {
+                NwifiSupplicantQueueSaeIndication((PNWIFI_MSM)Adapter->MsmContext,
+                                                  StatusIndication->StatusBuffer,
+                                                  StatusIndication->StatusBufferSize);
+            }
             break;
 
         default:
