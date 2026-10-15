@@ -13,6 +13,7 @@ extern void func_budget(void);
 extern void func_blend(void);
 extern void func_bundle(void);
 extern void func_features(void);
+extern void func_heaps(void);
 extern void func_interfaces(void);
 extern void func_pipeline(void);
 extern void func_queue(void);
@@ -29,6 +30,7 @@ const struct test winetest_testlist[] =
     { "blend", func_blend },
     { "bundle", func_bundle },
     { "features", func_features },
+    { "heaps", func_heaps },
     { "interfaces", func_interfaces },
     { "pipeline", func_pipeline },
     { "queue", func_queue },

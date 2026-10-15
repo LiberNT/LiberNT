@@ -5,6 +5,7 @@ list(APPEND SOURCE
     blend.cpp
     bundle.cpp
     features.cpp
+    heaps.cpp
     interfaces.cpp
     pipeline.cpp
     queue.cpp
