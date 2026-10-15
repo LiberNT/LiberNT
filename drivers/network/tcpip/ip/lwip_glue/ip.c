@@ -3,11 +3,20 @@
 
 #include <lwip/udp.h>
 #include <lwip/ip.h>
+#include <lwip/nd6.h>
+#include <lwip/stats.h>
+#include <lwip/priv/nd6_priv.h>
+#include <lwip/ip6_frag.h>
+#include <lwip/raw.h>
+#include <lwip/prot/icmp6.h>
 
 #include "lwip_glue.h"
 #include <address.h>
 #include <datagram.h>
 #include <udp.h>
+#include <nldef.h>
+#include <tcpip_undoc.h>
+#include <psdk/ipexport.h>
 
 typedef struct netif* PNETIF;
 
@@ -286,6 +295,615 @@ LibUDPSendDatagram(PADDRESS_FILE AddrFile, PTDI_CONNECTION_INFORMATION ConnInfo,
     default:
         return STATUS_INVALID_CONNECTION;
     }
+}
+
+struct lib_ip6_query
+{
+    ULONG TableId;
+    PUCHAR Buffer;
+    ULONG Length;
+    ULONG Count;
+    ULONG Needed;
+    PIP6_STATISTICS Statistics;
+};
+
+static
+VOID
+LibIP6Emit(struct lib_ip6_query *Query, const VOID *Row, ULONG Size)
+{
+    ULONG Offset = sizeof(IP6_TABLE_HEADER) + Query->Needed;
+
+    if (Query->Buffer && Offset + Size <= Query->Length)
+        RtlCopyMemory(Query->Buffer + Offset, Row, Size);
+
+    Query->Needed += Size;
+    Query->Count++;
+}
+
+static
+BOOLEAN
+LibIP6NetifIsLoopback(struct netif *netif)
+{
+    PIP_INTERFACE IF = netif->state;
+
+    return IF->AddressLength == 0;
+}
+
+static
+VOID
+LibIP6EmitRoute(struct lib_ip6_query *Query, struct netif *netif, const ip6_addr_t *Prefix, ULONG PrefixLength,
+                const ip6_addr_t *NextHop, ULONG Protocol, ULONG Origin, ULONG Lifetime, BOOLEAN Loopback)
+{
+    PIP_INTERFACE IF = netif->state;
+    IP6_ROUTE_ROW Row;
+
+    RtlZeroMemory(&Row, sizeof(Row));
+    Row.Index = IF->Index;
+    RtlCopyMemory(Row.Prefix, Prefix->addr, sizeof(Row.Prefix));
+    Row.PrefixLength = PrefixLength;
+    if (NextHop)
+        RtlCopyMemory(Row.NextHop, NextHop->addr, sizeof(Row.NextHop));
+    Row.Metric = 256;
+    Row.Protocol = Protocol;
+    Row.Origin = Origin;
+    Row.ValidLifetime = Lifetime;
+    Row.PreferredLifetime = Lifetime;
+    Row.Loopback = Loopback;
+    Row.Autoconfigure = (Origin == NlroRouterAdvertisement);
+    Row.Publish = FALSE;
+    Row.Immortal = (Lifetime == 0xFFFFFFFF);
+
+    if (Query->Statistics)
+        Query->Statistics->NumRoutes++;
+    else
+        LibIP6Emit(Query, &Row, sizeof(Row));
+}
+
+static
+VOID
+LibIP6QueryRoutes(struct lib_ip6_query *Query, struct netif *netif)
+{
+    ip6_addr_t Prefix;
+    s8_t i;
+
+    if (LibIP6NetifIsLoopback(netif))
+    {
+        ip6_addr_set_loopback(&Prefix);
+        LibIP6EmitRoute(Query, netif, &Prefix, 128, NULL, MIB_IPPROTO_LOCAL, NlroWellKnown, 0xFFFFFFFF, TRUE);
+    }
+    else
+    {
+        IP6_ADDR(&Prefix, PP_HTONL(0xfe800000UL), 0, 0, 0);
+        LibIP6EmitRoute(Query, netif, &Prefix, 64, NULL, MIB_IPPROTO_LOCAL, NlroWellKnown, 0xFFFFFFFF, FALSE);
+
+        for (i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++)
+        {
+            if (!ip6_addr_isvalid(netif_ip6_addr_state(netif, i)))
+                continue;
+            LibIP6EmitRoute(Query, netif, netif_ip6_addr(netif, i), 128, NULL, MIB_IPPROTO_LOCAL,
+                            NlroWellKnown, 0xFFFFFFFF, TRUE);
+        }
+
+        for (i = 0; i < LWIP_ND6_NUM_PREFIXES; i++)
+        {
+            if (prefix_list[i].netif != netif || !prefix_list[i].invalidation_timer)
+                continue;
+            LibIP6EmitRoute(Query, netif, &prefix_list[i].prefix, 64, NULL, MIB_IPPROTO_NETMGMT,
+                            NlroRouterAdvertisement, prefix_list[i].invalidation_timer, FALSE);
+        }
+
+        for (i = 0; i < LWIP_ND6_NUM_ROUTERS; i++)
+        {
+            ip6_addr_t DefaultPrefix;
+
+            if (!default_router_list[i].neighbor_entry ||
+                default_router_list[i].neighbor_entry->netif != netif)
+                continue;
+            ip6_addr_set_zero(&DefaultPrefix);
+            LibIP6EmitRoute(Query, netif, &DefaultPrefix, 0,
+                            &default_router_list[i].neighbor_entry->next_hop_address,
+                            MIB_IPPROTO_NETMGMT, NlroRouterAdvertisement,
+                            default_router_list[i].invalidation_timer, FALSE);
+        }
+    }
+
+    IP6_ADDR(&Prefix, PP_HTONL(0xff000000UL), 0, 0, 0);
+    LibIP6EmitRoute(Query, netif, &Prefix, 8, NULL, MIB_IPPROTO_LOCAL, NlroWellKnown, 0xFFFFFFFF, FALSE);
+}
+
+static
+VOID
+LibIP6QueryCallback(void *arg)
+{
+    struct lib_ip6_query *Query = arg;
+    struct netif *netif;
+    s8_t i;
+
+    NETIF_FOREACH(netif)
+    {
+        PIP_INTERFACE IF = netif->state;
+
+        if (!IF)
+            continue;
+
+        switch (Query->TableId)
+        {
+        case Ip6TableInterfaces:
+        {
+            IP6_INTERFACE_ROW Row;
+
+            RtlZeroMemory(&Row, sizeof(Row));
+            Row.Index = IF->Index;
+            Row.Mtu = netif_mtu6(netif);
+            Row.HopLimit = IP_DEFAULT_TTL;
+            Row.BaseReachableTime = LWIP_ND6_REACHABLE_TIME;
+            Row.ReachableTime = reachable_time;
+            Row.RetransmitTime = retrans_timer;
+            Row.DadTransmits = LibIP6NetifIsLoopback(netif) ? 0 : LWIP_IPV6_DUP_DETECT_ATTEMPTS;
+            Row.Connected = netif_is_link_up(netif) || LibIP6NetifIsLoopback(netif);
+            Row.Loopback = LibIP6NetifIsLoopback(netif);
+            Row.Autoconfiguration = netif->ip6_autoconfig_enabled ? TRUE : FALSE;
+            LibIP6Emit(Query, &Row, sizeof(Row));
+            break;
+        }
+
+        case Ip6TableAddresses:
+        case Ip6TableStatistics:
+            for (i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++)
+            {
+                u8_t State = netif_ip6_addr_state(netif, i);
+                const ip6_addr_t *Address = netif_ip6_addr(netif, i);
+                IP6_ADDRESS_ROW Row;
+                u32_t ValidLife, PreferredLife;
+
+                if (ip6_addr_isinvalid(State))
+                    continue;
+
+                if (Query->Statistics)
+                {
+                    Query->Statistics->NumAddresses++;
+                    continue;
+                }
+
+                RtlZeroMemory(&Row, sizeof(Row));
+                Row.Index = IF->Index;
+                RtlCopyMemory(Row.Address, Address->addr, sizeof(Row.Address));
+                Row.PrefixLength = ip6_addr_isloopback(Address) ? 128 : 64;
+
+                if (ip6_addr_istentative(State))
+                    Row.DadState = IpDadStateTentative;
+                else if (ip6_addr_isduplicated(State))
+                    Row.DadState = IpDadStateDuplicate;
+                else if (ip6_addr_isdeprecated(State))
+                    Row.DadState = IpDadStateDeprecated;
+                else
+                    Row.DadState = IpDadStatePreferred;
+
+                ValidLife = netif_ip6_addr_valid_life(netif, i);
+                PreferredLife = netif_ip6_addr_pref_life(netif, i);
+                if (ip6_addr_life_isstatic(ValidLife))
+                {
+                    ValidLife = 0xFFFFFFFF;
+                    PreferredLife = 0xFFFFFFFF;
+                }
+                else if (ip6_addr_life_isinfinite(PreferredLife))
+                {
+                    PreferredLife = 0xFFFFFFFF;
+                }
+                Row.ValidLifetime = ip6_addr_life_isinfinite(ValidLife) ? 0xFFFFFFFF : ValidLife;
+                Row.PreferredLifetime = PreferredLife;
+
+                if (ip6_addr_isloopback(Address))
+                {
+                    Row.PrefixOrigin = IpPrefixOriginWellKnown;
+                    Row.SuffixOrigin = IpSuffixOriginWellKnown;
+                }
+                else if (ip6_addr_islinklocal(Address))
+                {
+                    Row.PrefixOrigin = IpPrefixOriginWellKnown;
+                    Row.SuffixOrigin = IpSuffixOriginLinkLayerAddress;
+                }
+                else if (Row.ValidLifetime != 0xFFFFFFFF)
+                {
+                    Row.PrefixOrigin = IpPrefixOriginRouterAdvertisement;
+                    Row.SuffixOrigin = IpSuffixOriginLinkLayerAddress;
+                }
+                else
+                {
+                    Row.PrefixOrigin = IpPrefixOriginManual;
+                    Row.SuffixOrigin = IpSuffixOriginManual;
+                }
+
+                LibIP6Emit(Query, &Row, sizeof(Row));
+            }
+
+            if (Query->Statistics)
+            {
+                Query->Statistics->NumInterfaces++;
+                LibIP6QueryRoutes(Query, netif);
+            }
+            break;
+
+        case Ip6TableRoutes:
+            LibIP6QueryRoutes(Query, netif);
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    if (Query->TableId == Ip6TableNeighbors)
+    {
+        for (i = 0; i < LWIP_ND6_NUM_NEIGHBORS; i++)
+        {
+            struct nd6_neighbor_cache_entry *Entry = &neighbor_cache[i];
+            PIP_INTERFACE IF;
+            IP6_NEIGHBOR_ROW Row;
+
+            if (Entry->state == ND6_NO_ENTRY || !Entry->netif || !(IF = Entry->netif->state))
+                continue;
+
+            RtlZeroMemory(&Row, sizeof(Row));
+            Row.Index = IF->Index;
+            RtlCopyMemory(Row.Address, Entry->next_hop_address.addr, sizeof(Row.Address));
+            Row.PhysicalAddressLength = Entry->netif->hwaddr_len;
+            RtlCopyMemory(Row.PhysicalAddress, Entry->lladdr, min(sizeof(Row.PhysicalAddress), sizeof(Entry->lladdr)));
+            switch (Entry->state)
+            {
+            case ND6_INCOMPLETE: Row.State = NlnsIncomplete; break;
+            case ND6_REACHABLE:  Row.State = NlnsReachable; break;
+            case ND6_STALE:      Row.State = NlnsStale; break;
+            case ND6_DELAY:      Row.State = NlnsDelay; break;
+            case ND6_PROBE:      Row.State = NlnsProbe; break;
+            default:             Row.State = NlnsUnreachable; break;
+            }
+            Row.IsRouter = Entry->isrouter ? TRUE : FALSE;
+            Row.IsUnreachable = (Entry->state == ND6_INCOMPLETE);
+            LibIP6Emit(Query, &Row, sizeof(Row));
+        }
+    }
+
+    if (Query->Statistics)
+    {
+        PIP6_STATISTICS Stats = Query->Statistics;
+
+        Stats->DefaultHopLimit = IP_DEFAULT_TTL;
+        Stats->InReceives = lwip_stats.ip6.recv;
+        Stats->OutRequests = lwip_stats.ip6.xmit;
+        Stats->ForwardedDatagrams = lwip_stats.ip6.fw;
+        Stats->InDelivers = lwip_stats.ip6.recv >= lwip_stats.ip6.drop ? lwip_stats.ip6.recv - lwip_stats.ip6.drop : 0;
+        Stats->InHeaderErrors = lwip_stats.ip6.chkerr + lwip_stats.ip6.lenerr + lwip_stats.ip6.opterr;
+        Stats->InAddressErrors = 0;
+        Stats->InUnknownProtocols = lwip_stats.ip6.proterr;
+        Stats->InDiscards = lwip_stats.ip6.drop;
+        Stats->OutNoRoutes = lwip_stats.ip6.rterr;
+        Stats->OutDiscards = lwip_stats.ip6.memerr + lwip_stats.ip6.err;
+        Stats->ReassemblyRequired = lwip_stats.ip6_frag.recv;
+        Stats->ReassemblyOk = lwip_stats.ip6_frag.recv >= lwip_stats.ip6_frag.drop ? lwip_stats.ip6_frag.recv - lwip_stats.ip6_frag.drop : 0;
+        Stats->ReassemblyFailures = lwip_stats.ip6_frag.drop;
+        Stats->FragmentsCreated = lwip_stats.ip6_frag.xmit;
+        Stats->ReassemblyTimeout = IPV6_REASS_MAXAGE * IP6_REASS_TMR_INTERVAL / 1000;
+        Stats->IcmpInMessages = lwip_stats.icmp6.recv;
+        Stats->IcmpInErrors = lwip_stats.icmp6.chkerr + lwip_stats.icmp6.lenerr + lwip_stats.icmp6.proterr;
+        Stats->IcmpOutMessages = lwip_stats.icmp6.xmit;
+        Stats->IcmpOutErrors = lwip_stats.icmp6.err + lwip_stats.icmp6.memerr + lwip_stats.icmp6.rterr;
+        Stats->UdpInDatagrams = lwip_stats.udp.recv;
+        Stats->UdpOutDatagrams = lwip_stats.udp.xmit;
+        Stats->UdpNoPorts = lwip_stats.udp.proterr;
+        Stats->UdpInErrors = lwip_stats.udp.chkerr + lwip_stats.udp.lenerr;
+    }
+}
+
+NTSTATUS
+LibIP6QueryTable(ULONG TableId, PVOID Buffer, ULONG Length, PULONG Count, PULONG Needed, PVOID Statistics)
+{
+    struct lib_ip6_query Query;
+
+    RtlZeroMemory(&Query, sizeof(Query));
+    Query.TableId = TableId;
+    Query.Buffer = Buffer;
+    Query.Length = Length;
+    Query.Statistics = Statistics;
+
+    if (tcpip_callback_wait(LibIP6QueryCallback, &Query) != ERR_OK)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    *Count = Query.Count;
+    *Needed = sizeof(IP6_TABLE_HEADER) + Query.Needed;
+    return STATUS_SUCCESS;
+}
+
+typedef struct _ICMP6_ECHO_CONTEXT
+{
+    PIRP Irp;
+    PIO_WORKITEM WorkItem;
+    struct raw_pcb *Pcb;
+    KTIMER Timer;
+    KDPC Dpc;
+    LONG RefCount;
+    LONG Finished;
+    u16_t Identifier;
+    u16_t Sequence;
+    LARGE_INTEGER Frequency;
+    LONGLONG StartTicks;
+    ip_addr_t Destination;
+    ip_addr_t Source;
+    BOOLEAN HasSource;
+    u8_t Ttl;
+    PUCHAR Data;
+    u16_t DataSize;
+    err_t SendError;
+    ULONG OutputLength;
+} ICMP6_ECHO_CONTEXT, *PICMP6_ECHO_CONTEXT;
+
+static volatile LONG Icmp6Sequence;
+
+static
+VOID
+LibICMP6FillAddress(PIPV6_ADDRESS_EX Address, const ip_addr_t *IpAddr)
+{
+    RtlZeroMemory(Address, sizeof(*Address));
+    RtlCopyMemory(Address->sin6_addr, ip_2_ip6(IpAddr)->addr, sizeof(Address->sin6_addr));
+}
+
+static
+VOID
+NTAPI
+LibICMP6FinishWorker(PDEVICE_OBJECT DeviceObject, PVOID Context);
+
+static
+u8_t
+LibICMP6Recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *addr)
+{
+    PICMP6_ECHO_CONTEXT Context = arg;
+    struct icmp6_echo_hdr Header;
+    u16_t Offset = ip_current_header_tot_len();
+    PICMPV6_ECHO_REPLY Reply;
+    ULONG Copy;
+
+    if (p->tot_len < Offset + sizeof(Header) ||
+        pbuf_copy_partial(p, &Header, sizeof(Header), Offset) != sizeof(Header) ||
+        Header.type != ICMP6_TYPE_EREP || Header.code != 0 ||
+        Header.id != Context->Identifier || Header.seqno != Context->Sequence)
+    {
+        return 0;
+    }
+
+    if (InterlockedCompareExchange(&Context->Finished, 1, 0) != 0)
+    {
+        pbuf_free(p);
+        return 1;
+    }
+
+    Reply = Context->Irp->AssociatedIrp.SystemBuffer;
+    RtlZeroMemory(Reply, sizeof(*Reply));
+    LibICMP6FillAddress(&Reply->Address, addr);
+    Reply->Status = IP_SUCCESS;
+    Reply->RoundTripTime = (ULONG)((KeQueryPerformanceCounter(NULL).QuadPart - Context->StartTicks) * 1000 /
+                                   Context->Frequency.QuadPart);
+
+    Copy = p->tot_len - Offset - sizeof(Header);
+    Copy = min(Copy, Context->OutputLength - sizeof(*Reply));
+    if (Copy)
+        pbuf_copy_partial(p, Reply + 1, (u16_t)Copy, Offset + sizeof(Header));
+    Context->Irp->IoStatus.Status = STATUS_SUCCESS;
+    Context->Irp->IoStatus.Information = sizeof(*Reply) + Copy;
+
+    pbuf_free(p);
+    KeCancelTimer(&Context->Timer);
+    IoQueueWorkItem(Context->WorkItem, LibICMP6FinishWorker, DelayedWorkQueue, Context);
+    return 1;
+}
+
+static
+void
+LibICMP6StartCallback(void *arg)
+{
+    PICMP6_ECHO_CONTEXT Context = arg;
+    struct icmp6_echo_hdr *Header;
+    struct pbuf *p;
+
+    Context->Pcb = raw_new_ip6(IP6_NEXTH_ICMP6);
+    if (!Context->Pcb)
+    {
+        Context->SendError = ERR_MEM;
+        return;
+    }
+
+    Context->Pcb->chksum_reqd = 1;
+    Context->Pcb->chksum_offset = 2;
+    if (Context->Ttl)
+        Context->Pcb->ttl = Context->Ttl;
+    if (Context->HasSource)
+        raw_bind(Context->Pcb, &Context->Source);
+    raw_recv(Context->Pcb, LibICMP6Recv, Context);
+
+    p = pbuf_alloc(PBUF_IP, sizeof(*Header) + Context->DataSize, PBUF_RAM);
+    if (!p)
+    {
+        Context->SendError = ERR_MEM;
+        return;
+    }
+
+    Header = p->payload;
+    Header->type = ICMP6_TYPE_EREQ;
+    Header->code = 0;
+    Header->chksum = 0;
+    Header->id = Context->Identifier;
+    Header->seqno = Context->Sequence;
+    if (Context->DataSize)
+        RtlCopyMemory(Header + 1, Context->Data, Context->DataSize);
+
+    Context->StartTicks = KeQueryPerformanceCounter(&Context->Frequency).QuadPart;
+    Context->SendError = raw_sendto(Context->Pcb, p, &Context->Destination);
+    pbuf_free(p);
+}
+
+static
+void
+LibICMP6StopCallback(void *arg)
+{
+    PICMP6_ECHO_CONTEXT Context = arg;
+
+    if (Context->Pcb)
+    {
+        raw_remove(Context->Pcb);
+        Context->Pcb = NULL;
+    }
+}
+
+static
+VOID
+LibICMP6FreeContext(PICMP6_ECHO_CONTEXT Context)
+{
+    (void)tcpip_callback_wait(LibICMP6StopCallback, Context);
+    KeCancelTimer(&Context->Timer);
+    KeFlushQueuedDpcs();
+    if (Context->WorkItem)
+        IoFreeWorkItem(Context->WorkItem);
+    if (Context->Data)
+        ExFreePoolWithTag(Context->Data, LWIP_TAG);
+    ExFreePoolWithTag(Context, LWIP_TAG);
+}
+
+static
+VOID
+LibICMP6Release(PICMP6_ECHO_CONTEXT Context)
+{
+    if (InterlockedDecrement(&Context->RefCount) == 0)
+        LibICMP6FreeContext(Context);
+}
+
+static
+VOID
+NTAPI
+LibICMP6FinishWorker(PDEVICE_OBJECT DeviceObject, PVOID ContextArg)
+{
+    PICMP6_ECHO_CONTEXT Context = ContextArg;
+    PIRP Irp = Context->Irp;
+    KIRQL OldIrql;
+
+    if (Context->Finished == 2)
+    {
+        PICMPV6_ECHO_REPLY Reply = Irp->AssociatedIrp.SystemBuffer;
+
+        RtlZeroMemory(Reply, sizeof(*Reply));
+        Reply->Status = IP_REQ_TIMED_OUT;
+        Irp->IoStatus.Status = STATUS_TIMEOUT;
+        Irp->IoStatus.Information = sizeof(*Reply);
+    }
+
+    IoAcquireCancelSpinLock(&OldIrql);
+    IoSetCancelRoutine(Irp, NULL);
+    IoReleaseCancelSpinLock(OldIrql);
+    IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
+
+    LibICMP6Release(Context);
+}
+
+static
+VOID
+NTAPI
+LibICMP6TimeoutDpc(PKDPC Dpc, PVOID ContextArg, PVOID SystemArgument1, PVOID SystemArgument2)
+{
+    PICMP6_ECHO_CONTEXT Context = ContextArg;
+
+    if (InterlockedCompareExchange(&Context->Finished, 2, 0) == 0)
+        IoQueueWorkItem(Context->WorkItem, LibICMP6FinishWorker, DelayedWorkQueue, Context);
+}
+
+NTSTATUS
+LibICMP6EchoRequest(PDEVICE_OBJECT DeviceObject, PIRP Irp, PIO_STACK_LOCATION IrpSp)
+{
+    PICMPV6_ECHO_REQUEST Request = Irp->AssociatedIrp.SystemBuffer;
+    ULONG InputLength = IrpSp->Parameters.DeviceIoControl.InputBufferLength;
+    ULONG OutputLength = IrpSp->Parameters.DeviceIoControl.OutputBufferLength;
+    PICMP6_ECHO_CONTEXT Context;
+    LARGE_INTEGER Timeout;
+    ULONG DataSize;
+
+    if (InputLength < sizeof(*Request) || OutputLength < sizeof(ICMPV6_ECHO_REPLY))
+        return STATUS_INVALID_PARAMETER;
+
+    DataSize = InputLength - sizeof(*Request);
+    if (DataSize > 0xFFFF - IP6_HLEN - sizeof(struct icmp6_echo_hdr))
+        return STATUS_INVALID_PARAMETER;
+
+    Context = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Context), LWIP_TAG);
+    if (!Context)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(Context, sizeof(*Context));
+
+    Context->Irp = Irp;
+    Context->OutputLength = OutputLength;
+    Context->WorkItem = IoAllocateWorkItem(DeviceObject);
+    if (DataSize)
+        Context->Data = ExAllocatePoolWithTag(NonPagedPool, DataSize, LWIP_TAG);
+    if (!Context->WorkItem || (DataSize && !Context->Data))
+    {
+        LibICMP6FreeContext(Context);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    if (DataSize)
+        RtlCopyMemory(Context->Data, Request + 1, DataSize);
+    Context->DataSize = (u16_t)DataSize;
+    Context->Identifier = lwip_htons((u16_t)((ULONG_PTR)PsGetCurrentProcessId() & 0xFFFF));
+    Context->Sequence = lwip_htons((u16_t)InterlockedIncrement(&Icmp6Sequence));
+    Context->Ttl = (u8_t)Request->Ttl;
+
+    IP_SET_TYPE(&Context->Destination, IPADDR_TYPE_V6);
+    RtlCopyMemory(ip_2_ip6(&Context->Destination)->addr, Request->DestinationAddress.sin6_addr,
+                  sizeof(ip_2_ip6(&Context->Destination)->addr));
+    ip6_addr_clear_zone(ip_2_ip6(&Context->Destination));
+    if (ip6_addr_has_scope(ip_2_ip6(&Context->Destination), IP6_UNKNOWN))
+    {
+        struct netif *netif;
+
+        NETIF_FOREACH(netif)
+        {
+            PIP_INTERFACE IF = netif->state;
+
+            if (IF && IF->Index == Request->DestinationAddress.sin6_scope_id)
+            {
+                ip6_addr_assign_zone(ip_2_ip6(&Context->Destination), IP6_UNKNOWN, netif);
+                break;
+            }
+        }
+    }
+
+    IP_SET_TYPE(&Context->Source, IPADDR_TYPE_V6);
+    RtlCopyMemory(ip_2_ip6(&Context->Source)->addr, Request->SourceAddress.sin6_addr,
+                  sizeof(ip_2_ip6(&Context->Source)->addr));
+    ip6_addr_clear_zone(ip_2_ip6(&Context->Source));
+    Context->HasSource = !ip6_addr_isany(ip_2_ip6(&Context->Source));
+
+    KeInitializeTimer(&Context->Timer);
+    KeInitializeDpc(&Context->Dpc, LibICMP6TimeoutDpc, Context);
+    Context->RefCount = 2;
+
+    RtlZeroMemory(Irp->AssociatedIrp.SystemBuffer, OutputLength);
+    IoMarkIrpPending(Irp);
+
+    Timeout.QuadPart = -10000LL * (Request->Timeout ? Request->Timeout : 1);
+    KeSetTimer(&Context->Timer, Timeout, &Context->Dpc);
+
+    if (tcpip_callback_wait(LibICMP6StartCallback, Context) != ERR_OK || Context->SendError != ERR_OK)
+    {
+        if (InterlockedCompareExchange(&Context->Finished, 3, 0) == 0)
+        {
+            PICMPV6_ECHO_REPLY Reply = Irp->AssociatedIrp.SystemBuffer;
+
+            Reply->Status = Context->SendError == ERR_RTE ? IP_DEST_NET_UNREACHABLE : IP_GENERAL_FAILURE;
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            Irp->IoStatus.Information = sizeof(*Reply);
+            IoQueueWorkItem(Context->WorkItem, LibICMP6FinishWorker, DelayedWorkQueue, Context);
+        }
+    }
+
+    LibICMP6Release(Context);
+    return STATUS_PENDING;
 }
 
 void

@@ -80,7 +80,17 @@
 
 #define LWIP_NETCONN                    0
 
-#define LWIP_STATS                      0
+#define LWIP_STATS                      1
+
+#define LINK_STATS                      0
+
+#define IP_STATS                        0
+
+#define IPFRAG_STATS                    0
+
+#define TCP_STATS                       0
+
+#define SYS_STATS                       0
 
 #define ICMP_STATS                      0
 

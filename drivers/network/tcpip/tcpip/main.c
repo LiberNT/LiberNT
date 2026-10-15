@@ -21,6 +21,7 @@
 PDEVICE_OBJECT TCPDeviceObject   = NULL;
 PDEVICE_OBJECT UDPDeviceObject   = NULL;
 PDEVICE_OBJECT IPDeviceObject    = NULL;
+PDEVICE_OBJECT IP6DeviceObject   = NULL;
 PDEVICE_OBJECT RawIPDeviceObject = NULL;
 NDIS_HANDLE GlobalPacketPool     = NULL;
 NDIS_HANDLE GlobalBufferPool     = NULL;
@@ -549,12 +550,37 @@ TiDispatch(
 
             case IOCTL_ICMP_ECHO_REQUEST:
                 TI_DbgPrint(MIN_TRACE, ("ICMP_ECHO_REQUEST\n"));
-                Status = DispEchoRequest(DeviceObject, Irp, IrpSp);
+                if (DeviceObject == IP6DeviceObject)
+                    Status = LibICMP6EchoRequest(DeviceObject, Irp, IrpSp);
+                else
+                    Status = DispEchoRequest(DeviceObject, Irp, IrpSp);
                 break;
 
             case IOCTL_IP_INTERFACE_INFO:
                 Status = STATUS_INVALID_PARAMETER;
                 break;
+
+            case IOCTL_IP6_QUERY_TABLE:
+            {
+                ULONG TableId;
+
+                if (DeviceObject != IP6DeviceObject)
+                {
+                    Status = STATUS_INVALID_DEVICE_REQUEST;
+                    break;
+                }
+                if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(ULONG))
+                {
+                    Status = STATUS_INVALID_PARAMETER;
+                    break;
+                }
+                TableId = *(PULONG)Irp->AssociatedIrp.SystemBuffer;
+                Status = InfoIp6QueryTable(TableId,
+                                           Irp->AssociatedIrp.SystemBuffer,
+                                           IrpSp->Parameters.DeviceIoControl.OutputBufferLength,
+                                           (PULONG)&Irp->IoStatus.Information);
+                break;
+            }
 
             default:
                 TI_DbgPrint(MIN_TRACE, ("Unknown IOCTL 0x%X\n",
@@ -866,6 +892,9 @@ VOID NTAPI TiUnload(
         IoDeleteDevice(RawIPDeviceObject);
     }
 
+    if (IP6DeviceObject)
+        IoDeleteDevice(IP6DeviceObject);
+
     if (IPDeviceObject) {
         ChewShutdown();
         IoDeleteDevice(IPDeviceObject);
@@ -892,6 +921,7 @@ DriverEntry(
 {
     NTSTATUS Status;
     UNICODE_STRING strIpDeviceName = RTL_CONSTANT_STRING(DD_IP_DEVICE_NAME);
+    UNICODE_STRING strIp6DeviceName = RTL_CONSTANT_STRING(DD_IPV6_DEVICE_NAME);
     UNICODE_STRING strRawDeviceName = RTL_CONSTANT_STRING(DD_RAWIP_DEVICE_NAME);
     UNICODE_STRING strUdpDeviceName = RTL_CONSTANT_STRING(DD_UDP_DEVICE_NAME);
     UNICODE_STRING strTcpDeviceName = RTL_CONSTANT_STRING(DD_TCP_DEVICE_NAME);
@@ -924,6 +954,14 @@ DriverEntry(
     }
 
     ChewInit( IPDeviceObject );
+
+    Status = IoCreateDevice(DriverObject, 0, &strIp6DeviceName,
+        FILE_DEVICE_NETWORK, 0, FALSE, &IP6DeviceObject);
+    if (!NT_SUCCESS(Status)) {
+        TI_DbgPrint(MIN_TRACE, ("Failed to create IPv6 device object. Status (0x%X).\n", Status));
+        TiUnload(DriverObject);
+        return Status;
+    }
 
     /* Create RawIP device object */
     Status = IoCreateDevice(DriverObject, 0, &strRawDeviceName,

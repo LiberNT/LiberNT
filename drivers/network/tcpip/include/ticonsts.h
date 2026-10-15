@@ -25,6 +25,7 @@
 #define DD_UDP_DEVICE_NAME      L"\\Device\\Udp"
 #define DD_IP_DEVICE_NAME       L"\\Device\\Ip"
 #define DD_RAWIP_DEVICE_NAME    L"\\Device\\RawIp"
+#define DD_IPV6_DEVICE_NAME     L"\\Device\\Ip6"
 #define DD_TCPV6_DEVICE_NAME    L"\\Device\\Tcp6"
 #define DD_UDPV6_DEVICE_NAME    L"\\Device\\Udp6"
 #define DD_RAWIPV6_DEVICE_NAME  L"\\Device\\RawIp6"

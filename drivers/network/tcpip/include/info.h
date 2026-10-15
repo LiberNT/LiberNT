@@ -7,6 +7,9 @@
 
 #pragma once
 
+NTSTATUS
+InfoIp6QueryTable(ULONG TableId, PVOID Buffer, ULONG Length, PULONG Information);
+
 #include <tcpioctl.h>
 /* FIXME */
 #define DWORD ULONG
