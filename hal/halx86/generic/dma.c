@@ -86,6 +86,7 @@ static PADAPTER_OBJECT HalpEisaAdapter[8];
 static BOOLEAN HalpEisaDma;
 #ifndef _MINIHAL_
 static PADAPTER_OBJECT HalpMasterAdapter;
+static PADAPTER_OBJECT HalpMasterAdapter32;
 #endif
 
 static const ULONG_PTR HalpEisaPortPage[8] = {
@@ -450,7 +451,8 @@ HalpInitDma(VOID)
     InitializeListHead(&HalpDmaAdapterList);
     KeInitializeSpinLock(&HalpDmaAdapterListLock);
     KeInitializeEvent(&HalpDmaLock, SynchronizationEvent, TRUE);
-    HalpMasterAdapter = HalpDmaAllocateMasterAdapter();
+    HalpMasterAdapter = HalpDmaAllocateMasterAdapter(FALSE);
+    HalpMasterAdapter32 = HalpDmaAllocateMasterAdapter(TRUE);
 
     /*
      * Setup the HalDispatchTable callback for creating PnP DMA adapters. It's
@@ -631,7 +633,7 @@ HalpGrowMapBuffers(IN PADAPTER_OBJECT AdapterObject,
  */
 PADAPTER_OBJECT
 NTAPI
-HalpDmaAllocateMasterAdapter(VOID)
+HalpDmaAllocateMasterAdapter(IN BOOLEAN Dma32BitAddresses)
 {
     PADAPTER_OBJECT MasterAdapter;
     ULONG Size, SizeOfBitmap;
@@ -646,6 +648,8 @@ HalpDmaAllocateMasterAdapter(VOID)
 
     RtlZeroMemory(MasterAdapter, Size);
 
+    MasterAdapter->MasterDevice = Dma32BitAddresses;
+    MasterAdapter->Dma32BitAddresses = Dma32BitAddresses;
     KeInitializeSpinLock(&MasterAdapter->SpinLock);
     InitializeListHead(&MasterAdapter->AdapterQueue);
 
@@ -733,7 +737,6 @@ HalpDmaAllocateChildAdapter(IN ULONG NumberOfMapRegisters,
     AdapterObject->MapRegistersPerChannel = 1;
     AdapterObject->Dma32BitAddresses = DeviceDescription->Dma32BitAddresses;
     AdapterObject->ChannelNumber = 0xFF;
-    AdapterObject->MasterAdapter = HalpMasterAdapter;
     KeInitializeDeviceQueue(&AdapterObject->ChannelWaitQueue);
 
     return AdapterObject;
@@ -950,6 +953,7 @@ HalGetAdapter(IN PDEVICE_DESCRIPTION DeviceDescription,
               OUT PULONG NumberOfMapRegisters)
 {
     PADAPTER_OBJECT AdapterObject = NULL;
+    PADAPTER_OBJECT MasterAdapter;
     BOOLEAN EisaAdapter;
     ULONG MapRegisters;
     ULONG MaximumLength;
@@ -1021,6 +1025,18 @@ HalGetAdapter(IN PDEVICE_DESCRIPTION DeviceDescription,
         if (MapRegisters > 16) MapRegisters = 16;
     }
 
+    if (HalpGetDeviceMaximumPhysicalAddress(DeviceDescription) >= 0xFFFFFFFF)
+        MasterAdapter = HalpMasterAdapter32;
+    else
+        MasterAdapter = HalpMasterAdapter;
+
+    if ((MapRegisters > 0) && !(MasterAdapter))
+    {
+        DPRINT1("HalGetAdapter: no map buffers for a device limited to %I64x\n",
+                HalpGetDeviceMaximumPhysicalAddress(DeviceDescription));
+        return NULL;
+    }
+
     /*
      * Acquire the DMA lock that is used to protect the EISA adapter array.
      */
@@ -1053,6 +1069,8 @@ HalGetAdapter(IN PDEVICE_DESCRIPTION DeviceDescription,
             KeSetEvent(&HalpDmaLock, 0, 0);
             return NULL;
         }
+
+        AdapterObject->MasterAdapter = MasterAdapter;
 
         if (EisaAdapter)
         {
