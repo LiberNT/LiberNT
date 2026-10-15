@@ -7,6 +7,7 @@ list(APPEND SOURCE
     eventlog.c
     Hash.c
     HKEY_CLASSES_ROOT.c
+    InitiateShutdown.c
     IsTextUnicode.c
     LockServiceDatabase.c
     LookupAccountName.c
