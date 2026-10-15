@@ -434,6 +434,7 @@ MiDereferenceImports(IN PLOAD_IMPORTS ImportList)
             }
             else
             {
+                LdrEntry->LoadCount = 1;
                 LdrEntry->LoadedImports = CurrentImports;
             }
         }
