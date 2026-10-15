@@ -55,6 +55,12 @@ OSLoadingMethods[] =
     {"ReactOSSetup", MenuNTOptions, LoadReactOSSetup},
 };
 
+#if (defined(_M_IX86) || defined(_M_AMD64)) && !defined(UEFIBOOT)
+static PCSTR BootMenuFooter = "BIOS boot is not maintained and may crash. Use UEFI with CSM disabled.";
+#else
+static PCSTR BootMenuFooter = NULL;
+#endif
+
 /* FUNCTIONS ******************************************************************/
 
 #ifdef HAS_DEPRECATED_OPTIONS
@@ -475,7 +481,7 @@ VOID RunLoader(VOID)
     {
         LONG TimeOut = GetBootMgrInfo()->TimeOut;
         DisplayBootTimeOptions(&OperatingSystemList[MenuContext.Selected]);
-        if (!UiDisplayMenuWithIcons("Choose boot option", NULL,
+        if (!UiDisplayMenuWithIcons("Choose boot option", BootMenuFooter,
                            OperatingSystemDisplayNames, OperatingSystemCount + 3,
                            SelectedMenuItem, TimeOut, &SelectedMenuItem,
                            FALSE, OperatingSystemIcons, MainBootMenuKeyPressFilter, &MenuContext))
