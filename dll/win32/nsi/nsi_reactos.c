@@ -138,20 +138,29 @@ static DWORD finish_enumeration(struct nsi_enumerate_all_ex *params, UINT_PTR to
     return ERROR_MORE_DATA;
 }
 
-static void fill_ndis_entry(UINT index, NET_LUID *key, struct nsi_ndis_ifinfo_rw *rw,
+static BOOL fill_ndis_entry(UINT index, NET_LUID *key, struct nsi_ndis_ifinfo_rw *rw,
                             struct nsi_ndis_ifinfo_dynamic *dynamic, struct nsi_ndis_ifinfo_static *stat)
 {
     MIB_IFROW row;
-    const char *name;
-    DWORD type = MIB_IF_TYPE_OTHER, physical_length = IF_MAX_PHYS_ADDRESS_LENGTH, description_length;
+    const char *name = NULL;
+    DWORD type = MIB_IF_TYPE_OTHER, physical_length = 0, description_length;
     BYTE physical[IF_MAX_PHYS_ADDRESS_LENGTH] = {0};
     char description[MAXLEN_IFDESCR + 1];
+    BOOL found;
 
     memset(&row, 0, sizeof(row));
     row.dwIndex = index;
-    getInterfaceEntryByIndex(index, &row);
-    if (getInterfacePhysicalByIndex(index, &physical_length, physical, &type)) physical_length = 0;
-    name = getInterfaceNameByIndex(index);
+    found = !getInterfaceEntryByIndex(index, &row);
+    if (found)
+    {
+        type = row.dwType;
+        physical_length = row.dwPhysAddrLen < IF_MAX_PHYS_ADDRESS_LENGTH ? row.dwPhysAddrLen : IF_MAX_PHYS_ADDRESS_LENGTH;
+        memcpy(physical, row.bPhysAddr, physical_length);
+        description_length = row.dwDescrLen < MAXLEN_IFDESCR ? row.dwDescrLen : MAXLEN_IFDESCR;
+        memcpy(description, row.bDescr, description_length);
+        description[description_length] = 0;
+        name = description;
+    }
     if (key) *key = make_luid(index, type);
     if (rw)
     {
@@ -188,13 +197,7 @@ static void fill_ndis_entry(UINT index, NET_LUID *key, struct nsi_ndis_ifinfo_rw
     {
         memset(stat, 0, sizeof(*stat));
         stat->if_index = index;
-        if (row.dwDescrLen)
-        {
-            description_length = row.dwDescrLen < MAXLEN_IFDESCR ? row.dwDescrLen : MAXLEN_IFDESCR;
-            memcpy(description, row.bDescr, description_length);
-            description[description_length] = 0;
-        }
-        init_counted_string(&stat->descr, row.dwDescrLen ? description : name);
+        init_counted_string(&stat->descr, name);
         stat->type = type;
         stat->access_type = type == MIB_IF_TYPE_LOOPBACK ? NET_IF_ACCESS_LOOPBACK : NET_IF_ACCESS_BROADCAST;
         stat->conn_type = NET_IF_CONNECTION_DEDICATED;
@@ -204,7 +207,7 @@ static void fill_ndis_entry(UINT index, NET_LUID *key, struct nsi_ndis_ifinfo_rw
         memcpy(stat->perm_phys_addr.Address, physical, stat->perm_phys_addr.Length);
         stat->flags.hw = type != MIB_IF_TYPE_LOOPBACK;
     }
-    if (name) consumeInterfaceName(name);
+    return found;
 }
 
 static DWORD enumerate_ndis(struct nsi_enumerate_all_ex *params)
@@ -221,6 +224,22 @@ static DWORD enumerate_ndis(struct nsi_enumerate_all_ex *params)
                         params->static_data ? (struct nsi_ndis_ifinfo_static *)params->static_data + i : NULL);
     free(indexes);
     return finish_enumeration(params, count, want_data);
+}
+
+static DWORD get_ndis(struct nsi_get_all_parameters_ex *params)
+{
+    const NET_LUID *luid = params->key;
+    struct nsi_ndis_ifinfo_rw rw;
+    struct nsi_ndis_ifinfo_dynamic dynamic;
+    struct nsi_ndis_ifinfo_static stat;
+    NET_LUID key;
+
+    if (!fill_ndis_entry(luid->Info.NetLuidIndex, &key, &rw, &dynamic, &stat) || key.Value != luid->Value)
+        return ERROR_FILE_NOT_FOUND;
+    if (params->rw_size) memcpy(params->rw_data, &rw, sizeof(rw));
+    if (params->dynamic_size) memcpy(params->dynamic_data, &dynamic, sizeof(dynamic));
+    if (params->static_size) memcpy(params->static_data, &stat, sizeof(stat));
+    return ERROR_SUCCESS;
 }
 
 static void fill_ip_interface(UINT index, struct nsi_ip_interface_key *key, struct nsi_ip_interface_rw *rw,
@@ -1152,7 +1171,7 @@ static DWORD enumerate_udp(struct nsi_enumerate_all_ex *params)
 
 static const struct nsi_table tables[] =
 {
-    {&NPI_MS_NDIS_MODULEID, NSI_NDIS_IFINFO_TABLE, {sizeof(NET_LUID), sizeof(struct nsi_ndis_ifinfo_rw), sizeof(struct nsi_ndis_ifinfo_dynamic), sizeof(struct nsi_ndis_ifinfo_static)}, enumerate_ndis},
+    {&NPI_MS_NDIS_MODULEID, NSI_NDIS_IFINFO_TABLE, {sizeof(NET_LUID), sizeof(struct nsi_ndis_ifinfo_rw), sizeof(struct nsi_ndis_ifinfo_dynamic), sizeof(struct nsi_ndis_ifinfo_static)}, enumerate_ndis, get_ndis},
     {&NPI_MS_NDIS_MODULEID, NSI_NDIS_INDEX_LUID_TABLE, {sizeof(UINT), 0, 0, sizeof(NET_LUID)}},
     {&NPI_MS_IPV4_MODULEID, NSI_IP_COMPARTMENT_TABLE, {sizeof(UINT), sizeof(struct nsi_ip_cmpt_rw), sizeof(struct nsi_ip_cmpt_dynamic), 0}, NULL, get_ipv4_compartment},
     {&NPI_MS_IPV4_MODULEID, NSI_IP_ICMPSTATS_TABLE, {0, 0, sizeof(struct nsi_ip_icmpstats_dynamic), 0}, NULL, get_ipv4_icmp},
@@ -1301,20 +1320,14 @@ DWORD nsi_reactos_get_parameter(struct nsi_get_parameter_ex *params)
     if (module_equal(params->module, &NPI_MS_NDIS_MODULEID) && params->table == NSI_NDIS_INDEX_LUID_TABLE)
     {
         UINT index = *(const UINT *)params->key;
-        InterfaceIndexTable *indexes = getInterfaceIndexTable();
-        UINT i;
+        NET_LUID luid;
+        MIB_IFROW row;
 
-        error = ERROR_FILE_NOT_FOUND;
-        for (i = 0; indexes && i < indexes->numIndexes; i++)
-            if (indexes->indexes[i] == index)
-            {
-                NET_LUID luid = interface_luid(index);
-                memcpy(params->data, (BYTE *)&luid + params->data_offset, params->data_size);
-                error = ERROR_SUCCESS;
-                break;
-            }
-        free(indexes);
-        return error;
+        memset(&row, 0, sizeof(row));
+        if (getInterfaceEntryByIndex(index, &row)) return ERROR_FILE_NOT_FOUND;
+        luid = make_luid(index, row.dwType);
+        memcpy(params->data, (BYTE *)&luid + params->data_offset, params->data_size);
+        return ERROR_SUCCESS;
     }
     if (!(block = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size))) return ERROR_OUTOFMEMORY;
     memset(&get, 0, sizeof(get));
