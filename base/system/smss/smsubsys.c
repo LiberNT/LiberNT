@@ -574,6 +574,18 @@ SmpLoadSubSystemsForSystemSession(OUT PHANDLE ProcessId)
         NextEntry = NextEntry->Flink;
     }
 
+    if (NT_SUCCESS(Status))
+    {
+        UNICODE_STRING Wininit = RTL_CONSTANT_STRING(L"wininit.exe");
+        HANDLE WininitProcess;
+
+        Status = SmpExecuteInitialCommand(SessionId, &Wininit, &WininitProcess, NULL);
+        if (NT_SUCCESS(Status))
+            NtClose(WininitProcess);
+        else
+            DPRINT1("SMSS: Execute of wininit failed (%lx)\n", Status);
+    }
+
     if (AttachedSessionId != -1)
     {
         Status2 = NtSetSystemInformation(SystemSessionDetach,

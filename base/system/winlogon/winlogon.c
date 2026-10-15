@@ -43,75 +43,6 @@ WlStrDup(
 
 
 static
-BOOL
-StartServicesManager(VOID)
-{
-    STARTUPINFOW StartupInfo = { sizeof(StartupInfo) };
-    PROCESS_INFORMATION ProcessInformation;
-    LPCWSTR ServiceString = L"services.exe";
-    BOOL res;
-
-    /* Start the service control manager (services.exe) */
-    TRACE("WL: Creating new process - %S\n", ServiceString);
-    res = CreateProcessW(ServiceString,
-                         NULL,
-                         NULL,
-                         NULL,
-                         FALSE,
-                         DETACHED_PROCESS,
-                         NULL,
-                         NULL,
-                         &StartupInfo,
-                         &ProcessInformation);
-    if (!res)
-    {
-        ERR("WL: Failed to execute services (error %lu)\n", GetLastError());
-        return FALSE;
-    }
-
-    TRACE("WL: Created new process - %S\n", ServiceString);
-
-    CloseHandle(ProcessInformation.hThread);
-    CloseHandle(ProcessInformation.hProcess);
-
-    TRACE("WL: StartServicesManager() done.\n");
-
-    return TRUE;
-}
-
-
-static
-BOOL
-StartLsass(VOID)
-{
-    STARTUPINFOW StartupInfo = { sizeof(StartupInfo) };
-    PROCESS_INFORMATION ProcessInformation;
-    LPCWSTR ServiceString = L"lsass.exe";
-    BOOL res;
-
-    /* Start the local security authority subsystem (lsass.exe) */
-    TRACE("WL: Creating new process - %S\n", ServiceString);
-    res = CreateProcessW(ServiceString,
-                         NULL,
-                         NULL,
-                         NULL,
-                         FALSE,
-                         DETACHED_PROCESS,
-                         NULL,
-                         NULL,
-                         &StartupInfo,
-                         &ProcessInformation);
-
-    TRACE("WL: Created new process - %S\n", ServiceString);
-
-    CloseHandle(ProcessInformation.hThread);
-    CloseHandle(ProcessInformation.hProcess);
-
-    return res;
-}
-
-
-static
 VOID
 WaitForLsass(VOID)
 {
@@ -121,7 +52,7 @@ WaitForLsass(VOID)
     hEvent = CreateEventW(NULL,
                           TRUE,
                           FALSE,
-                          L"LSA_RPC_SERVER_ACTIVE");
+                          L"Global\\LSA_RPC_SERVER_ACTIVE");
     if (hEvent == NULL)
     {
         dwError = GetLastError();
@@ -131,7 +62,7 @@ WaitForLsass(VOID)
         {
             hEvent = OpenEventW(SYNCHRONIZE,
                                 FALSE,
-                                L"LSA_RPC_SERVER_ACTIVE");
+                                L"Global\\LSA_RPC_SERVER_ACTIVE");
             if (hEvent == NULL)
             {
                ERR("WL: Could not open the notification event (Error %lu)\n", GetLastError());
@@ -507,20 +438,6 @@ WinMain(
     if (!StartRpcServer())
     {
         ERR("WL: Could not start the RPC server\n");
-        NtRaiseHardError(STATUS_SYSTEM_PROCESS_TERMINATED, 0, 0, NULL, OptionOk, &HardErrorResponse);
-        ExitProcess(1);
-    }
-
-    if (!StartServicesManager())
-    {
-        ERR("WL: Could not start services.exe\n");
-        NtRaiseHardError(STATUS_SYSTEM_PROCESS_TERMINATED, 0, 0, NULL, OptionOk, &HardErrorResponse);
-        ExitProcess(1);
-    }
-
-    if (!StartLsass())
-    {
-        ERR("WL: Failed to start lsass.exe service (error %lu)\n", GetLastError());
         NtRaiseHardError(STATUS_SYSTEM_PROCESS_TERMINATED, 0, 0, NULL, OptionOk, &HardErrorResponse);
         ExitProcess(1);
     }
