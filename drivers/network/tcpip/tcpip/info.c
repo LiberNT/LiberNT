@@ -437,6 +437,11 @@ TDI_STATUS InfoTdiSetInformationEx
                                     return InfoTdiSetRoute(EntityListContext, Buffer, BufferSize);
                                 else
                                     return TDI_INVALID_PARAMETER;
+                            else if (ID->toi_entity.tei_entity == CO_TL_ENTITY)
+                                if ((EntityListContext = GetContext(ID->toi_entity)))
+                                    return InfoTdiSetConnectionTcp(EntityListContext, Buffer, BufferSize);
+                                else
+                                    return TDI_INVALID_PARAMETER;
                             else
                                 return TDI_INVALID_PARAMETER;
 

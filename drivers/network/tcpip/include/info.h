@@ -133,6 +133,10 @@ TDI_STATUS InfoTdiQueryGetConnectionUdpTable( PADDRESS_FILE AddrFile,
                                               PUINT BufferSize,
                                               TDI_TCPUDP_CLASS_INFO Class);
 
+TDI_STATUS InfoTdiSetConnectionTcp(PADDRESS_FILE AddrFile,
+                                   PVOID Buffer,
+                                   UINT BufferSize);
+
 TDI_STATUS InfoTdiSetRoute(PIP_INTERFACE IF,
                            PVOID Buffer,
                            UINT BufferSize);

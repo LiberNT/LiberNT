@@ -285,6 +285,47 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
     return Status;
 }
 
+TDI_STATUS InfoTdiSetConnectionTcp(PADDRESS_FILE AddrFile,
+                                   PVOID Buffer,
+                                   UINT BufferSize)
+{
+    PMIB_TCPROW Row = Buffer;
+    PCONNECTION_ENDPOINT Connection;
+    TA_IP_ADDRESS Local, Remote;
+    TDI_STATUS Status = TDI_INVALID_REQUEST;
+
+    if (!Buffer || BufferSize < sizeof(MIB_TCPROW))
+        return TDI_INVALID_PARAMETER;
+    if (Row->dwState != MIB_TCP_STATE_DELETE_TCB)
+        return TDI_INVALID_PARAMETER;
+
+    LockObject(AddrFile);
+    Connection = AddrFile->Connection;
+    if (Connection)
+        ReferenceObject(Connection);
+    UnlockObject(AddrFile);
+
+    if (!Connection)
+        return TDI_INVALID_REQUEST;
+
+    if (Connection->SocketContext &&
+        NT_SUCCESS(TCPGetSockAddress(Connection, (PTRANSPORT_ADDRESS)&Local, sizeof(Local), FALSE)) &&
+        NT_SUCCESS(TCPGetSockAddress(Connection, (PTRANSPORT_ADDRESS)&Remote, sizeof(Remote), TRUE)) &&
+        Local.Address[0].AddressType == TDI_ADDRESS_TYPE_IP &&
+        Remote.Address[0].AddressType == TDI_ADDRESS_TYPE_IP &&
+        Local.Address[0].Address[0].in_addr == Row->dwLocalAddr &&
+        Local.Address[0].Address[0].sin_port == (USHORT)Row->dwLocalPort &&
+        Remote.Address[0].Address[0].in_addr == Row->dwRemoteAddr &&
+        Remote.Address[0].Address[0].sin_port == (USHORT)Row->dwRemotePort)
+    {
+        TCPDisconnect(Connection, TDI_DISCONNECT_ABORT, NULL, NULL, NULL, NULL, NULL);
+        Status = TDI_SUCCESS;
+    }
+
+    DereferenceObject(Connection);
+    return Status;
+}
+
 TDI_STATUS InfoTdiQueryGetConnectionUdpTable(PADDRESS_FILE AddrFile,
 				    PNDIS_BUFFER Buffer,
 				    PUINT BufferSize,
