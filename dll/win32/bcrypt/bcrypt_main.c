@@ -708,9 +708,6 @@ NTSTATUS WINAPI BCryptGenRandom( BCRYPT_ALG_HANDLE handle, UCHAR *buffer, ULONG 
     if (flags & ~supported_flags)
         FIXME("unsupported flags %#lx\n", flags & ~supported_flags);
 
-    if (alg)
-        FIXME("ignoring selected algorithm\n");
-
     if (!count) return STATUS_SUCCESS;
 
     if (alg || (flags & BCRYPT_USE_SYSTEM_PREFERRED_RNG))
