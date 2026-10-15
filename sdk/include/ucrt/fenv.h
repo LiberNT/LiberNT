@@ -99,7 +99,11 @@ _ACRTIMP int __cdecl fesetround(_In_ int _Round);
                 __pragma(optimize("", on))
         #endif
         _BEGIN_PRAGMA_OPTIMIZE_DISABLE("", MSFT:4499495, "If optimizations are on, the floating-point exception might not get triggered (because the compiler optimizes it out), breaking the function.")
+        #if defined(__GNUC__)
+        static __inline int __CRTDECL feraiseexcept(_In_ int _Except)
+        #else
         __inline int __CRTDECL feraiseexcept(_In_ int _Except)
+        #endif
         {
             static struct
             {
@@ -148,7 +152,11 @@ _ACRTIMP int __cdecl fesetround(_In_ int _Round);
         }
         _END_PRAGMA_OPTIMIZE()
 
+        #if defined(__GNUC__)
+        static __inline int __CRTDECL feupdateenv(_In_ const fenv_t *_Penv)
+        #else
         __inline int __CRTDECL feupdateenv(_In_ const fenv_t *_Penv)
+        #endif
         {
             int _Except = fetestexcept(FE_ALL_EXCEPT);
 
