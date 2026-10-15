@@ -95,6 +95,7 @@ set(COMPAT_RUNTIME_MODULES
     libxslt
     lpk
     lz32
+    magnification
     mbedtls
     mf
     mfplat
