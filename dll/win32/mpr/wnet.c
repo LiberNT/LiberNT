@@ -2021,6 +2021,11 @@ static DWORD wnet_use_connection( struct use_connection_context *ctxt )
     if (ctxt->flags & CONNECT_INTERACTIVE)
         return ERROR_BAD_NET_NAME;
 
+#ifdef __REACTOS__
+    if (ctxt->accessname && ctxt->buffer_size && !*ctxt->buffer_size)
+        return ERROR_INVALID_PARAMETER;
+#endif
+
     if ((ret = ctxt->pre_set_accessname(ctxt, netres.lpLocalName)))
         return ret;
 
