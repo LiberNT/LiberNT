@@ -1892,6 +1892,23 @@ CywMiniportOidRequest(
             OidRequest->DATA.METHOD_INFORMATION.BytesWritten = 0;
             OidRequest->DATA.METHOD_INFORMATION.BytesRead = 0;
             OidRequest->DATA.METHOD_INFORMATION.BytesNeeded = 0;
+            if (OidRequest->DATA.METHOD_INFORMATION.Oid == OID_DOT11_ENUM_BSS_LIST)
+            {
+                ULONG BytesNeeded = 0;
+                ULONG Written = CywBuildBssList(Adapter,
+                    OidRequest->DATA.METHOD_INFORMATION.InformationBuffer,
+                    OidRequest->DATA.METHOD_INFORMATION.OutputBufferLength,
+                    &BytesNeeded);
+                if (Written == 0)
+                {
+                    OidRequest->DATA.METHOD_INFORMATION.BytesNeeded = BytesNeeded;
+                    return NDIS_STATUS_BUFFER_TOO_SHORT;
+                }
+                OidRequest->DATA.METHOD_INFORMATION.BytesRead =
+                    OidRequest->DATA.METHOD_INFORMATION.InputBufferLength;
+                OidRequest->DATA.METHOD_INFORMATION.BytesWritten = Written;
+                return NDIS_STATUS_SUCCESS;
+            }
             return NDIS_STATUS_NOT_SUPPORTED;
         default:
             return NDIS_STATUS_NOT_SUPPORTED;

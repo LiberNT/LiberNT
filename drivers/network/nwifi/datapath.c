@@ -577,7 +577,9 @@ NwifiTranslateRxFrame(
     UCHAR Da[IEEE80211_ADDR_LEN];
     UCHAR Sa[IEEE80211_ADDR_LEN];
     UCHAR Type;
+    UCHAR Subtype;
     UCHAR Dir;
+    ULONG HeaderLength = IEEE80211_MAC_HEADER_LEN;
     PNET_BUFFER_LIST Nbl;
 
     if (InLength < IEEE80211_MAC_HEADER_LEN + RFC1042_SNAP_HEADER_LEN)
@@ -587,16 +589,25 @@ NwifiTranslateRxFrame(
 
     MacHeader = (PIEEE80211_MAC_HEADER)In;
     Type = MacHeader->FrameControl[0] & IEEE80211_FC0_TYPE_MASK;
+    Subtype = MacHeader->FrameControl[0] & IEEE80211_FC0_SUBTYPE_MASK;
     Dir = MacHeader->FrameControl[1] & IEEE80211_FC1_DIR_MASK;
 
     if (Type != IEEE80211_FC0_TYPE_DATA)
     {
         return NULL;
     }
-    if ((MacHeader->FrameControl[0] & IEEE80211_FC0_SUBTYPE_MASK) !=
-        IEEE80211_FC0_SUBTYPE_DATA)
+    if (Subtype == IEEE80211_FC0_SUBTYPE_QOS)
     {
-        /* TODO: QoS data frames */
+        HeaderLength += IEEE80211_QOS_CONTROL_LEN;
+        if (MacHeader->FrameControl[1] & IEEE80211_FC1_ORDER)
+            HeaderLength += IEEE80211_HT_CONTROL_LEN;
+    }
+    else if (Subtype != IEEE80211_FC0_SUBTYPE_DATA)
+    {
+        return NULL;
+    }
+    if (InLength < HeaderLength + RFC1042_SNAP_HEADER_LEN)
+    {
         return NULL;
     }
 
@@ -617,7 +628,7 @@ NwifiTranslateRxFrame(
             return NULL;
     }
 
-    Snap = (PRFC1042_SNAP_HEADER)(In + IEEE80211_MAC_HEADER_LEN);
+    Snap = (PRFC1042_SNAP_HEADER)(In + HeaderLength);
     /* Verify it is an RFC-1042 / 802.1H encapsulated frame. */
     if (Snap->Dsap != SNAP_LLC_DSAP || Snap->Ssap != SNAP_LLC_SSAP ||
         Snap->Control != SNAP_LLC_CONTROL)
@@ -625,8 +636,8 @@ NwifiTranslateRxFrame(
         return NULL;
     }
 
-    Payload = In + IEEE80211_MAC_HEADER_LEN + RFC1042_SNAP_HEADER_LEN;
-    PayloadLength = InLength - IEEE80211_MAC_HEADER_LEN - RFC1042_SNAP_HEADER_LEN;
+    Payload = In + HeaderLength + RFC1042_SNAP_HEADER_LEN;
+    PayloadLength = InLength - HeaderLength - RFC1042_SNAP_HEADER_LEN;
     if (PayloadLength > ETH_MTU)
     {
         return NULL;

@@ -226,6 +226,7 @@ VOID NwifiSupplicantQueueSaeIndication(_In_ PNWIFI_MSM Msm, _In_reads_bytes_(Len
 /* Stop the supplicant session (zeroise keys, disarm) but keep the object so a
  * concurrent RX-path EAPOL feed never dereferences freed memory. */
 VOID NwifiSupplicantStop(_In_ PNWIFI_MSM Msm);
+VOID NwifiSupplicantResetSession(_In_ PNWIFI_MSM Msm);
 
 /* Free the supplicant object entirely.  Only call once the data path is
  * quiesced (NwifiMsmDestroy at unbind). */

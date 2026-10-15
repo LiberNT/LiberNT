@@ -54,6 +54,11 @@
 #define IEEE80211_FC1_DIR_FROMDS    0x02    /* AP   -> STA (infra downlink) */
 #define IEEE80211_FC1_DIR_DSTODS    0x03    /* WDS */
 #define IEEE80211_FC1_PROTECTED     0x40
+#define IEEE80211_FC1_ORDER         0x80
+#define IEEE80211_QOS_CONTROL_LEN   2
+#define IEEE80211_HT_CONTROL_LEN    4
+#define IEEE80211_ASSOC_REQ_FIXED_LEN   4
+#define IEEE80211_REASSOC_REQ_FIXED_LEN 10
 
 /* 3-address 802.11 MAC header; Addr1/2/3 are interpreted per the ToDS/FromDS
  * bits.  Only the non-QoS 3-address data form is generated/parsed. */

@@ -57,6 +57,13 @@ NwifiProtocolDoRequest(
         Request->DATA.SET_INFORMATION.InformationBuffer = Buffer;
         Request->DATA.SET_INFORMATION.InformationBufferLength = Length;
     }
+    else if (RequestType == NdisRequestMethod)
+    {
+        Request->DATA.METHOD_INFORMATION.Oid = Oid;
+        Request->DATA.METHOD_INFORMATION.InformationBuffer = Buffer;
+        Request->DATA.METHOD_INFORMATION.InputBufferLength = Length;
+        Request->DATA.METHOD_INFORMATION.OutputBufferLength = Length;
+    }
     else
     {
         Request->DATA.QUERY_INFORMATION.Oid = Oid;
@@ -81,7 +88,12 @@ NwifiProtocolDoRequest(
 
     if (BytesProcessed != NULL)
     {
-        *BytesProcessed = (RequestType == NdisRequestSetInformation) ? Request->DATA.SET_INFORMATION.BytesRead : Request->DATA.QUERY_INFORMATION.BytesWritten;
+        if (RequestType == NdisRequestSetInformation)
+            *BytesProcessed = Request->DATA.SET_INFORMATION.BytesRead;
+        else if (RequestType == NdisRequestMethod)
+            *BytesProcessed = Request->DATA.METHOD_INFORMATION.BytesWritten;
+        else
+            *BytesProcessed = Request->DATA.QUERY_INFORMATION.BytesWritten;
     }
 
     return Status;
@@ -383,14 +395,14 @@ NwifiBindAdapterEx(
      * callback on arbitrary lower-driver work. */
     {
         ULONG Dot11PacketFilter =
-            DOT11_PACKET_TYPE_DIRECTED_DATA |
-            DOT11_PACKET_TYPE_MULTICAST_DATA |
-            DOT11_PACKET_TYPE_ALL_MULTICAST_DATA |
-            DOT11_PACKET_TYPE_BROADCAST_DATA;
+            NDIS_PACKET_TYPE_802_11_DIRECTED_DATA |
+            NDIS_PACKET_TYPE_802_11_MULTICAST_DATA |
+            NDIS_PACKET_TYPE_802_11_ALL_MULTICAST_DATA |
+            NDIS_PACKET_TYPE_802_11_BROADCAST_DATA;
         ULONG BytesRead = 0;
 
         Status = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
-                                        OID_DOT11_CURRENT_PACKET_FILTER,
+                                        OID_GEN_CURRENT_PACKET_FILTER,
                                         &Dot11PacketFilter,
                                         sizeof(Dot11PacketFilter),
                                         &BytesRead);

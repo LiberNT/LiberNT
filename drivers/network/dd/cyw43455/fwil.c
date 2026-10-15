@@ -710,12 +710,12 @@ CywScanStart(
     {
         ULONG Offset = Request->udot11SSIDsOffset;
 
-        if (Offset < FixedSize || Offset > RequestLength ||
-            SsidCount > (RequestLength - Offset) / sizeof(DOT11_SSID))
+        if (Offset > RequestLength - FixedSize ||
+            SsidCount > (RequestLength - FixedSize - Offset) / sizeof(DOT11_SSID))
         {
             return STATUS_INVALID_PARAMETER;
         }
-        Ssids = (PDOT11_SSID)((PUCHAR)Request + Offset);
+        Ssids = (PDOT11_SSID)(Request->ucBuffer + Offset);
         for (i = 0; i < SsidCount; i++)
         {
             if (Ssids[i].uSSIDLength > DOT11_SSID_MAX_LENGTH)
@@ -725,9 +725,8 @@ CywScanStart(
         }
     }
     if (Request->uIEsLength != 0 &&
-        (Request->uIEsOffset < FixedSize ||
-         Request->uIEsOffset > RequestLength ||
-         Request->uIEsLength > RequestLength - Request->uIEsOffset))
+        (Request->uIEsOffset > RequestLength - FixedSize ||
+         Request->uIEsLength > RequestLength - FixedSize - Request->uIEsOffset))
     {
         return STATUS_INVALID_PARAMETER;
     }

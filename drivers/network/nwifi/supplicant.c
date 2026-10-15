@@ -1144,6 +1144,26 @@ NwifiSupplicantStop(
     NdisReleaseSpinLock(&Msm->Lock);
 }
 
+VOID
+NwifiSupplicantResetSession(
+    _In_ PNWIFI_MSM Msm)
+{
+    PNWIFI_SUPPLICANT Sup;
+
+    NdisAcquireSpinLock(&Msm->Lock);
+    Sup = Msm->Supplicant;
+    if (Sup != NULL && Sup->Initialised)
+    {
+        RsnaReset(&Sup->Ctx);
+        Sup->Generation++;
+        Sup->KeysInstalled = FALSE;
+        Sup->InstallQueued = 0;
+        Sup->InstalledGroupSerial = 0;
+        Sup->GroupInstallQueued = FALSE;
+    }
+    NdisReleaseSpinLock(&Msm->Lock);
+}
+
 /* Fully free the supplicant object.  Only safe once the data path is
  * quiesced (NwifiMsmDestroy at unbind). */
 VOID

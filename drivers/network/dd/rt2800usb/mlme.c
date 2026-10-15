@@ -438,8 +438,8 @@ RtMlmeReceive(
             {
                 Adapter->MlmeStatus = Body[2] | (Body[3] << 8);
                 Adapter->MlmeAid = (Body[4] | (Body[5] << 8)) & 0x3fff;
-                Adapter->AssocResponseIeLength = min(Length - DOT11_HEADER_LENGTH - 6, RT_MAX_IE_BYTES);
-                RtlCopyMemory(Adapter->AssocResponseIes, Body + 6, Adapter->AssocResponseIeLength);
+                Adapter->AssocResponseIeLength = min(Length - DOT11_HEADER_LENGTH, RT_MAX_IE_BYTES);
+                RtlCopyMemory(Adapter->AssocResponseIes, Body, Adapter->AssocResponseIeLength);
                 Adapter->MlmeExpect = 0;
                 KeSetEvent(&Adapter->MlmeEvent, IO_NETWORK_INCREMENT, FALSE);
             }
@@ -1198,7 +1198,7 @@ RtAssociate(
     _In_ PRT_BSS Bss)
 {
     UCHAR Frame[DOT11_HEADER_LENGTH + 4 + 2 + DOT11_SSID_MAX_LENGTH + 32 + 24 + 3];
-    ULONG Length, IeStart, Attempt, Comebacks = 0;
+    ULONG Length, BodyStart, Attempt, Comebacks = 0;
     USHORT Capability;
     BOOLEAN Secure = Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK ||
                      Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE;
@@ -1206,6 +1206,7 @@ RtAssociate(
     for (Attempt = 0; Attempt < RT_MLME_RETRIES; Attempt++)
     {
         Length = RtBuildHeader(Adapter, Frame, DOT11_SUBTYPE_ASSOC_REQ, Bss->Bssid, Bss->Bssid);
+        BodyStart = Length;
         Capability = 0x0001 | (Bss->Capability & 0x0020);
         if (Secure)
             Capability |= 0x0010;
@@ -1216,7 +1217,6 @@ RtAssociate(
         Frame[Length++] = 10;
         Frame[Length++] = 0;
 
-        IeStart = Length;
         Frame[Length++] = DOT11_IE_SSID;
         Frame[Length++] = (UCHAR)Bss->SsidLength;
         RtlCopyMemory(Frame + Length, Bss->Ssid, Bss->SsidLength);
@@ -1231,8 +1231,8 @@ RtAssociate(
             Frame[Length++] = RT_RSNXE_SAE_H2E;
         }
 
-        Adapter->AssocRequestIeLength = Length - IeStart;
-        RtlCopyMemory(Adapter->AssocRequestIes, Frame + IeStart, Adapter->AssocRequestIeLength);
+        Adapter->AssocRequestIeLength = Length - BodyStart;
+        RtlCopyMemory(Adapter->AssocRequestIes, Frame + BodyStart, Adapter->AssocRequestIeLength);
 
         KeClearEvent(&Adapter->MlmeEvent);
         Adapter->MlmeExpect = DOT11_SUBTYPE_ASSOC_RESP;
@@ -1246,7 +1246,7 @@ RtAssociate(
             if (Adapter->MlmeStatus != RT_STATUS_REFUSED_TEMPORARILY)
                 return Adapter->MlmeStatus == 0;
 
-            Timeout = RtFindIe(Adapter->AssocResponseIes, Adapter->AssocResponseIeLength,
+            Timeout = RtFindIe(Adapter->AssocResponseIes + 6, Adapter->AssocResponseIeLength - 6,
                                DOT11_IE_TIMEOUT_INTERVAL);
             Comeback = 1000;
             if (Timeout && Timeout[1] >= 5 && Timeout[2] == RT_TIMEOUT_COMEBACK)
