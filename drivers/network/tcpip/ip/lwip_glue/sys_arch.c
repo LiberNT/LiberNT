@@ -340,11 +340,14 @@ sys_shutdown(void)
 
         if (Container->ThreadFunction)
         {
-            KeWaitForSingleObject(Container->Handle,
-                                  Executive,
-                                  KernelMode,
-                                  FALSE,
-                                  NULL);
+            PVOID Thread;
+
+            if (NT_SUCCESS(ObReferenceObjectByHandle(Container->Handle, SYNCHRONIZE, *PsThreadType,
+                                                     KernelMode, &Thread, NULL)))
+            {
+                KeWaitForSingleObject(Thread, Executive, KernelMode, FALSE, NULL);
+                ObDereferenceObject(Thread);
+            }
 
             ZwClose(Container->Handle);
         }
