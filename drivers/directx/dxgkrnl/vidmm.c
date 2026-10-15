@@ -12309,6 +12309,7 @@ DxgkpVidMmMakeResidentOwned(
     NTSTATUS Status = STATUS_SUCCESS;
     ULONG i;
     BOOLEAN Placed = FALSE;
+    BOOLEAN UserMapped;
 
     if (Allocation == NULL || Adapter == NULL)
         return STATUS_INVALID_PARAMETER;
@@ -12331,11 +12332,7 @@ DxgkpVidMmMakeResidentOwned(
         Status = STATUS_INVALID_PARAMETER;
         goto Cleanup;
     }
-    if (InterlockedCompareExchange(&Allocation->UserModeMappingCount, 0, 0) != 0)
-    {
-        Status = STATUS_DEVICE_BUSY;
-        goto Cleanup;
-    }
+    UserMapped = InterlockedCompareExchange(&Allocation->UserModeMappingCount, 0, 0) != 0;
     if (Adapter->Segments == NULL)
     {
         DPRINT1("DxgkVidMmMakeResident: adapter %p has no segment table\n", Adapter);
@@ -12351,6 +12348,8 @@ DxgkpVidMmMakeResidentOwned(
         if (!VidMmAllocationSupportsSegment(Allocation, Seg->SegmentId))
             continue;
         if (VidMmSegmentIsAperture(Seg) && Allocation->SystemMemory == NULL)
+            continue;
+        if (UserMapped && !VidMmSegmentIsAperture(Seg))
             continue;
         Status = DxgkVidMmTryPlaceInSegment(Seg, Allocation);
         if (NT_SUCCESS(Status))
@@ -12401,7 +12400,7 @@ DxgkpVidMmMakeResidentOwned(
 
         if (!VidMmAllocationSupportsSegment(Allocation, Seg->SegmentId))
             continue;
-        if (VidMmSegmentIsAperture(Seg))
+        if (VidMmSegmentIsAperture(Seg) || UserMapped)
             continue;
         ExAcquireFastMutex(&Seg->Lock);
         Victim = VidMmFindLowestPriorityResident(Seg);
@@ -12464,6 +12463,11 @@ DxgkpVidMmMakeResidentOwned(
 
     if (!Placed)
     {
+        if (UserMapped)
+        {
+            Status = STATUS_DEVICE_BUSY;
+            goto Cleanup;
+        }
         DPRINT1("DxgkVidMmMakeResident: cannot make alloc %p resident — all segments full\n", Allocation);
         Status = STATUS_NO_MEMORY;
         goto Cleanup;
