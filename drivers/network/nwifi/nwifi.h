@@ -28,6 +28,7 @@
  * ===========================================================================
  */
 #define IEEE80211_ADDR_LEN          6
+#define IEEE80211_ELEMENT_RSN       48
 
 /* Frame Control field (little-endian on the air). */
 #define IEEE80211_FC0_VERSION_0     0x00

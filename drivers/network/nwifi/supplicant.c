@@ -9,12 +9,14 @@
 
 /* The RSNA supplicant library API (pure crypto + 4-way handshake FSM). */
 #include <rsna_supplicant.h>
+#include <bcrypt.h>
 
 #define NDEBUG
 #include <debug.h>
 
 #define EAPOL_ETHERTYPE     0x888E
 #define NWIFI_CREDENTIAL_MAX 128
+#define NWIFI_RANDOM_POOL    128
 
 /* Per-interface supplicant session.  Keeps a copy of the seeded passphrase
  * so a session can be re-initialised per SSID (the PMK is SSID-dependent). */
@@ -29,6 +31,10 @@ typedef struct _NWIFI_SUPPLICANT
     BOOLEAN   KeysInstalled;
     volatile LONG InstallQueued;
     ULONG     Generation;           /* invalidates queued work across sessions */
+    UCHAR     RandomPool[NWIFI_RANDOM_POOL];
+    ULONG     RandomAvailable;
+    ULONG     InstalledGroupSerial;
+    BOOLEAN   GroupInstallQueued;
 } NWIFI_SUPPLICANT;
 
 typedef struct _NWIFI_INSTALL_KEYS_CONTEXT
@@ -39,6 +45,51 @@ typedef struct _NWIFI_INSTALL_KEYS_CONTEXT
     ULONG EapolLength;
     UCHAR Eapol[256];
 } NWIFI_INSTALL_KEYS_CONTEXT, *PNWIFI_INSTALL_KEYS_CONTEXT;
+
+static
+int
+NwifiSupplicantRandom(
+    _In_ void *Context,
+    _Out_writes_bytes_(Length) rsna_u8 *Buffer,
+    _In_ rsna_size Length)
+{
+    NWIFI_SUPPLICANT *Sup = Context;
+
+    if (Sup == NULL || Length > Sup->RandomAvailable)
+        return -1;
+
+    Sup->RandomAvailable -= (ULONG)Length;
+    RtlCopyMemory(Buffer, Sup->RandomPool + Sup->RandomAvailable, Length);
+    RtlSecureZeroMemory(Sup->RandomPool + Sup->RandomAvailable, Length);
+    return 0;
+}
+
+static
+VOID
+NwifiSupplicantRefillRandom(
+    _In_ PNWIFI_MSM Msm,
+    _In_ NWIFI_SUPPLICANT *Expected,
+    _In_ ULONG Generation)
+{
+    UCHAR Pool[NWIFI_RANDOM_POOL];
+    NWIFI_SUPPLICANT *Sup;
+
+    if (!NT_SUCCESS(BCryptGenRandom(NULL, Pool, sizeof(Pool), BCRYPT_USE_SYSTEM_PREFERRED_RNG)))
+    {
+        DPRINT1("NWIFI: random source unavailable\n");
+        return;
+    }
+
+    NdisAcquireSpinLock(&Msm->Lock);
+    Sup = Msm->Supplicant;
+    if (Sup != NULL && Sup == Expected && Sup->Generation == Generation)
+    {
+        RtlCopyMemory(Sup->RandomPool, Pool, sizeof(Pool));
+        Sup->RandomAvailable = sizeof(Pool);
+    }
+    NdisReleaseSpinLock(&Msm->Lock);
+    RtlSecureZeroMemory(Pool, sizeof(Pool));
+}
 
 static
 BOOLEAN
@@ -340,6 +391,51 @@ NwifiInstallGroupKey(
     return Status;
 }
 
+static
+DOT11_CIPHER_ALGORITHM
+NwifiGroupCipherFromKeys(
+    _In_ const RSNA_KEYS *Keys)
+{
+    return Keys->gtkLen == RSNA_TK_TKIP_LEN ? DOT11_CIPHER_ALGO_TKIP : DOT11_CIPHER_ALGO_CCMP;
+}
+
+static
+NDIS_STATUS
+NwifiInstallIgtk(
+    _In_ PNWIFI_ADAPTER Adapter,
+    _In_ const RSNA_KEYS *Keys)
+{
+    PDOT11_CIPHER_DEFAULT_KEY_VALUE Value;
+    PDOT11_KEY_ALGO_BIP Bip;
+    ULONG KeyLength = FIELD_OFFSET(DOT11_KEY_ALGO_BIP, ucBIPKey) + (ULONG)Keys->igtkLen;
+    ULONG ValueSize = FIELD_OFFSET(DOT11_CIPHER_DEFAULT_KEY_VALUE, ucKey) + KeyLength;
+    NDIS_STATUS Status;
+
+    Value = (PDOT11_CIPHER_DEFAULT_KEY_VALUE)NwifiAllocate(ValueSize);
+    if (Value == NULL)
+        return NDIS_STATUS_RESOURCES;
+
+    RtlZeroMemory(Value, ValueSize);
+    Value->Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    Value->Header.Revision = DOT11_CIPHER_DEFAULT_KEY_VALUE_REVISION_1;
+    Value->Header.Size = sizeof(DOT11_CIPHER_DEFAULT_KEY_VALUE);
+    Value->uKeyIndex = Keys->igtkKeyId;
+    Value->AlgorithmId = DOT11_CIPHER_ALGO_BIP;
+    Value->usKeyLength = (USHORT)KeyLength;
+    Bip = (PDOT11_KEY_ALGO_BIP)Value->ucKey;
+    RtlCopyMemory(Bip->ucIPN, Keys->igtkIpn, sizeof(Bip->ucIPN));
+    Bip->ulBIPKeyLength = (ULONG)Keys->igtkLen;
+    RtlCopyMemory(Bip->ucBIPKey, Keys->igtk, Keys->igtkLen);
+
+    Status = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+                                    OID_DOT11_CIPHER_DEFAULT_KEY,
+                                    Value, ValueSize, NULL);
+    RtlSecureZeroMemory(Value, ValueSize);
+    NwifiFree(Value);
+    DPRINT1("NWIFI: install IGTK id %u -> 0x%08X\n", Keys->igtkKeyId, Status);
+    return Status;
+}
+
 /* ===========================================================================
  *  Session lifecycle
  * ===========================================================================
@@ -414,6 +510,7 @@ NwifiSupplicantStart(
     ULONG Generation;
     RSNA_CTX NewCtx;
     RSNA_STATUS RStatus;
+    UCHAR RandomPool[NWIFI_RANDOM_POOL];
     UCHAR RsnIe[22] = {
         0x30, 0x14, 0x01, 0x00,
         0x00, 0x0F, 0xAC, 0x00,
@@ -495,15 +592,13 @@ NwifiSupplicantStart(
     if (RStatus != RSNA_OK)
         goto StartFailed;
 
-    /* Seed the SNonce PRNG with whatever entropy we have (MAC + tick count). */
+    if (!NT_SUCCESS(BCryptGenRandom(NULL, RandomPool, sizeof(RandomPool),
+                                    BCRYPT_USE_SYSTEM_PREFERRED_RNG)))
     {
-        UCHAR Seed[IEEE80211_ADDR_LEN + sizeof(ULONG64)];
-        ULONG64 Tick = (ULONG64)KeQueryInterruptTime();
-        RtlCopyMemory(Seed, Adapter->MacAddress, IEEE80211_ADDR_LEN);
-        RtlCopyMemory(Seed + IEEE80211_ADDR_LEN, &Tick, sizeof(Tick));
-        RsnaSeed(&NewCtx, Seed, sizeof(Seed));
-        RtlSecureZeroMemory(Seed, sizeof(Seed));
+        RStatus = RSNA_ERR_RANDOM;
+        goto StartFailed;
     }
+    RsnaSetRandom(&NewCtx, NwifiSupplicantRandom, Sup);
 
     NdisAcquireSpinLock(&Msm->Lock);
     if (Msm->Supplicant != Sup || Sup->Generation != Generation ||
@@ -521,13 +616,18 @@ NwifiSupplicantStart(
     }
     Sup->Ctx = NewCtx;
     RtlCopyMemory(Sup->OwnMac, Adapter->MacAddress, IEEE80211_ADDR_LEN);
+    RtlCopyMemory(Sup->RandomPool, RandomPool, sizeof(RandomPool));
+    Sup->RandomAvailable = sizeof(RandomPool);
     Sup->Generation++;
     Sup->Initialised = TRUE;
     Sup->KeysInstalled = FALSE;
     Sup->InstallQueued = 0;
+    Sup->InstalledGroupSerial = 0;
+    Sup->GroupInstallQueued = FALSE;
     NdisReleaseSpinLock(&Msm->Lock);
 
     RtlSecureZeroMemory(&NewCtx, sizeof(NewCtx));
+    RtlSecureZeroMemory(RandomPool, sizeof(RandomPool));
     RtlSecureZeroMemory(Credential, sizeof(Credential));
     DPRINT1("NWIFI: supplicant started for SSID len %u\n", Ssid.uSSIDLength);
     return NDIS_STATUS_SUCCESS;
@@ -535,6 +635,7 @@ NwifiSupplicantStart(
 StartFailed:
     RtlSecureZeroMemory(&NewCtx, sizeof(NewCtx));
     RtlSecureZeroMemory(Credential, sizeof(Credential));
+    RtlSecureZeroMemory(RandomPool, sizeof(RandomPool));
     DPRINT1("NWIFI: supplicant initialization failed %d\n", RStatus);
     return (RStatus == RSNA_ERR_PARAM) ? NDIS_STATUS_INVALID_DATA
                                       : NDIS_STATUS_FAILURE;
@@ -642,17 +743,33 @@ NwifiSupplicantSeedFirmware(
 }
 
 VOID
-NwifiSupplicantSetApAddr(
+NwifiSupplicantSetAssociation(
     _In_ PNWIFI_MSM Msm,
-    _In_reads_bytes_(6) PUCHAR ApMac)
+    _In_reads_bytes_(6) PUCHAR ApMac,
+    _In_reads_bytes_opt_(RequestIeLength) PUCHAR RequestIes,
+    _In_ ULONG RequestIeLength)
 {
     PNWIFI_SUPPLICANT Sup;
+    ULONG Offset = 0;
+    ULONG Length;
 
     NdisAcquireSpinLock(&Msm->Lock);
     Sup = Msm->Supplicant;
     if (Sup != NULL && Sup->Initialised)
     {
         RsnaSetApAddr(&Sup->Ctx, ApMac);
+        while (RequestIes != NULL && Offset + 2 <= RequestIeLength)
+        {
+            Length = RequestIes[Offset + 1];
+            if (Offset + 2 + Length > RequestIeLength)
+                break;
+            if (RequestIes[Offset] == IEEE80211_ELEMENT_RSN)
+            {
+                RsnaSetRsnIe(&Sup->Ctx, RequestIes + Offset, Length + 2);
+                break;
+            }
+            Offset += 2 + Length;
+        }
     }
     NdisReleaseSpinLock(&Msm->Lock);
 }
@@ -773,8 +890,12 @@ NwifiSupplicantInstallKeysWorker(
 
     if (Status == NDIS_STATUS_SUCCESS && Keys.gtkLen != 0)
     {
-        Status = NwifiInstallGroupKey(Adapter, Cipher, Keys.gtkKeyId,
+        Status = NwifiInstallGroupKey(Adapter, NwifiGroupCipherFromKeys(&Keys), Keys.gtkKeyId,
                                       (PUCHAR)Keys.gtk, (ULONG)Keys.gtkLen);
+    }
+    if (Status == NDIS_STATUS_SUCCESS && Keys.igtkLen != 0)
+    {
+        NwifiInstallIgtk(Adapter, &Keys);
     }
     if (Status != NDIS_STATUS_SUCCESS)
     {
@@ -804,6 +925,7 @@ NwifiSupplicantInstallKeysWorker(
     }
     Sup->KeysInstalled = TRUE;
     Sup->InstallQueued = 0;
+    Sup->InstalledGroupSerial = Keys.groupSerial;
     NdisReleaseSpinLock(&Msm->Lock);
 
     Status = NwifiInjectL2Frame(Adapter,
@@ -827,7 +949,65 @@ NwifiSupplicantInstallKeysWorker(
     }
 
     NwifiMsmLinkUp(Msm, TRUE);
+    NwifiSupplicantRefillRandom(Msm, Sup, Context->Generation);
     DPRINT1("NWIFI: WPA2 4-way handshake complete; secure link up\n");
+
+Exit:
+    RtlSecureZeroMemory(&Keys, sizeof(Keys));
+    RtlSecureZeroMemory(Context, sizeof(*Context));
+    NwifiFree(Context);
+    NwifiMsmCompleteWorkItem(Msm, NdisIoWorkItemHandle);
+}
+
+static
+VOID
+NTAPI
+NwifiSupplicantInstallGroupKeysWorker(
+    _In_opt_ PVOID WorkItemContext,
+    _In_     NDIS_HANDLE NdisIoWorkItemHandle)
+{
+    PNWIFI_INSTALL_KEYS_CONTEXT Context =
+        (PNWIFI_INSTALL_KEYS_CONTEXT)WorkItemContext;
+    PNWIFI_MSM Msm;
+    PNWIFI_SUPPLICANT Sup;
+    RSNA_KEYS Keys;
+    NDIS_STATUS Status;
+
+    if (Context == NULL || Context->Msm == NULL)
+        return;
+    Msm = Context->Msm;
+    RtlZeroMemory(&Keys, sizeof(Keys));
+
+    NdisAcquireSpinLock(&Msm->Lock);
+    Sup = Msm->Supplicant;
+    if (Sup == NULL || Sup->Generation != Context->Generation ||
+        !Sup->Initialised || !Sup->KeysInstalled ||
+        RsnaGetKeys(&Sup->Ctx, &Keys) != RSNA_OK)
+    {
+        if (Sup != NULL && Sup->Generation == Context->Generation)
+            Sup->GroupInstallQueued = FALSE;
+        NdisReleaseSpinLock(&Msm->Lock);
+        goto Exit;
+    }
+    NdisReleaseSpinLock(&Msm->Lock);
+
+    Status = NwifiInstallGroupKey(Msm->Adapter, NwifiGroupCipherFromKeys(&Keys), Keys.gtkKeyId,
+                                  (PUCHAR)Keys.gtk, (ULONG)Keys.gtkLen);
+    if (Status == NDIS_STATUS_SUCCESS && Keys.igtkLen != 0)
+        NwifiInstallIgtk(Msm->Adapter, &Keys);
+
+    NdisAcquireSpinLock(&Msm->Lock);
+    Sup = Msm->Supplicant;
+    if (Sup != NULL && Sup->Generation == Context->Generation)
+    {
+        if (Status == NDIS_STATUS_SUCCESS)
+            Sup->InstalledGroupSerial = Keys.groupSerial;
+        Sup->GroupInstallQueued = FALSE;
+    }
+    NdisReleaseSpinLock(&Msm->Lock);
+
+    NwifiSupplicantRefillRandom(Msm, Sup, Context->Generation);
+    DPRINT1("NWIFI: group key rekey installed -> 0x%08X\n", Status);
 
 Exit:
     RtlSecureZeroMemory(&Keys, sizeof(Keys));
@@ -856,6 +1036,7 @@ NwifiSupplicantRxEapol(
     RSNA_STATUS Error = RSNA_OK;
     ULONG Generation = 0;
     BOOLEAN QueueInstall = FALSE;
+    BOOLEAN QueueGroupInstall = FALSE;
     BOOLEAN DeferReply = FALSE;
     BOOLEAN ReplyUnencrypted = TRUE;
     NDIS_STATUS SendStatus;
@@ -885,6 +1066,14 @@ NwifiSupplicantRxEapol(
         Sup->InstallQueued = 1;
         Generation = Sup->Generation;
         QueueInstall = TRUE;
+    }
+    if (NewState == RSNA_STATE_COMPLETED && Sup->KeysInstalled &&
+        !Sup->GroupInstallQueued &&
+        Sup->Ctx.keys.groupSerial != Sup->InstalledGroupSerial)
+    {
+        Sup->GroupInstallQueued = TRUE;
+        Generation = Sup->Generation;
+        QueueGroupInstall = TRUE;
     }
     DeferReply = (NewState == RSNA_STATE_COMPLETED &&
                   !Sup->KeysInstalled);
@@ -948,6 +1137,26 @@ NwifiSupplicantRxEapol(
             NwifiQueueNotification(Msm->Adapter->InterfaceIndex,
                                    NwifiNotifyConnectComplete,
                                    NDIS_STATUS_RESOURCES);
+        }
+    }
+    else if (QueueGroupInstall)
+    {
+        Context = (PNWIFI_INSTALL_KEYS_CONTEXT)NwifiAllocate(sizeof(*Context));
+        if (Context != NULL)
+        {
+            Context->Msm = Msm;
+            Context->Generation = Generation;
+            Context->EapolLength = 0;
+        }
+        if (Context == NULL ||
+            !NwifiMsmQueueWorkItem(Msm, NwifiSupplicantInstallGroupKeysWorker, Context))
+        {
+            NwifiFree(Context);
+            NdisAcquireSpinLock(&Msm->Lock);
+            Sup = Msm->Supplicant;
+            if (Sup != NULL && Sup->Generation == Generation)
+                Sup->GroupInstallQueued = FALSE;
+            NdisReleaseSpinLock(&Msm->Lock);
         }
     }
     else if (NewState == RSNA_STATE_FAILED)

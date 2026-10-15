@@ -850,7 +850,17 @@ NwifiMsmIndicateStatus(
 
                         if (Msm->Supplicant != NULL)
                         {
-                            NwifiSupplicantSetApAddr(Msm, P->MacAddr);
+                            PUCHAR RequestIes = NULL;
+                            ULONG RequestIeLength = 0;
+
+                            if (P->uAssocReqSize != 0 &&
+                                P->uAssocReqOffset <= BufferSize &&
+                                P->uAssocReqSize <= BufferSize - P->uAssocReqOffset)
+                            {
+                                RequestIes = (PUCHAR)Buffer + P->uAssocReqOffset;
+                                RequestIeLength = P->uAssocReqSize;
+                            }
+                            NwifiSupplicantSetAssociation(Msm, P->MacAddr, RequestIes, RequestIeLength);
                         }
 
                         NdisAcquireSpinLock(&Msm->Lock);

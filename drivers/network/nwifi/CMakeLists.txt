@@ -30,7 +30,7 @@ add_library(nwifi MODULE
 set_module_type(nwifi kernelmodedriver)
 target_link_libraries(nwifi ${PSEH_LIB} rsna_supplicant)
 
-add_importlibs(nwifi ndis ntoskrnl hal)
+add_importlibs(nwifi ndis ntoskrnl hal cng)
 add_pch(nwifi nwifi.h "")
 add_cd_file(TARGET nwifi DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_driver_inf(nwifi nwifi.inf)

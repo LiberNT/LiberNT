@@ -230,9 +230,11 @@ NDIS_STATUS NwifiSupplicantSetPassphrase(
     _In_ ULONG Length);
 
 /* Tell the supplicant the authenticator (AP) MAC once association completes. */
-VOID NwifiSupplicantSetApAddr(
+VOID NwifiSupplicantSetAssociation(
     _In_ PNWIFI_MSM Msm,
-    _In_reads_bytes_(6) PUCHAR ApMac);
+    _In_reads_bytes_(6) PUCHAR ApMac,
+    _In_reads_bytes_opt_(RequestIeLength) PUCHAR RequestIes,
+    _In_ ULONG RequestIeLength);
 
 /* Feed an EAPOL-Key frame to the supplicant; transmits any reply and, on
  * COMPLETED, installs the derived PTK/GTK.  Returns TRUE if consumed. */
