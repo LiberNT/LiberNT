@@ -1585,6 +1585,8 @@ SamQueryDisplayInformation(IN SAM_HANDLE DomainHandle,
         (SortedBuffer == NULL))
         return STATUS_INVALID_PARAMETER;
 
+    RtlZeroMemory(&LocalBuffer, sizeof(LocalBuffer));
+
     RpcTryExcept
     {
         Status = SamrQueryDisplayInformation3((SAMPR_HANDLE)DomainHandle,
