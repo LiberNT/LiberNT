@@ -906,6 +906,66 @@ DWORD getNumTcpEntries(void)
     return totalNumber;
 }
 
+DWORD setTcpEntry(PMIB_TCPROW Row)
+{
+    TCP_REQUEST_SET_INFORMATION_EX_ARP_ENTRY Request = { 0 };
+    DWORD numEntities, returnSize, i, j, Result = ERROR_MR_MID_NOT_FOUND;
+    TDIEntityID *entitySet;
+    PMIB_TCPROW Rows;
+    HANDLE tcpFile;
+    NTSTATUS status;
+
+    if (!Row || Row->dwState != MIB_TCP_STATE_DELETE_TCB)
+        return ERROR_INVALID_PARAMETER;
+
+    status = openTcpFile(&tcpFile, FILE_READ_DATA | FILE_WRITE_DATA);
+    if (status == STATUS_ACCESS_DENIED)
+        return ERROR_NETWORK_ACCESS_DENIED;
+    if (!NT_SUCCESS(status))
+        return RtlNtStatusToDosError(status);
+
+    status = tdiGetEntityIDSet(tcpFile, &entitySet, &numEntities);
+    if (!NT_SUCCESS(status))
+    {
+        closeTcpFile(tcpFile);
+        return RtlNtStatusToDosError(status);
+    }
+
+    for (i = 0; i < numEntities && Result == ERROR_MR_MID_NOT_FOUND; i++)
+    {
+        if (entitySet[i].tei_entity != CO_TL_ENTITY)
+            continue;
+
+        status = tdiGetSetOfThings(tcpFile, INFO_CLASS_PROTOCOL, INFO_TYPE_PROVIDER, IP_MIB_ARPTABLE_ENTRY_ID,
+                                   CO_TL_ENTITY, entitySet[i].tei_instance, 0, sizeof(MIB_TCPROW),
+                                   (PVOID *)&Rows, &returnSize);
+        if (!NT_SUCCESS(status))
+            continue;
+
+        for (j = 0; j < returnSize; j++)
+        {
+            if (Rows[j].dwLocalAddr != Row->dwLocalAddr || Rows[j].dwLocalPort != Row->dwLocalPort ||
+                Rows[j].dwRemoteAddr != Row->dwRemoteAddr || Rows[j].dwRemotePort != Row->dwRemotePort)
+                continue;
+
+            Request.Req.ID.toi_entity = entitySet[i];
+            Request.Req.ID.toi_class = INFO_CLASS_PROTOCOL;
+            Request.Req.ID.toi_type = INFO_TYPE_PROVIDER;
+            Request.Req.ID.toi_id = IP_MIB_ARPTABLE_ENTRY_ID;
+            Request.Req.BufferSize = sizeof(MIB_TCPROW);
+            memcpy(Request.Req.Buffer, Row, sizeof(MIB_TCPROW));
+            Result = DeviceIoControl(tcpFile, IOCTL_TCP_SET_INFORMATION_EX, &Request, sizeof(Request),
+                                     NULL, 0, &returnSize, NULL) ? NO_ERROR : GetLastError();
+            break;
+        }
+        tdiFreeThingSet(Rows);
+    }
+
+    tdiFreeThingSet(entitySet);
+    closeTcpFile(tcpFile);
+    return Result;
+}
+
 PVOID getTcpTable(CLASS_TABLE Class)
 {
     DWORD numEntities, returnSize;

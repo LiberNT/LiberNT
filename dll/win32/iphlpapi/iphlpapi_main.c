@@ -59,6 +59,7 @@
 #ifdef __REACTOS__
 #include <tdiinfo.h>
 #include "ifenum.h"
+#include "ipstats.h"
 #include "route.h"
 #endif
 
@@ -4472,8 +4473,13 @@ DWORD WINAPI SetIpTTL(UINT nTTL)
  */
 DWORD WINAPI SetTcpEntry(PMIB_TCPROW pTcpRow)
 {
+#ifdef __REACTOS__
+  TRACE("(pTcpRow %p)\n", pTcpRow);
+  return setTcpEntry(pTcpRow);
+#else
   FIXME("(pTcpRow %p): stub\n", pTcpRow);
   return 0;
+#endif
 }
 
 /***********************************************************************

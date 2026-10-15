@@ -111,4 +111,6 @@ DWORD getNumTcpEntries(void);
  */
 PVOID getTcpTable(CLASS_TABLE Class);
 
+DWORD setTcpEntry(PMIB_TCPROW Row);
+
 #endif /* ndef WINE_IPSTATS_H_ */
