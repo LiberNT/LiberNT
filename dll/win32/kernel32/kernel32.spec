@@ -255,16 +255,16 @@
 @ stdcall EnumLanguageGroupLocalesA(ptr long long ptr)
 @ stdcall EnumLanguageGroupLocalesW(ptr long long ptr)
 @ stdcall EnumResourceLanguagesA(long str str ptr long)
-@ stub -version=0x600+ EnumResourceLanguagesExA
-@ stub -version=0x600+ EnumResourceLanguagesExW
+@ stdcall -version=0x600+ EnumResourceLanguagesExA(long str str ptr long long long)
+@ stdcall -version=0x600+ EnumResourceLanguagesExW(long wstr wstr ptr long long long)
 @ stdcall EnumResourceLanguagesW(long wstr wstr ptr long)
 @ stdcall EnumResourceNamesA(long str ptr long)
-@ stub -version=0x600+ EnumResourceNamesExA
-@ stub -version=0x600+ EnumResourceNamesExW
+@ stdcall -version=0x600+ EnumResourceNamesExA(long str ptr long long long)
+@ stdcall -version=0x600+ EnumResourceNamesExW(long wstr ptr long long long)
 @ stdcall EnumResourceNamesW(long wstr ptr long)
 @ stdcall EnumResourceTypesA(long ptr long)
-@ stub -version=0x600+ EnumResourceTypesExA
-@ stub -version=0x600+ EnumResourceTypesExW
+@ stdcall -version=0x600+ EnumResourceTypesExA(long ptr long long long)
+@ stdcall -version=0x600+ EnumResourceTypesExW(long ptr long long long)
 @ stdcall EnumResourceTypesW(long ptr long)
 @ stdcall EnumSystemCodePagesA(ptr long)
 @ stdcall EnumSystemCodePagesW(ptr long)

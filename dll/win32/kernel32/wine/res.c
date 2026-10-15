@@ -179,6 +179,7 @@ HRSRC WINAPI FindResourceW( HINSTANCE hModule, LPCWSTR name, LPCWSTR type )
 }
 
 
+#ifndef __REACTOS__
 /**********************************************************************
  *	EnumResourceTypesA	(KERNEL32.@)
  */
@@ -524,6 +525,7 @@ done:
     if (status != STATUS_SUCCESS) SetLastError( RtlNtStatusToDosError(status) );
     return ret;
 }
+#endif
 
 
 /**********************************************************************

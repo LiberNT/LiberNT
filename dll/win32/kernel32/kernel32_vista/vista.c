@@ -651,25 +651,6 @@ GetFileMUIInfo(
 }
 
 /*
- * @unimplemented
- */
-BOOL
-WINAPI
-GetFileMUIPath(
-    DWORD dwFlags,
-    PCWSTR pcwszFilePath,
-    PWSTR pwszLanguage,
-    PULONG pcchLanguage,
-    PWSTR pwszFileMUIPath,
-    PULONG pcchFileMUIPath,
-    PULONGLONG pululEnumerator)
-{
-    DPRINT1("%x %p %p %p %p %p\n", dwFlags, pcwszFilePath, pwszLanguage, pwszFileMUIPath, pcchFileMUIPath, pululEnumerator);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
-}
-
-/*
  * @implemented
  */
 BOOL

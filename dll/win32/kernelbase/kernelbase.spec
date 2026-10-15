@@ -106,6 +106,13 @@
 @ stdcall EnumCalendarInfoExEx(ptr wstr long wstr long long)
 @ stdcall EnumCalendarInfoExW(ptr long long long)
 @ stdcall EnumCalendarInfoW(ptr long long long)
+@ stdcall EnumResourceLanguagesExA(long str str ptr long long long) kernel32.EnumResourceLanguagesExA
+@ stdcall EnumResourceLanguagesExW(long wstr wstr ptr long long long) kernel32.EnumResourceLanguagesExW
+@ stdcall EnumResourceNamesExA(long str ptr long long long) kernel32.EnumResourceNamesExA
+@ stdcall EnumResourceNamesExW(long wstr ptr long long long) kernel32.EnumResourceNamesExW
+@ stdcall EnumResourceNamesW(long wstr ptr long) kernel32.EnumResourceNamesW
+@ stdcall EnumResourceTypesExA(long ptr long long long) kernel32.EnumResourceTypesExA
+@ stdcall EnumResourceTypesExW(long ptr long long long) kernel32.EnumResourceTypesExW
 @ stdcall EnumSystemGeoID(long long ptr)
 @ stdcall EnumSystemLocalesA(ptr long)
 @ stdcall EnumSystemLocalesEx(ptr long long ptr)
@@ -188,6 +195,7 @@
 @ stdcall GetExitCodeProcess(long ptr) kernel32.GetExitCodeProcess
 @ stdcall GetExitCodeThread(long ptr) kernel32.GetExitCodeThread
 @ stdcall GetFileMUIInfo(long wstr ptr ptr)
+@ stdcall GetFileMUIPath(long wstr wstr ptr wstr ptr ptr) kernel32.GetFileMUIPath
 @ stdcall GetFileSecurityW(wstr long ptr long ptr)
 @ stdcall GetFileVersionInfoA(str long long ptr)
 @ stdcall GetFileVersionInfoExA(long str long long ptr)
