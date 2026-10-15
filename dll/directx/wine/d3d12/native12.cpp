@@ -1285,6 +1285,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS15 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            caps->TriangleFanSupported = ddi_build >= D3D12DDI_BUILD_VERSION_0097;
             caps->DynamicIndexBufferStripCutSupported = ddi_build >= D3D12DDI_BUILD_VERSION_0099;
             return S_OK;
         }
@@ -1319,6 +1320,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             ZeroMemory(caps, sizeof(*caps));
             caps->RasterizerDesc2Supported = TRUE;
             caps->NarrowQuadrilateralLinesSupported = ddi_build >= D3D12DDI_BUILD_VERSION_0102;
+            caps->AnisoFilterWithPointMipSupported = ddi_build >= D3D12DDI_BUILD_VERSION_0102;
             caps->SupportedSampleCountsWithNoOutputs = 1;
             caps->MaxSamplerDescriptorHeapSize = D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE;
             caps->MaxSamplerDescriptorHeapSizeWithStaticSamplers = D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE;
