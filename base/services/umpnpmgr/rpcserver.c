@@ -404,7 +404,6 @@ IsValidDeviceInstanceID(
 }
 
 
-static
 BOOL
 IsRootDeviceInstanceID(
     _In_ PWSTR pszDeviceInstanceID)

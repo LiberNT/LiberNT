@@ -99,6 +99,10 @@ WINAPI
 RpcServerThread(
     LPVOID lpParameter);
 
+BOOL
+IsRootDeviceInstanceID(
+    _In_ PWSTR pszDeviceInstanceID);
+
 
 /* umpnpmgr.c */
 

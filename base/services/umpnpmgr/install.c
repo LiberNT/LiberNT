@@ -75,7 +75,23 @@ GetDeviceInstallState(PCWSTR DeviceInstance)
     DWORD BytesWritten;
     DWORD DeviceStatus;
     DWORD DeviceProblem;
+    CONFIGRET StatusResult;
     DEVICE_INSTALL_STATE State = DeviceInstallRequired;
+
+    if (IsRootDeviceInstanceID((PWSTR)DeviceInstance))
+    {
+        return DeviceInstallComplete;
+    }
+
+    StatusResult = PNP_GetDeviceStatus(NULL,
+                                       (PWSTR)DeviceInstance,
+                                       &DeviceStatus,
+                                       &DeviceProblem,
+                                       0);
+    if (StatusResult == CR_NO_SUCH_DEVINST)
+    {
+        return DeviceInstallComplete;
+    }
 
     if (RegOpenKeyExW(hEnumKey,
                       DeviceInstance,
@@ -95,11 +111,7 @@ GetDeviceInstallState(PCWSTR DeviceInstance)
     {
         State = DeviceStartRequired;
 
-        if (PNP_GetDeviceStatus(NULL,
-                                (PWSTR)DeviceInstance,
-                                &DeviceStatus,
-                                &DeviceProblem,
-                                0) == CR_SUCCESS &&
+        if (StatusResult == CR_SUCCESS &&
             ((DeviceStatus & DN_STARTED) ||
              ((DeviceStatus & DN_HAS_PROBLEM) &&
               (DeviceProblem == CM_PROB_FAILED_START ||
