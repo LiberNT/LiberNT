@@ -29,6 +29,7 @@
 #include <tdi.h>
 #include <afd/shared.h>
 #include <mswsock.h>
+#include <ws2tcpip.h>
 
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(msafd);

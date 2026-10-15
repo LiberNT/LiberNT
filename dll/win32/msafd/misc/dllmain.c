@@ -3635,7 +3635,7 @@ WSPAddressToString(IN LPSOCKADDR lpsaAddress,
                    OUT LPINT lpErrno)
 {
     SIZE_T size;
-    WCHAR buffer[54]; /* 32 digits + 7':' + '[' + '%" + 5 digits + ']:' + 5 digits + '\0' */
+    WCHAR buffer[INET6_ADDRSTRLEN];
     WCHAR *p;
 
     if (!lpsaAddress || !lpszAddressString || !lpdwAddressStringLength)
@@ -3666,6 +3666,23 @@ WSPAddressToString(IN LPSOCKADDR lpsaAddress,
                 *p = 0;
             }
             break;
+        case AF_INET6:
+        {
+            SOCKADDR_IN6 *Address6 = (SOCKADDR_IN6 *)lpsaAddress;
+            ULONG Length = RTL_NUMBER_OF(buffer);
+
+            if (dwAddressLength < sizeof(SOCKADDR_IN6) ||
+                !NT_SUCCESS(RtlIpv6AddressToStringExW(&Address6->sin6_addr,
+                                                      Address6->sin6_scope_id,
+                                                      Address6->sin6_port,
+                                                      buffer,
+                                                      &Length)))
+            {
+                if (lpErrno) *lpErrno = WSAEINVAL;
+                return SOCKET_ERROR;
+            }
+            break;
+        }
         default:
             if (lpErrno) *lpErrno = WSAEINVAL;
             return SOCKET_ERROR;
@@ -3792,6 +3809,36 @@ WSPStringToAddress(IN LPWSTR AddressString,
             sockaddr->sin_addr.s_addr = inetaddr;
             sockaddr->sin_port = port;
         }
+    }
+    else if (AddressFamily == AF_INET6)
+    {
+        SOCKADDR_IN6 *Address6 = (SOCKADDR_IN6 *)lpAddress;
+        IN6_ADDR Address;
+        ULONG ScopeId;
+        USHORT Port;
+
+        if (*lpAddressLength < (INT)sizeof(SOCKADDR_IN6))
+        {
+            if (lpErrno) *lpErrno = WSAEFAULT;
+        }
+        else if (!NT_SUCCESS(RtlIpv6StringToAddressExW(AddressString, &Address, &ScopeId, &Port)))
+        {
+            if (lpErrno) *lpErrno = WSAEINVAL;
+        }
+        else
+        {
+            if (lpErrno) *lpErrno = NO_ERROR;
+            *lpAddressLength = sizeof(SOCKADDR_IN6);
+            memset(Address6, 0, sizeof(*Address6));
+            Address6->sin6_family = AF_INET6;
+            Address6->sin6_addr = Address;
+            Address6->sin6_scope_id = ScopeId;
+            Address6->sin6_port = Port;
+        }
+    }
+    else
+    {
+        if (lpErrno) *lpErrno = WSAEINVAL;
     }
 
     if (lpErrno && !*lpErrno)
