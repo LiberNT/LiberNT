@@ -71,6 +71,7 @@
 @ stdcall CheckNameLegalDOS8Dot3A(str str long long long)
 @ stdcall CheckNameLegalDOS8Dot3W(wstr str long long long)
 @ stdcall CheckRemoteDebuggerPresent(long ptr)
+@ stdcall -version=0x602+ CheckTokenCapability(ptr ptr ptr) kernelbase.CheckTokenCapability
 @ stdcall ClearCommBreak(long)
 @ stdcall ClearCommError(long ptr ptr)
 @ stdcall CloseConsoleHandle(long) kernelbase.CloseConsoleHandle
@@ -546,6 +547,7 @@
 @ stdcall GetLocaleInfoW(long long ptr long)
 @ stdcall -arch=win64 GetNextUmsListItem(ptr)
 @ stdcall -version=0x602+ GetOsSafeBootMode(ptr)
+@ stdcall -version=0x602+ GetPackageFullName(long ptr ptr) kernelbase.GetPackageFullName
 @ stdcall -version=0x602+ GetStateSettingsFolder(ptr ptr ptr)
 @ stdcall -arch=win64 GetUmsCompletionListEvent(ptr ptr)
 @ stdcall -version=0x600+ IsValidLocaleName(wstr) kernelbase.IsValidLocaleName
@@ -961,6 +963,8 @@
 @ stdcall OpenWaitableTimerW(long long wstr)
 @ stdcall OutputDebugStringA(str)
 @ stdcall OutputDebugStringW(wstr)
+@ stdcall -version=0x602+ PackageFamilyNameFromFullName(wstr ptr ptr) kernelbase.PackageFamilyNameFromFullName
+@ stdcall -version=0x602+ ParseApplicationUserModelId(wstr ptr ptr ptr ptr) kernelbase.ParseApplicationUserModelId
 @ stdcall PeekConsoleInputA(ptr ptr long ptr) kernelbase.PeekConsoleInputA
 @ stdcall PeekConsoleInputW(ptr ptr long ptr) kernelbase.PeekConsoleInputW
 @ stdcall PeekNamedPipe(long ptr long ptr ptr ptr)

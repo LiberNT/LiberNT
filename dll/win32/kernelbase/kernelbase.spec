@@ -217,6 +217,7 @@
 @ stdcall GetNumberOfConsoleMouseButtons(ptr)
 @ stdcall GetPackageFamilyName(long ptr ptr)
 @ stdcall GetPackageFamilyNameFromToken(ptr ptr ptr)
+@ stdcall GetPackageFullName(long ptr ptr)
 @ stdcall GetPackageFullNameFromToken(ptr ptr ptr)
 @ stdcall GetPriorityClass(long) kernel32.GetPriorityClass
 @ stdcall GetPrivateObjectSecurity(ptr long ptr long ptr)
@@ -337,6 +338,8 @@
 @ stdcall OpenProcessToken(long long ptr)
 @ stdcall OpenThread(long long long) kernel32.OpenThread
 @ stdcall OpenThreadToken(long long long ptr)
+@ stdcall PackageFamilyNameFromFullName(wstr ptr ptr)
+@ stdcall ParseApplicationUserModelId(wstr ptr ptr ptr ptr)
 @ stdcall ParseURLA(str ptr)
 @ stdcall ParseURLW(wstr ptr)
 @ stdcall PathAddBackslashA(str)
