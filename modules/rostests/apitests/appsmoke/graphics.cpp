@@ -208,6 +208,19 @@ static void TestDefaultBufferMap(ID3D11Device *Device, ID3D11DeviceContext *Cont
     UINT Index, Wrong = 0;
     HRESULT Hr;
 
+    memset(&Desc, 0, sizeof(Desc));
+    Desc.ByteWidth = 4096;
+    Desc.Usage = D3D11_USAGE_DEFAULT;
+    Desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    Desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
+    Hr = Device->CreateBuffer(&Desc, NULL, &Buffer);
+    ok(Hr == E_INVALIDARG && !Buffer, "Default-usage vertex buffer with CPU access: %#lx\n", Hr);
+    if (Buffer)
+    {
+        Buffer->Release();
+        Buffer = NULL;
+    }
+
     memset(&Options, 0, sizeof(Options));
     Hr = Device->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS1, &Options, sizeof(Options));
     if (FAILED(Hr) || !Options.MapOnDefaultBuffers)
@@ -216,13 +229,18 @@ static void TestDefaultBufferMap(ID3D11Device *Device, ID3D11DeviceContext *Cont
         return;
     }
 
-    memset(&Desc, 0, sizeof(Desc));
-    Desc.ByteWidth = 4096;
-    Desc.Usage = D3D11_USAGE_DEFAULT;
-    Desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    Desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
+    Desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
     Hr = Device->CreateBuffer(&Desc, NULL, &Buffer);
-    ok(Hr == S_OK && Buffer, "Default-usage buffer with CPU access: %#lx\n", Hr);
+    ok(Hr == S_OK && Buffer, "Default-usage shader resource and unordered access buffer with CPU access: %#lx\n", Hr);
+    if (Buffer)
+    {
+        Buffer->Release();
+        Buffer = NULL;
+    }
+
+    Desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    Hr = Device->CreateBuffer(&Desc, NULL, &Buffer);
+    ok(Hr == S_OK && Buffer, "Default-usage shader resource buffer with CPU access: %#lx\n", Hr);
     if (!Buffer)
         return;
 

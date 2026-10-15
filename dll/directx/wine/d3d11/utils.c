@@ -606,10 +606,20 @@ BOOL validate_d3d11_resource_access_flags(D3D11_RESOURCE_DIMENSION resource_dime
     switch (usage)
     {
         case D3D11_USAGE_DEFAULT:
+#ifdef __REACTOS__
+            if (!is_texture && feature_level >= D3D_FEATURE_LEVEL_11_0 && bind_flags
+                    && !(bind_flags & ~(D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS)))
+                break;
+            if (is_texture && ((bind_flags == D3D11_BIND_SHADER_RESOURCE && feature_level >= D3D_FEATURE_LEVEL_11_0)
+                    || bind_flags == D3D11_BIND_RENDER_TARGET
+                    || bind_flags == D3D11_BIND_UNORDERED_ACCESS))
+                break;
+#else
             if ((bind_flags == D3D11_BIND_SHADER_RESOURCE && feature_level >= D3D_FEATURE_LEVEL_11_0)
                     || (is_texture && bind_flags == D3D11_BIND_RENDER_TARGET)
                     || bind_flags == D3D11_BIND_UNORDERED_ACCESS)
                 break;
+#endif
             if (cpu_access_flags)
             {
                 WARN("Default resources are not CPU accessible.\n");

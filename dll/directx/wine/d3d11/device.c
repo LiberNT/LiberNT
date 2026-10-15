@@ -5021,7 +5021,11 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_CheckFeatureSupport(ID3D11Device5 
             options->TiledResourcesTier = D3D11_TILED_RESOURCES_NOT_SUPPORTED;
             options->MinMaxFiltering = wined3d_caps.min_max_filtering;
             options->ClearViewAlsoSupportsDepthOnlyFormats = FALSE;
+#ifdef __REACTOS__
+            options->MapOnDefaultBuffers = device->state->feature_level >= D3D_FEATURE_LEVEL_11_0;
+#else
             options->MapOnDefaultBuffers = FALSE;
+#endif
             return S_OK;
         }
 
