@@ -1,0 +1,57 @@
+; PROJECT:     LiberNT Realtek Bluetooth UART transport
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Realtek three-wire UART Bluetooth transport installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=System
+ClassGUID={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+CatalogFile=rtkh5bt.cat
+DriverVer=10/15/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=RealtekMfg,NTx86,NTamd64,NTarm64,NTRISCV64
+
+[RealtekMfg.NTx86]
+%RTKH5BT.DeviceDesc%=RTKH5BT_Inst,FDT\realtek_rtl8852bs-bt
+
+[RealtekMfg.NTamd64]
+%RTKH5BT.DeviceDesc%=RTKH5BT_Inst,FDT\realtek_rtl8852bs-bt
+
+[RealtekMfg.NTarm64]
+%RTKH5BT.DeviceDesc%=RTKH5BT_Inst,FDT\realtek_rtl8852bs-bt
+
+[RealtekMfg.NTRISCV64]
+%RTKH5BT.DeviceDesc%=RTKH5BT_Inst,FDT\realtek_rtl8852bs-bt
+
+[RTKH5BT_Inst.NT]
+CopyFiles=RTKH5BT_CopyFiles.NT
+
+[RTKH5BT_CopyFiles.NT]
+rtkh5bt.sys
+
+[RTKH5BT_Inst.NT.Services]
+AddService=rtkh5bt,0x00000002,RTKH5BT_Service_Inst
+
+[RTKH5BT_Service_Inst]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\rtkh5bt.sys
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+rtkh5bt.sys=1
+
+[Strings]
+ProviderName="Ahmed ARIF"
+ManufacturerName="Realtek"
+DiskName="Realtek UART Bluetooth Driver Disk"
+RTKH5BT.DeviceDesc="Realtek RTL8852BS Bluetooth UART transport"
