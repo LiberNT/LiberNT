@@ -1878,6 +1878,25 @@ typedef struct D3D12_SAMPLER_DESC
     FLOAT MaxLOD;
 } D3D12_SAMPLER_DESC;
 
+typedef struct D3D12_SAMPLER_DESC2
+{
+    D3D12_FILTER Filter;
+    D3D12_TEXTURE_ADDRESS_MODE AddressU;
+    D3D12_TEXTURE_ADDRESS_MODE AddressV;
+    D3D12_TEXTURE_ADDRESS_MODE AddressW;
+    FLOAT MipLODBias;
+    UINT MaxAnisotropy;
+    D3D12_COMPARISON_FUNC ComparisonFunc;
+    union
+    {
+        FLOAT FloatBorderColor[4];
+        UINT UintBorderColor[4];
+    };
+    FLOAT MinLOD;
+    FLOAT MaxLOD;
+    D3D12_SAMPLER_FLAGS Flags;
+} D3D12_SAMPLER_DESC2;
+
 typedef struct D3D12_CPU_DESCRIPTOR_HANDLE
 {
     SIZE_T ptr;
@@ -5057,6 +5076,68 @@ interface ID3D12Device10 : ID3D12Device9
 }
 
 [
+    uuid(5405c344-d457-444e-b4dd-2366e45aee39),
+    object,
+    local,
+    pointer_default(unique)
+]
+interface ID3D12Device11 : ID3D12Device10
+{
+    void CreateSampler2(
+            const D3D12_SAMPLER_DESC2 *desc,
+            D3D12_CPU_DESCRIPTOR_HANDLE dst_descriptor);
+}
+
+[
+    uuid(5af5c532-4c91-4cd0-b541-15a405395fc5),
+    object,
+    local,
+    pointer_default(unique)
+]
+interface ID3D12Device12 : ID3D12Device11
+{
+    D3D12_RESOURCE_ALLOCATION_INFO GetResourceAllocationInfo3(
+            UINT visible_mask,
+            UINT resource_descs_count,
+            const D3D12_RESOURCE_DESC1 *resource_descs,
+            const UINT32 *castable_formats_counts,
+            const DXGI_FORMAT *const *castable_formats,
+            D3D12_RESOURCE_ALLOCATION_INFO1 *resource_allocation_info1);
+}
+
+[
+    uuid(14eecffc-4df8-40f7-a118-5c816f45695e),
+    object,
+    local,
+    pointer_default(unique)
+]
+interface ID3D12Device13 : ID3D12Device12
+{
+    HRESULT OpenExistingHeapFromAddress1(
+            const void *address,
+            SIZE_T size,
+            REFIID riid,
+            void **heap);
+}
+
+[
+    uuid(5f6e592d-d895-44c2-8e4a-88ad4926d323),
+    object,
+    local,
+    pointer_default(unique)
+]
+interface ID3D12Device14 : ID3D12Device13
+{
+    HRESULT CreateRootSignatureFromSubobjectInLibrary(
+            UINT node_mask,
+            const void *library_blob,
+            SIZE_T blob_length,
+            LPCWSTR subobject_name,
+            REFIID riid,
+            void **root_signature);
+}
+
+[
     uuid(bc66d368-7373-4943-8757-fc87dc79e476),
     object,
     local,
@@ -5291,6 +5372,144 @@ interface ID3D12GraphicsCommandList7 : ID3D12GraphicsCommandList6
     void Barrier(
             UINT32 barrier_groups_count,
             const D3D12_BARRIER_GROUP *barrier_groups);
+};
+
+[
+    uuid(ee936ef9-599d-4d28-938e-23c4ad05ce51),
+    object,
+    local,
+    pointer_default(unique)
+]
+interface ID3D12GraphicsCommandList8 : ID3D12GraphicsCommandList7
+{
+    void OMSetFrontAndBackStencilRef(
+            UINT front_stencil_ref,
+            UINT back_stencil_ref);
+};
+
+[
+    uuid(34ed2808-ffe6-4c2b-b11a-cabd2b0c59e1),
+    object,
+    local,
+    pointer_default(unique)
+]
+interface ID3D12GraphicsCommandList9 : ID3D12GraphicsCommandList8
+{
+    void RSSetDepthBias(
+            FLOAT depth_bias,
+            FLOAT depth_bias_clamp,
+            FLOAT slope_scaled_depth_bias);
+
+    void IASetIndexBufferStripCutValue(
+            D3D12_INDEX_BUFFER_STRIP_CUT_VALUE ib_strip_cut_value);
+};
+
+typedef struct D3D12_PROGRAM_IDENTIFIER
+{
+    UINT64 OpaqueData[4];
+} D3D12_PROGRAM_IDENTIFIER;
+
+typedef enum D3D12_SET_WORK_GRAPH_FLAGS
+{
+    D3D12_SET_WORK_GRAPH_FLAG_NONE = 0x0,
+    D3D12_SET_WORK_GRAPH_FLAG_INITIALIZE = 0x1,
+} D3D12_SET_WORK_GRAPH_FLAGS;
+cpp_quote("DEFINE_ENUM_FLAG_OPERATORS(D3D12_SET_WORK_GRAPH_FLAGS);")
+
+typedef struct D3D12_SET_WORK_GRAPH_DESC
+{
+    D3D12_PROGRAM_IDENTIFIER ProgramIdentifier;
+    D3D12_SET_WORK_GRAPH_FLAGS Flags;
+    D3D12_GPU_VIRTUAL_ADDRESS_RANGE BackingMemory;
+    D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE NodeLocalRootArgumentsTable;
+} D3D12_SET_WORK_GRAPH_DESC;
+
+typedef struct D3D12_SET_RAYTRACING_PIPELINE_DESC
+{
+    D3D12_PROGRAM_IDENTIFIER ProgramIdentifier;
+} D3D12_SET_RAYTRACING_PIPELINE_DESC;
+
+typedef struct D3D12_SET_GENERIC_PIPELINE_DESC
+{
+    D3D12_PROGRAM_IDENTIFIER ProgramIdentifier;
+} D3D12_SET_GENERIC_PIPELINE_DESC;
+
+typedef enum D3D12_PROGRAM_TYPE
+{
+    D3D12_PROGRAM_TYPE_GENERIC_PIPELINE = 1,
+    D3D12_PROGRAM_TYPE_RAYTRACING_PIPELINE = 4,
+    D3D12_PROGRAM_TYPE_WORK_GRAPH = 5,
+} D3D12_PROGRAM_TYPE;
+
+typedef struct D3D12_SET_PROGRAM_DESC
+{
+    D3D12_PROGRAM_TYPE Type;
+    union
+    {
+        D3D12_SET_GENERIC_PIPELINE_DESC GenericPipeline;
+        D3D12_SET_RAYTRACING_PIPELINE_DESC RaytracingPipeline;
+        D3D12_SET_WORK_GRAPH_DESC WorkGraph;
+    };
+} D3D12_SET_PROGRAM_DESC;
+
+typedef enum D3D12_DISPATCH_MODE
+{
+    D3D12_DISPATCH_MODE_NODE_CPU_INPUT = 0,
+    D3D12_DISPATCH_MODE_NODE_GPU_INPUT = 1,
+    D3D12_DISPATCH_MODE_MULTI_NODE_CPU_INPUT = 2,
+    D3D12_DISPATCH_MODE_MULTI_NODE_GPU_INPUT = 3,
+} D3D12_DISPATCH_MODE;
+
+typedef struct D3D12_NODE_CPU_INPUT
+{
+    UINT EntrypointIndex;
+    UINT NumRecords;
+    void *pRecords;
+    UINT64 RecordStrideInBytes;
+} D3D12_NODE_CPU_INPUT;
+
+typedef struct D3D12_NODE_GPU_INPUT
+{
+    UINT EntrypointIndex;
+    UINT NumRecords;
+    D3D12_GPU_VIRTUAL_ADDRESS_AND_STRIDE Records;
+} D3D12_NODE_GPU_INPUT;
+
+typedef struct D3D12_MULTI_NODE_CPU_INPUT
+{
+    UINT NumNodeInputs;
+    D3D12_NODE_CPU_INPUT *pNodeInputs;
+    UINT64 NodeInputStrideInBytes;
+} D3D12_MULTI_NODE_CPU_INPUT;
+
+typedef struct D3D12_MULTI_NODE_GPU_INPUT
+{
+    UINT NumNodeInputs;
+    D3D12_GPU_VIRTUAL_ADDRESS_AND_STRIDE NodeInputs;
+} D3D12_MULTI_NODE_GPU_INPUT;
+
+typedef struct D3D12_DISPATCH_GRAPH_DESC
+{
+    D3D12_DISPATCH_MODE Mode;
+    union
+    {
+        D3D12_NODE_CPU_INPUT NodeCPUInput;
+        D3D12_GPU_VIRTUAL_ADDRESS NodeGPUInput;
+        D3D12_MULTI_NODE_CPU_INPUT MultiNodeCPUInput;
+        D3D12_GPU_VIRTUAL_ADDRESS MultiNodeGPUInput;
+    };
+} D3D12_DISPATCH_GRAPH_DESC;
+
+[
+    uuid(7013c015-d161-4b63-a08c-238552dd8acc),
+    object,
+    local,
+    pointer_default(unique)
+]
+interface ID3D12GraphicsCommandList10 : ID3D12GraphicsCommandList9
+{
+    void SetProgram(const D3D12_SET_PROGRAM_DESC *desc);
+    void DispatchGraph(const D3D12_DISPATCH_GRAPH_DESC *desc);
 };
 
 cpp_quote("#ifndef D3D12_IGNORE_SDK_LAYERS")
