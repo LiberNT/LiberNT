@@ -8,6 +8,7 @@ list(APPEND SOURCE
     queue.cpp
     renderpass.cpp
     rootsig.cpp
+    sampler.cpp
     shaders.cpp
     util.cpp
     versions.cpp

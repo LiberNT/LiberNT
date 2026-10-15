@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     ID3D12Device6 to ID3D12Device10, command lists 5 to 7, fences 1 and shader cache sessions
+ * PURPOSE:     ID3D12Device6 to ID3D12Device14, command lists 5 to 10, fences 1 and shader cache sessions
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
  */
 
@@ -75,6 +75,8 @@ static void TestInterfaces(ID3D12Device *device)
         { &__uuidof(ID3D12Device5), "ID3D12Device5" }, { &__uuidof(ID3D12Device6), "ID3D12Device6" },
         { &__uuidof(ID3D12Device7), "ID3D12Device7" }, { &__uuidof(ID3D12Device8), "ID3D12Device8" },
         { &__uuidof(ID3D12Device9), "ID3D12Device9" }, { &__uuidof(ID3D12Device10), "ID3D12Device10" },
+        { &__uuidof(ID3D12Device11), "ID3D12Device11" }, { &__uuidof(ID3D12Device12), "ID3D12Device12" },
+        { &__uuidof(ID3D12Device13), "ID3D12Device13" }, { &__uuidof(ID3D12Device14), "ID3D12Device14" },
     };
     static const struct { const GUID *iid; const char *name; } lists[] =
     {
@@ -85,6 +87,9 @@ static void TestInterfaces(ID3D12Device *device)
         { &__uuidof(ID3D12GraphicsCommandList5), "ID3D12GraphicsCommandList5" },
         { &__uuidof(ID3D12GraphicsCommandList6), "ID3D12GraphicsCommandList6" },
         { &__uuidof(ID3D12GraphicsCommandList7), "ID3D12GraphicsCommandList7" },
+        { &__uuidof(ID3D12GraphicsCommandList8), "ID3D12GraphicsCommandList8" },
+        { &__uuidof(ID3D12GraphicsCommandList9), "ID3D12GraphicsCommandList9" },
+        { &__uuidof(ID3D12GraphicsCommandList10), "ID3D12GraphicsCommandList10" },
     };
     ID3D12CommandAllocator *allocator = NULL;
     ID3D12GraphicsCommandList *list = NULL;
@@ -238,6 +243,16 @@ static void TestResourceDesc1(ID3D12Device *device)
         ok(info1.SizeInBytes == info.SizeInBytes && info1.Alignment == info.Alignment,
                 "GetResourceAllocationInfo2 %I64u/%I64u, GetResourceAllocationInfo1 %I64u/%I64u\n",
                 info1.SizeInBytes, info1.Alignment, info.SizeInBytes, info.Alignment);
+        {
+            ID3D12Device12 *device12 = NULL;
+            if (SUCCEEDED(device->QueryInterface(__uuidof(ID3D12Device12), reinterpret_cast<void **>(&device12))))
+            {
+                D3D12_RESOURCE_ALLOCATION_INFO info3 = device12->GetResourceAllocationInfo3(0, 2, descs1, NULL, NULL, NULL);
+                ok(info3.SizeInBytes == info.SizeInBytes && info3.Alignment == info.Alignment,
+                        "GetResourceAllocationInfo3 %I64u/%I64u\n", info3.SizeInBytes, info3.Alignment);
+                device12->Release();
+            }
+        }
         for (UINT i = 0; i < 2; ++i)
         {
             ok(infos1[i].Offset == infos[i].Offset && infos1[i].SizeInBytes == infos[i].SizeInBytes
@@ -654,6 +669,9 @@ enum list_case
     CASE_DISPATCH_MESH,
     CASE_BARRIER_EMPTY,
     CASE_BARRIER_GLOBAL,
+    CASE_STENCIL_REFS,
+    CASE_DEPTH_BIAS,
+    CASE_STRIP_CUT,
 };
 
 static HRESULT CloseAfter(ID3D12Device *device, D3D12_COMMAND_LIST_TYPE type, enum list_case which)
@@ -662,7 +680,7 @@ static HRESULT CloseAfter(ID3D12Device *device, D3D12_COMMAND_LIST_TYPE type, en
             D3D12_SHADING_RATE_COMBINER_PASSTHROUGH };
     ID3D12CommandAllocator *allocator = NULL;
     ID3D12GraphicsCommandList *list = NULL;
-    ID3D12GraphicsCommandList7 *list7 = NULL;
+    ID3D12GraphicsCommandList10 *list7 = NULL;
     D3D12_GLOBAL_BARRIER global = {};
     D3D12_BARRIER_GROUP group = {};
     HRESULT hr;
@@ -671,7 +689,7 @@ static HRESULT CloseAfter(ID3D12Device *device, D3D12_COMMAND_LIST_TYPE type, en
     if (!allocator) return E_UNEXPECTED;
     device->CreateCommandList(0, type, allocator, NULL, __uuidof(ID3D12GraphicsCommandList),
             reinterpret_cast<void **>(&list));
-    if (list) list->QueryInterface(__uuidof(ID3D12GraphicsCommandList7), reinterpret_cast<void **>(&list7));
+    if (list) list->QueryInterface(__uuidof(ID3D12GraphicsCommandList10), reinterpret_cast<void **>(&list7));
     if (!list7)
     {
         if (list) list->Release();
@@ -696,6 +714,9 @@ static HRESULT CloseAfter(ID3D12Device *device, D3D12_COMMAND_LIST_TYPE type, en
         case CASE_DISPATCH_MESH: list7->DispatchMesh(1, 1, 1); break;
         case CASE_BARRIER_EMPTY: list7->Barrier(0, NULL); break;
         case CASE_BARRIER_GLOBAL: list7->Barrier(1, &group); break;
+        case CASE_STENCIL_REFS: list7->OMSetFrontAndBackStencilRef(1, 2); break;
+        case CASE_DEPTH_BIAS: list7->RSSetDepthBias(1.0f, 0.0f, 1.0f); break;
+        case CASE_STRIP_CUT: list7->IASetIndexBufferStripCutValue(D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFF); break;
     }
     hr = list->Close();
     list7->Release();
@@ -709,7 +730,31 @@ static void TestListMethods(ID3D12Device *device)
     D3D12_FEATURE_DATA_D3D12_OPTIONS6 options6 = {};
     D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7 = {};
     D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12 = {};
+    D3D12_FEATURE_DATA_D3D12_OPTIONS14 options14 = {};
+    D3D12_FEATURE_DATA_D3D12_OPTIONS15 options15 = {};
+    D3D12_FEATURE_DATA_D3D12_OPTIONS16 options16 = {};
     HRESULT hr;
+
+    device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS14, &options14, sizeof(options14));
+    device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS15, &options15, sizeof(options15));
+    device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options16, sizeof(options16));
+    if (options14.IndependentFrontAndBackStencilRefMaskSupported)
+    {
+        hr = CloseAfter(device, D3D12_COMMAND_LIST_TYPE_DIRECT, CASE_STENCIL_REFS);
+        ok(hr == S_OK, "OMSetFrontAndBackStencilRef: %#lx\n", hr);
+        hr = CloseAfter(device, D3D12_COMMAND_LIST_TYPE_BUNDLE, CASE_STENCIL_REFS);
+        ok(hr == S_OK, "OMSetFrontAndBackStencilRef in a bundle: %#lx\n", hr);
+    }
+    if (options16.DynamicDepthBiasSupported)
+    {
+        hr = CloseAfter(device, D3D12_COMMAND_LIST_TYPE_DIRECT, CASE_DEPTH_BIAS);
+        ok(hr == S_OK, "RSSetDepthBias: %#lx\n", hr);
+    }
+    if (options15.DynamicIndexBufferStripCutSupported)
+    {
+        hr = CloseAfter(device, D3D12_COMMAND_LIST_TYPE_DIRECT, CASE_STRIP_CUT);
+        ok(hr == S_OK, "IASetIndexBufferStripCutValue: %#lx\n", hr);
+    }
 
     device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS6, &options6, sizeof(options6));
     device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &options7, sizeof(options7));
@@ -762,6 +807,22 @@ static void TestListMethods(ID3D12Device *device)
     else trace("Enhanced barriers are not supported, skipping their cases\n");
 }
 
+static void TestLibraryRootSignature(ID3D12Device *device)
+{
+    static const BYTE garbage[16] = {};
+    ID3D12Device14 *device14 = NULL;
+    IUnknown *signature;
+    HRESULT hr;
+
+    if (FAILED(device->QueryInterface(__uuidof(ID3D12Device14), reinterpret_cast<void **>(&device14)))) return;
+    signature = reinterpret_cast<IUnknown *>(0x1);
+    hr = device14->CreateRootSignatureFromSubobjectInLibrary(0, garbage, sizeof(garbage), NULL,
+            __uuidof(ID3D12RootSignature), reinterpret_cast<void **>(&signature));
+    ok(hr == E_INVALIDARG && !signature, "CreateRootSignatureFromSubobjectInLibrary on garbage: %#lx, %p\n", hr,
+            signature);
+    device14->Release();
+}
+
 static void RunVersions(void *)
 {
     ID3D12Device *device;
@@ -776,6 +837,7 @@ static void RunVersions(void *)
     TestShaderCache(device);
     TestInitialLayouts(device);
     TestListMethods(device);
+    TestLibraryRootSignature(device);
     ok(device->GetDeviceRemovedReason() == S_OK, "device removed reason %#lx\n", device->GetDeviceRemovedReason());
     device->Release();
 }
