@@ -432,6 +432,28 @@ HalAdjustResourceList(
 //
 // Environment Functions
 //
+NTHALAPI
+NTSTATUS
+NTAPI
+HalGetEnvironmentVariableEx(
+    _In_ PWSTR VariableName,
+    _In_ LPCGUID VendorGuid,
+    _Out_writes_bytes_opt_(*ValueLength) PVOID Value,
+    _Inout_ PULONG ValueLength,
+    _Out_opt_ PULONG Attributes
+);
+
+NTHALAPI
+NTSTATUS
+NTAPI
+HalSetEnvironmentVariableEx(
+    _In_ PWSTR VariableName,
+    _In_ LPCGUID VendorGuid,
+    _In_reads_bytes_(ValueLength) PVOID Value,
+    _In_ ULONG ValueLength,
+    _In_ ULONG Attributes
+);
+
 #ifdef _ARC_
 NTHALAPI
 ARC_STATUS

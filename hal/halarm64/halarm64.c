@@ -13,6 +13,7 @@
 #include <ndk/inbvfuncs.h>
 #include <ioaccess.h>
 #include <halfuncs.h>
+#include <halefi.h>
 #include <reactos/hal/acpi_pci.h>
 #include <reactos/hal/acpi_cstate.h>
 #include <reactos/drivers/acpi/acpi.h>
@@ -2754,6 +2755,7 @@ HalInitSystem(
 
     KeInitializeSpinLock(&HalpPCIConfigLock);
     KeInitializeSpinLock(&HalpGicItsLock);
+    HalpInitializeEfiRuntime(LoaderBlock);
     Status = HalpSetupAcpiPhase0(LoaderBlock);
     if (!NT_SUCCESS(Status))
     {

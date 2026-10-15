@@ -8,6 +8,7 @@
 #include <ntifs.h>
 #include <arc/arc.h>
 #include "halp.h"
+#include "../arch/common/include/halefi.h"
 
 ULONG_PTR HalpPpcIoBase;
 ULONG HalpPpcDmaOffset;
@@ -37,6 +38,8 @@ HalInitSystem(
     }
     if ((BootPhase != 0) || (HalpPpcInitializationPhase != 0) || (LoaderBlock == NULL))
         return FALSE;
+
+    HalpInitializeEfiRuntime(LoaderBlock);
 
     PpcBlock = &LoaderBlock->u.PowerPC;
     if ((PpcBlock->Version != PPC_LOADER_BLOCK_VERSION) || (PpcBlock->Size != sizeof(*PpcBlock)) || (PpcBlock->MachineType != PPC_MACHINE_PREP) || !PpcBlock->IsaIoVirtualBase)

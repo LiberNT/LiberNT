@@ -8,6 +8,7 @@
 #include <ntifs.h>
 #include <arc/arc.h>
 #include "halp.h"
+#include "../arch/common/include/halefi.h"
 
 typedef enum _RISCV_HAL_INITIALIZATION_FAILURE
 {
@@ -94,6 +95,8 @@ HalInitSystem(
         HalpRiscvInitializationFailure = RiscvHalInvalidLoaderContract;
         return FALSE;
     }
+
+    HalpInitializeEfiRuntime(LoaderBlock);
 
     RiscvBlock = &LoaderBlock->u.Riscv64;
     if ((RiscvBlock->Version != RISCV64_LOADER_BLOCK_VERSION) ||

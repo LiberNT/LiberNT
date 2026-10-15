@@ -108,6 +108,7 @@ HalInitSystem(
             HalBootViaEfi = LoaderBlock->Extension->BootViaEFI;
 #endif
 #endif
+        HalpInitializeEfiRuntime(LoaderBlock);
 
         /* Check for PRCB version mismatch */
         if (Prcb->MajorVersion != PRCB_MAJOR_VERSION)

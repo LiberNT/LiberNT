@@ -22,6 +22,7 @@ endforeach()
 
 list(APPEND SOURCE
     generic/display.c
+    generic/efi.c
     generic/memory.c
     generic/misc.c
     generic/sysinfo_stubs.c

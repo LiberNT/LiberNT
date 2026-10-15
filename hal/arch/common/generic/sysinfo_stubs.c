@@ -82,47 +82,6 @@ HalEnumerateEnvironmentVariablesEx(
 
 NTSTATUS
 NTAPI
-HalGetEnvironmentVariableEx(
-    _In_ PWSTR VariableName,
-    _In_ LPCGUID VendorGuid,
-    _Out_writes_bytes_opt_(*ValueLength) PVOID Value,
-    _Inout_ PULONG ValueLength,
-    _Out_opt_ PULONG Attributes)
-{
-    UNREFERENCED_PARAMETER(VariableName);
-    UNREFERENCED_PARAMETER(VendorGuid);
-    UNREFERENCED_PARAMETER(Value);
-
-    if (ValueLength)
-        *ValueLength = 0;
-    if (Attributes)
-        *Attributes = 0;
-
-    DPRINT1("HalGetEnvironmentVariableEx: STUB\n");
-    return STATUS_NOT_SUPPORTED;
-}
-
-NTSTATUS
-NTAPI
-HalSetEnvironmentVariableEx(
-    _In_ PWSTR VariableName,
-    _In_ LPCGUID VendorGuid,
-    _In_reads_bytes_(ValueLength) PVOID Value,
-    _In_ ULONG ValueLength,
-    _In_ ULONG Attributes)
-{
-    UNREFERENCED_PARAMETER(VariableName);
-    UNREFERENCED_PARAMETER(VendorGuid);
-    UNREFERENCED_PARAMETER(Value);
-    UNREFERENCED_PARAMETER(ValueLength);
-    UNREFERENCED_PARAMETER(Attributes);
-
-    DPRINT1("HalSetEnvironmentVariableEx: STUB\n");
-    return STATUS_NOT_SUPPORTED;
-}
-
-NTSTATUS
-NTAPI
 HalEnableInterrupt(
     _In_ PINTERRUPT_CONNECTION_DATA ConnectionData)
 {
