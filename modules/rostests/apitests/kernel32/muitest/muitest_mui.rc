@@ -1,0 +1,73 @@
+/*
+ * PROJECT:     LiberNT API tests
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     en-US resource file of the MUI test module
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <windef.h>
+#include <winuser.h>
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+1 MUI
+BEGIN
+    0xFECDFECDL, 0x000000C8L, 0x00010000L, 0x00000000L,
+    0x00000012L, 0x00000000L, 0x00000000L,
+    0x22222222L, 0x22222222L, 0x22222222L, 0x22222222L,
+    0x11111111L, 0x11111111L, 0x11111111L, 0x11111111L,
+    0x00000000L, 0x00000000L, 0x00000000L, 0x00000000L, 0x00000000L, 0x00000000L,
+    0x00000088L, 0x00000020L,
+    0x000000A8L, 0x0000000CL,
+    0x00000000L, 0x00000000L,
+    0x00000000L, 0x00000000L,
+    0x000000B8L, 0x0000000CL,
+    0x00000000L, 0x00000000L,
+    0x00000000L,
+    L"MUI\0ZMUITYPE\0\0", 0x0000, 0x0000,
+    0x00000006L, 0x0000000AL, 0x00000010L, 0x00000000L,
+    L"en-US\0", 0x0000, 0x0000
+END
+
+STRINGTABLE
+BEGIN
+    1 "mui string one"
+END
+
+2 RCDATA
+BEGIN
+    L"mui two\0"
+END
+
+3 RCDATA
+BEGIN
+    L"mui three\0"
+END
+
+1 ZMUITYPE
+BEGIN
+    L"mui custom\0"
+END
+
+1 VERSIONINFO
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x2L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "FileDescription", "LiberNT MUI test resources"
+            VALUE "FileVersion", "1.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

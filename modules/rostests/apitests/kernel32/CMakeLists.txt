@@ -1,4 +1,5 @@
 
+add_subdirectory(muitest)
 add_subdirectory(redirptest)
 
 add_message_headers(ANSI FormatMessage.mc)
@@ -54,6 +55,7 @@ list(APPEND SOURCE
     lstrcpynW.c
     lstrlen.c
     Mailslot.c
+    MuiResources.c
     MultiByteToWideChar.c
     Pipes.c
     PixeloramaCompat.c
