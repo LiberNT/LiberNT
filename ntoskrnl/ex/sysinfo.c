@@ -2398,6 +2398,7 @@ SSI_DEF(SystemExtendServiceTableInformation)
                                (PVOID)&ModuleObject,
                                &ImageBase);
 
+    if (Status == STATUS_IMAGE_ALREADY_LOADED) return STATUS_SUCCESS;
     if (!NT_SUCCESS(Status)) return Status;
 
     /* Get the headers */
