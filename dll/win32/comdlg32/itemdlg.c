@@ -1532,7 +1532,11 @@ static void ctrl_container_reparent(FileDialogImpl *This, HWND parent)
         wndstyle |= WS_POPUP;
         SetWindowLongW(This->cctrls_hwnd, GWL_STYLE, wndstyle);
 
+#ifdef __REACTOS__
+        SetParent(This->cctrls_hwnd, HWND_MESSAGE);
+#else
         SetParent(This->cctrls_hwnd, NULL);
+#endif
     }
 }
 
