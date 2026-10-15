@@ -33,6 +33,8 @@ typedef NTSTATUS (NTAPI *FN_RtlSubscribeWnf)(PVOID *, ULONGLONG, ULONG, PVOID, P
 typedef NTSTATUS (NTAPI *FN_RtlUnsubscribeWnf)(PVOID);
 typedef BOOL (NTAPI *FN_WinSqmIsOptedIn)(VOID);
 typedef BOOL (NTAPI *FN_WinSqmEventEnabled)(ULONG, ULONG);
+typedef VOID (NTAPI *FN_WinSqmSetDWORD)(HANDLE, ULONG, ULONG);
+typedef VOID (NTAPI *FN_WinSqmSetDWORD64)(HANDLE, ULONG, ULONGLONG);
 
 static HMODULE hNtdll;
 static FN_RtlFlushHeaps pRtlFlushHeaps;
@@ -41,6 +43,8 @@ static FN_RtlSubscribeWnf pRtlSubscribeWnfStateChangeNotification;
 static FN_RtlUnsubscribeWnf pRtlUnsubscribeWnfNotificationWaitForCompletion;
 static FN_WinSqmIsOptedIn pWinSqmIsOptedIn;
 static FN_WinSqmEventEnabled pWinSqmEventEnabled;
+static FN_WinSqmSetDWORD pWinSqmSetDWORD;
+static FN_WinSqmSetDWORD64 pWinSqmSetDWORD64;
 
 static void
 Test_RtlFlushHeaps(void)
@@ -107,18 +111,28 @@ Test_WnfReportsFailure(void)
             trace("Windows left the change stamp at 0x%08lx\n", ChangeStamp);
     }
 
-    if (pRtlSubscribeWnfStateChangeNotification)
+    if (pRtlSubscribeWnfStateChangeNotification && IsReactOS())
     {
-        Status = pRtlSubscribeWnfStateChangeNotification(&Subscription, 0, 0, NULL,
-                                                         NULL, NULL, 0, 0, 0);
-        ok(!NT_SUCCESS(Status),
-           "RtlSubscribeWnfStateChangeNotification must not claim success, got 0x%08lx\n",
-           Status);
-        ok(Subscription == NULL,
-           "a failed subscribe must NULL the handle, got %p\n", Subscription);
+        _SEH2_TRY
+        {
+            Status = pRtlSubscribeWnfStateChangeNotification(&Subscription, 0, 0, NULL,
+                                                             NULL, NULL, 0, 0, 0);
+            ok(!NT_SUCCESS(Status),
+               "RtlSubscribeWnfStateChangeNotification must not claim success, got 0x%08lx\n",
+               Status);
+            ok(Subscription == NULL,
+               "a failed subscribe must NULL the handle, got %p\n", Subscription);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            ok(!IsReactOS(),
+               "RtlSubscribeWnfStateChangeNotification without a callback raised 0x%08lx\n",
+               _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
     }
 
-    if (pRtlUnsubscribeWnfNotificationWaitForCompletion)
+    if (pRtlUnsubscribeWnfNotificationWaitForCompletion && IsReactOS())
     {
         _SEH2_TRY
         {
@@ -173,9 +187,13 @@ Test_ArityStackBalance(void)
             pWinSqmIsOptedIn();
         if (pWinSqmEventEnabled)
             pWinSqmEventEnabled(1, 2);
+        if (pWinSqmSetDWORD)
+            pWinSqmSetDWORD(NULL, 1, 2);
+        if (pWinSqmSetDWORD64)
+            pWinSqmSetDWORD64(NULL, 1, 0x100000002ULL);
         if (pRtlQueryWnfStateData)
             pRtlQueryWnfStateData(&ChangeStamp, 0, NULL, NULL, NULL, 0);
-        if (pRtlSubscribeWnfStateChangeNotification)
+        if (pRtlSubscribeWnfStateChangeNotification && IsReactOS())
             pRtlSubscribeWnfStateChangeNotification(&Subscription, 0, 0, NULL, NULL, NULL, 0, 0, 0);
     }
 
@@ -198,6 +216,8 @@ START_TEST(RtlWnfAndSqm)
         (FN_RtlUnsubscribeWnf)GetProcAddress(hNtdll, "RtlUnsubscribeWnfNotificationWaitForCompletion");
     pWinSqmIsOptedIn = (FN_WinSqmIsOptedIn)GetProcAddress(hNtdll, "WinSqmIsOptedIn");
     pWinSqmEventEnabled = (FN_WinSqmEventEnabled)GetProcAddress(hNtdll, "WinSqmEventEnabled");
+    pWinSqmSetDWORD = (FN_WinSqmSetDWORD)GetProcAddress(hNtdll, "WinSqmSetDWORD");
+    pWinSqmSetDWORD64 = (FN_WinSqmSetDWORD64)GetProcAddress(hNtdll, "WinSqmSetDWORD64");
 
     ok(pRtlFlushHeaps != NULL, "ntdll!RtlFlushHeaps is missing\n");
     ok(pRtlQueryWnfStateData != NULL, "ntdll!RtlQueryWnfStateData is missing\n");
@@ -207,6 +227,8 @@ START_TEST(RtlWnfAndSqm)
        "ntdll!RtlUnsubscribeWnfNotificationWaitForCompletion is missing\n");
     ok(pWinSqmIsOptedIn != NULL, "ntdll!WinSqmIsOptedIn is missing\n");
     ok(pWinSqmEventEnabled != NULL, "ntdll!WinSqmEventEnabled is missing\n");
+    ok(pWinSqmSetDWORD != NULL, "ntdll!WinSqmSetDWORD is missing\n");
+    ok(pWinSqmSetDWORD64 != NULL, "ntdll!WinSqmSetDWORD64 is missing\n");
 
     Test_RtlFlushHeaps();
     Test_WnfReportsFailure();
