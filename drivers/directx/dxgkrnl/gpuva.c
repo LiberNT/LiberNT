@@ -1701,7 +1701,6 @@ GpuVaRequeuePageTableUpdate(
     _In_ D3DGPU_VIRTUAL_ADDRESS End)
 {
     ExAcquireFastMutex(&Process->GpuVaLock);
-    Process->PageTableResendSpan = TRUE;
     if (!Process->PageTableUpdatePending)
     {
         Process->PageTableUpdatePending = TRUE;
@@ -1828,30 +1827,90 @@ GpuVaExecutePageTableBatch(
     _In_ ULONG OperationCount,
     _Inout_ PBOOLEAN TransactionHeld)
 {
+    PDXGKRNL_SEGMENT Segments = (PDXGKRNL_SEGMENT)Adapter->Segments;
+    CONST DXGKRNL_PAGING_OP *Flush = NULL;
+    PDXGKRNL_PAGING_OP Chunk;
+    ULONG UpdateCount = OperationCount;
+    ULONG ChunkLimit = PAGE_SIZE;
+    ULONG ChunkFenceId;
     ULONG FenceId = 0;
+    ULONG Index;
     NTSTATUS Status;
 
     PAGED_CODE();
     ASSERT(*TransactionHeld);
     ASSERT(Adapter->KmdTransactionOwnerThread == PsGetCurrentThread());
 
+    if (Segments != NULL && Adapter->SegmentCount != 0 && Segments[0].PagingBufferSize > PAGE_SIZE)
+        ChunkLimit = Segments[0].PagingBufferSize;
+    ChunkLimit = ChunkLimit / PAGE_SIZE > 1 ? ChunkLimit / PAGE_SIZE - 1 : 1;
+    if (OperationCount != 0 && Operations[OperationCount - 1].Type == DxgkPagingOpFlushTlb)
+    {
+        Flush = &Operations[OperationCount - 1];
+        UpdateCount--;
+    }
+
     /* Page-table maintenance belongs to VidMm, not the client work ledger.
      * A client fault must reject its rendering while still allowing the OS
      * to invalidate its mappings before releasing their backing pages. The
      * caller retains the process, tables and bindings until the paging fence
      * retires; the packet uses the adapter's paging system context. */
-    Status = DxgkPagingExecuteBatch(Adapter,
-                                    NULL,
-                                    Operations,
-                                    OperationCount,
-                                    NULL,
-                                    0,
-                                    0,
-                                    0,
-                                    &FenceId,
-                                    NULL);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    if (UpdateCount <= ChunkLimit)
+    {
+        Status = DxgkPagingExecuteBatch(Adapter,
+                                        NULL,
+                                        Operations,
+                                        OperationCount,
+                                        NULL,
+                                        0,
+                                        0,
+                                        0,
+                                        &FenceId,
+                                        NULL);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    else
+    {
+        Chunk = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)(ChunkLimit + 1) * sizeof(*Chunk), TAG_DXGK_GPUVA_PT);
+        if (Chunk == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+
+        for (Index = 0; Index < UpdateCount; Index += ChunkLimit)
+        {
+            ULONG Count = min(ChunkLimit, UpdateCount - Index);
+
+            RtlCopyMemory(Chunk, &Operations[Index], (SIZE_T)Count * sizeof(*Chunk));
+            if (Flush != NULL)
+                Chunk[Count++] = *Flush;
+            Status = DxgkPagingExecuteBatch(Adapter,
+                                            NULL,
+                                            Chunk,
+                                            Count,
+                                            NULL,
+                                            0,
+                                            0,
+                                            0,
+                                            &ChunkFenceId,
+                                            NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+            if (ChunkFenceId != 0)
+                FenceId = ChunkFenceId;
+        }
+
+        ExFreePoolWithTag(Chunk, TAG_DXGK_GPUVA_PT);
+        if (!NT_SUCCESS(Status))
+        {
+            if (FenceId != 0)
+            {
+                DxgkEndKmdTransaction(Adapter);
+                *TransactionHeld = FALSE;
+                (VOID)DxgkPagingWaitForFence(Adapter, FenceId, GPUVA_PAGING_SYNC_TIMEOUT_MS);
+            }
+            return Status;
+        }
+    }
 
     /* No more miniport calls until PageTableFlushMutex is released. A caller
      * waiting for this flush may already own the KMD transaction. Drop our
@@ -2566,6 +2625,26 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
     goto Complete;
 
 Requeue:
+    if (TableCount != 0)
+    {
+        ExAcquireFastMutex(&Process->GpuVaLock);
+        for (ReleaseIndex = 0; ReleaseIndex < TableCount; ++ReleaseIndex)
+        {
+            PDXGKRNL_GPUVA_PAGE_TABLE Table = Tables[ReleaseIndex].Table;
+
+            if (Table->DirtyEndIndex == 0)
+            {
+                Table->DirtyStartIndex = Tables[ReleaseIndex].StartIndex;
+                Table->DirtyEndIndex = Tables[ReleaseIndex].EndIndex;
+            }
+            else
+            {
+                Table->DirtyStartIndex = min(Table->DirtyStartIndex, Tables[ReleaseIndex].StartIndex);
+                Table->DirtyEndIndex = max(Table->DirtyEndIndex, Tables[ReleaseIndex].EndIndex);
+            }
+        }
+        ExReleaseFastMutex(&Process->GpuVaLock);
+    }
     GpuVaRequeuePageTableUpdate(Process, Start, End);
 
 Complete:
