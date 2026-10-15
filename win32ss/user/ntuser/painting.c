@@ -551,35 +551,34 @@ co_IntUpdateWindows(PWND Wnd, ULONG Flags, BOOL Recurse)
 
    if (!(Flags & RDW_NOCHILDREN)  &&
         (Flags & RDW_ALLCHILDREN) &&
+        Wnd->spwndChild != NULL &&
         !UserIsDesktopWindow(Wnd))
    {
-      PWND Child;
+      HWND *List;
+      ULONG Count, Index, Pass;
 
-      for (Child = Wnd->spwndChild; Child; Child = Child->spwndNext)
+      List = IntWinListChildren(Wnd);
+      if (List == NULL)
+         return;
+      for (Count = 0; List[Count] != NULL; ++Count)
+         ;
+      for (Pass = 0; Pass < 2; ++Pass)
       {
-         /* transparent window, check for non-transparent sibling to paint first, then skip it */
-         if ( Child->ExStyle & WS_EX_TRANSPARENT &&
-             ( Child->hrgnUpdate != NULL || Child->state & WNDS_INTERNALPAINT ) )
+         for (Index = 0; Index < Count; ++Index)
          {
-            PWND Next = Child->spwndNext;
-            while (Next)
-            {
-               if ( Next->hrgnUpdate != NULL || Next->state & WNDS_INTERNALPAINT ) break;
+            PWND Child = ValidateHwndNoErr(List[Pass ? Count - Index - 1 : Index]);
 
-               Next = Next->spwndNext;
-            }
+            if (Child == NULL || Child->spwndParent != Wnd ||
+                !(Child->style & WS_VISIBLE) ||
+                !!(Child->ExStyle & WS_EX_TRANSPARENT) != Pass)
+               continue;
 
-            if (Next) continue;
-         }
-
-         if (Child->style & WS_VISIBLE)
-         {
-             USER_REFERENCE_ENTRY Ref;
-             UserRefObjectCo(Child, &Ref);
-             co_IntUpdateWindows(Child, Flags, TRUE);
-             UserDerefObjectCo(Child);
+            UserRefObjectCo(Child, &Ref);
+            co_IntUpdateWindows(Child, Flags, TRUE);
+            UserDerefObjectCo(Child);
          }
       }
+      ExFreePoolWithTag(List, USERTAG_WINDOWLIST);
    }
 }
 
