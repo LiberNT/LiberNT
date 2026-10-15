@@ -42,6 +42,20 @@ def directory_path(directories, key):
     return "\\".join(reversed(parts))
 
 
+REDIRECTED_CLASSES = ("clsid", "directshow", "interface", "media type", "mediafoundation")
+
+
+def wow64_key(key):
+    parts = key.split("\\")
+    if parts[0].lower() != "software":
+        return key
+    if len(parts) > 1 and parts[1].lower() == "classes":
+        if len(parts) > 2 and parts[2].lower() in REDIRECTED_CLASSES:
+            return "\\".join(parts[:2] + ["Wow6432Node"] + parts[2:])
+        return key
+    return "\\".join([parts[0], "WOW6432Node"] + parts[1:])
+
+
 def inf_quote(text):
     return '"' + text.replace('"', '""') + '"'
 
@@ -109,7 +123,7 @@ def main():
             attributes = int(components[component]["Attributes"] or "0")
             key = row["Key"]
             if is64 and not attributes & 0x100:
-                key = key.replace("Software\\", "Software\\WOW6432Node\\", 1)
+                key = wow64_key(key)
             target = "%s\\%s\\" % (args.system_root, directory_path(directories, components[component]["Directory_"]))
             lines.append(registry_line(row["Root"], key, row["Name"], row["Value"], (component, target)))
         with open(os.path.join(args.out_dir, "monosupport.inf"), "w", encoding="ascii", newline="\r\n") as handle:
