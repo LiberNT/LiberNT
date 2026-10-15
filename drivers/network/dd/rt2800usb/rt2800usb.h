@@ -36,6 +36,7 @@
 #define RT_ASSOC_TIMEOUT_MS             300
 #define RT_MLME_RETRIES                 3
 #define RT_ASSOC_COMEBACK_MAX           8
+#define RT_JOIN_ATTEMPTS                2
 #define RT_SA_QUERY_MAX_TIMEOUT_MS      1024
 #define RT_BEACON_LOSS_MS               8000
 #define RT_AP_WCID                      33

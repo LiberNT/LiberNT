@@ -1197,6 +1197,7 @@ RtDoConnect(
     DOT11_ASSOC_STATUS Status = DOT11_ASSOC_STATUS_FAILURE;
     RT_BSS Candidate;
     PRT_BSS Bss;
+    ULONG Join;
 
     RtLeave(Adapter, TRUE, DOT11_DISASSOC_REASON_OS);
     RtIndicateConnectionStart(Adapter);
@@ -1231,8 +1232,13 @@ RtDoConnect(
 
     RtIndicateAssociationStart(Adapter, Bss);
 
-    if (RtAuthenticate(Adapter, Bss))
+    for (Join = 0; Join < RT_JOIN_ATTEMPTS && Status != DOT11_ASSOC_STATUS_SUCCESS && !Adapter->Halting; Join++)
     {
+        NdisAcquireSpinLock(&Adapter->Lock);
+        Adapter->LinkState = RtLinkAuthenticating;
+        NdisReleaseSpinLock(&Adapter->Lock);
+        if (!RtAuthenticate(Adapter, Bss))
+            continue;
         NdisAcquireSpinLock(&Adapter->Lock);
         Adapter->HoldRx = TRUE;
         Adapter->LinkState = RtLinkAssociating;

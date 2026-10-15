@@ -65,6 +65,7 @@
 #define RTW_ASSOC_TIMEOUT_MS            300
 #define RTW_MLME_RETRIES                3
 #define RTW_ASSOC_COMEBACK_MAX          8
+#define RTW_JOIN_ATTEMPTS               2
 #define RTW_SA_QUERY_MAX_TIMEOUT_MS     1024
 #define RTW_BEACON_LOSS_MS              8000
 #define RTW_DEFAULT_RSSI                (-60)
