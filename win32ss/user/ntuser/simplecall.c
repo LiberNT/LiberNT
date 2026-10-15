@@ -24,14 +24,12 @@ C_ASSERT(DWM_ROUTINE_SETGPUOUTPUT == ONEPARAM_ROUTINE_DWMSETGPUOUTPUT);
 C_ASSERT(DWM_ROUTINE_FLUSH == ONEPARAM_ROUTINE_DWMFLUSH);
 C_ASSERT(DWM_ROUTINE_PRESENTED == ONEPARAM_ROUTINE_DWMPRESENTED);
 
-/* Registered logon process ID */
-HANDLE gpidLogon = 0;
-
 BOOL FASTCALL
 co_IntRegisterLogonProcess(HANDLE ProcessId, BOOL Register)
 {
     NTSTATUS Status;
     PEPROCESS Process;
+    PUSER_SESSION Session;
 
     Status = PsLookupProcessByProcessId(ProcessId, &Process);
     if (!NT_SUCCESS(Status))
@@ -41,24 +39,28 @@ co_IntRegisterLogonProcess(HANDLE ProcessId, BOOL Register)
     }
 
     ProcessId = PsGetProcessId(Process);
+    Session = UserGetProcessSession(Process);
 
     ObDereferenceObject(Process);
+
+    if (!Session)
+        return FALSE;
 
     if (Register)
     {
         /* Register the logon process */
-        if (gpidLogon != 0)
+        if (Session->LogonPid != 0)
             return FALSE;
 
-        gpidLogon = ProcessId;
+        Session->LogonPid = ProcessId;
     }
     else
     {
         /* Deregister the logon process */
-        if (gpidLogon != ProcessId)
+        if (Session->LogonPid != ProcessId)
             return FALSE;
 
-        gpidLogon = 0;
+        Session->LogonPid = 0;
     }
 
     return TRUE;
@@ -616,7 +618,7 @@ NtUserCallOneParam(
             PDWORD pdwLayout;
             Result = TRUE;
 
-            if (PsGetCurrentProcess() == gpepCSRSS)
+            if (UserIsCsrProcess(PsGetCurrentProcess()))
             {
                 EngSetLastError(ERROR_INVALID_ACCESS);
                 Result = FALSE;

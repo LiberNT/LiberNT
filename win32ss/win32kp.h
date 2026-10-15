@@ -102,6 +102,7 @@ typedef struct _DC *PDC;
 
 /* CSRSS Interface */
 #include "user/ntuser/csr.h"
+#include "user/ntuser/session.h"
 
 #endif // __cplusplus
 

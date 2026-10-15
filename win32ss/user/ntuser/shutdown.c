@@ -209,7 +209,7 @@ UserInitiateShutdown(IN PETHREAD Thread,
     }
 
     /* If the caller is not Winlogon, do some security checks */
-    if (PsGetThreadProcessId(Thread) != gpidLogon)
+    if (!UserIsLogonProcess(PsGetThreadProcessId(Thread)))
     {
         /*
          * Here also, be sure there is no EWX_CALLER_WINLOGON flag
@@ -262,7 +262,7 @@ UserInitiateShutdown(IN PETHREAD Thread,
     }
 
     /* If the caller is not Winlogon, possibly notify it to perform the real shutdown */
-    if (PsGetThreadProcessId(Thread) != gpidLogon || !(Flags & EWX_CALLER_WINLOGON))
+    if (!UserIsLogonProcess(PsGetThreadProcessId(Thread)) || !(Flags & EWX_CALLER_WINLOGON))
     {
         // FIXME: HACK!! Do more checks!!
         TRACE("UserInitiateShutdown: Notify Winlogon for shutdown\n");

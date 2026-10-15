@@ -9,6 +9,7 @@
 #define TAG_SBARINFO       'NIBS' /* Scrollbar info */
 #define TAG_TIMERBMP       'BMIT' /* Timers bitmap */
 #define TAG_WINSTA         'ATSW' /* Window station */
+#define TAG_SESSION        'nssU'
 #define TAG_FONT           'ETNF' /* Font entry */
 #define TAG_BEZIER         'RZEB' /* Bezier */
 #define TAG_SHAPE          'phSG' /* Shape */

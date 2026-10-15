@@ -3370,8 +3370,10 @@ NtUserMessageCall( HWND hWnd,
                ULONG i;
                UINT fuFlags;
 
-               for (DesktopEntry = InputWindowStation->DesktopListHead.Flink;
-                    DesktopEntry != &InputWindowStation->DesktopListHead;
+               PWINSTATION_OBJECT InputWinSta = UserGetInputWindowStation(PsGetCurrentProcess());
+
+               for (DesktopEntry = InputWinSta->DesktopListHead.Flink;
+                    DesktopEntry != &InputWinSta->DesktopListHead;
                     DesktopEntry = DesktopEntry->Flink)
                {
                   rpdesk = CONTAINING_RECORD(DesktopEntry, DESKTOP, ListEntry);

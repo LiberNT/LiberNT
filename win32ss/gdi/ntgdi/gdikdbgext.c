@@ -87,8 +87,8 @@ KdbCommand_Gdi_dumpht(ULONG argc, char *argv[])
     ULONG_PTR ulArg;
 
     /* No CSRSS, no handle table */
-    if (!gpepCSRSS) return;
-    KeStackAttachProcess(&gpepCSRSS->Pcb, &ApcState);
+    if (!gpDisplaySession || !gpDisplaySession->CsrProcess) return;
+    KeStackAttachProcess(&gpDisplaySession->CsrProcess->Pcb, &ApcState);
 
     if (argc == 0)
     {
@@ -194,8 +194,8 @@ KdbCommand_Gdi_handle(char *argv)
     }
 
     /* No CSRSS, no handle table */
-    if (!gpepCSRSS) return;
-    KeStackAttachProcess(&gpepCSRSS->Pcb, &ApcState);
+    if (!gpDisplaySession || !gpDisplaySession->CsrProcess) return;
+    KeStackAttachProcess(&gpDisplaySession->CsrProcess->Pcb, &ApcState);
 
     usIndex = ulObject & 0xFFFF;
     pentry = &gpentHmgr[usIndex];
@@ -242,8 +242,8 @@ KdbCommand_Gdi_entry(char *argv)
     }
 
     /* No CSRSS, no handle table */
-    if (!gpepCSRSS) return;
-    KeStackAttachProcess(&gpepCSRSS->Pcb, &ApcState);
+    if (!gpDisplaySession || !gpDisplaySession->CsrProcess) return;
+    KeStackAttachProcess(&gpDisplaySession->CsrProcess->Pcb, &ApcState);
 
     /* If the parameter is smaller than 0x10000, it's an index */
     pentry = (ulValue <= 0xFFFF) ? &gpentHmgr[ulValue] : (PENTRY)ulValue;

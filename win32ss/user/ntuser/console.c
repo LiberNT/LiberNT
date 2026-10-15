@@ -19,7 +19,7 @@ NtUserConsoleControl(
     NTSTATUS Status = STATUS_SUCCESS;
 
     /* Allow only the Console Server to perform this operation (via CSRSS) */
-    if (PsGetCurrentProcess() != gpepCSRSS)
+    if (!UserIsCsrProcess(PsGetCurrentProcess()))
         return STATUS_ACCESS_DENIED;
 
     UserEnterExclusive();

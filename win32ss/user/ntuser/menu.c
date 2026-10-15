@@ -5170,7 +5170,7 @@ HMENU FASTCALL UserCreateMenu(PDESKTOP Desktop, BOOL PopupMenu)
    NTSTATUS Status;
    PEPROCESS CurrentProcess = PsGetCurrentProcess();
 
-   if (gpepCSRSS != CurrentProcess)
+   if (!UserIsCsrProcess(CurrentProcess))
    {
       /*
        * gpepCSRSS does not have a Win32WindowStation

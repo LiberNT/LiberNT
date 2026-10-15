@@ -18,14 +18,11 @@ DBG_DEFAULT_CHANNEL(UserWinsta);
  * The currently active window station. This is the
  * only one interactive window station on the system.
  */
-PWINSTATION_OBJECT InputWindowStation = NULL;
 
 /* Winlogon SAS window */
 HWND hwndSAS = NULL;
 
 /* Full path to WindowStations directory */
-UNICODE_STRING gustrWindowStationsDir;
-HANDLE ghWinStaDir;
 
 typedef struct _SESSION_NOTIFICATION
 {
@@ -116,7 +113,7 @@ IntNotifySessionChange(ULONG Event, ULONG SessionId)
     PLIST_ENTRY Entry;
 
     NT_ASSERT(UserIsEnteredExclusive());
-    if (PsGetCurrentProcessId() != gpidLogon ||
+    if (!UserIsLogonProcess(PsGetCurrentProcessId()) ||
         SessionId != PsGetProcessSessionId(PsGetCurrentProcess()))
     {
         EngSetLastError(ERROR_ACCESS_DENIED);
@@ -173,12 +170,16 @@ UserCreateWinstaDirectory(VOID)
     ULONG SessionId;
     OBJECT_ATTRIBUTES ObjectAttributes;
     WCHAR wstrWindowStationsDir[MAX_PATH];
+    PUSER_SESSION Session = UserGetCurrentSession();
+
+    if (!Session)
+        return STATUS_UNSUCCESSFUL;
 
     /* Create the WindowStations directory and cache its path for later use */
-    SessionId = PsGetCurrentProcessSessionId(); // gSessionId
+    SessionId = Session->SessionId;
     if (SessionId == 0)
     {
-        if (!RtlCreateUnicodeString(&gustrWindowStationsDir, WINSTA_OBJ_DIR))
+        if (!RtlCreateUnicodeString(&Session->WinStaDirName, WINSTA_OBJ_DIR))
             return STATUS_INSUFFICIENT_RESOURCES;
     }
     else
@@ -192,20 +193,20 @@ UserCreateWinstaDirectory(VOID)
         if (!NT_SUCCESS(Status))
             return Status;
 
-        if (!RtlCreateUnicodeString(&gustrWindowStationsDir, wstrWindowStationsDir))
+        if (!RtlCreateUnicodeString(&Session->WinStaDirName, wstrWindowStationsDir))
             return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     InitializeObjectAttributes(&ObjectAttributes,
-                               &gustrWindowStationsDir,
+                               &Session->WinStaDirName,
                                OBJ_KERNEL_HANDLE,
                                NULL,
                                NULL);
-    Status = ZwCreateDirectoryObject(&ghWinStaDir, DIRECTORY_CREATE_OBJECT, &ObjectAttributes);
+    Status = ZwCreateDirectoryObject(&Session->WinStaDir, DIRECTORY_CREATE_OBJECT, &ObjectAttributes);
     if (!NT_SUCCESS(Status))
-        ERR("Could not create %wZ directory (Status 0x%X)\n", &gustrWindowStationsDir, Status);
+        ERR("Could not create %wZ directory (Status 0x%X)\n", &Session->WinStaDirName, Status);
     else
-        TRACE("Created directory %wZ for session %lu\n", &gustrWindowStationsDir, SessionId);
+        TRACE("Created directory %wZ for session %lu\n", &Session->WinStaDirName, SessionId);
 
     return Status;
 }
@@ -219,39 +220,40 @@ IntWinStaObjectDelete(
 {
     PWIN32_DELETEMETHOD_PARAMETERS DeleteParameters = Parameters;
     PWINSTATION_OBJECT WinSta = (PWINSTATION_OBJECT)DeleteParameters->Object;
+    PUSER_SESSION Session = UserFindSession(WinSta->dwSessionId);
 
     TRACE("Deleting window station 0x%p\n", WinSta);
 
     WinSta->Flags |= WSS_DYING;
 
-    if (WinSta == InputWindowStation)
+    if (Session && WinSta == Session->InputWindowStation)
     {
         ERR("WARNING: Deleting the interactive window station '%wZ'!\n",
-            &(OBJECT_HEADER_TO_NAME_INFO(OBJECT_TO_OBJECT_HEADER(InputWindowStation))->Name));
+            &(OBJECT_HEADER_TO_NAME_INFO(OBJECT_TO_OBJECT_HEADER(WinSta))->Name));
 
         /* The window station must NOT be tagged as non-interactive */
         ASSERT(!(WinSta->Flags & WSS_NOIO));
 
         /* Only Winlogon can close and delete the interactive window station */
-        ASSERT(gpidLogon == PsGetCurrentProcessId());
+        ASSERT(Session->LogonPid == PsGetCurrentProcessId());
 
-        InputWindowStation = NULL;
+        Session->InputWindowStation = NULL;
 
         /* Signal and cleanup the global desktop-switch event */
-        if (gpDesktopSwitchEvent)
+        if (Session->DesktopSwitchEvent)
         {
             KAPC_STATE ApcState;
 
-            KeSetEvent(gpDesktopSwitchEvent, EVENT_INCREMENT, FALSE);
-            ObDereferenceObject(gpDesktopSwitchEvent);
-            gpDesktopSwitchEvent = NULL;
+            KeSetEvent(Session->DesktopSwitchEvent, EVENT_INCREMENT, FALSE);
+            ObDereferenceObject(Session->DesktopSwitchEvent);
+            Session->DesktopSwitchEvent = NULL;
 
             /* Close the handle in the CSRSS process */
-            ASSERT(gpepCSRSS);
-            KeStackAttachProcess(&gpepCSRSS->Pcb, &ApcState);
-            ObCloseHandle(ghDesktopSwitchEvent, UserMode);
+            ASSERT(Session->CsrProcess);
+            KeStackAttachProcess(&Session->CsrProcess->Pcb, &ApcState);
+            ObCloseHandle(Session->DesktopSwitchEventHandle, UserMode);
             KeUnstackDetachProcess(&ApcState);
-            ghDesktopSwitchEvent = NULL;
+            Session->DesktopSwitchEventHandle = NULL;
         }
     }
 
@@ -538,7 +540,7 @@ BOOL FASTCALL
 CheckWinstaAttributeAccess(ACCESS_MASK DesiredAccess)
 {
     PPROCESSINFO ppi = PsGetCurrentProcessWin32Process();
-    if ( gpidLogon != PsGetCurrentProcessId() )
+    if (!UserIsLogonProcess(PsGetCurrentProcessId()))
     {
         if (!(ppi->W32PF_flags & W32PF_IOWINSTA))
         {
@@ -575,7 +577,7 @@ IntGetProcessWindowStation(HWINSTA *phWinSta OPTIONAL)
  * Creates the global per-session `\BaseNamedObjects\WinSta0_DesktopSwitch` event.
  **/
 static NTSTATUS
-IntCreateDesktopSwitchEvent(VOID)
+IntCreateDesktopSwitchEvent(PUSER_SESSION Session)
 {
     NTSTATUS Status;
     ULONG SessionId;
@@ -586,12 +588,12 @@ IntCreateDesktopSwitchEvent(VOID)
     WCHAR BnoBuffer[50];
 
     /* We must not be called more than once */
-    NT_VERIFY(!gpDesktopSwitchEvent);
-    if (gpDesktopSwitchEvent)
+    NT_VERIFY(!Session->DesktopSwitchEvent);
+    if (Session->DesktopSwitchEvent)
         return STATUS_OBJECT_NAME_COLLISION;
 
     /* Open the per-session BaseNamedObjects directory */
-    SessionId = PsGetCurrentProcessSessionId(); // gSessionId
+    SessionId = Session->SessionId;
     if (SessionId)
     {
         RtlStringCbPrintfW(BnoBuffer, sizeof(BnoBuffer),
@@ -700,8 +702,8 @@ IntCreateDesktopSwitchEvent(VOID)
     {
     KAPC_STATE ApcState;
 
-    ASSERT(gpepCSRSS);
-    KeStackAttachProcess(&gpepCSRSS->Pcb, &ApcState);
+    ASSERT(Session->CsrProcess);
+    KeStackAttachProcess(&Session->CsrProcess->Pcb, &ApcState);
     InitializeObjectAttributes(&ObjectAttributes,
                                &Name,
                                /* No OBJ_KERNEL_HANDLE: directly create a user-mode handle */
@@ -724,12 +726,12 @@ IntCreateDesktopSwitchEvent(VOID)
                                            EVENT_ALL_ACCESS,
                                            *ExEventObjectType,
                                            UserMode, // We use a user-mode handle
-                                           (PVOID*)&gpDesktopSwitchEvent,
+                                           (PVOID*)&Session->DesktopSwitchEvent,
                                            NULL);
         if (NT_SUCCESS(Status))
         {
             /* We succeeded, keep the handle around to ensure the object name persists */
-            ghDesktopSwitchEvent = EventHandle;
+            Session->DesktopSwitchEventHandle = EventHandle;
             /*
              * *ALTERNATIVELY*, we would duplicate the handle in the CSRSS process:
              *
@@ -816,6 +818,7 @@ IntCreateWindowStation(
     NTSTATUS Status;
     HWINSTA hWinSta;
     PWINSTATION_OBJECT WindowStation;
+    PUSER_SESSION Session = UserGetCurrentSession();
 
     TRACE("IntCreateWindowStation called\n");
 
@@ -875,13 +878,13 @@ IntCreateWindowStation(
         return Status;
     }
 
-    if (InputWindowStation == NULL)
+    if (Session && Session->InputWindowStation == NULL)
     {
         TRACE("Initializing input window station\n");
         /* Only Winlogon can create the interactive window station */
-        ASSERT(gpidLogon == PsGetCurrentProcessId());
+        ASSERT(Session->LogonPid == PsGetCurrentProcessId());
 
-        InputWindowStation = WindowStation;
+        Session->InputWindowStation = WindowStation;
         WindowStation->Flags &= ~WSS_NOIO;
     }
     else
@@ -891,9 +894,9 @@ IntCreateWindowStation(
 
     /* Create the global WinSta0_DesktopSwitch event
      * only when creating the interactive WinSta0 */
-    if (InputWindowStation == WindowStation)
+    if (Session && Session->InputWindowStation == WindowStation)
     {
-        Status = IntCreateDesktopSwitchEvent();
+        Status = IntCreateDesktopSwitchEvent(Session);
         if (!NT_SUCCESS(Status))
         {
             ObDereferenceObject(WindowStation);
@@ -918,7 +921,7 @@ IntCreateWindowStation(
 
     // FIXME! TODO: Add this new window station to a linked list
 
-    if (InputWindowStation == WindowStation)
+    if (Session && Session->InputWindowStation == WindowStation)
     {
         ERR("Initializing input window station\n");
 
@@ -1006,7 +1009,7 @@ BuildUserModeWindowStationName(
 
     /* Compute the needed string size */
     MemSize = _scwprintf(L"%wZ\\Service-0x%x-%x$",
-                         &gustrWindowStationsDir,
+                         UserGetWinStaDirName(PsGetCurrentProcess()),
                          CallerLuid.HighPart,
                          CallerLuid.LowPart);
     MemSize = MemSize * sizeof(WCHAR) + sizeof(UNICODE_NULL);
@@ -1062,7 +1065,7 @@ BuildUserModeWindowStationName(
     Status = RtlStringCbPrintfW((*WindowStationName)->Buffer,
                                 (*WindowStationName)->MaximumLength,
                                 L"%wZ\\Service-0x%x-%x$",
-                                &gustrWindowStationsDir,
+                                UserGetWinStaDirName(PsGetCurrentProcess()),
                                 CallerLuid.HighPart,
                                 CallerLuid.LowPart);
     if (!NT_SUCCESS(Status))
@@ -1961,7 +1964,7 @@ NtUserLockWindowStation(HWINSTA hWindowStation)
     TRACE("About to set process window station with handle (%p)\n",
           hWindowStation);
 
-    if (gpidLogon != PsGetCurrentProcessId())
+    if (!UserIsLogonProcess(PsGetCurrentProcessId()))
     {
         ERR("Unauthorized process attempted to lock the window station!\n");
         EngSetLastError(ERROR_ACCESS_DENIED);
@@ -2006,7 +2009,7 @@ NtUserUnlockWindowStation(HWINSTA hWindowStation)
     TRACE("About to set process window station with handle (%p)\n",
           hWindowStation);
 
-    if (gpidLogon != PsGetCurrentProcessId())
+    if (!UserIsLogonProcess(PsGetCurrentProcessId()))
     {
         ERR("Unauthorized process attempted to unlock the window station!\n");
         EngSetLastError(ERROR_ACCESS_DENIED);
@@ -2100,7 +2103,7 @@ BuildWindowStationNameList(
 
     /* FIXME: Win32k should maintain this list instead of querying the directory. */
     InitializeObjectAttributes(&ObjectAttributes,
-                               &gustrWindowStationsDir,
+                               UserGetWinStaDirName(PsGetCurrentProcess()),
                                OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
                                NULL,
                                NULL);
@@ -2328,7 +2331,7 @@ NtUserSetLogonNotifyWindow(HWND hWnd)
     if (!IntIsWindow(hWnd))
         goto Leave;
 
-    if (gpidLogon != PsGetCurrentProcessId())
+    if (!UserIsLogonProcess(PsGetCurrentProcessId()))
     {
         EngSetLastError(ERROR_ACCESS_DENIED);
         goto Leave;
@@ -2380,7 +2383,7 @@ NtUserSetWindowStationUser(
 
     UserEnterExclusive();
 
-    if (gpidLogon != PsGetCurrentProcessId())
+    if (!UserIsLogonProcess(PsGetCurrentProcessId()))
     {
         EngSetLastError(ERROR_ACCESS_DENIED);
         goto Leave;

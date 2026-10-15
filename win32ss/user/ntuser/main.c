@@ -235,8 +235,12 @@ UserProcessDestroy(PEPROCESS Process)
     /*
      * Deregister logon application automatically
      */
-    if (gpidLogon == PsGetProcessId(ppiCurrent->peProcess))
-        gpidLogon = 0;
+    {
+        PUSER_SESSION Session = UserGetProcessSession(ppiCurrent->peProcess);
+
+        if (Session && Session->LogonPid == PsGetProcessId(ppiCurrent->peProcess))
+            Session->LogonPid = 0;
+    }
 
     /* Close the current window station */
     UserSetProcessWindowStation(NULL);
@@ -676,8 +680,12 @@ InitThreadCallback(PETHREAD Thread)
     // FIXME: Flag SYSTEM threads with... TIF_SYSTEMTHREAD !!
 
     /* CSRSS threads have some special features */
-    if (Process == gpepCSRSS || !gpepCSRSS)
-        ptiCurrent->TIF_flags = TIF_CSRSSTHREAD | TIF_DONTATTACHQUEUE;
+    {
+        PUSER_SESSION Session = UserGetProcessSession(Process);
+
+        if (!Session || !Session->CsrProcess || Session->CsrProcess == Process)
+            ptiCurrent->TIF_flags = TIF_CSRSSTHREAD | TIF_DONTATTACHQUEUE;
+    }
 
     /* A thread of a process that is in a job restricting the UI is restricted
        from the moment it appears, not from the next time the job is touched */
@@ -754,7 +762,7 @@ InitThreadCallback(PETHREAD Thread)
      */
     if (!(ptiCurrent->TIF_flags & (TIF_SYSTEMTHREAD | TIF_CSRSSTHREAD)) &&
         ptiCurrent->ppi->hdeskStartup == NULL &&
-        InputWindowStation != NULL)
+        UserGetInputWindowStation(Process) != NULL)
     {
         HWINSTA hWinSta = NULL;
         HDESK hDesk = NULL;
@@ -807,7 +815,7 @@ InitThreadCallback(PETHREAD Thread)
 
         /* Store the parsed desktop as the initial desktop */
         ASSERT(ptiCurrent->ppi->hdeskStartup == NULL);
-        ASSERT(PsGetProcessId(Process) != gpidLogon);
+        ASSERT(!UserIsLogonProcess(PsGetProcessId(Process)));
         ptiCurrent->ppi->hdeskStartup = hDesk;
         ptiCurrent->ppi->rpdeskStartup = pdesk;
     }
@@ -1101,8 +1109,11 @@ DriverUnload(IN PDRIVER_OBJECT DriverObject)
     // TODO: Do more cleanup!
 
     FreeFontSupport();
-    ResetCsrApiPort();
-    ResetCsrProcess();
+    if (gpDisplaySession)
+    {
+        ResetCsrApiPort(gpDisplaySession);
+        ResetCsrProcess(gpDisplaySession);
+    }
     IntWin32PowerManagementCleanup();
 }
 

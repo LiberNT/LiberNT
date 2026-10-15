@@ -17,13 +17,12 @@
 #include <csr/csr.h>
 #include <win/winmsg.h>
 
-extern PEPROCESS gpepCSRSS;
-extern PVOID CsrApiPort;
+struct _USER_SESSION;
 
-VOID InitCsrProcess(VOID /*IN PEPROCESS CsrProcess*/);
-VOID ResetCsrProcess(VOID);
-NTSTATUS InitCsrApiPort(IN HANDLE CsrPortHandle);
-VOID ResetCsrApiPort(VOID);
+VOID InitCsrProcess(struct _USER_SESSION *Session);
+VOID ResetCsrProcess(struct _USER_SESSION *Session);
+NTSTATUS InitCsrApiPort(struct _USER_SESSION *Session, IN HANDLE CsrPortHandle);
+VOID ResetCsrApiPort(struct _USER_SESSION *Session);
 
 NTSTATUS
 NTAPI

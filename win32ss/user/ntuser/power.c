@@ -371,7 +371,7 @@ IntHandlePowerEvent(
      * up other subsystems. Another case is that the system undergoes shutdown
      * and Win32k cleanup is currently in effect. Either way, just quit.
      */
-    if (!gpepCSRSS)
+    if (!gpDisplaySession || !gpDisplaySession->CsrProcess)
     {
         TRACE("CSRSS is not running, bailing out\n");
         return STATUS_UNSUCCESSFUL;

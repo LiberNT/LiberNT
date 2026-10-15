@@ -301,12 +301,14 @@ NtUserInitialize(
     HANDLE hMediaRequestEvent)
 {
     NTSTATUS Status;
+    PUSER_SESSION Session;
 
     TRACE("Enter NtUserInitialize(%lx, %p, %p)\n",
           dwWinVersion, hPowerRequestEvent, hMediaRequestEvent);
 
     /* Check if we are already initialized */
-    if (gpepCSRSS)
+    Session = UserGetCurrentSession();
+    if (Session && Session->CsrProcess)
         return STATUS_UNSUCCESSFUL;
 
     /* Check Windows USER subsystem version */
@@ -319,8 +321,22 @@ NtUserInitialize(
     /* Acquire exclusive lock */
     UserEnterExclusive();
 
+    Status = UserCreateSession(PsGetCurrentProcessSessionId(), &Session);
+    if (!NT_SUCCESS(Status))
+    {
+        UserLeave();
+        return Status;
+    }
+    if (Session->CsrProcess)
+    {
+        UserLeave();
+        return STATUS_UNSUCCESSFUL;
+    }
+
     /* Save the EPROCESS of CSRSS */
-    InitCsrProcess(/*PsGetCurrentProcess()*/);
+    InitCsrProcess(Session);
+    if (!gpDisplaySession)
+        WritePointerRelease((PVOID volatile *)&gpDisplaySession, Session);
 
     /* Initialize Power Request List */
     Status = IntInitWin32PowerManagement(hPowerRequestEvent);

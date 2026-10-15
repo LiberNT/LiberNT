@@ -334,7 +334,7 @@ NtUserGetThreadState(
          ret = (ULONG_PTR)pti->hklPrev;
          break;
       case THREADSTATE_ISWINLOGON:
-         ret = (gpidLogon == PsGetCurrentProcessId());
+         ret = UserIsLogonProcess(PsGetCurrentProcessId());
          break;
       case THREADSTATE_UNKNOWN_0x10:
          FIXME("stub\n");

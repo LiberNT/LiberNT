@@ -168,7 +168,7 @@ RawInputThreadMain(VOID)
     KeSetPriorityThread(&PsGetCurrentThread()->Tcb,
                         LOW_REALTIME_PRIORITY + 3);
 
-    Status = ObOpenObjectByPointer(InputWindowStation,
+    Status = ObOpenObjectByPointer(UserGetDisplayInputWindowStation(),
                                    0,
                                    NULL,
                                    MAXIMUM_ALLOWED,

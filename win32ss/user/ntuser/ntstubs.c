@@ -482,7 +482,7 @@ NtUserProcessConnect(
     W32Process = PsGetProcessWin32Process(Process);
     if (!W32Process ||
         (W32Process->pClientBase && Process != PsGetCurrentProcess()) ||
-        (PsGetCurrentProcess() != gpepCSRSS &&
+        (!UserIsCsrProcess(PsGetCurrentProcess()) &&
          (Process != PsGetCurrentProcess() || W32Process->pClientBase)))
     {
         Status = STATUS_UNSUCCESSFUL;
@@ -493,7 +493,7 @@ NtUserProcessConnect(
         IntGetProcessIntegrity(Process) < SECURITY_MANDATORY_LOW_RID &&
         (!W32Process->rpdeskStartup ||
          !W32Process->rpdeskStartup->pDeskInfo ||
-         (W32Process->prpwinsta == InputWindowStation &&
+         (W32Process->prpwinsta == UserGetInputWindowStation(Process) &&
           !_wcsicmp(W32Process->rpdeskStartup->pDeskInfo->szDesktopName,
                     L"Default"))))
     {
@@ -581,7 +581,7 @@ NtUserQueryInformationThread(IN HANDLE ThreadHandle,
     PETHREAD Thread;
 
     /* Allow only CSRSS to perform this operation */
-    if (PsGetCurrentProcess() != gpepCSRSS)
+    if (!UserIsCsrProcess(PsGetCurrentProcess()))
         return STATUS_ACCESS_DENIED;
 
     UserEnterShared();
@@ -669,7 +669,7 @@ NtUserSetInformationThread(IN HANDLE ThreadHandle,
     PETHREAD Thread;
 
     /* Allow only CSRSS to perform this operation */
-    if (PsGetCurrentProcess() != gpepCSRSS)
+    if (!UserIsCsrProcess(PsGetCurrentProcess()))
         return STATUS_ACCESS_DENIED;
 
     UserEnterExclusive();
@@ -783,7 +783,11 @@ NtUserSetInformationThread(IN HANDLE ThreadHandle,
             }
             _SEH2_END;
 
-            Status = InitCsrApiPort(CsrPortHandle);
+            {
+                PUSER_SESSION Session = UserGetCurrentSession();
+
+                Status = Session ? InitCsrApiPort(Session, CsrPortHandle) : STATUS_UNSUCCESSFUL;
+            }
             break;
         }
 

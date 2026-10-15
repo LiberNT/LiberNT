@@ -62,10 +62,7 @@ C_ASSERT(offsetof(WINSTATION_OBJECT, spwndClipViewer) == 0x24);
 C_ASSERT(offsetof(WINSTATION_OBJECT, spwndClipOwner) == 0x28);
 #endif
 
-extern WINSTATION_OBJECT *InputWindowStation;
-extern HANDLE gpidLogon;
 extern HWND hwndSAS;
-extern UNICODE_STRING gustrWindowStationsDir;
 
 BOOL FASTCALL IntRegisterSessionNotification(PWND Window, ULONG Flags);
 BOOL FASTCALL IntUnregisterSessionNotification(PWND Window, BOOL Destroying);

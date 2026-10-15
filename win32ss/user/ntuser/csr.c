@@ -12,30 +12,25 @@
 
 DBG_DEFAULT_CHANNEL(UserCsr);
 
-PEPROCESS gpepCSRSS = NULL;
-PVOID CsrApiPort = NULL;
-DWORD gdwPendingSystemThreads = 0;
-
 VOID
-InitCsrProcess(VOID /*IN PEPROCESS CsrProcess*/)
+InitCsrProcess(PUSER_SESSION Session)
 {
     /* Save the EPROCESS of CSRSS */
-    gpepCSRSS = PsGetCurrentProcess();
-    // gpepCSRSS = CsrProcess;
-    ObReferenceObject(gpepCSRSS);
+    Session->CsrProcess = PsGetCurrentProcess();
+    ObReferenceObject(Session->CsrProcess);
 }
 
 VOID
-ResetCsrProcess(VOID)
+ResetCsrProcess(PUSER_SESSION Session)
 {
-    if (gpepCSRSS)
-        ObDereferenceObject(gpepCSRSS);
+    if (Session->CsrProcess)
+        ObDereferenceObject(Session->CsrProcess);
 
-    gpepCSRSS = NULL;
+    Session->CsrProcess = NULL;
 }
 
 NTSTATUS
-InitCsrApiPort(IN HANDLE CsrPortHandle)
+InitCsrApiPort(PUSER_SESSION Session, IN HANDLE CsrPortHandle)
 {
     NTSTATUS Status;
 
@@ -43,11 +38,11 @@ InitCsrApiPort(IN HANDLE CsrPortHandle)
                                        0,
                                        /* * */LpcPortObjectType, // or NULL,
                                        UserMode,
-                                       &CsrApiPort,
+                                       &Session->CsrApiPort,
                                        NULL);
     if (!NT_SUCCESS(Status))
     {
-        CsrApiPort = NULL;
+        Session->CsrApiPort = NULL;
         ERR("Failed to set CSR API Port.\n");
     }
 
@@ -55,12 +50,12 @@ InitCsrApiPort(IN HANDLE CsrPortHandle)
 }
 
 VOID
-ResetCsrApiPort(VOID)
+ResetCsrApiPort(PUSER_SESSION Session)
 {
-    if (CsrApiPort)
-        ObDereferenceObject(CsrApiPort);
+    if (Session->CsrApiPort)
+        ObDereferenceObject(Session->CsrApiPort);
 
-    CsrApiPort = NULL;
+    Session->CsrApiPort = NULL;
 }
 
 /*
@@ -78,13 +73,14 @@ CsrClientCallServer(IN OUT PCSR_API_MESSAGE ApiMessage,
 {
     NTSTATUS Status;
     SIZE_T BufferLength = sizeof(*ApiMessage);
+    PUSER_SESSION Session = UserGetCurrentSession();
 #if 0
     ULONG PointerCount;
     PULONG_PTR OffsetPointer;
 #endif
 
     /* Do we have a connection to CSR yet? */
-    if (!CsrApiPort)
+    if (!Session || !Session->CsrApiPort)
         return STATUS_INVALID_PORT_HANDLE;
 
     /* Fill out the Port Message Header */
@@ -143,14 +139,14 @@ CsrClientCallServer(IN OUT PCSR_API_MESSAGE ApiMessage,
     // The wait logic below is subject to change in the future. One can
     // imagine adding an external parameter to CsrClientCallServer, or write
     // two versions of CsrClientCallServer, synchronous and asynchronous.
-    if (PsGetCurrentProcess() == gpepCSRSS)
+    if (PsGetCurrentProcess() == Session->CsrProcess)
     {
-        Status = LpcRequestPort(CsrApiPort,
+        Status = LpcRequestPort(Session->CsrApiPort,
                                 &ApiMessage->Header);
     }
     else
     {
-        Status = LpcSendWaitReceivePort(CsrApiPort, ALPC_MSGFLG_SYNC_REQUEST, &ApiMessage->Header, &ApiMessage->Header, &BufferLength, NULL);
+        Status = LpcSendWaitReceivePort(Session->CsrApiPort, ALPC_MSGFLG_SYNC_REQUEST, &ApiMessage->Header, &ApiMessage->Header, &BufferLength, NULL);
     }
 
     UserEnterCo();
@@ -206,18 +202,19 @@ CsrClientCallServer(IN OUT PCSR_API_MESSAGE ApiMessage,
  */
 DWORD UserSystemThreadProc(BOOL bRemoteProcess)
 {
+    PUSER_SESSION Session = UserGetCurrentSession();
     DWORD Type;
 
-    if (!gdwPendingSystemThreads)
+    if (!Session || !Session->PendingSystemThreads)
     {
-        ERR("gdwPendingSystemThreads is 0!\n");
+        ERR("PendingSystemThreads is 0!\n");
         return 0;
     }
 
     /* Decide which thread this will be */
-    if (gdwPendingSystemThreads & ST_RIT)
+    if (Session->PendingSystemThreads & ST_RIT)
         Type = ST_RIT;
-    else if (gdwPendingSystemThreads & ST_DESKTOP_THREAD)
+    else if (Session->PendingSystemThreads & ST_DESKTOP_THREAD)
         Type = ST_DESKTOP_THREAD;
     else
         Type = ST_GHOST_THREAD;
@@ -225,7 +222,7 @@ DWORD UserSystemThreadProc(BOOL bRemoteProcess)
     ASSERT(Type);
 
     /* We will handle one of these threads right here so unmark it as pending */
-    gdwPendingSystemThreads &= ~Type;
+    Session->PendingSystemThreads &= ~Type;
 
     UserLeave();
 
@@ -248,19 +245,23 @@ BOOL UserCreateSystemThread(DWORD Type)
 {
     USER_API_MESSAGE ApiMessage;
     PUSER_CREATE_SYSTEM_THREAD pCreateThreadRequest = &ApiMessage.Data.CreateSystemThreadRequest;
+    PUSER_SESSION Session = UserGetCurrentSession();
 
     TRACE("UserCreateSystemThread: %d\n", Type);
 
     ASSERT(UserIsEnteredExclusive());
 
-    if (gdwPendingSystemThreads & Type)
+    if (!Session)
+        return FALSE;
+
+    if (Session->PendingSystemThreads & Type)
     {
         ERR("System thread 0x%x already pending for creation\n", Type);
         return TRUE;
     }
 
     /* We can't pass a parameter to the new thread so mark what the new thread needs to do */
-    gdwPendingSystemThreads |= Type;
+    Session->PendingSystemThreads |= Type;
 
     /* Ask winsrv to create a new system thread. This new thread will enter win32k again calling UserSystemThreadProc */
     pCreateThreadRequest->bRemote = FALSE;

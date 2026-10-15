@@ -2090,7 +2090,7 @@ co_IntCreateDefaultImeWindow(
     PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
     HANDLE pid = PsGetThreadProcessId(pti->pEThread);
 
-    if (!(pti->spDefaultImc) && pid == gpidLogon)
+    if (!(pti->spDefaultImc) && UserIsLogonProcess(pid))
         UserCreateInputContext(0);
 
     if (!(pti->spDefaultImc) || IS_WND_IMELIKE(pwndTarget) || !(pti->rpdesk->pheapDesktop))

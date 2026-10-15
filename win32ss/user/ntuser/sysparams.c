@@ -24,7 +24,7 @@ BOOL g_bWindowSnapEnabled = TRUE;
 
 #define REQ_INTERACTIVE_WINSTA(err) \
 do { \
-    if (GetW32ProcessInfo()->prpwinsta != InputWindowStation) \
+    if (GetW32ProcessInfo()->prpwinsta != UserGetInputWindowStation(PsGetCurrentProcess())) \
     { \
         if (GetW32ProcessInfo()->prpwinsta == NULL) \
         { \
@@ -1089,9 +1089,9 @@ SpiSetEarlyWallpaper(
 
     REQ_INTERACTIVE_WINSTA(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
 
-    if (gpidLogon != PsGetCurrentProcessId())
+    if (!UserIsLogonProcess(PsGetCurrentProcessId()))
     {
-        ERR("EARLY_SPLASH: WIN32K_WALLPAPER_FAIL stage=caller pid=%p logon_pid=%p\n", PsGetCurrentProcessId(), gpidLogon);
+        ERR("EARLY_SPLASH: WIN32K_WALLPAPER_FAIL stage=caller pid=%p\n", PsGetCurrentProcessId());
         EngSetLastError(ERROR_ACCESS_DENIED);
         return 0;
     }

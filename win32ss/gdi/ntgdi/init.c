@@ -112,7 +112,7 @@ InitializeGreCSRSS(VOID)
     DxStartupDxgkInt();
 
     /* Initialize Legacy DirectX graphics driver */
-    if (DxDdStartupDxGraphics(0, NULL, 0, NULL, NULL, gpepCSRSS) != STATUS_SUCCESS)
+    if (DxDdStartupDxGraphics(0, NULL, 0, NULL, NULL, UserGetCurrentSession()->CsrProcess) != STATUS_SUCCESS)
     {
         ERR("Unable to initialize DirectX graphics\n");
         return FALSE;

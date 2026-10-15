@@ -65,8 +65,6 @@ extern HDC ScreenDeviceContext;
 extern PTHREADINFO gptiForeground;
 extern PTHREADINFO gptiDesktopThread;
 extern PKEVENT gpDesktopThreadStartedEvent;
-extern PKEVENT gpDesktopSwitchEvent;
-extern HANDLE ghDesktopSwitchEvent;
 
 typedef struct _SHELL_HOOK_WINDOW
 {
