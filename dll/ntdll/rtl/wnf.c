@@ -77,6 +77,55 @@ RtlUnsubscribeWnfNotificationWaitForCompletion(
 
 NTSTATUS
 NTAPI
+RtlUnsubscribeWnfStateChangeNotification(
+    _In_ PVOID Subscription)
+{
+    UNREFERENCED_PARAMETER(Subscription);
+
+    DPRINT("RtlUnsubscribeWnfStateChangeNotification: no WNF provider\n");
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+NTSTATUS
+NTAPI
+RtlCheckPortableOperatingSystem(
+    _Out_ PBOOLEAN IsPortable)
+{
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"PortableOperatingSystem");
+    UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + sizeof(ULONG)];
+    PKEY_VALUE_PARTIAL_INFORMATION Value = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE KeyHandle;
+    ULONG ResultLength;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = NtQueryValueKey(KeyHandle,
+                             &ValueName,
+                             KeyValuePartialInformation,
+                             Buffer,
+                             sizeof(Buffer),
+                             &ResultLength);
+    NtClose(KeyHandle);
+
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+        return STATUS_NOT_FOUND;
+    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_OVERFLOW)
+        return Status;
+    if (Value->Type != REG_DWORD || Value->DataLength != sizeof(ULONG))
+        return STATUS_OBJECT_TYPE_MISMATCH;
+
+    *IsPortable = (*(PULONG)Value->Data != 0);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
 RtlFlushHeaps(VOID)
 {
     HANDLE Heaps[64];

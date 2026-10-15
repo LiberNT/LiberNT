@@ -331,3 +331,13 @@ EtwEventWriteTransfer(
     UNREFERENCED_PARAMETER(RelatedActivityId);
     return EtwpValidateWrite(RegHandle, EventDescriptor, UserDataCount, UserData);
 }
+
+BOOLEAN
+NTAPI
+EtwCheckCoverage(
+    _Inout_ PVOID CoveragePoint)
+{
+    UNREFERENCED_PARAMETER(CoveragePoint);
+
+    return FALSE;
+}

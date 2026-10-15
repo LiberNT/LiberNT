@@ -55,6 +55,16 @@ NTSTATUS NTAPI ChpeAutoRtlUnsubscribeWnfNotificationWaitForCompletion(PVOID a0)
     return RtlUnsubscribeWnfNotificationWaitForCompletion(a0);
 }
 
+/* Native definition: dll/ntdll/rtl/wnf.c */
+#ifdef RtlUnsubscribeWnfStateChangeNotification
+#undef RtlUnsubscribeWnfStateChangeNotification
+#endif
+NTSTATUS NTAPI RtlUnsubscribeWnfStateChangeNotification(PVOID a0);
+NTSTATUS NTAPI ChpeAutoRtlUnsubscribeWnfStateChangeNotification(PVOID a0)
+{
+    return RtlUnsubscribeWnfStateChangeNotification(a0);
+}
+
 void NTAPI ChpeAutoA_SHAFinal(PSHA_CTX a0, PULONG a1)
 {
     A_SHAFinal(a0, a1);
@@ -335,6 +345,16 @@ NTSTATUS NTAPI ChpeAutoDbgUiWaitStateChange(PDBGUI_WAIT_STATE_CHANGE a0, PLARGE_
     return DbgUiWaitStateChange(a0, a1);
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoDbgUiWaitStateChange), __typeof__(&DbgUiWaitStateChange)), "DbgUiWaitStateChange bridge signature mismatch");
+
+/* Native definition: dll/ntdll/etw/provider.c */
+#ifdef EtwCheckCoverage
+#undef EtwCheckCoverage
+#endif
+BOOLEAN NTAPI EtwCheckCoverage(PVOID a0);
+BOOLEAN NTAPI ChpeAutoEtwCheckCoverage(PVOID a0)
+{
+    return EtwCheckCoverage(a0);
+}
 
 ULONG_PTR NTAPI ChpeStubEtwCreateTraceInstanceId(PVOID a0, PVOID a1)
 {
@@ -3555,6 +3575,16 @@ VOID NTAPI RtlCheckForOrphanedCriticalSections(PVOID a0);
 VOID NTAPI ChpeAutoRtlCheckForOrphanedCriticalSections(PVOID a0)
 {
     RtlCheckForOrphanedCriticalSections(a0);
+}
+
+/* Native definition: dll/ntdll/rtl/wnf.c */
+#ifdef RtlCheckPortableOperatingSystem
+#undef RtlCheckPortableOperatingSystem
+#endif
+NTSTATUS NTAPI RtlCheckPortableOperatingSystem(PVOID a0);
+NTSTATUS NTAPI ChpeAutoRtlCheckPortableOperatingSystem(PVOID a0)
+{
+    return RtlCheckPortableOperatingSystem(a0);
 }
 
 NTSTATUS NTAPI ChpeAutoRtlCheckRegistryKey(ULONG a0, PWSTR a1)
@@ -7151,11 +7181,31 @@ NTSTATUS NTAPI ChpeAutoRtlWow64GetProcessMachines(HANDLE a0, PUSHORT a1, PUSHORT
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlWow64GetProcessMachines), __typeof__(&RtlWow64GetProcessMachines)), "RtlWow64GetProcessMachines bridge signature mismatch");
 
+/* Native definition: dll/ntdll/wow64.c */
+#ifdef RtlWow64GetSharedInfoProcess
+#undef RtlWow64GetSharedInfoProcess
+#endif
+NTSTATUS NTAPI RtlWow64GetSharedInfoProcess(PVOID a0, PVOID a1, PVOID a2);
+NTSTATUS NTAPI ChpeAutoRtlWow64GetSharedInfoProcess(PVOID a0, PVOID a1, PVOID a2)
+{
+    return RtlWow64GetSharedInfoProcess(a0, a1, a2);
+}
+
 NTSTATUS NTAPI ChpeAutoRtlWow64GetThreadContext(HANDLE a0, PWOW64_CONTEXT a1)
 {
     return RtlWow64GetThreadContext(a0, a1);
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlWow64GetThreadContext), __typeof__(&RtlWow64GetThreadContext)), "RtlWow64GetThreadContext bridge signature mismatch");
+
+/* Native definition: dll/ntdll/wow64.c */
+#ifdef RtlWow64IsWowGuestMachineSupported
+#undef RtlWow64IsWowGuestMachineSupported
+#endif
+NTSTATUS NTAPI RtlWow64IsWowGuestMachineSupported(USHORT a0, PVOID a1);
+NTSTATUS NTAPI ChpeAutoRtlWow64IsWowGuestMachineSupported(USHORT a0, PVOID a1)
+{
+    return RtlWow64IsWowGuestMachineSupported(a0, a1);
+}
 
 ULONG_PTR NTAPI ChpeStubRtlWow64LogMessageInEventLogger(ULONG a0, ULONG a1, ULONG a2)
 {
