@@ -42,7 +42,6 @@ list(APPEND SOURCE
     libs/vkd3d-shader/tpf.c
     libs/vkd3d-shader/vkd3d_shader_main.c
     libs/vkd3d-utils/vkd3d_utils_main.c
-    libs/vkd3d/cache.c
     libs/vkd3d/command.c
     libs/vkd3d/device.c
     libs/vkd3d/resource.c

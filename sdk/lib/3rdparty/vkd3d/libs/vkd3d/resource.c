@@ -1928,10 +1928,11 @@ HRESULT d3d12_resource_validate_desc(const D3D12_RESOURCE_DESC1 *desc, struct d3
 
     d3d12_validate_resource_flags(desc->Flags);
 
-    if (mip_region->Width && mip_region->Height && mip_region->Depth)
+    if (mip_region->Width || mip_region->Height || mip_region->Depth)
     {
-        FIXME("Unhandled sampler feedback mip region size (%u, %u, %u).\n", mip_region->Width, mip_region->Height,
-                mip_region->Depth);
+        WARN("Sampler feedback mip region (%u, %u, %u) without sampler feedback support.\n", mip_region->Width,
+                mip_region->Height, mip_region->Depth);
+        return E_INVALIDARG;
     }
 
     return S_OK;
@@ -2266,7 +2267,7 @@ HRESULT d3d12_reserved_resource_create(struct d3d12_device *device,
 HRESULT vkd3d_create_image_resource(ID3D12Device *device,
         const struct vkd3d_image_resource_create_info *create_info, ID3D12Resource **resource)
 {
-    struct d3d12_device *d3d12_device = unsafe_impl_from_ID3D12Device9((ID3D12Device9 *)device);
+    struct d3d12_device *d3d12_device = unsafe_impl_from_ID3D12Device10((ID3D12Device10 *)device);
     struct d3d12_resource *object;
     HRESULT hr;
 

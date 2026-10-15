@@ -456,6 +456,8 @@ VKD3D_API VkFormat vkd3d_get_vk_format(DXGI_FORMAT format);
 /* 1.1 */
 VKD3D_API DXGI_FORMAT vkd3d_get_dxgi_format(VkFormat format);
 VKD3D_API void vkd3d_set_dred_enablement(D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault);
+VKD3D_API HRESULT vkd3d_create_shader_cache_session(ID3D12Device *device,
+        const D3D12_SHADER_CACHE_SESSION_DESC *desc, REFIID iid, void **session);
 
 /* 1.2 */
 VKD3D_API HRESULT vkd3d_serialize_versioned_root_signature(const D3D12_VERSIONED_ROOT_SIGNATURE_DESC *desc,
