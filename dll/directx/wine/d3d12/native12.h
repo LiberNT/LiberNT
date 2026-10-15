@@ -66,3 +66,4 @@ public:
 class Native12Device;
 
 HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, REFIID iid, void **out);
+extern "C" void d3d12_dred_enablement(D3D12_DRED_ENABLEMENT *auto_breadcrumbs, D3D12_DRED_ENABLEMENT *page_fault);

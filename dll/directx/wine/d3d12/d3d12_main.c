@@ -130,11 +130,200 @@ d3d12_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_level, 
     return d3d12_create_vkd3d_device(adapter, minimum_feature_level, iid, device);
 }
 
+static LONG d3d12_dred_auto_breadcrumbs;
+static LONG d3d12_dred_page_fault;
+static LONG d3d12_dred_watson_dump;
+static LONG d3d12_dred_breadcrumb_context;
+
+void d3d12_dred_enablement(D3D12_DRED_ENABLEMENT *auto_breadcrumbs, D3D12_DRED_ENABLEMENT *page_fault)
+{
+    *auto_breadcrumbs = d3d12_dred_auto_breadcrumbs;
+    *page_fault = d3d12_dred_page_fault;
+}
+
+struct d3d12_dred_settings
+{
+    ID3D12DeviceRemovedExtendedDataSettings1 ID3D12DeviceRemovedExtendedDataSettings1_iface;
+    LONG refcount;
+};
+
+static struct d3d12_dred_settings *impl_from_ID3D12DeviceRemovedExtendedDataSettings1(
+        ID3D12DeviceRemovedExtendedDataSettings1 *iface)
+{
+    return CONTAINING_RECORD(iface, struct d3d12_dred_settings, ID3D12DeviceRemovedExtendedDataSettings1_iface);
+}
+
+static HRESULT STDMETHODCALLTYPE
+d3d12_dred_settings_QueryInterface(ID3D12DeviceRemovedExtendedDataSettings1 *iface, REFIID iid, void **out)
+{
+    if (IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings1)
+            || IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings)
+            || IsEqualGUID(iid, &IID_IUnknown))
+    {
+        ID3D12DeviceRemovedExtendedDataSettings1_AddRef(iface);
+        *out = iface;
+        return S_OK;
+    }
+
+    *out = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE
+d3d12_dred_settings_AddRef(ID3D12DeviceRemovedExtendedDataSettings1 *iface)
+{
+    return InterlockedIncrement(&impl_from_ID3D12DeviceRemovedExtendedDataSettings1(iface)->refcount);
+}
+
+static ULONG STDMETHODCALLTYPE
+d3d12_dred_settings_Release(ID3D12DeviceRemovedExtendedDataSettings1 *iface)
+{
+    struct d3d12_dred_settings *settings = impl_from_ID3D12DeviceRemovedExtendedDataSettings1(iface);
+    ULONG refcount = InterlockedDecrement(&settings->refcount);
+
+    if (!refcount)
+        HeapFree(GetProcessHeap(), 0, settings);
+    return refcount;
+}
+
+static void STDMETHODCALLTYPE
+d3d12_dred_settings_SetAutoBreadcrumbsEnablement(ID3D12DeviceRemovedExtendedDataSettings1 *iface,
+                                                 D3D12_DRED_ENABLEMENT enablement)
+{
+    InterlockedExchange(&d3d12_dred_auto_breadcrumbs, enablement);
+    vkd3d_set_dred_enablement(d3d12_dred_auto_breadcrumbs, d3d12_dred_page_fault);
+}
+
+static void STDMETHODCALLTYPE
+d3d12_dred_settings_SetPageFaultEnablement(ID3D12DeviceRemovedExtendedDataSettings1 *iface,
+                                           D3D12_DRED_ENABLEMENT enablement)
+{
+    InterlockedExchange(&d3d12_dred_page_fault, enablement);
+    vkd3d_set_dred_enablement(d3d12_dred_auto_breadcrumbs, d3d12_dred_page_fault);
+}
+
+static void STDMETHODCALLTYPE
+d3d12_dred_settings_SetWatsonDumpEnablement(ID3D12DeviceRemovedExtendedDataSettings1 *iface,
+                                            D3D12_DRED_ENABLEMENT enablement)
+{
+    InterlockedExchange(&d3d12_dred_watson_dump, enablement);
+}
+
+static void STDMETHODCALLTYPE
+d3d12_dred_settings_SetBreadcrumbContextEnablement(ID3D12DeviceRemovedExtendedDataSettings1 *iface,
+                                                   D3D12_DRED_ENABLEMENT enablement)
+{
+    InterlockedExchange(&d3d12_dred_breadcrumb_context, enablement);
+}
+
+static const ID3D12DeviceRemovedExtendedDataSettings1Vtbl d3d12_dred_settings_vtbl =
+{
+    d3d12_dred_settings_QueryInterface,
+    d3d12_dred_settings_AddRef,
+    d3d12_dred_settings_Release,
+    d3d12_dred_settings_SetAutoBreadcrumbsEnablement,
+    d3d12_dred_settings_SetPageFaultEnablement,
+    d3d12_dred_settings_SetWatsonDumpEnablement,
+    d3d12_dred_settings_SetBreadcrumbContextEnablement,
+};
+
+static HRESULT
+d3d12_dred_settings_create(REFIID iid, void **out)
+{
+    struct d3d12_dred_settings *settings;
+    HRESULT hr;
+
+    if (!(settings = HeapAlloc(GetProcessHeap(), 0, sizeof(*settings))))
+        return E_OUTOFMEMORY;
+    settings->ID3D12DeviceRemovedExtendedDataSettings1_iface.lpVtbl = &d3d12_dred_settings_vtbl;
+    settings->refcount = 1;
+    hr = ID3D12DeviceRemovedExtendedDataSettings1_QueryInterface(
+            &settings->ID3D12DeviceRemovedExtendedDataSettings1_iface, iid, out);
+    ID3D12DeviceRemovedExtendedDataSettings1_Release(&settings->ID3D12DeviceRemovedExtendedDataSettings1_iface);
+    return hr;
+}
+
+struct d3d12_sdk_configuration
+{
+    ID3D12SDKConfiguration ID3D12SDKConfiguration_iface;
+    LONG refcount;
+};
+
+static struct d3d12_sdk_configuration *impl_from_ID3D12SDKConfiguration(ID3D12SDKConfiguration *iface)
+{
+    return CONTAINING_RECORD(iface, struct d3d12_sdk_configuration, ID3D12SDKConfiguration_iface);
+}
+
+static HRESULT STDMETHODCALLTYPE
+d3d12_sdk_configuration_QueryInterface(ID3D12SDKConfiguration *iface, REFIID iid, void **out)
+{
+    if (IsEqualGUID(iid, &IID_ID3D12SDKConfiguration) || IsEqualGUID(iid, &IID_IUnknown))
+    {
+        ID3D12SDKConfiguration_AddRef(iface);
+        *out = iface;
+        return S_OK;
+    }
+
+    *out = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE
+d3d12_sdk_configuration_AddRef(ID3D12SDKConfiguration *iface)
+{
+    return InterlockedIncrement(&impl_from_ID3D12SDKConfiguration(iface)->refcount);
+}
+
+static ULONG STDMETHODCALLTYPE
+d3d12_sdk_configuration_Release(ID3D12SDKConfiguration *iface)
+{
+    struct d3d12_sdk_configuration *configuration = impl_from_ID3D12SDKConfiguration(iface);
+    ULONG refcount = InterlockedDecrement(&configuration->refcount);
+
+    if (!refcount)
+        HeapFree(GetProcessHeap(), 0, configuration);
+    return refcount;
+}
+
+static HRESULT STDMETHODCALLTYPE
+d3d12_sdk_configuration_SetSDKVersion(ID3D12SDKConfiguration *iface, UINT version, const char *path)
+{
+    return DXGI_ERROR_INVALID_CALL;
+}
+
+static const ID3D12SDKConfigurationVtbl d3d12_sdk_configuration_vtbl =
+{
+    d3d12_sdk_configuration_QueryInterface,
+    d3d12_sdk_configuration_AddRef,
+    d3d12_sdk_configuration_Release,
+    d3d12_sdk_configuration_SetSDKVersion,
+};
+
+static HRESULT
+d3d12_sdk_configuration_create(REFIID iid, void **out)
+{
+    struct d3d12_sdk_configuration *configuration;
+    HRESULT hr;
+
+    if (!(configuration = HeapAlloc(GetProcessHeap(), 0, sizeof(*configuration))))
+        return E_OUTOFMEMORY;
+    configuration->ID3D12SDKConfiguration_iface.lpVtbl = &d3d12_sdk_configuration_vtbl;
+    configuration->refcount = 1;
+    hr = ID3D12SDKConfiguration_QueryInterface(&configuration->ID3D12SDKConfiguration_iface, iid, out);
+    ID3D12SDKConfiguration_Release(&configuration->ID3D12SDKConfiguration_iface);
+    return hr;
+}
+
 HRESULT WINAPI
 D3D12GetDebugInterface(REFIID iid, void **debug)
 {
-    UNREFERENCED_PARAMETER(iid);
-    UNREFERENCED_PARAMETER(debug);
+    if (!debug)
+        return DXGI_ERROR_SDK_COMPONENT_MISSING;
+    *debug = NULL;
+
+    if (IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings)
+            || IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings1))
+        return d3d12_dred_settings_create(iid, debug);
 
     return DXGI_ERROR_SDK_COMPONENT_MISSING;
 }
@@ -179,11 +368,12 @@ D3D12EnableExperimentalFeatures(UINT FeatureCount, const IID *Iids, void *Config
 HRESULT WINAPI
 D3D12GetInterface(REFCLSID clsid, REFIID iid, void **debug)
 {
-    if (debug)
-        *debug = NULL;
-
     if (IsEqualGUID(clsid, &CLSID_D3D12Debug))
         return D3D12GetDebugInterface(iid, debug);
+    if (debug && IsEqualGUID(clsid, &CLSID_D3D12DeviceRemovedExtendedData))
+        return d3d12_dred_settings_create(iid, debug);
+    if (debug && IsEqualGUID(clsid, &CLSID_D3D12SDKConfiguration))
+        return d3d12_sdk_configuration_create(iid, debug);
 
     return E_NOINTERFACE;
 }

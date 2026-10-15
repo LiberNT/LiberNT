@@ -9,7 +9,7 @@
 
 class Native12DescriptorHeap;
 
-class Native12Device final : public ID3D12Device5, public Native12Allocation
+class Native12Device final : public ID3D12Device5, public ID3D12DeviceRemovedExtendedData1, public Native12Allocation
 {
 public:
     LONG references = 1;
@@ -65,6 +65,8 @@ public:
     D3D12DDI_GPUVA_CAPS_0004 gpuva = {};
     UINT highest_shader_model = D3D_SHADER_MODEL_5_1;
     HRESULT removed_reason = S_OK;
+    D3D12_DRED_ENABLEMENT dred_auto_breadcrumbs = D3D12_DRED_ENABLEMENT_SYSTEM_CONTROLLED;
+    D3D12_DRED_ENABLEMENT dred_page_fault = D3D12_DRED_ENABLEMENT_SYSTEM_CONTROLLED;
     LONG64 resource_sequence = 0;
     LONG64 list_sequence = 0;
     Native12PrivateData private_data;
@@ -175,6 +177,10 @@ public:
             D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO *) override;
     D3D12_DRIVER_MATCHING_IDENTIFIER_STATUS STDMETHODCALLTYPE CheckDriverMatchingIdentifier(D3D12_SERIALIZED_DATA_TYPE,
             const D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER *) override;
+    HRESULT STDMETHODCALLTYPE GetAutoBreadcrumbsOutput(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT *) override;
+    HRESULT STDMETHODCALLTYPE GetPageFaultAllocationOutput(D3D12_DRED_PAGE_FAULT_OUTPUT *) override;
+    HRESULT STDMETHODCALLTYPE GetAutoBreadcrumbsOutput1(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 *) override;
+    HRESULT STDMETHODCALLTYPE GetPageFaultAllocationOutput1(D3D12_DRED_PAGE_FAULT_OUTPUT1 *) override;
 };
 
 Native12Device *Native12QueueDevice(HANDLE queue);

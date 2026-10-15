@@ -537,6 +537,7 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     HRESULT hr = selected_adapter->GetDesc(&desc);
     if (FAILED(hr)) return hr;
     luid = desc.AdapterLuid;
+    d3d12_dred_enablement(&dred_auto_breadcrumbs, &dred_page_fault);
 
     D3DKMT_OPENADAPTERFROMLUID open = {};
     open.AdapterLuid = desc.AdapterLuid;
@@ -866,8 +867,34 @@ HRESULT STDMETHODCALLTYPE Native12Device::QueryInterface(REFIID iid, void **out)
         AddRef();
         return S_OK;
     }
+    if (IsEqualGUID(iid, IID_ID3D12DeviceRemovedExtendedData) || IsEqualGUID(iid, IID_ID3D12DeviceRemovedExtendedData1))
+    {
+        *out = static_cast<ID3D12DeviceRemovedExtendedData1 *>(this);
+        AddRef();
+        return S_OK;
+    }
     *out = NULL;
     return E_NOINTERFACE;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::GetAutoBreadcrumbsOutput(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT *)
+{
+    return dred_auto_breadcrumbs == D3D12_DRED_ENABLEMENT_FORCED_ON ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : DXGI_ERROR_UNSUPPORTED;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::GetPageFaultAllocationOutput(D3D12_DRED_PAGE_FAULT_OUTPUT *)
+{
+    return dred_page_fault == D3D12_DRED_ENABLEMENT_FORCED_ON ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : DXGI_ERROR_UNSUPPORTED;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::GetAutoBreadcrumbsOutput1(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 *)
+{
+    return dred_auto_breadcrumbs == D3D12_DRED_ENABLEMENT_FORCED_ON ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : DXGI_ERROR_UNSUPPORTED;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::GetPageFaultAllocationOutput1(D3D12_DRED_PAGE_FAULT_OUTPUT1 *)
+{
+    return dred_page_fault == D3D12_DRED_ENABLEMENT_FORCED_ON ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : DXGI_ERROR_UNSUPPORTED;
 }
 
 ULONG STDMETHODCALLTYPE Native12Device::AddRef() { return InterlockedIncrement(&references); }
