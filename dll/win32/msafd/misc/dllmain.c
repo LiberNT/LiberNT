@@ -103,6 +103,20 @@ WSPSocket(int AddressFamily,
         SocketType = SharedData->SocketType;
         Protocol = SharedData->Protocol;
     }
+    else if (lpProtocolInfo)
+    {
+        if (AddressFamily == AF_UNSPEC || AddressFamily == FROM_PROTOCOL_INFO)
+            AddressFamily = lpProtocolInfo->iAddressFamily;
+        if (SocketType == 0 || SocketType == FROM_PROTOCOL_INFO)
+            SocketType = lpProtocolInfo->iSocketType;
+        if (Protocol == 0 || Protocol == FROM_PROTOCOL_INFO)
+            Protocol = lpProtocolInfo->iProtocol;
+        if (AddressFamily <= AF_UNSPEC)
+        {
+            Status = WSAEAFNOSUPPORT;
+            goto error;
+        }
+    }
 
     if (AddressFamily == AF_UNSPEC && SocketType == 0 && Protocol == 0)
     {
