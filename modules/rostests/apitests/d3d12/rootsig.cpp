@@ -232,6 +232,72 @@ static void TestValidation(void)
     }
 }
 
+static HRESULT SerializeSampler(D3D_ROOT_SIGNATURE_VERSION version, UINT filter, UINT max_anisotropy, BOOL *has_blob)
+{
+    D3D12_STATIC_SAMPLER_DESC1 sampler = Sampler(0, D3D12_SAMPLER_FLAG_NONE, D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,
+            static_cast<D3D12_FILTER>(filter));
+    D3D12_VERSIONED_ROOT_SIGNATURE_DESC desc = {};
+    D3D12_STATIC_SAMPLER_DESC plain;
+    ID3DBlob *blob = NULL;
+    HRESULT hr;
+
+    sampler.MaxAnisotropy = max_anisotropy;
+    memcpy(&plain, &sampler, sizeof(plain));
+    desc.Version = version;
+    if (version == D3D_ROOT_SIGNATURE_VERSION_1_0)
+    {
+        desc.Desc_1_0.NumStaticSamplers = 1;
+        desc.Desc_1_0.pStaticSamplers = &plain;
+    }
+    else if (version == D3D_ROOT_SIGNATURE_VERSION_1_1)
+    {
+        desc.Desc_1_1.NumStaticSamplers = 1;
+        desc.Desc_1_1.pStaticSamplers = &plain;
+    }
+    else
+    {
+        desc.Desc_1_2.NumStaticSamplers = 1;
+        desc.Desc_1_2.pStaticSamplers = &sampler;
+    }
+    hr = D3D12SerializeVersionedRootSignature(&desc, &blob, NULL);
+    *has_blob = blob != NULL;
+    if (blob) blob->Release();
+    return hr;
+}
+
+static void TestSamplerValidation(void)
+{
+    static const UINT valid[] = { 0x00, 0x01, 0x04, 0x14, 0x15, 0x55, 0x80, 0x94, 0xd5, 0x114, 0x155, 0x1d5 };
+    static const UINT invalid[] = { 0x03, 0x0c, 0x40, 0x44, 0x50, 0x54, 0x56, 0x57, 0x5c, 0x74, 0xd4, 0x154, 0x1d4,
+            0x200, 0x254 };
+    static const D3D_ROOT_SIGNATURE_VERSION versions[] = { D3D_ROOT_SIGNATURE_VERSION_1_0,
+            D3D_ROOT_SIGNATURE_VERSION_1_1, D3D_ROOT_SIGNATURE_VERSION_1_2 };
+    BOOL has_blob;
+    HRESULT hr;
+
+    for (UINT v = 0; v < ARRAYSIZE(versions); ++v)
+    {
+        for (UINT i = 0; i < ARRAYSIZE(valid); ++i)
+        {
+            hr = SerializeSampler(versions[v], valid[i], 16, &has_blob);
+            ok(hr == S_OK && has_blob, "version %#x filter %#x: %#lx\n", versions[v], valid[i], hr);
+        }
+        for (UINT i = 0; i < ARRAYSIZE(invalid); ++i)
+        {
+            hr = SerializeSampler(versions[v], invalid[i], 16, &has_blob);
+            ok(hr == E_INVALIDARG && !has_blob, "version %#x filter %#x: %#lx\n", versions[v], invalid[i], hr);
+        }
+        hr = SerializeSampler(versions[v], D3D12_FILTER_ANISOTROPIC, 0, &has_blob);
+        ok(hr == S_OK, "version %#x anisotropic filter, anisotropy 0: %#lx\n", versions[v], hr);
+        hr = SerializeSampler(versions[v], D3D12_FILTER_MIN_MAG_MIP_LINEAR, 0, &has_blob);
+        ok(hr == S_OK, "version %#x linear filter, anisotropy 0: %#lx\n", versions[v], hr);
+        hr = SerializeSampler(versions[v], D3D12_FILTER_ANISOTROPIC, 17, &has_blob);
+        ok(hr == E_INVALIDARG, "version %#x anisotropic filter, anisotropy 17: %#lx\n", versions[v], hr);
+        hr = SerializeSampler(versions[v], D3D12_FILTER_MIN_MAG_MIP_LINEAR, 17, &has_blob);
+        ok(hr == E_INVALIDARG, "version %#x linear filter, anisotropy 17: %#lx\n", versions[v], hr);
+    }
+}
+
 static ID3D12RootSignature *CreateRootSignature12(ID3D12Device *device, const D3D12_STATIC_SAMPLER_DESC1 *sampler,
         BOOL with_table, HRESULT *result)
 {
@@ -419,6 +485,7 @@ static void RunRootSignature(void *)
 
     TestSerialization();
     TestValidation();
+    TestSamplerValidation();
     if (!(device = d3d12_test_create_device())) return;
     TestFeature(device);
     TestCreation(device);

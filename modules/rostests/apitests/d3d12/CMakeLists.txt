@@ -12,6 +12,7 @@ list(APPEND SOURCE
     rootsig.cpp
     sampler.cpp
     shaders.cpp
+    topology.cpp
     util.cpp
     versions.cpp
     testlist.c)

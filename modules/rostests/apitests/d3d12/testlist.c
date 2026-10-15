@@ -19,6 +19,7 @@ extern void func_queue(void);
 extern void func_renderpass(void);
 extern void func_rootsig(void);
 extern void func_sampler(void);
+extern void func_topology(void);
 extern void func_versions(void);
 
 const struct test winetest_testlist[] =
@@ -34,6 +35,7 @@ const struct test winetest_testlist[] =
     { "renderpass", func_renderpass },
     { "rootsig", func_rootsig },
     { "sampler", func_sampler },
+    { "topology", func_topology },
     { "versions", func_versions },
     { 0, 0 }
 };
