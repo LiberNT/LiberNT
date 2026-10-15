@@ -4645,8 +4645,31 @@ static HRESULT WINAPI Uri_IsEqual(IUri *iface, IUri *pUri, BOOL *pfEqual)
 
     /* Try to convert it to a Uri (allows for a more simple comparison). */
     if(!(other = get_uri_obj(pUri))) {
+#ifdef __REACTOS__
+        IUri *copy;
+        BSTR str;
+        HRESULT hres;
+
+        hres = IUri_GetPropertyBSTR(pUri, Uri_PROPERTY_ABSOLUTE_URI, &str, 0);
+        if(hres == S_FALSE) {
+            SysFreeString(str);
+            hres = IUri_GetPropertyBSTR(pUri, Uri_PROPERTY_RAW_URI, &str, 0);
+        }
+        if(FAILED(hres))
+            return hres;
+
+        hres = CreateUri(str, Uri_CREATE_ALLOW_RELATIVE, 0, &copy);
+        SysFreeString(str);
+        if(FAILED(hres))
+            return hres;
+
+        hres = compare_uris(This, impl_from_IUri(copy), pfEqual);
+        IUri_Release(copy);
+        return hres;
+#else
         FIXME("(%p)->(%p %p) No support for unknown IUri's yet.\n", iface, pUri, pfEqual);
         return E_NOTIMPL;
+#endif
     }
 
     TRACE("comparing to %s\n", debugstr_w(other->canon_uri));
@@ -6524,6 +6547,12 @@ static HRESULT parse_canonicalize(const Uri *uri, DWORD flags, LPWSTR output,
 
     /* The null terminator isn't included in the length. */
     *result_len = len;
+#ifdef __REACTOS__
+    if(len >= output_len && allow_unescape && (flags & URL_UNESCAPE)) {
+        *result_len = 0;
+        return S_OK;
+    }
+#endif
     if(len >= output_len)
         return STRSAFE_E_INSUFFICIENT_BUFFER;
 
