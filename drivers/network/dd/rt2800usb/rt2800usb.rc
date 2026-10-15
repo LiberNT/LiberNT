@@ -1,0 +1,12 @@
+/*
+ * PROJECT:     LiberNT Ralink RT2800 USB Native 802.11 Miniport
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     RT2800 USB Native Wi-Fi miniport version resource
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION  "LiberNT Ralink RT2870/RT2770 USB WiFi Driver"
+#define REACTOS_STR_INTERNAL_NAME     "rt2800usb"
+#define REACTOS_STR_ORIGINAL_FILENAME "rt2800usb.sys"
+#include <reactos/version.rc>

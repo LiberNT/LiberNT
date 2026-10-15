@@ -1,0 +1,81 @@
+; PROJECT:     LiberNT Ralink RT2800 USB Native 802.11 Miniport
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     RT2870/RT2770 USB Native Wi-Fi miniport installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = Net
+ClassGUID   = {4d36e972-e325-11ce-bfc1-08002be10318}
+Provider    = %LiberNT%
+DriverVer   = 10/15/2026,1.0.0.0
+CatalogFile = netrt2800usb.cat
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%LiberNT% = Models,NTx86,NTamd64,NTarm64,NTRISCV64
+
+[Models.NTx86]
+%rt.DeviceDesc% = rt.ndi, USB\VID_148F&PID_2770
+%rt.DeviceDesc% = rt.ndi, USB\VID_148F&PID_2870
+
+[Models.NTamd64]
+%rt.DeviceDesc% = rt.ndi, USB\VID_148F&PID_2770
+%rt.DeviceDesc% = rt.ndi, USB\VID_148F&PID_2870
+
+[Models.NTarm64]
+%rt.DeviceDesc% = rt.ndi, USB\VID_148F&PID_2770
+%rt.DeviceDesc% = rt.ndi, USB\VID_148F&PID_2870
+
+[Models.NTRISCV64]
+%rt.DeviceDesc% = rt.ndi, USB\VID_148F&PID_2770
+%rt.DeviceDesc% = rt.ndi, USB\VID_148F&PID_2870
+
+[rt.ndi]
+Characteristics = 0x84
+BusType         = 15
+AddReg          = rt.reg
+CopyFiles       = rt.CopyFiles
+
+[rt.ndi.Services]
+AddService = rt2800usb, 2, rt.Service, rt.EventLog
+
+[rt.reg]
+HKR, ,                   *IfType,    0x00010001, 71
+HKR, ,                   *MediaType, 0x00010001, 16
+HKR, ,                   *PhysicalMediaType, 0x00010001, 9
+HKR, Ndi,               Service,    0, "rt2800usb"
+HKR, Ndi\Interfaces,    UpperRange, 0, "ndis5"
+HKR, Ndi\Interfaces,    LowerRange, 0, "nativewifi"
+
+[rt.CopyFiles]
+rt2800usb.sys
+
+[rt.Service]
+DisplayName    = %rt.ServiceDesc%
+ServiceType    = 1
+StartType      = 3
+ErrorControl   = 1
+ServiceBinary  = %12%\rt2800usb.sys
+LoadOrderGroup = NDIS
+
+[rt.EventLog]
+AddReg = rt.EventLog.Reg
+
+[rt.EventLog.Reg]
+HKR, , EventMessageFile, 0x00020000, "%%SystemRoot%%\System32\netevent.dll"
+HKR, , TypesSupported,   0x00010001, 7
+
+[SourceDisksNames]
+1 = %DiskName%
+
+[SourceDisksFiles]
+rt2800usb.sys = 1
+
+[Strings]
+LiberNT        = "LiberNT Team"
+rt.DeviceDesc  = "Ralink RT2870/RT2770 802.11n USB WiFi Adapter"
+rt.ServiceDesc = "LiberNT Ralink RT2800 USB WiFi Driver"
+DiskName       = "LiberNT Ralink RT2800 USB WiFi Driver Installation Disk"

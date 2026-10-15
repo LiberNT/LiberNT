@@ -97,6 +97,12 @@ Used Version: rogue_36.29.52.182_v1.fw (linux-firmware 8a58f81)
 License: Imagination Technologies binary redistribution license (drivers/directx/powervr/fw/LICENSE.powervr)
 URL: https://gitlab.freedesktop.org/imagination/linux-firmware
 
+Title: Ralink RT2870 firmware
+Path: drivers/network/dd/rt2800usb/fw
+Used Version: rt2870.bin (linux-firmware 20260319)
+License: Ralink Technology binary redistribution license (drivers/network/dd/rt2800usb/fw/LICENCE.ralink-firmware.txt)
+URL: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git
+
 Title: Linux PowerVR DRM driver (drm/imagination)
 Path: drivers/directx/powervr/upstream
 Used Version: Linux mainline 6addb4f38

@@ -1,0 +1,11 @@
+Firmware for the Ralink RT2870 and RT2770 USB wireless chips. Installed to
+\SystemRoot\system32\drivers\ralink\ and loaded by the rt2800usb driver during
+chip bring-up.
+
+File: rt2870.bin
+  Ralink 8051 MCU firmware, distributed by linux-firmware as rt2870.bin
+  (linux-firmware 20260319, SHA-256
+  251b8918391eac6415d60dca239e415aad0177e885376f2a17782e64fcbbe317).
+  Copyright (c) 2007, Ralink Technology Corporation. Redistributable in binary
+  form, without modification, under the terms in LICENCE.ralink-firmware.txt
+  (this directory).
