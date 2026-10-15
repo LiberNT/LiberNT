@@ -102,6 +102,28 @@ static HRESULT get_corversion(LPWSTR version, DWORD size)
     return hr;
 }
 
+#ifdef __REACTOS__
+static BOOL get_module_clr_version(LPWSTR version, DWORD size)
+{
+    WCHAR path[MAX_PATH], *file, *dir;
+    HMODULE module;
+
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCWSTR)get_module_clr_version, &module) ||
+        !GetModuleFileNameW(module, path, ARRAY_SIZE(path)) ||
+        !(file = wcsrchr(path, '\\')))
+        return FALSE;
+
+    *file = 0;
+    if (!(dir = wcsrchr(path, '\\')) || (dir[1] != 'v' && dir[1] != 'V') || dir[2] < '0' || dir[2] > '9' ||
+        lstrlenW(dir + 1) >= size)
+        return FALSE;
+
+    lstrcpyW(version, dir + 1);
+    return TRUE;
+}
+
+#endif
 /******************************************************************
  *  GetCachePath   (FUSION.@)
  */
@@ -126,7 +148,11 @@ HRESULT WINAPI GetCachePath(ASM_CACHE_FLAGS dwCacheFlags, LPWSTR pwzCachePath,
     {
         case ASM_CACHE_ZAP:
         {
+#ifdef __REACTOS__
+            hr = get_module_clr_version(version, MAX_PATH) ? S_OK : get_corversion(version, MAX_PATH);
+#else
             hr = get_corversion(version, MAX_PATH);
+#endif
             if (FAILED(hr))
                 return hr;
 
