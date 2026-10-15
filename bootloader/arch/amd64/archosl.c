@@ -164,6 +164,36 @@ OslArchDescriptorType(
     return Type;
 }
 
+BOOLEAN
+OslArchMapFirmwareRuntime(
+    _In_ ULONGLONG PhysicalStart,
+    _In_ ULONGLONG PageCount,
+    _In_ BOOLEAN Device,
+    _In_ BOOLEAN Executable,
+    _Out_ PULONGLONG VirtualStart)
+{
+    ULONG64 VirtualAddress = KSEG0_BASE + PhysicalStart;
+    PHARDWARE_PTE Pte;
+
+    UNREFERENCED_PARAMETER(Executable);
+
+    *VirtualStart = VirtualAddress;
+    for (; PageCount; PageCount--, VirtualAddress += MM_PAGE_SIZE, PhysicalStart += MM_PAGE_SIZE)
+    {
+        Pte = Amd64GetPte(VirtualAddress);
+        if (!Pte)
+            return FALSE;
+
+        Pte->Valid = 1;
+        Pte->Write = 1;
+        Pte->CacheDisable = Device;
+        Pte->WriteThrough = Device;
+        Pte->PageFrameNumber = PhysicalStart >> MM_PAGE_SHIFT;
+    }
+
+    return TRUE;
+}
+
 static
 BOOLEAN
 Amd64MapSpecialPages(

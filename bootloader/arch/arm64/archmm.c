@@ -45,6 +45,27 @@ OslArchDescriptorType(
     return Type;
 }
 
+BOOLEAN
+OslArchMapFirmwareRuntime(
+    _In_ ULONGLONG PhysicalStart,
+    _In_ ULONGLONG PageCount,
+    _In_ BOOLEAN Device,
+    _In_ BOOLEAN Executable,
+    _Out_ PULONGLONG VirtualStart)
+{
+    ULONGLONG Size = PageCount << MM_PAGE_SHIFT;
+    ULONG Attributes;
+
+    if (Device)
+        Attributes = ARM64_MAP_ATTR_DEVICE;
+    else
+        Attributes = ARM64_MAP_ATTR_NORMAL | (Executable ? ARM64_MAP_ATTR_EXECUTE : 0);
+
+    *VirtualStart = ARM64_KSEG0_BASE + PhysicalStart;
+    return Arm64MapVirtualMemory(PhysicalStart, PhysicalStart, Size, Attributes) &&
+           Arm64MapVirtualMemory(*VirtualStart, PhysicalStart, Size, Attributes);
+}
+
 VOID
 OslArchInitialize(VOID)
 {

@@ -500,6 +500,16 @@ FwExitBootServices(VOID)
 }
 
 BOOLEAN
+FwPrepareRuntimeServices(
+    _Inout_ PEFI_FIRMWARE_INFORMATION Information,
+    _Inout_ PVIRTUAL_EFI_RUNTIME_SERVICES Services)
+{
+    UNREFERENCED_PARAMETER(Information);
+    UNREFERENCED_PARAMETER(Services);
+    return FALSE;
+}
+
+BOOLEAN
 OslArchPrepareHandoff(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {

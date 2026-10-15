@@ -36,6 +36,22 @@ OslArchAddConfiguration(
     UNREFERENCED_PARAMETER(System);
 }
 
+BOOLEAN
+OslArchMapFirmwareRuntime(
+    _In_ ULONGLONG PhysicalStart,
+    _In_ ULONGLONG PageCount,
+    _In_ BOOLEAN Device,
+    _In_ BOOLEAN Executable,
+    _Out_ PULONGLONG VirtualStart)
+{
+    UNREFERENCED_PARAMETER(PhysicalStart);
+    UNREFERENCED_PARAMETER(PageCount);
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(Executable);
+    *VirtualStart = 0;
+    return FALSE;
+}
+
 TYPE_OF_MEMORY
 OslArchDescriptorType(
     _In_ PFN_NUMBER Page,

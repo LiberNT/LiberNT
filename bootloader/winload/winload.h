@@ -158,6 +158,14 @@ OslArchDescriptorType(
     _In_ PFN_NUMBER Page,
     _In_ TYPE_OF_MEMORY Type);
 
+BOOLEAN
+OslArchMapFirmwareRuntime(
+    _In_ ULONGLONG PhysicalStart,
+    _In_ ULONGLONG PageCount,
+    _In_ BOOLEAN Device,
+    _In_ BOOLEAN Executable,
+    _Out_ PULONGLONG VirtualStart);
+
 VOID
 WinLdrSetupMachineDependent(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock);

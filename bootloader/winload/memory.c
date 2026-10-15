@@ -135,6 +135,7 @@ BOOLEAN
 WinLdrSetupMemoryLayout(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
+    PVIRTUAL_EFI_RUNTIME_SERVICES RuntimeServices = NULL;
     PPAGE_LOOKUP_TABLE_ITEM Table;
     PFN_NUMBER Count, Start, i;
     TYPE_OF_MEMORY Type;
@@ -143,6 +144,13 @@ WinLdrSetupMemoryLayout(
 
     OslDescriptors = MmAllocateMemoryWithType(OSL_MAX_DESCRIPTORS * sizeof(*OslDescriptors),
                                               LoaderMemoryData);
+    if (LoaderBlock->FirmwareInformation.FirmwareTypeEfi)
+    {
+        RuntimeServices = MmAllocateMemoryWithType(sizeof(*RuntimeServices), LoaderMemoryData);
+        if (RuntimeServices)
+            RtlZeroMemory(RuntimeServices, sizeof(*RuntimeServices));
+    }
+
     if (!OslDescriptors || !MmSynchronizeFirmwareMap())
         return FALSE;
 
@@ -162,6 +170,9 @@ WinLdrSetupMemoryLayout(
 
         Start = i;
     }
+
+    if (RuntimeServices)
+        FwPrepareRuntimeServices(&LoaderBlock->FirmwareInformation.u.EfiInformation, RuntimeServices);
 
     Table = MmGetMemoryMap(&Count);
     for (Start = 0, i = 1; i <= Count; i++)

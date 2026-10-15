@@ -6,14 +6,28 @@
  */
 
 #include <blefi.h>
+#include "../winload/winload.h"
 
 #define UEFI_MAP_SLACK_DESCRIPTORS 32
 #define UEFI_MAP_RETRIES           4
+#define UEFI_MAX_RUNTIME_RANGES    64
+
+typedef struct _UEFI_RUNTIME_RANGE
+{
+    EFI_PHYSICAL_ADDRESS PhysicalStart;
+    UINT64 PageCount;
+    UINT64 VirtualStart;
+} UEFI_RUNTIME_RANGE;
 
 static EFI_MEMORY_DESCRIPTOR* UefiMap;
 static UINTN UefiMapCapacity;
+static UINT32 UefiMapDescriptorVersion;
 static PFREELDR_MEMORY_DESCRIPTOR UefiLoaderMap;
 static UINTN UefiLoaderMapCapacity;
+static UEFI_RUNTIME_RANGE UefiRuntimeRanges[UEFI_MAX_RUNTIME_RANGES];
+static ULONG UefiRuntimeRangeCount;
+static PEFI_FIRMWARE_INFORMATION UefiRuntimeInformation;
+static PVIRTUAL_EFI_RUNTIME_SERVICES UefiRuntimeServices;
 
 static
 TYPE_OF_MEMORY
@@ -57,7 +71,6 @@ UefiReadMemoryMap(
     _Out_ UINTN* DescriptorSize)
 {
     EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
-    UINT32 DescriptorVersion;
     EFI_STATUS Status;
     ULONG Retry;
 
@@ -68,7 +81,7 @@ UefiReadMemoryMap(
                                             UefiMap,
                                             MapKey,
                                             DescriptorSize,
-                                            &DescriptorVersion);
+                                            &UefiMapDescriptorVersion);
         if (!EFI_ERROR(Status))
             return *DescriptorSize >= sizeof(EFI_MEMORY_DESCRIPTOR);
 
@@ -152,6 +165,145 @@ FwGetMemoryMap(
     return UefiMemGetMemoryMap(Count);
 }
 
+static
+EFI_MEMORY_DESCRIPTOR*
+UefiMapEntry(
+    _In_ UINTN Index,
+    _In_ UINTN DescriptorSize)
+{
+    return (EFI_MEMORY_DESCRIPTOR*)((PUCHAR)UefiMap + Index * DescriptorSize);
+}
+
+BOOLEAN
+FwPrepareRuntimeServices(
+    _Inout_ PEFI_FIRMWARE_INFORMATION Information,
+    _Inout_ PVIRTUAL_EFI_RUNTIME_SERVICES Services)
+{
+    EFI_MEMORY_DESCRIPTOR* Entry;
+    UINTN MapKey, MapSize, DescriptorSize, i;
+    UEFI_RUNTIME_RANGE* Range;
+    BOOLEAN Device;
+
+    UefiRuntimeInformation = NULL;
+    UefiRuntimeServices = NULL;
+    UefiRuntimeRangeCount = 0;
+
+    Information->FirmwareVersion = GlobalSystemTable->Hdr.Revision;
+    Information->VirtualEfiRuntimeServices = NULL;
+
+    if (!UefiReadMemoryMap(TRUE, &MapKey, &MapSize, &DescriptorSize))
+        return FALSE;
+
+    for (i = 0; i < MapSize / DescriptorSize; i++)
+    {
+        Entry = UefiMapEntry(i, DescriptorSize);
+        if (!(Entry->Attribute & EFI_MEMORY_RUNTIME) || Entry->NumberOfPages == 0)
+            continue;
+
+        if (UefiRuntimeRangeCount == UEFI_MAX_RUNTIME_RANGES)
+            return FALSE;
+
+        Range = &UefiRuntimeRanges[UefiRuntimeRangeCount];
+        Device = (Entry->Type == EfiMemoryMappedIO || Entry->Type == EfiMemoryMappedIOPortSpace);
+        if (!OslArchMapFirmwareRuntime(Entry->PhysicalStart,
+                                       Entry->NumberOfPages,
+                                       Device,
+                                       Entry->Type == EfiRuntimeServicesCode,
+                                       &Range->VirtualStart))
+        {
+            return FALSE;
+        }
+
+        Range->PhysicalStart = Entry->PhysicalStart;
+        Range->PageCount = Entry->NumberOfPages;
+        UefiRuntimeRangeCount++;
+    }
+
+    UefiRuntimeInformation = Information;
+    UefiRuntimeServices = Services;
+    return TRUE;
+}
+
+static
+BOOLEAN
+UefiAssignRuntimeAddress(
+    _Inout_ EFI_MEMORY_DESCRIPTOR* Entry)
+{
+    UINT64 End = Entry->PhysicalStart + Entry->NumberOfPages * EFI_PAGE_SIZE;
+    UEFI_RUNTIME_RANGE* Range;
+    ULONG i;
+
+    for (i = 0; i < UefiRuntimeRangeCount; i++)
+    {
+        Range = &UefiRuntimeRanges[i];
+        if (Entry->PhysicalStart >= Range->PhysicalStart &&
+            End <= Range->PhysicalStart + Range->PageCount * EFI_PAGE_SIZE)
+        {
+            Entry->VirtualStart = Range->VirtualStart + (Entry->PhysicalStart - Range->PhysicalStart);
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static
+VOID
+UefiSetVirtualAddressMap(
+    _In_ UINTN MapSize,
+    _In_ UINTN DescriptorSize)
+{
+    PEFI_FIRMWARE_INFORMATION Information = UefiRuntimeInformation;
+    PVIRTUAL_EFI_RUNTIME_SERVICES Services = UefiRuntimeServices;
+    EFI_RUNTIME_SERVICES* Runtime = GlobalSystemTable->RuntimeServices;
+    EFI_MEMORY_DESCRIPTOR* Entry;
+    ULONG Missed = 0;
+    EFI_STATUS Status;
+    UINTN i;
+
+    if (!Information || !Services)
+        return;
+
+    for (i = 0; i < MapSize / DescriptorSize; i++)
+    {
+        Entry = UefiMapEntry(i, DescriptorSize);
+        if ((Entry->Attribute & EFI_MEMORY_RUNTIME) && !UefiAssignRuntimeAddress(Entry))
+            Missed++;
+    }
+
+    Information->MissedMappingsCount = Missed;
+    if (Missed != 0)
+    {
+        Information->SetVirtualAddressMapStatus = (ULONG)STATUS_UNSUCCESSFUL;
+        return;
+    }
+
+    Status = Runtime->SetVirtualAddressMap(MapSize, DescriptorSize, UefiMapDescriptorVersion, UefiMap);
+    if (EFI_ERROR(Status))
+    {
+        Information->SetVirtualAddressMapStatus = (ULONG)STATUS_UNSUCCESSFUL;
+        return;
+    }
+
+    Services->GetTime = (ULONG_PTR)Runtime->GetTime;
+    Services->SetTime = (ULONG_PTR)Runtime->SetTime;
+    Services->GetWakeupTime = (ULONG_PTR)Runtime->GetWakeupTime;
+    Services->SetWakeupTime = (ULONG_PTR)Runtime->SetWakeupTime;
+    Services->SetVirtualAddressMap = (ULONG_PTR)Runtime->SetVirtualAddressMap;
+    Services->ConvertPointer = (ULONG_PTR)Runtime->ConvertPointer;
+    Services->GetVariable = (ULONG_PTR)Runtime->GetVariable;
+    Services->GetNextVariableName = (ULONG_PTR)Runtime->GetNextVariableName;
+    Services->SetVariable = (ULONG_PTR)Runtime->SetVariable;
+    Services->GetNextHighMonotonicCount = (ULONG_PTR)Runtime->GetNextHighMonotonicCount;
+    Services->ResetSystem = (ULONG_PTR)Runtime->ResetSystem;
+    Services->UpdateCapsule = (ULONG_PTR)Runtime->UpdateCapsule;
+    Services->QueryCapsuleCapabilities = (ULONG_PTR)Runtime->QueryCapsuleCapabilities;
+    Services->QueryVariableInfo = (ULONG_PTR)Runtime->QueryVariableInfo;
+
+    Information->SetVirtualAddressMapStatus = (ULONG)STATUS_SUCCESS;
+    Information->VirtualEfiRuntimeServices = PaToVa(Services);
+}
+
 VOID
 UefiExitBootServices(VOID)
 {
@@ -169,6 +321,7 @@ UefiExitBootServices(VOID)
         if (!EFI_ERROR(GlobalSystemTable->BootServices->ExitBootServices(GlobalImageHandle, MapKey)))
         {
             BootServicesExitedFlag = TRUE;
+            UefiSetVirtualAddressMap(MapSize, DescriptorSize);
             return;
         }
     }

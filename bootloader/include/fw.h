@@ -91,6 +91,14 @@ FwGetMemoryMap(
 VOID
 FwExitBootServices(VOID);
 
+struct _EFI_FIRMWARE_INFORMATION;
+struct _VIRTUAL_EFI_RUNTIME_SERVICES;
+
+BOOLEAN
+FwPrepareRuntimeServices(
+    _Inout_ struct _EFI_FIRMWARE_INFORMATION* Information,
+    _Inout_ struct _VIRTUAL_EFI_RUNTIME_SERVICES* Services);
+
 VOID
 FwDebugPrint(
     _In_ PCSTR Text);
