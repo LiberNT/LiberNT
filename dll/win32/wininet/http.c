@@ -2263,6 +2263,13 @@ static void HTTPREQ_CloseConnection(object_header_t *hdr)
 {
     http_request_t *req = (http_request_t*)hdr;
 
+#ifdef __REACTOS__
+    if(req->read_size && req->data_stream == &req->netconn_stream.data_stream &&
+       req->netconn_stream.content_length == ~0 && is_valid_netconn(req->netconn)) {
+        close_netconn(req->netconn);
+        return;
+    }
+#endif
     http_release_netconn(req, drain_content(req, FALSE) == ERROR_SUCCESS);
 }
 
@@ -3017,7 +3024,15 @@ static DWORD netconn_read(data_stream_t *stream, http_request_t *req, BYTE *buf,
 #endif
         if(res == ERROR_SUCCESS) {
             if(!ret)
+#ifdef __REACTOS__
+            {
+                if(netconn_stream->content_length != ~0)
+                    netconn_stream->premature_eof = TRUE;
                 netconn_stream->content_length = netconn_stream->content_read;
+            }
+#else
+                netconn_stream->content_length = netconn_stream->content_read;
+#endif
             netconn_stream->content_read += ret;
         }
     }
@@ -3036,6 +3051,10 @@ static DWORD netconn_drain_content(data_stream_t *stream, http_request_t *req, B
 
     if(netconn_stream->content_length == ~0)
         return WSAEISCONN;
+#ifdef __REACTOS__
+    if(netconn_stream->premature_eof)
+        return WSAECONNABORTED;
+#endif
 
     while(netconn_stream->content_read < netconn_stream->content_length) {
         size = min(sizeof(buf), netconn_stream->content_length-netconn_stream->content_read);
@@ -3292,6 +3311,9 @@ static DWORD set_content_length(http_request_t *request)
 
     request->netconn_stream.content_length = request->contentLength;
     request->netconn_stream.content_read = request->read_size;
+#ifdef __REACTOS__
+    request->netconn_stream.premature_eof = FALSE;
+#endif
 
     size = sizeof(encoding);
     if (HTTP_HttpQueryInfoW(request, HTTP_QUERY_TRANSFER_ENCODING, encoding, &size, NULL) == ERROR_SUCCESS &&

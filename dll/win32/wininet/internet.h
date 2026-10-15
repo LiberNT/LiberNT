@@ -416,6 +416,9 @@ typedef struct {
     data_stream_t data_stream;
     ULONGLONG content_length;
     ULONGLONG content_read;
+#ifdef __REACTOS__
+    BOOL premature_eof;
+#endif
 } netconn_stream_t;
 
 #define READ_BUFFER_SIZE 8192
