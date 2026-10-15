@@ -278,8 +278,13 @@ NTSTATUS RunSingleHDACmd(PFDO_CONTEXT fdoCtx, ULONG val, ULONG* res) {
 	HDAUDIO_CODEC_TRANSFER transfer = { 0 };
 	transfer.Output.Command = val;
 
+#ifdef __REACTOS__
+	SklHdAudBusPrint(DEBUG_LEVEL_VERBOSE, DBG_IOCTL,
+		"%s: Called. Command: 0x%x\n", __func__, val);
+#else
 	SklHdAudBusPrint(DEBUG_LEVEL_ERROR, DBG_IOCTL,
 		"%s: Called. Command: 0x%x\n", __func__, val);
+#endif
 
 	NTSTATUS status = SendHDACmds(fdoCtx, 1, &transfer);
 	if (!NT_SUCCESS(status)) {
