@@ -153,10 +153,12 @@ HRESULT STDMETHODCALLTYPE Native12CommandList::QueryInterface(REFIID iid, void *
             || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList2) || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList3)
             || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList4) || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList5)
             || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList6) || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList7)
-            || IsEqualGUID(iid, IID_ID3D12CommandList) || IsEqualGUID(iid, IID_ID3D12DeviceChild)
-            || IsEqualGUID(iid, IID_ID3D12Object) || IsEqualGUID(iid, IID_IUnknown))
+            || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList8) || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList9)
+            || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList10) || IsEqualGUID(iid, IID_ID3D12CommandList)
+            || IsEqualGUID(iid, IID_ID3D12DeviceChild) || IsEqualGUID(iid, IID_ID3D12Object)
+            || IsEqualGUID(iid, IID_IUnknown))
     {
-        *out = static_cast<ID3D12GraphicsCommandList7 *>(this);
+        *out = static_cast<ID3D12GraphicsCommandList10 *>(this);
         AddRef();
         return S_OK;
     }
@@ -998,6 +1000,25 @@ void STDMETHODCALLTYPE Native12CommandList::Barrier(UINT32 group_count, const D3
         }
     }
 }
+
+void STDMETHODCALLTYPE Native12CommandList::OMSetFrontAndBackStencilRef(UINT front, UINT back)
+{
+    if (table->pfnOmSetFrontAndBackStencilRef) table->pfnOmSetFrontAndBackStencilRef(driver, front, back);
+}
+
+void STDMETHODCALLTYPE Native12CommandList::RSSetDepthBias(FLOAT bias, FLOAT clamp, FLOAT slope_scaled_bias)
+{
+    if (table->pfnRSSetDepthBias) table->pfnRSSetDepthBias(driver, bias, clamp, slope_scaled_bias);
+}
+
+void STDMETHODCALLTYPE Native12CommandList::IASetIndexBufferStripCutValue(D3D12_INDEX_BUFFER_STRIP_CUT_VALUE value)
+{
+    if (table->pfnIASetIndexBufferStripCutValue)
+        table->pfnIASetIndexBufferStripCutValue(driver, static_cast<D3D12DDI_INDEX_BUFFER_STRIP_CUT_VALUE>(value));
+}
+
+void STDMETHODCALLTYPE Native12CommandList::SetProgram(const D3D12_SET_PROGRAM_DESC *) {}
+void STDMETHODCALLTYPE Native12CommandList::DispatchGraph(const D3D12_DISPATCH_GRAPH_DESC *) {}
 
 HRESULT STDMETHODCALLTYPE Native12Device::CreateCommandList(UINT, D3D12_COMMAND_LIST_TYPE type,
         ID3D12CommandAllocator *allocator, ID3D12PipelineState *initial_state, REFIID iid, void **out)

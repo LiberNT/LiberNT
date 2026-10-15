@@ -9,7 +9,7 @@
 
 class Native12DescriptorHeap;
 
-class Native12Device final : public ID3D12Device10, public ID3D12DeviceRemovedExtendedData1, public Native12Allocation
+class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData1, public Native12Allocation
 {
 public:
     LONG references = 1;
@@ -204,6 +204,13 @@ public:
             D3D12_BARRIER_LAYOUT, const D3D12_CLEAR_VALUE *, UINT32, DXGI_FORMAT *, REFIID, void **) override;
     HRESULT STDMETHODCALLTYPE CreateReservedResource2(const D3D12_RESOURCE_DESC *, D3D12_BARRIER_LAYOUT,
             const D3D12_CLEAR_VALUE *, ID3D12ProtectedResourceSession *, UINT32, DXGI_FORMAT *, REFIID,
+            void **) override;
+    void STDMETHODCALLTYPE CreateSampler2(const D3D12_SAMPLER_DESC2 *, D3D12_CPU_DESCRIPTOR_HANDLE) override;
+    D3D12_RESOURCE_ALLOCATION_INFO *STDMETHODCALLTYPE GetResourceAllocationInfo3(D3D12_RESOURCE_ALLOCATION_INFO *,
+            UINT, UINT, const D3D12_RESOURCE_DESC1 *, const UINT32 *, const DXGI_FORMAT *const *,
+            D3D12_RESOURCE_ALLOCATION_INFO1 *) override;
+    HRESULT STDMETHODCALLTYPE OpenExistingHeapFromAddress1(const void *, SIZE_T, REFIID, void **) override;
+    HRESULT STDMETHODCALLTYPE CreateRootSignatureFromSubobjectInLibrary(UINT, const void *, SIZE_T, LPCWSTR, REFIID,
             void **) override;
     HRESULT STDMETHODCALLTYPE GetAutoBreadcrumbsOutput(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT *) override;
     HRESULT STDMETHODCALLTYPE GetPageFaultAllocationOutput(D3D12_DRED_PAGE_FAULT_OUTPUT *) override;

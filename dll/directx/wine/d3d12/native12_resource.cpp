@@ -1903,6 +1903,28 @@ void STDMETHODCALLTYPE Native12Device::CreateSampler(const D3D12_SAMPLER_DESC *d
     functions.pfnCreateSampler(driver_device, &args, Native12Descriptor(descriptor));
 }
 
+void STDMETHODCALLTYPE Native12Device::CreateSampler2(const D3D12_SAMPLER_DESC2 *desc,
+        D3D12_CPU_DESCRIPTOR_HANDLE descriptor)
+{
+    D3D12DDI_SAMPLER_DESC_0096 sampler = {};
+    D3D12DDIARG_CREATE_SAMPLER_0096 args = {};
+
+    if (!desc) return;
+    sampler.Filter = static_cast<D3D12DDI_FILTER>(desc->Filter);
+    sampler.AddressU = static_cast<D3D12DDI_TEXTURE_ADDRESS_MODE>(desc->AddressU);
+    sampler.AddressV = static_cast<D3D12DDI_TEXTURE_ADDRESS_MODE>(desc->AddressV);
+    sampler.AddressW = static_cast<D3D12DDI_TEXTURE_ADDRESS_MODE>(desc->AddressW);
+    sampler.MipLODBias = desc->MipLODBias;
+    sampler.MaxAnisotropy = desc->MaxAnisotropy;
+    sampler.ComparisonFunc = static_cast<D3D12DDI_COMPARISON_FUNC>(desc->ComparisonFunc);
+    memcpy(sampler.UintBorderColor, desc->UintBorderColor, sizeof(sampler.UintBorderColor));
+    sampler.MinLOD = desc->MinLOD;
+    sampler.MaxLOD = desc->MaxLOD;
+    sampler.Flags = static_cast<D3D12DDI_SAMPLER_FLAGS_0096>(desc->Flags);
+    args.pSamplerDesc = &sampler;
+    functions.pfnCreateSampler(driver_device, &args, Native12Descriptor(descriptor));
+}
+
 void STDMETHODCALLTYPE Native12Device::CopyDescriptors(UINT dst_count,
         const D3D12_CPU_DESCRIPTOR_HANDLE *dst_starts, const UINT *dst_sizes, UINT src_count,
         const D3D12_CPU_DESCRIPTOR_HANDLE *src_starts, const UINT *src_sizes, D3D12_DESCRIPTOR_HEAP_TYPE type)

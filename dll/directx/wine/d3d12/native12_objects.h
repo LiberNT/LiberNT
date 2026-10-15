@@ -332,7 +332,7 @@ struct Native12RootArguments
     UINT constants[D3D12_MAX_ROOT_COST];
 };
 
-class Native12CommandList final : public Native12Child<ID3D12GraphicsCommandList7>
+class Native12CommandList final : public Native12Child<ID3D12GraphicsCommandList10>
 {
 public:
     Native12RootArguments root_arguments[2] = {};
@@ -491,6 +491,11 @@ public:
     void STDMETHODCALLTYPE RSSetShadingRateImage(ID3D12Resource *shading_rate_image) override;
     void STDMETHODCALLTYPE DispatchMesh(UINT x, UINT y, UINT z) override;
     void STDMETHODCALLTYPE Barrier(UINT32 group_count, const D3D12_BARRIER_GROUP *groups) override;
+    void STDMETHODCALLTYPE OMSetFrontAndBackStencilRef(UINT front, UINT back) override;
+    void STDMETHODCALLTYPE RSSetDepthBias(FLOAT bias, FLOAT clamp, FLOAT slope_scaled_bias) override;
+    void STDMETHODCALLTYPE IASetIndexBufferStripCutValue(D3D12_INDEX_BUFFER_STRIP_CUT_VALUE value) override;
+    void STDMETHODCALLTYPE SetProgram(const D3D12_SET_PROGRAM_DESC *desc) override;
+    void STDMETHODCALLTYPE DispatchGraph(const D3D12_DISPATCH_GRAPH_DESC *desc) override;
 };
 
 struct Native12FormatInfo

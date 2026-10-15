@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Direct3D 12 runtime
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     ID3D12Device6 to ID3D12Device10 methods
+ * PURPOSE:     ID3D12Device6 to ID3D12Device14 methods
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
  */
 
@@ -178,6 +178,26 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreatePlacedResource2(ID3D12Heap *, UI
 
 HRESULT STDMETHODCALLTYPE Native12Device::CreateReservedResource2(const D3D12_RESOURCE_DESC *, D3D12_BARRIER_LAYOUT,
         const D3D12_CLEAR_VALUE *, ID3D12ProtectedResourceSession *, UINT32, DXGI_FORMAT *, REFIID, void **out)
+{
+    if (out) *out = NULL;
+    return E_INVALIDARG;
+}
+
+D3D12_RESOURCE_ALLOCATION_INFO *STDMETHODCALLTYPE Native12Device::GetResourceAllocationInfo3(
+        D3D12_RESOURCE_ALLOCATION_INFO *result, UINT visible_mask, UINT count, const D3D12_RESOURCE_DESC1 *descs,
+        const UINT32 *, const DXGI_FORMAT *const *, D3D12_RESOURCE_ALLOCATION_INFO1 *infos)
+{
+    return GetResourceAllocationInfo2(result, visible_mask, count, descs, infos);
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::OpenExistingHeapFromAddress1(const void *address, SIZE_T, REFIID iid,
+        void **out)
+{
+    return OpenExistingHeapFromAddress(address, iid, out);
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::CreateRootSignatureFromSubobjectInLibrary(UINT, const void *, SIZE_T,
+        LPCWSTR, REFIID, void **out)
 {
     if (out) *out = NULL;
     return E_INVALIDARG;
