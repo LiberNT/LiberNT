@@ -97,6 +97,7 @@ typedef struct _SNP_TCP
     BOOLEAN PeerFin;
     BOOLEAN PeerReset;
     BOOLEAN AckNow;
+    BOOLEAN ResendSyn;
     ULONG PendingSegments;
     ULONG DataTick;
 } SNP_TCP;
@@ -976,7 +977,10 @@ SnpTcpInput(
         if ((Flags & SNP_TCP_ACK) && Acknowledgment != Connection->Iss + 1)
         {
             if (!(Flags & SNP_TCP_RST))
+            {
                 SnpTcpSend(SNP_TCP_RST, Acknowledgment, NULL, 0);
+                Connection->ResendSyn = TRUE;
+            }
             return;
         }
 
@@ -1244,11 +1248,19 @@ SnpTcpConnect(
          Attempt < SNP_TCP_SYN_ATTEMPTS && Connection->State == SnpTcpSynSent && !Connection->PeerReset;
          Attempt++)
     {
+        BOOLEAN Resent = FALSE;
+
         SnpTcpSend(SNP_TCP_SYN, Connection->Iss, NULL, 0);
         for (Deadline = SnpNow() + (SNP_TICKS_PER_SECOND << min(Attempt, 3));
              Connection->State == SnpTcpSynSent && !Connection->PeerReset && SNP_TICK_BEFORE(SnpNow(), Deadline);
              SnpPoll(SNP_POLL_BUDGET))
         {
+            if (Connection->ResendSyn && !Resent)
+            {
+                SnpTcpSend(SNP_TCP_SYN, Connection->Iss, NULL, 0);
+                Resent = TRUE;
+            }
+            Connection->ResendSyn = FALSE;
         }
     }
 
