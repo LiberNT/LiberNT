@@ -2011,7 +2011,7 @@ PWND FASTCALL IntCreateWindow(CREATESTRUCTW* Cs,
    BOOL bUnicodeWindow;
    PCALLPROCDATA pcpd;
 
-   pti = pdeskCreated ? gptiDesktopThread : GetW32ThreadInfo();
+   pti = pdeskCreated ? UserGetDesktopThread() : GetW32ThreadInfo();
 
    if (!(Cs->dwExStyle & WS_EX_LAYOUTRTL))
    {      // Need both here for wine win.c test_CreateWindow.

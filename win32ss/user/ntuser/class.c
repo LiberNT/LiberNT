@@ -1556,7 +1556,7 @@ IntGetAndReferenceClass(PUNICODE_STRING ClassName, HINSTANCE hInstance, BOOL bDe
    PTHREADINFO pti;
 
    if (bDesktopThread)
-       pti = gptiDesktopThread;
+       pti = UserGetDesktopThread();
    else
        pti = PsGetCurrentThreadWin32Thread();
 

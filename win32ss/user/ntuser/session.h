@@ -20,6 +20,8 @@ typedef struct _USER_SESSION
     struct _WINSTATION_OBJECT *InputWindowStation;
     PKEVENT DesktopSwitchEvent;
     HANDLE DesktopSwitchEventHandle;
+    struct _THREADINFO *DesktopThread;
+    KEVENT DesktopThreadStarted;
 } USER_SESSION, *PUSER_SESSION;
 
 extern PUSER_SESSION gpDisplaySession;
@@ -33,3 +35,5 @@ struct _WINSTATION_OBJECT *FASTCALL UserGetInputWindowStation(PEPROCESS Process)
 struct _WINSTATION_OBJECT *FASTCALL UserGetDisplayInputWindowStation(VOID);
 BOOLEAN FASTCALL UserIsCsrProcess(PEPROCESS Process);
 BOOLEAN FASTCALL UserIsLogonProcess(HANDLE ProcessId);
+BOOLEAN FASTCALL UserIsDesktopThread(struct _THREADINFO *pti);
+struct _THREADINFO *FASTCALL UserGetDesktopThread(VOID);

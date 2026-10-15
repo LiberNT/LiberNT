@@ -147,7 +147,7 @@ co_IntClientLoadLibrary(PUNICODE_STRING pstrLibName,
    ULONG_PTR pLibNameBuffer = 0, pInitFuncBuffer = 0;
 
    /* Do not allow the desktop thread to do callback to user mode */
-   ASSERT(PsGetCurrentThreadWin32Thread() != gptiDesktopThread);
+   ASSERT(!UserIsDesktopThread(PsGetCurrentThreadWin32Thread()));
 
    TRACE("co_IntClientLoadLibrary: %S, %S, %d, %d\n", pstrLibName->Buffer, pstrLibName->Buffer, Unload, ApiHook);
 
@@ -248,7 +248,7 @@ co_IntCallSentMessageCallback(SENDASYNCPROC CompletionCallback,
    NTSTATUS Status;
 
    /* Do not allow the desktop thread to do callback to user mode */
-   ASSERT(PsGetCurrentThreadWin32Thread() != gptiDesktopThread);
+   ASSERT(!UserIsDesktopThread(PsGetCurrentThreadWin32Thread()));
 
    Arguments.Callback = CompletionCallback;
    Arguments.Wnd = hWnd;
@@ -302,7 +302,7 @@ co_IntCallWindowProc(WNDPROC Proc,
        Proc, IsAnsiProc ? "TRUE" : "FALSE", Wnd, Message, wParam, lParam, lParamBufferSize);
 
    /* Do not allow the desktop thread to do callback to user mode */
-   ASSERT(PsGetCurrentThreadWin32Thread() != gptiDesktopThread);
+   ASSERT(!UserIsDesktopThread(PsGetCurrentThreadWin32Thread()));
 
    if (lParamBufferSize != -1 &&
        Message == WM_COPYDATA &&
@@ -510,7 +510,7 @@ co_IntLoadSysMenuTemplate(VOID)
    ULONG ResultLength;
 
    /* Do not allow the desktop thread to do callback to user mode */
-   ASSERT(PsGetCurrentThreadWin32Thread() != gptiDesktopThread);
+   ASSERT(!UserIsDesktopThread(PsGetCurrentThreadWin32Thread()));
 
    ResultPointer = NULL;
    ResultLength = sizeof(LRESULT);
@@ -553,7 +553,7 @@ co_IntLoadDefaultCursors(VOID)
    BOOL DefaultCursor = TRUE;
 
    /* Do not allow the desktop thread to do callback to user mode */
-   ASSERT(PsGetCurrentThreadWin32Thread() != gptiDesktopThread);
+   ASSERT(!UserIsDesktopThread(PsGetCurrentThreadWin32Thread()));
 
    ResultPointer = NULL;
    ResultLength = sizeof(HCURSOR);
@@ -612,7 +612,7 @@ co_IntCallHookProc(INT HookId,
 
    ASSERT(Proc);
    /* Do not allow the desktop thread to do callback to user mode */
-   ASSERT(PsGetCurrentThreadWin32Thread() != gptiDesktopThread);
+   ASSERT(!UserIsDesktopThread(PsGetCurrentThreadWin32Thread()));
 
    pti = PsGetCurrentThreadWin32Thread();
    if (pti->TIF_flags & TIF_INCLEANUP)
@@ -1092,7 +1092,7 @@ co_IntClientThreadSetup(VOID)
    PVOID Argument, ResultPointer;
 
    /* Do not allow the desktop thread to do callback to user mode */
-   ASSERT(PsGetCurrentThreadWin32Thread() != gptiDesktopThread);
+   ASSERT(!UserIsDesktopThread(PsGetCurrentThreadWin32Thread()));
 
    ArgumentLength = ResultLength = 0;
    Argument = ResultPointer = NULL;

@@ -1038,11 +1038,11 @@ UserpDisplayConfigurationWorker(
 
     InterlockedExchange(&gUserDisplayConfigurationQueued, 0);
     UserEnterExclusive();
-    if (gptiDesktopThread != NULL)
+    if (gpDisplaySession && gpDisplaySession->DesktopThread != NULL)
     {
         RtlZeroMemory(&Msg, sizeof(Msg));
         Msg.message = WM_NULL;
-        MsqPostMessage(gptiDesktopThread, &Msg, FALSE, QS_POSTMESSAGE, 0, 0);
+        MsqPostMessage(gpDisplaySession->DesktopThread, &Msg, FALSE, QS_POSTMESSAGE, 0, 0);
     }
     UserLeave();
 }

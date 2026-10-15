@@ -925,14 +925,16 @@ IntCreateWindowStation(
     {
         ERR("Initializing input window station\n");
 
-        InitCursorImpl();
+        if (Session == gpDisplaySession)
+            InitCursorImpl();
 
         UserCreateSystemThread(ST_DESKTOP_THREAD);
-        UserCreateSystemThread(ST_RIT);
+        if (Session == gpDisplaySession)
+            UserCreateSystemThread(ST_RIT);
 
         /* Desktop functions require the desktop thread running so wait for it to initialize */
         UserLeaveCo();
-        KeWaitForSingleObject(gpDesktopThreadStartedEvent,
+        KeWaitForSingleObject(&Session->DesktopThreadStarted,
                               UserRequest,
                               UserMode,
                               FALSE,

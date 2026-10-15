@@ -63,8 +63,6 @@ extern PDESKTOP gpdeskInputDesktop;
 extern PCLS DesktopWindowClass;
 extern HDC ScreenDeviceContext;
 extern PTHREADINFO gptiForeground;
-extern PTHREADINFO gptiDesktopThread;
-extern PKEVENT gpDesktopThreadStartedEvent;
 
 typedef struct _SHELL_HOOK_WINDOW
 {

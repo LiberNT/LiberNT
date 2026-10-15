@@ -70,6 +70,7 @@ UserCreateSession(ULONG SessionId, PUSER_SESSION *Session)
         return STATUS_INSUFFICIENT_RESOURCES;
 
     NewSession->SessionId = SessionId;
+    KeInitializeEvent(&NewSession->DesktopThreadStarted, SynchronizationEvent, FALSE);
     NewSession->Next = gpUserSessions;
     WritePointerRelease((PVOID volatile *)&gpUserSessions, NewSession);
     *Session = NewSession;
@@ -114,6 +115,29 @@ UserIsCsrProcess(PEPROCESS Process)
             return TRUE;
     }
     return FALSE;
+}
+
+BOOLEAN FASTCALL
+UserIsDesktopThread(PTHREADINFO pti)
+{
+    PUSER_SESSION Session;
+
+    if (!pti)
+        return FALSE;
+    for (Session = ReadPointerAcquire((PVOID volatile *)&gpUserSessions); Session; Session = Session->Next)
+    {
+        if (Session->DesktopThread == pti)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+PTHREADINFO FASTCALL
+UserGetDesktopThread(VOID)
+{
+    PUSER_SESSION Session = UserGetCurrentSession();
+
+    return Session ? Session->DesktopThread : NULL;
 }
 
 BOOLEAN FASTCALL
