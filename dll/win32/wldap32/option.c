@@ -111,6 +111,13 @@ ULONG CDECL ldap_get_optionA( LDAP *ld, int option, void *value )
         char *host;
 
         ret = ldap_get_optionW( ld, option, &hostW );
+#ifdef __REACTOS__
+        if (!ret && !hostW)
+        {
+            *(char **)value = NULL;
+            return ret;
+        }
+#endif
         if (!ret)
         {
             host = strWtoA( hostW );
@@ -247,10 +254,22 @@ ULONG CDECL ldap_get_optionW( LDAP *ld, int option, void *value )
     case WLDAP32_LDAP_OPT_DESC:
     case WLDAP32_LDAP_OPT_ERROR_NUMBER:
     case WLDAP32_LDAP_OPT_PROTOCOL_VERSION:
+#ifndef __REACTOS__
     case WLDAP32_LDAP_OPT_REFERRALS:
+#endif
     case WLDAP32_LDAP_OPT_SIZELIMIT:
     case WLDAP32_LDAP_OPT_TIMELIMIT:
         return map_error( ldap_get_option( CTX(ld), option, value ) );
+
+#ifdef __REACTOS__
+    case WLDAP32_LDAP_OPT_REFERRALS:
+    {
+        int on;
+        ret = map_error( ldap_get_option( CTX(ld), LDAP_OPT_REFERRALS, &on ) );
+        if (!ret) *(ULONG *)value = on ? 1 : 0;
+        return ret;
+    }
+#endif
 
     case WLDAP32_LDAP_OPT_REFERRAL_HOP_LIMIT:
         return map_error( ldap_get_option( CTX(ld), LDAP_OPT_REFHOPLIMIT, value ) );
@@ -260,6 +279,13 @@ ULONG CDECL ldap_get_optionW( LDAP *ld, int option, void *value )
         WCHAR *hostW;
         char *host;
 
+#ifdef __REACTOS__
+        if (!ld->ld_host)
+        {
+            *(WCHAR **)value = NULL;
+            return WLDAP32_LDAP_SUCCESS;
+        }
+#endif
         ret = ldap_get_option( CTX(ld), LDAP_OPT_HOST_NAME, &host );
         if (!ret)
         {
@@ -608,6 +634,17 @@ ULONG CDECL ldap_set_optionW( LDAP *ld, int option, void *value )
 
         ret = ldap_set_option( CTX(ld), LDAP_OPT_HOST_NAME, host );
         free( host );
+#ifdef __REACTOS__
+        if (!ret)
+        {
+            WCHAR *copy = wcsdup( *hostW );
+            if (copy)
+            {
+                free( ld->ld_host );
+                ld->ld_host = copy;
+            }
+        }
+#endif
         return map_error( ret );
     }
 

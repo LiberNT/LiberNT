@@ -99,8 +99,12 @@ ULONG CDECL WLDAP32_ldap_count_entries( LDAP *ld, WLDAP32_LDAPMessage *res )
     TRACE( "(%p, %p)\n", ld, res );
 
     if (!res) return 0;
+#ifdef __REACTOS__
+    return ldap_count_entries( ld ? CTX(ld) : NULL, MSG(res) );
+#else
     if (!ld) return ~0u;
     return ldap_count_entries( CTX(ld), MSG(res) );
+#endif
 }
 
 /***********************************************************************
