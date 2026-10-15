@@ -39,6 +39,10 @@
 extern LIST_ENTRY g_EnumContextListHead;
 extern CRITICAL_SECTION g_EnumContextListLock;
 
+ULONG
+GetAccountFlags(ULONG AccountControl,
+                PACL Dacl);
+
 /* misc.c */
 
 NTSTATUS

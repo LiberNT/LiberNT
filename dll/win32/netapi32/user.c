@@ -122,7 +122,6 @@ GetAllowedWorldAce(IN PACL Acl,
 }
 
 
-static
 ULONG
 GetAccountFlags(ULONG AccountControl,
                 PACL Dacl)
