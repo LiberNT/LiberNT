@@ -2606,6 +2606,83 @@ err:
     return err;
 }
 
+#ifdef __REACTOS__
+static DWORD ipnet_row2_get_luid( const MIB_IPNET_ROW2 *row, NET_LUID *luid )
+{
+    NET_IFINDEX index;
+
+    if (row->InterfaceLuid.Value)
+    {
+        if (ConvertInterfaceLuidToIndex( &row->InterfaceLuid, &index )) return ERROR_FILE_NOT_FOUND;
+        *luid = row->InterfaceLuid;
+        return ERROR_SUCCESS;
+    }
+    if (!row->InterfaceIndex) return ERROR_INVALID_PARAMETER;
+    if (ConvertInterfaceIndexToLuid( row->InterfaceIndex, luid )) return ERROR_FILE_NOT_FOUND;
+    return ERROR_SUCCESS;
+}
+
+static BOOL ipnet_row2_address_equal( const SOCKADDR_INET *a, const SOCKADDR_INET *b )
+{
+    if (a->si_family != b->si_family) return FALSE;
+    if (a->si_family == AF_INET) return a->Ipv4.sin_addr.s_addr == b->Ipv4.sin_addr.s_addr;
+    return !memcmp( &a->Ipv6.sin6_addr, &b->Ipv6.sin6_addr, sizeof(a->Ipv6.sin6_addr) );
+}
+
+/******************************************************************
+ *    GetIpNetEntry2 (IPHLPAPI.@)
+ */
+DWORD WINAPI GetIpNetEntry2( MIB_IPNET_ROW2 *row )
+{
+    MIB_IPNET_TABLE2 *table;
+    NET_LUID luid;
+    DWORD err, i;
+
+    TRACE( "%p\n", row );
+
+    if (!row || (row->Address.si_family != AF_INET && row->Address.si_family != AF_INET6))
+        return ERROR_INVALID_PARAMETER;
+    if (!row->InterfaceLuid.Value && !row->InterfaceIndex) return ERROR_NOT_FOUND;
+    if ((err = ipnet_row2_get_luid( row, &luid ))) return err;
+    if ((err = GetIpNetTable2( row->Address.si_family, &table ))) return err;
+
+    err = ERROR_NOT_FOUND;
+    for (i = 0; i < table->NumEntries; i++)
+    {
+        if (table->Table[i].InterfaceLuid.Value != luid.Value ||
+            !ipnet_row2_address_equal( &table->Table[i].Address, &row->Address ))
+            continue;
+        *row = table->Table[i];
+        err = ERROR_SUCCESS;
+        break;
+    }
+    FreeMibTable( table );
+    return err;
+}
+
+/******************************************************************
+ *    ResolveIpNetEntry2 (IPHLPAPI.@)
+ */
+DWORD WINAPI ResolveIpNetEntry2( MIB_IPNET_ROW2 *row, const SOCKADDR_INET *source )
+{
+    ULONG mac[2], len = sizeof(mac);
+    NET_LUID luid;
+    DWORD err;
+
+    TRACE( "%p, %p\n", row, source );
+
+    if (!row || (row->Address.si_family != AF_INET && row->Address.si_family != AF_INET6))
+        return ERROR_INVALID_PARAMETER;
+    if ((err = ipnet_row2_get_luid( row, &luid ))) return err;
+    if (row->Address.si_family != AF_INET) return ERROR_NOT_SUPPORTED;
+
+    err = SendARP( row->Address.Ipv4.sin_addr.s_addr,
+                   source && source->si_family == AF_INET ? source->Ipv4.sin_addr.s_addr : 0, mac, &len );
+    if (err) return err;
+    return GetIpNetEntry2( row );
+}
+#endif
+
 /******************************************************************
  *    GetIpStatistics (IPHLPAPI.@)
  *

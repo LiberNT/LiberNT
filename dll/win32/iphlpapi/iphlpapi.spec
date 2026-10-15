@@ -108,7 +108,7 @@
 @ stub GetIpForwardTableFromStack
 @ stdcall GetIpInterfaceEntry( ptr )
 @ stdcall GetIpInterfaceTable( long ptr )
-#@ stub GetIpNetEntry2
+@ stdcall GetIpNetEntry2( ptr )
 @ stdcall GetIpNetTable( ptr ptr long )
 @ stdcall GetIpNetTable2( long ptr )
 @ stub GetIpNetTableFromStack
@@ -262,7 +262,7 @@
 @ stub _PfTestPacket@20
 @ stdcall _PfUnBindInterface@4(long) PfUnBindInterface
 #@ stub register_icmp
-#@ stub ResolveIpNetEntry2
+@ stdcall ResolveIpNetEntry2( ptr ptr )
 #@ stub ResolveNeighbor
 @ stdcall RestoreMediaSense(ptr ptr)
 @ stdcall SendARP( long long ptr ptr )
