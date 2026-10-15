@@ -1103,7 +1103,7 @@ MiBuildImageControlArea(
             ULONG VirtualSize = SectionHeader[i].Misc.VirtualSize ? SectionHeader[i].Misc.VirtualSize
                                                                    : SectionHeader[i].SizeOfRawData;
             ULONG64 RawOffset = SectionHeader[i].PointerToRawData & ~511ULL;
-            ULONG64 RawBytes = SectionHeader[i].SizeOfRawData;
+            ULONG64 RawBytes = ((ULONG64)SectionHeader[i].SizeOfRawData + (SectionHeader[i].PointerToRawData & 511) + 511) & ~511ULL;
             PMI_SEGMENT_LAYOUT Entry = &Layout[LayoutCount];
 
             if ((ULONG64)SectionHeader[i].PointerToRawData + SectionHeader[i].SizeOfRawData > MAXULONG)
