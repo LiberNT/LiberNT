@@ -1200,6 +1200,29 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
     }
     IntCompositionUnlockDevice(ppdev);
 
+    if (r->psurf == NULL && psurfNew->ppal != NULL)
+    {
+        PBRUSH Brush = BRUSH_ShareLockBrush(IntGetSysColorBrush(COLOR_WINDOW));
+
+        if (Brush != NULL)
+        {
+            PPDEVOBJ Device = IntCompositionLockDevice();
+
+            if (Device != NULL)
+            {
+                RECTL Bounds = {0, 0, cx, cy};
+                EBRUSHOBJ Fill;
+
+                EBRUSHOBJ_vInit(&Fill, Brush, psurfNew, 0x00FFFFFF, 0, NULL);
+                IntEngBitBlt(&psurfNew->SurfObj, NULL, NULL, NULL, NULL, &Bounds, NULL, NULL,
+                             &Fill.BrushObject, &Brush->ptOrigin, ROP4_PATCOPY);
+                EBRUSHOBJ_vCleanup(&Fill);
+                IntCompositionUnlockDevice(Device);
+            }
+            BRUSH_ShareUnlockBrush(Brush);
+        }
+    }
+
     RtlZeroMemory(&Old, sizeof(Old));
     if (bHold)
     {
