@@ -65,6 +65,10 @@ struct wgl_dc_data
     INT nb_icd_formats;
     LUID AdapterLuid;
     BOOL AdapterLuidValid;
+    HANDLE RedirectSurface;
+    ULONGLONG RedirectUpdateId;
+    POINT RedirectClientOffset;
+    BOOL RedirectPresented;
 
     /* Software implementation */
     INT nb_sw_formats;

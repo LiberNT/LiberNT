@@ -913,6 +913,7 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
 {
     const WGL_PRESENTBUFFERS_CB_RETAINED *Retained;
     struct ICD_Data *IcdData;
+    struct wgl_dc_data *DcData;
     PWGL_ASYNC_PRESENT AsyncPresent = NULL;
     WGL_PRESENTBUFFERS PresentData;
     WGL_PRESENTBUFFERS2 PresentData2;
@@ -925,6 +926,7 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
     ULONGLONG UpdateId = 0;
     UINT Format = 0;
     DWORD SurfaceFlags;
+    BOOL Redirected = FALSE;
     HRESULT Result;
 
     if (hdc == NULL || CallbackData == NULL ||
@@ -952,12 +954,9 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
 
     /* The ICD presents on every frame; use the ICD already bound to this DC
      * instead of re-running ICD discovery (adapter open/query/close). */
-    {
-        struct wgl_dc_data *DcData = IntGetDcData(hdc);
-
-        IcdData = (DcData != NULL && DcData->icd_data != NULL) ?
-            DcData->icd_data : IntGetIcdData(hdc, NULL, NULL);
-    }
+    DcData = IntGetDcData(hdc);
+    IcdData = (DcData != NULL && DcData->icd_data != NULL) ?
+        DcData->icd_data : IntGetIcdData(hdc, NULL, NULL);
     if (IcdData == NULL || IcdData->DrvPresentBuffers == NULL)
     {
         IntReportDwmDxPresentFailure("icd_callback", E_NOINTERFACE);
@@ -1060,6 +1059,15 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
         }
     }
 
+    if (DcData != NULL)
+    {
+        DcData->RedirectSurface = (SurfaceFlags & DWM_DX_REDIRECTION_GDI_SURFACE) ? SharedSurface : NULL;
+        DcData->RedirectUpdateId = UpdateId;
+        DcData->RedirectClientOffset.x = ClientOrigin.x - WindowRect.left;
+        DcData->RedirectClientOffset.y = ClientOrigin.y - WindowRect.top;
+        DcData->RedirectPresented = FALSE;
+    }
+
     if (AsyncPresent != NULL)
     {
         RtlZeroMemory(&PresentData2, sizeof(PresentData2));
@@ -1077,10 +1085,22 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
     {
         Result = IcdData->DrvPresentBuffers(hdc, &PresentData) ? S_OK : E_FAIL;
     }
+    if (DcData != NULL)
+    {
+        Redirected = DcData->RedirectSurface != NULL && DcData->RedirectPresented;
+        DcData->RedirectSurface = NULL;
+        DcData->RedirectPresented = FALSE;
+    }
     if (FAILED(Result))
     {
         IntReportDwmDxPresentFailure("icd_present", E_FAIL);
         goto Cancel;
+    }
+    if (Redirected)
+    {
+        if (AsyncPresent != NULL)
+            IntReleaseDwmDxPublishRecord(AsyncPresent);
+        return TRUE;
     }
     if (AsyncPresent != NULL)
     {
@@ -1122,7 +1142,9 @@ wglCheckFullscreenSupport(HDC hdc, PWGL_CHECKFULLSCREENSUPPORT_CB Arguments)
 static BOOL APIENTRY
 wglPresentToRedirectionSurface(HDC hdc, PWGL_PRESENTTOREDIRECTIONSURFACE_CB Arguments)
 {
+    struct wgl_dc_data *DcData;
     D3DKMT_PRESENT Present;
+    BOOL Redirected;
     NTSTATUS Status;
     UINT Index;
 
@@ -1150,7 +1172,25 @@ wglPresentToRedirectionSurface(HDC hdc, PWGL_PRESENTTOREDIRECTIONSURFACE_CB Argu
     Present.BroadcastDstAllocation = Arguments->BroadcastDstAllocation;
     Present.PrivateDriverDataSize = Arguments->PrivateDriverDataSize;
     Present.pPrivateDriverData = Arguments->PrivateDriverData;
+    Present.hWindow = WindowFromDC(hdc);
+
+    DcData = IntGetDcData(hdc);
+    Redirected = DcData != NULL && DcData->RedirectSurface != NULL &&
+                 Arguments->hSharedHandle == DcData->RedirectSurface &&
+                 Arguments->UpdateId == DcData->RedirectUpdateId;
+    if (Redirected)
+    {
+        OffsetRect(&Present.DstRect, DcData->RedirectClientOffset.x, DcData->RedirectClientOffset.y);
+        Present.PresentHistoryToken.Model = D3DKMT_PM_REDIRECTED_BLT;
+        Present.PresentHistoryToken.Token.Blt.hLogicalSurface = (ULONG64)(ULONG_PTR)Arguments->hSharedHandle;
+        Present.PresentHistoryToken.Token.Blt.hPhysicalSurface = (ULONG64)(ULONG_PTR)Arguments->hSharedHandle;
+        Present.PresentHistoryToken.Token.Blt.EventId = Arguments->UpdateId;
+        Present.PresentHistoryToken.Token.Blt.DirtyRegions.NumRects = 1;
+        Present.PresentHistoryToken.Token.Blt.DirtyRegions.Rects[0] = Present.DstRect;
+    }
     Status = D3DKMTPresent(&Present);
+    if (NT_SUCCESS(Status) && Redirected)
+        DcData->RedirectPresented = TRUE;
     return NT_SUCCESS(Status);
 }
 
