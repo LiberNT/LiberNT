@@ -1,0 +1,50 @@
+; PROJECT:     LiberNT SpacemiT K1 I2C driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     SpacemiT K1 I2C driver installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=System
+ClassGUID={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+CatalogFile=k1xi2c.cat
+DriverVer=10/15/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=SpacemitMfg,NTRISCV64
+
+[SpacemitMfg.NTRISCV64]
+%K1XI2C.DeviceDesc%=K1XI2C_Inst,FDT\spacemit_i2c
+%K1XI2C.DeviceDesc%=K1XI2C_Inst,FDT\spacemit_k1x-i2c
+
+[K1XI2C_Inst.NT]
+CopyFiles=K1XI2C_CopyFiles.NT
+
+[K1XI2C_CopyFiles.NT]
+k1xi2c.sys
+
+[K1XI2C_Inst.NT.Services]
+AddService=k1xi2c,0x00000002,K1XI2C_Service_Inst
+
+[K1XI2C_Service_Inst]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\k1xi2c.sys
+LoadOrderGroup=Extended Base
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+k1xi2c.sys=1
+
+[Strings]
+ProviderName="Ahmed ARIF"
+ManufacturerName="SpacemiT"
+DiskName="SpacemiT K1 I2C Driver Disk"
+K1XI2C.DeviceDesc="SpacemiT K1 I2C controller"
