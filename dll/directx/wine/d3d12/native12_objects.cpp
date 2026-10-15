@@ -858,6 +858,22 @@ void Native12CommandList::AddPassResolve(const D3D12_RENDER_PASS_ENDING_ACCESS &
     ++pass_resolve_count;
 }
 
+static bool Native12PassBindsRaster(D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE type, bool read_only)
+{
+    switch (type)
+    {
+        case D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_DISCARD:
+        case D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE:
+        case D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR:
+        case D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE_LOCAL_RENDER:
+            return true;
+        case D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE_LOCAL_SRV:
+            return read_only;
+        default:
+            return false;
+    }
+}
+
 void STDMETHODCALLTYPE Native12CommandList::BeginRenderPass(UINT count,
         const D3D12_RENDER_PASS_RENDER_TARGET_DESC *targets, const D3D12_RENDER_PASS_DEPTH_STENCIL_DESC *depth,
         D3D12_RENDER_PASS_FLAGS flags)
@@ -867,10 +883,14 @@ void STDMETHODCALLTYPE Native12CommandList::BeginRenderPass(UINT count,
     if (count > D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT || (count && !targets)) return;
     ClearPassResolves();
     pass_flags = flags;
-    for (UINT i = 0; i < count; ++i) handles[i] = targets[i].cpuDescriptor;
-    bool bind_depth = depth && (depth->DepthBeginningAccess.Type != D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_NO_ACCESS
-            || depth->StencilBeginningAccess.Type != D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_NO_ACCESS);
-    OMSetRenderTargets(count, count ? handles : NULL, FALSE, bind_depth ? &depth->cpuDescriptor : NULL);
+    UINT bound = 0;
+    for (UINT i = 0; i < count; ++i)
+        if (Native12PassBindsRaster(targets[i].BeginningAccess.Type, false)) handles[bound++] = targets[i].cpuDescriptor;
+    bool bind_depth = depth && (Native12PassBindsRaster(depth->DepthBeginningAccess.Type,
+            !!(flags & D3D12_RENDER_PASS_FLAG_BIND_READ_ONLY_DEPTH))
+            || Native12PassBindsRaster(depth->StencilBeginningAccess.Type,
+            !!(flags & D3D12_RENDER_PASS_FLAG_BIND_READ_ONLY_STENCIL)));
+    OMSetRenderTargets(bound, bound ? handles : NULL, FALSE, bind_depth ? &depth->cpuDescriptor : NULL);
 
     if (!(flags & D3D12_RENDER_PASS_FLAG_RESUMING_PASS))
     {

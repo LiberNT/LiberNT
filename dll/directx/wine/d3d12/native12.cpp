@@ -1278,7 +1278,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
         {
             D3D12_FEATURE_DATA_D3D12_OPTIONS18 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
-            caps->RenderPassesValid = FALSE;
+            caps->RenderPassesValid = TRUE;
             return S_OK;
         }
         default:
