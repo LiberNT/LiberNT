@@ -1871,6 +1871,15 @@ void STDMETHODCALLTYPE Native12Device::CreateUnorderedAccessView(ID3D12Resource 
             args.Tex2D.ArraySize = 1;
             args.Tex2D.PlaneSlice = desc->Texture2D.PlaneSlice;
             break;
+        case D3D12_UAV_DIMENSION_TEXTURE2DMS:
+            args.ResourceDimension = D3D12DDI_RD_TEXTURE2D;
+            args.Tex2D.ArraySize = 1;
+            break;
+        case D3D12_UAV_DIMENSION_TEXTURE2DMSARRAY:
+            args.ResourceDimension = D3D12DDI_RD_TEXTURE2D;
+            args.Tex2D.FirstArraySlice = desc->Texture2DMSArray.FirstArraySlice;
+            args.Tex2D.ArraySize = desc->Texture2DMSArray.ArraySize;
+            break;
         case D3D12_UAV_DIMENSION_TEXTURE3D:
             args.ResourceDimension = D3D12DDI_RD_TEXTURE3D;
             args.Tex3D.MipSlice = desc ? desc->Texture3D.MipSlice : 0;
