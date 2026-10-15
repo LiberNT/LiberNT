@@ -608,6 +608,33 @@ AfdConnectedSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     return Status;
 }
 
+static
+BOOLEAN
+AfdIsFromConnectedPeer(
+    _In_ PTRANSPORT_ADDRESS Peer,
+    _In_ PTRANSPORT_ADDRESS From)
+{
+    PTA_ADDRESS PeerAddress = &Peer->Address[0];
+    PTA_ADDRESS FromAddress = &From->Address[0];
+    PTDI_ADDRESS_IP PeerIp, FromIp;
+
+    if (Peer->TAAddressCount == 0)
+        return TRUE;
+    if (PeerAddress->AddressType != TDI_ADDRESS_TYPE_IP)
+    {
+        return PeerAddress->AddressType == FromAddress->AddressType &&
+               PeerAddress->AddressLength == FromAddress->AddressLength &&
+               RtlEqualMemory(PeerAddress->Address, FromAddress->Address, PeerAddress->AddressLength);
+    }
+
+    PeerIp = (PTDI_ADDRESS_IP)PeerAddress->Address;
+    if (FromAddress->AddressType != TDI_ADDRESS_TYPE_IP)
+        return FALSE;
+
+    FromIp = (PTDI_ADDRESS_IP)FromAddress->Address;
+    return PeerIp->in_addr == FromIp->in_addr && PeerIp->sin_port == FromIp->sin_port;
+}
+
 NTSTATUS NTAPI
 PacketSocketRecvComplete(
         PDEVICE_OBJECT DeviceObject,
@@ -681,6 +708,12 @@ PacketSocketRecvComplete(
         ControlLen = FCB->AddressFrom->OptionsLength;
     }
 
+    if (FCB->RemoteAddress && FCB->AddressFrom->RemoteAddress &&
+        !AfdIsFromConnectedPeer(FCB->RemoteAddress, FCB->AddressFrom->RemoteAddress))
+    {
+        goto SatisfyRequests;
+    }
+
     DGSize = FIELD_OFFSET(AFD_STORED_DATAGRAM, Buffer) +
              ALIGN_UP_BY(Irp->IoStatus.Information, MAX_NATURAL_ALIGNMENT) + ControlLen;
     DatagramRecv = ExAllocatePoolWithTag(NonPagedPool,
@@ -718,6 +751,7 @@ PacketSocketRecvComplete(
         InsertTailList( &FCB->DatagramList, &DatagramRecv->ListEntry );
     }
 
+SatisfyRequests:
     /* Satisfy as many requests as we can */
 
     while( !IsListEmpty( &FCB->DatagramList ) &&

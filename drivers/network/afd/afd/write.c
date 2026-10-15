@@ -540,8 +540,11 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         PAFD_SEND_INFO_UDP SendReq;
         PTDI_CONNECTION_INFORMATION TargetAddress;
 
+        if( !FCB->RemoteAddress )
+            return UnlockAndMaybeComplete( FCB, STATUS_INVALID_CONNECTION, Irp, 0 );
+
         /* Check that the socket is bound */
-        if( FCB->SharedData.State != SOCKET_STATE_BOUND || !FCB->RemoteAddress )
+        if( FCB->SharedData.State != SOCKET_STATE_BOUND )
         {
             AFD_DbgPrint(MIN_TRACE,("Invalid parameter\n"));
             return UnlockAndMaybeComplete( FCB, STATUS_INVALID_PARAMETER, Irp,

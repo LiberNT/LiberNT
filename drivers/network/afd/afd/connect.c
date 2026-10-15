@@ -234,6 +234,24 @@ AfdSetConnectDataSize(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 }
 
 
+static
+BOOLEAN
+AfdIsUnspecifiedIpAddress(
+    _In_ PTRANSPORT_ADDRESS Address)
+{
+    PTDI_ADDRESS_IP Ip;
+
+    if (Address->TAAddressCount == 0 ||
+        Address->Address[0].AddressType != TDI_ADDRESS_TYPE_IP ||
+        Address->Address[0].AddressLength < sizeof(TDI_ADDRESS_IP))
+    {
+        return FALSE;
+    }
+
+    Ip = (PTDI_ADDRESS_IP)Address->Address[0].Address;
+    return Ip->in_addr == 0 && Ip->sin_port == 0;
+}
+
 NTSTATUS
 WarmSocketForConnection(PAFD_FCB FCB) {
     NTSTATUS Status;
@@ -546,7 +564,11 @@ AfdStreamSocketConnect(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         if (FCB->RemoteAddress)
         {
             ExFreePoolWithTag(FCB->RemoteAddress, TAG_AFD_TRANSPORT_ADDRESS);
+            FCB->RemoteAddress = NULL;
         }
+
+        if (AfdIsUnspecifiedIpAddress(&ConnectReq->RemoteAddress))
+            return UnlockAndMaybeComplete( FCB, STATUS_SUCCESS, Irp, 0 );
 
         FCB->RemoteAddress =
             TaCopyTransportAddress( &ConnectReq->RemoteAddress );
