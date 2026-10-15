@@ -128,20 +128,24 @@ if(ARCH STREQUAL "i386")
         client/i386/fiber.S
         client/i386/thread.S)
     list(APPEND SOURCE
+        client/i386/emuwork.c
         client/i386/unwind.c)
 elseif(ARCH STREQUAL "amd64")
     list(APPEND ASM_SOURCE
         client/amd64/fiber.S)
     list(APPEND SOURCE
+        client/amd64/emuwork.c
         client/amd64/unwind.c)
 elseif(ARCH STREQUAL "arm")
     list(APPEND ASM_SOURCE
         client/arm/fiber.S
         client/arm/thread.S)
     list(APPEND SOURCE
+        client/arm/emuwork.c
         client/nounwind.c)
 elseif(ARCH STREQUAL "arm64")
     list(APPEND SOURCE
+        client/arm64/emuwork.c
         client/arm64/fiber.c)
     if(ARM64EC_RUNTIME)
         list(APPEND SOURCE
@@ -152,10 +156,12 @@ elseif(ARCH STREQUAL "arm64")
     endif()
 elseif(ARCH STREQUAL "riscv64")
     list(APPEND SOURCE
+        client/riscv64/emuwork.c
         client/riscv64/fiber.c
         client/riscv64/unwind.c)
 elseif(ARCH STREQUAL "ppc")
     list(APPEND SOURCE
+        client/ppc/emuwork.c
         client/ppc/fiber.c
         client/nounwind.c)
 endif()

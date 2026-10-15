@@ -434,6 +434,31 @@ DWORD
 WINAPI
 BaseSetLastNTError(IN NTSTATUS Status);
 
+#ifndef PAGE_ENCLAVE_UNVALIDATED
+#define PAGE_ENCLAVE_UNVALIDATED 0x20000000
+#endif
+
+PVOID
+WINAPI
+BasepOpenEmulatorWork(
+    _In_ HANDLE Process);
+
+VOID
+WINAPI
+BasepCloseEmulatorWork(
+    _In_opt_ PVOID WorkList);
+
+VOID
+WINAPI
+BasepPostEmulatorWork(
+    _In_opt_ PVOID WorkList,
+    _In_ ULONG Id,
+    _In_ PVOID Address,
+    _In_ SIZE_T Size,
+    _In_ ULONG ArgumentCount,
+    _In_ ULONG Argument0,
+    _In_ ULONG Argument1);
+
 VOID
 NTAPI
 BasepLocateExeLdrEntry(IN PLDR_DATA_TABLE_ENTRY Entry,

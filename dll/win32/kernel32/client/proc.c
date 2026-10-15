@@ -1416,6 +1416,11 @@ FlushInstructionCache(IN HANDLE hProcess,
                       IN SIZE_T nSize)
 {
     NTSTATUS Status;
+    PVOID WorkList;
+
+    WorkList = BasepOpenEmulatorWork(hProcess);
+    BasepPostEmulatorWork(WorkList, CrossProcessFlushCache, (PVOID)lpBaseAddress, nSize, 0, 0, 0);
+    BasepCloseEmulatorWork(WorkList);
 
     /* Call the native function */
     Status = NtFlushInstructionCache(hProcess, (PVOID)lpBaseAddress, nSize);
@@ -2144,9 +2149,12 @@ WriteProcessMemory(IN HANDLE hProcess,
     ULONG OldProtect, Protect;
     SIZE_T RegionSize;
     PVOID Base;
+    PVOID WorkList;
 
     if (!VirtualQueryEx(hProcess, lpBaseAddress, &Info, sizeof(Info)))
         return FALSE;
+
+    WorkList = BasepOpenEmulatorWork(hProcess);
 
     switch (Info.Protect & ~(PAGE_GUARD | PAGE_NOCACHE))
     {
@@ -2157,8 +2165,8 @@ WriteProcessMemory(IN HANDLE hProcess,
         Status = NtWriteVirtualMemory(hProcess, lpBaseAddress, (PVOID)lpBuffer, nSize, lpNumberOfBytesWritten);
         if (NT_SUCCESS(Status))
         {
+            BasepPostEmulatorWork(WorkList, CrossProcessFlushCache, lpBaseAddress, nSize, 0, 0, 0);
             NtFlushInstructionCache(hProcess, lpBaseAddress, nSize);
-            return TRUE;
         }
         break;
 
@@ -2167,13 +2175,21 @@ WriteProcessMemory(IN HANDLE hProcess,
         Base = (PVOID)((ULONG_PTR)lpBaseAddress & ~((ULONG_PTR)PAGE_SIZE - 1));
         RegionSize = (((ULONG_PTR)lpBaseAddress + nSize + PAGE_SIZE - 1) & ~((ULONG_PTR)PAGE_SIZE - 1)) - (ULONG_PTR)Base;
         RegionSize = min(RegionSize, (SIZE_T)((ULONG_PTR)Info.BaseAddress + Info.RegionSize - (ULONG_PTR)Base));
-        Protect = (Info.Type == MEM_PRIVATE) ? PAGE_EXECUTE_READWRITE : PAGE_EXECUTE_WRITECOPY;
+        Protect = PAGE_TARGETS_NO_UPDATE | PAGE_ENCLAVE_UNVALIDATED |
+                  ((Info.Type == MEM_PRIVATE) ? PAGE_EXECUTE_READWRITE : PAGE_EXECUTE_WRITECOPY);
+        BasepPostEmulatorWork(WorkList, CrossProcessPreVirtualProtect, Base, RegionSize, 1, Protect, 0);
         Status = NtProtectVirtualMemory(hProcess, &Base, &RegionSize, Protect, &OldProtect);
+        BasepPostEmulatorWork(WorkList, CrossProcessPostVirtualProtect, Base, RegionSize, 2, Protect, Status);
         if (!NT_SUCCESS(Status))
             break;
         Status = NtWriteVirtualMemory(hProcess, lpBaseAddress, (PVOID)lpBuffer, nSize, lpNumberOfBytesWritten);
+        if (NT_SUCCESS(Status))
+            BasepPostEmulatorWork(WorkList, CrossProcessFlushCache, lpBaseAddress, nSize, 0, 0, 0);
         NtFlushInstructionCache(hProcess, lpBaseAddress, nSize);
-        Status2 = NtProtectVirtualMemory(hProcess, &Base, &RegionSize, OldProtect, &Protect);
+        Protect = PAGE_TARGETS_NO_UPDATE | PAGE_ENCLAVE_UNVALIDATED | OldProtect;
+        BasepPostEmulatorWork(WorkList, CrossProcessPreVirtualProtect, Base, RegionSize, 1, Protect, 0);
+        Status2 = NtProtectVirtualMemory(hProcess, &Base, &RegionSize, Protect, &OldProtect);
+        BasepPostEmulatorWork(WorkList, CrossProcessPostVirtualProtect, Base, RegionSize, 2, Protect, Status2);
         if (NT_SUCCESS(Status))
             Status = Status2;
         break;
@@ -2182,6 +2198,8 @@ WriteProcessMemory(IN HANDLE hProcess,
         Status = STATUS_ACCESS_VIOLATION;
         break;
     }
+
+    BasepCloseEmulatorWork(WorkList);
 
     if (!NT_SUCCESS(Status))
     {
