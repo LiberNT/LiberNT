@@ -1853,6 +1853,31 @@ HKLM,"SYSTEM\CurrentControlSet\Services\Null","Start",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\Null","Tag",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\Null","Type",0x00010001,0x00000001
 
+HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","Start",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","ImagePath",0x00020000,"system32\drivers\nwifi.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","Group",0x00000000,"NDIS"
+HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","DisplayName",0x00000000,"ReactOS Native WiFi Service"
+
+; nwifi virtual 802.3 miniport uses a fixed GUID (NwifiUpperName in
+; drivers/network/nwifi/protocol.c) and is created at runtime by the NDIS IM, so
+; it has no PnP/netcfgx footprint. Seed the net-class instance + Tcpip linkage so
+; TCP/IP binds it and DHCP runs over WiFi.
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}\0100","DriverDesc",0x00000000,"ReactOS Native WiFi Virtual Adapter"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}\0100","NetCfgInstanceId",0x00000000,"{B1D2C3E4-5F6A-4B8C-9D0E-02524F535731}"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}\0100","Characteristics",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}\0100\Linkage","RootDevice",0x00000000,"{B1D2C3E4-5F6A-4B8C-9D0E-02524F535731}"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}\0100\Linkage","Export",0x00000000,"\Device\{B1D2C3E4-5F6A-4B8C-9D0E-02524F535731}"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}\0100\Linkage","UpperBind",0x00000000,"Tcpip"
+HKLM,"SYSTEM\CurrentControlSet\Services\Tcpip\Linkage","Bind",0x00010000,"\Device\{B1D2C3E4-5F6A-4B8C-9D0E-02524F535731}"
+HKLM,"SYSTEM\CurrentControlSet\Services\Tcpip\Linkage","Route",0x00010000,"{B1D2C3E4-5F6A-4B8C-9D0E-02524F535731}"
+HKLM,"SYSTEM\CurrentControlSet\Services\Tcpip\Linkage","Export",0x00010000,"\Device\Tcpip_{B1D2C3E4-5F6A-4B8C-9D0E-02524F535731}"
+HKLM,"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{B1D2C3E4-5F6A-4B8C-9D0E-02524F535731}","EnableDHCP",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{B1D2C3E4-5F6A-4B8C-9D0E-02524F535731}","IPAddress",0x00010000,"0.0.0.0"
+HKLM,"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{B1D2C3E4-5F6A-4B8C-9D0E-02524F535731}","SubnetMask",0x00010000,"0.0.0.0"
+HKLM,"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{B1D2C3E4-5F6A-4B8C-9D0E-02524F535731}","DefaultGateway",0x00010000,"0.0.0.0"
+
 ; Packet driver
 HKLM,"SYSTEM\CurrentControlSet\Services\Packet","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\Packet","Group",0x00000000,"PNP_TDI"
