@@ -1,0 +1,117 @@
+SpacemiT K1 U-Boot changes in media/boot/spacemit-k1/u-boot.itb
+Base: https://github.com/spacemit-com/uboot-2022.10 branch k1-bl-v2.2.y, commit 7f51f445
+License: the licenses of the patched U-Boot files (see ../LICENCE.u-boot)
+
+diff --git a/arch/riscv/dts/k1-x.dtsi b/arch/riscv/dts/k1-x.dtsi
+index b4a77fbb..461923ce 100644
+--- a/arch/riscv/dts/k1-x.dtsi
++++ b/arch/riscv/dts/k1-x.dtsi
+@@ -314,6 +314,18 @@
+ 			status = "disabled";
+ 		};
+ 
++		eth1: ethernet@cac81000 {
++			compatible = "spacemit,k1x-emac";
++			reg = <0x00000000 0xCAC81000 0x00000000 0x00000420>;
++			ctrl-reg = <0x3ec>;
++			dline-reg = <0x3f0>;
++			clocks = <&ccu CLK_EMAC1_BUS>;
++			clock-names = "emac-clk";
++			resets = <&reset RESET_EMAC1>;
++			reset-names = "emac-reset";
++			status = "disabled";
++		};
++
+ 		udc: udc@c0900100 {
+ 			compatible = "spacemit,mv-udc";
+ 			reg = <0x0 0xc0900100 0x0 0x4000>;
+diff --git a/arch/riscv/dts/k1-x_deb1.dts b/arch/riscv/dts/k1-x_deb1.dts
+index 90fc0098..5e972df2 100644
+--- a/arch/riscv/dts/k1-x_deb1.dts
++++ b/arch/riscv/dts/k1-x_deb1.dts
+@@ -223,6 +223,35 @@
+ 	};
+ };
+ 
++&eth1 {
++	status = "okay";
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_gmac1>;
++
++	phy-reset-pin = <115>;
++
++	clk_tuning_enable;
++	clk-tuning-by-delayline;
++	tx-phase = <90>;
++	rx-phase = <73>;
++
++	phy-mode = "rgmii";
++	phy-addr = <1>;
++	phy-handle = <&rgmii1>;
++
++	ref-clock-from-phy;
++
++	mdio {
++		#address-cells = <0x1>;
++		#size-cells = <0x0>;
++		rgmii1: phy@1 {
++			compatible = "ethernet-phy-id001c.c916";
++			device_type = "ethernet-phy";
++			reg = <0x1>;
++		};
++	};
++};
++
+ &pcie0_rc {
+ 	status = "disabled";
+ };
+diff --git a/drivers/net/spacemit/k1x_emac.c b/drivers/net/spacemit/k1x_emac.c
+index 892b9521..c650ea32 100644
+--- a/drivers/net/spacemit/k1x_emac.c
++++ b/drivers/net/spacemit/k1x_emac.c
+@@ -95,7 +95,7 @@
+ /* We assume ARCH_DMA_MINALIGN >= 16; 16 is the EQOS HW minimum */
+ #define EQOS_DESCRIPTOR_ALIGN           ARCH_DMA_MINALIGN
+ #define EQOS_DESCRIPTORS_TX             4
+-#define EQOS_DESCRIPTORS_RX             32
++#define EQOS_DESCRIPTORS_RX             256
+ #define EQOS_DESCRIPTORS_NUM            (EQOS_DESCRIPTORS_TX + EQOS_DESCRIPTORS_RX)
+ #define EQOS_DESCRIPTORS_SIZE           ALIGN(EQOS_DESCRIPTORS_NUM * \
+                                             EQOS_DESCRIPTOR_SIZE, ARCH_DMA_MINALIGN)
+@@ -645,6 +645,7 @@ static int emac_start(struct udevice *dev)
+ 
+     if (!priv->phy->link) {
+         pr_err("No link");
++        ret = -ENOLINK;
+         goto err_shutdown_phy;
+     }
+ 
+@@ -743,11 +744,11 @@ int emac_send(struct udevice *dev, void *packet, int length)
+ 
+     emac_wr(priv, DMA_TRANSMIT_POLL_DEMAND, 0xFF);
+ 
+-    for (i = 0; i < 1000; i++) {
++    for (i = 0; i < 1000000; i++) {
+         emac_inval_desc(tx_desc);
+         if (!(readl(&tx_desc->des0) & EMAC_DESC_OWN))
+             return 0;
+-        mdelay(1);
++        udelay(1);
+     }
+ 
+     printf("%s: TX timeout\n", __func__);
+diff --git a/lib/efi_loader/efi_net.c b/lib/efi_loader/efi_net.c
+index 69276b27..30c72e7d 100644
+--- a/lib/efi_loader/efi_net.c
++++ b/lib/efi_loader/efi_net.c
+@@ -177,6 +177,10 @@ static efi_status_t EFIAPI efi_net_initialize(struct efi_simple_network *this,
+ 		r = EFI_DEVICE_ERROR;
+ 		goto out;
+ 	} else {
++		memcpy(this->mode->current_address.mac_addr, eth_get_ethaddr(),
++		       ARP_HLEN);
++		memcpy(this->mode->permanent_address.mac_addr,
++		       eth_get_ethaddr(), ARP_HLEN);
+ 		this->int_status = 0;
+ 		wait_for_packet->is_signaled = false;
+ 		this->mode->state = EFI_NETWORK_INITIALIZED;
