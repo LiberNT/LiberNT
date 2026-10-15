@@ -433,6 +433,81 @@ TestEvictionRanking(
     }
 }
 
+static VOID
+TestMovableRegionAndRelocate(
+    _Inout_ PDXGMMS2_VIDMM_TEST_STATE State)
+{
+    DXGMMS2_VIDMM_SEGMENT_DESC_V1 Desc;
+    DXGMMS2_VIDMM_RESERVE_INFO_V1 Info;
+    ULONGLONG Offset = MAXULONGLONG;
+    ULONGLONG Window = MAXULONGLONG;
+    ULONG Index;
+    NTSTATUS NtStatus;
+
+    InitSegmentDesc(&Desc, DXGMMS2_VIDMM_TEST_PAGE * 6, 0, DXGMMS2_VIDMM_SEGMENT_APERTURE);
+    NtStatus = Dxgmms2VidMmCoreSetSegment(&State->Core, 1, &Desc);
+    ok_eq_hex(NtStatus, STATUS_SUCCESS);
+    for (Index = 0; Index < 6; ++Index)
+    {
+        NtStatus = ReserveSimple(State, 1, DXGMMS2_VIDMM_TEST_PAGE, 0x8001 + Index, &Offset);
+        ok_eq_hex(NtStatus, STATUS_SUCCESS);
+        ok_eq_ulonglong(Offset, DXGMMS2_VIDMM_TEST_PAGE * Index);
+    }
+    ok_eq_hex(Dxgmms2VidMmCoreRelease(&State->Core, 1, 0x8002), STATUS_SUCCESS);
+    ok_eq_hex(Dxgmms2VidMmCoreRelease(&State->Core, 1, 0x8004), STATUS_SUCCESS);
+    ok_eq_hex(Dxgmms2VidMmCoreRelease(&State->Core, 1, 0x8006), STATUS_SUCCESS);
+
+    InitReserveInfo(&Info, DXGMMS2_VIDMM_TEST_PAGE * 2, DXGMMS2_VIDMM_TEST_PAGE, 0x8101);
+    NtStatus = Dxgmms2VidMmCoreReserve(&State->Core, 1, &Info, &Offset);
+    ok_eq_hex(NtStatus, STATUS_NO_MEMORY);
+
+    NtStatus = Dxgmms2VidMmCoreFindMovableRegion(&State->Core, 1, DXGMMS2_VIDMM_TEST_PAGE * 2, DXGMMS2_VIDMM_TEST_PAGE, &Window);
+    ok_eq_hex(NtStatus, STATUS_NO_MEMORY);
+
+    NtStatus = Dxgmms2VidMmCoreSetRangeState(&State->Core, 1, 0x8003, 0, DXGMMS2_VIDMM_RANGE_MOVABLE | DXGMMS2_VIDMM_RANGE_PINNED);
+    ok_eq_hex(NtStatus, STATUS_SUCCESS);
+    NtStatus = Dxgmms2VidMmCoreFindMovableRegion(&State->Core, 1, DXGMMS2_VIDMM_TEST_PAGE * 2, DXGMMS2_VIDMM_TEST_PAGE, &Window);
+    ok_eq_hex(NtStatus, STATUS_NO_MEMORY);
+
+    NtStatus = Dxgmms2VidMmCoreSetRangeState(&State->Core, 1, 0x8003, 0, DXGMMS2_VIDMM_RANGE_MOVABLE);
+    ok_eq_hex(NtStatus, STATUS_SUCCESS);
+    NtStatus = Dxgmms2VidMmCoreFindMovableRegion(&State->Core, 1, DXGMMS2_VIDMM_TEST_PAGE * 2, DXGMMS2_VIDMM_TEST_PAGE, &Window);
+    ok_eq_hex(NtStatus, STATUS_SUCCESS);
+    ok_eq_ulonglong(Window, DXGMMS2_VIDMM_TEST_PAGE);
+
+    NtStatus = Dxgmms2VidMmCoreFindMovableRegion(&State->Core, 1, DXGMMS2_VIDMM_TEST_PAGE * 4, DXGMMS2_VIDMM_TEST_PAGE, &Window);
+    ok_eq_hex(NtStatus, STATUS_NO_MEMORY);
+
+    NtStatus = Dxgmms2VidMmCoreRelocate(&State->Core, 1, 0xBEEF, DXGMMS2_VIDMM_TEST_PAGE, DXGMMS2_VIDMM_TEST_PAGE, DXGMMS2_VIDMM_TEST_PAGE * 2, &Offset);
+    ok_eq_hex(NtStatus, STATUS_NOT_FOUND);
+
+    NtStatus = Dxgmms2VidMmCoreRelocate(&State->Core, 1, 0x8003, DXGMMS2_VIDMM_TEST_PAGE, DXGMMS2_VIDMM_TEST_PAGE, DXGMMS2_VIDMM_TEST_PAGE * 2, &Offset);
+    ok_eq_hex(NtStatus, STATUS_SUCCESS);
+    ok_eq_ulonglong(Offset, DXGMMS2_VIDMM_TEST_PAGE * 3);
+    ok_eq_ulonglong(SegmentUsedSize(State, 1), DXGMMS2_VIDMM_TEST_PAGE * 3);
+
+    NtStatus = Dxgmms2VidMmCoreReserve(&State->Core, 1, &Info, &Offset);
+    ok_eq_hex(NtStatus, STATUS_SUCCESS);
+    ok_eq_ulonglong(Offset, DXGMMS2_VIDMM_TEST_PAGE);
+    ok_eq_ulonglong(SegmentUsedSize(State, 1), DXGMMS2_VIDMM_TEST_PAGE * 5);
+
+    NtStatus = Dxgmms2VidMmCoreRelocate(&State->Core, 1, 0x8005, DXGMMS2_VIDMM_TEST_PAGE, 0, DXGMMS2_VIDMM_TEST_PAGE * 5, &Offset);
+    ok_eq_hex(NtStatus, STATUS_SUCCESS);
+    ok_eq_ulonglong(Offset, DXGMMS2_VIDMM_TEST_PAGE * 5);
+    NtStatus = Dxgmms2VidMmCoreRelocate(&State->Core, 1, 0x8001, DXGMMS2_VIDMM_TEST_PAGE, 0, DXGMMS2_VIDMM_TEST_PAGE, &Offset);
+    ok_eq_hex(NtStatus, STATUS_SUCCESS);
+    ok_eq_ulonglong(Offset, DXGMMS2_VIDMM_TEST_PAGE * 4);
+    NtStatus = Dxgmms2VidMmCoreRelocate(&State->Core, 1, 0x8003, DXGMMS2_VIDMM_TEST_PAGE, 0, DXGMMS2_VIDMM_TEST_PAGE * 6, &Offset);
+    ok_eq_hex(NtStatus, STATUS_NO_MEMORY);
+
+    {
+        ULONGLONG Cookies[DXGMMS2_VIDMM_TEST_BATCH];
+
+        (VOID)Dxgmms2VidMmCoreReleaseAll(&State->Core, Cookies, RTL_NUMBER_OF(Cookies));
+    }
+    ok_eq_ulong(State->Core.LiveRangeCount, 0UL);
+}
+
 /*
  * A full record pool is a property of this bookkeeping, not of the segments.
  * Reporting it as a full segment would send the caller off to evict something
@@ -537,6 +612,7 @@ START_TEST(Dxgmms2VidMm)
     TestAlignmentAndCommitLimit(State);
     TestSegmentRedescriptionIsGuarded(State);
     TestEvictionRanking(State);
+    TestMovableRegionAndRelocate(State);
     TestRecordPoolGrowsOnDemand(State);
     TestStopReclaimsAndRestarts(State);
 

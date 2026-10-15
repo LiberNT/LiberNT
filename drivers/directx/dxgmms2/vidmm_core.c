@@ -499,6 +499,181 @@ Dxgmms2VidMmCoreFindEvictionCandidate(
     return TRUE;
 }
 
+static BOOLEAN
+Dxgmms2VidMmRangeIsMovable(
+    _In_ PDXGMMS2_VIDMM_RANGE Range)
+{
+    return (Range->Flags & (DXGMMS2_VIDMM_RANGE_MOVABLE | DXGMMS2_VIDMM_RANGE_PINNED)) == DXGMMS2_VIDMM_RANGE_MOVABLE;
+}
+
+NTSTATUS
+Dxgmms2VidMmCoreFindMovableRegion(
+    _In_ PDXGMMS2_VIDMM_CORE Core,
+    _In_ ULONG SegmentIndex,
+    _In_ ULONGLONG Size,
+    _In_ ULONGLONG Alignment,
+    _Out_ PULONGLONG OutOffset)
+{
+    PDXGMMS2_VIDMM_SEGMENT Segment = Dxgmms2VidMmSegment(Core, SegmentIndex);
+    PLIST_ENTRY First;
+    PLIST_ENTRY Last;
+    PLIST_ENTRY Next;
+    ULONGLONG AlignedSize;
+    ULONGLONG Limit;
+    ULONGLONG Start = 0;
+    ULONGLONG Aligned;
+    ULONGLONG Bytes = 0;
+    ULONGLONG BestBytes = MAXULONGLONG;
+    ULONG Fixed = 0;
+
+    *OutOffset = 0;
+    if (Segment == NULL || Size == 0)
+        return STATUS_INVALID_PARAMETER;
+    if (!Dxgmms2VidMmAlignUp(Size, Alignment, &AlignedSize))
+        return STATUS_INVALID_PARAMETER;
+    Limit = Dxgmms2VidMmPlacementLimit(Segment);
+    if (AlignedSize > Limit || Segment->UsedSize > Limit - AlignedSize)
+        return STATUS_NO_MEMORY;
+
+    First = Segment->RangeList.Flink;
+    Last = First;
+    Next = First;
+    for (;;)
+    {
+        if (!Dxgmms2VidMmAlignUp(Start, Alignment, &Aligned) || Aligned > Limit - AlignedSize)
+            break;
+        while (Last != &Segment->RangeList &&
+               CONTAINING_RECORD(Last, DXGMMS2_VIDMM_RANGE, Entry)->Offset < Aligned + AlignedSize)
+        {
+            PDXGMMS2_VIDMM_RANGE Range = CONTAINING_RECORD(Last, DXGMMS2_VIDMM_RANGE, Entry);
+
+            if (!Dxgmms2VidMmRangeIsMovable(Range))
+                Fixed++;
+            Bytes += Range->AlignedSize;
+            Last = Last->Flink;
+        }
+        while (First != Last)
+        {
+            PDXGMMS2_VIDMM_RANGE Range = CONTAINING_RECORD(First, DXGMMS2_VIDMM_RANGE, Entry);
+
+            if (Range->Offset + Range->AlignedSize > Aligned)
+                break;
+            if (!Dxgmms2VidMmRangeIsMovable(Range))
+                Fixed--;
+            Bytes -= Range->AlignedSize;
+            First = First->Flink;
+        }
+        if (Fixed == 0 && Bytes < BestBytes)
+        {
+            BestBytes = Bytes;
+            *OutOffset = Aligned;
+        }
+        if (Next == &Segment->RangeList)
+            break;
+        Start = CONTAINING_RECORD(Next, DXGMMS2_VIDMM_RANGE, Entry)->Offset +
+                CONTAINING_RECORD(Next, DXGMMS2_VIDMM_RANGE, Entry)->AlignedSize;
+        Next = Next->Flink;
+    }
+    return BestBytes == MAXULONGLONG ? STATUS_NO_MEMORY : STATUS_SUCCESS;
+}
+
+static BOOLEAN
+Dxgmms2VidMmFitGapOutside(
+    _In_ ULONGLONG GapStart,
+    _In_ ULONGLONG GapEnd,
+    _In_ ULONGLONG Size,
+    _In_ ULONGLONG Alignment,
+    _In_ ULONGLONG AvoidOffset,
+    _In_ ULONGLONG AvoidEnd,
+    _Out_ PULONGLONG OutOffset)
+{
+    ULONGLONG Candidate;
+
+    if (!Dxgmms2VidMmAlignUp(GapStart, Alignment, &Candidate))
+        return FALSE;
+    if (Candidate < AvoidEnd && Candidate <= MAXULONGLONG - Size && AvoidOffset < Candidate + Size &&
+        !Dxgmms2VidMmAlignUp(AvoidEnd, Alignment, &Candidate))
+    {
+        return FALSE;
+    }
+    if (Candidate > GapEnd || Size > GapEnd - Candidate)
+        return FALSE;
+    *OutOffset = Candidate;
+    return TRUE;
+}
+
+NTSTATUS
+Dxgmms2VidMmCoreRelocate(
+    _Inout_ PDXGMMS2_VIDMM_CORE Core,
+    _In_ ULONG SegmentIndex,
+    _In_ ULONGLONG OwnerCookie,
+    _In_ ULONGLONG Alignment,
+    _In_ ULONGLONG AvoidOffset,
+    _In_ ULONGLONG AvoidSize,
+    _Out_ PULONGLONG OutOffset)
+{
+    PDXGMMS2_VIDMM_SEGMENT Segment = Dxgmms2VidMmSegment(Core, SegmentIndex);
+    PDXGMMS2_VIDMM_RANGE Range = NULL;
+    PLIST_ENTRY Entry;
+    PLIST_ENTRY InsertBefore;
+    ULONGLONG Limit;
+    ULONGLONG Cursor = 0;
+    ULONGLONG Candidate = 0;
+    BOOLEAN Found = FALSE;
+
+    *OutOffset = 0;
+    if (Segment == NULL || OwnerCookie == 0 || AvoidOffset > MAXULONGLONG - AvoidSize)
+        return STATUS_INVALID_PARAMETER;
+    for (Entry = Segment->RangeList.Flink; Entry != &Segment->RangeList; Entry = Entry->Flink)
+    {
+        if (CONTAINING_RECORD(Entry, DXGMMS2_VIDMM_RANGE, Entry)->OwnerCookie == OwnerCookie)
+        {
+            Range = CONTAINING_RECORD(Entry, DXGMMS2_VIDMM_RANGE, Entry);
+            break;
+        }
+    }
+    if (Range == NULL)
+        return STATUS_NOT_FOUND;
+
+    Limit = Dxgmms2VidMmPlacementLimit(Segment);
+    for (Entry = Segment->RangeList.Flink; ; Entry = Entry->Flink)
+    {
+        PDXGMMS2_VIDMM_RANGE Existing = (Entry == &Segment->RangeList) ? NULL : CONTAINING_RECORD(Entry, DXGMMS2_VIDMM_RANGE, Entry);
+        ULONGLONG GapEnd = (Existing == NULL) ? Limit : Existing->Offset;
+
+        if (GapEnd > Cursor &&
+            Dxgmms2VidMmFitGapOutside(Cursor, GapEnd, Range->AlignedSize, Alignment,
+                                      AvoidOffset, AvoidOffset + AvoidSize, &Candidate))
+        {
+            Found = TRUE;
+            break;
+        }
+        if (Existing == NULL)
+            break;
+        if (Existing->Offset + Existing->AlignedSize > Cursor)
+            Cursor = Existing->Offset + Existing->AlignedSize;
+    }
+    if (!Found)
+        return STATUS_NO_MEMORY;
+
+    RemoveEntryList(&Range->Entry);
+    Range->Offset = Candidate;
+    InsertBefore = Segment->RangeList.Flink;
+    for (Entry = Segment->RangeList.Blink; Entry != &Segment->RangeList; Entry = Entry->Blink)
+    {
+        if (CONTAINING_RECORD(Entry, DXGMMS2_VIDMM_RANGE, Entry)->Offset <= Candidate)
+        {
+            InsertBefore = Entry->Flink;
+            break;
+        }
+    }
+    InsertTailList(InsertBefore, &Range->Entry);
+    if (Candidate + Range->AlignedSize > Segment->BumpOffset)
+        Segment->BumpOffset = Candidate + Range->AlignedSize;
+    *OutOffset = Candidate;
+    return STATUS_SUCCESS;
+}
+
 ULONG
 Dxgmms2VidMmCoreReleaseAll(
     _Inout_ PDXGMMS2_VIDMM_CORE Core,

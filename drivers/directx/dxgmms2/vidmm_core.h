@@ -66,6 +66,8 @@ NTSTATUS Dxgmms2VidMmCoreReserveFixed(_Inout_ PDXGMMS2_VIDMM_CORE Core, _In_ ULO
 NTSTATUS Dxgmms2VidMmCoreRelease(_Inout_ PDXGMMS2_VIDMM_CORE Core, _In_ ULONG SegmentIndex, _In_ ULONGLONG OwnerCookie);
 NTSTATUS Dxgmms2VidMmCoreQuerySegment(_In_ PDXGMMS2_VIDMM_CORE Core, _In_ ULONG SegmentIndex, _Inout_ DXGMMS2_VIDMM_SEGMENT_STATUS_V1 *Status);
 BOOLEAN Dxgmms2VidMmCoreFindEvictionCandidate(_In_ PDXGMMS2_VIDMM_CORE Core, _In_ ULONG SegmentIndex, _In_ ULONG ExcludeFlags, _Out_ PULONGLONG OutOwnerCookie);
+NTSTATUS Dxgmms2VidMmCoreFindMovableRegion(_In_ PDXGMMS2_VIDMM_CORE Core, _In_ ULONG SegmentIndex, _In_ ULONGLONG Size, _In_ ULONGLONG Alignment, _Out_ PULONGLONG OutOffset);
+NTSTATUS Dxgmms2VidMmCoreRelocate(_Inout_ PDXGMMS2_VIDMM_CORE Core, _In_ ULONG SegmentIndex, _In_ ULONGLONG OwnerCookie, _In_ ULONGLONG Alignment, _In_ ULONGLONG AvoidOffset, _In_ ULONGLONG AvoidSize, _Out_ PULONGLONG OutOffset);
 ULONG Dxgmms2VidMmCoreReleaseAll(_Inout_ PDXGMMS2_VIDMM_CORE Core, _Out_writes_to_(Capacity, return) PULONGLONG OwnerCookies, _In_ ULONG Capacity);
 NTSTATUS Dxgmms2VidMmCoreSetRangeState(_Inout_ PDXGMMS2_VIDMM_CORE Core, _In_ ULONG SegmentIndex, _In_ ULONGLONG OwnerCookie, _In_ LONG Priority, _In_ ULONG Flags);
 

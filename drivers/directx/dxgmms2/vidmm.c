@@ -208,6 +208,56 @@ Dxgmms2VidMmFindEvictionCandidate(
 
 static NTSTATUS
 NTAPI
+Dxgmms2VidMmFindMovableRegion(
+    _In_ DXGMMS2_VIDMM_HANDLE VidMm,
+    _In_ ULONG SegmentIndex,
+    _In_ ULONGLONG Size,
+    _In_ ULONGLONG Alignment,
+    _Out_ PULONGLONG OutOffset)
+{
+    PDXGMMS2_ADAPTER_CONTEXT Context = Dxgmms2VidMmContext(VidMm);
+    KIRQL OldIrql;
+    NTSTATUS Status;
+
+    if (OutOffset == NULL)
+        return STATUS_INVALID_PARAMETER;
+    *OutOffset = 0;
+    if (Context == NULL)
+        return STATUS_INVALID_HANDLE;
+    KeAcquireSpinLock(&Context->VidMmLock, &OldIrql);
+    Status = Dxgmms2VidMmCoreFindMovableRegion(&Context->VidMmCore, SegmentIndex, Size, Alignment, OutOffset);
+    KeReleaseSpinLock(&Context->VidMmLock, OldIrql);
+    return Status;
+}
+
+static NTSTATUS
+NTAPI
+Dxgmms2VidMmRelocatePlacement(
+    _In_ DXGMMS2_VIDMM_HANDLE VidMm,
+    _In_ ULONG SegmentIndex,
+    _In_ ULONGLONG OwnerCookie,
+    _In_ ULONGLONG Alignment,
+    _In_ ULONGLONG AvoidOffset,
+    _In_ ULONGLONG AvoidSize,
+    _Out_ PULONGLONG OutOffset)
+{
+    PDXGMMS2_ADAPTER_CONTEXT Context = Dxgmms2VidMmContext(VidMm);
+    KIRQL OldIrql;
+    NTSTATUS Status;
+
+    if (OutOffset == NULL)
+        return STATUS_INVALID_PARAMETER;
+    *OutOffset = 0;
+    if (Context == NULL)
+        return STATUS_INVALID_HANDLE;
+    KeAcquireSpinLock(&Context->VidMmLock, &OldIrql);
+    Status = Dxgmms2VidMmCoreRelocate(&Context->VidMmCore, SegmentIndex, OwnerCookie, Alignment, AvoidOffset, AvoidSize, OutOffset);
+    KeReleaseSpinLock(&Context->VidMmLock, OldIrql);
+    return Status;
+}
+
+static NTSTATUS
+NTAPI
 Dxgmms2VidMmReleaseAllPlacements(
     _In_ DXGMMS2_VIDMM_HANDLE VidMm,
     _Out_writes_to_(Capacity, *Count) PULONGLONG OwnerCookies,
@@ -258,6 +308,8 @@ Dxgmms2QueryVidMmInterface(
     VidMmInterface->FindEvictionCandidate = Dxgmms2VidMmFindEvictionCandidate;
     VidMmInterface->ReleaseAllPlacements = Dxgmms2VidMmReleaseAllPlacements;
     VidMmInterface->ReserveFixedPlacement = Dxgmms2VidMmReserveFixedPlacement;
+    VidMmInterface->FindMovableRegion = Dxgmms2VidMmFindMovableRegion;
+    VidMmInterface->RelocatePlacement = Dxgmms2VidMmRelocatePlacement;
 
     Dxgmms2DereferenceAdapterContext(Context);
     return STATUS_SUCCESS;

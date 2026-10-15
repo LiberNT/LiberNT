@@ -9975,6 +9975,30 @@ Cleanup:
 
 /* SEGMENT PLACEMENT **********************************************************/
 
+static VOID
+DxgkpVidMmInsertSegmentEntryLocked(
+    _In_ PDXGKRNL_SEGMENT Segment,
+    _In_ PDXGKVMM_ALLOCATION Allocation)
+{
+    PLIST_ENTRY Entry;
+    PLIST_ENTRY InsertBefore = Segment->AllocationList.Flink;
+
+    for (Entry = Segment->AllocationList.Blink;
+         Entry != &Segment->AllocationList;
+         Entry = Entry->Blink)
+    {
+        PDXGKVMM_ALLOCATION Existing =
+            CONTAINING_RECORD(Entry, DXGKVMM_ALLOCATION, SegmentEntry);
+
+        if (Existing->SegmentOffset <= Allocation->SegmentOffset)
+        {
+            InsertBefore = Entry->Flink;
+            break;
+        }
+    }
+    InsertTailList(InsertBefore, &Allocation->SegmentEntry);
+}
+
 /*
  * DxgkVidMmTryPlaceInSegment
  *
@@ -10044,25 +10068,7 @@ DxgkVidMmTryPlaceInSegment(
      * allocation object; it is not the allocator and does not gate placement.
      */
     ExAcquireFastMutex(&Segment->Lock);
-    {
-        PLIST_ENTRY Entry;
-        PLIST_ENTRY InsertBefore = Segment->AllocationList.Flink;
-
-        for (Entry = Segment->AllocationList.Blink;
-             Entry != &Segment->AllocationList;
-             Entry = Entry->Blink)
-        {
-            PDXGKVMM_ALLOCATION Existing =
-                CONTAINING_RECORD(Entry, DXGKVMM_ALLOCATION, SegmentEntry);
-
-            if (Existing->SegmentOffset <= Offset)
-            {
-                InsertBefore = Entry->Flink;
-                break;
-            }
-        }
-        InsertTailList(InsertBefore, &Allocation->SegmentEntry);
-    }
+    DxgkpVidMmInsertSegmentEntryLocked(Segment, Allocation);
     ExReleaseFastMutex(&Segment->Lock);
     DxgkpVidMmNotifyResidency(Allocation, TRUE);
 
@@ -12023,6 +12029,275 @@ DxgkpVidMmTryReferencePhysicalAllocation(
     return TRUE;
 }
 
+static BOOLEAN
+DxgkpVidMmAperturePlacementMovable(
+    _In_ PDXGKVMM_ALLOCATION Allocation)
+{
+    return !DxgkSubmissionResidencyPinIsHeld(&Allocation->SubmissionResidencyPinCount) &&
+           !Allocation->AccessedPhysically &&
+           !Allocation->ExplicitResidencyNotification &&
+           !Allocation->ApertureMapped &&
+           Allocation->ApertureMdl == NULL &&
+           !Allocation->PendingPlacement &&
+           Allocation->SystemMemory != NULL &&
+           (Allocation->CpuAddress == NULL || Allocation->CpuAddress == Allocation->SystemMemory);
+}
+
+static ULONG
+DxgkpVidMmPublishAperturePlacementState(
+    _In_ PDXGKRNL_SEGMENT Segment,
+    _In_ PDXGMMS2_VIDMM_INTERFACE_V1 VidMm)
+{
+    PLIST_ENTRY Entry;
+    ULONG Count = 0;
+
+    ExAcquireFastMutex(&Segment->Lock);
+    ExAcquireFastMutex(&DxgkVidMmPolicyLock);
+    for (Entry = Segment->AllocationList.Flink;
+         Entry != &Segment->AllocationList;
+         Entry = Entry->Flink)
+    {
+        PDXGKVMM_ALLOCATION Candidate =
+            CONTAINING_RECORD(Entry, DXGKVMM_ALLOCATION, SegmentEntry);
+        ULONG Flags = 0;
+
+        if (DxgkSubmissionResidencyPinIsHeld(&Candidate->SubmissionResidencyPinCount) ||
+            InterlockedCompareExchangePointer(
+                &Candidate->ResidencyTransactionOwner,
+                NULL,
+                NULL) != NULL)
+            Flags |= DXGMMS2_VIDMM_RANGE_PINNED;
+        if (InterlockedCompareExchange(&Candidate->ResidencyReferenceCount, 0, 0) != 0)
+            Flags |= DXGMMS2_VIDMM_RANGE_RESIDENCY_REFERENCED;
+        if (Candidate->Offered)
+            Flags |= DXGMMS2_VIDMM_RANGE_OFFERED;
+        if (DxgkpVidMmAperturePlacementMovable(Candidate))
+            Flags |= DXGMMS2_VIDMM_RANGE_MOVABLE;
+        (VOID)VidMm->SetPlacementState(VidMm->VidMmHandle,
+                                       Segment->SegmentId - 1,
+                                       (ULONGLONG)(ULONG_PTR)Candidate,
+                                       Candidate->Offered ? (LONG)Candidate->OfferPriority : (LONG)Candidate->AllocationPriority,
+                                       Flags);
+        Count++;
+    }
+    ExReleaseFastMutex(&DxgkVidMmPolicyLock);
+    ExReleaseFastMutex(&Segment->Lock);
+    return Count;
+}
+
+static NTSTATUS
+DxgkpVidMmRelocateAperturePlacement(
+    _In_ PDXGKRNL_SEGMENT Segment,
+    _In_ PDXGMMS2_VIDMM_INTERFACE_V1 VidMm,
+    _In_ PDXGKVMM_ALLOCATION Victim,
+    _In_ ULONGLONG AvoidOffset,
+    _In_ ULONGLONG AvoidSize)
+{
+    ULONG OwnerToken;
+    ULONGLONG Offset = 0;
+    NTSTATUS Status;
+
+    Status = DxgkpVidMmTryBeginResidencyTransaction(Victim, &OwnerToken);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = KeWaitForSingleObject(&Victim->ResidencyLock,
+                                   Executive,
+                                   KernelMode,
+                                   FALSE,
+                                   NULL);
+    if (NT_SUCCESS(Status))
+    {
+        if (!Victim->Resident ||
+            Victim->SegmentId != Segment->SegmentId ||
+            !DxgkpVidMmAperturePlacementMovable(Victim))
+        {
+            Status = STATUS_DEVICE_BUSY;
+        }
+        else
+        {
+            Status = VidMm->RelocatePlacement(VidMm->VidMmHandle,
+                                              Segment->SegmentId - 1,
+                                              (ULONGLONG)(ULONG_PTR)Victim,
+                                              (ULONGLONG)Victim->Alignment,
+                                              AvoidOffset,
+                                              AvoidSize,
+                                              &Offset);
+        }
+        if (NT_SUCCESS(Status))
+        {
+            ExAcquireFastMutex(&Segment->Lock);
+            RemoveEntryList(&Victim->SegmentEntry);
+            Victim->SegmentOffset = Offset;
+            Victim->PhysicalAddress.QuadPart =
+                (LONGLONG)((ULONGLONG)Segment->BaseAddress.QuadPart + Offset);
+            DxgkpVidMmInsertSegmentEntryLocked(Segment, Victim);
+            ExReleaseFastMutex(&Segment->Lock);
+        }
+        KeReleaseMutex(&Victim->ResidencyLock, FALSE);
+    }
+    DxgkpVidMmEndResidencyTransaction(Victim, &OwnerToken);
+    return Status;
+}
+
+static NTSTATUS
+DxgkpVidMmClearApertureWindow(
+    _In_ PDXGKRNL_SEGMENT Segment,
+    _In_ PDXGMMS2_VIDMM_INTERFACE_V1 VidMm,
+    _In_ ULONGLONG Size,
+    _In_ ULONGLONG Alignment,
+    _In_ ULONG Placements)
+{
+    ULONGLONG Window = 0;
+    ULONG Moves = 0;
+    NTSTATUS Status;
+
+    Status = VidMm->FindMovableRegion(VidMm->VidMmHandle,
+                                      Segment->SegmentId - 1,
+                                      Size,
+                                      Alignment,
+                                      &Window);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    for (;;)
+    {
+        PDXGKVMM_ALLOCATION Victim = NULL;
+        PLIST_ENTRY Entry;
+
+        ExAcquireFastMutex(&Segment->Lock);
+        for (Entry = Segment->AllocationList.Flink;
+             Entry != &Segment->AllocationList;
+             Entry = Entry->Flink)
+        {
+            PDXGKVMM_ALLOCATION Candidate =
+                CONTAINING_RECORD(Entry, DXGKVMM_ALLOCATION, SegmentEntry);
+            ULONGLONG CandidateAlignment = max((ULONGLONG)Candidate->Alignment, 1ULL);
+            ULONGLONG CandidateSize =
+                (VidMmAllocationSizeForSegment(Candidate, Segment) + CandidateAlignment - 1) &
+                ~(CandidateAlignment - 1);
+
+            if (Candidate->SegmentOffset >= Window + Size)
+                break;
+            if (Candidate->SegmentOffset + CandidateSize > Window)
+            {
+                Victim = Candidate;
+                break;
+            }
+        }
+        if (Victim != NULL && !DxgkpVidMmTryReferencePhysicalAllocation(Victim))
+        {
+            ExReleaseFastMutex(&Segment->Lock);
+            return STATUS_NO_MEMORY;
+        }
+        ExReleaseFastMutex(&Segment->Lock);
+        if (Victim == NULL)
+            return STATUS_SUCCESS;
+        if (++Moves > Placements + 64)
+        {
+            DxgkVidMmDereferenceAllocation(Victim);
+            return STATUS_NO_MEMORY;
+        }
+        Status = DxgkpVidMmRelocateAperturePlacement(Segment,
+                                                     VidMm,
+                                                     Victim,
+                                                     Window,
+                                                     Size);
+        DxgkVidMmDereferenceAllocation(Victim);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("DxgkVidMm: moving allocation %p out of aperture window 0x%I64x+0x%I64x failed 0x%08lx\n",
+                    Victim, Window, Size, Status);
+            return STATUS_NO_MEMORY;
+        }
+    }
+}
+
+static VOID
+DxgkpVidMmSlideAperturePlacements(
+    _In_ PDXGKRNL_SEGMENT Segment,
+    _In_ PDXGMMS2_VIDMM_INTERFACE_V1 VidMm)
+{
+    ULONGLONG Cursor = 0;
+
+    for (;;)
+    {
+        PDXGKVMM_ALLOCATION Victim = NULL;
+        ULONGLONG Offset = 0;
+        PLIST_ENTRY Entry;
+
+        ExAcquireFastMutex(&Segment->Lock);
+        for (Entry = Segment->AllocationList.Flink;
+             Entry != &Segment->AllocationList;
+             Entry = Entry->Flink)
+        {
+            PDXGKVMM_ALLOCATION Candidate =
+                CONTAINING_RECORD(Entry, DXGKVMM_ALLOCATION, SegmentEntry);
+
+            if (Candidate->SegmentOffset < Cursor ||
+                !DxgkpVidMmAperturePlacementMovable(Candidate))
+                continue;
+            Offset = Candidate->SegmentOffset;
+            if (DxgkpVidMmTryReferencePhysicalAllocation(Candidate))
+                Victim = Candidate;
+            break;
+        }
+        ExReleaseFastMutex(&Segment->Lock);
+        if (Entry == &Segment->AllocationList || Offset == MAXULONGLONG)
+            return;
+        Cursor = Offset + 1;
+        if (Victim == NULL)
+            continue;
+        (VOID)DxgkpVidMmRelocateAperturePlacement(Segment,
+                                                  VidMm,
+                                                  Victim,
+                                                  Offset,
+                                                  MAXULONGLONG - Offset);
+        DxgkVidMmDereferenceAllocation(Victim);
+    }
+}
+
+static NTSTATUS
+DxgkpVidMmPlaceWithApertureCompaction(
+    _In_ PDXGKRNL_SEGMENT Segment,
+    _In_ PDXGKVMM_ALLOCATION Allocation)
+{
+    PDXGMMS2_VIDMM_INTERFACE_V1 VidMm = DxgkpVidMmOwner(Allocation->Adapter);
+    DXGMMS2_VIDMM_SEGMENT_STATUS_V1 SegmentStatus;
+    ULONGLONG Size = VidMmAllocationSizeForSegment(Allocation, Segment);
+    ULONGLONG Alignment = max((ULONGLONG)Allocation->Alignment, 1ULL);
+    ULONG Placements;
+    NTSTATUS Status;
+
+    if (VidMm == NULL)
+        return STATUS_DEVICE_NOT_READY;
+    if (VidMm->FindMovableRegion == NULL || VidMm->RelocatePlacement == NULL)
+        return STATUS_NO_MEMORY;
+    if (Size > MAXULONGLONG - (Alignment - 1))
+        return STATUS_INTEGER_OVERFLOW;
+    Size = (Size + Alignment - 1) & ~(Alignment - 1);
+
+    RtlZeroMemory(&SegmentStatus, sizeof(SegmentStatus));
+    Status = VidMm->QuerySegmentStatus(VidMm->VidMmHandle,
+                                       Segment->SegmentId - 1,
+                                       &SegmentStatus);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Size > SegmentStatus.CommitLimit ||
+        SegmentStatus.UsedSize > SegmentStatus.CommitLimit - Size)
+        return STATUS_NO_MEMORY;
+
+    Placements = DxgkpVidMmPublishAperturePlacementState(Segment, VidMm);
+    Status = DxgkpVidMmClearApertureWindow(Segment, VidMm, Size, Alignment, Placements);
+    if (NT_SUCCESS(Status))
+    {
+        Status = DxgkVidMmTryPlaceInSegment(Segment, Allocation);
+        if (NT_SUCCESS(Status))
+            return Status;
+    }
+    DxgkpVidMmSlideAperturePlacements(Segment, VidMm);
+    return DxgkVidMmTryPlaceInSegment(Segment, Allocation);
+}
+
 static NTSTATUS
 DxgkpVidMmMakeResidentOwned(
     _In_ PDXGKVMM_ALLOCATION Allocation,
@@ -12171,6 +12446,20 @@ DxgkpVidMmMakeResidentOwned(
             Placed = TRUE;
             DPRINT("DxgkVidMmMakeResident: placed after eviction in seg %lu offset=0x%I64x\n", Seg->SegmentId, Allocation->SegmentOffset);
         }
+    }
+
+    for (i = 0; i < Adapter->SegmentCount && !Placed; i++)
+    {
+        PDXGKRNL_SEGMENT Seg = &Segments[i];
+
+        if (!VidMmAllocationSupportsSegment(Allocation, Seg->SegmentId) ||
+            !VidMmSegmentIsAperture(Seg) ||
+            Seg->Flags.PitchAlignment ||
+            Allocation->SystemMemory == NULL)
+            continue;
+        Status = DxgkpVidMmPlaceWithApertureCompaction(Seg, Allocation);
+        if (NT_SUCCESS(Status))
+            Placed = TRUE;
     }
 
     if (!Placed)
