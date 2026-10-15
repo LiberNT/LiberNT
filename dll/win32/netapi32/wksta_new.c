@@ -1150,6 +1150,46 @@ NetWkstaUserGetInfo(
     }
     RpcEndExcept;
 
+    if (status == NERR_Success && *bufptr != NULL)
+    {
+        LPWSTR *Strings = (LPWSTR *)*bufptr;
+        ULONG Count = (level == 1) ? 4 : 1;
+        SIZE_T Size = Count * sizeof(LPWSTR);
+        LPWSTR *Packed = NULL;
+        PWSTR Ptr;
+        ULONG i;
+
+        for (i = 0; i < Count; i++)
+        {
+            if (Strings[i] != NULL)
+                Size += (wcslen(Strings[i]) + 1) * sizeof(WCHAR);
+        }
+
+        status = NetApiBufferAllocate(Size, (PVOID *)&Packed);
+        if (status == NERR_Success)
+        {
+            Ptr = (PWSTR)&Packed[Count];
+            for (i = 0; i < Count; i++)
+            {
+                if (Strings[i] == NULL)
+                {
+                    Packed[i] = NULL;
+                    continue;
+                }
+
+                Packed[i] = Ptr;
+                wcscpy(Ptr, Strings[i]);
+                Ptr += wcslen(Ptr) + 1;
+            }
+        }
+
+        for (i = 0; i < Count; i++)
+            midl_user_free(Strings[i]);
+        midl_user_free(Strings);
+
+        *bufptr = (LPBYTE)Packed;
+    }
+
     return status;
 }
 
