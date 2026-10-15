@@ -1,6 +1,10 @@
 name: Build
 on: [push, pull_request]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-linux:
     strategy:
@@ -66,13 +70,14 @@ jobs:
       if: ${{ steps.cache_rosbe.outputs.cache-hit != 'true' }}
       run: sh /tmp/rosbe-bootstrap.sh
 
-    - name: Set up cache for ccache
-      uses: actions/cache@v5
+    - name: Restore ccache
+      id: ccache_restore
+      uses: actions/cache/restore@v5
       with:
         path: ccache
-        key: ccache-${{matrix.compiler}}-${{matrix.arch}}-${{matrix.config}}-${{matrix.ntver}}-${{github.sha}}
+        key: ccache-${{matrix.compiler}}-${{matrix.arch}}${{matrix.variant}}-${{matrix.config}}-${{matrix.ntver}}-${{github.run_id}}-${{github.run_attempt}}
         restore-keys: |
-          ccache-${{matrix.compiler}}-${{matrix.arch}}-${{matrix.config}}-${{matrix.ntver}}-
+          ccache-${{matrix.compiler}}-${{matrix.arch}}${{matrix.variant}}-${{matrix.config}}-${{matrix.ntver}}-
 
     - name: Set ccache settings
       run: |
@@ -133,7 +138,15 @@ jobs:
         ninja -C ${{steps.configure.outputs.outdir}} bootcd liberntimg liberntvhd -k0
 
     - name: Print ccache statistics
+      if: ${{ always() && steps.ccache_restore.outcome == 'success' }}
       run: ccache -s
+
+    - name: Save ccache
+      if: ${{ always() && steps.ccache_restore.outcome == 'success' }}
+      uses: actions/cache/save@v5
+      with:
+        path: ccache
+        key: ${{ steps.ccache_restore.outputs.cache-primary-key }}
 
     - name: Name artifacts
       id: images
