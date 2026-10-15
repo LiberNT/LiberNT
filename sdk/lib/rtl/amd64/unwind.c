@@ -293,6 +293,45 @@ SetXmmRegFromStackValue(
  *  - Test and compare with Windows behaviour
  */
 static
+BOOLEAN
+RtlpIsInEpilogV2(
+    _In_ PUNWIND_INFO UnwindInfo,
+    _In_ PRUNTIME_FUNCTION FunctionEntry,
+    _In_ ULONG64 ControlRva)
+{
+    ULONG EpilogSize, EpilogOffset;
+    ULONG Index;
+
+    if (UnwindInfo->UnwindCode[0].UnwindOp != UWOP_EPILOG)
+        return FALSE;
+
+    EpilogSize = UnwindInfo->UnwindCode[0].CodeOffset;
+    if (UnwindInfo->UnwindCode[0].OpInfo & 1)
+    {
+        EpilogOffset = FunctionEntry->EndAddress - EpilogSize;
+        if (ControlRva - EpilogOffset < EpilogSize)
+            return TRUE;
+    }
+
+    for (Index = 1; Index < UnwindInfo->CountOfCodes; Index++)
+    {
+        if (UnwindInfo->UnwindCode[Index].UnwindOp != UWOP_EPILOG)
+            break;
+
+        EpilogOffset = UnwindInfo->UnwindCode[Index].CodeOffset +
+                       UnwindInfo->UnwindCode[Index].OpInfo * 256;
+        if (EpilogOffset == 0)
+            break;
+
+        EpilogOffset = FunctionEntry->EndAddress - EpilogOffset;
+        if (ControlRva - EpilogOffset < EpilogSize)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+static
 __inline
 BOOLEAN
 RtlpTryToUnwindEpilog(
@@ -526,7 +565,8 @@ RtlVirtualUnwind(
     }
 
     /* Check if we are in the function epilog and try to finish it */
-    if ((CodeOffset > UnwindInfo->SizeOfProlog) && (UnwindInfo->CountOfCodes > 0))
+    if ((CodeOffset > UnwindInfo->SizeOfProlog) && (UnwindInfo->CountOfCodes > 0) &&
+        ((UnwindInfo->Version < 2) || RtlpIsInEpilogV2(UnwindInfo, FunctionEntry, ControlRva)))
     {
         if (RtlpTryToUnwindEpilog(Context, ControlPc, ContextPointers, ImageBase, FunctionEntry))
         {
