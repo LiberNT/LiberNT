@@ -2096,6 +2096,37 @@ done:
 }
 
 
+static BOOLEAN
+LsapIsClientLocalSystem(VOID)
+{
+    UCHAR Buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    PTOKEN_USER User = (PTOKEN_USER)Buffer;
+    HANDLE TokenHandle;
+    ULONG Length;
+    NTSTATUS Status;
+
+    if (RpcImpersonateClient(NULL) != RPC_S_OK)
+        return FALSE;
+
+    Status = NtOpenThreadToken(NtCurrentThread(),
+                               TOKEN_QUERY,
+                               TRUE,
+                               &TokenHandle);
+    RpcRevertToSelf();
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    Status = NtQueryInformationToken(TokenHandle,
+                                     TokenUser,
+                                     User,
+                                     sizeof(Buffer),
+                                     &Length);
+    NtClose(TokenHandle);
+
+    return NT_SUCCESS(Status) && RtlEqualSid(User->User.Sid, LsapLocalSystemSid);
+}
+
+
 static NTSTATUS
 LsapLookupWellKnownSids(PLSAPR_SID_ENUM_BUFFER SidEnumBuffer,
                         PLSAPR_TRANSLATED_NAME_EX NamesBuffer,
@@ -2108,6 +2139,7 @@ LsapLookupWellKnownSids(PLSAPR_SID_ENUM_BUFFER SidEnumBuffer,
     ULONG DomainIndex;
     ULONG i;
     NTSTATUS Status = STATUS_SUCCESS;
+    BOOLEAN ClientChecked = FALSE, ClientIsLocalSystem = FALSE;
 
     for (i = 0; i < SidEnumBuffer->Entries; i++)
     {
@@ -2123,7 +2155,12 @@ LsapLookupWellKnownSids(PLSAPR_SID_ENUM_BUFFER SidEnumBuffer,
         ptr = LsapLookupWellKnownSid(SidEnumBuffer->SidInfo[i].Sid);
         if (ptr != NULL)
         {
-            NamesBuffer[i].Use = ptr->Sid == LsapLocalSystemSid ? SidTypeUser : ptr->Use;
+            if (ptr->Sid == LsapLocalSystemSid && !ClientChecked)
+            {
+                ClientIsLocalSystem = LsapIsClientLocalSystem();
+                ClientChecked = TRUE;
+            }
+            NamesBuffer[i].Use = (ptr->Sid == LsapLocalSystemSid && ClientIsLocalSystem) ? SidTypeUser : ptr->Use;
             NamesBuffer[i].Flags = 0;
 
             NamesBuffer[i].Name.Length = ptr->AccountName.Length;
