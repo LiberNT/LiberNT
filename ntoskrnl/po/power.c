@@ -21,12 +21,14 @@ typedef struct _POWER_STATE_TRAVERSE_CONTEXT
     SYSTEM_POWER_STATE SystemPowerState;
     POWER_ACTION PowerAction;
     PDEVICE_OBJECT PowerDevice;
+    ULONG Level;
 } POWER_STATE_TRAVERSE_CONTEXT, *PPOWER_STATE_TRAVERSE_CONTEXT;
 
 PDEVICE_NODE PopSystemPowerDeviceNode = NULL;
 BOOLEAN PopAcpiPresent = FALSE;
 POP_POWER_ACTION PopAction;
 WORK_QUEUE_ITEM PopShutdownWorkItem;
+static LONG PopShutdownInProgress;
 SYSTEM_POWER_CAPABILITIES PopCapabilities;
 
 #define POP_PROCESSOR_POWER_TAG 'pPoP'
@@ -573,6 +575,9 @@ PopSetSystemPowerStateTraverse(PDEVICE_NODE DeviceNode,
     if (DeviceNode == IopRootDeviceNode)
         return STATUS_SUCCESS;
 
+    if (DeviceNode->Level != PowerStateContext->Level)
+        return STATUS_SUCCESS;
+
     if (DeviceNode->PhysicalDeviceObject == PowerStateContext->PowerDevice)
         return STATUS_SUCCESS;
 
@@ -610,6 +615,19 @@ PopSetSystemPowerStateTraverse(PDEVICE_NODE DeviceNode,
 #endif
 }
 
+static
+NTSTATUS
+PopFindDeepestDeviceNodeTraverse(PDEVICE_NODE DeviceNode,
+                                 PVOID Context)
+{
+    PULONG DeepestLevel = Context;
+
+    if (DeviceNode->Level > *DeepestLevel)
+        *DeepestLevel = DeviceNode->Level;
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 PopSetSystemPowerState(SYSTEM_POWER_STATE PowerState, POWER_ACTION PowerAction)
@@ -619,6 +637,7 @@ PopSetSystemPowerState(SYSTEM_POWER_STATE PowerState, POWER_ACTION PowerAction)
     NTSTATUS Status;
     DEVICETREE_TRAVERSE_CONTEXT Context;
     POWER_STATE_TRAVERSE_CONTEXT PowerContext;
+    ULONG DeepestLevel;
 
     Status = IopGetSystemPowerDeviceObject(&DeviceObject);
     if (!NT_SUCCESS(Status))
@@ -640,6 +659,7 @@ PopSetSystemPowerState(SYSTEM_POWER_STATE PowerState, POWER_ACTION PowerAction)
     PowerContext.PowerAction = PowerAction;
     PowerContext.SystemPowerState = PowerState;
     PowerContext.PowerDevice = Fdo;
+    PowerContext.Level = 0;
 
     /* Query for system power change */
     IopInitDeviceTreeTraverseContext(&Context,
@@ -653,13 +673,23 @@ PopSetSystemPowerState(SYSTEM_POWER_STATE PowerState, POWER_ACTION PowerAction)
         DPRINT1("Query system power state failed; changing state anyway\n");
     }
 
-    /* Set system power change */
+    DeepestLevel = 0;
     IopInitDeviceTreeTraverseContext(&Context,
                                      IopRootDeviceNode,
-                                     PopSetSystemPowerStateTraverse,
-                                     &PowerContext);
-
+                                     PopFindDeepestDeviceNodeTraverse,
+                                     &DeepestLevel);
     IopTraverseDeviceTree(&Context);
+
+    /* Set system power change */
+    for (PowerContext.Level = DeepestLevel; PowerContext.Level > 0; PowerContext.Level--)
+    {
+        IopInitDeviceTreeTraverseContext(&Context,
+                                         IopRootDeviceNode,
+                                         PopSetSystemPowerStateTraverse,
+                                         &PowerContext);
+
+        IopTraverseDeviceTree(&Context);
+    }
 
     if (!PopAcpiPresent) return STATUS_NOT_IMPLEMENTED;
 
@@ -2045,6 +2075,15 @@ NtSetSystemPowerState(IN POWER_ACTION SystemAction,
 
         /* Do it as a kernel-mode caller for consistency with system state */
         return ZwSetSystemPowerState(SystemAction, MinSystemState, Flags);
+    }
+
+    if (((SystemAction == PowerActionShutdown) ||
+         (SystemAction == PowerActionShutdownReset) ||
+         (SystemAction == PowerActionShutdownOff)) &&
+        InterlockedExchange(&PopShutdownInProgress, TRUE))
+    {
+        DPRINT1("Shutdown already in progress; action %u ignored\n", SystemAction);
+        return STATUS_SHUTDOWN_IN_PROGRESS;
     }
 
     /* Read policy settings (partial shutdown vs. full shutdown) */
