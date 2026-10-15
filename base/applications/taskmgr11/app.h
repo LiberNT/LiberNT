@@ -439,7 +439,7 @@ struct DiskSnapshot
  * Nothing here is a fixed set of engine names.
  */
 #define TM_MAX_GPUS         8
-#define TM_MAX_GPU_ENGINES  8
+#define TM_MAX_GPU_ENGINES  32
 
 struct GpuEngineSnapshot
 {
@@ -463,6 +463,7 @@ struct GpuSnapshot
     WCHAR     location[96];     /* "PCI bus 11, device 0, function 0"      */
     int       index;            /* GPU 0, GPU 1, ...                       */
     int       engineCount;
+    int       graphEngines[4];  /* engines of the four default graphs      */
     GpuEngineSnapshot engines[TM_MAX_GPU_ENGINES];
 
     double    utilPct;          /* busiest engine, which is what Windows

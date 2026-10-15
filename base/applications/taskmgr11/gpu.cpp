@@ -302,6 +302,14 @@ static void ResolveAdapterIdentity(void)
                                              DIREG_DRV, KEY_QUERY_VALUE);
             if (driverKey != INVALID_HANDLE_VALUE)
             {
+                cb = sizeof(description) - sizeof(WCHAR);
+                ZeroMemory(description, sizeof(description));
+                if (RegQueryValueExW(driverKey, L"DriverDesc", NULL, NULL,
+                                     (LPBYTE)description, &cb) == ERROR_SUCCESS &&
+                    description[0])
+                {
+                    StringCchCopyW(gpu->name, _countof(gpu->name), description);
+                }
                 cb = sizeof(gpu->driverVersion);
                 if (RegQueryValueExW(driverKey, L"DriverVersion", NULL, NULL,
                                      (LPBYTE)gpu->driverVersion, &cb) != ERROR_SUCCESS)
@@ -471,7 +479,7 @@ static const D3D_FEATURE_LEVEL s_featureLevels[] =
 static void FormatDirectXVersion(int runtime, D3D_FEATURE_LEVEL level,
                                  WCHAR* buf, int cch)
 {
-    StringCchPrintfW(buf, cch, L"%d (FL %u_%u)", runtime,
+    StringCchPrintfW(buf, cch, L"%d (FL %u.%u)", runtime,
                      ((UINT)level >> 12) & 0xF, ((UINT)level >> 8) & 0xF);
 }
 
@@ -590,6 +598,41 @@ static void ProbeDirectXVersion(GpuSnapshot* gpu)
 /*  Per-adapter collection                                             */
 /* ------------------------------------------------------------------ */
 
+static void OrderGraphEngines(GpuSnapshot* gpu)
+{
+    static const ULONG preferred[] =
+    {
+        DXGK_ENGINE_TYPE_3D,
+        DXGK_ENGINE_TYPE_COPY,
+        DXGK_ENGINE_TYPE_VIDEO_ENCODE,
+        DXGK_ENGINE_TYPE_VIDEO_DECODE,
+    };
+    BOOL taken[TM_MAX_GPU_ENGINES] = { FALSE };
+    int slots = gpu->engineCount < 4 ? gpu->engineCount : 4;
+    int slot = 0;
+
+    for (int p = 0; p < (int)_countof(preferred) && slot < slots; p++)
+    {
+        for (int i = 0; i < gpu->engineCount; i++)
+        {
+            if (!taken[i] && gpu->engines[i].engineType == preferred[p])
+            {
+                taken[i] = TRUE;
+                gpu->graphEngines[slot++] = i;
+                break;
+            }
+        }
+    }
+    for (int i = 0; i < gpu->engineCount && slot < slots; i++)
+    {
+        if (!taken[i])
+        {
+            taken[i] = TRUE;
+            gpu->graphEngines[slot++] = i;
+        }
+    }
+}
+
 static void CollectEngines(GpuSnapshot* gpu, D3DKMT_HANDLE hAdapter,
                            ULONG nodeCount)
 {
@@ -676,6 +719,7 @@ static void CollectEngines(GpuSnapshot* gpu, D3DKMT_HANDLE hAdapter,
         gpu->engines[node].hasUtilization = FALSE;
     }
     gpu->engineCount = (int)nodeCount;
+    OrderGraphEngines(gpu);
 }
 
 static void CollectMemory(GpuSnapshot* gpu, D3DKMT_HANDLE hAdapter, ULONG segmentCount)
@@ -692,7 +736,6 @@ static void CollectMemory(GpuSnapshot* gpu, D3DKMT_HANDLE hAdapter, ULONG segmen
     info.PrivateDriverDataSize = sizeof(groups);
     if (NT_SUCCESS(pQueryAdapterInfo(&info)))
     {
-        gpu->dedicatedTotal = groups.LocalMemory;
         gpu->sharedTotal = groups.LegacyInfo.SharedSystemMemorySize;
         /*
          * Memory that belongs to no budget group is memory the hardware kept
@@ -700,6 +743,8 @@ static void CollectMemory(GpuSnapshot* gpu, D3DKMT_HANDLE hAdapter, ULONG segmen
          */
         gpu->reserved = groups.NonBudgetMemory;
     }
+
+    ULONGLONG videoMemory = 0;
 
     gpu->dedicatedUsed = 0;
     gpu->sharedUsed = 0;
@@ -723,8 +768,17 @@ static void CollectMemory(GpuSnapshot* gpu, D3DKMT_HANDLE hAdapter, ULONG segmen
         if (stats.QueryResult.SegmentInformation.Aperture)
             gpu->sharedUsed += stats.QueryResult.SegmentInformation.BytesCommitted;
         else
+        {
             gpu->dedicatedUsed += stats.QueryResult.SegmentInformation.BytesCommitted;
+            videoMemory += stats.QueryResult.SegmentInformation.CommitLimit;
+        }
     }
+
+    gpu->dedicatedTotal = videoMemory > gpu->reserved ? videoMemory - gpu->reserved : 0;
+    if (groups.LocalMemory && gpu->dedicatedTotal > groups.LocalMemory)
+        gpu->dedicatedTotal = groups.LocalMemory;
+    if (!gpu->dedicatedTotal)
+        gpu->dedicatedUsed = 0;
 
     gpu->hDedicated.Push((float)gpu->dedicatedUsed);
     gpu->hShared.Push((float)gpu->sharedUsed);
@@ -764,6 +818,12 @@ static void CollectThermal(GpuSnapshot* gpu, D3DKMT_HANDLE hAdapter)
         return;
     }
 
+    if (perf.Temperature == 0)
+    {
+        gpu->hasTemperature = FALSE;
+        gpu->temperatureC = 0.0;
+        return;
+    }
     gpu->hasTemperature = TRUE;
     gpu->temperatureC = perf.Temperature / 10.0;   /* deci-Celsius */
 }

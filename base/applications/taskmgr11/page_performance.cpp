@@ -707,8 +707,11 @@ struct PerformancePage : Page
             else
                 StringCchCopyW(st[n].value, 64, L"Not available");
             st[n++].label = L"Utilization";
-            FmtMemoryPair(gpu->dedicatedUsed, gpu->dedicatedTotal, st[n].value, 64);
-            st[n++].label = L"Dedicated GPU memory";
+            if (gpu->dedicatedTotal)
+            {
+                FmtMemoryPair(gpu->dedicatedUsed, gpu->dedicatedTotal, st[n].value, 64);
+                st[n++].label = L"Dedicated GPU memory";
+            }
             FmtMemoryPair(gpu->dedicatedUsed + gpu->sharedUsed,
                           gpu->dedicatedTotal + gpu->sharedTotal, st[n].value, 64);
             st[n++].label = L"GPU Memory";
@@ -1068,7 +1071,7 @@ struct PerformancePage : Page
                 style.grid = TRUE;
                 style.border = TRUE;
                 style.yMax = 100.0;
-                DrawGraph(paint, cell, &gpu->engines[i].history, style);
+                DrawGraph(paint, cell, &gpu->engines[gpu->graphEngines[i]].history, style);
             }
         }
 
@@ -1081,10 +1084,12 @@ struct PerformancePage : Page
             RECT label = { left, top, left + cellWidth, top + labelHeight };
             WCHAR percent[16];
 
-            DrawTextClip(dc, gpu->engines[i].name, label, g_t.fSmall, g_t.textSec,
+            const GpuEngineSnapshot* engine = &gpu->engines[gpu->graphEngines[i]];
+
+            DrawTextClip(dc, engine->name, label, g_t.fSmall, g_t.textSec,
                          DT_LEFT | DT_SINGLELINE | DT_BOTTOM);
-            if (gpu->engines[i].hasUtilization)
-                StringCchPrintfW(percent, _countof(percent), L"%.0f%%", gpu->engines[i].utilPct);
+            if (engine->hasUtilization)
+                StringCchPrintfW(percent, _countof(percent), L"%.0f%%", engine->utilPct);
             else
                 StringCchCopyW(percent, _countof(percent), L"N/A");
             DrawTextClip(dc, percent, label, g_t.fSmall, g_t.textSec,
@@ -1279,7 +1284,7 @@ struct PerformancePage : Page
              * the memory graphs take the room instead. */
             if (gpu->engineCount == 0)
                 enginesHeight = 0;
-            dedicatedHeight = (available - gap * 2 - enginesHeight) / 2;
+            dedicatedHeight = gpu->dedicatedTotal ? (available - gap * 2 - enginesHeight) / 2 : 0;
             sharedHeight = available - gap * 2 - enginesHeight - dedicatedHeight;
 
             if (enginesHeight != 0)
@@ -1310,8 +1315,9 @@ struct PerformancePage : Page
                                     : graphTop;
                 RECT dedicated = { pane.left, memoryTop, pane.right,
                                    memoryTop + dedicatedHeight };
-                RECT shared = { pane.left, dedicated.bottom + gap, pane.right,
-                                dedicated.bottom + gap + sharedHeight };
+                int sharedTop = dedicatedHeight ? dedicated.bottom + gap : memoryTop;
+                RECT shared = { pane.left, sharedTop, pane.right,
+                                sharedTop + sharedHeight };
                 double dedicatedMax = gpu->dedicatedTotal ?
                                       (double)gpu->dedicatedTotal :
                                       AutoMaximum(&gpu->hDedicated, NULL,
@@ -1321,10 +1327,13 @@ struct PerformancePage : Page
                                    AutoMaximum(&gpu->hShared, NULL,
                                                64.0 * 1024.0 * 1024.0);
 
-                FmtBytes((ULONGLONG)dedicatedMax, maximumLabel, _countof(maximumLabel));
-                PaintHistoryGraph(dc, dedicated, L"Dedicated GPU memory usage",
-                                  maximumLabel, &gpu->hDedicated, NULL,
-                                  dedicatedMax, FALSE);
+                if (dedicatedHeight)
+                {
+                    FmtBytes((ULONGLONG)dedicatedMax, maximumLabel, _countof(maximumLabel));
+                    PaintHistoryGraph(dc, dedicated, L"Dedicated GPU memory usage",
+                                      maximumLabel, &gpu->hDedicated, NULL,
+                                      dedicatedMax, FALSE);
+                }
                 FmtBytes((ULONGLONG)sharedMax, maximumLabel, _countof(maximumLabel));
                 PaintHistoryGraph(dc, shared, L"Shared GPU memory usage",
                                   maximumLabel, &gpu->hShared, NULL,
