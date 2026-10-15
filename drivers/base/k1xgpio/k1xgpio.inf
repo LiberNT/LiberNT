@@ -1,0 +1,49 @@
+; PROJECT:     LiberNT SpacemiT K1 GPIO driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     SpacemiT K1 GPIO driver installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=System
+ClassGUID={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+CatalogFile=k1xgpio.cat
+DriverVer=10/15/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=SpacemitMfg,NTRISCV64
+
+[SpacemitMfg.NTRISCV64]
+%K1XGPIO.DeviceDesc%=K1XGPIO_Inst,FDT\spacemit_k1x-gpio
+
+[K1XGPIO_Inst.NT]
+CopyFiles=K1XGPIO_CopyFiles.NT
+
+[K1XGPIO_CopyFiles.NT]
+k1xgpio.sys
+
+[K1XGPIO_Inst.NT.Services]
+AddService=k1xgpio,0x00000002,K1XGPIO_Service_Inst
+
+[K1XGPIO_Service_Inst]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\k1xgpio.sys
+LoadOrderGroup=Extended Base
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+k1xgpio.sys=1
+
+[Strings]
+ProviderName="Ahmed ARIF"
+ManufacturerName="SpacemiT"
+DiskName="SpacemiT K1 GPIO Driver Disk"
+K1XGPIO.DeviceDesc="SpacemiT K1 GPIO controller"

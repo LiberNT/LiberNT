@@ -26,6 +26,7 @@ add_subdirectory(werkernel)
 add_subdirectory(wpprecorder)
 
 if((ARCH STREQUAL "riscv64") AND SPACEMIT_K1_SUPPORT)
+    add_subdirectory(k1xgpio)
     add_subdirectory(k1xpmic)
     add_subdirectory(k1xthermal)
     add_subdirectory(k1xwdt)
