@@ -53,28 +53,28 @@ ServiceControlHandler(DWORD dwControl,
     switch (dwControl)
     {
         case SERVICE_CONTROL_STOP:
-            DPRINT1("WU ServiceControlHandler(SERVICE_CONTROL_STOP) received\n");
+            DPRINT("WU ServiceControlHandler(SERVICE_CONTROL_STOP) received\n");
             SetEvent(hStopEvent);
             UpdateServiceStatus(SERVICE_STOP_PENDING);
             return ERROR_SUCCESS;
 
         case SERVICE_CONTROL_PAUSE:
-            DPRINT1("WU ServiceControlHandler(SERVICE_CONTROL_PAUSE) received\n");
+            DPRINT("WU ServiceControlHandler(SERVICE_CONTROL_PAUSE) received\n");
             UpdateServiceStatus(SERVICE_PAUSED);
             return ERROR_SUCCESS;
 
         case SERVICE_CONTROL_CONTINUE:
-            DPRINT1("WU ServiceControlHandler(SERVICE_CONTROL_CONTINUE) received\n");
+            DPRINT("WU ServiceControlHandler(SERVICE_CONTROL_CONTINUE) received\n");
             UpdateServiceStatus(SERVICE_RUNNING);
             return ERROR_SUCCESS;
 
         case SERVICE_CONTROL_INTERROGATE:
-            DPRINT1("WU ServiceControlHandler(SERVICE_CONTROL_INTERROGATE) received\n");
+            DPRINT("WU ServiceControlHandler(SERVICE_CONTROL_INTERROGATE) received\n");
             SetServiceStatus(ServiceStatusHandle, &ServiceStatus);
             return ERROR_SUCCESS;
 
         case SERVICE_CONTROL_SHUTDOWN:
-            DPRINT1("WU ServiceControlHandler(SERVICE_CONTROL_SHUTDOWN) received\n");
+            DPRINT("WU ServiceControlHandler(SERVICE_CONTROL_SHUTDOWN) received\n");
             SetEvent(hStopEvent);
             UpdateServiceStatus(SERVICE_STOP_PENDING);
             return ERROR_SUCCESS;

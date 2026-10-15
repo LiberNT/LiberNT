@@ -226,11 +226,11 @@ ScmWaitForLsa(VOID)
 BOOL WINAPI
 ShutdownHandlerRoutine(DWORD dwCtrlType)
 {
-    DPRINT1("ShutdownHandlerRoutine() called\n");
+    DPRINT("ShutdownHandlerRoutine() called\n");
 
     if (dwCtrlType & (CTRL_SHUTDOWN_EVENT | CTRL_LOGOFF_EVENT))
     {
-        DPRINT1("Shutdown event received\n");
+        DPRINT("Shutdown event received\n");
         ScmShutdown = TRUE;
 
         ScmAutoShutdownServices();

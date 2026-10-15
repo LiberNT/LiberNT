@@ -328,8 +328,8 @@ IncrementRefCount(
     DWORD dwRefCount = 0, dwLength, dwType;
     DWORD dwError;
 
-    DPRINT1("IncrementRefCount(%S %p)\n",
-            pszSidString, pdwRefCount);
+    DPRINT("IncrementRefCount(%S %p)\n",
+           pszSidString, pdwRefCount);
 
     dwError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
                             L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList",
@@ -401,8 +401,8 @@ DecrementRefCount(
     DWORD dwRefCount = 0, dwLength, dwType;
     DWORD dwError;
 
-    DPRINT1("DecrementRefCount(%S %p)\n",
-            pszSidString, pdwRefCount);
+    DPRINT("DecrementRefCount(%S %p)\n",
+           pszSidString, pdwRefCount);
 
     dwError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
                             L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList",

@@ -79,34 +79,34 @@ ServiceControlHandler(DWORD dwControl,
                       LPVOID lpEventData,
                       LPVOID lpContext)
 {
-    DPRINT1("ServiceControlHandler() called\n");
+    DPRINT("ServiceControlHandler() called\n");
 
     switch (dwControl)
     {
         case SERVICE_CONTROL_STOP:
-            DPRINT1("  SERVICE_CONTROL_STOP received\n");
+            DPRINT("  SERVICE_CONTROL_STOP received\n");
             SetEvent(hStopEvent);
             UpdateServiceStatus(SERVICE_STOP_PENDING);
             return ERROR_SUCCESS;
 
         case SERVICE_CONTROL_PAUSE:
-            DPRINT1("  SERVICE_CONTROL_PAUSE received\n");
+            DPRINT("  SERVICE_CONTROL_PAUSE received\n");
             UpdateServiceStatus(SERVICE_PAUSED);
             return ERROR_SUCCESS;
 
         case SERVICE_CONTROL_CONTINUE:
-            DPRINT1("  SERVICE_CONTROL_CONTINUE received\n");
+            DPRINT("  SERVICE_CONTROL_CONTINUE received\n");
             UpdateServiceStatus(SERVICE_RUNNING);
             return ERROR_SUCCESS;
 
         case SERVICE_CONTROL_INTERROGATE:
-            DPRINT1("  SERVICE_CONTROL_INTERROGATE received\n");
+            DPRINT("  SERVICE_CONTROL_INTERROGATE received\n");
             SetServiceStatus(ServiceStatusHandle,
                              &ServiceStatus);
             return ERROR_SUCCESS;
 
         case SERVICE_CONTROL_SHUTDOWN:
-            DPRINT1("  SERVICE_CONTROL_SHUTDOWN received\n");
+            DPRINT("  SERVICE_CONTROL_SHUTDOWN received\n");
             SetEvent(hStopEvent);
             UpdateServiceStatus(SERVICE_STOP_PENDING);
             return ERROR_SUCCESS;

@@ -136,7 +136,7 @@ ServiceShutdown(VOID)
 {
     NTSTATUS Status;
 
-    ERR("ServiceShutdown()\n");
+    TRACE("ServiceShutdown()\n");
 
     Status = LsaDeregisterLogonProcess(LsaHandle);
     if (!NT_SUCCESS(Status))
