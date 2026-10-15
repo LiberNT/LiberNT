@@ -5,6 +5,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   build-linux:
     strategy:
@@ -142,11 +146,26 @@ jobs:
       run: ccache -s
 
     - name: Save ccache
+      id: ccache_save
       if: ${{ always() && steps.ccache_restore.outcome == 'success' }}
       uses: actions/cache/save@v5
       with:
         path: ccache
         key: ${{ steps.ccache_restore.outputs.cache-primary-key }}
+
+    - name: Prune older ccache entries
+      if: ${{ always() && steps.ccache_save.outcome == 'success' }}
+      continue-on-error: true
+      env:
+        GH_TOKEN: ${{ github.token }}
+        CACHE_KEY_PREFIX: ccache-${{matrix.compiler}}-${{matrix.arch}}${{matrix.variant}}-${{matrix.config}}-${{matrix.ntver}}-
+        CACHE_KEY_KEEP: ${{ steps.ccache_restore.outputs.cache-primary-key }}
+      run: |
+        gh cache list --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF" --key "$CACHE_KEY_PREFIX" --limit 100 --json id,key \
+          --jq '.[] | select(.key != env.CACHE_KEY_KEEP) | .id' |
+        while read -r id; do
+          gh cache delete "$id" --repo "$GITHUB_REPOSITORY" || true
+        done
 
     - name: Name artifacts
       id: images
@@ -169,3 +188,6 @@ jobs:
       with:
         name: LiberNT-vhd-${{steps.images.outputs.tag}}
         path: ${{steps.configure.outputs.outdir}}/LiberNT.vhd
+
+    - name: Check build dependencies
+      run: python3 sdk/tools/depcheck.py ${{steps.configure.outputs.outdir}} --mode depfiles --nested --fail-on-gaps
