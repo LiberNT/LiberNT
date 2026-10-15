@@ -70,9 +70,38 @@ TdiDeregisterDeviceObject(IN HANDLE RegistrationHandle)
 
 /* NET_ADDRESS */
 
-/*
- * @unimplemented
- */
+VOID
+TdiPnpNotifyAddress(
+    _In_ PTDI_PNP_CLIENT Client,
+    _In_ PTDI_NET_ADDRESS NetAddress,
+    _In_ BOOLEAN Add)
+{
+    if (Client->Info.MajorTdiVersion >= 2)
+    {
+        if (Add && Client->Info.AddAddressHandlerV2)
+            Client->Info.AddAddressHandlerV2(&NetAddress->Address, &NetAddress->DeviceName, NetAddress->Context);
+        else if (!Add && Client->Info.DelAddressHandlerV2)
+            Client->Info.DelAddressHandlerV2(&NetAddress->Address, &NetAddress->DeviceName, NetAddress->Context);
+    }
+    else
+    {
+        if (Add && Client->Info.AddAddressHandler)
+            Client->Info.AddAddressHandler(&NetAddress->Address);
+        else if (!Add && Client->Info.DelAddressHandler)
+            Client->Info.DelAddressHandler(&NetAddress->Address);
+    }
+}
+
+static VOID
+TdiFreeNetAddress(PTDI_NET_ADDRESS NetAddress)
+{
+    if (NetAddress->DeviceName.Buffer)
+        ExFreePoolWithTag(NetAddress->DeviceName.Buffer, TAG_TDI_PNP);
+    if (NetAddress->Context)
+        ExFreePoolWithTag(NetAddress->Context, TAG_TDI_PNP);
+    ExFreePoolWithTag(NetAddress, TAG_TDI_PNP);
+}
+
 NTSTATUS
 NTAPI
 TdiRegisterNetAddress(IN PTA_ADDRESS Address,
@@ -80,18 +109,83 @@ TdiRegisterNetAddress(IN PTA_ADDRESS Address,
                       IN PTDI_PNP_CONTEXT Context,
                       OUT HANDLE *RegistrationHandle)
 {
-    return STATUS_NOT_IMPLEMENTED;
+    PTDI_NET_ADDRESS NetAddress;
+    PLIST_ENTRY Entry;
+    ULONG ContextLength;
+
+    if (!Address || !RegistrationHandle)
+        return STATUS_INVALID_PARAMETER;
+
+    NetAddress = ExAllocatePoolZero(PagedPool,
+                                    FIELD_OFFSET(TDI_NET_ADDRESS, Address.Address) + Address->AddressLength,
+                                    TAG_TDI_PNP);
+    if (!NetAddress)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(&NetAddress->Address, Address, FIELD_OFFSET(TA_ADDRESS, Address) + Address->AddressLength);
+
+    if (DeviceName && DeviceName->Length)
+    {
+        NetAddress->DeviceName.Buffer = ExAllocatePoolWithTag(PagedPool, DeviceName->Length, TAG_TDI_PNP);
+        if (!NetAddress->DeviceName.Buffer)
+        {
+            TdiFreeNetAddress(NetAddress);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        RtlCopyMemory(NetAddress->DeviceName.Buffer, DeviceName->Buffer, DeviceName->Length);
+        NetAddress->DeviceName.Length = DeviceName->Length;
+        NetAddress->DeviceName.MaximumLength = DeviceName->Length;
+    }
+
+    if (Context)
+    {
+        ContextLength = FIELD_OFFSET(TDI_PNP_CONTEXT, ContextData) + Context->ContextSize;
+        NetAddress->Context = ExAllocatePoolWithTag(PagedPool, ContextLength, TAG_TDI_PNP);
+        if (!NetAddress->Context)
+        {
+            TdiFreeNetAddress(NetAddress);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        RtlCopyMemory(NetAddress->Context, Context, ContextLength);
+    }
+
+    KeWaitForMutexObject(&TdiPnpMutex, Executive, KernelMode, FALSE, NULL);
+
+    InsertTailList(&TdiNetAddressList, &NetAddress->ListEntry);
+
+    for (Entry = TdiPnpClientList.Flink; Entry != &TdiPnpClientList; Entry = Entry->Flink)
+        TdiPnpNotifyAddress(CONTAINING_RECORD(Entry, TDI_PNP_CLIENT, ListEntry), NetAddress, TRUE);
+
+    KeReleaseMutex(&TdiPnpMutex, FALSE);
+
+    *RegistrationHandle = NetAddress;
+
+    return STATUS_SUCCESS;
 }
 
 
-/*
- * @unimplemented
- */
 NTSTATUS
 NTAPI
 TdiDeregisterNetAddress(IN HANDLE RegistrationHandle)
 {
-    return STATUS_NOT_IMPLEMENTED;
+    PTDI_NET_ADDRESS NetAddress = RegistrationHandle;
+    PLIST_ENTRY Entry;
+
+    if (!NetAddress)
+        return STATUS_INVALID_PARAMETER;
+
+    KeWaitForMutexObject(&TdiPnpMutex, Executive, KernelMode, FALSE, NULL);
+
+    RemoveEntryList(&NetAddress->ListEntry);
+
+    for (Entry = TdiPnpClientList.Flink; Entry != &TdiPnpClientList; Entry = Entry->Flink)
+        TdiPnpNotifyAddress(CONTAINING_RECORD(Entry, TDI_PNP_CLIENT, ListEntry), NetAddress, FALSE);
+
+    KeReleaseMutex(&TdiPnpMutex, FALSE);
+
+    TdiFreeNetAddress(NetAddress);
+
+    return STATUS_SUCCESS;
 }
 
 

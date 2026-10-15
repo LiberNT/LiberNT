@@ -7,6 +7,24 @@
 
 extern LONG CteTimeIncrement;
 
+LIST_ENTRY TdiPnpClientList;
+LIST_ENTRY TdiNetAddressList;
+KMUTEX TdiPnpMutex;
+
+NTSTATUS
+NTAPI
+DllInitialize(IN PUNICODE_STRING RegistryPath)
+{
+    UNREFERENCED_PARAMETER(RegistryPath);
+
+    CteTimeIncrement = KeQueryTimeIncrement();
+    InitializeListHead(&TdiPnpClientList);
+    InitializeListHead(&TdiNetAddressList);
+    KeInitializeMutex(&TdiPnpMutex, 0);
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 DriverEntry(IN PDRIVER_OBJECT DriverObject,

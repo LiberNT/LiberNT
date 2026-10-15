@@ -280,6 +280,10 @@ struct tcp_pcb {
   u32_t tmr;
 #ifdef __REACTOS__
   u8_t quickack;
+  u8_t urg_valid;
+  u8_t urg_in_data;
+  u32_t urg_seq;
+  u32_t urg_offset;
 #endif
 
   /* receiver variables */

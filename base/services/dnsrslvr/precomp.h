@@ -83,4 +83,10 @@ DnsIntCacheGetEntries(
 BOOL
 ReadHostsFile(VOID);
 
+
+/* llmnr.c */
+
+VOID LlmnrStart(VOID);
+VOID LlmnrStop(VOID);
+
 #endif /* _DNSRSLVR_PCH_ */

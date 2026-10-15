@@ -12,6 +12,7 @@
 #include <receive.h>
 #include <transmit.h>
 #include <rawip.h>
+#include <igmp.h>
 #include <udp.h>
 #include <tcp.h>
 #include <tilists.h>

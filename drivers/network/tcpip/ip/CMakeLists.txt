@@ -12,6 +12,7 @@ list(APPEND SOURCE
     network/arp.c
     network/checksum.c
     network/icmp.c
+    network/igmp.c
     network/interface.c
     network/ip.c
     network/loopback.c

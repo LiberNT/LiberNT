@@ -1,3 +1,4 @@
+ @ stdcall -private DllInitialize(ptr)
  @ stdcall CTEAllocateString(long long)
  @ stdcall CTEBlock(long)
  @ stdcall CTEInitEvent(ptr ptr)

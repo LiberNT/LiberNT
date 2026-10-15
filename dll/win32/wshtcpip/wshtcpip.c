@@ -8,6 +8,7 @@
  *   CSH 01/09-2000 Created
  */
 #include "wshtcpip.h"
+#include <netioapi.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -218,6 +219,14 @@ GetTdiTypeId(
                 *TdiId = AO_OPTION_MCASTTTL;
                 return;
 
+             case IP_ADD_MEMBERSHIP:
+                *TdiId = AO_OPTION_ADD_MCAST;
+                return;
+
+             case IP_DROP_MEMBERSHIP:
+                *TdiId = AO_OPTION_DEL_MCAST;
+                return;
+
              case IP_UNICAST_IF:
                 *TdiId = AO_OPTION_IP_UCASTIF;
                 return;
@@ -255,6 +264,23 @@ GetTdiTypeId(
              case IP_RECVDSTADDR:
                  *TdiId = AO_OPTION_IP_RECVDSTADDR;
                  return;
+
+             default:
+                break;
+          }
+          break;
+
+       case IPPROTO_IPV6:
+          *TdiType = INFO_TYPE_ADDRESS_OBJECT;
+          switch (OptionName)
+          {
+             case IPV6_ADD_MEMBERSHIP:
+                *TdiId = AO_OPTION_ADD_MCAST;
+                return;
+
+             case IPV6_DROP_MEMBERSHIP:
+                *TdiId = AO_OPTION_DEL_MCAST;
+                return;
 
              default:
                 break;
@@ -477,11 +503,14 @@ WSHGetSocketInformation(
                 return NO_ERROR;
 
             case SO_MAX_MSG_SIZE:
-                if (Context->SocketType != SOCK_DGRAM)
+                if (Context->SocketType != SOCK_DGRAM && Context->SocketType != SOCK_STREAM)
                     return WSAENOPROTOOPT;
                 if (!OptionLength || !OptionValue || *OptionLength < sizeof(DWORD))
                     return WSAEFAULT;
-                *(DWORD *)OptionValue = 0xFFFF - 20 - 8;
+                if (Context->SocketType == SOCK_STREAM)
+                    *(DWORD *)OptionValue = 0xFFFFFFFF;
+                else
+                    *(DWORD *)OptionValue = Context->AddressFamily == AF_INET6 ? 0xFFFF - 8 : 0xFFFF - 20 - 8;
                 *OptionLength = sizeof(DWORD);
                 return NO_ERROR;
 
@@ -595,6 +624,82 @@ WSHGetWSAProtocolInfo(
 }
 
 
+typedef DWORD (WINAPI *PGET_BEST_ROUTE2)(NET_LUID *, NET_IFINDEX, const SOCKADDR_INET *,
+                                         const SOCKADDR_INET *, ULONG, PMIB_IPFORWARD_ROW2, SOCKADDR_INET *);
+
+static
+INT
+WSHIoctl_RoutingInterfaceQuery(
+    IN  PSOCKET_CONTEXT Context,
+    IN  LPVOID InputBuffer,
+    IN  DWORD InputBufferLength,
+    IN  LPVOID OutputBuffer,
+    IN  DWORD OutputBufferLength,
+    OUT LPDWORD NumberOfBytesReturned)
+{
+    static PGET_BEST_ROUTE2 pGetBestRoute2;
+    SOCKADDR_INET Destination, Source;
+    MIB_IPFORWARD_ROW2 Route;
+    DWORD AddressLength;
+    HMODULE Iphlpapi;
+
+    if (!InputBuffer || InputBufferLength < sizeof(USHORT))
+        return WSAEFAULT;
+
+    RtlZeroMemory(&Destination, sizeof(Destination));
+    Destination.si_family = ((PSOCKADDR)InputBuffer)->sa_family;
+    if (Destination.si_family != Context->AddressFamily)
+        return WSAEAFNOSUPPORT;
+
+    if (Destination.si_family == AF_INET)
+    {
+        AddressLength = sizeof(SOCKADDR_IN);
+        if (InputBufferLength < AddressLength)
+            return WSAEFAULT;
+        Destination.Ipv4 = *(PSOCKADDR_IN)InputBuffer;
+        if (Destination.Ipv4.sin_addr.s_addr == INADDR_ANY)
+            return WSAEINVAL;
+    }
+    else if (Destination.si_family == AF_INET6)
+    {
+        AddressLength = sizeof(SOCKADDR_IN6);
+        if (InputBufferLength < AddressLength)
+            return WSAEFAULT;
+        Destination.Ipv6 = *(PSOCKADDR_IN6)InputBuffer;
+        if (IN6_IS_ADDR_UNSPECIFIED(&Destination.Ipv6.sin6_addr))
+            return WSAEINVAL;
+    }
+    else
+    {
+        return WSAEAFNOSUPPORT;
+    }
+
+    *NumberOfBytesReturned = AddressLength;
+    if (!OutputBuffer || OutputBufferLength < AddressLength)
+        return WSAEFAULT;
+
+    if (!pGetBestRoute2)
+    {
+        Iphlpapi = LoadLibraryW(L"iphlpapi.dll");
+        if (Iphlpapi)
+            pGetBestRoute2 = (PGET_BEST_ROUTE2)GetProcAddress(Iphlpapi, "GetBestRoute2");
+        if (!pGetBestRoute2)
+            return WSAENETUNREACH;
+    }
+
+    RtlZeroMemory(&Source, sizeof(Source));
+    if (pGetBestRoute2(NULL, 0, NULL, &Destination, 0, &Route, &Source) != NO_ERROR)
+        return WSAENETUNREACH;
+
+    if (Source.si_family == AF_INET)
+        Source.Ipv4.sin_port = 0;
+    else
+        Source.Ipv6.sin6_port = 0;
+
+    RtlCopyMemory(OutputBuffer, &Source, AddressLength);
+    return NO_ERROR;
+}
+
 INT
 EXPORT
 WSHIoctl(
@@ -625,6 +730,15 @@ WSHIoctl(
             NumberOfBytesReturned,
             NeedsCompletion);
         return res;
+    }
+    else if (IoControlCode == SIO_ROUTING_INTERFACE_QUERY)
+    {
+        return WSHIoctl_RoutingInterfaceQuery(Context,
+                                              InputBuffer,
+                                              InputBufferLength,
+                                              OutputBuffer,
+                                              OutputBufferLength,
+                                              NumberOfBytesReturned);
     }
     else if (IoControlCode == SIO_KEEPALIVE_VALS)
     {
@@ -682,7 +796,7 @@ WSHIoctl(
             return 0;
         }
 
-        res = SendRequest(Info, sizeof(*Info) + Info->BufferSize, IOCTL_TCP_SET_INFORMATION_EX);
+        res = SendRequest(Info, sizeof(*Info) + Info->BufferSize, IOCTL_TCP_SET_INFORMATION_EX, TdiAddressObjectHandle);
 
         HeapFree(GetProcessHeap(), 0, Info);
         return res;
@@ -722,13 +836,16 @@ INT
 SendRequest(
     IN PVOID Request,
     IN DWORD RequestSize,
-    IN DWORD IOCTL)
+    IN DWORD IOCTL,
+    IN HANDLE TdiAddressObjectHandle)
 {
     BOOLEAN Success;
     HANDLE TcpCC;
     DWORD BytesReturned;
 
-    if (openTcpFile(&TcpCC, FILE_READ_DATA | FILE_WRITE_DATA) != STATUS_SUCCESS)
+    if (TdiAddressObjectHandle)
+        TcpCC = TdiAddressObjectHandle;
+    else if (openTcpFile(&TcpCC, FILE_READ_DATA | FILE_WRITE_DATA) != STATUS_SUCCESS)
         return WSAEINVAL;
 
     Success = DeviceIoControl(TcpCC,
@@ -740,7 +857,8 @@ SendRequest(
                               &BytesReturned,
                               NULL);
 
-    closeTcpFile(TcpCC);
+    if (TcpCC != TdiAddressObjectHandle)
+        closeTcpFile(TcpCC);
 
     DPRINT("DeviceIoControl: %ld\n", (Success ? NO_ERROR : GetLastError()));
 
@@ -824,7 +942,8 @@ WSHNotify(
 
                 SendRequest(QueuedRequest->Info,
                             sizeof(*QueuedRequest->Info) + QueuedRequest->Info->BufferSize,
-                            IOCTL_TCP_SET_INFORMATION_EX);
+                            IOCTL_TCP_SET_INFORMATION_EX,
+                            TdiAddressObjectHandle);
 
                 NextQueuedRequest = QueuedRequest->Next;
 
@@ -1132,6 +1251,13 @@ WSHSetSocketInformation(
                         return WSAEFAULT;
                     break;
 
+                case IP_ADD_MEMBERSHIP:
+                case IP_DROP_MEMBERSHIP:
+                    if (!OptionValue || OptionLength < sizeof(struct ip_mreq))
+                        return WSAEFAULT;
+                    OptionLength = sizeof(struct ip_mreq);
+                    break;
+
                 case IP_DONTFRAGMENT:
                 case IP_PKTINFO:
                 case IP_RECVTTL:
@@ -1182,6 +1308,13 @@ WSHSetSocketInformation(
                 OptionLength = sizeof(ULONG);
                 Level = IPPROTO_IP;
                 OptionName = IP_DONTFRAGMENT;
+                break;
+            }
+            if (OptionName == IPV6_ADD_MEMBERSHIP || OptionName == IPV6_DROP_MEMBERSHIP)
+            {
+                if (!OptionValue || OptionLength < sizeof(struct ipv6_mreq))
+                    return WSAEFAULT;
+                OptionLength = sizeof(struct ipv6_mreq);
                 break;
             }
             if (OptionName != IPV6_V6ONLY)
@@ -1310,7 +1443,7 @@ WSHSetSocketInformation(
         return 0;
     }
 
-    Status = SendRequest(Info, sizeof(*Info) + Info->BufferSize, IOCTL_TCP_SET_INFORMATION_EX);
+    Status = SendRequest(Info, sizeof(*Info) + Info->BufferSize, IOCTL_TCP_SET_INFORMATION_EX, TdiAddressObjectHandle);
     if (!Status && Level == IPPROTO_IP && OptionName == IP_MULTICAST_IF)
         memcpy(&Context->MulticastInterface, OptionValue, sizeof(ULONG));
     if (!Status && Level == IPPROTO_IP && OptionName == IP_MULTICAST_TTL)

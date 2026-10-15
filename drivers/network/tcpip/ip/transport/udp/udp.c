@@ -244,8 +244,10 @@ static NTSTATUS UDPSendToAddress(
     PNEIGHBOR_CACHE_ENTRY NCE;
     PNEIGHBOR_CACHE_ENTRY LoopNCE = NULL;
     BOOLEAN IsBroadcast;
+    BOOLEAN IsMulticast;
 
     IsBroadcast = UDPIsBroadcastAddress(&RemoteAddress);
+    IsMulticast = ((DN2H(RemoteAddress.Address.IPv4Address) & 0xf0000000) == 0xe0000000);
 
     LockObject(AddrFile);
 
@@ -328,7 +330,7 @@ static NTSTATUS UDPSendToAddress(
 							 BufferData,
 							 DataSize );
 
-    if (NT_SUCCESS(Status) && IsBroadcast && Loopback != NULL && NCE->Interface != Loopback)
+    if (NT_SUCCESS(Status) && (IsBroadcast || IsMulticast) && Loopback != NULL && NCE->Interface != Loopback)
     {
         LoopNCE = NBLocateNeighbor(&Loopback->Unicast, Loopback);
         if (LoopNCE != NULL &&
@@ -605,6 +607,9 @@ VOID UDPReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
   PUDP_HEADER UDPHeader;
   PIP_ADDRESS DstAddress, SrcAddress;
   UINT DataSize, i;
+  BOOLEAN IsMulticast;
+  ULONG MemberIndex;
+  PIP_INTERFACE SourceInterface;
 
   TI_DbgPrint(MAX_TRACE, ("Called.\n"));
 
@@ -652,6 +657,15 @@ VOID UDPReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
   /* Go to UDP data area */
   IPPacket->Data = (PVOID)((ULONG_PTR)IPPacket->Data + sizeof(UDP_HEADER));
 
+  IsMulticast = ((DN2H(DstAddress->Address.IPv4Address) & 0xf0000000) == 0xe0000000);
+  MemberIndex = Interface->Index;
+  if (IsMulticast && Interface == Loopback &&
+      (SourceInterface = AddrLocateInterface(SrcAddress)))
+  {
+      MemberIndex = SourceInterface->Index;
+      IPDereferenceInterface(SourceInterface);
+  }
+
   /* Locate a receive request on destination address file object
      and deliver the packet if one is found. If there is no receive
      request on the address file object, call the associated receive
@@ -663,7 +677,8 @@ VOID UDPReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
                              &SearchContext);
   if (AddrFile) {
     do {
-      if (UDPClassify(AddrFile,
+      if ((!IsMulticast || IGMPIsMember(AddrFile, MemberIndex, DstAddress->Address.IPv4Address)) &&
+          UDPClassify(AddrFile,
                       FALSE,
                       Interface,
                       DstAddress,

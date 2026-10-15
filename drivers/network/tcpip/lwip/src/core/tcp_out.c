@@ -795,6 +795,14 @@ tcp_write(struct tcp_pcb *pcb, const void *arg, u16_t len, u8_t apiflags)
     TCPH_SET_FLAG(seg->tcphdr, TCP_PSH);
   }
 
+#ifdef __REACTOS__
+  if ((apiflags & TCP_WRITE_FLAG_URG) && (pcb->unsent != NULL)) {
+    for (seg = pcb->unsent; seg->next != NULL; seg = seg->next);
+    TCPH_SET_FLAG(seg->tcphdr, TCP_URG);
+    seg->tcphdr->urgp = lwip_htons(seg->len);
+  }
+#endif
+
   return ERR_OK;
 memerr:
   tcp_set_flags(pcb, TF_NAGLEMEMERR);

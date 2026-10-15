@@ -342,7 +342,7 @@ MakeSocketIntoConnection(PAFD_FCB FCB) {
     if (!FCB->Send.Window)
     {
         FCB->Send.Window = ExAllocatePoolWithTag(PagedPool,
-                                                 FCB->Send.Size,
+                                                 FCB->Send.Size * 2,
                                                  TAG_AFD_DATA_BUFFER);
 
         if( !FCB->Send.Window ) return STATUS_NO_MEMORY;
@@ -427,6 +427,7 @@ StreamSocketConnectComplete(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     PAFD_FCB FCB = (PAFD_FCB)Context;
     PLIST_ENTRY NextIrpEntry;
     PIRP NextIrp;
+    BOOLEAN ConnectFailed;
 
     AFD_DbgPrint(MID_TRACE,("Called: FCB %p, FO %p\n",
                             Context, FCB->FileObject));
@@ -473,12 +474,13 @@ StreamSocketConnectComplete(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         Status = MakeSocketIntoConnection( FCB );
     }
 
-    if( !NT_SUCCESS(Status) ) {
+    ConnectFailed = !NT_SUCCESS(Status);
+
+    if( ConnectFailed ) {
         FCB->PollState |= AFD_EVENT_CONNECT_FAIL;
         FCB->PollStatus[FD_CONNECT_BIT] = Status;
         AFD_DbgPrint(MID_TRACE,("Going to bound state\n"));
         FCB->SharedData.State = SOCKET_STATE_BOUND;
-        PollReeval( FCB->DeviceExt, FCB->FileObject );
     } else {
         FCB->FilledConnectData = MIN(FCB->ConnectReturnInfo->UserDataLength, FCB->ConnectDataSize);
         if (FCB->FilledConnectData)
@@ -508,6 +510,9 @@ StreamSocketConnectComplete(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         (void)IoSetCancelRoutine(NextIrp, NULL);
         IoCompleteRequest( NextIrp, IO_NETWORK_INCREMENT );
     }
+
+    if( ConnectFailed )
+        PollReeval( FCB->DeviceExt, FCB->FileObject );
 
     if( NT_SUCCESS(Status) ) {
         if( !IsListEmpty( &FCB->PendingIrpList[FUNCTION_SEND] ) ) {

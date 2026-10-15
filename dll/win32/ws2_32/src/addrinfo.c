@@ -108,6 +108,71 @@ ParseV4Address(IN PCWSTR AddressString,
 }
 
 static
+BOOL
+WINAPI
+ParseV6Address(IN PCWSTR AddressString,
+               OUT PIN6_ADDR pAddress,
+               OUT PULONG pScopeId)
+{
+    WCHAR Buffer[INET6_ADDRSTRLEN];
+    PCWSTR End;
+    USHORT Port;
+
+    if (!AddressString)
+        return FALSE;
+    if (AddressString[0] == L'[')
+    {
+        End = wcschr(AddressString + 1, L']');
+        if (!End || (SIZE_T)(End - AddressString - 1) >= ARRAYSIZE(Buffer))
+            return FALSE;
+        RtlCopyMemory(Buffer, AddressString + 1, (End - AddressString - 1) * sizeof(WCHAR));
+        Buffer[End - AddressString - 1] = UNICODE_NULL;
+        AddressString = Buffer;
+    }
+
+    return NT_SUCCESS(RtlIpv6StringToAddressExW(AddressString, pAddress, pScopeId, &Port));
+}
+
+static
+PADDRINFOW
+WINAPI
+NewAddrInfo6(IN INT SocketType,
+             IN INT Protocol,
+             IN WORD Port,
+             IN const IN6_ADDR *Address,
+             IN ULONG ScopeId)
+{
+    PADDRINFOW AddrInfo;
+    PSOCKADDR_IN6 SockAddress;
+
+    AddrInfo = HeapAlloc(WsSockHeap, 0, sizeof(ADDRINFOW));
+    if (!AddrInfo) return NULL;
+
+    SockAddress = HeapAlloc(WsSockHeap, HEAP_ZERO_MEMORY, sizeof(SOCKADDR_IN6));
+    if (!SockAddress)
+    {
+        HeapFree(WsSockHeap, 0, AddrInfo);
+        return NULL;
+    }
+
+    SockAddress->sin6_family = AF_INET6;
+    SockAddress->sin6_port = Port;
+    SockAddress->sin6_addr = *Address;
+    SockAddress->sin6_scope_id = ScopeId;
+
+    AddrInfo->ai_family = PF_INET6;
+    AddrInfo->ai_socktype = SocketType;
+    AddrInfo->ai_protocol = Protocol;
+    AddrInfo->ai_flags = 0;
+    AddrInfo->ai_next = 0;
+    AddrInfo->ai_canonname = NULL;
+    AddrInfo->ai_addrlen = sizeof(SOCKADDR_IN6);
+    AddrInfo->ai_addr = (PSOCKADDR)SockAddress;
+
+    return AddrInfo;
+}
+
+static
 PADDRINFOW
 WINAPI
 NewAddrInfo(IN INT SocketType,
@@ -485,6 +550,8 @@ GetAddrInfoW(IN PCWSTR pszNodeName,
     INT iProtocol = 0;
     WORD wPort = 0;
     DWORD dwAddress = 0;
+    IN6_ADDR Ip6Address;
+    ULONG ScopeId = 0;
     PSERVENT ptService = NULL;
     PCHAR pc = NULL;
     BOOL bClone = FALSE;
@@ -536,7 +603,7 @@ GetAddrInfoW(IN PCWSTR pszNodeName,
 
         /* Save family and validate it */
         iFamily = ptHints->ai_family;
-        if ((iFamily != PF_UNSPEC) && (iFamily != PF_INET))
+        if ((iFamily != PF_UNSPEC) && (iFamily != PF_INET) && (iFamily != PF_INET6))
         {
             SetLastError(EAI_FAMILY);
             return EAI_FAMILY;
@@ -633,7 +700,21 @@ GetAddrInfoW(IN PCWSTR pszNodeName,
     }
 
     /* Check if no node was given or if this is is a valid IPv4 address */
-    if ((!pszNodeName) || (ParseV4Address(pszNodeName, &dwAddress)))
+    if ((!pszNodeName && iFamily == PF_INET6) ||
+        (pszNodeName && iFamily != PF_INET && ParseV6Address(pszNodeName, &Ip6Address, &ScopeId)))
+    {
+        if (!pszNodeName)
+        {
+            RtlZeroMemory(&Ip6Address, sizeof(Ip6Address));
+            if (!(iFlags & AI_PASSIVE))
+                Ip6Address.u.Byte[15] = 1;
+        }
+
+        *pptResult = NewAddrInfo6(iSocketType, iProtocol, wPort, &Ip6Address, ScopeId);
+        if (!(*pptResult)) iError = EAI_MEMORY;
+        else if (pszNodeName) (*pptResult)->ai_flags |= AI_NUMERICHOST;
+    }
+    else if ((!pszNodeName) || (iFamily != PF_INET6 && ParseV4Address(pszNodeName, &dwAddress)))
     {
         /* Check if we don't have a node name */
         if (!pszNodeName)
@@ -687,7 +768,7 @@ GetAddrInfoW(IN PCWSTR pszNodeName,
             }
         }
     }
-    else if (iFlags & AI_NUMERICHOST)
+    else if ((iFlags & AI_NUMERICHOST) || iFamily == PF_INET6)
     {
         /* No name for this request (we have a non-numeric name) */
         iError = EAI_NONAME;

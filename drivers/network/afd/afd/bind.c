@@ -135,9 +135,9 @@ AfdBindSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         Status = ObOpenObjectByPointer(FCB->AddressFile.Object,
                                        0,
                                        NULL,
-                                       MAXIMUM_ALLOWED,
+                                       GENERIC_READ | GENERIC_WRITE,
                                        *IoFileObjectType,
-                                       Irp->RequestorMode,
+                                       KernelMode,
                                        &UserHandle);
         if (NT_SUCCESS(Status))
             FCB->SharedData.State = SOCKET_STATE_BOUND;

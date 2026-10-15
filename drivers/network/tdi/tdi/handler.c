@@ -235,8 +235,30 @@ TdiRegisterPnPHandlers(
     _In_ ULONG InterfaceInfoSize,
     _Out_ HANDLE *BindingHandle)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    PTDI_PNP_CLIENT Client;
+    PLIST_ENTRY Entry;
+
+    if (!ClientInterfaceInfo || !BindingHandle || InterfaceInfoSize < sizeof(TDI_CLIENT_INTERFACE_INFO))
+        return STATUS_INVALID_PARAMETER;
+
+    Client = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Client), TAG_TDI_PNP);
+    if (!Client)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(&Client->Info, ClientInterfaceInfo, sizeof(Client->Info));
+
+    KeWaitForMutexObject(&TdiPnpMutex, Executive, KernelMode, FALSE, NULL);
+
+    InsertTailList(&TdiPnpClientList, &Client->ListEntry);
+
+    for (Entry = TdiNetAddressList.Flink; Entry != &TdiNetAddressList; Entry = Entry->Flink)
+        TdiPnpNotifyAddress(Client, CONTAINING_RECORD(Entry, TDI_NET_ADDRESS, ListEntry), TRUE);
+
+    KeReleaseMutex(&TdiPnpMutex, FALSE);
+
+    *BindingHandle = Client;
+
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS
@@ -244,8 +266,18 @@ NTAPI
 TdiDeregisterPnPHandlers(
     _In_ HANDLE BindingHandle)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    PTDI_PNP_CLIENT Client = BindingHandle;
+
+    if (!Client)
+        return STATUS_INVALID_PARAMETER;
+
+    KeWaitForMutexObject(&TdiPnpMutex, Executive, KernelMode, FALSE, NULL);
+    RemoveEntryList(&Client->ListEntry);
+    KeReleaseMutex(&TdiPnpMutex, FALSE);
+
+    ExFreePoolWithTag(Client, TAG_TDI_PNP);
+
+    return STATUS_SUCCESS;
 }
 
 /* EOF */

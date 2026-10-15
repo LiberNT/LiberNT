@@ -15,6 +15,45 @@
 /* See iptypes.h */
 #define MAX_ADAPTER_DESCRIPTION_LENGTH 128
 
+TDI_STATUS InfoTdiQueryGetIFInfo(PVOID Context,
+                                 PNDIS_BUFFER Buffer,
+                                 PUINT BufferSize)
+{
+    IP_ADDRESS Address;
+    PIP_INTERFACE Interface;
+    IPInterfaceInfo *InterfaceInfo;
+    ULONG Size;
+    TDI_STATUS Status;
+
+    AddrInitIPv4(&Address, (ULONG)*(PULONG_PTR)Context);
+
+    Interface = AddrLocateInterface(&Address);
+    if (!Interface)
+        return TDI_INVALID_PARAMETER;
+
+    Size = FIELD_OFFSET(IPInterfaceInfo, iii_addr) + Interface->AddressLength;
+    InterfaceInfo = ExAllocatePoolWithTag(NonPagedPool, Size, OUT_DATA_TAG);
+    if (!InterfaceInfo)
+    {
+        IPDereferenceInterface(Interface);
+        return TDI_NO_RESOURCES;
+    }
+
+    InterfaceInfo->iii_flags = 0;
+    InterfaceInfo->iii_mtu = Interface->MTU;
+    InterfaceInfo->iii_speed = Interface->Speed;
+    InterfaceInfo->iii_addrlength = Interface->AddressLength;
+    RtlCopyMemory(InterfaceInfo->iii_addr, Interface->Address, Interface->AddressLength);
+
+    IPDereferenceInterface(Interface);
+
+    Status = InfoCopyOut((PCHAR)InterfaceInfo, Size, Buffer, BufferSize);
+
+    ExFreePoolWithTag(InterfaceInfo, OUT_DATA_TAG);
+
+    return Status;
+}
+
 TDI_STATUS InfoTdiQueryGetInterfaceMIB(TDIEntityID ID,
 				       PIP_INTERFACE Interface,
 				       PNDIS_BUFFER Buffer,

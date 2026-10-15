@@ -21,6 +21,7 @@ PORT_SET TCPPorts6;
 #include "lwip/ip.h"
 #include "lwip/init.h"
 #include "lwip/arch.h"
+#include "lwip/tcpip.h"
 
 #include <lwip_glue/lwip_glue.h>
 
@@ -362,7 +363,25 @@ NTSTATUS TCPConnect
         return STATUS_INVALID_PARAMETER;
     }
 
-    if (Connection->AddressFile->Address.Type != RemoteAddress.Type)
+    if (RemoteAddress.Type == IP_ADDRESS_V6 &&
+        !RemoteAddress.Address.IPv6Address[0] && !RemoteAddress.Address.IPv6Address[1] &&
+        !RemoteAddress.Address.IPv6Address[2] && !RemoteAddress.Address.IPv6Address[3] &&
+        !RemoteAddress.Address.IPv6Address[4] && RemoteAddress.Address.IPv6Address[5] == 0xFFFF)
+    {
+        ULONG IPv4Address;
+
+        if (!Connection->AddressFile->DualStack)
+        {
+            UnlockObject(Connection);
+            return STATUS_INVALID_ADDRESS;
+        }
+
+        RtlCopyMemory(&IPv4Address, &RemoteAddress.Address.IPv6Address[6], sizeof(IPv4Address));
+        AddrInitIPv4(&RemoteAddress, IPv4Address);
+    }
+
+    if (Connection->AddressFile->Address.Type != RemoteAddress.Type &&
+        !(Connection->AddressFile->DualStack && RemoteAddress.Type == IP_ADDRESS_V4))
     {
         UnlockObject(Connection);
         return STATUS_INVALID_ADDRESS;
@@ -398,7 +417,8 @@ NTSTATUS TCPConnect
     }
 
     /* Copy bind address into connection */
-    Connection->AddressFile->Address = BindAddress;
+    if (!Connection->AddressFile->DualStack)
+        Connection->AddressFile->Address = BindAddress;
     /* Check if we had an unspecified port */
     if (!Connection->AddressFile->Port)
     {
@@ -455,6 +475,35 @@ NTSTATUS TCPConnect
     return Status;
 }
 
+static
+VOID
+TCPDisconnectDeliveredWorker(PVOID Context)
+{
+    PCONNECTION_ENDPOINT Connection = Context;
+
+    LockObject(Connection);
+    FlushShutdownQueue(Connection, STATUS_SUCCESS);
+    UnlockObject(Connection);
+
+    DereferenceObject(Connection);
+}
+
+static
+VOID
+TCPDisconnectDeliveredCallback(PVOID Context)
+{
+    if (!ChewCreateHighPriority(TCPDisconnectDeliveredWorker, Context))
+        TCPDisconnectDeliveredWorker(Context);
+}
+
+static
+VOID
+TCPDisconnectSentWorker(PVOID Context)
+{
+    if (tcpip_callback(TCPDisconnectDeliveredCallback, Context) != ERR_OK)
+        TCPDisconnectDeliveredWorker(Context);
+}
+
 NTSTATUS TCPDisconnect
 ( PCONNECTION_ENDPOINT Connection,
   UINT Flags,
@@ -483,6 +532,26 @@ NTSTATUS TCPDisconnect
                 Status = TCPTranslateError(LibTCPShutdown(Connection, 0, 1));
                 LockObject(Connection);
                 DereferenceObject(Connection);
+
+                if (Status == STATUS_SUCCESS &&
+                    (Bucket = ExAllocateFromNPagedLookasideList(&TdiBucketLookasideList)))
+                {
+                    Bucket->Request.RequestNotifyObject = (PVOID)Complete;
+                    Bucket->Request.RequestContext = Context;
+                    InsertTailList(&Connection->ShutdownRequest, &Bucket->Entry);
+
+                    ReferenceObject(Connection);
+                    if (ChewCreate(TCPDisconnectSentWorker, Connection))
+                    {
+                        Status = STATUS_PENDING;
+                    }
+                    else
+                    {
+                        RemoveEntryList(&Bucket->Entry);
+                        ExFreeToNPagedLookasideList(&TdiBucketLookasideList, Bucket);
+                        DereferenceObject(Connection);
+                    }
+                }
             }
             else if (Timeout && Timeout->QuadPart == 0)
             {
@@ -636,6 +705,7 @@ NTSTATUS TCPSendData
                                           BufferData,
                                           SendLength,
                                           BytesSent,
+                                          Flags,
                                           FALSE));
 
     TI_DbgPrint(DEBUG_TCP,("[IP, TCPSendData] Send: %x, %d\n", Status, SendLength));
@@ -708,6 +778,21 @@ VOID TCPFreePortForAddress(const IP_ADDRESS *Address, const UINT Port)
         DeallocatePort(&TCPPorts, Port);
 }
 
+VOID TCPMapToDualStack(
+    PIP_ADDRESS Address)
+{
+    ULONG IPv4Address;
+
+    if (Address->Type == IP_ADDRESS_V6)
+        return;
+
+    IPv4Address = Address->Address.IPv4Address;
+    RtlZeroMemory(Address->Address.IPv6Address, sizeof(Address->Address.IPv6Address));
+    Address->Address.IPv6Address[5] = 0xFFFF;
+    RtlCopyMemory(&Address->Address.IPv6Address[6], &IPv4Address, sizeof(IPv4Address));
+    Address->Type = IP_ADDRESS_V6;
+}
+
 NTSTATUS TCPGetSockAddress
 ( PCONNECTION_ENDPOINT Connection,
   PTRANSPORT_ADDRESS Address,
@@ -732,6 +817,8 @@ NTSTATUS TCPGetSockAddress
         return Status;
 
     LibIPAddressFromLwip(&ipaddr, &IpAddress);
+    if (Connection->AddressFile && Connection->AddressFile->DualStack)
+        TCPMapToDualStack(&IpAddress);
     return AddrBuildTransportAddress(&IpAddress, WH2N(Port), Address, AddressLength);
 }
 

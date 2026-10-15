@@ -39,6 +39,7 @@ typedef struct _IP6_INTERFACE_ROW
     BOOLEAN Loopback;
     BOOLEAN Autoconfiguration;
     BOOLEAN Reserved;
+    ULONG64 LinkSpeed;
 } IP6_INTERFACE_ROW, *PIP6_INTERFACE_ROW;
 
 typedef struct _IP6_ADDRESS_ROW

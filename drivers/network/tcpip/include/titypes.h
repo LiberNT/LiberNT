@@ -119,6 +119,9 @@ typedef struct _ADDRESS_FILE {
     USHORT Protocol;                      /* Protocol number */
     USHORT Port;                          /* Network port (network byte order) */
     LONG Sharers;                         /* Number of file objects with this addr file */
+    BOOLEAN Reuse;
+    BOOLEAN Exclusive;
+    BOOLEAN DualStack;
     UCHAR TTL;                            /* Time to live stored in packets sent from this address file */
     UINT DF;                              /* Don't fragment */
     UINT BCast;                           /* Receive broadcast packets */

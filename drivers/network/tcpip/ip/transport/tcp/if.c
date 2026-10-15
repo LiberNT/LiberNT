@@ -83,6 +83,15 @@ TCPMldMacFilter(struct netif *netif, const ip6_addr_t *group, enum netif_mac_fil
 
 static
 err_t
+TCPEthIp6Output(struct netif *netif, struct pbuf *p, const ip6_addr_t *dest)
+{
+    if (ip6_addr_ismulticast(dest))
+        LibIP6NoteMulticastDestination(netif, dest);
+    return ethip6_output(netif, p, dest);
+}
+
+static
+err_t
 TCPLoopbackOutput6(struct netif *netif, struct pbuf *p, const ip6_addr_t *dest)
 {
     return ERR_RTE;
@@ -186,7 +195,7 @@ TCPInterfaceInit(struct netif *netif)
 
     if (IF->AddressLength == ETH_HWADDR_LEN)
     {
-        netif->output_ip6 = ethip6_output;
+        netif->output_ip6 = TCPEthIp6Output;
         netif->linkoutput = TCPLinkOutput;
         netif->mld_mac_filter = TCPMldMacFilter;
         netif->flags |= NETIF_FLAG_MLD6;
@@ -256,6 +265,7 @@ TCPRegisterInterface(PIP_INTERFACE IF)
 VOID
 TCPUnregisterInterface(PIP_INTERFACE IF)
 {
+    LibIP6ForgetNetif(IF->TCPContext);
     netif_remove(IF->TCPContext);
 }
 

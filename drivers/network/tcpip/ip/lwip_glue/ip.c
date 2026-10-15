@@ -9,6 +9,7 @@
 #include <lwip/ip6_frag.h>
 #include <lwip/raw.h>
 #include <lwip/prot/icmp6.h>
+#include <lwip/mld6.h>
 
 #include "lwip_glue.h"
 #include <address.h>
@@ -349,9 +350,9 @@ LibIP6EmitRoute(struct lib_ip6_query *Query, struct netif *netif, const ip6_addr
     Row.ValidLifetime = Lifetime;
     Row.PreferredLifetime = Lifetime;
     Row.Loopback = Loopback;
-    Row.Autoconfigure = (Origin == NlroRouterAdvertisement);
+    Row.Autoconfigure = TRUE;
     Row.Publish = FALSE;
-    Row.Immortal = (Lifetime == 0xFFFFFFFF);
+    Row.Immortal = FALSE;
 
     if (Query->Statistics)
         Query->Statistics->NumRoutes++;
@@ -369,19 +370,19 @@ LibIP6QueryRoutes(struct lib_ip6_query *Query, struct netif *netif)
     if (LibIP6NetifIsLoopback(netif))
     {
         ip6_addr_set_loopback(&Prefix);
-        LibIP6EmitRoute(Query, netif, &Prefix, 128, NULL, MIB_IPPROTO_LOCAL, NlroWellKnown, 0xFFFFFFFF, TRUE);
+        LibIP6EmitRoute(Query, netif, &Prefix, 128, NULL, MIB_IPPROTO_LOCAL, NlroManual, 0xFFFFFFFF, TRUE);
     }
     else
     {
         IP6_ADDR(&Prefix, PP_HTONL(0xfe800000UL), 0, 0, 0);
-        LibIP6EmitRoute(Query, netif, &Prefix, 64, NULL, MIB_IPPROTO_LOCAL, NlroWellKnown, 0xFFFFFFFF, FALSE);
+        LibIP6EmitRoute(Query, netif, &Prefix, 64, NULL, MIB_IPPROTO_LOCAL, NlroManual, 0xFFFFFFFF, FALSE);
 
         for (i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++)
         {
             if (!ip6_addr_isvalid(netif_ip6_addr_state(netif, i)))
                 continue;
             LibIP6EmitRoute(Query, netif, netif_ip6_addr(netif, i), 128, NULL, MIB_IPPROTO_LOCAL,
-                            NlroWellKnown, 0xFFFFFFFF, TRUE);
+                            NlroManual, 0xFFFFFFFF, TRUE);
         }
 
         for (i = 0; i < LWIP_ND6_NUM_PREFIXES; i++)
@@ -409,6 +410,213 @@ LibIP6QueryRoutes(struct lib_ip6_query *Query, struct netif *netif)
 
     IP6_ADDR(&Prefix, PP_HTONL(0xff000000UL), 0, 0, 0);
     LibIP6EmitRoute(Query, netif, &Prefix, 8, NULL, MIB_IPPROTO_LOCAL, NlroWellKnown, 0xFFFFFFFF, FALSE);
+}
+
+#define LIB_IP6_MCAST_NEIGHBORS 32
+
+typedef struct _LIB_IP6_MCAST_NEIGHBOR
+{
+    struct netif *Netif;
+    ip6_addr_t Address;
+} LIB_IP6_MCAST_NEIGHBOR;
+
+static LIB_IP6_MCAST_NEIGHBOR LibIP6McastNeighbors[LIB_IP6_MCAST_NEIGHBORS];
+
+void
+LibIP6NoteMulticastDestination(struct netif *netif, const ip6_addr_t *Address)
+{
+    ULONG i, Free = LIB_IP6_MCAST_NEIGHBORS;
+    SYS_ARCH_DECL_PROTECT(Level);
+
+    SYS_ARCH_PROTECT(Level);
+    for (i = 0; i < LIB_IP6_MCAST_NEIGHBORS; i++)
+    {
+        if (!LibIP6McastNeighbors[i].Netif)
+        {
+            if (Free == LIB_IP6_MCAST_NEIGHBORS)
+                Free = i;
+            continue;
+        }
+        if (LibIP6McastNeighbors[i].Netif == netif &&
+            !memcmp(LibIP6McastNeighbors[i].Address.addr, Address->addr, sizeof(Address->addr)))
+            break;
+    }
+    if (i == LIB_IP6_MCAST_NEIGHBORS && Free < LIB_IP6_MCAST_NEIGHBORS)
+    {
+        LibIP6McastNeighbors[Free].Netif = netif;
+        ip6_addr_copy(LibIP6McastNeighbors[Free].Address, *Address);
+    }
+    SYS_ARCH_UNPROTECT(Level);
+}
+
+#define LIB_IP6_MEMBERSHIPS 64
+
+typedef struct _LIB_IP6_MEMBERSHIP
+{
+    PVOID Owner;
+    struct netif *Netif;
+    ip6_addr_t Group;
+} LIB_IP6_MEMBERSHIP;
+
+static LIB_IP6_MEMBERSHIP LibIP6Memberships[LIB_IP6_MEMBERSHIPS];
+static volatile LONG LibIP6MembershipCount;
+
+struct lib_ip6_membership_msg
+{
+    PVOID Owner;
+    ULONG Index;
+    ip6_addr_t Group;
+    BOOLEAN Join;
+    BOOLEAN All;
+    NTSTATUS Status;
+};
+
+static
+VOID
+LibIP6DropMembership(LIB_IP6_MEMBERSHIP *Membership)
+{
+    if (Membership->Netif->flags & NETIF_FLAG_MLD6)
+        mld6_leavegroup_netif(Membership->Netif, &Membership->Group);
+    Membership->Owner = NULL;
+    Membership->Netif = NULL;
+    InterlockedDecrement(&LibIP6MembershipCount);
+}
+
+static
+void
+LibIP6MembershipCallback(void *arg)
+{
+    struct lib_ip6_membership_msg *msg = arg;
+    struct netif *netif, *target = NULL;
+    ULONG i, Free = LIB_IP6_MEMBERSHIPS;
+
+    if (msg->All)
+    {
+        for (i = 0; i < LIB_IP6_MEMBERSHIPS; i++)
+        {
+            if (LibIP6Memberships[i].Owner == msg->Owner)
+                LibIP6DropMembership(&LibIP6Memberships[i]);
+        }
+        msg->Status = STATUS_SUCCESS;
+        return;
+    }
+
+    NETIF_FOREACH(netif)
+    {
+        PIP_INTERFACE IF = netif->state;
+
+        if (msg->Index ? (IF && IF->Index == msg->Index) : (netif->flags & NETIF_FLAG_MLD6) != 0)
+        {
+            target = netif;
+            break;
+        }
+    }
+    if (!target)
+    {
+        msg->Status = STATUS_INVALID_ADDRESS;
+        return;
+    }
+
+    for (i = 0; i < LIB_IP6_MEMBERSHIPS; i++)
+    {
+        if (!LibIP6Memberships[i].Owner)
+        {
+            if (Free == LIB_IP6_MEMBERSHIPS)
+                Free = i;
+            continue;
+        }
+        if (LibIP6Memberships[i].Owner == msg->Owner && LibIP6Memberships[i].Netif == target &&
+            ip6_addr_zoneless_eq(&LibIP6Memberships[i].Group, &msg->Group))
+            break;
+    }
+
+    if (!msg->Join)
+    {
+        if (i == LIB_IP6_MEMBERSHIPS)
+        {
+            msg->Status = STATUS_INVALID_ADDRESS;
+            return;
+        }
+        LibIP6DropMembership(&LibIP6Memberships[i]);
+        msg->Status = STATUS_SUCCESS;
+        return;
+    }
+
+    if (i < LIB_IP6_MEMBERSHIPS)
+    {
+        msg->Status = STATUS_ADDRESS_ALREADY_EXISTS;
+        return;
+    }
+    if (Free == LIB_IP6_MEMBERSHIPS)
+    {
+        msg->Status = STATUS_INSUFFICIENT_RESOURCES;
+        return;
+    }
+    if ((target->flags & NETIF_FLAG_MLD6) && mld6_joingroup_netif(target, &msg->Group) != ERR_OK)
+    {
+        msg->Status = STATUS_INSUFFICIENT_RESOURCES;
+        return;
+    }
+    LibIP6Memberships[Free].Owner = msg->Owner;
+    LibIP6Memberships[Free].Netif = target;
+    ip6_addr_copy(LibIP6Memberships[Free].Group, msg->Group);
+    InterlockedIncrement(&LibIP6MembershipCount);
+    msg->Status = STATUS_SUCCESS;
+}
+
+NTSTATUS
+LibIP6ChangeMembership(PVOID Owner, ULONG Index, const UCHAR *Group, BOOLEAN Join)
+{
+    struct lib_ip6_membership_msg msg;
+
+    RtlZeroMemory(&msg, sizeof(msg));
+    msg.Owner = Owner;
+    msg.Index = Index;
+    msg.Join = Join;
+    RtlCopyMemory(msg.Group.addr, Group, sizeof(msg.Group.addr));
+    ip6_addr_clear_zone(&msg.Group);
+    if (!ip6_addr_ismulticast(&msg.Group))
+        return STATUS_INVALID_PARAMETER;
+    if (tcpip_callback_wait(LibIP6MembershipCallback, &msg) != ERR_OK)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    return msg.Status;
+}
+
+VOID
+LibIP6LeaveAllGroups(PVOID Owner)
+{
+    struct lib_ip6_membership_msg msg;
+
+    if (!LibIP6MembershipCount)
+        return;
+    RtlZeroMemory(&msg, sizeof(msg));
+    msg.Owner = Owner;
+    msg.All = TRUE;
+    (void)tcpip_callback_wait(LibIP6MembershipCallback, &msg);
+}
+
+void
+LibIP6ForgetNetif(struct netif *netif)
+{
+    ULONG i;
+    SYS_ARCH_DECL_PROTECT(Level);
+
+    SYS_ARCH_PROTECT(Level);
+    for (i = 0; i < LIB_IP6_MCAST_NEIGHBORS; i++)
+    {
+        if (LibIP6McastNeighbors[i].Netif == netif)
+            LibIP6McastNeighbors[i].Netif = NULL;
+    }
+    for (i = 0; i < LIB_IP6_MEMBERSHIPS; i++)
+    {
+        if (LibIP6Memberships[i].Netif == netif)
+        {
+            LibIP6Memberships[i].Owner = NULL;
+            LibIP6Memberships[i].Netif = NULL;
+            InterlockedDecrement(&LibIP6MembershipCount);
+        }
+    }
+    SYS_ARCH_UNPROTECT(Level);
 }
 
 static
@@ -443,6 +651,7 @@ LibIP6QueryCallback(void *arg)
             Row.Connected = netif_is_link_up(netif) || LibIP6NetifIsLoopback(netif);
             Row.Loopback = LibIP6NetifIsLoopback(netif);
             Row.Autoconfiguration = netif->ip6_autoconfig_enabled ? TRUE : FALSE;
+            Row.LinkSpeed = (ULONG64)IF->Speed * 100;
             LibIP6Emit(Query, &Row, sizeof(Row));
             break;
         }
@@ -560,6 +769,27 @@ LibIP6QueryCallback(void *arg)
             }
             Row.IsRouter = Entry->isrouter ? TRUE : FALSE;
             Row.IsUnreachable = (Entry->state == ND6_INCOMPLETE);
+            LibIP6Emit(Query, &Row, sizeof(Row));
+        }
+
+        for (i = 0; i < LIB_IP6_MCAST_NEIGHBORS; i++)
+        {
+            struct netif *Netif = LibIP6McastNeighbors[i].Netif;
+            const u8_t *Group = (const u8_t *)&LibIP6McastNeighbors[i].Address.addr[3];
+            PIP_INTERFACE IF;
+            IP6_NEIGHBOR_ROW Row;
+
+            if (!Netif || !(IF = Netif->state))
+                continue;
+
+            RtlZeroMemory(&Row, sizeof(Row));
+            Row.Index = IF->Index;
+            RtlCopyMemory(Row.Address, LibIP6McastNeighbors[i].Address.addr, sizeof(Row.Address));
+            Row.PhysicalAddressLength = Netif->hwaddr_len;
+            Row.PhysicalAddress[0] = 0x33;
+            Row.PhysicalAddress[1] = 0x33;
+            RtlCopyMemory(&Row.PhysicalAddress[2], Group, 4);
+            Row.State = NlnsPermanent;
             LibIP6Emit(Query, &Row, sizeof(Row));
         }
     }

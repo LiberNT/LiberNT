@@ -827,6 +827,16 @@ NTSTATUS DispTdiQueryInformation(
                 return STATUS_INVALID_PARAMETER;
             }
 
+            if (NT_SUCCESS(TCPGetSockAddress(Endpoint,
+                                             (PTRANSPORT_ADDRESS)Address,
+                                             MmGetMdlByteCount(Irp->MdlAddress) -
+                                             FIELD_OFFSET(TDI_ADDRESS_INFO, Address),
+                                             FALSE)) &&
+                Address->Address[0].Address[0].sin_port)
+            {
+                return STATUS_SUCCESS;
+            }
+
             return AddrBuildTransportAddress(&Endpoint->AddressFile->Address,
                                              Endpoint->AddressFile->Port,
                                              (PTRANSPORT_ADDRESS)Address,
@@ -1668,6 +1678,12 @@ NTSTATUS DispTdiSetInformationEx(
     TranContext = (PTRANSPORT_CONTEXT)IrpSp->FileObject->FsContext;
     Info        = (PTCP_REQUEST_SET_INFORMATION_EX)Irp->AssociatedIrp.SystemBuffer;
 
+    if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < FIELD_OFFSET(TCP_REQUEST_SET_INFORMATION_EX, Buffer) ||
+        Info->BufferSize > IrpSp->Parameters.DeviceIoControl.InputBufferLength - FIELD_OFFSET(TCP_REQUEST_SET_INFORMATION_EX, Buffer))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
     switch ((ULONG_PTR)IrpSp->FileObject->FsContext2) {
     case TDI_TRANSPORT_ADDRESS_FILE:
         Request.Handle.AddressHandle = TranContext->Handle.AddressHandle;
@@ -1692,6 +1708,22 @@ NTSTATUS DispTdiSetInformationEx(
 
     Request.RequestNotifyObject = NULL;
     Request.RequestContext      = NULL;
+
+    if ((ULONG_PTR)IrpSp->FileObject->FsContext2 == TDI_TRANSPORT_ADDRESS_FILE &&
+        Info->ID.toi_class == INFO_CLASS_PROTOCOL)
+    {
+        if (Info->ID.toi_type == INFO_TYPE_ADDRESS_OBJECT)
+            return SetAddressFileInfo(&Info->ID, Request.Handle.AddressHandle, &Info->Buffer, Info->BufferSize);
+
+        if (Info->ID.toi_type == INFO_TYPE_CONNECTION)
+            return SetConnectionInfo(&Info->ID, Request.Handle.AddressHandle, &Info->Buffer, Info->BufferSize);
+    }
+
+    if (Irp->RequestorMode == UserMode &&
+        (ULONG_PTR)IrpSp->FileObject->FsContext2 != TDI_CONTROL_CHANNEL_FILE)
+    {
+        return STATUS_ACCESS_DENIED;
+    }
 
     Status = InfoTdiSetInformationEx(&Request, &Info->ID,
             &Info->Buffer, Info->BufferSize);
@@ -1807,15 +1839,21 @@ WaitForHwAddress ( PDEVICE_OBJECT DeviceObject, PVOID Context) {
     PIRP Irp;
     PNEIGHBOR_CACHE_ENTRY NCE = NULL;
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
+    ULONG Requests = 1;
 
     IoFreeWorkItem(WorkItem->WorkItem);
     Irp = WorkItem->Irp;
     AddrInitIPv4(&Remote, WorkItem->RemoteIP);
     KeQuerySystemTime(&Now);
-    while (Now.QuadPart - WorkItem->StartTime.QuadPart < 10000 * 1000 && !Irp->Cancel) {
+    while (Now.QuadPart - WorkItem->StartTime.QuadPart < 3 * 10000 * 1000 && !Irp->Cancel) {
         NCE = NBLocateNeighbor(&Remote, WorkItem->Interface);
         if (NCE && !(NCE->State & NUD_INCOMPLETE)) {
             break;
+        }
+
+        if ((Now.QuadPart - WorkItem->StartTime.QuadPart) / (10000 * 1000) >= Requests) {
+            ARPTransmit(&Remote, NULL, WorkItem->Interface);
+            Requests++;
         }
 
         if (NCE)

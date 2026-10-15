@@ -114,6 +114,33 @@ VOID AfdSuperAcceptRelease( PIRP Irp ) {
     }
 }
 
+VOID AfdCompleteAcceptData( PIRP Irp, NTSTATUS Status, ULONG_PTR Information ) {
+    AfdSuperAcceptRelease( Irp );
+    if( Irp->MdlAddress ) UnlockRequest( Irp, IoGetCurrentIrpStackLocation( Irp ) );
+    Irp->IoStatus.Status = Status;
+    Irp->IoStatus.Information = Information;
+    IoCompleteRequest( Irp, IO_NETWORK_INCREMENT );
+}
+
+static DRIVER_CANCEL AfdCancelAcceptData;
+static VOID NTAPI AfdCancelAcceptData( PDEVICE_OBJECT DeviceObject, PIRP Irp ) {
+    PFILE_OBJECT AcceptFileObject = Irp->Tail.Overlay.DriverContext[2];
+    PAFD_FCB AcceptFCB = AcceptFileObject->FsContext;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    IoReleaseCancelSpinLock( Irp->CancelIrql );
+
+    if( SocketAcquireStateLock( AcceptFCB ) ) {
+        if( !IsListEmpty( &Irp->Tail.Overlay.ListEntry ) )
+            RemoveEntryList( &Irp->Tail.Overlay.ListEntry );
+        InitializeListHead( &Irp->Tail.Overlay.ListEntry );
+        SocketStateUnlock( AcceptFCB );
+    }
+
+    AfdCompleteAcceptData( Irp, STATUS_CANCELLED, 0 );
+}
+
 static BOOLEAN IsSuperAcceptIrp( PIRP Irp ) {
     PIO_STACK_LOCATION IrpSp = IoGetCurrentIrpStackLocation( Irp );
     return IrpSp->MajorFunction == IRP_MJ_DEVICE_CONTROL &&
@@ -177,6 +204,24 @@ static NTSTATUS SatisfySuperAccept( PAFD_FCB FCB, PIRP Irp,
                                           Qelt->ConnInfo->RemoteAddress );
 
     ExFreePoolWithTag( Qelt, TAG_AFD_ACCEPT_QUEUE );
+
+    if( NT_SUCCESS(Status) && Info->ReceiveDataLength &&
+        SocketAcquireStateLock( AcceptFCB ) ) {
+        InsertTailList( &AcceptFCB->PendingIrpList[FUNCTION_ACCEPT],
+                        &Irp->Tail.Overlay.ListEntry );
+        (void)IoSetCancelRoutine( Irp, AfdCancelAcceptData );
+        if( ( Irp->Cancel || AcceptFCB->CleanedUp ) && IoSetCancelRoutine( Irp, NULL ) ) {
+            RemoveEntryList( &Irp->Tail.Overlay.ListEntry );
+            SocketStateUnlock( AcceptFCB );
+            AfdCompleteAcceptData( Irp, STATUS_CANCELLED, 0 );
+            return STATUS_CANCELLED;
+        }
+        IoMarkIrpPending( Irp );
+        AfdSatisfyAcceptData( AcceptFCB );
+        SocketStateUnlock( AcceptFCB );
+        return STATUS_PENDING;
+    }
+
     AfdSuperAcceptRelease( Irp );
 
     Irp->IoStatus.Information = 0;

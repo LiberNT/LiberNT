@@ -77,7 +77,8 @@ INT
 SendRequest(
     IN PVOID Request,
     IN DWORD RequestSize,
-    IN DWORD IOCTL);
+    IN DWORD IOCTL,
+    IN HANDLE TdiAddressObjectHandle);
 
 #endif /* __WSHTCPIP_H */
 

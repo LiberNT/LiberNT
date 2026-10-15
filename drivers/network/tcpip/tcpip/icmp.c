@@ -454,7 +454,7 @@ DispEchoRequest(
     LocalAddressTa.Address[0].AddressType = TDI_ADDRESS_TYPE_IP;
     LocalAddressTa.Address[0].Address[0].in_addr = 0;
 
-    Status = FileOpenAddress(&SendContext->TdiRequest, &LocalAddressTa, IPPROTO_ICMP, FALSE, NULL);
+    Status = FileOpenAddress(&SendContext->TdiRequest, &LocalAddressTa, IPPROTO_ICMP, FALSE, FALSE, NULL);
 
     if (!NT_SUCCESS(Status))
     {

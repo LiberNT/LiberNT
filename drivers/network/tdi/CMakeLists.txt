@@ -4,7 +4,7 @@ add_definitions(
     -D_NTDRIVER_
     -D_TDI_)
 
-spec2def(tdi.sys misc/tdi.spec)
+spec2def(tdi.sys misc/tdi.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE
     cte/events.c

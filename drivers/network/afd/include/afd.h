@@ -54,6 +54,7 @@
 #define TAG_AFD_SNMP_ADDRESS_INFO          'asfA'
 #define TAG_AFD_TDI_CONNECTION_INFORMATION 'cTfA'
 #define TAG_AFD_WSA_BUFFER                 'bWfA'
+#define TAG_AFD_TDI_IRP_CONTEXT            'iTfA'
 
 static __inline BOOLEAN
 AfdIs32bitIoctl(PIRP Irp)
@@ -104,7 +105,11 @@ typedef struct IPADDR_ENTRY {
 #define FUNCTION_DISCONNECT             5
 #define FUNCTION_CLOSE                  6
 #define FUNCTION_CONNECTEX              7
-#define MAX_FUNCTIONS                   8
+#define FUNCTION_RECV_OOB               8
+#define FUNCTION_ADDRESS_LIST_CHANGE    9
+#define MAX_FUNCTIONS                   10
+
+#define AFD_OOB_BUFFER_SIZE             64
 
 #define IN_FLIGHT_REQUESTS              5
 
@@ -237,6 +242,10 @@ typedef struct _AFD_FCB {
     BOOLEAN Locked, Critical, NonBlocking, OobInline, TdiReceiveClosed, SendClosed;
     BOOLEAN ReceiveRepostActive, ReceiveRepostPending;
     BOOLEAN SendStartActive, SendStartPending;
+    BOOLEAN CleanedUp;
+    UINT OobLength;
+    UCHAR OobData[AFD_OOB_BUFFER_SIZE];
+    UINT SendUrgentEnd;
     UINT Flags, GroupID, GroupType;
     KIRQL OldIrql;
     PVOID CurrentThread;
@@ -284,6 +293,7 @@ typedef struct _AFD_FCB {
     LIST_ENTRY PendingIrpList[MAX_FUNCTIONS];
     LIST_ENTRY DatagramList;
     LIST_ENTRY PendingConnections;
+    LIST_ENTRY AddressListChangeEntry;
 } AFD_FCB, *PAFD_FCB;
 
 /* bind.c */
@@ -359,6 +369,7 @@ AfdGetPeerName( PDEVICE_OBJECT DeviceObject, PIRP Irp,
 NTSTATUS AfdSuperAccept( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                          PIO_STACK_LOCATION IrpSp );
 VOID AfdSuperAcceptRelease( PIRP Irp );
+VOID AfdCompleteAcceptData( PIRP Irp, NTSTATUS Status, ULONG_PTR Information );
 NTSTATUS AfdWaitForListen( PDEVICE_OBJECT DeviceObject, PIRP Irp,
 			   PIO_STACK_LOCATION IrpSp );
 
@@ -407,6 +418,7 @@ VOID CleanupPendingIrp(PAFD_FCB FCB, PIRP Irp, PIO_STACK_LOCATION IrpSp, PAFD_AC
 /* read.c */
 
 IO_COMPLETION_ROUTINE ReceiveComplete;
+VOID AfdSatisfyAcceptData( PAFD_FCB FCB );
 
 IO_COMPLETION_ROUTINE PacketSocketRecvComplete;
 

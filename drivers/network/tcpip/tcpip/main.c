@@ -103,6 +103,26 @@ VOID TiWriteErrorLog(
     IoWriteErrorLogEntry(LogEntry);
 }
 
+static BOOLEAN TiIsDualStackAddress(
+    PTA_IP_ADDRESS Address,
+    ULONG Length)
+{
+    PTA_ADDRESS Next;
+    ULONG Offset;
+
+    if (Address->Address[0].AddressType != TDI_ADDRESS_TYPE_IP6)
+        return FALSE;
+
+    Offset = FIELD_OFFSET(TA_IP_ADDRESS, Address[0].Address) + Address->Address[0].AddressLength;
+    if (Length < Offset + FIELD_OFFSET(TA_ADDRESS, Address) + TDI_ADDRESS_LENGTH_IP)
+        return FALSE;
+
+    Next = (PTA_ADDRESS)((PUCHAR)Address + Offset);
+    return (Next->AddressType == TDI_ADDRESS_TYPE_IP) &&
+           (Next->AddressLength >= TDI_ADDRESS_LENGTH_IP) &&
+           (((PTDI_ADDRESS_IP)Next->Address)->in_addr == 0);
+}
+
 /*
  * FUNCTION: Creates a file object
  * ARGUMENTS:
@@ -125,6 +145,7 @@ NTSTATUS TiCreateFileObject(
     NTSTATUS Status;
     ULONG Protocol;
     BOOLEAN Shared;
+    BOOLEAN Exclusive;
 
     TI_DbgPrint(DEBUG_IRP, ("Called. DeviceObject is at (0x%X), IRP is at (0x%X).\n", DeviceObject, Irp));
 
@@ -164,7 +185,8 @@ NTSTATUS TiCreateFileObject(
         Address = (PTA_IP_ADDRESS)(EaInfo->EaName + EaInfo->EaNameLength + 1); //0-term
 
         if ((EaInfo->EaValueLength < FIELD_OFFSET(TA_IP_ADDRESS, Address[0].Address)) ||
-            (Address->TAAddressCount != 1) ||
+            ((Address->TAAddressCount != 1) &&
+             ((Address->TAAddressCount != 2) || !TiIsDualStackAddress(Address, EaInfo->EaValueLength))) ||
             !(((Address->Address[0].AddressType == TDI_ADDRESS_TYPE_IP) &&
                (EaInfo->EaValueLength >= sizeof(TA_IP_ADDRESS)) &&
                (Address->Address[0].AddressLength >= TDI_ADDRESS_LENGTH_IP)) ||
@@ -212,9 +234,10 @@ NTSTATUS TiCreateFileObject(
             return STATUS_INVALID_PARAMETER;
         }
 
-        Shared = (IrpSp->Parameters.Create.ShareAccess != 0);
+        Shared = ((IrpSp->Parameters.Create.ShareAccess & FILE_SHARE_WRITE) != 0);
+        Exclusive = (IrpSp->Parameters.Create.ShareAccess == 0);
 
-        Status = FileOpenAddress(&Request, Address, Protocol, Shared, NULL);
+        Status = FileOpenAddress(&Request, Address, Protocol, Shared, Exclusive, NULL);
         if (NT_SUCCESS(Status))
         {
             IrpSp->FileObject->FsContext2 = (PVOID)TDI_TRANSPORT_ADDRESS_FILE;
@@ -507,6 +530,14 @@ TiDispatch(
     TI_DbgPrint(DEBUG_IRP, ("[TCPIP, TiDispatch] Called. IRP is at (0x%X).\n", Irp));
 
     Irp->IoStatus.Information = 0;
+
+    if (Irp->RequestorMode == UserMode &&
+        (ULONG_PTR)IrpSp->FileObject->FsContext2 != TDI_CONTROL_CHANNEL_FILE &&
+        IrpSp->Parameters.DeviceIoControl.IoControlCode != IOCTL_TCP_QUERY_INFORMATION_EX &&
+        IrpSp->Parameters.DeviceIoControl.IoControlCode != IOCTL_TCP_SET_INFORMATION_EX)
+    {
+        return IRPFinish(Irp, STATUS_ACCESS_DENIED);
+    }
 
 #if 0
     Status = TdiMapUserRequest(DeviceObject, Irp, IrpSp);
@@ -859,6 +890,7 @@ VOID NTAPI TiUnload(
     UDPShutdown();
     RawIPShutdown();
     ICMPShutdown();
+    IGMPShutdown();
 
     /* Shutdown network level protocol subsystem */
     IPShutdown();
@@ -1076,6 +1108,12 @@ DriverEntry(
     }
 
     Status = ICMPStartup();
+    if( !NT_SUCCESS(Status) ) {
+        TiUnload(DriverObject);
+        return Status;
+    }
+
+    Status = IGMPStartup();
     if( !NT_SUCCESS(Status) ) {
         TiUnload(DriverObject);
         return Status;

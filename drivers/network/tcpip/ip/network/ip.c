@@ -148,6 +148,8 @@ VOID NTAPI IPTimeoutDpcFn(PKDPC Dpc,
 
     /* Clean possible outdated cached neighbor addresses */
     NBTimeout();
+
+    IGMPTimeout();
 }
 
 

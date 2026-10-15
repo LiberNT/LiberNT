@@ -114,6 +114,10 @@ TDI_STATUS InfoTdiQueryGetInterfaceMIB(TDIEntityID ID,
 				       PNDIS_BUFFER Buffer,
 				       PUINT BufferSize);
 
+TDI_STATUS InfoTdiQueryGetIFInfo(PVOID Context,
+                                 PNDIS_BUFFER Buffer,
+                                 PUINT BufferSize);
+
 TDI_STATUS InfoTdiQueryGetIPSnmpInfo( TDIEntityID ID,
                                       PIP_INTERFACE IF,
 				      PNDIS_BUFFER Buffer,

@@ -245,38 +245,81 @@ LogActiveObjects(VOID)
 #endif
 }
 
-PADDRESS_FILE AddrFindShared(
+NTSTATUS AddrCheckSharing(
     PIP_ADDRESS BindAddress,
     USHORT Port,
-    USHORT Protocol)
+    USHORT Protocol,
+    BOOLEAN Reuse,
+    BOOLEAN Exclusive,
+    BOOLEAN DualStack,
+    PADDRESS_FILE *SharedFile)
 {
     PLIST_ENTRY CurrentEntry;
     KIRQL OldIrql;
-    PADDRESS_FILE Current = NULL;
+    PADDRESS_FILE Current, Candidate = NULL;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    *SharedFile = NULL;
 
     TcpipAcquireSpinLock(&AddressFileListLock, &OldIrql);
 
-    CurrentEntry = AddressFileListHead.Flink;
-    while (CurrentEntry != &AddressFileListHead) {
+    for (CurrentEntry = AddressFileListHead.Flink;
+         CurrentEntry != &AddressFileListHead;
+         CurrentEntry = CurrentEntry->Flink)
+    {
         Current = CONTAINING_RECORD(CurrentEntry, ADDRESS_FILE, ListEntry);
 
         /* See if this address matches the search criteria */
-        if ((Current->Port == Port) &&
-            (Current->Protocol == Protocol))
+        if ((Current->Port != Port) || (Current->Protocol != Protocol))
+            continue;
+
+        if (Current->Address.Type != BindAddress->Type)
         {
-            /* Increase the sharer count */
-            ASSERT(Current->Sharers != 0);
-            InterlockedIncrement(&Current->Sharers);
+            if (Current->DualStack && Current->Exclusive)
+                Status = STATUS_ACCESS_DENIED;
+            else if (DualStack && Exclusive)
+                Status = STATUS_ADDRESS_ALREADY_EXISTS;
+            else
+                continue;
             break;
         }
 
-        CurrentEntry = CurrentEntry->Flink;
-        Current = NULL;
+        if (AddrIsEqual(&Current->Address, BindAddress))
+        {
+            if (Reuse && Current->Reuse)
+            {
+                /* Increase the sharer count */
+                ASSERT(Current->Sharers != 0);
+                InterlockedIncrement(&Current->Sharers);
+                *SharedFile = Current;
+            }
+            else
+            {
+                Status = Reuse ? STATUS_ACCESS_DENIED : STATUS_ADDRESS_ALREADY_EXISTS;
+            }
+            break;
+        }
+
+        if (Current->Exclusive && AddrIsUnspecified(&Current->Address))
+        {
+            Status = STATUS_ACCESS_DENIED;
+            break;
+        }
+
+        if (Reuse && !Candidate)
+            Candidate = Current;
+    }
+
+    if (NT_SUCCESS(Status) && !*SharedFile && Candidate)
+    {
+        ASSERT(Candidate->Sharers != 0);
+        InterlockedIncrement(&Candidate->Sharers);
+        *SharedFile = Candidate;
     }
 
     TcpipReleaseSpinLock(&AddressFileListLock, OldIrql);
 
-    return Current;
+    return Status;
 }
 
 /*
@@ -405,6 +448,9 @@ VOID AddrFileFree(
 
   WfpShimEndpointClosed(AddrFile->WfpEndpointId);
 
+  IGMPLeaveAllGroups(AddrFile);
+  LibIP6LeaveAllGroups(AddrFile);
+
   /* FIXME: Kill TCP connections on this address file object */
 
   /* Return pending requests with error */
@@ -486,6 +532,7 @@ NTSTATUS FileOpenAddress(
   PTA_IP_ADDRESS Address,
   USHORT Protocol,
   BOOLEAN Shared,
+  BOOLEAN Exclusive,
   PVOID Options)
 {
   PADDRESS_FILE AddrFile;
@@ -494,6 +541,7 @@ NTSTATUS FileOpenAddress(
   IP_ADDRESS BindAddress;
   USHORT BindPort;
   NTSTATUS Status;
+  BOOLEAN DualStack;
 
   TI_DbgPrint(MID_TRACE, ("Called (Proto %d).\n", Protocol));
 
@@ -501,10 +549,14 @@ NTSTATUS FileOpenAddress(
   if (!NT_SUCCESS(Status))
     return Status;
 
+  DualStack = (Address->TAAddressCount == 2);
+
   /* If it's shared and has a port specified, look for a match */
-  if ((Shared != FALSE) && (BindPort != 0))
+  if (BindPort != 0)
   {
-    AddrFile = AddrFindShared(NULL, BindPort, Protocol);
+    Status = AddrCheckSharing(&BindAddress, BindPort, Protocol, Shared, Exclusive, DualStack, &AddrFile);
+    if (!NT_SUCCESS(Status))
+        return Status;
     if (AddrFile != NULL)
     {
         Request->Handle.AddressHandle = AddrFile;
@@ -525,6 +577,9 @@ NTSTATUS FileOpenAddress(
   AddrFile->RefCount = 1;
   AddrFile->Free = AddrFileFree;
   AddrFile->Sharers = 1;
+  AddrFile->Reuse = Shared;
+  AddrFile->Exclusive = Exclusive;
+  AddrFile->DualStack = DualStack;
 
   /* Set our default options */
   AddrFile->TTL = 128;

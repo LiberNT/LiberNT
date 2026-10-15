@@ -212,13 +212,13 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                         InfoReq->Information.Ulong != FCB->Send.Size)
                     {
                         NewBuffer = ExAllocatePoolWithTag(PagedPool,
-                                                          InfoReq->Information.Ulong,
+                                                          InfoReq->Information.Ulong * 2,
                                                           TAG_AFD_DATA_BUFFER);
 
                         if (NewBuffer)
                         {
-                            if (FCB->Send.BytesUsed > InfoReq->Information.Ulong)
-                                FCB->Send.BytesUsed = InfoReq->Information.Ulong;
+                            if (FCB->Send.BytesUsed > InfoReq->Information.Ulong * 2)
+                                FCB->Send.BytesUsed = InfoReq->Information.Ulong * 2;
 
                             if (FCB->Send.Window)
                             {

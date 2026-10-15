@@ -61,9 +61,18 @@ UINT TaLengthOfAddress( PTA_ADDRESS Addr )
 UINT TaLengthOfTransportAddress( PTRANSPORT_ADDRESS Addr )
 {
     UINT AddrLen = TaLengthOfAddress(&Addr->Address[0]);
+    UINT NextLen;
 
     if (!AddrLen)
         return 0;
+
+    if (Addr->TAAddressCount == 2)
+    {
+        NextLen = TaLengthOfAddress((PTA_ADDRESS)((PUCHAR)&Addr->Address[0] + AddrLen));
+        if (!NextLen)
+            return 0;
+        AddrLen += NextLen;
+    }
 
     AddrLen += sizeof(ULONG);
 

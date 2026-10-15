@@ -71,6 +71,7 @@ WSPSocket(int AddressFamily,
     LARGE_INTEGER               GroupData;
     INT                         Status;
     PSOCK_SHARED_INFO           SharedData = NULL;
+    PSOCK_SHARED_INFO           MappedData;
 
     TRACE("Creating Socket, getting TDI Name - AddressFamily (%d)  SocketType (%d)  Protocol (%d).\n",
         AddressFamily, SocketType, Protocol);
@@ -88,17 +89,29 @@ WSPSocket(int AddressFamily,
             Status = WSAEINVAL;
             goto error;
         }
-        SharedData = MapViewOfFile(UlongToPtr(lpProtocolInfo->dwServiceFlags3),
+        MappedData = MapViewOfFile(UlongToPtr(lpProtocolInfo->dwServiceFlags3),
                                    FILE_MAP_ALL_ACCESS,
                                    0,
                                    0,
                                    sizeof(SOCK_SHARED_INFO));
-        if (!SharedData)
+        if (!MappedData)
         {
             Status = WSAEINVAL;
             goto error;
         }
-        InterlockedIncrement(&SharedData->RefCount);
+        SharedData = HeapAlloc(GlobalHeap, 0, sizeof(*SharedData));
+        if (SharedData)
+        {
+            *SharedData = *MappedData;
+            SharedData->RefCount = 1;
+        }
+        UnmapViewOfFile(MappedData);
+        NtClose(UlongToHandle(lpProtocolInfo->dwServiceFlags3));
+        if (!SharedData)
+        {
+            Status = WSAENOBUFS;
+            goto error;
+        }
         AddressFamily = SharedData->AddressFamily;
         SocketType = SharedData->SocketType;
         Protocol = SharedData->Protocol;
@@ -208,7 +221,7 @@ WSPSocket(int AddressFamily,
     if (SharedData)
     {
         Socket->SharedData = SharedData;
-        Socket->SharedDataHandle = UlongToHandle(lpProtocolInfo->dwServiceFlags3);
+        Socket->SharedDataHandle = INVALID_HANDLE_VALUE;
         Sock = UlongToHandle(lpProtocolInfo->dwServiceFlags4);
         Socket->Handle = (SOCKET)lpProtocolInfo->dwServiceFlags4;
     }
@@ -447,8 +460,7 @@ error:
 
     if( SharedData )
     {
-        UnmapViewOfFile(SharedData);
-        NtClose(UlongToHandle(lpProtocolInfo->dwServiceFlags3));
+        HeapFree(GlobalHeap, 0, SharedData);
     }
     else
     {
@@ -646,6 +658,9 @@ TranslateNtStatusError(NTSTATUS Status)
 
        case STATUS_ACCESS_DENIED:
           return WSAEACCES;
+
+       case STATUS_RECEIVE_EXPEDITED:
+          return NO_ERROR;
 
        case STATUS_NOT_IMPLEMENTED:
           return WSAEOPNOTSUPP;
@@ -974,6 +989,9 @@ WSPBind(SOCKET Handle,
     ULONG connectSize;
     ULONG RandomAttempts = 0;
     BOOLEAN Randomized = FALSE;
+    PTA_ADDRESS DualStack = NULL;
+    DWORD V6Only = TRUE;
+    INT V6OnlyLength = sizeof(V6Only);
 
     /* Get the Socket Structure associate to this Socket*/
     Socket = GetSocketStructure(Handle);
@@ -1032,6 +1050,25 @@ WSPBind(SOCKET Handle,
                    SocketAddress->sa_data,
                    SocketAddressLength - sizeof(SocketAddress->sa_family));
 
+    if (SocketAddress->sa_family == AF_INET6 &&
+        SocketInfo.AddressInfo == SockaddrAddressInfoWildcard &&
+        Socket->HelperData->WSHGetSocketInformation(Socket->HelperContext,
+                                                    Handle,
+                                                    Socket->TdiAddressHandle,
+                                                    Socket->TdiConnectionHandle,
+                                                    IPPROTO_IPV6,
+                                                    IPV6_V6ONLY,
+                                                    (PCHAR)&V6Only,
+                                                    &V6OnlyLength) == NO_ERROR &&
+        !V6Only)
+    {
+        DualStack = (PTA_ADDRESS)(BindData->Address.Address[0].Address + BindData->Address.Address[0].AddressLength);
+        BindData->Address.TAAddressCount = 2;
+        DualStack->AddressLength = TDI_ADDRESS_LENGTH_IP;
+        DualStack->AddressType = TDI_ADDRESS_TYPE_IP;
+        RtlZeroMemory(DualStack->Address, TDI_ADDRESS_LENGTH_IP);
+    }
+
     /* Set the Share Type */
     if (Socket->SharedData->ExclusiveAddressUse)
     {
@@ -1080,6 +1117,9 @@ WSPBind(SOCKET Handle,
             BindData->Address.Address[0].Address[1] = 0;
             Randomized = FALSE;
         }
+
+        if (DualStack)
+            RtlCopyMemory(DualStack->Address, BindData->Address.Address[0].Address, sizeof(USHORT));
 
         /* Send IOCTL */
         Status = NtDeviceIoControlFile((HANDLE)Socket->Handle,
@@ -2581,6 +2621,12 @@ WSPGetSockName(IN SOCKET Handle,
         return SOCKET_ERROR;
     }
 
+    if (Socket->SharedData->State == SocketOpen)
+    {
+        if (lpErrno) *lpErrno = WSAEINVAL;
+        return SOCKET_ERROR;
+    }
+
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
@@ -2757,6 +2803,14 @@ WSPGetPeerName(IN SOCKET s,
     return MsafdReturnWithErrno ( Status, lpErrno, 0, NULL );
 }
 
+static
+VOID
+NTAPI
+MsafdInfoAPC(
+    _In_ PVOID ApcContext,
+    _In_ PIO_STATUS_BLOCK IoStatusBlock,
+    _In_ ULONG Reserved);
+
 INT
 WSPAPI
 WSPIoctl(IN  SOCKET Handle,
@@ -2819,8 +2873,7 @@ WSPIoctl(IN  SOCKET Handle,
                 }
             }
             Socket->SharedData->NonBlocking = NonBlocking ? 1 : 0;
-            NeedsCompletion = FALSE;
-            Errno = SetSocketInformation(Socket, AFD_INFO_BLOCKING_MODE, &NonBlocking, NULL, NULL, lpOverlapped, lpCompletionRoutine);
+            Errno = SetSocketInformation(Socket, AFD_INFO_BLOCKING_MODE, &NonBlocking, NULL, NULL, NULL, NULL);
             if (Errno == NO_ERROR)
                 Ret = NO_ERROR;
             break;
@@ -2862,10 +2915,26 @@ WSPIoctl(IN  SOCKET Handle,
                 break;
             }
 
-            /* FIXME: Return false if OOBINLINE is true for now
-               We should MSG_PEEK|MSG_OOB check with driver
-            */
-            *(BOOL*)lpvOutBuffer = !Socket->SharedData->OobInline;
+            *(BOOL*)lpvOutBuffer = TRUE;
+            if (!Socket->SharedData->OobInline)
+            {
+                AFD_RECV_INFO OobRecvInfo;
+                WSABUF OobBuffer;
+                CHAR OobByte;
+                IO_STATUS_BLOCK OobIosb;
+
+                OobBuffer.len = sizeof(OobByte);
+                OobBuffer.buf = &OobByte;
+                OobRecvInfo.BufferArray = (PAFD_WSABUF)&OobBuffer;
+                OobRecvInfo.BufferCount = 1;
+                OobRecvInfo.AfdFlags = AFD_IMMEDIATE;
+                OobRecvInfo.TdiFlags = TDI_RECEIVE_EXPEDITED | TDI_RECEIVE_PEEK;
+                if (NtDeviceIoControlFile((HANDLE)Handle, NULL, NULL, NULL, &OobIosb, IOCTL_AFD_RECV,
+                                          &OobRecvInfo, sizeof(OobRecvInfo), NULL, 0) == STATUS_RECEIVE_EXPEDITED)
+                {
+                    *(BOOL*)lpvOutBuffer = FALSE;
+                }
+            }
 
             cbRet = sizeof(BOOL);
             Errno = NO_ERROR;
@@ -2984,6 +3053,85 @@ WSPIoctl(IN  SOCKET Handle,
             Errno = NO_ERROR;
             Ret = NO_ERROR;
             break;
+        case SIO_ADDRESS_LIST_CHANGE:
+        {
+            ULONG AfdFlags = 0;
+            IO_STATUS_BLOCK SyncIosb;
+            PIO_STATUS_BLOCK Iosb = &SyncIosb;
+            HANDLE ChangeEvent = NULL;
+            PIO_APC_ROUTINE ApcFunction = NULL;
+            PVOID ApcContext = NULL;
+            PMSAFD_INFO_APC_CONTEXT InfoApcContext;
+            NTSTATUS Status;
+
+            NeedsCompletion = FALSE;
+
+            if (!lpOverlapped)
+            {
+                if (Socket->SharedData->NonBlocking)
+                    AfdFlags = AFD_IMMEDIATE;
+
+                Status = NtCreateEvent(&ChangeEvent, EVENT_ALL_ACCESS, NULL, SynchronizationEvent, FALSE);
+                if (!NT_SUCCESS(Status))
+                {
+                    Errno = TranslateNtStatusError(Status);
+                    break;
+                }
+            }
+            else
+            {
+                Iosb = (PIO_STATUS_BLOCK)lpOverlapped;
+                if (lpCompletionRoutine)
+                {
+                    InfoApcContext = HeapAlloc(GlobalHeap, 0, sizeof(*InfoApcContext));
+                    if (!InfoApcContext)
+                    {
+                        Errno = WSAENOBUFS;
+                        break;
+                    }
+                    InfoApcContext->lpOverlapped = lpOverlapped;
+                    InfoApcContext->lpCompletionRoutine = lpCompletionRoutine;
+                    InfoApcContext->lpInfoData = NULL;
+                    ApcFunction = &MsafdInfoAPC;
+                    ApcContext = InfoApcContext;
+                }
+                else
+                {
+                    ChangeEvent = lpOverlapped->hEvent;
+                    if (!((ULONG_PTR)ChangeEvent & 1))
+                        ApcContext = lpOverlapped;
+                }
+            }
+
+            Iosb->Status = STATUS_PENDING;
+            Iosb->Information = 0;
+
+            Status = NtDeviceIoControlFile((HANDLE)Handle,
+                                           ChangeEvent,
+                                           ApcFunction,
+                                           ApcContext,
+                                           Iosb,
+                                           IOCTL_AFD_ADDRESS_LIST_CHANGE,
+                                           &AfdFlags,
+                                           sizeof(AfdFlags),
+                                           NULL,
+                                           0);
+
+            if (!lpOverlapped)
+            {
+                if (Status == STATUS_PENDING)
+                {
+                    MsafdWaitForAlert(ChangeEvent);
+                    Status = SyncIosb.Status;
+                }
+                NtClose(ChangeEvent);
+            }
+
+            Errno = TranslateNtStatusError(Status);
+            if (Errno == NO_ERROR)
+                Ret = NO_ERROR;
+            break;
+        }
         case SIO_ADDRESS_LIST_QUERY:
             if (IS_INTRESOURCE(lpvOutBuffer) || cbOutBuffer == 0)
             {
@@ -3412,6 +3560,7 @@ WSPSetSockOpt(
 {
     PSOCKET_INFORMATION Socket;
     INT Errno;
+    BOOLEAN OobInline;
 
     /* Get the Socket Structure associate to this Socket*/
     Socket = GetSocketStructure(s);
@@ -3448,6 +3597,8 @@ WSPSetSockOpt(
                   return SOCKET_ERROR;
               }
               Socket->SharedData->OobInline = (*optval != 0) ? 1 : 0;
+              OobInline = Socket->SharedData->OobInline;
+              SetSocketInformation(Socket, AFD_INFO_INLINING_MODE, &OobInline, NULL, NULL, NULL, NULL);
               return NO_ERROR;
 
            case SO_DONTLINGER:

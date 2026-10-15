@@ -34,9 +34,16 @@ AfdSubmitBufferedSend(PAFD_FCB FCB)
     PIRP Irp;
     PMDL Mdl;
     NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Length = FCB->Send.BytesUsed, Flags = 0;
 
     ASSERT(!FCB->SendIrp.InFlightRequest);
     ASSERT(FCB->Send.BytesUsed);
+
+    if (FCB->SendUrgentEnd && FCB->SendUrgentEnd <= Length)
+    {
+        Length = FCB->SendUrgentEnd;
+        Flags = TDI_SEND_EXPEDITED;
+    }
     DeviceObject = IoGetRelatedDeviceObject(FCB->Connection.Object);
 
     /* IoBuildDeviceIoControlRequest associates its IRP with the calling
@@ -45,7 +52,7 @@ AfdSubmitBufferedSend(PAFD_FCB FCB)
     if (!Irp)
         return STATUS_INSUFFICIENT_RESOURCES;
 
-    Mdl = IoAllocateMdl(FCB->Send.Window, FCB->Send.BytesUsed, FALSE, FALSE, Irp);
+    Mdl = IoAllocateMdl(FCB->Send.Window, Length, FALSE, FALSE, Irp);
     if (!Mdl)
     {
         IoFreeIrp(Irp);
@@ -70,7 +77,7 @@ AfdSubmitBufferedSend(PAFD_FCB FCB)
     }
 
     Irp->RequestorMode = KernelMode;
-    TdiBuildSend(Irp, DeviceObject, FCB->Connection.Object, AfdBufferedSendComplete, FCB, Mdl, 0, FCB->Send.BytesUsed);
+    TdiBuildSend(Irp, DeviceObject, FCB->Connection.Object, AfdBufferedSendComplete, FCB, Mdl, Flags, Length);
     FCB->SendIrp.InFlightRequest = Irp;
     return IoCallDriver(DeviceObject, Irp);
 }
@@ -112,6 +119,7 @@ AfdFailSendQueue(PAFD_FCB FCB, NTSTATUS Status)
     PAFD_SEND_INFO SendReq;
 
     FCB->Send.BytesUsed = 0;
+    FCB->SendUrgentEnd = 0;
     FCB->PollState &= ~AFD_EVENT_SEND;
     FCB->PollState |= AFD_EVENT_ABORT;
     FCB->PollStatus[FD_CLOSE_BIT] = Status;
@@ -205,6 +213,7 @@ static NTSTATUS NTAPI SendComplete
     ASSERT(Irp->IoStatus.Information <= FCB->Send.BytesUsed);
     SendLength = Irp->IoStatus.Information;
     FCB->Send.BytesUsed -= SendLength;
+    FCB->SendUrgentEnd = (FCB->SendUrgentEnd > SendLength) ? FCB->SendUrgentEnd - SendLength : 0;
     RtlMoveMemory(FCB->Send.Window, FCB->Send.Window + SendLength, FCB->Send.BytesUsed);
 
     /* DriverContext[3] is the end of this IRP's data relative to the start
@@ -270,7 +279,7 @@ static NTSTATUS NTAPI SendComplete
 
         AFD_DbgPrint(MID_TRACE,("SendReq @ %p\n", SendReq));
 
-        SpaceAvail = FCB->Send.Size - FCB->Send.BytesUsed;
+        SpaceAvail = (FCB->Send.BytesUsed < FCB->Send.Size) ? FCB->Send.Size - FCB->Send.BytesUsed : 0;
         TotalBytesCopied = 0;
 
         /* Count the total transfer size */
@@ -283,6 +292,9 @@ static NTSTATUS NTAPI SendComplete
         BytesAlreadyCopied = NextIrp->IoStatus.Information;
         ASSERT(BytesAlreadyCopied <= RequestLength);
         RequestLength -= BytesAlreadyCopied;
+
+        if (SpaceAvail && RequestLength <= FCB->Send.Size)
+            SpaceAvail = RequestLength;
 
         /* Make sure we've got the space */
         if (RequestLength > SpaceAvail)
@@ -336,10 +348,12 @@ static NTSTATUS NTAPI SendComplete
 
             NextIrp->IoStatus.Information += TotalBytesCopied;
             NextIrp->Tail.Overlay.DriverContext[3] = (PVOID)(ULONG_PTR)FCB->Send.BytesUsed;
+            if ((SendReq->TdiFlags & TDI_SEND_EXPEDITED) && TotalBytesCopied == RequestLength)
+                FCB->SendUrgentEnd = FCB->Send.BytesUsed;
         }
     }
 
-    if (FCB->Send.Size - FCB->Send.BytesUsed != 0 && !FCB->SendClosed &&
+    if (FCB->Send.BytesUsed < FCB->Send.Size && !FCB->SendClosed &&
         IsListEmpty(&FCB->PendingIrpList[FUNCTION_SEND]))
     {
         FCB->PollState |= AFD_EVENT_SEND;
@@ -642,7 +656,7 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     AFD_DbgPrint(MID_TRACE,("FCB->Send.BytesUsed = %u\n",
                             FCB->Send.BytesUsed));
 
-    SpaceAvail = FCB->Send.Size - FCB->Send.BytesUsed;
+    SpaceAvail = (FCB->Send.BytesUsed < FCB->Send.Size) ? FCB->Send.Size - FCB->Send.BytesUsed : 0;
 
     AFD_DbgPrint(MID_TRACE,("We can accept %u bytes\n",
                             SpaceAvail));
@@ -653,6 +667,9 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     {
         SendLength += SendReq->BufferArray[i].len;
     }
+
+    if (SpaceAvail && SendLength <= FCB->Send.Size)
+        SpaceAvail = SendLength;
 
     Irp->Tail.Overlay.DriverContext[3] = NULL;
     Irp->IoStatus.Information = 0;
@@ -728,6 +745,9 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     Irp->IoStatus.Information = TotalBytesCopied;
 
+    if ((SendReq->TdiFlags & TDI_SEND_EXPEDITED) && TotalBytesCopied == SendLength)
+        FCB->SendUrgentEnd = FCB->Send.BytesUsed;
+
     if( TotalBytesCopied == 0 ) {
         AFD_DbgPrint(MID_TRACE,("Empty send\n"));
         UnlockBuffers( SendReq->BufferArray, SendReq->BufferCount, FALSE );
@@ -735,7 +755,7 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         ( FCB, STATUS_SUCCESS, Irp, TotalBytesCopied );
     }
 
-    if (SpaceAvail)
+    if (FCB->Send.BytesUsed < FCB->Send.Size)
     {
         FCB->PollState |= AFD_EVENT_SEND;
         FCB->PollStatus[FD_WRITE_BIT] = STATUS_SUCCESS;

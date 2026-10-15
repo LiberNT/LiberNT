@@ -55,6 +55,7 @@ ServiceControlHandler(
         case SERVICE_CONTROL_STOP:
             UpdateServiceStatus(ServiceStatusHandle, SERVICE_STOP_PENDING, 1);
             RpcMgmtStopServerListening(NULL);
+            LlmnrStop();
             DnsIntCacheFree();
             UpdateServiceStatus(ServiceStatusHandle, SERVICE_STOPPED, 0);
             break;
@@ -106,6 +107,8 @@ ServiceMain(
     DnsIntCacheInitialize();
 
     ReadHostsFile();
+
+    LlmnrStart();
 
     hThread = CreateThread(NULL,
                            0,

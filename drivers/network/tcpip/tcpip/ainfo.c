@@ -52,6 +52,29 @@ TDI_STATUS SetAddressFileInfo(TDIObjectID *ID,
          return TDI_SUCCESS;
       }
 
+      case AO_OPTION_ADD_MCAST:
+      case AO_OPTION_DEL_MCAST:
+      {
+         ULONG Request[2];
+         PIP_INTERFACE Interface;
+         ULONG Index;
+
+         if (AddrFile->Family == TDI_ADDRESS_TYPE_IP6 && BufferSize >= 16 + sizeof(ULONG))
+         {
+             RtlCopyMemory(&Index, (PUCHAR)Buffer + 16, sizeof(Index));
+             return LibIP6ChangeMembership(AddrFile, Index, Buffer, ID->toi_id == AO_OPTION_ADD_MCAST);
+         }
+         if (BufferSize < sizeof(Request)) return TDI_INVALID_PARAMETER;
+         RtlCopyMemory(Request, Buffer, sizeof(Request));
+         Interface = GetMulticastInterface(Request[1]);
+         if (!Interface) return TDI_INVALID_PARAMETER;
+         Index = Interface->Index;
+         IPDereferenceInterface(Interface);
+         if (ID->toi_id == AO_OPTION_ADD_MCAST)
+             return IGMPJoinGroup(AddrFile, Index, Request[0]);
+         return IGMPLeaveGroup(AddrFile, Index, Request[0]);
+      }
+
       case AO_OPTION_XSUM:
          if (BufferSize < sizeof(ULONG))
              return TDI_INVALID_PARAMETER;

@@ -362,13 +362,11 @@ TDI_STATUS InfoTdiQueryInformationEx(
                  else
                      return TDI_INVALID_PARAMETER;
 
-#if 0
               case IP_INTFC_INFO_ID:
                  if (ID->toi_type != INFO_TYPE_PROVIDER)
                      return TDI_INVALID_PARAMETER;
 
                  return InfoTdiQueryGetIFInfo(Context, Buffer, BufferSize);
-#endif
 
               default:
                  return TDI_INVALID_REQUEST;

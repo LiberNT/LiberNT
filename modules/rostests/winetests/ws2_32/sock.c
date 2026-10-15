@@ -3969,7 +3969,6 @@ static void test_select(void)
     ok(FD_ISSET(fdWrite, &readfds), "fdWrite socket is not in the set\n");
     ok(FD_ISSET(fdRead, &readfds), "fdRead socket is not in the set\n");
 
-#if ROSTESTS_233_IS_FIXED
     while(1) {
         FD_ZERO(&writefds);
         FD_SET(fdWrite, &writefds);
@@ -3977,7 +3976,6 @@ static void test_select(void)
         if(!ret) break;
         ok(send(fdWrite, tmp_buf, sizeof(tmp_buf), 0) > 0, "failed to send data\n");
     }
-#endif /* ROSTESTS_233_IS_FIXED */
 
     FD_ZERO(&readfds);
     FD_SET(fdWrite, &readfds);

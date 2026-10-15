@@ -750,6 +750,25 @@ struct _TABLE_CALL
 
 #define Add2Ptr(PTR, INC) (PVOID)((ULONG_PTR)(PTR) + (INC))
 
+static BOOL isUdpEntity( HANDLE tcpFile, TDIEntityID *ent ) {
+    TCP_REQUEST_QUERY_INFORMATION_EX req = TCP_REQUEST_QUERY_INFORMATION_INIT;
+    DWORD returnSize, type;
+
+    if (ent->tei_entity != CL_TL_ENTITY)
+        return FALSE;
+
+    req.ID.toi_class                = INFO_CLASS_GENERIC;
+    req.ID.toi_type                 = INFO_TYPE_PROVIDER;
+    req.ID.toi_id                   = ENTITY_TYPE_ID;
+    req.ID.toi_entity               = *ent;
+
+    if (!DeviceIoControl(tcpFile, IOCTL_TCP_QUERY_INFORMATION_EX, &req, sizeof(req),
+                         &type, sizeof(type), &returnSize, NULL))
+        return FALSE;
+
+    return (type == CL_TL_UDP);
+}
+
 DWORD getNumUdpEntries(void)
 {
     DWORD numEntities;
@@ -772,7 +791,7 @@ DWORD getNumUdpEntries(void)
     status = tdiGetEntityIDSet(tcpFile, &entitySet, &numEntities);
 
     for (i = 0; i < numEntities; i++) {
-        if (entitySet[i].tei_entity == CL_TL_ENTITY && hasArp(tcpFile, &entitySet[i]))
+        if (isUdpEntity(tcpFile, &entitySet[i]))
         {
             status = tdiGetSetOfThings(tcpFile,
                 INFO_CLASS_PROTOCOL,
@@ -829,7 +848,7 @@ PVOID getUdpTable(CLASS_TABLE Class)
     status = tdiGetEntityIDSet(tcpFile, &entitySet, &numEntities);
 
     for (i = 0; i < numEntities; i++) {
-        if (entitySet[i].tei_entity == CL_TL_ENTITY && hasArp(tcpFile, &entitySet[i]))
+        if (isUdpEntity(tcpFile, &entitySet[i]))
         {
             status = tdiGetSetOfThings(tcpFile,
                 INFO_CLASS_PROTOCOL,
@@ -843,7 +862,7 @@ PVOID getUdpTable(CLASS_TABLE Class)
                 &returnSize);
 
             if (status == STATUS_SUCCESS) {
-                for (TmpIdx = 0; TmpIdx < returnSize; TmpIdx++, CurrIdx++)
+                for (TmpIdx = 0; TmpIdx < returnSize && CurrIdx < totalNumber; TmpIdx++, CurrIdx++)
                     CopyMemory(Add2Ptr(IpUdpTable, UdpTcpTableCall[Class].UdpOffset + UdpTcpTableCall[Class].UdpSize * CurrIdx),
                                Add2Ptr(AdapterUdpTable, UdpTcpTableCall[Class].UdpSize * TmpIdx),
                                UdpTcpTableCall[Class].UdpSize);

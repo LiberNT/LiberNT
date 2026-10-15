@@ -34,6 +34,8 @@ NTSTATUS TCPCheckPeerForAccept(PVOID Context,
         return Status;
 
     LibIPAddressFromLwip(&ipaddr, &Address);
+    if (((PTRANSPORT_ADDRESS)WhoIsConnecting->RemoteAddress)->Address[0].AddressType == TDI_ADDRESS_TYPE_IP6)
+        TCPMapToDualStack(&Address);
     return AddrBuildTransportAddress(&Address, WH2N(Port),
                                      (PTRANSPORT_ADDRESS)WhoIsConnecting->RemoteAddress,
                                      WhoIsConnecting->RemoteAddressLength);
@@ -59,6 +61,8 @@ NTSTATUS TCPListen(PCONNECTION_ENDPOINT Connection, UINT Backlog)
         Connection->SocketContext));
 
     LibIPAddressToLwip(&Connection->AddressFile->Address, &AddressToBind);
+    if (Connection->AddressFile->DualStack)
+        ip_addr_copy(AddressToBind, *IP_ANY_TYPE);
 
     Status = TCPTranslateError(LibTCPBind(Connection,
                                           &AddressToBind,

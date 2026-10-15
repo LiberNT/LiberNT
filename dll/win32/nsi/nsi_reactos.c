@@ -242,6 +242,52 @@ static DWORD get_ndis(struct nsi_get_all_parameters_ex *params)
     return ERROR_SUCCESS;
 }
 
+static ULONG automatic_metric(ULONG64 speed, UINT type)
+{
+    static const struct { ULONG64 speed; ULONG metric; } wired[] =
+    {
+        {100000000000ull, 5}, {40000000000ull, 10}, {10000000000ull, 15}, {2000000000ull, 20},
+        {200000000, 25}, {80000000, 35}, {20000000, 45}, {4000000, 55}, {500000, 65}
+    }, wireless[] =
+    {
+        {2000000000ull, 25}, {500000000, 30}, {200000000, 35}, {150000000, 40}, {80000000, 45}, {50000000, 50},
+        {20000000, 55}, {10000000, 60}, {4000000, 65}, {2000000, 70}, {500000, 75}, {200000, 80}
+    };
+    UINT i;
+
+    if (type == MIB_IF_TYPE_LOOPBACK) return 75;
+    if (type == IF_TYPE_IEEE80211)
+    {
+        for (i = 0; i < ARRAY_SIZE(wireless); i++)
+            if (speed >= wireless[i].speed) return wireless[i].metric;
+        return 85;
+    }
+    for (i = 0; i < ARRAY_SIZE(wired); i++)
+        if (speed >= wired[i].speed) return wired[i].metric;
+    return 75;
+}
+
+static void *ip6_query_table(ULONG table_id, ULONG *count);
+
+static ULONG64 interface_speed(UINT index)
+{
+    ULONG count, i;
+    IP6_TABLE_HEADER *header = ip6_query_table(Ip6TableInterfaces, &count);
+    const IP6_INTERFACE_ROW *rows = (const IP6_INTERFACE_ROW *)(header + 1);
+    ULONG64 speed = 0;
+
+    for (i = 0; header && i < count; i++)
+    {
+        if (rows[i].Index == index)
+        {
+            speed = rows[i].LinkSpeed;
+            break;
+        }
+    }
+    HeapFree(GetProcessHeap(), 0, header);
+    return speed;
+}
+
 static void fill_ip_interface(UINT index, struct nsi_ip_interface_key *key, struct nsi_ip_interface_rw *rw,
                               struct nsi_ip_interface_dynamic *dynamic, struct nsi_ip_interface_static *stat)
 {
@@ -254,7 +300,7 @@ static void fill_ip_interface(UINT index, struct nsi_ip_interface_key *key, stru
     if (rw)
     {
         memset(rw, 0, sizeof(*rw));
-        rw->metric = 0;
+        rw->metric = automatic_metric(interface_speed(index), interface_type(index));
         rw->base_reachable_time = 30000;
         rw->retransmit_time = 1000;
         rw->path_mtu_discovery_timeout = 600000;
@@ -337,6 +383,7 @@ static void fill_ipv6_interface(const IP6_INTERFACE_ROW *row, struct nsi_ip_inte
     if (rw)
     {
         memset(rw, 0, sizeof(*rw));
+        rw->metric = automatic_metric(row->LinkSpeed, row->Loopback ? MIB_IF_TYPE_LOOPBACK : interface_type(row->Index));
         rw->base_reachable_time = row->BaseReachableTime;
         rw->retransmit_time = row->RetransmitTime;
         rw->path_mtu_discovery_timeout = 600000;
@@ -732,17 +779,30 @@ static DWORD enumerate_ipv4_neighbour(struct nsi_enumerate_all_ex *params)
     return finish_enumeration(params, count, want_data);
 }
 
-static void fill_ipv4_forward(struct nsi_enumerate_all_ex *params, UINT_PTR i, DWORD dest, DWORD mask,
-                              DWORD next_hop, DWORD if_index, DWORD metric)
+struct ipv4_route
+{
+    DWORD dest;
+    DWORD mask;
+    DWORD next_hop;
+    DWORD if_index;
+    DWORD metric;
+    DWORD protocol;
+    DWORD origin;
+    BOOL loopback;
+    BOOL immortal;
+    NET_LUID luid;
+};
+
+static void fill_ipv4_forward(struct nsi_enumerate_all_ex *params, UINT_PTR i, const struct ipv4_route *route)
 {
     if (params->key_data)
     {
         struct nsi_ipv4_forward_key *key = (struct nsi_ipv4_forward_key *)params->key_data + i;
         memset(key, 0, sizeof(*key));
-        key->prefix.S_un.S_addr = dest;
-        key->prefix_len = prefix_length(mask);
-        key->luid = key->luid2 = interface_luid(if_index);
-        key->next_hop.S_un.S_addr = next_hop;
+        key->prefix.S_un.S_addr = route->dest;
+        key->prefix_len = prefix_length(route->mask);
+        key->luid = key->luid2 = route->luid;
+        key->next_hop.S_un.S_addr = route->next_hop;
     }
     if (params->rw_data)
     {
@@ -750,41 +810,54 @@ static void fill_ipv4_forward(struct nsi_enumerate_all_ex *params, UINT_PTR i, D
         memset(rw, 0, sizeof(*rw));
         rw->valid_lifetime = ~0u;
         rw->preferred_lifetime = ~0u;
-        rw->metric = metric;
-        rw->protocol = MIB_IPPROTO_NETMGMT;
-        rw->loopback = interface_type(if_index) == MIB_IF_TYPE_LOOPBACK;
-        rw->immortal = TRUE;
+        rw->metric = route->metric;
+        rw->protocol = route->protocol;
+        rw->loopback = route->loopback;
+        rw->autoconf = TRUE;
+        rw->immortal = route->immortal;
     }
     if (params->dynamic_data)
     {
         struct nsi_ipv4_forward_dynamic *dynamic = (struct nsi_ipv4_forward_dynamic *)params->dynamic_data + i;
         memset(dynamic, 0, sizeof(*dynamic));
-        dynamic->addr2.S_un.S_addr = dest;
+        dynamic->addr2.S_un.S_addr = route->dest;
     }
     if (params->static_data)
     {
         struct nsi_ip_forward_static *stat = (struct nsi_ip_forward_static *)params->static_data + i;
         memset(stat, 0, sizeof(*stat));
-        stat->origin = NlroManual;
-        stat->if_index = if_index;
+        stat->origin = route->origin;
+        stat->if_index = route->if_index;
     }
 }
 
-static BOOL ipv4_host_route_listed(const RouteTable *table, DWORD address)
+static void add_ipv4_route(struct ipv4_route *routes, UINT_PTR *count, DWORD dest, DWORD mask, DWORD next_hop,
+                           DWORD if_index, NET_LUID luid, DWORD metric, DWORD protocol, DWORD origin,
+                           BOOL loopback, BOOL immortal)
 {
-    UINT_PTR i;
+    struct ipv4_route *route = routes + (*count)++;
 
-    for (i = 0; table && i < table->numRoutes; i++)
-        if (table->routes[i].dest == address && table->routes[i].mask == INADDR_NONE) return TRUE;
-    return FALSE;
+    route->dest = dest;
+    route->mask = mask;
+    route->next_hop = next_hop;
+    route->if_index = if_index;
+    route->luid = luid;
+    route->metric = metric;
+    route->protocol = protocol;
+    route->origin = origin;
+    route->loopback = loopback;
+    route->immortal = immortal;
 }
 
-static DWORD ipv4_interface_route_metric(const RouteTable *table, DWORD if_index)
+static int __cdecl ipv4_route_compare(const void *left, const void *right)
 {
-    UINT_PTR i;
+    const struct ipv4_route *a = left, *b = right;
+    DWORD dest_a = RtlUlongByteSwap(a->dest), dest_b = RtlUlongByteSwap(b->dest);
+    DWORD mask_a = RtlUlongByteSwap(a->mask), mask_b = RtlUlongByteSwap(b->mask);
 
-    for (i = 0; table && i < table->numRoutes; i++)
-        if (table->routes[i].ifIndex == if_index && table->routes[i].mask) return table->routes[i].metric;
+    if (dest_a != dest_b) return dest_a < dest_b ? -1 : 1;
+    if (mask_a != mask_b) return mask_a < mask_b ? -1 : 1;
+    if (a->if_index != b->if_index) return a->if_index < b->if_index ? -1 : 1;
     return 0;
 }
 
@@ -793,33 +866,78 @@ static DWORD enumerate_ipv4_forward(struct nsi_enumerate_all_ex *params)
     RouteTable *table = getRouteTable();
     InterfaceIndexTable *indexes = getInterfaceIndexTable();
     BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
-    UINT_PTR count = 0, i;
+    UINT_PTR count = 0, i, j, capacity;
+    struct ipv4_route *routes;
+    DWORD *addresses, *masks;
+    NET_LUID *luids;
+    DWORD error;
 
-    for (i = 0; table && i < table->numRoutes; i++)
+    capacity = (table ? table->numRoutes : 0) + (indexes ? indexes->numIndexes : 0) * 5;
+    routes = HeapAlloc(GetProcessHeap(), 0, (capacity ? capacity : 1) * sizeof(*routes));
+    addresses = HeapAlloc(GetProcessHeap(), 0, ((indexes ? indexes->numIndexes : 0) + 1) * sizeof(DWORD));
+    masks = HeapAlloc(GetProcessHeap(), 0, ((indexes ? indexes->numIndexes : 0) + 1) * sizeof(DWORD));
+    luids = HeapAlloc(GetProcessHeap(), 0, ((indexes ? indexes->numIndexes : 0) + 1) * sizeof(NET_LUID));
+    if (!routes || !addresses || !masks || !luids)
     {
-        RouteEntry *row = table->routes + i;
-        DWORD next_hop = row->gateway;
-
-        if (next_hop == getInterfaceIPAddrByIndex(row->ifIndex)) next_hop = INADDR_ANY;
-        if (want_data && count < params->count)
-            fill_ipv4_forward(params, count, row->dest, row->mask, next_hop, row->ifIndex, row->metric);
-        count++;
+        error = ERROR_OUTOFMEMORY;
+        goto done;
     }
 
     for (i = 0; indexes && i < indexes->numIndexes; i++)
     {
-        DWORD address = getInterfaceIPAddrByIndex(indexes->indexes[i]);
+        DWORD index = indexes->indexes[i], address, mask;
 
-        if (address == INADDR_ANY || address == INADDR_NONE || ipv4_host_route_listed(table, address)) continue;
-        if (want_data && count < params->count)
-            fill_ipv4_forward(params, count, address, INADDR_NONE, INADDR_ANY, indexes->indexes[i],
-                              ipv4_interface_route_metric(table, indexes->indexes[i]));
-        count++;
+        addresses[i] = address = getInterfaceIPAddrByIndex(index);
+        masks[i] = mask = getInterfaceMaskByIndex(index);
+        luids[i] = interface_luid(index);
+        if (address == INADDR_ANY || address == INADDR_NONE) continue;
+        if (mask != INADDR_NONE)
+            add_ipv4_route(routes, &count, address & mask, mask, INADDR_ANY, index, luids[i], 256,
+                           MIB_IPPROTO_LOCAL, NlroManual, FALSE, FALSE);
+        add_ipv4_route(routes, &count, address, INADDR_NONE, INADDR_ANY, index, luids[i], 256,
+                       MIB_IPPROTO_LOCAL, NlroManual, TRUE, FALSE);
+        if (prefix_length(mask) < 31)
+            add_ipv4_route(routes, &count, address | ~mask, INADDR_NONE, INADDR_ANY, index, luids[i], 256,
+                           MIB_IPPROTO_LOCAL, NlroManual, TRUE, FALSE);
+        add_ipv4_route(routes, &count, RtlUlongByteSwap(0xe0000000), RtlUlongByteSwap(0xf0000000), INADDR_ANY,
+                       index, luids[i], 256, MIB_IPPROTO_LOCAL, NlroWellKnown, FALSE, FALSE);
+        add_ipv4_route(routes, &count, INADDR_NONE, INADDR_NONE, INADDR_ANY, index, luids[i], 256,
+                       MIB_IPPROTO_LOCAL, NlroManual, TRUE, FALSE);
     }
 
+    for (i = 0; table && i < table->numRoutes; i++)
+    {
+        RouteEntry *row = table->routes + i;
+
+        for (j = 0; indexes && j < indexes->numIndexes; j++)
+            if (indexes->indexes[j] == row->ifIndex) break;
+        if (!indexes || j == indexes->numIndexes) continue;
+        if (row->gateway == INADDR_ANY || row->gateway == addresses[j])
+        {
+            if ((row->dest == (addresses[j] & masks[j]) && row->mask == masks[j]) ||
+                (row->dest == addresses[j] && row->mask == INADDR_NONE))
+                continue;
+            add_ipv4_route(routes, &count, row->dest, row->mask, INADDR_ANY, row->ifIndex, luids[j], row->metric,
+                           MIB_IPPROTO_NETMGMT, NlroManual, FALSE, TRUE);
+            continue;
+        }
+        add_ipv4_route(routes, &count, row->dest, row->mask, row->gateway, row->ifIndex, luids[j], row->metric,
+                       MIB_IPPROTO_NETMGMT, NlroManual, FALSE, TRUE);
+    }
+
+    qsort(routes, count, sizeof(*routes), ipv4_route_compare);
+    for (i = 0; want_data && i < count && i < params->count; i++)
+        fill_ipv4_forward(params, i, routes + i);
+    error = finish_enumeration(params, count, want_data);
+
+done:
+    HeapFree(GetProcessHeap(), 0, luids);
+    HeapFree(GetProcessHeap(), 0, masks);
+    HeapFree(GetProcessHeap(), 0, addresses);
+    HeapFree(GetProcessHeap(), 0, routes);
     free(indexes);
     HeapFree(GetProcessHeap(), 0, table);
-    return finish_enumeration(params, count, want_data);
+    return error;
 }
 
 static DWORD get_ipv4_compartment(struct nsi_get_all_parameters_ex *params)
@@ -1427,6 +1545,17 @@ static DWORD table_hash(const NPI_MODULEID *module, UINT table_id, ULONG *result
     params.static_size = table->sizes[3];
     params.count = count;
     if ((error = table->enumerate(&params))) goto done;
+    if (rw && table_id == NSI_IP_UNICAST_TABLE)
+    {
+        UINT_PTR i;
+
+        for (i = 0; i < count; i++)
+        {
+            struct nsi_ip_unicast_rw *row = (struct nsi_ip_unicast_rw *)(rw + i * table->sizes[1]);
+
+            row->preferred_lifetime = row->valid_lifetime = 0;
+        }
+    }
     hash = hash_data(hash, &count, sizeof(count));
     if (key) hash = hash_data(hash, key, count * table->sizes[0]);
     if (rw) hash = hash_data(hash, rw, count * table->sizes[1]);

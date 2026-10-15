@@ -92,10 +92,14 @@ static NTSTATUS TdiOpenDevice(
     DPRINT("Called. DeviceName (%wZ, %u)\n", DeviceName, ShareType);
 
     /* Determine the share access */
-    if (ShareType != AFD_SHARE_REUSE)
+    if (ShareType == AFD_SHARE_EXCLUSIVE)
     {
         /* Exclusive access */
         ShareAccess = 0;
+    }
+    else if (ShareType != AFD_SHARE_REUSE)
+    {
+        ShareAccess = FILE_SHARE_READ;
     }
     else
     {
@@ -308,6 +312,81 @@ NTSTATUS TdiOpenConnectionEndpointFile(
 }
 
 
+typedef struct _TDI_THREADLESS_CONTEXT
+{
+    PIO_COMPLETION_ROUTINE CompletionRoutine;
+    PVOID CompletionContext;
+} TDI_THREADLESS_CONTEXT, *PTDI_THREADLESS_CONTEXT;
+
+static IO_COMPLETION_ROUTINE TdiThreadlessComplete;
+
+static
+NTSTATUS
+NTAPI
+TdiThreadlessComplete(PDEVICE_OBJECT DeviceObject, PIRP Irp, PVOID Context)
+{
+    PTDI_THREADLESS_CONTEXT ThreadlessContext = Context;
+    PMDL Mdl, NextMdl;
+
+    for (Mdl = Irp->MdlAddress; Mdl; Mdl = NextMdl)
+    {
+        NextMdl = Mdl->Next;
+        if (Mdl->MdlFlags & MDL_PAGES_LOCKED)
+            MmUnlockPages(Mdl);
+        IoFreeMdl(Mdl);
+    }
+    Irp->MdlAddress = NULL;
+
+    if (ThreadlessContext->CompletionRoutine)
+        ThreadlessContext->CompletionRoutine(DeviceObject, Irp, ThreadlessContext->CompletionContext);
+
+    ExFreePoolWithTag(ThreadlessContext, TAG_AFD_TDI_IRP_CONTEXT);
+    IoFreeIrp(Irp);
+
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+static
+PIRP
+TdiAllocateThreadlessIrp(
+    PDEVICE_OBJECT DeviceObject,
+    PIO_COMPLETION_ROUTINE *CompletionRoutine,
+    PVOID *CompletionContext)
+{
+    PTDI_THREADLESS_CONTEXT ThreadlessContext;
+    PIRP Irp;
+
+    ThreadlessContext = ExAllocatePoolWithTag(NonPagedPool,
+                                              sizeof(*ThreadlessContext),
+                                              TAG_AFD_TDI_IRP_CONTEXT);
+    if (!ThreadlessContext)
+        return NULL;
+
+    Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
+    if (!Irp)
+    {
+        ExFreePoolWithTag(ThreadlessContext, TAG_AFD_TDI_IRP_CONTEXT);
+        return NULL;
+    }
+
+    ThreadlessContext->CompletionRoutine = *CompletionRoutine;
+    ThreadlessContext->CompletionContext = *CompletionContext;
+    *CompletionRoutine = TdiThreadlessComplete;
+    *CompletionContext = ThreadlessContext;
+
+    return Irp;
+}
+
+static
+VOID
+TdiFreeThreadlessIrp(
+    PIRP Irp,
+    PVOID CompletionContext)
+{
+    ExFreePoolWithTag(CompletionContext, TAG_AFD_TDI_IRP_CONTEXT);
+    IoFreeIrp(Irp);
+}
+
 NTSTATUS TdiConnect(
     PIRP *Irp,
     PFILE_OBJECT ConnectionObject,
@@ -339,11 +418,7 @@ NTSTATUS TdiConnect(
         return STATUS_INVALID_PARAMETER;
     }
 
-    *Irp = TdiBuildInternalDeviceControlIrp(TDI_CONNECT,
-                                            DeviceObject,
-                                            ConnectionObject,
-                                            NULL,
-                                            NULL);
+    *Irp = TdiAllocateThreadlessIrp(DeviceObject, &CompletionRoutine, &CompletionContext);
     if (!*Irp) {
         return STATUS_INSUFFICIENT_RESOURCES;
     }
@@ -490,11 +565,7 @@ NTSTATUS TdiListen(
         return STATUS_INVALID_PARAMETER;
     }
 
-    *Irp = TdiBuildInternalDeviceControlIrp(TDI_LISTEN,
-                                            DeviceObject,
-                                            ConnectionObject,
-                                            NULL,
-                                            NULL);
+    *Irp = TdiAllocateThreadlessIrp(DeviceObject, &CompletionRoutine, &CompletionContext);
     if (*Irp == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
 
@@ -544,11 +615,7 @@ NTSTATUS TdiAccept(
         return STATUS_INVALID_PARAMETER;
     }
 
-    *Irp = TdiBuildInternalDeviceControlIrp(TDI_LISTEN,
-                                            DeviceObject,
-                                            AcceptConnectionObject,
-                                            NULL,
-                                            NULL);
+    *Irp = TdiAllocateThreadlessIrp(DeviceObject, &CompletionRoutine, &CompletionContext);
     if (*Irp == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
 
@@ -941,11 +1008,7 @@ NTSTATUS TdiSend(
         return STATUS_INVALID_PARAMETER;
     }
 
-    *Irp = TdiBuildInternalDeviceControlIrp(TDI_SEND,
-                                            DeviceObject,
-                                            TransportObject,
-                                            NULL,
-                                            NULL);
+    *Irp = TdiAllocateThreadlessIrp(DeviceObject, &CompletionRoutine, &CompletionContext);
 
     if (!*Irp) {
         DPRINT("Insufficient resources.\n");
@@ -961,7 +1024,7 @@ NTSTATUS TdiSend(
                         NULL);          /* Don't use IRP */
     if (!Mdl) {
         DPRINT("Insufficient resources.\n");
-        IoCompleteRequest(*Irp, IO_NO_INCREMENT);
+        TdiFreeThreadlessIrp(*Irp, CompletionContext);
         *Irp = NULL;
         return STATUS_INSUFFICIENT_RESOURCES;
     }
@@ -971,7 +1034,7 @@ NTSTATUS TdiSend(
     } _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) {
         DPRINT("MmProbeAndLockPages() failed.\n");
         IoFreeMdl(Mdl);
-        IoCompleteRequest(*Irp, IO_NO_INCREMENT);
+        TdiFreeThreadlessIrp(*Irp, CompletionContext);
         *Irp = NULL;
         _SEH2_YIELD(return STATUS_INSUFFICIENT_RESOURCES);
     } _SEH2_END;
@@ -1015,11 +1078,7 @@ NTSTATUS TdiReceive(
         return STATUS_INVALID_PARAMETER;
     }
 
-    *Irp = TdiBuildInternalDeviceControlIrp(TDI_RECEIVE,
-                                            DeviceObject,
-                                            TransportObject,
-                                            NULL,
-                                            NULL);
+    *Irp = TdiAllocateThreadlessIrp(DeviceObject, &CompletionRoutine, &CompletionContext);
 
     if (!*Irp) {
         DPRINT("Insufficient resources.\n");
@@ -1035,7 +1094,7 @@ NTSTATUS TdiReceive(
                         NULL);          /* Don't use IRP */
     if (!Mdl) {
         DPRINT("Insufficient resources.\n");
-        IoCompleteRequest(*Irp, IO_NO_INCREMENT);
+        TdiFreeThreadlessIrp(*Irp, CompletionContext);
         *Irp = NULL;
         return STATUS_INSUFFICIENT_RESOURCES;
     }
@@ -1047,7 +1106,7 @@ NTSTATUS TdiReceive(
     } _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) {
         DPRINT("MmProbeAndLockPages() failed.\n");
         IoFreeMdl(Mdl);
-        IoCompleteRequest(*Irp, IO_NO_INCREMENT);
+        TdiFreeThreadlessIrp(*Irp, CompletionContext);
         *Irp = NULL;
         _SEH2_YIELD(return STATUS_INSUFFICIENT_RESOURCES);
     } _SEH2_END;
@@ -1107,11 +1166,7 @@ NTSTATUS TdiReceiveDatagram(
         return STATUS_INVALID_PARAMETER;
     }
 
-    *Irp = TdiBuildInternalDeviceControlIrp(TDI_RECEIVE_DATAGRAM,
-                                            DeviceObject,
-                                            TransportObject,
-                                            NULL,
-                                            NULL);
+    *Irp = TdiAllocateThreadlessIrp(DeviceObject, &CompletionRoutine, &CompletionContext);
 
     if (!*Irp) {
         DPRINT("Insufficient resources.\n");
@@ -1127,7 +1182,7 @@ NTSTATUS TdiReceiveDatagram(
                         NULL);          /* Don't use IRP */
     if (!Mdl) {
         DPRINT("Insufficient resources.\n");
-        IoCompleteRequest(*Irp, IO_NO_INCREMENT);
+        TdiFreeThreadlessIrp(*Irp, CompletionContext);
         *Irp = NULL;
         return STATUS_INSUFFICIENT_RESOURCES;
     }
@@ -1137,7 +1192,7 @@ NTSTATUS TdiReceiveDatagram(
     } _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) {
         DPRINT("MmProbeAndLockPages() failed.\n");
         IoFreeMdl(Mdl);
-        IoCompleteRequest(*Irp, IO_NO_INCREMENT);
+        TdiFreeThreadlessIrp(*Irp, CompletionContext);
         *Irp = NULL;
         _SEH2_YIELD(return STATUS_INSUFFICIENT_RESOURCES);
     } _SEH2_END;
@@ -1205,11 +1260,7 @@ NTSTATUS TdiSendDatagram(
         return STATUS_SUCCESS;
     }
 
-    *Irp = TdiBuildInternalDeviceControlIrp(TDI_SEND_DATAGRAM,
-                                            DeviceObject,
-                                            TransportObject,
-                                            NULL,
-                                            NULL);
+    *Irp = TdiAllocateThreadlessIrp(DeviceObject, &CompletionRoutine, &CompletionContext);
 
     if (!*Irp) {
         DPRINT("Insufficient resources.\n");
@@ -1226,7 +1277,7 @@ NTSTATUS TdiSendDatagram(
 
     if (!Mdl) {
         DPRINT("Insufficient resources.\n");
-        IoCompleteRequest(*Irp, IO_NO_INCREMENT);
+        TdiFreeThreadlessIrp(*Irp, CompletionContext);
         *Irp = NULL;
         return STATUS_INSUFFICIENT_RESOURCES;
     }
@@ -1236,7 +1287,7 @@ NTSTATUS TdiSendDatagram(
     } _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) {
         DPRINT("MmProbeAndLockPages() failed.\n");
         IoFreeMdl(Mdl);
-        IoCompleteRequest(*Irp, IO_NO_INCREMENT);
+        TdiFreeThreadlessIrp(*Irp, CompletionContext);
         *Irp = NULL;
         _SEH2_YIELD(return STATUS_INSUFFICIENT_RESOURCES);
     } _SEH2_END;
@@ -1281,11 +1332,7 @@ NTSTATUS TdiDisconnect(
         return STATUS_INVALID_PARAMETER;
     }
 
-    *Irp = TdiBuildInternalDeviceControlIrp(TDI_DISCONNECT,
-                                            DeviceObject,
-                                            TransportObject,
-                                            NULL,
-                                            NULL);
+    *Irp = TdiAllocateThreadlessIrp(DeviceObject, &CompletionRoutine, &CompletionContext);
 
     if (!*Irp) {
         DPRINT("Insufficient resources.\n");

@@ -18,6 +18,8 @@ typedef struct _QUEUE_ENTRY
 {
     struct pbuf *p;
     ULONG Offset;
+    ULONG UrgentOffset;
+    BOOLEAN Urgent;
     LIST_ENTRY ListEntry;
 } QUEUE_ENTRY, *PQUEUE_ENTRY;
 
@@ -47,6 +49,7 @@ struct lwip_callback_msg
             PCONNECTION_ENDPOINT Connection;
             void *Data;
             u32_t DataLength;
+            ULONG Flags;
         } Send;
         struct {
             PCONNECTION_ENDPOINT Connection;
@@ -109,7 +112,7 @@ PTCP_PCB    LibTCPSocket(void *arg);
 VOID        LibTCPFreeSocket(PTCP_PCB pcb);
 err_t       LibTCPBind(PCONNECTION_ENDPOINT Connection, ip_addr_t *const ipaddr, const u16_t port);
 PTCP_PCB    LibTCPListen(PCONNECTION_ENDPOINT Connection, const UINT backlog);
-err_t       LibTCPSend(PCONNECTION_ENDPOINT Connection, void *const dataptr, const u32_t len, ULONG *sent, const int safe);
+err_t       LibTCPSend(PCONNECTION_ENDPOINT Connection, void *const dataptr, const u32_t len, ULONG *sent, ULONG Flags, const int safe);
 err_t       LibTCPConnect(PCONNECTION_ENDPOINT Connection, ip_addr_t *const ipaddr, const u16_t port);
 err_t       LibTCPShutdown(PCONNECTION_ENDPOINT Connection, const int shut_rx, const int shut_tx);
 err_t       LibTCPAbort(PCONNECTION_ENDPOINT Connection);
@@ -128,6 +131,8 @@ void        LibTCPGetSocketStatus(PTCP_PCB pcb, PULONG State);
 
 /* IP functions */
 void LibIPInsertPacket(void *ifarg, const void *const data, const u32_t size);
+void LibIP6NoteMulticastDestination(struct netif *netif, const ip6_addr_t *Address);
+void LibIP6ForgetNetif(struct netif *netif);
 void LibIPAddressToLwip(const IP_ADDRESS *Address, ip_addr_t *IpAddr);
 void LibIPAddressFromLwip(const ip_addr_t *IpAddr, PIP_ADDRESS Address);
 void LibIPInitialize(void);

@@ -177,6 +177,9 @@ UINT TCPAllocatePortForAddress( const IP_ADDRESS *Address, const UINT HintPort )
 
 VOID TCPFreePortForAddress( const IP_ADDRESS *Address, const UINT Port );
 
+VOID TCPMapToDualStack(
+    PIP_ADDRESS Address);
+
 NTSTATUS TCPGetSockAddress
 ( PCONNECTION_ENDPOINT Connection,
   PTRANSPORT_ADDRESS TransportAddress,

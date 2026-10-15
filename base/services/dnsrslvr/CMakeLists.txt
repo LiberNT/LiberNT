@@ -6,6 +6,7 @@ list(APPEND SOURCE
     cache.c
     dnsrslvr.c
     hostsfile.c
+    llmnr.c
     rpcserver.c
     precomp.h
     ${CMAKE_CURRENT_BINARY_DIR}/dnsrslvr_s.c)
@@ -19,6 +20,6 @@ if(NOT MSVC)
 endif()
 
 set_module_type(dnsrslvr win32dll UNICODE)
-add_importlibs(dnsrslvr advapi32 rpcrt4 dnsapi iphlpapi msvcrt kernel32 ntdll)
+add_importlibs(dnsrslvr advapi32 rpcrt4 dnsapi iphlpapi ws2_32 msvcrt kernel32 ntdll)
 add_pch(dnsrslvr precomp.h SOURCE)
 add_cd_file(TARGET dnsrslvr DESTINATION reactos/system32 FOR all)

@@ -1412,6 +1412,31 @@ static DWORD adapters_addresses_alloc( ULONG family, ULONG flags, IP_ADAPTER_ADD
     err = dns_info_alloc( aa, family, flags );
     if (err) goto err;
 
+#ifdef __REACTOS__
+    for (i = 0; i < *count; i++)
+    {
+        MIB_IPINTERFACE_ROW row;
+
+        memset( &row, 0, sizeof(row) );
+        row.Family = AF_INET;
+        row.InterfaceLuid = luids[i];
+        if (!GetIpInterfaceEntry( &row ))
+        {
+            aa[i].Flags |= IP_ADAPTER_IPV4_ENABLED;
+            aa[i].Ipv4Metric = row.Metric;
+        }
+        memset( &row, 0, sizeof(row) );
+        row.Family = AF_INET6;
+        row.InterfaceLuid = luids[i];
+        if (!GetIpInterfaceEntry( &row ))
+        {
+            aa[i].Flags |= IP_ADAPTER_IPV6_ENABLED;
+            aa[i].Ipv6IfIndex = row.InterfaceIndex;
+            aa[i].Ipv6Metric = row.Metric;
+        }
+    }
+#endif
+
 err:
     NsiFreeTable( luids, rw, dyn, stat );
     if (!err) *info = aa;
@@ -2301,7 +2326,18 @@ DWORD WINAPI GetIpForwardTable( MIB_IPFORWARDTABLE *table, ULONG *size, BOOL sor
         row->dwForwardProto = rw[i].protocol;
         row->dwForwardAge = dyn[i].age;
         row->dwForwardNextHopAS = 0;
+#ifdef __REACTOS__
+        {
+            MIB_IPINTERFACE_ROW ifrow;
+
+            memset( &ifrow, 0, sizeof(ifrow) );
+            ifrow.Family = AF_INET;
+            ifrow.InterfaceLuid = keys[i].luid;
+            row->dwForwardMetric1 = rw[i].metric + (GetIpInterfaceEntry( &ifrow ) ? 0 : ifrow.Metric);
+        }
+#else
         row->dwForwardMetric1 = rw[i].metric; /* FIXME: add interface metric */
+#endif
         row->dwForwardMetric2 = 0;
         row->dwForwardMetric3 = 0;
         row->dwForwardMetric4 = 0;
@@ -5381,8 +5417,14 @@ skip_system_route:
         goto done;
     }
     index = fwd->Table[best_idx].InterfaceIndex;
+#ifdef __REACTOS__
+    if (fwd->Table[best_idx].InterfaceLuid.Info.IfType != IF_TYPE_SOFTWARE_LOOPBACK
+        && ((v6 && IN6_IS_ADDR_LOOPBACK(&dst->Ipv6.sin6_addr))
+        || (!v6 && dst->Ipv4.sin_addr.S_un.S_un_b.s_b1 == 127)))
+#else
     if (!fwd->Table[best_idx].Loopback && ((v6 && IN6_IS_ADDR_LOOPBACK(&dst->Ipv6.sin6_addr))
         || (!v6 && dst->Ipv4.sin_addr.S_un.S_un_b.s_b1 == 127)))
+#endif
     {
         ret = ERROR_INVALID_PARAMETER;
         goto done;

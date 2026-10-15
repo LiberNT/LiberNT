@@ -22,7 +22,7 @@ list(APPEND SOURCE
 add_library(afd MODULE ${SOURCE} afd.rc)
 target_link_libraries(afd ${PSEH_LIB})
 set_module_type(afd kernelmodedriver)
-add_importlibs(afd netio ntoskrnl hal)
+add_importlibs(afd tdi netio ntoskrnl hal)
 add_pch(afd include/afd.h SOURCE)
 add_cd_file(TARGET afd DESTINATION reactos/system32/drivers FOR all)
 add_registry_inf(afd_reg.inf)

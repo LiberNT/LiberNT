@@ -125,6 +125,9 @@ tcp_input(struct pbuf *p, struct netif *inp)
 #endif /* SO_REUSE */
   u8_t hdrlen_bytes;
   err_t err;
+#ifdef __REACTOS__
+  u32_t urg_base = 0;
+#endif
 
   LWIP_UNUSED_ARG(inp);
   LWIP_ASSERT_CORE_LOCKED();
@@ -435,6 +438,17 @@ tcp_input(struct pbuf *p, struct netif *inp)
       }
     }
     tcp_input_pcb = pcb;
+#ifdef __REACTOS__
+    urg_base = pcb->rcv_nxt;
+    if ((flags & TCP_URG) && (tcphdr->urgp != 0)) {
+      u32_t urg_seq = seqno + lwip_ntohs(tcphdr->urgp) - 1;
+      if (TCP_SEQ_GEQ(urg_seq, pcb->rcv_nxt) &&
+          (!pcb->urg_valid || TCP_SEQ_GT(urg_seq, pcb->urg_seq))) {
+        pcb->urg_seq = urg_seq;
+        pcb->urg_valid = 1;
+      }
+    }
+#endif
     err = tcp_process(pcb);
     /* A return value of ERR_ABRT means that tcp_abort() was called
        and that the pcb has been freed. If so, we don't do anything. */
@@ -497,6 +511,15 @@ tcp_input(struct pbuf *p, struct netif *inp)
             goto aborted;
           }
 
+#ifdef __REACTOS__
+          if (pcb->urg_valid && TCP_SEQ_GEQ(pcb->urg_seq, urg_base) &&
+              TCP_SEQ_LT(pcb->urg_seq, urg_base + recv_data->tot_len)) {
+            pcb->urg_offset = pcb->urg_seq - urg_base;
+            pcb->urg_in_data = 1;
+            pcb->urg_valid = 0;
+          }
+          urg_base += recv_data->tot_len;
+#endif
           /* Notify application that data has been received. */
           TCP_EVENT_RECV(pcb, recv_data, ERR_OK, err);
           if (err == ERR_ABRT) {
@@ -507,6 +530,9 @@ tcp_input(struct pbuf *p, struct netif *inp)
 #endif /* TCP_QUEUE_OOSEQ && LWIP_WND_SCALE */
             goto aborted;
           }
+#ifdef __REACTOS__
+          pcb->urg_in_data = 0;
+#endif
 
           /* If the upper layer can't receive this data, store it */
           if (err != ERR_OK) {

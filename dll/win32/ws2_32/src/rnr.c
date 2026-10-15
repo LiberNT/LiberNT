@@ -344,6 +344,12 @@ WSALookupServiceBeginW(IN LPWSAQUERYSETW lpqsRestrictions,
         return SOCKET_ERROR;
     }
 
+    if (lpqsRestrictions->dwSize < sizeof(*lpqsRestrictions))
+    {
+        SetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
+
     /* Create a new query object */
     if ((Query = WsNqAllocate()))
     {

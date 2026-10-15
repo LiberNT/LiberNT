@@ -219,7 +219,7 @@ mwsNSPLookupServiceBegin(_In_ LPGUID lpProviderId,
     wsaErr = ERROR_CALL_NOT_IMPLEMENTED;
     if (IsEqualGUID(lpProviderId, &guid_mswsock_NLA))
     {
-        if (lpqsRestrictions->dwNameSpace != NS_NLA ||
+        if ((lpqsRestrictions->dwNameSpace != NS_NLA && lpqsRestrictions->dwNameSpace != NS_ALL) ||
             (lpqsRestrictions->lpServiceClassId &&
              !IsEqualGUID(lpqsRestrictions->lpServiceClassId, &guid_NLA_SERVICE_CLASS)))
         {

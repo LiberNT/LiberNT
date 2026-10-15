@@ -63,13 +63,16 @@ LibTCPEmptyQueue(PCONNECTION_ENDPOINT Connection)
     DereferenceObject(Connection);
 }
 
-void LibTCPEnqueuePacket(PCONNECTION_ENDPOINT Connection, struct pbuf *p)
+void LibTCPEnqueuePacket(PCONNECTION_ENDPOINT Connection, PTCP_PCB pcb, struct pbuf *p)
 {
     PQUEUE_ENTRY qp;
 
     qp = (PQUEUE_ENTRY)ExAllocateFromNPagedLookasideList(&QueueEntryLookasideList);
     qp->p = p;
     qp->Offset = 0;
+    qp->Urgent = pcb->urg_in_data;
+    qp->UrgentOffset = pcb->urg_offset;
+    pcb->urg_in_data = 0;
 
     LockObject(Connection);
     InsertTailList(&Connection->PacketQueue, &qp->ListEntry);
@@ -122,8 +125,9 @@ NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHA
 {
     PQUEUE_ENTRY qp;
     struct pbuf* p;
-    NTSTATUS Status;
+    NTSTATUS Status = STATUS_SUCCESS;
     UINT ReadLength, PayloadLength, Offset, Copied;
+    BOOLEAN AtMark;
 
     (*Received) = 0;
 
@@ -143,6 +147,27 @@ NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHA
             /* Check if we're reading the whole buffer */
             ReadLength = MIN(PayloadLength, RecvLen);
             ASSERT(ReadLength != 0);
+            AtMark = FALSE;
+
+            if (qp->Urgent && qp->UrgentOffset >= Offset && qp->UrgentOffset - Offset < ReadLength)
+            {
+                if (qp->UrgentOffset == Offset)
+                {
+                    if (*Received != 0)
+                    {
+                        InsertHeadList(&Connection->PacketQueue, &qp->ListEntry);
+                        break;
+                    }
+                    ReadLength = 1;
+                    qp->Urgent = FALSE;
+                    Status = STATUS_RECEIVE_EXPEDITED;
+                }
+                else
+                {
+                    ReadLength = qp->UrgentOffset - Offset;
+                }
+                AtMark = TRUE;
+            }
             if (ReadLength != PayloadLength)
             {
                 /* Save this one for later */
@@ -169,13 +194,14 @@ NTSTATUS LibTCPGetDataFromConnectionQueue(PCONNECTION_ENDPOINT Connection, PUCHA
             else
             {
                 /* If we get here, it means we've filled the buffer */
-                ASSERT(RecvLen == 0);
+                ASSERT(RecvLen == 0 || AtMark);
             }
 
             ASSERT((*Received) != 0);
-            Status = STATUS_SUCCESS;
+            if (Status != STATUS_RECEIVE_EXPEDITED)
+                Status = STATUS_SUCCESS;
 
-            if (!RecvLen)
+            if (!RecvLen || AtMark)
                 break;
         }
     }
@@ -304,7 +330,7 @@ InternalRecvEventHandler(void *arg, PTCP_PCB pcb, struct pbuf *p, const err_t er
             return ERR_OK;
         }
 
-        LibTCPEnqueuePacket(Connection, p);
+        LibTCPEnqueuePacket(Connection, pcb, p);
 
         TCPRecvEventHandler(arg);
     }
@@ -693,6 +719,8 @@ LibTCPSendCallback(void *arg)
 
     SendFlags = TCP_WRITE_FLAG_COPY;
     SendLength = msg->Input.Send.DataLength;
+    if (msg->Input.Send.Flags & TDI_SEND_EXPEDITED)
+        SendFlags |= TCP_WRITE_FLAG_URG;
     if (tcp_sndbuf(pcb) == 0)
     {
         /* No buffer space so return pending */
@@ -706,6 +734,7 @@ LibTCPSendCallback(void *arg)
 
         /* Don't set the push flag */
         SendFlags |= TCP_WRITE_FLAG_MORE;
+        SendFlags &= ~TCP_WRITE_FLAG_URG;
     }
 
     if (!WfpShimClassifyStream(msg->Input.Send.Connection->WfpEndpointId,
@@ -739,7 +768,7 @@ done:
 }
 
 err_t
-LibTCPSend(PCONNECTION_ENDPOINT Connection, void *const dataptr, const u32_t len, ULONG *sent, const int safe)
+LibTCPSend(PCONNECTION_ENDPOINT Connection, void *const dataptr, const u32_t len, ULONG *sent, ULONG Flags, const int safe)
 {
     err_t ret;
     struct lwip_callback_msg msg;
@@ -747,6 +776,7 @@ LibTCPSend(PCONNECTION_ENDPOINT Connection, void *const dataptr, const u32_t len
     msg.Input.Send.Connection = Connection;
     msg.Input.Send.Data = dataptr;
     msg.Input.Send.DataLength = len;
+    msg.Input.Send.Flags = Flags;
 
     if (safe)
         LibTCPSendCallback(&msg);
