@@ -162,6 +162,7 @@ RtkH5Thread(
 
 static
 NTSTATUS
+NTAPI
 RtkH5EvtPrepareHardware(
     _In_ WDFDEVICE Device,
     _In_ WDFCMRESLIST ResourcesRaw,
@@ -197,6 +198,7 @@ RtkH5EvtPrepareHardware(
 
 static
 NTSTATUS
+NTAPI
 RtkH5EvtD0Entry(
     _In_ WDFDEVICE Device,
     _In_ WDF_POWER_DEVICE_STATE PreviousState)
@@ -226,6 +228,7 @@ RtkH5EvtD0Entry(
 
 static
 NTSTATUS
+NTAPI
 RtkH5EvtD0Exit(
     _In_ WDFDEVICE Device,
     _In_ WDF_POWER_DEVICE_STATE TargetState)
@@ -332,6 +335,7 @@ RtkH5FlushPackets(
 
 static
 VOID
+NTAPI
 RtkH5EvtPdoIoctl(
     _In_ WDFQUEUE Queue,
     _In_ WDFREQUEST Request,
@@ -529,6 +533,7 @@ RtkH5CreatePdo(
 
 static
 NTSTATUS
+NTAPI
 RtkH5EvtDeviceAdd(
     _In_ WDFDRIVER Driver,
     _Inout_ PWDFDEVICE_INIT DeviceInit)
