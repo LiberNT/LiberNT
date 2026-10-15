@@ -142,6 +142,37 @@ RtwFindIe(
 }
 
 static
+ULONG
+RtwBssRateMask(
+    _In_ PRTW_BSS Bss)
+{
+    static const UCHAR Rates[] = { 2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108 };
+    static const UCHAR Ids[] = { DOT11_IE_RATES, DOT11_IE_EXT_RATES };
+    const UCHAR* Ie;
+    ULONG Mask = 0;
+    ULONG i, j, k;
+
+    for (k = 0; k < RTL_NUMBER_OF(Ids); k++)
+    {
+        Ie = RtwFindIe(Bss->Ies, Bss->IeLength, Ids[k]);
+        if (!Ie)
+            continue;
+        for (i = 0; i < Ie[1]; i++)
+        {
+            for (j = 0; j < RTL_NUMBER_OF(Rates); j++)
+            {
+                if ((Ie[2 + i] & 0x7F) == Rates[j])
+                    Mask |= 1UL << j;
+            }
+        }
+    }
+
+    if (Bss->Channel > 14)
+        Mask &= RTW_RATE_MASK_OFDM;
+    return Mask;
+}
+
+static
 USHORT
 RtwRsnCapabilities(
     _In_ PRTW_BSS Bss)
@@ -1287,6 +1318,7 @@ RtwDoConnect(
         DPRINT1("RTW8852BS: management frame protection %s\n", Adapter->PmfActive ? "active" : "off");
 
         RtwVifSetLink(Adapter, Bss->Bssid, TRUE, Adapter->AssociationId, Bss->BeaconPeriod);
+        RtwVifSetRates(Adapter, RtwBssRateMask(Bss));
         RtwSetRxFilter(Adapter, FALSE);
         RtwIndicateAssociationCompletion(Adapter, Bss->Bssid, DOT11_ASSOC_STATUS_SUCCESS);
         RtwReleaseHeldReceives(Adapter, TRUE);

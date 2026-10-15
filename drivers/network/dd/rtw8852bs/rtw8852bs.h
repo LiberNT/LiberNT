@@ -96,6 +96,8 @@
 #define DOT11_IE_RSN                    48
 #define DOT11_IE_TIMEOUT_INTERVAL       56
 #define DOT11_IE_EXT_RATES              50
+#define RTW_RATE_MASK_CCK               0x00F
+#define RTW_RATE_MASK_OFDM              0xFF0
 #define DOT11_IE_VENDOR                 221
 
 #define RTW_BB_GAIN_BANDS               8
@@ -246,6 +248,8 @@ typedef struct _RTW_ADAPTER
     ULONG ConnectedChannel;
     USHORT AssociationId;
     LONG ConnectedRssi;
+    ULONG TxRateMask;
+    UCHAR TxLowestRate;
     ULONGLONG LastBeaconTime;
     KEVENT MlmeEvent;
     UCHAR MlmeExpect;
@@ -649,3 +653,8 @@ RtwVifSetLink(
     _In_ BOOLEAN Associated,
     _In_ USHORT Aid,
     _In_ USHORT BeaconInterval);
+
+NTSTATUS
+RtwVifSetRates(
+    _In_ PRTW_ADAPTER Adapter,
+    _In_ ULONG RateMask);

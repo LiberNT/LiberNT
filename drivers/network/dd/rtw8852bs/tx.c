@@ -96,7 +96,7 @@ RtwTxFrame(
 {
     PUCHAR Wd = Adapter->TxBuffer;
     UCHAR Channel, Qsel, Rate, LowestRate;
-    BOOLEAN Group;
+    BOOLEAN Group, UseRate = TRUE;
     NTSTATUS Status;
 
     if (Length < 24 || Length + RTW_WD_LENGTH > RTW_TX_BUFFER_SIZE || !Adapter->PowerOn)
@@ -105,9 +105,19 @@ RtwTxFrame(
     Group = (Frame[4] & 0x01) != 0;
     LowestRate = Adapter->CurrentChannel > 14 ? RTW_HW_RATE_OFDM6 : RTW_HW_RATE_CCK1;
     if (Management || Group)
+    {
         Rate = LowestRate;
+    }
+    else if (Adapter->TxRateMask)
+    {
+        UseRate = FALSE;
+        Rate = 0;
+        LowestRate = Adapter->TxLowestRate;
+    }
     else
+    {
         Rate = RTW_HW_RATE_OFDM24;
+    }
     Channel = Management ? RTW_TXCH_B0MG : RTW_TXCH_ACH0;
     Qsel = Management ? RTW_TX_QSEL_B0_MGMT : RTW_TX_QSEL_BE_0;
 
@@ -125,7 +135,7 @@ RtwTxFrame(
                ((ULONG)Qsel << RTW_WD_BODY2_QSEL_SHIFT) |
                (0UL << RTW_WD_BODY2_MACID_SHIFT));
     RtwPutLe32(Wd + RTW_WD_BODY_LENGTH,
-               RTW_WD_INFO0_USE_RATE |
+               (UseRate ? RTW_WD_INFO0_USE_RATE : 0) |
                ((ULONG)Rate << RTW_WD_INFO0_DATA_RATE_SHIFT) |
                (Management ? RTW_WD_INFO0_DISDATAFB : 0));
     RtwPutLe32(Wd + RTW_WD_BODY_LENGTH + 4, (ULONG)LowestRate << RTW_WD_INFO1_RTY_LOWEST_SHIFT);

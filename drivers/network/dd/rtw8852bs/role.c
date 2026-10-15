@@ -42,6 +42,16 @@
 #define RTW_H2C_FUNC_FWROLE_MAINTAIN    4
 #define RTW_H2C_CL_MAC_FW_OFLD          9
 #define RTW_H2C_FUNC_MACID_PAUSE        8
+#define RTW_H2C_CAT_OUTSRC              2
+#define RTW_H2C_CL_OUTSRC_RA            1
+#define RTW_H2C_FUNC_OUTSRC_RA_MACIDCFG 0
+
+#define RTW_RA_MODE_CCK                 RTW_BIT(0)
+#define RTW_RA_MODE_OFDM                RTW_BIT(1)
+#define RTW_RA_MASK_SUBCCK              0x5
+#define RTW_H2C_RA_W0_MODE_SHIFT        1
+#define RTW_H2C_RA_W0_MACID_SHIFT       8
+#define RTW_H2C_RA_W0_UPD_ALL           RTW_BIT(20)
 
 static
 ULONG
@@ -354,6 +364,8 @@ RtwVifSetLink(
     BOOLEAN Changed = NetType != Adapter->NetType;
     NTSTATUS Status;
 
+    if (!Associated)
+        Adapter->TxRateMask = 0;
     if (Bssid)
         RtlCopyMemory(Adapter->Bssid, Bssid, RTW_ADDRESS_LENGTH);
     else
@@ -371,4 +383,48 @@ RtwVifSetLink(
     if (NT_SUCCESS(Status))
         Status = RtwSendAddressCam(Adapter);
     return Status;
+}
+
+NTSTATUS
+RtwVifSetRates(
+    _In_ PRTW_ADAPTER Adapter,
+    _In_ ULONG RateMask)
+{
+    UCHAR Data[16];
+    ULONG Mode = 0;
+    ULONG Mask = RateMask;
+    UCHAR Lowest = 0;
+    NTSTATUS Status;
+
+    Adapter->TxRateMask = 0;
+    if (Mask & RTW_RATE_MASK_CCK)
+        Mode |= RTW_RA_MODE_CCK;
+    if (Mask & RTW_RATE_MASK_OFDM)
+    {
+        Mode |= RTW_RA_MODE_OFDM;
+        Mask &= RTW_RATE_MASK_OFDM | RTW_RA_MASK_SUBCCK;
+    }
+    if (!Mask)
+        return STATUS_NOT_SUPPORTED;
+
+    while (!(RateMask & (1UL << Lowest)))
+        Lowest++;
+
+    RtlZeroMemory(Data, sizeof(Data));
+    RtwPutLe32(Data,
+               (Mode << RTW_H2C_RA_W0_MODE_SHIFT) |
+               ((ULONG)RTW_MACID << RTW_H2C_RA_W0_MACID_SHIFT) |
+               RTW_H2C_RA_W0_UPD_ALL);
+    RtwPutLe32(Data + 4, Mask);
+    Status = RtwSendH2c(Adapter, RTW_H2C_CAT_OUTSRC, RTW_H2C_CL_OUTSRC_RA, RTW_H2C_FUNC_OUTSRC_RA_MACIDCFG,
+                        FALSE, Data, sizeof(Data));
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("RTW8852BS: rate adaptation setup failed 0x%08lx\n", Status);
+        return Status;
+    }
+
+    Adapter->TxLowestRate = Lowest;
+    Adapter->TxRateMask = Mask;
+    return STATUS_SUCCESS;
 }
