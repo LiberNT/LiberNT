@@ -661,7 +661,11 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_GetDesc1(IDXGIOutput6 *iface,
     struct wined3d_display_mode mode;
     HRESULT hr;
 
+#if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
+    TRACE("iface %p, desc %p.\n", iface, desc);
+#else
     FIXME("iface %p, desc %p semi-stub!\n", iface, desc);
+#endif
 
     if (!desc)
         return E_INVALIDARG;
