@@ -76,7 +76,7 @@ typedef struct _PNP_SERIAL_BUS_DESCRIPTOR
 #ifdef RESHUB_USE_HELPER_ROUTINES
 #include <ntstrsafe.h>
 
-FORCEINLINE
+static __inline
 NTSTATUS
 RESOURCE_HUB_ID_TO_FILE_NAME(
     _In_ ULONG IdLowPart,
@@ -90,7 +90,7 @@ RESOURCE_HUB_ID_TO_FILE_NAME(
                               IdLowPart);
 }
 
-FORCEINLINE
+static __inline
 NTSTATUS
 RESOURCE_HUB_CREATE_PATH_FROM_ID(
     _Inout_ PUNICODE_STRING FileName,
