@@ -407,7 +407,7 @@ RawInputThreadMain(VOID)
         ghKeyboardDevice = NULL;
     }
 
-    ERR("Raw Input Thread Exit!\n");
+    TRACE("Raw Input Thread Exit!\n");
 }
 
 /*

@@ -613,8 +613,8 @@ UserExitReactOS(PCSR_THREAD CsrThread, UINT Flags)
     DWORD ProcessId = HandleToUlong(CsrThread->ClientId.UniqueProcess);
     DWORD ThreadId  = HandleToUlong(CsrThread->ClientId.UniqueThread);
 
-    DPRINT1("SrvExitWindowsEx(ClientId: %lx.%lx, Flags: 0x%x)\n",
-            ProcessId, ThreadId, Flags);
+    DPRINT("SrvExitWindowsEx(ClientId: %lx.%lx, Flags: 0x%x)\n",
+           ProcessId, ThreadId, Flags);
 
     /*
      * Check for flags validity
@@ -667,7 +667,7 @@ UserExitReactOS(PCSR_THREAD CsrThread, UINT Flags)
 
             /* Shutdown is in progress */
             case STATUS_PENDING:
-                DPRINT1("NtUserSetInformationThread returned STATUS_PENDING\n");
+                DPRINT("NtUserSetInformationThread returned STATUS_PENDING\n");
                 goto Quit;
 
             /* Abort */
@@ -789,11 +789,11 @@ UserClientShutdown(IN PCSR_PROCESS CsrProcess,
         WCHAR buffer[MAX_PATH];
         if (!GetProcessImageFileNameW(CsrProcess->ProcessHandle, buffer, ARRAYSIZE(buffer)))
         {
-            DPRINT1("Terminating process %x\n", CsrProcess->ClientId.UniqueProcess);
+            DPRINT("Terminating process %x\n", CsrProcess->ClientId.UniqueProcess);
         }
         else
         {
-            DPRINT1("Terminating process %x (%S)\n", CsrProcess->ClientId.UniqueProcess, buffer);
+            DPRINT("Terminating process %x (%S)\n", CsrProcess->ClientId.UniqueProcess, buffer);
         }
     }
 #endif

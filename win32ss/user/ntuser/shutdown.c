@@ -126,7 +126,7 @@ NotifyLogon(IN HWND hWndSta,
     // LUID SystemLuid = SYSTEM_LUID;
     ULONG Notif, Param;
 
-    ERR("NotifyLogon(0x%lx, 0x%lx)\n", Flags, ShutdownStatus);
+    TRACE("NotifyLogon(0x%lx, 0x%lx)\n", Flags, ShutdownStatus);
 
     /* If no Winlogon notifications are needed, just return */
     if (Flags & EWX_NONOTIFY)

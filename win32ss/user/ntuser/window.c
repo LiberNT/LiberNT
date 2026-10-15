@@ -3207,7 +3207,7 @@ BOOLEAN co_UserDestroyWindow(PVOID Object)
    {
       if (ti->pDeskInfo->hShellWindow == hWnd)
       {
-         ERR("Destroying the ShellWindow!\n");
+         TRACE("Destroying the ShellWindow!\n");
          ti->pDeskInfo->hShellWindow = NULL;
       }
    }

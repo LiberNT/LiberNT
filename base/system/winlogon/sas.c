@@ -1333,7 +1333,7 @@ HandleShutdown(
     UninitializeSAS(Session);
 
     /* Now we can shut down NT */
-    ERR("Shutting down NT...\n");
+    TRACE("Shutting down NT...\n");
     RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &Old);
     if (wlxAction == WLX_SAS_ACTION_SHUTDOWN_REBOOT)
     {
