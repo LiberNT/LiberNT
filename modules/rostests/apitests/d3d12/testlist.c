@@ -12,6 +12,7 @@ extern void func_allocator(void);
 extern void func_blend(void);
 extern void func_bundle(void);
 extern void func_features(void);
+extern void func_interfaces(void);
 extern void func_queue(void);
 extern void func_renderpass(void);
 
@@ -21,6 +22,7 @@ const struct test winetest_testlist[] =
     { "blend", func_blend },
     { "bundle", func_bundle },
     { "features", func_features },
+    { "interfaces", func_interfaces },
     { "queue", func_queue },
     { "renderpass", func_renderpass },
     { 0, 0 }

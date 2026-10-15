@@ -4,6 +4,7 @@ list(APPEND SOURCE
     blend.cpp
     bundle.cpp
     features.cpp
+    interfaces.cpp
     queue.cpp
     renderpass.cpp
     shaders.cpp
