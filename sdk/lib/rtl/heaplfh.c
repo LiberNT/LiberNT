@@ -361,27 +361,31 @@ PVOID
 RtlpLfhPopSlot(PRTLP_LFH_BUCKET BucketData, SIZE_T Size, ULONG Flags)
 {
     PRTLP_LFH_USER_BLOCK Block;
-    PLIST_ENTRY Link;
     PHEAP_ENTRY Entry;
     PVOID Ptr;
 
-    for (Link = BucketData->UserBlocks.Flink; Link != &BucketData->UserBlocks; Link = Link->Flink)
+    if (IsListEmpty(&BucketData->UserBlocks))
+        return NULL;
+
+    Block = CONTAINING_RECORD(BucketData->UserBlocks.Flink, RTLP_LFH_USER_BLOCK, Link);
+    if (!Block->FreeList)
+        return NULL;
+
+    Ptr = Block->FreeList;
+    Block->FreeList = *(PVOID *)Ptr;
+    --Block->FreeCount;
+
+    if (!Block->FreeList)
     {
-        Block = CONTAINING_RECORD(Link, RTLP_LFH_USER_BLOCK, Link);
-        if (!Block->FreeList)
-            continue;
-
-        Ptr = Block->FreeList;
-        Block->FreeList = *(PVOID *)Ptr;
-        --Block->FreeCount;
-
-        Entry = (PHEAP_ENTRY)Ptr - 1;
-        Entry->Flags = HEAP_ENTRY_BUSY | (UCHAR)((Flags & HEAP_SETTABLE_USER_FLAGS) >> 4);
-        Entry->SmallTagIndex = 0;
-        Entry->UnusedBytes = (UCHAR)(RtlpLfhUsableSize(Block) - Size);
-        return Ptr;
+        RemoveEntryList(&Block->Link);
+        InsertTailList(&BucketData->UserBlocks, &Block->Link);
     }
-    return NULL;
+
+    Entry = (PHEAP_ENTRY)Ptr - 1;
+    Entry->Flags = HEAP_ENTRY_BUSY | (UCHAR)((Flags & HEAP_SETTABLE_USER_FLAGS) >> 4);
+    Entry->SmallTagIndex = 0;
+    Entry->UnusedBytes = (UCHAR)(RtlpLfhUsableSize(Block) - Size);
+    return Ptr;
 }
 
 PVOID
@@ -469,6 +473,7 @@ RtlpLfhFree(PHEAP Heap, PVOID Ptr)
     PRTLP_LFH_BUCKET BucketData;
     PHEAP_ENTRY Entry = (PHEAP_ENTRY)Ptr - 1;
     BOOLEAN Release = FALSE;
+    BOOLEAN WasFull;
 
     RtlEnterHeapLock(Lfh->Lock, TRUE);
 
@@ -482,6 +487,7 @@ RtlpLfhFree(PHEAP Heap, PVOID Ptr)
 
     Entry->Flags = 0;
     Entry->UnusedBytes = 0;
+    WasFull = Block->FreeList == NULL;
     *(PVOID *)Ptr = Block->FreeList;
     Block->FreeList = Ptr;
     ++Block->FreeCount;
@@ -493,6 +499,11 @@ RtlpLfhFree(PHEAP Heap, PVOID Ptr)
         --BucketData->BlockCount;
         Block->Signature = 0;
         Release = TRUE;
+    }
+    else if (WasFull)
+    {
+        RemoveEntryList(&Block->Link);
+        InsertHeadList(&BucketData->UserBlocks, &Block->Link);
     }
 
     RtlLeaveHeapLock(Lfh->Lock);
