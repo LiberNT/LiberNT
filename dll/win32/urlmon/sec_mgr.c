@@ -822,7 +822,11 @@ static HRESULT get_action_policy(DWORD zone, DWORD action, BYTE *policy, DWORD s
     return hres;
 }
 
+#ifdef __REACTOS__
+static HRESULT generate_security_id(IUri *uri, BYTE *secid, DWORD *secid_len, DWORD zone, const WCHAR *domain)
+#else
 static HRESULT generate_security_id(IUri *uri, BYTE *secid, DWORD *secid_len, DWORD zone)
+#endif
 {
     DWORD len;
     HRESULT hres;
@@ -862,6 +866,13 @@ static HRESULT generate_security_id(IUri *uri, BYTE *secid, DWORD *secid_len, DW
         hres = IUri_GetHost(uri, &host);
         if(FAILED(hres))
             return hres;
+#ifdef __REACTOS__
+        if(domain) {
+            SysFreeString(host);
+            if(!(host = SysAllocString(domain)))
+                return E_OUTOFMEMORY;
+        }
+#endif
 
         /* The host can't be empty for Wildcard URIs. */
         if(scheme_type == URL_SCHEME_WILDCARD && !*host) {
@@ -921,13 +932,21 @@ static HRESULT get_security_id_for_url(LPCWSTR url, BYTE *secid, DWORD *secid_le
     if(FAILED(hres))
         return hres;
 
+#ifdef __REACTOS__
+    hres = generate_security_id(uri, secid, secid_len, zone, NULL);
+#else
     hres = generate_security_id(uri, secid, secid_len, zone);
+#endif
     IUri_Release(uri);
 
     return hres;
 }
 
+#ifdef __REACTOS__
+static HRESULT get_security_id_for_uri(IUri *uri, BYTE *secid, DWORD *secid_len, const WCHAR *domain)
+#else
 static HRESULT get_security_id_for_uri(IUri *uri, BYTE *secid, DWORD *secid_len)
+#endif
 {
     HRESULT hres;
     IUri *secur_uri;
@@ -937,7 +956,11 @@ static HRESULT get_security_id_for_uri(IUri *uri, BYTE *secid, DWORD *secid_len)
     if(FAILED(hres))
         return hres;
 
+#ifdef __REACTOS__
+    hres = generate_security_id(secur_uri, secid, secid_len, zone, domain);
+#else
     hres = generate_security_id(secur_uri, secid, secid_len, zone);
+#endif
     IUri_Release(secur_uri);
 
     return hres;
@@ -1310,13 +1333,19 @@ static HRESULT WINAPI SecManagerImpl_GetSecurityIdEx2(IInternetSecurityManagerEx
     SecManagerImpl *This = impl_from_IInternetSecurityManagerEx2(iface);
     TRACE("(%p)->(%p %p %p %08Ix) stub\n", This, pUri, pbSecurityId, pcbSecurityId, dwReserved);
 
+#ifndef __REACTOS__
     if(dwReserved)
         FIXME("dwReserved is not supported yet\n");
+#endif
 
     if(!pUri || !pcbSecurityId || !pbSecurityId)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    return get_security_id_for_uri(pUri, pbSecurityId, pcbSecurityId, (const WCHAR *)dwReserved);
+#else
     return get_security_id_for_uri(pUri, pbSecurityId, pcbSecurityId);
+#endif
 }
 
 static HRESULT WINAPI SecManagerImpl_QueryCustomPolicyEx2(IInternetSecurityManagerEx2 *iface,
