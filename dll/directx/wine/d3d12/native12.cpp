@@ -1265,8 +1265,19 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
         case D3D12_FEATURE_D3D12_OPTIONS13:
         {
             D3D12_FEATURE_DATA_D3D12_OPTIONS13 *caps;
+            D3D12DDI_OPTIONS_DATA_0091 relaxed = {};
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            if (ddi_build >= D3D12DDI_BUILD_VERSION_0091
+                    && SUCCEEDED(QueryCaps(D3D12DDICAPS_TYPE_OPTIONS_0091, NULL, &relaxed, sizeof(relaxed))))
+            {
+                caps->UnrestrictedBufferTextureCopyPitchSupported = !!relaxed.UnrestrictedBufferTextureCopyPitchSupported;
+                caps->UnrestrictedVertexElementAlignmentSupported = !!relaxed.UnrestrictedVertexElementAlignmentSupported;
+                caps->InvertedViewportHeightFlipsYSupported = !!relaxed.InvertedViewportHeightFlipsYSupported;
+                caps->InvertedViewportDepthFlipsZSupported = !!relaxed.InvertedViewportDepthFlipsZSupported;
+            }
+            caps->TextureCopyBetweenDimensionsSupported = ddi_build >= D3D12DDI_BUILD_VERSION_0091;
+            caps->AlphaBlendFactorSupported = ddi_build >= D3D12DDI_BUILD_VERSION_0092;
             return S_OK;
         }
         case D3D12_FEATURE_D3D12_OPTIONS14:
