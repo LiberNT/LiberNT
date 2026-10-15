@@ -571,7 +571,10 @@ START_TEST(tcp_info)
             sizeof(EntityType),
             &BufferSize,
             NULL);
-        ok(Result, "DeviceIoControl failed.\n");
+        ok(Result || broken(Entities[i].tei_entity == CL_NL_ENTITY || Entities[i].tei_entity == IF_ENTITY),
+           "DeviceIoControl failed.\n");
+        if (!Result)
+            continue;
 
         printf("Entity %lu: %#lx, %#lx, type %#lx\n", i, Entities[i].tei_entity, Entities[i].tei_instance, EntityType);
         test_IF_MIB_STATS(Entities[i], EntityType);

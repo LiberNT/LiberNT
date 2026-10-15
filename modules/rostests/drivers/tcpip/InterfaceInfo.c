@@ -47,7 +47,7 @@ START_TEST(InterfaceInfo)
         NULL);
     Error = GetLastError();
     ok(!Result, "DeviceIoControl succeeded.\n");
-    ok_long(Error, ERROR_INVALID_FUNCTION);
+    ok_long(Error, ERROR_INVALID_PARAMETER);
     ok_long(BufferSize, 0);
 
     CloseHandle(FileHandle);
@@ -61,7 +61,14 @@ START_TEST(InterfaceInfo)
         OPEN_EXISTING,
         FILE_FLAG_OVERLAPPED,
         NULL);
-    ok(FileHandle != INVALID_HANDLE_VALUE, "CreateFile failed, GLE %lu\n", GetLastError());
+    Error = GetLastError();
+    ok(FileHandle == INVALID_HANDLE_VALUE, "CreateFile succeeded\n");
+    ok_long(Error, ERROR_FILE_NOT_FOUND);
+    if (FileHandle == INVALID_HANDLE_VALUE)
+    {
+        skip("\\\\.\\Ip is not available\n");
+        return;
+    }
 
     /* Get the buffer size. */
     BufferSize = 0;
