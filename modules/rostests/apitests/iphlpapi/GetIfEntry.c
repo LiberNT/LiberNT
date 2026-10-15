@@ -69,7 +69,7 @@ START_TEST(GetIfEntry)
     {
         MIB_IFROW Row = Context->Table->table[Index];
 
-        if (Row.dwType != MIB_IF_TYPE_ETHERNET)
+        if (Row.dwType != MIB_IF_TYPE_ETHERNET || Row.dwOperStatus == MIB_IF_OPER_STATUS_NON_OPERATIONAL)
             continue;
         trace("Ethernet interface %lu: MTU %lu, operational state %lu\n",
               Row.dwIndex, Row.dwMtu, (ULONG)Row.dwOperStatus);
