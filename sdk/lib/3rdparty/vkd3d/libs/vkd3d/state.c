@@ -2066,11 +2066,109 @@ static void pipeline_state_desc_from_d3d12_compute_desc(struct d3d12_pipeline_st
     desc->flags = d3d12_desc->Flags;
 }
 
+static HRESULT pipeline_state_desc_apply_subobject(struct d3d12_pipeline_state_desc *desc,
+        D3D12_PIPELINE_STATE_SUBOBJECT_TYPE type)
+{
+    D3D12_DEPTH_STENCIL_DESC1 *ds = &desc->depth_stencil_state;
+    D3D12_RASTERIZER_DESC *rs = &desc->rasterizer_state;
+
+    switch (type)
+    {
+        case D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER:
+            desc->float_depth_bias = false;
+            break;
+
+        case D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER1:
+        {
+            const D3D12_RASTERIZER_DESC1 *rs1 = &desc->rasterizer_state1;
+
+            rs->FillMode = rs1->FillMode;
+            rs->CullMode = rs1->CullMode;
+            rs->FrontCounterClockwise = rs1->FrontCounterClockwise;
+            rs->DepthBias = (INT)rs1->DepthBias;
+            rs->DepthBiasClamp = rs1->DepthBiasClamp;
+            rs->SlopeScaledDepthBias = rs1->SlopeScaledDepthBias;
+            rs->DepthClipEnable = rs1->DepthClipEnable;
+            rs->MultisampleEnable = rs1->MultisampleEnable;
+            rs->AntialiasedLineEnable = rs1->AntialiasedLineEnable;
+            rs->ForcedSampleCount = rs1->ForcedSampleCount;
+            rs->ConservativeRaster = rs1->ConservativeRaster;
+            desc->float_depth_bias = true;
+            desc->depth_bias = rs1->DepthBias;
+            break;
+        }
+
+        case D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER2:
+        {
+            const D3D12_RASTERIZER_DESC2 *rs2 = &desc->rasterizer_state2;
+
+            if (rs2->LineRasterizationMode >= D3D12_LINE_RASTERIZATION_MODE_QUADRILATERAL_NARROW)
+            {
+                WARN("Unsupported line rasterization mode %#x.\n", rs2->LineRasterizationMode);
+                return E_INVALIDARG;
+            }
+            rs->FillMode = rs2->FillMode;
+            rs->CullMode = rs2->CullMode;
+            rs->FrontCounterClockwise = rs2->FrontCounterClockwise;
+            rs->DepthBias = (INT)rs2->DepthBias;
+            rs->DepthBiasClamp = rs2->DepthBiasClamp;
+            rs->SlopeScaledDepthBias = rs2->SlopeScaledDepthBias;
+            rs->DepthClipEnable = rs2->DepthClipEnable;
+            rs->MultisampleEnable = rs2->LineRasterizationMode == D3D12_LINE_RASTERIZATION_MODE_QUADRILATERAL_WIDE;
+            rs->AntialiasedLineEnable = rs2->LineRasterizationMode == D3D12_LINE_RASTERIZATION_MODE_ALPHA_ANTIALIASED;
+            rs->ForcedSampleCount = rs2->ForcedSampleCount;
+            rs->ConservativeRaster = rs2->ConservativeRaster;
+            desc->float_depth_bias = true;
+            desc->depth_bias = rs2->DepthBias;
+            break;
+        }
+
+        case D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL:
+            ds->DepthBoundsTestEnable = FALSE;
+            desc->face_stencil_masks = false;
+            break;
+
+        case D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL1:
+            desc->face_stencil_masks = false;
+            break;
+
+        case D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL2:
+        {
+            const D3D12_DEPTH_STENCIL_DESC2 *ds2 = &desc->depth_stencil_state2;
+
+            ds->DepthEnable = ds2->DepthEnable;
+            ds->DepthWriteMask = ds2->DepthWriteMask;
+            ds->DepthFunc = ds2->DepthFunc;
+            ds->StencilEnable = ds2->StencilEnable;
+            ds->StencilReadMask = ds2->FrontFace.StencilReadMask;
+            ds->StencilWriteMask = ds2->FrontFace.StencilWriteMask;
+            ds->FrontFace.StencilFailOp = ds2->FrontFace.StencilFailOp;
+            ds->FrontFace.StencilDepthFailOp = ds2->FrontFace.StencilDepthFailOp;
+            ds->FrontFace.StencilPassOp = ds2->FrontFace.StencilPassOp;
+            ds->FrontFace.StencilFunc = ds2->FrontFace.StencilFunc;
+            ds->BackFace.StencilFailOp = ds2->BackFace.StencilFailOp;
+            ds->BackFace.StencilDepthFailOp = ds2->BackFace.StencilDepthFailOp;
+            ds->BackFace.StencilPassOp = ds2->BackFace.StencilPassOp;
+            ds->BackFace.StencilFunc = ds2->BackFace.StencilFunc;
+            ds->DepthBoundsTestEnable = ds2->DepthBoundsTestEnable;
+            desc->face_stencil_masks = true;
+            desc->back_stencil_read_mask = ds2->BackFace.StencilReadMask;
+            desc->back_stencil_write_mask = ds2->BackFace.StencilWriteMask;
+            break;
+        }
+
+        default:
+            break;
+    }
+    return S_OK;
+}
+
 static HRESULT pipeline_state_desc_from_d3d12_stream_desc(struct d3d12_pipeline_state_desc *desc,
         const D3D12_PIPELINE_STATE_STREAM_DESC *d3d12_desc, VkPipelineBindPoint *vk_bind_point)
 {
-    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE subobject_type;
+    D3D12_PIPELINE_STATE_SUBOBJECT_TYPE subobject_type, base_type;
     uint64_t defined_subobjects = 0;
+    HRESULT hr;
     const uint8_t *stream_ptr;
     uint64_t subobject_bit;
     size_t start, size, i;
@@ -2108,6 +2206,9 @@ static HRESULT pipeline_state_desc_from_d3d12_stream_desc(struct d3d12_pipeline_
         [D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS]           = DCL_SUBOBJECT_INFO(D3D12_PIPELINE_STATE_FLAGS, flags),
         [D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL1]  = DCL_SUBOBJECT_INFO(D3D12_DEPTH_STENCIL_DESC1, depth_stencil_state),
         [D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_VIEW_INSTANCING] = DCL_SUBOBJECT_INFO(D3D12_VIEW_INSTANCING_DESC, view_instancing_desc),
+        [D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL2]  = DCL_SUBOBJECT_INFO(D3D12_DEPTH_STENCIL_DESC2, depth_stencil_state2),
+        [D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER1]     = DCL_SUBOBJECT_INFO(D3D12_RASTERIZER_DESC1, rasterizer_state1),
+        [D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER2]     = DCL_SUBOBJECT_INFO(D3D12_RASTERIZER_DESC2, rasterizer_state2),
 #undef DCL_SUBOBJECT_INFO
     };
     STATIC_ASSERT(ARRAY_SIZE(subobject_info) <= sizeof(defined_subobjects) * CHAR_BIT);
@@ -2127,18 +2228,24 @@ static HRESULT pipeline_state_desc_from_d3d12_stream_desc(struct d3d12_pipeline_
         }
 
         subobject_type = *(const D3D12_PIPELINE_STATE_SUBOBJECT_TYPE *)&stream_ptr[i];
-        if (subobject_type >= ARRAY_SIZE(subobject_info))
+        if (subobject_type >= ARRAY_SIZE(subobject_info) || !subobject_info[subobject_type].size)
         {
             FIXME("Unhandled pipeline subobject type %#x.\n", subobject_type);
             return E_INVALIDARG;
         }
 
-        subobject_bit = 1ull << subobject_type;
-        if (defined_subobjects & subobject_bit)
+        base_type = subobject_type;
+        if (subobject_type == D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL1
+                || subobject_type == D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL2)
+            base_type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL;
+        else if (subobject_type == D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER1)
+            base_type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER;
+        if (defined_subobjects & (1ull << base_type))
         {
             WARN("Duplicate pipeline subobject type %u.\n", subobject_type);
             return E_INVALIDARG;
         }
+        subobject_bit = 1ull << subobject_type;
         defined_subobjects |= subobject_bit;
 
         start = align(sizeof(subobject_type), subobject_info[subobject_type].alignment);
@@ -2153,6 +2260,8 @@ static HRESULT pipeline_state_desc_from_d3d12_stream_desc(struct d3d12_pipeline_
         memcpy(&desc_bytes[subobject_info[subobject_type].dst_offset], &stream_ptr[i + start], size);
         /* Stream packets are aligned to the size of pointers. */
         i += align(start + size, sizeof(void *));
+        if (FAILED(hr = pipeline_state_desc_apply_subobject(desc, subobject_type)))
+            return hr;
     }
 
     /* Deduce pipeline type from specified shaders. */
@@ -3321,6 +3430,14 @@ static HRESULT d3d12_pipeline_state_init_graphics(struct d3d12_pipeline_state *s
         state->implicit_root_signature = &root_signature->ID3D12RootSignature_iface;
     }
 
+    if (desc->flags & ~(D3D12_PIPELINE_STATE_FLAG_TOOL_DEBUG | D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS
+            | D3D12_PIPELINE_STATE_FLAG_DYNAMIC_INDEX_BUFFER_STRIP_CUT))
+    {
+        WARN("Invalid pipeline state flags %#x.\n", desc->flags);
+        hr = E_INVALIDARG;
+        goto fail;
+    }
+
     sample_count = vk_samples_from_dxgi_sample_desc(&desc->sample_desc);
     if (desc->sample_desc.Count != 1 && desc->sample_desc.Quality)
         WARN("Ignoring sample quality %u.\n", desc->sample_desc.Quality);
@@ -3386,6 +3503,11 @@ static HRESULT d3d12_pipeline_state_init_graphics(struct d3d12_pipeline_state *s
     graphics->rt_count = rt_count;
 
     ds_desc_from_d3d12(&graphics->ds_desc, &desc->depth_stencil_state);
+    if (desc->face_stencil_masks && graphics->ds_desc.stencilTestEnable)
+    {
+        graphics->ds_desc.back.compareMask = desc->back_stencil_read_mask;
+        graphics->ds_desc.back.writeMask = desc->back_stencil_write_mask;
+    }
     if (graphics->ds_desc.depthBoundsTestEnable && !device->feature_options2.DepthBoundsTestSupported)
     {
         WARN("Depth bounds test not supported by device.\n");
@@ -3714,6 +3836,8 @@ static HRESULT d3d12_pipeline_state_init_graphics(struct d3d12_pipeline_state *s
     is_dsv_format_unknown = graphics->null_attachment_mask & dsv_attachment_mask(graphics);
 
     rs_desc_from_d3d12(&graphics->rs_desc, &desc->rasterizer_state);
+    if (desc->float_depth_bias)
+        graphics->rs_desc.depthBiasConstantFactor = desc->depth_bias;
     have_attachment = graphics->rt_count || graphics->dsv_format || is_dsv_format_unknown;
     if ((!have_attachment && !(desc->ps.pShaderBytecode && desc->ps.BytecodeLength))
             || (graphics->xfb_enabled && so_desc->RasterizedStream == D3D12_SO_NO_RASTERIZED_STREAM))

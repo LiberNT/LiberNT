@@ -4683,6 +4683,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device14
             }
 
             memset(data, 0, sizeof(*data));
+            data->RasterizerDesc2Supported = TRUE;
             data->SupportedSampleCountsWithNoOutputs = 1;
             data->MaxSamplerDescriptorHeapSize = D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE;
             data->MaxSamplerDescriptorHeapSizeWithStaticSamplers = D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE;
@@ -5714,7 +5715,11 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CreatePipelineState(ID3D12Device14
     TRACE("iface %p, desc %p, iid %s, pipeline_state %p.\n", iface, desc, debugstr_guid(iid), pipeline_state);
 
     if (FAILED(hr = d3d12_pipeline_state_create(device, desc, &object)))
+    {
+        if (pipeline_state)
+            *pipeline_state = NULL;
         return hr;
+    }
 
     return return_interface(&object->ID3D12PipelineState_iface, &IID_ID3D12PipelineState, iid, pipeline_state);
 }

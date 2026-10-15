@@ -1152,6 +1152,14 @@ struct d3d12_pipeline_state_desc
     unsigned int node_mask;
     D3D12_CACHED_PIPELINE_STATE cached_pso;
     D3D12_PIPELINE_STATE_FLAGS flags;
+    D3D12_DEPTH_STENCIL_DESC2 depth_stencil_state2;
+    D3D12_RASTERIZER_DESC1 rasterizer_state1;
+    D3D12_RASTERIZER_DESC2 rasterizer_state2;
+    bool face_stencil_masks;
+    uint8_t back_stencil_read_mask;
+    uint8_t back_stencil_write_mask;
+    bool float_depth_bias;
+    float depth_bias;
 };
 
 HRESULT d3d12_pipeline_state_create_compute(struct d3d12_device *device,
