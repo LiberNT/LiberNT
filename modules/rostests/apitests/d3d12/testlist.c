@@ -14,6 +14,7 @@ extern void func_blend(void);
 extern void func_bundle(void);
 extern void func_features(void);
 extern void func_interfaces(void);
+extern void func_pipeline(void);
 extern void func_queue(void);
 extern void func_renderpass(void);
 extern void func_rootsig(void);
@@ -28,6 +29,7 @@ const struct test winetest_testlist[] =
     { "bundle", func_bundle },
     { "features", func_features },
     { "interfaces", func_interfaces },
+    { "pipeline", func_pipeline },
     { "queue", func_queue },
     { "renderpass", func_renderpass },
     { "rootsig", func_rootsig },

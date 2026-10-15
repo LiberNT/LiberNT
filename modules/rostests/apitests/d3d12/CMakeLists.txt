@@ -6,6 +6,7 @@ list(APPEND SOURCE
     bundle.cpp
     features.cpp
     interfaces.cpp
+    pipeline.cpp
     queue.cpp
     renderpass.cpp
     rootsig.cpp
