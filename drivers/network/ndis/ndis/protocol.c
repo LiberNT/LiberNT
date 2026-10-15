@@ -1434,18 +1434,8 @@ NdisRegisterProtocol(
       ExFreePool(PnPEvent);
   }
 
-  if (*Status != NDIS_STATUS_SUCCESS && !IsListEmpty(&Protocol->AdapterListHead))
-  {
-      *Status = NDIS_STATUS_SUCCESS;
-  }
-
-  if (*Status == NDIS_STATUS_SUCCESS) {
-      ExInterlockedInsertTailList(&ProtocolListHead, &Protocol->ListEntry, &ProtocolListLock);
-  } else {
-      NDIS_DbgPrint(MIN_TRACE, ("Binding failed (%x)\n", *Status));
-      ExFreePool(Protocol);
-      *NdisProtocolHandle = NULL;
-  }
+  ExInterlockedInsertTailList(&ProtocolListHead, &Protocol->ListEntry, &ProtocolListLock);
+  *Status = NDIS_STATUS_SUCCESS;
 }
 
 /*
