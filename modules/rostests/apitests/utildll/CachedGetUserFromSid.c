@@ -34,28 +34,27 @@ static void test_Sid_Null(void)
     wmemset(szUserName, L'?', _countof(szUserName));
     cchUserName = 1;
     pCachedGetUserFromSid(NULL, szUserName, &cchUserName);
-    ok(cchUserName == 0, "cchUserName: expected 0, got %lu\n", cchUserName);
-    ok(szUserName[0] == UNICODE_NULL, "szUserName: missing UNICODE_NULL, got \"%.*ls\"\n", (int)cchUserName, szUserName);
+    ok(cchUserName == 1, "cchUserName: expected 1, got %lu\n", cchUserName);
 
     wmemset(szUserName, L'?', _countof(szUserName));
     cchUserName = 2;
     pCachedGetUserFromSid(NULL, szUserName, &cchUserName);
-    ok(cchUserName == 1, "cchUserName: expected 0, got %lu\n", cchUserName);
-    ok(szUserName[1] == UNICODE_NULL, "szUserName: missing UNICODE_NULL, got \"%.*ls\"\n", (int)cchUserName, szUserName);
-    ok(wcsncmp(szUserName, szUserNameFromNull, 1) == 0, "szUserName: expected \"%.*ls\", got \"%.*ls\"\n", 1, szUserNameFromNull, (int)cchUserName, szUserName);
+    ok(cchUserName == 2, "cchUserName: expected 2, got %lu\n", cchUserName);
+    ok(szUserName[0] == UNICODE_NULL, "szUserName: missing UNICODE_NULL, got \"%.*ls\"\n", (int)cchUserName, szUserName);
 
     wmemset(szUserName, L'?', _countof(szUserName));
     cchUserName = cchUserNameFromNull;
     pCachedGetUserFromSid(NULL, szUserName, &cchUserName);
-    ok(cchUserName == cchUserNameFromNull - 1, "cchUserName: expected %lu, got %lu\n", cchUserNameFromNull - 1, cchUserName);
-    ok(szUserName[cchUserNameFromNull - 1] == UNICODE_NULL, "szUserName: missing UNICODE_NULL, got \"%.*ls\"\n", (int)cchUserName, szUserName);
-    ok(wcsncmp(szUserName, szUserNameFromNull, cchUserNameFromNull - 1) == 0, "szUserName: expected \"%.*ls\", got \"%.*ls\"\n", (int)cchUserNameFromNull - 1, szUserNameFromNull, (int)cchUserName, szUserName);
+    ok(cchUserName == cchUserNameFromNull - 2, "cchUserName: expected %lu, got %lu\n", cchUserNameFromNull - 2, cchUserName);
+    ok(szUserName[cchUserNameFromNull - 2] == UNICODE_NULL && szUserName[cchUserNameFromNull - 1] == UNICODE_NULL, "szUserName: missing UNICODE_NULL, got \"%.*ls\"\n", (int)cchUserName, szUserName);
+    ok(wcsncmp(szUserName, szUserNameFromNull, cchUserNameFromNull - 2) == 0, "szUserName: expected \"%.*ls\", got \"%.*ls\"\n", (int)cchUserNameFromNull - 2, szUserNameFromNull, (int)cchUserName, szUserName);
 
     wmemset(szUserName, L'?', _countof(szUserName));
     cchUserName = cchUserNameFromNull + 1;
     pCachedGetUserFromSid(NULL, szUserName, &cchUserName);
-    ok(cchUserName == cchUserNameFromNull, "cchUserName: expected %lu, got %lu\n", cchUserNameFromNull, cchUserName);
-    ok(wcscmp(szUserName, szUserNameFromNull) == 0, "szUserName: expected \"%ls\", got \"%.*ls\"\n", szUserNameFromNull, (int)cchUserName, szUserName);
+    ok(cchUserName == cchUserNameFromNull - 1, "cchUserName: expected %lu, got %lu\n", cchUserNameFromNull - 1, cchUserName);
+    ok(szUserName[cchUserNameFromNull - 1] == UNICODE_NULL && szUserName[cchUserNameFromNull] == UNICODE_NULL, "szUserName: missing UNICODE_NULL, got \"%.*ls\"\n", (int)cchUserName, szUserName);
+    ok(wcsncmp(szUserName, szUserNameFromNull, cchUserNameFromNull - 1) == 0, "szUserName: expected \"%.*ls\", got \"%.*ls\"\n", (int)cchUserNameFromNull - 1, szUserNameFromNull, (int)cchUserName, szUserName);
 }
 
 START_TEST(CachedGetUserFromSid)
