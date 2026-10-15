@@ -227,6 +227,20 @@ NTSTATUS RawIPSendDatagram(
         }
         if (AddrIsUnspecified(&LocalAddress)) LocalAddress = NCE->Interface->Unicast;
     }
+    else if (AddrFile->UnicastInterface)
+    {
+        PIP_INTERFACE Interface = GetMulticastInterface(AddrFile->UnicastInterface);
+
+        NCE = Interface ? RouteGetRouteOnInterface(&RemoteAddress, Interface) : NULL;
+        if (Interface)
+            IPDereferenceInterface(Interface);
+        if (!NCE)
+        {
+            UnlockObject(AddrFile);
+            return STATUS_INVALID_ADDRESS;
+        }
+        if (AddrIsUnspecified(&LocalAddress)) LocalAddress = NCE->Interface->Unicast;
+    }
     else if (AddrIsUnspecified(&LocalAddress))
     {
         /* If the local address is unspecified (0),

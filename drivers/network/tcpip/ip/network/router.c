@@ -316,7 +316,7 @@ static PNEIGHBOR_CACHE_ENTRY RouterRenewNeighbor(PNEIGHBOR_CACHE_ENTRY Removed)
     return NCE;
 }
 
-PNEIGHBOR_CACHE_ENTRY RouterGetRoute(PIP_ADDRESS Destination)
+static PNEIGHBOR_CACHE_ENTRY RouterFindRoute(PIP_ADDRESS Destination, PIP_INTERFACE Interface)
 /*
  * FUNCTION: Finds a router to use to get to Destination
  * ARGUMENTS:
@@ -359,6 +359,7 @@ PNEIGHBOR_CACHE_ENTRY RouterGetRoute(PIP_ADDRESS Destination)
 	 * inactive until its media connects again. */
 	if(Length >= MaskLength && (Length > BestLength || !BestNCE) &&
            ((!(State & NUD_STALE) && !(State & NUD_INCOMPLETE)) || !BestNCE) &&
+           (!Interface || NCE->Interface == Interface) &&
            IsInterfaceOperational(NCE->Interface)) {
 	    /* This seems to be a better router */
 	    BestNCE    = NCE;
@@ -384,6 +385,37 @@ PNEIGHBOR_CACHE_ENTRY RouterGetRoute(PIP_ADDRESS Destination)
     }
 
     return BestNCE;
+}
+
+PNEIGHBOR_CACHE_ENTRY RouterGetRoute(PIP_ADDRESS Destination)
+{
+    return RouterFindRoute(Destination, NULL);
+}
+
+PNEIGHBOR_CACHE_ENTRY RouteGetRouteOnInterface(PIP_ADDRESS Destination, PIP_INTERFACE Interface)
+{
+    PNEIGHBOR_CACHE_ENTRY NCE;
+
+    if (Destination->Type != IP_ADDRESS_V4)
+        return NULL;
+
+    if (Destination->Address.IPv4Address == 0xFFFFFFFF ||
+        AddrIsEqual(Destination, &Interface->Broadcast))
+    {
+        NCE = NBLocateNeighbor(Destination, Interface);
+        if (!NCE)
+            NCE = NBAddNeighbor(Interface, Destination, NULL,
+                                Interface->AddressLength, NUD_PERMANENT, 0);
+        return NCE;
+    }
+
+    if (!AddrIsUnspecified(&Interface->Unicast) &&
+        HasPrefix(Destination, &Interface->Unicast, AddrCountPrefixBits(&Interface->Netmask)))
+    {
+        return NBFindOrCreateNeighbor(Interface, Destination, FALSE);
+    }
+
+    return RouterFindRoute(Destination, Interface);
 }
 
 PNEIGHBOR_CACHE_ENTRY RouteGetMulticastRoute(PIP_ADDRESS Destination, ULONG Selector)

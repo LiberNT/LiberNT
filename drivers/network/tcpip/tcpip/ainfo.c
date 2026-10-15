@@ -33,6 +33,25 @@ TDI_STATUS SetAddressFileInfo(TDIObjectID *ID,
          return TDI_SUCCESS;
       }
 
+      case AO_OPTION_IP_UCASTIF:
+      {
+         ULONG Selector;
+         PIP_INTERFACE Interface;
+         if (BufferSize < sizeof(Selector)) return TDI_INVALID_PARAMETER;
+         RtlCopyMemory(&Selector, Buffer, sizeof(Selector));
+         if (Selector)
+         {
+             if (DN2H(Selector) >= 0x01000000) return TDI_INVALID_PARAMETER;
+             Interface = GetMulticastInterface(Selector);
+             if (!Interface) return TDI_INVALID_PARAMETER;
+             IPDereferenceInterface(Interface);
+         }
+         LockObject(AddrFile);
+         AddrFile->UnicastInterface = Selector;
+         UnlockObject(AddrFile);
+         return TDI_SUCCESS;
+      }
+
       case AO_OPTION_MCASTTTL:
          if (BufferSize < sizeof(UINT) || *(PUINT)Buffer > 255)
              return TDI_INVALID_PARAMETER;

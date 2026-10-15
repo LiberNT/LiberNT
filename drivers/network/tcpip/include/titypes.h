@@ -125,6 +125,7 @@ typedef struct _ADDRESS_FILE {
     UINT HeaderIncl;                      /* Include header in RawIP packets */
     ULONG MulticastInterface;             /* IPv4 address or network-order interface index */
     UCHAR MulticastTTL;
+    ULONG UnicastInterface;
     DATAGRAM_COMPLETION_ROUTINE Complete; /* Completion routine for delete request */
     PVOID Context;                        /* Delete request context */
     DATAGRAM_SEND_ROUTINE Send;           /* Routine to send a datagram */

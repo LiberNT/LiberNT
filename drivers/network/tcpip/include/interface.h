@@ -15,3 +15,4 @@ BOOLEAN IsInterfaceOperational(PIP_INTERFACE Interface);
 PIP_INTERFACE FindOnLinkInterface(PIP_ADDRESS Address);
 PIP_INTERFACE GetDefaultInterface(VOID);
 PIP_INTERFACE GetMulticastInterface(ULONG Selector);
+BOOLEAN HasPrefix(PIP_ADDRESS Address, PIP_ADDRESS Prefix, UINT Length);

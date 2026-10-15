@@ -194,6 +194,10 @@ GetTdiTypeId(
                 *TdiId = AO_OPTION_MCASTTTL;
                 return;
 
+             case IP_UNICAST_IF:
+                *TdiId = AO_OPTION_IP_UCASTIF;
+                return;
+
              case IP_DONTFRAGMENT:
                  *TdiId = AO_OPTION_IP_DONTFRAGMENT;
                  return;
@@ -254,6 +258,14 @@ WSHGetSocketInformation(
             return WSAEFAULT;
         memcpy(OptionValue, OptionName == IP_MULTICAST_IF ? &Context->MulticastInterface :
                                                          &Context->MulticastTTL, sizeof(ULONG));
+        *OptionLength = sizeof(ULONG);
+        return NO_ERROR;
+    }
+    if (Level == IPPROTO_IP && OptionName == IP_UNICAST_IF)
+    {
+        if (!OptionLength || !OptionValue || *OptionLength < sizeof(ULONG))
+            return WSAEFAULT;
+        memcpy(OptionValue, &Context->UnicastInterface, sizeof(ULONG));
         *OptionLength = sizeof(ULONG);
         return NO_ERROR;
     }
@@ -809,6 +821,7 @@ WSHSetSocketInformation(
     PTCP_REQUEST_SET_INFORMATION_EX Info;
     PQUEUED_REQUEST Queued, NextQueued;
     ULONG MulticastValue;
+    ULONG InterfaceIndex = 0;
 
     DPRINT("WSHSetSocketInformation\n");
 
@@ -865,6 +878,21 @@ WSHSetSocketInformation(
                     if (MulticastValue > 255)
                         return WSAEINVAL;
                     OptionValue = (PCHAR)&MulticastValue;
+                    OptionLength = sizeof(ULONG);
+                    break;
+
+                case IP_UNICAST_IF:
+                    if (!OptionValue || OptionLength < sizeof(ULONG))
+                        return WSAEFAULT;
+                    memcpy(&InterfaceIndex, OptionValue, sizeof(ULONG));
+                    if (ntohl(InterfaceIndex) >= 0x01000000)
+                        return WSAEADDRNOTAVAIL;
+                    Status = ValidateMulticastInterface(InterfaceIndex);
+                    if (Status == WSAEADDRNOTAVAIL)
+                        return WSAEINVAL;
+                    if (Status)
+                        return Status;
+                    OptionValue = (PCHAR)&InterfaceIndex;
                     OptionLength = sizeof(ULONG);
                     break;
 
@@ -978,6 +1006,8 @@ WSHSetSocketInformation(
             memcpy(&Context->MulticastInterface, OptionValue, sizeof(ULONG));
         if (Level == IPPROTO_IP && OptionName == IP_MULTICAST_TTL)
             memcpy(&Context->MulticastTTL, OptionValue, sizeof(ULONG));
+        if (Level == IPPROTO_IP && OptionName == IP_UNICAST_IF)
+            Context->UnicastInterface = ntohl(InterfaceIndex);
         return 0;
     }
 
@@ -986,6 +1016,8 @@ WSHSetSocketInformation(
         memcpy(&Context->MulticastInterface, OptionValue, sizeof(ULONG));
     if (!Status && Level == IPPROTO_IP && OptionName == IP_MULTICAST_TTL)
         memcpy(&Context->MulticastTTL, OptionValue, sizeof(ULONG));
+    if (!Status && Level == IPPROTO_IP && OptionName == IP_UNICAST_IF)
+        Context->UnicastInterface = ntohl(InterfaceIndex);
 
     HeapFree(GetProcessHeap(), 0, Info);
 
