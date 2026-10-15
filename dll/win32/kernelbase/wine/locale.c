@@ -5886,6 +5886,9 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetFileMUIInfo( DWORD flags, const WCHAR *path,
                                               FILEMUIINFO *info, DWORD *size )
 {
     DWORD off, mui_size, type = MUI_FILETYPE_NOT_LANGUAGE_NEUTRAL;
+#ifdef __REACTOS__
+    DWORD query_size;
+#endif
     struct mui_resource *mui = NULL;
     HMODULE hmod;
     HRSRC hrsrc;
@@ -5949,6 +5952,9 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetFileMUIInfo( DWORD flags, const WCHAR *path,
         off += type == MUI_FILETYPE_LANGUAGE_NEUTRAL_MAIN ?
             mui->fallback_lang_size : mui->lang_size;
     }
+#ifdef __REACTOS__
+    query_size = max( off, sizeof(*info) );
+#endif
     if (flags & MUI_QUERY_RESOURCE_TYPES)
     {
         if (type == MUI_FILETYPE_LANGUAGE_NEUTRAL_MAIN)
@@ -5960,7 +5966,11 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetFileMUIInfo( DWORD flags, const WCHAR *path,
     if (!info || info->dwSize < off)
     {
         FreeLibrary( hmod );
+#ifdef __REACTOS__
+        *size = info ? off : query_size;
+#else
         *size = off;
+#endif
         SetLastError( ERROR_INSUFFICIENT_BUFFER );
         return FALSE;
     }
