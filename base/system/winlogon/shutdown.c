@@ -348,7 +348,7 @@ StartSystemShutdown(
         return ERROR_INVALID_PARAMETER;
 
     if (_InterlockedCompareExchange8((volatile char*)&g_ShutdownParams.bShuttingDown, TRUE, FALSE) == TRUE)
-        return ERROR_SHUTDOWN_IN_PROGRESS;
+        return g_ShutdownParams.dwTimeout ? ERROR_SHUTDOWN_IS_SCHEDULED : ERROR_SHUTDOWN_IN_PROGRESS;
 
     if ((dwTimeout != 0) && pMessage && pMessage->Length && pMessage->Buffer)
     {

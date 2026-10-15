@@ -403,6 +403,42 @@ BaseRegUnLoadKey(
 }
 
 
+static
+DWORD
+CheckClientShutdownPrivilege(VOID)
+{
+    PRIVILEGE_SET PrivilegeSet;
+    HANDLE hToken;
+    BOOL bHeld = FALSE;
+    DWORD dwError;
+
+    dwError = RpcImpersonateClient(NULL);
+    if (dwError != RPC_S_OK)
+        return dwError;
+
+    if (!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &hToken))
+    {
+        dwError = GetLastError();
+        RpcRevertToSelf();
+        return dwError;
+    }
+    RpcRevertToSelf();
+
+    PrivilegeSet.PrivilegeCount = 1;
+    PrivilegeSet.Control = PRIVILEGE_SET_ALL_NECESSARY;
+    PrivilegeSet.Privilege[0].Attributes = 0;
+
+    if (!LookupPrivilegeValueW(NULL, L"SeShutdownPrivilege", &PrivilegeSet.Privilege[0].Luid) ||
+        !PrivilegeCheck(hToken, &PrivilegeSet, &bHeld))
+    {
+        bHeld = FALSE;
+    }
+    CloseHandle(hToken);
+
+    return bHeld ? ERROR_SUCCESS : ERROR_ACCESS_DENIED;
+}
+
+
 /* Function 24 */
 ULONG
 __stdcall
@@ -429,9 +465,13 @@ __stdcall
 BaseAbortSystemShutdown(
     PREGISTRY_SERVER_NAME ServerName)
 {
+    DWORD dwError;
+
     TRACE("BaseAbortSystemShutdown()\n");
 
-    //FIXME: Verify that the caller actually has the correct privileges
+    dwError = CheckClientShutdownPrivilege();
+    if (dwError != ERROR_SUCCESS)
+        return dwError;
 
     return TerminateSystemShutdown();
 }
@@ -499,6 +539,8 @@ BaseInitiateSystemShutdownEx(
     BOOLEAN bRebootAfterShutdown,
     ULONG dwReason)
 {
+    DWORD dwError;
+
     TRACE("BaseInitiateSystemShutdownEx()\n");
     TRACE("  Message: %wZ\n", lpMessage);
     TRACE("  Timeout: %lu\n", dwTimeout);
@@ -506,7 +548,9 @@ BaseInitiateSystemShutdownEx(
     TRACE("  Reboot: %d\n", bRebootAfterShutdown);
     TRACE("  Reason: %lu\n", dwReason);
 
-    //FIXME: Verify that the caller actually has the correct privileges
+    dwError = CheckClientShutdownPrivilege();
+    if (dwError != ERROR_SUCCESS)
+        return dwError;
 
     return StartSystemShutdown((PUNICODE_STRING)lpMessage,
                                dwTimeout,
