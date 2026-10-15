@@ -16,7 +16,7 @@ SIZE_T MmHeapSegmentReserve = 1 * _1MB;
 SIZE_T MmHeapSegmentCommit = 2 * PAGE_SIZE;
 SIZE_T MmHeapDeCommitTotalFreeThreshold = 64 * _1KB;
 SIZE_T MmHeapDeCommitFreeBlockThreshold = PAGE_SIZE;
-ULONG MmCritsectTimeoutSeconds = 150;
+ULONG MmCritsectTimeoutSeconds = 2592000;
 LARGE_INTEGER MmCriticalSectionTimeout;
 
 static ULONG MiRotatingUniprocessorNumber;
