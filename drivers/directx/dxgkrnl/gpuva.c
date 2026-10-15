@@ -3033,7 +3033,8 @@ GpuVaRewriteSpanPtes(
 
         if (Range->State == GpuVaStateMapped)
         {
-            if (Range->Binding != NULL && Range->Binding->BackingAllocation != NULL && Range->Binding->BackingAllocation->SystemMemory != NULL)
+            if (Range->Binding != NULL && Range->Binding->BackingAllocation != NULL &&
+                (Range->Binding->BackingAllocation->SystemMemory != NULL || Range->Binding->BackingAllocation->Resident))
                 Status = GpuVaWritePteSpan(Process, Cursor, OverlapSize, Range->Binding->BackingAllocation, Range->AllocationOffset + (Cursor - Range->GpuVirtualAddress), Range->Protection);
             else
                 Status = STATUS_NOT_SUPPORTED;
