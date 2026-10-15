@@ -218,9 +218,15 @@ NTSTATUS
 SampShutdownDisplayCache(VOID);
 
 NTSTATUS
-SampFillDisplayCache(
+SampQueryDisplayInformation(
     _In_ PSAM_DB_OBJECT DomainObject,
-    _In_ DOMAIN_DISPLAY_INFORMATION DisplayInformationClass);
+    _In_ DOMAIN_DISPLAY_INFORMATION DisplayInformationClass,
+    _In_ ULONG Index,
+    _In_ ULONG EntryCount,
+    _In_ ULONG PreferredMaximumLength,
+    _Out_ PULONG TotalAvailable,
+    _Out_ PULONG TotalReturned,
+    _Out_ PSAMPR_DISPLAY_INFO_BUFFER Buffer);
 
 
 /* domain.c */

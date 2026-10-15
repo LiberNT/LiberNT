@@ -9289,7 +9289,7 @@ SamrQueryDisplayInformation3(IN SAMPR_HANDLE DomainHandle,
     PSAM_DB_OBJECT DomainObject;
     NTSTATUS Status;
 
-    FIXME("SamrQueryDisplayInformation3(%p %lu %lu %lu %lu %p %p %p)\n",
+    TRACE("SamrQueryDisplayInformation3(%p %lu %lu %lu %lu %p %p %p)\n",
           DomainHandle, DisplayInformationClass, Index,
           EntryCount, PreferredMaximumLength, TotalAvailable,
           TotalReturned, Buffer);
@@ -9308,21 +9308,21 @@ SamrQueryDisplayInformation3(IN SAMPR_HANDLE DomainHandle,
         goto done;
     }
 
-    Status = SampFillDisplayCache(DomainObject,
-                                  DisplayInformationClass);
-    if (!NT_SUCCESS(Status))
-    {
-        ERR("SampFillDisplayCache() failed (Status 0x%08lx)\n", Status);
-        goto done;
-    }
+    Status = SampQueryDisplayInformation(DomainObject,
+                                         DisplayInformationClass,
+                                         Index,
+                                         EntryCount,
+                                         PreferredMaximumLength,
+                                         TotalAvailable,
+                                         TotalReturned,
+                                         Buffer);
 
 done:
     TRACE("returns with status 0x%08lx\n", Status);
 
     RtlReleaseResource(&SampResource);
 
-//    return Status;
-    return STATUS_NOT_IMPLEMENTED;
+    return Status;
 }
 
 
