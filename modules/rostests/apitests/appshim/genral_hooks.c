@@ -28,6 +28,7 @@ typedef struct expect_shim_data
     const WCHAR* ShimName;
     DWORD MinVersion;
     expect_shim_hook hooks[4];
+    DWORD AbsentFromBuild;
 } expect_shim_data;
 
 
@@ -38,7 +39,8 @@ static expect_shim_data data[] =
         _WIN32_WINNT_WIN8,
         {
             { "KERNEL32.DLL", "CreateProcessW" },
-        }
+        },
+        26100
     },
     {
         L"AddProcessParametersFlags",
@@ -95,6 +97,12 @@ START_TEST(genral_hooks)
         DWORD num_shims = 0, expected_shims = count_shims(current);
 
         PHOOKAPI hook = pGetHookAPIs("", current->ShimName, &num_shims);
+
+        if (current->AbsentFromBuild && rtlinfo.dwBuildNumber >= current->AbsentFromBuild)
+        {
+            ok(!hook, "Unexpected shim %s\n", wine_dbgstr_w(current->ShimName));
+            continue;
+        }
 
         if (current->MinVersion > g_WinVersion && !hook)
         {

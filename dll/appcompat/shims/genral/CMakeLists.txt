@@ -4,6 +4,7 @@ include_directories(${SHIMLIB_DIR})
 spec2def(acgenral.dll genral.spec)
 
 list(APPEND SOURCE
+    addprocessparametersflags.c
     ignoredbgout.c
     ignorefreelib.c
     ignoreloadlibrary.c
