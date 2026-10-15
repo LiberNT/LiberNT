@@ -340,7 +340,15 @@ VOID KillSelectsForFCB( PAFD_DEVICE_EXTENSION DeviceExt,
                                     HandleArray[i].Handle, FileObject));
             if( (PVOID)HandleArray[i].Handle == FileObject &&
                 (!OnlyExclusive || (OnlyExclusive && Poll->Exclusive)) ) {
-                SignalSocket(Poll, NULL, PollReq, STATUS_CANCELLED, FALSE);
+                if (OnlyExclusive)
+                {
+                    SignalSocket(Poll, NULL, PollReq, STATUS_CANCELLED, FALSE);
+                }
+                else
+                {
+                    PollReq->Handles[i].Status |= AFD_EVENT_CLOSE;
+                    SignalSocket(Poll, NULL, PollReq, STATUS_SUCCESS, FALSE);
+                }
                 break;
             }
         }

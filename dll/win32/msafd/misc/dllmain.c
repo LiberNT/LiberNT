@@ -1235,8 +1235,7 @@ WSPSelect(IN int nfds,
     }
     else
     {
-        Timeout = RtlEnlargedIntegerMultiply
-            ((timeout->tv_sec * 1000) + (timeout->tv_usec / 1000), -10000);
+        Timeout.QuadPart = -(((LONGLONG)timeout->tv_sec * 10000000) + ((LONGLONG)timeout->tv_usec * 10));
         /* Negative timeouts are illegal.  Since the kernel represents an
          * incremental timeout as a negative number, we check for a positive
          * result.
@@ -1429,17 +1428,25 @@ WSPSelect(IN int nfds,
     {
         Events = PollInfo->Handles[i].Events;
         Handle = PollInfo->Handles[i].Handle;
+        if (!Events)
+            continue;
+        Socket = GetSocketStructure(Handle);
+        if (!Socket)
+        {
+            if (Events & AFD_EVENT_CLOSE)
+            {
+                if (readfds)
+                    FD_SET(Handle, readfds);
+                continue;
+            }
+            TRACE("Invalid socket handle found %d\n", Handle);
+            if (lpErrno) *lpErrno = WSAENOTSOCK;
+            HeapFree(GlobalHeap, 0, PollBuffer);
+            NtClose(SockEvent);
+            return SOCKET_ERROR;
+        }
         for(x = 1; x; x<<=1)
         {
-            Socket = GetSocketStructure(Handle);
-            if (!Socket)
-            {
-                TRACE("Invalid socket handle found %d\n", Handle);
-                if (lpErrno) *lpErrno = WSAENOTSOCK;
-                HeapFree(GlobalHeap, 0, PollBuffer);
-                NtClose(SockEvent);
-                return SOCKET_ERROR;
-            }
             switch (Events & x)
             {
                 case AFD_EVENT_RECEIVE:

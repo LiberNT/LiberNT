@@ -9,6 +9,11 @@
 /* INCLUDES ******************************************************************/
 
 #include <ws2_32.h>
+#include <ndk/exfuncs.h>
+#include <ndk/iofuncs.h>
+#include <ndk/obfuncs.h>
+#include <tdi.h>
+#include <afd/shared.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -222,15 +227,15 @@ WSAPoll(IN OUT LPWSAPOLLFD fdArray,
         IN ULONG fds,
         IN INT timeout)
 {
-    struct timeval TimeValue;
-    struct timeval *TimeOut;
-    LPFD_SET ReadSet = NULL;
-    LPFD_SET WriteSet = NULL;
-    LPFD_SET ExceptSet = NULL;
-    SIZE_T SetSize;
-    ULONG Index;
-    ULONG Valid = 0;
-    INT Status;
+    PAFD_POLL_INFO PollInfo;
+    IO_STATUS_BLOCK IoStatusBlock;
+    PWSSOCKET Socket;
+    SOCKET PollSocket = 0;
+    HANDLE Event;
+    NTSTATUS Status;
+    SIZE_T PollSize;
+    ULONG Index, Entry, Events;
+    SHORT Revents;
     INT Result = 0;
     INT ErrorCode;
 
@@ -241,103 +246,127 @@ WSAPoll(IN OUT LPWSAPOLLFD fdArray,
         return SOCKET_ERROR;
     }
 
-    if (fdArray == NULL || fds == 0)
+    if (fds == 0)
     {
         SetLastError(WSAEINVAL);
         return SOCKET_ERROR;
     }
-
-    SetSize = FIELD_OFFSET(FD_SET, fd_array) + (SIZE_T)fds * sizeof(SOCKET);
-    ReadSet = HeapAlloc(WsSockHeap, HEAP_ZERO_MEMORY, SetSize);
-    WriteSet = HeapAlloc(WsSockHeap, HEAP_ZERO_MEMORY, SetSize);
-    ExceptSet = HeapAlloc(WsSockHeap, HEAP_ZERO_MEMORY, SetSize);
-
-    if (ReadSet == NULL || WriteSet == NULL || ExceptSet == NULL)
+    if (fdArray == NULL)
     {
-        if (ReadSet) HeapFree(WsSockHeap, 0, ReadSet);
-        if (WriteSet) HeapFree(WsSockHeap, 0, WriteSet);
-        if (ExceptSet) HeapFree(WsSockHeap, 0, ExceptSet);
+        SetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+
+    PollSize = FIELD_OFFSET(AFD_POLL_INFO, Handles) + (SIZE_T)fds * sizeof(AFD_HANDLE);
+    PollInfo = HeapAlloc(WsSockHeap, HEAP_ZERO_MEMORY, PollSize);
+    if (PollInfo == NULL)
+    {
         SetLastError(WSAENOBUFS);
         return SOCKET_ERROR;
     }
 
-    for (Index = 0; Index < fds; Index++)
-    {
-        fdArray[Index].revents = 0;
-
-        if (fdArray[Index].fd == INVALID_SOCKET)
-            continue;
-
-        Valid++;
-
-        if (fdArray[Index].events & (POLLRDNORM | POLLRDBAND))
-            ReadSet->fd_array[ReadSet->fd_count++] = fdArray[Index].fd;
-
-        if (fdArray[Index].events & POLLWRNORM)
-            WriteSet->fd_array[WriteSet->fd_count++] = fdArray[Index].fd;
-
-        ExceptSet->fd_array[ExceptSet->fd_count++] = fdArray[Index].fd;
-    }
-
-    if (Valid == 0)
-    {
-        HeapFree(WsSockHeap, 0, ReadSet);
-        HeapFree(WsSockHeap, 0, WriteSet);
-        HeapFree(WsSockHeap, 0, ExceptSet);
-        SetLastError(WSAEINVAL);
-        return SOCKET_ERROR;
-    }
-
-    if (timeout < 0)
-    {
-        TimeOut = NULL;
-    }
+    if (timeout >= 0)
+        PollInfo->Timeout.QuadPart = (LONGLONG)timeout * -10000;
     else
-    {
-        TimeValue.tv_sec = timeout / 1000;
-        TimeValue.tv_usec = (timeout % 1000) * 1000;
-        TimeOut = &TimeValue;
-    }
-
-    Status = select(0,
-                    ReadSet->fd_count ? ReadSet : NULL,
-                    WriteSet->fd_count ? WriteSet : NULL,
-                    ExceptSet->fd_count ? ExceptSet : NULL,
-                    TimeOut);
-
-    if (Status == SOCKET_ERROR)
-    {
-        HeapFree(WsSockHeap, 0, ReadSet);
-        HeapFree(WsSockHeap, 0, WriteSet);
-        HeapFree(WsSockHeap, 0, ExceptSet);
-        return SOCKET_ERROR;
-    }
+        PollInfo->Timeout.QuadPart = MAXLONGLONG;
 
     for (Index = 0; Index < fds; Index++)
     {
-        SHORT Events = 0;
-
-        if (fdArray[Index].fd == INVALID_SOCKET)
+        Socket = WsSockGetSocket(fdArray[Index].fd);
+        if (Socket == NULL)
+        {
+            fdArray[Index].revents = POLLNVAL;
             continue;
+        }
+        WsSockDereference(Socket);
 
-        if (ReadSet->fd_count && __WSAFDIsSet(fdArray[Index].fd, ReadSet))
-            Events |= (fdArray[Index].events & (POLLRDNORM | POLLRDBAND));
+        Events = AFD_EVENT_DISCONNECT | AFD_EVENT_ABORT | AFD_EVENT_CONNECT_FAIL;
+        if (fdArray[Index].events & POLLRDNORM)
+            Events |= AFD_EVENT_ACCEPT | AFD_EVENT_RECEIVE;
+        if (fdArray[Index].events & POLLRDBAND)
+            Events |= AFD_EVENT_OOB_RECEIVE;
+        if (fdArray[Index].events & POLLWRNORM)
+            Events |= AFD_EVENT_SEND;
 
-        if (WriteSet->fd_count && __WSAFDIsSet(fdArray[Index].fd, WriteSet))
-            Events |= (fdArray[Index].events & POLLWRNORM);
-
-        if (ExceptSet->fd_count && __WSAFDIsSet(fdArray[Index].fd, ExceptSet))
-            Events |= POLLERR;
-
-        fdArray[Index].revents = Events;
-
-        if (Events != 0)
-            Result++;
+        PollSocket = fdArray[Index].fd;
+        PollInfo->Handles[PollInfo->HandleCount].Handle = fdArray[Index].fd;
+        PollInfo->Handles[PollInfo->HandleCount].Events = Events;
+        PollInfo->HandleCount++;
+        fdArray[Index].revents = 0;
     }
 
-    HeapFree(WsSockHeap, 0, ReadSet);
-    HeapFree(WsSockHeap, 0, WriteSet);
-    HeapFree(WsSockHeap, 0, ExceptSet);
+    if (PollInfo->HandleCount == 0)
+    {
+        HeapFree(WsSockHeap, 0, PollInfo);
+        SetLastError(WSAENOTSOCK);
+        return SOCKET_ERROR;
+    }
+
+    Status = NtCreateEvent(&Event, EVENT_ALL_ACCESS, NULL, SynchronizationEvent, FALSE);
+    if (!NT_SUCCESS(Status))
+    {
+        HeapFree(WsSockHeap, 0, PollInfo);
+        SetLastError(WSAENOBUFS);
+        return SOCKET_ERROR;
+    }
+
+    PollSize = FIELD_OFFSET(AFD_POLL_INFO, Handles) + PollInfo->HandleCount * sizeof(AFD_HANDLE);
+    Status = NtDeviceIoControlFile((HANDLE)PollSocket,
+                                   Event,
+                                   NULL,
+                                   NULL,
+                                   &IoStatusBlock,
+                                   IOCTL_AFD_SELECT,
+                                   PollInfo,
+                                   (ULONG)PollSize,
+                                   PollInfo,
+                                   (ULONG)PollSize);
+    if (Status == STATUS_PENDING)
+    {
+        while (WaitForSingleObjectEx(Event, INFINITE, TRUE) == WAIT_IO_COMPLETION);
+        Status = IoStatusBlock.Status;
+    }
+    NtClose(Event);
+
+    if (Status == STATUS_SUCCESS)
+    {
+        for (Index = 0; Index < fds; Index++)
+        {
+            for (Entry = 0; Entry < PollInfo->HandleCount; Entry++)
+            {
+                if (PollInfo->Handles[Entry].Handle != fdArray[Index].fd)
+                    continue;
+
+                Events = PollInfo->Handles[Entry].Events;
+                Revents = 0;
+                if (Events & (AFD_EVENT_ACCEPT | AFD_EVENT_RECEIVE))
+                    Revents |= POLLRDNORM;
+                if (Events & AFD_EVENT_OOB_RECEIVE)
+                    Revents |= POLLRDBAND;
+                if (Events & AFD_EVENT_SEND)
+                    Revents |= POLLWRNORM;
+                if (Events & (AFD_EVENT_ABORT | AFD_EVENT_DISCONNECT))
+                    Revents |= POLLHUP;
+                if (Events & (AFD_EVENT_ABORT | AFD_EVENT_CONNECT_FAIL))
+                    Revents |= POLLERR;
+                if (Events & AFD_EVENT_CLOSE)
+                    Revents |= POLLNVAL;
+
+                fdArray[Index].revents = Revents & (fdArray[Index].events | POLLHUP | POLLERR | POLLNVAL);
+                if (fdArray[Index].revents)
+                    Result++;
+                break;
+            }
+        }
+    }
+
+    HeapFree(WsSockHeap, 0, PollInfo);
+
+    if (Status != STATUS_SUCCESS && Status != STATUS_TIMEOUT)
+    {
+        SetLastError(Status == STATUS_CANCELLED ? WSA_OPERATION_ABORTED : WSAENOTSOCK);
+        return SOCKET_ERROR;
+    }
 
     return Result;
 }
