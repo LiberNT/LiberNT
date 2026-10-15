@@ -22,12 +22,18 @@
 #include <winerror.h>
 #include <d3d12.h>
 #include <dxgi.h>
-#include <vkd3d_utils.h>
+#include <vkd3d.h>
 
 #ifdef REACTOS_D3D12_NATIVE_UMD
 HRESULT d3d12_native_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_level, REFIID iid,
         void **device);
 #endif
+
+static HRESULT
+d3d12_signal_event(HANDLE event)
+{
+    return SetEvent(event) ? S_OK : E_FAIL;
+}
 
 static HRESULT
 d3d12_get_adapter_luid(IUnknown *adapter, LUID *luid)
@@ -94,7 +100,7 @@ d3d12_create_vkd3d_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_l
     memset(&instance_create_info, 0, sizeof(instance_create_info));
     instance_create_info.type = VKD3D_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instance_create_info.next = &optional_instance_extensions_info;
-    instance_create_info.pfn_signal_event = vkd3d_signal_event;
+    instance_create_info.pfn_signal_event = d3d12_signal_event;
     instance_create_info.wchar_size = sizeof(WCHAR);
 
     memset(&optional_device_extensions_info, 0, sizeof(optional_device_extensions_info));
@@ -122,6 +128,41 @@ d3d12_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_level, 
         return hr;
 #endif
     return d3d12_create_vkd3d_device(adapter, minimum_feature_level, iid, device);
+}
+
+HRESULT WINAPI
+D3D12GetDebugInterface(REFIID iid, void **debug)
+{
+    UNREFERENCED_PARAMETER(iid);
+    UNREFERENCED_PARAMETER(debug);
+
+    return DXGI_ERROR_SDK_COMPONENT_MISSING;
+}
+
+HRESULT WINAPI
+D3D12CreateRootSignatureDeserializer(const void *data, SIZE_T data_size, REFIID iid, void **deserializer)
+{
+    return vkd3d_create_root_signature_deserializer(data, data_size, iid, deserializer);
+}
+
+HRESULT WINAPI
+D3D12CreateVersionedRootSignatureDeserializer(const void *data, SIZE_T data_size, REFIID iid, void **deserializer)
+{
+    return vkd3d_create_versioned_root_signature_deserializer(data, data_size, iid, deserializer);
+}
+
+HRESULT WINAPI
+D3D12SerializeRootSignature(const D3D12_ROOT_SIGNATURE_DESC *root_signature_desc, D3D_ROOT_SIGNATURE_VERSION version,
+                            ID3DBlob **blob, ID3DBlob **error_blob)
+{
+    return vkd3d_serialize_root_signature(root_signature_desc, version, blob, error_blob);
+}
+
+HRESULT WINAPI
+D3D12SerializeVersionedRootSignature(const D3D12_VERSIONED_ROOT_SIGNATURE_DESC *desc, ID3DBlob **blob,
+                                     ID3DBlob **error_blob)
+{
+    return vkd3d_serialize_versioned_root_signature(desc, blob, error_blob);
 }
 
 HRESULT WINAPI
