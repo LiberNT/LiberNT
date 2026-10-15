@@ -90,6 +90,7 @@
 @ stdcall DeleteIpForwardEntry2(ptr)
 @ stdcall DeleteUnicastIpAddressEntry(ptr)
 @ stdcall FreeMibTable(ptr)
+@ stdcall GetBestRoute2(ptr long ptr ptr long ptr ptr)
 @ stdcall GetIfEntry2(ptr)
 @ stdcall GetIfTable2(ptr)
 @ stdcall GetIpForwardTable2(long ptr)
