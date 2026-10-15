@@ -35,6 +35,9 @@ typedef struct IWSDUdpAddressImpl {
     WCHAR            ipv6Address[64];
     WORD             port;
     WSDUdpMessageType messageType;
+#ifdef __REACTOS__
+    WORD             transportPort;
+#endif
 } IWSDUdpAddressImpl;
 
 static inline IWSDUdpAddressImpl *impl_from_IWSDUdpAddress(IWSDUdpAddress *iface)
@@ -168,6 +171,10 @@ static HRESULT WINAPI IWSDUdpAddressImpl_GetTransportAddressEx(IWSDUdpAddress *T
 
             if (!fSafe)
                 ((SOCKADDR_IN6 *) &storage)->sin6_scope_id = 0;
+#ifdef __REACTOS__
+            if (!((SOCKADDR_IN6 *) &storage)->sin6_port && impl->transportPort)
+                ((SOCKADDR_IN6 *) &storage)->sin6_port = htons(impl->transportPort);
+#endif
 
             if (WSAAddressToStringW((LPSOCKADDR) &storage, sizeof(SOCKADDR_IN6), NULL, impl->ipv6Address, &size) == 0)
             {
@@ -195,6 +202,9 @@ static HRESULT WINAPI IWSDUdpAddressImpl_SetTransportAddress(IWSDUdpAddress *Thi
     ADDRINFOW *addrInfo = NULL;
     ADDRINFOW hints;
     int ret;
+#ifdef __REACTOS__
+    WORD transportPort = 0;
+#endif
 
     TRACE("(%p, %s)\n", impl, debugstr_w(pszAddress));
 
@@ -210,6 +220,16 @@ static HRESULT WINAPI IWSDUdpAddressImpl_SetTransportAddress(IWSDUdpAddress *Thi
     {
         ZeroMemory(&impl->sockAddr, sizeof(SOCKADDR_STORAGE));
         memcpy(&impl->sockAddr, addrInfo->ai_addr, addrInfo->ai_addrlen);
+#ifdef __REACTOS__
+        if (pszAddress[0] == '[' && ((SOCKADDR_IN6 *) &impl->sockAddr)->sin6_family == AF_INET6)
+        {
+            const WCHAR *end = wcschr(pszAddress, ']');
+
+            if (end && end[1] == ':')
+                transportPort = (WORD) wcstoul(end + 2, NULL, 10);
+        }
+        impl->transportPort = transportPort;
+#endif
     }
 
     if (addrInfo != NULL)
@@ -230,6 +250,9 @@ static HRESULT WINAPI IWSDUdpAddressImpl_SetSockaddr(IWSDUdpAddress *This, const
     }
 
     memcpy(&impl->sockAddr, pSockAddr, sizeof(SOCKADDR_STORAGE));
+#ifdef __REACTOS__
+    impl->transportPort = 0;
+#endif
     return S_OK;
 }
 
