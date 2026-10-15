@@ -9,6 +9,7 @@ list(APPEND SOURCE
     renderpass.cpp
     shaders.cpp
     util.cpp
+    versions.cpp
     testlist.c)
 
 add_executable(d3d12_apitest ${SOURCE})
