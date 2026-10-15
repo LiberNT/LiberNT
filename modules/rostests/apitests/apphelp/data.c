@@ -42,11 +42,11 @@ static IMAGE_NT_HEADERS32 nt_header =
         0x12345, /* TimeDateStamp */
         0, /* PointerToSymbolTable */
         0, /* NumberOfSymbols */
-        sizeof(IMAGE_OPTIONAL_HEADER), /* SizeOfOptionalHeader */
+        sizeof(IMAGE_OPTIONAL_HEADER32), /* SizeOfOptionalHeader */
         IMAGE_FILE_RELOCS_STRIPPED | IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LINE_NUMS_STRIPPED | IMAGE_FILE_32BIT_MACHINE /* Characteristics */
     },
     {
-        IMAGE_NT_OPTIONAL_HDR_MAGIC, /* Magic */
+        IMAGE_NT_OPTIONAL_HDR32_MAGIC, /* Magic */
         6, /* MajorLinkerVersion */
         3, /* MinorLinkerVersion */
         0, /* SizeOfCode */

@@ -973,7 +973,7 @@ static void test_ApplicationAttributes(void)
             g_AttrInfoSize = 43;
             break;
         case WINVER_WIN10:
-            g_AttrInfoSize = 38;
+            g_AttrInfoSize = NtCurrentPeb()->OSBuildNumber >= 26100 ? 41 : 38;
             break;
         default: 
             ok(0, "Unknown attrinfo size: %lu\n", num);
