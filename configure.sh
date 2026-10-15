@@ -266,7 +266,7 @@ kdb_zydis_enabled() {
 			;;
 	esac
 
-	[ "$BUILD_TYPE" = "Debug" ] || [ "$(rosconfig_cache_get DBG)" = "y" ]
+	return 0
 }
 
 verify_kdb_sources() {

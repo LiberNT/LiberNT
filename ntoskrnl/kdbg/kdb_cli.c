@@ -137,12 +137,12 @@ BOOLEAN ExpKdbgExtFileCache(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtDefWrites(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtHandle(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtPte(ULONG Argc, PCHAR Argv[]);
-BOOLEAN MmKdbIsSessionLeader(PEPROCESS Snapshot);
 BOOLEAN ExpKdbgExtPfn(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtVad(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtAddress(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtVm(ULONG Argc, PCHAR Argv[]);
 #endif
+BOOLEAN MmKdbIsSessionLeader(PEPROCESS Snapshot);
 
 extern char __ImageBase;
 
