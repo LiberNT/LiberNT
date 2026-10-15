@@ -62,8 +62,7 @@ MmBuildMdlForNonPagedPool(
     ULONG i;
 
     ASSERT(Mdl->ByteCount != 0);
-    ASSERT((Mdl->MdlFlags & (MDL_PAGES_LOCKED | MDL_MAPPED_TO_SYSTEM_VA | MDL_SOURCE_IS_NONPAGED_POOL |
-                             MDL_PARTIAL)) == 0);
+    ASSERT((Mdl->MdlFlags & (MDL_PAGES_LOCKED | MDL_MAPPED_TO_SYSTEM_VA | MDL_PARTIAL)) == 0);
 
     for (i = 0; i < Count; i++)
     {
@@ -79,6 +78,7 @@ MmBuildMdlForNonPagedPool(
 
     Mdl->Process = NULL;
     Mdl->MappedSystemVa = (PVOID)((PUCHAR)Mdl->StartVa + Mdl->ByteOffset);
+    Mdl->MdlFlags &= ~MDL_IO_SPACE;
     Mdl->MdlFlags |= MDL_SOURCE_IS_NONPAGED_POOL;
 
     if (IoSpace)
