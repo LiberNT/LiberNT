@@ -1374,7 +1374,7 @@ static HRESULT d3d12_root_signature_init_root_descriptors(struct d3d12_root_sign
 }
 
 static HRESULT d3d12_root_signature_init_static_samplers(struct d3d12_root_signature *root_signature,
-        struct d3d12_device *device, const D3D12_ROOT_SIGNATURE_DESC *desc,
+        struct d3d12_device *device, const D3D12_ROOT_SIGNATURE_DESC *desc, const D3D12_SAMPLER_FLAGS *sampler_flags,
         struct vkd3d_descriptor_set_context *context)
 {
     struct vk_binding_array *array;
@@ -1394,7 +1394,8 @@ static HRESULT d3d12_root_signature_init_static_samplers(struct d3d12_root_signa
     {
         const D3D12_STATIC_SAMPLER_DESC *s = &desc->pStaticSamplers[i];
 
-        if (FAILED(hr = vkd3d_create_static_sampler(device, s, &root_signature->static_samplers[i])))
+        if (FAILED(hr = vkd3d_create_static_sampler(device, s, sampler_flags ? sampler_flags[i] : 0,
+                &root_signature->static_samplers[i])))
             return hr;
 
         if (FAILED(hr = d3d12_root_signature_append_vk_binding(root_signature, array,
@@ -1615,7 +1616,7 @@ static unsigned int d3d12_root_signature_copy_descriptor_set_layouts(const struc
 }
 
 static HRESULT d3d12_root_signature_init(struct d3d12_root_signature *root_signature,
-        struct d3d12_device *device, const D3D12_ROOT_SIGNATURE_DESC *desc)
+        struct d3d12_device *device, const D3D12_ROOT_SIGNATURE_DESC *desc, const D3D12_SAMPLER_FLAGS *sampler_flags)
 {
     VkDescriptorSetLayout vk_layouts[VKD3D_MAX_DESCRIPTOR_SETS];
     const struct vkd3d_vulkan_info *vk_info = &device->vk_info;
@@ -1699,7 +1700,7 @@ static HRESULT d3d12_root_signature_init(struct d3d12_root_signature *root_signa
         goto fail;
 
     context.static_samplers = true;
-    if (FAILED(hr = d3d12_root_signature_init_static_samplers(root_signature, device, desc, &context)))
+    if (FAILED(hr = d3d12_root_signature_init_static_samplers(root_signature, device, desc, sampler_flags, &context)))
         goto fail;
     context.static_samplers = false;
 
@@ -1741,25 +1742,57 @@ HRESULT d3d12_root_signature_create(struct d3d12_device *device,
     {
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC d3d12;
         struct vkd3d_shader_versioned_root_signature_desc vkd3d;
-    } root_signature_desc;
+    } root_signature_desc, original_desc;
+    D3D12_SAMPLER_FLAGS *sampler_flags = NULL;
     struct d3d12_root_signature *object;
+    unsigned int i;
     HRESULT hr;
     int ret;
 
-    if ((ret = vkd3d_parse_root_signature_v_1_0(&dxbc, &root_signature_desc.vkd3d)) < 0)
+    if ((ret = vkd3d_shader_parse_root_signature(&dxbc, &original_desc.vkd3d, NULL)) < 0)
     {
         WARN("Failed to parse root signature, vkd3d result %d.\n", ret);
         return hresult_from_vkd3d_result(ret);
     }
 
+    if (original_desc.d3d12.Version == D3D_ROOT_SIGNATURE_VERSION_1_2 && original_desc.d3d12.u.Desc_1_2.NumStaticSamplers)
+    {
+        if (!(sampler_flags = vkd3d_calloc(original_desc.d3d12.u.Desc_1_2.NumStaticSamplers, sizeof(*sampler_flags))))
+        {
+            vkd3d_shader_free_root_signature(&original_desc.vkd3d);
+            return E_OUTOFMEMORY;
+        }
+        for (i = 0; i < original_desc.d3d12.u.Desc_1_2.NumStaticSamplers; ++i)
+            sampler_flags[i] = original_desc.d3d12.u.Desc_1_2.pStaticSamplers[i].Flags;
+    }
+
+    if (original_desc.d3d12.Version == D3D_ROOT_SIGNATURE_VERSION_1_0)
+    {
+        root_signature_desc = original_desc;
+    }
+    else
+    {
+        ret = vkd3d_shader_convert_root_signature(&root_signature_desc.vkd3d,
+                VKD3D_SHADER_ROOT_SIGNATURE_VERSION_1_0, &original_desc.vkd3d);
+        vkd3d_shader_free_root_signature(&original_desc.vkd3d);
+        if (ret < 0)
+        {
+            WARN("Failed to convert the root signature, vkd3d result %d.\n", ret);
+            vkd3d_free(sampler_flags);
+            return hresult_from_vkd3d_result(ret);
+        }
+    }
+
     if (!(object = vkd3d_malloc(sizeof(*object))))
     {
         vkd3d_shader_free_root_signature(&root_signature_desc.vkd3d);
+        vkd3d_free(sampler_flags);
         return E_OUTOFMEMORY;
     }
 
-    hr = d3d12_root_signature_init(object, device, &root_signature_desc.d3d12.u.Desc_1_0);
+    hr = d3d12_root_signature_init(object, device, &root_signature_desc.d3d12.u.Desc_1_0, sampler_flags);
     vkd3d_shader_free_root_signature(&root_signature_desc.vkd3d);
+    vkd3d_free(sampler_flags);
     if (FAILED(hr))
     {
         vkd3d_free(object);

@@ -2017,8 +2017,19 @@ enum vkd3d_shader_static_border_colour
     VKD3D_SHADER_STATIC_BORDER_COLOUR_TRANSPARENT_BLACK = 0x0,
     VKD3D_SHADER_STATIC_BORDER_COLOUR_OPAQUE_BLACK      = 0x1,
     VKD3D_SHADER_STATIC_BORDER_COLOUR_OPAQUE_WHITE      = 0x2,
+    VKD3D_SHADER_STATIC_BORDER_COLOUR_OPAQUE_BLACK_UINT = 0x3,
+    VKD3D_SHADER_STATIC_BORDER_COLOUR_OPAQUE_WHITE_UINT = 0x4,
 
     VKD3D_FORCE_32_BIT_ENUM(VKD3D_SHADER_STATIC_BORDER_COLOUR),
+};
+
+enum vkd3d_shader_static_sampler_flags
+{
+    VKD3D_SHADER_STATIC_SAMPLER_FLAG_NONE                       = 0x0,
+    VKD3D_SHADER_STATIC_SAMPLER_FLAG_UINT_BORDER_COLOUR         = 0x1,
+    VKD3D_SHADER_STATIC_SAMPLER_FLAG_NON_NORMALIZED_COORDINATES = 0x2,
+
+    VKD3D_FORCE_32_BIT_ENUM(VKD3D_SHADER_STATIC_SAMPLER_FLAGS),
 };
 
 struct vkd3d_shader_static_sampler_desc
@@ -2036,6 +2047,24 @@ struct vkd3d_shader_static_sampler_desc
     unsigned int shader_register;
     unsigned int register_space;
     enum vkd3d_shader_visibility shader_visibility;
+};
+
+struct vkd3d_shader_static_sampler_desc1
+{
+    enum vkd3d_shader_filter filter;
+    enum vkd3d_shader_texture_address_mode address_u;
+    enum vkd3d_shader_texture_address_mode address_v;
+    enum vkd3d_shader_texture_address_mode address_w;
+    float mip_lod_bias;
+    unsigned int max_anisotropy;
+    enum vkd3d_shader_comparison_func comparison_func;
+    enum vkd3d_shader_static_border_colour border_colour;
+    float min_lod;
+    float max_lod;
+    unsigned int shader_register;
+    unsigned int register_space;
+    enum vkd3d_shader_visibility shader_visibility;
+    enum vkd3d_shader_static_sampler_flags flags;
 };
 
 struct vkd3d_shader_descriptor_range
@@ -2180,10 +2209,20 @@ struct vkd3d_shader_root_signature_desc1
     enum vkd3d_shader_root_signature_flags flags;
 };
 
+struct vkd3d_shader_root_signature_desc2
+{
+    unsigned int parameter_count;
+    const struct vkd3d_shader_root_parameter1 *parameters;
+    unsigned int static_sampler_count;
+    const struct vkd3d_shader_static_sampler_desc1 *static_samplers;
+    enum vkd3d_shader_root_signature_flags flags;
+};
+
 enum vkd3d_shader_root_signature_version
 {
     VKD3D_SHADER_ROOT_SIGNATURE_VERSION_1_0 = 0x1,
     VKD3D_SHADER_ROOT_SIGNATURE_VERSION_1_1 = 0x2,
+    VKD3D_SHADER_ROOT_SIGNATURE_VERSION_1_2 = 0x3,
 
     VKD3D_FORCE_32_BIT_ENUM(VKD3D_SHADER_ROOT_SIGNATURE_VERSION),
 };
@@ -2195,6 +2234,7 @@ struct vkd3d_shader_versioned_root_signature_desc
     {
         struct vkd3d_shader_root_signature_desc v_1_0;
         struct vkd3d_shader_root_signature_desc1 v_1_1;
+        struct vkd3d_shader_root_signature_desc2 v_1_2;
     } u;
 };
 

@@ -2110,6 +2110,23 @@ static void vkd3d_shader_free_root_signature_v_1_1(struct vkd3d_shader_root_sign
     memset(root_signature, 0, sizeof(*root_signature));
 }
 
+static void vkd3d_shader_free_root_signature_v_1_2(struct vkd3d_shader_root_signature_desc2 *root_signature)
+{
+    unsigned int i;
+
+    for (i = 0; i < root_signature->parameter_count; ++i)
+    {
+        const struct vkd3d_shader_root_parameter1 *parameter = &root_signature->parameters[i];
+
+        if (parameter->parameter_type == VKD3D_SHADER_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
+            vkd3d_free((void *)parameter->u.descriptor_table.descriptor_ranges);
+    }
+    vkd3d_free((void *)root_signature->parameters);
+    vkd3d_free((void *)root_signature->static_samplers);
+
+    memset(root_signature, 0, sizeof(*root_signature));
+}
+
 void vkd3d_shader_free_root_signature(struct vkd3d_shader_versioned_root_signature_desc *desc)
 {
     TRACE("desc %p.\n", desc);
@@ -2121,6 +2138,10 @@ void vkd3d_shader_free_root_signature(struct vkd3d_shader_versioned_root_signatu
     else if (desc->version == VKD3D_SHADER_ROOT_SIGNATURE_VERSION_1_1)
     {
         vkd3d_shader_free_root_signature_v_1_1(&desc->u.v_1_1);
+    }
+    else if (desc->version == VKD3D_SHADER_ROOT_SIGNATURE_VERSION_1_2)
+    {
+        vkd3d_shader_free_root_signature_v_1_2(&desc->u.v_1_2);
     }
     else if (desc->version)
     {

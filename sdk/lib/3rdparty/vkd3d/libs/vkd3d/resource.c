@@ -3741,6 +3741,10 @@ static VkBorderColor vk_border_colour_from_d3d12(D3D12_STATIC_BORDER_COLOR colou
             return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
         case D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE:
             return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        case D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK_UINT:
+            return VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        case D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE_UINT:
+            return VK_BORDER_COLOR_INT_OPAQUE_WHITE;
         default:
             FIXME("Unhandled border colour %#x.\n", colour);
             return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
@@ -3751,7 +3755,7 @@ static VkResult d3d12_create_sampler(struct d3d12_device *device, D3D12_FILTER f
         D3D12_TEXTURE_ADDRESS_MODE address_u, D3D12_TEXTURE_ADDRESS_MODE address_v,
         D3D12_TEXTURE_ADDRESS_MODE address_w, float mip_lod_bias, unsigned int max_anisotropy,
         D3D12_COMPARISON_FUNC comparison_func, D3D12_STATIC_BORDER_COLOR border_colour,
-        float min_lod, float max_lod, VkSampler *vk_sampler)
+        float min_lod, float max_lod, bool unnormalised, VkSampler *vk_sampler)
 {
     VkSamplerReductionModeCreateInfoEXT reduction_desc;
     const struct vkd3d_vk_device_procs *vk_procs;
@@ -3777,7 +3781,7 @@ static VkResult d3d12_create_sampler(struct d3d12_device *device, D3D12_FILTER f
     sampler_desc.minLod = min_lod;
     sampler_desc.maxLod = max_lod;
     sampler_desc.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-    sampler_desc.unnormalizedCoordinates = VK_FALSE;
+    sampler_desc.unnormalizedCoordinates = unnormalised;
 
     if (address_u == D3D12_TEXTURE_ADDRESS_MODE_BORDER || address_v == D3D12_TEXTURE_ADDRESS_MODE_BORDER
             || address_w == D3D12_TEXTURE_ADDRESS_MODE_BORDER)
@@ -3856,7 +3860,7 @@ void d3d12_desc_create_sampler(struct d3d12_desc *sampler,
 
     if (d3d12_create_sampler(device, desc->Filter, desc->AddressU, desc->AddressV,
             desc->AddressW, desc->MipLODBias, desc->MaxAnisotropy, desc->ComparisonFunc,
-            static_colour, desc->MinLOD, desc->MaxLOD, &view->v.u.vk_sampler) < 0)
+            static_colour, desc->MinLOD, desc->MaxLOD, false, &view->v.u.vk_sampler) < 0)
     {
         vkd3d_view_decref(view, device);
         return;
@@ -3866,13 +3870,14 @@ void d3d12_desc_create_sampler(struct d3d12_desc *sampler,
 }
 
 HRESULT vkd3d_create_static_sampler(struct d3d12_device *device,
-        const D3D12_STATIC_SAMPLER_DESC *desc, VkSampler *vk_sampler)
+        const D3D12_STATIC_SAMPLER_DESC *desc, D3D12_SAMPLER_FLAGS flags, VkSampler *vk_sampler)
 {
     VkResult vr;
 
     vr = d3d12_create_sampler(device, desc->Filter, desc->AddressU, desc->AddressV,
             desc->AddressW, desc->MipLODBias, desc->MaxAnisotropy, desc->ComparisonFunc,
-            desc->BorderColor, desc->MinLOD, desc->MaxLOD, vk_sampler);
+            desc->BorderColor, desc->MinLOD, desc->MaxLOD,
+            !!(flags & D3D12_SAMPLER_FLAG_NON_NORMALIZED_COORDINATES), vk_sampler);
     return hresult_from_vk_result(vr);
 }
 

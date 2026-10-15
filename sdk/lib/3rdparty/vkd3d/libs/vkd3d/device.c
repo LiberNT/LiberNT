@@ -4184,7 +4184,11 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device10
             }
 
             TRACE("Root signature requested %#x.\n", data->HighestVersion);
-            data->HighestVersion = min(data->HighestVersion, D3D_ROOT_SIGNATURE_VERSION_1_1);
+            if (data->HighestVersion > D3D_ROOT_SIGNATURE_VERSION_1_2)
+            {
+                WARN("Unknown root signature version %#x.\n", data->HighestVersion);
+                return E_INVALIDARG;
+            }
             if (device->vkd3d_instance->api_version < VKD3D_API_VERSION_1_2)
                 data->HighestVersion = min(data->HighestVersion, D3D_ROOT_SIGNATURE_VERSION_1_0);
 
@@ -4631,7 +4635,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device10
                 return E_INVALIDARG;
             }
 
-            data->NonNormalizedCoordinateSamplersSupported = FALSE;
+            data->NonNormalizedCoordinateSamplersSupported = TRUE;
             data->ManualWriteTrackingResourceSupported = FALSE;
 
             TRACE("Non-normalized coordinate samplers %#x.\n", data->NonNormalizedCoordinateSamplersSupported);
