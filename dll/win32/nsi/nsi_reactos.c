@@ -224,6 +224,7 @@ static void fill_ip_interface(UINT index, struct nsi_ip_interface_key *key, stru
                               struct nsi_ip_interface_dynamic *dynamic, struct nsi_ip_interface_static *stat)
 {
     DWORD mtu = 0, status = 0;
+    BOOL loopback = interface_type(index) == MIB_IF_TYPE_LOOPBACK;
 
     getInterfaceMtuByIndex(index, &mtu);
     getInterfaceStatusByIndex(index, &status);
@@ -235,8 +236,9 @@ static void fill_ip_interface(UINT index, struct nsi_ip_interface_key *key, stru
         rw->base_reachable_time = 30000;
         rw->retransmit_time = 1000;
         rw->path_mtu_discovery_timeout = 600000;
-        rw->dad_transmits = 1;
-        rw->mtu = mtu;
+        rw->dad_transmits = loopback ? 0 : 1;
+        rw->mtu = loopback ? ~0u : mtu;
+        rw->site_prefix_len = 64;
     }
     if (dynamic)
     {
@@ -319,8 +321,8 @@ static void fill_ipv6_interface(const IP6_INTERFACE_ROW *row, struct nsi_ip_inte
         rw->dad_transmits = row->DadTransmits;
         rw->link_local_address_behavior = LinkLocalAlwaysOn;
         rw->link_local_address_timeout = ~0u;
-        rw->mtu = row->Mtu;
-        rw->site_prefix_len = 48;
+        rw->mtu = row->Loopback ? ~0u : row->Mtu;
+        rw->site_prefix_len = 64;
     }
     if (dynamic)
     {
@@ -684,6 +686,7 @@ static void fill_ipv4_forward(struct nsi_enumerate_all_ex *params, UINT_PTR i, D
         rw->preferred_lifetime = ~0u;
         rw->metric = metric;
         rw->protocol = MIB_IPPROTO_NETMGMT;
+        rw->loopback = interface_type(if_index) == MIB_IF_TYPE_LOOPBACK;
         rw->immortal = TRUE;
     }
     if (params->dynamic_data)
