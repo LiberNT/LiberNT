@@ -958,6 +958,29 @@ static INT_PTR CALLBACK FileOpenDlgProcUserTemplate(HWND hwnd, UINT uMsg, WPARAM
     return FALSE;
 }
 
+#ifdef __REACTOS__
+static INT_PTR CALLBACK FileOpenDlgProcHookInit(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    FileOpenDlgInfos *fodInfos = get_filedlg_infoptr(GetParent(hwnd));
+    DLGPROC hook;
+    INT_PTR ret;
+
+    if (!fodInfos)
+        return FALSE;
+
+    hook = (DLGPROC)fodInfos->ofnInfos->lpfnHook;
+    ret = hook(hwnd, uMsg, wParam, lParam);
+    if (uMsg != WM_INITDIALOG)
+        return ret;
+
+    if (fodInfos->unicode)
+        SetWindowLongPtrW(hwnd, DWLP_DLGPROC, (LONG_PTR)hook);
+    else
+        SetWindowLongPtrA(hwnd, DWLP_DLGPROC, (LONG_PTR)hook);
+    return FALSE;
+}
+
+#endif
 static HWND CreateTemplateDialog(FileOpenDlgInfos *fodInfos, HWND hwnd)
 {
     LPCVOID template;
@@ -1009,6 +1032,16 @@ static HWND CreateTemplateDialog(FileOpenDlgInfos *fodInfos, HWND hwnd)
           return NULL;
     	}
       }
+#ifdef __REACTOS__
+      if (fodInfos->unicode)
+          hChildDlg = CreateDialogIndirectParamW(hinst, template, hwnd,
+              is_dialog_hooked(fodInfos) ? FileOpenDlgProcHookInit : FileOpenDlgProcUserTemplate,
+              (LPARAM)fodInfos->ofnInfos);
+      else
+          hChildDlg = CreateDialogIndirectParamA(hinst, template, hwnd,
+              is_dialog_hooked(fodInfos) ? FileOpenDlgProcHookInit : FileOpenDlgProcUserTemplate,
+              (LPARAM)fodInfos->ofnInfos);
+#else
       if (fodInfos->unicode)
           hChildDlg = CreateDialogIndirectParamW(hinst, template, hwnd,
               is_dialog_hooked(fodInfos) ? (DLGPROC)fodInfos->ofnInfos->lpfnHook : FileOpenDlgProcUserTemplate,
@@ -1017,6 +1050,7 @@ static HWND CreateTemplateDialog(FileOpenDlgInfos *fodInfos, HWND hwnd)
           hChildDlg = CreateDialogIndirectParamA(hinst, template, hwnd,
               is_dialog_hooked(fodInfos) ? (DLGPROC)fodInfos->ofnInfos->lpfnHook : FileOpenDlgProcUserTemplate,
               (LPARAM)fodInfos->ofnInfos);
+#endif
       return hChildDlg;
     }
     else if (is_dialog_hooked(fodInfos))
