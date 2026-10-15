@@ -381,6 +381,9 @@ typedef struct
     LPWSTR  userName;
     LPWSTR  password;
     INTERNET_PORT hostPort; /* the final destination port of the request */
+#ifdef __REACTOS__
+    LPWSTR  agent;
+#endif
 } http_session_t;
 
 #define HDR_ISREQUEST		0x0001
@@ -429,6 +432,10 @@ typedef struct
     DWORD bytesToWrite;
     DWORD bytesWritten;
     BOOL clear_auth; /* Flag to clear the password field on the authorization dialog */
+#ifdef __REACTOS__
+    BOOL awaiting_response;
+    BOOL no_headers;
+#endif
 
     CRITICAL_SECTION headers_section;  /* section to protect the headers array */
     HTTPHEADERW *custHeaders;

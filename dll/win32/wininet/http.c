@@ -2603,7 +2603,11 @@ static DWORD HTTPREQ_QueryOption(object_header_t *hdr, DWORD option, void *buffe
 
         if(req->proxy)
             flags |= INTERNET_REQFLAG_VIA_PROXY;
+#ifdef __REACTOS__
+        if(!req->status_code || req->no_headers)
+#else
         if(!req->status_code)
+#endif
             flags |= INTERNET_REQFLAG_NO_HEADERS;
 
         TRACE("INTERNET_OPTION_REQUEST_FLAGS returning %lx\n", flags);
@@ -4074,6 +4078,11 @@ static DWORD HTTP_HttpQueryInfoW(http_request_t *request, DWORD dwInfoLevel,
     DWORD level = (dwInfoLevel & ~HTTP_QUERY_MODIFIER_FLAGS_MASK);
     INT index = -1;
 
+#ifdef __REACTOS__
+    if (!request_only && request->awaiting_response)
+        return ERROR_INTERNET_INCORRECT_HANDLE_STATE;
+
+#endif
     EnterCriticalSection( &request->headers_section );
 
     /* Find requested header structure */
@@ -4126,6 +4135,13 @@ static DWORD HTTP_HttpQueryInfoW(http_request_t *request, DWORD dwInfoLevel,
             LPWSTR headers;
             DWORD len;
 
+#ifdef __REACTOS__
+            if (requested_index)
+            {
+                LeaveCriticalSection( &request->headers_section );
+                return ERROR_HTTP_HEADER_NOT_FOUND;
+            }
+#endif
             if (request_only)
                 headers = build_request_header(request, request->verb, request->path, request->version, FALSE);
             else
@@ -5554,6 +5570,9 @@ static DWORD create_request(http_request_t *request, void *optional, DWORD optle
         }
 
         request->bytesWritten = data_len;
+#ifdef __REACTOS__
+        request->awaiting_response = !end_request;
+#endif
 
         INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
                               INTERNET_STATUS_REQUEST_SENT,
@@ -5580,6 +5599,13 @@ static DWORD create_request(http_request_t *request, void *optional, DWORD optle
                 loop_next = TRUE;
                 continue;
             }
+#ifdef __REACTOS__
+            if(!responseLen) {
+                http_release_netconn(request, FALSE);
+                res = ERROR_HTTP_INVALID_SERVER_RESPONSE;
+                goto lend;
+            }
+#endif
 
             INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
                                 INTERNET_STATUS_RESPONSE_RECEIVED, &responseLen,
@@ -5762,7 +5788,11 @@ static DWORD HTTP_HttpSendRequestW(http_request_t *request, LPCWSTR lpszHeaders,
         request->bytesToWrite = dwContentLength;
     }
 
+#ifdef __REACTOS__
+    appinfo_agent = request->session->agent;
+#else
     appinfo_agent = request->session->appInfo->agent;
+#endif
 
     if (appinfo_agent && *appinfo_agent)
     {
@@ -5912,6 +5942,9 @@ static DWORD HTTP_HttpEndRequestW(http_request_t *request, DWORD dwFlags, DWORD_
     INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
                   INTERNET_STATUS_RECEIVING_RESPONSE, NULL, 0);
 
+#ifdef __REACTOS__
+    request->awaiting_response = FALSE;
+#endif
     if (HTTP_GetResponseHeaders(request, &responseLen) || !responseLen)
         res = ERROR_HTTP_HEADER_NOT_FOUND;
 
@@ -6426,6 +6459,9 @@ static void HTTPSESSION_Destroy(object_header_t *hdr)
     free(session->hostName);
     free(session->password);
     free(session->userName);
+#ifdef __REACTOS__
+    free(session->agent);
+#endif
 }
 
 static DWORD HTTPSESSION_QueryOption(object_header_t *hdr, DWORD option, void *buffer, DWORD *size, BOOL unicode)
@@ -6547,8 +6583,9 @@ DWORD HTTP_Connect(appinfo_t *hIC, LPCWSTR lpszServerName,
         session->userName = wcsdup(lpszUserName);
 #ifdef __REACTOS__
     session->password = lpszPassword ? wcsdup(lpszPassword) : NULL;
+    session->agent = hIC->agent ? wcsdup(hIC->agent) : NULL;
     if (!session->hostName || ((lpszUserName && *lpszUserName) && !session->userName) ||
-        (lpszPassword && !session->password))
+        (lpszPassword && !session->password) || (hIC->agent && !session->agent))
     {
         InternetCloseHandle(session->hdr.hInternet);
         WININET_Release(&session->hdr);
@@ -6614,6 +6651,24 @@ static void HTTP_clear_response_headers( http_request_t *request )
     LeaveCriticalSection( &request->headers_section );
 }
 
+#ifdef __REACTOS__
+static BOOL response_has_status_line( http_request_t *req )
+{
+    BOOL ret = TRUE;
+
+    EnterCriticalSection( &req->read_section );
+    while (req->read_size < 4)
+    {
+        DWORD size = req->read_size;
+        if (read_more_data( req, -1 ) != ERROR_SUCCESS || req->read_size == size) break;
+    }
+    if (req->read_size && (req->read_size < 4 || memcmp( req->read_buf + req->read_pos, "HTTP", 4 )))
+        ret = FALSE;
+    LeaveCriticalSection( &req->read_section );
+    return ret;
+}
+
+#endif
 /***********************************************************************
  *           HTTP_GetResponseHeaders (internal)
  *
@@ -6644,6 +6699,22 @@ static DWORD HTTP_GetResponseHeaders(http_request_t *request, INT *len)
     HTTP_clear_response_headers( request );
 
     NETCON_set_timeout( request->netconn, FALSE, request->hdr.receive_timeout );
+#ifdef __REACTOS__
+    request->no_headers = FALSE;
+    if (!response_has_status_line( request ))
+    {
+        free(request->version);
+        free(request->statusText);
+
+        request->status_code = HTTP_STATUS_OK;
+        request->version = wcsdup(L"HTTP/1.0");
+        request->statusText = wcsdup(L"OK");
+        request->no_headers = TRUE;
+        rc = request->read_size;
+        res = ERROR_SUCCESS;
+        goto lend;
+    }
+#endif
     do {
         /*
          * We should first receive 'HTTP/1.x nnn OK' where nnn is the status code.
@@ -6846,6 +6917,13 @@ static DWORD HTTP_ProcessHeader(http_request_t *request, LPCWSTR field, LPCWSTR 
     {
         HTTPHEADERW hdr;
 
+#ifdef __REACTOS__
+        if (request_only && !value[0] && (dwModifier & (HTTP_ADDREQ_FLAG_ADD | HTTP_ADDREQ_FLAG_ADD_IF_NEW)))
+        {
+            LeaveCriticalSection( &request->headers_section );
+            return (dwModifier & HTTP_ADDREQ_FLAG_ADD) ? ERROR_INVALID_PARAMETER : ERROR_HTTP_HEADER_NOT_FOUND;
+        }
+#endif
         hdr.lpszField = (LPWSTR)field;
         hdr.lpszValue = (LPWSTR)value;
         hdr.wFlags = hdr.wCount = 0;
