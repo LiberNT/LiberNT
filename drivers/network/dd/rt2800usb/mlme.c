@@ -966,7 +966,7 @@ RtAssociate(
     _In_ PRT_BSS Bss)
 {
     UCHAR Frame[DOT11_HEADER_LENGTH + 4 + 2 + DOT11_SSID_MAX_LENGTH + 32 + 24];
-    ULONG Length, IeStart, Attempt;
+    ULONG Length, IeStart, Attempt, Comebacks = 0;
     USHORT Capability;
     BOOLEAN Secure = Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK;
 
@@ -1015,8 +1015,12 @@ RtAssociate(
                 Comeback = Timeout[3] | (Timeout[4] << 8) | (Timeout[5] << 16) | ((ULONG)Timeout[6] << 24);
                 Comeback = (ULONG)min((ULONGLONG)Comeback * 1024 / 1000, 10000);
             }
+            if (Comebacks)
+                Comeback = max(Comeback, RT_SA_QUERY_MAX_TIMEOUT_MS);
             DPRINT1("RT2800USB: association comeback in %lu ms\n", Comeback);
             RtSleep(Comeback);
+            if (++Comebacks < RT_ASSOC_COMEBACK_MAX)
+                Attempt--;
         }
     }
 
