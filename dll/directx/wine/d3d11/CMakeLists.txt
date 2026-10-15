@@ -7,6 +7,7 @@ list(APPEND SOURCE
     decoder.c
     device.c
     inputlayout.c
+    on12.c
     shader.c
     state.c
     texture.c

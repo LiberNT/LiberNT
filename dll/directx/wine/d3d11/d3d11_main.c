@@ -468,8 +468,15 @@ HRESULT WINAPI D3D11On12CreateDevice(IUnknown *device, UINT flags,
         ID3D11Device **d3d11_device, ID3D11DeviceContext **d3d11_immediate_context,
         D3D_FEATURE_LEVEL *obtained_feature_level)
 {
-#if defined(__REACTOS__) && defined(REACTOS_D3D11_NATIVE_UMD)
-    return d3d11_native_on12_create_device(device, flags, feature_levels, feature_level_count, queues,
+#ifdef __REACTOS__
+#ifdef REACTOS_D3D11_NATIVE_UMD
+    HRESULT hr = d3d11_native_on12_create_device(device, flags, feature_levels, feature_level_count, queues,
+            queue_count, node_mask, d3d11_device, d3d11_immediate_context, obtained_feature_level);
+
+    if (hr != E_NOINTERFACE)
+        return hr;
+#endif
+    return d3d11_on12_create_device(device, flags, feature_levels, feature_level_count, queues,
             queue_count, node_mask, d3d11_device, d3d11_immediate_context, obtained_feature_level);
 #endif
     FIXME("device %p, flags %#x, feature_levels %p, feature_level_count %u, "

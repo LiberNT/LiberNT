@@ -593,7 +593,20 @@ struct d3d_device
     struct d3d_device_context_state **context_states;
     SIZE_T context_states_size;
     SIZE_T context_state_count;
+#ifdef __REACTOS__
+    IUnknown *on12;
+#endif
 };
+
+#ifdef __REACTOS__
+#include <d3d11on12.h>
+
+HRESULT d3d11_device_attach_on12(ID3D11Device *iface, IUnknown *on12);
+void d3d11_on12_destroy(IUnknown *on12);
+HRESULT d3d11_on12_create_device(IUnknown *device, UINT flags, const D3D_FEATURE_LEVEL *feature_levels,
+        UINT feature_level_count, IUnknown * const *queues, UINT queue_count, UINT node_mask,
+        ID3D11Device **d3d11_device, ID3D11DeviceContext **d3d11_context, D3D_FEATURE_LEVEL *obtained_feature_level);
+#endif
 
 struct d3d11_command_list
 {
