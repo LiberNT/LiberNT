@@ -65,7 +65,7 @@ WSPAsyncSelect(IN  SOCKET Handle,
     Socket->SharedData->hWnd = hWnd;
     Socket->SharedData->wMsg = wMsg;
     Socket->SharedData->AsyncEvents = lEvent;
-    Socket->SharedData->AsyncDisabledEvents = 0;
+    Socket->SharedData->AsyncDisabledEvents = (Socket->SharedData->State == SocketConnected) ? FD_CONNECT : 0;
     Socket->SharedData->SequenceNumber++;
 
     /* Return if there are no more Events */
