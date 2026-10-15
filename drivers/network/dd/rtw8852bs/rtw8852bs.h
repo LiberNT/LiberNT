@@ -249,6 +249,8 @@ typedef struct _RTW_ADAPTER
     ULONG ConnectedChannel;
     USHORT AssociationId;
     LONG ConnectedRssi;
+    UCHAR RxPpduTransmitter[8][RTW_ADDRESS_LENGTH];
+    UCHAR RxPpduValid;
     ULONG TxRateMask;
     UCHAR TxLowestRate;
     ULONGLONG LastBeaconTime;
@@ -583,6 +585,12 @@ RtwFrameHeaderLength(
 VOID
 RtwClearKeys(
     _In_ PRTW_ADAPTER Adapter);
+
+VOID
+RtwMlmeUpdateRssi(
+    _In_ PRTW_ADAPTER Adapter,
+    _In_reads_bytes_(RTW_ADDRESS_LENGTH) const UCHAR* Transmitter,
+    _In_ LONG Rssi);
 
 VOID
 RtwMlmeReceive(

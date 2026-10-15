@@ -369,6 +369,7 @@ RtwUpdateBss(
     ULONG IeLength, Channel, i, Slot = MAXULONG, Oldest = 0;
     ULONGLONG Now = KeQueryInterruptTime(), OldestTime = MAXULONGLONG;
     PRTW_BSS Bss;
+    BOOLEAN New;
 
     if (Length < DOT11_HEADER_LENGTH + 12)
         return;
@@ -397,7 +398,8 @@ RtwUpdateBss(
         }
     }
 
-    if (Slot == MAXULONG)
+    New = Slot == MAXULONG;
+    if (New)
         Slot = Adapter->BssCount < RTW_MAX_BSS ? Adapter->BssCount++ : Oldest;
 
     Bss = &Adapter->Bss[Slot];
@@ -408,7 +410,8 @@ RtwUpdateBss(
         RtlCopyMemory(Bss->Ssid, Ssid + 2, Ssid[1]);
     }
     Bss->Channel = Channel;
-    Bss->Rssi = Rssi;
+    if (New)
+        Bss->Rssi = Rssi;
     RtlCopyMemory(&Bss->Timestamp, Frame + DOT11_HEADER_LENGTH, sizeof(Bss->Timestamp));
     Bss->BeaconPeriod = Frame[DOT11_HEADER_LENGTH + 8] | (Frame[DOT11_HEADER_LENGTH + 9] << 8);
     Bss->Capability = Frame[DOT11_HEADER_LENGTH + 10] | (Frame[DOT11_HEADER_LENGTH + 11] << 8);
@@ -420,7 +423,28 @@ RtwUpdateBss(
         RtlEqualMemory(Bss->Bssid, Adapter->ConnectedBssid, RTW_ADDRESS_LENGTH))
     {
         Adapter->LastBeaconTime = Now;
-        Adapter->ConnectedRssi = Rssi;
+    }
+    NdisReleaseSpinLock(&Adapter->Lock);
+}
+
+VOID
+RtwMlmeUpdateRssi(
+    _In_ PRTW_ADAPTER Adapter,
+    _In_reads_bytes_(RTW_ADDRESS_LENGTH) const UCHAR* Transmitter,
+    _In_ LONG Rssi)
+{
+    ULONG i;
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    for (i = 0; i < Adapter->BssCount; i++)
+    {
+        if (RtlEqualMemory(Adapter->Bss[i].Bssid, Transmitter, RTW_ADDRESS_LENGTH))
+            Adapter->Bss[i].Rssi = Rssi;
+    }
+    if (Adapter->LinkState == RtwLinkAssociated &&
+        RtlEqualMemory(Transmitter, Adapter->ConnectedBssid, RTW_ADDRESS_LENGTH))
+    {
+        Adapter->ConnectedRssi = (Adapter->ConnectedRssi * 3 + Rssi) / 4;
     }
     NdisReleaseSpinLock(&Adapter->Lock);
 }

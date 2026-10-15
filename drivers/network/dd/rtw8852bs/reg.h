@@ -522,3 +522,12 @@
 #define DMAC_TBL_BASE_ADDR                  0x18800000UL
 #define CMAC_TBL_BASE_ADDR                  0x18840000UL
 #define CCTL_INFO_SIZE                      0x0020
+
+#define R_AX_PPDU_STAT                      0xCE40
+#define B_AX_PPDU_STAT_RPT_EN               RTW_BIT(0)
+#define B_AX_APP_MAC_INFO_RPT               RTW_BIT(1)
+#define B_AX_APP_PLCP_HDR_RPT               RTW_BIT(3)
+#define B_AX_PPDU_STAT_RPT_CRC32            RTW_BIT(5)
+#define R_AX_HW_RPT_FWD                     0x9C18
+#define B_AX_FWD_PPDU_STAT_MASK             0x00000003
+#define RTW_PRPT_DEST_HOST                  1

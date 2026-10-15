@@ -1252,6 +1252,7 @@ RtwChannelHelp(
 
     if (Enter)
     {
+        RtwWrite32Clear(Adapter, R_AX_PPDU_STAT, B_AX_PPDU_STAT_RPT_EN);
         for (Path = 0; Path < 2; Path++)
         {
             RtwBbWrite32(Adapter, Path == 0 ? R_P0_TXPW_RSTB : R_P1_TXPW_RSTB, B_P0_TXPW_RSTB_MANON, 0x1);
@@ -1280,6 +1281,9 @@ RtwChannelHelp(
     if (Channel <= 14)
         RtwBbWrite32(Adapter, R_RXCCA, B_RXCCA_DIS, 0x0);
     RtwBbWrite32(Adapter, R_PD_CTRL, B_PD_HIT_DIS, 0x0);
+    RtwWrite32(Adapter, R_AX_PPDU_STAT,
+               B_AX_PPDU_STAT_RPT_EN | B_AX_APP_MAC_INFO_RPT | B_AX_APP_PLCP_HDR_RPT | B_AX_PPDU_STAT_RPT_CRC32);
+    RtwWrite32Mask(Adapter, R_AX_HW_RPT_FWD, B_AX_FWD_PPDU_STAT_MASK, RTW_PRPT_DEST_HOST);
 }
 
 VOID

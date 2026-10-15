@@ -14,6 +14,8 @@
 
 #define RTW_RXD_SHORT_LENGTH            16
 #define RTW_RXD_LONG_LENGTH             32
+#define RTW_PPDU_MAX_USERS              4
+#define RTW_PPDU_RX_CNT_SIZE            96
 #define RTW_RX_AGG_ALIGNMENT            8
 #define RTW_C2H_HEADER_LENGTH           8
 
@@ -189,17 +191,69 @@ RtwHandleWifiFrame(
 
 static
 VOID
+RtwNotePpduTransmitter(
+    _In_ PRTW_ADAPTER Adapter,
+    _In_ ULONG PpduCount,
+    _In_reads_bytes_(Length) const UCHAR* Frame,
+    _In_ ULONG Length)
+{
+    if (Length < 16 || (Frame[0] & DOT11_FC0_TYPE_MASK) == DOT11_FC0_TYPE_CTRL)
+        return;
+
+    RtlCopyMemory(Adapter->RxPpduTransmitter[PpduCount], Frame + 10, RTW_ADDRESS_LENGTH);
+    Adapter->RxPpduValid |= (UCHAR)(1 << PpduCount);
+}
+
+static
+VOID
+RtwHandlePpduStatus(
+    _In_ PRTW_ADAPTER Adapter,
+    _In_ ULONG PpduCount,
+    _In_ BOOLEAN MacInfo,
+    _In_reads_bytes_(Length) const UCHAR* Data,
+    _In_ ULONG Length)
+{
+    ULONG Word0, Word1, Users, Skip = 0, Header, Raw;
+
+    if (MacInfo)
+    {
+        if (Length < 8)
+            return;
+        Word0 = RtwLe32(Data);
+        Word1 = RtwLe32(Data + 4);
+        Users = Word0 & 0xF;
+        if (Users > RTW_PPDU_MAX_USERS)
+            return;
+        Skip = 8 + Users * 4 + ((Users & 1) ? 4 : 0) + ((Word0 & RTW_BIT(29)) ? RTW_PPDU_RX_CNT_SIZE : 0) +
+               (((Word1 >> 16) & 0xFF) << 3);
+    }
+    if (Skip + 8 > Length || !(Adapter->RxPpduValid & (1 << PpduCount)))
+        return;
+
+    Header = RtwLe32(Data + Skip);
+    Raw = Header >> 24;
+    if (!(Header & RTW_BIT(7)) || (((Header >> 8) & 0xFF) << 3) != Length - Skip || Raw == 0)
+        return;
+
+    Adapter->RxPpduValid &= (UCHAR)~(1 << PpduCount);
+    RtwMlmeUpdateRssi(Adapter, Adapter->RxPpduTransmitter[PpduCount], (LONG)(Raw >> 1) - 110);
+}
+
+static
+VOID
 RtwProcessRxBuffer(
     _In_ PRTW_ADAPTER Adapter,
     _Inout_updates_bytes_(Length) PUCHAR Buffer,
     _In_ ULONG Length)
 {
-    ULONG Offset = 0, Word0, Word3, PacketLength, DescLength, DrvInfo, Type, PayloadOffset;
+    ULONG Offset = 0, Word0, Word1, Word3, PacketLength, DescLength, DrvInfo, Type, PayloadOffset, PpduCount;
 
     while (Offset + RTW_RXD_SHORT_LENGTH <= Length)
     {
         Word0 = RtwLe32(Buffer + Offset);
+        Word1 = RtwLe32(Buffer + Offset + 4);
         Word3 = RtwLe32(Buffer + Offset + 12);
+        PpduCount = (Word1 >> 4) & 0x7;
         PacketLength = Word0 & 0x3FFF;
         Type = (Word0 >> 24) & 0xF;
         DrvInfo = ((Word0 >> 28) & 0x7) * 8;
@@ -212,8 +266,13 @@ RtwProcessRxBuffer(
         switch (Type)
         {
             case 0:
+                if (!(Word3 & RTW_BIT(9)))
+                    RtwNotePpduTransmitter(Adapter, PpduCount, Buffer + PayloadOffset, PacketLength);
                 RtwHandleWifiFrame(Adapter, Buffer + PayloadOffset, PacketLength, (Word3 & RTW_BIT(9)) != 0,
-                                   (RtwLe32(Buffer + Offset + 4) >> 16) & 0x1FF);
+                                   (Word1 >> 16) & 0x1FF);
+                break;
+            case 1:
+                RtwHandlePpduStatus(Adapter, PpduCount, (Word0 & RTW_BIT(23)) != 0, Buffer + PayloadOffset, PacketLength);
                 break;
             case 10:
                 RtwHandleC2h(Adapter, Buffer + PayloadOffset, PacketLength);
