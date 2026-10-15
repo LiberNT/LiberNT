@@ -694,6 +694,8 @@ UserExitReactOS(PCSR_THREAD CsrThread, UINT Flags)
         break;
     }
 
+    CsrRevertToSelf();
+
     /*
      * OK we can continue. Now magic happens:
      *
@@ -717,6 +719,7 @@ UserExitReactOS(PCSR_THREAD CsrThread, UINT Flags)
                                &Status, sizeof(Status));
 
     DPRINT("SrvExitWindowsEx returned 0x%08x\n", Status);
+    return Status;
 
 Quit:
     /* We are done */

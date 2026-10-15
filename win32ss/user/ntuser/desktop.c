@@ -1342,7 +1342,7 @@ IntGetDesktopObjectHandle(PDESKTOP DesktopObject)
                                        NULL,
                                        0,
                                        ExDesktopObjectType,
-                                       UserMode,
+                                       KernelMode,
                                        (PHANDLE)&hDesk);
         if (!NT_SUCCESS(Status))
         {
