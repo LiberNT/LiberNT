@@ -28,6 +28,8 @@
 #define DD_TCP_DEVICE_NAME      L"\\Device\\Tcp"
 #define DD_UDP_DEVICE_NAME      L"\\Device\\Udp"
 #define DD_RAW_IP_DEVICE_NAME   L"\\Device\\RawIp"
+#define DD_TCPV6_DEVICE_NAME    L"\\Device\\Tcp6"
+#define DD_UDPV6_DEVICE_NAME    L"\\Device\\Udp6"
 
 typedef enum _SOCKET_STATE {
     SocketStateCreated,

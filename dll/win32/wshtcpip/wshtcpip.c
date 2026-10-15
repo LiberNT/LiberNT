@@ -120,6 +120,30 @@ WSHGetSockaddrType(
 {
     PSOCKADDR_IN ipv4 = (PSOCKADDR_IN)Sockaddr;
 
+    if (ipv4 && SockaddrInfo && ipv4->sin_family == AF_INET6)
+    {
+        PSOCKADDR_IN6 ipv6 = (PSOCKADDR_IN6)Sockaddr;
+
+        if (SockaddrLength < sizeof(SOCKADDR_IN6))
+            return WSAEFAULT;
+
+        if (IN6_IS_ADDR_UNSPECIFIED(&ipv6->sin6_addr))
+            SockaddrInfo->AddressInfo = SockaddrAddressInfoWildcard;
+        else if (IN6_IS_ADDR_LOOPBACK(&ipv6->sin6_addr))
+            SockaddrInfo->AddressInfo = SockaddrAddressInfoLoopback;
+        else
+            SockaddrInfo->AddressInfo = SockaddrAddressInfoNormal;
+
+        if (ntohs(ipv6->sin6_port) == 0)
+            SockaddrInfo->EndpointInfo = SockaddrEndpointInfoWildcard;
+        else if (ntohs(ipv6->sin6_port) < IPPORT_RESERVED)
+            SockaddrInfo->EndpointInfo = SockaddrEndpointInfoReserved;
+        else
+            SockaddrInfo->EndpointInfo = SockaddrEndpointInfoNormal;
+
+        return NO_ERROR;
+    }
+
     if (!ipv4 || !SockaddrInfo || SockaddrLength < sizeof(SOCKADDR_IN) ||
         ipv4->sin_family != AF_INET)
     {
@@ -480,6 +504,18 @@ WSHGetWildcardSockaddr(
     OUT PINT SockaddrLength)
 {
     INT Size = 2 * sizeof(UINT);
+    PSOCKET_CONTEXT Context = HelperDllSocketContext;
+
+    if (Context && Context->AddressFamily == AF_INET6)
+    {
+        if (*SockaddrLength < (INT)sizeof(SOCKADDR_IN6))
+            return WSAEFAULT;
+
+        RtlZeroMemory(Sockaddr, sizeof(SOCKADDR_IN6));
+        Sockaddr->sa_family = AF_INET6;
+        *SockaddrLength = sizeof(SOCKADDR_IN6);
+        return NO_ERROR;
+    }
 
     if (*SockaddrLength < Size)
     {
@@ -865,16 +901,21 @@ WSHOpenSocket2(
     UNICODE_STRING TcpDeviceName = RTL_CONSTANT_STRING(DD_TCP_DEVICE_NAME);
     UNICODE_STRING UdpDeviceName = RTL_CONSTANT_STRING(DD_UDP_DEVICE_NAME);
     UNICODE_STRING RawDeviceName = RTL_CONSTANT_STRING(DD_RAW_IP_DEVICE_NAME);
+    UNICODE_STRING Tcp6DeviceName = RTL_CONSTANT_STRING(DD_TCPV6_DEVICE_NAME);
+    UNICODE_STRING Udp6DeviceName = RTL_CONSTANT_STRING(DD_UDPV6_DEVICE_NAME);
 
     DPRINT("WSHOpenSocket2 called\n");
 
+    if (*AddressFamily == AF_INET6 && *SocketType != SOCK_STREAM && *SocketType != SOCK_DGRAM)
+        return WSAESOCKTNOSUPPORT;
+
     switch (*SocketType) {
     case SOCK_STREAM:
-        String = TcpDeviceName;
+        String = (*AddressFamily == AF_INET6) ? Tcp6DeviceName : TcpDeviceName;
         break;
 
     case SOCK_DGRAM:
-        String = UdpDeviceName;
+        String = (*AddressFamily == AF_INET6) ? Udp6DeviceName : UdpDeviceName;
         break;
 
     case SOCK_RAW:
