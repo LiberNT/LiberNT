@@ -19,74 +19,7 @@ GetInterfacesList(
     _Out_ TDIEntityID **EntityList,
     _Out_ ULONG* InterfaceCount)
 {
-
-    TCP_REQUEST_QUERY_INFORMATION_EX TcpQueryInfo;
-    IO_STATUS_BLOCK StatusBlock;
-    NTSTATUS Status;
-    ULONG_PTR BufferSize;
-
-    ZeroMemory(&TcpQueryInfo, sizeof(TcpQueryInfo));
-    TcpQueryInfo.ID.toi_class = INFO_CLASS_GENERIC;
-    TcpQueryInfo.ID.toi_type = INFO_TYPE_PROVIDER;
-    TcpQueryInfo.ID.toi_id = ENTITY_LIST_ID;
-    TcpQueryInfo.ID.toi_entity.tei_entity = GENERIC_ENTITY;
-    TcpQueryInfo.ID.toi_entity.tei_instance = 0;
-
-    Status = NtDeviceIoControlFile(
-        TcpFile,
-        NULL,
-        NULL,
-        NULL,
-        &StatusBlock,
-        IOCTL_TCP_QUERY_INFORMATION_EX,
-        &TcpQueryInfo,
-        sizeof(TcpQueryInfo),
-        NULL,
-        0);
-    if (Status == STATUS_PENDING)
-    {
-        /* So we have to wait a bit */
-        Status = NtWaitForSingleObject(TcpFile, FALSE, NULL);
-        if (NT_SUCCESS(Status))
-            Status = StatusBlock.Status;
-    }
-
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    BufferSize = StatusBlock.Information;
-    *EntityList = HeapAlloc(GetProcessHeap(), 0, BufferSize);
-    if (!*EntityList)
-        return STATUS_NO_MEMORY;
-
-    /* Do the real call */
-    Status = NtDeviceIoControlFile(
-        TcpFile,
-        NULL,
-        NULL,
-        NULL,
-        &StatusBlock,
-        IOCTL_TCP_QUERY_INFORMATION_EX,
-        &TcpQueryInfo,
-        sizeof(TcpQueryInfo),
-        *EntityList,
-        BufferSize);
-    if (Status == STATUS_PENDING)
-    {
-        /* So we have to wait a bit */
-        Status = NtWaitForSingleObject(TcpFile, FALSE, NULL);
-        if (NT_SUCCESS(Status))
-            Status = StatusBlock.Status;
-    }
-
-    if (!NT_SUCCESS(Status))
-    {
-        HeapFree(GetProcessHeap(), 0, *EntityList);
-        return Status;
-    }
-
-    *InterfaceCount = BufferSize / sizeof(TDIEntityID);
-    return Status;
+    return tdiGetEntityIDSet(TcpFile, EntityList, InterfaceCount);
 }
 
 static
