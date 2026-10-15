@@ -3522,7 +3522,8 @@ HRESULT vkd3d_create_shader_cache_session(ID3D12Device *device, const D3D12_SHAD
         vkd3d_free(object);
         return hr;
     }
-    ID3D12Device_AddRef(object->device = device);
+    object->device = device;
+    ID3D12Device_AddRef(device);
     if (FAILED(hr = d3d12_shader_cache_acquire(&normalized, &object->cache)))
     {
         d3d12_cache_session_destroy(object);
