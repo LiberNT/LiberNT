@@ -395,7 +395,7 @@ DWORD WINAPI BluetoothGetRadioInfo( HANDLE radio, PBLUETOOTH_RADIO_INFO info )
         return GetLastError();
 
     if (radio_info.localInfo.flags & BDIF_ADDRESS)
-        info->address.ullLong = RtlUlonglongByteSwap( radio_info.localInfo.address ) >> 16;
+        info->address.ullLong = radio_info.localInfo.address;
     if (radio_info.localInfo.flags & BDIF_COD)
         info->ulClassofDevice = radio_info.localInfo.classOfDevice;
     if (radio_info.localInfo.flags & BDIF_NAME)
@@ -526,7 +526,7 @@ BOOL WINAPI BluetoothEnableIncomingConnections( HANDLE radio, BOOL enable )
             }
         }
     }
-    else if (!enable && !BluetoothIsDiscoverable( radio ))
+    else if (!enable && BluetoothIsDiscoverable( radio ))
         /* The local radio can only be made non-connectable if it is non-discoverable. */
         return FALSE;
     else
