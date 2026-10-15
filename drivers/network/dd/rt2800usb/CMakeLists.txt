@@ -29,3 +29,4 @@ add_cd_file(TARGET rt2800usb DESTINATION reactos/system32/drivers NO_CAB FOR all
 add_driver_inf(rt2800usb netrt2800usb.inf)
 
 add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/fw/rt2870.bin DESTINATION reactos/system32/drivers/ralink NO_CAB FOR all)
+add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/fw/LICENCE.ralink-firmware.txt DESTINATION reactos/3rdParty NO_CAB FOR all)

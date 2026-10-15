@@ -39,3 +39,4 @@ add_cd_file(TARGET rtw8852bs DESTINATION reactos/system32/drivers NO_CAB FOR all
 add_driver_inf(rtw8852bs netrtw8852bs.inf)
 
 add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/fw/rtw8852b_fw-2.bin DESTINATION reactos/system32/drivers/realtek NO_CAB FOR all)
+add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/fw/LICENCE.rtlwifi_firmware.txt DESTINATION reactos/3rdParty NO_CAB FOR all)
