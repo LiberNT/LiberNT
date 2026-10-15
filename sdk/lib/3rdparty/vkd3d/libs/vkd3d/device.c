@@ -4671,6 +4671,80 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device14
             return S_OK;
         }
 
+        case D3D12_FEATURE_D3D12_OPTIONS19:
+        {
+            D3D12_FEATURE_DATA_D3D12_OPTIONS19 *data = feature_data;
+
+            if (feature_data_size != sizeof(*data))
+            {
+                WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
+            }
+
+            memset(data, 0, sizeof(*data));
+            data->SupportedSampleCountsWithNoOutputs = 1;
+            data->MaxSamplerDescriptorHeapSize = D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE;
+            data->MaxSamplerDescriptorHeapSizeWithStaticSamplers = D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE;
+            data->MaxViewDescriptorHeapSize = D3D12_MAX_SHADER_VISIBLE_DESCRIPTOR_HEAP_SIZE_TIER_2;
+            return S_OK;
+        }
+
+        case D3D12_FEATURE_D3D12_OPTIONS20:
+        {
+            D3D12_FEATURE_DATA_D3D12_OPTIONS20 *data = feature_data;
+
+            if (feature_data_size != sizeof(*data))
+            {
+                WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
+            }
+
+            data->ComputeOnlyWriteWatchSupported = FALSE;
+            data->RecreateAtTier = D3D12_RECREATE_AT_TIER_NOT_SUPPORTED;
+            return S_OK;
+        }
+
+        case D3D12_FEATURE_D3D12_OPTIONS21:
+        {
+            D3D12_FEATURE_DATA_D3D12_OPTIONS21 *data = feature_data;
+
+            if (feature_data_size != sizeof(*data))
+            {
+                WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
+            }
+
+            data->WorkGraphsTier = D3D12_WORK_GRAPHS_TIER_NOT_SUPPORTED;
+            data->ExecuteIndirectTier = D3D12_EXECUTE_INDIRECT_TIER_1_0;
+            data->SampleCmpGradientAndBiasSupported = FALSE;
+            data->ExtendedCommandInfoSupported = FALSE;
+            return S_OK;
+        }
+
+        case D3D12_FEATURE_PREDICATION:
+            if (feature_data_size != sizeof(D3D12_FEATURE_DATA_PREDICATION))
+            {
+                WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
+            }
+            return E_UNEXPECTED;
+
+        case D3D12_FEATURE_PLACED_RESOURCE_SUPPORT_INFO:
+            if (feature_data_size != sizeof(D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO))
+            {
+                WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
+            }
+            return E_UNEXPECTED;
+
+        case D3D12_FEATURE_HARDWARE_COPY:
+            if (feature_data_size != sizeof(D3D12_FEATURE_DATA_HARDWARE_COPY))
+            {
+                WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
+            }
+            return E_UNEXPECTED;
+
         case D3D12_FEATURE_PROTECTED_RESOURCE_SESSION_SUPPORT:
         {
             D3D12_FEATURE_DATA_PROTECTED_RESOURCE_SESSION_SUPPORT *data = feature_data;
