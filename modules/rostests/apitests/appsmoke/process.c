@@ -270,6 +270,38 @@ START_TEST(alert_wait)
         return;
     }
 
+    if (AppSmokeIsRole("terminate"))
+    {
+        Thread = StartWaiter(BlockedWaiter);
+        ok(Thread != NULL, "The waiter did not start\n");
+        if (Thread)
+        {
+            ok(TerminateThread(Thread, 7), "TerminateThread: %lu\n", GetLastError());
+            Wait = WaitForSingleObject(Thread, 5000);
+            ExitCode = 0;
+            GetExitCodeThread(Thread, &ExitCode);
+            ok(Wait == WAIT_OBJECT_0 && ExitCode == 7, "A blocked waiter did not terminate: wait %lu exit code %lu\n", Wait, ExitCode);
+            CloseHandle(Thread);
+        }
+        return;
+    }
+
+    if (AppSmokeIsRole("terminate_polling"))
+    {
+        Thread = StartWaiter(PollingWaiter);
+        ok(Thread != NULL, "The waiter did not start\n");
+        if (Thread)
+        {
+            ok(TerminateThread(Thread, 9), "TerminateThread: %lu\n", GetLastError());
+            Wait = WaitForSingleObject(Thread, 5000);
+            ExitCode = 0;
+            GetExitCodeThread(Thread, &ExitCode);
+            ok(Wait == WAIT_OBJECT_0 && ExitCode == 9, "A polling waiter did not terminate: wait %lu exit code %lu\n", Wait, ExitCode);
+            CloseHandle(Thread);
+        }
+        return;
+    }
+
     Thread = StartWaiter(BlockedWaiter);
     ok(Thread != NULL && WaiterState == 1, "The waiter did not start\n");
     if (Thread)
@@ -283,27 +315,11 @@ START_TEST(alert_wait)
         CloseHandle(Thread);
     }
 
-    Thread = StartWaiter(BlockedWaiter);
-    if (Thread)
-    {
-        ok(TerminateThread(Thread, 7), "TerminateThread: %lu\n", GetLastError());
-        Wait = WaitForSingleObject(Thread, 5000);
-        ExitCode = 0;
-        GetExitCodeThread(Thread, &ExitCode);
-        ok(Wait == WAIT_OBJECT_0 && ExitCode == 7, "A blocked waiter did not terminate: wait %lu exit code %lu\n", Wait, ExitCode);
-        CloseHandle(Thread);
-    }
+    InTime = AppSmokeRunSelf("alert_wait", "terminate", CHILD_BUDGET_MS, &ExitCode, &Elapsed);
+    ok(InTime && !ExitCode, "Terminating a blocked waiter failed: exit code %#lx after %lu ms\n", ExitCode, Elapsed);
 
-    Thread = StartWaiter(PollingWaiter);
-    if (Thread)
-    {
-        ok(TerminateThread(Thread, 9), "TerminateThread: %lu\n", GetLastError());
-        Wait = WaitForSingleObject(Thread, 5000);
-        ExitCode = 0;
-        GetExitCodeThread(Thread, &ExitCode);
-        ok(Wait == WAIT_OBJECT_0 && ExitCode == 9, "A polling waiter did not terminate: wait %lu exit code %lu\n", Wait, ExitCode);
-        CloseHandle(Thread);
-    }
+    InTime = AppSmokeRunSelf("alert_wait", "terminate_polling", CHILD_BUDGET_MS, &ExitCode, &Elapsed);
+    ok(InTime && !ExitCode, "Terminating a polling waiter failed: exit code %#lx after %lu ms\n", ExitCode, Elapsed);
 
     InterlockedExchange(&WaitValue, 0);
     InterlockedExchange(&ApcCount, 0);
