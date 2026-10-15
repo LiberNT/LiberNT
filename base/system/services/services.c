@@ -381,6 +381,7 @@ wWinMain(HINSTANCE hInstance,
 
     /* Wait until the shutdown event gets signaled */
     WaitForSingleObject(hScmShutdownEvent, INFINITE);
+    ExitThread(0);
 
 done:
     ScmShutdownSecurity();
