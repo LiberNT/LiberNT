@@ -291,11 +291,13 @@ void STDMETHODCALLTYPE Native12CommandQueue::UpdateTileMappings(ID3D12Resource *
     if (!resource) return;
     D3D12DDI_HHEAP driver_heap = {};
     if (heap) driver_heap = static_cast<Native12Heap *>(heap)->driver;
+    AcquireSRWLockExclusive(&submit_lock);
     device->queue_functions.pfnUpdateTileMappings(driver, Native12UnwrapResource(resource)->driver, region_count,
             reinterpret_cast<const D3D12DDI_TILED_RESOURCE_COORDINATE *>(coordinates),
             reinterpret_cast<const D3D12DDI_TILE_REGION_SIZE *>(sizes), driver_heap, range_count,
             reinterpret_cast<const D3D12DDI_TILE_RANGE_FLAGS *>(range_flags), heap_range_offsets,
             range_tile_counts, static_cast<D3D12DDI_TILE_MAPPING_FLAGS>(flags));
+    ReleaseSRWLockExclusive(&submit_lock);
 }
 
 void STDMETHODCALLTYPE Native12CommandQueue::CopyTileMappings(ID3D12Resource *dst,
@@ -304,12 +306,14 @@ void STDMETHODCALLTYPE Native12CommandQueue::CopyTileMappings(ID3D12Resource *ds
         D3D12_TILE_MAPPING_FLAGS flags)
 {
     if (!dst || !src || !dst_start || !src_start || !size) return;
+    AcquireSRWLockExclusive(&submit_lock);
     device->queue_functions.pfnCopyTileMappings(driver, Native12UnwrapResource(dst)->driver,
             reinterpret_cast<const D3D12DDI_TILED_RESOURCE_COORDINATE *>(dst_start),
             Native12UnwrapResource(src)->driver,
             reinterpret_cast<const D3D12DDI_TILED_RESOURCE_COORDINATE *>(src_start),
             reinterpret_cast<const D3D12DDI_TILE_REGION_SIZE *>(size),
             static_cast<D3D12DDI_TILE_MAPPING_FLAGS>(flags));
+    ReleaseSRWLockExclusive(&submit_lock);
 }
 
 void STDMETHODCALLTYPE Native12CommandQueue::ExecuteCommandLists(UINT count, ID3D12CommandList *const *lists)
@@ -339,7 +343,9 @@ void STDMETHODCALLTYPE Native12CommandQueue::ExecuteCommandLists(UINT count, ID3
         handles[i] = list->driver;
     }
     TRACE("queue %p, %u lists.\n", this, count);
+    AcquireSRWLockExclusive(&submit_lock);
     device->queue_functions.pfnExecuteCommandLists(driver, count, handles);
+    ReleaseSRWLockExclusive(&submit_lock);
     TRACE("queue %p done.\n", this);
     if (handles != local) HeapFree(GetProcessHeap(), 0, handles);
 }
@@ -357,8 +363,13 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Signal(ID3D12Fence *fence, UINT6
     operation.Fence = native->driver;
     operation.Value = value;
     operation.PhysicalAdapterMask = 1;
+    AcquireSRWLockExclusive(&submit_lock);
     device->queue_functions.pfnSignalFence(driver, &operation);
-    if (FAILED(device->removed_reason)) return device->removed_reason;
+    if (FAILED(device->removed_reason))
+    {
+        ReleaseSRWLockExclusive(&submit_lock);
+        return device->removed_reason;
+    }
 
     HANDLE targets[D3DDDI_MAX_BROADCAST_CONTEXT];
     D3DDDICB_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 signal = {};
@@ -368,8 +379,13 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Signal(ID3D12Fence *fence, UINT6
     signal.BroadcastContextArray = targets;
     signal.MonitoredFenceValueArray = &value;
     signal.Flags.AllowFenceRewind = 1;
-    if (!signal.BroadcastContextCount) return E_FAIL;
+    if (!signal.BroadcastContextCount)
+    {
+        ReleaseSRWLockExclusive(&submit_lock);
+        return E_FAIL;
+    }
     HRESULT hr = device->kernel_callbacks.pfnSignalSynchronizationObjectFromGpu2Cb(device->runtime_device, &signal);
+    ReleaseSRWLockExclusive(&submit_lock);
     TRACE("queue %p, fence %p, value %#I64x, %lu contexts, first %p, hr %#lx.\n", this, fence, value,
             signal.BroadcastContextCount, targets[0], hr);
     return hr;
@@ -384,8 +400,13 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Wait(ID3D12Fence *fence, UINT64 
     operation.Fence = native->driver;
     operation.Value = value;
     operation.PhysicalAdapterMask = 1;
+    AcquireSRWLockExclusive(&submit_lock);
     device->queue_functions.pfnWaitForFence(driver, &operation);
-    if (FAILED(device->removed_reason)) return device->removed_reason;
+    if (FAILED(device->removed_reason))
+    {
+        ReleaseSRWLockExclusive(&submit_lock);
+        return device->removed_reason;
+    }
 
     HANDLE targets[D3DDDI_MAX_BROADCAST_CONTEXT];
     UINT count = WaitContexts(targets);
@@ -399,6 +420,7 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Wait(ID3D12Fence *fence, UINT64 
         wait.MonitoredFenceValueArray = &value;
         hr = device->kernel_callbacks.pfnWaitForSynchronizationObjectFromGpuCb(device->runtime_device, &wait);
     }
+    ReleaseSRWLockExclusive(&submit_lock);
     TRACE("queue %p, fence %p, value %#I64x, %u contexts, hr %#lx.\n", this, fence, value, count, hr);
     return hr;
 }

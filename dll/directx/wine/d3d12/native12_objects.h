@@ -83,6 +83,7 @@ public:
     Native12CommandQueue *next_queue = NULL;
     bool listed = false;
     SRWLOCK context_lock = SRWLOCK_INIT;
+    SRWLOCK submit_lock = SRWLOCK_INIT;
     HANDLE contexts[D3DDDI_MAX_BROADCAST_CONTEXT] = {};
     bool submitted[D3DDDI_MAX_BROADCAST_CONTEXT] = {};
     UINT context_count = 0;
