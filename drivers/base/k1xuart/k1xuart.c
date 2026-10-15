@@ -17,6 +17,7 @@
 #define K1XUART_TAG             'rUiK'
 #define K1XUART_SIZE            0x100
 #define K1XUART_FIFO_DEPTH      64
+#define K1XUART_RX_RING_SIZE    4096
 #define K1XUART_DEFAULT_BAUD    115200
 
 #define K1XUART_RBR             0x00
@@ -41,7 +42,6 @@
 #define K1XUART_IIR_NO_INT      0x01
 #define K1XUART_IIR_ID_MASK     0x0E
 #define K1XUART_IIR_THRE        0x02
-#define K1XUART_IIR_RLS         0x06
 
 #define K1XUART_FCR_ENABLE      0x01
 #define K1XUART_FCR_CLEAR_RX    0x02
@@ -106,8 +106,12 @@ typedef struct _K1XUART
     UCHAR Mcr;
     UCHAR Lcr;
     BOOLEAN RxPending;
+    BOOLEAN RxNotify;
     BOOLEAN TxPending;
     BOOLEAN Draining;
+    ULONG RxHead;
+    ULONG RxCount;
+    UCHAR RxRing[K1XUART_RX_RING_SIZE];
 } K1XUART, *PK1XUART;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(K1XUART, K1xUartGetContext)
@@ -172,6 +176,28 @@ K1xUartSetIer(
     Uart->Ier = (UCHAR)((Uart->Ier & ~Clear) | Set);
     K1xUartWrite(Uart, K1XUART_IER, Uart->Ier);
     WdfInterruptReleaseLock(Uart->Interrupt);
+}
+
+static
+VOID
+K1xUartDrainRx(
+    _In_ PK1XUART Uart)
+{
+    UCHAR Data;
+
+    if (Uart->Ier & K1XUART_IER_RTOIE)
+        K1xUartWrite(Uart, K1XUART_IER, (UCHAR)(Uart->Ier & ~K1XUART_IER_RTOIE));
+    while (K1xUartRead(Uart, K1XUART_LSR) & K1XUART_LSR_DR)
+    {
+        Data = K1xUartRead(Uart, K1XUART_RBR);
+        if (Uart->RxCount < K1XUART_RX_RING_SIZE)
+        {
+            Uart->RxRing[(Uart->RxHead + Uart->RxCount) % K1XUART_RX_RING_SIZE] = Data;
+            Uart->RxCount++;
+        }
+    }
+    if (Uart->Ier & K1XUART_IER_RTOIE)
+        K1xUartWrite(Uart, K1XUART_IER, Uart->Ier);
 }
 
 static
@@ -293,7 +319,10 @@ K1xUartResetHardware(
     WdfInterruptAcquireLock(Uart->Interrupt);
     Uart->Ier = K1XUART_IER_UUE;
     Uart->RxPending = FALSE;
+    Uart->RxNotify = FALSE;
     Uart->TxPending = FALSE;
+    Uart->RxHead = 0;
+    Uart->RxCount = 0;
     K1xUartWrite(Uart, K1XUART_IER, Uart->Ier);
     K1xUartWrite(Uart, K1XUART_FCR, K1XUART_FCR_ENABLE | K1XUART_FCR_CLEAR_RX | K1XUART_FCR_CLEAR_TX);
     K1xUartWrite(Uart, K1XUART_FCR, K1XUART_FCR_ENABLE | K1XUART_FCR_RX_TRIG8);
@@ -548,7 +577,14 @@ K1xUartEvtPurgeFifos(
         Fcr |= K1XUART_FCR_CLEAR_RX;
     if (PurgeTxFifo)
         Fcr |= K1XUART_FCR_CLEAR_TX;
+    WdfInterruptAcquireLock(Uart->Interrupt);
     K1xUartWrite(Uart, K1XUART_FCR, Fcr);
+    if (PurgeRxFifo)
+    {
+        Uart->RxHead = 0;
+        Uart->RxCount = 0;
+    }
+    WdfInterruptReleaseLock(Uart->Interrupt);
 }
 
 static
@@ -557,9 +593,19 @@ K1xUartEvtFileOpen(
     _In_ WDFDEVICE Device)
 {
     PK1XUART Uart = K1xUartGetContext(Device);
+    NTSTATUS Status = STATUS_SUCCESS;
 
     if (!Uart->BaudRate)
-        return K1xUartApplyDefaults(Uart);
+        Status = K1xUartApplyDefaults(Uart);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    WdfInterruptAcquireLock(Uart->Interrupt);
+    Uart->RxHead = 0;
+    Uart->RxCount = 0;
+    Uart->RxNotify = FALSE;
+    Uart->Ier |= K1XUART_IER_RX;
+    K1xUartWrite(Uart, K1XUART_IER, Uart->Ier);
+    WdfInterruptReleaseLock(Uart->Interrupt);
     return STATUS_SUCCESS;
 }
 
@@ -570,6 +616,9 @@ K1xUartEvtFileClose(
 {
     PK1XUART Uart = K1xUartGetContext(Device);
 
+    WdfInterruptAcquireLock(Uart->Interrupt);
+    Uart->RxNotify = FALSE;
+    WdfInterruptReleaseLock(Uart->Interrupt);
     K1xUartSetIer(Uart, 0, K1XUART_IER_RX | K1XUART_IER_THRI);
     Uart->BaudRate = 0;
 }
@@ -584,8 +633,15 @@ K1xUartEvtPioReceiveReadBuffer(
     PK1XUART Uart = K1xUartGetPio(PioReceive)->Uart;
     ULONG Read = 0;
 
-    while (Read < Length && (K1xUartRead(Uart, K1XUART_LSR) & K1XUART_LSR_DR))
-        Buffer[Read++] = K1xUartRead(Uart, K1XUART_RBR);
+    WdfInterruptAcquireLock(Uart->Interrupt);
+    K1xUartDrainRx(Uart);
+    while (Read < Length && Uart->RxCount)
+    {
+        Buffer[Read++] = Uart->RxRing[Uart->RxHead];
+        Uart->RxHead = (Uart->RxHead + 1) % K1XUART_RX_RING_SIZE;
+        Uart->RxCount--;
+    }
+    WdfInterruptReleaseLock(Uart->Interrupt);
     return Read;
 }
 
@@ -597,9 +653,16 @@ K1xUartEvtPioReceiveEnableReady(
     PK1XUART Uart = K1xUartGetPio(PioReceive)->Uart;
 
     WdfInterruptAcquireLock(Uart->Interrupt);
-    Uart->RxPending = FALSE;
-    Uart->Ier |= K1XUART_IER_RX;
-    K1xUartWrite(Uart, K1XUART_IER, Uart->Ier);
+    K1xUartDrainRx(Uart);
+    if (Uart->RxCount)
+    {
+        Uart->RxPending = TRUE;
+        WdfInterruptQueueDpcForIsr(Uart->Interrupt);
+    }
+    else
+    {
+        Uart->RxNotify = TRUE;
+    }
     WdfInterruptReleaseLock(Uart->Interrupt);
 }
 
@@ -612,9 +675,8 @@ K1xUartEvtPioReceiveCancelReady(
     BOOLEAN Cancelled;
 
     WdfInterruptAcquireLock(Uart->Interrupt);
-    Cancelled = (Uart->Ier & K1XUART_IER_RDI) != 0;
-    Uart->Ier &= ~K1XUART_IER_RX;
-    K1xUartWrite(Uart, K1XUART_IER, Uart->Ier);
+    Cancelled = Uart->RxNotify;
+    Uart->RxNotify = FALSE;
     WdfInterruptReleaseLock(Uart->Interrupt);
     return Cancelled;
 }
@@ -749,17 +811,16 @@ K1xUartEvtInterruptIsr(
                 Uart->Ier &= ~K1XUART_IER_THRI;
                 Uart->TxPending = TRUE;
                 break;
-            case K1XUART_IIR_RLS:
-                (VOID)K1xUartRead(Uart, K1XUART_LSR);
-                Uart->Ier &= ~K1XUART_IER_RX;
-                Uart->RxPending = TRUE;
-                break;
             case 0x00:
                 (VOID)K1xUartRead(Uart, K1XUART_MSR);
                 break;
             default:
-                Uart->Ier &= ~K1XUART_IER_RX;
-                Uart->RxPending = TRUE;
+                K1xUartDrainRx(Uart);
+                if (Uart->RxCount && Uart->RxNotify)
+                {
+                    Uart->RxNotify = FALSE;
+                    Uart->RxPending = TRUE;
+                }
                 break;
         }
         K1xUartWrite(Uart, K1XUART_IER, Uart->Ier);
