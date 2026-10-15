@@ -52,7 +52,7 @@ public:
     NATIVE12_LIST_FUNCS list_functions = {};
     NATIVE12_LIST_FUNCS *list_tables = NULL;
     UINT list_table_count = 0;
-    HRESULT FillOptionalTables(SIZE_T list_table_size);
+    HRESULT FillListTables(SIZE_T list_table_size);
     const NATIVE12_LIST_FUNCS *FindListTable(HANDLE table);
     D3DDDICB_CREATEPAGINGQUEUE paging_queue = {};
     D3D_FEATURE_LEVEL feature_level = D3D_FEATURE_LEVEL_11_0;

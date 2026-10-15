@@ -729,7 +729,7 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
         WARN("The driver failed to fill the command list table, hr %#lx.\n", hr);
         return hr;
     }
-    if (FAILED(hr = FillOptionalTables(list_table_size))) return hr;
+    if (FAILED(hr = FillListTables(list_table_size))) return hr;
 
     QueryCaps(D3D12DDICAPS_TYPE_D3D12_OPTIONS, NULL, &options, sizeof(options));
     QueryCaps(D3D12DDICAPS_TYPE_SHADER, NULL, &shader_caps, sizeof(shader_caps));
@@ -764,43 +764,38 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     return S_OK;
 }
 
-HRESULT Native12Device::FillOptionalTables(SIZE_T list_table_size)
+HRESULT Native12Device::FillListTables(SIZE_T list_table_size)
 {
     D3D12DDI_TABLE_REQUEST *requests;
-    UINT32 count = 0;
+    UINT32 count = 0, total = 2;
     HRESULT hr = S_OK;
 
-    if (!adapter_functions.pfnGetOptionalDDITables) return S_OK;
-    if (FAILED(adapter_functions.pfnGetOptionalDDITables(driver_adapter, &count, NULL)) || !count) return S_OK;
-    requests = static_cast<D3D12DDI_TABLE_REQUEST *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
-            count * sizeof(*requests)));
-    if (!requests) return E_OUTOFMEMORY;
-    if (SUCCEEDED(adapter_functions.pfnGetOptionalDDITables(driver_adapter, &count, requests)))
+    if (adapter_functions.pfnGetOptionalDDITables
+            && SUCCEEDED(adapter_functions.pfnGetOptionalDDITables(driver_adapter, &count, NULL)) && count)
     {
-        for (UINT32 i = 0; i < count && SUCCEEDED(hr); ++i)
+        if (!(requests = static_cast<D3D12DDI_TABLE_REQUEST *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                count * sizeof(*requests)))))
+            return E_OUTOFMEMORY;
+        if (SUCCEEDED(adapter_functions.pfnGetOptionalDDITables(driver_adapter, &count, requests)))
         {
-            if (requests[i].tableType != D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D || requests[i].numTables <= 1
-                    || list_tables)
-                continue;
-            list_tables = static_cast<NATIVE12_LIST_FUNCS *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
-                    (requests[i].numTables - 1) * sizeof(*list_tables)));
-            if (!list_tables)
-            {
-                hr = E_OUTOFMEMORY;
-                break;
-            }
-            list_table_count = requests[i].numTables - 1;
-            for (UINT j = 0; j < list_table_count && SUCCEEDED(hr); ++j)
-            {
-                D3D12DDI_HRTTABLE table;
-                table.handle = &list_tables[j];
-                if (FAILED(hr = adapter_functions.pfnFillDDITable(driver_adapter, D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D,
-                        &list_tables[j], list_table_size, j + 1, table)))
-                    WARN("The driver failed to fill command list table %u, hr %#lx.\n", j + 1, hr);
-            }
+            for (UINT32 i = 0; i < count; ++i)
+                if (requests[i].tableType == D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D) total += requests[i].numTables;
         }
+        HeapFree(GetProcessHeap(), 0, requests);
     }
-    HeapFree(GetProcessHeap(), 0, requests);
+
+    if (!(list_tables = static_cast<NATIVE12_LIST_FUNCS *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+            (total - 1) * sizeof(*list_tables)))))
+        return E_OUTOFMEMORY;
+    list_table_count = total - 1;
+    for (UINT i = 0; i < list_table_count && SUCCEEDED(hr); ++i)
+    {
+        D3D12DDI_HRTTABLE table;
+        table.handle = &list_tables[i];
+        if (FAILED(hr = adapter_functions.pfnFillDDITable(driver_adapter, D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D,
+                &list_tables[i], list_table_size, i + 1, table)))
+            WARN("The driver failed to fill command list table %u, hr %#lx.\n", i + 1, hr);
+    }
     return hr;
 }
 
