@@ -44,6 +44,10 @@ static inline ProxyBindStatusCallback *impl_from_IBindStatusCallback(IBindStatus
 
 static HRESULT WINAPI ProxyBindStatusCallback_QueryInterface(IBindStatusCallback *iface, REFIID riid, void **ppv)
 {
+#ifdef __REACTOS__
+    ProxyBindStatusCallback *This = impl_from_IBindStatusCallback(iface);
+#endif
+
     if (IsEqualGUID(&IID_IBindStatusCallback, riid) ||
         IsEqualGUID(&IID_IUnknown, riid))
     {
@@ -51,6 +55,11 @@ static HRESULT WINAPI ProxyBindStatusCallback_QueryInterface(IBindStatusCallback
         IBindStatusCallback_AddRef(iface);
         return S_OK;
     }
+
+#ifdef __REACTOS__
+    if (IsEqualGUID(&IID_IServiceProvider, riid) && This->pBSC)
+        return IBindStatusCallback_QueryInterface(This->pBSC, riid, ppv);
+#endif
 
     *ppv = NULL;
     return E_NOINTERFACE;
