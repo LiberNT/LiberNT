@@ -648,6 +648,7 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
     InitThread->NextProcessor = Number;
     InitThread->Priority = HIGH_PRIORITY;
     InitThread->State = Running;
+    InitThread->Running = TRUE;
     InitThread->Affinity = ((KAFFINITY)1 << Number);
     InitThread->WaitIrql = DISPATCH_LEVEL;
     InitProcess->ActiveProcessors |= ((KAFFINITY)1 << Number);

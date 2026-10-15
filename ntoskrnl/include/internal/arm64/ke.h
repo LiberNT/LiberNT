@@ -9,6 +9,8 @@
 /* This port initializes scheduler sub-nodes and their non-parked CPU sets. */
 #define KI_CORE_PARKING
 
+#define KI_ARCH_THREAD_HANDOFF_USES_RUNNING 1
+
 /* Executive bring-up completes native interrupt setup after each HAL phase. */
 #define EX_ARCH_HAS_POST_HAL_INIT
 

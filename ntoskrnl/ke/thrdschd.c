@@ -252,6 +252,9 @@ KiFindStealableThreadLocked(
         if (KiTryThreadLock(Thread))
             continue;
         if ((Thread->State == Ready) &&
+#if KI_THREAD_HANDOFF_USES_RUNNING
+            !Thread->Running &&
+#endif
             !Thread->ProcessReadyQueue &&
             (Thread->NextProcessor == Source->Number) &&
             (Thread->Priority == Priority) &&

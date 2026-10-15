@@ -632,7 +632,7 @@ FORCEINLINE
 VOID
 KiSetThreadSwapBusy(IN PKTHREAD Thread)
 {
-#if (NTDDI_VERSION < NTDDI_WIN7) || defined(_M_ARM64)
+#if (NTDDI_VERSION < NTDDI_WIN7)
     /* Make sure nobody already set it */
     ASSERT(Thread->SwapBusy == FALSE);
 
@@ -818,14 +818,9 @@ FORCEINLINE
 VOID
 KiClearThreadSwapBusy(IN PKTHREAD Thread)
 {
-#if defined(CONFIG_SMP) && \
-    ((NTDDI_VERSION < NTDDI_WIN7) || defined(_M_ARM64))
+#if defined(CONFIG_SMP) && (NTDDI_VERSION < NTDDI_WIN7)
     KeMemoryBarrier();
     Thread->SwapBusy = FALSE;
-#ifdef _M_ARM64
-    __asm__ __volatile__("dmb ishst" ::: "memory");
-    __asm__ __volatile__("sev" ::: "memory");
-#endif
 #else
     UNREFERENCED_PARAMETER(Thread);
 #endif
@@ -1827,8 +1822,7 @@ FORCEINLINE
 VOID
 KiWaitForThreadSwapOut(IN PKTHREAD Thread)
 {
-#if defined(_M_ARM64) || \
-    (defined(_M_AMD64) && (NTDDI_VERSION < NTDDI_WIN7))
+#if defined(_M_AMD64) && (NTDDI_VERSION < NTDDI_WIN7)
     while (*(volatile BOOLEAN *)&Thread->SwapBusy)
     {
         YieldProcessor();

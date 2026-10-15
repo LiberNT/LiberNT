@@ -421,17 +421,6 @@ KiSwapContextResume(
 #endif
 
     KeMemoryBarrier();
-#if (NTDDI_VERSION < NTDDI_WIN7)
-    OldThread->SwapBusy = FALSE;
-#elif defined(_M_ARM64)
-    OldThread->SwapBusy = FALSE;
-#else
-    OldThread->Running = FALSE;
-#endif
-#ifdef _M_ARM64
-    __asm__ __volatile__("dmb ishst" ::: "memory");
-    __asm__ __volatile__("sev" ::: "memory");
-#endif
 
     /* AP initialization installs the idle-process roots before scheduler
        release. After that invariant is established, only a real process
@@ -443,6 +432,8 @@ KiSwapContextResume(
     {
         KiSwapProcess(NewProcess, OldProcess);
     }
+
+    KiCompleteThreadSwitch(OldThread, NewThread);
 
     /* KiSwapContext saves and restores the complete eager per-thread VFP image. */
 
