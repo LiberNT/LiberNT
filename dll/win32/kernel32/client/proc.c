@@ -74,7 +74,7 @@ StuffStdHandle(IN HANDLE ProcessHandle,
                                0,
                                DUPLICATE_SAME_ACCESS |
                                DUPLICATE_SAME_ATTRIBUTES);
-    if (!NT_SUCCESS(Status)) return;
+    if (!NT_SUCCESS(Status)) DuplicatedHandle = NULL;
 
     /* Write it */
     NtWriteVirtualMemory(ProcessHandle,
@@ -5121,8 +5121,7 @@ StartScan:
         !(StartupInfo.dwFlags & STARTF_USESTDHANDLES) &&
         !(dwCreationFlags & (CREATE_NO_WINDOW |
                              CREATE_NEW_CONSOLE |
-                             DETACHED_PROCESS)) &&
-        (ImageInformation.SubSystemType == IMAGE_SUBSYSTEM_WINDOWS_CUI))
+                             DETACHED_PROCESS)))
     {
         /* Get the remote parameters */
         Status = NtReadVirtualMemory(ProcessHandle,
@@ -5130,7 +5129,8 @@ StartScan:
                                      &ProcessParameters,
                                      sizeof(PRTL_USER_PROCESS_PARAMETERS),
                                      NULL);
-        if (NT_SUCCESS(Status))
+        if (NT_SUCCESS(Status) &&
+            (ImageInformation.SubSystemType == IMAGE_SUBSYSTEM_WINDOWS_CUI))
         {
             StuffStdHandle(ProcessHandle,
                            Peb->ProcessParameters->StandardInput,
@@ -5141,6 +5141,17 @@ StartScan:
             StuffStdHandle(ProcessHandle,
                            Peb->ProcessParameters->StandardError,
                            &ProcessParameters->StandardError);
+        }
+        else if (NT_SUCCESS(Status) &&
+                 !(StartupInfo.dwFlags & (STARTF_USEHOTKEY | STARTF_SHELLPRIVATE)))
+        {
+            HANDLE NullHandles[3] = { NULL, NULL, NULL };
+
+            NtWriteVirtualMemory(ProcessHandle,
+                                 &ProcessParameters->StandardInput,
+                                 NullHandles,
+                                 sizeof(NullHandles),
+                                 NULL);
         }
     }
 
