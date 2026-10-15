@@ -1000,7 +1000,7 @@ KiRecalculateDueTime(IN PLARGE_INTEGER OriginalDueTime,
     if (OriginalDueTime->QuadPart >= 0) return OriginalDueTime;
 
     /* Otherwise, query the interrupt time and recalculate */
-    NewDueTime->QuadPart = KeQueryInterruptTime();
+    NewDueTime->QuadPart = KiQueryInterruptTimePrecise(NULL, FALSE);
     NewDueTime->QuadPart -= DueTime->QuadPart;
     return NewDueTime;
 }
@@ -1219,7 +1219,7 @@ KiComputeDueTime(IN PKTIMER Timer,
     if (DueTime.HighPart >= 0)
     {
         /* Get System Time */
-        KeQuerySystemTime(&SystemTime);
+        KeQuerySystemTimePrecise(&SystemTime);
 
         /* Do the conversion */
         DifferenceTime.QuadPart = SystemTime.QuadPart - DueTime.QuadPart;
@@ -1241,7 +1241,7 @@ KiComputeDueTime(IN PKTIMER Timer,
     }
 
     /* Get the Interrupt Time */
-    InterruptTime.QuadPart = KeQueryInterruptTime();
+    InterruptTime.QuadPart = KiQueryInterruptTimePrecise(NULL, FALSE);
 
     /* Recalculate due time */
     Timer->DueTime.QuadPart = InterruptTime.QuadPart - DueTime.QuadPart;
@@ -1313,7 +1313,7 @@ KxSetTimerForThreadWait(IN PKTIMER Timer,
     if (Interval.HighPart >= 0)
     {
         /* Get the system time and calculate the relative time */
-        KeQuerySystemTime(&SystemTime);
+        KeQuerySystemTimePrecise(&SystemTime);
         TimeDifference.QuadPart = SystemTime.QuadPart - Interval.QuadPart;
         Timer->Header.Absolute = TRUE;
 
@@ -1334,7 +1334,7 @@ KxSetTimerForThreadWait(IN PKTIMER Timer,
     }
 
     /* Calculate the due time */
-    InterruptTime.QuadPart = KeQueryInterruptTime();
+    InterruptTime.QuadPart = KiQueryInterruptTimePrecise(NULL, FALSE);
     DueTime = InterruptTime.QuadPart - Interval.QuadPart;
     Timer->DueTime.QuadPart = DueTime;
 
