@@ -8,6 +8,7 @@ list(APPEND SOURCE
     forcedxsetupsuccess.c
     globalmemorystatus.c
     versionlie.c
+    verifyversioninfolite.c
     vmhorizon.c
     main.c
     layer.spec)
