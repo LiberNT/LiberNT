@@ -17,6 +17,9 @@
 #include "wine/nsi.h"
 #include "wine/debug.h"
 
+#include <stdio.h>
+#include <time.h>
+
 #include <tdiinfo.h>
 #include <tdilib.h>
 #include <tcpioctl.h>
@@ -584,6 +587,53 @@ static void fill_ipv6_sockaddr(SOCKADDR_INET *address, const UCHAR *bytes, ULONG
     address->Ipv6.sin6_port = port;
 }
 
+static void ipv4_unicast_origin(UINT index, DWORD address, struct nsi_ip_unicast_rw *rw)
+{
+    const char *name;
+    char path[MAX_PATH], text[16];
+    DWORD enabled = 0, expiry = 0, size, type;
+    HKEY key;
+    IN_ADDR lease_address;
+    const char *end;
+    time_t now;
+
+    rw->preferred_lifetime = ~0u;
+    rw->valid_lifetime = ~0u;
+    rw->prefix_origin = IpPrefixOriginManual;
+    rw->suffix_origin = IpSuffixOriginManual;
+
+    if (interface_type(index) == MIB_IF_TYPE_LOOPBACK)
+    {
+        rw->prefix_origin = IpPrefixOriginWellKnown;
+        rw->suffix_origin = IpSuffixOriginWellKnown;
+        return;
+    }
+
+    if (!(name = getInterfaceNameByIndex(index))) return;
+    snprintf(path, sizeof(path), "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\%s", name);
+    consumeInterfaceName(name);
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &key)) return;
+
+    size = sizeof(enabled);
+    if (!RegQueryValueExA(key, "EnableDHCP", NULL, &type, (BYTE *)&enabled, &size) && type == REG_DWORD && enabled)
+    {
+        size = sizeof(text);
+        if (!RegQueryValueExA(key, "DhcpIPAddress", NULL, &type, (BYTE *)text, &size) && type == REG_SZ &&
+            !RtlIpv4StringToAddressA(text, TRUE, &end, &lease_address) && lease_address.S_un.S_addr == address)
+        {
+            rw->prefix_origin = IpPrefixOriginDhcp;
+            rw->suffix_origin = IpSuffixOriginDhcp;
+            size = sizeof(expiry);
+            if (!RegQueryValueExA(key, "LeaseTerminatesTime", NULL, &type, (BYTE *)&expiry, &size) && type == REG_DWORD)
+            {
+                now = time(NULL);
+                rw->valid_lifetime = rw->preferred_lifetime = (time_t)expiry > now ? (UINT)((time_t)expiry - now) : 0;
+            }
+        }
+    }
+    RegCloseKey(key);
+}
+
 static DWORD enumerate_ipv4_unicast(struct nsi_enumerate_all_ex *params)
 {
     InterfaceIndexTable *indexes = getInterfaceIndexTable();
@@ -609,10 +659,7 @@ static DWORD enumerate_ipv4_unicast(struct nsi_enumerate_all_ex *params)
             {
                 struct nsi_ip_unicast_rw *rw = (struct nsi_ip_unicast_rw *)params->rw_data + written;
                 memset(rw, 0, sizeof(*rw));
-                rw->preferred_lifetime = ~0u;
-                rw->valid_lifetime = ~0u;
-                rw->prefix_origin = IpPrefixOriginOther;
-                rw->suffix_origin = IpSuffixOriginOther;
+                ipv4_unicast_origin(indexes->indexes[i], address, rw);
                 rw->on_link_prefix = prefix_length(mask);
             }
             if (params->dynamic_data)
