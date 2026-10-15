@@ -742,6 +742,8 @@ C_ASSERT(sizeof(D3DKMT_PRESENTHISTORYTOKEN32) == 1080);
 C_ASSERT(sizeof(D3DKMT_PRESENT_RGNS32) == 16);
 C_ASSERT(sizeof(D3DKMT_PRESENT32) == 1456);
 C_ASSERT(FIELD_OFFSET(D3DKMT_PRESENT32, PresentHistoryToken) == 344);
+C_ASSERT(sizeof(D3DKMT_PRESENTHISTORYTOKEN32) == sizeof(D3DKMT_PRESENTHISTORYTOKEN));
+C_ASSERT(FIELD_OFFSET(D3DKMT_PRESENTHISTORYTOKEN, Token.Blt) == 16);
 C_ASSERT(FIELD_OFFSET(D3DKMT_PRESENT32, pPresentRegions) == 1424);
 C_ASSERT(FIELD_OFFSET(D3DKMT_PRESENT32, bOptimizeForComposition) == 1452);
 C_ASSERT(sizeof(D3DDDI_ALLOCATIONINFO32) == 24);
@@ -868,13 +870,16 @@ static NTSTATUS present_32to64(const D3DKMT_PRESENT32 *desc32, D3DKMT_PRESENT *d
 {
     const D3DKMT_PRESENT_RGNS32 *regions32;
 
-    if (desc32->PresentHistoryToken.Model != D3DKMT_PM_UNINITIALIZED ||
+    if ((desc32->PresentHistoryToken.Model != D3DKMT_PM_UNINITIALIZED &&
+         desc32->PresentHistoryToken.Model != D3DKMT_PM_REDIRECTED_BLT) ||
         desc32->PresentHistoryToken.TokenSize != 0)
     {
         return STATUS_NOT_SUPPORTED;
     }
 
     memset(desc, 0, sizeof(*desc));
+    if (desc32->PresentHistoryToken.Model == D3DKMT_PM_REDIRECTED_BLT)
+        memcpy(&desc->PresentHistoryToken, &desc32->PresentHistoryToken, sizeof(desc->PresentHistoryToken));
     desc->hContext = desc32->hContext;
     desc->hWindow = Handle32ToHandle(desc32->hWindow);
     desc->VidPnSourceId = desc32->VidPnSourceId;
