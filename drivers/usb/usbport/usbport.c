@@ -2751,7 +2751,7 @@ USBPORT_TimeoutAllEndpoints(IN PDEVICE_OBJECT FdoDevice)
         Endpoint = CONTAINING_RECORD(Entry, USBPORT_ENDPOINT, EndpointLink);
         /* TimerFlagsSpinLock serializes the use of TimeoutLink. Pin while
          * holding the list lock, also used by DeleteEndpoint's final check. */
-        InterlockedIncrement(&Endpoint->LockCounter);
+        InterlockedIncrement(&Endpoint->TimeoutPin);
         InsertTailList(&Endpoints, &Endpoint->TimeoutLink);
     }
     KeReleaseSpinLock(&FdoExtension->EndpointListSpinLock, OldIrql);
@@ -2778,7 +2778,7 @@ USBPORT_TimeoutAllEndpoints(IN PDEVICE_OBJECT FdoDevice)
         KeReleaseSpinLock(&Endpoint->EndpointSpinLock, OldIrql);
         if (Expired)
             USBPORT_InvalidateEndpointHandler(FdoDevice, Endpoint, INVALIDATE_ENDPOINT_WORKER_THREAD);
-        InterlockedDecrement(&Endpoint->LockCounter);
+        InterlockedDecrement(&Endpoint->TimeoutPin);
     }
 }
 

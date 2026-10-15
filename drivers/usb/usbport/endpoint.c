@@ -747,7 +747,8 @@ USBPORT_DeleteEndpoint(IN PDEVICE_OBJECT FdoDevice,
 
     KeAcquireSpinLock(&FdoExtension->EndpointListSpinLock, &OldIrql);
     if ((Endpoint->WorkerLink.Flink && Endpoint->WorkerLink.Blink) ||
-        Endpoint->LockCounter != -1)
+        Endpoint->LockCounter != -1 ||
+        Endpoint->TimeoutPin != 0)
     {
         ExInterlockedInsertTailList(&FdoExtension->EndpointClosedList,
                                     &Endpoint->CloseLink,

@@ -311,6 +311,7 @@ typedef struct _USBPORT_ENDPOINT {
   UCHAR Padded[2];
   LONG LockCounter;
   LONG FlushPendingLock;
+  LONG TimeoutPin;
   /* State */
   ULONG StateLast;
   ULONG StateNext;

@@ -819,6 +819,7 @@ USBPORT_FlushPendingTransfers(IN PUSBPORT_ENDPOINT Endpoint)
     PUSBPORT_DEVICE_EXTENSION FdoExtension;
     BOOLEAN IsMapTransfer;
     BOOLEAN IsEnd = FALSE;
+    BOOLEAN PendingDrained;
     PLIST_ENTRY List;
     PUSBPORT_TRANSFER Transfer;
     PURB Urb;
@@ -840,6 +841,7 @@ USBPORT_FlushPendingTransfers(IN PUSBPORT_ENDPOINT Endpoint)
     while (TRUE)
     {
         IsMapTransfer = 0;
+        PendingDrained = FALSE;
 
         KeAcquireSpinLock(&FdoExtension->FlushPendingTransferSpinLock,
                           &OldIrql);
@@ -899,6 +901,7 @@ USBPORT_FlushPendingTransfers(IN PUSBPORT_ENDPOINT Endpoint)
                               OldIrql);
 
             IsEnd = TRUE;
+            PendingDrained = TRUE;
             goto Worker;
         }
 
@@ -1011,7 +1014,7 @@ Next:
             KeAcquireSpinLock(&Endpoint->EndpointSpinLock,
                               &Endpoint->EndpointOldIrql);
 
-            if (!IsListEmpty(&Endpoint->PendingTransferList))
+            if (PendingDrained && !IsListEmpty(&Endpoint->PendingTransferList))
             {
                 KeReleaseSpinLock(&Endpoint->EndpointSpinLock,
                                   Endpoint->EndpointOldIrql);
