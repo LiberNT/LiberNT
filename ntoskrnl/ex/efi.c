@@ -78,13 +78,23 @@ ExGetSystemFirmwareTable(IN ULONG FirmwareTableProviderSignature,
     }
 }
 
-/*
- * @unimplemented
- *
- * ARM64 UEFI runtime-services variable access is not yet wired through the HAL,
- * so there is no real firmware variable path to route to. Parameters are still
- * validated so callers get a deterministic result.
- */
+static
+PWSTR
+ExpCaptureFirmwareVariableName(
+    _In_ PUNICODE_STRING VariableName)
+{
+    PWSTR Name;
+
+    Name = ExAllocatePoolWithTag(NonPagedPool, VariableName->Length + sizeof(UNICODE_NULL), TAG_EFI);
+    if (Name == NULL)
+        return NULL;
+
+    if (VariableName->Length != 0)
+        RtlCopyMemory(Name, VariableName->Buffer, VariableName->Length);
+    Name[VariableName->Length / sizeof(WCHAR)] = UNICODE_NULL;
+    return Name;
+}
+
 NTSTATUS
 NTAPI
 ExGetFirmwareEnvironmentVariable(IN PUNICODE_STRING VariableName,
@@ -93,16 +103,27 @@ ExGetFirmwareEnvironmentVariable(IN PUNICODE_STRING VariableName,
                                  IN OUT PULONG ValueLength,
                                  OUT PULONG Attributes OPTIONAL)
 {
-    UNREFERENCED_PARAMETER(Value);
-    UNREFERENCED_PARAMETER(Attributes);
+    NTSTATUS Status;
+    PWSTR Name;
 
-    if ((VariableName == NULL) || (VariableName->Buffer == NULL) ||
+    PAGED_CODE();
+
+    if (ExpFirmwareType != FirmwareTypeUefi)
+        return STATUS_NOT_IMPLEMENTED;
+
+    if ((VariableName == NULL) || ((VariableName->Buffer == NULL) && (VariableName->Length != 0)) ||
         (VendorGuid == NULL) || (ValueLength == NULL))
     {
         return STATUS_INVALID_PARAMETER;
     }
 
-    return STATUS_NOT_IMPLEMENTED;
+    Name = ExpCaptureFirmwareVariableName(VariableName);
+    if (Name == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = HalGetEnvironmentVariableEx(Name, VendorGuid, Value, ValueLength, Attributes);
+    ExFreePoolWithTag(Name, TAG_EFI);
+    return Status;
 }
 
 NTSTATUS
@@ -113,15 +134,28 @@ ExSetFirmwareEnvironmentVariable(IN PUNICODE_STRING VariableName,
                                  IN ULONG ValueLength,
                                  IN ULONG Attributes)
 {
-    UNREFERENCED_PARAMETER(Attributes);
+    NTSTATUS Status;
+    PWSTR Name;
 
-    if ((VariableName == NULL) || (VariableName->Buffer == NULL) ||
-        (VendorGuid == NULL) || ((Value == NULL) && (ValueLength != 0)))
+    PAGED_CODE();
+
+    if (ExpFirmwareType != FirmwareTypeUefi)
+        return STATUS_NOT_IMPLEMENTED;
+
+    if ((VariableName == NULL) || ((VariableName->Buffer == NULL) && (VariableName->Length != 0)) ||
+        (VendorGuid == NULL) || ((Value == NULL) && (ValueLength != 0)) ||
+        !(Attributes & VARIABLE_ATTRIBUTE_NON_VOLATILE))
     {
         return STATUS_INVALID_PARAMETER;
     }
 
-    return STATUS_NOT_IMPLEMENTED;
+    Name = ExpCaptureFirmwareVariableName(VariableName);
+    if (Name == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = HalSetEnvironmentVariableEx(Name, VendorGuid, Value, ValueLength, Attributes);
+    ExFreePoolWithTag(Name, TAG_EFI);
+    return Status;
 }
 
 NTSTATUS

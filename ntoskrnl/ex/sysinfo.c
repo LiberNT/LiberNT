@@ -796,8 +796,83 @@ NtQuerySystemEnvironmentValueEx(
     _Inout_ PULONG ReturnLength,
     _Out_opt_ PULONG Attributes)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    KPROCESSOR_MODE PreviousMode;
+    UNICODE_STRING Name;
+    PVOID Buffer = NULL;
+    ULONG Length, Attribute = 0;
+    NTSTATUS Status;
+    GUID Guid;
+
+    PAGED_CODE();
+
+    if (ExpFirmwareType != FirmwareTypeUefi)
+        return STATUS_NOT_IMPLEMENTED;
+
+    PreviousMode = ExGetPreviousMode();
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege, PreviousMode))
+        return STATUS_PRIVILEGE_NOT_HELD;
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForRead(VendorGuid, sizeof(*VendorGuid), sizeof(ULONG));
+            ProbeForWriteUlong(ReturnLength);
+            if (Attributes != NULL)
+                ProbeForWriteUlong(Attributes);
+        }
+
+        Guid = *VendorGuid;
+        Length = (Value != NULL) ? *ReturnLength : 0;
+        if ((PreviousMode != KernelMode) && (Length != 0))
+            ProbeForWrite(Value, Length, sizeof(UCHAR));
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    Status = ProbeAndCaptureUnicodeString(&Name, PreviousMode, VariableName);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (Length != 0)
+    {
+        Buffer = ExAllocatePoolWithTag(NonPagedPool, Length, TAG_EFI);
+        if (Buffer == NULL)
+        {
+            ReleaseCapturedUnicodeString(&Name, PreviousMode);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+    }
+
+    Status = ExGetFirmwareEnvironmentVariable(&Name, &Guid, Buffer, &Length, &Attribute);
+    ReleaseCapturedUnicodeString(&Name, PreviousMode);
+
+    _SEH2_TRY
+    {
+        if (NT_SUCCESS(Status) || (Status == STATUS_BUFFER_TOO_SMALL))
+            *ReturnLength = Length;
+
+        if (NT_SUCCESS(Status))
+        {
+            if (Length != 0)
+                RtlCopyMemory(Value, Buffer, Length);
+            if (Attributes != NULL)
+                *Attributes = Attribute;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (Buffer != NULL)
+        ExFreePoolWithTag(Buffer, TAG_EFI);
+
+    return Status;
 }
 
 NTSTATUS
@@ -809,8 +884,63 @@ NtSetSystemEnvironmentValueEx(
     _In_ ULONG ValueLength,
     _In_ ULONG Attributes)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    KPROCESSOR_MODE PreviousMode;
+    UNICODE_STRING Name;
+    PVOID Buffer = NULL;
+    NTSTATUS Status;
+    GUID Guid;
+
+    PAGED_CODE();
+
+    if (ExpFirmwareType != FirmwareTypeUefi)
+        return STATUS_NOT_IMPLEMENTED;
+
+    PreviousMode = ExGetPreviousMode();
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege, PreviousMode))
+        return STATUS_PRIVILEGE_NOT_HELD;
+
+    if ((Value == NULL) && (ValueLength != 0))
+        return STATUS_INVALID_PARAMETER;
+
+    if (ValueLength != 0)
+    {
+        Buffer = ExAllocatePoolWithTag(NonPagedPool, ValueLength, TAG_EFI);
+        if (Buffer == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForRead(VendorGuid, sizeof(*VendorGuid), sizeof(ULONG));
+            if (ValueLength != 0)
+                ProbeForRead(Value, ValueLength, sizeof(UCHAR));
+        }
+
+        Guid = *VendorGuid;
+        if (ValueLength != 0)
+            RtlCopyMemory(Buffer, Value, ValueLength);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        if (Buffer != NULL)
+            ExFreePoolWithTag(Buffer, TAG_EFI);
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    Status = ProbeAndCaptureUnicodeString(&Name, PreviousMode, VariableName);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ExSetFirmwareEnvironmentVariable(&Name, &Guid, Buffer, ValueLength, Attributes);
+        ReleaseCapturedUnicodeString(&Name, PreviousMode);
+    }
+
+    if (Buffer != NULL)
+        ExFreePoolWithTag(Buffer, TAG_EFI);
+
+    return Status;
 }
 
 /* --- Query/Set System Information --- */
