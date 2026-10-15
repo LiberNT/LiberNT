@@ -30,6 +30,8 @@ extern void func_GetModuleFileName(void);
 extern void func_GetNumaNodeProcessorMaskEx(void);
 extern void func_GetOsSafeBootMode(void);
 extern void func_GetPackageFamilyName(void);
+extern void func_GetProcessorSystemCycleTime(void);
+extern void func_AppModelInternal(void);
 extern void func_GetSystemWow64Directory(void);
 extern void func_GetTempFileName(void);
 extern void func_GetTempPath2(void);
@@ -115,6 +117,8 @@ const struct test winetest_testlist[] =
     { "GetNumaNodeProcessorMaskEx",  func_GetNumaNodeProcessorMaskEx },
     { "GetOsSafeBootMode",           func_GetOsSafeBootMode },
     { "GetPackageFamilyName",        func_GetPackageFamilyName },
+    { "GetProcessorSystemCycleTime", func_GetProcessorSystemCycleTime },
+    { "AppModelInternal",            func_AppModelInternal },
     { "GetSystemWow64Directory",     func_GetSystemWow64Directory },
     { "GetTempFileName",             func_GetTempFileName },
     { "GetTempPath2",                func_GetTempPath2 },

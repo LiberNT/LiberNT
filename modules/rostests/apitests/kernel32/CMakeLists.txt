@@ -32,6 +32,8 @@ list(APPEND SOURCE
     GetNumaNodeProcessorMaskEx.c
     GetOsSafeBootMode.c
     GetPackageFamilyName.c
+    GetProcessorSystemCycleTime.c
+    AppModelInternal.c
     GetSystemWow64Directory.c
     GetTempFileName.c
     GetTempPath2.c
