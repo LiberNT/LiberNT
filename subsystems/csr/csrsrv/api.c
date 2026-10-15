@@ -266,6 +266,103 @@ CsrCallServerFromServer(IN PCSR_API_MESSAGE ReceiveMsg,
  *          new clients connecting to CSR.
  *
  *--*/
+static
+VOID
+CsrpRegisterSessionClient(IN PCLIENT_ID ClientId)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    PROCESS_SESSION_INFORMATION SessionInfo;
+    KERNEL_USER_TIMES KernelTimes;
+    CLIENT_ID ProcessCid;
+    HANDLE hProcess = NULL, hThread = NULL;
+    PCSR_PROCESS CsrProcess;
+    PCSR_THREAD CsrThread;
+    PCSR_SERVER_DLL ServerDll;
+    PVOID ProcessData;
+    NTSTATUS Status;
+    ULONG i;
+
+    InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
+    ProcessCid.UniqueProcess = ClientId->UniqueProcess;
+    ProcessCid.UniqueThread = NULL;
+    Status = NtOpenProcess(&hProcess, PROCESS_ALL_ACCESS, &ObjectAttributes, &ProcessCid);
+    if (!NT_SUCCESS(Status)) return;
+    Status = NtQueryInformationProcess(hProcess, ProcessSessionInformation, &SessionInfo, sizeof(SessionInfo), NULL);
+    if (!NT_SUCCESS(Status) || SessionInfo.SessionId != NtCurrentPeb()->SessionId) goto Cleanup;
+    Status = NtOpenThread(&hThread, THREAD_ALL_ACCESS, &ObjectAttributes, ClientId);
+    if (!NT_SUCCESS(Status)) goto Cleanup;
+    Status = NtQueryInformationThread(hThread, ThreadTimes, &KernelTimes, sizeof(KernelTimes), NULL);
+    if (!NT_SUCCESS(Status)) goto Cleanup;
+    Status = NtSetInformationProcess(hProcess, ProcessExceptionPort, &CsrApiPort, sizeof(CsrApiPort));
+    if (!NT_SUCCESS(Status)) goto Cleanup;
+
+    CsrAcquireProcessLock();
+    if (CsrLocateThreadByClientId(NULL, ClientId))
+    {
+        CsrReleaseProcessLock();
+        goto Cleanup;
+    }
+
+    CsrProcess = CsrAllocateProcess();
+    if (!CsrProcess)
+    {
+        CsrReleaseProcessLock();
+        goto Cleanup;
+    }
+    CsrThread = CsrAllocateThread(CsrProcess);
+    if (!CsrThread)
+    {
+        CsrDeallocateProcess(CsrProcess);
+        CsrReleaseProcessLock();
+        goto Cleanup;
+    }
+
+    CsrThread->CreateTime = KernelTimes.CreateTime;
+    CsrThread->ClientId = *ClientId;
+    CsrThread->ThreadHandle = hThread;
+    ProtectHandle(hThread);
+    CsrThread->Flags = 0;
+    Status = CsrInsertThread(CsrProcess, CsrThread);
+    if (!NT_SUCCESS(Status))
+    {
+        UnProtectHandle(hThread);
+        CsrDeallocateProcess(CsrProcess);
+        CsrDeallocateThread(CsrThread);
+        CsrReleaseProcessLock();
+        goto Cleanup;
+    }
+
+    CsrProcess->ClientId = *ClientId;
+    CsrProcess->ProcessGroupId = HandleToUlong(ClientId->UniqueProcess);
+    CsrProcess->ProcessHandle = hProcess;
+    CsrSetBackgroundPriority(CsrProcess);
+
+    ProcessData = (PVOID)((ULONG_PTR)CsrProcess +
+                          FIELD_OFFSET(CSR_PROCESS, ServerData) +
+                          CSR_SERVER_DLL_MAX * sizeof(PVOID));
+    for (i = 0; i < CSR_SERVER_DLL_MAX; i++)
+    {
+        ServerDll = CsrLoadedServerDll[i];
+        if (ServerDll && ServerDll->SizeOfProcessData)
+        {
+            CsrProcess->ServerData[i] = ProcessData;
+            ProcessData = (PVOID)((ULONG_PTR)ProcessData + ServerDll->SizeOfProcessData);
+        }
+        else
+        {
+            CsrProcess->ServerData[i] = NULL;
+        }
+    }
+
+    CsrInsertProcess(NULL, CsrProcess);
+    CsrReleaseProcessLock();
+    return;
+
+Cleanup:
+    if (hThread) NtClose(hThread);
+    if (hProcess) NtClose(hProcess);
+}
+
 NTSTATUS
 NTAPI
 CsrApiHandleConnectionRequest(IN PCSR_API_MESSAGE ApiMessage)
@@ -296,6 +393,13 @@ CsrApiHandleConnectionRequest(IN PCSR_API_MESSAGE ApiMessage)
 
     /* Lookup the CSR Thread */
     CsrThread = CsrLocateThreadByClientId(NULL, &ApiMessage->Header.ClientId);
+    if (!CsrThread)
+    {
+        CsrReleaseProcessLock();
+        CsrpRegisterSessionClient(&ApiMessage->Header.ClientId);
+        CsrAcquireProcessLock();
+        CsrThread = CsrLocateThreadByClientId(NULL, &ApiMessage->Header.ClientId);
+    }
 
     /* Check if we have a thread */
     if (CsrThread)
