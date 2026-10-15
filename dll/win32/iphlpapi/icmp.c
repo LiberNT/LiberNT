@@ -81,7 +81,7 @@ Icmp6SendEcho2(
     _In_     struct sockaddr_in6    *DestinationAddress,
     _In_     LPVOID                 RequestData,
     _In_     WORD                   RequestSize,
-    _In_     PIP_OPTION_INFORMATION RequestOptions,
+    _In_opt_ PIP_OPTION_INFORMATION RequestOptions,
     _Out_    LPVOID                 ReplyBuffer,
     _In_     DWORD                  ReplySize,
     _In_     DWORD                  Timeout)
@@ -130,8 +130,11 @@ Icmp6SendEcho2(
     Request->Unknown1 = 0x72;
 
     Request->Timeout = Timeout;
-    Request->Ttl = RequestOptions->Ttl;
-    Request->Flags = RequestOptions->Flags;
+    if (RequestOptions != NULL)
+    {
+        Request->Ttl = RequestOptions->Ttl;
+        Request->Flags = RequestOptions->Flags;
+    }
 
     if (RequestSize > 0)
     {
