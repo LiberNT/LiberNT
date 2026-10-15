@@ -19,6 +19,8 @@
 
 #include <tdiinfo.h>
 #include <tdilib.h>
+#include <tcpioctl.h>
+#include <tcpip_undoc.h>
 
 #include "../iphlpapi/ifenum.h"
 #include "../iphlpapi/ipstats.h"
@@ -262,10 +264,322 @@ static DWORD enumerate_ip_interface(struct nsi_enumerate_all_ex *params)
     return finish_enumeration(params, count, want_data);
 }
 
-static DWORD enumerate_ipv6_empty(struct nsi_enumerate_all_ex *params)
+static void *ip6_query_table(ULONG table_id, ULONG *count)
 {
-    params->count = 0;
+    UNICODE_STRING name = RTL_CONSTANT_STRING(L"\\Device\\Ip6");
+    OBJECT_ATTRIBUTES attr;
+    IO_STATUS_BLOCK iosb;
+    IP6_TABLE_HEADER *header = NULL;
+    ULONG size = sizeof(IP6_TABLE_HEADER) + 4096;
+    NTSTATUS status;
+    HANDLE file;
+
+    *count = 0;
+    InitializeObjectAttributes(&attr, &name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    status = NtOpenFile(&file, SYNCHRONIZE, &attr, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(status)) return NULL;
+
+    for (;;)
+    {
+        if (!(header = HeapAlloc(GetProcessHeap(), 0, size))) break;
+        *(ULONG *)header = table_id;
+        status = NtDeviceIoControlFile(file, NULL, NULL, NULL, &iosb, IOCTL_IP6_QUERY_TABLE,
+                                       header, sizeof(ULONG), header, size);
+        if (status == STATUS_BUFFER_OVERFLOW && header->Needed > size)
+        {
+            size = header->Needed;
+            HeapFree(GetProcessHeap(), 0, header);
+            header = NULL;
+            continue;
+        }
+        if (!NT_SUCCESS(status))
+        {
+            HeapFree(GetProcessHeap(), 0, header);
+            header = NULL;
+        }
+        break;
+    }
+
+    NtClose(file);
+    if (header) *count = header->Count;
+    return header;
+}
+
+static void fill_ipv6_interface(const IP6_INTERFACE_ROW *row, struct nsi_ip_interface_key *key, struct nsi_ip_interface_rw *rw,
+                                struct nsi_ip_interface_dynamic *dynamic, struct nsi_ip_interface_static *stat)
+{
+    if (key) key->luid = interface_luid(row->Index);
+    if (rw)
+    {
+        memset(rw, 0, sizeof(*rw));
+        rw->base_reachable_time = row->BaseReachableTime;
+        rw->retransmit_time = row->RetransmitTime;
+        rw->path_mtu_discovery_timeout = 600000;
+        rw->dad_transmits = row->DadTransmits;
+        rw->link_local_address_behavior = LinkLocalAlwaysOn;
+        rw->link_local_address_timeout = ~0u;
+        rw->mtu = row->Mtu;
+        rw->site_prefix_len = 48;
+    }
+    if (dynamic)
+    {
+        memset(dynamic, 0, sizeof(*dynamic));
+        dynamic->if_index = row->Index;
+        dynamic->reachable_time = row->ReachableTime;
+        dynamic->connected = row->Connected;
+    }
+    if (stat) memset(stat, 0, sizeof(*stat));
+}
+
+static DWORD enumerate_ipv6_interface(struct nsi_enumerate_all_ex *params)
+{
+    ULONG count;
+    IP6_TABLE_HEADER *header = ip6_query_table(Ip6TableInterfaces, &count);
+    const IP6_INTERFACE_ROW *rows = (const IP6_INTERFACE_ROW *)(header + 1);
+    BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
+    UINT_PTR i, limit = count < params->count ? count : params->count;
+
+    for (i = 0; want_data && i < limit; i++)
+        fill_ipv6_interface(rows + i, params->key_data ? (struct nsi_ip_interface_key *)params->key_data + i : NULL,
+                            params->rw_data ? (struct nsi_ip_interface_rw *)params->rw_data + i : NULL,
+                            params->dynamic_data ? (struct nsi_ip_interface_dynamic *)params->dynamic_data + i : NULL,
+                            params->static_data ? (struct nsi_ip_interface_static *)params->static_data + i : NULL);
+    HeapFree(GetProcessHeap(), 0, header);
+    return finish_enumeration(params, count, want_data);
+}
+
+static DWORD enumerate_ipv6_unicast(struct nsi_enumerate_all_ex *params)
+{
+    ULONG count;
+    IP6_TABLE_HEADER *header = ip6_query_table(Ip6TableAddresses, &count);
+    const IP6_ADDRESS_ROW *rows = (const IP6_ADDRESS_ROW *)(header + 1);
+    BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
+    UINT_PTR i, limit = count < params->count ? count : params->count;
+
+    for (i = 0; want_data && i < limit; i++)
+    {
+        const IP6_ADDRESS_ROW *row = rows + i;
+
+        if (params->key_data)
+        {
+            struct nsi_ipv6_unicast_key *key = (struct nsi_ipv6_unicast_key *)params->key_data + i;
+            memset(key, 0, sizeof(*key));
+            key->luid = interface_luid(row->Index);
+            memcpy(&key->addr, row->Address, sizeof(key->addr));
+        }
+        if (params->rw_data)
+        {
+            struct nsi_ip_unicast_rw *rw = (struct nsi_ip_unicast_rw *)params->rw_data + i;
+            memset(rw, 0, sizeof(*rw));
+            rw->preferred_lifetime = row->PreferredLifetime;
+            rw->valid_lifetime = row->ValidLifetime;
+            rw->prefix_origin = row->PrefixOrigin;
+            rw->suffix_origin = row->SuffixOrigin;
+            rw->on_link_prefix = row->PrefixLength;
+        }
+        if (params->dynamic_data)
+        {
+            struct nsi_ip_unicast_dynamic *dynamic = (struct nsi_ip_unicast_dynamic *)params->dynamic_data + i;
+            memset(dynamic, 0, sizeof(*dynamic));
+            dynamic->scope_id = IN6_IS_ADDR_LINKLOCAL((const IN6_ADDR *)row->Address) ? row->Index : 0;
+            dynamic->dad_state = row->DadState;
+        }
+        if (params->static_data) memset((struct nsi_ip_unicast_static *)params->static_data + i, 0, sizeof(struct nsi_ip_unicast_static));
+    }
+    HeapFree(GetProcessHeap(), 0, header);
+    return finish_enumeration(params, count, want_data);
+}
+
+static DWORD enumerate_ipv6_neighbour(struct nsi_enumerate_all_ex *params)
+{
+    ULONG count;
+    IP6_TABLE_HEADER *header = ip6_query_table(Ip6TableNeighbors, &count);
+    const IP6_NEIGHBOR_ROW *rows = (const IP6_NEIGHBOR_ROW *)(header + 1);
+    BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
+    UINT_PTR i, limit = count < params->count ? count : params->count;
+
+    for (i = 0; want_data && i < limit; i++)
+    {
+        const IP6_NEIGHBOR_ROW *row = rows + i;
+        ULONG length = row->PhysicalAddressLength < IF_MAX_PHYS_ADDRESS_LENGTH ? row->PhysicalAddressLength : IF_MAX_PHYS_ADDRESS_LENGTH;
+
+        if (params->key_data)
+        {
+            struct nsi_ipv6_neighbour_key *key = (struct nsi_ipv6_neighbour_key *)params->key_data + i;
+            memset(key, 0, sizeof(*key));
+            key->luid = key->luid2 = interface_luid(row->Index);
+            memcpy(&key->addr, row->Address, sizeof(key->addr));
+        }
+        if (params->rw_data)
+        {
+            struct nsi_ip_neighbour_rw *rw = (struct nsi_ip_neighbour_rw *)params->rw_data + i;
+            memset(rw, 0, sizeof(*rw));
+            memcpy(rw->phys_addr, row->PhysicalAddress, length);
+        }
+        if (params->dynamic_data)
+        {
+            struct nsi_ip_neighbour_dynamic *dynamic = (struct nsi_ip_neighbour_dynamic *)params->dynamic_data + i;
+            memset(dynamic, 0, sizeof(*dynamic));
+            dynamic->state = row->State;
+            dynamic->flags.is_router = row->IsRouter;
+            dynamic->flags.is_unreachable = row->IsUnreachable;
+            dynamic->phys_addr_len = length;
+        }
+    }
+    HeapFree(GetProcessHeap(), 0, header);
+    return finish_enumeration(params, count, want_data);
+}
+
+static DWORD enumerate_ipv6_forward(struct nsi_enumerate_all_ex *params)
+{
+    ULONG count;
+    IP6_TABLE_HEADER *header = ip6_query_table(Ip6TableRoutes, &count);
+    const IP6_ROUTE_ROW *rows = (const IP6_ROUTE_ROW *)(header + 1);
+    BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
+    UINT_PTR i, limit = count < params->count ? count : params->count;
+
+    for (i = 0; want_data && i < limit; i++)
+    {
+        const IP6_ROUTE_ROW *row = rows + i;
+
+        if (params->key_data)
+        {
+            struct nsi_ipv6_forward_key *key = (struct nsi_ipv6_forward_key *)params->key_data + i;
+            memset(key, 0, sizeof(*key));
+            memcpy(&key->prefix, row->Prefix, sizeof(key->prefix));
+            key->prefix_len = (BYTE)row->PrefixLength;
+            key->luid = key->luid2 = interface_luid(row->Index);
+            memcpy(&key->next_hop, row->NextHop, sizeof(key->next_hop));
+        }
+        if (params->rw_data)
+        {
+            struct nsi_ip_forward_rw *rw = (struct nsi_ip_forward_rw *)params->rw_data + i;
+            memset(rw, 0, sizeof(*rw));
+            rw->valid_lifetime = row->ValidLifetime;
+            rw->preferred_lifetime = row->PreferredLifetime;
+            rw->metric = row->Metric;
+            rw->protocol = row->Protocol;
+            rw->loopback = row->Loopback;
+            rw->autoconf = row->Autoconfigure;
+            rw->publish = row->Publish;
+            rw->immortal = row->Immortal;
+        }
+        if (params->dynamic_data)
+        {
+            struct nsi_ipv6_forward_dynamic *dynamic = (struct nsi_ipv6_forward_dynamic *)params->dynamic_data + i;
+            memset(dynamic, 0, sizeof(*dynamic));
+            memcpy(&dynamic->addr2, row->Prefix, sizeof(dynamic->addr2));
+        }
+        if (params->static_data)
+        {
+            struct nsi_ip_forward_static *stat = (struct nsi_ip_forward_static *)params->static_data + i;
+            memset(stat, 0, sizeof(*stat));
+            stat->origin = row->Origin;
+            stat->if_index = row->Index;
+        }
+    }
+    HeapFree(GetProcessHeap(), 0, header);
+    return finish_enumeration(params, count, want_data);
+}
+
+static BOOL ipv6_statistics(IP6_STATISTICS *stats)
+{
+    ULONG count;
+    IP6_TABLE_HEADER *header = ip6_query_table(Ip6TableStatistics, &count);
+
+    if (!header) return FALSE;
+    if (count != 1 || header->Needed < sizeof(*header) + sizeof(*stats))
+    {
+        HeapFree(GetProcessHeap(), 0, header);
+        return FALSE;
+    }
+    memcpy(stats, header + 1, sizeof(*stats));
+    HeapFree(GetProcessHeap(), 0, header);
+    return TRUE;
+}
+
+static DWORD get_ipv6_compartment(struct nsi_get_all_parameters_ex *params)
+{
+    const UINT *key = params->key;
+    IP6_STATISTICS stats;
+
+    if (!key || *key != NET_IF_COMPARTMENT_ID_PRIMARY) return ERROR_FILE_NOT_FOUND;
+    if (!ipv6_statistics(&stats)) return ERROR_NOT_SUPPORTED;
+    if (params->rw_data)
+    {
+        struct nsi_ip_cmpt_rw *rw = params->rw_data;
+        memset(rw, 0, sizeof(*rw));
+        rw->not_forwarding = TRUE;
+        rw->default_ttl = stats.DefaultHopLimit;
+    }
+    if (params->dynamic_data)
+    {
+        struct nsi_ip_cmpt_dynamic *dynamic = params->dynamic_data;
+        memset(dynamic, 0, sizeof(*dynamic));
+        dynamic->num_ifs = stats.NumInterfaces;
+        dynamic->num_routes = stats.NumRoutes;
+        dynamic->num_addrs = stats.NumAddresses;
+    }
     return ERROR_SUCCESS;
+}
+
+static DWORD get_ipv6_icmp(struct nsi_get_all_parameters_ex *params)
+{
+    struct nsi_ip_icmpstats_dynamic *dynamic = params->dynamic_data;
+    IP6_STATISTICS stats;
+
+    if (!ipv6_statistics(&stats)) return ERROR_NOT_SUPPORTED;
+    if (!dynamic) return ERROR_SUCCESS;
+    memset(dynamic, 0, sizeof(*dynamic));
+    dynamic->in_msgs = stats.IcmpInMessages;
+    dynamic->in_errors = stats.IcmpInErrors;
+    dynamic->out_msgs = stats.IcmpOutMessages;
+    dynamic->out_errors = stats.IcmpOutErrors;
+    return ERROR_SUCCESS;
+}
+
+static DWORD get_ipv6_stats(struct nsi_get_all_parameters_ex *params)
+{
+    IP6_STATISTICS stats;
+
+    if (!ipv6_statistics(&stats)) return ERROR_NOT_SUPPORTED;
+    if (params->dynamic_data)
+    {
+        struct nsi_ip_ipstats_dynamic *dynamic = params->dynamic_data;
+        memset(dynamic, 0, sizeof(*dynamic));
+        dynamic->in_recv = stats.InReceives;
+        dynamic->fwd_dgrams = stats.ForwardedDatagrams;
+        dynamic->in_delivers = stats.InDelivers;
+        dynamic->out_reqs = stats.OutRequests;
+        dynamic->in_hdr_errs = stats.InHeaderErrors;
+        dynamic->in_addr_errs = stats.InAddressErrors;
+        dynamic->in_unk_protos = stats.InUnknownProtocols;
+        dynamic->reasm_reqds = stats.ReassemblyRequired;
+        dynamic->reasm_oks = stats.ReassemblyOk;
+        dynamic->reasm_fails = stats.ReassemblyFailures;
+        dynamic->in_discards = stats.InDiscards;
+        dynamic->out_no_routes = stats.OutNoRoutes;
+        dynamic->out_discards = stats.OutDiscards;
+        dynamic->frag_oks = stats.FragmentOk;
+        dynamic->frag_fails = stats.FragmentFailures;
+        dynamic->frag_creates = stats.FragmentsCreated;
+    }
+    if (params->static_data)
+    {
+        struct nsi_ip_ipstats_static *stat = params->static_data;
+        memset(stat, 0, sizeof(*stat));
+        stat->reasm_timeout = stats.ReassemblyTimeout;
+    }
+    return ERROR_SUCCESS;
+}
+
+static void fill_ipv6_sockaddr(SOCKADDR_INET *address, const UCHAR *bytes, ULONG scope_id, USHORT port)
+{
+    address->Ipv6.sin6_family = AF_INET6;
+    memcpy(&address->Ipv6.sin6_addr, bytes, sizeof(address->Ipv6.sin6_addr));
+    address->Ipv6.sin6_scope_id = scope_id;
+    address->Ipv6.sin6_port = port;
 }
 
 static DWORD enumerate_ipv4_unicast(struct nsi_enumerate_all_ex *params)
@@ -549,12 +863,29 @@ static DWORD get_tcp_stats(struct nsi_get_all_parameters_ex *params)
     HANDLE file;
     DWORD error;
 
-    if (!family || *family != AF_INET) return ERROR_NOT_SUPPORTED;
-    if (!NT_SUCCESS(openTcpFile(&file, 0))) return ERROR_NOT_SUPPORTED;
+    if (!family || (*family != AF_INET && *family != AF_INET6)) return ERROR_NOT_SUPPORTED;
     memset(&stats, 0, sizeof(stats));
+    if (!NT_SUCCESS(openTcpFile(&file, 0))) return ERROR_NOT_SUPPORTED;
     error = getTCPStats(file, &stats);
     closeTcpFile(file);
     if (error) return error;
+    if (*family == AF_INET6)
+    {
+        IP6_STATISTICS stats6;
+
+        if (!ipv6_statistics(&stats6)) return ERROR_NOT_SUPPORTED;
+        stats.dwActiveOpens = stats6.TcpActiveOpens;
+        stats.dwPassiveOpens = stats6.TcpPassiveOpens;
+        stats.dwAttemptFails = stats6.TcpAttemptFailures;
+        stats.dwEstabResets = stats6.TcpEstablishedResets;
+        stats.dwCurrEstab = stats6.TcpCurrentEstablished;
+        stats.dwInSegs = (DWORD)stats6.TcpInSegments;
+        stats.dwOutSegs = (DWORD)stats6.TcpOutSegments;
+        stats.dwRetransSegs = stats6.TcpRetransmittedSegments;
+        stats.dwOutRsts = stats6.TcpOutResets;
+        stats.dwInErrs = stats6.TcpInErrors;
+        stats.dwNumConns = stats6.TcpNumConnections;
+    }
     if (params->dynamic_data)
     {
         struct nsi_tcp_stats_dynamic *dynamic = params->dynamic_data;
@@ -588,6 +919,9 @@ static DWORD enumerate_tcp(struct nsi_enumerate_all_ex *params)
     MIB_TCPTABLE_OWNER_MODULE *table = getTcpTable(ClassModule);
     BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
     UINT_PTR i, count = 0, written = 0;
+    ULONG count6;
+    IP6_TABLE_HEADER *header6 = ip6_query_table(Ip6TableEndpoints, &count6);
+    const IP6_ENDPOINT_ROW *rows6 = (const IP6_ENDPOINT_ROW *)(header6 + 1);
 
     for (i = 0; table && i < table->dwNumEntries; i++)
     {
@@ -626,6 +960,41 @@ static DWORD enumerate_tcp(struct nsi_enumerate_all_ex *params)
         }
         count++;
     }
+    for (i = 0; i < count6; i++)
+    {
+        const IP6_ENDPOINT_ROW *row = rows6 + i;
+
+        if (row->Protocol != IPPROTO_TCP) continue;
+        if (params->table == NSI_TCP_ESTAB_TABLE && row->State != MIB_TCP_STATE_ESTAB) continue;
+        if (params->table == NSI_TCP_LISTEN_TABLE && row->State != MIB_TCP_STATE_LISTEN) continue;
+        if (want_data && written < params->count)
+        {
+            if (params->key_data)
+            {
+                struct nsi_tcp_conn_key *key = (struct nsi_tcp_conn_key *)params->key_data + written;
+                memset(key, 0, sizeof(*key));
+                fill_ipv6_sockaddr(&key->local, row->LocalAddress, row->LocalScopeId, row->LocalPort);
+                fill_ipv6_sockaddr(&key->remote, row->RemoteAddress, row->RemoteScopeId, row->RemotePort);
+            }
+            if (params->dynamic_data)
+            {
+                struct nsi_tcp_conn_dynamic *dynamic = (struct nsi_tcp_conn_dynamic *)params->dynamic_data + written;
+                memset(dynamic, 0, sizeof(*dynamic));
+                dynamic->state = row->State;
+            }
+            if (params->static_data)
+            {
+                struct nsi_tcp_conn_static *stat = (struct nsi_tcp_conn_static *)params->static_data + written;
+                memset(stat, 0, sizeof(*stat));
+                stat->pid = row->ProcessId;
+                stat->create_time = row->CreateTime.QuadPart;
+                stat->mod_info = row->ModuleInfo;
+            }
+            written++;
+        }
+        count++;
+    }
+    HeapFree(GetProcessHeap(), 0, header6);
     HeapFree(GetProcessHeap(), 0, table);
     return finish_enumeration(params, count, want_data);
 }
@@ -637,12 +1006,26 @@ static DWORD get_udp_stats(struct nsi_get_all_parameters_ex *params)
     HANDLE file;
     DWORD error;
 
-    if (!family || *family != AF_INET) return ERROR_NOT_SUPPORTED;
-    if (!NT_SUCCESS(openTcpFile(&file, 0))) return ERROR_NOT_SUPPORTED;
+    if (!family || (*family != AF_INET && *family != AF_INET6)) return ERROR_NOT_SUPPORTED;
     memset(&stats, 0, sizeof(stats));
-    error = getUDPStats(file, &stats);
-    closeTcpFile(file);
-    if (error) return error;
+    if (*family == AF_INET6)
+    {
+        IP6_STATISTICS stats6;
+
+        if (!ipv6_statistics(&stats6)) return ERROR_NOT_SUPPORTED;
+        stats.dwInDatagrams = (DWORD)stats6.UdpInDatagrams;
+        stats.dwNoPorts = stats6.UdpNoPorts;
+        stats.dwInErrors = stats6.UdpInErrors;
+        stats.dwOutDatagrams = (DWORD)stats6.UdpOutDatagrams;
+        stats.dwNumAddrs = stats6.UdpNumAddresses;
+    }
+    else
+    {
+        if (!NT_SUCCESS(openTcpFile(&file, 0))) return ERROR_NOT_SUPPORTED;
+        error = getUDPStats(file, &stats);
+        closeTcpFile(file);
+        if (error) return error;
+    }
     if (params->dynamic_data)
     {
         struct nsi_udp_stats_dynamic *dynamic = params->dynamic_data;
@@ -662,6 +1045,9 @@ static DWORD enumerate_udp(struct nsi_enumerate_all_ex *params)
     BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
     UINT_PTR count = table ? table->dwNumEntries : 0, limit = count < params->count ? count : params->count;
     UINT_PTR i;
+    ULONG count6;
+    IP6_TABLE_HEADER *header6 = ip6_query_table(Ip6TableEndpoints, &count6);
+    const IP6_ENDPOINT_ROW *rows6 = (const IP6_ENDPOINT_ROW *)(header6 + 1);
 
     for (i = 0; want_data && i < limit; i++)
     {
@@ -685,13 +1071,33 @@ static DWORD enumerate_udp(struct nsi_enumerate_all_ex *params)
             stat->mod_info = row->OwningModuleInfo[0];
         }
     }
+    for (i = 0; i < count6; i++)
+    {
+        const IP6_ENDPOINT_ROW *row = rows6 + i;
+
+        if (row->Protocol != IPPROTO_UDP) continue;
+        if (want_data && count < params->count)
+        {
+            if (params->key_data)
+            {
+                struct nsi_udp_endpoint_key *key = (struct nsi_udp_endpoint_key *)params->key_data + count;
+                memset(key, 0, sizeof(*key));
+                fill_ipv6_sockaddr(&key->local, row->LocalAddress, row->LocalScopeId, row->LocalPort);
+            }
+            if (params->static_data)
+            {
+                struct nsi_udp_endpoint_static *stat = (struct nsi_udp_endpoint_static *)params->static_data + count;
+                memset(stat, 0, sizeof(*stat));
+                stat->pid = row->ProcessId;
+                stat->create_time = row->CreateTime.QuadPart;
+                stat->mod_info = row->ModuleInfo;
+            }
+        }
+        count++;
+    }
+    HeapFree(GetProcessHeap(), 0, header6);
     HeapFree(GetProcessHeap(), 0, table);
     return finish_enumeration(params, count, want_data);
-}
-
-static DWORD get_not_supported(struct nsi_get_all_parameters_ex *params)
-{
-    return ERROR_NOT_SUPPORTED;
 }
 
 static const struct nsi_table tables[] =
@@ -705,13 +1111,13 @@ static const struct nsi_table tables[] =
     {&NPI_MS_IPV4_MODULEID, NSI_IP_UNICAST_TABLE, {sizeof(struct nsi_ipv4_unicast_key), sizeof(struct nsi_ip_unicast_rw), sizeof(struct nsi_ip_unicast_dynamic), sizeof(struct nsi_ip_unicast_static)}, enumerate_ipv4_unicast},
     {&NPI_MS_IPV4_MODULEID, NSI_IP_NEIGHBOUR_TABLE, {sizeof(struct nsi_ipv4_neighbour_key), sizeof(struct nsi_ip_neighbour_rw), sizeof(struct nsi_ip_neighbour_dynamic), 0}, enumerate_ipv4_neighbour},
     {&NPI_MS_IPV4_MODULEID, NSI_IP_FORWARD_TABLE, {sizeof(struct nsi_ipv4_forward_key), sizeof(struct nsi_ip_forward_rw), sizeof(struct nsi_ipv4_forward_dynamic), sizeof(struct nsi_ip_forward_static)}, enumerate_ipv4_forward},
-    {&NPI_MS_IPV6_MODULEID, NSI_IP_COMPARTMENT_TABLE, {sizeof(UINT), sizeof(struct nsi_ip_cmpt_rw), sizeof(struct nsi_ip_cmpt_dynamic), 0}, NULL, get_not_supported},
-    {&NPI_MS_IPV6_MODULEID, NSI_IP_ICMPSTATS_TABLE, {0, 0, sizeof(struct nsi_ip_icmpstats_dynamic), 0}, NULL, get_not_supported},
-    {&NPI_MS_IPV6_MODULEID, NSI_IP_IPSTATS_TABLE, {0, 0, sizeof(struct nsi_ip_ipstats_dynamic), sizeof(struct nsi_ip_ipstats_static)}, NULL, get_not_supported},
-    {&NPI_MS_IPV6_MODULEID, NSI_IP_INTERFACE_TABLE, {sizeof(struct nsi_ip_interface_key), sizeof(struct nsi_ip_interface_rw), sizeof(struct nsi_ip_interface_dynamic), sizeof(struct nsi_ip_interface_static)}, enumerate_ipv6_empty},
-    {&NPI_MS_IPV6_MODULEID, NSI_IP_UNICAST_TABLE, {sizeof(struct nsi_ipv6_unicast_key), sizeof(struct nsi_ip_unicast_rw), sizeof(struct nsi_ip_unicast_dynamic), sizeof(struct nsi_ip_unicast_static)}, enumerate_ipv6_empty},
-    {&NPI_MS_IPV6_MODULEID, NSI_IP_NEIGHBOUR_TABLE, {sizeof(struct nsi_ipv6_neighbour_key), sizeof(struct nsi_ip_neighbour_rw), sizeof(struct nsi_ip_neighbour_dynamic), 0}, enumerate_ipv6_empty},
-    {&NPI_MS_IPV6_MODULEID, NSI_IP_FORWARD_TABLE, {sizeof(struct nsi_ipv6_forward_key), sizeof(struct nsi_ip_forward_rw), sizeof(struct nsi_ipv6_forward_dynamic), sizeof(struct nsi_ip_forward_static)}, enumerate_ipv6_empty},
+    {&NPI_MS_IPV6_MODULEID, NSI_IP_COMPARTMENT_TABLE, {sizeof(UINT), sizeof(struct nsi_ip_cmpt_rw), sizeof(struct nsi_ip_cmpt_dynamic), 0}, NULL, get_ipv6_compartment},
+    {&NPI_MS_IPV6_MODULEID, NSI_IP_ICMPSTATS_TABLE, {0, 0, sizeof(struct nsi_ip_icmpstats_dynamic), 0}, NULL, get_ipv6_icmp},
+    {&NPI_MS_IPV6_MODULEID, NSI_IP_IPSTATS_TABLE, {0, 0, sizeof(struct nsi_ip_ipstats_dynamic), sizeof(struct nsi_ip_ipstats_static)}, NULL, get_ipv6_stats},
+    {&NPI_MS_IPV6_MODULEID, NSI_IP_INTERFACE_TABLE, {sizeof(struct nsi_ip_interface_key), sizeof(struct nsi_ip_interface_rw), sizeof(struct nsi_ip_interface_dynamic), sizeof(struct nsi_ip_interface_static)}, enumerate_ipv6_interface},
+    {&NPI_MS_IPV6_MODULEID, NSI_IP_UNICAST_TABLE, {sizeof(struct nsi_ipv6_unicast_key), sizeof(struct nsi_ip_unicast_rw), sizeof(struct nsi_ip_unicast_dynamic), sizeof(struct nsi_ip_unicast_static)}, enumerate_ipv6_unicast},
+    {&NPI_MS_IPV6_MODULEID, NSI_IP_NEIGHBOUR_TABLE, {sizeof(struct nsi_ipv6_neighbour_key), sizeof(struct nsi_ip_neighbour_rw), sizeof(struct nsi_ip_neighbour_dynamic), 0}, enumerate_ipv6_neighbour},
+    {&NPI_MS_IPV6_MODULEID, NSI_IP_FORWARD_TABLE, {sizeof(struct nsi_ipv6_forward_key), sizeof(struct nsi_ip_forward_rw), sizeof(struct nsi_ipv6_forward_dynamic), sizeof(struct nsi_ip_forward_static)}, enumerate_ipv6_forward},
     {&NPI_MS_TCP_MODULEID, NSI_TCP_STATS_TABLE, {sizeof(USHORT), 0, sizeof(struct nsi_tcp_stats_dynamic), sizeof(struct nsi_tcp_stats_static)}, NULL, get_tcp_stats},
     {&NPI_MS_TCP_MODULEID, NSI_TCP_ALL_TABLE, {sizeof(struct nsi_tcp_conn_key), 0, sizeof(struct nsi_tcp_conn_dynamic), sizeof(struct nsi_tcp_conn_static)}, enumerate_tcp},
     {&NPI_MS_TCP_MODULEID, NSI_TCP_ESTAB_TABLE, {sizeof(struct nsi_tcp_conn_key), 0, sizeof(struct nsi_tcp_conn_dynamic), sizeof(struct nsi_tcp_conn_static)}, enumerate_tcp},
