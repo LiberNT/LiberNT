@@ -57,6 +57,7 @@ SysAudio_Shutdown(
     DPRINT("SysAudio_Shutdown called\n");
 
     DeviceExtension = (PSYSAUDIODEVEXT)DeviceObject->DeviceExtension;
+    InterlockedExchange((PLONG)&DeviceExtension->NumberOfKsAudioDevices, 0);
 
     while(!IsListEmpty(&DeviceExtension->KsAudioDeviceList))
     {
