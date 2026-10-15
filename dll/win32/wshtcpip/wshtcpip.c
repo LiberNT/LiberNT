@@ -878,6 +878,9 @@ WSHSetSocketInformation(
                     /* Send these to TCPIP */
                     break;
 
+                case IP_RECVTOS:
+                    return WSAENOPROTOOPT;
+
                 default:
                     /* Invalid option -- FIXME */
                     DPRINT1("Set: Received unsupported IPPROTO_IP option %d\n", OptionName);

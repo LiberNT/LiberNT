@@ -51,6 +51,7 @@ extern "C" {
 #define IP_RECVRTHDR              38
 #define IP_TCLASS                 39
 #define IP_RECVTCLASS             40
+#define IP_RECVTOS                40
 #define IP_ORIGINAL_ARRIVAL_IF    47
 
 #define IP_UNSPECIFIED_TYPE_OF_SERVICE -1
