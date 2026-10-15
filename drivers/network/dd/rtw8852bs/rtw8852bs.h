@@ -10,6 +10,7 @@
 #include <ntddk.h>
 #include <ndis.h>
 #include <windot11.h>
+#include <nwifi_sae.h>
 #include <ntddsd.h>
 
 #include "reg.h"
@@ -67,6 +68,9 @@
 #define RTW_ASSOC_COMEBACK_MAX          8
 #define RTW_JOIN_ATTEMPTS               2
 #define RTW_SA_QUERY_MAX_TIMEOUT_MS     1024
+#define RTW_SAE_TIMEOUT_MS              500
+#define RTW_SAE_PARAMS_TIMEOUT_MS       3000
+#define RTW_SAE_ROUNDS                  8
 #define RTW_BEACON_LOSS_MS              8000
 #define RTW_DEFAULT_RSSI                (-60)
 
@@ -255,6 +259,13 @@ typedef struct _RTW_ADAPTER
     UCHAR TxLowestRate;
     ULONGLONG LastBeaconTime;
     KEVENT MlmeEvent;
+    KEVENT SaeEvent;
+    BOOLEAN SaeParamsValid;
+    NWIFI_SAE_PARAMS SaeParams;
+    USHORT SaeSequence;
+    BOOLEAN SaeH2e;
+    ULONG SaeFrameLength;
+    UCHAR SaeFrame[NWIFI_SAE_MAX_FRAME];
     UCHAR MlmeExpect;
     USHORT MlmeStatus;
     USHORT MlmeAid;

@@ -72,6 +72,7 @@ NDIS_OID RtSupportedOids[] =
     OID_DOT11_CIPHER_DEFAULT_KEY,
     OID_DOT11_CIPHER_DEFAULT_KEY_ID,
     OID_DOT11_CIPHER_KEY_MAPPING_KEY,
+    OID_WDI_SET_SAE_AUTH_PARAMS,
 };
 
 ULONG RtSupportedOidCount = RTL_NUMBER_OF(RtSupportedOids);
@@ -724,7 +725,8 @@ RtDot11Set(
                 return NDIS_STATUS_INVALID_LENGTH;
             }
             if (List->AlgorithmIds[0] != DOT11_AUTH_ALGO_80211_OPEN &&
-                List->AlgorithmIds[0] != DOT11_AUTH_ALGO_RSNA_PSK)
+                List->AlgorithmIds[0] != DOT11_AUTH_ALGO_RSNA_PSK &&
+                List->AlgorithmIds[0] != DOT11_AUTH_ALGO_WPA3_SAE)
             {
                 return NDIS_STATUS_NOT_SUPPORTED;
             }
@@ -877,6 +879,22 @@ RtOidSet(
             }
             Request->DATA.SET_INFORMATION.BytesRead = sizeof(ULONG);
             return NDIS_STATUS_SUCCESS;
+
+        case OID_WDI_SET_SAE_AUTH_PARAMS:
+        {
+            NWIFI_SAE_PARAMS Params;
+
+            if (!NwifiSaeParseParams(Buffer, Length, &Params))
+                return NDIS_STATUS_INVALID_DATA;
+            NdisAcquireSpinLock(&Adapter->Lock);
+            Adapter->SaeParams = Params;
+            Adapter->SaeParamsValid = TRUE;
+            NdisReleaseSpinLock(&Adapter->Lock);
+            RtlSecureZeroMemory(&Params, sizeof(Params));
+            KeSetEvent(&Adapter->SaeEvent, IO_NETWORK_INCREMENT, FALSE);
+            Request->DATA.SET_INFORMATION.BytesRead = Length;
+            return NDIS_STATUS_SUCCESS;
+        }
 
         case OID_GEN_NETWORK_LAYER_ADDRESSES:
         case OID_PNP_SET_POWER:

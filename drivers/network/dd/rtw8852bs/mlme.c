@@ -14,6 +14,14 @@
 #define RTW_RX_CONTEXT_TAG       'X88R'
 #define RTW_BSS_EXPIRY_100NS     (60ULL * 10000000ULL)
 #define RTW_RSN_CAP_MFPC         0x0080
+#define RTW_RSN_CAP_MFPR         0x0040
+#define RTW_AKM_SAE              8
+#define RTW_AUTH_ALGORITHM_SAE   3
+#define RTW_STATUS_SAE_H2E       126
+#define RTW_EID_RSNXE            244
+#define RTW_EID_EXTENSION        255
+#define RTW_EXT_ACT_CONTAINER    93
+#define RTW_RSNXE_SAE_H2E        0x20
 #define RTW_ACTION_SA_QUERY      8
 #define RTW_SA_QUERY_REQUEST     0
 #define RTW_SA_QUERY_RESPONSE    1
@@ -489,6 +497,19 @@ RtwMlmeReceive(
             if (Adapter->MlmeExpect == DOT11_SUBTYPE_AUTH &&
                 Length >= DOT11_HEADER_LENGTH + 6 &&
                 RtlEqualMemory(Frame + 10, Adapter->ConnectedBssid, RTW_ADDRESS_LENGTH) &&
+                (Body[0] | (Body[1] << 8)) == RTW_AUTH_ALGORITHM_SAE &&
+                Length - DOT11_HEADER_LENGTH <= sizeof(Adapter->SaeFrame))
+            {
+                Adapter->SaeSequence = (USHORT)(Body[2] | (Body[3] << 8));
+                Adapter->SaeFrameLength = Length - DOT11_HEADER_LENGTH;
+                RtlCopyMemory(Adapter->SaeFrame, Body, Adapter->SaeFrameLength);
+                Adapter->MlmeStatus = Body[4] | (Body[5] << 8);
+                Adapter->MlmeExpect = 0;
+                KeSetEvent(&Adapter->MlmeEvent, IO_NETWORK_INCREMENT, FALSE);
+            }
+            else if (Adapter->MlmeExpect == DOT11_SUBTYPE_AUTH &&
+                Length >= DOT11_HEADER_LENGTH + 6 &&
+                RtlEqualMemory(Frame + 10, Adapter->ConnectedBssid, RTW_ADDRESS_LENGTH) &&
                 (Body[2] | (Body[3] << 8)) == 2)
             {
                 Adapter->MlmeStatus = Body[4] | (Body[5] << 8);
@@ -936,6 +957,37 @@ RtwDoScan(
 }
 
 static
+BOOLEAN
+RtwRsnHasAkm(
+    _In_ PRTW_BSS Bss,
+    _In_ UCHAR Akm)
+{
+    const UCHAR* Rsn = RtwFindIe(Bss->Ies, Bss->IeLength, DOT11_IE_RSN);
+    ULONG Length, Offset, Count, i;
+
+    if (!Rsn)
+        return FALSE;
+
+    Length = Rsn[1];
+    Rsn += 2;
+    Offset = 2 + 4;
+    if (Offset + 2 > Length)
+        return FALSE;
+    Count = Rsn[Offset] | (Rsn[Offset + 1] << 8);
+    Offset += 2 + Count * 4;
+    if (Offset + 2 > Length)
+        return FALSE;
+    Count = Rsn[Offset] | (Rsn[Offset + 1] << 8);
+    Offset += 2;
+    for (i = 0; i < Count && Offset + 4 <= Length; i++, Offset += 4)
+    {
+        if (Rsn[Offset] == 0x00 && Rsn[Offset + 1] == 0x0f && Rsn[Offset + 2] == 0xac && Rsn[Offset + 3] == Akm)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static
 PRTW_BSS
 RtwSelectBss(
     _In_ PRTW_ADAPTER Adapter,
@@ -960,6 +1012,8 @@ RtwSelectBss(
             continue;
         }
         if (Adapter->HaveDesiredBssid && !RtlEqualMemory(Bss->Bssid, Adapter->DesiredBssid, RTW_ADDRESS_LENGTH))
+            continue;
+        if (Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE && !RtwRsnHasAkm(Bss, RTW_AKM_SAE))
             continue;
         if (!Best || Bss->Rssi > Best->Rssi)
             Best = Bss;
@@ -986,12 +1040,185 @@ RtwWaitMlme(
 
 static
 BOOLEAN
+RtwSaeRequestParams(
+    _In_ PRTW_ADAPTER Adapter,
+    _In_reads_bytes_(RTW_ADDRESS_LENGTH) const UCHAR* Bssid,
+    _In_ ULONG IndicationType,
+    _In_reads_bytes_opt_(FrameLength) const UCHAR* Frame,
+    _In_ ULONG FrameLength)
+{
+    UCHAR Message[NWIFI_SAE_MAX_MESSAGE];
+    LARGE_INTEGER Timeout;
+    ULONG Length;
+    BOOLEAN Valid;
+
+    Length = NwifiSaeBuildIndication(Message, sizeof(Message), Bssid, IndicationType,
+                                     Frame, FrameLength, FALSE, 0);
+    if (Length == 0)
+        return FALSE;
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    Adapter->SaeParamsValid = FALSE;
+    NdisReleaseSpinLock(&Adapter->Lock);
+    KeClearEvent(&Adapter->SaeEvent);
+    RtwIndicateDot11Status(Adapter, NDIS_STATUS_WDI_INDICATION_SAE_AUTH_PARAMS_NEEDED, Message, Length);
+
+    Timeout.QuadPart = -(LONGLONG)RTW_SAE_PARAMS_TIMEOUT_MS * 10000;
+    if (KeWaitForSingleObject(&Adapter->SaeEvent, Executive, KernelMode, FALSE, &Timeout) != STATUS_SUCCESS)
+        return FALSE;
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    Valid = Adapter->SaeParamsValid &&
+            RtlEqualMemory(Adapter->SaeParams.Bssid, Bssid, RTW_ADDRESS_LENGTH);
+    NdisReleaseSpinLock(&Adapter->Lock);
+    return Valid;
+}
+
+static
+VOID
+RtwSaeIndicateError(
+    _In_ PRTW_ADAPTER Adapter,
+    _In_reads_bytes_(RTW_ADDRESS_LENGTH) const UCHAR* Bssid,
+    _In_ ULONG Status)
+{
+    UCHAR Message[64];
+    ULONG Length;
+
+    Length = NwifiSaeBuildIndication(Message, sizeof(Message), Bssid, WDI_SAE_INDICATION_TYPE_ERROR,
+                                     NULL, 0, TRUE, Status);
+    if (Length)
+        RtwIndicateDot11Status(Adapter, NDIS_STATUS_WDI_INDICATION_SAE_AUTH_PARAMS_NEEDED, Message, Length);
+}
+
+static
+BOOLEAN
+RtwSaeExchange(
+    _In_ PRTW_ADAPTER Adapter,
+    _In_ PRTW_BSS Bss,
+    _In_ USHORT Sequence)
+{
+    UCHAR Frame[DOT11_HEADER_LENGTH + 8 + 3 + NWIFI_SAE_MAX_TOKEN + NWIFI_SAE_SCALAR_LENGTH + NWIFI_SAE_ELEMENT_LENGTH];
+    NWIFI_SAE_PARAMS* Params = &Adapter->SaeParams;
+    ULONG Length, Attempt;
+
+    for (Attempt = 0; Attempt < RTW_MLME_RETRIES; Attempt++)
+    {
+        Length = RtwBuildHeader(Adapter, Frame, DOT11_SUBTYPE_AUTH, Bss->Bssid, Bss->Bssid);
+        Frame[Length++] = (UCHAR)RTW_AUTH_ALGORITHM_SAE;
+        Frame[Length++] = 0;
+        Frame[Length++] = (UCHAR)Sequence;
+        Frame[Length++] = 0;
+        Frame[Length++] = Sequence == 1 && Adapter->SaeH2e ? RTW_STATUS_SAE_H2E : 0;
+        Frame[Length++] = 0;
+        if (Sequence == 1)
+        {
+            Frame[Length++] = (UCHAR)Params->Group;
+            Frame[Length++] = (UCHAR)(Params->Group >> 8);
+            if (Adapter->SaeH2e && Params->TokenLength)
+            {
+                Frame[Length++] = RTW_EID_EXTENSION;
+                Frame[Length++] = (UCHAR)(Params->TokenLength + 1);
+                Frame[Length++] = RTW_EXT_ACT_CONTAINER;
+            }
+            RtlCopyMemory(Frame + Length, Params->Token, Params->TokenLength);
+            Length += Params->TokenLength;
+            RtlCopyMemory(Frame + Length, Params->Scalar, NWIFI_SAE_SCALAR_LENGTH);
+            Length += NWIFI_SAE_SCALAR_LENGTH;
+            RtlCopyMemory(Frame + Length, Params->Element, NWIFI_SAE_ELEMENT_LENGTH);
+            Length += NWIFI_SAE_ELEMENT_LENGTH;
+        }
+        else
+        {
+            Frame[Length++] = (UCHAR)Params->SendConfirm;
+            Frame[Length++] = (UCHAR)(Params->SendConfirm >> 8);
+            RtlCopyMemory(Frame + Length, Params->Confirm, NWIFI_SAE_CONFIRM_LENGTH);
+            Length += NWIFI_SAE_CONFIRM_LENGTH;
+        }
+
+        KeClearEvent(&Adapter->MlmeEvent);
+        Adapter->SaeSequence = 0;
+        Adapter->MlmeExpect = DOT11_SUBTYPE_AUTH;
+        RtwTxFrame(Adapter, Frame, Length, TRUE);
+        if (RtwWaitMlme(Adapter, RTW_SAE_TIMEOUT_MS) && Adapter->SaeSequence == Sequence)
+            return TRUE;
+    }
+
+    Adapter->MlmeExpect = 0;
+    return FALSE;
+}
+
+static
+BOOLEAN
+RtwAuthenticateSae(
+    _In_ PRTW_ADAPTER Adapter,
+    _In_ PRTW_BSS Bss)
+{
+    ULONG Round, RequestType;
+
+    Adapter->SaeH2e = FALSE;
+    if (!RtwSaeRequestParams(Adapter, Bss->Bssid, WDI_SAE_INDICATION_TYPE_COMMIT_REQUEST_PARAMS_NEEDED, NULL, 0))
+    {
+        DPRINT1("RTW8852BS: no SAE commit parameters\n");
+        return FALSE;
+    }
+
+    for (Round = 0; Round < RTW_SAE_ROUNDS; Round++)
+    {
+        RequestType = Adapter->SaeParams.RequestType;
+        if (RequestType == WDI_SAE_REQUEST_TYPE_SUCCESS)
+        {
+            DPRINT1("RTW8852BS: SAE authentication succeeded\n");
+            return TRUE;
+        }
+        if ((RequestType == WDI_SAE_REQUEST_TYPE_COMMIT_PARAMS ||
+             RequestType == WDI_SAE_REQUEST_TYPE_COMMIT_H2E_PARAMS) && Adapter->SaeParams.HaveCommit)
+        {
+            Adapter->SaeH2e = RequestType == WDI_SAE_REQUEST_TYPE_COMMIT_H2E_PARAMS;
+            if (!RtwSaeExchange(Adapter, Bss, 1))
+            {
+                RtwSaeIndicateError(Adapter, Bss->Bssid, WDI_SAE_STATUS_TIMEOUT_WAITING_FOR_COMMIT_REQUEST);
+                break;
+            }
+            if (!RtwSaeRequestParams(Adapter, Bss->Bssid, WDI_SAE_INDICATION_TYPE_COMMIT_FRAME,
+                                     Adapter->SaeFrame, Adapter->SaeFrameLength))
+            {
+                break;
+            }
+            continue;
+        }
+        if (RequestType == WDI_SAE_REQUEST_TYPE_CONFIRM_PARAMS && Adapter->SaeParams.HaveConfirm)
+        {
+            if (!RtwSaeExchange(Adapter, Bss, 2))
+            {
+                RtwSaeIndicateError(Adapter, Bss->Bssid, WDI_SAE_STATUS_TIMEOUT_WAITING_FOR_CONFIRM_REQUEST);
+                break;
+            }
+            if (!RtwSaeRequestParams(Adapter, Bss->Bssid, WDI_SAE_INDICATION_TYPE_CONFIRM_FRAME,
+                                     Adapter->SaeFrame, Adapter->SaeFrameLength))
+            {
+                break;
+            }
+            continue;
+        }
+        DPRINT1("RTW8852BS: SAE authentication failed, status %lu\n",
+                Adapter->SaeParams.HaveStatus ? Adapter->SaeParams.Status : 0);
+        break;
+    }
+
+    return FALSE;
+}
+
+static
+BOOLEAN
 RtwAuthenticate(
     _In_ PRTW_ADAPTER Adapter,
     _In_ PRTW_BSS Bss)
 {
     UCHAR Frame[DOT11_HEADER_LENGTH + 6];
     ULONG Length, Attempt;
+
+    if (Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
+        return RtwAuthenticateSae(Adapter, Bss);
 
     for (Attempt = 0; Attempt < RTW_MLME_RETRIES; Attempt++)
     {
@@ -1041,6 +1268,11 @@ RtwBuildRsnIe(
     {
         Out[20] = (UCHAR)RTW_RSN_CAP_MFPC;
     }
+    if (Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
+    {
+        Out[19] = RTW_AKM_SAE;
+        Out[20] = (UCHAR)(RTW_RSN_CAP_MFPC | RTW_RSN_CAP_MFPR);
+    }
     return sizeof(Template);
 }
 
@@ -1050,10 +1282,11 @@ RtwAssociate(
     _In_ PRTW_ADAPTER Adapter,
     _In_ PRTW_BSS Bss)
 {
-    UCHAR Frame[DOT11_HEADER_LENGTH + 4 + 2 + DOT11_SSID_MAX_LENGTH + 32 + 24];
+    UCHAR Frame[DOT11_HEADER_LENGTH + 4 + 2 + DOT11_SSID_MAX_LENGTH + 32 + 24 + 3];
     ULONG Length, IeStart, Attempt, Comebacks = 0;
     USHORT Capability;
-    BOOLEAN Secure = Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK;
+    BOOLEAN Secure = Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK ||
+                     Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE;
 
     for (Attempt = 0; Attempt < RTW_MLME_RETRIES; Attempt++)
     {
@@ -1076,6 +1309,12 @@ RtwAssociate(
         Length += RtwAppendRates(Adapter, Frame + Length);
         if (Secure)
             Length += RtwBuildRsnIe(Adapter, Frame + Length);
+        if (Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE && Adapter->SaeH2e)
+        {
+            Frame[Length++] = RTW_EID_RSNXE;
+            Frame[Length++] = 1;
+            Frame[Length++] = RTW_RSNXE_SAE_H2E;
+        }
 
         Adapter->AssocRequestIeLength = Length - IeStart;
         RtlCopyMemory(Adapter->AssocRequestIes, Frame + IeStart, Adapter->AssocRequestIeLength);
@@ -1339,11 +1578,13 @@ RtwDoConnect(
         Adapter->ConnectedRssi = Bss->Rssi;
         Adapter->LastBeaconTime = KeQueryInterruptTime();
         Adapter->LinkState = RtwLinkAssociated;
-        Adapter->PmfActive = Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK &&
+        Adapter->PmfActive = (Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK ||
+                              Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE) &&
                              Adapter->MulticastCipher == DOT11_CIPHER_ALGO_CCMP &&
                              Adapter->UnicastCipher == DOT11_CIPHER_ALGO_CCMP &&
                              (RtwRsnCapabilities(Bss) & RTW_RSN_CAP_MFPC) != 0;
-        Adapter->SoftwareCrypto = Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK;
+        Adapter->SoftwareCrypto = Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK ||
+                                  Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE;
         NdisReleaseSpinLock(&Adapter->Lock);
         DPRINT1("RTW8852BS: management frame protection %s\n", Adapter->PmfActive ? "active" : "off");
 

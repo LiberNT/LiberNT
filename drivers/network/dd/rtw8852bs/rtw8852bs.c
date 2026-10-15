@@ -347,6 +347,7 @@ RtwMiniportInitializeEx(
     KeInitializeEvent(&Adapter->CommandEvent, SynchronizationEvent, FALSE);
     KeInitializeEvent(&Adapter->CommandStopped, NotificationEvent, FALSE);
     KeInitializeEvent(&Adapter->MlmeEvent, NotificationEvent, FALSE);
+    KeInitializeEvent(&Adapter->SaeEvent, SynchronizationEvent, FALSE);
 
     Adapter->OperationMode = DOT11_OPERATION_MODE_EXTENSIBLE_STATION;
     Adapter->CurrentPhyType = dot11_phy_type_erp;
