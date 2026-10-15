@@ -225,6 +225,7 @@ typedef struct _DXGKRNL_PRESENT_ENTRY
      * completion may publish damage only for that same immutable tuple. */
     DXGKRNL_REDIRECTED_BLT_PRESENT  RedirectedBltPresent;
     BOOLEAN                         RedirectedBltPresentAdmitted;
+    PVOID                           RedirectedBltWork;
 
     /* Colour value for colour-fill presents (ARGB 32-bit). */
     UINT                            Color;
@@ -612,5 +613,21 @@ VOID
 DxgkpNotifyMpoPostPresent(
     _In_ struct _DXGKRNL_ADAPTER          *Adapter,
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID    VidPnSourceId);
+
+PVOID
+DxgkAllocateRedirectedBltWork(VOID);
+
+VOID
+DxgkFreeRedirectedBltWork(
+    _In_ PVOID Work);
+
+VOID
+DxgkQueueRedirectedBltPresent(
+    _In_ PVOID Work,
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _In_ BOOLEAN Complete,
+    _In_reads_opt_(DirtyRectCount) const RECT *DirtyRects,
+    _In_ UINT DirtyRectCount,
+    _In_opt_ struct _DXGKRNL_CONTEXT *Context);
 
 /* EOF */

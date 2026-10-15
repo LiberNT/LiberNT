@@ -6,6 +6,7 @@
  */
 
 #include "dxgkrnl_private.h"
+#include "present.h"
 #include "vidmm.h"
 #include <reactos/dwmframe.h>
 
@@ -328,6 +329,80 @@ DxgkCancelRedirectedBltPresent(
     KeLeaveCriticalRegion();
 }
 
+typedef struct _DXGKP_REDIRECTED_BLT_WORK
+{
+    WORK_QUEUE_ITEM Item;
+    DXGKRNL_REDIRECTED_BLT_PRESENT Present;
+    HANDLE Context;
+    BOOLEAN Complete;
+    UINT DirtyRectCount;
+    RECT DirtyRects[DXGK_PRESENT_CORE_MAX_SUBRECTS];
+} DXGKP_REDIRECTED_BLT_WORK, *PDXGKP_REDIRECTED_BLT_WORK;
+
+static NTSTATUS
+DxgkpCompleteRedirectedBltPresentWithHandle(
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _In_reads_(DirtyRectCount) const RECT *DirtyRects,
+    _In_ UINT DirtyRectCount,
+    _In_opt_ HANDLE ContextHandle);
+
+static VOID
+NTAPI
+DxgkpRedirectedBltWorker(
+    _In_ PVOID Parameter)
+{
+    PDXGKP_REDIRECTED_BLT_WORK Work = Parameter;
+
+    if (!Work->Complete ||
+        !NT_SUCCESS(DxgkpCompleteRedirectedBltPresentWithHandle(&Work->Present,
+                                                                Work->DirtyRects,
+                                                                Work->DirtyRectCount,
+                                                                Work->Context)))
+    {
+        DxgkCancelRedirectedBltPresent(&Work->Present);
+    }
+    ObDereferenceObject(Work->Present.OwnerProcess);
+    ExFreePoolWithTag(Work, TAG_DXGK_PRESENT);
+}
+
+PVOID
+DxgkAllocateRedirectedBltWork(VOID)
+{
+    return ExAllocatePoolWithTag(NonPagedPool, sizeof(DXGKP_REDIRECTED_BLT_WORK), TAG_DXGK_PRESENT);
+}
+
+VOID
+DxgkFreeRedirectedBltWork(
+    _In_ PVOID Work)
+{
+    ExFreePoolWithTag(Work, TAG_DXGK_PRESENT);
+}
+
+VOID
+DxgkQueueRedirectedBltPresent(
+    _In_ PVOID Work,
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _In_ BOOLEAN Complete,
+    _In_reads_opt_(DirtyRectCount) const RECT *DirtyRects,
+    _In_ UINT DirtyRectCount,
+    _In_opt_ struct _DXGKRNL_CONTEXT *Context)
+{
+    PDXGKP_REDIRECTED_BLT_WORK Item = Work;
+
+    ASSERT(Item != NULL && Present != NULL && Present->OwnerProcess != NULL);
+    if (DirtyRects == NULL || DirtyRectCount > RTL_NUMBER_OF(Item->DirtyRects))
+        DirtyRectCount = 0;
+    Item->Present = *Present;
+    Item->Context = Context != NULL ? (HANDLE)(ULONG_PTR)Context->Handle : NULL;
+    Item->Complete = Complete;
+    Item->DirtyRectCount = DirtyRectCount;
+    if (DirtyRectCount != 0)
+        RtlCopyMemory(Item->DirtyRects, DirtyRects, DirtyRectCount * sizeof(RECT));
+    ObReferenceObject(Item->Present.OwnerProcess);
+    ExInitializeWorkItem(&Item->Item, DxgkpRedirectedBltWorker, Item);
+    ExQueueWorkItem(&Item->Item, DelayedWorkQueue);
+}
+
 NTSTATUS
 DxgkCompleteRedirectedBltPresent(
     _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
@@ -335,8 +410,21 @@ DxgkCompleteRedirectedBltPresent(
     _In_ UINT DirtyRectCount,
     _In_opt_ PDXGKRNL_CONTEXT Context)
 {
+    return DxgkpCompleteRedirectedBltPresentWithHandle(
+               Present,
+               DirtyRects,
+               DirtyRectCount,
+               Context != NULL ? (HANDLE)(ULONG_PTR)Context->Handle : NULL);
+}
+
+static NTSTATUS
+DxgkpCompleteRedirectedBltPresentWithHandle(
+    _In_ const DXGKRNL_REDIRECTED_BLT_PRESENT *Present,
+    _In_reads_(DirtyRectCount) const RECT *DirtyRects,
+    _In_ UINT DirtyRectCount,
+    _In_opt_ HANDLE ContextHandle)
+{
     PDXGKENG_COMPLETE_REDIRECTED_BLT_PRESENT Callback;
-    HANDLE ContextHandle;
     NTSTATUS Status;
 
     if (Present == NULL ||
@@ -345,9 +433,6 @@ DxgkCompleteRedirectedBltPresent(
         return STATUS_INVALID_PARAMETER;
     }
 
-    ContextHandle = Context != NULL
-                        ? (HANDLE)(ULONG_PTR)Context->Handle
-                        : NULL;
     KeEnterCriticalRegion();
     ExfAcquirePushLockShared(&DxgkpWin32kCddInterfaceLock);
     Callback = DxgkpWin32kCddInterface.CompleteRedirectedBltPresent;

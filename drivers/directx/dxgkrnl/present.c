@@ -865,8 +865,14 @@ DxgkpReleasePresentEntry(
         return;
     if (Entry->RedirectedBltPresentAdmitted)
     {
-        DxgkCancelRedirectedBltPresent(&Entry->RedirectedBltPresent);
+        DxgkQueueRedirectedBltPresent(Entry->RedirectedBltWork, &Entry->RedirectedBltPresent, FALSE, NULL, 0, NULL);
+        Entry->RedirectedBltWork = NULL;
         Entry->RedirectedBltPresentAdmitted = FALSE;
+    }
+    if (Entry->RedirectedBltWork != NULL)
+    {
+        DxgkFreeRedirectedBltWork(Entry->RedirectedBltWork);
+        Entry->RedirectedBltWork = NULL;
     }
     if (Entry->PresentLimitReservationOwned)
     {
@@ -922,7 +928,6 @@ DxgkpCompleteRedirectedBltPresent(
 {
     const RECT *DirtyRects;
     UINT DirtyRectCount;
-    NTSTATUS Status;
 
     if (!NT_SUCCESS(ExecutionStatus) ||
         !Entry->RedirectedBltPresentAdmitted)
@@ -947,14 +952,15 @@ DxgkpCompleteRedirectedBltPresent(
     DxgkPublishRedirectionPresent(Entry->DestinationAllocation,
                                   Entry->SubmissionNodeOrdinal,
                                   Entry->SubmissionFenceId);
-    Status = DxgkCompleteRedirectedBltPresent(
-                 &Entry->RedirectedBltPresent,
-                 DirtyRects,
-                 DirtyRectCount,
-                 Entry->Context);
-    if (NT_SUCCESS(Status))
-        Entry->RedirectedBltPresentAdmitted = FALSE;
-    return Status;
+    DxgkQueueRedirectedBltPresent(Entry->RedirectedBltWork,
+                                  &Entry->RedirectedBltPresent,
+                                  TRUE,
+                                  DirtyRects,
+                                  DirtyRectCount,
+                                  Entry->Context);
+    Entry->RedirectedBltWork = NULL;
+    Entry->RedirectedBltPresentAdmitted = FALSE;
+    return ExecutionStatus;
 }
 
 NTSTATUS DxgkPresentSetQueuedLimit(_In_ PDXGKRNL_DEVICE Device, _In_ ULONG RequestedLimit)
@@ -6054,6 +6060,7 @@ DxgkpQueuePresent(
     Entry->DstSubRects = NULL;
     Entry->DstSubRectCount = 0;
     Entry->RedirectedBltPresentAdmitted = FALSE;
+    Entry->RedirectedBltWork = NULL;
     Queue->Tail = (Queue->Tail + 1) % DXGKRNL_PRESENT_QUEUE_DEPTH;
     Queue->Count++;
     if (Queue->Count == DXGKRNL_PRESENT_QUEUE_DEPTH)

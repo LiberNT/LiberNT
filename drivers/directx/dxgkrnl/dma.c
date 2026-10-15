@@ -1244,6 +1244,13 @@ DxgkpPresent(
                 return STATUS_INVALID_PARAMETER;
             }
 
+            Entry.RedirectedBltWork = DxgkAllocateRedirectedBltWork();
+            if (Entry.RedirectedBltWork == NULL)
+            {
+                DxgkpReleasePresentEntry(&Entry);
+                return STATUS_INSUFFICIENT_RESOURCES;
+            }
+
             Status = DxgkpCaptureRedirectedBltPresent(
                          pPresent,
                          InputLength,
