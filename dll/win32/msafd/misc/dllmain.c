@@ -3201,6 +3201,50 @@ WSPGetSockOpt(IN SOCKET Handle,
                     BufferSize = sizeof(Socket->ProtocolInfo);
                     break;
 
+                case SO_BSP_STATE:
+                {
+                    PCSADDR_INFO CsAddr = (PCSADDR_INFO)OptionValue;
+                    INT AddressSize;
+
+                    if (Socket->SharedData->AddressFamily == AF_INET)
+                        AddressSize = sizeof(SOCKADDR_IN);
+                    else if (Socket->SharedData->AddressFamily == AF_INET6)
+                        AddressSize = sizeof(SOCKADDR_IN6);
+                    else
+                    {
+                        if (lpErrno) *lpErrno = WSAEAFNOSUPPORT;
+                        return SOCKET_ERROR;
+                    }
+
+                    if (*OptionLength < (INT)sizeof(CSADDR_INFO) + 2 * AddressSize)
+                    {
+                        if (lpErrno) *lpErrno = WSAEFAULT;
+                        return SOCKET_ERROR;
+                    }
+
+                    CsAddr->LocalAddr.lpSockaddr = (LPSOCKADDR)(CsAddr + 1);
+                    CsAddr->LocalAddr.iSockaddrLength = AddressSize;
+                    if (WSPGetSockName(Handle, CsAddr->LocalAddr.lpSockaddr,
+                                       &CsAddr->LocalAddr.iSockaddrLength, &Errno) != NO_ERROR)
+                    {
+                        CsAddr->LocalAddr.lpSockaddr = NULL;
+                        CsAddr->LocalAddr.iSockaddrLength = 0;
+                    }
+
+                    CsAddr->RemoteAddr.lpSockaddr = (LPSOCKADDR)((PCHAR)(CsAddr + 1) + AddressSize);
+                    CsAddr->RemoteAddr.iSockaddrLength = AddressSize;
+                    if (WSPGetPeerName(Handle, CsAddr->RemoteAddr.lpSockaddr,
+                                       &CsAddr->RemoteAddr.iSockaddrLength, &Errno) != NO_ERROR)
+                    {
+                        CsAddr->RemoteAddr.lpSockaddr = NULL;
+                        CsAddr->RemoteAddr.iSockaddrLength = 0;
+                    }
+
+                    CsAddr->iSocketType = Socket->SharedData->SocketType;
+                    CsAddr->iProtocol = Socket->SharedData->Protocol;
+                    return NO_ERROR;
+                }
+
                 case SO_MAX_MSG_SIZE:
                     goto SendToHelper;
 
