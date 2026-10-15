@@ -58,6 +58,7 @@ list(APPEND SOURCE
     MuiResources.c
     MultiByteToWideChar.c
     Pipes.c
+    PackageNames.c
     PixeloramaCompat.c
     ProcessPreferredUILanguages.c
     PssSnapshot.c

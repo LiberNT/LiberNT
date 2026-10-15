@@ -56,6 +56,7 @@ extern void func_MailslotRead(void);
 extern void func_MuiResources(void);
 extern void func_MultiByteToWideChar(void);
 extern void func_Pipes(void);
+extern void func_PackageNames(void);
 extern void func_PixeloramaCompat(void);
 extern void func_ProcessPreferredUILanguages(void);
 extern void func_PssSnapshot(void);
@@ -140,6 +141,7 @@ const struct test winetest_testlist[] =
     { "MuiResources",                func_MuiResources },
     { "MultiByteToWideChar",         func_MultiByteToWideChar },
     { "Pipes",                       func_Pipes },
+    { "PackageNames",                func_PackageNames },
     { "PixeloramaCompat",            func_PixeloramaCompat },
     { "ProcessPreferredUILanguages", func_ProcessPreferredUILanguages },
     { "PssSnapshot",                 func_PssSnapshot },
