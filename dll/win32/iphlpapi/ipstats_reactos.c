@@ -92,6 +92,32 @@ NTSTATUS getNthIpEntity( HANDLE tcpFile, DWORD index, TDIEntityID *ent ) {
     }
 }
 
+NTSTATUS getIpEntityForIfIndex( HANDLE tcpFile, DWORD ifIndex, TDIEntityID *ent ) {
+    TDIEntityID candidate;
+    IPAddrEntry *addrs;
+    DWORD numAddrs, n, j;
+    BOOL found;
+
+    for( n = 0; NT_SUCCESS(getNthIpEntity( tcpFile, n, &candidate )); n++ ) {
+        if( !NT_SUCCESS(tdiGetIpAddrsForIpEntity( tcpFile, &candidate, &addrs, &numAddrs )) )
+            continue;
+        found = FALSE;
+        for( j = 0; j < numAddrs; j++ ) {
+            if( addrs[j].iae_index == ifIndex ) {
+                found = TRUE;
+                break;
+            }
+        }
+        tdiFreeThingSet( addrs );
+        if( found ) {
+            *ent = candidate;
+            return STATUS_SUCCESS;
+        }
+    }
+
+    return STATUS_UNSUCCESSFUL;
+}
+
 static NTSTATUS
 tdiGetMibForIpEntity(
   _In_ HANDLE tcpFile,

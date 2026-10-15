@@ -147,6 +147,7 @@ typedef enum _IPHLPAddrType {
 
 /** Prototypes **/
 NTSTATUS getNthIpEntity( HANDLE tcpFile, DWORD index, TDIEntityID *ent );
+NTSTATUS getIpEntityForIfIndex( HANDLE tcpFile, DWORD ifIndex, TDIEntityID *ent );
 NTSTATUS tdiGetIpAddrsForIpEntity( HANDLE tcpFile, TDIEntityID *ent,
 				   IPAddrEntry **addrs, PDWORD numAddrs );
 BOOL isInterface( TDIEntityID *if_maybe );
