@@ -891,6 +891,93 @@ static ULONG format_uint64( const UINT64 *ptr, unsigned char *buf )
     return wsprintfA( (char *)buf, "%I64u", *ptr );
 }
 
+#ifdef __REACTOS__
+static ULONG format_double( const double *ptr, unsigned char *buf )
+{
+    char str[32], sig[20], *e, *q;
+    unsigned char *p = buf;
+    double val = *ptr;
+    int prec, exp10, count = 0, i;
+
+    if (isnan( val ))
+    {
+        memcpy( buf, "NaN", 3 );
+        return 3;
+    }
+    if (isinf( val ))
+    {
+        if (val < 0)
+        {
+            memcpy( buf, "-INF", 4 );
+            return 4;
+        }
+        memcpy( buf, "INF", 3 );
+        return 3;
+    }
+    if (val == 0.0)
+    {
+        *p = '0';
+        return 1;
+    }
+
+    if (val < 0)
+    {
+        *p++ = '-';
+        val = -val;
+    }
+
+    for (prec = 0; prec < 17; prec++)
+    {
+        _snprintf_l( str, sizeof(str), "%.*e", c_locale, prec, val );
+        if (_strtod_l( str, NULL, c_locale ) == val) break;
+    }
+
+    if (!(e = strchr( str, 'e' ))) return 0;
+    exp10 = atoi( e + 1 );
+    sig[count++] = str[0];
+    for (q = (str[1] == '.') ? str + 2 : str + 1; q < e && count < sizeof(sig); q++) sig[count++] = *q;
+    while (count > 1 && sig[count - 1] == '0') count--;
+
+    if (exp10 >= 15 || exp10 <= -2)
+    {
+        char exp_str[8];
+        int exp_len = 0, mag = (exp10 < 0) ? -exp10 : exp10;
+
+        *p++ = sig[0];
+        if (count > 1)
+        {
+            *p++ = '.';
+            memcpy( p, sig + 1, count - 1 );
+            p += count - 1;
+        }
+        *p++ = 'E';
+        *p++ = (exp10 < 0) ? '-' : '+';
+        do
+        {
+            exp_str[exp_len++] = '0' + mag % 10;
+            mag /= 10;
+        } while (mag);
+        while (exp_len) *p++ = exp_str[--exp_len];
+    }
+    else if (exp10 >= 0)
+    {
+        for (i = 0; i <= exp10; i++) *p++ = (i < count) ? sig[i] : '0';
+        if (count > exp10 + 1)
+        {
+            *p++ = '.';
+            for (i = exp10 + 1; i < count; i++) *p++ = sig[i];
+        }
+    }
+    else
+    {
+        *p++ = '0';
+        *p++ = '.';
+        for (i = 0; i < count; i++) *p++ = sig[i];
+    }
+
+    return p - buf;
+}
+#else
 static ULONG format_double( const double *ptr, unsigned char *buf )
 {
     static const double precision = 0.0000000000000001;
@@ -976,6 +1063,7 @@ static ULONG format_double( const double *ptr, unsigned char *buf )
 
     return p - buf;
 }
+#endif
 
 static inline int year_size( int year )
 {
@@ -1692,6 +1780,23 @@ static HRESULT set_namespaces( struct writer *writer )
     WS_XML_ELEMENT_NODE *elem = &writer->current->hdr;
     HRESULT hr;
     ULONG i;
+#ifdef __REACTOS__
+    ULONG j;
+
+    for (i = 0; i < elem->attributeCount; i++)
+    {
+        const WS_XML_ATTRIBUTE *attr = elem->attributes[i];
+        if (!attr->isXmlNs) continue;
+        if (elem->ns->length && str_equal( attr->prefix, elem->prefix ) && !str_equal( attr->ns, elem->ns ))
+            return WS_E_INVALID_FORMAT;
+        for (j = i + 1; j < elem->attributeCount; j++)
+        {
+            const WS_XML_ATTRIBUTE *attr2 = elem->attributes[j];
+            if (attr2->isXmlNs && str_equal( attr->prefix, attr2->prefix ) && !str_equal( attr->ns, attr2->ns ))
+                return WS_E_INVALID_FORMAT;
+        }
+    }
+#endif
 
     if (elem->ns->length && !namespace_in_scope( elem, elem->prefix, elem->ns ))
     {
@@ -3532,7 +3637,11 @@ static HRESULT write_type_bytes( struct writer *writer, WS_TYPE_MAPPING mapping,
 
     if (!option) return E_INVALIDARG;
     if ((hr = get_value_ptr( option, value, size, sizeof(WS_BYTES), (const void **)&ptr )) != S_OK) return hr;
+#ifdef __REACTOS__
+    if ((option == WS_WRITE_NILLABLE_VALUE && !ptr->length && !ptr->bytes) ||
+#else
     if ((option == WS_WRITE_NILLABLE_VALUE && is_nil_value( value, size )) ||
+#endif
         (option == WS_WRITE_NILLABLE_POINTER && !ptr)) return write_add_nil_attribute( writer );
     if (!ptr->length) return S_OK;
 
@@ -4531,7 +4640,11 @@ HRESULT WINAPI WsMoveWriter( WS_XML_WRITER *handle, WS_MOVE_TO move, BOOL *found
         return E_INVALIDARG;
     }
 
+#ifdef __REACTOS__
+    if (writer->output_type != WS_XML_WRITER_OUTPUT_TYPE_BUFFER || !writer->output_buf_user) hr = WS_E_INVALID_OPERATION;
+#else
     if (writer->output_type != WS_XML_WRITER_OUTPUT_TYPE_BUFFER) hr = WS_E_INVALID_OPERATION;
+#endif
     else hr = write_move_to( writer, move, found );
 
     LeaveCriticalSection( &writer->cs );
@@ -4560,7 +4673,11 @@ HRESULT WINAPI WsGetWriterPosition( WS_XML_WRITER *handle, WS_XML_NODE_POSITION 
         return E_INVALIDARG;
     }
 
+#ifdef __REACTOS__
+    if (!writer->output_type || !writer->output_buf_user) hr = WS_E_INVALID_OPERATION;
+#else
     if (!writer->output_type) hr = WS_E_INVALID_OPERATION;
+#endif
     else
     {
         pos->buffer = (WS_XML_BUFFER *)writer->output_buf;
@@ -4743,7 +4860,11 @@ HRESULT WINAPI WsWriteNode( WS_XML_WRITER *handle, const WS_XML_NODE *node, WS_E
     TRACE( "%p %p %p\n", handle, node, error );
     if (error) FIXME( "ignoring error parameter\n" );
 
+#ifdef __REACTOS__
+    if (!writer) return E_INVALIDARG;
+#else
     if (!writer || !node) return E_INVALIDARG;
+#endif
 
     EnterCriticalSection( &writer->cs );
 
@@ -4754,6 +4875,9 @@ HRESULT WINAPI WsWriteNode( WS_XML_WRITER *handle, const WS_XML_NODE *node, WS_E
     }
 
     if (!writer->output_type) hr = WS_E_INVALID_OPERATION;
+#ifdef __REACTOS__
+    else if (!node) hr = E_INVALIDARG;
+#endif
     else hr = write_node( writer, node );
 
     LeaveCriticalSection( &writer->cs );

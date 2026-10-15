@@ -45,6 +45,12 @@ struct heap
     HANDLE           handle;
     SIZE_T           max_size;
     SIZE_T           allocated;
+#ifdef __REACTOS__
+    SIZE_T           actual;
+    SIZE_T           first_chunk;
+    SIZE_T           chunk_size;
+    SIZE_T           chunk_left;
+#endif
     ULONG            prop_count;
     struct prop      prop[ARRAY_SIZE( heap_props )];
 };
@@ -62,6 +68,25 @@ static BOOL ensure_heap( struct heap *heap )
     return TRUE;
 }
 
+#ifdef __REACTOS__
+static void add_actual_size( struct heap *heap, SIZE_T size )
+{
+    SIZE_T chunk;
+
+    if (size <= heap->chunk_left)
+    {
+        heap->chunk_left -= size;
+        return;
+    }
+    chunk = heap->chunk_size ? heap->chunk_size * 2 : 128;
+    if (chunk < size) chunk = size;
+    if (!heap->actual) heap->first_chunk = chunk;
+    heap->actual    += chunk;
+    heap->chunk_size = chunk;
+    heap->chunk_left = chunk - size;
+}
+
+#endif
 void *ws_alloc( WS_HEAP *handle, SIZE_T size )
 {
     struct heap *heap = (struct heap *)handle;
@@ -71,7 +96,15 @@ void *ws_alloc( WS_HEAP *handle, SIZE_T size )
 
     if (heap->magic != HEAP_MAGIC) goto done;
     if (!ensure_heap( heap ) || size > heap->max_size - heap->allocated) goto done;
+#ifdef __REACTOS__
+    if ((ret = HeapAlloc( heap->handle, 0, size )))
+    {
+        heap->allocated += size;
+        add_actual_size( heap, size );
+    }
+#else
     if ((ret = HeapAlloc( heap->handle, 0, size ))) heap->allocated += size;
+#endif
 
 done:
     LeaveCriticalSection( &heap->cs );
@@ -87,7 +120,15 @@ void *ws_alloc_zero( WS_HEAP *handle, SIZE_T size )
 
     if (heap->magic != HEAP_MAGIC) goto done;
     if (!ensure_heap( heap ) || size > heap->max_size - heap->allocated) goto done;
+#ifdef __REACTOS__
+    if ((ret = HeapAlloc( heap->handle, HEAP_ZERO_MEMORY, size )))
+    {
+        heap->allocated += size;
+        add_actual_size( heap, size );
+    }
+#else
     if ((ret = HeapAlloc( heap->handle, HEAP_ZERO_MEMORY, size ))) heap->allocated += size;
+#endif
 
 done:
     LeaveCriticalSection( &heap->cs );
@@ -106,7 +147,15 @@ void *ws_realloc( WS_HEAP *handle, void *ptr, SIZE_T old_size, SIZE_T new_size )
     {
         SIZE_T size = new_size - old_size;
         if (size > heap->max_size - heap->allocated) goto done;
+#ifdef __REACTOS__
+        if ((ret = HeapReAlloc( heap->handle, 0, ptr, new_size )))
+        {
+            heap->allocated += size;
+            add_actual_size( heap, size );
+        }
+#else
         if ((ret = HeapReAlloc( heap->handle, 0, ptr, new_size ))) heap->allocated += size;
+#endif
     }
     else
     {
@@ -131,7 +180,15 @@ void *ws_realloc_zero( WS_HEAP *handle, void *ptr, SIZE_T old_size, SIZE_T new_s
     {
         SIZE_T size = new_size - old_size;
         if (size > heap->max_size - heap->allocated) goto done;
+#ifdef __REACTOS__
+        if ((ret = HeapReAlloc( heap->handle, HEAP_ZERO_MEMORY, ptr, new_size )))
+        {
+            heap->allocated += size;
+            add_actual_size( heap, size );
+        }
+#else
         if ((ret = HeapReAlloc( heap->handle, HEAP_ZERO_MEMORY, ptr, new_size ))) heap->allocated += size;
+#endif
     }
     else
     {
@@ -219,6 +276,11 @@ static void reset_heap( struct heap *heap )
     if (heap->handle) HeapDestroy( heap->handle );
     heap->handle   = NULL;
     heap->max_size = heap->allocated = 0;
+#ifdef __REACTOS__
+    heap->actual     = heap->first_chunk;
+    heap->chunk_size = heap->first_chunk;
+    heap->chunk_left = heap->first_chunk;
+#endif
 }
 
 /**************************************************************************
@@ -307,6 +369,9 @@ HRESULT WINAPI WsGetHeapProperty( WS_HEAP *handle, WS_HEAP_PROPERTY_ID id, void 
     {
         SIZE_T *heap_size = buf;
         if (!buf || size != sizeof(heap_size)) hr = E_INVALIDARG;
+#ifdef __REACTOS__
+        else if (id == WS_HEAP_PROPERTY_ACTUAL_SIZE) *heap_size = heap->actual;
+#endif
         else *heap_size = heap->allocated;
         break;
     }
