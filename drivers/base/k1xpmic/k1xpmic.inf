@@ -18,8 +18,7 @@ DefaultDestDir=12
 %ManufacturerName%=SpacemitMfg,NTRISCV64
 
 [SpacemitMfg.NTRISCV64]
-%K1XPMIC.DeviceDesc%=K1XPMIC_Inst,FDT\spacemit_i2c
-%K1XPMIC.DeviceDesc%=K1XPMIC_Inst,FDT\spacemit_k1x-i2c
+%K1XPMIC.DeviceDesc%=K1XPMIC_Inst,FDT\spacemit_spm8821
 %K1XPMIC.PowerButtonDesc%=K1XPMIC_PowerButton,K1XPMIC\PowerButton
 
 [K1XPMIC_Inst.NT]
