@@ -50,6 +50,10 @@ public:
     NATIVE12_DEVICE_FUNCS functions = {};
     NATIVE12_QUEUE_FUNCS queue_functions = {};
     NATIVE12_LIST_FUNCS list_functions = {};
+    NATIVE12_LIST_FUNCS *list_tables = NULL;
+    UINT list_table_count = 0;
+    HRESULT FillOptionalTables(SIZE_T list_table_size);
+    const NATIVE12_LIST_FUNCS *FindListTable(HANDLE table);
     D3DDDICB_CREATEPAGINGQUEUE paging_queue = {};
     D3D_FEATURE_LEVEL feature_level = D3D_FEATURE_LEVEL_11_0;
     UINT ddi_build = NATIVE12_DDI_BUILD;

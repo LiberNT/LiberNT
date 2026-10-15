@@ -30,7 +30,15 @@ void Native12SetCommandListErrorObject(HANDLE handle, HRESULT hr)
 void Native12SetCommandListTableObject(HANDLE handle, HANDLE table)
 {
     Native12CommandList *list = static_cast<Native12CommandList *>(handle);
-    if (list && table) list->table = static_cast<const NATIVE12_LIST_FUNCS *>(table);
+    const NATIVE12_LIST_FUNCS *functions;
+
+    if (!list) return;
+    if (!(functions = list->device->FindListTable(table)))
+    {
+        WARN("Ignoring unknown command list table %p.\n", table);
+        return;
+    }
+    list->table = functions;
 }
 
 static D3D12DDI_CPU_DESCRIPTOR_HANDLE Native12CpuHandle(D3D12_CPU_DESCRIPTOR_HANDLE handle)

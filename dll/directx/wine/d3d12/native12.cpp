@@ -719,14 +719,16 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
         WARN("The driver failed to fill the command queue table, hr %#lx.\n", hr);
         return hr;
     }
+    SIZE_T list_table_size = ddi_build >= D3D12DDI_BUILD_VERSION_0110 ? sizeof(list_functions)
+            : FIELD_OFFSET(NATIVE12_LIST_FUNCS, pfnSetProgram);
     table.handle = &list_functions;
     if (FAILED(hr = adapter_functions.pfnFillDDITable(driver_adapter, D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D,
-            &list_functions, ddi_build >= D3D12DDI_BUILD_VERSION_0110 ? sizeof(list_functions)
-                    : FIELD_OFFSET(NATIVE12_LIST_FUNCS, pfnSetProgram), 0, table)))
+            &list_functions, list_table_size, 0, table)))
     {
         WARN("The driver failed to fill the command list table, hr %#lx.\n", hr);
         return hr;
     }
+    if (FAILED(hr = FillOptionalTables(list_table_size))) return hr;
 
     QueryCaps(D3D12DDICAPS_TYPE_D3D12_OPTIONS, NULL, &options, sizeof(options));
     QueryCaps(D3D12DDICAPS_TYPE_SHADER, NULL, &shader_caps, sizeof(shader_caps));
@@ -761,6 +763,54 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     return S_OK;
 }
 
+HRESULT Native12Device::FillOptionalTables(SIZE_T list_table_size)
+{
+    D3D12DDI_TABLE_REQUEST *requests;
+    UINT32 count = 0;
+    HRESULT hr = S_OK;
+
+    if (!adapter_functions.pfnGetOptionalDDITables) return S_OK;
+    if (FAILED(adapter_functions.pfnGetOptionalDDITables(driver_adapter, &count, NULL)) || !count) return S_OK;
+    requests = static_cast<D3D12DDI_TABLE_REQUEST *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+            count * sizeof(*requests)));
+    if (!requests) return E_OUTOFMEMORY;
+    if (SUCCEEDED(adapter_functions.pfnGetOptionalDDITables(driver_adapter, &count, requests)))
+    {
+        for (UINT32 i = 0; i < count && SUCCEEDED(hr); ++i)
+        {
+            if (requests[i].tableType != D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D || requests[i].numTables <= 1
+                    || list_tables)
+                continue;
+            list_tables = static_cast<NATIVE12_LIST_FUNCS *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                    (requests[i].numTables - 1) * sizeof(*list_tables)));
+            if (!list_tables)
+            {
+                hr = E_OUTOFMEMORY;
+                break;
+            }
+            list_table_count = requests[i].numTables - 1;
+            for (UINT j = 0; j < list_table_count && SUCCEEDED(hr); ++j)
+            {
+                D3D12DDI_HRTTABLE table;
+                table.handle = &list_tables[j];
+                if (FAILED(hr = adapter_functions.pfnFillDDITable(driver_adapter, D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D,
+                        &list_tables[j], list_table_size, j + 1, table)))
+                    WARN("The driver failed to fill command list table %u, hr %#lx.\n", j + 1, hr);
+            }
+        }
+    }
+    HeapFree(GetProcessHeap(), 0, requests);
+    return hr;
+}
+
+const NATIVE12_LIST_FUNCS *Native12Device::FindListTable(HANDLE table)
+{
+    if (table == &list_functions) return &list_functions;
+    for (UINT i = 0; i < list_table_count; ++i)
+        if (table == &list_tables[i]) return &list_tables[i];
+    return NULL;
+}
+
 Native12Device::~Native12Device()
 {
     if (driver_created && adapter_functions.pfnDestroyDevice) adapter_functions.pfnDestroyDevice(driver_device);
@@ -786,6 +836,7 @@ Native12Device::~Native12Device()
     if (runtime_device && destroy_callbacks) destroy_callbacks(runtime_device);
     if (adapter_open && adapter_functions.pfnCloseAdapter) adapter_functions.pfnCloseAdapter(driver_adapter);
     if (driver_device_storage) HeapFree(GetProcessHeap(), 0, driver_device_storage);
+    if (list_tables) HeapFree(GetProcessHeap(), 0, list_tables);
     if (km_device)
     {
         D3DKMT_DESTROYDEVICE destroy = {};
