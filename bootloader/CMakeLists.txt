@@ -229,6 +229,7 @@ if(NOT ARCH STREQUAL "ppc")
         net/uefihttp.c
         net/uefinet.c
         net/uefinet_hw.c
+        net/snpnet.c
         uefi/memory.c)
 endif()
 

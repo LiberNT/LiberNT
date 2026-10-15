@@ -91,6 +91,23 @@ UefiHttpBootDownload(
     _Out_ PULONG ImageSize);
 
 BOOLEAN
+UefiParseIpv4Address(
+    _Inout_ PCSTR *Text,
+    _Out_ EFI_IPv4_ADDRESS *Address);
+
+BOOLEAN
+UefiParseStaticIpConfiguration(
+    _In_ PCSTR Configuration,
+    _Out_ PUEFI_NET_CONTEXT Context);
+
+EFI_STATUS
+SnpHttpDownload(
+    _In_ PCSTR Url,
+    _In_opt_ PCSTR StaticIp,
+    _Out_ PVOID* Image,
+    _Out_ PULONG ImageSize);
+
+BOOLEAN
 UefiStaticIpConfigure(
     _Inout_ PUEFI_NET_CONTEXT Context,
     _In_ PCSTR Configuration);

@@ -97,7 +97,7 @@ UefiSetIp4Data(
     return Status;
 }
 
-static BOOLEAN
+BOOLEAN
 UefiParseIpv4Address(
     _Inout_ PCSTR *Text,
     _Out_ EFI_IPv4_ADDRESS *Address)
@@ -131,7 +131,7 @@ UefiParseIpv4Address(
     return TRUE;
 }
 
-static BOOLEAN
+BOOLEAN
 UefiParseStaticIpConfiguration(
     _In_ PCSTR Configuration,
     _Out_ PUEFI_NET_CONTEXT Context)

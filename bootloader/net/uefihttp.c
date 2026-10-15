@@ -1023,7 +1023,12 @@ FwDownloadFile(
 {
     PVOID Image = NULL;
     BOOLEAN Cancelled;
+    EFI_STATUS Status;
 
     *Size = 0;
+    Status = SnpHttpDownload(Url, Address, &Image, Size);
+    if (Status != EFI_NOT_FOUND && Status != EFI_UNSUPPORTED)
+        return EFI_ERROR(Status) ? NULL : Image;
+
     return UefiHttpBootDownload(Url, Address, &Cancelled, &Image, Size) ? Image : NULL;
 }
