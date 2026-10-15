@@ -1040,6 +1040,52 @@ xHalIoAssignDriveLetters(IN PLOADER_PARAMETER_BLOCK LoaderBlock,
         RtlFreeUnicodeString(&DeviceName);
     }
 
+    /* If not remote boot, handle NtDeviceName */
+    if (!IoRemoteBootClient &&
+        !PreserveBootRamdiskLetter &&
+        NT_SUCCESS(RtlAnsiStringToUnicodeString(&DeviceName, NtDeviceName, TRUE)))
+    {
+        /* Assign it a drive letter */
+        DriveLetter = HalpNextDriveLetter(&DeviceName, NULL, NULL, TRUE);
+        if (DriveLetter != 0)
+        {
+            if (DriveLetter != 0xFF)
+                *NtSystemPath = DriveLetter;
+        }
+        /* If it fails through the MountMgr, retry manually */
+        else
+        {
+            if (RtlPrefixUnicodeString(&FloppyPrefix, &DeviceName, TRUE))
+                DriveLetter = 'A'; /* If floppy, start at A */
+            else if (RtlPrefixUnicodeString(&CdPrefix, &DeviceName, TRUE))
+                DriveLetter = 'D'; /* If CD-ROM, start at D */
+            else
+                DriveLetter = 'C'; /* Otherwise, start at C */
+
+            /* Try any drive letter */
+            while (HalpSetMountLetter(&DeviceName, DriveLetter) != STATUS_SUCCESS)
+            {
+                ++DriveLetter;
+                if (DriveLetter > 'Z')
+                    break;
+            }
+
+            /* If we're beyond Z (no letter left), delete Z and
+             * reuse it for the OS boot volume (SystemRoot) */
+            if (DriveLetter > 'Z')
+            {
+                DriveLetter = 'Z';
+                HalpDeleteMountLetter(DriveLetter);
+                HalpSetMountLetter(&DeviceName, DriveLetter);
+            }
+
+            /* Return the matching drive letter */
+            *NtSystemPath = DriveLetter;
+        }
+
+        RtlFreeUnicodeString(&DeviceName);
+    }
+
     /* Compute the disks derangements */
     DiskCount -= Increment;
     DiskCount = max(DiskCount, RealDiskCount);
@@ -1223,52 +1269,6 @@ xHalIoAssignDriveLetters(IN PLOADER_PARAMETER_BLOCK LoaderBlock,
         _swprintf(Buffer, L"\\Device\\CdRom%d", i);
         RtlInitUnicodeString(&DeviceName, Buffer);
         HalpNextDriveLetter(&DeviceName, NtDeviceName, NtSystemPath, TRUE);
-    }
-
-    /* If not remote boot, handle NtDeviceName */
-    if (!IoRemoteBootClient &&
-        !PreserveBootRamdiskLetter &&
-        NT_SUCCESS(RtlAnsiStringToUnicodeString(&DeviceName, NtDeviceName, TRUE)))
-    {
-        /* Assign it a drive letter */
-        DriveLetter = HalpNextDriveLetter(&DeviceName, NULL, NULL, TRUE);
-        if (DriveLetter != 0)
-        {
-            if (DriveLetter != 0xFF)
-                *NtSystemPath = DriveLetter;
-        }
-        /* If it fails through the MountMgr, retry manually */
-        else
-        {
-            if (RtlPrefixUnicodeString(&FloppyPrefix, &DeviceName, TRUE))
-                DriveLetter = 'A'; /* If floppy, start at A */
-            else if (RtlPrefixUnicodeString(&CdPrefix, &DeviceName, TRUE))
-                DriveLetter = 'D'; /* If CD-ROM, start at D */
-            else
-                DriveLetter = 'C'; /* Otherwise, start at C */
-
-            /* Try any drive letter */
-            while (HalpSetMountLetter(&DeviceName, DriveLetter) != STATUS_SUCCESS)
-            {
-                ++DriveLetter;
-                if (DriveLetter > 'Z')
-                    break;
-            }
-
-            /* If we're beyond Z (no letter left), delete Z and
-             * reuse it for the OS boot volume (SystemRoot) */
-            if (DriveLetter > 'Z')
-            {
-                DriveLetter = 'Z';
-                HalpDeleteMountLetter(DriveLetter);
-                HalpSetMountLetter(&DeviceName, DriveLetter);
-            }
-
-            /* Return the matching drive letter */
-            *NtSystemPath = DriveLetter;
-        }
-
-        RtlFreeUnicodeString(&DeviceName);
     }
 
     /* Enable auto assignment for MountMgr */
