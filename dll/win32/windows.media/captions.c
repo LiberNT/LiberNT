@@ -119,7 +119,7 @@ DEFINE_IINSPECTABLE( captions, IClosedCaptionPropertiesStatics, struct captions_
 
 static HRESULT WINAPI captions_get_FontColor( IClosedCaptionPropertiesStatics *iface, ClosedCaptionColor *value )
 {
-    FIXME( "iface %p, value %p semi-stub.\n", iface, value );
+    TRACE( "iface %p, value %p.\n", iface, value );
 
     *value = ClosedCaptionColor_Default;
     return S_OK;
@@ -127,13 +127,13 @@ static HRESULT WINAPI captions_get_FontColor( IClosedCaptionPropertiesStatics *i
 
 static HRESULT WINAPI captions_get_ComputedFontColor( IClosedCaptionPropertiesStatics *iface, Color *value )
 {
-    FIXME( "iface %p, value %p stub!\n", iface, value );
-    return E_NOTIMPL;
+    TRACE( "iface %p, value %p.\n", iface, value );
+    return E_INVALIDARG;
 }
 
 static HRESULT WINAPI captions_get_FontOpacity( IClosedCaptionPropertiesStatics *iface, ClosedCaptionOpacity *value )
 {
-    FIXME( "iface %p, value %p semi-stub.\n", iface, value );
+    TRACE( "iface %p, value %p.\n", iface, value );
 
     *value = ClosedCaptionOpacity_Default;
     return S_OK;
@@ -141,7 +141,7 @@ static HRESULT WINAPI captions_get_FontOpacity( IClosedCaptionPropertiesStatics 
 
 static HRESULT WINAPI captions_get_FontSize( IClosedCaptionPropertiesStatics *iface, ClosedCaptionSize *value )
 {
-    FIXME( "iface %p, value %p semi-stub.\n", iface, value );
+    TRACE( "iface %p, value %p.\n", iface, value );
 
     *value = ClosedCaptionSize_Default;
     return S_OK;
@@ -149,7 +149,7 @@ static HRESULT WINAPI captions_get_FontSize( IClosedCaptionPropertiesStatics *if
 
 static HRESULT WINAPI captions_get_FontStyle( IClosedCaptionPropertiesStatics *iface, ClosedCaptionStyle *value )
 {
-    FIXME( "iface %p, value %p semi-stub.\n", iface, value );
+    TRACE( "iface %p, value %p.\n", iface, value );
 
     *value = ClosedCaptionStyle_Default;
     return S_OK;
@@ -157,7 +157,7 @@ static HRESULT WINAPI captions_get_FontStyle( IClosedCaptionPropertiesStatics *i
 
 static HRESULT WINAPI captions_get_FontEffect( IClosedCaptionPropertiesStatics *iface, ClosedCaptionEdgeEffect *value )
 {
-    FIXME( "iface %p, value %p semi-stub.\n", iface, value );
+    TRACE( "iface %p, value %p.\n", iface, value );
 
     *value = ClosedCaptionEdgeEffect_Default;
     return S_OK;
@@ -165,7 +165,7 @@ static HRESULT WINAPI captions_get_FontEffect( IClosedCaptionPropertiesStatics *
 
 static HRESULT WINAPI captions_get_BackgroundColor( IClosedCaptionPropertiesStatics *iface, ClosedCaptionColor *value )
 {
-    FIXME( "iface %p, value %p semi-stub.\n", iface, value );
+    TRACE( "iface %p, value %p.\n", iface, value );
 
     *value = ClosedCaptionColor_Default;
     return S_OK;
@@ -173,13 +173,13 @@ static HRESULT WINAPI captions_get_BackgroundColor( IClosedCaptionPropertiesStat
 
 static HRESULT WINAPI captions_get_ComputedBackgroundColor( IClosedCaptionPropertiesStatics *iface, Color *value )
 {
-    FIXME( "iface %p, value %p stub!\n", iface, value );
-    return E_NOTIMPL;
+    TRACE( "iface %p, value %p.\n", iface, value );
+    return E_INVALIDARG;
 }
 
 static HRESULT WINAPI captions_get_BackgroundOpacity( IClosedCaptionPropertiesStatics *iface, ClosedCaptionOpacity *value )
 {
-    FIXME( "iface %p, value %p semi-stub.\n", iface, value );
+    TRACE( "iface %p, value %p.\n", iface, value );
 
     *value = ClosedCaptionOpacity_Default;
     return S_OK;
@@ -187,7 +187,7 @@ static HRESULT WINAPI captions_get_BackgroundOpacity( IClosedCaptionPropertiesSt
 
 static HRESULT WINAPI captions_get_RegionColor( IClosedCaptionPropertiesStatics *iface, ClosedCaptionColor *value )
 {
-    FIXME( "iface %p, value %p semi-stub.\n", iface, value );
+    TRACE( "iface %p, value %p.\n", iface, value );
 
     *value = ClosedCaptionColor_Default;
     return S_OK;
@@ -195,13 +195,13 @@ static HRESULT WINAPI captions_get_RegionColor( IClosedCaptionPropertiesStatics 
 
 static HRESULT WINAPI captions_get_ComputedRegionColor( IClosedCaptionPropertiesStatics *iface, Color *value )
 {
-    FIXME( "iface %p, value %p stub!\n", iface, value );
-    return E_NOTIMPL;
+    TRACE( "iface %p, value %p.\n", iface, value );
+    return E_INVALIDARG;
 }
 
 static HRESULT WINAPI captions_get_RegionOpacity( IClosedCaptionPropertiesStatics *iface, ClosedCaptionOpacity *value )
 {
-    FIXME( "iface %p, value %p semi-stub.\n", iface, value );
+    TRACE( "iface %p, value %p.\n", iface, value );
 
     *value = ClosedCaptionOpacity_Default;
     return S_OK;

@@ -93,9 +93,9 @@ static void test_CaptionStatics(void)
     ok( color == ClosedCaptionColor_Default, "expected default font color, got %d\n", color );
 
     hr = IClosedCaptionPropertiesStatics_get_ComputedFontColor( caption_statics, &computed_color );
-    todo_wine ok( hr == E_INVALIDARG, "get_ComputedFontColor returned %#lx\n", hr );
+    ok( hr == E_INVALIDARG, "get_ComputedFontColor returned %#lx\n", hr );
     hr = IClosedCaptionPropertiesStatics_get_ComputedFontColor( caption_statics, NULL );
-    todo_wine ok( hr == E_INVALIDARG, "get_ComputedFontColor returned %#lx\n", hr );
+    ok( hr == E_INVALIDARG, "get_ComputedFontColor returned %#lx\n", hr );
 
     opacity = 0xdeadbeef;
     hr = IClosedCaptionPropertiesStatics_get_FontOpacity( caption_statics, &opacity );
@@ -123,9 +123,9 @@ static void test_CaptionStatics(void)
     ok( color == ClosedCaptionColor_Default, "expected default background color, got %d\n", color );
 
     hr = IClosedCaptionPropertiesStatics_get_ComputedBackgroundColor( caption_statics, &computed_color );
-    todo_wine ok( hr == E_INVALIDARG, "get_ComputedBackgroundColor returned %#lx\n", hr );
+    ok( hr == E_INVALIDARG, "get_ComputedBackgroundColor returned %#lx\n", hr );
     hr = IClosedCaptionPropertiesStatics_get_ComputedBackgroundColor( caption_statics, NULL );
-    todo_wine ok( hr == E_INVALIDARG, "get_ComputedBackgroundColor returned %#lx\n", hr );
+    ok( hr == E_INVALIDARG, "get_ComputedBackgroundColor returned %#lx\n", hr );
 
     opacity = 0xdeadbeef;
     hr = IClosedCaptionPropertiesStatics_get_BackgroundOpacity( caption_statics, &opacity );
@@ -138,9 +138,9 @@ static void test_CaptionStatics(void)
     ok( color == ClosedCaptionColor_Default, "expected default region color, got %d\n", color );
 
     hr = IClosedCaptionPropertiesStatics_get_ComputedRegionColor( caption_statics, &computed_color );
-    todo_wine ok( hr == E_INVALIDARG, "get_ComputedRegionColor returned %#lx\n", hr );
+    ok( hr == E_INVALIDARG, "get_ComputedRegionColor returned %#lx\n", hr );
     hr = IClosedCaptionPropertiesStatics_get_ComputedRegionColor( caption_statics, NULL );
-    todo_wine ok( hr == E_INVALIDARG, "get_ComputedRegionColor returned %#lx\n", hr );
+    ok( hr == E_INVALIDARG, "get_ComputedRegionColor returned %#lx\n", hr );
 
     opacity = 0xdeadbeef;
     hr = IClosedCaptionPropertiesStatics_get_RegionOpacity( caption_statics, &opacity );
