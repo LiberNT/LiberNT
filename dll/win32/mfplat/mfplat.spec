@@ -3,6 +3,7 @@
 @ stub MFGetIoPortHandle
 @ stub MFGetPlatformVersion
 @ stub MFGetRandomNumber
+@ stdcall MFGetSupportedSchemes(ptr) mf.MFGetSupportedSchemes
 @ stub MFIsFeatureEnabled
 @ stub MFIsQueueThread
 @ stub MFPlatformBigEndian
