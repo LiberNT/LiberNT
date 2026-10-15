@@ -371,6 +371,10 @@ typedef struct
     LPWSTR  proxyUsername;
     LPWSTR  proxyPassword;
     DWORD   accessType;
+#ifdef __REACTOS__
+    SRWLOCK synced_lock;
+    struct list synced_urls;
+#endif
 } appinfo_t;
 
 typedef struct
@@ -436,6 +440,7 @@ typedef struct
     BOOL awaiting_response;
     BOOL no_headers;
     DWORD net_received;
+    BOOL request_sent;
 #endif
 
     CRITICAL_SECTION headers_section;  /* section to protect the headers array */
@@ -533,6 +538,10 @@ server_t *get_server(substr_t,INTERNET_PORT,BOOL,BOOL);
 
 DWORD create_req_file(const WCHAR*,req_file_t**);
 void req_file_release(req_file_t*);
+#ifdef __REACTOS__
+void INTERNET_AddSessionSyncedUrl(appinfo_t*,const WCHAR*);
+BOOL INTERNET_IsSessionSyncedUrl(appinfo_t*,const WCHAR*);
+#endif
 
 static inline req_file_t *req_file_addref(req_file_t *req_file)
 {

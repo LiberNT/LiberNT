@@ -1321,6 +1321,14 @@ static void dump_INTERNET_FLAGS(DWORD dwFlags)
  * Close internet handle
  *
  */
+#ifdef __REACTOS__
+struct synced_url
+{
+    struct list entry;
+    WCHAR url[1];
+};
+
+#endif
 static VOID APPINFO_Destroy(object_header_t *hdr)
 {
     appinfo_t *lpwai = (appinfo_t*)hdr;
@@ -1332,6 +1340,18 @@ static VOID APPINFO_Destroy(object_header_t *hdr)
     free(lpwai->proxyBypass);
     free(lpwai->proxyUsername);
     free(lpwai->proxyPassword);
+#ifdef __REACTOS__
+    if (lpwai->synced_urls.next)
+    {
+        struct synced_url *synced, *next;
+
+        LIST_FOR_EACH_ENTRY_SAFE(synced, next, &lpwai->synced_urls, struct synced_url, entry)
+        {
+            list_remove(&synced->entry);
+            free(synced);
+        }
+    }
+#endif
 }
 
 static WCHAR *copy_optionW(WCHAR *value)
@@ -1731,6 +1751,10 @@ HINTERNET WINAPI InternetOpenW(LPCWSTR lpszAgent, DWORD dwAccessType,
     lpwai->accessType = dwAccessType;
     lpwai->proxyUsername = NULL;
     lpwai->proxyPassword = NULL;
+#ifdef __REACTOS__
+    InitializeSRWLock(&lpwai->synced_lock);
+    list_init(&lpwai->synced_urls);
+#endif
 
 #ifdef __REACTOS__
     lpwai->agent = lpszAgent ? wcsdup(lpszAgent) : NULL;
@@ -6259,3 +6283,41 @@ DWORD WINAPI ShowClientAuthCerts(HWND parent)
     FIXME("%p: stub\n", parent);
     return 0;
 }
+
+#ifdef __REACTOS__
+static struct synced_url *find_session_synced_url(appinfo_t *appinfo, const WCHAR *url)
+{
+    struct synced_url *synced;
+
+    LIST_FOR_EACH_ENTRY(synced, &appinfo->synced_urls, struct synced_url, entry)
+    {
+        if (!wcscmp(synced->url, url))
+            return synced;
+    }
+    return NULL;
+}
+
+void INTERNET_AddSessionSyncedUrl(appinfo_t *appinfo, const WCHAR *url)
+{
+    struct synced_url *synced;
+
+    AcquireSRWLockExclusive(&appinfo->synced_lock);
+    if (!find_session_synced_url(appinfo, url) &&
+        (synced = malloc(FIELD_OFFSET(struct synced_url, url[wcslen(url) + 1]))))
+    {
+        wcscpy(synced->url, url);
+        list_add_tail(&appinfo->synced_urls, &synced->entry);
+    }
+    ReleaseSRWLockExclusive(&appinfo->synced_lock);
+}
+
+BOOL INTERNET_IsSessionSyncedUrl(appinfo_t *appinfo, const WCHAR *url)
+{
+    BOOL ret;
+
+    AcquireSRWLockShared(&appinfo->synced_lock);
+    ret = find_session_synced_url(appinfo, url) != NULL;
+    ReleaseSRWLockShared(&appinfo->synced_lock);
+    return ret;
+}
+#endif

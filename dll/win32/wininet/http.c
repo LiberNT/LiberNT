@@ -2717,7 +2717,14 @@ static void commit_cache_entry(http_request_t *req)
              req->last_modified, NORMAL_CACHE_ENTRY,
             header, header_len, NULL, 0);
     if(res)
+#ifdef __REACTOS__
+    {
         req->req_file->is_committed = TRUE;
+        INTERNET_AddSessionSyncedUrl(req->session->appInfo, req->req_file->url);
+    }
+#else
+        req->req_file->is_committed = TRUE;
+#endif
     else
         WARN("CommitUrlCacheEntry failed: %lu\n", GetLastError());
     free(header);
@@ -5377,6 +5384,10 @@ static void HTTP_ProcessExpires(http_request_t *request)
     }
     if (!expirationFound)
     {
+#ifdef __REACTOS__
+        request->expires.dwLowDateTime = 0;
+        request->expires.dwHighDateTime = 0;
+#else
         LARGE_INTEGER t;
 
         /* With no known age, default to 10 minutes until expiration. */
@@ -5384,6 +5395,7 @@ static void HTTP_ProcessExpires(http_request_t *request)
         t.QuadPart += 10 * 60 * (ULONGLONG)10000000;
         request->expires.dwLowDateTime = t.u.LowPart;
         request->expires.dwHighDateTime = t.u.HighPart;
+#endif
     }
 
     LeaveCriticalSection( &request->headers_section );
@@ -5861,6 +5873,28 @@ static void set_cached_status_line(http_request_t *request, WCHAR *line)
     HTTP_ProcessHeader(request, L"Status", code, HTTP_ADDREQ_FLAG_REPLACE | HTTP_ADDREQ_FLAG_ADD);
 }
 
+static BOOL cached_response_allowed(http_request_t *request)
+{
+    if (request->hdr.dwFlags & INTERNET_FLAG_FROM_CACHE)
+        return TRUE;
+    if (request->request_sent ||
+        (request->hdr.dwFlags & (INTERNET_FLAG_RELOAD | INTERNET_FLAG_RESYNCHRONIZE | INTERNET_FLAG_PRAGMA_NOCACHE)))
+        return FALSE;
+    return !request->verb || !wcscmp(request->verb, L"GET");
+}
+
+static BOOL cache_entry_fresh(http_request_t *request, const WCHAR *url, const INTERNET_CACHE_ENTRY_INFOW *info)
+{
+    FILETIME now;
+
+    if (info->ExpireTime.dwLowDateTime || info->ExpireTime.dwHighDateTime)
+    {
+        GetSystemTimeAsFileTime(&now);
+        return CompareFileTime(&info->ExpireTime, &now) > 0;
+    }
+    return INTERNET_IsSessionSyncedUrl(request->session->appInfo, url);
+}
+
 static DWORD open_cached_response(http_request_t *request)
 {
     INTERNET_CACHE_ENTRY_INFOW *info;
@@ -5877,7 +5911,8 @@ static DWORD open_cached_response(http_request_t *request)
         free(url);
         return ERROR_FILE_NOT_FOUND;
     }
-    if (!GetUrlCacheEntryInfoW(url, info, &size) || !info->lpszLocalFileName)
+    if (!GetUrlCacheEntryInfoW(url, info, &size) || !info->lpszLocalFileName ||
+        (!(request->hdr.dwFlags & INTERNET_FLAG_FROM_CACHE) && !cache_entry_fresh(request, url, info)))
     {
         free(info);
         free(url);
@@ -6042,19 +6077,24 @@ static DWORD HTTP_HttpSendRequestW(http_request_t *request, LPCWSTR lpszHeaders,
     }
 
 #ifdef __REACTOS__
-    if (request->hdr.dwFlags & INTERNET_FLAG_FROM_CACHE)
+    if (bEndRequest && cached_response_allowed(request))
     {
         res = open_cached_response(request);
-        if (request->session->appInfo->hdr.dwFlags & INTERNET_FLAG_ASYNC)
+        if (res == ERROR_SUCCESS || (request->hdr.dwFlags & INTERNET_FLAG_FROM_CACHE))
         {
-            if (res == ERROR_SUCCESS)
-                send_request_complete(request,
-                        request->session->hdr.dwInternalFlags & INET_OPENURL ? (DWORD_PTR)request->hdr.hInternet : 1, 0);
-            else
-                send_request_complete(request, 0, res);
+            if (request->session->appInfo->hdr.dwFlags & INTERNET_FLAG_ASYNC)
+            {
+                if (res == ERROR_SUCCESS)
+                    send_request_complete(request,
+                            request->session->hdr.dwInternalFlags & INET_OPENURL ? (DWORD_PTR)request->hdr.hInternet : 1, 0);
+                else
+                    send_request_complete(request, 0, res);
+            }
+            return res;
         }
-        return res;
     }
+
+    request->request_sent = TRUE;
 
 #endif
     res = create_request(request, lpOptional, dwOptionalLength, dwContentLength, bEndRequest);
@@ -6562,6 +6602,16 @@ BOOL WINAPI HttpSendRequestW(HINTERNET hHttpRequest, LPCWSTR lpszHeaders,
         goto lend;
     }
 
+#ifdef __REACTOS__
+    if ((hIC->hdr.dwFlags & INTERNET_FLAG_ASYNC) && cached_response_allowed(request))
+    {
+        res = open_cached_response(request);
+        if (res == ERROR_SUCCESS || (request->hdr.dwFlags & INTERNET_FLAG_FROM_CACHE))
+            goto lend;
+        res = ERROR_SUCCESS;
+    }
+
+#endif
     if (hIC->hdr.dwFlags & INTERNET_FLAG_ASYNC)
     {
         send_request_task_t *task;
