@@ -2866,6 +2866,7 @@ BasepCreateUserProcess(IN HANDLE UserToken,
     PIMAGE_NT_HEADERS NtHeaders;
     ULONG AttributeCount = 0, ProcessFlags = InitialProcessFlags, ResumeCount;
     ULONG HardErrorMode, Length;
+    PROCESS_SESSION_INFORMATION SessionInfo;
     NTSTATUS Status;
     PS_BNO_ISOLATION_PARAMETERS BnoIsolation;
     ULONG BnoPrefixLength;
@@ -3158,9 +3159,14 @@ BasepCreateUserProcess(IN HANDLE UserToken,
     if (NtHeaders && NtHeaders->OptionalHeader.Subsystem == IMAGE_SUBSYSTEM_WINDOWS_GUI) AddToHandle(CreateProcessMessage->ProcessHandle, 1);
     if (StartupInfo->dwFlags & STARTF_FORCEONFEEDBACK) AddToHandle(CreateProcessMessage->ProcessHandle, 1);
     if (StartupInfo->dwFlags & STARTF_FORCEOFFFEEDBACK) RemoveFromHandle(CreateProcessMessage->ProcessHandle, 1);
-    Status = CsrClientCallServer((PCSR_API_MESSAGE)&CsrMessage, NULL, CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepCreateProcess), sizeof(*CreateProcessMessage));
-    if (NT_SUCCESS(Status)) Status = CsrMessage.Status;
-    if (!NT_SUCCESS(Status)) goto Failure;
+    if (!UserToken ||
+        !NT_SUCCESS(NtQueryInformationProcess(ProcessHandle, ProcessSessionInformation, &SessionInfo, sizeof(SessionInfo), NULL)) ||
+        SessionInfo.SessionId == NtCurrentPeb()->SessionId)
+    {
+        Status = CsrClientCallServer((PCSR_API_MESSAGE)&CsrMessage, NULL, CSR_CREATE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepCreateProcess), sizeof(*CreateProcessMessage));
+        if (NT_SUCCESS(Status)) Status = CsrMessage.Status;
+        if (!NT_SUCCESS(Status)) goto Failure;
+    }
 
     for (JobIndex = 0; JobIndex < Extended->JobCount; JobIndex++)
     {
