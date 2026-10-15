@@ -3028,7 +3028,14 @@ static HRESULT DP_IF_EnumSessions( IDirectPlayImpl *This, DPSESSIONDESC2 *sdesc,
 
     if ( flags & DPENUMSESSIONS_STOPASYNC )
     {
+#ifdef __REACTOS__
+        BOOL running = This->dp2->hEnumSessionThread != INVALID_HANDLE_VALUE;
+#endif
         DP_KillEnumSessionThread( This );
+#ifdef __REACTOS__
+        if ( running && enumsessioncb )
+            enumsessioncb( NULL, &timeout, DPESC_TIMEDOUT, context );
+#endif
         return DP_OK;
     }
 
@@ -5907,6 +5914,14 @@ static HRESULT WINAPI IDirectPlay4Impl_SendEx( IDirectPlay4 *iface, DPID from, D
         LeaveCriticalSection( &This->lock );
         return DPERR_INVALIDPLAYER;
     }
+
+#ifdef __REACTOS__
+    if ( !DP_FindPlayer( This, to ) && !DP_FindAnyGroup( This, to ) )
+    {
+        LeaveCriticalSection( &This->lock );
+        return DPERR_INVALIDPARAM;
+    }
+#endif
 
     hr = DP_QueueMessage( This, from, to, from, data, DP_CopyGeneric, size );
     if ( FAILED( hr ) )
