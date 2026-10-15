@@ -292,7 +292,7 @@ InitiateSystemShutdownExW(LPWSTR lpMachineName,
 /******************************************************************************
  * InitiateShutdownW [ADVAPI32.@]
  *
- * @unimplemented
+ * @implemented
  */
 DWORD WINAPI
 InitiateShutdownW(LPWSTR lpMachineName,
@@ -301,8 +301,34 @@ InitiateShutdownW(LPWSTR lpMachineName,
                   DWORD dwShutdownFlags,
                   DWORD dwReason)
 {
-    UNIMPLEMENTED;
-    return ERROR_SUCCESS;
+    UNICODE_STRING Message;
+    DWORD dwError;
+
+    if (dwGracePeriod >= 10 * 365 * 24 * 60 * 60 ||
+        (lpMessage && wcslen(lpMessage) >= 512))
+    {
+        return ERROR_INVALID_PARAMETER;
+    }
+
+    RtlInitUnicodeString(&Message, lpMessage);
+    SetLastError(ERROR_SUCCESS);
+
+    RpcTryExcept
+    {
+        dwError = BaseInitiateSystemShutdownEx((PREGISTRY_SERVER_NAME)lpMachineName,
+                                               (PRPC_UNICODE_STRING)&Message,
+                                               (dwShutdownFlags & SHUTDOWN_GRACE_OVERRIDE) ? 0 : dwGracePeriod,
+                                               (dwShutdownFlags & (SHUTDOWN_FORCE_OTHERS | SHUTDOWN_FORCE_SELF)) != 0,
+                                               (dwShutdownFlags & SHUTDOWN_RESTART) != 0,
+                                               dwReason);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        dwError = RpcExceptionCode();
+    }
+    RpcEndExcept;
+
+    return dwError;
 }
 
 /******************************************************************************
@@ -331,13 +357,7 @@ InitiateShutdownA(LPSTR lpMachineName,
         RtlInitAnsiString(&MachineNameA, lpMachineName);
         Status = RtlAnsiStringToUnicodeString(&MachineNameW, &MachineNameA, TRUE);
         if (STATUS_SUCCESS != Status)
-        {
-            if(MachineNameW.Buffer)
-                RtlFreeUnicodeString(&MachineNameW);
-
-            SetLastError(RtlNtStatusToDosError(Status));
-            return FALSE;
-        }
+            return RtlNtStatusToDosError(Status);
     }
 
     if (lpMessage)
@@ -346,11 +366,10 @@ InitiateShutdownA(LPSTR lpMachineName,
         Status = RtlAnsiStringToUnicodeString(&MessageW, &MessageA, TRUE);
         if (STATUS_SUCCESS != Status)
         {
-            if (MessageW.Buffer)
-                RtlFreeUnicodeString(&MessageW);
+            if (lpMachineName)
+                RtlFreeUnicodeString(&MachineNameW);
 
-            SetLastError(RtlNtStatusToDosError(Status));
-            return FALSE;
+            return RtlNtStatusToDosError(Status);
         }
     }
 

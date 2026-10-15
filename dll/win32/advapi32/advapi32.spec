@@ -332,6 +332,8 @@
 @ stdcall InitializeAcl(ptr long long) kernelbase.InitializeAcl
 @ stdcall InitializeSecurityDescriptor(ptr long) kernelbase.InitializeSecurityDescriptor
 @ stdcall InitializeSid(ptr ptr long) kernelbase.InitializeSid
+@ stdcall InitiateShutdownA(str str long long long)
+@ stdcall InitiateShutdownW(wstr wstr long long long)
 @ stdcall InitiateSystemShutdownA(str str long long long)
 @ stdcall InitiateSystemShutdownExA(str str long long long long)
 @ stdcall InitiateSystemShutdownExW(wstr wstr long long long long)
