@@ -233,6 +233,10 @@ TCPRegisterInterface(PIP_INTERFACE IF)
 
     if (IF->AddressLength == ETH_HWADDR_LEN)
     {
+        ip6_addr_t AllNodes;
+
+        ip6_addr_set_allnodes_linklocal(&AllNodes);
+        TCPMldMacFilter(Netif, &AllNodes, NETIF_ADD_MAC_FILTER);
         netif_create_ip6_linklocal_address(Netif, 1);
         netif_set_ip6_autoconfig_enabled(Netif, 1);
     }
