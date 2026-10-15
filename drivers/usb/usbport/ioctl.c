@@ -28,13 +28,15 @@ static WDMUSB_POWER_STATE USBPORT_MapDevicePowerState(IN DEVICE_POWER_STATE Stat
 /* Bulk-Only Mass Storage Reset (USB MSC Bulk-Only Transport 3.1). */
 #define USBPORT_DUMP_BULK_RESET_DEVICE 0xFF
 
-static NTSTATUS USBPORT_DumpSubmit(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ PUSBPORT_ENDPOINT Endpoint, _In_opt_ PUSB_DEFAULT_PIPE_SETUP_PACKET SetupPacket, _In_ BOOLEAN DirectionIn, _Inout_updates_bytes_opt_(Length) PVOID Buffer, _In_ PHYSICAL_ADDRESS PhysicalAddress, _In_ BOOLEAN UsePhysicalAddress, _In_ ULONG Length)
+#define USBPORT_HID_SET_PROTOCOL 0x0B
+#define USBPORT_HID_BOOT_PROTOCOL 0
+
+static NTSTATUS USBPORT_DumpStart(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ PUSBPORT_ENDPOINT Endpoint, _In_opt_ PUSB_DEFAULT_PIPE_SETUP_PACKET SetupPacket, _In_ BOOLEAN DirectionIn, _Inout_updates_bytes_opt_(Length) PVOID Buffer, _In_ PHYSICAL_ADDRESS PhysicalAddress, _In_ BOOLEAN UsePhysicalAddress, _In_ ULONG Length)
 {
     PUSBPORT_DEVICE_EXTENSION FdoExtension;
     PUSBPORT_REGISTRATION_PACKET Packet;
     PUSBPORT_TRANSFER Transfer;
     MPSTATUS MpStatus;
-    ULONG Timeout;
 
     if ((Endpoint == NULL) || (Length > PAGE_SIZE) || ((Length != 0) && !UsePhysicalAddress && (Buffer == NULL)) || (UsePhysicalAddress && DirectionIn))
     {
@@ -94,6 +96,22 @@ static NTSTATUS USBPORT_DumpSubmit(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ 
     if (MpStatus != MP_STATUS_SUCCESS)
         return STATUS_IO_DEVICE_ERROR;
 
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS USBPORT_DumpSubmit(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ PUSBPORT_ENDPOINT Endpoint, _In_opt_ PUSB_DEFAULT_PIPE_SETUP_PACKET SetupPacket, _In_ BOOLEAN DirectionIn, _Inout_updates_bytes_opt_(Length) PVOID Buffer, _In_ PHYSICAL_ADDRESS PhysicalAddress, _In_ BOOLEAN UsePhysicalAddress, _In_ ULONG Length)
+{
+    PUSBPORT_DEVICE_EXTENSION FdoExtension;
+    PUSBPORT_REGISTRATION_PACKET Packet;
+    NTSTATUS Status;
+    ULONG Timeout;
+
+    Status = USBPORT_DumpStart(DumpContext, Endpoint, SetupPacket, DirectionIn, Buffer, PhysicalAddress, UsePhysicalAddress, Length);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    FdoExtension = DumpContext->FdoExtension;
+    Packet = &FdoExtension->MiniPortInterface->Packet;
     for (Timeout = 0; Timeout < ROS_DUMP_POLL_ITERATIONS; Timeout++)
     {
         Packet->PollEndpoint(FdoExtension->MiniPortExt, Endpoint + 1);
@@ -183,6 +201,74 @@ static NTSTATUS NTAPI USBPORT_DumpPrepare(_In_ PVOID Context)
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS NTAPI USBPORT_KeyboardPrepare(_In_ PVOID Context)
+{
+    PUSBPORT_DUMP_CONTEXT KeyboardContext = Context;
+    PUSBPORT_DEVICE_EXTENSION FdoExtension;
+    PUSBPORT_REGISTRATION_PACKET Packet;
+
+    FdoExtension = KeyboardContext->FdoExtension;
+    Packet = &FdoExtension->MiniPortInterface->Packet;
+    KeyboardContext->DumpMode = TRUE;
+    KeMemoryBarrier();
+    Packet->DisableInterrupts(FdoExtension->MiniPortExt);
+
+    return USBPORT_DumpControl(KeyboardContext, USBPORT_DUMP_RT_CLASS_INTERFACE_OUT, USBPORT_HID_SET_PROTOCOL, USBPORT_HID_BOOT_PROTOCOL, KeyboardContext->InterfaceNumber);
+}
+
+static NTSTATUS NTAPI USBPORT_KeyboardPoll(_In_ PVOID Context, _Out_writes_bytes_(Length) PUCHAR Report, _In_ ULONG Length, _Out_ PULONG ReturnedLength)
+{
+    PUSBPORT_DUMP_CONTEXT KeyboardContext = Context;
+    PUSBPORT_DEVICE_EXTENSION FdoExtension;
+    PUSBPORT_REGISTRATION_PACKET Packet;
+    PHYSICAL_ADDRESS PhysicalAddress;
+    NTSTATUS Status;
+
+    *ReturnedLength = 0;
+    if (!KeyboardContext->DumpMode || (Length < ROS_USB_KEYBOARD_BOOT_REPORT_SIZE))
+        return STATUS_DEVICE_NOT_READY;
+
+    FdoExtension = KeyboardContext->FdoExtension;
+    Packet = &FdoExtension->MiniPortInterface->Packet;
+    if (!KeyboardContext->TransferPending)
+    {
+        PhysicalAddress.QuadPart = 0;
+        Status = USBPORT_DumpStart(KeyboardContext, KeyboardContext->BulkInEndpoint, NULL, TRUE, Report, PhysicalAddress, FALSE, ROS_USB_KEYBOARD_BOOT_REPORT_SIZE);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        KeyboardContext->TransferPending = TRUE;
+    }
+
+    Packet->PollEndpoint(FdoExtension->MiniPortExt, KeyboardContext->BulkInEndpoint + 1);
+
+    if (KeyboardContext->StashLength != 0)
+    {
+        *ReturnedLength = KeyboardContext->StashLength;
+        RtlCopyMemory(Report, KeyboardContext->Stash, *ReturnedLength);
+        KeyboardContext->StashLength = 0;
+        return STATUS_SUCCESS;
+    }
+
+    if (InterlockedCompareExchange(&KeyboardContext->Completed, 0, 0) == 0)
+        return STATUS_PENDING;
+
+    KeyboardContext->TransferPending = FALSE;
+    if (!USBD_SUCCESS(KeyboardContext->TransferStatus))
+        return USBPORT_USBDStatusToNtStatus(NULL, KeyboardContext->TransferStatus);
+
+    *ReturnedLength = min(KeyboardContext->CompletedLength, ROS_USB_KEYBOARD_BOOT_REPORT_SIZE);
+    RtlCopyMemory(Report, KeyboardContext->BounceBuffer, *ReturnedLength);
+    return STATUS_SUCCESS;
+}
+
+static VOID NTAPI USBPORT_KeyboardRelease(_In_ PVOID Context)
+{
+    PUSBPORT_DUMP_CONTEXT KeyboardContext = Context;
+
+    if (InterlockedCompareExchangePointer(&KeyboardContext->FdoExtension->Aux.KeyboardContext, NULL, KeyboardContext) == KeyboardContext)
+        USBPORT_FreeDumpContext(KeyboardContext);
+}
+
 VOID USBPORT_FreeDumpContext(_In_opt_ PUSBPORT_DUMP_CONTEXT DumpContext)
 {
     if (DumpContext == NULL)
@@ -199,6 +285,41 @@ VOID USBPORT_FreeDumpContext(_In_opt_ PUSBPORT_DUMP_CONTEXT DumpContext)
     ExFreePoolWithTag(DumpContext, USBPORT_DUMP_CONTEXT_TAG);
 }
 
+static PUSBPORT_DUMP_CONTEXT USBPORT_AllocateDumpContext(_In_ PUSBPORT_DEVICE_EXTENSION FdoExtension)
+{
+    PUSBPORT_DUMP_CONTEXT DumpContext;
+    PHYSICAL_ADDRESS LowestAddress;
+    PHYSICAL_ADDRESS HighestAddress;
+    PHYSICAL_ADDRESS BoundaryAddress;
+    SIZE_T TransferSize;
+
+    DumpContext = ExAllocatePoolWithTag(NonPagedPool, sizeof(*DumpContext), USBPORT_DUMP_CONTEXT_TAG);
+    if (DumpContext == NULL)
+        return NULL;
+    RtlZeroMemory(DumpContext, sizeof(*DumpContext));
+
+    TransferSize = sizeof(USBPORT_TRANSFER) + sizeof(USBPORT_MINIPORT_TRANSFER_HEADER) + FdoExtension->MiniPortInterface->Packet.MiniPortTransferSize;
+    DumpContext->Transfer = ExAllocatePoolWithTag(NonPagedPool, TransferSize, USBPORT_DUMP_CONTEXT_TAG);
+    if (DumpContext->Transfer == NULL)
+        goto Failure;
+
+    LowestAddress.QuadPart = 0;
+    HighestAddress.QuadPart = MAXULONG;
+    BoundaryAddress.QuadPart = 0;
+    DumpContext->BounceBuffer = MmAllocateContiguousMemorySpecifyCache(PAGE_SIZE, LowestAddress, HighestAddress, BoundaryAddress, MmNonCached);
+    if (DumpContext->BounceBuffer == NULL)
+        goto Failure;
+
+    DumpContext->FdoExtension = FdoExtension;
+    DumpContext->TransferAllocationSize = TransferSize;
+    DumpContext->BouncePhysicalAddress = MmGetPhysicalAddress(DumpContext->BounceBuffer);
+    return DumpContext;
+
+Failure:
+    USBPORT_FreeDumpContext(DumpContext);
+    return NULL;
+}
+
 static NTSTATUS USBPORT_GetDumpInterface(_Inout_ PROS_USB_DUMP_INTERFACE Interface)
 {
     PUSBPORT_DEVICE_EXTENSION FdoExtension;
@@ -209,10 +330,6 @@ static NTSTATUS USBPORT_GetDumpInterface(_Inout_ PROS_USB_DUMP_INTERFACE Interfa
     PUSBPORT_ENDPOINT ControlEndpoint;
     PUSBPORT_ENDPOINT BulkInEndpoint;
     PUSBPORT_ENDPOINT BulkOutEndpoint;
-    PHYSICAL_ADDRESS LowestAddress;
-    PHYSICAL_ADDRESS HighestAddress;
-    PHYSICAL_ADDRESS BoundaryAddress;
-    SIZE_T TransferSize;
 
     if ((Interface == NULL) || (Interface->Version != ROS_USB_DUMP_INTERFACE_VERSION) || (Interface->Size < sizeof(*Interface)) || (Interface->DeviceHandle == NULL) || (Interface->BulkInPipe == NULL) || (Interface->BulkOutPipe == NULL))
     {
@@ -246,30 +363,14 @@ static NTSTATUS USBPORT_GetDumpInterface(_Inout_ PROS_USB_DUMP_INTERFACE Interfa
     DumpContext = FdoExtension->Aux.DumpContext;
     if (DumpContext == NULL)
     {
-        DumpContext = ExAllocatePoolWithTag(NonPagedPool, sizeof(*DumpContext), USBPORT_DUMP_CONTEXT_TAG);
+        DumpContext = USBPORT_AllocateDumpContext(FdoExtension);
         if (DumpContext == NULL)
             return STATUS_INSUFFICIENT_RESOURCES;
-        RtlZeroMemory(DumpContext, sizeof(*DumpContext));
 
-        TransferSize = sizeof(USBPORT_TRANSFER) + sizeof(USBPORT_MINIPORT_TRANSFER_HEADER) + FdoExtension->MiniPortInterface->Packet.MiniPortTransferSize;
-        DumpContext->Transfer = ExAllocatePoolWithTag(NonPagedPool, TransferSize, USBPORT_DUMP_CONTEXT_TAG);
-        if (DumpContext->Transfer == NULL)
-            goto Failure;
-
-        LowestAddress.QuadPart = 0;
-        HighestAddress.QuadPart = MAXULONG;
-        BoundaryAddress.QuadPart = 0;
-        DumpContext->BounceBuffer = MmAllocateContiguousMemorySpecifyCache(PAGE_SIZE, LowestAddress, HighestAddress, BoundaryAddress, MmNonCached);
-        if (DumpContext->BounceBuffer == NULL)
-            goto Failure;
-
-        DumpContext->FdoExtension = FdoExtension;
         DumpContext->DeviceHandle = DeviceHandle;
         DumpContext->ControlEndpoint = ControlEndpoint;
         DumpContext->BulkInEndpoint = BulkInEndpoint;
         DumpContext->BulkOutEndpoint = BulkOutEndpoint;
-        DumpContext->TransferAllocationSize = TransferSize;
-        DumpContext->BouncePhysicalAddress = MmGetPhysicalAddress(DumpContext->BounceBuffer);
         DumpContext->InterfaceNumber = Interface->InterfaceNumber;
         DumpContext->BulkInEndpointAddress = Interface->BulkInEndpointAddress;
         DumpContext->BulkOutEndpointAddress = Interface->BulkOutEndpointAddress;
@@ -287,10 +388,55 @@ static NTSTATUS USBPORT_GetDumpInterface(_Inout_ PROS_USB_DUMP_INTERFACE Interfa
     Interface->Transfer = USBPORT_DumpTransfer;
     Interface->TransferPhysical = USBPORT_DumpTransferPhysical;
     return STATUS_SUCCESS;
+}
 
-Failure:
-    USBPORT_FreeDumpContext(DumpContext);
-    return STATUS_INSUFFICIENT_RESOURCES;
+static NTSTATUS USBPORT_GetKeyboardInterface(_Inout_ PROS_USB_KEYBOARD_INTERFACE Interface)
+{
+    PUSBPORT_DEVICE_EXTENSION FdoExtension;
+    PUSBPORT_DUMP_CONTEXT KeyboardContext;
+    PUSBPORT_DEVICE_HANDLE DeviceHandle;
+    PUSBPORT_PIPE_HANDLE InterruptPipe;
+    PUSBPORT_ENDPOINT ControlEndpoint;
+    PUSBPORT_ENDPOINT InterruptEndpoint;
+
+    if ((Interface == NULL) || (Interface->Version != ROS_USB_KEYBOARD_INTERFACE_VERSION) || (Interface->Size < sizeof(*Interface)) || (Interface->DeviceHandle == NULL) || (Interface->InterruptInPipe == NULL))
+        return STATUS_INVALID_PARAMETER;
+
+    DeviceHandle = Interface->DeviceHandle;
+    InterruptPipe = Interface->InterruptInPipe;
+    if (!USBPORT_ValidatePipeHandle(DeviceHandle, InterruptPipe))
+        return STATUS_INVALID_PARAMETER;
+
+    ControlEndpoint = DeviceHandle->PipeHandle.Endpoint;
+    InterruptEndpoint = InterruptPipe->Endpoint;
+    if ((ControlEndpoint == NULL) || (InterruptEndpoint == NULL) || (InterruptEndpoint->FdoDevice == NULL) || (InterruptEndpoint->FdoDevice != ControlEndpoint->FdoDevice) || (InterruptEndpoint->EndpointProperties.TransferType != USBPORT_TRANSFER_TYPE_INTERRUPT) || (InterruptEndpoint->EndpointProperties.Direction == USBPORT_TRANSFER_DIRECTION_OUT))
+        return STATUS_INVALID_DEVICE_STATE;
+
+    FdoExtension = InterruptEndpoint->FdoDevice->DeviceExtension;
+    if (!(FdoExtension->MiniPortInterface->Packet.MiniPortFlags & USB_MINIPORT_FLAGS_DUMP_POLLING))
+        return STATUS_NOT_SUPPORTED;
+
+    KeyboardContext = USBPORT_AllocateDumpContext(FdoExtension);
+    if (KeyboardContext == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    KeyboardContext->DeviceHandle = DeviceHandle;
+    KeyboardContext->ControlEndpoint = ControlEndpoint;
+    KeyboardContext->BulkInEndpoint = InterruptEndpoint;
+    KeyboardContext->InterfaceNumber = Interface->InterfaceNumber;
+    if (InterlockedCompareExchangePointer(&FdoExtension->Aux.KeyboardContext, KeyboardContext, NULL) != NULL)
+    {
+        USBPORT_FreeDumpContext(KeyboardContext);
+        return STATUS_DEVICE_BUSY;
+    }
+
+    Interface->Version = ROS_USB_KEYBOARD_INTERFACE_VERSION;
+    Interface->Size = sizeof(*Interface);
+    Interface->Context = KeyboardContext;
+    Interface->Prepare = USBPORT_KeyboardPrepare;
+    Interface->Poll = USBPORT_KeyboardPoll;
+    Interface->Release = USBPORT_KeyboardRelease;
+    return STATUS_SUCCESS;
 }
 
 static
@@ -927,6 +1073,12 @@ USBPORT_PdoInternalDeviceControl(IN PDEVICE_OBJECT PdoDevice,
     if (IoCtl == IOCTL_INTERNAL_REACTOS_USB_GET_DUMP_INTERFACE)
     {
         Status = USBPORT_GetDumpInterface(IoStack->Parameters.Others.Argument1);
+        goto Exit;
+    }
+
+    if (IoCtl == IOCTL_INTERNAL_REACTOS_USB_GET_KEYBOARD_INTERFACE)
+    {
+        Status = USBPORT_GetKeyboardInterface(IoStack->Parameters.Others.Argument1);
         goto Exit;
     }
 

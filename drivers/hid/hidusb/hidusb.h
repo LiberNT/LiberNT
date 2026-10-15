@@ -13,6 +13,7 @@
 #include <usbdlib.h>
 
 #include <hidport.h>
+#include <reactos/drivers/dumpstor.h>
 
 typedef struct
 {
@@ -51,6 +52,9 @@ typedef struct
     //
     LONG ConfigurationActive;
     LONG ResetPending;
+
+    ROS_USB_KEYBOARD_INTERFACE DebuggerKeyboard;
+    PCALLBACK_OBJECT DebuggerKeyboardCallback;
 
 } HID_USB_DEVICE_EXTENSION, *PHID_USB_DEVICE_EXTENSION;
 
@@ -94,6 +98,9 @@ Hid_DispatchUrb(
 #define USB_GET_PROTOCOL_REQUEST 0x3
 #define USB_HID_GET_REPORT_REQUEST 0x1
 #define USB_HID_SET_REPORT_REQUEST 0x9
+
+#define USB_HID_BOOT_INTERFACE_SUBCLASS 0x1
+#define USB_HID_KEYBOARD_PROTOCOL 0x1
 
 #define USB_HID_REPORT_TYPE_INPUT 0x1
 #define USB_HID_REPORT_TYPE_OUTPUT 0x2

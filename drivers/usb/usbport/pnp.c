@@ -2841,6 +2841,7 @@ Exit:
 
             USBPORT_FreeDumpContext(FdoExtension->Aux.DumpContext);
             FdoExtension->Aux.DumpContext = NULL;
+            USBPORT_FreeDumpContext(InterlockedExchangePointer(&FdoExtension->Aux.KeyboardContext, NULL));
 
             if (FdoCommonExtension->PnpStateFlags & USBPORT_PNP_STATE_STARTED &&
                !(FdoCommonExtension->PnpStateFlags & USBPORT_PNP_STATE_NOT_INIT))

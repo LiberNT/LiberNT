@@ -13,7 +13,7 @@
 #define NDEBUG_USBHUB_IOCTL
 #include "dbg_uhub.h"
 
-static NTSTATUS USBH_GetDumpInterface(_In_ PUSBHUB_PORT_PDO_EXTENSION PortExtension, _Inout_ PROS_USB_DUMP_INTERFACE Interface)
+static NTSTATUS USBH_ForwardDumpInterfaceRequest(_In_ PUSBHUB_PORT_PDO_EXTENSION PortExtension, _In_ ULONG IoControlCode, _Inout_ PVOID Interface)
 {
     PUSBHUB_FDO_EXTENSION HubExtension;
     PDEVICE_OBJECT RootHubPdo;
@@ -23,22 +23,15 @@ static NTSTATUS USBH_GetDumpInterface(_In_ PUSBHUB_PORT_PDO_EXTENSION PortExtens
     PIRP Irp;
     NTSTATUS Status;
 
-    if ((Interface == NULL) || (Interface->Version != ROS_USB_DUMP_INTERFACE_VERSION) || (Interface->Size < sizeof(*Interface)) || (PortExtension->DeviceHandle == NULL))
-    {
-        DPRINT1("USBHUB: dump interface validation failed: interface %p version %lu size %lu device %p\n", Interface, Interface != NULL ? Interface->Version : 0, Interface != NULL ? Interface->Size : 0, PortExtension->DeviceHandle);
-        return STATUS_INVALID_PARAMETER;
-    }
-
     HubExtension = PortExtension->HubExtension;
     if ((HubExtension == NULL) || (HubExtension->RootHubPdo2 == NULL))
     {
         return STATUS_DEVICE_NOT_READY;
     }
 
-    Interface->DeviceHandle = PortExtension->DeviceHandle;
     RootHubPdo = HubExtension->RootHubPdo2;
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
-    Irp = IoBuildDeviceIoControlRequest(IOCTL_INTERNAL_REACTOS_USB_GET_DUMP_INTERFACE, RootHubPdo, NULL, 0, NULL, 0, TRUE, &Event, &IoStatus);
+    Irp = IoBuildDeviceIoControlRequest(IoControlCode, RootHubPdo, NULL, 0, NULL, 0, TRUE, &Event, &IoStatus);
     if (Irp == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
 
@@ -54,6 +47,27 @@ static NTSTATUS USBH_GetDumpInterface(_In_ PUSBHUB_PORT_PDO_EXTENSION PortExtens
         DPRINT1("USBHUB: USBPORT dump interface request failed (0x%08lx)\n", Status);
 
     return Status;
+}
+
+static NTSTATUS USBH_GetDumpInterface(_In_ PUSBHUB_PORT_PDO_EXTENSION PortExtension, _Inout_ PROS_USB_DUMP_INTERFACE Interface)
+{
+    if ((Interface == NULL) || (Interface->Version != ROS_USB_DUMP_INTERFACE_VERSION) || (Interface->Size < sizeof(*Interface)) || (PortExtension->DeviceHandle == NULL))
+    {
+        DPRINT1("USBHUB: dump interface validation failed: interface %p version %lu size %lu device %p\n", Interface, Interface != NULL ? Interface->Version : 0, Interface != NULL ? Interface->Size : 0, PortExtension->DeviceHandle);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Interface->DeviceHandle = PortExtension->DeviceHandle;
+    return USBH_ForwardDumpInterfaceRequest(PortExtension, IOCTL_INTERNAL_REACTOS_USB_GET_DUMP_INTERFACE, Interface);
+}
+
+static NTSTATUS USBH_GetKeyboardInterface(_In_ PUSBHUB_PORT_PDO_EXTENSION PortExtension, _Inout_ PROS_USB_KEYBOARD_INTERFACE Interface)
+{
+    if ((Interface == NULL) || (Interface->Version != ROS_USB_KEYBOARD_INTERFACE_VERSION) || (Interface->Size < sizeof(*Interface)) || (PortExtension->DeviceHandle == NULL))
+        return STATUS_INVALID_PARAMETER;
+
+    Interface->DeviceHandle = PortExtension->DeviceHandle;
+    return USBH_ForwardDumpInterfaceRequest(PortExtension, IOCTL_INTERNAL_REACTOS_USB_GET_KEYBOARD_INTERFACE, Interface);
 }
 
 static
@@ -1918,6 +1932,10 @@ USBH_PdoInternalControl(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
     {
         case IOCTL_INTERNAL_REACTOS_USB_GET_DUMP_INTERFACE:
             Status = USBH_GetDumpInterface(PortExtension, IoStack->Parameters.Others.Argument1);
+            break;
+
+        case IOCTL_INTERNAL_REACTOS_USB_GET_KEYBOARD_INTERFACE:
+            Status = USBH_GetKeyboardInterface(PortExtension, IoStack->Parameters.Others.Argument1);
             break;
 
         case IOCTL_INTERNAL_USB_SUBMIT_URB:

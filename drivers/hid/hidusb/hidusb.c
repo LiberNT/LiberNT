@@ -401,6 +401,111 @@ HidCreate(
     return STATUS_SUCCESS;
 }
 
+static
+VOID
+HidUsb_RegisterDebuggerKeyboard(
+    IN PDEVICE_OBJECT DeviceObject)
+{
+    PHID_DEVICE_EXTENSION DeviceExtension;
+    PHID_USB_DEVICE_EXTENSION HidDeviceExtension;
+    PROS_USB_KEYBOARD_INTERFACE Keyboard;
+    PUSBD_PIPE_INFORMATION PipeInformation;
+    UNICODE_STRING CallbackName = RTL_CONSTANT_STRING(ROS_USB_KEYBOARD_CALLBACK_NAME);
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatus;
+    PIO_STACK_LOCATION IoStack;
+    KEVENT Event;
+    PIRP Irp;
+    NTSTATUS Status;
+
+    DeviceExtension = DeviceObject->DeviceExtension;
+    HidDeviceExtension = DeviceExtension->MiniDeviceExtension;
+    Keyboard = &HidDeviceExtension->DebuggerKeyboard;
+
+    if (!HidUsb_HasActiveConfiguration(HidDeviceExtension) ||
+        HidDeviceExtension->DebuggerKeyboardCallback ||
+        HidDeviceExtension->InterfaceInfo->SubClass != USB_HID_BOOT_INTERFACE_SUBCLASS ||
+        HidDeviceExtension->InterfaceInfo->Protocol != USB_HID_KEYBOARD_PROTOCOL)
+    {
+        return;
+    }
+
+    PipeInformation = HidUsb_GetInputInterruptInterfaceHandle(HidDeviceExtension->InterfaceInfo);
+    if (!PipeInformation || !PipeInformation->PipeHandle)
+        return;
+
+    RtlZeroMemory(Keyboard, sizeof(*Keyboard));
+    Keyboard->Version = ROS_USB_KEYBOARD_INTERFACE_VERSION;
+    Keyboard->Size = sizeof(*Keyboard);
+    Keyboard->InterruptInPipe = PipeInformation->PipeHandle;
+    Keyboard->InterfaceNumber = HidDeviceExtension->InterfaceInfo->InterfaceNumber;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_INTERNAL_REACTOS_USB_GET_KEYBOARD_INTERFACE,
+                                        DeviceExtension->NextDeviceObject,
+                                        NULL,
+                                        0,
+                                        NULL,
+                                        0,
+                                        TRUE,
+                                        &Event,
+                                        &IoStatus);
+    if (!Irp)
+        return;
+
+    IoStack = IoGetNextIrpStackLocation(Irp);
+    IoStack->Parameters.Others.Argument1 = Keyboard;
+    Status = IoCallDriver(DeviceExtension->NextDeviceObject, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+
+    if (!NT_SUCCESS(Status) ||
+        Keyboard->Version != ROS_USB_KEYBOARD_INTERFACE_VERSION ||
+        Keyboard->Size < sizeof(*Keyboard) ||
+        !Keyboard->Context ||
+        !Keyboard->Prepare ||
+        !Keyboard->Poll ||
+        !Keyboard->Release)
+    {
+        DPRINT1("[HIDUSB] no debugger keyboard interface (0x%08lx)\n", Status);
+        RtlZeroMemory(Keyboard, sizeof(*Keyboard));
+        return;
+    }
+
+    InitializeObjectAttributes(&ObjectAttributes, &CallbackName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ExCreateCallback(&HidDeviceExtension->DebuggerKeyboardCallback, &ObjectAttributes, FALSE, TRUE);
+    if (!NT_SUCCESS(Status))
+    {
+        HidDeviceExtension->DebuggerKeyboardCallback = NULL;
+        Keyboard->Release(Keyboard->Context);
+        RtlZeroMemory(Keyboard, sizeof(*Keyboard));
+        return;
+    }
+
+    ExNotifyCallback(HidDeviceExtension->DebuggerKeyboardCallback, Keyboard, (PVOID)TRUE);
+}
+
+static
+VOID
+HidUsb_UnregisterDebuggerKeyboard(
+    IN PHID_USB_DEVICE_EXTENSION HidDeviceExtension)
+{
+    PCALLBACK_OBJECT Callback;
+
+    Callback = HidDeviceExtension->DebuggerKeyboardCallback;
+    if (!Callback)
+        return;
+
+    ExNotifyCallback(Callback, &HidDeviceExtension->DebuggerKeyboard, (PVOID)FALSE);
+    ObDereferenceObject(Callback);
+    HidDeviceExtension->DebuggerKeyboardCallback = NULL;
+    HidDeviceExtension->DebuggerKeyboard.Release(HidDeviceExtension->DebuggerKeyboard.Context);
+    RtlZeroMemory(&HidDeviceExtension->DebuggerKeyboard, sizeof(HidDeviceExtension->DebuggerKeyboard));
+}
+
 VOID
 NTAPI
 HidUsb_ResetWorkerRoutine(
@@ -442,6 +547,7 @@ HidUsb_ResetWorkerRoutine(
             //
             // port is disabled
             //
+            HidUsb_UnregisterDebuggerKeyboard(HidDeviceExtension);
             Status = HidUsb_ResetPort(ResetContext->DeviceObject);
             DPRINT("[HIDUSB] ResetPort %x\n", Status);
             if (Status == STATUS_DEVICE_DATA_ERROR)
@@ -456,6 +562,7 @@ HidUsb_ResetWorkerRoutine(
             {
                 Status = HidUsb_ResetInterruptPipe(ResetContext->DeviceObject);
                 DPRINT("[HIDUSB] ResetWorkerRoutine ResetPipe %x\n", Status);
+                HidUsb_RegisterDebuggerKeyboard(ResetContext->DeviceObject);
             }
         }
         else
@@ -1820,6 +1927,8 @@ Hid_DisableConfiguration(
     DeviceExtension = DeviceObject->DeviceExtension;
     HidDeviceExtension = DeviceExtension->MiniDeviceExtension;
 
+    HidUsb_UnregisterDebuggerKeyboard(HidDeviceExtension);
+
     //
     // build urb
     //
@@ -2203,6 +2312,7 @@ Hid_PnpStart(
             // get protocol
             //
             Hid_GetProtocol(DeviceObject);
+            HidUsb_RegisterDebuggerKeyboard(DeviceObject);
             return Status;
         }
     }
@@ -2264,6 +2374,12 @@ HidPnp(
             Status = IoCallDriver(DeviceExtension->NextDeviceObject, Irp);
 
             return Status;
+        }
+        case IRP_MN_SURPRISE_REMOVAL:
+        {
+            HidUsb_UnregisterDebuggerKeyboard(DeviceExtension->MiniDeviceExtension);
+            IoSkipCurrentIrpStackLocation(Irp);
+            return IoCallDriver(DeviceExtension->NextDeviceObject, Irp);
         }
         case IRP_MN_QUERY_PNP_DEVICE_STATE:
         {

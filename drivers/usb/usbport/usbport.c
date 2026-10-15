@@ -3330,6 +3330,19 @@ USBPORT_MiniportCompleteTransfer(IN PVOID MiniPortExtension,
         return;
     }
 
+    DumpContext = ((PUSBPORT_DEVICE_EXTENSION)Transfer->FdoDevice->DeviceExtension)->Aux.KeyboardContext;
+    if ((DumpContext != NULL) && DumpContext->DumpMode)
+    {
+        if ((Transfer->Endpoint == DumpContext->BulkInEndpoint) && USBD_SUCCESS(USBDStatus) && (Transfer->SgList.MappedSystemVa != NULL))
+        {
+            ULONG StashLength = min(TransferLength, ROS_USB_KEYBOARD_BOOT_REPORT_SIZE);
+
+            RtlCopyMemory(DumpContext->Stash, Transfer->SgList.MappedSystemVa, StashLength);
+            DumpContext->StashLength = StashLength;
+        }
+        return;
+    }
+
     /*
      * Once the bugcheck owner has entered USB dump mode, normal transfer
      * owners can no longer run. Let the miniport retire their descriptors,
