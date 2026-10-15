@@ -3078,6 +3078,16 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_QueryInterface(ID3D12Device9 *ifac
         return S_OK;
     }
 
+    if (IsEqualGUID(riid, &IID_ID3D12DeviceRemovedExtendedData1)
+            || IsEqualGUID(riid, &IID_ID3D12DeviceRemovedExtendedData))
+    {
+        struct d3d12_device *device = impl_from_ID3D12Device9(iface);
+
+        ID3D12Device9_AddRef(iface);
+        *object = &device->ID3D12DeviceRemovedExtendedData1_iface;
+        return S_OK;
+    }
+
     WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(riid));
 
     *object = NULL;
@@ -5617,6 +5627,90 @@ static const struct ID3D12Device9Vtbl d3d12_device_vtbl =
     d3d12_device_CreateCommandQueue1,
 };
 
+static LONG vkd3d_dred_auto_breadcrumbs;
+static LONG vkd3d_dred_page_fault;
+
+void vkd3d_set_dred_enablement(D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault)
+{
+    InterlockedExchange(&vkd3d_dred_auto_breadcrumbs, auto_breadcrumbs);
+    InterlockedExchange(&vkd3d_dred_page_fault, page_fault);
+}
+
+static HRESULT d3d12_device_dred_status(D3D12_DRED_ENABLEMENT enablement)
+{
+    return enablement == D3D12_DRED_ENABLEMENT_FORCED_ON ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : DXGI_ERROR_UNSUPPORTED;
+}
+
+static inline struct d3d12_device *impl_from_ID3D12DeviceRemovedExtendedData1(ID3D12DeviceRemovedExtendedData1 *iface)
+{
+    return CONTAINING_RECORD(iface, struct d3d12_device, ID3D12DeviceRemovedExtendedData1_iface);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_device_dred_QueryInterface(ID3D12DeviceRemovedExtendedData1 *iface,
+        REFIID riid, void **object)
+{
+    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData1(iface);
+
+    return d3d12_device_QueryInterface(&device->ID3D12Device9_iface, riid, object);
+}
+
+static ULONG STDMETHODCALLTYPE d3d12_device_dred_AddRef(ID3D12DeviceRemovedExtendedData1 *iface)
+{
+    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData1(iface);
+
+    return d3d12_device_AddRef(&device->ID3D12Device9_iface);
+}
+
+static ULONG STDMETHODCALLTYPE d3d12_device_dred_Release(ID3D12DeviceRemovedExtendedData1 *iface)
+{
+    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData1(iface);
+
+    return d3d12_device_Release(&device->ID3D12Device9_iface);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetAutoBreadcrumbsOutput(ID3D12DeviceRemovedExtendedData1 *iface,
+        D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT *output)
+{
+    TRACE("iface %p, output %p.\n", iface, output);
+
+    return d3d12_device_dred_status(impl_from_ID3D12DeviceRemovedExtendedData1(iface)->dred_auto_breadcrumbs);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetPageFaultAllocationOutput(ID3D12DeviceRemovedExtendedData1 *iface,
+        D3D12_DRED_PAGE_FAULT_OUTPUT *output)
+{
+    TRACE("iface %p, output %p.\n", iface, output);
+
+    return d3d12_device_dred_status(impl_from_ID3D12DeviceRemovedExtendedData1(iface)->dred_page_fault);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetAutoBreadcrumbsOutput1(ID3D12DeviceRemovedExtendedData1 *iface,
+        D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 *output)
+{
+    TRACE("iface %p, output %p.\n", iface, output);
+
+    return d3d12_device_dred_status(impl_from_ID3D12DeviceRemovedExtendedData1(iface)->dred_auto_breadcrumbs);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetPageFaultAllocationOutput1(ID3D12DeviceRemovedExtendedData1 *iface,
+        D3D12_DRED_PAGE_FAULT_OUTPUT1 *output)
+{
+    TRACE("iface %p, output %p.\n", iface, output);
+
+    return d3d12_device_dred_status(impl_from_ID3D12DeviceRemovedExtendedData1(iface)->dred_page_fault);
+}
+
+static const struct ID3D12DeviceRemovedExtendedData1Vtbl d3d12_device_dred_vtbl =
+{
+    d3d12_device_dred_QueryInterface,
+    d3d12_device_dred_AddRef,
+    d3d12_device_dred_Release,
+    d3d12_device_dred_GetAutoBreadcrumbsOutput,
+    d3d12_device_dred_GetPageFaultAllocationOutput,
+    d3d12_device_dred_GetAutoBreadcrumbsOutput1,
+    d3d12_device_dred_GetPageFaultAllocationOutput1,
+};
+
 struct d3d12_device *unsafe_impl_from_ID3D12Device9(ID3D12Device9 *iface)
 {
     if (!iface)
@@ -5666,6 +5760,9 @@ static HRESULT d3d12_device_init(struct d3d12_device *device,
     HRESULT hr;
 
     device->ID3D12Device9_iface.lpVtbl = &d3d12_device_vtbl;
+    device->ID3D12DeviceRemovedExtendedData1_iface.lpVtbl = &d3d12_device_dred_vtbl;
+    device->dred_auto_breadcrumbs = vkd3d_dred_auto_breadcrumbs;
+    device->dred_page_fault = vkd3d_dred_page_fault;
     device->refcount = 1;
 
     vkd3d_instance_incref(device->vkd3d_instance = instance);

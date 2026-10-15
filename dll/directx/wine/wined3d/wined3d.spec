@@ -380,6 +380,7 @@
 @ cdecl vkd3d_create_versioned_root_signature_deserializer(ptr long ptr ptr)
 @ cdecl vkd3d_get_device_parent(ptr)
 @ cdecl vkd3d_get_dxgi_format(long)
+@ cdecl vkd3d_set_dred_enablement(long long)
 @ cdecl vkd3d_get_vk_device(ptr)
 @ cdecl vkd3d_get_vk_format(long)
 @ cdecl vkd3d_get_vk_physical_device(ptr)

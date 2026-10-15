@@ -1631,6 +1631,9 @@ struct vkd3d_desc_object_cache
 struct d3d12_device
 {
     ID3D12Device9 ID3D12Device9_iface;
+    ID3D12DeviceRemovedExtendedData1 ID3D12DeviceRemovedExtendedData1_iface;
+    D3D12_DRED_ENABLEMENT dred_auto_breadcrumbs;
+    D3D12_DRED_ENABLEMENT dred_page_fault;
     unsigned int refcount;
 
     VkDevice vk_device;
