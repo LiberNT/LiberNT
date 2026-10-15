@@ -2568,6 +2568,14 @@ DWORD WINAPI WNetGetUniversalNameA ( LPCSTR lpLocalPath, DWORD dwInfoLevel,
     FIXME( "(%s, 0x%08lX, %p, %p): stub\n",
            debugstr_a(lpLocalPath), dwInfoLevel, lpBuffer, lpBufferSize);
 
+#ifdef __REACTOS__
+    if (!lpBufferSize)
+    {
+        SetLastError(WN_BAD_POINTER);
+        return WN_BAD_POINTER;
+    }
+
+#endif
     switch (dwInfoLevel)
     {
     case UNIVERSAL_NAME_INFO_LEVEL:
@@ -2615,6 +2623,14 @@ DWORD WINAPI WNetGetUniversalNameW ( LPCWSTR lpLocalPath, DWORD dwInfoLevel,
     FIXME( "(%s, 0x%08lX, %p, %p): stub\n",
            debugstr_w(lpLocalPath), dwInfoLevel, lpBuffer, lpBufferSize);
 
+#ifdef __REACTOS__
+    if (!lpBufferSize)
+    {
+        SetLastError(WN_BAD_POINTER);
+        return WN_BAD_POINTER;
+    }
+
+#endif
     switch (dwInfoLevel)
     {
     case UNIVERSAL_NAME_INFO_LEVEL:
@@ -2640,6 +2656,13 @@ DWORD WINAPI WNetGetUniversalNameW ( LPCWSTR lpLocalPath, DWORD dwInfoLevel,
         break;
     }
     case REMOTE_NAME_INFO_LEVEL:
+#ifdef __REACTOS__
+        if (GetDriveTypeW(lpLocalPath) != DRIVE_REMOTE)
+        {
+            err = WN_NOT_CONNECTED;
+            break;
+        }
+#endif
         err = WN_NO_NETWORK;
         break;
 
