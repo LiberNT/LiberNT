@@ -61,6 +61,8 @@
 136 stdcall -noname FlushMenuThemes()
 137 stdcall -noname IsDarkModeAllowedForWindow(ptr)
 138 stdcall -noname ShouldSystemUseDarkMode()
+141 stdcall -noname EnableTextScalingForCurrentProcess()
+142 stdcall -noname EnableTextScalingForWindow(ptr)
 
 # Standard functions
 @ stdcall BeginBufferedAnimation(ptr ptr ptr long ptr ptr ptr ptr)

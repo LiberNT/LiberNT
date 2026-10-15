@@ -80,3 +80,14 @@ HRESULT WINAPI SetSystemVisualStyle(const WCHAR *style_file, const WCHAR *color,
         MSSTYLES_CloseThemeFile(theme_file);
     return hr;
 }
+
+BOOL WINAPI EnableTextScalingForCurrentProcess(void)
+{
+    return TRUE;
+}
+
+BOOL WINAPI EnableTextScalingForWindow(HWND hwnd)
+{
+    UNREFERENCED_PARAMETER(hwnd);
+    return FALSE;
+}
