@@ -4631,7 +4631,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device14
             }
 
             data->DynamicDepthBiasSupported = FALSE;
-            data->GPUUploadHeapSupported = FALSE;
+            data->GPUUploadHeapSupported = d3d12_device_is_uma(device, NULL);
 
             TRACE("Dynamic depth bias %#x.\n", data->DynamicDepthBiasSupported);
             TRACE("GPU upload heap %#x.\n", data->GPUUploadHeapSupported);
@@ -5195,8 +5195,18 @@ static D3D12_HEAP_PROPERTIES * STDMETHODCALLTYPE d3d12_device_GetCustomHeapPrope
             heap_properties->MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
             break;
 
+        case D3D12_HEAP_TYPE_GPU_UPLOAD:
+            heap_properties->CPUPageProperty = d3d12_device_is_uma(device, &coherent) && coherent
+                    ? D3D12_CPU_PAGE_PROPERTY_WRITE_BACK : D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+            heap_properties->MemoryPoolPreference = d3d12_device_is_uma(device, NULL)
+                    ? D3D12_MEMORY_POOL_L0 : D3D12_MEMORY_POOL_L1;
+            break;
+
         default:
-            FIXME("Unhandled heap type %#x.\n", heap_type);
+            WARN("Invalid heap type %#x.\n", heap_type);
+            heap_properties->Type = 0;
+            heap_properties->CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+            heap_properties->MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
             break;
     };
 

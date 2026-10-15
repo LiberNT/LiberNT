@@ -59,6 +59,12 @@ static HRESULT vkd3d_select_memory_type(struct d3d12_device *device, uint32_t me
             flags[count++] = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
             break;
 
+        case D3D12_HEAP_TYPE_GPU_UPLOAD:
+            flags[count++] = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                    | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            flags[count++] = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            break;
+
         case D3D12_HEAP_TYPE_CUSTOM:
             if (heap_properties->MemoryPoolPreference == D3D12_MEMORY_POOL_UNKNOWN
                     || (heap_properties->MemoryPoolPreference == D3D12_MEMORY_POOL_L1
@@ -450,8 +456,35 @@ struct d3d12_heap *unsafe_impl_from_ID3D12Heap(ID3D12Heap *iface)
     return impl_from_ID3D12Heap(iface);
 }
 
-static HRESULT validate_heap_desc(const D3D12_HEAP_DESC *desc, const struct d3d12_resource *resource)
+static HRESULT validate_heap_desc(struct d3d12_device *device, const D3D12_HEAP_DESC *desc,
+        const struct d3d12_resource *resource)
 {
+    if (desc->Flags & D3D12_HEAP_FLAG_TOOLS_USE_MANUAL_WRITE_TRACKING)
+    {
+        WARN("Manual write tracking is not supported.\n");
+        return E_INVALIDARG;
+    }
+
+    if (desc->Properties.Type == D3D12_HEAP_TYPE_GPU_UPLOAD)
+    {
+        if (!d3d12_device_is_uma(device, NULL))
+        {
+            WARN("GPU upload heaps are not supported.\n");
+            return E_INVALIDARG;
+        }
+        if (desc->Properties.CPUPageProperty != D3D12_CPU_PAGE_PROPERTY_UNKNOWN
+                || desc->Properties.MemoryPoolPreference != D3D12_MEMORY_POOL_UNKNOWN)
+        {
+            WARN("Invalid GPU upload heap properties.\n");
+            return E_INVALIDARG;
+        }
+        if (desc->Flags & (D3D12_HEAP_FLAG_SHARED | D3D12_HEAP_FLAG_SHARED_CROSS_ADAPTER | D3D12_HEAP_FLAG_ALLOW_DISPLAY))
+        {
+            WARN("Invalid GPU upload heap flags %#x.\n", desc->Flags);
+            return E_INVALIDARG;
+        }
+    }
+
     if (!resource && !desc->SizeInBytes)
     {
         WARN("Invalid size %"PRIu64".\n", desc->SizeInBytes);
@@ -510,7 +543,7 @@ static HRESULT d3d12_heap_init(struct d3d12_heap *heap,
     if (!heap->desc.Alignment)
         heap->desc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
 
-    if (FAILED(hr = validate_heap_desc(&heap->desc, resource)))
+    if (FAILED(hr = validate_heap_desc(device, &heap->desc, resource)))
         return hr;
 
     vkd3d_mutex_init(&heap->mutex);
@@ -2133,6 +2166,13 @@ HRESULT d3d12_committed_resource_create(struct d3d12_device *device,
     if (FAILED(hr = d3d12_resource_create(device, heap_properties, heap_flags,
             desc, initial_state, optimized_clear_value, &object)))
         return hr;
+
+    if (d3d12_resource_is_buffer(object))
+        heap_flags |= D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
+    else if (desc->Flags & (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))
+        heap_flags |= D3D12_HEAP_FLAG_ALLOW_ONLY_RT_DS_TEXTURES;
+    else
+        heap_flags |= D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES;
 
     if (FAILED(hr = vkd3d_allocate_resource_memory(device, object, heap_properties, heap_flags)))
     {
