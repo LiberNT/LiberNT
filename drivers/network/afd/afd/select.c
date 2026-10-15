@@ -587,6 +587,8 @@ AfdEnumEvents( PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     /* Copy the poll state, masking out disabled events */
     EnumReq->PollEvents = (FCB->PollState & ~FCB->EventSelectDisabled);
+    if (FCB->EventSelect)
+        EnumReq->PollEvents &= FCB->EventSelectTriggers;
     RtlCopyMemory( EnumReq->EventStatus,
                    FCB->PollStatus,
                    sizeof(EnumReq->EventStatus) );
