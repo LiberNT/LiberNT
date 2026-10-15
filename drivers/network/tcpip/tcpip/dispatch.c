@@ -1647,69 +1647,6 @@ NTSTATUS DispTdiQueryInformationEx(
             ExFreePoolWithTag(QueryContext, QUERY_CONTEXT_TAG);
         } else
             Status = STATUS_INSUFFICIENT_RESOURCES;
-    } else if( InputBufferLength == RequestLength ) {
-	/* Handle the case where the user is probing the buffer for length */
-        InputBuffer = (PTCP_REQUEST_QUERY_INFORMATION_EX)
-            IrpSp->Parameters.DeviceIoControl.Type3InputBuffer;
-
-	Size = 0;
-
-        QueryContext = ExAllocatePoolWithTag(NonPagedPool, sizeof(TI_QUERY_CONTEXT), QUERY_CONTEXT_TAG);
-        if (!QueryContext) return STATUS_INSUFFICIENT_RESOURCES;
-        RtlZeroMemory(QueryContext, sizeof(*QueryContext));
-
-	/* Same kernel-buffer trick as the data-fetch path: SEH-copy
-	 * the input from user space, build a kernel-pool MDL, then
-	 * dispatch normally. Avoids ReactOS's broken
-	 * MmProbeAndLockPages behaviour. */
-	QueryContext->KernelInputBuffer = ExAllocatePoolWithTag(
-	    NonPagedPool,
-	    sizeof(TCP_REQUEST_QUERY_INFORMATION_EX),
-	    QUERY_CONTEXT_TAG);
-	if (!QueryContext->KernelInputBuffer)
-	{
-	    ExFreePoolWithTag(QueryContext, QUERY_CONTEXT_TAG);
-	    return STATUS_INSUFFICIENT_RESOURCES;
-	}
-
-	Status = DispTdiCopyQueryRequest(QueryContext, InputBuffer, RequestLength, ContextOffset);
-
-	if (NT_SUCCESS(Status))
-	{
-	    InputMdl = IoAllocateMdl(QueryContext->KernelInputBuffer,
-	                             sizeof(TCP_REQUEST_QUERY_INFORMATION_EX),
-	                             FALSE, FALSE, NULL);
-	    if (InputMdl == NULL)
-	    {
-	        Status = STATUS_INSUFFICIENT_RESOURCES;
-	    }
-	    else
-	    {
-	        MmBuildMdlForNonPagedPool(InputMdl);
-	        InputMdlLocked = TRUE;
-	        QueryContext->UserInputBuffer = InputBuffer;
-	    }
-	}
-
-	if( !NT_SUCCESS(Status) || !InputMdl ) {
-	    if( InputMdl ) IoFreeMdl( InputMdl );
-	    ExFreePoolWithTag(QueryContext, QUERY_CONTEXT_TAG);
-	    return Status;
-	}
-
-	QueryContext->Irp       = Irp;
-	QueryContext->InputMdl  = InputMdl;
-	QueryContext->OutputMdl = NULL;
-
-	Request.RequestNotifyObject = DispTdiQueryInformationExComplete;
-	Request.RequestContext      = QueryContext;
-	Status = InfoTdiQueryInformationEx(&Request,
-					   &QueryContext->QueryInfo.ID,
-					   NULL,
-					   &Size,
-					   &QueryContext->QueryInfo.Context);
-	DispTdiQueryInformationExComplete(QueryContext, Status, Size);
-	TI_DbgPrint(MAX_TRACE, ("Leaving. Status = (0x%X)\n", Status));
     } else Status = STATUS_INVALID_PARAMETER;
 
     TI_DbgPrint(MIN_TRACE, ("Leaving. Status = (0x%X)\n", Status));

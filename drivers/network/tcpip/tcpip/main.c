@@ -16,6 +16,7 @@
 
 #include <dispatch.h>
 #include <fileobjs.h>
+#include <tcpip_undoc.h>
 
 PDEVICE_OBJECT TCPDeviceObject   = NULL;
 PDEVICE_OBJECT UDPDeviceObject   = NULL;
@@ -547,6 +548,10 @@ TiDispatch(
                 Status = DispEchoRequest(DeviceObject, Irp, IrpSp);
                 break;
 
+            case IOCTL_IP_INTERFACE_INFO:
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+
             default:
                 TI_DbgPrint(MIN_TRACE, ("Unknown IOCTL 0x%X\n",
                     IrpSp->Parameters.DeviceIoControl.IoControlCode));
@@ -832,7 +837,12 @@ VOID NTAPI TiUnload(
     /* Release all device objects */
 
     if (TCPDeviceObject)
+    {
+        UNICODE_STRING strTcpLinkName = RTL_CONSTANT_STRING(L"\\DosDevices\\Tcp");
+
+        IoDeleteSymbolicLink(&strTcpLinkName);
         IoDeleteDevice(TCPDeviceObject);
+    }
 
     if (UDPDeviceObject)
         IoDeleteDevice(UDPDeviceObject);
@@ -869,6 +879,7 @@ DriverEntry(
     UNICODE_STRING strRawDeviceName = RTL_CONSTANT_STRING(DD_RAWIP_DEVICE_NAME);
     UNICODE_STRING strUdpDeviceName = RTL_CONSTANT_STRING(DD_UDP_DEVICE_NAME);
     UNICODE_STRING strTcpDeviceName = RTL_CONSTANT_STRING(DD_TCP_DEVICE_NAME);
+    UNICODE_STRING strTcpLinkName = RTL_CONSTANT_STRING(L"\\DosDevices\\Tcp");
     UNICODE_STRING strNdisDeviceName = RTL_CONSTANT_STRING(TCPIP_PROTOCOL_NAME);
     NDIS_STATUS NdisStatus;
     LARGE_INTEGER DueTime;
@@ -921,6 +932,10 @@ DriverEntry(
         TiUnload(DriverObject);
         return Status;
     }
+
+    Status = IoCreateSymbolicLink(&strTcpLinkName, &strTcpDeviceName);
+    if (!NT_SUCCESS(Status))
+        TI_DbgPrint(MIN_TRACE, ("Failed to create the Tcp symbolic link. Status (0x%X).\n", Status));
 
     /* Setup network layer and transport layer entities */
     KeInitializeSpinLock(&EntityListLock);

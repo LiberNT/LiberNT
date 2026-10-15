@@ -164,9 +164,7 @@ TDI_STATUS InfoTdiQueryListEntities(PNDIS_BUFFER Buffer,
     if (BufSize < Size || !Buffer)
     {
 	TcpipReleaseSpinLock( &EntityListLock, OldIrql );
-	/* The buffer is too small to contain requested data, but we return
-         * success anyway, as we did everything we wanted. */
-	return TDI_SUCCESS;
+	return TDI_BUFFER_TOO_SMALL;
     }
 
     /* Return entity list -- Copy only the TDIEntityID parts. */
