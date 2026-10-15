@@ -861,9 +861,12 @@ HRESULT STDMETHODCALLTYPE Native12Device::QueryInterface(REFIID iid, void **out)
     if (IsEqualGUID(iid, IID_ID3D12Device) || IsEqualGUID(iid, IID_ID3D12Device1)
             || IsEqualGUID(iid, IID_ID3D12Device2) || IsEqualGUID(iid, IID_ID3D12Device3)
             || IsEqualGUID(iid, IID_ID3D12Device4) || IsEqualGUID(iid, IID_ID3D12Device5)
-            || IsEqualGUID(iid, IID_ID3D12Object) || IsEqualGUID(iid, IID_IUnknown))
+            || IsEqualGUID(iid, IID_ID3D12Device6) || IsEqualGUID(iid, IID_ID3D12Device7)
+            || IsEqualGUID(iid, IID_ID3D12Device8) || IsEqualGUID(iid, IID_ID3D12Device9)
+            || IsEqualGUID(iid, IID_ID3D12Device10) || IsEqualGUID(iid, IID_ID3D12Object)
+            || IsEqualGUID(iid, IID_IUnknown))
     {
-        *out = static_cast<ID3D12Device5 *>(this);
+        *out = static_cast<ID3D12Device10 *>(this);
         AddRef();
         return S_OK;
     }

@@ -52,10 +52,11 @@ public:
     }
 };
 
-class Native12Fence final : public Native12Child<ID3D12Fence>
+class Native12Fence final : public Native12Child<ID3D12Fence1>
 {
 public:
     D3DKMT_HANDLE sync = 0;
+    D3D12_FENCE_FLAGS flags = D3D12_FENCE_FLAG_NONE;
     const volatile UINT64 *value = NULL;
     D3D12DDI_HFENCE driver = {};
     bool driver_created = false;
@@ -67,6 +68,7 @@ public:
     UINT64 STDMETHODCALLTYPE GetCompletedValue() override;
     HRESULT STDMETHODCALLTYPE SetEventOnCompletion(UINT64 value, HANDLE event) override;
     HRESULT STDMETHODCALLTYPE Signal(UINT64 value) override;
+    D3D12_FENCE_FLAGS STDMETHODCALLTYPE GetCreationFlags() override;
 };
 
 class Native12CommandQueue final : public Native12Child<ID3D12CommandQueue>, public IWineDXGISwapChainFactory
@@ -330,7 +332,7 @@ struct Native12RootArguments
     UINT constants[D3D12_MAX_ROOT_COST];
 };
 
-class Native12CommandList final : public Native12Child<ID3D12GraphicsCommandList4>
+class Native12CommandList final : public Native12Child<ID3D12GraphicsCommandList7>
 {
 public:
     Native12RootArguments root_arguments[2] = {};
@@ -484,6 +486,11 @@ public:
             D3D12_GPU_VIRTUAL_ADDRESS src_data, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE mode) override;
     void STDMETHODCALLTYPE SetPipelineState1(ID3D12StateObject *state_object) override;
     void STDMETHODCALLTYPE DispatchRays(const D3D12_DISPATCH_RAYS_DESC *desc) override;
+    void STDMETHODCALLTYPE RSSetShadingRate(D3D12_SHADING_RATE base_shading_rate,
+            const D3D12_SHADING_RATE_COMBINER *combiners) override;
+    void STDMETHODCALLTYPE RSSetShadingRateImage(ID3D12Resource *shading_rate_image) override;
+    void STDMETHODCALLTYPE DispatchMesh(UINT x, UINT y, UINT z) override;
+    void STDMETHODCALLTYPE Barrier(UINT32 group_count, const D3D12_BARRIER_GROUP *groups) override;
 };
 
 struct Native12FormatInfo

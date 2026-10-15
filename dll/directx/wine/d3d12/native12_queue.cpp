@@ -31,8 +31,9 @@ Native12Device *Native12QueueDevice(HANDLE queue)
     return queue ? static_cast<Native12CommandQueue *>(queue)->device : NULL;
 }
 
-HRESULT Native12Fence::Initialize(UINT64 initial_value, D3D12_FENCE_FLAGS)
+HRESULT Native12Fence::Initialize(UINT64 initial_value, D3D12_FENCE_FLAGS creation_flags)
 {
+    flags = creation_flags;
     if (!device->kernel_callbacks.pfnCreateSynchronizationObject2Cb) return E_NOINTERFACE;
     D3DDDICB_CREATESYNCHRONIZATIONOBJECT2 create = {};
     create.Info.Type = D3DDDI_MONITORED_FENCE;
@@ -81,16 +82,21 @@ Native12Fence::~Native12Fence()
 HRESULT STDMETHODCALLTYPE Native12Fence::QueryInterface(REFIID iid, void **out)
 {
     if (!out) return E_POINTER;
-    if (IsEqualGUID(iid, IID_ID3D12Fence) || IsEqualGUID(iid, IID_ID3D12Pageable)
-            || IsEqualGUID(iid, IID_ID3D12DeviceChild) || IsEqualGUID(iid, IID_ID3D12Object)
-            || IsEqualGUID(iid, IID_IUnknown))
+    if (IsEqualGUID(iid, IID_ID3D12Fence) || IsEqualGUID(iid, IID_ID3D12Fence1)
+            || IsEqualGUID(iid, IID_ID3D12Pageable) || IsEqualGUID(iid, IID_ID3D12DeviceChild)
+            || IsEqualGUID(iid, IID_ID3D12Object) || IsEqualGUID(iid, IID_IUnknown))
     {
-        *out = static_cast<ID3D12Fence *>(this);
+        *out = static_cast<ID3D12Fence1 *>(this);
         AddRef();
         return S_OK;
     }
     *out = NULL;
     return E_NOINTERFACE;
+}
+
+D3D12_FENCE_FLAGS STDMETHODCALLTYPE Native12Fence::GetCreationFlags()
+{
+    return flags;
 }
 
 UINT64 STDMETHODCALLTYPE Native12Fence::GetCompletedValue()

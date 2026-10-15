@@ -9,7 +9,7 @@
 
 class Native12DescriptorHeap;
 
-class Native12Device final : public ID3D12Device5, public ID3D12DeviceRemovedExtendedData1, public Native12Allocation
+class Native12Device final : public ID3D12Device10, public ID3D12DeviceRemovedExtendedData1, public Native12Allocation
 {
 public:
     LONG references = 1;
@@ -177,6 +177,34 @@ public:
             D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO *) override;
     D3D12_DRIVER_MATCHING_IDENTIFIER_STATUS STDMETHODCALLTYPE CheckDriverMatchingIdentifier(D3D12_SERIALIZED_DATA_TYPE,
             const D3D12_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER *) override;
+    HRESULT STDMETHODCALLTYPE SetBackgroundProcessingMode(D3D12_BACKGROUND_PROCESSING_MODE, D3D12_MEASUREMENTS_ACTION,
+            HANDLE, BOOL *) override;
+    HRESULT STDMETHODCALLTYPE AddToStateObject(const D3D12_STATE_OBJECT_DESC *, ID3D12StateObject *, REFIID,
+            void **) override;
+    HRESULT STDMETHODCALLTYPE CreateProtectedResourceSession1(const D3D12_PROTECTED_RESOURCE_SESSION_DESC1 *, REFIID,
+            void **) override;
+    D3D12_RESOURCE_ALLOCATION_INFO *STDMETHODCALLTYPE GetResourceAllocationInfo2(D3D12_RESOURCE_ALLOCATION_INFO *,
+            UINT, UINT, const D3D12_RESOURCE_DESC1 *, D3D12_RESOURCE_ALLOCATION_INFO1 *) override;
+    HRESULT STDMETHODCALLTYPE CreateCommittedResource2(const D3D12_HEAP_PROPERTIES *, D3D12_HEAP_FLAGS,
+            const D3D12_RESOURCE_DESC1 *, D3D12_RESOURCE_STATES, const D3D12_CLEAR_VALUE *,
+            ID3D12ProtectedResourceSession *, REFIID, void **) override;
+    HRESULT STDMETHODCALLTYPE CreatePlacedResource1(ID3D12Heap *, UINT64, const D3D12_RESOURCE_DESC1 *,
+            D3D12_RESOURCE_STATES, const D3D12_CLEAR_VALUE *, REFIID, void **) override;
+    void STDMETHODCALLTYPE CreateSamplerFeedbackUnorderedAccessView(ID3D12Resource *, ID3D12Resource *,
+            D3D12_CPU_DESCRIPTOR_HANDLE) override;
+    void STDMETHODCALLTYPE GetCopyableFootprints1(const D3D12_RESOURCE_DESC1 *, UINT, UINT, UINT64,
+            D3D12_PLACED_SUBRESOURCE_FOOTPRINT *, UINT *, UINT64 *, UINT64 *) override;
+    HRESULT STDMETHODCALLTYPE CreateShaderCacheSession(const D3D12_SHADER_CACHE_SESSION_DESC *, REFIID, void **) override;
+    HRESULT STDMETHODCALLTYPE ShaderCacheControl(D3D12_SHADER_CACHE_KIND_FLAGS, D3D12_SHADER_CACHE_CONTROL_FLAGS) override;
+    HRESULT STDMETHODCALLTYPE CreateCommandQueue1(const D3D12_COMMAND_QUEUE_DESC *, REFIID, REFIID, void **) override;
+    HRESULT STDMETHODCALLTYPE CreateCommittedResource3(const D3D12_HEAP_PROPERTIES *, D3D12_HEAP_FLAGS,
+            const D3D12_RESOURCE_DESC1 *, D3D12_BARRIER_LAYOUT, const D3D12_CLEAR_VALUE *,
+            ID3D12ProtectedResourceSession *, UINT32, DXGI_FORMAT *, REFIID, void **) override;
+    HRESULT STDMETHODCALLTYPE CreatePlacedResource2(ID3D12Heap *, UINT64, const D3D12_RESOURCE_DESC1 *,
+            D3D12_BARRIER_LAYOUT, const D3D12_CLEAR_VALUE *, UINT32, DXGI_FORMAT *, REFIID, void **) override;
+    HRESULT STDMETHODCALLTYPE CreateReservedResource2(const D3D12_RESOURCE_DESC *, D3D12_BARRIER_LAYOUT,
+            const D3D12_CLEAR_VALUE *, ID3D12ProtectedResourceSession *, UINT32, DXGI_FORMAT *, REFIID,
+            void **) override;
     HRESULT STDMETHODCALLTYPE GetAutoBreadcrumbsOutput(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT *) override;
     HRESULT STDMETHODCALLTYPE GetPageFaultAllocationOutput(D3D12_DRED_PAGE_FAULT_OUTPUT *) override;
     HRESULT STDMETHODCALLTYPE GetAutoBreadcrumbsOutput1(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 *) override;

@@ -151,11 +151,12 @@ HRESULT STDMETHODCALLTYPE Native12CommandList::QueryInterface(REFIID iid, void *
     if (!out) return E_POINTER;
     if (IsEqualGUID(iid, IID_ID3D12GraphicsCommandList) || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList1)
             || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList2) || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList3)
-            || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList4) || IsEqualGUID(iid, IID_ID3D12CommandList)
-            || IsEqualGUID(iid, IID_ID3D12DeviceChild) || IsEqualGUID(iid, IID_ID3D12Object)
-            || IsEqualGUID(iid, IID_IUnknown))
+            || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList4) || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList5)
+            || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList6) || IsEqualGUID(iid, IID_ID3D12GraphicsCommandList7)
+            || IsEqualGUID(iid, IID_ID3D12CommandList) || IsEqualGUID(iid, IID_ID3D12DeviceChild)
+            || IsEqualGUID(iid, IID_ID3D12Object) || IsEqualGUID(iid, IID_IUnknown))
     {
-        *out = static_cast<ID3D12GraphicsCommandList4 *>(this);
+        *out = static_cast<ID3D12GraphicsCommandList7 *>(this);
         AddRef();
         return S_OK;
     }
@@ -950,6 +951,53 @@ void STDMETHODCALLTYPE Native12CommandList::CopyRaytracingAccelerationStructure(
         D3D12_GPU_VIRTUAL_ADDRESS, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE) {}
 void STDMETHODCALLTYPE Native12CommandList::SetPipelineState1(ID3D12StateObject *) {}
 void STDMETHODCALLTYPE Native12CommandList::DispatchRays(const D3D12_DISPATCH_RAYS_DESC *) {}
+
+static bool Native12ShadingRateValid(D3D12_SHADING_RATE rate)
+{
+    switch (rate)
+    {
+        case D3D12_SHADING_RATE_1X1:
+        case D3D12_SHADING_RATE_1X2:
+        case D3D12_SHADING_RATE_2X1:
+        case D3D12_SHADING_RATE_2X2:
+        case D3D12_SHADING_RATE_2X4:
+        case D3D12_SHADING_RATE_4X2:
+        case D3D12_SHADING_RATE_4X4:
+            return true;
+        default:
+            return false;
+    }
+}
+
+void STDMETHODCALLTYPE Native12CommandList::RSSetShadingRate(D3D12_SHADING_RATE rate,
+        const D3D12_SHADING_RATE_COMBINER *combiners)
+{
+    HRESULT hr = E_FAIL;
+    if (!Native12ShadingRateValid(rate) || (combiners && (combiners[0] > D3D12_SHADING_RATE_COMBINER_SUM
+            || combiners[1] > D3D12_SHADING_RATE_COMBINER_SUM)))
+        hr = E_INVALIDARG;
+    if (SUCCEEDED(error)) error = hr;
+}
+
+void STDMETHODCALLTYPE Native12CommandList::RSSetShadingRateImage(ID3D12Resource *)
+{
+    if (SUCCEEDED(error)) error = E_FAIL;
+}
+
+void STDMETHODCALLTYPE Native12CommandList::DispatchMesh(UINT, UINT, UINT) {}
+
+void STDMETHODCALLTYPE Native12CommandList::Barrier(UINT32 group_count, const D3D12_BARRIER_GROUP *groups)
+{
+    if (RejectInBundle()) return;
+    for (UINT32 i = 0; i < group_count; ++i)
+    {
+        if (groups[i].NumBarriers)
+        {
+            if (SUCCEEDED(error)) error = E_FAIL;
+            return;
+        }
+    }
+}
 
 HRESULT STDMETHODCALLTYPE Native12Device::CreateCommandList(UINT, D3D12_COMMAND_LIST_TYPE type,
         ID3D12CommandAllocator *allocator, ID3D12PipelineState *initial_state, REFIID iid, void **out)

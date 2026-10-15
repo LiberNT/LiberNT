@@ -16,6 +16,7 @@ if(REACTOS_USE_WDDM)
     list(APPEND NATIVE_SOURCE
         native12.cpp
         native12_device5.cpp
+        native12_device10.cpp
         native12_objects.cpp
         native12_pipeline.cpp
         native12_queue.cpp

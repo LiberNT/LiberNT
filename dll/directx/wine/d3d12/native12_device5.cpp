@@ -216,10 +216,9 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommandList1(UINT, D3D12_COMMAND
 }
 
 HRESULT STDMETHODCALLTYPE Native12Device::CreateProtectedResourceSession(const D3D12_PROTECTED_RESOURCE_SESSION_DESC *,
-        REFIID, void **out)
+        REFIID, void **)
 {
-    if (out) *out = NULL;
-    return DXGI_ERROR_UNSUPPORTED;
+    return E_INVALIDARG;
 }
 
 HRESULT STDMETHODCALLTYPE Native12Device::CreateCommittedResource1(const D3D12_HEAP_PROPERTIES *properties,
