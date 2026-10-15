@@ -666,6 +666,10 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     HRESULT hr;
 
     if (input->NumRenderTargets > D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT) return E_INVALIDARG;
+    if (input->Flags & ~(D3D12_PIPELINE_STATE_FLAG_TOOL_DEBUG | D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS
+            | D3D12_PIPELINE_STATE_FLAG_DYNAMIC_INDEX_BUFFER_STRIP_CUT))
+        return E_INVALIDARG;
+    flags = input->Flags;
     if (!input->VS.pShaderBytecode || !input->VS.BytecodeLength) return E_INVALIDARG;
     if ((input->HS.pShaderBytecode || input->DS.pShaderBytecode)
             && input->PrimitiveTopologyType != D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH)
@@ -750,13 +754,13 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     raster_desc.FillMode = static_cast<D3D12DDI_FILL_MODE>(input->RasterizerState.FillMode);
     raster_desc.CullMode = static_cast<D3D12DDI_CULL_MODE>(input->RasterizerState.CullMode);
     raster_desc.FrontCounterClockwise = input->RasterizerState.FrontCounterClockwise;
-    raster_desc.DepthBias = static_cast<FLOAT>(input->RasterizerState.DepthBias);
+    raster_desc.DepthBias = float_depth_bias ? depth_bias : static_cast<FLOAT>(input->RasterizerState.DepthBias);
     raster_desc.DepthBiasClamp = input->RasterizerState.DepthBiasClamp;
     raster_desc.SlopeScaledDepthBias = input->RasterizerState.SlopeScaledDepthBias;
     raster_desc.DepthClipEnable = input->RasterizerState.DepthClipEnable;
     raster_desc.ScissorEnable = TRUE;
-    raster_desc.LineRasterizationMode = input->RasterizerState.MultisampleEnable
-            ? D3D12DDI_LINE_RASTERIZATION_MODE_QUADRILATERAL_WIDE
+    raster_desc.LineRasterizationMode = line_mode_set ? static_cast<D3D12DDI_LINE_RASTERIZATION_MODE>(line_mode)
+            : input->RasterizerState.MultisampleEnable ? D3D12DDI_LINE_RASTERIZATION_MODE_QUADRILATERAL_WIDE
             : input->RasterizerState.AntialiasedLineEnable ? D3D12DDI_LINE_RASTERIZATION_MODE_ALPHA_ANTIALIASED
             : D3D12DDI_LINE_RASTERIZATION_MODE_ALIASED;
     raster_desc.ForcedSampleCount = input->RasterizerState.ForcedSampleCount;
@@ -779,8 +783,8 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     depth_desc.BackEnable = depth_source.StencilEnable;
     depth_desc.FrontFaceStencilReadMask = depth_source.StencilReadMask;
     depth_desc.FrontFaceStencilWriteMask = depth_source.StencilWriteMask;
-    depth_desc.BackFaceStencilReadMask = depth_source.StencilReadMask;
-    depth_desc.BackFaceStencilWriteMask = depth_source.StencilWriteMask;
+    depth_desc.BackFaceStencilReadMask = face_stencil_masks ? back_stencil_read_mask : depth_source.StencilReadMask;
+    depth_desc.BackFaceStencilWriteMask = face_stencil_masks ? back_stencil_write_mask : depth_source.StencilWriteMask;
     depth_desc.DepthBoundsTestEnable = depth_bounds_test;
     const D3D12_DEPTH_STENCILOP_DESC *faces[2] = { &depth_source.FrontFace, &depth_source.BackFace };
     D3D12DDI_DEPTH_STENCILOP_DESC *targets[2] = { &depth_desc.FrontFace, &depth_desc.BackFace };
@@ -869,6 +873,8 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     args.SampleDesc = input->SampleDesc;
     if (!args.SampleDesc.Count) args.SampleDesc.Count = 1;
     args.NodeMask = input->NodeMask ? input->NodeMask : 1;
+    args.Flags = static_cast<D3D12DDI_PIPELINE_STATE_FLAGS>(input->Flags
+            & (D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS | D3D12_PIPELINE_STATE_FLAG_DYNAMIC_INDEX_BUFFER_STRIP_CUT));
     size = device->functions.pfnCalcPrivatePipelineStateSize(device->driver_device, &args);
     driver.pDrvPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size ? size : 1);
     if (!driver.pDrvPrivate) return E_OUTOFMEMORY;

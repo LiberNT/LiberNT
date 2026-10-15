@@ -203,6 +203,7 @@ HRESULT STDMETHODCALLTYPE Native12CommandList::Reset(ID3D12CommandAllocator *poo
         table->pfnSetPredication(driver, no_buffer, 0, D3D12DDI_PREDICATION_OP_EQUAL_ZERO);
     }
     graphics_bound = compute_bound = pipeline_set = false;
+    pipeline_flags = D3D12_PIPELINE_STATE_FLAG_NONE;
     ZeroMemory(root_arguments, sizeof(root_arguments));
     if (initial_state) SetPipelineState(initial_state);
     else SetDefaultPipelineState();
@@ -360,6 +361,7 @@ void STDMETHODCALLTYPE Native12CommandList::SetPipelineState(ID3D12PipelineState
     compute_bound = pipeline->compute;
     graphics_bound = !pipeline->compute;
     pipeline_set = true;
+    pipeline_flags = pipeline->flags;
     table->pfnSetPipelineState(driver, pipeline->driver);
 }
 
@@ -420,6 +422,7 @@ void STDMETHODCALLTYPE Native12CommandList::ExecuteBundle(ID3D12GraphicsCommandL
     {
         graphics_bound = bundle->graphics_bound;
         compute_bound = bundle->compute_bound;
+        pipeline_flags = bundle->pipeline_flags;
     }
 }
 
@@ -1008,12 +1011,14 @@ void STDMETHODCALLTYPE Native12CommandList::OMSetFrontAndBackStencilRef(UINT fro
 
 void STDMETHODCALLTYPE Native12CommandList::RSSetDepthBias(FLOAT bias, FLOAT clamp, FLOAT slope_scaled_bias)
 {
-    if (table->pfnRSSetDepthBias) table->pfnRSSetDepthBias(driver, bias, clamp, slope_scaled_bias);
+    if (table->pfnRSSetDepthBias && (pipeline_flags & D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS))
+        table->pfnRSSetDepthBias(driver, bias, clamp, slope_scaled_bias);
 }
 
 void STDMETHODCALLTYPE Native12CommandList::IASetIndexBufferStripCutValue(D3D12_INDEX_BUFFER_STRIP_CUT_VALUE value)
 {
-    if (table->pfnIASetIndexBufferStripCutValue)
+    if (table->pfnIASetIndexBufferStripCutValue
+            && (pipeline_flags & D3D12_PIPELINE_STATE_FLAG_DYNAMIC_INDEX_BUFFER_STRIP_CUT))
         table->pfnIASetIndexBufferStripCutValue(driver, static_cast<D3D12DDI_INDEX_BUFFER_STRIP_CUT_VALUE>(value));
 }
 

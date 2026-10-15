@@ -300,6 +300,13 @@ public:
     bool blend_created = false, rasterizer_created = false, depth_created = false, layout_created = false;
     bool compute = false;
     BOOL depth_bounds_test = FALSE;
+    D3D12_PIPELINE_STATE_FLAGS flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+    bool face_stencil_masks = false;
+    UINT8 back_stencil_read_mask = 0, back_stencil_write_mask = 0;
+    bool float_depth_bias = false;
+    FLOAT depth_bias = 0.0f;
+    bool line_mode_set = false;
+    D3D12_LINE_RASTERIZATION_MODE line_mode = D3D12_LINE_RASTERIZATION_MODE_ALIASED;
 
     using Native12Child::Native12Child;
     ~Native12PipelineState();
@@ -354,6 +361,7 @@ public:
     HRESULT error = S_OK;
     bool recording = false;
     bool graphics_bound = false, compute_bound = false, pipeline_set = false;
+    D3D12_PIPELINE_STATE_FLAGS pipeline_flags = D3D12_PIPELINE_STATE_FLAG_NONE;
     bool RejectInBundle();
     ID3D12PipelineState *default_states[2] = {};
     UINT64 id = 0;
