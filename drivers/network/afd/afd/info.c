@@ -68,9 +68,7 @@ AfdGetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
     _SEH2_TRY {
         switch( InfoReq->InformationClass ) {
         case AFD_INFO_RECEIVE_WINDOW_SIZE:
-            InfoReq->Information.Ulong = FCB->PendingReceiveWindowSize ?
-                                         FCB->PendingReceiveWindowSize :
-                                         FCB->Recv.Size;
+            InfoReq->Information.Ulong = FCB->ReportedReceiveWindowSize;
             break;
 
         case AFD_INFO_SEND_WINDOW_SIZE:
@@ -167,13 +165,12 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 {
                     /* FIXME: likely not right, check tcpip.sys for TDI_QUERY_MAX_DATAGRAM_INFO */
                     if (InfoReq->Information.Ulong > 0 && InfoReq->Information.Ulong < 0xFFFF &&
-                        InfoReq->Information.Ulong != (FCB->PendingReceiveWindowSize ?
-                                                       FCB->PendingReceiveWindowSize :
-                                                       FCB->Recv.Size))
+                        InfoReq->Information.Ulong != FCB->ReportedReceiveWindowSize)
                     {
                         if (InfoReq->Information.Ulong == FCB->Recv.Size)
                         {
                             FCB->PendingReceiveWindowSize = 0;
+                            FCB->ReportedReceiveWindowSize = InfoReq->Information.Ulong;
                             break;
                         }
 
@@ -185,6 +182,7 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                         else
                         {
                             FCB->PendingReceiveWindowSize = InfoReq->Information.Ulong;
+                            FCB->ReportedReceiveWindowSize = InfoReq->Information.Ulong;
 
                             if (!FCB->ReceiveIrp.InFlightRequest)
                                 AfdTryApplyPendingReceiveWindow(FCB);
@@ -197,6 +195,12 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 }
                 else
                 {
+                    if (InfoReq->Information.Ulong > 0 && InfoReq->Information.Ulong < 0xFFFF &&
+                        !FCB->Recv.Window)
+                    {
+                        FCB->Recv.Size = InfoReq->Information.Ulong;
+                        FCB->ReportedReceiveWindowSize = InfoReq->Information.Ulong;
+                    }
                     Status = STATUS_SUCCESS;
                 }
                 break;

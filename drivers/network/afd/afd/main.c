@@ -24,6 +24,7 @@ DWORD DebugTraceLevel = MIN_TRACE;
 
 /* FIXME: should depend on SystemSize */
 ULONG AfdReceiveWindowSize = 0x40000;
+ULONG AfdReportedReceiveWindowSize = 0x10000;
 ULONG AfdSendWindowSize = 0x10000;
 
 void OskitDumpBuffer( PCHAR Data, UINT Len ) {
@@ -371,6 +372,7 @@ AfdCreateSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     FCB->AddressFile.Handle = INVALID_HANDLE_VALUE;
     FCB->Connection.Handle = INVALID_HANDLE_VALUE;
     FCB->Recv.Size = AfdReceiveWindowSize;
+    FCB->ReportedReceiveWindowSize = AfdReportedReceiveWindowSize;
     FCB->Send.Size = AfdSendWindowSize;
 
     KeInitializeMutex( &FCB->Mutex, 0 );

@@ -182,6 +182,7 @@ typedef struct _AFD_DEVICE_EXTENSION {
 } AFD_DEVICE_EXTENSION, *PAFD_DEVICE_EXTENSION;
 
 extern ULONG AfdReceiveWindowSize;
+extern ULONG AfdReportedReceiveWindowSize;
 
 typedef struct _AFD_ACTIVE_POLL {
     LIST_ENTRY ListEntry;
@@ -254,7 +255,7 @@ typedef struct _AFD_FCB {
     AFD_TDI_OBJECT AddressFile, Connection;
     AFD_IN_FLIGHT_REQUEST ConnectIrp, ListenIrp, ReceiveIrp, SendIrp, DisconnectIrp;
     AFD_DATA_WINDOW Send, Recv;
-    UINT ReceiveWindowAllocationSize, PendingReceiveWindowSize;
+    UINT ReceiveWindowAllocationSize, PendingReceiveWindowSize, ReportedReceiveWindowSize;
     KMUTEX Mutex;
     PKEVENT TdiRundownEvent;
     PKEVENT EventSelect;
