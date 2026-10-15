@@ -36,6 +36,8 @@ typedef struct ETH_HEADER {
 #define IP_MAX_RECV_BACKLOG 0x20
 
 /* Per adapter information */
+#define LAN_MAX_MULTICAST 32
+
 typedef struct LAN_ADAPTER {
     LIST_ENTRY ListEntry;                   /* Entry on list */
     KSPIN_LOCK Lock;                        /* Lock for this structure */
@@ -64,6 +66,9 @@ typedef struct LAN_ADAPTER {
     UINT MacOptions;                        /* MAC options for NIC driver/adapter */
     UINT Speed;                             /* Link speed */
     UINT PacketFilter;                      /* Packet filter for this adapter */
+    UCHAR MulticastList[LAN_MAX_MULTICAST][IEEE_802_ADDR_LENGTH];
+    ULONG MulticastRefs[LAN_MAX_MULTICAST];
+    ULONG MulticastCount;
 } LAN_ADAPTER, *PLAN_ADAPTER;
 
 /* LAN adapter state constants */
@@ -105,6 +110,11 @@ VOID LANShutdown(VOID);
 
 NTSTATUS TcpipLanGetDwordOid( PIP_INTERFACE Interface, NDIS_OID Oid,
                               PULONG Result );
+
+NDIS_STATUS LANUpdateMulticastList(
+    PVOID Context,
+    const UCHAR *Address,
+    BOOLEAN Add);
 
 NDIS_STATUS NDISCall(
     PLAN_ADAPTER Adapter,

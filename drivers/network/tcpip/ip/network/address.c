@@ -126,7 +126,17 @@ BOOLEAN AddrIsUnspecified(
                     Address->Address.IPv4Address == 0xFFFFFFFF);
 
         case IP_ADDRESS_V6:
-        /* FIXME: IPv6 is not supported */
+        {
+            ULONG i;
+
+            for (i = 0; i < RTL_NUMBER_OF(Address->Address.IPv6Address); i++)
+            {
+                if (Address->Address.IPv6Address[i])
+                    return FALSE;
+            }
+            return TRUE;
+        }
+
         default:
             return FALSE;
     }
@@ -166,7 +176,20 @@ NTSTATUS AddrGetAddress(
 		AddrInitIPv4(Address, ValidAddr->in_addr);
 		return STATUS_SUCCESS;
 	    }
+	    break;
+
+        case TDI_ADDRESS_TYPE_IP6:
+            if (CurAddr->AddressLength >= TDI_ADDRESS_LENGTH_IP6) {
+                PTDI_ADDRESS_IP6 ValidAddr6 = (PTDI_ADDRESS_IP6)CurAddr->Address;
+                *Port = ValidAddr6->sin6_port;
+                Address->Type = IP_ADDRESS_V6;
+                RtlCopyMemory(Address->Address.IPv6Address, ValidAddr6->sin6_addr,
+                              sizeof(Address->Address.IPv6Address));
+                return STATUS_SUCCESS;
+            }
+            break;
 	}
+        CurAddr = (PTA_ADDRESS)((PUCHAR)CurAddr->Address + CurAddr->AddressLength);
     }
 
     return STATUS_INVALID_ADDRESS;
@@ -189,6 +212,20 @@ NTSTATUS AddrBuildAddress(
   PTDI_ADDRESS_IP ValidAddr;
   PTA_ADDRESS TdiAddress = &TaAddress->Address[0];
 
+  if (TdiAddress->AddressType == TDI_ADDRESS_TYPE_IP6) {
+      PTDI_ADDRESS_IP6 ValidAddr6;
+
+      if (TdiAddress->AddressLength < TDI_ADDRESS_LENGTH_IP6)
+          return STATUS_INVALID_ADDRESS;
+
+      ValidAddr6 = (PTDI_ADDRESS_IP6)TdiAddress->Address;
+      Address->Type = IP_ADDRESS_V6;
+      RtlCopyMemory(Address->Address.IPv6Address, ValidAddr6->sin6_addr,
+                    sizeof(Address->Address.IPv6Address));
+      *Port = ValidAddr6->sin6_port;
+      return STATUS_SUCCESS;
+  }
+
   if (TdiAddress->AddressType != TDI_ADDRESS_TYPE_IP) {
       TI_DbgPrint
 	  (MID_TRACE,("AddressType %x, Not valid\n", TdiAddress->AddressType));
@@ -208,6 +245,48 @@ NTSTATUS AddrBuildAddress(
   *Port = ValidAddr->sin_port;
 
   return STATUS_SUCCESS;
+}
+
+NTSTATUS AddrBuildTransportAddress(
+    PIP_ADDRESS Address,
+    USHORT Port,
+    PTRANSPORT_ADDRESS TransportAddress,
+    ULONG TransportAddressLength)
+{
+    if (Address->Type == IP_ADDRESS_V6)
+    {
+        PTA_IP6_ADDRESS Ta6 = (PTA_IP6_ADDRESS)TransportAddress;
+
+        if (TransportAddressLength < sizeof(TA_IP6_ADDRESS))
+            return STATUS_BUFFER_TOO_SMALL;
+
+        Ta6->TAAddressCount = 1;
+        Ta6->Address[0].AddressLength = TDI_ADDRESS_LENGTH_IP6;
+        Ta6->Address[0].AddressType = TDI_ADDRESS_TYPE_IP6;
+        Ta6->Address[0].Address[0].sin6_port = Port;
+        Ta6->Address[0].Address[0].sin6_flowinfo = 0;
+        RtlCopyMemory(Ta6->Address[0].Address[0].sin6_addr,
+                      Address->Address.IPv6Address,
+                      sizeof(Ta6->Address[0].Address[0].sin6_addr));
+        Ta6->Address[0].Address[0].sin6_scope_id = 0;
+    }
+    else
+    {
+        PTA_IP_ADDRESS Ta = (PTA_IP_ADDRESS)TransportAddress;
+
+        if (TransportAddressLength < sizeof(TA_IP_ADDRESS))
+            return STATUS_BUFFER_TOO_SMALL;
+
+        Ta->TAAddressCount = 1;
+        Ta->Address[0].AddressLength = TDI_ADDRESS_LENGTH_IP;
+        Ta->Address[0].AddressType = TDI_ADDRESS_TYPE_IP;
+        Ta->Address[0].Address[0].sin_port = Port;
+        Ta->Address[0].Address[0].in_addr = Address->Address.IPv4Address;
+        RtlZeroMemory(Ta->Address[0].Address[0].sin_zero,
+                      sizeof(Ta->Address[0].Address[0].sin_zero));
+    }
+
+    return STATUS_SUCCESS;
 }
 
 /*

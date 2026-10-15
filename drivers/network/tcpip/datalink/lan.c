@@ -306,6 +306,75 @@ VOID NTAPI ProtocolRequestComplete(
 }
 
 
+NDIS_STATUS LANUpdateMulticastList(
+    PVOID Context,
+    const UCHAR *Address,
+    BOOLEAN Add)
+{
+    PLAN_ADAPTER Adapter = Context;
+    UCHAR List[LAN_MAX_MULTICAST][IEEE_802_ADDR_LENGTH];
+    ULONG Count, i;
+    KIRQL OldIrql;
+
+    if (!Adapter || Adapter->Media != NdisMedium802_3)
+        return NDIS_STATUS_NOT_SUPPORTED;
+
+    KeAcquireSpinLock(&Adapter->Lock, &OldIrql);
+
+    for (i = 0; i < Adapter->MulticastCount; i++)
+    {
+        if (RtlEqualMemory(Adapter->MulticastList[i], Address, IEEE_802_ADDR_LENGTH))
+            break;
+    }
+
+    if (Add)
+    {
+        if (i < Adapter->MulticastCount)
+        {
+            Adapter->MulticastRefs[i]++;
+            KeReleaseSpinLock(&Adapter->Lock, OldIrql);
+            return NDIS_STATUS_SUCCESS;
+        }
+        if (Adapter->MulticastCount == LAN_MAX_MULTICAST)
+        {
+            KeReleaseSpinLock(&Adapter->Lock, OldIrql);
+            return NDIS_STATUS_MULTICAST_FULL;
+        }
+        RtlCopyMemory(Adapter->MulticastList[i], Address, IEEE_802_ADDR_LENGTH);
+        Adapter->MulticastRefs[i] = 1;
+        Adapter->MulticastCount++;
+    }
+    else
+    {
+        if (i == Adapter->MulticastCount)
+        {
+            KeReleaseSpinLock(&Adapter->Lock, OldIrql);
+            return NDIS_STATUS_SUCCESS;
+        }
+        if (--Adapter->MulticastRefs[i])
+        {
+            KeReleaseSpinLock(&Adapter->Lock, OldIrql);
+            return NDIS_STATUS_SUCCESS;
+        }
+        Adapter->MulticastCount--;
+        RtlMoveMemory(Adapter->MulticastList[i], Adapter->MulticastList[i + 1],
+                      (Adapter->MulticastCount - i) * IEEE_802_ADDR_LENGTH);
+        RtlMoveMemory(&Adapter->MulticastRefs[i], &Adapter->MulticastRefs[i + 1],
+                      (Adapter->MulticastCount - i) * sizeof(ULONG));
+    }
+
+    Count = Adapter->MulticastCount;
+    RtlCopyMemory(List, Adapter->MulticastList, Count * IEEE_802_ADDR_LENGTH);
+
+    KeReleaseSpinLock(&Adapter->Lock, OldIrql);
+
+    return NDISCall(Adapter,
+                    NdisRequestSetInformation,
+                    OID_802_3_MULTICAST_LIST,
+                    List,
+                    Count * IEEE_802_ADDR_LENGTH);
+}
+
 VOID NTAPI ProtocolSendComplete(
     NDIS_HANDLE BindingContext,
     PNDIS_PACKET Packet,

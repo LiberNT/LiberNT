@@ -136,6 +136,7 @@ typedef struct _ADDRESS_FILE {
     DATAGRAM_COMPLETION_ROUTINE Complete; /* Completion routine for delete request */
     PVOID Context;                        /* Delete request context */
     DATAGRAM_SEND_ROUTINE Send;           /* Routine to send a datagram */
+    PVOID UdpPcb;
     LIST_ENTRY ReceiveQueue;              /* List of outstanding receive requests */
     LIST_ENTRY TransmitQueue;             /* List of outstanding transmit requests */
     struct _CONNECTION_ENDPOINT *Connection;

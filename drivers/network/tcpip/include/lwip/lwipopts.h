@@ -17,6 +17,16 @@
 
 #define LWIP_ARP                        0
 
+#define LWIP_ETHERNET                   1
+
+#define LWIP_IPV6                       1
+
+#define LWIP_NETIF_LOOPBACK             1
+
+#define LWIP_HAVE_LOOPIF                0
+
+#define IPV6_FRAG_COPYHEADER            1
+
 #define ETH_PAD_SIZE                    2
 
 #define IP_REASS_MAX_PBUFS              0xFFFFFFFF
@@ -29,9 +39,9 @@
 
 #define LWIP_ICMP                       0
 
-#define LWIP_RAW                        0
+#define LWIP_RAW                        1
 
-#define LWIP_UDP                        0
+#define LWIP_UDP                        1
 
 #define SO_REUSE                        1
 

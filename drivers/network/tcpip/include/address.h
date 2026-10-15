@@ -42,6 +42,15 @@ NTSTATUS AddrBuildAddress(
     PIP_ADDRESS Address,
     PUSHORT Port);
 
+BOOLEAN LibIPIsLocalAddress(
+    const IP_ADDRESS *Address);
+
+NTSTATUS AddrBuildTransportAddress(
+    PIP_ADDRESS Address,
+    USHORT Port,
+    PTRANSPORT_ADDRESS TransportAddress,
+    ULONG TransportAddressLength);
+
 BOOLEAN AddrIsEqual(
     PIP_ADDRESS Address1,
     PIP_ADDRESS Address2);

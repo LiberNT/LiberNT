@@ -25,6 +25,9 @@
 #define DD_UDP_DEVICE_NAME      L"\\Device\\Udp"
 #define DD_IP_DEVICE_NAME       L"\\Device\\Ip"
 #define DD_RAWIP_DEVICE_NAME    L"\\Device\\RawIp"
+#define DD_TCPV6_DEVICE_NAME    L"\\Device\\Tcp6"
+#define DD_UDPV6_DEVICE_NAME    L"\\Device\\Udp6"
+#define DD_RAWIPV6_DEVICE_NAME  L"\\Device\\RawIp6"
 
 /* For NDIS protocol registration */
 /* The DDK says you have to register with the name that's registered with SCM, e.g. tcpip */

@@ -202,13 +202,22 @@ DGDeliverData(
                      DataBuffer,
                      MIN(Current->BufferSize, DataSize));
 
-                RTAIPAddress = (PTA_IP_ADDRESS)Current->ReturnInfo->RemoteAddress;
-                RTAIPAddress->TAAddressCount = 1;
-                RTAIPAddress->Address->AddressType = TDI_ADDRESS_TYPE_IP;
-                RTAIPAddress->Address->AddressLength = TDI_ADDRESS_LENGTH_IP;
-                RTAIPAddress->Address->Address->sin_port = SrcPort;
-                RTAIPAddress->Address->Address->in_addr = SrcAddress->Address.IPv4Address;
-                RtlZeroMemory(RTAIPAddress->Address->Address->sin_zero, 8);
+                if (SrcAddress->Type == IP_ADDRESS_V6)
+                {
+                    AddrBuildTransportAddress(SrcAddress, SrcPort,
+                                              (PTRANSPORT_ADDRESS)Current->ReturnInfo->RemoteAddress,
+                                              Current->ReturnInfo->RemoteAddressLength);
+                }
+                else
+                {
+                    RTAIPAddress = (PTA_IP_ADDRESS)Current->ReturnInfo->RemoteAddress;
+                    RTAIPAddress->TAAddressCount = 1;
+                    RTAIPAddress->Address->AddressType = TDI_ADDRESS_TYPE_IP;
+                    RTAIPAddress->Address->AddressLength = TDI_ADDRESS_LENGTH_IP;
+                    RTAIPAddress->Address->Address->sin_port = SrcPort;
+                    RTAIPAddress->Address->Address->in_addr = SrcAddress->Address.IPv4Address;
+                    RtlZeroMemory(RTAIPAddress->Address->Address->sin_zero, 8);
+                }
 
                 if (Current->ReturnInfo->Options)
                 {

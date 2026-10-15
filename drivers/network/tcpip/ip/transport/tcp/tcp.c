@@ -15,6 +15,7 @@
 LONG TCP_IPIdentification = 0;
 static BOOLEAN TCPInitialized = FALSE;
 PORT_SET TCPPorts;
+PORT_SET TCPPorts6;
 
 #include "lwip/pbuf.h"
 #include "lwip/ip.h"
@@ -228,6 +229,12 @@ NTSTATUS TCPStartup(VOID)
     NTSTATUS Status;
 
     Status = PortsStartup(&TCPPorts, 1, 0xffff);
+    if (NT_SUCCESS(Status))
+    {
+        Status = PortsStartup(&TCPPorts6, 1, 0xffff);
+        if (!NT_SUCCESS(Status))
+            PortsShutdown(&TCPPorts);
+    }
     if (!NT_SUCCESS(Status))
     {
         return Status;
@@ -273,6 +280,7 @@ NTSTATUS TCPShutdown(VOID)
     TCPInitialized = FALSE;
 
     PortsShutdown( &TCPPorts );
+    PortsShutdown( &TCPPorts6 );
 
     return STATUS_SUCCESS;
 }
@@ -320,9 +328,8 @@ NTSTATUS TCPConnect
 {
     NTSTATUS Status;
     ip_addr_t bindaddr, connaddr;
-    IP_ADDRESS RemoteAddress;
-    USHORT RemotePort;
-    TA_IP_ADDRESS LocalAddress;
+    IP_ADDRESS RemoteAddress, BindAddress;
+    USHORT RemotePort, LocalPort;
     PTDI_BUCKET Bucket;
     PNEIGHBOR_CACHE_ENTRY NCE;
 
@@ -355,7 +362,14 @@ NTSTATUS TCPConnect
         return STATUS_INVALID_PARAMETER;
     }
 
-    if (AddrIsUnspecified(&Connection->AddressFile->Address))
+    if (Connection->AddressFile->Address.Type != RemoteAddress.Type)
+    {
+        UnlockObject(Connection);
+        return STATUS_INVALID_ADDRESS;
+    }
+
+    if (RemoteAddress.Type == IP_ADDRESS_V4 &&
+        AddrIsUnspecified(&Connection->AddressFile->Address))
     {
         if (!(NCE = RouteGetRouteToDestination(&RemoteAddress)))
         {
@@ -363,13 +377,15 @@ NTSTATUS TCPConnect
             return STATUS_NETWORK_UNREACHABLE;
         }
 
-        bindaddr.addr = NCE->Interface->Unicast.Address.IPv4Address;
+        AddrInitIPv4(&BindAddress, NCE->Interface->Unicast.Address.IPv4Address);
         NBDereferenceNeighbor(NCE);
     }
     else
     {
-        bindaddr.addr = Connection->AddressFile->Address.Address.IPv4Address;
+        BindAddress = Connection->AddressFile->Address;
     }
+
+    LibIPAddressToLwip(&BindAddress, &bindaddr);
 
     Status = TCPTranslateError(LibTCPBind(Connection,
                                           &bindaddr,
@@ -382,14 +398,14 @@ NTSTATUS TCPConnect
     }
 
     /* Copy bind address into connection */
-    Connection->AddressFile->Address.Address.IPv4Address = bindaddr.addr;
+    Connection->AddressFile->Address = BindAddress;
     /* Check if we had an unspecified port */
     if (!Connection->AddressFile->Port)
     {
         UINT AllocatedPort;
 
         /* We did, so we need to copy back the port */
-        Status = TCPGetSockAddress(Connection, (PTRANSPORT_ADDRESS)&LocalAddress, FALSE);
+        Status = TCPGetSockPort(Connection, &LocalPort);
         if (!NT_SUCCESS(Status))
         {
             UnlockObject(Connection);
@@ -397,7 +413,7 @@ NTSTATUS TCPConnect
         }
 
         /* Allocate the port in the port bitmap */
-        AllocatedPort = TCPAllocatePort(LocalAddress.Address[0].Address[0].sin_port);
+        AllocatedPort = TCPAllocatePort(LocalPort);
         /* This should never fail unless all ports are in use */
         if (AllocatedPort == (UINT) -1)
         {
@@ -408,7 +424,7 @@ NTSTATUS TCPConnect
         Connection->AddressFile->Port = AllocatedPort;
     }
 
-    connaddr.addr = RemoteAddress.Address.IPv4Address;
+    LibIPAddressToLwip(&RemoteAddress, &connaddr);
 
     Bucket = ExAllocateFromNPagedLookasideList(&TdiBucketLookasideList);
     if (!Bucket)
@@ -673,41 +689,66 @@ VOID TCPFreePort(const UINT Port)
     DeallocatePort(&TCPPorts, Port);
 }
 
+UINT TCPAllocatePortForAddress(const IP_ADDRESS *Address, const UINT HintPort)
+{
+    if (Address->Type != IP_ADDRESS_V6)
+        return TCPAllocatePort(HintPort);
+
+    if (HintPort)
+        return AllocatePort(&TCPPorts6, HintPort) ? HintPort : (UINT)-1;
+
+    return AllocatePortFromRange(&TCPPorts6, DYNAMIC_PORT_FIRST, DYNAMIC_PORT_LAST);
+}
+
+VOID TCPFreePortForAddress(const IP_ADDRESS *Address, const UINT Port)
+{
+    if (Address->Type == IP_ADDRESS_V6)
+        DeallocatePort(&TCPPorts6, Port);
+    else
+        DeallocatePort(&TCPPorts, Port);
+}
+
 NTSTATUS TCPGetSockAddress
 ( PCONNECTION_ENDPOINT Connection,
   PTRANSPORT_ADDRESS Address,
+  ULONG AddressLength,
   BOOLEAN GetRemote )
 {
-    PTA_IP_ADDRESS AddressIP = (PTA_IP_ADDRESS)Address;
     ip_addr_t ipaddr;
+    IP_ADDRESS IpAddress;
+    u16_t Port;
     NTSTATUS Status;
-
-    AddressIP->TAAddressCount = 1;
-    AddressIP->Address[0].AddressLength = TDI_ADDRESS_LENGTH_IP;
-    AddressIP->Address[0].AddressType = TDI_ADDRESS_TYPE_IP;
 
     LockObject(Connection);
 
     if (GetRemote)
-    {
-        Status = TCPTranslateError(LibTCPGetPeerName(Connection->SocketContext,
-                                    &ipaddr,
-                                    &AddressIP->Address[0].Address[0].sin_port));
-    }
+        Status = TCPTranslateError(LibTCPGetPeerName(Connection->SocketContext, &ipaddr, &Port));
     else
-    {
-        Status = TCPTranslateError(LibTCPGetHostName(Connection->SocketContext,
-                                    &ipaddr,
-                                    &AddressIP->Address[0].Address[0].sin_port));
-    }
+        Status = TCPTranslateError(LibTCPGetHostName(Connection->SocketContext, &ipaddr, &Port));
 
     UnlockObject(Connection);
 
-    AddressIP->Address[0].Address[0].sin_port = WH2N(AddressIP->Address[0].Address[0].sin_port);
-    AddressIP->Address[0].Address[0].in_addr = ipaddr.addr;
+    if (!NT_SUCCESS(Status))
+        return Status;
 
-    RtlZeroMemory(&AddressIP->Address[0].Address[0].sin_zero,
-                  sizeof(AddressIP->Address[0].Address[0].sin_zero));
+    LibIPAddressFromLwip(&ipaddr, &IpAddress);
+    return AddrBuildTransportAddress(&IpAddress, WH2N(Port), Address, AddressLength);
+}
+
+NTSTATUS TCPGetSockPort
+( PCONNECTION_ENDPOINT Connection,
+  PUSHORT Port )
+{
+    ip_addr_t ipaddr;
+    u16_t LocalPort;
+    NTSTATUS Status;
+
+    LockObject(Connection);
+    Status = TCPTranslateError(LibTCPGetHostName(Connection->SocketContext, &ipaddr, &LocalPort));
+    UnlockObject(Connection);
+
+    if (NT_SUCCESS(Status))
+        *Port = WH2N(LocalPort);
 
     return Status;
 }

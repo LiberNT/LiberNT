@@ -255,7 +255,7 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
     {
         TA_IP_ADDRESS EndPoint;
 
-        Status = TCPGetSockAddress(AddrFile->Connection, (PTRANSPORT_ADDRESS)&EndPoint, FALSE);
+        Status = TCPGetSockAddress(AddrFile->Connection, (PTRANSPORT_ADDRESS)&EndPoint, sizeof(EndPoint), FALSE);
         if (NT_SUCCESS(Status))
         {
             ASSERT(EndPoint.TAAddressCount >= 1);
@@ -263,7 +263,7 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
             TcpRow.dwLocalAddr = EndPoint.Address[0].Address[0].in_addr;
             TcpRow.dwLocalPort = EndPoint.Address[0].Address[0].sin_port;
 
-            Status = TCPGetSockAddress(AddrFile->Connection, (PTRANSPORT_ADDRESS)&EndPoint, TRUE);
+            Status = TCPGetSockAddress(AddrFile->Connection, (PTRANSPORT_ADDRESS)&EndPoint, sizeof(EndPoint), TRUE);
             if (NT_SUCCESS(Status))
             {
                 ASSERT(EndPoint.TAAddressCount >= 1);

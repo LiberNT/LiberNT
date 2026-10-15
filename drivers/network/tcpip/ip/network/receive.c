@@ -726,6 +726,27 @@ VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
 }
 
 
+static VOID IPv6Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
+{
+    UINT AvailableSize;
+    PCHAR Data;
+
+    AvailableSize = IPPacket->TotalSize >= IPPacket->Position ?
+                    IPPacket->TotalSize - IPPacket->Position : 0;
+
+    if (!IF->TCPContext || AvailableSize < sizeof(IPv6_HEADER))
+        return;
+
+    Data = ExAllocatePoolWithTag(NonPagedPool, AvailableSize, PACKET_BUFFER_TAG);
+    if (!Data)
+        return;
+
+    if (CopyPacketToBuffer(Data, IPPacket->NdisPacket, IPPacket->Position, AvailableSize) == AvailableSize)
+        LibIPInsertPacket(IF->TCPContext, Data, AvailableSize);
+
+    ExFreePoolWithTag(Data, PACKET_BUFFER_TAG);
+}
+
 VOID IPReceive( PIP_INTERFACE IF, PIP_PACKET IPPacket )
 /*
  * FUNCTION: Receives an IP datagram (or fragment)
@@ -759,7 +780,7 @@ VOID IPReceive( PIP_INTERFACE IF, PIP_PACKET IPPacket )
             break;
         case 6:
             IPPacket->Type = IP_ADDRESS_V6;
-            TI_DbgPrint(MAX_TRACE, ("Datagram of type IPv6 discarded.\n"));
+            IPv6Receive(IF, IPPacket);
             break;
         default:
             TI_DbgPrint(MIN_TRACE, ("Datagram has an unsupported IP version %d.\n", Version));

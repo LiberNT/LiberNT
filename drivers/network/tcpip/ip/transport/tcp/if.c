@@ -6,7 +6,87 @@
 #include "lwip/ip.h"
 #include "lwip/api.h"
 #include "lwip/tcpip.h"
+#include "lwip/ethip6.h"
+#include "lwip/mld6.h"
+#include "lwip/prot/ethernet.h"
 #include <ipifcons.h>
+
+static
+VOID
+TCPLinkOutputComplete(
+    PVOID Context,
+    PNDIS_PACKET NdisPacket,
+    NDIS_STATUS NdisStatus)
+{
+    FreeNdisPacket(NdisPacket);
+}
+
+static
+err_t
+TCPLinkOutput(struct netif *netif, struct pbuf *p)
+{
+    PIP_INTERFACE IF = netif->state;
+    struct eth_hdr Header;
+    PNDIS_PACKET NdisPacket;
+    NDIS_STATUS NdisStatus;
+    PCHAR Data;
+    UINT Size;
+    u16_t Length;
+
+    if (p->tot_len <= SIZEOF_ETH_HDR)
+        return ERR_ARG;
+
+    if (pbuf_copy_partial(p, &Header, SIZEOF_ETH_HDR, 0) != SIZEOF_ETH_HDR ||
+        Header.type != PP_HTONS(ETHTYPE_IPV6))
+        return ERR_ARG;
+
+    Length = p->tot_len - SIZEOF_ETH_HDR;
+
+    NdisStatus = AllocatePacketWithBuffer(&NdisPacket, NULL, Length);
+    if (NdisStatus != NDIS_STATUS_SUCCESS)
+        return ERR_MEM;
+
+    GetDataPtr(NdisPacket, 0, &Data, &Size);
+    if (pbuf_copy_partial(p, Data, Length, SIZEOF_ETH_HDR) != Length)
+    {
+        FreeNdisPacket(NdisPacket);
+        return ERR_BUF;
+    }
+
+    PC(NdisPacket)->DLComplete = TCPLinkOutputComplete;
+
+    (*IF->Transmit)(IF->Context, NdisPacket, 0, Header.dest.addr, LAN_PROTO_IPv6);
+
+    return ERR_OK;
+}
+
+static
+err_t
+TCPMldMacFilter(struct netif *netif, const ip6_addr_t *group, enum netif_mac_filter_action action)
+{
+    PIP_INTERFACE IF = netif->state;
+    const u8_t *GroupBytes = (const u8_t *)&group->addr[3];
+    UCHAR Address[ETH_HWADDR_LEN];
+
+    Address[0] = 0x33;
+    Address[1] = 0x33;
+    Address[2] = GroupBytes[0];
+    Address[3] = GroupBytes[1];
+    Address[4] = GroupBytes[2];
+    Address[5] = GroupBytes[3];
+
+    if (LANUpdateMulticastList(IF->Context, Address, action == NETIF_ADD_MAC_FILTER) != NDIS_STATUS_SUCCESS)
+        return ERR_IF;
+
+    return ERR_OK;
+}
+
+static
+err_t
+TCPLoopbackOutput6(struct netif *netif, struct pbuf *p, const ip6_addr_t *dest)
+{
+    return ERR_RTE;
+}
 
 err_t
 TCPSendDataCallback(struct netif *netif, struct pbuf *p, const ip4_addr_t *dest)
@@ -104,6 +184,18 @@ TCPInterfaceInit(struct netif *netif)
     netif->output = TCPSendDataCallback;
     netif->mtu = IF->MTU;
 
+    if (IF->AddressLength == ETH_HWADDR_LEN)
+    {
+        netif->output_ip6 = ethip6_output;
+        netif->linkoutput = TCPLinkOutput;
+        netif->mld_mac_filter = TCPMldMacFilter;
+        netif->flags |= NETIF_FLAG_MLD6;
+    }
+    else
+    {
+        netif->output_ip6 = TCPLoopbackOutput6;
+    }
+
     netif->name[0] = 'e';
     netif->name[1] = 'n';
 
@@ -119,9 +211,10 @@ TCPInterfaceInit(struct netif *netif)
 VOID
 TCPRegisterInterface(PIP_INTERFACE IF)
 {
-    ip_addr_t ipaddr;
-    ip_addr_t netmask;
-    ip_addr_t gw;
+    struct netif *Netif;
+    ip4_addr_t ipaddr;
+    ip4_addr_t netmask;
+    ip4_addr_t gw;
 
     gw.addr = 0;
     ipaddr.addr = 0;
@@ -134,6 +227,26 @@ TCPRegisterInterface(PIP_INTERFACE IF)
                                IF,
                                TCPInterfaceInit,
                                tcpip_input);
+    Netif = IF->TCPContext;
+    if (!Netif)
+        return;
+
+    if (IF->AddressLength == ETH_HWADDR_LEN)
+    {
+        netif_create_ip6_linklocal_address(Netif, 1);
+        netif_set_ip6_autoconfig_enabled(Netif, 1);
+    }
+    else
+    {
+        ip6_addr_t LoopbackAddress;
+        s8_t Index;
+
+        ip6_addr_set_loopback(&LoopbackAddress);
+        if (netif_add_ip6_address(Netif, &LoopbackAddress, &Index) == ERR_OK)
+            netif_ip6_addr_set_state(Netif, Index, IP6_ADDR_PREFERRED);
+    }
+
+    netif_set_up(Netif);
 }
 
 VOID
@@ -145,9 +258,9 @@ TCPUnregisterInterface(PIP_INTERFACE IF)
 VOID
 TCPUpdateInterfaceIPInformation(PIP_INTERFACE IF)
 {
-    ip_addr_t ipaddr;
-    ip_addr_t netmask;
-    ip_addr_t gw;
+    ip4_addr_t ipaddr;
+    ip4_addr_t netmask;
+    ip4_addr_t gw;
 
     gw.addr = 0;
 
@@ -161,13 +274,7 @@ TCPUpdateInterfaceIPInformation(PIP_INTERFACE IF)
 
     netif_set_addr(IF->TCPContext, &ipaddr, &netmask, &gw);
 
+    netif_set_up(IF->TCPContext);
     if (ipaddr.addr != 0)
-    {
-        netif_set_up(IF->TCPContext);
         netif_set_default(IF->TCPContext);
-    }
-    else
-    {
-        netif_set_down(IF->TCPContext);
-    }
 }

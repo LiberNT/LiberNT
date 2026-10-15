@@ -32,14 +32,11 @@ void
 LibTCPDumpPcb(PVOID SocketContext)
 {
     struct tcp_pcb *pcb = (struct tcp_pcb*)SocketContext;
-    unsigned int addr = lwip_ntohl(pcb->remote_ip.addr);
+    char addr[IPADDR_STRLEN_MAX];
 
     DbgPrint("\tState: %s\n", tcp_state_str[pcb->state]);
-    DbgPrint("\tRemote: (%d.%d.%d.%d, %d)\n",
-    (addr >> 24) & 0xFF,
-    (addr >> 16) & 0xFF,
-    (addr >> 8) & 0xFF,
-    addr & 0xFF,
+    DbgPrint("\tRemote: (%s, %d)\n",
+    ipaddr_ntoa_r(&pcb->remote_ip, addr, sizeof(addr)),
     pcb->remote_port);
 }
 
@@ -522,7 +519,7 @@ LibTCPSocketCallback(void *arg)
 
     ASSERT(msg);
 
-    msg->Output.Socket.NewPcb = tcp_new();
+    msg->Output.Socket.NewPcb = tcp_new_ip_type(IPADDR_TYPE_ANY);
 
     if (msg->Output.Socket.NewPcb)
     {
@@ -598,7 +595,7 @@ done:
 }
 
 err_t
-LibTCPBind(PCONNECTION_ENDPOINT Connection, ip4_addr_t *const ipaddr, const u16_t port)
+LibTCPBind(PCONNECTION_ENDPOINT Connection, ip_addr_t *const ipaddr, const u16_t port)
 {
     struct lwip_callback_msg msg;
     err_t ret;

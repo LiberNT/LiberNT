@@ -62,4 +62,19 @@ NTSTATUS UDPShutdown(
 UINT UDPAllocatePort( UINT HintPort );
 VOID UDPFreePort( UINT Port );
 
+NTSTATUS LibUDPOpen(
+    PADDRESS_FILE AddrFile,
+    USHORT Port,
+    PUSHORT AllocatedPort);
+
+VOID LibUDPClose(
+    PADDRESS_FILE AddrFile);
+
+NTSTATUS LibUDPSendDatagram(
+    PADDRESS_FILE AddrFile,
+    PTDI_CONNECTION_INFORMATION ConnInfo,
+    PCHAR BufferData,
+    ULONG DataSize,
+    PULONG DataUsed);
+
 /* EOF */

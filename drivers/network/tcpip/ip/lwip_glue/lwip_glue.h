@@ -107,16 +107,16 @@ extern void TCPRecvEventHandler(void *arg);
 /* TCP functions */
 PTCP_PCB    LibTCPSocket(void *arg);
 VOID        LibTCPFreeSocket(PTCP_PCB pcb);
-err_t       LibTCPBind(PCONNECTION_ENDPOINT Connection, ip4_addr_t *const ipaddr, const u16_t port);
+err_t       LibTCPBind(PCONNECTION_ENDPOINT Connection, ip_addr_t *const ipaddr, const u16_t port);
 PTCP_PCB    LibTCPListen(PCONNECTION_ENDPOINT Connection, const UINT backlog);
 err_t       LibTCPSend(PCONNECTION_ENDPOINT Connection, void *const dataptr, const u16_t len, ULONG *sent, const int safe);
-err_t       LibTCPConnect(PCONNECTION_ENDPOINT Connection, ip4_addr_t *const ipaddr, const u16_t port);
+err_t       LibTCPConnect(PCONNECTION_ENDPOINT Connection, ip_addr_t *const ipaddr, const u16_t port);
 err_t       LibTCPShutdown(PCONNECTION_ENDPOINT Connection, const int shut_rx, const int shut_tx);
 err_t       LibTCPAbort(PCONNECTION_ENDPOINT Connection);
 err_t       LibTCPClose(PCONNECTION_ENDPOINT Connection, const int safe, const int callback);
 
-err_t       LibTCPGetPeerName(PTCP_PCB pcb, ip4_addr_t *const ipaddr, u16_t *const port);
-err_t       LibTCPGetHostName(PTCP_PCB pcb, ip4_addr_t *const ipaddr, u16_t *const port);
+err_t       LibTCPGetPeerName(PTCP_PCB pcb, ip_addr_t *const ipaddr, u16_t *const port);
+err_t       LibTCPGetHostName(PTCP_PCB pcb, ip_addr_t *const ipaddr, u16_t *const port);
 void        LibTCPAccept(PTCP_PCB pcb, struct tcp_pcb *listen_pcb, void *arg);
 void        LibTCPWfpEstablish(PCONNECTION_ENDPOINT Connection, PTCP_PCB pcb, BOOLEAN Outbound);
 NTSTATUS    LibTCPDeferAcceptLocked(PCONNECTION_ENDPOINT Connection, PTCP_PCB pcb);
@@ -128,6 +128,8 @@ void        LibTCPGetSocketStatus(PTCP_PCB pcb, PULONG State);
 
 /* IP functions */
 void LibIPInsertPacket(void *ifarg, const void *const data, const u32_t size);
+void LibIPAddressToLwip(const IP_ADDRESS *Address, ip_addr_t *IpAddr);
+void LibIPAddressFromLwip(const ip_addr_t *IpAddr, PIP_ADDRESS Address);
 void LibIPInitialize(void);
 void LibIPShutdown(void);
 

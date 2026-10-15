@@ -162,10 +162,14 @@ NTSTATUS TiCreateFileObject(
 
         Address = (PTA_IP_ADDRESS)(EaInfo->EaName + EaInfo->EaNameLength + 1); //0-term
 
-        if ((EaInfo->EaValueLength < sizeof(TA_IP_ADDRESS)) ||
+        if ((EaInfo->EaValueLength < FIELD_OFFSET(TA_IP_ADDRESS, Address[0].Address)) ||
             (Address->TAAddressCount != 1) ||
-            (Address->Address[0].AddressLength < TDI_ADDRESS_LENGTH_IP) ||
-            (Address->Address[0].AddressType != TDI_ADDRESS_TYPE_IP))
+            !(((Address->Address[0].AddressType == TDI_ADDRESS_TYPE_IP) &&
+               (EaInfo->EaValueLength >= sizeof(TA_IP_ADDRESS)) &&
+               (Address->Address[0].AddressLength >= TDI_ADDRESS_LENGTH_IP)) ||
+              ((Address->Address[0].AddressType == TDI_ADDRESS_TYPE_IP6) &&
+               (EaInfo->EaValueLength >= sizeof(TA_IP6_ADDRESS)) &&
+               (Address->Address[0].AddressLength >= TDI_ADDRESS_LENGTH_IP6))))
         {
             TI_DbgPrint(MIN_TRACE, ("Parameters are invalid:\n"));
             TI_DbgPrint(MIN_TRACE, ("AddressCount: %d\n", Address->TAAddressCount));
@@ -839,16 +843,28 @@ VOID NTAPI TiUnload(
     if (TCPDeviceObject)
     {
         UNICODE_STRING strTcpLinkName = RTL_CONSTANT_STRING(L"\\DosDevices\\Tcp");
+        UNICODE_STRING strTcp6DeviceName = RTL_CONSTANT_STRING(DD_TCPV6_DEVICE_NAME);
 
         IoDeleteSymbolicLink(&strTcpLinkName);
+        IoDeleteSymbolicLink(&strTcp6DeviceName);
         IoDeleteDevice(TCPDeviceObject);
     }
 
     if (UDPDeviceObject)
+    {
+        UNICODE_STRING strUdp6DeviceName = RTL_CONSTANT_STRING(DD_UDPV6_DEVICE_NAME);
+
+        IoDeleteSymbolicLink(&strUdp6DeviceName);
         IoDeleteDevice(UDPDeviceObject);
+    }
 
     if (RawIPDeviceObject)
+    {
+        UNICODE_STRING strRaw6DeviceName = RTL_CONSTANT_STRING(DD_RAWIPV6_DEVICE_NAME);
+
+        IoDeleteSymbolicLink(&strRaw6DeviceName);
         IoDeleteDevice(RawIPDeviceObject);
+    }
 
     if (IPDeviceObject) {
         ChewShutdown();
@@ -880,6 +896,9 @@ DriverEntry(
     UNICODE_STRING strUdpDeviceName = RTL_CONSTANT_STRING(DD_UDP_DEVICE_NAME);
     UNICODE_STRING strTcpDeviceName = RTL_CONSTANT_STRING(DD_TCP_DEVICE_NAME);
     UNICODE_STRING strTcpLinkName = RTL_CONSTANT_STRING(L"\\DosDevices\\Tcp");
+    UNICODE_STRING strTcp6DeviceName = RTL_CONSTANT_STRING(DD_TCPV6_DEVICE_NAME);
+    UNICODE_STRING strUdp6DeviceName = RTL_CONSTANT_STRING(DD_UDPV6_DEVICE_NAME);
+    UNICODE_STRING strRaw6DeviceName = RTL_CONSTANT_STRING(DD_RAWIPV6_DEVICE_NAME);
     UNICODE_STRING strNdisDeviceName = RTL_CONSTANT_STRING(TCPIP_PROTOCOL_NAME);
     NDIS_STATUS NdisStatus;
     LARGE_INTEGER DueTime;
@@ -936,6 +955,18 @@ DriverEntry(
     Status = IoCreateSymbolicLink(&strTcpLinkName, &strTcpDeviceName);
     if (!NT_SUCCESS(Status))
         TI_DbgPrint(MIN_TRACE, ("Failed to create the Tcp symbolic link. Status (0x%X).\n", Status));
+
+    Status = IoCreateSymbolicLink(&strTcp6DeviceName, &strTcpDeviceName);
+    if (!NT_SUCCESS(Status))
+        TI_DbgPrint(MIN_TRACE, ("Failed to create the Tcp6 device link. Status (0x%X).\n", Status));
+
+    Status = IoCreateSymbolicLink(&strUdp6DeviceName, &strUdpDeviceName);
+    if (!NT_SUCCESS(Status))
+        TI_DbgPrint(MIN_TRACE, ("Failed to create the Udp6 device link. Status (0x%X).\n", Status));
+
+    Status = IoCreateSymbolicLink(&strRaw6DeviceName, &strRawDeviceName);
+    if (!NT_SUCCESS(Status))
+        TI_DbgPrint(MIN_TRACE, ("Failed to create the RawIp6 device link. Status (0x%X).\n", Status));
 
     /* Setup network layer and transport layer entities */
     KeInitializeSpinLock(&EntityListLock);
