@@ -34,7 +34,8 @@ NTSTATUS tdiGetSetOfThings( HANDLE tcpFile,
     TCP_REQUEST_QUERY_INFORMATION_EX req = TCP_REQUEST_QUERY_INFORMATION_INIT;
     PVOID entitySet = 0;
     NTSTATUS status = STATUS_SUCCESS;
-    DWORD allocationSizeForEntityArray = entrySize * MAX_TDI_ENTITIES;
+    DWORD allocationSizeForEntityArray = fixedPart + entrySize * 16;
+    DWORD maxAllocationSize = fixedPart + entrySize * MAX_TDI_ENTITIES;
     IO_STATUS_BLOCK Iosb;
 
     req.ID.toi_class                = toiClass;
@@ -52,28 +53,6 @@ NTSTATUS tdiGetSetOfThings( HANDLE tcpFile,
      * stabilizes.
      */
     do {
-        status = NtDeviceIoControlFile( tcpFile,
-                                        NULL,
-                                        NULL,
-                                        NULL,
-                                        &Iosb,
-                                        IOCTL_TCP_QUERY_INFORMATION_EX,
-                                        &req,
-                                        sizeof(req),
-                                        NULL,
-                                        0);
-        if (status == STATUS_PENDING)
-        {
-            status = NtWaitForSingleObject(tcpFile, FALSE, NULL);
-            if (NT_SUCCESS(status)) status = Iosb.Status;
-        }
-
-        if(!NT_SUCCESS(status))
-        {
-            return status;
-        }
-
-        allocationSizeForEntityArray = Iosb.Information;
         entitySet = HeapAlloc( GetProcessHeap(), 0, allocationSizeForEntityArray );
 
         if( !entitySet ) {
@@ -81,6 +60,7 @@ NTSTATUS tdiGetSetOfThings( HANDLE tcpFile,
             return status;
         }
 
+        Iosb.Information = 0;
         status = NtDeviceIoControlFile( tcpFile,
                                         NULL,
                                         NULL,
@@ -98,18 +78,29 @@ NTSTATUS tdiGetSetOfThings( HANDLE tcpFile,
         }
 
         /* This is why we have the loop -- we might have added an adapter */
-        if( Iosb.Information == allocationSizeForEntityArray )
+        if( NT_SUCCESS(status) && Iosb.Information <= allocationSizeForEntityArray )
             break;
 
         HeapFree( GetProcessHeap(), 0, entitySet );
         entitySet = 0;
 
-        if(!NT_SUCCESS(status))
+        if( status != STATUS_BUFFER_TOO_SMALL &&
+            status != STATUS_BUFFER_OVERFLOW &&
+            !NT_SUCCESS(status) )
             return status;
+
+        if( allocationSizeForEntityArray >= maxAllocationSize )
+            return STATUS_BUFFER_TOO_SMALL;
+
+        if( NT_SUCCESS(status) && Iosb.Information > allocationSizeForEntityArray * 2 )
+            allocationSizeForEntityArray = (DWORD)Iosb.Information;
+        else
+            allocationSizeForEntityArray *= 2;
     } while( TRUE ); /* We break if the array we received was the size we
                       * expected.  Therefore, we got here because it wasn't */
 
-    *numEntries = (allocationSizeForEntityArray - fixedPart) / entrySize;
+    *numEntries = Iosb.Information > fixedPart ?
+                  (DWORD)(Iosb.Information - fixedPart) / entrySize : 0;
     *tdiEntitySet = entitySet;
 
     return STATUS_SUCCESS;
