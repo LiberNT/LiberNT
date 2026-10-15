@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     allocator.cpp
+    budget.cpp
     blend.cpp
     bundle.cpp
     features.cpp

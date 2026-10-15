@@ -9,6 +9,7 @@
 #include <apitest.h>
 
 extern void func_allocator(void);
+extern void func_budget(void);
 extern void func_blend(void);
 extern void func_bundle(void);
 extern void func_features(void);
@@ -22,6 +23,7 @@ extern void func_versions(void);
 const struct test winetest_testlist[] =
 {
     { "allocator", func_allocator },
+    { "budget", func_budget },
     { "blend", func_blend },
     { "bundle", func_bundle },
     { "features", func_features },
