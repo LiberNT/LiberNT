@@ -189,6 +189,9 @@ else()
     else()
         # Single-configuration generators, like Ninja.
         message("-- Build type: ${CMAKE_BUILD_TYPE}")
+        if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+            message(WARNING "${CMAKE_BUILD_TYPE} builds are not built by CI and are not maintained. Use a Debug build.")
+        endif()
     endif()
 
     # Always add /MT in VS CMAKE_GENERATOR and define _SBCS otherwise VS thinks it's a multi-byte or whatever project
