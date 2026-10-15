@@ -237,6 +237,7 @@ DGDeliverData(
 
                 LockObject(AddrFile);
                 DereferenceObject(AddrFile);
+                break;
             }
         }
 

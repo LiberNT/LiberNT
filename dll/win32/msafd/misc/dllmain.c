@@ -222,8 +222,8 @@ WSPSocket(int AddressFamily,
         Socket->SharedData->CatalogEntryId = lpProtocolInfo->dwCatalogEntryId;
         Socket->SharedData->UseSAN = FALSE;
         Socket->SharedData->NonBlocking = FALSE; /* Sockets start blocking */
-        Socket->SharedData->RecvTimeout = INFINITE;
-        Socket->SharedData->SendTimeout = INFINITE;
+        Socket->SharedData->RecvTimeout = 0;
+        Socket->SharedData->SendTimeout = 0;
         Socket->SharedData->OobInline = FALSE;
 
         /* Ask alex about this */
@@ -646,6 +646,48 @@ MsafdWaitForAlert(
         if (Result != WAIT_IO_COMPLETION)
             break;
     }
+}
+
+NTSTATUS
+MsafdWaitForCompletion(
+    _In_ PSOCKET_INFORMATION Socket,
+    _In_ HANDLE hObject,
+    _In_ PIO_STATUS_BLOCK IoStatusBlock,
+    _In_ DWORD Timeout)
+{
+    IO_STATUS_BLOCK CancelIosb;
+    ULONGLONG Deadline;
+    ULONGLONG Now;
+    DWORD Result;
+
+    if (!(Socket->SharedData->CreateFlags & WSA_FLAG_OVERLAPPED) ||
+        Timeout == 0 || Timeout == INFINITE)
+    {
+        MsafdWaitForAlert(hObject);
+        return IoStatusBlock->Status;
+    }
+
+    Deadline = GetTickCount64() + Timeout;
+    for (;;)
+    {
+        Now = GetTickCount64();
+        Result = WaitForSingleObjectEx(hObject,
+                                       Now < Deadline ? (DWORD)(Deadline - Now) : 0,
+                                       TRUE);
+        if (Result != WAIT_IO_COMPLETION)
+            break;
+    }
+
+    if (Result != WAIT_TIMEOUT)
+        return IoStatusBlock->Status;
+
+    NtCancelIoFileEx((HANDLE)Socket->Handle, IoStatusBlock, &CancelIosb);
+    MsafdWaitForAlert(hObject);
+
+    if (IoStatusBlock->Status == STATUS_CANCELLED)
+        return STATUS_TIMEOUT;
+
+    return IoStatusBlock->Status;
 }
 
 /*
@@ -3084,20 +3126,25 @@ WSPGetSockOpt(IN SOCKET Handle,
                     BufferSize = sizeof(Socket->ProtocolInfo);
                     break;
 
+                case SO_MAX_MSG_SIZE:
+                    goto SendToHelper;
+
                 case SO_GROUP_ID:
                 case SO_GROUP_PRIORITY:
-                case SO_MAX_MSG_SIZE:
+                    DbgPrint("MSAFD: Get unimplemented optname %x\n", OptionName);
+                    if (lpErrno) *lpErrno = WSAENOPROTOOPT;
+                    return SOCKET_ERROR;
 
                 default:
                     DbgPrint("MSAFD: Get unknown optname %x\n", OptionName);
-                    if (lpErrno) *lpErrno = WSAENOPROTOOPT;
+                    if (lpErrno) *lpErrno = WSAEINVAL;
+                    *OptionLength = 0;
                     return SOCKET_ERROR;
             }
 
             if (*OptionLength < BufferSize)
             {
                 if (lpErrno) *lpErrno = WSAEFAULT;
-                *OptionLength = BufferSize;
                 return SOCKET_ERROR;
             }
             RtlCopyMemory(OptionValue, Buffer, BufferSize);
@@ -3117,6 +3164,8 @@ SendToHelper:
                                                         OptionName,
                                                         OptionValue,
                                                         (LPINT)OptionLength);
+    if (Errno != NO_ERROR && Errno != WSAEFAULT)
+        *OptionLength = 0;
     if (lpErrno) *lpErrno = Errno;
     return (Errno == NO_ERROR) ? NO_ERROR : SOCKET_ERROR;
 }
@@ -3758,7 +3807,7 @@ MsafdInfoAPC(
     TRACE("MsafdInfoAPC(%p %lx %lx)\n", ApcContext, IoStatusBlock->Status, IoStatusBlock->Information);
 
     if (Context->lpCompletionRoutine)
-        Context->lpCompletionRoutine(IoStatusBlock->Status, IoStatusBlock->Information, Context->lpOverlapped, 0);
+        Context->lpCompletionRoutine(TranslateNtStatusError(IoStatusBlock->Status), IoStatusBlock->Information, Context->lpOverlapped, 0);
 
     /* Free IOCTL buffer */
     HeapFree(GlobalHeap, 0, Context->lpInfoData);

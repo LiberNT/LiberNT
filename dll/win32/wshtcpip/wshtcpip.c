@@ -295,6 +295,47 @@ RecvInfoOptionBit(
     }
 }
 
+static BOOLEAN
+IsWindowsIpOption(
+    _In_ INT OptionName)
+{
+    switch (OptionName)
+    {
+        case IP_OPTIONS:
+        case IP_HDRINCL:
+        case IP_TOS:
+        case IP_TTL:
+        case IP_MULTICAST_IF:
+        case IP_MULTICAST_TTL:
+        case IP_MULTICAST_LOOP:
+        case IP_ADD_MEMBERSHIP:
+        case IP_DROP_MEMBERSHIP:
+        case IP_DONTFRAGMENT:
+        case IP_ADD_SOURCE_MEMBERSHIP:
+        case IP_DROP_SOURCE_MEMBERSHIP:
+        case IP_BLOCK_SOURCE:
+        case IP_UNBLOCK_SOURCE:
+        case IP_PKTINFO:
+        case IP_RECVTTL:
+        case IP_RECEIVE_BROADCAST:
+        case IP_RECVIF:
+        case IP_RECVDSTADDR:
+        case IP_IFLIST:
+        case IP_ADD_IFLIST:
+        case IP_DEL_IFLIST:
+        case IP_UNICAST_IF:
+        case IP_RTHDR:
+        case IP_RECVRTHDR:
+        case IP_TCLASS:
+        case IP_RECVTOS:
+        case IP_ORIGINAL_ARRIVAL_IF:
+        case IP_RECVECN:
+            return TRUE;
+        default:
+            return FALSE;
+    }
+}
+
 INT
 EXPORT
 WSHGetSocketInformation(
@@ -356,6 +397,30 @@ WSHGetSocketInformation(
                 return WSAEINVAL;
         }
     }
+    if (Level == IPPROTO_IP && OptionName == IP_TTL)
+    {
+        if (!OptionLength || !OptionValue || *OptionLength < 1)
+            return WSAEFAULT;
+        if (*OptionLength >= sizeof(DWORD))
+        {
+            *(DWORD *)OptionValue = Context->Ttl;
+            *OptionLength = sizeof(DWORD);
+        }
+        else
+        {
+            *(PUCHAR)OptionValue = (UCHAR)Context->Ttl;
+            *OptionLength = sizeof(UCHAR);
+        }
+        return NO_ERROR;
+    }
+    if (Level == IPPROTO_IP && OptionName == IP_DONTFRAGMENT)
+    {
+        if (!OptionLength || !OptionValue || *OptionLength < sizeof(DWORD))
+            return WSAEFAULT;
+        *(DWORD *)OptionValue = Context->DontFragment ? 1 : 0;
+        *OptionLength = sizeof(DWORD);
+        return NO_ERROR;
+    }
     if (Level == IPPROTO_IP && RecvInfoOptionBit(OptionName))
     {
         if (!OptionLength || !OptionValue || *OptionLength < sizeof(DWORD))
@@ -374,15 +439,36 @@ WSHGetSocketInformation(
         *OptionLength = sizeof(DWORD);
         return NO_ERROR;
     }
-    if (Level != SOL_SOCKET)
+    if (Level == SOL_SOCKET)
+    {
+        switch (OptionName)
+        {
+            case SO_DONTROUTE:
+            case SO_KEEPALIVE:
+                if (!OptionLength || !OptionValue || *OptionLength < sizeof(BOOL))
+                    return WSAEFAULT;
+                *(BOOL *)OptionValue = (OptionName == SO_DONTROUTE) ? Context->DontRoute : Context->KeepAlive;
+                *OptionLength = sizeof(BOOL);
+                return NO_ERROR;
+
+            case SO_MAX_MSG_SIZE:
+                if (Context->SocketType != SOCK_DGRAM)
+                    return WSAENOPROTOOPT;
+                if (!OptionLength || !OptionValue || *OptionLength < sizeof(DWORD))
+                    return WSAEFAULT;
+                *(DWORD *)OptionValue = 0xFFFF - 20 - 8;
+                *OptionLength = sizeof(DWORD);
+                return NO_ERROR;
+
+            default:
+                return WSAENOPROTOOPT;
+        }
+    }
+    if (Level == IPPROTO_IP || Level == IPPROTO_TCP || Level == IPPROTO_IPV6)
         return WSAENOPROTOOPT;
-    UNIMPLEMENTED;
 
     DPRINT1("Get: Unknown level/option name: %d %d\n", Level, OptionName);
-
-    *OptionLength = 0;
-
-    return NO_ERROR;
+    return WSAEINVAL;
 }
 
 
@@ -849,6 +935,7 @@ WSHOpenSocket2(
     Context->Flags         = Flags;
     Context->SocketState   = SocketStateCreated;
     Context->MulticastTTL  = 1;
+    Context->Ttl           = 128;
     Context->V6Only        = TRUE;
 
     *HelperDllSocketContext = Context;
@@ -999,10 +1086,11 @@ WSHSetSocketInformation(
                     break;
 
                 case IP_TTL:
-                case IP_DONTFRAGMENT:
-                    /* Send these to TCPIP */
+                    if (!OptionValue || OptionLength < 1)
+                        return WSAEFAULT;
                     break;
 
+                case IP_DONTFRAGMENT:
                 case IP_PKTINFO:
                 case IP_RECVTTL:
                 case IP_RECVTOS:
@@ -1017,7 +1105,8 @@ WSHSetSocketInformation(
                     break;
 
                 default:
-                    /* Invalid option -- FIXME */
+                    if (!IsWindowsIpOption(OptionName))
+                        return WSAENOPROTOOPT;
                     DPRINT1("Set: Received unsupported IPPROTO_IP option %d\n", OptionName);
                     return 0;
             }
@@ -1158,6 +1247,12 @@ WSHSetSocketInformation(
             else
                 Context->RecvInfoOptions &= ~RecvInfoOptionBit(OptionName);
         }
+        if (Level == IPPROTO_IP && OptionName == IP_TTL)
+            Context->Ttl = *(PUCHAR)OptionValue;
+        if (Level == IPPROTO_IP && OptionName == IP_DONTFRAGMENT)
+            Context->DontFragment = (RecvValue != 0);
+        if (Level == SOL_SOCKET && OptionName == SO_KEEPALIVE)
+            Context->KeepAlive = (*(DWORD *)OptionValue != 0);
         return 0;
     }
 
@@ -1179,6 +1274,12 @@ WSHSetSocketInformation(
         else
             Context->RecvInfoOptions &= ~RecvInfoOptionBit(OptionName);
     }
+    if (!Status && Level == IPPROTO_IP && OptionName == IP_TTL)
+        Context->Ttl = *(PUCHAR)OptionValue;
+    if (!Status && Level == IPPROTO_IP && OptionName == IP_DONTFRAGMENT)
+        Context->DontFragment = (RecvValue != 0);
+    if (!Status && Level == SOL_SOCKET && OptionName == SO_KEEPALIVE)
+        Context->KeepAlive = (*(DWORD *)OptionValue != 0);
 
     HeapFree(GetProcessHeap(), 0, Info);
 

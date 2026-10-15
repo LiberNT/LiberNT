@@ -104,6 +104,8 @@ WSPGetOverlappedResult(
     PSOCKET_INFORMATION     Socket;
     PIO_STATUS_BLOCK        IoStatusBlock;
     BOOL                    Ret;
+    DWORD                   Bytes;
+    DWORD                   Flags;
 
     TRACE("Called (%x)\n", Handle);
 
@@ -115,12 +117,16 @@ WSPGetOverlappedResult(
             *lpErrno = WSAENOTSOCK;
         return FALSE;
     }
-    if (!lpOverlapped || !lpdwBytes || !lpdwFlags)
+    if (!lpOverlapped)
     {
         if (lpErrno)
             *lpErrno = WSAEFAULT;
         return FALSE;
     }
+    if (!lpdwBytes)
+        lpdwBytes = &Bytes;
+    if (!lpdwFlags)
+        lpdwFlags = &Flags;
 
     IoStatusBlock = (PIO_STATUS_BLOCK)lpOverlapped;
     Ret = GetOverlappedResult((HANDLE)Handle, lpOverlapped, lpdwBytes, fWait);
@@ -189,7 +195,7 @@ MsafdRecvAPC(
     }
 
     if (Context->lpCompletionRoutine)
-        Context->lpCompletionRoutine(IoStatusBlock->Status, IoStatusBlock->Information, (LPWSAOVERLAPPED)IoStatusBlock, 0);
+        Context->lpCompletionRoutine(TranslateNtStatusError(IoStatusBlock->Status), IoStatusBlock->Information, (LPWSAOVERLAPPED)IoStatusBlock, 0);
 
     HeapFree(GlobalHeap, 0, ApcContext);
 }
@@ -210,7 +216,7 @@ MsafdSendAPC(
     SockReenableAsyncSelectEvent(Context->lpSocket, FD_WRITE);
 
     if (Context->lpCompletionRoutine)
-        Context->lpCompletionRoutine(IoStatusBlock->Status, IoStatusBlock->Information, (LPWSAOVERLAPPED)IoStatusBlock, 0);
+        Context->lpCompletionRoutine(TranslateNtStatusError(IoStatusBlock->Status), IoStatusBlock->Information, (LPWSAOVERLAPPED)IoStatusBlock, 0);
 
     /* Free IOCTL buffers */
     HeapFree(GlobalHeap, 0, ApcContext);
@@ -375,10 +381,7 @@ WSPRecv(SOCKET Handle,
     /* Wait for completion if not overlapped */
     if (!lpOverlapped && Status == STATUS_PENDING)
     {
-        /* It's up to the protocol to time out recv. We must wait
-         * until the protocol decides it's had enough. */
-        MsafdWaitForAlert(SockEvent);
-        Status = IOSB->Status;
+        Status = MsafdWaitForCompletion(Socket, SockEvent, IOSB, Socket->SharedData->RecvTimeout);
     }
 
     NtClose(SockEvent);
@@ -490,15 +493,11 @@ MsafdRecvFrom(SOCKET Handle,
                        lpErrno);
     }
 
-    /* Bind us First */
     if (Socket->SharedData->State == SocketOpen)
     {
-        Socket->HelperData->WSHGetWildcardSockaddr(Socket->HelperContext,
-            SocketAddress,
-            SocketAddressLength);
-        /* Bind it */
-        if (WSPBind(Handle, SocketAddress, *SocketAddressLength, lpErrno) == SOCKET_ERROR)
-            return SOCKET_ERROR;
+        if (lpErrno)
+            *lpErrno = WSAEINVAL;
+        return SOCKET_ERROR;
     }
     memset(&RecvInfo, 0, sizeof(RecvInfo));
 
@@ -623,9 +622,7 @@ MsafdRecvFrom(SOCKET Handle,
     /* Wait for completion if not overlapped */
     if (!lpOverlapped && Status == STATUS_PENDING)
     {
-        /* FIXME: Shouldn't wait infinitely for receive... */
-        MsafdWaitForAlert(SockEvent);
-        Status = IOSB->Status;
+        Status = MsafdWaitForCompletion(Socket, SockEvent, IOSB, Socket->SharedData->RecvTimeout);
     }
 
     /* Return the Flags */
@@ -905,9 +902,7 @@ WSPSend(SOCKET Handle,
     /* Wait for completion if not overlapped */
     if (!lpOverlapped && Status == STATUS_PENDING)
     {
-        /* FIXME: Shouldn't wait infinitely for send... */
-        MsafdWaitForAlert(SockEvent);
-        Status = IOSB->Status;
+        Status = MsafdWaitForCompletion(Socket, SockEvent, IOSB, Socket->SharedData->SendTimeout);
     }
 
     NtClose(SockEvent);
@@ -1114,9 +1109,7 @@ WSPSendTo(SOCKET Handle,
     /* Wait for completion if not overlapped */
     if (!lpOverlapped && Status == STATUS_PENDING)
     {
-        /* FIXME: Shouldn't wait infinitely for send... */
-        MsafdWaitForAlert(SockEvent);
-        Status = IOSB->Status;
+        Status = MsafdWaitForCompletion(Socket, SockEvent, IOSB, Socket->SharedData->SendTimeout);
     }
 
     NtClose(SockEvent);

@@ -51,6 +51,7 @@ typedef struct _SOCKET_CONTEXT {
     SOCKET_STATE SocketState;
     PQUEUED_REQUEST RequestQueue;
     BOOL DontRoute;
+    BOOL KeepAlive;
     ULONG MulticastInterface;
     ULONG MulticastTTL;
     ULONG UnicastInterface;
@@ -58,6 +59,8 @@ typedef struct _SOCKET_CONTEXT {
     ULONG UdpSendMsgSize;
     ULONG UdpRecvMaxCoalescedSize;
     ULONG RecvInfoOptions;
+    ULONG Ttl;
+    BOOLEAN DontFragment;
     BOOL V6Only;
 } SOCKET_CONTEXT, *PSOCKET_CONTEXT;
 

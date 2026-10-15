@@ -551,4 +551,11 @@ VOID
 MsafdWaitForAlert(
     _In_ HANDLE hObject);
 
+NTSTATUS
+MsafdWaitForCompletion(
+    _In_ PSOCKET_INFORMATION Socket,
+    _In_ HANDLE hObject,
+    _In_ PIO_STATUS_BLOCK IoStatusBlock,
+    _In_ DWORD Timeout);
+
 #endif /* __MSAFD_H */
