@@ -12,6 +12,7 @@
  */
 
 #include <msafd.h>
+#include <ntsecapi.h>
 
 #include <winuser.h>
 #include <wchar.h>
@@ -957,6 +958,8 @@ WSPBind(SOCKET Handle,
     SOCKADDR_INFO           SocketInfo;
     HANDLE                  SockEvent;
     ULONG connectSize;
+    ULONG RandomAttempts = 0;
+    BOOLEAN Randomized = FALSE;
 
     /* Get the Socket Structure associate to this Socket*/
     Socket = GetSocketStructure(Handle);
@@ -1033,23 +1036,59 @@ WSPBind(SOCKET Handle,
         BindData->ShareType = AFD_SHARE_UNIQUE;
     }
 
-    /* Send IOCTL */
-    Status = NtDeviceIoControlFile((HANDLE)Socket->Handle,
-                                   SockEvent,
-                                   NULL,
-                                   NULL,
-                                   &IOSB,
-                                   IOCTL_AFD_BIND,
-                                   BindData,
-                                   connectSize,
-                                   BindData,
-                                   connectSize);
-
-    /* Wait for return */
-    if (Status == STATUS_PENDING)
+    if (Socket->RandomizePort &&
+        (SocketAddress->sa_family == AF_INET || SocketAddress->sa_family == AF_INET6) &&
+        SocketAddressLength >= (int)(sizeof(SocketAddress->sa_family) + sizeof(USHORT)) &&
+        BindData->Address.Address[0].Address[0] == 0 &&
+        BindData->Address.Address[0].Address[1] == 0)
     {
-        MsafdWaitForAlert(SockEvent);
-        Status = IOSB.Status;
+        RandomAttempts = 16;
+    }
+
+    for (;;)
+    {
+        USHORT Random = 0;
+
+        if (RandomAttempts != 0 && !RtlGenRandom(&Random, sizeof(Random)))
+            RandomAttempts = 0;
+        if (RandomAttempts != 0)
+        {
+            USHORT Port = (USHORT)(49152 + Random % (65535 - 49152 + 1));
+
+            BindData->Address.Address[0].Address[0] = (UCHAR)(Port >> 8);
+            BindData->Address.Address[0].Address[1] = (UCHAR)(Port & 0xff);
+            RandomAttempts--;
+            Randomized = TRUE;
+        }
+        else if (Randomized)
+        {
+            BindData->Address.Address[0].Address[0] = 0;
+            BindData->Address.Address[0].Address[1] = 0;
+            Randomized = FALSE;
+        }
+
+        /* Send IOCTL */
+        Status = NtDeviceIoControlFile((HANDLE)Socket->Handle,
+                                       SockEvent,
+                                       NULL,
+                                       NULL,
+                                       &IOSB,
+                                       IOCTL_AFD_BIND,
+                                       BindData,
+                                       connectSize,
+                                       BindData,
+                                       connectSize);
+
+        /* Wait for return */
+        if (Status == STATUS_PENDING)
+        {
+            MsafdWaitForAlert(SockEvent);
+            Status = IOSB.Status;
+        }
+
+        if (!Randomized ||
+            (Status != STATUS_ADDRESS_ALREADY_EXISTS && Status != STATUS_SHARING_VIOLATION))
+            break;
     }
 
     NtClose( SockEvent );
@@ -3015,6 +3054,7 @@ WSPGetSockOpt(IN SOCKET Handle,
     PVOID Buffer;
     INT BufferSize;
     BOOL BoolBuffer;
+    BOOLEAN BooleanBuffer;
     DWORD DwordBuffer;
     INT Errno;
 
@@ -3116,6 +3156,12 @@ WSPGetSockOpt(IN SOCKET Handle,
                     BufferSize = sizeof(BOOL);
                     break;
 
+                case SO_RANDOMIZE_PORT:
+                    BooleanBuffer = (Socket->RandomizePort != FALSE);
+                    Buffer = &BooleanBuffer;
+                    BufferSize = sizeof(BOOLEAN);
+                    break;
+
                 case SO_ERROR:
                     Buffer = &Socket->SharedData->SocketLastError;
                     BufferSize = sizeof(INT);
@@ -3162,6 +3208,7 @@ WSPGetSockOpt(IN SOCKET Handle,
                 return SOCKET_ERROR;
             }
             RtlCopyMemory(OptionValue, Buffer, BufferSize);
+            *OptionLength = BufferSize;
 
             return 0;
 
@@ -3369,6 +3416,15 @@ WSPSetSockOpt(
                   return SOCKET_ERROR;
               }
               Socket->SharedData->ExclusiveAddressUse = (*optval != 0) ? 1 : 0;
+              return NO_ERROR;
+
+           case SO_RANDOMIZE_PORT:
+              if (optlen < sizeof(BOOLEAN))
+              {
+                  if (lpErrno) *lpErrno = WSAEFAULT;
+                  return SOCKET_ERROR;
+              }
+              Socket->RandomizePort = (*optval != 0);
               return NO_ERROR;
 
            case SO_LINGER:

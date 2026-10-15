@@ -127,6 +127,55 @@ TestBind(IN_ADDR Address)
     ok(Error == 0, "Unexpected error %d %d on closesocket for broadcast test\n", Error, WSAGetLastError());
 }
 
+static void TestRandomizePort(void)
+{
+    struct sockaddr_in Addr;
+    SOCKET Socket;
+    BOOL Value;
+    int Length;
+    int Error;
+
+    Socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    ok(Socket != INVALID_SOCKET, "socket failed with %d\n", WSAGetLastError());
+    if (Socket == INVALID_SOCKET)
+        return;
+
+    Value = TRUE;
+    Error = setsockopt(Socket, SOL_SOCKET, SO_RANDOMIZE_PORT, (const char *)&Value, sizeof(Value));
+    ok_dec(Error, 0);
+
+    Value = FALSE;
+    Length = sizeof(Value);
+    Error = getsockopt(Socket, SOL_SOCKET, SO_RANDOMIZE_PORT, (char *)&Value, &Length);
+    ok_dec(Error, 0);
+    ok_dec(Value, TRUE);
+    ok_dec(Length, sizeof(BOOLEAN));
+
+    Length = 0;
+    Error = getsockopt(Socket, SOL_SOCKET, SO_RANDOMIZE_PORT, (char *)&Value, &Length);
+    ok_dec(Error, SOCKET_ERROR);
+    ok_dec(WSAGetLastError(), WSAEFAULT);
+
+    Error = setsockopt(Socket, SOL_SOCKET, SO_RANDOMIZE_PORT, (const char *)&Value, sizeof(BOOLEAN));
+    ok_dec(Error, 0);
+    Error = setsockopt(Socket, SOL_SOCKET, SO_RANDOMIZE_PORT, (const char *)&Value, 0);
+    ok_dec(Error, SOCKET_ERROR);
+    ok_dec(WSAGetLastError(), WSAEFAULT);
+
+    ZeroMemory(&Addr, sizeof(Addr));
+    Addr.sin_family = AF_INET;
+    Addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    Error = bind(Socket, (const struct sockaddr *)&Addr, sizeof(Addr));
+    ok_dec(Error, 0);
+
+    Length = sizeof(Addr);
+    Error = getsockname(Socket, (struct sockaddr *)&Addr, &Length);
+    ok_dec(Error, 0);
+    ok(ntohs(Addr.sin_port) >= 49152, "Port %u is outside the dynamic range\n", ntohs(Addr.sin_port));
+
+    closesocket(Socket);
+}
+
 START_TEST(bind)
 {
     WSADATA WsaData;
@@ -219,6 +268,7 @@ START_TEST(bind)
     EndSeh(STATUS_SUCCESS);
 
     TestBind(Address);
+    TestRandomizePort();
     /* TODO: test IPv6 */
 
     Error = WSACleanup();
