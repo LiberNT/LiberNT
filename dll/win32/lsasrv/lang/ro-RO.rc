@@ -49,6 +49,21 @@ BEGIN
     IDS_ALIAS_RID_PREW2KCOMPACCESS "Acces compatibil pre-Windows 2000"
     IDS_ALIAS_RID_REMOTE_DESKTOP_USERS "Utilizatori de desktop la distanță"
     IDS_ALIAS_RID_NETWORK_CONFIGURATION_OPS "Operatori de configurare rețea"
+    IDS_APP_PACKAGE_AUTHORITY "APPLICATION PACKAGE AUTHORITY"
+    IDS_ALL_APP_PACKAGES "ALL APPLICATION PACKAGES"
+    IDS_ALL_RESTRICTED_APP_PACKAGES "ALL RESTRICTED APPLICATION PACKAGES"
+    IDS_CAPABILITY_INTERNET_CLIENT "Your Internet connection"
+    IDS_CAPABILITY_INTERNET_CLIENT_SERVER "Your Internet connection, including incoming connections from the Internet"
+    IDS_CAPABILITY_PRIVATE_NETWORK_CLIENT_SERVER "Your home or work networks"
+    IDS_CAPABILITY_PICTURES_LIBRARY "Your pictures library"
+    IDS_CAPABILITY_VIDEOS_LIBRARY "Your videos library"
+    IDS_CAPABILITY_MUSIC_LIBRARY "Your music library"
+    IDS_CAPABILITY_DOCUMENTS_LIBRARY "Your documents library"
+    IDS_CAPABILITY_ENTERPRISE_AUTHENTICATION "Your Windows credentials"
+    IDS_CAPABILITY_SHARED_USER_CERTIFICATES "Software and hardware certificates or a smart card"
+    IDS_CAPABILITY_REMOVABLE_STORAGE "Removable storage"
+    IDS_CAPABILITY_APPOINTMENTS "Your Appointments"
+    IDS_CAPABILITY_CONTACTS "Your Contacts"
 END
 
 STRINGTABLE

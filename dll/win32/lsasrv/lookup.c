@@ -75,6 +75,7 @@ typedef struct _WELL_KNOWN_SID
 
 
 LIST_ENTRY WellKnownSidListHead;
+static SID_IDENTIFIER_AUTHORITY AppPackageAuthority = {SECURITY_APP_PACKAGE_AUTHORITY};
 PSID LsapWorldSid = NULL;
 PSID LsapNetworkSid = NULL;
 PSID LsapBatchSid = NULL;
@@ -184,6 +185,7 @@ LsapInitSids(VOID)
     WCHAR szAccountName[80];
     WCHAR szDomainName[80];
     ULONG SubAuthorities[8];
+    ULONG Capability;
     HINSTANCE hInstance;
 
     InitializeListHead(&WellKnownSidListHead);
@@ -688,6 +690,46 @@ LsapInitSids(VOID)
                   SidTypeAlias,
                   NULL);
 
+    LsapLoadString(hInstance, IDS_APP_PACKAGE_AUTHORITY, szDomainName, ARRAYSIZE(szDomainName));
+
+    LsapLoadString(hInstance, IDS_ALL_APP_PACKAGES, szAccountName, ARRAYSIZE(szAccountName));
+    SubAuthorities[0] = SECURITY_APP_PACKAGE_BASE_RID;
+    SubAuthorities[1] = SECURITY_BUILTIN_PACKAGE_ANY_PACKAGE;
+    LsapCreateSid(&AppPackageAuthority,
+                  2,
+                  SubAuthorities,
+                  szAccountName,
+                  szDomainName,
+                  SidTypeWellKnownGroup,
+                  NULL);
+
+    LsapLoadString(hInstance, IDS_ALL_RESTRICTED_APP_PACKAGES, szAccountName, ARRAYSIZE(szAccountName));
+    SubAuthorities[1] = SECURITY_BUILTIN_PACKAGE_ANY_RESTRICTED_PACKAGE;
+    LsapCreateSid(&AppPackageAuthority,
+                  2,
+                  SubAuthorities,
+                  szAccountName,
+                  szDomainName,
+                  SidTypeWellKnownGroup,
+                  NULL);
+
+    for (Capability = SECURITY_CAPABILITY_INTERNET_CLIENT; Capability <= SECURITY_CAPABILITY_CONTACTS; Capability++)
+    {
+        LsapLoadString(hInstance,
+                       IDS_CAPABILITY_INTERNET_CLIENT + Capability - SECURITY_CAPABILITY_INTERNET_CLIENT,
+                       szAccountName,
+                       ARRAYSIZE(szAccountName));
+        SubAuthorities[0] = SECURITY_CAPABILITY_BASE_RID;
+        SubAuthorities[1] = Capability;
+        LsapCreateSid(&AppPackageAuthority,
+                      2,
+                      SubAuthorities,
+                      szAccountName,
+                      szDomainName,
+                      SidTypeWellKnownGroup,
+                      NULL);
+    }
+
     /* FIXME: Add more well known sids */
 
     return STATUS_SUCCESS;
@@ -756,7 +798,9 @@ LsapLookupFullyQualifiedWellKnownName(PUNICODE_STRING AccountName,
                                 WELL_KNOWN_SID,
                                 ListEntry);
         if (RtlEqualUnicodeString(AccountName, &Ptr->AccountName, TRUE) &&
-            RtlEqualUnicodeString(DomainName, &Ptr->DomainName, TRUE))
+            RtlEqualUnicodeString(DomainName, &Ptr->DomainName, TRUE) &&
+            RtlCompareMemory(RtlIdentifierAuthoritySid(Ptr->Sid), &AppPackageAuthority,
+                             sizeof(AppPackageAuthority)) != sizeof(AppPackageAuthority))
         {
             return Ptr;
         }
@@ -1158,7 +1202,6 @@ LsapLookupIsolatedNames(DWORD Count,
                         PLSAPR_TRANSLATED_SID_EX2 SidsBuffer,
                         PULONG Mapped)
 {
-    UNICODE_STRING EmptyDomainName = RTL_CONSTANT_STRING(L"");
     PWELL_KNOWN_SID ptr, ptr2;
     PSID DomainSid;
     ULONG DomainIndex;
@@ -1227,7 +1270,7 @@ LsapLookupIsolatedNames(DWORD Count,
                     }
 
                     Status = LsapAddDomainToDomainsList(DomainsBuffer,
-                                                        &EmptyDomainName,
+                                                        &ptr->DomainName,
                                                         DomainSid,
                                                         &DomainIndex);
 
@@ -2061,6 +2104,7 @@ LsapLookupWellKnownSids(PLSAPR_SID_ENUM_BUFFER SidEnumBuffer,
 {
     PWELL_KNOWN_SID ptr, ptr2;
     LPWSTR SidString = NULL;
+    PSID DomainSid;
     ULONG DomainIndex;
     ULONG i;
     NTSTATUS Status = STATUS_SUCCESS;
@@ -2112,6 +2156,25 @@ LsapLookupWellKnownSids(PLSAPR_SID_ENUM_BUFFER SidEnumBuffer,
                                                         &ptr2->AccountName,
                                                         ptr2->Sid,
                                                         &DomainIndex);
+                    if (!NT_SUCCESS(Status))
+                        goto done;
+
+                    NamesBuffer[i].DomainIndex = DomainIndex;
+                }
+                else
+                {
+                    DomainSid = CreateDomainSidFromAccountSid(ptr->Sid);
+                    if (DomainSid == NULL)
+                    {
+                        Status = STATUS_INSUFFICIENT_RESOURCES;
+                        goto done;
+                    }
+
+                    Status = LsapAddDomainToDomainsList(DomainsBuffer,
+                                                        &ptr->DomainName,
+                                                        DomainSid,
+                                                        &DomainIndex);
+                    MIDL_user_free(DomainSid);
                     if (!NT_SUCCESS(Status))
                         goto done;
 
