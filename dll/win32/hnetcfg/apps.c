@@ -114,6 +114,10 @@ static REFIID tid_id[] =
     &IID_INetFwPolicy,
     &IID_INetFwPolicy2,
     &IID_INetFwProfile,
+#ifdef __REACTOS__
+    &IID_INetFwRule,
+    &IID_INetFwRules,
+#endif
     &IID_IUPnPNAT,
     &IID_IStaticPortMappingCollection,
     &IID_IStaticPortMapping,

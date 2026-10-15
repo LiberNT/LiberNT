@@ -2287,6 +2287,157 @@ static HRESULT WINAPI upnpnat_get_DynamicPortMappingCollection(IUPnPNAT *iface, 
     return E_NOTIMPL;
 }
 
+#ifdef __REACTOS__
+typedef struct nat_event_manager
+{
+    INATEventManager INATEventManager_iface;
+    IUnknown *external_ip_callback;
+    IUnknown *entries_callback;
+    LONG refs;
+} nat_event_manager;
+
+static inline nat_event_manager *impl_from_INATEventManager( INATEventManager *iface )
+{
+    return CONTAINING_RECORD(iface, nat_event_manager, INATEventManager_iface);
+}
+
+static HRESULT WINAPI nat_event_manager_QueryInterface( INATEventManager *iface, REFIID riid, void **object )
+{
+    nat_event_manager *This = impl_from_INATEventManager( iface );
+
+    TRACE("%p %s %p\n", This, debugstr_guid( riid ), object );
+
+    if ( IsEqualGUID( riid, &IID_INATEventManager ) ||
+         IsEqualGUID( riid, &IID_IDispatch ) ||
+         IsEqualGUID( riid, &IID_IUnknown ) )
+    {
+        *object = iface;
+        INATEventManager_AddRef( iface );
+        return S_OK;
+    }
+
+    FIXME("interface %s not implemented\n", debugstr_guid(riid));
+    *object = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI nat_event_manager_AddRef( INATEventManager *iface )
+{
+    nat_event_manager *This = impl_from_INATEventManager( iface );
+    return InterlockedIncrement( &This->refs );
+}
+
+static ULONG WINAPI nat_event_manager_Release( INATEventManager *iface )
+{
+    nat_event_manager *This = impl_from_INATEventManager( iface );
+    LONG refs = InterlockedDecrement( &This->refs );
+
+    if (!refs)
+    {
+        TRACE("destroying %p\n", This);
+        if (This->external_ip_callback) IUnknown_Release( This->external_ip_callback );
+        if (This->entries_callback) IUnknown_Release( This->entries_callback );
+        free( This );
+    }
+    return refs;
+}
+
+static HRESULT WINAPI nat_event_manager_GetTypeInfoCount( INATEventManager *iface, UINT *pctinfo )
+{
+    nat_event_manager *This = impl_from_INATEventManager( iface );
+
+    FIXME("%p %p\n", This, pctinfo);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI nat_event_manager_GetTypeInfo( INATEventManager *iface, UINT iTInfo, LCID lcid,
+                                                     ITypeInfo **ppTInfo )
+{
+    nat_event_manager *This = impl_from_INATEventManager( iface );
+
+    FIXME("%p %u %lu %p\n", This, iTInfo, lcid, ppTInfo);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI nat_event_manager_GetIDsOfNames( INATEventManager *iface, REFIID riid, LPOLESTR *rgszNames,
+                                                       UINT cNames, LCID lcid, DISPID *rgDispId )
+{
+    nat_event_manager *This = impl_from_INATEventManager( iface );
+
+    FIXME("%p %s %p %u %lu %p\n", This, debugstr_guid(riid), rgszNames, cNames, lcid, rgDispId);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI nat_event_manager_Invoke( INATEventManager *iface, DISPID dispIdMember, REFIID riid,
+                                                LCID lcid, WORD wFlags, DISPPARAMS *pDispParams,
+                                                VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr )
+{
+    nat_event_manager *This = impl_from_INATEventManager( iface );
+
+    FIXME("%p %ld %s %ld %d %p %p %p %p\n", This, dispIdMember, debugstr_guid(riid),
+          lcid, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI nat_event_manager_put_ExternalIPAddressCallback( INATEventManager *iface, IUnknown *unk )
+{
+    nat_event_manager *This = impl_from_INATEventManager( iface );
+
+    FIXME("%p %p: callbacks are never invoked\n", This, unk);
+
+    if (unk) IUnknown_AddRef( unk );
+    if (This->external_ip_callback) IUnknown_Release( This->external_ip_callback );
+    This->external_ip_callback = unk;
+    return S_OK;
+}
+
+static HRESULT WINAPI nat_event_manager_put_NumberOfEntriesCallback( INATEventManager *iface, IUnknown *unk )
+{
+    nat_event_manager *This = impl_from_INATEventManager( iface );
+
+    FIXME("%p %p: callbacks are never invoked\n", This, unk);
+
+    if (unk) IUnknown_AddRef( unk );
+    if (This->entries_callback) IUnknown_Release( This->entries_callback );
+    This->entries_callback = unk;
+    return S_OK;
+}
+
+static const struct INATEventManagerVtbl nat_event_manager_vtbl =
+{
+    nat_event_manager_QueryInterface,
+    nat_event_manager_AddRef,
+    nat_event_manager_Release,
+    nat_event_manager_GetTypeInfoCount,
+    nat_event_manager_GetTypeInfo,
+    nat_event_manager_GetIDsOfNames,
+    nat_event_manager_Invoke,
+    nat_event_manager_put_ExternalIPAddressCallback,
+    nat_event_manager_put_NumberOfEntriesCallback
+};
+
+static HRESULT WINAPI upnpnat_get_NATEventManager(IUPnPNAT *iface, INATEventManager **manager)
+{
+    upnpnat *This = impl_from_IUPnPNAT( iface );
+    nat_event_manager *ret;
+
+    TRACE("%p, %p\n", This, manager);
+
+    if (!manager)
+        return E_POINTER;
+
+    if (!(ret = calloc( 1, sizeof(*ret) )))
+    {
+        *manager = NULL;
+        return E_OUTOFMEMORY;
+    }
+
+    ret->INATEventManager_iface.lpVtbl = &nat_event_manager_vtbl;
+    ret->refs = 1;
+    *manager = &ret->INATEventManager_iface;
+    return S_OK;
+}
+#else
 static HRESULT WINAPI upnpnat_get_NATEventManager(IUPnPNAT *iface, INATEventManager **manager)
 {
     upnpnat *This = impl_from_IUPnPNAT( iface );
@@ -2295,6 +2446,7 @@ static HRESULT WINAPI upnpnat_get_NATEventManager(IUPnPNAT *iface, INATEventMana
         *manager = NULL;
     return E_NOTIMPL;
 }
+#endif
 
 static const IUPnPNATVtbl upnpnat_vtbl =
 {

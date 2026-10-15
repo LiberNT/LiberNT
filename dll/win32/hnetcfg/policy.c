@@ -1322,12 +1322,176 @@ static HRESULT WINAPI fwpolicy2_get_Rules(INetFwPolicy2 *iface, INetFwRules **ru
     return S_OK;
 }
 
+#ifdef __REACTOS__
+typedef struct fw_service_restriction
+{
+    INetFwServiceRestriction INetFwServiceRestriction_iface;
+    INetFwRules *rules;
+    LONG refs;
+} fw_service_restriction;
+
+static inline fw_service_restriction *impl_from_INetFwServiceRestriction( INetFwServiceRestriction *iface )
+{
+    return CONTAINING_RECORD(iface, fw_service_restriction, INetFwServiceRestriction_iface);
+}
+
+static HRESULT WINAPI fw_service_restriction_QueryInterface( INetFwServiceRestriction *iface, REFIID riid, void **object )
+{
+    fw_service_restriction *This = impl_from_INetFwServiceRestriction( iface );
+
+    TRACE("%p %s %p\n", This, debugstr_guid( riid ), object );
+
+    if ( IsEqualGUID( riid, &IID_INetFwServiceRestriction ) ||
+         IsEqualGUID( riid, &IID_IDispatch ) ||
+         IsEqualGUID( riid, &IID_IUnknown ) )
+    {
+        *object = iface;
+        INetFwServiceRestriction_AddRef( iface );
+        return S_OK;
+    }
+
+    FIXME("interface %s not implemented\n", debugstr_guid(riid));
+    *object = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI fw_service_restriction_AddRef( INetFwServiceRestriction *iface )
+{
+    fw_service_restriction *This = impl_from_INetFwServiceRestriction( iface );
+    return InterlockedIncrement( &This->refs );
+}
+
+static ULONG WINAPI fw_service_restriction_Release( INetFwServiceRestriction *iface )
+{
+    fw_service_restriction *This = impl_from_INetFwServiceRestriction( iface );
+    LONG refs = InterlockedDecrement( &This->refs );
+
+    if (!refs)
+    {
+        TRACE("destroying %p\n", This);
+        INetFwRules_Release( This->rules );
+        free( This );
+    }
+    return refs;
+}
+
+static HRESULT WINAPI fw_service_restriction_GetTypeInfoCount( INetFwServiceRestriction *iface, UINT *pctinfo )
+{
+    fw_service_restriction *This = impl_from_INetFwServiceRestriction( iface );
+
+    FIXME("%p %p\n", This, pctinfo);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI fw_service_restriction_GetTypeInfo( INetFwServiceRestriction *iface, UINT iTInfo, LCID lcid,
+                                                          ITypeInfo **ppTInfo )
+{
+    fw_service_restriction *This = impl_from_INetFwServiceRestriction( iface );
+
+    FIXME("%p %u %lu %p\n", This, iTInfo, lcid, ppTInfo);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI fw_service_restriction_GetIDsOfNames( INetFwServiceRestriction *iface, REFIID riid,
+                                                            LPOLESTR *rgszNames, UINT cNames, LCID lcid,
+                                                            DISPID *rgDispId )
+{
+    fw_service_restriction *This = impl_from_INetFwServiceRestriction( iface );
+
+    FIXME("%p %s %p %u %lu %p\n", This, debugstr_guid(riid), rgszNames, cNames, lcid, rgDispId);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI fw_service_restriction_Invoke( INetFwServiceRestriction *iface, DISPID dispIdMember,
+                                                     REFIID riid, LCID lcid, WORD wFlags,
+                                                     DISPPARAMS *pDispParams, VARIANT *pVarResult,
+                                                     EXCEPINFO *pExcepInfo, UINT *puArgErr )
+{
+    fw_service_restriction *This = impl_from_INetFwServiceRestriction( iface );
+
+    FIXME("%p %ld %s %ld %d %p %p %p %p\n", This, dispIdMember, debugstr_guid(riid),
+          lcid, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI fw_service_restriction_RestrictService( INetFwServiceRestriction *iface, BSTR serviceName,
+                                                              BSTR appName, VARIANT_BOOL restrictService,
+                                                              VARIANT_BOOL serviceSidRestricted )
+{
+    fw_service_restriction *This = impl_from_INetFwServiceRestriction( iface );
+
+    FIXME("%p %s %s %d %d\n", This, debugstr_w(serviceName), debugstr_w(appName), restrictService,
+          serviceSidRestricted);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI fw_service_restriction_ServiceRestricted( INetFwServiceRestriction *iface, BSTR serviceName,
+                                                                BSTR appName, VARIANT_BOOL *serviceRestricted )
+{
+    fw_service_restriction *This = impl_from_INetFwServiceRestriction( iface );
+
+    FIXME("%p %s %s %p\n", This, debugstr_w(serviceName), debugstr_w(appName), serviceRestricted);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI fw_service_restriction_get_Rules( INetFwServiceRestriction *iface, INetFwRules **rules )
+{
+    fw_service_restriction *This = impl_from_INetFwServiceRestriction( iface );
+
+    TRACE("%p %p\n", This, rules);
+
+    if (!rules)
+        return E_POINTER;
+
+    *rules = This->rules;
+    INetFwRules_AddRef( This->rules );
+    return S_OK;
+}
+
+static const struct INetFwServiceRestrictionVtbl fw_service_restriction_vtbl =
+{
+    fw_service_restriction_QueryInterface,
+    fw_service_restriction_AddRef,
+    fw_service_restriction_Release,
+    fw_service_restriction_GetTypeInfoCount,
+    fw_service_restriction_GetTypeInfo,
+    fw_service_restriction_GetIDsOfNames,
+    fw_service_restriction_Invoke,
+    fw_service_restriction_RestrictService,
+    fw_service_restriction_ServiceRestricted,
+    fw_service_restriction_get_Rules
+};
+#endif
+
 static HRESULT WINAPI fwpolicy2_get_ServiceRestriction(INetFwPolicy2 *iface, INetFwServiceRestriction **ServiceRestriction)
 {
     fw_policy2 *This = impl_from_INetFwPolicy2( iface );
+#ifdef __REACTOS__
+    fw_service_restriction *restriction;
+
+    TRACE("%p %p\n", This, ServiceRestriction);
+
+    if (!ServiceRestriction)
+        return E_POINTER;
+
+    if (!(restriction = malloc( sizeof(*restriction) )))
+        return E_OUTOFMEMORY;
+
+    if (FAILED(create_INetFwRules( &restriction->rules )))
+    {
+        free( restriction );
+        return E_OUTOFMEMORY;
+    }
+
+    restriction->INetFwServiceRestriction_iface.lpVtbl = &fw_service_restriction_vtbl;
+    restriction->refs = 1;
+    *ServiceRestriction = &restriction->INetFwServiceRestriction_iface;
+    return S_OK;
+#else
 
     FIXME("%p %p\n", This, ServiceRestriction);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI fwpolicy2_EnableRuleGroup(INetFwPolicy2 *iface, LONG bitmask, BSTR group, VARIANT_BOOL enable)
