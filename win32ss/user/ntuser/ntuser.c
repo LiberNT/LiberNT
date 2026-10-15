@@ -13,6 +13,7 @@ BOOL FASTCALL RegisterControlAtoms(VOID);
 /* GLOBALS ********************************************************************/
 
 PPROCESSINFO gppiInputProvider = NULL;
+static BOOLEAN gbGreInitialized = FALSE;
 BOOL g_AlwaysDisplayVersion = FALSE;
 USER_CRIT gUserCrit;
 USER_DOMAIN_LOCK gUserDomainLocks[DLT_MAX];
@@ -335,8 +336,26 @@ NtUserInitialize(
 
     /* Save the EPROCESS of CSRSS */
     InitCsrProcess(Session);
-    if (!gpDisplaySession)
-        WritePointerRelease((PVOID volatile *)&gpDisplaySession, Session);
+
+    /* Initialize various GDI stuff (DirectX, fonts, language ID etc.) */
+    if (!gbGreInitialized)
+    {
+        if (!InitializeGreCSRSS())
+        {
+            UserLeave();
+            return STATUS_UNSUCCESSFUL;
+        }
+        gbGreInitialized = TRUE;
+    }
+
+    if (Session->SessionId == 0 || gpDisplaySession)
+    {
+        Status = UserCreateWinstaDirectory();
+        UserLeave();
+        return Status;
+    }
+
+    WritePointerRelease((PVOID volatile *)&gpDisplaySession, Session);
 
     /* Initialize Power Request List */
     Status = IntInitWin32PowerManagement(hPowerRequestEvent);
@@ -347,10 +366,6 @@ NtUserInitialize(
     }
 
 // Initialize Media Change (use hMediaRequestEvent).
-
-    /* Initialize various GDI stuff (DirectX, fonts, language ID etc.) */
-    if (!InitializeGreCSRSS())
-        return STATUS_UNSUCCESSFUL;
 
     /* Initialize USER */
     Status = UserInitialize();
