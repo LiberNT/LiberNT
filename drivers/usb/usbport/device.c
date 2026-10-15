@@ -2272,6 +2272,22 @@ USBPORT_InitializeDevice(IN PUSBPORT_DEVICE_HANDLE DeviceHandle,
     {
 ExitError:
         DPRINT1("USBPORT_InitializeDevice: ExitError. Status - %x\n", Status);
+
+        USBPORT_RemoveDeviceHandle(FdoDevice, DeviceHandle);
+        USBPORT_NotifyMiniportRemoveDevice(FdoDevice, DeviceHandle);
+        USBPORT_ClosePipe(DeviceHandle, FdoDevice, &DeviceHandle->PipeHandle);
+
+        if (DeviceAddress)
+            USBPORT_FreeUsbAddress(FdoDevice, DeviceAddress);
+
+        KeReleaseSemaphore(&FdoExtension->DeviceSemaphore,
+                           LOW_REALTIME_PRIORITY,
+                           1,
+                           FALSE);
+
+        ExFreePoolWithTag(DeviceHandle, USB_PORT_TAG);
+
+        return NT_SUCCESS(Status) ? STATUS_DEVICE_DATA_ERROR : Status;
     }
 
     KeReleaseSemaphore(&FdoExtension->DeviceSemaphore,

@@ -6390,16 +6390,9 @@ USBH_ResetDevice(IN PUSBHUB_FDO_EXTENSION HubExtension,
         goto ErrorExit;
     }
 
-    Status = USBH_SyncResetPort(HubExtension, Port);
-
     if (IsWait)
     {
         USBH_Wait(50);
-    }
-
-    if (!NT_SUCCESS(Status))
-    {
-        goto ErrorExit;
     }
 
     Status = USBD_InitializeDeviceEx(HubExtension,
