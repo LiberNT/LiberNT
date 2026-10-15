@@ -192,7 +192,7 @@ state_reboot(void *ipp)
 	   flags. */
 	make_request(ip, ip->client->active);
 	ip->client->destination = iaddr_broadcast;
-	time(&ip->client->first_sending);
+	ip->client->first_sending = GetMonotonicTime();
 	ip->client->interval = ip->client->config->initial_interval;
 
 	/* Zap the medium list... */
@@ -213,13 +213,20 @@ state_init(void *ipp)
 
 	ASSERT_STATE(state, S_INIT);
 
+	while (ip->client->offered_leases) {
+		struct client_lease *next = ip->client->offered_leases->next;
+
+		free_client_lease(ip->client->offered_leases);
+		ip->client->offered_leases = next;
+	}
+
 	/* Make a DHCPDISCOVER packet, and set appropriate per-interface
 	   flags. */
 	make_discover(ip, ip->client->active);
 	ip->client->xid = ip->client->packet.xid;
 	ip->client->destination = iaddr_broadcast;
 	ip->client->state = S_SELECTING;
-	time(&ip->client->first_sending);
+	ip->client->first_sending = GetMonotonicTime();
 	ip->client->interval = ip->client->config->initial_interval;
 
 	/* Add an immediate timeout to cause the first DHCPDISCOVER packet
@@ -262,7 +269,7 @@ state_selecting(void *ipp)
 
 	ASSERT_STATE(state, S_SELECTING);
 
-        time(&cur_time);
+        cur_time = GetMonotonicTime();
 
 	/* Cancel state_selecting and send_discover timeouts, since either
 	   one could have got us here. */
@@ -341,7 +348,7 @@ dhcpack(struct packet *packet)
 	struct client_lease *lease;
         time_t cur_time;
 
-        time(&cur_time);
+        cur_time = GetMonotonicTime();
 
 	/* If we're not receptive to an offer right now, or if the offer
 	   has an unrecognizable transaction id, then just drop it. */
@@ -592,11 +599,17 @@ void setup_adapter( PDHCP_ADAPTER Adapter, struct client_lease *new_lease ) {
             RegSetValueExA(hkey, "DhcpSubnetMask", 0, REG_SZ, (LPBYTE)AddressBuffer, strlen(AddressBuffer)+1);
             RegSetValueExA(hkey, "DhcpServer", 0, REG_SZ, (LPBYTE)piaddr(new_lease->serveraddress), strlen(piaddr(new_lease->serveraddress))+1);
 
+            time_t WallOffset = time(NULL) - GetMonotonicTime();
+            DWORD Obtained = (DWORD)(new_lease->obtained + WallOffset);
+            DWORD Expiry = (DWORD)(new_lease->expiry == TIME_MAX ? TIME_MAX : new_lease->expiry + WallOffset);
+            DWORD Renewal = (DWORD)(new_lease->renewal == TIME_MAX ? TIME_MAX : new_lease->renewal + WallOffset);
+            DWORD Rebind = (DWORD)(new_lease->rebind == TIME_MAX ? TIME_MAX : new_lease->rebind + WallOffset);
+
             RegSetValueExA(hkey, "Lease", 0, REG_DWORD, (LPBYTE)&new_lease->lease, sizeof(DWORD));
-            RegSetValueExA(hkey, "LeaseObtainedTime", 0, REG_DWORD, (LPBYTE)&new_lease->obtained, sizeof(DWORD));
-            RegSetValueExA(hkey, "LeaseTerminatesTime", 0, REG_DWORD, (LPBYTE)&new_lease->expiry, sizeof(DWORD));
-            RegSetValueExA(hkey, "T1", 0, REG_DWORD, (LPBYTE)&new_lease->renewal, sizeof(DWORD));
-            RegSetValueExA(hkey, "T2", 0, REG_DWORD, (LPBYTE)&new_lease->rebind, sizeof(DWORD));
+            RegSetValueExA(hkey, "LeaseObtainedTime", 0, REG_DWORD, (LPBYTE)&Obtained, sizeof(DWORD));
+            RegSetValueExA(hkey, "LeaseTerminatesTime", 0, REG_DWORD, (LPBYTE)&Expiry, sizeof(DWORD));
+            RegSetValueExA(hkey, "T1", 0, REG_DWORD, (LPBYTE)&Renewal, sizeof(DWORD));
+            RegSetValueExA(hkey, "T2", 0, REG_DWORD, (LPBYTE)&Rebind, sizeof(DWORD));
             DWORD dwAddressType = 0;
             RegSetValueExA(hkey, "AddressType", 0, REG_DWORD, (LPBYTE)&dwAddressType, sizeof(DWORD));
         }
@@ -703,7 +716,7 @@ bind_lease(struct interface_info *ip)
     struct client_lease *new_lease = ip->client->new;
     time_t cur_time;
 
-    time(&cur_time);
+    cur_time = GetMonotonicTime();
 
     /* Remember the medium. */
     ip->client->new->medium = ip->client->medium;
@@ -784,7 +797,7 @@ state_bound(void *ipp)
 	} else
 		ip->client->destination = iaddr_broadcast;
 
-	time(&ip->client->first_sending);
+	ip->client->first_sending = GetMonotonicTime();
 	ip->client->interval = ip->client->config->initial_interval;
 	ip->client->state = S_RENEWING;
 
@@ -860,7 +873,7 @@ dhcpoffer(struct packet *packet)
 	    "DHCPOFFER" : "BOOTREPLY";
         time_t cur_time;
 
-        time(&cur_time);
+        cur_time = GetMonotonicTime();
 
 	/* If we're not receptive to an offer right now, or if the offer
 	   has an unrecognizable transaction id, then just drop it. */
@@ -1111,7 +1124,7 @@ send_discover(void *ipp)
 
         DH_DbgPrint(MID_TRACE,("Doing discover on interface %p\n",ip));
 
-        time(&cur_time);
+        cur_time = GetMonotonicTime();
 
 	/* Figure out how long it's been since we started transmitting. */
 	interval = cur_time - ip->client->first_sending;
@@ -1232,7 +1245,7 @@ state_panic(void *ipp)
 
     note("No DHCPOFFERS received.");
 
-    time(&cur_time);
+    cur_time = GetMonotonicTime();
 
     strcat(szKeyNameBuffer, Adapter->DhclientInfo.name);
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, szKeyNameBuffer, 0, KEY_WRITE, &hKey) != ERROR_SUCCESS)
@@ -1407,7 +1420,7 @@ send_request(void *ipp)
 	int interval;
         time_t cur_time;
 
-        time(&cur_time); 
+        cur_time = GetMonotonicTime();
 
 	/* Figure out how long it's been since we started transmitting. */
 	interval = cur_time - ip->client->first_sending;

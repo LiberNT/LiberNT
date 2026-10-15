@@ -1,4 +1,5 @@
 #include <rosdhcp.h>
+#include <ws2ipdef.h>
 
 SOCKET ServerSocket;
 
@@ -12,10 +13,16 @@ ssize_t send_packet( struct interface_info *ip,
                      struct in_addr addr,
                      struct sockaddr_in *broadcast,
                      struct hardware *hardware ) {
+    PDHCP_ADAPTER Adapter = CONTAINING_RECORD(ip, DHCP_ADAPTER, DhclientInfo);
+    DWORD InterfaceIndex = htonl(Adapter->IfMib.dwIndex);
     int result;
 
     if (size > INT_MAX)
         return WSAEMSGSIZE;
+
+    if (setsockopt(ip->wfdesc, IPPROTO_IP, IP_UNICAST_IF,
+                   (const char *)&InterfaceIndex, sizeof(InterfaceIndex)) == SOCKET_ERROR)
+        return SOCKET_ERROR;
 
     result =
         sendto( ip->wfdesc, (char *)p, (int)size, 0,

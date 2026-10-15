@@ -114,6 +114,7 @@ extern VOID ApiInit(VOID);
 extern VOID ApiFree(VOID);
 extern VOID ApiLock(VOID);
 extern VOID ApiUnlock(VOID);
+time_t GetMonotonicTime(VOID);
 extern int inet_aton(const char *s, struct in_addr *addr);
 int warn( char *format, ... );
 

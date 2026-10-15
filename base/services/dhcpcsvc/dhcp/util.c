@@ -103,6 +103,10 @@ int addr_eq( struct iaddr a, struct iaddr b ) {
 
 void *dmalloc( int size, char *name ) { return malloc( size ); }
 
+time_t GetMonotonicTime(VOID) {
+    return (time_t)(GetTickCount64() / 1000);
+}
+
 int read_client_conf(struct interface_info *ifi) {
        /* What a strange dance */
        struct client_config *config;

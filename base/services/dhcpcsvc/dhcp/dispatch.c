@@ -86,7 +86,7 @@ dispatch(HANDLE hStopEvent)
          * Call any expired timeouts, and then if there's still
          * a timeout registered, time out the select call then.
          */
-        time(&cur_time);
+        cur_time = GetMonotonicTime();
 
         if (timeouts)
         {
@@ -210,6 +210,8 @@ got_one(struct protocol *l)
 
     if ((result = receive_packet(ip, u.packbuf, sizeof(u), &from,
                                  &hfrom)) == -1) {
+        if (WSAGetLastError() == WSAEWOULDBLOCK)
+            return;
         warning("receive_packet failed on %s: %d", ip->name,
                 WSAGetLastError());
         ip->errors++;
@@ -404,7 +406,9 @@ remove_protocol(struct protocol *proto)
             else
                 protocols = p->next;
             free(p);
+            break;
         }
+        prev = p;
     }
 }
 
