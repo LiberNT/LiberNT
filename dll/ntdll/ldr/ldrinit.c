@@ -3590,7 +3590,8 @@ LdrpInit(PCONTEXT Context,
              * ntdll thread gateway instead; it enters the x64 image through
              * the emulator and never relies on a cross-image kernel32 RVA.
              */
-            if (InitializeChpeProcess)
+            if (InitializeChpeProcess ||
+                Context->Pc == (ULONG64)(ULONG_PTR)LdrpImageEntry->EntryPoint)
             {
                 Context->X0 = (ULONG64)(ULONG_PTR)LdrpImageEntry->EntryPoint;
                 Context->X1 = (ULONG64)(ULONG_PTR)Peb;
