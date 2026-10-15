@@ -1286,6 +1286,44 @@ struct vkd3d_resource_list
 };
 
 /* ID3D12CommandList */
+enum d3d12_bundle_command_type
+{
+    VKD3D_BUNDLE_DRAW_INSTANCED,
+    VKD3D_BUNDLE_DRAW_INDEXED_INSTANCED,
+    VKD3D_BUNDLE_DISPATCH,
+    VKD3D_BUNDLE_IA_SET_PRIMITIVE_TOPOLOGY,
+    VKD3D_BUNDLE_OM_SET_BLEND_FACTOR,
+    VKD3D_BUNDLE_OM_SET_STENCIL_REF,
+    VKD3D_BUNDLE_SET_PIPELINE_STATE,
+    VKD3D_BUNDLE_SET_COMPUTE_ROOT_SIGNATURE,
+    VKD3D_BUNDLE_SET_GRAPHICS_ROOT_SIGNATURE,
+    VKD3D_BUNDLE_SET_COMPUTE_ROOT_DESCRIPTOR_TABLE,
+    VKD3D_BUNDLE_SET_GRAPHICS_ROOT_DESCRIPTOR_TABLE,
+    VKD3D_BUNDLE_SET_COMPUTE_ROOT_32BIT_CONSTANT,
+    VKD3D_BUNDLE_SET_GRAPHICS_ROOT_32BIT_CONSTANT,
+    VKD3D_BUNDLE_SET_COMPUTE_ROOT_32BIT_CONSTANTS,
+    VKD3D_BUNDLE_SET_GRAPHICS_ROOT_32BIT_CONSTANTS,
+    VKD3D_BUNDLE_SET_COMPUTE_ROOT_CBV,
+    VKD3D_BUNDLE_SET_GRAPHICS_ROOT_CBV,
+    VKD3D_BUNDLE_SET_COMPUTE_ROOT_SRV,
+    VKD3D_BUNDLE_SET_GRAPHICS_ROOT_SRV,
+    VKD3D_BUNDLE_SET_COMPUTE_ROOT_UAV,
+    VKD3D_BUNDLE_SET_GRAPHICS_ROOT_UAV,
+    VKD3D_BUNDLE_IA_SET_INDEX_BUFFER,
+    VKD3D_BUNDLE_IA_SET_VERTEX_BUFFERS,
+    VKD3D_BUNDLE_SET_DESCRIPTOR_HEAPS,
+    VKD3D_BUNDLE_EXECUTE_INDIRECT,
+};
+
+struct d3d12_bundle_command
+{
+    enum d3d12_bundle_command_type type;
+    UINT args[5];
+    UINT64 values[2];
+    void *objects[3];
+    void *data;
+};
+
 struct d3d12_command_list
 {
     ID3D12GraphicsCommandList6 ID3D12GraphicsCommandList6_iface;
@@ -1347,6 +1385,11 @@ struct d3d12_command_list
         DXGI_FORMAT format;
     } pass_resolves[D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT + 2];
     unsigned int pass_resolve_count;
+
+    struct d3d12_bundle_command *bundle_commands;
+    size_t bundle_command_count;
+    size_t bundle_commands_size;
+    bool bundle_rejected;
 
     struct vkd3d_private_store private_store;
 };
