@@ -1528,6 +1528,25 @@ static int validate_descriptor_table_v_1_1(const struct vkd3d_shader_root_descri
     return VKD3D_OK;
 }
 
+static int validate_static_sampler(unsigned int filter, unsigned int max_anisotropy,
+        struct vkd3d_shader_message_context *message_context)
+{
+    if ((filter & ~0x1d5u) || ((filter & 0x40) && (filter & 0x15) != 0x15))
+    {
+        vkd3d_shader_error(message_context, NULL, VKD3D_SHADER_ERROR_RS_INVALID_STATIC_SAMPLER,
+                "Invalid static sampler filter %#x.", filter);
+        return VKD3D_ERROR_INVALID_ARGUMENT;
+    }
+    if (max_anisotropy > 16)
+    {
+        vkd3d_shader_error(message_context, NULL, VKD3D_SHADER_ERROR_RS_INVALID_STATIC_SAMPLER,
+                "Invalid static sampler maximum anisotropy %u.", max_anisotropy);
+        return VKD3D_ERROR_INVALID_ARGUMENT;
+    }
+
+    return VKD3D_OK;
+}
+
 static int validate_static_sampler_v_1_2(const struct vkd3d_shader_static_sampler_desc1 *sampler,
         struct vkd3d_shader_message_context *message_context)
 {
@@ -1603,7 +1622,24 @@ static int validate_root_signature_desc(const struct vkd3d_shader_versioned_root
     {
         for (i = 0; i < desc->u.v_1_2.static_sampler_count; ++i)
         {
-            if ((ret = validate_static_sampler_v_1_2(&desc->u.v_1_2.static_samplers[i], message_context)) < 0)
+            const struct vkd3d_shader_static_sampler_desc1 *sampler = &desc->u.v_1_2.static_samplers[i];
+
+            if ((ret = validate_static_sampler(sampler->filter, sampler->max_anisotropy, message_context)) < 0)
+                return ret;
+            if ((ret = validate_static_sampler_v_1_2(sampler, message_context)) < 0)
+                return ret;
+        }
+    }
+    else
+    {
+        const struct vkd3d_shader_static_sampler_desc *samplers = desc->version == VKD3D_SHADER_ROOT_SIGNATURE_VERSION_1_0
+                ? desc->u.v_1_0.static_samplers : desc->u.v_1_1.static_samplers;
+        unsigned int count = desc->version == VKD3D_SHADER_ROOT_SIGNATURE_VERSION_1_0
+                ? desc->u.v_1_0.static_sampler_count : desc->u.v_1_1.static_sampler_count;
+
+        for (i = 0; i < count; ++i)
+        {
+            if ((ret = validate_static_sampler(samplers[i].filter, samplers[i].max_anisotropy, message_context)) < 0)
                 return ret;
         }
     }
