@@ -725,7 +725,8 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     blend_desc.IndependentBlendEnable = input->BlendState.IndependentBlendEnable;
     for (UINT i = 0; i < 8; ++i)
     {
-        const D3D12_RENDER_TARGET_BLEND_DESC &source = input->BlendState.RenderTarget[i];
+        const D3D12_RENDER_TARGET_BLEND_DESC &source =
+                input->BlendState.RenderTarget[input->BlendState.IndependentBlendEnable ? i : 0];
         D3D12DDI_RENDER_TARGET_BLEND_DESC &target = blend_desc.RenderTarget[i];
         target.BlendEnable = source.BlendEnable;
         target.LogicOpEnable = source.LogicOpEnable;
