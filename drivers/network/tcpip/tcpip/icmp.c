@@ -365,15 +365,10 @@ ReceiveDatagram(
 
     Context->nReplies++;
 
-    if (Context->RemainingSize < sizeof(ICMP_ECHO_REPLY))
+    // if the timer was inserted, that means DPC has not been queued yet
+    if (KeCancelTimer(&Context->TimeoutTimer))
     {
-        TI_DbgPrint(DEBUG_ICMP, ("The space is over: %u\n", Context->RemainingSize));
-
-        // if the timer was inserted, that means DPC has not been queued yet
-        if (KeCancelTimer(&Context->TimeoutTimer))
-        {
-            Finish = TRUE;
-        }
+        Finish = TRUE;
     }
     KeReleaseSpinLock(&Context->ReplyLock, OldIrql);
     if (Finish)
