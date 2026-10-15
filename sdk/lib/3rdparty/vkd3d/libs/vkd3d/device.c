@@ -4161,7 +4161,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device9 
                 return E_INVALIDARG;
             }
 
-            data->RenderPassesValid = FALSE;
+            data->RenderPassesValid = TRUE;
 
             TRACE("Render passes valid %#x.\n", data->RenderPassesValid);
             return S_OK;

@@ -1338,6 +1338,16 @@ struct d3d12_command_list
     struct d3d12_descriptor_heap *descriptor_heaps[64];
     unsigned int descriptor_heap_count;
 
+    struct
+    {
+        ID3D12Resource *dst;
+        UINT dst_sub_resource_idx;
+        ID3D12Resource *src;
+        UINT src_sub_resource_idx;
+        DXGI_FORMAT format;
+    } pass_resolves[D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT + 2];
+    unsigned int pass_resolve_count;
+
     struct vkd3d_private_store private_store;
 };
 

@@ -2695,6 +2695,7 @@ static void d3d12_command_list_reset_state(struct d3d12_command_list *list,
 
     memset(list->strides, 0, sizeof(list->strides));
     list->primitive_topology = D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
+    list->pass_resolve_count = 0;
 
     list->index_buffer_format = DXGI_FORMAT_UNKNOWN;
 
@@ -6359,17 +6360,127 @@ static void STDMETHODCALLTYPE d3d12_command_list_SetProtectedResourceSession(ID3
     FIXME("iface %p, protected_session %p stub!\n", iface, protected_session);
 }
 
+static bool d3d12_render_pass_binds_raster(D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE type, bool read_only)
+{
+    switch (type)
+    {
+        case D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_DISCARD:
+        case D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE:
+        case D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR:
+        case D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE_LOCAL_RENDER:
+            return true;
+        case D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE_LOCAL_SRV:
+            return read_only;
+        default:
+            return false;
+    }
+}
+
+static void d3d12_command_list_add_pass_resolve(struct d3d12_command_list *list,
+        const D3D12_RENDER_PASS_ENDING_ACCESS *access)
+{
+    const D3D12_RENDER_PASS_ENDING_ACCESS_RESOLVE_PARAMETERS *resolve = &access->u.Resolve;
+    const D3D12_RENDER_PASS_ENDING_ACCESS_RESOLVE_SUBRESOURCE_PARAMETERS *parameters;
+    unsigned int i;
+
+    if (access->Type != D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_RESOLVE || !resolve->pSrcResource
+            || !resolve->pDstResource || !resolve->pSubresourceParameters)
+        return;
+    for (i = 0; i < resolve->SubresourceCount; ++i)
+    {
+        parameters = &resolve->pSubresourceParameters[i];
+        if (resolve->ResolveMode != D3D12_RESOLVE_MODE_AVERAGE || parameters->DstX || parameters->DstY
+                || parameters->SrcRect.left || parameters->SrcRect.top || parameters->SrcRect.right
+                || parameters->SrcRect.bottom)
+        {
+            FIXME("Unhandled resolve mode %#x or region.\n", resolve->ResolveMode);
+            continue;
+        }
+        if (list->pass_resolve_count == ARRAY_SIZE(list->pass_resolves))
+            return;
+        list->pass_resolves[list->pass_resolve_count].dst = resolve->pDstResource;
+        list->pass_resolves[list->pass_resolve_count].dst_sub_resource_idx = parameters->DstSubresource;
+        list->pass_resolves[list->pass_resolve_count].src = resolve->pSrcResource;
+        list->pass_resolves[list->pass_resolve_count].src_sub_resource_idx = parameters->SrcSubresource;
+        list->pass_resolves[list->pass_resolve_count].format = resolve->Format;
+        ++list->pass_resolve_count;
+    }
+}
+
 static void STDMETHODCALLTYPE d3d12_command_list_BeginRenderPass(ID3D12GraphicsCommandList6 *iface,
         UINT count, const D3D12_RENDER_PASS_RENDER_TARGET_DESC *render_targets,
         const D3D12_RENDER_PASS_DEPTH_STENCIL_DESC *depth_stencil, D3D12_RENDER_PASS_FLAGS flags)
 {
-    FIXME("iface %p, count %u, render_targets %p, depth_stencil %p, flags %#x stub!\n", iface,
+    struct d3d12_command_list *list = impl_from_ID3D12GraphicsCommandList6(iface);
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvs[D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT];
+    unsigned int i, bound = 0;
+    UINT clear = 0;
+    bool bind_depth;
+
+    TRACE("iface %p, count %u, render_targets %p, depth_stencil %p, flags %#x.\n", iface,
             count, render_targets, depth_stencil, flags);
+
+    if (count > D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT || (count && !render_targets))
+        return;
+
+    list->pass_resolve_count = 0;
+    for (i = 0; i < count; ++i)
+    {
+        if (d3d12_render_pass_binds_raster(render_targets[i].BeginningAccess.Type, false))
+            rtvs[bound++] = render_targets[i].cpuDescriptor;
+    }
+    bind_depth = depth_stencil && (d3d12_render_pass_binds_raster(depth_stencil->DepthBeginningAccess.Type,
+            !!(flags & D3D12_RENDER_PASS_FLAG_BIND_READ_ONLY_DEPTH))
+            || d3d12_render_pass_binds_raster(depth_stencil->StencilBeginningAccess.Type,
+            !!(flags & D3D12_RENDER_PASS_FLAG_BIND_READ_ONLY_STENCIL)));
+    d3d12_command_list_OMSetRenderTargets(iface, bound, bound ? rtvs : NULL, FALSE,
+            bind_depth ? &depth_stencil->cpuDescriptor : NULL);
+
+    if (!(flags & D3D12_RENDER_PASS_FLAG_RESUMING_PASS))
+    {
+        for (i = 0; i < count; ++i)
+        {
+            if (render_targets[i].BeginningAccess.Type == D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR)
+                d3d12_command_list_ClearRenderTargetView(iface, render_targets[i].cpuDescriptor,
+                        render_targets[i].BeginningAccess.u.Clear.ClearValue.u.Color, 0, NULL);
+        }
+        if (bind_depth)
+        {
+            if (depth_stencil->DepthBeginningAccess.Type == D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR)
+                clear |= D3D12_CLEAR_FLAG_DEPTH;
+            if (depth_stencil->StencilBeginningAccess.Type == D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR)
+                clear |= D3D12_CLEAR_FLAG_STENCIL;
+            if (clear)
+                d3d12_command_list_ClearDepthStencilView(iface, depth_stencil->cpuDescriptor, clear,
+                        depth_stencil->DepthBeginningAccess.u.Clear.ClearValue.u.DepthStencil.Depth,
+                        depth_stencil->StencilBeginningAccess.u.Clear.ClearValue.u.DepthStencil.Stencil, 0, NULL);
+        }
+    }
+
+    if (!(flags & D3D12_RENDER_PASS_FLAG_SUSPENDING_PASS))
+    {
+        for (i = 0; i < count; ++i)
+            d3d12_command_list_add_pass_resolve(list, &render_targets[i].EndingAccess);
+        if (depth_stencil)
+        {
+            d3d12_command_list_add_pass_resolve(list, &depth_stencil->DepthEndingAccess);
+            d3d12_command_list_add_pass_resolve(list, &depth_stencil->StencilEndingAccess);
+        }
+    }
 }
 
 static void STDMETHODCALLTYPE d3d12_command_list_EndRenderPass(ID3D12GraphicsCommandList6 *iface)
 {
-    FIXME("iface %p stub!\n", iface);
+    struct d3d12_command_list *list = impl_from_ID3D12GraphicsCommandList6(iface);
+    unsigned int i;
+
+    TRACE("iface %p.\n", iface);
+
+    for (i = 0; i < list->pass_resolve_count; ++i)
+        d3d12_command_list_ResolveSubresource(iface, list->pass_resolves[i].dst,
+                list->pass_resolves[i].dst_sub_resource_idx, list->pass_resolves[i].src,
+                list->pass_resolves[i].src_sub_resource_idx, list->pass_resolves[i].format);
+    list->pass_resolve_count = 0;
 }
 
 static void STDMETHODCALLTYPE d3d12_command_list_InitializeMetaCommand(ID3D12GraphicsCommandList6 *iface,
