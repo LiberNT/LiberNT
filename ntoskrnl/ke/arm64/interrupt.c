@@ -129,9 +129,13 @@ typedef struct DECLSPEC_CACHEALIGN _KI_ARM64_TIMER_STATE
     ULONGLONG LastCounter;
     ULONGLONG CounterRemainder;
     ULONG ElapsedIncrement;
+    ULONGLONG PeriodicDeadline;
 } KI_ARM64_TIMER_STATE, *PKI_ARM64_TIMER_STATE;
 
 static KI_ARM64_TIMER_STATE KiArm64TimerState[MAXIMUM_PROCESSORS];
+static volatile ULONGLONG KiArm64ClockDeadline;
+static volatile LONG KiArm64ClockDeadlineReady;
+static KDPC KiArm64ClockDeadlineDpc;
 
 /* Include nested and secondary dispatches in interrupt-object rundown. */
 typedef struct DECLSPEC_CACHEALIGN _KI_ARM64_DISPATCH_DEPTH
@@ -434,17 +438,6 @@ static __inline ULONGLONG KiArm64ReadCounter(VOID)
     return Value;
 }
 
-static __inline ULONGLONG KiArm64ReadTimerCompare(VOID)
-{
-    ULONGLONG Value;
-
-    if (KiArm64UseVirtualTimer)
-        __asm__ __volatile__("mrs %0, cntv_cval_el0" : "=r"(Value));
-    else
-        __asm__ __volatile__("mrs %0, cntp_cval_el0" : "=r"(Value));
-    return Value;
-}
-
 static __inline VOID KiArm64WriteTimerCompare(ULONGLONG Value)
 {
     if (KiArm64UseVirtualTimer)
@@ -463,14 +456,102 @@ static __inline VOID KiArm64WriteCntpCtl(ULONG v)
     __asm__ __volatile__("msr cntp_ctl_el0, %0; isb" :: "r"((ULONGLONG)v) : "memory");
 }
 
-static __inline VOID KiArm64AcknowledgeTimer(ULONGLONG Counter, ULONGLONG Period)
+static
+ULONGLONG
+KiArm64ClockDeadlineCompare(
+    _In_ BOOLEAN FireIfDue)
 {
-    ULONGLONG Deadline = KiArm64ReadTimerCompare();
+    ULONGLONG Deadline = KiArm64ClockDeadline;
+    ULONGLONG Now, Counter;
+
+    if (Deadline == 0)
+        return MAXULONGLONG;
+    Now = KiQueryInterruptTimePrecise(NULL, FALSE);
+    Counter = KiArm64ReadCounter();
+    if (Deadline <= Now)
+        return FireIfDue ? Counter + 1 : MAXULONGLONG;
+    if (Deadline - Now > KeMaximumIncrement)
+        return MAXULONGLONG;
+    return Counter + ((Deadline - Now) * KiArm64TimerFrequency + 9999999) / 10000000 + 1;
+}
+
+static __inline VOID KiArm64AcknowledgeTimer(ULONG Cpu, PKI_ARM64_TIMER_STATE TimerState, ULONGLONG Counter)
+{
+    ULONGLONG Compare, HighResolution, Now, Next;
 
     /* Rearm once beyond the current counter, without replaying missed IRQs. */
-    if (Deadline <= Counter)
-        Deadline += ((Counter - Deadline) / Period + 1) * Period;
-    KiArm64WriteTimerCompare(Deadline);
+    if (TimerState->PeriodicDeadline <= Counter)
+        TimerState->PeriodicDeadline += ((Counter - TimerState->PeriodicDeadline) / TimerState->PeriodTicks + 1) * TimerState->PeriodTicks;
+    if (Cpu == 0)
+    {
+        Now = KiQueryInterruptTimePrecise(NULL, FALSE);
+        Next = (Now / TimerState->Increment + 1) * TimerState->Increment;
+        TimerState->PeriodicDeadline = KiArm64ReadCounter() +
+            ((Next - Now) * KiArm64TimerFrequency + 9999999) / 10000000;
+    }
+    Compare = TimerState->PeriodicDeadline;
+    if (Cpu == 0)
+    {
+        HighResolution = KiArm64ClockDeadlineCompare(FALSE);
+        if (HighResolution < Compare)
+            Compare = HighResolution;
+    }
+    KiArm64WriteTimerCompare(Compare);
+}
+
+static
+VOID
+KiArm64ReprogramClock(VOID)
+{
+    PKI_ARM64_TIMER_STATE TimerState = &KiArm64TimerState[0];
+    ULONGLONG Compare, HighResolution;
+    BOOLEAN Enabled;
+
+    ASSERT(KeGetCurrentProcessorNumber() == 0);
+    Enabled = KeDisableInterrupts();
+    Compare = TimerState->PeriodicDeadline;
+    HighResolution = KiArm64ClockDeadlineCompare(TRUE);
+    if (HighResolution < Compare)
+        Compare = HighResolution;
+    KiArm64WriteTimerCompare(Compare);
+    KeRestoreInterrupts(Enabled);
+}
+
+static
+VOID
+NTAPI
+KiArm64ClockDeadlineDpcRoutine(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(DeferredContext);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    KiArm64ReprogramClock();
+}
+
+BOOLEAN
+NTAPI
+KiSetClockDeadline(
+    _In_ ULONGLONG InterruptTime)
+{
+    KIRQL OldIrql;
+
+    KiArm64ClockDeadline = InterruptTime;
+    if (!KiArm64ClockDeadlineReady)
+        return TRUE;
+
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+    if (KeGetCurrentProcessorNumber() == 0)
+        KiArm64ReprogramClock();
+    else
+        KeInsertQueueDpc(&KiArm64ClockDeadlineDpc, NULL, NULL);
+    KeLowerIrql(OldIrql);
+    return TRUE;
 }
 
 static
@@ -503,7 +584,7 @@ KiArm64AcknowledgeClockInterrupt(
     TimerState->ElapsedIncrement = (ULONG)(Scaled / KiArm64TimerFrequency);
     TimerState->CounterRemainder = Scaled % KiArm64TimerFrequency;
     TimerState->LastCounter += Elapsed;
-    KiArm64AcknowledgeTimer(Counter, TimerState->PeriodTicks);
+    KiArm64AcknowledgeTimer(Cpu, TimerState, Counter);
 }
 
 static __inline VOID KiArm64WriteCntvCtl(ULONG v)
@@ -634,7 +715,7 @@ KiArm64TimerIsr(
      * profile interval has elapsed, so coarser intervals are honored instead of
      * sampling on every single tick.
      */
-    if (HalArm64ProfileSample(Increment))
+    if (HalArm64ProfileSample(TimerState->ElapsedIncrement))
     {
         KeProfileInterrupt(TrapFrame);
     }
@@ -706,7 +787,8 @@ KiArm64StartLocalTimer(VOID)
     TimerState->LastCounter = Counter;
     TimerState->CounterRemainder = 0;
     TimerState->ElapsedIncrement = 0;
-    KiArm64WriteTimerCompare(Counter + TimerState->PeriodTicks);
+    TimerState->PeriodicDeadline = Counter + TimerState->PeriodTicks;
+    KiArm64WriteTimerCompare(TimerState->PeriodicDeadline);
     __asm__ __volatile__("isb" ::: "memory");
 
     if (KiArm64UseVirtualTimer)
@@ -733,6 +815,15 @@ KiArm64StartLocalTimer(VOID)
     }
     KiTimerCtlReadback = ctl;
     KiTimerStartedFlag = 1;
+
+    if (Cpu == 0 && !KiArm64ClockDeadlineReady)
+    {
+        KeInitializeDpc(&KiArm64ClockDeadlineDpc, KiArm64ClockDeadlineDpcRoutine, NULL);
+        KeSetTargetProcessorDpc(&KiArm64ClockDeadlineDpc, 0);
+        KeSetImportanceDpc(&KiArm64ClockDeadlineDpc, HighImportance);
+        InterlockedExchange(&KiArm64ClockDeadlineReady, 1);
+        KiArm64ReprogramClock();
+    }
 }
 
 VOID

@@ -65,3 +65,11 @@ KeSynchronizeExecution(
     return FALSE;
 }
 
+BOOLEAN
+NTAPI
+KiSetClockDeadline(
+    _In_ ULONGLONG InterruptTime)
+{
+    UNREFERENCED_PARAMETER(InterruptTime);
+    return FALSE;
+}

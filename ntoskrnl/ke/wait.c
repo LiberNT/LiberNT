@@ -753,7 +753,7 @@ WaitStart:
     /* Arm the timeout timer, if one was supplied */
     if (Timeout)
     {
-        KxSetTimerForThreadWait(Timer, *Timeout, &Hand);
+        KxSetTimerForThreadWait(Timer, *Timeout, WaitMode, &Hand);
         DueTime.QuadPart = Timer->DueTime.QuadPart;
 
         /* Legacy targets link here. Modern targets publish under the timer

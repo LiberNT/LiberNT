@@ -16,6 +16,7 @@
 /* GLOBALS ********************************************************************/
 
 LONG KiTickOffset;
+volatile ULONG KiTickPhase;
 static ULONGLONG KiLastClockInterruptTime;
 ULONG KeTimeAdjustment;
 BOOLEAN KiTimeAdjustmentEnabled = FALSE;
@@ -158,6 +159,7 @@ KeUpdateSystemTime(IN PKTRAP_FRAME TrapFrame,
 
         /* Reset the tick offset */
         KiTickOffset = KeMaximumIncrement - (Increment - (ULONG)OldTickOffset) % KeMaximumIncrement;
+        KiTickPhase = (ULONG)((ULONGLONG)InterruptTime.QuadPart % KeMaximumIncrement);
 
         /* Update processor/thread runtime */
         KiUpdateRunTime(TrapFrame, Irql, Ticks);

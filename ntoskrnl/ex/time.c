@@ -31,6 +31,11 @@ ERESOURCE ExpTimeRefreshLock;
 ULONG ExpKernelResolutionCount = 0;
 ULONG ExpKernelRequestedResolution;
 LIST_ENTRY ExpTimerResolutionListHead = { &ExpTimerResolutionListHead, &ExpTimerResolutionListHead };
+static WORK_QUEUE_ITEM ExpHighResolutionWorkItem;
+static volatile LONG ExpHighResolutionWanted;
+static volatile LONG ExpHighResolutionWorkQueued;
+static BOOLEAN ExpHighResolutionActive;
+static ULONG ExpProcessTimerResolution;
 
 /* FUNCTIONS ****************************************************************/
 
@@ -201,16 +206,20 @@ ExpUpdateTimerResolution(VOID)
     PLIST_ENTRY ListEntry;
     PEPROCESS Process;
     ULONG DesiredTime = KeMaximumIncrement;
+    ULONG ProcessTime = KeMaximumIncrement;
 
     if (ExpKernelResolutionCount) DesiredTime = min(DesiredTime, ExpKernelRequestedResolution);
+    if (ExpHighResolutionActive) DesiredTime = KeMinimumIncrement;
 
     for (ListEntry = ExpTimerResolutionListHead.Flink;
          ListEntry != &ExpTimerResolutionListHead;
          ListEntry = ListEntry->Flink)
     {
         Process = CONTAINING_RECORD(ListEntry, EPROCESS, TimerResolutionLink);
-        DesiredTime = min(DesiredTime, Process->RequestedTimerResolution);
+        ProcessTime = min(ProcessTime, Process->RequestedTimerResolution);
     }
+    ExpProcessTimerResolution = ProcessTime;
+    DesiredTime = min(DesiredTime, ProcessTime);
 
     if (DesiredTime != KeTimeIncrement)
     {
@@ -218,6 +227,38 @@ ExpUpdateTimerResolution(VOID)
     }
 
     return KeTimeIncrement;
+}
+
+static
+VOID
+NTAPI
+ExpHighResolutionWorker(IN PVOID Context)
+{
+    BOOLEAN Wanted;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    ExAcquireTimeRefreshLock(TRUE);
+    InterlockedExchange(&ExpHighResolutionWorkQueued, 0);
+    Wanted = InterlockedCompareExchange(&ExpHighResolutionWanted, 0, 0) != 0;
+    if (Wanted != ExpHighResolutionActive)
+    {
+        ExpHighResolutionActive = Wanted;
+        ExpUpdateTimerResolution();
+    }
+    ExReleaseTimeRefreshLock();
+}
+
+VOID
+NTAPI
+ExpSetHighResolutionClock(IN BOOLEAN Active)
+{
+    InterlockedExchange(&ExpHighResolutionWanted, Active ? 1 : 0);
+    if (!InterlockedExchange(&ExpHighResolutionWorkQueued, 1))
+    {
+        ExInitializeWorkItem(&ExpHighResolutionWorkItem, ExpHighResolutionWorker, NULL);
+        ExQueueWorkItem(&ExpHighResolutionWorkItem, CriticalWorkQueue);
+    }
 }
 
 /*++
@@ -677,7 +718,7 @@ NtQueryTimerResolution(OUT PULONG MinimumResolution,
              */
             *MinimumResolution = KeMaximumIncrement;
             *MaximumResolution = KeMinimumIncrement;
-            *ActualResolution  = KeTimeIncrement;
+            *ActualResolution  = ExpProcessTimerResolution ? ExpProcessTimerResolution : KeMaximumIncrement;
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -691,7 +732,7 @@ NtQueryTimerResolution(OUT PULONG MinimumResolution,
         /* Set the parameters to the actual values */
         *MinimumResolution = KeMaximumIncrement;
         *MaximumResolution = KeMinimumIncrement;
-        *ActualResolution  = KeTimeIncrement;
+        *ActualResolution  = ExpProcessTimerResolution ? ExpProcessTimerResolution : KeMaximumIncrement;
     }
 
     /* Return success */

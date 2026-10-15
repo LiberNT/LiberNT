@@ -444,3 +444,12 @@ KiRiscvInterruptDispatch(
     }
     KiRiscvTrapStop(TrapFrame);
 }
+
+BOOLEAN
+NTAPI
+KiSetClockDeadline(
+    _In_ ULONGLONG InterruptTime)
+{
+    UNREFERENCED_PARAMETER(InterruptTime);
+    return FALSE;
+}

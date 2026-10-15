@@ -280,3 +280,12 @@ KeDispatchSecondaryInterrupt(
     UNREFERENCED_PARAMETER(Reserved);
     return KiDispatchPassiveInterrupt(Vector, NULL);
 }
+
+BOOLEAN
+NTAPI
+KiSetClockDeadline(
+    _In_ ULONGLONG InterruptTime)
+{
+    UNREFERENCED_PARAMETER(InterruptTime);
+    return FALSE;
+}

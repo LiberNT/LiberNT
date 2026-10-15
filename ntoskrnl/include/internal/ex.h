@@ -1634,6 +1634,12 @@ ExReleaseTimeRefreshLock(
 
 VOID
 NTAPI
+ExpSetHighResolutionClock(
+    IN BOOLEAN Active
+);
+
+VOID
+NTAPI
 ExUpdateSystemTimeFromCmos(
     IN BOOLEAN UpdateInterruptTime,
     IN ULONG MaxSepInSeconds

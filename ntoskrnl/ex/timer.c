@@ -759,6 +759,15 @@ NtSetTimer(IN HANDLE TimerHandle,
             DerefsToDo--;
          }
 
+        if ((PreviousMode == UserMode) && (TimerDueTime.QuadPart < 0) &&
+            !PsGetCurrentProcess()->SetTimerResolution)
+        {
+            ULONGLONG Now = KiQueryInterruptTimePrecise(NULL, FALSE);
+            ULONGLONG Due = KiRoundToDefaultTimerResolution(Now - TimerDueTime.QuadPart);
+
+            TimerDueTime.QuadPart = -(LONGLONG)(Due - Now);
+        }
+
         /* Enable and Set the Timer */
         KeSetTimerEx(&Timer->KeTimer,
                      TimerDueTime,
@@ -806,7 +815,50 @@ typedef struct _EX_TIMER
     PEXT_CALLBACK Callback;
     PVOID CallbackContext;
     ULONG Attributes;
+    LIST_ENTRY HighResolutionLink;
+    ULONGLONG ScheduledTime;
+    LONGLONG Period;
+    BOOLEAN Armed;
 } EX_TIMER;
+
+static LIST_ENTRY ExpHighResolutionTimerList = { &ExpHighResolutionTimerList, &ExpHighResolutionTimerList };
+static KSPIN_LOCK ExpHighResolutionTimerLock;
+
+static
+VOID
+ExpUpdateHighResolutionDeadline(VOID)
+{
+    PLIST_ENTRY ListEntry;
+    PEX_TIMER Timer;
+    ULONGLONG Deadline = 0;
+
+    for (ListEntry = ExpHighResolutionTimerList.Flink;
+         ListEntry != &ExpHighResolutionTimerList;
+         ListEntry = ListEntry->Flink)
+    {
+        Timer = CONTAINING_RECORD(ListEntry, EX_TIMER, HighResolutionLink);
+        if (Timer->KeTimer.Header.Inserted &&
+            (!Deadline || (ULONGLONG)Timer->KeTimer.DueTime.QuadPart < Deadline))
+        {
+            Deadline = Timer->KeTimer.DueTime.QuadPart;
+        }
+    }
+
+    if (!KiSetClockDeadline(Deadline))
+        ExpSetHighResolutionClock(!IsListEmpty(&ExpHighResolutionTimerList));
+}
+
+static
+VOID
+ExpDisarmHighResolutionTimer(IN PEX_TIMER Timer)
+{
+    if (Timer->Armed)
+    {
+        RemoveEntryList(&Timer->HighResolutionLink);
+        Timer->Armed = FALSE;
+    }
+    ExpUpdateHighResolutionDeadline();
+}
 
 _Function_class_(KDEFERRED_ROUTINE)
 static
@@ -818,10 +870,37 @@ ExpExtTimerDpcRoutine(IN PKDPC Dpc,
                       IN PVOID SystemArgument2)
 {
     PEX_TIMER Timer = DeferredContext;
+    LARGE_INTEGER DueTime;
+    ULONGLONG Now;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
+    {
+        KeAcquireSpinLockAtDpcLevel(&ExpHighResolutionTimerLock);
+        if (Timer->Armed && !Timer->KeTimer.Header.Inserted)
+        {
+            if (Timer->Period)
+            {
+                Now = KiQueryInterruptTimePrecise(NULL, FALSE);
+                Timer->ScheduledTime += Timer->Period;
+                if (Timer->ScheduledTime <= Now)
+                {
+                    Timer->ScheduledTime += ((Now - Timer->ScheduledTime) / Timer->Period + 1) * Timer->Period;
+                }
+                DueTime.QuadPart = -(LONGLONG)(Timer->ScheduledTime - Now);
+                KeSetTimerEx(&Timer->KeTimer, DueTime, 0, &Timer->TimerDpc);
+                ExpUpdateHighResolutionDeadline();
+            }
+            else
+            {
+                ExpDisarmHighResolutionTimer(Timer);
+            }
+        }
+        KeReleaseSpinLockFromDpcLevel(&ExpHighResolutionTimerLock);
+    }
 
     /* Invoke the client callback at DISPATCH_LEVEL */
     if (Timer->Callback) Timer->Callback(Timer, Timer->CallbackContext);
@@ -855,13 +934,17 @@ ExAllocateTimer(IN PEXT_CALLBACK Callback OPTIONAL,
     Timer->Callback = Callback;
     Timer->CallbackContext = CallbackContext;
     Timer->Attributes = Attributes;
+    InitializeListHead(&Timer->HighResolutionLink);
+    Timer->ScheduledTime = 0;
+    Timer->Period = 0;
+    Timer->Armed = FALSE;
 
     TimerType = (Attributes & EX_TIMER_NOTIFICATION) ? NotificationTimer
                                                      : SynchronizationTimer;
     KeInitializeTimerEx(&Timer->KeTimer, TimerType);
 
     /* A DPC is only needed when a callback was supplied */
-    if (Callback)
+    if (Callback || (Attributes & EX_TIMER_HIGH_RESOLUTION))
     {
         KeInitializeDpc(&Timer->TimerDpc, ExpExtTimerDpcRoutine, Timer);
     }
@@ -880,11 +963,29 @@ ExSetTimer(IN PEX_TIMER Timer,
            IN PEXT_SET_PARAMETERS Parameters OPTIONAL)
 {
     LARGE_INTEGER TimerDueTime;
+    BOOLEAN Inserted;
+    KIRQL OldIrql;
 
     /* NoWakeTolerance-style coalescing is ignored on a single-node system */
     UNREFERENCED_PARAMETER(Parameters);
 
     TimerDueTime.QuadPart = DueTime;
+
+    if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
+    {
+        KeAcquireSpinLock(&ExpHighResolutionTimerLock, &OldIrql);
+        Inserted = KeSetTimerEx(&Timer->KeTimer, TimerDueTime, 0, &Timer->TimerDpc);
+        Timer->ScheduledTime = Timer->KeTimer.DueTime.QuadPart;
+        Timer->Period = Period;
+        if (!Timer->Armed)
+        {
+            InsertTailList(&ExpHighResolutionTimerList, &Timer->HighResolutionLink);
+            Timer->Armed = TRUE;
+        }
+        ExpUpdateHighResolutionDeadline();
+        KeReleaseSpinLock(&ExpHighResolutionTimerLock, OldIrql);
+        return Inserted;
+    }
 
     return KeSetTimerEx(&Timer->KeTimer,
                         TimerDueTime,
@@ -901,8 +1002,19 @@ ExCancelTimer(IN OUT PEX_TIMER Timer,
               IN PEXT_CANCEL_PARAMETERS Parameters OPTIONAL)
 {
     BOOLEAN Cancelled;
+    KIRQL OldIrql;
 
     UNREFERENCED_PARAMETER(Parameters);
+
+    if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
+    {
+        KeAcquireSpinLock(&ExpHighResolutionTimerLock, &OldIrql);
+        Cancelled = KeCancelTimer(&Timer->KeTimer);
+        KeRemoveQueueDpc(&Timer->TimerDpc);
+        ExpDisarmHighResolutionTimer(Timer);
+        KeReleaseSpinLock(&ExpHighResolutionTimerLock, OldIrql);
+        return Cancelled;
+    }
 
     /* Pull it out of the timer queue and drop any DPC still queued for it */
     Cancelled = KeCancelTimer(&Timer->KeTimer);
@@ -922,15 +1034,23 @@ ExDeleteTimer(IN PEX_TIMER Timer,
               IN PEXT_DELETE_PARAMETERS Parameters OPTIONAL)
 {
     BOOLEAN Cancelled;
+    KIRQL OldIrql;
 
     UNREFERENCED_PARAMETER(Wait);
+
+    if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
+    {
+        KeAcquireSpinLock(&ExpHighResolutionTimerLock, &OldIrql);
+        ExpDisarmHighResolutionTimer(Timer);
+        KeReleaseSpinLock(&ExpHighResolutionTimerLock, OldIrql);
+    }
 
     /* Always cancel before freeing so a pending expiry can't fire afterwards */
     Cancelled = KeCancelTimer(&Timer->KeTimer);
 
     /* Drain any in-flight DPC so the callback can't touch freed memory; a
      * callback-less timer never had a DPC, so it skips the system-wide flush */
-    if (Timer->Callback)
+    if (Timer->Callback || (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION))
     {
         KeRemoveQueueDpc(&Timer->TimerDpc);
         KeFlushQueuedDpcs();

@@ -127,6 +127,12 @@ ULONGLONG
 NTAPI
 KiQueryInterruptTimePrecise(PULONG64 QpcTimeStamp, BOOLEAN Unbiased);
 
+BOOLEAN
+NTAPI
+KiSetClockDeadline(ULONGLONG InterruptTime);
+
+extern volatile ULONG KiTickPhase;
+
 extern ULONGLONG KeBootTimeBias;
 extern BOOLEAN ExCmosClockIsSane;
 extern USHORT KeProcessorArchitecture;

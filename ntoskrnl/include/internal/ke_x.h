@@ -1300,9 +1300,25 @@ KxRemoveTreeTimer(IN PKTIMER Timer)
 }
 
 FORCEINLINE
+ULONGLONG
+KiRoundToDefaultTimerResolution(IN ULONGLONG DueTime)
+{
+    ULONGLONG Phase = KiTickPhase;
+    ULONGLONG Tick;
+
+    if (DueTime <= Phase)
+        return DueTime;
+
+    Tick = (DueTime - Phase + KeMaximumIncrement - 1) / KeMaximumIncrement;
+    Tick = Tick * KeMaximumIncrement + Phase - KeTimeIncrement / 16;
+    return max(DueTime, Tick);
+}
+
+FORCEINLINE
 VOID
 KxSetTimerForThreadWait(IN PKTIMER Timer,
                         IN LARGE_INTEGER Interval,
+                        IN KPROCESSOR_MODE WaitMode,
                         OUT PULONG Hand)
 {
     ULONGLONG DueTime;
@@ -1336,6 +1352,11 @@ KxSetTimerForThreadWait(IN PKTIMER Timer,
     /* Calculate the due time */
     InterruptTime.QuadPart = KiQueryInterruptTimePrecise(NULL, FALSE);
     DueTime = InterruptTime.QuadPart - Interval.QuadPart;
+    if ((WaitMode == UserMode) &&
+        !((PEPROCESS)KeGetCurrentThread()->ApcState.Process)->SetTimerResolution)
+    {
+        DueTime = KiRoundToDefaultTimerResolution(DueTime);
+    }
     Timer->DueTime.QuadPart = DueTime;
 
     /* Calculate the timer handle */
@@ -1516,7 +1537,7 @@ KxCommitThreadWait(IN PKTHREAD Thread,
     Thread->WaitBlockList = TimerBlock;                                     \
                                                                             \
     /* Setup the timer */                                                   \
-    KxSetTimerForThreadWait(Timer, *Interval, &Hand);                       \
+    KxSetTimerForThreadWait(Timer, *Interval, WaitMode, &Hand);             \
                                                                             \
     /* Save the due time for the caller */                                  \
     DueTime.QuadPart = Timer->DueTime.QuadPart;                             \
@@ -1575,7 +1596,7 @@ KxCommitThreadWait(IN PKTHREAD Thread,
         KxChainTimerToArray(WaitBlockArray);                                \
                                                                             \
         /* Setup the timer */                                               \
-        KxSetTimerForThreadWait(Timer, *Timeout, &Hand);                    \
+        KxSetTimerForThreadWait(Timer, *Timeout, WaitMode, &Hand);          \
                                                                             \
         /* Save the due time for the caller */                              \
         DueTime.QuadPart = Timer->DueTime.QuadPart;                         \
@@ -1611,7 +1632,7 @@ KxCommitThreadWait(IN PKTHREAD Thread,
     if (Timeout)                                                            \
     {                                                                       \
         /* Setup the timer */                                               \
-        KxSetTimerForThreadWait(Timer, *Timeout, &Hand);                    \
+        KxSetTimerForThreadWait(Timer, *Timeout, WaitMode, &Hand);          \
                                                                             \
         /* Save the due time for the caller */                              \
         DueTime.QuadPart = Timer->DueTime.QuadPart;                         \
@@ -1656,7 +1677,7 @@ KxCommitThreadWait(IN PKTHREAD Thread,
     if (Timeout)                                                            \
     {                                                                       \
         /* Setup the timer */                                               \
-        KxSetTimerForThreadWait(Timer, *Timeout, &Hand);                    \
+        KxSetTimerForThreadWait(Timer, *Timeout, WaitMode, &Hand);          \
                                                                             \
         /* Save the due time for the caller */                              \
         DueTime.QuadPart = Timer->DueTime.QuadPart;                         \
