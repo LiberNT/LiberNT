@@ -882,6 +882,7 @@ BaseInitializeContext(IN PCONTEXT Context,
     RtlZeroMemory(Context, sizeof(*Context));
 
     /* Setup the Initial Win32 Thread Context */
+    Context->Rax = (ULONG_PTR)StartAddress;
     Context->Rcx = (ULONG_PTR)StartAddress;
     Context->Rdx = (ULONG_PTR)Parameter;
     Context->Rsp = (ULONG_PTR)StackAddress;
