@@ -29,7 +29,7 @@ LIST_ENTRY ServiceListHead;
 
 static RTL_RESOURCE DatabaseLock;
 static DWORD ResumeCount = 1;
-static DWORD NoInteractiveServices = 0;
+static DWORD NoInteractiveServices = 1;
 static DWORD ServiceTag = 0;
 
 /* The critical section synchronizes service control requests */
