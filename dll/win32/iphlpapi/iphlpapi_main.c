@@ -5220,6 +5220,9 @@ DWORD WINAPI GetBestRoute2( NET_LUID *luid, NET_IFINDEX index,
     int max_prefix_len;
     DWORD ret;
     BOOL v6;
+#ifdef __REACTOS__
+    NET_IFINDEX if_index;
+#endif
 
     TRACE( "(%p, %ld, %p, %p, 0x%08lx, %p, %p).\n", luid, index, src, dst, options, bestroute, bestaddress );
 
@@ -5295,6 +5298,9 @@ DWORD WINAPI GetBestRoute2( NET_LUID *luid, NET_IFINDEX index,
         }
     }
 
+#ifdef __REACTOS__
+    if_index = uni_row ? index : 0;
+#endif
     uni_row = NULL;
     if (!src && !(v6 && IN6_IS_ADDR_LINKLOCAL(&dst->Ipv6.sin6_addr)))
     {
@@ -5359,6 +5365,18 @@ skip_system_route:
 
     if (max_prefix_len == -1)
     {
+#ifdef __REACTOS__
+        if (if_index && (v6 ? IN6_IS_ADDR_LINKLOCAL(&dst->Ipv6.sin6_addr)
+                            : dst->Ipv4.sin_addr.S_un.S_un_b.s_b1 == 169 && dst->Ipv4.sin_addr.S_un.S_un_b.s_b2 == 254)
+            && (uni_row = find_first_matching_unicast_addr( uni, v6, src, NULL, if_index )))
+        {
+            bestroute->DestinationPrefix.Prefix.si_family = dst->si_family;
+            bestroute->NextHop.si_family = dst->si_family;
+            *bestaddress = uni_row->Address;
+            ret = ERROR_SUCCESS;
+            goto done;
+        }
+#endif
         ret = ERROR_NETWORK_UNREACHABLE;
         goto done;
     }
