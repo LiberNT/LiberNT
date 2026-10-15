@@ -259,6 +259,39 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
     return UnlockAndMaybeComplete(FCB, Status, Irp, 0);
 }
 
+static
+VOID
+AfdReportConnectedSource(
+    _In_ PAFD_FCB FCB,
+    _In_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IrpSp)
+{
+    PTDI_ADDRESS_INFO Info = Irp->UserBuffer;
+    ULONG Length = IrpSp->Parameters.DeviceIoControl.OutputBufferLength;
+    PTDI_ADDRESS_IP Ip;
+
+    if (Length < FIELD_OFFSET(TDI_ADDRESS_INFO, Address.Address[0].Address) + sizeof(TDI_ADDRESS_IP))
+        return;
+
+    _SEH2_TRY
+    {
+        if (Irp->RequestorMode != KernelMode)
+            ProbeForWrite(Info, Length, 1);
+        if (Info->Address.TAAddressCount != 0 &&
+            Info->Address.Address[0].AddressType == TDI_ADDRESS_TYPE_IP &&
+            Info->Address.Address[0].AddressLength >= sizeof(TDI_ADDRESS_IP))
+        {
+            Ip = (PTDI_ADDRESS_IP)Info->Address.Address[0].Address;
+            if (Ip->in_addr == 0)
+                Ip->in_addr = FCB->ConnectedSourceAddress;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    _SEH2_END;
+}
+
 NTSTATUS NTAPI
 AfdGetSockName( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 PIO_STACK_LOCATION IrpSp ) {
@@ -302,6 +335,12 @@ AfdGetSockName( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                     Status = TdiQueryInformation( FCB->AddressFile.Object,
                                                   TDI_QUERY_ADDRESS_INFO,
                                                   Mdl );
+                }
+
+                if (NT_SUCCESS(Status) && (FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS) &&
+                    FCB->RemoteAddress && FCB->ConnectedSourceAddress)
+                {
+                    AfdReportConnectedSource(FCB, Irp, IrpSp);
                 }
         }
 
