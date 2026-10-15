@@ -559,6 +559,13 @@ static void TestHandshake(void)
         frameLen = ApBuildKeyFrame(frame, m3info, replay, anonce,
                                    kck, NULL, wrapped, (n + 1) * 8);
 
+        frame[EAPOL_HDR_LEN + KEYDESC_OFF_MIC] ^= 0x01;
+        replyLen = sizeof(reply);
+        st = RsnaRxEapol(&ctx, frame, frameLen, reply, &replyLen);
+        Check("msg3 with a bad MIC is dropped, handshake continues",
+              st == RSNA_STATE_PTK_NEGOTIATING && replyLen == 0 && RsnaLastError(&ctx) == RSNA_ERR_MIC, NULL, NULL, 0);
+        frame[EAPOL_HDR_LEN + KEYDESC_OFF_MIC] ^= 0x01;
+
         replyLen = sizeof(reply);
         st = RsnaRxEapol(&ctx, frame, frameLen, reply, &replyLen);
         Check("msg3 -> state COMPLETED", st == RSNA_STATE_COMPLETED, NULL, NULL, 0);
@@ -661,6 +668,20 @@ static void TestHandshake(void)
                   st == RSNA_STATE_COMPLETED && replyLen == 0 &&
                   RsnaLastError(&ctx) == RSNA_ERR_REPLAY, NULL, NULL, 0);
         }
+        {
+            rsna_u8 again[512];
+            rsna_size againLen, againReply = sizeof(again);
+            RSNA_KEYS before, after;
+
+            RsnaGetKeys(&ctx, &before);
+            replay[7] = 0x40;
+            againLen = ApBuildKeyFrame(again, m3info, replay, anonce, kck, NULL, wrapped, (n + 1) * 8);
+            st = RsnaRxEapol(&ctx, again, againLen, again, &againReply);
+            RsnaGetKeys(&ctx, &after);
+            Check("retransmitted msg3 after completion re-sends msg4",
+                  st == RSNA_STATE_COMPLETED && againReply >= EAPOL_KEY_FRAME_FIXED_LEN, NULL, NULL, 0);
+            CheckBytes("retransmitted msg3 keeps the installed PTK", after.ptk, before.ptk, 48);
+        }
     }
 
     /* ---- negative tests ---- */
@@ -695,7 +716,7 @@ static void TestHandshake(void)
         }
         replyLen = sizeof(reply);
         st = RsnaRxEapol(&ctx2, frame, frameLen, reply, &replyLen);
-        Check("msg3 with bad MIC -> FAILED", st == RSNA_STATE_FAILED, NULL, NULL, 0);
+        Check("msg3 with bad MIC is dropped", st == RSNA_STATE_PTK_NEGOTIATING && replyLen == 0, NULL, NULL, 0);
         Check("bad MIC reports RSNA_ERR_MIC", RsnaLastError(&ctx2) == RSNA_ERR_MIC, NULL, NULL, 0);
     }
 }

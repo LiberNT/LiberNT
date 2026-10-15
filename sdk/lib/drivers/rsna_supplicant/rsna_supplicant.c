@@ -747,24 +747,27 @@ static RSNA_STATE RsnaHandleMsg3(RSNA_CTX *ctx,
     rsna_size n;
     rsna_u16 replyInfo;
 
-    if (ctx->state != RSNA_STATE_PTK_NEGOTIATING)
+    if (outLen != RSNA_NULL)
+        *outLen = 0;
+
+    if (ctx->state != RSNA_STATE_PTK_NEGOTIATING && ctx->state != RSNA_STATE_COMPLETED)
     {
         ctx->lastError = RSNA_ERR_STATE;
-        return (ctx->state = RSNA_STATE_FAILED);
+        return ctx->state;
     }
 
     /* ANonce in msg3 must match msg1's ANonce (prevents nonce reuse attacks). */
     if (RsnaMemcmp(&body[KEYDESC_OFF_NONCE], ctx->anonce, RSNA_NONCE_LEN) != 0)
     {
         ctx->lastError = RSNA_ERR_MALFORMED;
-        return (ctx->state = RSNA_STATE_FAILED);
+        return ctx->state;
     }
 
     /* ---- verify the Key MIC over the frame with MIC field zeroed ---- */
     if (frameLen > sizeof(frameBuf))
     {
         ctx->lastError = RSNA_ERR_MALFORMED;
-        return (ctx->state = RSNA_STATE_FAILED);
+        return ctx->state;
     }
     RsnaMemcpy(frameBuf, frame, frameLen);
     frameCopy = frameBuf;
@@ -777,12 +780,23 @@ static RSNA_STATE RsnaHandleMsg3(RSNA_CTX *ctx,
     if (!RsnaSecureEqual(rxMic, calcMic, KEYDESC_MIC_LEN))
     {
         ctx->lastError = RSNA_ERR_MIC;
-        return (ctx->state = RSNA_STATE_FAILED);
+        return ctx->state;
     }
 
     /* Commit the replay counter only after MIC verification; it is echoed
      * in msg4 and becomes the new replay baseline. */
     RsnaMemcpy(ctx->replayCounter, &body[KEYDESC_OFF_REPLAY], 8);
+
+    if (ctx->state == RSNA_STATE_COMPLETED)
+    {
+        replyInfo = (rsna_u16)(ctx->keyDescVer & KEYINFO_VERSION_MASK);
+        replyInfo |= KEYINFO_KEY_TYPE | KEYINFO_KEY_MIC | KEYINFO_SECURE;
+        n = RsnaBuildReply(ctx, replyInfo, RSNA_NULL, RSNA_NULL, 0, out, cap);
+        if (outLen != RSNA_NULL)
+            *outLen = n;
+        ctx->lastError = (n == 0 && out != RSNA_NULL) ? RSNA_ERR_TOO_SMALL : RSNA_OK;
+        return ctx->state;
+    }
 
     /* ---- decrypt Key Data and extract the GTK ---- */
     kdLen = RsnaGetU16(&body[KEYDESC_OFF_DATALEN]);
