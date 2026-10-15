@@ -113,6 +113,110 @@ int RsnaSaeDerivePwe(RSNA_SAE *sae, const rsna_u8 ownAddress[6], const rsna_u8 p
     return 1;
 }
 
+static void RsnaSaeOrderAddresses(rsna_u8 addresses[12], const rsna_u8 a[6], const rsna_u8 b[6])
+{
+    const rsna_u8 *high = RsnaSaeCompare(a, b, 6) > 0 ? a : b;
+    const rsna_u8 *low = high == a ? b : a;
+    int i;
+
+    for (i = 0; i < 6; i++)
+    {
+        addresses[i] = high[i];
+        addresses[6 + i] = low[i];
+    }
+}
+
+static void RsnaSaeHkdfExpand(const rsna_u8 prk[RSNA_SHA256_DIGEST_LEN], const char *info,
+                              rsna_u8 *out, rsna_size outLen)
+{
+    rsna_u8 block[RSNA_SHA256_DIGEST_LEN], counter;
+    const rsna_u8 *addr[3];
+    rsna_size len[3], infoLen = 0, done = 0, n, i;
+
+    while (info[infoLen])
+        infoLen++;
+
+    for (counter = 1; done < outLen; counter++)
+    {
+        n = 0;
+        if (counter > 1)
+        {
+            addr[n] = block;
+            len[n++] = sizeof(block);
+        }
+        addr[n] = (const rsna_u8 *)info;
+        len[n++] = infoLen;
+        addr[n] = &counter;
+        len[n++] = 1;
+        RsnaHmacSha256Vector(prk, RSNA_SHA256_DIGEST_LEN, n, addr, len, block);
+        for (i = 0; i < sizeof(block) && done < outLen; i++)
+            out[done++] = block[i];
+    }
+
+    RsnaSaeWipe(block, sizeof(block));
+}
+
+int RsnaSaeDerivePt(rsna_u8 pt[RSNA_SAE_ELEMENT_LEN], const rsna_u8 *ssid, rsna_size ssidLen,
+                    const rsna_u8 *password, rsna_size passwordLen,
+                    const rsna_u8 *identifier, rsna_size identifierLen)
+{
+    static const char *const labels[2] = { "SAE Hash to Element u1 P1", "SAE Hash to Element u2 P2" };
+    rsna_u8 seed[RSNA_SHA256_DIGEST_LEN], value[RSNA_SAE_H2E_VALUE_LEN];
+    const rsna_u8 *addr[2];
+    rsna_size len[2];
+    RSNA_P256_POINT points[2], sum;
+    RSNA_P256_FE u;
+    int i, ok;
+
+    addr[0] = password;
+    len[0] = passwordLen;
+    addr[1] = identifier;
+    len[1] = identifier ? identifierLen : 0;
+    RsnaHmacSha256Vector(ssid, ssidLen, identifier && identifierLen ? 2 : 1, addr, len, seed);
+
+    for (i = 0; i < 2; i++)
+    {
+        RsnaSaeHkdfExpand(seed, labels[i], value, sizeof(value));
+        RsnaP256FieldFromWide(&u, value, sizeof(value));
+        RsnaP256Sswu(&points[i], &u);
+    }
+
+    RsnaP256PointAdd(&sum, &points[0], &points[1]);
+    ok = RsnaP256PointToBytes(pt, pt + RSNA_P256_BYTES, &sum);
+
+    RsnaSaeWipe(seed, sizeof(seed));
+    RsnaSaeWipe(value, sizeof(value));
+    RsnaSaeWipe(&u, sizeof(u));
+    RsnaSaeWipe(points, sizeof(points));
+    RsnaSaeWipe(&sum, sizeof(sum));
+    return ok;
+}
+
+int RsnaSaeDerivePweFromPt(RSNA_SAE *sae, const rsna_u8 pt[RSNA_SAE_ELEMENT_LEN],
+                           const rsna_u8 ownAddress[6], const rsna_u8 peerAddress[6])
+{
+    static const rsna_u8 zeroKey[RSNA_SHA256_DIGEST_LEN] = { 0 };
+    rsna_u8 addresses[12], value[RSNA_SHA256_DIGEST_LEN];
+    RSNA_P256_POINT element;
+
+    if (!RsnaP256PointFromBytes(&element, pt, pt + RSNA_P256_BYTES))
+        return 0;
+
+    RsnaSaeOrderAddresses(addresses, ownAddress, peerAddress);
+    RsnaHmacSha256(zeroKey, sizeof(zeroKey), addresses, sizeof(addresses), value);
+    RsnaP256ScalarReduceNonZero(value, value);
+    RsnaP256PointMul(&sae->Pwe, &element, value);
+    RsnaSaeWipe(value, sizeof(value));
+    RsnaSaeWipe(&element, sizeof(element));
+    if (RsnaP256PointIsInfinity(&sae->Pwe))
+        return 0;
+
+    sae->HavePwe = 1;
+    sae->HaveCommit = 0;
+    sae->HaveKeys = 0;
+    return 1;
+}
+
 int RsnaSaeSetCommit(RSNA_SAE *sae, const rsna_u8 rand[RSNA_SAE_SCALAR_LEN],
                      const rsna_u8 mask[RSNA_SAE_SCALAR_LEN])
 {

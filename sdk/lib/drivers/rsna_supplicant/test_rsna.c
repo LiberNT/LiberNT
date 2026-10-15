@@ -756,6 +756,7 @@ static void TestRandomSource(void)
  */
 static void TestHandshakeSae(void)
 {
+    static const rsna_u8 Rsnxe[3] = { 0xF4, 0x01, 0x20 };
     static const rsna_u8 RsnIe[] =
     {
         0x30, 0x14, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04,
@@ -783,6 +784,7 @@ static void TestHandshakeSae(void)
     RsnaSetApAddr(&ctx, aa);
     RsnaSetStaAddr(&ctx, spa);
     RsnaSetRsnIe(&ctx, RsnIe, sizeof(RsnIe));
+    RsnaSetRsnxe(&ctx, Rsnxe, sizeof(Rsnxe));
     RsnaSeed(&ctx, spa, sizeof(spa));
 
     for (i = 0; i < 32; i++)
@@ -795,6 +797,11 @@ static void TestHandshakeSae(void)
     Check("SAE msg1 -> PTK_NEGOTIATING", st == RSNA_STATE_PTK_NEGOTIATING, NULL, NULL, 0);
     Check("SAE msg2 descriptor version 0",
           (reply[EAPOL_HDR_LEN + KEYDESC_OFF_KEYINFO + 1] & KEYINFO_VERSION_MASK) == 0, NULL, NULL, 0);
+    Check("SAE msg2 key data carries RSN element and RSNXE",
+          ((reply[EAPOL_HDR_LEN + KEYDESC_OFF_DATALEN] << 8) | reply[EAPOL_HDR_LEN + KEYDESC_OFF_DATALEN + 1]) ==
+              sizeof(RsnIe) + sizeof(Rsnxe), NULL, NULL, 0);
+    CheckBytes("SAE msg2 RSNXE echoes the association request",
+               &reply[EAPOL_HDR_LEN + KEYDESC_OFF_DATA + sizeof(RsnIe)], Rsnxe, sizeof(Rsnxe));
 
     RsnaDerivePtkSha256(pmk, aa, spa, anonce, &reply[EAPOL_HDR_LEN + KEYDESC_OFF_NONCE], apPtk, sizeof(apPtk));
     memcpy(copy, reply, replyLen);
@@ -989,6 +996,77 @@ static void TestSae(void)
     RsnaSaeClear(&sae);
 }
 
+static void TestSaeH2e(void)
+{
+    rsna_u8 addr1[6], addr2[6], pt[64], x[32], y[32], expX[32], expY[32];
+    RSNA_SAE sae;
+
+    FromHex("00095b66ec1e", addr1, sizeof(addr1));
+    FromHex("000b6bd90246", addr2, sizeof(addr2));
+    FromHex("c93049b9e64000f848201649e999f2b5c22dea69b5632c9df4d633b8aa1f6c1e", expX, sizeof(expX));
+    FromHex("73634e94b53d82e7383a8d258199d9dc1a5ee8269d060382ccbf33e614ff59a0", expY, sizeof(expY));
+
+    memset(&sae, 0, sizeof(sae));
+    Check("SAE H2E PT", RsnaSaeDerivePt(pt, (const rsna_u8 *)"byteme", 6,
+                                        (const rsna_u8 *)"mekmitasdigoat", 14,
+                                        (const rsna_u8 *)"psk4internet", 12), NULL, NULL, 0);
+    Check("SAE H2E PWE", RsnaSaeDerivePweFromPt(&sae, pt, addr1, addr2), NULL, NULL, 0);
+    RsnaP256PointToBytes(x, y, &sae.Pwe);
+    CheckBytes("SAE H2E PWE x (802.11-2020 J.10)", x, expX, 32);
+    CheckBytes("SAE H2E PWE y (802.11-2020 J.10)", y, expY, 32);
+    Check("SAE H2E PWE from swapped addresses", RsnaSaeDerivePweFromPt(&sae, pt, addr2, addr1), NULL, NULL, 0);
+    RsnaP256PointToBytes(x, y, &sae.Pwe);
+    CheckBytes("SAE H2E PWE x, address order independent", x, expX, 32);
+    RsnaSaeClear(&sae);
+}
+
+static int TestSaeRandom(void *context, rsna_u8 *buffer, rsna_size length)
+{
+    rsna_u32 *state = (rsna_u32 *)context;
+    rsna_size i;
+
+    for (i = 0; i < length; i++)
+    {
+        *state = *state * 1103515245u + 12345u;
+        buffer[i] = (rsna_u8)(*state >> 16);
+    }
+    return 0;
+}
+
+static void TestSaeH2eExchange(void)
+{
+    static const rsna_u8 sta[6] = { 0x02, 0x11, 0x22, 0x33, 0x44, 0x55 };
+    static const rsna_u8 ap[6] = { 0x02, 0xaa, 0xbb, 0xcc, 0xdd, 0xee };
+    rsna_u8 ptSta[64], ptAp[64], confirmSta[32], confirmAp[32];
+    rsna_u32 seedSta = 1, seedAp = 2;
+    RSNA_SAE s, a;
+
+    memset(&s, 0, sizeof(s));
+    memset(&a, 0, sizeof(a));
+    Check("SAE H2E PT without identifier",
+          RsnaSaeDerivePt(ptSta, (const rsna_u8 *)"LiberNT-WPA3", 12, (const rsna_u8 *)"correct horse", 13, NULL, 0) &&
+          RsnaSaeDerivePt(ptAp, (const rsna_u8 *)"LiberNT-WPA3", 12, (const rsna_u8 *)"correct horse", 13, NULL, 0),
+          NULL, NULL, 0);
+    CheckBytes("SAE H2E PT is deterministic", ptSta, ptAp, 64);
+    Check("SAE H2E both PWEs", RsnaSaeDerivePweFromPt(&s, ptSta, sta, ap) && RsnaSaeDerivePweFromPt(&a, ptAp, ap, sta),
+          NULL, NULL, 0);
+    Check("SAE H2E both commits", RsnaSaeGenerateCommit(&s, TestSaeRandom, &seedSta) &&
+                                  RsnaSaeGenerateCommit(&a, TestSaeRandom, &seedAp), NULL, NULL, 0);
+    Check("SAE H2E commits exchanged", RsnaSaeProcessCommit(&s, a.Scalar, a.Element) &&
+                                       RsnaSaeProcessCommit(&a, s.Scalar, s.Element), NULL, NULL, 0);
+    CheckBytes("SAE H2E PMK agrees", s.Pmk, a.Pmk, 32);
+    RsnaSaeComputeConfirm(&s, 1, confirmSta);
+    RsnaSaeComputeConfirm(&a, 1, confirmAp);
+    Check("SAE H2E AP verifies STA confirm", RsnaSaeVerifyConfirm(&a, 1, confirmSta), NULL, NULL, 0);
+    Check("SAE H2E STA verifies AP confirm", RsnaSaeVerifyConfirm(&s, 1, confirmAp), NULL, NULL, 0);
+    Check("SAE H2E wrong password fails",
+          RsnaSaeDerivePt(ptAp, (const rsna_u8 *)"LiberNT-WPA3", 12, (const rsna_u8 *)"wrong horse", 11, NULL, 0) &&
+          RsnaSaeDerivePweFromPt(&a, ptAp, ap, sta) && RsnaSaeGenerateCommit(&a, TestSaeRandom, &seedAp) &&
+          RsnaSaeProcessCommit(&a, s.Scalar, s.Element) && !RsnaSaeVerifyConfirm(&a, 1, confirmSta), NULL, NULL, 0);
+    RsnaSaeClear(&s);
+    RsnaSaeClear(&a);
+}
+
 /* ================================================================== */
 
 int main(void)
@@ -1006,6 +1084,8 @@ int main(void)
     TestCcmpBip();
     TestSha256();
     TestSae();
+    TestSaeH2e();
+    TestSaeH2eExchange();
 
     printf("\n--- Key derivation vectors ---\n");
     TestPmk();

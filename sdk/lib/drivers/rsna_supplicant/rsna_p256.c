@@ -329,6 +329,108 @@ int RsnaP256FieldIsOdd(const RSNA_P256_FE *a)
     return (int)(t[0] & 1);
 }
 
+static void RsnaFeSelect(RSNA_P256_FE *r, const RSNA_P256_FE *a, const RSNA_P256_FE *b, int useA)
+{
+    rsna_u32 mask = (rsna_u32)0 - (rsna_u32)(useA != 0);
+    int i;
+
+    for (i = 0; i < RSNA_P256_LIMBS; i++)
+        r->v[i] = (a->v[i] & mask) | (b->v[i] & ~mask);
+}
+
+static void RsnaFeFromSmallNegative(RSNA_P256_FE *r, rsna_u32 value)
+{
+    rsna_u32 t[RSNA_P256_LIMBS], v[RSNA_P256_LIMBS] = { 0 };
+
+    v[0] = value;
+    RsnaBnSub(t, RsnaP256Prime, v);
+    RsnaFeToMont(r, t);
+}
+
+static void RsnaFeFromReducedBytes(RSNA_P256_FE *r, const rsna_u8 in[RSNA_P256_BYTES])
+{
+    rsna_u32 a[RSNA_P256_LIMBS], t[RSNA_P256_LIMBS];
+
+    RsnaBnFromBytes(a, in);
+    if (RsnaBnSub(t, a, RsnaP256Prime) == 0)
+        RsnaFeToMont(r, t);
+    else
+        RsnaFeToMont(r, a);
+}
+
+void RsnaP256FieldFromWide(RSNA_P256_FE *r, const rsna_u8 *in, rsna_size len)
+{
+    rsna_u8 high[RSNA_P256_BYTES] = { 0 }, low[RSNA_P256_BYTES] = { 0 };
+    RSNA_P256_FE h, l, shift;
+    rsna_size i, lowLen = len < RSNA_P256_BYTES ? len : RSNA_P256_BYTES;
+
+    for (i = 0; i < lowLen; i++)
+        low[RSNA_P256_BYTES - lowLen + i] = in[len - lowLen + i];
+    for (i = 0; i < len - lowLen && i < RSNA_P256_BYTES; i++)
+        high[RSNA_P256_BYTES - (len - lowLen) + i] = in[i];
+
+    RsnaFeFromReducedBytes(&h, high);
+    RsnaFeFromReducedBytes(&l, low);
+    RsnaFeToMont(&shift, RsnaP256MontOne);
+    RsnaFeMul(r, &h, &shift);
+    RsnaFeAdd(r, r, &l);
+}
+
+void RsnaP256Sswu(RSNA_P256_POINT *r, const RSNA_P256_FE *u)
+{
+    RSNA_P256_FE z, a, b, one, zu2, m, t, x1a, x1b, x1, gx1, x2, gx2, x, v, y, ny, tmp;
+    int zero, square;
+
+    RsnaFeFromSmallNegative(&z, 10);
+    RsnaFeFromSmallNegative(&a, 3);
+    RsnaFeToMont(&b, RsnaP256B);
+    RsnaFeSetOne(&one);
+
+    RsnaFeSqr(&zu2, u);
+    RsnaFeMul(&zu2, &zu2, &z);
+    RsnaFeSqr(&m, &zu2);
+    RsnaFeAdd(&m, &m, &zu2);
+    zero = RsnaBnIsZero(m.v);
+    RsnaFeInv(&t, &m);
+
+    RsnaFeMul(&tmp, &z, &a);
+    RsnaFeInv(&tmp, &tmp);
+    RsnaFeMul(&x1a, &b, &tmp);
+
+    RsnaFeInv(&tmp, &a);
+    RsnaFeMul(&tmp, &tmp, &b);
+    RsnaP256FieldNeg(&tmp, &tmp);
+    RsnaFeAdd(&x1b, &one, &t);
+    RsnaFeMul(&x1b, &x1b, &tmp);
+
+    RsnaFeSelect(&x1, &x1a, &x1b, zero);
+    RsnaP256CurveRhs(&gx1, &x1);
+    RsnaFeMul(&x2, &zu2, &x1);
+    RsnaP256CurveRhs(&gx2, &x2);
+
+    square = RsnaP256IsSquare(&gx1);
+    RsnaFeSelect(&x, &x1, &x2, square);
+    RsnaFeSelect(&v, &gx1, &gx2, square);
+    RsnaP256Sqrt(&y, &v);
+    RsnaP256FieldNeg(&ny, &y);
+    RsnaFeSelect(&y, &y, &ny, RsnaP256FieldIsOdd(u) == RsnaP256FieldIsOdd(&y));
+    RsnaP256PointSetAffine(r, &x, &y);
+}
+
+void RsnaP256ScalarReduceNonZero(rsna_u8 out[RSNA_P256_BYTES], const rsna_u8 in[RSNA_P256_BYTES])
+{
+    rsna_u32 a[RSNA_P256_LIMBS], t[RSNA_P256_LIMBS], orderMinusOne[RSNA_P256_LIMBS];
+    rsna_u32 one[RSNA_P256_LIMBS] = { 1, 0, 0, 0, 0, 0, 0, 0 };
+
+    RsnaBnFromBytes(a, in);
+    RsnaBnSub(orderMinusOne, RsnaP256Order, one);
+    if (RsnaBnSub(t, a, orderMinusOne) == 0)
+        RsnaBnAdd(a, t, one);
+    else
+        RsnaBnAdd(a, a, one);
+    RsnaBnToBytes(out, a);
+}
+
 int RsnaP256LessThanPrime(const rsna_u8 in[RSNA_P256_BYTES])
 {
     rsna_u32 a[RSNA_P256_LIMBS];

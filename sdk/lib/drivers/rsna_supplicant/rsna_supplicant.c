@@ -351,6 +351,22 @@ RSNA_STATUS RsnaSetRsnIe(RSNA_CTX *ctx, const rsna_u8 *ie, rsna_size ieLen)
     return RSNA_OK;
 }
 
+RSNA_STATUS RsnaSetRsnxe(RSNA_CTX *ctx, const rsna_u8 *ie, rsna_size ieLen)
+{
+    if (ctx == RSNA_NULL)
+        return RSNA_ERR_PARAM;
+    if (ie == RSNA_NULL || ieLen == 0)
+    {
+        ctx->staRsnxeLen = 0;
+        return RSNA_OK;
+    }
+    if (ieLen > sizeof(ctx->staRsnxe))
+        return RSNA_ERR_PARAM;
+    RsnaMemcpy(ctx->staRsnxe, ie, ieLen);
+    ctx->staRsnxeLen = ieLen;
+    return RSNA_OK;
+}
+
 void RsnaReset(RSNA_CTX *ctx)
 {
     if (ctx == RSNA_NULL)
@@ -635,7 +651,8 @@ static RSNA_STATE RsnaHandleMsg1(RSNA_CTX *ctx,
                                  rsna_u8 *out, rsna_size *outLen)
 {
     rsna_size cap = (out != RSNA_NULL) ? *outLen : 0;
-    rsna_size n;
+    rsna_size n, keyDataLen;
+    rsna_u8 keyData[sizeof(ctx->staRsnIe) + sizeof(ctx->staRsnxe)];
     rsna_u16 keyInfo;
 
     if (!ctx->pmkValid || !ctx->haveAa || !ctx->haveSpa)
@@ -688,9 +705,12 @@ static RSNA_STATE RsnaHandleMsg1(RSNA_CTX *ctx,
     keyInfo = (rsna_u16)(ctx->keyDescVer & KEYINFO_VERSION_MASK);
     keyInfo |= KEYINFO_KEY_TYPE | KEYINFO_KEY_MIC;
 
+    RsnaMemcpy(keyData, ctx->staRsnIe, ctx->staRsnIeLen);
+    RsnaMemcpy(keyData + ctx->staRsnIeLen, ctx->staRsnxe, ctx->staRsnxeLen);
+    keyDataLen = ctx->staRsnIeLen + ctx->staRsnxeLen;
     n = RsnaBuildReply(ctx, keyInfo, ctx->snonce,
-                       (ctx->staRsnIeLen > 0) ? ctx->staRsnIe : RSNA_NULL,
-                       ctx->staRsnIeLen, out, cap);
+                       (keyDataLen > 0) ? keyData : RSNA_NULL,
+                       keyDataLen, out, cap);
     if (n == 0 && out != RSNA_NULL)
     {
         ctx->lastError = RSNA_ERR_TOO_SMALL;

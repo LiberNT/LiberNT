@@ -33,6 +33,10 @@ void RsnaP256Sqrt(RSNA_P256_FE *r, const RSNA_P256_FE *a);
 void RsnaP256FieldNeg(RSNA_P256_FE *r, const RSNA_P256_FE *a);
 int RsnaP256FieldIsOdd(const RSNA_P256_FE *a);
 
+void RsnaP256FieldFromWide(RSNA_P256_FE *r, const rsna_u8 *in, rsna_size len);
+void RsnaP256Sswu(RSNA_P256_POINT *r, const RSNA_P256_FE *u);
+void RsnaP256ScalarReduceNonZero(rsna_u8 out[RSNA_P256_BYTES], const rsna_u8 in[RSNA_P256_BYTES]);
+
 int RsnaP256LessThanPrime(const rsna_u8 in[RSNA_P256_BYTES]);
 int RsnaP256ScalarIsValid(const rsna_u8 s[RSNA_P256_BYTES]);
 void RsnaP256ScalarAdd(rsna_u8 out[RSNA_P256_BYTES], const rsna_u8 a[RSNA_P256_BYTES],

@@ -119,6 +119,8 @@ typedef struct _RSNA_CTX
     /* The STA's own RSN IE (sent in msg2 Key Data so the AP can verify it). */
     rsna_u8     staRsnIe[64];
     rsna_size   staRsnIeLen;
+    rsna_u8     staRsnxe[16];
+    rsna_size   staRsnxeLen;
 
     /* Negotiated cipher (drives PRF length, MIC algorithm, keywrap method). */
     RSNA_CIPHER cipher;
@@ -176,6 +178,7 @@ RSNA_STATUS RsnaSetStaAddr(RSNA_CTX *ctx, const rsna_u8 spa[RSNA_MAC_LEN]);
  * echoed in msg2's Key Data.  If omitted, msg2 carries empty Key Data.
  */
 RSNA_STATUS RsnaSetRsnIe(RSNA_CTX *ctx, const rsna_u8 *ie, rsna_size ieLen);
+RSNA_STATUS RsnaSetRsnxe(RSNA_CTX *ctx, const rsna_u8 *ie, rsna_size ieLen);
 
 /* Seed the internal SNonce PRNG (mix in time/MAC/etc. for entropy). */
 void RsnaSeed(RSNA_CTX *ctx, const rsna_u8 *seed, rsna_size seedLen);
