@@ -207,10 +207,52 @@ SessionAttachRundown(void)
     MiSessionTestCurrent = NULL;
 }
 
+static void
+SessionMoveProcess(void)
+{
+    struct _EPROCESS_HOST Leader, Keeper0, Keeper1, Mover;
+    MI_PROCESS Native[4];
+    ULONG Id0, Id1;
+    PVOID Session0;
+
+    SessionProcessInitialize(&Leader, &Native[0]);
+    SessionProcessInitialize(&Keeper0, &Native[1]);
+    SessionProcessInitialize(&Keeper1, &Native[2]);
+    SessionProcessInitialize(&Mover, &Native[3]);
+    MiSessionTestCurrent = &Leader;
+    CHECK(MmSessionCreate(&Id0) == STATUS_SUCCESS);
+    MiSessionAddProcess(&Keeper0);
+    MiSessionAddProcess(&Mover);
+    CHECK(MmSessionDelete(Id0) == STATUS_SUCCESS);
+    CHECK(MmSessionCreate(&Id1) == STATUS_SUCCESS && Id1 != Id0);
+    MiSessionAddProcess(&Keeper1);
+    CHECK(MmSessionDelete(Id1) == STATUS_SUCCESS);
+    Session0 = Mover.Session;
+
+    CHECK(MmSetProcessSession(&Mover, Id0) == STATUS_SUCCESS && Mover.Session == Session0);
+    CHECK(MmSetProcessSession(&Mover, Id1) == STATUS_SUCCESS);
+    CHECK(MmGetSessionId(&Mover) == Id1 && Mover.Session == Keeper1.Session);
+    CHECK((Mover.Flags & PSF_PROCESS_IN_SESSION_BIT) && Keeper0.Session == Session0);
+    CHECK(MmSetProcessSession(&Mover, Id1 + 1) == STATUS_INVALID_PARAMETER);
+    CHECK(MmGetSessionId(&Mover) == Id1);
+    CHECK(MmSetProcessSession(&Leader, Id1) == STATUS_INVALID_PARAMETER);
+    CHECK(MmSetProcessSession(&Mover, Id0) == STATUS_SUCCESS && MmGetSessionId(&Mover) == Id0);
+
+    MiSessionRemoveProcess(&Keeper0);
+    CHECK(MmGetSessionId(&Mover) == Id0);
+    MiSessionRemoveProcess(&Mover);
+    CHECK(MmSetProcessSession(&Keeper1, Id0) == STATUS_INVALID_PARAMETER);
+    MiSessionRemoveProcess(&Keeper1);
+    MiSessionRemoveProcess(&Leader);
+    CHECK(MiSessionTestAllocations == 0);
+    MiSessionTestCurrent = NULL;
+}
+
 void
 TestSession(void)
 {
     SessionCreateRace();
     SessionLifecycle();
     SessionAttachRundown();
+    SessionMoveProcess();
 }

@@ -2508,6 +2508,50 @@ PsCheckImageLoadPolicy(
     return Status;
 }
 
+static
+NTSTATUS
+PspSetProcessSessionFromToken(
+    _In_ PEPROCESS Process,
+    _In_ HANDLE TokenHandle)
+{
+    PACCESS_TOKEN Token;
+    KAPC_STATE ApcState;
+    ULONG SessionId;
+    NTSTATUS Status;
+
+    Status = ObReferenceObjectByHandle(TokenHandle,
+                                       TOKEN_ASSIGN_PRIMARY,
+                                       SeTokenObjectType,
+                                       ExGetPreviousMode(),
+                                       (PVOID*)&Token,
+                                       NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = SeQuerySessionIdToken(Token, &SessionId);
+    ObDereferenceObject(Token);
+    if (!NT_SUCCESS(Status) || SessionId == PsGetProcessSessionId(Process))
+        return Status;
+
+    Status = MmSetProcessSession(Process, SessionId);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    KeStackAttachProcess(&Process->Pcb, &ApcState);
+    _SEH2_TRY
+    {
+        if (Process->Peb)
+            Process->Peb->SessionId = SessionId;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    KeUnstackDetachProcess(&ApcState);
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 NtCreateUserProcess(OUT PHANDLE ProcessHandle,
@@ -3162,7 +3206,9 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
 
         if (TokenHandle)
         {
-            Status = PspSetPrimaryToken(Process, TokenHandle, NULL, TRUE);
+            Status = PspSetProcessSessionFromToken(Process, TokenHandle);
+            if (NT_SUCCESS(Status))
+                Status = PspSetPrimaryToken(Process, TokenHandle, NULL, TRUE);
             if (!NT_SUCCESS(Status))
             {
                 DPRINT1("NtCreateUserProcess: PspSetPrimaryToken failed, Status=0x%lx\n", Status);
