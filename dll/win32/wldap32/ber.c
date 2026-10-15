@@ -39,7 +39,11 @@ WLDAP32_BerElement * CDECL WLDAP32_ber_alloc_t( int options )
     TRACE( "%d\n", options );
 
     if (options != WLDAP32_LBER_USE_DER || !(ret = malloc( sizeof(*ret) ))) return NULL;
+#ifdef __REACTOS__
+    if ((ret->opaque = (char *)ber_alloc_t( 0 ))) return ret;
+#else
     if ((ret->opaque = (char *)ber_alloc_t( options ))) return ret;
+#endif
     free( ret );
     return NULL;
 }
@@ -189,6 +193,27 @@ int WINAPIV WLDAP32_ber_printf( WLDAP32_BerElement *ber, char *fmt, ... )
             ret = ber_printf( BER(ber), new_fmt, arg );
             break;
         }
+#ifdef __REACTOS__
+        case 'o':
+        {
+            char *arg = va_arg( list, char * );
+            int len = va_arg( list, int );
+            ret = ber_printf( BER(ber), new_fmt, arg, (ber_len_t)len );
+            break;
+        }
+        case 's':
+        {
+            char *arg = va_arg( list, char * );
+            ret = ber_printf( BER(ber), new_fmt, arg ? arg : "" );
+            break;
+        }
+        case 't':
+        {
+            unsigned int arg = va_arg( list, unsigned int );
+            ret = ber_printf( BER(ber), new_fmt, (ber_tag_t)(arg & 0xff) );
+            break;
+        }
+#else
         case 'o':
         case 's':
         {
@@ -202,6 +227,7 @@ int WINAPIV WLDAP32_ber_printf( WLDAP32_BerElement *ber, char *fmt, ... )
             ret = ber_printf( BER(ber), new_fmt, arg );
             break;
         }
+#endif
         case 'v':
         {
             char **arg = va_arg( list, char ** );
@@ -212,6 +238,9 @@ int WINAPIV WLDAP32_ber_printf( WLDAP32_BerElement *ber, char *fmt, ... )
         {
             struct WLDAP32_berval **array = va_arg( list, struct WLDAP32_berval ** );
             struct berval **arrayU;
+#ifdef __REACTOS__
+            if (!array) break;
+#endif
             if (!(arrayU = bvarrayWtoU( array )))
             {
                 ret = -1;
@@ -225,8 +254,12 @@ int WINAPIV WLDAP32_ber_printf( WLDAP32_BerElement *ber, char *fmt, ... )
         {
             char *arg = va_arg( list, char * );
             int arg2 = va_arg( list, int );
+#ifdef __REACTOS__
+            ret = ber_printf( BER(ber), new_fmt, arg, (ber_len_t)arg2 );
+#else
             new_fmt[0] = 'B';  /* 'X' is deprecated */
             ret = ber_printf( BER(ber), new_fmt, arg, arg2 );
+#endif
             break;
         }
         case 'n':
@@ -245,7 +278,11 @@ int WINAPIV WLDAP32_ber_printf( WLDAP32_BerElement *ber, char *fmt, ... )
         if (ret == -1) break;
     }
     va_end( list );
+#ifdef __REACTOS__
+    return ret == -1 ? -1 : 0;
+#else
     return ret;
+#endif
 }
 
 /***********************************************************************

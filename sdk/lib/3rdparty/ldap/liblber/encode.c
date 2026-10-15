@@ -95,6 +95,18 @@ ber_prepend_len( unsigned char *ptr, ber_len_t len )
 
 	*--ptr = (unsigned char) len & 0xffU;
 
+#ifdef __REACTOS__
+	if ( len >= 0x80 ) {
+		*--ptr = (unsigned char) (len >> 8) & 0xffU;
+		if ( len > 0x7fffU ) {
+			*--ptr = (unsigned char) (len >> 16) & 0xffU;
+			*--ptr = (unsigned char) (len >> 24) & 0xffU;
+			*--ptr = 0x84U;
+		} else {
+			*--ptr = 0x82U;
+		}
+	}
+#else
 	if ( len >= 0x80 ) {
 		unsigned char *endptr = ptr--;
 
@@ -103,6 +115,7 @@ ber_prepend_len( unsigned char *ptr, ber_len_t len )
 		}
 		*ptr = (unsigned char) (endptr - ptr) + 0x80U;
 	}
+#endif
 
 	return ptr;
 }
@@ -186,6 +199,11 @@ ber_put_int_or_enum(
 		if ( unum < 0x80 )	/* top bit at *ptr is sign bit */
 			break;
 	}
+#ifdef __REACTOS__
+	while ( sign && (ber_len_t) (&data[sizeof(data) - 1] - ptr) < sizeof(ber_int_t) ) {
+		*ptr-- = sign;
+	}
+#endif
 
 	*ptr = (unsigned char) (&data[sizeof(data) - 1] - ptr); /* length */
 	ptr = ber_prepend_tag( ptr, tag );
@@ -333,7 +351,11 @@ ber_put_boolean(
 	if ( tag == LBER_DEFAULT )
 		tag = LBER_BOOLEAN;
 
+#ifdef __REACTOS__
+	data[sizeof(data) - 1] = (unsigned char) boolval == 1 ? 0xff : 0;
+#else
 	data[sizeof(data) - 1] = boolval ? 0xff : 0;
+#endif
 	data[sizeof(data) - 2] = 1;			/* length */
 	ptr = ber_prepend_tag( &data[sizeof(data) - 2], tag );
 
@@ -575,12 +597,27 @@ ber_printf( BerElement *ber, LDAP_CONST char *fmt, ... )
 			rc = ber_put_string( ber, s, ber->ber_tag );
 			break;
 
+#ifdef __REACTOS__
+		case 'B':
+			s = va_arg( ap, char * );
+			len = va_arg( ap, ber_len_t );
+			rc = ber_put_bitstring( ber, s, len, ber->ber_tag );
+			break;
+
+		case 'X':
+			s = va_arg( ap, char * );
+			len = va_arg( ap, ber_len_t );
+			rc = ber_put_ostring( ber, s, len,
+				ber->ber_tag == LBER_DEFAULT ? LBER_BITSTRING : ber->ber_tag );
+			break;
+#else
 		case 'B':	/* bit string */
 		case 'X':	/* bit string (deprecated) */
 			s = va_arg( ap, char * );
 			len = va_arg( ap, ber_len_t );	/* in bits */
 			rc = ber_put_bitstring( ber, s, len, ber->ber_tag );
 			break;
+#endif
 
 		case 't':	/* tag for the next element */
 			ber->ber_tag = va_arg( ap, ber_tag_t );
