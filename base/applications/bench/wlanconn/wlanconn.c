@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <windows.h>
 #include <wlanapi.h>
+#include <objbase.h>
 #include <stdio.h>
 #include <wchar.h>
 
@@ -171,6 +172,21 @@ WlanValidWpa2Key(PCWSTR Key)
     return TRUE;
 }
 
+static BOOL
+WlanContains(
+    _In_ PCWSTR Text,
+    _In_ PCWSTR Pattern)
+{
+    SIZE_T PatternLength = wcslen(Pattern);
+
+    for (; *Text; Text++)
+    {
+        if (_wcsnicmp(Text, Pattern, PatternLength) == 0)
+            return TRUE;
+    }
+    return PatternLength == 0;
+}
+
 int
 wmain(int argc, WCHAR **argv)
 {
@@ -179,6 +195,10 @@ wmain(int argc, WCHAR **argv)
     PWLAN_INTERFACE_INFO_LIST pIfList = NULL;
     WLAN_CONNECTION_PARAMETERS Params;
     PCWSTR Ssid;
+    PCWSTR InterfaceMatch = NULL;
+    const GUID *InterfaceGuid = NULL;
+    INT ArgIndex;
+    DWORD Index;
     WCHAR Key[128];
     WCHAR SsidXml[512];
     WCHAR KeyXml[512];
@@ -201,18 +221,20 @@ wmain(int argc, WCHAR **argv)
     RtlZeroMemory(KeyXml, sizeof(KeyXml));
     RtlZeroMemory(ProfileXml, sizeof(ProfileXml));
 
-    if (argc != 3 && argc != 4)
+    ArgIndex = (argc >= 3 && _wcsicmp(argv[2], L"--key-file") == 0) ? 4 : 3;
+    if (argc != ArgIndex && !(argc == ArgIndex + 2 && _wcsicmp(argv[ArgIndex], L"--interface") == 0))
     {
-        wprintf(L"usage: wlanconn <ssid> <wpa2-passphrase>\n"
-                L"       wlanconn <ssid> --key-file <path>\n");
+        wprintf(L"usage: wlanconn <ssid> <wpa2-passphrase> [--interface <description>]\n"
+                L"       wlanconn <ssid> --key-file <path> [--interface <description>]\n");
         return 1;
     }
+    if (argc == ArgIndex + 2)
+        InterfaceMatch = argv[ArgIndex + 1];
 
     Ssid = argv[1];
-    if (argc == 4)
+    if (ArgIndex == 4)
     {
-        if (_wcsicmp(argv[2], L"--key-file") != 0 ||
-            !WlanLoadKeyFile(argv[3], Key, ARRAYSIZE(Key)))
+        if (!WlanLoadKeyFile(argv[3], Key, ARRAYSIZE(Key)))
         {
             wprintf(L"WLANCONN: cannot read key file\n");
             goto Cleanup;
@@ -275,6 +297,27 @@ wmain(int argc, WCHAR **argv)
         goto Cleanup;
     }
 
+    for (Index = 0; Index < pIfList->dwNumberOfItems; Index++)
+    {
+        WCHAR GuidText[40];
+
+        if (!StringFromGUID2(&pIfList->InterfaceInfo[Index].InterfaceGuid, GuidText, ARRAYSIZE(GuidText)))
+            GuidText[0] = L'\0';
+        if (!InterfaceMatch ||
+            WlanContains(pIfList->InterfaceInfo[Index].strInterfaceDescription, InterfaceMatch) ||
+            WlanContains(GuidText, InterfaceMatch))
+        {
+            InterfaceGuid = &pIfList->InterfaceInfo[Index].InterfaceGuid;
+            wprintf(L"WLANCONN: using %s\n", pIfList->InterfaceInfo[Index].strInterfaceDescription);
+            break;
+        }
+    }
+    if (InterfaceGuid == NULL)
+    {
+        wprintf(L"WLANCONN: no WLAN interface matches %s\n", InterfaceMatch);
+        goto Cleanup;
+    }
+
     RtlZeroMemory(&ScanWait, sizeof(ScanWait));
     ScanWait.Event = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (ScanWait.Event == NULL)
@@ -291,7 +334,7 @@ wmain(int argc, WCHAR **argv)
         CloseHandle(ScanWait.Event);
         goto Cleanup;
     }
-    Result = WlanScan(hClient, &pIfList->InterfaceInfo[0].InterfaceGuid,
+    Result = WlanScan(hClient, InterfaceGuid,
                       NULL, NULL, NULL);
     if (Result != ERROR_SUCCESS ||
         WaitForSingleObject(ScanWait.Event, 15000) != WAIT_OBJECT_0 ||
@@ -307,7 +350,7 @@ wmain(int argc, WCHAR **argv)
                              FALSE, NULL, NULL, NULL, &PreviousSource);
     CloseHandle(ScanWait.Event);
 
-    Result = WlanSetProfile(hClient, &pIfList->InterfaceInfo[0].InterfaceGuid, 0, ProfileXml, NULL, TRUE, NULL, &Reason);
+    Result = WlanSetProfile(hClient, InterfaceGuid, 0, ProfileXml, NULL, TRUE, NULL, &Reason);
     wprintf(L"WLANCONN: WlanSetProfile 0x%lx (reason %lu)\n", Result, Reason);
     SecureZeroMemory(Key, sizeof(Key));
     SecureZeroMemory(KeyXml, sizeof(KeyXml));
@@ -321,7 +364,7 @@ wmain(int argc, WCHAR **argv)
     Params.strProfile = Ssid;
     Params.dot11BssType = dot11_BSS_type_infrastructure;
 
-    Result = WlanConnect(hClient, &pIfList->InterfaceInfo[0].InterfaceGuid, &Params, NULL);
+    Result = WlanConnect(hClient, InterfaceGuid, &Params, NULL);
     wprintf(L"WLANCONN: WlanConnect 0x%lx\n", Result);
     if (Result != ERROR_SUCCESS)
         goto Cleanup;
@@ -331,7 +374,7 @@ wmain(int argc, WCHAR **argv)
         DataSize = 0;
         Attributes = NULL;
         Result = WlanQueryInterface(hClient,
-                                    &pIfList->InterfaceInfo[0].InterfaceGuid,
+                                    InterfaceGuid,
                                     wlan_intf_opcode_current_connection,
                                     NULL,
                                     &DataSize,
@@ -374,11 +417,10 @@ wmain(int argc, WCHAR **argv)
 Cleanup:
     if (Attributes != NULL)
         WlanFreeMemory(Attributes);
-    if (ProfileSet && hClient != NULL && pIfList != NULL &&
-        pIfList->dwNumberOfItems != 0)
+    if (ProfileSet && hClient != NULL && InterfaceGuid != NULL)
     {
         WlanDeleteProfile(hClient,
-                          &pIfList->InterfaceInfo[0].InterfaceGuid,
+                          InterfaceGuid,
                           Ssid,
                           NULL);
     }
