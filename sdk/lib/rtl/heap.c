@@ -2266,6 +2266,14 @@ RtlAllocateHeap(IN PVOID HeapPtr,
         VirtualBlock->CommitSize = AllocationSize;
         VirtualBlock->ReserveSize = AllocationSize;
 
+        if ((Heap->Flags & HEAP_TAIL_CHECKING_ENABLED) &&
+            !(Heap->SegmentFlags & HEAP_USER_ALLOCATED) &&
+            !RtlpHeapIsSpecial(Heap->Flags))
+        {
+            RtlFillMemory((PCHAR)(VirtualBlock + 1) + Size, sizeof(HEAP_ENTRY), HEAP_TAIL_FILL);
+            VirtualBlock->BusyBlock.Flags |= HEAP_ENTRY_FILL_PATTERN;
+        }
+
         /* Insert it into the list of virtual allocations */
         InsertTailList(&Heap->VirtualAllocdBlocks, &VirtualBlock->Entry);
 

@@ -3415,7 +3415,11 @@ static void test_block_layout( HANDLE heap, DWORD global_flags, DWORD heap_flags
         ok( diff > expect_size, "got diff %#Ix\n", diff );
 
         tail = ptr0[alloc_size] | ptr1[alloc_size] | ptr2[alloc_size];
+#ifdef __REACTOS__
+        ok( !tail == !(global_flags & FLG_HEAP_ENABLE_TAIL_CHECK), "got tail %#x\n", tail );
+#else
         ok( !tail, "got tail\n" );
+#endif
 
         ret = HeapFree( heap, 0, ptr2 );
         ok( ret, "HeapFree failed, error %lu\n", GetLastError() );
