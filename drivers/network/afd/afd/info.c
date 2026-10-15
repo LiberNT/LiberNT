@@ -197,7 +197,7 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 }
                 else
                 {
-                    Status = STATUS_INVALID_PARAMETER;
+                    Status = STATUS_SUCCESS;
                 }
                 break;
             case AFD_INFO_SEND_WINDOW_SIZE:
@@ -242,7 +242,7 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 }
                 else
                 {
-                    Status = STATUS_INVALID_PARAMETER;
+                    Status = STATUS_SUCCESS;
                 }
                 break;
             default:

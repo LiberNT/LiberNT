@@ -24,7 +24,7 @@ DWORD DebugTraceLevel = MIN_TRACE;
 
 /* FIXME: should depend on SystemSize */
 ULONG AfdReceiveWindowSize = 0x40000;
-ULONG AfdSendWindowSize = 0x2000;
+ULONG AfdSendWindowSize = 0x10000;
 
 void OskitDumpBuffer( PCHAR Data, UINT Len ) {
     unsigned int i;
