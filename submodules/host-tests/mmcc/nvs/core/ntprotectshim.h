@@ -23,7 +23,10 @@
 #define PAGE_NOCACHE 0x200
 #define PAGE_WRITECOMBINE 0x400
 #define PAGE_TARGETS_INVALID 0x40000000
+#define PAGE_TARGETS_NO_UPDATE 0x40000000
+#define PAGE_ENCLAVE_UNVALIDATED 0x20000000
 
 BOOLEAN MiProtectionFromWin32(ULONG Win32Protect, PULONG Protection);
 BOOLEAN MiAllocationProtectionFromWin32(ULONG Win32Protect, PULONG Protection);
+NTSTATUS MiProtectChangeFromWin32(ULONG Win32Protect, PULONG Protection);
 ULONG MiProtectionToWin32(ULONG Protection);

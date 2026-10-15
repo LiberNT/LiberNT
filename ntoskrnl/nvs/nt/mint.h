@@ -20,6 +20,10 @@
 
 #include <nvs/nt/mmkernel.h>
 
+#ifndef PAGE_ENCLAVE_UNVALIDATED
+#define PAGE_ENCLAVE_UNVALIDATED 0x20000000
+#endif
+
 #define MI_NT_UNUSED_SEGMENT_LIMIT 1024
 #define MI_NT_BOTTOM_UP_SLOTS 256
 #define MI_NT_HIGH_ENTROPY_FLOOR 0x100000000ULL
@@ -143,6 +147,7 @@ MiCacheTypeFromNt(
 
 BOOLEAN MiProtectionFromWin32(_In_ ULONG Win32Protect, _Out_ PULONG Protection);
 BOOLEAN MiAllocationProtectionFromWin32(_In_ ULONG Win32Protect, _Out_ PULONG Protection);
+NTSTATUS MiProtectChangeFromWin32(_In_ ULONG Win32Protect, _Out_ PULONG Protection);
 ULONG MiProtectionToWin32(_In_ ULONG Protection);
 VOID MiShrinkUserStackToGuard(_In_ PEPROCESS Process, _In_ ULONG64 Base, _In_ ULONG64 Size);
 NTSTATUS MiWaitForMemory(_In_ NTSTATUS Status, _Inout_ PULONG Attempts);

@@ -15,7 +15,11 @@
 static void
 VmWindowsProtection(void)
 {
-    ULONG Win32, Protection, Plain;
+    static const ULONG Probed[] =
+    {
+        PAGE_READONLY, PAGE_READWRITE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY
+    };
+    ULONG Win32, Protection, Plain, i;
 
     for (Win32 = PAGE_NOACCESS; Win32 <= PAGE_EXECUTE_WRITECOPY; Win32 <<= 1)
     {
@@ -26,6 +30,17 @@ VmWindowsProtection(void)
               MI_PROT_IS_EXECUTE(Plain));
         CHECK(Protection == (MI_PROT_IS_EXECUTE(Plain) ? Plain : 0));
         CHECK(!MiAllocationProtectionFromWin32(Win32 | 0x20000000, &Protection));
+    }
+    for (i = 0; i < sizeof(Probed) / sizeof(Probed[0]); i++)
+    {
+        CHECK(MiProtectionFromWin32(Probed[i], &Plain));
+        CHECK(MiProtectChangeFromWin32(Probed[i] | PAGE_ENCLAVE_UNVALIDATED, &Protection) == STATUS_SUCCESS);
+        CHECK(Protection == Plain);
+        CHECK(MiProtectChangeFromWin32(Probed[i] | PAGE_TARGETS_NO_UPDATE, &Protection) ==
+              (MI_PROT_IS_EXECUTE(Plain) ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER_4));
+        CHECK(MiProtectChangeFromWin32(Probed[i] | PAGE_TARGETS_NO_UPDATE | PAGE_ENCLAVE_UNVALIDATED, &Protection) ==
+              (MI_PROT_IS_EXECUTE(Plain) ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER_4));
+        CHECK(Protection == (MI_PROT_IS_EXECUTE(Plain) ? Plain : 0));
     }
     CHECK(!MiAllocationProtectionFromWin32(PAGE_TARGETS_INVALID, &Protection));
     CHECK(!MiAllocationProtectionFromWin32(PAGE_EXECUTE | PAGE_READWRITE | PAGE_TARGETS_INVALID, &Protection));

@@ -99,3 +99,19 @@ MiAllocationProtectionFromWin32(
     *Protection = Base;
     return TRUE;
 }
+
+NTSTATUS
+MiProtectChangeFromWin32(
+    _In_ ULONG Win32Protect,
+    _Out_ PULONG Protection)
+{
+    ULONG Base;
+
+    *Protection = 0;
+    if (!MiProtectionFromWin32(Win32Protect & ~(PAGE_TARGETS_NO_UPDATE | PAGE_ENCLAVE_UNVALIDATED), &Base))
+        return STATUS_INVALID_PAGE_PROTECTION;
+    if ((Win32Protect & PAGE_TARGETS_NO_UPDATE) && !MI_PROT_IS_EXECUTE(Base))
+        return STATUS_INVALID_PARAMETER_4;
+    *Protection = Base;
+    return STATUS_SUCCESS;
+}

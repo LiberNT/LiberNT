@@ -764,8 +764,9 @@ MiProtectVirtualMemoryNt(
     ULONG Attempts = 0;
     NTSTATUS Status;
 
-    if (!MiProtectionFromWin32(NewAccessProtection, &Protection))
-        return STATUS_INVALID_PAGE_PROTECTION;
+    Status = MiProtectChangeFromWin32(NewAccessProtection, &Protection);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     do
     {
@@ -806,8 +807,9 @@ NtProtectVirtualMemory(
 
     PAGED_CODE();
 
-    if (!MiProtectionFromWin32(NewAccessProtection, &Protection))
-        return STATUS_INVALID_PAGE_PROTECTION;
+    Status = MiProtectChangeFromWin32(NewAccessProtection, &Protection);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     _SEH2_TRY
     {
