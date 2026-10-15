@@ -13,6 +13,7 @@
 #include <ndk/iofuncs.h>
 #include <initguid.h>
 #include <wdmguid.h>
+#include <acpiioct.h>
 #include <reactos/riscv64/fdtlib.h>
 #include "halp.h"
 
@@ -898,6 +899,36 @@ HalpRiscvPlatformPower(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS NTAPI
+HalpRiscvPlatformDeviceControl(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP Irp)
+{
+    RISCV_PLATFORM_EXTENSION *Extension = DeviceObject->DeviceExtension;
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    NTSTATUS Status;
+
+    if (Extension->Type == RISCV_PLATFORM_FDO)
+    {
+        IoSkipCurrentIrpStackLocation(Irp);
+        return IoCallDriver(Extension->LowerDevice, Irp);
+    }
+    switch (Stack->Parameters.DeviceIoControl.IoControlCode)
+    {
+        case IOCTL_ACPI_EVAL_METHOD:
+        case IOCTL_ACPI_ASYNC_EVAL_METHOD:
+        case IOCTL_ACPI_EVAL_METHOD_EX:
+        case IOCTL_ACPI_ASYNC_EVAL_METHOD_EX:
+            Status = STATUS_OBJECT_NAME_NOT_FOUND;
+            break;
+        default:
+            Status = STATUS_INVALID_DEVICE_REQUEST;
+            break;
+    }
+    Irp->IoStatus.Status = Status;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
+}
+
 static VOID
 HalpRiscvQueryDebuggerDevice(VOID)
 {
@@ -1031,6 +1062,7 @@ HalpRiscvPlatformDriverEntry(_In_ PDRIVER_OBJECT DriverObject,
     DriverObject->DriverExtension->AddDevice = HalpRiscvPlatformAddDevice;
     DriverObject->MajorFunction[IRP_MJ_PNP] = HalpRiscvPlatformPnp;
     DriverObject->MajorFunction[IRP_MJ_POWER] = HalpRiscvPlatformPower;
+    DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = HalpRiscvPlatformDeviceControl;
 
     Status = IoReportDetectedDevice(DriverObject, InterfaceTypeUndefined,
                                     MAXULONG, MAXULONG, NULL, NULL,
