@@ -11,6 +11,7 @@ add_library(threaddll SHARED
     threaddll.def
 )
 set_entrypoint(threaddll DllMain 12)
+add_dependencies(threaddll psdk)
 if(MSVC)
     target_link_libraries(threaddll runtmchk)
 endif()

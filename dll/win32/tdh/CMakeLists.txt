@@ -8,5 +8,6 @@ list(APPEND SOURCE
 
 add_library(tdh MODULE ${SOURCE})
 set_module_type(tdh win32dll ENTRYPOINT 0 UNICODE)
+add_dependencies(tdh xdk)
 add_importlibs(tdh kernel32 ntdll)
 add_cd_file(TARGET tdh DESTINATION reactos/system32 FOR all)

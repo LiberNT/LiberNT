@@ -1,6 +1,6 @@
 add_library(ntfslib_new)
 add_subdirectory(src)
-add_dependencies(ntfslib_new psdk)
+add_dependencies(ntfslib_new psdk bugcodes)
 
 target_include_directories(ntfslib_new
     PUBLIC include/public

@@ -64,7 +64,7 @@ add_library(win32_registry_hkcr STATIC
     reg/hkcr.c
 )
 
-add_dependencies(win32_registry_hkcr advapi32_rpc_headers)
+add_dependencies(win32_registry_hkcr advapi32_rpc_headers xdk)
 target_link_libraries(win32_registry_hkcr ${PSEH_LIB})
 target_compile_definitions(win32_registry_hkcr PRIVATE _KERNEL32_ UNICODE _UNICODE)
 
@@ -73,7 +73,7 @@ add_library(win32_registry STATIC
     reg/reg.c
 )
 
-add_dependencies(win32_registry advapi32_rpc_headers)
+add_dependencies(win32_registry advapi32_rpc_headers xdk)
 target_link_libraries(win32_registry win32_registry_hkcr ${PSEH_LIB})
 target_compile_definitions(win32_registry PRIVATE _KERNEL32_ UNICODE _UNICODE)
 

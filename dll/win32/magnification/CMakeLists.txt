@@ -8,5 +8,6 @@ list(APPEND SOURCE
 
 add_library(magnification MODULE ${SOURCE})
 set_module_type(magnification win32dll UNICODE ENTRYPOINT DllMain 12)
+add_dependencies(magnification psdk)
 add_importlibs(magnification user32 gdi32 kernel32 ntdll)
 add_cd_file(TARGET magnification DESTINATION reactos/system32 FOR all)

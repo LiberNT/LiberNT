@@ -5,7 +5,7 @@ function(add_wdfdriverentry_version _target _minor)
         classbind.c
         inittypes.c
         wdfdriverentry.c)
-    add_dependencies(${_target} xdk)
+    add_dependencies(${_target} bugcodes xdk)
 
     if(GCC)
         target_compile_options(${_target} PRIVATE -Wno-unknown-pragmas -Wno-switch)

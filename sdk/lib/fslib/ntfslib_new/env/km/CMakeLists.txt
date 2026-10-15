@@ -1,6 +1,6 @@
 
 add_library(ntfslib_new_km km.cpp)
-add_dependencies(ntfslib_new_km psdk)
+add_dependencies(ntfslib_new_km psdk bugcodes)
 
 target_include_directories(ntfslib_new_km
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}

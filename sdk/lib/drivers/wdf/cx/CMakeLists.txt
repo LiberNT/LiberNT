@@ -5,7 +5,7 @@
 
 function(add_wdfcx_stub _target _source)
     add_library(${_target} STATIC ${_source})
-    add_dependencies(${_target} xdk)
+    add_dependencies(${_target} bugcodes xdk)
     target_compile_definitions(${_target} PRIVATE WDF_DEVICE_NO_WDMSEC_H)
     target_include_directories(${_target} PRIVATE
         ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/wdf

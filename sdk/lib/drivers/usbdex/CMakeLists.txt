@@ -6,4 +6,4 @@ list(APPEND SOURCE
     usbguid.c)
 
 add_library(usbdex ${SOURCE})
-add_dependencies(usbdex xdk)
+add_dependencies(usbdex bugcodes xdk)
