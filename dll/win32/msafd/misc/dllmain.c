@@ -1901,7 +1901,7 @@ WSPAccept(
             }
             else
             {
-                if (lpErrno) *lpErrno = WSAECONNREFUSED;
+                if (lpErrno) *lpErrno = WSATRY_AGAIN;
                 return INVALID_SOCKET;
             }
         }

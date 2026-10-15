@@ -629,3 +629,49 @@ NTSTATUS AfdAccept( PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     return UnlockAndMaybeComplete( FCB, STATUS_UNSUCCESSFUL, Irp, 0 );
 }
+
+NTSTATUS AfdDeferAccept( PDEVICE_OBJECT DeviceObject, PIRP Irp,
+                         PIO_STACK_LOCATION IrpSp ) {
+    PFILE_OBJECT FileObject = IrpSp->FileObject;
+    PAFD_FCB FCB = FileObject->FsContext;
+    PAFD_DEFER_ACCEPT_DATA DeferData;
+    PAFD_TDI_OBJECT_QELT Qelt;
+    PLIST_ENTRY PendingConn;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    if( !SocketAcquireStateLock( FCB ) ) return LostSocket( Irp );
+
+    if( FCB->SharedData.State != SOCKET_STATE_LISTENING )
+        return UnlockAndMaybeComplete( FCB, STATUS_INVALID_PARAMETER, Irp, 0 );
+
+    if( IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(AFD_DEFER_ACCEPT_DATA) )
+        return UnlockAndMaybeComplete( FCB, STATUS_INVALID_PARAMETER, Irp, 0 );
+
+    DeferData = LockRequest( Irp, IrpSp, FALSE, NULL );
+    if( !DeferData )
+        return UnlockAndMaybeComplete( FCB, STATUS_NO_MEMORY, Irp, 0 );
+
+    for( PendingConn = FCB->PendingConnections.Flink;
+         PendingConn != &FCB->PendingConnections;
+         PendingConn = PendingConn->Flink ) {
+        Qelt = CONTAINING_RECORD( PendingConn, AFD_TDI_OBJECT_QELT, ListEntry );
+        if( Qelt->Seq != DeferData->SequenceNumber )
+            continue;
+
+        if( DeferData->RejectConnection ) {
+            RemoveEntryList( &Qelt->ListEntry );
+            TdiDisassociateAddressFile( Qelt->Object.Object );
+            ObDereferenceObject( Qelt->Object.Object );
+            ZwClose( Qelt->Object.Handle );
+            ExFreePoolWithTag( Qelt, TAG_AFD_ACCEPT_QUEUE );
+
+            if( IsListEmpty( &FCB->PendingConnections ) )
+                FCB->PollState &= ~AFD_EVENT_ACCEPT;
+        }
+
+        return UnlockAndMaybeComplete( FCB, STATUS_SUCCESS, Irp, 0 );
+    }
+
+    return UnlockAndMaybeComplete( FCB, STATUS_INVALID_PARAMETER, Irp, 0 );
+}
