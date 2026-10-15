@@ -4612,7 +4612,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device14
                 return E_INVALIDARG;
             }
 
-            data->TriangleFanSupported = FALSE;
+            data->TriangleFanSupported = TRUE;
             data->DynamicIndexBufferStripCutSupported = FALSE;
 
             TRACE("Triangle fan %#x.\n", data->TriangleFanSupported);
@@ -4684,6 +4684,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device14
 
             memset(data, 0, sizeof(*data));
             data->RasterizerDesc2Supported = TRUE;
+            data->AnisoFilterWithPointMipSupported = TRUE;
             data->SupportedSampleCountsWithNoOutputs = 1;
             data->MaxSamplerDescriptorHeapSize = D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE;
             data->MaxSamplerDescriptorHeapSizeWithStaticSamplers = D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE;
