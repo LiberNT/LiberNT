@@ -1005,6 +1005,8 @@ function(create_registry_hives)
             ${CMAKE_SOURCE_DIR}/boot/bootdata/hiveinst.inf)
     endif()
     list(APPEND _preinstall_inf_files ${_comreg_inf})
+    get_property(_preinstall_registry_infs GLOBAL PROPERTY PREINSTALL_REGISTRY_INF_LIST)
+    list(APPEND _preinstall_inf_files ${_preinstall_registry_infs})
 
     add_custom_command(
         OUTPUT ${CMAKE_BINARY_DIR}/boot/bootdata/preinstall/system

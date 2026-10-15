@@ -246,7 +246,6 @@ Control="System\CurrentControlSet\Control"
 
 [Classes]
 HKLM,%CurrentVersion%\Installer,"InstallerLocation",,"%11%"
-HKLM,Software\Microsoft\.NETFramework,InstallRoot,,"%10%\Microsoft.NET\Framework\"
 
 [DestinationDirs]
 IECopy=16422,Internet Explorer

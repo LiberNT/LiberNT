@@ -697,6 +697,38 @@ if(PREINSTALL_WINE_MONO)
             "reactos/mono/mono-2.0/${_wine_mono_file}=${_wine_mono_source}")
         list(APPEND _preinstall_overlay_deps "${_wine_mono_source}")
     endforeach()
+
+    find_program(MKMONOSUPPORT_PYTHON_EXECUTABLE NAMES python3 python REQUIRED NO_CMAKE_FIND_ROOT_PATH)
+    set(_wine_mono_support_dir "${_wine_mono_dir}/support-${ARCH}")
+    set(_wine_mono_support_stamp "${_wine_mono_support_dir}.generated")
+    set(_wine_mono_support_key "${_wine_mono_sha256}-${ARCH}")
+    set(_wine_mono_support_done)
+    if(EXISTS "${_wine_mono_support_stamp}")
+        file(READ "${_wine_mono_support_stamp}" _wine_mono_support_done)
+    endif()
+    if(NOT _wine_mono_support_done STREQUAL _wine_mono_support_key)
+        file(REMOVE_RECURSE "${_wine_mono_support_dir}")
+        file(MAKE_DIRECTORY "${_wine_mono_support_dir}")
+        execute_process(
+            COMMAND ${MKMONOSUPPORT_PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/sdk/tools/mkmonosupport.py
+                    "${_wine_mono_dir}/${_wine_mono_name}/support/winemono-support.msi" ${ARCH} "C:\\Windows"
+                    "${_wine_mono_support_dir}"
+            RESULT_VARIABLE _wine_mono_result)
+        if(NOT _wine_mono_result EQUAL 0)
+            message(FATAL_ERROR "Preparing the Wine Mono support package failed (msitools is required). "
+                                "Set PREINSTALL_WINE_MONO=OFF to build the image without Wine Mono.")
+        endif()
+        file(WRITE "${_wine_mono_support_stamp}" "${_wine_mono_support_key}")
+    endif()
+    file(STRINGS "${_wine_mono_support_dir}/monosupport.lst" _wine_mono_support_entries)
+    foreach(_wine_mono_entry IN LISTS _wine_mono_support_entries)
+        string(FIND "${_wine_mono_entry}" "=" _wine_mono_separator)
+        math(EXPR _wine_mono_start "${_wine_mono_separator} + 1")
+        string(SUBSTRING "${_wine_mono_entry}" ${_wine_mono_start} -1 _wine_mono_source)
+        set_property(GLOBAL APPEND PROPERTY PREINSTALL_OVERLAY_FILE_LIST "reactos/${_wine_mono_entry}")
+        list(APPEND _preinstall_overlay_deps "${_wine_mono_source}")
+    endforeach()
+    set_property(GLOBAL APPEND PROPERTY PREINSTALL_REGISTRY_INF_LIST "${_wine_mono_support_dir}/monosupport.inf")
 endif()
 
 # Disk image size configuration (in MiB). The 1-GiB default provides a
