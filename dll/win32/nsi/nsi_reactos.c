@@ -350,50 +350,91 @@ static DWORD enumerate_ipv4_neighbour(struct nsi_enumerate_all_ex *params)
     return finish_enumeration(params, count, want_data);
 }
 
+static void fill_ipv4_forward(struct nsi_enumerate_all_ex *params, UINT_PTR i, DWORD dest, DWORD mask,
+                              DWORD next_hop, DWORD if_index, DWORD metric)
+{
+    if (params->key_data)
+    {
+        struct nsi_ipv4_forward_key *key = (struct nsi_ipv4_forward_key *)params->key_data + i;
+        memset(key, 0, sizeof(*key));
+        key->prefix.S_un.S_addr = dest;
+        key->prefix_len = prefix_length(mask);
+        key->luid = key->luid2 = interface_luid(if_index);
+        key->next_hop.S_un.S_addr = next_hop;
+    }
+    if (params->rw_data)
+    {
+        struct nsi_ip_forward_rw *rw = (struct nsi_ip_forward_rw *)params->rw_data + i;
+        memset(rw, 0, sizeof(*rw));
+        rw->valid_lifetime = ~0u;
+        rw->preferred_lifetime = ~0u;
+        rw->metric = metric;
+        rw->protocol = MIB_IPPROTO_NETMGMT;
+        rw->immortal = TRUE;
+    }
+    if (params->dynamic_data)
+    {
+        struct nsi_ipv4_forward_dynamic *dynamic = (struct nsi_ipv4_forward_dynamic *)params->dynamic_data + i;
+        memset(dynamic, 0, sizeof(*dynamic));
+        dynamic->addr2.S_un.S_addr = dest;
+    }
+    if (params->static_data)
+    {
+        struct nsi_ip_forward_static *stat = (struct nsi_ip_forward_static *)params->static_data + i;
+        memset(stat, 0, sizeof(*stat));
+        stat->origin = NlroManual;
+        stat->if_index = if_index;
+    }
+}
+
+static BOOL ipv4_host_route_listed(const RouteTable *table, DWORD address)
+{
+    UINT_PTR i;
+
+    for (i = 0; table && i < table->numRoutes; i++)
+        if (table->routes[i].dest == address && table->routes[i].mask == INADDR_NONE) return TRUE;
+    return FALSE;
+}
+
+static DWORD ipv4_interface_route_metric(const RouteTable *table, DWORD if_index)
+{
+    UINT_PTR i;
+
+    for (i = 0; table && i < table->numRoutes; i++)
+        if (table->routes[i].ifIndex == if_index && table->routes[i].mask) return table->routes[i].metric;
+    return 0;
+}
+
 static DWORD enumerate_ipv4_forward(struct nsi_enumerate_all_ex *params)
 {
     RouteTable *table = getRouteTable();
+    InterfaceIndexTable *indexes = getInterfaceIndexTable();
     BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
-    UINT_PTR count = table ? table->numRoutes : 0, limit = count < params->count ? count : params->count;
-    UINT_PTR i;
+    UINT_PTR count = 0, i;
 
-    for (i = 0; want_data && i < limit; i++)
+    for (i = 0; table && i < table->numRoutes; i++)
     {
         RouteEntry *row = table->routes + i;
+        DWORD next_hop = row->gateway;
 
-        if (params->key_data)
-        {
-            struct nsi_ipv4_forward_key *key = (struct nsi_ipv4_forward_key *)params->key_data + i;
-            memset(key, 0, sizeof(*key));
-            key->prefix.S_un.S_addr = row->dest;
-            key->prefix_len = prefix_length(row->mask);
-            key->luid = key->luid2 = interface_luid(row->ifIndex);
-            key->next_hop.S_un.S_addr = row->gateway;
-        }
-        if (params->rw_data)
-        {
-            struct nsi_ip_forward_rw *rw = (struct nsi_ip_forward_rw *)params->rw_data + i;
-            memset(rw, 0, sizeof(*rw));
-            rw->valid_lifetime = ~0u;
-            rw->preferred_lifetime = ~0u;
-            rw->metric = row->metric;
-            rw->protocol = MIB_IPPROTO_NETMGMT;
-            rw->immortal = TRUE;
-        }
-        if (params->dynamic_data)
-        {
-            struct nsi_ipv4_forward_dynamic *dynamic = (struct nsi_ipv4_forward_dynamic *)params->dynamic_data + i;
-            memset(dynamic, 0, sizeof(*dynamic));
-            dynamic->addr2.S_un.S_addr = row->dest;
-        }
-        if (params->static_data)
-        {
-            struct nsi_ip_forward_static *stat = (struct nsi_ip_forward_static *)params->static_data + i;
-            memset(stat, 0, sizeof(*stat));
-            stat->origin = NlroManual;
-            stat->if_index = row->ifIndex;
-        }
+        if (next_hop == getInterfaceIPAddrByIndex(row->ifIndex)) next_hop = INADDR_ANY;
+        if (want_data && count < params->count)
+            fill_ipv4_forward(params, count, row->dest, row->mask, next_hop, row->ifIndex, row->metric);
+        count++;
     }
+
+    for (i = 0; indexes && i < indexes->numIndexes; i++)
+    {
+        DWORD address = getInterfaceIPAddrByIndex(indexes->indexes[i]);
+
+        if (address == INADDR_ANY || address == INADDR_NONE || ipv4_host_route_listed(table, address)) continue;
+        if (want_data && count < params->count)
+            fill_ipv4_forward(params, count, address, INADDR_NONE, INADDR_ANY, indexes->indexes[i],
+                              ipv4_interface_route_metric(table, indexes->indexes[i]));
+        count++;
+    }
+
+    free(indexes);
     HeapFree(GetProcessHeap(), 0, table);
     return finish_enumeration(params, count, want_data);
 }
@@ -722,14 +763,16 @@ static DWORD get_from_enumeration(const struct nsi_table *table, struct nsi_get_
     struct nsi_enumerate_all_ex enumerate;
     BYTE *data[4] = {NULL};
     UINT_PTR count = 0, i;
-    DWORD error;
+    DWORD error, not_found;
 
+    not_found = (module_equal(params->module, &NPI_MS_IPV4_MODULEID) ||
+                 module_equal(params->module, &NPI_MS_IPV6_MODULEID)) ? ERROR_NOT_FOUND : ERROR_FILE_NOT_FOUND;
     memset(&enumerate, 0, sizeof(enumerate));
     enumerate.module = params->module;
     enumerate.table = params->table;
     if ((error = table->enumerate(&enumerate))) return error;
     count = enumerate.count;
-    if (!count) return ERROR_FILE_NOT_FOUND;
+    if (!count) return not_found;
     data[0] = HeapAlloc(GetProcessHeap(), 0, table->sizes[0] * count);
     if (params->rw_size) data[1] = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, table->sizes[1] * count);
     if (params->dynamic_size) data[2] = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, table->sizes[2] * count);
@@ -749,7 +792,7 @@ static DWORD get_from_enumeration(const struct nsi_table *table, struct nsi_get_
     enumerate.static_size = params->static_size;
     enumerate.count = count;
     if ((error = table->enumerate(&enumerate))) goto done;
-    error = ERROR_FILE_NOT_FOUND;
+    error = not_found;
     for (i = 0; i < enumerate.count; i++)
     {
         if (memcmp(data[0] + i * table->sizes[0], params->key, table->sizes[0])) continue;
