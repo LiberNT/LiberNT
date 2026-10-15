@@ -31,4 +31,9 @@ void RsnaPrf(const rsna_u8 *key, rsna_size keyLen,
              const rsna_u8 *data, rsna_size dataLen,
              rsna_u8 *out, rsna_size bits);
 
+void RsnaKdfSha256(const rsna_u8 *key, rsna_size keyLen,
+                  const char *label,
+                  const rsna_u8 *context, rsna_size contextLen,
+                  rsna_u8 *out, rsna_size bits);
+
 #endif /* _RSNA_KDF_H_ */

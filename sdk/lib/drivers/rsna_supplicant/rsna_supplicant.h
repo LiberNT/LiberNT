@@ -123,6 +123,7 @@ typedef struct _RSNA_CTX
     /* Negotiated cipher (drives PRF length, MIC algorithm, keywrap method). */
     RSNA_CIPHER cipher;
     int         keyDescVer;                 /* from Key Information field       */
+    int         akm;
 
     /* Handshake transient state. */
     RSNA_STATE  state;
@@ -161,6 +162,8 @@ RSNA_STATUS RsnaInit(RSNA_CTX *ctx,
 RSNA_STATUS RsnaInitWithPmk(RSNA_CTX *ctx,
                             const rsna_u8 *ssid, rsna_size ssidLen,
                             const rsna_u8 pmk[RSNA_PMK_LEN]);
+
+RSNA_STATUS RsnaSetPmk(RSNA_CTX *ctx, const rsna_u8 pmk[RSNA_PMK_LEN]);
 
 /* Set the AP (authenticator) MAC address (AA). */
 RSNA_STATUS RsnaSetApAddr(RSNA_CTX *ctx, const rsna_u8 aa[RSNA_MAC_LEN]);
@@ -225,7 +228,18 @@ void RsnaClear(RSNA_CTX *ctx);
  *               MIN(ANonce,SNonce) || MAX(ANonce,SNonce))
  * ptkLen selects the width (48 for CCMP, 64 for TKIP).
  */
+#define RSNA_AKM_PSK            2
+#define RSNA_AKM_PSK_SHA256     6
+#define RSNA_AKM_SAE            8
+
 void RsnaDerivePtk(const rsna_u8 pmk[RSNA_PMK_LEN],
+                   const rsna_u8 aa[RSNA_MAC_LEN],
+                   const rsna_u8 spa[RSNA_MAC_LEN],
+                   const rsna_u8 anonce[RSNA_NONCE_LEN],
+                   const rsna_u8 snonce[RSNA_NONCE_LEN],
+                   rsna_u8 *ptk, rsna_size ptkLen);
+
+void RsnaDerivePtkSha256(const rsna_u8 pmk[RSNA_PMK_LEN],
                    const rsna_u8 aa[RSNA_MAC_LEN],
                    const rsna_u8 spa[RSNA_MAC_LEN],
                    const rsna_u8 anonce[RSNA_NONCE_LEN],

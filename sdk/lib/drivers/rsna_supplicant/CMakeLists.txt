@@ -7,6 +7,9 @@
 
 list(APPEND SOURCE
     rsna_sha1.c
+    rsna_sha256.c
+    rsna_p256.c
+    rsna_sae.c
     rsna_md5.c
     rsna_hmac.c
     rsna_kdf.c

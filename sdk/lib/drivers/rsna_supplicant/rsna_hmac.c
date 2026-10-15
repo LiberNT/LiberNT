@@ -107,3 +107,55 @@ void RsnaHmacMd5(const rsna_u8 *key, rsna_size keyLen,
     RsnaMd5Update(&ctx, inner, RSNA_MD5_DIGEST_LEN);
     RsnaMd5Final(&ctx, mac);
 }
+
+void RsnaHmacSha256Vector(const rsna_u8 *key, rsna_size keyLen,
+                          rsna_size numElem,
+                          const rsna_u8 *const *addr, const rsna_size *len,
+                          rsna_u8 mac[RSNA_SHA256_DIGEST_LEN])
+{
+    RSNA_SHA256_CTX ctx;
+    rsna_u8 k_pad[RSNA_SHA256_BLOCK_LEN];
+    rsna_u8 tk[RSNA_SHA256_DIGEST_LEN];
+    rsna_u8 inner[RSNA_SHA256_DIGEST_LEN];
+    rsna_size i;
+
+    if (keyLen > RSNA_SHA256_BLOCK_LEN)
+    {
+        RsnaSha256(key, keyLen, tk);
+        key = tk;
+        keyLen = RSNA_SHA256_DIGEST_LEN;
+    }
+
+    for (i = 0; i < RSNA_SHA256_BLOCK_LEN; i++)
+        k_pad[i] = 0x36;
+    for (i = 0; i < keyLen; i++)
+        k_pad[i] ^= key[i];
+
+    RsnaSha256Init(&ctx);
+    RsnaSha256Update(&ctx, k_pad, RSNA_SHA256_BLOCK_LEN);
+    for (i = 0; i < numElem; i++)
+        RsnaSha256Update(&ctx, addr[i], len[i]);
+    RsnaSha256Final(&ctx, inner);
+
+    for (i = 0; i < RSNA_SHA256_BLOCK_LEN; i++)
+        k_pad[i] = 0x5c;
+    for (i = 0; i < keyLen; i++)
+        k_pad[i] ^= key[i];
+
+    RsnaSha256Init(&ctx);
+    RsnaSha256Update(&ctx, k_pad, RSNA_SHA256_BLOCK_LEN);
+    RsnaSha256Update(&ctx, inner, RSNA_SHA256_DIGEST_LEN);
+    RsnaSha256Final(&ctx, mac);
+}
+
+void RsnaHmacSha256(const rsna_u8 *key, rsna_size keyLen,
+                    const rsna_u8 *data, rsna_size dataLen,
+                    rsna_u8 mac[RSNA_SHA256_DIGEST_LEN])
+{
+    const rsna_u8 *addr[1];
+    rsna_size len[1];
+
+    addr[0] = data;
+    len[0] = dataLen;
+    RsnaHmacSha256Vector(key, keyLen, 1, addr, len, mac);
+}

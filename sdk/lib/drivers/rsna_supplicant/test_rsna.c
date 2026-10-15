@@ -6,8 +6,8 @@
  *
  * Not built by CMake; build and run on the host:
  *     clang -std=c99 -D_RSNA_HOST_TEST -Wall -Wextra \
- *         rsna_sha1.c rsna_md5.c rsna_hmac.c rsna_kdf.c rsna_aes.c \
- *         rsna_keywrap.c rsna_rc4.c rsna_cmac.c rsna_ccmp.c \
+ *         rsna_sha1.c rsna_sha256.c rsna_md5.c rsna_hmac.c rsna_kdf.c rsna_aes.c \
+ *         rsna_keywrap.c rsna_rc4.c rsna_cmac.c rsna_ccmp.c rsna_p256.c rsna_sae.c \
  *         rsna_supplicant.c test_rsna.c \
  *         -o test_rsna && ./test_rsna
  */
@@ -24,6 +24,8 @@
 #include "rsna_rc4.h"
 #include "rsna_cmac.h"
 #include "rsna_ccmp.h"
+#include "rsna_sha256.h"
+#include "rsna_sae.h"
 #include "rsna_eapol.h"
 #include "rsna_supplicant.h"
 
@@ -752,6 +754,82 @@ static void TestRandomSource(void)
  * Legacy TKIP descriptor path: HMAC-MD5 Key MIC and RC4-encrypted Key Data
  * (key = EAPOL Key IV || KEK, first 256 keystream bytes dropped).
  */
+static void TestHandshakeSae(void)
+{
+    static const rsna_u8 RsnIe[] =
+    {
+        0x30, 0x14, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04, 0x01, 0x00, 0x00, 0x0f, 0xac, 0x04,
+        0x01, 0x00, 0x00, 0x0f, 0xac, 0x08, 0xc0, 0x00
+    };
+    rsna_u8 aa[6] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x01 };
+    rsna_u8 spa[6] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x02 };
+    rsna_u8 pmk[RSNA_PMK_LEN], anonce[32], replay[8], frame[512], reply[512], copy[512];
+    rsna_u8 apPtk[48], mic[16], kd[32], wrapped[40];
+    rsna_size frameLen, replyLen;
+    RSNA_KEYS keys;
+    RSNA_CTX ctx;
+    RSNA_STATE st;
+    int i;
+
+    printf("\n--- Simulated WPA3-SAE (AKM 8) 4-Way Handshake ---\n");
+
+    for (i = 0; i < RSNA_PMK_LEN; i++)
+        pmk[i] = (rsna_u8)(0x40 + i);
+    if (RsnaInitWithPmk(&ctx, (const rsna_u8 *)"WPA3Net", 7, pmk) != RSNA_OK)
+    {
+        Check("SAE handshake: RsnaInitWithPmk", 0, NULL, NULL, 0);
+        return;
+    }
+    RsnaSetApAddr(&ctx, aa);
+    RsnaSetStaAddr(&ctx, spa);
+    RsnaSetRsnIe(&ctx, RsnIe, sizeof(RsnIe));
+    RsnaSeed(&ctx, spa, sizeof(spa));
+
+    for (i = 0; i < 32; i++)
+        anonce[i] = (rsna_u8)(0x60 + i);
+    memset(replay, 0, sizeof(replay));
+    replay[7] = 1;
+    frameLen = ApBuildKeyFrame(frame, KEYINFO_KEY_TYPE | KEYINFO_KEY_ACK, replay, anonce, NULL, NULL, NULL, 0);
+    replyLen = sizeof(reply);
+    st = RsnaRxEapol(&ctx, frame, frameLen, reply, &replyLen);
+    Check("SAE msg1 -> PTK_NEGOTIATING", st == RSNA_STATE_PTK_NEGOTIATING, NULL, NULL, 0);
+    Check("SAE msg2 descriptor version 0",
+          (reply[EAPOL_HDR_LEN + KEYDESC_OFF_KEYINFO + 1] & KEYINFO_VERSION_MASK) == 0, NULL, NULL, 0);
+
+    RsnaDerivePtkSha256(pmk, aa, spa, anonce, &reply[EAPOL_HDR_LEN + KEYDESC_OFF_NONCE], apPtk, sizeof(apPtk));
+    memcpy(copy, reply, replyLen);
+    memset(&copy[EAPOL_HDR_LEN + KEYDESC_OFF_MIC], 0, KEYDESC_MIC_LEN);
+    RsnaAesCmac(apPtk, copy, replyLen, mic);
+    CheckBytes("AP verifies SAE msg2 AES-CMAC MIC", &reply[EAPOL_HDR_LEN + KEYDESC_OFF_MIC], mic, 16);
+
+    kd[0] = KDE_IE_VENDOR;
+    kd[1] = 4 + 2 + 16;
+    kd[2] = KDE_OUI_0; kd[3] = KDE_OUI_1; kd[4] = KDE_OUI_2;
+    kd[5] = KDE_TYPE_GTK;
+    kd[6] = 0x01;
+    kd[7] = 0x00;
+    for (i = 0; i < 16; i++)
+        kd[8 + i] = (rsna_u8)(0xC0 + i);
+    kd[24] = KDE_IE_VENDOR;
+    for (i = 25; i < 32; i++)
+        kd[i] = 0;
+    RsnaAesWrap(apPtk + 16, 128, kd, 4, wrapped);
+
+    replay[7] = 2;
+    frameLen = ApBuildKeyFrame(frame, KEYINFO_KEY_TYPE | KEYINFO_KEY_ACK | KEYINFO_KEY_MIC | KEYINFO_INSTALL |
+                               KEYINFO_SECURE | KEYINFO_ENCRYPTED_DATA,
+                               replay, anonce, NULL, NULL, wrapped, sizeof(wrapped));
+    RsnaAesCmac(apPtk, frame, frameLen, mic);
+    memcpy(&frame[EAPOL_HDR_LEN + KEYDESC_OFF_MIC], mic, KEYDESC_MIC_LEN);
+    replyLen = sizeof(reply);
+    st = RsnaRxEapol(&ctx, frame, frameLen, reply, &replyLen);
+    Check("SAE msg3 -> COMPLETED", st == RSNA_STATE_COMPLETED, NULL, NULL, 0);
+    RsnaGetKeys(&ctx, &keys);
+    CheckBytes("SAE PTK from KDF-SHA-256", keys.ptk, apPtk, sizeof(apPtk));
+    CheckBytes("SAE GTK extracted", keys.gtk, kd + 8, 16);
+    RsnaClear(&ctx);
+}
+
 static void TestHandshakeTkip(void)
 {
     RSNA_CTX ctx;
@@ -861,6 +939,56 @@ static void TestHandshakeTkip(void)
     }
 }
 
+static void TestSha256(void)
+{
+    rsna_u8 out[48], exp[48];
+
+    RsnaSha256("abc", 3, out);
+    FromHex("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", exp, sizeof(exp));
+    CheckBytes("SHA-256 FIPS 180-4 abc", out, exp, 32);
+
+    RsnaHmacSha256((const rsna_u8 *)"Jefe", 4, (const rsna_u8 *)"what do ya want for nothing?", 28, out);
+    FromHex("5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843", exp, sizeof(exp));
+    CheckBytes("HMAC-SHA-256 RFC 4231 case 2", out, exp, 32);
+
+    RsnaKdfSha256((const rsna_u8 *)"key", 3, "label", (const rsna_u8 *)"ctx", 3, out, 384);
+    FromHex("ec355ff2dc2ac99e8df3d8a95eae4c1bc28237326547ed2f3140b2d5e6daa65e"
+            "a93ad7782e2b84e3e5b1b396880f5163", exp, sizeof(exp));
+    CheckBytes("KDF-SHA-256-384", out, exp, 48);
+}
+
+static void TestSae(void)
+{
+    rsna_u8 own[6], peer[6], rand[32], mask[32], commit[98], peerCommit[98], kck[32], pmk[32], pmkid[16];
+    RSNA_SAE sae;
+
+    FromHex("4d3f2fffe387", own, sizeof(own));
+    FromHex("a5d8aa958e3c", peer, sizeof(peer));
+    FromHex("992465fd3daa3c60aa6565b7f62a2a7f2e12dd12f198faf4fbed89d7ff1ace94", rand, sizeof(rand));
+    FromHex("9507a90f777a044d6a0830b91ea3d5dd70bece44e1acffb86983b5e1bf9fb322", mask, sizeof(mask));
+    FromHex("13002e2c0f0db52440ad146d967114ce005ce1eab0aa2c2e5c2871b774f6c2575c65d5ad9e00829707aa36ba8b85"
+            "9738fc961d08243505f47c035376d7ac4bc8d7b95083bf43827d0fc31ed778dd3671fd21a46d1091d64b6f9a1e"
+            "1272621325dbe1", commit, sizeof(commit));
+    FromHex("1300591b96f3397fb945100848e7b550543b6720d88337ee93fc49fd6df7e08b5223e71b9bb048d3873f20556953"
+            "a96c91536fd8ee6ca9b4a68a148b056a909be03e83ae208f60f8ef5537858074db06687032399862999b511e0a"
+            "1552a5fea317c2", peerCommit, sizeof(peerCommit));
+    FromHex("1e733f6d9bd53256287304338831b09a39406d121017073a5c30db36f36cb81a", kck, sizeof(kck));
+    FromHex("4e4dfab1a2dd8ac1a91790f953faaa452ae5c6873ab75b63605ba663f8a7fe59", pmk, sizeof(pmk));
+    FromHex("8747a600eea3f9f22475df58ca1e5498", pmkid, sizeof(pmkid));
+
+    memset(&sae, 0, sizeof(sae));
+    Check("SAE PWE hunting and pecking",
+          RsnaSaeDerivePwe(&sae, own, peer, (const rsna_u8 *)"mekmitasdigoat", 14), NULL, NULL, 0);
+    Check("SAE commit", RsnaSaeSetCommit(&sae, rand, mask), NULL, NULL, 0);
+    CheckBytes("SAE commit scalar (802.11-2020 J.10)", sae.Scalar, commit + 2, 32);
+    CheckBytes("SAE commit element (802.11-2020 J.10)", sae.Element, commit + 34, 64);
+    Check("SAE peer commit", RsnaSaeProcessCommit(&sae, peerCommit + 2, peerCommit + 34), NULL, NULL, 0);
+    CheckBytes("SAE KCK (802.11-2020 J.10)", sae.Kck, kck, 32);
+    CheckBytes("SAE PMK (802.11-2020 J.10)", sae.Pmk, pmk, 32);
+    CheckBytes("SAE PMKID (802.11-2020 J.10)", sae.Pmkid, pmkid, 16);
+    RsnaSaeClear(&sae);
+}
+
 /* ================================================================== */
 
 int main(void)
@@ -876,6 +1004,8 @@ int main(void)
     TestAesKeyWrap();
     TestCmac();
     TestCcmpBip();
+    TestSha256();
+    TestSae();
 
     printf("\n--- Key derivation vectors ---\n");
     TestPmk();
@@ -883,6 +1013,7 @@ int main(void)
 
     TestHandshake();
     TestHandshakeTkip();
+    TestHandshakeSae();
     TestRandomSource();
 
     printf("\n=== RESULT: %d passed, %d failed ===\n", g_pass, g_fail);

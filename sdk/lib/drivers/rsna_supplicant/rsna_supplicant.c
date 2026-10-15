@@ -20,6 +20,7 @@
 #include "rsna_keywrap.h"
 #include "rsna_rc4.h"
 #include "rsna_aes.h"
+#include "rsna_cmac.h"
 
 /* ------------------------------------------------------------------ */
 /* small local helpers (no libc dependency in the core)               */
@@ -183,6 +184,46 @@ void RsnaDerivePtk(const rsna_u8 pmk[RSNA_PMK_LEN],
             data, pos, ptk, ptkLen * 8);
 }
 
+void RsnaDerivePtkSha256(const rsna_u8 pmk[RSNA_PMK_LEN],
+                   const rsna_u8 aa[RSNA_MAC_LEN],
+                   const rsna_u8 spa[RSNA_MAC_LEN],
+                   const rsna_u8 anonce[RSNA_NONCE_LEN],
+                   const rsna_u8 snonce[RSNA_NONCE_LEN],
+                   rsna_u8 *ptk, rsna_size ptkLen)
+{
+    rsna_u8 data[2 * RSNA_MAC_LEN + 2 * RSNA_NONCE_LEN];
+    rsna_size pos = 0;
+    const rsna_u8 *addrMin, *addrMax;
+    const rsna_u8 *nonceMin, *nonceMax;
+
+    /* MIN(AA,SPA) || MAX(AA,SPA) */
+    if (RsnaMemcmp(aa, spa, RSNA_MAC_LEN) < 0)
+    {
+        addrMin = aa; addrMax = spa;
+    }
+    else
+    {
+        addrMin = spa; addrMax = aa;
+    }
+    RsnaMemcpy(&data[pos], addrMin, RSNA_MAC_LEN); pos += RSNA_MAC_LEN;
+    RsnaMemcpy(&data[pos], addrMax, RSNA_MAC_LEN); pos += RSNA_MAC_LEN;
+
+    /* MIN(ANonce,SNonce) || MAX(ANonce,SNonce) */
+    if (RsnaMemcmp(anonce, snonce, RSNA_NONCE_LEN) < 0)
+    {
+        nonceMin = anonce; nonceMax = snonce;
+    }
+    else
+    {
+        nonceMin = snonce; nonceMax = anonce;
+    }
+    RsnaMemcpy(&data[pos], nonceMin, RSNA_NONCE_LEN); pos += RSNA_NONCE_LEN;
+    RsnaMemcpy(&data[pos], nonceMax, RSNA_NONCE_LEN); pos += RSNA_NONCE_LEN;
+
+    RsnaKdfSha256(pmk, RSNA_PMK_LEN, "Pairwise key expansion",
+                  data, pos, ptk, ptkLen * 8);
+}
+
 /* ------------------------------------------------------------------ */
 /* Initialisation                                                    */
 /* ------------------------------------------------------------------ */
@@ -270,6 +311,16 @@ RSNA_STATUS RsnaSetStaAddr(RSNA_CTX *ctx, const rsna_u8 spa[RSNA_MAC_LEN])
     return RSNA_OK;
 }
 
+RSNA_STATUS RsnaSetPmk(RSNA_CTX *ctx, const rsna_u8 pmk[RSNA_PMK_LEN])
+{
+    if (ctx == RSNA_NULL || pmk == RSNA_NULL)
+        return RSNA_ERR_PARAM;
+    RsnaMemcpy(ctx->pmk, pmk, RSNA_PMK_LEN);
+    ctx->pmkValid = 1;
+    RsnaResetHandshake(ctx);
+    return RSNA_OK;
+}
+
 RSNA_STATUS RsnaSetRsnIe(RSNA_CTX *ctx, const rsna_u8 *ie, rsna_size ieLen)
 {
     if (ctx == RSNA_NULL)
@@ -283,6 +334,20 @@ RSNA_STATUS RsnaSetRsnIe(RSNA_CTX *ctx, const rsna_u8 *ie, rsna_size ieLen)
         return RSNA_ERR_PARAM;
     RsnaMemcpy(ctx->staRsnIe, ie, ieLen);
     ctx->staRsnIeLen = ieLen;
+    ctx->akm = RSNA_AKM_PSK;
+    if (ieLen >= 2 + 2 + 4 + 2)
+    {
+        rsna_size pos = 2 + 2 + 4;
+        rsna_size count = ie[pos] | ((rsna_size)ie[pos + 1] << 8);
+
+        pos += 2 + 4 * count;
+        if (pos + 2 + 4 <= ieLen &&
+            (ie[pos] | (ie[pos + 1] << 8)) >= 1 &&
+            ie[pos + 2] == 0x00 && ie[pos + 3] == 0x0F && ie[pos + 4] == 0xAC)
+        {
+            ctx->akm = ie[pos + 5];
+        }
+    }
     return RSNA_OK;
 }
 
@@ -347,11 +412,16 @@ RSNA_STATUS RsnaGetKeys(const RSNA_CTX *ctx, RSNA_KEYS *keys)
  * (TKIP) or HMAC-SHA1 truncated to 128 bits (CCMP), per the Key Descriptor
  * Version.
  */
-static void RsnaComputeMic(int keyDescVer, const rsna_u8 *kck,
+static void RsnaComputeMic(int keyDescVer, int akm, const rsna_u8 *kck,
                            const rsna_u8 *frame, rsna_size frameLen,
                            rsna_u8 mic[KEYDESC_MIC_LEN])
 {
-    if (keyDescVer == KEYINFO_VER_HMAC_MD5_RC4)
+    if (keyDescVer == KEYINFO_VER_AES_CMAC_AES ||
+        (keyDescVer == 0 && (akm == RSNA_AKM_SAE || akm == RSNA_AKM_PSK_SHA256)))
+    {
+        RsnaAesCmac(kck, frame, frameLen, mic);
+    }
+    else if (keyDescVer == KEYINFO_VER_HMAC_MD5_RC4)
     {
         RsnaHmacMd5(kck, RSNA_KCK_LEN, frame, frameLen, mic);
     }
@@ -545,7 +615,7 @@ static rsna_size RsnaBuildReply(RSNA_CTX *ctx,
     /* MIC over the whole frame with the MIC field (still) zeroed. */
     if (keyInfo & KEYINFO_KEY_MIC)
     {
-        RsnaComputeMic(ctx->keyDescVer, ctx->keys.ptk, out, frameLen, mic);
+        RsnaComputeMic(ctx->keyDescVer, ctx->akm, ctx->keys.ptk, out, frameLen, mic);
         RsnaMemcpy(&body[KEYDESC_OFF_MIC], mic, KEYDESC_MIC_LEN);
     }
 
@@ -607,8 +677,12 @@ static RSNA_STATE RsnaHandleMsg1(RSNA_CTX *ctx,
         ctx->haveSnonce = 1;
     }
 
-    RsnaDerivePtk(ctx->pmk, ctx->aa, ctx->spa, ctx->anonce, ctx->snonce,
-                  ctx->keys.ptk, ctx->keys.ptkLen);
+    if (ctx->akm == RSNA_AKM_SAE || ctx->akm == RSNA_AKM_PSK_SHA256)
+        RsnaDerivePtkSha256(ctx->pmk, ctx->aa, ctx->spa, ctx->anonce, ctx->snonce,
+                            ctx->keys.ptk, ctx->keys.ptkLen);
+    else
+        RsnaDerivePtk(ctx->pmk, ctx->aa, ctx->spa, ctx->anonce, ctx->snonce,
+                      ctx->keys.ptk, ctx->keys.ptkLen);
 
     /* Build msg2: Pairwise + MIC, Key Data = STA RSN IE. */
     keyInfo = (rsna_u16)(ctx->keyDescVer & KEYINFO_VERSION_MASK);
@@ -679,7 +753,7 @@ static RSNA_STATE RsnaHandleMsg3(RSNA_CTX *ctx,
     RsnaMemcpy(rxMic, &body[KEYDESC_OFF_MIC], KEYDESC_MIC_LEN);
     RsnaMemset(frameCopy + EAPOL_HDR_LEN + KEYDESC_OFF_MIC, 0, KEYDESC_MIC_LEN);
 
-    RsnaComputeMic(ctx->keyDescVer, ctx->keys.ptk, frameCopy, frameLen, calcMic);
+    RsnaComputeMic(ctx->keyDescVer, ctx->akm, ctx->keys.ptk, frameCopy, frameLen, calcMic);
     if (!RsnaSecureEqual(rxMic, calcMic, KEYDESC_MIC_LEN))
     {
         ctx->lastError = RSNA_ERR_MIC;
@@ -787,7 +861,7 @@ static RSNA_STATE RsnaHandleGroupMsg1(RSNA_CTX *ctx,
     RsnaMemcpy(frameBuf, frame, frameLen);
     RsnaMemcpy(rxMic, &body[KEYDESC_OFF_MIC], KEYDESC_MIC_LEN);
     RsnaMemset(frameBuf + EAPOL_HDR_LEN + KEYDESC_OFF_MIC, 0, KEYDESC_MIC_LEN);
-    RsnaComputeMic(ctx->keyDescVer, ctx->keys.ptk, frameBuf, frameLen, calcMic);
+    RsnaComputeMic(ctx->keyDescVer, ctx->akm, ctx->keys.ptk, frameBuf, frameLen, calcMic);
     RsnaMemset(frameBuf, 0, sizeof(frameBuf));
     if (!RsnaSecureEqual(rxMic, calcMic, KEYDESC_MIC_LEN))
     {

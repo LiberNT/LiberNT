@@ -146,3 +146,47 @@ void RsnaPrf(const rsna_u8 *key, rsna_size keyLen,
         counter++;
     }
 }
+
+void RsnaKdfSha256(const rsna_u8 *key, rsna_size keyLen,
+                  const char *label,
+                  const rsna_u8 *context, rsna_size contextLen,
+                  rsna_u8 *out, rsna_size bits)
+{
+    rsna_u8 counter[2], length[2], mac[RSNA_SHA256_DIGEST_LEN];
+    const rsna_u8 *addr[4];
+    rsna_size len[4], labelLen = 0, bytes = (bits + 7) / 8, pos = 0, take, i;
+    rsna_u16 iteration = 1;
+
+    while (label[labelLen])
+        labelLen++;
+
+    length[0] = (rsna_u8)bits;
+    length[1] = (rsna_u8)(bits >> 8);
+    addr[0] = counter;
+    len[0] = 2;
+    addr[1] = (const rsna_u8 *)label;
+    len[1] = labelLen;
+    addr[2] = context;
+    len[2] = contextLen;
+    addr[3] = length;
+    len[3] = 2;
+
+    while (pos < bytes)
+    {
+        counter[0] = (rsna_u8)iteration;
+        counter[1] = (rsna_u8)(iteration >> 8);
+        RsnaHmacSha256Vector(key, keyLen, 4, addr, len, mac);
+        take = bytes - pos;
+        if (take > RSNA_SHA256_DIGEST_LEN)
+            take = RSNA_SHA256_DIGEST_LEN;
+        for (i = 0; i < take; i++)
+            out[pos + i] = mac[i];
+        pos += take;
+        iteration++;
+    }
+
+    if (bits % 8)
+        out[bytes - 1] &= (rsna_u8)(0xFF << (8 - bits % 8));
+    for (i = 0; i < sizeof(mac); i++)
+        mac[i] = 0;
+}
