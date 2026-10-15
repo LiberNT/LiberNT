@@ -204,7 +204,9 @@ NTSTATUS NTAPI HandleSystemQueryPower(IN PDEVICE_OBJECT DeviceObject, IN PIRP Ir
                          deviceExtension->SysPower - 1));
 
     // Fail a query for a power state incompatible with waking up the system
-    if ((deviceExtension->WaitWakeEnable) && (systemState > deviceExtension->DeviceCapabilities.SystemWake))
+    if ((deviceExtension->WaitWakeEnable) &&
+        (systemState > deviceExtension->DeviceCapabilities.SystemWake) &&
+        (systemState != PowerSystemShutdown))
     {
         FreeBT_DbgPrint(1, ("FBTUSB: HandleSystemQueryPower: Query for an incompatible system power state\n"));
 

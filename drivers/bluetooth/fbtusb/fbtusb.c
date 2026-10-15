@@ -23,7 +23,7 @@
 
 // Globals
 GLOBALS Globals;
-ULONG DebugLevel=255;
+ULONG DebugLevel=1;
 
 // Forward declaration
 NTSTATUS NTAPI DriverEntry(IN PDRIVER_OBJECT  DriverObject, IN PUNICODE_STRING UniRegistryPath );
