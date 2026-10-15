@@ -543,7 +543,7 @@ TiDispatch(
                 Status = DispTdiDeleteIPAddress(Irp, IrpSp);
                 break;
 
-            case IOCTL_QUERY_IP_HW_ADDRESS:
+            case IOCTL_IP_RESOLVE_NEIGHBOR:
                 TI_DbgPrint(MIN_TRACE, ("QUERY_IP_HW_ADDRESS\n"));
                 Status = DispTdiQueryIpHwAddress(DeviceObject, Irp, IrpSp);
                 break;

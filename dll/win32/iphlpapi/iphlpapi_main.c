@@ -58,6 +58,8 @@
 #include "wine/debug.h"
 #ifdef __REACTOS__
 #include <tdiinfo.h>
+#include <tcpioctl.h>
+#include <tcpip_undoc.h>
 #include "ifenum.h"
 #include "ipstats.h"
 #include "route.h"
@@ -4324,12 +4326,111 @@ DWORD WINAPI NotifyUnicastIpAddressChange(ADDRESS_FAMILY family, PUNICAST_IPADDR
  * FIXME
  *  Stub, returns ERROR_NOT_SUPPORTED.
  */
+#ifdef __REACTOS__
+DWORD WINAPI SendARP(IPAddr DestIP, IPAddr SrcIP, PULONG pMacAddr, PULONG PhyAddrLen)
+{
+    UNICODE_STRING name = RTL_CONSTANT_STRING(L"\\Device\\Ip");
+    MIB_UNICASTIPADDRESS_TABLE *table;
+    OBJECT_ATTRIBUTES attr;
+    IO_STATUS_BLOCK iosb;
+    IPAddr ips[2] = { DestIP, SrcIP };
+    MIB_IFROW row;
+    NET_IFINDEX index = 0;
+    BOOL found, remote_local = FALSE;
+    NTSTATUS status;
+    HANDLE file;
+    DWORD err, i;
+
+    TRACE("(DestIP 0x%08lx, SrcIP 0x%08lx, pMacAddr %p, PhyAddrLen %p)\n",
+          DestIP, SrcIP, pMacAddr, PhyAddrLen);
+
+    if (!pMacAddr || !PhyAddrLen) return ERROR_INVALID_PARAMETER;
+    if (!DestIP)
+    {
+        *PhyAddrLen = 0;
+        return ERROR_INVALID_PARAMETER;
+    }
+
+    if (!SrcIP && (err = GetBestInterface( DestIP, &index )))
+    {
+        *PhyAddrLen = 0;
+        return ERROR_BAD_NET_NAME;
+    }
+    if ((err = GetUnicastIpAddressTable( AF_INET, &table )))
+    {
+        *PhyAddrLen = 0;
+        return err;
+    }
+    for (i = 0; i < table->NumEntries; i++)
+    {
+        if (SrcIP ? table->Table[i].Address.Ipv4.sin_addr.s_addr == SrcIP
+                  : table->Table[i].InterfaceIndex == index)
+            break;
+    }
+    found = i < table->NumEntries;
+    if (found)
+    {
+        index = table->Table[i].InterfaceIndex;
+        ips[1] = table->Table[i].Address.Ipv4.sin_addr.s_addr;
+        for (i = 0; i < table->NumEntries; i++)
+        {
+            if (table->Table[i].Address.Ipv4.sin_addr.s_addr == DestIP &&
+                table->Table[i].InterfaceIndex != index)
+                remote_local = TRUE;
+        }
+    }
+    FreeMibTable( table );
+    if (!found)
+    {
+        *PhyAddrLen = 0;
+        return SrcIP ? ERROR_NOT_FOUND : ERROR_BAD_NET_NAME;
+    }
+
+    memset( &row, 0, sizeof(row) );
+    row.dwIndex = index;
+    if ((err = GetIfEntry( &row )))
+    {
+        *PhyAddrLen = 0;
+        return err;
+    }
+    if (*PhyAddrLen < row.dwPhysAddrLen)
+    {
+        *PhyAddrLen = 0;
+        return ERROR_BUFFER_OVERFLOW;
+    }
+    if (!row.dwPhysAddrLen || remote_local)
+    {
+        *PhyAddrLen = 0;
+        return row.dwPhysAddrLen ? ERROR_BAD_NET_NAME : NO_ERROR;
+    }
+
+    InitializeObjectAttributes( &attr, &name, OBJ_CASE_INSENSITIVE, NULL, NULL );
+    status = NtOpenFile( &file, SYNCHRONIZE, &attr, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                         FILE_SYNCHRONOUS_IO_NONALERT );
+    if (!NT_SUCCESS(status))
+    {
+        *PhyAddrLen = 0;
+        return RtlNtStatusToDosError( status );
+    }
+    status = NtDeviceIoControlFile( file, NULL, NULL, NULL, &iosb, IOCTL_IP_RESOLVE_NEIGHBOR,
+                                    ips, sizeof(ips), pMacAddr, *PhyAddrLen );
+    CloseHandle( file );
+    if (!NT_SUCCESS(status))
+    {
+        *PhyAddrLen = 0;
+        return ERROR_BAD_NET_NAME;
+    }
+    *PhyAddrLen = (ULONG)iosb.Information;
+    return NO_ERROR;
+}
+#else
 DWORD WINAPI SendARP(IPAddr DestIP, IPAddr SrcIP, PULONG pMacAddr, PULONG PhyAddrLen)
 {
   FIXME("(DestIP 0x%08lx, SrcIP 0x%08lx, pMacAddr %p, PhyAddrLen %p): stub\n",
    DestIP, SrcIP, pMacAddr, PhyAddrLen);
   return ERROR_NOT_SUPPORTED;
 }
+#endif
 
 
 /******************************************************************

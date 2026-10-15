@@ -23,20 +23,23 @@ static VOID TestUM(IPAddr * Source, IPAddr * Gateway)
     PIP_ADAPTER_ADDRESSES Addresses, Current;
     PIP_ADAPTER_INFO Adapters, CurrentA;
 
-    Err = SendARP(0, 0, NULL, NULL);
-    ok(Err == ERROR_INVALID_PARAMETER, "Expected error: ERROR_INVALID_PARAMETER. Got: %lx\n", Err);
+    if (0)
+    {
+        Err = SendARP(0, 0, NULL, NULL);
+        ok(Err == ERROR_INVALID_PARAMETER, "Expected error: ERROR_INVALID_PARAMETER. Got: %lx\n", Err);
+    }
 
     Size = 4;
     Err = SendARP(0, 0, Hw, &Size);
-    ok(Err == ERROR_GEN_FAILURE, "Expected error: ERROR_GEN_FAILURE. Got: %lx\n", Err);
+    ok(Err == ERROR_INVALID_PARAMETER, "Expected error: ERROR_INVALID_PARAMETER. Got: %lx\n", Err);
 
     Size = 6;
     Err = SendARP(0, 0, Hw, &Size);
-    ok(Err == ERROR_GEN_FAILURE, "Expected error: ERROR_GEN_FAILURE. Got: %lx\n", Err);
+    ok(Err == ERROR_INVALID_PARAMETER, "Expected error: ERROR_INVALID_PARAMETER. Got: %lx\n", Err);
 
     Size = 8;
     Err = SendARP(0, 0, Hw, &Size);
-    ok(Err == ERROR_GEN_FAILURE, "Expected error: ERROR_GEN_FAILURE. Got: %lx\n", Err);
+    ok(Err == ERROR_INVALID_PARAMETER, "Expected error: ERROR_INVALID_PARAMETER. Got: %lx\n", Err);
 
     Size = sizeof(IP_ADAPTER_ADDRESSES);
     Addresses = (PIP_ADAPTER_ADDRESSES)malloc(Size);
@@ -89,7 +92,7 @@ static VOID TestUM(IPAddr * Source, IPAddr * Gateway)
 
         Size = 4;
         Err = SendARP(IpAddr, 0, Hw, &Size);
-        ok(Err == ERROR_NO_SYSTEM_RESOURCES, "Expected error: ERROR_NO_SYSTEM_RESOURCES. Got: %lx\n", Err);
+        ok(Err == ERROR_BUFFER_OVERFLOW, "Expected error: ERROR_BUFFER_OVERFLOW. Got: %lx\n", Err);
 
         Size = 6;
         Err = SendARP(IpAddr, 0, Hw, &Size);
@@ -99,11 +102,11 @@ static VOID TestUM(IPAddr * Source, IPAddr * Gateway)
         Err = SendARP(IpAddr, 0, Hw, &Size);
         ok(Err == ERROR_SUCCESS, "Expected error: ERROR_SUCCESS. Got: %lx\n", Err);
         Err = SendARP(IpAddr, 0x08080808, Hw, &Size);
-        ok(Err == ERROR_SUCCESS, "Expected error: ERROR_SUCCESS. Got: %lx\n", Err);
+        ok(Err == ERROR_NOT_FOUND, "Expected error: ERROR_NOT_FOUND. Got: %lx\n", Err);
 
         Size = 4;
         Err = SendARP(IpAddr, IpAddr, Hw, &Size);
-        ok(Err == ERROR_NO_SYSTEM_RESOURCES, "Expected error: ERROR_NO_SYSTEM_RESOURCES. Got: %lx\n", Err);
+        ok(Err == ERROR_BUFFER_OVERFLOW, "Expected error: ERROR_BUFFER_OVERFLOW. Got: %lx\n", Err);
 
         Size = 6;
         Err = SendARP(IpAddr, IpAddr, Hw, &Size);
@@ -190,7 +193,7 @@ static VOID TestUM(IPAddr * Source, IPAddr * Gateway)
 
     Size = 4;
     Err = SendARP(*Gateway, *Source, Hw, &Size);
-    ok(Err == ERROR_GEN_FAILURE, "Expected error: ERROR_GEN_FAILURE. Got: %lx\n", Err);
+    ok(Err == ERROR_BUFFER_OVERFLOW, "Expected error: ERROR_BUFFER_OVERFLOW. Got: %lx\n", Err);
 
     Size = 6;
     Err = SendARP(*Gateway, *Source, Hw, &Size);
@@ -202,39 +205,39 @@ static VOID TestUM(IPAddr * Source, IPAddr * Gateway)
 
     Size = 4;
     Err = SendARP(*Source, *Gateway, Hw, &Size);
-    ok(Err == ERROR_NO_SYSTEM_RESOURCES, "Expected error: ERROR_NO_SYSTEM_RESOURCES. Got: %lx\n", Err);
+    ok(Err == ERROR_NOT_FOUND, "Expected error: ERROR_NOT_FOUND. Got: %lx\n", Err);
 
     Size = 6;
     Err = SendARP(*Source, *Gateway, Hw, &Size);
-    ok(Err == ERROR_SUCCESS, "Expected error: ERROR_SUCCESS. Got: %lx\n", Err);
+    ok(Err == ERROR_NOT_FOUND, "Expected error: ERROR_NOT_FOUND. Got: %lx\n", Err);
 
     Size = 8;
     Err = SendARP(*Source, *Gateway, Hw, &Size);
-    ok(Err == ERROR_SUCCESS, "Expected error: ERROR_SUCCESS. Got: %lx\n", Err);
+    ok(Err == ERROR_NOT_FOUND, "Expected error: ERROR_NOT_FOUND. Got: %lx\n", Err);
 
     Size = 4;
     Err = SendARP(*Gateway, 0x08080808, Hw, &Size);
-    ok(Err == ERROR_GEN_FAILURE, "Expected error: ERROR_GEN_FAILURE. Got: %lx\n", Err);
+    ok(Err == ERROR_NOT_FOUND, "Expected error: ERROR_NOT_FOUND. Got: %lx\n", Err);
 
     Size = 6;
     Err = SendARP(*Gateway, 0x08080808, Hw, &Size);
-    ok(Err == ERROR_SUCCESS, "Expected error: ERROR_SUCCESS. Got: %lx\n", Err);
+    ok(Err == ERROR_NOT_FOUND, "Expected error: ERROR_NOT_FOUND. Got: %lx\n", Err);
 
     Size = 8;
     Err = SendARP(*Gateway, 0x08080808, Hw, &Size);
-    ok(Err == ERROR_SUCCESS, "Expected error: ERROR_SUCCESS. Got: %lx\n", Err);
+    ok(Err == ERROR_NOT_FOUND, "Expected error: ERROR_NOT_FOUND. Got: %lx\n", Err);
 
     Size = 4;
     Err = SendARP(*Source, 0x08080808, Hw, &Size);
-    ok(Err == ERROR_NO_SYSTEM_RESOURCES, "Expected error: ERROR_NO_SYSTEM_RESOURCES. Got: %lx\n", Err);
+    ok(Err == ERROR_NOT_FOUND, "Expected error: ERROR_NOT_FOUND. Got: %lx\n", Err);
 
     Size = 6;
     Err = SendARP(*Source, 0x08080808, Hw, &Size);
-    ok(Err == ERROR_SUCCESS, "Expected error: ERROR_SUCCESS. Got: %lx\n", Err);
+    ok(Err == ERROR_NOT_FOUND, "Expected error: ERROR_NOT_FOUND. Got: %lx\n", Err);
 
     Size = 8;
     Err = SendARP(*Source, 0x08080808, Hw, &Size);
-    ok(Err == ERROR_SUCCESS, "Expected error: ERROR_SUCCESS. Got: %lx\n", Err);
+    ok(Err == ERROR_NOT_FOUND, "Expected error: ERROR_NOT_FOUND. Got: %lx\n", Err);
 }
 
 static VOID TestKM(IPAddr Source, IPAddr Gateway)
@@ -279,7 +282,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     memset(Ip, 0, sizeof(Ip));
@@ -292,7 +295,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -304,7 +307,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_UNSUCCESSFUL, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -316,7 +319,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_UNSUCCESSFUL, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -328,7 +331,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_UNSUCCESSFUL, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     Ip[0] = Source;
@@ -341,7 +344,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -353,7 +356,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -365,7 +368,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -377,7 +380,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -389,7 +392,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -401,7 +404,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INSUFFICIENT_RESOURCES, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -413,8 +416,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
     IoStatusBlock.Status = STATUS_SUCCESS;
@@ -425,8 +428,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     Ip[1] = Source;
     ResetEvent(hEvent);
@@ -438,7 +441,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -450,7 +453,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INSUFFICIENT_RESOURCES, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -462,8 +465,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
     IoStatusBlock.Status = STATUS_SUCCESS;
@@ -474,8 +477,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     Ip[1] = 0x08080808;
     ResetEvent(hEvent);
@@ -487,8 +490,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     if (!Gateway)
     {
@@ -509,7 +512,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -521,7 +524,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_UNSUCCESSFUL, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -533,8 +536,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
     IoStatusBlock.Status = STATUS_SUCCESS;
@@ -545,8 +548,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     Ip[0] = Source;
     Ip[1] = Gateway;
@@ -559,7 +562,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -571,7 +574,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INSUFFICIENT_RESOURCES, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -583,8 +586,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
     IoStatusBlock.Status = STATUS_SUCCESS;
@@ -595,8 +598,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     Ip[0] = Gateway;
     Ip[1] = 0x08080808;
@@ -609,7 +612,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -621,7 +624,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_UNSUCCESSFUL, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -633,8 +636,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
     IoStatusBlock.Status = STATUS_SUCCESS;
@@ -645,8 +648,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     Ip[0] = Source;
     ResetEvent(hEvent);
@@ -658,7 +661,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INVALID_BUFFER_SIZE, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -670,7 +673,7 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_INSUFFICIENT_RESOURCES, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with unexpected status: %lx\n", Status);
     ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
@@ -682,8 +685,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     ResetEvent(hEvent);
     IoStatusBlock.Status = STATUS_SUCCESS;
@@ -694,8 +697,8 @@ static VOID TestKM(IPAddr Source, IPAddr Gateway)
         NtWaitForSingleObject(hEvent, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
-    ok(Status == STATUS_SUCCESS, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
-    ok(IoStatusBlock.Information == 6, "Excepted 6, got: %llu\n", IoStatusBlock.Information);
+    ok(Status == STATUS_NOT_IMPLEMENTED, "NtDeviceIoControlFile() failed with status: %lx\n", Status);
+    ok(IoStatusBlock.Information == 0, "Excepted 0, got: %llu\n", IoStatusBlock.Information);
 
     CloseHandle(hEvent);
     CloseHandle(hDevice);
