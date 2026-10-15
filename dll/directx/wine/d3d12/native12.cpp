@@ -1307,6 +1307,68 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             caps->RenderPassesValid = TRUE;
             return S_OK;
         }
+        case D3D12_FEATURE_D3D12_OPTIONS19:
+        {
+            D3D12_FEATURE_DATA_D3D12_OPTIONS19 *caps;
+            D3D12DDI_OPTIONS_DATA_0101 compute = {};
+            D3D12DDI_OPTIONS_DATA_0102 limits = {};
+            if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
+            ZeroMemory(caps, sizeof(*caps));
+            caps->SupportedSampleCountsWithNoOutputs = 1;
+            caps->MaxSamplerDescriptorHeapSize = D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE;
+            caps->MaxSamplerDescriptorHeapSizeWithStaticSamplers = D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE;
+            caps->MaxViewDescriptorHeapSize = D3D12_MAX_SHADER_VISIBLE_DESCRIPTOR_HEAP_SIZE_TIER_2;
+            if (ddi_build >= D3D12DDI_BUILD_VERSION_0102
+                    && SUCCEEDED(QueryCaps(D3D12DDICAPS_TYPE_OPTIONS_0102, NULL, &limits, sizeof(limits))))
+            {
+                caps->MismatchingOutputDimensionsSupported = TRUE;
+                caps->PointSamplingAddressesNeverRoundUp = TRUE;
+                caps->SupportedSampleCountsWithNoOutputs = limits.SupportedSampleCountsWithNoOutputs;
+                caps->MaxSamplerDescriptorHeapSize = limits.MaxSamplerDescriptorHeapSize;
+                caps->MaxSamplerDescriptorHeapSizeWithStaticSamplers = limits.MaxSamplerDescriptorHeapSizeWithStaticSamplers;
+                caps->MaxViewDescriptorHeapSize = limits.MaxViewDescriptorHeapSize;
+            }
+            if (ddi_build >= D3D12DDI_BUILD_VERSION_0101
+                    && SUCCEEDED(QueryCaps(D3D12DDICAPS_TYPE_OPTIONS_0101, NULL, &compute, sizeof(compute))))
+                caps->ComputeOnlyCustomHeapSupported = !!compute.ComputeOnlyCustomHeapSupported;
+            return S_OK;
+        }
+        case D3D12_FEATURE_D3D12_OPTIONS20:
+        {
+            D3D12_FEATURE_DATA_D3D12_OPTIONS20 *caps;
+            if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
+            caps->ComputeOnlyWriteWatchSupported = FALSE;
+            caps->RecreateAtTier = D3D12_RECREATE_AT_TIER_NOT_SUPPORTED;
+            return S_OK;
+        }
+        case D3D12_FEATURE_D3D12_OPTIONS21:
+        {
+            D3D12_FEATURE_DATA_D3D12_OPTIONS21 *caps;
+            if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
+            caps->WorkGraphsTier = D3D12_WORK_GRAPHS_TIER_NOT_SUPPORTED;
+            caps->ExecuteIndirectTier = D3D12_EXECUTE_INDIRECT_TIER_1_0;
+            caps->SampleCmpGradientAndBiasSupported = FALSE;
+            caps->ExtendedCommandInfoSupported = FALSE;
+            return S_OK;
+        }
+        case D3D12_FEATURE_PREDICATION:
+        {
+            D3D12_FEATURE_DATA_PREDICATION *caps;
+            if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
+            return E_UNEXPECTED;
+        }
+        case D3D12_FEATURE_PLACED_RESOURCE_SUPPORT_INFO:
+        {
+            D3D12_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO *caps;
+            if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
+            return E_UNEXPECTED;
+        }
+        case D3D12_FEATURE_HARDWARE_COPY:
+        {
+            D3D12_FEATURE_DATA_HARDWARE_COPY *caps;
+            if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
+            return E_UNEXPECTED;
+        }
         default:
             WARN("Unknown feature %#x.\n", feature);
             return E_INVALIDARG;
