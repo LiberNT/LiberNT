@@ -202,15 +202,15 @@ DGDeliverData(
                      DataBuffer,
                      MIN(Current->BufferSize, DataSize));
 
+                RTAIPAddress = (PTA_IP_ADDRESS)Current->ReturnInfo->RemoteAddress;
                 if (SrcAddress->Type == IP_ADDRESS_V6)
                 {
                     AddrBuildTransportAddress(SrcAddress, SrcPort,
-                                              (PTRANSPORT_ADDRESS)Current->ReturnInfo->RemoteAddress,
+                                              (PTRANSPORT_ADDRESS)RTAIPAddress,
                                               Current->ReturnInfo->RemoteAddressLength);
                 }
                 else
                 {
-                    RTAIPAddress = (PTA_IP_ADDRESS)Current->ReturnInfo->RemoteAddress;
                     RTAIPAddress->TAAddressCount = 1;
                     RTAIPAddress->Address->AddressType = TDI_ADDRESS_TYPE_IP;
                     RTAIPAddress->Address->AddressLength = TDI_ADDRESS_LENGTH_IP;
