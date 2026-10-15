@@ -283,7 +283,8 @@ class CAdapterCommon : public CUnknownImpl<IAdapterPowerManagement>
         Interface(), m_CodecAddress(0), m_FunctionGroupStartNode(0), RevisionId(0), VendorId(0), m_Tags(),
         m_TagIndex(0), m_WaveRTOutPortUnknown(NULL), m_WaveRTInPortUnknown(NULL), m_TopoOutPortUnknown(NULL),
         m_TopoInPortUnknown(NULL), m_WaveInDataRange(), m_WaveInDataRanges(), m_WaveOutDataRange(),
-        m_WaveOutDataRanges(), m_ClaimedConverters(), m_ClaimedConverterCount(0), m_SubdeviceNames()
+        m_WaveOutDataRanges(), m_ClaimedConverters(), m_ClaimedConverterCount(0), m_SubdeviceNames(),
+        m_PowerState(PowerDeviceD0)
     {
         RtlCopyMemory(m_WaveInPins, WaveInPins, sizeof(m_WaveInPins));
         RtlCopyMemory(m_WaveOutPins, WaveOutPins, sizeof(m_WaveOutPins));
@@ -332,6 +333,7 @@ class CAdapterCommon : public CUnknownImpl<IAdapterPowerManagement>
     ULONG m_ClaimedConverters[32];
     ULONG m_ClaimedConverterCount;
     UCHAR m_SubdeviceNames[2][16];
+    DEVICE_POWER_STATE m_PowerState;
 };
 
 class CFunctionGroupNode

@@ -89,7 +89,7 @@ HDAUDIO_StartDevice(
         DeviceExtension->AdapterCommon = NULL;
         return Status;
     }
-    DPRINT1("HDAUDIO: StartDevice completed success\n");
+    DPRINT("HDAUDIO: StartDevice completed success\n");
     return Status;
 }
 
@@ -152,7 +152,7 @@ DriverEntry(
 {
     NTSTATUS Status;
 
-    DPRINT1("HDAUDIO: DriverEntry\n");
+    DPRINT("HDAUDIO: DriverEntry\n");
 
     Status = PcInitializeAdapterDriver(DriverObject, RegistryPath, HDAUDIO_AddDevice);
     if (NT_SUCCESS(Status))

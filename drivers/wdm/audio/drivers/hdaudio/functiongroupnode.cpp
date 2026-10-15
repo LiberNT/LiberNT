@@ -23,7 +23,7 @@ CFunctionGroupNode::QueryWidgetCount()
     {
         m_StartSubNode = (NodeResponse >> 16) & 0xFF;
         m_SubNodeCount = NodeResponse & 0xFF;
-        DPRINT1(
+        DPRINT(
             "HDAUDIO: StartNodeId %x StartSubNode %x WidgetCount %u\n", m_StartNodeId, m_StartSubNode, m_SubNodeCount);
     }
     return Status;
@@ -121,26 +121,26 @@ CFunctionGroupNode::AddNode(ULONG NodeId)
     UCHAR Digital = (WidgetCaps >> 9) & 0x1;
     if (Digital)
     {
-        DPRINT1("HDAUDIO: NodeId %u is digital\n", NodeId);
+        DPRINT("HDAUDIO: NodeId %u is digital\n", NodeId);
     }
     UCHAR ChanCountLSB = (WidgetCaps & 0x1);
     UCHAR ChanCountExt = (WidgetCaps >> 13) & 0x7;
     UCHAR ChannelCount = (ChanCountExt << 1 | ChanCountLSB) + 1;
 
-    DPRINT1("HDAUDIO: NodeId %u Channels Supported %u\n", NodeId, ChannelCount);
+    DPRINT("HDAUDIO: NodeId %u Channels Supported %u\n", NodeId, ChannelCount);
 
     if (NodeType == 0x00)
     {
         UCHAR Stripe = (WidgetCaps >> 5) & 0x1;
-        DPRINT1("HDAUDIO: Striping support %x\n", Stripe);
+        DPRINT("HDAUDIO: Striping support %x\n", Stripe);
         SetStripeBit(Stripe);
     }
 
     UCHAR UnsolCapable = (WidgetCaps >> 7) & 0x1;
-    DPRINT1("HDAUDIO: Unsolicited support %x\n", UnsolCapable);
+    DPRINT("HDAUDIO: Unsolicited support %x\n", UnsolCapable);
 
     UCHAR PowerControl = (WidgetCaps >> 10) & 0x1;
-    DPRINT1("HDAUDIO: Power control support %x\n", PowerControl);
+    DPRINT("HDAUDIO: Power control support %x\n", PowerControl);
     if (PowerControl)
     {
         // Set widget Power State to D0 (required by some codecs)
@@ -989,31 +989,31 @@ CFunctionGroupNode::PrintNodeInfo(UCHAR NodeType, ULONG NodeId)
     switch (NodeType)
     {
         case 0x00:
-            DPRINT1("HDAUDIO: Found AudioOutput at NodeId %u\n", NodeId);
+            DPRINT("HDAUDIO: Found AudioOutput at NodeId %u\n", NodeId);
             break;
         case 0x01:
-            DPRINT1("HDAUDIO: Found AudioInput at NodeId %u\n", NodeId);
+            DPRINT("HDAUDIO: Found AudioInput at NodeId %u\n", NodeId);
             break;
         case 0x02:
-            DPRINT1("HDAUDIO: Found AudioMixer at NodeId %u\n", NodeId);
+            DPRINT("HDAUDIO: Found AudioMixer at NodeId %u\n", NodeId);
             break;
         case 0x03:
-            DPRINT1("HDAUDIO: Found AudioSelector at NodeId %u\n", NodeId);
+            DPRINT("HDAUDIO: Found AudioSelector at NodeId %u\n", NodeId);
             break;
         case 0x04:
-            DPRINT1("HDAUDIO: Found PinComplex at NodeId %u\n", NodeId);
+            DPRINT("HDAUDIO: Found PinComplex at NodeId %u\n", NodeId);
             break;
         case 0x05:
-            DPRINT1("HDAUDIO: Found Power Widget at NodeId %u\n", NodeId);
+            DPRINT("HDAUDIO: Found Power Widget at NodeId %u\n", NodeId);
             break;
         case 0x06:
-            DPRINT1("HDAUDIO: Found Volume Knob at NodeId %u\n", NodeId);
+            DPRINT("HDAUDIO: Found Volume Knob at NodeId %u\n", NodeId);
             break;
         case 0x07:
-            DPRINT1("HDAUDIO: Found Beep Generator at NodeId %u\n", NodeId);
+            DPRINT("HDAUDIO: Found Beep Generator at NodeId %u\n", NodeId);
             break;
         case 0x0F:
-            DPRINT1("HDAUDIO: Found Vendor Defined Widget at NodeId %u\n", NodeId);
+            DPRINT("HDAUDIO: Found Vendor Defined Widget at NodeId %u\n", NodeId);
             break;
         default:
             DPRINT1("HDAUDIO: Found Reserved type %x at NodeId %x\n", NodeType, NodeId);

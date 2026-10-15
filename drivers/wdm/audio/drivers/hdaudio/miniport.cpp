@@ -28,7 +28,7 @@ CMiniportWaveRT::QueryInterface(IN REFIID refiid, OUT PVOID *Output)
 
     if (RtlStringFromGUID(refiid, &GuidString) == STATUS_SUCCESS)
     {
-        DPRINT1("CMiniportWaveRT::QueryInterface no interface!!! iface %S\n", GuidString.Buffer);
+        DPRINT("CMiniportWaveRT::QueryInterface no interface!!! iface %S\n", GuidString.Buffer);
         RtlFreeUnicodeString(&GuidString);
     }
     return STATUS_UNSUCCESSFUL;

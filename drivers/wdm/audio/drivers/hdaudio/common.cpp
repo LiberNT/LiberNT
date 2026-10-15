@@ -60,7 +60,7 @@ CAdapterCommon::QueryInterface(IN REFIID refiid, OUT PVOID *Output)
 
     if (RtlStringFromGUID(refiid, &GuidString) == STATUS_SUCCESS)
     {
-        DPRINT1("CAdapterCommon::QueryInterface no interface!!! iface %S\n", GuidString.Buffer);
+        DPRINT("CAdapterCommon::QueryInterface no interface!!! iface %S\n", GuidString.Buffer);
         RtlFreeUnicodeString(&GuidString);
     }
     return STATUS_UNSUCCESSFUL;
@@ -71,14 +71,29 @@ CAdapterCommon::QueryInterface(IN REFIID refiid, OUT PVOID *Output)
 VOID NTAPI
 CAdapterCommon::PowerChangeState(IN POWER_STATE NewState)
 {
-    UNIMPLEMENTED;
+    ULONG Response;
+
+    if (NewState.DeviceState < PowerDeviceD0 || NewState.DeviceState > PowerDeviceD3)
+        return;
+
+    if (NewState.DeviceState == m_PowerState)
+        return;
+
+    if (!NT_SUCCESS(TransferVerb(((ULONG)m_CodecAddress << 28) | ((ULONG)m_FunctionGroupStartNode << 20) |
+                                     (AC_VERB_SET_POWER_STATE << 8) | (NewState.DeviceState - PowerDeviceD0),
+                                 &Response)))
+    {
+        return;
+    }
+
+    m_PowerState = NewState.DeviceState;
 }
 
 NTSTATUS
 NTAPI
 CAdapterCommon::QueryDeviceCapabilities(IN PDEVICE_CAPABILITIES PowerDeviceCaps)
 {
-    UNIMPLEMENTED;
+    UNREFERENCED_PARAMETER(PowerDeviceCaps);
     return STATUS_SUCCESS;
 }
 
@@ -86,8 +101,10 @@ NTSTATUS
 NTAPI
 CAdapterCommon::QueryPowerChangeState(IN POWER_STATE NewStateQuery)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    if (NewStateQuery.DeviceState < PowerDeviceD0 || NewStateQuery.DeviceState > PowerDeviceD3)
+        return STATUS_INVALID_PARAMETER;
+
+    return STATUS_SUCCESS;
 }
 
 //----------------------------------------------------------------------------
@@ -100,7 +117,7 @@ CAdapterCommon::AcquireBusInterface(IN PDEVICE_OBJECT DeviceObject)
     PIRP Irp;
     PIO_STACK_LOCATION Stack;
 
-    DPRINT1("AcquireBusInterface\n");
+    DPRINT("AcquireBusInterface\n");
     Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
     if (Irp == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -226,7 +243,7 @@ CAdapterCommon::ReadRegistryKey(
             return Status;
         }
         Status = SubKey->QueryValueKey(&Name, KeyValuePartialInformation, NULL, 0, &ResultLength);
-        DPRINT1("HDAUDIO: QueryValueKey Status %x\n", Status);
+        DPRINT("HDAUDIO: QueryValueKey Status %x\n", Status);
         if (Status == STATUS_BUFFER_TOO_SMALL)
         {
             PartialInformation =
@@ -276,7 +293,7 @@ CAdapterCommon::TransferInitVerbs(IN PDEVICE_OBJECT DeviceObject)
     Status = ReadRegistryKey(DeviceObject, L"NumVerbs", sizeof(ULONG), &Key, &Type, &NumVerbs);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("HDAUDIO: Warning failed to read NumVerbs key with %x\n", Status);
+        DPRINT("HDAUDIO: Warning failed to read NumVerbs key with %x\n", Status);
         return STATUS_SUCCESS;
     }
     for (Index = 0; Index < NumVerbs; Index++)
@@ -286,7 +303,7 @@ CAdapterCommon::TransferInitVerbs(IN PDEVICE_OBJECT DeviceObject)
 
         // read key
         Status = Key->QueryValueKey(&KeyName, KeyValuePartialInformation, NULL, 0, &ResultLength);
-        DPRINT1("Status %x\n", Status);
+        DPRINT("Status %x\n", Status);
         if (Status == STATUS_BUFFER_TOO_SMALL)
         {
             PKEY_VALUE_PARTIAL_INFORMATION PartialInformation =
@@ -306,7 +323,7 @@ CAdapterCommon::TransferInitVerbs(IN PDEVICE_OBJECT DeviceObject)
                 Verb |= PartialInformation->Data[2] << 16;
                 Verb |= PartialInformation->Data[3] << 24;
                 ExFreePool(PartialInformation);
-                DPRINT1("KeyName %wZ Value %x\n", &KeyName, Verb);
+                DPRINT("KeyName %wZ Value %x\n", &KeyName, Verb);
                 HDAUDIO_CODEC_TRANSFER Transfer;
                 Transfer.Output.Command = Verb | m_CodecAddress << 28;
                 Status = Interface.TransferCodecVerbs(Interface.Context, 1, &Transfer, NULL, NULL);
@@ -417,7 +434,7 @@ CAdapterCommon::InstallDevice(
 
     if (bTopology)
     {
-        DPRINT1("Topology\n");
+        DPRINT("Topology\n");
         // allocate new topology
         Status =
             HDAUDIO_NewMiniportTopology(&MiniportTopology, AssociatedPinsCount, AssociatedPinIds, OutNode, this, FilterDescription);
@@ -430,7 +447,7 @@ CAdapterCommon::InstallDevice(
     }
     else
     {
-        DPRINT1("WaveRT\n");
+        DPRINT("WaveRT\n");
         // allocate new miniport
         Status =
             HDAUDIO_NewMiniportWaveRT(&MiniportWaveRT, AssociatedPinsCount, AssociatedPinIds, OutNode, this, FilterDescription);
@@ -548,7 +565,7 @@ CAdapterCommon::FindConnectedWidgets(
         TotalFoundNodes += 1;
         OutNodes[NodeIndex] = NodeContext->NodeId;
         NodeIndex++;
-        DPRINT1("HDAUDIO: Adding Node %u Type %u\n", NodeContext->NodeId, NodeType);
+        DPRINT("HDAUDIO: Adding Node %u Type %u\n", NodeContext->NodeId, NodeType);
     }
 
     ULONG ConnectionCount = NodeContext->ConnectionCount;
@@ -738,7 +755,7 @@ CAdapterCommon::BuildWaveFormat(
     ULONG Digital = 0xFF;
     for (ULONG Index = 0; Index < NodeCount; Index++)
     {
-        DPRINT1("I/O NodeIndex %u\n", TargetWidgets[Index]);
+        DPRINT("I/O NodeIndex %u\n", TargetWidgets[Index]);
         PNODE_CONTEXT Node = OutNode->FindNodeId(TargetWidgets[Index]);
         ASSERT(Node);
         if (Node)
@@ -757,16 +774,16 @@ CAdapterCommon::BuildWaveFormat(
         }
     }
 
-    DPRINT1("Digital %x\n", Digital);
-    DPRINT1("NodeType %u\n", NodeType);
-    DPRINT1("MaximumChannels %u\n", MaximumChannels);
-    DPRINT1("MinimumBitsPerSample %u\n", MinimumBitsPerSample);
-    DPRINT1("MaximumBitsPerSample %u\n", MaximumBitsPerSample);
-    DPRINT1("MinimumSampleFrequency %u\n", MinimumSampleFrequency);
-    DPRINT1("MaximumSampleFrequency %u\n", MaximumSampleFrequency);
+    DPRINT("Digital %x\n", Digital);
+    DPRINT("NodeType %u\n", NodeType);
+    DPRINT("MaximumChannels %u\n", MaximumChannels);
+    DPRINT("MinimumBitsPerSample %u\n", MinimumBitsPerSample);
+    DPRINT("MaximumBitsPerSample %u\n", MaximumBitsPerSample);
+    DPRINT("MinimumSampleFrequency %u\n", MinimumSampleFrequency);
+    DPRINT("MaximumSampleFrequency %u\n", MaximumSampleFrequency);
 
     ULONG FormatsSupported = FormatPCMSupported + FormatFloatSupported + FormatAC3Supported;
-    DPRINT1("FormatsSupported %u\n", FormatsSupported);
+    DPRINT("FormatsSupported %u\n", FormatsSupported);
     if (FormatsSupported == 0)
     {
         // ignore pin
@@ -788,19 +805,19 @@ CAdapterCommon::BuildWaveFormat(
 
         if (FormatPCMSupported)
         {
-            DPRINT1("PCM\n");
+            DPRINT("PCM\n");
             DataRange[AudioFormatIndex].DataRange.SubFormat = {KSDATAFORMAT_SUBTYPE_PCM};
             FormatPCMSupported = FALSE;
         }
         else if (FormatAC3Supported)
         {
-            DPRINT1("AC3\n");
+            DPRINT("AC3\n");
             DataRange[AudioFormatIndex].DataRange.SubFormat = {KSDATAFORMAT_SUBTYPE_DOLBY_AC3_SPDIF};
             FormatAC3Supported = FALSE;
         }
         else if (FormatFloatSupported)
         {
-            DPRINT1("Float\n");
+            DPRINT("Float\n");
             DataRange[AudioFormatIndex].DataRange.SubFormat = {KSDATAFORMAT_SUBTYPE_IEEE_FLOAT};
             FormatFloatSupported = FALSE;
         }
@@ -848,7 +865,7 @@ CAdapterCommon::BuildWaveOutFormat(
 
     for (ULONG Index = 0; Index < AssociatedPinCount; Index++)
     {
-        DPRINT1("AssociatedNode %u\n", AssociatedPins[Index]);
+        DPRINT("AssociatedNode %u\n", AssociatedPins[Index]);
     }
     PULONG TargetWidgets =
         (PULONG)ExAllocatePoolZero(NonPagedPool, sizeof(ULONG) * TotalInputOutputWidgets, TAG_HDAUDIO);
@@ -868,7 +885,7 @@ CAdapterCommon::BuildWaveOutFormat(
             SubNodeCount += NodesFound;
         }
     }
-    DPRINT1("Total I/O Nodes Found %u\n", SubNodeCount);
+    DPRINT("Total I/O Nodes Found %u\n", SubNodeCount);
     NTSTATUS Result;
     if (SubNodeCount == 0)
     {
@@ -910,7 +927,7 @@ CAdapterCommon::Initialize(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PRESO
     }
     // get resource information
     GetResourceInformation();
-    DPRINT1("HDAUDIO: CodecAddress %u FunctionGroupStartNode %u\n", m_CodecAddress, m_FunctionGroupStartNode);
+    DPRINT("HDAUDIO: CodecAddress %u FunctionGroupStartNode %u\n", m_CodecAddress, m_FunctionGroupStartNode);
 
     // get vendor revision
     Status = GetVendorRevisionId();
@@ -972,12 +989,12 @@ CAdapterCommon::Initialize(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PRESO
             ExFreePool(OutputNodes);
         return Status;
     }
-    DPRINT1(
+    DPRINT(
         "HDAUDIO: InputNodeCount %u OutputNodeCount %u PinNodeCount %u\n", InputNodeCount, OutputNodeCount,
         PinNodeCount);
 
     OutNode->ClearVisitedState();
-    DPRINT1("ProcessOutputNodes----------------------------------\n");
+    DPRINT("ProcessOutputNodes----------------------------------\n");
     Status = ProcessOutputNodes(DeviceObject, Irp, ResourceList, PinNodeCount, PinNodes, (PVOID)OutNode, OutputNodeCount, OutputNodes);
     if (!NT_SUCCESS(Status))
     {
@@ -1011,7 +1028,7 @@ CAdapterCommon::Initialize(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PRESO
         }
 
         OutNode->ClearVisitedState();
-        DPRINT1("ProcessInputNodes----------------------------------\n");
+        DPRINT("ProcessInputNodes----------------------------------\n");
         Status = ProcessInputNodes(DeviceObject, Irp, ResourceList, PinNodeCount, PinNodes, (PVOID)OutNode, InputNodeCount, InputNodes);
         if (!NT_SUCCESS(Status))
         {
@@ -1243,7 +1260,7 @@ CAdapterCommon::ProcessOutputNodes(
         if (PinNodes[NodeIndex] == (ULONG)-1)
         {
             // already handled by association
-            DPRINT1("PinNode %u already handled\n", PinNodes[NodeIndex]);
+            DPRINT("PinNode %u already handled\n", PinNodes[NodeIndex]);
             continue;
         }
         PNODE_CONTEXT NodeContext = OutNode->FindNodeId(PinNodes[NodeIndex]);
@@ -1251,7 +1268,7 @@ CAdapterCommon::ProcessOutputNodes(
         {
             for (ULONG CIndex = 0; CIndex < NodeContext->ConnectionCount; CIndex++)
             {
-                DPRINT1(
+                DPRINT(
                     "HDAUDIO PinNode %u TotalConnectionCount %u connected to %u\n", PinNodes[NodeIndex],
                     NodeContext->ConnectionCount, NodeContext->Connections[CIndex]);
             }
@@ -1260,7 +1277,7 @@ CAdapterCommon::ProcessOutputNodes(
         {
             // pin node not connected to anything
             // ignore
-            DPRINT1("PinNode %u not connected\n", PinNodes[NodeIndex]);
+            DPRINT("PinNode %u not connected\n", PinNodes[NodeIndex]);
             continue;
         }
 
@@ -1283,13 +1300,13 @@ CAdapterCommon::ProcessOutputNodes(
         ULONG DevicePresent = 0;
         if (NT_SUCCESS(Status))
         {
-            DPRINT1(
+            DPRINT(
                 "HDAUDIO: PinNode %u EAPD % x Input %x Output %x PresenceDetectCapable %x\n", PinNodes[NodeIndex],
                 PinCaps.EAPDCapable, PinCaps.InputCapable, PinCaps.OutputCapable, PinCaps.PresenceDetectCapable);
 
             if (!PinCaps.OutputCapable)
             {
-                DPRINT1("HDAUDIO: PinNode %u not outputcapable %x\n", PinNodes[NodeIndex], PinCaps.OutputCapable);
+                DPRINT("HDAUDIO: PinNode %u not outputcapable %x\n", PinNodes[NodeIndex], PinCaps.OutputCapable);
                 continue;
             }
 
@@ -1298,12 +1315,12 @@ CAdapterCommon::ProcessOutputNodes(
                 Status = OutNode->GetPinSense(PinNodes[NodeIndex], &DevicePresent);
                 if (NT_SUCCESS(Status))
                 {
-                    DPRINT1("HDAUDIO: PinNode %u DevicePresent %x\n", PinNodes[NodeIndex], DevicePresent);
+                    DPRINT("HDAUDIO: PinNode %u DevicePresent %x\n", PinNodes[NodeIndex], DevicePresent);
                     if (!DevicePresent)
                     {
                         UCHAR UnsolCapable, NodeType;
                         Status = OutNode->GetFunctionGroupType(PinNodes[NodeIndex], &UnsolCapable, &NodeType);
-                        DPRINT1("HDAUDIO: GetFunctionGroupType Status %x Unsolicited %x, NodeType %x\n", Status, UnsolCapable, NodeType);
+                        DPRINT("HDAUDIO: GetFunctionGroupType Status %x Unsolicited %x, NodeType %x\n", Status, UnsolCapable, NodeType);
                         if (NT_SUCCESS(Status) && UnsolCapable)
                         {
                             Status = Interface.RegisterEventCallback(
@@ -1315,7 +1332,7 @@ CAdapterCommon::ProcessOutputNodes(
                             }
 
                             // enable Unsolicited Response
-                            DPRINT1("Enable Unsolicited Response...\n");
+                            DPRINT("Enable Unsolicited Response...\n");
                             Status = OutNode->EnableUnsolicitedResponse(PinNodes[NodeIndex], 1, m_Tags[m_TagIndex]);
                             if (!NT_SUCCESS(Status))
                             {
@@ -1331,7 +1348,7 @@ CAdapterCommon::ProcessOutputNodes(
             if (PinCaps.EAPDCapable)
             {
                 // enable EAPD
-                DPRINT1("Enable EAPD...\n");
+                DPRINT("Enable EAPD...\n");
                 Status = OutNode->SetEAPDBTL(PinNodes[NodeIndex], 0, 1, 0);
                 if (!NT_SUCCESS(Status))
                 {
@@ -1353,7 +1370,7 @@ CAdapterCommon::ProcessOutputNodes(
             if (PinConfiguration.PortConnectivity == 0x1)
             {
                 // no connection
-                DPRINT1("Ignoring PinNode %u\n", PinNodes[NodeIndex]);
+                DPRINT("Ignoring PinNode %u\n", PinNodes[NodeIndex]);
                 ClearRef(PinNodes[NodeIndex], PinNodeCount, PinNodes);
                 continue;
             }
@@ -1361,7 +1378,7 @@ CAdapterCommon::ProcessOutputNodes(
             if (PinConfiguration.DefaultDevice > 7)
             {
                 // not an output pin
-                DPRINT1("Ignoring Pin %u DefaultDevice %u\n", PinNodes[NodeIndex], PinConfiguration.DefaultDevice);
+                DPRINT("Ignoring Pin %u DefaultDevice %u\n", PinNodes[NodeIndex], PinConfiguration.DefaultDevice);
                 continue;
             }
 
@@ -1410,7 +1427,7 @@ CAdapterCommon::ProcessOutputNodes(
                 DPRINT1("Warning: ProcessDacNodes failed %x\n", Status);
             }
 
-            DPRINT1(
+            DPRINT(
                 "HDAUDIO: PinNode %u PortConnectivity %x DefaultDevice %x DefaultAssociation %x Sequence %x\n",
                 PinNodes[NodeIndex], PinConfiguration.PortConnectivity, PinConfiguration.DefaultDevice,
                 PinConfiguration.DefaultAssociation, PinConfiguration.Sequence);
@@ -1451,12 +1468,12 @@ CAdapterCommon::IsInputNodeConnectedToPin(
         return Status;
     }
     *Result = 0;
-    DPRINT1("Searched for %u FoundNodes %u\n", PinNodeId, FoundNodes);
+    DPRINT("Searched for %u FoundNodes %u\n", PinNodeId, FoundNodes);
     for (ULONG Index = 0; Index < FoundNodes; Index++)
     {
         if (ConnectedPins[Index] == PinNodeId)
         {
-            DPRINT1("Found\n");
+            DPRINT("Found\n");
             *Result = 1;
             break;
         }
@@ -1530,7 +1547,7 @@ CAdapterCommon::ProcessInputNodes(
         if (PinNodes[NodeIndex] == (ULONG)-1)
         {
             // already handled by association
-            DPRINT1("PinNode %u already handled\n", PinNodes[NodeIndex]);
+            DPRINT("PinNode %u already handled\n", PinNodes[NodeIndex]);
             continue;
         }
 
@@ -1553,7 +1570,7 @@ CAdapterCommon::ProcessInputNodes(
         if (!NT_SUCCESS(Status) || !PinCaps.InputCapable)
         {
             // ignoring
-            DPRINT1("Ignoring Pin %u\n", PinNodes[NodeIndex]);
+            DPRINT("Ignoring Pin %u\n", PinNodes[NodeIndex]);
             continue;
         }
 
@@ -1563,12 +1580,12 @@ CAdapterCommon::ProcessInputNodes(
             Status = OutNode->GetPinSense(PinNodes[NodeIndex], &DevicePresent);
             if (NT_SUCCESS(Status))
             {
-                DPRINT1("HDAUDIO: PinNode %u DevicePresent %x\n", PinNodes[NodeIndex], DevicePresent);
+                DPRINT("HDAUDIO: PinNode %u DevicePresent %x\n", PinNodes[NodeIndex], DevicePresent);
                 if (!DevicePresent)
                 {
                     UCHAR UnsolCapable, NodeType;
                     Status = OutNode->GetFunctionGroupType(PinNodes[NodeIndex], &UnsolCapable, &NodeType);
-                    DPRINT1("HDAUDIO: GetFunctionGroupType Status %x Unsolicited %x, NodeType %x\n", Status, UnsolCapable, NodeType);
+                    DPRINT("HDAUDIO: GetFunctionGroupType Status %x Unsolicited %x, NodeType %x\n", Status, UnsolCapable, NodeType);
                     if (NT_SUCCESS(Status) && UnsolCapable)
                     {
                         Status = Interface.RegisterEventCallback(
@@ -1580,7 +1597,7 @@ CAdapterCommon::ProcessInputNodes(
                         }
 
                         // enable Unsolicited Response
-                        DPRINT1("Enable Unsolicited Response...\n");
+                        DPRINT("Enable Unsolicited Response...\n");
                         Status = OutNode->EnableUnsolicitedResponse(PinNodes[NodeIndex], 1, m_Tags[m_TagIndex]);
                         if (!NT_SUCCESS(Status))
                         {
@@ -1596,7 +1613,7 @@ CAdapterCommon::ProcessInputNodes(
         if (PinCaps.EAPDCapable)
         {
             // enable EAPD
-            DPRINT1("Enable EAPD...\n");
+            DPRINT("Enable EAPD...\n");
             Status = OutNode->SetEAPDBTL(PinNodes[NodeIndex], 0, 1, 0);
             if (!NT_SUCCESS(Status))
             {
@@ -1610,10 +1627,10 @@ CAdapterCommon::ProcessInputNodes(
         if (!NT_SUCCESS(Status) || PinConfiguration.DefaultDevice < 0x8 || PinConfiguration.PortConnectivity == 0x1)
         {
             // ignoring
-            DPRINT1("Ignoring Pin %u DefaultDevice %u\n", PinNodes[NodeIndex], PinConfiguration.DefaultDevice);
+            DPRINT("Ignoring Pin %u DefaultDevice %u\n", PinNodes[NodeIndex], PinConfiguration.DefaultDevice);
             continue;
         }
-        DPRINT1("Adding Input Pin %u\n", PinNodes[NodeIndex]);
+        DPRINT("Adding Input Pin %u\n", PinNodes[NodeIndex]);
         FilteredPinNodes[FilteredPinNodeCount] = PinNodes[NodeIndex];
         DefaultDeviceList[FilteredPinNodeCount] = PinConfiguration.DefaultDevice;
         FilteredPinNodeCount++;
@@ -1642,7 +1659,7 @@ CAdapterCommon::ProcessInputNodes(
         if (!PinsOfSameTypeCount)
         {
             // no pins of that type
-            DPRINT1("No Pins of Type %u\n", DeviceType);
+            DPRINT("No Pins of Type %u\n", DeviceType);
             ExFreePool(PinsOfSameType);
             continue;
         }
@@ -1707,7 +1724,7 @@ CAdapterCommon::ProcessInputNodes(
         }
         else
         {
-            DPRINT1("FilteredInputNodeCount %u PinsOfSameTypeCount %u\n", FilteredInputNodeCount, PinsOfSameTypeCount);
+            DPRINT("FilteredInputNodeCount %u PinsOfSameTypeCount %u\n", FilteredInputNodeCount, PinsOfSameTypeCount);
         }
         if (FilteredInputNodes)
             ExFreePool(FilteredInputNodes);
@@ -1829,7 +1846,7 @@ CAdapterCommon::AssociatePins(
 
     Status =
         OutNode->GetPinNodesWithDefaultAssociation(DefaultAssociation, Digital, &AssociatedPinCount, &AssociatedPins);
-    DPRINT1("GetPinNodesWithDefaultAssociation Status %x, AssociatedPinCount %u\n", Status, AssociatedPinCount);
+    DPRINT("GetPinNodesWithDefaultAssociation Status %x, AssociatedPinCount %u\n", Status, AssociatedPinCount);
     if (NT_SUCCESS(Status))
     {
         Status = BuildInstallFilter(DeviceObject, Irp, TRUE, OutNode, ResourceList, AssociatedPinCount, AssociatedPins, Digital);

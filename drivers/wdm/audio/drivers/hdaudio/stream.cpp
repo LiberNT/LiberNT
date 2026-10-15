@@ -28,7 +28,7 @@ CMiniportWaveRTStream::QueryInterface(IN REFIID refiid, OUT PVOID *Output)
 
     if (RtlStringFromGUID(refiid, &GuidString) == STATUS_SUCCESS)
     {
-        DPRINT1("CMiniportWaveRT::QueryInterface no interface!!! iface %S\n", GuidString.Buffer);
+        DPRINT("CMiniportWaveRT::QueryInterface no interface!!! iface %S\n", GuidString.Buffer);
         RtlFreeUnicodeString(&GuidString);
     }
     return STATUS_UNSUCCESSFUL;
@@ -133,24 +133,28 @@ CMiniportWaveRTStream::SetState(
     if (State == KSSTATE_ACQUIRE)
     {
         Status = m_Interface.SetDmaEngineState(m_Interface.Context, ResetState, 1, Handles);
-        DPRINT1("SetDmaEngineState State %x Status %x\n", State, Status);
+        if (!NT_SUCCESS(Status))
+            DPRINT1("SetDmaEngineState State %x Status %x\n", State, Status);
     }
     else if (State == KSSTATE_PAUSE || State == KSSTATE_STOP)
     {
         Status = m_Interface.SetDmaEngineState(m_Interface.Context, PauseState, 1, Handles);
-        DPRINT1("SetDmaEngineState State %x Status %x\n", State, Status);
+        if (!NT_SUCCESS(Status))
+            DPRINT1("SetDmaEngineState State %x Status %x\n", State, Status);
     }
     else if (State == KSSTATE_RUN)
     {
         for (ULONG Index = 0; Index < m_NodeCount; Index++)
         {
             Status = m_OutNode->SetStreamFormat(m_Nodes[Index], m_Converter.ConverterFormat);
-            DPRINT1("Node %u SetStreamFormat Status %x\n", m_Nodes[Index], Status);
+            if (!NT_SUCCESS(Status))
+                DPRINT1("Node %u SetStreamFormat Status %x\n", m_Nodes[Index], Status);
         }
         for (ULONG Index = 0; Index < m_NodeCount; Index++)
         {
             Status = m_OutNode->SetConverterStream(m_Nodes[Index], m_StreamId);
-            DPRINT1("Node %u SetConverterStream Status %x\n", m_Nodes[Index], Status);
+            if (!NT_SUCCESS(Status))
+                DPRINT1("Node %u SetConverterStream Status %x\n", m_Nodes[Index], Status);
         }
         Status = m_Interface.SetDmaEngineState(m_Interface.Context, RunState, 1, Handles);
     }
