@@ -99,6 +99,9 @@ enum node_flag
 {
     NODE_FLAG_IGNORE_TRAILING_ELEMENT_CONTENT   = 0x1,
     NODE_FLAG_TEXT_WITH_IMPLICIT_END_ELEMENT    = 0x2,
+#ifdef __REACTOS__
+    NODE_FLAG_CLOSED_ELEMENT                    = 0x4,
+#endif
 };
 
 struct node
@@ -114,6 +117,10 @@ struct node *alloc_node( WS_XML_NODE_TYPE );
 void free_node( struct node * );
 void destroy_nodes( struct node * );
 HRESULT copy_node( WS_XML_READER *, WS_XML_WRITER_ENCODING_TYPE, struct node ** );
+#ifdef __REACTOS__
+HRESULT move_reader_next_node( WS_XML_READER * );
+HRESULT copy_input_nodes( WS_XML_READER *, WS_XML_WRITER_ENCODING_TYPE, struct list * );
+#endif
 
 static inline WS_XML_NODE_TYPE node_type( const struct node *node )
 {

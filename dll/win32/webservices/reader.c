@@ -2054,6 +2054,23 @@ static inline struct node *find_parent( struct reader *reader )
     return NULL;
 }
 
+#ifdef __REACTOS__
+static BOOL is_second_root( struct reader *reader, const struct node *parent )
+{
+    const struct node *child;
+    BOOL allow = FALSE;
+
+    if (parent != reader->root) return FALSE;
+    prop_get( reader->prop, reader->prop_count, WS_XML_READER_PROPERTY_ALLOW_FRAGMENT, &allow, sizeof(allow) );
+    if (allow) return FALSE;
+    LIST_FOR_EACH_ENTRY( child, &parent->children, struct node, entry )
+    {
+        if (node_type( child ) == WS_XML_NODE_TYPE_ELEMENT) return TRUE;
+    }
+    return FALSE;
+}
+
+#endif
 static HRESULT set_namespaces( struct reader *reader, WS_XML_ELEMENT_NODE *elem )
 {
     static const WS_XML_STRING xml = {3, (BYTE *)"xml"};
@@ -2164,6 +2181,13 @@ static HRESULT read_element_text( struct reader *reader )
     }
 
     if (!(parent = find_parent( reader ))) goto error;
+#ifdef __REACTOS__
+    if (is_second_root( reader, parent ))
+    {
+        hr = WS_E_INVALID_FORMAT;
+        goto error;
+    }
+#endif
     if ((hr = parse_qname( start, len, &elem->prefix, &elem->localName )) != S_OK) goto error;
     if ((hr = read_attributes_text( reader, elem )) != S_OK) goto error;
     if ((hr = set_namespaces( reader, elem )) != S_OK) goto error;
@@ -2281,6 +2305,13 @@ static HRESULT read_element_bin( struct reader *reader )
         hr = WS_E_INVALID_FORMAT;
         goto error;
     }
+#ifdef __REACTOS__
+    if (is_second_root( reader, parent ))
+    {
+        hr = WS_E_INVALID_FORMAT;
+        goto error;
+    }
+#endif
 
     if ((hr = read_attributes_bin( reader, elem )) != S_OK) goto error;
     if ((hr = set_namespaces( reader, elem )) != S_OK) goto error;
@@ -3741,7 +3772,11 @@ HRESULT WINAPI WsMoveReader( WS_XML_READER *handle, WS_MOVE_TO move, BOOL *found
         return E_INVALIDARG;
     }
 
+#ifdef __REACTOS__
+    if (!reader->input_buf) hr = WS_E_INVALID_OPERATION;
+#else
     if (reader->input_type != WS_XML_READER_INPUT_TYPE_BUFFER) hr = WS_E_INVALID_OPERATION;
+#endif
     else hr = read_move_to( reader, move, found );
 
     LeaveCriticalSection( &reader->cs );
@@ -3749,6 +3784,69 @@ HRESULT WINAPI WsMoveReader( WS_XML_READER *handle, WS_MOVE_TO move, BOOL *found
     return hr;
 }
 
+#ifdef __REACTOS__
+HRESULT copy_input_nodes( WS_XML_READER *handle, WS_XML_WRITER_ENCODING_TYPE enc, struct list *nodes )
+{
+    struct reader *reader = (struct reader *)handle;
+    struct node *child, *dst, *next;
+    HRESULT hr = S_OK;
+
+    EnterCriticalSection( &reader->cs );
+
+    if (reader->magic != READER_MAGIC)
+    {
+        LeaveCriticalSection( &reader->cs );
+        return E_INVALIDARG;
+    }
+
+    while (!read_end_of_data( reader ))
+    {
+        if ((hr = read_node( reader )) != S_OK) goto done;
+        if (node_type( reader->current ) == WS_XML_NODE_TYPE_EOF) break;
+    }
+
+    LIST_FOR_EACH_ENTRY( child, &reader->root->children, struct node, entry )
+    {
+        if (node_type( child ) == WS_XML_NODE_TYPE_EOF) break;
+        dst = NULL;
+        if ((hr = dup_tree( child, enc, &dst )) != S_OK) break;
+        list_add_tail( nodes, &dst->entry );
+    }
+
+    if (hr != S_OK)
+    {
+        LIST_FOR_EACH_ENTRY_SAFE( child, next, nodes, struct node, entry )
+        {
+            list_remove( &child->entry );
+            destroy_nodes( child );
+        }
+    }
+
+done:
+    LeaveCriticalSection( &reader->cs );
+    return hr;
+}
+
+HRESULT move_reader_next_node( WS_XML_READER *handle )
+{
+    struct reader *reader = (struct reader *)handle;
+    HRESULT hr;
+
+    EnterCriticalSection( &reader->cs );
+
+    if (reader->magic != READER_MAGIC)
+    {
+        LeaveCriticalSection( &reader->cs );
+        return E_INVALIDARG;
+    }
+
+    hr = read_move_to( reader, WS_MOVE_TO_NEXT_NODE, NULL );
+
+    LeaveCriticalSection( &reader->cs );
+    return hr;
+}
+
+#endif
 /**************************************************************************
  *          WsReadStartAttribute		[webservices.@]
  */
@@ -6533,6 +6631,13 @@ static HRESULT read_type_array( struct reader *reader, const WS_FIELD_DESCRIPTIO
     }
 
     if (desc->localName && ((hr = read_type_next_node( reader )) != S_OK)) return hr;
+#ifdef __REACTOS__
+    if (desc->localName && node_type( reader->current ) != WS_XML_NODE_TYPE_END_ELEMENT)
+    {
+        ws_free( heap, buf, nb_allocated * item_size );
+        return WS_E_INVALID_FORMAT;
+    }
+#endif
 
     if (desc->itemRange && (nb_items < desc->itemRange->minItemCount || nb_items > desc->itemRange->maxItemCount))
     {
@@ -6614,6 +6719,10 @@ static HRESULT read_type_field( struct reader *reader, const WS_STRUCT_DESCRIPTI
         if (desc->type != WS_UNION_TYPE || !desc->typeDescription ||
             (desc->options & (WS_FIELD_POINTER|WS_FIELD_NILLABLE))) return E_INVALIDARG;
         hr = read_type_union( reader, desc->typeDescription, heap, ptr, size, &found );
+#ifdef __REACTOS__
+        if (hr == S_OK && !found && !(desc->options & WS_FIELD_OPTIONAL) &&
+            (hr = read_type_next_node( reader )) == S_OK) hr = WS_E_INVALID_FORMAT;
+#endif
         break;
     }
     case WS_REPEATING_ELEMENT_FIELD_MAPPING:
@@ -7143,7 +7252,12 @@ HRESULT WINAPI WsReadType( WS_XML_READER *handle, WS_TYPE_MAPPING mapping, WS_TY
         default:
             break;
         }
+#ifdef __REACTOS__
+        if (hr == S_OK && mapping != WS_ELEMENT_CONTENT_TYPE_MAPPING && !read_end_of_data( reader ))
+            hr = WS_E_INVALID_FORMAT;
+#else
         if (hr == S_OK && !read_end_of_data( reader )) hr = WS_E_INVALID_FORMAT;
+#endif
     }
 
     LeaveCriticalSection( &reader->cs );
