@@ -4014,7 +4014,7 @@ NtGdiPtInRegion(
     prgn = REGION_LockRgn(hrgn);
     if (prgn == NULL)
     {
-        DPRINT1("NtGdiPtInRegion: hrgn error\n");
+        DPRINT("NtGdiPtInRegion: hrgn error\n");
         return FALSE;
     }
 
