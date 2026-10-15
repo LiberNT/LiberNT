@@ -185,7 +185,7 @@ NTSTATUS TdiOpenAddressFile(
     RtlCopyMemory(EaInfo->EaName,
                   TdiTransportAddress,
                   TDI_TRANSPORT_ADDRESS_LENGTH);
-    EaInfo->EaValueLength = sizeof(TA_IP_ADDRESS);
+    EaInfo->EaValueLength = (USHORT)TaLengthOfTransportAddress(Name);
     Address =
         (PTRANSPORT_ADDRESS)(EaInfo->EaName + TDI_TRANSPORT_ADDRESS_LENGTH + 1); /* 0-terminated */
     TaCopyTransportAddressInPlace( Address, Name );

@@ -27,6 +27,8 @@ UINT TdiAddressSizeFromType( UINT AddressType ) {
         return TDI_ADDRESS_LENGTH_UNIX;
     case TDI_ADDRESS_TYPE_IP:
         return TDI_ADDRESS_LENGTH_IP;
+    case TDI_ADDRESS_TYPE_IP6:
+        return TDI_ADDRESS_LENGTH_IP6;
     case TDI_ADDRESS_TYPE_APPLETALK:
         return TDI_ADDRESS_LENGTH_APPLETALK;
     case TDI_ADDRESS_TYPE_NETBIOS:
