@@ -6,6 +6,7 @@ list(APPEND SOURCE
     GetThemeParseErrorInfo.c
     NonClientCaption.c
     SetWindowTheme.c
+    TextScaling.c
     SetThemeAppProperties.c
     ThemeRendering.c
     ThemeShellTransition.c

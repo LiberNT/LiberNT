@@ -9,6 +9,7 @@ extern void func_GetThemeParseErrorInfo(void);
 extern void func_NonClientCaption(void);
 extern void func_SetThemeAppProperties(void);
 extern void func_SetWindowTheme(void);
+extern void func_TextScaling(void);
 extern void func_ThemeRendering(void);
 extern void func_ThemeShellTransition(void);
 
@@ -20,6 +21,7 @@ const struct test winetest_testlist[] =
     { "GetThemeParseErrorInfo", func_GetThemeParseErrorInfo },
     { "NonClientCaption", func_NonClientCaption },
     { "SetWindowTheme", func_SetWindowTheme },
+    { "TextScaling",    func_TextScaling },
     { "SetThemeAppProperties", func_SetThemeAppProperties },
     { "ThemeRendering", func_ThemeRendering },
     { "ThemeShellTransition", func_ThemeShellTransition },
