@@ -473,43 +473,28 @@ FORCEINLINE
 VOID
 KiAcquireDispatcherObject(IN DISPATCHER_HEADER* Object)
 {
-    LONG OldValue;
-
     /* Make sure we're at a safe level to touch the lock */
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
     /* Start acquire loop */
-    do
+    while (InterlockedOr(&Object->Lock, KOBJECT_LOCK_BIT) & KOBJECT_LOCK_BIT)
     {
         /* Loop until the other CPU releases it */
-        while (TRUE)
+        do
         {
-            /* Check if it got released */
-            OldValue = Object->Lock;
-            if ((OldValue & KOBJECT_LOCK_BIT) == 0) break;
-
             /* Let the CPU know that this is a loop */
             YieldProcessor();
-        }
-
-        /* Try acquiring the lock now */
-    } while (InterlockedCompareExchange(&Object->Lock,
-                                        OldValue | KOBJECT_LOCK_BIT,
-                                        OldValue) != OldValue);
+        } while (Object->Lock & KOBJECT_LOCK_BIT);
+    }
 }
 
 FORCEINLINE
 BOOLEAN
 KiTryAcquireDispatcherObject(IN DISPATCHER_HEADER* Object)
 {
-    LONG OldValue;
-
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
-    OldValue = Object->Lock;
-    if (OldValue & KOBJECT_LOCK_BIT) return FALSE;
-
-    return (InterlockedCompareExchange(&Object->Lock, OldValue | KOBJECT_LOCK_BIT, OldValue) == OldValue);
+    return !(InterlockedOr(&Object->Lock, KOBJECT_LOCK_BIT) & KOBJECT_LOCK_BIT);
 }
 
 FORCEINLINE
