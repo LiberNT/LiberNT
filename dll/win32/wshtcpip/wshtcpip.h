@@ -54,6 +54,10 @@ typedef struct _SOCKET_CONTEXT {
     ULONG MulticastInterface;
     ULONG MulticastTTL;
     ULONG UnicastInterface;
+    BOOLEAN UdpNoChecksum;
+    ULONG UdpSendMsgSize;
+    ULONG UdpRecvMaxCoalescedSize;
+    ULONG RecvInfoOptions;
     BOOL V6Only;
 } SOCKET_CONTEXT, *PSOCKET_CONTEXT;
 

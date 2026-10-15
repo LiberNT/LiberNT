@@ -568,6 +568,9 @@ AfdCloseSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     if (FCB->AddressFrom)
         ExFreePoolWithTag(FCB->AddressFrom, TAG_AFD_TDI_CONNECTION_INFORMATION);
 
+    if (FCB->RecvControl)
+        ExFreePoolWithTag(FCB->RecvControl, TAG_AFD_DATA_BUFFER);
+
     if (FCB->ConnectCallInfo)
         ExFreePoolWithTag(FCB->ConnectCallInfo, TAG_AFD_TDI_CONNECTION_INFORMATION);
 

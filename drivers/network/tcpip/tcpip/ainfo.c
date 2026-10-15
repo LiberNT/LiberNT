@@ -52,6 +52,52 @@ TDI_STATUS SetAddressFileInfo(TDIObjectID *ID,
          return TDI_SUCCESS;
       }
 
+      case AO_OPTION_XSUM:
+         if (BufferSize < sizeof(ULONG))
+             return TDI_INVALID_PARAMETER;
+
+         LockObject(AddrFile);
+         AddrFile->NoChecksum = (*(PULONG)Buffer == 0);
+         UnlockObject(AddrFile);
+
+         return TDI_SUCCESS;
+
+      case AO_OPTION_UDP_SEND_MSG_SIZE:
+         if (BufferSize < sizeof(ULONG))
+             return TDI_INVALID_PARAMETER;
+
+         LockObject(AddrFile);
+         AddrFile->SendMsgSize = *(PULONG)Buffer;
+         UnlockObject(AddrFile);
+
+         return TDI_SUCCESS;
+
+      case AO_OPTION_IP_PKTINFO:
+      case AO_OPTION_IP_RECVTTL:
+      case AO_OPTION_IP_RECVTOS:
+      case AO_OPTION_IP_RECVECN:
+      case AO_OPTION_IP_RECVDSTADDR:
+      {
+         BOOLEAN Enable;
+
+         if (BufferSize < sizeof(ULONG))
+             return TDI_INVALID_PARAMETER;
+
+         Enable = (*(PULONG)Buffer != 0);
+         LockObject(AddrFile);
+         switch (ID->toi_id)
+         {
+            case AO_OPTION_IP_PKTINFO: AddrFile->RecvPktInfo = Enable; break;
+            case AO_OPTION_IP_RECVTTL: AddrFile->RecvTtl = Enable; break;
+            case AO_OPTION_IP_RECVTOS: AddrFile->RecvTos = Enable; break;
+            case AO_OPTION_IP_RECVECN: AddrFile->RecvEcn = Enable; break;
+            default: AddrFile->RecvDstAddr = Enable; break;
+         }
+         UnlockObject(AddrFile);
+
+         return TDI_SUCCESS;
+      }
+
       case AO_OPTION_MCASTTTL:
          if (BufferSize < sizeof(UINT) || *(PUINT)Buffer > 255)
              return TDI_INVALID_PARAMETER;

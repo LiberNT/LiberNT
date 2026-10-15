@@ -212,6 +212,43 @@ GetTdiTypeId(
                  *TdiId = AO_OPTION_IP_HDRINCL;
                  return;
 
+             case IP_PKTINFO:
+                 *TdiId = AO_OPTION_IP_PKTINFO;
+                 return;
+
+             case IP_RECVTTL:
+                 *TdiId = AO_OPTION_IP_RECVTTL;
+                 return;
+
+             case IP_RECVTOS:
+                 *TdiId = AO_OPTION_IP_RECVTOS;
+                 return;
+
+             case IP_RECVECN:
+                 *TdiId = AO_OPTION_IP_RECVECN;
+                 return;
+
+             case IP_RECVDSTADDR:
+                 *TdiId = AO_OPTION_IP_RECVDSTADDR;
+                 return;
+
+             default:
+                break;
+          }
+          break;
+
+       case IPPROTO_UDP:
+          *TdiType = INFO_TYPE_ADDRESS_OBJECT;
+          switch (OptionName)
+          {
+             case UDP_NOCHECKSUM:
+                *TdiId = AO_OPTION_XSUM;
+                return;
+
+             case UDP_SEND_MSG_SIZE:
+                *TdiId = AO_OPTION_UDP_SEND_MSG_SIZE;
+                return;
+
              default:
                 break;
           }
@@ -235,6 +272,27 @@ GetTdiTypeId(
     DPRINT1("Unknown level/option name: %d %d\n", Level, OptionName);
     *TdiType = 0;
     *TdiId = 0;
+}
+
+static ULONG
+RecvInfoOptionBit(
+    _In_ INT OptionName)
+{
+    switch (OptionName)
+    {
+        case IP_PKTINFO:
+            return 0x1;
+        case IP_RECVTTL:
+            return 0x2;
+        case IP_RECVTOS:
+            return 0x4;
+        case IP_RECVECN:
+            return 0x8;
+        case IP_RECVDSTADDR:
+            return 0x10;
+        default:
+            return 0;
+    }
 }
 
 INT
@@ -267,6 +325,43 @@ WSHGetSocketInformation(
             return WSAEFAULT;
         memcpy(OptionValue, &Context->UnicastInterface, sizeof(ULONG));
         *OptionLength = sizeof(ULONG);
+        return NO_ERROR;
+    }
+    if (Level == IPPROTO_UDP)
+    {
+        if (Context->SocketType != SOCK_DGRAM)
+            return WSAEINVAL;
+        if (!OptionLength || !OptionValue)
+            return WSAEFAULT;
+        switch (OptionName)
+        {
+            case UDP_NOCHECKSUM:
+                if (*OptionLength < sizeof(BOOLEAN))
+                    return WSAEFAULT;
+                *(BOOLEAN *)OptionValue = Context->UdpNoChecksum;
+                *OptionLength = sizeof(BOOLEAN);
+                return NO_ERROR;
+
+            case UDP_SEND_MSG_SIZE:
+            case UDP_RECV_MAX_COALESCED_SIZE:
+                if (*OptionLength < sizeof(DWORD))
+                    return WSAEFAULT;
+                memcpy(OptionValue,
+                       OptionName == UDP_SEND_MSG_SIZE ? &Context->UdpSendMsgSize : &Context->UdpRecvMaxCoalescedSize,
+                       sizeof(DWORD));
+                *OptionLength = sizeof(DWORD);
+                return NO_ERROR;
+
+            default:
+                return WSAEINVAL;
+        }
+    }
+    if (Level == IPPROTO_IP && RecvInfoOptionBit(OptionName))
+    {
+        if (!OptionLength || !OptionValue || *OptionLength < sizeof(DWORD))
+            return WSAEFAULT;
+        *(DWORD *)OptionValue = (Context->RecvInfoOptions & RecvInfoOptionBit(OptionName)) ? 1 : 0;
+        *OptionLength = sizeof(DWORD);
         return NO_ERROR;
     }
     if (Level == IPPROTO_IP && OptionName == IP_HDRINCL && Context->SocketType != SOCK_RAW)
@@ -822,6 +917,8 @@ WSHSetSocketInformation(
     PQUEUED_REQUEST Queued, NextQueued;
     ULONG MulticastValue;
     ULONG InterfaceIndex = 0;
+    ULONG UdpValue = 0;
+    ULONG RecvValue = 0;
 
     DPRINT("WSHSetSocketInformation\n");
 
@@ -906,8 +1003,18 @@ WSHSetSocketInformation(
                     /* Send these to TCPIP */
                     break;
 
+                case IP_PKTINFO:
+                case IP_RECVTTL:
                 case IP_RECVTOS:
-                    return WSAENOPROTOOPT;
+                case IP_RECVECN:
+                case IP_RECVDSTADDR:
+                    if (!OptionValue || OptionLength < 1)
+                        return WSAEFAULT;
+                    memcpy(&RecvValue, OptionValue, min(OptionLength, (INT)sizeof(ULONG)));
+                    RecvValue = (RecvValue != 0);
+                    OptionValue = (PCHAR)&RecvValue;
+                    OptionLength = sizeof(ULONG);
+                    break;
 
                 default:
                     /* Invalid option -- FIXME */
@@ -944,8 +1051,40 @@ WSHSetSocketInformation(
             return 0;
 
         case IPPROTO_UDP:
-            DPRINT1("Set: Received unexpected %d option %d\n", Level, OptionName);
-            return 0;
+            if (Context->SocketType != SOCK_DGRAM)
+                return WSAEINVAL;
+            switch (OptionName)
+            {
+                case UDP_NOCHECKSUM:
+                    if (!OptionValue || OptionLength < sizeof(BOOLEAN))
+                        return WSAEFAULT;
+                    if (OptionLength >= sizeof(DWORD))
+                        memcpy(&UdpValue, OptionValue, sizeof(DWORD));
+                    else
+                        UdpValue = *(PUCHAR)OptionValue;
+                    UdpValue = (UdpValue == 0);
+                    OptionValue = (PCHAR)&UdpValue;
+                    OptionLength = sizeof(ULONG);
+                    break;
+
+                case UDP_SEND_MSG_SIZE:
+                    if (!OptionValue || OptionLength < sizeof(DWORD))
+                        return WSAEFAULT;
+                    memcpy(&UdpValue, OptionValue, sizeof(DWORD));
+                    OptionValue = (PCHAR)&UdpValue;
+                    OptionLength = sizeof(ULONG);
+                    break;
+
+                case UDP_RECV_MAX_COALESCED_SIZE:
+                    if (!OptionValue || OptionLength < sizeof(DWORD))
+                        return WSAEFAULT;
+                    memcpy(&Context->UdpRecvMaxCoalescedSize, OptionValue, sizeof(DWORD));
+                    return 0;
+
+                default:
+                    return WSAEINVAL;
+            }
+            break;
 
         default:
             DPRINT1("Set: Received unexpected %d option %d\n", Level, OptionName);
@@ -1008,6 +1147,17 @@ WSHSetSocketInformation(
             memcpy(&Context->MulticastTTL, OptionValue, sizeof(ULONG));
         if (Level == IPPROTO_IP && OptionName == IP_UNICAST_IF)
             Context->UnicastInterface = ntohl(InterfaceIndex);
+        if (Level == IPPROTO_UDP && OptionName == UDP_NOCHECKSUM)
+            Context->UdpNoChecksum = (UdpValue == 0);
+        if (Level == IPPROTO_UDP && OptionName == UDP_SEND_MSG_SIZE)
+            Context->UdpSendMsgSize = UdpValue;
+        if (Level == IPPROTO_IP && RecvInfoOptionBit(OptionName))
+        {
+            if (RecvValue)
+                Context->RecvInfoOptions |= RecvInfoOptionBit(OptionName);
+            else
+                Context->RecvInfoOptions &= ~RecvInfoOptionBit(OptionName);
+        }
         return 0;
     }
 
@@ -1018,6 +1168,17 @@ WSHSetSocketInformation(
         memcpy(&Context->MulticastTTL, OptionValue, sizeof(ULONG));
     if (!Status && Level == IPPROTO_IP && OptionName == IP_UNICAST_IF)
         Context->UnicastInterface = ntohl(InterfaceIndex);
+    if (!Status && Level == IPPROTO_UDP && OptionName == UDP_NOCHECKSUM)
+        Context->UdpNoChecksum = (UdpValue == 0);
+    if (!Status && Level == IPPROTO_UDP && OptionName == UDP_SEND_MSG_SIZE)
+        Context->UdpSendMsgSize = UdpValue;
+    if (!Status && Level == IPPROTO_IP && RecvInfoOptionBit(OptionName))
+    {
+        if (RecvValue)
+            Context->RecvInfoOptions |= RecvInfoOptionBit(OptionName);
+        else
+            Context->RecvInfoOptions &= ~RecvInfoOptionBit(OptionName);
+    }
 
     HeapFree(GetProcessHeap(), 0, Info);
 

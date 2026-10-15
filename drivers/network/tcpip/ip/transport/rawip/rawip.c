@@ -351,7 +351,8 @@ VOID RawIpReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
                     0,
                     0,
                     IPPacket,
-                    DataSize);
+                    DataSize,
+                    Interface);
       DereferenceObject(AddrFile);
     } while ((AddrFile = AddrSearchNext(&SearchContext)) != NULL);
   } else {

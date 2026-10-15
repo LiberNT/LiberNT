@@ -48,6 +48,80 @@ BOOLEAN DGRemoveIRP(
     return Found;
 }
 
+static ULONG
+DGAppendControl(
+    PUCHAR Buffer,
+    ULONG BufferLength,
+    LONG Level,
+    LONG Type,
+    PVOID Data,
+    ULONG DataLength)
+{
+    if (TDI_CMSG_SPACE(DataLength) > BufferLength)
+        return 0;
+
+    RtlZeroMemory(Buffer, TDI_CMSG_SPACE(DataLength));
+    TDI_INIT_CMSGHDR(Buffer, Level, Type, DataLength);
+    RtlCopyMemory(TDI_CMSG_DATA(Buffer), Data, DataLength);
+    return TDI_CMSG_SPACE(DataLength);
+}
+
+static ULONG
+DGBuildControlData(
+    PADDRESS_FILE AddrFile,
+    PIP_INTERFACE Interface,
+    PIP_ADDRESS DstAddress,
+    PIP_PACKET IPPacket,
+    PUCHAR Buffer,
+    ULONG BufferLength)
+{
+    PIPv4_HEADER Header = IPPacket->Header;
+    ULONG Written = 0;
+    ULONG PktInfo[2];
+    INT Value;
+
+    if (!Buffer || IPPacket->Type != IP_ADDRESS_V4 || DstAddress->Type != IP_ADDRESS_V4)
+        return 0;
+
+    if (AddrFile->RecvPktInfo)
+    {
+        PktInfo[0] = DstAddress->Address.IPv4Address;
+        PktInfo[1] = Interface ? Interface->Index : 0;
+        Written += DGAppendControl(Buffer + Written, BufferLength - Written,
+                                   WS_IPPROTO_IP, WS_IP_PKTINFO, PktInfo, sizeof(PktInfo));
+    }
+
+    if (AddrFile->RecvTtl)
+    {
+        Value = Header->Ttl;
+        Written += DGAppendControl(Buffer + Written, BufferLength - Written,
+                                   WS_IPPROTO_IP, WS_IP_TTL, &Value, sizeof(Value));
+    }
+
+    if (AddrFile->RecvTos)
+    {
+        Value = Header->Tos;
+        Written += DGAppendControl(Buffer + Written, BufferLength - Written,
+                                   WS_IPPROTO_IP, WS_IP_TOS, &Value, sizeof(Value));
+    }
+
+    if (AddrFile->RecvEcn)
+    {
+        Value = Header->Tos & 3;
+        Written += DGAppendControl(Buffer + Written, BufferLength - Written,
+                                   WS_IPPROTO_IP, WS_IP_ECN, &Value, sizeof(Value));
+    }
+
+    if (AddrFile->RecvDstAddr)
+    {
+        Written += DGAppendControl(Buffer + Written, BufferLength - Written,
+                                   WS_IPPROTO_IP, WS_IP_RECVDSTADDR,
+                                   &DstAddress->Address.IPv4Address, sizeof(IPv4_RAW_ADDRESS));
+    }
+
+    return Written;
+}
+
 VOID
 DGDeliverData(
     PADDRESS_FILE AddrFile,
@@ -56,7 +130,8 @@ DGDeliverData(
     USHORT SrcPort,
     USHORT DstPort,
     PIP_PACKET IPPacket,
-    UINT DataSize)
+    UINT DataSize,
+    PIP_INTERFACE Interface)
 /*
  * FUNCTION: Delivers datagram data to a user
  * ARGUMENTS:
@@ -134,6 +209,18 @@ DGDeliverData(
                 RTAIPAddress->Address->Address->sin_port = SrcPort;
                 RTAIPAddress->Address->Address->in_addr = SrcAddress->Address.IPv4Address;
                 RtlZeroMemory(RTAIPAddress->Address->Address->sin_zero, 8);
+
+                if (Current->ReturnInfo->Options)
+                {
+                    Current->ReturnInfo->OptionsLength =
+                        DGBuildControlData(AddrFile,
+                                           Interface,
+                                           DstAddress,
+                                           IPPacket,
+                                           Current->ReturnInfo->Options,
+                                           Current->ReturnInfo->OptionsLength > 0 ?
+                                               Current->ReturnInfo->OptionsLength : 0);
+                }
 
                 TI_DbgPrint(MAX_TRACE, ("(A: %08x) Addr %08x Port %04x\n",
                             RTAIPAddress,

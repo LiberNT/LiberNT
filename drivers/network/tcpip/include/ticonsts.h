@@ -35,4 +35,11 @@
 /* Unique error values for log entries */
 #define TI_ERROR_DRIVERENTRY 0
 
+#define WS_IPPROTO_IP 0
+#define WS_IP_TOS 3
+#define WS_IP_TTL 4
+#define WS_IP_PKTINFO 19
+#define WS_IP_RECVDSTADDR 25
+#define WS_IP_ECN 50
+
 /* EOF */

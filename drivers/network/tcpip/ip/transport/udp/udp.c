@@ -61,10 +61,13 @@ NTSTATUS AddUDPHeaderIPv4(
 
     RtlCopyMemory(IPPacket->Data, Data, DataLength);
 
-    UDPHeader->Checksum = UDPv4ChecksumCalculate((PIPv4_HEADER)IPPacket->Header,
-                                                 (PUCHAR)UDPHeader,
-                                                 DataLength + sizeof(UDP_HEADER));
-    UDPHeader->Checksum = WH2N(UDPHeader->Checksum);
+    if (!AddrFile->NoChecksum)
+    {
+        UDPHeader->Checksum = UDPv4ChecksumCalculate((PIPv4_HEADER)IPPacket->Header,
+                                                     (PUCHAR)UDPHeader,
+                                                     DataLength + sizeof(UDP_HEADER));
+        UDPHeader->Checksum = WH2N(UDPHeader->Checksum);
+    }
 
     TI_DbgPrint(MID_TRACE, ("Packet: %d ip %d udp %d payload\n",
 			    (PCHAR)UDPHeader - (PCHAR)IPPacket->Header,
@@ -386,6 +389,9 @@ NTSTATUS UDPSendDatagram(
     IP_ADDRESS RemoteAddress;
     USHORT RemotePort;
     NTSTATUS Status;
+    ULONG SendMsgSize;
+    ULONG Offset;
+    ULONG Chunk;
 
     TI_DbgPrint(MID_TRACE,("Sending Datagram(%x %x %x %d)\n",
 						   AddrFile, ConnInfo, BufferData, DataSize));
@@ -403,9 +409,19 @@ NTSTATUS UDPSendDatagram(
 		return STATUS_UNSUCCESSFUL;
     }
 
-    Status = UDPSendToAddress(AddrFile, RemoteAddress, RemotePort, BufferData, DataSize, &NoTag);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    SendMsgSize = AddrFile->SendMsgSize;
+    if (SendMsgSize == 0 || SendMsgSize >= DataSize)
+        SendMsgSize = DataSize;
+
+    Offset = 0;
+    do
+    {
+        Chunk = min(SendMsgSize, DataSize - Offset);
+        Status = UDPSendToAddress(AddrFile, RemoteAddress, RemotePort, BufferData + Offset, Chunk, &NoTag);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Offset += Chunk;
+    } while (Offset < DataSize);
 
     *DataUsed = DataSize;
 
@@ -667,7 +683,8 @@ VOID UDPReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
 		    UDPHeader->SourcePort,
 		    UDPHeader->DestPort,
                     IPPacket,
-                    DataSize);
+                    DataSize,
+                    Interface);
       }
       DereferenceObject(AddrFile);
     } while ((AddrFile = AddrSearchNext(&SearchContext)) != NULL);

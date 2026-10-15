@@ -32,6 +32,7 @@ VOID DGDeliverData(
   USHORT SrcPort,
   USHORT DstPort,
   PIP_PACKET IPPacket,
-  UINT DataSize);
+  UINT DataSize,
+  PIP_INTERFACE Interface);
 
 /* EOF */

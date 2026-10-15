@@ -14,6 +14,7 @@
 #include <ntifs.h>
 #include <ndk/obtypes.h>
 #include <tdi.h>
+#include <tdikrnl.h>
 #include <tcpioctl.h>
 #define _WINBASE_
 #define _WINDOWS_H
@@ -107,9 +108,11 @@ typedef struct IPADDR_ENTRY {
 
 #define IN_FLIGHT_REQUESTS              5
 
-#define EXTRA_LOCK_BUFFERS              2 /* Number of extra buffers needed
+#define EXTRA_LOCK_BUFFERS              5 /* Number of extra buffers needed
 					   * for ancillary data on packet
 					   * requests. */
+
+#define AFD_RECV_CONTROL_SIZE           256
 
 /* XXX This is a hack we should clean up later
  * We do this in order to get some storage for the locked handle table
@@ -223,6 +226,8 @@ typedef struct _AFD_STORED_DATAGRAM {
     LIST_ENTRY ListEntry;
     UINT Len;
     PTRANSPORT_ADDRESS Address;
+    PVOID Control;
+    UINT ControlLen;
     CHAR Buffer[1];
 } AFD_STORED_DATAGRAM, *PAFD_STORED_DATAGRAM;
 
@@ -243,6 +248,7 @@ typedef struct _AFD_FCB {
     LARGE_INTEGER DisconnectTimeout;
     PTRANSPORT_ADDRESS LocalAddress, RemoteAddress;
     PTDI_CONNECTION_INFORMATION AddressFrom, ConnectCallInfo, ConnectReturnInfo;
+    PVOID RecvControl;
     AFD_TDI_OBJECT AddressFile, Connection;
     AFD_IN_FLIGHT_REQUEST ConnectIrp, ListenIrp, ReceiveIrp, SendIrp, DisconnectIrp;
     AFD_DATA_WINDOW Send, Recv;
@@ -366,6 +372,8 @@ PAFD_WSABUF LockBuffers( PAFD_WSABUF Buf, UINT Count,
                         BOOLEAN Write, BOOLEAN LockAddress,
                         KPROCESSOR_MODE LockMode, BOOLEAN Is32Bit );
 VOID UnlockBuffers( PAFD_WSABUF Buf, UINT Count, BOOL Address );
+BOOLEAN AfdIsRecvMsgRequest(PIRP Irp, PIO_STACK_LOCATION IrpSp);
+BOOLEAN AfdLockMessageBuffers(PAFD_WSABUF Buf, UINT Count, PAFD_RECV_MSG_INFO Message, KPROCESSOR_MODE LockMode);
 BOOLEAN SocketAcquireStateLock( PAFD_FCB FCB );
 NTSTATUS NTAPI UnlockAndMaybeComplete
 ( PAFD_FCB FCB, NTSTATUS Status, PIRP Irp,

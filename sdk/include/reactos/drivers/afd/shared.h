@@ -107,6 +107,13 @@ typedef struct _AFD_RECV_INFO_UDP {
     PINT				AddressLength;
 } AFD_RECV_INFO_UDP, *PAFD_RECV_INFO_UDP;
 
+typedef struct _AFD_RECV_MSG_INFO {
+    AFD_RECV_INFO_UDP			Datagram;
+    PVOID				ControlBuffer;
+    PULONG				ControlLength;
+    PULONG				MsgFlags;
+} AFD_RECV_MSG_INFO, *PAFD_RECV_MSG_INFO;
+
 typedef struct  _AFD_SEND_INFO {
     PAFD_WSABUF				BufferArray;
     ULONG				BufferCount;

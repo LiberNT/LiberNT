@@ -428,6 +428,15 @@ WSPDisconnectEx(
     IN DWORD dwFlags,
     IN DWORD reserved);
 
+INT
+PASCAL
+WSPRecvMsg(
+    IN SOCKET Handle,
+    IN OUT LPWSAMSG lpMsg,
+    OUT LPDWORD lpdwNumberOfBytesRecvd,
+    IN LPWSAOVERLAPPED lpOverlapped,
+    IN LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
+
 VOID
 WSPAPI
 WSPGetAcceptExSockaddrs(
@@ -525,14 +534,14 @@ MsafdReturnWithErrno(
         *Errno = TranslateNtStatusError(Status);
 
         if (ReturnedBytes)
-            *ReturnedBytes = (*Errno == 0) ? Received : 0;
+            *ReturnedBytes = (*Errno == 0 || Status == STATUS_BUFFER_OVERFLOW) ? Received : 0;
 
         return (*Errno == 0) ? 0 : SOCKET_ERROR;
     }
     else
     {
         if (ReturnedBytes)
-            *ReturnedBytes = (Status == STATUS_SUCCESS) ? Received : 0;
+            *ReturnedBytes = (Status == STATUS_SUCCESS || Status == STATUS_BUFFER_OVERFLOW) ? Received : 0;
 
         return (Status == STATUS_SUCCESS) ? 0 : SOCKET_ERROR;
     }

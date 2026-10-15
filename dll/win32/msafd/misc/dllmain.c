@@ -2781,6 +2781,7 @@ WSPIoctl(IN  SOCKET Handle,
                 GUID ConnectExGUID = WSAID_CONNECTEX;
                 GUID DisconnectExGUID = WSAID_DISCONNECTEX;
                 GUID GetAcceptExSockaddrsGUID = WSAID_GETACCEPTEXSOCKADDRS;
+                GUID RecvMsgGUID = WSAID_WSARECVMSG;
 
                 if (IsEqualGUID(&AcceptExGUID, lpvInBuffer))
                 {
@@ -2806,6 +2807,13 @@ WSPIoctl(IN  SOCKET Handle,
                 else if (IsEqualGUID(&GetAcceptExSockaddrsGUID, lpvInBuffer))
                 {
                     *((PVOID *)lpvOutBuffer) = WSPGetAcceptExSockaddrs;
+                    cbRet = sizeof(PVOID);
+                    Errno = NO_ERROR;
+                    Ret = NO_ERROR;
+                }
+                else if (IsEqualGUID(&RecvMsgGUID, lpvInBuffer))
+                {
+                    *((PVOID *)lpvOutBuffer) = WSPRecvMsg;
                     cbRet = sizeof(PVOID);
                     Errno = NO_ERROR;
                     Ret = NO_ERROR;

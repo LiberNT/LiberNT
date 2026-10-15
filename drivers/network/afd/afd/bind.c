@@ -62,8 +62,22 @@ NTSTATUS WarmSocketForBind( PAFD_FCB FCB, ULONG ShareType ) {
                 FCB->ReceiveWindowAllocationSize = ReceiveWindowAllocationSize;
         }
 
+        if (NT_SUCCESS(Status) && !FCB->RecvControl)
+        {
+            FCB->RecvControl = ExAllocatePoolWithTag(NonPagedPool,
+                                                     AFD_RECV_CONTROL_SIZE,
+                                                     TAG_AFD_DATA_BUFFER);
+            if (!FCB->RecvControl)
+                Status = STATUS_NO_MEMORY;
+        }
+
         if (NT_SUCCESS(Status) && FCB->Recv.Content < FCB->Recv.Size)
         {
+            if (FCB->AddressFrom)
+            {
+                FCB->AddressFrom->Options = FCB->RecvControl;
+                FCB->AddressFrom->OptionsLength = AFD_RECV_CONTROL_SIZE;
+            }
             Status = TdiReceiveDatagram(&FCB->ReceiveIrp.InFlightRequest,
                                         FCB->AddressFile.Object,
                                         0,

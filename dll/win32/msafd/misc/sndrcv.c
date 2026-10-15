@@ -425,23 +425,26 @@ WSPRecv(SOCKET Handle,
     return MsafdReturnWithErrno(Status, lpErrno, NumberOfBytesRead, lpNumberOfBytesRead);
 }
 
+static
 int
-WSPAPI
-WSPRecvFrom(SOCKET Handle,
-            LPWSABUF lpBuffers,
-            DWORD dwBufferCount,
-            LPDWORD lpNumberOfBytesRead,
-            LPDWORD ReceiveFlags,
-            struct sockaddr *SocketAddress,
-            int *SocketAddressLength,
-            LPWSAOVERLAPPED lpOverlapped,
-            LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine,
-            LPWSATHREADID lpThreadId,
-            LPINT lpErrno )
+MsafdRecvFrom(SOCKET Handle,
+              LPWSABUF lpBuffers,
+              DWORD dwBufferCount,
+              LPDWORD lpNumberOfBytesRead,
+              LPDWORD ReceiveFlags,
+              struct sockaddr *SocketAddress,
+              int *SocketAddressLength,
+              LPWSABUF Control,
+              LPDWORD MsgFlags,
+              LPWSAOVERLAPPED lpOverlapped,
+              LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine,
+              LPWSATHREADID lpThreadId,
+              LPINT lpErrno )
 {
     PIO_STATUS_BLOCK            IOSB;
     IO_STATUS_BLOCK             DummyIOSB;
     AFD_RECV_INFO_UDP           RecvInfo;
+    AFD_RECV_MSG_INFO           MsgInfo;
     NTSTATUS                    Status;
     PMSAFD_RECV_APC_CONTEXT     APCContext;
     PIO_APC_ROUTINE             APCFunction = NULL;
@@ -597,6 +600,14 @@ WSPRecvFrom(SOCKET Handle,
     IOSB->Information = 0;
     IOSB->Status = STATUS_PENDING;
 
+    if (Control)
+    {
+        MsgInfo.Datagram = RecvInfo;
+        MsgInfo.ControlBuffer = Control->buf;
+        MsgInfo.ControlLength = &Control->len;
+        MsgInfo.MsgFlags = MsgFlags;
+    }
+
     /* Send IOCTL */
     Status = NtDeviceIoControlFile((HANDLE)Handle,
                                     Event,
@@ -604,8 +615,8 @@ WSPRecvFrom(SOCKET Handle,
                                     APCContext,
                                     IOSB,
                                     IOCTL_AFD_RECV_DATAGRAM,
-                                    &RecvInfo,
-                                    sizeof(RecvInfo),
+                                    Control ? (PVOID)&MsgInfo : (PVOID)&RecvInfo,
+                                    Control ? sizeof(MsgInfo) : sizeof(RecvInfo),
                                     NULL,
                                     0);
 
@@ -660,6 +671,84 @@ WSPRecvFrom(SOCKET Handle,
 
     TRACE("Leaving (%lx %ld)\n", Status, NumberOfBytesRead);
     return MsafdReturnWithErrno(Status, lpErrno, NumberOfBytesRead, lpNumberOfBytesRead);
+}
+
+int
+WSPAPI
+WSPRecvFrom(SOCKET Handle,
+            LPWSABUF lpBuffers,
+            DWORD dwBufferCount,
+            LPDWORD lpNumberOfBytesRead,
+            LPDWORD ReceiveFlags,
+            struct sockaddr *SocketAddress,
+            int *SocketAddressLength,
+            LPWSAOVERLAPPED lpOverlapped,
+            LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine,
+            LPWSATHREADID lpThreadId,
+            LPINT lpErrno )
+{
+    return MsafdRecvFrom(Handle,
+                         lpBuffers,
+                         dwBufferCount,
+                         lpNumberOfBytesRead,
+                         ReceiveFlags,
+                         SocketAddress,
+                         SocketAddressLength,
+                         NULL,
+                         NULL,
+                         lpOverlapped,
+                         lpCompletionRoutine,
+                         lpThreadId,
+                         lpErrno);
+}
+
+INT
+PASCAL
+WSPRecvMsg(SOCKET Handle,
+           LPWSAMSG lpMsg,
+           LPDWORD lpdwNumberOfBytesRecvd,
+           LPWSAOVERLAPPED lpOverlapped,
+           LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine)
+{
+    PSOCKET_INFORMATION Socket = GetSocketStructure(Handle);
+    DWORD ReceiveFlags;
+    INT Errno = NO_ERROR;
+    INT Result;
+
+    if (!Socket)
+    {
+        WSASetLastError(WSAENOTSOCK);
+        return SOCKET_ERROR;
+    }
+    if (!lpMsg)
+    {
+        WSASetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+    if (!(Socket->SharedData->ServiceFlags1 & XP1_CONNECTIONLESS) ||
+        Socket->SharedData->State == SocketOpen)
+    {
+        WSASetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
+
+    ReceiveFlags = lpMsg->dwFlags & MSG_PEEK;
+    Result = MsafdRecvFrom(Handle,
+                           lpMsg->lpBuffers,
+                           lpMsg->dwBufferCount,
+                           lpdwNumberOfBytesRecvd,
+                           &ReceiveFlags,
+                           lpMsg->name,
+                           &lpMsg->namelen,
+                           &lpMsg->Control,
+                           &lpMsg->dwFlags,
+                           lpOverlapped,
+                           lpCompletionRoutine,
+                           NULL,
+                           &Errno);
+    if (Result == SOCKET_ERROR)
+        WSASetLastError(Errno);
+    return Result;
 }
 
 

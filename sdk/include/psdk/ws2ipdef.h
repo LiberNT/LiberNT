@@ -40,6 +40,7 @@ extern "C" {
 #define IP_UNBLOCK_SOURCE         18
 #define IP_PKTINFO                19
 #define IP_HOPLIMIT               21
+#define IP_RECVTTL                21
 #define IP_RECEIVE_BROADCAST      22
 #define IP_RECVIF                 24
 #define IP_RECVDSTADDR            25
@@ -53,6 +54,8 @@ extern "C" {
 #define IP_RECVTCLASS             40
 #define IP_RECVTOS                40
 #define IP_ORIGINAL_ARRIVAL_IF    47
+#define IP_ECN                    50
+#define IP_RECVECN                50
 
 #define IP_UNSPECIFIED_TYPE_OF_SERVICE -1
 
@@ -115,6 +118,11 @@ extern "C" {
 #define IPV6_RECVRTHDR        38
 #define IPV6_TCLASS           39
 #define IPV6_RECVTCLASS       40
+
+#define UDP_SEND_MSG_SIZE           2
+#define UDP_RECV_MAX_COALESCED_SIZE 3
+
+#define UDP_COALESCED_INFO          3
 
 #define IP_UNSPECIFIED_HOP_LIMIT -1
 

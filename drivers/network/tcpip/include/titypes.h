@@ -126,6 +126,13 @@ typedef struct _ADDRESS_FILE {
     ULONG MulticastInterface;             /* IPv4 address or network-order interface index */
     UCHAR MulticastTTL;
     ULONG UnicastInterface;
+    BOOLEAN NoChecksum;
+    ULONG SendMsgSize;
+    BOOLEAN RecvPktInfo;
+    BOOLEAN RecvTtl;
+    BOOLEAN RecvTos;
+    BOOLEAN RecvEcn;
+    BOOLEAN RecvDstAddr;
     DATAGRAM_COMPLETION_ROUTINE Complete; /* Completion routine for delete request */
     PVOID Context;                        /* Delete request context */
     DATAGRAM_SEND_ROUTINE Send;           /* Routine to send a datagram */

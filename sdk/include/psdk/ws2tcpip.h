@@ -842,6 +842,50 @@ WSARevertImpersonation(VOID);
 #endif /* _SECURE_SOCKET_TYPES_DEFINED_ */
 #endif /* (_WIN32_WINNT >= 0x0600) */
 
+#if (NTDDI_VERSION >= NTDDI_WIN10_VB)
+
+WS2TCPIP_INLINE
+INT
+WSAGetUdpSendMessageSize(
+  _In_ SOCKET Socket,
+  _Out_ DWORD *MsgSize)
+{
+  INT OptSize = sizeof(*MsgSize);
+
+  return getsockopt(Socket, IPPROTO_UDP, UDP_SEND_MSG_SIZE, (PCHAR)MsgSize, &OptSize);
+}
+
+WS2TCPIP_INLINE
+INT
+WSASetUdpSendMessageSize(
+  _In_ SOCKET Socket,
+  _In_ DWORD MsgSize)
+{
+  return setsockopt(Socket, IPPROTO_UDP, UDP_SEND_MSG_SIZE, (PCHAR)&MsgSize, sizeof(MsgSize));
+}
+
+WS2TCPIP_INLINE
+INT
+WSAGetUdpRecvMaxCoalescedSize(
+  _In_ SOCKET Socket,
+  _Out_ DWORD *MaxCoalescedMsgSize)
+{
+  INT OptSize = sizeof(*MaxCoalescedMsgSize);
+
+  return getsockopt(Socket, IPPROTO_UDP, UDP_RECV_MAX_COALESCED_SIZE, (PCHAR)MaxCoalescedMsgSize, &OptSize);
+}
+
+WS2TCPIP_INLINE
+INT
+WSASetUdpRecvMaxCoalescedSize(
+  _In_ SOCKET Socket,
+  _In_ DWORD MaxCoalescedMsgSize)
+{
+  return setsockopt(Socket, IPPROTO_UDP, UDP_RECV_MAX_COALESCED_SIZE, (PCHAR)&MaxCoalescedMsgSize, sizeof(MaxCoalescedMsgSize));
+}
+
+#endif /* (NTDDI_VERSION >= NTDDI_WIN10_VB) */
+
 #if !defined(_WIN32_WINNT) || (_WIN32_WINNT <= 0x0500)
 #include <wspiapi.h>
 #endif
