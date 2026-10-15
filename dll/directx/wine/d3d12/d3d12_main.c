@@ -16,16 +16,101 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#define COBJMACROS
 #include <windef.h>
 #include <winbase.h>
 #include <winerror.h>
 #include <d3d12.h>
+#include <dxgi.h>
 #include <vkd3d_utils.h>
 
 #ifdef REACTOS_D3D12_NATIVE_UMD
 HRESULT d3d12_native_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_level, REFIID iid,
         void **device);
 #endif
+
+static HRESULT
+d3d12_get_adapter_luid(IUnknown *adapter, LUID *luid)
+{
+    IDXGIFactory1 *factory;
+    IDXGIAdapter *dxgi_adapter;
+    DXGI_ADAPTER_DESC desc;
+    HRESULT hr;
+
+    if (adapter)
+    {
+        hr = IUnknown_QueryInterface(adapter, &IID_IDXGIAdapter, (void **)&dxgi_adapter);
+    }
+    else
+    {
+        if (FAILED(hr = CreateDXGIFactory1(&IID_IDXGIFactory1, (void **)&factory)))
+            return hr;
+        hr = IDXGIFactory1_EnumAdapters(factory, 0, &dxgi_adapter);
+        IDXGIFactory1_Release(factory);
+    }
+    if (FAILED(hr))
+        return hr;
+
+    hr = IDXGIAdapter_GetDesc(dxgi_adapter, &desc);
+    IDXGIAdapter_Release(dxgi_adapter);
+    if (SUCCEEDED(hr))
+        *luid = desc.AdapterLuid;
+    return hr;
+}
+
+static HRESULT
+d3d12_create_vkd3d_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_level, REFIID iid, void **device)
+{
+    static const char * const instance_extensions[] =
+    {
+        VK_KHR_SURFACE_EXTENSION_NAME,
+        "VK_KHR_win32_surface",
+    };
+    static const char * const device_extensions[] =
+    {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    };
+    struct vkd3d_optional_instance_extensions_info optional_instance_extensions_info;
+    struct vkd3d_optional_device_extensions_info optional_device_extensions_info;
+    struct vkd3d_instance_create_info instance_create_info;
+    struct vkd3d_device_create_info device_create_info;
+    struct vkd3d_application_info application_info;
+    LUID luid;
+    HRESULT hr;
+
+    if (FAILED(hr = d3d12_get_adapter_luid(adapter, &luid)))
+        return hr;
+
+    memset(&application_info, 0, sizeof(application_info));
+    application_info.type = VKD3D_STRUCTURE_TYPE_APPLICATION_INFO;
+    application_info.api_version = VKD3D_API_VERSION_1_0;
+
+    memset(&optional_instance_extensions_info, 0, sizeof(optional_instance_extensions_info));
+    optional_instance_extensions_info.type = VKD3D_STRUCTURE_TYPE_OPTIONAL_INSTANCE_EXTENSIONS_INFO;
+    optional_instance_extensions_info.next = &application_info;
+    optional_instance_extensions_info.extensions = instance_extensions;
+    optional_instance_extensions_info.extension_count = ARRAYSIZE(instance_extensions);
+
+    memset(&instance_create_info, 0, sizeof(instance_create_info));
+    instance_create_info.type = VKD3D_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    instance_create_info.next = &optional_instance_extensions_info;
+    instance_create_info.pfn_signal_event = vkd3d_signal_event;
+    instance_create_info.wchar_size = sizeof(WCHAR);
+
+    memset(&optional_device_extensions_info, 0, sizeof(optional_device_extensions_info));
+    optional_device_extensions_info.type = VKD3D_STRUCTURE_TYPE_OPTIONAL_DEVICE_EXTENSIONS_INFO;
+    optional_device_extensions_info.extensions = device_extensions;
+    optional_device_extensions_info.extension_count = ARRAYSIZE(device_extensions);
+
+    memset(&device_create_info, 0, sizeof(device_create_info));
+    device_create_info.type = VKD3D_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_create_info.next = &optional_device_extensions_info;
+    device_create_info.minimum_feature_level = minimum_feature_level;
+    device_create_info.instance_create_info = &instance_create_info;
+    device_create_info.adapter_luid = luid;
+
+    return vkd3d_create_device(&device_create_info, iid, device);
+}
 
 HRESULT WINAPI
 d3d12_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_level, REFIID iid, void **device)
@@ -36,7 +121,7 @@ d3d12_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_level, 
     if (hr != DXGI_ERROR_UNSUPPORTED)
         return hr;
 #endif
-    return D3D12CreateDeviceVKD3D(adapter, minimum_feature_level, iid, device, VKD3D_API_VERSION_1_0);
+    return d3d12_create_vkd3d_device(adapter, minimum_feature_level, iid, device);
 }
 
 HRESULT WINAPI
