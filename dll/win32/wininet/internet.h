@@ -374,6 +374,7 @@ typedef struct
 #ifdef __REACTOS__
     SRWLOCK synced_lock;
     struct list synced_urls;
+    BOOL preconfig;
 #endif
 } appinfo_t;
 
@@ -539,6 +540,7 @@ server_t *get_server(substr_t,INTERNET_PORT,BOOL,BOOL);
 DWORD create_req_file(const WCHAR*,req_file_t**);
 void req_file_release(req_file_t*);
 #ifdef __REACTOS__
+WCHAR *INTERNET_GetAutoConfigProxy(const WCHAR*,const WCHAR*);
 void INTERNET_AddSessionSyncedUrl(appinfo_t*,const WCHAR*);
 BOOL INTERNET_IsSessionSyncedUrl(appinfo_t*,const WCHAR*);
 #endif

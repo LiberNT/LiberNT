@@ -1754,6 +1754,7 @@ HINTERNET WINAPI InternetOpenW(LPCWSTR lpszAgent, DWORD dwAccessType,
 #ifdef __REACTOS__
     InitializeSRWLock(&lpwai->synced_lock);
     list_init(&lpwai->synced_urls);
+    lpwai->preconfig = dwAccessType == INTERNET_OPEN_TYPE_PRECONFIG;
 #endif
 
 #ifdef __REACTOS__
@@ -6283,6 +6284,113 @@ DWORD WINAPI ShowClientAuthCerts(HWND parent)
     FIXME("%p: stub\n", parent);
     return 0;
 }
+
+#ifdef __REACTOS__
+static char *download_autoconfig_script(const WCHAR *url, DWORD *size)
+{
+    HINTERNET session, request;
+    char *buffer = NULL, *grown;
+    DWORD length = 0, capacity = 0, read;
+
+    if (!(session = InternetOpenW(L"", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0)))
+        return NULL;
+    if ((request = InternetOpenUrlW(session, url, NULL, 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0)))
+    {
+        for (;;)
+        {
+            if (capacity - length < 4096)
+            {
+                if (capacity >= 1024 * 1024 || !(grown = realloc(buffer, capacity + 4096 + 1)))
+                {
+                    free(buffer);
+                    buffer = NULL;
+                    break;
+                }
+                buffer = grown;
+                capacity += 4096;
+            }
+            if (!InternetReadFile(request, buffer + length, capacity - length, &read))
+            {
+                free(buffer);
+                buffer = NULL;
+                break;
+            }
+            if (!read)
+                break;
+            length += read;
+        }
+        InternetCloseHandle(request);
+    }
+    InternetCloseHandle(session);
+
+    if (!buffer)
+        return NULL;
+    buffer[length] = 0;
+    *size = length;
+    return buffer;
+}
+
+WCHAR *INTERNET_GetAutoConfigProxy(const WCHAR *url, const WCHAR *host)
+{
+    BOOL (WINAPI *init_dll)(DWORD, LPSTR, LPSTR, void *, AUTO_PROXY_SCRIPT_BUFFER *);
+    BOOL (WINAPI *get_proxy_info)(LPCSTR, DWORD, LPCSTR, DWORD, LPSTR *, LPDWORD);
+    BOOL (WINAPI *deinit_dll)(LPSTR, DWORD);
+    AUTO_PROXY_SCRIPT_BUFFER buffer = { sizeof(buffer) };
+    char *script, *url_a, *host_a, *result = NULL, *p;
+    WCHAR *autoconf = NULL, *ret = NULL;
+    DWORD size = 0, result_len = 0;
+    HMODULE module;
+    int len;
+
+    EnterCriticalSection(&WININET_cs);
+    if ((global_proxy.flags & PROXY_TYPE_AUTO_PROXY_URL) && global_proxy.autoconf_url)
+        autoconf = wcsdup(global_proxy.autoconf_url);
+    LeaveCriticalSection(&WININET_cs);
+    if (!autoconf)
+        return NULL;
+
+    script = download_autoconfig_script(autoconf, &size);
+    free(autoconf);
+    if (!script)
+        return NULL;
+
+    if ((module = LoadLibraryW(L"jsproxy.dll")))
+    {
+        init_dll = (void *)GetProcAddress(module, "InternetInitializeAutoProxyDll");
+        get_proxy_info = (void *)GetProcAddress(module, "InternetGetProxyInfo");
+        deinit_dll = (void *)GetProcAddress(module, "InternetDeInitializeAutoProxyDll");
+        url_a = strdupWtoA(url);
+        host_a = strdupWtoA(host);
+        buffer.lpszScriptBuffer = script;
+        buffer.dwScriptBufferSize = size + 1;
+        if (init_dll && get_proxy_info && deinit_dll && url_a && host_a &&
+            init_dll(0, NULL, NULL, NULL, &buffer))
+        {
+            if (get_proxy_info(url_a, strlen(url_a), host_a, strlen(host_a), &result, &result_len) && result)
+            {
+                for (p = result; *p == ' '; p++);
+                if (!_strnicmp(p, "PROXY", 5) && (p[5] == ' ' || p[5] == '\t'))
+                {
+                    for (p += 5; *p == ' ' || *p == '\t'; p++);
+                    len = strcspn(p, "; \t");
+                    if (len && (ret = malloc((len + 1) * sizeof(WCHAR))))
+                    {
+                        MultiByteToWideChar(CP_ACP, 0, p, len, ret, len);
+                        ret[len] = 0;
+                    }
+                }
+                GlobalFree(result);
+            }
+            deinit_dll(NULL, 0);
+        }
+        free(url_a);
+        free(host_a);
+        FreeLibrary(module);
+    }
+    free(script);
+    return ret;
+}
+#endif
 
 #ifdef __REACTOS__
 static struct synced_url *find_session_synced_url(appinfo_t *appinfo, const WCHAR *url)

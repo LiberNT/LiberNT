@@ -5891,6 +5891,34 @@ static void set_cached_status_line(http_request_t *request, WCHAR *line)
     HTTP_ProcessHeader(request, L"Status", code, HTTP_ADDREQ_FLAG_REPLACE | HTTP_ADDREQ_FLAG_ADD);
 }
 
+static void apply_autoconfig_proxy(http_request_t *request)
+{
+    URL_COMPONENTSW components = { sizeof(components) };
+    WCHAR *url, *proxy, *proxy_url;
+    server_t *server = NULL;
+
+    if (!(url = compose_request_url(request)))
+        return;
+    proxy = INTERNET_GetAutoConfigProxy(url, request->server->name);
+    free(url);
+    if (!proxy)
+        return;
+
+    if ((proxy_url = malloc((wcslen(proxy) + ARRAY_SIZE(L"http://")) * sizeof(WCHAR))))
+    {
+        lstrcpyW(proxy_url, L"http://");
+        lstrcatW(proxy_url, proxy);
+        components.dwHostNameLength = 1;
+        if (InternetCrackUrlW(proxy_url, 0, 0, &components) && components.dwHostNameLength)
+            server = get_server(substr(components.lpszHostName, components.dwHostNameLength),
+                                components.nPort, FALSE, TRUE);
+        free(proxy_url);
+    }
+    free(proxy);
+    if (server)
+        request->proxy = server;
+}
+
 static BOOL cached_response_allowed(http_request_t *request)
 {
     if (request->hdr.dwFlags & INTERNET_FLAG_FROM_CACHE)
@@ -6112,6 +6140,8 @@ static DWORD HTTP_HttpSendRequestW(http_request_t *request, LPCWSTR lpszHeaders,
         }
     }
 
+    if (!request->proxy && request->session->appInfo->preconfig)
+        apply_autoconfig_proxy(request);
     request->request_sent = TRUE;
 
 #endif
