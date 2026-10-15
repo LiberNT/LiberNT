@@ -1259,6 +1259,30 @@ UninitializeSAS(
     UnregisterClassW(WINLOGON_SAS_CLASS, hAppInstance);
 }
 
+static
+VOID
+ShutdownSessionZero(VOID)
+{
+    HANDLE Request, Complete;
+
+    Request = OpenEventW(EVENT_MODIFY_STATE, FALSE, L"Global\\WininitShutdownRequest");
+    Complete = OpenEventW(SYNCHRONIZE, FALSE, L"Global\\WininitShutdownComplete");
+    if (Request && Complete)
+    {
+        SetEvent(Request);
+        WaitForSingleObject(Complete, INFINITE);
+    }
+    else
+    {
+        ERR("WL: Could not reach wininit for the session 0 shutdown (error %lu)\n", GetLastError());
+    }
+
+    if (Complete)
+        CloseHandle(Complete);
+    if (Request)
+        CloseHandle(Request);
+}
+
 NTSTATUS
 HandleShutdown(
     IN OUT PWLSESSION Session,
@@ -1302,6 +1326,8 @@ HandleShutdown(
     /* Show again the shutdown message */
     // SwitchDesktop(Session->WinlogonDesktop); // Re-enable if you notice the desktop may have switched to something else.
     DisplayStatusMessage(Session, Session->WinlogonDesktop, uMsgId);
+
+    ShutdownSessionZero();
 
     /* Destroy SAS window */
     UninitializeSAS(Session);

@@ -6,16 +6,111 @@
  */
 
 #include <stdarg.h>
+#include <stdlib.h>
 
 #define WIN32_NO_STATUS
 #include <windef.h>
 #include <winbase.h>
 #include <wingdi.h>
 #include <winuser.h>
+#include <winreg.h>
+#include <wincon.h>
+#include <sddl.h>
 #include <ndk/rtlfuncs.h>
 #include <wine/debug.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(wininit);
+
+static HANDLE ShutdownRequest;
+static HANDLE ShutdownComplete;
+static HANDLE ServicesProcess;
+
+static
+DWORD
+GetWaitToKillServiceTimeout(VOID)
+{
+    WCHAR Value[16];
+    DWORD Size = sizeof(Value);
+
+    if (RegGetValueW(HKEY_LOCAL_MACHINE,
+                     L"SYSTEM\\CurrentControlSet\\Control",
+                     L"WaitToKillServiceTimeout",
+                     RRF_RT_REG_SZ,
+                     NULL,
+                     Value,
+                     &Size) != ERROR_SUCCESS)
+    {
+        return 20000;
+    }
+    return wcstoul(Value, NULL, 10);
+}
+
+static
+DWORD
+WINAPI
+ShutdownThread(
+    _In_ PVOID Parameter)
+{
+    LPTHREAD_START_ROUTINE CtrlRoutine;
+    HANDLE Thread;
+
+    UNREFERENCED_PARAMETER(Parameter);
+
+    for (;;)
+    {
+        WaitForSingleObject(ShutdownRequest, INFINITE);
+
+        CtrlRoutine = (LPTHREAD_START_ROUTINE)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "CtrlRoutine");
+        Thread = CtrlRoutine ? CreateRemoteThread(ServicesProcess,
+                                                  NULL,
+                                                  0,
+                                                  CtrlRoutine,
+                                                  (PVOID)(ULONG_PTR)CTRL_SHUTDOWN_EVENT,
+                                                  0,
+                                                  NULL)
+                             : NULL;
+        if (Thread)
+        {
+            WaitForSingleObject(Thread, GetWaitToKillServiceTimeout());
+            CloseHandle(Thread);
+        }
+        else
+        {
+            ERR("WININIT: Could not notify the service control manager (error %lu)\n", GetLastError());
+        }
+
+        SetEvent(ShutdownComplete);
+    }
+    return 0;
+}
+
+static
+BOOL
+CreateShutdownEvents(VOID)
+{
+    SECURITY_ATTRIBUTES Attributes = { sizeof(Attributes), NULL, FALSE };
+    HANDLE Thread;
+
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:(A;;GA;;;SY)",
+                                                              SDDL_REVISION_1,
+                                                              &Attributes.lpSecurityDescriptor,
+                                                              NULL))
+    {
+        return FALSE;
+    }
+
+    ShutdownRequest = CreateEventW(&Attributes, FALSE, FALSE, L"WininitShutdownRequest");
+    ShutdownComplete = CreateEventW(&Attributes, FALSE, FALSE, L"WininitShutdownComplete");
+    LocalFree(Attributes.lpSecurityDescriptor);
+    if (!ShutdownRequest || !ShutdownComplete)
+        return FALSE;
+
+    Thread = CreateThread(NULL, 0, ShutdownThread, NULL, 0, NULL);
+    if (!Thread)
+        return FALSE;
+    CloseHandle(Thread);
+    return TRUE;
+}
 
 static
 HANDLE
@@ -84,6 +179,10 @@ wWinMain(
     Processes[1] = StartSystemProcess(L"lsass.exe");
     if (!Processes[0] || !Processes[1])
         return 1;
+
+    ServicesProcess = Processes[0];
+    if (!CreateShutdownEvents())
+        ERR("WININIT: Could not set up the shutdown notification (error %lu)\n", GetLastError());
 
     WaitForMultipleObjects(ARRAYSIZE(Processes), Processes, TRUE, INFINITE);
     return 0;
