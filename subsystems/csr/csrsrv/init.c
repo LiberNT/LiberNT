@@ -534,7 +534,7 @@ CsrCreateSessionObjectDirectory(IN ULONG Session)
     RtlInitUnicodeString(&SessionString, L"DosDevices");
     InitializeObjectAttributes(&ObjectAttributes,
                                &SessionString,
-                               OBJ_CASE_INSENSITIVE,
+                               OBJ_OPENIF | OBJ_CASE_INSENSITIVE,
                                SessionObjectDirectory,
                                &DosDevicesSd);
     Status = NtCreateDirectoryObject(&DosDevicesDirectory,
@@ -1153,12 +1153,15 @@ CsrServerInitialization(IN ULONG ArgumentCount,
 #endif
 
     /* Have us handle Hard Errors */
-    Status = NtSetDefaultHardErrorPort(CsrApiPort);
-    if (!NT_SUCCESS(Status))
+    if (SessionId == 0)
     {
-        DPRINT1("CSRSRV:%s: NtSetDefaultHardErrorPort failed (Status=0x%08lx)\n",
-                __FUNCTION__, Status);
-        return Status;
+        Status = NtSetDefaultHardErrorPort(CsrApiPort);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("CSRSRV:%s: NtSetDefaultHardErrorPort failed (Status=0x%08lx)\n",
+                    __FUNCTION__, Status);
+            return Status;
+        }
     }
 
     /* Return status */

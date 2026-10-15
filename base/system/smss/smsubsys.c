@@ -526,6 +526,68 @@ Quickie2:
 
 NTSTATUS
 NTAPI
+SmpLoadSubSystemsForSystemSession(OUT PHANDLE ProcessId)
+{
+    NTSTATUS Status, Status2;
+    PSMP_REGISTRY_VALUE RegEntry;
+    UNICODE_STRING Win32kName;
+    PLIST_ENTRY NextEntry;
+    ULONG SessionId;
+    PVOID State;
+
+    Status = SmpAcquirePrivilege(SE_LOAD_DRIVER_PRIVILEGE, &State);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    ASSERT(AttachedSessionId == -1);
+    Status = NtSetSystemInformation(SystemSessionCreate,
+                                    &SessionId,
+                                    sizeof(SessionId));
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("SMSS: Session space creation failed\n");
+        SmpReleasePrivilege(State);
+        return Status;
+    }
+    ASSERT(SessionId == 0);
+    AttachedSessionId = SessionId;
+
+    RtlInitUnicodeString(&Win32kName, L"\\SystemRoot\\System32\\win32k.sys");
+    Status = NtSetSystemInformation(SystemExtendServiceTableInformation,
+                                    &Win32kName,
+                                    sizeof(Win32kName));
+    if (!NT_SUCCESS(Status))
+        DPRINT1("SMSS: Load of WIN32K failed.\n");
+
+    NextEntry = SmpSubSystemsToLoad.Flink;
+    while (NT_SUCCESS(Status) && NextEntry != &SmpSubSystemsToLoad)
+    {
+        RegEntry = CONTAINING_RECORD(NextEntry, SMP_REGISTRY_VALUE, Entry);
+        if (_wcsicmp(RegEntry->Name.Buffer, L"Debug") != 0)
+        {
+            Status = SmpExecuteCommand(&RegEntry->Value,
+                                       SessionId,
+                                       ProcessId,
+                                       SMP_SUBSYSTEM_FLAG);
+            if (!NT_SUCCESS(Status))
+                DPRINT1("SMSS: Subsystem execute failed (%wZ)\n", &RegEntry->Value);
+        }
+        NextEntry = NextEntry->Flink;
+    }
+
+    if (AttachedSessionId != -1)
+    {
+        Status2 = NtSetSystemInformation(SystemSessionDetach,
+                                         &AttachedSessionId,
+                                         sizeof(AttachedSessionId));
+        ASSERT(NT_SUCCESS(Status2));
+        AttachedSessionId = -1;
+    }
+    SmpReleasePrivilege(State);
+    return Status;
+}
+
+NTSTATUS
+NTAPI
 SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
                               OUT PHANDLE ProcessId,
                               IN PUNICODE_STRING InitialCommand)

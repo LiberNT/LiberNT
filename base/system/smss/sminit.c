@@ -2393,31 +2393,6 @@ Quickie:
     return Status;
 }
 
-static
-NTSTATUS
-SmpReserveSystemSession(VOID)
-{
-    ULONG SessionId = 0;
-    PVOID State;
-    NTSTATUS Status;
-
-    Status = SmpAcquirePrivilege(SE_LOAD_DRIVER_PRIVILEGE, &State);
-    if (!NT_SUCCESS(Status)) return Status;
-
-    Status = NtSetSystemInformation(SystemSessionCreate,
-                                    &SessionId,
-                                    sizeof(SessionId));
-    if (NT_SUCCESS(Status))
-    {
-        Status = NtSetSystemInformation(SystemSessionDetach,
-                                        &SessionId,
-                                        sizeof(SessionId));
-    }
-
-    SmpReleasePrivilege(State);
-    return Status;
-}
-
 NTSTATUS
 NTAPI
 SmpLoadDataFromRegistry(OUT PUNICODE_STRING InitialCommand)
@@ -2615,10 +2590,10 @@ SmpLoadDataFromRegistry(OUT PUNICODE_STRING InitialCommand)
         return Status;
     }
 
-    Status = SmpReserveSystemSession();
+    Status = SmpLoadSubSystemsForSystemSession(&SmpWindowsSubSysProcessId);
     if (!NT_SUCCESS(Status))
     {
-        SMSS_CHECKPOINT(SmpReserveSystemSession, Status);
+        SMSS_CHECKPOINT(SmpLoadSubSystemsForSystemSession, Status);
         return Status;
     }
 

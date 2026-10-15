@@ -291,6 +291,12 @@ SmpLoadSubSystem(
 
 NTSTATUS
 NTAPI
+SmpLoadSubSystemsForSystemSession(
+    OUT PHANDLE ProcessId
+);
+
+NTSTATUS
+NTAPI
 SmpLoadSubSystemsForMuSession(
     IN PULONG MuSessionId,
     OUT PHANDLE ProcessId,
