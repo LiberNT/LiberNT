@@ -437,7 +437,8 @@ WSHGetSocketInformation(
         }
         return NO_ERROR;
     }
-    if (Level == IPPROTO_IP && OptionName == IP_DONTFRAGMENT)
+    if ((Level == IPPROTO_IP && OptionName == IP_DONTFRAGMENT) ||
+        (Level == IPPROTO_IPV6 && OptionName == IPV6_DONTFRAG))
     {
         if (!OptionLength || !OptionValue || *OptionLength < sizeof(DWORD))
             return WSAEFAULT;
@@ -1171,6 +1172,18 @@ WSHSetSocketInformation(
             break;
 
         case IPPROTO_IPV6:
+            if (OptionName == IPV6_DONTFRAG)
+            {
+                if (!OptionValue || OptionLength < 1)
+                    return WSAEFAULT;
+                memcpy(&RecvValue, OptionValue, min(OptionLength, (INT)sizeof(ULONG)));
+                RecvValue = (RecvValue != 0);
+                OptionValue = (PCHAR)&RecvValue;
+                OptionLength = sizeof(ULONG);
+                Level = IPPROTO_IP;
+                OptionName = IP_DONTFRAGMENT;
+                break;
+            }
             if (OptionName != IPV6_V6ONLY)
                 return 0;
             if (!OptionValue || OptionLength < sizeof(DWORD))
