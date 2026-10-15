@@ -361,6 +361,21 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_QueryVideoMemoryInfo(IWineDXGIAdap
     TRACE("iface %p, node_index %u, segment_group %#x, info %p.\n",
             iface, node_index, segment_group, info);
 
+#if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
+    if (!adapter->factory->software && segment_group <= DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL)
+    {
+        struct wined3d_adapter_identifier adapter_id = {0};
+
+        wined3d_mutex_lock();
+        hr = wined3d_adapter_get_identifier(adapter->wined3d_adapter, 0, &adapter_id);
+        wined3d_mutex_unlock();
+        if (SUCCEEDED(hr) && (hr = dxgi_query_wddm_video_memory_info(
+                adapter->wddm_foreign ? adapter->wddm_luid : adapter_id.adapter_luid,
+                node_index, segment_group, info)) != E_FAIL)
+            return hr;
+    }
+#endif
+
     if (SUCCEEDED(hr = wined3d_adapter_get_video_memory_info(adapter->wined3d_adapter, node_index,
             (enum wined3d_memory_segment_group)segment_group, &wined3d_info)))
     {

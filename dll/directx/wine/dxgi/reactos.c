@@ -61,6 +61,35 @@ HRESULT dxgi_get_wddm_output_index(struct wined3d_adapter *adapter, const LUID *
     return DXGI_ERROR_NOT_FOUND;
 }
 
+HRESULT dxgi_query_wddm_video_memory_info(LUID luid, UINT node_index, DXGI_MEMORY_SEGMENT_GROUP segment_group,
+        DXGI_QUERY_VIDEO_MEMORY_INFO *info)
+{
+    D3DKMT_OPENADAPTERFROMLUID open_adapter = {0};
+    D3DKMT_QUERYVIDEOMEMORYINFO query = {0};
+    D3DKMT_CLOSEADAPTER close_adapter;
+    NTSTATUS status;
+
+    open_adapter.AdapterLuid = luid;
+    if (!NT_SUCCESS(D3DKMTOpenAdapterFromLuid(&open_adapter)))
+        return E_FAIL;
+    query.hAdapter = open_adapter.hAdapter;
+    query.PhysicalAdapterIndex = node_index;
+    query.MemorySegmentGroup = (D3DKMT_MEMORY_SEGMENT_GROUP)segment_group;
+    status = D3DKMTQueryVideoMemoryInfo(&query);
+    close_adapter.hAdapter = open_adapter.hAdapter;
+    D3DKMTCloseAdapter(&close_adapter);
+    if (!NT_SUCCESS(status))
+    {
+        WARN("Failed to query video memory info, status %#lx.\n", status);
+        return status == STATUS_INVALID_PARAMETER ? E_INVALIDARG : E_FAIL;
+    }
+    info->Budget = query.Budget;
+    info->CurrentUsage = query.CurrentUsage;
+    info->AvailableForReservation = query.AvailableForReservation;
+    info->CurrentReservation = query.CurrentReservation;
+    return S_OK;
+}
+
 HRESULT dxgi_get_wddm_adapter_desc(LUID luid, DXGI_ADAPTER_DESC3 *desc)
 {
     D3DKMT_OPENADAPTERFROMLUID open_adapter = {0};
