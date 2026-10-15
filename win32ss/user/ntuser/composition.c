@@ -46,7 +46,6 @@ typedef struct _REDIRECT_ENTRY
     PTHREADINFO  PaintOwner;   /* thread that opened the outer paint bracket   */
     LONG         DcCount;      /* GetDC..ReleaseDC depth on this tree          */
     PTHREADINFO  DcOwner;      /* thread that opened the outer DC bracket      */
-    LONGLONG     DcStart;      /* when the outer DC bracket opened             */
     PTHREADINFO  BatchOwner;
     LONGLONG     BatchStart;
     BOOL         BatchFlushing;
@@ -2028,18 +2027,7 @@ IntCompositionDamageBacking(_In_opt_ PSURFACE psurf,
                         return;
                     }
                 }
-                /* A bounded GetDC/ReleaseDC or BeginPaint/EndPaint bracket
-                 * publishes the completed backing when it closes. Waking the
-                 * compositor for every primitive inside that bracket only
-                 * makes it repeatedly present the previous FRONT while BACK
-                 * is incomplete. */
-                if (InterlockedCompareExchange(&g_Redirects[i].PaintCount, 0, 0) == 0 &&
-                    (InterlockedCompareExchange(&g_Redirects[i].DcCount, 0, 0) == 0 ||
-                     (LONGLONG)KeQueryInterruptTime() - g_Redirects[i].DcStart >=
-                         COMPOSITION_DC_HOLD_100NS))
-                {
-                    IntCompositionMarkDamage(FALSE);
-                }
+                IntCompositionMarkDamage(FALSE);
                 return;
             }
         }
@@ -2087,7 +2075,12 @@ IntCompositionBatchEnd(_In_opt_ PSURFACE psurf)
         if (g_Redirects[i].Redirect.psurf != psurf)
             continue;
         if (g_Redirects[i].BatchOwner == pti)
+        {
+            g_Redirects[i].BatchOwner = NULL;
             g_Redirects[i].BatchFlushing = FALSE;
+            if (g_Redirects[i].Damaged)
+                IntCompositionMarkDamage(FALSE);
+        }
         return;
     }
 }
@@ -2410,11 +2403,22 @@ IntCompositionDamageFromGdi(VOID)
 static BOOL
 IntCompositionPaintOpen(_In_ REDIRECT_ENTRY *Entry, _In_ LONGLONG Now)
 {
-    return InterlockedCompareExchange(&Entry->PaintCount, 0, 0) > 0 ||
-           (InterlockedCompareExchange(&Entry->DcCount, 0, 0) > 0 &&
-            Now - Entry->DcStart < COMPOSITION_DC_HOLD_100NS) ||
-           (Entry->BatchOwner != NULL &&
-            Now - Entry->BatchStart < COMPOSITION_DC_HOLD_100NS);
+    return Entry->BatchOwner != NULL &&
+           Now - Entry->BatchStart < COMPOSITION_DC_HOLD_100NS;
+}
+
+static LONGLONG
+IntCompositionHeldPeriod(_In_ const WND_REDIRECT *Redirect)
+{
+    ULONG Hz = 0;
+
+    if (Redirect->FrontScaled)
+        return COMPOSITION_FRAME_HOLD_100NS;
+    if (gpmdev != NULL && gpmdev->ppdevGlobal != NULL)
+        Hz = gpmdev->ppdevGlobal->gdiinfo.ulVRefresh;
+    if (Hz < 24 || Hz > 480)
+        Hz = 60;
+    return 10000000LL / Hz;
 }
 
 static BOOL
@@ -2435,7 +2439,7 @@ IntCompositionPublishHeld(_Inout_ REDIRECT_ENTRY *Entry, _In_ LONGLONG Now,
     {
         return FALSE;
     }
-    if (Now - Redirect->HeldTime < COMPOSITION_FRAME_HOLD_100NS &&
+    if (Now - Redirect->HeldTime < IntCompositionHeldPeriod(Redirect) &&
         IntCompositionTreeHasPendingPaint(Entry->Wnd))
     {
         return FALSE;
@@ -2520,14 +2524,6 @@ IntCompositionCommitHeld(_Inout_ REDIRECT_ENTRY *Entry)
         IntCompositionMarkDamage(FALSE);
 }
 
-/*
- * BeginPaint/EndPaint bracket. While a window tree is mid-paint the
- * compositor defers presenting its (inconsistent) backing — the screen keeps
- * the previous frame — and the EndPaint that closes the last bracket damages
- * and (when the thread has no further paints queued) composes the finished
- * frame. This is what keeps other windows from flickering through their
- * erase/redraw cycles while a GL app's message pump drives composes at 60Hz.
- */
 VOID
 IntCompositionPaintBegin(_In_ PWND Wnd)
 {
@@ -2638,10 +2634,7 @@ IntCompositionDcAcquire(_In_opt_ PWND Wnd)
     if (e == NULL)
         return COMPOSITION_DC_NONE;
     if (InterlockedIncrement(&e->DcCount) == 1)
-    {
         e->DcOwner = PsGetCurrentThreadWin32Thread();
-        e->DcStart = (LONGLONG)KeQueryInterruptTime();
-    }
     return COMPOSITION_DC_REDIRECTED;
 }
 
@@ -2911,8 +2904,13 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
     {
         REDIRECT_ENTRY *e = IntCompositionFind(s_stack[i]);
 
-        if (e != NULL && IntCompositionPublishHeld(e, now, TRUE))
+        if (e == NULL)
+            continue;
+        if (IntCompositionPublishHeld(e, now, TRUE))
             InterlockedExchange(&g_CompositionDamaged, TRUE);
+        else if (e->Redirect.FrontHeld && !e->Redirect.FrontScaled &&
+                 now - e->Redirect.HeldTime < IntCompositionHeldPeriod(&e->Redirect))
+            DeferredDamage = TRUE;
     }
 
     /* Consume only the damage that existed before this snapshot. A GDI draw
@@ -2953,9 +2951,6 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
          * the remainder of the snapshot, serializing it against redirected
          * GDI drawing. */
         {
-            /* Never publish a BACK whose paint is still open, however long
-             * it takes. A painter closes its brackets when it next asks for
-             * a message; only a long-held cache DC is published open. */
             BOOL bBusy = IntCompositionPaintOpen(e, now);
             BOOL bBackingDrawn =
                 InterlockedCompareExchange(&e->BackingDrawn, FALSE, FALSE) != FALSE;
@@ -2981,7 +2976,7 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
                                        bTreePending);
 
             if ((!e->Redirect.FrontValid || bBackingDirty) &&
-                !bBusy && !bTreePending &&
+                !bBusy &&
                 !bFirstPaintPending && !e->Redirect.FrontHeld &&
                 e->Redirect.psurf != NULL && e->Redirect.psurfFront != NULL)
             {
@@ -3044,7 +3039,7 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
             }
             else if (e->Damaged && (!e->Redirect.FrontValid || bBackingDirty))
             {
-                if (bBusy || bTreePending || bFirstPaintPending ||
+                if (bBusy || bFirstPaintPending ||
                     e->Redirect.FrontHeld)
                     PaintDeferred = TRUE;
                 else
