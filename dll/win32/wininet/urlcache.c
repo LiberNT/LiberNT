@@ -3259,21 +3259,8 @@ BOOL WINAPI CommitUrlCacheEntryW(LPCWSTR lpszUrlName, LPCWSTR lpszLocalFileName,
     if(!urlcache_encode_url_alloc(lpszUrlName, &url))
         return FALSE;
 
-#ifdef __REACTOS__
-    if(lpHeaderInfo && dwHeaderSize) {
-        int size;
-
-        if(dwHeaderSize > INT_MAX) {
-            SetLastError(ERROR_INVALID_PARAMETER);
-            goto done;
-        }
-        size = WideCharToMultiByte(CP_UTF8, 0, lpHeaderInfo, dwHeaderSize, NULL, 0, NULL, NULL);
-        if(!size) goto done;
-        header_info = malloc(size);
-#else
     if(lpHeaderInfo) {
         header_info = strdupWtoUTF8(lpHeaderInfo);
-#endif
         if(!header_info) {
 #ifdef __REACTOS__
             SetLastError(ERROR_OUTOFMEMORY);
@@ -3283,13 +3270,7 @@ BOOL WINAPI CommitUrlCacheEntryW(LPCWSTR lpszUrlName, LPCWSTR lpszLocalFileName,
             return FALSE;
 #endif
         }
-#ifdef __REACTOS__
-        if(!WideCharToMultiByte(CP_UTF8, 0, lpHeaderInfo, dwHeaderSize, header_info, size, NULL, NULL))
-            goto done;
-        dwHeaderSize = size;
-#else
         dwHeaderSize = strlen(header_info);
-#endif
     }
 
     if(lpszFileExtension) {

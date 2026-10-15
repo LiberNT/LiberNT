@@ -1042,6 +1042,9 @@ BOOL WINAPI InternetGetCookieExW(LPCWSTR lpszUrl, LPCWSTR lpszCookieName,
 
     ret = cookie_parse_url(lpszUrl, &host, &path);
     if (!ret) {
+#ifdef __REACTOS__
+        if (GetLastError() != ERROR_INTERNET_UNRECOGNIZED_SCHEME)
+#endif
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
