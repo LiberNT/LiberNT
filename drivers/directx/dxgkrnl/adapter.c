@@ -6879,7 +6879,7 @@ DxgkpReportAcpiEval(
     }
 
     if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_TOO_SMALL &&
-        Status != STATUS_BUFFER_OVERFLOW)
+        Status != STATUS_BUFFER_OVERFLOW && Status != STATUS_OBJECT_NAME_NOT_FOUND)
         DXGKRNL_WARN("DxgkCbEvalAcpiMethod: adapter=%p uid=0x%lx method=%s failed 0x%08lx\n",
                      Adapter, DeviceUid, MethodName, Status);
 
