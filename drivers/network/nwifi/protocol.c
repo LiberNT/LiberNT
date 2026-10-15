@@ -248,6 +248,29 @@ NwifiOpenLowerAdapter(
     return Status;
 }
 
+static
+VOID
+NwifiGuidFromDeviceName(
+    _In_ PCUNICODE_STRING DeviceName,
+    _Out_ GUID *Guid)
+{
+    UNICODE_STRING GuidString;
+    USHORT Start;
+
+    RtlZeroMemory(Guid, sizeof(*Guid));
+    for (Start = 0; Start < DeviceName->Length / sizeof(WCHAR); Start++)
+    {
+        if (DeviceName->Buffer[Start] == L'{')
+            break;
+    }
+
+    GuidString.Buffer = DeviceName->Buffer + Start;
+    GuidString.Length = DeviceName->Length - Start * sizeof(WCHAR);
+    GuidString.MaximumLength = GuidString.Length;
+    if (GuidString.Length != 38 * sizeof(WCHAR) || !NT_SUCCESS(RtlGUIDFromString(&GuidString, Guid)))
+        RtlZeroMemory(Guid, sizeof(*Guid));
+}
+
 /* ===========================================================================
  *  BindAdapterEx
  * ===========================================================================
@@ -304,6 +327,7 @@ NwifiBindAdapterEx(
         Adapter->LowerDeviceNameStore.Length = (USHORT)NameBytes;
         Adapter->LowerDeviceNameStore.MaximumLength = (USHORT)(NameBytes + sizeof(WCHAR));
         Adapter->LowerDeviceName = &Adapter->LowerDeviceNameStore;
+        NwifiGuidFromDeviceName(Adapter->LowerDeviceName, &Adapter->AdapterGuid);
     }
 
     Status = NwifiCreateNblPools(Adapter);
@@ -395,15 +419,19 @@ NwifiBindAdapterEx(
      * NwifiMiniportInitializeEx, which recovers this NWIFI_ADAPTER via
      * NdisIMGetDeviceContext. */
     {
-        /*
-         * The upper miniport needs a device name distinct from the lower
-         * adapter's FDO.  A fixed GUID name lets the registry pre-bind tcpip
-         * to it (one instance; another dot11 NIC would need a distinct GUID).
-         */
-        static const WCHAR NwifiUpperName[] =
-            L"\\Device\\{B1D2C3E4-5F6A-4B8C-9D0E-02524F535731}";
+        static const WCHAR Hex[] = L"0123456789ABCDEF";
+        WCHAR UpperNameBuffer[] = L"\\Device\\{B1D2C3E4-5F6A-4B8C-9D0E-000000000000}";
         NDIS_STRING UpperName;
-        RtlInitUnicodeString(&UpperName, NwifiUpperName);
+        ULONG Digit = RTL_NUMBER_OF(UpperNameBuffer) - 1 - 1 - 2 * IEEE80211_ADDR_LEN;
+        ULONG i;
+
+        for (i = 0; i < IEEE80211_ADDR_LEN; i++)
+        {
+            UpperNameBuffer[Digit++] = Hex[Adapter->MacAddress[i] >> 4];
+            UpperNameBuffer[Digit++] = Hex[Adapter->MacAddress[i] & 0xF];
+        }
+        RtlInitUnicodeString(&UpperName, UpperNameBuffer);
+        NwifiGuidFromDeviceName(&UpperName, &Adapter->InterfaceGuid);
         Status = NdisIMInitializeDeviceInstanceEx(gNwifi.MiniportDriverHandle,
                                                   &UpperName,
                                                   (NDIS_HANDLE)Adapter);

@@ -321,6 +321,7 @@ VOID WlanSvcCleanup(VOID);
 PWLANSVC_INTERFACE WlanSvcFindInterface(const GUID *pInterfaceGuid);
 PWLANSVC_INTERFACE WlanSvcFindInterfaceByIndex(ULONG NwifiIndex);
 VOID WlanSvcRefreshInterfaces(VOID);
+BOOL WlanSvcGetAdapterDescription(const GUID *AdapterGuid, PWCHAR Description, ULONG Length);
 PWLANSVCHANDLE WlanSvcGetHandleEntry(WLANSVC_RPC_HANDLE ClientHandle);
 
 /* scan.c */

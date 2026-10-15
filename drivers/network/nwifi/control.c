@@ -238,6 +238,8 @@ NwifiIoctlEnumInterfaces(
         Ref->InterfaceIndex = Adapter->InterfaceIndex;
         Ref->UpperLuid = 0;     /* TODO: NET_LUID correlation */
         RtlCopyMemory(Ref->MacAddress, Adapter->MacAddress, IEEE80211_ADDR_LEN);
+        Ref->InterfaceGuid = Adapter->InterfaceGuid;
+        Ref->AdapterGuid = Adapter->AdapterGuid;
     }
     NdisReleaseSpinLock(&gNwifi.AdapterLock);
 

@@ -151,6 +151,8 @@ typedef struct _NWIFI_ADAPTER
 
     /* ---- Shared identity / state ---- */
     UCHAR         MacAddress[IEEE80211_ADDR_LEN];   /* lower MAC == upper MAC */
+    GUID          InterfaceGuid;
+    GUID          AdapterGuid;
     NWIFI_STATE   State;
     ULONG         CurrentPacketFilter;
     ULONG         CurrentLookahead;

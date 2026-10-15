@@ -116,9 +116,13 @@ WlanSvcPopulateInterfacesLocked(VOID)
         iface->NwifiIndex = ref->InterfaceIndex;
         iface->UpperLuid = ref->UpperLuid;
         iface->MacAddress = ref->MacAddress;
-        WlanSvcSynthesizeGuid(ref, &iface->InterfaceGuid);
+        if (ref->InterfaceGuid.Data1 != 0)
+            iface->InterfaceGuid = ref->InterfaceGuid;
+        else
+            WlanSvcSynthesizeGuid(ref, &iface->InterfaceGuid);
         _snwprintf(iface->Description, WLAN_MAX_NAME_LENGTH - 1,
                    L"ReactOS Native WiFi Adapter #%lu", ref->InterfaceIndex + 1);
+        WlanSvcGetAdapterDescription(&ref->AdapterGuid, iface->Description, WLAN_MAX_NAME_LENGTH);
         iface->PhyType = dot11_phy_type_erp;
         iface->AutoConfigEnabled = TRUE;
 

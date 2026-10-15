@@ -74,6 +74,8 @@ typedef struct _NWIFI_INTERFACE_REF
     ULONG  InterfaceIndex;  /* nwifi-local index (0..N-1) */
     ULONG64 UpperLuid;      /* NET_LUID of the presented 802.3 miniport */
     DOT11_MAC_ADDRESS MacAddress;
+    GUID   InterfaceGuid;
+    GUID   AdapterGuid;
 } NWIFI_INTERFACE_REF, *PNWIFI_INTERFACE_REF;
 
 typedef struct _NWIFI_INTERFACE_LIST
