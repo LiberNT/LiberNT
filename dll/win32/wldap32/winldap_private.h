@@ -625,7 +625,11 @@ static inline WCHAR *strnAtoW( const char *str, DWORD in_len, DWORD *out_len )
 static inline char *strreplace( const char *s, const char *before, const char *after )
 {
     char *ret = malloc( strlen( s ) + strlen( after ) / strlen( before ) + 1 );
+#ifdef __REACTOS__
+    const char *cur, *prev = s;
+#else
     char *cur, *prev = ret;
+#endif
     if (ret)
     {
         ret[0] = 0;

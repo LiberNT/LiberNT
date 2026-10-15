@@ -30,6 +30,19 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(wldap32);
 
+#ifdef __REACTOS__
+static void search_with_version3( LDAP *ld )
+{
+    int version;
+
+    if (!ldap_get_option( CTX(ld), LDAP_OPT_PROTOCOL_VERSION, &version ) && version < WLDAP32_LDAP_VERSION3)
+    {
+        version = WLDAP32_LDAP_VERSION3;
+        ldap_set_option( CTX(ld), LDAP_OPT_PROTOCOL_VERSION, &version );
+    }
+}
+
+#endif
 /***********************************************************************
  *      ldap_searchA     (WLDAP32.@)
  */
@@ -120,6 +133,9 @@ ULONG CDECL ldap_search_extW( LDAP *ld, WCHAR *base, ULONG scope, WCHAR *filter,
 
     if (!ld) return WLDAP32_LDAP_PARAM_ERROR;
     if ((ret = WLDAP32_ldap_connect( ld, &timevalW ))) return ret;
+#ifdef __REACTOS__
+    search_with_version3( ld );
+#endif
 
     ret = WLDAP32_LDAP_NO_MEMORY;
     if (base && !(baseU = strWtoU( base ))) goto exit;
@@ -191,6 +207,9 @@ ULONG CDECL ldap_search_ext_sW( LDAP *ld, WCHAR *base, ULONG scope, WCHAR *filte
 
     if (!ld || !res) return WLDAP32_LDAP_PARAM_ERROR;
     if ((ret = WLDAP32_ldap_connect( ld, timeout ))) return ret;
+#ifdef __REACTOS__
+    search_with_version3( ld );
+#endif
 
     ret = WLDAP32_LDAP_NO_MEMORY;
     if (base && !(baseU = strWtoU( base ))) goto exit;
