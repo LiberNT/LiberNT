@@ -71,11 +71,17 @@ static inline void mdelay(LONG msec) {
 	KeDelayExecutionThread(KernelMode, FALSE, &Interval);
 }
 
+#ifdef __REACTOS__
+static inline void udelay(LONG usec) {
+	KeStallExecutionProcessor((ULONG)usec);
+}
+#else
 static inline void udelay(LONG usec) {
 	LARGE_INTEGER Interval;
 	Interval.QuadPart = -10 * (LONGLONG)usec;
 	KeDelayExecutionThread(KernelMode, FALSE, &Interval);
 }
+#endif
 
 //
 // Helper macros
