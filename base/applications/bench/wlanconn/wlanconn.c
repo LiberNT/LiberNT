@@ -196,6 +196,7 @@ wmain(int argc, WCHAR **argv)
     WLAN_CONNECTION_PARAMETERS Params;
     PCWSTR Ssid;
     PCWSTR InterfaceMatch = NULL;
+    PCWSTR Authentication = L"WPA2PSK";
     const GUID *InterfaceGuid = NULL;
     INT ArgIndex;
     DWORD Index;
@@ -222,14 +223,21 @@ wmain(int argc, WCHAR **argv)
     RtlZeroMemory(ProfileXml, sizeof(ProfileXml));
 
     ArgIndex = (argc >= 3 && _wcsicmp(argv[2], L"--key-file") == 0) ? 4 : 3;
-    if (argc != ArgIndex && !(argc == ArgIndex + 2 && _wcsicmp(argv[ArgIndex], L"--interface") == 0))
+    for (Index = ArgIndex; Index < (DWORD)argc; Index++)
     {
-        wprintf(L"usage: wlanconn <ssid> <wpa2-passphrase> [--interface <description>]\n"
-                L"       wlanconn <ssid> --key-file <path> [--interface <description>]\n");
+        if (_wcsicmp(argv[Index], L"--interface") == 0 && Index + 1 < (DWORD)argc)
+            InterfaceMatch = argv[++Index];
+        else if (_wcsicmp(argv[Index], L"--wpa3") == 0)
+            Authentication = L"WPA3SAE";
+        else
+            break;
+    }
+    if (argc < 3 || ArgIndex > (DWORD)argc || Index != (DWORD)argc)
+    {
+        wprintf(L"usage: wlanconn <ssid> <passphrase> [--interface <description>] [--wpa3]\n"
+                L"       wlanconn <ssid> --key-file <path> [--interface <description>] [--wpa3]\n");
         return 1;
     }
-    if (argc == ArgIndex + 2)
-        InterfaceMatch = argv[ArgIndex + 1];
 
     Ssid = argv[1];
     if (ArgIndex == 4)
@@ -275,7 +283,7 @@ wmain(int argc, WCHAR **argv)
         goto Cleanup;
     }
 
-    ProfileLength = _snwprintf(ProfileXml, ARRAYSIZE(ProfileXml) - 1, L"<?xml version=\"1.0\"?>\r\n" L"<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">\r\n" L"<name>%s</name>\r\n" L"<SSIDConfig><SSID><name>%s</name></SSID></SSIDConfig>\r\n" L"<connectionType>ESS</connectionType>\r\n" L"<connectionMode>manual</connectionMode>\r\n" L"<MSM><security>\r\n" L"<authEncryption><authentication>WPA2PSK</authentication>" L"<encryption>AES</encryption><useOneX>false</useOneX></authEncryption>\r\n" L"<sharedKey><keyType>passPhrase</keyType><protected>false</protected>" L"<keyMaterial>%s</keyMaterial></sharedKey>\r\n" L"</security></MSM>\r\n" L"</WLANProfile>\r\n", SsidXml, SsidXml, KeyXml);
+    ProfileLength = _snwprintf(ProfileXml, ARRAYSIZE(ProfileXml) - 1, L"<?xml version=\"1.0\"?>\r\n" L"<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">\r\n" L"<name>%s</name>\r\n" L"<SSIDConfig><SSID><name>%s</name></SSID></SSIDConfig>\r\n" L"<connectionType>ESS</connectionType>\r\n" L"<connectionMode>manual</connectionMode>\r\n" L"<MSM><security>\r\n" L"<authEncryption><authentication>%s</authentication>" L"<encryption>AES</encryption><useOneX>false</useOneX></authEncryption>\r\n" L"<sharedKey><keyType>passPhrase</keyType><protected>false</protected>" L"<keyMaterial>%s</keyMaterial></sharedKey>\r\n" L"</security></MSM>\r\n" L"</WLANProfile>\r\n", SsidXml, SsidXml, Authentication, KeyXml);
     ProfileXml[ARRAYSIZE(ProfileXml) - 1] = L'\0';
     if (ProfileLength < 0 || ProfileLength >= ARRAYSIZE(ProfileXml))
     {
