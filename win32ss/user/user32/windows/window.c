@@ -11,6 +11,7 @@
 
 #define DEBUG
 #include <user32.h>
+#include <dwmapi.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(user32);
 
@@ -2385,6 +2386,218 @@ CreateWindowInBand(
     return CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle,
                            x, y, nWidth, nHeight,
                            hWndParent, hMenu, hInstance, lpParam);
+}
+
+BOOL
+WINAPI
+IsShellManagedWindow(HWND hWnd)
+{
+    if (!ValidateHwnd(hWnd))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    return FALSE;
+}
+
+BOOL
+WINAPI
+IsShellFrameWindow(HWND hWnd)
+{
+    if (!ValidateHwnd(hWnd))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    return FALSE;
+}
+
+HWND
+WINAPI
+GetModernAppWindow(HWND hWnd)
+{
+    if (!ValidateHwnd(hWnd))
+        return NULL;
+
+    SetLastError(ERROR_INVALID_PARAMETER);
+    return NULL;
+}
+
+BOOL
+WINAPI
+GetProcessUIContextInformation(HANDLE hProcess, PVOID Information)
+{
+    if (!hProcess)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    _SEH2_TRY
+    {
+        ((PULONG)Information)[0] = 0;
+        ((PULONG)Information)[1] = 0;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        SetLastError(ERROR_NOACCESS);
+        _SEH2_YIELD(return FALSE;)
+    }
+    _SEH2_END;
+
+    return TRUE;
+}
+
+typedef struct _WINDOW_COMPOSITION_ATTRIBUTE_DATA
+{
+    ULONG Attribute;
+    PVOID Data;
+    SIZE_T DataSize;
+} WINDOW_COMPOSITION_ATTRIBUTE_DATA, *PWINDOW_COMPOSITION_ATTRIBUTE_DATA;
+
+typedef HRESULT (WINAPI *PFN_DWMGETWINDOWATTRIBUTE)(HWND, DWORD, PVOID, DWORD);
+
+static
+BOOL
+GetWindowCompositionBounds(HWND hWnd, DWORD DwmAttribute, PVOID Data)
+{
+    static PFN_DWMGETWINDOWATTRIBUTE pDwmGetWindowAttribute;
+    HMODULE DwmApi;
+    HRESULT hr;
+
+    if (!pDwmGetWindowAttribute)
+    {
+        DwmApi = LoadLibraryW(L"dwmapi.dll");
+        if (DwmApi)
+            pDwmGetWindowAttribute = (PFN_DWMGETWINDOWATTRIBUTE)GetProcAddress(DwmApi, "DwmGetWindowAttribute");
+        if (!pDwmGetWindowAttribute)
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+    }
+
+    hr = pDwmGetWindowAttribute(hWnd, DwmAttribute, Data, sizeof(RECT));
+    if (FAILED(hr))
+    {
+        SetLastError(HRESULT_FACILITY(hr) == FACILITY_WIN32 ? HRESULT_CODE(hr) : ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+BOOL
+WINAPI
+GetWindowCompositionAttribute(HWND hWnd, PVOID AttributeData)
+{
+    PWINDOW_COMPOSITION_ATTRIBUTE_DATA Request = AttributeData;
+    ULONG Attribute, Size, Required, Value = 0;
+    PVOID Data;
+    BOOL SetOnly = FALSE;
+    BOOL Result = TRUE;
+
+    if (!ValidateHwnd(hWnd))
+    {
+        SetLastError(ERROR_INVALID_HANDLE);
+        return FALSE;
+    }
+
+    _SEH2_TRY
+    {
+        Attribute = Request->Attribute;
+        Data = Request->Data;
+        Size = (ULONG)Request->DataSize;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        SetLastError(ERROR_NOACCESS);
+        _SEH2_YIELD(return FALSE;)
+    }
+    _SEH2_END;
+
+    switch (Attribute)
+    {
+        case 1:
+        case 21:
+            Value = 1;
+            Required = sizeof(ULONG);
+            break;
+
+        case 18:
+        case 20:
+        case 23:
+        case 24:
+        case 25:
+        case 26:
+        case 27:
+        case 29:
+        case 30:
+        case 34:
+            Required = sizeof(ULONG);
+            break;
+
+        case 5:
+        case 8:
+            Required = sizeof(RECT);
+            break;
+
+        case 12:
+            Required = 5 * sizeof(ULONG);
+            break;
+
+        case 19:
+        case 31:
+            Required = 4 * sizeof(ULONG);
+            SetOnly = TRUE;
+            break;
+
+        case 22:
+        case 28:
+        case 37:
+            Required = 2 * sizeof(ULONG);
+            SetOnly = TRUE;
+            break;
+
+        default:
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+    }
+
+    if (Size < Required)
+    {
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
+    }
+
+    if (SetOnly || !Data)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (Attribute == 5)
+        return GetWindowCompositionBounds(hWnd, DWMWA_CAPTION_BUTTON_BOUNDS, Data);
+    if (Attribute == 8)
+        return GetWindowCompositionBounds(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, Data);
+
+    _SEH2_TRY
+    {
+        if (Attribute == 12)
+            RtlZeroMemory((PULONG)Data + 1, 4 * sizeof(ULONG));
+        else
+            *(PULONG)Data = Value;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        SetLastError(ERROR_NOACCESS);
+        Result = FALSE;
+    }
+    _SEH2_END;
+
+    return Result;
 }
 
 /* EOF */

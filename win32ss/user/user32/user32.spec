@@ -416,6 +416,7 @@
 @ stdcall -version=0x602+ GetWindowBand(long ptr)
 @ stdcall GetWinStationInfo(ptr)
 @ stdcall GetWindow(long long)
+@ stdcall -version=0x601+ GetWindowCompositionAttribute(ptr ptr)
 @ stdcall GetWindowContextHelpId(long)
 @ stdcall GetWindowDC(long) User32GetWindowDC
 @ stdcall -version=0xA00+ GetWindowDpiAwarenessContext(long)
@@ -843,5 +844,9 @@
 @ stdcall wvsprintfA(ptr str ptr)
 @ stdcall wvsprintfW(ptr wstr ptr)
 2005 stdcall -noname -version=0x602+ User32Ordinal2005(ptr)
+2521 stdcall -noname -version=0x602+ GetProcessUIContextInformation(ptr ptr)
 2522 stdcall -noname -version=0x602+ User32Ordinal2522(ptr)
 2530 stdcall -noname -version=0x602+ User32Ordinal2530(ptr ptr)
+2569 stdcall -noname -version=0x602+ GetModernAppWindow(ptr)
+2573 stdcall -noname -version=0x602+ IsShellFrameWindow(ptr)
+2574 stdcall -noname -version=0x602+ IsShellManagedWindow(ptr)
