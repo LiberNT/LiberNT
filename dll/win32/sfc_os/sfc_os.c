@@ -26,7 +26,6 @@
 #include <winbase.h>
 #include <winreg.h>
 #include <winuser.h>
-#include <winwlx.h>
 #define NTOS_MODE_USER
 #include <ndk/obfuncs.h>
 #include <ndk/rtlfuncs.h>
@@ -235,42 +234,3 @@ DWORD WINAPI SfcFileException(DWORD dwUnknown0, PWCHAR pwszFile, DWORD dwUnknown
     return 0;
 }
 
-/******************************************************************
- *              SfcWLEventLogoff     [sfc_os.@]
- *
- * Logoff notification function
- *
- * PARAMS
- *  pInfo         [I] Pointer to logoff notification information
- *
- * RETURNS
- *  nothing
- *
- */
-VOID
-WINAPI
-SfcWLEventLogoff(
-    PWLX_NOTIFICATION_INFO pInfo)
-{
-    UNIMPLEMENTED;
-}
-
-/******************************************************************
- *              SfcWLEventLogon     [sfc_os.@]
- *
- * Logon notification function
- *
- * PARAMS
- *  pInfo         [I] Pointer to logon notification information
- *
- * RETURNS
- *  nothing
- *
- */
-VOID
-WINAPI
-SfcWLEventLogon(
-    PWLX_NOTIFICATION_INFO pInfo)
-{
-    UNIMPLEMENTED;
-}

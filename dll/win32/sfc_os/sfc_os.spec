@@ -8,5 +8,3 @@
 @ stdcall SfcGetNextProtectedFile(ptr ptr)
 @ stdcall SfcIsFileProtected(ptr wstr)
 @ stdcall SfcIsKeyProtected(long wstr long)
-@ stdcall SfcWLEventLogoff(ptr)
-@ stdcall SfcWLEventLogon(ptr)
