@@ -375,12 +375,19 @@ NwifiDispatchNotification(const NWIFI_NOTIFICATION *pNotif)
                 }
                 else
                 {
+                    WLAN_REASON_CODE reason = WLAN_REASON_CODE_UNKNOWN;
+
+                    if (pNotif->StatusCode == NDIS_STATUS_DOT11_ASSOCIATION_COMPLETION)
+                        reason = WLAN_REASON_CODE_ASSOCIATION_FAILURE;
+                    else if (pNotif->StatusCode == NDIS_STATUS_DOT11_CONNECTION_COMPLETION)
+                        reason = WLAN_REASON_CODE_NETWORK_NOT_AVAILABLE;
+
                     WlanSvcIndicateConnection(iface,
                         wlan_notification_acm_connection_attempt_fail,
                         (iface->ConnectedProfile[0] != L'\0')
                             ? wlan_connection_mode_profile
                             : wlan_connection_mode_discovery_unsecure,
-                        iface->ConnectedProfile, pNotif->StatusCode);
+                        iface->ConnectedProfile, reason);
                 }
             }
             break;

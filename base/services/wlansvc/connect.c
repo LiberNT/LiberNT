@@ -196,8 +196,10 @@ WlanSvcConnect(PWLANSVC_INTERFACE Iface, const PWLAN_CONNECTION_PARAMETERS pPara
         WlanSvcIndicateConnection(Iface,
                                   wlan_notification_acm_connection_attempt_fail,
                                   pParams->wlanConnectionMode, profileName,
-                                  dwResult);
-        return dwResult;
+                                  (dwResult == ERROR_NOT_SUPPORTED)
+                                      ? WLAN_REASON_CODE_NETWORK_NOT_AVAILABLE
+                                      : WLAN_REASON_CODE_CONNECT_CALL_FAIL);
+        return ERROR_SUCCESS;
     }
 
     return ERROR_SUCCESS;
