@@ -464,6 +464,23 @@ AfdCleanupSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     if( !SocketAcquireStateLock( FCB ) ) return LostSocket(Irp);
 
+    if (!(FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS) &&
+        FCB->SharedData.State == SOCKET_STATE_CONNECTED)
+    {
+        while (!IsListEmpty(&FCB->PendingIrpList[FUNCTION_RECV]))
+        {
+            CurrentEntry = RemoveHeadList(&FCB->PendingIrpList[FUNCTION_RECV]);
+            CurrentIrp = CONTAINING_RECORD(CurrentEntry, IRP, Tail.Overlay.ListEntry);
+            CleanupPendingIrp(FCB, CurrentIrp, IoGetCurrentIrpStackLocation(CurrentIrp), NULL);
+            CurrentIrp->IoStatus.Status = STATUS_CONNECTION_ABORTED;
+            CurrentIrp->IoStatus.Information = 0;
+            if (CurrentIrp->MdlAddress)
+                UnlockRequest(CurrentIrp, IoGetCurrentIrpStackLocation(CurrentIrp));
+            (void)IoSetCancelRoutine(CurrentIrp, NULL);
+            IoCompleteRequest(CurrentIrp, IO_NETWORK_INCREMENT);
+        }
+    }
+
     for (Function = 0; Function < MAX_FUNCTIONS; Function++)
     {
         CurrentEntry = FCB->PendingIrpList[Function].Flink;

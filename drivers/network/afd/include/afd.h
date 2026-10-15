@@ -402,6 +402,7 @@ VOID DestroySocket( PAFD_FCB FCB );
 DRIVER_CANCEL AfdCancelHandler;
 VOID RetryDisconnectCompletion(PAFD_FCB FCB);
 BOOLEAN CheckUnlockExtraBuffers(PAFD_FCB FCB, PIO_STACK_LOCATION IrpSp);
+VOID CleanupPendingIrp(PAFD_FCB FCB, PIRP Irp, PIO_STACK_LOCATION IrpSp, PAFD_ACTIVE_POLL Poll);
 
 /* read.c */
 
