@@ -17,6 +17,7 @@ extern void func_heaps(void);
 extern void func_interfaces(void);
 extern void func_pipeline(void);
 extern void func_queue(void);
+extern void func_relaxed(void);
 extern void func_renderpass(void);
 extern void func_rootsig(void);
 extern void func_sampler(void);
@@ -35,6 +36,7 @@ const struct test winetest_testlist[] =
     { "interfaces", func_interfaces },
     { "pipeline", func_pipeline },
     { "queue", func_queue },
+    { "relaxed", func_relaxed },
     { "renderpass", func_renderpass },
     { "rootsig", func_rootsig },
     { "sampler", func_sampler },

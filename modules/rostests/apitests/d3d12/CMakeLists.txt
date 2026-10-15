@@ -9,6 +9,7 @@ list(APPEND SOURCE
     interfaces.cpp
     pipeline.cpp
     queue.cpp
+    relaxed.cpp
     renderpass.cpp
     rootsig.cpp
     sampler.cpp
