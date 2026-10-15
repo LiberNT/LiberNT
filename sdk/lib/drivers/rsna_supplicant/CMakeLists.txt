@@ -13,6 +13,8 @@ list(APPEND SOURCE
     rsna_aes.c
     rsna_keywrap.c
     rsna_rc4.c
+    rsna_cmac.c
+    rsna_ccmp.c
     rsna_supplicant.c)
 
 add_library(rsna_supplicant ${SOURCE})

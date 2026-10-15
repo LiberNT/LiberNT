@@ -7,7 +7,8 @@
  * Not built by CMake; build and run on the host:
  *     clang -std=c99 -D_RSNA_HOST_TEST -Wall -Wextra \
  *         rsna_sha1.c rsna_md5.c rsna_hmac.c rsna_kdf.c rsna_aes.c \
- *         rsna_keywrap.c rsna_rc4.c rsna_supplicant.c test_rsna.c \
+ *         rsna_keywrap.c rsna_rc4.c rsna_cmac.c rsna_ccmp.c \
+ *         rsna_supplicant.c test_rsna.c \
  *         -o test_rsna && ./test_rsna
  */
 
@@ -21,6 +22,8 @@
 #include "rsna_aes.h"
 #include "rsna_keywrap.h"
 #include "rsna_rc4.h"
+#include "rsna_cmac.h"
+#include "rsna_ccmp.h"
 #include "rsna_eapol.h"
 #include "rsna_supplicant.h"
 
@@ -234,6 +237,68 @@ static void TestAesKeyWrap(void)
 /* PMK / PTK test vectors                                             */
 /* ================================================================== */
 
+static void TestCmac(void)
+{
+    static const char *Messages[] =
+    {
+        "",
+        "6bc1bee22e409f96e93d7e117393172a",
+        "6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411",
+        "6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411"
+        "e5fbc1191a0a52eff69f2445df4f9b17ad2b417be66c3710"
+    };
+    static const char *Macs[] =
+    {
+        "bb1d6929e95937287fa37d129b756746",
+        "070a16b46b4d4144f79bdd9dd04a287c",
+        "dfa66747de9ae63030ca32611497c827",
+        "51f0bebf7e3b9d92fc49741779363cfe"
+    };
+    rsna_u8 key[16], msg[64], exp[16], mac[16];
+    rsna_size msgLen, i;
+
+    FromHex("2b7e151628aed2a6abf7158809cf4f3c", key, sizeof(key));
+    for (i = 0; i < 4; i++)
+    {
+        msgLen = FromHex(Messages[i], msg, sizeof(msg));
+        FromHex(Macs[i], exp, sizeof(exp));
+        RsnaAesCmac(key, msg, msgLen, mac);
+        CheckBytes("AES-CMAC RFC 4493", mac, exp, 16);
+    }
+}
+
+static void TestCcmpBip(void)
+{
+    rsna_u8 tk[16], hdr[24], body[64], exp[64], out[64], plain[64], igtk[16], frame[64];
+    rsna_size bodyLen, expLen, frameLen;
+    rsna_u64 pn = 0;
+    rsna_u16 keyId = 0;
+
+    FromHex("404142434445464748494a4b4c4d4e4f", tk, sizeof(tk));
+    FromHex("d00000000202020202020404040404040404040404043000", hdr, sizeof(hdr));
+    bodyLen = FromHex("0800555500010203040506070809", body, sizeof(body));
+    expLen = FromHex("06050020040302011d12456b5b9eb6dfc1d3f8e9c47ec6894fe19d6f84bf", exp, sizeof(exp));
+    Check("CCMP management frame encrypt",
+          RsnaCcmpEncrypt(tk, hdr, sizeof(hdr), 0x010203040506ULL, 0, body, bodyLen, out) == 0 &&
+          expLen == bodyLen + 16 && memcmp(out, exp, expLen) == 0, NULL, NULL, 0);
+    Check("CCMP management frame decrypt",
+          RsnaCcmpDecrypt(tk, hdr, sizeof(hdr), exp, expLen, plain, &pn) == 0 &&
+          pn == 0x010203040506ULL && memcmp(plain, body, bodyLen) == 0, NULL, NULL, 0);
+    exp[expLen - 1] ^= 1;
+    Check("CCMP rejects a modified MIC",
+          RsnaCcmpDecrypt(tk, hdr, sizeof(hdr), exp, expLen, plain, &pn) != 0, NULL, NULL, 0);
+
+    FromHex("606162636465666768696a6b6c6d6e6f", igtk, sizeof(igtk));
+    frameLen = FromHex("c0000000ffffffffffff060606060606060606060606310007004c1004000f0e0d0c0b0a024402c64b57c24e",
+                       frame, sizeof(frame));
+    Check("BIP MMIE verifies",
+          RsnaBipVerify(igtk, frame, frameLen, &keyId, &pn) == 0 &&
+          keyId == 4 && pn == 0x0a0b0c0d0e0fULL, NULL, NULL, 0);
+    frame[24] ^= 1;
+    Check("BIP rejects a modified body",
+          RsnaBipVerify(igtk, frame, frameLen, &keyId, &pn) != 0, NULL, NULL, 0);
+}
+
 static void TestPmk(void)
 {
     rsna_u8 pmk[RSNA_PMK_LEN];
@@ -443,9 +508,9 @@ static void TestHandshake(void)
     {
         rsna_u8 gtk[16];
         rsna_u8 gtkKde[2 + 6 + 16];     /* id+len + OUI+type+keyidhdr + GTK */
-        rsna_u8 plainKd[64];
+        rsna_u8 plainKd[96];
         rsna_size plainKdLen;
-        rsna_u8 wrapped[64];
+        rsna_u8 wrapped[104];
         rsna_size n;
         const rsna_u8 *kck = apPtk;
         const rsna_u8 *kek = apPtk + 16;
@@ -465,6 +530,18 @@ static void TestHandshake(void)
         /* Key Data plaintext = the GTK KDE (could include padding). */
         memcpy(plainKd, gtkKde, sizeof(gtkKde));
         plainKdLen = sizeof(gtkKde);
+        {
+            static const rsna_u8 IgtkKde[] =
+            {
+                KDE_IE_VENDOR, 4 + 2 + 6 + 16, KDE_OUI_0, KDE_OUI_1, KDE_OUI_2, KDE_TYPE_IGTK,
+                0x04, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+                0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7,
+                0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF
+            };
+            memcpy(plainKd + plainKdLen, IgtkKde, sizeof(IgtkKde));
+            plainKdLen += sizeof(IgtkKde);
+            plainKd[plainKdLen++] = KDE_IE_VENDOR;
+        }
         /* AES Key Wrap requires a plaintext length multiple of 8: zero-pad. */
         while ((plainKdLen % 8) != 0)
             plainKd[plainKdLen++] = 0x00;
@@ -499,6 +576,10 @@ static void TestHandshake(void)
                 CheckBytes("PTK TK matches AP TK", keys.tk, apPtk + 32, 16);
                 /* KCK/KEK match too (whole PTK identical). */
                 CheckBytes("Full PTK matches AP PTK", keys.ptk, apPtk, 48);
+                Check("IGTK key id == 4", keys.igtkKeyId == 4, NULL, NULL, 0);
+                Check("IGTK length == 16", keys.igtkLen == 16, NULL, NULL, 0);
+                Check("IGTK IPN read", keys.igtkIpn[0] == 0x01 && keys.igtkIpn[5] == 0x06, NULL, NULL, 0);
+                Check("IGTK value read", keys.igtk[0] == 0xB0 && keys.igtk[15] == 0xBF, NULL, NULL, 0);
             }
             else
             {
@@ -524,6 +605,59 @@ static void TestHandshake(void)
             st = RsnaRxEapol(&ctx, frame, frameLen, reply, &replyLen);
             Check("msg3 retransmit stays COMPLETED", st == RSNA_STATE_COMPLETED, NULL, NULL, 0);
             Check("msg3 retransmit re-emits msg4", replyLen >= EAPOL_KEY_FRAME_FIXED_LEN, NULL, NULL, 0);
+        }
+
+        {
+            static const rsna_u8 GroupKd[] =
+            {
+                KDE_IE_VENDOR, 4 + 2 + 16, KDE_OUI_0, KDE_OUI_1, KDE_OUI_2, KDE_TYPE_GTK,
+                0x02, 0x00,
+                0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7,
+                0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF,
+                KDE_IE_VENDOR, 4 + 2 + 6 + 16, KDE_OUI_0, KDE_OUI_1, KDE_OUI_2, KDE_TYPE_IGTK,
+                0x05, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7,
+                0xD8, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF,
+                KDE_IE_VENDOR, 0x00
+            };
+            rsna_u8 groupWrapped[80];
+            rsna_u8 full[RSNA_SHA1_DIGEST_LEN];
+            rsna_u8 rxMic[KEYDESC_MIC_LEN];
+            RSNA_KEYS before, after;
+            rsna_u16 groupInfo = KEYINFO_VER_HMAC_SHA1_AES | KEYINFO_KEY_ACK |
+                                 KEYINFO_KEY_MIC | KEYINFO_SECURE | KEYINFO_ENCRYPTED_DATA;
+
+            RsnaGetKeys(&ctx, &before);
+            RsnaAesWrap(kek, 128, GroupKd, sizeof(GroupKd) / 8, groupWrapped);
+            replay[7] = 4;
+            frameLen = ApBuildKeyFrame(frame, groupInfo, replay, anonce, kck, NULL,
+                                       groupWrapped, sizeof(GroupKd) + 8);
+            replyLen = sizeof(reply);
+            st = RsnaRxEapol(&ctx, frame, frameLen, reply, &replyLen);
+            RsnaGetKeys(&ctx, &after);
+            Check("group msg1 keeps COMPLETED", st == RSNA_STATE_COMPLETED, NULL, NULL, 0);
+            Check("group msg2 produced", replyLen >= EAPOL_KEY_FRAME_FIXED_LEN, NULL, NULL, 0);
+            Check("group msg2 is a group, secure, MIC'd reply",
+                  replyLen >= EAPOL_KEY_FRAME_FIXED_LEN &&
+                  !(reply[EAPOL_HDR_LEN + KEYDESC_OFF_KEYINFO + 1] & KEYINFO_KEY_TYPE) &&
+                  (reply[EAPOL_HDR_LEN + KEYDESC_OFF_KEYINFO] & (KEYINFO_SECURE >> 8)) &&
+                  (reply[EAPOL_HDR_LEN + KEYDESC_OFF_KEYINFO] & (KEYINFO_KEY_MIC >> 8)), NULL, NULL, 0);
+            memcpy(rxMic, &reply[EAPOL_HDR_LEN + KEYDESC_OFF_MIC], KEYDESC_MIC_LEN);
+            memset(&reply[EAPOL_HDR_LEN + KEYDESC_OFF_MIC], 0, KEYDESC_MIC_LEN);
+            RsnaHmacSha1(apPtk, RSNA_KCK_LEN, reply, replyLen, full);
+            Check("AP verifies group msg2 MIC", memcmp(full, rxMic, KEYDESC_MIC_LEN) == 0, NULL, NULL, 0);
+            Check("group rekey installs GTK id 2",
+                  after.gtkKeyId == 2 && after.gtk[0] == 0xC0 && after.gtk[15] == 0xCF, NULL, NULL, 0);
+            Check("group rekey installs IGTK id 5",
+                  after.igtkKeyId == 5 && after.igtk[0] == 0xD0 && after.igtkIpn[0] == 0x10, NULL, NULL, 0);
+            Check("group rekey bumps the group serial", after.groupSerial == before.groupSerial + 1, NULL, NULL, 0);
+            CheckBytes("group rekey keeps the PTK", after.ptk, before.ptk, 48);
+
+            replyLen = sizeof(reply);
+            st = RsnaRxEapol(&ctx, frame, frameLen, reply, &replyLen);
+            Check("replayed group msg1 is dropped",
+                  st == RSNA_STATE_COMPLETED && replyLen == 0 &&
+                  RsnaLastError(&ctx) == RSNA_ERR_REPLAY, NULL, NULL, 0);
         }
     }
 
@@ -562,6 +696,56 @@ static void TestHandshake(void)
         Check("msg3 with bad MIC -> FAILED", st == RSNA_STATE_FAILED, NULL, NULL, 0);
         Check("bad MIC reports RSNA_ERR_MIC", RsnaLastError(&ctx2) == RSNA_ERR_MIC, NULL, NULL, 0);
     }
+}
+
+static int FixedRandom(void *context, rsna_u8 *buffer, rsna_size length)
+{
+    rsna_size i;
+
+    if (context == NULL)
+        return -1;
+    for (i = 0; i < length; i++)
+        buffer[i] = *(const rsna_u8 *)context;
+    return 0;
+}
+
+static void TestRandomSource(void)
+{
+    static const rsna_u8 Ssid[] = { 'T','e','s','t','N','e','t' };
+    static const rsna_u8 Aa[6] = { 0x02,0x00,0x00,0x00,0x00,0x01 };
+    static const rsna_u8 Spa[6] = { 0x02,0x00,0x00,0x00,0x00,0x02 };
+    rsna_u8 fill = 0x5A, anonce[32], replay[8] = { 0, 0, 0, 0, 0, 0, 0, 1 };
+    rsna_u8 frame[512], reply[512], expected[RSNA_NONCE_LEN];
+    rsna_size frameLen, replyLen;
+    RSNA_CTX ctx;
+    RSNA_STATE st;
+
+    printf("\n--- SNonce random source ---\n");
+    memset(anonce, 0x11, sizeof(anonce));
+    memset(expected, fill, sizeof(expected));
+    frameLen = ApBuildKeyFrame(frame, KEYINFO_VER_HMAC_SHA1_AES | KEYINFO_KEY_TYPE | KEYINFO_KEY_ACK,
+                               replay, anonce, NULL, NULL, NULL, 0);
+
+    RsnaInit(&ctx, Ssid, sizeof(Ssid), "passphrase123", 13);
+    RsnaSetApAddr(&ctx, Aa);
+    RsnaSetStaAddr(&ctx, Spa);
+    RsnaSetRandom(&ctx, FixedRandom, &fill);
+    replyLen = sizeof(reply);
+    st = RsnaRxEapol(&ctx, frame, frameLen, reply, &replyLen);
+    Check("SNonce comes from the random callback",
+          st == RSNA_STATE_PTK_NEGOTIATING &&
+          memcmp(&reply[EAPOL_HDR_LEN + KEYDESC_OFF_NONCE], expected, sizeof(expected)) == 0, NULL, NULL, 0);
+    RsnaClear(&ctx);
+
+    RsnaInit(&ctx, Ssid, sizeof(Ssid), "passphrase123", 13);
+    RsnaSetApAddr(&ctx, Aa);
+    RsnaSetStaAddr(&ctx, Spa);
+    RsnaSetRandom(&ctx, FixedRandom, NULL);
+    replyLen = sizeof(reply);
+    st = RsnaRxEapol(&ctx, frame, frameLen, reply, &replyLen);
+    Check("a failing random source fails the handshake",
+          st == RSNA_STATE_FAILED && RsnaLastError(&ctx) == RSNA_ERR_RANDOM && replyLen == 0, NULL, NULL, 0);
+    RsnaClear(&ctx);
 }
 
 /*
@@ -690,6 +874,8 @@ int main(void)
     TestAes();
     TestRc4();
     TestAesKeyWrap();
+    TestCmac();
+    TestCcmpBip();
 
     printf("\n--- Key derivation vectors ---\n");
     TestPmk();
@@ -697,6 +883,7 @@ int main(void)
 
     TestHandshake();
     TestHandshakeTkip();
+    TestRandomSource();
 
     printf("\n=== RESULT: %d passed, %d failed ===\n", g_pass, g_fail);
     return (g_fail == 0) ? 0 : 1;

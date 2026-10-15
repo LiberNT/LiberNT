@@ -101,9 +101,13 @@ static rsna_u64 RsnaRngNext(RSNA_CTX *ctx)
     return z;
 }
 
-static void RsnaGenNonce(RSNA_CTX *ctx, rsna_u8 nonce[RSNA_NONCE_LEN])
+static int RsnaGenNonce(RSNA_CTX *ctx, rsna_u8 nonce[RSNA_NONCE_LEN])
 {
     int i;
+
+    if (ctx->random != RSNA_NULL)
+        return ctx->random(ctx->randomContext, nonce, RSNA_NONCE_LEN);
+
     for (i = 0; i < RSNA_NONCE_LEN; i += 8)
     {
         rsna_u64 r = RsnaRngNext(ctx);
@@ -111,6 +115,15 @@ static void RsnaGenNonce(RSNA_CTX *ctx, rsna_u8 nonce[RSNA_NONCE_LEN])
         for (k = 0; k < 8 && (i + k) < RSNA_NONCE_LEN; k++)
             nonce[i + k] = (rsna_u8)((r >> (8 * k)) & 0xFF);
     }
+    return 0;
+}
+
+void RsnaSetRandom(RSNA_CTX *ctx, RSNA_RANDOM_FN random, void *context)
+{
+    if (ctx == RSNA_NULL)
+        return;
+    ctx->random = random;
+    ctx->randomContext = context;
 }
 
 void RsnaSeed(RSNA_CTX *ctx, const rsna_u8 *seed, rsna_size seedLen)
@@ -364,6 +377,7 @@ static RSNA_STATUS RsnaExtractGtk(RSNA_CTX *ctx,
                                   const rsna_u8 *kd, rsna_size kdLen)
 {
     rsna_size pos = 0;
+    int haveGtk = 0;
 
     while (pos + 2 <= kdLen)
     {
@@ -397,14 +411,28 @@ static RSNA_STATUS RsnaExtractGtk(RSNA_CTX *ctx,
                 ctx->keys.gtkKeyId = (rsna_u8)(kdeData[GTK_KDE_OFF_KEYID] & 0x03);
                 RsnaMemcpy(ctx->keys.gtk, kdeData + GTK_KDE_OFF_GTK, gtkLen);
                 ctx->keys.gtkLen = gtkLen;
-                return RSNA_OK;
+                haveGtk = 1;
+            }
+            else if (kdeType == KDE_TYPE_IGTK && kdeDataLen > 2 + RSNA_IPN_LEN)
+            {
+                rsna_size igtkLen = kdeDataLen - 2 - RSNA_IPN_LEN;
+                if (igtkLen > RSNA_IGTK_MAX_LEN)
+                    return RSNA_ERR_MALFORMED;
+
+                ctx->keys.igtkKeyId = (rsna_u16)(kdeData[0] | (kdeData[1] << 8));
+                RsnaMemcpy(ctx->keys.igtkIpn, kdeData + 2, RSNA_IPN_LEN);
+                RsnaMemcpy(ctx->keys.igtk, kdeData + 2 + RSNA_IPN_LEN, igtkLen);
+                ctx->keys.igtkLen = igtkLen;
             }
         }
 
         pos += 2 + len;
     }
 
-    return RSNA_ERR_NO_GTK;
+    if (!haveGtk)
+        return RSNA_ERR_NO_GTK;
+    ctx->keys.groupSerial++;
+    return RSNA_OK;
 }
 
 /* ------------------------------------------------------------------ */
@@ -571,7 +599,11 @@ static RSNA_STATE RsnaHandleMsg1(RSNA_CTX *ctx,
      * here would derive a different PTK for every retry of the same handshake. */
     if (!ctx->haveSnonce)
     {
-        RsnaGenNonce(ctx, ctx->snonce);
+        if (RsnaGenNonce(ctx, ctx->snonce) != 0)
+        {
+            ctx->lastError = RSNA_ERR_RANDOM;
+            return (ctx->state = RSNA_STATE_FAILED);
+        }
         ctx->haveSnonce = 1;
     }
 
@@ -726,6 +758,94 @@ static RSNA_STATE RsnaHandleMsg3(RSNA_CTX *ctx,
     return ctx->state;
 }
 
+static RSNA_STATE RsnaHandleGroupMsg1(RSNA_CTX *ctx,
+                                      const rsna_u8 *frame, rsna_size frameLen,
+                                      const rsna_u8 *body, rsna_u16 keyInfo,
+                                      rsna_u8 *out, rsna_size *outLen)
+{
+    rsna_size cap = (out != RSNA_NULL) ? *outLen : 0;
+    rsna_u8 rxMic[KEYDESC_MIC_LEN];
+    rsna_u8 calcMic[KEYDESC_MIC_LEN];
+    rsna_u8 frameBuf[512];
+    rsna_u8 plainKd[512];
+    rsna_size plainLen = 0;
+    const rsna_u8 *kd;
+    rsna_u16 kdLen;
+    rsna_u16 replyInfo;
+    RSNA_KEYS saved;
+    RSNA_STATUS st;
+    rsna_size n;
+
+    if (ctx->state != RSNA_STATE_COMPLETED || frameLen > sizeof(frameBuf))
+    {
+        ctx->lastError = (ctx->state != RSNA_STATE_COMPLETED) ? RSNA_ERR_STATE : RSNA_ERR_MALFORMED;
+        if (outLen != RSNA_NULL)
+            *outLen = 0;
+        return ctx->state;
+    }
+
+    RsnaMemcpy(frameBuf, frame, frameLen);
+    RsnaMemcpy(rxMic, &body[KEYDESC_OFF_MIC], KEYDESC_MIC_LEN);
+    RsnaMemset(frameBuf + EAPOL_HDR_LEN + KEYDESC_OFF_MIC, 0, KEYDESC_MIC_LEN);
+    RsnaComputeMic(ctx->keyDescVer, ctx->keys.ptk, frameBuf, frameLen, calcMic);
+    RsnaMemset(frameBuf, 0, sizeof(frameBuf));
+    if (!RsnaSecureEqual(rxMic, calcMic, KEYDESC_MIC_LEN))
+    {
+        ctx->lastError = RSNA_ERR_MIC;
+        if (outLen != RSNA_NULL)
+            *outLen = 0;
+        return ctx->state;
+    }
+
+    kdLen = RsnaGetU16(&body[KEYDESC_OFF_DATALEN]);
+    kd = &body[KEYDESC_OFF_DATA];
+    if ((rsna_size)(KEYDESC_OFF_DATA + kdLen) > (frameLen - EAPOL_HDR_LEN) ||
+        kdLen > sizeof(plainKd))
+    {
+        ctx->lastError = RSNA_ERR_MALFORMED;
+        if (outLen != RSNA_NULL)
+            *outLen = 0;
+        return ctx->state;
+    }
+
+    if (keyInfo & KEYINFO_ENCRYPTED_DATA)
+    {
+        st = RsnaDecryptKeyData(ctx, &body[KEYDESC_OFF_IV], kd, kdLen,
+                                plainKd, &plainLen);
+    }
+    else
+    {
+        RsnaMemcpy(plainKd, kd, kdLen);
+        plainLen = kdLen;
+        st = RSNA_OK;
+    }
+
+    RsnaMemcpy(&saved, &ctx->keys, sizeof(saved));
+    if (st == RSNA_OK)
+        st = RsnaExtractGtk(ctx, plainKd, plainLen);
+    RsnaMemset(plainKd, 0, sizeof(plainKd));
+    if (st != RSNA_OK)
+    {
+        RsnaMemcpy(&ctx->keys, &saved, sizeof(saved));
+        RsnaMemset(&saved, 0, sizeof(saved));
+        ctx->lastError = st;
+        if (outLen != RSNA_NULL)
+            *outLen = 0;
+        return ctx->state;
+    }
+    RsnaMemset(&saved, 0, sizeof(saved));
+
+    RsnaMemcpy(ctx->replayCounter, &body[KEYDESC_OFF_REPLAY], 8);
+
+    replyInfo = (rsna_u16)(ctx->keyDescVer & KEYINFO_VERSION_MASK);
+    replyInfo |= KEYINFO_KEY_MIC | KEYINFO_SECURE;
+    n = RsnaBuildReply(ctx, replyInfo, RSNA_NULL, RSNA_NULL, 0, out, cap);
+    if (outLen != RSNA_NULL)
+        *outLen = n;
+    ctx->lastError = (n == 0 && out != RSNA_NULL) ? RSNA_ERR_TOO_SMALL : RSNA_OK;
+    return ctx->state;
+}
+
 /* ------------------------------------------------------------------ */
 /* Top-level dispatch                                                 */
 /* ------------------------------------------------------------------ */
@@ -848,7 +968,12 @@ RSNA_STATE RsnaRxEapol(RSNA_CTX *ctx,
         return ctx->state;
     }
 
-    /* Group-key handshake and other messages are not handled. */
+    else if (!isPairwise && hasAck && hasMic)
+    {
+        return RsnaHandleGroupMsg1(ctx, in, EAPOL_HDR_LEN + bodyLen,
+                                   body, keyInfo, out, outLen);
+    }
+
     ctx->lastError = RSNA_ERR_STATE;
     *outLen = 0;
     return ctx->state;

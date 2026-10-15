@@ -40,6 +40,8 @@ extern "C" {
 #define RSNA_PTK_TKIP_LEN     (RSNA_KCK_LEN + RSNA_KEK_LEN + RSNA_TK_TKIP_LEN)  /* 64 */
 #define RSNA_PTK_MAX_LEN      RSNA_PTK_TKIP_LEN
 #define RSNA_GTK_MAX_LEN      32
+#define RSNA_IGTK_MAX_LEN     32
+#define RSNA_IPN_LEN          6
 
 /* Cipher suite the handshake is running for. */
 typedef enum _RSNA_CIPHER
@@ -69,8 +71,11 @@ typedef enum _RSNA_STATUS
     RSNA_ERR_MIC,               /* Key MIC verification failed                  */
     RSNA_ERR_UNWRAP,            /* GTK key-data unwrap / integrity failed       */
     RSNA_ERR_STATE,             /* message unexpected in the current state      */
-    RSNA_ERR_NO_GTK             /* msg3 had no GTK KDE                          */
+    RSNA_ERR_NO_GTK,            /* msg3 had no GTK KDE                          */
+    RSNA_ERR_RANDOM
 } RSNA_STATUS;
+
+typedef int (*RSNA_RANDOM_FN)(void *context, rsna_u8 *buffer, rsna_size length);
 
 /* Extracted/derived key material handed back to the caller. */
 typedef struct _RSNA_KEYS
@@ -88,6 +93,12 @@ typedef struct _RSNA_KEYS
     rsna_u8     gtk[RSNA_GTK_MAX_LEN];
     rsna_size   gtkLen;
     rsna_u8     gtkKeyId;       /* group key index from the GTK KDE             */
+
+    rsna_u8     igtk[RSNA_IGTK_MAX_LEN];
+    rsna_size   igtkLen;
+    rsna_u16    igtkKeyId;
+    rsna_u8     igtkIpn[RSNA_IPN_LEN];
+    rsna_u32    groupSerial;
 } RSNA_KEYS;
 
 /* Supplicant context.  Defined here so it can be stack or pool allocated. */
@@ -129,6 +140,9 @@ typedef struct _RSNA_CTX
 
     /* SNonce PRNG state (seed via RsnaSeed()). */
     rsna_u64    rngState;
+
+    RSNA_RANDOM_FN random;
+    void          *randomContext;
 } RSNA_CTX;
 
 /* ------------------------------------------------------------------ */
@@ -162,6 +176,8 @@ RSNA_STATUS RsnaSetRsnIe(RSNA_CTX *ctx, const rsna_u8 *ie, rsna_size ieLen);
 
 /* Seed the internal SNonce PRNG (mix in time/MAC/etc. for entropy). */
 void RsnaSeed(RSNA_CTX *ctx, const rsna_u8 *seed, rsna_size seedLen);
+
+void RsnaSetRandom(RSNA_CTX *ctx, RSNA_RANDOM_FN random, void *context);
 
 /*
  * Feed a received EAPOL-Key frame (starting at the EAPOL header, without the
