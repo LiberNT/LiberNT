@@ -1150,6 +1150,27 @@ static BOOL create_full_pathW(const WCHAR *path)
     return ret;
 }
 
+#ifdef __REACTOS__
+static BOOL is_lz_compressed_file( LPCWSTR file )
+{
+    static const BYTE lz_magic[] = { 0x53, 0x5a, 0x44, 0x44, 0x88, 0xf0, 0x27, 0x33 };
+    BYTE buffer[sizeof(lz_magic)];
+    HANDLE handle;
+    DWORD size;
+    BOOL compressed;
+
+    handle = CreateFileW( file, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                          NULL, OPEN_EXISTING, 0, NULL );
+    if (handle == INVALID_HANDLE_VALUE)
+        return TRUE;
+
+    compressed = ReadFile( handle, buffer, sizeof(buffer), &size, NULL ) && size == sizeof(buffer) &&
+                 !memcmp( buffer, lz_magic, sizeof(lz_magic) );
+    CloseHandle( handle );
+    return compressed;
+}
+#endif
+
 static BOOL do_file_copyW( LPCWSTR source, LPCWSTR target, DWORD style,
                            PSP_FILE_CALLBACK_W handler, PVOID context )
 {
@@ -1241,44 +1262,59 @@ static BOOL do_file_copyW( LPCWSTR source, LPCWSTR target, DWORD style,
         return FALSE;
     }
 
-    /* Extract the compressed file to a temp location */
-    hTemp = LZOpenFileW(TempFile, &OfStruct, OF_CREATE);
-    if (hTemp < 0)
+    if (!is_lz_compressed_file(source))
     {
-        dwLastError = GetLastError();
-
-        ERR("LZOpenFileW(2) error %d %s\n", (int)hTemp, debugstr_w(TempFile));
-
-        /* Close the source handle */
         LZClose(hSource);
 
-        /* Delete temp file if an error is signaled */
-        DeleteFileW(TempFile);
-
-        /* Restore error condition triggered by LZOpenFileW */
-        SetLastError(dwLastError);
-
-        return FALSE;
+        if (!CopyFileW(source, TempFile, FALSE))
+        {
+            dwLastError = GetLastError();
+            DeleteFileW(TempFile);
+            SetLastError(dwLastError);
+            return FALSE;
+        }
     }
-
-    lRes = LZCopy(hSource, hTemp);
-
-    dwLastError = GetLastError();
-
-    LZClose(hSource);
-    LZClose(hTemp);
-
-    if (lRes < 0)
+    else
     {
-        ERR("LZCopy error %d (%s, %s)\n", (int)lRes, debugstr_w(source), debugstr_w(TempFile));
+        /* Extract the compressed file to a temp location */
+        hTemp = LZOpenFileW(TempFile, &OfStruct, OF_CREATE);
+        if (hTemp < 0)
+        {
+            dwLastError = GetLastError();
 
-        /* Delete temp file if copy was not successful */
-        DeleteFileW(TempFile);
+            ERR("LZOpenFileW(2) error %d %s\n", (int)hTemp, debugstr_w(TempFile));
 
-        /* Restore error condition triggered by LZCopy */
-        SetLastError(dwLastError);
+            /* Close the source handle */
+            LZClose(hSource);
 
-        return FALSE;
+            /* Delete temp file if an error is signaled */
+            DeleteFileW(TempFile);
+
+            /* Restore error condition triggered by LZOpenFileW */
+            SetLastError(dwLastError);
+
+            return FALSE;
+        }
+
+        lRes = LZCopy(hSource, hTemp);
+
+        dwLastError = GetLastError();
+
+        LZClose(hSource);
+        LZClose(hTemp);
+
+        if (lRes < 0)
+        {
+            ERR("LZCopy error %d (%s, %s)\n", (int)lRes, debugstr_w(source), debugstr_w(TempFile));
+
+            /* Delete temp file if copy was not successful */
+            DeleteFileW(TempFile);
+
+            /* Restore error condition triggered by LZCopy */
+            SetLastError(dwLastError);
+
+            return FALSE;
+        }
     }
 #endif
 
