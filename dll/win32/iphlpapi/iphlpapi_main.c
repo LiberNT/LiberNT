@@ -784,8 +784,6 @@ err:
     return err;
 }
 
-#ifndef __REACTOS__
-
 static void address_entry_free( void *ptr, ULONG offset, void *ctxt )
 {
     HeapFree( GetProcessHeap(), 0, ptr );
@@ -1225,6 +1223,35 @@ static DWORD dns_servers_query_code( ULONG family )
     return DnsConfigDnsServersUnspec;
 }
 
+#ifdef __REACTOS__
+static void adapter_dns_suffix( const WCHAR *name, WCHAR *suffix )
+{
+    static const WCHAR interfaces[] = L"SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\";
+    static const WCHAR *values[] = { L"Domain", L"DhcpDomain" };
+    WCHAR path[ARRAY_SIZE(interfaces) + MAX_ADAPTER_NAME_LENGTH + 1];
+    DWORD size, type, i;
+    HKEY key;
+
+    suffix[0] = 0;
+    if (wcslen( name ) > MAX_ADAPTER_NAME_LENGTH) return;
+    wcscpy( path, interfaces );
+    wcscat( path, name );
+    if (RegOpenKeyExW( HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &key )) return;
+
+    for (i = 0; i < ARRAY_SIZE(values); i++)
+    {
+        size = (MAX_DNS_SUFFIX_STRING_LENGTH - 1) * sizeof(WCHAR);
+        if (!RegQueryValueExW( key, values[i], NULL, &type, (BYTE *)suffix, &size ) && type == REG_SZ)
+        {
+            suffix[size / sizeof(WCHAR)] = 0;
+            if (suffix[0]) break;
+        }
+        suffix[0] = 0;
+    }
+    RegCloseKey( key );
+}
+#endif
+
 static DWORD dns_info_alloc( IP_ADAPTER_ADDRESSES *aa, ULONG family, ULONG flags )
 {
     char buf[FIELD_OFFSET(DNS_ADDR_ARRAY, AddrArray[3])];
@@ -1233,7 +1260,9 @@ static DWORD dns_info_alloc( IP_ADAPTER_ADDRESSES *aa, ULONG family, ULONG flags
     DWORD err, i, size, attempt, sockaddr_len;
     WCHAR name[MAX_ADAPTER_NAME_LENGTH + 1];
     DNS_ADDR_ARRAY *servers;
+#ifndef __REACTOS__
     WCHAR *search;
+#endif
 
     while (aa)
     {
@@ -1241,6 +1270,9 @@ static DWORD dns_info_alloc( IP_ADAPTER_ADDRESSES *aa, ULONG family, ULONG flags
         if (!(flags & GAA_FLAG_SKIP_DNS_SERVER))
         {
             servers = (DNS_ADDR_ARRAY *)buf;
+#ifdef __REACTOS__
+            size = sizeof(buf);
+#endif
             for (attempt = 0; attempt < 5; attempt++)
             {
                 err = DnsQueryConfig( query, 0, name, NULL, servers, &size );
@@ -1283,6 +1315,9 @@ static DWORD dns_info_alloc( IP_ADAPTER_ADDRESSES *aa, ULONG family, ULONG flags
         if (!aa->DnsSuffix) return ERROR_NOT_ENOUGH_MEMORY;
         aa->DnsSuffix[0] = '\0';
 
+#ifdef __REACTOS__
+        adapter_dns_suffix( name, aa->DnsSuffix );
+#else
         if (!DnsQueryConfig( DnsConfigSearchList, 0, name, NULL, NULL, &size ) &&
             (search = malloc( size )))
         {
@@ -1293,6 +1328,7 @@ static DWORD dns_info_alloc( IP_ADAPTER_ADDRESSES *aa, ULONG family, ULONG flags
             }
             free( search );
         }
+#endif
 
         aa = aa->Next;
     }
@@ -1411,6 +1447,48 @@ ULONG WINAPI DECLSPEC_HOTPATCH GetAdaptersAddresses( ULONG family, ULONG flags, 
 
     adapters_addresses_free( info );
     return err;
+}
+
+#ifdef __REACTOS__
+DWORD WINAPI NhpAllocateAndGetInterfaceInfoFromStack( IP_INTERFACE_NAME_INFO **table, DWORD *count, BOOL order,
+                                                      HANDLE heap, DWORD flags )
+{
+    struct nsi_ndis_ifinfo_static *stat;
+    IP_INTERFACE_NAME_INFO *out;
+    NET_LUID *keys;
+    DWORD err, i, num, used = 0;
+
+    TRACE( "(%p, %p, %d, %p, %#lx)\n", table, count, order, heap, flags );
+
+    if (!table || !count) return ERROR_INVALID_PARAMETER;
+
+    err = NsiAllocateAndGetTable( 1, &NPI_MS_NDIS_MODULEID, NSI_NDIS_IFINFO_TABLE, (void **)&keys, sizeof(*keys),
+                                  NULL, 0, NULL, 0, (void **)&stat, sizeof(*stat), &num, 0 );
+    if (err) return err;
+
+    out = HeapAlloc( heap, flags, max( num, 1 ) * sizeof(*out) );
+    if (!out)
+    {
+        NsiFreeTable( keys, NULL, NULL, stat );
+        return ERROR_NOT_ENOUGH_MEMORY;
+    }
+
+    for (i = 0; i < num; i++)
+    {
+        if (stat[i].type == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+        out[used].Index = stat[i].if_index;
+        out[used].MediaType = stat[i].type;
+        out[used].ConnectionType = stat[i].conn_type;
+        out[used].AccessType = stat[i].access_type;
+        out[used].DeviceGuid = stat[i].if_guid;
+        memset( &out[used].InterfaceGuid, 0, sizeof(out[used].InterfaceGuid) );
+        used++;
+    }
+
+    NsiFreeTable( keys, NULL, NULL, stat );
+    *table = out;
+    *count = used;
+    return ERROR_SUCCESS;
 }
 #endif
 
