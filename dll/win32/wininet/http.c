@@ -5475,8 +5475,14 @@ static DWORD open_http_connection(http_request_t *request, BOOL *reusing)
 
     EnterCriticalSection(&connection_pool_cs);
 
+#ifdef __REACTOS__
+    server = request->proxy ? request->proxy : request->server;
+    while(!list_empty(&server->conn_pool)) {
+        netconn = LIST_ENTRY(list_head(&server->conn_pool), netconn_t, pool_entry);
+#else
     while(!list_empty(&request->server->conn_pool)) {
         netconn = LIST_ENTRY(list_head(&request->server->conn_pool), netconn_t, pool_entry);
+#endif
         list_remove(&netconn->pool_entry);
 
         if(is_valid_netconn(netconn) && NETCON_is_alive(netconn))
