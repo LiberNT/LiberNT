@@ -1087,7 +1087,11 @@ static void socket_close_complete( struct socket *socket, DWORD ret )
     else
     {
         WINHTTP_WEB_SOCKET_ASYNC_RESULT result;
+#ifdef __REACTOS__
+        result.AsyncResult.dwResult = 0;
+#else
         result.AsyncResult.dwResult = API_READ_DATA; /* FIXME */
+#endif
         result.AsyncResult.dwError  = ret;
         result.Operation = WINHTTP_WEB_SOCKET_CLOSE_OPERATION;
         send_callback( &socket->hdr, WINHTTP_CALLBACK_STATUS_REQUEST_ERROR, &result, sizeof(result) );

@@ -2164,10 +2164,28 @@ done:
     return ERROR_SUCCESS;
 }
 
+#ifdef __REACTOS__
+static void finished_reading( struct request * );
+#endif
+
 void close_connection( struct request *request )
 {
     if (!request->netconn) return;
 
+#ifdef __REACTOS__
+    if (request->state >= REQUEST_STATE_RESPONSE_RECEIVED &&
+        !(request->flags & REQUEST_FLAG_WEBSOCKET_UPGRADE) &&
+        request->data_stream == &request->netconn_stream.data_stream &&
+        request->content_length != ~0ull &&
+        request->content_length - request->content_read <= request->read.size)
+    {
+        request->content_read = request->content_length;
+        request->read.pos = request->read.size = 0;
+        finished_reading( request );
+        return;
+    }
+
+#endif
     netconn_release( request->netconn );
     request->netconn = NULL;
 }
