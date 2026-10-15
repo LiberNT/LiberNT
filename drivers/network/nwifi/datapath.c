@@ -537,7 +537,6 @@ NwifiInjectL2Frame(
     SendCtx->Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
     SendCtx->Header.Revision = DOT11_EXTSTA_SEND_CONTEXT_REVISION_1;
     SendCtx->Header.Size = sizeof(DOT11_EXTSTA_SEND_CONTEXT);
-    /* Message 2 is exempt before PTK installation; message 4 is protected. */
     SendCtx->usExemptionActionType =
         SendUnencrypted ? DOT11_EXEMPT_ALWAYS : DOT11_EXEMPT_NO_EXEMPTION;
     SendCtx->uPhyId = 0;

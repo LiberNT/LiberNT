@@ -833,15 +833,19 @@ RSNA_STATE RsnaRxEapol(RSNA_CTX *ctx,
     if (isPairwise && hasAck && !hasMic)
     {
         /* message 1 */
-        return RsnaHandleMsg1(ctx, body, out, outLen);
+        if (RsnaHandleMsg1(ctx, body, out, outLen) == RSNA_STATE_FAILED)
+            *outLen = 0;
+        return ctx->state;
     }
     else if (isPairwise && hasAck && hasMic)
     {
         /* message 3.  The replay counter is committed only after the MIC is
          * verified, so a forged msg3 cannot lock out the legitimate one. */
         (void)hasInstall;
-        return RsnaHandleMsg3(ctx, in, EAPOL_HDR_LEN + bodyLen,
-                              body, keyInfo, out, outLen);
+        if (RsnaHandleMsg3(ctx, in, EAPOL_HDR_LEN + bodyLen,
+                           body, keyInfo, out, outLen) == RSNA_STATE_FAILED)
+            *outLen = 0;
+        return ctx->state;
     }
 
     /* Group-key handshake and other messages are not handled. */

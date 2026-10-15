@@ -420,7 +420,7 @@ WlanSvcScanInterface(const GUID *pInterfaceGuid, PDOT11_SSID pDot11Ssid)
     LeaveCriticalSection(&WlanSvcLock);
 
     dwResult = NwifiScan(interfaceIndex, pDot11Ssid, dot11_BSS_type_any);
-    if (dwResult == ERROR_SUCCESS || dwResult == ERROR_NOT_READY)
+    if (dwResult == ERROR_SUCCESS || dwResult == ERROR_NOT_READY || dwResult == ERROR_BUSY)
     {
         dwResult = NwifiGetBssList(interfaceIndex, upperLuid, &macAddress, &bssList);
         if (dwResult == ERROR_SUCCESS && bssList == NULL)

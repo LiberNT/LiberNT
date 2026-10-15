@@ -551,7 +551,7 @@ NwifiMsmConnect(
     NDIS_STATUS Status;
 
     NdisAcquireSpinLock(&Msm->Lock);
-    if (Msm->State != NwifiMsmIdle)
+    if (Msm->State != NwifiMsmIdle && Msm->State != NwifiMsmScanning)
     {
         NdisReleaseSpinLock(&Msm->Lock);
         return NDIS_STATUS_MEDIA_BUSY;
@@ -617,6 +617,11 @@ NwifiMsmConnect(
             Params->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
         {
             Status = NwifiSupplicantSeedFirmware(Msm);
+            if (Status == NDIS_STATUS_NOT_SUPPORTED &&
+                Params->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK)
+            {
+                Status = NwifiSupplicantStart(Msm);
+            }
         }
         else
         {

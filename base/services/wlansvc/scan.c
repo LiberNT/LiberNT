@@ -390,7 +390,7 @@ WlanSvcDoScan(PWLANSVC_INTERFACE Iface, PDOT11_SSID pSsid)
     DWORD dwResult;
 
     dwResult = NwifiScan(Iface->NwifiIndex, pSsid, dot11_BSS_type_any);
-    if (dwResult != ERROR_SUCCESS && dwResult != ERROR_NOT_READY)
+    if (dwResult != ERROR_SUCCESS && dwResult != ERROR_NOT_READY && dwResult != ERROR_BUSY)
         return dwResult;
 
     return WlanSvcRefreshBssCache(Iface);

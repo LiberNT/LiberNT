@@ -261,6 +261,7 @@ NwifiMapNdisStatus(
         case NDIS_STATUS_RESOURCES:         return STATUS_INSUFFICIENT_RESOURCES;
         case NDIS_STATUS_NOT_SUPPORTED:     return STATUS_NOT_SUPPORTED;
         case NDIS_STATUS_MEDIA_BUSY:        return STATUS_DEVICE_BUSY;
+        case NDIS_STATUS_DOT11_MEDIA_IN_USE: return STATUS_DEVICE_BUSY;
         case NDIS_STATUS_INVALID_STATE:     return STATUS_INVALID_DEVICE_STATE;
         default:                            return STATUS_UNSUCCESSFUL;
     }

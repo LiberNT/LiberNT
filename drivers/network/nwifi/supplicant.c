@@ -811,7 +811,7 @@ NwifiSupplicantInstallKeysWorker(
                                 EAPOL_ETHERTYPE,
                                 Context->Eapol,
                                 Context->EapolLength,
-                                FALSE);
+                                TRUE);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         NdisAcquireSpinLock(&Msm->Lock);
@@ -888,15 +888,14 @@ NwifiSupplicantRxEapol(
     }
     DeferReply = (NewState == RSNA_STATE_COMPLETED &&
                   !Sup->KeysInstalled);
-    if (NewState == RSNA_STATE_COMPLETED && Sup->KeysInstalled)
+    if (NewState == RSNA_STATE_COMPLETED && Sup->KeysInstalled &&
+        Length >= 7 && !(Eapol[6] & 0x08))
         ReplyUnencrypted = FALSE;
     NdisReleaseSpinLock(&Msm->Lock);
 
     DPRINT1("NWIFI: sup eapol in %lu out %lu state %d err %d\n",
             Length, (ULONG)OutLen, NewState, Error);
 
-    /* Message 2 is sent before a mapping key exists. Message 4 is held for the
-     * PASSIVE_LEVEL worker, which installs PTK/GTK first and sends it protected. */
     if (OutLen != 0 && !DeferReply)
     {
         SendStatus = NwifiInjectL2Frame(Msm->Adapter,
