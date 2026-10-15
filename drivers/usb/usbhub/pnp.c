@@ -2755,6 +2755,14 @@ USBH_PdoStartDevice(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
     {
         Status = USBH_RestoreDevice(PortExtension, 0);
     }
+    else if ((PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_PORT_SUSPENDED) && HubExtension)
+    {
+        USBH_SyncResumePort(HubExtension, PortExtension->PortNumber);
+    }
+
+    PortExtension->PortPdoFlags &= ~(USBHUB_PDO_FLAG_PORT_SUSPENDED |
+                                     USBHUB_PDO_FLAG_WAKEUP_ENABLED |
+                                     USBHUB_PDO_FLAG_POWER_D1_OR_D2);
 
     PortExtension->PortPdoFlags |= USBHUB_PDO_FLAG_DEVICE_STARTED;
 

@@ -600,6 +600,15 @@ NTAPI
 USBH_SyncSubmitUrb(IN PDEVICE_OBJECT DeviceObject,
                    IN PURB Urb)
 {
+    return USBH_SyncSubmitDeviceUrb(DeviceObject, Urb, NULL);
+}
+
+NTSTATUS
+NTAPI
+USBH_SyncSubmitDeviceUrb(IN PDEVICE_OBJECT DeviceObject,
+                         IN PURB Urb,
+                         IN PUSB_DEVICE_HANDLE DeviceHandle)
+{
     KEVENT Event;
     IO_STATUS_BLOCK IoStatusBlock;
     PIRP Irp;
@@ -611,7 +620,7 @@ USBH_SyncSubmitUrb(IN PDEVICE_OBJECT DeviceObject,
 
     DPRINT("USBH_SyncSubmitUrb: ... \n");
 
-    Urb->UrbHeader.UsbdDeviceHandle = NULL;
+    Urb->UrbHeader.UsbdDeviceHandle = DeviceHandle;
 
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
 
@@ -2073,6 +2082,76 @@ USBH_SyncDisablePort(IN PUSBHUB_FDO_EXTENSION HubExtension,
     if (NT_SUCCESS(Status))
     {
         PortData->PortStatus.PortStatus.Usb20PortStatus.PortEnabledDisabled = 0;
+    }
+
+    return Status;
+}
+
+static
+NTSTATUS
+USBH_SyncSetPortSuspend(IN PUSBHUB_FDO_EXTENSION HubExtension,
+                        IN USHORT Port,
+                        IN BOOLEAN Suspend)
+{
+    BM_REQUEST_TYPE RequestType;
+    UCHAR Request;
+    USHORT RequestValue;
+    USHORT RequestIndex;
+
+    RequestType.B = 0;
+    RequestType.Recipient = BMREQUEST_TO_OTHER;
+    RequestType.Type = BMREQUEST_CLASS;
+    RequestType.Dir = BMREQUEST_HOST_TO_DEVICE;
+
+    if (HubExtension->LowerPDO != HubExtension->RootHubPdo &&
+        USBH_IsSuperSpeedHub(HubExtension))
+    {
+        Request = USB_REQUEST_SET_FEATURE;
+        RequestValue = USBHUB_FEATURE_PORT_LINK_STATE;
+        RequestIndex = ((Suspend ? PORT_LINK_STATE_U3 : PORT_LINK_STATE_U0) << 8) | Port;
+    }
+    else
+    {
+        Request = Suspend ? USB_REQUEST_SET_FEATURE : USB_REQUEST_CLEAR_FEATURE;
+        RequestValue = USBHUB_FEATURE_PORT_SUSPEND;
+        RequestIndex = Port;
+    }
+
+    return USBH_Transact(HubExtension,
+                         NULL,
+                         0,
+                         BMREQUEST_HOST_TO_DEVICE,
+                         URB_FUNCTION_CLASS_OTHER,
+                         RequestType,
+                         Request,
+                         RequestValue,
+                         RequestIndex);
+}
+
+NTSTATUS
+NTAPI
+USBH_SyncSuspendPort(IN PUSBHUB_FDO_EXTENSION HubExtension,
+                     IN USHORT Port)
+{
+    DPRINT("USBH_SyncSuspendPort: Port - %x\n", Port);
+
+    return USBH_SyncSetPortSuspend(HubExtension, Port, TRUE);
+}
+
+NTSTATUS
+NTAPI
+USBH_SyncResumePort(IN PUSBHUB_FDO_EXTENSION HubExtension,
+                    IN USHORT Port)
+{
+    NTSTATUS Status;
+
+    DPRINT("USBH_SyncResumePort: Port - %x\n", Port);
+
+    Status = USBH_SyncSetPortSuspend(HubExtension, Port, FALSE);
+
+    if (NT_SUCCESS(Status))
+    {
+        USBH_Wait(USBHUB_RESUME_SIGNALING_MS + USBHUB_RESUME_RECOVERY_MS);
     }
 
     return Status;
