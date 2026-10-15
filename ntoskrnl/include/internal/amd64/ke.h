@@ -673,7 +673,7 @@ KiClearDpcRequestState(
     Prcb->DpcInterruptRequested = FALSE;
 }
 
-#define _KeIsExecutingDpc() (KeGetCurrentPrcb()->DpcRoutineActive)
+#define _KeIsExecutingDpc() ((BOOLEAN)__readgsbyte(FIELD_OFFSET(KIPCR, Prcb.DpcRoutineActive)))
 
 /* The RPL of the saved code selector is the previous mode. */
 #define KiGetContextPreviousMode(Context) ((KPROCESSOR_MODE)((Context)->SegCs & 1))
