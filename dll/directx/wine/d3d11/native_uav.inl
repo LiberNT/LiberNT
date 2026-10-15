@@ -243,6 +243,7 @@ void STDMETHODCALLTYPE NativeContext::CSSetUnorderedAccessViews(UINT start, UINT
     for (UINT i = 0; i < count; ++i)
     {
         if (!values[i]) continue;
+        if (!deferred) NativeWaitPendingRelease(static_cast<NativeUnorderedAccessView *>(values[i])->texture, device);
         NativeUnbindInputs(this, values[i]);
         for (UINT j = 0; j < 8; ++j)
         {
@@ -342,6 +343,13 @@ void STDMETHODCALLTYPE NativeContext::OMSetRenderTargetsAndUnorderedAccessViews(
     }
     for (UINT i = 0; i < 8; ++i)
     {
+        if (!deferred)
+        {
+            if (next_targets[i])
+                NativeWaitPendingRelease(static_cast<NativeRenderTargetView *>(next_targets[i])->texture, device);
+            if (next_uavs[i])
+                NativeWaitPendingRelease(static_cast<NativeUnorderedAccessView *>(next_uavs[i])->texture, device);
+        }
         NativeUnbindInputs(this, next_targets[i]);
         NativeUnbindInputs(this, next_uavs[i]);
         for (UINT j = 0; j < 8; ++j)
@@ -443,6 +451,7 @@ void STDMETHODCALLTYPE NativeContext::ClearUnorderedAccessView##Suffix(ID3D11Uno
         return; \
     } \
     ValueType normalized[4]; \
+    NativeWaitPendingRelease(view->texture, device); \
     NativeUavClearValues(view->desc.Format, values, normalized); \
     device->functions.pfnClearUnorderedAccessView##Suffix(device->driver_device, view->handle, normalized); \
 }

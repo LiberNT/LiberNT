@@ -246,6 +246,7 @@ public:
     NativePrivateData private_data;
     NativeContext *context = NULL;
     D3D_FEATURE_LEVEL feature_level = D3D_FEATURE_LEVEL_11_0;
+    volatile LONG pending_releases = 0;
     UINT threading_caps = 0;
     UINT shader_caps = 0;
     D3D11_1DDI_D3D11_OPTIONS_DATA options_caps = {};
@@ -1043,11 +1044,17 @@ public:
     HANDLE gdi_bitmap = NULL;
     BYTE *gdi_memory = NULL;
     ID3D11Resource *tile_pool = NULL;
+    HANDLE pending_release = NULL;
     explicit NativeTexture2D(NativeDevice *d)
         : NativeChild(d), runtime_handle(d->AllocateResourceIdentity()), dxgi_resource(this, d, &usage),
           dxgi_keyed_mutex(this) {}
     ~NativeTexture2D()
     {
+        if (pending_release)
+        {
+            CloseHandle(pending_release);
+            InterlockedDecrement(&device->pending_releases);
+        }
         if (keyed_mutex)
         {
             D3DKMT_DESTROYKEYEDMUTEX destroy = {};
@@ -2835,6 +2842,21 @@ static NativeTexture2D *NativeTexture(ID3D11Resource *resource, NativeDevice *de
     return same ? static_cast<NativeTexture2D *>(static_cast<ID3D11Texture2D *>(resource)) : NULL;
 }
 
+static void NativeWaitPendingRelease(NativeTexture2D *texture)
+{
+    if (!texture || !texture->pending_release) return;
+    WaitForSingleObject(texture->pending_release, 5000);
+    CloseHandle(texture->pending_release);
+    texture->pending_release = NULL;
+    InterlockedDecrement(&texture->device->pending_releases);
+}
+
+static void NativeWaitPendingRelease(ID3D11Resource *resource, NativeDevice *device)
+{
+    if (!resource || !device->pending_releases) return;
+    NativeWaitPendingRelease(NativeTexture(resource, device));
+}
+
 HRESULT STDMETHODCALLTYPE NativeDevice::CreateTexture2D(const D3D11_TEXTURE2D_DESC *input,
         const D3D11_SUBRESOURCE_DATA *initial, ID3D11Texture2D **out)
 {
@@ -4000,6 +4022,7 @@ void STDMETHODCALLTYPE NativeContext::ClearRenderTargetView(ID3D11RenderTargetVi
     NativeRenderTargetView *view = static_cast<NativeRenderTargetView *>(target);
     if (view->device != device) return;
     NativeLock guard(device);
+    NativeWaitPendingRelease(view->texture, device);
     FLOAT value[4];
     memcpy(value, color, sizeof(value));
     device->functions.pfnClearRenderTargetView(device->driver_device, view->handle, value);
@@ -4084,6 +4107,7 @@ void STDMETHODCALLTYPE NativeContext::CopyResource(ID3D11Resource *dst, ID3D11Re
             || d->desc.SampleDesc.Quality != s->desc.SampleDesc.Quality || d->desc.Usage == D3D11_USAGE_IMMUTABLE) return;
     if ((d->desc.BindFlags & D3D11_BIND_DEPTH_STENCIL) && device->feature_level < D3D_FEATURE_LEVEL_10_1) return;
     NativeLock guard(device);
+    NativeWaitPendingRelease(dst, device);
     device->functions.pfnResourceCopy(device->driver_device, d->handle, s->handle);
 }
 
@@ -4135,6 +4159,7 @@ void STDMETHODCALLTYPE NativeContext::CopySubresourceRegion(ID3D11Resource *dst,
     }
     if ((d->desc.BindFlags & D3D11_BIND_DEPTH_STENCIL) && device->feature_level < D3D_FEATURE_LEVEL_10_1) return;
     NativeLock guard(device);
+    NativeWaitPendingRelease(dst, device);
     device->functions.pfnResourceCopyRegion(device->driver_device, d->handle, dst_subresource,
             x, y, z, s->handle, src_subresource, reinterpret_cast<const D3D10_DDI_BOX *>(box));
 }
@@ -4171,6 +4196,7 @@ void STDMETHODCALLTYPE NativeContext::ResolveSubresource(ID3D11Resource *dst, UI
             || max(1u, d->desc.Height >> (dst_subresource % d->desc.MipLevels))
                     != max(1u, s->desc.Height >> (src_subresource % s->desc.MipLevels))) return;
     NativeLock guard(device);
+    NativeWaitPendingRelease(d);
     device->BeginCall();
     if (s->desc.SampleDesc.Count == 1)
     {
@@ -4204,6 +4230,7 @@ void STDMETHODCALLTYPE NativeContext::UpdateSubresource(ID3D11Resource *resource
     if (!texture || !data || texture->desc.Usage != D3D11_USAGE_DEFAULT
             || subresource >= texture->desc.MipLevels * texture->desc.ArraySize) return;
     NativeLock guard(device);
+    NativeWaitPendingRelease(resource, device);
     device->functions.pfnResourceUpdateSubresourceUP(device->driver_device, texture->handle,
             subresource, reinterpret_cast<const D3D10_DDI_BOX *>(box), data, row_pitch, depth_pitch);
 }
@@ -7559,6 +7586,7 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
     if (!sequence && !present_count) return S_OK;
     if (!primary && sequence)
     {
+        NativeWaitPendingRelease(buffers[0]);
         HRESULT hr = CarryForward(parameters);
         if (FAILED(hr)) return hr;
         if (transports[0])
@@ -7571,6 +7599,7 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
         if (FAILED(hr)) return hr;
     }
     NativeTexture2D *source = transport ? transport : buffers[sequence ? 0 : desc.BufferCount - 1];
+    NativeWaitPendingRelease(source);
     D3DKMT_HANDLE source_allocation = 0;
     if (!primary)
     {
@@ -7627,8 +7656,21 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
          * returns, so DWM must have released that frame first. */
         if (window && !transports[0])
         {
-            hr = WaitForRelease(buffers[0]);
-            if (FAILED(hr)) return hr;
+            HANDLE event = ReleaseEvent(buffers[0], NULL);
+            if (event && WaitForSingleObject(event, 0) != WAIT_OBJECT_0)
+            {
+                NativeWaitPendingRelease(buffers[0]);
+                if (DuplicateHandle(GetCurrentProcess(), event, GetCurrentProcess(), &buffers[0]->pending_release,
+                        SYNCHRONIZE, FALSE, 0))
+                {
+                    InterlockedIncrement(&device->pending_releases);
+                }
+                else
+                {
+                    hr = WaitForRelease(buffers[0]);
+                    if (FAILED(hr)) return hr;
+                }
+            }
         }
     }
     if (sequence && (desc.SwapEffect == DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL || desc.SwapEffect == DXGI_SWAP_EFFECT_FLIP_DISCARD))
