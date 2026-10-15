@@ -126,6 +126,9 @@ static LPWSTR HTTP_build_req( LPCWSTR *list, int len );
 static DWORD HTTP_HttpQueryInfoW(http_request_t*, DWORD, LPVOID, LPDWORD, LPDWORD);
 static UINT HTTP_DecodeBase64(LPCWSTR base64, LPSTR bin);
 static DWORD drain_content(http_request_t*,BOOL);
+#ifdef __REACTOS__
+static void HTTP_clear_response_headers(http_request_t *request);
+#endif
 
 static CRITICAL_SECTION connection_pool_cs;
 static CRITICAL_SECTION_DEBUG connection_pool_debug =
@@ -5776,6 +5779,111 @@ lend:
  *    win32 error code on failure
  *
  */
+#ifdef __REACTOS__
+static void set_cached_status_line(http_request_t *request, WCHAR *line)
+{
+    WCHAR *code, *text;
+
+    if (!(code = wcschr(line, ' ')))
+        return;
+    *code++ = 0;
+    if ((text = wcschr(code, ' ')))
+        *text++ = 0;
+
+    free(request->version);
+    free(request->statusText);
+    request->version = wcsdup(line);
+    request->statusText = wcsdup(text ? text : L"");
+    request->status_code = wcstol(code, NULL, 10);
+    HTTP_ProcessHeader(request, L"Status", code, HTTP_ADDREQ_FLAG_REPLACE | HTTP_ADDREQ_FLAG_ADD);
+}
+
+static DWORD open_cached_response(http_request_t *request)
+{
+    INTERNET_CACHE_ENTRY_INFOW *info;
+    WCHAR *url, *headers, *line, *next;
+    LARGE_INTEGER file_size;
+    DWORD size = 0, res;
+    SIZE_T max_len;
+
+    if (!(url = compose_request_url(request)))
+        return ERROR_OUTOFMEMORY;
+    if (GetUrlCacheEntryInfoW(url, NULL, &size) || GetLastError() != ERROR_INSUFFICIENT_BUFFER ||
+        !(info = malloc(size)))
+    {
+        free(url);
+        return ERROR_FILE_NOT_FOUND;
+    }
+    if (!GetUrlCacheEntryInfoW(url, info, &size) || !info->lpszLocalFileName)
+    {
+        free(info);
+        free(url);
+        return ERROR_FILE_NOT_FOUND;
+    }
+
+    if (request->req_file)
+    {
+        req_file_release(request->req_file);
+        request->req_file = NULL;
+    }
+    res = create_req_file(info->lpszLocalFileName, &request->req_file);
+    if (res != ERROR_SUCCESS)
+    {
+        free(info);
+        free(url);
+        return ERROR_FILE_NOT_FOUND;
+    }
+    request->req_file->url = url;
+    request->req_file->is_committed = TRUE;
+    if (!GetFileSizeEx(request->req_file->file_handle, &file_size))
+        file_size.QuadPart = 0;
+
+    HTTP_clear_response_headers(request);
+    if (info->lpHeaderInfo)
+    {
+        max_len = (size - ((BYTE *)info->lpHeaderInfo - (BYTE *)info)) / sizeof(WCHAR);
+        headers = malloc((max_len + 1) * sizeof(WCHAR));
+        if (headers)
+        {
+            memcpy(headers, info->lpHeaderInfo, max_len * sizeof(WCHAR));
+            headers[wcsnlen((WCHAR *)info->lpHeaderInfo, max_len)] = 0;
+            for (line = headers; line && *line; line = next)
+            {
+                LPWSTR *field;
+
+                if ((next = wcschr(line, '\n')))
+                    *next++ = 0;
+                if (*line && line[lstrlenW(line) - 1] == '\r')
+                    line[lstrlenW(line) - 1] = 0;
+                if (!*line)
+                    continue;
+                if (line == headers)
+                {
+                    set_cached_status_line(request, line);
+                    continue;
+                }
+                if ((field = HTTP_InterpretHttpHeader(line)))
+                {
+                    HTTP_ProcessHeader(request, field[0], field[1], HTTP_ADDREQ_FLAG_ADD);
+                    HTTP_FreeTokens(field);
+                }
+            }
+            free(headers);
+        }
+    }
+    free(info);
+
+    EnterCriticalSection(&request->read_section);
+    reset_data_stream(request);
+    request->netconn_stream.content_length = 0;
+    request->content_pos = 0;
+    request->cache_size = file_size.QuadPart;
+    request->contentLength = file_size.QuadPart;
+    LeaveCriticalSection(&request->read_section);
+    return ERROR_SUCCESS;
+}
+
+#endif
 static DWORD HTTP_HttpSendRequestW(http_request_t *request, LPCWSTR lpszHeaders,
 	DWORD dwHeaderLength, LPVOID lpOptional, DWORD dwOptionalLength,
 	DWORD dwContentLength, BOOL bEndRequest)
@@ -5870,6 +5978,22 @@ static DWORD HTTP_HttpSendRequestW(http_request_t *request, LPCWSTR lpszHeaders,
         HTTP_HttpAddRequestHeadersW(request, lpszHeaders, dwHeaderLength, HTTP_ADDREQ_FLAG_ADD | HTTP_ADDREQ_FLAG_REPLACE);
     }
 
+#ifdef __REACTOS__
+    if (request->hdr.dwFlags & INTERNET_FLAG_FROM_CACHE)
+    {
+        res = open_cached_response(request);
+        if (request->session->appInfo->hdr.dwFlags & INTERNET_FLAG_ASYNC)
+        {
+            if (res == ERROR_SUCCESS)
+                send_request_complete(request,
+                        request->session->hdr.dwInternalFlags & INET_OPENURL ? (DWORD_PTR)request->hdr.hInternet : 1, 0);
+            else
+                send_request_complete(request, 0, res);
+        }
+        return res;
+    }
+
+#endif
     res = create_request(request, lpOptional, dwOptionalLength, dwContentLength, bEndRequest);
 
     /* TODO: send notification for P3P header */
