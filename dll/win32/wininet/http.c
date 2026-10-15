@@ -1924,8 +1924,15 @@ static WCHAR *build_proxy_path_url(http_request_t *req)
 {
     DWORD size, len;
     WCHAR *url;
+#ifdef __REACTOS__
+    const WCHAR *scheme = req->server->is_https ? L"https://" : L"http://";
+    DWORD scheme_len = lstrlenW(scheme);
+
+    len = scheme_len + lstrlenW(req->server->canon_host_port);
+#else
 
     len = lstrlenW(req->server->scheme_host_port);
+#endif
     size = len + lstrlenW(req->path) + 1;
     if(*req->path != '/')
         size++;
@@ -1933,7 +1940,12 @@ static WCHAR *build_proxy_path_url(http_request_t *req)
     if(!url)
         return NULL;
 
+#ifdef __REACTOS__
+    memcpy(url, scheme, scheme_len * sizeof(WCHAR));
+    memcpy(url + scheme_len, req->server->canon_host_port, (len - scheme_len) * sizeof(WCHAR));
+#else
     memcpy(url, req->server->scheme_host_port, len*sizeof(WCHAR));
+#endif
     if(*req->path != '/')
         url[len++] = '/';
 
