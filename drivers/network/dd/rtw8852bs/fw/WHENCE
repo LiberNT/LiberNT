@@ -1,0 +1,12 @@
+Firmware for the Realtek RTL8852B family wireless chips. Installed to
+\SystemRoot\system32\drivers\realtek\ and loaded by the rtw8852bs driver during
+chip bring-up.
+
+File: rtw8852b_fw-2.bin
+  Realtek RTL8852B WCPU firmware with its baseband, RF and transmit power
+  parameter elements, distributed by linux-firmware as rtw89/rtw8852b_fw-2.bin
+  (linux-firmware 20260319, SHA-256
+  07e6451c0009b73023da94bbfe7a5333044e504812f4cf8dcb284d4046588e3a).
+  Copyright (c) 2010, Realtek Semiconductor Corporation. Redistributable in
+  binary form, without modification, under the terms in
+  LICENCE.rtlwifi_firmware.txt (this directory).

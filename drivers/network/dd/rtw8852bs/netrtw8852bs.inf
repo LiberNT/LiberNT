@@ -1,0 +1,77 @@
+; PROJECT:     LiberNT Realtek RTL8852BS Native 802.11 Miniport
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     RTL8852BS SDIO Native Wi-Fi miniport installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = Net
+ClassGUID   = {4d36e972-e325-11ce-bfc1-08002be10318}
+Provider    = %LiberNT%
+DriverVer   = 10/15/2026,1.0.0.0
+CatalogFile = netrtw8852bs.cat
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%LiberNT% = Models,NTx86,NTamd64,NTarm64,NTRISCV64
+
+[Models.NTx86]
+%rtw.DeviceDesc% = rtw.ndi, SD\VID_024C&PID_B852&FN_1
+
+[Models.NTamd64]
+%rtw.DeviceDesc% = rtw.ndi, SD\VID_024C&PID_B852&FN_1
+
+[Models.NTarm64]
+%rtw.DeviceDesc% = rtw.ndi, SD\VID_024C&PID_B852&FN_1
+
+[Models.NTRISCV64]
+%rtw.DeviceDesc% = rtw.ndi, SD\VID_024C&PID_B852&FN_1
+
+[rtw.ndi]
+Characteristics = 0x84
+BusType         = 15
+AddReg          = rtw.reg
+CopyFiles       = rtw.CopyFiles
+
+[rtw.ndi.Services]
+AddService = rtw8852bs, 2, rtw.Service, rtw.EventLog
+
+[rtw.reg]
+HKR, ,                   *IfType,    0x00010001, 71
+HKR, ,                   *MediaType, 0x00010001, 16
+HKR, ,                   *PhysicalMediaType, 0x00010001, 9
+HKR, Ndi,               Service,    0, "rtw8852bs"
+HKR, Ndi\Interfaces,    UpperRange, 0, "ndis5"
+HKR, Ndi\Interfaces,    LowerRange, 0, "nativewifi"
+
+[rtw.CopyFiles]
+rtw8852bs.sys
+
+[rtw.Service]
+DisplayName    = %rtw.ServiceDesc%
+ServiceType    = 1
+StartType      = 3
+ErrorControl   = 1
+ServiceBinary  = %12%\rtw8852bs.sys
+LoadOrderGroup = NDIS
+
+[rtw.EventLog]
+AddReg = rtw.EventLog.Reg
+
+[rtw.EventLog.Reg]
+HKR, , EventMessageFile, 0x00020000, "%%SystemRoot%%\System32\netevent.dll"
+HKR, , TypesSupported,   0x00010001, 7
+
+[SourceDisksNames]
+1 = %DiskName%
+
+[SourceDisksFiles]
+rtw8852bs.sys = 1
+
+[Strings]
+LiberNT         = "LiberNT Team"
+rtw.DeviceDesc  = "Realtek RTL8852BS 802.11ax SDIO WiFi Adapter"
+rtw.ServiceDesc = "LiberNT Realtek RTL8852BS SDIO WiFi Driver"
+DiskName        = "LiberNT Realtek RTL8852BS SDIO WiFi Driver Installation Disk"

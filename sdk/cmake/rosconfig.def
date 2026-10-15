@@ -293,6 +293,14 @@ config ENABLE_RT2800USB
       Build the rt2800usb Native 802.11 miniport for Ralink RT2870 and RT2770
       USB adapters, with its MCU firmware.
 
+config ENABLE_RTW8852BS
+    prompt "Realtek RTL8852BS SDIO Wi-Fi driver"
+    type bool
+    default n
+    help
+      Build the rtw8852bs Native 802.11 miniport for the Realtek RTL8852BS
+      SDIO Wi-Fi chip, with its firmware.
+
 config ENABLE_ROSV
     prompt "ROSV hypervisor (VMX)"
     type bool

@@ -103,6 +103,12 @@ Used Version: rt2870.bin (linux-firmware 20260319)
 License: Ralink Technology binary redistribution license (drivers/network/dd/rt2800usb/fw/LICENCE.ralink-firmware.txt)
 URL: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git
 
+Title: Realtek RTL8852B firmware
+Path: drivers/network/dd/rtw8852bs/fw
+Used Version: rtw89/rtw8852b_fw-2.bin (linux-firmware 20260319)
+License: Realtek binary redistribution license (drivers/network/dd/rtw8852bs/fw/LICENCE.rtlwifi_firmware.txt)
+URL: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git
+
 Title: Linux PowerVR DRM driver (drm/imagination)
 Path: drivers/directx/powervr/upstream
 Used Version: Linux mainline 6addb4f38

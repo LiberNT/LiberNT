@@ -1,0 +1,12 @@
+/*
+ * PROJECT:     LiberNT Realtek RTL8852BS Native 802.11 Miniport
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     RTL8852BS Native Wi-Fi miniport version resource
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION  "LiberNT Realtek RTL8852BS SDIO WiFi Driver"
+#define REACTOS_STR_INTERNAL_NAME     "rtw8852bs"
+#define REACTOS_STR_ORIGINAL_FILENAME "rtw8852bs.sys"
+#include <reactos/version.rc>
