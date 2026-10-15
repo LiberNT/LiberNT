@@ -88,6 +88,9 @@ IInternetProtocolInfo *get_protocol_info(LPCWSTR);
 HRESULT get_protocol_handler(IUri*,CLSID*,IClassFactory**);
 IInternetProtocol *get_mime_filter(LPCWSTR);
 BOOL is_registered_protocol(LPCWSTR);
+#ifdef __REACTOS__
+BOOL is_direct_builtin_protocol(IUri*);
+#endif
 HRESULT register_namespace(IClassFactory*,REFIID,LPCWSTR,BOOL);
 HINTERNET get_internet_session(IInternetBindInfo*);
 WCHAR *get_useragent(void);
@@ -214,6 +217,12 @@ typedef struct {
     BOOL reported_result;
     BOOL reported_mime;
     DWORD pi;
+#ifdef __REACTOS__
+    BOOL redirecting;
+    BOOL url_binding;
+    BOOL terminated;
+    LONG lock_count;
+#endif
 
     DWORD bscf;
     ULONG progress;

@@ -251,6 +251,26 @@ HRESULT get_protocol_handler(IUri *uri, CLSID *clsid, IClassFactory **ret)
     return hres;
 }
 
+#ifdef __REACTOS__
+BOOL is_direct_builtin_protocol(IUri *uri)
+{
+    name_space *ns;
+    BSTR name;
+    BOOL ret;
+
+    if(FAILED(IUri_GetSchemeName(uri, &name)))
+        return FALSE;
+
+    EnterCriticalSection(&session_cs);
+    ns = find_name_space(name);
+    ret = ns && ns->urlmon;
+    LeaveCriticalSection(&session_cs);
+
+    SysFreeString(name);
+    return ret;
+}
+#endif
+
 IInternetProtocol *get_mime_filter(LPCWSTR mime)
 {
     IClassFactory *cf = NULL;
@@ -441,6 +461,9 @@ static HRESULT WINAPI InternetSession_CreateBinding(IInternetSession *iface,
     if(FAILED(hres))
         return hres;
 
+#ifdef __REACTOS__
+    protocol->url_binding = szUrl != NULL;
+#endif
     *ppOInetProt = (IInternetProtocol*)&protocol->IInternetProtocolEx_iface;
     return S_OK;
 }

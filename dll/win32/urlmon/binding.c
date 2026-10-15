@@ -74,6 +74,10 @@ typedef struct {
 
     IBindStatusCallback *callback;
     IServiceProvider *service_provider;
+#ifdef __REACTOS__
+    IInternetProtocol *service_protocol;
+    BOOL service_protocol_queried;
+#endif
 
     BindProtocol *protocol;
 
@@ -853,6 +857,10 @@ static ULONG WINAPI Binding_Release(IBinding *iface)
             IInternetProtocolEx_Release(&This->protocol->IInternetProtocolEx_iface);
         if(This->service_provider)
             IServiceProvider_Release(This->service_provider);
+#ifdef __REACTOS__
+        if(This->service_protocol)
+            IInternetProtocol_Release(This->service_protocol);
+#endif
         if(This->stgmed_buf)
             IUnknown_Release(&This->stgmed_buf->IUnknown_iface);
         if(This->stgmed_obj)
@@ -1384,6 +1392,16 @@ static HRESULT WINAPI ServiceProvider_QueryService(IServiceProvider *iface,
 
     TRACE("(%p)->(%s %s %p)\n", This, debugstr_guid(guidService), debugstr_guid(riid), ppv);
 
+#ifdef __REACTOS__
+    if(This->service_protocol_queried && IsEqualGUID(&IID_IInternetProtocol, guidService)) {
+        if(!This->service_protocol) {
+            *ppv = NULL;
+            return E_NOINTERFACE;
+        }
+        return IInternetProtocol_QueryInterface(This->service_protocol, riid, ppv);
+    }
+#endif
+
     if(This->service_provider) {
         hres = IServiceProvider_QueryService(This->service_provider, guidService,
                                              riid, ppv);
@@ -1562,6 +1580,18 @@ static HRESULT start_binding(IMoniker *mon, Binding *binding_ctx, IUri *uri, IBi
     if(FAILED(hres))
         return hres;
 
+#ifdef __REACTOS__
+    if(!binding_ctx) {
+        IInternetProtocol *service_protocol = NULL;
+
+        if(binding->service_provider
+           && SUCCEEDED(IServiceProvider_QueryService(binding->service_provider, &IID_IInternetProtocol,
+                                                      &IID_IInternetProtocol, (void**)&service_protocol)))
+            binding->service_protocol = service_protocol;
+        binding->service_protocol_queried = TRUE;
+    }
+#endif
+
     hres = IBindStatusCallback_OnStartBinding(binding->callback, 0, &binding->IBinding_iface);
     if(FAILED(hres)) {
         WARN("OnStartBinding failed: %08lx\n", hres);
@@ -1595,8 +1625,10 @@ static HRESULT start_binding(IMoniker *mon, Binding *binding_ctx, IUri *uri, IBi
                 if(SUCCEEDED(IUri_HasProperty(uri, Uri_PROPERTY_SCHEME_NAME, &has_scheme)) && !has_scheme)
                     hres = INET_E_UNKNOWN_PROTOCOL;
             }
-#endif
+            stop_binding(binding, binding->protocol->protocol ? S_OK : hres, NULL);
+#else
             stop_binding(binding, hres, NULL);
+#endif
             IBinding_Release(&binding->IBinding_iface);
 
             return hres;
