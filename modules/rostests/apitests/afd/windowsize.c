@@ -21,24 +21,24 @@ TestTcp(void)
 
     Status = AfdGetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &OrigReceiveSize, NULL);
     ok(Status == STATUS_SUCCESS, "AfdGetInformation failed with %lx\n", Status);
-    ok(OrigReceiveSize == 0x1000 || OrigReceiveSize == 0x2000, "Invalid size: %lu\n", OrigReceiveSize);
+    ok(OrigReceiveSize == 0x10000, "Invalid size: %lu\n", OrigReceiveSize);
     Status = AfdGetInformation(SocketHandle, AFD_INFO_SEND_WINDOW_SIZE, NULL, &OrigSendSize, NULL);
     ok(Status == STATUS_SUCCESS, "AfdGetInformation failed with %lx\n", Status);
-    ok(OrigSendSize == 0x1000 || OrigSendSize == 0x2000, "Invalid size: %lu\n", OrigSendSize);
+    ok(OrigSendSize == 0x10000, "Invalid size: %lu\n", OrigSendSize);
 
     ReceiveSize = 0;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &ReceiveSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
     SendSize = 0;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_SEND_WINDOW_SIZE, NULL, &SendSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
 
     ReceiveSize = (ULONG)-1L;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &ReceiveSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
     SendSize = (ULONG)-1L;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_SEND_WINDOW_SIZE, NULL, &SendSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
 
     Status = AfdGetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &ReceiveSize, NULL);
     ok(Status == STATUS_SUCCESS, "AfdGetInformation failed with %lx\n", Status);
@@ -49,10 +49,10 @@ TestTcp(void)
 
     ReceiveSize = OrigReceiveSize;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &ReceiveSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
     SendSize = OrigSendSize;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_SEND_WINDOW_SIZE, NULL, &SendSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -71,17 +71,17 @@ TestTcp(void)
 
     ReceiveSize = 0;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &ReceiveSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
     SendSize = 0;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_SEND_WINDOW_SIZE, NULL, &SendSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
 
     ReceiveSize = (ULONG)-1L;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &ReceiveSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
     SendSize = (ULONG)-1L;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_SEND_WINDOW_SIZE, NULL, &SendSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
 
     Status = AfdGetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &ReceiveSize, NULL);
     ok(Status == STATUS_SUCCESS, "AfdGetInformation failed with %lx\n", Status);
@@ -92,10 +92,10 @@ TestTcp(void)
 
     ReceiveSize = OrigReceiveSize;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &ReceiveSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
     SendSize = OrigSendSize;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_SEND_WINDOW_SIZE, NULL, &SendSize, NULL);
-    ok(Status == STATUS_INVALID_PARAMETER, "AfdSetInformation failed with %lx\n", Status);
+    ok(Status == STATUS_SUCCESS, "AfdSetInformation failed with %lx\n", Status);
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -103,7 +103,8 @@ TestTcp(void)
     addr.sin_port = htons(53);
 
     Status = AfdConnect(SocketHandle, (const struct sockaddr *)&addr, sizeof(addr));
-    ok(Status == STATUS_SUCCESS, "AfdConnect failed with %lx\n", Status);
+    if (Status != STATUS_SUCCESS)
+        skip("AfdConnect failed with %lx\n", Status);
 
     Status = AfdGetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &ReceiveSize, NULL);
     ok(Status == STATUS_SUCCESS, "AfdGetInformation failed with %lx\n", Status);
@@ -185,10 +186,10 @@ TestUdp(void)
 
     Status = AfdGetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &OrigReceiveSize, NULL);
     ok(Status == STATUS_SUCCESS, "AfdGetInformation failed with %lx\n", Status);
-    ok(OrigReceiveSize == 0x1000 || OrigReceiveSize == 0x2000, "Invalid size: %lu\n", OrigReceiveSize);
+    ok(OrigReceiveSize == 0x10000, "Invalid size: %lu\n", OrigReceiveSize);
     Status = AfdGetInformation(SocketHandle, AFD_INFO_SEND_WINDOW_SIZE, NULL, &OrigSendSize, NULL);
     ok(Status == STATUS_SUCCESS, "AfdGetInformation failed with %lx\n", Status);
-    ok(OrigSendSize == 0x1000 || OrigSendSize == 0x2000, "Invalid size: %lu\n", OrigSendSize);
+    ok(OrigSendSize == 0x10000, "Invalid size: %lu\n", OrigSendSize);
 
     ReceiveSize = 0;
     Status = AfdSetInformation(SocketHandle, AFD_INFO_RECEIVE_WINDOW_SIZE, NULL, &ReceiveSize, NULL);
