@@ -266,10 +266,12 @@ BthMiniThread(
         PsTerminateSystemThread(Status);
     }
 
+    BthConnLoadPaired(Dev);
     Dev->Ready = TRUE;
     while (!Dev->Stopping)
     {
         WDFREQUEST Request;
+        ULONG Wait;
 
         BthHciProcessRx(Dev);
         while (!Dev->Stopping && NT_SUCCESS(WdfIoQueueRetrieveNextRequest(Dev->Queue, &Request)))
@@ -277,7 +279,11 @@ BthMiniThread(
             BthRadioDeviceControl(Dev, Request);
             BthHciProcessRx(Dev);
         }
-        BthMiniWaitWork(Dev, 1000);
+        BthConnTick(Dev);
+        BthL2capTick(Dev);
+        BthRfcommTick(Dev);
+        Wait = BthComProcess(Dev);
+        BthMiniWaitWork(Dev, max(Wait, 1));
     }
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
@@ -398,6 +404,7 @@ BthMiniEvtD0Exit(
     }
     BthHciFlushCommands(Dev);
     BthMiniFlushRx(Dev);
+    BthL2capFlush(Dev);
     BthRadioFreeRemotes(Dev);
     return STATUS_SUCCESS;
 }
@@ -439,6 +446,11 @@ BthMiniEvtDeviceAdd(
     InitializeListHead(&Dev->CommandsPending);
     InitializeListHead(&Dev->CommandsSent);
     InitializeListHead(&Dev->Remotes);
+    InitializeListHead(&Dev->Channels);
+    InitializeListHead(&Dev->Sessions);
+    InitializeListHead(&Dev->ComPorts);
+    InitializeListHead(&Dev->AclQueue);
+    Dev->NextCid = 0x0040;
 
     WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&QueueConfig, WdfIoQueueDispatchManual);
     QueueConfig.PowerManaged = WdfFalse;
@@ -462,7 +474,12 @@ DriverEntry(
     _In_ PUNICODE_STRING RegistryPath)
 {
     WDF_DRIVER_CONFIG Config;
+    WDFDRIVER Driver;
+    NTSTATUS Status;
 
     WDF_DRIVER_CONFIG_INIT(&Config, BthMiniEvtDeviceAdd);
-    return WdfDriverCreate(DriverObject, RegistryPath, WDF_NO_OBJECT_ATTRIBUTES, &Config, WDF_NO_HANDLE);
+    Status = WdfDriverCreate(DriverObject, RegistryPath, WDF_NO_OBJECT_ATTRIBUTES, &Config, &Driver);
+    if (NT_SUCCESS(Status) && !NT_SUCCESS(BthAuthCreateControlDevice(Driver)))
+        DPRINT1("BTHMINI: pairing control device not created\n");
+    return Status;
 }

@@ -10,17 +10,6 @@
 #define NDEBUG
 #include <debug.h>
 
-#define L2CAP_SIGNALING_CID             0x0001
-#define L2CAP_COMMAND_REJECT            0x01
-#define L2CAP_CONNECTION_REQUEST        0x02
-#define L2CAP_CONNECTION_RESPONSE       0x03
-#define L2CAP_DISCONNECTION_REQUEST     0x06
-#define L2CAP_ECHO_REQUEST              0x08
-#define L2CAP_ECHO_RESPONSE             0x09
-#define L2CAP_INFORMATION_REQUEST       0x0A
-#define L2CAP_INFORMATION_RESPONSE      0x0B
-
-static
 BTH_ADDR
 BthReadAddress(
     _In_reads_(6) const UCHAR *Data)
@@ -33,7 +22,6 @@ BthReadAddress(
     return Address;
 }
 
-static
 VOID
 BthWriteAddress(
     _Out_writes_(6) PUCHAR Data,
@@ -45,7 +33,6 @@ BthWriteAddress(
         Data[Index] = (UCHAR)(Address >> (Index * 8));
 }
 
-static
 PBTHMINI_REMOTE
 BthRadioFindRemote(
     _In_ PBTHMINI_DEVICE Dev,
@@ -63,7 +50,6 @@ BthRadioFindRemote(
     return NULL;
 }
 
-static
 PBTHMINI_REMOTE
 BthRadioFindHandle(
     _In_ PBTHMINI_DEVICE Dev,
@@ -81,7 +67,6 @@ BthRadioFindHandle(
     return NULL;
 }
 
-static
 PBTHMINI_REMOTE
 BthRadioGetRemote(
     _In_ PBTHMINI_DEVICE Dev,
@@ -105,6 +90,7 @@ VOID
 BthRadioFreeRemotes(
     _In_ PBTHMINI_DEVICE Dev)
 {
+    BthConnCancelAll(Dev);
     while (!IsListEmpty(&Dev->Remotes))
         ExFreePoolWithTag(CONTAINING_RECORD(RemoveHeadList(&Dev->Remotes), BTHMINI_REMOTE, Link), BTHMINI_TAG);
     Dev->RemoteCount = 0;
@@ -126,7 +112,6 @@ BthRadioFillInfo(
     RtlCopyMemory(Info->name, Remote->Name, sizeof(Info->name));
 }
 
-static
 VOID
 BthRadioReportInRange(
     _In_ PBTHMINI_DEVICE Dev,
@@ -254,153 +239,6 @@ BthRadioInquiryResult(
         BthRadioReportInRange(Dev, Remote, Previous);
 }
 
-static
-NTSTATUS
-BthAclSend(
-    _In_ PBTHMINI_DEVICE Dev,
-    _In_ USHORT Handle,
-    _In_reads_bytes_(Length) const UCHAR *Data,
-    _In_ USHORT Length)
-{
-    UCHAR Packet[4 + 64];
-
-    if (Length > sizeof(Packet) - 4 || Length > Dev->AclMtu)
-        return STATUS_INVALID_BUFFER_SIZE;
-    if (!Dev->AclCredits)
-        return STATUS_DEVICE_BUSY;
-    Packet[0] = (UCHAR)Handle;
-    Packet[1] = (UCHAR)(((Handle >> 8) & 0x0F) | (0x02 << 4));
-    Packet[2] = (UCHAR)Length;
-    Packet[3] = (UCHAR)(Length >> 8);
-    RtlCopyMemory(Packet + 4, Data, Length);
-    Dev->AclCredits--;
-    return BthMiniSendPacket(Dev, HciPacketAclData, Packet, 4 + Length);
-}
-
-static
-VOID
-BthL2capSignal(
-    _In_ PBTHMINI_DEVICE Dev,
-    _In_ USHORT Handle,
-    _In_ UCHAR Code,
-    _In_ UCHAR Identifier,
-    _In_reads_bytes_(Length) const UCHAR *Data,
-    _In_ USHORT Length)
-{
-    UCHAR Frame[4 + 4 + 44];
-
-    if (Length > sizeof(Frame) - 8)
-        return;
-    Frame[0] = (UCHAR)(4 + Length);
-    Frame[1] = (UCHAR)((4 + Length) >> 8);
-    Frame[2] = (UCHAR)L2CAP_SIGNALING_CID;
-    Frame[3] = 0;
-    Frame[4] = Code;
-    Frame[5] = Identifier;
-    Frame[6] = (UCHAR)Length;
-    Frame[7] = (UCHAR)(Length >> 8);
-    RtlCopyMemory(Frame + 8, Data, Length);
-    if (!NT_SUCCESS(BthAclSend(Dev, Handle, Frame, 8 + Length)))
-        DPRINT1("BTHMINI: L2CAP signal 0x%02x to handle 0x%03x not sent\n", Code, Handle);
-}
-
-static
-VOID
-BthL2capSignaling(
-    _In_ PBTHMINI_DEVICE Dev,
-    _In_ USHORT Handle,
-    _In_reads_bytes_(Length) const UCHAR *Data,
-    _In_ ULONG Length)
-{
-    while (Length >= 4)
-    {
-        UCHAR Code = Data[0], Identifier = Data[1];
-        USHORT CommandLength = (USHORT)(Data[2] | (Data[3] << 8));
-        const UCHAR *Command = Data + 4;
-        UCHAR Response[44];
-
-        if (4 + (ULONG)CommandLength > Length)
-            return;
-        switch (Code)
-        {
-            case L2CAP_CONNECTION_REQUEST:
-                if (CommandLength < 4)
-                    break;
-                RtlZeroMemory(Response, 8);
-                Response[2] = Command[2];
-                Response[3] = Command[3];
-                Response[4] = 0x02;
-                BthL2capSignal(Dev, Handle, L2CAP_CONNECTION_RESPONSE, Identifier, Response, 8);
-                break;
-
-            case L2CAP_ECHO_REQUEST:
-                BthL2capSignal(Dev, Handle, L2CAP_ECHO_RESPONSE, Identifier, Command,
-                               (USHORT)min(CommandLength, sizeof(Response)));
-                break;
-
-            case L2CAP_INFORMATION_REQUEST:
-                if (CommandLength < 2)
-                    break;
-                Response[0] = Command[0];
-                Response[1] = Command[1];
-                Response[2] = 0x01;
-                Response[3] = 0x00;
-                BthL2capSignal(Dev, Handle, L2CAP_INFORMATION_RESPONSE, Identifier, Response, 4);
-                break;
-
-            case L2CAP_DISCONNECTION_REQUEST:
-                if (CommandLength < 4)
-                    break;
-                Response[0] = 0x02;
-                Response[1] = 0x00;
-                Response[2] = Command[0];
-                Response[3] = Command[1];
-                Response[4] = Command[2];
-                Response[5] = Command[3];
-                BthL2capSignal(Dev, Handle, L2CAP_COMMAND_REJECT, Identifier, Response, 6);
-                break;
-
-            case L2CAP_COMMAND_REJECT:
-            case L2CAP_CONNECTION_RESPONSE:
-            case L2CAP_ECHO_RESPONSE:
-            case L2CAP_INFORMATION_RESPONSE:
-                break;
-
-            default:
-                Response[0] = 0x00;
-                Response[1] = 0x00;
-                BthL2capSignal(Dev, Handle, L2CAP_COMMAND_REJECT, Identifier, Response, 2);
-                break;
-        }
-        Data += 4 + CommandLength;
-        Length -= 4 + CommandLength;
-    }
-}
-
-VOID
-BthAclReceive(
-    _In_ PBTHMINI_DEVICE Dev,
-    _In_reads_bytes_(Length) const UCHAR *Data,
-    _In_ ULONG Length)
-{
-    USHORT Handle, AclLength, L2capLength, Cid;
-    UCHAR Boundary;
-
-    if (Length < 8)
-        return;
-    Handle = (USHORT)((Data[0] | (Data[1] << 8)) & 0x0FFF);
-    Boundary = (Data[1] >> 4) & 0x03;
-    AclLength = (USHORT)(Data[2] | (Data[3] << 8));
-    if (Boundary == 0x01 || 4 + (ULONG)AclLength > Length || AclLength < 4)
-        return;
-    L2capLength = (USHORT)(Data[4] | (Data[5] << 8));
-    Cid = (USHORT)(Data[6] | (Data[7] << 8));
-    if (4 + (ULONG)L2capLength > AclLength || !BthRadioFindHandle(Dev, Handle))
-        return;
-    if (Cid == L2CAP_SIGNALING_CID)
-        BthL2capSignaling(Dev, Handle, Data + 8, L2capLength);
-}
-
 VOID
 BthRadioEvent(
     _In_ PBTHMINI_DEVICE Dev,
@@ -411,6 +249,9 @@ BthRadioEvent(
     ULONG ParameterLength = Length - 2;
     PBTHMINI_REMOTE Remote;
     ULONG Index, Previous;
+
+    if (BthConnEvent(Dev, Event, Length) || BthL2capEvent(Dev, Event, Length))
+        return;
 
     switch (Event[0])
     {
@@ -452,68 +293,6 @@ BthRadioEvent(
             BthRadioContinueDiscovery(Dev);
             break;
 
-        case HCI_EV_CONNECTION_REQUEST:
-            if (ParameterLength >= 10)
-            {
-                UCHAR Reply[7];
-
-                RtlCopyMemory(Reply, Parameters, 6);
-                if (Parameters[9] == 0x01)
-                {
-                    Reply[6] = 0x01;
-                    BthHciQueueCommand(Dev, HCI_ACCEPT_CONNECTION_REQUEST, Reply, 7);
-                }
-                else
-                {
-                    Reply[6] = 0x0D;
-                    BthHciQueueCommand(Dev, HCI_REJECT_CONNECTION_REQUEST, Reply, 7);
-                }
-            }
-            break;
-
-        case HCI_EV_CONNECTION_COMPLETE:
-            if (ParameterLength >= 11 && !Parameters[0] && Parameters[9] == 0x01)
-            {
-                Remote = BthRadioGetRemote(Dev, BthReadAddress(Parameters + 3));
-                if (Remote)
-                {
-                    Previous = Remote->Flags;
-                    Remote->Handle = (USHORT)((Parameters[1] | (Parameters[2] << 8)) & 0x0FFF);
-                    Remote->Flags |= BDIF_CONNECTED;
-                    BthRadioReportInRange(Dev, Remote, Previous);
-                    DPRINT1("BTHMINI: connected to %012I64x, handle 0x%03x\n", Remote->Address, Remote->Handle);
-                }
-            }
-            break;
-
-        case HCI_EV_DISCONNECTION_COMPLETE:
-            if (ParameterLength >= 4 && !Parameters[0])
-            {
-                Remote = BthRadioFindHandle(Dev, (USHORT)((Parameters[1] | (Parameters[2] << 8)) & 0x0FFF));
-                if (Remote)
-                {
-                    Previous = Remote->Flags;
-                    Remote->Flags &= ~BDIF_CONNECTED;
-                    BthRadioReportInRange(Dev, Remote, Previous);
-                    DPRINT1("BTHMINI: disconnected from %012I64x, reason 0x%02x\n", Remote->Address, Parameters[3]);
-                }
-            }
-            break;
-
-        case HCI_EV_NUMBER_OF_COMPLETED:
-            for (Index = 0; ParameterLength >= 1 && Index < Parameters[0] && 1 + (Index + 1) * 4 <= ParameterLength; Index++)
-            {
-                const UCHAR *Entry = Parameters + 1 + Index * 4;
-
-                Dev->AclCredits = (USHORT)min(Dev->AclPackets, Dev->AclCredits + (Entry[2] | (Entry[3] << 8)));
-            }
-            break;
-
-        case HCI_EV_LINK_KEY_REQUEST:
-            if (ParameterLength >= 6)
-                BthHciQueueCommand(Dev, HCI_LINK_KEY_REQUEST_NEG_REPLY, Parameters, 6);
-            break;
-
         default:
             break;
     }
@@ -524,6 +303,7 @@ BthRadioCommandFailed(
     _In_ PBTHMINI_DEVICE Dev,
     _In_ USHORT Opcode)
 {
+    BthConnCommandFailed(Dev, Opcode);
     if (Opcode == HCI_INQUIRY)
     {
         Dev->Inquiring = FALSE;
@@ -714,6 +494,16 @@ BthRadioDeviceControl(
 
         case IOCTL_WINEBTH_RADIO_STOP_DISCOVERY:
             Status = BthRadioStopDiscovery(Dev);
+            break;
+
+        case IOCTL_WINEBTH_RADIO_START_AUTH:
+            Status = BthConnStartAuthentication(Dev, Request);
+            if (Status == STATUS_PENDING)
+                return;
+            break;
+
+        case IOCTL_WINEBTH_RADIO_REMOVE_DEVICE:
+            Status = BthConnRemoveDevice(Dev, Request);
             break;
 
         default:
