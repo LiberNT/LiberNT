@@ -7839,8 +7839,8 @@ XHCI_HandleTransferEvent(
 
     if (!AllowCallbacks)
     {
-        DPRINT1("usbxhci: DEFERRED completion slot=%u ep=%u code=%lu bytes=%lu\n",
-                SlotId, EndpointId, CompletionCode, Transfer->BytesTransferred);
+        DPRINT("usbxhci: DEFERRED completion slot=%u ep=%u code=%lu bytes=%lu\n",
+               SlotId, EndpointId, CompletionCode, Transfer->BytesTransferred);
         XHCI_QueueDeferredTransferCompletion(Extension, Transfer);
         return;
     }

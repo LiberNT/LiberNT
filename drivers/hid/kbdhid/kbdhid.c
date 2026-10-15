@@ -124,7 +124,7 @@ KbdHid_ReadCompletion(
         DeviceExtension->StopReadReport)
     {
         /* failed to read or should be stopped*/
-        DPRINT1("[KBDHID] ReadCompletion terminating read Status %x\n", Irp->IoStatus.Status);
+        DPRINT("[KBDHID] ReadCompletion terminating read Status %x\n", Irp->IoStatus.Status);
 
         /* report no longer active */
         DeviceExtension->ReadReportActive = FALSE;

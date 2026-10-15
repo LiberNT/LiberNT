@@ -2588,7 +2588,7 @@ VOID AhciProcessSrb(__in PAHCI_PORT_EXTENSION PortExtension, __in PSCSI_REQUEST_
         else if ((SrbExtension->CommandReg == IDE_COMMAND_WRITE_FPDMA_QUEUED) &&
                  !PortExtension->DeviceParams.NcqWriteLogged)
         {
-            AhciDebugPrint("\tPort %u: first WRITE FPDMA QUEUED command, slot %u\n",
+            DPRINT("\tPort %u: first WRITE FPDMA QUEUED command, slot %u\n",
                            PortExtension->PortNumber,
                            SlotIndex);
             PortExtension->DeviceParams.NcqWriteLogged = TRUE;

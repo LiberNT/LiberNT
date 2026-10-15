@@ -357,7 +357,7 @@ MouHid_ReadCompletion(
         DeviceExtension->StopReadReport)
     {
         /* failed to read or should be stopped*/
-        DPRINT1("[MOUHID] ReadCompletion terminating read Status %x\n", Irp->IoStatus.Status);
+        DPRINT("[MOUHID] ReadCompletion terminating read Status %x\n", Irp->IoStatus.Status);
 
         /* report no longer active */
         DeviceExtension->ReadReportActive = FALSE;

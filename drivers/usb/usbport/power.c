@@ -132,7 +132,7 @@ USBPORT_SuspendController(IN PDEVICE_OBJECT FdoDevice)
     PUSBPORT_DEVICE_EXTENSION  FdoExtension;
     PUSBPORT_REGISTRATION_PACKET Packet;
 
-    DPRINT1("USBPORT_SuspendController \n");
+    DPRINT("USBPORT_SuspendController \n");
 
     FdoExtension = FdoDevice->DeviceExtension;
     Packet = &FdoExtension->MiniPortInterface->Packet;
@@ -169,7 +169,7 @@ USBPORT_ResumeController(IN PDEVICE_OBJECT FdoDevice)
     KIRQL OldIrql;
     MPSTATUS MpStatus;
 
-    DPRINT1("USBPORT_ResumeController: ... \n");
+    DPRINT("USBPORT_ResumeController: ... \n");
 
     FdoExtension = FdoDevice->DeviceExtension;
     Packet = &FdoExtension->MiniPortInterface->Packet;
@@ -266,9 +266,9 @@ USBPORT_PdoDevicePowerState(IN PDEVICE_OBJECT PdoDevice,
 
     State = IoStack->Parameters.Power.State;
 
-    DPRINT1("USBPORT_PdoDevicePowerState: Irp - %p, State - %x\n",
-            Irp,
-            State.DeviceState);
+    DPRINT("USBPORT_PdoDevicePowerState: Irp - %p, State - %x\n",
+           Irp,
+           State.DeviceState);
 
     if (State.DeviceState == PowerDeviceD0)
     {
@@ -288,8 +288,8 @@ USBPORT_PdoDevicePowerState(IN PDEVICE_OBJECT PdoDevice,
         }
         else
         {
-            DPRINT1("USBPORT_PdoDevicePowerState: FdoExtension->Flags - %lx\n",
-                    FdoExtension->Flags);
+            DPRINT("USBPORT_PdoDevicePowerState: FdoExtension->Flags - %lx\n",
+                   FdoExtension->Flags);
 
             InterlockedIncrement(&FdoExtension->SetPowerLockCounter);
 
@@ -564,8 +564,8 @@ USBPORT_SystemPowerState(IN PDEVICE_OBJECT FdoDevice,
     IoStack = IoGetCurrentIrpStackLocation(Irp);
     State = IoStack->Parameters.Power.State;
 
-    DPRINT1("USBPORT_SystemPowerState: SystemState=%x\n",
-            State.SystemState);
+    DPRINT("USBPORT_SystemPowerState: SystemState=%x\n",
+           State.SystemState);
 
     switch (State.SystemState)
     {
