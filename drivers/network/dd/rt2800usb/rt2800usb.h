@@ -295,6 +295,7 @@
 #define DOT11_SUBTYPE_DISASSOC          0xa0
 #define DOT11_SUBTYPE_AUTH              0xb0
 #define DOT11_SUBTYPE_DEAUTH            0xc0
+#define DOT11_SUBTYPE_ACTION            0xd0
 #define DOT11_FC1_TODS                  0x01
 #define DOT11_FC1_FROMDS                0x02
 #define DOT11_FC1_PROTECTED             0x40
@@ -305,6 +306,7 @@
 #define DOT11_IE_RATES                  1
 #define DOT11_IE_DS_PARAMS              3
 #define DOT11_IE_RSN                    48
+#define DOT11_IE_TIMEOUT_INTERVAL       56
 #define DOT11_IE_EXT_RATES              50
 #define DOT11_IE_VENDOR                 221
 
@@ -437,6 +439,23 @@ struct _RT_ADAPTER
     UCHAR SupportedRates[16];
     ULONG SupportedRateCount;
     BOOLEAN PairwiseKeyInstalled;
+    BOOLEAN PmfActive;
+    BOOLEAN SoftwareCrypto;
+    BOOLEAN MgmtKeyValid;
+    ULONGLONG DataRxPn;
+    BOOLEAN GroupKeyValid[4];
+    UCHAR GroupKey[4][16];
+    ULONGLONG GroupRxPn[4];
+    UCHAR MgmtTk[16];
+    ULONGLONG MgmtTxPn;
+    ULONGLONG MgmtRxPn;
+    BOOLEAN SaQueryPending;
+    USHORT SaQueryId;
+    ULONGLONG SaQueryDeadline;
+    BOOLEAN IgtkValid;
+    USHORT IgtkKeyId;
+    UCHAR Igtk[16];
+    ULONGLONG IgtkRxIpn;
 
     NDIS_HANDLE RxNblPool;
     RT_URB_CONTEXT Rx[RT_RX_URBS];
@@ -491,7 +510,7 @@ NTSTATUS RtInstallKey(_In_ PRT_ADAPTER Adapter, _In_ BOOLEAN Pairwise, _In_ ULON
 VOID RtRemoveKeys(_In_ PRT_ADAPTER Adapter);
 LONG RtRssiFromRxwi(_In_ PRT_ADAPTER Adapter, _In_ ULONG Rxwi2, _In_ ULONG Channel);
 
-VOID RtMlmeReceive(_In_ PRT_ADAPTER Adapter, _In_reads_bytes_(Length) const UCHAR* Frame, _In_ ULONG Length, _In_ LONG Rssi);
+VOID RtMlmeReceive(_In_ PRT_ADAPTER Adapter, _In_reads_bytes_(Length) const UCHAR* Frame, _In_ ULONG Length, _In_ LONG Rssi, _In_ BOOLEAN HwDecrypted);
 KSTART_ROUTINE RtWorkerThread;
 VOID RtIndicateLinkState(_In_ PRT_ADAPTER Adapter, _In_ BOOLEAN Connected);
 VOID RtIndicateDot11Status(_In_ PRT_ADAPTER Adapter, _In_ NDIS_STATUS StatusCode, _In_reads_bytes_opt_(BufferSize) PVOID Buffer, _In_ ULONG BufferSize);

@@ -19,8 +19,11 @@ list(APPEND SOURCE
     oid.c
     rt2800usb.h)
 
+include_directories(${REACTOS_SOURCE_DIR}/sdk/lib/drivers/rsna_supplicant)
+
 add_library(rt2800usb MODULE ${SOURCE} rt2800usb.rc)
 set_module_type(rt2800usb kernelmodedriver)
+target_link_libraries(rt2800usb rsna_supplicant)
 add_importlibs(rt2800usb ndis ntoskrnl hal usbd)
 add_cd_file(TARGET rt2800usb DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_driver_inf(rt2800usb netrt2800usb.inf)

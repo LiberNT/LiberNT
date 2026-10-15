@@ -6,6 +6,7 @@
  */
 
 #include "rt2800usb.h"
+#include <rsna_ccmp.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -365,6 +366,97 @@ RtFrameHeaderLength(
 }
 
 static
+BOOLEAN
+RtSoftwareDecrypt(
+    _In_ PRT_ADAPTER Adapter,
+    _Inout_updates_bytes_(*Length) PUCHAR Frame,
+    _Inout_ PULONG Length)
+{
+    ULONG HeaderLength = RtFrameHeaderLength(Frame, *Length);
+    PUCHAR Body = Frame + HeaderLength;
+    BOOLEAN Group = (Frame[4] & 0x01) != 0;
+    ULONGLONG Pn = 0;
+    UCHAR KeyId, Tk[16];
+    BOOLEAN Valid;
+
+    if (*Length < HeaderLength + RSNA_CCMP_HDR_LEN + RSNA_CCMP_MIC_LEN)
+        return FALSE;
+    KeyId = Body[3] >> 6;
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    Valid = Adapter->SoftwareCrypto && (Group ? Adapter->GroupKeyValid[KeyId] : Adapter->MgmtKeyValid);
+    if (Valid)
+        RtlCopyMemory(Tk, Group ? Adapter->GroupKey[KeyId] : Adapter->MgmtTk, sizeof(Tk));
+    NdisReleaseSpinLock(&Adapter->Lock);
+    if (!Valid)
+        return FALSE;
+
+    Valid = RsnaCcmpDecrypt(Tk, Frame, HeaderLength, Body, *Length - HeaderLength, Body, &Pn) == 0;
+    RtlSecureZeroMemory(Tk, sizeof(Tk));
+    if (!Valid)
+        return FALSE;
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    if (Group)
+    {
+        Valid = Pn > Adapter->GroupRxPn[KeyId];
+        if (Valid)
+            Adapter->GroupRxPn[KeyId] = Pn;
+    }
+    else
+    {
+        Valid = Pn > Adapter->DataRxPn;
+        if (Valid)
+            Adapter->DataRxPn = Pn;
+    }
+    NdisReleaseSpinLock(&Adapter->Lock);
+    if (!Valid)
+        return FALSE;
+
+    Frame[1] &= ~DOT11_FC1_PROTECTED;
+    *Length -= RSNA_CCMP_HDR_LEN + RSNA_CCMP_MIC_LEN;
+    return TRUE;
+}
+
+static
+BOOLEAN
+RtSoftwareEncrypt(
+    _In_ PRT_ADAPTER Adapter,
+    _Inout_updates_bytes_(*Length + RSNA_CCMP_HDR_LEN + RSNA_CCMP_MIC_LEN) PUCHAR Frame,
+    _Inout_ PULONG Length)
+{
+    ULONG HeaderLength, BodyLength;
+    ULONGLONG Pn = 0;
+    UCHAR Tk[16];
+    BOOLEAN Valid;
+
+    if ((Frame[0] & DOT11_FC0_TYPE_MASK) != DOT11_FC0_TYPE_DATA || (Frame[4] & 0x01))
+        return FALSE;
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    Valid = Adapter->SoftwareCrypto && Adapter->MgmtKeyValid;
+    if (Valid)
+    {
+        Pn = ++Adapter->MgmtTxPn;
+        RtlCopyMemory(Tk, Adapter->MgmtTk, sizeof(Tk));
+    }
+    NdisReleaseSpinLock(&Adapter->Lock);
+    if (!Valid)
+        return FALSE;
+
+    HeaderLength = RtFrameHeaderLength(Frame, *Length);
+    BodyLength = *Length - HeaderLength;
+    RtlMoveMemory(Frame + HeaderLength + RSNA_CCMP_HDR_LEN, Frame + HeaderLength, BodyLength);
+    Frame[1] |= DOT11_FC1_PROTECTED;
+    RsnaCcmpEncrypt(Tk, Frame, HeaderLength, Pn, 0,
+                    Frame + HeaderLength + RSNA_CCMP_HDR_LEN, BodyLength,
+                    Frame + HeaderLength);
+    RtlSecureZeroMemory(Tk, sizeof(Tk));
+    *Length += RSNA_CCMP_HDR_LEN + RSNA_CCMP_MIC_LEN;
+    return TRUE;
+}
+
+static
 VOID
 RtProcessReceiveBuffer(
     _In_ PRT_ADAPTER Adapter,
@@ -411,7 +503,21 @@ RtProcessReceiveBuffer(
 
                 if ((Frame[0] & DOT11_FC0_TYPE_MASK) == DOT11_FC0_TYPE_MGMT)
                 {
-                    RtMlmeReceive(Adapter, Frame, MpduLength, Rssi);
+                    RtMlmeReceive(Adapter, Frame, MpduLength, Rssi,
+                                  (Rxd & RT_RXD_DECRYPTED) && !(Rxd & RT_RXD_CIPHER_ERROR_MASK));
+                }
+                else if ((Frame[0] & DOT11_FC0_TYPE_MASK) == DOT11_FC0_TYPE_DATA &&
+                         (Frame[1] & DOT11_FC1_PROTECTED) &&
+                         Adapter->SoftwareCrypto)
+                {
+                    if (RtSoftwareDecrypt(Adapter, Frame, &MpduLength))
+                    {
+                        RtReceiveData(Adapter,
+                                      Frame,
+                                      MpduLength,
+                                      Rssi,
+                                      ((Rxwi1 >> RT_RXWI_W1_PHYMODE_SHIFT) << 8) | ((Rxwi1 >> RT_RXWI_W1_MCS_SHIFT) & 0x7f));
+                    }
                 }
                 else if ((Frame[0] & DOT11_FC0_TYPE_MASK) == DOT11_FC0_TYPE_DATA &&
                          !(Rxd & RT_RXD_CIPHER_ERROR_MASK) &&
@@ -636,6 +742,8 @@ RtSubmitTx(
               (Frame[0] & DOT11_FC0_TYPE_MASK) == DOT11_FC0_TYPE_DATA &&
               Unicast;
     Wcid = Unicast && Adapter->LinkState == RtLinkAssociated ? RT_AP_WCID : 0xff;
+    if (Frame[1] & DOT11_FC1_PROTECTED)
+        Wcid = 0xff;
 
     RtTransmitRate(Adapter, Management, &PhyMode, &Mcs);
 
@@ -713,6 +821,9 @@ RtSendNetBuffer(
 
     if (Data != Storage)
         RtlCopyMemory(Storage, Data, Length);
+
+    if (!Exempt)
+        RtSoftwareEncrypt(Adapter, Storage, &Length);
 
     RtSubmitTx(Adapter, Tx, Length, FALSE, Exempt, Nbl);
     return STATUS_PENDING;

@@ -471,11 +471,52 @@ RtSetDefaultKey(
     if (Value->bDelete)
         return NDIS_STATUS_SUCCESS;
 
+    if (Value->AlgorithmId == DOT11_CIPHER_ALGO_BIP)
+    {
+        PDOT11_KEY_ALGO_BIP Bip = (PDOT11_KEY_ALGO_BIP)Value->ucKey;
+        ULONG i;
+
+        if ((Value->uKeyIndex != 4 && Value->uKeyIndex != 5) ||
+            Value->usKeyLength < FIELD_OFFSET(DOT11_KEY_ALGO_BIP, ucBIPKey) + 16 ||
+            Bip->ulBIPKeyLength != 16)
+        {
+            return NDIS_STATUS_INVALID_DATA;
+        }
+
+        NdisAcquireSpinLock(&Adapter->Lock);
+        RtlCopyMemory(Adapter->Igtk, Bip->ucBIPKey, 16);
+        Adapter->IgtkKeyId = (USHORT)Value->uKeyIndex;
+        Adapter->IgtkRxIpn = 0;
+        for (i = 0; i < 6; i++)
+            Adapter->IgtkRxIpn |= (ULONGLONG)Bip->ucIPN[i] << (8 * i);
+        Adapter->IgtkValid = TRUE;
+        NdisReleaseSpinLock(&Adapter->Lock);
+        DPRINT1("RT2800USB: IGTK %lu installed\n", Value->uKeyIndex);
+        return NDIS_STATUS_SUCCESS;
+    }
+
     Cipher = RtCipherFromAlgorithm(Value->AlgorithmId, Value->usKeyLength);
     if (Cipher == RT_CIPHER_NONE ||
         !RtDecodeKey(Value->AlgorithmId, Value->ucKey, Value->usKeyLength, Key, &KeyLength))
     {
         return NDIS_STATUS_NOT_SUPPORTED;
+    }
+
+    if (Adapter->SoftwareCrypto)
+    {
+        if (Cipher != RT_CIPHER_AES || KeyLength != 16 || Value->uKeyIndex >= 4)
+        {
+            RtlSecureZeroMemory(Key, sizeof(Key));
+            return NDIS_STATUS_NOT_SUPPORTED;
+        }
+        NdisAcquireSpinLock(&Adapter->Lock);
+        RtlCopyMemory(Adapter->GroupKey[Value->uKeyIndex], Key, 16);
+        Adapter->GroupRxPn[Value->uKeyIndex] = 0;
+        Adapter->GroupKeyValid[Value->uKeyIndex] = TRUE;
+        NdisReleaseSpinLock(&Adapter->Lock);
+        RtlSecureZeroMemory(Key, sizeof(Key));
+        DPRINT1("RT2800USB: software group key %lu installed\n", Value->uKeyIndex);
+        return NDIS_STATUS_SUCCESS;
     }
 
     Status = RtInstallKey(Adapter, FALSE, Value->uKeyIndex, Cipher, Key, KeyLength, NULL);
@@ -521,7 +562,20 @@ RtSetKeyMappingKey(
         return NDIS_STATUS_NOT_SUPPORTED;
     }
 
-    Status = RtInstallKey(Adapter, TRUE, 0, Cipher, Key, KeyLength, Value->PeerMacAddr);
+    if (Adapter->SoftwareCrypto)
+        Status = (Cipher == RT_CIPHER_AES && KeyLength == 16) ? STATUS_SUCCESS : STATUS_NOT_SUPPORTED;
+    else
+        Status = RtInstallKey(Adapter, TRUE, 0, Cipher, Key, KeyLength, Value->PeerMacAddr);
+    if (NT_SUCCESS(Status) && Cipher == RT_CIPHER_AES && KeyLength == 16)
+    {
+        NdisAcquireSpinLock(&Adapter->Lock);
+        RtlCopyMemory(Adapter->MgmtTk, Key, 16);
+        Adapter->MgmtTxPn = 0;
+        Adapter->MgmtRxPn = 0;
+        Adapter->DataRxPn = 0;
+        Adapter->MgmtKeyValid = TRUE;
+        NdisReleaseSpinLock(&Adapter->Lock);
+    }
     RtlSecureZeroMemory(Key, sizeof(Key));
     DPRINT1("RT2800USB: pairwise key cipher %lu -> 0x%08lx\n", Cipher, Status);
     return NT_SUCCESS(Status) ? NDIS_STATUS_SUCCESS : NDIS_STATUS_FAILURE;

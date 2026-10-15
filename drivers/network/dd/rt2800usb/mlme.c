@@ -6,12 +6,21 @@
  */
 
 #include "rt2800usb.h"
+#include <rsna_ccmp.h>
 
 #define NDEBUG
 #include <debug.h>
 
 #define RT_RX_CONTEXT_TAG       'X82R'
 #define RT_BSS_EXPIRY_100NS     (60ULL * 10000000ULL)
+#define RT_RSN_CAP_MFPC         0x0080
+#define RT_ACTION_SA_QUERY      8
+#define RT_SA_QUERY_REQUEST     0
+#define RT_SA_QUERY_RESPONSE    1
+#define RT_STATUS_REFUSED_TEMPORARILY 30
+#define RT_TIMEOUT_COMEBACK     3
+#define RT_PROTECTED_MGMT_MAX   512
+#define RT_SA_QUERY_TIMEOUT_100NS (1000ULL * 10000ULL)
 
 typedef struct _RT_RX_PACKET
 {
@@ -101,6 +110,191 @@ RtFindIe(
 }
 
 static
+USHORT
+RtRsnCapabilities(
+    _In_ PRT_BSS Bss)
+{
+    const UCHAR* Rsn = RtFindIe(Bss->Ies, Bss->IeLength, DOT11_IE_RSN);
+    ULONG Length, Offset, Count;
+
+    if (!Rsn)
+        return 0;
+
+    Length = Rsn[1];
+    Rsn += 2;
+    Offset = 2 + 4;
+    if (Offset + 2 > Length)
+        return 0;
+    Count = Rsn[Offset] | (Rsn[Offset + 1] << 8);
+    Offset += 2 + Count * 4;
+    if (Offset + 2 > Length)
+        return 0;
+    Count = Rsn[Offset] | (Rsn[Offset + 1] << 8);
+    Offset += 2 + Count * 4;
+    if (Offset + 2 > Length)
+        return 0;
+    return (USHORT)(Rsn[Offset] | (Rsn[Offset + 1] << 8));
+}
+
+static
+ULONG
+RtBuildHeader(
+    _In_ PRT_ADAPTER Adapter,
+    _Out_writes_bytes_(DOT11_HEADER_LENGTH) PUCHAR Frame,
+    _In_ UCHAR Subtype,
+    _In_reads_bytes_(RT_ADDRESS_LENGTH) const UCHAR* Destination,
+    _In_reads_bytes_(RT_ADDRESS_LENGTH) const UCHAR* Bssid);
+
+static
+NTSTATUS
+RtSendManagement(
+    _In_ PRT_ADAPTER Adapter,
+    _In_reads_bytes_(Length) const UCHAR* Frame,
+    _In_ ULONG Length)
+{
+    UCHAR Protected[RT_PROTECTED_MGMT_MAX];
+    UCHAR Tk[16];
+    ULONGLONG Pn = 0;
+    BOOLEAN Protect;
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    Protect = Adapter->PmfActive && Adapter->MgmtKeyValid && !(Frame[4] & 0x01) &&
+              Length + RSNA_CCMP_HDR_LEN + RSNA_CCMP_MIC_LEN <= sizeof(Protected);
+    if (Protect)
+    {
+        Pn = ++Adapter->MgmtTxPn;
+        RtlCopyMemory(Tk, Adapter->MgmtTk, sizeof(Tk));
+    }
+    NdisReleaseSpinLock(&Adapter->Lock);
+
+    if (!Protect)
+        return RtSendFrame(Adapter, Frame, Length, TRUE, NULL);
+
+    RtlCopyMemory(Protected, Frame, DOT11_HEADER_LENGTH);
+    Protected[1] |= DOT11_FC1_PROTECTED;
+    RsnaCcmpEncrypt(Tk, Protected, DOT11_HEADER_LENGTH, Pn, 0,
+                    Frame + DOT11_HEADER_LENGTH, Length - DOT11_HEADER_LENGTH,
+                    Protected + DOT11_HEADER_LENGTH);
+    RtlSecureZeroMemory(Tk, sizeof(Tk));
+    return RtSendFrame(Adapter, Protected, Length + RSNA_CCMP_HDR_LEN + RSNA_CCMP_MIC_LEN, TRUE, NULL);
+}
+
+static
+VOID
+RtStartSaQuery(
+    _In_ PRT_ADAPTER Adapter)
+{
+    UCHAR Query[DOT11_HEADER_LENGTH + 4];
+    ULONG QueryLength;
+    USHORT Id;
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    if (Adapter->SaQueryPending)
+    {
+        NdisReleaseSpinLock(&Adapter->Lock);
+        return;
+    }
+    Id = (USHORT)(KeQueryPerformanceCounter(NULL).QuadPart ^ (KeQueryInterruptTime() >> 4));
+    Adapter->SaQueryPending = TRUE;
+    Adapter->SaQueryId = Id;
+    Adapter->SaQueryDeadline = KeQueryInterruptTime() + RT_SA_QUERY_TIMEOUT_100NS;
+    NdisReleaseSpinLock(&Adapter->Lock);
+
+    QueryLength = RtBuildHeader(Adapter, Query, DOT11_SUBTYPE_ACTION, Adapter->ConnectedBssid, Adapter->ConnectedBssid);
+    Query[QueryLength++] = RT_ACTION_SA_QUERY;
+    Query[QueryLength++] = RT_SA_QUERY_REQUEST;
+    Query[QueryLength++] = (UCHAR)Id;
+    Query[QueryLength++] = (UCHAR)(Id >> 8);
+    RtSendManagement(Adapter, Query, QueryLength);
+}
+
+static
+BOOLEAN
+RtDecryptManagement(
+    _In_ PRT_ADAPTER Adapter,
+    _In_reads_bytes_(Length) const UCHAR* Frame,
+    _In_ ULONG Length,
+    _Out_writes_bytes_(RT_PROTECTED_MGMT_MAX) PUCHAR Plain,
+    _Out_ PULONG PlainLength)
+{
+    UCHAR Tk[16];
+    ULONGLONG Pn = 0;
+    BOOLEAN Valid;
+
+    if (Length < DOT11_HEADER_LENGTH + RSNA_CCMP_HDR_LEN + RSNA_CCMP_MIC_LEN ||
+        Length > RT_PROTECTED_MGMT_MAX)
+    {
+        return FALSE;
+    }
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    Valid = Adapter->PmfActive && Adapter->MgmtKeyValid &&
+            RtlEqualMemory(Frame + 4, Adapter->CurrentAddress, RT_ADDRESS_LENGTH) &&
+            RtlEqualMemory(Frame + 10, Adapter->ConnectedBssid, RT_ADDRESS_LENGTH);
+    if (Valid)
+        RtlCopyMemory(Tk, Adapter->MgmtTk, sizeof(Tk));
+    NdisReleaseSpinLock(&Adapter->Lock);
+    if (!Valid)
+        return FALSE;
+
+    Valid = RsnaCcmpDecrypt(Tk, Frame, DOT11_HEADER_LENGTH,
+                            Frame + DOT11_HEADER_LENGTH, Length - DOT11_HEADER_LENGTH,
+                            Plain + DOT11_HEADER_LENGTH, &Pn) == 0;
+    RtlSecureZeroMemory(Tk, sizeof(Tk));
+    if (!Valid)
+    {
+        DPRINT1("RT2800USB: protected management frame failed to decrypt\n");
+        return FALSE;
+    }
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    Valid = Pn > Adapter->MgmtRxPn;
+    if (Valid)
+        Adapter->MgmtRxPn = Pn;
+    NdisReleaseSpinLock(&Adapter->Lock);
+    if (!Valid)
+        return FALSE;
+
+    RtlCopyMemory(Plain, Frame, DOT11_HEADER_LENGTH);
+    Plain[1] &= ~DOT11_FC1_PROTECTED;
+    *PlainLength = Length - RSNA_CCMP_HDR_LEN - RSNA_CCMP_MIC_LEN;
+    return TRUE;
+}
+
+static
+BOOLEAN
+RtVerifyBip(
+    _In_ PRT_ADAPTER Adapter,
+    _In_reads_bytes_(Length) const UCHAR* Frame,
+    _In_ ULONG Length)
+{
+    UCHAR Igtk[16];
+    ULONGLONG Ipn = 0;
+    USHORT KeyId = 0;
+    BOOLEAN Valid;
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    Valid = Adapter->IgtkValid;
+    if (Valid)
+        RtlCopyMemory(Igtk, Adapter->Igtk, sizeof(Igtk));
+    NdisReleaseSpinLock(&Adapter->Lock);
+    if (!Valid)
+        return FALSE;
+
+    Valid = RsnaBipVerify(Igtk, Frame, Length, &KeyId, &Ipn) == 0;
+    RtlSecureZeroMemory(Igtk, sizeof(Igtk));
+    if (!Valid)
+        return FALSE;
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    Valid = KeyId == Adapter->IgtkKeyId && Ipn > Adapter->IgtkRxIpn;
+    if (Valid)
+        Adapter->IgtkRxIpn = Ipn;
+    NdisReleaseSpinLock(&Adapter->Lock);
+    return Valid;
+}
+
+static
 VOID
 RtUpdateBss(
     _In_ PRT_ADAPTER Adapter,
@@ -173,13 +367,29 @@ RtMlmeReceive(
     _In_ PRT_ADAPTER Adapter,
     _In_reads_bytes_(Length) const UCHAR* Frame,
     _In_ ULONG Length,
-    _In_ LONG Rssi)
+    _In_ LONG Rssi,
+    _In_ BOOLEAN HwDecrypted)
 {
+    UCHAR Plain[RT_PROTECTED_MGMT_MAX];
     UCHAR Subtype = Frame[0] & DOT11_FC0_SUBTYPE_MASK;
     const UCHAR* Body = Frame + DOT11_HEADER_LENGTH;
+    BOOLEAN Protected = HwDecrypted;
+    BOOLEAN Pmf;
+    ULONG PlainLength;
 
     if (Length < DOT11_HEADER_LENGTH)
         return;
+
+    if (Frame[1] & DOT11_FC1_PROTECTED)
+    {
+        if (!RtDecryptManagement(Adapter, Frame, Length, Plain, &PlainLength))
+            return;
+        Frame = Plain;
+        Length = PlainLength;
+        Body = Frame + DOT11_HEADER_LENGTH;
+        Protected = TRUE;
+    }
+    Pmf = Adapter->PmfActive && Adapter->MgmtKeyValid && Adapter->LinkState == RtLinkAssociated;
 
     switch (Subtype)
     {
@@ -216,6 +426,16 @@ RtMlmeReceive(
 
         case DOT11_SUBTYPE_DEAUTH:
         case DOT11_SUBTYPE_DISASSOC:
+            if (Pmf &&
+                (RtlEqualMemory(Frame + 4, RtBroadcast, RT_ADDRESS_LENGTH) ?
+                 !RtVerifyBip(Adapter, Frame, Length) : !Protected))
+            {
+                DPRINT1("RT2800USB: unprotected %s, querying the AP\n",
+                        Subtype == DOT11_SUBTYPE_DEAUTH ? "deauthentication" : "disassociation");
+                if (RtlEqualMemory(Frame + 10, Adapter->ConnectedBssid, RT_ADDRESS_LENGTH))
+                    RtStartSaQuery(Adapter);
+                break;
+            }
             if (Adapter->LinkState == RtLinkAssociated &&
                 RtlEqualMemory(Frame + 10, Adapter->ConnectedBssid, RT_ADDRESS_LENGTH) &&
                 (RtlEqualMemory(Frame + 4, Adapter->CurrentAddress, RT_ADDRESS_LENGTH) ||
@@ -228,6 +448,39 @@ RtMlmeReceive(
                 Adapter->LastBeaconTime = 0;
                 NdisReleaseSpinLock(&Adapter->Lock);
                 RtWakeWorker(Adapter);
+            }
+            break;
+
+        case DOT11_SUBTYPE_ACTION:
+            if (Length >= DOT11_HEADER_LENGTH + 4 &&
+                Body[0] == RT_ACTION_SA_QUERY &&
+                Pmf && Protected &&
+                RtlEqualMemory(Frame + 10, Adapter->ConnectedBssid, RT_ADDRESS_LENGTH))
+            {
+                UCHAR Response[DOT11_HEADER_LENGTH + 4];
+                ULONG ResponseLength;
+
+                if (Body[1] == RT_SA_QUERY_REQUEST)
+                {
+                    ResponseLength = RtBuildHeader(Adapter, Response, DOT11_SUBTYPE_ACTION,
+                                                   Adapter->ConnectedBssid, Adapter->ConnectedBssid);
+                    Response[ResponseLength++] = RT_ACTION_SA_QUERY;
+                    Response[ResponseLength++] = RT_SA_QUERY_RESPONSE;
+                    Response[ResponseLength++] = Body[2];
+                    Response[ResponseLength++] = Body[3];
+                    RtSendManagement(Adapter, Response, ResponseLength);
+                    DPRINT1("RT2800USB: answered SA Query %02x%02x\n", Body[2], Body[3]);
+                }
+                else if (Body[1] == RT_SA_QUERY_RESPONSE)
+                {
+                    NdisAcquireSpinLock(&Adapter->Lock);
+                    if (Adapter->SaQueryPending &&
+                        Adapter->SaQueryId == (USHORT)(Body[2] | (Body[3] << 8)))
+                    {
+                        Adapter->SaQueryPending = FALSE;
+                    }
+                    NdisReleaseSpinLock(&Adapter->Lock);
+                }
             }
             break;
     }
@@ -698,6 +951,11 @@ RtBuildRsnIe(
     RtlCopyMemory(Out, Template, sizeof(Template));
     Out[7] = Adapter->MulticastCipher == DOT11_CIPHER_ALGO_TKIP ? 2 : 4;
     Out[13] = Adapter->UnicastCipher == DOT11_CIPHER_ALGO_TKIP ? 2 : 4;
+    if (Adapter->MulticastCipher == DOT11_CIPHER_ALGO_CCMP &&
+        Adapter->UnicastCipher == DOT11_CIPHER_ALGO_CCMP)
+    {
+        Out[20] = (UCHAR)RT_RSN_CAP_MFPC;
+    }
     return sizeof(Template);
 }
 
@@ -742,8 +1000,23 @@ RtAssociate(
         RtSendFrame(Adapter, Frame, Length, TRUE, NULL);
         if (RtWaitMlme(Adapter, RT_ASSOC_TIMEOUT_MS))
         {
+            const UCHAR* Timeout;
+            ULONG Comeback;
+
             DPRINT1("RT2800USB: association status %u aid %u\n", Adapter->MlmeStatus, Adapter->MlmeAid);
-            return Adapter->MlmeStatus == 0;
+            if (Adapter->MlmeStatus != RT_STATUS_REFUSED_TEMPORARILY)
+                return Adapter->MlmeStatus == 0;
+
+            Timeout = RtFindIe(Adapter->AssocResponseIes, Adapter->AssocResponseIeLength,
+                               DOT11_IE_TIMEOUT_INTERVAL);
+            Comeback = 1000;
+            if (Timeout && Timeout[1] >= 5 && Timeout[2] == RT_TIMEOUT_COMEBACK)
+            {
+                Comeback = Timeout[3] | (Timeout[4] << 8) | (Timeout[5] << 16) | ((ULONG)Timeout[6] << 24);
+                Comeback = (ULONG)min((ULONGLONG)Comeback * 1024 / 1000, 10000);
+            }
+            DPRINT1("RT2800USB: association comeback in %lu ms\n", Comeback);
+            RtSleep(Comeback);
         }
     }
 
@@ -891,12 +1164,15 @@ RtLeave(
         Length = RtBuildHeader(Adapter, Frame, DOT11_SUBTYPE_DEAUTH, Bssid, Bssid);
         Frame[Length++] = 3;
         Frame[Length++] = 0;
-        RtSendFrame(Adapter, Frame, Length, TRUE, NULL);
+        RtSendManagement(Adapter, Frame, Length);
         RtSleep(20);
     }
 
     NdisAcquireSpinLock(&Adapter->Lock);
     Adapter->LinkState = RtLinkIdle;
+    Adapter->PmfActive = FALSE;
+    Adapter->SoftwareCrypto = FALSE;
+    Adapter->SaQueryPending = FALSE;
     NdisReleaseSpinLock(&Adapter->Lock);
 
     RtRemoveKeys(Adapter);
@@ -968,7 +1244,13 @@ RtDoConnect(
         Adapter->ConnectedRssi = Bss->Rssi;
         Adapter->LastBeaconTime = KeQueryInterruptTime();
         Adapter->LinkState = RtLinkAssociated;
+        Adapter->PmfActive = Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK &&
+                             Adapter->MulticastCipher == DOT11_CIPHER_ALGO_CCMP &&
+                             Adapter->UnicastCipher == DOT11_CIPHER_ALGO_CCMP &&
+                             (RtRsnCapabilities(Bss) & RT_RSN_CAP_MFPC) != 0;
+        Adapter->SoftwareCrypto = Adapter->PmfActive;
         NdisReleaseSpinLock(&Adapter->Lock);
+        DPRINT1("RT2800USB: management frame protection %s\n", Adapter->PmfActive ? "active" : "off");
 
         RtSetAssociated(Adapter, TRUE, Bss->BeaconPeriod);
         RtIndicateAssociationCompletion(Adapter, Bss->Bssid, DOT11_ASSOC_STATUS_SUCCESS);
@@ -997,12 +1279,18 @@ RtCheckLink(
 
     NdisAcquireSpinLock(&Adapter->Lock);
     Last = Adapter->LastBeaconTime;
+    if (Adapter->SaQueryPending && Now > Adapter->SaQueryDeadline)
+    {
+        Adapter->SaQueryPending = FALSE;
+        Last = 0;
+    }
     Lost = Adapter->LinkState == RtLinkAssociated &&
            (Last == 0 || Now - Last > (ULONGLONG)RT_BEACON_LOSS_MS * 10000);
     NdisReleaseSpinLock(&Adapter->Lock);
 
     if (Lost)
         RtLeave(Adapter, Last != 0, Last == 0 ? DOT11_ASSOC_STATUS_PEER_DEAUTHENTICATED : DOT11_ASSOC_STATUS_UNREACHABLE);
+
 }
 
 VOID

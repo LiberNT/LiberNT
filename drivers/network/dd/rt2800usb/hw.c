@@ -1160,6 +1160,12 @@ RtRemoveKeys(
     ULONG i;
 
     Adapter->PairwiseKeyInstalled = FALSE;
+    Adapter->MgmtKeyValid = FALSE;
+    Adapter->IgtkValid = FALSE;
+    RtlSecureZeroMemory(Adapter->MgmtTk, sizeof(Adapter->MgmtTk));
+    RtlSecureZeroMemory(Adapter->Igtk, sizeof(Adapter->Igtk));
+    RtlZeroMemory(Adapter->GroupKeyValid, sizeof(Adapter->GroupKeyValid));
+    RtlSecureZeroMemory(Adapter->GroupKey, sizeof(Adapter->GroupKey));
 
     for (i = 0; i < 4; i++)
     {
