@@ -65,6 +65,7 @@ SeclCreateProcessWithLogonW(
     PROFILEINFOW ProfileInfo;
     HANDLE hToken = NULL;
     HANDLE hTargetProcessHandle = NULL;
+    DWORD SessionId;
 
     ULONG dwError = ERROR_SUCCESS;
     BOOL rc;
@@ -107,6 +108,14 @@ SeclCreateProcessWithLogonW(
     {
         dwError = GetLastError();
         WARN("LogonUser() failed with Error %lu\n", dwError);
+        goto done;
+    }
+
+    if (!ProcessIdToSessionId(pRequest->dwProcessId, &SessionId) ||
+        !SetTokenInformation(hToken, TokenSessionId, &SessionId, sizeof(SessionId)))
+    {
+        dwError = GetLastError();
+        WARN("Setting the token session failed with Error %lu\n", dwError);
         goto done;
     }
 

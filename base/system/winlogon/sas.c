@@ -666,6 +666,10 @@ HandleLogon(
     IN OUT PWLSESSION Session)
 {
     BOOL ret = FALSE;
+    ULONG SessionId = NtCurrentPeb()->SessionId;
+
+    if (!SetTokenInformation(Session->UserToken, TokenSessionId, &SessionId, sizeof(SessionId)))
+        ERR("WL: SetTokenInformation(TokenSessionId) failed (error %lu)\n", GetLastError());
 
     /* Loading personal settings */
     DisplayStatusMessage(Session, Session->WinlogonDesktop, IDS_LOADINGYOURPERSONALSETTINGS);
