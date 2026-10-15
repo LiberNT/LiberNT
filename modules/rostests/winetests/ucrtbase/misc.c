@@ -1759,6 +1759,59 @@ static void test_remainderf(void)
     }
 }
 
+static void test_nearbyint(void)
+{
+    static const struct { int round; double x, expected; } cases[] =
+    {
+        {FE_TONEAREST, 2.5, 2.0}, {FE_TONEAREST, -2.5, -2.0}, {FE_TONEAREST, 3.5, 4.0},
+        {FE_TONEAREST, 1.4, 1.0}, {FE_TONEAREST, -0.4, -0.0}, {FE_UPWARD, 1.1, 2.0},
+        {FE_UPWARD, -1.9, -1.0}, {FE_DOWNWARD, 1.9, 1.0}, {FE_DOWNWARD, -1.1, -2.0},
+        {FE_TOWARDZERO, -1.9, -1.0}, {FE_TOWARDZERO, 1.9, 1.0}, {FE_TONEAREST, 4503599627370497.0, 4503599627370497.0}
+    };
+    static const char *names[2][2] = {{"nearbyint", "_o_nearbyint"}, {"nearbyintf", "_o_nearbyintf"}};
+    HMODULE module = GetModuleHandleA("ucrtbase.dll");
+    double (__cdecl *dfunc)(double);
+    float (__cdecl *ffunc)(float);
+    unsigned int i, j;
+    double result;
+
+    for (j = 0; j < 2; ++j)
+    {
+        dfunc = (void *)GetProcAddress(module, names[0][j]);
+        ffunc = (void *)GetProcAddress(module, names[1][j]);
+        ok(dfunc != NULL && ffunc != NULL, "missing %s or %s\n", names[0][j], names[1][j]);
+        if (!dfunc || !ffunc) continue;
+        for (i = 0; i < ARRAY_SIZE(cases); ++i)
+        {
+            fesetround(cases[i].round);
+            feclearexcept(FE_ALL_EXCEPT);
+            result = dfunc(cases[i].x);
+            ok(!fetestexcept(FE_INEXACT), "%s case %u raised inexact\n", names[0][j], i);
+            ok(result == cases[i].expected && signbit(result) == signbit(cases[i].expected),
+               "%s case %u: %.17g, expected %.17g\n", names[0][j], i, result, cases[i].expected);
+            if (fabs(cases[i].x) < 16777216.0)
+            {
+                float x = (float)cases[i].x;
+
+                feclearexcept(FE_ALL_EXCEPT);
+                result = ffunc(x);
+                ok(!fetestexcept(FE_INEXACT), "%s case %u raised inexact\n", names[1][j], i);
+                ok(result == cases[i].expected && signbit(result) == signbit(cases[i].expected),
+                   "%s case %u: %.9g, expected %.9g\n", names[1][j], i, result, cases[i].expected);
+            }
+        }
+        fesetround(FE_TONEAREST);
+        feraiseexcept(FE_INEXACT);
+        dfunc(0.5);
+        ok(fetestexcept(FE_INEXACT) != 0, "%s cleared a raised inexact flag\n", names[0][j]);
+        feclearexcept(FE_ALL_EXCEPT);
+        ok(_isnan(dfunc(NAN)) && _isnan(ffunc(NAN)), "%s: NaN not preserved\n", names[0][j]);
+        ok(dfunc(INFINITY) == INFINITY && ffunc(-INFINITY) == -INFINITY, "%s: infinity not preserved\n", names[0][j]);
+    }
+    fesetround(FE_TONEAREST);
+    feclearexcept(FE_ALL_EXCEPT);
+}
+
 START_TEST(misc)
 {
     int arg_c;
@@ -1780,6 +1833,7 @@ START_TEST(misc)
     }
 
     test_remainderf();
+    test_nearbyint();
     test_invalid_parameter_handler();
     test__initialize_onexit_table();
     test__register_onexit_function();

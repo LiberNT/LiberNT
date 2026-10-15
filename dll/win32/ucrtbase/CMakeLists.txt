@@ -35,6 +35,8 @@ add_library(ucrtbase SHARED
     ${REACTOS_SOURCE_DIR}/sdk/lib/crt/math/expm1f.c
     ${REACTOS_SOURCE_DIR}/sdk/lib/crt/math/log1p.c
     ${REACTOS_SOURCE_DIR}/sdk/lib/crt/math/log1pf.c
+    ${REACTOS_SOURCE_DIR}/sdk/lib/crt/math/nearbyint.c
+    ${REACTOS_SOURCE_DIR}/sdk/lib/crt/math/nearbyintf.c
     ${REACTOS_SOURCE_DIR}/sdk/lib/crt/math/remainder.c
     ${REACTOS_SOURCE_DIR}/sdk/lib/crt/math/remainderf.c
     ${REACTOS_SOURCE_DIR}/sdk/lib/crt/math/rint.c
