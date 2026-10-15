@@ -14,6 +14,7 @@ list(APPEND SOURCE
     sampler.cpp
     shaders.cpp
     topology.cpp
+    uav.cpp
     util.cpp
     versions.cpp
     testlist.c)
