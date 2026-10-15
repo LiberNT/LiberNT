@@ -9,6 +9,7 @@ DriverVer=03/27/2012,1.0.0
 DefaultDestDir = 11
 BluetoothClass.NT.Files = 11
 FreeBT.Files = 12
+BthMini.Files = 12
 
 [ClassInstall32.NT]
 AddReg=BluetoothClass.NT.AddReg
@@ -28,6 +29,7 @@ bthci.dll
 
 [ReactOS]
 %BTUSB.DeviceDesc%=FreeBT.Dev, USB\Class_E0&SubClass_01&Prot_01 ; Bluetooth class devices
+%BthMini.DeviceDesc%=BthMini.Dev, MS_BTHX_BTHMINI
 
 [FreeBT.Dev]
 CopyFiles=FreeBT.Files
@@ -55,6 +57,21 @@ HKLM,"System\CurrentControlSet\services\FreeBT\Parameters","FreeBTEnable",0x1000
 [FreeBT.Files]
 fbtusb.sys
 
+[BthMini.Dev.NT]
+CopyFiles=BthMini.Files
+
+[BthMini.Dev.NT.Services]
+AddService = BthMini, 0x00000002, BthMini.AddService
+
+[BthMini.AddService]
+ServiceType    = 1
+StartType      = 3
+ErrorControl   = 1
+ServiceBinary  = %12%\bthmini.sys
+
+[BthMini.Files]
+bthmini.sys
+
 ;-------------------------------- STRINGS -------------------------------
 
 [Strings]
@@ -63,6 +80,7 @@ ReactOS = "LiberNT Project"
 
 ; Localizable
 BTUSB.DeviceDesc="Generic USB Bluetooth Radio"
+BthMini.DeviceDesc="Generic Bluetooth Radio"
 BluetoothClassName="Bluetooth Radios"
 
 [Strings.0404]
