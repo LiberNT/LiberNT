@@ -54,6 +54,13 @@ License: libtiff (https://spdx.org/licenses/libtiff.html)
 URL: http://www.simplesystems.org/libtiff/
 Modifications: added .spec file
 
+Title: Public Suffix List (ICANN domains)
+Path: dll/win32/wininet/public_suffix_list.h
+Used Version: publicsuffix.org list of 2026-10-07 (ETag 7ba6fb3902bb3cd40f456e283f9182dc)
+License: MPL-2.0 (https://spdx.org/licenses/MPL-2.0.html)
+URL: https://publicsuffix.org/
+Modifications: ICANN section only, generated with sdk/tools/mkpsl.py
+
 Title: DirectX-Headers (DXCore)
 Path: sdk/include/psdk/dxcore.h
 Path: sdk/include/psdk/dxcore_interface.h

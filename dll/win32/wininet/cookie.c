@@ -1213,6 +1213,50 @@ BOOL WINAPI InternetGetCookieA(const char *url, const char *name, char *data, DW
     return InternetGetCookieExA(url, name, data, size, 0, NULL);
 }
 
+#ifdef __REACTOS__
+#include "public_suffix_list.h"
+
+static int compare_public_suffix(const void *key, const void *entry)
+{
+    return strcmp(key, *(const char *const *)entry);
+}
+
+static BOOL has_public_suffix_rule(const char *rule)
+{
+    return bsearch(rule, public_suffixes, ARRAY_SIZE(public_suffixes), sizeof(public_suffixes[0]),
+                   compare_public_suffix) != NULL;
+}
+
+static BOOL is_public_suffix(substr_t domain)
+{
+    char name[2 + 255 * 3 + 1], rule[2 + 255 * 3 + 1];
+    WCHAR lower[256];
+    const char *parent;
+    size_t i;
+    int len;
+
+    if (domain.len >= ARRAY_SIZE(lower))
+        return FALSE;
+    for (i = 0; i < domain.len; i++)
+        lower[i] = towlower(domain.str[i]);
+    len = WideCharToMultiByte(CP_UTF8, 0, lower, domain.len, name + 1, sizeof(name) - 2, NULL, NULL);
+    if (len <= 0)
+        return FALSE;
+    name[0] = '!';
+    name[len + 1] = 0;
+
+    if (has_public_suffix_rule(name))
+        return FALSE;
+    if (has_public_suffix_rule(name + 1))
+        return TRUE;
+    if (!(parent = strchr(name + 1, '.')))
+        return FALSE;
+    rule[0] = '*';
+    strcpy(rule + 1, parent);
+    return has_public_suffix_rule(rule);
+}
+
+#endif
 static BOOL is_domain_legal_for_cookie(substr_t domain, substr_t full_domain)
 {
     const WCHAR *ptr;
@@ -1230,6 +1274,12 @@ static BOOL is_domain_legal_for_cookie(substr_t domain, substr_t full_domain)
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
+#ifdef __REACTOS__
+    if (is_public_suffix(domain)) {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+#endif
 
     return TRUE;
 }
