@@ -798,8 +798,12 @@ static void test_LoadLibraryEx_search_flags(void)
         ok( GetLastError() == ERROR_MOD_NOT_FOUND, "wrong error %lu\n", GetLastError() );
         SetLastError( 0xdeadbeef );
         mod = LoadLibraryExA( "ext-ms-win-ras-rasapi32-l1-1-0.dll", NULL, LOAD_LIBRARY_SEARCH_APPLICATION_DIR );
+#ifdef __REACTOS__
+        ok( !!mod, "rasapi32 not loaded %lu\n", GetLastError() );
+#else
         todo_wine /* rasapi32 doesn't have interesting dependencies on wine */
         ok( !mod, "rasapi32 loaded\n" );
+#endif
         if (mod) FreeLibrary( mod );
         else ok( GetLastError() == ERROR_MOD_NOT_FOUND, "wrong error %lu\n", GetLastError() );
         mod = LoadLibraryA( "ext-ms-win-ras-rasapi32-l1-1-0.dll" );
