@@ -18,7 +18,6 @@
 /* Get IPRouteEntry s for each of the routes in the system */
 TDI_STATUS InfoTdiQueryGetRouteTable( PIP_INTERFACE IF, PNDIS_BUFFER Buffer, PUINT BufferSize ) {
     TDI_STATUS Status;
-    KIRQL OldIrql;
     UINT RtCount;
     UINT Capacity = CountFIBs(IF);
     UINT Size;
@@ -101,17 +100,7 @@ TDI_STATUS InfoTdiQueryGetRouteTable( PIP_INTERFACE IF, PNDIS_BUFFER Buffer, PUI
 	      RtCurrent->Gw,
 	      RtCurrent->Metric1 ));
 
-	TcpipAcquireSpinLock(&EntityListLock, &OldIrql);
-	for (i = 0; i < EntityCount; i++)
-             if (EntityList[i].context == IF)
-                 break;
-
-        if (i < EntityCount)
-            RtCurrent->Index = EntityList[i].tei_instance;
-        else
-            RtCurrent->Index = 0;
-
-	TcpipReleaseSpinLock(&EntityListLock, OldIrql);
+	RtCurrent->Index = IF->Index;
 
 	RtCurrent++; RCacheCur++;
     }
