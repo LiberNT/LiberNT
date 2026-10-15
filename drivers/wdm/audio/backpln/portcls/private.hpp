@@ -450,6 +450,7 @@ typedef struct
 
     DEVICE_POWER_STATE DevicePowerState;
     SYSTEM_POWER_STATE  SystemPowerState;
+    DEVICE_POWER_STATE DeviceStateMap[PowerSystemMaximum];
 
 } PCLASS_DEVICE_EXTENSION, *PPCLASS_DEVICE_EXTENSION;
 

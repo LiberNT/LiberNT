@@ -189,14 +189,16 @@ PortClsPnp(
             return PcCompleteIrp(DeviceObject, Irp, Status);
       case IRP_MN_QUERY_CAPABILITIES:
             DPRINT("IRP_MN_QUERY_CAPABILITIES\n");
-            if (DeviceExt->AdapterPowerManagement)
+            Status = PcForwardIrpSynchronous(DeviceObject, Irp);
+            if (NT_SUCCESS(Status) && DeviceExt->AdapterPowerManagement)
             {
                 Status = DeviceExt->AdapterPowerManagement->QueryDeviceCapabilities(IoStack->Parameters.DeviceCapabilities.Capabilities);
-                DPRINT1("QueryCapabilities Status %x\n", Status);
             }
-            else
+            if (NT_SUCCESS(Status))
             {
-                Status = PcForwardIrpSynchronous(DeviceObject, Irp);
+                RtlCopyMemory(DeviceExt->DeviceStateMap,
+                              IoStack->Parameters.DeviceCapabilities.Capabilities->DeviceState,
+                              sizeof(DeviceExt->DeviceStateMap));
             }
             return PcCompleteIrp(DeviceObject, Irp, Status);
       case IRP_MN_QUERY_PNP_DEVICE_STATE:
@@ -208,6 +210,62 @@ PortClsPnp(
     DPRINT("unhandled function %u\n", IoStack->MinorFunction);
     IoSkipCurrentIrpStackLocation(Irp);
     return IoCallDriver(DeviceExt->PrevDeviceObject, Irp);
+}
+
+static
+DEVICE_POWER_STATE
+PcSystemToDevicePowerState(
+    IN PPCLASS_DEVICE_EXTENSION DeviceExtension,
+    IN SYSTEM_POWER_STATE SystemState)
+{
+    DEVICE_POWER_STATE DeviceState = PowerDeviceUnspecified;
+
+    if (SystemState == PowerSystemWorking)
+        return PowerDeviceD0;
+
+    if (SystemState > PowerSystemUnspecified && SystemState < PowerSystemMaximum)
+        DeviceState = DeviceExtension->DeviceStateMap[SystemState];
+
+    if (DeviceState <= PowerDeviceUnspecified || DeviceState >= PowerDeviceMaximum)
+        DeviceState = PowerDeviceD3;
+
+    return DeviceState;
+}
+
+static
+VOID
+PcChangeDevicePowerState(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PPCLASS_DEVICE_EXTENSION DeviceExtension,
+    IN POWER_STATE PowerState)
+{
+    PoSetPowerState(DeviceObject, DevicePowerState, PowerState);
+
+    if (DeviceExtension->AdapterPowerManagement)
+    {
+        DeviceExtension->AdapterPowerManagement->PowerChangeState(PowerState);
+    }
+
+    KIRQL OldLevel;
+    KeAcquireSpinLock(&DeviceExtension->PowerNotifyListLock, &OldLevel);
+
+    PLIST_ENTRY Entry = DeviceExtension->PowerNotifyList.Flink;
+    while (Entry != &DeviceExtension->PowerNotifyList)
+    {
+        PENTRY_POWER_NOTIFY PowerEntry = CONTAINING_RECORD(Entry, ENTRY_POWER_NOTIFY, Entry);
+
+        Entry = Entry->Flink;
+
+        KeReleaseSpinLock(&DeviceExtension->PowerNotifyListLock, OldLevel);
+
+        PowerEntry->PowerNotify->PowerChangeNotify(PowerState);
+
+        KeAcquireSpinLock(&DeviceExtension->PowerNotifyListLock, &OldLevel);
+    }
+
+    KeReleaseSpinLock(&DeviceExtension->PowerNotifyListLock, OldLevel);
+
+    DeviceExtension->DevicePowerState = PowerState.DeviceState;
 }
 
 VOID
@@ -244,6 +302,58 @@ PwrCompletionFunction(
     FreeItem(PwrContext, TAG_PORTCLASS);
 }
 
+static
+VOID
+CALLBACK
+PcDeviceSetPowerComplete(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN UCHAR MinorFunction,
+    IN POWER_STATE PowerState,
+    IN PVOID Context,
+    IN PIO_STATUS_BLOCK IoStatus)
+{
+    PIRP Irp = (PIRP)Context;
+
+    PoStartNextPowerIrp(Irp);
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+}
+
+static
+NTSTATUS
+NTAPI
+PcSystemSetPowerComplete(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PIRP Irp,
+    IN PVOID Context)
+{
+    PPCLASS_DEVICE_EXTENSION DeviceExtension = (PPCLASS_DEVICE_EXTENSION)Context;
+    PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
+    POWER_STATE PowerState;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(Irp->IoStatus.Status))
+    {
+        PoStartNextPowerIrp(Irp);
+        return STATUS_CONTINUE_COMPLETION;
+    }
+
+    PowerState.DeviceState = PcSystemToDevicePowerState(DeviceExtension, IoStack->Parameters.Power.State.SystemState);
+    Status = PoRequestPowerIrp(DeviceExtension->PhysicalDeviceObject,
+                               IRP_MN_SET_POWER,
+                               PowerState,
+                               PcDeviceSetPowerComplete,
+                               Irp,
+                               NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Device power request D%u failed with %x\n", PowerState.DeviceState - PowerDeviceD0, Status);
+        PoStartNextPowerIrp(Irp);
+        return STATUS_CONTINUE_COMPLETION;
+    }
+
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
 NTSTATUS
 NTAPI
 PortClsPower(
@@ -275,36 +385,13 @@ PortClsPower(
     // get current request type
     if (IoStack->Parameters.Power.Type == DevicePowerState)
     {
-        // request for device power state
-        if (DeviceExtension->DevicePowerState == IoStack->Parameters.Power.State.DeviceState)
-        {
-            // nothing has changed
-            if (IoStack->MinorFunction == IRP_MN_QUERY_POWER)
-            {
-                // only forward query requests; we can forget about them
-                PoStartNextPowerIrp(Irp);
-                IoSkipCurrentIrpStackLocation(Irp);
-                return PoCallDriver(DeviceExtension->PrevDeviceObject, Irp);
-            }
-
-            // start next power irp
-            PoStartNextPowerIrp(Irp);
-
-            // complete request
-            Irp->IoStatus.Status = Status;
-            IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-            // done
-            return Status;
-        }
+        PowerState = IoStack->Parameters.Power.State;
 
         if (IoStack->MinorFunction == IRP_MN_QUERY_POWER)
         {
-            // check if there is a registered adapter power management
-            if (DeviceExtension->AdapterPowerManagement)
+            if (DeviceExtension->DevicePowerState != PowerState.DeviceState &&
+                DeviceExtension->AdapterPowerManagement)
             {
-                // it is query if the change can be changed
-                PowerState = IoStack->Parameters.Power.State;
                 Status = DeviceExtension->AdapterPowerManagement->QueryPowerChangeState(PowerState);
 
                 if (!NT_SUCCESS(Status))
@@ -322,55 +409,29 @@ PortClsPower(
             IoSkipCurrentIrpStackLocation(Irp);
             return PoCallDriver(DeviceExtension->PrevDeviceObject, Irp);
         }
-        else
+
+        if (PowerState.DeviceState == PowerDeviceD0 && DeviceExtension->DevicePowerState != PowerDeviceD0)
         {
-            // set power state
-            PowerState = IoStack->Parameters.Power.State;
-            PoSetPowerState(DeviceObject, DevicePowerState, PowerState);
-
-            // check if there is a registered adapter power management
-            if (DeviceExtension->AdapterPowerManagement)
+            Status = PcForwardIrpSynchronous(DeviceObject, Irp);
+            if (NT_SUCCESS(Status))
             {
-                // notify of a power change state
-                DeviceExtension->AdapterPowerManagement->PowerChangeState(PowerState);
+                PcChangeDevicePowerState(DeviceObject, DeviceExtension, PowerState);
             }
 
-            // Call all registered IPowerNotify interfaces via ISubdevice interface
-            KIRQL OldLevel;
-            KeAcquireSpinLock(&DeviceExtension->PowerNotifyListLock, &OldLevel);
-
-            PLIST_ENTRY Entry = DeviceExtension->PowerNotifyList.Flink;
-            while (Entry != &DeviceExtension->PowerNotifyList)
-            {
-                PENTRY_POWER_NOTIFY PowerEntry = CONTAINING_RECORD(Entry, ENTRY_POWER_NOTIFY, Entry);
-
-                // Move to next entry
-                Entry = Entry->Flink;
-
-                // Release lock
-                KeReleaseSpinLock(&DeviceExtension->PowerNotifyListLock, OldLevel);
-
-                // Call entry
-                DPRINT1("Calling %p\n", PowerEntry->PowerNotify);
-                PowerEntry->PowerNotify->PowerChangeNotify(PowerState);
-
-                // Reacquire lock
-                KeAcquireSpinLock(&DeviceExtension->PowerNotifyListLock, &OldLevel);
-            }
-
-            // Release lock
-            KeReleaseSpinLock(&DeviceExtension->PowerNotifyListLock, OldLevel);
-
-            // store new power state
-            DeviceExtension->DevicePowerState = IoStack->Parameters.Power.State.DeviceState;
-
-            // complete request
+            PoStartNextPowerIrp(Irp);
             Irp->IoStatus.Status = Status;
             IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-            // done
             return Status;
         }
+
+        if (DeviceExtension->DevicePowerState != PowerState.DeviceState)
+        {
+            PcChangeDevicePowerState(DeviceObject, DeviceExtension, PowerState);
+        }
+
+        PoStartNextPowerIrp(Irp);
+        IoSkipCurrentIrpStackLocation(Irp);
+        return PoCallDriver(DeviceExtension->PrevDeviceObject, Irp);
     }
     else
     {
@@ -403,13 +464,15 @@ PortClsPower(
             PwrContext->DeviceObject = DeviceObject;
 
             // pass the irp down
-            PowerState = IoStack->Parameters.Power.State;
+            PowerState.DeviceState = PcSystemToDevicePowerState(DeviceExtension, IoStack->Parameters.Power.State.SystemState);
             Status = PoRequestPowerIrp(DeviceExtension->PhysicalDeviceObject, IoStack->MinorFunction, PowerState, PwrCompletionFunction, (PVOID)PwrContext, NULL);
 
             // check for success
             if (!NT_SUCCESS(Status))
             {
                 // failed
+                FreeItem(PwrContext, TAG_PORTCLASS);
+                PoStartNextPowerIrp(Irp);
                 Irp->IoStatus.Status = Status;
                 IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
@@ -425,10 +488,11 @@ PortClsPower(
             // set power request
             DeviceExtension->SystemPowerState = IoStack->Parameters.Power.State.SystemState;
 
-            // only forward query requests
-            PoStartNextPowerIrp(Irp);
-            IoSkipCurrentIrpStackLocation(Irp);
-            return PoCallDriver(DeviceExtension->PrevDeviceObject, Irp);
+            IoMarkIrpPending(Irp);
+            IoCopyCurrentIrpStackLocationToNext(Irp);
+            IoSetCompletionRoutine(Irp, PcSystemSetPowerComplete, DeviceExtension, TRUE, TRUE, TRUE);
+            PoCallDriver(DeviceExtension->PrevDeviceObject, Irp);
+            return STATUS_PENDING;
         }
     }
 }
