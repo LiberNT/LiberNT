@@ -8,6 +8,7 @@
 @ stdcall AddConsoleAliasW(wstr wstr wstr) kernelbase.AddConsoleAliasW
 @ stdcall AddLocalAlternateComputerNameA(str ptr)
 @ stdcall AddLocalAlternateComputerNameW(wstr ptr)
+@ stdcall -version=0xA00+ AddDependencyToProcessPackageGraph(wstr ptr ptr ptr) kernelbase.AddDependencyToProcessPackageGraph
 @ stdcall AddRefActCtx(ptr)
 @ stdcall -version=0x600+ AddSIDToBoundaryDescriptor(ptr ptr)
 @ stdcall -version=0x600+ BasepAdjustObjectAttributesForPrivateNamespace(ptr)
@@ -19,6 +20,8 @@
 @ stdcall AllocConsole() kernelbase.AllocConsole
 @ stdcall AllocateUserPhysicalPages(long ptr ptr)
 @ stdcall -stub -version=0x600+ AllocateUserPhysicalPagesNuma(ptr ptr ptr long)
+@ stdcall -version=0x602+ AppXFreeMemory(ptr) kernelbase.AppXFreeMemory
+@ stdcall -version=0x602+ AppXGetPackageSid(wstr ptr) kernelbase.AppXGetPackageSid
 @ stdcall -version=0x600+ ApplicationRecoveryFinished(long)
 @ stdcall -version=0x600+ ApplicationRecoveryInProgress(ptr)
 @ stdcall AreFileApisANSI()
@@ -32,6 +35,7 @@
 @ stdcall BaseCleanupAppcompatCacheSupport(ptr)
 @ stdcall BaseDumpAppcompatCache()
 @ stdcall BaseFlushAppcompatCache()
+@ stdcall -version=0x602+ BaseFreeAppCompatDataForProcess(ptr)
 @ stub -version=0x600+ BaseGenerateAppCompatData
 @ stdcall BaseGetNamedObjectDirectory(ptr)
 @ stdcall BaseInitAppcompatCacheSupport()
@@ -40,6 +44,7 @@
 @ stdcall -version=0x600+ BaseProcessInitPostImport() # HACK: This export is dynamicaly imported by ntdll
 ;@ stdcall -version=0x502 -arch=x86_64 BaseProcessStart()
 @ stdcall BaseQueryModuleData(str str ptr ptr ptr) ;check
+@ stdcall -version=0x602+ BaseReadAppCompatDataForProcess(ptr ptr ptr)
 @ stdcall -version=0x600+ BaseThreadInitThunk(long ptr ptr)
 ;@ stdcall -version=0x502 -arch=x86_64 BaseThreadStart()
 @ stdcall BaseUpdateAppcompatCache(long long long)

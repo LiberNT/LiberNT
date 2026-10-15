@@ -558,6 +558,56 @@ SetTermsrvAppInstallMode(IN BOOL bInstallMode)
 /*
  * @unimplemented
  */
+#define BASE_APPCOMPAT_PROCESS_DATA_SIZE 4544
+
+DWORD
+WINAPI
+BaseReadAppCompatDataForProcess(IN HANDLE ProcessHandle,
+                                OUT PVOID *AppCompatData,
+                                IN PVOID Reserved)
+{
+    PROCESS_BASIC_INFORMATION BasicInfo;
+    PVOID ShimData;
+    PVOID Data;
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(Reserved);
+
+    if (!ProcessHandle || !AppCompatData)
+        return ERROR_INVALID_PARAMETER;
+
+    Status = NtQueryInformationProcess(ProcessHandle,
+                                       ProcessBasicInformation,
+                                       &BasicInfo,
+                                       sizeof(BasicInfo),
+                                       NULL);
+    if (NT_SUCCESS(Status))
+    {
+        Status = NtReadVirtualMemory(ProcessHandle,
+                                     &BasicInfo.PebBaseAddress->pShimData,
+                                     &ShimData,
+                                     sizeof(ShimData),
+                                     NULL);
+    }
+    if (!NT_SUCCESS(Status))
+        return RtlNtStatusToDosError(Status);
+
+    Data = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, BASE_APPCOMPAT_PROCESS_DATA_SIZE);
+    if (!Data)
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    *AppCompatData = Data;
+    return ERROR_SUCCESS;
+}
+
+VOID
+WINAPI
+BaseFreeAppCompatDataForProcess(IN PVOID AppCompatData)
+{
+    if (AppCompatData)
+        RtlFreeHeap(RtlGetProcessHeap(), 0, AppCompatData);
+}
+
 BOOL
 WINAPI
 TermsrvAppInstallMode(VOID)

@@ -261,3 +261,40 @@ ParseApplicationUserModelId(
     *packageRelativeApplicationIdLength = ApplicationRequired;
     return ERROR_SUCCESS;
 }
+
+HRESULT
+WINAPI
+AddDependencyToProcessPackageGraph(
+    _In_ PCWSTR PackageFamilyName,
+    _In_opt_ PVOID Reserved1,
+    _In_opt_ PVOID Reserved2,
+    _In_opt_ PVOID Reserved3)
+{
+    UNREFERENCED_PARAMETER(PackageFamilyName);
+    UNREFERENCED_PARAMETER(Reserved1);
+    UNREFERENCED_PARAMETER(Reserved2);
+    UNREFERENCED_PARAMETER(Reserved3);
+
+    return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+}
+
+HRESULT
+WINAPI
+AppXGetPackageSid(
+    _In_ PCWSTR PackageFullName,
+    _Out_ PSID *PackageSid)
+{
+    UNREFERENCED_PARAMETER(PackageFullName);
+    UNREFERENCED_PARAMETER(PackageSid);
+
+    return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+}
+
+VOID
+WINAPI
+AppXFreeMemory(
+    _In_opt_ PVOID Memory)
+{
+    if (Memory)
+        HeapFree(GetProcessHeap(), 0, Memory);
+}

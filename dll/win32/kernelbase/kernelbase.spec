@@ -14,6 +14,7 @@
 @ stdcall AddAuditAccessObjectAce(ptr long long long ptr ptr ptr long long)
 @ stdcall AddConsoleAliasA(str str str)
 @ stdcall AddConsoleAliasW(wstr wstr wstr)
+@ stdcall AddDependencyToProcessPackageGraph(wstr ptr ptr ptr)
 @ stdcall AddMandatoryAce(ptr long long long ptr)
 @ stdcall AddResourceAttributeAce(ptr long long long ptr ptr ptr)
 @ stdcall AddSIDToBoundaryDescriptor(ptr ptr) kernel32.AddSIDToBoundaryDescriptor
@@ -28,9 +29,13 @@
 @ stdcall AppContainerLookupMoniker(ptr ptr)
 @ stdcall AppContainerRegisterSid(ptr wstr wstr)
 @ stdcall AppContainerUnregisterSid(ptr)
+@ stdcall AppXFreeMemory(ptr)
+@ stdcall AppXGetPackageSid(wstr ptr)
 @ stdcall AreAllAccessesGranted(long long)
 @ stdcall AreAnyAccessesGranted(long long)
 @ stdcall AttachConsole(long)
+@ stdcall BaseFreeAppCompatDataForProcess(ptr) kernel32.BaseFreeAppCompatDataForProcess
+@ stdcall BaseReadAppCompatDataForProcess(ptr ptr ptr) kernel32.BaseReadAppCompatDataForProcess
 @ stdcall BasepAdjustObjectAttributesForPrivateNamespace(ptr) kernel32.BasepAdjustObjectAttributesForPrivateNamespace
 @ stdcall CancelSynchronousIo(long)
 @ stdcall CancelThreadpoolIo(ptr) ntdll.TpCancelAsyncIoOperation
