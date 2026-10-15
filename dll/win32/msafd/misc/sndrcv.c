@@ -771,6 +771,7 @@ WSPSend(SOCKET Handle,
     HANDLE                  SockEvent;
     PSOCKET_INFORMATION     Socket;
     DWORD                   NumberOfBytesSent;
+    DWORD                   SendLength = 0, i;
     
     TRACE("WSPSend(%x)\n", Handle);
 
@@ -915,8 +916,15 @@ WSPSend(SOCKET Handle,
 
     NumberOfBytesSent = (DWORD)IOSB->Information;
 
+    if (NT_SUCCESS(Status))
+    {
+        for (i = 0; i < dwBufferCount; i++)
+            SendLength += lpBuffers[i].len;
+    }
+
     /* Re-enable Async Event */
-    SockReenableAsyncSelectEvent(Socket, FD_WRITE);
+    if (Status == STATUS_CANT_WAIT || (NT_SUCCESS(Status) && NumberOfBytesSent < SendLength))
+        SockReenableAsyncSelectEvent(Socket, FD_WRITE);
 
     TRACE("Leaving (%lx %ld)\n", Status, NumberOfBytesSent);
     return MsafdReturnWithErrno(Status, lpErrno, NumberOfBytesSent, lpNumberOfBytesSent);

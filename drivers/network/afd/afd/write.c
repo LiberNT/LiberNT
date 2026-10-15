@@ -533,11 +533,11 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     if( !SocketAcquireStateLock( FCB ) ) return LostSocket( Irp );
 
-    FCB->EventSelectDisabled &= ~AFD_EVENT_SEND;
-
     if( FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS )
     {
         PAFD_SEND_INFO_UDP SendReq;
+
+        FCB->EventSelectDisabled &= ~AFD_EVENT_SEND;
         PTDI_CONNECTION_INFORMATION TargetAddress;
 
         if( !FCB->RemoteAddress )
@@ -670,6 +670,7 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         FCB->PollState &= ~AFD_EVENT_SEND;
         if (Immediate)
         {
+            FCB->EventSelectDisabled &= ~AFD_EVENT_SEND;
             UnlockBuffers(SendReq->BufferArray, SendReq->BufferCount, FALSE);
             return UnlockAndMaybeComplete(FCB, STATUS_CANT_WAIT, Irp, 0);
         }
@@ -694,6 +695,7 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
             /* Non-overlapped sockets will fail if we can send nothing */
             if (!(SendReq->AfdFlags & AFD_OVERLAPPED))
             {
+                FCB->EventSelectDisabled &= ~AFD_EVENT_SEND;
                 UnlockBuffers( SendReq->BufferArray, SendReq->BufferCount, FALSE );
                 return UnlockAndMaybeComplete( FCB, STATUS_CANT_WAIT, Irp, 0 );
             }
@@ -743,6 +745,9 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     {
         FCB->PollState &= ~AFD_EVENT_SEND;
     }
+
+    if (TotalBytesCopied < SendLength)
+        FCB->EventSelectDisabled &= ~AFD_EVENT_SEND;
 
     if (Immediate || TotalBytesCopied == SendLength)
     {
