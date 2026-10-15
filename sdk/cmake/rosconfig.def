@@ -237,6 +237,33 @@ config FREELDR_HTTP_BOOT
       default boot entry, and the board's UEFI network drivers are packaged
       onto the boot media.
 
+config BOOTLOADER_HTTP_BOOT_URL
+    prompt "Boot manager HTTP boot URL"
+    type string
+    default ""
+    depends ARCH!=ppc
+    help
+      Adds a "LiberNT (HTTP boot)" entry to the boot manager of the disk
+      image. Its loader takes an address from DHCP on the firmware's
+      network adapter, downloads the live image from this http:// URL,
+      whose host is an IPv4 address, and starts it as a RAM disk. Empty
+      leaves the entry out.
+
+config BOOTLOADER_HTTP_BOOT_IP
+    prompt "Boot manager HTTP boot static IPv4 address"
+    type string
+    default ""
+    depends ARCH!=ppc
+    help
+      address/prefix[,gateway] the HTTP boot entry uses instead of DHCP.
+      Empty uses DHCP.
+
+config BOOTLOADER_HTTP_BOOT_DEFAULT
+    prompt "Start the boot manager HTTP boot entry by default"
+    type bool
+    default n
+    depends ARCH!=ppc
+
 endmenu
 
 menu "System"

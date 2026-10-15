@@ -12,8 +12,8 @@ BCD,"BCD00000000\Objects\{9dea862c-5cdd-4e70-acc1-f32b344d4795}\Elements\1200000
 BCD,"BCD00000000\Objects\{9dea862c-5cdd-4e70-acc1-f32b344d4795}\Elements\12000004","Element",,"LiberNT Boot Manager"
 BCD,"BCD00000000\Objects\{9dea862c-5cdd-4e70-acc1-f32b344d4795}\Elements\12000005","Element",,"en-US"
 BCD,"BCD00000000\Objects\{9dea862c-5cdd-4e70-acc1-f32b344d4795}\Elements\14000006","Element",0x10000,"{7ea2e1ac-2e61-4728-aaa3-896d9d0a9f0e}"
-BCD,"BCD00000000\Objects\{9dea862c-5cdd-4e70-acc1-f32b344d4795}\Elements\23000003","Element",,"@BCD_OS_ENTRY@"
-BCD,"BCD00000000\Objects\{9dea862c-5cdd-4e70-acc1-f32b344d4795}\Elements\24000001","Element",0x10000,"@BCD_OS_ENTRY@"
+BCD,"BCD00000000\Objects\{9dea862c-5cdd-4e70-acc1-f32b344d4795}\Elements\23000003","Element",,"@BCD_DEFAULT_ENTRY@"
+BCD,"BCD00000000\Objects\{9dea862c-5cdd-4e70-acc1-f32b344d4795}\Elements\24000001","Element",0x10000,@BCD_DISPLAY_ORDER@
 BCD,"BCD00000000\Objects\{9dea862c-5cdd-4e70-acc1-f32b344d4795}\Elements\25000004","Element",0x1,@BCD_TIMEOUT@
 BCD,"BCD00000000\Objects\{9dea862c-5cdd-4e70-acc1-f32b344d4795}\Elements\26000020","Element",0x1,@BCD_DISPLAY_MENU@
 
@@ -35,6 +35,7 @@ BCD,"BCD00000000\Objects\@BCD_OS_ENTRY@\Elements\250000c2","Element",0x1,00,00,0
 BCD,"BCD00000000\Objects\@BCD_OS_ENTRY@\Elements\26000091","Element",0x1,@BCD_SOS@
 BCD,"BCD00000000\Objects\@BCD_OS_ENTRY@\Elements\260000a0","Element",0x1,@BCD_DEBUG@
 BCD,"BCD00000000\Objects\@BCD_OS_ENTRY@\Elements\12000030","Element",,"@BCD_LOAD_OPTIONS@"
+@BCD_HTTP_ENTRY@
 
 BCD,"BCD00000000\Objects\{7ea2e1ac-2e61-4728-aaa3-896d9d0a9f0e}\Description","Type",0x00010001,0x20100000
 BCD,"BCD00000000\Objects\{7ea2e1ac-2e61-4728-aaa3-896d9d0a9f0e}\Elements\14000006","Element",0x10000,"{4636856e-540f-4170-a130-a84776f4c654}","{0ce4991b-e6b3-4b16-b23c-5e0d9250e5d9}","{5189b25c-5558-4bf2-bca4-289b11bd29e2}"

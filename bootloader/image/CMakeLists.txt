@@ -27,6 +27,9 @@ math(EXPR BOOTLOADER_SYSTEM_START "${BOOTLOADER_ESP_START} + ${BOOTLOADER_ESP_SE
 
 set(BOOTLOADER_ID_NAMESPACE 354fa6e5-5e45-49af-91bf-1fd2754e470a)
 set(BCD_OS_ENTRY "{${BOOTLOADER_ID_NAMESPACE}}")
+set(BCD_DEFAULT_ENTRY "${BCD_OS_ENTRY}")
+set(BCD_DISPLAY_ORDER "\"${BCD_OS_ENTRY}\"")
+set(BCD_HTTP_ENTRY "")
 string(UUID BOOTLOADER_DISK_ID NAMESPACE ${BOOTLOADER_ID_NAMESPACE} NAME "LiberNT disk" TYPE SHA1)
 string(UUID BOOTLOADER_ESP_ID NAMESPACE ${BOOTLOADER_ID_NAMESPACE} NAME "LiberNT EFI system partition" TYPE SHA1)
 string(UUID BOOTLOADER_SYSTEM_ID NAMESPACE ${BOOTLOADER_ID_NAMESPACE} NAME "LiberNT system partition" TYPE SHA1)
@@ -270,6 +273,42 @@ if(_standard_signature)
     set(BCD_WINPE_ELEMENT "")
     set(BCD_SOS 00)
     set(BCD_DEBUG 00)
+
+    if(BOOTLOADER_HTTP_BOOT_URL)
+        string(UUID _http_entry NAMESPACE ${BOOTLOADER_ID_NAMESPACE} NAME "LiberNT HTTP boot" TYPE SHA1)
+        set(_http_entry "{${_http_entry}}")
+        bootloader_ramdisk_device(_http_device "")
+        set(_http_options "RDRAMSIZE=${BOOTLOADER_MEDIA_RAMDISK_EXTRA} HTTPBOOTURL=${BOOTLOADER_HTTP_BOOT_URL}")
+        if(BOOTLOADER_HTTP_BOOT_IP)
+            string(APPEND _http_options " HTTPBOOTIP=${BOOTLOADER_HTTP_BOOT_IP}")
+        endif()
+        string(APPEND _http_options " ${BCD_LOAD_OPTIONS}")
+        set(_object "BCD,\"BCD00000000\\Objects\\${_http_entry}")
+        set(BCD_HTTP_ENTRY "
+${_object}\\Description\",\"Type\",0x00010001,0x10200003
+${_object}\\Elements\\11000001\",\"Element\",0x1,${BCD_BOOT_DEVICE}
+${_object}\\Elements\\12000002\",\"Element\",,\"\\EFI\\LiberNT\\Boot\\${BOOTLOADER_OS_LOADER}\"
+${_object}\\Elements\\12000004\",\"Element\",,\"LiberNT (HTTP boot)\"
+${_object}\\Elements\\12000005\",\"Element\",,\"en-US\"
+${_object}\\Elements\\14000006\",\"Element\",0x10000,\"{6efb52bf-1766-41db-a6b3-0ee5eff72bd7}\"
+${_object}\\Elements\\16000009\",\"Element\",0x1,00
+${_object}\\Elements\\16000060\",\"Element\",0x1,01
+${_object}\\Elements\\21000001\",\"Element\",0x1,${_http_device}
+${_object}\\Elements\\22000002\",\"Element\",,\"\\Windows\"
+${_object}\\Elements\\22000011\",\"Element\",,\"${BCD_KERNEL}\"
+${_object}\\Elements\\22000012\",\"Element\",,\"${BCD_HAL}\"
+${_object}\\Elements\\25000020\",\"Element\",0x1,00,00,00,00,00,00,00,00
+${_object}\\Elements\\250000c2\",\"Element\",0x1,00,00,00,00,00,00,00,00
+${_object}\\Elements\\26000022\",\"Element\",0x1,01
+${_object}\\Elements\\26000091\",\"Element\",0x1,${BCD_SOS}
+${_object}\\Elements\\260000a0\",\"Element\",0x1,${BCD_DEBUG}
+${_object}\\Elements\\12000030\",\"Element\",,\"${_http_options}\"")
+        set(BCD_DISPLAY_ORDER "\"${BCD_OS_ENTRY}\",\"${_http_entry}\"")
+        if(BOOTLOADER_HTTP_BOOT_DEFAULT)
+            set(BCD_DEFAULT_ENTRY "${_http_entry}")
+        endif()
+    endif()
+
     bootloader_bcd_store(${CMAKE_CURRENT_BINARY_DIR}/standard)
     add_custom_target(bootloaderstandardbcd DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/standard/BCD)
 endif()
@@ -282,6 +321,9 @@ set(BCD_LOAD_OPTIONS "${BOOTLOADER_LOAD_OPTIONS}")
 set(BCD_WINPE_ELEMENT "")
 set(BCD_SOS 00)
 set(BCD_DEBUG 00)
+set(BCD_DEFAULT_ENTRY "${BCD_OS_ENTRY}")
+set(BCD_DISPLAY_ORDER "\"${BCD_OS_ENTRY}\"")
+set(BCD_HTTP_ENTRY "")
 bootloader_bcd_store(${CMAKE_CURRENT_BINARY_DIR}/template)
 add_custom_target(bootloadertemplatebcd DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/template/BCD)
 add_cd_file(TARGET bootloadertemplatebcd FILE ${CMAKE_CURRENT_BINARY_DIR}/template/BCD

@@ -86,6 +86,12 @@ if(FREELDR_HTTP_BOOT)
                               "${FREELDR_HTTP_BOOT_OPTIONS}")
 endif()
 
+set(BOOTLOADER_HTTP_BOOT_URL "" CACHE STRING
+    "URL of the live image the boot manager's HTTP boot entry downloads; empty leaves the entry out")
+set(BOOTLOADER_HTTP_BOOT_IP "" CACHE STRING
+    "Static IPv4 address/prefix[,gateway] of the boot manager's HTTP boot entry; empty uses DHCP")
+option(BOOTLOADER_HTTP_BOOT_DEFAULT "Start the boot manager's HTTP boot entry by default" OFF)
+
 set(FREELDR_PREINSTALL_OPTIONS "" CACHE STRING
     "Boot options appended to the boot entry of the preinstalled disk image")
 if(FREELDR_PREINSTALL_OPTIONS)
@@ -869,6 +875,11 @@ if(DEFINED EFI_PLATFORM_ID)
             -add $<TARGET_FILE:bootmgfw> EFI/LiberNT/Boot/bootmgfw.efi
             -add ${REACTOS_BINARY_DIR}/bootloader/image/standard/BCD EFI/LiberNT/Boot/BCD)
         list(APPEND _preinstall_partition_deps bootloaderstandardbcd)
+        if(BOOTLOADER_HTTP_BOOT_URL)
+            list(APPEND _preinstall_boot_partition_files
+                -add $<TARGET_FILE:winload> EFI/LiberNT/Boot/winload.efi)
+            list(APPEND _preinstall_partition_deps winload)
+        endif()
         libernt_standard_disk_ids()
     endif()
     if(_uefi_driver_files)
