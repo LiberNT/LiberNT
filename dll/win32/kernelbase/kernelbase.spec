@@ -245,6 +245,7 @@
 @ stdcall GetStringTypeW(long wstr long ptr)
 @ stdcall GetSystemCpuSetInformation(ptr long ptr ptr long)
 @ stdcall GetSystemPreferredUILanguages(long ptr ptr ptr)
+@ stdcall GetProcessorSystemCycleTime(long ptr ptr) kernel32.GetProcessorSystemCycleTime
 @ stdcall GetTempPath2A(long ptr) kernel32.GetTempPath2A
 @ stdcall GetTempPath2W(long ptr) kernel32.GetTempPath2W
 @ stdcall GetThreadDescription(ptr ptr)

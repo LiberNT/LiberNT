@@ -995,6 +995,7 @@
 @ stdcall -version=0x600+ QueryFullProcessImageNameW(ptr long ptr ptr)
 @ stdcall -version=0x600+ QueryIdleProcessorCycleTime(ptr ptr)
 @ stdcall -version=0x601+ QueryIdleProcessorCycleTimeEx(long ptr ptr)
+@ stdcall -version=0x601+ GetProcessorSystemCycleTime(long ptr ptr)
 @ stdcall QueryInformationJobObject(long long ptr long ptr)
 @ stdcall QueryMemoryResourceNotification(ptr ptr)
 @ stdcall QueryPerformanceCounter(ptr)

@@ -83,3 +83,35 @@ QueryIdleProcessorCycleTimeEx(IN USHORT Group,
 
     return TRUE;
 }
+
+BOOL
+WINAPI
+GetProcessorSystemCycleTime(IN USHORT Group,
+                            OUT PSYSTEM_PROCESSOR_CYCLE_TIME_INFORMATION Buffer,
+                            IN OUT PDWORD ReturnedLength)
+{
+    ULONG ReturnLength = 0;
+    NTSTATUS Status;
+
+    Status = NtQuerySystemInformationEx(SystemProcessorCycleTimeInformation,
+                                        &Group,
+                                        sizeof(Group),
+                                        Buffer,
+                                        *ReturnedLength,
+                                        &ReturnLength);
+    if (Status == STATUS_BUFFER_TOO_SMALL || Status == STATUS_INFO_LENGTH_MISMATCH)
+    {
+        *ReturnedLength = ReturnLength;
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    *ReturnedLength = ReturnLength;
+    return TRUE;
+}

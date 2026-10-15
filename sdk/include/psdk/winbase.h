@@ -2065,6 +2065,7 @@ BOOL WINAPI GetNamedPipeInfo(_In_ HANDLE, _Out_opt_ PDWORD, _Out_opt_ PDWORD, _O
 #if (_WIN32_WINNT >= 0x0501)
 #if (_WIN32_WINNT >= 0x0601)
 DWORD WINAPI GetActiveProcessorCount(WORD GroupNumber);
+WORD WINAPI GetActiveProcessorGroupCount(VOID);
 #endif
 #endif
 
