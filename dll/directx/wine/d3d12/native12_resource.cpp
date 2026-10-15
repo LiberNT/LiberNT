@@ -222,6 +222,11 @@ static void Native12HeapPlacement(Native12Device *device, const D3D12_HEAP_PROPE
             heap->MemoryPool = D3D12DDI_MEMORY_POOL_L0;
             heap->CPUPageProperty = D3D12DDI_CPU_PAGE_PROPERTY_WRITE_BACK;
             break;
+        case D3D12_HEAP_TYPE_GPU_UPLOAD:
+            heap->MemoryPool = device->memory.UMA ? D3D12DDI_MEMORY_POOL_L0 : D3D12DDI_MEMORY_POOL_L1;
+            heap->CPUPageProperty = device->memory.CacheCoherent ? D3D12DDI_CPU_PAGE_PROPERTY_WRITE_BACK
+                    : D3D12DDI_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+            break;
         case D3D12_HEAP_TYPE_CUSTOM:
             heap->MemoryPool = properties->MemoryPoolPreference == D3D12_MEMORY_POOL_L1
                     ? D3D12DDI_MEMORY_POOL_L1 : D3D12DDI_MEMORY_POOL_L0;
@@ -298,6 +303,10 @@ HRESULT Native12Resource::Initialize(const D3D12_HEAP_PROPERTIES *properties, D3
     if (!heap_properties.CreationNodeMask) heap_properties.CreationNodeMask = 1;
     if (!heap_properties.VisibleNodeMask) heap_properties.VisibleNodeMask = 1;
     heap_flags = flags;
+    if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER) heap_flags |= D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
+    else if (desc.Flags & (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))
+        heap_flags |= D3D12_HEAP_FLAG_ALLOW_ONLY_RT_DS_TEXTURES;
+    else heap_flags |= D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES;
     identity = reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(InterlockedIncrement64(&device->resource_sequence)));
 
     D3D12DDIARG_CREATERESOURCE_0109 resource_args;
@@ -1156,7 +1165,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommittedResource(const D3D12_HE
 {
     if (!properties || !desc) return E_INVALIDARG;
     if (out) *out = NULL;
-    HRESULT hr = ValidateHeapProperties(properties);
+    HRESULT hr = ValidateHeapProperties(properties, flags);
     if (FAILED(hr)) return hr;
     hr = Native12ValidateResource(properties->Type, desc, initial_state, clear_value);
     if (FAILED(hr))
@@ -1211,10 +1220,18 @@ D3D12_RESOURCE_ALLOCATION_INFO *STDMETHODCALLTYPE Native12Device::GetResourceAll
     return out;
 }
 
-HRESULT Native12Device::ValidateHeapProperties(const D3D12_HEAP_PROPERTIES *properties)
+HRESULT Native12Device::ValidateHeapProperties(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags)
 {
+    if (flags & D3D12_HEAP_FLAG_TOOLS_USE_MANUAL_WRITE_TRACKING) return E_INVALIDARG;
     switch (properties->Type)
     {
+        case D3D12_HEAP_TYPE_GPU_UPLOAD:
+            if (!gpu_upload.L1MemoryFullyCpuAccessible
+                    || (flags & (D3D12_HEAP_FLAG_SHARED | D3D12_HEAP_FLAG_SHARED_CROSS_ADAPTER
+                    | D3D12_HEAP_FLAG_ALLOW_DISPLAY)))
+                return E_INVALIDARG;
+            return properties->CPUPageProperty == D3D12_CPU_PAGE_PROPERTY_UNKNOWN
+                    && properties->MemoryPoolPreference == D3D12_MEMORY_POOL_UNKNOWN ? S_OK : E_INVALIDARG;
         case D3D12_HEAP_TYPE_DEFAULT:
         case D3D12_HEAP_TYPE_UPLOAD:
         case D3D12_HEAP_TYPE_READBACK:
@@ -1226,7 +1243,9 @@ HRESULT Native12Device::ValidateHeapProperties(const D3D12_HEAP_PROPERTIES *prop
                 return E_INVALIDARG;
             if (properties->MemoryPoolPreference == D3D12_MEMORY_POOL_L0) return S_OK;
             if (properties->MemoryPoolPreference != D3D12_MEMORY_POOL_L1 || memory.UMA) return E_INVALIDARG;
-            return properties->CPUPageProperty == D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE ? S_OK : E_INVALIDARG;
+            return properties->CPUPageProperty == D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE
+                    || (properties->CPUPageProperty == D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE
+                    && gpu_upload.L1MemoryFullyCpuAccessible) ? S_OK : E_INVALIDARG;
         default:
             return E_INVALIDARG;
     }
@@ -1250,9 +1269,17 @@ D3D12_HEAP_PROPERTIES *STDMETHODCALLTYPE Native12Device::GetCustomHeapProperties
             out->CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
             out->MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
             break;
-        default:
+        case D3D12_HEAP_TYPE_GPU_UPLOAD:
+            out->CPUPageProperty = memory.CacheCoherent ? D3D12_CPU_PAGE_PROPERTY_WRITE_BACK
+                    : D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+            out->MemoryPoolPreference = memory.UMA ? D3D12_MEMORY_POOL_L0 : D3D12_MEMORY_POOL_L1;
+            break;
+        case D3D12_HEAP_TYPE_DEFAULT:
             out->CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
             out->MemoryPoolPreference = memory.UMA ? D3D12_MEMORY_POOL_L0 : D3D12_MEMORY_POOL_L1;
+            break;
+        default:
+            out->Type = static_cast<D3D12_HEAP_TYPE>(0);
             break;
     }
     return out;

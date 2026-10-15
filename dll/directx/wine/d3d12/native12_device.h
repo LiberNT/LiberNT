@@ -61,7 +61,8 @@ public:
     D3D12DDI_SHADER_CAPS_0084 shader_caps = {};
     D3D12DDI_ARCHITECTURE_INFO_DATA architecture = {};
     D3D12DDI_MEMORY_ARCHITECTURE_CAPS_0041 memory = {};
-    HRESULT ValidateHeapProperties(const D3D12_HEAP_PROPERTIES *properties);
+    D3D12DDI_OPTIONS_DATA_0098 gpu_upload = {};
+    HRESULT ValidateHeapProperties(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags);
     D3D12DDI_GPUVA_CAPS_0004 gpuva = {};
     UINT highest_shader_model = D3D_SHADER_MODEL_5_1;
     HRESULT removed_reason = S_OK;

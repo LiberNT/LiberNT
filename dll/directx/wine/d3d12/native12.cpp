@@ -737,6 +737,10 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     UINT node = 0;
     QueryCaps(D3D12DDICAPS_TYPE_MEMORY_ARCHITECTURE, &node, &memory, sizeof(memory));
     QueryCaps(D3D12DDICAPS_TYPE_GPUVA_CAPS, &node, &gpuva, sizeof(gpuva));
+    if (ddi_build >= D3D12DDI_BUILD_VERSION_0098)
+        QueryCaps(D3D12DDICAPS_TYPE_OPTIONS_0098, NULL, &gpu_upload, sizeof(gpu_upload));
+    TRACE("UMA %u, cache coherent %u, L1 fully CPU accessible %u.\n", memory.UMA, memory.CacheCoherent,
+            gpu_upload.L1MemoryFullyCpuAccessible);
 
     UINT model_count = 0;
     D3D12DDI_D3D12_SHADER_MODELS_DATA_0011 models = {};
@@ -1295,6 +1299,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
             caps->DynamicDepthBiasSupported = ddi_build >= D3D12DDI_BUILD_VERSION_0099;
+            caps->GPUUploadHeapSupported = !!gpu_upload.L1MemoryFullyCpuAccessible;
             return S_OK;
         }
         case D3D12_FEATURE_D3D12_OPTIONS17:

@@ -1043,7 +1043,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateHeap(const D3D12_HEAP_DESC *desc
 {
     if (out) *out = NULL;
     if (!desc || !desc->SizeInBytes || (desc->Flags & D3D12_HEAP_FLAG_ALLOW_DISPLAY)) return E_INVALIDARG;
-    if (FAILED(ValidateHeapProperties(&desc->Properties))) return E_INVALIDARG;
+    if (FAILED(ValidateHeapProperties(&desc->Properties, desc->Flags))) return E_INVALIDARG;
     if (desc->Alignment && desc->Alignment != D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT
             && desc->Alignment != D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT)
         return E_INVALIDARG;
