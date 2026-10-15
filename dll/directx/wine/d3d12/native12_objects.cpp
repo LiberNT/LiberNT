@@ -111,6 +111,7 @@ Native12CommandList::~Native12CommandList()
     if (driver.pDrvPrivate) HeapFree(GetProcessHeap(), 0, driver.pDrvPrivate);
     if (recorder_created) device->functions.pfnDestroyCommandRecorder(device->driver_device, recorder);
     if (recorder.pDrvPrivate) HeapFree(GetProcessHeap(), 0, recorder.pDrvPrivate);
+    if (allocator) allocator->ReleaseInternal();
     ClearPassResolves();
     for (UINT i = 0; i < ARRAYSIZE(default_states); ++i)
     {
@@ -175,7 +176,9 @@ HRESULT STDMETHODCALLTYPE Native12CommandList::Reset(ID3D12CommandAllocator *poo
     if (target->type != type) return E_INVALIDARG;
     if (InterlockedCompareExchangePointer(reinterpret_cast<void *volatile *>(&target->recording_list), this, NULL))
         return E_INVALIDARG;
+    Native12CommandAllocator *previous = allocator;
     allocator = target;
+    allocator->AddInternal();
     error = S_OK;
     device->functions.pfnCommandRecorderSetCommandPoolAsTarget(device->driver_device, recorder, target->driver);
     D3D12DDIARG_RESETCOMMANDLIST_0040 args = {};
@@ -183,6 +186,7 @@ HRESULT STDMETHODCALLTYPE Native12CommandList::Reset(ID3D12CommandAllocator *poo
     args.ID = id;
     table->pfnResetCommandList(driver, &args);
     recording = true;
+    if (previous) previous->ReleaseInternal();
     D3D12DDI_HRESOURCE no_buffer = {};
     table->pfnSetPredication(driver, no_buffer, 0, D3D12DDI_PREDICATION_OP_EQUAL_ZERO);
     graphics_bound = compute_bound = false;
