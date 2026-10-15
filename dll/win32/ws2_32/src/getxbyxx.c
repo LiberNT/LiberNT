@@ -412,8 +412,15 @@ gethostname(OUT char FAR * name,
     getxyDataEnt(&Results, RNR_BUFFER_SIZE, NULL, &HostnameGuid, &Name);
     if (Name)
     {
+        if (strlen(Name) >= (SIZE_T)namelen)
+        {
+            if (Results != ResultsBuffer) HeapFree(WsSockHeap, 0, Results);
+            SetLastError(WSAEFAULT);
+            return SOCKET_ERROR;
+        }
+
         /* Copy it */
-        strncpy(name, Name, namelen-1);
+        strcpy(name, Name);
     }
 
     /* Check if we received a newly allocated buffer; free it. */
