@@ -1645,6 +1645,7 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
     UCHAR LogonPassHash;
     PUNICODE_STRING ErasePassword = NULL;
     PLOGON_LIST_ENTRY LogonEntry = NULL;
+    BOOLEAN WellKnownLogon = FALSE, ExistingLogon = FALSE;
 
     TRACE("LsaApLogonUserEx2()\n");
 
@@ -1825,25 +1826,47 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
 
     /* Return logon information */
 
-    /* Create and return a new logon id */
-    Status = NtAllocateLocallyUniqueId(LogonId);
-    if (!NT_SUCCESS(Status))
+    if (SpecialAccount && UserInfo->All.UserId == SECURITY_LOCAL_SERVICE_RID)
     {
-        TRACE("NtAllocateLocallyUniqueId failed (Status %08lx)\n", Status);
-        goto done;
+        LUID ServiceLuid = LOCALSERVICE_LUID;
+
+        *LogonId = ServiceLuid;
+        WellKnownLogon = TRUE;
+    }
+    else if (SpecialAccount && UserInfo->All.UserId == SECURITY_NETWORK_SERVICE_RID)
+    {
+        LUID ServiceLuid = NETWORKSERVICE_LUID;
+
+        *LogonId = ServiceLuid;
+        WellKnownLogon = TRUE;
+    }
+    else
+    {
+        /* Create and return a new logon id */
+        Status = NtAllocateLocallyUniqueId(LogonId);
+        if (!NT_SUCCESS(Status))
+        {
+            TRACE("NtAllocateLocallyUniqueId failed (Status %08lx)\n", Status);
+            goto done;
+        }
     }
 
     /* Create the logon session */
     Status = DispatchTable.CreateLogonSession(LogonId);
+    if (WellKnownLogon && Status == STATUS_LOGON_SESSION_COLLISION)
+    {
+        ExistingLogon = TRUE;
+        Status = STATUS_SUCCESS;
+    }
     if (!NT_SUCCESS(Status))
     {
         TRACE("CreateLogonSession failed (Status %08lx)\n", Status);
         goto done;
     }
 
-    SessionCreated = TRUE;
+    SessionCreated = !ExistingLogon;
 
-    LogonEntry = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(LOGON_LIST_ENTRY));
+    LogonEntry = ExistingLogon ? NULL : RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(LOGON_LIST_ENTRY));
     if (LogonEntry)
     {
         RtlCopyMemory(&LogonEntry->LogonId, LogonId, sizeof(LUID));
