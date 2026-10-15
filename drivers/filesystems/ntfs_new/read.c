@@ -507,7 +507,24 @@ NtfsFsdRead(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         FileObject->SectionObjectPointer != NULL &&
         FileObject->PrivateCacheMap == NULL)
     {
-        NtfsInitializeStreamCache(FileCB, FileObject);
+        NTSTATUS CacheStatus = STATUS_SUCCESS;
+
+        _SEH2_TRY
+        {
+            NtfsInitializeStreamCache(FileCB, FileObject);
+        }
+        _SEH2_EXCEPT(FsRtlIsNtstatusExpected(_SEH2_GetExceptionCode()) ?
+                     EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+        {
+            CacheStatus = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+
+        if (!NT_SUCCESS(CacheStatus))
+        {
+            Status = CacheStatus;
+            goto Complete;
+        }
     }
 
     /*
