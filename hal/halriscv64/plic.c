@@ -237,7 +237,7 @@ HalEnableSystemInterrupt(ULONG Vector, KIRQL Irql, KINTERRUPT_MODE Mode)
     ULONG Bit;
 
     if (!HalpRiscvPlic.Mapping || !HalpRiscvPlicValidSource(Vector) ||
-        Irql != RISCV_HAL_EXTERNAL_IRQL || Mode != LevelSensitive)
+        (Irql != RISCV_HAL_EXTERNAL_IRQL && Irql != PASSIVE_LEVEL) || Mode != LevelSensitive)
         return FALSE;
 
     Enable = HalpRiscvPlicEnableWord(Vector);
@@ -260,7 +260,7 @@ HalDisableSystemInterrupt(ULONG Vector, KIRQL Irql)
     ULONG Bit;
 
     if (!HalpRiscvPlic.Mapping || !HalpRiscvPlicValidSource(Vector) ||
-        Irql != RISCV_HAL_EXTERNAL_IRQL)
+        (Irql != RISCV_HAL_EXTERNAL_IRQL && Irql != PASSIVE_LEVEL))
         return;
     Enable = HalpRiscvPlicEnableWord(Vector);
     Bit = 1UL << (Vector % 32);

@@ -244,6 +244,13 @@ KiRiscvExternalInterrupt(_Inout_ PKTRAP_FRAME TrapFrame)
         } while (TRUE);
         _disable();
     }
+    else
+    {
+        BOOLEAN IsLevel = FALSE;
+
+        if (KiDispatchPassiveInterrupt(Source, &IsLevel) && IsLevel)
+            HalDisableSystemInterrupt(Source, PASSIVE_LEVEL);
+    }
     HalpRiscvCompletePlicInterrupt(Source);
     KfLowerIrql(OldIrql);
 }
