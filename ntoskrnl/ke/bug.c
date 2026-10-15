@@ -1824,6 +1824,9 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
             }
 
             /* Break in the debugger */
+#ifndef _WINKD_
+            KdEnableBugCheckDebugger();
+#endif
             KiBugCheckDebugBreak(DBG_STATUS_BUGCHECK_FIRST);
         }
     }
@@ -1915,6 +1918,10 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
     /* A double fault is already using the emergency IST. Do not recursively
      * enter the debugger after the crash report and dump are complete. */
     if (IsDoubleFault) HalHaltSystem();
+
+#ifndef _WINKD_
+    KdEnableBugCheckDebugger();
+#endif
 
     /* Attempt to break in the debugger (otherwise halt CPU) */
     KiBugCheckDebugBreak(DBG_STATUS_BUGCHECK_SECOND);

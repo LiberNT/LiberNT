@@ -12,7 +12,6 @@
 #include "kd.h"
 #include "kdterminal.h"
 
-#define KdbpGetCharKeyboard(ScanCode) KdbpTryGetCharKeyboard((ScanCode), 0)
 CHAR
 KdbpTryGetCharKeyboard(PULONG ScanCode, ULONG Retry);
 
@@ -218,70 +217,94 @@ KdpUpdateTerminalSize(
 }
 
 /**
- * @brief   Flushes terminal input (either serial or PS/2).
+ * @brief   Flushes terminal input (serial, PS/2 and USB keyboards).
  **/
 VOID
 KdpFlushTerminalInput(VOID)
 {
+    ULONG ScanCode;
+
     KdTermNextKey = ANSI_NULL;
-    if (KdTermSerial)
+    while (KdbpTryGetCharSerial(1) != -1);
+    while (KdbpTryGetCharKeyboard(&ScanCode, 1) != -1);
+}
+
+static CHAR
+KdpTryReadSerialKey(
+    _Out_ PULONG ScanCode)
+{
+    CHAR Key;
+
+    Key = KdbpTryGetCharSerial(1);
+    if (Key == KEY_ESC) /* ESC */
     {
-        while (KdbpTryGetCharSerial(1) != -1);
+        Key = KdbpGetCharSerial();
+        if (Key == '[')
+        {
+            Key = KdbpGetCharSerial();
+            switch (Key)
+            {
+                case 'A':
+                    *ScanCode = KEY_SCAN_UP;
+                    break;
+                case 'B':
+                    *ScanCode = KEY_SCAN_DOWN;
+                    break;
+                case 'C':
+                    break;
+                case 'D':
+                    break;
+            }
+        }
     }
-    else
-    {
-        ULONG ScanCode;
-        while (KdbpTryGetCharKeyboard(&ScanCode, 1) != -1);
-    }
+
+    return Key;
 }
 
 /**
  * @brief
- * Reads one character from the terminal. This function returns
- * a scan code even when reading is done from a serial terminal.
+ * Reads one character from the first terminal input that has one:
+ * serial, PS/2 keyboard or USB keyboard. This function returns a
+ * scan code even when reading is done from a serial terminal.
  **/
 CHAR
 KdpReadTermKey(
     _Out_ PULONG ScanCode)
 {
     CHAR Key;
+    BOOLEAN FromSerial = TRUE;
 
     *ScanCode = 0;
 
-    if (KdTermSerial)
+    if (KdTermNextKey)
     {
-        Key = (!KdTermNextKey ? KdbpGetCharSerial() : KdTermNextKey);
+        Key = KdTermNextKey;
         KdTermNextKey = ANSI_NULL;
-        if (Key == KEY_ESC) /* ESC */
-        {
-            Key = KdbpGetCharSerial();
-            if (Key == '[')
-            {
-                Key = KdbpGetCharSerial();
-                switch (Key)
-                {
-                    case 'A':
-                        *ScanCode = KEY_SCAN_UP;
-                        break;
-                    case 'B':
-                        *ScanCode = KEY_SCAN_DOWN;
-                        break;
-                    case 'C':
-                        break;
-                    case 'D':
-                        break;
-                }
-            }
-        }
     }
     else
     {
-        Key = (!KdTermNextKey ? KdbpGetCharKeyboard(ScanCode) : KdTermNextKey);
-        KdTermNextKey = ANSI_NULL;
+        for (;;)
+        {
+            FromSerial = TRUE;
+            *ScanCode = 0;
+            Key = KdpTryReadSerialKey(ScanCode);
+            if ((Key != -1) || (*ScanCode != 0))
+                break;
+
+            FromSerial = FALSE;
+            Key = KdbpTryGetCharKeyboard(ScanCode, 1);
+            if (Key != -1)
+                break;
+
+            *ScanCode = 0;
+            Key = KdpUsbKeyboardTryGetChar(ScanCode);
+            if (Key != -1)
+                break;
+        }
     }
 
     /* Check for return */
-    if (Key == '\r')
+    if ((Key == '\r') && FromSerial)
     {
         /*
          * We might need to discard the next '\n' which most clients
@@ -289,11 +312,7 @@ KdpReadTermKey(
          */
         KeStallExecutionProcessor(100000);
 
-        if (KdTermSerial)
-            KdTermNextKey = KdbpTryGetCharSerial(5);
-        else
-            KdTermNextKey = KdbpTryGetCharKeyboard(ScanCode, 5);
-
+        KdTermNextKey = KdbpTryGetCharSerial(5);
         if (KdTermNextKey == '\n' || KdTermNextKey == -1) /* \n or no response at all */
             KdTermNextKey = ANSI_NULL;
     }

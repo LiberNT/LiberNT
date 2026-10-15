@@ -57,4 +57,16 @@ CHAR
 KdpReadTermKey(
     _Out_ PULONG ScanCode);
 
+CHAR
+KdpScanCodeToChar(
+    _In_ UCHAR ScanCode,
+    _In_ BOOLEAN Shift);
+
+VOID
+KdpUsbKeyboardInitialize(VOID);
+
+CHAR
+KdpUsbKeyboardTryGetChar(
+    _Out_ PULONG ScanCode);
+
 /* EOF */

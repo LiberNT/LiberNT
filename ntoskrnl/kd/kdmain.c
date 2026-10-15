@@ -399,6 +399,8 @@ KdDebuggerInitialize1(
     BOOLEAN Success = FALSE;
     BOOLEAN ReinitForPhase2 = FALSE;
 
+    KdpUsbKeyboardInitialize();
+
     /* Make space for the displayed providers' signons */
     HalDisplayString("\r\n");
 

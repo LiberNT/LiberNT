@@ -576,7 +576,8 @@ endif()
         ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdprompt.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdps2kbd.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdserial.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdterminal.c)
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdterminal.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/kdusbkbd.c)
 
 else()
     add_definitions(-D_WINKD_)

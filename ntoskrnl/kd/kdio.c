@@ -492,6 +492,43 @@ KdShowShutdownLog(VOID)
     return TRUE;
 }
 
+VOID
+NTAPI
+KdEnableBugCheckDebugger(VOID)
+{
+#ifdef KDBG
+    static BOOLEAN Prepared = FALSE;
+
+    if (KdPitchDebugger || (Prepared && KdDebuggerEnabled))
+        return;
+
+    if (!KdpDebugMode.Screen && InbvIsBootDriverInstalled())
+    {
+        KdpDebugMode.Screen = TRUE;
+        if (InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
+            KdpScreenInitialized = TRUE;
+    }
+
+    if (!KdpDebugMode.Serial)
+    {
+        KdpDebugMode.Serial = TRUE;
+        SerialPortNumber = 1;
+    }
+
+    if (KdDebuggerEnabled)
+        KdDebuggerInitialize0(NULL);
+    else if (NT_SUCCESS(KdEnableDebuggerWithLock(FALSE)) && !KdDebuggerEnabled)
+        KdInitSystem(0, NULL);
+
+    if (!KdDebuggerEnabled)
+        return;
+
+    Prepared = TRUE;
+    KdDebuggerNotPresent = FALSE;
+    MmWriteableSharedUserData->KdDebuggerEnabled |= 0x00000002;
+#endif
+}
+
 // extern VOID NTAPI InbvSetDisplayOwnership(IN BOOLEAN DisplayOwned);
 
 VOID

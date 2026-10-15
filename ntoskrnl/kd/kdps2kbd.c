@@ -43,6 +43,12 @@
 #define kbd_read_input()        READ_PORT_UCHAR((PUCHAR)KBD_DATA_REG)
 #define kbd_read_status()       READ_PORT_UCHAR((PUCHAR)KBD_STATUS_REG)
 
+#define KBD_DRAIN_LIMIT         16
+
+typedef UCHAR byte_t;
+
+#endif /* KBD_PS2_SUPPORTED */
+
 static unsigned char keyb_layout[2][128] =
 {
     "\000\0331234567890-=\177\t"                                        /* 0x00 - 0x0f */
@@ -62,11 +68,24 @@ static unsigned char keyb_layout[2][128] =
     "\r\000/"                                                           /* 0x60 - 0x6f */
 };
 
-typedef UCHAR byte_t;
-
-#endif /* KBD_PS2_SUPPORTED */
-
 /* FUNCTIONS *****************************************************************/
+
+CHAR
+KdpScanCodeToChar(
+    _In_ UCHAR ScanCode,
+    _In_ BOOLEAN Shift)
+{
+    UCHAR c;
+
+    if (ScanCode >= RTL_NUMBER_OF(keyb_layout[0]))
+        return -1;
+
+    c = keyb_layout[Shift ? 1 : 0][ScanCode];
+    if ((c == 0) || (c >= 0x80))
+        return -1;
+
+    return (CHAR)c;
+}
 
 #if KBD_PS2_SUPPORTED
 
@@ -125,11 +144,12 @@ KdbpTryGetCharKeyboard(PULONG ScanCode, ULONG Retry)
     static byte_t last_key = 0;
     static byte_t shift = 0;
     char c;
+    ULONG Drained;
     BOOLEAN KeepRetrying = (Retry == 0);
 
     while (KeepRetrying || Retry-- > 0)
     {
-        while (kbd_read_status() & KBD_STAT_OBF)
+        for (Drained = 0; (Drained < KBD_DRAIN_LIMIT) && (kbd_read_status() & KBD_STAT_OBF); Drained++)
         {
             byte_t scancode;
 
@@ -151,10 +171,10 @@ KdbpTryGetCharKeyboard(PULONG ScanCode, ULONG Retry)
             {
                 //printf("kbd: %d, %d, %c\n", scancode, last_key, keyb_layout[shift][scancode]);
                 last_key = scancode;
-                c = keyb_layout[shift][scancode];
+                c = KdpScanCodeToChar(scancode, shift);
                 *ScanCode = scancode;
 
-                if (c > 0)
+                if (c != -1)
                     return c;
             }
         }
