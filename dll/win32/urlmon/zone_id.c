@@ -183,6 +183,67 @@ static HRESULT WINAPI PZIPersistFile_IsDirty(IPersistFile *iface)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static WCHAR *zone_stream_name(LPCOLESTR file_name)
+{
+    static const WCHAR suffix[] = L":Zone.Identifier";
+    WCHAR *stream = malloc((lstrlenW(file_name) + ARRAY_SIZE(suffix)) * sizeof(WCHAR));
+
+    if (stream)
+    {
+        lstrcpyW(stream, file_name);
+        lstrcatW(stream, suffix);
+    }
+    return stream;
+}
+
+static BOOL read_zone_stream(LPCOLESTR file_name, DWORD *zone)
+{
+    WCHAR *stream = zone_stream_name(file_name);
+    char buffer[1024], *id;
+    DWORD read = 0;
+    HANDLE hfile;
+
+    if (!stream)
+        return FALSE;
+    hfile = CreateFileW(stream, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    free(stream);
+    if (hfile == INVALID_HANDLE_VALUE)
+        return FALSE;
+    if (!ReadFile(hfile, buffer, sizeof(buffer) - 1, &read, NULL))
+        read = 0;
+    CloseHandle(hfile);
+    buffer[read] = 0;
+
+    if (!(id = strstr(buffer, "ZoneId=")))
+        return FALSE;
+    *zone = strtoul(id + 7, NULL, 10);
+    return TRUE;
+}
+
+static HRESULT write_zone_stream(LPCOLESTR file_name, DWORD zone)
+{
+    WCHAR *stream = zone_stream_name(file_name);
+    char buffer[64];
+    DWORD written;
+    HANDLE hfile;
+    BOOL ret;
+
+    if (!stream)
+        return E_OUTOFMEMORY;
+    hfile = CreateFileW(stream, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    free(stream);
+    if (hfile == INVALID_HANDLE_VALUE)
+        return HRESULT_FROM_WIN32(GetLastError());
+    sprintf(buffer, "[ZoneTransfer]\r\nZoneId=%lu\r\n", zone);
+    ret = WriteFile(hfile, buffer, strlen(buffer), &written, NULL);
+    CloseHandle(hfile);
+    return ret ? S_OK : HRESULT_FROM_WIN32(GetLastError());
+}
+
+#endif
 static HRESULT WINAPI PZIPersistFile_Load(IPersistFile *iface, LPCOLESTR file_name, DWORD mode)
 {
     PersistentZoneIdentifier *This = impl_from_IPersistFile(iface);
@@ -208,6 +269,17 @@ static HRESULT WINAPI PZIPersistFile_Load(IPersistFile *iface, LPCOLESTR file_na
 
     CloseHandle(hfile);
 
+#ifdef __REACTOS__
+    {
+        DWORD zone;
+
+        if (read_zone_stream(file_name, &zone))
+        {
+            This->zone = zone;
+            This->is_zone_removed = FALSE;
+        }
+    }
+#endif
     if (lstrcmpW(This->load_file_name, file_name))
     {
         free(This->load_file_name);
@@ -244,6 +316,14 @@ static HRESULT WINAPI PZIPersistFile_Save(IPersistFile *iface, LPCOLESTR file_na
 
     CloseHandle(hfile);
 
+#ifdef __REACTOS__
+    if (!This->is_zone_removed)
+    {
+        HRESULT hr = write_zone_stream(file_name, This->zone);
+        if (FAILED(hr))
+            return hr;
+    }
+#endif
     if (remember)
     {
         new_file_name = wcsdup(file_name);
