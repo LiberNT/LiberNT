@@ -630,10 +630,12 @@ typedef struct _ICMP6_ECHO_CONTEXT
     ip_addr_t Destination;
     ip_addr_t Source;
     BOOLEAN HasSource;
-    u8_t Ttl;
+    BOOLEAN DefaultHopLimit;
+    u8_t HopLimit;
     PUCHAR Data;
     u16_t DataSize;
     err_t SendError;
+    PICMPV6_ECHO_REPLY Reply;
     ULONG OutputLength;
 } ICMP6_ECHO_CONTEXT, *PICMP6_ECHO_CONTEXT;
 
@@ -653,13 +655,24 @@ NTAPI
 LibICMP6FinishWorker(PDEVICE_OBJECT DeviceObject, PVOID Context);
 
 static
+VOID
+LibICMP6Complete(PICMP6_ECHO_CONTEXT Context, NTSTATUS Status, ULONG ReplyStatus)
+{
+    RtlZeroMemory(Context->Reply, sizeof(*Context->Reply));
+    Context->Reply->Status = ReplyStatus;
+    Context->Irp->IoStatus.Status = Status;
+    Context->Irp->IoStatus.Information = sizeof(*Context->Reply);
+    IoQueueWorkItem(Context->WorkItem, LibICMP6FinishWorker, DelayedWorkQueue, Context);
+}
+
+static
 u8_t
 LibICMP6Recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *addr)
 {
     PICMP6_ECHO_CONTEXT Context = arg;
     struct icmp6_echo_hdr Header;
     u16_t Offset = ip_current_header_tot_len();
-    PICMPV6_ECHO_REPLY Reply;
+    PICMPV6_ECHO_REPLY Reply = Context->Reply;
     ULONG Copy;
 
     if (p->tot_len < Offset + sizeof(Header) ||
@@ -676,7 +689,6 @@ LibICMP6Recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *ad
         return 1;
     }
 
-    Reply = Context->Irp->AssociatedIrp.SystemBuffer;
     RtlZeroMemory(Reply, sizeof(*Reply));
     LibICMP6FillAddress(&Reply->Address, addr);
     Reply->Status = IP_SUCCESS;
@@ -713,8 +725,8 @@ LibICMP6StartCallback(void *arg)
 
     Context->Pcb->chksum_reqd = 1;
     Context->Pcb->chksum_offset = 2;
-    if (Context->Ttl)
-        Context->Pcb->ttl = Context->Ttl;
+    if (!Context->DefaultHopLimit)
+        Context->Pcb->ttl = Context->HopLimit;
     if (Context->HasSource)
         raw_bind(Context->Pcb, &Context->Source);
     raw_recv(Context->Pcb, LibICMP6Recv, Context);
@@ -784,16 +796,6 @@ LibICMP6FinishWorker(PDEVICE_OBJECT DeviceObject, PVOID ContextArg)
     PIRP Irp = Context->Irp;
     KIRQL OldIrql;
 
-    if (Context->Finished == 2)
-    {
-        PICMPV6_ECHO_REPLY Reply = Irp->AssociatedIrp.SystemBuffer;
-
-        RtlZeroMemory(Reply, sizeof(*Reply));
-        Reply->Status = IP_REQ_TIMED_OUT;
-        Irp->IoStatus.Status = STATUS_TIMEOUT;
-        Irp->IoStatus.Information = sizeof(*Reply);
-    }
-
     IoAcquireCancelSpinLock(&OldIrql);
     IoSetCancelRoutine(Irp, NULL);
     IoReleaseCancelSpinLock(OldIrql);
@@ -810,7 +812,31 @@ LibICMP6TimeoutDpc(PKDPC Dpc, PVOID ContextArg, PVOID SystemArgument1, PVOID Sys
     PICMP6_ECHO_CONTEXT Context = ContextArg;
 
     if (InterlockedCompareExchange(&Context->Finished, 2, 0) == 0)
-        IoQueueWorkItem(Context->WorkItem, LibICMP6FinishWorker, DelayedWorkQueue, Context);
+        LibICMP6Complete(Context, STATUS_TIMEOUT, IP_REQ_TIMED_OUT);
+}
+
+static
+BOOLEAN
+LibICMP6ResolveScope(ip6_addr_t *Address, ULONG ScopeId)
+{
+    struct netif *netif;
+
+    ip6_addr_clear_zone(Address);
+    if (!ip6_addr_has_scope(Address, IP6_UNKNOWN) || !ScopeId)
+        return TRUE;
+
+    NETIF_FOREACH(netif)
+    {
+        PIP_INTERFACE IF = netif->state;
+
+        if (IF && IF->Index == ScopeId)
+        {
+            ip6_addr_assign_zone(Address, IP6_UNKNOWN, netif);
+            return TRUE;
+        }
+    }
+
+    return FALSE;
 }
 
 NTSTATUS
@@ -820,15 +846,34 @@ LibICMP6EchoRequest(PDEVICE_OBJECT DeviceObject, PIRP Irp, PIO_STACK_LOCATION Ir
     ULONG InputLength = IrpSp->Parameters.DeviceIoControl.InputBufferLength;
     ULONG OutputLength = IrpSp->Parameters.DeviceIoControl.OutputBufferLength;
     PICMP6_ECHO_CONTEXT Context;
+    PICMPV6_ECHO_REPLY Reply;
+    IP_ADDRESS SourceAddress, DestinationAddress;
     LARGE_INTEGER Timeout;
     ULONG DataSize;
 
-    if (InputLength < sizeof(*Request) || OutputLength < sizeof(ICMPV6_ECHO_REPLY))
+    if (InputLength < sizeof(*Request) || OutputLength < sizeof(ICMPV6_ECHO_REPLY) || !Irp->MdlAddress)
         return STATUS_INVALID_PARAMETER;
 
     DataSize = InputLength - sizeof(*Request);
     if (DataSize > 0xFFFF - IP6_HLEN - sizeof(struct icmp6_echo_hdr))
         return STATUS_INVALID_PARAMETER;
+
+    Reply = MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);
+    if (!Reply)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    SourceAddress.Type = IP_ADDRESS_V6;
+    RtlCopyMemory(SourceAddress.Address.IPv6Address, Request->SourceAddress.sin6_addr,
+                  sizeof(SourceAddress.Address.IPv6Address));
+    DestinationAddress.Type = IP_ADDRESS_V6;
+    RtlCopyMemory(DestinationAddress.Address.IPv6Address, Request->DestinationAddress.sin6_addr,
+                  sizeof(DestinationAddress.Address.IPv6Address));
+
+    if (AddrIsUnspecified(&DestinationAddress))
+        return STATUS_INVALID_ADDRESS_COMPONENT;
+
+    if (!AddrIsUnspecified(&SourceAddress) && !LibIPIsLocalAddress(&SourceAddress))
+        return STATUS_INVALID_ADDRESS_COMPONENT;
 
     Context = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Context), LWIP_TAG);
     if (!Context)
@@ -836,6 +881,7 @@ LibICMP6EchoRequest(PDEVICE_OBJECT DeviceObject, PIRP Irp, PIO_STACK_LOCATION Ir
     RtlZeroMemory(Context, sizeof(*Context));
 
     Context->Irp = Irp;
+    Context->Reply = Reply;
     Context->OutputLength = OutputLength;
     Context->WorkItem = IoAllocateWorkItem(DeviceObject);
     if (DataSize)
@@ -851,27 +897,12 @@ LibICMP6EchoRequest(PDEVICE_OBJECT DeviceObject, PIRP Irp, PIO_STACK_LOCATION Ir
     Context->DataSize = (u16_t)DataSize;
     Context->Identifier = lwip_htons((u16_t)((ULONG_PTR)PsGetCurrentProcessId() & 0xFFFF));
     Context->Sequence = lwip_htons((u16_t)InterlockedIncrement(&Icmp6Sequence));
-    Context->Ttl = (u8_t)Request->Ttl;
+    Context->DefaultHopLimit = (Request->Ttl > 0xFF);
+    Context->HopLimit = (u8_t)Request->Ttl;
 
     IP_SET_TYPE(&Context->Destination, IPADDR_TYPE_V6);
     RtlCopyMemory(ip_2_ip6(&Context->Destination)->addr, Request->DestinationAddress.sin6_addr,
                   sizeof(ip_2_ip6(&Context->Destination)->addr));
-    ip6_addr_clear_zone(ip_2_ip6(&Context->Destination));
-    if (ip6_addr_has_scope(ip_2_ip6(&Context->Destination), IP6_UNKNOWN))
-    {
-        struct netif *netif;
-
-        NETIF_FOREACH(netif)
-        {
-            PIP_INTERFACE IF = netif->state;
-
-            if (IF && IF->Index == Request->DestinationAddress.sin6_scope_id)
-            {
-                ip6_addr_assign_zone(ip_2_ip6(&Context->Destination), IP6_UNKNOWN, netif);
-                break;
-            }
-        }
-    }
 
     IP_SET_TYPE(&Context->Source, IPADDR_TYPE_V6);
     RtlCopyMemory(ip_2_ip6(&Context->Source)->addr, Request->SourceAddress.sin6_addr,
@@ -883,8 +914,23 @@ LibICMP6EchoRequest(PDEVICE_OBJECT DeviceObject, PIRP Irp, PIO_STACK_LOCATION Ir
     KeInitializeDpc(&Context->Dpc, LibICMP6TimeoutDpc, Context);
     Context->RefCount = 2;
 
-    RtlZeroMemory(Irp->AssociatedIrp.SystemBuffer, OutputLength);
     IoMarkIrpPending(Irp);
+
+    if (!Context->DefaultHopLimit && !Context->HopLimit)
+    {
+        Context->Finished = 3;
+        LibICMP6Complete(Context, STATUS_INVALID_PARAMETER, IP_GENERAL_FAILURE);
+        LibICMP6Release(Context);
+        return STATUS_PENDING;
+    }
+
+    if (!LibICMP6ResolveScope(ip_2_ip6(&Context->Destination), Request->DestinationAddress.sin6_scope_id))
+    {
+        Context->Finished = 3;
+        LibICMP6Complete(Context, STATUS_SUCCESS, IP_DEST_NET_UNREACHABLE);
+        LibICMP6Release(Context);
+        return STATUS_PENDING;
+    }
 
     Timeout.QuadPart = -10000LL * (Request->Timeout ? Request->Timeout : 1);
     KeSetTimer(&Context->Timer, Timeout, &Context->Dpc);
@@ -893,12 +939,9 @@ LibICMP6EchoRequest(PDEVICE_OBJECT DeviceObject, PIRP Irp, PIO_STACK_LOCATION Ir
     {
         if (InterlockedCompareExchange(&Context->Finished, 3, 0) == 0)
         {
-            PICMPV6_ECHO_REPLY Reply = Irp->AssociatedIrp.SystemBuffer;
-
-            Reply->Status = Context->SendError == ERR_RTE ? IP_DEST_NET_UNREACHABLE : IP_GENERAL_FAILURE;
-            Irp->IoStatus.Status = STATUS_SUCCESS;
-            Irp->IoStatus.Information = sizeof(*Reply);
-            IoQueueWorkItem(Context->WorkItem, LibICMP6FinishWorker, DelayedWorkQueue, Context);
+            KeCancelTimer(&Context->Timer);
+            LibICMP6Complete(Context, STATUS_SUCCESS,
+                             Context->SendError == ERR_RTE ? IP_DEST_NET_UNREACHABLE : IP_GENERAL_FAILURE);
         }
     }
 

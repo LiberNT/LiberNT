@@ -80,6 +80,49 @@ ClearReceiveHandler(
     UnlockObject(AddrFile);
 }
 
+static
+ULONG
+IcmpPackReplies(
+    _In_ PIRP Irp,
+    _In_ ULONG Replies,
+    _In_ ULONG Length)
+{
+    PUCHAR System = Irp->AssociatedIrp.SystemBuffer;
+    PUCHAR User = Irp->UserBuffer;
+    PICMP_ECHO_REPLY Reply = (PICMP_ECHO_REPLY)System;
+    ULONG Used = Replies * sizeof(ICMP_ECHO_REPLY);
+    PUCHAR Packed;
+    ULONG i;
+
+    Packed = ExAllocatePoolWithTag(NonPagedPool, Length, OUT_DATA_TAG);
+    if (!Packed)
+        return Length;
+
+    RtlCopyMemory(Packed, System, Used);
+    for (i = 0; i < Replies; i++)
+    {
+        PICMP_ECHO_REPLY Out = (PICMP_ECHO_REPLY)Packed + i;
+
+        if (Reply[i].Options.OptionsSize)
+        {
+            RtlCopyMemory(Packed + Used, System + ((PUCHAR)Reply[i].Options.OptionsData - User),
+                          Reply[i].Options.OptionsSize);
+            Out->Options.OptionsData = User + Used;
+            Used += Reply[i].Options.OptionsSize;
+        }
+        if (Reply[i].DataSize)
+        {
+            RtlCopyMemory(Packed + Used, System + ((PUCHAR)Reply[i].Data - User), Reply[i].DataSize);
+            Out->Data = User + Used;
+            Used += Reply[i].DataSize;
+        }
+    }
+
+    RtlCopyMemory(System, Packed, Used);
+    ExFreePoolWithTag(Packed, OUT_DATA_TAG);
+    return Used;
+}
+
 IO_WORKITEM_ROUTINE EndRequestHandler;
 
 VOID
@@ -107,9 +150,10 @@ EndRequestHandler(
 
     if (Context->nReplies > 0)
     {
+        Irp->IoStatus.Information = IcmpPackReplies(Irp, Context->nReplies,
+                                                    CurrentStack->Parameters.DeviceIoControl.OutputBufferLength);
         ((PICMP_ECHO_REPLY)Irp->AssociatedIrp.SystemBuffer)->Reserved = Context->nReplies;
         Irp->IoStatus.Status = STATUS_SUCCESS;
-        Irp->IoStatus.Information = CurrentStack->Parameters.DeviceIoControl.OutputBufferLength;
     }
     else
     {
@@ -386,6 +430,9 @@ DispEchoRequest(
     {
         return STATUS_INVALID_PARAMETER;
     }
+
+    if (Request->Address == 0)
+        return STATUS_INVALID_ADDRESS_COMPONENT;
 
     SendContext = ExAllocatePoolWithTag(NonPagedPool, sizeof(*SendContext), OUT_DATA_TAG);
     if (!SendContext)

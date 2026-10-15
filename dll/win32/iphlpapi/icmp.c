@@ -8,6 +8,98 @@
 
 #include "iphlpapi_private.h"
 
+#include <tcpip_undoc.h>
+
+typedef struct _ICMP_ASYNC_CONTEXT
+{
+    HANDLE Event;
+    HANDLE Thread;
+    PIO_APC_ROUTINE ApcRoutine;
+    PVOID ApcContext;
+    IO_STATUS_BLOCK IoStatusBlock;
+} ICMP_ASYNC_CONTEXT, *PICMP_ASYNC_CONTEXT;
+
+static
+VOID
+CALLBACK
+IcmpApcRoutine(
+    _In_ ULONG_PTR Parameter)
+{
+    PICMP_ASYNC_CONTEXT Context = (PICMP_ASYNC_CONTEXT)Parameter;
+
+    Context->ApcRoutine(Context->ApcContext, &Context->IoStatusBlock, 0);
+    HeapFree(GetProcessHeap(), 0, Context);
+}
+
+static
+VOID
+CALLBACK
+IcmpCompletionRoutine(
+    _In_ DWORD ErrorCode,
+    _In_ DWORD BytesTransferred,
+    _In_ LPOVERLAPPED Overlapped)
+{
+    PICMP_ASYNC_CONTEXT Context = (PICMP_ASYNC_CONTEXT)Overlapped;
+    HANDLE Thread;
+    BOOL Queued;
+
+    if (!Context)
+        return;
+
+    if (Context->Event)
+    {
+        SetEvent(Context->Event);
+    }
+    else if (Context->ApcRoutine)
+    {
+        Thread = Context->Thread;
+        Context->Thread = NULL;
+        Queued = QueueUserAPC(IcmpApcRoutine, Thread, (ULONG_PTR)Context);
+        CloseHandle(Thread);
+        if (Queued)
+            return;
+    }
+
+    HeapFree(GetProcessHeap(), 0, Context);
+}
+
+static
+PICMP_ASYNC_CONTEXT
+IcmpCreateAsyncContext(
+    _In_opt_ HANDLE Event,
+    _In_opt_ PIO_APC_ROUTINE ApcRoutine,
+    _In_opt_ PVOID ApcContext)
+{
+    PICMP_ASYNC_CONTEXT Context;
+
+    Context = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*Context));
+    if (!Context)
+        return NULL;
+
+    Context->Event = Event;
+    Context->ApcRoutine = ApcRoutine;
+    Context->ApcContext = ApcContext;
+    if (Event == NULL &&
+        !DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
+                         &Context->Thread, 0, FALSE, DUPLICATE_SAME_ACCESS))
+    {
+        HeapFree(GetProcessHeap(), 0, Context);
+        return NULL;
+    }
+
+    return Context;
+}
+
+static
+VOID
+IcmpFreeAsyncContext(
+    _In_ PICMP_ASYNC_CONTEXT Context)
+{
+    if (Context->Thread)
+        CloseHandle(Context->Thread);
+    HeapFree(GetProcessHeap(), 0, Context);
+}
+
 HANDLE
 WINAPI
 Icmp6CreateFile(void)
@@ -41,6 +133,15 @@ Icmp6CreateFile(void)
     if (!NT_SUCCESS(Status))
     {
         SetLastError(RtlNtStatusToDosError(Status));
+        return INVALID_HANDLE_VALUE;
+    }
+
+    if (!BindIoCompletionCallback(IcmpFile, IcmpCompletionRoutine, 0))
+    {
+        DWORD Error = GetLastError();
+
+        NtClose(IcmpFile);
+        SetLastError(Error);
         return INVALID_HANDLE_VALUE;
     }
 
@@ -86,27 +187,28 @@ Icmp6SendEcho2(
     _In_     DWORD                  ReplySize,
     _In_     DWORD                  Timeout)
 {
-    HANDLE hEvent;
+    PICMP_ASYNC_CONTEXT Context = NULL;
+    IO_STATUS_BLOCK LocalIoStatusBlock;
     PIO_STATUS_BLOCK IoStatusBlock;
+    HANDLE hEvent = NULL;
     PVOID InputBuffer;
     ULONG InputBufferLength;
-    //ULONG OutputBufferLength;
     PICMPV6_ECHO_REQUEST Request;
     NTSTATUS Status;
 
-    InputBufferLength = sizeof(ICMPV6_ECHO_REQUEST) + RequestSize;
+    if (IcmpHandle == NULL || IcmpHandle == INVALID_HANDLE_VALUE || !ReplyBuffer)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
 
-    if (ReplySize < sizeof(ICMPV6_ECHO_REPLY) + sizeof(IO_STATUS_BLOCK))
+    if (ReplySize < sizeof(ICMPV6_ECHO_REPLY))
     {
         SetLastError(IP_BUF_TOO_SMALL);
         return 0;
     }
 
-    // IO_STATUS_BLOCK will be stored inside ReplyBuffer (in the end)
-    // that's because the function may return before device request ends
-    IoStatusBlock = (PIO_STATUS_BLOCK)((PUCHAR)ReplyBuffer + ReplySize - sizeof(IO_STATUS_BLOCK));
-    ReplySize -= sizeof(IO_STATUS_BLOCK);
-
+    InputBufferLength = sizeof(ICMPV6_ECHO_REQUEST) + RequestSize;
     InputBuffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, InputBufferLength);
     if (InputBuffer == NULL)
     {
@@ -126,14 +228,15 @@ Icmp6SendEcho2(
     CopyMemory(&(Request->SourceAddress.sin6_addr), &(SourceAddress->sin6_addr), sizeof(Request->SourceAddress.sin6_addr));
     Request->SourceAddress.sin6_scope_id = SourceAddress->sin6_scope_id;
 
-    // XXX: What is this and why is it sometimes 0x72?
-    Request->Unknown1 = 0x72;
-
     Request->Timeout = Timeout;
     if (RequestOptions != NULL)
     {
         Request->Ttl = RequestOptions->Ttl;
         Request->Flags = RequestOptions->Flags;
+    }
+    else
+    {
+        Request->Ttl = (UINT16)-1;
     }
 
     if (RequestSize > 0)
@@ -141,31 +244,47 @@ Icmp6SendEcho2(
         CopyMemory((PBYTE)InputBuffer + sizeof(ICMPV6_ECHO_REQUEST), RequestData, RequestSize);
     }
 
-    if (Event == NULL && ApcRoutine == NULL)
+    if (Event != NULL || ApcRoutine != NULL)
     {
-        hEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+        Context = IcmpCreateAsyncContext(Event, ApcRoutine, ApcContext);
+        if (!Context)
+        {
+            HeapFree(GetProcessHeap(), 0, InputBuffer);
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return 0;
+        }
+        IoStatusBlock = &Context->IoStatusBlock;
     }
     else
     {
-        hEvent = Event;
+        hEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+        if (!hEvent)
+        {
+            HeapFree(GetProcessHeap(), 0, InputBuffer);
+            return 0;
+        }
+        IoStatusBlock = &LocalIoStatusBlock;
     }
 
     Status = NtDeviceIoControlFile(
         IcmpHandle,
         hEvent,
-        ApcRoutine,
-        ApcContext,
+        NULL,
+        Context,
         IoStatusBlock,
-        IOCTL_ICMP_ECHO_REQUEST,
+        IOCTL_ICMPV6_ECHO_REQUEST,
         InputBuffer,
         InputBufferLength,
         ReplyBuffer,
         ReplySize);         // TODO: Determine how Windows calculates OutputBufferLength.
 
-    if (Event != NULL || ApcRoutine != NULL)
+    HeapFree(GetProcessHeap(), 0, InputBuffer);
+
+    if (Context != NULL)
     {
+        if (Status != STATUS_PENDING)
+            IcmpFreeAsyncContext(Context);
         SetLastError(RtlNtStatusToDosError(Status));
-        HeapFree(GetProcessHeap(), 0, InputBuffer);
         return 0;
     }
 
@@ -180,9 +299,8 @@ Icmp6SendEcho2(
     }
 
     CloseHandle(hEvent);
-    HeapFree(GetProcessHeap(), 0, InputBuffer);
 
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status) && IoStatusBlock->Information < sizeof(ICMPV6_ECHO_REPLY))
     {
         SetLastError(RtlNtStatusToDosError(Status));
         return 0;
@@ -257,6 +375,15 @@ IcmpCreateFile(void)
         return INVALID_HANDLE_VALUE;
     }
 
+    if (!BindIoCompletionCallback(IcmpFile, IcmpCompletionRoutine, 0))
+    {
+        DWORD Error = GetLastError();
+
+        NtClose(IcmpFile);
+        SetLastError(Error);
+        return INVALID_HANDLE_VALUE;
+    }
+
     return IcmpFile;
 }
 
@@ -302,8 +429,10 @@ IcmpSendEcho2(
     _In_     DWORD                  ReplySize,
     _In_     DWORD                  Timeout)
 {
-    HANDLE hEvent;
+    PICMP_ASYNC_CONTEXT Context = NULL;
+    IO_STATUS_BLOCK LocalIoStatusBlock;
     PIO_STATUS_BLOCK IoStatusBlock;
+    HANDLE hEvent = NULL;
     PVOID InputBuffer;
     PICMP_ECHO_REQUEST Request;
     DWORD nReplies;
@@ -320,11 +449,6 @@ IcmpSendEcho2(
         SetLastError(IP_GENERAL_FAILURE);
         return 0;
     }
-
-    // IO_STATUS_BLOCK will be stored inside ReplyBuffer (in the end)
-    // that's because the function may return before device request ends
-    IoStatusBlock = (PIO_STATUS_BLOCK)((PUCHAR)ReplyBuffer + ReplySize - sizeof(IO_STATUS_BLOCK));
-    ReplySize -= sizeof(IO_STATUS_BLOCK);
 
     InputBuffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ReplySize);
     if (InputBuffer == NULL)
@@ -364,20 +488,33 @@ IcmpSendEcho2(
         CopyMemory((PUCHAR)InputBuffer + Request->DataOffset, RequestData, RequestSize);
     }
 
-    if (Event == NULL && ApcRoutine == NULL)
+    if (Event != NULL || ApcRoutine != NULL)
     {
-        hEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+        Context = IcmpCreateAsyncContext(Event, ApcRoutine, ApcContext);
+        if (!Context)
+        {
+            HeapFree(GetProcessHeap(), 0, InputBuffer);
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return 0;
+        }
+        IoStatusBlock = &Context->IoStatusBlock;
     }
     else
     {
-        hEvent = Event;
+        hEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+        if (!hEvent)
+        {
+            HeapFree(GetProcessHeap(), 0, InputBuffer);
+            return 0;
+        }
+        IoStatusBlock = &LocalIoStatusBlock;
     }
 
     Status = NtDeviceIoControlFile(
         IcmpHandle,
         hEvent,
-        ApcRoutine,
-        ApcContext,
+        NULL,
+        Context,
         IoStatusBlock,
         IOCTL_ICMP_ECHO_REQUEST,
         InputBuffer,
@@ -385,9 +522,10 @@ IcmpSendEcho2(
         ReplyBuffer,
         ReplySize);         // TODO: Determine how Windows calculates OutputBufferLength.
 
-    // If called asynchronously, return for the caller to handle.
-    if (Event != NULL || ApcRoutine != NULL)
+    if (Context != NULL)
     {
+        if (Status != STATUS_PENDING)
+            IcmpFreeAsyncContext(Context);
         SetLastError(RtlNtStatusToDosError(Status));
         HeapFree(GetProcessHeap(), 0, InputBuffer);
         return 0;

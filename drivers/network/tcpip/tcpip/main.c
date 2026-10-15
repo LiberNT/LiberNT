@@ -551,9 +551,16 @@ TiDispatch(
             case IOCTL_ICMP_ECHO_REQUEST:
                 TI_DbgPrint(MIN_TRACE, ("ICMP_ECHO_REQUEST\n"));
                 if (DeviceObject == IP6DeviceObject)
-                    Status = LibICMP6EchoRequest(DeviceObject, Irp, IrpSp);
+                    Status = STATUS_INVALID_DEVICE_REQUEST;
                 else
                     Status = DispEchoRequest(DeviceObject, Irp, IrpSp);
+                break;
+
+            case IOCTL_ICMPV6_ECHO_REQUEST:
+                if (DeviceObject == IP6DeviceObject)
+                    Status = LibICMP6EchoRequest(DeviceObject, Irp, IrpSp);
+                else
+                    Status = STATUS_INVALID_DEVICE_REQUEST;
                 break;
 
             case IOCTL_IP_INTERFACE_INFO:
