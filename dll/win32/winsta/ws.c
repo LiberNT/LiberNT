@@ -76,6 +76,30 @@ WINSTAAPI WinStationConnectEx(PVOID A,
     UNIMPLEMENTED;
 }
 
+BOOLEAN
+WINSTAAPI WinStationConnectAndLockDesktop(HANDLE hServer,
+                                          ULONG SessionId)
+{
+    DWORD CurrentSessionId = 0;
+
+    UNREFERENCED_PARAMETER(hServer);
+
+    if (SessionId == 0)
+    {
+        SetLastError(ERROR_NOT_SUPPORTED);
+        return FALSE;
+    }
+
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &CurrentSessionId) && SessionId == CurrentSessionId)
+    {
+        SetLastError(ERROR_ACCESS_DENIED);
+        return FALSE;
+    }
+
+    SetLastError(ERROR_FILE_NOT_FOUND);
+    return FALSE;
+}
+
 VOID
 WINSTAAPI WinStationConnectW(PVOID A,
                              PVOID B,

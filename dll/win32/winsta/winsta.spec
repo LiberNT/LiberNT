@@ -26,6 +26,7 @@
 @ stdcall WinStationCheckLoopBack(ptr ptr ptr ptr)
 @ stdcall WinStationCloseServer(ptr ptr ptr ptr)
 @ stdcall WinStationConnectA(ptr)
+@ stdcall WinStationConnectAndLockDesktop(ptr long)
 @ stdcall WinStationConnectCallback(ptr ptr ptr ptr ptr)
 @ stdcall WinStationConnectEx(ptr ptr)
 @ stdcall WinStationConnectW(ptr ptr ptr ptr ptr)
