@@ -142,6 +142,61 @@ TestLookupAccountSidLocal(VOID)
     FreeLibrary(Sechost);
 }
 
+static BOOL
+IsCallerLocalSystem(VOID)
+{
+    UCHAR Buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    HANDLE Token;
+    DWORD Length;
+    BOOL Result = FALSE;
+
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &Token))
+    {
+        if (GetTokenInformation(Token, TokenUser, Buffer, sizeof(Buffer), &Length))
+            Result = IsWellKnownSid(((PTOKEN_USER)Buffer)->User.Sid, WinLocalSystemSid);
+        CloseHandle(Token);
+    }
+    return Result;
+}
+
+static VOID
+TestLocalSystemUse(VOID)
+{
+    WCHAR Name[256], Domain[256];
+    DWORD cchName = ARRAYSIZE(Name), cchDomain = ARRAYSIZE(Domain), cbSid;
+    SID_NAME_USE Use = SidTypeUnknown;
+    BYTE SidBuffer[SECURITY_MAX_SID_SIZE];
+    PSID Sid = NULL;
+    BOOL CallerIsSystem = IsCallerLocalSystem();
+    BOOL Ret;
+
+    ok(ConvertStringSidToSidW(L"S-1-5-18", &Sid), "ConvertStringSidToSidW failed: %lu\n", GetLastError());
+    if (!Sid)
+        return;
+
+    Ret = LookupAccountSidW(NULL, Sid, Name, &cchName, Domain, &cchDomain, &Use);
+    ok(Ret, "S-1-5-18: lookup failed with error %lu\n", GetLastError());
+    if (Ret)
+    {
+        ok(!wcscmp(Name, L"SYSTEM"), "S-1-5-18: name is %s\n", wine_dbgstr_w(Name));
+        ok(!wcscmp(Domain, L"NT AUTHORITY"), "S-1-5-18: domain is %s\n", wine_dbgstr_w(Domain));
+        ok(Use == (CallerIsSystem ? SidTypeUser : SidTypeWellKnownGroup), "S-1-5-18: use is %d for a %s caller\n",
+           Use, CallerIsSystem ? "SYSTEM" : "non-SYSTEM");
+    }
+    LocalFree(Sid);
+
+    cbSid = sizeof(SidBuffer);
+    cchDomain = ARRAYSIZE(Domain);
+    Use = SidTypeUnknown;
+    Ret = LookupAccountNameW(NULL, L"SYSTEM", SidBuffer, &cbSid, Domain, &cchDomain, &Use);
+    ok(Ret, "SYSTEM: lookup failed with error %lu\n", GetLastError());
+    if (Ret)
+    {
+        ok(IsWellKnownSid(SidBuffer, WinLocalSystemSid), "SYSTEM: wrong SID\n");
+        ok(Use == SidTypeWellKnownGroup, "SYSTEM: use is %d\n", Use);
+    }
+}
+
 START_TEST(LookupAccountSid)
 {
     ULONG i;
@@ -151,4 +206,5 @@ START_TEST(LookupAccountSid)
     for (i = 0; i < ARRAYSIZE(UnmappedSids); i++)
         TestUnmappedSid(UnmappedSids[i]);
     TestLookupAccountSidLocal();
+    TestLocalSystemUse();
 }
