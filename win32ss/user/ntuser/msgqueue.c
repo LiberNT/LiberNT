@@ -2082,7 +2082,7 @@ co_MsqPeekHardwareMessage(IN PTHREADINFO pti,
 
    if (MessageQueue->ptiSysLock != pti)
    {
-      ERR("Thread Q is locked to ptiSysLock 0x%p pti 0x%p\n",MessageQueue->ptiSysLock,pti);
+      TRACE("Thread Q is locked to ptiSysLock 0x%p pti 0x%p\n",MessageQueue->ptiSysLock,pti);
       return FALSE;
    }
 

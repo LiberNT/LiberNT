@@ -567,7 +567,7 @@ UserAttachThreadInput(PTHREADINFO ptiFrom, PTHREADINFO ptiTo, BOOL fAttach)
         pai->pti2 = ptiTo;
         gpai = pai;
         paiCount++;
-        ERR("Attach Allocated! ptiFrom 0x%p  ptiTo 0x%p paiCount %d\n",ptiFrom,ptiTo,paiCount);
+        TRACE("Attach Allocated! ptiFrom 0x%p  ptiTo 0x%p paiCount %d\n",ptiFrom,ptiTo,paiCount);
 
         if (ptiTo->MessageQueue != ptiFrom->MessageQueue)
         {
@@ -576,7 +576,7 @@ UserAttachThreadInput(PTHREADINFO ptiFrom, PTHREADINFO ptiTo, BOOL fAttach)
 
            if (ptiFrom->MessageQueue == gpqForeground)
            {
-              ERR("ptiFrom is Foreground\n");
+              TRACE("ptiFrom is Foreground\n");
               ptiTo->MessageQueue->spwndActive  = ptiFrom->MessageQueue->spwndActive;
               ptiTo->MessageQueue->spwndFocus   = ptiFrom->MessageQueue->spwndFocus;
               ptiTo->MessageQueue->spwndCapture = ptiFrom->MessageQueue->spwndCapture;
@@ -590,7 +590,7 @@ UserAttachThreadInput(PTHREADINFO ptiFrom, PTHREADINFO ptiTo, BOOL fAttach)
            }
            else
            {
-              ERR("ptiFrom NOT Foreground\n");
+              TRACE("ptiFrom NOT Foreground\n");
               if ( ptiTo->MessageQueue->spwndActive == 0 )
                   ptiTo->MessageQueue->spwndActive = ptiFrom->MessageQueue->spwndActive;
               if ( ptiTo->MessageQueue->spwndFocus == 0 )
@@ -618,18 +618,18 @@ UserAttachThreadInput(PTHREADINFO ptiFrom, PTHREADINFO ptiTo, BOOL fAttach)
            // Pass cursor From if To is null. Pass test_SetCursor parent_id == current pti ID.
            if (CurIcon && ptiTo->MessageQueue->CursorObject == NULL)
            {
-              ERR("ptiTo receiving ptiFrom Cursor\n");
+              TRACE("ptiTo receiving ptiFrom Cursor\n");
               ptiTo->MessageQueue->CursorObject = CurIcon;
            }
 
            ptiFrom->MessageQueue->cThreads++;
-           ERR("ptiTo S Share count %u\n", ptiFrom->MessageQueue->cThreads);
+           TRACE("ptiTo S Share count %u\n", ptiFrom->MessageQueue->cThreads);
 
            IntReferenceMessageQueue(ptiTo->MessageQueue);
         }
         else
         {
-           ERR("Attach Threads are already associated!\n");
+           TRACE("Attach Threads are already associated!\n");
         }
     }
     else /* If clear, unlink and free it. */
@@ -658,7 +658,7 @@ UserAttachThreadInput(PTHREADINFO ptiFrom, PTHREADINFO ptiTo, BOOL fAttach)
 
         if (!Hit) return STATUS_INVALID_PARAMETER;
 
-        ERR("Attach Free! ptiFrom 0x%p  ptiTo 0x%p paiCount %d\n",ptiFrom,ptiTo,paiCount);
+        TRACE("Attach Free! ptiFrom 0x%p  ptiTo 0x%p paiCount %d\n",ptiFrom,ptiTo,paiCount);
 
         if (ptiTo->MessageQueue == ptiFrom->MessageQueue)
         {
@@ -667,12 +667,12 @@ UserAttachThreadInput(PTHREADINFO ptiFrom, PTHREADINFO ptiTo, BOOL fAttach)
 
            if (gptiForeground == ptiFrom)
            {
-              ERR("ptiTo is now pti FG.\n");
+              TRACE("ptiTo is now pti FG.\n");
               // MessageQueue foreground is set so switch threads.
               IntSetForegroundThread(ptiTo);
            }
            ptiTo->MessageQueue->cThreads--;
-           ERR("ptiTo E Share count %u\n", ptiTo->MessageQueue->cThreads);
+           TRACE("ptiTo E Share count %u\n", ptiTo->MessageQueue->cThreads);
            ASSERT(ptiTo->MessageQueue->cThreads >= 1);
 
            IntDereferenceMessageQueue(ptiTo->MessageQueue);
