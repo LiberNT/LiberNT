@@ -13,6 +13,10 @@
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 #endif
 
+#ifndef STATUS_OBJECT_NAME_NOT_FOUND
+#define STATUS_OBJECT_NAME_NOT_FOUND ((NTSTATUS)0xC0000034L)
+#endif
+
 typedef NTSTATUS (APIENTRY *KMT_CALL)(void *);
 
 typedef struct _APPSMOKE_ADAPTER
@@ -342,7 +346,10 @@ START_TEST(d3dkmt)
 
     memset(&Registry, 0, sizeof(Registry));
     Status = QueryAdapter(Adapter.hAdapter, KMTQAITYPE_ADAPTERREGISTRYINFO, &Registry, sizeof(Registry));
-    ok(NT_SUCCESS(Status) && Registry.AdapterString[0] != 0, "Adapter registry information: %#lx\n", Status);
+    ok(Status == STATUS_OBJECT_NAME_NOT_FOUND ||
+       (NT_SUCCESS(Status) && (Registry.AdapterString[0] || Registry.ChipType[0] || Registry.DacType[0] ||
+                               Registry.BiosString[0])),
+       "Adapter registry information: %#lx\n", Status);
     trace("Adapter \"%ls\", chip \"%ls\", DAC \"%ls\", BIOS \"%ls\"\n", Registry.AdapterString,
           Registry.ChipType, Registry.DacType, Registry.BiosString);
 

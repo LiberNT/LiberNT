@@ -855,7 +855,7 @@ DxgkpFreeRegistryValue(
         ExFreePoolWithTag(ValueInformation, TAG_DXGK_REGISTRY);
 }
 
-static VOID
+static BOOLEAN
 DxgkpReadHardwareInformation(
     _In_ HANDLE KeyHandle,
     _In_ PCWSTR ValueName,
@@ -863,17 +863,20 @@ DxgkpReadHardwareInformation(
     _In_ ULONG BufferBytes)
 {
     PKEY_VALUE_PARTIAL_INFORMATION ValueInfo = NULL;
+    BOOLEAN Found = FALSE;
     ULONG Length;
 
     if (!NT_SUCCESS(DxgkpQueryRegistryValue(KeyHandle, ValueName, &ValueInfo)))
-        return;
+        return FALSE;
     if (ValueInfo->Type == REG_SZ || ValueInfo->Type == REG_MULTI_SZ || ValueInfo->Type == REG_BINARY)
     {
         Length = min(ValueInfo->DataLength, BufferBytes - sizeof(WCHAR)) & ~(ULONG)(sizeof(WCHAR) - 1);
         RtlCopyMemory(Buffer, ValueInfo->Data, Length);
         Buffer[Length / sizeof(WCHAR)] = UNICODE_NULL;
+        Found = TRUE;
     }
     DxgkpFreeRegistryValue(ValueInfo);
+    return Found;
 }
 
 static BOOLEAN
@@ -4172,17 +4175,14 @@ DxgkpQueryAdapterInfoCaptured(
 
         /*
          * The four description strings are the HardwareInformation values the
-         * miniport stores in its driver key.  An adapter string the miniport
-         * never stored falls back to the PnP device description; the other
-         * three stay empty rather than filled with something invented.
+         * miniport stores in its driver key.
          */
         case KMTQAITYPE_ADAPTERREGISTRYINFO:
         case KMTQAITYPE_ADAPTERREGISTRYINFO_RENDER:
         {
             D3DKMT_ADAPTERREGISTRYINFO *Info;
             HANDLE DriverKey = NULL;
-            ULONG ResultLength = 0;
-            NTSTATUS InfoStatus;
+            BOOLEAN Found = FALSE;
 
             if (pQueryAdapterInfo->pPrivateDriverData == NULL ||
                 pQueryAdapterInfo->PrivateDriverDataSize < sizeof(*Info))
@@ -4199,27 +4199,20 @@ DxgkpQueryAdapterInfoCaptured(
             RtlZeroMemory(Info, sizeof(*Info));
             if (NT_SUCCESS(DxgkpOpenAdapterDriverKey(Adapter, &DriverKey)))
             {
-                DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.AdapterString",
-                                             Info->AdapterString, sizeof(Info->AdapterString));
-                DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.BiosString",
-                                             Info->BiosString, sizeof(Info->BiosString));
-                DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.DacType",
-                                             Info->DacType, sizeof(Info->DacType));
-                DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.ChipType",
-                                             Info->ChipType, sizeof(Info->ChipType));
+                Found |= DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.AdapterString",
+                                                      Info->AdapterString, sizeof(Info->AdapterString));
+                Found |= DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.BiosString",
+                                                      Info->BiosString, sizeof(Info->BiosString));
+                Found |= DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.DacType",
+                                                      Info->DacType, sizeof(Info->DacType));
+                Found |= DxgkpReadHardwareInformation(DriverKey, L"HardwareInformation.ChipType",
+                                                      Info->ChipType, sizeof(Info->ChipType));
                 ZwClose(DriverKey);
             }
-            if (Info->AdapterString[0] == UNICODE_NULL)
+            if (!Found)
             {
-                /* Truncation is not an error here: the field is fixed-width and a
-                 * shortened description is still the right adapter's description. */
-                InfoStatus = IoGetDeviceProperty(Adapter->PhysicalDeviceObject,
-                                                 DevicePropertyDeviceDescription,
-                                                 sizeof(Info->AdapterString) - sizeof(WCHAR),
-                                                 Info->AdapterString,
-                                                 &ResultLength);
-                if (!NT_SUCCESS(InfoStatus) && InfoStatus != STATUS_BUFFER_TOO_SMALL)
-                    RtlZeroMemory(Info->AdapterString, sizeof(Info->AdapterString));
+                ExFreePoolWithTag(Info, TAG_DXGK_CAPTURE);
+                DXGKP_QUERY_RETURN(STATUS_OBJECT_NAME_NOT_FOUND);
             }
 
             _SEH2_TRY
