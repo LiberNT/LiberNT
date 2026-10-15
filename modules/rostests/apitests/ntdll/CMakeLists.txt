@@ -133,6 +133,7 @@ list(APPEND SOURCE
     RtlDeleteAce.c
     RtlDetermineDosPathNameType.c
     RtlWnfAndSqm.c
+    RtlCheckPortableOperatingSystem.c
     RtlDoesFileExists.c
     RtlDosApplyFileIsolationRedirection_Ustr.c
     RtlDosPathNameToNtPathName_U.c
