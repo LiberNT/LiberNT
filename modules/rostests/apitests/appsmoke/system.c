@@ -65,18 +65,30 @@ START_TEST(registry_security)
     {
         SE_OBJECT_TYPE Type;
         const char *Name;
+        DWORD HandleError;
     } Types[] =
     {
-        { SE_REGISTRY_KEY, "SE_REGISTRY_KEY" },
-        { SE_REGISTRY_WOW64_32KEY, "SE_REGISTRY_WOW64_32KEY" },
-        { SE_REGISTRY_WOW64_64KEY, "SE_REGISTRY_WOW64_64KEY" },
+        { SE_REGISTRY_KEY, "SE_REGISTRY_KEY", ERROR_SUCCESS },
+        { SE_REGISTRY_WOW64_32KEY, "SE_REGISTRY_WOW64_32KEY", ERROR_INVALID_PARAMETER },
+        { SE_REGISTRY_WOW64_64KEY, "SE_REGISTRY_WOW64_64KEY", ERROR_INVALID_PARAMETER },
     };
     WCHAR Name[] = L"MACHINE\\SOFTWARE";
-    PSECURITY_DESCRIPTOR Descriptor;
+    PSECURITY_DESCRIPTOR Descriptor, ScratchDescriptor = NULL;
+    PACL Dacl = NULL;
     PSID Owner;
-    HKEY Key;
+    HKEY Key, Scratch = NULL;
     DWORD Error;
     UINT Index;
+
+    Error = RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\LiberNTAppSmoke", 0, NULL, REG_OPTION_VOLATILE,
+                            READ_CONTROL | WRITE_DAC, NULL, &Scratch, NULL);
+    ok(Error == ERROR_SUCCESS, "RegCreateKeyExW returned %lu\n", Error);
+    if (Error == ERROR_SUCCESS)
+    {
+        Error = GetSecurityInfo(Scratch, SE_REGISTRY_KEY, DACL_SECURITY_INFORMATION, NULL, NULL, &Dacl, NULL,
+                                &ScratchDescriptor);
+        ok(Error == ERROR_SUCCESS, "GetSecurityInfo(DACL) returned %lu\n", Error);
+    }
 
     for (Index = 0; Index < ARRAYSIZE(Types); Index++)
     {
@@ -89,6 +101,12 @@ START_TEST(registry_security)
         if (Descriptor)
             LocalFree(Descriptor);
 
+        if (Dacl)
+        {
+            Error = SetSecurityInfo(Scratch, Types[Index].Type, DACL_SECURITY_INFORMATION, NULL, NULL, Dacl, NULL);
+            ok(Error == Types[Index].HandleError, "SetSecurityInfo(%s) returned %lu\n", Types[Index].Name, Error);
+        }
+
         Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE", 0, READ_CONTROL, &Key);
         ok(Error == ERROR_SUCCESS, "RegOpenKeyExW returned %lu\n", Error);
         if (Error != ERROR_SUCCESS)
@@ -97,9 +115,17 @@ START_TEST(registry_security)
         Owner = NULL;
         Error = GetSecurityInfo(Key, Types[Index].Type, OWNER_SECURITY_INFORMATION, &Owner, NULL, NULL, NULL,
                                 &Descriptor);
-        ok(Error == ERROR_SUCCESS, "GetSecurityInfo(%s) returned %lu\n", Types[Index].Name, Error);
+        ok(Error == Types[Index].HandleError, "GetSecurityInfo(%s) returned %lu\n", Types[Index].Name, Error);
         if (Descriptor)
             LocalFree(Descriptor);
         RegCloseKey(Key);
+    }
+
+    if (ScratchDescriptor)
+        LocalFree(ScratchDescriptor);
+    if (Scratch)
+    {
+        RegCloseKey(Scratch);
+        RegDeleteKeyW(HKEY_CURRENT_USER, L"Software\\LiberNTAppSmoke");
     }
 }

@@ -699,8 +699,6 @@ AccRewriteGetHandleRights(HANDLE handle,
     /* save the last error code */
     LastErr = GetLastError();
 
-    ObjectType = AccpRegistryObjectType(ObjectType, NULL);
-
     if (ObjectType == SE_FILE_OBJECT && (SecurityInfo & DACL_SECURITY_INFORMATION))
         QueryInformation |= OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION;
 
@@ -1938,8 +1936,6 @@ AccRewriteSetHandleRights(HANDLE handle,
     /* save the last error code */
     LastErr = GetLastError();
 
-    ObjectType = AccpRegistryObjectType(ObjectType, NULL);
-
     /* set the security according to the object type */
     switch (ObjectType)
     {
@@ -2362,7 +2358,7 @@ AccRewriteGetNamedRights(LPWSTR pObjectName,
 
         /* perform the operation */
         Ret = AccRewriteGetHandleRights(Handle,
-                                        ObjectType,
+                                        AccpRegistryObjectType(ObjectType, NULL),
                                         SecurityInfo,
                                         ppsidOwner,
                                         ppsidGroup,
@@ -2416,7 +2412,7 @@ AccRewriteSetNamedRights(LPWSTR pObjectName,
 
         /* perform the operation */
         Ret = AccRewriteSetHandleRights(Handle,
-                                        ObjectType,
+                                        AccpRegistryObjectType(ObjectType, NULL),
                                         SecurityInfo,
                                         pSecurityDescriptor);
 
