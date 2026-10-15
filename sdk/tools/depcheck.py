@@ -637,7 +637,8 @@ def analyze(build_dir, source_dir, mode, jobs, progress, timeout, all_targets=Fa
             used |= embedded & generated
         elif is_rc:
             _, embedded, missing = scanner.scan(source, quote_dirs, dirs, True)
-            missing_resources |= {(path, name + ' [static]') for path, name in missing}
+            if mode == 'static':
+                missing_resources |= {(path, name + ' [static]') for path, name in missing}
             used |= embedded & generated
         used.discard(source)
         if used or embedded:
