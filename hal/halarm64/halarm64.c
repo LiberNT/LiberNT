@@ -2805,7 +2805,7 @@ HalInitSystem(
         HalpWriteIccIgrpen1(0);
     }
 
-    KeSetTimeIncrement(156250, 10000);
+    KeSetTimeIncrement(156250, 5000);
 
     /*
      * Set up HAL dispatch table callbacks.
@@ -6200,19 +6200,10 @@ NTAPI
 HalSetTimeIncrement(
     _In_ ULONG Increment)
 {
-    /*
-     * Clamp the request to the supported range and return what was actually
-     * achieved (the caller records it in KeTimeIncrement, which the generic
-     * timer ISR reads each tick). The 1 ms floor (10000 * 100ns) is the NT
-     * minimum resolution: KeSetTimeIncrement hard-floors KeMinimumIncrement
-     * at 10000, and ExSetTimerResolution pre-clamps the request to
-     * KeMinimumIncrement before calling us. The literal is used because
-     * KeMinimumIncrement is not exported to the HAL.
-     */
     ULONG Maximum = KeQueryTimeIncrement();
 
-    if (Increment < 10000)
-        Increment = 10000;
+    if (Increment < 5000)
+        Increment = 5000;
     if (Increment > Maximum)
         Increment = Maximum;
 
