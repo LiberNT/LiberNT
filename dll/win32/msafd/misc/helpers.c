@@ -513,6 +513,15 @@ SockIsTripleInMapping(
             TRACE("Found\n");
             return TRUE;
         }
+
+        if (SocketType == SOCK_RAW &&
+            Protocol >= 0 && Protocol <= 255 &&
+            (INT)Mapping->Mapping[Row].AddressFamily == AddressFamily &&
+            (INT)Mapping->Mapping[Row].SocketType == SOCK_RAW &&
+            Mapping->Mapping[Row].Protocol == 0) {
+            TRACE("Found raw protocol %d\n", Protocol);
+            return TRUE;
+        }
     }
     WARN("Not found\n");
     return FALSE;

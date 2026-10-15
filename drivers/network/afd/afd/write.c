@@ -397,6 +397,12 @@ static NTSTATUS NTAPI PacketSocketSendComplete
     FCB->SendIrp.InFlightRequest = NULL;
     /* Request is not in flight any longer */
 
+    if (FCB->SendDatagramBuffer)
+    {
+        ExFreePoolWithTag(FCB->SendDatagramBuffer, TAG_AFD_DATA_BUFFER);
+        FCB->SendDatagramBuffer = NULL;
+    }
+
     if( FCB->SharedData.State == SOCKET_STATE_CLOSED ) {
         /* Cleanup our IRP queue because the FCB is being destroyed */
         while( !IsListEmpty( &FCB->PendingIrpList[FUNCTION_SEND] ) ) {
@@ -442,6 +448,70 @@ static NTSTATUS NTAPI PacketSocketSendComplete
     SocketStateUnlock(FCB);
 
     return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+AfdSendDatagram(PAFD_FCB FCB,
+                PAFD_SEND_INFO SendReq,
+                PTDI_CONNECTION_INFORMATION TargetAddress,
+                PUINT SendLength)
+{
+    PAFD_MAPBUF Map = (PAFD_MAPBUF)(SendReq->BufferArray + SendReq->BufferCount);
+    PCHAR Buffer, Source;
+    UINT i, Total = 0;
+    NTSTATUS Status;
+
+    if (SendReq->BufferCount == 1)
+    {
+        *SendLength = SendReq->BufferArray[0].len;
+        return TdiSendDatagram(&FCB->SendIrp.InFlightRequest,
+                               FCB->AddressFile.Object,
+                               SendReq->BufferArray[0].buf,
+                               SendReq->BufferArray[0].len,
+                               TargetAddress,
+                               PacketSocketSendComplete,
+                               FCB);
+    }
+
+    for (i = 0; i < SendReq->BufferCount; i++)
+    {
+        if (SendReq->BufferArray[i].len > MAXUSHORT - Total)
+            return STATUS_BUFFER_OVERFLOW;
+        Total += SendReq->BufferArray[i].len;
+    }
+
+    Buffer = ExAllocatePoolWithTag(NonPagedPool, max(Total, 1), TAG_AFD_DATA_BUFFER);
+    if (!Buffer)
+        return STATUS_NO_MEMORY;
+
+    Total = 0;
+    for (i = 0; i < SendReq->BufferCount; i++)
+    {
+        if (!SendReq->BufferArray[i].len || !Map[i].Mdl)
+            continue;
+
+        Source = MmMapLockedPages(Map[i].Mdl, KernelMode);
+        RtlCopyMemory(Buffer + Total, Source, SendReq->BufferArray[i].len);
+        MmUnmapLockedPages(Source, Map[i].Mdl);
+        Total += SendReq->BufferArray[i].len;
+    }
+
+    *SendLength = Total;
+    FCB->SendDatagramBuffer = Buffer;
+    Status = TdiSendDatagram(&FCB->SendIrp.InFlightRequest,
+                             FCB->AddressFile.Object,
+                             Buffer,
+                             Total,
+                             TargetAddress,
+                             PacketSocketSendComplete,
+                             FCB);
+    if (Status != STATUS_PENDING && FCB->SendDatagramBuffer == Buffer)
+    {
+        ExFreePoolWithTag(Buffer, TAG_AFD_DATA_BUFFER);
+        FCB->SendDatagramBuffer = NULL;
+    }
+
+    return Status;
 }
 
 NTSTATUS NTAPI
@@ -497,22 +567,12 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
             Status = QueueUserModeIrp(FCB, Irp, FUNCTION_SEND);
             if (Status == STATUS_PENDING)
             {
-                if (SendReq->BufferCount > 1)
-                {
-                    AFD_DbgPrint(MIN_TRACE,("WARN: More than one buffer %ld\n", SendReq->BufferCount));
-                }
-                Status = TdiSendDatagram(&FCB->SendIrp.InFlightRequest,
-                                         FCB->AddressFile.Object,
-                                         SendReq->BufferArray[0].buf,
-                                         SendReq->BufferArray[0].len,
-                                         TargetAddress,
-                                         PacketSocketSendComplete,
-                                         FCB);
+                Status = AfdSendDatagram(FCB, (PAFD_SEND_INFO)SendReq, TargetAddress, &SendLength);
                 if (Status != STATUS_PENDING)
                 {
                     NT_VERIFY(RemoveHeadList(&FCB->PendingIrpList[FUNCTION_SEND]) == &Irp->Tail.Overlay.ListEntry);
                     Irp->IoStatus.Status = Status;
-                    Irp->IoStatus.Information = ((Status == STATUS_SUCCESS) ? SendReq->BufferArray[0].len : 0);
+                    Irp->IoStatus.Information = ((Status == STATUS_SUCCESS) ? SendLength : 0);
                     (void)IoSetCancelRoutine(Irp, NULL);
                     UnlockBuffers(SendReq->BufferArray, SendReq->BufferCount, FALSE);
                     UnlockRequest(Irp, IoGetCurrentIrpStackLocation(Irp));
@@ -681,7 +741,7 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         FCB->PollState &= ~AFD_EVENT_SEND;
     }
 
-    if (Immediate)
+    if (Immediate || TotalBytesCopied == SendLength)
     {
         /* The user buffer is no longer needed. Waiting for the TDI send
          * here can deadlock an event loop whose peer has not begun reading. */
@@ -723,6 +783,7 @@ AfdPacketSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     PAFD_FCB FCB = FileObject->FsContext;
     PAFD_SEND_INFO_UDP SendReq;
     KPROCESSOR_MODE LockMode;
+    UINT SendLength;
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -796,22 +857,12 @@ AfdPacketSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         Status = QueueUserModeIrp(FCB, Irp, FUNCTION_SEND);
         if (Status == STATUS_PENDING)
         {
-            if (SendReq->BufferCount > 1)
-            {
-                AFD_DbgPrint(MIN_TRACE,("WARN: More than one buffer %ld\n", SendReq->BufferCount));
-            }
-            Status = TdiSendDatagram(&FCB->SendIrp.InFlightRequest,
-                                     FCB->AddressFile.Object,
-                                     SendReq->BufferArray[0].buf,
-                                     SendReq->BufferArray[0].len,
-                                     TargetAddress,
-                                     PacketSocketSendComplete,
-                                     FCB);
+            Status = AfdSendDatagram(FCB, (PAFD_SEND_INFO)SendReq, TargetAddress, &SendLength);
             if (Status != STATUS_PENDING)
             {
                 NT_VERIFY(RemoveHeadList(&FCB->PendingIrpList[FUNCTION_SEND]) == &Irp->Tail.Overlay.ListEntry);
                 Irp->IoStatus.Status = Status;
-                Irp->IoStatus.Information = ((Status == STATUS_SUCCESS) ? SendReq->BufferArray[0].len : 0);
+                Irp->IoStatus.Information = ((Status == STATUS_SUCCESS) ? SendLength : 0);
                 (void)IoSetCancelRoutine(Irp, NULL);
                 UnlockBuffers(SendReq->BufferArray, SendReq->BufferCount, FALSE);
                 UnlockRequest(Irp, IoGetCurrentIrpStackLocation(Irp));

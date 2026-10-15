@@ -533,15 +533,15 @@ MsafdReturnWithErrno(
     {
         *Errno = TranslateNtStatusError(Status);
 
-        if (ReturnedBytes)
-            *ReturnedBytes = (*Errno == 0 || Status == STATUS_BUFFER_OVERFLOW) ? Received : 0;
+        if (ReturnedBytes && (*Errno == 0 || Status == STATUS_BUFFER_OVERFLOW))
+            *ReturnedBytes = Received;
 
         return (*Errno == 0) ? 0 : SOCKET_ERROR;
     }
     else
     {
-        if (ReturnedBytes)
-            *ReturnedBytes = (Status == STATUS_SUCCESS || Status == STATUS_BUFFER_OVERFLOW) ? Received : 0;
+        if (ReturnedBytes && (Status == STATUS_SUCCESS || Status == STATUS_BUFFER_OVERFLOW))
+            *ReturnedBytes = Received;
 
         return (Status == STATUS_SUCCESS) ? 0 : SOCKET_ERROR;
     }

@@ -249,6 +249,7 @@ typedef struct _AFD_FCB {
     PTRANSPORT_ADDRESS LocalAddress, RemoteAddress;
     PTDI_CONNECTION_INFORMATION AddressFrom, ConnectCallInfo, ConnectReturnInfo;
     PVOID RecvControl;
+    PVOID SendDatagramBuffer;
     AFD_TDI_OBJECT AddressFile, Connection;
     AFD_IN_FLIGHT_REQUEST ConnectIrp, ListenIrp, ReceiveIrp, SendIrp, DisconnectIrp;
     AFD_DATA_WINDOW Send, Recv;
