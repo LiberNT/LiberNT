@@ -87,6 +87,7 @@ typedef struct _LOADER_PARAMETER_BLOCK_HOST *PLOADER_PARAMETER_BLOCK;
 #define _In_reads_(x)
 #define _Out_writes_(x)
 #define _Inout_updates_(x)
+#define _Inout_updates_opt_(x)
 #define FORCEINLINE static inline
 #define C_ASSERT(e) _Static_assert(e, #e)
 #define RTL_NUMBER_OF(a) (sizeof(a) / sizeof((a)[0]))

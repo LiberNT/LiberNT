@@ -1332,6 +1332,7 @@ PagingAgingAndSoftFaults(void)
     CHECK(MiPfnListCount(&World.System.Pfn, MiPageModified) == 24);
 
     CHECK(MiWriteModifiedPages(&World.System, 1000) == 24);
+    CHECK(World.Paging.WriteCalls == 1);
     CHECK(MiPfnListCount(&World.System.Pfn, MiPageStandby) == 24);
     CHECK(World.Paging.PageFile.SlotsInUse == 24);
 

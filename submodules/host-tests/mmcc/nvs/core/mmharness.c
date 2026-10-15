@@ -155,13 +155,32 @@ PagingWrite(PVOID Context, ULONG64 Slot, PVOID PageBuffer)
         return STATUS_UNEXPECTED_IO_ERROR;
 
     MachineCopyFromRam(MachineCurrent, Paging->Store + Slot * PAGE_SIZE, PageBuffer, PAGE_SIZE);
+    __sync_fetch_and_add(&Paging->WriteCalls, 1);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+PagingWriteFrames(PVOID Context, ULONG64 Slot, const ULONG *Frames, ULONG PageCount)
+{
+    TEST_PAGEFILE *Paging = Context;
+    ULONG i;
+
+    MI_ASSERT(MiHostIrql <= 1);
+    if (Paging->FailWrites || Slot == 0 || PageCount == 0 || PageCount > MI_MAX_FILE_WRITE_PAGES ||
+        Slot + PageCount > Paging->Slots)
+        return STATUS_UNEXPECTED_IO_ERROR;
+
+    for (i = 0; i < PageCount; i++)
+        memcpy(Paging->Store + (Slot + i) * PAGE_SIZE, MachineFrame(MachineCurrent, Frames[i]), PAGE_SIZE);
+    __sync_fetch_and_add(&Paging->WriteCalls, 1);
     return STATUS_SUCCESS;
 }
 
 void
 WorldAttachPageFile(TEST_WORLD *World, ULONG64 Slots)
 {
-    MI_PAGEFILE_OPS Ops = { PagingRead, PagingWrite };
+    MI_PAGEFILE_OPS Ops = { PagingRead, PagingWrite, PagingWriteFrames };
 
     World->Paging.Slots = Slots;
     World->Paging.Store = calloc(Slots, PAGE_SIZE);

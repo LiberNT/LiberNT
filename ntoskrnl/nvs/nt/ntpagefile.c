@@ -70,6 +70,20 @@ MiPageFileWrite(
     return MiPagingIo(PagingFile->FileObject, Slot << PAGE_SHIFT, PAGE_SIZE, PageBuffer, TRUE, &Transferred);
 }
 
+static
+NTSTATUS
+MiPageFileWriteFrames(
+    _In_opt_ PVOID Context,
+    _In_ ULONG64 Slot,
+    _In_ const ULONG *Frames,
+    _In_ ULONG PageCount)
+{
+    PMI_NT_PAGEFILE PagingFile = Context;
+    ULONG Transferred;
+
+    return MiPagingIoFrames(PagingFile->FileObject, Slot << PAGE_SHIFT, Frames, PageCount, TRUE, &Transferred);
+}
+
 BOOLEAN
 NTAPI
 MmIsFileObjectAPagingFile(
@@ -215,7 +229,7 @@ NtCreatePagingFile(
     _In_ ULONG Reserved)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
-    MI_PAGEFILE_OPS Ops = { MiPageFileRead, MiPageFileWrite };
+    MI_PAGEFILE_OPS Ops = { MiPageFileRead, MiPageFileWrite, MiPageFileWriteFrames };
     FILE_END_OF_FILE_INFORMATION EndOfFile;
     LARGE_INTEGER SafeMinimum = {0}, SafeMaximum = {0}, AllocationSize;
     OBJECT_ATTRIBUTES ObjectAttributes;

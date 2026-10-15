@@ -135,23 +135,75 @@ MiTrimAddressSpace(
     return Trimmed;
 }
 
+static
+NTSTATUS
+MiWritePageFileCluster(
+    _Inout_ PMI_SYSTEM System,
+    _In_ const ULONG *Frames,
+    _In_ const ULONG64 *Slots,
+    _In_ const BOOLEAN *Reused,
+    _In_ ULONG Count)
+{
+    PMI_PAGEFILE PageFile = System->PageFile;
+    NTSTATUS Status;
+    PVOID Mapping;
+    ULONG i;
+
+    if (PageFile->Ops.WriteFrames != NULL)
+    {
+        Status = PageFile->Ops.WriteFrames(PageFile->Context, Slots[0], Frames, Count);
+    }
+    else
+    {
+        MI_ASSERT(Count == 1);
+        Mapping = MiPfnMapFrame(&System->Pfn, Frames[0]);
+        Status = PageFile->Ops.Write(PageFile->Context, Slots[0], Mapping);
+        MiPfnUnmapFrame(&System->Pfn, Mapping);
+    }
+
+    for (i = 0; i < Count; i++)
+    {
+        PMI_PFN Entry = &System->Pfn.Pfn[Frames[i]];
+
+        if (!NT_SUCCESS(Status))
+        {
+            if (MiPfnWriteComplete(&System->Pfn, Frames[i], 0, FALSE) || !Reused[i])
+                MiPageFileReleaseSlot(PageFile, Slots[i]);
+        }
+        else if (MiPfnWriteComplete(&System->Pfn, Frames[i],
+                                    MiSoftMake(MiSoftPageFile, MiSoftProtection(Entry->OriginalPte), Slots[i]), TRUE))
+        {
+            MiPageFileReleaseSlot(PageFile, Slots[i]);
+        }
+    }
+
+    if (NT_SUCCESS(Status))
+        MI_ATOMIC_ADD64(&PageFile->PagesWritten, Count);
+
+    return Status;
+}
+
 ULONG
 MiWriteModifiedPages(
     _Inout_ PMI_SYSTEM System,
     _In_ ULONG MaximumPages)
 {
     PMI_PAGEFILE PageFile = System->PageFile;
+    ULONG Frames[MI_MAX_FILE_WRITE_PAGES];
+    ULONG64 Slots[MI_MAX_FILE_WRITE_PAGES];
+    BOOLEAN ClusterReused[MI_MAX_FILE_WRITE_PAGES];
+    ULONG Limit = (PageFile != NULL && PageFile->Ops.WriteFrames != NULL) ? MI_MAX_FILE_WRITE_PAGES : 1;
+    ULONG Count = 0;
     ULONG Written = 0;
     ULONG Attempts = 0;
 
-    while (Written < MaximumPages && Attempts++ < MaximumPages)
+    while (Written + Count < MaximumPages && Attempts++ < MaximumPages)
     {
         ULONG Frame = MiPfnTakeModified(&System->Pfn);
         PMI_PFN Entry;
         ULONG64 Slot;
         BOOLEAN Reused;
         NTSTATUS Status;
-        PVOID Mapping;
 
         if (Frame == MI_FRAME_INVALID)
             break;
@@ -185,27 +237,39 @@ MiWriteModifiedPages(
             break;
         }
 
-        Mapping = MiPfnMapFrame(&System->Pfn, Frame);
-        Status = PageFile->Ops.Write(PageFile->Context, Slot, Mapping);
-        MiPfnUnmapFrame(&System->Pfn, Mapping);
-
-        if (!NT_SUCCESS(Status))
+        if (Count != 0 && Slot != Slots[Count - 1] + 1)
         {
-            if (MiPfnWriteComplete(&System->Pfn, Frame, 0, FALSE) || !Reused)
-                MiPageFileReleaseSlot(PageFile, Slot);
+            Status = MiWritePageFileCluster(System, Frames, Slots, ClusterReused, Count);
+            if (!NT_SUCCESS(Status))
+            {
+                if (MiPfnWriteComplete(&System->Pfn, Frame, 0, FALSE) || !Reused)
+                    MiPageFileReleaseSlot(PageFile, Slot);
 
-            break;
+                return Written;
+            }
+
+            Written += Count;
+            Count = 0;
         }
 
-        MI_ATOMIC_ADD64(&PageFile->PagesWritten, 1);
-        if (MiPfnWriteComplete(&System->Pfn, Frame,
-                               MiSoftMake(MiSoftPageFile, MiSoftProtection(Entry->OriginalPte), Slot), TRUE))
-        {
-            MiPageFileReleaseSlot(PageFile, Slot);
-        }
+        Frames[Count] = Frame;
+        Slots[Count] = Slot;
+        ClusterReused[Count] = Reused;
+        Count++;
 
-        Written++;
+        if (Count == Limit)
+        {
+            Status = MiWritePageFileCluster(System, Frames, Slots, ClusterReused, Count);
+            if (!NT_SUCCESS(Status))
+                return Written;
+
+            Written += Count;
+            Count = 0;
+        }
     }
+
+    if (Count != 0 && NT_SUCCESS(MiWritePageFileCluster(System, Frames, Slots, ClusterReused, Count)))
+        Written += Count;
 
     return Written;
 }

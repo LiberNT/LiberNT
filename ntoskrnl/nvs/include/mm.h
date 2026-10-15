@@ -274,6 +274,8 @@ typedef struct _MI_PAGEFILE_OPS
 {
     NTSTATUS (*Read)(_In_opt_ PVOID Context, _In_ ULONG64 Slot, _Out_ PVOID PageBuffer);
     NTSTATUS (*Write)(_In_opt_ PVOID Context, _In_ ULONG64 Slot, _In_ PVOID PageBuffer);
+    NTSTATUS (*WriteFrames)(_In_opt_ PVOID Context, _In_ ULONG64 Slot, _In_ const ULONG *Frames,
+                            _In_ ULONG PageCount);
 } MI_PAGEFILE_OPS, *PMI_PAGEFILE_OPS;
 
 typedef struct _MI_PAGEFILE

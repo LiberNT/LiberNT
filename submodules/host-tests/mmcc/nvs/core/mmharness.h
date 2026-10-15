@@ -30,6 +30,7 @@ typedef struct _TEST_PAGEFILE
     volatile LONG FailReads;
     PMI_RWLOCK ProbeLock;
     volatile LONG IoUnderLock;
+    volatile LONG WriteCalls;
 } TEST_PAGEFILE;
 
 typedef struct _TEST_FILE
