@@ -794,6 +794,8 @@ AfdDisconnect(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     /* Receive direction or both */
     else
     {
+        BOOLEAN UnreadData = (FCB->Recv.Content > FCB->Recv.BytesUsed);
+
         /* Mark that we can't issue another receive request */
         FCB->TdiReceiveClosed = TRUE;
 
@@ -817,6 +819,10 @@ AfdDisconnect(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         {
             /* No need to tell the transport driver for receive direction only */
             return UnlockAndMaybeComplete( FCB, STATUS_SUCCESS, Irp, 0 );
+        }
+        else if (!(DisReq->DisconnectType & AFD_DISCONNECT_ABORT) && !UnreadData)
+        {
+            Flags = TDI_DISCONNECT_RELEASE;
         }
         else
         {
