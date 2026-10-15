@@ -1588,5 +1588,6 @@ DWORD nsi_reactos_request_change_notification(struct nsi_request_change_notifica
     }
     SetEvent(notification_wake);
     if (params->handle) *params->handle = notification_complete;
+    SetLastError(ERROR_IO_PENDING);
     return ERROR_IO_PENDING;
 }
