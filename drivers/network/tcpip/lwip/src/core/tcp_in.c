@@ -844,6 +844,10 @@ tcp_process(struct tcp_pcb *pcb)
   }
 
   if ((pcb->flags & TF_RXCLOSED) == 0) {
+#ifdef __REACTOS__
+    if ((u32_t)(tcp_ticks - pcb->tmr) > TCP_QUICKACK_IDLE_TICKS)
+      pcb->quickack = TCP_QUICKACK_SEGMENTS;
+#endif
     /* Update the PCB (in)activity timer unless rx is closed (see tcp_shutdown) */
     pcb->tmr = tcp_ticks;
   }
@@ -1628,6 +1632,12 @@ tcp_receive(struct tcp_pcb *pcb)
 
 
         /* Acknowledge the segment(s). */
+#ifdef __REACTOS__
+        if (pcb->quickack) {
+          pcb->quickack--;
+          tcp_ack_now(pcb);
+        } else
+#endif
         tcp_ack(pcb);
 
 #if LWIP_TCP_SACK_OUT

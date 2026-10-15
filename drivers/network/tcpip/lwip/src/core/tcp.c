@@ -1908,6 +1908,9 @@ tcp_alloc(u8_t prio)
     pcb->rtime = -1;
     pcb->cwnd = 1;
     pcb->tmr = tcp_ticks;
+#ifdef __REACTOS__
+    pcb->quickack = TCP_QUICKACK_SEGMENTS;
+#endif
     pcb->last_timer = tcp_timer_ctr;
 
     /* RFC 5681 recommends setting ssthresh arbitrarily high and gives an example

@@ -466,6 +466,11 @@ struct tcp_seg *tcp_seg_copy(struct tcp_seg *seg);
 #define tcp_ack_now(pcb)                           \
   tcp_set_flags(pcb, TF_ACK_NOW)
 
+#ifdef __REACTOS__
+#define TCP_QUICKACK_SEGMENTS   16
+#define TCP_QUICKACK_IDLE_TICKS (200 / TCP_SLOW_INTERVAL)
+#endif
+
 err_t tcp_send_fin(struct tcp_pcb *pcb);
 err_t tcp_enqueue_flags(struct tcp_pcb *pcb, u8_t flags);
 
