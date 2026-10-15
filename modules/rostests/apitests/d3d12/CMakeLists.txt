@@ -7,6 +7,7 @@ list(APPEND SOURCE
     interfaces.cpp
     queue.cpp
     renderpass.cpp
+    rootsig.cpp
     shaders.cpp
     util.cpp
     versions.cpp

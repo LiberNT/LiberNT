@@ -15,6 +15,7 @@ extern void func_features(void);
 extern void func_interfaces(void);
 extern void func_queue(void);
 extern void func_renderpass(void);
+extern void func_rootsig(void);
 extern void func_versions(void);
 
 const struct test winetest_testlist[] =
@@ -26,6 +27,7 @@ const struct test winetest_testlist[] =
     { "interfaces", func_interfaces },
     { "queue", func_queue },
     { "renderpass", func_renderpass },
+    { "rootsig", func_rootsig },
     { "versions", func_versions },
     { 0, 0 }
 };

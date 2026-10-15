@@ -35,6 +35,8 @@ extern const DWORD ps_green_code[];
 extern const SIZE_T ps_green_code_size;
 extern const DWORD ps_mrt_code[];
 extern const SIZE_T ps_mrt_code_size;
+extern const DWORD ps_sample_code[];
+extern const SIZE_T ps_sample_code_size;
 
 ID3D12Device *d3d12_test_create_device(void);
 BOOL d3d12_test_bounded(const char *name, void (*function)(void *), void *argument, DWORD timeout);
