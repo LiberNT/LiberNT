@@ -30,10 +30,14 @@
 
 #include <pseh/pseh2.h>
 
+#ifdef __REACTOS__
+#define DbgP(_x_)
+#else
 #ifdef DBG
 #define DbgP(_x_) NFS41DbgPrint _x_
 #else
 #define DbgP(_x_)
+#endif
 #endif
 #define TRACE_TAG   L"[NFS41_NP]"
 #define WNNC_DRIVER( major, minor ) ( major * 0x00010000 + minor )
