@@ -1119,15 +1119,50 @@ PortDispatchPower(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp)
 {
-    DPRINT1("PortDispatchPower(%p %p)\n",
-            DeviceObject, Irp);
+    PFDO_DEVICE_EXTENSION DeviceExtension;
+    PIO_STACK_LOCATION Stack;
+    NTSTATUS Status;
 
-    Irp->IoStatus.Status = STATUS_SUCCESS;
-    Irp->IoStatus.Information = 0;
+    DPRINT("PortDispatchPower(%p %p)\n",
+           DeviceObject, Irp);
 
+    DeviceExtension = (PFDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
+
+    if (DeviceExtension->ExtensionType == FdoExtension)
+    {
+        PoStartNextPowerIrp(Irp);
+        IoSkipCurrentIrpStackLocation(Irp);
+        return PoCallDriver(DeviceExtension->LowerDevice, Irp);
+    }
+
+    Stack = IoGetCurrentIrpStackLocation(Irp);
+
+    switch (Stack->MinorFunction)
+    {
+        case IRP_MN_SET_POWER:
+            if (Stack->Parameters.Power.Type == DevicePowerState)
+            {
+                PoSetPowerState(DeviceObject,
+                                DevicePowerState,
+                                Stack->Parameters.Power.State);
+            }
+            Status = STATUS_SUCCESS;
+            break;
+
+        case IRP_MN_QUERY_POWER:
+            Status = STATUS_SUCCESS;
+            break;
+
+        default:
+            Status = Irp->IoStatus.Status;
+            break;
+    }
+
+    PoStartNextPowerIrp(Irp);
+    Irp->IoStatus.Status = Status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 
