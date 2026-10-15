@@ -239,6 +239,68 @@ GetCompressedSourceName(
     return TRUE;
 }
 
+typedef struct _STAGE_NAME_LIST
+{
+    PWSTR *Names;
+    DWORD Count;
+    DWORD Capacity;
+} STAGE_NAME_LIST, *PSTAGE_NAME_LIST;
+
+typedef struct _STAGE_PACKAGE_CONTEXT
+{
+    PCWSTR SourceRoot;
+    PCWSTR StoreRoot;
+    STAGE_NAME_LIST Sections;
+    STAGE_NAME_LIST Files;
+} STAGE_PACKAGE_CONTEXT, *PSTAGE_PACKAGE_CONTEXT;
+
+static BOOL
+MarkNameSeen(
+    IN OUT PSTAGE_NAME_LIST List,
+    IN PCWSTR Name)
+{
+    PWSTR Copy;
+    DWORD i;
+
+    for (i = 0; i < List->Count; i++)
+    {
+        if (!_wcsicmp(List->Names[i], Name))
+            return FALSE;
+    }
+
+    if (List->Count == List->Capacity)
+    {
+        DWORD Capacity = List->Capacity ? List->Capacity * 2 : 128;
+        PWSTR *Names = List->Names ? MyRealloc(List->Names, Capacity * sizeof(PWSTR))
+                                   : MyMalloc(Capacity * sizeof(PWSTR));
+
+        if (!Names)
+            return TRUE;
+        List->Names = Names;
+        List->Capacity = Capacity;
+    }
+
+    Copy = MyMalloc((lstrlenW(Name) + 1) * sizeof(WCHAR));
+    if (!Copy)
+        return TRUE;
+    lstrcpyW(Copy, Name);
+    List->Names[List->Count++] = Copy;
+    return TRUE;
+}
+
+static VOID
+FreeNameList(
+    IN OUT PSTAGE_NAME_LIST List)
+{
+    DWORD i;
+
+    for (i = 0; i < List->Count; i++)
+        MyFree(List->Names[i]);
+    MyFree(List->Names);
+    List->Names = NULL;
+    List->Count = List->Capacity = 0;
+}
+
 typedef struct _STAGE_CABINET_CONTEXT
 {
     PCWSTR FileName;
@@ -353,13 +415,15 @@ static VOID
 StageCopyFile(
     IN HINF hInf,
     IN PCWSTR FileName,
-    IN PCWSTR SourceRoot,
-    IN PCWSTR StoreRoot)
+    IN OUT PSTAGE_PACKAGE_CONTEXT Package)
 {
     WCHAR SubDir[MAX_PATH], DiskPath[MAX_PATH], Tag[MAX_PATH], Relative[MAX_PATH], Cabinet[MAX_PATH];
     PCWSTR CabinetPath = NULL;
     SIZE_T Length;
     UINT DiskId;
+
+    if (!MarkNameSeen(&Package->Files, FileName))
+        return;
 
     SubDir[0] = UNICODE_NULL;
     if (!SetupGetSourceFileLocationW(hInf, NULL, FileName, &DiskId, SubDir, ARRAY_SIZE(SubDir), NULL))
@@ -382,7 +446,7 @@ StageCopyFile(
     Length = wcslen(Tag);
     if (Length > 4 && _wcsicmp(Tag + Length - 4, L".cab") == 0 &&
         IsSafeRelativePath(DiskPath) && IsSafeRelativePath(Tag) &&
-        CombinePath(Cabinet, SourceRoot, DiskPath) &&
+        CombinePath(Cabinet, Package->SourceRoot, DiskPath) &&
         lstrlenW(Cabinet) + 1 + Length < MAX_PATH)
     {
         if (Cabinet[0] && Cabinet[lstrlenW(Cabinet) - 1] != L'\\')
@@ -391,26 +455,26 @@ StageCopyFile(
         CabinetPath = Cabinet;
     }
 
-    StagePackageFile(SourceRoot, StoreRoot, Relative, CabinetPath);
+    StagePackageFile(Package->SourceRoot, Package->StoreRoot, Relative, CabinetPath);
 }
 
 static VOID
 StageCopyFilesSection(
     IN HINF hInf,
     IN PCWSTR Section,
-    IN PCWSTR SourceRoot,
-    IN PCWSTR StoreRoot)
+    IN OUT PSTAGE_PACKAGE_CONTEXT Package)
 {
     WCHAR Target[MAX_PATH], Source[MAX_PATH];
     INFCONTEXT Context;
 
     if (Section[0] == L'@')
     {
-        StageCopyFile(hInf, Section + 1, SourceRoot, StoreRoot);
+        StageCopyFile(hInf, Section + 1, Package);
         return;
     }
 
-    if (!SetupFindFirstLineW(hInf, Section, NULL, &Context))
+    if (!MarkNameSeen(&Package->Sections, Section) ||
+        !SetupFindFirstLineW(hInf, Section, NULL, &Context))
         return;
 
     do
@@ -420,15 +484,14 @@ StageCopyFilesSection(
         if (!SetupGetStringFieldW(&Context, 2, Source, ARRAY_SIZE(Source), NULL) || !Source[0])
             lstrcpyW(Source, Target);
 
-        StageCopyFile(hInf, Source, SourceRoot, StoreRoot);
+        StageCopyFile(hInf, Source, Package);
     } while (SetupFindNextLine(&Context, &Context));
 }
 
 static VOID
 StageCopyFiles(
     IN HINF hInf,
-    IN PCWSTR SourceRoot,
-    IN PCWSTR StoreRoot)
+    IN OUT PSTAGE_PACKAGE_CONTEXT Package)
 {
     WCHAR Section[MAX_INF_SECTION_NAME_LENGTH + 1], Files[MAX_INF_SECTION_NAME_LENGTH + 1];
     DWORD Index, Field, FieldCount;
@@ -445,7 +508,7 @@ StageCopyFiles(
             for (Field = 1; Field <= FieldCount; Field++)
             {
                 if (SetupGetStringFieldW(&Context, Field, Files, ARRAY_SIZE(Files), NULL) && Files[0])
-                    StageCopyFilesSection(hInf, Files, SourceRoot, StoreRoot);
+                    StageCopyFilesSection(hInf, Files, Package);
             }
         }
     }
@@ -545,6 +608,7 @@ SETUPAPI_StageDriverPackage(
     IN PCWSTR SourceInfFileName)
 {
     WCHAR Source[MAX_PATH], SourceRoot[MAX_PATH], Root[MAX_PATH], Store[MAX_PATH], Target[MAX_PATH];
+    STAGE_PACKAGE_CONTEXT Package;
     PWSTR BaseName;
     HINF hInf;
     DWORD Length;
@@ -564,25 +628,33 @@ SETUPAPI_StageDriverPackage(
         return TRUE;
 
     if (!BuildStoreDirectory(Source, BaseName, Store) ||
-        !CreateDirectoryPath(Store) ||
         !CombinePath(Target, Store, BaseName))
     {
         return FALSE;
     }
 
-    if (!CopyFileW(Source, Target, FALSE))
+    if (GetFileAttributesW(Target) != INVALID_FILE_ATTRIBUTES && FilesAreIdentical(Source, Target))
+        return TRUE;
+
+    if (!CreateDirectoryPath(Store))
         return FALSE;
 
     hInf = SetupOpenInfFileW(Source, NULL, INF_STYLE_WIN4, NULL);
-    if (hInf == INVALID_HANDLE_VALUE)
-        return TRUE;
+    if (hInf != INVALID_HANDLE_VALUE)
+    {
+        StageCatalogFiles(hInf, SourceRoot, Store);
 
-    StageCatalogFiles(hInf, SourceRoot, Store);
+        ZeroMemory(&Package, sizeof(Package));
+        Package.SourceRoot = SourceRoot;
+        Package.StoreRoot = Store;
+        StageCopyFiles(hInf, &Package);
+        FreeNameList(&Package.Sections);
+        FreeNameList(&Package.Files);
 
-    StageCopyFiles(hInf, SourceRoot, Store);
+        SetupCloseInfFile(hInf);
+    }
 
-    SetupCloseInfFile(hInf);
-    return TRUE;
+    return CopyFileW(Source, Target, FALSE);
 }
 
 static BOOL
