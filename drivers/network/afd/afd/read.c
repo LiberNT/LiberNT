@@ -268,6 +268,10 @@ static NTSTATUS ReceiveActivity( PAFD_FCB FCB, PIRP Irp ) {
         {
             FCB->PollState |= AFD_EVENT_DISCONNECT;
         }
+        else if (FCB->LastReceiveStatus == STATUS_CONNECTION_RESET)
+        {
+            FCB->PollState |= AFD_EVENT_ABORT;
+        }
         else
         {
             FCB->PollState |= AFD_EVENT_CLOSE;

@@ -507,7 +507,7 @@ InternalErrorEventHandler(void *arg, const err_t err)
 
     /* Give them one shot to receive the remaining data */
     Connection->ReceiveShutdown = TRUE;
-    Connection->ReceiveShutdownStatus = TCPTranslateError(err);
+    Connection->ReceiveShutdownStatus = (err == ERR_RST) ? STATUS_CONNECTION_RESET : TCPTranslateError(err);
     TCPRecvEventHandler(Connection);
 
     /* Terminate the connection */
@@ -896,6 +896,54 @@ LibTCPShutdown(PCONNECTION_ENDPOINT Connection, const int shut_rx, const int shu
     msg.Input.Shutdown.shut_tx = shut_tx;
 
     Error = tcpip_callback_wait(LibTCPShutdownCallback, &msg);
+    if (Error != ERR_OK)
+        return Error;
+
+    return msg.Output.Shutdown.Error;
+}
+
+static
+void
+LibTCPAbortCallback(void *arg)
+{
+    struct lwip_callback_msg *msg = arg;
+    PCONNECTION_ENDPOINT Connection = msg->Input.Shutdown.Connection;
+    PTCP_PCB pcb = Connection->SocketContext;
+
+    if (!pcb)
+    {
+        msg->Output.Shutdown.Error = ERR_CLSD;
+        return;
+    }
+
+    if (!Connection->SendShutdown && pcb->state == ESTABLISHED)
+    {
+        WfpShimClassifyStream(Connection->WfpEndpointId,
+                              WFP_SHIM_STREAM_SEND | WFP_SHIM_STREAM_DISCONNECT,
+                              NULL,
+                              0);
+    }
+
+    Connection->SocketContext = NULL;
+    Connection->ReceiveShutdown = TRUE;
+    Connection->ReceiveShutdownStatus = STATUS_FILE_CLOSED;
+    Connection->SendShutdown = TRUE;
+    tcp_arg(pcb, NULL);
+    tcp_abort(pcb);
+
+    TCPFinEventHandler(Connection, ERR_ABRT);
+    msg->Output.Shutdown.Error = ERR_OK;
+}
+
+err_t
+LibTCPAbort(PCONNECTION_ENDPOINT Connection)
+{
+    struct lwip_callback_msg msg;
+    err_t Error;
+
+    msg.Input.Shutdown.Connection = Connection;
+
+    Error = tcpip_callback_wait(LibTCPAbortCallback, &msg);
     if (Error != ERR_OK)
         return Error;
 

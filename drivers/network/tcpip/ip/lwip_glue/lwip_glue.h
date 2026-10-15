@@ -112,6 +112,7 @@ PTCP_PCB    LibTCPListen(PCONNECTION_ENDPOINT Connection, const UINT backlog);
 err_t       LibTCPSend(PCONNECTION_ENDPOINT Connection, void *const dataptr, const u16_t len, ULONG *sent, const int safe);
 err_t       LibTCPConnect(PCONNECTION_ENDPOINT Connection, ip4_addr_t *const ipaddr, const u16_t port);
 err_t       LibTCPShutdown(PCONNECTION_ENDPOINT Connection, const int shut_rx, const int shut_tx);
+err_t       LibTCPAbort(PCONNECTION_ENDPOINT Connection);
 err_t       LibTCPClose(PCONNECTION_ENDPOINT Connection, const int safe, const int callback);
 
 err_t       LibTCPGetPeerName(PTCP_PCB pcb, ip4_addr_t *const ipaddr, u16_t *const port);

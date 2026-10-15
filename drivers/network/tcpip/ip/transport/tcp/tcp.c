@@ -521,7 +521,10 @@ NTSTATUS TCPDisconnect
             FlushShutdownQueue(Connection, STATUS_FILE_CLOSED);
             ReferenceObject(Connection);
             UnlockObject(Connection);
-            Status = TCPTranslateError(LibTCPShutdown(Connection, 1, 1));
+            if (Flags & TDI_DISCONNECT_ABORT)
+                Status = TCPTranslateError(LibTCPAbort(Connection));
+            else
+                Status = TCPTranslateError(LibTCPShutdown(Connection, 1, 1));
             DereferenceObject(Connection);
         }
         else

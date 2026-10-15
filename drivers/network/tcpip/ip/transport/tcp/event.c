@@ -182,13 +182,16 @@ VOID
 TCPFinEventHandler(void *arg, const err_t err)
 {
    PCONNECTION_ENDPOINT Connection = (PCONNECTION_ENDPOINT)arg, LastConnection;
-   const NTSTATUS Status = TCPTranslateError(err);
+   NTSTATUS Status = TCPTranslateError(err);
 
    ASSERT(Connection->SocketContext == NULL);
    ASSERT(Connection->AddressFile);
    ASSERT(err != ERR_OK);
 
    LockObject(Connection);
+
+   if (err == ERR_RST && IsListEmpty(&Connection->ConnectRequest))
+       Status = STATUS_CONNECTION_RESET;
 
    /* Complete all outstanding requests now */
    FlushAllQueues(Connection, Status);
