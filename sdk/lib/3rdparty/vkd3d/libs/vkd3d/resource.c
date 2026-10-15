@@ -2267,7 +2267,7 @@ HRESULT d3d12_reserved_resource_create(struct d3d12_device *device,
 HRESULT vkd3d_create_image_resource(ID3D12Device *device,
         const struct vkd3d_image_resource_create_info *create_info, ID3D12Resource **resource)
 {
-    struct d3d12_device *d3d12_device = unsafe_impl_from_ID3D12Device10((ID3D12Device10 *)device);
+    struct d3d12_device *d3d12_device = unsafe_impl_from_ID3D12Device14((ID3D12Device14 *)device);
     struct d3d12_resource *object;
     HRESULT hr;
 
@@ -3755,8 +3755,10 @@ static VkResult d3d12_create_sampler(struct d3d12_device *device, D3D12_FILTER f
         D3D12_TEXTURE_ADDRESS_MODE address_u, D3D12_TEXTURE_ADDRESS_MODE address_v,
         D3D12_TEXTURE_ADDRESS_MODE address_w, float mip_lod_bias, unsigned int max_anisotropy,
         D3D12_COMPARISON_FUNC comparison_func, D3D12_STATIC_BORDER_COLOR border_colour,
-        float min_lod, float max_lod, bool unnormalised, VkSampler *vk_sampler)
+        const VkClearColorValue *custom_colour, bool integer_colour, float min_lod, float max_lod,
+        bool unnormalised, VkSampler *vk_sampler)
 {
+    VkSamplerCustomBorderColorCreateInfoEXT custom_colour_desc;
     VkSamplerReductionModeCreateInfoEXT reduction_desc;
     const struct vkd3d_vk_device_procs *vk_procs;
     struct VkSamplerCreateInfo sampler_desc;
@@ -3785,7 +3787,23 @@ static VkResult d3d12_create_sampler(struct d3d12_device *device, D3D12_FILTER f
 
     if (address_u == D3D12_TEXTURE_ADDRESS_MODE_BORDER || address_v == D3D12_TEXTURE_ADDRESS_MODE_BORDER
             || address_w == D3D12_TEXTURE_ADDRESS_MODE_BORDER)
-        sampler_desc.borderColor = vk_border_colour_from_d3d12(border_colour);
+    {
+        if (custom_colour && device->vk_info.EXT_custom_border_color)
+        {
+            sampler_desc.borderColor = integer_colour ? VK_BORDER_COLOR_INT_CUSTOM_EXT : VK_BORDER_COLOR_FLOAT_CUSTOM_EXT;
+            custom_colour_desc.sType = VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT;
+            custom_colour_desc.pNext = NULL;
+            custom_colour_desc.customBorderColor = *custom_colour;
+            custom_colour_desc.format = VK_FORMAT_UNDEFINED;
+            vk_prepend_struct(&sampler_desc, &custom_colour_desc);
+        }
+        else
+        {
+            if (custom_colour)
+                FIXME("Custom border colours are not supported by the device.\n");
+            sampler_desc.borderColor = vk_border_colour_from_d3d12(border_colour);
+        }
+    }
 
     reduction_desc.reductionMode = vk_reduction_mode_from_d3d12(D3D12_DECODE_FILTER_REDUCTION(filter));
     if (reduction_desc.reductionMode != VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)
@@ -3808,7 +3826,7 @@ static VkResult d3d12_create_sampler(struct d3d12_device *device, D3D12_FILTER f
     return vr;
 }
 
-static D3D12_STATIC_BORDER_COLOR d3d12_static_border_colour(const float *colour)
+static bool d3d12_static_border_colour(const D3D12_SAMPLER_DESC2 *desc, D3D12_STATIC_BORDER_COLOR *static_colour)
 {
     unsigned int i;
 
@@ -3817,28 +3835,53 @@ static D3D12_STATIC_BORDER_COLOR d3d12_static_border_colour(const float *colour)
         float colour[4];
         D3D12_STATIC_BORDER_COLOR static_colour;
     }
-    colours[] =
+    float_colours[] =
     {
         {{0.0f, 0.0f, 0.0f, 0.0f}, D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK},
         {{0.0f, 0.0f, 0.0f, 1.0f}, D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK},
         {{1.0f, 1.0f, 1.0f, 1.0f}, D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE},
     };
-
-    for (i = 0; i < ARRAY_SIZE(colours); ++i)
+    static const struct
     {
-        if (!memcmp(colour, colours[i].colour, sizeof(colours[i].colour)))
-            return colours[i].static_colour;
+        UINT colour[4];
+        D3D12_STATIC_BORDER_COLOR static_colour;
+    }
+    integer_colours[] =
+    {
+        {{0, 0, 0, 1}, D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK_UINT},
+        {{1, 1, 1, 1}, D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE_UINT},
+    };
+
+    if (desc->Flags & D3D12_SAMPLER_FLAG_UINT_BORDER_COLOR)
+    {
+        for (i = 0; i < ARRAY_SIZE(integer_colours); ++i)
+        {
+            if (!memcmp(desc->u.UintBorderColor, integer_colours[i].colour, sizeof(integer_colours[i].colour)))
+            {
+                *static_colour = integer_colours[i].static_colour;
+                return true;
+            }
+        }
+        return false;
     }
 
-    FIXME("Unhandled border colour {%.8e, %.8e, %.8e, %.8e}.\n", colour[0], colour[1], colour[2], colour[3]);
-
-    return D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+    for (i = 0; i < ARRAY_SIZE(float_colours); ++i)
+    {
+        if (!memcmp(desc->u.FloatBorderColor, float_colours[i].colour, sizeof(float_colours[i].colour)))
+        {
+            *static_colour = float_colours[i].static_colour;
+            return true;
+        }
+    }
+    return false;
 }
 
-void d3d12_desc_create_sampler(struct d3d12_desc *sampler,
-        struct d3d12_device *device, const D3D12_SAMPLER_DESC *desc)
+void d3d12_desc_create_sampler2(struct d3d12_desc *sampler,
+        struct d3d12_device *device, const D3D12_SAMPLER_DESC2 *desc)
 {
     D3D12_STATIC_BORDER_COLOR static_colour = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+    const VkClearColorValue *custom_colour = NULL;
+    VkClearColorValue colour;
     struct vkd3d_view *view;
 
     if (!desc)
@@ -3847,10 +3890,14 @@ void d3d12_desc_create_sampler(struct d3d12_desc *sampler,
         return;
     }
 
-    if (desc->AddressU == D3D12_TEXTURE_ADDRESS_MODE_BORDER
+    if ((desc->AddressU == D3D12_TEXTURE_ADDRESS_MODE_BORDER
             || desc->AddressV == D3D12_TEXTURE_ADDRESS_MODE_BORDER
             || desc->AddressW == D3D12_TEXTURE_ADDRESS_MODE_BORDER)
-        static_colour = d3d12_static_border_colour(desc->BorderColor);
+            && !d3d12_static_border_colour(desc, &static_colour))
+    {
+        memcpy(colour.uint32, desc->u.UintBorderColor, sizeof(colour.uint32));
+        custom_colour = &colour;
+    }
 
     if (!(view = vkd3d_view_create(VKD3D_DESCRIPTOR_MAGIC_SAMPLER, VK_DESCRIPTOR_TYPE_SAMPLER,
             VKD3D_VIEW_TYPE_SAMPLER, device)))
@@ -3860,13 +3907,40 @@ void d3d12_desc_create_sampler(struct d3d12_desc *sampler,
 
     if (d3d12_create_sampler(device, desc->Filter, desc->AddressU, desc->AddressV,
             desc->AddressW, desc->MipLODBias, desc->MaxAnisotropy, desc->ComparisonFunc,
-            static_colour, desc->MinLOD, desc->MaxLOD, false, &view->v.u.vk_sampler) < 0)
+            static_colour, custom_colour, !!(desc->Flags & D3D12_SAMPLER_FLAG_UINT_BORDER_COLOR),
+            desc->MinLOD, desc->MaxLOD, !!(desc->Flags & D3D12_SAMPLER_FLAG_NON_NORMALIZED_COORDINATES),
+            &view->v.u.vk_sampler) < 0)
     {
         vkd3d_view_decref(view, device);
         return;
     }
 
     sampler->s.u.view = view;
+}
+
+void d3d12_desc_create_sampler(struct d3d12_desc *sampler,
+        struct d3d12_device *device, const D3D12_SAMPLER_DESC *desc)
+{
+    D3D12_SAMPLER_DESC2 desc2;
+
+    if (!desc)
+    {
+        WARN("NULL sampler desc.\n");
+        return;
+    }
+
+    desc2.Filter = desc->Filter;
+    desc2.AddressU = desc->AddressU;
+    desc2.AddressV = desc->AddressV;
+    desc2.AddressW = desc->AddressW;
+    desc2.MipLODBias = desc->MipLODBias;
+    desc2.MaxAnisotropy = desc->MaxAnisotropy;
+    desc2.ComparisonFunc = desc->ComparisonFunc;
+    memcpy(desc2.u.FloatBorderColor, desc->BorderColor, sizeof(desc2.u.FloatBorderColor));
+    desc2.MinLOD = desc->MinLOD;
+    desc2.MaxLOD = desc->MaxLOD;
+    desc2.Flags = D3D12_SAMPLER_FLAG_NONE;
+    d3d12_desc_create_sampler2(sampler, device, &desc2);
 }
 
 HRESULT vkd3d_create_static_sampler(struct d3d12_device *device,
@@ -3876,7 +3950,7 @@ HRESULT vkd3d_create_static_sampler(struct d3d12_device *device,
 
     vr = d3d12_create_sampler(device, desc->Filter, desc->AddressU, desc->AddressV,
             desc->AddressW, desc->MipLODBias, desc->MaxAnisotropy, desc->ComparisonFunc,
-            desc->BorderColor, desc->MinLOD, desc->MaxLOD,
+            desc->BorderColor, NULL, !!(flags & D3D12_SAMPLER_FLAG_UINT_BORDER_COLOR), desc->MinLOD, desc->MaxLOD,
             !!(flags & D3D12_SAMPLER_FLAG_NON_NORMALIZED_COORDINATES), vk_sampler);
     return hresult_from_vk_result(vr);
 }

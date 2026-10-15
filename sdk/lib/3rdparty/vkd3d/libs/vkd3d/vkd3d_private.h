@@ -136,6 +136,7 @@ struct vkd3d_vulkan_info
     bool EXT_4444_formats;
     bool EXT_calibrated_timestamps;
     bool EXT_conditional_rendering;
+    bool EXT_custom_border_color;
     bool EXT_debug_marker;
     bool EXT_depth_range_unrestricted;
     bool EXT_depth_clip_enable;
@@ -745,6 +746,7 @@ void d3d12_desc_create_uav(struct d3d12_desc *descriptor, struct d3d12_device *d
         struct d3d12_resource *resource, struct d3d12_resource *counter_resource,
         const D3D12_UNORDERED_ACCESS_VIEW_DESC *desc);
 void d3d12_desc_create_sampler(struct d3d12_desc *sampler, struct d3d12_device *device, const D3D12_SAMPLER_DESC *desc);
+void d3d12_desc_create_sampler2(struct d3d12_desc *sampler, struct d3d12_device *device, const D3D12_SAMPLER_DESC2 *desc);
 void d3d12_desc_write_atomic(struct d3d12_desc *dst, const struct d3d12_desc *src, struct d3d12_device *device);
 
 bool vkd3d_create_raw_buffer_view(struct d3d12_device *device,
@@ -1294,6 +1296,7 @@ enum d3d12_bundle_command_type
     VKD3D_BUNDLE_IA_SET_PRIMITIVE_TOPOLOGY,
     VKD3D_BUNDLE_OM_SET_BLEND_FACTOR,
     VKD3D_BUNDLE_OM_SET_STENCIL_REF,
+    VKD3D_BUNDLE_OM_SET_FRONT_AND_BACK_STENCIL_REF,
     VKD3D_BUNDLE_SET_PIPELINE_STATE,
     VKD3D_BUNDLE_SET_COMPUTE_ROOT_SIGNATURE,
     VKD3D_BUNDLE_SET_GRAPHICS_ROOT_SIGNATURE,
@@ -1326,7 +1329,7 @@ struct d3d12_bundle_command
 
 struct d3d12_command_list
 {
-    ID3D12GraphicsCommandList7 ID3D12GraphicsCommandList7_iface;
+    ID3D12GraphicsCommandList10 ID3D12GraphicsCommandList10_iface;
     unsigned int refcount;
 
     D3D12_COMMAND_LIST_TYPE type;
@@ -1630,7 +1633,7 @@ struct vkd3d_desc_object_cache
 /* ID3D12Device */
 struct d3d12_device
 {
-    ID3D12Device10 ID3D12Device10_iface;
+    ID3D12Device14 ID3D12Device14_iface;
     ID3D12DeviceRemovedExtendedData1 ID3D12DeviceRemovedExtendedData1_iface;
     D3D12_DRED_ENABLEMENT dred_auto_breadcrumbs;
     D3D12_DRED_ENABLEMENT dred_page_fault;
@@ -1708,29 +1711,29 @@ struct vkd3d_queue *d3d12_device_get_vkd3d_queue(struct d3d12_device *device, D3
 bool d3d12_device_is_uma(struct d3d12_device *device, bool *coherent);
 void d3d12_device_mark_as_removed(struct d3d12_device *device, HRESULT reason,
         const char *message, ...) VKD3D_PRINTF_FUNC(3, 4);
-struct d3d12_device *unsafe_impl_from_ID3D12Device10(ID3D12Device10 *iface);
+struct d3d12_device *unsafe_impl_from_ID3D12Device14(ID3D12Device14 *iface);
 HRESULT d3d12_device_add_descriptor_heap(struct d3d12_device *device, struct d3d12_descriptor_heap *heap);
 void d3d12_device_remove_descriptor_heap(struct d3d12_device *device, struct d3d12_descriptor_heap *heap);
 
 static inline HRESULT d3d12_device_query_interface(struct d3d12_device *device, REFIID iid, void **object)
 {
-    return ID3D12Device10_QueryInterface(&device->ID3D12Device10_iface, iid, object);
+    return ID3D12Device14_QueryInterface(&device->ID3D12Device14_iface, iid, object);
 }
 
 static inline ULONG d3d12_device_add_ref(struct d3d12_device *device)
 {
-    return ID3D12Device10_AddRef(&device->ID3D12Device10_iface);
+    return ID3D12Device14_AddRef(&device->ID3D12Device14_iface);
 }
 
 static inline ULONG d3d12_device_release(struct d3d12_device *device)
 {
-    return ID3D12Device10_Release(&device->ID3D12Device10_iface);
+    return ID3D12Device14_Release(&device->ID3D12Device14_iface);
 }
 
 static inline unsigned int d3d12_device_get_descriptor_handle_increment_size(struct d3d12_device *device,
         D3D12_DESCRIPTOR_HEAP_TYPE descriptor_type)
 {
-    return ID3D12Device10_GetDescriptorHandleIncrementSize(&device->ID3D12Device10_iface, descriptor_type);
+    return ID3D12Device14_GetDescriptorHandleIncrementSize(&device->ID3D12Device14_iface, descriptor_type);
 }
 
 /* utils */
