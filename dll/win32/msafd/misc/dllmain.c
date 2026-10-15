@@ -1639,8 +1639,9 @@ WSPAccept(
        if (lpErrno) *lpErrno = WSAEINVAL;
        return INVALID_SOCKET;
     }
-    if ((SocketAddress && !SocketAddressLength) ||
-        (SocketAddressLength && !SocketAddress) ||
+    if (!SocketAddressLength)
+        SocketAddress = NULL;
+    if ((SocketAddressLength && !SocketAddress) ||
         (SocketAddressLength && *SocketAddressLength < sizeof(SOCKADDR)))
     {
        if (lpErrno) *lpErrno = WSAEFAULT;
