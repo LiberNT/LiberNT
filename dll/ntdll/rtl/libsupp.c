@@ -698,31 +698,60 @@ done:
     return STATUS_SUCCESS;
 }
 
+static BOOLEAN LdrpIsResourceNotFound( NTSTATUS Status )
+{
+    return Status == STATUS_RESOURCE_TYPE_NOT_FOUND ||
+           Status == STATUS_RESOURCE_NAME_NOT_FOUND ||
+           Status == STATUS_RESOURCE_LANG_NOT_FOUND;
+}
+
+static BOOLEAN LdrpIsNeutralFirstResourceType( ULONG_PTR Type )
+{
+    if (IS_INTRESOURCE(Type))
+        return Type == (ULONG_PTR)RT_VERSION;
+    return !_wcsicmp( (LPCWSTR)Type, L"MUI" );
+}
+
 NTSTATUS find_entry( PVOID BaseAddress, LDR_RESOURCE_INFO *info,
                      ULONG level, void **ret, int want_dir )
 {
     NTSTATUS Status, MuiStatus;
     PVOID ResourceBase;
+    USHORT Language = level > 2 ? (USHORT)info->Language : 0;
 
-    Status = LdrpFindModuleResourceEntry( BaseAddress, info, level, ret, !!want_dir );
-    if (want_dir ||
-        (Status != STATUS_RESOURCE_TYPE_NOT_FOUND &&
-         Status != STATUS_RESOURCE_NAME_NOT_FOUND &&
-         Status != STATUS_RESOURCE_LANG_NOT_FOUND))
+    if (want_dir || !level)
+        return LdrpFindModuleResourceEntry( BaseAddress, info, level, ret, !!want_dir );
+
+    if (LdrpIsNeutralFirstResourceType( info->Type ))
     {
-        return Status;
+        Status = LdrpFindModuleResourceEntry( BaseAddress, info, level, ret, FALSE );
+        if (!LdrpIsResourceNotFound( Status ))
+            return Status;
+
+        MuiStatus = LdrpGetAlternateResourceModule( BaseAddress, info->Type, Language, &ResourceBase );
+        if (MuiStatus == STATUS_RESOURCE_DATA_NOT_FOUND)
+            return Status;
+        if (!NT_SUCCESS(MuiStatus))
+            return MuiStatus;
+
+        return LdrpFindModuleResourceEntry( ResourceBase, info, level, ret, FALSE );
     }
 
-    if (!level)
-        return Status;
-
-    MuiStatus = LdrpGetAlternateResourceModule( BaseAddress, info->Type, level > 2 ? (USHORT)info->Language : 0, &ResourceBase );
+    MuiStatus = LdrpGetAlternateResourceModule( BaseAddress, info->Type, Language, &ResourceBase );
     if (MuiStatus == STATUS_RESOURCE_DATA_NOT_FOUND)
-        return Status;
-    if (!NT_SUCCESS(MuiStatus))
-        return MuiStatus;
+        return LdrpFindModuleResourceEntry( BaseAddress, info, level, ret, FALSE );
 
-    return LdrpFindModuleResourceEntry( ResourceBase, info, level, ret, FALSE );
+    if (NT_SUCCESS(MuiStatus))
+    {
+        Status = LdrpFindModuleResourceEntry( ResourceBase, info, level, ret, FALSE );
+        if (!LdrpIsResourceNotFound( Status ))
+            return Status;
+    }
+
+    Status = LdrpFindModuleResourceEntry( BaseAddress, info, level, ret, FALSE );
+    if (NT_SUCCESS(MuiStatus) || !LdrpIsResourceNotFound( Status ))
+        return Status;
+    return MuiStatus;
 }
 
 PVOID
