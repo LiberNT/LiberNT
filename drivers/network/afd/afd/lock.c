@@ -602,7 +602,7 @@ VOID UnlockBuffers( PAFD_WSABUF Buf, UINT Count, BOOL Address ) {
 
 /* Produce a kernel-land handle array with handles replaced by object
  * pointers.  This will allow the system to do proper alerting */
-PAFD_HANDLE LockHandles( PAFD_HANDLE HandleArray, UINT HandleCount ) {
+PAFD_HANDLE LockHandles( PAFD_HANDLE HandleArray, UINT HandleCount, PDEVICE_OBJECT DeviceObject ) {
     UINT i;
     NTSTATUS Status = STATUS_SUCCESS;
 
@@ -619,10 +619,15 @@ PAFD_HANDLE LockHandles( PAFD_HANDLE HandleArray, UINT HandleCount ) {
                 Status = ObReferenceObjectByHandle
                     ( (PVOID)HandleArray[i].Handle,
                       FILE_ALL_ACCESS,
-                      NULL,
+                      *IoFileObjectType,
                        KernelMode,
                        (PVOID*)&FileObjects[i].Handle,
                        NULL );
+                if( NT_SUCCESS(Status) &&
+                    ((PFILE_OBJECT)FileObjects[i].Handle)->DeviceObject != DeviceObject ) {
+                    ObDereferenceObject( (PVOID)FileObjects[i].Handle );
+                    Status = STATUS_INVALID_HANDLE;
+                }
         }
 
         if( !NT_SUCCESS(Status) )
