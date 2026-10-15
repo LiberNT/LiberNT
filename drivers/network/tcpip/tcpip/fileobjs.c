@@ -160,6 +160,12 @@ BOOLEAN AddrReceiveMatch(
        return TRUE;
    }
 
+   if (RemoteAddress->Type == IP_ADDRESS_V4 && LocalAddress->Type == IP_ADDRESS_V4 &&
+       (DN2H(RemoteAddress->Address.IPv4Address) & 0xf0000000) == 0xe0000000)
+   {
+       return TRUE;
+   }
+
    return FALSE;
 }
 

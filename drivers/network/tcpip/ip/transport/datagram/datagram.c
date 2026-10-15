@@ -186,7 +186,9 @@ DGDeliverData(
             if (DstPort == AddrFile->Port &&
                (AddrIsEqual(DstAddress, &AddrFile->Address) ||
                 AddrIsUnspecified(&AddrFile->Address) ||
-                AddrIsUnspecified(DstAddress)))
+                AddrIsUnspecified(DstAddress) ||
+                (DstAddress->Type == IP_ADDRESS_V4 &&
+                 (DN2H(DstAddress->Address.IPv4Address) & 0xf0000000) == 0xe0000000)))
             {
                 /* Remove the request from the queue */
                 RemoveEntryList(&Current->ListEntry);
