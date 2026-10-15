@@ -4084,6 +4084,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device9 
             if (feature_data_size != sizeof(*data))
             {
                 WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
             }
 
             data->AdvancedTextureOpsSupported = FALSE;
@@ -4103,6 +4104,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device9 
             if (feature_data_size != sizeof(*data))
             {
                 WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
             }
 
             data->TriangleFanSupported = FALSE;
@@ -4120,6 +4122,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device9 
             if (feature_data_size != sizeof(*data))
             {
                 WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
             }
 
             data->DynamicDepthBiasSupported = FALSE;
@@ -4137,6 +4140,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device9 
             if (feature_data_size != sizeof(*data))
             {
                 WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
             }
 
             data->NonNormalizedCoordinateSamplersSupported = FALSE;
@@ -4154,6 +4158,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device9 
             if (feature_data_size != sizeof(*data))
             {
                 WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
             }
 
             data->RenderPassesValid = FALSE;
@@ -4162,9 +4167,62 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device9 
             return S_OK;
         }
 
+        case D3D12_FEATURE_PROTECTED_RESOURCE_SESSION_SUPPORT:
+        {
+            D3D12_FEATURE_DATA_PROTECTED_RESOURCE_SESSION_SUPPORT *data = feature_data;
+
+            if (feature_data_size != sizeof(*data))
+            {
+                WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
+            }
+            if (data->NodeIndex)
+            {
+                FIXME("Multi-adapter not supported.\n");
+                return E_INVALIDARG;
+            }
+
+            data->Support = D3D12_PROTECTED_RESOURCE_SESSION_SUPPORT_FLAG_NONE;
+            return S_OK;
+        }
+
+        case D3D12_FEATURE_PROTECTED_RESOURCE_SESSION_TYPE_COUNT:
+        {
+            D3D12_FEATURE_DATA_PROTECTED_RESOURCE_SESSION_TYPE_COUNT *data = feature_data;
+
+            if (feature_data_size != sizeof(*data))
+            {
+                WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
+            }
+            if (data->NodeIndex)
+            {
+                FIXME("Multi-adapter not supported.\n");
+                return E_INVALIDARG;
+            }
+
+            data->Count = 0;
+            return S_OK;
+        }
+
+        case D3D12_FEATURE_DISPLAYABLE:
+        {
+            D3D12_FEATURE_DATA_DISPLAYABLE *data = feature_data;
+
+            if (feature_data_size != sizeof(*data))
+            {
+                WARN("Invalid size %u.\n", feature_data_size);
+                return E_INVALIDARG;
+            }
+
+            data->DisplayableTexture = FALSE;
+            data->SharedResourceCompatibilityTier = D3D12_SHARED_RESOURCE_COMPATIBILITY_TIER_0;
+            return S_OK;
+        }
+
         default:
             FIXME("Unhandled feature %#x.\n", feature);
-            return E_NOTIMPL;
+            return E_INVALIDARG;
     }
 }
 
