@@ -28,6 +28,58 @@ ROOTS = {
     "HKCU": ("HKCU", ""),
 }
 
+REDIRECTED_CLASSES = ("clsid", "directshow", "interface", "media type", "mediafoundation")
+
+SHARED_SOFTWARE_KEYS = (
+    "clients",
+    "microsoft\\com3",
+    "microsoft\\cryptography\\calais\\current",
+    "microsoft\\cryptography\\calais\\readers",
+    "microsoft\\cryptography\\services",
+    "microsoft\\ctf\\systemshared",
+    "microsoft\\ctf\\tip",
+    "microsoft\\dfs",
+    "microsoft\\driver signing",
+    "microsoft\\enterprisecertificates",
+    "microsoft\\eventsystem",
+    "microsoft\\msmq",
+    "microsoft\\non-driver signing",
+    "microsoft\\notepad\\defaultfonts",
+    "microsoft\\ole",
+    "microsoft\\ras",
+    "microsoft\\rpc",
+    "microsoft\\systemcertificates",
+    "microsoft\\termservlicensing",
+    "microsoft\\transaction server",
+    "microsoft\\windows\\currentversion\\app paths",
+    "microsoft\\windows\\currentversion\\control panel\\cursors\\schemes",
+    "microsoft\\windows\\currentversion\\explorer\\autoplayhandlers",
+    "microsoft\\windows\\currentversion\\explorer\\driveicons",
+    "microsoft\\windows\\currentversion\\explorer\\kindmap",
+    "microsoft\\windows\\currentversion\\group policy",
+    "microsoft\\windows\\currentversion\\policies",
+    "microsoft\\windows\\currentversion\\previewhandlers",
+    "microsoft\\windows\\currentversion\\setup",
+    "microsoft\\windows\\currentversion\\telephony\\locations",
+    "microsoft\\windows nt\\currentversion\\console",
+    "microsoft\\windows nt\\currentversion\\fontdpi",
+    "microsoft\\windows nt\\currentversion\\fontlink",
+    "microsoft\\windows nt\\currentversion\\fontmapper",
+    "microsoft\\windows nt\\currentversion\\fonts",
+    "microsoft\\windows nt\\currentversion\\fontsubstitutes",
+    "microsoft\\windows nt\\currentversion\\gre_initialize",
+    "microsoft\\windows nt\\currentversion\\image file execution options",
+    "microsoft\\windows nt\\currentversion\\languagepack",
+    "microsoft\\windows nt\\currentversion\\networkcards",
+    "microsoft\\windows nt\\currentversion\\perflib",
+    "microsoft\\windows nt\\currentversion\\ports",
+    "microsoft\\windows nt\\currentversion\\print",
+    "microsoft\\windows nt\\currentversion\\profilelist",
+    "microsoft\\windows nt\\currentversion\\time zones",
+    "policies",
+    "registeredapplications",
+)
+
 class ScriptError(Exception):
     pass
 
@@ -132,6 +184,31 @@ class Registry:
     def set_value(self, root, path, name, vtype, data):
         values = self.create(root, path)["values"]
         values[(name or "").lower()] = (name or "", vtype, data)
+
+
+def wow64_view(root, path):
+    parts = path.split("\\")
+    if parts[0].lower() != "software" or (len(parts) > 1 and parts[1].lower() == "wow6432node"):
+        return path
+    if len(parts) > 1 and parts[1].lower() == "classes":
+        if len(parts) > 2 and parts[2].lower() in REDIRECTED_CLASSES:
+            return "\\".join(parts[:2] + ["Wow6432Node"] + parts[2:])
+        return path
+    if root != "HKLM":
+        return path
+    for i in range(2, len(parts) + 1):
+        if "\\".join(parts[1:i]).lower() in SHARED_SOFTWARE_KEYS:
+            return path
+    return "\\".join(parts[:1] + ["Wow6432Node"] + parts[1:])
+
+
+def merge_wow64(registry, wow64):
+    for key in wow64.order:
+        entry = wow64.keys[key]
+        path = wow64_view(entry["root"], entry["name"])
+        values = registry.create(entry["root"], path)["values"]
+        for vname, value in entry["values"].items():
+            values.setdefault(vname, value)
 
 
 def join_key(base, sub):
@@ -396,18 +473,22 @@ def build(inf, modules, wow64_modules, warnings):
     code_names = {entry[2].lower() for entry in code}
 
     registry = Registry()
+    wow64 = Registry()
     for dirid, subdir, name, flags in entries:
         if name.lower() in code_names:
             continue
         if dirid != "11" or int(flags or "1") & ~1:
             raise ValueError("%s must be registered at run time; add it to [OleControlDllsCode]" % name)
         register(registry, modules, subdir, name, warnings)
+        if name.lower() in wow64_modules:
+            register(wow64, wow64_modules, subdir, name, warnings, SYSWOW64)
     for fields in read_inf_section(inf, "TypeLibraries"):
         if len(fields) > 1 and fields[1]:
             raise ValueError("type library %s is not in the system directory" % fields[0])
         if fields[0].lower() in wow64_modules:
-            register(registry, wow64_modules, "", fields[0], warnings, SYSWOW64)
+            register(wow64, wow64_modules, "", fields[0], warnings, SYSWOW64)
         register(registry, modules, "", fields[0], warnings)
+    merge_wow64(registry, wow64)
     return registry
 
 

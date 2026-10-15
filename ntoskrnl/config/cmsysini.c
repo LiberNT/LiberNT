@@ -109,6 +109,57 @@ CmpLinkKeyToHive(
     return TRUE;
 }
 
+static
+VOID
+CmpLinkWow64SharedKey(
+    _In_z_ PCWSTR SharedKeyName)
+{
+    static const WCHAR LinkPrefix[] = L"\\Registry\\Machine\\Software\\Wow6432Node\\";
+    WCHAR LinkName[256], TargetName[256];
+    OBJECT_ATTRIBUTES Attributes;
+    UNICODE_STRING KeyName;
+    HANDLE KeyHandle;
+    PWCHAR Separator;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(RtlStringCbPrintfW(TargetName, sizeof(TargetName),
+                                       L"\\Registry\\Machine\\Software\\%s", SharedKeyName)) ||
+        !NT_SUCCESS(RtlStringCbPrintfW(LinkName, sizeof(LinkName), L"%s%s", LinkPrefix, SharedKeyName)))
+    {
+        return;
+    }
+
+    RtlInitUnicodeString(&KeyName, TargetName);
+    InitializeObjectAttributes(&Attributes,
+                               &KeyName,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+    Status = ZwOpenKey(&KeyHandle, KEY_READ, &Attributes);
+    if (!NT_SUCCESS(Status)) return;
+    ZwClose(KeyHandle);
+
+    for (Separator = wcschr(LinkName + RTL_NUMBER_OF(LinkPrefix) - 1, OBJ_NAME_PATH_SEPARATOR);
+         Separator;
+         Separator = wcschr(Separator + 1, OBJ_NAME_PATH_SEPARATOR))
+    {
+        *Separator = UNICODE_NULL;
+        RtlInitUnicodeString(&KeyName, LinkName);
+        Status = ZwCreateKey(&KeyHandle,
+                             KEY_CREATE_SUB_KEY,
+                             &Attributes,
+                             0,
+                             NULL,
+                             REG_OPTION_NON_VOLATILE,
+                             NULL);
+        *Separator = OBJ_NAME_PATH_SEPARATOR;
+        if (!NT_SUCCESS(Status)) return;
+        ZwClose(KeyHandle);
+    }
+
+    CmpLinkKeyToHive(LinkName, TargetName);
+}
+
 VOID
 NTAPI
 CmpDeleteKeyObject(PVOID DeletedObject)
@@ -1672,6 +1723,56 @@ CmpInitializeHiveList(VOID)
             L"\\Registry\\Machine\\Software\\Wow6432Node",
             L"\\Registry\\Machine\\Software\\Classes\\Wow6432Node"
         };
+        static const PCWSTR SharedKeyNames[] =
+        {
+            L"Clients",
+            L"Microsoft\\COM3",
+            L"Microsoft\\Cryptography\\Calais\\Current",
+            L"Microsoft\\Cryptography\\Calais\\Readers",
+            L"Microsoft\\Cryptography\\Services",
+            L"Microsoft\\CTF\\SystemShared",
+            L"Microsoft\\CTF\\TIP",
+            L"Microsoft\\DFS",
+            L"Microsoft\\Driver Signing",
+            L"Microsoft\\EnterpriseCertificates",
+            L"Microsoft\\EventSystem",
+            L"Microsoft\\MSMQ",
+            L"Microsoft\\Non-Driver Signing",
+            L"Microsoft\\Notepad\\DefaultFonts",
+            L"Microsoft\\OLE",
+            L"Microsoft\\RAS",
+            L"Microsoft\\RPC",
+            L"Microsoft\\SystemCertificates",
+            L"Microsoft\\TermServLicensing",
+            L"Microsoft\\Transaction Server",
+            L"Microsoft\\Windows\\CurrentVersion\\App Paths",
+            L"Microsoft\\Windows\\CurrentVersion\\Control Panel\\Cursors\\Schemes",
+            L"Microsoft\\Windows\\CurrentVersion\\Explorer\\AutoplayHandlers",
+            L"Microsoft\\Windows\\CurrentVersion\\Explorer\\DriveIcons",
+            L"Microsoft\\Windows\\CurrentVersion\\Explorer\\KindMap",
+            L"Microsoft\\Windows\\CurrentVersion\\Group Policy",
+            L"Microsoft\\Windows\\CurrentVersion\\Policies",
+            L"Microsoft\\Windows\\CurrentVersion\\PreviewHandlers",
+            L"Microsoft\\Windows\\CurrentVersion\\Setup",
+            L"Microsoft\\Windows\\CurrentVersion\\Telephony\\Locations",
+            L"Microsoft\\Windows NT\\CurrentVersion\\Console",
+            L"Microsoft\\Windows NT\\CurrentVersion\\FontDpi",
+            L"Microsoft\\Windows NT\\CurrentVersion\\FontLink",
+            L"Microsoft\\Windows NT\\CurrentVersion\\FontMapper",
+            L"Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+            L"Microsoft\\Windows NT\\CurrentVersion\\FontSubstitutes",
+            L"Microsoft\\Windows NT\\CurrentVersion\\Gre_Initialize",
+            L"Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options",
+            L"Microsoft\\Windows NT\\CurrentVersion\\LanguagePack",
+            L"Microsoft\\Windows NT\\CurrentVersion\\NetworkCards",
+            L"Microsoft\\Windows NT\\CurrentVersion\\Perflib",
+            L"Microsoft\\Windows NT\\CurrentVersion\\Ports",
+            L"Microsoft\\Windows NT\\CurrentVersion\\Print",
+            L"Microsoft\\Windows NT\\CurrentVersion\\ProfileList",
+            L"Microsoft\\Windows NT\\CurrentVersion\\Time Zones",
+            L"Policies",
+            L"RegisteredApplications"
+        };
         OBJECT_ATTRIBUTES Attributes;
         UNICODE_STRING ParentName;
         HANDLE ParentKey;
@@ -1705,6 +1806,8 @@ CmpInitializeHiveList(VOID)
                             L"\\Registry\\Machine\\Software\\Classes\\PROTOCOLS");
             CmpLinkKeyToHive(L"\\Registry\\Machine\\Software\\Classes\\Wow6432Node\\Typelib",
                             L"\\Registry\\Machine\\Software\\Classes\\Typelib");
+            for (i = 0; i < RTL_NUMBER_OF(SharedKeyNames); ++i)
+                CmpLinkWow64SharedKey(SharedKeyNames[i]);
         }
     }
     CmpMarkPredefinedKey(L"\\Registry\\Machine\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Perflib\\009");
@@ -2283,9 +2386,10 @@ CmShutdownSystem(VOID)
     CmpUnlockRegistry();
 }
 
+static
 VOID
-NTAPI
-CmpSetVersionData(VOID)
+CmpSetVersionDataInKey(
+    _In_z_ PCWSTR SoftwareKeyName)
 {
     NTSTATUS Status;
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -2305,7 +2409,7 @@ CmpSetVersionData(VOID)
      * (create the intermediate subkeys if needed).
      */
 
-    RtlInitUnicodeString(&KeyName, L"\\REGISTRY\\MACHINE\\SOFTWARE");
+    RtlInitUnicodeString(&KeyName, SoftwareKeyName);
     InitializeObjectAttributes(&ObjectAttributes,
                                &KeyName,
                                OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
@@ -2495,6 +2599,15 @@ Quit:
 
     if (SoftwareKeyHandle != NULL)
         NtClose(SoftwareKeyHandle);
+}
+
+VOID
+NTAPI
+CmpSetVersionData(VOID)
+{
+    CmpSetVersionDataInKey(L"\\REGISTRY\\MACHINE\\SOFTWARE");
+    if (sizeof(PVOID) == sizeof(ULONGLONG))
+        CmpSetVersionDataInKey(L"\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node");
 }
 
 /* EOF */

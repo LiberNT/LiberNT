@@ -277,6 +277,10 @@ add_cd_file(TARGET wow64_i386 FILE ${_wow64_comctl32_v6_file} DESTINATION reacto
 add_cd_file(TARGET wow64_i386 FILE ${_wow64_gdiplus_file} DESTINATION reactos/winsxs/x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef FOR all)
 add_cd_file(TARGET wow64_i386 FILE ${_wow64_gdiplus_file} DESTINATION reactos/winsxs/x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.14393.0_none_deadbeef FOR all)
 add_cd_file(TARGET wow64_i386 FILE ${_wow64_msvcr90_file} ${_wow64_msvcp90_file} ${_wow64_msvcm90_file} DESTINATION reactos/winsxs/x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef FOR all)
+_wow64_get_target_file(fusion _wow64_fusion_file)
+_wow64_get_target_file(fusion_2_0 _wow64_fusion_2_0_file)
+add_cd_file(TARGET wow64_i386 FILE ${_wow64_fusion_file} DESTINATION reactos/Microsoft.NET/Framework/v4.0.30319 FOR all)
+add_cd_file(TARGET wow64_i386 FILE ${_wow64_fusion_2_0_file} DESTINATION reactos/Microsoft.NET/Framework/v2.0.50727 FOR all)
 add_cd_file(FILE
     ${REACTOS_SOURCE_DIR}/dll/win32/comctl32/x86_microsoft.windows.common-controls_6595b64144ccf1df_5.82.2600.2982_none_deadbeef.manifest
     ${REACTOS_SOURCE_DIR}/dll/win32/comctl32/x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef.manifest

@@ -54,6 +54,10 @@ if(_NT_VALUE GREATER_EQUAL 2560)
     add_registry_inf(hivent10.inf)
 endif()
 
+if(ENABLE_WOW64)
+    add_registry_inf(hivewow64.inf)
+endif()
+
 # Regtest
 add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/bootcdregtest/regtest.cmd DESTINATION reactos/bin FOR all)
 

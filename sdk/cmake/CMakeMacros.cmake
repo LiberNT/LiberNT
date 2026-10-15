@@ -956,6 +956,9 @@ function(create_registry_hives)
         list(APPEND _livecd_inf_files ${_livecd_extra_registry_inf})
     endforeach()
     list(APPEND _livecd_inf_files ${_comreg_inf})
+    if(ENABLE_WOW64)
+        list(APPEND _livecd_inf_files ${CMAKE_SOURCE_DIR}/boot/bootdata/hivewow64_live.inf)
+    endif()
 
     add_custom_command(
         OUTPUT ${CMAKE_BINARY_DIR}/boot/bootdata/system
@@ -1005,6 +1008,9 @@ function(create_registry_hives)
             ${CMAKE_SOURCE_DIR}/boot/bootdata/hiveinst.inf)
     endif()
     list(APPEND _preinstall_inf_files ${_comreg_inf})
+    if(ENABLE_WOW64)
+        list(APPEND _preinstall_inf_files ${CMAKE_SOURCE_DIR}/boot/bootdata/hivewow64_live.inf)
+    endif()
     get_property(_preinstall_registry_infs GLOBAL PROPERTY PREINSTALL_REGISTRY_INF_LIST)
     list(APPEND _preinstall_inf_files ${_preinstall_registry_infs})
 

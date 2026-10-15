@@ -1,0 +1,34 @@
+; PROJECT:     LiberNT boot data
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     32-bit registry view entries of the live and preinstalled images
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+
+[AddReg]
+
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders","Common Documents",0x00020000,"%SystemDrive%\Users\Public\Documents"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders","Common Desktop",0x00020000,"%SystemDrive%\Users\Public\Desktop"
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}",,,"Internet Browser"
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}","InfoTip",0x00020000,"@%SystemRoot%\system32\ieframe.dll,-881"
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}","LocalizedString",0x00020000,"@%SystemRoot%\system32\ieframe.dll,-880"
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}\DefaultIcon",,0x00020000,"%SystemRoot%\system32\shell32.dll,-512"
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}\Shell",,,"open"
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}\Shell\open",,,""
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}\Shell\open\Command",,,"rundll32.exe url,OpenURL https://google.com"
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}\ShellFolder","",,"@%SystemRoot%\system32\shell32.dll,-512"
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}\ShellFolder","Attributes",0x10001,0x24
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}\ShellFolder","HideAsDeletePerUser",,""
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}\ShellFolder","HideFolderVerbs",,""
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}\ShellFolder","HideOnDesktopPerUser",,""
+HKCR,"Wow6432Node\CLSID\{871C5380-42A0-1069-A2EA-08002B30309D}\ShellFolder","WantsParseDisplayName",,""
+HKCR,"Wow6432Node\Interface\{00000131-0000-0000-C000-000000000046}","",0x00000000,"IRemUnknown"
+HKCR,"Wow6432Node\Interface\{00000131-0000-0000-C000-000000000046}\NumMethods","",0x00000000,"6"
+HKCR,"Wow6432Node\Interface\{00000131-0000-0000-C000-000000000046}\ProxyStubClsid32","",0x00000000,"{00000320-0000-0000-C000-000000000046}"
+HKCR,"Wow6432Node\Interface\{00000122-0000-0000-C000-000000000046}","",0x00000000,"IDropTarget"
+HKCR,"Wow6432Node\Interface\{00000122-0000-0000-C000-000000000046}\NumMethods","",0x00000000,"7"
+HKCR,"Wow6432Node\Interface\{00000122-0000-0000-C000-000000000046}\ProxyStubClsid32","",0x00000000,"{00000320-0000-0000-C000-000000000046}"
+HKCR,"Wow6432Node\CLSID\{00000320-0000-0000-C000-000000000046}","",0x00000000,"PSFactoryBuffer"
+HKCR,"Wow6432Node\CLSID\{00000320-0000-0000-C000-000000000046}\InProcServer32","",0x00000000,"ole32.dll"
+HKCR,"Wow6432Node\CLSID\{00000320-0000-0000-C000-000000000046}\InProcServer32","ThreadingModel",0x00000000,"Both"

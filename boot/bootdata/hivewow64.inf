@@ -1,0 +1,582 @@
+; PROJECT:     LiberNT boot data
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     32-bit registry view entries of the WoW64 system components
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+
+[AddReg]
+
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectX","InstalledVersion",0x00000001, 0x00,0x00,0x00,0x09,0x00,0x00,0x00,0x00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectX","Version",0x00000000,"4.09.00.0904"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Internet TCP/IP Connection For DirectPlay","DescriptionA",,"Internet TCP/IP Connection For DirectPlay"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Internet TCP/IP Connection For DirectPlay","DescriptionW",,"Internet TCP/IP Connection For DirectPlay"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Internet TCP/IP Connection For DirectPlay","dwReserved1",0x10001,0x000001f4
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Internet TCP/IP Connection For DirectPlay","dwReserved2",0x10001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Internet TCP/IP Connection For DirectPlay","Guid",,"{36E95EE0-8577-11cf-960C-0080C7534E82}"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Internet TCP/IP Connection For DirectPlay","NATHelp",,"dpnhupnp.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Internet TCP/IP Connection For DirectPlay","Path",,"dpwsockx.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\IPX Connection For DirectPlay","DescriptionA",,"IPX Connection For DirectPlay"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\IPX Connection For DirectPlay","DescriptionW",,"IPX Connection For DirectPlay"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\IPX Connection For DirectPlay","dwReserved1",0x10001,0x00000032
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\IPX Connection For DirectPlay","dwReserved2",0x10001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\IPX Connection For DirectPlay","Guid",,"{685BC400-9D2C-11cf-A9CD-00AA006886E3}"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\IPX Connection For DirectPlay","Path",,"dpwsockx.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Modem Connection For DirectPlay","DescriptionA",,"Modem Connection For DirectPlay"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Modem Connection For DirectPlay","DescriptionW",,"Modem Connection For DirectPlay"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Modem Connection For DirectPlay","dwReserved1",0x10001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Modem Connection For DirectPlay","dwReserved2",0x10001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Modem Connection For DirectPlay","Guid",,"{44EAA760-CB68-11cf-9C4E-00A0C905425E}"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Modem Connection For DirectPlay","Path",,"dpmodemx.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Serial Connection For DirectPlay","DescriptionA",,"Serial Connection For DirectPlay"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Serial Connection For DirectPlay","DescriptionW",,"Serial Connection For DirectPlay"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Serial Connection For DirectPlay","dwReserved1",0x10001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Serial Connection For DirectPlay","dwReserved2",0x10001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Serial Connection For DirectPlay","Guid",,"{0F1D6860-88D9-11cf-9C4E-00A0C905425E}"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\DirectPlay\Service Providers\Serial Connection For DirectPlay","Path",,"dpmodemx.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\NetSh",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\NetSh","2",0x00000002,"ifmon.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\wbem\ess",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\wbem\Transports",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\wbem\Scripting",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\wbem","Installation Directory",0x00020000,"%SystemRoot%\system32\wbem"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\wbem","MOF Self-Install Directory",0x00020000,"%SystemRoot%\system32\wbem\mof"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Active Setup\Installed Components\{de5aed00-a4bf-11d1-9948-00c04f98bbc9}",,2,"HTML Help"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Active Setup\Installed Components\{de5aed00-a4bf-11d1-9948-00c04f98bbc9}","ComponentID",2,"HTMLHelp"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Active Setup\Installed Components\{de5aed00-a4bf-11d1-9948-00c04f98bbc9}","IsInstalled",2,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Active Setup\Installed Components\{de5aed00-a4bf-11d1-9948-00c04f98bbc9}","Locale",2,"*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Active Setup\Installed Components\{de5aed00-a4bf-11d1-9948-00c04f98bbc9}","Version",2,"4,74,9273,0"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion","DevicePath",0x00020002,"%SystemRoot%\inf"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion","MediaPathUnexpanded",0x00020000,"%SystemRoot%\Media"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Internet Settings\5.0\User Agent\Post Platform",".NET CLR 1.1.4322",0x00000000,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Internet Settings\5.0\User Agent\Post Platform",".NET CLR 2.0.50727",0x00000000,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Applets",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\coolcat.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\coolcat.exe","Version",2,"4.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\coolcat.exe","ANSIDISPLAYNAMES",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\coreldrw.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\coreldrw.exe","Version",2,"9.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\coreldrw.exe","OLDREGITEMGDN",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\creatr32.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\creatr32.exe","Version",2,"3.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\creatr32.exe","MYCOMPUTERFIRST",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\creatr32.exe","WIN95DEFVIEW",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\creatr32.exe","OLDCREATEVIEWWND",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\creatr32.exe","IGNOREENUMRESET",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\creatr32.exe","RequiredFile",2,"trkwrite.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\cutftp32.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\cutftp32.exe","Version",2,"3.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\cutftp32.exe","OLDREGITEMGDN",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\diskjockey.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\diskjockey.exe","Version",2,"2,*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\diskjockey.exe","OLDREGITEMGDN",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\dlwin.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\dlwin.exe\DownLoader 6.*",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\dlwin.exe\DownLoader 6.*","Version",2,"6.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\dlwin.exe\DownLoader 6.*","FILEOPENBOGUSCTRLID",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\dlwin.exe\DownLoader 7.01",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\dlwin.exe\DownLoader 7.01","Version",2,"7.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\dlwin.exe\DownLoader 7.01","FILEOPENBOGUSCTRLID",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\fusion.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\fusion.exe","Version",2,"5.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\fusion.exe","FILEOPENNEEDSEXT",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\install.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\install.exe\Starcraft 1.03",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\install.exe\Starcraft 1.03","RequiredFile",2,"help\\star.htm"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\install.exe\Starcraft 1.03","Version",2,"Version 1.03"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\install.exe\Starcraft 1.03","OLDREGITEMGDN",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\msdev.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\msdev.exe","Version",2,"6.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\msdev.exe","FILEOPENNEEDSEXT",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\mswin.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\mswin.exe\Metastock 6.*",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\mswin.exe\Metastock 6.*","Version",2,"6.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\mswin.exe\Metastock 6.*","FILEOPENBOGUSCTRLID",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\mswin.exe\Metastock 7.01",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\mswin.exe\Metastock 7.01","Version",2,"7.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\mswin.exe\Metastock 7.01","FILEOPENBOGUSCTRLID",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\photoed.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\photoed.exe","Version",2,"3.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\photoed.exe","FILEOPENNEEDSEXT",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\pwrplay.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\pwrplay.exe","Version",2,"6.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\pwrplay.exe","FILEOPENBOGUSCTRLID",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\qstitch.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\qstitch.exe","Version",2,"1,*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\qstitch.exe","WIN95BINDTOOBJECT",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\qstitch.exe\Version 2",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\qstitch.exe\Version 2","Version",2,"2.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\qstitch.exe\Version 2","WIN95BINDTOOBJECT",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\recycle.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\recycle.exe","Version",2,"1,*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\recycle.exe","FILEOPENNEEDSEXT",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\sesapp.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\sesapp.exe","Version",2,"3.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\sesapp.exe","OLDREGITEMGDN",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\snapshot.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\snapshot.exe","RequiredFile",2,"ssres.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\snapshot.exe","Version",2,"1.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\snapshot.exe","LOADCOLUMNHANDLER",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\trace.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\trace.exe","Version",2,"9.*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\trace.exe","OLDREGITEMGDN",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\uni.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\uni.exe","Version",2,"5, 5,*"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\uni.exe","ANSIDISPLAYNAMES",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\vcafe.exe",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\vcafe.exe","Version",2,"4.0"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellCompatibility\Applications\vcafe.exe","FORCELFNIDLIST",2,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Cpls",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Cpls","Hotplug",0x00020000,"%SystemRoot%\system32\hotplug.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Cpls","Input",0x00020000,"%SystemRoot%\system32\input.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","access.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","appwiz.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","desk.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","hdwwiz.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","inetcpl.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","intl.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","main.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","mmsys.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","ncpa.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","powercfg.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","sysdm.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","telephon.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","timedate.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\don't load","usrmgr.cpl",0x00000000,"No"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2","bthprops.cpl",0x00010001,2
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2","console.dll",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2","hotplug.dll",0x00010001,2
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2","input.dll",0x00010001,6
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2","joy.cpl",0x00010001,2
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2","odbccp32i.cpl",0x00010001,5
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2","openglcfg.cpl",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2","wined3dcfg.cpl",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder","Type",0x00000000,"group"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder","Text",0x00000000,"@shell32.dll,-30498"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder","Bitmap",0x00020000,"%SystemRoot%\system32\SHELL32.dll,4"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder","HelpID",0x00000000,"shell.hlp#51140"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ClassicViewState",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ClassicViewState","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ClassicViewState","Text",0x00000000,"@shell32.dll,-30506"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ClassicViewState","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ClassicViewState","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ClassicViewState","ValueName",0x00000000,"ClassicViewState"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ClassicViewState","CheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ClassicViewState","UncheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ClassicViewState","DefaultValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ClassicViewState","HelpID",0x00000000,"shell.hlp#51076"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ControlPanelInMyComputer",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ControlPanelInMyComputer","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\HideMyComputerIcons"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ControlPanelInMyComputer","Text",0x00000000,"@shell32.dll,-30497"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ControlPanelInMyComputer","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ControlPanelInMyComputer","ValueName",0x00000000,"{21EC2020-3AEA-1069-A2DD-08002B30309D}"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ControlPanelInMyComputer","CheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ControlPanelInMyComputer","UncheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ControlPanelInMyComputer","DefaultValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ControlPanelInMyComputer","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ControlPanelInMyComputer","HelpID",0x00000000,"shell.hlp#51150"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess","Text",0x00000000,"@shell32.dll,-30507"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess","ValueName",0x00000000,"SeparateProcess"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess","UncheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess","DefaultValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess","HelpID",0x00000000,"shell.hlp#51079"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess",Grayed,0x10001,4
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess\Policy",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DesktopProcess\Policy\SeparateProcess",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DisableThumbCache",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DisableThumbCache","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DisableThumbCache","Text",0x00000000,"@shell32.dll,-30517"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DisableThumbCache","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DisableThumbCache","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DisableThumbCache","ValueName",0x00000000,"DisableThumbnailCache"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DisableThumbCache","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DisableThumbCache","UncheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DisableThumbCache","DefaultValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DisableThumbCache","HelpID",0x00000000,"shell.hlp#51155"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\DisableThumbCache",Grayed,0x10001,6
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FolderSizeTip",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FolderSizeTip","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FolderSizeTip","Text",0x00000000,"@shell32.dll,-30514"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FolderSizeTip","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FolderSizeTip","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FolderSizeTip","ValueName",0x00000000,"FolderContentsInfoTip"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FolderSizeTip","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FolderSizeTip","UncheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FolderSizeTip","DefaultValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FolderSizeTip",Grayed,0x10001,4
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FriendlyTree",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FriendlyTree","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FriendlyTree","Text",0x00000000,"@shell32.dll,-30511"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FriendlyTree","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FriendlyTree","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FriendlyTree","ValueName",0x00000000,"FriendlyTree"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FriendlyTree","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FriendlyTree","UncheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FriendlyTree","HelpID",0x00000000,"shell.hlp#51149"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FriendlyTree","DefaultValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\FriendlyTree",Grayed,0x10001,4
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden","Text",0x00000000,"@shell32.dll,-30499"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden","Type",0x00000000,"group"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden","Bitmap",0x00020000,"%SystemRoot%\system32\SHELL32.dll,4"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden","HelpID",0x00000000,"shell.hlp#51131"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\NOHIDDEN",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\NOHIDDEN","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\NOHIDDEN","Text",0x00000000,"@shell32.dll,-30501"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\NOHIDDEN","Type",0x00000000,"radio"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\NOHIDDEN","CheckedValue",0x00010001,0x00000002
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\NOHIDDEN","ValueName",0x00000000,"Hidden"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\NOHIDDEN","DefaultValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\NOHIDDEN","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\NOHIDDEN","HelpID",0x00000000,"shell.hlp#51104"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\SHOWALL",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\SHOWALL","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\SHOWALL","Text",0x00000000,"@shell32.dll,-30500"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\SHOWALL","Type",0x00000000,"radio"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\SHOWALL","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\SHOWALL","ValueName",0x00000000,"Hidden"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\SHOWALL","DefaultValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\SHOWALL","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\Hidden\SHOWALL","HelpID",0x00000000,"shell.hlp#51105"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\HideFileExt",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\HideFileExt","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\HideFileExt","Text",0x00000000,"@shell32.dll,-30503"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\HideFileExt","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\HideFileExt","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\HideFileExt","ValueName",0x00000000,"HideFileExt"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\HideFileExt","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\HideFileExt","UncheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\HideFileExt","DefaultValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\HideFileExt","HelpID",0x00000000,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler","Text",0x00000000,"@shell32.dll,-30509"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler","ValueName",0x00000000,"NoNetCrawling"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler","CheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler","UncheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler","DefaultValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler","HelpID",0x00000000,"shell.hlp#51147"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler",Grayed,0x10001,4
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler\Policy",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\NetCrawler\Policy\NoNetCrawling",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\PersistBrowsers",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\PersistBrowsers","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\PersistBrowsers","Text",0x00000000,"@shell32.dll,-30513"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\PersistBrowsers","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\PersistBrowsers","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\PersistBrowsers","ValueName",0x00000000,"PersistBrowsers"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\PersistBrowsers","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\PersistBrowsers","UncheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\PersistBrowsers","HelpID",0x00000000,"shell.hlp#51152"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\PersistBrowsers","DefaultValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\PersistBrowsers",Grayed,0x10001,4
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowCompColor",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowCompColor","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowCompColor","Text",0x00000000,"@shell32.dll,-30512"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowCompColor","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowCompColor","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowCompColor","ValueName",0x00000000,"ShowCompColor"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowCompColor","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowCompColor","UncheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowCompColor","DefaultValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowCompColor","HelpID",0x00000000,"shell.hlp#51130"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowCompColor",Grayed,0x10001,4
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPath",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPath","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPath","Text",0x00000000,"@shell32.dll,-30504"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPath","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPath","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\CabinetState"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPath","ValueName",0x00000000,"FullPath"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPath","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPath","UncheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPath","DefaultValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPath","HelpID",0x00000000,"shell.hlp#51100"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPathAddress",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPathAddress","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPathAddress","Text",0x00000000,"@shell32.dll,-30505"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPathAddress","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPathAddress","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\CabinetState"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPathAddress","ValueName",0x00000000,"FullPathAddress"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPathAddress","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPathAddress","UncheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPathAddress","DefaultValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowFullPathAddress","HelpID",0x00000000,"shell.hlp#51107"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowInfoTip",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowInfoTip","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowInfoTip","Text",0x00000000,"@shell32.dll,-30502"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowInfoTip","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowInfoTip","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowInfoTip","ValueName",0x00000000,"ShowInfoTip"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowInfoTip","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowInfoTip","UncheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowInfoTip","DefaultValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowInfoTip","HelpID",0x00000000,"shell.hlp#51102"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\ShowInfoTip",Grayed,0x10001,4
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden","Text",0x00000000,"@shell32.dll,-30508"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden","WarningIfNotDefault",0x00000000,"@shell32.dll,-28964"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden","ValueName",0x00000000,"ShowSuperHidden"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden","CheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden","UncheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden","DefaultValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden","HelpID",0x00000000,"shell.hlp#51103"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden\Policy",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\SuperHidden\Policy\DontShowSuperHidden",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade","Text",0x00000000,"@shell32.dll,-30510"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade","HKeyRoot",0x00010001,0x80000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade","RegPath",0x00000000,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade","ValueName",0x00000000,"WebViewBarricade"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade","CheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade","UncheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade","HelpID",0x00000000,"shell.hlp#51148"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade","DefaultValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade",Grayed,0x10001,6
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow","ValueName",,"ListviewShadow"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow","RegPath",,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow","Text",,"@shell32.dll,-30541"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow","Type",,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow","DefaultValue",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow","CheckedValue",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow","UncheckedValue",0x00010001,0
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows","SPIActionSet",0x00010001,37
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows","SPIActionGet",0x00010001,38
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows","Text",,"@shell32.dll,-30533"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows","Type",,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows","DefaultValue",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows","CheckedValue",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows","UncheckedValue",0x00010001,0
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing","SPIActionSet",0x00010001,75
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing","SPIActionGet",0x00010001,74
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing","Text",,"@shell32.dll,-30535"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing","Type",,"checkbox"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing","DefaultValue",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing","CheckedValue",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing","UncheckedValue",0x00010001,0
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\DefragPath",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\DefragPath","",0x00020000,"%SystemRoot%\system32\dfrg.msc %c:"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\BackupPath",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\BackupPath","",0x00020000,"%SystemRoot%\system32\ntbackup.exe"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Run",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\RunOnce",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\SharedDlls",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Shell Extensions",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellServiceObjectDelayLoad",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\ShellServiceObjectDelayLoad","Network.ConnectionTray",0x00000000,"{7007ACCF-3202-11D1-AAD2-00805FC1270E}"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Command Processor","CompletionChar",0x00010001,0x40
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Command Processor","DefaultColor",0x00010001,0
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Command Processor","EnableExtensions",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Command Processor","PathCompletionChar",0x00010001,0x40
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion","InstallDate",0x00010003,0
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion","ProductName",2,"ReactOS"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion","SoftwareType",2,"System"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug","UserDebuggerHotKey",0x00010001,0x00000000
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Accessibility",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Compatibility32",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\IniFileMapping",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\IniFileMapping\win.ini","desktop",0x00000000,"USR:Control Panel\Desktop"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\IniFileMapping\win.ini","extensions",0x00000000,"USR:Software\Microsoft\Windows NT\CurrentVersion\Extensions"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\IniFileMapping\win.ini","intl",0x00000000,"USR:Control Panel\International"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\IniFileMapping\win.ini","sounds",0x00000000,"USR:Control Panel\Sounds"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\drivers.desc",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","midimapper",0x00000000,"midimap.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","wavemapper",0x00000000,"msacm32.drv"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","midi",0x00000000,"beepmidi.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","msacm.msadpcm",0x00000000,"msadp32.acm"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","msacm.msg711",0x00000000,"msg711.acm"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","msacm.msgsm610",0x00000000,"msgsm32.acm"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","msacm.imaadpcm",0x00000000,"imaadp32.acm"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","msacm.l3acm",0x00000000,"l3codeca.acm"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","vidc.cvid",0x00000000,"iccvid.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","vidc.i420",0x00000000,"iyuv_32.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","vidc.iyuv",0x00000000,"iyuv_32.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","vidc.mrle",0x00000000,"msrle32.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32","vidc.msvc",0x00000000,"msvidc32.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI32","AVIVideo",0x00000002,"mciavi32.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI32","CDAudio",0x00000002,"mcicda.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI32","MPEGVideo",0x00000002,"mciqtz32.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI32","Sequencer",0x00000002,"mciseq.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI32","WaveAudio",0x00000002,"mciwave.dll"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","aif",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","aifc",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","aiff",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","asf",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","asx",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","au",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","avi",0x00000002,"AVIVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","cda",0x00000002,"CDAudio"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","m1v",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","m3u",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","mid",0x00000002,"Sequencer"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","mp2",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","mp2v",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","mp3",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","mpa",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","mpe",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","mpeg",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","mpg",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","mpv2",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","rmi",0x00000002,"Sequencer"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","snd",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","wav",0x00000002,"WaveAudio"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","wax",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","wm",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","wma",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","wmv",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","wmx",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\MCI Extensions","wvx",0x00000002,"MPEGVideo"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Winlogon","Shell",0x00020000,"%SystemRoot%\explorer.exe"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Winlogon","DefaultDomainName",0x00000000,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Winlogon","DefaultUserName",0x00000000,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\DateTime\Servers",,0x00000000,"1"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\DateTime\Servers","1",0x00000000,"pool.ntp.org"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\DateTime\Servers","2",0x00000000,"asia.pool.ntp.org"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\DateTime\Servers","3",0x00000000,"europe.pool.ntp.org"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\DateTime\Servers","4",0x00000000,"north-america.pool.ntp.org"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\DateTime\Servers","5",0x00000000,"oceania.pool.ntp.org"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\DateTime\Servers","6",0x00000000,"south-america.pool.ntp.org"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\DateTime\Servers","7",0x00000000,"time.windows.com"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\DateTime\Servers","8",0x00000000,"time.nist.gov"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Telephony",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Telephony\tapi3",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Telephony\Terminal Manager",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg","LastID",0x00000002,"0"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg","DiskSpinDownMax",0x00000002,"3600"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg","DiskSpinDownMin",0x00000002,"3"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\GlobalPowerPolicy","Policies",0x00030003,\
+01,00,00,00,01,00,00,00,01,00,00,00,03,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\PowerPolicies\0","Policies",0x00030003,\
+01,00,00,00,02,00,00,00,04,00,00,00,02,00,00,00,02,00,00,00,00,00,00,00,84,03,00,00,00,00,00,00,84,03,00,00,32,\
+32,00,00,02,00,00,00,04,00,00,C0,00,00,00,00,02,00,00,00,04,00,00,C0,00,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\PowerPolicies\1","Policies",0x00030003,\
+01,00,00,00,02,00,00,00,03,00,00,00,03,00,00,00,03,00,00,00,60,09,00,00,2C,01,00,00,80,25,00,00,F4,1A,00,00,32,\
+32,00,00,02,00,00,00,04,00,00,C0,00,00,00,00,02,00,00,00,04,00,00,C0,00,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\PowerPolicies\2","Policies",0x00030003,\
+01,00,00,00,02,00,00,00,03,00,00,00,02,00,00,00,02,00,00,00,00,00,00,00,84,03,00,00,00,00,00,00,9C,18,00,00,32,\
+32,00,00,02,00,00,00,04,00,00,C0,00,00,00,00,02,00,00,00,04,00,00,C0,00,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\PowerPolicies\3","Policies",0x00030003,\
+01,00,00,00,02,00,00,00,04,00,00,00,02,00,00,00,02,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,5A,\
+5A,00,00,02,00,00,00,04,00,00,C0,00,00,00,00,02,00,00,00,04,00,00,C0,00,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\PowerPolicies\4","Policies",0x00030003,\
+01,00,00,00,02,00,00,00,04,00,00,00,02,00,00,00,02,00,00,00,00,00,00,00,08,07,00,00,00,00,00,00,04,29,00,00,5A,\
+5A,00,00,02,00,00,00,04,00,00,C0,00,00,00,00,02,00,00,00,04,00,00,C0,00,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\PowerPolicies\5","Policies",0x00030003,\
+01,00,00,00,02,00,00,00,04,00,00,00,03,00,00,00,03,00,00,00,DC,05,00,00,B4,00,00,00,DC,05,00,00,98,0D,00,00,32,\
+0A,00,00,02,00,00,00,04,00,00,C0,00,00,00,00,02,00,00,00,04,00,00,C0,00,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\ProcessorPolicies\0","Policies",0x00030001,\
+01,00,00,00,01,00,00,00,00,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,32,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,3C,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,50,00,00,\
+01,00,00,00,01,00,00,00,03,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,0A,14,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,28,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,46,00,00,\
+01,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\ProcessorPolicies\1","Policies",0x00030001,\
+01,00,00,00,01,00,00,00,03,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,32,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,3C,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,50,00,00,\
+01,00,00,00,01,00,00,00,03,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,0A,14,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,28,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,46,00,00,\
+01,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\ProcessorPolicies\2","Policies",0x00030001,\
+01,00,00,00,01,00,00,00,03,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,32,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,3C,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,50,00,00,\
+01,00,00,00,01,00,00,00,02,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,0A,14,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,28,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,46,00,00,\
+01,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\ProcessorPolicies\3","Policies",0x00030001,\
+01,00,00,00,01,00,00,00,00,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,32,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,3C,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,50,00,00,\
+01,00,00,00,01,00,00,00,00,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,0A,14,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,28,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,50,00,00,\
+01,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\ProcessorPolicies\4","Policies",0x00030001,\
+01,00,00,00,01,00,00,00,03,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,32,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,3C,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,50,00,00,\
+01,00,00,00,01,00,00,00,03,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,0A,14,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,28,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,46,00,00,\
+01,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\PowerCfg\ProcessorPolicies\5","Policies",0x00030001,\
+01,00,00,00,01,00,00,00,03,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,32,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,3C,00,00,02,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,28,50,00,00,\
+01,00,00,00,01,00,00,00,02,00,00,00,00,00,00,00,03,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,0A,14,00,00,02,00,\
+00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,28,00,00,02,00,00,00,A0,86,01,00,A0,86,01,00,A0,86,01,00,14,41,00,00,\
+01,00,00,00
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\Device\shellex\PropertySheetHandlers\Display Adapter CPL Extension","",0x00000000,"{42071712-76d4-11d1-8b24-00a0c9068ff3}"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Controls Folder\Device\shellex\PropertySheetHandlers\Display Monitor CPL Extension","",0x00000000,"{42071713-76d4-11d1-8b24-00a0c9068ff3}"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\SvcHost",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\SvcHost","DcomLaunch",0x00010000,"DcomLaunch","PlugPlay"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\SvcHost","netsvcs",0x00010000,"BITS","Browser","DHCP","lanmanserver","seclogon","Themes","winmgmt","wuauserv"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\SvcHost","LocalService",0x00010000,"W32Time"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\SvcHost","LocalServiceNetworkRestricted",0x00010000,"EventLog"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Svchost","NetworkService",0x00010000,"DnsCache","LanmanWorkstation"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows",,0x00000012
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows","AppInit_DLLs",0x00000000,""
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows","DesktopHeapLogging",0x00010001,0x1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows","DeviceNotSelectedTimeout",0x00000000,"15"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows","GDIProcessHandleQuota",0x00010001,0x2710
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows","Spooler",0x00000000,"yes"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows","TransmissionRetryTimeout",0x00000000,"90"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows","USERProcessHandleQuota",0x00010001,0x2710
+HKCR,"Wow6432Node\CLSID\{25336920-03F9-11CF-8FD0-00AA00686F13}\BrowseInPlace","",0x00000000,""
+HKCR,"Wow6432Node\CLSID",,0x00000012
+HKCR,"Wow6432Node\CLSID\{1F4DE370-D627-11D1-BA4F-00A0C91EEDBA}","",0x00000000,"Computer Search Results Folder"
+HKCR,"Wow6432Node\CLSID\{1F4DE370-D627-11D1-BA4F-00A0C91EEDBA}","LocalizedString",0x00020000,"@%SystemRoot%\system32\shell32.dll,-30521"
+HKCR,"Wow6432Node\CLSID\{1F4DE370-D627-11D1-BA4F-00A0C91EEDBA}\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-135"
+HKCR,"Wow6432Node\CLSID\{1F4DE370-D627-11D1-BA4F-00A0C91EEDBA}\InProcServer32","",0x00020000,"%SystemRoot%\system32\shell32.dll"
+HKCR,"Wow6432Node\CLSID\{1F4DE370-D627-11D1-BA4F-00A0C91EEDBA}\InProcServer32","ThreadingModel",0x00000000,"Apartment"
+HKCR,"Wow6432Node\CLSID\{1F4DE370-D627-11D1-BA4F-00A0C91EEDBA}\ShellFolder","Attributes",0x00010001,0x20180000
+HKCR,"Wow6432Node\CLSID\{42071712-76d4-11d1-8b24-00a0c9068ff3}","",0x00000000,"Display Adapter CPL Extension"
+HKCR,"Wow6432Node\CLSID\{42071712-76d4-11d1-8b24-00a0c9068ff3}\InProcServer32","",0x00020000,"%SystemRoot%\system32\deskadp.dll"
+HKCR,"Wow6432Node\CLSID\{42071712-76d4-11d1-8b24-00a0c9068ff3}\InProcServer32","ThreadingModel",0x00000000,"Apartment"
+HKCR,"Wow6432Node\CLSID\{42071713-76d4-11d1-8b24-00a0c9068ff3}","",0x00000000,"Display Monitor CPL Extension"
+HKCR,"Wow6432Node\CLSID\{42071713-76d4-11d1-8b24-00a0c9068ff3}\InProcServer32","",0x00020000,"%SystemRoot%\system32\deskmon.dll"
+HKCR,"Wow6432Node\CLSID\{42071713-76d4-11d1-8b24-00a0c9068ff3}\InProcServer32","ThreadingModel",0x00000000,"Apartment"
+HKCR,"Wow6432Node\CLSID\{A907657F-6FDF-11D0-8EFB-00C04FD912B2}","",0x00000000,"TCP/IP Configuration Notify Object"
+HKCR,"Wow6432Node\CLSID\{A907657F-6FDF-11D0-8EFB-00C04FD912B2}\InProcServer32","",0x00000000,"netcfgx.dll"
+HKCR,"Wow6432Node\CLSID\{A907657F-6FDF-11D0-8EFB-00C04FD912B2}\InProcServer32","ThreadingModel",0x00000000,"Both"
+HKCR,"Wow6432Node\CLSID\{5B035261-40F9-11D1-AAEC-00805FC1270E}","",0x00000000,"Network Configuration Component Object"
+HKCR,"Wow6432Node\CLSID\{5B035261-40F9-11D1-AAEC-00805FC1270E}\InProcServer32","",0x00020000,"%SystemRoot%\system32\netsetupshim.dll"
+HKCR,"Wow6432Node\CLSID\{5B035261-40F9-11D1-AAEC-00805FC1270E}\InProcServer32","ThreadingModel",0x00000000,"Both"
+HKCR,"Wow6432Node\CLSID\{0002E005-0000-0000-C000-000000000046}","",0x00000000,"Component Categories Manager"
+HKCR,"Wow6432Node\CLSID\{0002E005-0000-0000-C000-000000000046}\InProcServer32","",0x00000000,"combase.dll"
+HKCR,"Wow6432Node\CLSID\{0002E005-0000-0000-C000-000000000046}\InProcServer32","ThreadingModel",0x00000000,"Both"
+HKCR,"Wow6432Node\CLSID\{25E609E0-B259-11CF-BFC7-444553540000}","",0x00000000,"DirectInput Object"
+HKCR,"Wow6432Node\CLSID\{25E609E0-B259-11CF-BFC7-444553540000}\InProcServer32","",0x00020000,"%SystemRoot%\system32\dinput.dll"
+HKCR,"Wow6432Node\CLSID\{25E609E0-B259-11CF-BFC7-444553540000}\InProcServer32","ThreadingModel",0x00000000,"Both"
+HKCR,"Wow6432Node\CLSID\{25E609E1-B259-11CF-BFC7-444553540000}","",0x00000000,"DirectInputDevice Object"
+HKCR,"Wow6432Node\CLSID\{25E609E1-B259-11CF-BFC7-444553540000}\InProcServer32","",0x00020000,"%SystemRoot%\system32\dinput.dll"
+HKCR,"Wow6432Node\CLSID\{25E609E1-B259-11CF-BFC7-444553540000}\InProcServer32","ThreadingModel",0x00000000,"Both"
+HKCR,"Wow6432Node\CLSID\{25E609E4-B259-11CF-BFC7-444553540000}","",0x00000000,"DirectInput8 Object"
+HKCR,"Wow6432Node\CLSID\{25E609E4-B259-11CF-BFC7-444553540000}\InProcServer32","",0x00020000,"%SystemRoot%\system32\dinput8.dll"
+HKCR,"Wow6432Node\CLSID\{25E609E4-B259-11CF-BFC7-444553540000}\InProcServer32","ThreadingModel",0x00000000,"Both"
+HKCR,"Wow6432Node\CLSID\{25E609E5-B259-11CF-BFC7-444553540000}","",0x00000000,"DirectInputDevice8 Object"
+HKCR,"Wow6432Node\CLSID\{25E609E5-B259-11CF-BFC7-444553540000}\InProcServer32","",0x00020000,"%SystemRoot%\system32\dinput8.dll"
+HKCR,"Wow6432Node\CLSID\{25E609E5-B259-11CF-BFC7-444553540000}\InProcServer32","ThreadingModel",0x00000000,"Both"
+HKCR,"Wow6432Node\CLSID\{BCDE0395-E52F-467C-8E3D-C4579291692E}","",0x00000000,"MMDeviceEnumerator class"
+HKCR,"Wow6432Node\CLSID\{BCDE0395-E52F-467C-8E3D-C4579291692E}\InProcServer32","",0x00020000,"%SystemRoot%\system32\mmdevapi.dll"
+HKCR,"Wow6432Node\CLSID\{BCDE0395-E52F-467C-8E3D-C4579291692E}\InProcServer32","ThreadingModel",0x00000000,"Both"
+HKCR,"Wow6432Node\CLSID\{A65B8071-3BFE-4213-9A5B-491DA4461CA7}","",0x00000000,"DxDiagProvider Class"
+HKCR,"Wow6432Node\CLSID\{A65B8071-3BFE-4213-9A5B-491DA4461CA7}\InProcServer32","",0x00000000,"%SystemRoot%\system32\dxdiagn.dll"
+HKCR,"Wow6432Node\CLSID\{A65B8071-3BFE-4213-9A5B-491DA4461CA7}\InProcServer32","ThreadingModel",0x00000000,"Apartment"
+HKCR,"Wow6432Node\CLSID\{A65B8071-3BFE-4213-9A5B-491DA4461CA7}\ProgID","",0x00000000,"DxDiag.DxDiagProvider.1"
+HKCR,"Wow6432Node\CLSID\{A65B8071-3BFE-4213-9A5B-491DA4461CA7}\VersionIndependentProgID","",0x00000000,"DxDiag.DxDiagProvider"
