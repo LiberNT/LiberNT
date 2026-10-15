@@ -122,6 +122,13 @@ Native12CommandList::~Native12CommandList()
     }
 }
 
+bool Native12CommandList::RejectInBundle()
+{
+    if (type != D3D12_COMMAND_LIST_TYPE_BUNDLE) return false;
+    if (SUCCEEDED(error)) error = E_FAIL;
+    return true;
+}
+
 void Native12CommandList::SetDefaultPipelineState()
 {
     if (type != D3D12_COMMAND_LIST_TYPE_DIRECT && type != D3D12_COMMAND_LIST_TYPE_BUNDLE
@@ -187,9 +194,12 @@ HRESULT STDMETHODCALLTYPE Native12CommandList::Reset(ID3D12CommandAllocator *poo
     table->pfnResetCommandList(driver, &args);
     recording = true;
     if (previous) previous->ReleaseInternal();
-    D3D12DDI_HRESOURCE no_buffer = {};
-    table->pfnSetPredication(driver, no_buffer, 0, D3D12DDI_PREDICATION_OP_EQUAL_ZERO);
-    graphics_bound = compute_bound = false;
+    if (type != D3D12_COMMAND_LIST_TYPE_BUNDLE)
+    {
+        D3D12DDI_HRESOURCE no_buffer = {};
+        table->pfnSetPredication(driver, no_buffer, 0, D3D12DDI_PREDICATION_OP_EQUAL_ZERO);
+    }
+    graphics_bound = compute_bound = pipeline_set = false;
     ZeroMemory(root_arguments, sizeof(root_arguments));
     if (initial_state) SetPipelineState(initial_state);
     else SetDefaultPipelineState();
@@ -198,6 +208,7 @@ HRESULT STDMETHODCALLTYPE Native12CommandList::Reset(ID3D12CommandAllocator *poo
 
 void STDMETHODCALLTYPE Native12CommandList::ClearState(ID3D12PipelineState *pipeline_state)
 {
+    if (RejectInBundle()) return;
     table->pfnClearRootArguments(driver);
     graphics_bound = compute_bound = false;
     ZeroMemory(root_arguments, sizeof(root_arguments));
@@ -228,6 +239,7 @@ void STDMETHODCALLTYPE Native12CommandList::Dispatch(UINT x, UINT y, UINT z)
 void STDMETHODCALLTYPE Native12CommandList::CopyBufferRegion(ID3D12Resource *dst, UINT64 dst_offset,
         ID3D12Resource *src, UINT64 src_offset, UINT64 byte_count)
 {
+    if (RejectInBundle()) return;
     table->pfnCopyBufferRegion(driver, Native12Placement(dst, dst_offset), Native12Placement(src, src_offset),
             byte_count);
 }
@@ -267,6 +279,7 @@ static void Native12CopyLocation(const D3D12_TEXTURE_COPY_LOCATION *location,
 void STDMETHODCALLTYPE Native12CommandList::CopyTextureRegion(const D3D12_TEXTURE_COPY_LOCATION *dst,
         UINT dst_x, UINT dst_y, UINT dst_z, const D3D12_TEXTURE_COPY_LOCATION *src, const D3D12_BOX *src_box)
 {
+    if (RejectInBundle()) return;
     D3D12DDIARG_BUFFER_PLACEMENT dst_placement, src_placement;
     D3D12DDIARG_PLACED_RESOURCE dst_placed, src_placed;
     D3D12DDIARG_PHYSICAL_SUBRESOURCE_PITCHED_LAYOUT dst_layout = {}, src_layout = {};
@@ -283,6 +296,7 @@ void STDMETHODCALLTYPE Native12CommandList::CopyTextureRegion(const D3D12_TEXTUR
 
 void STDMETHODCALLTYPE Native12CommandList::CopyResource(ID3D12Resource *dst, ID3D12Resource *src)
 {
+    if (RejectInBundle()) return;
     if (!dst || !src) return;
     table->pfnResourceCopy(driver, Native12UnwrapResource(dst)->driver, Native12UnwrapResource(src)->driver);
 }
@@ -291,6 +305,7 @@ void STDMETHODCALLTYPE Native12CommandList::CopyTiles(ID3D12Resource *tiled,
         const D3D12_TILED_RESOURCE_COORDINATE *start, const D3D12_TILE_REGION_SIZE *size, ID3D12Resource *buffer,
         UINT64 buffer_offset, D3D12_TILE_COPY_FLAGS flags)
 {
+    if (RejectInBundle()) return;
     if (!tiled || !buffer || !start || !size) return;
     table->pfnCopyTiles(driver, Native12UnwrapResource(tiled)->driver,
             reinterpret_cast<const D3D12DDI_TILED_RESOURCE_COORDINATE *>(start),
@@ -301,6 +316,7 @@ void STDMETHODCALLTYPE Native12CommandList::CopyTiles(ID3D12Resource *tiled,
 void STDMETHODCALLTYPE Native12CommandList::ResolveSubresource(ID3D12Resource *dst, UINT dst_sub_resource,
         ID3D12Resource *src, UINT src_sub_resource, DXGI_FORMAT format)
 {
+    if (RejectInBundle()) return;
     if (!dst || !src) return;
     table->pfnResourceResolveSubresource(driver, Native12UnwrapResource(dst)->driver, dst_sub_resource,
             Native12UnwrapResource(src)->driver, src_sub_resource, format);
@@ -313,11 +329,13 @@ void STDMETHODCALLTYPE Native12CommandList::IASetPrimitiveTopology(D3D12_PRIMITI
 
 void STDMETHODCALLTYPE Native12CommandList::RSSetViewports(UINT count, const D3D12_VIEWPORT *viewports)
 {
+    if (RejectInBundle()) return;
     table->pfnRsSetViewports(driver, count, reinterpret_cast<const D3D12DDI_VIEWPORT *>(viewports));
 }
 
 void STDMETHODCALLTYPE Native12CommandList::RSSetScissorRects(UINT count, const D3D12_RECT *rects)
 {
+    if (RejectInBundle()) return;
     table->pfnRsSetScissorRects(driver, count, rects);
 }
 
@@ -338,11 +356,13 @@ void STDMETHODCALLTYPE Native12CommandList::SetPipelineState(ID3D12PipelineState
     Native12PipelineState *pipeline = static_cast<Native12PipelineState *>(pipeline_state);
     compute_bound = pipeline->compute;
     graphics_bound = !pipeline->compute;
+    pipeline_set = true;
     table->pfnSetPipelineState(driver, pipeline->driver);
 }
 
 void STDMETHODCALLTYPE Native12CommandList::ResourceBarrier(UINT count, const D3D12_RESOURCE_BARRIER *barriers)
 {
+    if (RejectInBundle()) return;
     D3D12DDIARG_RESOURCE_BARRIER_0022 local[16];
     D3D12DDIARG_RESOURCE_BARRIER_0022 *converted = local;
     UINT used = 0;
@@ -388,9 +408,16 @@ void STDMETHODCALLTYPE Native12CommandList::ResourceBarrier(UINT count, const D3
 
 void STDMETHODCALLTYPE Native12CommandList::ExecuteBundle(ID3D12GraphicsCommandList *command_list)
 {
+    if (RejectInBundle()) return;
     if (!command_list) return;
-    table->pfnExecuteBundle(driver, static_cast<Native12CommandList *>(command_list)->driver);
+    Native12CommandList *bundle = static_cast<Native12CommandList *>(command_list);
+    table->pfnExecuteBundle(driver, bundle->driver);
     ZeroMemory(root_arguments, sizeof(root_arguments));
+    if (bundle->pipeline_set)
+    {
+        graphics_bound = bundle->graphics_bound;
+        compute_bound = bundle->compute_bound;
+    }
 }
 
 void STDMETHODCALLTYPE Native12CommandList::SetDescriptorHeaps(UINT count, ID3D12DescriptorHeap *const *heaps)
@@ -593,6 +620,7 @@ void STDMETHODCALLTYPE Native12CommandList::IASetVertexBuffers(UINT start_slot, 
 void STDMETHODCALLTYPE Native12CommandList::SOSetTargets(UINT start_slot, UINT count,
         const D3D12_STREAM_OUTPUT_BUFFER_VIEW *views)
 {
+    if (RejectInBundle()) return;
     table->pfnSOSetTargets(driver, start_slot, count,
             reinterpret_cast<const D3D12DDI_STREAM_OUTPUT_BUFFER_VIEW *>(views));
 }
@@ -601,6 +629,7 @@ void STDMETHODCALLTYPE Native12CommandList::OMSetRenderTargets(UINT count,
         const D3D12_CPU_DESCRIPTOR_HANDLE *render_targets, BOOL single_handle,
         const D3D12_CPU_DESCRIPTOR_HANDLE *depth_stencil)
 {
+    if (RejectInBundle()) return;
     static_assert(sizeof(D3D12_CPU_DESCRIPTOR_HANDLE) == sizeof(D3D12DDI_CPU_DESCRIPTOR_HANDLE), "descriptor");
     table->pfnOMSetRenderTargets(driver, count,
             reinterpret_cast<const D3D12DDI_CPU_DESCRIPTOR_HANDLE *>(render_targets), single_handle,
@@ -610,6 +639,7 @@ void STDMETHODCALLTYPE Native12CommandList::OMSetRenderTargets(UINT count,
 void STDMETHODCALLTYPE Native12CommandList::ClearDepthStencilView(D3D12_CPU_DESCRIPTOR_HANDLE dsv,
         D3D12_CLEAR_FLAGS flags, FLOAT depth, UINT8 stencil, UINT rect_count, const D3D12_RECT *rects)
 {
+    if (RejectInBundle()) return;
     DXGI_FORMAT format = device->GetDsvFormat(dsv.ptr);
     if (format == DXGI_FORMAT_D16_UNORM || format == DXGI_FORMAT_D32_FLOAT)
         flags = static_cast<D3D12_CLEAR_FLAGS>(flags & ~D3D12_CLEAR_FLAG_STENCIL);
@@ -620,6 +650,7 @@ void STDMETHODCALLTYPE Native12CommandList::ClearDepthStencilView(D3D12_CPU_DESC
 void STDMETHODCALLTYPE Native12CommandList::ClearRenderTargetView(D3D12_CPU_DESCRIPTOR_HANDLE rtv,
         const FLOAT color[4], UINT rect_count, const D3D12_RECT *rects)
 {
+    if (RejectInBundle()) return;
     table->pfnClearRenderTargetView(driver, Native12CpuHandle(rtv), color, rect_count, rects);
 }
 
@@ -627,6 +658,7 @@ void STDMETHODCALLTYPE Native12CommandList::ClearUnorderedAccessViewUint(D3D12_G
         D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle, ID3D12Resource *resource, const UINT values[4], UINT rect_count,
         const D3D12_RECT *rects)
 {
+    if (RejectInBundle()) return;
     if (!resource) return;
     table->pfnClearUnorderedAccessViewUint(driver, Native12GpuHandle(gpu_handle), Native12CpuHandle(cpu_handle),
             Native12UnwrapResource(resource)->driver, values, rect_count, rects);
@@ -636,6 +668,7 @@ void STDMETHODCALLTYPE Native12CommandList::ClearUnorderedAccessViewFloat(D3D12_
         D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle, ID3D12Resource *resource, const float values[4], UINT rect_count,
         const D3D12_RECT *rects)
 {
+    if (RejectInBundle()) return;
     if (!resource) return;
     table->pfnClearUnorderedAccessViewFloat(driver, Native12GpuHandle(gpu_handle), Native12CpuHandle(cpu_handle),
             Native12UnwrapResource(resource)->driver, values, rect_count, rects);
@@ -644,6 +677,7 @@ void STDMETHODCALLTYPE Native12CommandList::ClearUnorderedAccessViewFloat(D3D12_
 void STDMETHODCALLTYPE Native12CommandList::DiscardResource(ID3D12Resource *resource,
         const D3D12_DISCARD_REGION *region)
 {
+    if (RejectInBundle()) return;
     D3D12DDIARG_DISCARD_RESOURCE_0003 args = {};
 
     if (!resource) return;
@@ -662,6 +696,7 @@ void STDMETHODCALLTYPE Native12CommandList::DiscardResource(ID3D12Resource *reso
 void STDMETHODCALLTYPE Native12CommandList::BeginQuery(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE query_type,
         UINT index)
 {
+    if (RejectInBundle()) return;
     if (!heap) return;
     table->pfnBeginQuery(driver, static_cast<Native12QueryHeap *>(heap)->driver,
             static_cast<D3D12DDI_QUERY_TYPE>(query_type), index);
@@ -670,6 +705,7 @@ void STDMETHODCALLTYPE Native12CommandList::BeginQuery(ID3D12QueryHeap *heap, D3
 void STDMETHODCALLTYPE Native12CommandList::EndQuery(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE query_type,
         UINT index)
 {
+    if (RejectInBundle()) return;
     if (!heap) return;
     table->pfnEndQuery(driver, static_cast<Native12QueryHeap *>(heap)->driver,
             static_cast<D3D12DDI_QUERY_TYPE>(query_type), index);
@@ -687,6 +723,7 @@ void STDMETHODCALLTYPE Native12CommandList::ResolveQueryData(ID3D12QueryHeap *he
 void STDMETHODCALLTYPE Native12CommandList::SetPredication(ID3D12Resource *buffer, UINT64 offset,
         D3D12_PREDICATION_OP operation)
 {
+    if (RejectInBundle()) return;
     D3D12DDI_HRESOURCE handle = {};
     if (buffer) handle = Native12UnwrapResource(buffer)->driver;
     table->pfnSetPredication(driver, handle, offset, static_cast<D3D12DDI_PREDICATION_OP>(operation));
@@ -735,6 +772,7 @@ void STDMETHODCALLTYPE Native12CommandList::OMSetDepthBounds(FLOAT min, FLOAT ma
 void STDMETHODCALLTYPE Native12CommandList::SetSamplePositions(UINT sample_count, UINT pixel_count,
         D3D12_SAMPLE_POSITION *positions)
 {
+    if (RejectInBundle()) return;
     if (table->pfnSetSamplePositions)
         table->pfnSetSamplePositions(driver, sample_count, pixel_count,
                 reinterpret_cast<D3D12DDI_SAMPLE_POSITION *>(positions));
@@ -744,6 +782,7 @@ void STDMETHODCALLTYPE Native12CommandList::ResolveSubresourceRegion(ID3D12Resou
         UINT dst_x, UINT dst_y, ID3D12Resource *src, UINT src_sub_resource, D3D12_RECT *src_rect, DXGI_FORMAT format,
         D3D12_RESOLVE_MODE mode)
 {
+    if (RejectInBundle()) return;
     if (!dst || !src || !table->pfnResourceResolveSubresourceRegion) return;
     table->pfnResourceResolveSubresourceRegion(driver, Native12UnwrapResource(dst)->driver, dst_sub_resource, dst_x,
             dst_y, Native12UnwrapResource(src)->driver, src_sub_resource, src_rect, format,

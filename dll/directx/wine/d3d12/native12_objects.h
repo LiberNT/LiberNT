@@ -350,7 +350,8 @@ public:
     Native12CommandAllocator *allocator = NULL;
     HRESULT error = S_OK;
     bool recording = false;
-    bool graphics_bound = false, compute_bound = false;
+    bool graphics_bound = false, compute_bound = false, pipeline_set = false;
+    bool RejectInBundle();
     ID3D12PipelineState *default_states[2] = {};
     UINT64 id = 0;
 
