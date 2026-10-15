@@ -19,7 +19,7 @@ list(APPEND SOURCE
 add_library(sechost MODULE ${SOURCE})
 set_module_type(sechost win32dll ENTRYPOINT 0)
 target_link_libraries(sechost wine ${PSEH_LIB})
-add_delay_importlibs(sechost rpcrt4)
+add_delay_importlibs(sechost rpcrt4 advapi32)
 add_importlibs(sechost kernelbase msvcrt kernel32_vista kernel32 ntdll)
 add_cd_file(TARGET sechost DESTINATION reactos/system32 FOR all)
 set_wine_module(sechost)

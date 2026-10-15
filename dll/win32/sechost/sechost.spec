@@ -124,8 +124,8 @@
 @ stub LocalRpcBindingSetAuthInfoEx
 @ stub LookupAccountNameLocalA
 @ stub LookupAccountNameLocalW
-@ stdcall LookupAccountSidLocalA(ptr ptr ptr ptr ptr ptr) advapi32.LookupAccountSidLocalA
-@ stdcall LookupAccountSidLocalW(ptr ptr ptr ptr ptr ptr) advapi32.LookupAccountSidLocalW
+@ stdcall LookupAccountSidLocalA(ptr ptr ptr ptr ptr ptr)
+@ stdcall LookupAccountSidLocalW(ptr ptr ptr ptr ptr ptr)
 @ stdcall LsaAddAccountRights(ptr ptr ptr long) advapi32.LsaAddAccountRights
 @ stdcall LsaClose(ptr) advapi32.LsaClose
 @ stub LsaCreateSecret

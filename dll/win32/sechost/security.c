@@ -1479,3 +1479,17 @@ BOOL WINAPI DECLSPEC_HOTPATCH ConvertStringSecurityDescriptorToSecurityDescripto
     if (ret_size) *ret_size = size;
     return TRUE;
 }
+
+#ifdef __REACTOS__
+BOOL WINAPI LookupAccountSidLocalA( PSID sid, char *name, DWORD *name_len, char *domain,
+                                    DWORD *domain_len, SID_NAME_USE *use )
+{
+    return LookupAccountSidA( NULL, sid, name, name_len, domain, domain_len, use );
+}
+
+BOOL WINAPI LookupAccountSidLocalW( PSID sid, WCHAR *name, DWORD *name_len, WCHAR *domain,
+                                    DWORD *domain_len, SID_NAME_USE *use )
+{
+    return LookupAccountSidW( NULL, sid, name, name_len, domain, domain_len, use );
+}
+#endif
