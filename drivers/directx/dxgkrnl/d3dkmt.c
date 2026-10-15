@@ -2723,6 +2723,11 @@ DxgkpQueryAdapterInfoMinimumLevel(
             *MinimumLevel = DXGK_CAPS_CORE_LEVEL_WDDM_2_4;
             return TRUE;
 
+        case KMTQAITYPE_DRIVER_DESCRIPTION:
+        case KMTQAITYPE_DRIVER_DESCRIPTION_RENDER:
+            *MinimumLevel = DXGK_CAPS_CORE_LEVEL_WDDM_2_6;
+            return TRUE;
+
         case KMTQAITYPE_WDDM_2_7_CAPS:
             *MinimumLevel = DXGK_CAPS_CORE_LEVEL_WDDM_2_7;
             return TRUE;
@@ -4226,6 +4231,53 @@ DxgkpQueryAdapterInfoCaptured(
             }
             _SEH2_END;
             ExFreePoolWithTag(Info, TAG_DXGK_CAPTURE);
+            DXGKP_QUERY_RETURN(STATUS_SUCCESS);
+        }
+
+        case KMTQAITYPE_DRIVER_DESCRIPTION:
+        case KMTQAITYPE_DRIVER_DESCRIPTION_RENDER:
+        {
+            D3DKMT_DRIVER_DESCRIPTION *Description;
+            HANDLE DriverKey = NULL;
+            BOOLEAN Found = FALSE;
+
+            if (pQueryAdapterInfo->pPrivateDriverData == NULL ||
+                pQueryAdapterInfo->PrivateDriverDataSize < sizeof(*Description))
+            {
+                DXGKP_QUERY_RETURN(STATUS_BUFFER_TOO_SMALL);
+            }
+            if (Adapter->PhysicalDeviceObject == NULL)
+                DXGKP_QUERY_RETURN(STATUS_NOT_SUPPORTED);
+
+            Description = ExAllocatePoolWithTag(PagedPool, sizeof(*Description), TAG_DXGK_CAPTURE);
+            if (Description == NULL)
+                DXGKP_QUERY_RETURN(STATUS_INSUFFICIENT_RESOURCES);
+
+            RtlZeroMemory(Description, sizeof(*Description));
+            if (NT_SUCCESS(DxgkpOpenAdapterDriverKey(Adapter, &DriverKey)))
+            {
+                Found = DxgkpReadHardwareInformation(DriverKey, L"DriverDesc",
+                                                     Description->DriverDescription,
+                                                     sizeof(Description->DriverDescription));
+                ZwClose(DriverKey);
+            }
+            if (!Found)
+            {
+                ExFreePoolWithTag(Description, TAG_DXGK_CAPTURE);
+                DXGKP_QUERY_RETURN(STATUS_OBJECT_NAME_NOT_FOUND);
+            }
+
+            _SEH2_TRY
+            {
+                RtlCopyMemory(pQueryAdapterInfo->pPrivateDriverData, Description, sizeof(*Description));
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                ExFreePoolWithTag(Description, TAG_DXGK_CAPTURE);
+                DXGKP_QUERY_RETURN(_SEH2_GetExceptionCode());
+            }
+            _SEH2_END;
+            ExFreePoolWithTag(Description, TAG_DXGK_CAPTURE);
             DXGKP_QUERY_RETURN(STATUS_SUCCESS);
         }
 
