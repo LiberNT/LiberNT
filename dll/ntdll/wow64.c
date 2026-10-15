@@ -141,7 +141,11 @@ RtlWow64IsWowGuestMachineSupported(USHORT machine, BOOLEAN *supported)
     *supported = FALSE;
     for (i = 0; machines[i].Machine; ++i)
     {
+#ifdef __REACTOS__
+        if (machines[i].WoW64Container && machine == machines[i].Machine)
+#else
         if (!machines[i].Native && machine == machines[i].Machine)
+#endif
             *supported = TRUE;
     }
     return status;
