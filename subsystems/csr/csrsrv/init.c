@@ -511,7 +511,9 @@ CsrCreateSessionObjectDirectory(IN ULONG Session)
 
     if (Session == 0)
     {
-        RtlInitUnicodeString(&SessionString, L"BaseNamedObjects");
+        UNICODE_STRING WindowsString = RTL_CONSTANT_STRING(L"\\Windows");
+
+        RtlInitUnicodeString(&SessionString, L"Windows");
         InitializeObjectAttributes(&ObjectAttributes,
                                    &SessionString,
                                    OBJ_OPENIF | OBJ_CASE_INSENSITIVE,
@@ -520,7 +522,7 @@ CsrCreateSessionObjectDirectory(IN ULONG Session)
         Status = NtCreateSymbolicLinkObject(&BnoHandle,
                                             SYMBOLIC_LINK_ALL_ACCESS,
                                             &ObjectAttributes,
-                                            &BnoString);
+                                            &WindowsString);
         if (!NT_SUCCESS(Status))
         {
             DPRINT1("CSRSS: NtCreateSymbolicLinkObject failed in "
@@ -594,12 +596,6 @@ CsrParseServerCommandLine(IN ULONG ArgumentCount,
 
     /* Save our Session ID, and create a Directory for it */
     SessionId = NtCurrentPeb()->SessionId;
-    if (SessionId != 0)
-    {
-        Status = CsrCreateSessionObjectDirectory(0);
-        if (!NT_SUCCESS(Status) && Status != STATUS_OBJECT_NAME_COLLISION)
-            return Status;
-    }
     Status = CsrCreateSessionObjectDirectory(SessionId);
     if (!NT_SUCCESS(Status))
     {

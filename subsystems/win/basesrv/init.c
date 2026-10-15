@@ -285,37 +285,10 @@ Quit:
     if (SystemSid) RtlFreeSid(SystemSid);
 }
 
-static
-VOID
-BaseSrvCreateGlobalLink(_In_ HANDLE Directory,
-                        _In_ PCWSTR Name,
-                        _In_ PCWSTR Target,
-                        _In_ PSECURITY_DESCRIPTOR SecurityDescriptor)
-{
-    UNICODE_STRING LinkName, LinkTarget;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    HANDLE Link;
-    NTSTATUS Status;
-
-    RtlInitUnicodeString(&LinkName, Name);
-    RtlInitUnicodeString(&LinkTarget, Target);
-    InitializeObjectAttributes(&ObjectAttributes,
-                               &LinkName,
-                               OBJ_OPENIF | OBJ_PERMANENT | OBJ_CASE_INSENSITIVE,
-                               Directory,
-                               SecurityDescriptor);
-    Status = NtCreateSymbolicLinkObject(&Link,
-                                        SYMBOLIC_LINK_ALL_ACCESS,
-                                        &ObjectAttributes,
-                                        &LinkTarget);
-    if (NT_SUCCESS(Status)) NtClose(Link);
-}
-
 NTSTATUS
 NTAPI
 CreateBaseAcls(OUT PACL* Dacl,
-               OUT PACL* RestrictedDacl,
-               IN BOOLEAN GlobalDirectory)
+               OUT PACL* RestrictedDacl)
 {
     PSID SystemSid, WorldSid, RestrictedSid, AdminsSid, CreatorOwnerSid;
     SID_IDENTIFIER_AUTHORITY CreatorAuthority = {SECURITY_CREATOR_SID_AUTHORITY};
@@ -365,7 +338,7 @@ CreateBaseAcls(OUT PACL* Dacl,
     }
 
     /* Get object security mode */
-    if (SessionId == 0 || GlobalDirectory ||
+    if (SessionId == 0 ||
         !NT_SUCCESS(NtQuerySystemInformation(SystemObjectSecurityMode, &ObjectSecurityMode, sizeof(ULONG), NULL)))
     {
         ObjectSecurityMode = 0;
@@ -735,7 +708,7 @@ BaseInitializeStaticServerData(IN PCSR_SERVER_DLL LoadedServerDll)
     ASSERT(NT_SUCCESS(Status));
 
     /* Create the BNO and \Restricted DACLs */
-    Status = CreateBaseAcls(&BnoDacl, &BnoRestrictedDacl, FALSE);
+    Status = CreateBaseAcls(&BnoDacl, &BnoRestrictedDacl);
     ASSERT(NT_SUCCESS(Status));
 
     /* Set the BNO DACL as active for now */
@@ -761,53 +734,6 @@ BaseInitializeStaticServerData(IN PCSR_SERVER_DLL LoadedServerDll)
         ASSERT(NT_SUCCESS(Status));
         Status = RtlSetSaclSecurityDescriptor(BnoSd, TRUE, LabelSacl, FALSE);
         ASSERT(NT_SUCCESS(Status));
-    }
-
-    if (SessionId != 0)
-    {
-        HANDLE GlobalDirectory;
-        PACL GlobalDacl, GlobalRestrictedDacl, LabelSacl;
-        BOOLEAN SaclPresent, SaclDefaulted;
-        SECURITY_DESCRIPTOR GlobalSd;
-
-        Status = CreateBaseAcls(&GlobalDacl, &GlobalRestrictedDacl, TRUE);
-        ASSERT(NT_SUCCESS(Status));
-        Status = RtlCreateSecurityDescriptor(&GlobalSd, SECURITY_DESCRIPTOR_REVISION);
-        ASSERT(NT_SUCCESS(Status));
-        Status = RtlSetDaclSecurityDescriptor(&GlobalSd, TRUE, GlobalDacl, FALSE);
-        ASSERT(NT_SUCCESS(Status));
-        Status = RtlGetSaclSecurityDescriptor(BnoSd, &SaclPresent, &LabelSacl, &SaclDefaulted);
-        ASSERT(NT_SUCCESS(Status));
-        Status = RtlSetSaclSecurityDescriptor(&GlobalSd, SaclPresent, LabelSacl, FALSE);
-        ASSERT(NT_SUCCESS(Status));
-
-        RtlInitUnicodeString(&DirectoryName, L"\\BaseNamedObjects");
-        InitializeObjectAttributes(&ObjectAttributes,
-                                   &DirectoryName,
-                                   OBJ_OPENIF | OBJ_PERMANENT | OBJ_CASE_INSENSITIVE,
-                                   NULL,
-                                   &GlobalSd);
-        Status = NtCreateDirectoryObject(&GlobalDirectory,
-                                         DIRECTORY_ALL_ACCESS,
-                                         &ObjectAttributes);
-        ASSERT(NT_SUCCESS(Status));
-        if (Status == STATUS_OBJECT_NAME_EXISTS)
-        {
-            Status = NtSetSecurityObject(GlobalDirectory,
-                                         DACL_SECURITY_INFORMATION |
-                                         LABEL_SECURITY_INFORMATION,
-                                         &GlobalSd);
-            ASSERT(NT_SUCCESS(Status));
-        }
-        RtlFreeHeap(BaseSrvHeap, 0, GlobalRestrictedDacl);
-        RtlFreeHeap(BaseSrvHeap, 0, GlobalDacl);
-        if (NT_SUCCESS(Status))
-        {
-            BaseSrvCreateGlobalLink(GlobalDirectory, L"Global", L"\\BaseNamedObjects", BnoSd);
-            BaseSrvCreateGlobalLink(GlobalDirectory, L"Local", L"\\BaseNamedObjects", BnoSd);
-            BaseSrvCreateGlobalLink(GlobalDirectory, L"Session", L"\\Sessions\\BNOLINKS", BnoSd);
-            NtClose(GlobalDirectory);
-        }
     }
 
     /* Create the BNO directory */
