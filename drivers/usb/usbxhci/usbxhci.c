@@ -2692,6 +2692,16 @@ XHCI_EstimateTrbsNeeded(
 }
 
 static
+VOID
+XHCI_PublishTrbControl(
+    _Inout_ PXHCI_TRB Trb,
+    _In_ ULONG Control)
+{
+    KeMemoryBarrier();
+    *(volatile ULONG *)&Trb->Control = Control;
+}
+
+static
 PXHCI_TRB
 XHCI_GetTransferRingTrb(
     _Inout_ PXHCI_RING Ring,
@@ -2724,7 +2734,7 @@ XHCI_GetTransferRingTrb(
         if (TdContinues)
             LinkControl |= XHCI_TRB_CHAIN_BIT;
 
-        LinkTrb->Control = LinkControl;
+        XHCI_PublishTrbControl(LinkTrb, LinkControl);
 
     }
 
@@ -9935,11 +9945,11 @@ XHCI_QueueCommand(
     Trb->Parameter1 = (ULONG)(Parameter & 0xFFFFFFFF);
     Trb->Parameter2 = (ULONG)(Parameter >> 32);
     Trb->Status = (ULONG)(Context & 0xFFFFFFFF);
-    Trb->Control = (ULONG)(Context >> 32);
-    Trb->Control &= ~XHCI_TRB_TYPE_MASK;
-    Trb->Control |= (TrbType << XHCI_TRB_TYPE_SHIFT) |
-                    (Extension->CommandRingCycleState & XHCI_TRB_CYCLE) |
-                    ControlFlags;
+    XHCI_PublishTrbControl(Trb,
+                           ((ULONG)(Context >> 32) & ~XHCI_TRB_TYPE_MASK) |
+                           (TrbType << XHCI_TRB_TYPE_SHIFT) |
+                           (Extension->CommandRingCycleState & XHCI_TRB_CYCLE) |
+                           ControlFlags);
 
     CommandPointer = Extension->CommandRingPhysical.QuadPart +
                      ((ULONGLONG)Extension->CommandRingEnqueueIndex * sizeof(XHCI_TRB));
@@ -11496,7 +11506,7 @@ XHCI_SubmitControlTransfer(
             Control |= XHCI_TRB_TRT_OUT;
 
         /* Keep this TRB unowned for either producer cycle state. */
-        Trb->Control = Control;
+        XHCI_PublishTrbControl(Trb, Control);
         ProgrammedRing = TRUE;
 
         /* Save for deferred commit (local variables used after Status TRB programming) */
@@ -11581,7 +11591,7 @@ XHCI_SubmitControlTransfer(
                     Control |= XHCI_TRB_CHAIN_BIT;
                 }
 
-                Trb->Control = Control;
+                XHCI_PublishTrbControl(Trb, Control);
                 XHCI_AdvanceTransferRing(&Endpoint->TransferRing);
 
                 ElementAddress += Chunk;
@@ -11664,7 +11674,7 @@ XHCI_SubmitControlTransfer(
                         Control |= XHCI_TRB_CHAIN_BIT;
                     }
 
-                    Trb->Control = Control;
+                    XHCI_PublishTrbControl(Trb, Control);
                     XHCI_AdvanceTransferRing(&Endpoint->TransferRing);
 
                     ElementAddress += Chunk;
@@ -11707,7 +11717,7 @@ XHCI_SubmitControlTransfer(
         Control |= XHCI_TRB_DIR_IN;
 
     /* Interrupt target is encoded in the event TRB, not the status-stage TRB. */
-    Trb->Control = Control;
+    XHCI_PublishTrbControl(Trb, Control);
     Transfer->CompletionTrbPointer = PhysicalAddress;
     if (TraceBos)
     {
@@ -11981,7 +11991,7 @@ XHCI_SubmitSgTransfer(
         ASSERT((Control & XHCI_TRB_IOC) != 0);
         IocTrbCount++;
 #endif
-        Trb->Control = Control;
+        XHCI_PublishTrbControl(Trb, Control);
         XHCI_AdvanceTransferRing(Ring);
 
         Transfer->CompletionTrbPointer = PhysicalAddress;
@@ -12045,6 +12055,47 @@ XHCI_SubmitSgTransfer(
         }
     }
 
+    {
+        ULONG CountRemaining = Remaining;
+        ULONG TrbsNeeded = 0;
+        ULONG CountIndex = SgIndex;
+
+        do
+        {
+            ULONGLONG CountAddress;
+            ULONG CountElement;
+
+            if (UseBounce)
+            {
+                CountAddress = Transfer->BouncePhysicalAddress.QuadPart;
+                CountElement = Transfer->BounceLength;
+            }
+            else
+            {
+                CountAddress = SgList->SgElement[CountIndex].SgPhysicalAddress.QuadPart;
+                CountElement = SgList->SgElement[CountIndex].SgTransferLength;
+            }
+
+            while (CountElement && CountRemaining)
+            {
+                ULONG CountChunk = XHCI_CalcTrbTransferChunk(CountAddress,
+                                                             CountElement,
+                                                             CountRemaining,
+                                                             IsoPayloadLimit);
+                CountAddress += CountChunk;
+                CountElement -= CountChunk;
+                CountRemaining -= CountChunk;
+                TrbsNeeded++;
+            }
+        } while (!UseBounce && CountRemaining && ++CountIndex < SgList->SgElementCount);
+
+        if (!XHCI_RingHasSpace(Ring, TrbsNeeded))
+        {
+            Status = MP_STATUS_NO_RESOURCES;
+            goto Failure;
+        }
+    }
+
     if (UseBounce)
     {
         ULONG ElementRemaining = Transfer->BounceLength;
@@ -12102,7 +12153,7 @@ XHCI_SubmitSgTransfer(
             if (ShortPacketOk)
                 Control |= XHCI_TRB_ISP;
 
-            Trb->Control = Control;
+            XHCI_PublishTrbControl(Trb, Control);
             XHCI_AdvanceTransferRing(Ring);
 
 
@@ -12179,7 +12230,7 @@ XHCI_SubmitSgTransfer(
                 if (ShortPacketOk)
                     Control |= XHCI_TRB_ISP;
 
-                Trb->Control = Control;
+                XHCI_PublishTrbControl(Trb, Control);
                 XHCI_AdvanceTransferRing(Ring);
 
 
@@ -13985,7 +14036,7 @@ XHCI_SubmitIsochronousTransfer(
             if (Endpoint->InterruptTarget < Extension->InterrupterCount)
                 Control |= ((ULONG)Endpoint->InterruptTarget << XHCI_TRB_INTR_TARGET_SHIFT);
 
-            Trb->Control = Control;
+            XHCI_PublishTrbControl(Trb, Control);
             XHCI_AdvanceTransferRing(Ring);
             PacketContext->LastTrbPointer = PhysicalAddress;
             Transfer->CompletionTrbPointer = PhysicalAddress;
@@ -14049,7 +14100,7 @@ XHCI_SubmitIsochronousTransfer(
                 else
                     Control |= XHCI_TRB_IOC;
 
-                Trb->Control = Control;
+                XHCI_PublishTrbControl(Trb, Control);
                 XHCI_AdvanceTransferRing(Ring);
                 PacketContext->LastTrbPointer = PhysicalAddress;
                 Transfer->CompletionTrbPointer = PhysicalAddress;
@@ -14135,7 +14186,7 @@ XHCI_SubmitIsochronousTransfer(
                     else
                         Control |= XHCI_TRB_IOC;
 
-                    Trb->Control = Control;
+                    XHCI_PublishTrbControl(Trb, Control);
                     XHCI_AdvanceTransferRing(Ring);
                     PacketContext->LastTrbPointer = PhysicalAddress;
                     Transfer->CompletionTrbPointer = PhysicalAddress;
