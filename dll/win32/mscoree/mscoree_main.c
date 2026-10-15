@@ -711,6 +711,15 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv)
     if(!ppv)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    hr = check_monodata_assembly(rclsid);
+    if (FAILED(hr))
+    {
+        *ppv = NULL;
+        return hr;
+    }
+#endif
+
     This = malloc(sizeof(mscorecf));
 
     This->IClassFactory_iface.lpVtbl = &mscorecf_vtbl;

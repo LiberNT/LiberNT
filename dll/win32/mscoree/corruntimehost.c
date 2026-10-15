@@ -1759,6 +1759,30 @@ end:
 
 #define CHARS_IN_GUID 39
 
+#ifdef __REACTOS__
+HRESULT check_monodata_assembly(REFCLSID clsid)
+{
+    WCHAR path[CHARS_IN_GUID + 22], classname[350], filename[MAX_PATH];
+    HKEY key;
+
+    lstrcpyW(path, L"CLSID\\");
+    StringFromGUID2(clsid, path + lstrlenW(path), CHARS_IN_GUID);
+    lstrcatW(path, L"\\InprocServer32");
+
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, path, 0, KEY_READ, &key) != ERROR_FILE_NOT_FOUND)
+    {
+        RegCloseKey(key);
+        return S_OK;
+    }
+
+    if (try_create_registration_free_com(clsid, classname, ARRAY_SIZE(classname), filename, ARRAY_SIZE(filename)) &&
+        GetFileAttributesW(filename) == INVALID_FILE_ATTRIBUTES)
+        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+
+    return S_OK;
+}
+
+#endif
 HRESULT create_monodata(REFCLSID clsid, LPVOID *ppObj)
 {
     static const WCHAR wszFileSlash[] = L"file:///";
@@ -1930,6 +1954,14 @@ HRESULT create_monodata(REFCLSID clsid, LPVOID *ppObj)
     TRACE("filename (%s)\n", debugstr_w(filename));
 
     *ppObj = NULL;
+
+#ifdef __REACTOS__
+    if (GetFileAttributesW(filename) == INVALID_FILE_ATTRIBUTES)
+    {
+        hr = HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+        goto cleanup;
+    }
+#endif
 
 
     hr = get_runtime_info(filename, NULL, NULL, NULL, 0, 0, FALSE, &info);

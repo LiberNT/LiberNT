@@ -107,6 +107,9 @@ extern HRESULT get_runtime_info(LPCWSTR exefile, LPCWSTR version, LPCWSTR config
     ICLRRuntimeInfo **result);
 
 extern BOOL get_mono_path(LPWSTR path, BOOL skip_local);
+#ifdef __REACTOS__
+extern HRESULT check_monodata_assembly(REFCLSID clsid);
+#endif
 
 extern MonoDomain* get_root_domain(void);
 
