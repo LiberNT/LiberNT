@@ -12,6 +12,7 @@
 #include <initguid.h>
 #include <devpkey.h>
 #include <ndk/iotypes.h>
+#include <cfg.h>
 
 typedef struct _EX_WORKITEM_CONTEXT
 {
@@ -530,6 +531,53 @@ IopFindMappedDeviceProperty(
     return NULL;
 }
 
+static
+ULONG
+IopGetDevNodeStatus(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    ULONG Status = DN_NT_ENUMERATOR | DN_NT_DRIVER;
+
+    if (DeviceNode->Parent && !DeviceNode->Parent->Parent)
+        Status |= DN_ROOT_ENUMERATED;
+
+    if (DeviceNode->State >= DeviceNodeDriversAdded &&
+        DeviceNode->State < DeviceNodeAwaitingQueuedDeletion)
+    {
+        Status |= DN_DRIVER_LOADED;
+    }
+
+    switch (DeviceNode->State)
+    {
+        case DeviceNodeStartPending:
+        case DeviceNodeStartCompletion:
+        case DeviceNodeStartPostWork:
+        case DeviceNodeStarted:
+        case DeviceNodeQueryStopped:
+        case DeviceNodeEnumeratePending:
+        case DeviceNodeEnumerateCompletion:
+        case DeviceNodeStopped:
+        case DeviceNodeRestartCompletion:
+            Status |= DN_STARTED;
+            break;
+        default:
+            break;
+    }
+
+    if (DeviceNode->Flags & DNF_HAS_PROBLEM)
+        Status |= DN_HAS_PROBLEM;
+    if (DeviceNode->Flags & DNF_HAS_PRIVATE_PROBLEM)
+        Status |= DN_PRIVATE_PROBLEM;
+    if (DeviceNode->Flags & DNF_DRIVER_BLOCKED)
+        Status |= DN_DRIVER_BLOCKED;
+    if (DeviceNode->Flags & DNF_CHILD_WITH_INVALID_ID)
+        Status |= DN_CHILD_WITH_INVALID_ID;
+    if (DeviceNode->Flags & DNF_LEGACY_DRIVER)
+        Status |= DN_LEGACY_DRIVER;
+
+    return Status;
+}
+
 typedef struct _IOP_DEVPROP_DRIVER_VALUE
 {
     CONST DEVPROPKEY *PropertyKey;
@@ -772,6 +820,18 @@ IopQueryMappedDevicePropertyData(
 
     if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_Stack))
         return IopQueryDeviceStack(Pdo, Size, Data, RequiredSize, Type);
+
+    if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_DevNodeStatus))
+    {
+        PDEVICE_NODE DeviceNode = IopGetPdoDeviceNode(Pdo);
+        ULONG Value;
+
+        if (!DeviceNode)
+            return STATUS_INVALID_DEVICE_REQUEST;
+
+        Value = IopGetDevNodeStatus(DeviceNode);
+        return IopCopyPropertyData(DEVPROP_TYPE_UINT32, &Value, sizeof(Value), Size, Data, RequiredSize, Type);
+    }
 
     DriverValue = IopFindDriverKeyProperty(PropertyKey);
     if (DriverValue)
