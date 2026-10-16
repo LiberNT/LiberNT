@@ -10708,6 +10708,136 @@ typedef struct _NDIS_ENUM_FILTERS
 #endif
 #endif
 
+#if NDIS_SUPPORT_NDIS6
+
+typedef
+_IRQL_requires_max_(PASSIVE_LEVEL)
+_Function_class_(IF_QUERY_OBJECT)
+NDIS_STATUS
+(IF_QUERY_OBJECT)(
+  _In_ NDIS_HANDLE ProviderIfContext,
+  _In_ NET_IF_OBJECT_ID ObjectId,
+  _Inout_ PULONG pOutputBufferLength,
+  _Out_writes_bytes_to_(*pOutputBufferLength, *pOutputBufferLength) PVOID pOutputBuffer);
+typedef IF_QUERY_OBJECT *IFP_QUERY_OBJECT;
+
+typedef
+_IRQL_requires_max_(PASSIVE_LEVEL)
+_Function_class_(IF_SET_OBJECT)
+NDIS_STATUS
+(IF_SET_OBJECT)(
+  _In_ NDIS_HANDLE ProviderIfContext,
+  _In_ NET_IF_OBJECT_ID ObjectId,
+  _In_ ULONG InputBufferLength,
+  _In_reads_bytes_(InputBufferLength) PVOID pInputBuffer);
+typedef IF_SET_OBJECT *IFP_SET_OBJECT;
+
+typedef struct _NDIS_IF_PROVIDER_CHARACTERISTICS {
+  NDIS_OBJECT_HEADER Header;
+  IFP_QUERY_OBJECT QueryObjectHandler;
+  IFP_SET_OBJECT SetObjectHandler;
+  PVOID Reserved1;
+  PVOID Reserved2;
+} NDIS_IF_PROVIDER_CHARACTERISTICS, *PNDIS_IF_PROVIDER_CHARACTERISTICS;
+
+#define NDIS_SIZEOF_IF_PROVIDER_CHARACTERISTICS_REVISION_1 \
+  RTL_SIZEOF_THROUGH_FIELD(NDIS_IF_PROVIDER_CHARACTERISTICS, Reserved2)
+
+typedef struct _NET_IF_INFORMATION {
+  NDIS_OBJECT_HEADER Header;
+  ULONG Flags;
+  NET_PHYSICAL_LOCATION PhysicalLocation;
+  ULONG WanTunnelType;
+  ULONG PortNumber;
+  NET_IF_ACCESS_TYPE AccessType;
+  NET_IF_DIRECTION_TYPE DirectionType;
+  NET_IF_CONNECTION_TYPE ConnectionType;
+  BOOLEAN ifConnectorPresent;
+  USHORT PhysAddressLength;
+  USHORT PhysAddressOffset;
+  USHORT PermanentPhysAddressOffset;
+  USHORT FriendlyNameLength;
+  USHORT FriendlyNameOffset;
+  GUID InterfaceGuid;
+  NET_IF_NETWORK_GUID NetworkGuid;
+  ULONG SupportedStatistics;
+  NDIS_MEDIUM MediaType;
+  NDIS_PHYSICAL_MEDIUM PhysicalMediumType;
+} NET_IF_INFORMATION, *PNET_IF_INFORMATION;
+
+#define NDIS_SIZEOF_NET_IF_INFORMATION_REVISION_1 \
+  RTL_SIZEOF_THROUGH_FIELD(NET_IF_INFORMATION, PhysicalMediumType)
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NDIS_STATUS
+NDISAPI
+NdisIfRegisterProvider(
+  _In_ PNDIS_IF_PROVIDER_CHARACTERISTICS ProviderCharacteristics,
+  _In_opt_ NDIS_HANDLE IfProviderContext,
+  _Out_ PNDIS_HANDLE pNdisIfProviderHandle);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID
+NDISAPI
+NdisIfDeregisterProvider(
+  _In_ NDIS_HANDLE NdisProviderHandle);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NDIS_STATUS
+NDISAPI
+NdisIfAllocateNetLuidIndex(
+  _In_ NET_IFTYPE ifType,
+  _Out_ PUINT32 pNetLuidIndex);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NDIS_STATUS
+NDISAPI
+NdisIfFreeNetLuidIndex(
+  _In_ NET_IFTYPE ifType,
+  _In_ UINT32 NetLuidIndex);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NDIS_STATUS
+NDISAPI
+NdisIfRegisterInterface(
+  _In_ NDIS_HANDLE NdisProviderHandle,
+  _In_ NET_LUID NetLuid,
+  _In_ NDIS_HANDLE ProviderIfContext,
+  _In_ PNET_IF_INFORMATION pIfInfo,
+  _Out_ PNET_IFINDEX pfIndex);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID
+NDISAPI
+NdisIfDeregisterInterface(
+  _In_ NET_IFINDEX ifIndex);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NDIS_STATUS
+NDISAPI
+NdisIfGetInterfaceIndexFromNetLuid(
+  _In_ NET_LUID NetLuid,
+  _Out_ PNET_IFINDEX pIfIndex);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NDIS_STATUS
+NDISAPI
+NdisIfGetNetLuidFromInterfaceIndex(
+  _In_ NET_IFINDEX ifIndex,
+  _Out_ PNET_LUID pNetLuid);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NDIS_STATUS
+NDISAPI
+NdisIfQueryBindingIfIndex(
+  _In_ NDIS_HANDLE NdisBindingHandle,
+  _Out_ PNET_IFINDEX pBoundIfIndex,
+  _Out_ PNET_LUID pBoundIfNetLuid,
+  _Out_ PNET_IFINDEX pLowestIfIndex,
+  _Out_ PNET_LUID pLowestIfNetLuid);
+
+#endif
+
 #ifdef __cplusplus
 }
 #endif
