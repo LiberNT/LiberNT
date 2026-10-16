@@ -2172,6 +2172,41 @@ AddDiskToList(
     ScanForUnpartitionedDiskSpace(DiskEntry);
 }
 
+static
+PPARTENTRY
+GetActiveDiskPartition(
+    IN PDISKENTRY DiskEntry);
+
+static
+BOOLEAN
+IsSupportedActivePartition(
+    IN PPARTENTRY PartEntry);
+
+static
+PDISKENTRY
+GetFirstEfiSystemDisk(
+    IN PPARTLIST List)
+{
+    PLIST_ENTRY Entry;
+    PDISKENTRY DiskEntry;
+    PPARTENTRY PartEntry;
+
+    for (Entry = List->DiskListHead.Flink;
+         Entry != &List->DiskListHead;
+         Entry = Entry->Flink)
+    {
+        DiskEntry = CONTAINING_RECORD(Entry, DISKENTRY, ListEntry);
+        if (DiskEntry->MediaType != FixedMedia || DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
+            continue;
+
+        PartEntry = GetActiveDiskPartition(DiskEntry);
+        if (PartEntry && IsSupportedActivePartition(PartEntry))
+            return DiskEntry;
+    }
+
+    return NULL;
+}
+
 /*
  * Retrieve the system disk, i.e. the fixed disk that is accessible by the
  * firmware during boot time and where the system partition resides.
@@ -2212,6 +2247,9 @@ GetSystemDisk(
     }
     if (Entry == &List->DiskListHead)
     {
+        if (IsUefiFirmware())
+            return GetFirstEfiSystemDisk(List);
+
         /* We haven't encountered any suitable disk */
         return NULL;
     }

@@ -11,6 +11,7 @@
 #include "precomp.h"
 
 #include <ntddstor.h> // For STORAGE_DEVICE_NUMBER
+#include <ntddscsi.h>
 
 #include "bldrsup.h"
 #include "devutils.h"
@@ -1049,8 +1050,88 @@ InstallEfiLoaderFiles(
 #define BCD_TEMPLATE_PATH           L"Windows\\System32\\config\\BCD-Template"
 #define BCD_BOOT_MANAGER_PATTERN    L"boot*.efi"
 #define BCD_RELATIVE_PARTITION      L"partition("
+#define BCD_SCSI_ADAPTER            L"scsi("
+#define BCD_SCSI_DISK               L")disk("
+#define BCD_SCSI_RDISK              L")rdisk("
+#define BCD_SCSI_PARTITION          L")partition("
 #define BCD_DISK_PREFIX             L"\\Harddisk"
 #define BCD_PARTITION_PREFIX        L"\\Partition"
+
+static
+BOOLEAN
+ParseArcPathNumber(
+    _Inout_ PCWSTR* Text,
+    _In_ PCWSTR Prefix,
+    _Out_ PULONG Value)
+{
+    SIZE_T Length = wcslen(Prefix);
+    PWSTR End;
+
+    if (_wcsnicmp(*Text, Prefix, Length) != 0)
+        return FALSE;
+
+    *Value = wcstoul(*Text + Length, &End, 10);
+    if (End == *Text + Length)
+        return FALSE;
+
+    *Text = End;
+    return TRUE;
+}
+
+static
+NTSTATUS
+GetScsiArcPathPartition(
+    _In_ PCWSTR ArcPath,
+    _Out_ PULONG DiskNumber,
+    _Out_ PULONG PartitionNumber)
+{
+    SYSTEM_DEVICE_INFORMATION DeviceInformation;
+    IO_STATUS_BLOCK IoStatusBlock;
+    SCSI_ADDRESS Address;
+    WCHAR Path[MAX_PATH];
+    ULONG Port, Bus, Target, Partition, i;
+    HANDLE Handle;
+    NTSTATUS Status;
+
+    if (!ParseArcPathNumber(&ArcPath, BCD_SCSI_ADAPTER, &Port) ||
+        !ParseArcPathNumber(&ArcPath, BCD_SCSI_DISK, &Bus) ||
+        !ParseArcPathNumber(&ArcPath, BCD_SCSI_RDISK, &Target) ||
+        !ParseArcPathNumber(&ArcPath, BCD_SCSI_PARTITION, &Partition))
+    {
+        return STATUS_OBJECT_PATH_SYNTAX_BAD;
+    }
+
+    Status = NtQuerySystemInformation(SystemDeviceInformation,
+                                      &DeviceInformation,
+                                      sizeof(DeviceInformation),
+                                      NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    for (i = 0; i < DeviceInformation.NumberOfDisks; i++)
+    {
+        RtlStringCchPrintfW(Path, ARRAYSIZE(Path), L"\\Device\\Harddisk%lu\\Partition0", i);
+        if (!NT_SUCCESS(pOpenDevice(Path, &Handle)))
+            continue;
+
+        Status = NtDeviceIoControlFile(Handle, NULL, NULL, NULL, &IoStatusBlock,
+                                       IOCTL_SCSI_GET_ADDRESS,
+                                       NULL, 0,
+                                       &Address, sizeof(Address));
+        NtClose(Handle);
+        if (NT_SUCCESS(Status) &&
+            Address.PortNumber == Port &&
+            Address.PathId == Bus &&
+            Address.TargetId == Target)
+        {
+            *DiskNumber = i;
+            *PartitionNumber = Partition;
+            return STATUS_SUCCESS;
+        }
+    }
+
+    return STATUS_OBJECT_PATH_NOT_FOUND;
+}
 
 static
 NTSTATUS
@@ -1202,6 +1283,12 @@ InstallBcdStore(
     if (_wcsnicmp(Text, BCD_RELATIVE_PARTITION, ARRAYSIZE(BCD_RELATIVE_PARTITION) - 1) == 0)
     {
         Number = wcstoul(Text + ARRAYSIZE(BCD_RELATIVE_PARTITION) - 1, NULL, 10);
+    }
+    else if (_wcsnicmp(Text, BCD_SCSI_ADAPTER, ARRAYSIZE(BCD_SCSI_ADAPTER) - 1) == 0)
+    {
+        Status = GetScsiArcPathPartition(Text, &Disk, &Number);
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
     else if (*Text != UNICODE_NULL && *Text != OBJ_NAME_PATH_SEPARATOR)
     {
