@@ -29,6 +29,7 @@
 #define IDC_COMMAND(command) (0x400 + (int)(command))
 #define WM_CABINET_STATUS (WM_APP + 1)
 #define WM_CABINET_CHANGED (WM_APP + 2)
+#define WM_CABINET_FOCUSVIEW (WM_APP + 3)
 #define IDT_CABINET_STATUS 1
 #define IDT_CABINET_SEARCH 2
 
@@ -145,6 +146,7 @@ CCabinetWindow::CCabinetWindow() :
     m_PreviewPidl(NULL),
     m_DetailsIconHandle(NULL),
     m_InHistoryNavigation(FALSE),
+    m_FocusViewOnNavigate(FALSE),
     m_ChangeNotify(0),
     m_NavigationVisible(TRUE),
     m_SearchBrowser(NULL),
@@ -541,6 +543,9 @@ CCabinetWindow::PlacePanes()
     ShowWindow(m_DetailsList, details ? SW_SHOW : SW_HIDE);
     if (details)
     {
+        int width = rc.right - rc.left - GetSystemMetrics(SM_CXVSCROLL);
+        ListView_SetColumnWidth(m_DetailsList, 0, width * 2 / 5);
+        ListView_SetColumnWidth(m_DetailsList, 1, width - width * 2 / 5);
         MoveWindow(m_DetailsIcon, rc.left, rc.top, rc.right - rc.left, icon, TRUE);
         MoveWindow(m_DetailsName, rc.left, rc.top + icon + margin, rc.right - rc.left, Scale(20), TRUE);
         MoveWindow(m_DetailsList, rc.left, rc.top + icon + margin * 2 + Scale(20), rc.right - rc.left,
@@ -1079,7 +1084,14 @@ CCabinetWindow::FocusView()
 
     if (view)
     {
+        HWND window = NULL;
         view->UIActivate(SVUIA_ACTIVATE_FOCUS);
+        if (SUCCEEDED(view->GetWindow(&window)) && window)
+        {
+            HWND focus = GetFocus();
+            if (focus != window && !IsChild(window, focus))
+                SetFocus(window);
+        }
         view->Release();
     }
 }
@@ -1533,6 +1545,8 @@ CCabinetWindow::ActivateTab(int index)
     UpdatePreview();
     SyncNavigationPane();
     WatchFolder();
+    if (GetActiveWindow() == m_hwnd)
+        PostMessageW(m_hwnd, WM_CABINET_FOCUSVIEW, 0, 0);
 }
 
 void
@@ -1685,10 +1699,12 @@ CCabinetWindow::OnNavigationComplete(IExplorerBrowser *browser, PCIDLIST_ABSOLUT
         if (GetActiveWindow() == m_hwnd)
         {
             HWND focus = GetFocus();
-            if (focus != m_SearchEdit && focus != m_AddressEdit &&
-                !(m_NavigationWindow && (focus == m_NavigationWindow || IsChild(m_NavigationWindow, focus))))
-                FocusView();
+            if (m_FocusViewOnNavigate ||
+                (focus != m_SearchEdit && focus != m_AddressEdit &&
+                 !(m_NavigationWindow && (focus == m_NavigationWindow || IsChild(m_NavigationWindow, focus)))))
+                PostMessageW(m_hwnd, WM_CABINET_FOCUSVIEW, 0, 0);
         }
+        m_FocusViewOnNavigate = FALSE;
     }
 }
 
@@ -1840,7 +1856,7 @@ CCabinetWindow::UpdateAddress()
         COMBOBOXEXITEMW item = { CBEIF_TEXT | CBEIF_IMAGE | CBEIF_SELECTEDIMAGE | CBEIF_INDENT | CBEIF_LPARAM };
         PWSTR name = NULL;
         item.iItem = index++;
-        if (FAILED(SHGetNameFromIDList(chain[i], SIGDN_NORMALDISPLAY, &name)))
+        if (FAILED(SHGetNameFromIDList(chain[i], i ? SIGDN_NORMALDISPLAY : SIGDN_DESKTOPABSOLUTEEDITING, &name)))
             name = NULL;
         item.pszText = name ? name : (PWSTR)L"";
         item.iImage = item.iSelectedImage = SystemIconIndex(chain[i]);
@@ -1850,14 +1866,6 @@ CCabinetWindow::UpdateAddress()
         CoTaskMemFree(name);
     }
     SendMessageW(m_Address, CB_SETCURSEL, index - 1, 0);
-    {
-        PWSTR path = NULL;
-        if (SUCCEEDED(SHGetNameFromIDList(tab->Pidl, SIGDN_DESKTOPABSOLUTEEDITING, &path)))
-        {
-            SetWindowTextW(m_AddressEdit, path);
-            CoTaskMemFree(path);
-        }
-    }
 }
 
 void
@@ -1882,7 +1890,10 @@ CCabinetWindow::NavigateToAddress()
             parent->Release();
         }
         if (ILIsEmpty(pidl) || (attributes & SFGAO_FOLDER))
+        {
+            m_FocusViewOnNavigate = TRUE;
             Navigate(pidl);
+        }
         else
             ShellExecuteW(m_hwnd, NULL, text, NULL, NULL, SW_SHOWNORMAL);
         ILFree(pidl);
@@ -2530,9 +2541,9 @@ CCabinetWindow::TranslateAcceleratorMessage(MSG *msg)
             StartSearch();
             return TRUE;
         }
-        return FALSE;
     }
-    if (msg->message == WM_KEYDOWN && msg->hwnd == m_AddressEdit)
+    if (msg->message == WM_KEYDOWN && (msg->hwnd == m_AddressEdit || msg->hwnd == m_SearchEdit) &&
+        !(control && (msg->wParam == 'T' || msg->wParam == 'W' || msg->wParam == 'N' || msg->wParam == VK_TAB)))
         return FALSE;
     if (msg->message == WM_SYSKEYDOWN && alt)
     {
@@ -2756,6 +2767,9 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
         case WM_CABINET_CHANGED:
             SetTimer(m_hwnd, IDT_CABINET_STATUS, 200, NULL);
+            return 0;
+        case WM_CABINET_FOCUSVIEW:
+            FocusView();
             return 0;
         case WM_TIMER:
             if (wParam == IDT_CABINET_STATUS)

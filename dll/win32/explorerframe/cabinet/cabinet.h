@@ -189,6 +189,7 @@ private:
     PIDLIST_ABSOLUTE m_PreviewPidl;
     HICON m_DetailsIconHandle;
     BOOL m_InHistoryNavigation;
+    BOOL m_FocusViewOnNavigate;
     ULONG m_ChangeNotify;
     BOOL m_NavigationVisible;
     IExplorerBrowser *m_SearchBrowser;
