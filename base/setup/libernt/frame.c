@@ -185,6 +185,7 @@ FrameShowPage(
 {
     HWND hPage = Frame.Pages[Page];
     BOOL Back = !!(Frame.PageInfo[Page].Flags & SETUP_PAGE_BACK);
+    BOOL Cancel = !(Frame.PageInfo[Page].Flags & SETUP_PAGE_NO_CANCEL);
 
     if (Frame.Current >= 0)
     {
@@ -197,9 +198,9 @@ FrameShowPage(
     SetupFrameSetButtonText(hPage, IDC_FRAME_BACK, IDS_BACKBTN);
     SetupFrameSetButtonText(hPage, IDC_FRAME_NEXT, IDS_NEXTBTN);
     SetupFrameSetButtonText(hPage, IDCANCEL, IDS_CANCELBTN);
-    SetupFrameShowButtons(hPage, Back, TRUE, TRUE);
+    SetupFrameShowButtons(hPage, Back, TRUE, Cancel);
     SetupFrameSetButtons(hPage, Back, TRUE);
-    EnableSetupCancel(Frame.hwnd, TRUE);
+    EnableSetupCancel(Frame.hwnd, Cancel);
 
     ShowWindow(hPage, SW_SHOW);
     SendMessageW(hPage, SPN_SETACTIVE, 0, 0);

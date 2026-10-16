@@ -1,7 +1,7 @@
 
 include_directories(${REACTOS_SOURCE_DIR}/sdk/lib/tzlib)
 
-spec2def(syssetup.dll syssetup.spec)
+spec2def(syssetup.dll syssetup.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE
     classinst.c

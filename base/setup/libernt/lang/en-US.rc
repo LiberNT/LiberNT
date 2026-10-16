@@ -55,6 +55,14 @@ BEGIN
     LTEXT "The keyboard works in Setup as soon as you choose it, so you can type your account name and password with it.", IDC_STATIC, 0, 128, 290, 26
 END
 
+IDD_APPSPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 118
+    LTEXT "Clear a box to skip a component. The downloads use your internet connection, and each package is checked against its publisher's signature or checksum before it is installed.", IDC_STATIC, 0, 124, 290, 34
+END
+
 IDD_ACCOUNTPAGE DIALOGEX 0, 0, 290, 160
 STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
@@ -229,6 +237,27 @@ BEGIN
     IDS_FORMAT_FAILED "Setup could not format %s as %s.\n%s"
     IDS_CHECK_FAILED "Setup found errors on %s that it could not repair (status 0x%08lx). Setup continues."
     IDS_SETUPLIB_MISSING "Setup cannot load %s. Run libernt.exe from the folder that holds its system32 folder and txtsetup.sif."
+END
+
+STRINGTABLE
+BEGIN
+    IDS_OOBE_REGIONTITLE "Choose your region format and keyboard"
+    IDS_OOBE_REGIONSUBTITLE "LiberNT uses this format for dates, times, numbers and currency, and this keyboard for typing."
+    IDS_APPSTITLE "Get the components most programs need"
+    IDS_APPSSUBTITLE "LiberNT downloads them from their publishers and installs them for every account."
+    IDS_APPS_COL_NAME "Component"
+    IDS_APPS_COL_SOURCE "Downloaded from"
+    IDS_OOBE_FINISHTITLE "Getting LiberNT ready"
+    IDS_OOBE_FINISHSUBTITLE "This can take a few minutes. Keep your computer on."
+    IDS_OOBE_APPLY_REGION "Applying your region and keyboard..."
+    IDS_OOBE_APPLY_TIMEZONE "Setting the time zone..."
+    IDS_OOBE_APPLY_NAME "Naming your computer..."
+    IDS_OOBE_APPLY_ACCOUNT "Creating your account..."
+    IDS_OOBE_DOWNLOADING "Downloading %s..."
+    IDS_OOBE_INSTALLING "Installing %s..."
+    IDS_OOBE_APP_FAILED "%s (0x%08lx)"
+    IDS_OOBE_APPS_FAILED "Some components were not installed"
+    IDS_OOBE_ACCOUNT_FAILED "LiberNT could not create your account (error %lu). LiberNT signs in to the built-in User account instead."
 END
 
 /* Progress Strings */

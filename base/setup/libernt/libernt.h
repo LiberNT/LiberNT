@@ -173,6 +173,7 @@ typedef enum _SETUP_PAGE
 #define SETUP_MAX_PAGES             8
 #define SETUP_PAGE_BACK             0x1
 #define SETUP_PAGE_SKIP_UNATTEND    0x2
+#define SETUP_PAGE_NO_CANCEL        0x4
 
 typedef struct _SETUP_PAGE_INFO
 {

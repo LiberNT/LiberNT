@@ -507,7 +507,8 @@ ConfigureInstalledSystem(
                                 L"UserName=%s\n"
                                 L"Password=%s\n"
                                 L"TimeZoneIndex=%lu\n"
-                                L"AutoDaylight=%u\n",
+                                L"AutoDaylight=%u\n"
+                                L"Components=%u\n",
                                 (int)(wcslen(REGISTRY_SETUP_MACHINE) - 1), REGISTRY_SETUP_MACHINE,
                                 (int)(wcslen(REGISTRY_SETUP_USER) - 1), REGISTRY_SETUP_USER,
                                 InstallVolume->Info.DeviceName,
@@ -516,7 +517,8 @@ ConfigureInstalledSystem(
                                 pSetupData->UserName,
                                 pSetupData->Password,
                                 pSetupData->TimeZoneIndex,
-                                pSetupData->AutoDaylight ? 1 : 0)))
+                                pSetupData->AutoDaylight ? 1 : 0,
+                                pSetupData->bUnattend ? 0 : 1)))
     {
         HeapFree(ProcessHeap, 0, Settings);
         return ERROR_BUFFER_OVERFLOW;

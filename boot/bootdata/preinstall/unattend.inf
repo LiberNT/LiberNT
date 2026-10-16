@@ -3,7 +3,7 @@ Signature = "$ReactOS$"
 
 ; Unattended 2nd stage setup for pre-installed disk image
 ; First boot runs InstallReactOS() automatically
-UnattendSetupEnabled = yes
+UnattendSetupEnabled = no
 
 ; Install to \Device\Harddisk0\Partition1\Windows
 DestinationDiskNumber = 0

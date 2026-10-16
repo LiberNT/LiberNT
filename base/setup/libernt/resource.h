@@ -67,6 +67,9 @@
 #define IDC_LANGUAGELIST     2251
 #define IDC_LAYOUTLIST       2252
 
+#define IDD_APPSPAGE         2260
+#define IDC_APPLIST          2261
+
 #define IDD_READYPAGE        2240
 #define IDC_READY_SUMMARY    2241
 #define IDC_READY_WARNING    2242
@@ -252,3 +255,20 @@
 #define IDS_FORMAT_FAILED           5586
 #define IDS_CHECK_FAILED            5587
 #define IDS_SETUPLIB_MISSING        5588
+#define IDS_OOBE_REGIONTITLE        5600
+#define IDS_OOBE_REGIONSUBTITLE     5601
+#define IDS_APPSTITLE               5602
+#define IDS_APPSSUBTITLE            5603
+#define IDS_APPS_COL_NAME           5604
+#define IDS_APPS_COL_SOURCE         5605
+#define IDS_OOBE_FINISHTITLE        5606
+#define IDS_OOBE_FINISHSUBTITLE     5607
+#define IDS_OOBE_APPLY_REGION       5608
+#define IDS_OOBE_APPLY_TIMEZONE     5609
+#define IDS_OOBE_APPLY_NAME         5610
+#define IDS_OOBE_APPLY_ACCOUNT      5611
+#define IDS_OOBE_DOWNLOADING        5612
+#define IDS_OOBE_INSTALLING         5613
+#define IDS_OOBE_APP_FAILED         5614
+#define IDS_OOBE_APPS_FAILED        5615
+#define IDS_OOBE_ACCOUNT_FAILED     5616

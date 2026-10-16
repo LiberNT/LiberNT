@@ -36,6 +36,7 @@ typedef struct _TARGET_SETTINGS
     WCHAR Password[PWLEN + 1];
     DWORD TimeZoneIndex;
     BOOL AutoDaylight;
+    BOOL Components;
 } TARGET_SETTINGS, *PTARGET_SETTINGS;
 
 typedef struct _TARGET_REGISTRATION
@@ -141,6 +142,8 @@ ReadTargetSettings(
             Settings->TimeZoneIndex = wcstoul(Value, NULL, 10);
         else if (!_wcsicmp(Line, L"AutoDaylight"))
             Settings->AutoDaylight = (wcstoul(Value, NULL, 10) != 0);
+        else if (!_wcsicmp(Line, L"Components"))
+            Settings->Components = (wcstoul(Value, NULL, 10) != 0);
     }
 
     SecureZeroMemory(Buffer, cbBuffer);
@@ -647,6 +650,32 @@ WriteTargetLogon(
 }
 
 static DWORD
+ScheduleFirstBootComponents(
+    _In_ PTARGET_SETTINGS Settings)
+{
+    WCHAR Path[MAX_PATH];
+    HKEY hKey;
+    LONG Error;
+
+    if (FAILED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"%s\\system32\\oobe\\oobe.exe", Settings->SystemRoot)) ||
+        GetFileAttributesW(Path) == INVALID_FILE_ATTRIBUTES)
+    {
+        return ERROR_FILE_NOT_FOUND;
+    }
+
+    Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\Setup", 0, KEY_SET_VALUE, &hKey);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+
+    SetRegString(hKey, L"CmdLine", REG_EXPAND_SZ, L"%SystemRoot%\\system32\\oobe\\oobe.exe /components");
+    SetRegDword(hKey, L"SetupType", 2);
+    SetRegDword(hKey, L"SystemSetupInProgress", 1);
+    RegCloseKey(hKey);
+
+    return ERROR_SUCCESS;
+}
+
+static DWORD
 EnableTargetPlugPlay(VOID)
 {
     HKEY hKey;
@@ -1064,6 +1093,12 @@ InstallTargetSystem(VOID)
         return Error;
 
     ReportTargetPhase(9);
+    if (Settings.Components)
+    {
+        Error = ScheduleFirstBootComponents(&Settings);
+        if (Error != ERROR_SUCCESS)
+            DPRINT1("ScheduleFirstBootComponents() failed (Error %lu)\n", Error);
+    }
     SetupCloseInfFile(hSysSetupInf);
     hSysSetupInf = INVALID_HANDLE_VALUE;
     Error = CreateTargetBootStatusData(&Settings);

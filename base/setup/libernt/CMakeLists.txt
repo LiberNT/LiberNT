@@ -33,3 +33,20 @@ add_delay_importlibs(libernt setuplib)
 add_importlibs(libernt advapi32 gdi32 user32 comctl32 dwmapi shlwapi setupapi ole32 oleaut32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET libernt DESTINATION reactos NO_CAB FOR bootcd)
 add_cd_file(TARGET libernt DESTINATION ${ARCH} FOR preinstall)
+
+list(APPEND OOBE_SOURCE
+    account.c
+    apps.c
+    frame.c
+    langpage.c
+    oobe.c
+    libernt.h)
+
+add_rc_deps(oobe.rc ${libernt_rc_deps})
+add_executable(oobe ${OOBE_SOURCE} oobe.rc)
+add_pch(oobe libernt.h OOBE_SOURCE)
+set_module_type(oobe win32gui UNICODE)
+target_link_libraries(oobe uuid tzlib)
+add_importlibs(oobe advapi32 gdi32 user32 comctl32 dwmapi setupapi ole32 oleaut32 msi wintrust crypt32 bcrypt netapi32 userenv syssetup msvcrt kernel32 ntdll)
+add_cd_file(TARGET oobe DESTINATION reactos/system32/oobe FOR all)
+add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/oobeapps.inf DESTINATION reactos/system32/oobe FOR all)

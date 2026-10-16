@@ -1187,6 +1187,40 @@ GetPreinstallUserName(
 }
 
 static
+BOOL
+RunFirstBootSetup(VOID)
+{
+    STARTUPINFOW StartupInfo;
+    PROCESS_INFORMATION ProcessInfo;
+    WCHAR Path[MAX_PATH];
+    DWORD ExitCode = ERROR_GEN_FAILURE;
+    UINT Length;
+
+    Length = GetSystemDirectoryW(Path, ARRAYSIZE(Path));
+    if (Length == 0 || Length + wcslen(L"\\oobe\\oobe.exe") >= ARRAYSIZE(Path))
+        return FALSE;
+    wcscat(Path, L"\\oobe\\oobe.exe");
+    if (GetFileAttributesW(Path) == INVALID_FILE_ATTRIBUTES)
+        return FALSE;
+
+    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+    StartupInfo.cb = sizeof(StartupInfo);
+    if (!CreateProcessW(Path, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &StartupInfo, &ProcessInfo))
+    {
+        DPRINT1("Could not start %S (error %lu)\n", Path, GetLastError());
+        return FALSE;
+    }
+
+    WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+    GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode);
+    CloseHandle(ProcessInfo.hThread);
+    CloseHandle(ProcessInfo.hProcess);
+
+    DPRINT1("First-boot setup finished with %lu\n", ExitCode);
+    return ExitCode == ERROR_SUCCESS;
+}
+
+static
 LONG
 EndSystemSetup(VOID)
 {
@@ -1286,9 +1320,12 @@ InstallLiveCD(VOID)
 
     if (bPreinstall)
     {
-        Status = CreateTargetAccount(UserName, L"");
-        if (!NT_SUCCESS(Status) && Status != STATUS_USER_EXISTS)
-            goto error;
+        if (!RunFirstBootSetup())
+        {
+            Status = CreateTargetAccount(UserName, L"");
+            if (!NT_SUCCESS(Status) && Status != STATUS_USER_EXISTS)
+                goto error;
+        }
         if (EndSystemSetup() != ERROR_SUCCESS)
             goto error;
         return 0;
