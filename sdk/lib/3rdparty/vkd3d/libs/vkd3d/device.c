@@ -3617,10 +3617,78 @@ static HRESULT device_worker_stop(struct d3d12_device *device)
     return S_OK;
 }
 
+static struct vkd3d_mutex d3d12_device_singleton_mutex = VKD3D_MUTEX_INITIALIZER;
+static struct d3d12_device *d3d12_device_singletons[16];
+
+static struct d3d12_device *d3d12_device_find_singleton(const LUID *luid, D3D_FEATURE_LEVEL minimum_level)
+{
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_SIZE(d3d12_device_singletons); ++i)
+    {
+        struct d3d12_device *device = d3d12_device_singletons[i];
+
+        if (device && device->adapter_luid.LowPart == luid->LowPart && device->adapter_luid.HighPart == luid->HighPart
+                && device->vk_info.max_feature_level >= minimum_level)
+        {
+            vkd3d_atomic_increment_u32(&device->refcount);
+            return device;
+        }
+    }
+    return NULL;
+}
+
+struct d3d12_device *d3d12_device_get_singleton(const LUID *luid, D3D_FEATURE_LEVEL minimum_level)
+{
+    struct d3d12_device *device;
+
+    if (!luid->LowPart && !luid->HighPart)
+        return NULL;
+    vkd3d_mutex_lock(&d3d12_device_singleton_mutex);
+    device = d3d12_device_find_singleton(luid, minimum_level);
+    vkd3d_mutex_unlock(&d3d12_device_singleton_mutex);
+    return device;
+}
+
+struct d3d12_device *d3d12_device_store_singleton(struct d3d12_device *device, D3D_FEATURE_LEVEL minimum_level)
+{
+    struct d3d12_device *existing;
+    unsigned int i;
+
+    if (!device->adapter_luid.LowPart && !device->adapter_luid.HighPart)
+        return NULL;
+    vkd3d_mutex_lock(&d3d12_device_singleton_mutex);
+    if (!(existing = d3d12_device_find_singleton(&device->adapter_luid, minimum_level)))
+    {
+        for (i = 0; i < ARRAY_SIZE(d3d12_device_singletons); ++i)
+        {
+            if (!d3d12_device_singletons[i])
+            {
+                d3d12_device_singletons[i] = device;
+                break;
+            }
+        }
+    }
+    vkd3d_mutex_unlock(&d3d12_device_singleton_mutex);
+    return existing;
+}
+
 static ULONG STDMETHODCALLTYPE d3d12_device_Release(ID3D12Device14 *iface)
 {
     struct d3d12_device *device = impl_from_ID3D12Device14(iface);
-    unsigned int refcount = vkd3d_atomic_decrement_u32(&device->refcount);
+    unsigned int refcount, i;
+
+    vkd3d_mutex_lock(&d3d12_device_singleton_mutex);
+    refcount = vkd3d_atomic_decrement_u32(&device->refcount);
+    if (!refcount)
+    {
+        for (i = 0; i < ARRAY_SIZE(d3d12_device_singletons); ++i)
+        {
+            if (d3d12_device_singletons[i] == device)
+                d3d12_device_singletons[i] = NULL;
+        }
+    }
+    vkd3d_mutex_unlock(&d3d12_device_singleton_mutex);
 
     TRACE("%p decreasing refcount to %u.\n", device, refcount);
 

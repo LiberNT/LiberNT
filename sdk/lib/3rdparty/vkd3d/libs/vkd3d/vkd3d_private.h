@@ -1713,6 +1713,8 @@ struct d3d12_device
     struct vkd3d_uav_clear_state uav_clear_state;
 };
 
+struct d3d12_device *d3d12_device_get_singleton(const LUID *luid, D3D_FEATURE_LEVEL minimum_level);
+struct d3d12_device *d3d12_device_store_singleton(struct d3d12_device *device, D3D_FEATURE_LEVEL minimum_level);
 HRESULT d3d12_device_create(struct vkd3d_instance *instance,
         const struct vkd3d_device_create_info *create_info, struct d3d12_device **device);
 struct vkd3d_queue *d3d12_device_get_vkd3d_queue(struct d3d12_device *device, D3D12_COMMAND_LIST_TYPE type);

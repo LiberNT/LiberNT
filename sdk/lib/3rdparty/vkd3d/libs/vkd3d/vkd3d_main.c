@@ -21,8 +21,8 @@
 HRESULT vkd3d_create_device(const struct vkd3d_device_create_info *create_info,
         REFIID iid, void **device)
 {
+    struct d3d12_device *object, *existing;
     struct vkd3d_instance *instance;
-    struct d3d12_device *object;
     HRESULT hr;
 
     TRACE("create_info %p, iid %s, device %p.\n", create_info, debugstr_guid(iid), device);
@@ -52,6 +52,16 @@ HRESULT vkd3d_create_device(const struct vkd3d_device_create_info *create_info,
         return E_INVALIDARG;
     }
 
+    if ((object = d3d12_device_get_singleton(&create_info->adapter_luid, create_info->minimum_feature_level)))
+    {
+        if (!device)
+        {
+            ID3D12Device14_Release(&object->ID3D12Device14_iface);
+            return S_FALSE;
+        }
+        return return_interface(&object->ID3D12Device14_iface, &IID_ID3D12Device, iid, device);
+    }
+
     if ((instance = create_info->instance))
     {
         vkd3d_instance_incref(instance);
@@ -66,6 +76,12 @@ HRESULT vkd3d_create_device(const struct vkd3d_device_create_info *create_info,
     vkd3d_instance_decref(instance);
     if (FAILED(hr))
         return hr;
+
+    if ((existing = d3d12_device_store_singleton(object, create_info->minimum_feature_level)))
+    {
+        ID3D12Device14_Release(&object->ID3D12Device14_iface);
+        object = existing;
+    }
 
     if (!device)
     {
