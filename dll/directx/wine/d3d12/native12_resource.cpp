@@ -66,6 +66,8 @@ bool Native12GetFormatInfo(DXGI_FORMAT format, Native12FormatInfo *info)
     else if (value == DXGI_FORMAT_B5G6R5_UNORM || value == DXGI_FORMAT_B5G5R5A1_UNORM
             || value == DXGI_FORMAT_B4G4R4A4_UNORM) info->block_bytes = 2;
     else if (value >= DXGI_FORMAT_B8G8R8A8_UNORM && value <= DXGI_FORMAT_B8G8R8X8_UNORM_SRGB) info->block_bytes = 4;
+    else if (value == DXGI_FORMAT_SAMPLER_FEEDBACK_MIN_MIP_OPAQUE
+            || value == DXGI_FORMAT_SAMPLER_FEEDBACK_MIP_REGION_USED_OPAQUE) info->block_bytes = 1;
     else
     {
         info->block_bytes = 0;
@@ -341,6 +343,7 @@ HRESULT Native12Resource::Initialize(const D3D12_HEAP_PROPERTIES *properties, D3
 
     D3D12DDIARG_CREATERESOURCE_0109 resource_args;
     Native12ResourceArguments(&desc, initial_state, &resource_args);
+    memcpy(&resource_args.SamplerFeedbackMipRegion, &mip_region, sizeof(resource_args.SamplerFeedbackMipRegion));
 
     UINT optimization = D3D12DDI_RESOURCE_OPTIMIZATION_FLAG_NONE;
     D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 allocation = {};
@@ -711,6 +714,7 @@ HRESULT Native12Resource::InitializePlaced(Native12Heap *parent, UINT64 offset, 
 
     D3D12DDIARG_CREATERESOURCE_0109 resource_args;
     Native12ResourceArguments(&desc, initial_state, &resource_args);
+    memcpy(&resource_args.SamplerFeedbackMipRegion, &mip_region, sizeof(resource_args.SamplerFeedbackMipRegion));
     D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 allocation = {};
     device->functions.pfnCheckResourceAllocationInfo(device->driver_device, &resource_args,
             D3D12DDI_RESOURCE_OPTIMIZATION_FLAG_NONE, static_cast<UINT32>(desc.Alignment), 1, &allocation);
@@ -1196,6 +1200,13 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommittedResource(const D3D12_HE
         D3D12_HEAP_FLAGS flags, const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES initial_state,
         const D3D12_CLEAR_VALUE *clear_value, REFIID iid, void **out)
 {
+    return CreateCommittedResourceRegion(properties, flags, desc, initial_state, clear_value, NULL, iid, out);
+}
+
+HRESULT Native12Device::CreateCommittedResourceRegion(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags,
+        const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value,
+        const D3D12_MIP_REGION *mip_region, REFIID iid, void **out)
+{
     if (!properties || !desc) return E_INVALIDARG;
     if (out) *out = NULL;
     HRESULT hr = ValidateHeapProperties(properties, flags);
@@ -1209,6 +1220,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommittedResource(const D3D12_HE
     }
     Native12Resource *resource = new Native12Resource(this);
     if (!resource) return E_OUTOFMEMORY;
+    if (mip_region) resource->mip_region = *mip_region;
     hr = resource->Initialize(properties, flags, desc, initial_state, clear_value);
     if (SUCCEEDED(hr)) hr = out ? resource->QueryInterface(iid, out) : S_FALSE;
     resource->Release();
@@ -1217,6 +1229,12 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommittedResource(const D3D12_HE
 
 D3D12_RESOURCE_ALLOCATION_INFO *STDMETHODCALLTYPE Native12Device::GetResourceAllocationInfo(
         D3D12_RESOURCE_ALLOCATION_INFO *out, UINT, UINT count, const D3D12_RESOURCE_DESC *descs)
+{
+    return GetResourceAllocationInfoRegion(out, count, descs, NULL);
+}
+
+D3D12_RESOURCE_ALLOCATION_INFO *Native12Device::GetResourceAllocationInfoRegion(D3D12_RESOURCE_ALLOCATION_INFO *out,
+        UINT count, const D3D12_RESOURCE_DESC *descs, const D3D12_MIP_REGION *mip_region)
 {
     out->SizeInBytes = 0;
     out->Alignment = 0;
@@ -1233,6 +1251,7 @@ D3D12_RESOURCE_ALLOCATION_INFO *STDMETHODCALLTYPE Native12Device::GetResourceAll
             return out;
         }
         Native12ResourceArguments(&desc, D3D12_RESOURCE_STATE_COMMON, &args);
+        if (mip_region) memcpy(&args.SamplerFeedbackMipRegion, mip_region, sizeof(args.SamplerFeedbackMipRegion));
         D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 info = {};
         functions.pfnCheckResourceAllocationInfo(driver_device, &args, D3D12DDI_RESOURCE_OPTIMIZATION_FLAG_NONE,
                 static_cast<UINT32>(desc.Alignment), 1, &info);

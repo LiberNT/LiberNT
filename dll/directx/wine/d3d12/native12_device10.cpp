@@ -43,6 +43,35 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateProtectedResourceSession1(const 
     return E_INVALIDARG;
 }
 
+static bool Native12FeedbackFormat(DXGI_FORMAT format)
+{
+    return format == DXGI_FORMAT_SAMPLER_FEEDBACK_MIN_MIP_OPAQUE
+            || format == DXGI_FORMAT_SAMPLER_FEEDBACK_MIP_REGION_USED_OPAQUE;
+}
+
+static bool Native12PowerOfTwo(UINT value)
+{
+    return value && !(value & (value - 1));
+}
+
+D3D12_SAMPLER_FEEDBACK_TIER Native12Device::SamplerFeedbackTier() const
+{
+    if (highest_shader_model < D3D_SHADER_MODEL_6_5) return D3D12_SAMPLER_FEEDBACK_TIER_NOT_SUPPORTED;
+    return static_cast<D3D12_SAMPLER_FEEDBACK_TIER>(options.SamplerFeedbackTier);
+}
+
+static bool Native12ValidMipRegion(const D3D12_RESOURCE_DESC1 *desc, D3D12_SAMPLER_FEEDBACK_TIER tier)
+{
+    const D3D12_MIP_REGION &region = desc->SamplerFeedbackMipRegion;
+
+    if (!Native12FeedbackFormat(desc->Format)) return !region.Width && !region.Height && !region.Depth;
+    return tier != D3D12_SAMPLER_FEEDBACK_TIER_NOT_SUPPORTED && desc->Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D
+            && desc->SampleDesc.Count == 1 && !desc->SampleDesc.Quality && desc->Layout == D3D12_TEXTURE_LAYOUT_UNKNOWN
+            && region.Depth <= 1
+            && Native12PowerOfTwo(region.Width) && Native12PowerOfTwo(region.Height) && region.Width >= 4
+            && region.Height >= 4 && region.Width <= desc->Width / 2 && region.Height <= desc->Height / 2;
+}
+
 static bool Native12ResourceDesc(const D3D12_RESOURCE_DESC1 *in, D3D12_RESOURCE_DESC *out)
 {
     out->Dimension = in->Dimension;
@@ -68,8 +97,9 @@ D3D12_RESOURCE_ALLOCATION_INFO *STDMETHODCALLTYPE Native12Device::GetResourceAll
     {
         D3D12_RESOURCE_ALLOCATION_INFO info;
         D3D12_RESOURCE_DESC desc;
-        bool valid = Native12ResourceDesc(&descs[i], &desc);
-        GetResourceAllocationInfo(&info, visible_mask, 1, &desc);
+        bool valid = Native12ValidMipRegion(&descs[i], SamplerFeedbackTier());
+        Native12ResourceDesc(&descs[i], &desc);
+        GetResourceAllocationInfoRegion(&info, 1, &desc, &descs[i].SamplerFeedbackMipRegion);
         if (!valid || info.SizeInBytes == ~(UINT64)0)
         {
             result->SizeInBytes = ~(UINT64)0;
@@ -97,12 +127,14 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommittedResource2(const D3D12_H
 {
     D3D12_RESOURCE_DESC desc0;
     if (!desc) return CreateCommittedResource1(properties, flags, NULL, state, clear, session, iid, out);
-    if (!Native12ResourceDesc(desc, &desc0))
+    if (session || !Native12ValidMipRegion(desc, SamplerFeedbackTier()))
     {
         if (out) *out = NULL;
         return E_INVALIDARG;
     }
-    return CreateCommittedResource1(properties, flags, &desc0, state, clear, session, iid, out);
+    Native12ResourceDesc(desc, &desc0);
+    return CreateCommittedResourceRegion(properties, flags, &desc0, state, clear, &desc->SamplerFeedbackMipRegion, iid,
+            out);
 }
 
 HRESULT STDMETHODCALLTYPE Native12Device::CreatePlacedResource1(ID3D12Heap *heap, UINT64 offset,
@@ -111,18 +143,32 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreatePlacedResource1(ID3D12Heap *heap
 {
     D3D12_RESOURCE_DESC desc0;
     if (!desc) return CreatePlacedResource(heap, offset, NULL, state, clear, iid, out);
-    if (!Native12ResourceDesc(desc, &desc0))
+    if (!Native12ValidMipRegion(desc, SamplerFeedbackTier()))
     {
         if (out) *out = NULL;
         return E_INVALIDARG;
     }
-    return CreatePlacedResource(heap, offset, &desc0, state, clear, iid, out);
+    Native12ResourceDesc(desc, &desc0);
+    return CreatePlacedResourceRegion(heap, offset, &desc0, state, clear, &desc->SamplerFeedbackMipRegion, iid, out);
 }
 
-void STDMETHODCALLTYPE Native12Device::CreateSamplerFeedbackUnorderedAccessView(ID3D12Resource *, ID3D12Resource *,
-        D3D12_CPU_DESCRIPTOR_HANDLE)
+void STDMETHODCALLTYPE Native12Device::CreateSamplerFeedbackUnorderedAccessView(ID3D12Resource *targeted,
+        ID3D12Resource *feedback, D3D12_CPU_DESCRIPTOR_HANDLE descriptor)
 {
-    WARN("Sampler feedback is not supported.\n");
+    D3D12DDI_HRESOURCE target = {};
+    D3D12DDI_CPU_DESCRIPTOR_HANDLE handle;
+
+    if (!feedback || SamplerFeedbackTier() == D3D12_SAMPLER_FEEDBACK_TIER_NOT_SUPPORTED
+            || !Native12FeedbackFormat(Native12UnwrapResource(feedback)->desc.Format)
+            || !functions.pfnCreateSamplerFeedbackUnorderedAccessView)
+    {
+        WARN("Invalid sampler feedback view.\n");
+        return;
+    }
+    if (targeted) target = Native12UnwrapResource(targeted)->driver;
+    handle.ptr = descriptor.ptr;
+    functions.pfnCreateSamplerFeedbackUnorderedAccessView(driver_device, target, Native12UnwrapResource(feedback)->driver,
+            handle);
 }
 
 void STDMETHODCALLTYPE Native12Device::GetCopyableFootprints1(const D3D12_RESOURCE_DESC1 *desc, UINT first,

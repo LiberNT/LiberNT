@@ -189,6 +189,8 @@ public:
 
     using Native12Child::Native12Child;
     ~Native12Resource();
+    D3D12_MIP_REGION mip_region = {};
+
     HRESULT Initialize(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags,
             const D3D12_RESOURCE_DESC *input, D3D12_RESOURCE_STATES initial_state,
             const D3D12_CLEAR_VALUE *clear_value);

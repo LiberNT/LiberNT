@@ -1227,6 +1227,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS7 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            caps->SamplerFeedbackTier = SamplerFeedbackTier();
             return S_OK;
         }
         case D3D12_FEATURE_EXISTING_HEAPS:

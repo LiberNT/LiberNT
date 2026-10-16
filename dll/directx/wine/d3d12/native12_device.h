@@ -76,6 +76,15 @@ public:
     D3D12DDI_COMMAND_QUEUE_FUNCS_VIDEO_0020 encode_queue_functions = {};
     D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_ENCODE_0094 encode_list_functions = {};
     D3D12DDI_VIDEO_FEATURE_AREA_SUPPORT_DATA_0053 video_areas = {};
+    HRESULT CreateCommittedResourceRegion(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags,
+            const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value,
+            const D3D12_MIP_REGION *mip_region, REFIID iid, void **out);
+    HRESULT CreatePlacedResourceRegion(ID3D12Heap *heap, UINT64 offset, const D3D12_RESOURCE_DESC *desc,
+            D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value, const D3D12_MIP_REGION *mip_region,
+            REFIID iid, void **out);
+    D3D12_RESOURCE_ALLOCATION_INFO *GetResourceAllocationInfoRegion(D3D12_RESOURCE_ALLOCATION_INFO *out, UINT count,
+            const D3D12_RESOURCE_DESC *descs, const D3D12_MIP_REGION *mip_region);
+    D3D12_SAMPLER_FEEDBACK_TIER SamplerFeedbackTier() const;
     bool EnsureVideo();
     bool EnsureVideoProcess();
     bool EnsureVideoEncode();

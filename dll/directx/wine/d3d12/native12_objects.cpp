@@ -1107,6 +1107,13 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreatePlacedResource(ID3D12Heap *heap,
         const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES initial_state,
         const D3D12_CLEAR_VALUE *clear_value, REFIID iid, void **out)
 {
+    return CreatePlacedResourceRegion(heap, offset, desc, initial_state, clear_value, NULL, iid, out);
+}
+
+HRESULT Native12Device::CreatePlacedResourceRegion(ID3D12Heap *heap, UINT64 offset, const D3D12_RESOURCE_DESC *desc,
+        D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value, const D3D12_MIP_REGION *mip_region,
+        REFIID iid, void **out)
+{
     if (out) *out = NULL;
     if (!heap || !desc) return E_INVALIDARG;
     HRESULT hr = Native12ValidateResource(static_cast<Native12Heap *>(heap)->desc.Properties.Type, desc,
@@ -1114,6 +1121,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreatePlacedResource(ID3D12Heap *heap,
     if (FAILED(hr)) return hr;
     Native12Resource *resource = new Native12Resource(this);
     if (!resource) return E_OUTOFMEMORY;
+    if (mip_region) resource->mip_region = *mip_region;
     hr = resource->InitializePlaced(static_cast<Native12Heap *>(heap), offset, desc, initial_state,
             clear_value);
     if (SUCCEEDED(hr)) hr = out ? resource->QueryInterface(iid, out) : S_FALSE;
