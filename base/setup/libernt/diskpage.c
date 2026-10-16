@@ -323,6 +323,9 @@ DrawDiskList(
         {
             PDISKENTRY DiskEntry = CONTAINING_RECORD(DiskLink, DISKENTRY, ListEntry);
 
+            if (DiskEntry->BootMedium)
+                continue;
+
             for (PartLink = DiskEntry->PrimaryPartListHead.Flink;
                  PartLink != &DiskEntry->PrimaryPartListHead;
                  PartLink = PartLink->Flink)
@@ -403,6 +406,9 @@ FindDefaultInstallRegion(
     for (DiskLink = List->DiskListHead.Flink; DiskLink != &List->DiskListHead; DiskLink = DiskLink->Flink)
     {
         PDISKENTRY DiskEntry = CONTAINING_RECORD(DiskLink, DISKENTRY, ListEntry);
+
+        if (DiskEntry->BootMedium)
+            continue;
 
         for (PartLink = DiskEntry->PrimaryPartListHead.Flink;
              PartLink != &DiskEntry->PrimaryPartListHead;

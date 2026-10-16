@@ -806,10 +806,12 @@ SelfTestFindTargets(
          Entry = Entry->Flink)
     {
         DiskEntry = CONTAINING_RECORD(Entry, DISKENTRY, ListEntry);
-        SelfTestLog(Context, L"SETUPTEST INFO disk %lu media %lu style %lu new %u size %I64u",
+        SelfTestLog(Context, L"SETUPTEST INFO disk %lu media %lu style %lu new %u size %I64u boot medium %u",
                     DiskEntry->DiskNumber, (ULONG)DiskEntry->MediaType, (ULONG)DiskEntry->DiskStyle,
-                    DiskEntry->NewDisk, DiskEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector);
-        if (DiskEntry->MediaType == FixedMedia && DiskEntry->NewDisk && Count < SELFTEST_MAX_DISKS)
+                    DiskEntry->NewDisk, DiskEntry->SectorCount.QuadPart * DiskEntry->BytesPerSector,
+                    DiskEntry->BootMedium);
+        if (DiskEntry->MediaType == FixedMedia && DiskEntry->NewDisk && !DiskEntry->BootMedium &&
+            Count < SELFTEST_MAX_DISKS)
             Targets[Count++] = DiskEntry->DiskNumber;
     }
 

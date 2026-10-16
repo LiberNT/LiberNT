@@ -8,6 +8,7 @@
 
 #include "precomp.h"
 #include <ntddscsi.h>
+#include <ntddstor.h>
 #include <mountdev.h> // For IOCTL_MOUNTDEV_QUERY_DEVICE_NAME
 #include <diskguid.h>
 #include <gptsup.h>
@@ -1764,6 +1765,90 @@ UpdateHwDiskNumbers(
 }
 
 static
+BOOLEAN
+IsIsoImageDisk(
+    _In_ HANDLE FileHandle,
+    _In_ ULONG BytesPerSector)
+{
+    static const UCHAR VolumeId[] = { 0x01, 'C', 'D', '0', '0', '1', 0x01 };
+    IO_STATUS_BLOCK Iosb;
+    LARGE_INTEGER Offset;
+    ULONG Length = max(BytesPerSector, 2048);
+    PUCHAR Sector;
+    NTSTATUS Status;
+    BOOLEAN IsIso;
+
+    Sector = RtlAllocateHeap(ProcessHeap, 0, Length);
+    if (!Sector)
+        return FALSE;
+
+    Offset.QuadPart = 16 * 2048;
+    Status = NtReadFile(FileHandle, NULL, NULL, NULL, &Iosb, Sector, Length, &Offset, NULL);
+    IsIso = NT_SUCCESS(Status) && RtlEqualMemory(Sector, VolumeId, sizeof(VolumeId));
+
+    RtlFreeHeap(ProcessHeap, 0, Sector);
+    return IsIso;
+}
+
+static
+BOOLEAN
+GetRunningSystemDiskNumber(
+    _Out_ PULONG DiskNumber)
+{
+    static const UNICODE_STRING DevicePrefix = RTL_CONSTANT_STRING(L"\\Device\\Harddisk");
+    static const UNICODE_STRING VolumePrefix = RTL_CONSTANT_STRING(L"\\Device\\HarddiskVolume");
+    UNICODE_STRING SystemRoot = RTL_CONSTANT_STRING(L"\\SystemRoot");
+    UCHAR Buffer[sizeof(OBJECT_NAME_INFORMATION) + MAX_PATH * sizeof(WCHAR)];
+    POBJECT_NAME_INFORMATION NameInfo = (POBJECT_NAME_INFORMATION)Buffer;
+    STORAGE_DEVICE_NUMBER DeviceNumber;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK Iosb;
+    UNICODE_STRING Volume;
+    HANDLE Handle;
+    NTSTATUS Status;
+    USHORT Index, Separators = 0, VolumeSeparators;
+
+    InitializeObjectAttributes(&ObjectAttributes, &SystemRoot, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenFile(&Handle, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &ObjectAttributes, &Iosb,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    Status = NtQueryObject(Handle, ObjectNameInformation, NameInfo, sizeof(Buffer) - sizeof(WCHAR), NULL);
+    NtClose(Handle);
+    if (!NT_SUCCESS(Status) || !RtlPrefixUnicodeString(&DevicePrefix, &NameInfo->Name, TRUE))
+        return FALSE;
+
+    Volume = NameInfo->Name;
+    VolumeSeparators = RtlPrefixUnicodeString(&VolumePrefix, &Volume, TRUE) ? 3 : 4;
+    for (Index = 0; Index < Volume.Length / sizeof(WCHAR); Index++)
+    {
+        if (Volume.Buffer[Index] == L'\\' && ++Separators == VolumeSeparators)
+        {
+            Volume.Length = Index * sizeof(WCHAR);
+            break;
+        }
+    }
+
+    InitializeObjectAttributes(&ObjectAttributes, &Volume, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenFile(&Handle, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &ObjectAttributes, &Iosb,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    Status = NtDeviceIoControlFile(Handle, NULL, NULL, NULL, &Iosb, IOCTL_STORAGE_GET_DEVICE_NUMBER,
+                                   NULL, 0, &DeviceNumber, sizeof(DeviceNumber));
+    NtClose(Handle);
+    if (!NT_SUCCESS(Status) || DeviceNumber.DeviceType != FILE_DEVICE_DISK)
+        return FALSE;
+
+    *DiskNumber = DeviceNumber.DeviceNumber;
+    return TRUE;
+}
+
+static
 VOID
 AddDiskToList(
     IN HANDLE FileHandle,
@@ -1880,6 +1965,7 @@ AddDiskToList(
     }
 
     DiskEntry->PartList = List;
+    DiskEntry->BootMedium = IsIsoImageDisk(FileHandle, DiskGeometry.BytesPerSector);
 
 #if 0
     {
@@ -2196,8 +2282,11 @@ GetFirstEfiSystemDisk(
          Entry = Entry->Flink)
     {
         DiskEntry = CONTAINING_RECORD(Entry, DISKENTRY, ListEntry);
-        if (DiskEntry->MediaType != FixedMedia || DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
+        if (DiskEntry->MediaType != FixedMedia || DiskEntry->DiskStyle != PARTITION_STYLE_GPT ||
+            DiskEntry->BootMedium)
+        {
             continue;
+        }
 
         PartEntry = GetActiveDiskPartition(DiskEntry);
         if (PartEntry && IsSupportedActivePartition(PartEntry))
@@ -2240,7 +2329,7 @@ GetSystemDisk(
         DiskEntry = CONTAINING_RECORD(Entry, DISKENTRY, ListEntry);
 
         /* The disk must be a fixed disk and be found by the firmware */
-        if (DiskEntry->MediaType == FixedMedia && DiskEntry->BiosFound)
+        if (DiskEntry->MediaType == FixedMedia && DiskEntry->BiosFound && !DiskEntry->BootMedium)
         {
             break;
         }
@@ -2410,6 +2499,19 @@ CreatePartitionList(VOID)
         {
             AddDiskToList(FileHandle, DiskNumber, List);
             NtClose(FileHandle);
+        }
+    }
+
+    if (GetRunningSystemDiskNumber(&DiskNumber))
+    {
+        PLIST_ENTRY Entry;
+
+        for (Entry = List->DiskListHead.Flink; Entry != &List->DiskListHead; Entry = Entry->Flink)
+        {
+            PDISKENTRY DiskEntry = CONTAINING_RECORD(Entry, DISKENTRY, ListEntry);
+
+            if (DiskEntry->DiskNumber == DiskNumber)
+                DiskEntry->BootMedium = TRUE;
         }
     }
 

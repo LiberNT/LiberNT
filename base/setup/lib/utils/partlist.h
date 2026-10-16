@@ -108,6 +108,7 @@ typedef struct _DISKENTRY
     struct _PARTLIST *PartList;
 
     MEDIA_TYPE MediaType;   /* FixedMedia or RemovableMedia */
+    BOOLEAN BootMedium;
 
     /* Disk geometry */
 
