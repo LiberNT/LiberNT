@@ -664,6 +664,7 @@ enum list_case
     CASE_RATE_1X1,
     CASE_RATE_2X2_COMBINERS,
     CASE_RATE_INVALID,
+    CASE_RATE_4X4,
     CASE_COMBINER_INVALID,
     CASE_RATE_IMAGE,
     CASE_DISPATCH_MESH,
@@ -706,6 +707,7 @@ static HRESULT CloseAfter(ID3D12Device *device, D3D12_COMMAND_LIST_TYPE type, en
         case CASE_RATE_1X1: list7->RSSetShadingRate(D3D12_SHADING_RATE_1X1, NULL); break;
         case CASE_RATE_2X2_COMBINERS: list7->RSSetShadingRate(D3D12_SHADING_RATE_2X2, combiners); break;
         case CASE_RATE_INVALID: list7->RSSetShadingRate(static_cast<D3D12_SHADING_RATE>(3), NULL); break;
+        case CASE_RATE_4X4: list7->RSSetShadingRate(D3D12_SHADING_RATE_4X4, NULL); break;
         case CASE_COMBINER_INVALID:
             combiners[0] = static_cast<D3D12_SHADING_RATE_COMBINER>(9);
             list7->RSSetShadingRate(D3D12_SHADING_RATE_1X1, combiners);
@@ -772,8 +774,13 @@ static void TestListMethods(ID3D12Device *device)
         ok(hr == E_INVALIDARG, "invalid shading rate: %#lx\n", hr);
         hr = CloseAfter(device, D3D12_COMMAND_LIST_TYPE_DIRECT, CASE_COMBINER_INVALID);
         ok(hr == E_INVALIDARG, "invalid combiner: %#lx\n", hr);
+        hr = CloseAfter(device, D3D12_COMMAND_LIST_TYPE_DIRECT, CASE_RATE_4X4);
+        ok(hr == (options6.AdditionalShadingRatesSupported ? S_OK : E_INVALIDARG),
+                "RSSetShadingRate 4X4 with additional rates %d: %#lx\n", options6.AdditionalShadingRatesSupported, hr);
         hr = CloseAfter(device, D3D12_COMMAND_LIST_TYPE_COMPUTE, CASE_RATE_1X1);
         ok(hr == E_FAIL, "RSSetShadingRate on a compute list: %#lx\n", hr);
+        hr = CloseAfter(device, D3D12_COMMAND_LIST_TYPE_COPY, CASE_RATE_1X1);
+        ok(hr == E_FAIL, "RSSetShadingRate on a copy list: %#lx\n", hr);
         if (options6.VariableShadingRateTier < D3D12_VARIABLE_SHADING_RATE_TIER_2)
         {
             hr = CloseAfter(device, D3D12_COMMAND_LIST_TYPE_DIRECT, CASE_RATE_IMAGE);

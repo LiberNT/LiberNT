@@ -19,6 +19,7 @@ list(APPEND SOURCE
     uav.cpp
     util.cpp
     versions.cpp
+    vrs.cpp
     testlist.c)
 
 add_executable(d3d12_apitest ${SOURCE})
