@@ -392,11 +392,135 @@ struct Native12Signature
     }
 };
 
+struct Native12DxbcConverter : public IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE Convert(LPCVOID dxbc, UINT32 dxbc_size, LPCWSTR options, LPVOID *dxil,
+            UINT32 *dxil_size, LPWSTR *diagnostics) = 0;
+};
+
+struct Native12ConvertedShader
+{
+    Native12ConvertedShader *next;
+    UINT dxbc_size;
+    const UINT *code;
+    UINT size;
+    BYTE data[1];
+};
+
+static SRWLOCK Native12ConvertedLock = SRWLOCK_INIT;
+static Native12ConvertedShader *Native12ConvertedShaders;
+static INIT_ONCE Native12DxilconvOnce = INIT_ONCE_STATIC_INIT;
+static HRESULT (WINAPI *Native12DxilconvCreate)(REFCLSID, REFIID, void **);
+
+static BOOL CALLBACK Native12LoadDxilconv(INIT_ONCE *, void *, void **)
+{
+    HMODULE module = LoadLibraryW(L"dxilconv.dll");
+    if (module)
+        Native12DxilconvCreate = reinterpret_cast<HRESULT (WINAPI *)(REFCLSID, REFIID, void **)>(
+                GetProcAddress(module, "DxcCreateInstance"));
+    TRACE("dxilconv %p, DxcCreateInstance %p.\n", module, Native12DxilconvCreate);
+    return TRUE;
+}
+
+static const UINT *Native12FindDxilProgram(const BYTE *data, UINT size)
+{
+    if (size < 32 || Native12ReadDword(data) != 0x43425844) return NULL;
+    UINT chunks = Native12ReadDword(data + 28);
+    if (chunks > (size - 32) / 4) return NULL;
+    for (UINT i = 0; i < chunks; ++i)
+    {
+        UINT offset = Native12ReadDword(data + 32 + i * 4);
+        if (offset > size - 8) return NULL;
+        UINT tag = Native12ReadDword(data + offset), chunk_size = Native12ReadDword(data + offset + 4);
+        if (tag == 0x4c495844 && chunk_size >= 8 && chunk_size <= size - offset - 8)
+            return reinterpret_cast<const UINT *>(data + offset + 8);
+    }
+    return NULL;
+}
+
+static Native12ConvertedShader *Native12FindConvertedShader(const BYTE *dxbc, UINT dxbc_size)
+{
+    for (Native12ConvertedShader *entry = Native12ConvertedShaders; entry; entry = entry->next)
+        if (entry->dxbc_size == dxbc_size && !memcmp(entry->data, dxbc, dxbc_size)) return entry;
+    return NULL;
+}
+
 struct Native12ShaderCode
 {
     const UINT *code = NULL;
     D3D12DDI_SHADERCACHE_HASH hash = {};
     Native12Signature input, output, patch;
+    bool dxil = false;
+
+    HRESULT ConvertToDxil(UINT highest_shader_model, const D3D12_SHADER_BYTECODE &bytecode)
+    {
+        static const GUID clsid = {0x4900391e, 0xb752, 0x4edd, {0xa8, 0x85, 0x6f, 0xb7, 0x6e, 0x25, 0xad, 0xdb}};
+        static const GUID iid = {0x5f956ed5, 0x78d1, 0x4b15, {0x82, 0x47, 0xf7, 0x18, 0x76, 0x14, 0xa0, 0x41}};
+        const BYTE *dxbc = static_cast<const BYTE *>(bytecode.pShaderBytecode);
+        UINT dxbc_size = Native12ReadDword(dxbc + 24);
+        Native12DxbcConverter *converter = NULL;
+        Native12ConvertedShader *entry, *existing;
+        void *converted = NULL;
+        UINT32 converted_size = 0;
+        WCHAR *diagnostics = NULL;
+        const UINT *program;
+        HRESULT hr;
+
+        if (dxil || highest_shader_model < D3D_SHADER_MODEL_6_0) return S_OK;
+        InitOnceExecuteOnce(&Native12DxilconvOnce, Native12LoadDxilconv, NULL, NULL);
+        if (!Native12DxilconvCreate) return S_OK;
+
+        AcquireSRWLockShared(&Native12ConvertedLock);
+        entry = Native12FindConvertedShader(dxbc, dxbc_size);
+        ReleaseSRWLockShared(&Native12ConvertedLock);
+        if (entry)
+        {
+            code = entry->code;
+            return S_OK;
+        }
+
+        if (FAILED(hr = Native12DxilconvCreate(clsid, iid, reinterpret_cast<void **>(&converter)))) return hr;
+        hr = converter->Convert(bytecode.pShaderBytecode, static_cast<UINT32>(bytecode.BytecodeLength), NULL,
+                &converted, &converted_size, &diagnostics);
+        converter->Release();
+        if (FAILED(hr)) WARN("DXBC to DXIL conversion failed, hr %#lx, %s.\n", hr, debugstr_w(diagnostics));
+        if (diagnostics) CoTaskMemFree(diagnostics);
+        if (FAILED(hr)) return hr;
+
+        entry = static_cast<Native12ConvertedShader *>(HeapAlloc(GetProcessHeap(), 0,
+                FIELD_OFFSET(Native12ConvertedShader, data[dxbc_size + converted_size])));
+        if (!entry)
+        {
+            CoTaskMemFree(converted);
+            return E_OUTOFMEMORY;
+        }
+        entry->dxbc_size = dxbc_size;
+        memcpy(entry->data, dxbc, dxbc_size);
+        memcpy(entry->data + entry->dxbc_size, converted, converted_size);
+        entry->size = converted_size;
+        CoTaskMemFree(converted);
+        if (!(program = Native12FindDxilProgram(entry->data + entry->dxbc_size, entry->size)))
+        {
+            HeapFree(GetProcessHeap(), 0, entry);
+            return E_FAIL;
+        }
+        entry->code = program;
+
+        AcquireSRWLockExclusive(&Native12ConvertedLock);
+        if ((existing = Native12FindConvertedShader(dxbc, dxbc_size)))
+        {
+            HeapFree(GetProcessHeap(), 0, entry);
+            entry = existing;
+        }
+        else
+        {
+            entry->next = Native12ConvertedShaders;
+            Native12ConvertedShaders = entry;
+        }
+        ReleaseSRWLockExclusive(&Native12ConvertedLock);
+        code = entry->code;
+        return S_OK;
+    }
 
     HRESULT Parse(const D3D12_SHADER_BYTECODE &bytecode)
     {
@@ -417,6 +541,7 @@ struct Native12ShaderCode
             {
                 if (chunk_size < 8) return E_INVALIDARG;
                 code = reinterpret_cast<const UINT *>(chunk);
+                dxil = tag == 0x4c495844;
             }
             else if (tag == 0x4e475349 || tag == 0x31475349) hr = input.Read(chunk, chunk_size, tag);
             else if (tag == 0x4e47534f || tag == 0x3147534f || tag == 0x3547534f)
@@ -712,6 +837,7 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
         if (!bytecode.pShaderBytecode || !bytecode.BytecodeLength) continue;
         Native12ShaderCode &shader = parsed[i];
         if (FAILED(hr = shader.Parse(bytecode))) return hr;
+        if (FAILED(hr = shader.ConvertToDxil(device->highest_shader_model, bytecode))) return hr;
         if (stream_output && stages[i].stage == Native12StageGeometry)
             hr = Native12CreateStreamOutputShader(this, shader, false, input->StreamOutput);
         else
@@ -905,6 +1031,7 @@ HRESULT Native12PipelineState::InitializeCompute(const D3D12_COMPUTE_PIPELINE_ST
         return E_INVALIDARG;
     }
     if (FAILED(hr = shader.Parse(input->CS))) return hr;
+    if (FAILED(hr = shader.ConvertToDxil(device->highest_shader_model, input->CS))) return hr;
     if (FAILED(hr = Native12CreateShader(this, Native12StageCompute, shader))) return hr;
 
     D3D12DDIARG_CREATE_PIPELINE_STATE_0099 args = {};
