@@ -1946,6 +1946,117 @@ BOOL LoadSetupData(
     return TRUE;
 }
 
+static ULONG
+CreateChoicesFromList(
+    _In_opt_ PGENERIC_LIST List,
+    _In_ BOOL LocaleNames,
+    _Out_ PSETUP_CHOICE* Choices)
+{
+    PGENERIC_LIST_ENTRY Entry;
+    PSETUP_CHOICE Items;
+    ULONG Total, Count = 0, Index;
+
+    *Choices = NULL;
+    Total = List ? GetNumberOfListEntries(List) : 0;
+    if (Total == 0)
+        return 0;
+
+    Items = HeapAlloc(ProcessHeap, HEAP_ZERO_MEMORY, Total * sizeof(*Items));
+    if (!Items)
+        return 0;
+
+    for (Entry = GetFirstListEntry(List); Entry && Count < Total; Entry = GetNextListEntry(Entry))
+    {
+        PGENENTRY Data = (PGENENTRY)GetListEntryData(Entry);
+
+        if (!Data || !Data->Id)
+            continue;
+        for (Index = 0; Index < Count; Index++)
+        {
+            if (_wcsicmp(Items[Index].Id, Data->Id) == 0)
+                break;
+        }
+        if (Index < Count)
+            continue;
+
+        StringCchCopyW(Items[Count].Id, ARRAYSIZE(Items[Count].Id), Data->Id);
+        if (!LocaleNames ||
+            !GetLocaleInfoW(wcstoul(Data->Id, NULL, 16), LOCALE_SLOCALIZEDDISPLAYNAME,
+                            Items[Count].Name, ARRAYSIZE(Items[Count].Name)))
+        {
+            StringCchCopyW(Items[Count].Name, ARRAYSIZE(Items[Count].Name), Data->Value ? Data->Value : Data->Id);
+        }
+        Count++;
+    }
+
+    *Choices = Items;
+    return Count;
+}
+
+VOID
+LoadLanguageChoices(
+    _Inout_ PSETUPDATA pSetupData)
+{
+    if (pSetupData->Locales)
+        HeapFree(ProcessHeap, 0, pSetupData->Locales);
+    if (pSetupData->Layouts)
+        HeapFree(ProcessHeap, 0, pSetupData->Layouts);
+
+    pSetupData->LocaleCount = CreateChoicesFromList(pSetupData->USetupData.LanguageList, TRUE,
+                                                    &pSetupData->Locales);
+    pSetupData->LayoutCount = CreateChoicesFromList(pSetupData->USetupData.LayoutList, FALSE,
+                                                    &pSetupData->Layouts);
+}
+
+static BOOL
+SelectListEntryById(
+    _In_opt_ PGENERIC_LIST List,
+    _In_ PCWSTR Id)
+{
+    PGENERIC_LIST_ENTRY Entry;
+
+    if (!List)
+        return FALSE;
+
+    for (Entry = GetFirstListEntry(List); Entry; Entry = GetNextListEntry(Entry))
+    {
+        PGENENTRY Data = (PGENENTRY)GetListEntryData(Entry);
+
+        if (Data && Data->Id && _wcsicmp(Data->Id, Id) == 0)
+        {
+            SetCurrentListEntry(List, Entry);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+VOID
+ApplyLanguageChoice(
+    _Inout_ PSETUPDATA pSetupData,
+    _In_ PCWSTR LocaleId,
+    _In_ PCWSTR LayoutId)
+{
+    WCHAR Locale[ARRAYSIZE(pSetupData->DefaultLanguage)];
+    WCHAR Layout[ARRAYSIZE(pSetupData->DefaultKBLayout)];
+
+    StringCchCopyW(Locale, ARRAYSIZE(Locale), LocaleId);
+    StringCchCopyW(Layout, ARRAYSIZE(Layout), LayoutId);
+
+    if (SelectListEntryById(pSetupData->USetupData.LanguageList, Locale))
+    {
+        StringCchCopyW(pSetupData->DefaultLanguage, ARRAYSIZE(pSetupData->DefaultLanguage), Locale);
+        StringCchCopyW(pSetupData->USetupData.LocaleID, ARRAYSIZE(pSetupData->USetupData.LocaleID), Locale);
+        pSetupData->SelectedLanguageId = pSetupData->DefaultLanguage;
+        pSetupData->USetupData.LanguageId = (LANGID)(wcstoul(Locale, NULL, 16) & 0xFFFF);
+    }
+
+    if (SelectListEntryById(pSetupData->USetupData.LayoutList, Layout))
+        StringCchCopyW(pSetupData->DefaultKBLayout, ARRAYSIZE(pSetupData->DefaultKBLayout), Layout);
+
+    DPRINT1("Setup language %S, keyboard %S\n", pSetupData->DefaultLanguage, pSetupData->DefaultKBLayout);
+}
+
 VOID
 InitNtToWin32PathMappingList(
     IN OUT PNT_WIN32_PATH_MAPPING_LIST MappingList)

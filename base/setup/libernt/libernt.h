@@ -109,6 +109,12 @@ typedef struct _KBLAYOUT
 #define InterlockedFlagsTestAndReset8(Target, Flags) \
     !!(InterlockedAnd8((PCHAR)(Target), ~(Flags)) & (Flags))
 
+typedef struct _SETUP_CHOICE
+{
+    WCHAR Id[KL_NAMELENGTH];
+    WCHAR Name[128];
+} SETUP_CHOICE, *PSETUP_CHOICE;
+
 typedef struct _SETUPDATA
 {
     /* General */
@@ -150,6 +156,10 @@ typedef struct _SETUPDATA
     PCWSTR SelectedLanguageId;
     WCHAR DefaultLanguage[20];   // Copy of string inside LanguageList
     WCHAR DefaultKBLayout[20];   // Copy of string inside KeyboardList
+    PSETUP_CHOICE Locales;
+    ULONG LocaleCount;
+    PSETUP_CHOICE Layouts;
+    ULONG LayoutCount;
 
     WCHAR ComputerName[MAX_COMPUTERNAME_LENGTH + 1];
     WCHAR UserName[UNLEN + 1];
@@ -190,6 +200,7 @@ typedef struct _VOL_CREATE_INFO
 
 typedef enum _SETUP_PAGE
 {
+    SETUP_PAGE_LANGUAGE,
     SETUP_PAGE_DISK,
     SETUP_PAGE_ACCOUNT,
     SETUP_PAGE_READY,
@@ -197,6 +208,19 @@ typedef enum _SETUP_PAGE
     SETUP_PAGE_DONE,
     SETUP_PAGE_COUNT
 } SETUP_PAGE;
+
+#define SETUP_MAX_PAGES             8
+#define SETUP_PAGE_BACK             0x1
+#define SETUP_PAGE_SKIP_UNATTEND    0x2
+
+typedef struct _SETUP_PAGE_INFO
+{
+    UINT Template;
+    DLGPROC Proc;
+    UINT Title;
+    UINT Subtitle;
+    UINT Flags;
+} SETUP_PAGE_INFO;
 
 #define PM_INSTALL_START    (WM_APP + 1)
 #define PM_INSTALL_DONE     (WM_APP + 2)
@@ -249,8 +273,32 @@ DiskInfoGetDescription(
     _In_ SIZE_T cchText);
 
 INT_PTR
+RunSetupFrame(
+    _In_ PSETUPDATA pSetupData,
+    _In_reads_(PageCount) const SETUP_PAGE_INFO* PageInfo,
+    _In_ INT PageCount);
+
+INT_PTR
 RunSetupWizard(
     _In_ PSETUPDATA pSetupData);
+
+INT_PTR
+CALLBACK
+LanguagePageProc(
+    _In_ HWND hwndDlg,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam);
+
+VOID
+LoadLanguageChoices(
+    _Inout_ PSETUPDATA pSetupData);
+
+VOID
+ApplyLanguageChoice(
+    _Inout_ PSETUPDATA pSetupData,
+    _In_ PCWSTR LocaleId,
+    _In_ PCWSTR LayoutId);
 
 VOID
 EnableSetupCancel(
@@ -289,7 +337,7 @@ SetupFramePressNext(
 VOID
 SetupFrameGoTo(
     _In_ HWND hPage,
-    _In_ SETUP_PAGE Page);
+    _In_ INT Page);
 
 
 /*

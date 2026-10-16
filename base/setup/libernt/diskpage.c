@@ -602,7 +602,7 @@ UpdateDiskButtons(
     SetDlgItemTextW(hwndDlg, IDC_DISKNOTE, Note);
 
     UpdateDiskInfo(hwndDlg, PartEntry);
-    SetupFrameSetButtons(hwndDlg, FALSE, PartEntry && !Blocker);
+    SetupFrameSetButtons(hwndDlg, TRUE, PartEntry && !Blocker);
 }
 
 static VOID
@@ -616,6 +616,19 @@ RedrawDiskList(
     DrawDiskList(hList, pSetupData->PartitionList);
     SelectRegion(hList, Select);
     UpdateDiskButtons(hwndDlg, pSetupData);
+}
+
+static INT
+SetupMessageBox(
+    _In_ HWND hwndDlg,
+    _In_ PCWSTR Text,
+    _In_ UINT Type)
+{
+    WCHAR Caption[64];
+
+    if (!LoadStringW(GetModuleHandleW(NULL), IDS_CAPTION, Caption, ARRAYSIZE(Caption)))
+        Caption[0] = UNICODE_NULL;
+    return MessageBoxW(GetParent(hwndDlg), Text, Caption, Type);
 }
 
 static VOID
@@ -658,7 +671,7 @@ CreateRegionPartition(
         if (Ask)
         {
             LoadStringW(pSetupData->hInstance, IDS_DISK_NEW_SYSTEM, Text, ARRAYSIZE(Text));
-            if (MessageBoxW(GetParent(hwndDlg), Text, NULL, MB_OKCANCEL | MB_ICONINFORMATION) != IDOK)
+            if (SetupMessageBox(hwndDlg, Text, MB_OKCANCEL | MB_ICONINFORMATION) != IDOK)
                 return FALSE;
         }
 
@@ -818,7 +831,7 @@ DoFormatPartition(
         return;
 
     LoadStringW(pSetupData->hInstance, IDS_DISK_FORMAT_WARN, Text, ARRAYSIZE(Text));
-    if (MessageBoxW(GetParent(hwndDlg), Text, NULL, MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONWARNING) != IDOK)
+    if (SetupMessageBox(hwndDlg, Text, MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONWARNING) != IDOK)
         return;
 
     if (IsSystemPartitionEntry(PartEntry))
@@ -844,7 +857,7 @@ DoEraseDisk(
 
     DiskEntry = PartEntry->DiskEntry;
     LoadPrintfW(Text, ARRAYSIZE(Text), IDS_DISK_ERASE_WARN, DiskEntry->DiskNumber);
-    if (MessageBoxW(GetParent(hwndDlg), Text, NULL, MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) != IDYES)
+    if (SetupMessageBox(hwndDlg, Text, MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) != IDYES)
         return;
 
     ForgetVolumePlans(DiskEntry, NULL, FALSE);
@@ -992,7 +1005,7 @@ DoResizePartition(
     if (HasPendingDiskChanges(pSetupData->PartitionList))
     {
         LoadStringW(pSetupData->hInstance, IDS_RESIZE_PENDING, Text, ARRAYSIZE(Text));
-        MessageBoxW(GetParent(hwndDlg), Text, NULL, MB_OK | MB_ICONWARNING);
+        SetupMessageBox(hwndDlg, Text, MB_OK | MB_ICONWARNING);
         return;
     }
 
@@ -1010,7 +1023,7 @@ DoResizePartition(
         if (!NT_SUCCESS(Status))
         {
             LoadStringW(pSetupData->hInstance, IDS_RESIZE_FAILED, Text, ARRAYSIZE(Text));
-            MessageBoxW(GetParent(hwndDlg), Text, NULL, MB_OK | MB_ICONERROR);
+            SetupMessageBox(hwndDlg, Text, MB_OK | MB_ICONERROR);
             return;
         }
         Ctx.TotalMb = Info.PartitionBytes / DISK_MEGABYTE;
@@ -1047,7 +1060,7 @@ DoResizePartition(
     if (!NT_SUCCESS(Status))
     {
         LoadStringW(pSetupData->hInstance, IDS_RESIZE_FAILED, Text, ARRAYSIZE(Text));
-        MessageBoxW(GetParent(hwndDlg), Text, NULL, MB_OK | MB_ICONERROR);
+        SetupMessageBox(hwndDlg, Text, MB_OK | MB_ICONERROR);
     }
 
     ReloadDiskList(hwndDlg, pSetupData);
@@ -1105,7 +1118,7 @@ ApplyInstallSelection(
         !IsListEmpty(&PartEntry->DiskEntry->PartList->BiosDiskListHead))
     {
         LoadStringW(pSetupData->hInstance, IDS_DISK_NOT_FIRMWARE, Text, ARRAYSIZE(Text));
-        if (MessageBoxW(GetParent(hwndDlg), Text, NULL, MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONWARNING) != IDOK)
+        if (SetupMessageBox(hwndDlg, Text, MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONWARNING) != IDOK)
             return FALSE;
     }
 
@@ -1157,7 +1170,7 @@ ApplyInstallSelection(
             if (WarnId && !pSetupData->bUnattend)
             {
                 LoadStringW(pSetupData->hInstance, WarnId, Text, ARRAYSIZE(Text));
-                if (MessageBoxW(GetParent(hwndDlg), Text, NULL, MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONWARNING) != IDOK)
+                if (SetupMessageBox(hwndDlg, Text, MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONWARNING) != IDOK)
                     return FALSE;
             }
             PlanVolumeFormat(Volume, L"NTFS", NULL);

@@ -63,6 +63,10 @@
 #define IDC_NEWSIZE_SPIN     2232
 #define IDC_NEWSIZE_RANGE    2233
 
+#define IDD_LANGUAGEPAGE     2250
+#define IDC_LANGUAGELIST     2251
+#define IDC_LAYOUTLIST       2252
+
 #define IDD_READYPAGE        2240
 #define IDC_READY_SUMMARY    2241
 #define IDC_READY_WARNING    2242
@@ -254,3 +258,7 @@
 #define IDS_READY_COMPUTER          5566
 #define IDS_READY_ACCOUNT           5567
 #define IDS_READY_TIMEZONE          5568
+#define IDS_READY_LANGUAGE          5569
+#define IDS_READY_KEYBOARD          5570
+#define IDS_LANGUAGETITLE           5571
+#define IDS_LANGUAGESUBTITLE        5572

@@ -17,19 +17,13 @@
 #define RESTART_STEPS   300
 #define RESTART_TIMER   1
 
-typedef struct _SETUP_PAGE_INFO
-{
-    UINT Template;
-    DLGPROC Proc;
-    UINT Title;
-    UINT Subtitle;
-} SETUP_PAGE_INFO;
-
 typedef struct _SETUP_FRAME
 {
     PSETUPDATA SetupData;
     HWND hwnd;
-    HWND Pages[SETUP_PAGE_COUNT];
+    const SETUP_PAGE_INFO* PageInfo;
+    INT PageCount;
+    HWND Pages[SETUP_MAX_PAGES];
     INT Current;
     HBITMAP hWatermark;
     SIZE Watermark;
@@ -38,6 +32,7 @@ typedef struct _SETUP_FRAME
 typedef struct _TIMEZONE_ITEM
 {
     ULONG Index;
+    LONG Bias;
     BOOL HasDaylight;
     WCHAR Description[128];
 } TIMEZONE_ITEM, *PTIMEZONE_ITEM;
@@ -52,13 +47,14 @@ static INT_PTR CALLBACK AccountPageProc(HWND, UINT, WPARAM, LPARAM);
 static INT_PTR CALLBACK ReadyPageProc(HWND, UINT, WPARAM, LPARAM);
 static INT_PTR CALLBACK DonePageProc(HWND, UINT, WPARAM, LPARAM);
 
-static const SETUP_PAGE_INFO PageInfo[SETUP_PAGE_COUNT] =
+static const SETUP_PAGE_INFO SetupPages[SETUP_PAGE_COUNT] =
 {
-    { IDD_DISKPAGE,    DiskPageProc,    IDS_DRIVETITLE,   IDS_DISKSUBTITLE },
-    { IDD_ACCOUNTPAGE, AccountPageProc, IDS_ACCOUNTTITLE, IDS_ACCOUNTZONESUBTITLE },
-    { IDD_READYPAGE,   ReadyPageProc,   IDS_READYTITLE,   IDS_READYSUBTITLE },
-    { IDD_PROCESSPAGE, InstallPageProc, IDS_PROCESSTITLE, IDS_PROCESSSUBTITLE },
-    { IDD_FINISHPAGE,  DonePageProc,    IDS_DONETITLE,    0 },
+    { IDD_LANGUAGEPAGE, LanguagePageProc, IDS_LANGUAGETITLE, IDS_LANGUAGESUBTITLE,    SETUP_PAGE_SKIP_UNATTEND },
+    { IDD_DISKPAGE,     DiskPageProc,     IDS_DRIVETITLE,    IDS_DISKSUBTITLE,        SETUP_PAGE_BACK },
+    { IDD_ACCOUNTPAGE,  AccountPageProc,  IDS_ACCOUNTTITLE,  IDS_ACCOUNTZONESUBTITLE, SETUP_PAGE_BACK | SETUP_PAGE_SKIP_UNATTEND },
+    { IDD_READYPAGE,    ReadyPageProc,    IDS_READYTITLE,    IDS_READYSUBTITLE,       SETUP_PAGE_BACK | SETUP_PAGE_SKIP_UNATTEND },
+    { IDD_PROCESSPAGE,  InstallPageProc,  IDS_PROCESSTITLE,  IDS_PROCESSSUBTITLE,     0 },
+    { IDD_FINISHPAGE,   DonePageProc,     IDS_DONETITLE,     0,                       0 },
 };
 
 static SETUP_FRAME Frame;
@@ -151,7 +147,7 @@ FrameShowPage(
     _In_ INT Page)
 {
     HWND hPage = Frame.Pages[Page];
-    BOOL Back = (Page == SETUP_PAGE_ACCOUNT || Page == SETUP_PAGE_READY);
+    BOOL Back = !!(Frame.PageInfo[Page].Flags & SETUP_PAGE_BACK);
 
     if (Frame.Current >= 0)
     {
@@ -160,7 +156,7 @@ FrameShowPage(
     }
 
     Frame.Current = Page;
-    SetupFrameSetTitle(hPage, PageInfo[Page].Title, PageInfo[Page].Subtitle);
+    SetupFrameSetTitle(hPage, Frame.PageInfo[Page].Title, Frame.PageInfo[Page].Subtitle);
     SetupFrameSetButtonText(hPage, IDC_FRAME_BACK, IDS_BACKBTN);
     SetupFrameSetButtonText(hPage, IDC_FRAME_NEXT, IDS_NEXTBTN);
     SetupFrameSetButtonText(hPage, IDCANCEL, IDS_CANCELBTN);
@@ -175,10 +171,22 @@ FrameShowPage(
 VOID
 SetupFrameGoTo(
     _In_ HWND hPage,
-    _In_ SETUP_PAGE Page)
+    _In_ INT Page)
 {
     UNREFERENCED_PARAMETER(hPage);
     FrameShowPage(Page);
+}
+
+static INT
+FrameNextPage(
+    _In_ INT Page)
+{
+    while (Page < Frame.PageCount && Frame.SetupData->bUnattend &&
+           (Frame.PageInfo[Page].Flags & SETUP_PAGE_SKIP_UNATTEND))
+    {
+        Page++;
+    }
+    return Page;
 }
 
 static VOID
@@ -194,10 +202,8 @@ FrameNext(VOID)
     if (SendMessageW(Frame.Pages[Current], SPN_WIZNEXT, 0, 0) == -1 || Frame.Current != Current)
         return;
 
-    Page = Current + 1;
-    if (Current == SETUP_PAGE_DISK && Frame.SetupData->bUnattend)
-        Page = SETUP_PAGE_INSTALL;
-    if (Page < SETUP_PAGE_COUNT)
+    Page = FrameNextPage(Current + 1);
+    if (Page < Frame.PageCount)
         FrameShowPage(Page);
 }
 
@@ -316,12 +322,12 @@ SetupFrameProc(
 
             GetWindowRect(GetDlgItem(hwnd, IDC_FRAME_PAGE), &rc);
             MapWindowPoints(HWND_DESKTOP, hwnd, (LPPOINT)&rc, 2);
-            for (Page = 0; Page < SETUP_PAGE_COUNT; Page++)
+            for (Page = 0; Page < Frame.PageCount; Page++)
             {
                 Frame.Pages[Page] = CreateDialogParamW(pSetupData->hInstance,
-                                                       MAKEINTRESOURCEW(PageInfo[Page].Template),
+                                                       MAKEINTRESOURCEW(Frame.PageInfo[Page].Template),
                                                        hwnd,
-                                                       PageInfo[Page].Proc,
+                                                       Frame.PageInfo[Page].Proc,
                                                        (LPARAM)pSetupData);
                 if (!Frame.Pages[Page])
                 {
@@ -333,7 +339,7 @@ SetupFrameProc(
             }
 
             FrameCenter(hwnd);
-            FrameShowPage(SETUP_PAGE_DISK);
+            FrameShowPage(FrameNextPage(0));
             return FALSE;
         }
 
@@ -373,11 +379,22 @@ SetupFrameProc(
 }
 
 INT_PTR
+RunSetupFrame(
+    _In_ PSETUPDATA pSetupData,
+    _In_reads_(PageCount) const SETUP_PAGE_INFO* PageInfo,
+    _In_ INT PageCount)
+{
+    Frame.PageInfo = PageInfo;
+    Frame.PageCount = min(PageCount, SETUP_MAX_PAGES);
+    return DialogBoxParamW(pSetupData->hInstance, MAKEINTRESOURCEW(IDD_SETUPFRAME),
+                           NULL, SetupFrameProc, (LPARAM)pSetupData);
+}
+
+INT_PTR
 RunSetupWizard(
     _In_ PSETUPDATA pSetupData)
 {
-    return DialogBoxParamW(pSetupData->hInstance, MAKEINTRESOURCEW(IDD_SETUPFRAME),
-                           NULL, SetupFrameProc, (LPARAM)pSetupData);
+    return RunSetupFrame(pSetupData, SetupPages, ARRAYSIZE(SetupPages));
 }
 
 static BOOL
@@ -418,6 +435,7 @@ AddTimeZoneItem(
     if (Error != ERROR_SUCCESS)
         return ERROR_SUCCESS;
 
+    Item.Bias = TimeZoneInfo.Bias;
     Item.HasDaylight = (TimeZoneInfo.StandardDate.wMonth != 0 &&
                         TimeZoneInfo.DaylightDate.wMonth != 0);
 
@@ -442,6 +460,36 @@ CompareTimeZoneItems(
     ULONG Index2 = ((const TIMEZONE_ITEM*)Item2)->Index;
 
     return (Index1 < Index2) ? -1 : (Index1 > Index2);
+}
+
+static INT
+FindDefaultTimeZone(
+    _In_ ULONG TimeZoneIndex)
+{
+    TIME_ZONE_INFORMATION Current;
+    ULONG Index;
+    INT Match = -1;
+
+    for (Index = 0; Index < TimeZones.Count; Index++)
+    {
+        if (TimeZones.Items[Index].Index == TimeZoneIndex)
+            return (INT)Index;
+    }
+
+    if (GetTimeZoneInformation(&Current) == TIME_ZONE_ID_INVALID)
+        return 0;
+
+    for (Index = 0; Index < TimeZones.Count; Index++)
+    {
+        if (TimeZones.Items[Index].Bias != Current.Bias)
+            continue;
+        if (!TimeZones.Items[Index].HasDaylight)
+            return (INT)Index;
+        if (Match < 0)
+            Match = (INT)Index;
+    }
+
+    return (Match < 0) ? 0 : Match;
 }
 
 static VOID
@@ -554,11 +602,8 @@ AccountPageProc(
             if (TimeZones.Count)
                 qsort(TimeZones.Items, TimeZones.Count, sizeof(*TimeZones.Items), CompareTimeZoneItems);
             for (Index = 0; Index < TimeZones.Count; Index++)
-            {
                 SendDlgItemMessageW(hwndDlg, IDC_TIMEZONELIST, CB_ADDSTRING, 0, (LPARAM)TimeZones.Items[Index].Description);
-                if (TimeZones.Items[Index].Index == pSetupData->TimeZoneIndex)
-                    iItem = (INT)Index;
-            }
+            iItem = FindDefaultTimeZone(pSetupData->TimeZoneIndex);
             SendDlgItemMessageW(hwndDlg, IDC_TIMEZONELIST, CB_SETCURSEL, iItem, 0);
             UpdateAutoDaylight(hwndDlg, pSetupData->AutoDaylight);
             if ((ULONG)iItem < TimeZones.Count)
@@ -612,6 +657,22 @@ AppendLine(
     StringCchCatW(Text, cchText, L"\r\n");
 }
 
+static PCWSTR
+FindChoiceName(
+    _In_reads_(Count) const SETUP_CHOICE* Choices,
+    _In_ ULONG Count,
+    _In_ PCWSTR Id)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (_wcsicmp(Choices[Index].Id, Id) == 0)
+            return Choices[Index].Name;
+    }
+    return Id;
+}
+
 static VOID
 FillSummary(
     _In_ HWND hwndDlg,
@@ -637,6 +698,10 @@ FillSummary(
         AppendLine(Text, ARRAYSIZE(Text), IDS_READY_NOCHANGES);
 
     StringCchCatW(Text, ARRAYSIZE(Text), L"\r\n");
+    AppendLine(Text, ARRAYSIZE(Text), IDS_READY_LANGUAGE,
+               FindChoiceName(pSetupData->Locales, pSetupData->LocaleCount, pSetupData->DefaultLanguage));
+    AppendLine(Text, ARRAYSIZE(Text), IDS_READY_KEYBOARD,
+               FindChoiceName(pSetupData->Layouts, pSetupData->LayoutCount, pSetupData->DefaultKBLayout));
     AppendLine(Text, ARRAYSIZE(Text), IDS_READY_COMPUTER, pSetupData->ComputerName);
     AppendLine(Text, ARRAYSIZE(Text), IDS_READY_ACCOUNT, pSetupData->UserName);
     if (TimeZoneName[0])

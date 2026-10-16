@@ -11,6 +11,7 @@ list(APPEND SOURCE
     spapisup/infsupp.c
     diskinfo.c
     diskpage.c
+    langpage.c
     libernt.c
     selftest.c
     wizard.c

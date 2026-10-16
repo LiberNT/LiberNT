@@ -44,6 +44,17 @@ BEGIN
     PUSHBUTTON "Cancel", IDCANCEL, 153, 41, 50, 14
 END
 
+IDD_LANGUAGEPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "&Time and currency format:", IDC_STATIC, 0, 4, 95, 9
+    COMBOBOX IDC_LANGUAGELIST, 100, 2, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT "&Keyboard or input method:", IDC_STATIC, 0, 24, 95, 9
+    COMBOBOX IDC_LAYOUTLIST, 100, 22, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT "The keyboard works in Setup as soon as you choose it, so you can type your account name and password with it.", IDC_STATIC, 0, 128, 290, 26
+END
+
 IDD_ACCOUNTPAGE DIALOGEX 0, 0, 290, 160
 STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
@@ -205,6 +216,10 @@ BEGIN
     IDS_READY_COMPUTER "Computer name: %s"
     IDS_READY_ACCOUNT "Account: %s"
     IDS_READY_TIMEZONE "Time zone: %s"
+    IDS_READY_LANGUAGE "Time and currency format: %s"
+    IDS_READY_KEYBOARD "Keyboard: %s"
+    IDS_LANGUAGETITLE "Choose your language and keyboard"
+    IDS_LANGUAGESUBTITLE "LiberNT uses this format for dates, times, numbers and currency."
 END
 
 /* Progress Strings */
