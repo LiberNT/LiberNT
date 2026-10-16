@@ -205,6 +205,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/time.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/timerobj.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/wait.c
+    ${REACTOS_SOURCE_DIR}/ntoskrnl/kse/kse.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/nvs/pool/va/varegion.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/nvs/pool/heap/heapcore.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/nvs/pool/heap/heapseg.c

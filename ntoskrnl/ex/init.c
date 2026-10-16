@@ -1903,6 +1903,8 @@ Phase1InitializationDiscard(IN PVOID Context)
         }
     }
 
+    KseInitialize();
+
     /* Initialize the I/O Subsystem */
     if (!IoInitSystem(LoaderBlock)) KeBugCheck(IO1_INITIALIZATION_FAILED);
 

@@ -143,6 +143,7 @@
 #include "ps.h"
 #include "cc.h"
 #include "io.h"
+#include "kse.h"
 #include "po.h"
 #include "se.h"
 #include "tm.h"
