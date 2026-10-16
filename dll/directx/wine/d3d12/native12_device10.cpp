@@ -22,11 +22,55 @@ HRESULT STDMETHODCALLTYPE Native12Device::SetBackgroundProcessingMode(D3D12_BACK
             || action == D3D12_MEASUREMENTS_ACTION_COMMIT_RESULTS_HIGH_PRIORITY)
         return DXGI_ERROR_SDK_COMPONENT_MISSING;
     if (event && action != D3D12_MEASUREMENTS_ACTION_COMMIT_RESULTS) return E_INVALIDARG;
-    if (action == D3D12_MEASUREMENTS_ACTION_COMMIT_RESULTS)
+    if (!background_supported)
     {
-        if (further_measurements_desired) *further_measurements_desired = FALSE;
-        if (event) SetEvent(event);
+        if (action == D3D12_MEASUREMENTS_ACTION_COMMIT_RESULTS)
+        {
+            if (further_measurements_desired) *further_measurements_desired = FALSE;
+            if (event) SetEvent(event);
+        }
+        return S_OK;
     }
+
+    BOOL further = FALSE;
+    BOOL *further_target = further_measurements_desired ? further_measurements_desired : &further;
+    Native12BackgroundWork *deferred = NULL;
+    bool signal = false;
+
+    AcquireSRWLockExclusive(&background_lock);
+    functions.pfnSetBackgroundProcessingMode(driver_device, static_cast<D3D12DDI_BACKGROUND_PROCESSING_MODE_0062>(mode),
+            static_cast<D3D12DDI_MEASUREMENTS_ACTION_0062>(action), further_target);
+    background_disabled = mode == D3D12_BACKGROUND_PROCESSING_MODE_DISABLE_BACKGROUND_WORK
+            || mode == D3D12_BACKGROUND_PROCESSING_MODE_DISABLE_PROFILING_BY_SYSTEM;
+    if (!background_disabled)
+    {
+        deferred = background_deferred;
+        background_deferred = NULL;
+        for (Native12BackgroundWork *work = deferred; work; work = work->next) ++background_running;
+    }
+    if (event)
+    {
+        signal = !background_running;
+        for (UINT i = 0; !signal && i < ARRAYSIZE(background_events); ++i)
+        {
+            if (background_events[i]) continue;
+            background_events[i] = event;
+            break;
+        }
+    }
+    ReleaseSRWLockExclusive(&background_lock);
+    while (deferred)
+    {
+        Native12BackgroundWork *next = deferred->next;
+        if (!QueueUserWorkItem(Native12BackgroundWorker, deferred, WT_EXECUTEDEFAULT))
+        {
+            HeapFree(GetProcessHeap(), 0, deferred);
+            BackgroundDone();
+            Release();
+        }
+        deferred = next;
+    }
+    if (signal) SetEvent(event);
     return S_OK;
 }
 

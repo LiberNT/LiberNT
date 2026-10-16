@@ -493,29 +493,73 @@ static HRESULT APIENTRY Native12CreateHwQueue(D3D12DDI_HRTCOMMANDQUEUE, D3DDDICB
     return E_NOTIMPL;
 }
 
-struct Native12BackgroundWork
-{
-    PFND3D12DDI_UMD_CALLBACK_METHOD callback;
-    void *context;
-};
-
-static DWORD WINAPI Native12BackgroundWorker(void *parameter)
+DWORD WINAPI Native12BackgroundWorker(void *parameter)
 {
     Native12BackgroundWork *work = static_cast<Native12BackgroundWork *>(parameter);
+    Native12Device *device = work->device;
+
     work->callback(work->context);
     HeapFree(GetProcessHeap(), 0, work);
+    if (device)
+    {
+        device->BackgroundDone();
+        device->Release();
+    }
     return 0;
 }
 
-static HRESULT APIENTRY Native12QueueBackgroundWork(D3D12DDI_HRTDEVICE, PFND3D12DDI_UMD_CALLBACK_METHOD callback,
+HRESULT Native12Device::QueueBackground(Native12BackgroundWork *work)
+{
+    bool deferred;
+
+    AddRef();
+    AcquireSRWLockExclusive(&background_lock);
+    deferred = background_disabled;
+    if (deferred)
+    {
+        work->next = background_deferred;
+        background_deferred = work;
+    }
+    else ++background_running;
+    ReleaseSRWLockExclusive(&background_lock);
+    if (deferred || QueueUserWorkItem(Native12BackgroundWorker, work, WT_EXECUTEDEFAULT)) return S_OK;
+    HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
+    HeapFree(GetProcessHeap(), 0, work);
+    BackgroundDone();
+    Release();
+    return hr;
+}
+
+void Native12Device::BackgroundDone()
+{
+    HANDLE events[ARRAYSIZE(background_events)];
+    UINT count = 0;
+
+    AcquireSRWLockExclusive(&background_lock);
+    if (!--background_running)
+    {
+        for (UINT i = 0; i < ARRAYSIZE(background_events); ++i)
+        {
+            if (!background_events[i]) continue;
+            events[count++] = background_events[i];
+            background_events[i] = NULL;
+        }
+    }
+    ReleaseSRWLockExclusive(&background_lock);
+    for (UINT i = 0; i < count; ++i) SetEvent(events[i]);
+}
+
+static HRESULT APIENTRY Native12QueueBackgroundWork(D3D12DDI_HRTDEVICE runtime, PFND3D12DDI_UMD_CALLBACK_METHOD callback,
         PFND3D12DDI_UMD_CALLBACK_METHOD, void *context)
 {
     if (!callback) return E_INVALIDARG;
     Native12BackgroundWork *work = static_cast<Native12BackgroundWork *>(
-            HeapAlloc(GetProcessHeap(), 0, sizeof(*work)));
+            HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*work)));
     if (!work) return E_OUTOFMEMORY;
     work->callback = callback;
     work->context = context;
+    work->device = Native12Device::FromRuntime(runtime.handle);
+    if (work->device) return work->device->QueueBackground(work);
     if (!QueueUserWorkItem(Native12BackgroundWorker, work, WT_EXECUTEDEFAULT))
     {
         HeapFree(GetProcessHeap(), 0, work);
@@ -749,6 +793,13 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     if (FAILED(hr = FillListTables(list_table_size))) return hr;
 
     QueryCaps(D3D12DDICAPS_TYPE_D3D12_OPTIONS, NULL, &options, sizeof(options));
+    background_supported = options.BackgroundProcessingSupported && functions.pfnSetBackgroundProcessingMode;
+    if (background_supported)
+    {
+        BOOL further = FALSE;
+        functions.pfnSetBackgroundProcessingMode(driver_device, D3D12DDI_BACKGROUND_PROCESSING_MODE_0062_ALLOWED,
+                D3D12DDI_MEASUREMENTS_ACTION_0062_KEEP_ALL, &further);
+    }
     QueryCaps(D3D12DDICAPS_TYPE_SHADER, NULL, &shader_caps, sizeof(shader_caps));
     QueryCaps(D3D12DDICAPS_TYPE_ARCHITECTURE_INFO, NULL, &architecture, sizeof(architecture));
     UINT node = 0;
@@ -1220,6 +1271,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
                 caps->VariableShadingRateTier = D3D12_VARIABLE_SHADING_RATE_TIER_1;
                 caps->AdditionalShadingRatesSupported = !!options.AdditionalShadingRatesSupported;
             }
+            caps->BackgroundProcessingSupported = background_supported;
             return S_OK;
         }
         case D3D12_FEATURE_D3D12_OPTIONS7:
@@ -1261,6 +1313,8 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             if (functions.pfnCreatePipelineLibrary && functions.pfnAddPipelineStateToLibrary
                     && functions.pfnSerializeLibrary)
                 caps->SupportFlags |= D3D12_SHADER_CACHE_SUPPORT_LIBRARY;
+            if (options.DriverManagedShaderCachePresent)
+                caps->SupportFlags |= D3D12_SHADER_CACHE_SUPPORT_DRIVER_MANAGED_CACHE;
             return S_OK;
         }
         case D3D12_FEATURE_COMMAND_QUEUE_PRIORITY:

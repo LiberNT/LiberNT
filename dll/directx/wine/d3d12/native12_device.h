@@ -10,6 +10,18 @@
 class Native12DescriptorHeap;
 class Native12PipelineState;
 
+class Native12Device;
+
+struct Native12BackgroundWork
+{
+    PFND3D12DDI_UMD_CALLBACK_METHOD callback;
+    void *context;
+    Native12Device *device;
+    Native12BackgroundWork *next;
+};
+
+DWORD WINAPI Native12BackgroundWorker(void *parameter);
+
 class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData2,
         public ID3D12DeviceConfiguration1, public ID3D12VideoDevice1, public Native12Allocation
 {
@@ -76,6 +88,14 @@ public:
     D3D12DDI_COMMAND_QUEUE_FUNCS_VIDEO_0020 encode_queue_functions = {};
     D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_ENCODE_0094 encode_list_functions = {};
     D3D12DDI_VIDEO_FEATURE_AREA_SUPPORT_DATA_0053 video_areas = {};
+    SRWLOCK background_lock = SRWLOCK_INIT;
+    bool background_supported = false;
+    bool background_disabled = false;
+    LONG background_running = 0;
+    struct Native12BackgroundWork *background_deferred = NULL;
+    HANDLE background_events[16] = {};
+    HRESULT QueueBackground(struct Native12BackgroundWork *work);
+    void BackgroundDone();
     HRESULT CreateCommittedResourceRegion(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags,
             const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE *clear_value,
             const D3D12_MIP_REGION *mip_region, REFIID iid, void **out);
