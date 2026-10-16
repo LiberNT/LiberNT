@@ -1201,6 +1201,11 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             D3D12_FEATURE_DATA_D3D12_OPTIONS6 *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
             ZeroMemory(caps, sizeof(*caps));
+            if (options.VariableShadingRateTier != D3D12DDI_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED)
+            {
+                caps->VariableShadingRateTier = D3D12_VARIABLE_SHADING_RATE_TIER_1;
+                caps->AdditionalShadingRatesSupported = !!options.AdditionalShadingRatesSupported;
+            }
             return S_OK;
         }
         case D3D12_FEATURE_D3D12_OPTIONS7:

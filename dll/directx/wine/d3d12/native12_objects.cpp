@@ -957,7 +957,7 @@ void STDMETHODCALLTYPE Native12CommandList::CopyRaytracingAccelerationStructure(
 void STDMETHODCALLTYPE Native12CommandList::SetPipelineState1(ID3D12StateObject *) {}
 void STDMETHODCALLTYPE Native12CommandList::DispatchRays(const D3D12_DISPATCH_RAYS_DESC *) {}
 
-static bool Native12ShadingRateValid(D3D12_SHADING_RATE rate)
+static bool Native12ShadingRateValid(D3D12_SHADING_RATE rate, bool additional)
 {
     switch (rate)
     {
@@ -965,10 +965,11 @@ static bool Native12ShadingRateValid(D3D12_SHADING_RATE rate)
         case D3D12_SHADING_RATE_1X2:
         case D3D12_SHADING_RATE_2X1:
         case D3D12_SHADING_RATE_2X2:
+            return true;
         case D3D12_SHADING_RATE_2X4:
         case D3D12_SHADING_RATE_4X2:
         case D3D12_SHADING_RATE_4X4:
-            return true;
+            return additional;
         default:
             return false;
     }
@@ -977,11 +978,22 @@ static bool Native12ShadingRateValid(D3D12_SHADING_RATE rate)
 void STDMETHODCALLTYPE Native12CommandList::RSSetShadingRate(D3D12_SHADING_RATE rate,
         const D3D12_SHADING_RATE_COMBINER *combiners)
 {
-    HRESULT hr = E_FAIL;
-    if (!Native12ShadingRateValid(rate) || (combiners && (combiners[0] > D3D12_SHADING_RATE_COMBINER_SUM
+    bool additional = device->options.VariableShadingRateTier != D3D12DDI_VARIABLE_SHADING_RATE_TIER_NOT_SUPPORTED
+            && device->options.AdditionalShadingRatesSupported;
+    if (type != D3D12_COMMAND_LIST_TYPE_DIRECT && type != D3D12_COMMAND_LIST_TYPE_BUNDLE)
+    {
+        if (SUCCEEDED(error)) error = E_FAIL;
+        return;
+    }
+    if (!Native12ShadingRateValid(rate, additional) || (combiners && (combiners[0] > D3D12_SHADING_RATE_COMBINER_SUM
             || combiners[1] > D3D12_SHADING_RATE_COMBINER_SUM)))
-        hr = E_INVALIDARG;
-    if (SUCCEEDED(error)) error = hr;
+    {
+        if (SUCCEEDED(error)) error = E_INVALIDARG;
+        return;
+    }
+    if (table->pfnRSSetShadingRate)
+        table->pfnRSSetShadingRate(driver, static_cast<D3D12DDI_SHADING_RATE_0062>(rate),
+                reinterpret_cast<const D3D12DDI_SHADING_RATE_COMBINER_0062 *>(combiners));
 }
 
 void STDMETHODCALLTYPE Native12CommandList::RSSetShadingRateImage(ID3D12Resource *)
