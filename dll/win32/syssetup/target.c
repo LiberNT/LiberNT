@@ -663,13 +663,19 @@ ScheduleFirstBootComponents(
         return ERROR_FILE_NOT_FOUND;
     }
 
-    Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\Setup", 0, KEY_SET_VALUE, &hKey);
+    Error = RegCreateKeyExW(HKEY_LOCAL_MACHINE,
+                            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+                            0,
+                            NULL,
+                            0,
+                            KEY_SET_VALUE,
+                            NULL,
+                            &hKey,
+                            NULL);
     if (Error != ERROR_SUCCESS)
         return Error;
 
-    SetRegString(hKey, L"CmdLine", REG_EXPAND_SZ, L"%SystemRoot%\\system32\\oobe\\oobe.exe /components");
-    SetRegDword(hKey, L"SetupType", 2);
-    SetRegDword(hKey, L"SystemSetupInProgress", 1);
+    SetRegString(hKey, L"OOBE", REG_EXPAND_SZ, L"%SystemRoot%\\system32\\oobe\\oobe.exe /components");
     RegCloseKey(hKey);
 
     return ERROR_SUCCESS;

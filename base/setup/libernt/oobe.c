@@ -20,6 +20,8 @@
 
 #define OOBE_SKIPPED            1
 #define OOBE_DEFAULT_HIVE       L"LiberNT.FirstBoot.Default"
+#define OOBE_APPLY_TIMEOUT      5000
+#define PM_APPLY_DONE           (WM_APP + 3)
 
 NTSTATUS
 WINAPI
@@ -34,18 +36,18 @@ static INT_PTR CALLBACK FinishPageProc(HWND, UINT, WPARAM, LPARAM);
 
 static const SETUP_PAGE_INFO ComponentPages[] =
 {
-    { IDD_APPSPAGE,     AppsPageProc,     IDS_APPSTITLE,        IDS_APPSSUBTITLE,        SETUP_PAGE_NO_CANCEL },
-    { IDD_PROCESSPAGE,  FinishPageProc,   IDS_OOBE_FINISHTITLE, IDS_OOBE_FINISHSUBTITLE, SETUP_PAGE_NO_CANCEL },
+    { IDD_APPSPAGE,     AppsPageProc,     IDS_APPSTITLE,        IDS_APPSSUBTITLE,        SETUP_PAGE_CLOSE },
+    { IDD_PROCESSPAGE,  FinishPageProc,   IDS_OOBE_FINISHTITLE, IDS_OOBE_FINISHSUBTITLE, SETUP_PAGE_CLOSE },
 };
 
 static BOOL ComponentsOnly;
 
 static const SETUP_PAGE_INFO OobePages[] =
 {
-    { IDD_LANGUAGEPAGE, LanguagePageProc, IDS_OOBE_REGIONTITLE, IDS_OOBE_REGIONSUBTITLE, SETUP_PAGE_NO_CANCEL },
-    { IDD_ACCOUNTPAGE,  AccountPageProc,  IDS_ACCOUNTTITLE,     IDS_ACCOUNTZONESUBTITLE, SETUP_PAGE_BACK | SETUP_PAGE_NO_CANCEL },
-    { IDD_APPSPAGE,     AppsPageProc,     IDS_APPSTITLE,        IDS_APPSSUBTITLE,        SETUP_PAGE_BACK | SETUP_PAGE_NO_CANCEL },
-    { IDD_PROCESSPAGE,  FinishPageProc,   IDS_OOBE_FINISHTITLE, IDS_OOBE_FINISHSUBTITLE, SETUP_PAGE_NO_CANCEL },
+    { IDD_LANGUAGEPAGE, LanguagePageProc, IDS_OOBE_REGIONTITLE, IDS_OOBE_REGIONSUBTITLE, SETUP_PAGE_CLOSE },
+    { IDD_ACCOUNTPAGE,  AccountPageProc,  IDS_ACCOUNTTITLE,     IDS_ACCOUNTZONESUBTITLE, SETUP_PAGE_BACK | SETUP_PAGE_CLOSE },
+    { IDD_APPSPAGE,     AppsPageProc,     IDS_APPSTITLE,        IDS_APPSSUBTITLE,        SETUP_PAGE_BACK | SETUP_PAGE_CLOSE },
+    { IDD_PROCESSPAGE,  FinishPageProc,   IDS_OOBE_FINISHTITLE, IDS_OOBE_FINISHSUBTITLE, SETUP_PAGE_CLOSE },
 };
 
 typedef struct _CHOICE_LIST
@@ -269,6 +271,8 @@ ApplyRegion(
     LCID Lcid = wcstoul(pSetupData->DefaultLanguage, NULL, 16);
     HKEY hUser;
     LONG Error;
+
+    WriteUserRegion(HKEY_CURRENT_USER, Lcid, pSetupData->DefaultKBLayout);
 
     if (RegOpenKeyExW(HKEY_USERS, L".DEFAULT", 0, KEY_CREATE_SUB_KEY | KEY_SET_VALUE, &hUser) == ERROR_SUCCESS)
     {
@@ -504,6 +508,7 @@ FinishThread(
     }
 
 Components:
+    PostMessageW(Context->hwndDlg, PM_APPLY_DONE, 0, 0);
     hrCom = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     for (Index = 0; Index < OobeAppCount; Index++)
     {
@@ -569,7 +574,8 @@ FinishPageProc(
             return FALSE;
 
         case SPN_SETACTIVE:
-            SetupFrameShowButtons(hwndDlg, FALSE, FALSE, FALSE);
+            SetupFrameShowButtons(hwndDlg, FALSE, FALSE, TRUE);
+            SetTimer(hwndDlg, 1, OOBE_APPLY_TIMEOUT, NULL);
             Context.hwndDlg = hwndDlg;
             Context.Progress.hwndActivity = GetDlgItem(hwndDlg, IDC_ACTIVITY);
             Context.Progress.hwndItem = GetDlgItem(hwndDlg, IDC_ITEM);
@@ -586,7 +592,18 @@ FinishPageProc(
             SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, -1);
             return TRUE;
 
+        case PM_APPLY_DONE:
+            KillTimer(hwndDlg, 1);
+            return TRUE;
+
+        case WM_TIMER:
+            KillTimer(hwndDlg, 1);
+            DPRINT1("First-boot settings not applied within %u ms\n", OOBE_APPLY_TIMEOUT);
+            EndDialog(GetParent(hwndDlg), IDCANCEL);
+            return TRUE;
+
         case PM_INSTALL_DONE:
+            KillTimer(hwndDlg, 1);
             ReportFinish(hwndDlg, (DWORD)wParam);
             EndDialog(GetParent(hwndDlg), IDOK);
             return TRUE;
@@ -639,15 +656,15 @@ HasAutomationPayload(VOID)
 static VOID
 EndFirstBootSetup(VOID)
 {
-    DWORD Zero = 0;
     HKEY hKey;
 
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\Setup", 0, KEY_SET_VALUE, &hKey) != ERROR_SUCCESS)
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+                      0, KEY_SET_VALUE, &hKey) != ERROR_SUCCESS)
+    {
         return;
+    }
 
-    RegSetValueExW(hKey, L"SystemSetupInProgress", 0, REG_DWORD, (const BYTE*)&Zero, sizeof(Zero));
-    RegSetValueExW(hKey, L"SetupType", 0, REG_DWORD, (const BYTE*)&Zero, sizeof(Zero));
-    SetStringValue(hKey, L"CmdLine", L"");
+    RegDeleteValueW(hKey, L"OOBE");
     RegCloseKey(hKey);
 }
 
@@ -665,12 +682,9 @@ wWinMain(
     ProcessHeap = GetProcessHeap();
     SetupData.hInstance = hInst;
 
+    EndFirstBootSetup();
     if (IsUnattendedFirstBoot() || HasAutomationPayload())
-    {
-        if (ComponentsOnly)
-            EndFirstBootSetup();
         return OOBE_SKIPPED;
-    }
 
     iccx.dwSize = sizeof(iccx);
     iccx.dwICC = ICC_LISTVIEW_CLASSES | ICC_PROGRESS_CLASS;
@@ -695,9 +709,6 @@ wWinMain(
     if (SUCCEEDED(hrCom))
         CoUninitialize();
     if (ComponentsOnly)
-    {
-        EndFirstBootSetup();
         return ERROR_SUCCESS;
-    }
     return SetupData.bInstalled ? ERROR_SUCCESS : OOBE_SKIPPED;
 }

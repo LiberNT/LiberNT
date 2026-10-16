@@ -267,6 +267,12 @@ FrameCancel(VOID)
     if (!IsWindowEnabled(GetDlgItem(Frame.hwnd, IDCANCEL)))
         return;
 
+    if (Frame.PageInfo[Frame.Current].Flags & SETUP_PAGE_CLOSE)
+    {
+        EndDialog(Frame.hwnd, IDCANCEL);
+        return;
+    }
+
     if (SendMessageW(Frame.Pages[Frame.Current], SPN_QUERYCANCEL, 0, 0))
         return;
 

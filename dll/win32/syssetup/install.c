@@ -1187,37 +1187,38 @@ GetPreinstallUserName(
 }
 
 static
-BOOL
-RunFirstBootSetup(VOID)
+VOID
+ScheduleFirstBootSetup(VOID)
 {
-    STARTUPINFOW StartupInfo;
-    PROCESS_INFORMATION ProcessInfo;
     WCHAR Path[MAX_PATH];
-    DWORD ExitCode = ERROR_GEN_FAILURE;
+    HKEY hKey;
+    LONG Error;
     UINT Length;
 
     Length = GetSystemDirectoryW(Path, ARRAYSIZE(Path));
     if (Length == 0 || Length + wcslen(L"\\oobe\\oobe.exe") >= ARRAYSIZE(Path))
-        return FALSE;
+        return;
     wcscat(Path, L"\\oobe\\oobe.exe");
     if (GetFileAttributesW(Path) == INVALID_FILE_ATTRIBUTES)
-        return FALSE;
+        return;
 
-    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
-    StartupInfo.cb = sizeof(StartupInfo);
-    if (!CreateProcessW(Path, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &StartupInfo, &ProcessInfo))
+    Error = RegCreateKeyExW(HKEY_LOCAL_MACHINE,
+                            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+                            0,
+                            NULL,
+                            0,
+                            KEY_SET_VALUE,
+                            NULL,
+                            &hKey,
+                            NULL);
+    if (Error != ERROR_SUCCESS)
     {
-        DPRINT1("Could not start %S (error %lu)\n", Path, GetLastError());
-        return FALSE;
+        DPRINT1("Could not schedule the first-boot setup (error %ld)\n", Error);
+        return;
     }
 
-    WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
-    GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode);
-    CloseHandle(ProcessInfo.hThread);
-    CloseHandle(ProcessInfo.hProcess);
-
-    DPRINT1("First-boot setup finished with %lu\n", ExitCode);
-    return ExitCode == ERROR_SUCCESS;
+    RegSetValueExW(hKey, L"OOBE", 0, REG_SZ, (PBYTE)Path, (DWORD)((wcslen(Path) + 1) * sizeof(WCHAR)));
+    RegCloseKey(hKey);
 }
 
 static
@@ -1320,12 +1321,10 @@ InstallLiveCD(VOID)
 
     if (bPreinstall)
     {
-        if (!RunFirstBootSetup())
-        {
-            Status = CreateTargetAccount(UserName, L"");
-            if (!NT_SUCCESS(Status) && Status != STATUS_USER_EXISTS)
-                goto error;
-        }
+        Status = CreateTargetAccount(UserName, L"");
+        if (!NT_SUCCESS(Status) && Status != STATUS_USER_EXISTS)
+            goto error;
+        ScheduleFirstBootSetup();
         if (EndSystemSetup() != ERROR_SUCCESS)
             goto error;
         return 0;
