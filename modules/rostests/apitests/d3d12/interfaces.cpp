@@ -19,6 +19,7 @@ static void TestGetInterface(PFN_D3D12_GET_INTERFACE_TEST get_interface)
     ID3D12SDKConfiguration *configuration = NULL;
     ID3D12DeviceRemovedExtendedDataSettings *settings = NULL;
     ID3D12DeviceRemovedExtendedDataSettings1 *settings1 = NULL;
+    ID3D12DeviceRemovedExtendedDataSettings2 *settings2 = NULL;
     IUnknown *object;
     HRESULT hr;
 
@@ -45,8 +46,21 @@ static void TestGetInterface(PFN_D3D12_GET_INTERFACE_TEST get_interface)
                 reinterpret_cast<void **>(&settings1));
         ok(hr == S_OK, "DRED settings 1: %#lx\n", hr);
         if (settings1) settings1->Release();
+        hr = settings->QueryInterface(__uuidof(ID3D12DeviceRemovedExtendedDataSettings2),
+                reinterpret_cast<void **>(&settings2));
+        ok(hr == S_OK, "DRED settings 2: %#lx\n", hr);
+        if (settings2)
+        {
+            settings2->UseMarkersOnlyAutoBreadcrumbs(FALSE);
+            settings2->Release();
+        }
         settings->Release();
     }
+    settings2 = NULL;
+    hr = get_interface(clsid_dred, __uuidof(ID3D12DeviceRemovedExtendedDataSettings2),
+            reinterpret_cast<void **>(&settings2));
+    ok(hr == S_OK && settings2, "DRED settings 2 from D3D12GetInterface: %#lx\n", hr);
+    if (settings2) settings2->Release();
 
     object = reinterpret_cast<IUnknown *>(0x1);
     hr = get_interface(unknown_clsid, __uuidof(IUnknown), reinterpret_cast<void **>(&object));
@@ -62,6 +76,8 @@ static void TestDeviceDred(BOOL enabled)
 {
     ID3D12DeviceRemovedExtendedData *dred = NULL;
     ID3D12DeviceRemovedExtendedData1 *dred1 = NULL;
+    ID3D12DeviceRemovedExtendedData2 *dred2 = NULL;
+    D3D12_DRED_PAGE_FAULT_OUTPUT2 page_fault2;
     D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT breadcrumbs = {};
     D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 breadcrumbs1 = {};
     D3D12_DRED_PAGE_FAULT_OUTPUT page_fault = {};
@@ -87,6 +103,19 @@ static void TestDeviceDred(BOOL enabled)
             ok(hr == expected, "enabled %d: breadcrumbs 1 of a live device: %#lx\n", enabled, hr);
             dred1->Release();
         }
+        hr = dred->QueryInterface(__uuidof(ID3D12DeviceRemovedExtendedData2), reinterpret_cast<void **>(&dred2));
+        ok(hr == S_OK, "device DRED 2: %#lx\n", hr);
+        if (dred2)
+        {
+            memset(&page_fault2, 0xcc, sizeof(page_fault2));
+            hr = dred2->GetPageFaultAllocationOutput2(&page_fault2);
+            ok(hr == expected && page_fault2.PageFaultFlags == 0xccccccccu,
+                    "enabled %d: page fault 2 of a live device: %#lx, flags %#x\n", enabled, hr,
+                    page_fault2.PageFaultFlags);
+            ok(dred2->GetDeviceState() == D3D12_DRED_DEVICE_STATE_UNKNOWN, "enabled %d: device state %u\n", enabled,
+                    dred2->GetDeviceState());
+            dred2->Release();
+        }
         dred->Release();
     }
     ok(device->GetDeviceRemovedReason() == S_OK, "device removed reason %#lx\n", device->GetDeviceRemovedReason());
@@ -107,6 +136,14 @@ static void RunInterfaces(void *)
     hr = D3D12GetDebugInterface(__uuidof(ID3D12DeviceRemovedExtendedDataSettings),
             reinterpret_cast<void **>(&settings));
     ok(hr == S_OK, "D3D12GetDebugInterface(DRED settings): %#lx\n", hr);
+    {
+        ID3D12DeviceRemovedExtendedDataSettings2 *settings2 = NULL;
+
+        hr = D3D12GetDebugInterface(__uuidof(ID3D12DeviceRemovedExtendedDataSettings2),
+                reinterpret_cast<void **>(&settings2));
+        ok(hr == S_OK && settings2, "D3D12GetDebugInterface(DRED settings 2): %#lx\n", hr);
+        if (settings2) settings2->Release();
+    }
     if (settings)
     {
         TestDeviceDred(FALSE);
