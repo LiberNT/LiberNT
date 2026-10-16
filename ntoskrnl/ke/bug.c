@@ -1461,6 +1461,7 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
     CHAR AnsiName[128];
     BOOLEAN IsSystem, IsHardError = FALSE, Reboot = FALSE;
     BOOLEAN IsDoubleFault;
+    BOOLEAN FatalErrorPrinted = FALSE;
     PCHAR HardErrCaption = NULL, HardErrMessage = NULL;
     PVOID Pc = NULL, Memory;
     PVOID DriverBase;
@@ -1804,6 +1805,7 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
                  KiBugCheckData[2],
                  KiBugCheckData[3],
                  KiBugCheckData[4]);
+        FatalErrorPrinted = TRUE;
 
         /* Check if the debugger isn't currently connected */
         if (!KdDebuggerNotPresent && !IsDoubleFault)
@@ -1922,6 +1924,17 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
 #ifndef _WINKD_
     KdEnableBugCheckDebugger();
 #endif
+
+    if (KdDebuggerEnabled && !FatalErrorPrinted)
+    {
+        DbgPrint("\n*** Fatal System Error: 0x%08lx\n"
+                 "                       (0x%p,0x%p,0x%p,0x%p)\n\n",
+                 KiBugCheckData[0],
+                 KiBugCheckData[1],
+                 KiBugCheckData[2],
+                 KiBugCheckData[3],
+                 KiBugCheckData[4]);
+    }
 
     /* Attempt to break in the debugger (otherwise halt CPU) */
     KiBugCheckDebugBreak(DBG_STATUS_BUGCHECK_SECOND);
