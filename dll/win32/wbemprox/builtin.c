@@ -234,7 +234,11 @@ static const struct column col_msft_phys_disk[] =
     { L"DeviceId",                          CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { L"EnclosureNumber",                   CIM_UINT16 },
     { L"FirmwareVersion",                   CIM_STRING },
+#ifdef __REACTOS__
+    { L"FriendlyName",                      CIM_STRING|COL_FLAG_DYNAMIC },
+#else
     { L"FriendlyName",                      CIM_STRING },
+#endif
     { L"FruId",                             CIM_STRING },
     { L"HealthStatus",                      CIM_UINT16 },
     { L"IsIndicationEnabled",               CIM_BOOLEAN },
@@ -242,7 +246,11 @@ static const struct column col_msft_phys_disk[] =
     { L"LogicalSectorSize",                 CIM_UINT64 },
     { L"Manufacturer",                      CIM_STRING },
     { L"MediaType",                         CIM_UINT16 },
+#ifdef __REACTOS__
+    { L"Model",                             CIM_STRING|COL_FLAG_DYNAMIC },
+#else
     { L"Model",                             CIM_STRING },
+#endif
     { L"OperationalDetails",                CIM_STRING|CIM_FLAG_ARRAY },
     { L"OperationalStatus",                 CIM_UINT16|CIM_FLAG_ARRAY|COL_FLAG_DYNAMIC },
     { L"OtherCannotPoolReasonDescription",  CIM_STRING },
@@ -5527,6 +5535,129 @@ static struct table wmi_builtin_classes[] =
     { L"MSSMBios_RawSMBiosTables", C(col_rawsmbiostables), 0, 0, NULL, fill_rawbiosdata },
 };
 
+#ifdef __REACTOS__
+static WCHAR *get_storage_descriptor_string( const STORAGE_DEVICE_DESCRIPTOR *desc, DWORD size, DWORD offset )
+{
+    const char *start, *end, *limit;
+    WCHAR *ret;
+    int len;
+
+    if (!offset || offset >= size) return NULL;
+    start = (const char *)desc + offset;
+    limit = (const char *)desc + size;
+    end = start;
+    while (end < limit && *end) end++;
+    while (start < end && *start == ' ') start++;
+    while (end > start && end[-1] == ' ') end--;
+    if (start == end) return NULL;
+
+    len = MultiByteToWideChar( CP_ACP, 0, start, end - start, NULL, 0 );
+    if (len <= 0 || !(ret = malloc( (len + 1) * sizeof(WCHAR) ))) return NULL;
+    MultiByteToWideChar( CP_ACP, 0, start, end - start, ret, len );
+    ret[len] = 0;
+    return ret;
+}
+
+static BOOL query_storage_property( HANDLE handle, STORAGE_PROPERTY_ID id, void *buffer, DWORD size )
+{
+    STORAGE_PROPERTY_QUERY query;
+    DWORD returned;
+
+    memset( &query, 0, sizeof(query) );
+    query.PropertyId = id;
+    query.QueryType = PropertyStandardQuery;
+    return DeviceIoControl( handle, IOCTL_STORAGE_QUERY_PROPERTY, &query, sizeof(query), buffer, size, &returned, NULL ) &&
+           returned != 0;
+}
+
+static enum fill_status fill_msft_phys_disk( struct table *table, const struct expr *cond )
+{
+    static UINT16 operational_status[] = { 2 };
+    static struct array operational_status_array =
+    {
+        .elem_size = sizeof(*operational_status),
+        .count = ARRAY_SIZE(operational_status),
+        .ptr = &operational_status,
+    };
+    static UINT16 supported_usages[] = { 1, 2, 3, 4, 5 };
+    static struct array supported_usages_array =
+    {
+        .elem_size = sizeof(*supported_usages),
+        .count = ARRAY_SIZE(supported_usages),
+        .ptr = supported_usages,
+    };
+    union
+    {
+        STORAGE_DEVICE_DESCRIPTOR desc;
+        BYTE buffer[1024];
+    } device;
+    DEVICE_SEEK_PENALTY_DESCRIPTOR seek_penalty;
+    DISK_GEOMETRY_EX geometry;
+    WCHAR path[32], device_id[10];
+    struct record_msft_phys_disk *rec;
+    UINT row = 0, offset = 0, index;
+    DWORD returned;
+    HANDLE handle;
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+
+    if (!resize_table( table, 2, sizeof(*rec) )) return FILL_STATUS_FAILED;
+
+    for (index = 0; index < 64; index++)
+    {
+        swprintf( path, ARRAY_SIZE( path ), L"\\\\.\\PhysicalDrive%u", index );
+        handle = CreateFileW( path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL );
+        if (handle == INVALID_HANDLE_VALUE) continue;
+
+        memset( &device, 0, sizeof(device) );
+        if (!query_storage_property( handle, StorageDeviceProperty, &device, sizeof(device) ) ||
+            !DeviceIoControl( handle, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, NULL, 0, &geometry, sizeof(geometry), &returned, NULL ))
+        {
+            CloseHandle( handle );
+            continue;
+        }
+
+        if (!resize_table( table, row + 1, sizeof(*rec) ))
+        {
+            CloseHandle( handle );
+            return FILL_STATUS_FAILED;
+        }
+
+        rec = (struct record_msft_phys_disk *)(table->data + offset);
+        memset( rec, 0, sizeof(*rec) );
+        rec->size                   = geometry.DiskSize.QuadPart;
+        rec->allocated_size         = rec->size;
+        rec->bus_type               = device.desc.BusType;
+        swprintf( device_id, ARRAY_SIZE( device_id ), L"%u", index );
+        rec->device_id              = wcsdup( device_id );
+        rec->model                  = get_storage_descriptor_string( &device.desc, sizeof(device), device.desc.ProductIdOffset );
+        rec->friendly_name          = rec->model ? wcsdup( rec->model ) : NULL;
+        rec->serial_number          = get_storage_descriptor_string( &device.desc, sizeof(device), device.desc.SerialNumberOffset );
+        rec->unique_id              = rec->serial_number ? wcsdup( rec->serial_number ) : NULL;
+        rec->health_status          = 0;
+        rec->media_type             = 0;
+        if (query_storage_property( handle, StorageDeviceSeekPenaltyProperty, &seek_penalty, sizeof(seek_penalty) ))
+            rec->media_type         = seek_penalty.IncursSeekPenalty ? 3 : 4;
+        rec->logical_sector_size    = geometry.Geometry.BytesPerSector;
+        rec->physical_sector_size   = geometry.Geometry.BytesPerSector;
+        rec->operational_status     = dup_array( &operational_status_array );
+        rec->supported_usages       = dup_array( &supported_usages_array );
+        rec->unique_id_format       = 0;
+        rec->usage                  = 1;
+        CloseHandle( handle );
+
+        if (!match_row( table, row, cond, &status ))
+        {
+            free_row_values( table, row );
+            continue;
+        }
+        offset += sizeof(*rec);
+        row++;
+    }
+    TRACE("created %u rows\n", row);
+    table->num_rows = row;
+    return status;
+}
+#else
 static enum fill_status fill_msft_phys_disk( struct table *table, const struct expr *cond )
 {
     static UINT16 operational_status[] = { 2 };
@@ -5598,6 +5729,7 @@ static enum fill_status fill_msft_phys_disk( struct table *table, const struct e
     table->num_rows = row;
     return status;
 }
+#endif
 
 static struct table win_storage_builtin_classes[] =
 {
