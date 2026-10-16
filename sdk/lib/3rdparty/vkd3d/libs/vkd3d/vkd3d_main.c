@@ -18,9 +18,22 @@
 
 #include "vkd3d_private.h"
 
+static const struct vkd3d_device_configuration_info *vkd3d_find_device_configuration(const void *next)
+{
+    const struct vkd3d_device_configuration_info *info;
+
+    for (info = next; info; info = info->next)
+    {
+        if (info->type == VKD3D_STRUCTURE_TYPE_DEVICE_CONFIGURATION_INFO)
+            return info;
+    }
+    return NULL;
+}
+
 HRESULT vkd3d_create_device(const struct vkd3d_device_create_info *create_info,
         REFIID iid, void **device)
 {
+    const struct vkd3d_device_configuration_info *configuration;
     struct d3d12_device *object, *existing;
     struct vkd3d_instance *instance;
     HRESULT hr;
@@ -52,7 +65,9 @@ HRESULT vkd3d_create_device(const struct vkd3d_device_create_info *create_info,
         return E_INVALIDARG;
     }
 
-    if ((object = d3d12_device_get_singleton(&create_info->adapter_luid, create_info->minimum_feature_level)))
+    configuration = vkd3d_find_device_configuration(create_info->next);
+    if (!configuration
+            && (object = d3d12_device_get_singleton(&create_info->adapter_luid, create_info->minimum_feature_level)))
     {
         if (!device)
         {
@@ -77,7 +92,13 @@ HRESULT vkd3d_create_device(const struct vkd3d_device_create_info *create_info,
     if (FAILED(hr))
         return hr;
 
-    if ((existing = d3d12_device_store_singleton(object, create_info->minimum_feature_level)))
+    if (configuration)
+    {
+        object->dred_auto_breadcrumbs = configuration->dred_auto_breadcrumbs;
+        object->dred_page_fault = configuration->dred_page_fault;
+        object->configuration_flags = configuration->configuration_flags;
+    }
+    else if ((existing = d3d12_device_store_singleton(object, create_info->minimum_feature_level)))
     {
         ID3D12Device14_Release(&object->ID3D12Device14_iface);
         object = existing;

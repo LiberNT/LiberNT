@@ -79,6 +79,8 @@ enum vkd3d_structure_type
      */
     VKD3D_STRUCTURE_TYPE_HOST_TIME_DOMAIN_INFO,
 
+    VKD3D_STRUCTURE_TYPE_DEVICE_CONFIGURATION_INFO,
+
     VKD3D_FORCE_32_BIT_ENUM(VKD3D_STRUCTURE_TYPE),
 };
 
@@ -457,6 +459,17 @@ VKD3D_API VkFormat vkd3d_get_vk_format(DXGI_FORMAT format);
 VKD3D_API DXGI_FORMAT vkd3d_get_dxgi_format(VkFormat format);
 VKD3D_API void vkd3d_set_dred_enablement(D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault);
 VKD3D_API void vkd3d_set_device_configuration_flags(UINT flags);
+
+struct vkd3d_device_configuration_info
+{
+    enum vkd3d_structure_type type;
+    const void *next;
+
+    D3D12_DRED_ENABLEMENT dred_auto_breadcrumbs;
+    D3D12_DRED_ENABLEMENT dred_page_fault;
+    UINT configuration_flags;
+};
+
 VKD3D_API HRESULT vkd3d_create_shader_cache_session(ID3D12Device *device,
         const D3D12_SHADER_CACHE_SESSION_DESC *desc, REFIID iid, void **session);
 
