@@ -45,6 +45,7 @@ typedef struct
     BOOL bDontDisplayLastUserName;
     BOOL bShutdownWithoutLogon;
     BOOL bIgnoreShiftOverride;
+    BOOL bRefreshSettings;
 
     ULONG nShutdownAction;
 

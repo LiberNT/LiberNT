@@ -229,6 +229,31 @@ GetRegistrySettings(PGINA_CONTEXT pgContext)
     return TRUE;
 }
 
+static
+BOOL
+IsSetupPending(VOID)
+{
+    DWORD dwSetupType = 0;
+    HKEY hKey;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\Setup", 0, KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS)
+        return FALSE;
+    if (ReadRegDwordValue(hKey, L"SetupType", &dwSetupType) != ERROR_SUCCESS)
+        dwSetupType = 0;
+    RegCloseKey(hKey);
+    return dwSetupType != 0;
+}
+
+static
+VOID
+RefreshRegistrySettings(PGINA_CONTEXT pgContext)
+{
+    if (!pgContext->bRefreshSettings)
+        return;
+    pgContext->bRefreshSettings = FALSE;
+    GetRegistrySettings(pgContext);
+}
+
 typedef DWORD (WINAPI *pThemeWait)(DWORD dwTimeout);
 typedef BOOL (WINAPI *pThemeWatch)(void);
 
@@ -282,6 +307,7 @@ WlxInitialize(
         LocalFree(pgContext);
         return FALSE;
     }
+    pgContext->bRefreshSettings = IsSetupPending();
 
     /* Return the context to winlogon */
     *pWlxContext = (PVOID)pgContext;
@@ -938,6 +964,8 @@ WlxDisplaySASNotice(
 
     TRACE("WlxDisplaySASNotice(%p)\n", pWlxContext);
 
+    RefreshRegistrySettings(pgContext);
+
     if (GetSystemMetrics(SM_REMOTESESSION))
     {
         /* User is remotely logged on. Don't display a notice */
@@ -987,6 +1015,8 @@ WlxLoggedOutSAS(
     INT res;
 
     TRACE("WlxLoggedOutSAS()\n");
+
+    RefreshRegistrySettings(pgContext);
 
     UNREFERENCED_PARAMETER(dwSasType);
     UNREFERENCED_PARAMETER(pLogonSid);
