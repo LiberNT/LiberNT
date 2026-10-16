@@ -1,0 +1,68 @@
+/*
+ * PROJECT:     LiberNT Settings
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     English resources
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+STRINGTABLE
+BEGIN
+    IDS_APP_TITLE "Settings"
+    IDS_FIND_SETTING "Find a setting"
+    IDS_LOCAL_ACCOUNT "Local Account"
+    IDS_SEARCH_RESULTS "Search results"
+    IDS_NO_RESULTS "No results"
+    IDS_EMPTY_PAGE "There are no settings on this page yet."
+    IDS_BACK "Back"
+
+    IDS_PAGE_SYSTEM "System"
+    IDS_PAGE_DEVICES "Bluetooth & devices"
+    IDS_PAGE_NETWORK "Network & internet"
+    IDS_PAGE_PERSONALIZE "Personalization"
+    IDS_PAGE_APPS "Apps"
+    IDS_PAGE_ACCOUNTS "Accounts"
+    IDS_PAGE_TIME "Time & language"
+    IDS_PAGE_GAMING "Gaming"
+    IDS_PAGE_ACCESSIBILITY "Accessibility"
+    IDS_PAGE_PRIVACY "Privacy & security"
+    IDS_PAGE_UPDATE "Updates"
+
+    IDS_CARD_DISPLAY "Display"
+    IDS_CARD_DISPLAY_DESC "Monitors, resolution, scale"
+    IDS_CARD_SOUND "Sound"
+    IDS_CARD_SOUND_DESC "Volume levels, output, input, sound devices"
+    IDS_CARD_POWER "Power"
+    IDS_CARD_POWER_DESC "Screen and sleep, power plans"
+    IDS_CARD_ABOUT "About"
+    IDS_CARD_ABOUT_DESC "Device specifications, computer name, advanced settings"
+    IDS_CARD_BLUETOOTH "Bluetooth"
+    IDS_CARD_BLUETOOTH_DESC "Pair and manage Bluetooth devices"
+    IDS_CARD_DEVICES "Device Manager"
+    IDS_CARD_DEVICES_DESC "Hardware, drivers, device properties"
+    IDS_CARD_MOUSE "Mouse"
+    IDS_CARD_MOUSE_DESC "Buttons, pointer speed, scrolling"
+    IDS_CARD_KEYBOARD "Keyboard"
+    IDS_CARD_KEYBOARD_DESC "Repeat delay, repeat rate, cursor blink rate"
+    IDS_CARD_PRINTERS "Printers & scanners"
+    IDS_CARD_PRINTERS_DESC "Installed printers, print queues"
+    IDS_CARD_CONNECTIONS "Network connections"
+    IDS_CARD_CONNECTIONS_DESC "Adapters, IP settings, status"
+    IDS_CARD_INTERNET "Internet options"
+    IDS_CARD_INTERNET_DESC "Proxy, security zones, connections"
+    IDS_CARD_APPEARANCE "Background and colors"
+    IDS_CARD_APPEARANCE_DESC "Desktop background, colors, screen saver"
+    IDS_CARD_INSTALLED "Installed apps"
+    IDS_CARD_INSTALLED_DESC "Uninstall, change, Windows features"
+    IDS_CARD_USERS "Other users"
+    IDS_CARD_USERS_DESC "Accounts, passwords, groups"
+    IDS_CARD_DATETIME "Date & time"
+    IDS_CARD_DATETIME_DESC "Time zone, clock, internet time"
+    IDS_CARD_REGION "Language & region"
+    IDS_CARD_REGION_DESC "Formats, location, keyboards"
+    IDS_CARD_CONTROLLERS "Game controllers"
+    IDS_CARD_CONTROLLERS_DESC "Joysticks, gamepads, calibration"
+    IDS_CARD_ACCESS "Accessibility options"
+    IDS_CARD_ACCESS_DESC "Keyboard, sound, display, mouse aids"
+END

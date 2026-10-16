@@ -1,0 +1,87 @@
+Source: Microsoft Fluent UI System Icons
+Repository: https://github.com/microsoft/fluentui-system-icons
+Revision: 4d685f77b2cb8f3f412a74ec8d920c8c91149528
+License: MIT (see LICENSE)
+
+Files used, copied unmodified and drawn from their path data at run time:
+- assets/Accessibility/SVG/ic_fluent_accessibility_20_regular.svg
+- assets/Add/SVG/ic_fluent_add_16_regular.svg
+- assets/Add Circle/SVG/ic_fluent_add_circle_20_regular.svg
+- assets/Alert/SVG/ic_fluent_alert_20_regular.svg
+- assets/Apps/SVG/ic_fluent_apps_20_regular.svg
+- assets/Apps List/SVG/ic_fluent_apps_list_20_regular.svg
+- assets/Arrow Clockwise/SVG/ic_fluent_arrow_clockwise_16_regular.svg
+- assets/Arrow Download/SVG/ic_fluent_arrow_download_20_regular.svg
+- assets/Arrow Left/SVG/ic_fluent_arrow_left_16_regular.svg
+- assets/Arrow Right/SVG/ic_fluent_arrow_right_16_regular.svg
+- assets/Arrow Sort/SVG/ic_fluent_arrow_sort_20_regular.svg
+- assets/Arrow Sync/SVG/ic_fluent_arrow_sync_20_regular.svg
+- assets/Arrow Up/SVG/ic_fluent_arrow_up_16_regular.svg
+- assets/Battery 10/SVG/ic_fluent_battery_10_20_regular.svg
+- assets/Bluetooth/SVG/ic_fluent_bluetooth_20_regular.svg
+- assets/Calendar Clock/SVG/ic_fluent_calendar_clock_20_regular.svg
+- assets/Checkmark Circle/SVG/ic_fluent_checkmark_circle_20_regular.svg
+- assets/Chevron Down/SVG/ic_fluent_chevron_down_12_regular.svg
+- assets/Chevron Right/SVG/ic_fluent_chevron_right_12_regular.svg
+- assets/Chevron Right/SVG/ic_fluent_chevron_right_16_regular.svg
+- assets/Chevron Up/SVG/ic_fluent_chevron_up_12_regular.svg
+- assets/Clipboard Paste/SVG/ic_fluent_clipboard_paste_20_regular.svg
+- assets/Color/SVG/ic_fluent_color_20_regular.svg
+- assets/Copy/SVG/ic_fluent_copy_20_regular.svg
+- assets/Cursor/SVG/ic_fluent_cursor_20_regular.svg
+- assets/Cut/SVG/ic_fluent_cut_20_regular.svg
+- assets/Delete/SVG/ic_fluent_delete_20_regular.svg
+- assets/Desktop/SVG/ic_fluent_desktop_20_regular.svg
+- assets/Device Meeting Room/SVG/ic_fluent_device_meeting_room_20_regular.svg
+- assets/Dismiss/SVG/ic_fluent_dismiss_16_regular.svg
+- assets/Document/SVG/ic_fluent_document_20_regular.svg
+- assets/Filter/SVG/ic_fluent_filter_20_regular.svg
+- assets/Folder/SVG/ic_fluent_folder_20_regular.svg
+- assets/Folder Open/SVG/ic_fluent_folder_open_20_regular.svg
+- assets/Games/SVG/ic_fluent_games_20_regular.svg
+- assets/Globe/SVG/ic_fluent_globe_20_regular.svg
+- assets/Globe Clock/SVG/ic_fluent_globe_clock_20_regular.svg
+- assets/Grid/SVG/ic_fluent_grid_16_regular.svg
+- assets/Hard Drive/SVG/ic_fluent_hard_drive_16_regular.svg
+- assets/Hard Drive/SVG/ic_fluent_hard_drive_20_regular.svg
+- assets/Home/SVG/ic_fluent_home_20_regular.svg
+- assets/Image/SVG/ic_fluent_image_20_regular.svg
+- assets/Image Multiple/SVG/ic_fluent_image_multiple_20_regular.svg
+- assets/Info/SVG/ic_fluent_info_20_regular.svg
+- assets/Keyboard/SVG/ic_fluent_keyboard_20_regular.svg
+- assets/List/SVG/ic_fluent_list_16_regular.svg
+- assets/List/SVG/ic_fluent_list_20_regular.svg
+- assets/Local Language/SVG/ic_fluent_local_language_20_regular.svg
+- assets/Location/SVG/ic_fluent_location_20_regular.svg
+- assets/Lock Closed/SVG/ic_fluent_lock_closed_20_regular.svg
+- assets/Mic/SVG/ic_fluent_mic_20_regular.svg
+- assets/More Horizontal/SVG/ic_fluent_more_horizontal_20_regular.svg
+- assets/Music Note 2/SVG/ic_fluent_music_note_2_20_regular.svg
+- assets/Navigation/SVG/ic_fluent_navigation_16_regular.svg
+- assets/Paint Brush/SVG/ic_fluent_paint_brush_20_regular.svg
+- assets/Panel Right/SVG/ic_fluent_panel_right_20_regular.svg
+- assets/People/SVG/ic_fluent_people_20_regular.svg
+- assets/Person/SVG/ic_fluent_person_20_regular.svg
+- assets/Pin/SVG/ic_fluent_pin_16_regular.svg
+- assets/Power/SVG/ic_fluent_power_20_regular.svg
+- assets/Print/SVG/ic_fluent_print_20_regular.svg
+- assets/Rename/SVG/ic_fluent_rename_20_regular.svg
+- assets/Router/SVG/ic_fluent_router_20_regular.svg
+- assets/Search/SVG/ic_fluent_search_16_regular.svg
+- assets/Settings/SVG/ic_fluent_settings_20_regular.svg
+- assets/Settings/SVG/ic_fluent_settings_24_regular.svg
+- assets/Share/SVG/ic_fluent_share_20_regular.svg
+- assets/Shield/SVG/ic_fluent_shield_20_regular.svg
+- assets/Speaker 2/SVG/ic_fluent_speaker_2_20_regular.svg
+- assets/Square/SVG/ic_fluent_square_16_regular.svg
+- assets/Square Multiple/SVG/ic_fluent_square_multiple_16_regular.svg
+- assets/Storage/SVG/ic_fluent_storage_20_regular.svg
+- assets/Subtract/SVG/ic_fluent_subtract_16_regular.svg
+- assets/Text Bullet List/SVG/ic_fluent_text_bullet_list_20_regular.svg
+- assets/Text Bullet List LTR/SVG/ic_fluent_text_bullet_list_ltr_16_regular.svg
+- assets/Text Bullet List LTR/SVG/ic_fluent_text_bullet_list_ltr_20_regular.svg
+- assets/Text Bullet List Square/SVG/ic_fluent_text_bullet_list_square_20_regular.svg
+- assets/Video/SVG/ic_fluent_video_20_regular.svg
+- assets/WiFi 1/SVG/ic_fluent_wifi_1_20_regular.svg
+- assets/Window Multiple/SVG/ic_fluent_window_multiple_20_regular.svg
+- assets/Wrench/SVG/ic_fluent_wrench_20_regular.svg
