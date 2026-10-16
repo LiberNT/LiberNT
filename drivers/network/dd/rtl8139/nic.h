@@ -13,7 +13,8 @@
 #include "rtlhw.h"
 
 #define ADAPTER_TAG 'Altr'
-#define RESOURCE_LIST_TAG 'Rltr'
+#define RECEIVE_TAG 'Rltr'
+#define RECEIVE_NBL_COUNT 64
 
 #define MAX_RESET_ATTEMPTS 25
 #define RECEIVE_BUFFER_SIZE      (32768)
@@ -49,9 +50,19 @@ typedef struct _RTL_ADAPTER {
     ULONG InterruptFlags;
 
     PUCHAR IoBase;
-    NDIS_MINIPORT_INTERRUPT Interrupt;
-    BOOLEAN InterruptRegistered;
+    NDIS_HANDLE InterruptHandle;
+    NDIS_HANDLE DmaHandle;
     BOOLEAN DmaActive;
+    BOOLEAN Paused;
+    BOOLEAN PausePending;
+
+    NDIS_HANDLE ReceiveNblPool;
+    PNET_BUFFER_LIST FreeReceiveNbls;
+    PNET_BUFFER_LIST ReceiveNbls[RECEIVE_NBL_COUNT];
+    ULONG ReceiveNblsOutstanding;
+
+    PNET_BUFFER_LIST SendQueueHead;
+    PNET_BUFFER_LIST SendQueueTail;
 
     UCHAR PermanentMacAddress[IEEE_802_ADDR_LENGTH];
     UCHAR CurrentMacAddress[IEEE_802_ADDR_LENGTH];
@@ -174,40 +185,33 @@ NICTransmitPacket (
     IN ULONG Length
     );
 
-NDIS_STATUS
-NTAPI
-MiniportSetInformation (
-    IN NDIS_HANDLE MiniportAdapterContext,
-    IN NDIS_OID Oid,
-    IN PVOID InformationBuffer,
-    IN ULONG InformationBufferLength,
-    OUT PULONG BytesRead,
-    OUT PULONG BytesNeeded
-    );
+extern NDIS_OID RtlSupportedOids[];
+extern ULONG RtlSupportedOidCount;
 
-NDIS_STATUS
-NTAPI
-MiniportQueryInformation (
-    IN NDIS_HANDLE MiniportAdapterContext,
-    IN NDIS_OID Oid,
-    IN PVOID InformationBuffer,
-    IN ULONG InformationBufferLength,
-    OUT PULONG BytesWritten,
-    OUT PULONG BytesNeeded
+MINIPORT_OID_REQUEST MiniportOidRequest;
+MINIPORT_CANCEL_OID_REQUEST MiniportCancelOidRequest;
+MINIPORT_ISR MiniportIsr;
+MINIPORT_INTERRUPT_DPC MiniportInterruptDpc;
+MINIPORT_DISABLE_INTERRUPT MiniportDisableInterrupt;
+MINIPORT_ENABLE_INTERRUPT MiniportEnableInterrupt;
+
+VOID
+RtlIndicateLinkState (
+    IN PRTL_ADAPTER Adapter
     );
 
 VOID
-NTAPI
-MiniportISR (
-    OUT PBOOLEAN InterruptRecognized,
-    OUT PBOOLEAN QueueMiniportHandleInterrupt,
-    IN NDIS_HANDLE MiniportAdapterContext
+RtlProcessSendQueue (
+    IN PRTL_ADAPTER Adapter,
+    IN OUT PNET_BUFFER_LIST *CompleteHead,
+    IN OUT PNET_BUFFER_LIST *CompleteTail
     );
 
 VOID
-NTAPI
-MiniportHandleInterrupt (
-    IN NDIS_HANDLE MiniportAdapterContext
+RtlCompleteSends (
+    IN PRTL_ADAPTER Adapter,
+    IN PNET_BUFFER_LIST CompleteHead,
+    IN BOOLEAN DispatchLevel
     );
 
 #endif /* _RTL8139_PCH_ */

@@ -42,6 +42,9 @@ DefaultDestDir = 12
 
 [RTL8139_Inst.ndi.NT]
 Characteristics = 0x4 ; NCF_PHYSICAL
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType = 5 ; PCIBus
 AddReg = RTL8139_AddReg.NT
 CopyFiles = RTL8139_CopyFiles.NT

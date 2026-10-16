@@ -24,7 +24,7 @@
 #define NDEBUG
 #include <debug.h>
 
-static ULONG SupportedOidList[] =
+NDIS_OID RtlSupportedOids[] =
 {
     OID_GEN_SUPPORTED_LIST,
     OID_GEN_HARDWARE_STATUS,
@@ -62,11 +62,15 @@ static ULONG SupportedOidList[] =
     OID_802_3_RCV_ERROR_ALIGNMENT,
     OID_802_3_XMIT_ONE_COLLISION,
     OID_802_3_XMIT_MORE_COLLISIONS,
-    OID_GEN_PHYSICAL_MEDIUM
+    OID_GEN_PHYSICAL_MEDIUM,
+    OID_GEN_STATISTICS,
+    OID_GEN_INTERRUPT_MODERATION
 };
 
+ULONG RtlSupportedOidCount = RTL_NUMBER_OF(RtlSupportedOids);
+
+static
 NDIS_STATUS
-NTAPI
 MiniportQueryInformation (
     IN NDIS_HANDLE MiniportAdapterContext,
     IN NDIS_OID Oid,
@@ -77,6 +81,8 @@ MiniportQueryInformation (
     )
 {
     PRTL_ADAPTER adapter = (PRTL_ADAPTER)MiniportAdapterContext;
+    NDIS_INTERRUPT_MODERATION_PARAMETERS moderation;
+    NDIS_STATISTICS_INFO statistics;
     ULONG genericUlong;
     ULONG copyLength;
     PVOID copySource;
@@ -91,8 +97,37 @@ MiniportQueryInformation (
     switch (Oid)
     {
         case OID_GEN_SUPPORTED_LIST:
-            copySource = (PVOID)&SupportedOidList;
-            copyLength = sizeof(SupportedOidList);
+            copySource = (PVOID)&RtlSupportedOids;
+            copyLength = sizeof(RtlSupportedOids);
+            break;
+
+        case OID_GEN_STATISTICS:
+            NdisZeroMemory(&statistics, sizeof(statistics));
+            statistics.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+            statistics.Header.Revision = NDIS_STATISTICS_INFO_REVISION_1;
+            statistics.Header.Size = NDIS_SIZEOF_STATISTICS_INFO_REVISION_1;
+            statistics.SupportedStatistics = NDIS_STATISTICS_FLAGS_VALID_DIRECTED_FRAMES_RCV |
+                                             NDIS_STATISTICS_FLAGS_VALID_RCV_ERROR |
+                                             NDIS_STATISTICS_FLAGS_VALID_RCV_DISCARDS |
+                                             NDIS_STATISTICS_FLAGS_VALID_DIRECTED_FRAMES_XMIT |
+                                             NDIS_STATISTICS_FLAGS_VALID_XMIT_ERROR;
+            statistics.ifInDiscards = adapter->ReceiveNoBufferSpace + adapter->ReceiveError;
+            statistics.ifInErrors = adapter->ReceiveError;
+            statistics.ifHCInUcastPkts = adapter->ReceiveOk;
+            statistics.ifHCOutUcastPkts = adapter->TransmitOk;
+            statistics.ifOutErrors = adapter->TransmitError;
+            copySource = &statistics;
+            copyLength = sizeof(statistics);
+            break;
+
+        case OID_GEN_INTERRUPT_MODERATION:
+            NdisZeroMemory(&moderation, sizeof(moderation));
+            moderation.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+            moderation.Header.Revision = NDIS_INTERRUPT_MODERATION_PARAMETERS_REVISION_1;
+            moderation.Header.Size = NDIS_SIZEOF_INTERRUPT_MODERATION_PARAMETERS_REVISION_1;
+            moderation.InterruptModeration = NdisInterruptModerationNotSupported;
+            copySource = &moderation;
+            copyLength = sizeof(moderation);
             break;
 
         case OID_GEN_CURRENT_PACKET_FILTER:
@@ -276,8 +311,8 @@ MiniportQueryInformation (
     return status;
 }
 
+static
 NDIS_STATUS
-NTAPI
 MiniportSetInformation (
     IN NDIS_HANDLE MiniportAdapterContext,
     IN NDIS_OID Oid,
@@ -395,4 +430,44 @@ MiniportSetInformation (
     NdisReleaseSpinLock(&adapter->Lock);
 
     return status;
+}
+
+NDIS_STATUS
+NTAPI
+MiniportOidRequest(
+    IN NDIS_HANDLE MiniportAdapterContext,
+    IN PNDIS_OID_REQUEST OidRequest)
+{
+    switch (OidRequest->RequestType)
+    {
+        case NdisRequestQueryInformation:
+        case NdisRequestQueryStatistics:
+            return MiniportQueryInformation(MiniportAdapterContext,
+                                            OidRequest->DATA.QUERY_INFORMATION.Oid,
+                                            OidRequest->DATA.QUERY_INFORMATION.InformationBuffer,
+                                            OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength,
+                                            (PULONG)&OidRequest->DATA.QUERY_INFORMATION.BytesWritten,
+                                            (PULONG)&OidRequest->DATA.QUERY_INFORMATION.BytesNeeded);
+
+        case NdisRequestSetInformation:
+            return MiniportSetInformation(MiniportAdapterContext,
+                                          OidRequest->DATA.SET_INFORMATION.Oid,
+                                          OidRequest->DATA.SET_INFORMATION.InformationBuffer,
+                                          OidRequest->DATA.SET_INFORMATION.InformationBufferLength,
+                                          (PULONG)&OidRequest->DATA.SET_INFORMATION.BytesRead,
+                                          (PULONG)&OidRequest->DATA.SET_INFORMATION.BytesNeeded);
+
+        default:
+            return NDIS_STATUS_NOT_SUPPORTED;
+    }
+}
+
+VOID
+NTAPI
+MiniportCancelOidRequest(
+    IN NDIS_HANDLE MiniportAdapterContext,
+    IN PVOID RequestId)
+{
+    UNREFERENCED_PARAMETER(MiniportAdapterContext);
+    UNREFERENCED_PARAMETER(RequestId);
 }

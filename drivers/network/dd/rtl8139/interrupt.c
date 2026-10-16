@@ -24,36 +24,25 @@
 #define NDEBUG
 #include <debug.h>
 
-VOID
+BOOLEAN
 NTAPI
-MiniportISR (
-    OUT PBOOLEAN InterruptRecognized,
-    OUT PBOOLEAN QueueMiniportHandleInterrupt,
-    IN NDIS_HANDLE MiniportAdapterContext
-    )
+MiniportIsr(
+    IN NDIS_HANDLE MiniportInterruptContext,
+    OUT PBOOLEAN QueueDefaultInterruptDpc,
+    OUT PULONG TargetProcessors)
 {
-    PRTL_ADAPTER adapter = (PRTL_ADAPTER)MiniportAdapterContext;
+    PRTL_ADAPTER adapter = (PRTL_ADAPTER)MiniportInterruptContext;
+    BOOLEAN recognized;
     ULONG csConfig;
 
-    //
-    // FIXME: We need to synchronize with this ISR for changes to InterruptPending,
-    // LinkChange, MediaState, and LinkSpeedMbps. We can get away with IRQL
-    // synchronization on non-SMP machines because we run a DIRQL here.
-    //
-
-    adapter->InterruptPending |= NICInterruptRecognized(adapter, InterruptRecognized);
-    if (!(*InterruptRecognized))
+    *TargetProcessors = 0;
+    adapter->InterruptPending |= NICInterruptRecognized(adapter, &recognized);
+    if (!recognized)
     {
-        //
-        // This is not ours.
-        //
-        *QueueMiniportHandleInterrupt = FALSE;
-        return;
+        *QueueDefaultInterruptDpc = FALSE;
+        return FALSE;
     }
 
-    //
-    // We have to check for a special link change interrupt before acknowledging
-    //
     if (adapter->InterruptPending & R_I_RXUNDRUN)
     {
         NdisRawReadPortUlong(adapter->IoBase + R_CSCFG, &csConfig);
@@ -64,85 +53,77 @@ MiniportISR (
         }
     }
 
-    //
-    // Acknowledge the interrupt and mark the events pending service
-    //
     NICAcknowledgeInterrupts(adapter);
-    *QueueMiniportHandleInterrupt = TRUE;
+    *QueueDefaultInterruptDpc = TRUE;
+    return TRUE;
 }
 
 VOID
 NTAPI
-MiniportHandleInterrupt (
-    IN NDIS_HANDLE MiniportAdapterContext
-    )
+MiniportDisableInterrupt(
+    IN NDIS_HANDLE MiniportInterruptContext)
 {
-    PRTL_ADAPTER adapter = (PRTL_ADAPTER)MiniportAdapterContext;
+    NICDisableInterrupts((PRTL_ADAPTER)MiniportInterruptContext);
+}
+
+VOID
+NTAPI
+MiniportEnableInterrupt(
+    IN NDIS_HANDLE MiniportInterruptContext)
+{
+    NICApplyInterruptMask((PRTL_ADAPTER)MiniportInterruptContext);
+}
+
+VOID
+NTAPI
+MiniportInterruptDpc(
+    IN NDIS_HANDLE MiniportInterruptContext,
+    IN PVOID MiniportDpcContext,
+    IN PVOID ReceiveThrottleParameters,
+    IN PVOID NdisReserved2)
+{
+    PRTL_ADAPTER adapter = (PRTL_ADAPTER)MiniportInterruptContext;
+    PNET_BUFFER_LIST completeHead = NULL, completeTail = NULL;
+    PNET_BUFFER_LIST receiveHead = NULL, receiveTail = NULL, nbl;
+    ULONG receiveCount = 0;
+    ULONG frameLength;
     ULONG txStatus;
     UCHAR command;
     PPACKET_HEADER nicHeader;
-    PETH_HEADER ethHeader;
+    BOOLEAN linkChange;
+
+    UNREFERENCED_PARAMETER(MiniportDpcContext);
+    UNREFERENCED_PARAMETER(ReceiveThrottleParameters);
+    UNREFERENCED_PARAMETER(NdisReserved2);
 
     NdisDprAcquireSpinLock(&adapter->Lock);
 
-    NDIS_DbgPrint(MAX_TRACE, ("Interrupts pending: 0x%x\n", adapter->InterruptPending));
+    linkChange = adapter->LinkChange;
+    adapter->LinkChange = FALSE;
 
-    //
-    // Handle a link change
-    //
-    if (adapter->LinkChange)
-    {
-        NdisDprReleaseSpinLock(&adapter->Lock);
-        NdisMIndicateStatus(adapter->MiniportAdapterHandle,
-                            adapter->MediaState == NdisMediaStateConnected ?
-                                NDIS_STATUS_MEDIA_CONNECT : NDIS_STATUS_MEDIA_DISCONNECT,
-                            NULL,
-                            0);
-        NdisMIndicateStatusComplete(adapter->MiniportAdapterHandle);
-        NdisDprAcquireSpinLock(&adapter->Lock);
-        adapter->LinkChange = FALSE;
-    }
-
-    //
-    // Handle a TX interrupt
-    //
     if (adapter->InterruptPending & (R_I_TXOK | R_I_TXERR))
     {
         while (adapter->TxFull || adapter->DirtyTxDesc != adapter->CurrentTxDesc)
         {
             NdisRawReadPortUlong(adapter->IoBase + R_TXSTS0 +
                                  (adapter->DirtyTxDesc * sizeof(ULONG)), &txStatus);
-
             if (!(txStatus & (R_TXS_STATOK | R_TXS_UNDERRUN | R_TXS_ABORTED)))
-            {
-                //
-                // Not sent yet
-                //
                 break;
-            }
-
-            NDIS_DbgPrint(MAX_TRACE, ("Transmission for desc %d complete: 0x%x\n",
-                                      adapter->DirtyTxDesc, txStatus));
 
             if (txStatus & R_TXS_STATOK)
-            {
                 adapter->TransmitOk++;
-            }
             else
-            {
                 adapter->TransmitError++;
-            }
 
             adapter->DirtyTxDesc++;
             adapter->DirtyTxDesc %= TX_DESC_COUNT;
             adapter->InterruptPending &= ~(R_I_TXOK | R_I_TXERR);
             adapter->TxFull = FALSE;
         }
+
+        RtlProcessSendQueue(adapter, &completeHead, &completeTail);
     }
 
-    //
-    // Handle a good RX interrupt
-    //
     if (adapter->InterruptPending & (R_I_RXOK | R_I_RXERR))
     {
         for (;;)
@@ -150,49 +131,53 @@ MiniportHandleInterrupt (
             NdisRawReadPortUchar(adapter->IoBase + R_CMD, &command);
             if (command & R_CMD_RXEMPTY)
             {
-                //
-                // The buffer is empty
-                //
                 adapter->InterruptPending &= ~(R_I_RXOK | R_I_RXERR);
                 break;
             }
 
             adapter->ReceiveOffset %= RECEIVE_BUFFER_SIZE;
-
-            NDIS_DbgPrint(MAX_TRACE, ("Looking for a packet at offset 0x%x\n",
-                            adapter->ReceiveOffset));
             nicHeader = (PPACKET_HEADER)(adapter->ReceiveBuffer + adapter->ReceiveOffset);
             if (!(nicHeader->Status & RSR_ROK))
             {
-                //
-                // Receive failed
-                //
-                NDIS_DbgPrint(MIN_TRACE, ("Receive failed: 0x%x\n", nicHeader->Status));
-
                 if (nicHeader->Status & RSR_FAE)
-                {
                     adapter->ReceiveAlignmentError++;
-                }
                 else if (nicHeader->Status & RSR_CRC)
-                {
                     adapter->ReceiveCrcError++;
-                }
                 adapter->ReceiveError++;
-
                 goto NextPacket;
             }
 
-            NDIS_DbgPrint(MAX_TRACE, ("Indicating %d byte packet to NDIS\n",
-                           nicHeader->PacketLength - RECV_CRC_LENGTH));
+            frameLength = nicHeader->PacketLength - RECV_CRC_LENGTH;
+            if (nicHeader->PacketLength < RECV_CRC_LENGTH + sizeof(ETH_HEADER) || frameLength > MAXIMUM_FRAME_SIZE)
+            {
+                adapter->ReceiveError++;
+                goto NextPacket;
+            }
 
-            ethHeader = (PETH_HEADER)(nicHeader + 1);
-            NdisMEthIndicateReceive(adapter->MiniportAdapterHandle,
-                                    NULL,
-                                    (PVOID)(ethHeader),
-                                    sizeof(ETH_HEADER),
-                                    (PVOID)(ethHeader + 1),
-                                    nicHeader->PacketLength - sizeof(ETH_HEADER) - RECV_CRC_LENGTH,
-                                    nicHeader->PacketLength - sizeof(ETH_HEADER) - RECV_CRC_LENGTH);
+            if (adapter->Paused || adapter->FreeReceiveNbls == NULL)
+            {
+                adapter->ReceiveNoBufferSpace++;
+                goto NextPacket;
+            }
+
+            nbl = adapter->FreeReceiveNbls;
+            adapter->FreeReceiveNbls = NET_BUFFER_LIST_NEXT_NBL(nbl);
+            adapter->ReceiveNblsOutstanding++;
+
+            RtlCopyMemory(nbl->MiniportReserved[0], nicHeader + 1, frameLength);
+            NdisAdjustMdlLength(NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(nbl)), frameLength);
+            NET_BUFFER_DATA_OFFSET(NET_BUFFER_LIST_FIRST_NB(nbl)) = 0;
+            NET_BUFFER_CURRENT_MDL(NET_BUFFER_LIST_FIRST_NB(nbl)) = NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(nbl));
+            NET_BUFFER_CURRENT_MDL_OFFSET(NET_BUFFER_LIST_FIRST_NB(nbl)) = 0;
+            NET_BUFFER_DATA_LENGTH(NET_BUFFER_LIST_FIRST_NB(nbl)) = frameLength;
+            NET_BUFFER_LIST_STATUS(nbl) = NDIS_STATUS_SUCCESS;
+            NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
+            if (receiveTail)
+                NET_BUFFER_LIST_NEXT_NBL(receiveTail) = nbl;
+            else
+                receiveHead = nbl;
+            receiveTail = nbl;
+            receiveCount++;
             adapter->ReceiveOk++;
 
         NextPacket:
@@ -202,16 +187,25 @@ MiniportHandleInterrupt (
 
             if (adapter->InterruptPending & (R_I_RXOVRFLW | R_I_FIFOOVR))
             {
-                //
-                // We can only clear these interrupts once CAPR has been reset
-                //
                 NdisRawWritePortUshort(adapter->IoBase + R_IS, R_I_RXOVRFLW | R_I_FIFOOVR);
                 adapter->InterruptPending &= ~(R_I_RXOVRFLW | R_I_FIFOOVR);
             }
         }
-
-        NdisMEthIndicateReceiveComplete(adapter->MiniportAdapterHandle);
     }
 
     NdisDprReleaseSpinLock(&adapter->Lock);
+
+    RtlCompleteSends(adapter, completeHead, TRUE);
+
+    if (receiveHead != NULL)
+    {
+        NdisMIndicateReceiveNetBufferLists(adapter->MiniportAdapterHandle,
+                                           receiveHead,
+                                           NDIS_DEFAULT_PORT_NUMBER,
+                                           receiveCount,
+                                           NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL);
+    }
+
+    if (linkChange)
+        RtlIndicateLinkState(adapter);
 }
