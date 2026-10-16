@@ -432,6 +432,11 @@ static HRESULT string_alloc_from_int(const PROPVARIANT *var, WCHAR **ret)
         case VT_I8:
             value = (negative = var->hVal.QuadPart < 0) ? -var->hVal.QuadPart : var->hVal.QuadPart;
             break;
+#ifdef __REACTOS__
+        case VT_BOOL:
+            value = (negative = var->boolVal < 0) ? -var->boolVal : var->boolVal;
+            break;
+#endif
         case VT_UI1:
             value = var->bVal;
             break;
@@ -526,8 +531,45 @@ HRESULT WINAPI PropVariantToStringAlloc(REFPROPVARIANT propvarIn, WCHAR **ret)
         case VT_UI2:
         case VT_UI4:
         case VT_UI8:
+#ifdef __REACTOS__
+        case VT_BOOL:
+#endif
             hr = string_alloc_from_int(propvarIn, &res);
             break;
+
+#ifdef __REACTOS__
+        case VT_FILETIME:
+        {
+            SYSTEMTIME st;
+
+            if (!FileTimeToSystemTime(&propvarIn->filetime, &st))
+                return HRESULT_FROM_WIN32(GetLastError());
+            if (!(res = CoTaskMemAlloc(24 * sizeof(WCHAR))))
+                return E_OUTOFMEMORY;
+            swprintf(res, 24, L"%04u/%02u/%02u:%02u:%02u:%02u.%03u", st.wYear, st.wMonth, st.wDay,
+                     st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+            break;
+        }
+
+        case VT_VECTOR | VT_LPWSTR:
+        {
+            SIZE_T len = 1;
+            ULONG i;
+
+            for (i = 0; i < propvarIn->calpwstr.cElems; i++)
+                len += lstrlenW(propvarIn->calpwstr.pElems[i]) + (i ? 2 : 0);
+            if (!(res = CoTaskMemAlloc(len * sizeof(WCHAR))))
+                return E_OUTOFMEMORY;
+            res[0] = 0;
+            for (i = 0; i < propvarIn->calpwstr.cElems; i++)
+            {
+                if (i)
+                    lstrcatW(res, L"; ");
+                lstrcatW(res, propvarIn->calpwstr.pElems[i]);
+            }
+            break;
+        }
+#endif
 
         default:
             FIXME("Unsupported conversion (%d)\n", propvarIn->vt);
@@ -863,6 +905,21 @@ HRESULT WINAPI InitPropVariantFromCLSID(REFCLSID clsid, PROPVARIANT *ppropvar)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+HRESULT WINAPI InitPropVariantFromFileTime(const FILETIME *ft, PROPVARIANT *ppropvar)
+{
+    TRACE("(%p %p)\n", ft, ppropvar);
+
+    if (!ft || !ppropvar)
+        return E_INVALIDARG;
+
+    PropVariantInit(ppropvar);
+    ppropvar->vt = VT_FILETIME;
+    ppropvar->filetime = *ft;
+    return S_OK;
+}
+#endif
+
 HRESULT WINAPI InitPropVariantFromStringVector(PCWSTR *strs, ULONG count, PROPVARIANT *ppropvar)
 {
     unsigned int i;
@@ -1142,6 +1199,14 @@ INT WINAPI PropVariantCompareEx(REFPROPVARIANT propvar1, REFPROPVARIANT propvar2
     case VT_UI8:
         CMP_NUM_VALUE(uhVal.QuadPart);
         break;
+#ifdef __REACTOS__
+    case VT_BOOL:
+        CMP_NUM_VALUE(boolVal);
+        break;
+    case VT_FILETIME:
+        res = CompareFileTime(&propvar1->filetime, &propvar2_converted->filetime);
+        break;
+#endif
     case VT_R4:
         CMP_NUM_VALUE(fltVal);
         break;
@@ -1394,6 +1459,13 @@ HRESULT WINAPI PropVariantToFileTime(REFPROPVARIANT propvar, PSTIME_FLAGS flags,
     {
     case VT_EMPTY:
         return E_INVALIDARG;
+#ifdef __REACTOS__
+    case VT_FILETIME:
+        if (flags & PSTF_LOCAL)
+            return FileTimeToLocalFileTime(&propvar->filetime, timestamp) ? S_OK : HRESULT_FROM_WIN32(GetLastError());
+        *timestamp = propvar->filetime;
+        return S_OK;
+#endif
     default:
         FIXME("Unimplemented for type %d.\n", propvar->vt);
         return E_NOTIMPL;

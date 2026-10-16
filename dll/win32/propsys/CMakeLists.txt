@@ -5,6 +5,7 @@ add_rpcproxy_files(propsys_propsys.idl propsys_undoc.idl)
 generate_idl_iids(propsys_propsys.idl)
 
 list(APPEND SOURCE
+    prophandler.c
     propschema.c
     propstore.c
     propsys_main.c

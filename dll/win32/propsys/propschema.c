@@ -30,7 +30,31 @@ typedef struct _PROPSCHEMA_ENTRY
     UINT Operation;
     UINT DisplayNameId;
     UINT InvitationId;
+    USHORT EnumFirst;
+    USHORT EnumCount;
+    UINT DefaultTextId;
 } PROPSCHEMA_ENTRY;
+
+typedef struct _PROPSCHEMA_ENUM
+{
+    UCHAR EnumType;
+    UCHAR Bounds;
+    VARTYPE Type;
+    LONGLONG Value;
+    LONGLONG Min;
+    LONGLONG Set;
+    LPCWSTR Text;
+    UINT DisplayId;
+    LPCWSTR Image;
+} PROPSCHEMA_ENUM;
+
+#define PROPSCHEMA_ENUM_HAS_MIN 0x1
+#define PROPSCHEMA_ENUM_HAS_SET 0x2
+
+#define PROPSCHEMA_DEFAULT_FAIL 0
+#define PROPSCHEMA_DEFAULT_VALUE ((UINT)-1)
+#define PROPSCHEMA_DEFAULT_EMPTY ((UINT)-2)
+#define PROPSCHEMA_TEXT_EMPTY ((UINT)-2)
 
 #include "propschema_table.h"
 
@@ -318,13 +342,352 @@ desc_GetConditionType(IPropertyDescription *iface, PROPDESC_CONDITION_TYPE *cont
     return S_OK;
 }
 
+static HRESULT
+EnumNumberToPropVariant(const PROPSCHEMA_ENUM *Enum, LONGLONG Number, PROPVARIANT *Out)
+{
+    PropVariantInit(Out);
+    switch (Enum->Type)
+    {
+        case VT_LPWSTR:
+            Out->vt = VT_LPWSTR;
+            return DupString(Enum->Text, &Out->pwszVal);
+        case VT_BOOL:
+            Out->vt = VT_BOOL;
+            Out->boolVal = Number ? VARIANT_TRUE : VARIANT_FALSE;
+            return S_OK;
+        case VT_R8:
+            Out->vt = VT_R8;
+            Out->dblVal = (double)Number;
+            return S_OK;
+        case VT_I4:
+            Out->vt = VT_I4;
+            Out->lVal = (LONG)Number;
+            return S_OK;
+        case VT_UI1:
+            Out->vt = VT_UI1;
+            Out->bVal = (BYTE)Number;
+            return S_OK;
+        case VT_UI2:
+            Out->vt = VT_UI2;
+            Out->uiVal = (USHORT)Number;
+            return S_OK;
+        case VT_UI4:
+            Out->vt = VT_UI4;
+            Out->ulVal = (ULONG)Number;
+            return S_OK;
+        case VT_UI8:
+            Out->vt = VT_UI8;
+            Out->uhVal.QuadPart = (ULONGLONG)Number;
+            return S_OK;
+    }
+    return E_UNEXPECTED;
+}
+
+static LONGLONG
+EnumLowerBound(const PROPSCHEMA_ENUM *Enum)
+{
+    return (Enum->Bounds & PROPSCHEMA_ENUM_HAS_MIN) ? Enum->Min : Enum->Value;
+}
+
+static INT
+EnumCompare(const PROPSCHEMA_ENUM *Enum, LONGLONG Number, const PROPVARIANT *Value)
+{
+    PROPVARIANT Bound;
+    INT Result;
+
+    if (FAILED(EnumNumberToPropVariant(Enum, Number, &Bound)))
+        return 1;
+    Result = PropVariantCompareEx(Value, &Bound, PVCU_DEFAULT, PVCF_USESTRCMPI);
+    PropVariantClear(&Bound);
+    return Result;
+}
+
+static HRESULT
+EnumFindMatch(const PROPSCHEMA_ENTRY *Entry, const PROPVARIANT *Value, UINT *Index)
+{
+    const PROPSCHEMA_ENUM *Enums = &PropertyEnums[Entry->EnumFirst];
+    UINT i, Default = (UINT)-1;
+
+    *Index = (UINT)-1;
+    for (i = 0; i < Entry->EnumCount; i++)
+    {
+        const PROPSCHEMA_ENUM *Enum = &Enums[i];
+
+        switch (Enum->EnumType)
+        {
+            case PET_DISCRETEVALUE:
+                if (!EnumCompare(Enum, Enum->Value, Value))
+                {
+                    *Index = i;
+                    return S_OK;
+                }
+                break;
+            case PET_RANGEDVALUE:
+                if (EnumCompare(Enum, EnumLowerBound(Enum), Value) >= 0 &&
+                    (i + 1 >= Entry->EnumCount || EnumCompare(&Enums[i + 1], EnumLowerBound(&Enums[i + 1]), Value) < 0))
+                {
+                    *Index = i;
+                    return S_OK;
+                }
+                break;
+            case PET_DEFAULTVALUE:
+                Default = i;
+                break;
+        }
+    }
+    if (Default != (UINT)-1)
+    {
+        *Index = Default;
+        return S_OK;
+    }
+    return E_FAIL;
+}
+
+typedef struct _SCHEMA_ENUMTYPE
+{
+    IPropertyEnumType2 IPropertyEnumType2_iface;
+    LONG Ref;
+    const PROPSCHEMA_ENUM *Enum;
+} SCHEMA_ENUMTYPE;
+
+static inline SCHEMA_ENUMTYPE *
+impl_from_enumtype(IPropertyEnumType2 *iface)
+{
+    return CONTAINING_RECORD(iface, SCHEMA_ENUMTYPE, IPropertyEnumType2_iface);
+}
+
 static HRESULT WINAPI
-desc_GetEnumTypeList(IPropertyDescription *iface, REFIID riid, void **ppv)
+enumtype_QueryInterface(IPropertyEnumType2 *iface, REFIID riid, void **ppv)
+{
+    if (!ppv)
+        return E_POINTER;
+    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IPropertyEnumType) ||
+        IsEqualIID(riid, &IID_IPropertyEnumType2))
+    {
+        *ppv = iface;
+        IPropertyEnumType2_AddRef(iface);
+        return S_OK;
+    }
+    *ppv = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI
+enumtype_AddRef(IPropertyEnumType2 *iface)
+{
+    return InterlockedIncrement(&impl_from_enumtype(iface)->Ref);
+}
+
+static ULONG WINAPI
+enumtype_Release(IPropertyEnumType2 *iface)
+{
+    SCHEMA_ENUMTYPE *This = impl_from_enumtype(iface);
+    ULONG Ref = InterlockedDecrement(&This->Ref);
+
+    if (!Ref)
+        free(This);
+    return Ref;
+}
+
+static HRESULT WINAPI
+enumtype_GetEnumType(IPropertyEnumType2 *iface, PROPENUMTYPE *penumtype)
+{
+    if (!penumtype)
+        return E_POINTER;
+    *penumtype = impl_from_enumtype(iface)->Enum->EnumType;
+    return S_OK;
+}
+
+static HRESULT WINAPI
+enumtype_GetValue(IPropertyEnumType2 *iface, PROPVARIANT *ppropvar)
+{
+    const PROPSCHEMA_ENUM *Enum = impl_from_enumtype(iface)->Enum;
+
+    if (!ppropvar)
+        return E_POINTER;
+    return EnumNumberToPropVariant(Enum, Enum->Value, ppropvar);
+}
+
+static HRESULT WINAPI
+enumtype_GetRangeMinValue(IPropertyEnumType2 *iface, PROPVARIANT *ppropvarMin)
+{
+    const PROPSCHEMA_ENUM *Enum = impl_from_enumtype(iface)->Enum;
+
+    if (!ppropvarMin)
+        return E_POINTER;
+    PropVariantInit(ppropvarMin);
+    if (!(Enum->Bounds & PROPSCHEMA_ENUM_HAS_MIN))
+        return S_OK;
+    return EnumNumberToPropVariant(Enum, Enum->Min, ppropvarMin);
+}
+
+static HRESULT WINAPI
+enumtype_GetRangeSetValue(IPropertyEnumType2 *iface, PROPVARIANT *ppropvarSet)
+{
+    const PROPSCHEMA_ENUM *Enum = impl_from_enumtype(iface)->Enum;
+
+    if (!ppropvarSet)
+        return E_POINTER;
+    PropVariantInit(ppropvarSet);
+    if (!(Enum->Bounds & PROPSCHEMA_ENUM_HAS_SET))
+        return S_OK;
+    return EnumNumberToPropVariant(Enum, Enum->Set, ppropvarSet);
+}
+
+static HRESULT
+LoadEnumText(UINT Id, LPWSTR *Out)
+{
+    if (Id == PROPSCHEMA_TEXT_EMPTY)
+        return DupString(L"", Out);
+    return LoadResourceString(Id, Out);
+}
+
+static HRESULT WINAPI
+enumtype_GetDisplayText(IPropertyEnumType2 *iface, LPWSTR *ppszDisplay)
+{
+    return LoadEnumText(impl_from_enumtype(iface)->Enum->DisplayId, ppszDisplay);
+}
+
+static HRESULT WINAPI
+enumtype_GetImageReference(IPropertyEnumType2 *iface, LPWSTR *ppszImageRes)
+{
+    return DupString(impl_from_enumtype(iface)->Enum->Image, ppszImageRes);
+}
+
+static const IPropertyEnumType2Vtbl SchemaEnumTypeVtbl =
+{
+    enumtype_QueryInterface,
+    enumtype_AddRef,
+    enumtype_Release,
+    enumtype_GetEnumType,
+    enumtype_GetValue,
+    enumtype_GetRangeMinValue,
+    enumtype_GetRangeSetValue,
+    enumtype_GetDisplayText,
+    enumtype_GetImageReference,
+};
+
+typedef struct _SCHEMA_ENUMLIST
+{
+    IPropertyEnumTypeList IPropertyEnumTypeList_iface;
+    LONG Ref;
+    const PROPSCHEMA_ENTRY *Entry;
+} SCHEMA_ENUMLIST;
+
+static inline SCHEMA_ENUMLIST *
+impl_from_enumlist(IPropertyEnumTypeList *iface)
+{
+    return CONTAINING_RECORD(iface, SCHEMA_ENUMLIST, IPropertyEnumTypeList_iface);
+}
+
+static HRESULT WINAPI
+enumlist_QueryInterface(IPropertyEnumTypeList *iface, REFIID riid, void **ppv)
+{
+    if (!ppv)
+        return E_POINTER;
+    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IPropertyEnumTypeList))
+    {
+        *ppv = iface;
+        IPropertyEnumTypeList_AddRef(iface);
+        return S_OK;
+    }
+    *ppv = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI
+enumlist_AddRef(IPropertyEnumTypeList *iface)
+{
+    return InterlockedIncrement(&impl_from_enumlist(iface)->Ref);
+}
+
+static ULONG WINAPI
+enumlist_Release(IPropertyEnumTypeList *iface)
+{
+    SCHEMA_ENUMLIST *This = impl_from_enumlist(iface);
+    ULONG Ref = InterlockedDecrement(&This->Ref);
+
+    if (!Ref)
+        free(This);
+    return Ref;
+}
+
+static HRESULT WINAPI
+enumlist_GetCount(IPropertyEnumTypeList *iface, UINT *pctypes)
+{
+    if (!pctypes)
+        return E_POINTER;
+    *pctypes = impl_from_enumlist(iface)->Entry->EnumCount;
+    return S_OK;
+}
+
+static HRESULT WINAPI
+enumlist_GetAt(IPropertyEnumTypeList *iface, UINT itype, REFIID riid, void **ppv)
+{
+    const PROPSCHEMA_ENTRY *Entry = impl_from_enumlist(iface)->Entry;
+    SCHEMA_ENUMTYPE *Type;
+    HRESULT hr;
+
+    if (!ppv)
+        return E_POINTER;
+    *ppv = NULL;
+    if (itype >= Entry->EnumCount)
+        return E_INVALIDARG;
+    if (!(Type = calloc(1, sizeof(*Type))))
+        return E_OUTOFMEMORY;
+    Type->IPropertyEnumType2_iface.lpVtbl = &SchemaEnumTypeVtbl;
+    Type->Ref = 1;
+    Type->Enum = &PropertyEnums[Entry->EnumFirst + itype];
+    hr = IPropertyEnumType2_QueryInterface(&Type->IPropertyEnumType2_iface, riid, ppv);
+    IPropertyEnumType2_Release(&Type->IPropertyEnumType2_iface);
+    return hr;
+}
+
+static HRESULT WINAPI
+enumlist_GetConditionAt(IPropertyEnumTypeList *iface, UINT nIndex, REFIID riid, void **ppv)
 {
     if (!ppv)
         return E_POINTER;
     *ppv = NULL;
     return E_NOTIMPL;
+}
+
+static HRESULT WINAPI
+enumlist_FindMatchingIndex(IPropertyEnumTypeList *iface, REFPROPVARIANT propvarCmp, UINT *pnIndex)
+{
+    if (!propvarCmp || !pnIndex)
+        return E_POINTER;
+    return EnumFindMatch(impl_from_enumlist(iface)->Entry, propvarCmp, pnIndex);
+}
+
+static const IPropertyEnumTypeListVtbl SchemaEnumListVtbl =
+{
+    enumlist_QueryInterface,
+    enumlist_AddRef,
+    enumlist_Release,
+    enumlist_GetCount,
+    enumlist_GetAt,
+    enumlist_GetConditionAt,
+    enumlist_FindMatchingIndex,
+};
+
+static HRESULT WINAPI
+desc_GetEnumTypeList(IPropertyDescription *iface, REFIID riid, void **ppv)
+{
+    SCHEMA_ENUMLIST *List;
+    HRESULT hr;
+
+    if (!ppv)
+        return E_POINTER;
+    *ppv = NULL;
+    if (!(List = calloc(1, sizeof(*List))))
+        return E_OUTOFMEMORY;
+    List->IPropertyEnumTypeList_iface.lpVtbl = &SchemaEnumListVtbl;
+    List->Ref = 1;
+    List->Entry = impl_from_description(iface)->Entry;
+    hr = IPropertyEnumTypeList_QueryInterface(&List->IPropertyEnumTypeList_iface, riid, ppv);
+    IPropertyEnumTypeList_Release(&List->IPropertyEnumTypeList_iface);
+    return hr;
 }
 
 static HRESULT WINAPI
@@ -361,6 +724,71 @@ FormatFileTime(const FILETIME *Time, PROPDESC_FORMAT_FLAGS Flags, LPWSTR *Out)
     return DupString(Text, Out);
 }
 
+static HRESULT
+FormatEnumValue(const PROPSCHEMA_ENTRY *Entry, const PROPVARIANT *Value, LPWSTR *Out)
+{
+    UINT Index;
+
+    if (SUCCEEDED(EnumFindMatch(Entry, Value, &Index)) &&
+        PropertyEnums[Entry->EnumFirst + Index].DisplayId)
+        return LoadEnumText(PropertyEnums[Entry->EnumFirst + Index].DisplayId, Out);
+    switch (Entry->DefaultTextId)
+    {
+        case PROPSCHEMA_DEFAULT_FAIL:
+            return E_FAIL;
+        case PROPSCHEMA_DEFAULT_VALUE:
+            return PropVariantToStringAlloc(Value, Out);
+        case PROPSCHEMA_DEFAULT_EMPTY:
+            return DupString(L"", Out);
+    }
+    return LoadResourceString(Entry->DefaultTextId, Out);
+}
+
+static HRESULT
+FormatEnumerated(const PROPSCHEMA_ENTRY *Entry, const PROPVARIANT *Value, LPWSTR *Out)
+{
+    LPWSTR Text = NULL, Joined = NULL;
+    SIZE_T Length = 0, Add;
+    ULONG i;
+    HRESULT hr;
+
+    if (Value->vt != (VT_VECTOR | VT_LPWSTR))
+        return FormatEnumValue(Entry, Value, Out);
+    for (i = 0; i < Value->calpwstr.cElems; i++)
+    {
+        PROPVARIANT Element;
+        LPWSTR Grown;
+
+        PropVariantInit(&Element);
+        Element.vt = VT_LPWSTR;
+        Element.pwszVal = Value->calpwstr.pElems[i];
+        hr = FormatEnumValue(Entry, &Element, &Text);
+        if (FAILED(hr))
+        {
+            CoTaskMemFree(Joined);
+            return hr;
+        }
+        Add = wcslen(Text) + (i ? 2 : 0);
+        if (!(Grown = CoTaskMemRealloc(Joined, (Length + Add + 1) * sizeof(WCHAR))))
+        {
+            CoTaskMemFree(Text);
+            CoTaskMemFree(Joined);
+            return E_OUTOFMEMORY;
+        }
+        Joined = Grown;
+        if (i)
+            memcpy(Joined + Length, L"; ", 2 * sizeof(WCHAR));
+        memcpy(Joined + Length + (i ? 2 : 0), Text, (wcslen(Text) + 1) * sizeof(WCHAR));
+        Length += Add;
+        CoTaskMemFree(Text);
+        Text = NULL;
+    }
+    if (!Joined)
+        return DupString(L"", Out);
+    *Out = Joined;
+    return S_OK;
+}
+
 static HRESULT WINAPI
 desc_FormatForDisplay(IPropertyDescription *iface, REFPROPVARIANT propvar, PROPDESC_FORMAT_FLAGS flags, LPWSTR *display)
 {
@@ -374,6 +802,8 @@ desc_FormatForDisplay(IPropertyDescription *iface, REFPROPVARIANT propvar, PROPD
         return E_INVALIDARG;
     if (propvar->vt == VT_EMPTY)
         return DupString(L"", display);
+    if (Entry->DisplayType == PDDT_ENUMERATED && Entry->EnumCount)
+        return FormatEnumerated(Entry, propvar, display);
     if (propvar->vt == VT_FILETIME)
         return FormatFileTime(&propvar->filetime, flags, display);
     if (!wcscmp(Entry->CanonicalName, L"System.Size"))

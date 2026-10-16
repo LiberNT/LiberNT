@@ -10,6 +10,7 @@
 #include <apitest.h>
 #include <objbase.h>
 #include <propsys.h>
+#include <propvarutil.h>
 #include <stdio.h>
 
 static void
@@ -29,6 +30,137 @@ PrintText(LPCWSTR Text)
         else
             printf("\\u%04x", *Text);
     }
+}
+
+static void
+PrintValue(const PROPVARIANT *Value)
+{
+    LPWSTR Text = NULL;
+
+    printf("%u:", Value->vt);
+    if (Value->vt != VT_EMPTY && SUCCEEDED(PropVariantToStringAlloc(Value, &Text)))
+    {
+        PrintText(Text);
+        CoTaskMemFree(Text);
+    }
+}
+
+static void
+DumpDefaultText(IPropertyDescription *Desc, IPropertyEnumTypeList *List, LPCWSTR Canonical)
+{
+    static const LONGLONG Probes[] = {0, -2, 7, 1000003, 2147483646, 4294967294LL};
+    VARTYPE Type = VT_EMPTY;
+    PROPVARIANT Value;
+    LPWSTR Text = NULL;
+    UINT Index, i;
+    HRESULT hr;
+
+    IPropertyDescription_GetPropertyType(Desc, &Type);
+    for (i = 0; i < ARRAYSIZE(Probes) + 1; i++)
+    {
+        PropVariantInit(&Value);
+        if ((Type & ~VT_VECTOR) == VT_LPWSTR)
+        {
+            if (i)
+                break;
+            Value.vt = VT_LPWSTR;
+            Value.pwszVal = L"liberntprobe";
+        }
+        else if (i == ARRAYSIZE(Probes))
+        {
+            break;
+        }
+        else
+        {
+            PROPVARIANT Number;
+            PropVariantInit(&Number);
+            Number.vt = VT_I8;
+            Number.hVal.QuadPart = Probes[i];
+            if (FAILED(PropVariantChangeType(&Value, &Number, 0, Type & ~VT_VECTOR)))
+                continue;
+        }
+        if (SUCCEEDED(IPropertyEnumTypeList_FindMatchingIndex(List, &Value, &Index)))
+        {
+            if ((Type & ~VT_VECTOR) != VT_LPWSTR)
+                PropVariantClear(&Value);
+            continue;
+        }
+        hr = IPropertyDescription_FormatForDisplay(Desc, &Value, PDFF_DEFAULT, &Text);
+        printf("DEFAULT\t");
+        PrintText(Canonical);
+        printf("\t");
+        PrintValue(&Value);
+        printf("\t%#lx\t", hr);
+        PrintText(SUCCEEDED(hr) ? Text : NULL);
+        printf("\n");
+        CoTaskMemFree(Text);
+        Text = NULL;
+        if ((Type & ~VT_VECTOR) != VT_LPWSTR)
+            PropVariantClear(&Value);
+        return;
+    }
+    printf("DEFAULT\t");
+    PrintText(Canonical);
+    printf("\t-\t-\t-\n");
+}
+
+static void
+DumpEnumTypes(IPropertyDescription *Desc, LPCWSTR Canonical)
+{
+    IPropertyEnumTypeList *List = NULL;
+    UINT Count = 0, i;
+
+    if (FAILED(IPropertyDescription_GetEnumTypeList(Desc, &IID_IPropertyEnumTypeList, (void **)&List)))
+        return;
+    IPropertyEnumTypeList_GetCount(List, &Count);
+    if (Count)
+        DumpDefaultText(Desc, List, Canonical);
+    for (i = 0; i < Count; i++)
+    {
+        IPropertyEnumType *Type = NULL;
+        IPropertyEnumType2 *Type2 = NULL;
+        PROPENUMTYPE Kind = PET_DISCRETEVALUE;
+        PROPVARIANT Value, Min, Set;
+        LPWSTR Display = NULL, Image = NULL;
+
+        if (FAILED(IPropertyEnumTypeList_GetAt(List, i, &IID_IPropertyEnumType, (void **)&Type)))
+            continue;
+        PropVariantInit(&Value);
+        PropVariantInit(&Min);
+        PropVariantInit(&Set);
+        IPropertyEnumType_GetEnumType(Type, &Kind);
+        IPropertyEnumType_GetValue(Type, &Value);
+        IPropertyEnumType_GetRangeMinValue(Type, &Min);
+        IPropertyEnumType_GetRangeSetValue(Type, &Set);
+        if (FAILED(IPropertyEnumType_GetDisplayText(Type, &Display)))
+            Display = NULL;
+        if (SUCCEEDED(IPropertyEnumType_QueryInterface(Type, &IID_IPropertyEnumType2, (void **)&Type2)))
+        {
+            if (FAILED(IPropertyEnumType2_GetImageReference(Type2, &Image)))
+                Image = NULL;
+            IPropertyEnumType2_Release(Type2);
+        }
+        printf("ENUM\t");
+        PrintText(Canonical);
+        printf("\t%u\t%u\t", i, Kind);
+        PrintValue(&Value);
+        printf("\t");
+        PrintValue(&Min);
+        printf("\t");
+        PrintValue(&Set);
+        printf("\t");
+        PrintText(Display);
+        printf("\t");
+        PrintText(Image);
+        printf("\n");
+        PropVariantClear(&Value);
+        PropVariantClear(&Min);
+        PropVariantClear(&Set);
+        CoTaskMemFree(Display);
+        CoTaskMemFree(Image);
+        IPropertyEnumType_Release(Type);
+    }
+    IPropertyEnumTypeList_Release(List);
 }
 
 static void
@@ -80,6 +212,7 @@ DumpDescription(IPropertyDescription *Desc)
     printf("\t");
     PrintText(Invitation);
     printf("\n");
+    DumpEnumTypes(Desc, Canonical);
     CoTaskMemFree(Canonical);
     CoTaskMemFree(Display);
     CoTaskMemFree(Invitation);

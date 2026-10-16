@@ -31,7 +31,7 @@
 @ stdcall InitPropVariantFromBuffer(ptr long ptr)
 @ stdcall InitPropVariantFromCLSID(ptr ptr)
 @ stub InitPropVariantFromDoubleVector
-@ stub InitPropVariantFromFileTime
+@ stdcall InitPropVariantFromFileTime(ptr ptr)
 @ stub InitPropVariantFromFileTimeVector
 @ stdcall InitPropVariantFromGUIDAsString(ptr ptr)
 @ stub InitPropVariantFromInt16Vector
@@ -86,7 +86,7 @@
 @ stdcall PSGetPropertyKeyFromName(wstr ptr)
 @ stdcall PSGetPropertySystem(ptr ptr)
 @ stub PSGetPropertyValue
-@ stub PSLookupPropertyHandlerCLSID
+@ stdcall PSLookupPropertyHandlerCLSID(wstr ptr)
 @ stdcall PSPropertyBag_WriteDWORD(ptr wstr long)
 @ stdcall PSPropertyKeyFromString(wstr ptr)
 @ stdcall PSRefreshPropertySchema()
