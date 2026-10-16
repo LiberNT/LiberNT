@@ -871,7 +871,7 @@ Restart:
         }
 
         case INSTALLER:
-            Success = StartInstaller(L"reactos.exe");
+            Success = StartInstaller(L"libernt.exe");
             break;
 
         case REBOOT:

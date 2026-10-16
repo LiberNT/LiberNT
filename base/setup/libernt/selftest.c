@@ -5,7 +5,7 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#include "reactos.h"
+#include "libernt.h"
 #include <ntddstor.h>
 #include <fslib/volresize.h>
 #include <ndk/cmfuncs.h>

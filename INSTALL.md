@@ -20,7 +20,7 @@ Boot `bootcd.iso` in a virtual machine or on a PC, and follow the instructions o
 
 `LiberNT.img` needs no setup. Start it in a virtual machine such as QEMU, or write it to a USB drive or an SD card and boot the machine from it. Use `LiberNT.vhd` for virtual machines that take VHD disks.
 
-The preinstalled disk also carries LiberNT Setup. Run `C:\<architecture>\reactos.exe`, for example `C:\arm64\reactos.exe`, to install LiberNT on another disk from the running system.
+The preinstalled disk also carries LiberNT Setup. Run `C:\<architecture>\libernt.exe`, for example `C:\arm64\libernt.exe`, to install LiberNT on another disk from the running system.
 
 ## Help
 

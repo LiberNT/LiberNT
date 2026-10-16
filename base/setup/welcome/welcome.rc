@@ -23,7 +23,7 @@ IDB_TITLE_BITMAP BITMAP "res/title.bmp"
 /* Topic commands or actions */
 STRINGTABLE
 BEGIN
-    IDS_TOPIC_COMMAND0  "reactos.exe"
+    IDS_TOPIC_COMMAND0  "libernt.exe"
     IDS_TOPIC_COMMAND1  "explorer.exe"
     IDS_TOPIC_ACTION2   "<exit>"   /* Quits the program */
 END

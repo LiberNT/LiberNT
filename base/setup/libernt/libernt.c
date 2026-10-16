@@ -7,7 +7,7 @@
  *              Copyright 2018-2024 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
-#include "reactos.h"
+#include "libernt.h"
 #include <winnls.h> // For GetUserDefaultLCID()
 #include <tzlib.h>
 #include <objbase.h>
@@ -2448,9 +2448,9 @@ IsSetupAlreadyRunning(
     HWND hWnd = NULL;
     HWND hWndMain;
 
-    hMutex = CreateMutexW(NULL, FALSE, L"Global\\__ReactOS_Setup__");
+    hMutex = CreateMutexW(NULL, FALSE, L"Global\\__LiberNT_Setup__");
     if (!hMutex && GetLastError() == ERROR_PATH_NOT_FOUND)
-        hMutex = CreateMutexW(NULL, FALSE, L"__ReactOS_Setup__");
+        hMutex = CreateMutexW(NULL, FALSE, L"__LiberNT_Setup__");
     if (!hMutex || GetLastError() != ERROR_ALREADY_EXISTS)
         return FALSE;
 

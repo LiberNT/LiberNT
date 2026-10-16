@@ -7,8 +7,8 @@
  *              Copyright 2018-2024 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
-#ifndef _REACTOS_PCH_
-#define _REACTOS_PCH_
+#ifndef _LIBERNT_PCH_
+#define _LIBERNT_PCH_
 
 /* C Headers */
 #include <stdlib.h>
@@ -304,7 +304,7 @@ ConvertNtPathToWin32Path(
     IN PCWSTR pwszNTPath);
 
 
-/* reactos.c */
+/* libernt.c */
 
 INT_PTR
 CALLBACK
@@ -391,6 +391,6 @@ SetWindowResPrintfW(
     _In_ UINT uID,
     ...);
 
-#endif /* _REACTOS_PCH_ */
+#endif /* _LIBERNT_PCH_ */
 
 /* EOF */

@@ -8,7 +8,7 @@
 
 /* INCLUDES *****************************************************************/
 
-#include "reactos.h"
+#include "libernt.h"
 
 #define NDEBUG
 #include <debug.h>

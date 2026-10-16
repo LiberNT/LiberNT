@@ -6,7 +6,7 @@
  *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#include "reactos.h"
+#include "libernt.h"
 #include <tzlib.h>
 
 #include "resource.h"

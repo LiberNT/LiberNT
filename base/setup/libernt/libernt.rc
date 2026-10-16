@@ -5,8 +5,8 @@
 #include "resource.h"
 
 #define REACTOS_STR_FILE_DESCRIPTION    "LiberNT Setup"
-#define REACTOS_STR_INTERNAL_NAME       "reactos"
-#define REACTOS_STR_ORIGINAL_FILENAME   "reactos.exe"
+#define REACTOS_STR_INTERNAL_NAME       "libernt"
+#define REACTOS_STR_ORIGINAL_FILENAME   "libernt.exe"
 #include <reactos/version.rc>
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
@@ -19,7 +19,7 @@ IDB_WATERMARK   BITMAP "res/watermark.bmp"
 IDB_LOGO        BITMAP "../../system/userinit/res/rosbitmap.bmp"
 IDB_LOGOMASK    BITMAP "../../system/userinit/res/rosbitmap_mask.bmp"
 
-CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "reactos.exe.manifest"
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "libernt.exe.manifest"
 
 /* UTF-8 */
 #pragma code_page(65001)

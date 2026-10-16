@@ -403,7 +403,7 @@ AddNewTopicEx(
         pTopic->bIsCommand = TRUE;
 
         /* Check for special applications: ReactOS Installer */
-        if (_tcsicmp(szCommand, TEXT("reactos.exe")) == 0)
+        if (_tcsicmp(szCommand, TEXT("libernt.exe")) == 0)
         {
             ExpandInstallerPath(szCommand, pTopic->szCommand, ARRAYSIZE(pTopic->szCommand));
         }

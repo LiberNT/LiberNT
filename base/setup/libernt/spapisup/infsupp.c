@@ -9,7 +9,7 @@
 
 /* INCLUDES ******************************************************************/
 
-#include "reactos.h"
+#include "libernt.h"
 #include <winnls.h>
 
 #define NDEBUG

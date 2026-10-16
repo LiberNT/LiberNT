@@ -905,7 +905,7 @@ RunLiveCD(
 
     InitLogo(&pState->ImageInfo, NULL);
 
-    if (!ExpandInstallerPath(L"reactos.exe", Installer, _countof(Installer)))
+    if (!ExpandInstallerPath(L"libernt.exe", Installer, _countof(Installer)))
         *Installer = UNICODE_NULL;
 
     StringCchCopyW(UnattendInf, _countof(UnattendInf), Installer);
