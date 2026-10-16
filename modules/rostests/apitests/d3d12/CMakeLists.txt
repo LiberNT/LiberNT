@@ -19,6 +19,7 @@ list(APPEND SOURCE
     uav.cpp
     util.cpp
     versions.cpp
+    viewinst.cpp
     vrs.cpp
     testlist.c)
 
