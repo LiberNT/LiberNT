@@ -382,9 +382,13 @@ PeResolveImports(
     PIMAGE_THUNK_DATA Thunk, Lookup;
     PIMAGE_IMPORT_BY_NAME ByName;
     PLDR_DATA_TABLE_ENTRY Module;
+    UNICODE_STRING EntryName;
     PCSTR DllName;
     PVOID Address;
     ULONG Size;
+
+    EntryName = Entry->BaseDllName;
+    EntryName.Buffer = VaToPa(EntryName.Buffer);
 
     Import = RtlImageDirectoryEntryToData(Base, TRUE, IMAGE_DIRECTORY_ENTRY_IMPORT, &Size);
     if (!Import)
@@ -403,7 +407,7 @@ PeResolveImports(
                           LDRP_DRIVER_DEPENDENT_DLL,
                           &Module))
         {
-            FwPrint(L"%hs imported by %wZ could not be loaded.\r\n", DllName, &Entry->BaseDllName);
+            FwPrint(L"%hs imported by %wZ could not be loaded.\r\n", DllName, &EntryName);
             return FALSE;
         }
 
@@ -435,7 +439,7 @@ PeResolveImports(
             if (!Address)
             {
                 FwPrint(L"%wZ needs %hs from %hs, which does not export it.\r\n",
-                        &Entry->BaseDllName,
+                        &EntryName,
                         ByName ? (PCSTR)ByName->Name : "an ordinal",
                         DllName);
                 return FALSE;
