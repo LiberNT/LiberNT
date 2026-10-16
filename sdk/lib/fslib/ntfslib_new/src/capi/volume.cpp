@@ -87,6 +87,13 @@ NtfsVolumeGetClustersInVolume(
     return reinterpret_cast<PVolume>(DiskVolume)->ClustersInVolume;
 }
 
+UINT64
+NtfsVolumeGetReservedClusters(
+    _In_ PNtfsVolume DiskVolume)
+{
+    return reinterpret_cast<PVolume>(DiskVolume)->GetReservedClusters();
+}
+
 NTSTATUS
 NtfsVolumeReloadSize(
     _In_ PNtfsVolume DiskVolume)

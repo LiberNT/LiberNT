@@ -927,6 +927,10 @@ UINT64
 NtfsVolumeGetClustersInVolume(
     _In_ PNtfsVolume DiskVolume);
 
+UINT64
+NtfsVolumeGetReservedClusters(
+    _In_ PNtfsVolume DiskVolume);
+
 NTSTATUS
 NtfsVolumeReloadSize(
     _In_ PNtfsVolume DiskVolume);

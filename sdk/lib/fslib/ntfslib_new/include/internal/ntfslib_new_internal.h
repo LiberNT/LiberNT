@@ -443,6 +443,8 @@ typedef struct _DIRECTORY_KEY_BLOCK
 #define NTFS_SRAT_ENTRY_MIN_SIZE 0x0C
 #define NTFS_SRAT_GUARANTEE_OFFSET 0x08
 #define NTFS_SRAT_MAX_IDS 64
+#define NTFS_BASELINE_RESERVE_BYTES (4 * 1024 * 1024)
+#define NTFS_JOURNAL_RESERVE_OVERHEAD_DIVISOR 256
 
 #define NTFS_FILE_NAME_UPDATE_SIZES ((UINT32)0x00000001)
 #define NTFS_FILE_NAME_UPDATE_EA_SIZE ((UINT32)0x00000002)
@@ -540,6 +542,8 @@ public:
     ULONGLONG FreeClusterHint = 0;
 
     ULONGLONG AllocationLimit = 0;
+    ULONGLONG ReservedClusters = 0;
+    BOOLEAN ReservedClustersKnown = FALSE;
 
     /* Parsed $Bitmap record, built once: its layout never changes and its
      * data is served through the block cache, so re-parsing it for every
@@ -596,7 +600,13 @@ public:
         _Out_ PNtfsVolumeInformation Information);
 
     ULONGLONG
-    GetStorageReserveClusters();
+    GetReservedClusters();
+
+    ULONGLONG
+    ComputeReservedClusters();
+
+    ULONGLONG
+    GetJournalReserveClusters();
 
     NTSTATUS
     ReadBitmap(_In_ ULONGLONG StartingLcn,

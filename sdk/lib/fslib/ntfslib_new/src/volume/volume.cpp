@@ -394,6 +394,7 @@ Volume::ReloadSize()
             delete CachedBitmapFile;
             CachedBitmapFile = NULL;
             CachedBitmapData = NULL;
+            ReservedClustersKnown = FALSE;
             SectorsInVolume = PartitionBootSector->SectorsInVolume;
             ClustersInVolume = SectorsInVolume / SectorsPerCluster;
         }
@@ -446,12 +447,23 @@ Volume::QueryInformation(
         ClusterSize;
     Information->MajorVersion = NtfsMajorVersion;
     Information->MinorVersion = NtfsMinorVersion;
-    Information->TotalReserved = GetStorageReserveClusters();
+    Information->TotalReserved = GetReservedClusters();
     return STATUS_SUCCESS;
 }
 
 ULONGLONG
-Volume::GetStorageReserveClusters()
+Volume::GetReservedClusters()
+{
+    if (!ReservedClustersKnown)
+    {
+        ReservedClusters = ComputeReservedClusters();
+        ReservedClustersKnown = TRUE;
+    }
+    return ReservedClusters < ClustersInVolume ? ReservedClusters : ClustersInVolume;
+}
+
+ULONGLONG
+Volume::ComputeReservedClusters()
 {
     WCHAR Name[] = L"$SRAT";
     PFileRecord File = NULL;
@@ -494,5 +506,47 @@ Volume::GetStorageReserveClusters()
     }
 
     delete File;
-    return Reserved < ClustersInVolume ? Reserved : ClustersInVolume;
+
+    Reserved += GetJournalReserveClusters();
+    Reserved += NTFS_BASELINE_RESERVE_BYTES / ((ULONG)BytesPerSector * SectorsPerCluster);
+    return Reserved;
+}
+
+ULONGLONG
+Volume::GetJournalReserveClusters()
+{
+    WCHAR JournalName[] = L"$UsnJrnl";
+    WCHAR MaxName[] = L"$Max";
+    PFileRecord Extend = NULL;
+    PFileRecord Journal = NULL;
+    PAttribute Attribute;
+    PUCHAR Value;
+    ULONGLONG Clusters = 0;
+    ULONGLONG MaximumSize, AllocationDelta;
+    ULONG ClusterSize = (ULONG)BytesPerSector * SectorsPerCluster;
+
+    if (!MFT || ClusterSize == 0 || !NT_SUCCESS(MFT->GetFileRecord(_Extend, &Extend)))
+        return 0;
+
+    if (NT_SUCCESS(MFT->GetFileRecordInDirectory(Extend, JournalName, &Journal)))
+    {
+        Attribute = Journal->GetAttribute(TypeData, MaxName);
+        if (Attribute && !Attribute->IsNonResident &&
+            Attribute->Resident.DataLength >= 2 * sizeof(ULONGLONG))
+        {
+            Value = (PUCHAR)GetResidentDataPointer(Attribute);
+            MaximumSize = *(PULONGLONG)Value;
+            AllocationDelta = *(PULONGLONG)(Value + sizeof(ULONGLONG));
+            if (MaximumSize <= ClustersInVolume * ClusterSize &&
+                AllocationDelta <= ClustersInVolume * ClusterSize)
+            {
+                Clusters = (MaximumSize + 2 * AllocationDelta) / ClusterSize;
+                Clusters += Clusters / NTFS_JOURNAL_RESERVE_OVERHEAD_DIVISOR;
+            }
+        }
+        delete Journal;
+    }
+
+    delete Extend;
+    return Clusters;
 }
