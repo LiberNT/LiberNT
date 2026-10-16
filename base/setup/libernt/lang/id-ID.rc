@@ -91,7 +91,6 @@ BEGIN
     IDS_REG_ADDKBLAYOUTS "Adding keyboard layouts"
     IDS_REG_KEYBOARDSETTINGSUPDATE "Memperbarui pengaturan tata letak papan ketik"
     IDS_REG_CODEPAGEINFOUPDATE "Menambahkan informasi halaman kode"
-    IDS_REG_UNKNOWN "Status tidak diketahui %d"
 END
 
 STRINGTABLE
@@ -111,7 +110,6 @@ BEGIN
     IDS_ERROR_USERNAME "The user name must have 1 to 20 characters and cannot contain any of these characters:\n"" / \\ [ ] : ; | = , + * ? < > @\nIt cannot contain only periods and spaces."
     IDS_ERROR_USEREXISTS "This name is already used by a built-in account or group, or by the computer. Choose another user name."
     IDS_ERROR_PASSWORDMATCH "The passwords do not match. Type the same password in both boxes."
-    IDS_ERROR_CONFIGURE "Setup could not configure the installed system (error %lu)."
 END
 
 /* Error Strings */
@@ -119,38 +117,9 @@ END
 STRINGTABLE
 BEGIN
 
-    IDS_ERROR_CREATE_PARTITION_TITLE "Membuat partisi"
     IDS_ERROR_CREATE_PARTITION "Gagal membuat partisi baru."
 
     IDS_WARN_DELETE_PARTITION_TITLE "Hapus partisi?"
     IDS_WARN_DELETE_PARTITION "Kamu yakin ingin menghapus partisi terpilih?"
     IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "Apakah Anda yakin ingin menghapus partisi perluasan terpilih dan SEMUA partisi logikal yang ada di dalamnya?"
-
-    IDS_ERROR_WRITE_PTABLE "Penyetelan gagal menulis tabel partisi."
-
-    IDS_ERROR_SYSTEM_PARTITION "Penyetelan LiberNT tidak bisa menemukan partisi sistem yang didukung\n\
-pada sistemmu atau tidak bisa membuat baru. Tanpa partisi tersebut\n\
-Program penyetelan tidak bisa memasang LiberNT.\
-\nKlik OK untuk kembali ke to kembali ke daftar pilihan partisi."
-
-    IDS_ERROR_FORMAT_UNRECOGNIZED_VOLUME "Volume tidak dikenal ketika mencoba memformat partisi."
-
-    IDS_ERROR_COULD_NOT_FORMAT "Penyetelan saat ini tidak bisa memformat partisi dalam %s.\n\
-\nKlik OK melanjutkan Penyetelan.\
-\nKlik BATAL untuk keluar dari Penyetelan."
-
-    IDS_ERROR_FORMATTING_PARTITION "Penyetelan tidak bisa memformat partisi:\n %s\n"
-
-    IDS_ERROR_COULD_NOT_CHECK "Penyetelan saat ini tidak bisa memeriksa partisi yang terformat dalam %s.\n\
-\nKlik OK melanjutkan Penyetelan.\
-\nKlik BATAL untuk keluar dari Penyetelan."
-
-    IDS_ERROR_CHECKING_PARTITION "ChkDsk mendeteksi kesalahan beberapa disk.\n(Status 0x%08lx)."
-
-    IDS_ERROR_WRITE_BOOT "Penyetelan gagal memasang bootcode %s pada partisi sistem."
-    IDS_ERROR_INSTALL_BOOTCODE "Penyetelan gagal memasang bootcode %s pada boot disk."
-    IDS_ERROR_INSTALL_BOOTCODE_REMOVABLE "Penyetelan gagal memasang bootcode pada media yang bisa dilepas."
-    IDS_ERROR_BOOTLDR_ARCH_UNSUPPORTED "Penyetelan saat ini tidak didukung untuk memasang bootloader pada komputer yang kamu gunakan.\
-\nKlik OK untuk tetap melanjutkan"
-    IDS_ERROR_BOOTLDR_FAILED "Penyetelan tidak bisa memasang bootloader (Status 0x%08lx)."
 END

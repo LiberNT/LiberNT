@@ -96,7 +96,6 @@ BEGIN
     IDS_REG_ADDKBLAYOUTS "Adding keyboard layouts"
     IDS_REG_KEYBOARDSETTINGSUPDATE "Updating keyboard layout settings"
     IDS_REG_CODEPAGEINFOUPDATE "Adding codepage information"
-    IDS_REG_UNKNOWN "Unknown status %d"
 END
 
 STRINGTABLE
@@ -116,7 +115,6 @@ BEGIN
     IDS_ERROR_USERNAME "The user name must have 1 to 20 characters and cannot contain any of these characters:\n"" / \\ [ ] : ; | = , + * ? < > @\nIt cannot contain only periods and spaces."
     IDS_ERROR_USEREXISTS "This name is already used by a built-in account or group, or by the computer. Choose another user name."
     IDS_ERROR_PASSWORDMATCH "The passwords do not match. Type the same password in both boxes."
-    IDS_ERROR_CONFIGURE "Setup could not configure the installed system (error %lu)."
 END
 
 /* Error Strings */
@@ -124,38 +122,9 @@ END
 STRINGTABLE
 BEGIN
 
-    IDS_ERROR_CREATE_PARTITION_TITLE "Create partition"
     IDS_ERROR_CREATE_PARTITION "Failed to create a new partition."
 
     IDS_WARN_DELETE_PARTITION_TITLE "Delete partition?"
     IDS_WARN_DELETE_PARTITION "Are you sure you want to delete the selected partition?"
     IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "Are you sure you want to delete the selected extended partition and ALL the logical partitions it contains?"
-
-    IDS_ERROR_WRITE_PTABLE "Setup failed to write partition tables."
-
-    IDS_ERROR_SYSTEM_PARTITION "The LiberNT Setup could not find a supported system partition\n\
-on your system or could not create a new one. Without such a partition\n\
-the Setup program cannot install LiberNT.\
-\nClick on OK to return to the partition selection list."
-
-    IDS_ERROR_FORMAT_UNRECOGNIZED_VOLUME "Unrecognized volume while attempting to format the partition."
-
-    IDS_ERROR_COULD_NOT_FORMAT "Setup is currently unable to format a partition in %s.\n\
-\nClick on OK to continue Setup.\
-\nClick on CANCEL to quit Setup."
-
-    IDS_ERROR_FORMATTING_PARTITION "Setup is unable to format the partition:\n %s\n"
-
-    IDS_ERROR_COULD_NOT_CHECK "Setup is currently unable to check a partition formatted in %s.\n\
-\nClick on OK to continue Setup.\
-\nClick on CANCEL to quit Setup."
-
-    IDS_ERROR_CHECKING_PARTITION "ChkDsk detected some disk errors.\n(Status 0x%08lx)."
-
-    IDS_ERROR_WRITE_BOOT "Setup failed to install the %s bootcode on the system partition."
-    IDS_ERROR_INSTALL_BOOTCODE "Setup failed to install the %s bootcode on the boot disk."
-    IDS_ERROR_INSTALL_BOOTCODE_REMOVABLE "Setup failed to install the bootcode on the removable media."
-    IDS_ERROR_BOOTLDR_ARCH_UNSUPPORTED "Setup does not currently support installing the bootloader on the computer you are using.\
-\nClick on OK to continue anyway."
-    IDS_ERROR_BOOTLDR_FAILED "Setup could not install the bootloader (Status 0x%08lx)."
 END

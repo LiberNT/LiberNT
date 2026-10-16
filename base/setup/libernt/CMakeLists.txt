@@ -9,8 +9,10 @@ include_directories(
 list(APPEND SOURCE
     spapisup/fileqsup.c
     spapisup/infsupp.c
+    account.c
     diskinfo.c
     diskpage.c
+    frame.c
     langpage.c
     libernt.c
     selftest.c

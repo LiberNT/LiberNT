@@ -100,7 +100,6 @@ BEGIN
     IDS_REG_ADDKBLAYOUTS "Se adaugă limbi pentru tastatură"
     IDS_REG_KEYBOARDSETTINGSUPDATE "Se actualizează setările pentru limbilor pentru tastatură"
     IDS_REG_CODEPAGEINFOUPDATE "Se adaugă informațiile din pagina de coduri"
-    IDS_REG_UNKNOWN "Stare necunoscută %d"
 END
 
 STRINGTABLE
@@ -120,7 +119,6 @@ BEGIN
     IDS_ERROR_USERNAME "The user name must have 1 to 20 characters and cannot contain any of these characters:\n"" / \\ [ ] : ; | = , + * ? < > @\nIt cannot contain only periods and spaces."
     IDS_ERROR_USEREXISTS "This name is already used by a built-in account or group, or by the computer. Choose another user name."
     IDS_ERROR_PASSWORDMATCH "The passwords do not match. Type the same password in both boxes."
-    IDS_ERROR_CONFIGURE "Setup could not configure the installed system (error %lu)."
 END
 
 /* Error Strings */
@@ -128,38 +126,9 @@ END
 STRINGTABLE
 BEGIN
 
-    IDS_ERROR_CREATE_PARTITION_TITLE "Crearea partiției"
     IDS_ERROR_CREATE_PARTITION "Imposibil de creat noua partiție."
 
     IDS_WARN_DELETE_PARTITION_TITLE "Ștergeți partiția?"
     IDS_WARN_DELETE_PARTITION "Sigur vreți să ștergeți partiția selectată?"
     IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "Sigur vreți să ștergeți partiția selectată extinsă și TOATE partițiile logice pe care le conține?"
-
-    IDS_ERROR_WRITE_PTABLE "Instalatorul a eșuat să scrie tabelele de partiții."
-
-    IDS_ERROR_SYSTEM_PARTITION "Instalatorul LiberNT nu a putut găsi o partiție de sistem acceptată\n\
-pe sistem sau nu a putut crea unul nou. Fără o astfel de partiție\n\
-programul de instalare nu poate instala LiberNT.\
-\nApăsați OK pentru a reveni la lista de selecție a partițiilor."
-
-    IDS_ERROR_FORMAT_UNRECOGNIZED_VOLUME "Volum necunoscut în timpul încercării de a formata partiția."
-
-    IDS_ERROR_COULD_NOT_FORMAT "Instalatorul nu poate în prezent, să formateze o partiție în %s.\n\
-\nApăsați pe OK pentru a continua configurarea.\
-\nApăsați pe REVOCARE pentru a ieși din Instalator."
-
-    IDS_ERROR_FORMATTING_PARTITION "Instalatorul nu poate formata partiția:\n %s\n"
-
-    IDS_ERROR_COULD_NOT_CHECK "În prezent, Instalatorul nu poate verifica o partiție formatată în %s.\n\
-\nApăsați pe OK pentru a continua configurarea.\
-\nApăsați pe REVOCARE pentru a ieși din Instalator."
-
-    IDS_ERROR_CHECKING_PARTITION "ChkDsk a detectat niște erori de disc.\n(Statutul 0x%08lx)."
-
-    IDS_ERROR_WRITE_BOOT "Instalatorul nu a reușit să instaleze codul de pornire %s pe partiția de sistem."
-    IDS_ERROR_INSTALL_BOOTCODE "Instalatorul nu a reușit să instaleze codul de pornire %s pe discul de pornire."
-    IDS_ERROR_INSTALL_BOOTCODE_REMOVABLE "Instalatorul nu a reușit să instaleze codul de pornire pe suportul amovibil."
-    IDS_ERROR_BOOTLDR_ARCH_UNSUPPORTED "În prezent, Instalatorul nu a reușit să instaleze codul de pornire pe computerul pe care îl folosiți.\
-\nApăsați pe OK pentru a continua oricum."
-    IDS_ERROR_BOOTLDR_FAILED "Instalatorul nu a putut instala bootloader-ul (Statutul 0x%08lx)."
 END

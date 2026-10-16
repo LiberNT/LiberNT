@@ -43,18 +43,8 @@ SetupOpenInfFileExW(
     LCID OldLocaleId;
     WCHAR Win32FileName[MAX_PATH];
 
-    /*
-     * SetupOpenInfFileExW is called within setuplib with NT paths, however
-     * the Win32 SetupOpenInfFileW API only takes Win32 paths. We therefore
-     * map the NT path to Win32 path and then call the Win32 API.
-     */
-    if (!ConvertNtPathToWin32Path(&SetupData.MappingList,
-                                  Win32FileName,
-                                  _countof(Win32FileName),
-                                  FileName))
-    {
+    if (FAILED(StringCchPrintfW(Win32FileName, _countof(Win32FileName), L"\\\\?\\GLOBALROOT%s", FileName)))
         return INVALID_HANDLE_VALUE;
-    }
 
     /*
      * Because SetupAPI's SetupOpenInfFileW() function does not allow the user

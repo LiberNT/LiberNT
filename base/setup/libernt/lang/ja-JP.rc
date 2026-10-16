@@ -91,7 +91,6 @@ BEGIN
     IDS_REG_ADDKBLAYOUTS "キーボードレイアウトの追加"
     IDS_REG_KEYBOARDSETTINGSUPDATE "キーボードレイアウト設定の更新"
     IDS_REG_CODEPAGEINFOUPDATE "コードページ情報の追加"
-    IDS_REG_UNKNOWN "不明なステータス %d"
 END
 
 STRINGTABLE
@@ -111,7 +110,6 @@ BEGIN
     IDS_ERROR_USERNAME "The user name must have 1 to 20 characters and cannot contain any of these characters:\n"" / \\ [ ] : ; | = , + * ? < > @\nIt cannot contain only periods and spaces."
     IDS_ERROR_USEREXISTS "This name is already used by a built-in account or group, or by the computer. Choose another user name."
     IDS_ERROR_PASSWORDMATCH "The passwords do not match. Type the same password in both boxes."
-    IDS_ERROR_CONFIGURE "Setup could not configure the installed system (error %lu)."
 END
 
 /* Error Strings */
@@ -119,37 +117,9 @@ END
 STRINGTABLE
 BEGIN
 
-    IDS_ERROR_CREATE_PARTITION_TITLE "パーティションの作成"
     IDS_ERROR_CREATE_PARTITION "新しいパーティションの作成に失敗しました。"
 
     IDS_WARN_DELETE_PARTITION_TITLE "パーティションを削除しますか?"
     IDS_WARN_DELETE_PARTITION "選択したパーティションを削除してもよろしいですか?"
     IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "選択した拡張パーティションとそれに含まれるすべての論理パーティションを削除してもよろしいですか?"
-
-    IDS_ERROR_WRITE_PTABLE "セットアップはパーティション テーブルの書き込みに失敗しました。"
-
-    IDS_ERROR_SYSTEM_PARTITION "LiberNT セットアップは、システム上でサポートされているシステム パーティションを見つけられなかったか、\
-新しいパーティションを作成できませんでした。そのようなパーティションがないと、セットアップ プログラムは LiberNT をインストールできません。\n\
-「OK」をクリックしてパーティション選択リストに戻ります。"
-
-    IDS_ERROR_FORMAT_UNRECOGNIZED_VOLUME "パーティションをフォーマットしようとしましたが、ボリュームが認識されませんでした。"
-
-    IDS_ERROR_COULD_NOT_FORMAT "セットアップでは現在、%s 内のパーティションをフォーマットできません。\n\
-\n「OK」をクリックしてセットアップを続行します。\
-\nセットアップを終了するには、「キャンセル」をクリックします。"
-
-    IDS_ERROR_FORMATTING_PARTITION "セットアップはパーティションをフォーマットできません:\n %s\n"
-
-    IDS_ERROR_COULD_NOT_CHECK "セットアップでは現在、%s でフォーマットされたパーティションをチェックできません。\n\
-\n「OK」をクリックしてセットアップを続行します。\
-\nセットアップを終了するには、「キャンセル」をクリックします。"
-
-    IDS_ERROR_CHECKING_PARTITION "ChkDsk はいくつかのディスク エラーを検出しました。\n(ステータス 0x%08lx)。"
-
-    IDS_ERROR_WRITE_BOOT "セットアップはシステム パーティションに %s ブートコードをインストールできませんでした。"
-    IDS_ERROR_INSTALL_BOOTCODE "セットアップはブート ディスクに %s ブートコードをインストールできませんでした。"
-    IDS_ERROR_INSTALL_BOOTCODE_REMOVABLE "セットアップはリムーバブル メディアにブートコードをインストールできませんでした。"
-    IDS_ERROR_BOOTLDR_ARCH_UNSUPPORTED "セットアップでは現在、使用しているコンピューターへのブートローダーのインストールはサポートされていません。\
-\nそれでも続行するには、「OK」をクリックしてください。"
-    IDS_ERROR_BOOTLDR_FAILED "セットアップはブートローダーをインストールできませんでした (ステータス 0x%08lx)。"
 END

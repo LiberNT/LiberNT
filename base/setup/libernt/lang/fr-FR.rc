@@ -91,7 +91,6 @@ BEGIN
     IDS_REG_ADDKBLAYOUTS "Ajout des dispositions de clavier"
     IDS_REG_KEYBOARDSETTINGSUPDATE "Mise à jour des paramètres de disposition du clavier"
     IDS_REG_CODEPAGEINFOUPDATE "Ajout des informations de pages de codes"
-    IDS_REG_UNKNOWN "Statut %d inconnu"
 END
 
 STRINGTABLE
@@ -111,7 +110,6 @@ BEGIN
     IDS_ERROR_USERNAME "The user name must have 1 to 20 characters and cannot contain any of these characters:\n"" / \\ [ ] : ; | = , + * ? < > @\nIt cannot contain only periods and spaces."
     IDS_ERROR_USEREXISTS "This name is already used by a built-in account or group, or by the computer. Choose another user name."
     IDS_ERROR_PASSWORDMATCH "The passwords do not match. Type the same password in both boxes."
-    IDS_ERROR_CONFIGURE "Setup could not configure the installed system (error %lu)."
 END
 
 /* Error Strings */
@@ -119,38 +117,9 @@ END
 STRINGTABLE
 BEGIN
 
-    IDS_ERROR_CREATE_PARTITION_TITLE "Créer une partition"
     IDS_ERROR_CREATE_PARTITION "Échec lors de la création d'une nouvelle partition."
 
     IDS_WARN_DELETE_PARTITION_TITLE "Supprimer la partition ?"
     IDS_WARN_DELETE_PARTITION "Êtes-vous sûr de vouloir supprimer la partition sélectionnée ?"
     IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "Êtes-vous sûr de vouloir supprimer la partition étendue sélectionnée et TOUTES les partitions logiques qu'elle contient ?"
-
-    IDS_ERROR_WRITE_PTABLE "Le programme d'installation a échoué à écrire les tables de partition."
-
-    IDS_ERROR_SYSTEM_PARTITION "Le programme d'installation de LiberNT ne peut pas trouver une partition système supportée\n\
-sur votre système, ou ne peut pas en créer une nouvelle. Sans une telle partition,\n\
-le programme d'installation ne peut pas installer LiberNT.\
-\nCliquez sur OK pour revenir à la liste de sélection des partitions."
-
-    IDS_ERROR_FORMAT_UNRECOGNIZED_VOLUME "Volume non reconnu lors du formatage de la partition."
-
-    IDS_ERROR_COULD_NOT_FORMAT "Le programme d'installation ne parvient actuellement pas à formater une partition en %s.\n\
-\nCliquez sur OK pour continuer l'installation.\
-\nCliquez sur Annuler pour quitter l'installation."
-
-    IDS_ERROR_FORMATTING_PARTITION "Le programme d'installation ne parvient pas à formater la partition :\n %s\n"
-
-    IDS_ERROR_COULD_NOT_CHECK "Le programme d'installation ne parvient actuellement pas à vérifier une partition formatée en %s.\n\
-\nCliquez sur OK pour continuer l'installation.\
-\nCliquez sur Annuler pour quitter l'installation."
-
-    IDS_ERROR_CHECKING_PARTITION "ChkDsk a détecté des erreurs disque.\n(Status 0x%08lx)."
-
-    IDS_ERROR_WRITE_BOOT "Échec de l'installation du code de démarrage %s sur la partition système."
-    IDS_ERROR_INSTALL_BOOTCODE "Échec de l'installation du code de démarrage %s sur le disque système."
-    IDS_ERROR_INSTALL_BOOTCODE_REMOVABLE "Échec de l'installation du code de démarrage sur le média amovible."
-    IDS_ERROR_BOOTLDR_ARCH_UNSUPPORTED "Le programme d'installation ne supporte pas actuellement l'installation du chargeur de démarrage sur l'ordinateur que vous utilisez.\
-\nCliquez sur OK pour continuer quand même."
-    IDS_ERROR_BOOTLDR_FAILED "Le programme d'installation n'a pas pu installer le chargeur de démarrage (Status 0x%08lx)."
 END

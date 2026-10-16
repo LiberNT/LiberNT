@@ -1,5 +1,5 @@
 /*
- * PROJECT:     ReactOS GUI first stage setup application
+ * PROJECT:     LiberNT Setup
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
  * PURPOSE:     Precompiled header
  * COPYRIGHT:   Copyright 2008-2010 Matthias Kupfer <mkupfer@reactos.org>
@@ -65,44 +65,6 @@ typedef struct _UI_CONTEXT
 extern UI_CONTEXT UiContext;
 
 
-/*
- * A mapping entry that maps an NT path to a corresponding Win32 path.
- *
- * Example is:
- *   NT path:    "\Device\Harddisk0\Partition1\some\path1"
- *   Win32 path: "C:\some\path1"
- *
- * Here, the NT path prefix to be cached is only
- * "\Device\Harddisk0\Partition1\", to be mapped with "C:\".
- *
- * Then the same entry would be reused if one wants to convert
- * the NT path "\Device\Harddisk0\Partition1\another\path2",
- * which converts to the Win32 path "C:\another\path2" .
- */
-typedef struct _NT_WIN32_PATH_MAPPING
-{
-    LIST_ENTRY ListEntry;
-    WCHAR NtPath[MAX_PATH]; // MAX_PATH for both entries should be more than enough.
-    WCHAR Win32Path[MAX_PATH];
-} NT_WIN32_PATH_MAPPING, *PNT_WIN32_PATH_MAPPING;
-
-/* The list of NT to Win32 path prefix mappings */
-typedef struct _NT_WIN32_PATH_MAPPING_LIST
-{
-    LIST_ENTRY List;
-    ULONG MappingsCount;
-} NT_WIN32_PATH_MAPPING_LIST, *PNT_WIN32_PATH_MAPPING_LIST;
-
-
-#if 0
-typedef struct _KBLAYOUT
-{
-    TCHAR LayoutId[9];
-    TCHAR LayoutName[128];
-    TCHAR DllName[128];
-} KBLAYOUT, *PKBLAYOUT;
-#endif
-
 #define InterlockedFlagsTestAndSet8(Target, Flags) \
     !!(InterlockedOr8((PCHAR)(Target), (Flags)) & (Flags))
 
@@ -143,8 +105,6 @@ typedef struct _SETUPDATA
         BOOLEAN bStopInstall;
     };
 
-    NT_WIN32_PATH_MAPPING_LIST MappingList;
-
     USETUP_DATA USetupData;
 
     PPARTLIST PartitionList;
@@ -166,6 +126,7 @@ typedef struct _SETUPDATA
     WCHAR Password[PWLEN + 1];
     DWORD TimeZoneIndex;
     BOOL AutoDaylight;
+    WCHAR TimeZoneName[128];
 
 } SETUPDATA, *PSETUPDATA;
 
@@ -284,6 +245,19 @@ RunSetupWizard(
 
 INT_PTR
 CALLBACK
+AccountPageProc(
+    _In_ HWND hwndDlg,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam);
+
+VOID
+SetResText(
+    _In_ HWND hWnd,
+    _In_ UINT uID);
+
+INT_PTR
+CALLBACK
 LanguagePageProc(
     _In_ HWND hwndDlg,
     _In_ UINT uMsg,
@@ -340,17 +314,6 @@ SetupFrameGoTo(
     _In_ INT Page);
 
 
-/*
- * Attempts to convert a pure NT file path into a corresponding Win32 path.
- * Adapted from GetInstallSourceWin32() in dll/win32/syssetup/wizard.c
- */
-BOOL
-ConvertNtPathToWin32Path(
-    IN OUT PNT_WIN32_PATH_MAPPING_LIST MappingList,
-    OUT PWSTR pwszPath,
-    IN DWORD cchPathMax,
-    IN PCWSTR pwszNTPath);
-
 
 /* libernt.c */
 
@@ -362,6 +325,10 @@ InstallPageProc(
     _In_ WPARAM wParam,
     _In_ LPARAM lParam);
 
+VOID
+GenerateComputerName(
+    _Out_writes_(MAX_COMPUTERNAME_LENGTH + 1) PWSTR Buffer);
+
 BOOL
 IsValidSetupComputerName(
     _In_ PCWSTR Name);
@@ -370,74 +337,21 @@ BOOL
 IsValidSetupUserName(
     _In_ PCWSTR Name);
 
-BOOL
-IsShellActive(VOID);
-
-BOOL
-AreThereInteractiveWindows(
-    _In_opt_ HWND hWndExclude);
-
-size_t
-LoadAllocStringW(
-    _In_opt_ HINSTANCE hInstance,
+VOID
+LoadPrintfW(
+    _Out_writes_(cchText) PWSTR Text,
+    _In_ SIZE_T cchText,
     _In_ UINT uID,
-    _In_opt_ _Outptr_ PWSTR* pString,
-    _In_opt_ size_t cchBufferLen /*,
-    _In_opt_ PCWSTR pDefaultString*/);
-
-size_t
-FormatAllocStringWV(
-    _In_opt_ _Outptr_ PWSTR* pString,
-    _In_opt_ size_t cchBufferLen,
-    _In_ PCWSTR pszFormat,
-    _In_ va_list args);
-
-INT
-DisplayMessageV(
-    _In_opt_ HWND hWnd,
-    _In_ UINT uType,
-    _In_opt_ PCWSTR pszTitle,
-    _In_opt_ PCWSTR pszFormatMessage,
-    _In_ va_list args);
-
-INT
-__cdecl
-DisplayMessage(
-    _In_opt_ HWND hWnd,
-    _In_ UINT uType,
-    _In_opt_ PCWSTR pszTitle,
-    _In_opt_ PCWSTR pszFormatMessage,
     ...);
 
 INT
-__cdecl
-DisplayError(
-    _In_opt_ HWND hWnd,
-    _In_ UINT uIDTitle,
-    _In_ UINT uIDMessage,
-    ...);
-
-VOID
-SetWindowResTextW(
-    _In_ HWND hWnd,
-    _In_opt_ HINSTANCE hInstance,
-    _In_ UINT uID /*,
-    _In_opt_ PCWSTR pDefaultString*/);
-
-VOID
-SetWindowResPrintfVW(
-    _In_ HWND hWnd,
-    _In_opt_ HINSTANCE hInstance,
-    _In_ UINT uID,
-    _In_ va_list args);
-
-VOID
-__cdecl
-SetWindowResPrintfW(
-    _In_ HWND hWnd,
-    _In_opt_ HINSTANCE hInstance,
-    _In_ UINT uID,
-    ...);
+SetupMessage(
+    _In_opt_ HWND hwndOwner,
+    _In_opt_ PCWSTR Icon,
+    _In_ TASKDIALOG_COMMON_BUTTON_FLAGS Buttons,
+    _In_ INT DefaultButton,
+    _In_opt_ PCWSTR MainInstruction,
+    _In_opt_ PCWSTR Content);
 
 #endif /* _LIBERNT_PCH_ */
 

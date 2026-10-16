@@ -74,25 +74,6 @@ FormatDiskSize(
     StringCchPrintfW(Text, cchText, L"%I64u.%I64u %s", Tenths / 10, Tenths % 10, Unit);
 }
 
-static VOID
-LoadPrintfW(
-    _Out_writes_(cchText) PWSTR Text,
-    _In_ SIZE_T cchText,
-    _In_ UINT uID,
-    ...)
-{
-    WCHAR Format[256];
-    va_list Args;
-
-    Text[0] = UNICODE_NULL;
-    if (!LoadStringW(SetupData.hInstance, uID, Format, ARRAYSIZE(Format)))
-        return;
-
-    va_start(Args, uID);
-    StringCchVPrintfW(Text, cchText, Format, Args);
-    va_end(Args);
-}
-
 PVOL_CREATE_INFO
 FindVolumeFormatPlan(
     _In_ PVOLENTRY Volume)
@@ -618,19 +599,6 @@ RedrawDiskList(
     UpdateDiskButtons(hwndDlg, pSetupData);
 }
 
-static INT
-SetupMessageBox(
-    _In_ HWND hwndDlg,
-    _In_ PCWSTR Text,
-    _In_ UINT Type)
-{
-    WCHAR Caption[64];
-
-    if (!LoadStringW(GetModuleHandleW(NULL), IDS_CAPTION, Caption, ARRAYSIZE(Caption)))
-        Caption[0] = UNICODE_NULL;
-    return MessageBoxW(GetParent(hwndDlg), Text, Caption, Type);
-}
-
 static VOID
 ReloadDiskList(
     _In_ HWND hwndDlg,
@@ -671,12 +639,12 @@ CreateRegionPartition(
         if (Ask)
         {
             LoadStringW(pSetupData->hInstance, IDS_DISK_NEW_SYSTEM, Text, ARRAYSIZE(Text));
-            if (SetupMessageBox(hwndDlg, Text, MB_OKCANCEL | MB_ICONINFORMATION) != IDOK)
+            if (SetupMessage(GetParent(hwndDlg), TD_INFORMATION_ICON, TDCBF_OK_BUTTON | TDCBF_CANCEL_BUTTON, IDOK, NULL, Text) != IDOK)
                 return FALSE;
         }
 
         if (!CreateGptSystemPartitions(List, &Region, &EfiPart, &ReservedPart) || !Region)
-            return FALSE;
+            goto Failed;
 
         if (EfiPart && EfiPart->Volume)
             PlanVolumeFormat(EfiPart->Volume, L"FAT32", L"System");
@@ -686,13 +654,18 @@ CreateRegionPartition(
     }
 
     if (!CreatePartition(List, Region, SizeBytes, 0))
-        return FALSE;
+        goto Failed;
 
     if (Region->Volume)
         PlanVolumeFormat(Region->Volume, L"NTFS", NULL);
 
     *pRegion = Region;
     return TRUE;
+
+Failed:
+    SetupMessage(GetParent(hwndDlg), TD_ERROR_ICON, TDCBF_OK_BUTTON, IDOK,
+                 MAKEINTRESOURCEW(IDS_ERROR_CREATE_PARTITION), NULL);
+    return FALSE;
 }
 
 static INT_PTR CALLBACK
@@ -774,11 +747,8 @@ DoNewPartition(
         return;
     }
 
-    if (!CreateRegionPartition(hwndDlg, pSetupData, &Region,
-                               (Ctx.SizeMb >= Ctx.MaxMb) ? 0 : Ctx.SizeMb * DISK_MEGABYTE, TRUE))
-    {
-        DisplayError(GetParent(hwndDlg), IDS_ERROR_CREATE_PARTITION_TITLE, IDS_ERROR_CREATE_PARTITION);
-    }
+    CreateRegionPartition(hwndDlg, pSetupData, &Region,
+                          (Ctx.SizeMb >= Ctx.MaxMb) ? 0 : Ctx.SizeMb * DISK_MEGABYTE, TRUE);
 
     RedrawDiskList(hwndDlg, pSetupData, Region);
 }
@@ -797,11 +767,10 @@ DoDeletePartition(
         return;
 
     Extended = (PartEntry == PartEntry->DiskEntry->ExtendedPartition);
-    if (DisplayMessage(GetParent(hwndDlg),
-                       MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING,
-                       MAKEINTRESOURCEW(IDS_WARN_DELETE_PARTITION_TITLE),
-                       MAKEINTRESOURCEW(Extended ? IDS_WARN_DELETE_MBR_EXTENDED_PARTITION
-                                                 : IDS_WARN_DELETE_PARTITION)) != IDYES)
+    if (SetupMessage(GetParent(hwndDlg), TD_WARNING_ICON, TDCBF_YES_BUTTON | TDCBF_NO_BUTTON, IDNO,
+                     MAKEINTRESOURCEW(IDS_WARN_DELETE_PARTITION_TITLE),
+                     MAKEINTRESOURCEW(Extended ? IDS_WARN_DELETE_MBR_EXTENDED_PARTITION
+                                               : IDS_WARN_DELETE_PARTITION)) != IDYES)
     {
         return;
     }
@@ -831,7 +800,7 @@ DoFormatPartition(
         return;
 
     LoadStringW(pSetupData->hInstance, IDS_DISK_FORMAT_WARN, Text, ARRAYSIZE(Text));
-    if (SetupMessageBox(hwndDlg, Text, MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONWARNING) != IDOK)
+    if (SetupMessage(GetParent(hwndDlg), TD_WARNING_ICON, TDCBF_OK_BUTTON | TDCBF_CANCEL_BUTTON, IDCANCEL, NULL, Text) != IDOK)
         return;
 
     if (IsSystemPartitionEntry(PartEntry))
@@ -857,12 +826,12 @@ DoEraseDisk(
 
     DiskEntry = PartEntry->DiskEntry;
     LoadPrintfW(Text, ARRAYSIZE(Text), IDS_DISK_ERASE_WARN, DiskEntry->DiskNumber);
-    if (SetupMessageBox(hwndDlg, Text, MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) != IDYES)
+    if (SetupMessage(GetParent(hwndDlg), TD_WARNING_ICON, TDCBF_YES_BUTTON | TDCBF_NO_BUTTON, IDNO, NULL, Text) != IDYES)
         return;
 
     ForgetVolumePlans(DiskEntry, NULL, FALSE);
     if (!EraseDisk(pSetupData->PartitionList, DiskEntry, &FreeRegion))
-        DisplayError(GetParent(hwndDlg), IDS_ERROR_CREATE_PARTITION_TITLE, IDS_ERROR_CREATE_PARTITION);
+        SetupMessage(GetParent(hwndDlg), TD_ERROR_ICON, TDCBF_OK_BUTTON, IDOK, MAKEINTRESOURCEW(IDS_ERROR_CREATE_PARTITION), NULL);
     else if (DiskEntry->DiskNumber < 64)
         ErasedDisks |= 1ULL << DiskEntry->DiskNumber;
 
@@ -1005,7 +974,7 @@ DoResizePartition(
     if (HasPendingDiskChanges(pSetupData->PartitionList))
     {
         LoadStringW(pSetupData->hInstance, IDS_RESIZE_PENDING, Text, ARRAYSIZE(Text));
-        SetupMessageBox(hwndDlg, Text, MB_OK | MB_ICONWARNING);
+        SetupMessage(GetParent(hwndDlg), TD_WARNING_ICON, TDCBF_OK_BUTTON, IDOK, NULL, Text);
         return;
     }
 
@@ -1023,7 +992,7 @@ DoResizePartition(
         if (!NT_SUCCESS(Status))
         {
             LoadStringW(pSetupData->hInstance, IDS_RESIZE_FAILED, Text, ARRAYSIZE(Text));
-            SetupMessageBox(hwndDlg, Text, MB_OK | MB_ICONERROR);
+            SetupMessage(GetParent(hwndDlg), TD_ERROR_ICON, TDCBF_OK_BUTTON, IDOK, NULL, Text);
             return;
         }
         Ctx.TotalMb = Info.PartitionBytes / DISK_MEGABYTE;
@@ -1060,7 +1029,7 @@ DoResizePartition(
     if (!NT_SUCCESS(Status))
     {
         LoadStringW(pSetupData->hInstance, IDS_RESIZE_FAILED, Text, ARRAYSIZE(Text));
-        SetupMessageBox(hwndDlg, Text, MB_OK | MB_ICONERROR);
+        SetupMessage(GetParent(hwndDlg), TD_ERROR_ICON, TDCBF_OK_BUTTON, IDOK, NULL, Text);
     }
 
     ReloadDiskList(hwndDlg, pSetupData);
@@ -1118,7 +1087,7 @@ ApplyInstallSelection(
         !IsListEmpty(&PartEntry->DiskEntry->PartList->BiosDiskListHead))
     {
         LoadStringW(pSetupData->hInstance, IDS_DISK_NOT_FIRMWARE, Text, ARRAYSIZE(Text));
-        if (SetupMessageBox(hwndDlg, Text, MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONWARNING) != IDOK)
+        if (SetupMessage(GetParent(hwndDlg), TD_WARNING_ICON, TDCBF_OK_BUTTON | TDCBF_CANCEL_BUTTON, IDCANCEL, NULL, Text) != IDOK)
             return FALSE;
     }
 
@@ -1126,7 +1095,6 @@ ApplyInstallSelection(
     {
         if (!CreateRegionPartition(hwndDlg, pSetupData, &PartEntry, 0ULL, !pSetupData->bUnattend))
         {
-            DisplayError(GetParent(hwndDlg), IDS_ERROR_CREATE_PARTITION_TITLE, IDS_ERROR_CREATE_PARTITION);
             RedrawDiskList(hwndDlg, pSetupData, PartEntry);
             return FALSE;
         }
@@ -1170,7 +1138,7 @@ ApplyInstallSelection(
             if (WarnId && !pSetupData->bUnattend)
             {
                 LoadStringW(pSetupData->hInstance, WarnId, Text, ARRAYSIZE(Text));
-                if (SetupMessageBox(hwndDlg, Text, MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONWARNING) != IDOK)
+                if (SetupMessage(GetParent(hwndDlg), TD_WARNING_ICON, TDCBF_OK_BUTTON | TDCBF_CANCEL_BUTTON, IDCANCEL, NULL, Text) != IDOK)
                     return FALSE;
             }
             PlanVolumeFormat(Volume, L"NTFS", NULL);
