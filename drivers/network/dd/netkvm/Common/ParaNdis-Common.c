@@ -462,12 +462,21 @@ static BOOLEAN GetAdapterResources(NDIS_HANDLE MiniportHandle, PNDIS_RESOURCE_LI
     NdisZeroMemory(pResources, sizeof(*pResources));
 
     // read the PCI config space header
+#ifdef __REACTOS__
+    read = NdisMGetBusData(
+       MiniportHandle,
+       PCI_WHICHSPACE_CONFIG,
+       0,
+       &pci_config,
+       sizeof(pci_config));
+#else
     read = NdisReadPciSlotInformation(
        MiniportHandle,
        0 /* SlotNumber, reserved */,
        0 /* Offset */,
        &pci_config,
        sizeof(pci_config));
+#endif
     if (read != sizeof(pci_config)) {
        return FALSE;
     }

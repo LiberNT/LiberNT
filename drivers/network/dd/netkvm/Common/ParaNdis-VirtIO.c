@@ -254,12 +254,21 @@ static int PCIReadConfig(PPARANDIS_ADAPTER pContext,
 {
     ULONG read;
 
+#ifdef __REACTOS__
+    read = NdisMGetBusData(
+        pContext->MiniportHandle,
+        PCI_WHICHSPACE_CONFIG,
+        where,
+        buffer,
+        (ULONG)length);
+#else
     read = NdisReadPciSlotInformation(
         pContext->MiniportHandle,
         0 /* SlotNumber */,
         where,
         buffer,
         (ULONG)length);
+#endif
 
     if (read == length) {
         DPrintf(6, ("[%s] read %d bytes at %d\n", __FUNCTION__, read, where));
