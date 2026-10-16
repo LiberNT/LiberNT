@@ -6,8 +6,11 @@
  */
 
 #include <kmt_test.h>
+#include <ndis.h>
+#include "NdisTestExport.h"
 
-__declspec(dllimport) ULONG NTAPI NdisSystemActiveProcessorCount(PKAFFINITY);
+typedef ULONG (NTAPI *PFN_NDIS_SYSTEM_ACTIVE_PROCESSOR_COUNT)(PKAFFINITY);
+
 __declspec(dllimport) USHORT NTAPI NdisActiveGroupCount(VOID);
 __declspec(dllimport) USHORT NTAPI NdisMaxGroupCount(VOID);
 __declspec(dllimport) ULONG NTAPI NdisGroupMaxProcessorCount(USHORT);
@@ -19,6 +22,7 @@ __declspec(dllimport) NTSTATUS NTAPI NdisProcessorIndexToNumber(ULONG, PPROCESSO
 
 START_TEST(NdisProcessorGroup)
 {
+    PFN_NDIS_SYSTEM_ACTIVE_PROCESSOR_COUNT pSystemActiveProcessorCount = NdisTestFindExport("NdisSystemActiveProcessorCount");
     KAFFINITY NdisAffinity = 0, KeAffinity = 0;
     PROCESSOR_NUMBER Number, KeNumber;
     USHORT Group, Groups;
@@ -26,8 +30,15 @@ START_TEST(NdisProcessorGroup)
     KIRQL OldIrql;
     NTSTATUS Status;
 
-    ok_eq_ulong(NdisSystemActiveProcessorCount(&NdisAffinity), KeQueryActiveProcessorCount(&KeAffinity));
-    ok_eq_ulongptr(NdisAffinity, KeAffinity);
+    if (pSystemActiveProcessorCount)
+    {
+        ok_eq_ulong(pSystemActiveProcessorCount(&NdisAffinity), KeQueryActiveProcessorCount(&KeAffinity));
+        ok_eq_ulongptr(NdisAffinity, KeAffinity);
+    }
+    else
+    {
+        trace("ndis.sys does not export NdisSystemActiveProcessorCount\n");
+    }
 
     Groups = NdisActiveGroupCount();
     ok_eq_uint(Groups, KeQueryActiveGroupCount());

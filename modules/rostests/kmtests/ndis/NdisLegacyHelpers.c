@@ -7,12 +7,11 @@
 
 #include <kmt_test.h>
 #include <ndis.h>
+#include "NdisTestExport.h"
 
-#undef NdisInterlockedPushEntryList
-#undef NdisInterlockedPopEntryList
+typedef PSINGLE_LIST_ENTRY (NTAPI *PFN_NDIS_PUSH_ENTRY_LIST)(PSINGLE_LIST_ENTRY, PSINGLE_LIST_ENTRY, PNDIS_SPIN_LOCK);
+typedef PSINGLE_LIST_ENTRY (NTAPI *PFN_NDIS_POP_ENTRY_LIST)(PSINGLE_LIST_ENTRY, PNDIS_SPIN_LOCK);
 
-__declspec(dllimport) PSINGLE_LIST_ENTRY NTAPI NdisInterlockedPushEntryList(PSINGLE_LIST_ENTRY, PSINGLE_LIST_ENTRY, PNDIS_SPIN_LOCK);
-__declspec(dllimport) PSINGLE_LIST_ENTRY NTAPI NdisInterlockedPopEntryList(PSINGLE_LIST_ENTRY, PNDIS_SPIN_LOCK);
 __declspec(dllimport) VOID NTAPI NdisDprAcquireReadWriteLock(PNDIS_RW_LOCK, BOOLEAN, PLOCK_STATE);
 __declspec(dllimport) VOID NTAPI NdisDprReleaseReadWriteLock(PNDIS_RW_LOCK, PLOCK_STATE);
 
@@ -47,6 +46,8 @@ TestDelay(
 
 START_TEST(NdisLegacyHelpers)
 {
+    PFN_NDIS_PUSH_ENTRY_LIST pPush = NdisTestFindExport("NdisInterlockedPushEntryList");
+    PFN_NDIS_POP_ENTRY_LIST pPop = NdisTestFindExport("NdisInterlockedPopEntryList");
     SINGLE_LIST_ENTRY Head, First, Second;
     PSINGLE_LIST_ENTRY Entry;
     NDIS_SPIN_LOCK SpinLock;
@@ -57,20 +58,28 @@ START_TEST(NdisLegacyHelpers)
     LONG Count;
     KIRQL OldIrql;
 
-    NdisAllocateSpinLock(&SpinLock);
-    Head.Next = NULL;
-    Entry = NdisInterlockedPushEntryList(&Head, &First, &SpinLock);
-    ok_eq_pointer(Entry, NULL);
-    Entry = NdisInterlockedPushEntryList(&Head, &Second, &SpinLock);
-    ok_eq_pointer(Entry, &First);
-    ok_eq_pointer(Head.Next, &Second);
-    Entry = NdisInterlockedPopEntryList(&Head, &SpinLock);
-    ok_eq_pointer(Entry, &Second);
-    Entry = NdisInterlockedPopEntryList(&Head, &SpinLock);
-    ok_eq_pointer(Entry, &First);
-    Entry = NdisInterlockedPopEntryList(&Head, &SpinLock);
-    ok_eq_pointer(Entry, NULL);
-    NdisFreeSpinLock(&SpinLock);
+    ok_eq_bool(pPush != NULL, pPop != NULL);
+    if (pPush && pPop)
+    {
+        NdisAllocateSpinLock(&SpinLock);
+        Head.Next = NULL;
+        Entry = pPush(&Head, &First, &SpinLock);
+        ok_eq_pointer(Entry, NULL);
+        Entry = pPush(&Head, &Second, &SpinLock);
+        ok_eq_pointer(Entry, &First);
+        ok_eq_pointer(Head.Next, &Second);
+        Entry = pPop(&Head, &SpinLock);
+        ok_eq_pointer(Entry, &Second);
+        Entry = pPop(&Head, &SpinLock);
+        ok_eq_pointer(Entry, &First);
+        Entry = pPop(&Head, &SpinLock);
+        ok_eq_pointer(Entry, NULL);
+        NdisFreeSpinLock(&SpinLock);
+    }
+    else
+    {
+        trace("ndis.sys does not export the interlocked list routines\n");
+    }
 
     NdisInitializeReadWriteLock(&RwLock);
     KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
