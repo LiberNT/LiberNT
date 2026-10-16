@@ -152,6 +152,8 @@ static BOOL device_find_next( struct bluetooth_find_device *find, BLUETOOTH_DEVI
         BOOL matches;
 
         bth_info = &find->device_list->deviceList[find->idx++];
+        if ((bth_info->flags & (BDIF_LE | BDIF_BR)) == BDIF_LE)
+            continue;
         matches = (find->params.fReturnAuthenticated && bth_info->flags & BDIF_PAIRED) ||
             (find->params.fReturnRemembered && bth_info->flags & BDIF_PERSONAL) ||
             (find->params.fReturnUnknown && !(bth_info->flags & BDIF_PERSONAL)) ||
