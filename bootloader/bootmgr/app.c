@@ -67,6 +67,14 @@ BmStartApplication(
     ULONG Size;
     BOOLEAN Started = FALSE;
 
+    if (Entry->FirmwareDevice)
+    {
+        Started = FwStartFirmwareApplication(Entry->FirmwareDevice, Entry->FirmwarePath);
+        if (!Started)
+            FwPrint(L"%s could not be started.\r\n", Entry->FirmwarePath);
+        return Started;
+    }
+
     if (!BcdGetDevice(&Entry->Object, BcdLibraryDevice_ApplicationDevice, &BcdDevice) ||
         !BcdGetString(&Entry->Object, BcdLibraryString_ApplicationPath, Path, RTL_NUMBER_OF(Path)))
     {

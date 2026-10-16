@@ -146,6 +146,8 @@ typedef struct _BM_ENTRY
     BCD_OBJECT Object;
     WCHAR Id[BCD_ID_CHARS];
     WCHAR Description[BM_DESCRIPTION_CHARS];
+    PVOID FirmwareDevice;
+    PCWSTR FirmwarePath;
 } BM_ENTRY, *PBM_ENTRY;
 
 #define BM_FILE_NAME_CHARS 64

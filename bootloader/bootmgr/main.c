@@ -14,15 +14,18 @@
 #define BM_STORE_NAME      L"BCD"
 #define BM_DEFAULT_TITLE   L"Boot Manager"
 #define BM_BOOT_TIMEOUT    3
+#define BM_WINDOWS_MANAGER L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi"
+#define BM_WINDOWS_STORE   L"\\EFI\\Microsoft\\Boot\\BCD"
+#define BM_WINDOWS_TITLE   L"Windows Boot Manager"
 
 static const PCWSTR BmStorePaths[] =
 {
     L"\\EFI\\LiberNT\\Boot\\BCD",
-    L"\\EFI\\Microsoft\\Boot\\BCD",
     L"\\Boot\\BCD",
 };
 
 static BM_ENTRY BmEntries[BM_MAX_ENTRIES];
+static BM_ENTRY BmWindowsEntries[BM_MAX_ENTRIES];
 static CHAR BmNames[BM_MAX_ENTRIES][BM_NAME_CHARS];
 static PCSTR BmMenuNames[BM_MAX_ENTRIES + BM_EXTRA_ITEMS];
 static UI_MENU_ICON BmMenuIcons[BM_MAX_ENTRIES + BM_EXTRA_ITEMS];
@@ -30,6 +33,7 @@ static PCWSTR BmTextNames[BM_MAX_ENTRIES];
 static WCHAR BmStorePath[BM_PATH_CHARS];
 static WCHAR BmTitle[BM_DESCRIPTION_CHARS];
 static ULONG BmCount;
+static ULONG BmWindowsCount;
 static ULONG BmSelected;
 
 static
@@ -65,6 +69,62 @@ BmReadStore(
 
 static
 VOID
+BmGetWindowsDescription(
+    _In_ PVOID Device,
+    _Out_writes_z_(Chars) PWSTR Description,
+    _In_ ULONG Chars)
+{
+    BCD_OBJECT BootMgr, Object, Loader = {HCELL_NIL, 0};
+    WCHAR Id[BCD_ID_CHARS];
+    PVOID Store;
+    ULONG Size, Index, Loaders = 0;
+
+    RtlStringCchCopyW(Description, Chars, BM_WINDOWS_TITLE);
+
+    Store = FwReadDeviceFile(Device, BM_WINDOWS_STORE, &Size);
+    if (!Store)
+        return;
+
+    if (BcdOpenStore(Store, Size) && BcdOpenObject(BCD_ID_BOOTMGR, &BootMgr))
+    {
+        for (Index = 0; BcdGetObjectId(&BootMgr, BcdBootMgrObjectList_DisplayOrder, Index, Id); Index++)
+        {
+            if (BcdOpenObject(Id, &Object) && Object.Type == BCD_OBJECT_OSLOADER)
+            {
+                Loader = Object;
+                Loaders++;
+            }
+        }
+
+        if (Loaders == 1)
+            BcdGetString(&Loader, BcdLibraryString_Description, Description, Chars);
+        else
+            BcdGetString(&BootMgr, BcdLibraryString_Description, Description, Chars);
+    }
+
+    FwFreePages(Store, Size);
+}
+
+static
+VOID
+BmFindWindows(VOID)
+{
+    PVOID Devices[BM_MAX_ENTRIES];
+    PBM_ENTRY Entry;
+    ULONG Count, i;
+
+    Count = FwFindFileVolumes(BM_WINDOWS_MANAGER, Devices, RTL_NUMBER_OF(Devices));
+    for (i = 0; i < Count; i++)
+    {
+        Entry = &BmWindowsEntries[BmWindowsCount++];
+        Entry->FirmwareDevice = Devices[i];
+        Entry->FirmwarePath = BM_WINDOWS_MANAGER;
+        BmGetWindowsDescription(Devices[i], Entry->Description, RTL_NUMBER_OF(Entry->Description));
+    }
+}
+
+static
+VOID
 BmStartEntry(
     _In_ ULONG Index,
     _In_ BOOLEAN AskStartup)
@@ -72,7 +132,7 @@ BmStartEntry(
     BM_STARTUP Startup;
 
     RtlZeroMemory(&Startup, sizeof(Startup));
-    if (AskStartup && !BmChooseStartupSettings(TRUE, &Startup))
+    if (AskStartup && !BmEntries[Index].FirmwareDevice && !BmChooseStartupSettings(TRUE, &Startup))
         return;
 
     FbGuiVtbl.UnInitialize();
@@ -172,7 +232,7 @@ BmRunGuiMenu(
 
         BmNames[i][j] = ANSI_NULL;
         BmMenuNames[i] = BmNames[i];
-        BmMenuIcons[i] = UiMenuIconLiberNT;
+        BmMenuIcons[i] = BmEntries[i].FirmwareDevice ? UiMenuIconDesktop : UiMenuIconLiberNT;
     }
 
     BmMenuNames[BmCount] = NULL;
@@ -312,24 +372,30 @@ VOID
 BlMain(VOID)
 {
     PVOID Store;
-    ULONG Size, Default;
+    ULONG Size, Default = 0, i;
 
     Store = BmReadStore(BmStorePath, RTL_NUMBER_OF(BmStorePath), &Size);
+    BmFindWindows();
+
+    RtlStringCchCopyW(BmTitle, RTL_NUMBER_OF(BmTitle), BM_DEFAULT_TITLE);
+
     if (!Store || !BcdOpenStore(Store, Size))
     {
         FwPrint(L"The Boot Configuration Data store is missing or corrupt.\r\n");
-        return;
     }
-
-    BmCount = BmEnumerateEntries(BmEntries, RTL_NUMBER_OF(BmEntries), &Default);
-    if (BmCount == 0)
+    else
     {
-        FwPrint(L"The Boot Configuration Data store has no operating system entry.\r\n");
-        return;
+        BmGetDescription(BmTitle, RTL_NUMBER_OF(BmTitle));
+        BmCount = BmEnumerateEntries(BmEntries, RTL_NUMBER_OF(BmEntries), &Default);
+        if (BmCount == 0)
+            FwPrint(L"The Boot Configuration Data store has no operating system entry.\r\n");
     }
 
-    if (!BmGetDescription(BmTitle, RTL_NUMBER_OF(BmTitle)))
-        RtlStringCchCopyW(BmTitle, RTL_NUMBER_OF(BmTitle), BM_DEFAULT_TITLE);
+    for (i = 0; i < BmWindowsCount && BmCount < RTL_NUMBER_OF(BmEntries); i++)
+        BmEntries[BmCount++] = BmWindowsEntries[i];
+
+    if (BmCount == 0)
+        return;
 
     BmSelected = Default;
     BmRunMenu(BM_BOOT_TIMEOUT);

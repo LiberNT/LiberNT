@@ -325,12 +325,12 @@ FwHalt(VOID)
 }
 
 PVOID
-FwReadBootFile(
+FwReadDeviceFile(
+    _In_ PVOID Device,
     _In_ PCWSTR Path,
     _Out_ PULONG Size)
 {
     EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
-    EFI_HANDLE Device = FwGetBootDeviceHandle();
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* FileSystem;
     EFI_FILE_PROTOCOL* Root;
     EFI_FILE_PROTOCOL* File;
@@ -379,6 +379,54 @@ FwReadBootFile(
 
     Root->Close(Root);
     return Data;
+}
+
+PVOID
+FwReadBootFile(
+    _In_ PCWSTR Path,
+    _Out_ PULONG Size)
+{
+    return FwReadDeviceFile(FwGetBootDeviceHandle(), Path, Size);
+}
+
+ULONG
+FwFindFileVolumes(
+    _In_ PCWSTR Path,
+    _Out_writes_(MaxDevices) PVOID* Devices,
+    _In_ ULONG MaxDevices)
+{
+    EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* FileSystem;
+    EFI_FILE_PROTOCOL* Root;
+    EFI_FILE_PROTOCOL* File;
+    EFI_HANDLE* Handles;
+    UINTN HandleCount, i;
+    ULONG Count = 0;
+
+    FwRescanDisks();
+
+    if (EFI_ERROR(BootServices->LocateHandleBuffer(ByProtocol, &FwFileSystemGuid, NULL, &HandleCount, &Handles)))
+        return 0;
+
+    for (i = 0; i < HandleCount && Count < MaxDevices; i++)
+    {
+        if (EFI_ERROR(BootServices->HandleProtocol(Handles[i], &FwFileSystemGuid, (VOID**)&FileSystem)) ||
+            EFI_ERROR(FileSystem->OpenVolume(FileSystem, &Root)))
+        {
+            continue;
+        }
+
+        if (!EFI_ERROR(Root->Open(Root, &File, (CHAR16*)Path, EFI_FILE_MODE_READ, 0)))
+        {
+            File->Close(File);
+            Devices[Count++] = Handles[i];
+        }
+
+        Root->Close(Root);
+    }
+
+    BootServices->FreePool(Handles);
+    return Count;
 }
 
 EFI_STATUS

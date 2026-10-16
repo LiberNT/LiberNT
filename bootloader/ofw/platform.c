@@ -769,6 +769,40 @@ FwReadBootFile(
     return FsReadFile(&Device, Path, Size);
 }
 
+PVOID
+FwReadDeviceFile(
+    _In_ PVOID Device,
+    _In_ PCWSTR Path,
+    _Out_ PULONG Size)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(Path);
+    *Size = 0;
+    return NULL;
+}
+
+ULONG
+FwFindFileVolumes(
+    _In_ PCWSTR Path,
+    _Out_writes_(MaxDevices) PVOID* Devices,
+    _In_ ULONG MaxDevices)
+{
+    UNREFERENCED_PARAMETER(Path);
+    UNREFERENCED_PARAMETER(Devices);
+    UNREFERENCED_PARAMETER(MaxDevices);
+    return 0;
+}
+
+BOOLEAN
+FwStartFirmwareApplication(
+    _In_ PVOID Device,
+    _In_ PCWSTR Path)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(Path);
+    return FALSE;
+}
+
 BOOLEAN
 FwGetBootMedium(
     _Out_ PDK_DEVICE Device)

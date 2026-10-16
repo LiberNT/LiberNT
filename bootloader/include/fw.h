@@ -27,6 +27,23 @@ FwReadBootFile(
     _In_ PCWSTR Path,
     _Out_ PULONG Size);
 
+PVOID
+FwReadDeviceFile(
+    _In_ PVOID Device,
+    _In_ PCWSTR Path,
+    _Out_ PULONG Size);
+
+ULONG
+FwFindFileVolumes(
+    _In_ PCWSTR Path,
+    _Out_writes_(MaxDevices) PVOID* Devices,
+    _In_ ULONG MaxDevices);
+
+BOOLEAN
+FwStartFirmwareApplication(
+    _In_ PVOID Device,
+    _In_ PCWSTR Path);
+
 DECLSPEC_NORETURN
 VOID
 FwHalt(VOID);

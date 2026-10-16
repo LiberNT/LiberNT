@@ -948,6 +948,11 @@ BootUiRenderMenu(PUI_MENU_INFO Menu, LONG TimeOut, BOOLEAN CanEscape, BOOTUI_MEN
             BootUiLogo(Left + 20, Y + (RowHeight - 21) / 2, 2);
             TextInset = 64;
         }
+        else if (Menu->MenuItemIcons && Menu->MenuItemIcons[I] == UiMenuIconDesktop)
+        {
+            BootUiIcon(Left + 20, Y + (RowHeight - 24) / 2, 0);
+            TextInset = 64;
+        }
         else if (Icon)
         {
             BootUiIcon(Left + 20, Y + (RowHeight - 24) / 2, Icon);
