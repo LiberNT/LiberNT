@@ -8,7 +8,7 @@ DriverVer=03/27/2012,1.0.0
 [DestinationDirs]
 DefaultDestDir = 11
 BluetoothClass.NT.Files = 11
-FreeBT.Files = 12
+BthUsb.Files = 12
 BthMini.Files = 12
 
 [ClassInstall32.NT]
@@ -28,34 +28,23 @@ bthci.dll
 %ReactOS%=ReactOS
 
 [ReactOS]
-%BTUSB.DeviceDesc%=FreeBT.Dev, USB\Class_E0&SubClass_01&Prot_01 ; Bluetooth class devices
+%BTUSB.DeviceDesc%=BthUsb.Dev, USB\Class_E0&SubClass_01&Prot_01
 %BthMini.DeviceDesc%=BthMini.Dev, MS_BTHX_BTHMINI
 
-[FreeBT.Dev]
-CopyFiles=FreeBT.Files
-AddReg=FreeBT.AddReg
+[BthUsb.Dev.NT]
+CopyFiles=BthUsb.Files
 
-[FreeBT.Dev.NT]
-CopyFiles=FreeBT.Files
-AddReg=FreeBT.AddReg
+[BthUsb.Dev.NT.Services]
+AddService = BTHUSB, 0x00000002, BthUsb.AddService
 
-[FreeBT.Dev.NT.Services]
-Addservice = FreeBT, 0x00000002, FreeBT.AddService
+[BthUsb.AddService]
+ServiceType    = 1
+StartType      = 3
+ErrorControl   = 1
+ServiceBinary  = %12%\bthusb.sys
 
-[FreeBT.AddService]
-ServiceType    = 1                  ; SERVICE_KERNEL_DRIVER
-StartType      = 3                  ; SERVICE_DEMAND_START
-ErrorControl   = 1                  ; SERVICE_ERROR_NORMAL
-ServiceBinary  = %12%\fbtusb.sys
-LoadOrderGroup = Base
-
-[FreeBT.AddReg]
-HKLM,"System\CurrentControlSet\Services\FreeBT\Parameters","MaximumTransferSize",0x10001,4096
-HKLM,"System\CurrentControlSet\Services\FreeBT\Parameters","DebugLevel",0x10001,2
-HKLM,"System\CurrentControlSet\services\FreeBT\Parameters","FreeBTEnable",0x10001,1
-
-[FreeBT.Files]
-fbtusb.sys
+[BthUsb.Files]
+bthusb.sys
 
 [BthMini.Dev.NT]
 CopyFiles=BthMini.Files
