@@ -3543,6 +3543,23 @@ LRESULT CDefView::OnNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandl
                     return CDRF_SKIPDEFAULT;
                 }
             }
+            else if (lpnmh->hwndFrom == m_ListView && m_ExplorerMaterialActive)
+            {
+                NMLVCUSTOMDRAW *pDraw = (NMLVCUSTOMDRAW *)lpnmh;
+                if (pDraw->nmcd.dwDrawStage == CDDS_PREPAINT)
+                    return CDRF_NOTIFYITEMDRAW;
+                if (pDraw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT &&
+                    (pDraw->nmcd.uItemState & CDIS_SELECTED) && ::GetFocus() != m_ListView)
+                {
+                    const COLORREF Key = m_ExplorerMaterialBack;
+                    const BYTE Ink = GetRValue(ExplorerContentTextColor()) >= 128 ? 255 : 0;
+                    pDraw->nmcd.uItemState &= ~CDIS_SELECTED;
+                    pDraw->clrTextBk = RGB(GetRValue(Key) + (Ink - GetRValue(Key)) * 0x14 / 255,
+                                           GetGValue(Key) + (Ink - GetGValue(Key)) * 0x14 / 255,
+                                           GetBValue(Key) + (Ink - GetBValue(Key)) * 0x14 / 255);
+                    pDraw->clrText = ExplorerContentTextColor();
+                }
+            }
             return CDRF_DODEFAULT;
         case NM_RELEASEDCAPTURE:
             TRACE("-- NM_RELEASEDCAPTURE %p\n", this);
