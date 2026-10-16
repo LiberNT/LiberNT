@@ -105,3 +105,12 @@
 @ stdcall NotifyUnicastIpAddressChange(long ptr ptr long ptr)
 @ stdcall SetInterfaceDnsSettings(long long long long ptr)
 @ stdcall SetIpInterfaceEntry(ptr)
+
+@ stdcall -arch=win64 NetioSetTriageBlock()
+@ stdcall -arch=win64 NsiEnumerateObjectsAllParametersEx()
+@ stdcall -arch=win64 NsiRegisterChangeNotificationEx()
+@ stdcall -arch=win64 NsiSetAllParametersEx()
+@ stdcall -arch=win64 NsiSetObjectSecurity()
+@ stdcall -arch=win64 NsiSetParameterEx()
+@ stub -arch=win64 WfpNblInfoCleanup
+@ stub -arch=win64 WfpNblInfoClone

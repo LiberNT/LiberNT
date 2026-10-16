@@ -3284,3 +3284,11 @@ done:
 
     return Status;
 }
+
+NTSTATUS
+NTAPI
+CmRegisterMachineHiveLoadedNotification(VOID)
+{
+    UNIMPLEMENTED;
+    return STATUS_NOT_IMPLEMENTED;
+}

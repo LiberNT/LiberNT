@@ -22,6 +22,7 @@ list(APPEND SOURCE
     iphlp.c
     ../tdihelpers/tdi.c
     ../tdihelpers/tdiconn.c
+    ${CMAKE_CURRENT_BINARY_DIR}/netio_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/netio.def)
 
 add_library(netio MODULE ${SOURCE})

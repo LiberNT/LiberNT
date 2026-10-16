@@ -1504,3 +1504,51 @@ WskDeregister(_In_ PWSK_REGISTRATION reg)
     reg->ReservedRegistrationState = 0;
     reg->ReservedRegistrationContext = NULL;
 }
+
+NTSTATUS
+NTAPI
+NetioSetTriageBlock(VOID)
+{
+    UNIMPLEMENTED;
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+NTSTATUS
+NTAPI
+NsiEnumerateObjectsAllParametersEx(VOID)
+{
+    UNIMPLEMENTED;
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+NTSTATUS
+NTAPI
+NsiRegisterChangeNotificationEx(VOID)
+{
+    UNIMPLEMENTED;
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+NTSTATUS
+NTAPI
+NsiSetAllParametersEx(VOID)
+{
+    UNIMPLEMENTED;
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+NTSTATUS
+NTAPI
+NsiSetObjectSecurity(VOID)
+{
+    UNIMPLEMENTED;
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+NTSTATUS
+NTAPI
+NsiSetParameterEx(VOID)
+{
+    UNIMPLEMENTED;
+    return STATUS_NOT_IMPLEMENTED;
+}

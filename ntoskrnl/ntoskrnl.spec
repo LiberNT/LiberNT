@@ -2110,7 +2110,7 @@
 @ stdcall CmGetBoundTransaction(ptr ptr)
 @ stdcall CmGetCallbackVersion(ptr ptr)
 @ stdcall CmRegisterCallbackEx(ptr ptr ptr ptr ptr ptr)
-@ stub -arch=win64 CmRegisterMachineHiveLoadedNotification
+@ stdcall -arch=win64 CmRegisterMachineHiveLoadedNotification()
 @ stdcall CmSetCallbackObjectContext(ptr ptr ptr ptr)
 @ stub -arch=win64 CmUnregisterMachineHiveLoadedNotification
 @ stdcall DbgSetDebugPrintCallback(ptr long)
