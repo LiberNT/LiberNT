@@ -911,7 +911,7 @@ void CDefView::RefreshExplorerContentAppearance()
     Eligible = !(m_FolderSettings.fFlags & (FWF_DESKTOP | FWF_TRANSPARENT)) &&
                m_viewinfo_data.hbmBack == NULL && !IsHighContrastEnabled() &&
                ::IsWindow(Root) && IsExplorerCabinetWindow(Root) &&
-               LoadExplorerContentMaterial();
+               GetPropW(Root, DWM_PROP_CONTENT_BACKDROP) && LoadExplorerContentMaterial();
 
     if (!Eligible)
     {

@@ -6,6 +6,7 @@
  */
 
 #include "cabinet.h"
+#include <shellframe.h>
 #include <browseui_undoc.h>
 
 extern "C" HRESULT WINAPI SHOpenFolderWindow(PIE_THREAD_PARAM_BLOCK parameters);
@@ -20,6 +21,8 @@ Cabinet_RunWindow(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd)
     MSG msg;
     PIDLIST_ABSOLUTE fallback = NULL;
 
+    if (!ShellFrame::Startup())
+        return E_FAIL;
     if (!pidl && SUCCEEDED(Cabinet_GetDefaultFolder(&fallback)))
         pidl = fallback;
     window = new CCabinetWindow();
@@ -38,6 +41,7 @@ Cabinet_RunWindow(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd)
     delete window;
     if (fallback)
         ILFree(fallback);
+    ShellFrame::Shutdown();
     return hr;
 }
 

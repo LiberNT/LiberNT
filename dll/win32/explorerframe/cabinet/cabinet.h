@@ -23,10 +23,11 @@
 #define IID_PPV_ARG(Itype, ppType) IID_##Itype, reinterpret_cast<void **>((static_cast<Itype **>(ppType)))
 #endif
 
+#include "bands.h"
+
 #define CABINET_CLASS L"CabinetWClass"
 #define CABINET_MAX_TABS 32
 #define CABINET_MAX_HISTORY 64
-#define CABINET_MAX_CRUMBS 32
 
 class CCabinetWindow;
 
@@ -57,7 +58,6 @@ enum class CabinetCommand
     Copy,
     Paste,
     Rename,
-    Share,
     Delete,
     Sort,
     View,
@@ -66,13 +66,15 @@ enum class CabinetCommand
     Preview,
     Properties,
     NewTab,
-    Go,
+    ViewDetails,
+    ViewLarge,
     Count
 };
 
+HINSTANCE CabinetModule();
 HRESULT CabinetSite_Create(CCabinetWindow *window, IExplorerBrowser *browser, IUnknown **site);
 
-class CCabinetWindow
+class CCabinetWindow : public ICabinetBandHost
 {
 public:
     CCabinetWindow();
@@ -89,9 +91,17 @@ public:
     void OnNavigationItem(IShellItem *item, BOOL newTab);
     void OnViewEvent(DISPID dispid);
 
+    void OnTabSelect(int index) override;
+    void OnTabClose(int index) override;
+    void OnTabMove(int from, int to) override;
+    void OnTabMenu(int index, POINT screen) override;
+    void OnNewTab() override;
+    void OnAddressNavigate(PCIDLIST_ABSOLUTE pidl) override;
+    void OnAddressText(LPCWSTR text) override;
+    void OnAddressCancel() override;
+
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-    static LRESULT CALLBACK TabProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR id, DWORD_PTR data);
     LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam);
     LRESULT OnNotify(NMHDR *header);
     void OnCreate();
@@ -109,7 +119,8 @@ private:
     void Refresh();
     void UpdateTitle(CabinetTab *tab);
     void UpdateAddress();
-    void NavigateToAddress();
+    void NavigateToAddress(LPCWSTR text);
+    void EditAddress();
     void UpdateStatus();
     void UpdateCommands();
     IShellView *CurrentView();
@@ -121,7 +132,6 @@ private:
     void ShowSortMenu();
     void ShowViewMenu();
     void ShowMoreMenu();
-    void ShowChevronMenu(const NMREBARCHEVRON *chevron);
     RECT MenuAnchor(CabinetCommand command);
     void LoadText(UINT id, LPWSTR buffer, int length);
     void CreateBands();
@@ -149,21 +159,28 @@ private:
     void RestoreFocus();
     void CycleFocus();
     void SavePlacement();
-    void UpdateMaterial();
+    void ExtendFrame();
+    void PaintBackground(HDC dc);
+    void FitCommandBar(int width);
+    void UpdateViewToggles();
+    int CaptionButtonsWidth();
+    int TabStripHeight() const { return Scale(40); }
+    int AddressBottom() const { return Scale(88); }
+    int CommandBottom() const { return Scale(143); }
 
     HWND m_hwnd;
     CabinetTab m_Tabs[CABINET_MAX_TABS];
     int m_TabCount;
     int m_ActiveTab;
-    HWND m_Rebar;
-    HWND m_TabControl;
-    HWND m_TabTools;
+    CCabinetTabBand *m_TabBand;
+    CCabinetAddressBand *m_AddressBand;
+    CCabinetSearchBox *m_SearchBox;
     HWND m_NavBar;
-    HWND m_Address;
     HWND m_AddressEdit;
-    HWND m_GoBar;
     HWND m_SearchEdit;
     HWND m_CommandBar;
+    HWND m_DetailsBar;
+    HWND m_ViewBar;
     HWND m_Status;
     HWND m_DetailsIcon;
     HWND m_DetailsName;
@@ -172,16 +189,13 @@ private:
     HWND m_PreviewText;
     HWND m_PreviewImage;
     HWND m_PreviewLabel;
-    HIMAGELIST m_ToolbarImages;
-    HIMAGELIST m_ToolbarHotImages;
-    HIMAGELIST m_GoImages;
+    HIMAGELIST m_Images[8];
     HFONT m_Font;
     INameSpaceTreeControl *m_Navigation;
     HWND m_NavigationWindow;
     HWND m_FocusSave;
     RECT m_ViewRect;
     RECT m_PaneRect;
-    int m_DragTab;
     BOOL m_DetailsPane;
     BOOL m_PreviewPane;
     IPreviewHandler *m_PreviewHandler;
@@ -197,10 +211,8 @@ private:
     WCHAR m_SearchPaths[26][MAX_PATH];
     int m_SearchPathCount;
     BOOL m_SearchActive;
-    HBRUSH m_ContentBrush;
 };
 
-HIMAGELIST LoadToolbarImages(UINT bitmapId);
 HRESULT CabinetNavigation_Create(CCabinetWindow *window, IUnknown **events);
 HRESULT CabinetViewEvents_Create(CCabinetWindow *window, IUnknown **events);
 HRESULT Cabinet_GetDefaultFolder(PIDLIST_ABSOLUTE *pidl);

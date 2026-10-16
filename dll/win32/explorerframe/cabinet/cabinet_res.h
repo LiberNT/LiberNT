@@ -49,7 +49,6 @@
 #define IDS_CAB_COPY                12051
 #define IDS_CAB_PASTE               12052
 #define IDS_CAB_RENAME              12053
-#define IDS_CAB_SHARE               12054
 #define IDS_CAB_DELETE              12055
 #define IDS_CAB_BACK                12056
 #define IDS_CAB_FORWARD             12057
@@ -60,4 +59,3 @@
 #define IDS_CAB_SHOW_PREVIEW        12046
 #define IDS_CAB_PREVIEW_NONE        12062
 #define IDS_CAB_PREVIEW_SELECT      12063
-#define IDS_CAB_GO                  12064

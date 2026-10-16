@@ -53,7 +53,6 @@ BEGIN
     IDS_CAB_COPY "Copy"
     IDS_CAB_PASTE "Paste"
     IDS_CAB_RENAME "Rename"
-    IDS_CAB_SHARE "Share"
     IDS_CAB_DELETE "Delete"
     IDS_CAB_BACK "Back"
     IDS_CAB_FORWARD "Forward"
@@ -64,5 +63,4 @@ BEGIN
     IDS_CAB_SHOW_PREVIEW "Preview pane"
     IDS_CAB_PREVIEW_NONE "No preview available."
     IDS_CAB_PREVIEW_SELECT "Select a file to preview."
-    IDS_CAB_GO "Go"
 END

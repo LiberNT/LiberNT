@@ -255,7 +255,7 @@ static HIMAGELIST CreateToolbarImages(UINT bitmapId)
 static SRWLOCK g_ToolbarImagesLock = SRWLOCK_INIT;
 static HIMAGELIST g_ToolbarImages[2];
 
-HIMAGELIST LoadToolbarImages(UINT bitmapId)
+static HIMAGELIST LoadToolbarImages(UINT bitmapId)
 {
     HIMAGELIST &master = g_ToolbarImages[bitmapId == IDB_SHELL_EXPLORER_LG_HOT];
 
