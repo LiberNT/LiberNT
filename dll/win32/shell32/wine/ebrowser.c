@@ -112,6 +112,7 @@ typedef struct _ExplorerBrowserImpl {
     INamespaceWalkCB2 INamespaceWalkCB2_iface;
     IShellBrowserService IShellBrowserService_iface;
     IUnknown *punk_filter;
+    PCIDLIST_ABSOLUTE view_pidl;
 #endif
 } ExplorerBrowserImpl;
 
@@ -365,6 +366,9 @@ static HRESULT create_new_shellview(ExplorerBrowserImpl *This, IShellItem *psi)
     IShellView *psv;
     HWND hwnd_new;
     HRESULT hr;
+#ifdef __REACTOS__
+    LPITEMIDLIST view_pidl = NULL;
+#endif
 
     TRACE("%p, %p\n", This, psi);
 
@@ -385,14 +389,31 @@ static HRESULT create_new_shellview(ExplorerBrowserImpl *This, IShellItem *psi)
                 }
             }
 #endif
+#ifdef __REACTOS__
+            if(This->hwnd_sv)
+            {
+                if(!(This->eb_options & EBO_NOPERSISTVIEWSTATE))
+                    IShellView_SaveViewState(This->psv);
+                IShellView_DestroyViewWindow(This->psv);
+                This->hwnd_sv = NULL;
+            }
+
+            if(SUCCEEDED(SHGetIDListFromObject((IUnknown*)psi, &view_pidl)))
+                This->view_pidl = view_pidl;
+#else
             if(This->hwnd_sv)
             {
                 IShellView_DestroyViewWindow(This->psv);
                 This->hwnd_sv = NULL;
             }
+#endif
 
             This->fs.fFlags |= FWF_USESEARCHFOLDER | FWF_FULLROWSELECT | FWF_NOCLIENTEDGE;
             hr = IShellView_CreateViewWindow(psv, This->psv, &This->fs, psb, &This->sv_rc, &hwnd_new);
+#ifdef __REACTOS__
+            This->view_pidl = NULL;
+            ILFree(view_pidl);
+#endif
             if(SUCCEEDED(hr))
             {
                 /* Replace the old shellview */
@@ -975,6 +996,10 @@ static HRESULT WINAPI IExplorerBrowser_fnDestroy(IExplorerBrowser *iface)
 
     if(This->psv)
     {
+#ifdef __REACTOS__
+        if(This->hwnd_sv && !(This->eb_options & EBO_NOPERSISTVIEWSTATE))
+            IShellView_SaveViewState(This->psv);
+#endif
         IShellView_DestroyViewWindow(This->psv);
         IShellView_Release(This->psv);
         This->psv = NULL;
@@ -1473,9 +1498,15 @@ static HRESULT WINAPI IShellBrowser_fnTranslateAcceleratorSB(IShellBrowser *ifac
                                                              MSG *pmsg, WORD wID)
 {
     ExplorerBrowserImpl *This = impl_from_IShellBrowser(iface);
+#ifdef __REACTOS__
+    TRACE("%p (%p, 0x%x)\n", This, pmsg, wID);
+
+    return S_FALSE;
+#else
     FIXME("stub, %p (%p, 0x%x)\n", This, pmsg, wID);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI IShellBrowser_fnBrowseObject(IShellBrowser *iface,
@@ -1492,7 +1523,11 @@ static HRESULT WINAPI IShellBrowser_fnGetViewStateStream(IShellBrowser *iface,
                                                          IStream **ppStrm)
 {
     ExplorerBrowserImpl *This = impl_from_IShellBrowser(iface);
+#ifdef __REACTOS__
+    TRACE("%p (0x%lx, %p)\n", This, grfMode, ppStrm);
+#else
     FIXME("stub, %p (0x%lx, %p)\n", This, grfMode, ppStrm);
+#endif
 
     *ppStrm = NULL;
     return E_FAIL;
@@ -1513,7 +1548,12 @@ static HRESULT WINAPI IShellBrowser_fnSendControlMsg(IShellBrowser *iface,
                                                      LRESULT *pret)
 {
     ExplorerBrowserImpl *This = impl_from_IShellBrowser(iface);
+#ifdef __REACTOS__
+    TRACE("%p (%d, %d, %Ix, %Ix, %p)\n", This, id, uMsg, wParam, lParam, pret);
+    if (pret) *pret = 0;
+#else
     FIXME("stub, %p (%d, %d, %Ix, %Ix, %p)\n", This, id, uMsg, wParam, lParam, pret);
+#endif
 
     return E_NOTIMPL;
 }
@@ -1537,9 +1577,15 @@ static HRESULT WINAPI IShellBrowser_fnOnViewWindowActive(IShellBrowser *iface,
                                                          IShellView *pshv)
 {
     ExplorerBrowserImpl *This = impl_from_IShellBrowser(iface);
+#ifdef __REACTOS__
+    TRACE("%p (%p)\n", This, pshv);
+
+    return S_OK;
+#else
     FIXME("stub, %p (%p)\n", This, pshv);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI IShellBrowser_fnSetToolbarItems(IShellBrowser *iface,
@@ -2801,6 +2847,8 @@ static HRESULT WINAPI IShellBrowserService_fnGetPropertyBag(IShellBrowserService
     if(!ppvObject)
         return E_POINTER;
     *ppvObject = NULL;
+    if(This->view_pidl)
+        return SHGetViewStatePropertyBag(This->view_pidl, L"Shell", flags, riid, ppvObject);
     if(!This->current_pidl)
         return E_FAIL;
     return SHGetViewStatePropertyBag(This->current_pidl, L"Shell", flags, riid, ppvObject);
