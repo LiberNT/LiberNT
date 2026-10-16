@@ -6155,6 +6155,16 @@ NdisMCancelTimer(
  *   IN NDIS_STATUS  Status,
  *   IN BOOLEAN  AddressingReset);
  */
+#if NDIS_SUPPORT_NDIS6
+_IRQL_requires_max_(DISPATCH_LEVEL)
+NDISAPI
+VOID
+NTAPI
+NdisMResetComplete(
+  _In_ NDIS_HANDLE MiniportAdapterHandle,
+  _In_ NDIS_STATUS Status,
+  _In_ BOOLEAN AddressingReset);
+#else
 #define NdisMResetComplete(MiniportAdapterHandle, \
                            Status,                \
                            AddressingReset)       \
@@ -6162,6 +6172,7 @@ NdisMCancelTimer(
     (*((PNDIS_MINIPORT_BLOCK)(MiniportAdapterHandle))->ResetCompleteHandler)( \
         MiniportAdapterHandle, Status, AddressingReset); \
 }
+#endif
 
 /*
  * VOID
@@ -10384,6 +10395,17 @@ NdisMGetBusData(
     _In_ ULONG                    WhichSpace,
     _In_ ULONG                    Offset,
     _Out_writes_bytes_all_(Length) PVOID  Buffer,
+    _In_ ULONG                    Length
+    );
+
+_IRQL_requires_max_(HIGH_LEVEL)
+ULONG
+NDISAPI
+NdisMSetBusData(
+    _In_ NDIS_HANDLE              NdisMiniportHandle,
+    _In_ ULONG                    WhichSpace,
+    _In_ ULONG                    Offset,
+    _In_reads_bytes_(Length) PVOID Buffer,
     _In_ ULONG                    Length
     );
 
