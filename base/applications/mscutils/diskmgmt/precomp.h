@@ -34,6 +34,7 @@
 #include "labels.h"
 #include "properties.h"
 #include "actions.h"
+#include "resize.h"
 #include "mainwndaction.h"
 #include "mainwndchrome.h"
 #include "mainwndlayout.h"

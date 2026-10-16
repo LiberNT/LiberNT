@@ -30,6 +30,7 @@ IDB_TB_PROPERTIES BITMAP "res/tb_properties.bmp"
 IDB_TB_HELP BITMAP "res/tb_help.bmp"
 IDB_LV_VOLUME BITMAP "res/lv_volume.bmp"
 IDB_LV_PARTITION BITMAP "res/lv_partition.bmp"
+IDB_WATERMARK BITMAP "res/watermark.bmp"
 
 /* UTF-8 */
 #pragma code_page(65001)

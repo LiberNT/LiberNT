@@ -30,6 +30,8 @@ list(APPEND SOURCE
     precomp.h
     properties.c
     properties.h
+    resize.c
+    resize.h
     snapshot.c
     snapshotenum.c
     snapshotenum.h
@@ -53,9 +55,11 @@ add_rc_deps(diskmgmt.rc
     ${CMAKE_CURRENT_SOURCE_DIR}/res/tb_properties.bmp
     ${CMAKE_CURRENT_SOURCE_DIR}/res/tb_help.bmp
     ${CMAKE_CURRENT_SOURCE_DIR}/res/lv_volume.bmp
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/lv_partition.bmp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/lv_partition.bmp
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/watermark.bmp)
 add_executable(diskmgmt ${SOURCE} diskmgmt.rc)
 set_module_type(diskmgmt win32gui UNICODE)
+target_link_libraries(diskmgmt volresize)
 add_importlibs(diskmgmt fmifs user32 gdi32 comctl32 comdlg32 shell32 advapi32 uxtheme msvcrt kernel32 ntdll)
 add_pch(diskmgmt precomp.h SOURCE)
 add_cd_file(TARGET diskmgmt DESTINATION reactos/system32 FOR all)

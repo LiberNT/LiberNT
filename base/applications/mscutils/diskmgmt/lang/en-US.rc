@@ -120,40 +120,86 @@ BEGIN
     PUSHBUTTON "Cancel", IDCANCEL, 186, 98, 40, 14
 END
 
-IDD_EXTEND_VOLUME DIALOGEX 0, 0, 214, 102
+IDD_SHRINK_VOLUME DIALOGEX 0, 0, 300, 170
 STYLE DS_MODALFRAME | DS_SHELLFONT | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Extend Volume"
+CAPTION "Shrink"
 FONT 8, "MS Shell Dlg"
 BEGIN
-    LTEXT "Specify the amount of right-adjacent free space to add to the selected RAW volume:", -1, 8, 10, 198, 18
-    LTEXT "Current size:", -1, 8, 34, 64, 8
-    LTEXT "", IDC_RESIZE_CURRENT, 90, 34, 80, 8
-    LTEXT "Maximum additional size:", -1, 8, 50, 80, 8
-    LTEXT "", IDC_RESIZE_LIMIT, 90, 50, 80, 8
-    LTEXT "Additional size (MB):", -1, 8, 67, 80, 8
-    EDITTEXT IDC_RESIZE_AMOUNT, 90, 64, 54, 12, ES_AUTOHSCROLL | ES_NUMBER | WS_TABSTOP
-    DEFPUSHBUTTON "OK", IDOK, 120, 84, 40, 14
-    PUSHBUTTON "Cancel", IDCANCEL, 166, 84, 40, 14
+    LTEXT "Total size before shrink in MB:", -1, 7, 13, 190, 8
+    EDITTEXT IDC_SHRINK_TOTAL, 203, 10, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
+    LTEXT "Size of available shrink space in MB:", -1, 7, 32, 190, 8
+    EDITTEXT IDC_SHRINK_AVAILABLE, 203, 29, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
+    LTEXT "&Enter the amount of space to shrink in MB:", -1, 7, 51, 190, 8
+    EDITTEXT IDC_SHRINK_AMOUNT, 203, 48, 80, 13, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
+    CONTROL "", IDC_SHRINK_SPIN, UPDOWN_CLASS, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 283, 48, 10, 13
+    LTEXT "Total size after shrink in MB:", -1, 7, 70, 190, 8
+    EDITTEXT IDC_SHRINK_AFTER, 203, 67, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
+    ICON "", IDC_SHRINK_ICON, 8, 85, 10, 10, SS_ICON | SS_REALSIZEIMAGE
+    LTEXT "You cannot shrink a volume beyond the point where any unmovable files are located. See the ""defrag"" event in the Application log for detailed information about the operation when it has completed.", -1, 25, 86, 268, 26
+    LTEXT "See ""Shrink a basic volume"" in Disk Management help for more information", -1, 25, 126, 268, 8
+    DEFPUSHBUTTON "&Shrink", IDOK, 180, 149, 54, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 239, 149, 54, 14
 END
 
-IDD_SHRINK_VOLUME DIALOGEX 0, 0, 214, 102
-STYLE DS_MODALFRAME | DS_SHELLFONT | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Shrink Volume"
+IDD_SHRINK_QUERY DIALOGEX 0, 0, 220, 40
+STYLE DS_MODALFRAME | DS_SHELLFONT | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "Shrink"
 FONT 8, "MS Shell Dlg"
 BEGIN
-    LTEXT "Specify the amount of space to remove from the selected RAW volume:", -1, 8, 10, 198, 18
-    LTEXT "Current size:", -1, 8, 34, 64, 8
-    LTEXT "", IDC_RESIZE_CURRENT, 90, 34, 80, 8
-    LTEXT "Maximum shrink size:", -1, 8, 50, 80, 8
-    LTEXT "", IDC_RESIZE_LIMIT, 90, 50, 80, 8
-    LTEXT "Shrink size (MB):", -1, 8, 67, 80, 8
-    EDITTEXT IDC_RESIZE_AMOUNT, 90, 64, 54, 12, ES_AUTOHSCROLL | ES_NUMBER | WS_TABSTOP
-    DEFPUSHBUTTON "OK", IDOK, 120, 84, 40, 14
-    PUSHBUTTON "Cancel", IDCANCEL, 166, 84, 40, 14
+    LTEXT "Querying volume for available shrink space, please wait...", -1, 10, 15, 200, 10
+END
+
+IDD_EXTEND_WELCOME DIALOGEX 0, 0, 317, 193
+STYLE DS_SHELLFONT | WS_CHILD | WS_DISABLED | WS_CAPTION
+CAPTION "Extend Volume Wizard"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "Welcome to the Extend Volume Wizard", IDC_EXTEND_TITLE, 115, 8, 195, 24
+    LTEXT "This wizard helps you increase the size of simple and spanned volumes. You can extend a volume  by adding space from one or more additional disks.", -1, 115, 40, 195, 30
+    LTEXT "To continue, click Next.", -1, 115, 80, 195, 8
+END
+
+IDD_EXTEND_SELECT DIALOGEX 0, 0, 317, 143
+STYLE DS_SHELLFONT | WS_CHILD | WS_DISABLED | WS_CAPTION
+CAPTION "Extend Volume Wizard"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "Av&ailable:", -1, 21, 7, 100, 8
+    LISTBOX IDC_EXTEND_AVAILABLE, 21, 17, 96, 62, LBS_NOINTEGRALHEIGHT | LBS_USETABSTOPS | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON "&Add >", IDC_EXTEND_ADD, 127, 21, 62, 14
+    PUSHBUTTON "< &Remove", IDC_EXTEND_REMOVE, 127, 41, 62, 14
+    PUSHBUTTON "< Remove A&ll", IDC_EXTEND_REMOVE_ALL, 127, 61, 62, 14
+    LTEXT "&Selected:", -1, 200, 7, 100, 8
+    LISTBOX IDC_EXTEND_SELECTED, 200, 17, 96, 62, LBS_NOINTEGRALHEIGHT | LBS_USETABSTOPS | WS_VSCROLL | WS_TABSTOP
+    LTEXT "Total volume size in megabytes (MB):", -1, 21, 87, 170, 8
+    EDITTEXT IDC_EXTEND_TOTAL, 200, 85, 96, 12, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
+    LTEXT "Maximum available space in MB:", -1, 21, 103, 170, 8
+    EDITTEXT IDC_EXTEND_MAX, 200, 101, 96, 12, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
+    LTEXT "S&elect the amount of space in MB:", -1, 21, 119, 170, 8
+    EDITTEXT IDC_EXTEND_AMOUNT, 200, 117, 86, 12, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
+    CONTROL "", IDC_EXTEND_SPIN, UPDOWN_CLASS, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 286, 117, 10, 12
+END
+
+IDD_EXTEND_FINISH DIALOGEX 0, 0, 317, 193
+STYLE DS_SHELLFONT | WS_CHILD | WS_DISABLED | WS_CAPTION
+CAPTION "Extend Volume Wizard"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "Completing the Extend Volume Wizard", IDC_EXTEND_TITLE, 115, 8, 195, 24
+    LTEXT "You selected the following settings:", -1, 115, 48, 195, 8
+    LISTBOX IDC_EXTEND_SETTINGS, 115, 58, 187, 62, LBS_NOINTEGRALHEIGHT | LBS_NOSEL | WS_VSCROLL
+    LTEXT "To close this wizard, click Finish.", -1, 115, 130, 195, 8
 END
 
 STRINGTABLE
 BEGIN
+    IDS_SHRINK_TITLE "Shrink"
+    IDS_SHRINK_CAPTION "Shrink %s"
+    IDS_EXTEND_CAPTION "Extend Volume Wizard"
+    IDS_EXTEND_SELECT_TITLE "Select Disks"
+    IDS_EXTEND_SELECT_SUBTITLE "You can use space on one or more disks to extend the volume."
+    IDS_EXTEND_DISK_ENTRY "Disk %lu\t%I64u MB"
+    IDS_EXTEND_DISK_SELECTED "Disk selected: Disk %lu (%I64u MB)"
     IDS_COPYRIGHT "Copyright (C) 2026 LiberNT Team"
     IDS_APPNAME "Disk Management"
     IDS_STATUS_READY "Ready"

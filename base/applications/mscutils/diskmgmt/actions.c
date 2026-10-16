@@ -61,13 +61,6 @@ typedef struct _DM_FORMAT_VOLUME_DIALOG
     BOOL QuickFormat;
 } DM_FORMAT_VOLUME_DIALOG, *PDM_FORMAT_VOLUME_DIALOG;
 
-typedef struct _DM_RESIZE_VOLUME_DIALOG
-{
-    ULONGLONG CurrentSizeMb;
-    ULONGLONG MaxDeltaMb;
-    ULONGLONG SelectedDeltaMb;
-} DM_RESIZE_VOLUME_DIALOG, *PDM_RESIZE_VOLUME_DIALOG;
-
 typedef struct _DM_SELECT_MOUNT_PATH_DIALOG
 {
     WCHAR Paths[DM_MAX_MOUNT_PATHS][MAX_PATH];
@@ -994,45 +987,6 @@ DmActionAlignedBytesFromSizeMb(
     return min(RequestedBytes, MaxBytes);
 }
 
-/* File-system online resize FSCTLs; not exposed by the psdk winioctl.h yet. */
-#ifndef FSCTL_EXTEND_VOLUME
-#define FSCTL_EXTEND_VOLUME \
-    CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 60, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
-#endif
-
-#ifndef FSCTL_SHRINK_VOLUME
-#define FSCTL_SHRINK_VOLUME \
-    CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 130, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
-
-typedef enum _DM_SHRINK_VOLUME_REQUEST_TYPES
-{
-    DmShrinkPrepare = 1,
-    DmShrinkCommit = 2,
-    DmShrinkAbort = 3
-} DM_SHRINK_VOLUME_REQUEST_TYPES;
-
-typedef struct _DM_SHRINK_VOLUME_INFORMATION
-{
-    DM_SHRINK_VOLUME_REQUEST_TYPES ShrinkRequestType;
-    ULONGLONG Flags;
-    LONGLONG NewNumberOfSectors;
-} DM_SHRINK_VOLUME_INFORMATION;
-#else
-typedef SHRINK_VOLUME_REQUEST_TYPES DM_SHRINK_VOLUME_REQUEST_TYPES;
-typedef SHRINK_VOLUME_INFORMATION DM_SHRINK_VOLUME_INFORMATION;
-#define DmShrinkPrepare ShrinkPrepare
-#define DmShrinkCommit ShrinkCommit
-#define DmShrinkAbort ShrinkAbort
-#endif
-
-static BOOL
-DmActionIsRawVolume(
-    _In_opt_ const DM_VOLUME *Volume)
-{
-    return (Volume == NULL ||
-            Volume->FileSystem[0] == UNICODE_NULL ||
-            _wcsicmp(Volume->FileSystem, L"RAW") == 0);
-}
 
 static HANDLE
 DmActionOpenNativeVolumeHandle(
@@ -1163,33 +1117,25 @@ DmActionCanResizeVolume(
     _In_ const DM_ACTION_CONTEXT *Context,
     _In_ BOOL Extend)
 {
-    ULONGLONG AlignmentBytes;
-
     if (Context == NULL || Context->Disk == NULL || Context->Volume == NULL || Context->Region == NULL)
         return FALSE;
 
     if (Context->Region->Type != DmRegionPartition ||
         Context->Region->IsContainer ||
         Context->Region->IsHidden ||
-        Context->Volume->ExtentCount > 1 ||
         Context->Disk->IsDynamic ||
         Context->Region->IsDynamic ||
-        Context->Volume->IsDynamic ||
         Context->Disk->IsOffline ||
         Context->Disk->IsReadOnly ||
-        Context->Region->IsBoot ||
-        Context->Region->IsSystem ||
-        Context->Volume->IsBoot ||
-        Context->Volume->IsSystem)
+        Context->Region->IsSystem)
     {
         return FALSE;
     }
 
     if (Extend)
-        return (DmActionFindRightAdjacentFreeRegion(Context) != NULL);
+        return DmResizeCanExtend(Context, DmActionFindRightAdjacentFreeRegion(Context));
 
-    AlignmentBytes = DmActionAlignmentBytes(Context);
-    return (Context->Region->Length > AlignmentBytes);
+    return DmResizeCanShrink(Context);
 }
 
 static BOOL
@@ -2318,142 +2264,6 @@ DmActionPromptForCreateVolume(
     return TRUE;
 }
 
-static INT_PTR CALLBACK
-DmResizeVolumeDlgProc(
-    _In_ HWND hwndDlg,
-    _In_ UINT uMsg,
-    _In_ WPARAM wParam,
-    _In_ LPARAM lParam)
-{
-    PDM_RESIZE_VOLUME_DIALOG Dialog;
-    WCHAR Buffer[32];
-    WCHAR *EndPtr;
-    ULONGLONG Value;
-
-    Dialog = (PDM_RESIZE_VOLUME_DIALOG)GetWindowLongPtrW(hwndDlg, DWLP_USER);
-
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
-            Dialog = (PDM_RESIZE_VOLUME_DIALOG)lParam;
-            SetWindowLongPtrW(hwndDlg, DWLP_USER, (LONG_PTR)Dialog);
-
-            if (Dialog == NULL || Dialog->MaxDeltaMb == 0)
-            {
-                EndDialog(hwndDlg, IDCANCEL);
-                return FALSE;
-            }
-
-            StringCchPrintfW(Buffer, ARRAYSIZE(Buffer), L"%I64u MB", Dialog->CurrentSizeMb);
-            SetDlgItemTextW(hwndDlg, IDC_RESIZE_CURRENT, Buffer);
-            StringCchPrintfW(Buffer, ARRAYSIZE(Buffer), L"%I64u MB", Dialog->MaxDeltaMb);
-            SetDlgItemTextW(hwndDlg, IDC_RESIZE_LIMIT, Buffer);
-            StringCchPrintfW(Buffer, ARRAYSIZE(Buffer), L"%I64u", Dialog->SelectedDeltaMb);
-            SetDlgItemTextW(hwndDlg, IDC_RESIZE_AMOUNT, Buffer);
-            SendDlgItemMessageW(hwndDlg, IDC_RESIZE_AMOUNT, EM_SETSEL, 0, -1);
-            return TRUE;
-
-        case WM_COMMAND:
-            switch (LOWORD(wParam))
-            {
-                case IDOK:
-                    if (Dialog == NULL)
-                    {
-                        EndDialog(hwndDlg, IDCANCEL);
-                        return TRUE;
-                    }
-
-                    if (GetDlgItemTextW(hwndDlg,
-                                        IDC_RESIZE_AMOUNT,
-                                        Buffer,
-                                        ARRAYSIZE(Buffer)) == 0)
-                    {
-                        MessageBoxW(hwndDlg,
-                                    L"Enter a resize amount in MB.",
-                                    L"Disk Management",
-                                    MB_OK | MB_ICONWARNING);
-                        return TRUE;
-                    }
-
-                    Value = _wcstoui64(Buffer, &EndPtr, 10);
-                    if (EndPtr == Buffer ||
-                        *EndPtr != UNICODE_NULL ||
-                        Value == 0 ||
-                        Value > Dialog->MaxDeltaMb)
-                    {
-                        MessageBoxW(hwndDlg,
-                                    L"Enter a valid size in MB that does not exceed the maximum amount shown.",
-                                    L"Disk Management",
-                                    MB_OK | MB_ICONWARNING);
-                        return TRUE;
-                    }
-
-                    Dialog->SelectedDeltaMb = Value;
-                    EndDialog(hwndDlg, IDOK);
-                    return TRUE;
-
-                case IDCANCEL:
-                    EndDialog(hwndDlg, IDCANCEL);
-                    return TRUE;
-
-                default:
-                    break;
-            }
-            break;
-
-        default:
-            break;
-    }
-
-    return FALSE;
-}
-
-static BOOL
-DmActionPromptForResizeVolume(
-    _In_ const DM_ACTION_CONTEXT *Context,
-    _In_ BOOL Extend,
-    _In_ ULONGLONG MaxDeltaBytes,
-    _Out_ PULONGLONG DeltaBytes)
-{
-    DM_RESIZE_VOLUME_DIALOG Dialog;
-    INT DialogId;
-
-    if (Context == NULL || Context->Region == NULL || DeltaBytes == NULL || MaxDeltaBytes == 0)
-        return FALSE;
-
-    ZeroMemory(&Dialog, sizeof(Dialog));
-    Dialog.CurrentSizeMb = DmActionRegionMaxSizeMb(Context->Region->Length);
-    Dialog.MaxDeltaMb = DmActionRegionMaxSizeMb(MaxDeltaBytes);
-    Dialog.SelectedDeltaMb = Dialog.MaxDeltaMb;
-    DialogId = Extend ? IDD_EXTEND_VOLUME : IDD_SHRINK_VOLUME;
-
-    if (Dialog.MaxDeltaMb == 0)
-        return FALSE;
-
-    if (DialogBoxParamW(hInstance,
-                        MAKEINTRESOURCEW(DialogId),
-                        Context->hWnd,
-                        DmResizeVolumeDlgProc,
-                        (LPARAM)&Dialog) != IDOK)
-    {
-        return FALSE;
-    }
-
-    *DeltaBytes = DmActionAlignedBytesFromSizeMb(Context,
-                                                 Dialog.SelectedDeltaMb,
-                                                 MaxDeltaBytes);
-    if (*DeltaBytes == 0)
-    {
-        MessageBoxW(Context->hWnd,
-                    L"The requested resize amount is not valid for the selected volume.",
-                    L"Disk Management",
-                    MB_OK | MB_ICONWARNING);
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
 static BOOL
 DmActionDismountVolume(
     _In_opt_ HWND hWnd,
@@ -3349,302 +3159,21 @@ DmActionProcessPendingCreate(
 }
 
 static BOOL
-DmActionShrinkFileSystem(
-    _In_ const DM_ACTION_CONTEXT *Context,
-    _In_ ULONGLONG DeltaBytes)
-{
-    HANDLE VolumeHandle;
-    DM_SHRINK_VOLUME_INFORMATION ShrinkInfo;
-    ULONGLONG BytesPerSector;
-    DWORD BytesReturned;
-    DWORD Error;
-
-    VolumeHandle = DmActionOpenVolumeHandle(Context->Volume);
-    if (VolumeHandle == INVALID_HANDLE_VALUE)
-    {
-        DmActionShowWin32Error(Context->hWnd,
-                               L"Unable to open the selected volume for shrinking.",
-                               GetLastError());
-        return FALSE;
-    }
-
-    BytesPerSector = max(Context->Disk->BytesPerSector, 512ULL);
-    ZeroMemory(&ShrinkInfo, sizeof(ShrinkInfo));
-    ShrinkInfo.ShrinkRequestType = DmShrinkPrepare;
-    ShrinkInfo.NewNumberOfSectors =
-        (LONGLONG)((Context->Region->Length - DeltaBytes) / BytesPerSector);
-
-    BytesReturned = 0;
-    if (!DeviceIoControl(VolumeHandle,
-                         FSCTL_SHRINK_VOLUME,
-                         &ShrinkInfo,
-                         sizeof(ShrinkInfo),
-                         NULL,
-                         0,
-                         &BytesReturned,
-                         NULL))
-    {
-        Error = GetLastError();
-        CloseHandle(VolumeHandle);
-        DmActionShowWin32Error(Context->hWnd,
-                               L"The file system on the selected volume does not support online shrinking.\r\n"
-                               L"The partition was not changed.",
-                               Error);
-        return FALSE;
-    }
-
-    ShrinkInfo.ShrinkRequestType = DmShrinkCommit;
-    if (!DeviceIoControl(VolumeHandle,
-                         FSCTL_SHRINK_VOLUME,
-                         &ShrinkInfo,
-                         sizeof(ShrinkInfo),
-                         NULL,
-                         0,
-                         &BytesReturned,
-                         NULL))
-    {
-        Error = GetLastError();
-        ShrinkInfo.ShrinkRequestType = DmShrinkAbort;
-        DeviceIoControl(VolumeHandle,
-                        FSCTL_SHRINK_VOLUME,
-                        &ShrinkInfo,
-                        sizeof(ShrinkInfo),
-                        NULL,
-                        0,
-                        &BytesReturned,
-                        NULL);
-        CloseHandle(VolumeHandle);
-        DmActionShowWin32Error(Context->hWnd,
-                               L"Shrinking the file system failed.\r\n"
-                               L"The partition was not changed.",
-                               Error);
-        return FALSE;
-    }
-
-    CloseHandle(VolumeHandle);
-    return TRUE;
-}
-
-static VOID
-DmActionExtendFileSystem(
-    _In_ const DM_ACTION_CONTEXT *Context,
-    _In_ ULONGLONG DeltaBytes)
-{
-    HANDLE VolumeHandle;
-    LONGLONG NewSectorCount;
-    ULONGLONG BytesPerSector;
-    DWORD BytesReturned;
-    DWORD Error;
-
-    VolumeHandle = DmActionOpenVolumeHandle(Context->Volume);
-    if (VolumeHandle == INVALID_HANDLE_VALUE)
-        Error = GetLastError();
-    else
-    {
-        BytesPerSector = max(Context->Disk->BytesPerSector, 512ULL);
-        NewSectorCount = (LONGLONG)((Context->Region->Length + DeltaBytes) / BytesPerSector);
-        BytesReturned = 0;
-        if (DeviceIoControl(VolumeHandle,
-                            FSCTL_EXTEND_VOLUME,
-                            &NewSectorCount,
-                            sizeof(NewSectorCount),
-                            NULL,
-                            0,
-                            &BytesReturned,
-                            NULL))
-        {
-            CloseHandle(VolumeHandle);
-            return;
-        }
-
-        Error = GetLastError();
-        CloseHandle(VolumeHandle);
-    }
-
-    DmActionShowWin32Error(Context->hWnd,
-                           L"The partition was extended, but the file system could not be "
-                           L"extended to fill it.\r\n"
-                           L"The additional space stays unused until the volume is reformatted "
-                           L"or the file system driver supports online extension.",
-                           Error);
-}
-
-static BOOL
-DmActionResizeVolume(
-    _In_ const DM_ACTION_CONTEXT *Context,
-    _In_ BOOL Extend)
-{
-    const DM_REGION *FreeRegion;
-    WCHAR TargetText[128];
-    WCHAR Prompt[512];
-    HANDLE Handle;
-    PDRIVE_LAYOUT_INFORMATION_EX Layout;
-    PPARTITION_INFORMATION_EX Entry;
-    DWORD BytesReturned;
-    DWORD LayoutSize;
-    ULONGLONG DeltaBytes;
-    ULONGLONG MaxDeltaBytes;
-    PCWSTR Title;
-    BOOL RawVolume;
-
-    if (Context == NULL || Context->Disk == NULL || Context->Volume == NULL || Context->Region == NULL)
-        return FALSE;
-
-    if (!DmActionEnsureBasicDiskLayout(Context, Extend ? L"Extend Volume" : L"Shrink Volume"))
-        return FALSE;
-
-    if (!DmActionCanResizeVolume(Context, Extend))
-    {
-        MessageBoxW(Context->hWnd,
-                    Extend
-                        ? L"Only single-extent basic volumes with right-adjacent free space can be extended."
-                        : L"Only single-extent basic volumes can be shrunk.",
-                    L"Disk Management",
-                    MB_OK | MB_ICONINFORMATION);
-        return FALSE;
-    }
-
-    RawVolume = DmActionIsRawVolume(Context->Volume);
-
-    FreeRegion = DmActionFindRightAdjacentFreeRegion(Context);
-    MaxDeltaBytes = Extend ? (FreeRegion != NULL ? FreeRegion->Length : 0) :
-                             (Context->Region->Length - DmActionAlignmentBytes(Context));
-    if (MaxDeltaBytes == 0 ||
-        !DmActionPromptForResizeVolume(Context, Extend, MaxDeltaBytes, &DeltaBytes))
-    {
-        return FALSE;
-    }
-
-    DmVolumeListBuildName(Context->Volume, TargetText, ARRAYSIZE(TargetText));
-    Title = Extend ? L"Extend Volume" : L"Shrink Volume";
-    StringCchPrintfW(Prompt,
-                     ARRAYSIZE(Prompt),
-                     Extend
-                         ? L"Extend %s by %I64u MB now?"
-                         : L"Shrink %s by %I64u MB now?",
-                     (TargetText[0] != UNICODE_NULL) ? TargetText : L"the selected volume",
-                     DmActionRegionMaxSizeMb(DeltaBytes));
-    if (MessageBoxW(Context->hWnd,
-                    Prompt,
-                    Title,
-                    MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
-    {
-        return FALSE;
-    }
-
-    /* A formatted volume must agree to give up the space before the
-       partition is reduced underneath it. */
-    if (!Extend && !RawVolume && !DmActionShrinkFileSystem(Context, DeltaBytes))
-        return FALSE;
-
-    if (RawVolume &&
-        !DmActionDismountVolume(Context->hWnd, Context->Volume))
-    {
-        return FALSE;
-    }
-
-    Handle = CreateFileW(Context->Disk->DeviceName,
-                         GENERIC_READ | GENERIC_WRITE,
-                         FILE_SHARE_READ | FILE_SHARE_WRITE,
-                         NULL,
-                         OPEN_EXISTING,
-                         0,
-                         NULL);
-    if (Handle == INVALID_HANDLE_VALUE)
-    {
-        DmActionShowWin32Error(Context->hWnd,
-                               Extend
-                                   ? L"Unable to open the selected disk for volume extension."
-                                   : L"Unable to open the selected disk for volume shrink.",
-                               GetLastError());
-        return FALSE;
-    }
-
-    if (!DmActionQueryDiskLayout(Handle, &Layout))
-    {
-        DWORD Error;
-
-        Error = GetLastError();
-        CloseHandle(Handle);
-        DmActionShowWin32Error(Context->hWnd,
-                               L"Unable to query the current disk layout.",
-                               Error);
-        return FALSE;
-    }
-
-    Entry = DmActionFindLayoutPartition(Layout, Context->Region);
-    if (Entry == NULL)
-    {
-        HeapFree(ProcessHeap, 0, Layout);
-        CloseHandle(Handle);
-        MessageBoxW(Context->hWnd,
-                    L"The selected volume could not be matched to the current disk layout.",
-                    L"Disk Management",
-                    MB_OK | MB_ICONERROR);
-        return FALSE;
-    }
-
-    if (Extend)
-        Entry->PartitionLength.QuadPart += DeltaBytes;
-    else
-        Entry->PartitionLength.QuadPart -= DeltaBytes;
-    Entry->RewritePartition = TRUE;
-
-    LayoutSize = sizeof(DRIVE_LAYOUT_INFORMATION_EX) +
-                 ((Layout->PartitionCount - ANYSIZE_ARRAY) * sizeof(PARTITION_INFORMATION_EX));
-    BytesReturned = 0;
-    if (!DeviceIoControl(Handle,
-                         IOCTL_DISK_SET_DRIVE_LAYOUT_EX,
-                         Layout,
-                         LayoutSize,
-                         Layout,
-                         LayoutSize,
-                         &BytesReturned,
-                         NULL))
-    {
-        DWORD Error;
-
-        Error = GetLastError();
-        HeapFree(ProcessHeap, 0, Layout);
-        CloseHandle(Handle);
-        DmActionShowWin32Error(Context->hWnd,
-                               Extend
-                                   ? L"Extending the selected volume failed."
-                                   : L"Shrinking the selected volume failed.",
-                               Error);
-        return FALSE;
-    }
-
-    DeviceIoControl(Handle,
-                    IOCTL_DISK_UPDATE_PROPERTIES,
-                    NULL,
-                    0,
-                    NULL,
-                    0,
-                    &BytesReturned,
-                    NULL);
-    HeapFree(ProcessHeap, 0, Layout);
-    CloseHandle(Handle);
-
-    /* Grow the file system into the enlarged partition. */
-    if (Extend && !RawVolume)
-        DmActionExtendFileSystem(Context, DeltaBytes);
-
-    return TRUE;
-}
-
-static BOOL
 DmActionExtendVolume(
     _In_ const DM_ACTION_CONTEXT *Context)
 {
-    return DmActionResizeVolume(Context, TRUE);
+    if (!DmActionEnsureBasicDiskLayout(Context, L"Extend Volume"))
+        return FALSE;
+    return DmResizeExtendVolume(Context, DmActionFindRightAdjacentFreeRegion(Context));
 }
 
 static BOOL
 DmActionShrinkVolume(
     _In_ const DM_ACTION_CONTEXT *Context)
 {
-    return DmActionResizeVolume(Context, FALSE);
+    if (!DmActionEnsureBasicDiskLayout(Context, L"Shrink Volume"))
+        return FALSE;
+    return DmResizeShrinkVolume(Context);
 }
 
 static BOOL

@@ -18,6 +18,7 @@
 #define IDB_TB_HELP                 17
 #define IDB_LV_VOLUME               18
 #define IDB_LV_PARTITION            19
+#define IDB_WATERMARK               20
 #define IDM_DISKMGMT                32770
 #define IDM_FILE_EXIT               32771
 #define IDM_NAV_BACK                32772
@@ -74,11 +75,28 @@
 #define IDC_SELECT_MOUNT_PATH_PROMPT 34031
 #define IDC_SELECT_MOUNT_PATH_LIST  34032
 #define IDC_SELECT_MOUNT_PATH_REPLACE 34033
-#define IDD_EXTEND_VOLUME           34040
+#define IDD_EXTEND_WELCOME          34040
 #define IDD_SHRINK_VOLUME           34041
-#define IDC_RESIZE_CURRENT          34042
-#define IDC_RESIZE_LIMIT            34043
-#define IDC_RESIZE_AMOUNT           34044
+#define IDC_SHRINK_TOTAL            34042
+#define IDC_SHRINK_AVAILABLE        34043
+#define IDC_SHRINK_AMOUNT           34044
+#define IDC_SHRINK_SPIN             34100
+#define IDC_SHRINK_AFTER            34101
+#define IDC_SHRINK_ICON             34102
+#define IDD_SHRINK_QUERY            34103
+#define IDD_EXTEND_SELECT           34104
+#define IDD_EXTEND_FINISH           34105
+#define IDC_EXTEND_TITLE            34106
+#define IDC_EXTEND_AVAILABLE        34107
+#define IDC_EXTEND_ADD              34108
+#define IDC_EXTEND_REMOVE           34109
+#define IDC_EXTEND_REMOVE_ALL       34110
+#define IDC_EXTEND_SELECTED         34111
+#define IDC_EXTEND_TOTAL            34112
+#define IDC_EXTEND_MAX              34113
+#define IDC_EXTEND_AMOUNT           34114
+#define IDC_EXTEND_SPIN             34115
+#define IDC_EXTEND_SETTINGS         34116
 
 /* String IDs */
 #define IDS_COPYRIGHT               100
@@ -105,6 +123,13 @@
 #define IDS_STATUS_CONVERTING_MBR   171
 #define IDS_STATUS_EXTENDING_VOLUME 181
 #define IDS_STATUS_SHRINKING_VOLUME 182
+#define IDS_SHRINK_TITLE            400
+#define IDS_SHRINK_CAPTION          401
+#define IDS_EXTEND_CAPTION          402
+#define IDS_EXTEND_SELECT_TITLE     403
+#define IDS_EXTEND_SELECT_SUBTITLE  404
+#define IDS_EXTEND_DISK_ENTRY       405
+#define IDS_EXTEND_DISK_SELECTED    406
 #define IDS_CREATE_PROMPT_VOLUME    183
 #define IDS_CREATE_PROMPT_PARTITION 184
 #define IDS_CREATE_PROMPT_LOGICAL   185

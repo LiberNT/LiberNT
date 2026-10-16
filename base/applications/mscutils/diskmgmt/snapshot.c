@@ -575,8 +575,10 @@ DmComputeDiskUsableBounds(
             return;
         }
 
-        EndSector = DmAlignDownU64(StartSector + UsableSectorCount - 1, SectorAlignment);
-        if (StartSector > EndSector)
+        EndSector = DmAlignDownU64(((ULONGLONG)Layout->Gpt.StartingUsableOffset.QuadPart +
+                                    (ULONGLONG)Layout->Gpt.UsableLength.QuadPart) / BytesPerSector,
+                                   SectorAlignment);
+        if (EndSector == 0 || StartSector > --EndSector)
         {
             Disk->UsableEndOffset = Disk->UsableStartOffset;
             return;

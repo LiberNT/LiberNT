@@ -362,7 +362,7 @@ DmBuildPartitionMenu(
     else
     {
         DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_EXTEND_VOLUME, L"E&xtend Volume...", Disk, Region, Volume);
-        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_SHRINK_VOLUME, L"Sh&rink Volume...", Disk, Region, Volume);
+        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_SHRINK_VOLUME, L"S&hrink Volume...", Disk, Region, Volume);
         DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_FORMAT, L"&Format...", Disk, Region, Volume);
         DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_CHANGE_MOUNT_PATH, L"Change Mount &Path...", Disk, Region, Volume);
         DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_REMOVE_MOUNT_PATH, L"Remove Mount Pat&h", Disk, Region, Volume);
@@ -388,7 +388,7 @@ DmBuildVolumeMenu(
     DmAppendSeparatorIfNeeded(Menu);
     DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_DELETE_VOLUME, L"De&lete Volume", NULL, NULL, Volume);
     DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_EXTEND_VOLUME, L"E&xtend Volume...", NULL, NULL, Volume);
-    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_SHRINK_VOLUME, L"Sh&rink Volume...", NULL, NULL, Volume);
+    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_SHRINK_VOLUME, L"S&hrink Volume...", NULL, NULL, Volume);
     DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_FORMAT, L"&Format...", NULL, NULL, Volume);
     DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_ASSIGN_LETTER, L"Assi&gn Drive Letter", NULL, NULL, Volume);
     DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_REMOVE_LETTER, L"&Remove Drive Letter", NULL, NULL, Volume);
