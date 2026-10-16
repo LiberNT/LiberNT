@@ -15,6 +15,14 @@
 
 BOOLEAN
 NTAPI
+KdPortIsComPortNumberValid(
+    _In_ ULONG ComPortNumber)
+{
+    return ComPortNumber > 0;
+}
+
+BOOLEAN
+NTAPI
 KdPortInitializeEx(
     _Inout_ PCPPORT PortInformation,
     _In_ ULONG ComPortNumber)

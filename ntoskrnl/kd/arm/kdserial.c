@@ -10,6 +10,7 @@
 
 #include <ntoskrnl.h>
 #include <arm/peripherals/pl011.h>
+#include <cportlib/uartinfo.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -24,6 +25,14 @@ CPPORT DefaultPort = {0, 0, 0};
 #define HACK 24000000
 
 /* REACTOS FUNCTIONS **********************************************************/
+
+BOOLEAN
+NTAPI
+KdPortIsComPortNumberValid(
+    _In_ ULONG ComPortNumber)
+{
+    return ComPortNumber > 0 && ComPortNumber <= MAX_COM_PORTS;
+}
 
 BOOLEAN
 NTAPI

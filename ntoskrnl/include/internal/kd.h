@@ -15,6 +15,12 @@ KdPortInitializeEx(
 
 BOOLEAN
 NTAPI
+KdPortIsComPortNumberValid(
+    ULONG ComPortNumber
+);
+
+BOOLEAN
+NTAPI
 KdPortGetByteEx(
     PCPPORT PortInformation,
     PUCHAR ByteReceived);

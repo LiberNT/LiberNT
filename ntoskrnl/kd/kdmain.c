@@ -72,7 +72,7 @@ KdpGetDebugMode(
         if (*p2 != ':')
         {
             Value = (ULONG)atol(p2);
-            if (Value > 0 && Value <= MAX_COM_PORTS)
+            if (KdPortIsComPortNumberValid(Value))
             {
                 /* Valid port found, enable it and set the port to use */
                 KdpDebugMode.Serial = TRUE;
