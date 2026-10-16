@@ -31,9 +31,9 @@ static void RunRenderPass(void *)
     struct d3d12_test_context context;
     ID3D12GraphicsCommandList4 *list4 = NULL;
     ID3D12PipelineState *pipeline = NULL;
-    ID3D12Resource *targets[2] = {};
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvs[2];
-    D3D12_RENDER_PASS_RENDER_TARGET_DESC pass[2];
+    ID3D12Resource *targets[3] = {};
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvs[3];
+    D3D12_RENDER_PASS_RENDER_TARGET_DESC pass[3];
     D3D12_VIEWPORT viewport = { 0.0f, 0.0f, (FLOAT)D3D12_TEST_SIZE, (FLOAT)D3D12_TEST_SIZE, 0.0f, 1.0f };
     D3D12_RECT scissor = { 0, 0, D3D12_TEST_SIZE, D3D12_TEST_SIZE };
     DWORD texel;
@@ -43,13 +43,13 @@ static void RunRenderPass(void *)
     hr = context.list->QueryInterface(__uuidof(ID3D12GraphicsCommandList4), reinterpret_cast<void **>(&list4));
     ok(hr == S_OK, "QueryInterface(ID3D12GraphicsCommandList4): %#lx\n", hr);
     pipeline = d3d12_test_create_pipeline(&context, ps_green_code, ps_green_code_size, 1, NULL);
-    for (UINT i = 0; i < 2; ++i)
+    for (UINT i = 0; i < 3; ++i)
     {
         targets[i] = d3d12_test_create_target(context.device, DXGI_FORMAT_R8G8B8A8_UNORM);
         rtvs[i] = d3d12_test_rtv(&context, i);
         if (targets[i]) context.device->CreateRenderTargetView(targets[i], NULL, rtvs[i]);
     }
-    if (!list4 || !pipeline || !targets[0] || !targets[1]) goto done;
+    if (!list4 || !pipeline || !targets[0] || !targets[1] || !targets[2]) goto done;
 
     context.list->ClearRenderTargetView(rtvs[0], red, 0, NULL);
     pass[0] = PassTarget(rtvs[0], D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR,
@@ -85,8 +85,44 @@ static void RunRenderPass(void *)
     ok(d3d12_test_read_texel(&context, targets[0], D3D12_RESOURCE_STATE_RENDER_TARGET, 4, 4, &texel), "readback failed\n");
     ok(texel == RED, "NO_ACCESS target: got %08lx\n", texel);
 
+    context.allocator->Reset();
+    context.list->Reset(context.allocator, NULL);
+    for (UINT i = 0; i < 3; ++i) context.list->ClearRenderTargetView(rtvs[i], red, 0, NULL);
+    pass[0] = PassTarget(rtvs[0], D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE,
+            D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE_LOCAL_SRV);
+    pass[1] = PassTarget(rtvs[1], D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE,
+            D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE_LOCAL_RENDER);
+    pass[2] = PassTarget(rtvs[2], D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE,
+            D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE_LOCAL_UAV);
+    list4->BeginRenderPass(3, pass, NULL, D3D12_RENDER_PASS_FLAG_NONE);
+    list4->EndRenderPass();
+    pass[0] = PassTarget(rtvs[0], D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE_LOCAL_SRV,
+            D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE);
+    pass[1] = PassTarget(rtvs[1], D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE_LOCAL_RENDER,
+            D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE);
+    pass[2] = PassTarget(rtvs[2], D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE_LOCAL_UAV,
+            D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE);
+    list4->BeginRenderPass(3, pass, NULL, D3D12_RENDER_PASS_FLAG_NONE);
+    context.list->RSSetViewports(1, &viewport);
+    context.list->RSSetScissorRects(1, &scissor);
+    context.list->SetGraphicsRootSignature(context.root_signature);
+    context.list->SetPipelineState(pipeline);
+    context.list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    context.list->DrawInstanced(3, 1, 0, 0);
+    list4->EndRenderPass();
+    ok(d3d12_test_execute(&context, context.list, D3D12_TEST_WAIT), "local pass did not complete\n");
+    for (UINT i = 0; i < 3; ++i)
+    {
+        DWORD expected = i == 1 ? GREEN : RED;
+
+        texel = 0;
+        ok(d3d12_test_read_texel(&context, targets[i], D3D12_RESOURCE_STATE_RENDER_TARGET, 4, 4, &texel),
+                "readback failed\n");
+        ok(texel == expected, "PRESERVE_LOCAL target %u: got %08lx, expected %08lx\n", i, texel, expected);
+    }
+
 done:
-    for (UINT i = 0; i < 2; ++i) if (targets[i]) targets[i]->Release();
+    for (UINT i = 0; i < 3; ++i) if (targets[i]) targets[i]->Release();
     if (pipeline) pipeline->Release();
     if (list4) list4->Release();
     d3d12_test_destroy(&context);
