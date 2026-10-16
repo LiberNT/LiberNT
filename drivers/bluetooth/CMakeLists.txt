@@ -10,6 +10,7 @@ endif()
 
 add_subdirectory(bthmini)
 add_subdirectory(bthusb)
+add_subdirectory(hidavrcp)
 add_subdirectory(hidbth)
 add_subdirectory(hidbthle)
 add_subdirectory(rtkh5bt)

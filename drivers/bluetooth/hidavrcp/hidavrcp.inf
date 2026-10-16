@@ -1,0 +1,45 @@
+; PROJECT:     LiberNT Bluetooth AVRCP HID miniport
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Bluetooth AVRCP HID miniport installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = HIDClass
+ClassGUID = {745a17a0-74d3-11d0-b6fe-00a0c90f57da}
+Provider = %LiberNT%
+DriverVer = 10/16/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%HidAvrcp.DeviceDesc% = HidAvrcp_Inst,BTHENUM\{0000110e-0000-1000-8000-00805f9b34fb}
+
+[HidAvrcp_Inst.NT]
+CopyFiles = HidAvrcp_CopyFiles
+
+[HidAvrcp_CopyFiles]
+hidavrcp.sys
+hidclass.sys
+hidparse.sys
+
+[HidAvrcp_Inst.NT.Services]
+AddService = HidAvrcp,0x00000002,HidAvrcp_Service
+
+[HidAvrcp_Service]
+DisplayName = %HidAvrcp.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 0
+ServiceBinary = %12%\hidavrcp.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+HidAvrcp.DeviceDesc = "Bluetooth Audio Remote Control"
+HidAvrcp.ServiceDesc = "Bluetooth AVRCP HID Miniport"
