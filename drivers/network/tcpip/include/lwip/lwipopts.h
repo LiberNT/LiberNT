@@ -94,6 +94,11 @@
 
 #define ICMP_STATS                      0
 
+void LibTCPLockCore(void);
+void LibTCPUnlockCore(void);
+#define LOCK_TCPIP_CORE()               LibTCPLockCore()
+#define UNLOCK_TCPIP_CORE()             LibTCPUnlockCore()
+
 /*
    ---------------------------------------
    ---------- Debugging options ----------

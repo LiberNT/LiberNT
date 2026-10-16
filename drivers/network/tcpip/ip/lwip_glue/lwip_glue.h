@@ -117,6 +117,7 @@ err_t       LibTCPConnect(PCONNECTION_ENDPOINT Connection, ip_addr_t *const ipad
 err_t       LibTCPShutdown(PCONNECTION_ENDPOINT Connection, const int shut_rx, const int shut_tx);
 err_t       LibTCPAbort(PCONNECTION_ENDPOINT Connection);
 err_t       LibTCPClose(PCONNECTION_ENDPOINT Connection, const int safe, const int callback);
+BOOLEAN     LibTCPCoreHeld(void);
 
 err_t       LibTCPGetPeerName(PTCP_PCB pcb, ip_addr_t *const ipaddr, u16_t *const port);
 err_t       LibTCPGetHostName(PTCP_PCB pcb, ip_addr_t *const ipaddr, u16_t *const port);

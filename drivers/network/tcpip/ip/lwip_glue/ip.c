@@ -592,7 +592,10 @@ LibIP6LeaveAllGroups(PVOID Owner)
     RtlZeroMemory(&msg, sizeof(msg));
     msg.Owner = Owner;
     msg.All = TRUE;
-    (void)tcpip_callback_wait(LibIP6MembershipCallback, &msg);
+    if (LibTCPCoreHeld())
+        LibIP6MembershipCallback(&msg);
+    else
+        (void)tcpip_callback_wait(LibIP6MembershipCallback, &msg);
 }
 
 void

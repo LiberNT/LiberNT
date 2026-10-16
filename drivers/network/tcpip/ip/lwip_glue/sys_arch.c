@@ -1,5 +1,6 @@
 #include <debug.h>
 #include <lwip/sys.h>
+#include <lwip/tcpip.h>
 
 #include "lwip_glue.h"
 
@@ -354,4 +355,26 @@ sys_shutdown(void)
     }
 
     ExDeleteNPagedLookasideList(&QueueEntryLookasideList);
+}
+
+static PKTHREAD LibTCPCoreOwner;
+
+void
+LibTCPLockCore(void)
+{
+    sys_mutex_lock(&lock_tcpip_core);
+    LibTCPCoreOwner = KeGetCurrentThread();
+}
+
+void
+LibTCPUnlockCore(void)
+{
+    LibTCPCoreOwner = NULL;
+    sys_mutex_unlock(&lock_tcpip_core);
+}
+
+BOOLEAN
+LibTCPCoreHeld(void)
+{
+    return LibTCPCoreOwner == KeGetCurrentThread();
 }
