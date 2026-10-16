@@ -147,7 +147,7 @@ target_include_directories(wow64win PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 set_module_type(wow64win win32dll ENTRYPOINT DllMain 12)
 target_compile_definitions(wow64win PRIVATE __WINESRC__)
 add_importlibs(wow64win wow64 win32u ntdll)
-add_dependencies(wow64win wow64)
+add_dependencies(wow64win wow64 psdk)
 add_cd_file(TARGET wow64win DESTINATION reactos/system32 FOR all)
 set_wine_module(wow64win)
 
