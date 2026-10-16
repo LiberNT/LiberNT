@@ -31,6 +31,7 @@ UserShellFolders[] =
     {L"Desktop", L"Desktop", FALSE, TRUE, TRUE},
     {L"Favorites", L"Favorites", FALSE, TRUE, TRUE},
     {L"Personal", L"Documents", FALSE, TRUE, TRUE},
+    {L"{374DE290-123F-4565-9164-39C4925E467B}", L"Downloads", FALSE, TRUE, TRUE},
     {L"My Music", L"Music", FALSE, TRUE, TRUE},
     {L"My Pictures", L"Pictures", FALSE, TRUE, TRUE},
     {L"My Video", L"Videos", FALSE, TRUE, TRUE},

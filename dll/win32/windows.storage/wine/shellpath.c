@@ -6356,11 +6356,7 @@ static const CSIDL_DATA CSIDL_Data[] =
     },
     { /* 0x47 - CSIDL_DOWNLOADS */
         &FOLDERID_Downloads,
-#ifdef __REACTOS__
-        CSIDL_Type_InMyDocuments,
-#else
         CSIDL_Type_User,
-#endif
         NULL,
         L"Downloads",
         -IDI_SHELL_DOWNLOADS
