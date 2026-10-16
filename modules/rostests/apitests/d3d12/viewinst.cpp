@@ -22,12 +22,11 @@ struct view_stream
     }
 };
 
-static HRESULT CreateViewPipeline(struct d3d12_test_context *context, ID3D12Device2 *device, UINT count,
+static HRESULT CreateShaderPipeline(struct d3d12_test_context *context, ID3D12Device2 *device,
+        const D3D12_SHADER_BYTECODE &vs, const D3D12_SHADER_BYTECODE &ps, UINT count,
         const D3D12_VIEW_INSTANCE_LOCATION *locations, D3D12_VIEW_INSTANCING_FLAGS flags,
         ID3D12PipelineState **pipeline)
 {
-    D3D12_SHADER_BYTECODE vs = { vs_viewid_code, vs_viewid_code_size };
-    D3D12_SHADER_BYTECODE ps = { ps_viewid_code, ps_viewid_code_size };
     D3D12_VIEW_INSTANCING_DESC views = { count, locations, flags };
     D3D12_RT_FORMAT_ARRAY targets = {};
     D3D12_RASTERIZER_DESC raster = {};
@@ -54,6 +53,36 @@ static HRESULT CreateViewPipeline(struct d3d12_test_context *context, ID3D12Devi
     D3D12_PIPELINE_STATE_STREAM_DESC desc = { stream.size, stream.data };
     *pipeline = NULL;
     return device->CreatePipelineState(&desc, __uuidof(ID3D12PipelineState), reinterpret_cast<void **>(pipeline));
+}
+
+static HRESULT CreateViewPipeline(struct d3d12_test_context *context, ID3D12Device2 *device, UINT count,
+        const D3D12_VIEW_INSTANCE_LOCATION *locations, D3D12_VIEW_INSTANCING_FLAGS flags,
+        ID3D12PipelineState **pipeline)
+{
+    D3D12_SHADER_BYTECODE vs = { vs_viewid_code, vs_viewid_code_size };
+    D3D12_SHADER_BYTECODE ps = { ps_viewid_code, ps_viewid_code_size };
+
+    return CreateShaderPipeline(context, device, vs, ps, count, locations, flags, pipeline);
+}
+
+static void TestVertexSize(struct d3d12_test_context *context, ID3D12Device2 *device)
+{
+    static const D3D12_VIEW_INSTANCE_LOCATION locations[4] = { { 0, 0 }, { 0, 1 }, { 0, 2 }, { 0, 3 } };
+    D3D12_SHADER_BYTECODE dependent = { vs_size_dep_code, vs_size_dep_code_size };
+    D3D12_SHADER_BYTECODE flat = { vs_size_flat_code, vs_size_flat_code_size };
+    D3D12_SHADER_BYTECODE ps = { ps_flat_code, ps_flat_code_size };
+    ID3D12PipelineState *pipeline = NULL;
+    HRESULT hr;
+
+    hr = CreateShaderPipeline(context, device, dependent, ps, 2, locations, D3D12_VIEW_INSTANCING_FLAG_NONE, &pipeline);
+    ok(hr == S_OK, "120 outputs, 4 view dependent, 2 views: %#lx\n", hr);
+    if (pipeline) pipeline->Release();
+    hr = CreateShaderPipeline(context, device, dependent, ps, 4, locations, D3D12_VIEW_INSTANCING_FLAG_NONE, &pipeline);
+    ok(hr == E_INVALIDARG, "120 outputs, 4 view dependent, 4 views: %#lx\n", hr);
+    if (pipeline) pipeline->Release();
+    hr = CreateShaderPipeline(context, device, flat, ps, 4, locations, D3D12_VIEW_INSTANCING_FLAG_NONE, &pipeline);
+    ok(hr == S_OK, "120 outputs, none view dependent, 4 views: %#lx\n", hr);
+    if (pipeline) pipeline->Release();
 }
 
 static ID3D12Resource *CreateTargetArray(ID3D12Device *device)
@@ -207,6 +236,8 @@ static void RunViewInstancing(void *)
     hr = CreateViewPipeline(&context, device, 2, locations, static_cast<D3D12_VIEW_INSTANCING_FLAGS>(2), &pipeline);
     ok(hr == E_INVALIDARG, "unknown view instancing flag: %#lx\n", hr);
     if (pipeline) pipeline->Release();
+
+    TestVertexSize(&context, device);
 
     target = CreateTargetArray(context.device);
     ok(target != NULL, "render target array creation failed\n");

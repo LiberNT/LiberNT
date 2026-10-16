@@ -43,6 +43,12 @@ extern const DWORD vs_viewid_code[];
 extern const SIZE_T vs_viewid_code_size;
 extern const DWORD ps_viewid_code[];
 extern const SIZE_T ps_viewid_code_size;
+extern const DWORD vs_size_dep_code[];
+extern const SIZE_T vs_size_dep_code_size;
+extern const DWORD vs_size_flat_code[];
+extern const SIZE_T vs_size_flat_code_size;
+extern const DWORD ps_flat_code[];
+extern const SIZE_T ps_flat_code_size;
 
 ID3D12Device *d3d12_test_create_device(void);
 BOOL d3d12_test_bounded(const char *name, void (*function)(void *), void *argument, DWORD timeout);
