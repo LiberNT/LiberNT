@@ -165,6 +165,26 @@ typedef struct tagSUBITEM_INFO
 
 typedef struct tagITEM_ID ITEM_ID;
 
+#ifdef __REACTOS__
+typedef struct tagGROUP_INFO
+{
+  INT iGroupId;
+  LPWSTR pszHeader;
+  LPWSTR pszFooter;
+  LPWSTR pszSubtitle;
+  LPWSTR pszTask;
+  LPWSTR pszDescriptionTop;
+  LPWSTR pszDescriptionBottom;
+  LPWSTR pszSubsetTitle;
+  UINT state;
+  UINT uAlign;
+  INT iTitleImage;
+  INT iExtendedImage;
+  RECT rcHeader;
+  RECT rcGroup;
+} GROUP_INFO;
+#endif
+
 typedef struct tagITEM_INFO
 {
   ITEMHDR hdr;
@@ -172,6 +192,9 @@ typedef struct tagITEM_INFO
   LPARAM lParam;
   INT iIndent;
   ITEM_ID *id;
+#ifdef __REACTOS__
+  GROUP_INFO *group;
+#endif
 } ITEM_INFO;
 
 struct tagITEM_ID
@@ -329,6 +352,18 @@ typedef struct tagLISTVIEW_INFO
 
   /* misc */
   INT iVersion;            /* CCM_[G,S]ETVERSION */
+
+#ifdef __REACTOS__
+  HDPA hdpaGroups;
+  BOOL bGroupView;
+  LVGROUPMETRICS groupMetrics;
+  POINT *groupItemPos;
+  INT groupItemCount;
+  INT groupViewHeight;
+  INT groupViewWidth;
+  DWORD groupLayoutView;
+  INT groupLayoutItemHeight;
+#endif
 } LISTVIEW_INFO;
 
 /*
@@ -433,6 +468,17 @@ enum key_state
  */
 static BOOL LISTVIEW_GetItemT(const LISTVIEW_INFO *, LPLVITEMW, BOOL);
 static void LISTVIEW_GetItemBox(const LISTVIEW_INFO *, INT, LPRECT);
+#ifdef __REACTOS__
+static void LISTVIEW_FreeGroup(GROUP_INFO *);
+static GROUP_INFO *LISTVIEW_FindGroup(const LISTVIEW_INFO *, INT, INT *);
+static BOOL LISTVIEW_IsGroupLayout(const LISTVIEW_INFO *);
+static void LISTVIEW_UpdateGroupLayout(LISTVIEW_INFO *);
+static void LISTVIEW_InvalidateGroupLayout(LISTVIEW_INFO *);
+static const POINT *LISTVIEW_GroupItemPos(const LISTVIEW_INFO *, INT);
+static INT LISTVIEW_GroupNextShown(const LISTVIEW_INFO *, INT, BOOL);
+static void LISTVIEW_DrawGroupHeaders(const LISTVIEW_INFO *, HDC);
+static LRESULT LISTVIEW_GroupHitTest(const LISTVIEW_INFO *, LVHITTESTINFO *);
+#endif
 static void LISTVIEW_GetItemOrigin(const LISTVIEW_INFO *, INT, LPPOINT);
 static BOOL LISTVIEW_GetItemPosition(const LISTVIEW_INFO *, INT, LPPOINT);
 static BOOL LISTVIEW_GetItemRect(const LISTVIEW_INFO *, INT, LPRECT);
@@ -1418,6 +1464,37 @@ static BOOL iterator_frameditems_absolute(ITERATOR* i, const LISTVIEW_INFO* info
     if (infoPtr->nItemCount == 0)
         return TRUE;
 
+#ifdef __REACTOS__
+    if (LISTVIEW_IsGroupLayout(infoPtr))
+    {
+        INT nItem;
+
+        if (!(ranges = ranges_create(50))) return FALSE;
+        iterator_rangesitems(i, ranges);
+        for (nItem = 0; nItem < infoPtr->nItemCount; nItem++)
+        {
+            const POINT *pt = LISTVIEW_GroupItemPos(infoPtr, nItem);
+
+            if (!pt || pt->y == INT_MIN) continue;
+            if (infoPtr->uView == LV_VIEW_DETAILS)
+            {
+                rcItem.left = 0;
+                rcItem.right = max(infoPtr->nItemWidth, 1);
+            }
+            else
+            {
+                rcItem.left = pt->x;
+                rcItem.right = pt->x + infoPtr->nItemWidth;
+            }
+            rcItem.top = pt->y;
+            rcItem.bottom = pt->y + infoPtr->nItemHeight;
+            if (IntersectRect(&rcTemp, &rcItem, frame))
+                ranges_additem(i->ranges, nItem);
+        }
+        return TRUE;
+    }
+#endif
+
     if (infoPtr->uView == LV_VIEW_ICON || infoPtr->uView == LV_VIEW_SMALLICON)
     {
 	INT nItem;
@@ -2161,6 +2238,13 @@ static INT LISTVIEW_UpdateVScroll(LISTVIEW_INFO *infoPtr)
     if (infoPtr->uView == LV_VIEW_DETAILS)
     {
 	vertInfo.nMax = infoPtr->nItemCount;
+#ifdef __REACTOS__
+	if (LISTVIEW_IsGroupLayout(infoPtr) && infoPtr->nItemHeight > 0)
+	{
+	    LISTVIEW_UpdateGroupLayout(infoPtr);
+	    vertInfo.nMax = (infoPtr->groupViewHeight + infoPtr->nItemHeight - 1) / infoPtr->nItemHeight;
+	}
+#endif
 	
 	/* scroll by at least one page */
 	if(vertInfo.nPage < infoPtr->nItemHeight)
@@ -2331,6 +2415,20 @@ static void LISTVIEW_InvalidateSelectedItems(const LISTVIEW_INFO *infoPtr)
 static void LISTVIEW_GetItemOrigin(const LISTVIEW_INFO *infoPtr, INT nItem, LPPOINT lpptPosition)
 {
     assert(nItem >= 0 && nItem < infoPtr->nItemCount);
+
+#ifdef __REACTOS__
+    if (LISTVIEW_IsGroupLayout(infoPtr))
+    {
+        const POINT *pt = LISTVIEW_GroupItemPos(infoPtr, nItem);
+
+        if (pt)
+        {
+            lpptPosition->x = pt->x;
+            lpptPosition->y = pt->y == INT_MIN ? -0x100000 : pt->y;
+            return;
+        }
+    }
+#endif
 
     if ((infoPtr->uView == LV_VIEW_SMALLICON) || (infoPtr->uView == LV_VIEW_ICON))
     {
@@ -2895,6 +2993,16 @@ static void LISTVIEW_GetAreaRect(const LISTVIEW_INFO *infoPtr, LPRECT lprcView)
     INT i, x, y;
 
     SetRectEmpty(lprcView);
+
+#ifdef __REACTOS__
+    if (LISTVIEW_IsGroupLayout(infoPtr))
+    {
+        LISTVIEW_UpdateGroupLayout((LISTVIEW_INFO *)infoPtr);
+        lprcView->right = infoPtr->uView == LV_VIEW_DETAILS ? infoPtr->nItemWidth : infoPtr->groupViewWidth;
+        lprcView->bottom = infoPtr->groupViewHeight;
+        return;
+    }
+#endif
 
     switch (infoPtr->uView)
     {
@@ -4418,6 +4526,12 @@ static BOOL set_main_item(LISTVIEW_INFO *infoPtr, const LVITEMW *lpLVItem, BOOL 
     if ((lpLVItem->mask & LVIF_INDENT) && (lpItem->iIndent != lpLVItem->iIndent))
 	uChanged |= LVIF_INDENT;
 
+#ifdef __REACTOS__
+    if (lpItem && (lpLVItem->mask & LVIF_GROUPID) &&
+        lpItem->group != (lpLVItem->iGroupId >= 0 ? LISTVIEW_FindGroup(infoPtr, lpLVItem->iGroupId, NULL) : NULL))
+	uChanged |= LVIF_GROUPID;
+#endif
+
     if ((lpLVItem->mask & LVIF_TEXT) && textcmpWT(lpItem->hdr.pszText, lpLVItem->pszText, isW))
 	uChanged |= LVIF_TEXT;
    
@@ -4476,6 +4590,21 @@ static BOOL set_main_item(LISTVIEW_INFO *infoPtr, const LVITEMW *lpLVItem, BOOL 
 
     if (lpLVItem->mask & LVIF_INDENT)
 	lpItem->iIndent = lpLVItem->iIndent;
+
+#ifdef __REACTOS__
+    if (lpItem && (lpLVItem->mask & LVIF_GROUPID))
+    {
+        GROUP_INFO *group = lpLVItem->iGroupId >= 0 ? LISTVIEW_FindGroup(infoPtr, lpLVItem->iGroupId, NULL) : NULL;
+
+        if (lpItem->group != group)
+        {
+            lpItem->group = group;
+            LISTVIEW_InvalidateGroupLayout(infoPtr);
+            if (!isNew && infoPtr->bGroupView)
+                LISTVIEW_InvalidateList(infoPtr);
+        }
+    }
+#endif
 
     if (uChanged & LVIF_STATE)
     {
@@ -5482,6 +5611,9 @@ static void LISTVIEW_Refresh(LISTVIEW_INFO *infoPtr, HDC hdc, const RECT *prcEra
             LISTVIEW_RefreshReport(infoPtr, &i, hdc, cdmode);
 	else /* LV_VIEW_LIST, LV_VIEW_ICON or LV_VIEW_SMALLICON */
 	    LISTVIEW_RefreshList(infoPtr, &i, hdc, cdmode);
+#ifdef __REACTOS__
+	LISTVIEW_DrawGroupHeaders(infoPtr, hdc);
+#endif
 
 	/* if we have a focus rect and it's visible, draw it */
 	if (infoPtr->bFocus && range.lower <= infoPtr->nFocusedItem &&
@@ -7115,6 +7247,11 @@ static BOOL LISTVIEW_GetItemT(const LISTVIEW_INFO *infoPtr, LPLVITEMW lpLVItem, 
         lpLVItem->iIndent = lpItem->iIndent;
     }
 
+#ifdef __REACTOS__
+    if ((lpLVItem->mask & LVIF_GROUPID) && lpLVItem->iSubItem == 0)
+        lpLVItem->iGroupId = lpItem->group ? lpItem->group->iGroupId : I_GROUPIDNONE;
+#endif
+
     return TRUE;
 }
 
@@ -7554,6 +7691,20 @@ static INT LISTVIEW_GetNextItem(const LISTVIEW_INFO *infoPtr, INT nItem, UINT uF
 	return (infoPtr->nFocusedItem == nItem) ? -1 : infoPtr->nFocusedItem;
     }
     
+#ifdef __REACTOS__
+    if ((uFlags & (LVNI_ABOVE | LVNI_BELOW)) && nItem >= 0 && LISTVIEW_IsGroupLayout(infoPtr))
+    {
+        BOOL below = (uFlags & LVNI_BELOW) != 0;
+
+        while ((nItem = LISTVIEW_GroupNextShown(infoPtr, nItem, below)) != -1)
+        {
+            if ((LISTVIEW_GetItemState(infoPtr, nItem, uMask) & uMask) == uMask)
+                return nItem;
+        }
+        return -1;
+    }
+#endif
+
     if (uFlags & LVNI_ABOVE)
     {
       if ((infoPtr->uView == LV_VIEW_LIST) || (infoPtr->uView == LV_VIEW_DETAILS))
@@ -8022,6 +8173,12 @@ static INT LISTVIEW_InsertItemT(LISTVIEW_INFO *infoPtr, const LVITEMW *lpLVItem,
     if (!lpLVItem || lpLVItem->iSubItem) return -1;
 
     if (!is_assignable_item(lpLVItem, infoPtr->dwStyle)) return -1;
+
+#ifdef __REACTOS__
+    if ((lpLVItem->mask & LVIF_GROUPID) && lpLVItem->iGroupId >= 0 &&
+        !LISTVIEW_FindGroup(infoPtr, lpLVItem->iGroupId, NULL))
+        return -1;
+#endif
 
     if (!(lpItem = Alloc(sizeof(*lpItem)))) return -1;
     
@@ -9839,6 +9996,11 @@ static LRESULT LISTVIEW_NCCreate(HWND hwnd, WPARAM wParam, const CREATESTRUCTW *
   if (!(infoPtr->hdpaPosX  = DPA_Create(10))) goto fail;
   if (!(infoPtr->hdpaPosY  = DPA_Create(10))) goto fail;
   if (!(infoPtr->hdpaColumns = DPA_Create(10))) goto fail;
+#ifdef __REACTOS__
+  if (!(infoPtr->hdpaGroups = DPA_Create(4))) goto fail;
+  infoPtr->groupMetrics.cbSize = sizeof(infoPtr->groupMetrics);
+  infoPtr->groupMetrics.Top = 12;
+#endif
 
   return DefWindowProcW(hwnd, WM_NCCREATE, wParam, (LPARAM)lpcs);
 
@@ -9850,6 +10012,9 @@ fail:
     DPA_Destroy(infoPtr->hdpaPosX);
     DPA_Destroy(infoPtr->hdpaPosY);
     DPA_Destroy(infoPtr->hdpaColumns);
+#ifdef __REACTOS__
+    DPA_Destroy(infoPtr->hdpaGroups);
+#endif
     Free(infoPtr);
     return FALSE;
 }
@@ -10728,6 +10893,12 @@ static LRESULT LISTVIEW_NCDestroy(LISTVIEW_INFO *infoPtr)
   DPA_Destroy(infoPtr->hdpaItemIds);
   DPA_Destroy(infoPtr->hdpaPosX);
   DPA_Destroy(infoPtr->hdpaPosY);
+#ifdef __REACTOS__
+  for (i = 0; i < DPA_GetPtrCount(infoPtr->hdpaGroups); i++)
+      LISTVIEW_FreeGroup(DPA_GetPtr(infoPtr->hdpaGroups, i));
+  DPA_Destroy(infoPtr->hdpaGroups);
+  Free(infoPtr->groupItemPos);
+#endif
   /* columns */
   for (i = 0; i < DPA_GetPtrCount(infoPtr->hdpaColumns); i++)
       Free(DPA_GetPtr(infoPtr->hdpaColumns, i));
@@ -11647,6 +11818,621 @@ static LRESULT LISTVIEW_SetVersion(LISTVIEW_INFO *infoPtr, INT iVersion)
     return COMCTL32_SetVersion(&infoPtr->iVersion, iVersion);
 }
 
+#ifdef __REACTOS__
+#define GROUP_LABEL_LEFT     10
+#define GROUP_LABEL_TOP      2
+#define GROUP_HEADER_EXTRA   6
+#define GROUP_BOTTOM_PADDING 3
+
+static void LISTVIEW_FreeGroup(GROUP_INFO *group)
+{
+    if (!group) return;
+    Free(group->pszHeader);
+    Free(group->pszFooter);
+    Free(group->pszSubtitle);
+    Free(group->pszTask);
+    Free(group->pszDescriptionTop);
+    Free(group->pszDescriptionBottom);
+    Free(group->pszSubsetTitle);
+    Free(group);
+}
+
+static GROUP_INFO *LISTVIEW_FindGroup(const LISTVIEW_INFO *infoPtr, INT iGroupId, INT *pIndex)
+{
+    INT i;
+
+    for (i = 0; i < DPA_GetPtrCount(infoPtr->hdpaGroups); i++)
+    {
+        GROUP_INFO *group = DPA_GetPtr(infoPtr->hdpaGroups, i);
+        if (group->iGroupId == iGroupId)
+        {
+            if (pIndex) *pIndex = i;
+            return group;
+        }
+    }
+    return NULL;
+}
+
+static ITEM_INFO *LISTVIEW_GetItemInfo(const LISTVIEW_INFO *infoPtr, INT nItem)
+{
+    HDPA hdpaSubItems;
+
+    if (infoPtr->dwStyle & LVS_OWNERDATA) return NULL;
+    if (nItem < 0 || nItem >= infoPtr->nItemCount) return NULL;
+    hdpaSubItems = DPA_GetPtr(infoPtr->hdpaItems, nItem);
+    return hdpaSubItems ? DPA_GetPtr(hdpaSubItems, 0) : NULL;
+}
+
+static BOOL LISTVIEW_IsGroupLayout(const LISTVIEW_INFO *infoPtr)
+{
+    return infoPtr->bGroupView && infoPtr->uView != LV_VIEW_LIST &&
+           !(infoPtr->dwStyle & LVS_OWNERDATA);
+}
+
+static void LISTVIEW_InvalidateGroupLayout(LISTVIEW_INFO *infoPtr)
+{
+    infoPtr->groupItemCount = -1;
+}
+
+static BOOL LISTVIEW_GroupIsShown(const LISTVIEW_INFO *infoPtr, const GROUP_INFO *group)
+{
+    INT i;
+
+    if (group->state & LVGS_HIDDEN) return FALSE;
+    for (i = 0; i < infoPtr->nItemCount; i++)
+    {
+        ITEM_INFO *item = LISTVIEW_GetItemInfo(infoPtr, i);
+        if (item && item->group == group) return TRUE;
+    }
+    return FALSE;
+}
+
+static void LISTVIEW_UpdateGroupLayout(LISTVIEW_INFO *infoPtr)
+{
+    INT width = infoPtr->rcList.right - infoPtr->rcList.left;
+    INT header = infoPtr->ntmHeight + GROUP_HEADER_EXTRA;
+    INT g, i, y = 0, rowWidth = 0;
+    POINT *pos;
+
+    if (infoPtr->groupItemCount == infoPtr->nItemCount && infoPtr->groupViewWidth == width &&
+        infoPtr->groupLayoutView == infoPtr->uView && infoPtr->groupLayoutItemHeight == infoPtr->nItemHeight &&
+        infoPtr->groupItemPos)
+        return;
+
+    pos = Alloc(max(infoPtr->nItemCount, 1) * sizeof(*pos));
+    if (!pos) return;
+    for (i = 0; i < infoPtr->nItemCount; i++)
+    {
+        pos[i].x = 0;
+        pos[i].y = INT_MIN;
+    }
+
+    if (infoPtr->uView == LV_VIEW_DETAILS)
+    {
+        rowWidth = REPORT_MARGINX;
+        if (DPA_GetPtrCount(infoPtr->hdpaColumns) > 0)
+            rowWidth += LISTVIEW_GetColumnInfo(infoPtr, 0)->rcHeader.left;
+    }
+
+    for (g = 0; g < DPA_GetPtrCount(infoPtr->hdpaGroups); g++)
+    {
+        GROUP_INFO *group = DPA_GetPtr(infoPtr->hdpaGroups, g);
+        INT top = y, x = 0, rowsBottom;
+        BOOL any = FALSE;
+
+        SetRectEmpty(&group->rcHeader);
+        SetRectEmpty(&group->rcGroup);
+        if (!LISTVIEW_GroupIsShown(infoPtr, group)) continue;
+
+        SetRect(&group->rcHeader, 0, top, width, top + header);
+        y = top + header;
+        rowsBottom = y;
+        for (i = 0; i < infoPtr->nItemCount; i++)
+        {
+            ITEM_INFO *item = LISTVIEW_GetItemInfo(infoPtr, i);
+            if (!item || item->group != group) continue;
+            if (infoPtr->uView == LV_VIEW_DETAILS)
+            {
+                pos[i].x = rowWidth;
+                pos[i].y = rowsBottom;
+                rowsBottom += infoPtr->nItemHeight;
+            }
+            else
+            {
+                if (any && x + infoPtr->nItemWidth > width)
+                {
+                    x = 0;
+                    rowsBottom += infoPtr->nItemHeight;
+                }
+                pos[i].x = x;
+                pos[i].y = rowsBottom;
+                x += infoPtr->nItemWidth;
+            }
+            any = TRUE;
+        }
+        if (any && infoPtr->uView != LV_VIEW_DETAILS)
+            rowsBottom += infoPtr->nItemHeight;
+        SetRect(&group->rcGroup, 0, top, width, rowsBottom + GROUP_BOTTOM_PADDING);
+        if (group->state & LVGS_COLLAPSED)
+        {
+            for (i = 0; i < infoPtr->nItemCount; i++)
+            {
+                ITEM_INFO *item = LISTVIEW_GetItemInfo(infoPtr, i);
+                if (item && item->group == group) pos[i].y = INT_MIN;
+            }
+            y = top + header;
+        }
+        else
+        {
+            y = group->rcGroup.bottom;
+        }
+    }
+
+    Free(infoPtr->groupItemPos);
+    infoPtr->groupItemPos = pos;
+    infoPtr->groupItemCount = infoPtr->nItemCount;
+    infoPtr->groupViewWidth = width;
+    infoPtr->groupViewHeight = y;
+    infoPtr->groupLayoutView = infoPtr->uView;
+    infoPtr->groupLayoutItemHeight = infoPtr->nItemHeight;
+}
+
+static const POINT *LISTVIEW_GroupItemPos(const LISTVIEW_INFO *infoPtr, INT nItem)
+{
+    LISTVIEW_UpdateGroupLayout((LISTVIEW_INFO *)infoPtr);
+    if (!infoPtr->groupItemPos || nItem < 0 || nItem >= infoPtr->groupItemCount) return NULL;
+    return &infoPtr->groupItemPos[nItem];
+}
+
+static INT LISTVIEW_GroupNextShown(const LISTVIEW_INFO *infoPtr, INT nItem, BOOL below)
+{
+    const POINT *cur = LISTVIEW_GroupItemPos(infoPtr, nItem);
+    INT i, best = -1;
+    LONG bestY = 0, bestX = 0;
+
+    if (!cur || cur->y == INT_MIN) return -1;
+    for (i = 0; i < infoPtr->groupItemCount; i++)
+    {
+        const POINT *pt = &infoPtr->groupItemPos[i];
+        if (i == nItem || pt->y == INT_MIN) continue;
+        if (below ? (pt->y <= cur->y) : (pt->y >= cur->y)) continue;
+        if (infoPtr->uView != LV_VIEW_DETAILS && pt->x != cur->x &&
+            best != -1 && abs(pt->x - cur->x) >= abs(bestX - cur->x) && pt->y == bestY)
+            continue;
+        if (best == -1 || (below ? pt->y < bestY : pt->y > bestY) ||
+            (pt->y == bestY && abs(pt->x - cur->x) < abs(bestX - cur->x)))
+        {
+            best = i;
+            bestY = pt->y;
+            bestX = pt->x;
+        }
+    }
+    return best;
+}
+
+static BOOL LISTVIEW_CopyGroupText(LPWSTR dest, INT cch, LPCWSTR src)
+{
+    if (!dest || cch <= 0) return FALSE;
+    lstrcpynW(dest, src ? src : L"", cch);
+    return TRUE;
+}
+
+static BOOL LISTVIEW_StoreGroupText(LPWSTR *dest, LPCWSTR src)
+{
+    LPWSTR copy = NULL;
+
+    if (src && src != LPSTR_TEXTCALLBACKW)
+    {
+        INT len = lstrlenW(src) + 1;
+        if (!(copy = Alloc(len * sizeof(WCHAR)))) return FALSE;
+        memcpy(copy, src, len * sizeof(WCHAR));
+    }
+    Free(*dest);
+    *dest = copy;
+    return TRUE;
+}
+
+static BOOL LISTVIEW_ApplyGroup(GROUP_INFO *group, const LVGROUP *lvg)
+{
+    BOOL full = lvg->cbSize >= sizeof(LVGROUP);
+
+    if ((lvg->mask & LVGF_HEADER) && !LISTVIEW_StoreGroupText(&group->pszHeader, lvg->pszHeader)) return FALSE;
+    if ((lvg->mask & LVGF_FOOTER) && !LISTVIEW_StoreGroupText(&group->pszFooter, lvg->pszFooter)) return FALSE;
+    if (lvg->mask & LVGF_STATE)
+        group->state = (group->state & ~lvg->stateMask) | (lvg->state & lvg->stateMask);
+    if (lvg->mask & LVGF_ALIGN)
+        group->uAlign = lvg->uAlign;
+    if (!full) return TRUE;
+    if ((lvg->mask & LVGF_SUBTITLE) && !LISTVIEW_StoreGroupText(&group->pszSubtitle, lvg->pszSubtitle)) return FALSE;
+    if ((lvg->mask & LVGF_TASK) && !LISTVIEW_StoreGroupText(&group->pszTask, lvg->pszTask)) return FALSE;
+    if ((lvg->mask & LVGF_DESCRIPTIONTOP) && !LISTVIEW_StoreGroupText(&group->pszDescriptionTop, lvg->pszDescriptionTop)) return FALSE;
+    if ((lvg->mask & LVGF_DESCRIPTIONBOTTOM) && !LISTVIEW_StoreGroupText(&group->pszDescriptionBottom, lvg->pszDescriptionBottom)) return FALSE;
+    if ((lvg->mask & LVGF_SUBSET) && !LISTVIEW_StoreGroupText(&group->pszSubsetTitle, lvg->pszSubsetTitle)) return FALSE;
+    if (lvg->mask & LVGF_TITLEIMAGE) group->iTitleImage = lvg->iTitleImage;
+    if (lvg->mask & LVGF_EXTENDEDIMAGE) group->iExtendedImage = lvg->iExtendedImage;
+    return TRUE;
+}
+
+static BOOL LISTVIEW_IsValidGroup(const LVGROUP *lvg)
+{
+    return lvg && lvg->cbSize >= LVGROUP_V5_SIZE;
+}
+
+static void LISTVIEW_GroupsChanged(LISTVIEW_INFO *infoPtr)
+{
+    LISTVIEW_InvalidateGroupLayout(infoPtr);
+    if (infoPtr->bGroupView)
+    {
+        LISTVIEW_UpdateScroll(infoPtr);
+        LISTVIEW_InvalidateList(infoPtr);
+    }
+}
+
+static LRESULT LISTVIEW_EnableGroupView(LISTVIEW_INFO *infoPtr, BOOL fEnable)
+{
+    if (!!fEnable == infoPtr->bGroupView) return 0;
+    infoPtr->bGroupView = !!fEnable;
+    LISTVIEW_InvalidateGroupLayout(infoPtr);
+    LISTVIEW_UpdateScroll(infoPtr);
+    LISTVIEW_InvalidateList(infoPtr);
+    return 1;
+}
+
+static INT LISTVIEW_InsertGroupAt(LISTVIEW_INFO *infoPtr, INT index, const LVGROUP *lvg)
+{
+    GROUP_INFO *group;
+    INT count = DPA_GetPtrCount(infoPtr->hdpaGroups);
+
+    if (!LISTVIEW_IsValidGroup(lvg) || !(lvg->mask & LVGF_GROUPID)) return -1;
+    if (!(group = Alloc(sizeof(*group)))) return -1;
+    group->iGroupId = lvg->iGroupId;
+    group->iTitleImage = -1;
+    group->iExtendedImage = -1;
+    if (!LISTVIEW_ApplyGroup(group, lvg))
+    {
+        LISTVIEW_FreeGroup(group);
+        return -1;
+    }
+    if (index < 0 || index > count) index = count;
+    index = DPA_InsertPtr(infoPtr->hdpaGroups, index, group);
+    if (index == -1)
+    {
+        LISTVIEW_FreeGroup(group);
+        return -1;
+    }
+    LISTVIEW_GroupsChanged(infoPtr);
+    return index;
+}
+
+static void LISTVIEW_FillGroup(const LISTVIEW_INFO *infoPtr, const GROUP_INFO *group, LVGROUP *lvg)
+{
+    BOOL full = lvg->cbSize >= sizeof(LVGROUP);
+
+    if (lvg->mask & LVGF_HEADER) LISTVIEW_CopyGroupText(lvg->pszHeader, lvg->cchHeader, group->pszHeader);
+    if (lvg->mask & LVGF_FOOTER) LISTVIEW_CopyGroupText(lvg->pszFooter, lvg->cchFooter, group->pszFooter);
+    if (lvg->mask & LVGF_GROUPID) lvg->iGroupId = group->iGroupId;
+    if (lvg->mask & LVGF_STATE) lvg->state = group->state & lvg->stateMask;
+    if (lvg->mask & LVGF_ALIGN) lvg->uAlign = group->uAlign;
+    if (!full) return;
+    if (lvg->mask & LVGF_SUBTITLE) LISTVIEW_CopyGroupText(lvg->pszSubtitle, lvg->cchSubtitle, group->pszSubtitle);
+    if (lvg->mask & LVGF_TASK) LISTVIEW_CopyGroupText(lvg->pszTask, lvg->cchTask, group->pszTask);
+    if (lvg->mask & LVGF_DESCRIPTIONTOP) LISTVIEW_CopyGroupText(lvg->pszDescriptionTop, lvg->cchDescriptionTop, group->pszDescriptionTop);
+    if (lvg->mask & LVGF_DESCRIPTIONBOTTOM) LISTVIEW_CopyGroupText(lvg->pszDescriptionBottom, lvg->cchDescriptionBottom, group->pszDescriptionBottom);
+    if (lvg->mask & LVGF_SUBSET) LISTVIEW_CopyGroupText(lvg->pszSubsetTitle, lvg->cchSubsetTitle, group->pszSubsetTitle);
+    if (lvg->mask & LVGF_TITLEIMAGE) lvg->iTitleImage = group->iTitleImage;
+    if (lvg->mask & LVGF_EXTENDEDIMAGE) lvg->iExtendedImage = group->iExtendedImage;
+    if (lvg->mask & LVGF_ITEMS)
+    {
+        INT i;
+
+        lvg->cItems = 0;
+        lvg->iFirstItem = -1;
+        for (i = 0; i < infoPtr->nItemCount; i++)
+        {
+            ITEM_INFO *item = LISTVIEW_GetItemInfo(infoPtr, i);
+            if (!item || item->group != group) continue;
+            if (lvg->iFirstItem == -1) lvg->iFirstItem = i;
+            lvg->cItems++;
+        }
+    }
+}
+
+static LRESULT LISTVIEW_GetGroupInfo(const LISTVIEW_INFO *infoPtr, INT iGroupId, LVGROUP *lvg)
+{
+    GROUP_INFO *group;
+
+    if (!LISTVIEW_IsValidGroup(lvg)) return -1;
+    if (!(group = LISTVIEW_FindGroup(infoPtr, iGroupId, NULL))) return -1;
+    LISTVIEW_FillGroup(infoPtr, group, lvg);
+    return iGroupId;
+}
+
+static LRESULT LISTVIEW_GetGroupInfoByIndex(const LISTVIEW_INFO *infoPtr, INT index, LVGROUP *lvg)
+{
+    GROUP_INFO *group;
+
+    if (!LISTVIEW_IsValidGroup(lvg)) return FALSE;
+    if (index < 0 || index >= DPA_GetPtrCount(infoPtr->hdpaGroups)) return FALSE;
+    group = DPA_GetPtr(infoPtr->hdpaGroups, index);
+    LISTVIEW_FillGroup(infoPtr, group, lvg);
+    return TRUE;
+}
+
+static LRESULT LISTVIEW_SetGroupInfo(LISTVIEW_INFO *infoPtr, INT iGroupId, const LVGROUP *lvg)
+{
+    GROUP_INFO *group;
+
+    if (!LISTVIEW_IsValidGroup(lvg)) return -1;
+    if (!(group = LISTVIEW_FindGroup(infoPtr, iGroupId, NULL))) return -1;
+    if (!LISTVIEW_ApplyGroup(group, lvg)) return -1;
+    if (lvg->mask & LVGF_GROUPID) group->iGroupId = lvg->iGroupId;
+    LISTVIEW_GroupsChanged(infoPtr);
+    return iGroupId;
+}
+
+static void LISTVIEW_DetachGroupItems(LISTVIEW_INFO *infoPtr, const GROUP_INFO *group)
+{
+    INT i;
+
+    for (i = 0; i < infoPtr->nItemCount; i++)
+    {
+        ITEM_INFO *item = LISTVIEW_GetItemInfo(infoPtr, i);
+        if (item && (item->group == group || !group)) item->group = NULL;
+    }
+}
+
+static LRESULT LISTVIEW_RemoveGroup(LISTVIEW_INFO *infoPtr, INT iGroupId)
+{
+    GROUP_INFO *group;
+    INT index;
+
+    if (!(group = LISTVIEW_FindGroup(infoPtr, iGroupId, &index))) return -1;
+    LISTVIEW_DetachGroupItems(infoPtr, group);
+    DPA_DeletePtr(infoPtr->hdpaGroups, index);
+    LISTVIEW_FreeGroup(group);
+    LISTVIEW_GroupsChanged(infoPtr);
+    return index;
+}
+
+static void LISTVIEW_RemoveAllGroups(LISTVIEW_INFO *infoPtr)
+{
+    INT i;
+
+    LISTVIEW_DetachGroupItems(infoPtr, NULL);
+    for (i = 0; i < DPA_GetPtrCount(infoPtr->hdpaGroups); i++)
+        LISTVIEW_FreeGroup(DPA_GetPtr(infoPtr->hdpaGroups, i));
+    DPA_DeleteAllPtrs(infoPtr->hdpaGroups);
+    LISTVIEW_GroupsChanged(infoPtr);
+}
+
+typedef struct tagGROUP_SORT
+{
+    PFNLVGROUPCOMPARE pfnCompare;
+    void *pvData;
+} GROUP_SORT;
+
+static INT CALLBACK LISTVIEW_CompareGroups(void *first, void *second, LPARAM lParam)
+{
+    const GROUP_SORT *sort = (const GROUP_SORT *)lParam;
+    return sort->pfnCompare(((GROUP_INFO *)first)->iGroupId, ((GROUP_INFO *)second)->iGroupId, sort->pvData);
+}
+
+static LRESULT LISTVIEW_SortGroups(LISTVIEW_INFO *infoPtr, PFNLVGROUPCOMPARE pfnCompare, void *pvData)
+{
+    GROUP_SORT sort;
+
+    if (!pfnCompare) return 0;
+    sort.pfnCompare = pfnCompare;
+    sort.pvData = pvData;
+    DPA_Sort(infoPtr->hdpaGroups, LISTVIEW_CompareGroups, (LPARAM)&sort);
+    LISTVIEW_GroupsChanged(infoPtr);
+    return 1;
+}
+
+static LRESULT LISTVIEW_InsertGroupSorted(LISTVIEW_INFO *infoPtr, const LVINSERTGROUPSORTED *sorted)
+{
+    INT index, count;
+
+    if (!sorted || !sorted->pfnGroupCompare) return -1;
+    count = DPA_GetPtrCount(infoPtr->hdpaGroups);
+    for (index = 0; index < count; index++)
+    {
+        GROUP_INFO *group = DPA_GetPtr(infoPtr->hdpaGroups, index);
+        if (sorted->pfnGroupCompare(sorted->lvGroup.iGroupId, group->iGroupId, sorted->pvData) < 0)
+            break;
+    }
+    return LISTVIEW_InsertGroupAt(infoPtr, index, &sorted->lvGroup);
+}
+
+static LRESULT LISTVIEW_GetGroupState(const LISTVIEW_INFO *infoPtr, INT iGroupId, UINT mask)
+{
+    GROUP_INFO *group = LISTVIEW_FindGroup(infoPtr, iGroupId, NULL);
+    return group ? (group->state & mask) : 0;
+}
+
+static LRESULT LISTVIEW_GetFocusedGroup(const LISTVIEW_INFO *infoPtr)
+{
+    INT i;
+
+    for (i = 0; i < DPA_GetPtrCount(infoPtr->hdpaGroups); i++)
+    {
+        GROUP_INFO *group = DPA_GetPtr(infoPtr->hdpaGroups, i);
+        if (group->state & LVGS_FOCUSED) return i;
+    }
+    return -1;
+}
+
+static LRESULT LISTVIEW_GetGroupRect(const LISTVIEW_INFO *infoPtr, INT iGroupId, RECT *rect)
+{
+    GROUP_INFO *group;
+    POINT origin;
+    LONG type;
+    HDC hdc;
+
+    if (!rect || !(group = LISTVIEW_FindGroup(infoPtr, iGroupId, NULL))) return FALSE;
+    type = rect->top;
+    if (!LISTVIEW_IsGroupLayout(infoPtr))
+    {
+        SetRect(rect, 0, 0, 0, infoPtr->ntmHeight + GROUP_LABEL_TOP);
+        return TRUE;
+    }
+    LISTVIEW_UpdateGroupLayout((LISTVIEW_INFO *)infoPtr);
+    switch (type)
+    {
+    case LVGGR_HEADER:
+        *rect = group->rcHeader;
+        break;
+    case LVGGR_LABEL:
+        *rect = group->rcHeader;
+        rect->left = GROUP_LABEL_LEFT;
+        rect->top = group->rcHeader.top + GROUP_LABEL_TOP;
+        rect->bottom = rect->top + infoPtr->ntmHeight;
+        rect->right = rect->left;
+        if ((hdc = GetDC(infoPtr->hwndSelf)))
+        {
+            HFONT old = SelectObject(hdc, infoPtr->hFont);
+            SIZE size;
+            if (group->pszHeader && GetTextExtentPoint32W(hdc, group->pszHeader, lstrlenW(group->pszHeader), &size))
+                rect->right = rect->left + size.cx;
+            SelectObject(hdc, old);
+            ReleaseDC(infoPtr->hwndSelf, hdc);
+        }
+        break;
+    case LVGGR_GROUP:
+    default:
+        *rect = group->rcGroup;
+        break;
+    }
+    LISTVIEW_GetOrigin(infoPtr, &origin);
+    OffsetRect(rect, origin.x, origin.y);
+    return TRUE;
+}
+
+static void LISTVIEW_SetGroupMetrics(LISTVIEW_INFO *infoPtr, const LVGROUPMETRICS *metrics)
+{
+    if (!metrics) return;
+    if (metrics->mask & LVGMF_BORDERSIZE)
+    {
+        infoPtr->groupMetrics.Left = metrics->Left;
+        infoPtr->groupMetrics.Top = metrics->Top;
+        infoPtr->groupMetrics.Right = metrics->Right;
+        infoPtr->groupMetrics.Bottom = metrics->Bottom;
+    }
+    if (metrics->mask & LVGMF_BORDERCOLOR)
+    {
+        infoPtr->groupMetrics.crLeft = metrics->crLeft;
+        infoPtr->groupMetrics.crTop = metrics->crTop;
+        infoPtr->groupMetrics.crRight = metrics->crRight;
+        infoPtr->groupMetrics.crBottom = metrics->crBottom;
+    }
+    if (metrics->mask & LVGMF_TEXTCOLOR)
+    {
+        infoPtr->groupMetrics.crHeader = metrics->crHeader;
+        infoPtr->groupMetrics.crFooter = metrics->crFooter;
+    }
+    LISTVIEW_GroupsChanged(infoPtr);
+}
+
+static void LISTVIEW_GetGroupMetrics(const LISTVIEW_INFO *infoPtr, LVGROUPMETRICS *metrics)
+{
+    if (!metrics) return;
+    if (metrics->mask & LVGMF_BORDERSIZE)
+    {
+        metrics->Left = infoPtr->groupMetrics.Left;
+        metrics->Top = infoPtr->groupMetrics.Top;
+        metrics->Right = infoPtr->groupMetrics.Right;
+        metrics->Bottom = infoPtr->groupMetrics.Bottom;
+    }
+    if (metrics->mask & LVGMF_BORDERCOLOR)
+    {
+        metrics->crLeft = infoPtr->groupMetrics.crLeft;
+        metrics->crTop = infoPtr->groupMetrics.crTop;
+        metrics->crRight = infoPtr->groupMetrics.crRight;
+        metrics->crBottom = infoPtr->groupMetrics.crBottom;
+    }
+    if (metrics->mask & LVGMF_TEXTCOLOR)
+    {
+        metrics->crHeader = infoPtr->groupMetrics.crHeader;
+        metrics->crFooter = infoPtr->groupMetrics.crFooter;
+    }
+}
+
+static LRESULT LISTVIEW_GroupHitTest(const LISTVIEW_INFO *infoPtr, LVHITTESTINFO *lpht)
+{
+    POINT origin, pt;
+    INT i;
+
+    if (!LISTVIEW_IsGroupLayout(infoPtr)) return -1;
+    LISTVIEW_UpdateGroupLayout((LISTVIEW_INFO *)infoPtr);
+    LISTVIEW_GetOrigin(infoPtr, &origin);
+    pt.x = lpht->pt.x - origin.x;
+    pt.y = lpht->pt.y - origin.y;
+    for (i = 0; i < DPA_GetPtrCount(infoPtr->hdpaGroups); i++)
+    {
+        GROUP_INFO *group = DPA_GetPtr(infoPtr->hdpaGroups, i);
+        if (PtInRect(&group->rcHeader, pt))
+        {
+            lpht->flags = LVHT_EX_GROUP_HEADER;
+            lpht->iItem = group->iGroupId;
+            return group->iGroupId;
+        }
+    }
+    return -1;
+}
+
+static void LISTVIEW_DrawGroupHeaders(const LISTVIEW_INFO *infoPtr, HDC hdc)
+{
+    HTHEME theme = GetWindowTheme(infoPtr->hwndSelf);
+    POINT origin;
+    RECT clip;
+    INT i;
+
+    if (!LISTVIEW_IsGroupLayout(infoPtr)) return;
+    LISTVIEW_UpdateGroupLayout((LISTVIEW_INFO *)infoPtr);
+    LISTVIEW_GetOrigin(infoPtr, &origin);
+    GetClipBox(hdc, &clip);
+    SelectObject(hdc, infoPtr->hFont);
+    SetBkMode(hdc, TRANSPARENT);
+    for (i = 0; i < DPA_GetPtrCount(infoPtr->hdpaGroups); i++)
+    {
+        GROUP_INFO *group = DPA_GetPtr(infoPtr->hdpaGroups, i);
+        RECT header = group->rcHeader, label, line, tmp;
+        LPCWSTR text = group->pszHeader ? group->pszHeader : L"";
+        SIZE size = {0, 0};
+
+        if (IsRectEmpty(&header)) continue;
+        OffsetRect(&header, origin.x, origin.y);
+        if (!IntersectRect(&tmp, &header, &clip)) continue;
+
+        GetTextExtentPoint32W(hdc, text, lstrlenW(text), &size);
+        SetRect(&label, header.left + GROUP_LABEL_LEFT, header.top + GROUP_LABEL_TOP,
+                header.left + GROUP_LABEL_LEFT + size.cx, header.top + GROUP_LABEL_TOP + infoPtr->ntmHeight);
+        SetRect(&line, label.right + GROUP_LABEL_LEFT, (label.top + label.bottom) / 2,
+                header.right - GROUP_LABEL_LEFT, (label.top + label.bottom) / 2 + 1);
+
+        if (theme && IsThemePartDefined(theme, LVP_GROUPHEADER, 0))
+        {
+            DrawThemeText(theme, hdc, LVP_GROUPHEADER, LVGH_OPEN, text, -1,
+                          DT_LEFT | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS, 0, &label);
+            if (line.right > line.left && IsThemePartDefined(theme, LVP_GROUPHEADERLINE, 0))
+                DrawThemeBackground(theme, hdc, LVP_GROUPHEADERLINE, LVGHL_OPEN, &line, NULL);
+        }
+        else
+        {
+            SetTextColor(hdc, (infoPtr->groupMetrics.crHeader && infoPtr->groupMetrics.crHeader != CLR_DEFAULT) ?
+                              infoPtr->groupMetrics.crHeader : comctl32_color.clrHighlight);
+            DrawTextW(hdc, text, -1, &label, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+            if (line.right > line.left)
+            {
+                HBRUSH brush = CreateSolidBrush(comctl32_color.clr3dShadow);
+                FillRect(hdc, &line, brush);
+                DeleteObject(brush);
+            }
+        }
+    }
+}
+#endif
+
 /***
  * DESCRIPTION:
  * Window procedure of the listview control.
@@ -11689,7 +12475,12 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
   case LVM_EDITLABELW:
     return (LRESULT)LISTVIEW_EditLabelT(infoPtr, (INT)wParam,
                                         uMsg == LVM_EDITLABELW);
+#ifdef __REACTOS__
+  case LVM_ENABLEGROUPVIEW:
+    return LISTVIEW_EnableGroupView(infoPtr, (BOOL)wParam);
+#else
   /* case LVM_ENABLEGROUPVIEW: */
+#endif
 
   case LVM_ENSUREVISIBLE:
     return LISTVIEW_EnsureVisible(infoPtr, (INT)wParam, (BOOL)lParam);
@@ -11728,9 +12519,33 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
   case LVM_GETEXTENDEDLISTVIEWSTYLE:
     return infoPtr->dwLvExStyle;
 
+#ifdef __REACTOS__
+  case LVM_GETGROUPINFO:
+    return LISTVIEW_GetGroupInfo(infoPtr, (INT)wParam, (LVGROUP *)lParam);
+
+  case LVM_GETGROUPINFOBYINDEX:
+    return LISTVIEW_GetGroupInfoByIndex(infoPtr, (INT)wParam, (LVGROUP *)lParam);
+
+  case LVM_GETGROUPCOUNT:
+    return DPA_GetPtrCount(infoPtr->hdpaGroups);
+
+  case LVM_GETGROUPMETRICS:
+    LISTVIEW_GetGroupMetrics(infoPtr, (LVGROUPMETRICS *)lParam);
+    return 0;
+
+  case LVM_GETGROUPRECT:
+    return LISTVIEW_GetGroupRect(infoPtr, (INT)wParam, (RECT *)lParam);
+
+  case LVM_GETGROUPSTATE:
+    return LISTVIEW_GetGroupState(infoPtr, (INT)wParam, (UINT)lParam);
+
+  case LVM_GETFOCUSEDGROUP:
+    return LISTVIEW_GetFocusedGroup(infoPtr);
+#else
   /* case LVM_GETGROUPINFO: */
 
   /* case LVM_GETGROUPMETRICS: */
+#endif
 
   case LVM_GETHEADER:
     return (LRESULT)infoPtr->hwndHeader;
@@ -11855,19 +12670,46 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     FIXME("LVM_GETWORKAREAS: unimplemented\n");
     return FALSE;
 
+#ifdef __REACTOS__
+  case LVM_HASGROUP:
+    return LISTVIEW_FindGroup(infoPtr, (INT)wParam, NULL) != NULL;
+
+  case LVM_HITTEST:
+  {
+    LRESULT Result = LISTVIEW_HitTest(infoPtr, (LPLVHITTESTINFO)lParam, FALSE, TRUE);
+
+    if (lParam && LISTVIEW_IsGroupLayout(infoPtr))
+    {
+        if (wParam == (WPARAM)-1)
+            ((LPLVHITTESTINFO)lParam)->iGroup = 0;
+        if (Result == -1)
+            Result = LISTVIEW_GroupHitTest(infoPtr, (LPLVHITTESTINFO)lParam);
+    }
+    return Result;
+  }
+#else
   /* case LVM_HASGROUP: */
 
   case LVM_HITTEST:
     return LISTVIEW_HitTest(infoPtr, (LPLVHITTESTINFO)lParam, FALSE, TRUE);
+#endif
 
   case LVM_INSERTCOLUMNA:
   case LVM_INSERTCOLUMNW:
     return LISTVIEW_InsertColumnT(infoPtr, (INT)wParam, (LPLVCOLUMNW)lParam,
                                   uMsg == LVM_INSERTCOLUMNW);
 
+#ifdef __REACTOS__
+  case LVM_INSERTGROUP:
+    return LISTVIEW_InsertGroupAt(infoPtr, (INT)wParam, (const LVGROUP *)lParam);
+
+  case LVM_INSERTGROUPSORTED:
+    return LISTVIEW_InsertGroupSorted(infoPtr, (const LVINSERTGROUPSORTED *)wParam);
+#else
   /* case LVM_INSERTGROUP: */
 
   /* case LVM_INSERTGROUPSORTED: */
+#endif
 
   case LVM_INSERTITEMA:
   case LVM_INSERTITEMW:
@@ -11877,7 +12719,7 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 #ifdef __REACTOS__
   case LVM_ISGROUPVIEWENABLED:
-    return FALSE;
+    return infoPtr->bGroupView;
 #else
   /* case LVM_ISGROUPVIEWENABLED: */
 #endif
@@ -11891,16 +12733,31 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
   case LVM_MAPINDEXTOID:
     return LISTVIEW_MapIndexToId(infoPtr, (INT)wParam);
 
+#ifdef __REACTOS__
+  case LVM_MOVEGROUP:
+  case LVM_MOVEITEMTOGROUP:
+    return 0;
+#else
   /* case LVM_MOVEGROUP: */
 
   /* case LVM_MOVEITEMTOGROUP: */
+#endif
 
   case LVM_REDRAWITEMS:
     return LISTVIEW_RedrawItems(infoPtr, (INT)wParam, (INT)lParam);
 
+#ifdef __REACTOS__
+  case LVM_REMOVEALLGROUPS:
+    LISTVIEW_RemoveAllGroups(infoPtr);
+    return 0;
+
+  case LVM_REMOVEGROUP:
+    return LISTVIEW_RemoveGroup(infoPtr, (INT)wParam);
+#else
   /* case LVM_REMOVEALLGROUPS: */
 
   /* case LVM_REMOVEGROUP: */
+#endif
 
   case LVM_SCROLL:
     return LISTVIEW_Scroll(infoPtr, (INT)wParam, (INT)lParam);
@@ -11930,9 +12787,18 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
   case LVM_SETEXTENDEDLISTVIEWSTYLE:
     return LISTVIEW_SetExtendedListViewStyle(infoPtr, (DWORD)wParam, (DWORD)lParam);
 
+#ifdef __REACTOS__
+  case LVM_SETGROUPINFO:
+    return LISTVIEW_SetGroupInfo(infoPtr, (INT)wParam, (const LVGROUP *)lParam);
+
+  case LVM_SETGROUPMETRICS:
+    LISTVIEW_SetGroupMetrics(infoPtr, (const LVGROUPMETRICS *)lParam);
+    return 0;
+#else
   /* case LVM_SETGROUPINFO: */
 
   /* case LVM_SETGROUPMETRICS: */
+#endif
 
   case LVM_SETHOTCURSOR:
     return (LRESULT)LISTVIEW_SetHotCursor(infoPtr, (HCURSOR)lParam);
@@ -12018,7 +12884,12 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
   /* case LVM_SETWORKAREAS: */
 
+#ifdef __REACTOS__
+  case LVM_SORTGROUPS:
+    return LISTVIEW_SortGroups(infoPtr, (PFNLVGROUPCOMPARE)wParam, (void *)lParam);
+#else
   /* case LVM_SORTGROUPS: */
+#endif
 
   case LVM_SORTITEMS:
   case LVM_SORTITEMSEX:

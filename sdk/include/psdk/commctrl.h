@@ -2517,6 +2517,17 @@ typedef struct tagNMBCDROPDOWN {
 #define LVHT_BELOW 0x10
 #define LVHT_TORIGHT 0x20
 #define LVHT_TOLEFT 0x40
+#if (_WIN32_WINNT >= 0x0600)
+#define LVHT_EX_GROUP_HEADER 0x10000000
+#define LVHT_EX_GROUP_FOOTER 0x20000000
+#define LVHT_EX_GROUP_COLLAPSE 0x40000000
+#define LVHT_EX_GROUP_BACKGROUND 0x80000000
+#define LVHT_EX_GROUP_STATEICON 0x01000000
+#define LVHT_EX_GROUP_SUBSETLINK 0x02000000
+#define LVHT_EX_GROUP (LVHT_EX_GROUP_BACKGROUND | LVHT_EX_GROUP_COLLAPSE | LVHT_EX_GROUP_FOOTER | LVHT_EX_GROUP_HEADER | LVHT_EX_GROUP_STATEICON | LVHT_EX_GROUP_SUBSETLINK)
+#define LVHT_EX_ONCONTENTS 0x04000000
+#define LVHT_EX_FOOTER 0x08000000
+#endif
 
 #define LV_HITTESTINFO LVHITTESTINFO
 
@@ -2527,6 +2538,9 @@ typedef struct tagNMBCDROPDOWN {
     UINT flags;
     int iItem;
     int iSubItem;
+#if (_WIN32_WINNT >= 0x0600)
+    int iGroup;
+#endif
   } LVHITTESTINFO,*LPLVHITTESTINFO;
 
 #define LVM_HITTEST (LVM_FIRST+18)
@@ -2872,10 +2886,29 @@ typedef struct tagNMBCDROPDOWN {
 #define LVGF_STATE 0x4
 #define LVGF_ALIGN 0x8
 #define LVGF_GROUPID 0x10
+#if (_WIN32_WINNT >= 0x0600)
+#define LVGF_SUBTITLE 0x100
+#define LVGF_TASK 0x200
+#define LVGF_DESCRIPTIONTOP 0x400
+#define LVGF_DESCRIPTIONBOTTOM 0x800
+#define LVGF_TITLEIMAGE 0x1000
+#define LVGF_EXTENDEDIMAGE 0x2000
+#define LVGF_ITEMS 0x4000
+#define LVGF_SUBSET 0x8000
+#define LVGF_SUBSETITEMS 0x10000
+#endif
 
 #define LVGS_NORMAL 0x0
 #define LVGS_COLLAPSED 0x1
 #define LVGS_HIDDEN 0x2
+#if (_WIN32_WINNT >= 0x0600)
+#define LVGS_NOHEADER 0x4
+#define LVGS_COLLAPSIBLE 0x8
+#define LVGS_FOCUSED 0x10
+#define LVGS_SELECTED 0x20
+#define LVGS_SUBSETED 0x40
+#define LVGS_SUBSETLINKFOCUSED 0x80
+#endif
 
 #define LVGA_HEADER_LEFT 0x1
 #define LVGA_HEADER_CENTER 0x2
@@ -2895,7 +2928,27 @@ typedef struct tagNMBCDROPDOWN {
     UINT stateMask;
     UINT state;
     UINT uAlign;
+#if (_WIN32_WINNT >= 0x0600)
+    LPWSTR pszSubtitle;
+    UINT cchSubtitle;
+    LPWSTR pszTask;
+    UINT cchTask;
+    LPWSTR pszDescriptionTop;
+    UINT cchDescriptionTop;
+    LPWSTR pszDescriptionBottom;
+    UINT cchDescriptionBottom;
+    int iTitleImage;
+    int iExtendedImage;
+    int iFirstItem;
+    UINT cItems;
+    LPWSTR pszSubsetTitle;
+    UINT cchSubsetTitle;
+#endif
   } LVGROUP,*PLVGROUP;
+
+#if (_WIN32_WINNT >= 0x0600)
+#define LVGROUP_V5_SIZE CCSIZEOF_STRUCT(LVGROUP,uAlign)
+#endif
 
 #define LVM_INSERTGROUP (LVM_FIRST+145)
 #define ListView_InsertGroup(hwnd,index,pgrp) SNDMSG((hwnd),LVM_INSERTGROUP,(WPARAM)index,(LPARAM)pgrp)
@@ -2957,10 +3010,17 @@ typedef struct tagNMBCDROPDOWN {
 #define ListView_GetGroupCount(hwnd) SNDMSG((hwnd),LVM_GETGROUPCOUNT,(WPARAM)0,(LPARAM)0)
 #define LVM_GETGROUPINFOBYINDEX (LVM_FIRST + 153)
 #define ListView_GetGroupInfoByIndex(hwnd, iIndex, pgrp) SNDMSG((hwnd),LVM_GETGROUPINFOBYINDEX,(WPARAM)(iIndex),(LPARAM)(pgrp))
+#define LVGGR_GROUP 0
+#define LVGGR_HEADER 1
+#define LVGGR_LABEL 2
+#define LVGGR_SUBSETLINK 3
 #define LVM_GETGROUPRECT (LVM_FIRST+98)
 #define ListView_GetGroupRect(hwnd, iGroupId, type, prc) SNDMSG((hwnd),LVM_GETGROUPRECT,(WPARAM)(iGroupId),((prc) ? (((RECT *)(prc))->top = (type)),(LPARAM)(RECT *)(prc) : (LPARAM)(RECT *)NULL))
 #define LVM_GETGROUPSTATE (LVM_FIRST+92)
 #define ListView_GetGroupState(hwnd, dwGroupId, dwMask) (UINT)SNDMSG((hwnd), LVM_GETGROUPSTATE,(WPARAM)(dwGroupId),(LPARAM)(dwMask))
+#define ListView_SetGroupState(hwnd,dwGroupId,dwMask,dwState) { LVGROUP _macro_lvg; _macro_lvg.cbSize = sizeof(_macro_lvg); _macro_lvg.mask = LVGF_STATE; _macro_lvg.stateMask = dwMask; _macro_lvg.state = dwState; SNDMSG((hwnd),LVM_SETGROUPINFO,(WPARAM)(dwGroupId),(LPARAM)(LVGROUP *)&_macro_lvg); }
+#define ListView_SetGroupHeaderImageList(hwnd,himl) (HIMAGELIST)SNDMSG((hwnd),LVM_SETIMAGELIST,(WPARAM)LVSIL_GROUPHEADER,(LPARAM)(HIMAGELIST)(himl))
+#define ListView_GetGroupHeaderImageList(hwnd) (HIMAGELIST)SNDMSG((hwnd),LVM_GETIMAGELIST,(WPARAM)LVSIL_GROUPHEADER,0L)
 #define LVM_GETFOCUSEDGROUP (LVM_FIRST+93)
 #define ListView_GetFocusedGroup(hwnd) SNDMSG((hwnd), LVM_GETFOCUSEDGROUP, 0, 0)
 
