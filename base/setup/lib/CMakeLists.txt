@@ -19,8 +19,6 @@ list(APPEND SOURCE
     utils/fsrec.c
     utils/genlist.c
     utils/inicache.c
-    utils/ntverrsrc.c
-    utils/osdetect.c
     utils/partinfo.c
     utils/partlist.c
     utils/regutil.c

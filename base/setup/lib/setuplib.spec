@@ -45,10 +45,6 @@
 ;; partinfo
 @ stdcall LookupPartitionTypeString(long ptr)
 
-;; osdetect
-@ stdcall CreateNTOSInstallationsList(ptr)
-@ stdcall FindSubStrI(wstr wstr)
-
 ;; settings
 @ cdecl CreateComputerTypeList(ptr)
 @ cdecl CreateDisplayDriverList(ptr)
@@ -82,4 +78,3 @@
 
 ;; bootsup
 @ stdcall InstallBootManagerAndBootEntries(long ptr ptr ptr ptr)
-@ stdcall InstallBootcodeToRemovable(long ptr ptr ptr)
