@@ -31,6 +31,7 @@ list(APPEND SOURCE
     transport/udp/udp.c)
 
 add_library(ip OBJECT ${SOURCE} ${ip_asm})
+target_compile_definitions(ip PRIVATE NDIS60 NDIS_LEGACY_DRIVER=1)
 add_dependencies(ip bugcodes xdk)
 
 target_link_libraries(ip lwipcore)

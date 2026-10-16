@@ -8,7 +8,7 @@
 #pragma once
 
 /* NDIS version this driver supports */
-#define NDIS_VERSION_MAJOR 4
+#define NDIS_VERSION_MAJOR 6
 #define NDIS_VERSION_MINOR 0
 
 #ifdef _NTTEST_

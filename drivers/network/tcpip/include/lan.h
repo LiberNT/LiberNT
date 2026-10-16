@@ -62,9 +62,12 @@ typedef struct LAN_ADAPTER {
     UINT MTU;                               /* Maximum Transfer Unit */
     UINT MinFrameSize;                      /* Minimum frame size in bytes */
     UINT MaxPacketSize;                     /* Maximum packet size when sending */
-    UINT MaxSendPackets;                    /* Maximum number of packets per send */
-    UINT MacOptions;                        /* MAC options for NIC driver/adapter */
     UINT Speed;                             /* Link speed */
+    ULONG64 LinkSpeed;
+    NDIS_HANDLE NblPool;
+    volatile LONG Paused;
+    volatile LONG PendingSends;
+    KEVENT SendsDoneEvent;
     UINT PacketFilter;                      /* Packet filter for this adapter */
     UCHAR MulticastList[LAN_MAX_MULTICAST][IEEE_802_ADDR_LENGTH];
     ULONG MulticastRefs[LAN_MAX_MULTICAST];
@@ -93,8 +96,8 @@ typedef struct LAN_ADAPTER {
 
 
 NDIS_STATUS LANRegisterAdapter(
-    PNDIS_STRING AdapterName,
-		PNDIS_STRING RegistryPath);
+    NDIS_HANDLE BindContext,
+    PNDIS_BIND_PARAMETERS BindParameters);
 
 NDIS_STATUS LANUnregisterAdapter(
     PLAN_ADAPTER Adapter);

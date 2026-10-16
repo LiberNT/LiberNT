@@ -79,7 +79,6 @@ typedef struct _IP_PACKET {
     UCHAR Type;                         /* Type of IP packet (see IP_ADDRESS_xx above) */
     UCHAR Flags;                        /* Flags for packet (see IP_PACKET_FLAG_xx below)*/
     BOOLEAN MappedHeader;               /* States whether Header is from an MDL or allocated from pool */
-    BOOLEAN ReturnPacket;               /* States whether NdisPacket should be passed to NdisReturnPackets */
     PVOID Header;                       /* Pointer to IP header for this packet */
     UINT HeaderSize;                    /* Size of IP header */
     PVOID Data;                         /* Current pointer into packet data */

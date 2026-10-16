@@ -16,7 +16,6 @@
 typedef struct IP_FRAGMENT {
     LIST_ENTRY ListEntry; /* Entry on list */
     PNDIS_PACKET Packet;  /* NDIS packet containing fragment data */
-    BOOLEAN ReturnPacket; /* States whether to call NdisReturnPackets */
     UINT PacketOffset;    /* Offset into NDIS packet where data is */
     UINT Offset;          /* Offset into datagram where this fragment is */
     UINT Size;            /* Size of this fragment */

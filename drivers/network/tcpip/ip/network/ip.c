@@ -51,20 +51,9 @@ VOID DeinitializePacket(
     /* Check if there's a packet to free */
     if (IPPacket->NdisPacket != NULL)
     {
-        if (IPPacket->ReturnPacket)
-        {
-            /* Return the packet to the miniport driver */
-            TI_DbgPrint(MAX_TRACE, ("Returning packet 0x%p\n",
-                                    IPPacket->NdisPacket));
-            NdisReturnPackets(&IPPacket->NdisPacket, 1);
-        }
-        else
-        {
-            /* Free it the conventional way */
-            TI_DbgPrint(MAX_TRACE, ("Freeing packet 0x%p\n",
-                                    IPPacket->NdisPacket));
-            FreeNdisPacket(IPPacket->NdisPacket);
-        }
+        TI_DbgPrint(MAX_TRACE, ("Freeing packet 0x%p\n",
+                                IPPacket->NdisPacket));
+        FreeNdisPacket(IPPacket->NdisPacket);
     }
 
     /* Check if we have a pool-allocated header */

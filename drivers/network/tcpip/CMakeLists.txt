@@ -12,7 +12,8 @@ endif()
 add_subdirectory(ip)
 
 add_definitions(
-    -DNDIS40
+    -DNDIS60
+    -DNDIS_LEGACY_DRIVER=1
     -D_NTDRIVER_)
 
 spec2def(tcpip.sys tcpip.spec)

@@ -92,14 +92,7 @@ VOID FreeIPDR(
     TI_DbgPrint(DEBUG_IP, ("Freeing fragment packet at (0x%X).\n", CurrentF->Packet));
 
     /* Free the fragment data buffer */
-    if (CurrentF->ReturnPacket)
-    {
-        NdisReturnPackets(&CurrentF->Packet, 1);
-    }
-    else
-    {
-        FreeNdisPacket(CurrentF->Packet);
-    }
+    FreeNdisPacket(CurrentF->Packet);
 
     TI_DbgPrint(DEBUG_IP, ("Freeing fragment at (0x%X).\n", CurrentF));
 
@@ -475,7 +468,6 @@ VOID ProcessFragment(
 
     Fragment->Size = IPPacket->TotalSize - IPPacket->HeaderSize;
     Fragment->Packet = IPPacket->NdisPacket;
-    Fragment->ReturnPacket = IPPacket->ReturnPacket;
     Fragment->PacketOffset = IPPacket->Position + IPPacket->HeaderSize;
     Fragment->Offset = FragFirst;
 
