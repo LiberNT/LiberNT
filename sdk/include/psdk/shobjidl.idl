@@ -32,6 +32,7 @@ import "msxml.idl";
 import "wtypes.idl";
 import "propsys.idl";
 import "objectarray.idl";
+import "structuredquerycondition.idl";
 /* FIXME: import "structuredquery.idl"; */
 
 cpp_quote("/* FIXME: #include <sherrors.h> */")
@@ -721,6 +722,18 @@ typedef [v1_enum] enum DATAOBJ_GET_ITEM_FLAGS
 } DATAOBJ_GET_ITEM_FLAGS;
 cpp_quote("DEFINE_ENUM_FLAG_OPERATORS(DATAOBJ_GET_ITEM_FLAGS)")
 
+typedef [v1_enum] enum PLACEHOLDER_STATES
+{
+    PS_NONE                            = 0x0,
+    PS_MARKED_FOR_OFFLINE_AVAILABILITY = 0x1,
+    PS_FULL_PRIMARY_STREAM_AVAILABLE   = 0x2,
+    PS_CREATE_FILE_ACCESSIBLE          = 0x4,
+    PS_CLOUDFILE_PLACEHOLDER           = 0x8,
+    PS_DEFAULT                         = 0x7,
+    PS_ALL                             = 0xf
+} PLACEHOLDER_STATES;
+cpp_quote("DEFINE_ENUM_FLAG_OPERATORS(PLACEHOLDER_STATES)")
+
 cpp_quote("HRESULT WINAPI SHGetNameFromIDList(PCIDLIST_ABSOLUTE pidl, SIGDN sigdnName, PWSTR *ppszName);")
 cpp_quote("HRESULT WINAPI SHCreateItemFromParsingName(PCWSTR pszPath, IBindCtx *pbc, REFIID riid, void **ppv);")
 cpp_quote("HRESULT WINAPI SHCreateItemFromIDList(PCIDLIST_ABSOLUTE pidl, REFIID riid, void **ppv);")
@@ -730,6 +743,8 @@ cpp_quote("HRESULT WINAPI SHGetIDListFromObject(IUnknown *punk, PIDLIST_ABSOLUTE
 cpp_quote("HRESULT WINAPI SHGetItemFromObject(IUnknown *punk, REFIID riid, void **ppv);")
 cpp_quote("HRESULT WINAPI SHCreateShellItemArray(PCIDLIST_ABSOLUTE pidlParent, IShellFolder* psf, UINT cidl, PCUITEMID_CHILD_ARRAY ppidl, IShellItemArray **ppsiItemArray);")
 cpp_quote("HRESULT WINAPI SHCreateShellItemArrayFromShellItem(IShellItem *psi, REFIID riid, void **ppv);")
+cpp_quote("HRESULT WINAPI SetCurrentProcessExplicitAppUserModelID(PCWSTR AppID);")
+cpp_quote("HRESULT WINAPI GetCurrentProcessExplicitAppUserModelID(PWSTR *AppID);")
 cpp_quote("HRESULT WINAPI SHCreateShellItemArrayFromIDLists(UINT cidl, PCIDLIST_ABSOLUTE_ARRAY pidl_array, IShellItemArray **psia);")
 cpp_quote("HRESULT WINAPI SHCreateShellItemArrayFromDataObject(IDataObject *pdo, REFIID riid, void **ppv);")
 
@@ -4953,6 +4968,14 @@ library ShellObjects
     }
 
     [
+        uuid(14010e02-bbbd-41f0-88e3-eda371216584)
+    ]
+    coclass SearchFolderItemFactory
+    {
+        interface ISearchFolderItemFactory;
+    }
+
+    [
         uuid(86bec222-30f2-47e0-9f25-60d11cd75c28)
     ]
     coclass ApplicationDocumentLists
@@ -5626,6 +5649,27 @@ interface IContextMenuSite : IUnknown
         [in] IUnknown* punkContextMenu,
         [in] UINT fFlags,
         [in] POINT pt);
+}
+
+[
+    object,
+    uuid(a0ffbc28-5482-4366-be27-3e81e78e06c2),
+    pointer_default(unique)
+]
+interface ISearchFolderItemFactory : IUnknown
+{
+    HRESULT SetDisplayName([in, string] LPCWSTR pszDisplayName);
+    HRESULT SetFolderTypeID([in] FOLDERTYPEID ftid);
+    HRESULT SetFolderLogicalViewMode([in] FOLDERLOGICALVIEWMODE flvm);
+    HRESULT SetIconSize([in] int iIconSize);
+    HRESULT SetVisibleColumns([in] UINT cVisibleColumns, [in, size_is(cVisibleColumns)] PROPERTYKEY const *rgKey);
+    HRESULT SetSortColumns([in] UINT cSortColumns, [in, size_is(cSortColumns)] SORTCOLUMN *rgSortColumns);
+    HRESULT SetGroupColumn([in] REFPROPERTYKEY keyGroup);
+    HRESULT SetStacks([in] UINT cStackKeys, [in, size_is(cStackKeys)] PROPERTYKEY *rgStackKeys);
+    HRESULT SetScope([in] IShellItemArray *psiaScope);
+    HRESULT SetCondition([in] ICondition *pCondition);
+    HRESULT GetShellItem([in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    HRESULT GetIDList([out] PIDLIST_ABSOLUTE *ppidl);
 }
 
 [

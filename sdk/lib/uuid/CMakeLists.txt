@@ -92,6 +92,7 @@ list(APPEND IDL_SOURCES
     objidl.idl
     objidlbase.idl
     objsafe.idl
+    objectarray.idl
     ocidl.idl
     ocmm.idl
     oleacc.idl
@@ -130,7 +131,10 @@ list(APPEND IDL_SOURCES
 #    tapi3.idl
 #    tapi3if.idl
 #    termmgr.idl
+    structuredquery.idl
+    structuredquerycondition.idl
     textstor.idl
+    thumbcache.idl
 #    tlog.idl
     tlogstg.idl
     transact.idl

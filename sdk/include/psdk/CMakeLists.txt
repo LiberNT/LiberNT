@@ -164,9 +164,11 @@ list(APPEND SOURCE
     systemmediatransportcontrolsinterop.idl
 #   stdole2.idl
     strmif.idl
+    structuredquery.idl
     structuredquerycondition.idl
     taskschd.idl
     textstor.idl
+    thumbcache.idl
     tlogstg.idl
     tom.idl
     transact.idl

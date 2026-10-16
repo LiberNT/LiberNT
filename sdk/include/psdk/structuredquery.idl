@@ -1,0 +1,136 @@
+/*
+ * PROJECT:     LiberNT SDK
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Structured Query condition factory interfaces
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+import "structuredquerycondition.idl";
+import "objectarray.idl";
+
+cpp_quote("#if 0")
+typedef PROPERTYKEY *REFPROPERTYKEY;
+cpp_quote("#endif")
+cpp_quote("#include <propkeydef.h>")
+
+typedef [v1_enum] enum STRUCTURED_QUERY_RESOLVE_OPTION
+{
+    SQRO_DEFAULT                           = 0x00000000,
+    SQRO_DONT_RESOLVE_DATETIME             = 0x00000001,
+    SQRO_ALWAYS_ONE_INTERVAL               = 0x00000002,
+    SQRO_DONT_SIMPLIFY_CONDITION_TREES     = 0x00000004,
+    SQRO_DONT_MAP_RELATIONS                = 0x00000008,
+    SQRO_DONT_RESOLVE_RANGES               = 0x00000010,
+    SQRO_DONT_REMOVE_UNRESTRICTED_KEYWORDS = 0x00000020,
+    SQRO_DONT_SPLIT_WORDS                  = 0x00000040,
+    SQRO_IGNORE_PHRASE_ORDER               = 0x00000080,
+    SQRO_ADD_VALUE_TYPE_FOR_PLAIN_VALUES   = 0x00000100,
+    SQRO_ADD_ROBUST_ITEM_NAME              = 0x00000200,
+} STRUCTURED_QUERY_RESOLVE_OPTION;
+cpp_quote("DEFINE_ENUM_FLAG_OPERATORS(STRUCTURED_QUERY_RESOLVE_OPTION)")
+
+[
+    object,
+    uuid(a5efe073-b16f-474f-9f3e-9f8b497a3e08),
+    pointer_default(unique)
+]
+interface IConditionFactory : IUnknown
+{
+    HRESULT MakeNot([in] ICondition *pcSub, [in] BOOL fSimplify, [out, retval] ICondition **ppcResult);
+    HRESULT MakeAndOr([in] CONDITION_TYPE ct, [in] IEnumUnknown *peuSubs, [in] BOOL fSimplify, [out, retval] ICondition **ppcResult);
+    HRESULT MakeLeaf([in, unique] LPCWSTR pszPropertyName, [in] CONDITION_OPERATION cop, [in, unique] LPCWSTR pszValueType,
+                     [in] PROPVARIANT const *ppropvar, [in] IRichChunk *pPropertyNameTerm, [in] IRichChunk *pOperationTerm,
+                     [in] IRichChunk *pValueTerm, [in] BOOL fExpand, [out, retval] ICondition **ppcResult);
+    [local] HRESULT Resolve([in] ICondition *pc, [in] STRUCTURED_QUERY_RESOLVE_OPTION sqro,
+                            [in, ref] SYSTEMTIME const *pstReferenceTime, [out, retval] ICondition **ppcResolved);
+}
+
+typedef [v1_enum] enum CONDITION_CREATION_OPTIONS
+{
+    CONDITION_CREATION_DEFAULT            = 0x00000000,
+    CONDITION_CREATION_NONE               = 0x00000000,
+    CONDITION_CREATION_SIMPLIFY           = 0x00000001,
+    CONDITION_CREATION_VECTOR_AND         = 0x00000002,
+    CONDITION_CREATION_VECTOR_OR          = 0x00000004,
+    CONDITION_CREATION_VECTOR_LEAF        = 0x00000008,
+    CONDITION_CREATION_USE_CONTENT_LOCALE = 0x00000010,
+} CONDITION_CREATION_OPTIONS;
+cpp_quote("DEFINE_ENUM_FLAG_OPERATORS(CONDITION_CREATION_OPTIONS)")
+
+[
+    uuid(71d222e1-432f-429e-8c13-b6dafde5077a),
+    object,
+    pointer_default(unique),
+    local
+]
+interface IConditionFactory2 : IConditionFactory
+{
+    HRESULT CreateTrueFalse([in] BOOL fVal, [in] CONDITION_CREATION_OPTIONS cco,
+                            [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    HRESULT CreateNegation([in] ICondition *pcSub, [in] CONDITION_CREATION_OPTIONS cco,
+                           [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    HRESULT CreateCompoundFromObjectArray([in] CONDITION_TYPE ct, [in] IObjectArray *poaSubs,
+                                          [in] CONDITION_CREATION_OPTIONS cco,
+                                          [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    HRESULT CreateCompoundFromArray([in] CONDITION_TYPE ct, [in, size_is(cSubs)] ICondition **ppcondSubs,
+                                    [in] ULONG cSubs, [in] CONDITION_CREATION_OPTIONS cco,
+                                    [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    HRESULT CreateStringLeaf([in] REFPROPERTYKEY propkey, [in] CONDITION_OPERATION cop,
+                             [in] LPCWSTR pszValue, [in] LPCWSTR pszLocaleName,
+                             [in] CONDITION_CREATION_OPTIONS cco,
+                             [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    HRESULT CreateIntegerLeaf([in] REFPROPERTYKEY propkey, [in] CONDITION_OPERATION cop,
+                              [in] INT32 lValue, [in] CONDITION_CREATION_OPTIONS cco,
+                              [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    HRESULT CreateBooleanLeaf([in] REFPROPERTYKEY propkey, [in] CONDITION_OPERATION cop,
+                              [in] BOOL fValue, [in] CONDITION_CREATION_OPTIONS cco,
+                              [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    HRESULT CreateLeaf([in] REFPROPERTYKEY propkey, [in] CONDITION_OPERATION cop,
+                       [in] REFPROPVARIANT propvar, [in] LPCWSTR pszSemanticType,
+                       [in] LPCWSTR pszLocaleName, [in] IRichChunk *pPropertyNameTerm,
+                       [in] IRichChunk *pOperationTerm, [in] IRichChunk *pValueTerm,
+                       [in] CONDITION_CREATION_OPTIONS cco,
+                       [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+    HRESULT ResolveCondition([in] ICondition *pc, [in] STRUCTURED_QUERY_RESOLVE_OPTION sqro,
+                             [in] SYSTEMTIME const *pstReferenceTime,
+                             [in] REFIID riid, [out, iid_is(riid)] void **ppv);
+}
+
+[
+    uuid(1352fa67-2022-41df-9d6f-943a5ee97c9f),
+    version(1.0)
+]
+library StructuredQuery1
+{
+    [
+        uuid(8de9c74c-605a-4acd-bee3-2b222aa2d23d)
+    ]
+    coclass NegationCondition
+    {
+        [default] interface ICondition;
+    };
+
+    [
+        uuid(116f8d13-101e-4fa5-84d4-ff8279381935)
+    ]
+    coclass CompoundCondition
+    {
+        [default] interface ICondition;
+    };
+
+    [
+        uuid(52f15c89-5a17-48e1-bbcd-46a3f89c7cc2)
+    ]
+    coclass LeafCondition
+    {
+        [default] interface ICondition;
+    };
+
+    [
+        uuid(e03e85b0-7be3-4000-ba98-6c13de9fa486)
+    ]
+    coclass ConditionFactory
+    {
+        [default] interface IConditionFactory;
+    };
+}
