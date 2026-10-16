@@ -5,6 +5,7 @@ list(APPEND SOURCE
     blend.cpp
     bundle.cpp
     device.cpp
+    factory.cpp
     features.cpp
     heaps.cpp
     interfaces.cpp
