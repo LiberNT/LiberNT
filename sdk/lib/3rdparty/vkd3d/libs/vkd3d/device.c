@@ -3569,13 +3569,14 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_QueryInterface(ID3D12Device14 *ifa
         return S_OK;
     }
 
-    if (IsEqualGUID(riid, &IID_ID3D12DeviceRemovedExtendedData1)
+    if (IsEqualGUID(riid, &IID_ID3D12DeviceRemovedExtendedData2)
+            || IsEqualGUID(riid, &IID_ID3D12DeviceRemovedExtendedData1)
             || IsEqualGUID(riid, &IID_ID3D12DeviceRemovedExtendedData))
     {
         struct d3d12_device *device = impl_from_ID3D12Device14(iface);
 
         ID3D12Device14_AddRef(iface);
-        *object = &device->ID3D12DeviceRemovedExtendedData1_iface;
+        *object = &device->ID3D12DeviceRemovedExtendedData2_iface;
         return S_OK;
     }
 
@@ -6370,71 +6371,113 @@ void vkd3d_set_dred_enablement(D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRE
     InterlockedExchange(&vkd3d_dred_page_fault, page_fault);
 }
 
-static HRESULT d3d12_device_dred_status(D3D12_DRED_ENABLEMENT enablement)
+static HRESULT d3d12_device_dred_status(struct d3d12_device *device, D3D12_DRED_ENABLEMENT enablement)
 {
-    return enablement == D3D12_DRED_ENABLEMENT_FORCED_ON ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : DXGI_ERROR_UNSUPPORTED;
+    if (enablement != D3D12_DRED_ENABLEMENT_FORCED_ON)
+        return DXGI_ERROR_UNSUPPORTED;
+    return SUCCEEDED(device->removed_reason) ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : S_OK;
 }
 
-static inline struct d3d12_device *impl_from_ID3D12DeviceRemovedExtendedData1(ID3D12DeviceRemovedExtendedData1 *iface)
+static inline struct d3d12_device *impl_from_ID3D12DeviceRemovedExtendedData2(ID3D12DeviceRemovedExtendedData2 *iface)
 {
-    return CONTAINING_RECORD(iface, struct d3d12_device, ID3D12DeviceRemovedExtendedData1_iface);
+    return CONTAINING_RECORD(iface, struct d3d12_device, ID3D12DeviceRemovedExtendedData2_iface);
 }
 
-static HRESULT STDMETHODCALLTYPE d3d12_device_dred_QueryInterface(ID3D12DeviceRemovedExtendedData1 *iface,
+static HRESULT STDMETHODCALLTYPE d3d12_device_dred_QueryInterface(ID3D12DeviceRemovedExtendedData2 *iface,
         REFIID riid, void **object)
 {
-    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData1(iface);
+    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData2(iface);
 
     return d3d12_device_QueryInterface(&device->ID3D12Device14_iface, riid, object);
 }
 
-static ULONG STDMETHODCALLTYPE d3d12_device_dred_AddRef(ID3D12DeviceRemovedExtendedData1 *iface)
+static ULONG STDMETHODCALLTYPE d3d12_device_dred_AddRef(ID3D12DeviceRemovedExtendedData2 *iface)
 {
-    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData1(iface);
+    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData2(iface);
 
     return d3d12_device_AddRef(&device->ID3D12Device14_iface);
 }
 
-static ULONG STDMETHODCALLTYPE d3d12_device_dred_Release(ID3D12DeviceRemovedExtendedData1 *iface)
+static ULONG STDMETHODCALLTYPE d3d12_device_dred_Release(ID3D12DeviceRemovedExtendedData2 *iface)
 {
-    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData1(iface);
+    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData2(iface);
 
     return d3d12_device_Release(&device->ID3D12Device14_iface);
 }
 
-static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetAutoBreadcrumbsOutput(ID3D12DeviceRemovedExtendedData1 *iface,
+static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetAutoBreadcrumbsOutput(ID3D12DeviceRemovedExtendedData2 *iface,
         D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT *output)
 {
+    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData2(iface);
+    HRESULT hr;
+
     TRACE("iface %p, output %p.\n", iface, output);
 
-    return d3d12_device_dred_status(impl_from_ID3D12DeviceRemovedExtendedData1(iface)->dred_auto_breadcrumbs);
+    if (SUCCEEDED(hr = d3d12_device_dred_status(device, device->dred_auto_breadcrumbs)))
+        output->pHeadAutoBreadcrumbNode = NULL;
+    return hr;
 }
 
-static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetPageFaultAllocationOutput(ID3D12DeviceRemovedExtendedData1 *iface,
+static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetPageFaultAllocationOutput(ID3D12DeviceRemovedExtendedData2 *iface,
         D3D12_DRED_PAGE_FAULT_OUTPUT *output)
 {
+    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData2(iface);
+    HRESULT hr;
+
     TRACE("iface %p, output %p.\n", iface, output);
 
-    return d3d12_device_dred_status(impl_from_ID3D12DeviceRemovedExtendedData1(iface)->dred_page_fault);
+    if (SUCCEEDED(hr = d3d12_device_dred_status(device, device->dred_page_fault)))
+        memset(output, 0, sizeof(*output));
+    return hr;
 }
 
-static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetAutoBreadcrumbsOutput1(ID3D12DeviceRemovedExtendedData1 *iface,
+static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetAutoBreadcrumbsOutput1(ID3D12DeviceRemovedExtendedData2 *iface,
         D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 *output)
 {
+    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData2(iface);
+    HRESULT hr;
+
     TRACE("iface %p, output %p.\n", iface, output);
 
-    return d3d12_device_dred_status(impl_from_ID3D12DeviceRemovedExtendedData1(iface)->dred_auto_breadcrumbs);
+    if (SUCCEEDED(hr = d3d12_device_dred_status(device, device->dred_auto_breadcrumbs)))
+        output->pHeadAutoBreadcrumbNode = NULL;
+    return hr;
 }
 
-static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetPageFaultAllocationOutput1(ID3D12DeviceRemovedExtendedData1 *iface,
+static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetPageFaultAllocationOutput1(ID3D12DeviceRemovedExtendedData2 *iface,
         D3D12_DRED_PAGE_FAULT_OUTPUT1 *output)
 {
+    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData2(iface);
+    HRESULT hr;
+
     TRACE("iface %p, output %p.\n", iface, output);
 
-    return d3d12_device_dred_status(impl_from_ID3D12DeviceRemovedExtendedData1(iface)->dred_page_fault);
+    if (SUCCEEDED(hr = d3d12_device_dred_status(device, device->dred_page_fault)))
+        memset(output, 0, sizeof(*output));
+    return hr;
 }
 
-static const struct ID3D12DeviceRemovedExtendedData1Vtbl d3d12_device_dred_vtbl =
+static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetPageFaultAllocationOutput2(ID3D12DeviceRemovedExtendedData2 *iface,
+        D3D12_DRED_PAGE_FAULT_OUTPUT2 *output)
+{
+    struct d3d12_device *device = impl_from_ID3D12DeviceRemovedExtendedData2(iface);
+    HRESULT hr;
+
+    TRACE("iface %p, output %p.\n", iface, output);
+
+    if (SUCCEEDED(hr = d3d12_device_dred_status(device, device->dred_page_fault)))
+        memset(output, 0, sizeof(*output));
+    return hr;
+}
+
+static D3D12_DRED_DEVICE_STATE STDMETHODCALLTYPE d3d12_device_dred_GetDeviceState(ID3D12DeviceRemovedExtendedData2 *iface)
+{
+    TRACE("iface %p.\n", iface);
+
+    return D3D12_DRED_DEVICE_STATE_UNKNOWN;
+}
+
+static const struct ID3D12DeviceRemovedExtendedData2Vtbl d3d12_device_dred_vtbl =
 {
     d3d12_device_dred_QueryInterface,
     d3d12_device_dred_AddRef,
@@ -6443,6 +6486,8 @@ static const struct ID3D12DeviceRemovedExtendedData1Vtbl d3d12_device_dred_vtbl 
     d3d12_device_dred_GetPageFaultAllocationOutput,
     d3d12_device_dred_GetAutoBreadcrumbsOutput1,
     d3d12_device_dred_GetPageFaultAllocationOutput1,
+    d3d12_device_dred_GetPageFaultAllocationOutput2,
+    d3d12_device_dred_GetDeviceState,
 };
 
 struct d3d12_device *unsafe_impl_from_ID3D12Device14(ID3D12Device14 *iface)
@@ -6494,7 +6539,7 @@ static HRESULT d3d12_device_init(struct d3d12_device *device,
     HRESULT hr;
 
     device->ID3D12Device14_iface.lpVtbl = &d3d12_device_vtbl;
-    device->ID3D12DeviceRemovedExtendedData1_iface.lpVtbl = &d3d12_device_dred_vtbl;
+    device->ID3D12DeviceRemovedExtendedData2_iface.lpVtbl = &d3d12_device_dred_vtbl;
     device->dred_auto_breadcrumbs = vkd3d_dred_auto_breadcrumbs;
     device->dred_page_fault = vkd3d_dred_page_fault;
     device->refcount = 1;
