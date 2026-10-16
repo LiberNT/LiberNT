@@ -4567,6 +4567,17 @@ interface ID3D12DeviceRemovedExtendedDataSettings1 : ID3D12DeviceRemovedExtended
 }
 
 [
+    uuid(61552388-01ab-4008-a436-83db189566ea),
+    object,
+    local,
+    pointer_default(unique)
+]
+interface ID3D12DeviceRemovedExtendedDataSettings2 : ID3D12DeviceRemovedExtendedDataSettings1
+{
+    void UseMarkersOnlyAutoBreadcrumbs(BOOL markers_only);
+}
+
+[
     uuid(98931d33-5ae8-4791-aa3c-1a73a2934e71),
     object,
     local,
