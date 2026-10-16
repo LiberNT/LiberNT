@@ -630,7 +630,7 @@ NotifyLogon(VOID)
  * Expands the path for the ReactOS Installer "reactos.exe".
  * See also base/setup/welcome/welcome.c!ExpandInstallerPath()
  */
-BOOL
+static BOOL
 ExpandInstallerPath(
     IN LPCWSTR lpInstallerName,
     OUT LPWSTR lpInstallerPath,
@@ -778,122 +778,36 @@ StartInstaller(IN LPCWSTR lpInstallerName)
     return FALSE;
 }
 
-/* Used to get the shutdown privilege */
-static BOOL
-EnablePrivilege(LPCWSTR lpszPrivilegeName, BOOL bEnablePrivilege)
-{
-    BOOL   Success;
-    HANDLE hToken;
-    TOKEN_PRIVILEGES tp;
-
-    Success = OpenProcessToken(GetCurrentProcess(),
-                               TOKEN_ADJUST_PRIVILEGES,
-                               &hToken);
-    if (!Success) return Success;
-
-    Success = LookupPrivilegeValueW(NULL,
-                                    lpszPrivilegeName,
-                                    &tp.Privileges[0].Luid);
-    if (!Success) goto Quit;
-
-    tp.PrivilegeCount = 1;
-    tp.Privileges[0].Attributes = (bEnablePrivilege ? SE_PRIVILEGE_ENABLED : 0);
-
-    Success = AdjustTokenPrivileges(hToken, FALSE, &tp, 0, NULL, NULL);
-
-Quit:
-    CloseHandle(hToken);
-    return Success;
-}
-
-
 int WINAPI
 wWinMain(IN HINSTANCE hInst,
          IN HINSTANCE hPrevInstance,
          IN LPWSTR lpszCmdLine,
          IN int nCmdShow)
 {
-    BOOL bIsLiveCD, Success = TRUE;
-    STATE State;
+    BOOL bIsLiveCD, Success;
+    PVOID pEnvironment = NULL;
 
     hInstance = hInst;
 
     bIsLiveCD = IsLiveCD();
     ApplyUserPowerScheme();
-
-Restart:
     SetUserSettings();
 
+    if (bIsLiveCD && !CreateEnvironmentBlock(&pEnvironment, NULL, TRUE))
+        WARN("CreateEnvironmentBlock() failed, fall back to default (error %lu)\n", GetLastError());
+    if (!IsConsoleShell())
+        StartDesktopCompositor(pEnvironment);
+    Success = StartShell(pEnvironment);
+    if (pEnvironment)
+        DestroyEnvironmentBlock(pEnvironment);
+#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
+    SignalEarlySplashDesktopReady(Success ? "shell_started" : "shell_failed");
+#endif
+    if (Success)
+        NotifyLogon();
+
     if (bIsLiveCD)
-    {
-        State.NextPage = LOCALEPAGE;
-        State.Run = SHELL;
-    }
-    else
-    {
-        State.NextPage = DONE;
-        State.Run = SHELL;
-    }
-
-    if (State.NextPage != DONE) // && bIsLiveCD
-    {
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-        SignalEarlySplashDesktopReady("livecd_ui_ready");
-#endif
-        RunLiveCD(&State);
-    }
-
-    switch (State.Run)
-    {
-        case SHELL:
-        {
-            /* In LiveCD mode, create a suitable environment block for the
-             * shell; otherwise, use the current one (built by WinLogon) */
-            PVOID pEnvironment = NULL;
-            if (bIsLiveCD && /* In LiveCD mode we run under the LocalSystem account */
-                !CreateEnvironmentBlock(&pEnvironment, NULL, TRUE))
-            {
-                WARN("CreateEnvironmentBlock() failed, fall back to default (error %lu)\n",
-                     GetLastError());
-            }
-            if (!IsConsoleShell())
-                StartDesktopCompositor(pEnvironment);
-            Success = StartShell(pEnvironment);
-            if (pEnvironment)
-                DestroyEnvironmentBlock(pEnvironment);
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-            if (!bIsLiveCD)
-                SignalEarlySplashDesktopReady(Success ? "shell_started" : "shell_failed");
-#endif
-            if (Success)
-                NotifyLogon();
-            break;
-        }
-
-        case INSTALLER:
-            Success = StartInstaller(L"libernt.exe");
-            break;
-
-        case REBOOT:
-        {
-            EnablePrivilege(SE_SHUTDOWN_NAME, TRUE);
-            ExitWindowsEx(EWX_REBOOT, 0);
-            EnablePrivilege(SE_SHUTDOWN_NAME, FALSE);
-            Success = TRUE;
-            break;
-        }
-
-        default:
-            Success = FALSE;
-            break;
-    }
-
-    /*
-     * In LiveCD mode, go back to the main menu if we failed
-     * to either start the shell or the installer.
-     */
-    if (bIsLiveCD && !Success)
-        goto Restart;
+        StartInstaller(L"libernt.exe");
 
     return 0;
 }

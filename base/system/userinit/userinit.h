@@ -35,38 +35,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(userinit);
 #include "resource.h"
 
 
-typedef enum
-{
-    LOCALEPAGE,
-    STARTPAGE,
-    DONE
-} PAGESTATE;
-
-typedef enum
-{
-    SHELL,
-    INSTALLER,
-    REBOOT
-} RUN;
-
-typedef struct _IMGINFO
-{
-    HBITMAP hBitmap;
-    INT cxSource;
-    INT cySource;
-    INT iPlanes;
-    INT iBits;
-} IMGINFO, *PIMGINFO;
-
-typedef struct
-{
-    PAGESTATE NextPage;
-    RUN Run;
-    IMGINFO ImageInfo;
-    struct _LIVECD_UNATTEND* Unattend;
-} STATE, *PSTATE;
-
-
 extern HINSTANCE hInstance;
 
 LONG
@@ -76,16 +44,6 @@ ReadRegSzKey(
     OUT LPWSTR *pValue);
 
 BOOL
-ExpandInstallerPath(
-    IN LPCWSTR lpInstallerName,
-    OUT LPWSTR lpInstallerPath,
-    IN SIZE_T PathSize);
-
-BOOL
 IsLiveCD(VOID);
-
-VOID
-RunLiveCD(
-    PSTATE State);
 
 #endif /* __USERINIT_H__ */

@@ -10,10 +10,6 @@
 
 #include <reactos/manifest_exe.rc>
 
-/* Bitmaps */
-IDB_ROSLOGO BITMAP "res/rosbitmap.bmp"
-IDB_ROSMASK BITMAP "res/rosbitmap_mask.bmp"
-
 /* UTF-8 */
 #pragma code_page(65001)
 
