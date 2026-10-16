@@ -340,10 +340,60 @@ IopCopyPropertyData(
 }
 
 static
+PDEVICE_NODE
+IopGetPdoDeviceNode(
+    _In_ PDEVICE_OBJECT Pdo)
+{
+    PEXTENDED_DEVOBJ_EXTENSION DeviceObjectExtension;
+
+    DeviceObjectExtension = (PEXTENDED_DEVOBJ_EXTENSION)Pdo->DeviceObjectExtension;
+    if (!DeviceObjectExtension)
+        return NULL;
+
+    return DeviceObjectExtension->DeviceNode;
+}
+
+static
+NTSTATUS
+IopOpenDeviceInstanceKey(
+    _In_ PDEVICE_OBJECT Pdo,
+    _Out_ PHANDLE KeyHandle)
+{
+    static const WCHAR EnumRoot[] = L"\\Registry\\Machine\\System\\CurrentControlSet\\Enum\\";
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING KeyName;
+    PDEVICE_NODE DeviceNode;
+    NTSTATUS Status;
+
+    DeviceNode = IopGetPdoDeviceNode(Pdo);
+    if (!DeviceNode || !DeviceNode->InstancePath.Buffer)
+        return STATUS_INVALID_DEVICE_REQUEST;
+
+    KeyName.Length = 0;
+    KeyName.MaximumLength = sizeof(EnumRoot) + DeviceNode->InstancePath.Length;
+    KeyName.Buffer = ExAllocatePoolWithTag(PagedPool, KeyName.MaximumLength, TAG_IOVP);
+    if (!KeyName.Buffer)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlAppendUnicodeToString(&KeyName, EnumRoot);
+    RtlAppendUnicodeStringToString(&KeyName, &DeviceNode->InstancePath);
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &KeyName,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+    Status = ZwOpenKey(KeyHandle, KEY_READ, &ObjectAttributes);
+    ExFreePoolWithTag(KeyName.Buffer, TAG_IOVP);
+    return Status;
+}
+
+static
 NTSTATUS
 NTAPI
 IopQueryDeviceRegistryValueData(
     _In_ PDEVICE_OBJECT Pdo,
+    _In_ BOOLEAN DriverKey,
     _In_ PCWSTR ValueNameString,
     _In_ ULONG RegistryType,
     _In_ DEVPROPTYPE PropertyType,
@@ -359,10 +409,10 @@ IopQueryDeviceRegistryValueData(
     PKEY_VALUE_PARTIAL_INFORMATION ValueInfo = NULL;
     NTSTATUS Status;
 
-    Status = IoOpenDeviceRegistryKey(Pdo,
-                                     PLUGPLAY_REGKEY_DEVICE,
-                                     KEY_READ,
-                                     &DeviceKey);
+    if (DriverKey)
+        Status = IoOpenDeviceRegistryKey(Pdo, PLUGPLAY_REGKEY_DRIVER, KEY_READ, &DeviceKey);
+    else
+        Status = IopOpenDeviceInstanceKey(Pdo, &DeviceKey);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -480,6 +530,83 @@ IopFindMappedDeviceProperty(
     return NULL;
 }
 
+typedef struct _IOP_DEVPROP_DRIVER_VALUE
+{
+    CONST DEVPROPKEY *PropertyKey;
+    PCWSTR ValueName;
+    ULONG RegistryType;
+    DEVPROPTYPE Type;
+} IOP_DEVPROP_DRIVER_VALUE;
+
+static
+const IOP_DEVPROP_DRIVER_VALUE *
+IopFindDriverKeyProperty(
+    _In_ CONST DEVPROPKEY *PropertyKey)
+{
+    static const IOP_DEVPROP_DRIVER_VALUE DriverValues[] =
+    {
+        { &DEVPKEY_Device_DriverDate,       L"DriverDateData",   REG_BINARY, DEVPROP_TYPE_FILETIME },
+        { &DEVPKEY_Device_DriverVersion,    L"DriverVersion",    REG_SZ,     DEVPROP_TYPE_STRING },
+        { &DEVPKEY_Device_DriverDesc,       L"DriverDesc",       REG_SZ,     DEVPROP_TYPE_STRING },
+        { &DEVPKEY_Device_DriverInfPath,    L"InfPath",          REG_SZ,     DEVPROP_TYPE_STRING },
+        { &DEVPKEY_Device_DriverInfSection, L"InfSection",       REG_SZ,     DEVPROP_TYPE_STRING },
+        { &DEVPKEY_Device_MatchingDeviceId, L"MatchingDeviceId", REG_SZ,     DEVPROP_TYPE_STRING },
+        { &DEVPKEY_Device_DriverProvider,   L"ProviderName",     REG_SZ,     DEVPROP_TYPE_STRING },
+    };
+    ULONG i;
+
+    for (i = 0; i < RTL_NUMBER_OF(DriverValues); ++i)
+    {
+        if (IopIsEqualDevPropKey(PropertyKey, DriverValues[i].PropertyKey))
+            return &DriverValues[i];
+    }
+
+    return NULL;
+}
+
+static
+NTSTATUS
+IopQueryDeviceStack(
+    _In_ PDEVICE_OBJECT Pdo,
+    _In_ ULONG Size,
+    _Out_writes_bytes_opt_(Size) PVOID Data,
+    _Out_ PULONG RequiredSize,
+    _Out_ PDEVPROPTYPE Type)
+{
+    PDEVICE_OBJECT DeviceObject, LowerDevice;
+    PWCHAR Output = Data;
+    ULONG Needed = sizeof(WCHAR);
+    ULONG Offset = 0;
+
+    *Type = DEVPROP_TYPE_STRING_LIST;
+
+    DeviceObject = IoGetAttachedDeviceReference(Pdo);
+    while (DeviceObject)
+    {
+        PUNICODE_STRING Name = &DeviceObject->DriverObject->DriverName;
+
+        Needed += Name->Length + sizeof(WCHAR);
+        if (Output && Needed <= Size)
+        {
+            RtlCopyMemory((PUCHAR)Output + Offset, Name->Buffer, Name->Length);
+            Offset += Name->Length;
+            Output[Offset / sizeof(WCHAR)] = UNICODE_NULL;
+            Offset += sizeof(WCHAR);
+        }
+
+        LowerDevice = (DeviceObject == Pdo) ? NULL : IoGetLowerDeviceObject(DeviceObject);
+        ObDereferenceObject(DeviceObject);
+        DeviceObject = LowerDevice;
+    }
+
+    *RequiredSize = Needed;
+    if (!Output || Size < Needed)
+        return STATUS_BUFFER_TOO_SMALL;
+
+    Output[Offset / sizeof(WCHAR)] = UNICODE_NULL;
+    return STATUS_SUCCESS;
+}
+
 static
 NTSTATUS
 NTAPI
@@ -492,24 +619,13 @@ IopQueryMappedDevicePropertyData(
     _Out_ PDEVPROPTYPE Type)
 {
     const IOP_DEVPROP_LEGACY_MAP *Mapping;
+    const IOP_DEVPROP_DRIVER_VALUE *DriverValue;
     NTSTATUS Status;
 
     if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_InLocalMachineContainer))
     {
         DEVPROP_BOOLEAN Value = DEVPROP_TRUE;
         return IopCopyPropertyData(DEVPROP_TYPE_BOOLEAN,
-                                   &Value,
-                                   sizeof(Value),
-                                   Size,
-                                   Data,
-                                   RequiredSize,
-                                   Type);
-    }
-
-    if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_SessionId))
-    {
-        ULONG Value = MAXULONG;
-        return IopCopyPropertyData(DEVPROP_TYPE_UINT32,
                                    &Value,
                                    sizeof(Value),
                                    Size,
@@ -551,6 +667,7 @@ IopQueryMappedDevicePropertyData(
     if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_Service))
     {
         return IopQueryDeviceRegistryValueData(Pdo,
+                                               FALSE,
                                                L"Service",
                                                REG_SZ,
                                                DEVPROP_TYPE_STRING,
@@ -564,6 +681,7 @@ IopQueryMappedDevicePropertyData(
     if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_ConfigFlags))
     {
         return IopQueryDeviceRegistryValueData(Pdo,
+                                               FALSE,
                                                L"ConfigFlags",
                                                REG_DWORD,
                                                DEVPROP_TYPE_UINT32,
@@ -577,6 +695,7 @@ IopQueryMappedDevicePropertyData(
     if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_Capabilities))
     {
         return IopQueryDeviceRegistryValueData(Pdo,
+                                               FALSE,
                                                L"Capabilities",
                                                REG_DWORD,
                                                DEVPROP_TYPE_UINT32,
@@ -590,6 +709,7 @@ IopQueryMappedDevicePropertyData(
     if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_UpperFilters))
     {
         return IopQueryDeviceRegistryValueData(Pdo,
+                                               FALSE,
                                                L"UpperFilters",
                                                REG_MULTI_SZ,
                                                DEVPROP_TYPE_STRING_LIST,
@@ -603,6 +723,7 @@ IopQueryMappedDevicePropertyData(
     if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_LowerFilters))
     {
         return IopQueryDeviceRegistryValueData(Pdo,
+                                               FALSE,
                                                L"LowerFilters",
                                                REG_MULTI_SZ,
                                                DEVPROP_TYPE_STRING_LIST,
@@ -616,10 +737,51 @@ IopQueryMappedDevicePropertyData(
     if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_ContainerId))
     {
         return IopQueryDeviceRegistryValueData(Pdo,
+                                               FALSE,
                                                L"ContainerID",
                                                REG_SZ,
                                                DEVPROP_TYPE_GUID,
                                                TRUE,
+                                               Size,
+                                               Data,
+                                               RequiredSize,
+                                               Type);
+    }
+
+    if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_ProblemCode) ||
+        IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_HasProblem) ||
+        IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_IsPresent))
+    {
+        PDEVICE_NODE DeviceNode = IopGetPdoDeviceNode(Pdo);
+        ULONG Problem;
+        DEVPROP_BOOLEAN Value;
+
+        if (!DeviceNode)
+            return STATUS_INVALID_DEVICE_REQUEST;
+
+        Problem = (DeviceNode->Flags & DNF_HAS_PROBLEM) ? DeviceNode->Problem : 0;
+        if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_ProblemCode))
+            return IopCopyPropertyData(DEVPROP_TYPE_UINT32, &Problem, sizeof(Problem), Size, Data, RequiredSize, Type);
+
+        if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_HasProblem))
+            Value = (DeviceNode->Flags & DNF_HAS_PROBLEM) ? DEVPROP_TRUE : DEVPROP_FALSE;
+        else
+            Value = DEVPROP_TRUE;
+        return IopCopyPropertyData(DEVPROP_TYPE_BOOLEAN, &Value, sizeof(Value), Size, Data, RequiredSize, Type);
+    }
+
+    if (IopIsEqualDevPropKey(PropertyKey, &DEVPKEY_Device_Stack))
+        return IopQueryDeviceStack(Pdo, Size, Data, RequiredSize, Type);
+
+    DriverValue = IopFindDriverKeyProperty(PropertyKey);
+    if (DriverValue)
+    {
+        return IopQueryDeviceRegistryValueData(Pdo,
+                                               TRUE,
+                                               DriverValue->ValueName,
+                                               DriverValue->RegistryType,
+                                               DriverValue->Type,
+                                               FALSE,
                                                Size,
                                                Data,
                                                RequiredSize,
