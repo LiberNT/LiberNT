@@ -307,6 +307,7 @@ KMT_TESTFUNC Test_ObOpenByPointer;
 KMT_TESTFUNC Test_ObSecurityDescKM;
 KMT_TESTFUNC Test_PsNotifyKM;
 KMT_TESTFUNC Test_RtlBitmapKM;
+KMT_TESTFUNC Test_RtlBitmapEx;
 KMT_TESTFUNC Test_RtlGuidKM;
 KMT_TESTFUNC Test_RtlHashTableKM;
 KMT_TESTFUNC Test_RtlTimeKM;
@@ -612,6 +613,7 @@ const KMT_TEST TestList[] =
     { "PsNotifyKM",                         Test_PsNotifyKM },
     { "PsSystemThread",                     Test_PsSystemThread },
     { "RtlBitmapKM",                        Test_RtlBitmapKM },
+    { "RtlBitmapEx",                        Test_RtlBitmapEx },
     { "RtlGenericTableKM",                  Test_RtlGenericTableKM },
     { "RtlTableElementKM",                  Test_RtlTableElementKM },
     { "RtlGuidKM",                          Test_RtlGuidKM },

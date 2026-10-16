@@ -3036,7 +3036,7 @@
 @ stub -arch=win64 RtlFillMemoryNonTemporal
 @ stub -arch=win64 RtlFillNonVolatileMemory
 @ stub -arch=win64 RtlFindAceByType
-@ stub -arch=win64 RtlFindClearBitsAndSetEx
+@ stdcall -arch=win64 RtlFindClearBitsAndSetEx(ptr int64 int64) RtlFindClearBitsAndSet64
 @ stub -arch=win64 RtlFindClearBitsEx
 @ stub -arch=win64 RtlFindClosestEncodableLength
 @ stub -arch=win64 RtlFindNextForwardRunClearCapped
@@ -3186,7 +3186,7 @@
 @ stdcall RtlStringFromGUIDEx(ptr ptr long)
 @ stub -arch=win64 RtlStronglyEnumerateEntryHashTable
 @ stdcall RtlSuffixUnicodeString(ptr ptr long)
-@ stub -arch=win64 RtlTestBitEx
+@ stdcall -arch=win64 RtlTestBitEx(ptr int64) RtlTestBit64
 @ stdcall RtlUTF8StringToUnicodeString(ptr ptr long)
 @ stub -arch=arm64 RtlUdiv128
 @ stub -arch=win64 RtlUnicodeStringToInt64

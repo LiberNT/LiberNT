@@ -264,6 +264,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_se/SeTokenFiltering.c
     ntos_tm/TmTransactions.c
     rtl/RtlBitmapKM.c
+    rtl/RtlBitmapEx.c
     rtl/RtlAtomEx.c
     rtl/RtlGenericTableKM.c
     rtl/RtlTableElementKM.c
