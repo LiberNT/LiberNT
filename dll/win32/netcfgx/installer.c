@@ -165,6 +165,29 @@ GetUniqueConnectionName(
 
 static
 LONG
+SetSingleMultiSzValue(
+    _In_ HKEY hKey,
+    _In_ PCWSTR ValueName,
+    _In_ PCWSTR String)
+{
+    SIZE_T Length = wcslen(String);
+    PWSTR Buffer;
+    LONG rc;
+
+    Buffer = HeapAlloc(GetProcessHeap(), 0, (Length + 2) * sizeof(WCHAR));
+    if (Buffer == NULL)
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    CopyMemory(Buffer, String, Length * sizeof(WCHAR));
+    Buffer[Length] = UNICODE_NULL;
+    Buffer[Length + 1] = UNICODE_NULL;
+    rc = RegSetValueExW(hKey, ValueName, 0, REG_MULTI_SZ, (const BYTE*)Buffer, (DWORD)((Length + 2) * sizeof(WCHAR)));
+    HeapFree(GetProcessHeap(), 0, Buffer);
+    return rc;
+}
+
+static
+LONG
 SetNetSetupProperty(
     _In_ HKEY hPropertiesKey,
     _In_ const GUID *Fmtid,
@@ -679,21 +702,21 @@ InstallNetDevice(
         goto cleanup;
     }
 
-    rc = RegSetValueExW(hLinkageKey, L"Export", 0, REG_SZ, (const BYTE*)DeviceName, (wcslen(DeviceName) + 1) * sizeof(WCHAR));
+    rc = SetSingleMultiSzValue(hLinkageKey, L"Export", DeviceName);
     if (rc != ERROR_SUCCESS)
     {
         ERR("RegSetValueExW() failed with error 0x%lx\n", rc);
         goto cleanup;
     }
 
-    rc = RegSetValueExW(hLinkageKey, L"RootDevice", 0, REG_SZ, (const BYTE*)UuidString, (wcslen(UuidString) + 1) * sizeof(WCHAR));
+    rc = SetSingleMultiSzValue(hLinkageKey, L"RootDevice", UuidString);
     if (rc != ERROR_SUCCESS)
     {
         ERR("RegSetValueExW() failed with error 0x%lx\n", rc);
         goto cleanup;
     }
 
-    rc = RegSetValueExW(hLinkageKey, L"UpperBind", 0, REG_SZ, (const BYTE*)L"Tcpip", (wcslen(L"Tcpip") + 1) * sizeof(WCHAR));
+    rc = SetSingleMultiSzValue(hLinkageKey, L"UpperBind", L"Tcpip");
     if (rc != ERROR_SUCCESS)
     {
         ERR("RegSetValueExW() failed with error 0x%lx\n", rc);
