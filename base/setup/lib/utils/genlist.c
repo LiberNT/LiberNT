@@ -102,7 +102,7 @@ NTAPI
 GetCurrentListEntry(
     IN PGENERIC_LIST List)
 {
-    return List->CurrentEntry;
+    return List ? List->CurrentEntry : NULL;
 }
 
 PGENERIC_LIST_ENTRY

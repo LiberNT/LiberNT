@@ -3352,13 +3352,69 @@ CreatePartition(
     return TRUE;
 }
 
+static
+BOOLEAN
+IsSupportedActivePartition(
+    IN PPARTENTRY PartEntry);
+
+static
+BOOLEAN
+GptDiskHasPartitionType(
+    _In_ PDISKENTRY DiskEntry,
+    _In_ const GUID* PartitionType)
+{
+    PLIST_ENTRY Entry;
+    PPARTENTRY PartEntry;
+
+    for (Entry = DiskEntry->PrimaryPartListHead.Flink;
+         Entry != &DiskEntry->PrimaryPartListHead;
+         Entry = Entry->Flink)
+    {
+        PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
+        if (PartEntry->IsPartitioned && IsEqualGUID(&PartEntry->PartitionTypeGuid, PartitionType))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+static
+PPARTENTRY
+GetGptSystemDiskPartition(
+    _In_ PPARTLIST List)
+{
+    PDISKENTRY SystemDisk = GetSystemDisk(List);
+    PPARTENTRY ActivePartition;
+
+    if (!SystemDisk || SystemDisk->DiskStyle != PARTITION_STYLE_GPT)
+        return NULL;
+
+    ActivePartition = GetActiveDiskPartition(SystemDisk);
+    if (!ActivePartition || !IsSupportedActivePartition(ActivePartition))
+        return NULL;
+
+    return ActivePartition;
+}
+
+static
+BOOLEAN
+GptDiskNeedsEfiPartition(
+    _In_ PDISKENTRY DiskEntry)
+{
+    return !GetActiveDiskPartition(DiskEntry) &&
+           !GetGptSystemDiskPartition(DiskEntry->PartList);
+}
+
 BOOLEAN
 NTAPI
 GptDiskNeedsSystemPartitions(
     _In_ PPARTENTRY PartEntry)
 {
-    return (PartEntry->DiskEntry->DiskStyle == PARTITION_STYLE_GPT) &&
-           !GetActiveDiskPartition(PartEntry->DiskEntry);
+    PDISKENTRY DiskEntry = PartEntry->DiskEntry;
+
+    return (DiskEntry->DiskStyle == PARTITION_STYLE_GPT) &&
+           (GptDiskNeedsEfiPartition(DiskEntry) ||
+            !GptDiskHasPartitionType(DiskEntry, &PARTITION_MSFT_RESERVED_GUID));
 }
 
 BOOLEAN
@@ -3373,27 +3429,43 @@ CreateGptSystemPartitions(
     PDISKENTRY DiskEntry = Free->DiskEntry;
     ULONGLONG EfiSize = (DiskEntry->BytesPerSector >= 4096 ? 260ULL : 100ULL) * 1024 * 1024;
     ULONGLONG ReservedSize = 16ULL * 1024 * 1024;
-    PPARTENTRY Next;
+    BOOLEAN NeedEfi, NeedReserved;
 
     *EfiPartition = NULL;
     *ReservedPartition = NULL;
 
-    if (DiskEntry->DiskStyle != PARTITION_STYLE_GPT || Free->IsPartitioned ||
-        GetPartEntrySizeInBytes(Free) <= EfiSize + ReservedSize)
-    {
+    if (DiskEntry->DiskStyle != PARTITION_STYLE_GPT || Free->IsPartitioned)
         return FALSE;
+
+    NeedEfi = GptDiskNeedsEfiPartition(DiskEntry);
+    NeedReserved = !GptDiskHasPartitionType(DiskEntry, &PARTITION_MSFT_RESERVED_GUID);
+    if (!NeedEfi)
+        EfiSize = 0;
+    if (!NeedReserved)
+        ReservedSize = 0;
+
+    if (GetPartEntrySizeInBytes(Free) <= EfiSize + ReservedSize)
+        return FALSE;
+
+    if (NeedEfi)
+    {
+        if (!CreatePartition(List, Free, EfiSize, (ULONG_PTR)&PARTITION_SYSTEM_GUID))
+            return FALSE;
+        *EfiPartition = Free;
+        Free = GetAdjUnpartitionedEntry(Free, TRUE);
+        if (!Free)
+            return FALSE;
     }
 
-    if (!CreatePartition(List, Free, EfiSize, (ULONG_PTR)&PARTITION_SYSTEM_GUID))
-        return FALSE;
-    *EfiPartition = Free;
+    if (NeedReserved)
+    {
+        if (!CreatePartition(List, Free, ReservedSize, (ULONG_PTR)&PARTITION_MSFT_RESERVED_GUID))
+            return FALSE;
+        *ReservedPartition = Free;
+        Free = GetAdjUnpartitionedEntry(Free, TRUE);
+    }
 
-    Next = GetAdjUnpartitionedEntry(Free, TRUE);
-    if (!Next || !CreatePartition(List, Next, ReservedSize, (ULONG_PTR)&PARTITION_MSFT_RESERVED_GUID))
-        return FALSE;
-    *ReservedPartition = Next;
-
-    *Region = GetAdjUnpartitionedEntry(Next, TRUE);
+    *Region = Free;
     return TRUE;
 }
 
@@ -3963,10 +4035,7 @@ FindSupportedSystemPartition(
 //
 
 UseAlternativeDisk:
-    if (!AlternativeDisk || (!ForceSelect && DiskEntry && (DiskEntry != AlternativeDisk)))
-        goto NoSystemPartition;
-
-    if (AlternativeDisk->DiskStyle == PARTITION_STYLE_GPT)
+    if (AlternativeDisk && AlternativeDisk->DiskStyle == PARTITION_STYLE_GPT)
     {
         ActivePartition = GetActiveDiskPartition(AlternativeDisk);
         if (ActivePartition && IsSupportedActivePartition(ActivePartition))
@@ -3976,6 +4045,9 @@ UseAlternativeDisk:
         }
         goto NoSystemPartition;
     }
+
+    if (!AlternativeDisk || (!ForceSelect && DiskEntry && (DiskEntry != AlternativeDisk)))
+        goto NoSystemPartition;
 
     if (DiskEntry != AlternativeDisk)
     {
