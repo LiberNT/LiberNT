@@ -63,6 +63,44 @@ Ndis6ReadInterfaceType(
     return (NET_IFTYPE)Value;
 }
 
+BOOLEAN
+Ndis6HasMandatoryKeywords(
+    _In_ PDEVICE_OBJECT Pdo)
+{
+    static const PCWSTR Keywords[] = { L"*IfType", L"*MediaType", L"*PhysicalMediaType" };
+    union
+    {
+        KEY_VALUE_PARTIAL_INFORMATION Information;
+        UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + sizeof(ULONG)];
+    } Query;
+    UNICODE_STRING ValueName;
+    HANDLE DriverKey;
+    ULONG ResultLength;
+    ULONG i;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = IoOpenDeviceRegistryKey(Pdo, PLUGPLAY_REGKEY_DRIVER, KEY_QUERY_VALUE, &DriverKey);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    for (i = 0; i < RTL_NUMBER_OF(Keywords); i++)
+    {
+        RtlInitUnicodeString(&ValueName, Keywords[i]);
+        Status = ZwQueryValueKey(DriverKey, &ValueName, KeyValuePartialInformation, &Query, sizeof(Query), &ResultLength);
+        if (!NT_SUCCESS(Status) ||
+            Query.Information.Type != REG_DWORD ||
+            Query.Information.DataLength != sizeof(ULONG))
+        {
+            break;
+        }
+    }
+
+    ZwClose(DriverKey);
+    return i == RTL_NUMBER_OF(Keywords);
+}
+
 static VOID
 Ndis6ResetMiniportAttributes(
     _In_ PLOGICAL_ADAPTER Adapter)

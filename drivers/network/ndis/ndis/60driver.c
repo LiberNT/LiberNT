@@ -1292,7 +1292,10 @@ Ndis6DispatchPnp(
              * mark the adapter as initialized so the matching HaltEx will
              * run on REMOVE. If it fails, the driver has cleaned up
              * internally — we must NOT call HaltEx (MS DDK contract). */
-            NdisStatus = Ndis6CallMiniportInitializeEx(Adapter);
+            if (Ndis6HasMandatoryKeywords(Adapter->NdisMiniportBlock.PhysicalDeviceObject))
+                NdisStatus = Ndis6CallMiniportInitializeEx(Adapter);
+            else
+                NdisStatus = NDIS_STATUS_FAILURE;
             if (NdisStatus == NDIS_STATUS_SUCCESS)
             {
                 if (Ext)

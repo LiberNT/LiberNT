@@ -680,6 +680,10 @@ VOID
 Ndis6DestroyLogicalAdapter(
     _In_ PLOGICAL_ADAPTER       Adapter);
 
+BOOLEAN
+Ndis6HasMandatoryKeywords(
+    _In_ PDEVICE_OBJECT Pdo);
+
 NDIS_STATUS
 Ndis6CallMiniportInitializeEx(
     _In_ PLOGICAL_ADAPTER       Adapter);

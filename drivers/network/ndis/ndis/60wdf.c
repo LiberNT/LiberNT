@@ -378,6 +378,9 @@ NdisWdfPnpPowerEventHandler(
         case NdisWdfActionPnpStart:
             if (!Ext->Initialized)
             {
+                if (!Ndis6HasMandatoryKeywords(Adapter->NdisMiniportBlock.PhysicalDeviceObject))
+                    return STATUS_UNSUCCESSFUL;
+
                 Status = Ndis6CallMiniportInitializeEx(Adapter);
                 if (Status != NDIS_STATUS_SUCCESS)
                     return (NTSTATUS)Status;
