@@ -11,7 +11,6 @@
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <strsafe.h>
-#include <reactos/dwmsettings.h>
 #include "resource.h"
 
 using namespace ShellFrame;
@@ -98,15 +97,39 @@ static const SETTINGS_PAGE Pages[] =
     { IDS_PAGE_TIME, L"globe_clock_20_regular", TimeCards, _countof(TimeCards) },
     { IDS_PAGE_GAMING, L"games_20_regular", GamingCards, _countof(GamingCards) },
     { IDS_PAGE_ACCESSIBILITY, L"accessibility_20_regular", AccessCards, _countof(AccessCards) },
-    { IDS_PAGE_PRIVACY, L"shield_20_regular", NULL, 0 },
-    { IDS_PAGE_UPDATE, L"arrow_sync_20_regular", NULL, 0 },
 };
 
 #define SEARCH_PAGE ((int)_countof(Pages))
 #define MAX_RESULTS 64
 #define IDC_SEARCH 100
 
+#define GLASS_TEXT RGB(255, 255, 255)
+#define GLASS_TEXT_SECONDARY RGB(0xC8, 0xC8, 0xC8)
+#define GLASS_TEXT_DISABLED RGB(0x80, 0x80, 0x80)
+#define GLASS_HOVER RGB(0x1C, 0x1C, 0x1C)
+#define GLASS_SELECTED RGB(0x30, 0x30, 0x30)
+#define GLASS_STROKE RGB(0x60, 0x60, 0x60)
+
 static HINSTANCE Instance;
+
+static void
+GlassFill(Canvas &canvas, const RECT &rc, int radius, COLORREF color, COLORREF stroke)
+{
+    HDC dc = canvas.Dc();
+    HBRUSH brush = CreateSolidBrush(color);
+    HPEN pen = stroke != CLR_NONE ? CreatePen(PS_SOLID, 1, stroke) : NULL;
+    HGDIOBJ oldBrush, oldPen;
+
+    canvas.Graphics().Flush(Gdiplus::FlushIntentionSync);
+    oldBrush = SelectObject(dc, brush);
+    oldPen = SelectObject(dc, pen ? (HGDIOBJ)pen : GetStockObject(NULL_PEN));
+    RoundRect(dc, rc.left, rc.top, rc.right + (pen ? 0 : 1), rc.bottom + (pen ? 0 : 1), radius * 2, radius * 2);
+    SelectObject(dc, oldPen);
+    SelectObject(dc, oldBrush);
+    if (pen)
+        DeleteObject(pen);
+    DeleteObject(brush);
+}
 
 static void
 LoadText(UINT id, LPWSTR buffer, int length)
@@ -143,6 +166,7 @@ public:
 
 protected:
     int CaptionHeight() const override { return m_Theme.Scale(48); }
+    int GlassWidth() const override { return ContentLeft() - m_Theme.Scale(12); }
 
     BOOL IsCaptionClient(POINT pt) override
     {
@@ -154,7 +178,6 @@ protected:
     {
         WCHAR cue[64];
 
-        ApplyMaterial();
         m_SmallIcon = CreateGlyphIcon(L"settings_20_regular", GetSystemMetricsForDpi(SM_CXSMICON, m_Theme.Dpi()),
                                       m_Theme.Colors().Accent);
         m_BigIcon = CreateGlyphIcon(L"settings_24_regular", GetSystemMetricsForDpi(SM_CXICON, m_Theme.Dpi()),
@@ -200,8 +223,11 @@ protected:
     void OnPaint(Canvas &canvas, const RECT &client) override
     {
         const Palette &c = m_Theme.Colors();
+        RECT glass = { 0, 0, GlassWidth(), client.bottom }, caption = { 0, 0, client.right, CaptionHeight() };
 
         canvas.Fill(client, c.Window);
+        canvas.Fill(glass, RGB(0, 0, 0));
+        canvas.Fill(caption, RGB(0, 0, 0));
         PaintCaption(canvas);
         PaintAccount(canvas);
         PaintSearch(canvas);
@@ -241,21 +267,13 @@ protected:
                     OnSearchChanged();
                 break;
             case WM_CTLCOLOREDIT:
-            {
-                const Palette &c = m_Theme.Colors();
-                static HBRUSH brush;
-                if (brush)
-                    DeleteObject(brush);
-                brush = CreateSolidBrush(GetFocus() == m_Search ? c.ControlFillFocus : c.ControlFill);
-                SetTextColor((HDC)wParam, c.Text);
-                SetBkColor((HDC)wParam, GetFocus() == m_Search ? c.ControlFillFocus : c.ControlFill);
-                return (LRESULT)brush;
-            }
+                SetTextColor((HDC)wParam, GLASS_TEXT);
+                SetBkColor((HDC)wParam, RGB(0, 0, 0));
+                return (LRESULT)GetStockObject(BLACK_BRUSH);
             case WM_THEMECHANGED:
             case WM_SETTINGCHANGE:
             {
                 LRESULT result = FrameWindow::HandleMessage(msg, wParam, lParam);
-                ApplyMaterial();
                 Invalidate(NULL);
                 return result;
             }
@@ -280,18 +298,6 @@ protected:
     }
 
 private:
-    void ApplyMaterial()
-    {
-        COLORREF fill;
-        INT opacity;
-
-        if (DwmSettingsLoadSchemeMaterial(DwmSettingsReadColorScheme(), &fill, &opacity))
-            DwmSettingsSetContentBackdrop(m_hwnd, fill, opacity);
-        else
-            DwmSettingsClearContentBackdrop(m_hwnd);
-        m_Theme.UpdateMaterial(m_hwnd);
-    }
-
     RECT BackRect() const
     {
         RECT rc = { m_Theme.Scale(4), m_Theme.Scale(6), m_Theme.Scale(44), m_Theme.Scale(42) };
@@ -357,19 +363,20 @@ private:
         WCHAR text[64];
         int size = m_Theme.Scale(16);
 
+        UNREFERENCED_PARAMETER(c);
         if (m_HotBack && m_HistoryCount)
-            canvas.FillRound(back, m_Theme.ScaleF(4.0f), c.SubtleHover);
+            GlassFill(canvas, back, m_Theme.Scale(4), GLASS_HOVER, CLR_NONE);
         glyph.left = back.left + (back.right - back.left - size) / 2;
         glyph.top = back.top + (back.bottom - back.top - size) / 2;
         glyph.right = glyph.left + size;
         glyph.bottom = glyph.top + size;
-        canvas.Icon(L"arrow_left_16_regular", glyph, m_HistoryCount ? c.Text : c.TextDisabled);
+        canvas.Icon(L"arrow_left_16_regular", glyph, m_HistoryCount ? GLASS_TEXT : GLASS_TEXT_DISABLED);
         LoadText(IDS_APP_TITLE, text, _countof(text));
         title.left = m_Theme.Scale(50);
         title.top = 0;
         title.right = m_Theme.Scale(400);
         title.bottom = CaptionHeight();
-        canvas.Text(text, title, m_Theme.Font(TextStyle::Caption), IsActive() ? c.Text : c.TextDisabled,
+        canvas.Text(text, title, m_Theme.Font(TextStyle::Caption), IsActive() ? GLASS_TEXT : GLASS_TEXT_SECONDARY,
                     DT_SINGLELINE | DT_VCENTER | DT_LEFT);
     }
 
@@ -380,20 +387,21 @@ private:
         RECT glyph = avatar, name, kind;
         WCHAR text[64];
 
-        canvas.FillEllipse(avatar, c.Selected);
+        UNREFERENCED_PARAMETER(c);
+        GlassFill(canvas, avatar, m_Theme.Scale(30), GLASS_SELECTED, CLR_NONE);
         InflateRect(&glyph, -m_Theme.Scale(16), -m_Theme.Scale(16));
-        canvas.Icon(L"person_20_regular", glyph, c.TextSecondary);
+        canvas.Icon(L"person_20_regular", glyph, GLASS_TEXT);
         name.left = m_Theme.Scale(88);
         name.top = m_Theme.Scale(70);
         name.right = m_Theme.Scale(296);
         name.bottom = m_Theme.Scale(90);
-        canvas.Text(m_User, name, m_Theme.Font(TextStyle::BodyStrong), c.Text,
+        canvas.Text(m_User, name, m_Theme.Font(TextStyle::BodyStrong), GLASS_TEXT,
                     DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
         kind = name;
         kind.top = m_Theme.Scale(90);
         kind.bottom = m_Theme.Scale(106);
         LoadText(IDS_LOCAL_ACCOUNT, text, _countof(text));
-        canvas.Text(text, kind, m_Theme.Font(TextStyle::Caption), c.TextSecondary, DT_SINGLELINE | DT_VCENTER);
+        canvas.Text(text, kind, m_Theme.Font(TextStyle::Caption), GLASS_TEXT_SECONDARY, DT_SINGLELINE | DT_VCENTER);
     }
 
     void PaintSearch(Canvas &canvas)
@@ -403,23 +411,17 @@ private:
         BOOL focus = GetFocus() == m_Search;
         int size = m_Theme.Scale(16);
 
-        canvas.FillRound(box, m_Theme.ScaleF(4.0f), focus ? c.ControlFillFocus : c.ControlFill);
-        canvas.FrameRound(box, m_Theme.ScaleF(4.0f), c.ControlStroke);
+        GlassFill(canvas, box, m_Theme.Scale(4), RGB(0, 0, 0), GLASS_STROKE);
         if (focus)
         {
             RECT line = { box.left + 1, box.bottom - m_Theme.Scale(2), box.right - 1, box.bottom };
             canvas.Fill(line, c.Accent);
         }
-        else
-        {
-            RECT line = { box.left + m_Theme.Scale(2), box.bottom - 1, box.right - m_Theme.Scale(2), box.bottom };
-            canvas.Fill(line, c.ControlStrongStroke);
-        }
         glyph.right = box.right - m_Theme.Scale(10);
         glyph.left = glyph.right - size;
         glyph.top = box.top + (box.bottom - box.top - size) / 2;
         glyph.bottom = glyph.top + size;
-        canvas.Icon(L"search_16_regular", glyph, c.TextSecondary);
+        canvas.Icon(L"search_16_regular", glyph, GLASS_TEXT_SECONDARY);
     }
 
     void PaintNavigation(Canvas &canvas)
@@ -436,22 +438,22 @@ private:
             {
                 RECT pill = { rc.left, rc.top + m_Theme.Scale(10), rc.left + m_Theme.Scale(3),
                               rc.bottom - m_Theme.Scale(10) };
-                canvas.FillRound(rc, m_Theme.ScaleF(4.0f), c.Selected);
+                GlassFill(canvas, rc, m_Theme.Scale(4), GLASS_SELECTED, CLR_NONE);
                 canvas.FillRound(pill, m_Theme.ScaleF(1.5f), c.Accent);
             }
             else if (i == m_HotNav)
             {
-                canvas.FillRound(rc, m_Theme.ScaleF(4.0f), c.SubtleHover);
+                GlassFill(canvas, rc, m_Theme.Scale(4), GLASS_HOVER, CLR_NONE);
             }
             glyph.left = rc.left + m_Theme.Scale(12);
             glyph.top = rc.top + (rc.bottom - rc.top - size) / 2;
             glyph.right = glyph.left + size;
             glyph.bottom = glyph.top + size;
-            canvas.Icon(Pages[i].Icon, glyph, c.Glyph);
+            canvas.Icon(Pages[i].Icon, glyph, GLASS_TEXT);
             label = rc;
             label.left = rc.left + m_Theme.Scale(44);
             LoadText(Pages[i].Title, text, _countof(text));
-            canvas.Text(text, label, m_Theme.Font(TextStyle::Body), c.Text,
+            canvas.Text(text, label, m_Theme.Font(TextStyle::Body), GLASS_TEXT,
                         DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
         }
     }
@@ -672,7 +674,6 @@ PageFromUri(LPCWSTR commandLine)
         { L"network", 2 }, { L"personalization", 3 }, { L"colors", 3 }, { L"themes", 3 }, { L"appsfeatures", 4 },
         { L"defaultapps", 4 }, { L"yourinfo", 5 }, { L"otherusers", 5 }, { L"accounts", 5 }, { L"dateandtime", 6 },
         { L"regionlanguage", 6 }, { L"regionformatting", 6 }, { L"gaming", 7 }, { L"easeofaccess", 8 },
-        { L"privacy", 9 }, { L"windowsupdate", 10 },
     };
     LPCWSTR uri = commandLine ? StrStrIW(commandLine, L"ms-settings:") : NULL;
 

@@ -149,6 +149,7 @@ protected:
     virtual void OnThemeChanged() {}
     virtual BOOL IsCaptionClient(POINT pt) { UNREFERENCED_PARAMETER(pt); return FALSE; }
     virtual int CaptionHeight() const = 0;
+    virtual int GlassWidth() const { return 0; }
     virtual int CaptionButtonHeight() const { return m_Theme.Scale(32); }
 
     LRESULT DefaultProc(UINT msg, WPARAM wParam, LPARAM lParam);

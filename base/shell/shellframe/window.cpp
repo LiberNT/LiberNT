@@ -96,7 +96,7 @@ FrameWindow::ApplyFrameAttributes()
 #if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
     MARGINS margins = { 0, 0, 0, 0 };
 #else
-    MARGINS margins = { 0, 0, CaptionHeight(), 0 };
+    MARGINS margins = { GlassWidth(), 0, CaptionHeight(), 0 };
 #endif
     DWORD corner = 2;
 
