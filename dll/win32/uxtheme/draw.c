@@ -625,9 +625,17 @@ static HRESULT UXTHEME_DrawImageGlyph(HTHEME hTheme, HDC hdc, int iPartId,
 
     topleft.x = pRect->left;
     topleft.y = pRect->top;
+#ifdef __REACTOS__
+    if(halign == HA_CENTER)      topleft.x += (dstSize.x-srcSize.x)/2;
+#else
     if(halign == HA_CENTER)      topleft.x += (dstSize.x/2)-(srcSize.x/2);
+#endif
     else if(halign == HA_RIGHT)  topleft.x += dstSize.x-srcSize.x;
+#ifdef __REACTOS__
+    if(valign == VA_CENTER)      topleft.y += (dstSize.y-srcSize.y)/2;
+#else
     if(valign == VA_CENTER)      topleft.y += (dstSize.y/2)-(srcSize.y/2);
+#endif
     else if(valign == VA_BOTTOM) topleft.y += dstSize.y-srcSize.y;
 
     if(!UXTHEME_Blt(hdc, topleft.x, topleft.y, srcSize.x, srcSize.y,
@@ -822,11 +830,19 @@ static HRESULT UXTHEME_DrawImageBackground(HTHEME hTheme, HDC hdc, int iPartId,
         GetThemeEnumValue(hTheme, iPartId, iStateId, TMT_HALIGN, &halign);
 
         if (halign == HA_CENTER)
+#ifdef __REACTOS__
+            rcDst.left += (dstSize.x-drawSize.x)/2;
+#else
             rcDst.left += (dstSize.x/2)-(drawSize.x/2);
+#endif
         else if (halign == HA_RIGHT)
             rcDst.left = rcDst.right - drawSize.x;
         if (valign == VA_CENTER)
+#ifdef __REACTOS__
+            rcDst.top  += (dstSize.y-drawSize.y)/2;
+#else
             rcDst.top  += (dstSize.y/2)-(drawSize.y/2);
+#endif
         else if (valign == VA_BOTTOM)
             rcDst.top = rcDst.bottom - drawSize.y;
         rcDst.right = rcDst.left + drawSize.x;
