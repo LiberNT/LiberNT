@@ -115,6 +115,7 @@ list(APPEND KMTEST_DRV_SOURCE
     hal/HalSystemInfo.c
     ndis/NdisRwLock.c
     ndis/NdisProcessorGroup.c
+    ndis/NdisLegacyHelpers.c
     npfs/NpfsConnect.c
     npfs/NpfsCreate.c
     npfs/NpfsFileInfo.c
