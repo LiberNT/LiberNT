@@ -201,6 +201,10 @@ extern "C" {
 #endif
 #endif
 
+#if (NTDDI_VERSION >= NTDDI_WINXP)
+HRESULT WINAPI SHGetImageList(_In_ int iImageList, _In_ REFIID riid, _Outptr_ void **ppvObj);
+#endif
+
 typedef struct _SHCREATEPROCESSINFOW
 {
     DWORD cbSize;
