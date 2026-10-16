@@ -56,9 +56,3 @@ BEGIN
     IDS_ASSUMEPRESENT "Assume wheel is present"
 END
 
-STRINGTABLE
-BEGIN
-    IDS_INSTALLADDONSCAPTION "Optional Components"
-    IDS_INSTALLADDONSMESSAGE "Optional components are available to improve application compatibility.\n\nWould you like to download and install them?"
-    IDS_INSTALLADDONSFAILEDMESSAGE "One or more optional components failed to install."
-END

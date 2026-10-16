@@ -56,9 +56,3 @@ BEGIN
     IDS_ASSUMEPRESENT "Assume wheel is present"
 END
 
-STRINGTABLE
-BEGIN
-    IDS_INSTALLADDONSCAPTION "Дополнительные компоненты"
-    IDS_INSTALLADDONSMESSAGE "Для повышения совместимости приложений доступны дополнительные компоненты.\n\nХотите загрузить и установить их?"
-    IDS_INSTALLADDONSFAILEDMESSAGE "Не удалось установить один или несколько дополнительных компонентов."
-END

@@ -55,10 +55,5 @@
 #define IDS_LOOKFORWHEEL      3701
 #define IDS_ASSUMEPRESENT     3702
 
-/* Strings for install addons consent dialog */
-#define IDS_INSTALLADDONSCAPTION        4010
-#define IDS_INSTALLADDONSMESSAGE        4011
-#define IDS_INSTALLADDONSFAILEDMESSAGE  4012
-
 /* Timer ID for the animated dialog bar. */
 #define IDT_BAR 1

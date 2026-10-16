@@ -60,15 +60,6 @@ typedef struct _REGISTRATIONNOTIFY
 extern HINSTANCE hDllInstance;
 extern HINF hSysSetupInf;
 
-/* addons.c */
-HRESULT
-InstallOptionalComponents(
-    _In_ PITEMSDATA pItemsData);
-
-HRESULT
-RunCommandAndWait(
-    _In_ PWCHAR Command);
-
 /* install */
 
 VOID
