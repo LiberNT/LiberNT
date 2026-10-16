@@ -134,6 +134,7 @@ static LONG d3d12_dred_auto_breadcrumbs;
 static LONG d3d12_dred_page_fault;
 static LONG d3d12_dred_watson_dump;
 static LONG d3d12_dred_breadcrumb_context;
+static LONG d3d12_dred_markers_only;
 
 void d3d12_dred_enablement(D3D12_DRED_ENABLEMENT *auto_breadcrumbs, D3D12_DRED_ENABLEMENT *page_fault)
 {
@@ -143,24 +144,25 @@ void d3d12_dred_enablement(D3D12_DRED_ENABLEMENT *auto_breadcrumbs, D3D12_DRED_E
 
 struct d3d12_dred_settings
 {
-    ID3D12DeviceRemovedExtendedDataSettings1 ID3D12DeviceRemovedExtendedDataSettings1_iface;
+    ID3D12DeviceRemovedExtendedDataSettings2 ID3D12DeviceRemovedExtendedDataSettings2_iface;
     LONG refcount;
 };
 
-static struct d3d12_dred_settings *impl_from_ID3D12DeviceRemovedExtendedDataSettings1(
-        ID3D12DeviceRemovedExtendedDataSettings1 *iface)
+static struct d3d12_dred_settings *impl_from_ID3D12DeviceRemovedExtendedDataSettings2(
+        ID3D12DeviceRemovedExtendedDataSettings2 *iface)
 {
-    return CONTAINING_RECORD(iface, struct d3d12_dred_settings, ID3D12DeviceRemovedExtendedDataSettings1_iface);
+    return CONTAINING_RECORD(iface, struct d3d12_dred_settings, ID3D12DeviceRemovedExtendedDataSettings2_iface);
 }
 
 static HRESULT STDMETHODCALLTYPE
-d3d12_dred_settings_QueryInterface(ID3D12DeviceRemovedExtendedDataSettings1 *iface, REFIID iid, void **out)
+d3d12_dred_settings_QueryInterface(ID3D12DeviceRemovedExtendedDataSettings2 *iface, REFIID iid, void **out)
 {
-    if (IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings1)
+    if (IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings2)
+            || IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings1)
             || IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings)
             || IsEqualGUID(iid, &IID_IUnknown))
     {
-        ID3D12DeviceRemovedExtendedDataSettings1_AddRef(iface);
+        ID3D12DeviceRemovedExtendedDataSettings2_AddRef(iface);
         *out = iface;
         return S_OK;
     }
@@ -170,15 +172,15 @@ d3d12_dred_settings_QueryInterface(ID3D12DeviceRemovedExtendedDataSettings1 *ifa
 }
 
 static ULONG STDMETHODCALLTYPE
-d3d12_dred_settings_AddRef(ID3D12DeviceRemovedExtendedDataSettings1 *iface)
+d3d12_dred_settings_AddRef(ID3D12DeviceRemovedExtendedDataSettings2 *iface)
 {
-    return InterlockedIncrement(&impl_from_ID3D12DeviceRemovedExtendedDataSettings1(iface)->refcount);
+    return InterlockedIncrement(&impl_from_ID3D12DeviceRemovedExtendedDataSettings2(iface)->refcount);
 }
 
 static ULONG STDMETHODCALLTYPE
-d3d12_dred_settings_Release(ID3D12DeviceRemovedExtendedDataSettings1 *iface)
+d3d12_dred_settings_Release(ID3D12DeviceRemovedExtendedDataSettings2 *iface)
 {
-    struct d3d12_dred_settings *settings = impl_from_ID3D12DeviceRemovedExtendedDataSettings1(iface);
+    struct d3d12_dred_settings *settings = impl_from_ID3D12DeviceRemovedExtendedDataSettings2(iface);
     ULONG refcount = InterlockedDecrement(&settings->refcount);
 
     if (!refcount)
@@ -187,7 +189,7 @@ d3d12_dred_settings_Release(ID3D12DeviceRemovedExtendedDataSettings1 *iface)
 }
 
 static void STDMETHODCALLTYPE
-d3d12_dred_settings_SetAutoBreadcrumbsEnablement(ID3D12DeviceRemovedExtendedDataSettings1 *iface,
+d3d12_dred_settings_SetAutoBreadcrumbsEnablement(ID3D12DeviceRemovedExtendedDataSettings2 *iface,
                                                  D3D12_DRED_ENABLEMENT enablement)
 {
     InterlockedExchange(&d3d12_dred_auto_breadcrumbs, enablement);
@@ -195,7 +197,7 @@ d3d12_dred_settings_SetAutoBreadcrumbsEnablement(ID3D12DeviceRemovedExtendedData
 }
 
 static void STDMETHODCALLTYPE
-d3d12_dred_settings_SetPageFaultEnablement(ID3D12DeviceRemovedExtendedDataSettings1 *iface,
+d3d12_dred_settings_SetPageFaultEnablement(ID3D12DeviceRemovedExtendedDataSettings2 *iface,
                                            D3D12_DRED_ENABLEMENT enablement)
 {
     InterlockedExchange(&d3d12_dred_page_fault, enablement);
@@ -203,20 +205,26 @@ d3d12_dred_settings_SetPageFaultEnablement(ID3D12DeviceRemovedExtendedDataSettin
 }
 
 static void STDMETHODCALLTYPE
-d3d12_dred_settings_SetWatsonDumpEnablement(ID3D12DeviceRemovedExtendedDataSettings1 *iface,
+d3d12_dred_settings_SetWatsonDumpEnablement(ID3D12DeviceRemovedExtendedDataSettings2 *iface,
                                             D3D12_DRED_ENABLEMENT enablement)
 {
     InterlockedExchange(&d3d12_dred_watson_dump, enablement);
 }
 
 static void STDMETHODCALLTYPE
-d3d12_dred_settings_SetBreadcrumbContextEnablement(ID3D12DeviceRemovedExtendedDataSettings1 *iface,
+d3d12_dred_settings_SetBreadcrumbContextEnablement(ID3D12DeviceRemovedExtendedDataSettings2 *iface,
                                                    D3D12_DRED_ENABLEMENT enablement)
 {
     InterlockedExchange(&d3d12_dred_breadcrumb_context, enablement);
 }
 
-static const ID3D12DeviceRemovedExtendedDataSettings1Vtbl d3d12_dred_settings_vtbl =
+static void STDMETHODCALLTYPE
+d3d12_dred_settings_UseMarkersOnlyAutoBreadcrumbs(ID3D12DeviceRemovedExtendedDataSettings2 *iface, BOOL markers_only)
+{
+    InterlockedExchange(&d3d12_dred_markers_only, markers_only);
+}
+
+static const ID3D12DeviceRemovedExtendedDataSettings2Vtbl d3d12_dred_settings_vtbl =
 {
     d3d12_dred_settings_QueryInterface,
     d3d12_dred_settings_AddRef,
@@ -225,6 +233,7 @@ static const ID3D12DeviceRemovedExtendedDataSettings1Vtbl d3d12_dred_settings_vt
     d3d12_dred_settings_SetPageFaultEnablement,
     d3d12_dred_settings_SetWatsonDumpEnablement,
     d3d12_dred_settings_SetBreadcrumbContextEnablement,
+    d3d12_dred_settings_UseMarkersOnlyAutoBreadcrumbs,
 };
 
 static HRESULT
@@ -235,11 +244,11 @@ d3d12_dred_settings_create(REFIID iid, void **out)
 
     if (!(settings = HeapAlloc(GetProcessHeap(), 0, sizeof(*settings))))
         return E_OUTOFMEMORY;
-    settings->ID3D12DeviceRemovedExtendedDataSettings1_iface.lpVtbl = &d3d12_dred_settings_vtbl;
+    settings->ID3D12DeviceRemovedExtendedDataSettings2_iface.lpVtbl = &d3d12_dred_settings_vtbl;
     settings->refcount = 1;
-    hr = ID3D12DeviceRemovedExtendedDataSettings1_QueryInterface(
-            &settings->ID3D12DeviceRemovedExtendedDataSettings1_iface, iid, out);
-    ID3D12DeviceRemovedExtendedDataSettings1_Release(&settings->ID3D12DeviceRemovedExtendedDataSettings1_iface);
+    hr = ID3D12DeviceRemovedExtendedDataSettings2_QueryInterface(
+            &settings->ID3D12DeviceRemovedExtendedDataSettings2_iface, iid, out);
+    ID3D12DeviceRemovedExtendedDataSettings2_Release(&settings->ID3D12DeviceRemovedExtendedDataSettings2_iface);
     return hr;
 }
 
@@ -322,7 +331,8 @@ D3D12GetDebugInterface(REFIID iid, void **debug)
     *debug = NULL;
 
     if (IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings)
-            || IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings1))
+            || IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings1)
+            || IsEqualGUID(iid, &IID_ID3D12DeviceRemovedExtendedDataSettings2))
         return d3d12_dred_settings_create(iid, debug);
 
     return DXGI_ERROR_SDK_COMPONENT_MISSING;
