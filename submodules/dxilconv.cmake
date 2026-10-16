@@ -18,9 +18,15 @@ endif()
 
 if(ARCH STREQUAL "amd64")
     set(_dxilconv_sdk_arch x86_64)
+    set(_dxilconv_triple x86_64-w64-mingw32)
+    set(_dxilconv_arch_flags -mlong-double-64)
+elseif(ARCH STREQUAL "i386")
+    set(_dxilconv_sdk_arch i386)
+    set(_dxilconv_triple i686-w64-mingw32)
     set(_dxilconv_arch_flags -mlong-double-64)
 elseif(ARCH STREQUAL "arm64")
     set(_dxilconv_sdk_arch aarch64)
+    set(_dxilconv_triple aarch64-w64-mingw32)
     set(_dxilconv_arch_flags "")
 else()
     message(FATAL_ERROR "dxilconv does not support ARCH ${ARCH}. Use -DENABLE_DXILCONV=OFF.")
@@ -115,7 +121,7 @@ ExternalProject_Add(dxilconv-build
         -DCMAKE_TRY_COMPILE_TARGET_TYPE:STRING=EXECUTABLE
         -DREACTOS_CLANG_LLVM_MINGW_ROOT:PATH=${REACTOS_CLANG_LLVM_MINGW_ROOT}
         -DREACTOS_SDK_ARCH:STRING=${_dxilconv_sdk_arch}
-        -DREACTOS_SDK_TRIPLE:STRING=${_dxilconv_sdk_arch}-w64-mingw32
+        -DREACTOS_SDK_TRIPLE:STRING=${_dxilconv_triple}
         "-DREACTOS_SDK_ARCH_FLAGS:STRING=${_dxilconv_sdk_arch_flags}"
         -DREACTOS_SDK_SOURCE_DIR:PATH=${REACTOS_SOURCE_DIR}
         -DREACTOS_SDK_BUILD_DIR:PATH=${REACTOS_BINARY_DIR}

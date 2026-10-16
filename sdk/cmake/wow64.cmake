@@ -23,6 +23,13 @@ if(TARGET mesa_gallium)
     list(APPEND WOW64_I386_TARGETS mesa_gallium)
 endif()
 
+# dxilconv.dll is loaded by the Direct3D 12 runtime of 32-bit processes too.
+set(WOW64_I386_DXILCONV_FILE)
+if(TARGET dxilconv)
+    set(WOW64_I386_DXILCONV_FILE "${WOW64_I386_BINARY_DIR}/submodules/dxilconv/dxilconv.dll")
+    list(APPEND WOW64_I386_TARGETS dxilconv)
+endif()
+
 # Walk a target's link closure to find the DLL modules it imports. ReactOS
 # links DLL imports through "lib<module>" import libraries, so those names
 # are mapped back to the module targets that provide them.
@@ -131,6 +138,9 @@ foreach(_target IN LISTS WOW64_I386_MODULES WOW64_I386_EXECUTABLES)
     list(APPEND WOW64_I386_FILES "${_file}")
 endforeach()
 set(WOW64_I386_OPTIONAL_FILES)
+if(WOW64_I386_DXILCONV_FILE)
+    list(APPEND WOW64_I386_OPTIONAL_FILES "${WOW64_I386_DXILCONV_FILE}")
+endif()
 if(WOW64_I386_MESA_FILE)
     list(APPEND WOW64_I386_OPTIONAL_FILES "${WOW64_I386_MESA_FILE}")
     if(WOW64_I386_MESA_D3D_FILE)
@@ -191,6 +201,11 @@ set(_wow64_i386_cmake_args
     -DENABLE_ROSTESTS:BOOL=${ENABLE_ROSTESTS}
     -DENABLE_APPSMOKE_TESTS:BOOL=${ENABLE_APPSMOKE_TESTS})
 
+if(WOW64_I386_DXILCONV_FILE)
+    list(APPEND _wow64_i386_cmake_args -DENABLE_DXILCONV:BOOL=ON)
+else()
+    list(APPEND _wow64_i386_cmake_args -DENABLE_DXILCONV:BOOL=OFF)
+endif()
 if(WOW64_I386_MESA_FILE)
     list(APPEND _wow64_i386_cmake_args
         -DMESA_GALLIUM_FROM_SOURCE:BOOL=ON
