@@ -879,7 +879,7 @@ DxgkpReadHardwareInformation(
     return Found;
 }
 
-static BOOLEAN
+BOOLEAN
 DxgkpIsWow64Caller(VOID)
 {
 #if defined(_WIN64)

@@ -1468,6 +1468,7 @@ DxgkSyncObjectAttachMonitoredPage(
     _Out_opt_ D3DGPU_VIRTUAL_ADDRESS *GpuVa)
 {
     PDXGKRNL_SYNC_OBJECT SyncObj;
+    ULONG MappingPriority;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -1510,9 +1511,13 @@ DxgkSyncObjectAttachMonitoredPage(
 
     MmBuildMdlForNonPagedPool(SyncObj->MonitoredValueMdl);
 
+    MappingPriority = NormalPagePriority | MdlMappingNoExecute;
+    if (sizeof(PVOID) != sizeof(ULONG) && !DxgkpIsWow64Caller())
+        MappingPriority |= MdlMappingNoWrite;
+
     _SEH2_TRY
     {
-        SyncObj->MonitoredValueUserVa = MmMapLockedPagesSpecifyCache(SyncObj->MonitoredValueMdl, UserMode, MmCached, NULL, FALSE, NormalPagePriority | MdlMappingNoWrite | MdlMappingNoExecute);
+        SyncObj->MonitoredValueUserVa = MmMapLockedPagesSpecifyCache(SyncObj->MonitoredValueMdl, UserMode, MmCached, NULL, FALSE, MappingPriority);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {

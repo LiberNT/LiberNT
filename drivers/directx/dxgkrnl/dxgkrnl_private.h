@@ -3245,6 +3245,9 @@ DxgkPresentCallback(
  * Function prototypes — d3dkmt.c  (standalone D3DKMT handlers)
  * ====================================================================== */
 
+BOOLEAN
+DxgkpIsWow64Caller(VOID);
+
 NTSTATUS
 NTAPI
 DxgkLock(
