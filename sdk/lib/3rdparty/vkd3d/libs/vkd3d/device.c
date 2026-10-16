@@ -3580,6 +3580,16 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_QueryInterface(ID3D12Device14 *ifa
         return S_OK;
     }
 
+    if (IsEqualGUID(riid, &IID_ID3D12DeviceConfiguration1)
+            || IsEqualGUID(riid, &IID_ID3D12DeviceConfiguration))
+    {
+        struct d3d12_device *device = impl_from_ID3D12Device14(iface);
+
+        ID3D12Device14_AddRef(iface);
+        *object = &device->ID3D12DeviceConfiguration1_iface;
+        return S_OK;
+    }
+
     WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(riid));
 
     *object = NULL;
@@ -6362,6 +6372,12 @@ static const struct ID3D12Device14Vtbl d3d12_device_vtbl =
 
 static LONG vkd3d_dred_auto_breadcrumbs;
 static LONG vkd3d_dred_page_fault;
+static LONG vkd3d_device_configuration_flags;
+
+void vkd3d_set_device_configuration_flags(UINT flags)
+{
+    InterlockedExchange(&vkd3d_device_configuration_flags, flags);
+}
 
 void vkd3d_set_dred_enablement(D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault)
 {
@@ -6488,6 +6504,100 @@ static const struct ID3D12DeviceRemovedExtendedData2Vtbl d3d12_device_dred_vtbl 
     d3d12_device_dred_GetDeviceState,
 };
 
+static inline struct d3d12_device *impl_from_ID3D12DeviceConfiguration1(ID3D12DeviceConfiguration1 *iface)
+{
+    return CONTAINING_RECORD(iface, struct d3d12_device, ID3D12DeviceConfiguration1_iface);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_device_configuration_QueryInterface(ID3D12DeviceConfiguration1 *iface,
+        REFIID riid, void **object)
+{
+    struct d3d12_device *device = impl_from_ID3D12DeviceConfiguration1(iface);
+
+    return d3d12_device_QueryInterface(&device->ID3D12Device14_iface, riid, object);
+}
+
+static ULONG STDMETHODCALLTYPE d3d12_device_configuration_AddRef(ID3D12DeviceConfiguration1 *iface)
+{
+    struct d3d12_device *device = impl_from_ID3D12DeviceConfiguration1(iface);
+
+    return d3d12_device_AddRef(&device->ID3D12Device14_iface);
+}
+
+static ULONG STDMETHODCALLTYPE d3d12_device_configuration_Release(ID3D12DeviceConfiguration1 *iface)
+{
+    struct d3d12_device *device = impl_from_ID3D12DeviceConfiguration1(iface);
+
+    return d3d12_device_Release(&device->ID3D12Device14_iface);
+}
+
+static D3D12_DEVICE_CONFIGURATION_DESC * STDMETHODCALLTYPE d3d12_device_configuration_GetDesc(
+        ID3D12DeviceConfiguration1 *iface, D3D12_DEVICE_CONFIGURATION_DESC *desc)
+{
+    struct d3d12_device *device = impl_from_ID3D12DeviceConfiguration1(iface);
+
+    TRACE("iface %p, desc %p.\n", iface, desc);
+
+    desc->Flags = device->configuration_flags;
+    desc->GpuBasedValidationFlags = D3D12_GPU_BASED_VALIDATION_FLAGS_NONE;
+    desc->SDKVersion = 612;
+    desc->NumEnabledExperimentalFeatures = 0;
+    return desc;
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_device_configuration_GetEnabledExperimentalFeatures(
+        ID3D12DeviceConfiguration1 *iface, GUID *guids, UINT guid_count)
+{
+    TRACE("iface %p, guids %p, guid_count %u.\n", iface, guids, guid_count);
+
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_device_configuration_SerializeVersionedRootSignature(
+        ID3D12DeviceConfiguration1 *iface, const D3D12_VERSIONED_ROOT_SIGNATURE_DESC *desc,
+        ID3DBlob **blob, ID3DBlob **error_blob)
+{
+    TRACE("iface %p, desc %p, blob %p, error_blob %p.\n", iface, desc, blob, error_blob);
+
+    return vkd3d_serialize_versioned_root_signature(desc, blob, error_blob);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_device_configuration_CreateVersionedRootSignatureDeserializer(
+        ID3D12DeviceConfiguration1 *iface, const void *data, SIZE_T data_size, REFIID iid, void **deserializer)
+{
+    TRACE("iface %p, data %p, data_size %lu, iid %s, deserializer %p.\n",
+            iface, data, (unsigned long)data_size, debugstr_guid(iid), deserializer);
+
+    return vkd3d_create_versioned_root_signature_deserializer(data, data_size, iid, deserializer);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_device_configuration_CreateVersionedRootSignatureDeserializerFromSubobjectInLibrary(
+        ID3D12DeviceConfiguration1 *iface, const void *library_blob, SIZE_T size, LPCWSTR subobject_name,
+        REFIID iid, void **deserializer)
+{
+    WARN("iface %p, library_blob %p, size %lu, iid %s, deserializer %p, state object libraries are not supported.\n",
+            iface, library_blob, (unsigned long)size, debugstr_guid(iid), deserializer);
+
+    if (deserializer)
+        *deserializer = NULL;
+    return E_INVALIDARG;
+}
+
+static const struct ID3D12DeviceConfiguration1Vtbl d3d12_device_configuration_vtbl =
+{
+    /* IUnknown methods */
+    d3d12_device_configuration_QueryInterface,
+    d3d12_device_configuration_AddRef,
+    d3d12_device_configuration_Release,
+    /* ID3D12DeviceConfiguration methods */
+    d3d12_device_configuration_GetDesc,
+    d3d12_device_configuration_GetEnabledExperimentalFeatures,
+    d3d12_device_configuration_SerializeVersionedRootSignature,
+    d3d12_device_configuration_CreateVersionedRootSignatureDeserializer,
+    /* ID3D12DeviceConfiguration1 methods */
+    d3d12_device_configuration_CreateVersionedRootSignatureDeserializerFromSubobjectInLibrary,
+};
+
 struct d3d12_device *unsafe_impl_from_ID3D12Device14(ID3D12Device14 *iface)
 {
     if (!iface)
@@ -6538,6 +6648,8 @@ static HRESULT d3d12_device_init(struct d3d12_device *device,
 
     device->ID3D12Device14_iface.lpVtbl = &d3d12_device_vtbl;
     device->ID3D12DeviceRemovedExtendedData2_iface.lpVtbl = &d3d12_device_dred_vtbl;
+    device->ID3D12DeviceConfiguration1_iface.lpVtbl = &d3d12_device_configuration_vtbl;
+    device->configuration_flags = vkd3d_device_configuration_flags;
     device->dred_auto_breadcrumbs = vkd3d_dred_auto_breadcrumbs;
     device->dred_page_fault = vkd3d_dred_page_fault;
     device->refcount = 1;

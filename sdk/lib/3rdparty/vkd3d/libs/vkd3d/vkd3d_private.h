@@ -1647,6 +1647,8 @@ struct d3d12_device
 {
     ID3D12Device14 ID3D12Device14_iface;
     ID3D12DeviceRemovedExtendedData2 ID3D12DeviceRemovedExtendedData2_iface;
+    ID3D12DeviceConfiguration1 ID3D12DeviceConfiguration1_iface;
+    unsigned int configuration_flags;
     D3D12_DRED_ENABLEMENT dred_auto_breadcrumbs;
     D3D12_DRED_ENABLEMENT dred_page_fault;
     unsigned int refcount;
