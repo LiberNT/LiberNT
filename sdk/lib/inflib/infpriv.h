@@ -48,6 +48,7 @@ typedef struct _INFCACHESECTION
 
   PINFCACHELINE FirstLine;
   PINFCACHELINE LastLine;
+  PINFCACHELINE CursorLine;
   UINT Id;
 
   LONG LineCount;

@@ -293,12 +293,17 @@ InfpFindLineById(PINFCACHESECTION Section, UINT Id)
 {
     PINFCACHELINE Line;
 
-    for (Line = Section->FirstLine;
-         Line != NULL;
-         Line = Line->Next)
+    Line = Section->CursorLine;
+    if (Line == NULL || Line->Id > Id)
+    {
+        Line = Section->FirstLine;
+    }
+
+    for (; Line != NULL; Line = Line->Next)
     {
         if (Line->Id == Id)
         {
+            Section->CursorLine = Line;
             return Line;
         }
     }
