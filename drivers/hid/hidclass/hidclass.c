@@ -1009,7 +1009,7 @@ HidClass_Write(
 
     RtlZeroMemory(&XferPacket, sizeof(XferPacket));
     XferPacket.reportBufferLen = Length;
-    XferPacket.reportBuffer = Irp->UserBuffer;
+    XferPacket.reportBuffer = Irp->AssociatedIrp.SystemBuffer;
     XferPacket.reportId = XferPacket.reportBuffer[0];
 
     CommonDeviceExtension = DeviceObject->DeviceExtension;
