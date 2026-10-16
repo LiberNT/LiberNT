@@ -267,7 +267,12 @@ BthMiniThread(
     }
 
     BthConnLoadPaired(Dev);
+    BthSmpLoadKeys(Dev);
+    BthGattLoad(Dev);
+    BthEnumLoad(Dev);
+    BthEnumLoadLocalServices(Dev);
     Dev->Ready = TRUE;
+    BthTdiRadioReady(Dev);
     while (!Dev->Stopping)
     {
         WDFREQUEST Request;
@@ -280,8 +285,11 @@ BthMiniThread(
             BthHciProcessRx(Dev);
         }
         BthConnTick(Dev);
+        BthLeTick(Dev);
         BthL2capTick(Dev);
         BthRfcommTick(Dev);
+        BthSdpClientTick(Dev);
+        BthTdiProcess(Dev);
         Wait = BthComProcess(Dev);
         BthMiniWaitWork(Dev, max(Wait, 1));
     }
@@ -404,9 +412,59 @@ BthMiniEvtD0Exit(
     }
     BthHciFlushCommands(Dev);
     BthMiniFlushRx(Dev);
+    BthBrbFlush(Dev);
     BthL2capFlush(Dev);
+    BthSdpClientFlush(Dev);
+    BthTdiRadioStopping(Dev);
     BthRadioFreeRemotes(Dev);
     return STATUS_SUCCESS;
+}
+
+static
+VOID
+NTAPI
+BthMiniEvtCleanup(
+    _In_ WDFOBJECT Object)
+{
+    PBTHMINI_DEVICE Dev = BthMiniGetDevice((WDFDEVICE)Object);
+
+    BthEnumFlush(Dev);
+    BthBrbCleanup(Dev);
+    BthSdpCleanup(Dev);
+}
+
+static
+VOID
+NTAPI
+BthMiniEvtIoInCallerContext(
+    _In_ WDFDEVICE Device,
+    _In_ WDFREQUEST Request)
+{
+    WDF_REQUEST_PARAMETERS Parameters;
+    NTSTATUS Status;
+
+    WDF_REQUEST_PARAMETERS_INIT(&Parameters);
+    WdfRequestGetParameters(Request, &Parameters);
+    if (Parameters.Type == WdfRequestTypeDeviceControl &&
+        Parameters.Parameters.DeviceIoControl.IoControlCode == IOCTL_BTHMINI_SET_LOCAL_SERVICE &&
+        WdfRequestGetRequestorMode(Request) == UserMode &&
+        !SeSinglePrivilegeCheck(RtlConvertLongToLuid(SE_LOAD_DRIVER_PRIVILEGE), UserMode))
+    {
+        WdfRequestComplete(Request, STATUS_PRIVILEGE_NOT_HELD);
+        return;
+    }
+    Status = WdfDeviceEnqueueRequest(Device, Request);
+    if (!NT_SUCCESS(Status))
+        WdfRequestComplete(Request, Status);
+}
+
+static
+VOID
+NTAPI
+BthMiniEvtFileCleanup(
+    _In_ WDFFILEOBJECT FileObject)
+{
+    BthSdpClientFileClosed(BthMiniGetDevice(WdfFileObjectGetDevice(FileObject)), FileObject);
 }
 
 static
@@ -419,6 +477,7 @@ BthMiniEvtDeviceAdd(
     WDF_PNPPOWER_EVENT_CALLBACKS Callbacks;
     WDF_OBJECT_ATTRIBUTES Attributes;
     WDF_IO_QUEUE_CONFIG QueueConfig;
+    WDF_FILEOBJECT_CONFIG FileConfig;
     PBTHMINI_DEVICE Dev;
     WDFDEVICE Device;
     NTSTATUS Status;
@@ -430,8 +489,13 @@ BthMiniEvtDeviceAdd(
     Callbacks.EvtDeviceD0Entry = BthMiniEvtD0Entry;
     Callbacks.EvtDeviceD0Exit = BthMiniEvtD0Exit;
     WdfDeviceInitSetPnpPowerEventCallbacks(DeviceInit, &Callbacks);
+    WDF_FILEOBJECT_CONFIG_INIT(&FileConfig, NULL, NULL, BthMiniEvtFileCleanup);
+    FileConfig.FileObjectClass = (WDF_FILEOBJECT_CLASS)(WdfFileObjectWdfCannotUseFsContexts | WdfFileObjectCanBeOptional);
+    WdfDeviceInitSetFileObjectConfig(DeviceInit, &FileConfig, WDF_NO_OBJECT_ATTRIBUTES);
+    WdfDeviceInitSetIoInCallerContextCallback(DeviceInit, BthMiniEvtIoInCallerContext);
 
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&Attributes, BTHMINI_DEVICE);
+    Attributes.EvtCleanupCallback = BthMiniEvtCleanup;
     Status = WdfDeviceCreate(&DeviceInit, &Attributes, &Device);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -448,8 +512,19 @@ BthMiniEvtDeviceAdd(
     InitializeListHead(&Dev->Remotes);
     InitializeListHead(&Dev->Channels);
     InitializeListHead(&Dev->Sessions);
+    InitializeListHead(&Dev->RfcommServers);
     InitializeListHead(&Dev->ComPorts);
     InitializeListHead(&Dev->AclQueue);
+    InitializeListHead(&Dev->LeAclQueue);
+    InitializeListHead(&Dev->Services);
+    InitializeListHead(&Dev->LocalServices);
+    BthSdpInitialize(Dev);
+    InitializeListHead(&Dev->SdpConnections);
+    KeInitializeSpinLock(&Dev->SdpClosedFilesLock);
+    InitializeListHead(&Dev->SdpClosedFiles);
+    InitializeListHead(&Dev->ProfileServers);
+    InitializeListHead(&Dev->ProfilePsms);
+    InitializeListHead(&Dev->ProfileChannels);
     Dev->NextCid = 0x0040;
 
     WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&QueueConfig, WdfIoQueueDispatchManual);
@@ -469,6 +544,16 @@ BthMiniEvtDeviceAdd(
     return Status;
 }
 
+static
+VOID
+NTAPI
+BthMiniEvtDriverUnload(
+    _In_ WDFDRIVER Driver)
+{
+    UNREFERENCED_PARAMETER(Driver);
+    BthTdiUnload();
+}
+
 NTSTATUS
 NTAPI
 DriverEntry(
@@ -476,7 +561,16 @@ DriverEntry(
     _In_ PUNICODE_STRING RegistryPath)
 {
     WDF_DRIVER_CONFIG Config;
+    WDFDRIVER Driver;
+    NTSTATUS Status;
 
     WDF_DRIVER_CONFIG_INIT(&Config, BthMiniEvtDeviceAdd);
-    return WdfDriverCreate(DriverObject, RegistryPath, WDF_NO_OBJECT_ATTRIBUTES, &Config, WDF_NO_HANDLE);
+    Config.EvtDriverUnload = BthMiniEvtDriverUnload;
+    Status = WdfDriverCreate(DriverObject, RegistryPath, WDF_NO_OBJECT_ATTRIBUTES, &Config, &Driver);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = BthTdiInitialize(Driver);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("BTHMINI: RFCOMM socket transport not created 0x%08lx\n", Status);
+    return STATUS_SUCCESS;
 }

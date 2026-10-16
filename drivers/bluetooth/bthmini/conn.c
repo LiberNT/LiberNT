@@ -21,7 +21,6 @@ typedef struct _BTHMINI_AUTH_CONTEXT
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(BTHMINI_AUTH_CONTEXT, BthAuthGetContext)
 
-static
 NTSTATUS
 BthCreateKey(
     _In_opt_ HANDLE Parent,
@@ -36,7 +35,6 @@ BthCreateKey(
     return ZwCreateKey(Key, KEY_ALL_ACCESS, &Attributes, 0, NULL, REG_OPTION_NON_VOLATILE, NULL);
 }
 
-static
 NTSTATUS
 BthOpenParameters(
     _In_ PCWSTR Subkey,
@@ -62,7 +60,6 @@ BthOpenParameters(
     return Status;
 }
 
-static
 VOID
 BthFormatAddress(
     _In_ BTH_ADDR Address,
@@ -101,16 +98,38 @@ BthParseAddress(
     return TRUE;
 }
 
-static
 VOID
 BthConnSaveDevice(
+    _In_ PBTHMINI_REMOTE Remote)
+{
+    UNICODE_STRING ValueName;
+    WCHAR Device[13];
+    HANDLE Key;
+    ULONG Cod = Remote->ClassOfDevice;
+
+    BthFormatAddress(Remote->Address, Device);
+    if (NT_SUCCESS(BthOpenParameters(L"Devices", Device, &Key)))
+    {
+        RtlInitUnicodeString(&ValueName, L"Name");
+        ZwSetValueKey(Key, &ValueName, 0, REG_BINARY, Remote->Name, (ULONG)strlen(Remote->Name) + 1);
+        if (Remote->Flags & BDIF_COD)
+        {
+            RtlInitUnicodeString(&ValueName, L"COD");
+            ZwSetValueKey(Key, &ValueName, 0, REG_DWORD, &Cod, sizeof(Cod));
+        }
+        ZwClose(Key);
+    }
+}
+
+static
+VOID
+BthConnSaveKey(
     _In_ PBTHMINI_DEVICE Dev,
     _In_ PBTHMINI_REMOTE Remote)
 {
     UNICODE_STRING ValueName;
     WCHAR Radio[13], Device[13];
     HANDLE Key;
-    ULONG Cod = Remote->ClassOfDevice;
 
     BthFormatAddress(Dev->Address, Radio);
     BthFormatAddress(Remote->Address, Device);
@@ -120,14 +139,7 @@ BthConnSaveDevice(
         ZwSetValueKey(Key, &ValueName, 0, REG_BINARY, Remote->LinkKey, sizeof(Remote->LinkKey));
         ZwClose(Key);
     }
-    if (NT_SUCCESS(BthOpenParameters(L"Devices", Device, &Key)))
-    {
-        RtlInitUnicodeString(&ValueName, L"Name");
-        ZwSetValueKey(Key, &ValueName, 0, REG_BINARY, Remote->Name, (ULONG)strlen(Remote->Name) + 1);
-        RtlInitUnicodeString(&ValueName, L"COD");
-        ZwSetValueKey(Key, &ValueName, 0, REG_DWORD, &Cod, sizeof(Cod));
-        ZwClose(Key);
-    }
+    BthConnSaveDevice(Remote);
 }
 
 static
@@ -156,13 +168,46 @@ BthConnDeleteDevice(
 }
 
 VOID
+BthConnLoadDevice(
+    _Inout_ PBTHMINI_REMOTE Remote)
+{
+    UCHAR DataBuffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + BTH_MAX_NAME_SIZE];
+    PKEY_VALUE_PARTIAL_INFORMATION Data = (PKEY_VALUE_PARTIAL_INFORMATION)DataBuffer;
+    UNICODE_STRING ValueName;
+    WCHAR Device[13];
+    HANDLE DeviceKey;
+    ULONG Size;
+
+    BthFormatAddress(Remote->Address, Device);
+    if (!NT_SUCCESS(BthOpenParameters(L"Devices", Device, &DeviceKey)))
+        return;
+    RtlInitUnicodeString(&ValueName, L"Name");
+    if (NT_SUCCESS(ZwQueryValueKey(DeviceKey, &ValueName, KeyValuePartialInformation, Data, sizeof(DataBuffer), &Size)) &&
+        Data->Type == REG_BINARY && Data->DataLength)
+    {
+        RtlZeroMemory(Remote->Name, sizeof(Remote->Name));
+        RtlCopyMemory(Remote->Name, Data->Data, min(Data->DataLength, sizeof(Remote->Name) - 1));
+        if (Remote->Name[0])
+            Remote->Flags |= BDIF_NAME;
+    }
+    RtlInitUnicodeString(&ValueName, L"COD");
+    if (NT_SUCCESS(ZwQueryValueKey(DeviceKey, &ValueName, KeyValuePartialInformation, Data, sizeof(DataBuffer), &Size)) &&
+        Data->Type == REG_DWORD && Data->DataLength == sizeof(ULONG))
+    {
+        Remote->ClassOfDevice = *(PULONG)Data->Data;
+        Remote->Flags |= BDIF_COD;
+    }
+    ZwClose(DeviceKey);
+}
+
+VOID
 BthConnLoadPaired(
     _In_ PBTHMINI_DEVICE Dev)
 {
     UCHAR Buffer[sizeof(KEY_VALUE_FULL_INFORMATION) + 64 * sizeof(WCHAR) + 16];
     PKEY_VALUE_FULL_INFORMATION Value = (PKEY_VALUE_FULL_INFORMATION)Buffer;
     WCHAR Radio[13];
-    HANDLE Key, DeviceKey;
+    HANDLE Key;
     ULONG Index, Size;
 
     BthFormatAddress(Dev->Address, Radio);
@@ -171,11 +216,7 @@ BthConnLoadPaired(
 
     for (Index = 0; NT_SUCCESS(ZwEnumerateValueKey(Key, Index, KeyValueFullInformation, Value, sizeof(Buffer), &Size)); Index++)
     {
-        PKEY_VALUE_PARTIAL_INFORMATION Data;
-        UCHAR DataBuffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + BTH_MAX_NAME_SIZE];
-        UNICODE_STRING ValueName;
         PBTHMINI_REMOTE Remote;
-        WCHAR Device[13];
         BTH_ADDR Address;
 
         if (Value->Type != REG_BINARY || Value->DataLength != 16 ||
@@ -188,27 +229,7 @@ BthConnLoadPaired(
         Remote->HasLinkKey = TRUE;
         Remote->Flags |= BDIF_PAIRED | BDIF_PERSONAL;
 
-        BthFormatAddress(Address, Device);
-        if (!NT_SUCCESS(BthOpenParameters(L"Devices", Device, &DeviceKey)))
-            continue;
-        Data = (PKEY_VALUE_PARTIAL_INFORMATION)DataBuffer;
-        RtlInitUnicodeString(&ValueName, L"Name");
-        if (NT_SUCCESS(ZwQueryValueKey(DeviceKey, &ValueName, KeyValuePartialInformation, Data, sizeof(DataBuffer), &Size)) &&
-            Data->Type == REG_BINARY && Data->DataLength)
-        {
-            RtlZeroMemory(Remote->Name, sizeof(Remote->Name));
-            RtlCopyMemory(Remote->Name, Data->Data, min(Data->DataLength, sizeof(Remote->Name) - 1));
-            if (Remote->Name[0])
-                Remote->Flags |= BDIF_NAME;
-        }
-        RtlInitUnicodeString(&ValueName, L"COD");
-        if (NT_SUCCESS(ZwQueryValueKey(DeviceKey, &ValueName, KeyValuePartialInformation, Data, sizeof(DataBuffer), &Size)) &&
-            Data->Type == REG_DWORD && Data->DataLength == sizeof(ULONG))
-        {
-            Remote->ClassOfDevice = *(PULONG)Data->Data;
-            Remote->Flags |= BDIF_COD;
-        }
-        ZwClose(DeviceKey);
+        BthConnLoadDevice(Remote);
     }
     ZwClose(Key);
 }
@@ -254,7 +275,6 @@ BthConnFinishPrompt(
     }
 }
 
-static
 BOOLEAN
 BthConnPrompt(
     _In_ PBTHMINI_DEVICE Dev,
@@ -394,6 +414,12 @@ BthConnStartAuthentication(
     Remote = BthRadioGetRemote(Dev, RtlUlonglongByteSwap(*Parameter) >> 16);
     if (!Remote)
         return STATUS_INSUFFICIENT_RESOURCES;
+    if ((Remote->Flags & (BDIF_LE | BDIF_BR)) == BDIF_LE)
+    {
+        if (Remote->Flags & BDIF_LE_PAIRED)
+            return STATUS_NO_MORE_ENTRIES;
+        return BthSmpPair(Dev, Remote, Request);
+    }
     if (Remote->Flags & BDIF_PAIRED)
         return STATUS_NO_MORE_ENTRIES;
     if (Remote->AuthRequest)
@@ -430,7 +456,7 @@ BthConnRemoveDevice(
     if (!NT_SUCCESS(Status))
         return STATUS_INVALID_BUFFER_SIZE;
     Remote = BthRadioFindRemote(Dev, *Address & 0xFFFFFFFFFFFFULL);
-    if (!Remote || !(Remote->Flags & BDIF_PAIRED))
+    if (!Remote || !(Remote->Flags & (BDIF_PAIRED | BDIF_LE_PAIRED)))
         return STATUS_NOT_FOUND;
 
     if (Remote->Flags & BDIF_CONNECTED)
@@ -442,8 +468,15 @@ BthConnRemoveDevice(
         Parameters[2] = HCI_REMOTE_USER_TERMINATED;
         BthHciQueueCommand(Dev, HCI_DISCONNECT, Parameters, sizeof(Parameters));
     }
-    BthConnDeleteDevice(Dev, Remote);
     Previous = Remote->Flags;
+    if (Remote->Flags & BDIF_LE_PAIRED)
+    {
+        BthLeDisconnect(Dev, Remote);
+        BthGattRemoveDevice(Dev, Remote);
+        BthSmpDeleteKeys(Dev, Remote);
+    }
+    BthConnDeleteDevice(Dev, Remote);
+    BthEnumRemoveDevice(Dev, Remote->Address);
     Remote->HasLinkKey = FALSE;
     RtlZeroMemory(Remote->LinkKey, sizeof(Remote->LinkKey));
     Remote->Flags &= ~(BDIF_PAIRED | BDIF_PERSONAL | BDIF_SSP_PAIRED | BDIF_SSP_MITM_PROTECTED);
@@ -538,6 +571,8 @@ BthConnSendAuthResponse(
     if (!NT_SUCCESS(Status))
         return STATUS_INVALID_BUFFER_SIZE;
     Remote = BthRadioFindRemote(Dev, RtlUlonglongByteSwap(Response->Address) >> 16);
+    if (Remote && Remote->Smp)
+        return BthSmpAuthResponse(Dev, Remote, Request, Response, Information);
     if (!Remote || !(Remote->Flags & BDIF_CONNECTED))
         return STATUS_DEVICE_NOT_CONNECTED;
     if (!Remote->Prompting || Remote->PromptResponse || Response->Method != Remote->PromptMethod)
@@ -633,6 +668,8 @@ BthConnEvent(
             Remote->Flags |= BDIF_CONNECTED;
             BthRadioReportInRange(Dev, Remote, Previous);
             DPRINT1("BTHMINI: connected to %012I64x, handle 0x%03x\n", Remote->Address, Remote->Handle);
+            BthHciQueueCommand(Dev, HCI_READ_REMOTE_FEATURES, Parameters + 1, 2);
+            BthHciQueueCommand(Dev, HCI_READ_REMOTE_VERSION, Parameters + 1, 2);
             if (!Dev->Inquiring)
                 BthRadioRequestName(Dev, Remote);
             if (Remote->Pairing && !NT_SUCCESS(BthConnAuthenticate(Dev, Remote)))
@@ -656,6 +693,30 @@ BthConnEvent(
             DPRINT1("BTHMINI: disconnected from %012I64x, reason 0x%02x\n", Remote->Address, Parameters[3]);
             if (Remote->Pairing)
                 BthConnFinishAuthentication(Remote, BthConnStatus(Parameters[3]));
+            return TRUE;
+
+        case HCI_EV_REMOTE_FEATURES_COMPLETE:
+            if (ParameterLength < 11 || Parameters[0])
+                return TRUE;
+            Remote = BthRadioFindHandle(Dev, (USHORT)((Parameters[1] | (Parameters[2] << 8)) & 0x0FFF));
+            if (!Remote)
+                return TRUE;
+            Remote->RemoteLmpFeatures = 0;
+            for (Previous = 0; Previous < 8; Previous++)
+                Remote->RemoteLmpFeatures |= (ULONGLONG)Parameters[3 + Previous] << (Previous * 8);
+            Remote->HasRemoteFeatures = TRUE;
+            return TRUE;
+
+        case HCI_EV_REMOTE_VERSION_COMPLETE:
+            if (ParameterLength < 8 || Parameters[0])
+                return TRUE;
+            Remote = BthRadioFindHandle(Dev, (USHORT)((Parameters[1] | (Parameters[2] << 8)) & 0x0FFF));
+            if (!Remote)
+                return TRUE;
+            Remote->RemoteLmpVersion = Parameters[3];
+            Remote->RemoteManufacturer = (USHORT)(Parameters[4] | (Parameters[5] << 8));
+            Remote->RemoteLmpSubversion = (USHORT)(Parameters[6] | (Parameters[7] << 8));
+            Remote->HasRemoteVersion = TRUE;
             return TRUE;
 
         case HCI_EV_AUTHENTICATION_COMPLETE:
@@ -740,9 +801,11 @@ BthConnEvent(
                 Remote->Flags |= BDIF_SSP_PAIRED;
             if (Remote->LinkKeyType == 0x05 || Remote->LinkKeyType == 0x08)
                 Remote->Flags |= BDIF_SSP_MITM_PROTECTED;
-            BthConnSaveDevice(Dev, Remote);
+            BthConnSaveKey(Dev, Remote);
             BthRadioReportInRange(Dev, Remote, Previous);
             DPRINT1("BTHMINI: paired with %012I64x, key type %u\n", Remote->Address, Remote->LinkKeyType);
+            if (!(Previous & BDIF_PAIRED))
+                BthEnumDiscover(Dev, Remote);
             return TRUE;
 
         case HCI_EV_IO_CAPABILITY_REQUEST:

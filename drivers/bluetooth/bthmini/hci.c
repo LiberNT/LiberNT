@@ -296,6 +296,24 @@ BthHciWriteScanEnable(
     return Status;
 }
 
+static
+ULONGLONG
+BthHciReadExtendedFeatures(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ UCHAR Page)
+{
+    UCHAR Result[11];
+    ULONGLONG Features = 0;
+    ULONG Index;
+
+    if (!NT_SUCCESS(BthHciCommand(Dev, HCI_READ_LOCAL_EXT_FEATURES, &Page, 1, Result, sizeof(Result))))
+        return 0;
+    Dev->LmpMaxFeaturePage = Result[2];
+    for (Index = 0; Index < 8; Index++)
+        Features |= (ULONGLONG)Result[3 + Index] << (Index * 8);
+    return Features;
+}
+
 NTSTATUS
 BthHciInitialize(
     _In_ PBTHMINI_DEVICE Dev)
@@ -349,10 +367,37 @@ BthHciInitialize(
         Parameters[Index] = (UCHAR)(EventMask >> (Index * 8));
     BthHciCommand(Dev, HCI_SET_EVENT_MASK, Parameters, 8, NULL, 0);
 
-    if (LMP_FEATURE(Dev->LmpFeatures, 6, 3))
+    if (LMP_SSP_SUPPORTED(Dev->LmpFeatures))
     {
         Parameters[0] = 1;
         BthHciCommand(Dev, HCI_WRITE_SIMPLE_PAIRING_MODE, Parameters, 1, NULL, 0);
+    }
+
+    if (LMP_LE_SUPPORTED(Dev->LmpFeatures))
+    {
+        Parameters[0] = 1;
+        Parameters[1] = 0;
+        Dev->LeEnabled = NT_SUCCESS(BthHciCommand(Dev, HCI_WRITE_LE_HOST_SUPPORT, Parameters, 2, NULL, 0));
+        if (Dev->LeEnabled &&
+            NT_SUCCESS(BthHciCommand(Dev, HCI_LE_READ_BUFFER_SIZE, NULL, 0, Result, 4)))
+        {
+            Dev->LeMtu = (USHORT)(Result[1] | (Result[2] << 8));
+            Dev->LePackets = Result[3];
+            Dev->LeCredits = Dev->LePackets;
+        }
+    }
+
+    if (LMP_EXTENDED_FEATURES(Dev->LmpFeatures))
+    {
+        BthHciReadExtendedFeatures(Dev, 1);
+        if (Dev->LmpMaxFeaturePage >= 2)
+            Dev->LmpFeaturesPage2 = BthHciReadExtendedFeatures(Dev, 2);
+        if (LMP_SC_CONTROLLER(Dev->LmpFeaturesPage2))
+        {
+            Parameters[0] = 1;
+            Dev->SecureConnections = NT_SUCCESS(BthHciCommand(Dev, HCI_WRITE_SC_HOST_SUPPORT, Parameters, 1, NULL, 0));
+        }
+        Dev->LmpHostFeatures = BthHciReadExtendedFeatures(Dev, 1);
     }
 
     Parameters[0] = LMP_FEATURE(Dev->LmpFeatures, 6, 0) ? 2 : (LMP_FEATURE(Dev->LmpFeatures, 3, 6) ? 1 : 0);
@@ -392,11 +437,14 @@ BthHciInitialize(
     Status = BthHciWriteScanEnable(Dev, HCI_SCAN_PAGE);
     if (!NT_SUCCESS(Status))
         return Status;
+    BthLeInitialize(Dev);
 
-    DPRINT1("BTHMINI: radio %02x:%02x:%02x:%02x:%02x:%02x \"%s\" HCI %u.%04x LMP %u.%04x manufacturer %u, ACL %u x %u\n",
+    DPRINT1("BTHMINI: radio %02x:%02x:%02x:%02x:%02x:%02x \"%s\" HCI %u.%04x LMP %u.%04x manufacturer %u, ACL %u x %u, "
+            "LE %u (%u x %u), Secure Connections %u, host features 0x%I64x\n",
             (UCHAR)(Dev->Address >> 40), (UCHAR)(Dev->Address >> 32), (UCHAR)(Dev->Address >> 24),
             (UCHAR)(Dev->Address >> 16), (UCHAR)(Dev->Address >> 8), (UCHAR)Dev->Address, Dev->Name,
             Dev->HciVersion, Dev->HciRevision, Dev->LmpVersion, Dev->LmpSubversion, Dev->Manufacturer,
-            Dev->AclPackets, Dev->AclMtu);
+            Dev->AclPackets, Dev->AclMtu, Dev->LeEnabled, Dev->LePackets, Dev->LeMtu, Dev->SecureConnections,
+            Dev->LmpHostFeatures);
     return STATUS_SUCCESS;
 }

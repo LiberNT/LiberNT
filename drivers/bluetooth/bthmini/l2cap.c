@@ -30,11 +30,14 @@
 #define L2CAP_RESULT_BAD_PSM            0x0002
 #define L2CAP_RESULT_SECURITY_BLOCK     0x0003
 #define L2CAP_RESULT_NO_RESOURCES       0x0004
+#define L2CAP_STATUS_AUTHENTICATION_PENDING 0x0001
+#define L2CAP_STATUS_AUTHORIZATION_PENDING  0x0002
 #define L2CAP_CONFIG_UNACCEPTABLE       0x0001
 #define L2CAP_SIGNAL_TIMEOUT_MS         30000
 #define L2CAP_MAX_CHANNELS_PER_LINK     16
 #define ACL_PB_CONTINUING               0x01
 #define ACL_PB_START                    0x02
+#define ACL_PB_START_NON_FLUSHABLE      0x00
 
 static
 USHORT
@@ -79,6 +82,21 @@ BthAclKick(
         }
         ExFreePoolWithTag(Packet, BTHMINI_TAG);
     }
+    while ((Dev->LePackets ? Dev->LeCredits : Dev->AclCredits) && !IsListEmpty(&Dev->LeAclQueue))
+    {
+        PBTHMINI_ACL_PACKET Packet = CONTAINING_RECORD(RemoveHeadList(&Dev->LeAclQueue), BTHMINI_ACL_PACKET, Link);
+        PBTHMINI_REMOTE Remote = BthLeFindHandle(Dev, BthGet16(Packet->Data) & 0x0FFF);
+
+        if (Remote && NT_SUCCESS(BthMiniSendPacket(Dev, HciPacketAclData, Packet->Data, Packet->Length)))
+        {
+            if (Dev->LePackets)
+                Dev->LeCredits--;
+            else
+                Dev->AclCredits--;
+            Remote->LeAclOutstanding++;
+        }
+        ExFreePoolWithTag(Packet, BTHMINI_TAG);
+    }
 }
 
 static
@@ -86,24 +104,28 @@ NTSTATUS
 BthAclQueueFrame(
     _In_ PBTHMINI_DEVICE Dev,
     _In_ USHORT Handle,
+    _In_ BOOLEAN Le,
     _In_reads_bytes_(Length) const UCHAR *Frame,
     _In_ ULONG Length)
 {
-    ULONG Offset = 0;
+    ULONG Offset = 0, Mtu = Le && Dev->LePackets ? Dev->LeMtu : Dev->AclMtu;
+    UCHAR Start = Le ? ACL_PB_START_NON_FLUSHABLE : ACL_PB_START;
 
+    if (!Mtu)
+        return STATUS_INVALID_DEVICE_STATE;
     while (Offset < Length)
     {
-        ULONG Chunk = min(Length - Offset, Dev->AclMtu);
+        ULONG Chunk = min(Length - Offset, Mtu);
         PBTHMINI_ACL_PACKET Packet;
 
         Packet = ExAllocatePoolWithTag(NonPagedPool, FIELD_OFFSET(BTHMINI_ACL_PACKET, Data[4 + Chunk]), BTHMINI_TAG);
         if (!Packet)
             return STATUS_INSUFFICIENT_RESOURCES;
-        BthPut16(Packet->Data, (USHORT)(Handle | ((Offset ? ACL_PB_CONTINUING : ACL_PB_START) << 12)));
+        BthPut16(Packet->Data, (USHORT)(Handle | ((Offset ? ACL_PB_CONTINUING : Start) << 12)));
         BthPut16(Packet->Data + 2, (USHORT)Chunk);
         RtlCopyMemory(Packet->Data + 4, Frame + Offset, Chunk);
         Packet->Length = 4 + Chunk;
-        InsertTailList(&Dev->AclQueue, &Packet->Link);
+        InsertTailList(Le ? &Dev->LeAclQueue : &Dev->AclQueue, &Packet->Link);
         Offset += Chunk;
     }
     BthAclKick(Dev);
@@ -130,7 +152,31 @@ BthL2capSendFrame(
     BthPut16(Frame, (USHORT)Length);
     BthPut16(Frame + 2, Cid);
     RtlCopyMemory(Frame + 4, Payload, Length);
-    Status = BthAclQueueFrame(Dev, Remote->Handle, Frame, 4 + Length);
+    Status = BthAclQueueFrame(Dev, Remote->Handle, FALSE, Frame, 4 + Length);
+    ExFreePoolWithTag(Frame, BTHMINI_TAG);
+    return Status;
+}
+
+NTSTATUS
+BthL2capSendLe(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ USHORT Cid,
+    _In_reads_bytes_(Length) const UCHAR *Payload,
+    _In_ ULONG Length)
+{
+    PUCHAR Frame;
+    NTSTATUS Status;
+
+    if (Length > L2CAP_MAX_FRAME || !Remote->LeConnected)
+        return STATUS_INVALID_PARAMETER;
+    Frame = ExAllocatePoolWithTag(NonPagedPool, 4 + Length, BTHMINI_TAG);
+    if (!Frame)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    BthPut16(Frame, (USHORT)Length);
+    BthPut16(Frame + 2, Cid);
+    RtlCopyMemory(Frame + 4, Payload, Length);
+    Status = BthAclQueueFrame(Dev, Remote->LeHandle, TRUE, Frame, 4 + Length);
     ExFreePoolWithTag(Frame, BTHMINI_TAG);
     return Status;
 }
@@ -296,8 +342,11 @@ BthL2capCountChannels(
 static
 const BTHMINI_CHANNEL_CALLBACKS *
 BthL2capServer(
-    _In_ USHORT Psm)
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ USHORT Psm,
+    _Out_ PBOOLEAN Deferred)
 {
+    *Deferred = FALSE;
     switch (Psm)
     {
         case L2CAP_PSM_SDP:
@@ -305,8 +354,75 @@ BthL2capServer(
         case L2CAP_PSM_RFCOMM:
             return BthRfcommServerCallbacks();
         default:
-            return NULL;
+            *Deferred = TRUE;
+            return BthBrbServer(Dev, Psm);
     }
+}
+
+static
+VOID
+BthL2capRespond(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_CHANNEL Channel,
+    _In_ USHORT Result,
+    _In_ USHORT Status)
+{
+    UCHAR Response[8];
+
+    BthPut16(Response, Result == L2CAP_RESULT_SUCCESS || Result == L2CAP_RESULT_PENDING ? Channel->LocalCid : 0);
+    BthPut16(Response + 2, Channel->RemoteCid);
+    BthPut16(Response + 4, Result);
+    BthPut16(Response + 6, Status);
+    BthL2capSignal(Dev, Channel->Remote, L2CAP_CONNECTION_RESPONSE, Channel->RequestIdentifier, Response, sizeof(Response));
+}
+
+static
+VOID
+BthL2capDropIncoming(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_CHANNEL Channel,
+    _In_ USHORT Result)
+{
+    DPRINT1("BTHMINI: L2CAP PSM 0x%04x refused, result %u\n", Channel->Psm, Result);
+    BthL2capRespond(Dev, Channel, Result, 0);
+    BthL2capClose(Dev, Channel, STATUS_CONNECTION_REFUSED);
+}
+
+static
+VOID
+BthL2capProceedIncoming(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_CHANNEL Channel)
+{
+    if (Channel->Deferred)
+    {
+        Channel->State = BthChannelWaitAccept;
+        Channel->Deadline = BthNowMs() + L2CAP_SIGNAL_TIMEOUT_MS;
+        BthL2capRespond(Dev, Channel, L2CAP_RESULT_PENDING, L2CAP_STATUS_AUTHORIZATION_PENDING);
+        BthBrbRemoteConnect(Dev, Channel);
+        return;
+    }
+    Channel->State = BthChannelConfig;
+    BthL2capRespond(Dev, Channel, L2CAP_RESULT_SUCCESS, 0);
+    BthL2capSendConfiguration(Dev, Channel);
+}
+
+VOID
+BthL2capAccept(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_CHANNEL Channel,
+    _In_ USHORT Result)
+{
+    if (Channel->State != BthChannelWaitAccept)
+        return;
+    if (Result != L2CAP_RESULT_SUCCESS)
+    {
+        BthL2capDropIncoming(Dev, Channel, Result);
+        return;
+    }
+    Channel->State = BthChannelConfig;
+    BthL2capRespond(Dev, Channel, L2CAP_RESULT_SUCCESS, 0);
+    BthL2capSendConfiguration(Dev, Channel);
 }
 
 static
@@ -318,42 +434,52 @@ BthL2capConnectionRequest(
     _In_reads_(4) const UCHAR *Request)
 {
     const BTHMINI_CHANNEL_CALLBACKS *Server;
-    PBTHMINI_CHANNEL Channel = NULL;
+    PBTHMINI_CHANNEL Channel;
     USHORT Psm = BthGet16(Request), RemoteCid = BthGet16(Request + 2), Result;
+    BOOLEAN Deferred;
     UCHAR Response[8];
+    NTSTATUS Status;
 
-    Server = BthL2capServer(Psm);
+    Server = BthL2capServer(Dev, Psm, &Deferred);
     if (!Server)
         Result = L2CAP_RESULT_BAD_PSM;
-    else if (Psm != L2CAP_PSM_SDP && !Remote->Encrypted)
-        Result = L2CAP_RESULT_SECURITY_BLOCK;
     else if (BthL2capCountChannels(Dev, Remote) >= L2CAP_MAX_CHANNELS_PER_LINK)
-        Result = L2CAP_RESULT_NO_RESOURCES;
-    else if (!(Channel = ExAllocatePoolZero(NonPagedPool, sizeof(*Channel), BTHMINI_TAG)))
         Result = L2CAP_RESULT_NO_RESOURCES;
     else
         Result = L2CAP_RESULT_SUCCESS;
-
-    if (Channel)
+    Channel = Result == L2CAP_RESULT_SUCCESS ? ExAllocatePoolZero(NonPagedPool, sizeof(*Channel), BTHMINI_TAG) : NULL;
+    if (!Channel)
     {
-        Channel->Remote = Remote;
-        Channel->Callbacks = Server;
-        Channel->Psm = Psm;
-        Channel->LocalCid = BthL2capAllocateCid(Dev);
-        Channel->RemoteCid = RemoteCid;
-        Channel->RemoteMtu = L2CAP_DEFAULT_MTU;
-        Channel->State = BthChannelConfig;
-        InsertTailList(&Dev->Channels, &Channel->Link);
-    }
-    BthPut16(Response, Channel ? Channel->LocalCid : 0);
-    BthPut16(Response + 2, RemoteCid);
-    BthPut16(Response + 4, Result);
-    BthPut16(Response + 6, 0);
-    BthL2capSignal(Dev, Remote, L2CAP_CONNECTION_RESPONSE, Identifier, Response, sizeof(Response));
-    if (Channel)
-        BthL2capSendConfiguration(Dev, Channel);
-    else
+        if (Result == L2CAP_RESULT_SUCCESS)
+            Result = L2CAP_RESULT_NO_RESOURCES;
+        BthPut16(Response, 0);
+        BthPut16(Response + 2, RemoteCid);
+        BthPut16(Response + 4, Result);
+        BthPut16(Response + 6, 0);
+        BthL2capSignal(Dev, Remote, L2CAP_CONNECTION_RESPONSE, Identifier, Response, sizeof(Response));
         DPRINT1("BTHMINI: L2CAP PSM 0x%04x refused, result %u\n", Psm, Result);
+        return;
+    }
+
+    Channel->Remote = Remote;
+    Channel->Callbacks = Server;
+    Channel->Psm = Psm;
+    Channel->Deferred = Deferred;
+    Channel->LocalCid = BthL2capAllocateCid(Dev);
+    Channel->RemoteCid = RemoteCid;
+    Channel->RemoteMtu = L2CAP_DEFAULT_MTU;
+    Channel->RequestIdentifier = Identifier;
+    Channel->State = BthChannelWaitSecurity;
+    Channel->Deadline = BthNowMs() + L2CAP_SIGNAL_TIMEOUT_MS;
+    InsertTailList(&Dev->Channels, &Channel->Link);
+
+    Status = BthConnEnsureLink(Dev, Remote, Psm != L2CAP_PSM_SDP);
+    if (Status == STATUS_SUCCESS)
+        BthL2capProceedIncoming(Dev, Channel);
+    else if (Status == STATUS_PENDING)
+        BthL2capRespond(Dev, Channel, L2CAP_RESULT_PENDING, L2CAP_STATUS_AUTHENTICATION_PENDING);
+    else
+        BthL2capDropIncoming(Dev, Channel, L2CAP_RESULT_SECURITY_BLOCK);
 }
 
 static
@@ -593,14 +719,42 @@ BthL2capFrame(
 
 static
 VOID
+BthL2capDropFrame(
+    _Inout_ PUCHAR *Frame,
+    _Inout_ PULONG Expected,
+    _Inout_ PULONG Received)
+{
+    if (*Frame)
+        ExFreePoolWithTag(*Frame, BTHMINI_TAG);
+    *Frame = NULL;
+    *Expected = 0;
+    *Received = 0;
+}
+
+static
+VOID
 BthL2capDropReassembly(
     _In_ PBTHMINI_REMOTE Remote)
 {
-    if (Remote->RxFrame)
-        ExFreePoolWithTag(Remote->RxFrame, BTHMINI_TAG);
-    Remote->RxFrame = NULL;
-    Remote->RxExpected = 0;
-    Remote->RxLength = 0;
+    BthL2capDropFrame(&Remote->RxFrame, &Remote->RxExpected, &Remote->RxLength);
+}
+
+static
+VOID
+BthL2capDeliver(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ BOOLEAN Le,
+    _In_reads_bytes_(Length) const UCHAR *Frame,
+    _In_ ULONG Length)
+{
+    if (!Le)
+    {
+        BthL2capFrame(Dev, Remote, Frame, Length);
+        return;
+    }
+    if (4 + (ULONG)BthGet16(Frame) == Length)
+        BthLeFrame(Dev, Remote, BthGet16(Frame + 2), Frame + 4, Length - 4);
 }
 
 VOID
@@ -612,6 +766,9 @@ BthAclReceive(
     PBTHMINI_REMOTE Remote;
     USHORT Handle, AclLength;
     UCHAR Boundary;
+    BOOLEAN Le = FALSE;
+    PUCHAR *RxFrame;
+    PULONG RxExpected, RxLength;
 
     if (Length < 4)
         return;
@@ -622,48 +779,83 @@ BthAclReceive(
         return;
     Remote = BthRadioFindHandle(Dev, Handle);
     if (!Remote)
+    {
+        Remote = BthLeFindHandle(Dev, Handle);
+        Le = TRUE;
+    }
+    if (!Remote)
         return;
+    RxFrame = Le ? &Remote->LeRxFrame : &Remote->RxFrame;
+    RxExpected = Le ? &Remote->LeRxExpected : &Remote->RxExpected;
+    RxLength = Le ? &Remote->LeRxLength : &Remote->RxLength;
     Data += 4;
 
     if (Boundary != ACL_PB_CONTINUING)
     {
         ULONG FrameLength;
 
-        BthL2capDropReassembly(Remote);
+        BthL2capDropFrame(RxFrame, RxExpected, RxLength);
         if (AclLength < 4)
             return;
         FrameLength = 4 + BthGet16(Data);
         if (AclLength >= FrameLength)
         {
-            BthL2capFrame(Dev, Remote, Data, FrameLength);
+            BthL2capDeliver(Dev, Remote, Le, Data, FrameLength);
             return;
         }
-        Remote->RxFrame = ExAllocatePoolWithTag(NonPagedPool, FrameLength, BTHMINI_TAG);
-        if (!Remote->RxFrame)
+        *RxFrame = ExAllocatePoolWithTag(NonPagedPool, FrameLength, BTHMINI_TAG);
+        if (!*RxFrame)
             return;
-        Remote->RxExpected = FrameLength;
-        Remote->RxLength = 0;
+        *RxExpected = FrameLength;
+        *RxLength = 0;
     }
-    if (!Remote->RxFrame)
+    if (!*RxFrame)
         return;
-    if (AclLength > Remote->RxExpected - Remote->RxLength)
+    if (AclLength > *RxExpected - *RxLength)
     {
-        BthL2capDropReassembly(Remote);
+        BthL2capDropFrame(RxFrame, RxExpected, RxLength);
         return;
     }
-    RtlCopyMemory(Remote->RxFrame + Remote->RxLength, Data, AclLength);
-    Remote->RxLength += AclLength;
-    if (Remote->RxLength == Remote->RxExpected)
+    RtlCopyMemory(*RxFrame + *RxLength, Data, AclLength);
+    *RxLength += AclLength;
+    if (*RxLength == *RxExpected)
     {
-        PUCHAR Frame = Remote->RxFrame;
-        ULONG FrameLength = Remote->RxLength;
+        PUCHAR Frame = *RxFrame;
+        ULONG FrameLength = *RxLength;
 
-        Remote->RxFrame = NULL;
-        Remote->RxExpected = 0;
-        Remote->RxLength = 0;
-        BthL2capFrame(Dev, Remote, Frame, FrameLength);
+        *RxFrame = NULL;
+        *RxExpected = 0;
+        *RxLength = 0;
+        BthL2capDeliver(Dev, Remote, Le, Frame, FrameLength);
         ExFreePoolWithTag(Frame, BTHMINI_TAG);
     }
+}
+
+VOID
+BthL2capLeLinkDown(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote)
+{
+    PLIST_ENTRY Entry, Next;
+
+    BthL2capDropFrame(&Remote->LeRxFrame, &Remote->LeRxExpected, &Remote->LeRxLength);
+    for (Entry = Dev->LeAclQueue.Flink; Entry != &Dev->LeAclQueue; Entry = Next)
+    {
+        PBTHMINI_ACL_PACKET Packet = CONTAINING_RECORD(Entry, BTHMINI_ACL_PACKET, Link);
+
+        Next = Entry->Flink;
+        if ((BthGet16(Packet->Data) & 0x0FFF) == Remote->LeHandle)
+        {
+            RemoveEntryList(&Packet->Link);
+            ExFreePoolWithTag(Packet, BTHMINI_TAG);
+        }
+    }
+    if (Dev->LePackets)
+        Dev->LeCredits = (USHORT)min(Dev->LePackets, Dev->LeCredits + Remote->LeAclOutstanding);
+    else
+        Dev->AclCredits = (USHORT)min(Dev->AclPackets, Dev->AclCredits + Remote->LeAclOutstanding);
+    Remote->LeAclOutstanding = 0;
+    BthAclKick(Dev);
 }
 
 NTSTATUS
@@ -765,6 +957,14 @@ BthL2capLinkChanged(
             BthL2capClose(Dev, Channel, STATUS_REMOTE_DISCONNECT);
             continue;
         }
+        if (Channel->State == BthChannelWaitSecurity)
+        {
+            if (NT_SUCCESS(Status) && (Remote->Encrypted || Channel->Psm == L2CAP_PSM_SDP))
+                BthL2capProceedIncoming(Dev, Channel);
+            else if (!NT_SUCCESS(Status))
+                BthL2capDropIncoming(Dev, Channel, L2CAP_RESULT_SECURITY_BLOCK);
+            continue;
+        }
         if (Channel->State != BthChannelWaitLink)
             continue;
         if (!NT_SUCCESS(Status))
@@ -816,6 +1016,8 @@ BthL2capTick(
         if (Channel->State != BthChannelOpen && Now >= Channel->Deadline)
         {
             DPRINT1("BTHMINI: L2CAP PSM 0x%04x timed out in state %u\n", Channel->Psm, Channel->State);
+            if (Channel->State == BthChannelWaitSecurity || Channel->State == BthChannelWaitAccept)
+                BthL2capRespond(Dev, Channel, L2CAP_RESULT_NO_RESOURCES, 0);
             BthL2capClose(Dev, Channel, STATUS_IO_TIMEOUT);
         }
     }
@@ -831,8 +1033,15 @@ BthL2capFlush(
         BthL2capClose(Dev, CONTAINING_RECORD(Dev->Channels.Flink, BTHMINI_CHANNEL, Link), STATUS_CANCELLED);
     while (!IsListEmpty(&Dev->AclQueue))
         ExFreePoolWithTag(CONTAINING_RECORD(RemoveHeadList(&Dev->AclQueue), BTHMINI_ACL_PACKET, Link), BTHMINI_TAG);
+    while (!IsListEmpty(&Dev->LeAclQueue))
+        ExFreePoolWithTag(CONTAINING_RECORD(RemoveHeadList(&Dev->LeAclQueue), BTHMINI_ACL_PACKET, Link), BTHMINI_TAG);
     for (Entry = Dev->Remotes.Flink; Entry != &Dev->Remotes; Entry = Entry->Flink)
-        BthL2capDropReassembly(CONTAINING_RECORD(Entry, BTHMINI_REMOTE, Link));
+    {
+        PBTHMINI_REMOTE Remote = CONTAINING_RECORD(Entry, BTHMINI_REMOTE, Link);
+
+        BthL2capDropReassembly(Remote);
+        BthL2capDropFrame(&Remote->LeRxFrame, &Remote->LeRxExpected, &Remote->LeRxLength);
+    }
 }
 
 BOOLEAN
@@ -849,12 +1058,22 @@ BthL2capEvent(
     for (Index = 0; ParameterLength >= 1 && Index < Parameters[0] && 1 + (Index + 1) * 4 <= ParameterLength; Index++)
     {
         const UCHAR *Entry = Parameters + 1 + Index * 4;
-        PBTHMINI_REMOTE Remote = BthRadioFindHandle(Dev, BthGet16(Entry) & 0x0FFF);
-        USHORT Count = BthGet16(Entry + 2);
+        USHORT Handle = BthGet16(Entry) & 0x0FFF, Count = BthGet16(Entry + 2);
+        PBTHMINI_REMOTE Remote = BthRadioFindHandle(Dev, Handle);
 
         if (Remote)
+        {
             Remote->AclOutstanding = Remote->AclOutstanding > Count ? Remote->AclOutstanding - Count : 0;
-        Dev->AclCredits = (USHORT)min(Dev->AclPackets, Dev->AclCredits + Count);
+            Dev->AclCredits = (USHORT)min(Dev->AclPackets, Dev->AclCredits + Count);
+            continue;
+        }
+        Remote = BthLeFindHandle(Dev, Handle);
+        if (Remote)
+            Remote->LeAclOutstanding = Remote->LeAclOutstanding > Count ? Remote->LeAclOutstanding - Count : 0;
+        if (Remote && Dev->LePackets)
+            Dev->LeCredits = (USHORT)min(Dev->LePackets, Dev->LeCredits + Count);
+        else
+            Dev->AclCredits = (USHORT)min(Dev->AclPackets, Dev->AclCredits + Count);
     }
     BthAclKick(Dev);
     return TRUE;

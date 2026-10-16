@@ -30,6 +30,7 @@
 #define RFCOMM_INITIAL_CREDITS      7
 #define RFCOMM_TIMEOUT_MS           20000
 #define RFCOMM_MAX_FRAME_SIZE       (L2CAP_LOCAL_MTU - 5)
+#define RFCOMM_DEFAULT_FRAME_SIZE   127
 
 typedef struct _BTHMINI_DLC_BUFFER
 {
@@ -39,6 +40,8 @@ typedef struct _BTHMINI_DLC_BUFFER
 } BTHMINI_DLC_BUFFER, *PBTHMINI_DLC_BUFFER;
 
 static UCHAR BthRfcommCrcTable[256];
+
+static const BTHMINI_DLC_CALLBACKS BthRfcommPendingCallbacks = { NULL, NULL, NULL, NULL };
 
 static
 ULONGLONG
@@ -347,6 +350,61 @@ BthRfcommStartDlc(
 }
 
 static
+PBTHMINI_RFCOMM_SERVER
+BthRfcommFindServer(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ UCHAR Channel)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = Dev->RfcommServers.Flink; Entry != &Dev->RfcommServers; Entry = Entry->Flink)
+    {
+        PBTHMINI_RFCOMM_SERVER Server = CONTAINING_RECORD(Entry, BTHMINI_RFCOMM_SERVER, Link);
+
+        if (Server->Channel == Channel)
+            return Server;
+    }
+    return NULL;
+}
+
+static
+PBTHMINI_DLC
+BthRfcommCreateIncoming(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_RFCOMM_SESSION Session,
+    _In_ UCHAR Dlci)
+{
+    PBTHMINI_DLC Dlc;
+
+    if ((Dlci >> 1) < 1 || (Dlci >> 1) > 30 || (Dlci & 1) != (Session->Initiator ? 1 : 0) ||
+        !Session->Channel || !BthRfcommFindServer(Dev, Dlci >> 1))
+        return NULL;
+    Dlc = ExAllocatePoolZero(NonPagedPool, sizeof(*Dlc), BTHMINI_TAG);
+    if (!Dlc)
+        return NULL;
+    Dlc->Session = Session;
+    Dlc->Callbacks = &BthRfcommPendingCallbacks;
+    Dlc->Dlci = Dlci;
+    Dlc->State = BthDlcWaitSabm;
+    Dlc->Deadline = BthRfcommNow() + RFCOMM_TIMEOUT_MS;
+    Dlc->FrameSize = (USHORT)min(RFCOMM_DEFAULT_FRAME_SIZE, Session->Channel->RemoteMtu - 5);
+    InitializeListHead(&Dlc->TxQueue);
+    InsertTailList(&Session->Dlcs, &Dlc->Link);
+    return Dlc;
+}
+
+static
+BOOLEAN
+BthRfcommAccept(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_DLC Dlc)
+{
+    PBTHMINI_RFCOMM_SERVER Server = BthRfcommFindServer(Dev, Dlc->Dlci >> 1);
+
+    return Server && Server->Accept(Dev, Server->Context, Dlc) && Dlc->Callbacks != &BthRfcommPendingCallbacks;
+}
+
+static
 VOID
 BthRfcommMcc(
     _In_ PBTHMINI_DEVICE Dev,
@@ -386,10 +444,21 @@ BthRfcommMcc(
                 Dlc->Deadline = BthRfcommNow() + RFCOMM_TIMEOUT_MS;
                 BthRfcommSendControl(Dev, Session, Dlc->Dlci, RFCOMM_SABM);
             }
-            else if (Dlc)
+            else if (Dlc && Dlc->State != BthDlcWaitSabm)
             {
                 Dlc->CreditFlow = (Value[1] & 0xF0) == RFCOMM_CFC_REQUEST;
                 Dlc->FrameSize = (USHORT)min(Dlc->FrameSize, Value[4] | (Value[5] << 8));
+                BthRfcommSendParameters(Dev, Dlc, FALSE, Dlc->CreditFlow ? RFCOMM_CFC_ACCEPT : 0);
+            }
+            else if (Dlc || (Dlc = BthRfcommCreateIncoming(Dev, Session, Value[0] & 0x3F)) != NULL)
+            {
+                USHORT Requested = (USHORT)(Value[4] | (Value[5] << 8));
+
+                Dlc->CreditFlow = (Value[1] & 0xF0) == RFCOMM_CFC_REQUEST;
+                Dlc->FrameSize = (USHORT)min(min(RFCOMM_MAX_FRAME_SIZE, Session->Channel->RemoteMtu - 5),
+                                             Requested ? Requested : RFCOMM_DEFAULT_FRAME_SIZE);
+                Dlc->TxCredits = Dlc->CreditFlow ? (Value[7] & 0x07) : 0;
+                Dlc->RxCredits = Dlc->CreditFlow ? RFCOMM_INITIAL_CREDITS : 0;
                 BthRfcommSendParameters(Dev, Dlc, FALSE, Dlc->CreditFlow ? RFCOMM_CFC_ACCEPT : 0);
             }
             else
@@ -471,11 +540,31 @@ BthRfcommReceive(
             {
                 Session->Open = TRUE;
                 BthRfcommSendControl(Dev, Session, 0, RFCOMM_UA);
+                break;
             }
-            else
+            if (!Dlc)
+                Dlc = BthRfcommCreateIncoming(Dev, Session, Dlci);
+            if (!Dlc || Dlc->State != BthDlcWaitSabm)
             {
-                BthRfcommSendControl(Dev, Session, Dlci, RFCOMM_DM);
+                if (!Dlc)
+                    BthRfcommSendControl(Dev, Session, Dlci, RFCOMM_DM);
+                break;
             }
+            if (!Session->Open || !BthRfcommAccept(Dev, Dlc))
+            {
+                Dlc->Callbacks = &BthRfcommPendingCallbacks;
+                BthRfcommSendControl(Dev, Session, Dlci, RFCOMM_DM);
+                BthRfcommCloseDlc(Dev, Dlc, STATUS_CONNECTION_REFUSED);
+                break;
+            }
+            Dlc->State = BthDlcOpen;
+            BthRfcommSendControl(Dev, Session, Dlci, RFCOMM_UA);
+            DPRINT1("BTHMINI: RFCOMM channel %u accepted from %012I64x, frame %u, credits %lu\n",
+                    Dlci >> 1, Session->Remote->Address, Dlc->FrameSize, Dlc->TxCredits);
+            BthRfcommSendModemStatus(Dev, Dlc, TRUE);
+            if (Dlc->Callbacks->Opened)
+                Dlc->Callbacks->Opened(Dev, Dlc, STATUS_SUCCESS);
+            BthRfcommFlushTx(Dev, Dlc);
             break;
 
         case RFCOMM_UA:
@@ -743,6 +832,63 @@ BthRfcommDisconnect(
     {
         BthRfcommCloseDlc(Dev, Dlc, STATUS_CANCELLED);
     }
+}
+
+NTSTATUS
+BthRfcommRegisterServer(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ UCHAR Channel,
+    _In_ BTHMINI_RFCOMM_ACCEPT *Accept,
+    _In_opt_ PVOID Context,
+    _Out_ PBTHMINI_RFCOMM_SERVER *Result)
+{
+    PBTHMINI_RFCOMM_SERVER Server;
+
+    *Result = NULL;
+    if (Channel > 30)
+        return STATUS_INVALID_PARAMETER;
+    if (!Channel)
+    {
+        for (Channel = 1; Channel <= 30 && BthRfcommFindServer(Dev, Channel); Channel++)
+            ;
+        if (Channel > 30)
+            return STATUS_TOO_MANY_ADDRESSES;
+    }
+    else if (BthRfcommFindServer(Dev, Channel))
+    {
+        return STATUS_ADDRESS_ALREADY_EXISTS;
+    }
+    Server = ExAllocatePoolZero(NonPagedPool, sizeof(*Server), BTHMINI_TAG);
+    if (!Server)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Server->Channel = Channel;
+    Server->Accept = Accept;
+    Server->Context = Context;
+    InsertTailList(&Dev->RfcommServers, &Server->Link);
+    *Result = Server;
+    return STATUS_SUCCESS;
+}
+
+VOID
+BthRfcommUnregisterServer(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_RFCOMM_SERVER Server)
+{
+    UNREFERENCED_PARAMETER(Dev);
+    RemoveEntryList(&Server->Link);
+    ExFreePoolWithTag(Server, BTHMINI_TAG);
+}
+
+ULONG
+BthRfcommTxQueued(
+    _In_ PBTHMINI_DLC Dlc)
+{
+    PLIST_ENTRY Entry;
+    ULONG Queued = 0;
+
+    for (Entry = Dlc->TxQueue.Flink; Entry != &Dlc->TxQueue; Entry = Entry->Flink)
+        Queued += CONTAINING_RECORD(Entry, BTHMINI_DLC_BUFFER, Link)->Length;
+    return Queued;
 }
 
 VOID

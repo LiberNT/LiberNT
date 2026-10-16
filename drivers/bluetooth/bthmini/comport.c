@@ -106,6 +106,14 @@ BthComCopyOut(
 
 static
 BOOLEAN
+BthComCanWait(
+    _In_ PBTHMINI_COMPORT Port)
+{
+    return Port->Open || (Port->Incoming && !Port->Removed);
+}
+
+static
+BOOLEAN
 BthComReadImmediate(
     _In_ PBTHMINI_COMPORT Port)
 {
@@ -135,14 +143,14 @@ BthComServiceReads(
             return;
         }
         Done = (ULONG_PTR)WdfRequestGetInformation(Request);
-        if (!Port->RxCount && !Expired && Port->Open)
+        if (!Port->RxCount && !Expired && BthComCanWait(Port))
         {
             WdfObjectDereference(Request);
             return;
         }
         Copied = BthComCopyOut(Port, Buffer + Done, (ULONG)(Length - Done));
         WdfRequestSetInformation(Request, Done + Copied);
-        if (Done + Copied < Length && !Expired && Port->Open && !Port->Timeouts.ReadIntervalTimeout)
+        if (Done + Copied < Length && !Expired && BthComCanWait(Port) && !Port->Timeouts.ReadIntervalTimeout)
         {
             WdfObjectDereference(Request);
             return;
@@ -151,7 +159,8 @@ BthComServiceReads(
             WDFREQUEST Found = Request;
 
             if (NT_SUCCESS(WdfIoQueueRetrieveFoundRequest(Port->ReadQueue, Found, &Request)))
-                WdfRequestCompleteWithInformation(Request, Port->Open || Done + Copied ? STATUS_SUCCESS : STATUS_DEVICE_NOT_CONNECTED,
+                WdfRequestCompleteWithInformation(Request, BthComCanWait(Port) || Done + Copied ? STATUS_SUCCESS :
+                                                                                             STATUS_DEVICE_NOT_CONNECTED,
                                                   Done + Copied);
             WdfObjectDereference(Found);
         }
@@ -527,6 +536,18 @@ BthComProcessRequest(
     switch (Parameters.Type)
     {
         case WdfRequestTypeCreate:
+            if (Port->Incoming)
+            {
+                Port->Events = 0;
+                Port->CleanupRequested = 0;
+                if (!Port->Dlc)
+                {
+                    Port->RxHead = 0;
+                    Port->RxCount = 0;
+                }
+                Status = Port->Removed ? STATUS_DEVICE_NOT_CONNECTED : STATUS_SUCCESS;
+                break;
+            }
             if (Port->Dlc || Port->PendingCreate)
             {
                 Status = STATUS_ACCESS_DENIED;
@@ -554,17 +575,19 @@ BthComProcessRequest(
             Status = WdfRequestRetrieveOutputBuffer(Request, 1, &Buffer, &Length);
             if (!NT_SUCCESS(Status))
                 break;
-            if (Port->RxCount || BthComReadImmediate(Port) || !Port->Open)
+            if (Port->RxCount || BthComReadImmediate(Port) || !BthComCanWait(Port))
             {
                 Information = BthComCopyOut(Port, Buffer, (ULONG)Length);
-                Status = Port->Open || Information ? STATUS_SUCCESS : STATUS_DEVICE_NOT_CONNECTED;
+                Status = BthComCanWait(Port) || Information ? STATUS_SUCCESS : STATUS_DEVICE_NOT_CONNECTED;
                 break;
             }
             WdfRequestSetInformation(Request, 0);
             Status = WdfRequestForwardToIoQueue(Request, Port->ReadQueue);
             if (!NT_SUCCESS(Status))
                 break;
-            if (Port->Timeouts.ReadTotalTimeoutConstant || Port->Timeouts.ReadTotalTimeoutMultiplier)
+            if (Port->Timeouts.ReadIntervalTimeout == MAXULONG && Port->Timeouts.ReadTotalTimeoutMultiplier == MAXULONG)
+                Port->ReadDeadline = BthComNow() + Port->Timeouts.ReadTotalTimeoutConstant;
+            else if (Port->Timeouts.ReadTotalTimeoutConstant || Port->Timeouts.ReadTotalTimeoutMultiplier)
                 Port->ReadDeadline = BthComNow() + Port->Timeouts.ReadTotalTimeoutConstant +
                                      (ULONGLONG)Port->Timeouts.ReadTotalTimeoutMultiplier * Length;
             return;
@@ -714,10 +737,13 @@ BthComFind(
 
 static
 NTSTATUS
-BthComCreatePort(
+BthComCreateObject(
     _In_ PBTHMINI_DEVICE Dev,
-    _In_ PBTHMINI_REMOTE Remote,
-    _In_ UCHAR ServerChannel)
+    _In_ BTH_ADDR Address,
+    _In_ UCHAR ServerChannel,
+    _In_ BOOLEAN Incoming,
+    _In_ ULONG LocalInstance,
+    _Out_opt_ PBTHMINI_COMPORT *Result)
 {
     WCHAR DeviceName[32], HardwareId[96], InstanceId[32], Description[64], LinkName[32];
     UNICODE_STRING Name, Hardware, Compatible, Instance, Text, Link;
@@ -731,8 +757,8 @@ BthComCreatePort(
     ULONG Number;
     NTSTATUS Status;
 
-    if (BthComFind(Dev, Remote->Address, ServerChannel))
-        return STATUS_SUCCESS;
+    if (Result)
+        *Result = NULL;
     for (Number = BTH_COM_FIRST_PORT; Number <= BTH_COM_LAST_PORT && BthComPortNameInUse(Number); Number++)
         ;
     if (Number > BTH_COM_LAST_PORT)
@@ -742,8 +768,10 @@ BthComCreatePort(
     if (!Port)
         return STATUS_INSUFFICIENT_RESOURCES;
     Port->Dev = Dev;
-    Port->Address = Remote->Address;
+    Port->Address = Address;
     Port->ServerChannel = ServerChannel;
+    Port->Incoming = Incoming;
+    Port->LocalInstance = LocalInstance;
     Port->PortNumber = Number;
     Port->Index = (ULONG)InterlockedIncrement(&BthComNextIndex);
     Port->BaudRate.BaudRate = 115200;
@@ -756,7 +784,10 @@ BthComCreatePort(
     RtlStringCchPrintfW(DeviceName, RTL_NUMBER_OF(DeviceName), L"\\Device\\BthModem%lu", Port->Index);
     RtlStringCchPrintfW(HardwareId, RTL_NUMBER_OF(HardwareId),
                         L"BTHENUM\\{00001101-0000-1000-8000-00805f9b34fb}_LOCALMFG&%04x", Dev->Manufacturer);
-    RtlStringCchPrintfW(InstanceId, RTL_NUMBER_OF(InstanceId), L"%012I64X_C%08X", Remote->Address, ServerChannel);
+    if (Incoming)
+        RtlStringCchPrintfW(InstanceId, RTL_NUMBER_OF(InstanceId), L"LOCAL&%08X", LocalInstance);
+    else
+        RtlStringCchPrintfW(InstanceId, RTL_NUMBER_OF(InstanceId), L"%012I64X_C%08X", Address, ServerChannel);
     RtlStringCchPrintfW(Description, RTL_NUMBER_OF(Description), L"Standard Serial over Bluetooth link (COM%lu)", Number);
     RtlStringCchPrintfW(LinkName, RTL_NUMBER_OF(LinkName), L"\\DosDevices\\COM%lu", Number);
     RtlInitUnicodeString(&Name, DeviceName);
@@ -844,7 +875,176 @@ BthComCreatePort(
     }
     InsertTailList(&Dev->ComPorts, &Port->Link);
     IoInvalidateDeviceRelations(WdfDeviceWdmGetPhysicalDevice(Dev->Device), BusRelations);
-    DPRINT1("BTHMINI: COM%lu is the serial port of %012I64x channel %u\n", Number, Remote->Address, ServerChannel);
+    if (Result)
+        *Result = Port;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+BthComCreatePort(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ UCHAR ServerChannel)
+{
+    PBTHMINI_COMPORT Port;
+    NTSTATUS Status;
+
+    if (BthComFind(Dev, Remote->Address, ServerChannel))
+        return STATUS_SUCCESS;
+    Status = BthComCreateObject(Dev, Remote->Address, ServerChannel, FALSE, 0, &Port);
+    if (NT_SUCCESS(Status))
+        DPRINT1("BTHMINI: COM%lu is the serial port of %012I64x channel %u\n", Port->PortNumber, Remote->Address,
+                ServerChannel);
+    return Status;
+}
+
+static const BTHMINI_DLC_CALLBACKS BthComDetachedCallbacks = { NULL, NULL, NULL, NULL };
+
+static
+BOOLEAN
+BthComAccept(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_opt_ PVOID Context,
+    _In_ PBTHMINI_DLC Dlc)
+{
+    PBTHMINI_COMPORT Port = Context;
+
+    UNREFERENCED_PARAMETER(Dev);
+    if (Port->Removed || Port->Dlc)
+        return FALSE;
+    Dlc->Callbacks = &BthComDlcCallbacks;
+    Dlc->Context = Port;
+    Port->Dlc = Dlc;
+    Port->Address = Dlc->Session->Remote->Address;
+    DPRINT1("BTHMINI: incoming COM%lu accepted %012I64x\n", Port->PortNumber, Port->Address);
+    return TRUE;
+}
+
+static
+ULONG
+BthComBuildRecord(
+    _In_ PBTHMINI_COMPORT Port,
+    _In_opt_ PCWSTR Name,
+    _Out_writes_bytes_(Capacity) PUCHAR Record,
+    _In_ ULONG Capacity)
+{
+    static const UCHAR Fixed[] =
+    {
+        0x09, 0x00, 0x01, 0x35, 0x03, 0x19, 0x11, 0x01,
+        0x09, 0x00, 0x04, 0x35, 0x0C, 0x35, 0x03, 0x19, 0x01, 0x00, 0x35, 0x05, 0x19, 0x00, 0x03, 0x08, 0x00,
+        0x09, 0x00, 0x05, 0x35, 0x03, 0x19, 0x10, 0x02,
+        0x09, 0x00, 0x06, 0x35, 0x09, 0x09, 0x65, 0x6E, 0x09, 0x00, 0x6A, 0x09, 0x01, 0x00,
+        0x09, 0x00, 0x09, 0x35, 0x08, 0x35, 0x06, 0x19, 0x11, 0x01, 0x09, 0x01, 0x02
+    };
+    CHAR Utf8[BTHMINI_LOCAL_SERVICE_NAME_SIZE];
+    ULONG Used = 2 + sizeof(Fixed), NameLength = 0;
+    UNICODE_STRING Source;
+    ANSI_STRING Ansi;
+
+    if (Name && *Name)
+    {
+        RtlInitUnicodeString(&Source, Name);
+        if (!NT_SUCCESS(RtlUnicodeToUTF8N(Utf8, sizeof(Utf8) - 1, &NameLength, Source.Buffer, Source.Length)))
+            NameLength = 0;
+    }
+    if (!NameLength)
+    {
+        RtlStringCchPrintfA(Utf8, sizeof(Utf8), "COM%lu", Port->PortNumber);
+        RtlInitAnsiString(&Ansi, Utf8);
+        NameLength = Ansi.Length;
+    }
+    NameLength = min(NameLength, 180);
+    if (Capacity < Used + 5 + NameLength)
+        return 0;
+    RtlCopyMemory(Record + 2, Fixed, sizeof(Fixed));
+    Record[2 + 24] = Port->ServerChannel;
+    Record[Used++] = 0x09;
+    Record[Used++] = 0x01;
+    Record[Used++] = 0x00;
+    Record[Used++] = 0x25;
+    Record[Used++] = (UCHAR)NameLength;
+    RtlCopyMemory(Record + Used, Utf8, NameLength);
+    Used += NameLength;
+    Record[0] = 0x35;
+    Record[1] = (UCHAR)(Used - 2);
+    return Used;
+}
+
+static
+PBTHMINI_COMPORT
+BthComFindIncoming(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ ULONG LocalInstance)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = Dev->ComPorts.Flink; Entry != &Dev->ComPorts; Entry = Entry->Flink)
+    {
+        PBTHMINI_COMPORT Port = CONTAINING_RECORD(Entry, BTHMINI_COMPORT, Link);
+
+        if (Port->Incoming && !Port->Removed && Port->LocalInstance == LocalInstance)
+            return Port;
+    }
+    return NULL;
+}
+
+NTSTATUS
+BthComSetIncoming(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ ULONG LocalInstance,
+    _In_ BOOLEAN Enabled,
+    _In_opt_ PCWSTR Name)
+{
+    PBTHMINI_COMPORT Port = BthComFindIncoming(Dev, LocalInstance);
+    PBTHMINI_RFCOMM_SERVER Server;
+    UCHAR Record[256];
+    ULONG Length;
+    NTSTATUS Status;
+
+    if (!Enabled)
+    {
+        if (!Port)
+            return STATUS_SUCCESS;
+        Port->Removed = TRUE;
+        if (Port->Server)
+            BthRfcommUnregisterServer(Dev, Port->Server);
+        Port->Server = NULL;
+        if (Port->SdpHandle)
+            BthSdpRemoveRecord(Dev, Port->SdpHandle);
+        Port->SdpHandle = 0;
+        if (Port->Dlc)
+        {
+            Port->Dlc->Callbacks = &BthComDetachedCallbacks;
+            BthRfcommDisconnect(Dev, Port->Dlc);
+            Port->Dlc = NULL;
+        }
+        Port->Open = FALSE;
+        BthComServiceReads(Port, TRUE);
+        RemoveEntryList(&Port->Link);
+        if (!NT_SUCCESS(WdfPdoMarkMissing(Port->Device)))
+            DPRINT1("BTHMINI: incoming COM%lu not marked missing\n", Port->PortNumber);
+        IoInvalidateDeviceRelations(WdfDeviceWdmGetPhysicalDevice(Dev->Device), BusRelations);
+        DPRINT1("BTHMINI: incoming COM%lu removed\n", Port->PortNumber);
+        return STATUS_SUCCESS;
+    }
+    if (Port)
+        return STATUS_SUCCESS;
+    Status = BthRfcommRegisterServer(Dev, 0, BthComAccept, NULL, &Server);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = BthComCreateObject(Dev, 0, Server->Channel, TRUE, LocalInstance, &Port);
+    if (!NT_SUCCESS(Status))
+    {
+        BthRfcommUnregisterServer(Dev, Server);
+        return Status;
+    }
+    Server->Context = Port;
+    Port->Server = Server;
+    Length = BthComBuildRecord(Port, Name, Record, sizeof(Record));
+    if (!Length || !NT_SUCCESS(BthSdpAddRecord(Dev, Record, Length, NULL, &Port->SdpHandle)))
+        DPRINT1("BTHMINI: incoming COM%lu has no SDP record\n", Port->PortNumber);
+    DPRINT1("BTHMINI: incoming COM%lu listens on RFCOMM channel %u\n", Port->PortNumber, Port->ServerChannel);
     return STATUS_SUCCESS;
 }
 

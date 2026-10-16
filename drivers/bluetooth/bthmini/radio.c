@@ -92,9 +92,16 @@ BthRadioFreeRemotes(
 {
     BthConnCancelAll(Dev);
     while (!IsListEmpty(&Dev->Remotes))
-        ExFreePoolWithTag(CONTAINING_RECORD(RemoveHeadList(&Dev->Remotes), BTHMINI_REMOTE, Link), BTHMINI_TAG);
+    {
+        PBTHMINI_REMOTE Remote = CONTAINING_RECORD(RemoveHeadList(&Dev->Remotes), BTHMINI_REMOTE, Link);
+
+        BthSmpLinkDown(Dev, Remote, STATUS_CANCELLED);
+        BthGattFree(Remote);
+        ExFreePoolWithTag(Remote, BTHMINI_TAG);
+    }
     Dev->RemoteCount = 0;
     Dev->Discovering = FALSE;
+    Dev->LeScanning = FALSE;
     Dev->Inquiring = FALSE;
     Dev->NameRequestActive = FALSE;
 }
@@ -258,7 +265,8 @@ BthRadioEvent(
     PBTHMINI_REMOTE Remote;
     ULONG Index, Previous;
 
-    if (BthConnEvent(Dev, Event, Length) || BthL2capEvent(Dev, Event, Length))
+    if (BthLeLinkEvent(Dev, Event, Length) || BthConnEvent(Dev, Event, Length) || BthL2capEvent(Dev, Event, Length) ||
+        BthLeEvent(Dev, Event, Length))
         return;
 
     switch (Event[0])
@@ -312,6 +320,7 @@ BthRadioCommandFailed(
     _In_ USHORT Opcode)
 {
     BthConnCommandFailed(Dev, Opcode);
+    BthLeCommandFailed(Dev, Opcode);
     if (Opcode == HCI_INQUIRY)
     {
         Dev->Inquiring = FALSE;
@@ -352,6 +361,56 @@ BthRadioGetLocalInfo(
     Info->radioInfo.lmpSubversion = Dev->LmpSubversion;
     Info->radioInfo.lmpVersion = Dev->LmpVersion;
     *Information = sizeof(*Info);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+BthRadioGetRadioInfo(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFREQUEST Request,
+    _Out_ PULONG_PTR Information)
+{
+    PBTHMINI_REMOTE Remote;
+    PBTH_RADIO_INFO Info;
+    BTH_ADDR *Address;
+    NTSTATUS Status;
+
+    Status = WdfRequestRetrieveInputBuffer(Request, sizeof(*Address), (PVOID *)&Address, NULL);
+    if (!NT_SUCCESS(Status))
+        return STATUS_INVALID_USER_BUFFER;
+    Remote = BthRadioFindRemote(Dev, *Address);
+    if (!Remote || !Remote->HasRemoteFeatures || !Remote->HasRemoteVersion)
+        return STATUS_DEVICE_NOT_CONNECTED;
+    Status = WdfRequestRetrieveOutputBuffer(Request, sizeof(*Info), (PVOID *)&Info, NULL);
+    if (!NT_SUCCESS(Status))
+        return STATUS_INVALID_USER_BUFFER;
+    RtlZeroMemory(Info, sizeof(*Info));
+    Info->lmpSupportedFeatures = Remote->RemoteLmpFeatures;
+    Info->mfg = Remote->RemoteManufacturer;
+    Info->lmpSubversion = Remote->RemoteLmpSubversion;
+    Info->lmpVersion = Remote->RemoteLmpVersion;
+    *Information = sizeof(*Info);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+BthRadioGetHostFeatures(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFREQUEST Request,
+    _Out_ PULONG_PTR Information)
+{
+    PBTH_HOST_FEATURE_MASK Features;
+    NTSTATUS Status;
+
+    Status = WdfRequestRetrieveOutputBuffer(Request, sizeof(*Features), (PVOID *)&Features, NULL);
+    if (!NT_SUCCESS(Status))
+        return STATUS_INVALID_USER_BUFFER;
+    RtlZeroMemory(Features, sizeof(*Features));
+    if (Dev->LeEnabled)
+        Features->Mask |= BTH_HOST_FEATURE_LOW_ENERGY;
+    *Information = sizeof(*Features);
     return STATUS_SUCCESS;
 }
 
@@ -451,12 +510,82 @@ BthRadioStopDiscovery(
     _In_ PBTHMINI_DEVICE Dev)
 {
     Dev->Discovering = FALSE;
+    BthLeSetScan(Dev, FALSE);
     if (!Dev->Inquiring)
         return STATUS_SUCCESS;
     Dev->Inquiring = FALSE;
     BthHciCommand(Dev, HCI_INQUIRY_CANCEL, NULL, 0, NULL, 0);
     BthRadioContinueDiscovery(Dev);
     return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+BthRadioSubmitRecord(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFREQUEST Request,
+    _In_ BOOLEAN WithInfo,
+    _Out_ PULONG_PTR Information)
+{
+    PHANDLE_SDP Output;
+    PUCHAR Input;
+    size_t InputLength;
+    const UCHAR *Record;
+    ULONG RecordLength, Handle, CodService = 0;
+    NTSTATUS Status;
+
+    Status = WdfRequestRetrieveInputBuffer(Request, WithInfo ? FIELD_OFFSET(BTH_SDP_RECORD, record) : 2,
+                                           (PVOID *)&Input, &InputLength);
+    if (NT_SUCCESS(Status))
+        Status = WdfRequestRetrieveOutputBuffer(Request, sizeof(*Output), (PVOID *)&Output, NULL);
+    if (!NT_SUCCESS(Status))
+        return STATUS_INVALID_PARAMETER;
+    if (WithInfo)
+    {
+        PBTH_SDP_RECORD Info = (PBTH_SDP_RECORD)Input;
+
+        if (Info->recordLength > InputLength - FIELD_OFFSET(BTH_SDP_RECORD, record))
+            return STATUS_INVALID_PARAMETER;
+        Record = Info->record;
+        RecordLength = Info->recordLength;
+        CodService = Info->fCodService;
+    }
+    else
+    {
+        Record = Input;
+        RecordLength = (ULONG)InputLength;
+    }
+    Status = BthSdpAddRecord(Dev, Record, RecordLength, WdfRequestGetFileObject(Request), &Handle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (CodService && !(Dev->ClassOfDevice & (CodService << COD_SERVICE_BIT_OFFSET)))
+    {
+        UCHAR Parameters[3];
+
+        Dev->ClassOfDevice |= (CodService << COD_SERVICE_BIT_OFFSET) & COD_SERVICE_MASK;
+        Parameters[0] = (UCHAR)Dev->ClassOfDevice;
+        Parameters[1] = (UCHAR)(Dev->ClassOfDevice >> 8);
+        Parameters[2] = (UCHAR)(Dev->ClassOfDevice >> 16);
+        BthHciQueueCommand(Dev, HCI_WRITE_CLASS_OF_DEVICE, Parameters, sizeof(Parameters));
+    }
+    *Output = Handle;
+    *Information = sizeof(*Output);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+BthRadioRemoveRecord(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFREQUEST Request)
+{
+    PHANDLE_SDP Handle;
+
+    if (!NT_SUCCESS(WdfRequestRetrieveInputBuffer(Request, sizeof(*Handle), (PVOID *)&Handle, NULL)))
+        return STATUS_INVALID_PARAMETER;
+    if (*Handle > 0xFFFFFFFF)
+        return STATUS_INVALID_PARAMETER;
+    return BthSdpRemoveRecord(Dev, (ULONG)*Handle);
 }
 
 VOID
@@ -470,6 +599,16 @@ BthRadioDeviceControl(
 
     WDF_REQUEST_PARAMETERS_INIT(&Parameters);
     WdfRequestGetParameters(Request, &Parameters);
+    if (BthMiniGetRequest(Request) && BthMiniGetRequest(Request)->Gatt)
+    {
+        BthGattControl(Dev, Request);
+        return;
+    }
+    if (Parameters.Type == WdfRequestTypeDeviceControlInternal)
+    {
+        BthBrbInternalControl(Dev, Request);
+        return;
+    }
     if (Parameters.Type != WdfRequestTypeDeviceControl)
     {
         WdfRequestComplete(Request, STATUS_INVALID_DEVICE_REQUEST);
@@ -482,12 +621,47 @@ BthRadioDeviceControl(
             Status = BthRadioGetLocalInfo(Dev, Request, &Information);
             break;
 
+        case IOCTL_BTH_GET_RADIO_INFO:
+            Status = BthRadioGetRadioInfo(Dev, Request, &Information);
+            break;
+
         case IOCTL_BTH_GET_DEVICE_INFO:
             Status = BthRadioGetDeviceInfo(Dev, Request, &Information);
             break;
 
+        case IOCTL_BTH_GET_HOST_SUPPORTED_FEATURES:
+            Status = BthRadioGetHostFeatures(Dev, Request, &Information);
+            break;
+
+        case IOCTL_BTH_SDP_CONNECT:
+        case IOCTL_BTH_SDP_DISCONNECT:
+        case IOCTL_BTH_SDP_SERVICE_SEARCH:
+        case IOCTL_BTH_SDP_ATTRIBUTE_SEARCH:
+        case IOCTL_BTH_SDP_SERVICE_ATTRIBUTE_SEARCH:
+            Status = BthSdpClientControl(Dev, Request, Parameters.Parameters.DeviceIoControl.IoControlCode,
+                                         &Information);
+            if (Status == STATUS_PENDING)
+                return;
+            break;
+
         case IOCTL_BTH_DISCONNECT_DEVICE:
             Status = BthRadioDisconnect(Dev, Request);
+            break;
+
+        case IOCTL_BTH_SDP_SUBMIT_RECORD:
+        case IOCTL_BTH_SDP_SUBMIT_RECORD_WITH_INFO:
+            Status = BthRadioSubmitRecord(Dev, Request,
+                                          Parameters.Parameters.DeviceIoControl.IoControlCode ==
+                                              IOCTL_BTH_SDP_SUBMIT_RECORD_WITH_INFO,
+                                          &Information);
+            break;
+
+        case IOCTL_BTH_SDP_REMOVE_RECORD:
+            Status = BthRadioRemoveRecord(Dev, Request);
+            break;
+
+        case IOCTL_BTHMINI_SET_LOCAL_SERVICE:
+            Status = BthEnumSetLocalService(Dev, Request);
             break;
 
         case IOCTL_WINEBTH_RADIO_SET_FLAG:
@@ -496,6 +670,7 @@ BthRadioDeviceControl(
 
         case IOCTL_WINEBTH_RADIO_START_DISCOVERY:
             Dev->Discovering = TRUE;
+            BthLeSetScan(Dev, TRUE);
             BthRadioContinueDiscovery(Dev);
             Status = STATUS_SUCCESS;
             break;

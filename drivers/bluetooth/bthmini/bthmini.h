@@ -13,7 +13,11 @@
 #include <bthdef.h>
 #include <bthioctl.h>
 #include <bthxddi.h>
+#include <bthddi.h>
+#include <bthguid.h>
+#include <bthminiddi.h>
 #include <ntddser.h>
+#include <reactos/drivers/bthlocal.h>
 
 #define BTHMINI_TAG                     'iMhB'
 #define BTHMINI_EVENT_READS             2
@@ -24,6 +28,8 @@
 #define BTHMINI_INQUIRY_LENGTH          0x04
 #define BTHMINI_MAX_DEVICES             64
 #define BTHMINI_DEFAULT_COD             0x000104
+#define BTH_HID_UUID16                  0x1124
+#define BTH_PNP_UUID16                  0x1200
 
 #define LOCAL_RADIO_DISCOVERABLE        0x0001
 #define LOCAL_RADIO_CONNECTABLE         0x0002
@@ -35,6 +41,12 @@
 #define IOCTL_WINEBTH_RADIO_SEND_AUTH_RESPONSE  CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xa9, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_WINEBTH_RADIO_START_AUTH          CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xaa, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_WINEBTH_RADIO_REMOVE_DEVICE       CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xab, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_WINEBTH_LE_DEVICE_GET_GATT_SERVICES \
+    CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xc0, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_WINEBTH_LE_DEVICE_GET_GATT_CHARACTERISTICS \
+    CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xc1, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_WINEBTH_GATT_SERVICE_READ_CHARACTERISITIC_VALUE \
+    CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xd0, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define BTHMINI_AUTH_DEVICE_NAME                L"\\Device\\WINEBTHAUTH"
 #define BTHMINI_AUTH_LINK_NAME                  L"\\??\\WINEBTHAUTH"
 #define BTHMINI_PAIRING_TIMEOUT_MS              60000
@@ -42,6 +54,7 @@
 
 #define BTHMINI_AUTH_NUMERIC_COMPARISON         3
 #define BTHMINI_AUTH_PASSKEY_NOTIFICATION       4
+#define BTHMINI_AUTH_PASSKEY                    5
 
 DEFINE_GUID(GUID_WINEBTH_AUTHENTICATION_REQUEST, 0xca67235f, 0xf621, 0x4c27, 0x85, 0x65, 0xa4, 0xd5, 0x5e, 0xa1, 0x26, 0xe8);
 
@@ -61,6 +74,28 @@ typedef struct _BTHMINI_AUTH_RESPONSE
     ULONG Negative : 1;
     ULONG Authenticated : 1;
 } BTHMINI_AUTH_RESPONSE, *PBTHMINI_AUTH_RESPONSE;
+
+typedef struct _BTHMINI_GATT_SERVICES
+{
+    ULONG Count;
+    BTH_LE_GATT_SERVICE Services[ANYSIZE_ARRAY];
+} BTHMINI_GATT_SERVICES, *PBTHMINI_GATT_SERVICES;
+
+typedef struct _BTHMINI_GATT_CHARACTERISTICS
+{
+    BTH_LE_GATT_SERVICE Service;
+    ULONG Count;
+    BTH_LE_GATT_CHARACTERISTIC Characteristics[ANYSIZE_ARRAY];
+} BTHMINI_GATT_CHARACTERISTICS, *PBTHMINI_GATT_CHARACTERISTICS;
+
+typedef struct _BTHMINI_GATT_READ_VALUE
+{
+    BTH_LE_UUID Uuid;
+    USHORT Handle;
+    ULONG FromDevice : 1;
+    ULONG Size;
+    UCHAR Buffer[ANYSIZE_ARRAY];
+} BTHMINI_GATT_READ_VALUE, *PBTHMINI_GATT_READ_VALUE;
 #pragma pack(pop)
 
 #define HCI_OP(Ogf, Ocf)                ((USHORT)(((Ogf) << 10) | (Ocf)))
@@ -77,6 +112,8 @@ typedef struct _BTHMINI_AUTH_RESPONSE
 #define HCI_AUTHENTICATION_REQUESTED    HCI_OP(0x01, 0x0011)
 #define HCI_SET_CONNECTION_ENCRYPTION   HCI_OP(0x01, 0x0013)
 #define HCI_REMOTE_NAME_REQUEST         HCI_OP(0x01, 0x0019)
+#define HCI_READ_REMOTE_FEATURES        HCI_OP(0x01, 0x001B)
+#define HCI_READ_REMOTE_VERSION         HCI_OP(0x01, 0x001D)
 #define HCI_IO_CAPABILITY_REPLY         HCI_OP(0x01, 0x002B)
 #define HCI_USER_CONFIRMATION_REPLY     HCI_OP(0x01, 0x002C)
 #define HCI_USER_CONFIRMATION_NEG_REPLY HCI_OP(0x01, 0x002D)
@@ -92,11 +129,15 @@ typedef struct _BTHMINI_AUTH_RESPONSE
 #define HCI_WRITE_INQUIRY_MODE          HCI_OP(0x03, 0x0045)
 #define HCI_WRITE_EIR                   HCI_OP(0x03, 0x0052)
 #define HCI_WRITE_SIMPLE_PAIRING_MODE   HCI_OP(0x03, 0x0056)
+#define HCI_WRITE_LE_HOST_SUPPORT       HCI_OP(0x03, 0x006D)
+#define HCI_WRITE_SC_HOST_SUPPORT       HCI_OP(0x03, 0x007A)
 #define HCI_READ_LOCAL_VERSION          HCI_OP(0x04, 0x0001)
 #define HCI_READ_LOCAL_COMMANDS         HCI_OP(0x04, 0x0002)
 #define HCI_READ_LOCAL_FEATURES         HCI_OP(0x04, 0x0003)
+#define HCI_READ_LOCAL_EXT_FEATURES     HCI_OP(0x04, 0x0004)
 #define HCI_READ_BUFFER_SIZE            HCI_OP(0x04, 0x0005)
 #define HCI_READ_BD_ADDR                HCI_OP(0x04, 0x0009)
+#define HCI_LE_READ_BUFFER_SIZE         HCI_OP(0x08, 0x0002)
 
 #define HCI_EV_INQUIRY_COMPLETE         0x01
 #define HCI_EV_INQUIRY_RESULT           0x02
@@ -106,6 +147,8 @@ typedef struct _BTHMINI_AUTH_RESPONSE
 #define HCI_EV_AUTHENTICATION_COMPLETE  0x06
 #define HCI_EV_REMOTE_NAME_COMPLETE     0x07
 #define HCI_EV_ENCRYPTION_CHANGE        0x08
+#define HCI_EV_REMOTE_FEATURES_COMPLETE 0x0B
+#define HCI_EV_REMOTE_VERSION_COMPLETE  0x0C
 #define HCI_EV_COMMAND_COMPLETE         0x0E
 #define HCI_EV_COMMAND_STATUS           0x0F
 #define HCI_EV_HARDWARE_ERROR           0x10
@@ -133,12 +176,23 @@ typedef struct _BTHMINI_AUTH_RESPONSE
 #define HCI_SCAN_PAGE                   0x02
 
 #define L2CAP_PSM_SDP                   0x0001
+#define SDP_PDU_ERROR_RESPONSE              0x01
+#define SDP_PDU_SERVICE_SEARCH_REQUEST      0x02
+#define SDP_PDU_SERVICE_SEARCH_RESPONSE     0x03
+#define SDP_PDU_SERVICE_ATTRIBUTE_REQUEST   0x04
+#define SDP_PDU_SERVICE_ATTRIBUTE_RESPONSE  0x05
+#define SDP_PDU_SERVICE_SEARCH_ATTRIBUTE_REQUEST  0x06
+#define SDP_PDU_SERVICE_SEARCH_ATTRIBUTE_RESPONSE 0x07
 #define L2CAP_PSM_RFCOMM                0x0003
 #define L2CAP_DEFAULT_MTU               672
 #define L2CAP_LOCAL_MTU                 1013
 #define L2CAP_MAX_FRAME                 0xFFFF
 
 #define LMP_FEATURE(Features, Byte, Bit)    (((Features) >> ((Byte) * 8 + (Bit))) & 1)
+#define LMP_LE_SUPPORTED(Features)          LMP_FEATURE(Features, 4, 6)
+#define LMP_SSP_SUPPORTED(Features)         LMP_FEATURE(Features, 6, 3)
+#define LMP_EXTENDED_FEATURES(Features)     LMP_FEATURE(Features, 7, 7)
+#define LMP_SC_CONTROLLER(Page2)            LMP_FEATURE(Page2, 1, 0)
 
 typedef struct _BTHMINI_RX_PACKET
 {
@@ -187,9 +241,35 @@ typedef struct _BTHMINI_REMOTE
     WDFREQUEST PromptResponse;
     ULONGLONG PromptDeadline;
     USHORT AclOutstanding;
+    UCHAR LeAddressType;
+    USHORT LeHandle;
+    BOOLEAN LeConnected;
+    BOOLEAN LeConnecting;
+    BOOLEAN LeEncrypted;
+    USHORT LeAclOutstanding;
+    PUCHAR LeRxFrame;
+    ULONG LeRxExpected;
+    ULONG LeRxLength;
+    struct _BTHMINI_SMP *Smp;
+    struct _BTHMINI_GATT *Gatt;
+    BOOLEAN HasLeKey;
+    BOOLEAN LeKeyAuthenticated;
+    BOOLEAN LeKeySecureConnections;
+    UCHAR LeKeySize;
+    UCHAR LeLtk[16];
+    UCHAR LeIrk[16];
+    BOOLEAN HasLeIrk;
+    USHORT LeEdiv;
+    ULONGLONG LeRand;
     PUCHAR RxFrame;
     ULONG RxExpected;
     ULONG RxLength;
+    BOOLEAN HasRemoteFeatures;
+    BOOLEAN HasRemoteVersion;
+    UCHAR RemoteLmpVersion;
+    USHORT RemoteLmpSubversion;
+    USHORT RemoteManufacturer;
+    ULONGLONG RemoteLmpFeatures;
     CHAR Name[BTH_MAX_NAME_SIZE];
 } BTHMINI_REMOTE, *PBTHMINI_REMOTE;
 
@@ -218,6 +298,8 @@ typedef enum _BTHMINI_CHANNEL_STATE
 {
     BthChannelWaitLink,
     BthChannelWaitConnect,
+    BthChannelWaitSecurity,
+    BthChannelWaitAccept,
     BthChannelConfig,
     BthChannelOpen,
     BthChannelWaitDisconnect
@@ -235,7 +317,9 @@ struct _BTHMINI_CHANNEL
     USHORT RemoteCid;
     USHORT RemoteMtu;
     UCHAR Identifier;
+    UCHAR RequestIdentifier;
     BOOLEAN Outgoing;
+    BOOLEAN Deferred;
     BOOLEAN LocalConfigured;
     BOOLEAN RemoteConfigured;
     ULONGLONG Deadline;
@@ -247,6 +331,14 @@ typedef VOID BTHMINI_SDP_CALLBACK(
     _In_opt_ PVOID Context,
     _In_ NTSTATUS Status,
     _In_ UCHAR RfcommChannel);
+
+typedef VOID BTHMINI_SDP_RECORDS_CALLBACK(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_opt_ PVOID Context,
+    _In_ NTSTATUS Status,
+    _In_reads_bytes_opt_(Length) const UCHAR *Records,
+    _In_ ULONG Length);
 
 typedef struct _BTHMINI_RFCOMM_SESSION BTHMINI_RFCOMM_SESSION, *PBTHMINI_RFCOMM_SESSION;
 typedef struct _BTHMINI_DLC BTHMINI_DLC, *PBTHMINI_DLC;
@@ -279,8 +371,22 @@ typedef enum _BTHMINI_DLC_STATE
     BthDlcWaitParameters,
     BthDlcWaitUa,
     BthDlcOpen,
-    BthDlcWaitDisconnect
+    BthDlcWaitDisconnect,
+    BthDlcWaitSabm
 } BTHMINI_DLC_STATE;
+
+typedef BOOLEAN BTHMINI_RFCOMM_ACCEPT(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_opt_ PVOID Context,
+    _In_ PBTHMINI_DLC Dlc);
+
+typedef struct _BTHMINI_RFCOMM_SERVER
+{
+    LIST_ENTRY Link;
+    UCHAR Channel;
+    BTHMINI_RFCOMM_ACCEPT *Accept;
+    PVOID Context;
+} BTHMINI_RFCOMM_SERVER, *PBTHMINI_RFCOMM_SERVER;
 
 struct _BTHMINI_RFCOMM_SESSION
 {
@@ -321,6 +427,11 @@ typedef struct _BTHMINI_COMPORT
     BTH_ADDR Address;
     UCHAR ServerChannel;
     BOOLEAN Open;
+    BOOLEAN Incoming;
+    BOOLEAN Removed;
+    ULONG LocalInstance;
+    PBTHMINI_RFCOMM_SERVER Server;
+    ULONG SdpHandle;
     ULONG PortNumber;
     ULONG Index;
     PBTHMINI_DLC Dlc;
@@ -345,6 +456,47 @@ typedef struct _BTHMINI_ACL_PACKET
     ULONG Length;
     UCHAR Data[ANYSIZE_ARRAY];
 } BTHMINI_ACL_PACKET, *PBTHMINI_ACL_PACKET;
+
+typedef struct _BTHMINI_SERVICE_PDO
+{
+    PBTHMINI_DEVICE Dev;
+    BTH_ADDR Address;
+    USHORT Uuid;
+    BOOLEAN HasPnpInfo;
+    USHORT VendorIdSource;
+    USHORT VendorId;
+    USHORT ProductId;
+    USHORT Version;
+    CHAR ServiceName[BTH_MAX_SERVICE_NAME_SIZE];
+    CHAR DeviceName[BTH_MAX_NAME_SIZE];
+    PUCHAR Record;
+    ULONG RecordLength;
+    BOOLEAN Local;
+    GUID ServiceClass;
+} BTHMINI_SERVICE_PDO, *PBTHMINI_SERVICE_PDO;
+
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(BTHMINI_SERVICE_PDO, BthEnumGetPdo)
+
+typedef struct _BTHMINI_LE_PARAMETERS
+{
+    USHORT HighDutyScanInterval;
+    USHORT HighDutyScanWindow;
+    USHORT LowDutyScanInterval;
+    USHORT LowDutyScanWindow;
+    USHORT IntervalMin;
+    USHORT IntervalMax;
+    USHORT Latency;
+    USHORT SupervisionTimeout;
+} BTHMINI_LE_PARAMETERS, *PBTHMINI_LE_PARAMETERS;
+
+typedef struct _BTHMINI_REQUEST
+{
+    BTH_ADDR Address;
+    BOOLEAN Gatt;
+    USHORT Service;
+} BTHMINI_REQUEST, *PBTHMINI_REQUEST;
+
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(BTHMINI_REQUEST, BthMiniGetRequest)
 
 struct _BTHMINI_DEVICE
 {
@@ -375,6 +527,25 @@ struct _BTHMINI_DEVICE
     USHORT LmpSubversion;
     USHORT Manufacturer;
     ULONGLONG LmpFeatures;
+    ULONGLONG LmpHostFeatures;
+    ULONGLONG LmpFeaturesPage2;
+    UCHAR LmpMaxFeaturePage;
+    BOOLEAN LeEnabled;
+    BOOLEAN LeExtendedScan;
+    BOOLEAN LeScanning;
+    BOOLEAN LeConnectCancelled;
+    PBTHMINI_REMOTE LeConnectPending;
+    ULONGLONG LeConnectDeadline;
+    UCHAR LeInitiator;
+    UCHAR LeAcceptListSize;
+    UCHAR LeResolvingListSize;
+    BOOLEAN LePrivacy;
+    BOOLEAN LeAcceptListDirty;
+    ULONGLONG LeAutoConnectAfter;
+    ULONGLONG LeFeatures;
+    BOOLEAN SecureConnections;
+    USHORT LeMtu;
+    UCHAR LePackets;
     UCHAR SupportedCommands[64];
     USHORT AclMtu;
     USHORT AclPackets;
@@ -394,10 +565,26 @@ struct _BTHMINI_DEVICE
 
     LIST_ENTRY Channels;
     LIST_ENTRY Sessions;
+    LIST_ENTRY RfcommServers;
     LIST_ENTRY ComPorts;
     LIST_ENTRY AclQueue;
+    LIST_ENTRY LeAclQueue;
+    USHORT LeCredits;
     USHORT NextCid;
     UCHAR SignalId;
+
+    LIST_ENTRY Services;
+    LIST_ENTRY LocalServices;
+    LIST_ENTRY SdpRecords;
+    ULONG NextSdpHandle;
+    LIST_ENTRY SdpConnections;
+    HANDLE_SDP NextSdpConnection;
+    KSPIN_LOCK SdpClosedFilesLock;
+    LIST_ENTRY SdpClosedFiles;
+    LIST_ENTRY ProfileServers;
+    LIST_ENTRY ProfilePsms;
+    LIST_ENTRY ProfileChannels;
+    USHORT NextPsm;
 };
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(BTHMINI_DEVICE, BthMiniGetDevice)
@@ -518,6 +705,21 @@ VOID
 BthConnTick(
     _In_ PBTHMINI_DEVICE Dev);
 
+BOOLEAN
+BthConnPrompt(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ ULONG Method,
+    _In_ ULONG NumericValue);
+
+VOID
+BthConnSaveDevice(
+    _In_ PBTHMINI_REMOTE Remote);
+
+VOID
+BthConnLoadDevice(
+    _Inout_ PBTHMINI_REMOTE Remote);
+
 VOID
 BthConnLoadPaired(
     _In_ PBTHMINI_DEVICE Dev);
@@ -578,6 +780,12 @@ BthL2capDisconnect(
     _In_ PBTHMINI_CHANNEL Channel);
 
 VOID
+BthL2capAccept(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_CHANNEL Channel,
+    _In_ USHORT Result);
+
+VOID
 BthL2capLinkChanged(
     _In_ PBTHMINI_DEVICE Dev,
     _In_ PBTHMINI_REMOTE Remote,
@@ -600,6 +808,91 @@ BthConnEnsureLink(
 const BTHMINI_CHANNEL_CALLBACKS *
 BthSdpServerCallbacks(VOID);
 
+VOID
+BthSdpInitialize(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthSdpCleanup(
+    _In_ PBTHMINI_DEVICE Dev);
+
+NTSTATUS
+BthSdpAddRecord(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_reads_bytes_(Length) const UCHAR *Data,
+    _In_ ULONG Length,
+    _In_opt_ WDFFILEOBJECT Owner,
+    _Out_ PULONG Handle);
+
+VOID
+BthSdpRemoveOwnedRecords(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFFILEOBJECT Owner);
+
+NTSTATUS
+BthSdpRemoveRecord(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ ULONG Handle);
+
+NTSTATUS
+BthSdpLocalSearch(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_reads_bytes_(PatternLength) const UCHAR *Pattern,
+    _In_ ULONG PatternLength,
+    _Out_writes_to_(MaxCount, *Count) PULONG Handles,
+    _In_ ULONG MaxCount,
+    _Out_ PULONG Count);
+
+NTSTATUS
+BthSdpLocalAttributes(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_opt_ const ULONG *Handle,
+    _In_reads_bytes_opt_(PatternLength) const UCHAR *Pattern,
+    _In_ ULONG PatternLength,
+    _In_reads_bytes_(ListLength) const UCHAR *List,
+    _In_ ULONG ListLength,
+    _Outptr_result_bytebuffer_(*Length) PUCHAR *Response,
+    _Out_ PULONG Length);
+
+NTSTATUS
+BthSdpClientControl(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFREQUEST Request,
+    _In_ ULONG IoControlCode,
+    _Out_ PULONG_PTR Information);
+
+VOID
+BthSdpClientFileClosed(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFFILEOBJECT FileObject);
+
+VOID
+BthSdpClientTick(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthSdpClientFlush(
+    _In_ PBTHMINI_DEVICE Dev);
+
+NTSTATUS
+BthTdiInitialize(
+    _In_ WDFDRIVER Driver);
+
+VOID
+BthTdiUnload(VOID);
+
+VOID
+BthTdiRadioReady(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthTdiRadioStopping(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthTdiProcess(
+    _In_ PBTHMINI_DEVICE Dev);
+
 NTSTATUS
 BthSdpQueryRfcommChannel(
     _In_ PBTHMINI_DEVICE Dev,
@@ -607,6 +900,44 @@ BthSdpQueryRfcommChannel(
     _In_ USHORT ServiceUuid,
     _In_ BTHMINI_SDP_CALLBACK *Callback,
     _In_opt_ PVOID Context);
+
+NTSTATUS
+BthSdpQueryRfcommChannelUuid(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_reads_(16) const UCHAR *ServiceUuid,
+    _In_ BTHMINI_SDP_CALLBACK *Callback,
+    _In_opt_ PVOID Context);
+
+NTSTATUS
+BthSdpQueryRecords(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ USHORT ServiceUuid,
+    _In_ BTHMINI_SDP_RECORDS_CALLBACK *Callback,
+    _In_opt_ PVOID Context);
+
+BOOLEAN
+BthSdpNextRecord(
+    _In_reads_bytes_(Length) const UCHAR *Records,
+    _In_ ULONG Length,
+    _Inout_ PULONG Offset,
+    _Out_ const UCHAR **Record,
+    _Out_ PULONG RecordLength);
+
+BOOLEAN
+BthSdpFindAttribute(
+    _In_reads_bytes_(RecordLength) const UCHAR *Record,
+    _In_ ULONG RecordLength,
+    _In_ USHORT Attribute,
+    _Out_ const UCHAR **Value,
+    _Out_ PULONG ValueLength);
+
+BOOLEAN
+BthSdpGetUint(
+    _In_reads_bytes_(Length) const UCHAR *Element,
+    _In_ ULONG Length,
+    _Out_ PULONG Value);
 
 const BTHMINI_CHANNEL_CALLBACKS *
 BthRfcommServerCallbacks(VOID);
@@ -637,6 +968,23 @@ BthRfcommDisconnect(
     _In_ PBTHMINI_DEVICE Dev,
     _In_ PBTHMINI_DLC Dlc);
 
+NTSTATUS
+BthRfcommRegisterServer(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ UCHAR Channel,
+    _In_ BTHMINI_RFCOMM_ACCEPT *Accept,
+    _In_opt_ PVOID Context,
+    _Out_ PBTHMINI_RFCOMM_SERVER *Result);
+
+VOID
+BthRfcommUnregisterServer(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_RFCOMM_SERVER Server);
+
+ULONG
+BthRfcommTxQueued(
+    _In_ PBTHMINI_DLC Dlc);
+
 VOID
 BthRfcommTick(
     _In_ PBTHMINI_DEVICE Dev);
@@ -645,10 +993,255 @@ ULONG
 BthComProcess(
     _In_ PBTHMINI_DEVICE Dev);
 
+NTSTATUS
+BthComSetIncoming(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ ULONG LocalInstance,
+    _In_ BOOLEAN Enabled,
+    _In_opt_ PCWSTR Name);
+
+NTSTATUS
+BthEnumSetLocalService(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFREQUEST Request);
+
+VOID
+BthEnumLoadLocalServices(
+    _In_ PBTHMINI_DEVICE Dev);
+
 VOID
 BthComDevicePaired(
     _In_ PBTHMINI_DEVICE Dev,
     _In_ PBTHMINI_REMOTE Remote);
+
+PBTHMINI_REMOTE
+BthLeFindHandle(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ USHORT Handle);
+
+VOID
+BthLeFrame(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ USHORT Cid,
+    _In_reads_bytes_(Length) const UCHAR *Data,
+    _In_ ULONG Length);
+
+BOOLEAN
+BthLeLinkEvent(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_reads_bytes_(Length) const UCHAR *Event,
+    _In_ ULONG Length);
+
+NTSTATUS
+BthLeConnect(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote);
+
+VOID
+BthLeDisconnect(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote);
+
+NTSTATUS
+BthL2capSendLe(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ USHORT Cid,
+    _In_reads_bytes_(Length) const UCHAR *Payload,
+    _In_ ULONG Length);
+
+VOID
+BthL2capLeLinkDown(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote);
+
+NTSTATUS
+BthSmpPair(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_opt_ WDFREQUEST Request);
+
+VOID
+BthSmpLinkUp(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote);
+
+VOID
+BthSmpReceive(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_reads_bytes_(Length) const UCHAR *Data,
+    _In_ ULONG Length);
+
+VOID
+BthSmpEncryptionChanged(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ NTSTATUS Status);
+
+VOID
+BthSmpLinkDown(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ NTSTATUS Status);
+
+VOID
+BthSmpLoadKeys(
+    _In_ PBTHMINI_DEVICE Dev);
+
+NTSTATUS
+BthSmpAuthResponse(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ WDFREQUEST Request,
+    _In_ PBTHMINI_AUTH_RESPONSE Response,
+    _Out_ PULONG_PTR Information);
+
+VOID
+BthSmpTick(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthSmpDeleteKeys(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote);
+
+VOID
+BthGattReceive(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_reads_bytes_(Length) const UCHAR *Data,
+    _In_ ULONG Length);
+
+VOID
+BthGattLinkReady(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote);
+
+VOID
+BthGattLinkDown(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ NTSTATUS Status);
+
+VOID
+BthGattTick(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthGattControl(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFREQUEST Request);
+
+VOID
+BthGattPaired(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote);
+
+VOID
+BthGattLoad(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthGattRemoveDevice(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote);
+
+BOOLEAN
+BthGattConnectionParameters(
+    _In_ PBTHMINI_REMOTE Remote,
+    _Inout_ PBTHMINI_LE_PARAMETERS Parameters);
+
+VOID
+BthGattFree(
+    _In_ PBTHMINI_REMOTE Remote);
+
+VOID
+BthLeCommandFailed(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ USHORT Opcode);
+
+VOID
+BthLeTick(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthLeBondsChanged(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthLeInitialize(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthLeSetScan(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ BOOLEAN Enable);
+
+BOOLEAN
+BthLeEvent(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_reads_bytes_(Length) const UCHAR *Event,
+    _In_ ULONG Length);
+
+NTSTATUS
+BthCreateKey(
+    _In_opt_ HANDLE Parent,
+    _In_ PCWSTR Name,
+    _Out_ PHANDLE Key);
+
+NTSTATUS
+BthOpenParameters(
+    _In_ PCWSTR Subkey,
+    _In_opt_ PCWSTR Leaf,
+    _Out_ PHANDLE Key);
+
+VOID
+BthFormatAddress(
+    _In_ BTH_ADDR Address,
+    _Out_writes_(13) PWCHAR Buffer);
+
+VOID
+BthEnumLoad(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthEnumDiscover(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote);
+
+VOID
+BthEnumRemoveDevice(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ BTH_ADDR Address);
+
+VOID
+BthEnumFlush(
+    _In_ PBTHMINI_DEVICE Dev);
+
+const BTHMINI_CHANNEL_CALLBACKS *
+BthBrbServer(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ USHORT Psm);
+
+VOID
+BthBrbRemoteConnect(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_CHANNEL Channel);
+
+VOID
+BthBrbInternalControl(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFREQUEST Request);
+
+VOID
+BthBrbFlush(
+    _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthBrbCleanup(
+    _In_ PBTHMINI_DEVICE Dev);
 
 VOID
 BthAclReceive(
