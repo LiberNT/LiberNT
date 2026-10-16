@@ -1974,7 +1974,6 @@ PiGetDeviceRegistryProperty(IN PDEVICE_OBJECT DeviceObject,
 
 #define PIP_RETURN_DATA(x, y)   {ReturnLength = x; Data = y; Status = STATUS_SUCCESS; break;}
 #define PIP_REGISTRY_DATA(x, y) {ValueName = x; ValueType = y; break;}
-#define PIP_UNIMPLEMENTED()     {UNIMPLEMENTED_DBGBREAK(); break;}
 
 /*
  * @implemented
@@ -2147,9 +2146,21 @@ IoGetDeviceProperty(IN PDEVICE_OBJECT DeviceObject,
             PIP_REGISTRY_DATA(REGSTR_VAL_CONFIGFLAGS, REG_DWORD);
             break;
         case DevicePropertyResourceRequirements:
-            PIP_UNIMPLEMENTED();
+            if (!DeviceNode->ResourceRequirements)
+            {
+                *ResultLength = 0;
+                return STATUS_SUCCESS;
+            }
+            PIP_RETURN_DATA(DeviceNode->ResourceRequirements->ListSize,
+                            DeviceNode->ResourceRequirements);
         case DevicePropertyAllocatedResources:
-            PIP_UNIMPLEMENTED();
+            if (!DeviceNode->ResourceList)
+            {
+                *ResultLength = 0;
+                return STATUS_SUCCESS;
+            }
+            PIP_RETURN_DATA(PnpDetermineResourceListSize(DeviceNode->ResourceList),
+                            DeviceNode->ResourceList);
         default:
             return STATUS_INVALID_PARAMETER_2;
     }
