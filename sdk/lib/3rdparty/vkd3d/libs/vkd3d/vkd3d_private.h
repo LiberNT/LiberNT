@@ -1407,6 +1407,8 @@ struct d3d12_command_list
     bool xfb_enabled;
     bool has_depth_bounds;
     bool is_predicated;
+    VkBuffer predicate_vk_buffer;
+    VkConditionalRenderingFlagsEXT predicate_flags;
 
     VkFramebuffer current_framebuffer;
     VkPipeline current_pipeline;
@@ -1661,6 +1663,7 @@ struct vkd3d_uav_clear_state
     struct vkd3d_uav_clear_pipelines pipelines_uint;
 
     VkPipeline predicate_latch;
+    VkPipeline predicate_copy;
 };
 
 HRESULT vkd3d_uav_clear_state_init(struct vkd3d_uav_clear_state *state, struct d3d12_device *device);

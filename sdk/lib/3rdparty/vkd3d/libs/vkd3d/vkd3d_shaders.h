@@ -232,4 +232,23 @@ static const char cs_predicate_latch_code[] =
     "    dst[2] = dst[0] | dst[1];\n"
     "}\n";
 
+static const char cs_predicate_copy_code[] =
+    "RWBuffer<uint> buf;\n"
+    "\n"
+    "[numthreads(64, 1, 1)]\n"
+    "void main(uint3 thread_id : SV_DispatchThreadID)\n"
+    "{\n"
+    "    uint count = buf[0];\n"
+    "    uint src = buf[1];\n"
+    "    uint dst = buf[2];\n"
+    "    uint stride = buf[3];\n"
+    "    uint i, value;\n"
+    "\n"
+    "    for (i = thread_id.x; i < count; i += stride)\n"
+    "    {\n"
+    "        value = buf[src + i];\n"
+    "        buf[dst + i] = value;\n"
+    "    }\n"
+    "}\n";
+
 #endif /* __VKD3D_SHADERS_H */
