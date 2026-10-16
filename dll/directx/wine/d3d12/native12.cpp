@@ -879,8 +879,20 @@ const NATIVE12_LIST_FUNCS *Native12Device::FindListTable(HANDLE table)
     return NULL;
 }
 
+static void Native12DredFree(void **arena);
+
 Native12Device::~Native12Device()
 {
+    for (Native12DredAllocation *next; dred_live || dred_freed;)
+    {
+        Native12DredAllocation *&list = dred_live ? dred_live : dred_freed;
+        next = list->next;
+        if (list->name) HeapFree(GetProcessHeap(), 0, list->name);
+        delete list;
+        list = next;
+    }
+    Native12DredFree(&dred_crumb_arena);
+    Native12DredFree(&dred_fault_arena);
     if (driver_created && adapter_functions.pfnDestroyDevice) adapter_functions.pfnDestroyDevice(driver_device);
     if (paging_queue.hPagingQueue && kernel_callbacks.pfnDestroyPagingQueueCb)
     {
@@ -985,39 +997,309 @@ HRESULT Native12Device::DredStatus(D3D12_DRED_ENABLEMENT enablement)
     return SUCCEEDED(RefreshRemovedReason()) ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : S_OK;
 }
 
+const GUID Native12DebugObjectNameW = {0x4cca5fd8, 0x921f, 0x42c8, {0x85, 0x66, 0x70, 0xca, 0xf2, 0xa9, 0xb7, 0x41}};
+
+struct Native12DredBlock
+{
+    Native12DredBlock *next;
+    UINT64 align;
+};
+
+static void *Native12DredAlloc(void **arena, SIZE_T size)
+{
+    Native12DredBlock *block = static_cast<Native12DredBlock *>(
+            HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*block) + size));
+
+    if (!block) return NULL;
+    block->next = static_cast<Native12DredBlock *>(*arena);
+    *arena = block;
+    return block + 1;
+}
+
+static void Native12DredFree(void **arena)
+{
+    Native12DredBlock *block = static_cast<Native12DredBlock *>(*arena), *next;
+
+    for (; block; block = next)
+    {
+        next = block->next;
+        HeapFree(GetProcessHeap(), 0, block);
+    }
+    *arena = NULL;
+}
+
+static WCHAR *Native12DredNameW(void **arena, ID3D12Object *object)
+{
+    UINT size = 0;
+    WCHAR *name;
+
+    if (!object || FAILED(object->GetPrivateData(Native12DebugObjectNameW, &size, NULL)) || !size) return NULL;
+    if (!(name = static_cast<WCHAR *>(Native12DredAlloc(arena, size + sizeof(WCHAR))))) return NULL;
+    if (FAILED(object->GetPrivateData(Native12DebugObjectNameW, &size, name))) return NULL;
+    return name;
+}
+
+static const char *Native12DredNameA(void **arena, const WCHAR *name)
+{
+    char *output;
+    int size;
+
+    if (!name || (size = WideCharToMultiByte(CP_ACP, 0, name, -1, NULL, 0, NULL, NULL)) <= 0) return NULL;
+    if (!(output = static_cast<char *>(Native12DredAlloc(arena, size)))) return NULL;
+    WideCharToMultiByte(CP_ACP, 0, name, -1, output, size, NULL, NULL);
+    return output;
+}
+
+void Native12Device::DredExecuted(Native12DredList *record, ID3D12CommandQueue *queue)
+{
+    AcquireSRWLockExclusive(&dred_lock);
+    if (record->queue != queue)
+    {
+        queue->AddRef();
+        if (record->queue) record->queue->Release();
+        record->queue = queue;
+    }
+    if (!record->listed)
+    {
+        record->next = dred_lists;
+        dred_lists = record;
+        record->listed = true;
+    }
+    ReleaseSRWLockExclusive(&dred_lock);
+}
+
+void Native12Device::DredForget(Native12DredList *record)
+{
+    AcquireSRWLockExclusive(&dred_lock);
+    for (Native12DredList **entry = &dred_lists; *entry; entry = &(*entry)->next)
+    {
+        if (*entry != record) continue;
+        *entry = record->next;
+        break;
+    }
+    record->listed = false;
+    ReleaseSRWLockExclusive(&dred_lock);
+    if (record->queue) record->queue->Release();
+    record->queue = NULL;
+}
+
+void Native12Device::DredListDestroyed(Native12CommandList *list)
+{
+    AcquireSRWLockExclusive(&dred_lock);
+    for (Native12DredList **entry = &dred_lists; *entry;)
+    {
+        Native12DredList *record = *entry;
+
+        if (record->list != list)
+        {
+            entry = &record->next;
+            continue;
+        }
+        *entry = record->next;
+        record->listed = false;
+        record->list = NULL;
+        if (record->queue) record->queue->Release();
+        record->queue = NULL;
+    }
+    ReleaseSRWLockExclusive(&dred_lock);
+}
+
+void Native12Device::DredTrack(Native12Resource *resource)
+{
+    Native12DredAllocation *allocation;
+
+    if (dred_page_fault != D3D12_DRED_ENABLEMENT_FORCED_ON || resource->desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER
+            || !(allocation = new Native12DredAllocation()))
+        return;
+    allocation->resource = resource;
+    allocation->address = resource->GetGPUVirtualAddress();
+    allocation->size = resource->desc.Width;
+    resource->dred = allocation;
+    AcquireSRWLockExclusive(&dred_lock);
+    allocation->next = dred_live;
+    dred_live = allocation;
+    ReleaseSRWLockExclusive(&dred_lock);
+}
+
+void Native12Device::DredUntrack(Native12Resource *resource)
+{
+    Native12DredAllocation *allocation = resource->dred, *drop = NULL;
+    UINT size = 0;
+
+    if (SUCCEEDED(resource->private_data.Get(Native12DebugObjectNameW, &size, NULL)) && size
+            && (allocation->name = static_cast<WCHAR *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+            size + sizeof(WCHAR)))))
+        resource->private_data.Get(Native12DebugObjectNameW, &size, allocation->name);
+    AcquireSRWLockExclusive(&dred_lock);
+    for (Native12DredAllocation **entry = &dred_live; *entry; entry = &(*entry)->next)
+    {
+        if (*entry != allocation) continue;
+        *entry = allocation->next;
+        break;
+    }
+    allocation->resource = NULL;
+    allocation->next = dred_freed;
+    dred_freed = allocation;
+    if (++dred_freed_count > 64)
+    {
+        Native12DredAllocation **entry = &dred_freed;
+        while ((*entry)->next) entry = &(*entry)->next;
+        drop = *entry;
+        *entry = NULL;
+        --dred_freed_count;
+    }
+    ReleaseSRWLockExclusive(&dred_lock);
+    resource->dred = NULL;
+    if (drop)
+    {
+        if (drop->name) HeapFree(GetProcessHeap(), 0, drop->name);
+        delete drop;
+    }
+}
+
+HRESULT Native12Device::DredBreadcrumbs(const D3D12_AUTO_BREADCRUMB_NODE1 **head)
+{
+    D3D12_AUTO_BREADCRUMB_NODE1 *previous = NULL, *node;
+    HRESULT hr = DredStatus(dred_auto_breadcrumbs);
+
+    if (FAILED(hr) || hr == DXGI_ERROR_NOT_CURRENTLY_AVAILABLE) return hr;
+    *head = NULL;
+    AcquireSRWLockExclusive(&dred_lock);
+    if (dred_crumbs_done)
+    {
+        *head = dred_crumb_head;
+        ReleaseSRWLockExclusive(&dred_lock);
+        return S_OK;
+    }
+    for (Native12DredList *record = dred_lists; record; record = record->next)
+    {
+        if (!(node = static_cast<D3D12_AUTO_BREADCRUMB_NODE1 *>(Native12DredAlloc(&dred_crumb_arena, sizeof(*node)))))
+        {
+            hr = E_OUTOFMEMORY;
+            break;
+        }
+        node->pCommandListDebugNameW = Native12DredNameW(&dred_crumb_arena, static_cast<ID3D12GraphicsCommandList *>(
+                record->list));
+        node->pCommandListDebugNameA = Native12DredNameA(&dred_crumb_arena, node->pCommandListDebugNameW);
+        node->pCommandQueueDebugNameW = Native12DredNameW(&dred_crumb_arena, record->queue);
+        node->pCommandQueueDebugNameA = Native12DredNameA(&dred_crumb_arena, node->pCommandQueueDebugNameW);
+        node->pCommandList = static_cast<ID3D12GraphicsCommandList *>(record->list);
+        node->pCommandQueue = record->queue;
+        node->BreadcrumbCount = record->count;
+        node->pLastBreadcrumbValue = const_cast<const UINT *>(record->counter);
+        node->pCommandHistory = record->history;
+        if (previous) previous->pNext = node;
+        else *head = node;
+        previous = node;
+    }
+    if (SUCCEEDED(hr))
+    {
+        dred_crumb_head = *head;
+        dred_crumbs_done = true;
+    }
+    ReleaseSRWLockExclusive(&dred_lock);
+    return hr;
+}
+
+HRESULT Native12Device::DredPageFault(D3D12_DRED_PAGE_FAULT_OUTPUT2 *output)
+{
+    D3D12_DRED_ALLOCATION_NODE1 *node, *tails[2] = {};
+    D3DKMT_GETDEVICESTATE state = {};
+    HRESULT hr = DredStatus(dred_page_fault);
+
+    if (FAILED(hr) || hr == DXGI_ERROR_NOT_CURRENTLY_AVAILABLE) return hr;
+    AcquireSRWLockExclusive(&dred_lock);
+    if (dred_fault_done)
+    {
+        *output = dred_fault;
+        ReleaseSRWLockExclusive(&dred_lock);
+        return S_OK;
+    }
+    ZeroMemory(output, sizeof(*output));
+    state.hDevice = km_device;
+    state.StateType = D3DKMT_DEVICESTATE_PAGE_FAULT;
+    if (km_device && D3DKMTGetDeviceState(&state) >= 0)
+        output->PageFaultVA = state.PageFaultState.FaultedVirtualAddress;
+    for (UINT list = 0; output->PageFaultVA && list < 2; ++list)
+    {
+        for (Native12DredAllocation *allocation = list ? dred_freed : dred_live; allocation; allocation = allocation->next)
+        {
+            if (output->PageFaultVA < allocation->address
+                    || output->PageFaultVA - allocation->address >= allocation->size)
+                continue;
+            if (!(node = static_cast<D3D12_DRED_ALLOCATION_NODE1 *>(
+                    Native12DredAlloc(&dred_fault_arena, sizeof(*node)))))
+                break;
+            node->AllocationType = D3D12_DRED_ALLOCATION_TYPE_RESOURCE;
+            if (allocation->resource)
+            {
+                node->ObjectNameW = Native12DredNameW(&dred_fault_arena, allocation->resource);
+                node->pObject = static_cast<ID3D12Resource *>(allocation->resource);
+            }
+            else
+            {
+                node->ObjectNameW = allocation->name;
+            }
+            node->ObjectNameA = Native12DredNameA(&dred_fault_arena, node->ObjectNameW);
+            if (tails[list]) tails[list]->pNext = node;
+            else if (list) output->pHeadRecentFreedAllocationNode = node;
+            else output->pHeadExistingAllocationNode = node;
+            tails[list] = node;
+        }
+    }
+    dred_fault = *output;
+    dred_fault_done = true;
+    ReleaseSRWLockExclusive(&dred_lock);
+    return S_OK;
+}
+
 HRESULT STDMETHODCALLTYPE Native12Device::GetAutoBreadcrumbsOutput(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT *output)
 {
-    HRESULT hr = DredStatus(dred_auto_breadcrumbs);
-    if (SUCCEEDED(hr)) output->pHeadAutoBreadcrumbNode = NULL;
+    const D3D12_AUTO_BREADCRUMB_NODE1 *head = NULL;
+    HRESULT hr = DredBreadcrumbs(&head);
+
+    if (hr == S_OK) output->pHeadAutoBreadcrumbNode = reinterpret_cast<const D3D12_AUTO_BREADCRUMB_NODE *>(head);
     return hr;
 }
 
 HRESULT STDMETHODCALLTYPE Native12Device::GetPageFaultAllocationOutput(D3D12_DRED_PAGE_FAULT_OUTPUT *output)
 {
-    HRESULT hr = DredStatus(dred_page_fault);
-    if (SUCCEEDED(hr)) ZeroMemory(output, sizeof(*output));
-    return hr;
+    D3D12_DRED_PAGE_FAULT_OUTPUT2 data;
+    HRESULT hr = DredPageFault(&data);
+
+    if (hr != S_OK) return hr;
+    output->PageFaultVA = data.PageFaultVA;
+    output->pHeadExistingAllocationNode = reinterpret_cast<const D3D12_DRED_ALLOCATION_NODE *>(
+            data.pHeadExistingAllocationNode);
+    output->pHeadRecentFreedAllocationNode = reinterpret_cast<const D3D12_DRED_ALLOCATION_NODE *>(
+            data.pHeadRecentFreedAllocationNode);
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE Native12Device::GetAutoBreadcrumbsOutput1(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 *output)
 {
-    HRESULT hr = DredStatus(dred_auto_breadcrumbs);
-    if (SUCCEEDED(hr)) output->pHeadAutoBreadcrumbNode = NULL;
+    const D3D12_AUTO_BREADCRUMB_NODE1 *head = NULL;
+    HRESULT hr = DredBreadcrumbs(&head);
+
+    if (hr == S_OK) output->pHeadAutoBreadcrumbNode = head;
     return hr;
 }
 
 HRESULT STDMETHODCALLTYPE Native12Device::GetPageFaultAllocationOutput1(D3D12_DRED_PAGE_FAULT_OUTPUT1 *output)
 {
-    HRESULT hr = DredStatus(dred_page_fault);
-    if (SUCCEEDED(hr)) ZeroMemory(output, sizeof(*output));
-    return hr;
+    D3D12_DRED_PAGE_FAULT_OUTPUT2 data;
+    HRESULT hr = DredPageFault(&data);
+
+    if (hr != S_OK) return hr;
+    output->PageFaultVA = data.PageFaultVA;
+    output->pHeadExistingAllocationNode = data.pHeadExistingAllocationNode;
+    output->pHeadRecentFreedAllocationNode = data.pHeadRecentFreedAllocationNode;
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE Native12Device::GetPageFaultAllocationOutput2(D3D12_DRED_PAGE_FAULT_OUTPUT2 *output)
 {
-    HRESULT hr = DredStatus(dred_page_fault);
-    if (SUCCEEDED(hr)) ZeroMemory(output, sizeof(*output));
-    return hr;
+    return DredPageFault(output);
 }
 
 D3D12_DRED_DEVICE_STATE STDMETHODCALLTYPE Native12Device::GetDeviceState()
@@ -1056,7 +1338,12 @@ HRESULT STDMETHODCALLTYPE Native12Device::SetPrivateDataInterface(REFGUID guid, 
     return private_data.SetInterface(guid, const_cast<IUnknown *>(data));
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::SetName(const WCHAR *) { return S_OK; }
+HRESULT STDMETHODCALLTYPE Native12Device::SetName(const WCHAR *name)
+{
+    return private_data.Set(Native12DebugObjectNameW, name ? static_cast<UINT>((lstrlenW(name) + 1) * sizeof(WCHAR)) : 0,
+            name, NULL);
+}
+
 UINT STDMETHODCALLTYPE Native12Device::GetNodeCount() { return 1; }
 
 template <typename T> static bool Native12FeatureData(void *data, UINT size, T **out)

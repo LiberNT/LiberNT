@@ -35,6 +35,8 @@ static inline HRESULT Native12StatusToHresult(NTSTATUS status)
     return status >= 0 ? S_OK : HRESULT_FROM_NT(status);
 }
 
+extern const GUID Native12DebugObjectNameW;
+
 class Native12Allocation
 {
 public:

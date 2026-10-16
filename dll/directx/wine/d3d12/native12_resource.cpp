@@ -477,6 +477,7 @@ HRESULT Native12Resource::Initialize(const D3D12_HEAP_PROPERTIES *properties, D3
 
 Native12Resource::~Native12Resource()
 {
+    if (dred) device->DredUntrack(this);
     if (driver_created) device->functions.pfnDestroyHeapAndResource(device->driver_device, driver_heap, driver);
     if (identity && device->release_resource) device->release_resource(device->runtime_device, identity);
     if (driver.pDrvPrivate) HeapFree(GetProcessHeap(), 0, driver.pDrvPrivate);
@@ -1222,6 +1223,7 @@ HRESULT Native12Device::CreateCommittedResourceRegion(const D3D12_HEAP_PROPERTIE
     if (!resource) return E_OUTOFMEMORY;
     if (mip_region) resource->mip_region = *mip_region;
     hr = resource->Initialize(properties, flags, desc, initial_state, clear_value);
+    if (SUCCEEDED(hr)) DredTrack(resource);
     if (SUCCEEDED(hr)) hr = out ? resource->QueryInterface(iid, out) : S_FALSE;
     resource->Release();
     return hr;

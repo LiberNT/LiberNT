@@ -45,7 +45,11 @@ public:
     {
         return private_data.SetInterface(guid, const_cast<IUnknown *>(data));
     }
-    HRESULT STDMETHODCALLTYPE SetName(const WCHAR *) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE SetName(const WCHAR *name) override
+    {
+        return private_data.Set(Native12DebugObjectNameW, name ? static_cast<UINT>((lstrlenW(name) + 1) * sizeof(WCHAR))
+                : 0, name, NULL);
+    }
     HRESULT STDMETHODCALLTYPE GetDevice(REFIID iid, void **out) override
     {
         return device->QueryInterface(iid, out);
@@ -131,6 +135,8 @@ public:
     Native12CommandList *volatile recording_list = NULL;
     D3D12DDI_HCOMMANDPOOL_0040 driver = {};
     bool driver_created = false;
+    Native12DredList *dred_records = NULL;
+    Native12DredList *DredAcquire(Native12CommandList *list);
 
     using Native12Child::Native12Child;
     ~Native12CommandAllocator();
@@ -166,9 +172,18 @@ struct Native12SharedTextureData
     D3DKMT_HANDLE keyed_mutex;
 };
 
+struct Native12DredAllocation : public Native12Allocation
+{
+    Native12DredAllocation *next = NULL;
+    Native12Resource *resource = NULL;
+    UINT64 address = 0, size = 0;
+    WCHAR *name = NULL;
+};
+
 class Native12Resource final : public Native12Child<ID3D12Resource2>
 {
 public:
+    Native12DredAllocation *dred = NULL;
     Native12Heap *heap = NULL;
     UINT64 heap_offset = 0;
     const void *shared_data = NULL;
@@ -689,9 +704,27 @@ struct Native12RootArguments
     UINT constants[D3D12_MAX_ROOT_COST];
 };
 
+struct Native12DredList : public Native12Allocation
+{
+    Native12DredList *next = NULL, *allocator_next = NULL;
+    bool listed = false, in_use = false;
+    Native12CommandList *list = NULL;
+    ID3D12CommandQueue *queue = NULL;
+    D3D12_AUTO_BREADCRUMB_OP *history = NULL;
+    UINT capacity = 0;
+    UINT32 count = 0;
+    ID3D12Resource *buffer = NULL;
+    volatile UINT32 *counter = NULL;
+    D3D12_GPU_VIRTUAL_ADDRESS address = 0;
+};
+
 class Native12CommandList final : public Native12Child<ID3D12GraphicsCommandList10>
 {
 public:
+    Native12DredList *dred = NULL;
+    bool dred_enabled = false;
+    UINT dred_depth = 0;
+    void DredRecord(D3D12_AUTO_BREADCRUMB_OP op);
     Native12RootArguments root_arguments[2] = {};
     void BindRootSignature(UINT bind_point, Native12RootSignature *signature);
     void RecordRootValue(UINT bind_point, UINT index, UINT64 value);
@@ -854,6 +887,22 @@ public:
     void STDMETHODCALLTYPE IASetIndexBufferStripCutValue(D3D12_INDEX_BUFFER_STRIP_CUT_VALUE value) override;
     void STDMETHODCALLTYPE SetProgram(const D3D12_SET_PROGRAM_DESC *desc) override;
     void STDMETHODCALLTYPE DispatchGraph(const D3D12_DISPATCH_GRAPH_DESC *desc) override;
+};
+
+class Native12Crumb
+{
+    Native12CommandList *list;
+    D3D12_AUTO_BREADCRUMB_OP op;
+
+public:
+    Native12Crumb(Native12CommandList *owner, D3D12_AUTO_BREADCRUMB_OP operation) : list(owner), op(operation)
+    {
+        ++list->dred_depth;
+    }
+    ~Native12Crumb()
+    {
+        if (!--list->dred_depth && list->dred) list->DredRecord(op);
+    }
 };
 
 struct Native12FormatInfo

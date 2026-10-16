@@ -100,7 +100,34 @@ HRESULT Native12CommandList::Initialize(D3D12_COMMAND_LIST_TYPE list_type, Nativ
         return hr;
     }
     recorder_created = true;
+    dred_enabled = (type == D3D12_COMMAND_LIST_TYPE_DIRECT || type == D3D12_COMMAND_LIST_TYPE_COMPUTE)
+            && device->dred_auto_breadcrumbs == D3D12_DRED_ENABLEMENT_FORCED_ON && table->pfnWriteBufferImmediate
+            && (device->options.WriteBufferImmediateQueueFlags & args.QueueFlags);
     return pool ? Reset(pool, initial_state) : S_OK;
+}
+
+void Native12CommandList::DredRecord(D3D12_AUTO_BREADCRUMB_OP op)
+{
+    D3D12DDI_WRITEBUFFERIMMEDIATE_PARAMETER_0032 parameter;
+    D3D12DDI_WRITEBUFFERIMMEDIATE_MODE_0032 mode = D3D12DDI_WRITEBUFFERIMMEDIATE_MODE_MARKER_OUT;
+    UINT slot = dred->count % 65536;
+
+    if (!recording) return;
+    if (slot >= dred->capacity)
+    {
+        UINT capacity = dred->capacity ? dred->capacity * 2 : 256;
+        void *history = dred->history
+                ? HeapReAlloc(GetProcessHeap(), 0, dred->history, capacity * sizeof(*dred->history))
+                : HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(*dred->history));
+
+        if (!history) return;
+        dred->history = static_cast<D3D12_AUTO_BREADCRUMB_OP *>(history);
+        dred->capacity = capacity;
+    }
+    dred->history[slot] = op;
+    parameter.Dst = dred->address;
+    parameter.Value = ++dred->count;
+    table->pfnWriteBufferImmediate(driver, 1, &parameter, &mode);
 }
 
 Native12CommandList::~Native12CommandList()
@@ -111,6 +138,7 @@ Native12CommandList::~Native12CommandList()
     if (driver.pDrvPrivate) HeapFree(GetProcessHeap(), 0, driver.pDrvPrivate);
     if (recorder_created) device->functions.pfnDestroyCommandRecorder(device->driver_device, recorder);
     if (recorder.pDrvPrivate) HeapFree(GetProcessHeap(), 0, recorder.pDrvPrivate);
+    if (dred_enabled) device->DredListDestroyed(this);
     if (allocator) allocator->ReleaseInternal();
     ClearPassResolves();
     for (UINT i = 0; i < ARRAYSIZE(default_states); ++i)
@@ -196,6 +224,13 @@ HRESULT STDMETHODCALLTYPE Native12CommandList::Reset(ID3D12CommandAllocator *poo
     args.ID = id;
     table->pfnResetCommandList(driver, &args);
     recording = true;
+    if (dred_enabled && (dred = target->DredAcquire(this)))
+    {
+        D3D12DDI_WRITEBUFFERIMMEDIATE_PARAMETER_0032 parameter = {dred->address, 0};
+        D3D12DDI_WRITEBUFFERIMMEDIATE_MODE_0032 mode = D3D12DDI_WRITEBUFFERIMMEDIATE_MODE_MARKER_IN;
+
+        table->pfnWriteBufferImmediate(driver, 1, &parameter, &mode);
+    }
     if (previous) previous->ReleaseInternal();
     if (type != D3D12_COMMAND_LIST_TYPE_BUNDLE)
     {
@@ -223,6 +258,7 @@ void STDMETHODCALLTYPE Native12CommandList::ClearState(ID3D12PipelineState *pipe
 void STDMETHODCALLTYPE Native12CommandList::DrawInstanced(UINT vertex_count, UINT instance_count,
         UINT start_vertex, UINT start_instance)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_DRAWINSTANCED);
     if (type != D3D12_COMMAND_LIST_TYPE_BUNDLE && !graphics_bound) return;
     table->pfnDrawInstanced(driver, vertex_count, instance_count, start_vertex, start_instance);
 }
@@ -230,12 +266,14 @@ void STDMETHODCALLTYPE Native12CommandList::DrawInstanced(UINT vertex_count, UIN
 void STDMETHODCALLTYPE Native12CommandList::DrawIndexedInstanced(UINT index_count, UINT instance_count,
         UINT start_index, INT base_vertex, UINT start_instance)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_DRAWINDEXEDINSTANCED);
     if (type != D3D12_COMMAND_LIST_TYPE_BUNDLE && !graphics_bound) return;
     table->pfnDrawIndexedInstanced(driver, index_count, instance_count, start_index, base_vertex, start_instance);
 }
 
 void STDMETHODCALLTYPE Native12CommandList::Dispatch(UINT x, UINT y, UINT z)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_DISPATCH);
     if (type != D3D12_COMMAND_LIST_TYPE_BUNDLE && !compute_bound) return;
     table->pfnDispatch(driver, x, y, z);
 }
@@ -243,6 +281,7 @@ void STDMETHODCALLTYPE Native12CommandList::Dispatch(UINT x, UINT y, UINT z)
 void STDMETHODCALLTYPE Native12CommandList::CopyBufferRegion(ID3D12Resource *dst, UINT64 dst_offset,
         ID3D12Resource *src, UINT64 src_offset, UINT64 byte_count)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_COPYBUFFERREGION);
     if (RejectInBundle()) return;
     table->pfnCopyBufferRegion(driver, Native12Placement(dst, dst_offset), Native12Placement(src, src_offset),
             byte_count);
@@ -283,6 +322,7 @@ static void Native12CopyLocation(const D3D12_TEXTURE_COPY_LOCATION *location,
 void STDMETHODCALLTYPE Native12CommandList::CopyTextureRegion(const D3D12_TEXTURE_COPY_LOCATION *dst,
         UINT dst_x, UINT dst_y, UINT dst_z, const D3D12_TEXTURE_COPY_LOCATION *src, const D3D12_BOX *src_box)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_COPYTEXTUREREGION);
     if (RejectInBundle()) return;
     D3D12DDIARG_BUFFER_PLACEMENT dst_placement, src_placement;
     D3D12DDIARG_PLACED_RESOURCE dst_placed, src_placed;
@@ -300,6 +340,7 @@ void STDMETHODCALLTYPE Native12CommandList::CopyTextureRegion(const D3D12_TEXTUR
 
 void STDMETHODCALLTYPE Native12CommandList::CopyResource(ID3D12Resource *dst, ID3D12Resource *src)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_COPYRESOURCE);
     if (RejectInBundle()) return;
     if (!dst || !src) return;
     table->pfnResourceCopy(driver, Native12UnwrapResource(dst)->driver, Native12UnwrapResource(src)->driver);
@@ -309,6 +350,7 @@ void STDMETHODCALLTYPE Native12CommandList::CopyTiles(ID3D12Resource *tiled,
         const D3D12_TILED_RESOURCE_COORDINATE *start, const D3D12_TILE_REGION_SIZE *size, ID3D12Resource *buffer,
         UINT64 buffer_offset, D3D12_TILE_COPY_FLAGS flags)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_COPYTILES);
     if (RejectInBundle()) return;
     if (!tiled || !buffer || !start || !size) return;
     table->pfnCopyTiles(driver, Native12UnwrapResource(tiled)->driver,
@@ -320,6 +362,7 @@ void STDMETHODCALLTYPE Native12CommandList::CopyTiles(ID3D12Resource *tiled,
 void STDMETHODCALLTYPE Native12CommandList::ResolveSubresource(ID3D12Resource *dst, UINT dst_sub_resource,
         ID3D12Resource *src, UINT src_sub_resource, DXGI_FORMAT format)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_RESOLVESUBRESOURCE);
     if (RejectInBundle()) return;
     if (!dst || !src) return;
     table->pfnResourceResolveSubresource(driver, Native12UnwrapResource(dst)->driver, dst_sub_resource,
@@ -403,6 +446,7 @@ UINT Native12ConvertResourceBarriers(UINT count, const D3D12_RESOURCE_BARRIER *b
 
 void STDMETHODCALLTYPE Native12CommandList::ResourceBarrier(UINT count, const D3D12_RESOURCE_BARRIER *barriers)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_RESOURCEBARRIER);
     if (RejectInBundle()) return;
     D3D12DDIARG_RESOURCE_BARRIER_0022 local[16];
     D3D12DDIARG_RESOURCE_BARRIER_0022 *converted = local;
@@ -422,6 +466,7 @@ void STDMETHODCALLTYPE Native12CommandList::ResourceBarrier(UINT count, const D3
 
 void STDMETHODCALLTYPE Native12CommandList::ExecuteBundle(ID3D12GraphicsCommandList *command_list)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_EXECUTEBUNDLE);
     if (RejectInBundle()) return;
     if (!command_list) return;
     Native12CommandList *bundle = static_cast<Native12CommandList *>(command_list);
@@ -654,6 +699,7 @@ void STDMETHODCALLTYPE Native12CommandList::OMSetRenderTargets(UINT count,
 void STDMETHODCALLTYPE Native12CommandList::ClearDepthStencilView(D3D12_CPU_DESCRIPTOR_HANDLE dsv,
         D3D12_CLEAR_FLAGS flags, FLOAT depth, UINT8 stencil, UINT rect_count, const D3D12_RECT *rects)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_CLEARDEPTHSTENCILVIEW);
     if (RejectInBundle()) return;
     DXGI_FORMAT format = device->GetDsvFormat(dsv.ptr);
     if (format == DXGI_FORMAT_D16_UNORM || format == DXGI_FORMAT_D32_FLOAT)
@@ -665,6 +711,7 @@ void STDMETHODCALLTYPE Native12CommandList::ClearDepthStencilView(D3D12_CPU_DESC
 void STDMETHODCALLTYPE Native12CommandList::ClearRenderTargetView(D3D12_CPU_DESCRIPTOR_HANDLE rtv,
         const FLOAT color[4], UINT rect_count, const D3D12_RECT *rects)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_CLEARRENDERTARGETVIEW);
     if (RejectInBundle()) return;
     table->pfnClearRenderTargetView(driver, Native12CpuHandle(rtv), color, rect_count, rects);
 }
@@ -673,6 +720,7 @@ void STDMETHODCALLTYPE Native12CommandList::ClearUnorderedAccessViewUint(D3D12_G
         D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle, ID3D12Resource *resource, const UINT values[4], UINT rect_count,
         const D3D12_RECT *rects)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_CLEARUNORDEREDACCESSVIEW);
     if (RejectInBundle()) return;
     if (!resource) return;
     table->pfnClearUnorderedAccessViewUint(driver, Native12GpuHandle(gpu_handle), Native12CpuHandle(cpu_handle),
@@ -683,6 +731,7 @@ void STDMETHODCALLTYPE Native12CommandList::ClearUnorderedAccessViewFloat(D3D12_
         D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle, ID3D12Resource *resource, const float values[4], UINT rect_count,
         const D3D12_RECT *rects)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_CLEARUNORDEREDACCESSVIEW);
     if (RejectInBundle()) return;
     if (!resource) return;
     table->pfnClearUnorderedAccessViewFloat(driver, Native12GpuHandle(gpu_handle), Native12CpuHandle(cpu_handle),
@@ -729,6 +778,7 @@ void STDMETHODCALLTYPE Native12CommandList::EndQuery(ID3D12QueryHeap *heap, D3D1
 void STDMETHODCALLTYPE Native12CommandList::ResolveQueryData(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE query_type,
         UINT start, UINT count, ID3D12Resource *buffer, UINT64 offset)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_RESOLVEQUERYDATA);
     if (!heap || !buffer) return;
     table->pfnResolveQueryData(driver, static_cast<Native12QueryHeap *>(heap)->driver,
             static_cast<D3D12DDI_QUERY_TYPE>(query_type), start, count, Native12UnwrapResource(buffer)->driver,
@@ -744,13 +794,23 @@ void STDMETHODCALLTYPE Native12CommandList::SetPredication(ID3D12Resource *buffe
     table->pfnSetPredication(driver, handle, offset, static_cast<D3D12DDI_PREDICATION_OP>(operation));
 }
 
-void STDMETHODCALLTYPE Native12CommandList::SetMarker(UINT, const void *, UINT) {}
-void STDMETHODCALLTYPE Native12CommandList::BeginEvent(UINT, const void *, UINT) {}
-void STDMETHODCALLTYPE Native12CommandList::EndEvent() {}
+void STDMETHODCALLTYPE Native12CommandList::SetMarker(UINT, const void *, UINT)
+{
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_SETMARKER);
+}
+void STDMETHODCALLTYPE Native12CommandList::BeginEvent(UINT, const void *, UINT)
+{
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_BEGINEVENT);
+}
+void STDMETHODCALLTYPE Native12CommandList::EndEvent()
+{
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_ENDEVENT);
+}
 
 void STDMETHODCALLTYPE Native12CommandList::ExecuteIndirect(ID3D12CommandSignature *signature, UINT max_count,
         ID3D12Resource *arguments, UINT64 argument_offset, ID3D12Resource *count, UINT64 count_offset)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_EXECUTEINDIRECT);
     if (!signature || !arguments) return;
     table->pfnExecuteIndirect(driver, static_cast<Native12CommandSignature *>(signature)->driver, max_count,
             Native12Placement(arguments, argument_offset), Native12Placement(count, count_offset));
@@ -766,6 +826,7 @@ static_assert(sizeof(D3D12_WRITEBUFFERIMMEDIATE_MODE) == sizeof(D3D12DDI_WRITEBU
 void STDMETHODCALLTYPE Native12CommandList::AtomicCopyBufferUINT(ID3D12Resource *dst, UINT64 dst_offset,
         ID3D12Resource *src, UINT64 src_offset, UINT, ID3D12Resource *const *, const D3D12_SUBRESOURCE_RANGE_UINT64 *)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_ATOMICCOPYBUFFERUINT);
     if (!dst || !src || !table->pfnAtomicCopyBufferRegion) return;
     table->pfnAtomicCopyBufferRegion(driver, Native12Placement(dst, dst_offset), Native12Placement(src, src_offset),
             sizeof(UINT));
@@ -774,6 +835,7 @@ void STDMETHODCALLTYPE Native12CommandList::AtomicCopyBufferUINT(ID3D12Resource 
 void STDMETHODCALLTYPE Native12CommandList::AtomicCopyBufferUINT64(ID3D12Resource *dst, UINT64 dst_offset,
         ID3D12Resource *src, UINT64 src_offset, UINT, ID3D12Resource *const *, const D3D12_SUBRESOURCE_RANGE_UINT64 *)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_ATOMICCOPYBUFFERUINT64);
     if (!dst || !src || !table->pfnAtomicCopyBufferRegion) return;
     table->pfnAtomicCopyBufferRegion(driver, Native12Placement(dst, dst_offset), Native12Placement(src, src_offset),
             sizeof(UINT64));
@@ -797,6 +859,7 @@ void STDMETHODCALLTYPE Native12CommandList::ResolveSubresourceRegion(ID3D12Resou
         UINT dst_x, UINT dst_y, ID3D12Resource *src, UINT src_sub_resource, D3D12_RECT *src_rect, DXGI_FORMAT format,
         D3D12_RESOLVE_MODE mode)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_RESOLVESUBRESOURCEREGION);
     if (RejectInBundle()) return;
     if (!dst || !src || !table->pfnResourceResolveSubresourceRegion) return;
     table->pfnResourceResolveSubresourceRegion(driver, Native12UnwrapResource(dst)->driver, dst_sub_resource, dst_x,
@@ -812,6 +875,7 @@ void STDMETHODCALLTYPE Native12CommandList::SetViewInstanceMask(UINT mask)
 void STDMETHODCALLTYPE Native12CommandList::WriteBufferImmediate(UINT count,
         const D3D12_WRITEBUFFERIMMEDIATE_PARAMETER *parameters, const D3D12_WRITEBUFFERIMMEDIATE_MODE *modes)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_WRITEBUFFERIMMEDIATE);
     if (!count || !parameters || !table->pfnWriteBufferImmediate) return;
     for (UINT i = 0; modes && i < count; ++i)
     {
@@ -829,6 +893,7 @@ void STDMETHODCALLTYPE Native12CommandList::WriteBufferImmediate(UINT count,
 
 void STDMETHODCALLTYPE Native12CommandList::SetProtectedResourceSession(ID3D12ProtectedResourceSession *session)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_SETPROTECTEDRESOURCESESSION);
     D3D12DDI_HPROTECTEDRESOURCESESSION_0030 none = {};
     if (!session && table->pfnSetProtectedResourceSession) table->pfnSetProtectedResourceSession(driver, none);
 }
@@ -1014,6 +1079,7 @@ void STDMETHODCALLTYPE Native12CommandList::DispatchMesh(UINT, UINT, UINT) {}
 
 void STDMETHODCALLTYPE Native12CommandList::Barrier(UINT32 group_count, const D3D12_BARRIER_GROUP *groups)
 {
+    Native12Crumb crumb(this, D3D12_AUTO_BREADCRUMB_OP_BARRIER);
     if (RejectInBundle()) return;
     for (UINT32 i = 0; i < group_count; ++i)
     {
@@ -1124,6 +1190,7 @@ HRESULT Native12Device::CreatePlacedResourceRegion(ID3D12Heap *heap, UINT64 offs
     if (mip_region) resource->mip_region = *mip_region;
     hr = resource->InitializePlaced(static_cast<Native12Heap *>(heap), offset, desc, initial_state,
             clear_value);
+    if (SUCCEEDED(hr)) DredTrack(resource);
     if (SUCCEEDED(hr)) hr = out ? resource->QueryInterface(iid, out) : S_FALSE;
     resource->Release();
     return hr;

@@ -370,6 +370,7 @@ void STDMETHODCALLTYPE Native12CommandQueue::ExecuteCommandLists(UINT count, ID3
         Native12CommandList *list = static_cast<Native12CommandList *>(
                 static_cast<ID3D12GraphicsCommandList *>(lists[i]));
         handles[i] = list->driver;
+        if (list->dred) device->DredExecuted(list->dred, this);
     }
     TRACE("queue %p, %u lists.\n", this, count);
     AcquireSRWLockExclusive(&submit_lock);
@@ -539,8 +540,54 @@ HRESULT Native12CommandAllocator::Initialize(D3D12_COMMAND_LIST_TYPE list_type)
     return S_OK;
 }
 
+Native12DredList *Native12CommandAllocator::DredAcquire(Native12CommandList *list)
+{
+    D3D12_HEAP_PROPERTIES properties = {};
+    D3D12_RESOURCE_DESC desc = {};
+    D3D12_RANGE none = {};
+    Native12DredList *record;
+    void *data;
+
+    for (record = dred_records; record && record->in_use; record = record->allocator_next) {}
+    if (!record)
+    {
+        if (!(record = new Native12DredList())) return NULL;
+        properties.Type = D3D12_HEAP_TYPE_READBACK;
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        desc.Width = sizeof(UINT32);
+        desc.Height = desc.DepthOrArraySize = desc.MipLevels = 1;
+        desc.SampleDesc.Count = 1;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        if (FAILED(device->CreateCommittedResource(&properties, D3D12_HEAP_FLAG_NONE, &desc,
+                D3D12_RESOURCE_STATE_COPY_DEST, NULL, IID_ID3D12Resource, reinterpret_cast<void **>(&record->buffer)))
+                || FAILED(record->buffer->Map(0, &none, &data)))
+        {
+            if (record->buffer) record->buffer->Release();
+            delete record;
+            return NULL;
+        }
+        record->counter = static_cast<volatile UINT32 *>(data);
+        record->address = record->buffer->GetGPUVirtualAddress();
+        record->allocator_next = dred_records;
+        dred_records = record;
+    }
+    record->in_use = true;
+    record->list = list;
+    record->count = 0;
+    *record->counter = 0;
+    return record;
+}
+
 Native12CommandAllocator::~Native12CommandAllocator()
 {
+    for (Native12DredList *record = dred_records, *next; record; record = next)
+    {
+        next = record->allocator_next;
+        device->DredForget(record);
+        if (record->buffer) record->buffer->Release();
+        if (record->history) HeapFree(GetProcessHeap(), 0, record->history);
+        delete record;
+    }
     if (driver_created) device->functions.pfnDestroyCommandPool(device->driver_device, driver);
     if (driver.pDrvPrivate) HeapFree(GetProcessHeap(), 0, driver.pDrvPrivate);
 }
@@ -564,6 +611,12 @@ HRESULT STDMETHODCALLTYPE Native12CommandAllocator::Reset()
 {
     if (recording_list) return E_FAIL;
     device->functions.pfnResetCommandPool(device->driver_device, driver);
+    for (Native12DredList *record = dred_records; record; record = record->allocator_next)
+    {
+        device->DredForget(record);
+        record->in_use = false;
+        record->list = NULL;
+    }
     return S_OK;
 }
 

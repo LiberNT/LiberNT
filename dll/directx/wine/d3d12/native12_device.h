@@ -11,6 +11,10 @@ class Native12DescriptorHeap;
 class Native12PipelineState;
 
 class Native12Device;
+class Native12Resource;
+class Native12CommandList;
+struct Native12DredList;
+struct Native12DredAllocation;
 
 struct Native12BackgroundWork
 {
@@ -122,6 +126,21 @@ public:
     HRESULT removed_reason = S_OK;
     D3D12_DRED_ENABLEMENT dred_auto_breadcrumbs = D3D12_DRED_ENABLEMENT_SYSTEM_CONTROLLED;
     D3D12_DRED_ENABLEMENT dred_page_fault = D3D12_DRED_ENABLEMENT_SYSTEM_CONTROLLED;
+    SRWLOCK dred_lock = SRWLOCK_INIT;
+    Native12DredList *dred_lists = NULL;
+    Native12DredAllocation *dred_live = NULL, *dred_freed = NULL;
+    UINT dred_freed_count = 0;
+    void *dred_crumb_arena = NULL, *dred_fault_arena = NULL;
+    const D3D12_AUTO_BREADCRUMB_NODE1 *dred_crumb_head = NULL;
+    D3D12_DRED_PAGE_FAULT_OUTPUT2 dred_fault = {};
+    bool dred_crumbs_done = false, dred_fault_done = false;
+    void DredExecuted(Native12DredList *record, ID3D12CommandQueue *queue);
+    void DredForget(Native12DredList *record);
+    void DredListDestroyed(Native12CommandList *list);
+    void DredTrack(Native12Resource *resource);
+    void DredUntrack(Native12Resource *resource);
+    HRESULT DredBreadcrumbs(const D3D12_AUTO_BREADCRUMB_NODE1 **head);
+    HRESULT DredPageFault(D3D12_DRED_PAGE_FAULT_OUTPUT2 *output);
     UINT configuration_flags = 0;
     LONG64 resource_sequence = 0;
     LONG64 list_sequence = 0;
