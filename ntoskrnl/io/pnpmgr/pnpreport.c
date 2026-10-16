@@ -329,6 +329,7 @@ PpSetCustomTargetEvent(IN PDEVICE_OBJECT DeviceObject,
 
     /* That call is totally wrong but notifications handler must be fixed first */
     PiNotifyTargetDeviceChange(&GUID_PNP_CUSTOM_NOTIFICATION, DeviceObject, NotificationStructure);
+    IopQueueCustomTargetEvent(&IopGetDeviceNode(DeviceObject)->InstancePath, NotificationStructure);
 
     if (SyncEvent)
     {

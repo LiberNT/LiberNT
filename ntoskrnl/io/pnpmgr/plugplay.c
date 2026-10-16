@@ -191,6 +191,44 @@ IopQueueTargetDeviceEvent(const GUID *Guid,
 }
 
 NTSTATUS
+IopQueueCustomTargetEvent(
+    _In_ PUNICODE_STRING DeviceIds,
+    _In_ PTARGET_DEVICE_CUSTOM_NOTIFICATION Notification)
+{
+    PPNP_EVENT_ENTRY EventEntry;
+    PTARGET_DEVICE_CUSTOM_NOTIFICATION Copy;
+    ULONG IdsSize, NotificationOffset, TotalSize;
+
+    if (Notification->Size < FIELD_OFFSET(TARGET_DEVICE_CUSTOM_NOTIFICATION, CustomDataBuffer) ||
+        DeviceIds->Length > MAXUSHORT - 2 * sizeof(WCHAR))
+        return STATUS_INVALID_PARAMETER;
+
+    IdsSize = DeviceIds->Length + 2 * sizeof(WCHAR);
+    NotificationOffset = ALIGN_UP_BY(FIELD_OFFSET(PLUGPLAY_EVENT_BLOCK, CustomNotification.DeviceIds) + IdsSize,
+                                     sizeof(ULONGLONG));
+    TotalSize = NotificationOffset + Notification->Size;
+
+    EventEntry = ExAllocatePool(NonPagedPool, TotalSize + FIELD_OFFSET(PNP_EVENT_ENTRY, Event));
+    if (!EventEntry)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(EventEntry, TotalSize + FIELD_OFFSET(PNP_EVENT_ENTRY, Event));
+
+    EventEntry->Event.EventGuid = GUID_PNP_CUSTOM_NOTIFICATION;
+    EventEntry->Event.EventCategory = CustomDeviceEvent;
+    EventEntry->Event.TotalSize = TotalSize;
+    EventEntry->Event.CustomNotification.NotificationStructure = (PVOID)(ULONG_PTR)NotificationOffset;
+    RtlCopyMemory(EventEntry->Event.CustomNotification.DeviceIds, DeviceIds->Buffer, DeviceIds->Length);
+
+    Copy = (PTARGET_DEVICE_CUSTOM_NOTIFICATION)((PUCHAR)&EventEntry->Event + NotificationOffset);
+    RtlCopyMemory(Copy, Notification, Notification->Size);
+    Copy->FileObject = NULL;
+
+    IopInsertPlugPlayEvent(EventEntry);
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 IopFindDeviceInstanceTraverse(
     _In_ PDEVICE_NODE DeviceNode,
     _Inout_ PVOID Context)
@@ -1772,6 +1810,11 @@ NtGetPlugPlayEvent(IN ULONG Reserved1,
         RtlCopyMemory(Buffer,
                       &Entry->Event,
                       TotalSize);
+        if (Entry->Event.EventCategory == CustomDeviceEvent)
+        {
+            Buffer->CustomNotification.NotificationStructure =
+                (PUCHAR)Buffer + (ULONG_PTR)Entry->Event.CustomNotification.NotificationStructure;
+        }
         Status = STATUS_SUCCESS;
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
