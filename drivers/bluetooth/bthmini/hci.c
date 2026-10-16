@@ -358,6 +358,12 @@ BthHciInitialize(
     Parameters[0] = LMP_FEATURE(Dev->LmpFeatures, 6, 0) ? 2 : (LMP_FEATURE(Dev->LmpFeatures, 3, 6) ? 1 : 0);
     BthHciCommand(Dev, HCI_WRITE_INQUIRY_MODE, Parameters, 1, NULL, 0);
 
+    Parameters[0] = 1;
+    Parameters[1] = 0x33;
+    Parameters[2] = 0x8B;
+    Parameters[3] = 0x9E;
+    BthHciCommand(Dev, HCI_WRITE_CURRENT_IAC_LAP, Parameters, 4, NULL, 0);
+
     Dev->ClassOfDevice = BTHMINI_DEFAULT_COD;
     Parameters[0] = (UCHAR)Dev->ClassOfDevice;
     Parameters[1] = (UCHAR)(Dev->ClassOfDevice >> 8);
