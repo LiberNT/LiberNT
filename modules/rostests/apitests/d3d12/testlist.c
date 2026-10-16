@@ -14,6 +14,7 @@ extern void func_blend(void);
 extern void func_bundle(void);
 extern void func_device(void);
 extern void func_factory(void);
+extern void func_feedback(void);
 extern void func_features(void);
 extern void func_heaps(void);
 extern void func_interfaces(void);
@@ -39,6 +40,7 @@ const struct test winetest_testlist[] =
     { "bundle", func_bundle },
     { "device", func_device },
     { "factory", func_factory },
+    { "feedback", func_feedback },
     { "features", func_features },
     { "heaps", func_heaps },
     { "interfaces", func_interfaces },

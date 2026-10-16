@@ -6,6 +6,7 @@ list(APPEND SOURCE
     bundle.cpp
     device.cpp
     factory.cpp
+    feedback.cpp
     features.cpp
     heaps.cpp
     interfaces.cpp
