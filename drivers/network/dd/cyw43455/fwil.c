@@ -994,14 +994,11 @@ CywConnect(
     NdisReleaseSpinLock(&Adapter->Lock);
 
     Sae = (Settings.AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE);
-    FirmwareSupplicant =
-        (Settings.AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK || Sae);
+    FirmwareSupplicant = Sae;
     if (Settings.SsidLength == 0 ||
         Settings.SsidLength > DOT11_SSID_MAX_LENGTH ||
         Settings.SaePasswordLength > CYW_SAE_PASSWORD_MAX ||
-        (FirmwareSupplicant && Settings.SaePasswordLength == 0) ||
-        (Settings.AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK &&
-         Settings.SaePasswordLength != 32))
+        (FirmwareSupplicant && Settings.SaePasswordLength == 0))
     {
         Status = STATUS_INVALID_DEVICE_STATE;
         goto Exit;

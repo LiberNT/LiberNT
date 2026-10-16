@@ -872,8 +872,7 @@ CywOidConnectRequest(
     Adapter->Associated = FALSE;
     Adapter->LinkUp = FALSE;
     Adapter->FirmwareSupplicant =
-        (Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK ||
-         Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE);
+        (Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE);
     Adapter->FirmwareHandshakeComplete = FALSE;
     Adapter->PortAuthorized = FALSE;
     Sequence = ++Adapter->ConnectSeq;

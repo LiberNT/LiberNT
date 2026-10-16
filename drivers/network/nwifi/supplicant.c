@@ -989,7 +989,6 @@ NwifiSupplicantSeedFirmware(
     PDOT11_CIPHER_DEFAULT_KEY_VALUE Value;
     UCHAR Credential[NWIFI_CREDENTIAL_MAX];
     UCHAR FirmwareCredential[NWIFI_CREDENTIAL_MAX];
-    DOT11_SSID Ssid;
     DOT11_AUTH_ALGORITHM AuthAlgorithm;
     ULONG CredentialLength;
     ULONG FirmwareCredentialLength;
@@ -1009,34 +1008,10 @@ NwifiSupplicantSeedFirmware(
     }
     CredentialLength = Sup->PassphraseLen;
     RtlCopyMemory(Credential, Sup->Passphrase, CredentialLength);
-    Ssid = Msm->Connect.Ssid;
     AuthAlgorithm = Msm->Connect.AuthAlgorithm;
     NdisReleaseSpinLock(&Msm->Lock);
 
-    if (AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK)
-    {
-        RSNA_CTX Context;
-        RSNA_STATUS RStatus;
-
-        RStatus = NwifiInitRsnaContext(&Context,
-                                       &Ssid,
-                                       Credential,
-                                       CredentialLength);
-        if (RStatus == RSNA_OK)
-        {
-            RStatus = RsnaGetPmk(&Context, FirmwareCredential);
-        }
-        RsnaClear(&Context);
-        if (RStatus != RSNA_OK)
-        {
-            RtlSecureZeroMemory(Credential, sizeof(Credential));
-            RtlSecureZeroMemory(FirmwareCredential,
-                                sizeof(FirmwareCredential));
-            return NDIS_STATUS_INVALID_DATA;
-        }
-        FirmwareCredentialLength = RSNA_PMK_LEN;
-    }
-    else if (AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
+    if (AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
     {
         RtlCopyMemory(FirmwareCredential, Credential, CredentialLength);
         FirmwareCredentialLength = CredentialLength;

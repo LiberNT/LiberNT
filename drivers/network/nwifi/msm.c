@@ -668,15 +668,14 @@ NwifiMsmConnect(
         goto ConnectFailed;
     }
 
-    /* Fullmac adapters complete WPA2-PSK and WPA3-SAE in firmware after the
-     * credential is seeded through the lower miniport. */
     if (Params->Secure)
     {
         if (Params->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK ||
             Params->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
         {
             Status = NwifiSupplicantStart(Msm);
-            if (Status == NDIS_STATUS_SUCCESS)
+            if (Status == NDIS_STATUS_SUCCESS &&
+                Params->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
             {
                 NwifiSupplicantSeedFirmware(Msm);
             }
