@@ -109,6 +109,7 @@ static const struct vkd3d_optional_extension_info optional_device_extensions[] =
     VK_EXTENSION(EXT_DESCRIPTOR_INDEXING, EXT_descriptor_indexing),
     VK_EXTENSION(EXT_FRAGMENT_SHADER_INTERLOCK, EXT_fragment_shader_interlock),
     VK_EXTENSION(EXT_MUTABLE_DESCRIPTOR_TYPE, EXT_mutable_descriptor_type),
+    VK_EXTENSION(EXT_PRIMITIVE_RESTART_INDEX, EXT_primitive_restart_index),
     VK_EXTENSION(EXT_ROBUSTNESS_2, EXT_robustness2),
     VK_EXTENSION(EXT_SAMPLER_FILTER_MINMAX, EXT_sampler_filter_minmax),
     VK_EXTENSION(EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION, EXT_shader_demote_to_helper_invocation),
@@ -117,6 +118,7 @@ static const struct vkd3d_optional_extension_info optional_device_extensions[] =
     VK_EXTENSION(EXT_TEXEL_BUFFER_ALIGNMENT, EXT_texel_buffer_alignment),
     VK_EXTENSION(EXT_TRANSFORM_FEEDBACK, EXT_transform_feedback),
     VK_EXTENSION(EXT_VERTEX_ATTRIBUTE_DIVISOR, EXT_vertex_attribute_divisor),
+    VK_EXTENSION(EXT_ZERO_INITIALIZE_DEVICE_MEMORY, EXT_zero_initialize_device_memory),
 };
 
 static HRESULT vkd3d_create_vk_descriptor_heap_layout(struct d3d12_device *device, unsigned int index)
@@ -860,6 +862,8 @@ struct vkd3d_physical_device_info
     VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT mutable_features;
     VkPhysicalDevice4444FormatsFeaturesEXT formats4444_features;
     VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR zero_initialize_workgroup_memory_features;
+    VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT zero_initialize_device_memory_features;
+    VkPhysicalDevicePrimitiveRestartIndexFeaturesEXT primitive_restart_index_features;
 
     VkPhysicalDeviceFeatures2 features2;
 };
@@ -899,6 +903,10 @@ static void vkd3d_chain_physical_device_info_structures(struct vkd3d_physical_de
         vk_prepend_struct(&info->features2, &info->formats4444_features);
     if (vulkan_info->KHR_zero_initialize_workgroup_memory)
         vk_prepend_struct(&info->features2, &info->zero_initialize_workgroup_memory_features);
+    if (vulkan_info->EXT_zero_initialize_device_memory)
+        vk_prepend_struct(&info->features2, &info->zero_initialize_device_memory_features);
+    if (vulkan_info->EXT_primitive_restart_index)
+        vk_prepend_struct(&info->features2, &info->primitive_restart_index_features);
 
     info->properties2.pNext = NULL;
 
@@ -941,6 +949,8 @@ static void vkd3d_physical_device_info_init(struct vkd3d_physical_device_info *i
     info->mutable_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT;
     info->formats4444_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT;
     info->zero_initialize_workgroup_memory_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES_KHR;
+    info->zero_initialize_device_memory_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_DEVICE_MEMORY_FEATURES_EXT;
+    info->primitive_restart_index_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVE_RESTART_INDEX_FEATURES_EXT;
 
     info->properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
     info->maintenance3_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES;
@@ -1879,6 +1889,10 @@ static HRESULT vkd3d_init_device_caps(struct d3d12_device *device,
         vulkan_info->KHR_timeline_semaphore = false;
     if (!physical_device_info->zero_initialize_workgroup_memory_features.shaderZeroInitializeWorkgroupMemory)
         vulkan_info->KHR_zero_initialize_workgroup_memory = false;
+    if (!physical_device_info->zero_initialize_device_memory_features.zeroInitializeDeviceMemory)
+        vulkan_info->EXT_zero_initialize_device_memory = false;
+    if (!physical_device_info->primitive_restart_index_features.primitiveRestartIndex)
+        vulkan_info->EXT_primitive_restart_index = false;
 
     physical_device_info->formats4444_features.formatA4B4G4R4 = VK_FALSE;
 
@@ -3712,6 +3726,7 @@ static ULONG STDMETHODCALLTYPE d3d12_device_Release(ID3D12Device14 *iface)
         vkd3d_mutex_destroy(&device->blocked_queues_mutex);
         d3d12_device_dred_free_arena(device);
         vkd3d_mutex_destroy(&device->dred_mutex);
+        vkd3d_mutex_destroy(&device->root_signature_cache_mutex);
 
         vkd3d_private_store_destroy(&device->private_store);
 
@@ -3800,6 +3815,8 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CreateCommandQueue(ID3D12Device14 
     TRACE("iface %p, desc %p, riid %s, command_queue %p.\n",
             iface, desc, debugstr_guid(riid), command_queue);
 
+    if (FAILED(device->removed_reason))
+        return DXGI_ERROR_DEVICE_REMOVED;
     if (FAILED(hr = d3d12_command_queue_create(device, desc, &object)))
         return hr;
 
@@ -4102,6 +4119,11 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device14
 
             data->Support1 = D3D12_FORMAT_SUPPORT1_NONE;
             data->Support2 = D3D12_FORMAT_SUPPORT2_NONE;
+            if (data->Format == DXGI_FORMAT_UNKNOWN)
+            {
+                data->Support1 = D3D12_FORMAT_SUPPORT1_BUFFER;
+                return S_OK;
+            }
             if (!(format = vkd3d_get_format(device, data->Format, false)))
                 format = vkd3d_get_format(device, data->Format, true);
             if (!format)
@@ -4193,6 +4215,13 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device14
 
             if (!(format = vkd3d_get_format(device, data->Format, false)))
                 format = vkd3d_get_format(device, data->Format, true);
+            if (!format && data->Format > DXGI_FORMAT_UNKNOWN && data->Format <= DXGI_FORMAT_B4G4R4A4_UNORM
+                    && data->Format != DXGI_FORMAT_R1_UNORM)
+            {
+                data->PlaneCount = (data->Format == DXGI_FORMAT_NV12 || data->Format == DXGI_FORMAT_P010
+                        || data->Format == DXGI_FORMAT_P016 || data->Format == DXGI_FORMAT_NV11) ? 2 : 1;
+                return S_OK;
+            }
             if (!format)
             {
                 FIXME("Unhandled format %#x.\n", data->Format);
@@ -4941,8 +4970,41 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CreateRootSignature(ID3D12Device14
 
     debug_ignored_node_mask(node_mask);
 
+    vkd3d_mutex_lock(&device->root_signature_cache_mutex);
+    for (object = device->root_signature_cache; object; object = object->cache_next)
+    {
+        unsigned int refcount;
+
+        if (object->cache_blob_size != bytecode_length || memcmp(object->cache_blob, bytecode, bytecode_length))
+            continue;
+        do
+        {
+            if (!(refcount = object->refcount))
+                break;
+        }
+        while (!vkd3d_atomic_compare_exchange_u32(&object->refcount, refcount, refcount + 1));
+        if (refcount)
+        {
+            vkd3d_mutex_unlock(&device->root_signature_cache_mutex);
+            hr = ID3D12RootSignature_QueryInterface(&object->ID3D12RootSignature_iface, riid, root_signature);
+            ID3D12RootSignature_Release(&object->ID3D12RootSignature_iface);
+            return hr;
+        }
+    }
+    vkd3d_mutex_unlock(&device->root_signature_cache_mutex);
+
     if (FAILED(hr = d3d12_root_signature_create(device, bytecode, bytecode_length, &object)))
         return hr;
+
+    if (bytecode && (object->cache_blob = vkd3d_malloc(bytecode_length)))
+    {
+        memcpy(object->cache_blob, bytecode, bytecode_length);
+        object->cache_blob_size = bytecode_length;
+        vkd3d_mutex_lock(&device->root_signature_cache_mutex);
+        object->cache_next = device->root_signature_cache;
+        device->root_signature_cache = object;
+        vkd3d_mutex_unlock(&device->root_signature_cache_mutex);
+    }
 
     return return_interface(&object->ID3D12RootSignature_iface,
             &IID_ID3D12RootSignature, riid, root_signature);
@@ -5158,8 +5220,8 @@ static void d3d12_device_get_resource1_allocation_info(struct d3d12_device *devi
                 goto invalid;
             }
 
-            requested_alignment = desc->Alignment
-                    ? desc->Alignment : D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+            requested_alignment = d3d12_resource_desc_get_placement_alignment(desc, vkd3d_get_format(device,
+                    desc->Format, !!(desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)));
             info.alignment = max(info.alignment, requested_alignment);
             info.size_in_bytes = align(info.size_in_bytes, info.alignment);
 
@@ -5188,12 +5250,7 @@ static void d3d12_device_get_resource1_allocation_info(struct d3d12_device *devi
 
 invalid:
     result->SizeInBytes = UINT64_MAX;
-
-    /* FIXME: Should we support D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT for small MSAA resources? */
-    if (desc->SampleDesc.Count != 1)
-        result->Alignment = D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT;
-    else
-        result->Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+    result->Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
 
     TRACE("Alignment %#"PRIx64".\n", result->Alignment);
 }
@@ -6861,6 +6918,8 @@ static HRESULT d3d12_device_init(struct d3d12_device *device,
     vkd3d_mutex_init(&device->worker_mutex);
     vkd3d_cond_init(&device->worker_cond);
     vkd3d_mutex_init(&device->dred_mutex);
+    vkd3d_mutex_init(&device->root_signature_cache_mutex);
+    device->root_signature_cache = NULL;
     device->dred_lists = NULL;
     device->dred_arena = NULL;
     device->dred_crumb_head = NULL;

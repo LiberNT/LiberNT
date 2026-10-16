@@ -210,6 +210,9 @@ VK_DEVICE_EXT_PFN(vkCmdEndConditionalRenderingEXT)
 /* VK_EXT_debug_marker */
 VK_DEVICE_EXT_PFN(vkDebugMarkerSetObjectNameEXT)
 
+/* VK_EXT_primitive_restart_index */
+VK_DEVICE_EXT_PFN(vkCmdSetPrimitiveRestartIndexEXT)
+
 /* VK_EXT_transform_feedback */
 VK_DEVICE_EXT_PFN(vkCmdBeginQueryIndexedEXT)
 VK_DEVICE_EXT_PFN(vkCmdBeginTransformFeedbackEXT)

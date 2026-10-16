@@ -707,8 +707,23 @@ static void d3d12_fence_release_vk_semaphore(struct d3d12_fence *fence, struct v
 
 static void d3d12_fence_update_pending_value_locked(struct d3d12_fence *fence)
 {
-    uint64_t new_max_pending_value;
+    uint64_t new_max_pending_value, latest_timeline_value = 0;
     unsigned int i;
+
+    if (fence->timeline_semaphore && fence->semaphore_count)
+    {
+        for (i = 0; i < fence->semaphore_count; ++i)
+        {
+            if (fence->semaphores[i].u.timeline_value > latest_timeline_value)
+            {
+                latest_timeline_value = fence->semaphores[i].u.timeline_value;
+                fence->max_pending_value = fence->semaphores[i].value;
+            }
+        }
+        if (latest_timeline_value <= fence->cpu_signal_timeline_value)
+            fence->max_pending_value = max(fence->max_pending_value, fence->value);
+        return;
+    }
 
     for (i = 0, new_max_pending_value = 0; i < fence->semaphore_count; ++i)
         new_max_pending_value = max(fence->semaphores[i].value, new_max_pending_value);
@@ -920,13 +935,19 @@ static uint64_t d3d12_fence_add_pending_timeline_signal(struct d3d12_fence *fenc
 
 static uint64_t d3d12_fence_get_timeline_wait_value_locked(struct d3d12_fence *fence, uint64_t virtual_value)
 {
-    uint64_t target_timeline_value = UINT64_MAX;
+    uint64_t target_timeline_value = UINT64_MAX, rewind_timeline_value = 0;
     unsigned int i;
+
+    for (i = 0; i < fence->semaphore_count; ++i)
+    {
+        if (virtual_value > fence->semaphores[i].value)
+            rewind_timeline_value = max(rewind_timeline_value, fence->semaphores[i].u.timeline_value);
+    }
 
     /* Find the smallest physical value which is at least the virtual value. */
     for (i = 0; i < fence->semaphore_count; ++i)
     {
-        if (virtual_value <= fence->semaphores[i].value)
+        if (virtual_value <= fence->semaphores[i].value && fence->semaphores[i].u.timeline_value > rewind_timeline_value)
             target_timeline_value = min(target_timeline_value, fence->semaphores[i].u.timeline_value);
     }
 
@@ -1190,6 +1211,7 @@ static HRESULT d3d12_fence_signal_cpu_timeline_semaphore(struct d3d12_fence *fen
     vkd3d_mutex_lock(&fence->mutex);
 
     fence->value = value;
+    fence->cpu_signal_timeline_value = fence->pending_timeline_value;
     d3d12_fence_signal_external_events_locked(fence);
     d3d12_fence_update_pending_value_locked(fence);
 
@@ -1275,6 +1297,7 @@ static HRESULT d3d12_fence_init(struct d3d12_fence *fence, struct d3d12_device *
     fence->timeline_semaphore = VK_NULL_HANDLE;
     fence->timeline_value = 0;
     fence->pending_timeline_value = 0;
+    fence->cpu_signal_timeline_value = 0;
     fence->last_waited_value = 0;
     if (device->vk_info.KHR_timeline_semaphore && (vr = vkd3d_create_timeline_semaphore(device, 0,
             &fence->timeline_semaphore)) < 0)
@@ -3126,7 +3149,7 @@ static bool d3d12_command_list_update_graphics_pipeline(struct d3d12_command_lis
     }
 
     if (!(vk_pipeline = d3d12_pipeline_state_get_or_create_pipeline(list->state,
-            list->primitive_topology, list->strides, list->dsv_format, &vk_render_pass)))
+            list->primitive_topology, list->strides, list->dsv_format, list->index_buffer_format, &vk_render_pass)))
         return false;
 
     /* The render pass cache ensures that we use the same Vulkan render pass
@@ -3886,6 +3909,15 @@ static bool d3d12_command_list_begin_render_pass(struct d3d12_command_list *list
 static void d3d12_command_list_check_index_buffer_strip_cut_value(struct d3d12_command_list *list)
 {
     struct d3d12_graphics_pipeline_state *graphics = &list->state->u.graphics;
+    const struct vkd3d_vk_device_procs *vk_procs = &list->device->vk_procs;
+
+    if (list->device->vk_info.EXT_primitive_restart_index && graphics->index_buffer_strip_cut_value)
+    {
+        VK_CALL(vkCmdSetPrimitiveRestartIndexEXT(list->vk_command_buffer,
+                graphics->index_buffer_strip_cut_value == D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFF
+                ? 0xffff : 0xffffffff));
+        return;
+    }
 
     /* In Vulkan, the strip cut value is derived from the index buffer format. */
     switch (graphics->index_buffer_strip_cut_value)
@@ -3894,14 +3926,6 @@ static void d3d12_command_list_check_index_buffer_strip_cut_value(struct d3d12_c
             if (list->index_buffer_format != DXGI_FORMAT_R16_UINT)
             {
                 FIXME_ONCE("Strip cut value 0xffff is not supported with index buffer format %#x.\n",
-                        list->index_buffer_format);
-            }
-            break;
-
-        case D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFFFFFF:
-            if (list->index_buffer_format != DXGI_FORMAT_R32_UINT)
-            {
-                FIXME_ONCE("Strip cut value 0xffffffff is not supported with index buffer format %#x.\n",
                         list->index_buffer_format);
             }
             break;
@@ -5543,6 +5567,8 @@ static void STDMETHODCALLTYPE d3d12_command_list_IASetIndexBuffer(ID3D12Graphics
             return;
     }
 
+    if (list->index_buffer_format != view->Format)
+        d3d12_command_list_invalidate_current_pipeline(list);
     list->index_buffer_format = view->Format;
 
     resource = vkd3d_gpu_va_allocator_dereference(&list->device->gpu_va_allocator, view->BufferLocation);
@@ -5807,15 +5833,37 @@ static void d3d12_command_list_clear(struct d3d12_command_list *list,
         const union VkClearValue *clear_value, unsigned int rect_count, const D3D12_RECT *rects)
 {
     const struct vkd3d_vk_device_procs *vk_procs = &list->device->vk_procs;
+    struct VkAttachmentDescription predicated_desc;
     struct VkSubpassDescription sub_pass_desc;
     struct VkRenderPassCreateInfo pass_desc;
     struct VkRenderPassBeginInfo begin_desc;
     struct VkFramebufferCreateInfo fb_desc;
+    VkClearAttachment clear_attachment;
     VkFramebuffer vk_framebuffer;
     VkRenderPass vk_render_pass;
+    VkClearRect clear_rect;
     D3D12_RECT full_rect;
     unsigned int i;
     VkResult vr;
+
+    if (list->is_predicated)
+    {
+        clear_attachment.aspectMask = 0;
+        clear_attachment.colorAttachment = 0;
+        clear_attachment.clearValue = *clear_value;
+        predicated_desc = *attachment_desc;
+        if (color_reference)
+            clear_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        if (ds_reference && attachment_desc->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
+            clear_attachment.aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (ds_reference && attachment_desc->stencilLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
+            clear_attachment.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        if (predicated_desc.loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
+            predicated_desc.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        if (predicated_desc.stencilLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
+            predicated_desc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        attachment_desc = &predicated_desc;
+    }
 
     if (!rect_count)
     {
@@ -5902,6 +5950,13 @@ static void d3d12_command_list_clear(struct d3d12_command_list *list,
         begin_desc.renderArea.extent.width = rects[i].right - rects[i].left;
         begin_desc.renderArea.extent.height = rects[i].bottom - rects[i].top;
         VK_CALL(vkCmdBeginRenderPass(list->vk_command_buffer, &begin_desc, VK_SUBPASS_CONTENTS_INLINE));
+        if (list->is_predicated)
+        {
+            clear_rect.rect = begin_desc.renderArea;
+            clear_rect.baseArrayLayer = 0;
+            clear_rect.layerCount = layer_count;
+            VK_CALL(vkCmdClearAttachments(list->vk_command_buffer, 1, &clear_attachment, 1, &clear_rect));
+        }
         VK_CALL(vkCmdEndRenderPass(list->vk_command_buffer));
     }
 }
@@ -6550,6 +6605,40 @@ static void STDMETHODCALLTYPE d3d12_command_list_ResolveQueryData(ID3D12Graphics
     }
 }
 
+static bool d3d12_command_list_latch_predicate(struct d3d12_command_list *list,
+        struct d3d12_resource *resource, uint64_t offset, VkBuffer *vk_buffer)
+{
+    const struct vkd3d_vk_device_procs *vk_procs = &list->device->vk_procs;
+    struct vkd3d_buffer buffer;
+    VkMemoryBarrier vk_barrier;
+    VkBufferCopy copy;
+
+    if (FAILED(d3d12_command_list_allocate_transfer_buffer(list, sizeof(uint64_t), &buffer)))
+        return false;
+
+    d3d12_command_list_track_resource_usage(list, resource);
+
+    vk_barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    vk_barrier.pNext = NULL;
+    vk_barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+    vk_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    VK_CALL(vkCmdPipelineBarrier(list->vk_command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &vk_barrier, 0, NULL, 0, NULL));
+
+    copy.srcOffset = offset;
+    copy.dstOffset = 0;
+    copy.size = sizeof(uint64_t);
+    VK_CALL(vkCmdCopyBuffer(list->vk_command_buffer, resource->u.vk_buffer, buffer.vk_buffer, 1, &copy));
+
+    vk_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vk_barrier.dstAccessMask = VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT;
+    VK_CALL(vkCmdPipelineBarrier(list->vk_command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT, 0, 1, &vk_barrier, 0, NULL, 0, NULL));
+
+    *vk_buffer = buffer.vk_buffer;
+    return true;
+}
+
 static void STDMETHODCALLTYPE d3d12_command_list_SetPredication(ID3D12GraphicsCommandList10 *iface,
         ID3D12Resource *buffer, UINT64 aligned_buffer_offset, D3D12_PREDICATION_OP operation)
 {
@@ -6591,13 +6680,11 @@ static void STDMETHODCALLTYPE d3d12_command_list_SetPredication(ID3D12GraphicsCo
             return;
         }
 
-        FIXME_ONCE("Predication doesn't support clear and copy commands, "
+        FIXME_ONCE("Predication doesn't support copy and resolve commands, "
                 "and predication values are treated as 32-bit values.\n");
 
         cond_info.sType = VK_STRUCTURE_TYPE_CONDITIONAL_RENDERING_BEGIN_INFO_EXT;
         cond_info.pNext = NULL;
-        cond_info.buffer = resource->u.vk_buffer;
-        cond_info.offset = aligned_buffer_offset;
         switch (operation)
         {
             case D3D12_PREDICATION_OP_EQUAL_ZERO:
@@ -6614,7 +6701,16 @@ static void STDMETHODCALLTYPE d3d12_command_list_SetPredication(ID3D12GraphicsCo
         }
 
         if (list->is_predicated)
+        {
             VK_CALL(vkCmdEndConditionalRenderingEXT(list->vk_command_buffer));
+            list->is_predicated = false;
+        }
+        if (!d3d12_command_list_latch_predicate(list, resource, aligned_buffer_offset, &cond_info.buffer))
+        {
+            ERR("Failed to latch the predicate.\n");
+            return;
+        }
+        cond_info.offset = 0;
         VK_CALL(vkCmdBeginConditionalRenderingEXT(list->vk_command_buffer, &cond_info));
         list->is_predicated = true;
     }
@@ -6871,6 +6967,16 @@ static void STDMETHODCALLTYPE d3d12_command_list_WriteBufferImmediate(ID3D12Grap
 
     TRACE("iface %p, count %u, parameters %p, modes %p.\n", iface, count, parameters, modes);
 
+    for (i = 0; modes && i < count; ++i)
+    {
+        if (modes[i] != D3D12_WRITEBUFFERIMMEDIATE_MODE_DEFAULT && modes[i] != D3D12_WRITEBUFFERIMMEDIATE_MODE_MARKER_IN
+                && modes[i] != D3D12_WRITEBUFFERIMMEDIATE_MODE_MARKER_OUT)
+        {
+            WARN("Invalid mode %#x.\n", modes[i]);
+            list->is_valid = false;
+            return;
+        }
+    }
     d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_WRITEBUFFERIMMEDIATE);
     for (i = 0; i < count; ++i)
     {

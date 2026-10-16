@@ -143,6 +143,7 @@ struct vkd3d_vulkan_info
     bool EXT_descriptor_indexing;
     bool EXT_fragment_shader_interlock;
     bool EXT_mutable_descriptor_type;
+    bool EXT_primitive_restart_index;
     bool EXT_robustness2;
     bool EXT_sampler_filter_minmax;
     bool EXT_shader_demote_to_helper_invocation;
@@ -151,6 +152,7 @@ struct vkd3d_vulkan_info
     bool EXT_texel_buffer_alignment;
     bool EXT_transform_feedback;
     bool EXT_vertex_attribute_divisor;
+    bool EXT_zero_initialize_device_memory;
 
     bool rasterization_stream;
     bool transform_feedback_queries;
@@ -412,6 +414,7 @@ struct d3d12_fence
     VkSemaphore timeline_semaphore;
     uint64_t timeline_value;
     uint64_t pending_timeline_value;
+    uint64_t cpu_signal_timeline_value;
 
     struct vkd3d_signaled_semaphore *semaphores;
     size_t semaphores_size;
@@ -551,6 +554,8 @@ struct vkd3d_resource_allocation_info
 
 bool d3d12_resource_is_cpu_accessible(const struct d3d12_resource *resource);
 HRESULT d3d12_resource_validate_desc(const D3D12_RESOURCE_DESC1 *desc, struct d3d12_device *device, uint32_t flags);
+uint64_t d3d12_resource_desc_get_placement_alignment(const D3D12_RESOURCE_DESC1 *desc,
+        const struct vkd3d_format *format);
 void d3d12_resource_get_tiling(struct d3d12_device *device, const struct d3d12_resource *resource,
         UINT *total_tile_count, D3D12_PACKED_MIP_INFO *packed_mip_info, D3D12_TILE_SHAPE *standard_tile_shape,
         UINT *sub_resource_tiling_count, UINT first_sub_resource_tiling,
@@ -983,6 +988,10 @@ struct d3d12_root_signature
     unsigned int refcount;
     uint8_t hash[16];
 
+    struct d3d12_root_signature *cache_next;
+    void *cache_blob;
+    size_t cache_blob_size;
+
     VkPipelineLayout vk_pipeline_layout;
     struct d3d12_descriptor_set_layout descriptor_set_layouts[VKD3D_MAX_DESCRIPTOR_SETS];
     uint32_t vk_set_count;
@@ -1173,7 +1182,8 @@ HRESULT d3d12_pipeline_state_create(struct d3d12_device *device,
 HRESULT d3d12_pipeline_library_create(struct d3d12_device *device, const void *blob, SIZE_T blob_size,
         REFIID iid, void **library);
 VkPipeline d3d12_pipeline_state_get_or_create_pipeline(struct d3d12_pipeline_state *state,
-        D3D12_PRIMITIVE_TOPOLOGY topology, const uint32_t *strides, VkFormat dsv_format, VkRenderPass *vk_render_pass);
+        D3D12_PRIMITIVE_TOPOLOGY topology, const uint32_t *strides, VkFormat dsv_format,
+        DXGI_FORMAT index_buffer_format, VkRenderPass *vk_render_pass);
 struct d3d12_pipeline_state *unsafe_impl_from_ID3D12PipelineState(ID3D12PipelineState *iface);
 
 struct vkd3d_buffer
@@ -1677,6 +1687,8 @@ struct d3d12_device
     D3D12_DRED_ENABLEMENT dred_page_fault;
     unsigned int refcount;
     struct vkd3d_mutex dred_mutex;
+    struct vkd3d_mutex root_signature_cache_mutex;
+    struct d3d12_root_signature *root_signature_cache;
     struct vkd3d_dred_list *dred_lists;
     void *dred_arena;
     const D3D12_AUTO_BREADCRUMB_NODE1 *dred_crumb_head;

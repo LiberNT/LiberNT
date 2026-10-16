@@ -118,6 +118,18 @@ static ULONG STDMETHODCALLTYPE d3d12_root_signature_Release(ID3D12RootSignature 
     if (!refcount)
     {
         struct d3d12_device *device = root_signature->device;
+        struct d3d12_root_signature **entry;
+
+        vkd3d_mutex_lock(&device->root_signature_cache_mutex);
+        for (entry = &device->root_signature_cache; *entry; entry = &(*entry)->cache_next)
+        {
+            if (*entry != root_signature)
+                continue;
+            *entry = root_signature->cache_next;
+            break;
+        }
+        vkd3d_mutex_unlock(&device->root_signature_cache_mutex);
+        vkd3d_free(root_signature->cache_blob);
         vkd3d_private_store_destroy(&root_signature->private_store);
         d3d12_root_signature_cleanup(root_signature, device);
         vkd3d_free(root_signature);
@@ -2053,7 +2065,7 @@ HRESULT d3d12_root_signature_create(struct d3d12_device *device,
         }
     }
 
-    if (!(object = vkd3d_malloc(sizeof(*object))))
+    if (!(object = vkd3d_calloc(1, sizeof(*object))))
     {
         vkd3d_shader_free_root_signature(&root_signature_desc.vkd3d);
         vkd3d_free(sampler_flags);
@@ -2568,6 +2580,7 @@ struct vkd3d_pipeline_key
     D3D12_PRIMITIVE_TOPOLOGY topology;
     uint32_t strides[D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
     VkFormat dsv_format;
+    bool restart_disabled;
 };
 
 struct vkd3d_compiled_pipeline
@@ -4530,7 +4543,7 @@ static bool d3d12_pipeline_state_put_pipeline_to_cache(struct d3d12_pipeline_sta
 
 VkPipeline d3d12_pipeline_state_get_or_create_pipeline(struct d3d12_pipeline_state *state,
         D3D12_PRIMITIVE_TOPOLOGY topology, const uint32_t *strides, VkFormat dsv_format,
-        VkRenderPass *vk_render_pass)
+        DXGI_FORMAT index_buffer_format, VkRenderPass *vk_render_pass)
 {
     VkVertexInputBindingDescription bindings[D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
     const struct vkd3d_vk_device_procs *vk_procs = &state->device->vk_procs;
@@ -4581,6 +4594,8 @@ VkPipeline d3d12_pipeline_state_get_or_create_pipeline(struct d3d12_pipeline_sta
 
     memset(&pipeline_key, 0, sizeof(pipeline_key));
     pipeline_key.topology = topology;
+    pipeline_key.restart_disabled = graphics->index_buffer_strip_cut_value
+            == D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFFFFFF && index_buffer_format == DXGI_FORMAT_R16_UINT;
 
     for (i = 0, mask = 0; i < graphics->attribute_count; ++i)
     {
@@ -4634,7 +4649,7 @@ VkPipeline d3d12_pipeline_state_get_or_create_pipeline(struct d3d12_pipeline_sta
     ia_desc.pNext = NULL;
     ia_desc.flags = 0;
     ia_desc.topology = vk_topology_from_d3d12_topology(topology);
-    ia_desc.primitiveRestartEnable = graphics->index_buffer_strip_cut_value
+    ia_desc.primitiveRestartEnable = graphics->index_buffer_strip_cut_value && !pipeline_key.restart_disabled
             && vk_topology_can_restart(ia_desc.topology);
 
     if (ia_desc.topology == VK_PRIMITIVE_TOPOLOGY_MAX_ENUM)

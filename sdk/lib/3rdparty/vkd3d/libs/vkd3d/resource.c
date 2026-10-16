@@ -124,6 +124,7 @@ static HRESULT vkd3d_allocate_device_memory(struct d3d12_device *device,
         VkDeviceMemory *vk_memory, uint32_t *vk_memory_type)
 {
     const struct vkd3d_vk_device_procs *vk_procs = &device->vk_procs;
+    VkMemoryAllocateFlagsInfo flags_info;
     VkMemoryAllocateInfo allocate_info;
     VkResult vr;
     HRESULT hr;
@@ -134,6 +135,14 @@ static HRESULT vkd3d_allocate_device_memory(struct d3d12_device *device,
     allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocate_info.pNext = dedicated_allocate_info;
     allocate_info.allocationSize = memory_requirements->size;
+    if (device->vk_info.EXT_zero_initialize_device_memory && !(heap_flags & D3D12_HEAP_FLAG_CREATE_NOT_ZEROED))
+    {
+        flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+        flags_info.pNext = allocate_info.pNext;
+        flags_info.flags = VK_MEMORY_ALLOCATE_ZERO_INITIALIZE_BIT_EXT;
+        flags_info.deviceMask = 0;
+        allocate_info.pNext = &flags_info;
+    }
     if (FAILED(hr = vkd3d_select_memory_type(device, memory_requirements->memoryTypeBits,
             heap_properties, heap_flags, &allocate_info.memoryTypeIndex)))
     {
@@ -896,7 +905,8 @@ static HRESULT vkd3d_create_image(struct d3d12_device *device,
 
         image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
     }
-    else if (desc->Layout == D3D12_TEXTURE_LAYOUT_UNKNOWN)
+    else if (desc->Layout == D3D12_TEXTURE_LAYOUT_UNKNOWN
+            || desc->Layout == D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE)
     {
         image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
     }
@@ -981,7 +991,6 @@ HRESULT vkd3d_get_image_allocation_info(struct d3d12_device *device,
     D3D12_RESOURCE_DESC1 validated_desc;
     VkMemoryRequirements requirements;
     VkImage vk_image;
-    bool tiled;
     HRESULT hr;
 
     VKD3D_ASSERT(desc->Dimension != D3D12_RESOURCE_DIMENSION_BUFFER);
@@ -994,10 +1003,8 @@ HRESULT vkd3d_get_image_allocation_info(struct d3d12_device *device,
         desc = &validated_desc;
     }
 
-    tiled = desc->Layout == D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
-
     /* XXX: We have to create an image to get its memory requirements. */
-    if (SUCCEEDED(hr = vkd3d_create_image(device, tiled ? NULL : &heap_properties, 0, desc, NULL, &vk_image)))
+    if (SUCCEEDED(hr = vkd3d_create_image(device, &heap_properties, 0, desc, NULL, &vk_image)))
     {
         VK_CALL(vkGetImageMemoryRequirements(device->vk_device, vk_image, &requirements));
         VK_CALL(vkDestroyImage(device->vk_device, vk_image, NULL));
@@ -1482,7 +1489,9 @@ static HRESULT STDMETHODCALLTYPE d3d12_resource_Map(ID3D12Resource2 *iface, UINT
     if (d3d12_resource_is_texture(resource))
     {
         /* Textures seem to be mappable only on UMA adapters. */
-        FIXME("Not implemented for textures.\n");
+        if (!data)
+            return S_OK;
+        WARN("The address of a texture mapping is not disclosed.\n");
         return E_INVALIDARG;
     }
 
@@ -1846,39 +1855,99 @@ static bool d3d12_resource_validate_texture_format(const D3D12_RESOURCE_DESC1 *d
     return true;
 }
 
-static bool d3d12_resource_validate_texture_alignment(const D3D12_RESOURCE_DESC1 *desc,
+static bool d3d12_resource_desc_is_small(const D3D12_RESOURCE_DESC1 *desc, const struct vkd3d_format *format)
+{
+    unsigned int bytes, tile_size, log_size, log_width, log_height, log_depth;
+    uint64_t tile_width, tile_height, tile_depth, count;
+
+    if (desc->Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+        return false;
+    if (desc->SampleDesc.Count > 1)
+        return true;
+    if (desc->Layout != D3D12_TEXTURE_LAYOUT_UNKNOWN
+            || (desc->Flags & (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)))
+        return false;
+    if (!(bytes = format->byte_count * format->block_byte_count))
+        return false;
+
+    tile_size = D3D12_SMALL_RESOURCE_PLACEMENT_ALIGNMENT / bytes;
+    if (desc->Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE1D)
+    {
+        tile_width = tile_size;
+        tile_height = 1;
+        tile_depth = 1;
+    }
+    else
+    {
+        log_size = vkd3d_log2i(tile_size);
+        log_depth = desc->Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? log_size / 3 : 0;
+        log_height = (log_size - log_depth) / 2;
+        log_width = log_size - log_depth - log_height;
+        tile_width = (1u << log_width) * format->block_width;
+        tile_height = (1u << log_height) * format->block_height;
+        tile_depth = 1u << log_depth;
+    }
+    count = ((desc->Width + tile_width - 1) / tile_width) * ((desc->Height + tile_height - 1) / tile_height);
+    if (desc->Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D)
+        count *= (desc->DepthOrArraySize + tile_depth - 1) / tile_depth;
+
+    return count <= D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT / D3D12_SMALL_RESOURCE_PLACEMENT_ALIGNMENT;
+}
+
+uint64_t d3d12_resource_desc_get_placement_alignment(const D3D12_RESOURCE_DESC1 *desc,
         const struct vkd3d_format *format)
 {
-    uint64_t estimated_size;
+    bool multisampled = desc->SampleDesc.Count > 1;
+    uint64_t small_alignment, default_alignment;
 
+    if (desc->Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+        return D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+    if (desc->Layout == D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE
+            || desc->Layout == D3D12_TEXTURE_LAYOUT_64KB_STANDARD_SWIZZLE)
+        return D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+
+    small_alignment = multisampled ? D3D12_SMALL_MSAA_RESOURCE_PLACEMENT_ALIGNMENT
+            : D3D12_SMALL_RESOURCE_PLACEMENT_ALIGNMENT;
+    default_alignment = multisampled ? D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT
+            : D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
     if (!desc->Alignment)
-        return true;
+        return default_alignment;
+    if (multisampled && desc->Alignment != default_alignment)
+        return small_alignment;
+    if (desc->Alignment == small_alignment && format && d3d12_resource_desc_is_small(desc, format))
+        return small_alignment;
+    return default_alignment;
+}
 
-    if (desc->Alignment != D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT
-            && desc->Alignment != D3D12_SMALL_RESOURCE_PLACEMENT_ALIGNMENT
-            && (desc->SampleDesc.Count == 1 || desc->Alignment != D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT))
+static bool d3d12_resource_validate_texture_alignment(const D3D12_RESOURCE_DESC1 *desc,
+        const struct vkd3d_format *format, const struct d3d12_device *device)
+{
+    bool multisampled = desc->SampleDesc.Count > 1;
+    uint64_t small_alignment, default_alignment;
+
+    if (desc->Layout == D3D12_TEXTURE_LAYOUT_64KB_STANDARD_SWIZZLE
+            && !device->feature_options.StandardSwizzle64KBSupported)
     {
-        WARN("Invalid resource alignment %#"PRIx64".\n", desc->Alignment);
+        WARN("64KB standard swizzle is not supported.\n");
         return false;
     }
+    if (!desc->Alignment)
+        return true;
+    if (desc->Layout == D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE
+            || desc->Layout == D3D12_TEXTURE_LAYOUT_64KB_STANDARD_SWIZZLE)
+        return desc->Alignment == D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
 
-    if (desc->Alignment < D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT)
-    {
-        /* Windows uses the slice size to determine small alignment eligibility. DepthOrArraySize is ignored. */
-        estimated_size = desc->Width * desc->Height * format->byte_count * format->block_byte_count
-                / (format->block_width * format->block_height);
-        if (estimated_size > D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT)
-        {
-            WARN("Invalid resource alignment %#"PRIx64" (required %#x).\n",
-                    desc->Alignment, D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT);
-            return false;
-        }
-    }
+    small_alignment = multisampled ? D3D12_SMALL_MSAA_RESOURCE_PLACEMENT_ALIGNMENT
+            : D3D12_SMALL_RESOURCE_PLACEMENT_ALIGNMENT;
+    default_alignment = multisampled ? D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT
+            : D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+    if (desc->Alignment == default_alignment)
+        return true;
+    if (desc->Alignment == small_alignment && d3d12_resource_desc_is_small(desc, format))
+        return true;
 
-    /* The size check for MSAA textures with D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT is probably
-     * not important. The 4MB requirement is no longer universal and Vulkan has no such requirement. */
-
-    return true;
+    WARN("Invalid resource alignment %#"PRIx64".\n", desc->Alignment);
+    return false;
 }
 
 HRESULT d3d12_resource_validate_desc(const D3D12_RESOURCE_DESC1 *desc, struct d3d12_device *device, uint32_t flags)
@@ -1950,7 +2019,7 @@ HRESULT d3d12_resource_validate_desc(const D3D12_RESOURCE_DESC1 *desc, struct d3
             }
 
             if (!d3d12_resource_validate_texture_format(desc, format)
-                    || !d3d12_resource_validate_texture_alignment(desc, format))
+                    || !d3d12_resource_validate_texture_alignment(desc, format, device))
                 return E_INVALIDARG;
             break;
 
@@ -2051,6 +2120,12 @@ static HRESULT d3d12_resource_init(struct d3d12_resource *resource, struct d3d12
 
     if (FAILED(hr = d3d12_resource_validate_desc(&resource->desc, device, 0)))
         return hr;
+
+    if (desc->Dimension == D3D12_RESOURCE_DIMENSION_BUFFER && !desc->Alignment)
+        resource->desc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+    else if (desc->Dimension != D3D12_RESOURCE_DIMENSION_BUFFER)
+        resource->desc.Alignment = d3d12_resource_desc_get_placement_alignment(desc,
+                vkd3d_get_format(device, desc->Format, !!(desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)));
 
     resource->format = vkd3d_format_from_d3d12_resource_desc(device, desc, 0);
 
@@ -4727,6 +4802,98 @@ struct d3d12_query_heap *unsafe_impl_from_ID3D12QueryHeap(ID3D12QueryHeap *iface
     return impl_from_ID3D12QueryHeap(iface);
 }
 
+static bool d3d12_query_heap_issue_all(struct d3d12_query_heap *heap, struct d3d12_device *device,
+        const D3D12_QUERY_HEAP_DESC *desc)
+{
+    const struct vkd3d_vk_device_procs *vk_procs = &device->vk_procs;
+    VkCommandBufferAllocateInfo command_buffer_info;
+    VkCommandPool vk_command_pool = VK_NULL_HANDLE;
+    VkCommandPoolCreateInfo command_pool_info;
+    VkDevice vk_device = device->vk_device;
+    VkCommandBufferBeginInfo begin_info;
+    VkCommandBuffer vk_command_buffer;
+    VkFence vk_fence = VK_NULL_HANDLE;
+    VkFenceCreateInfo fence_info;
+    struct vkd3d_queue *queue;
+    VkSubmitInfo submit_info;
+    bool issued = false;
+    unsigned int i;
+    VkQueue vk_queue;
+
+    queue = d3d12_device_get_vkd3d_queue(device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+
+    command_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    command_pool_info.pNext = NULL;
+    command_pool_info.flags = 0;
+    command_pool_info.queueFamilyIndex = queue->vk_family_index;
+    if (VK_CALL(vkCreateCommandPool(vk_device, &command_pool_info, NULL, &vk_command_pool)) < 0)
+        goto done;
+
+    command_buffer_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    command_buffer_info.pNext = NULL;
+    command_buffer_info.commandPool = vk_command_pool;
+    command_buffer_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    command_buffer_info.commandBufferCount = 1;
+    if (VK_CALL(vkAllocateCommandBuffers(vk_device, &command_buffer_info, &vk_command_buffer)) < 0)
+        goto done;
+
+    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin_info.pNext = NULL;
+    begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    begin_info.pInheritanceInfo = NULL;
+    if (VK_CALL(vkBeginCommandBuffer(vk_command_buffer, &begin_info)) < 0)
+        goto done;
+
+    VK_CALL(vkCmdResetQueryPool(vk_command_buffer, heap->vk_query_pool, 0, desc->Count));
+    for (i = 0; i < desc->Count; ++i)
+    {
+        if (desc->Type == D3D12_QUERY_HEAP_TYPE_SO_STATISTICS)
+        {
+            VK_CALL(vkCmdBeginQueryIndexedEXT(vk_command_buffer, heap->vk_query_pool, i, 0, 0));
+            VK_CALL(vkCmdEndQueryIndexedEXT(vk_command_buffer, heap->vk_query_pool, i, 0));
+        }
+        else
+        {
+            VK_CALL(vkCmdBeginQuery(vk_command_buffer, heap->vk_query_pool, i, 0));
+            VK_CALL(vkCmdEndQuery(vk_command_buffer, heap->vk_query_pool, i));
+        }
+    }
+
+    if (VK_CALL(vkEndCommandBuffer(vk_command_buffer)) < 0)
+        goto done;
+
+    fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fence_info.pNext = NULL;
+    fence_info.flags = 0;
+    if (VK_CALL(vkCreateFence(vk_device, &fence_info, NULL, &vk_fence)) < 0)
+        goto done;
+
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.pNext = NULL;
+    submit_info.waitSemaphoreCount = 0;
+    submit_info.pWaitSemaphores = NULL;
+    submit_info.pWaitDstStageMask = NULL;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &vk_command_buffer;
+    submit_info.signalSemaphoreCount = 0;
+    submit_info.pSignalSemaphores = NULL;
+
+    if (!(vk_queue = vkd3d_queue_acquire(queue)))
+        goto done;
+    issued = VK_CALL(vkQueueSubmit(vk_queue, 1, &submit_info, vk_fence)) >= 0;
+    vkd3d_queue_release(queue);
+
+    if (issued)
+        issued = VK_CALL(vkWaitForFences(vk_device, 1, &vk_fence, VK_FALSE, ~(uint64_t)0)) == VK_SUCCESS;
+
+done:
+    VK_CALL(vkDestroyCommandPool(vk_device, vk_command_pool, NULL));
+    VK_CALL(vkDestroyFence(vk_device, vk_fence, NULL));
+    if (!issued)
+        WARN("Failed to issue the queries of heap %p.\n", heap);
+    return issued;
+}
+
 HRESULT d3d12_query_heap_create(struct d3d12_device *device, const D3D12_QUERY_HEAP_DESC *desc,
         struct d3d12_query_heap **heap)
 {
@@ -4809,6 +4976,10 @@ HRESULT d3d12_query_heap_create(struct d3d12_device *device, const D3D12_QUERY_H
         vkd3d_free(object);
         return hresult_from_vk_result(vr);
     }
+
+    if (desc->Type != D3D12_QUERY_HEAP_TYPE_TIMESTAMP && desc->Count
+            && d3d12_query_heap_issue_all(object, device, desc))
+        memset(object->availability_mask, 0xff, element_count * sizeof(*object->availability_mask));
 
     d3d12_device_add_ref(device);
 
