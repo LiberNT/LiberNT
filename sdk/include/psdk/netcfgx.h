@@ -26,6 +26,25 @@ EXTERN_C const IID IID_INetCfgLock;
 #define INetCfgLock_IsWriteLocked(p,a)         (p)->lpVtbl->IsWriteLocked(p,a)
 #endif
 
+typedef enum tagCOMPONENT_CHARACTERISTICS
+{
+    NCF_VIRTUAL                     = 0x1,
+    NCF_SOFTWARE_ENUMERATED         = 0x2,
+    NCF_PHYSICAL                    = 0x4,
+    NCF_HIDDEN                      = 0x8,
+    NCF_NO_SERVICE                  = 0x10,
+    NCF_NOT_USER_REMOVABLE          = 0x20,
+    NCF_MULTIPORT_INSTANCED_ADAPTER = 0x40,
+    NCF_HAS_UI                      = 0x80,
+    NCF_SINGLE_INSTANCE             = 0x100,
+    NCF_FILTER                      = 0x400,
+    NCF_DONTEXPOSELOWER             = 0x1000,
+    NCF_HIDE_BINDING                = 0x2000,
+    NCF_NDIS_PROTOCOL               = 0x4000,
+    NCF_FIXED_BINDING               = 0x20000,
+    NCF_LW_FILTER                   = 0x40000
+} COMPONENT_CHARACTERISTICS;
+
 typedef enum
 {
     NCRP_QUERY_PROPERTY_UI  = 1,
