@@ -1085,6 +1085,7 @@ NetClassInstaller(
     wcscpy(UuidString, L"{");
     wcscat(UuidString, UuidRpcString);
     wcscat(UuidString, L"}");
+    _wcsupr(UuidString);
 
     if (IsEqualIID(&DeviceInfoData->ClassGuid, &GUID_DEVCLASS_NET))
         rc = InstallNetDevice(DeviceInfoSet, DeviceInfoData, UuidString, Characteristics, BusType, &Keywords);
