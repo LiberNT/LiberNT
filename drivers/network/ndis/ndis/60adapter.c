@@ -140,22 +140,32 @@ Ndis6ResetMiniportAttributes(
     Adapter->AddressLength = 0;
 }
 
-static VOID
-Ndis6AllocateInterfaceIdentity(
-    _In_opt_ PDEVICE_OBJECT Pdo,
-    _Out_ PNDIS6_ADAPTER_EXT Ext)
+NET_IFINDEX
+Ndis6AllocateInterfaceIndex(VOID)
 {
     LONG Current;
     LONG Next;
 
-    /* NET_LUID reserves 24 bits for NetLuidIndex and zero is invalid. Keep
-     * IfIndex and NetLuidIndex identical so NdisIfGetInterfaceIndexFromNetLuid
-     * preserves the adapter identity. */
     do
     {
         Current = InterlockedCompareExchange(&Ndis6NextInterfaceIndex, 0, 0);
         Next = (Current <= 0 || Current >= 0x00ffffff) ? 1 : Current + 1;
     } while (InterlockedCompareExchange(&Ndis6NextInterfaceIndex, Next, Current) != Current);
+
+    return (NET_IFINDEX)Next;
+}
+
+static VOID
+Ndis6AllocateInterfaceIdentity(
+    _In_opt_ PDEVICE_OBJECT Pdo,
+    _Out_ PNDIS6_ADAPTER_EXT Ext)
+{
+    LONG Next;
+
+    /* NET_LUID reserves 24 bits for NetLuidIndex and zero is invalid. Keep
+     * IfIndex and NetLuidIndex identical so NdisIfGetInterfaceIndexFromNetLuid
+     * preserves the adapter identity. */
+    Next = (LONG)Ndis6AllocateInterfaceIndex();
 
     Ext->IfIndex = (NET_IFINDEX)Next;
     Ext->NetLuid.Value = 0;

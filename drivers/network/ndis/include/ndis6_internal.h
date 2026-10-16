@@ -1312,4 +1312,17 @@ Ndis6MFreeSharedMemory(
     _In_ PVOID VirtualAddress,
     _In_ NDIS_PHYSICAL_ADDRESS PhysicalAddress);
 
+NET_IFINDEX
+Ndis6AllocateInterfaceIndex(VOID);
+
+BOOLEAN
+Ndis6LookupProviderInterface(
+    _In_ NET_IFINDEX IfIndex,
+    _Out_opt_ PNET_LUID NetLuid);
+
+BOOLEAN
+Ndis6LookupProviderNetLuid(
+    _In_ NET_LUID NetLuid,
+    _Out_opt_ PNET_IFINDEX IfIndex);
+
 #endif /* _NDIS6_INTERNAL_H_ */

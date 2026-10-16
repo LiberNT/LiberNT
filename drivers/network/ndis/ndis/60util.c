@@ -843,6 +843,9 @@ NdisIfGetInterfaceIndexFromNetLuid(
     if (IfIndex == NULL || NetLuid.Info.NetLuidIndex == 0)
         return NDIS_STATUS_INTERFACE_NOT_FOUND;
 
+    if (Ndis6LookupProviderNetLuid(NetLuid, IfIndex))
+        return NDIS_STATUS_SUCCESS;
+
     *IfIndex = (NET_IFINDEX)NetLuid.Info.NetLuidIndex;
     return NDIS_STATUS_SUCCESS;
 }
