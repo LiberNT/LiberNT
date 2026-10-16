@@ -7,11 +7,19 @@
 
 #include "bthmini.h"
 #include <wdmsec.h>
+#include <devguid.h>
 
 #define NDEBUG
 #include <debug.h>
 
 static const WCHAR BthServicesKey[] = L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Services";
+
+typedef struct _BTHMINI_AUTH_CONTEXT
+{
+    PBTHMINI_DEVICE Dev;
+} BTHMINI_AUTH_CONTEXT, *PBTHMINI_AUTH_CONTEXT;
+
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(BTHMINI_AUTH_CONTEXT, BthAuthGetContext)
 
 static
 NTSTATUS
@@ -223,6 +231,66 @@ BthConnFinishAuthentication(
 }
 
 static
+VOID
+BthConnFinishPrompt(
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ BOOLEAN Authenticated)
+{
+    WDFREQUEST Request = Remote->PromptResponse;
+    PBTHMINI_AUTH_RESPONSE Response;
+
+    Remote->Prompting = FALSE;
+    Remote->PromptResponse = NULL;
+    if (!Request)
+        return;
+    if (NT_SUCCESS(WdfRequestRetrieveOutputBuffer(Request, sizeof(*Response), (PVOID *)&Response, NULL)))
+    {
+        Response->Authenticated = Authenticated;
+        WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS, sizeof(*Response));
+    }
+    else
+    {
+        WdfRequestComplete(Request, STATUS_INVALID_BUFFER_SIZE);
+    }
+}
+
+static
+BOOLEAN
+BthConnPrompt(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote,
+    _In_ ULONG Method,
+    _In_ ULONG NumericValue)
+{
+    union
+    {
+        TARGET_DEVICE_CUSTOM_NOTIFICATION Notification;
+        UCHAR Buffer[FIELD_OFFSET(TARGET_DEVICE_CUSTOM_NOTIFICATION, CustomDataBuffer) + sizeof(BTHMINI_AUTH_REQUEST)];
+    } Event;
+    BTHMINI_AUTH_REQUEST Request;
+    NTSTATUS Status;
+
+    if (!Dev->AuthForwarding || !Dev->AuthPdo)
+        return FALSE;
+    RtlZeroMemory(&Event, sizeof(Event));
+    Event.Notification.Version = 1;
+    Event.Notification.Size = sizeof(Event.Buffer);
+    Event.Notification.Event = GUID_WINEBTH_AUTHENTICATION_REQUEST;
+    Event.Notification.NameBufferOffset = -1;
+    BthRadioFillInfo(Remote, &Request.DeviceInfo);
+    Request.Method = Method;
+    Request.NumericValue = NumericValue;
+    RtlCopyMemory(Event.Notification.CustomDataBuffer, &Request, sizeof(Request));
+    Status = IoReportTargetDeviceChangeAsynchronous(WdfDeviceWdmGetDeviceObject(Dev->AuthPdo), &Event.Notification, NULL, NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("BTHMINI: authentication request for %012I64x not reported 0x%08lx\n", Remote->Address, Status);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static
 NTSTATUS
 BthConnStatus(
     _In_ UCHAR HciStatus)
@@ -426,6 +494,17 @@ BthConnTick(
 
         if (Remote->AuthRequest && Now >= Remote->AuthDeadline)
             BthConnFinishAuthentication(Remote, STATUS_IO_TIMEOUT);
+        if ((Remote->Prompting || Remote->PromptResponse) && Now >= Remote->PromptDeadline)
+        {
+            if (Remote->Prompting && !Remote->PromptResponse)
+            {
+                UCHAR Address[6];
+
+                BthWriteAddress(Address, Remote->Address);
+                BthHciQueueCommand(Dev, HCI_USER_CONFIRMATION_NEG_REPLY, Address, sizeof(Address));
+            }
+            BthConnFinishPrompt(Remote, FALSE);
+        }
     }
 }
 
@@ -436,7 +515,49 @@ BthConnCancelAll(
     PLIST_ENTRY Entry;
 
     for (Entry = Dev->Remotes.Flink; Entry != &Dev->Remotes; Entry = Entry->Flink)
+    {
         BthConnFinishAuthentication(CONTAINING_RECORD(Entry, BTHMINI_REMOTE, Link), STATUS_CANCELLED);
+        BthConnFinishPrompt(CONTAINING_RECORD(Entry, BTHMINI_REMOTE, Link), FALSE);
+    }
+}
+
+NTSTATUS
+BthConnSendAuthResponse(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFREQUEST Request,
+    _Out_ PULONG_PTR Information)
+{
+    PBTHMINI_AUTH_RESPONSE Response, Output;
+    PBTHMINI_REMOTE Remote;
+    UCHAR Address[6];
+    NTSTATUS Status;
+
+    Status = WdfRequestRetrieveInputBuffer(Request, sizeof(*Response), (PVOID *)&Response, NULL);
+    if (NT_SUCCESS(Status))
+        Status = WdfRequestRetrieveOutputBuffer(Request, sizeof(*Output), (PVOID *)&Output, NULL);
+    if (!NT_SUCCESS(Status))
+        return STATUS_INVALID_BUFFER_SIZE;
+    Remote = BthRadioFindRemote(Dev, RtlUlonglongByteSwap(Response->Address) >> 16);
+    if (!Remote || !(Remote->Flags & BDIF_CONNECTED))
+        return STATUS_DEVICE_NOT_CONNECTED;
+    if (!Remote->Prompting || Remote->PromptResponse || Response->Method != Remote->PromptMethod)
+        return STATUS_DEVICE_NOT_READY;
+
+    BthWriteAddress(Address, Remote->Address);
+    if (Response->Negative)
+    {
+        BthHciQueueCommand(Dev, HCI_USER_CONFIRMATION_NEG_REPLY, Address, sizeof(Address));
+        Remote->Prompting = FALSE;
+        Output->Authenticated = FALSE;
+        *Information = sizeof(*Output);
+        return STATUS_SUCCESS;
+    }
+    Status = BthHciQueueCommand(Dev, HCI_USER_CONFIRMATION_REPLY, Address, sizeof(Address));
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Remote->PromptResponse = Request;
+    Remote->PromptDeadline = KeQueryInterruptTime() / 10000 + BTHMINI_PROMPT_TIMEOUT_MS;
+    return STATUS_PENDING;
 }
 
 static
@@ -512,6 +633,8 @@ BthConnEvent(
             Remote->Flags |= BDIF_CONNECTED;
             BthRadioReportInRange(Dev, Remote, Previous);
             DPRINT1("BTHMINI: connected to %012I64x, handle 0x%03x\n", Remote->Address, Remote->Handle);
+            if (!Dev->Inquiring)
+                BthRadioRequestName(Dev, Remote);
             if (Remote->Pairing && !NT_SUCCESS(BthConnAuthenticate(Dev, Remote)))
                 BthConnFinishAuthentication(Remote, STATUS_UNSUCCESSFUL);
             BthL2capLinkChanged(Dev, Remote, STATUS_SUCCESS);
@@ -529,6 +652,7 @@ BthConnEvent(
             Remote->Securing = FALSE;
             BthRadioReportInRange(Dev, Remote, Previous);
             BthL2capLinkChanged(Dev, Remote, STATUS_REMOTE_DISCONNECT);
+            BthConnFinishPrompt(Remote, FALSE);
             DPRINT1("BTHMINI: disconnected from %012I64x, reason 0x%02x\n", Remote->Address, Parameters[3]);
             if (Remote->Pairing)
                 BthConnFinishAuthentication(Remote, BthConnStatus(Parameters[3]));
@@ -624,15 +748,16 @@ BthConnEvent(
         case HCI_EV_IO_CAPABILITY_REQUEST:
             if (ParameterLength < 6)
                 return TRUE;
-            Remote = BthRadioFindRemote(Dev, BthReadAddress(Parameters));
-            if (Remote && Remote->Pairing)
+            Remote = Dev->AuthForwarding ? BthRadioGetRemote(Dev, BthReadAddress(Parameters))
+                                         : BthRadioFindRemote(Dev, BthReadAddress(Parameters));
+            if (Remote && (Remote->Pairing || Dev->AuthForwarding))
             {
                 UCHAR Reply[9];
 
                 RtlCopyMemory(Reply, Parameters, 6);
                 Reply[6] = HCI_IO_DISPLAY_YES_NO;
                 Reply[7] = 0x00;
-                Reply[8] = HCI_AUTH_MITM_DEDICATED_BONDING;
+                Reply[8] = Remote->Pairing ? HCI_AUTH_MITM_DEDICATED_BONDING : (UCHAR)(Remote->RemoteAuthentication | 0x01);
                 BthHciQueueCommand(Dev, HCI_IO_CAPABILITY_REPLY, Reply, sizeof(Reply));
             }
             else
@@ -658,9 +783,30 @@ BthConnEvent(
                 return TRUE;
             Remote = BthRadioFindRemote(Dev, BthReadAddress(Parameters));
             if (Remote && Remote->Pairing && Remote->RemoteIoCapability == HCI_IO_NO_INPUT_NO_OUTPUT)
+            {
                 BthConnReplyAddress(Dev, HCI_USER_CONFIRMATION_REPLY, Parameters, 0);
+            }
+            else if (Remote && !Remote->Prompting &&
+                     BthConnPrompt(Dev, Remote, BTHMINI_AUTH_NUMERIC_COMPARISON,
+                                   Parameters[6] | (Parameters[7] << 8) | (Parameters[8] << 16) | ((ULONG)Parameters[9] << 24)))
+            {
+                Remote->Prompting = TRUE;
+                Remote->PromptMethod = BTHMINI_AUTH_NUMERIC_COMPARISON;
+                Remote->PromptDeadline = KeQueryInterruptTime() / 10000 + BTHMINI_PROMPT_TIMEOUT_MS;
+            }
             else
+            {
                 BthConnReplyAddress(Dev, HCI_USER_CONFIRMATION_NEG_REPLY, Parameters, 0);
+            }
+            return TRUE;
+
+        case HCI_EV_USER_PASSKEY_NOTIFICATION:
+            if (ParameterLength < 10)
+                return TRUE;
+            Remote = BthRadioFindRemote(Dev, BthReadAddress(Parameters));
+            if (Remote)
+                BthConnPrompt(Dev, Remote, BTHMINI_AUTH_PASSKEY_NOTIFICATION,
+                              Parameters[6] | (Parameters[7] << 8) | (Parameters[8] << 16) | ((ULONG)Parameters[9] << 24));
             return TRUE;
 
         case HCI_EV_USER_PASSKEY_REQUEST:
@@ -669,12 +815,14 @@ BthConnEvent(
             return TRUE;
 
         case HCI_EV_SIMPLE_PAIRING_COMPLETE:
-            if (ParameterLength >= 7 && Parameters[0])
-            {
-                Remote = BthRadioFindRemote(Dev, BthReadAddress(Parameters + 1));
-                if (Remote && Remote->Pairing)
-                    BthConnFinishAuthentication(Remote, BthConnStatus(Parameters[0]));
-            }
+            if (ParameterLength < 7)
+                return TRUE;
+            Remote = BthRadioFindRemote(Dev, BthReadAddress(Parameters + 1));
+            if (!Remote)
+                return TRUE;
+            BthConnFinishPrompt(Remote, Parameters[0] == 0);
+            if (Parameters[0] && Remote->Pairing)
+                BthConnFinishAuthentication(Remote, BthConnStatus(Parameters[0]));
             return TRUE;
 
         default:
@@ -692,52 +840,86 @@ BthAuthEvtIoDeviceControl(
     _In_ size_t InputBufferLength,
     _In_ ULONG IoControlCode)
 {
-    UNREFERENCED_PARAMETER(Queue);
+    PBTHMINI_DEVICE Dev = BthAuthGetContext(WdfIoQueueGetDevice(Queue))->Dev;
+
     UNREFERENCED_PARAMETER(OutputBufferLength);
     UNREFERENCED_PARAMETER(InputBufferLength);
 
-    WdfRequestComplete(Request, IoControlCode == IOCTL_WINEBTH_AUTH_REGISTER ? STATUS_SUCCESS : STATUS_NOT_SUPPORTED);
+    if (IoControlCode != IOCTL_WINEBTH_AUTH_REGISTER)
+    {
+        WdfRequestComplete(Request, STATUS_NOT_SUPPORTED);
+        return;
+    }
+    Dev->AuthForwarding = TRUE;
+    WdfRequestComplete(Request, STATUS_SUCCESS);
 }
 
 NTSTATUS
-BthAuthCreateControlDevice(
-    _In_ WDFDRIVER Driver)
+BthAuthCreatePdo(
+    _In_ PBTHMINI_DEVICE Dev)
 {
     DECLARE_CONST_UNICODE_STRING(Name, BTHMINI_AUTH_DEVICE_NAME);
     DECLARE_CONST_UNICODE_STRING(Link, BTHMINI_AUTH_LINK_NAME);
+    DECLARE_CONST_UNICODE_STRING(DeviceId, L"BTH\\WINEBTHAUTH");
+    DECLARE_CONST_UNICODE_STRING(InstanceId, L"0");
+    DECLARE_CONST_UNICODE_STRING(Description, L"Bluetooth pairing requests");
+    WDF_DEVICE_PNP_CAPABILITIES Capabilities;
+    WDF_OBJECT_ATTRIBUTES Attributes;
     WDF_IO_QUEUE_CONFIG QueueConfig;
     PWDFDEVICE_INIT Init;
-    WDFDEVICE Device;
+    WDFDEVICE Child;
     NTSTATUS Status;
 
-    Init = WdfControlDeviceInitAllocate(Driver, &SDDL_DEVOBJ_SYS_ALL_ADM_RWX_WORLD_RW_RES_R);
+    Init = WdfPdoInitAllocate(Dev->Device);
     if (!Init)
         return STATUS_INSUFFICIENT_RESOURCES;
     WdfDeviceInitSetDeviceType(Init, FILE_DEVICE_BLUETOOTH);
     Status = WdfDeviceInitAssignName(Init, &Name);
-    if (!NT_SUCCESS(Status))
-    {
-        WdfDeviceInitFree(Init);
-        return Status;
-    }
-    Status = WdfDeviceCreate(&Init, WDF_NO_OBJECT_ATTRIBUTES, &Device);
-    if (!NT_SUCCESS(Status))
-    {
-        WdfDeviceInitFree(Init);
-        return Status;
-    }
-    Status = WdfDeviceCreateSymbolicLink(Device, &Link);
     if (NT_SUCCESS(Status))
-    {
-        WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&QueueConfig, WdfIoQueueDispatchParallel);
-        QueueConfig.EvtIoDeviceControl = BthAuthEvtIoDeviceControl;
-        Status = WdfIoQueueCreate(Device, &QueueConfig, WDF_NO_OBJECT_ATTRIBUTES, WDF_NO_HANDLE);
-    }
+        Status = WdfDeviceInitAssignSDDLString(Init, &SDDL_DEVOBJ_SYS_ALL_ADM_RWX_WORLD_RW_RES_R);
+    if (NT_SUCCESS(Status))
+        Status = WdfPdoInitAssignRawDevice(Init, &GUID_DEVCLASS_BLUETOOTH);
+    if (NT_SUCCESS(Status))
+        Status = WdfPdoInitAssignDeviceID(Init, &DeviceId);
+    if (NT_SUCCESS(Status))
+        Status = WdfPdoInitAddHardwareID(Init, &DeviceId);
+    if (NT_SUCCESS(Status))
+        Status = WdfPdoInitAssignInstanceID(Init, &InstanceId);
+    if (NT_SUCCESS(Status))
+        Status = WdfPdoInitAddDeviceText(Init, &Description, &Description, 0x409);
     if (!NT_SUCCESS(Status))
     {
-        WdfObjectDelete(Device);
+        WdfDeviceInitFree(Init);
         return Status;
     }
-    WdfControlFinishInitializing(Device);
+    WdfPdoInitSetDefaultLocale(Init, 0x409);
+
+    WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&Attributes, BTHMINI_AUTH_CONTEXT);
+    Status = WdfDeviceCreate(&Init, &Attributes, &Child);
+    if (!NT_SUCCESS(Status))
+    {
+        WdfDeviceInitFree(Init);
+        return Status;
+    }
+    BthAuthGetContext(Child)->Dev = Dev;
+
+    WDF_DEVICE_PNP_CAPABILITIES_INIT(&Capabilities);
+    Capabilities.NoDisplayInUI = WdfTrue;
+    WdfDeviceSetPnpCapabilities(Child, &Capabilities);
+
+    WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&QueueConfig, WdfIoQueueDispatchParallel);
+    QueueConfig.EvtIoDeviceControl = BthAuthEvtIoDeviceControl;
+    QueueConfig.PowerManaged = WdfFalse;
+    Status = WdfIoQueueCreate(Child, &QueueConfig, WDF_NO_OBJECT_ATTRIBUTES, WDF_NO_HANDLE);
+    if (NT_SUCCESS(Status))
+        Status = WdfDeviceCreateSymbolicLink(Child, &Link);
+    if (NT_SUCCESS(Status))
+        Status = WdfFdoAddStaticChild(Dev->Device, Child);
+    if (!NT_SUCCESS(Status))
+    {
+        WdfObjectDelete(Child);
+        return Status;
+    }
+    Dev->AuthPdo = Child;
     return STATUS_SUCCESS;
 }

@@ -32,11 +32,36 @@
 #define IOCTL_WINEBTH_RADIO_START_DISCOVERY     CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xa6, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_WINEBTH_RADIO_STOP_DISCOVERY      CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xa7, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_WINEBTH_AUTH_REGISTER             CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xa8, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_WINEBTH_RADIO_SEND_AUTH_RESPONSE  CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xa9, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_WINEBTH_RADIO_START_AUTH          CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xaa, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_WINEBTH_RADIO_REMOVE_DEVICE       CTL_CODE(FILE_DEVICE_BLUETOOTH, 0xab, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define BTHMINI_AUTH_DEVICE_NAME                L"\\Device\\WINEBTHAUTH"
 #define BTHMINI_AUTH_LINK_NAME                  L"\\??\\WINEBTHAUTH"
 #define BTHMINI_PAIRING_TIMEOUT_MS              60000
+#define BTHMINI_PROMPT_TIMEOUT_MS               30000
+
+#define BTHMINI_AUTH_NUMERIC_COMPARISON         3
+#define BTHMINI_AUTH_PASSKEY_NOTIFICATION       4
+
+DEFINE_GUID(GUID_WINEBTH_AUTHENTICATION_REQUEST, 0xca67235f, 0xf621, 0x4c27, 0x85, 0x65, 0xa4, 0xd5, 0x5e, 0xa1, 0x26, 0xe8);
+
+#pragma pack(push, 1)
+typedef struct _BTHMINI_AUTH_REQUEST
+{
+    BTH_DEVICE_INFO DeviceInfo;
+    ULONG Method;
+    ULONG NumericValue;
+} BTHMINI_AUTH_REQUEST, *PBTHMINI_AUTH_REQUEST;
+
+typedef struct _BTHMINI_AUTH_RESPONSE
+{
+    BTH_ADDR Address;
+    ULONG Method;
+    ULONG NumericValue;
+    ULONG Negative : 1;
+    ULONG Authenticated : 1;
+} BTHMINI_AUTH_RESPONSE, *PBTHMINI_AUTH_RESPONSE;
+#pragma pack(pop)
 
 #define HCI_OP(Ogf, Ocf)                ((USHORT)(((Ogf) << 10) | (Ocf)))
 
@@ -96,6 +121,7 @@
 #define HCI_EV_USER_CONFIRMATION        0x33
 #define HCI_EV_USER_PASSKEY_REQUEST     0x34
 #define HCI_EV_SIMPLE_PAIRING_COMPLETE  0x36
+#define HCI_EV_USER_PASSKEY_NOTIFICATION 0x3B
 
 #define HCI_IO_DISPLAY_YES_NO           0x01
 #define HCI_IO_NO_INPUT_NO_OUTPUT       0x03
@@ -156,6 +182,10 @@ typedef struct _BTHMINI_REMOTE
     BOOLEAN Securing;
     WDFREQUEST AuthRequest;
     ULONGLONG AuthDeadline;
+    BOOLEAN Prompting;
+    ULONG PromptMethod;
+    WDFREQUEST PromptResponse;
+    ULONGLONG PromptDeadline;
     USHORT AclOutstanding;
     PUCHAR RxFrame;
     ULONG RxExpected;
@@ -359,6 +389,9 @@ struct _BTHMINI_DEVICE
     LIST_ENTRY Remotes;
     ULONG RemoteCount;
 
+    WDFDEVICE AuthPdo;
+    volatile BOOLEAN AuthForwarding;
+
     LIST_ENTRY Channels;
     LIST_ENTRY Sessions;
     LIST_ENTRY ComPorts;
@@ -435,6 +468,16 @@ BthRadioGetRemote(
     _In_ PBTHMINI_DEVICE Dev,
     _In_ BTH_ADDR Address);
 
+BOOLEAN
+BthRadioRequestName(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote);
+
+VOID
+BthRadioFillInfo(
+    _In_ PBTHMINI_REMOTE Remote,
+    _Out_ PBTH_DEVICE_INFO Info);
+
 VOID
 BthRadioReportInRange(
     _In_ PBTHMINI_DEVICE Dev,
@@ -484,8 +527,14 @@ BthConnCancelAll(
     _In_ PBTHMINI_DEVICE Dev);
 
 NTSTATUS
-BthAuthCreateControlDevice(
-    _In_ WDFDRIVER Driver);
+BthAuthCreatePdo(
+    _In_ PBTHMINI_DEVICE Dev);
+
+NTSTATUS
+BthConnSendAuthResponse(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFREQUEST Request,
+    _Out_ PULONG_PTR Information);
 
 VOID
 BthRadioCommandFailed(

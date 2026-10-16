@@ -99,7 +99,6 @@ BthRadioFreeRemotes(
     Dev->NameRequestActive = FALSE;
 }
 
-static
 VOID
 BthRadioFillInfo(
     _In_ PBTHMINI_REMOTE Remote,
@@ -145,6 +144,27 @@ BthRadioStartInquiry(
         Dev->Inquiring = TRUE;
 }
 
+BOOLEAN
+BthRadioRequestName(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ PBTHMINI_REMOTE Remote)
+{
+    UCHAR Parameters[10];
+
+    if (Dev->NameRequestActive || (Remote->Flags & BDIF_NAME) || Remote->NameRequested)
+        return FALSE;
+    Remote->NameRequested = TRUE;
+    BthWriteAddress(Parameters, Remote->Address);
+    Parameters[6] = Remote->PageScanRepetitionMode;
+    Parameters[7] = 0;
+    Parameters[8] = (UCHAR)Remote->ClockOffset;
+    Parameters[9] = (UCHAR)((Remote->ClockOffset >> 8) | 0x80);
+    if (!NT_SUCCESS(BthHciQueueCommand(Dev, HCI_REMOTE_NAME_REQUEST, Parameters, sizeof(Parameters))))
+        return FALSE;
+    Dev->NameRequestActive = TRUE;
+    return TRUE;
+}
+
 static
 VOID
 BthRadioContinueDiscovery(
@@ -157,21 +177,9 @@ BthRadioContinueDiscovery(
     for (Entry = Dev->Remotes.Flink; Entry != &Dev->Remotes; Entry = Entry->Flink)
     {
         PBTHMINI_REMOTE Remote = CONTAINING_RECORD(Entry, BTHMINI_REMOTE, Link);
-        UCHAR Parameters[10];
 
-        if ((Remote->Flags & BDIF_NAME) || Remote->NameRequested || !(Remote->Flags & BDIF_VISIBLE))
-            continue;
-        Remote->NameRequested = TRUE;
-        BthWriteAddress(Parameters, Remote->Address);
-        Parameters[6] = Remote->PageScanRepetitionMode;
-        Parameters[7] = 0;
-        Parameters[8] = (UCHAR)Remote->ClockOffset;
-        Parameters[9] = (UCHAR)((Remote->ClockOffset >> 8) | 0x80);
-        if (NT_SUCCESS(BthHciQueueCommand(Dev, HCI_REMOTE_NAME_REQUEST, Parameters, sizeof(Parameters))))
-        {
-            Dev->NameRequestActive = TRUE;
+        if ((Remote->Flags & BDIF_VISIBLE) && BthRadioRequestName(Dev, Remote))
             return;
-        }
     }
     if (Dev->Discovering)
         BthRadioStartInquiry(Dev);
@@ -504,6 +512,12 @@ BthRadioDeviceControl(
 
         case IOCTL_WINEBTH_RADIO_REMOVE_DEVICE:
             Status = BthConnRemoveDevice(Dev, Request);
+            break;
+
+        case IOCTL_WINEBTH_RADIO_SEND_AUTH_RESPONSE:
+            Status = BthConnSendAuthResponse(Dev, Request, &Information);
+            if (Status == STATUS_PENDING)
+                return;
             break;
 
         default:

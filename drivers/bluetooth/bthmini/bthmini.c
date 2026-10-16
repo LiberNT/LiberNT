@@ -464,6 +464,8 @@ BthMiniEvtDeviceAdd(
     Status = WdfDeviceCreateDeviceInterface(Device, &GUID_BTHPORT_DEVICE_INTERFACE, NULL);
     if (NT_SUCCESS(Status))
         Status = WdfDeviceCreateDeviceInterface(Device, &GUID_BLUETOOTH_RADIO_INTERFACE, NULL);
+    if (NT_SUCCESS(Status) && !NT_SUCCESS(BthAuthCreatePdo(Dev)))
+        DPRINT1("BTHMINI: pairing request device not created\n");
     return Status;
 }
 
@@ -474,12 +476,7 @@ DriverEntry(
     _In_ PUNICODE_STRING RegistryPath)
 {
     WDF_DRIVER_CONFIG Config;
-    WDFDRIVER Driver;
-    NTSTATUS Status;
 
     WDF_DRIVER_CONFIG_INIT(&Config, BthMiniEvtDeviceAdd);
-    Status = WdfDriverCreate(DriverObject, RegistryPath, WDF_NO_OBJECT_ATTRIBUTES, &Config, &Driver);
-    if (NT_SUCCESS(Status) && !NT_SUCCESS(BthAuthCreateControlDevice(Driver)))
-        DPRINT1("BTHMINI: pairing control device not created\n");
-    return Status;
+    return WdfDriverCreate(DriverObject, RegistryPath, WDF_NO_OBJECT_ATTRIBUTES, &Config, WDF_NO_HANDLE);
 }
