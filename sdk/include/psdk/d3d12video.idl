@@ -530,6 +530,46 @@ typedef struct D3D12_FEATURE_DATA_VIDEO_PROCESS_SUPPORT
     D3D12_VIDEO_PROCESS_FILTER_RANGE FilterRangeSupport[D3D12_VIDEO_PROCESS_MAX_FILTERS];
 } D3D12_FEATURE_DATA_VIDEO_PROCESS_SUPPORT;
 
+typedef struct D3D12_FEATURE_DATA_VIDEO_PROCESS_MAX_INPUT_STREAMS
+{
+    UINT NodeIndex;
+    UINT MaxInputStreams;
+} D3D12_FEATURE_DATA_VIDEO_PROCESS_MAX_INPUT_STREAMS;
+
+typedef struct D3D12_FEATURE_DATA_VIDEO_PROCESS_REFERENCE_INFO
+{
+    UINT NodeIndex;
+    D3D12_VIDEO_PROCESS_DEINTERLACE_FLAGS DeinterlaceMode;
+    D3D12_VIDEO_PROCESS_FILTER_FLAGS Filters;
+    D3D12_VIDEO_PROCESS_FEATURE_FLAGS FeatureSupport;
+    DXGI_RATIONAL InputFrameRate;
+    DXGI_RATIONAL OutputFrameRate;
+    BOOL EnableAutoProcessing;
+    UINT PastFrames;
+    UINT FutureFrames;
+} D3D12_FEATURE_DATA_VIDEO_PROCESS_REFERENCE_INFO;
+
+typedef struct D3D12_FEATURE_DATA_VIDEO_PROCESSOR_SIZE
+{
+    UINT NodeMask;
+    const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *pOutputStreamDesc;
+    UINT NumInputStreamDescs;
+    const D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC *pInputStreamDescs;
+    UINT64 MemoryPoolL0Size;
+    UINT64 MemoryPoolL1Size;
+} D3D12_FEATURE_DATA_VIDEO_PROCESSOR_SIZE;
+
+typedef struct D3D12_FEATURE_DATA_VIDEO_PROCESSOR_SIZE1
+{
+    UINT NodeMask;
+    const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *pOutputStreamDesc;
+    UINT NumInputStreamDescs;
+    const D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC *pInputStreamDescs;
+    BOOL Protected;
+    UINT64 MemoryPoolL0Size;
+    UINT64 MemoryPoolL1Size;
+} D3D12_FEATURE_DATA_VIDEO_PROCESSOR_SIZE1;
+
 typedef struct D3D12_VIDEO_PROCESS_REFERENCE_SET
 {
     UINT NumPastFrames;
@@ -780,6 +820,33 @@ interface ID3D12VideoDecodeCommandList1 : ID3D12VideoDecodeCommandList
         [in] ID3D12VideoDecoder *decoder,
         [in] const D3D12_VIDEO_DECODE_OUTPUT_STREAM_ARGUMENTS1 *output_arguments,
         [in] const D3D12_VIDEO_DECODE_INPUT_STREAM_ARGUMENTS *input_arguments
+    );
+}
+
+typedef struct D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS1
+{
+    D3D12_VIDEO_PROCESS_INPUT_STREAM InputStream[D3D12_VIDEO_PROCESS_STEREO_VIEWS];
+    D3D12_VIDEO_PROCESS_TRANSFORM Transform;
+    D3D12_VIDEO_PROCESS_INPUT_STREAM_FLAGS Flags;
+    D3D12_VIDEO_PROCESS_INPUT_STREAM_RATE RateInfo;
+    INT FilterLevels[D3D12_VIDEO_PROCESS_MAX_FILTERS];
+    D3D12_VIDEO_PROCESS_ALPHA_BLENDING AlphaBlending;
+    D3D12_VIDEO_FIELD_TYPE FieldType;
+} D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS1;
+
+[
+    uuid(542c5c4d-7596-434f-8c93-4efa6766f267),
+    object,
+    local,
+    pointer_default(unique)
+]
+interface ID3D12VideoProcessCommandList1 : ID3D12VideoProcessCommandList
+{
+    void ProcessFrames1(
+        [in] ID3D12VideoProcessor *video_processor,
+        [in] const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_ARGUMENTS *output_arguments,
+        [in] UINT num_input_streams,
+        [in] const D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS1 *input_arguments
     );
 }
 
