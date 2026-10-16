@@ -2781,7 +2781,7 @@ DmActionFormatCallback(
                                      Progress);
                     SendMessageW(Runtime->ActionContext->hStatusBar,
                                  SB_SETTEXTW,
-                                 1,
+                                 0,
                                  (LPARAM)StatusText);
                     UpdateWindow(Runtime->ActionContext->hStatusBar);
                 }
@@ -3132,7 +3132,7 @@ DmActionProcessPendingCreate(
         }
 
         if (hStatusBar != NULL)
-            SendMessageW(hStatusBar, SB_SETTEXTW, 1, (LPARAM)L"Formatting the new volume...");
+            SendMessageW(hStatusBar, SB_SETTEXTW, 0, (LPARAM)L"Formatting the new volume...");
 
         ZeroMemory(&FormatContext, sizeof(FormatContext));
         FormatContext.hWnd = hWnd;

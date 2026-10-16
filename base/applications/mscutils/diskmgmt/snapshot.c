@@ -5,8 +5,8 @@
  * PURPOSE:     Read-only storage snapshot helpers for the Disk Management UI
  */
 
-#include "snapshot.h"
-#include "snapshotmatch.h"
+#include "precomp.h"
+#include <ndk/exfuncs.h>
 #include "snapshotenum.h"
 
 #include <stdlib.h>
@@ -30,6 +30,11 @@ static const GUID DmLdmDataPartitionGuid =
 {
     0xAF9B60A0, 0x1431, 0x4F62,
     { 0xBC, 0x68, 0x33, 0x11, 0x71, 0x4A, 0x69, 0xAD }
+};
+static const GUID DmMsftReservedPartitionGuid =
+{
+    0xE3C9E316, 0x0B5C, 0x4DB8,
+    { 0x81, 0x7D, 0xF9, 0x2D, 0xF0, 0x02, 0x15, 0xAE }
 };
 
 #ifndef PARTITION_LDM
@@ -745,6 +750,84 @@ DmUpdateBootFlags(
 }
 
 static VOID
+DmUpdatePageFileFlags(
+    _Inout_ PDM_VOLUME Volume)
+{
+    PSYSTEM_PAGEFILE_INFORMATION Info = NULL;
+    PSYSTEM_PAGEFILE_INFORMATION Entry;
+    ULONG Size = 4096;
+    ULONG ReturnLength = 0;
+    NTSTATUS Status = STATUS_UNSUCCESSFUL;
+    HKEY Key;
+    DWORD Enabled = 0;
+    DWORD Type;
+    DWORD Length = sizeof(Enabled);
+
+    Volume->HasPageFile = FALSE;
+    Volume->HasCrashDump = FALSE;
+    if (Volume->DriveLetter == 0)
+        return;
+
+    for (;;)
+    {
+        Info = HeapAlloc(GetProcessHeap(), 0, Size);
+        if (Info == NULL)
+            break;
+
+        Status = NtQuerySystemInformation(SystemPageFileInformation, Info, Size, &ReturnLength);
+        if (Status != STATUS_INFO_LENGTH_MISMATCH)
+            break;
+
+        HeapFree(GetProcessHeap(), 0, Info);
+        Info = NULL;
+        Size *= 2;
+    }
+
+    if (Info != NULL)
+    {
+        if (NT_SUCCESS(Status) && ReturnLength != 0)
+        {
+            Entry = Info;
+            for (;;)
+            {
+                if (Entry->PageFileName.Length >= 6 * sizeof(WCHAR) &&
+                    Entry->PageFileName.Buffer[5] == L':' &&
+                    towupper(Entry->PageFileName.Buffer[4]) == towupper(Volume->DriveLetter))
+                {
+                    Volume->HasPageFile = TRUE;
+                }
+
+                if (Entry->NextEntryOffset == 0)
+                    break;
+
+                Entry = (PSYSTEM_PAGEFILE_INFORMATION)((PUCHAR)Entry + Entry->NextEntryOffset);
+            }
+        }
+
+        HeapFree(GetProcessHeap(), 0, Info);
+    }
+
+    if (!Volume->IsBoot ||
+        RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"SYSTEM\\CurrentControlSet\\Control\\CrashControl",
+                      0,
+                      KEY_READ,
+                      &Key) != ERROR_SUCCESS)
+    {
+        return;
+    }
+
+    if (RegQueryValueExW(Key, L"CrashDumpEnabled", NULL, &Type, (LPBYTE)&Enabled, &Length) == ERROR_SUCCESS &&
+        Type == REG_DWORD &&
+        Enabled != 0)
+    {
+        Volume->HasCrashDump = TRUE;
+    }
+
+    RegCloseKey(Key);
+}
+
+static VOID
 DmUpdateSystemFlags(
     _Inout_ PDM_VOLUME Volume)
 {
@@ -860,6 +943,7 @@ DmPopulateDiskRegions(
                        sizeof(GUID));
             Region->Data.Gpt.Attributes = Part->Gpt.Attributes;
             Region->IsDynamic = DmIsDynamicGptPartitionType(&Part->Gpt.PartitionType);
+            Region->IsHidden = IsEqualGUID(&Part->Gpt.PartitionType, &DmMsftReservedPartitionGuid);
         }
 
         if (Region->IsDynamic)
@@ -1337,6 +1421,7 @@ DmPopulateVolume(
 
     DmUpdateSystemFlags(Volume);
     DmUpdateBootFlags(Volume);
+    DmUpdatePageFileFlags(Volume);
     return STATUS_SUCCESS;
 }
 

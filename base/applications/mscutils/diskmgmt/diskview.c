@@ -82,8 +82,6 @@ static COLORREF
 DmDiskViewGetRegionBarColor(
     _In_ const DM_REGION *Region)
 {
-    WCHAR TypeText[96];
-
     if (Region == NULL || Region->Type == DmRegionFree)
     {
         /* Free space inside extended partition: bright green */
@@ -101,34 +99,31 @@ DmDiskViewGetRegionBarColor(
     if (Region->IsLogical)
         return RGB(0, 128, 128);
 
-    /* GPT special types */
-    if (Region->PartitionStyle == PARTITION_STYLE_GPT)
-    {
-        DmGetGptTypeLabel(&Region->Data.Gpt.PartitionType, TypeText, ARRAYSIZE(TypeText));
-        if (_wcsicmp(TypeText, L"EFI System Partition") == 0)
-            return RGB(128, 0, 128);   /* EFI system: purple */
-        if (_wcsicmp(TypeText, L"Microsoft Reserved Partition") == 0)
-            return RGB(128, 128, 0);   /* MSR: olive */
-        if (_wcsicmp(TypeText, L"Recovery Partition") == 0)
-            return RGB(160, 0, 0);     /* Recovery: dark red */
-    }
-
     /* Dynamic/LDM volume */
     if (Region->IsDynamic)
         return RGB(128, 128, 0);       /* Dynamic: olive */
 
     /* Primary partition: dark blue (default) */
-    return RGB(0, 0, 160);
+    return RGB(0, 0, 128);
 }
 
 static VOID
 DmDiskViewPaintLegend(
     _In_ HDC hdc,
-    _In_ const RECT *Rect)
+    _In_ const RECT *Rect,
+    _In_opt_ const DM_SNAPSHOT *Snapshot)
 {
     RECT LineRect;
     INT X;
     INT Y;
+    ULONG DiskIndex;
+    ULONG RegionIndex;
+    const DM_REGION *Region;
+    BOOL HasUnallocated = FALSE;
+    BOOL HasPrimary = FALSE;
+    BOOL HasExtended = FALSE;
+    BOOL HasFree = FALSE;
+    BOOL HasLogical = FALSE;
 
     if (Rect == NULL || Rect->bottom <= Rect->top)
         return;
@@ -138,14 +133,50 @@ DmDiskViewPaintLegend(
     LineRect.bottom = LineRect.top + 1;
     FillRect(hdc, &LineRect, GetSysColorBrush(COLOR_3DSHADOW));
 
+    for (DiskIndex = 0; Snapshot != NULL && DiskIndex < Snapshot->DiskCount; DiskIndex++)
+    {
+        for (RegionIndex = 0; RegionIndex < Snapshot->Disks[DiskIndex].RegionCount; RegionIndex++)
+        {
+            Region = &Snapshot->Disks[DiskIndex].Regions[RegionIndex];
+            if (Region->Type == DmRegionFree)
+            {
+                if (Region->IsLogical)
+                    HasFree = TRUE;
+                else
+                    HasUnallocated = TRUE;
+            }
+            else if (Region->IsContainer)
+            {
+                HasExtended = TRUE;
+            }
+            else if (Region->IsHidden || Region->IsDynamic)
+            {
+                continue;
+            }
+            else if (Region->IsLogical)
+            {
+                HasLogical = TRUE;
+            }
+            else
+            {
+                HasPrimary = TRUE;
+            }
+        }
+    }
+
     X = Rect->left + 8;
     Y = Rect->top + 5;
 
-    X += DmDiskViewPaintLegendItem(hdc, X, Y, RGB(0, 0, 0),     L"Unallocated");
-    X += DmDiskViewPaintLegendItem(hdc, X, Y, RGB(0, 0, 160),   L"Primary partition");
-    X += DmDiskViewPaintLegendItem(hdc, X, Y, RGB(0, 128, 0),   L"Extended partition");
-    X += DmDiskViewPaintLegendItem(hdc, X, Y, RGB(0, 128, 128), L"Logical drive");
-    DmDiskViewPaintLegendItem(hdc, X, Y, RGB(0, 192, 0),   L"Free space");
+    if (HasUnallocated)
+        X += DmDiskViewPaintLegendItem(hdc, X, Y, RGB(0, 0, 0), L"Unallocated");
+    if (HasPrimary)
+        X += DmDiskViewPaintLegendItem(hdc, X, Y, RGB(0, 0, 128), L"Primary partition");
+    if (HasExtended)
+        X += DmDiskViewPaintLegendItem(hdc, X, Y, RGB(0, 128, 0), L"Extended partition");
+    if (HasFree)
+        X += DmDiskViewPaintLegendItem(hdc, X, Y, RGB(0, 192, 0), L"Free space");
+    if (HasLogical)
+        DmDiskViewPaintLegendItem(hdc, X, Y, RGB(0, 128, 128), L"Logical drive");
 }
 
 static VOID
@@ -212,8 +243,7 @@ DmDiskViewBuildRegionRole(
     if (Region->PartitionStyle == PARTITION_STYLE_GPT)
     {
         DmGetGptTypeLabel(&Region->Data.Gpt.PartitionType, TypeText, ARRAYSIZE(TypeText));
-        if (_wcsicmp(TypeText, L"Basic Data Partition") == 0 ||
-            _wcsicmp(TypeText, L"Unknown") == 0)
+        if (_wcsicmp(TypeText, L"Unknown") == 0)
         {
             StringCchCopyW(Buffer, cchBuffer, L"Primary Partition");
             return;
@@ -279,6 +309,7 @@ DmDiskViewBuildRegionStatus(
     StringCchCopyW(Buffer, cchBuffer, L"Healthy");
     if (!Region->IsBoot &&
         !Region->IsSystem &&
+        !(Region->PartitionStyle == PARTITION_STYLE_MBR && Region->Data.Mbr.BootIndicator) &&
         (Region->Volume == NULL || !Region->Volume->IsMultiExtent) &&
         (Region->Volume == NULL || !Region->Volume->IsDynamic) &&
         !Region->IsDynamic)
@@ -303,6 +334,30 @@ DmDiskViewBuildRegionStatus(
         if (!First)
             StringCchCatW(Buffer, cchBuffer, L", ");
         StringCchCatW(Buffer, cchBuffer, L"Boot");
+        First = FALSE;
+    }
+
+    if (Region->Volume != NULL && Region->Volume->HasPageFile)
+    {
+        if (!First)
+            StringCchCatW(Buffer, cchBuffer, L", ");
+        StringCchCatW(Buffer, cchBuffer, L"Page File");
+        First = FALSE;
+    }
+
+    if (Region->PartitionStyle == PARTITION_STYLE_MBR && Region->Data.Mbr.BootIndicator && !Region->IsDynamic)
+    {
+        if (!First)
+            StringCchCatW(Buffer, cchBuffer, L", ");
+        StringCchCatW(Buffer, cchBuffer, L"Active");
+        First = FALSE;
+    }
+
+    if (Region->Volume != NULL && Region->Volume->HasCrashDump)
+    {
+        if (!First)
+            StringCchCatW(Buffer, cchBuffer, L", ");
+        StringCchCatW(Buffer, cchBuffer, L"Crash Dump");
         First = FALSE;
     }
 
@@ -333,6 +388,23 @@ DmDiskViewBuildRegionStatus(
 }
 
 static BOOL
+DmDiskViewIsEfiSystemRegion(
+    _In_ const DM_REGION *Region)
+{
+    WCHAR TypeText[96];
+
+    if (Region == NULL ||
+        Region->Type != DmRegionPartition ||
+        Region->PartitionStyle != PARTITION_STYLE_GPT)
+    {
+        return FALSE;
+    }
+
+    DmGetGptTypeLabel(&Region->Data.Gpt.PartitionType, TypeText, ARRAYSIZE(TypeText));
+    return (_wcsicmp(TypeText, L"EFI System Partition") == 0);
+}
+
+static BOOL
 DmDiskViewIsSpecialRegion(
     _In_ const DM_REGION *Region)
 {
@@ -343,6 +415,7 @@ DmDiskViewIsSpecialRegion(
 
     DmDiskViewBuildRegionRole(Region, RoleText, ARRAYSIZE(RoleText));
     return (_wcsicmp(RoleText, L"Primary Partition") != 0 &&
+            _wcsicmp(RoleText, L"Basic Data Partition") != 0 &&
             _wcsicmp(RoleText, L"Logical Drive") != 0 &&
             _wcsicmp(RoleText, L"Partition") != 0);
 }
@@ -407,9 +480,7 @@ DmDiskViewDrawRegion(
     FillRectArea = *Rect;
     FillRectArea.top = BarRect.bottom;
     InflateRect(&FillRectArea, -1, -1);
-    if (Region->Type == DmRegionFree)
-        DmDiskViewFillHatch(hdc, &FillRectArea);
-    else if (Selected)
+    if (Selected)
         DmDiskViewFillHatch(hdc, &FillRectArea);
 
     TextRect = *Rect;
@@ -435,7 +506,7 @@ DmDiskViewDrawRegion(
                   Title,
                   -1,
                   &TextRect,
-                  DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
+                  DT_LEFT | DT_TOP | DT_SINGLELINE);
         SelectObject(hdc, Font);
         TextRect.top += LineHeight;
     }
@@ -444,7 +515,7 @@ DmDiskViewDrawRegion(
               Detail,
               -1,
               &TextRect,
-              DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
+              DT_LEFT | DT_TOP | DT_SINGLELINE);
 
     if (Status[0] != UNICODE_NULL)
     {
@@ -453,7 +524,7 @@ DmDiskViewDrawRegion(
                   Status,
                   -1,
                   &TextRect,
-                  DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS);
+                  DT_LEFT | DT_TOP | DT_SINGLELINE);
     }
 
     SelectObject(hdc, OldFont);
@@ -540,8 +611,28 @@ DmDiskViewPaintEmptyState(
               &MessageRect,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-    DmDiskViewPaintLegend(hdc, &LegendRect);
+    DmDiskViewPaintLegend(hdc, &LegendRect, NULL);
     SelectObject(hdc, OldFont);
+}
+
+static ULONGLONG
+DmDiskViewGetShownDiskSize(
+    _In_ const DM_DISK *Disk)
+{
+    ULONGLONG Size = Disk->Size;
+    ULONG Index;
+
+    for (Index = 0; Index < Disk->RegionCount; Index++)
+    {
+        if (Disk->Regions[Index].IsHidden &&
+            !Disk->Regions[Index].IsContainer &&
+            Disk->Regions[Index].Length <= Size)
+        {
+            Size -= Disk->Regions[Index].Length;
+        }
+    }
+
+    return Size;
 }
 
 static VOID
@@ -571,7 +662,7 @@ DmDiskViewDrawDiskLabel(
     StringCchPrintfW(Line1, ARRAYSIZE(Line1), L"Disk %lu", Disk->DiskNumber);
     DmDiskViewBuildDiskSummary(Disk, Line2, ARRAYSIZE(Line2));
     DmDiskViewBuildDiskStatus(Disk, Line3, ARRAYSIZE(Line3));
-    DmDiskViewFormatSize(Disk->Size, Line4, ARRAYSIZE(Line4));
+    DmDiskViewFormatSize(DmDiskViewGetShownDiskSize(Disk), Line4, ARRAYSIZE(Line4));
 
     if (Font == NULL)
         Font = GetStockObject(DEFAULT_GUI_FONT);
@@ -597,38 +688,35 @@ DmDiskViewFormatSize(
     _Out_writes_(cchBuffer) PWSTR Buffer,
     _In_ SIZE_T cchBuffer)
 {
-    static const struct
-    {
-        ULONGLONG Scale;
-        PCWSTR Suffix;
-    } Units[] =
-    {
-        { 1024ULL * 1024ULL * 1024ULL * 1024ULL, L"TB" },
-        { 1024ULL * 1024ULL * 1024ULL, L"GB" },
-        { 1024ULL * 1024ULL, L"MB" },
-        { 1024ULL, L"KB" }
-    };
-    ULONGLONG Whole;
-    ULONGLONG Fraction;
-    UINT Index;
+    const ULONGLONG Gigabyte = 1024ULL * 1024ULL * 1024ULL;
+    const ULONGLONG Megabyte = 1024ULL * 1024ULL;
+    const ULONGLONG Kilobyte = 1024ULL;
+    ULONGLONG Hundredths;
 
     if (Buffer == NULL || cchBuffer == 0)
         return;
 
-    for (Index = 0; Index < ARRAYSIZE(Units); Index++)
+    if (Size >= Gigabyte)
     {
-        if (Size >= Units[Index].Scale)
-        {
-            Whole = Size / Units[Index].Scale;
-            Fraction = ((Size % Units[Index].Scale) * 100ULL) / Units[Index].Scale;
-            StringCchPrintfW(Buffer,
-                             cchBuffer,
-                             L"%I64u.%02I64u %s",
-                             Whole,
-                             Fraction,
-                             Units[Index].Suffix);
-            return;
-        }
+        Hundredths = (Size / Megabyte * 100ULL + 512ULL) / 1024ULL;
+        StringCchPrintfW(Buffer,
+                         cchBuffer,
+                         L"%I64u.%02I64u GB",
+                         Hundredths / 100ULL,
+                         Hundredths % 100ULL);
+        return;
+    }
+
+    if (Size >= Megabyte)
+    {
+        StringCchPrintfW(Buffer, cchBuffer, L"%I64u MB", (Size + Megabyte / 2) / Megabyte);
+        return;
+    }
+
+    if (Size >= Kilobyte)
+    {
+        StringCchPrintfW(Buffer, cchBuffer, L"%I64u KB", (Size + Kilobyte / 2) / Kilobyte);
+        return;
     }
 
     StringCchPrintfW(Buffer,
@@ -747,7 +835,7 @@ DmDiskViewBuildRegionTitle(
     if (Buffer == NULL || cchBuffer == 0)
         return;
 
-    if (Region->Type == DmRegionFree)
+    if (Region->Type == DmRegionFree || DmDiskViewIsEfiSystemRegion(Region))
     {
         Buffer[0] = UNICODE_NULL;
         return;
@@ -1254,7 +1342,7 @@ DmDiskViewPaintSnapshot(
         Y += DM_DISKVIEW_DEFAULT_ROW_HEIGHT + DM_DISKVIEW_ROW_SPACING;
     }
 
-    DmDiskViewPaintLegend(hdc, &LegendRect);
+    DmDiskViewPaintLegend(hdc, &LegendRect, Snapshot);
     if (BoldFont != Font)
         DeleteObject(BoldFont);
     SelectObject(hdc, OldFont);

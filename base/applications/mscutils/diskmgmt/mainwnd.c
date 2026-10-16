@@ -50,6 +50,10 @@ CreateMainWindow(
 {
     PMAIN_WND_INFO Info;
     HWND hwnd;
+    RECT WindowRect;
+    RECT WorkArea;
+    INT Width;
+    INT Height;
 
     Info = (PMAIN_WND_INFO)HeapAlloc(ProcessHeap,
                                      HEAP_ZERO_MEMORY,
@@ -77,6 +81,17 @@ CreateMainWindow(
         return NULL;
     }
 
+    if (GetWindowRect(hwnd, &WindowRect) &&
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &WorkArea, 0))
+    {
+        Width = min(WindowRect.right - WindowRect.left, WorkArea.right - WorkArea.left);
+        Height = min(WindowRect.bottom - WindowRect.top, WorkArea.bottom - WorkArea.top);
+        WindowRect.left = max(WorkArea.left, min(WindowRect.left, WorkArea.right - Width));
+        WindowRect.top = max(WorkArea.top, min(WindowRect.top, WorkArea.bottom - Height));
+        SetWindowPos(hwnd, NULL, WindowRect.left, WindowRect.top, Width, Height,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
     return hwnd;
@@ -92,7 +107,7 @@ StatusBarLoadString(
     WCHAR szText[128];
 
     if (LoadStringW(hInst, uID, szText, ARRAYSIZE(szText)) == 0)
-        return FALSE;
+        szText[0] = UNICODE_NULL;
 
     return (SendMessageW(hStatusBar,
                          SB_SETTEXTW,

@@ -268,7 +268,7 @@ DmMainWndShowHint(
     {
         return (BOOL)SendMessageW(Info->hStatusBar,
                                   SB_SETTEXTW,
-                                  1,
+                                  0,
                                   (LPARAM)DynamicHint);
     }
 
@@ -282,7 +282,7 @@ DmMainWndShowHint(
     }
 
     return StatusBarLoadString(Info->hStatusBar,
-                               1,
+                               0,
                                hInstance,
                                HintId);
 }
@@ -369,7 +369,7 @@ BOOL
 DmMainWndCreateStatusBar(
     _In_ PMAIN_WND_INFO Info)
 {
-    INT Widths[DISKMGMT_STATUS_PARTS] = {130, -1};
+    INT Widths[DISKMGMT_STATUS_PARTS] = {-1};
 
     Info->hStatusBar = CreateWindowExW(0,
                                        STATUSCLASSNAMEW,
@@ -390,12 +390,8 @@ DmMainWndCreateStatusBar(
 
     ShowWindow(Info->hStatusBar, SW_SHOW);
     Info->bStatusBarVisible = TRUE;
-    SendMessageW(Info->hStatusBar,
-                 SB_SETTEXTW,
-                 0,
-                 (LPARAM)L"Volumes: 0");
     StatusBarLoadString(Info->hStatusBar,
-                        1,
+                        0,
                         hInstance,
                         IDS_STATUS_READY);
     return TRUE;

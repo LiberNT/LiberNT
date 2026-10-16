@@ -69,27 +69,6 @@ DmMainWndUpdateDynamicActionMenuText(
     SetMenuItemInfoW(Info->hMenu, IDM_ACTION_DELETE_VOLUME, FALSE, &ItemInfo);
 }
 
-static
-VOID
-DmMainWndUpdateSummaryText(
-    _In_ PMAIN_WND_INFO Info)
-{
-    WCHAR Buffer[64];
-
-    StringCchPrintfW(Buffer,
-                     ARRAYSIZE(Buffer),
-                     L"%lu disk%s, %lu volume%s",
-                     Info->Snapshot.DiskCount,
-                     (Info->Snapshot.DiskCount == 1) ? L"" : L"s",
-                     Info->Snapshot.VolumeCount,
-                     (Info->Snapshot.VolumeCount == 1) ? L"" : L"s");
-
-    SendMessageW(Info->hStatusBar,
-                 SB_SETTEXTW,
-                 0,
-                 (LPARAM)Buffer);
-}
-
 VOID
 DmMainWndCacheSelectedVolumeName(
     _In_ PMAIN_WND_INFO Info)
@@ -195,7 +174,6 @@ DmMainWndPopulateVolumeList(
 {
     DmVolumeListPopulate(Info->hVolumeView, &Info->Snapshot);
     DmSortApplyToListView(Info->hVolumeView, &Info->SortContext);
-    DmMainWndUpdateSummaryText(Info);
     DmMainWndRestoreSelectedVolume(Info);
     DmMainWndUpdateMenuState(Info);
 }
@@ -236,7 +214,7 @@ DmMainWndExecuteCommand(
     }
 
     if (StatusId != 0)
-        StatusBarLoadString(Info->hStatusBar, 1, hInstance, StatusId);
+        StatusBarLoadString(Info->hStatusBar, 0, hInstance, StatusId);
 
     hWait = LoadCursorW(NULL, IDC_WAIT);
     hOldCursor = SetCursor(hWait);
@@ -267,7 +245,7 @@ DmMainWndExecuteCommand(
 
     if (!Success)
     {
-        StatusBarLoadString(Info->hStatusBar, 1, hInstance, IDS_STATUS_READY);
+        StatusBarLoadString(Info->hStatusBar, 0, hInstance, IDS_STATUS_READY);
         return FALSE;
     }
 
@@ -279,6 +257,6 @@ DmMainWndExecuteCommand(
     }
 
     DmMainWndUpdateMenuState(Info);
-    StatusBarLoadString(Info->hStatusBar, 1, hInstance, IDS_STATUS_READY);
+    StatusBarLoadString(Info->hStatusBar, 0, hInstance, IDS_STATUS_READY);
     return TRUE;
 }

@@ -202,7 +202,6 @@ BEGIN
     IDS_EXTEND_DISK_SELECTED "Ausgewählter Datenträger: Datenträger %lu (%I64u MB)"
     IDS_COPYRIGHT "Copyright (C) 2026 LiberNT Team"
     IDS_APPNAME "Datentraegerverwaltung"
-    IDS_STATUS_READY "Bereit"
     IDS_STATUS_RESCANNING "Datentraeger werden erneut gesucht..."
     IDS_STATUS_REFRESHING "Datentraegerdaten werden aktualisiert..."
     IDS_STATUS_INITIALIZING_DISK "Datentraeger wird initialisiert..."

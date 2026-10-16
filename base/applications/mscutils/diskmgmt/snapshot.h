@@ -127,6 +127,8 @@ typedef struct _DM_VOLUME
 
     BOOLEAN IsSystem;
     BOOLEAN IsBoot;
+    BOOLEAN HasPageFile;
+    BOOLEAN HasCrashDump;
     BOOLEAN IsDynamic;
 
     DM_DISK *Disk;

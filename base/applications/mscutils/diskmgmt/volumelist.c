@@ -47,38 +47,35 @@ DmFormatByteString(
     _Out_writes_(cchBuffer) PWSTR Buffer,
     _In_ SIZE_T cchBuffer)
 {
-    static const struct
-    {
-        ULONGLONG Scale;
-        PCWSTR Suffix;
-    } Units[] =
-    {
-        { 1024ULL * 1024ULL * 1024ULL * 1024ULL, L"TB" },
-        { 1024ULL * 1024ULL * 1024ULL, L"GB" },
-        { 1024ULL * 1024ULL, L"MB" },
-        { 1024ULL, L"KB" }
-    };
-    ULONGLONG Whole;
-    ULONGLONG Fraction;
-    UINT Index;
+    const ULONGLONG Gigabyte = 1024ULL * 1024ULL * 1024ULL;
+    const ULONGLONG Megabyte = 1024ULL * 1024ULL;
+    const ULONGLONG Kilobyte = 1024ULL;
+    ULONGLONG Hundredths;
 
     if (Buffer == NULL || cchBuffer == 0)
         return;
 
-    for (Index = 0; Index < ARRAYSIZE(Units); Index++)
+    if (Size >= Gigabyte)
     {
-        if (Size >= Units[Index].Scale)
-        {
-            Whole = Size / Units[Index].Scale;
-            Fraction = ((Size % Units[Index].Scale) * 100ULL) / Units[Index].Scale;
-            StringCchPrintfW(Buffer,
-                             cchBuffer,
-                             L"%I64u.%02I64u %s",
-                             Whole,
-                             Fraction,
-                             Units[Index].Suffix);
-            return;
-        }
+        Hundredths = (Size / Megabyte * 100ULL + 512ULL) / 1024ULL;
+        StringCchPrintfW(Buffer,
+                         cchBuffer,
+                         L"%I64u.%02I64u GB",
+                         Hundredths / 100ULL,
+                         Hundredths % 100ULL);
+        return;
+    }
+
+    if (Size >= Megabyte)
+    {
+        StringCchPrintfW(Buffer, cchBuffer, L"%I64u MB", (Size + Megabyte / 2) / Megabyte);
+        return;
+    }
+
+    if (Size >= Kilobyte)
+    {
+        StringCchPrintfW(Buffer, cchBuffer, L"%I64u KB", (Size + Kilobyte / 2) / Kilobyte);
+        return;
     }
 
     StringCchPrintfW(Buffer,
@@ -153,7 +150,7 @@ DmVolumeListGetPartitionRole(
 
         if (IsEqualGUID(&Region->Data.Gpt.PartitionType, &DmGptBasicDataPartitionGuid))
         {
-            return L"Primary Partition";
+            return L"Basic Data Partition";
         }
 
         if (IsEqualGUID(&Region->Data.Gpt.PartitionType, &DmGptMsrPartitionGuid))
@@ -200,8 +197,18 @@ DmVolumeListIsGenericPartitionRole(
 {
     return (Role == NULL ||
             _wcsicmp(Role, L"Primary Partition") == 0 ||
+            _wcsicmp(Role, L"Basic Data Partition") == 0 ||
             _wcsicmp(Role, L"Logical Drive") == 0 ||
             _wcsicmp(Role, L"Extended Partition") == 0);
+}
+
+static BOOL
+DmVolumeListIsEfiSystemVolume(
+    _In_ const DM_VOLUME *Volume)
+{
+    return (Volume->Region != NULL &&
+            Volume->Region->PartitionStyle == PARTITION_STYLE_GPT &&
+            IsEqualGUID(&Volume->Region->Data.Gpt.PartitionType, &DmGptEfiSystemPartitionGuid));
 }
 
 static VOID
@@ -212,7 +219,7 @@ DmBuildFileSystemText(
 {
     UNREFERENCED_PARAMETER(Volume);
 
-    if (Volume->FileSystem[0] != UNICODE_NULL)
+    if (Volume->FileSystem[0] != UNICODE_NULL && !DmVolumeListIsEfiSystemVolume(Volume))
     {
         StringCchCopyW(Buffer, cchBuffer, Volume->FileSystem);
     }
@@ -298,7 +305,7 @@ DmVolumeListBuildName(
         return;
     }
 
-    if (Volume->Label[0] != UNICODE_NULL)
+    if (Volume->Label[0] != UNICODE_NULL && !DmVolumeListIsEfiSystemVolume(Volume))
     {
         StringCchCopyW(Buffer, cchBuffer, Volume->Label);
         return;
@@ -438,7 +445,9 @@ DmVolumeListBuildStatus(
         const DM_REGION *Region = Volume->Region;
         PCWSTR Role;
 
-        if (Volume->IsSystem || (Region != NULL && Region->IsSystem))
+        Role = DmVolumeListGetPartitionRole(Volume);
+        if ((Volume->IsSystem || (Region != NULL && Region->IsSystem)) &&
+            (Role == NULL || _wcsicmp(Role, L"EFI System Partition") != 0))
         {
             DmAppendStatusComponent(Buffer, cchBuffer, &First, L"System");
         }
@@ -446,6 +455,11 @@ DmVolumeListBuildStatus(
         if (Volume->IsBoot || (Region != NULL && Region->IsBoot))
         {
             DmAppendStatusComponent(Buffer, cchBuffer, &First, L"Boot");
+        }
+
+        if (Volume->HasPageFile)
+        {
+            DmAppendStatusComponent(Buffer, cchBuffer, &First, L"Page File");
         }
 
         if (!Volume->IsDynamic &&
@@ -457,7 +471,11 @@ DmVolumeListBuildStatus(
             DmAppendStatusComponent(Buffer, cchBuffer, &First, L"Active");
         }
 
-        Role = DmVolumeListGetPartitionRole(Volume);
+        if (Volume->HasCrashDump)
+        {
+            DmAppendStatusComponent(Buffer, cchBuffer, &First, L"Crash Dump");
+        }
+
         if (Volume->IsMultiExtent)
         {
             DmAppendStatusComponent(Buffer, cchBuffer, &First, L"Multi-extent");
@@ -519,7 +537,9 @@ DmVolumeListBuildFreeSpace(
         return;
     }
 
-    DmFormatByteString(Volume->FreeBytes.QuadPart, Buffer, cchBuffer);
+    DmFormatByteString(DmVolumeListIsEfiSystemVolume(Volume) ? Volume->Size.QuadPart : Volume->FreeBytes.QuadPart,
+                       Buffer,
+                       cchBuffer);
 }
 
 VOID
@@ -537,7 +557,7 @@ DmVolumeListBuildFreePercent(
         return;
     }
 
-    DmVolumeListFormatPercent(Volume->FreeBytes.QuadPart,
+    DmVolumeListFormatPercent(DmVolumeListIsEfiSystemVolume(Volume) ? Volume->Size.QuadPart : Volume->FreeBytes.QuadPart,
                               Volume->Size.QuadPart,
                               Buffer,
                               cchBuffer);

@@ -731,7 +731,7 @@ DmMainWndProc(
                here or the background timers stay disabled forever. */
             Info->bInMenuLoop = FALSE;
             DmMainWndUpdateStatusBarMode(Info);
-            StatusBarLoadString(Info->hStatusBar, 1, hInstance, IDS_STATUS_READY);
+            StatusBarLoadString(Info->hStatusBar, 0, hInstance, IDS_STATUS_READY);
             return 0;
 
         case WM_MENUSELECT:
@@ -752,7 +752,7 @@ DmMainWndProc(
                 else
                 {
                     StatusBarLoadString(Info->hStatusBar,
-                                        1,
+                                        0,
                                         hInstance,
                                         IDS_STATUS_READY);
                 }
@@ -768,7 +768,7 @@ DmMainWndProc(
                 Info->bInMenuLoop = FALSE;
                 DmMainWndUpdateStatusBarMode(Info);
                 StatusBarLoadString(Info->hStatusBar,
-                                    1,
+                                    0,
                                     hInstance,
                                     IDS_STATUS_READY);
             }
