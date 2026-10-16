@@ -1265,6 +1265,7 @@ struct vkd3d_push_descriptor
         {
             VkBuffer vk_buffer;
             VkDeviceSize offset;
+            VkDeviceSize range;
         } cbv;
     } u;
 };
@@ -1294,6 +1295,7 @@ struct vkd3d_pipeline_bindings
     struct vkd3d_push_descriptor push_descriptors[D3D12_MAX_ROOT_COST / 2];
     uint32_t push_descriptor_dirty_mask;
     uint32_t push_descriptor_active_mask;
+    uint32_t push_descriptor_pushed_mask;
 };
 
 enum vkd3d_pipeline_bind_point
@@ -1657,6 +1659,8 @@ struct vkd3d_uav_clear_state
 
     struct vkd3d_uav_clear_pipelines pipelines_float;
     struct vkd3d_uav_clear_pipelines pipelines_uint;
+
+    VkPipeline predicate_latch;
 };
 
 HRESULT vkd3d_uav_clear_state_init(struct vkd3d_uav_clear_state *state, struct d3d12_device *device);

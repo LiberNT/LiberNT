@@ -4774,6 +4774,7 @@ void vkd3d_uav_clear_state_cleanup(struct vkd3d_uav_clear_state *state, struct d
 {
     const struct vkd3d_vk_device_procs *vk_procs = &device->vk_procs;
 
+    VK_CALL(vkDestroyPipeline(device->vk_device, state->predicate_latch, NULL));
     vkd3d_uav_clear_pipelines_cleanup(&state->pipelines_uint, device);
     vkd3d_uav_clear_pipelines_cleanup(&state->pipelines_float, device);
 
@@ -4840,6 +4841,9 @@ HRESULT vkd3d_uav_clear_state_init(struct vkd3d_uav_clear_state *state, struct d
                 SHADER_CODE(cs_uav_clear_2d_array_uint_code)},
         {&state->pipelines_uint.image_3d, &state->vk_pipeline_layout_image,
                 SHADER_CODE(cs_uav_clear_3d_uint_code)},
+
+        {&state->predicate_latch, &state->vk_pipeline_layout_buffer,
+                SHADER_CODE(cs_predicate_latch_code)},
 #undef SHADER_CODE
     };
 

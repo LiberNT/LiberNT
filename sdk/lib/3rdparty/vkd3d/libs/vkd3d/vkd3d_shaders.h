@@ -223,4 +223,13 @@ static const char cs_uav_clear_3d_uint_code[] =
     "        dst[int3(u_info.dst_offset.xy, 0) + thread_id.xyz] = u_info.clear_value;\n"
     "}\n";
 
+static const char cs_predicate_latch_code[] =
+    "RWBuffer<uint> dst;\n"
+    "\n"
+    "[numthreads(1, 1, 1)]\n"
+    "void main()\n"
+    "{\n"
+    "    dst[2] = dst[0] | dst[1];\n"
+    "}\n";
+
 #endif /* __VKD3D_SHADERS_H */
