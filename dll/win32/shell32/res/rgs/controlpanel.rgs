@@ -136,7 +136,7 @@ HKCR
 			{
 				Open
 				{
-					Command = e '%%SystemRoot%%\system32\control11.exe /name Microsoft.System'
+					Command = e '%%SystemRoot%%\system32\rundll32.exe shell32.dll,Control_RunDLL sysdm.cpl'
 				}
 			}
 			ShellFolder
@@ -164,7 +164,7 @@ HKCR
 			{
 				Open
 				{
-					Command = e '%%SystemRoot%%\system32\control11.exe /name Microsoft.PowerOptions'
+					Command = e '%%SystemRoot%%\system32\rundll32.exe shell32.dll,Control_RunDLL powercfg.cpl'
 				}
 			}
 			ShellFolder
@@ -192,7 +192,7 @@ HKCR
 			{
 				Open
 				{
-					Command = e '%%SystemRoot%%\system32\control11.exe /name Microsoft.Personalization'
+					Command = e '%%SystemRoot%%\system32\rundll32.exe shell32.dll,Control_RunDLL desk.cpl'
 				}
 			}
 			ShellFolder

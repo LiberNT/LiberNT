@@ -10,13 +10,13 @@ records the icon name, design size, file and SHA-256 of each one.
 
 | Icon | Papirus icon | Resource |
 | --- | --- | --- |
-| Generic folder | `places/folder-yellow` | shell32.dll, -4; explorer11.exe, generic folder |
+| Generic folder | `places/folder-yellow` | shell32.dll, -4 |
 | Open folder | `places/folder-yellow-open` | shell32.dll, -5 |
 | Fixed drive | `devices/drive-harddisk` | shell32.dll, -9 |
 | My Computer | `devices/computer` | shell32.dll, -16 |
 | Network Places | `places/network-workgroup` | shell32.dll, -18 |
 | Recycle Bin, empty and full | `places/user-trash`, `places/user-trash-full` | shell32.dll, -32 and -33 |
-| Desktop | `places/user-teal-home` | shell32.dll, -35; explorer11.exe, Desktop |
+| Desktop | `places/user-teal-home` | shell32.dll, -35 |
 | Control Panel | `places/folder-blue-development` | shell32.dll, -137 |
 | Read Me | `mimetypes/text-x-readme` | shell32.dll, -152 |
 | Documents | `places/folder-blue-documents` | shell32.dll, -235; mydocs.dll, 100 |

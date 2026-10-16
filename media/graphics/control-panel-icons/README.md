@@ -36,8 +36,7 @@ classic Control Panel items whose existing icon resources they replace.
 
 Display keeps the primary `desk.cpl` icon resource. Personalization uses the
 existing secondary resource so both entries can show their matching artwork.
-The obsolete Control11-only Network and Sharing Center entry is intentionally
-not represented; Network Connections remains the working network item.
+Network Connections is the network item.
 
 With Pillow and NumPy installed, regenerate the ICO resources using:
 

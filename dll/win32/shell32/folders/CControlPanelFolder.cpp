@@ -1145,12 +1145,7 @@ static HRESULT ExecuteCplClassCommand(LPCWSTR pszClsKey, LPCWSTR pszPage)
     ExpandEnvironmentStringsW(szRaw, szCmd, _countof(szCmd));
     if (pszPage && *pszPage)
     {
-        if (StrStrIW(szCmd, L"control11"))
-        {
-            StringCchCatW(szCmd, _countof(szCmd), L" /page ");
-            StringCchCatW(szCmd, _countof(szCmd), pszPage);
-        }
-        else if (StrStrIW(szCmd, L"Control_RunDLL"))
+        if (StrStrIW(szCmd, L"Control_RunDLL"))
         {
             if (IsAllDigits(pszPage))
             {

@@ -292,7 +292,6 @@ Explorer_Main(IN HINSTANCE hInstance,
     return StartWithDesktop(hInstance);
 }
 
-#ifndef EXPLORER11_BUILD
 INT WINAPI
 _tWinMain(IN HINSTANCE hInstance,
           IN HINSTANCE hPrevInstance,
@@ -303,4 +302,3 @@ _tWinMain(IN HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(nCmdShow);
     return Explorer_Main(hInstance, lpCmdLine);
 }
-#endif

@@ -15,7 +15,7 @@
 #include <reactos/version.rc>
 #include <reactos/manifest_exe.rc>
 
-IDI_ASSIST ICON "../../control11/res/cat_network.ico"
+IDI_ASSIST ICON "res/cat_network.ico"
 
 #pragma code_page(65001)
 #include "lang/en-US.rc"
