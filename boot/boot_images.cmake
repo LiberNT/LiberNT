@@ -696,15 +696,7 @@ endif()
 # Disk image size configuration (in MiB). The 1-GiB default provides a
 # 959-MiB NTFS partition after the 1-MiB alignment gap and 64-MiB FAT boot
 # partition.
-set(_preinstall_image_size_default 1024)
-if(PREINSTALL_WINE_MONO)
-    set(_preinstall_image_size_default 1536)
-endif()
-set(PREINSTALL_IMAGE_SIZE_MB ${_preinstall_image_size_default} CACHE STRING "Disk image size in MB, including the alignment gap, boot partition, and system partition")
-if(PREINSTALL_WINE_MONO AND PREINSTALL_IMAGE_SIZE_MB LESS _preinstall_image_size_default)
-    message(STATUS "PREINSTALL_IMAGE_SIZE_MB raised from ${PREINSTALL_IMAGE_SIZE_MB} to ${_preinstall_image_size_default} to hold Wine Mono")
-    set(PREINSTALL_IMAGE_SIZE_MB ${_preinstall_image_size_default})
-endif()
+set(PREINSTALL_IMAGE_SIZE_MB 1024 CACHE STRING "Disk image size in MB, including the alignment gap, boot partition, and system partition")
 set(_rosprofiler_package_pdbs_default OFF)
 if(MSVC AND (CMAKE_BUILD_TYPE MATCHES "^[Dd]ebug$" OR
              CMAKE_CONFIGURATION_TYPES))
