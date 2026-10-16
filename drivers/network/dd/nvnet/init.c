@@ -69,6 +69,7 @@ NvNetReadConfiguration(
 {
     NDIS_STATUS Status;
     NDIS_HANDLE ConfigurationHandle;
+    NDIS_CONFIGURATION_OBJECT ConfigurationObject;
     PUCHAR NetworkAddress;
     UINT Length;
     ULONG GenericUlong;
@@ -77,9 +78,13 @@ NvNetReadConfiguration(
 
     NDIS_DbgPrint(MIN_TRACE, ("()\n"));
 
-    NdisOpenConfiguration(&Status,
-                          &ConfigurationHandle,
-                          Adapter->WrapperConfigurationHandle);
+    ConfigurationObject.Header.Type = NDIS_OBJECT_TYPE_CONFIGURATION_OBJECT;
+    ConfigurationObject.Header.Revision = NDIS_CONFIGURATION_OBJECT_REVISION_1;
+    ConfigurationObject.Header.Size = NDIS_SIZEOF_CONFIGURATION_OBJECT_REVISION_1;
+    ConfigurationObject.NdisHandle = Adapter->AdapterHandle;
+    ConfigurationObject.Flags = 0;
+
+    Status = NdisOpenConfigurationEx(&ConfigurationObject, &ConfigurationHandle);
     if (Status != NDIS_STATUS_SUCCESS)
         return Status;
 
@@ -214,43 +219,20 @@ static
 CODE_SEG("PAGE")
 NDIS_STATUS
 NvNetInitializeAdapterResources(
-    _Inout_ PNVNET_ADAPTER Adapter)
+    _Inout_ PNVNET_ADAPTER Adapter,
+    _In_opt_ PNDIS_RESOURCE_LIST AssignedResources)
 {
     NDIS_STATUS Status;
-    PNDIS_RESOURCE_LIST AssignedResources = NULL;
-    UINT i, ResourceListSize = 0;
+    UINT i;
 
     PAGED_CODE();
 
     NDIS_DbgPrint(MIN_TRACE, ("()\n"));
 
-    NdisMQueryAdapterResources(&Status,
-                               Adapter->WrapperConfigurationHandle,
-                               AssignedResources,
-                               &ResourceListSize);
-    if (Status != NDIS_STATUS_RESOURCES)
+    if (!AssignedResources)
     {
         NvNetLogError(Adapter, NDIS_ERROR_CODE_RESOURCE_CONFLICT);
-        return NDIS_STATUS_FAILURE;
-    }
-
-    Status = NdisAllocateMemoryWithTag((PVOID*)&AssignedResources,
-                                       ResourceListSize,
-                                       NVNET_TAG);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NvNetLogError(Adapter, NDIS_ERROR_CODE_OUT_OF_RESOURCES);
-        return Status;
-    }
-
-    NdisMQueryAdapterResources(&Status,
-                               Adapter->WrapperConfigurationHandle,
-                               AssignedResources,
-                               &ResourceListSize);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NvNetLogError(Adapter, NDIS_ERROR_CODE_RESOURCE_CONFLICT);
-        goto Cleanup;
+        return NDIS_STATUS_RESOURCES;
     }
 
     for (i = 0; i < AssignedResources->Count; ++i)
@@ -282,9 +264,8 @@ NvNetInitializeAdapterResources(
 
     if (!Adapter->IoAddress.QuadPart || !Adapter->InterruptVector)
     {
-        Status = NDIS_STATUS_RESOURCES;
         NvNetLogError(Adapter, NDIS_ERROR_CODE_RESOURCE_CONFLICT);
-        goto Cleanup;
+        return NDIS_STATUS_RESOURCES;
     }
 
     NDIS_DbgPrint(MIN_TRACE, ("MEM at [%I64X-%I64X]\n",
@@ -301,11 +282,7 @@ NvNetInitializeAdapterResources(
     if (Status != NDIS_STATUS_SUCCESS)
     {
         NvNetLogError(Adapter, NDIS_ERROR_CODE_RESOURCE_CONFLICT);
-        goto Cleanup;
     }
-
-Cleanup:
-    NdisFreeMemory(AssignedResources, ResourceListSize, 0);
 
     return Status;
 }
@@ -494,6 +471,107 @@ AllocateReceiveBuffers(
 static
 CODE_SEG("PAGE")
 NDIS_STATUS
+AllocateReceiveNbls(
+    _In_ PNVNET_ADAPTER Adapter)
+{
+    NET_BUFFER_LIST_POOL_PARAMETERS PoolParameters;
+    PNET_BUFFER_LIST Nbl;
+    PVOID Buffer;
+    PMDL Mdl;
+    ULONG i;
+
+    PAGED_CODE();
+
+    NdisZeroMemory(&PoolParameters, sizeof(PoolParameters));
+    PoolParameters.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    PoolParameters.Header.Revision = NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+    PoolParameters.Header.Size = NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+    PoolParameters.ProtocolId = NDIS_PROTOCOL_ID_DEFAULT;
+    PoolParameters.fAllocateNetBuffer = TRUE;
+    PoolParameters.PoolTag = NVNET_TAG;
+
+    Adapter->ReceiveNblPool = NdisAllocateNetBufferListPool(Adapter->AdapterHandle,
+                                                            &PoolParameters);
+    if (!Adapter->ReceiveNblPool)
+        return NDIS_STATUS_RESOURCES;
+
+    for (i = 0; i < NVNET_RECEIVE_NBL_COUNT; ++i)
+    {
+        Buffer = NdisAllocateMemoryWithTagPriority(Adapter->AdapterHandle,
+                                                   NVNET_RECEIVE_BUFFER_SIZE,
+                                                   NVNET_TAG,
+                                                   NormalPoolPriority);
+        if (!Buffer)
+            return NDIS_STATUS_RESOURCES;
+
+        Mdl = NdisAllocateMdl(Adapter->AdapterHandle, Buffer, NVNET_RECEIVE_BUFFER_SIZE);
+        if (!Mdl)
+        {
+            NdisFreeMemory(Buffer, 0, 0);
+            return NDIS_STATUS_RESOURCES;
+        }
+
+        Nbl = NdisAllocateNetBufferAndNetBufferList(Adapter->ReceiveNblPool,
+                                                    0,
+                                                    0,
+                                                    Mdl,
+                                                    0,
+                                                    NVNET_RECEIVE_BUFFER_SIZE);
+        if (!Nbl)
+        {
+            NdisFreeMdl(Mdl);
+            NdisFreeMemory(Buffer, 0, 0);
+            return NDIS_STATUS_RESOURCES;
+        }
+
+        Nbl->MiniportReserved[0] = Buffer;
+        Nbl->SourceHandle = Adapter->AdapterHandle;
+        Adapter->ReceiveNbls[i] = Nbl;
+        NET_BUFFER_LIST_NEXT_NBL(Nbl) = Adapter->FreeReceiveNbls;
+        Adapter->FreeReceiveNbls = Nbl;
+    }
+
+    return NDIS_STATUS_SUCCESS;
+}
+
+static
+CODE_SEG("PAGE")
+VOID
+FreeReceiveNbls(
+    _In_ PNVNET_ADAPTER Adapter)
+{
+    PNET_BUFFER_LIST Nbl;
+    PMDL Mdl;
+    ULONG i;
+
+    PAGED_CODE();
+
+    for (i = 0; i < NVNET_RECEIVE_NBL_COUNT; ++i)
+    {
+        Nbl = Adapter->ReceiveNbls[i];
+        if (!Nbl)
+            continue;
+
+        Mdl = NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(Nbl));
+        if (Nbl->MiniportReserved[0])
+            NdisFreeMemory(Nbl->MiniportReserved[0], 0, 0);
+        NdisFreeNetBufferList(Nbl);
+        if (Mdl)
+            NdisFreeMdl(Mdl);
+        Adapter->ReceiveNbls[i] = NULL;
+    }
+    Adapter->FreeReceiveNbls = NULL;
+
+    if (Adapter->ReceiveNblPool)
+    {
+        NdisFreeNetBufferListPool(Adapter->ReceiveNblPool);
+        Adapter->ReceiveNblPool = NULL;
+    }
+}
+
+static
+CODE_SEG("PAGE")
+NDIS_STATUS
 AllocateAdapterMemory(
     _In_ PNVNET_ADAPTER Adapter)
 {
@@ -518,6 +596,10 @@ AllocateAdapterMemory(
         return Status;
 
     Status = AllocateReceiveBuffers(Adapter);
+    if (Status != NDIS_STATUS_SUCCESS)
+        return Status;
+
+    Status = AllocateReceiveNbls(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
         return Status;
 
@@ -613,10 +695,18 @@ NvNetFreeAdapter(
         NdisFreeMemory(WakeFrame, sizeof(*WakeFrame), 0);
     }
 
-    if (Adapter->Interrupt.InterruptObject)
+    if (Adapter->InterruptHandle)
     {
-        NdisMDeregisterInterrupt(&Adapter->Interrupt);
-        Adapter->Interrupt.InterruptObject = NULL;
+        NdisMDeregisterInterruptEx(Adapter->InterruptHandle);
+        Adapter->InterruptHandle = NULL;
+    }
+
+    if (Adapter->MediaDetectionTimer)
+    {
+        NdisCancelTimerObject(Adapter->MediaDetectionTimer);
+        KeFlushQueuedDpcs();
+        NdisFreeTimerObject(Adapter->MediaDetectionTimer);
+        Adapter->MediaDetectionTimer = NULL;
     }
 
     if (Adapter->Features & DEV_HAS_HIGH_DMA)
@@ -677,6 +767,14 @@ NvNetFreeAdapter(
         Adapter->ReceiveBuffer = NULL;
     }
 
+    FreeReceiveNbls(Adapter);
+
+    if (Adapter->DmaHandle)
+    {
+        NdisMDeregisterScatterGatherDma(Adapter->DmaHandle);
+        Adapter->DmaHandle = NULL;
+    }
+
     if (Adapter->IoBase)
     {
         NdisMUnmapIoSpace(Adapter->AdapterHandle,
@@ -684,6 +782,11 @@ NvNetFreeAdapter(
                           Adapter->IoLength);
         Adapter->IoBase = NULL;
     }
+
+    if (Adapter->ResetWorkItem)
+        NdisFreeIoWorkItem(Adapter->ResetWorkItem);
+    if (Adapter->PowerWorkItem)
+        NdisFreeIoWorkItem(Adapter->PowerWorkItem);
 
     if (Adapter->Lock.SpinLock)
         NdisFreeSpinLock(&Adapter->Lock);
@@ -698,37 +801,24 @@ NvNetFreeAdapter(
 CODE_SEG("PAGE")
 NDIS_STATUS
 NTAPI
-MiniportInitialize(
-    _Out_ PNDIS_STATUS OpenErrorStatus,
-    _Out_ PUINT SelectedMediumIndex,
-    _In_ PNDIS_MEDIUM MediumArray,
-    _In_ UINT MediumArraySize,
+MiniportInitializeEx(
     _In_ NDIS_HANDLE MiniportAdapterHandle,
-    _In_ NDIS_HANDLE WrapperConfigurationContext)
+    _In_ NDIS_HANDLE MiniportDriverContext,
+    _In_ PNDIS_MINIPORT_INIT_PARAMETERS MiniportInitParameters)
 {
-    UINT i;
     ULONG Size;
     PVOID UnalignedAdapter;
     PNVNET_ADAPTER Adapter;
     NDIS_STATUS Status;
+    NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES Registration;
+    NDIS_SG_DMA_DESCRIPTION DmaDescription;
+    NDIS_MINIPORT_INTERRUPT_CHARACTERISTICS InterruptCharacteristics;
+
+    UNREFERENCED_PARAMETER(MiniportDriverContext);
 
     PAGED_CODE();
 
     NDIS_DbgPrint(MIN_TRACE, ("()\n"));
-
-    for (i = 0; i < MediumArraySize; ++i)
-    {
-        if (MediumArray[i] == NdisMedium802_3)
-        {
-            *SelectedMediumIndex = i;
-            break;
-        }
-    }
-    if (i == MediumArraySize)
-    {
-        NDIS_DbgPrint(MAX_TRACE, ("No supported media\n"));
-        return NDIS_STATUS_UNSUPPORTED_MEDIA;
-    }
 
     Size = sizeof(NVNET_ADAPTER) + NdisGetSharedDataAlignment();
 
@@ -745,21 +835,38 @@ MiniportInitialize(
     Adapter = ALIGN_UP_POINTER_BY(UnalignedAdapter, NdisGetSharedDataAlignment());
     Adapter->AdapterOriginal = UnalignedAdapter;
     Adapter->AdapterHandle = MiniportAdapterHandle;
-    Adapter->WrapperConfigurationHandle = WrapperConfigurationContext;
+    Adapter->Paused = TRUE;
+
+    NdisZeroMemory(&Registration, sizeof(Registration));
+    Registration.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES;
+    Registration.Header.Revision = NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1;
+    Registration.Header.Size = NDIS_SIZEOF_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1;
+    Registration.MiniportAdapterContext = Adapter;
+    Registration.AttributeFlags = NDIS_MINIPORT_ATTRIBUTES_HARDWARE_DEVICE |
+                                  NDIS_MINIPORT_ATTRIBUTES_BUS_MASTER;
+    Registration.CheckForHangTimeInSeconds = 2;
+    Registration.InterfaceType = NdisInterfacePci;
+
+    Status = NdisMSetMiniportAttributes(MiniportAdapterHandle,
+                                        (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&Registration);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        goto Failure;
+    }
+
+    Adapter->ResetWorkItem = NdisAllocateIoWorkItem(MiniportAdapterHandle);
+    Adapter->PowerWorkItem = NdisAllocateIoWorkItem(MiniportAdapterHandle);
+    if (!Adapter->ResetWorkItem || !Adapter->PowerWorkItem)
+    {
+        Status = NDIS_STATUS_RESOURCES;
+        goto Failure;
+    }
 
     Status = NvNetReadConfiguration(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         goto Failure;
     }
-
-    NdisMSetAttributesEx(MiniportAdapterHandle,
-                         Adapter,
-                         0,
-                         NDIS_ATTRIBUTE_USES_SAFE_BUFFER_APIS |
-                         // NDIS_ATTRIBUTE_DESERIALIZE |  TODO
-                         NDIS_ATTRIBUTE_BUS_MASTER,
-                         NdisInterfacePci);
 
     Status = NvNetRecognizeHardware(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
@@ -776,18 +883,26 @@ MiniportInitialize(
         goto Failure;
     }
 
-    Status = NvNetInitializeAdapterResources(Adapter);
+    Status = NvNetInitializeAdapterResources(Adapter, MiniportInitParameters->AllocatedResources);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         goto Failure;
     }
 
-    Status = NdisMInitializeScatterGatherDma(Adapter->AdapterHandle,
-                                             !!(Adapter->Features & DEV_HAS_HIGH_DMA),
-                                             NVNET_MAXIMUM_FRAME_SIZE);
-                                             // ^TODO: NVNET_MAX_DMA_TRANSFER);
+    NdisZeroMemory(&DmaDescription, sizeof(DmaDescription));
+    DmaDescription.Header.Type = NDIS_OBJECT_TYPE_SG_DMA_DESCRIPTION;
+    DmaDescription.Header.Revision = NDIS_SG_DMA_DESCRIPTION_REVISION_1;
+    DmaDescription.Header.Size = NDIS_SIZEOF_SG_DMA_DESCRIPTION_REVISION_1;
+    if (Adapter->Features & DEV_HAS_HIGH_DMA)
+        DmaDescription.Flags = NDIS_SG_DMA_64_BIT_ADDRESS;
+    DmaDescription.MaximumPhysicalMapping = Adapter->MaximumFrameSize;
+
+    Status = NdisMRegisterScatterGatherDma(Adapter->AdapterHandle,
+                                           &DmaDescription,
+                                           &Adapter->DmaHandle);
     if (Status != NDIS_STATUS_SUCCESS)
     {
+        Adapter->DmaHandle = NULL;
         NvNetLogError(Adapter, NDIS_ERROR_CODE_OUT_OF_RESOURCES);
         goto Failure;
     }
@@ -851,26 +966,28 @@ MiniportInitialize(
     NV_WRITE(Adapter, NvRegMIIStatus, NVREG_MIISTAT_MASK_ALL);
     NV_WRITE(Adapter, NvRegIrqStatus, NVREG_IRQSTAT_MASK);
 
-/* FIXME: Bug in the PIC HAL? */
-#if defined(SARCH_XBOX)
-    Status = NdisMRegisterInterrupt(&Adapter->Interrupt,
-                                    Adapter->AdapterHandle,
-                                    Adapter->InterruptVector,
-                                    Adapter->InterruptLevel,
-                                    TRUE, /* Request ISR calls */
-                                    FALSE,
-                                    NdisInterruptLatched);
-#else
-    Status = NdisMRegisterInterrupt(&Adapter->Interrupt,
-                                    Adapter->AdapterHandle,
-                                    Adapter->InterruptVector,
-                                    Adapter->InterruptLevel,
-                                    TRUE, /* Request ISR calls */
-                                    TRUE, /* Shared */
-                                    NdisInterruptLevelSensitive);
-#endif
+    Status = NvNetSetGeneralAttributes(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
     {
+        goto Failure;
+    }
+
+    NdisZeroMemory(&InterruptCharacteristics, sizeof(InterruptCharacteristics));
+    InterruptCharacteristics.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_INTERRUPT;
+    InterruptCharacteristics.Header.Revision = NDIS_MINIPORT_INTERRUPT_REVISION_1;
+    InterruptCharacteristics.Header.Size = NDIS_SIZEOF_MINIPORT_INTERRUPT_CHARACTERISTICS_REVISION_1;
+    InterruptCharacteristics.InterruptHandler = MiniportISR;
+    InterruptCharacteristics.InterruptDpcHandler = MiniportInterruptDpc;
+    InterruptCharacteristics.DisableInterruptHandler = MiniportDisableInterrupt;
+    InterruptCharacteristics.EnableInterruptHandler = MiniportEnableInterrupt;
+
+    Status = NdisMRegisterInterruptEx(Adapter->AdapterHandle,
+                                      Adapter,
+                                      &InterruptCharacteristics,
+                                      &Adapter->InterruptHandle);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        Adapter->InterruptHandle = NULL;
         NvNetLogError(Adapter, NDIS_ERROR_CODE_INTERRUPT_CONNECT);
         goto Failure;
     }

@@ -204,151 +204,101 @@ NvNetTransmitPacket64(
 }
 
 static
-DECLSPEC_NOINLINE
-ULONG
-NvNetQueryTcpIpHeaders(
-    _In_ PNVNET_ADAPTER Adapter,
-    _In_ PNDIS_PACKET Packet)
-{
-    PNDIS_BUFFER CurrentBuffer;
-    PVOID Address;
-    UINT CurrentLength;
-    UINT PacketLength;
-    PIPv4_HEADER IpHeader;
-    PTCPv4_HEADER TcpHeader;
-    ULONG BytesCopied = 0;
-    UCHAR Buffer[136];
-
-    NdisGetFirstBufferFromPacketSafe(Packet,
-                                     &CurrentBuffer,
-                                     &Address,
-                                     &CurrentLength,
-                                     &PacketLength,
-                                     HighPagePriority);
-    if (!Address)
-        return 0;
-
-    while (TRUE)
-    {
-        CurrentLength = min(CurrentLength, sizeof(Buffer) - BytesCopied);
-
-        NdisMoveMemory(&Buffer[BytesCopied], Address, CurrentLength);
-        BytesCopied += CurrentLength;
-
-        if (BytesCopied >= sizeof(Buffer))
-            break;
-
-        NdisGetNextBuffer(CurrentBuffer, &CurrentBuffer);
-
-        if (!CurrentBuffer)
-            return 0;
-
-        NdisQueryBufferSafe(CurrentBuffer,
-                            &Address,
-                            &CurrentLength,
-                            HighPagePriority);
-    }
-
-    IpHeader = (PIPv4_HEADER)&Buffer[Adapter->IpHeaderOffset];
-    TcpHeader = (PTCPv4_HEADER)((PUCHAR)IpHeader + IP_HEADER_LENGTH(IpHeader));
-
-    return IP_HEADER_LENGTH(IpHeader) + TCP_HEADER_LENGTH(TcpHeader);
-}
-
-static
 BOOLEAN
 NvNetCopyPacket(
     _In_ PNVNET_ADAPTER Adapter,
-    _In_ PNDIS_PACKET Packet,
+    _In_ PNET_BUFFER NetBuffer,
     _In_ PNVNET_TX_BUFFER Buffer)
 {
-    PNDIS_BUFFER CurrentBuffer;
-    PVOID Address;
-    UINT CurrentLength;
-    UINT PacketLength;
+    PMDL CurrentMdl = NET_BUFFER_CURRENT_MDL(NetBuffer);
+    ULONG Offset = NET_BUFFER_CURRENT_MDL_OFFSET(NetBuffer);
+    ULONG Remaining = NET_BUFFER_DATA_LENGTH(NetBuffer);
+    ULONG CurrentLength;
+    PUCHAR Address;
     PUCHAR Destination;
 
-    NdisGetFirstBufferFromPacketSafe(Packet,
-                                     &CurrentBuffer,
-                                     &Address,
-                                     &CurrentLength,
-                                     &PacketLength,
-                                     HighPagePriority);
-    if (!Address)
-        return FALSE;
+    UNREFERENCED_PARAMETER(Adapter);
 
     Destination = Buffer->VirtualAddress;
 
-    while (TRUE)
+    while (CurrentMdl && Remaining)
     {
-        NdisMoveMemory(Destination, Address, CurrentLength);
-        Destination += CurrentLength;
-
-        NdisGetNextBuffer(CurrentBuffer, &CurrentBuffer);
-
-        if (!CurrentBuffer)
-            break;
-
-        NdisQueryBufferSafe(CurrentBuffer,
-                            &Address,
-                            &CurrentLength,
-                            HighPagePriority);
+        NdisQueryMdl(CurrentMdl, (PVOID*)&Address, &CurrentLength, HighPagePriority);
         if (!Address)
             return FALSE;
+
+        if (CurrentLength > Offset)
+        {
+            CurrentLength = min(CurrentLength - Offset, Remaining);
+            NdisMoveMemory(Destination, Address + Offset, CurrentLength);
+            Destination += CurrentLength;
+            Remaining -= CurrentLength;
+            Offset = 0;
+        }
+        else
+        {
+            Offset -= CurrentLength;
+        }
+
+        NdisGetNextMdl(CurrentMdl, &CurrentMdl);
     }
 
-    return TRUE;
+    return (Remaining == 0);
 }
 
 static
 NDIS_STATUS
-NvNetSendPacketLargeSend(
+NvNetSendPacket(
     _In_ PNVNET_ADAPTER Adapter,
-    _In_ PNDIS_PACKET Packet,
-    _In_ ULONG TotalLength)
+    _In_ PNET_BUFFER_LIST Nbl,
+    _In_ PNET_BUFFER NetBuffer)
 {
-    PSCATTER_GATHER_LIST SgList;
-    ULONG Mss, Length;
+    union
+    {
+        SCATTER_GATHER_LIST List;
+        UCHAR Buffer[FIELD_OFFSET(SCATTER_GATHER_LIST, Elements) + sizeof(SCATTER_GATHER_ELEMENT)];
+    } LocalSgList;
+    PNVNET_TX_BUFFER CoalesceBuffer;
     PNVNET_TCB Tcb;
+    ULONG TotalLength, Slots;
 
-    if (!Adapter->Send.TcbSlots)
+    TotalLength = NET_BUFFER_DATA_LENGTH(NetBuffer);
+    if (TotalLength == 0 || TotalLength > Adapter->MaximumFrameSize)
+    {
+        return NDIS_STATUS_INVALID_LENGTH;
+    }
+
+    Slots = 1;
+    if (TotalLength > NV_MAXIMUM_SG_SIZE)
+    {
+        Slots += NV_IMPLICIT_ENTRIES(TotalLength);
+    }
+
+    if (!Adapter->Send.TcbSlots || Slots > Adapter->Send.TbdSlots || !Adapter->Send.BufferList.Next)
     {
         return NDIS_STATUS_RESOURCES;
     }
 
-    SgList = NDIS_PER_PACKET_INFO_FROM_PACKET(Packet, ScatterGatherListPacketInfo);
+    CoalesceBuffer = (PNVNET_TX_BUFFER)PopEntryList(&Adapter->Send.BufferList);
 
-    /* Make sure we have room to setup all fragments */
-    C_ASSERT(NVNET_TRANSMIT_DESCRIPTORS > ((NVNET_MAXIMUM_LSO_FRAME_SIZE / PAGE_SIZE) + 3));
-    ASSERT(SgList->NumberOfElements +
-           (NVNET_MAXIMUM_LSO_FRAME_SIZE / (NV_MAXIMUM_SG_SIZE + 1)) <=
-           NVNET_TRANSMIT_DESCRIPTORS);
-
-    if (SgList->NumberOfElements +
-        (NVNET_MAXIMUM_LSO_FRAME_SIZE / (NV_MAXIMUM_SG_SIZE + 1)) < Adapter->Send.TbdSlots)
+    if (!NvNetCopyPacket(Adapter, NetBuffer, CoalesceBuffer))
     {
-        return NDIS_STATUS_RESOURCES;
+        PushEntryList(&Adapter->Send.BufferList, &CoalesceBuffer->Link);
+        return NDIS_STATUS_FAILURE;
     }
-
-    Length = NvNetQueryTcpIpHeaders(Adapter, Packet);
-    if (!Length)
-    {
-        return NDIS_STATUS_RESOURCES;
-    }
-
-    NDIS_PER_PACKET_INFO_FROM_PACKET(Packet, TcpLargeSendPacketInfo) =
-        UlongToPtr(TotalLength - Adapter->IpHeaderOffset - Length);
 
     --Adapter->Send.TcbSlots;
 
-    Mss = PtrToUlong(NDIS_PER_PACKET_INFO_FROM_PACKET(Packet, TcpLargeSendPacketInfo));
+    LocalSgList.List.NumberOfElements = 1;
+    LocalSgList.List.Elements[0].Address = CoalesceBuffer->PhysicalAddress;
+    LocalSgList.List.Elements[0].Length = TotalLength;
 
     Tcb = Adapter->Send.CurrentTcb;
-    Tcb->Mss = Mss;
-    Tcb->Packet = Packet;
-    Tcb->Flags = NV_TCB_LARGE_SEND;
+    Tcb->Buffer = CoalesceBuffer;
+    Tcb->Nbl = Nbl;
+    Tcb->Flags = NV_TCB_COALESCE;
 
-    Adapter->TransmitPacket(Adapter, Tcb, SgList);
+    Adapter->TransmitPacket(Adapter, Tcb, &LocalSgList.List);
 
     ASSERT(Adapter->Send.TbdSlots >= Tcb->Slots);
     Adapter->Send.TbdSlots -= Tcb->Slots;
@@ -358,171 +308,212 @@ NvNetSendPacketLargeSend(
     return NDIS_STATUS_SUCCESS;
 }
 
-static
-ULONG
-NvNetGetChecksumInfo(
-    _In_ PNVNET_ADAPTER Adapter,
-    _In_ PNDIS_PACKET Packet)
+VOID
+NvNetCompleteNetBuffer(
+    _In_ PNET_BUFFER_LIST Nbl,
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail)
 {
-    ULONG Flags;
-    NDIS_TCP_IP_CHECKSUM_PACKET_INFO ChecksumInfo;
+    if (--NV_PENDING_FROM_NBL(Nbl) != 0)
+        return;
 
-    if (NDIS_GET_PACKET_PROTOCOL_TYPE(Packet) != NDIS_PROTOCOL_ID_TCP_IP)
-        return 0;
-
-    ChecksumInfo.Value = PtrToUlong(NDIS_PER_PACKET_INFO_FROM_PACKET(Packet,
-                                                                     TcpIpChecksumPacketInfo));
-
-    Flags = 0;
-    if (ChecksumInfo.Transmit.NdisPacketChecksumV4)
-    {
-        if (ChecksumInfo.Transmit.NdisPacketTcpChecksum && Adapter->Offload.SendTcpChecksum)
-        {
-            Flags |= NV_TCB_CHECKSUM_TCP;
-        }
-        if (ChecksumInfo.Transmit.NdisPacketUdpChecksum && Adapter->Offload.SendUdpChecksum)
-        {
-            Flags |= NV_TCB_CHECKSUM_UDP;
-        }
-        if (ChecksumInfo.Transmit.NdisPacketIpChecksum && Adapter->Offload.SendIpChecksum)
-        {
-            Flags |= NV_TCB_CHECKSUM_IP;
-        }
-    }
-
-    return Flags;
-}
-
-static
-NDIS_STATUS
-NvNetSendPacket(
-    _In_ PNVNET_ADAPTER Adapter,
-    _In_ PNDIS_PACKET Packet,
-    _In_ ULONG TotalLength)
-{
-    PSCATTER_GATHER_LIST SgList;
-    union
-    {
-        SCATTER_GATHER_LIST List;
-        UCHAR Buffer[FIELD_OFFSET(SCATTER_GATHER_LIST, Elements) + sizeof(SCATTER_GATHER_ELEMENT)];
-    } LocalSgList;
-    PNVNET_TCB Tcb;
-    ULONG Flags;
-
-    ASSERT(TotalLength <= Adapter->MaximumFrameSize);
-
-    if (!Adapter->Send.TcbSlots)
-    {
-        return NDIS_STATUS_RESOURCES;
-    }
-
-    Flags = NvNetGetChecksumInfo(Adapter, Packet);
-
-    SgList = NDIS_PER_PACKET_INFO_FROM_PACKET(Packet, ScatterGatherListPacketInfo);
-
-    if (SgList->NumberOfElements > NVNET_FRAGMENTATION_THRESHOLD)
-    {
-        if (!Adapter->Send.TbdSlots || !Adapter->Send.BufferList.Next)
-        {
-            return NDIS_STATUS_RESOURCES;
-        }
-        else
-        {
-            PNVNET_TX_BUFFER CoalesceBuffer;
-            BOOLEAN Success;
-
-            --Adapter->Send.TcbSlots;
-
-            CoalesceBuffer = (PNVNET_TX_BUFFER)PopEntryList(&Adapter->Send.BufferList);
-
-            NdisDprReleaseSpinLock(&Adapter->Send.Lock);
-
-            Success = NvNetCopyPacket(Adapter, Packet, CoalesceBuffer);
-
-            NdisDprAcquireSpinLock(&Adapter->Send.Lock);
-
-            if (!Success || !Adapter->Send.TbdSlots || !(Adapter->Flags & NV_ACTIVE))
-            {
-                PushEntryList(&Adapter->Send.BufferList, &CoalesceBuffer->Link);
-
-                ++Adapter->Send.TcbSlots;
-
-                return NDIS_STATUS_RESOURCES;
-            }
-
-            Flags |= NV_TCB_COALESCE;
-
-            LocalSgList.List.NumberOfElements = 1;
-            LocalSgList.List.Elements[0].Address = CoalesceBuffer->PhysicalAddress;
-            LocalSgList.List.Elements[0].Length = TotalLength;
-            SgList = &LocalSgList.List;
-
-            Tcb = Adapter->Send.CurrentTcb;
-            Tcb->Buffer = CoalesceBuffer;
-        }
-    }
+    NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+    if (*CompleteTail)
+        NET_BUFFER_LIST_NEXT_NBL(*CompleteTail) = Nbl;
     else
-    {
-        if (SgList->NumberOfElements +
-            (NVNET_MAXIMUM_FRAME_SIZE_JUMBO / (NV_MAXIMUM_SG_SIZE + 1)) > Adapter->Send.TbdSlots)
-        {
-            return NDIS_STATUS_RESOURCES;
-        }
-
-        --Adapter->Send.TcbSlots;
-
-        Tcb = Adapter->Send.CurrentTcb;
-    }
-
-    Tcb->Packet = Packet;
-    Tcb->Flags = Flags;
-
-    Adapter->TransmitPacket(Adapter, Tcb, SgList);
-
-    ASSERT(Adapter->Send.TbdSlots >= Tcb->Slots);
-    Adapter->Send.TbdSlots -= Tcb->Slots;
-
-    Adapter->Send.CurrentTcb = NV_NEXT_TCB(Adapter, Tcb);
-
-    return NDIS_STATUS_PENDING;
+        *CompleteHead = Nbl;
+    *CompleteTail = Nbl;
 }
 
-/* FIXME: Use the proper send function (MiniportSendPackets) */
-NDIS_STATUS
+VOID
+NvNetCompleteSends(
+    _In_ PNVNET_ADAPTER Adapter,
+    _In_opt_ PNET_BUFFER_LIST CompleteHead,
+    _In_ BOOLEAN DispatchLevel)
+{
+    if (!CompleteHead)
+        return;
+
+    NdisMSendNetBufferListsComplete(Adapter->AdapterHandle,
+                                    CompleteHead,
+                                    DispatchLevel ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
+}
+
+VOID
+NvNetProcessSendQueue(
+    _In_ PNVNET_ADAPTER Adapter,
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail)
+{
+    PNET_BUFFER_LIST Nbl;
+    PNET_BUFFER NetBuffer;
+    NDIS_STATUS Status;
+
+    while ((Nbl = Adapter->Send.QueueHead) != NULL)
+    {
+        NetBuffer = NV_NEXT_NB_FROM_NBL(Nbl);
+
+        Status = NvNetSendPacket(Adapter, Nbl, NetBuffer);
+        if (Status == NDIS_STATUS_RESOURCES)
+            break;
+
+        NV_NEXT_NB_FROM_NBL(Nbl) = NET_BUFFER_NEXT_NB(NetBuffer);
+        if (!NV_NEXT_NB_FROM_NBL(Nbl))
+        {
+            Adapter->Send.QueueHead = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+            if (!Adapter->Send.QueueHead)
+                Adapter->Send.QueueTail = NULL;
+        }
+
+        if (Status != NDIS_STATUS_SUCCESS)
+        {
+            NET_BUFFER_LIST_STATUS(Nbl) = Status;
+            NvNetCompleteNetBuffer(Nbl, CompleteHead, CompleteTail);
+        }
+    }
+}
+
+VOID
+NvNetFailNetBufferLists(
+    _In_ PNVNET_ADAPTER Adapter,
+    _In_ NDIS_STATUS CompleteStatus)
+{
+    PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
+    PNET_BUFFER_LIST Nbl, NextNbl;
+    PNET_BUFFER NetBuffer;
+
+    NdisAcquireSpinLock(&Adapter->Send.Lock);
+
+    for (Nbl = Adapter->Send.QueueHead; Nbl; Nbl = NextNbl)
+    {
+        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+
+        NET_BUFFER_LIST_STATUS(Nbl) = CompleteStatus;
+        for (NetBuffer = NV_NEXT_NB_FROM_NBL(Nbl);
+             NetBuffer;
+             NetBuffer = NET_BUFFER_NEXT_NB(NetBuffer))
+        {
+            NvNetCompleteNetBuffer(Nbl, &CompleteHead, &CompleteTail);
+        }
+    }
+    Adapter->Send.QueueHead = NULL;
+    Adapter->Send.QueueTail = NULL;
+
+    NdisReleaseSpinLock(&Adapter->Send.Lock);
+
+    NvNetCompleteSends(Adapter, CompleteHead, FALSE);
+}
+
+VOID
 NTAPI
-MiniportSend(
+MiniportSendNetBufferLists(
     _In_ NDIS_HANDLE MiniportAdapterContext,
-    _In_ PNDIS_PACKET Packet,
-    _In_ UINT Flags)
+    _In_ PNET_BUFFER_LIST NetBufferLists,
+    _In_ NDIS_PORT_NUMBER PortNumber,
+    _In_ ULONG SendFlags)
 {
     PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
-    UINT TotalLength;
+    PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
+    PNET_BUFFER_LIST Nbl, NextNbl;
+    PNET_BUFFER NetBuffer;
     NDIS_STATUS Status;
+    LONG_PTR Count;
+
+    UNREFERENCED_PARAMETER(PortNumber);
 
     NDIS_DbgPrint(MIN_TRACE, ("()\n"));
 
-    NdisQueryPacketLength(Packet, &TotalLength);
+    NdisAcquireSpinLock(&Adapter->Send.Lock);
 
-    NdisDprAcquireSpinLock(&Adapter->Send.Lock);
-
-    if (!(Adapter->Flags & NV_ACTIVE))
-    {
-        NdisDprReleaseSpinLock(&Adapter->Send.Lock);
-
-        return NDIS_STATUS_FAILURE;
-    }
-
-    if (Adapter->Flags & NV_SEND_LARGE_SEND &&
-        PtrToUlong(NDIS_PER_PACKET_INFO_FROM_PACKET(Packet, TcpLargeSendPacketInfo)))
-    {
-        Status = NvNetSendPacketLargeSend(Adapter, Packet, TotalLength);
-    }
+    if (Adapter->Paused)
+        Status = NDIS_STATUS_PAUSED;
+    else if (!(Adapter->Flags & NV_ACTIVE))
+        Status = NDIS_STATUS_FAILURE;
     else
+        Status = NDIS_STATUS_SUCCESS;
+
+    for (Nbl = NetBufferLists; Nbl; Nbl = NextNbl)
     {
-        Status = NvNetSendPacket(Adapter, Packet, TotalLength);
+        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+        NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+        NET_BUFFER_LIST_STATUS(Nbl) = Status;
+
+        Count = 0;
+        for (NetBuffer = NET_BUFFER_LIST_FIRST_NB(Nbl);
+             NetBuffer;
+             NetBuffer = NET_BUFFER_NEXT_NB(NetBuffer))
+        {
+            ++Count;
+        }
+
+        if (Status != NDIS_STATUS_SUCCESS || !Count)
+        {
+            NV_PENDING_FROM_NBL(Nbl) = 1;
+            NvNetCompleteNetBuffer(Nbl, &CompleteHead, &CompleteTail);
+            continue;
+        }
+
+        NV_PENDING_FROM_NBL(Nbl) = Count;
+        NV_NEXT_NB_FROM_NBL(Nbl) = NET_BUFFER_LIST_FIRST_NB(Nbl);
+
+        if (Adapter->Send.QueueTail)
+            NET_BUFFER_LIST_NEXT_NBL(Adapter->Send.QueueTail) = Nbl;
+        else
+            Adapter->Send.QueueHead = Nbl;
+        Adapter->Send.QueueTail = Nbl;
     }
 
-    NdisDprReleaseSpinLock(&Adapter->Send.Lock);
+    if (Status == NDIS_STATUS_SUCCESS)
+        NvNetProcessSendQueue(Adapter, &CompleteHead, &CompleteTail);
 
-    return Status;
+    NdisReleaseSpinLock(&Adapter->Send.Lock);
+
+    NvNetCompleteSends(Adapter, CompleteHead, NDIS_TEST_SEND_AT_DISPATCH_LEVEL(SendFlags));
+}
+
+VOID
+NTAPI
+MiniportCancelSend(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PVOID CancelId)
+{
+    PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
+    PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
+    PNET_BUFFER_LIST Nbl, NextNbl, KeepHead = NULL, KeepTail = NULL;
+    PNET_BUFFER NetBuffer;
+
+    NdisAcquireSpinLock(&Adapter->Send.Lock);
+
+    for (Nbl = Adapter->Send.QueueHead; Nbl; Nbl = NextNbl)
+    {
+        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+        NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+
+        if (NDIS_GET_NET_BUFFER_LIST_CANCEL_ID(Nbl) == CancelId &&
+            NV_NEXT_NB_FROM_NBL(Nbl) == NET_BUFFER_LIST_FIRST_NB(Nbl))
+        {
+            NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SEND_ABORTED;
+
+            for (NetBuffer = NET_BUFFER_LIST_FIRST_NB(Nbl);
+                 NetBuffer;
+                 NetBuffer = NET_BUFFER_NEXT_NB(NetBuffer))
+            {
+                NvNetCompleteNetBuffer(Nbl, &CompleteHead, &CompleteTail);
+            }
+            continue;
+        }
+
+        if (KeepTail)
+            NET_BUFFER_LIST_NEXT_NBL(KeepTail) = Nbl;
+        else
+            KeepHead = Nbl;
+        KeepTail = Nbl;
+    }
+
+    Adapter->Send.QueueHead = KeepHead;
+    Adapter->Send.QueueTail = KeepTail;
+
+    NdisReleaseSpinLock(&Adapter->Send.Lock);
+
+    NvNetCompleteSends(Adapter, CompleteHead, FALSE);
 }

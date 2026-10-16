@@ -17,7 +17,8 @@
 ULONG
 ProcessTransmitDescriptorsLegacy(
     _In_ PNVNET_ADAPTER Adapter,
-    _Inout_ PLIST_ENTRY SendReadyList)
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail)
 {
     PNVNET_TCB Tcb = Adapter->Send.LastTcb;
     ULONG TcbProcessed = 0;
@@ -67,7 +68,7 @@ ProcessTransmitDescriptorsLegacy(
                 ++Adapter->Statistics.TransmitOneRetry;
         }
 
-        InsertTailList(SendReadyList, PACKET_ENTRY(Tcb->Packet));
+        NvNetCompleteNetBuffer(Tcb->Nbl, CompleteHead, CompleteTail);
 
         NV_RELEASE_TCB(Adapter, Tcb);
 
@@ -84,7 +85,8 @@ ProcessTransmitDescriptorsLegacy(
 ULONG
 ProcessTransmitDescriptors32(
     _In_ PNVNET_ADAPTER Adapter,
-    _Inout_ PLIST_ENTRY SendReadyList)
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail)
 {
     PNVNET_TCB Tcb = Adapter->Send.LastTcb;
     ULONG TcbProcessed = 0;
@@ -111,7 +113,7 @@ ProcessTransmitDescriptors32(
             }
         }
 
-        InsertTailList(SendReadyList, PACKET_ENTRY(Tcb->Packet));
+        NvNetCompleteNetBuffer(Tcb->Nbl, CompleteHead, CompleteTail);
 
         NV_RELEASE_TCB(Adapter, Tcb);
 
@@ -128,7 +130,8 @@ ProcessTransmitDescriptors32(
 ULONG
 ProcessTransmitDescriptors64(
     _In_ PNVNET_ADAPTER Adapter,
-    _Inout_ PLIST_ENTRY SendReadyList)
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail)
 {
     PNVNET_TCB Tcb = Adapter->Send.LastTcb;
     ULONG TcbProcessed = 0;
@@ -179,7 +182,7 @@ ProcessTransmitDescriptors64(
             }
         }
 
-        InsertTailList(SendReadyList, PACKET_ENTRY(Tcb->Packet));
+        NvNetCompleteNetBuffer(Tcb->Nbl, CompleteHead, CompleteTail);
 
         NV_RELEASE_TCB(Adapter, Tcb);
 
@@ -223,7 +226,12 @@ ProcessReceiveDescriptors(
     _In_ ULONG TotalRxProcessed)
 {
     ULONG i, RxProcessed = 0;
-    BOOLEAN IndicateComplete = FALSE;
+    PNET_BUFFER_LIST ReceiveHead = NULL, ReceiveTail = NULL;
+    ULONG ReceiveCount = 0;
+    PNET_BUFFER_LIST Nbl;
+    PNET_BUFFER NetBuffer;
+
+    NdisDprAcquireSpinLock(&Adapter->Receive.Lock);
 
     for (i = 0; i < NVNET_RECEIVE_DESCRIPTORS; ++i)
     {
@@ -323,14 +331,35 @@ ProcessReceiveDescriptors(
                                       Adapter->CurrentRx, Length, Flags & FLAG_MASK_V1));
         }
 
-        NdisMEthIndicateReceive(Adapter->AdapterHandle,
-                                NULL,
-                                (PCHAR)EthHeader,
-                                sizeof(ETH_HEADER),
-                                EthHeader + sizeof(ETH_HEADER),
-                                Length - sizeof(ETH_HEADER),
-                                Length - sizeof(ETH_HEADER));
-        IndicateComplete = TRUE;
+        if (Length < sizeof(ETH_HEADER) || Length > NVNET_RECEIVE_BUFFER_SIZE)
+            goto NextDescriptor;
+
+        if (Adapter->Paused || !Adapter->FreeReceiveNbls)
+        {
+            ++Adapter->Statistics.ReceiveNoBuffers;
+            goto NextDescriptor;
+        }
+
+        Nbl = Adapter->FreeReceiveNbls;
+        Adapter->FreeReceiveNbls = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+        ++Adapter->ReceiveNblsOutstanding;
+
+        NetBuffer = NET_BUFFER_LIST_FIRST_NB(Nbl);
+        NdisMoveMemory(Nbl->MiniportReserved[0], EthHeader, Length);
+        NdisAdjustMdlLength(NET_BUFFER_FIRST_MDL(NetBuffer), Length);
+        NET_BUFFER_DATA_OFFSET(NetBuffer) = 0;
+        NET_BUFFER_CURRENT_MDL(NetBuffer) = NET_BUFFER_FIRST_MDL(NetBuffer);
+        NET_BUFFER_CURRENT_MDL_OFFSET(NetBuffer) = 0;
+        NET_BUFFER_DATA_LENGTH(NetBuffer) = Length;
+        NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
+
+        NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+        if (ReceiveTail)
+            NET_BUFFER_LIST_NEXT_NBL(ReceiveTail) = Nbl;
+        else
+            ReceiveHead = Nbl;
+        ReceiveTail = Nbl;
+        ++ReceiveCount;
 
 NextDescriptor:
         /* Invalidate the buffer length and release the descriptor */
@@ -343,9 +372,15 @@ NextDescriptor:
         ++RxProcessed;
     }
 
-    if (IndicateComplete)
+    NdisDprReleaseSpinLock(&Adapter->Receive.Lock);
+
+    if (ReceiveHead)
     {
-        NdisMEthIndicateReceiveComplete(Adapter->AdapterHandle);
+        NdisMIndicateReceiveNetBufferLists(Adapter->AdapterHandle,
+                                           ReceiveHead,
+                                           NDIS_DEFAULT_PORT_NUMBER,
+                                           ReceiveCount,
+                                           NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL);
     }
 
     return RxProcessed;
@@ -427,11 +462,7 @@ HandleLinkStateChange(
 
     if (Report)
     {
-        NdisMIndicateStatus(Adapter->AdapterHandle,
-                            Connected ? NDIS_STATUS_MEDIA_CONNECT : NDIS_STATUS_MEDIA_DISCONNECT,
-                            NULL,
-                            0);
-        NdisMIndicateStatusComplete(Adapter->AdapterHandle);
+        NvNetIndicateLinkState(Adapter);
     }
 }
 
@@ -446,38 +477,41 @@ HandleRecoverableError(
 
 VOID
 NTAPI
-MiniportHandleInterrupt(
-    _In_ NDIS_HANDLE MiniportAdapterContext)
+MiniportInterruptDpc(
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _In_ PVOID MiniportDpcContext,
+    _In_ PVOID ReceiveThrottleParameters,
+    _In_ PVOID NdisReserved2)
 {
-    PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
+    PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportInterruptContext;
     ULONG InterruptStatus = Adapter->InterruptStatus;
     ULONG RxProcessed, TotalTxProcessed = 0, TotalRxProcessed = 0;
-    LIST_ENTRY SendReadyList;
+    PNET_BUFFER_LIST CompleteHead, CompleteTail;
+
+    UNREFERENCED_PARAMETER(MiniportDpcContext);
+    UNREFERENCED_PARAMETER(ReceiveThrottleParameters);
+    UNREFERENCED_PARAMETER(NdisReserved2);
 
     NDIS_DbgPrint(MIN_TRACE, ("() Events 0x%lx\n", InterruptStatus));
 
     if (!(Adapter->Flags & NV_ACTIVE))
         return;
 
-    InitializeListHead(&SendReadyList);
-
     /* Process the rings and measure network activity */
     while (TotalRxProcessed < NVNET_RECEIVE_PROCESSING_LIMIT)
     {
+        CompleteHead = NULL;
+        CompleteTail = NULL;
+
         NdisDprAcquireSpinLock(&Adapter->Send.Lock);
 
-        TotalTxProcessed += Adapter->ProcessTransmit(Adapter, &SendReadyList);
+        TotalTxProcessed += Adapter->ProcessTransmit(Adapter, &CompleteHead, &CompleteTail);
+
+        NvNetProcessSendQueue(Adapter, &CompleteHead, &CompleteTail);
 
         NdisDprReleaseSpinLock(&Adapter->Send.Lock);
 
-        while (!IsListEmpty(&SendReadyList))
-        {
-            PLIST_ENTRY Entry = RemoveHeadList(&SendReadyList);
-
-            NdisMSendComplete(Adapter->AdapterHandle,
-                              CONTAINING_RECORD(Entry, NDIS_PACKET, MiniportReserved),
-                              NDIS_STATUS_SUCCESS);
-        }
+        NvNetCompleteSends(Adapter, CompleteHead, TRUE);
 
         RxProcessed = ProcessReceiveDescriptors(Adapter, TotalRxProcessed);
         if (!RxProcessed)
@@ -513,17 +547,19 @@ MiniportHandleInterrupt(
     NvNetApplyInterruptMask(Adapter);
 }
 
-VOID
+BOOLEAN
 NTAPI
 MiniportISR(
-    _Out_ PBOOLEAN InterruptRecognized,
-    _Out_ PBOOLEAN QueueMiniportHandleInterrupt,
-    _In_ NDIS_HANDLE MiniportAdapterContext)
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _Out_ PBOOLEAN QueueDefaultInterruptDpc,
+    _Out_ PULONG TargetProcessors)
 {
-    PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
+    PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportInterruptContext;
     ULONG InterruptStatus;
 
     NDIS_DbgPrint(MIN_TRACE, ("()\n"));
+
+    *TargetProcessors = 0;
 
     InterruptStatus = NV_READ(Adapter, NvRegIrqStatus);
 
@@ -537,13 +573,33 @@ MiniportISR(
 
         Adapter->InterruptStatus = InterruptStatus;
 
-        *InterruptRecognized = TRUE;
-        *QueueMiniportHandleInterrupt = TRUE;
+        *QueueDefaultInterruptDpc = TRUE;
+        return TRUE;
     }
     else
     {
         /* This interrupt is not ours */
-        *InterruptRecognized = FALSE;
-        *QueueMiniportHandleInterrupt = FALSE;
+        *QueueDefaultInterruptDpc = FALSE;
+        return FALSE;
     }
+}
+
+VOID
+NTAPI
+MiniportDisableInterrupt(
+    _In_ NDIS_HANDLE MiniportInterruptContext)
+{
+    PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportInterruptContext;
+
+    NvNetDisableInterrupts(Adapter);
+}
+
+VOID
+NTAPI
+MiniportEnableInterrupt(
+    _In_ NDIS_HANDLE MiniportInterruptContext)
+{
+    PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportInterruptContext;
+
+    NvNetApplyInterruptMask(Adapter);
 }

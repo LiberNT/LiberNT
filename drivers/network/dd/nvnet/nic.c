@@ -356,12 +356,68 @@ NvNetMediaDetectionDpc(
 
     if (Report)
     {
-        NdisMIndicateStatus(Adapter->AdapterHandle,
-                            Connected ? NDIS_STATUS_MEDIA_CONNECT : NDIS_STATUS_MEDIA_DISCONNECT,
-                            NULL,
-                            0);
-        NdisMIndicateStatusComplete(Adapter->AdapterHandle);
+        NvNetIndicateLinkState(Adapter);
     }
+}
+
+VOID
+NvNetIndicateLinkState(
+    _In_ PNVNET_ADAPTER Adapter)
+{
+    NDIS_STATUS_INDICATION Indication;
+    NDIS_LINK_STATE LinkState;
+    ULONG64 Speed;
+
+    NdisZeroMemory(&LinkState, sizeof(LinkState));
+    LinkState.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    LinkState.Header.Revision = NDIS_LINK_STATE_REVISION_1;
+    LinkState.Header.Size = NDIS_SIZEOF_LINK_STATE_REVISION_1;
+
+    if (Adapter->Connected)
+    {
+        Speed = (ULONG64)NvNetGetLinkSpeed(Adapter) * 1000000;
+
+        LinkState.MediaConnectState = MediaConnectStateConnected;
+        LinkState.MediaDuplexState = Adapter->FullDuplex ? MediaDuplexStateFull
+                                                         : MediaDuplexStateHalf;
+        LinkState.XmitLinkSpeed = Speed;
+        LinkState.RcvLinkSpeed = Speed;
+
+        switch (Adapter->PauseFlags & (NV_PAUSEFRAME_RX_ENABLE | NV_PAUSEFRAME_TX_ENABLE))
+        {
+            case NV_PAUSEFRAME_RX_ENABLE | NV_PAUSEFRAME_TX_ENABLE:
+                LinkState.PauseFunctions = NdisPauseFunctionsSendAndReceive;
+                break;
+            case NV_PAUSEFRAME_RX_ENABLE:
+                LinkState.PauseFunctions = NdisPauseFunctionsReceiveOnly;
+                break;
+            case NV_PAUSEFRAME_TX_ENABLE:
+                LinkState.PauseFunctions = NdisPauseFunctionsSendOnly;
+                break;
+            default:
+                LinkState.PauseFunctions = NdisPauseFunctionsUnsupported;
+                break;
+        }
+    }
+    else
+    {
+        LinkState.MediaConnectState = MediaConnectStateDisconnected;
+        LinkState.MediaDuplexState = MediaDuplexStateUnknown;
+        LinkState.XmitLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+        LinkState.RcvLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+        LinkState.PauseFunctions = NdisPauseFunctionsUnknown;
+    }
+
+    NdisZeroMemory(&Indication, sizeof(Indication));
+    Indication.Header.Type = NDIS_OBJECT_TYPE_STATUS_INDICATION;
+    Indication.Header.Revision = NDIS_STATUS_INDICATION_REVISION_1;
+    Indication.Header.Size = NDIS_SIZEOF_STATUS_INDICATION_REVISION_1;
+    Indication.SourceHandle = Adapter->AdapterHandle;
+    Indication.StatusCode = NDIS_STATUS_LINK_STATE;
+    Indication.StatusBuffer = &LinkState;
+    Indication.StatusBufferSize = sizeof(LinkState);
+
+    NdisMIndicateStatusEx(Adapter->AdapterHandle, &Indication);
 }
 
 BOOLEAN
@@ -682,11 +738,11 @@ NvNetRecognizeHardware(
 
     NDIS_DbgPrint(MIN_TRACE, ("()\n"));
 
-    Bytes = NdisReadPciSlotInformation(Adapter->AdapterHandle,
-                                       0,
-                                       FIELD_OFFSET(PCI_COMMON_CONFIG, VendorID),
-                                       &PciConfig,
-                                       PCI_COMMON_HDR_LENGTH);
+    Bytes = NdisMGetBusData(Adapter->AdapterHandle,
+                            PCI_WHICHSPACE_CONFIG,
+                            FIELD_OFFSET(PCI_COMMON_CONFIG, VendorID),
+                            &PciConfig,
+                            PCI_COMMON_HDR_LENGTH);
     if (Bytes != PCI_COMMON_HDR_LENGTH)
         return NDIS_STATUS_ADAPTER_NOT_FOUND;
 
@@ -917,10 +973,25 @@ NvNetRecognizeHardware(
 
     if (Adapter->Features & DEV_NEED_LINKTIMER)
     {
-        NdisMInitializeTimer(&Adapter->MediaDetectionTimer,
-                             Adapter->AdapterHandle,
-                             NvNetMediaDetectionDpc,
-                             Adapter);
+        NDIS_TIMER_CHARACTERISTICS TimerCharacteristics;
+        NDIS_STATUS Status;
+
+        NdisZeroMemory(&TimerCharacteristics, sizeof(TimerCharacteristics));
+        TimerCharacteristics.Header.Type = NDIS_OBJECT_TYPE_TIMER_CHARACTERISTICS;
+        TimerCharacteristics.Header.Revision = NDIS_TIMER_CHARACTERISTICS_REVISION_1;
+        TimerCharacteristics.Header.Size = NDIS_SIZEOF_TIMER_CHARACTERISTICS_REVISION_1;
+        TimerCharacteristics.AllocationTag = NVNET_TAG;
+        TimerCharacteristics.TimerFunction = NvNetMediaDetectionDpc;
+        TimerCharacteristics.FunctionContext = Adapter;
+
+        Status = NdisAllocateTimerObject(Adapter->AdapterHandle,
+                                         &TimerCharacteristics,
+                                         &Adapter->MediaDetectionTimer);
+        if (Status != NDIS_STATUS_SUCCESS)
+        {
+            Adapter->MediaDetectionTimer = NULL;
+            return Status;
+        }
     }
 
     return NDIS_STATUS_SUCCESS;

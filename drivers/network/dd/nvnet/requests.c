@@ -63,9 +63,8 @@ static const NDIS_OID NvpSupportedOidList[] =
     OID_802_3_XMIT_HEARTBEAT_FAILURE,
     OID_802_3_XMIT_TIMES_CRS_LOST,
     OID_802_3_XMIT_LATE_COLLISIONS,
-
-    /* Offload */
-    OID_TCP_TASK_OFFLOAD,
+    OID_GEN_STATISTICS,
+    OID_GEN_INTERRUPT_MODERATION,
 
     /* Power management */
     OID_PNP_CAPABILITIES,
@@ -78,7 +77,6 @@ static const NDIS_OID NvpSupportedOidList[] =
 
 /* FUNCTIONS ******************************************************************/
 
-static
 ULONG
 NvNetGetLinkSpeed(
     _In_ PNVNET_ADAPTER Adapter)
@@ -602,12 +600,13 @@ CODE_SEG("PAGE")
 VOID
 NTAPI
 NvNetPowerWorker(
-    _In_ PNDIS_WORK_ITEM WorkItem,
-    _In_opt_ PVOID Context)
+    _In_opt_ PVOID WorkItemContext,
+    _In_ NDIS_HANDLE NdisIoWorkItemHandle)
 {
-    PNVNET_ADAPTER Adapter = Context;
+    PNVNET_ADAPTER Adapter = WorkItemContext;
+    PNDIS_OID_REQUEST OidRequest;
 
-    UNREFERENCED_PARAMETER(WorkItem);
+    UNREFERENCED_PARAMETER(NdisIoWorkItemHandle);
 
     PAGED_CODE();
 
@@ -639,7 +638,9 @@ NvNetPowerWorker(
         NvNetSetPowerState(Adapter, Adapter->PowerStatePending, Adapter->WakeFlags);
     }
 
-    NdisMSetInformationComplete(Adapter->AdapterHandle, NDIS_STATUS_SUCCESS);
+    OidRequest = InterlockedExchangePointer((PVOID*)&Adapter->PendingOidRequest, NULL);
+    if (OidRequest)
+        NdisMOidRequestComplete(Adapter->AdapterHandle, OidRequest, NDIS_STATUS_SUCCESS);
 }
 
 static
@@ -650,8 +651,7 @@ NvNetSetPower(
 {
     Adapter->PowerStatePending = NewPowerState;
 
-    NdisInitializeWorkItem(&Adapter->PowerWorkItem, NvNetPowerWorker, Adapter);
-    NdisScheduleWorkItem(&Adapter->PowerWorkItem);
+    NdisQueueIoWorkItem(Adapter->PowerWorkItem, NvNetPowerWorker, Adapter);
 
     return NDIS_STATUS_PENDING;
 }
@@ -754,222 +754,6 @@ NvNetEnableWakeUp(
 
 static
 NDIS_STATUS
-NvNetGetTcpTaskOffload(
-    _In_ PNVNET_ADAPTER Adapter,
-    _In_ PNDIS_TASK_OFFLOAD_HEADER TaskOffloadHeader,
-    _In_ ULONG InformationBufferLength,
-    _Out_ PULONG BytesWritten,
-    _Out_ PULONG BytesNeeded)
-{
-    ULONG InfoLength;
-    PNDIS_TASK_OFFLOAD TaskOffload;
-
-    if (!(Adapter->Flags & (NV_SEND_CHECKSUM | NV_SEND_LARGE_SEND)))
-    {
-        *BytesWritten = 0;
-        *BytesNeeded = 0;
-        return NDIS_STATUS_NOT_SUPPORTED;
-    }
-
-    InfoLength = sizeof(NDIS_TASK_OFFLOAD_HEADER);
-    if (Adapter->Flags & NV_SEND_CHECKSUM)
-    {
-        InfoLength += FIELD_OFFSET(NDIS_TASK_OFFLOAD, TaskBuffer) +
-                      sizeof(NDIS_TASK_TCP_IP_CHECKSUM);
-    }
-    if (Adapter->Flags & NV_SEND_LARGE_SEND)
-    {
-        InfoLength += FIELD_OFFSET(NDIS_TASK_OFFLOAD, TaskBuffer) +
-                      sizeof(NDIS_TASK_TCP_LARGE_SEND);
-    }
-
-    if (InformationBufferLength < InfoLength)
-    {
-        *BytesWritten = 0;
-        *BytesNeeded = InfoLength;
-        return NDIS_STATUS_BUFFER_TOO_SHORT;
-    }
-
-    if ((TaskOffloadHeader->EncapsulationFormat.Encapsulation != IEEE_802_3_Encapsulation) &&
-        (TaskOffloadHeader->EncapsulationFormat.Encapsulation != UNSPECIFIED_Encapsulation ||
-         TaskOffloadHeader->EncapsulationFormat.EncapsulationHeaderSize != sizeof(ETH_HEADER)))
-    {
-        *BytesWritten = 0;
-        *BytesNeeded = 0;
-        return NDIS_STATUS_NOT_SUPPORTED;
-    }
-    if (TaskOffloadHeader->Version != NDIS_TASK_OFFLOAD_VERSION)
-    {
-        *BytesWritten = 0;
-        *BytesNeeded = 0;
-        return NDIS_STATUS_NOT_SUPPORTED;
-    }
-
-    TaskOffloadHeader->OffsetFirstTask = sizeof(NDIS_TASK_OFFLOAD_HEADER);
-    TaskOffload = (PNDIS_TASK_OFFLOAD)(TaskOffloadHeader + 1);
-    if (Adapter->Flags & NV_SEND_CHECKSUM)
-    {
-        PNDIS_TASK_TCP_IP_CHECKSUM ChecksumTask;
-
-        TaskOffload->Size = sizeof(NDIS_TASK_OFFLOAD);
-        TaskOffload->Version = NDIS_TASK_OFFLOAD_VERSION;
-        TaskOffload->Task = TcpIpChecksumNdisTask;
-        TaskOffload->TaskBufferLength = sizeof(NDIS_TASK_TCP_IP_CHECKSUM);
-        TaskOffload->OffsetNextTask = FIELD_OFFSET(NDIS_TASK_OFFLOAD, TaskBuffer) +
-                                      sizeof(NDIS_TASK_TCP_IP_CHECKSUM);
-
-        ChecksumTask = (PNDIS_TASK_TCP_IP_CHECKSUM)TaskOffload->TaskBuffer;
-        NdisZeroMemory(ChecksumTask, sizeof(*ChecksumTask));
-
-        ChecksumTask->V4Transmit.IpOptionsSupported = 1;
-        ChecksumTask->V4Transmit.TcpOptionsSupported = 1;
-        ChecksumTask->V4Transmit.TcpChecksum = 1;
-        ChecksumTask->V4Transmit.UdpChecksum = 1;
-        ChecksumTask->V4Transmit.IpChecksum = 1;
-
-        ChecksumTask->V4Receive.IpOptionsSupported = 1;
-        ChecksumTask->V4Receive.TcpOptionsSupported = 1;
-        ChecksumTask->V4Receive.TcpChecksum = 1;
-        ChecksumTask->V4Receive.UdpChecksum = 1;
-        ChecksumTask->V4Receive.IpChecksum = 1;
-
-        TaskOffload = (PNDIS_TASK_OFFLOAD)(ChecksumTask + 1);
-    }
-    if (Adapter->Flags & NV_SEND_LARGE_SEND)
-    {
-        PNDIS_TASK_TCP_LARGE_SEND LargeSendTask;
-
-        TaskOffload->Size = sizeof(NDIS_TASK_OFFLOAD);
-        TaskOffload->Version = NDIS_TASK_OFFLOAD_VERSION;
-        TaskOffload->Task = TcpLargeSendNdisTask;
-        TaskOffload->TaskBufferLength = sizeof(NDIS_TASK_TCP_LARGE_SEND);
-        TaskOffload->OffsetNextTask = 0;
-
-        LargeSendTask = (PNDIS_TASK_TCP_LARGE_SEND)TaskOffload->TaskBuffer;
-        LargeSendTask->Version = NDIS_TASK_TCP_LARGE_SEND_V0;
-        LargeSendTask->MinSegmentCount = NVNET_MINIMUM_LSO_SEGMENT_COUNT;
-        LargeSendTask->MaxOffLoadSize = NVNET_MAXIMUM_LSO_FRAME_SIZE;
-        LargeSendTask->IpOptions = TRUE;
-        LargeSendTask->TcpOptions = TRUE;
-    }
-    TaskOffload->OffsetNextTask = 0;
-
-    *BytesWritten = InfoLength;
-    *BytesNeeded = 0;
-
-    return NDIS_STATUS_SUCCESS;
-}
-
-static
-NDIS_STATUS
-NvNetSetTcpTaskOffload(
-    _Inout_ PNVNET_ADAPTER Adapter,
-    _In_ PNDIS_TASK_OFFLOAD_HEADER TaskOffloadHeader,
-    _In_ PULONG BytesRead)
-{
-    ULONG Offset;
-    PNDIS_TASK_OFFLOAD TaskOffload;
-
-    if (TaskOffloadHeader->Version != NDIS_TASK_OFFLOAD_VERSION)
-    {
-        return NDIS_STATUS_NOT_SUPPORTED;
-    }
-
-    Adapter->IpHeaderOffset = TaskOffloadHeader->EncapsulationFormat.EncapsulationHeaderSize;
-
-    TaskOffload = (PNDIS_TASK_OFFLOAD)TaskOffloadHeader;
-    Offset = TaskOffloadHeader->OffsetFirstTask;
-
-    while (Offset)
-    {
-        *BytesRead += FIELD_OFFSET(NDIS_TASK_OFFLOAD, TaskBuffer);
-
-        TaskOffload = (PNDIS_TASK_OFFLOAD)((PUCHAR)TaskOffload + Offset);
-        switch (TaskOffload->Task)
-        {
-            case TcpIpChecksumNdisTask:
-            {
-                PNDIS_TASK_TCP_IP_CHECKSUM Task;
-
-                *BytesRead += sizeof(NDIS_TASK_TCP_IP_CHECKSUM);
-
-                if (!(Adapter->Flags & NV_SEND_CHECKSUM))
-                {
-                    return NDIS_STATUS_NOT_SUPPORTED;
-                }
-
-                Task = (PNDIS_TASK_TCP_IP_CHECKSUM)TaskOffload->TaskBuffer;
-
-                Adapter->Offload.SendTcpChecksum = Task->V4Transmit.TcpChecksum;
-                Adapter->Offload.SendUdpChecksum = Task->V4Transmit.UdpChecksum;
-                Adapter->Offload.SendIpChecksum = Task->V4Transmit.IpChecksum;
-
-                Adapter->Offload.ReceiveTcpChecksum = Task->V4Receive.TcpChecksum;
-                Adapter->Offload.ReceiveUdpChecksum = Task->V4Receive.UdpChecksum;
-                Adapter->Offload.ReceiveIpChecksum = Task->V4Receive.IpChecksum;
-                break;
-            }
-
-            case TcpLargeSendNdisTask:
-            {
-                PNDIS_TASK_TCP_LARGE_SEND Task;
-
-                if (!(Adapter->Flags & NV_SEND_LARGE_SEND))
-                {
-                    return NDIS_STATUS_NOT_SUPPORTED;
-                }
-
-                if ((TaskOffloadHeader->
-                     EncapsulationFormat.Encapsulation != IEEE_802_3_Encapsulation) &&
-                    (TaskOffloadHeader->
-                     EncapsulationFormat.Encapsulation != UNSPECIFIED_Encapsulation ||
-                     TaskOffloadHeader->
-                     EncapsulationFormat.EncapsulationHeaderSize != sizeof(ETH_HEADER)))
-                {
-                    return NDIS_STATUS_NOT_SUPPORTED;
-                }
-
-                *BytesRead += sizeof(NDIS_TASK_TCP_LARGE_SEND);
-
-                Task = (PNDIS_TASK_TCP_LARGE_SEND)TaskOffload->TaskBuffer;
-
-                if (Task->MinSegmentCount != NVNET_MINIMUM_LSO_SEGMENT_COUNT)
-                    return NDIS_STATUS_NOT_SUPPORTED;
-
-                if (Task->MaxOffLoadSize > NVNET_MAXIMUM_LSO_FRAME_SIZE)
-                    return NDIS_STATUS_NOT_SUPPORTED;
-
-                /* Nothing to do */
-                break;
-            }
-
-            default:
-                break;
-        }
-
-        Offset = TaskOffload->OffsetNextTask;
-    }
-
-    NdisAcquireSpinLock(&Adapter->Send.Lock);
-
-    if (Adapter->Offload.ReceiveTcpChecksum ||
-        Adapter->Offload.ReceiveUdpChecksum ||
-        Adapter->Offload.ReceiveIpChecksum)
-    {
-        Adapter->TxRxControl |= NVREG_TXRXCTL_RXCHECK;
-    }
-    else
-    {
-        Adapter->TxRxControl &= ~NVREG_TXRXCTL_RXCHECK;
-    }
-    NV_WRITE(Adapter, NvRegTxRxControl, Adapter->TxRxControl);
-
-    NdisReleaseSpinLock(&Adapter->Send.Lock);
-
-    return NDIS_STATUS_SUCCESS;
-}
-
-NDIS_STATUS
 NTAPI
 MiniportQueryInformation(
     _In_ NDIS_HANDLE MiniportAdapterContext,
@@ -991,6 +775,8 @@ MiniportQueryInformation(
         NDIS_MEDIUM Medium;
         NDIS_HARDWARE_STATUS Status;
         NDIS_DEVICE_POWER_STATE PowerState;
+        NDIS_STATISTICS_INFO Statistics;
+        NDIS_INTERRUPT_MODERATION_PARAMETERS Moderation;
     } GenericInfo;
 
     InfoLength = sizeof(ULONG);
@@ -1173,6 +959,64 @@ MiniportQueryInformation(
             break;
         }
 
+        case OID_GEN_STATISTICS:
+        {
+            ULONG64 ReceiveErrors, NoBuffers, Directed, TransmitOk, TransmitErrors;
+            PNDIS_STATISTICS_INFO Statistics = &GenericInfo.Statistics;
+
+            NdisZeroMemory(Statistics, sizeof(*Statistics));
+            Statistics->Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+            Statistics->Header.Revision = NDIS_STATISTICS_INFO_REVISION_1;
+            Statistics->Header.Size = NDIS_SIZEOF_STATISTICS_INFO_REVISION_1;
+            Statistics->SupportedStatistics = NDIS_STATISTICS_FLAGS_VALID_DIRECTED_FRAMES_RCV |
+                                              NDIS_STATISTICS_FLAGS_VALID_RCV_DISCARDS |
+                                              NDIS_STATISTICS_FLAGS_VALID_RCV_ERROR |
+                                              NDIS_STATISTICS_FLAGS_VALID_DIRECTED_FRAMES_XMIT |
+                                              NDIS_STATISTICS_FLAGS_VALID_XMIT_ERROR;
+
+            if (Adapter->Features & DEV_HAS_STATISTICS_COUNTERS)
+            {
+                NvNetReadStatistics(Adapter);
+                NvNetQueryHwCounter(Adapter, OID_GEN_RCV_ERROR, &ReceiveErrors);
+                NvNetQueryHwCounter(Adapter, OID_GEN_RCV_NO_BUFFER, &NoBuffers);
+                NvNetQueryHwCounter(Adapter, OID_GEN_DIRECTED_FRAMES_RCV, &Directed);
+                NvNetQueryHwCounter(Adapter, OID_GEN_XMIT_OK, &TransmitOk);
+                NvNetQueryHwCounter(Adapter, OID_GEN_XMIT_ERROR, &TransmitErrors);
+
+                Statistics->SupportedStatistics |= NDIS_STATISTICS_FLAGS_VALID_MULTICAST_FRAMES_RCV |
+                                                   NDIS_STATISTICS_FLAGS_VALID_BROADCAST_FRAMES_RCV;
+                Statistics->ifHCInMulticastPkts = Adapter->Statistics.HwRxMulticast;
+                Statistics->ifHCInBroadcastPkts = Adapter->Statistics.HwRxBroadcast;
+            }
+            else
+            {
+                NvNetQuerySoftwareCounter(Adapter, OID_GEN_RCV_ERROR, &ReceiveErrors);
+                NvNetQuerySoftwareCounter(Adapter, OID_GEN_RCV_NO_BUFFER, &NoBuffers);
+                NvNetQuerySoftwareCounter(Adapter, OID_GEN_DIRECTED_FRAMES_RCV, &Directed);
+                NvNetQuerySoftwareCounter(Adapter, OID_GEN_XMIT_OK, &TransmitOk);
+                NvNetQuerySoftwareCounter(Adapter, OID_GEN_XMIT_ERROR, &TransmitErrors);
+            }
+
+            Statistics->ifInDiscards = ReceiveErrors + NoBuffers;
+            Statistics->ifInErrors = ReceiveErrors;
+            Statistics->ifHCInUcastPkts = Directed;
+            Statistics->ifHCOutUcastPkts = TransmitOk;
+            Statistics->ifOutErrors = TransmitErrors;
+            InfoLength = sizeof(*Statistics);
+            break;
+        }
+
+        case OID_GEN_INTERRUPT_MODERATION:
+        {
+            NdisZeroMemory(&GenericInfo.Moderation, sizeof(GenericInfo.Moderation));
+            GenericInfo.Moderation.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+            GenericInfo.Moderation.Header.Revision = NDIS_INTERRUPT_MODERATION_PARAMETERS_REVISION_1;
+            GenericInfo.Moderation.Header.Size = NDIS_SIZEOF_INTERRUPT_MODERATION_PARAMETERS_REVISION_1;
+            GenericInfo.Moderation.InterruptModeration = NdisInterruptModerationNotSupported;
+            InfoLength = sizeof(GenericInfo.Moderation);
+            break;
+        }
+
         case OID_802_3_PERMANENT_ADDRESS:
         {
             InfoPtr = Adapter->PermanentMacAddress;
@@ -1204,15 +1048,6 @@ MiniportQueryInformation(
         {
             GenericInfo.Ulong = NdisPhysicalMedium802_3;
             break;
-        }
-
-        case OID_TCP_TASK_OFFLOAD:
-        {
-            return NvNetGetTcpTaskOffload(Adapter,
-                                          InformationBuffer,
-                                          InformationBufferLength,
-                                          BytesWritten,
-                                          BytesWritten);
         }
 
         case OID_PNP_ENABLE_WAKE_UP:
@@ -1256,7 +1091,7 @@ MiniportQueryInformation(
         }
 
         default:
-            Status = NDIS_STATUS_INVALID_OID;
+            Status = NDIS_STATUS_NOT_SUPPORTED;
             break;
     }
 
@@ -1284,6 +1119,7 @@ MiniportQueryInformation(
     return Status;
 }
 
+static
 NDIS_STATUS
 NTAPI
 MiniportSetInformation(
@@ -1396,21 +1232,6 @@ MiniportSetInformation(
             break;
         }
 
-        case OID_TCP_TASK_OFFLOAD:
-        {
-            if (InformationBufferLength < sizeof(NDIS_TASK_OFFLOAD_HEADER))
-            {
-                *BytesNeeded = sizeof(NDIS_TASK_OFFLOAD_HEADER);
-                Status = NDIS_STATUS_INVALID_LENGTH;
-                break;
-            }
-
-            *BytesRead = InformationBufferLength;
-
-            Status = NvNetSetTcpTaskOffload(Adapter, InformationBuffer, BytesRead);
-            break;
-        }
-
         case OID_PNP_ADD_WAKE_UP_PATTERN:
         {
             if (InformationBufferLength < sizeof(NDIS_PM_PACKET_PATTERN))
@@ -1485,4 +1306,134 @@ MiniportSetInformation(
     }
 
     return Status;
+}
+
+NDIS_STATUS
+NvNetSetGeneralAttributes(
+    _In_ PNVNET_ADAPTER Adapter)
+{
+    NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES General;
+    NDIS_PNP_CAPABILITIES PowerCapabilities;
+    ULONG64 MaximumSpeed;
+
+    NdisZeroMemory(&PowerCapabilities, sizeof(PowerCapabilities));
+    NvNetFillPowerManagementCapabilities(Adapter, &PowerCapabilities);
+
+    MaximumSpeed = (Adapter->Flags & NV_GIGABIT_PHY) ? 1000000000ULL : 100000000ULL;
+
+    NdisZeroMemory(&General, sizeof(General));
+    General.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES;
+    General.Header.Revision = NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_1;
+    General.Header.Size = NDIS_SIZEOF_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_1;
+    General.MediaType = NdisMedium802_3;
+    General.PhysicalMediumType = NdisPhysicalMedium802_3;
+    General.MtuSize = Adapter->MaximumFrameSize - sizeof(ETH_HEADER);
+    General.MaxXmitLinkSpeed = MaximumSpeed;
+    General.MaxRcvLinkSpeed = MaximumSpeed;
+    General.XmitLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+    General.RcvLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+    General.MediaConnectState = MediaConnectStateUnknown;
+    General.MediaDuplexState = MediaDuplexStateUnknown;
+    General.LookaheadSize = Adapter->MaximumFrameSize - sizeof(ETH_HEADER);
+    General.PowerManagementCapabilities = &PowerCapabilities;
+    General.MacOptions = NDIS_MAC_OPTION_COPY_LOOKAHEAD_DATA |
+                         NDIS_MAC_OPTION_TRANSFERS_NOT_PEND |
+                         NDIS_MAC_OPTION_NO_LOOPBACK;
+    if (Adapter->Flags & NV_PACKET_PRIORITY)
+        General.MacOptions |= NDIS_MAC_OPTION_8021P_PRIORITY;
+    if (Adapter->Flags & NV_VLAN_TAGGING)
+        General.MacOptions |= NDIS_MAC_OPTION_8021Q_VLAN;
+    General.SupportedPacketFilters = NVNET_PACKET_FILTERS;
+    General.MaxMulticastListSize = NVNET_MULTICAST_LIST_SIZE;
+    General.MacAddressLength = ETH_LENGTH_OF_ADDRESS;
+    NdisMoveMemory(General.PermanentMacAddress, Adapter->PermanentMacAddress, ETH_LENGTH_OF_ADDRESS);
+    NdisMoveMemory(General.CurrentMacAddress, Adapter->CurrentMacAddress, ETH_LENGTH_OF_ADDRESS);
+    General.AccessType = NET_IF_ACCESS_BROADCAST;
+    General.DirectionType = NET_IF_DIRECTION_SENDRECEIVE;
+    General.ConnectionType = NET_IF_CONNECTION_DEDICATED;
+    General.IfType = IF_TYPE_ETHERNET_CSMACD;
+    General.IfConnectorPresent = TRUE;
+    General.SupportedStatistics = NDIS_STATISTICS_XMIT_OK_SUPPORTED |
+                                  NDIS_STATISTICS_RCV_OK_SUPPORTED |
+                                  NDIS_STATISTICS_XMIT_ERROR_SUPPORTED |
+                                  NDIS_STATISTICS_RCV_ERROR_SUPPORTED |
+                                  NDIS_STATISTICS_RCV_NO_BUFFER_SUPPORTED |
+                                  NDIS_STATISTICS_DIRECTED_FRAMES_RCV_SUPPORTED |
+                                  NDIS_STATISTICS_RCV_CRC_ERROR_SUPPORTED |
+                                  NDIS_STATISTICS_TRANSMIT_QUEUE_LENGTH_SUPPORTED |
+                                  NDIS_STATISTICS_GEN_STATISTICS_SUPPORTED;
+    if (Adapter->Features & DEV_HAS_STATISTICS_COUNTERS)
+    {
+        General.SupportedStatistics |= NDIS_STATISTICS_MULTICAST_FRAMES_RCV_SUPPORTED |
+                                       NDIS_STATISTICS_BROADCAST_FRAMES_RCV_SUPPORTED;
+    }
+    switch (Adapter->PauseFlags & (NV_PAUSEFRAME_RX_CAPABLE | NV_PAUSEFRAME_TX_CAPABLE))
+    {
+        case NV_PAUSEFRAME_RX_CAPABLE | NV_PAUSEFRAME_TX_CAPABLE:
+            General.SupportedPauseFunctions = NdisPauseFunctionsSendAndReceive;
+            break;
+        case NV_PAUSEFRAME_RX_CAPABLE:
+            General.SupportedPauseFunctions = NdisPauseFunctionsReceiveOnly;
+            break;
+        case NV_PAUSEFRAME_TX_CAPABLE:
+            General.SupportedPauseFunctions = NdisPauseFunctionsSendOnly;
+            break;
+        default:
+            General.SupportedPauseFunctions = NdisPauseFunctionsUnsupported;
+            break;
+    }
+    General.SupportedOidList = (PNDIS_OID)NvpSupportedOidList;
+    General.SupportedOidListLength = sizeof(NvpSupportedOidList);
+
+    return NdisMSetMiniportAttributes(Adapter->AdapterHandle,
+                                      (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&General);
+}
+
+NDIS_STATUS
+NTAPI
+MiniportOidRequest(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PNDIS_OID_REQUEST OidRequest)
+{
+    PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
+    NDIS_STATUS Status;
+
+    switch (OidRequest->RequestType)
+    {
+        case NdisRequestQueryInformation:
+        case NdisRequestQueryStatistics:
+            return MiniportQueryInformation(MiniportAdapterContext,
+                                            OidRequest->DATA.QUERY_INFORMATION.Oid,
+                                            OidRequest->DATA.QUERY_INFORMATION.InformationBuffer,
+                                            OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength,
+                                            (PULONG)&OidRequest->DATA.QUERY_INFORMATION.BytesWritten,
+                                            (PULONG)&OidRequest->DATA.QUERY_INFORMATION.BytesNeeded);
+
+        case NdisRequestSetInformation:
+            InterlockedExchangePointer((PVOID*)&Adapter->PendingOidRequest, OidRequest);
+
+            Status = MiniportSetInformation(MiniportAdapterContext,
+                                            OidRequest->DATA.SET_INFORMATION.Oid,
+                                            OidRequest->DATA.SET_INFORMATION.InformationBuffer,
+                                            OidRequest->DATA.SET_INFORMATION.InformationBufferLength,
+                                            (PULONG)&OidRequest->DATA.SET_INFORMATION.BytesRead,
+                                            (PULONG)&OidRequest->DATA.SET_INFORMATION.BytesNeeded);
+            if (Status != NDIS_STATUS_PENDING)
+                InterlockedExchangePointer((PVOID*)&Adapter->PendingOidRequest, NULL);
+
+            return Status;
+
+        default:
+            return NDIS_STATUS_NOT_SUPPORTED;
+    }
+}
+
+VOID
+NTAPI
+MiniportCancelOidRequest(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PVOID RequestId)
+{
+    UNREFERENCED_PARAMETER(MiniportAdapterContext);
+    UNREFERENCED_PARAMETER(RequestId);
 }

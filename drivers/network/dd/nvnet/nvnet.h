@@ -25,13 +25,15 @@
 /* Reduce memory requirements on OG Xbox */
 #define NVNET_TRANSMIT_BLOCKS        8
 #define NVNET_TRANSMIT_DESCRIPTORS   32
-#define NVNET_TRANSMIT_BUFFERS       1
+#define NVNET_TRANSMIT_BUFFERS       NVNET_TRANSMIT_BLOCKS
 #define NVNET_RECEIVE_DESCRIPTORS    16
+#define NVNET_RECEIVE_NBL_COUNT      16
 #else
 #define NVNET_TRANSMIT_BLOCKS        64
 #define NVNET_TRANSMIT_DESCRIPTORS   512
-#define NVNET_TRANSMIT_BUFFERS       16
+#define NVNET_TRANSMIT_BUFFERS       NVNET_TRANSMIT_BLOCKS
 #define NVNET_RECEIVE_DESCRIPTORS    512
+#define NVNET_RECEIVE_NBL_COUNT      128
 #endif
 
 #define NVNET_ALIGNMENT    64
@@ -49,12 +51,6 @@
 #define NVNET_TRANSMIT_HANG_THRESHOLD    5
 #endif
 
-#if defined(SARCH_XBOX)
-#define NVNET_FRAGMENTATION_THRESHOLD    8
-#else
-#define NVNET_FRAGMENTATION_THRESHOLD    32
-#endif
-
 #define NVNET_MEDIA_DETECTION_INTERVAL   5000
 
 #define NVNET_MAXIMUM_FRAME_SIZE        1514
@@ -63,9 +59,6 @@
 
 #define NVNET_MULTICAST_LIST_SIZE    32
 
-#define NVNET_MINIMUM_LSO_SEGMENT_COUNT    2
-#define NVNET_MAXIMUM_LSO_FRAME_SIZE       0xFC00
-
 #define NVNET_PACKET_FILTERS ( \
     NDIS_PACKET_TYPE_DIRECTED | \
     NDIS_PACKET_TYPE_MULTICAST | \
@@ -73,7 +66,11 @@
     NDIS_PACKET_TYPE_PROMISCUOUS | \
     NDIS_PACKET_TYPE_ALL_MULTICAST)
 
-#define PACKET_ENTRY(Packet) ((PLIST_ENTRY)(&(Packet)->MiniportReserved[0]))
+#define NV_NEXT_NB_FROM_NBL(Nbl) \
+    (*(PNET_BUFFER*)&(Nbl)->MiniportReserved[0])
+
+#define NV_PENDING_FROM_NBL(Nbl) \
+    (*(PLONG_PTR)&(Nbl)->MiniportReserved[1])
 
 typedef enum _NVNET_OPTIMIZATION_MODE
 {
@@ -205,7 +202,7 @@ typedef struct _NVNET_TCB
 {
     NVNET_TBD Tbd;
     NVNET_TBD DeferredTbd;
-    PNDIS_PACKET Packet;
+    PNET_BUFFER_LIST Nbl;
     PNVNET_TX_BUFFER Buffer;
     ULONG Slots;
     ULONG Flags;
@@ -225,13 +222,6 @@ typedef union _NV_RBD
     PVOID Memory;
 } NV_RBD;
 
-typedef struct _NVNET_RBD
-{
-    NV_RBD NvRbd;
-    PNDIS_PACKET Packet;
-    PNDIS_BUFFER Buffer;
-} NVNET_RBD, *PNVNET_RBD;
-
 typedef struct _NVNET_SEND
 {
     NDIS_SPIN_LOCK Lock;
@@ -248,6 +238,8 @@ typedef struct _NVNET_SEND
     ULONG StuckCount;
     ULONG PacketsCount;
     SINGLE_LIST_ENTRY BufferList;
+    PNET_BUFFER_LIST QueueHead;
+    PNET_BUFFER_LIST QueueTail;
 } NVNET_SEND, *PNVNET_SEND;
 
 typedef struct _NVNET_RECEIVE
@@ -268,7 +260,8 @@ typedef NVNET_TRANSMIT_PACKET *PNVNET_TRANSMIT_PACKET;
 typedef ULONG
 (NVNET_PROCESS_TRANSMIT)(
     _In_ PNVNET_ADAPTER Adapter,
-    _Inout_ PLIST_ENTRY SendReadyList);
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail);
 typedef NVNET_PROCESS_TRANSMIT *PNVNET_PROCESS_TRANSMIT;
 
 typedef ULONG
@@ -348,10 +341,17 @@ typedef struct _NVNET_ADAPTER
     ULONG WakeFrameBitmap;
     PNVNET_WAKE_FRAME WakeFrames[NV_WAKEUPPATTERNS_V2];
 
-    NDIS_HANDLE WrapperConfigurationHandle;
+    NDIS_HANDLE DmaHandle;
+    NDIS_HANDLE ReceiveNblPool;
+    PNET_BUFFER_LIST FreeReceiveNbls;
+    PNET_BUFFER_LIST ReceiveNbls[NVNET_RECEIVE_NBL_COUNT];
+    ULONG ReceiveNblsOutstanding;
+    BOOLEAN Paused;
+    BOOLEAN PausePending;
+    PNDIS_OID_REQUEST PendingOidRequest;
 
-    NDIS_WORK_ITEM PowerWorkItem;
-    NDIS_WORK_ITEM ResetWorkItem;
+    NDIS_HANDLE PowerWorkItem;
+    NDIS_HANDLE ResetWorkItem;
 
     _Interlocked_
     volatile LONG ResetLock;
@@ -360,13 +360,13 @@ typedef struct _NVNET_ADAPTER
     ULONG IoLength;
 
     NVNET_FLOW_CONTROL_MODE FlowControlMode;
-    NDIS_MINIPORT_TIMER MediaDetectionTimer;
+    NDIS_HANDLE MediaDetectionTimer;
 
     USHORT DeviceId;
     UCHAR RevisionId;
 
     BOOLEAN InterruptShared;
-    NDIS_MINIPORT_INTERRUPT Interrupt;
+    NDIS_HANDLE InterruptHandle;
     ULONG InterruptVector;
     ULONG InterruptLevel;
     ULONG InterruptFlags;
@@ -394,15 +394,7 @@ NVNET_PROCESS_TRANSMIT ProcessTransmitDescriptors32;
 NVNET_PROCESS_TRANSMIT ProcessTransmitDescriptors64;
 
 CODE_SEG("PAGE")
-NDIS_STATUS
-NTAPI
-MiniportInitialize(
-    _Out_ PNDIS_STATUS OpenErrorStatus,
-    _Out_ PUINT SelectedMediumIndex,
-    _In_ PNDIS_MEDIUM MediumArray,
-    _In_ UINT MediumArraySize,
-    _In_ NDIS_HANDLE MiniportAdapterHandle,
-    _In_ NDIS_HANDLE WrapperConfigurationContext);
+MINIPORT_INITIALIZE MiniportInitializeEx;
 
 CODE_SEG("PAGE")
 VOID
@@ -467,7 +459,7 @@ NvNetFlushTransmitQueue(
     _In_ PNVNET_ADAPTER Adapter,
     _In_ NDIS_STATUS CompleteStatus);
 
-KSYNCHRONIZE_ROUTINE NvNetInitPhaseSynchronized;
+MINIPORT_SYNCHRONIZE_INTERRUPT NvNetInitPhaseSynchronized;
 NDIS_TIMER_FUNCTION NvNetMediaDetectionDpc;
 
 BOOLEAN
@@ -543,44 +535,58 @@ VOID
 NvNetBackoffReseedEx(
     _In_ PNVNET_ADAPTER Adapter);
 
-NDIS_STATUS
-NTAPI
-MiniportSend(
-    _In_ NDIS_HANDLE MiniportAdapterContext,
-    _In_ PNDIS_PACKET Packet,
-    _In_ UINT Flags);
+MINIPORT_SEND_NET_BUFFER_LISTS MiniportSendNetBufferLists;
+
+MINIPORT_CANCEL_SEND MiniportCancelSend;
+
+MINIPORT_RETURN_NET_BUFFER_LISTS MiniportReturnNetBufferLists;
+
+MINIPORT_ISR MiniportISR;
+
+MINIPORT_INTERRUPT_DPC MiniportInterruptDpc;
+
+MINIPORT_DISABLE_INTERRUPT MiniportDisableInterrupt;
+
+MINIPORT_ENABLE_INTERRUPT MiniportEnableInterrupt;
+
+MINIPORT_OID_REQUEST MiniportOidRequest;
+
+MINIPORT_CANCEL_OID_REQUEST MiniportCancelOidRequest;
 
 VOID
-NTAPI
-MiniportISR(
-    _Out_ PBOOLEAN InterruptRecognized,
-    _Out_ PBOOLEAN QueueMiniportHandleInterrupt,
-    _In_ NDIS_HANDLE MiniportAdapterContext);
+NvNetProcessSendQueue(
+    _In_ PNVNET_ADAPTER Adapter,
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail);
 
 VOID
-NTAPI
-MiniportHandleInterrupt(
-    _In_ NDIS_HANDLE MiniportAdapterContext);
+NvNetCompleteNetBuffer(
+    _In_ PNET_BUFFER_LIST Nbl,
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail);
+
+VOID
+NvNetCompleteSends(
+    _In_ PNVNET_ADAPTER Adapter,
+    _In_opt_ PNET_BUFFER_LIST CompleteHead,
+    _In_ BOOLEAN DispatchLevel);
+
+VOID
+NvNetFailNetBufferLists(
+    _In_ PNVNET_ADAPTER Adapter,
+    _In_ NDIS_STATUS CompleteStatus);
+
+VOID
+NvNetIndicateLinkState(
+    _In_ PNVNET_ADAPTER Adapter);
+
+ULONG
+NvNetGetLinkSpeed(
+    _In_ PNVNET_ADAPTER Adapter);
 
 NDIS_STATUS
-NTAPI
-MiniportQueryInformation(
-    _In_ NDIS_HANDLE MiniportAdapterContext,
-    _In_ NDIS_OID Oid,
-    _In_ PVOID InformationBuffer,
-    _In_ ULONG InformationBufferLength,
-    _Out_ PULONG BytesWritten,
-    _Out_ PULONG BytesNeeded);
-
-NDIS_STATUS
-NTAPI
-MiniportSetInformation(
-    _In_ NDIS_HANDLE MiniportAdapterContext,
-    _In_ NDIS_OID Oid,
-    _In_ PVOID InformationBuffer,
-    _In_ ULONG InformationBufferLength,
-    _Out_ PULONG BytesRead,
-    _Out_ PULONG BytesNeeded);
+NvNetSetGeneralAttributes(
+    _In_ PNVNET_ADAPTER Adapter);
 
 #define NV_IMPLICIT_ENTRIES(Length) \
     (((Length - (NV_MAXIMUM_SG_SIZE + 1)) >> NV_TX2_TSO_MAX_SHIFT) + 1)
@@ -596,7 +602,7 @@ NV_RELEASE_TCB(
         PushEntryList(&Adapter->Send.BufferList, &Tcb->Buffer->Link);
     }
 
-    Tcb->Packet = NULL;
+    Tcb->Nbl = NULL;
 
     ++Adapter->Send.TcbSlots;
 

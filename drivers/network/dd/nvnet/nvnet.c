@@ -17,6 +17,8 @@
 CODE_SEG("INIT")
 DRIVER_INITIALIZE DriverEntry;
 
+static NDIS_HANDLE NvNetDriverHandle;
+
 /* FUNCTIONS ******************************************************************/
 
 CODE_SEG("PAGE")
@@ -33,12 +35,16 @@ NvNetFlushTransmitQueue(
          Tcb != Adapter->Send.CurrentTcb;
          Tcb = NV_NEXT_TCB(Adapter, Tcb))
     {
-        NdisMSendComplete(Adapter->AdapterHandle,
-                          Tcb->Packet,
-                          CompleteStatus);
+        PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
+
+        NET_BUFFER_LIST_STATUS(Tcb->Nbl) = CompleteStatus;
+        NvNetCompleteNetBuffer(Tcb->Nbl, &CompleteHead, &CompleteTail);
+        NvNetCompleteSends(Adapter, CompleteHead, FALSE);
 
         NV_RELEASE_TCB(Adapter, Tcb);
     }
+
+    Adapter->Send.LastTcb = Adapter->Send.CurrentTcb;
 }
 
 DECLSPEC_NOINLINE /* Called from pageable code */
@@ -58,11 +64,12 @@ VOID
 NvNetStopAdapter(
     _In_ PNVNET_ADAPTER Adapter)
 {
-    BOOLEAN Dummy;
-
     PAGED_CODE();
 
-    NdisMCancelTimer(&Adapter->MediaDetectionTimer, &Dummy);
+    if (Adapter->MediaDetectionTimer)
+    {
+        NdisCancelTimerObject(Adapter->MediaDetectionTimer);
+    }
 
     NvNetDisableInterrupts(Adapter);
 
@@ -76,15 +83,21 @@ NvNetStartAdapter(
 {
     PAGED_CODE();
 
-    NdisMSynchronizeWithInterrupt(&Adapter->Interrupt,
-                                  NvNetInitPhaseSynchronized,
-                                  Adapter);
+    NdisMSynchronizeWithInterruptEx(Adapter->InterruptHandle,
+                                    0,
+                                    NvNetInitPhaseSynchronized,
+                                    Adapter);
 
     /* Setup the link timer right after the NIC is initialized */
-    if (Adapter->Features & DEV_NEED_LINKTIMER)
+    if (Adapter->MediaDetectionTimer)
     {
-        NdisMSetPeriodicTimer(&Adapter->MediaDetectionTimer,
-                              NVNET_MEDIA_DETECTION_INTERVAL);
+        LARGE_INTEGER DueTime;
+
+        DueTime.QuadPart = -10000LL * NVNET_MEDIA_DETECTION_INTERVAL;
+        NdisSetTimerObject(Adapter->MediaDetectionTimer,
+                           DueTime,
+                           NVNET_MEDIA_DETECTION_INTERVAL,
+                           NULL);
     }
 }
 
@@ -93,10 +106,12 @@ CODE_SEG("PAGE")
 VOID
 NTAPI
 NvNetResetWorker(
-    _In_ PNDIS_WORK_ITEM WorkItem,
-    _In_opt_ PVOID Context)
+    _In_opt_ PVOID WorkItemContext,
+    _In_ NDIS_HANDLE NdisIoWorkItemHandle)
 {
-    PNVNET_ADAPTER Adapter = Context;
+    PNVNET_ADAPTER Adapter = WorkItemContext;
+
+    UNREFERENCED_PARAMETER(NdisIoWorkItemHandle);
 
     PAGED_CODE();
 
@@ -110,6 +125,7 @@ NvNetResetWorker(
     NdisStallExecution(NV_TXRX_RESET_DELAY);
 
     NvNetFlushTransmitQueue(Adapter, NDIS_STATUS_FAILURE);
+    NvNetFailNetBufferLists(Adapter, NDIS_STATUS_FAILURE);
 
     NT_VERIFY(NvNetInitNIC(Adapter, FALSE) == NDIS_STATUS_SUCCESS);
 
@@ -130,7 +146,7 @@ MiniportCheckForHang(
 {
     PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
 
-    NdisDprAcquireSpinLock(&Adapter->Send.Lock);
+    NdisAcquireSpinLock(&Adapter->Send.Lock);
 
     if (Adapter->Flags & NV_ACTIVE &&
         Adapter->Send.TcbSlots < NVNET_TRANSMIT_BLOCKS)
@@ -149,7 +165,7 @@ MiniportCheckForHang(
         }
     }
 
-    NdisDprReleaseSpinLock(&Adapter->Send.Lock);
+    NdisReleaseSpinLock(&Adapter->Send.Lock);
 
     return FALSE;
 }
@@ -158,11 +174,14 @@ static
 CODE_SEG("PAGE")
 VOID
 NTAPI
-MiniportHalt(
-    _In_ NDIS_HANDLE MiniportAdapterContext)
+MiniportHaltEx(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ NDIS_HALT_ACTION HaltAction)
 {
     PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
     BOOLEAN IsActive = !!(Adapter->Flags & NV_ACTIVE);
+
+    UNREFERENCED_PARAMETER(HaltAction);
 
     NDIS_DbgPrint(MIN_TRACE, ("()\n"));
 
@@ -202,13 +221,15 @@ MiniportHalt(
 static
 NDIS_STATUS
 NTAPI
-MiniportReset(
-    _Out_ PBOOLEAN AddressingReset,
-    _In_ NDIS_HANDLE MiniportAdapterContext)
+MiniportResetEx(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _Out_ PBOOLEAN AddressingReset)
 {
     PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
 
     NDIS_DbgPrint(MIN_TRACE, ("()\n"));
+
+    *AddressingReset = TRUE;
 
     if (_InterlockedCompareExchange(&Adapter->ResetLock, 1, 0))
     {
@@ -217,8 +238,7 @@ MiniportReset(
 
     NvNetPauseProcessing(Adapter);
 
-    NdisInitializeWorkItem(&Adapter->ResetWorkItem, NvNetResetWorker, Adapter);
-    NdisScheduleWorkItem(&Adapter->ResetWorkItem);
+    NdisQueueIoWorkItem(Adapter->ResetWorkItem, NvNetResetWorker, Adapter);
 
     return NDIS_STATUS_PENDING;
 }
@@ -226,10 +246,13 @@ MiniportReset(
 static
 VOID
 NTAPI
-MiniportShutdown(
-    _In_ NDIS_HANDLE MiniportAdapterContext)
+MiniportShutdownEx(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ NDIS_SHUTDOWN_ACTION ShutdownAction)
 {
     PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
+
+    UNREFERENCED_PARAMETER(ShutdownAction);
 
     NDIS_DbgPrint(MIN_TRACE, ("()\n"));
 
@@ -255,6 +278,119 @@ MiniportShutdown(
     NvNetSetPowerState(Adapter, NdisDeviceStateD3, 0);
 }
 
+VOID
+NTAPI
+MiniportReturnNetBufferLists(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PNET_BUFFER_LIST NetBufferLists,
+    _In_ ULONG ReturnFlags)
+{
+    PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
+    PNET_BUFFER_LIST Nbl, NextNbl;
+    BOOLEAN CompletePause = FALSE;
+
+    UNREFERENCED_PARAMETER(ReturnFlags);
+
+    NdisAcquireSpinLock(&Adapter->Receive.Lock);
+
+    for (Nbl = NetBufferLists; Nbl; Nbl = NextNbl)
+    {
+        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+        NET_BUFFER_LIST_NEXT_NBL(Nbl) = Adapter->FreeReceiveNbls;
+        Adapter->FreeReceiveNbls = Nbl;
+        --Adapter->ReceiveNblsOutstanding;
+    }
+
+    if (Adapter->PausePending && !Adapter->ReceiveNblsOutstanding)
+    {
+        Adapter->PausePending = FALSE;
+        CompletePause = TRUE;
+    }
+
+    NdisReleaseSpinLock(&Adapter->Receive.Lock);
+
+    if (CompletePause)
+        NdisMPauseComplete(Adapter->AdapterHandle);
+}
+
+static
+NDIS_STATUS
+NTAPI
+MiniportPause(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PNDIS_MINIPORT_PAUSE_PARAMETERS PauseParameters)
+{
+    PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
+    NDIS_STATUS Status = NDIS_STATUS_SUCCESS;
+
+    UNREFERENCED_PARAMETER(PauseParameters);
+
+    NdisAcquireSpinLock(&Adapter->Send.Lock);
+    Adapter->Paused = TRUE;
+    NdisReleaseSpinLock(&Adapter->Send.Lock);
+
+    NvNetFailNetBufferLists(Adapter, NDIS_STATUS_PAUSED);
+
+    KeFlushQueuedDpcs();
+
+    NdisAcquireSpinLock(&Adapter->Receive.Lock);
+    if (Adapter->ReceiveNblsOutstanding)
+    {
+        Adapter->PausePending = TRUE;
+        Status = NDIS_STATUS_PENDING;
+    }
+    NdisReleaseSpinLock(&Adapter->Receive.Lock);
+
+    return Status;
+}
+
+static
+NDIS_STATUS
+NTAPI
+MiniportRestart(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PNDIS_MINIPORT_RESTART_PARAMETERS RestartParameters)
+{
+    PNVNET_ADAPTER Adapter = (PNVNET_ADAPTER)MiniportAdapterContext;
+
+    UNREFERENCED_PARAMETER(RestartParameters);
+
+    NdisAcquireSpinLock(&Adapter->Receive.Lock);
+    Adapter->PausePending = FALSE;
+    Adapter->Paused = FALSE;
+    NdisReleaseSpinLock(&Adapter->Receive.Lock);
+
+    NdisAcquireSpinLock(&Adapter->Send.Lock);
+    Adapter->Paused = FALSE;
+    NdisReleaseSpinLock(&Adapter->Send.Lock);
+
+    NvNetIndicateLinkState(Adapter);
+
+    return NDIS_STATUS_SUCCESS;
+}
+
+static
+VOID
+NTAPI
+MiniportDevicePnPEventNotify(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PNET_DEVICE_PNP_EVENT NetDevicePnPEvent)
+{
+    UNREFERENCED_PARAMETER(MiniportAdapterContext);
+    UNREFERENCED_PARAMETER(NetDevicePnPEvent);
+}
+
+static
+VOID
+NTAPI
+MiniportUnload(
+    _In_ PDRIVER_OBJECT DriverObject)
+{
+    UNREFERENCED_PARAMETER(DriverObject);
+
+    NdisMDeregisterMiniportDriver(NvNetDriverHandle);
+}
+
 CODE_SEG("INIT")
 NTSTATUS
 NTAPI
@@ -262,37 +398,32 @@ DriverEntry(
     _In_ PDRIVER_OBJECT DriverObject,
     _In_ PUNICODE_STRING RegistryPath)
 {
-    NDIS_HANDLE WrapperHandle;
-    NDIS_MINIPORT_CHARACTERISTICS Characteristics = { 0 };
-    NDIS_STATUS Status;
+    NDIS_MINIPORT_DRIVER_CHARACTERISTICS Characteristics = { 0 };
 
-    NdisMInitializeWrapper(&WrapperHandle, DriverObject, RegistryPath, NULL);
-    if (!WrapperHandle)
-    {
-        return NDIS_STATUS_FAILURE;
-    }
-
+    Characteristics.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS;
+    Characteristics.Header.Revision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1;
+    Characteristics.Header.Size = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1;
     Characteristics.MajorNdisVersion = NDIS_MINIPORT_MAJOR_VERSION;
     Characteristics.MinorNdisVersion = NDIS_MINIPORT_MINOR_VERSION;
-    Characteristics.CheckForHangHandler = MiniportCheckForHang;
-    Characteristics.HaltHandler = MiniportHalt;
-    Characteristics.HandleInterruptHandler = MiniportHandleInterrupt;
-    Characteristics.InitializeHandler = MiniportInitialize;
-    Characteristics.ISRHandler = MiniportISR;
-    Characteristics.QueryInformationHandler = MiniportQueryInformation;
-    Characteristics.ResetHandler = MiniportReset;
-    Characteristics.SendHandler = MiniportSend; /* TODO */
-    Characteristics.SetInformationHandler = MiniportSetInformation;
-    // Characteristics.ReturnPacketHandler = MiniportReturnPacket; /* TODO */
-    // Characteristics.SendPacketsHandler = MiniportSendPackets; /* TODO */
-    Characteristics.AdapterShutdownHandler = MiniportShutdown;
+    Characteristics.MajorDriverVersion = 1;
+    Characteristics.InitializeHandlerEx = MiniportInitializeEx;
+    Characteristics.HaltHandlerEx = MiniportHaltEx;
+    Characteristics.UnloadHandler = MiniportUnload;
+    Characteristics.PauseHandler = MiniportPause;
+    Characteristics.RestartHandler = MiniportRestart;
+    Characteristics.OidRequestHandler = MiniportOidRequest;
+    Characteristics.SendNetBufferListsHandler = MiniportSendNetBufferLists;
+    Characteristics.ReturnNetBufferListsHandler = MiniportReturnNetBufferLists;
+    Characteristics.CancelSendHandler = MiniportCancelSend;
+    Characteristics.CheckForHangHandlerEx = MiniportCheckForHang;
+    Characteristics.ResetHandlerEx = MiniportResetEx;
+    Characteristics.DevicePnPEventNotifyHandler = MiniportDevicePnPEventNotify;
+    Characteristics.ShutdownHandlerEx = MiniportShutdownEx;
+    Characteristics.CancelOidRequestHandler = MiniportCancelOidRequest;
 
-    Status = NdisMRegisterMiniport(WrapperHandle, &Characteristics, sizeof(Characteristics));
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NdisTerminateWrapper(WrapperHandle, NULL);
-        return Status;
-    }
-
-    return Status;
+    return NdisMRegisterMiniportDriver(DriverObject,
+                                       RegistryPath,
+                                       NULL,
+                                       &Characteristics,
+                                       &NvNetDriverHandle);
 }

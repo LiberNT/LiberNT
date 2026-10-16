@@ -67,42 +67,63 @@ ExcludeFromSelect = *
 [NVNET_Inst_V1.ndi.NT]
 Characteristics = 0x84 ; NCF_PHYSICAL | NCF_HAS_UI
 BusType = 5 ; PCIBus
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 CopyFiles = NVNET_CopyFiles.NT
 AddReg = NVNET_AddReg, NVNET_Generic, NVNET_Flow
 
 [NVNET_Inst_V2.ndi.NT]
 Characteristics = 0x84
 BusType = 5
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 CopyFiles = NVNET_CopyFiles.NT
 AddReg = NVNET_AddReg, NVNET_Generic, NVNET_Flow, NVNET_Jumbo, NVNET_Offload
 
 [NVNET_Inst_V3.ndi.NT]
 Characteristics = 0x84
 BusType = 5
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 CopyFiles = NVNET_CopyFiles.NT
 AddReg = NVNET_AddReg, NVNET_Generic, NVNET_Flow_V2, NVNET_Jumbo, NVNET_Offload, NVNET_VLAN
 
 [NVNET_Inst_V4.ndi.NT]
 Characteristics = 0x84
 BusType = 5
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 CopyFiles = NVNET_CopyFiles.NT
 AddReg = NVNET_AddReg, NVNET_Generic, NVNET_Flow_V2
 
 [NVNET_Inst_V5.ndi.NT]
 Characteristics = 0x84
 BusType = 5
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 CopyFiles = NVNET_CopyFiles.NT
 AddReg = NVNET_AddReg, NVNET_Generic, NVNET_Flow_V2, NVNET_Jumbo
 
 [NVNET_Inst_V6.ndi.NT]
 Characteristics = 0x84
 BusType = 5
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 CopyFiles = NVNET_CopyFiles.NT
 AddReg = NVNET_AddReg, NVNET_Generic, NVNET_Flow_V2, NVNET_Offload
 
 [NVNET_Inst_V7.ndi.NT]
 Characteristics = 0x84
 BusType = 5
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 CopyFiles = NVNET_CopyFiles.NT
 AddReg = NVNET_AddReg, NVNET_Generic, NVNET_Flow_V2, NVNET_Jumbo, NVNET_Offload
 
