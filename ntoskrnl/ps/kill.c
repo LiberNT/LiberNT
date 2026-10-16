@@ -452,6 +452,8 @@ PspDeleteThread(IN PVOID ObjectBody)
     /* Cleanup impersonation information */
     PspDeleteThreadSecurity(Thread);
 
+    PspRundownPropertySet(&Thread->PropertySet);
+
     if (Thread->WorkOnBehalfThread)
     {
         ObDereferenceObject(Thread->WorkOnBehalfThread);
@@ -823,6 +825,8 @@ PspExitThread(IN NTSTATUS ExitStatus)
 
     /* Rundown Timers */
     ExTimerRundown();
+
+    PspRundownPropertySet(&Thread->PropertySet);
 
     /* FIXME: Rundown Registry Notifications (NtChangeNotify)
     CmNotifyRunDown(Thread); */

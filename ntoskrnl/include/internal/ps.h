@@ -446,6 +446,12 @@ PspDeleteThread(
 
 VOID
 NTAPI
+PspRundownPropertySet(
+    _Inout_ PPS_PROPERTY_SET PropertySet
+);
+
+VOID
+NTAPI
 PspInitializeTls(VOID);
 
 BOOLEAN

@@ -150,6 +150,7 @@
 #define TAG_PS_API_SET          'sApP'
 #define TAG_WOW64_PROCESS       '46WP'
 #define TAG_PS_ENERGY           'nEsP'
+#define TAG_PS_PROPERTY         'rPsP'
 #define TAG_PS_WS_WATCH         'wWsP'
 #define TAG_PS_XSTATE           'sXsP'
 #define TAG_KE_XSTATE           'sXeK'

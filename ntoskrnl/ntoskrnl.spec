@@ -2891,7 +2891,7 @@
 @ stub -arch=win64 PsGetEffectiveContainerId
 @ stub -arch=win64 PsGetEffectiveServerSilo
 @ stdcall PsGetHostSilo()
-@ stub -arch=win64 PsGetJobProperty
+@ stdcall PsGetJobProperty(ptr ptr)
 @ stub -arch=win64 PsGetJobServerSilo
 @ stub -arch=win64 PsGetJobSilo
 @ stub -arch=win64 PsGetParentSilo
@@ -2913,7 +2913,7 @@
 @ stub -arch=win64 PsGetSiloMonitorContextSlot
 @ stub -arch=win64 PsGetThreadCreateTime
 @ stub -arch=win64 PsGetThreadExitStatus
-@ stub -arch=win64 PsGetThreadProperty
+@ stdcall PsGetThreadProperty(ptr ptr long)
 @ stub -arch=win64 PsGetThreadServerSilo
 @ stdcall PsGetWin32KFilterSet()
 @ stub -arch=win64 PsInsertPermanentSiloContext
@@ -2959,13 +2959,13 @@
 @ stdcall -version=0xA00+ PsSetCreateProcessNotifyRoutineEx2(long ptr long)
 @ stub -arch=win64 PsSetCreateThreadNotifyRoutineEx
 @ stub -arch=win64 PsSetCurrentThreadPrefetching
-@ stub -arch=win64 PsSetJobProperty
+@ stdcall PsSetJobProperty(ptr ptr ptr)
 @ stub -arch=win64 PsSetLoadImageNotifyRoutineEx
 @ stdcall PsSetProcessDxgProcess(ptr ptr)
 @ stdcall PsSetProcessFaultInformation(ptr ptr)
 @ stdcall PsSetProcessesWindowState(long ptr)
 @ stub -arch=win64 PsSetSystemMultipleGroupAffinityThread
-@ stub -arch=win64 PsSetThreadProperty
+@ stdcall PsSetThreadProperty(ptr ptr ptr)
 @ stub -arch=win64 PsStartSiloMonitor
 @ stub -arch=win64 PsTerminateServerSilo
 @ stdcall PsTlsAlloc(ptr long ptr)

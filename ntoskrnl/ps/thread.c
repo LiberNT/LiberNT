@@ -305,6 +305,7 @@ PspCreateThread(OUT PHANDLE ThreadHandle,
     InitializeListHead(&Thread->PostBlockList);
     InitializeListHead(&Thread->ActiveTimerListHead);
     KeInitializeSpinLock(&Thread->ActiveTimerListLock);
+    InitializeListHead(&Thread->PropertySet.ListHead);
 
     /* Acquire rundown protection */
     if (!ExAcquireRundownProtection (&Process->RundownProtect))

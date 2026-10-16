@@ -91,6 +91,10 @@ KMT_TESTFUNC Test_PsEnergy;
 KMT_TESTFUNC Test_PsTls;
 KMT_TESTFUNC Test_KseShim;
 KMT_TESTFUNC Test_KseDeviceData;
+KMT_TESTFUNC Test_PsPropertyThread;
+KMT_TESTFUNC Test_PsPropertyJob;
+KMT_TESTFUNC Test_PsPropertyThreadExit;
+KMT_TESTFUNC Test_PsPropertyDispatch;
 KMT_TESTFUNC Test_PsModern;
 KMT_TESTFUNC Test_PsModernIdentity;
 KMT_TESTFUNC Test_PsModernPolicy;
@@ -591,6 +595,10 @@ const KMT_TEST TestList[] =
     { "PsTls",                              Test_PsTls },
     { "KseShim",                            Test_KseShim },
     { "KseDeviceData",                      Test_KseDeviceData },
+    { "PsPropertyThread",                   Test_PsPropertyThread },
+    { "PsPropertyJob",                      Test_PsPropertyJob },
+    { "PsPropertyThreadExit",               Test_PsPropertyThreadExit },
+    { "PsPropertyDispatch",                 Test_PsPropertyDispatch },
     { "PsModern",                           Test_PsModern },
     { "PsModernIdentity",                   Test_PsModernIdentity },
     { "PsModernPolicy",                     Test_PsModernPolicy },

@@ -1530,6 +1530,8 @@ PspDeleteJob(_In_ PVOID ObjectBody)
 
     Job->LimitFlags = 0;
 
+    PspRundownPropertySet(&Job->PropertySet);
+
     /* Remove the reference to the completion port if associated */
     if (Job->CompletionPort)
     {
@@ -2528,6 +2530,7 @@ NtCreateJobObject(
     InitializeListHead(&Job->SiblingJobLinks);
     InitializeListHead(&Job->ChildJobListHead);
     InitializeListHead(&Job->IteratorListHead);
+    InitializeListHead(&Job->PropertySet.ListHead);
 
     /* Make sure that early destruction doesn't attempt to remove
        the object from the list before it even gets added */
