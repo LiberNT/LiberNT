@@ -89,6 +89,8 @@ KMT_TESTFUNC Test_IoCancelKM;
 KMT_TESTFUNC Test_PsProcessInfo;
 KMT_TESTFUNC Test_PsEnergy;
 KMT_TESTFUNC Test_PsTls;
+KMT_TESTFUNC Test_KeDpcWatchdog;
+KMT_TESTFUNC Test_IoDevicePropertyData;
 KMT_TESTFUNC Test_KseShim;
 KMT_TESTFUNC Test_KseDeviceData;
 KMT_TESTFUNC Test_PsPropertyThread;
@@ -593,6 +595,8 @@ const KMT_TEST TestList[] =
     { "PsNotify",                           Test_PsNotify },
     { "PsEnergy",                           Test_PsEnergy },
     { "PsTls",                              Test_PsTls },
+    { "KeDpcWatchdog",                      Test_KeDpcWatchdog },
+    { "IoDevicePropertyData",               Test_IoDevicePropertyData },
     { "KseShim",                            Test_KseShim },
     { "KseDeviceData",                      Test_KseDeviceData },
     { "PsPropertyThread",                   Test_PsPropertyThread },

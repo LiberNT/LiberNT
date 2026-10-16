@@ -160,6 +160,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_fsrtl/FsRtlMcb.c
     ntos_fsrtl/FsRtlQueryFileLock.c
     ntos_fsrtl/FsRtlTunnel.c
+    ntos_io/IoDevicePropertyData.c
     ntos_io/IoBuildIoctlKM.c
     ntos_io/IoLargeMemoryResource.c
     ntos_io/IoCancelKM.c
@@ -183,6 +184,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoVolume.c
     ntos_kd/KdSystemDebugControl.c
     ksecdd/KsecBcrypt.c
+    ntos_ke/KeDpcWatchdog.c
     ntos_ke/KeWddmExports.c
     ntos_ke/KeAffinityKM.c
     ntos_ke/KeApc.c
