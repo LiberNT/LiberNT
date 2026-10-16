@@ -85,7 +85,8 @@ static
 VOID
 DcHandleTxCompletedFrames(
     _In_ PDC21X4_ADAPTER Adapter,
-    _Inout_ PLIST_ENTRY SendReadyList,
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail,
     _Out_ PULONG DpcEvents)
 {
     PDC_TCB Tcb;
@@ -118,7 +119,7 @@ DcHandleTxCompletedFrames(
         }
 
         /* This is our media test packet, so no need to update the TX statistics */
-        if (!Tcb->Packet)
+        if (!Tcb->Nbl)
         {
             _InterlockedExchange(&Adapter->MediaTestStatus,
                                  !(TbdStatus & DC_TBD_STATUS_ERROR_SUMMARY));
@@ -161,7 +162,7 @@ DcHandleTxCompletedFrames(
                 ++Adapter->Statistics.TransmitMoreCollisions;
         }
 
-        InsertTailList(SendReadyList, DC_LIST_ENTRY_FROM_PACKET(Tcb->Packet));
+        DcCompleteNetBuffer(Tcb->Nbl, CompleteHead, CompleteTail);
 
         DC_RELEASE_TCB(Adapter, Tcb);
     }
@@ -174,35 +175,25 @@ VOID
 DcHandleTx(
     _In_ PDC21X4_ADAPTER Adapter)
 {
-    LIST_ENTRY SendReadyList;
+    PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
     ULONG DpcEvents;
 
     TRACE("Handle TX\n");
 
-    InitializeListHead(&SendReadyList);
     DpcEvents = 0;
 
     NdisDprAcquireSpinLock(&Adapter->SendLock);
 
-    DcHandleTxCompletedFrames(Adapter, &SendReadyList, &DpcEvents);
+    DcHandleTxCompletedFrames(Adapter, &CompleteHead, &CompleteTail, &DpcEvents);
 
-    if (!IsListEmpty(&Adapter->SendQueueList))
+    if (Adapter->SendQueueHead)
     {
-        DcProcessPendingPackets(Adapter);
+        DcProcessPendingPackets(Adapter, &CompleteHead, &CompleteTail);
     }
 
     NdisDprReleaseSpinLock(&Adapter->SendLock);
 
-    while (!IsListEmpty(&SendReadyList))
-    {
-        PLIST_ENTRY Entry = RemoveHeadList(&SendReadyList);
-
-        TRACE("Complete TX packet %p\n", DC_PACKET_FROM_LIST_ENTRY(Entry));
-
-        NdisMSendComplete(Adapter->AdapterHandle,
-                          DC_PACKET_FROM_LIST_ENTRY(Entry),
-                          NDIS_STATUS_SUCCESS);
-    }
+    DcCompleteSends(Adapter, CompleteHead, TRUE);
 
     /* We have to complete the OID request outside of the spinlock */
     if (DpcEvents & DC_EVENT_SETUP_FRAME_COMPLETED)
@@ -211,7 +202,7 @@ DcHandleTx(
 
         Adapter->OidPending = FALSE;
 
-        NdisMSetInformationComplete(Adapter->AdapterHandle, NDIS_STATUS_SUCCESS);
+        DcCompletePendingOid(Adapter, NDIS_STATUS_SUCCESS);
     }
 }
 
@@ -241,53 +232,101 @@ DcStopRxProcess(
 
 VOID
 NTAPI
-DcReturnPacket(
+DcReturnNetBufferLists(
     _In_ NDIS_HANDLE MiniportAdapterContext,
-    _In_ PNDIS_PACKET Packet)
+    _In_ PNET_BUFFER_LIST NetBufferLists,
+    _In_ ULONG ReturnFlags)
 {
     PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
+    PNET_BUFFER_LIST Nbl, NextNbl;
+    BOOLEAN CompletePause = FALSE;
     PDC_RCB Rcb;
 
-    Rcb = *DC_RCB_FROM_PACKET(Packet);
+    UNREFERENCED_PARAMETER(ReturnFlags);
 
     NdisAcquireSpinLock(&Adapter->ReceiveLock);
 
-    PushEntryList(&Adapter->FreeRcbList, &Rcb->ListEntry);
+    for (Nbl = NetBufferLists; Nbl; Nbl = NextNbl)
+    {
+        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
 
-    ++Adapter->RcbFree;
+        Rcb = *DC_RCB_FROM_NBL(Nbl);
+
+        PushEntryList(&Adapter->FreeRcbList, &Rcb->ListEntry);
+
+        ++Adapter->RcbFree;
+    }
+
+    if (Adapter->PausePending && (Adapter->RcbFree == Adapter->RcbCount))
+    {
+        Adapter->PausePending = FALSE;
+        CompletePause = TRUE;
+    }
 
     NdisReleaseSpinLock(&Adapter->ReceiveLock);
+
+    if (CompletePause)
+        NdisMPauseComplete(Adapter->AdapterHandle);
+}
+
+static
+BOOLEAN
+DcIsReclaimNbl(
+    _In_ PNET_BUFFER_LIST Nbl)
+{
+    return !!((*DC_RCB_FROM_NBL(Nbl))->Flags & DC_RCB_FLAG_RECLAIM);
 }
 
 static
 VOID
 DcIndicateReceivePackets(
     _In_ PDC21X4_ADAPTER Adapter,
-    _In_ PNDIS_PACKET* ReceiveArray,
+    _In_ PNET_BUFFER_LIST* ReceiveArray,
     _In_ ULONG PacketsToIndicate)
 {
-    PNDIS_PACKET Packet;
+    PNET_BUFFER_LIST Nbl;
     PDC_RBD Rbd;
     PDC_RCB Rcb;
-    ULONG i;
+    ULONG i, j, Flags;
+    BOOLEAN Reclaim;
 
     NdisDprReleaseSpinLock(&Adapter->ReceiveLock);
 
-    NdisMIndicateReceivePacket(Adapter->AdapterHandle,
-                               ReceiveArray,
-                               PacketsToIndicate);
+    for (i = 0; i < PacketsToIndicate; i = j)
+    {
+        Reclaim = DcIsReclaimNbl(ReceiveArray[i]);
+
+        for (j = i + 1; j < PacketsToIndicate; ++j)
+        {
+            if (DcIsReclaimNbl(ReceiveArray[j]) != Reclaim)
+                break;
+
+            NET_BUFFER_LIST_NEXT_NBL(ReceiveArray[j - 1]) = ReceiveArray[j];
+        }
+        NET_BUFFER_LIST_NEXT_NBL(ReceiveArray[j - 1]) = NULL;
+
+        Flags = NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL;
+        if (Reclaim)
+            Flags |= NDIS_RECEIVE_FLAGS_RESOURCES;
+
+        NdisMIndicateReceiveNetBufferLists(Adapter->AdapterHandle,
+                                           ReceiveArray[i],
+                                           NDIS_DEFAULT_PORT_NUMBER,
+                                           j - i,
+                                           Flags);
+    }
 
     NdisDprAcquireSpinLock(&Adapter->ReceiveLock);
 
     for (i = 0; i < PacketsToIndicate; ++i)
     {
-        Packet = ReceiveArray[i];
-        Rcb = *DC_RCB_FROM_PACKET(Packet);
+        Nbl = ReceiveArray[i];
+        Rcb = *DC_RCB_FROM_NBL(Nbl);
 
         /* Reuse the RCB immediately */
         if (Rcb->Flags & DC_RCB_FLAG_RECLAIM)
         {
-            Rbd = *DC_RBD_FROM_PACKET(Packet);
+            Rbd = *DC_RBD_FROM_NBL(Nbl);
 
             Rbd->Status = DC_RBD_STATUS_OWNED;
         }
@@ -301,7 +340,7 @@ DcHandleRxReceivedFrames(
 {
     PDC_RBD Rbd, StartRbd, LastRbd;
     ULONG PacketsToIndicate;
-    PNDIS_PACKET ReceiveArray[DC_RECEIVE_ARRAY_SIZE];
+    PNET_BUFFER_LIST ReceiveArray[DC_RECEIVE_ARRAY_SIZE];
 
     Rbd = StartRbd = LastRbd = Adapter->CurrentRbd;
     PacketsToIndicate = 0;
@@ -310,7 +349,7 @@ DcHandleRxReceivedFrames(
     {
         PDC_RCB Rcb;
         PDC_RCB* RcbSlot;
-        PNDIS_PACKET Packet;
+        PNET_BUFFER_LIST Nbl;
         ULONG RbdStatus, PacketLength, RxCounters;
 
         if (Rbd->Status & DC_RBD_STATUS_OWNED)
@@ -398,6 +437,12 @@ DcHandleRxReceivedFrames(
             goto NextRbd;
         }
 
+        if (Adapter->Paused)
+        {
+            Rbd->Status = DC_RBD_STATUS_OWNED;
+            goto NextRbd;
+        }
+
         ++Adapter->Statistics.ReceiveOk;
 
         PacketLength = (RbdStatus & DC_RBD_STATUS_FRAME_LENGTH_MASK) >>
@@ -411,10 +456,11 @@ DcHandleRxReceivedFrames(
 
         TRACE("RX packet (len %u), RCB %p\n", PacketLength, Rcb);
 
-        NdisAdjustBufferLength(Rcb->NdisBuffer, PacketLength);
+        NdisAdjustMdlLength(Rcb->Mdl, PacketLength);
+        NET_BUFFER_DATA_LENGTH(NET_BUFFER_LIST_FIRST_NB(Rcb->Nbl)) = PacketLength;
 
         /* Receive buffers are in cached memory */
-        NdisFlushBuffer(Rcb->NdisBuffer, FALSE);
+        KeFlushIoBuffers(Rcb->Mdl, TRUE, TRUE);
 
         if (RbdStatus & DC_RBD_STATUS_MULTICAST)
         {
@@ -428,14 +474,15 @@ DcHandleRxReceivedFrames(
             ++Adapter->Statistics.ReceiveUnicast;
         }
 
-        Packet = Rcb->Packet;
+        Nbl = Rcb->Nbl;
 
-        ReceiveArray[PacketsToIndicate++] = Packet;
+        ReceiveArray[PacketsToIndicate++] = Nbl;
+
+        NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
 
         if (Adapter->FreeRcbList.Next)
         {
             Rcb->Flags = 0;
-            NDIS_SET_PACKET_STATUS(Packet, NDIS_STATUS_SUCCESS);
 
             Rcb = (PDC_RCB)DcPopEntryList(&Adapter->FreeRcbList);
             *RcbSlot = Rcb;
@@ -450,9 +497,8 @@ DcHandleRxReceivedFrames(
         else
         {
             Rcb->Flags = DC_RCB_FLAG_RECLAIM;
-            NDIS_SET_PACKET_STATUS(Packet, NDIS_STATUS_RESOURCES);
 
-            *DC_RBD_FROM_PACKET(Packet) = Rbd;
+            *DC_RBD_FROM_NBL(Nbl) = Rbd;
         }
 
 NextRbd:
@@ -505,17 +551,24 @@ DcHandleSystemError(
     /* Issue a software reset, which also enables the interrupts */
     if (_InterlockedCompareExchange(&Adapter->ResetLock, 2, 0) == 0)
     {
-        NdisScheduleWorkItem(&Adapter->ResetWorkItem);
+        NdisQueueIoWorkItem(Adapter->ResetWorkItem, DcResetWorker, Adapter);
     }
 }
 
 VOID
 NTAPI
-DcHandleInterrupt(
-    _In_ NDIS_HANDLE MiniportAdapterContext)
+DcInterruptDpc(
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _In_ PVOID MiniportDpcContext,
+    _In_ PVOID ReceiveThrottleParameters,
+    _In_ PVOID NdisReserved2)
 {
     ULONG InterruptStatus, IoLimit;
-    PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
+    PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportInterruptContext;
+
+    UNREFERENCED_PARAMETER(MiniportDpcContext);
+    UNREFERENCED_PARAMETER(ReceiveThrottleParameters);
+    UNREFERENCED_PARAMETER(NdisReserved2);
 
     TRACE("Events %08lx\n", Adapter->InterruptStatus);
 
@@ -589,15 +642,17 @@ DcHandleInterrupt(
     DC_WRITE(Adapter, DcCsr7_IrqMask, Adapter->InterruptMask);
 }
 
-VOID
+BOOLEAN
 NTAPI
 DcIsr(
-    _Out_ PBOOLEAN InterruptRecognized,
-    _Out_ PBOOLEAN QueueMiniportHandleInterrupt,
-    _In_ NDIS_HANDLE MiniportAdapterContext)
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _Out_ PBOOLEAN QueueDefaultInterruptDpc,
+    _Out_ PULONG TargetProcessors)
 {
-    PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
+    PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportInterruptContext;
     ULONG InterruptStatus;
+
+    *TargetProcessors = 0;
 
     if (Adapter->CurrentInterruptMask == 0)
         goto NotOurs;
@@ -615,11 +670,30 @@ DcIsr(
     Adapter->InterruptStatus = InterruptStatus;
     Adapter->CurrentInterruptMask = 0;
 
-    *InterruptRecognized = TRUE;
-    *QueueMiniportHandleInterrupt = TRUE;
-    return;
+    *QueueDefaultInterruptDpc = TRUE;
+    return TRUE;
 
 NotOurs:
-    *InterruptRecognized = FALSE;
-    *QueueMiniportHandleInterrupt = FALSE;
+    *QueueDefaultInterruptDpc = FALSE;
+    return FALSE;
+}
+
+VOID
+NTAPI
+DcDisableInterrupt(
+    _In_ NDIS_HANDLE MiniportInterruptContext)
+{
+    PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportInterruptContext;
+
+    DC_WRITE(Adapter, DcCsr7_IrqMask, 0);
+}
+
+VOID
+NTAPI
+DcEnableInterrupt(
+    _In_ NDIS_HANDLE MiniportInterruptContext)
+{
+    PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportInterruptContext;
+
+    DC_WRITE(Adapter, DcCsr7_IrqMask, Adapter->CurrentInterruptMask);
 }

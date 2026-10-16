@@ -165,8 +165,8 @@ CODE_SEG("PAGE")
 VOID
 NTAPI
 DcPowerWorker(
-    _In_ PNDIS_WORK_ITEM WorkItem,
-    _In_opt_ PVOID Context)
+    _In_ PVOID Context,
+    _In_ NDIS_HANDLE WorkItem)
 {
     PDC21X4_ADAPTER Adapter = Context;
 
@@ -184,7 +184,7 @@ DcPowerWorker(
     }
     Adapter->PrevPowerState = Adapter->PowerState;
 
-    NdisMSetInformationComplete(Adapter->AdapterHandle, NDIS_STATUS_SUCCESS);
+    DcCompletePendingOid(Adapter, NDIS_STATUS_SUCCESS);
 }
 
 NDIS_STATUS
@@ -196,7 +196,7 @@ DcSetPower(
 
     Adapter->PowerState = PowerState;
 
-    NdisScheduleWorkItem(&Adapter->PowerWorkItem);
+    NdisQueueIoWorkItem(Adapter->PowerWorkItem, DcPowerWorker, Adapter);
 
     return NDIS_STATUS_PENDING;
 }
@@ -231,11 +231,14 @@ DcPowerSave(
     if (!(Adapter->Features & DC_HAS_POWER_SAVING))
         return;
 
-    NdisReadPciSlotInformation(Adapter->AdapterHandle,
-                               0,
-                               DC_PCI_DEVICE_CONFIG,
-                               &ConfigValue,
-                               sizeof(ConfigValue));
+    if (NdisMGetBusData(Adapter->AdapterHandle,
+                        PCI_WHICHSPACE_CONFIG,
+                        DC_PCI_DEVICE_CONFIG,
+                        &ConfigValue,
+                        sizeof(ConfigValue)) != sizeof(ConfigValue))
+    {
+        return;
+    }
 
     ConfigValue &= ~DC_PCI_DEVICE_CONFIG_SLEEP;
 
@@ -244,9 +247,9 @@ DcPowerSave(
     else
         ConfigValue &= ~DC_PCI_DEVICE_CONFIG_SNOOZE;
 
-    NdisWritePciSlotInformation(Adapter->AdapterHandle,
-                                0,
-                                DC_PCI_DEVICE_CONFIG,
-                                &ConfigValue,
-                                sizeof(ConfigValue));
+    NdisMSetBusData(Adapter->AdapterHandle,
+                    PCI_WHICHSPACE_CONFIG,
+                    DC_PCI_DEVICE_CONFIG,
+                    &ConfigValue,
+                    sizeof(ConfigValue));
 }

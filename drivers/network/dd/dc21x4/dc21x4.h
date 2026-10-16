@@ -22,7 +22,7 @@
 
 #define DC_TRANSMIT_DESCRIPTORS    64
 #define DC_TRANSMIT_BLOCKS         48
-#define DC_TRANSMIT_BUFFERS        4
+#define DC_TRANSMIT_BUFFERS        (DC_TRANSMIT_BLOCKS - DC_TCB_RESERVE)
 #define DC_LOOPBACK_FRAMES         4
 
 #define DC_RECEIVE_BUFFERS_DEFAULT     64
@@ -40,8 +40,6 @@
 
 #define DC_TX_UNDERRUN_LIMIT    5
 #define DC_INTERRUPT_PROCESSING_LIMIT    8
-
-#define DC_FRAGMENTATION_THRESHOLD    32
 
 #define DC_PACKET_FILTERS ( \
     NDIS_PACKET_TYPE_DIRECTED | \
@@ -142,7 +140,8 @@ typedef struct _DC21X4_ADAPTER
     PDC_TBD CurrentTbd;
     PDC_TBD HeadTbd;
     PDC_TBD TailTbd;
-    LIST_ENTRY SendQueueList;
+    PNET_BUFFER_LIST SendQueueHead;
+    PNET_BUFFER_LIST SendQueueTail;
     ULONG TcbSlots;
     ULONG TbdSlots;
     ULONG TcbCompleted;
@@ -165,7 +164,8 @@ typedef struct _DC21X4_ADAPTER
     DC_STATISTICS Statistics;
 
     NDIS_HANDLE AdapterHandle;
-    NDIS_HANDLE WrapperConfigurationHandle;
+    NDIS_HANDLE DmaHandle;
+    PNDIS_OID_REQUEST PendingOidRequest;
 
     DECLSPEC_CACHEALIGN NDIS_SPIN_LOCK ModeLock;
     ULONG ModeFlags;
@@ -187,7 +187,7 @@ typedef struct _DC21X4_ADAPTER
     ULONG SiaSetting;
     ULONG LastReceiveActivity;
     volatile LONG MediaTestStatus;
-    NDIS_MINIPORT_TIMER MediaMonitorTimer;
+    NDIS_HANDLE MediaMonitorTimer;
     DC_MII_MEDIA MiiMedia;
     DC_MEDIA Media[MEDIA_LIST_MAX];
 
@@ -221,6 +221,8 @@ typedef struct _DC21X4_ADAPTER
     ULONG DefaultMedia;
     ULONG RcbCount;
     BOOLEAN OidPending;
+    BOOLEAN Paused;
+    BOOLEAN PausePending;
     BOOLEAN ProgramHashPerfectFilter;
     PULONG SetupFrame;
     PULONG SetupFrameSaved;
@@ -237,14 +239,14 @@ typedef struct _DC21X4_ADAPTER
     USHORT DeviceId;
     SINGLE_LIST_ENTRY AllocRcbList;
     SINGLE_LIST_ENTRY UsedRcbList;
-    NDIS_MINIPORT_INTERRUPT Interrupt;
+    NDIS_HANDLE InterruptHandle;
     ULONG InterruptVector;
     ULONG InterruptLevel;
     ULONG InterruptFlags;
     ULONG AdapterSize;
-    NDIS_WORK_ITEM PowerWorkItem;
-    NDIS_WORK_ITEM ResetWorkItem;
-    NDIS_WORK_ITEM TxRecoveryWorkItem;
+    NDIS_HANDLE PowerWorkItem;
+    NDIS_HANDLE ResetWorkItem;
+    NDIS_HANDLE TxRecoveryWorkItem;
     _Interlocked_ volatile LONG ResetLock;
     NDIS_PHYSICAL_ADDRESS IoBaseAddress;
     PDC_SROM_ENTRY SRomEntry;
@@ -253,8 +255,7 @@ typedef struct _DC21X4_ADAPTER
     PVOID RbdOriginal;
     ULONG TbdPhys;
     ULONG RbdPhys;
-    NDIS_HANDLE BufferPool;
-    NDIS_HANDLE PacketPool;
+    NDIS_HANDLE ReceiveNblPool;
     NDIS_PHYSICAL_ADDRESS TbdPhysOriginal;
     NDIS_PHYSICAL_ADDRESS RbdPhysOriginal;
     PVOID LoopbackFrame[DC_LOOPBACK_FRAMES];
@@ -281,42 +282,68 @@ DC_READ(
 #define DC_WRITE(Adapter, Register, Value)  \
     NdisRawWritePortUlong((PULONG)((Adapter)->IoBase + (Register)), (Value));
 
+FORCEINLINE
+VOID
+DcSetMediaMonitorTimer(
+    _In_ PDC21X4_ADAPTER Adapter,
+    _In_ ULONG Milliseconds)
+{
+    LARGE_INTEGER DueTime;
+
+    DueTime.QuadPart = -(LONGLONG)Milliseconds * 10000;
+    NdisSetTimerObject(Adapter->MediaMonitorTimer, DueTime, 0, NULL);
+}
+
 CODE_SEG("INIT")
 DRIVER_INITIALIZE DriverEntry;
 
 CODE_SEG("PAGE")
-NDIS_STATUS
-NTAPI
-DcInitialize(
-    _Out_ PNDIS_STATUS OpenErrorStatus,
-    _Out_ PUINT SelectedMediumIndex,
-    _In_ PNDIS_MEDIUM MediumArray,
-    _In_ UINT MediumArraySize,
-    _In_ NDIS_HANDLE MiniportAdapterHandle,
-    _In_ NDIS_HANDLE WrapperConfigurationContext);
+MINIPORT_INITIALIZE DcInitializeEx;
 
-VOID
-NTAPI
-DcSendPackets(
-    _In_ NDIS_HANDLE MiniportAdapterContext,
-    _In_ PPNDIS_PACKET PacketArray,
-    _In_ UINT NumberOfPackets);
+MINIPORT_SEND_NET_BUFFER_LISTS DcSendNetBufferLists;
 
-VOID
-NTAPI
-DcCancelSendPackets(
-    _In_ NDIS_HANDLE MiniportAdapterContext,
-    _In_ PVOID CancelId);
+MINIPORT_CANCEL_SEND DcCancelSend;
 
 VOID
 DcProcessPendingPackets(
-    _In_ PDC21X4_ADAPTER Adapter);
+    _In_ PDC21X4_ADAPTER Adapter,
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail);
 
 VOID
-NTAPI
-DcReturnPacket(
-    _In_ NDIS_HANDLE MiniportAdapterContext,
-    _In_ PNDIS_PACKET Packet);
+DcCompleteNetBuffer(
+    _In_ PNET_BUFFER_LIST Nbl,
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail);
+
+VOID
+DcCompleteSends(
+    _In_ PDC21X4_ADAPTER Adapter,
+    _In_opt_ PNET_BUFFER_LIST CompleteHead,
+    _In_ BOOLEAN DispatchLevel);
+
+MINIPORT_RETURN_NET_BUFFER_LISTS DcReturnNetBufferLists;
+
+MINIPORT_OID_REQUEST DcOidRequest;
+
+MINIPORT_CANCEL_OID_REQUEST DcCancelOidRequest;
+
+VOID
+DcCompletePendingOid(
+    _In_ PDC21X4_ADAPTER Adapter,
+    _In_ NDIS_STATUS Status);
+
+VOID
+DcIndicateLinkState(
+    _In_ PDC21X4_ADAPTER Adapter);
+
+ULONG
+DcGetLinkSpeed(
+    _In_ PDC21X4_ADAPTER Adapter);
+
+NDIS_STATUS
+DcSetGeneralAttributes(
+    _In_ PDC21X4_ADAPTER Adapter);
 
 NDIS_STATUS
 NTAPI
@@ -338,24 +365,16 @@ DcSetInformation(
     _Out_ PULONG BytesRead,
     _Out_ PULONG BytesNeeded);
 
-VOID
-NTAPI
-DcIsr(
-    _Out_ PBOOLEAN InterruptRecognized,
-    _Out_ PBOOLEAN QueueMiniportHandleInterrupt,
-    _In_ NDIS_HANDLE MiniportAdapterContext);
+MINIPORT_ISR DcIsr;
 
-VOID
-NTAPI
-DcHandleInterrupt(
-    _In_ NDIS_HANDLE MiniportAdapterContext);
+MINIPORT_INTERRUPT_DPC DcInterruptDpc;
+
+MINIPORT_DISABLE_INTERRUPT DcDisableInterrupt;
+
+MINIPORT_ENABLE_INTERRUPT DcEnableInterrupt;
 
 CODE_SEG("PAGE")
-VOID
-NTAPI
-DcPowerWorker(
-    _In_ PNDIS_WORK_ITEM WorkItem,
-    _In_opt_ PVOID Context);
+NDIS_IO_WORKITEM_FUNCTION DcPowerWorker;
 
 NDIS_STATUS
 DcSetPower(
@@ -378,11 +397,7 @@ DcFreeAdapter(
     _In_ __drv_freesMem(Mem) PDC21X4_ADAPTER Adapter);
 
 CODE_SEG("PAGE")
-VOID
-NTAPI
-DcResetWorker(
-    _In_ PNDIS_WORK_ITEM WorkItem,
-    _In_opt_ PVOID Context);
+NDIS_IO_WORKITEM_FUNCTION DcResetWorker;
 
 DECLSPEC_NOINLINE
 VOID
@@ -497,11 +512,7 @@ VOID
 HpnaPhyInit(
     _In_ PDC21X4_ADAPTER Adapter);
 
-VOID
-NTAPI
-DcTransmitTimeoutRecoveryWorker(
-    _In_ PNDIS_WORK_ITEM WorkItem,
-    _In_opt_ PVOID Context);
+NDIS_IO_WORKITEM_FUNCTION DcTransmitTimeoutRecoveryWorker;
 
 NDIS_TIMER_FUNCTION MediaMonitor21040Dpc;
 NDIS_TIMER_FUNCTION MediaMonitor21041Dpc;

@@ -83,231 +83,271 @@ static
 BOOLEAN
 DcCopyPacket(
     _In_ PDC21X4_ADAPTER Adapter,
-    _In_ PNDIS_PACKET Packet,
+    _In_ PNET_BUFFER NetBuffer,
     _In_ PDC_COALESCE_BUFFER Buffer)
 {
-    PNDIS_BUFFER CurrentBuffer;
-    PVOID Address;
-    UINT CurrentLength, PacketLength;
+    PMDL CurrentMdl = NET_BUFFER_CURRENT_MDL(NetBuffer);
+    ULONG Offset = NET_BUFFER_CURRENT_MDL_OFFSET(NetBuffer);
+    ULONG Remaining = NET_BUFFER_DATA_LENGTH(NetBuffer);
+    ULONG CurrentLength;
+    PUCHAR Address;
     PUCHAR Destination;
-
-    NdisGetFirstBufferFromPacketSafe(Packet,
-                                     &CurrentBuffer,
-                                     &Address,
-                                     &CurrentLength,
-                                     &PacketLength,
-                                     HighPagePriority);
-    if (!Address)
-        return FALSE;
 
     Destination = Buffer->VirtualAddress;
 
-    while (TRUE)
+    while (CurrentMdl && Remaining)
     {
-        NdisMoveMemory(Destination, Address, CurrentLength);
-        Destination += CurrentLength;
-
-        NdisGetNextBuffer(CurrentBuffer, &CurrentBuffer);
-        if (!CurrentBuffer)
-            break;
-
-        NdisQueryBufferSafe(CurrentBuffer,
-                            &Address,
-                            &CurrentLength,
-                            HighPagePriority);
+        NdisQueryMdl(CurrentMdl, (PVOID*)&Address, &CurrentLength, HighPagePriority);
         if (!Address)
             return FALSE;
+
+        if (CurrentLength > Offset)
+        {
+            CurrentLength = min(CurrentLength - Offset, Remaining);
+            NdisMoveMemory(Destination, Address + Offset, CurrentLength);
+            Destination += CurrentLength;
+            Remaining -= CurrentLength;
+            Offset = 0;
+        }
+        else
+        {
+            Offset -= CurrentLength;
+        }
+
+        NdisGetNextMdl(CurrentMdl, &CurrentMdl);
     }
 
-    return TRUE;
+    return (Remaining == 0);
 }
 
 static
 NDIS_STATUS
 DcSendPacket(
-    _In_ NDIS_HANDLE MiniportAdapterContext,
-    _In_ PNDIS_PACKET Packet)
+    _In_ PDC21X4_ADAPTER Adapter,
+    _In_ PNET_BUFFER_LIST Nbl,
+    _In_ PNET_BUFFER NetBuffer)
 {
-    PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
     PSCATTER_GATHER_LIST SgList;
+    PDC_COALESCE_BUFFER CoalesceBuffer;
     PDC_TCB Tcb;
-    ULONG SlotsUsed;
+    ULONG PacketLength;
 
-    if (!Adapter->TcbSlots)
+    if (!Adapter->TcbSlots || !Adapter->TbdSlots || !Adapter->SendBufferList.Next)
         return NDIS_STATUS_RESOURCES;
 
-    SgList = NDIS_PER_PACKET_INFO_FROM_PACKET(Packet, ScatterGatherListPacketInfo);
+    PacketLength = NET_BUFFER_DATA_LENGTH(NetBuffer);
+    if (PacketLength == 0 || PacketLength > DC_TRANSMIT_BLOCK_SIZE)
+        return NDIS_STATUS_INVALID_LENGTH;
 
-    if (SgList->NumberOfElements > DC_FRAGMENTATION_THRESHOLD)
+    CoalesceBuffer = (PDC_COALESCE_BUFFER)PopEntryList(&Adapter->SendBufferList);
+
+    if (!DcCopyPacket(Adapter, NetBuffer, CoalesceBuffer))
     {
-        PDC_COALESCE_BUFFER CoalesceBuffer;
-        UINT PacketLength;
-
-        if (!Adapter->TbdSlots || !Adapter->SendBufferList.Next)
-        {
-            return NDIS_STATUS_RESOURCES;
-        }
-
-        NdisQueryPacketLength(Packet, &PacketLength);
-
-        CoalesceBuffer = (PDC_COALESCE_BUFFER)PopEntryList(&Adapter->SendBufferList);
-
-        if (!DcCopyPacket(Adapter, Packet, CoalesceBuffer))
-        {
-            PushEntryList(&Adapter->SendBufferList, &CoalesceBuffer->ListEntry);
-            return NDIS_STATUS_RESOURCES;
-        }
-
-        SgList = (PSCATTER_GATHER_LIST)&Adapter->LocalSgList;
-        SgList->Elements[0].Address.LowPart = CoalesceBuffer->PhysicalAddress;
-        SgList->Elements[0].Length = PacketLength;
-        SgList->NumberOfElements = 1;
-        SlotsUsed = 1;
-
-        Tcb = Adapter->CurrentTcb;
-        Tcb->SlotsUsed = 1;
-        Tcb->Buffer = CoalesceBuffer;
+        PushEntryList(&Adapter->SendBufferList, &CoalesceBuffer->ListEntry);
+        return NDIS_STATUS_FAILURE;
     }
-    else
-    {
-        /* We use two data buffers per descriptor */
-        SlotsUsed = (SgList->NumberOfElements + 1) / 2;
 
-        if (SlotsUsed > Adapter->TbdSlots)
-            return NDIS_STATUS_RESOURCES;
+    SgList = (PSCATTER_GATHER_LIST)&Adapter->LocalSgList;
+    SgList->Elements[0].Address.LowPart = CoalesceBuffer->PhysicalAddress;
+    SgList->Elements[0].Length = PacketLength;
+    SgList->NumberOfElements = 1;
 
-        Tcb = Adapter->CurrentTcb;
-        Tcb->SlotsUsed = SlotsUsed;
-        Tcb->Buffer = NULL;
-    }
+    Tcb = Adapter->CurrentTcb;
+    Tcb->SlotsUsed = 1;
+    Tcb->Buffer = CoalesceBuffer;
 
     --Adapter->TcbSlots;
 
     Adapter->CurrentTcb = DC_NEXT_TCB(Adapter, Tcb);
 
-    Tcb->Packet = Packet;
+    Tcb->Nbl = Nbl;
 
     ASSERT(Adapter->TbdSlots >= Tcb->SlotsUsed);
-    Adapter->TbdSlots -= SlotsUsed;
+    Adapter->TbdSlots -= Tcb->SlotsUsed;
 
     DcTransmitPacket(Adapter, Tcb, SgList);
 
     DC_WRITE(Adapter, DcCsr1_TxPoll, DC_TX_POLL_DOORBELL);
 
-    return NDIS_STATUS_PENDING;
+    return NDIS_STATUS_SUCCESS;
+}
+
+VOID
+DcCompleteNetBuffer(
+    _In_ PNET_BUFFER_LIST Nbl,
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail)
+{
+    if (--DC_PENDING_FROM_NBL(Nbl) != 0)
+        return;
+
+    NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+    if (*CompleteTail)
+        NET_BUFFER_LIST_NEXT_NBL(*CompleteTail) = Nbl;
+    else
+        *CompleteHead = Nbl;
+    *CompleteTail = Nbl;
+}
+
+VOID
+DcCompleteSends(
+    _In_ PDC21X4_ADAPTER Adapter,
+    _In_opt_ PNET_BUFFER_LIST CompleteHead,
+    _In_ BOOLEAN DispatchLevel)
+{
+    if (!CompleteHead)
+        return;
+
+    NdisMSendNetBufferListsComplete(Adapter->AdapterHandle,
+                                    CompleteHead,
+                                    DispatchLevel ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
 }
 
 VOID
 DcProcessPendingPackets(
-    _In_ PDC21X4_ADAPTER Adapter)
+    _In_ PDC21X4_ADAPTER Adapter,
+    _Inout_ PNET_BUFFER_LIST* CompleteHead,
+    _Inout_ PNET_BUFFER_LIST* CompleteTail)
 {
-    PLIST_ENTRY Entry;
+    PNET_BUFFER_LIST Nbl;
+    PNET_BUFFER NetBuffer;
     NDIS_STATUS Status;
-    PNDIS_PACKET Packet;
 
-    ASSERT(!IsListEmpty(&Adapter->SendQueueList));
-
-    do
+    while ((Nbl = Adapter->SendQueueHead) != NULL)
     {
-        Entry = RemoveHeadList(&Adapter->SendQueueList);
+        NetBuffer = DC_NEXT_NB_FROM_NBL(Nbl);
 
-        Packet = DC_PACKET_FROM_LIST_ENTRY(Entry);
-
-        Status = DcSendPacket(Adapter, Packet);
+        Status = DcSendPacket(Adapter, Nbl, NetBuffer);
         if (Status == NDIS_STATUS_RESOURCES)
-        {
-            InsertHeadList(&Adapter->SendQueueList, DC_LIST_ENTRY_FROM_PACKET(Packet));
             break;
+
+        DC_NEXT_NB_FROM_NBL(Nbl) = NET_BUFFER_NEXT_NB(NetBuffer);
+        if (!DC_NEXT_NB_FROM_NBL(Nbl))
+        {
+            Adapter->SendQueueHead = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+            if (!Adapter->SendQueueHead)
+                Adapter->SendQueueTail = NULL;
+        }
+
+        if (Status != NDIS_STATUS_SUCCESS)
+        {
+            NET_BUFFER_LIST_STATUS(Nbl) = Status;
+            DcCompleteNetBuffer(Nbl, CompleteHead, CompleteTail);
         }
     }
-    while (!IsListEmpty(&Adapter->SendQueueList));
 }
 
 VOID
 NTAPI
-DcSendPackets(
+DcSendNetBufferLists(
     _In_ NDIS_HANDLE MiniportAdapterContext,
-    _In_ PPNDIS_PACKET PacketArray,
-    _In_ UINT NumberOfPackets)
+    _In_ PNET_BUFFER_LIST NetBufferLists,
+    _In_ NDIS_PORT_NUMBER PortNumber,
+    _In_ ULONG SendFlags)
 {
     PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
+    PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
+    PNET_BUFFER_LIST Nbl, NextNbl;
+    PNET_BUFFER NetBuffer;
     NDIS_STATUS Status;
-    ULONG i;
+    LONG_PTR Count;
+
+    UNREFERENCED_PARAMETER(PortNumber);
 
     NdisAcquireSpinLock(&Adapter->SendLock);
 
-    if (!(Adapter->Flags & DC_ACTIVE))
-    {
-        NdisReleaseSpinLock(&Adapter->SendLock);
+    if (Adapter->Paused)
+        Status = NDIS_STATUS_PAUSED;
+    else if (!(Adapter->Flags & DC_ACTIVE))
+        Status = NDIS_STATUS_NOT_ACCEPTED;
+    else
+        Status = NDIS_STATUS_SUCCESS;
 
-        for (i = 0; i < NumberOfPackets; ++i)
+    for (Nbl = NetBufferLists; Nbl; Nbl = NextNbl)
+    {
+        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+        NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+        NET_BUFFER_LIST_STATUS(Nbl) = Status;
+
+        Count = 0;
+        for (NetBuffer = NET_BUFFER_LIST_FIRST_NB(Nbl);
+             NetBuffer;
+             NetBuffer = NET_BUFFER_NEXT_NB(NetBuffer))
         {
-            NdisMSendComplete(Adapter->AdapterHandle,
-                              PacketArray[i],
-                              NDIS_STATUS_NOT_ACCEPTED);
+            ++Count;
         }
 
-        return;
-    }
-
-    TRACE("Send packets %u\n", NumberOfPackets);
-
-    for (i = 0; i < NumberOfPackets; ++i)
-    {
-        PNDIS_PACKET Packet = PacketArray[i];
-
-        Status = DcSendPacket(Adapter, Packet);
-        if (Status == NDIS_STATUS_RESOURCES)
+        if (Status != NDIS_STATUS_SUCCESS || !Count)
         {
-            InsertTailList(&Adapter->SendQueueList, DC_LIST_ENTRY_FROM_PACKET(Packet));
+            DC_PENDING_FROM_NBL(Nbl) = 1;
+            DcCompleteNetBuffer(Nbl, &CompleteHead, &CompleteTail);
+            continue;
         }
+
+        DC_PENDING_FROM_NBL(Nbl) = Count;
+        DC_NEXT_NB_FROM_NBL(Nbl) = NET_BUFFER_LIST_FIRST_NB(Nbl);
+
+        if (Adapter->SendQueueTail)
+            NET_BUFFER_LIST_NEXT_NBL(Adapter->SendQueueTail) = Nbl;
+        else
+            Adapter->SendQueueHead = Nbl;
+        Adapter->SendQueueTail = Nbl;
     }
+
+    TRACE("Send packets\n");
+
+    DcProcessPendingPackets(Adapter, &CompleteHead, &CompleteTail);
 
     NdisReleaseSpinLock(&Adapter->SendLock);
+
+    DcCompleteSends(Adapter, CompleteHead, NDIS_TEST_SEND_AT_DISPATCH_LEVEL(SendFlags));
 }
 
 VOID
 NTAPI
-DcCancelSendPackets(
+DcCancelSend(
     _In_ NDIS_HANDLE MiniportAdapterContext,
     _In_ PVOID CancelId)
 {
     PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
-    LIST_ENTRY DoneList;
-    PLIST_ENTRY Entry, NextEntry;
+    PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
+    PNET_BUFFER_LIST Nbl, NextNbl, KeepHead = NULL, KeepTail = NULL;
+    PNET_BUFFER NetBuffer;
 
     TRACE("Called\n");
 
-    InitializeListHead(&DoneList);
-
     NdisAcquireSpinLock(&Adapter->SendLock);
 
-    NextEntry = Adapter->SendQueueList.Flink;
-    while (NextEntry != &Adapter->SendQueueList)
+    for (Nbl = Adapter->SendQueueHead; Nbl; Nbl = NextNbl)
     {
-        PNDIS_PACKET Packet;
+        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+        NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
 
-        Entry = NextEntry;
-        NextEntry = NextEntry->Flink;
-
-        Packet = DC_PACKET_FROM_LIST_ENTRY(Entry);
-
-        if (NDIS_GET_PACKET_CANCEL_ID(Packet) == CancelId)
+        if (NDIS_GET_NET_BUFFER_LIST_CANCEL_ID(Nbl) == CancelId &&
+            DC_NEXT_NB_FROM_NBL(Nbl) == NET_BUFFER_LIST_FIRST_NB(Nbl))
         {
-            RemoveEntryList(DC_LIST_ENTRY_FROM_PACKET(Packet));
+            NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SEND_ABORTED;
 
-            InsertTailList(&DoneList, DC_LIST_ENTRY_FROM_PACKET(Packet));
+            for (NetBuffer = NET_BUFFER_LIST_FIRST_NB(Nbl);
+                 NetBuffer;
+                 NetBuffer = NET_BUFFER_NEXT_NB(NetBuffer))
+            {
+                DcCompleteNetBuffer(Nbl, &CompleteHead, &CompleteTail);
+            }
+            continue;
         }
+
+        if (KeepTail)
+            NET_BUFFER_LIST_NEXT_NBL(KeepTail) = Nbl;
+        else
+            KeepHead = Nbl;
+        KeepTail = Nbl;
     }
+
+    Adapter->SendQueueHead = KeepHead;
+    Adapter->SendQueueTail = KeepTail;
 
     NdisReleaseSpinLock(&Adapter->SendLock);
 
-    while (!IsListEmpty(&DoneList))
-    {
-        Entry = RemoveHeadList(&DoneList);
-
-        NdisMSendComplete(Adapter->AdapterHandle,
-                          DC_PACKET_FROM_LIST_ENTRY(Entry),
-                          NDIS_STATUS_REQUEST_ABORTED);
-    }
+    DcCompleteSends(Adapter, CompleteHead, FALSE);
 }

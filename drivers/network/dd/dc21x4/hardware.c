@@ -149,7 +149,7 @@ DcTestPacket(
             DC_READ(Adapter, DcCsr5_Status));
 
         /* Try to recover the lost TX buffers */
-        NdisScheduleWorkItem(&Adapter->TxRecoveryWorkItem);
+        NdisQueueIoWorkItem(Adapter->TxRecoveryWorkItem, DcTransmitTimeoutRecoveryWorker, Adapter);
         return;
     }
 
@@ -164,7 +164,7 @@ DcTestPacket(
     Adapter->CurrentTcb = DC_NEXT_TCB(Adapter, Tcb);
 
     Tcb->Tbd = Tbd;
-    Tcb->Packet = NULL;
+    Tcb->Nbl = NULL;
 
     ASSERT(!(Tbd->Status & DC_TBD_STATUS_OWNED));
 
@@ -215,7 +215,7 @@ DcSetupFrameDownload(
     Adapter->CurrentTcb = DC_NEXT_TCB(Adapter, Tcb);
 
     Tcb->Tbd = Tbd;
-    Tcb->Packet = NULL;
+    Tcb->Nbl = NULL;
 
     ASSERT(!(Tbd->Status & DC_TBD_STATUS_OWNED));
 
@@ -546,11 +546,7 @@ DcSetupAdapter(
             {
                 Adapter->LinkUp = TRUE;
 
-                NdisMIndicateStatus(Adapter->AdapterHandle,
-                                    NDIS_STATUS_MEDIA_CONNECT,
-                                    NULL,
-                                    0);
-                NdisMIndicateStatusComplete(Adapter->AdapterHandle);
+                DcIndicateLinkState(Adapter);
             }
 
             MediaSiaSelect(Adapter);

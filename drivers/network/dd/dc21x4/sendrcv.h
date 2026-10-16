@@ -7,17 +7,17 @@
 
 #pragma once
 
-#define DC_LIST_ENTRY_FROM_PACKET(Packet) \
-    ((PLIST_ENTRY)(&(Packet)->MiniportReservedEx[0]))
+#define DC_RCB_FROM_NBL(Nbl) \
+    ((PDC_RCB*)&(Nbl)->MiniportReserved[0])
 
-#define DC_PACKET_FROM_LIST_ENTRY(ListEntry) \
-    (CONTAINING_RECORD(ListEntry, NDIS_PACKET, MiniportReservedEx))
+#define DC_RBD_FROM_NBL(Nbl) \
+    ((PDC_RBD*)&(Nbl)->MiniportReserved[1])
 
-#define DC_RCB_FROM_PACKET(Packet) \
-    ((PDC_RCB*)&(Packet)->MiniportReservedEx[0])
+#define DC_NEXT_NB_FROM_NBL(Nbl) \
+    (*(PNET_BUFFER*)&(Nbl)->MiniportReserved[0])
 
-#define DC_RBD_FROM_PACKET(Packet) \
-    ((PDC_RBD*)&(Packet)->MiniportReservedEx[sizeof(PVOID)])
+#define DC_PENDING_FROM_NBL(Nbl) \
+    (*(PLONG_PTR)&(Nbl)->MiniportReserved[1])
 
 typedef struct _DC_COALESCE_BUFFER
 {
@@ -31,7 +31,7 @@ typedef struct _DC_COALESCE_BUFFER
 typedef struct _DC_TCB
 {
     PDC_TBD Tbd;
-    PNDIS_PACKET Packet;
+    PNET_BUFFER_LIST Nbl;
     PDC_COALESCE_BUFFER Buffer;
     ULONG SlotsUsed;
 } DC_TCB, *PDC_TCB;
@@ -45,8 +45,8 @@ typedef struct _DC_RCB
     ULONG Flags;
 #define DC_RCB_FLAG_RECLAIM          0x80000000
 
-    PNDIS_PACKET Packet;
-    PNDIS_BUFFER NdisBuffer;
+    PNET_BUFFER_LIST Nbl;
+    PMDL Mdl;
     PVOID VirtualAddress;
     PVOID VirtualAddressOriginal;
     NDIS_PHYSICAL_ADDRESS PhysicalAddressOriginal;

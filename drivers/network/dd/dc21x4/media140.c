@@ -132,5 +132,5 @@ MediaMonitor21140Dpc(
 
     NdisDprReleaseSpinLock(&Adapter->ModeLock);
 
-    NdisMSetTimer(&Adapter->MediaMonitorTimer, DelayMs);
+    DcSetMediaMonitorTimer(Adapter, DelayMs);
 }

@@ -101,7 +101,7 @@ Media143SelectNextMedia(
 
     Adapter->ModeFlags &= ~DC_MODE_AUTONEG_MASK;
     Adapter->ModeFlags |= DC_MODE_AUTONEG_NONE;
-    NdisMSetTimer(&Adapter->MediaMonitorTimer, 3000);
+    DcSetMediaMonitorTimer(Adapter, 3000);
 
     if (Adapter->MediaNumber != MediaNumber)
     {
@@ -153,7 +153,7 @@ Media143Handle10LinkPass(
             /* Wait for a link pass interrupt to signal the link test completed */
             Adapter->ModeFlags &= ~DC_MODE_AUTONEG_MASK;
             Adapter->ModeFlags |= DC_MODE_AUTONEG_WAIT_INTERRUPT;
-            NdisMSetTimer(&Adapter->MediaMonitorTimer, 3000);
+            DcSetMediaMonitorTimer(Adapter, 3000);
         }
     }
     else
@@ -263,14 +263,14 @@ Media143HandleNWayComplete(
         /* Set the time limit for auto-negotiation */
         Adapter->ModeFlags &= ~DC_MODE_AUTONEG_MASK;
         Adapter->ModeFlags |= DC_MODE_AUTONEG_WAIT_INTERRUPT;
-        NdisMSetTimer(&Adapter->MediaMonitorTimer, 5000);
+        DcSetMediaMonitorTimer(Adapter, 5000);
     }
     else
     {
         /* Wait for the link integrity test to complete before we can read the link status */
         Adapter->ModeFlags &= ~DC_MODE_AUTONEG_MASK;
         Adapter->ModeFlags |= DC_MODE_AUTONEG_LINK_STATUS_CHECK;
-        NdisMSetTimer(&Adapter->MediaMonitorTimer, 1000);
+        DcSetMediaMonitorTimer(Adapter, 1000);
     }
 
     if (Adapter->MediaNumber != MediaNumber)
@@ -434,7 +434,7 @@ MediaMonitor21143Dpc(
 
             MediaIndicateConnect(Adapter, LinkUp);
 
-            NdisMSetTimer(&Adapter->MediaMonitorTimer, 5000);
+            DcSetMediaMonitorTimer(Adapter, 5000);
             break;
         }
 
@@ -495,7 +495,7 @@ MediaMonitor21143Dpc(
             }
             Adapter->LastReceiveActivity = ReceiveActivity;
 
-            NdisMSetTimer(&Adapter->MediaMonitorTimer, DelayMs);
+            DcSetMediaMonitorTimer(Adapter, DelayMs);
             break;
         }
 

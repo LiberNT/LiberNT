@@ -33,30 +33,45 @@ ExcludeFromSelect = *
 
 [DC21040.ndi.NT]
 Characteristics = 0x84 ; NCF_PHYSICAL | NCF_HAS_UI
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType = 5 ; PCIBus
 CopyFiles = DC_CopyFiles.NT
 AddReg = Common, DC_SD, DC_AUIBNC, DC_10
 
 [DC21041.ndi.NT]
 Characteristics = 0x84
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType = 5
 CopyFiles = DC_CopyFiles.NT
 AddReg = Common, DC_SD, DC_AUI_BNC, DC_10
 
 [DC21140.ndi.NT]
 Characteristics = 0x84
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType = 5
 CopyFiles = DC_CopyFiles.NT
 AddReg = Common, DC_SD, DC_10, DC_100
 
 [DC21143.ndi.NT]
 Characteristics = 0x84
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType = 5
 CopyFiles = DC_CopyFiles.NT
 AddReg = Common, DC_SD, DC_AUI_BNC, DC_10, DC_100
 
 [DC21145.ndi.NT]
 Characteristics = 0x84
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType = 5
 CopyFiles = DC_CopyFiles.NT
 AddReg = Common, DC_SD, DC_10, DC_HMR

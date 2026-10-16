@@ -14,6 +14,50 @@
 /* FUNCTIONS ******************************************************************/
 
 VOID
+DcIndicateLinkState(
+    _In_ PDC21X4_ADAPTER Adapter)
+{
+    NDIS_STATUS_INDICATION Indication;
+    NDIS_LINK_STATE LinkState;
+    ULONG64 Speed;
+
+    NdisZeroMemory(&LinkState, sizeof(LinkState));
+    LinkState.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    LinkState.Header.Revision = NDIS_LINK_STATE_REVISION_1;
+    LinkState.Header.Size = NDIS_SIZEOF_LINK_STATE_REVISION_1;
+
+    if (Adapter->LinkUp)
+    {
+        Speed = (ULONG64)DcGetLinkSpeed(Adapter) * 1000000;
+
+        LinkState.MediaConnectState = MediaConnectStateConnected;
+        LinkState.MediaDuplexState = (Adapter->OpMode & DC_OPMODE_FULL_DUPLEX) ?
+                                     MediaDuplexStateFull : MediaDuplexStateHalf;
+        LinkState.XmitLinkSpeed = Speed;
+        LinkState.RcvLinkSpeed = Speed;
+    }
+    else
+    {
+        LinkState.MediaConnectState = MediaConnectStateDisconnected;
+        LinkState.MediaDuplexState = MediaDuplexStateUnknown;
+        LinkState.XmitLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+        LinkState.RcvLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+    }
+    LinkState.PauseFunctions = NdisPauseFunctionsUnsupported;
+
+    NdisZeroMemory(&Indication, sizeof(Indication));
+    Indication.Header.Type = NDIS_OBJECT_TYPE_STATUS_INDICATION;
+    Indication.Header.Revision = NDIS_STATUS_INDICATION_REVISION_1;
+    Indication.Header.Size = NDIS_SIZEOF_STATUS_INDICATION_REVISION_1;
+    Indication.SourceHandle = Adapter->AdapterHandle;
+    Indication.StatusCode = NDIS_STATUS_LINK_STATE;
+    Indication.StatusBuffer = &LinkState;
+    Indication.StatusBufferSize = sizeof(LinkState);
+
+    NdisMIndicateStatusEx(Adapter->AdapterHandle, &Indication);
+}
+
+VOID
 MediaIndicateConnect(
     _In_ PDC21X4_ADAPTER Adapter,
     _In_ BOOLEAN LinkUp)
@@ -30,11 +74,7 @@ MediaIndicateConnect(
 
     NdisDprReleaseSpinLock(&Adapter->ModeLock);
 
-    NdisMIndicateStatus(Adapter->AdapterHandle,
-                        LinkUp ? NDIS_STATUS_MEDIA_CONNECT : NDIS_STATUS_MEDIA_DISCONNECT,
-                        NULL,
-                        0);
-    NdisMIndicateStatusComplete(Adapter->AdapterHandle);
+    DcIndicateLinkState(Adapter);
 
     NdisDprAcquireSpinLock(&Adapter->ModeLock);
 }

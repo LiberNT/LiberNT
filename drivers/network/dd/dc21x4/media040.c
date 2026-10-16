@@ -29,7 +29,7 @@ MediaLinkStateChange21040(
     {
         MediaIndicateConnect(Adapter, FALSE);
 
-        NdisMSetTimer(&Adapter->MediaMonitorTimer, 3000);
+        DcSetMediaMonitorTimer(Adapter, 3000);
     }
 
     NdisDprReleaseSpinLock(&Adapter->ModeLock);
@@ -138,6 +138,6 @@ MediaMonitor21040Dpc(
 
     if (RunAgain)
     {
-        NdisMSetTimer(&Adapter->MediaMonitorTimer, LinkUp ? 6000 : 3000);
+        DcSetMediaMonitorTimer(Adapter, LinkUp ? 6000 : 3000);
     }
 }

@@ -11,6 +11,8 @@
 
 #include <debug.h>
 
+static NDIS_HANDLE DcDriverHandle;
+
 /* FUNCTIONS ******************************************************************/
 
 ULONG
@@ -38,14 +40,13 @@ DcEthernetCrc(
 static
 VOID
 DcFlushTransmitQueue(
-    _In_ PDC21X4_ADAPTER Adapter)
+    _In_ PDC21X4_ADAPTER Adapter,
+    _In_ NDIS_STATUS Status)
 {
-    LIST_ENTRY DoneList;
-    PLIST_ENTRY Entry;
-    PNDIS_PACKET Packet;
+    PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
+    PNET_BUFFER_LIST Nbl, NextNbl;
+    PNET_BUFFER NetBuffer;
     PDC_TCB Tcb;
-
-    InitializeListHead(&DoneList);
 
     NdisAcquireSpinLock(&Adapter->SendLock);
 
@@ -54,35 +55,37 @@ DcFlushTransmitQueue(
          Tcb != Adapter->CurrentTcb;
          Tcb = DC_NEXT_TCB(Adapter, Tcb))
     {
-        Packet = Tcb->Packet;
+        Nbl = Tcb->Nbl;
 
-        if (!Packet)
+        if (!Nbl)
             continue;
 
-        InsertTailList(&DoneList, DC_LIST_ENTRY_FROM_PACKET(Packet));
+        NET_BUFFER_LIST_STATUS(Nbl) = Status;
+        DcCompleteNetBuffer(Nbl, &CompleteHead, &CompleteTail);
 
         DC_RELEASE_TCB(Adapter, Tcb);
     }
     Adapter->CurrentTcb = Tcb;
 
     /* Remove pending transmissions from the internal queue */
-    while (!IsListEmpty(&Adapter->SendQueueList))
+    for (Nbl = Adapter->SendQueueHead; Nbl != NULL; Nbl = NextNbl)
     {
-        Entry = RemoveHeadList(&Adapter->SendQueueList);
+        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
 
-        InsertTailList(&DoneList, Entry);
+        NET_BUFFER_LIST_STATUS(Nbl) = Status;
+        for (NetBuffer = DC_NEXT_NB_FROM_NBL(Nbl);
+             NetBuffer != NULL;
+             NetBuffer = NET_BUFFER_NEXT_NB(NetBuffer))
+        {
+            DcCompleteNetBuffer(Nbl, &CompleteHead, &CompleteTail);
+        }
     }
+    Adapter->SendQueueHead = NULL;
+    Adapter->SendQueueTail = NULL;
 
     NdisReleaseSpinLock(&Adapter->SendLock);
 
-    while (!IsListEmpty(&DoneList))
-    {
-        Entry = RemoveHeadList(&DoneList);
-
-        NdisMSendComplete(Adapter->AdapterHandle,
-                          DC_PACKET_FROM_LIST_ENTRY(Entry),
-                          NDIS_STATUS_FAILURE);
-    }
+    DcCompleteSends(Adapter, CompleteHead, FALSE);
 }
 
 static
@@ -124,8 +127,6 @@ DcStopAdapter(
     _In_ PDC21X4_ADAPTER Adapter,
     _In_ BOOLEAN WaitForPackets)
 {
-    BOOLEAN TimerCancelled;
-
     /* Attempt to disable interrupts to complete more quickly */
     DC_WRITE(Adapter, DcCsr7_IrqMask, 0);
 
@@ -134,7 +135,7 @@ DcStopAdapter(
     Adapter->Flags &= ~DC_ACTIVE;
     NdisReleaseSpinLock(&Adapter->SendLock);
 
-    NdisMCancelTimer(&Adapter->MediaMonitorTimer, &TimerCancelled);
+    NdisCancelTimerObject(Adapter->MediaMonitorTimer);
 
     /* Wait for any DPCs to complete */
     KeFlushQueuedDpcs();
@@ -146,7 +147,7 @@ DcStopAdapter(
     DcStopTxRxProcess(Adapter);
     Adapter->OpMode &= ~(DC_OPMODE_RX_ENABLE | DC_OPMODE_TX_ENABLE);
 
-    DcFlushTransmitQueue(Adapter);
+    DcFlushTransmitQueue(Adapter, NDIS_STATUS_FAILURE);
 
     /* Wait for the packets to be returned to the driver */
     if (WaitForPackets)
@@ -157,9 +158,9 @@ DcStopAdapter(
     /* Make sure there is no pending OID request */
     if (Adapter->OidPending)
     {
-        NdisMSetInformationComplete(Adapter->AdapterHandle, NDIS_STATUS_SUCCESS);
-
         Adapter->OidPending = FALSE;
+
+        DcCompletePendingOid(Adapter, NDIS_STATUS_SUCCESS);
     }
 }
 
@@ -181,15 +182,15 @@ DcStartAdapter(
     DC_WRITE(Adapter, DcCsr6_OpMode, Adapter->OpMode);
 
     /* Start the media monitor, wait the selected media to become ready */
-    NdisMSetTimer(&Adapter->MediaMonitorTimer, 2400);
+    DcSetMediaMonitorTimer(Adapter, 2400);
 }
 
 CODE_SEG("PAGE")
 VOID
 NTAPI
 DcResetWorker(
-    _In_ PNDIS_WORK_ITEM WorkItem,
-    _In_opt_ PVOID Context)
+    _In_ PVOID Context,
+    _In_ NDIS_HANDLE WorkItem)
 {
     PDC21X4_ADAPTER Adapter = Context;
     NDIS_STATUS Status;
@@ -221,11 +222,7 @@ DcResetWorker(
     {
         Adapter->LinkUp = FALSE;
 
-        NdisMIndicateStatus(Adapter->AdapterHandle,
-                            NDIS_STATUS_MEDIA_DISCONNECT,
-                            NULL,
-                            0);
-        NdisMIndicateStatusComplete(Adapter->AdapterHandle);
+        DcIndicateLinkState(Adapter);
     }
 
     DcSetupAdapter(Adapter);
@@ -245,8 +242,8 @@ Done:
 VOID
 NTAPI
 DcTransmitTimeoutRecoveryWorker(
-    _In_ PNDIS_WORK_ITEM WorkItem,
-    _In_opt_ PVOID Context)
+    _In_ PVOID Context,
+    _In_ NDIS_HANDLE WorkItem)
 {
     PDC21X4_ADAPTER Adapter = Context;
 
@@ -296,7 +293,7 @@ DcCheckForHang(
              DC_READ(Adapter, DcCsr12_SiaStatus),
              DC_READ(Adapter, DcCsr5_Status));
 
-        NdisScheduleWorkItem(&Adapter->TxRecoveryWorkItem);
+        NdisQueueIoWorkItem(Adapter->TxRecoveryWorkItem, DcTransmitTimeoutRecoveryWorker, Adapter);
     }
 
     return FALSE;
@@ -306,19 +303,21 @@ static
 NDIS_STATUS
 NTAPI
 DcReset(
-    _Out_ PBOOLEAN AddressingReset,
-    _In_ NDIS_HANDLE MiniportAdapterContext)
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _Out_ PBOOLEAN AddressingReset)
 {
     PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
 
     WARN("Called\n");
+
+    *AddressingReset = FALSE;
 
     if (_InterlockedCompareExchange(&Adapter->ResetLock, 1, 0))
     {
         return NDIS_STATUS_RESET_IN_PROGRESS;
     }
 
-    NdisScheduleWorkItem(&Adapter->ResetWorkItem);
+    NdisQueueIoWorkItem(Adapter->ResetWorkItem, DcResetWorker, Adapter);
 
     return NDIS_STATUS_PENDING;
 }
@@ -328,9 +327,12 @@ CODE_SEG("PAGE")
 VOID
 NTAPI
 DcHalt(
-    _In_ NDIS_HANDLE MiniportAdapterContext)
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ NDIS_HALT_ACTION HaltAction)
 {
     PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
+
+    UNREFERENCED_PARAMETER(HaltAction);
 
     PAGED_CODE();
 
@@ -347,13 +349,110 @@ static
 VOID
 NTAPI
 DcShutdown(
-    _In_ NDIS_HANDLE MiniportAdapterContext)
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ NDIS_SHUTDOWN_ACTION ShutdownAction)
 {
     PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
+
+    UNREFERENCED_PARAMETER(ShutdownAction);
 
     INFO("Called\n");
 
     DcDisableHw(Adapter);
+}
+
+static
+NDIS_STATUS
+NTAPI
+DcPause(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PNDIS_MINIPORT_PAUSE_PARAMETERS PauseParameters)
+{
+    PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
+    PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
+    PNET_BUFFER_LIST Nbl, NextNbl;
+    PNET_BUFFER NetBuffer;
+    NDIS_STATUS Status = NDIS_STATUS_SUCCESS;
+
+    UNREFERENCED_PARAMETER(PauseParameters);
+
+    NdisAcquireSpinLock(&Adapter->SendLock);
+    Adapter->Paused = TRUE;
+    for (Nbl = Adapter->SendQueueHead; Nbl != NULL; Nbl = NextNbl)
+    {
+        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+
+        NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_PAUSED;
+        for (NetBuffer = DC_NEXT_NB_FROM_NBL(Nbl);
+             NetBuffer != NULL;
+             NetBuffer = NET_BUFFER_NEXT_NB(NetBuffer))
+        {
+            DcCompleteNetBuffer(Nbl, &CompleteHead, &CompleteTail);
+        }
+    }
+    Adapter->SendQueueHead = NULL;
+    Adapter->SendQueueTail = NULL;
+    NdisReleaseSpinLock(&Adapter->SendLock);
+
+    DcCompleteSends(Adapter, CompleteHead, FALSE);
+
+    KeFlushQueuedDpcs();
+
+    NdisAcquireSpinLock(&Adapter->ReceiveLock);
+    if (Adapter->RcbFree != Adapter->RcbCount)
+    {
+        Adapter->PausePending = TRUE;
+        Status = NDIS_STATUS_PENDING;
+    }
+    NdisReleaseSpinLock(&Adapter->ReceiveLock);
+
+    return Status;
+}
+
+static
+NDIS_STATUS
+NTAPI
+DcRestart(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PNDIS_MINIPORT_RESTART_PARAMETERS RestartParameters)
+{
+    PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
+
+    UNREFERENCED_PARAMETER(RestartParameters);
+
+    NdisAcquireSpinLock(&Adapter->ReceiveLock);
+    Adapter->PausePending = FALSE;
+    NdisReleaseSpinLock(&Adapter->ReceiveLock);
+
+    NdisAcquireSpinLock(&Adapter->SendLock);
+    Adapter->Paused = FALSE;
+    NdisReleaseSpinLock(&Adapter->SendLock);
+
+    DcIndicateLinkState(Adapter);
+
+    return NDIS_STATUS_SUCCESS;
+}
+
+static
+VOID
+NTAPI
+DcDevicePnPEventNotify(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PNET_DEVICE_PNP_EVENT NetDevicePnPEvent)
+{
+    UNREFERENCED_PARAMETER(MiniportAdapterContext);
+    UNREFERENCED_PARAMETER(NetDevicePnPEvent);
+}
+
+static
+VOID
+NTAPI
+DcUnload(
+    _In_ PDRIVER_OBJECT DriverObject)
+{
+    UNREFERENCED_PARAMETER(DriverObject);
+
+    NdisMDeregisterMiniportDriver(DcDriverHandle);
 }
 
 CODE_SEG("INIT")
@@ -363,39 +462,41 @@ DriverEntry(
     _In_ PDRIVER_OBJECT DriverObject,
     _In_ PUNICODE_STRING RegistryPath)
 {
-    NDIS_HANDLE WrapperHandle;
     NDIS_STATUS Status;
-    NDIS_MINIPORT_CHARACTERISTICS Characteristics = { 0 };
+    NDIS_MINIPORT_DRIVER_CHARACTERISTICS Characteristics = { 0 };
 
     INFO("Called\n");
 
-    NdisMInitializeWrapper(&WrapperHandle, DriverObject, RegistryPath, NULL);
-    if (!WrapperHandle)
-        return NDIS_STATUS_FAILURE;
+    InitializeListHead(&SRompAdapterList);
 
+    Characteristics.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS;
+    Characteristics.Header.Revision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1;
+    Characteristics.Header.Size = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1;
     Characteristics.MajorNdisVersion = NDIS_MINIPORT_MAJOR_VERSION;
     Characteristics.MinorNdisVersion = NDIS_MINIPORT_MINOR_VERSION;
-    Characteristics.CheckForHangHandler = DcCheckForHang;
-    Characteristics.HaltHandler = DcHalt;
-    Characteristics.HandleInterruptHandler = DcHandleInterrupt;
-    Characteristics.InitializeHandler = DcInitialize;
-    Characteristics.ISRHandler = DcIsr;
-    Characteristics.QueryInformationHandler = DcQueryInformation;
-    Characteristics.ResetHandler = DcReset;
-    Characteristics.SetInformationHandler = DcSetInformation;
-    Characteristics.ReturnPacketHandler = DcReturnPacket;
-    Characteristics.SendPacketsHandler = DcSendPackets;
-    Characteristics.CancelSendPacketsHandler = DcCancelSendPackets;
-    Characteristics.AdapterShutdownHandler = DcShutdown;
+    Characteristics.MajorDriverVersion = 1;
+    Characteristics.InitializeHandlerEx = DcInitializeEx;
+    Characteristics.HaltHandlerEx = DcHalt;
+    Characteristics.UnloadHandler = DcUnload;
+    Characteristics.PauseHandler = DcPause;
+    Characteristics.RestartHandler = DcRestart;
+    Characteristics.OidRequestHandler = DcOidRequest;
+    Characteristics.SendNetBufferListsHandler = DcSendNetBufferLists;
+    Characteristics.ReturnNetBufferListsHandler = DcReturnNetBufferLists;
+    Characteristics.CancelSendHandler = DcCancelSend;
+    Characteristics.CheckForHangHandlerEx = DcCheckForHang;
+    Characteristics.ResetHandlerEx = DcReset;
+    Characteristics.DevicePnPEventNotifyHandler = DcDevicePnPEventNotify;
+    Characteristics.ShutdownHandlerEx = DcShutdown;
+    Characteristics.CancelOidRequestHandler = DcCancelOidRequest;
 
-    Status = NdisMRegisterMiniport(WrapperHandle, &Characteristics, sizeof(Characteristics));
+    Status = NdisMRegisterMiniportDriver(DriverObject,
+                                         RegistryPath,
+                                         NULL,
+                                         &Characteristics,
+                                         &DcDriverHandle);
     if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NdisTerminateWrapper(WrapperHandle, NULL);
         return Status;
-    }
-
-    InitializeListHead(&SRompAdapterList);
 
     return NDIS_STATUS_SUCCESS;
 }

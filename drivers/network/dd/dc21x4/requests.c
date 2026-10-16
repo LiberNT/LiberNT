@@ -63,6 +63,8 @@ static const NDIS_OID DcpSupportedOidList[] =
     OID_802_3_XMIT_HEARTBEAT_FAILURE,
     OID_802_3_XMIT_TIMES_CRS_LOST,
     OID_802_3_XMIT_LATE_COLLISIONS,
+    OID_GEN_STATISTICS,
+    OID_GEN_INTERRUPT_MODERATION,
 
     /* Power management */
     OID_PNP_CAPABILITIES,
@@ -163,7 +165,6 @@ DcQueryStatisticCounter(
     }
 }
 
-static
 ULONG
 DcGetLinkSpeed(
     _In_ PDC21X4_ADAPTER Adapter)
@@ -226,6 +227,8 @@ DcQueryInformation(
         NDIS_MEDIUM Medium;
         NDIS_HARDWARE_STATUS Status;
         NDIS_DEVICE_POWER_STATE PowerState;
+        NDIS_STATISTICS_INFO Statistics;
+        NDIS_INTERRUPT_MODERATION_PARAMETERS Moderation;
     } GenericInfo;
 
     InfoLength = sizeof(ULONG);
@@ -408,6 +411,44 @@ DcQueryInformation(
             GenericInfo.Ulong = (DC_TRANSMIT_BLOCKS - DC_TCB_RESERVE) - Adapter->TcbSlots;
             break;
 
+        case OID_GEN_STATISTICS:
+        {
+            ULONG64 NoBuffers;
+
+            DcQueryStatisticCounter(Adapter, OID_GEN_RCV_NO_BUFFER, &NoBuffers);
+
+            NdisZeroMemory(&GenericInfo.Statistics, sizeof(GenericInfo.Statistics));
+            GenericInfo.Statistics.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+            GenericInfo.Statistics.Header.Revision = NDIS_STATISTICS_INFO_REVISION_1;
+            GenericInfo.Statistics.Header.Size = NDIS_SIZEOF_STATISTICS_INFO_REVISION_1;
+            GenericInfo.Statistics.SupportedStatistics =
+                NDIS_STATISTICS_FLAGS_VALID_DIRECTED_FRAMES_RCV |
+                NDIS_STATISTICS_FLAGS_VALID_MULTICAST_FRAMES_RCV |
+                NDIS_STATISTICS_FLAGS_VALID_BROADCAST_FRAMES_RCV |
+                NDIS_STATISTICS_FLAGS_VALID_RCV_DISCARDS |
+                NDIS_STATISTICS_FLAGS_VALID_RCV_ERROR |
+                NDIS_STATISTICS_FLAGS_VALID_DIRECTED_FRAMES_XMIT |
+                NDIS_STATISTICS_FLAGS_VALID_XMIT_ERROR;
+            GenericInfo.Statistics.ifInDiscards = Adapter->Statistics.ReceiveErrors + NoBuffers;
+            GenericInfo.Statistics.ifInErrors = Adapter->Statistics.ReceiveErrors;
+            GenericInfo.Statistics.ifHCInUcastPkts = Adapter->Statistics.ReceiveUnicast;
+            GenericInfo.Statistics.ifHCInMulticastPkts = Adapter->Statistics.ReceiveMulticast;
+            GenericInfo.Statistics.ifHCInBroadcastPkts = Adapter->Statistics.ReceiveBroadcast;
+            GenericInfo.Statistics.ifHCOutUcastPkts = Adapter->Statistics.TransmitOk;
+            GenericInfo.Statistics.ifOutErrors = Adapter->Statistics.TransmitErrors;
+            InfoLength = sizeof(GenericInfo.Statistics);
+            break;
+        }
+
+        case OID_GEN_INTERRUPT_MODERATION:
+            NdisZeroMemory(&GenericInfo.Moderation, sizeof(GenericInfo.Moderation));
+            GenericInfo.Moderation.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+            GenericInfo.Moderation.Header.Revision = NDIS_INTERRUPT_MODERATION_PARAMETERS_REVISION_1;
+            GenericInfo.Moderation.Header.Size = NDIS_SIZEOF_INTERRUPT_MODERATION_PARAMETERS_REVISION_1;
+            GenericInfo.Moderation.InterruptModeration = NdisInterruptModerationNotSupported;
+            InfoLength = sizeof(GenericInfo.Moderation);
+            break;
+
         case OID_PNP_CAPABILITIES:
         {
             PNDIS_PNP_CAPABILITIES Capabilities;
@@ -455,7 +496,7 @@ DcQueryInformation(
         }
 
         default:
-            Status = NDIS_STATUS_INVALID_OID;
+            Status = NDIS_STATUS_NOT_SUPPORTED;
             break;
     }
 
@@ -662,4 +703,130 @@ DcSetInformation(
     }
 
     return Status;
+}
+
+NDIS_STATUS
+DcSetGeneralAttributes(
+    _In_ PDC21X4_ADAPTER Adapter)
+{
+    NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES General;
+    ULONG64 Speed;
+
+    NdisZeroMemory(&General, sizeof(General));
+    General.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES;
+    General.Header.Revision = NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_1;
+    General.Header.Size = NDIS_SIZEOF_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_1;
+    General.MediaType = NdisMedium802_3;
+    General.PhysicalMediumType = NdisPhysicalMedium802_3;
+    General.MtuSize = DC_MAXIMUM_FRAME_SIZE - DC_ETHERNET_HEADER_SIZE;
+    General.MaxXmitLinkSpeed = 100000000;
+    General.MaxRcvLinkSpeed = 100000000;
+    if (Adapter->LinkUp)
+    {
+        Speed = (ULONG64)DcGetLinkSpeed(Adapter) * 1000000;
+        General.XmitLinkSpeed = Speed;
+        General.RcvLinkSpeed = Speed;
+        General.MediaConnectState = MediaConnectStateConnected;
+        General.MediaDuplexState = (Adapter->OpMode & DC_OPMODE_FULL_DUPLEX) ?
+                                   MediaDuplexStateFull : MediaDuplexStateHalf;
+    }
+    else
+    {
+        General.XmitLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+        General.RcvLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+        General.MediaConnectState = MediaConnectStateUnknown;
+        General.MediaDuplexState = MediaDuplexStateUnknown;
+    }
+    General.LookaheadSize = DC_MAXIMUM_FRAME_SIZE - DC_ETHERNET_HEADER_SIZE;
+    General.MacOptions = NDIS_MAC_OPTION_COPY_LOOKAHEAD_DATA |
+                         NDIS_MAC_OPTION_TRANSFERS_NOT_PEND |
+                         NDIS_MAC_OPTION_NO_LOOPBACK;
+    General.SupportedPacketFilters = DC_PACKET_FILTERS;
+    General.MaxMulticastListSize = Adapter->MulticastMaxEntries;
+    General.MacAddressLength = ETH_LENGTH_OF_ADDRESS;
+    NdisMoveMemory(General.PermanentMacAddress, Adapter->PermanentMacAddress, ETH_LENGTH_OF_ADDRESS);
+    NdisMoveMemory(General.CurrentMacAddress, Adapter->CurrentMacAddress, ETH_LENGTH_OF_ADDRESS);
+    General.AccessType = NET_IF_ACCESS_BROADCAST;
+    General.DirectionType = NET_IF_DIRECTION_SENDRECEIVE;
+    General.ConnectionType = NET_IF_CONNECTION_DEDICATED;
+    General.IfType = IF_TYPE_ETHERNET_CSMACD;
+    General.IfConnectorPresent = TRUE;
+    General.SupportedStatistics = NDIS_STATISTICS_XMIT_OK_SUPPORTED |
+                                  NDIS_STATISTICS_RCV_OK_SUPPORTED |
+                                  NDIS_STATISTICS_XMIT_ERROR_SUPPORTED |
+                                  NDIS_STATISTICS_RCV_ERROR_SUPPORTED |
+                                  NDIS_STATISTICS_RCV_NO_BUFFER_SUPPORTED |
+                                  NDIS_STATISTICS_DIRECTED_FRAMES_RCV_SUPPORTED |
+                                  NDIS_STATISTICS_MULTICAST_FRAMES_RCV_SUPPORTED |
+                                  NDIS_STATISTICS_BROADCAST_FRAMES_RCV_SUPPORTED |
+                                  NDIS_STATISTICS_RCV_CRC_ERROR_SUPPORTED |
+                                  NDIS_STATISTICS_TRANSMIT_QUEUE_LENGTH_SUPPORTED |
+                                  NDIS_STATISTICS_GEN_STATISTICS_SUPPORTED;
+    General.SupportedPauseFunctions = NdisPauseFunctionsUnsupported;
+    General.SupportedOidList = (PNDIS_OID)DcpSupportedOidList;
+    General.SupportedOidListLength = sizeof(DcpSupportedOidList);
+
+    return NdisMSetMiniportAttributes(Adapter->AdapterHandle,
+                                      (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&General);
+}
+
+VOID
+DcCompletePendingOid(
+    _In_ PDC21X4_ADAPTER Adapter,
+    _In_ NDIS_STATUS Status)
+{
+    PNDIS_OID_REQUEST OidRequest;
+
+    OidRequest = InterlockedExchangePointer((PVOID*)&Adapter->PendingOidRequest, NULL);
+    if (OidRequest)
+        NdisMOidRequestComplete(Adapter->AdapterHandle, OidRequest, Status);
+}
+
+NDIS_STATUS
+NTAPI
+DcOidRequest(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PNDIS_OID_REQUEST OidRequest)
+{
+    PDC21X4_ADAPTER Adapter = (PDC21X4_ADAPTER)MiniportAdapterContext;
+    NDIS_STATUS Status;
+
+    switch (OidRequest->RequestType)
+    {
+        case NdisRequestQueryInformation:
+        case NdisRequestQueryStatistics:
+            return DcQueryInformation(MiniportAdapterContext,
+                                      OidRequest->DATA.QUERY_INFORMATION.Oid,
+                                      OidRequest->DATA.QUERY_INFORMATION.InformationBuffer,
+                                      OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength,
+                                      (PULONG)&OidRequest->DATA.QUERY_INFORMATION.BytesWritten,
+                                      (PULONG)&OidRequest->DATA.QUERY_INFORMATION.BytesNeeded);
+
+        case NdisRequestSetInformation:
+            InterlockedExchangePointer((PVOID*)&Adapter->PendingOidRequest, OidRequest);
+
+            Status = DcSetInformation(MiniportAdapterContext,
+                                      OidRequest->DATA.SET_INFORMATION.Oid,
+                                      OidRequest->DATA.SET_INFORMATION.InformationBuffer,
+                                      OidRequest->DATA.SET_INFORMATION.InformationBufferLength,
+                                      (PULONG)&OidRequest->DATA.SET_INFORMATION.BytesRead,
+                                      (PULONG)&OidRequest->DATA.SET_INFORMATION.BytesNeeded);
+            if (Status != NDIS_STATUS_PENDING)
+                InterlockedExchangePointer((PVOID*)&Adapter->PendingOidRequest, NULL);
+
+            return Status;
+
+        default:
+            return NDIS_STATUS_NOT_SUPPORTED;
+    }
+}
+
+VOID
+NTAPI
+DcCancelOidRequest(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PVOID RequestId)
+{
+    UNREFERENCED_PARAMETER(MiniportAdapterContext);
+    UNREFERENCED_PARAMETER(RequestId);
 }

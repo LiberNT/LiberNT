@@ -1,6 +1,6 @@
 
 add_definitions(
-    -DNDIS51_MINIPORT
+    -DNDIS60_MINIPORT
     -DNDIS_MINIPORT_DRIVER)
 
 list(APPEND SOURCE

@@ -33,7 +33,7 @@ MediaLinkStateChange21041(
                 Adapter->MediaNumber = MEDIA_10T;
                 MediaSiaSelect(Adapter);
 
-                NdisMSetTimer(&Adapter->MediaMonitorTimer, 3000);
+                DcSetMediaMonitorTimer(Adapter, 3000);
             }
         }
 
@@ -218,5 +218,5 @@ MediaMonitor21041Dpc(
 
     NdisDprReleaseSpinLock(&Adapter->ModeLock);
 
-    NdisMSetTimer(&Adapter->MediaMonitorTimer, DelayMs);
+    DcSetMediaMonitorTimer(Adapter, DelayMs);
 }

@@ -95,15 +95,20 @@ DcReadConfiguration(
 {
     NDIS_STATUS Status;
     NDIS_HANDLE ConfigurationHandle;
+    NDIS_CONFIGURATION_OBJECT ConfigurationObject;
     PUCHAR NetworkAddress;
     UINT Length;
     ULONG GenericUlong;
 
     PAGED_CODE();
 
-    NdisOpenConfiguration(&Status,
-                          &ConfigurationHandle,
-                          Adapter->WrapperConfigurationHandle);
+    ConfigurationObject.Header.Type = NDIS_OBJECT_TYPE_CONFIGURATION_OBJECT;
+    ConfigurationObject.Header.Revision = NDIS_CONFIGURATION_OBJECT_REVISION_1;
+    ConfigurationObject.Header.Size = NDIS_SIZEOF_CONFIGURATION_OBJECT_REVISION_1;
+    ConfigurationObject.NdisHandle = Adapter->AdapterHandle;
+    ConfigurationObject.Flags = 0;
+
+    Status = NdisOpenConfigurationEx(&ConfigurationObject, &ConfigurationHandle);
     if (Status != NDIS_STATUS_SUCCESS)
         return Status;
 
@@ -166,10 +171,10 @@ DcFreeRcb(
                               Rcb->PhysicalAddressOriginal);
     }
 
-    if (Rcb->NdisBuffer)
-        NdisFreeBuffer(Rcb->NdisBuffer);
-    if (Rcb->Packet)
-        NdisFreePacket(Rcb->Packet);
+    if (Rcb->Nbl)
+        NdisFreeNetBufferList(Rcb->Nbl);
+    if (Rcb->Mdl)
+        NdisFreeMdl(Rcb->Mdl);
 
     NdisFreeMemory(Rcb, sizeof(*Rcb), 0);
 }
@@ -211,22 +216,21 @@ DcAllocateRcb(
     Rcb->VirtualAddressOriginal = VirtualAddress;
     Rcb->PhysicalAddressOriginal.QuadPart = PhysicalAddress.QuadPart;
 
-    NdisAllocatePacket(&Status, &Rcb->Packet, Adapter->PacketPool);
-    if (Status != NDIS_STATUS_SUCCESS)
+    Rcb->Mdl = NdisAllocateMdl(Adapter->AdapterHandle, Rcb->VirtualAddress, DC_RECEIVE_BLOCK_SIZE);
+    if (!Rcb->Mdl)
         goto Failure;
 
-    *DC_RCB_FROM_PACKET(Rcb->Packet) = Rcb;
-
-    NdisAllocateBuffer(&Status,
-                       &Rcb->NdisBuffer,
-                       Adapter->BufferPool,
-                       Rcb->VirtualAddress,
-                       DC_RECEIVE_BLOCK_SIZE);
-    if (Status != NDIS_STATUS_SUCCESS)
+    Rcb->Nbl = NdisAllocateNetBufferAndNetBufferList(Adapter->ReceiveNblPool,
+                                                     0,
+                                                     0,
+                                                     Rcb->Mdl,
+                                                     0,
+                                                     DC_RECEIVE_BLOCK_SIZE);
+    if (!Rcb->Nbl)
         goto Failure;
 
-    NDIS_SET_PACKET_HEADER_SIZE(Rcb->Packet, DC_ETHERNET_HEADER_SIZE);
-    NdisChainBufferAtFront(Rcb->Packet, Rcb->NdisBuffer);
+    *DC_RCB_FROM_NBL(Rcb->Nbl) = Rcb;
+    Rcb->Nbl->SourceHandle = Adapter->AdapterHandle;
 
     PushEntryList(&Adapter->AllocRcbList, &Rcb->AllocListEntry);
 
@@ -247,21 +251,21 @@ DcAllocateReceiveBuffers(
     ULONG i;
     NDIS_STATUS Status;
     PDC_RCB Rcb;
+    NET_BUFFER_LIST_POOL_PARAMETERS PoolParameters;
 
     PAGED_CODE();
 
-    NdisAllocatePacketPool(&Status,
-                           &Adapter->PacketPool,
-                           DC_RECEIVE_BUFFERS_DEFAULT + DC_RECEIVE_BUFFERS_EXTRA,
-                           PROTOCOL_RESERVED_SIZE_IN_PACKET);
-    if (Status != NDIS_STATUS_SUCCESS)
-        return Status;
+    NdisZeroMemory(&PoolParameters, sizeof(PoolParameters));
+    PoolParameters.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    PoolParameters.Header.Revision = NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+    PoolParameters.Header.Size = NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+    PoolParameters.ProtocolId = NDIS_PROTOCOL_ID_DEFAULT;
+    PoolParameters.fAllocateNetBuffer = TRUE;
+    PoolParameters.PoolTag = DC21X4_TAG;
 
-    NdisAllocateBufferPool(&Status,
-                           &Adapter->BufferPool,
-                           DC_RECEIVE_BUFFERS_DEFAULT + DC_RECEIVE_BUFFERS_EXTRA);
-    if (Status != NDIS_STATUS_SUCCESS)
-        return Status;
+    Adapter->ReceiveNblPool = NdisAllocateNetBufferListPool(Adapter->AdapterHandle, &PoolParameters);
+    if (!Adapter->ReceiveNblPool)
+        return NDIS_STATUS_RESOURCES;
 
     /* Allocate RCBs */
     for (i = 0; i < DC_RECEIVE_BUFFERS_DEFAULT; ++i)
@@ -504,7 +508,8 @@ DcInitTxRing(
 
     PAGED_CODE();
 
-    InitializeListHead(&Adapter->SendQueueList);
+    Adapter->SendQueueHead = NULL;
+    Adapter->SendQueueTail = NULL;
 
     Tcb = Adapter->HeadTcb;
 
@@ -602,14 +607,24 @@ DcAllocateMemory(
     _In_ PDC21X4_ADAPTER Adapter)
 {
     NDIS_STATUS Status;
+    NDIS_SG_DMA_DESCRIPTION DmaDescription;
 
     PAGED_CODE();
 
-    Status = NdisMInitializeScatterGatherDma(Adapter->AdapterHandle,
-                                             FALSE, /* 32-bit DMA */
-                                             DC_TRANSMIT_BLOCK_SIZE);
+    NdisZeroMemory(&DmaDescription, sizeof(DmaDescription));
+    DmaDescription.Header.Type = NDIS_OBJECT_TYPE_SG_DMA_DESCRIPTION;
+    DmaDescription.Header.Revision = NDIS_SG_DMA_DESCRIPTION_REVISION_1;
+    DmaDescription.Header.Size = NDIS_SIZEOF_SG_DMA_DESCRIPTION_REVISION_1;
+    DmaDescription.MaximumPhysicalMapping = DC_TRANSMIT_BLOCK_SIZE;
+
+    Status = NdisMRegisterScatterGatherDma(Adapter->AdapterHandle,
+                                           &DmaDescription,
+                                           &Adapter->DmaHandle);
     if (Status != NDIS_STATUS_SUCCESS)
+    {
+        Adapter->DmaHandle = NULL;
         return Status;
+    }
 
     Status = DcAllocateReceiveDescriptors(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
@@ -672,35 +687,18 @@ static
 CODE_SEG("PAGE")
 NDIS_STATUS
 DcInitializeAdapterResources(
-    _In_ PDC21X4_ADAPTER Adapter)
+    _In_ PDC21X4_ADAPTER Adapter,
+    _In_opt_ PCM_PARTIAL_RESOURCE_LIST AssignedResources)
 {
     NDIS_STATUS Status;
-    PNDIS_RESOURCE_LIST AssignedResources = NULL;
     PCM_PARTIAL_RESOURCE_DESCRIPTOR IoDescriptor = NULL;
     PCM_PARTIAL_RESOURCE_DESCRIPTOR InterruptDescriptor = NULL;
-    UINT i, ResourceListSize = 0;
+    UINT i;
 
     PAGED_CODE();
 
-    NdisMQueryAdapterResources(&Status,
-                               Adapter->WrapperConfigurationHandle,
-                               AssignedResources,
-                               &ResourceListSize);
-    if (Status != NDIS_STATUS_RESOURCES)
-        return NDIS_STATUS_FAILURE;
-
-    Status = NdisAllocateMemoryWithTag((PVOID*)&AssignedResources,
-                                       ResourceListSize,
-                                       DC21X4_TAG);
-    if (Status != NDIS_STATUS_SUCCESS)
-        return Status;
-
-    NdisMQueryAdapterResources(&Status,
-                               Adapter->WrapperConfigurationHandle,
-                               AssignedResources,
-                               &ResourceListSize);
-    if (Status != NDIS_STATUS_SUCCESS)
-        goto Cleanup;
+    if (!AssignedResources)
+        return NDIS_STATUS_RESOURCES;
 
     for (i = 0; i < AssignedResources->Count; ++i)
     {
@@ -731,8 +729,7 @@ DcInitializeAdapterResources(
 
     if (!IoDescriptor || !InterruptDescriptor)
     {
-        Status = NDIS_STATUS_RESOURCES;
-        goto Cleanup;
+        return NDIS_STATUS_RESOURCES;
     }
 
     Adapter->InterruptVector = InterruptDescriptor->u.Interrupt.Vector;
@@ -762,7 +759,8 @@ DcInitializeAdapterResources(
     }
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        goto Cleanup;
+        Adapter->IoBase = NULL;
+        return Status;
     }
 
     INFO("IO Base %p\n", Adapter->IoBase);
@@ -772,9 +770,6 @@ DcInitializeAdapterResources(
     INFO("IRQ ShareDisposition %u, InterruptFlags %lx\n",
          InterruptDescriptor->ShareDisposition,
          InterruptDescriptor->Flags);
-
-Cleanup:
-    NdisFreeMemory(AssignedResources, ResourceListSize, 0);
 
     return Status;
 }
@@ -881,15 +876,17 @@ DcRecognizeHardware(
     PCI_COMMON_HEADER Buffer;
     PPCI_COMMON_HEADER PciConfig = &Buffer; // Partial PCI header
     PNDIS_TIMER_FUNCTION MediaMonitorRoutine;
+    NDIS_TIMER_CHARACTERISTICS TimerCharacteristics;
+    NDIS_STATUS Status;
     ULONG Bytes;
 
     PAGED_CODE();
 
-    Bytes = NdisReadPciSlotInformation(Adapter->AdapterHandle,
-                                       0,
-                                       FIELD_OFFSET(PCI_COMMON_CONFIG, VendorID),
-                                       &Buffer,
-                                       RTL_SIZEOF_THROUGH_FIELD(PCI_COMMON_HEADER, CacheLineSize));
+    Bytes = NdisMGetBusData(Adapter->AdapterHandle,
+                            PCI_WHICHSPACE_CONFIG,
+                            FIELD_OFFSET(PCI_COMMON_CONFIG, VendorID),
+                            &Buffer,
+                            RTL_SIZEOF_THROUGH_FIELD(PCI_COMMON_HEADER, CacheLineSize));
     if (Bytes != RTL_SIZEOF_THROUGH_FIELD(PCI_COMMON_HEADER, CacheLineSize))
         return NDIS_STATUS_FAILURE;
 
@@ -1013,10 +1010,22 @@ DcRecognizeHardware(
     else
         Adapter->MulticastMaxEntries = DC_MULTICAST_LIST_SIZE;
 
-    NdisMInitializeTimer(&Adapter->MediaMonitorTimer,
-                         Adapter->AdapterHandle,
-                         MediaMonitorRoutine,
-                         Adapter);
+    NdisZeroMemory(&TimerCharacteristics, sizeof(TimerCharacteristics));
+    TimerCharacteristics.Header.Type = NDIS_OBJECT_TYPE_TIMER_CHARACTERISTICS;
+    TimerCharacteristics.Header.Revision = NDIS_TIMER_CHARACTERISTICS_REVISION_1;
+    TimerCharacteristics.Header.Size = NDIS_SIZEOF_TIMER_CHARACTERISTICS_REVISION_1;
+    TimerCharacteristics.AllocationTag = DC21X4_TAG;
+    TimerCharacteristics.TimerFunction = MediaMonitorRoutine;
+    TimerCharacteristics.FunctionContext = Adapter;
+
+    Status = NdisAllocateTimerObject(Adapter->AdapterHandle,
+                                     &TimerCharacteristics,
+                                     &Adapter->MediaMonitorTimer);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        Adapter->MediaMonitorTimer = NULL;
+        return Status;
+    }
 
     return NDIS_STATUS_SUCCESS;
 }
@@ -1032,9 +1041,16 @@ DcFreeAdapter(
 
     DcFreeEeprom(Adapter);
 
-    if (Adapter->Interrupt.InterruptObject)
+    if (Adapter->InterruptHandle)
     {
-        NdisMDeregisterInterrupt(&Adapter->Interrupt);
+        NdisMDeregisterInterruptEx(Adapter->InterruptHandle);
+    }
+
+    if (Adapter->MediaMonitorTimer)
+    {
+        NdisCancelTimerObject(Adapter->MediaMonitorTimer);
+        KeFlushQueuedDpcs();
+        NdisFreeTimerObject(Adapter->MediaMonitorTimer);
     }
 
     if (Adapter->IoBase)
@@ -1108,10 +1124,17 @@ DcFreeAdapter(
         }
     }
 
-    if (Adapter->PacketPool)
-        NdisFreePacketPool(Adapter->PacketPool);
-    if (Adapter->BufferPool)
-        NdisFreeBufferPool(Adapter->BufferPool);
+    if (Adapter->DmaHandle)
+        NdisMDeregisterScatterGatherDma(Adapter->DmaHandle);
+    if (Adapter->ReceiveNblPool)
+        NdisFreeNetBufferListPool(Adapter->ReceiveNblPool);
+
+    if (Adapter->ResetWorkItem)
+        NdisFreeIoWorkItem(Adapter->ResetWorkItem);
+    if (Adapter->PowerWorkItem)
+        NdisFreeIoWorkItem(Adapter->PowerWorkItem);
+    if (Adapter->TxRecoveryWorkItem)
+        NdisFreeIoWorkItem(Adapter->TxRecoveryWorkItem);
 
     if (Adapter->SendLock.SpinLock)
         NdisFreeSpinLock(&Adapter->SendLock);
@@ -1126,13 +1149,10 @@ DcFreeAdapter(
 CODE_SEG("PAGE")
 NDIS_STATUS
 NTAPI
-DcInitialize(
-    _Out_ PNDIS_STATUS OpenErrorStatus,
-    _Out_ PUINT SelectedMediumIndex,
-    _In_ PNDIS_MEDIUM MediumArray,
-    _In_ UINT MediumArraySize,
+DcInitializeEx(
     _In_ NDIS_HANDLE MiniportAdapterHandle,
-    _In_ NDIS_HANDLE WrapperConfigurationContext)
+    _In_ NDIS_HANDLE MiniportDriverContext,
+    _In_ PNDIS_MINIPORT_INIT_PARAMETERS MiniportInitParameters)
 {
     PDC21X4_ADAPTER Adapter;
     PVOID UnalignedAdapter;
@@ -1140,24 +1160,14 @@ DcInitialize(
     ULONG Alignment, AdapterSize, OpMode;
     BOOLEAN Success;
     UINT i;
+    NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES Registration;
+    NDIS_MINIPORT_INTERRUPT_CHARACTERISTICS InterruptCharacteristics;
+
+    UNREFERENCED_PARAMETER(MiniportDriverContext);
 
     INFO("Called\n");
 
     PAGED_CODE();
-
-    for (i = 0; i < MediumArraySize; ++i)
-    {
-        if (MediumArray[i] == NdisMedium802_3)
-        {
-            *SelectedMediumIndex = i;
-            break;
-        }
-    }
-    if (i == MediumArraySize)
-    {
-        ERR("No supported media\n");
-        return NDIS_STATUS_UNSUPPORTED_MEDIA;
-    }
 
     Alignment = NdisGetSharedDataAlignment();
     AdapterSize = sizeof(*Adapter) + Alignment;
@@ -1174,27 +1184,41 @@ DcInitialize(
     Adapter->AdapterOriginal = UnalignedAdapter;
     Adapter->AdapterSize = AdapterSize;
     Adapter->AdapterHandle = MiniportAdapterHandle;
-    Adapter->WrapperConfigurationHandle = WrapperConfigurationContext;
+    Adapter->Paused = TRUE;
 
-    NdisInitializeWorkItem(&Adapter->ResetWorkItem, DcResetWorker, Adapter);
-    NdisInitializeWorkItem(&Adapter->PowerWorkItem, DcPowerWorker, Adapter);
-    NdisInitializeWorkItem(&Adapter->TxRecoveryWorkItem, DcTransmitTimeoutRecoveryWorker, Adapter);
+    NdisZeroMemory(&Registration, sizeof(Registration));
+    Registration.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES;
+    Registration.Header.Revision = NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1;
+    Registration.Header.Size = NDIS_SIZEOF_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1;
+    Registration.MiniportAdapterContext = Adapter;
+    Registration.AttributeFlags = NDIS_MINIPORT_ATTRIBUTES_HARDWARE_DEVICE |
+                                  NDIS_MINIPORT_ATTRIBUTES_BUS_MASTER;
+    Registration.CheckForHangTimeInSeconds = 2;
+    Registration.InterfaceType = NdisInterfacePci;
 
-    NdisMSetAttributesEx(MiniportAdapterHandle,
-                         Adapter,
-                         2, /* CheckForHangTimeInSeconds */
-                         NDIS_ATTRIBUTE_BUS_MASTER |
-                         NDIS_ATTRIBUTE_DESERIALIZE |
-                         NDIS_ATTRIBUTE_USES_SAFE_BUFFER_APIS,
-                         NdisInterfacePci);
+    Status = NdisMSetMiniportAttributes(MiniportAdapterHandle,
+                                        (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&Registration);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        goto Failure;
+    }
+
+    Adapter->ResetWorkItem = NdisAllocateIoWorkItem(MiniportAdapterHandle);
+    Adapter->PowerWorkItem = NdisAllocateIoWorkItem(MiniportAdapterHandle);
+    Adapter->TxRecoveryWorkItem = NdisAllocateIoWorkItem(MiniportAdapterHandle);
+    if (!Adapter->ResetWorkItem || !Adapter->PowerWorkItem || !Adapter->TxRecoveryWorkItem)
+    {
+        Status = NDIS_STATUS_RESOURCES;
+        goto Failure;
+    }
 
     Status = DcRecognizeHardware(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        return Status;
+        goto Failure;
     }
 
-    Status = DcInitializeAdapterResources(Adapter);
+    Status = DcInitializeAdapterResources(Adapter, MiniportInitParameters->AllocatedResources);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         goto Failure;
@@ -1296,17 +1320,29 @@ DcInitialize(
 
     Adapter->Flags &= ~DC_FIRST_SETUP;
 
-    Status = NdisMRegisterInterrupt(&Adapter->Interrupt,
-                                    Adapter->AdapterHandle,
-                                    Adapter->InterruptVector,
-                                    Adapter->InterruptLevel,
-                                    TRUE, /* Request ISR calls */
-                                    !!(Adapter->Flags & DC_IRQ_SHARED),
-                                    (Adapter->InterruptFlags & CM_RESOURCE_INTERRUPT_LATCHED) ?
-                                    NdisInterruptLatched : NdisInterruptLevelSensitive);
+    Status = DcSetGeneralAttributes(Adapter);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        goto Disable;
+    }
+
+    NdisZeroMemory(&InterruptCharacteristics, sizeof(InterruptCharacteristics));
+    InterruptCharacteristics.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_INTERRUPT;
+    InterruptCharacteristics.Header.Revision = NDIS_MINIPORT_INTERRUPT_REVISION_1;
+    InterruptCharacteristics.Header.Size = NDIS_SIZEOF_MINIPORT_INTERRUPT_CHARACTERISTICS_REVISION_1;
+    InterruptCharacteristics.InterruptHandler = DcIsr;
+    InterruptCharacteristics.InterruptDpcHandler = DcInterruptDpc;
+    InterruptCharacteristics.DisableInterruptHandler = DcDisableInterrupt;
+    InterruptCharacteristics.EnableInterruptHandler = DcEnableInterrupt;
+
+    Status = NdisMRegisterInterruptEx(Adapter->AdapterHandle,
+                                      Adapter,
+                                      &InterruptCharacteristics,
+                                      &Adapter->InterruptHandle);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         ERR("Unable to register interrupt\n");
+        Adapter->InterruptHandle = NULL;
         goto Disable;
     }
 
