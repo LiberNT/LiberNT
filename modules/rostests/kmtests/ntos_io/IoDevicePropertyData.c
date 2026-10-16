@@ -10,6 +10,7 @@
 #include <devpkey.h>
 #include <ntddstor.h>
 #include <usbiodef.h>
+#include <cfg.h>
 
 typedef struct _TEST_DEVPROP
 {
@@ -33,7 +34,7 @@ static const TEST_DEVPROP TestDiskKeys[] =
     TEST_TYPED(DriverInfSection, DEVPROP_TYPE_STRING), TEST_TYPED(MatchingDeviceId, DEVPROP_TYPE_STRING),
     TEST_TYPED(DriverProvider, DEVPROP_TYPE_STRING), TEST_TYPED(ProblemCode, DEVPROP_TYPE_UINT32),
     TEST_TYPED(Stack, DEVPROP_TYPE_STRING_LIST), TEST_TYPED(IsPresent, DEVPROP_TYPE_BOOLEAN),
-    TEST_TYPED(HasProblem, DEVPROP_TYPE_BOOLEAN),
+    TEST_TYPED(HasProblem, DEVPROP_TYPE_BOOLEAN), TEST_TYPED(DevNodeStatus, DEVPROP_TYPE_UINT32),
 };
 
 static const TEST_DEVPROP TestKeys[] =
@@ -165,6 +166,7 @@ TestCheckDiskPdo(
 {
     DEVPROPTYPE Type;
     ULONG Required, i;
+    ULONG DevNodeStatus = 0;
     NTSTATUS Status;
 
     for (i = 0; i < RTL_NUMBER_OF(TestDiskKeys); i++)
@@ -176,6 +178,11 @@ TestCheckDiskPdo(
         ok(Type == TestDiskKeys[i].Type, "%s: type %lx, expected %lx\n", TestDiskKeys[i].Name, Type, TestDiskKeys[i].Type);
         ok(Required != 0, "%s: no size\n", TestDiskKeys[i].Name);
     }
+
+    Status = IoGetDevicePropertyData(Pdo, &DEVPKEY_Device_DevNodeStatus, LOCALE_NEUTRAL, 0, sizeof(DevNodeStatus), &DevNodeStatus, &Required, &Type);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_hex(DevNodeStatus & (DN_DRIVER_LOADED | DN_STARTED | DN_NT_ENUMERATOR | DN_NT_DRIVER | DN_HAS_PROBLEM),
+              DN_DRIVER_LOADED | DN_STARTED | DN_NT_ENUMERATOR | DN_NT_DRIVER);
 
     Status = IoGetDevicePropertyData(Pdo, &DEVPKEY_Device_SessionId, LOCALE_NEUTRAL, 0, 0, NULL, &Required, &Type);
     ok_eq_hex(Status, STATUS_OBJECT_NAME_NOT_FOUND);
