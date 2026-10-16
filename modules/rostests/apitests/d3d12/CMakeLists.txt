@@ -22,6 +22,7 @@ list(APPEND SOURCE
     rootstate.cpp
     sampler.cpp
     shaders.cpp
+    swizzle.cpp
     topology.cpp
     uav.cpp
     util.cpp
