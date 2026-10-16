@@ -918,6 +918,10 @@ function(create_registry_hives)
                 FILE ${_registry_inf}
                 DESTINATION reactos
                 NO_CAB FOR bootcd)
+    add_cd_file(TARGET registry_inf
+                FILE ${_registry_inf}
+                DESTINATION ${ARCH}
+                FOR preinstall)
 
     find_program(MKCOMREG_PYTHON_EXECUTABLE NAMES python3 python REQUIRED NO_CMAKE_FIND_ROOT_PATH)
     set(_syssetup_inf ${CMAKE_SOURCE_DIR}/media/inf/syssetup.inf)

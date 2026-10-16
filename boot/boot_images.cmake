@@ -1009,7 +1009,7 @@ add_dependencies(liberntvhd preinstall_partition)
 if(DEFINED EFI_PLATFORM_ID)
     # For devices such as USB drives, add also the EFI boot image into efi/boot.
     add_cd_file(TARGET efisys FILE ${CMAKE_CURRENT_BINARY_DIR}/efisys.bin DESTINATION loader NO_CAB FOR bootcd livecd)
-    add_cd_file(TARGET ${_uefi_loader} DESTINATION efi/boot NO_CAB NAME_ON_CD boot${EFI_PLATFORM_ID}.efi FOR bootcd livecd)
+    add_cd_file(TARGET ${_uefi_loader} DESTINATION efi/boot NO_CAB NAME_ON_CD boot${EFI_PLATFORM_ID}.efi FOR bootcd livecd preinstall)
     if(_uefi_driver_files)
         foreach(_driver ${_uefi_driver_files})
             get_filename_component(_driver_name "${_driver}" NAME)

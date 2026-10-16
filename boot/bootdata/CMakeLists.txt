@@ -2,10 +2,12 @@
 
 # Setup settings file
 add_cd_file(FILE ${REACTOS_BINARY_DIR}/boot/bootdata/txtsetup.$<CONFIG>.sif DESTINATION reactos NO_CAB NAME_ON_CD txtsetup.sif FOR bootcd)
+add_cd_file(FILE ${REACTOS_BINARY_DIR}/boot/bootdata/txtsetup.$<CONFIG>.sif DESTINATION ${ARCH} NAME_ON_CD txtsetup.sif FOR preinstall)
 
 add_custom_target(converted_caroots_inf DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/caroots.inf)
 utf16le_convert(${CMAKE_CURRENT_SOURCE_DIR}/caroots.inf ${CMAKE_CURRENT_BINARY_DIR}/caroots.inf)
 add_cd_file(TARGET converted_caroots_inf FILE ${CMAKE_CURRENT_BINARY_DIR}/caroots.inf DESTINATION reactos NO_CAB FOR bootcd)
+add_cd_file(TARGET converted_caroots_inf FILE ${CMAKE_CURRENT_BINARY_DIR}/caroots.inf DESTINATION ${ARCH} FOR preinstall)
 
 # Common hives
 add_registry_inf(
@@ -164,10 +166,14 @@ cmdenvvar(envvar_archdir     "PROCESSOR_ARCHITECTURE:x86=I386" TRUE)
 add_livecd_shortcut("Install LiberNT"
     "shell:system\\cmd.exe"
     CMDLINE_ARGS "/D /E:ON /C \"start ${envvar_systemdrive}\\${envvar_archdir}\\reactos.exe\""
-    ICON "${envvar_systemdrive}\\icon.ico"
+    ICON "${envvar_systemdrive}\\${envvar_archdir}\\reactos.exe"
     MINIMIZE
     FOR livecd
     DESTINATION "${dir_allusers_desktop}")
+add_cd_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/Install LiberNT.lnk"
+            TARGET livecd_links
+            DESTINATION "${dir_startmenu_programs}"
+            FOR preinstall)
 
 add_livecd_shortcut("Read Me"
     "shell:windows\\readme.txt"

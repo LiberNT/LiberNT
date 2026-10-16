@@ -14,11 +14,13 @@ Each target builds everything it needs first, and the files are written to the o
 
 ## Installing from the setup CD
 
-Boot `bootcd.iso` in a virtual machine or on a PC, and follow the instructions of LiberNT Setup. Setup can create and format the partition it installs to. It offers FAT, FAT32, NTFS and BtrFS.
+Boot `bootcd.iso` in a virtual machine or on a PC, and follow the instructions of LiberNT Setup. Setup lists the drives the way Windows Setup does, and can create, delete, format, shrink and extend partitions. It installs LiberNT on NTFS and creates the EFI system partition it needs.
 
 ## Using the preinstalled disk
 
 `LiberNT.img` needs no setup. Start it in a virtual machine such as QEMU, or write it to a USB drive or an SD card and boot the machine from it. Use `LiberNT.vhd` for virtual machines that take VHD disks.
+
+The preinstalled disk also carries LiberNT Setup. Run `C:\<architecture>\reactos.exe`, for example `C:\arm64\reactos.exe`, to install LiberNT on another disk from the running system.
 
 ## Help
 
