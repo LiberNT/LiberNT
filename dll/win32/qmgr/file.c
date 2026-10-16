@@ -216,6 +216,19 @@ static HRESULT hresult_from_http_response(DWORD code)
     }
 }
 
+#ifdef __REACTOS__
+static void set_remote_file_error(BackgroundCopyJobImpl *job, BackgroundCopyFileImpl *file, HRESULT code)
+{
+    EnterCriticalSection(&job->cs);
+    job->error.code = code;
+    job->error.context = BG_ERROR_CONTEXT_REMOTE_FILE;
+    if (job->error.file) IBackgroundCopyFile2_Release(job->error.file);
+    job->error.file = &file->IBackgroundCopyFile2_iface;
+    IBackgroundCopyFile2_AddRef(job->error.file);
+    LeaveCriticalSection(&job->cs);
+}
+
+#endif
 static void CALLBACK progress_callback_http(HINTERNET handle, DWORD_PTR context, DWORD status,
                                             LPVOID buf, DWORD buflen)
 {
@@ -276,7 +289,11 @@ static void CALLBACK progress_callback_http(HINTERNET handle, DWORD_PTR context,
     case WINHTTP_CALLBACK_STATUS_REQUEST_ERROR:
     {
         WINHTTP_ASYNC_RESULT *result = (WINHTTP_ASYNC_RESULT *)buf;
+#ifdef __REACTOS__
+        set_remote_file_error(job, file, HRESULT_FROM_WIN32(result->dwError));
+#else
         job->error.code = HRESULT_FROM_WIN32(result->dwError);
+#endif
         transitionJobState(job, BG_JOB_STATE_TRANSFERRING, BG_JOB_STATE_ERROR);
         break;
     }
@@ -412,6 +429,13 @@ static BOOL transfer_file_http(BackgroundCopyFileImpl *file, URL_COMPONENTSW *uc
     CloseHandle(handle);
 
 done:
+#ifdef __REACTOS__
+    if (!ret && !FAILED(job->error.code))
+    {
+        DWORD error = GetLastError();
+        set_remote_file_error(job, file, HRESULT_FROM_WIN32(error ? error : ERROR_GEN_FAILURE));
+    }
+#endif
     WinHttpCloseHandle(req);
     WinHttpCloseHandle(con);
     WinHttpCloseHandle(ses);
