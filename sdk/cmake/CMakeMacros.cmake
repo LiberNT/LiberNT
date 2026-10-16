@@ -193,7 +193,7 @@ function(add_cd_file)
     if(NOT __cd EQUAL -1)
         # manage dependency
         if(_CD_TARGET AND NOT _CD_OPTIONAL)
-            add_dependencies(livecd ${_CD_TARGET} registry_inf)
+            add_dependencies(bootcd ${_CD_TARGET} registry_inf)
         endif()
         foreach(item ${_CD_FILE})
             if(_CD_NAME_ON_CD)
@@ -948,10 +948,6 @@ function(create_registry_hives)
         ${_registry_inf}
         ${CMAKE_SOURCE_DIR}/boot/bootdata/livecd.inf
         ${CMAKE_SOURCE_DIR}/boot/bootdata/caroots.inf)
-    if(NOT "${_app_launcher_contents}" STREQUAL "")
-        list(APPEND _livecd_inf_files
-            ${CMAKE_SOURCE_DIR}/boot/bootdata/app_launcher.inf)
-    endif()
     if(REACTOS_USE_XPDM AND (SARCH STREQUAL "xbox"))
         list(APPEND _livecd_inf_files
             ${CMAKE_SOURCE_DIR}/boot/bootdata/hiveinst_xbox.inf)

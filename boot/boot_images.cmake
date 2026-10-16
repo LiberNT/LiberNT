@@ -313,13 +313,10 @@ endif()
 
 set(ISOHYBRID_DEPENDS)
 set(ISOHYBRID_BOOTCD_COMMAND)
-set(ISOHYBRID_LIVECD_COMMAND)
 if(FREELDR_HAS_BIOS_BOOT)
     set(ISOHYBRID_DEPENDS isombr native-isohybrid)
     set(ISOHYBRID_BOOTCD_COMMAND
         COMMAND native-isohybrid -b ${_isombr_file} -t 0x96 ${REACTOS_BINARY_DIR}/bootcd.iso)
-    set(ISOHYBRID_LIVECD_COMMAND
-        COMMAND native-isohybrid -b ${_isombr_file} -t 0x96 ${REACTOS_BINARY_DIR}/livecd.iso)
 endif()
 
 
@@ -391,20 +388,6 @@ function(image_list_command _image _var)
         -DSYSTEM_DIR=Windows
         -P ${REACTOS_SOURCE_DIR}/sdk/cmake/optional_files.cmake PARENT_SCOPE)
 endfunction()
-
-## BootCD
-# Create the file list
-file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/bootcd.cmake.lst "${CMAKE_CURRENT_BINARY_DIR}/empty\n")
-
-image_list_command(bootcd _bootcd_list_command)
-add_custom_target(bootcd
-    COMMAND ${_bootcd_list_command}
-    COMMAND native-mkisofs -quiet -o ${REACTOS_BINARY_DIR}/bootcd.iso
-        ${ISO_COMMON_OPTIONS} ${ISO_BOOT_OPTIONS} ${ISO_BOOT_FILES_OPTIONS} ${ISO_LAYOUT_OPTIONS}
-        -path-list ${CMAKE_CURRENT_BINARY_DIR}/bootcd.effective.lst
-    ${ISOHYBRID_BOOTCD_COMMAND}
-    DEPENDS ${ISOHYBRID_DEPENDS} native-mkisofs livecd
-    VERBATIM)
 
 ## LiveImage -- Constitutes a small RAMDISK ISO, and is also merged with the BootCD
 # Create the file list
@@ -478,42 +461,19 @@ foreach(_livecd_extra_registry_inf IN LISTS LIVECD_EXTRA_REGISTRY_INF)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_livecd_extra_registry_inf}")
 endforeach()
 
-image_list_command(livecd _livecd_list_command)
-if(FREELDR_WIM_RAMDISK)
-    set(_livecd_stage_dir  ${CMAKE_CURRENT_BINARY_DIR}/livecd_wim_stage)
-    set(_livecd_boot_wim   ${CMAKE_CURRENT_BINARY_DIR}/boot.wim)
-    set(_livecd_wim_lst    ${CMAKE_CURRENT_BINARY_DIR}/livecd_wim.$<CONFIG>.lst)
-    set(_livecd_ini_src    ${REACTOS_SOURCE_DIR}/boot/bootdata/wim/livecd_wim.ini)
-    set(_livecd_wim_ini    ${CMAKE_CURRENT_BINARY_DIR}/livecd_wim.freeldr.ini)
-    set(_livecd_wim_script ${REACTOS_SOURCE_DIR}/boot/bootdata/wim/make_livecd_wim.cmake)
+## BootCD
+# Create the file list
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/bootcd.cmake.lst "${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 
-    add_custom_target(livecd
-        COMMAND ${_livecd_list_command}
-        COMMAND ${CMAKE_COMMAND}
-            -DINPUT_LIST=${CMAKE_CURRENT_BINARY_DIR}/livecd.effective.lst
-            -DSTAGE_DIR=${_livecd_stage_dir}
-            -DOUTPUT_WIM=${_livecd_boot_wim}
-            -DOUTPUT_LIST=${_livecd_wim_lst}
-            -DWIMAGE_EXE=$<TARGET_FILE:native-wimage>
-            -DSOURCE_FREELDR_INI=${_livecd_ini_src}
-            -DOUTPUT_FREELDR_INI=${_livecd_wim_ini}
-            -P ${_livecd_wim_script}
-        COMMAND native-mkisofs -quiet -o ${REACTOS_BINARY_DIR}/livecd.iso
-            ${ISO_COMMON_OPTIONS} ${ISO_BOOT_OPTIONS} ${ISO_BOOT_FILES_OPTIONS} ${ISO_LAYOUT_OPTIONS}
-            -path-list ${_livecd_wim_lst}
-        ${ISOHYBRID_LIVECD_COMMAND}
-        DEPENDS ${ISOHYBRID_DEPENDS} native-mkisofs native-wimage ${_livecd_ini_src} ${_livecd_wim_script} ${_livecd_overlay_deps}
-        VERBATIM)
-else()
-    add_custom_target(livecd
-        COMMAND ${_livecd_list_command}
-        COMMAND native-mkisofs -quiet -o ${REACTOS_BINARY_DIR}/livecd.iso
-            ${ISO_COMMON_OPTIONS} ${ISO_BOOT_OPTIONS} ${ISO_BOOT_FILES_OPTIONS} ${ISO_LAYOUT_OPTIONS}
-            -path-list ${CMAKE_CURRENT_BINARY_DIR}/livecd.effective.lst
-        ${ISOHYBRID_LIVECD_COMMAND}
-        DEPENDS ${ISOHYBRID_DEPENDS} native-mkisofs ${_livecd_overlay_deps}
-        VERBATIM)
-endif()
+image_list_command(bootcd _bootcd_list_command)
+add_custom_target(bootcd
+    COMMAND ${_bootcd_list_command}
+    COMMAND native-mkisofs -quiet -o ${REACTOS_BINARY_DIR}/bootcd.iso
+        ${ISO_COMMON_OPTIONS} ${ISO_BOOT_OPTIONS} ${ISO_BOOT_FILES_OPTIONS} ${ISO_LAYOUT_OPTIONS}
+        -path-list ${CMAKE_CURRENT_BINARY_DIR}/bootcd.effective.lst
+    ${ISOHYBRID_BOOTCD_COMMAND}
+    DEPENDS ${ISOHYBRID_DEPENDS} native-mkisofs ${_livecd_overlay_deps}
+    VERBATIM)
 
 
 ## LiberNTImg
@@ -883,7 +843,7 @@ if(FREELDR_HAS_OFW_BOOT)
     set(_ofw_boot_file ${CMAKE_CURRENT_BINARY_DIR}/freeldr/freeldr/ppcboot.bin)
     list(APPEND _preinstall_boot_partition_files -add ${_ofw_boot_file} ppcboot.bin)
     list(APPEND _preinstall_partition_deps ppcboot)
-    add_dependencies(livecd ppcboot)
+    add_dependencies(bootcd ppcboot)
     if(EXISTS "${REACTOS_SOURCE_DIR}/bootloader/arch/${ARCH}")
         list(APPEND _preinstall_boot_partition_files
             -mkdir Boot

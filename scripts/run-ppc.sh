@@ -11,7 +11,7 @@ disk_image=
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --img) media=disk; disk_image=; shift ;;
-        --livecd) media=iso; disk_image=; shift ;;
+        --bootcd) media=iso; disk_image=; shift ;;
         --disk-image)
             if [ "$#" -lt 2 ] || [ ! -f "$2" ]; then
                 echo "--disk-image requires an existing disk image." >&2
@@ -24,7 +24,7 @@ while [ "$#" -gt 0 ]; do
         --no-build) do_build=no; shift ;;
         --) shift; break ;;
         -h|--help)
-            echo "Usage: $0 [--img|--livecd|--disk-image PATH] [--no-build] [-- QEMU arguments]"
+            echo "Usage: $0 [--img|--bootcd|--disk-image PATH] [--no-build] [-- QEMU arguments]"
             echo "--disk-image boots an existing disk without rebuilding it."
             echo "Environment: REACTOS_BUILD_DIR, ROS_QEMU_PPC, ROS_QEMU_DISPLAY (default gtk)"
             exit 0 ;;
@@ -61,8 +61,8 @@ fi
 target=liberntimg
 image=${disk_image:-"$build_dir/LiberNT.img"}
 if [ "$media" = iso ]; then
-    target=livecd
-    image="$build_dir/livecd.iso"
+    target=bootcd
+    image="$build_dir/bootcd.iso"
 fi
 if [ "$do_build" = yes ]; then
     ninja -C "$build_dir" -j "${ROS_BUILD_JOBS:-8}" "$target"

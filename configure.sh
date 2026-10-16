@@ -709,6 +709,6 @@ fi
 
 echo "========================================"
 echo "Configure script complete."
-echo "Build the LiveCD with:"
-printf '  cd %s && %s livecd\n' "$BUILD_HINT_PATH" "$BUILD_TOOL"
+echo "Build the boot CD with:"
+printf '  cd %s && %s bootcd\n' "$BUILD_HINT_PATH" "$BUILD_TOOL"
 echo "========================================"

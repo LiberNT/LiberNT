@@ -6,8 +6,7 @@ Set up the build environment and configure a build as described in [Building](RE
 
 | Command | Creates | Use it to |
 |---|---|---|
-| `ninja bootcd` | `bootcd.iso` | Start LiberNT Setup from a CD image and install LiberNT on a disk. |
-| `ninja livecd` | `livecd.iso` | Run LiberNT from a CD image without installing it. |
+| `ninja bootcd` | `bootcd.iso` | Run LiberNT from a CD image, or start LiberNT Setup from it and install LiberNT on a disk. |
 | `ninja liberntimg` | `LiberNT.img` | Boot a disk with LiberNT already installed. It boots with UEFI or BIOS. |
 | `ninja liberntvhd` | `LiberNT.vhd` | Use the same preinstalled disk in virtual machines that take VHD disks, such as Hyper-V and VirtualBox. |
 

@@ -250,7 +250,6 @@ if(ENABLE_FEX_ARM64EC_TEST_PAYLOADS)
         add_custom_target(fex-arm64ec-amd64-test-binary
             DEPENDS "${FEX_ARM64EC_AMD64_TEST_DEST}")
         add_dependencies(bootcd fex-arm64ec-amd64-test-binary)
-        add_dependencies(livecd fex-arm64ec-amd64-test-binary)
 
         add_cd_file(
             FILE "${FEX_ARM64EC_AMD64_TEST_DEST}"
@@ -276,7 +275,6 @@ if(ENABLE_FEX_ARM64EC_TEST_PAYLOADS)
         add_custom_target(fex-arm64ec-amd64-ntdll-apitest-binary
             DEPENDS "${FEX_ARM64EC_AMD64_NTDLL_APITEST_DEST}")
         add_dependencies(bootcd fex-arm64ec-amd64-ntdll-apitest-binary)
-        add_dependencies(livecd fex-arm64ec-amd64-ntdll-apitest-binary)
 
         add_cd_file(
             FILE "${FEX_ARM64EC_AMD64_NTDLL_APITEST_DEST}"
