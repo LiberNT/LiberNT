@@ -668,6 +668,25 @@ Exit:
     return Status;
 }
 
+static
+VOID
+CmpGrantBackupRestoreAccess(
+    _Inout_ PACCESS_STATE AccessState,
+    _In_ KPROCESSOR_MODE AccessMode)
+{
+    ACCESS_MASK Granted = 0;
+
+    if (SeSinglePrivilegeCheck(SeBackupPrivilege, AccessMode))
+        Granted |= KEY_READ | ACCESS_SYSTEM_SECURITY;
+    if (SeSinglePrivilegeCheck(SeRestorePrivilege, AccessMode))
+        Granted |= KEY_WRITE | DELETE | ACCESS_SYSTEM_SECURITY;
+    if (Granted == 0)
+        return;
+
+    AccessState->PreviouslyGrantedAccess |= Granted;
+    AccessState->RemainingDesiredAccess = 0;
+}
+
 NTSTATUS
 NTAPI
 CmpDoOpen(IN PHHIVE Hive,
@@ -879,6 +898,9 @@ CmpDoOpen(IN PHHIVE Hive,
          * attempt to acquire a lock again.
          */
         KeyBody->KcbLocked = TRUE;
+
+        if (Context && (Context->CreateOptions & REG_OPTION_BACKUP_RESTORE) && EffectiveMode != KernelMode)
+            CmpGrantBackupRestoreAccess(AccessState, EffectiveMode);
 
         if (!ObCheckObjectAccess(*Object,
                                  AccessState,
