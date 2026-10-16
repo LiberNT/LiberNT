@@ -4934,6 +4934,11 @@ NDISAPI
 CCHAR
 NTAPI
 NdisSystemProcessorCount(VOID);
+
+ULONG
+NDISAPI
+NdisSystemActiveProcessorCount(
+    PKAFFINITY ActiveProcessors);
 #endif
 
 NDISAPI
@@ -9569,6 +9574,46 @@ NdisGetRssProcessorInformation(
     _Out_writes_bytes_to_opt_(*Size, *Size) PNDIS_RSS_PROCESSOR_INFO       RssProcessorInfo,
     _Inout_                 PSIZE_T                                        Size
     );
+
+USHORT
+NDISAPI
+NdisActiveGroupCount(VOID);
+
+USHORT
+NDISAPI
+NdisMaxGroupCount(VOID);
+
+ULONG
+NDISAPI
+NdisGroupMaxProcessorCount(
+    USHORT Group);
+
+ULONG
+NDISAPI
+NdisGroupActiveProcessorCount(
+    USHORT Group);
+
+KAFFINITY
+NDISAPI
+NdisGroupActiveProcessorMask(
+    USHORT Group);
+
+PROCESSOR_NUMBER
+NDISAPI
+NdisCurrentGroupAndProcessor(VOID);
+
+_IRQL_requires_max_(HIGH_LEVEL)
+ULONG
+NDISAPI
+NdisProcessorNumberToIndex(
+    _In_ PROCESSOR_NUMBER ProcNum);
+
+_IRQL_requires_max_(HIGH_LEVEL)
+NTSTATUS
+NDISAPI
+NdisProcessorIndexToNumber(
+    _In_ ULONG ProcIndex,
+    _Out_ PPROCESSOR_NUMBER ProcNum);
 
 #endif
 #endif

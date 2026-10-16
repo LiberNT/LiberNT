@@ -83,6 +83,79 @@ NdisCurrentProcessorIndex(VOID)
     return KeGetCurrentProcessorNumberEx(NULL);
 }
 
+ULONG
+NTAPI
+NdisSystemActiveProcessorCount(
+    PKAFFINITY ActiveProcessors)
+{
+    return KeQueryActiveProcessorCount(ActiveProcessors);
+}
+
+USHORT
+NTAPI
+NdisActiveGroupCount(VOID)
+{
+    return KeQueryActiveGroupCount();
+}
+
+USHORT
+NTAPI
+NdisMaxGroupCount(VOID)
+{
+    return KeQueryMaximumGroupCount();
+}
+
+ULONG
+NTAPI
+NdisGroupMaxProcessorCount(
+    USHORT Group)
+{
+    return KeQueryMaximumProcessorCountEx(Group);
+}
+
+ULONG
+NTAPI
+NdisGroupActiveProcessorCount(
+    USHORT Group)
+{
+    return KeQueryActiveProcessorCountEx(Group);
+}
+
+KAFFINITY
+NTAPI
+NdisGroupActiveProcessorMask(
+    USHORT Group)
+{
+    return KeQueryGroupAffinity(Group);
+}
+
+PROCESSOR_NUMBER
+NTAPI
+NdisCurrentGroupAndProcessor(VOID)
+{
+    PROCESSOR_NUMBER ProcNum;
+
+    KeGetCurrentProcessorNumberEx(&ProcNum);
+    return ProcNum;
+}
+
+ULONG
+NTAPI
+NdisProcessorNumberToIndex(
+    _In_ PROCESSOR_NUMBER ProcNum)
+{
+    return KeGetProcessorIndexFromNumber(&ProcNum);
+}
+
+NTSTATUS
+NTAPI
+NdisProcessorIndexToNumber(
+    _In_ ULONG ProcIndex,
+    _Out_ PPROCESSOR_NUMBER ProcNum)
+{
+    return KeGetProcessorNumberFromIndex(ProcIndex, ProcNum);
+}
+
 static
 BOOLEAN
 Ndis6ProcessorInMask(
