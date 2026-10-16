@@ -49,21 +49,204 @@ DriverEntry(
     IN PDRIVER_OBJECT DriverObject,
     IN PUNICODE_STRING RegistryPath);
 
+static MINIPORT_ISR MiniportIsr;
+static MINIPORT_DISABLE_INTERRUPT MiniportDisableInterrupt;
+static MINIPORT_ENABLE_INTERRUPT MiniportEnableInterrupt;
+
+static NDIS_HANDLE MiniportDriverHandle;
+
+static VOID
+MiAppendNbl(
+    IN OUT PNET_BUFFER_LIST *Head,
+    IN OUT PNET_BUFFER_LIST *Tail,
+    IN PNET_BUFFER_LIST Nbl)
+{
+  NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+  if (*Tail)
+    NET_BUFFER_LIST_NEXT_NBL(*Tail) = Nbl;
+  else
+    *Head = Nbl;
+  *Tail = Nbl;
+}
+
+static PNET_BUFFER_LIST
+MiFailNblChain(
+    IN PNET_BUFFER_LIST Nbl,
+    IN NDIS_STATUS Status)
+{
+  PNET_BUFFER_LIST Current;
+
+  for (Current = Nbl; Current != NULL; Current = NET_BUFFER_LIST_NEXT_NBL(Current))
+    NET_BUFFER_LIST_STATUS(Current) = Status;
+
+  return Nbl;
+}
+
+static VOID
+MiCompleteSends(
+    IN PADAPTER Adapter,
+    IN PNET_BUFFER_LIST CompleteHead,
+    IN BOOLEAN DispatchLevel)
+{
+  if (CompleteHead != NULL)
+    NdisMSendNetBufferListsComplete(Adapter->MiniportAdapterHandle, CompleteHead,
+                                    DispatchLevel ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
+}
+
+static BOOLEAN
+MiCopyNetBuffer(
+    IN PNET_BUFFER NetBuffer,
+    OUT PCHAR Destination,
+    OUT PULONG Length)
+{
+  PMDL Mdl = NET_BUFFER_CURRENT_MDL(NetBuffer);
+  ULONG Offset = NET_BUFFER_CURRENT_MDL_OFFSET(NetBuffer);
+  ULONG Remaining = NET_BUFFER_DATA_LENGTH(NetBuffer);
+  ULONG Copied = 0;
+  ULONG MdlLength;
+  PCHAR Source;
+
+  if (Remaining == 0 || Remaining > BUFFER_SIZE)
+    return FALSE;
+
+  while (Mdl != NULL && Remaining != 0)
+    {
+      NdisQueryMdl(Mdl, (PVOID *)&Source, &MdlLength, NormalPagePriority);
+      if (Source == NULL)
+        return FALSE;
+
+      if (MdlLength > Offset)
+        {
+          MdlLength = min(MdlLength - Offset, Remaining);
+          RtlCopyMemory(Destination + Copied, Source + Offset, MdlLength);
+          Copied += MdlLength;
+          Remaining -= MdlLength;
+          Offset = 0;
+        }
+      else
+        {
+          Offset -= MdlLength;
+        }
+
+      NdisGetNextMdl(Mdl, &Mdl);
+    }
+
+  *Length = Copied;
+  return Remaining == 0;
+}
+
+static BOOLEAN
+MiProcessSendQueue(
+    IN PADAPTER Adapter,
+    IN OUT PNET_BUFFER_LIST *CompleteHead,
+    IN OUT PNET_BUFFER_LIST *CompleteTail)
+{
+  PNET_BUFFER_LIST Nbl;
+  PNET_BUFFER NetBuffer;
+  PTRANSMIT_DESCRIPTOR Desc;
+  ULONG Length;
+  BOOLEAN Queued = FALSE;
+
+  while ((Nbl = Adapter->SendQueueHead) != NULL)
+    {
+      NetBuffer = (PNET_BUFFER)Nbl->MiniportReserved[0];
+
+      while (NetBuffer != NULL)
+        {
+          if ((Adapter->CurrentTransmitEndIndex + 1) % Adapter->BufferCount ==
+              Adapter->CurrentTransmitStartIndex)
+            return Queued;
+
+          Desc = Adapter->TransmitDescriptorRingVirt + Adapter->CurrentTransmitEndIndex;
+
+          if (!MiCopyNetBuffer(NetBuffer,
+                               Adapter->TransmitBufferPtrVirt + Adapter->CurrentTransmitEndIndex * BUFFER_SIZE,
+                               &Length))
+            {
+              NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_INVALID_LENGTH;
+              Adapter->Statistics.XmtBufferErrors++;
+            }
+          else
+            {
+              Desc->BCNT = 0xf000 | -(INT)Length;
+              KeMemoryBarrier();
+              Desc->FLAGS = TD1_OWN | TD1_STP | TD1_ENP;
+
+              Adapter->CurrentTransmitEndIndex++;
+              Adapter->CurrentTransmitEndIndex %= Adapter->BufferCount;
+              Queued = TRUE;
+            }
+
+          NetBuffer = NET_BUFFER_NEXT_NB(NetBuffer);
+          Nbl->MiniportReserved[0] = NetBuffer;
+        }
+
+      Adapter->SendQueueHead = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+      if (Adapter->SendQueueHead == NULL)
+        Adapter->SendQueueTail = NULL;
+      MiAppendNbl(CompleteHead, CompleteTail, Nbl);
+    }
+
+  return Queued;
+}
+
+static VOID
+MiIndicateLinkState(
+    IN PADAPTER Adapter)
+{
+  NDIS_STATUS_INDICATION Indication;
+  NDIS_LINK_STATE LinkState;
+
+  NdisZeroMemory(&LinkState, sizeof(LinkState));
+  LinkState.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+  LinkState.Header.Revision = NDIS_LINK_STATE_REVISION_1;
+  LinkState.Header.Size = NDIS_SIZEOF_LINK_STATE_REVISION_1;
+  if (Adapter->MediaState == NdisMediaStateConnected)
+    {
+      LinkState.MediaConnectState = MediaConnectStateConnected;
+      LinkState.MediaDuplexState = Adapter->FullDuplex ? MediaDuplexStateFull : MediaDuplexStateHalf;
+      LinkState.XmitLinkSpeed = (ULONG64)Adapter->MediaSpeed * 1000000;
+      LinkState.RcvLinkSpeed = LinkState.XmitLinkSpeed;
+    }
+  else
+    {
+      LinkState.MediaConnectState = MediaConnectStateDisconnected;
+      LinkState.MediaDuplexState = MediaDuplexStateUnknown;
+      LinkState.XmitLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+      LinkState.RcvLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+    }
+  LinkState.PauseFunctions = NdisPauseFunctionsUnsupported;
+
+  NdisZeroMemory(&Indication, sizeof(Indication));
+  Indication.Header.Type = NDIS_OBJECT_TYPE_STATUS_INDICATION;
+  Indication.Header.Revision = NDIS_STATUS_INDICATION_REVISION_1;
+  Indication.Header.Size = NDIS_SIZEOF_STATUS_INDICATION_REVISION_1;
+  Indication.SourceHandle = Adapter->MiniportAdapterHandle;
+  Indication.StatusCode = NDIS_STATUS_LINK_STATE;
+  Indication.StatusBuffer = &LinkState;
+  Indication.StatusBufferSize = sizeof(LinkState);
+
+  NdisMIndicateStatusEx(Adapter->MiniportAdapterHandle, &Indication);
+}
+
 static VOID
 NTAPI
-MiniportHandleInterrupt(
-    IN NDIS_HANDLE MiniportAdapterContext)
-/*
- * FUNCTION: Handle an interrupt if told to by MiniportISR
- * ARGUMENTS:
- *     MiniportAdapterContext: context specified to NdisMSetAttributes
- * NOTES:
- *     - Called by NDIS at DISPATCH_LEVEL
- */
+MiniportInterruptDpc(
+    IN NDIS_HANDLE MiniportInterruptContext,
+    IN PVOID MiniportDpcContext,
+    IN PVOID ReceiveThrottleParameters,
+    IN PVOID NdisReserved2)
 {
-  PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
+  PADAPTER Adapter = (PADAPTER)MiniportInterruptContext;
+  PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
+  PNET_BUFFER_LIST ReceiveHead = NULL, ReceiveTail = NULL;
+  ULONG ReceiveCount = 0;
   USHORT Data;
   UINT i = 0;
+
+  UNREFERENCED_PARAMETER(MiniportDpcContext);
+  UNREFERENCED_PARAMETER(ReceiveThrottleParameters);
+  UNREFERENCED_PARAMETER(NdisReserved2);
 
   DPRINT("Called\n");
 
@@ -93,13 +276,13 @@ MiniportHandleInterrupt(
         }
       if(Data & CSR0_RINT)
         {
-          BOOLEAN IndicatedData = FALSE;
-
           DPRINT("receive interrupt\n");
 
           while(1)
             {
               PRECEIVE_DESCRIPTOR Descriptor = Adapter->ReceiveDescriptorRingVirt + Adapter->CurrentReceiveDescriptorIndex;
+              PNET_BUFFER_LIST Nbl;
+              PNET_BUFFER NetBuffer;
               PCHAR Buffer;
               ULONG ByteCount;
 
@@ -108,6 +291,8 @@ MiniportHandleInterrupt(
                   DPRINT("no more receive descriptors to process\n");
                   break;
                 }
+
+              KeMemoryBarrier();
 
               if(Descriptor->FLAGS & RD_ERR)
                 {
@@ -120,38 +305,59 @@ MiniportHandleInterrupt(
                     Adapter->Statistics.RcvOverflowErrors++;
                   if (Descriptor->FLAGS & RD_FRAM)
                     Adapter->Statistics.RcvFramingErrors++;
-                  break;
                 }
-
-              if(!((Descriptor->FLAGS & RD_STP) && (Descriptor->FLAGS & RD_ENP)))
+              else if(!((Descriptor->FLAGS & RD_STP) && (Descriptor->FLAGS & RD_ENP)))
                 {
                   DPRINT("receive descriptor not start&end: 0x%x\n", Descriptor->FLAGS);
-                  break;
                 }
+              else
+                {
+                  Buffer = Adapter->ReceiveBufferPtrVirt + Adapter->CurrentReceiveDescriptorIndex * BUFFER_SIZE;
+                  ByteCount = Descriptor->MCNT & 0xfff;
 
-              Buffer = Adapter->ReceiveBufferPtrVirt + Adapter->CurrentReceiveDescriptorIndex * BUFFER_SIZE;
-              ByteCount = Descriptor->MCNT & 0xfff;
+                  if (ByteCount < 14 + FCS_LENGTH || ByteCount > BUFFER_SIZE)
+                    {
+                      DPRINT("bad receive length %lu\n", ByteCount);
+                    }
+                  else if (Adapter->Paused || Adapter->FreeReceiveNbls == NULL)
+                    {
+                      Adapter->Statistics.RcvNoBuffers++;
+                    }
+                  else
+                    {
+                      ByteCount -= FCS_LENGTH;
 
-              DPRINT("Indicating a %d-byte packet (index %d)\n", ByteCount, Adapter->CurrentReceiveDescriptorIndex);
+                      DPRINT("Indicating a %d-byte packet (index %d)\n", ByteCount, Adapter->CurrentReceiveDescriptorIndex);
 
-              NdisMEthIndicateReceive(Adapter->MiniportAdapterHandle, 0, Buffer, 14, Buffer+14, ByteCount-14, ByteCount-14);
+                      Nbl = Adapter->FreeReceiveNbls;
+                      Adapter->FreeReceiveNbls = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+                      Adapter->ReceiveNblsOutstanding++;
 
-              IndicatedData = TRUE;
+                      NetBuffer = NET_BUFFER_LIST_FIRST_NB(Nbl);
+                      RtlCopyMemory(Nbl->MiniportReserved[0], Buffer, ByteCount);
+                      NdisAdjustMdlLength(NET_BUFFER_FIRST_MDL(NetBuffer), ByteCount);
+                      NET_BUFFER_DATA_OFFSET(NetBuffer) = 0;
+                      NET_BUFFER_CURRENT_MDL(NetBuffer) = NET_BUFFER_FIRST_MDL(NetBuffer);
+                      NET_BUFFER_CURRENT_MDL_OFFSET(NetBuffer) = 0;
+                      NET_BUFFER_DATA_LENGTH(NetBuffer) = ByteCount;
+                      NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
+                      MiAppendNbl(&ReceiveHead, &ReceiveTail, Nbl);
+                      ReceiveCount++;
+
+                      Adapter->Statistics.RcvGoodFrames++;
+                    }
+                }
 
               RtlZeroMemory(Descriptor, sizeof(RECEIVE_DESCRIPTOR));
               Descriptor->RBADR = Adapter->ReceiveBufferPtrPhys.QuadPart +
                                   (Adapter->CurrentReceiveDescriptorIndex * BUFFER_SIZE);
               Descriptor->BCNT = (-BUFFER_SIZE) | 0xf000;
+              KeMemoryBarrier();
               Descriptor->FLAGS |= RD_OWN;
 
               Adapter->CurrentReceiveDescriptorIndex++;
               Adapter->CurrentReceiveDescriptorIndex %= Adapter->BufferCount;
-
-              Adapter->Statistics.RcvGoodFrames++;
             }
-
-            if (IndicatedData)
-                NdisMEthIndicateReceiveComplete(Adapter->MiniportAdapterHandle);
         }
       if(Data & CSR0_TINT)
         {
@@ -173,6 +379,8 @@ MiniportHandleInterrupt(
                   DPRINT("non-TXed buffer\n");
                   break;
                 }
+
+              KeMemoryBarrier();
 
               if (Descriptor->FLAGS & TD1_STP)
                 {
@@ -197,15 +405,18 @@ MiniportHandleInterrupt(
                     Adapter->Statistics.XmtBufferUnderflows++;
                   if (Descriptor->FLAGS2 & TD2_BUFF)
                     Adapter->Statistics.XmtBufferErrors++;
-                  break;
+                }
+              else
+                {
+                  Adapter->Statistics.XmtGoodFrames++;
                 }
 
               Adapter->CurrentTransmitStartIndex++;
               Adapter->CurrentTransmitStartIndex %= Adapter->BufferCount;
-
-              Adapter->Statistics.XmtGoodFrames++;
             }
-          NdisMSendResourcesAvailable(Adapter->MiniportAdapterHandle);
+
+          if (MiProcessSendQueue(Adapter, &CompleteHead, &CompleteTail))
+            NdisRawWritePortUshort(Adapter->PortOffset + RDP, CSR0_TDMD);
         }
       if(Data & ~(CSR0_ERR | CSR0_IDON | CSR0_RINT | CSR0_TINT))
         {
@@ -222,79 +433,13 @@ MiniportHandleInterrupt(
   DPRINT("CSR0 is now 0x%x\n", Data);
 
   NdisDprReleaseSpinLock(&Adapter->Lock);
-}
 
-static NDIS_STATUS
-MiQueryCard(
-    IN PADAPTER Adapter)
-/*
- * FUNCTION: Detect the PCNET NIC in the configured slot and query its I/O address and interrupt vector
- * ARGUMENTS:
- *     MiniportAdapterContext: context supplied to NdisMSetAttributes
- * RETURNS:
- *     NDIS_STATUS_FAILURE on a general error
- *     NDIS_STATUS_ADAPTER_NOT_FOUND on not finding the adapter
- *     NDIS_STATUS_SUCCESS on succes
- */
-{
-  ULONG  buf32 = 0;
-  UCHAR  buf8  = 0;
-  NDIS_STATUS Status;
+  MiCompleteSends(Adapter, CompleteHead, TRUE);
 
-  /* Detect the card in the configured slot */
-  Status = NdisReadPciSlotInformation(Adapter->MiniportAdapterHandle, 0, PCI_PCIID, &buf32, 4);
-  if(Status != 4)
-    {
-      Status =  NDIS_STATUS_FAILURE;
-      DPRINT1("NdisReadPciSlotInformation failed\n");
-      return Status;
-    }
-
-  if(buf32 != PCI_ID)
-    {
-      Status = NDIS_STATUS_ADAPTER_NOT_FOUND;
-      DPRINT1("card in slot isn't our: 0x%x\n", 0, buf32);
-      return Status;
-    }
-
-  /* set busmaster and io space enable bits */
-  buf32 = PCI_BMEN | PCI_IOEN;
-  NdisWritePciSlotInformation(Adapter->MiniportAdapterHandle, 0, PCI_COMMAND, &buf32, 4);
-
-  /* get IO base physical address */
-  buf32 = 0;
-  Status = NdisReadPciSlotInformation(Adapter->MiniportAdapterHandle, 0, PCI_IOBAR, &buf32, 4);
-  if(Status != 4)
-    {
-      Status = NDIS_STATUS_FAILURE;
-      DPRINT1("NdisReadPciSlotInformation failed\n");
-      return Status;
-    }
-
-  if(!buf32)
-    {
-      DPRINT1("No base i/o address set\n");
-      return NDIS_STATUS_FAILURE;
-    }
-
-  buf32 &= ~1;  /* even up address - comes out odd for some reason */
-
-  DPRINT("detected io address 0x%x\n", buf32);
-  Adapter->IoBaseAddress = buf32;
-
-  /* get interrupt vector */
-  Status = NdisReadPciSlotInformation(Adapter->MiniportAdapterHandle, 0, PCI_ILR, &buf8, 1);
-  if(Status != 1)
-    {
-      Status = NDIS_STATUS_FAILURE;
-      DPRINT1("NdisReadPciSlotInformation failed\n");
-      return Status;
-    }
-
-  DPRINT("interrupt: 0x%x\n", buf8);
-  Adapter->InterruptVector = buf8;
-
-  return NDIS_STATUS_SUCCESS;
+  if (ReceiveHead != NULL)
+    NdisMIndicateReceiveNetBufferLists(Adapter->MiniportAdapterHandle, ReceiveHead,
+                                       NDIS_DEFAULT_PORT_NUMBER, ReceiveCount,
+                                       NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL);
 }
 
 static VOID
@@ -566,9 +711,95 @@ MiSyncStop(
 }
 
 static VOID
+MiFreeReceiveNbls(
+    IN PADAPTER Adapter)
+{
+  PNET_BUFFER_LIST Nbl;
+  PMDL Mdl;
+  ULONG i;
+
+  for (i = 0; i < RECEIVE_NBL_COUNT; i++)
+    {
+      Nbl = Adapter->ReceiveNbls[i];
+      if (Nbl == NULL)
+        continue;
+
+      Mdl = NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(Nbl));
+      if (Nbl->MiniportReserved[0] != NULL)
+        NdisFreeMemory(Nbl->MiniportReserved[0], 0, 0);
+      NdisFreeNetBufferList(Nbl);
+      if (Mdl != NULL)
+        NdisFreeMdl(Mdl);
+      Adapter->ReceiveNbls[i] = NULL;
+    }
+  Adapter->FreeReceiveNbls = NULL;
+
+  if (Adapter->ReceiveNblPool != NULL)
+    {
+      NdisFreeNetBufferListPool(Adapter->ReceiveNblPool);
+      Adapter->ReceiveNblPool = NULL;
+    }
+}
+
+static NDIS_STATUS
+MiAllocateReceiveNbls(
+    IN PADAPTER Adapter)
+{
+  NET_BUFFER_LIST_POOL_PARAMETERS PoolParameters;
+  PNET_BUFFER_LIST Nbl;
+  PCHAR Buffer;
+  PMDL Mdl;
+  ULONG i;
+
+  NdisZeroMemory(&PoolParameters, sizeof(PoolParameters));
+  PoolParameters.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+  PoolParameters.Header.Revision = NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+  PoolParameters.Header.Size = NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+  PoolParameters.ProtocolId = NDIS_PROTOCOL_ID_DEFAULT;
+  PoolParameters.fAllocateNetBuffer = TRUE;
+  PoolParameters.PoolTag = PCNET_RECEIVE_TAG;
+
+  Adapter->ReceiveNblPool = NdisAllocateNetBufferListPool(Adapter->MiniportAdapterHandle, &PoolParameters);
+  if (Adapter->ReceiveNblPool == NULL)
+    return NDIS_STATUS_RESOURCES;
+
+  for (i = 0; i < RECEIVE_NBL_COUNT; i++)
+    {
+      Buffer = NdisAllocateMemoryWithTagPriority(Adapter->MiniportAdapterHandle, BUFFER_SIZE,
+                                                 PCNET_RECEIVE_TAG, NormalPoolPriority);
+      if (Buffer == NULL)
+        return NDIS_STATUS_RESOURCES;
+
+      Mdl = NdisAllocateMdl(Adapter->MiniportAdapterHandle, Buffer, BUFFER_SIZE);
+      if (Mdl == NULL)
+        {
+          NdisFreeMemory(Buffer, 0, 0);
+          return NDIS_STATUS_RESOURCES;
+        }
+
+      Nbl = NdisAllocateNetBufferAndNetBufferList(Adapter->ReceiveNblPool, 0, 0, Mdl, 0, BUFFER_SIZE);
+      if (Nbl == NULL)
+        {
+          NdisFreeMdl(Mdl);
+          NdisFreeMemory(Buffer, 0, 0);
+          return NDIS_STATUS_RESOURCES;
+        }
+
+      Nbl->MiniportReserved[0] = Buffer;
+      Nbl->SourceHandle = Adapter->MiniportAdapterHandle;
+      Adapter->ReceiveNbls[i] = Nbl;
+      NET_BUFFER_LIST_NEXT_NBL(Nbl) = Adapter->FreeReceiveNbls;
+      Adapter->FreeReceiveNbls = Nbl;
+    }
+
+  return NDIS_STATUS_SUCCESS;
+}
+
+static VOID
 NTAPI
-MiniportHalt(
-    IN NDIS_HANDLE MiniportAdapterContext)
+MiniportHaltEx(
+    IN NDIS_HANDLE MiniportAdapterContext,
+    IN NDIS_HALT_ACTION HaltAction)
 /*
  * FUNCTION: Stop the adapter and release any per-adapter resources
  * ARGUMENTS:
@@ -578,31 +809,39 @@ MiniportHalt(
  */
 {
   PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
-  BOOLEAN TimerCancelled;
+
+  UNREFERENCED_PARAMETER(HaltAction);
 
   DPRINT("Called\n");
   ASSERT(Adapter);
 
   /* stop the media detection timer */
-  NdisMCancelTimer(&Adapter->MediaDetectionTimer, &TimerCancelled);
+  if (Adapter->MediaDetectionTimer)
+    {
+      NdisCancelTimerObject(Adapter->MediaDetectionTimer);
+      KeFlushQueuedDpcs();
+      NdisFreeTimerObject(Adapter->MediaDetectionTimer);
+    }
 
   /* stop the chip */
-  NdisMSynchronizeWithInterrupt(&Adapter->InterruptObject, MiSyncStop, Adapter);
+  if (Adapter->ChipStarted)
+    NdisMSynchronizeWithInterruptEx(Adapter->InterruptHandle, 0, MiSyncStop, Adapter);
 
   /* deregister the interrupt */
-  NdisMDeregisterInterrupt(&Adapter->InterruptObject);
+  if (Adapter->InterruptHandle)
+    NdisMDeregisterInterruptEx(Adapter->InterruptHandle);
 
   /* deregister i/o port range */
-  NdisMDeregisterIoPortRange(Adapter->MiniportAdapterHandle, Adapter->IoBaseAddress, NUMBER_OF_PORTS, (PVOID)Adapter->PortOffset);
-
-  /* deregister the shutdown routine */
-  NdisMDeregisterAdapterShutdownHandler(Adapter->MiniportAdapterHandle);
+  if (Adapter->PortOffset)
+    NdisMDeregisterIoPortRange(Adapter->MiniportAdapterHandle, Adapter->IoBaseAddress, NUMBER_OF_PORTS, (PVOID)Adapter->PortOffset);
 
   /* free shared memory */
   MiFreeSharedMemory(Adapter);
 
-  /* free map registers */
-  NdisMFreeMapRegisters(Adapter->MiniportAdapterHandle);
+  if (Adapter->DmaHandle)
+    NdisMDeregisterScatterGatherDma(Adapter->DmaHandle);
+
+  MiFreeReceiveNbls(Adapter);
 
   /* free the lock */
   NdisFreeSpinLock(&Adapter->Lock);
@@ -656,19 +895,18 @@ MiniportMediaDetectionTimer(
  */
 {
   PADAPTER Adapter = (PADAPTER)FunctionContext;
+  BOOLEAN Changed;
 
   ASSERT_IRQL_EQUAL(DISPATCH_LEVEL);
 
-  if (NdisMSynchronizeWithInterrupt(&Adapter->InterruptObject,
-                                    MiSyncMediaDetection,
-                                    FunctionContext))
-    {
-      NdisMIndicateStatus(Adapter->MiniportAdapterHandle,
-        Adapter->MediaState == NdisMediaStateConnected ?
-        NDIS_STATUS_MEDIA_CONNECT : NDIS_STATUS_MEDIA_DISCONNECT,
-        (PVOID)0, 0);
-      NdisMIndicateStatusComplete(Adapter->MiniportAdapterHandle);
-    }
+  NdisDprAcquireSpinLock(&Adapter->Lock);
+  Changed = NdisMSynchronizeWithInterruptEx(Adapter->InterruptHandle, 0,
+                                            MiSyncMediaDetection,
+                                            FunctionContext);
+  NdisDprReleaseSpinLock(&Adapter->Lock);
+
+  if (Changed)
+    MiIndicateLinkState(Adapter);
 }
 
 static VOID
@@ -836,11 +1074,15 @@ MiTestCard(
 }
 #endif
 
-VOID
+static VOID
 NTAPI
-MiniportShutdown( PVOID Context )
+MiniportShutdownEx(
+    IN NDIS_HANDLE MiniportAdapterContext,
+    IN NDIS_SHUTDOWN_ACTION ShutdownAction)
 {
-  PADAPTER Adapter = Context;
+  PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
+
+  UNREFERENCED_PARAMETER(ShutdownAction);
 
   DPRINT("Stopping the chip\n");
 
@@ -849,225 +1091,276 @@ MiniportShutdown( PVOID Context )
 }
 
 static NDIS_STATUS
-NTAPI
-MiniportInitialize(
-    OUT PNDIS_STATUS OpenErrorStatus,
-    OUT PUINT SelectedMediumIndex,
-    IN PNDIS_MEDIUM MediumArray,
-    IN UINT MediumArraySize,
-    IN NDIS_HANDLE MiniportAdapterHandle,
-    IN NDIS_HANDLE WrapperConfigurationContext)
-/*
- * FUNCTION:  Initialize a new miniport
- * ARGUMENTS:
- *     OpenErrorStatus:  pointer to a var to return status info in
- *     SelectedMediumIndex: index of the selected medium (will be NdisMedium802_3)
- *     MediumArray: array of media that we can pick from
- *     MediumArraySize: size of MediumArray
- *     MiniportAdapterHandle: NDIS-assigned handle for this miniport instance
- *     WrapperConfigurationContext: temporary NDIS-assigned handle for passing
- *                                  to configuration APIs
- * RETURNS:
- *     NDIS_STATUS_SUCCESS on success
- *     NDIS_STATUS_FAILURE on general failure
- *     NDIS_STATUS_UNSUPPORTED_MEDIA on not finding 802_3 in the MediaArray
- *     NDIS_STATUS_RESOURCES on insufficient system resources
- *     NDIS_STATUS_ADAPTER_NOT_FOUND on not finding the adapter
- * NOTES:
- *     - Called by NDIS at PASSIVE_LEVEL, once per detected card
- *     - Will int 3 on failure of MiTestCard if DBG=1
- */
+MiSetRegistrationAttributes(
+    IN PADAPTER Adapter)
 {
-  UINT i = 0;
-  PADAPTER Adapter = 0;
-  NDIS_STATUS Status = NDIS_STATUS_FAILURE;
-  BOOLEAN InterruptRegistered = FALSE, MapRegistersAllocated = FALSE;
+  NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES Registration;
+
+  NdisZeroMemory(&Registration, sizeof(Registration));
+  Registration.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES;
+  Registration.Header.Revision = NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1;
+  Registration.Header.Size = NDIS_SIZEOF_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1;
+  Registration.MiniportAdapterContext = Adapter;
+  Registration.AttributeFlags = NDIS_MINIPORT_ATTRIBUTES_HARDWARE_DEVICE | NDIS_MINIPORT_ATTRIBUTES_BUS_MASTER;
+  Registration.InterfaceType = NdisInterfacePci;
+
+  return NdisMSetMiniportAttributes(Adapter->MiniportAdapterHandle,
+                                    (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&Registration);
+}
+
+static NDIS_STATUS
+MiSetGeneralAttributes(
+    IN PADAPTER Adapter)
+{
+  NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES General;
+
+  NdisZeroMemory(&General, sizeof(General));
+  General.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES;
+  General.Header.Revision = NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_1;
+  General.Header.Size = NDIS_SIZEOF_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_1;
+  General.MediaType = NdisMedium802_3;
+  General.PhysicalMediumType = NdisPhysicalMedium802_3;
+  General.MtuSize = MAXIMUM_FRAME_SIZE - 14;
+  General.MaxXmitLinkSpeed = 100000000;
+  General.MaxRcvLinkSpeed = 100000000;
+  if (Adapter->MediaState == NdisMediaStateConnected)
+    {
+      General.XmitLinkSpeed = (ULONG64)Adapter->MediaSpeed * 1000000;
+      General.RcvLinkSpeed = General.XmitLinkSpeed;
+      General.MediaConnectState = MediaConnectStateConnected;
+      General.MediaDuplexState = Adapter->FullDuplex ? MediaDuplexStateFull : MediaDuplexStateHalf;
+    }
+  else
+    {
+      General.XmitLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+      General.RcvLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;
+      General.MediaConnectState = MediaConnectStateDisconnected;
+      General.MediaDuplexState = MediaDuplexStateUnknown;
+    }
+  General.LookaheadSize = MAXIMUM_FRAME_SIZE - 14;
+  General.MacOptions = NDIS_MAC_OPTION_COPY_LOOKAHEAD_DATA |
+                       NDIS_MAC_OPTION_TRANSFERS_NOT_PEND |
+                       NDIS_MAC_OPTION_NO_LOOPBACK;
+  General.SupportedPacketFilters = NDIS_PACKET_TYPE_DIRECTED |
+                                   NDIS_PACKET_TYPE_MULTICAST |
+                                   NDIS_PACKET_TYPE_BROADCAST;
+  General.MaxMulticastListSize = MAX_MULTICAST_ADDRESSES;
+  General.MacAddressLength = 6;
+  NdisMoveMemory(General.PermanentMacAddress, Adapter->PermanentAddress, 6);
+  NdisMoveMemory(General.CurrentMacAddress, Adapter->InitializationBlockVirt->PADR, 6);
+  General.AccessType = NET_IF_ACCESS_BROADCAST;
+  General.DirectionType = NET_IF_DIRECTION_SENDRECEIVE;
+  General.ConnectionType = NET_IF_CONNECTION_DEDICATED;
+  General.IfType = IF_TYPE_ETHERNET_CSMACD;
+  General.IfConnectorPresent = TRUE;
+  General.SupportedStatistics = NDIS_STATISTICS_XMIT_OK_SUPPORTED |
+                                NDIS_STATISTICS_RCV_OK_SUPPORTED |
+                                NDIS_STATISTICS_XMIT_ERROR_SUPPORTED |
+                                NDIS_STATISTICS_RCV_ERROR_SUPPORTED |
+                                NDIS_STATISTICS_RCV_NO_BUFFER_SUPPORTED |
+                                NDIS_STATISTICS_RCV_CRC_ERROR_SUPPORTED;
+  General.SupportedPauseFunctions = NdisPauseFunctionsUnsupported;
+  General.AutoNegotiationFlags = NDIS_LINK_STATE_XMIT_LINK_SPEED_AUTO_NEGOTIATED |
+                                 NDIS_LINK_STATE_RCV_LINK_SPEED_AUTO_NEGOTIATED |
+                                 NDIS_LINK_STATE_DUPLEX_AUTO_NEGOTIATED;
+  General.SupportedOidList = MiniportOIDList;
+  General.SupportedOidListLength = MiniportOIDCount * sizeof(NDIS_OID);
+
+  return NdisMSetMiniportAttributes(Adapter->MiniportAdapterHandle,
+                                    (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&General);
+}
+
+static NDIS_STATUS
+NTAPI
+MiniportInitializeEx(
+    IN NDIS_HANDLE MiniportAdapterHandle,
+    IN NDIS_HANDLE MiniportDriverContext,
+    IN PNDIS_MINIPORT_INIT_PARAMETERS MiniportInitParameters)
+{
+  NDIS_MINIPORT_INTERRUPT_CHARACTERISTICS InterruptCharacteristics;
+  NDIS_TIMER_CHARACTERISTICS TimerCharacteristics;
+  NDIS_SG_DMA_DESCRIPTION DmaDescription;
+  NDIS_CONFIGURATION_OBJECT ConfigurationObject;
+  PCM_PARTIAL_RESOURCE_LIST ResourceList;
+  PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+  PADAPTER Adapter;
+  NDIS_STATUS Status;
   NDIS_HANDLE ConfigurationHandle;
-  UINT *RegNetworkAddress = 0;
+  PUCHAR RegNetworkAddress = NULL;
   UINT RegNetworkAddressLength = 0;
+  LARGE_INTEGER DueTime;
+  ULONG i;
+
+  UNREFERENCED_PARAMETER(MiniportDriverContext);
 
   ASSERT_IRQL_EQUAL(PASSIVE_LEVEL);
 
-  /* Pick a medium */
-  for(i = 0; i < MediumArraySize; i++)
-    if(MediumArray[i] == NdisMedium802_3)
-      break;
-
-  if(i == MediumArraySize)
-    {
-      Status = NDIS_STATUS_UNSUPPORTED_MEDIA;
-      DPRINT1("unsupported media\n");
-      *OpenErrorStatus = Status;
-      return Status;
-    }
-
-  *SelectedMediumIndex = i;
-
   /* allocate our adapter struct */
-  Status = NdisAllocateMemoryWithTag((PVOID *)&Adapter, sizeof(ADAPTER), PCNET_TAG);
-  if(Status != NDIS_STATUS_SUCCESS)
+  Adapter = NdisAllocateMemoryWithTagPriority(MiniportAdapterHandle, sizeof(ADAPTER), PCNET_TAG, NormalPoolPriority);
+  if(!Adapter)
     {
-      Status =  NDIS_STATUS_RESOURCES;
       DPRINT1("Insufficient resources\n");
-      *OpenErrorStatus = Status;
-      return Status;
+      return NDIS_STATUS_RESOURCES;
     }
 
   RtlZeroMemory(Adapter, sizeof(ADAPTER));
 
   Adapter->MiniportAdapterHandle = MiniportAdapterHandle;
+  Adapter->Paused = TRUE;
+  NdisAllocateSpinLock(&Adapter->Lock);
 
   /* register our adapter structwith ndis */
-  NdisMSetAttributesEx(Adapter->MiniportAdapterHandle, Adapter, 0, NDIS_ATTRIBUTE_BUS_MASTER, NdisInterfacePci);
+  Status = MiSetRegistrationAttributes(Adapter);
+  if(Status != NDIS_STATUS_SUCCESS)
+    goto Failure;
 
-  do
+  ResourceList = MiniportInitParameters->AllocatedResources;
+  for (i = 0; ResourceList && i < ResourceList->Count; i++)
     {
-      /* Card-specific detection and setup */
-      Status = MiQueryCard(Adapter);
-      if(Status != NDIS_STATUS_SUCCESS)
+      Descriptor = &ResourceList->PartialDescriptors[i];
+      if (Descriptor->Type == CmResourceTypePort &&
+          !Adapter->IoBaseAddress &&
+          Descriptor->u.Port.Start.HighPart == 0 &&
+          Descriptor->u.Port.Length >= NUMBER_OF_PORTS)
         {
-          DPRINT1("MiQueryCard failed\n");
-          Status = NDIS_STATUS_ADAPTER_NOT_FOUND;
-          break;
+          Adapter->IoBaseAddress = Descriptor->u.Port.Start.LowPart;
         }
-
-      /* register an IO port range */
-      Status = NdisMRegisterIoPortRange((PVOID*)&Adapter->PortOffset, Adapter->MiniportAdapterHandle,
-          (UINT)Adapter->IoBaseAddress, NUMBER_OF_PORTS);
-      if(Status != NDIS_STATUS_SUCCESS)
-        {
-          DPRINT1("NdisMRegisterIoPortRange failed: 0x%x\n", Status);
-          break;
-        }
-
-      /* Allocate map registers */
-      Status = NdisMAllocateMapRegisters(Adapter->MiniportAdapterHandle, 0,
-          NDIS_DMA_32BITS, 8, BUFFER_SIZE);
-      if(Status != NDIS_STATUS_SUCCESS)
-        {
-          DPRINT1("NdisMAllocateMapRegisters failed: 0x%x\n", Status);
-          break;
-        }
-
-      MapRegistersAllocated = TRUE;
-
-      /* set up the interrupt */
-      Status = NdisMRegisterInterrupt(&Adapter->InterruptObject, Adapter->MiniportAdapterHandle, Adapter->InterruptVector,
-          Adapter->InterruptVector, TRUE, TRUE, NdisInterruptLevelSensitive);
-      if(Status != NDIS_STATUS_SUCCESS)
-        {
-          DPRINT1("NdisMRegisterInterrupt failed: 0x%x\n", Status);
-          break;
-        }
-
-      InterruptRegistered = TRUE;
-
-      /* Allocate and initialize shared data structures */
-      Status = MiAllocateSharedMemory(Adapter);
-      if(Status != NDIS_STATUS_SUCCESS)
-        {
-          Status = NDIS_STATUS_RESOURCES;
-          DPRINT1("MiAllocateSharedMemory failed\n", Status);
-          break;
-        }
-
-      /* set up the initialization block */
-      MiPrepareInitializationBlock(Adapter);
-
-      /* see if someone set a network address manually */
-      NdisOpenConfiguration(&Status, &ConfigurationHandle, WrapperConfigurationContext);
-      if (Status == NDIS_STATUS_SUCCESS)
-      {
-         NdisReadNetworkAddress(&Status, (PVOID *)&RegNetworkAddress, &RegNetworkAddressLength, ConfigurationHandle);
-         if(Status == NDIS_STATUS_SUCCESS && RegNetworkAddressLength == 6)
-         {
-             int i;
-             DPRINT("NdisReadNetworkAddress returned successfully, address %x:%x:%x:%x:%x:%x\n",
-                     RegNetworkAddress[0], RegNetworkAddress[1], RegNetworkAddress[2], RegNetworkAddress[3],
-                     RegNetworkAddress[4], RegNetworkAddress[5]);
-
-             for(i = 0; i < 6; i++)
-                 Adapter->InitializationBlockVirt->PADR[i] = RegNetworkAddress[i];
-         }
-
-         NdisCloseConfiguration(ConfigurationHandle);
-      }
-
-      DPRINT("Interrupt registered successfully\n");
-
-      /* Initialize and start the chip */
-      MiInitChip(Adapter);
-
-      NdisAllocateSpinLock(&Adapter->Lock);
-
-      Status = NDIS_STATUS_SUCCESS;
-    }
-  while(0);
-
-  if(Status != NDIS_STATUS_SUCCESS && Adapter)
-    {
-      DPRINT("Error; freeing stuff\n");
-
-      MiFreeSharedMemory(Adapter);
-
-      if(MapRegistersAllocated)
-        NdisMFreeMapRegisters(Adapter->MiniportAdapterHandle);
-
-      if(Adapter->PortOffset)
-        NdisMDeregisterIoPortRange(Adapter->MiniportAdapterHandle, Adapter->IoBaseAddress, NUMBER_OF_PORTS, (PVOID)Adapter->PortOffset);
-
-      if(InterruptRegistered)
-        NdisMDeregisterInterrupt(&Adapter->InterruptObject);
-
-      NdisFreeMemory(Adapter, 0, 0);
     }
 
-  if(Status == NDIS_STATUS_SUCCESS)
+  if(!Adapter->IoBaseAddress)
     {
-      NdisMInitializeTimer(&Adapter->MediaDetectionTimer,
-                           Adapter->MiniportAdapterHandle,
-                           MiniportMediaDetectionTimer,
-                           Adapter);
-      NdisMSetPeriodicTimer(&Adapter->MediaDetectionTimer,
-                            MEDIA_DETECTION_INTERVAL);
-      NdisMRegisterAdapterShutdownHandler(Adapter->MiniportAdapterHandle,
-                                          Adapter,
-                                          MiniportShutdown);
+      DPRINT1("No base i/o address set\n");
+      Status = NDIS_STATUS_RESOURCES;
+      goto Failure;
     }
 
+  Status = NdisMRegisterIoPortRange((PVOID*)&Adapter->PortOffset, Adapter->MiniportAdapterHandle,
+      (UINT)Adapter->IoBaseAddress, NUMBER_OF_PORTS);
+  if(Status != NDIS_STATUS_SUCCESS)
+    {
+      DPRINT1("NdisMRegisterIoPortRange failed: 0x%x\n", Status);
+      Adapter->PortOffset = 0;
+      goto Failure;
+    }
+
+  NdisZeroMemory(&DmaDescription, sizeof(DmaDescription));
+  DmaDescription.Header.Type = NDIS_OBJECT_TYPE_SG_DMA_DESCRIPTION;
+  DmaDescription.Header.Revision = NDIS_SG_DMA_DESCRIPTION_REVISION_1;
+  DmaDescription.Header.Size = NDIS_SIZEOF_SG_DMA_DESCRIPTION_REVISION_1;
+  DmaDescription.MaximumPhysicalMapping = BUFFER_SIZE;
+  Status = NdisMRegisterScatterGatherDma(Adapter->MiniportAdapterHandle, &DmaDescription, &Adapter->DmaHandle);
+  if(Status != NDIS_STATUS_SUCCESS)
+    {
+      DPRINT1("NdisMRegisterScatterGatherDma failed: 0x%x\n", Status);
+      Adapter->DmaHandle = NULL;
+      goto Failure;
+    }
+
+  Status = MiAllocateSharedMemory(Adapter);
+  if(Status != NDIS_STATUS_SUCCESS)
+    {
+      Status = NDIS_STATUS_RESOURCES;
+      DPRINT1("MiAllocateSharedMemory failed\n", Status);
+      goto Failure;
+    }
+
+  Status = MiAllocateReceiveNbls(Adapter);
+  if(Status != NDIS_STATUS_SUCCESS)
+    goto Failure;
+
+  MiPrepareInitializationBlock(Adapter);
+  NdisMoveMemory(Adapter->PermanentAddress, Adapter->InitializationBlockVirt->PADR, 6);
+
+  ConfigurationObject.Header.Type = NDIS_OBJECT_TYPE_CONFIGURATION_OBJECT;
+  ConfigurationObject.Header.Revision = NDIS_CONFIGURATION_OBJECT_REVISION_1;
+  ConfigurationObject.Header.Size = NDIS_SIZEOF_CONFIGURATION_OBJECT_REVISION_1;
+  ConfigurationObject.NdisHandle = Adapter->MiniportAdapterHandle;
+  ConfigurationObject.Flags = 0;
+  if (NdisOpenConfigurationEx(&ConfigurationObject, &ConfigurationHandle) == NDIS_STATUS_SUCCESS)
+  {
+     NdisReadNetworkAddress(&Status, (PVOID *)&RegNetworkAddress, &RegNetworkAddressLength, ConfigurationHandle);
+     if(Status == NDIS_STATUS_SUCCESS && RegNetworkAddressLength == 6 && !(RegNetworkAddress[0] & 0x01))
+     {
+         DPRINT("NdisReadNetworkAddress returned successfully, address %x:%x:%x:%x:%x:%x\n",
+                 RegNetworkAddress[0], RegNetworkAddress[1], RegNetworkAddress[2], RegNetworkAddress[3],
+                 RegNetworkAddress[4], RegNetworkAddress[5]);
+
+         NdisMoveMemory(Adapter->InitializationBlockVirt->PADR, RegNetworkAddress, 6);
+     }
+
+     NdisCloseConfiguration(ConfigurationHandle);
+  }
+
+  NdisZeroMemory(&InterruptCharacteristics, sizeof(InterruptCharacteristics));
+  InterruptCharacteristics.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_INTERRUPT;
+  InterruptCharacteristics.Header.Revision = NDIS_MINIPORT_INTERRUPT_REVISION_1;
+  InterruptCharacteristics.Header.Size = NDIS_SIZEOF_MINIPORT_INTERRUPT_CHARACTERISTICS_REVISION_1;
+  InterruptCharacteristics.InterruptHandler = MiniportIsr;
+  InterruptCharacteristics.InterruptDpcHandler = MiniportInterruptDpc;
+  InterruptCharacteristics.DisableInterruptHandler = MiniportDisableInterrupt;
+  InterruptCharacteristics.EnableInterruptHandler = MiniportEnableInterrupt;
+  Status = NdisMRegisterInterruptEx(Adapter->MiniportAdapterHandle, Adapter, &InterruptCharacteristics, &Adapter->InterruptHandle);
+  if(Status != NDIS_STATUS_SUCCESS)
+    {
+      DPRINT1("NdisMRegisterInterruptEx failed: 0x%x\n", Status);
+      Adapter->InterruptHandle = NULL;
+      goto Failure;
+    }
+
+  DPRINT("Interrupt registered successfully\n");
+
+  NdisAcquireSpinLock(&Adapter->Lock);
+  MiInitChip(Adapter);
+  Adapter->ChipStarted = TRUE;
 #if DBG
   if(!MiTestCard(Adapter))
     ASSERT(0);
 #endif
+  NdisReleaseSpinLock(&Adapter->Lock);
 
-  DPRINT("returning 0x%x\n", Status);
-  *OpenErrorStatus = Status;
+  Status = MiSetGeneralAttributes(Adapter);
+  if(Status != NDIS_STATUS_SUCCESS)
+    goto Failure;
+
+  NdisZeroMemory(&TimerCharacteristics, sizeof(TimerCharacteristics));
+  TimerCharacteristics.Header.Type = NDIS_OBJECT_TYPE_TIMER_CHARACTERISTICS;
+  TimerCharacteristics.Header.Revision = NDIS_TIMER_CHARACTERISTICS_REVISION_1;
+  TimerCharacteristics.Header.Size = NDIS_SIZEOF_TIMER_CHARACTERISTICS_REVISION_1;
+  TimerCharacteristics.AllocationTag = PCNET_TAG;
+  TimerCharacteristics.TimerFunction = MiniportMediaDetectionTimer;
+  TimerCharacteristics.FunctionContext = Adapter;
+  Status = NdisAllocateTimerObject(Adapter->MiniportAdapterHandle, &TimerCharacteristics, &Adapter->MediaDetectionTimer);
+  if(Status != NDIS_STATUS_SUCCESS)
+    {
+      Adapter->MediaDetectionTimer = NULL;
+      goto Failure;
+    }
+
+  DueTime.QuadPart = -10000LL * MEDIA_DETECTION_INTERVAL;
+  NdisSetTimerObject(Adapter->MediaDetectionTimer, DueTime, MEDIA_DETECTION_INTERVAL, Adapter);
+
+  return NDIS_STATUS_SUCCESS;
+
+Failure:
+  DPRINT("Error; freeing stuff\n");
+  MiniportHaltEx(Adapter, NdisHaltDeviceInitializationFailed);
   return Status;
 }
 
-static VOID
+static BOOLEAN
 NTAPI
-MiniportISR(
-    OUT PBOOLEAN InterruptRecognized,
-    OUT PBOOLEAN QueueMiniportHandleInterrupt,
-    IN NDIS_HANDLE MiniportAdapterContext)
-/*
- * FUNCTION: Miniport interrupt service routine
- * ARGUMENTS:
- *     InterruptRecognized: the interrupt was ours
- *     QueueMiniportHandleInterrupt: whether to queue a DPC to handle this interrupt
- *     MiniportAdapterContext: the context originally passed to NdisMSetAttributes
- * NOTES:
- *     - called by NDIS at DIRQL
- *     - by setting QueueMiniportHandleInterrupt to TRUE, MiniportHandleInterrupt
- *       will be called
- */
+MiniportIsr(
+    IN NDIS_HANDLE MiniportInterruptContext,
+    OUT PBOOLEAN QueueDefaultInterruptDpc,
+    OUT PULONG TargetProcessors)
 {
   USHORT Data;
   USHORT Rap;
-  PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
+  PADAPTER Adapter = (PADAPTER)MiniportInterruptContext;
 
   DPRINT("Called\n");
+
+  *TargetProcessors = 0;
 
   /* save the old RAP value */
   NdisRawReadPortUshort(Adapter->PortOffset + RAP, &Rap);
@@ -1076,11 +1369,10 @@ MiniportISR(
   NdisRawWritePortUshort(Adapter->PortOffset + RAP, CSR0);
   NdisRawReadPortUshort(Adapter->PortOffset + RDP, &Data);
 
-  if(!(Data & CSR0_INTR))
+  if(!(Data & CSR0_INTR) || !(Data & CSR0_IENA))
     {
       DPRINT("not our interrupt.\n");
-      *InterruptRecognized = FALSE;
-      *QueueMiniportHandleInterrupt = FALSE;
+      *QueueDefaultInterruptDpc = FALSE;
     }
   else
     {
@@ -1090,38 +1382,43 @@ MiniportISR(
       NdisRawWritePortUshort(Adapter->PortOffset + RAP, CSR0);
       NdisRawWritePortUshort(Adapter->PortOffset + RDP, 0);
 
-      *InterruptRecognized = TRUE;
-      *QueueMiniportHandleInterrupt = TRUE;
+      *QueueDefaultInterruptDpc = TRUE;
     }
 
   /* restore the rap */
   NdisRawWritePortUshort(Adapter->PortOffset + RAP, Rap);
+
+  return *QueueDefaultInterruptDpc;
 }
 
-static NDIS_STATUS
+static VOID
 NTAPI
-MiniportReset(
-    OUT PBOOLEAN AddressingReset,
-    IN NDIS_HANDLE MiniportAdapterContext)
-/*
- * FUNCTION: Reset the miniport
- * ARGUMENTS:
- *     AddressingReset: Whether or not we want NDIS to subsequently call MiniportSetInformation
- *                      to reset our addresses and filters
- *     MiniportAdapterContext: context originally passed to NdisMSetAttributes
- * RETURNS:
- *     NDIS_STATUS_SUCCESS on all requests
- * Notes:
- *     - Called by NDIS at PASSIVE_LEVEL when it thinks we need a reset
- */
+MiniportDisableInterrupt(
+    IN NDIS_HANDLE MiniportInterruptContext)
 {
-  DPRINT("Called\n");
+  PADAPTER Adapter = (PADAPTER)MiniportInterruptContext;
+  USHORT Rap;
 
-  /* MiniportReset doesn't do anything at the moment... perhaps this should be fixed. */
-
-  *AddressingReset = FALSE;
-  return NDIS_STATUS_SUCCESS;
+  NdisRawReadPortUshort(Adapter->PortOffset + RAP, &Rap);
+  NdisRawWritePortUshort(Adapter->PortOffset + RAP, CSR0);
+  NdisRawWritePortUshort(Adapter->PortOffset + RDP, 0);
+  NdisRawWritePortUshort(Adapter->PortOffset + RAP, Rap);
 }
+
+static VOID
+NTAPI
+MiniportEnableInterrupt(
+    IN NDIS_HANDLE MiniportInterruptContext)
+{
+  PADAPTER Adapter = (PADAPTER)MiniportInterruptContext;
+  USHORT Rap;
+
+  NdisRawReadPortUshort(Adapter->PortOffset + RAP, &Rap);
+  NdisRawWritePortUshort(Adapter->PortOffset + RAP, CSR0);
+  NdisRawWritePortUshort(Adapter->PortOffset + RDP, CSR0_IENA);
+  NdisRawWritePortUshort(Adapter->PortOffset + RAP, Rap);
+}
+
 
 static BOOLEAN
 NTAPI
@@ -1139,94 +1436,165 @@ MiSyncStartTransmit(
   return TRUE;
 }
 
-static NDIS_STATUS
+static VOID
 NTAPI
-MiniportSend(
+MiniportSendNetBufferLists(
     IN NDIS_HANDLE MiniportAdapterContext,
-    IN PNDIS_PACKET Packet,
-    IN UINT Flags)
-/*
- * FUNCTION: Called by NDIS when it has a packet for the NIC to send out
- * ARGUMENTS:
- *     MiniportAdapterContext: context originally input to NdisMSetAttributes
- *     Packet: The NDIS_PACKET to be sent
- *     Flags: Flags associated with Packet
- * RETURNS:
- *     NDIS_STATUS_SUCCESS on processed requests
- *     NDIS_STATUS_RESOURCES if there's no place in buffer ring
- * NOTES:
- *     - Called by NDIS at DISPATCH_LEVEL
- */
+    IN PNET_BUFFER_LIST NetBufferLists,
+    IN NDIS_PORT_NUMBER PortNumber,
+    IN ULONG SendFlags)
 {
   PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
-  PTRANSMIT_DESCRIPTOR Desc;
-  PNDIS_BUFFER NdisBuffer;
-  PVOID SourceBuffer;
-  UINT TotalPacketLength, SourceLength, Position = 0;
+  BOOLEAN DispatchLevel = NDIS_TEST_SEND_AT_DISPATCH_LEVEL(SendFlags);
+  PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
+  PNET_BUFFER_LIST Nbl, Next;
+
+  UNREFERENCED_PARAMETER(PortNumber);
 
   DPRINT("Called\n");
 
-  ASSERT_IRQL_EQUAL(DISPATCH_LEVEL);
+  NdisAcquireSpinLock(&Adapter->Lock);
 
-  NdisDprAcquireSpinLock(&Adapter->Lock);
-
-  /* Check if we have free entry in our circular buffer. */
-  if ((Adapter->CurrentTransmitEndIndex + 1 ==
-       Adapter->CurrentTransmitStartIndex) ||
-      (Adapter->CurrentTransmitEndIndex == Adapter->BufferCount - 1 &&
-       Adapter->CurrentTransmitStartIndex == 0))
+  if (Adapter->Paused)
     {
-      DPRINT1("No free space in circular buffer\n");
-      NdisDprReleaseSpinLock(&Adapter->Lock);
-      return NDIS_STATUS_RESOURCES;
+      NdisReleaseSpinLock(&Adapter->Lock);
+      MiCompleteSends(Adapter, MiFailNblChain(NetBufferLists, NDIS_STATUS_PAUSED), DispatchLevel);
+      return;
     }
 
-  Desc = Adapter->TransmitDescriptorRingVirt + Adapter->CurrentTransmitEndIndex;
-
-  NdisQueryPacket(Packet, NULL, NULL, &NdisBuffer, &TotalPacketLength);
-  ASSERT(TotalPacketLength <= BUFFER_SIZE);
-
-  DPRINT("TotalPacketLength: %x\n", TotalPacketLength);
-
-  while (NdisBuffer)
+  for (Nbl = NetBufferLists; Nbl != NULL; Nbl = Next)
     {
-      NdisQueryBuffer(NdisBuffer, &SourceBuffer, &SourceLength);
-
-      DPRINT("Buffer: %x Length: %x\n", SourceBuffer, SourceLength);
-
-      RtlCopyMemory(Adapter->TransmitBufferPtrVirt +
-                    Adapter->CurrentTransmitEndIndex * BUFFER_SIZE + Position,
-                    SourceBuffer, SourceLength);
-
-      Position += SourceLength;
-
-      NdisGetNextBuffer(NdisBuffer, &NdisBuffer);
+      Next = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+      NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
+      Nbl->MiniportReserved[0] = NET_BUFFER_LIST_FIRST_NB(Nbl);
+      MiAppendNbl(&Adapter->SendQueueHead, &Adapter->SendQueueTail, Nbl);
     }
 
-#if DBG && 0
-  {
-    PUCHAR Ptr = Adapter->TransmitBufferPtrVirt +
-                 Adapter->CurrentTransmitEndIndex * BUFFER_SIZE;
-    for (Position = 0; Position < TotalPacketLength; Position++)
-      {
-        if (Position % 16 == 0)
-          DbgPrint("\n");
-        DbgPrint("%x ", *Ptr++);
-      }
-  }
-  DbgPrint("\n");
-#endif
+  if (MiProcessSendQueue(Adapter, &CompleteHead, &CompleteTail))
+    NdisMSynchronizeWithInterruptEx(Adapter->InterruptHandle, 0, MiSyncStartTransmit, Adapter);
 
-  Adapter->CurrentTransmitEndIndex++;
-  Adapter->CurrentTransmitEndIndex %= Adapter->BufferCount;
+  NdisReleaseSpinLock(&Adapter->Lock);
 
-  Desc->FLAGS = TD1_OWN | TD1_STP | TD1_ENP;
-  Desc->BCNT = 0xf000 | -(INT)TotalPacketLength;
+  MiCompleteSends(Adapter, CompleteHead, DispatchLevel);
+}
 
-  NdisMSynchronizeWithInterrupt(&Adapter->InterruptObject, MiSyncStartTransmit, Adapter);
+static VOID
+NTAPI
+MiniportCancelSend(
+    IN NDIS_HANDLE MiniportAdapterContext,
+    IN PVOID CancelId)
+{
+  PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
+  PNET_BUFFER_LIST CompleteHead = NULL, CompleteTail = NULL;
+  PNET_BUFFER_LIST Nbl, Next, KeepHead = NULL, KeepTail = NULL;
 
-  NdisDprReleaseSpinLock(&Adapter->Lock);
+  NdisAcquireSpinLock(&Adapter->Lock);
 
+  Nbl = Adapter->SendQueueHead;
+  if (Nbl != NULL && Nbl->MiniportReserved[0] != NET_BUFFER_LIST_FIRST_NB(Nbl))
+    {
+      Next = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+      MiAppendNbl(&KeepHead, &KeepTail, Nbl);
+      Nbl = Next;
+    }
+
+  for (; Nbl != NULL; Nbl = Next)
+    {
+      Next = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+      if (NDIS_GET_NET_BUFFER_LIST_CANCEL_ID(Nbl) == CancelId)
+        {
+          NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SEND_ABORTED;
+          MiAppendNbl(&CompleteHead, &CompleteTail, Nbl);
+        }
+      else
+        {
+          MiAppendNbl(&KeepHead, &KeepTail, Nbl);
+        }
+    }
+
+  Adapter->SendQueueHead = KeepHead;
+  Adapter->SendQueueTail = KeepTail;
+  NdisReleaseSpinLock(&Adapter->Lock);
+
+  MiCompleteSends(Adapter, CompleteHead, FALSE);
+}
+
+static VOID
+NTAPI
+MiniportReturnNetBufferLists(
+    IN NDIS_HANDLE MiniportAdapterContext,
+    IN PNET_BUFFER_LIST NetBufferLists,
+    IN ULONG ReturnFlags)
+{
+  PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
+  PNET_BUFFER_LIST Nbl, Next;
+  BOOLEAN CompletePause = FALSE;
+
+  UNREFERENCED_PARAMETER(ReturnFlags);
+
+  NdisAcquireSpinLock(&Adapter->Lock);
+  for (Nbl = NetBufferLists; Nbl != NULL; Nbl = Next)
+    {
+      Next = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+      NET_BUFFER_LIST_NEXT_NBL(Nbl) = Adapter->FreeReceiveNbls;
+      Adapter->FreeReceiveNbls = Nbl;
+      Adapter->ReceiveNblsOutstanding--;
+    }
+
+  if (Adapter->PausePending && Adapter->ReceiveNblsOutstanding == 0)
+    {
+      Adapter->PausePending = FALSE;
+      CompletePause = TRUE;
+    }
+  NdisReleaseSpinLock(&Adapter->Lock);
+
+  if (CompletePause)
+    NdisMPauseComplete(Adapter->MiniportAdapterHandle);
+}
+
+static NDIS_STATUS
+NTAPI
+MiniportPause(
+    IN NDIS_HANDLE MiniportAdapterContext,
+    IN PNDIS_MINIPORT_PAUSE_PARAMETERS PauseParameters)
+{
+  PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
+  PNET_BUFFER_LIST Pending;
+  NDIS_STATUS Status = NDIS_STATUS_SUCCESS;
+
+  UNREFERENCED_PARAMETER(PauseParameters);
+
+  NdisAcquireSpinLock(&Adapter->Lock);
+  Adapter->Paused = TRUE;
+  Pending = Adapter->SendQueueHead;
+  Adapter->SendQueueHead = NULL;
+  Adapter->SendQueueTail = NULL;
+  if (Adapter->ReceiveNblsOutstanding != 0)
+    {
+      Adapter->PausePending = TRUE;
+      Status = NDIS_STATUS_PENDING;
+    }
+  NdisReleaseSpinLock(&Adapter->Lock);
+
+  MiCompleteSends(Adapter, MiFailNblChain(Pending, NDIS_STATUS_PAUSED), FALSE);
+  return Status;
+}
+
+static NDIS_STATUS
+NTAPI
+MiniportRestart(
+    IN NDIS_HANDLE MiniportAdapterContext,
+    IN PNDIS_MINIPORT_RESTART_PARAMETERS RestartParameters)
+{
+  PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
+
+  UNREFERENCED_PARAMETER(RestartParameters);
+
+  NdisAcquireSpinLock(&Adapter->Lock);
+  Adapter->Paused = FALSE;
+  NdisReleaseSpinLock(&Adapter->Lock);
+
+  MiIndicateLinkState(Adapter);
   return NDIS_STATUS_SUCCESS;
 }
 
@@ -1322,49 +1690,52 @@ MiGetMediaState(PADAPTER Adapter)
   return Data & BCR4_LEDOUT ? NdisMediaStateConnected : NdisMediaStateDisconnected;
 }
 
+static VOID
+NTAPI
+MiniportDevicePnPEventNotify(
+    IN NDIS_HANDLE MiniportAdapterContext,
+    IN PNET_DEVICE_PNP_EVENT NetDevicePnPEvent)
+{
+  UNREFERENCED_PARAMETER(MiniportAdapterContext);
+  UNREFERENCED_PARAMETER(NetDevicePnPEvent);
+}
+
+static VOID
+NTAPI
+MiniportUnload(
+    IN PDRIVER_OBJECT DriverObject)
+{
+  UNREFERENCED_PARAMETER(DriverObject);
+  NdisMDeregisterMiniportDriver(MiniportDriverHandle);
+}
+
 NTSTATUS
 NTAPI
 DriverEntry(
     IN PDRIVER_OBJECT DriverObject,
     IN PUNICODE_STRING RegistryPath)
-/*
- * FUNCTION: Start this driver
- * ARGUMENTS:
- *     DriverObject: Pointer to the system-allocated driver object
- *     RegistryPath: Pointer to our SCM database entry
- * RETURNS:
- *     NDIS_STATUS_SUCCESS on success
- *     NDIS_STATUS_FAILURE on failure
- * NOTES:
- *     - Called by the I/O manager when the driver starts at PASSIVE_LEVEL
- *     - TODO: convert this to NTSTATUS return values
- */
 {
-  NDIS_HANDLE WrapperHandle;
-  NDIS_MINIPORT_CHARACTERISTICS Characteristics;
-  NDIS_STATUS Status;
+  NDIS_MINIPORT_DRIVER_CHARACTERISTICS Characteristics;
 
   RtlZeroMemory(&Characteristics, sizeof(Characteristics));
+  Characteristics.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS;
+  Characteristics.Header.Revision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1;
+  Characteristics.Header.Size = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1;
   Characteristics.MajorNdisVersion = NDIS_MINIPORT_MAJOR_VERSION;
   Characteristics.MinorNdisVersion = NDIS_MINIPORT_MINOR_VERSION;
-  Characteristics.HaltHandler = MiniportHalt;
-  Characteristics.HandleInterruptHandler = MiniportHandleInterrupt;
-  Characteristics.InitializeHandler = MiniportInitialize;
-  Characteristics.ISRHandler = MiniportISR;
-  Characteristics.QueryInformationHandler = MiniportQueryInformation;
-  Characteristics.ResetHandler = MiniportReset;
-  Characteristics.SetInformationHandler = MiniportSetInformation;
-  Characteristics.SendHandler = MiniportSend;
+  Characteristics.MajorDriverVersion = 1;
+  Characteristics.InitializeHandlerEx = MiniportInitializeEx;
+  Characteristics.HaltHandlerEx = MiniportHaltEx;
+  Characteristics.UnloadHandler = MiniportUnload;
+  Characteristics.PauseHandler = MiniportPause;
+  Characteristics.RestartHandler = MiniportRestart;
+  Characteristics.OidRequestHandler = MiniportOidRequest;
+  Characteristics.SendNetBufferListsHandler = MiniportSendNetBufferLists;
+  Characteristics.ReturnNetBufferListsHandler = MiniportReturnNetBufferLists;
+  Characteristics.CancelSendHandler = MiniportCancelSend;
+  Characteristics.DevicePnPEventNotifyHandler = MiniportDevicePnPEventNotify;
+  Characteristics.ShutdownHandlerEx = MiniportShutdownEx;
+  Characteristics.CancelOidRequestHandler = MiniportCancelOidRequest;
 
-  NdisMInitializeWrapper(&WrapperHandle, DriverObject, RegistryPath, 0);
-  if (!WrapperHandle) return NDIS_STATUS_FAILURE;
-
-  Status = NdisMRegisterMiniport(WrapperHandle, &Characteristics, sizeof(Characteristics));
-  if(Status != NDIS_STATUS_SUCCESS)
-    {
-      NdisTerminateWrapper(WrapperHandle, 0);
-      return NDIS_STATUS_FAILURE;
-    }
-
-  return NDIS_STATUS_SUCCESS;
+  return NdisMRegisterMiniportDriver(DriverObject, RegistryPath, NULL, &Characteristics, &MiniportDriverHandle);
 }

@@ -24,6 +24,9 @@ DefaultDestDir = 12
 
 [PCNet_Inst.ndi.NT]
 Characteristics = 0x4 ; NCF_PHYSICAL
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType = 5 ; PCIBus
 AddReg = PCNet_AddReg.NT
 CopyFiles = PCNet_CopyFiles.NT

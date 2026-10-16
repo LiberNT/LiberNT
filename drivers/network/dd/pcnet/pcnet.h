@@ -33,6 +33,11 @@
 #include "pci.h"
 #include "pcnethw.h"
 
+#define MAXIMUM_FRAME_SIZE    1514
+#define RECEIVE_NBL_COUNT     64
+#define FCS_LENGTH            4
+#define PCNET_RECEIVE_TAG     'rNcP'
+
 /* statistics struct */
 typedef struct _ADAPTER_STATS
 {
@@ -51,6 +56,7 @@ typedef struct _ADAPTER_STATS
   ULONG RcvCrcErrors;
   ULONG RcvOverflowErrors;
   ULONG RcvFramingErrors;
+  ULONG RcvNoBuffers;
 } ADAPTER_STATS, *PADAPTER_STATS;
 
 /* adapter struct */
@@ -60,14 +66,18 @@ typedef struct _ADAPTER
 
   NDIS_HANDLE MiniportAdapterHandle;
   ULONG Flags;
-  ULONG InterruptVector;
   ULONG IoBaseAddress;
   ULONG_PTR PortOffset;
-  NDIS_MINIPORT_INTERRUPT InterruptObject;
+  NDIS_HANDLE InterruptHandle;
+  NDIS_HANDLE DmaHandle;
   NDIS_MEDIA_STATE MediaState;
   UINT MediaSpeed;
   BOOLEAN FullDuplex;
-  NDIS_MINIPORT_TIMER MediaDetectionTimer;
+  BOOLEAN ChipStarted;
+  BOOLEAN Paused;
+  BOOLEAN PausePending;
+  NDIS_HANDLE MediaDetectionTimer;
+  UCHAR PermanentAddress[6];
   ULONG CurrentReceiveDescriptorIndex;
   ULONG CurrentPacketFilter;
   ULONG CurrentLookaheadSize;
@@ -105,29 +115,23 @@ typedef struct _ADAPTER
   ULONG BufferCount;
   ULONG LogBufferCount;
 
+  NDIS_HANDLE ReceiveNblPool;
+  PNET_BUFFER_LIST FreeReceiveNbls;
+  PNET_BUFFER_LIST ReceiveNbls[RECEIVE_NBL_COUNT];
+  ULONG ReceiveNblsOutstanding;
+
+  PNET_BUFFER_LIST SendQueueHead;
+  PNET_BUFFER_LIST SendQueueTail;
+
   ADAPTER_STATS Statistics;
 } ADAPTER, *PADAPTER;
 
 /* forward declarations */
-NDIS_STATUS
-NTAPI
-MiniportQueryInformation(
-    IN NDIS_HANDLE MiniportAdapterContext,
-    IN NDIS_OID Oid,
-    IN PVOID InformationBuffer,
-    IN ULONG InformationBufferLength,
-    OUT PULONG BytesWritten,
-    OUT PULONG BytesNeeded);
+MINIPORT_OID_REQUEST MiniportOidRequest;
+MINIPORT_CANCEL_OID_REQUEST MiniportCancelOidRequest;
 
-NDIS_STATUS
-NTAPI
-MiniportSetInformation(
-    IN NDIS_HANDLE MiniportAdapterContext,
-    IN NDIS_OID Oid,
-    IN PVOID InformationBuffer,
-    IN ULONG InformationBufferLength,
-    OUT PULONG BytesRead,
-    OUT PULONG BytesNeeded);
+extern NDIS_OID MiniportOIDList[];
+extern ULONG MiniportOIDCount;
 
 NDIS_STATUS
 NTAPI
