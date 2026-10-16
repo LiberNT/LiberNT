@@ -93,13 +93,48 @@ FrameWindow::Invalidate(const RECT *rc)
 void
 FrameWindow::ApplyFrameAttributes()
 {
+#if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
     MARGINS margins = { 0, 0, 0, 0 };
+#else
+    MARGINS margins = { 0, 0, CaptionHeight(), 0 };
+#endif
     DWORD corner = 2;
 
     DwmExtendFrameIntoClientArea(m_hwnd, &margins);
     DwmSetWindowAttribute(m_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
 }
 
+int
+FrameWindow::CaptionButtonsWidth() const
+{
+#if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
+    return m_Theme.Scale(46) * 3;
+#else
+    RECT bounds;
+
+    if (SUCCEEDED(DwmGetWindowAttribute(m_hwnd, DWMWA_CAPTION_BUTTON_BOUNDS, &bounds, sizeof(bounds))) &&
+        bounds.right > bounds.left)
+        return bounds.right - bounds.left;
+    return GetSystemMetricsForDpi(SM_CXSIZE, m_Theme.Dpi()) * 3;
+#endif
+}
+
+#if !SHELLFRAME_CUSTOM_CAPTION_BUTTONS
+void
+FrameWindow::ClearCaptionButtons(Canvas &canvas)
+{
+    RECT bounds, window;
+    POINT origin = { 0, 0 };
+
+    if (FAILED(DwmGetWindowAttribute(m_hwnd, DWMWA_CAPTION_BUTTON_BOUNDS, &bounds, sizeof(bounds))) ||
+        !GetWindowRect(m_hwnd, &window) || !ClientToScreen(m_hwnd, &origin))
+        return;
+    OffsetRect(&bounds, window.left - origin.x, window.top - origin.y);
+    canvas.Fill(bounds, RGB(0, 0, 0));
+}
+#endif
+
+#if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
 RECT
 FrameWindow::CaptionButtonRect(CaptionButton button) const
 {
@@ -140,6 +175,7 @@ FrameWindow::SetHotButton(CaptionButton button)
     rc.bottom = CaptionButtonHeight();
     Invalidate(&rc);
 }
+#endif
 
 LRESULT
 FrameWindow::HitTest(POINT screen)
@@ -148,17 +184,21 @@ FrameWindow::HitTest(POINT screen)
     RECT client;
     int border = GetSystemMetricsForDpi(SM_CYSIZEFRAME, m_Theme.Dpi()) +
                  GetSystemMetricsForDpi(SM_CXPADDEDBORDER, m_Theme.Dpi());
+#if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
     static const CaptionButton Buttons[] = { CaptionButton::Minimize, CaptionButton::Maximize, CaptionButton::Close };
     static const LRESULT Hits[] = { HTMINBUTTON, HTMAXBUTTON, HTCLOSE };
+#endif
 
     ScreenToClient(m_hwnd, &pt);
     GetClientRect(m_hwnd, &client);
+#if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
     for (int i = 0; i < 3; i++)
     {
         RECT rc = CaptionButtonRect(Buttons[i]);
         if (PtInRect(&rc, pt))
             return Hits[i];
     }
+#endif
     if (!IsZoomed(m_hwnd) && pt.y < border)
     {
         if (pt.x < border * 2)
@@ -172,6 +212,7 @@ FrameWindow::HitTest(POINT screen)
     return HTCLIENT;
 }
 
+#if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
 void
 FrameWindow::PaintCaptionButtons(Canvas &canvas, const RECT &client, COLORREF background)
 {
@@ -211,10 +252,17 @@ FrameWindow::PaintCaptionButtons(Canvas &canvas, const RECT &client, COLORREF ba
         canvas.Icon(icon, glyph, ink);
     }
 }
+#endif
 
 LRESULT
 FrameWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 {
+#if !SHELLFRAME_CUSTOM_CAPTION_BUTTONS
+    LRESULT result = 0;
+
+    if (DwmDefWindowProc(m_hwnd, msg, wParam, lParam, &result))
+        return result;
+#endif
     switch (msg)
     {
         case WM_CREATE:
@@ -249,6 +297,7 @@ FrameWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             return HitTest(pt);
         }
 
+#if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
         case WM_NCMOUSEMOVE:
         {
             CaptionButton button = ButtonFromHit(wParam);
@@ -306,6 +355,7 @@ FrameWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             break;
         }
 
+#endif
         case WM_ACTIVATE:
             m_Active = LOWORD(wParam) != WA_INACTIVE;
             Invalidate(NULL);
@@ -332,6 +382,9 @@ FrameWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             {
                 Canvas canvas(hdc, client);
                 OnPaint(canvas, client);
+#if !SHELLFRAME_CUSTOM_CAPTION_BUTTONS
+                ClearCaptionButtons(canvas);
+#endif
             }
             EndPaint(m_hwnd, &ps);
             return 0;
@@ -341,6 +394,7 @@ FrameWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         {
             RECT *suggested = (RECT *)lParam;
             m_Theme.SetDpi(HIWORD(wParam));
+            ApplyFrameAttributes();
             OnThemeChanged();
             SetWindowPos(m_hwnd, NULL, suggested->left, suggested->top, suggested->right - suggested->left,
                          suggested->bottom - suggested->top, SWP_NOZORDER | SWP_NOACTIVATE);

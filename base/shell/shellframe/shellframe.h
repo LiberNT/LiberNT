@@ -12,6 +12,10 @@
 #include <dwmapi.h>
 #include <gdiplus.h>
 
+#ifndef SHELLFRAME_CUSTOM_CAPTION_BUTTONS
+#define SHELLFRAME_CUSTOM_CAPTION_BUTTONS 0
+#endif
+
 namespace ShellFrame
 {
 
@@ -62,8 +66,10 @@ public:
 
     void Update(HWND hwnd);
     void SetDpi(UINT dpi);
+    BOOL UpdateMaterial(HWND hwnd);
 
-    BOOL IsDark() const { return m_Dark; }
+    BOOL IsDark() const { return m_Material ? m_MaterialDark : m_Dark; }
+    BOOL HasMaterial() const { return m_Material; }
     UINT Dpi() const { return m_Dpi; }
     int Scale(int value) const { return MulDiv(value, (int)m_Dpi, 96); }
     float ScaleF(float value) const { return value * (float)m_Dpi / 96.0f; }
@@ -73,8 +79,12 @@ public:
 private:
     void CreateFonts();
     void DestroyFonts();
+    void BuildPalette();
 
     BOOL m_Dark;
+    BOOL m_Material;
+    BOOL m_MaterialDark;
+    COLORREF m_MaterialKey;
     UINT m_Dpi;
     Palette m_Colors;
     HFONT m_Fonts[(int)TextStyle::Count];
@@ -111,6 +121,7 @@ BOOL Startup();
 void Shutdown();
 Gdiplus::GraphicsPath *IconPath(LPCWSTR name, float *viewBox);
 HICON CreateGlyphIcon(LPCWSTR name, int size, COLORREF color);
+void FillIcon(Gdiplus::Graphics &graphics, LPCWSTR name, const Gdiplus::RectF &rc, COLORREF color);
 
 enum class CaptionButton
 {
@@ -144,7 +155,7 @@ protected:
     void Invalidate(const RECT *rc = NULL);
     void PaintCaptionButtons(Canvas &canvas, const RECT &client, COLORREF background);
     RECT CaptionButtonRect(CaptionButton button) const;
-    int CaptionButtonsWidth() const { return m_Theme.Scale(46) * 3; }
+    int CaptionButtonsWidth() const;
     BOOL IsActive() const { return m_Active; }
 
     HWND m_hwnd;
@@ -156,6 +167,9 @@ private:
     CaptionButton ButtonFromHit(LRESULT hit) const;
     void SetHotButton(CaptionButton button);
     void ApplyFrameAttributes();
+#if !SHELLFRAME_CUSTOM_CAPTION_BUTTONS
+    void ClearCaptionButtons(Canvas &canvas);
+#endif
 
     CaptionButton m_HotButton;
     CaptionButton m_PressedButton;

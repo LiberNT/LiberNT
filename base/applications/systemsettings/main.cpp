@@ -11,6 +11,7 @@
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <strsafe.h>
+#include <reactos/dwmsettings.h>
 #include "resource.h"
 
 using namespace ShellFrame;
@@ -134,6 +135,12 @@ public:
             m_User[0] = UNICODE_NULL;
     }
 
+    void SetInitialPage(int page)
+    {
+        if (page >= 0 && page < (int)_countof(Pages))
+            m_Page = page;
+    }
+
 protected:
     int CaptionHeight() const override { return m_Theme.Scale(48); }
 
@@ -147,6 +154,7 @@ protected:
     {
         WCHAR cue[64];
 
+        ApplyMaterial();
         m_SmallIcon = CreateGlyphIcon(L"settings_20_regular", GetSystemMetricsForDpi(SM_CXSMICON, m_Theme.Dpi()),
                                       m_Theme.Colors().Accent);
         m_BigIcon = CreateGlyphIcon(L"settings_24_regular", GetSystemMetricsForDpi(SM_CXICON, m_Theme.Dpi()),
@@ -199,7 +207,9 @@ protected:
         PaintSearch(canvas);
         PaintNavigation(canvas);
         PaintContent(canvas, client);
+#if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
         PaintCaptionButtons(canvas, client, c.Window);
+#endif
     }
 
     LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) override
@@ -241,6 +251,14 @@ protected:
                 SetBkColor((HDC)wParam, GetFocus() == m_Search ? c.ControlFillFocus : c.ControlFill);
                 return (LRESULT)brush;
             }
+            case WM_THEMECHANGED:
+            case WM_SETTINGCHANGE:
+            {
+                LRESULT result = FrameWindow::HandleMessage(msg, wParam, lParam);
+                ApplyMaterial();
+                Invalidate(NULL);
+                return result;
+            }
             case WM_DESTROY:
                 if (m_SearchFont)
                     DeleteObject(m_SearchFont);
@@ -262,6 +280,18 @@ protected:
     }
 
 private:
+    void ApplyMaterial()
+    {
+        COLORREF fill;
+        INT opacity;
+
+        if (DwmSettingsLoadSchemeMaterial(DwmSettingsReadColorScheme(), &fill, &opacity))
+            DwmSettingsSetContentBackdrop(m_hwnd, fill, opacity);
+        else
+            DwmSettingsClearContentBackdrop(m_hwnd);
+        m_Theme.UpdateMaterial(m_hwnd);
+    }
+
     RECT BackRect() const
     {
         RECT rc = { m_Theme.Scale(4), m_Theme.Scale(6), m_Theme.Scale(44), m_Theme.Scale(42) };
@@ -632,6 +662,31 @@ private:
     int m_ResultCount;
 };
 
+static int
+PageFromUri(LPCWSTR commandLine)
+{
+    static const struct { LPCWSTR Prefix; int Page; } Map[] =
+    {
+        { L"display", 0 }, { L"sound", 0 }, { L"powersleep", 0 }, { L"about", 0 }, { L"system", 0 },
+        { L"bluetooth", 1 }, { L"devices", 1 }, { L"mousetouchpad", 1 }, { L"printers", 1 }, { L"typing", 1 },
+        { L"network", 2 }, { L"personalization", 3 }, { L"colors", 3 }, { L"themes", 3 }, { L"appsfeatures", 4 },
+        { L"defaultapps", 4 }, { L"yourinfo", 5 }, { L"otherusers", 5 }, { L"accounts", 5 }, { L"dateandtime", 6 },
+        { L"regionlanguage", 6 }, { L"regionformatting", 6 }, { L"gaming", 7 }, { L"easeofaccess", 8 },
+        { L"privacy", 9 }, { L"windowsupdate", 10 },
+    };
+    LPCWSTR uri = commandLine ? StrStrIW(commandLine, L"ms-settings:") : NULL;
+
+    if (!uri)
+        return 0;
+    uri += lstrlenW(L"ms-settings:");
+    for (UINT i = 0; i < _countof(Map); i++)
+    {
+        if (!StrCmpNIW(uri, Map[i].Prefix, lstrlenW(Map[i].Prefix)))
+            return Map[i].Page;
+    }
+    return 0;
+}
+
 int WINAPI
 wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR commandLine, int showCmd)
 {
@@ -641,8 +696,8 @@ wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR commandLine, int showCmd
     MSG msg;
 
     UNREFERENCED_PARAMETER(previous);
-    UNREFERENCED_PARAMETER(commandLine);
     Instance = instance;
+    window.SetInitialPage(PageFromUri(commandLine));
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     InitCommonControlsEx(&icc);
     if (!Startup())

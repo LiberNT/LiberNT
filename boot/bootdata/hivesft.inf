@@ -134,6 +134,10 @@ HKLM,"SOFTWARE\Classes\https","URL Protocol",0x00000000,""
 ;HKLM,"SOFTWARE\Classes\https\shell\open\command","",0x00020000,"""%programfiles%\Internet Explorer\iexplore.exe"" -nohome"
 HKLM,"SOFTWARE\Classes\https\shell\open\command","",0x00020000,"""%programfiles%\Internet Explorer\iexplore.exe"" ""%1"""
 
+HKLM,"SOFTWARE\Classes\ms-settings","",0x00000000,"URL:ms-settings"
+HKLM,"SOFTWARE\Classes\ms-settings","URL Protocol",0x00000000,""
+HKLM,"SOFTWARE\Classes\ms-settings\shell\open\command","",0x00020000,"""%SystemRoot%\ImmersiveControlPanel\SystemSettings.exe"" ""%1"""
+
 ; Register system default web browser
 HKLM,"SOFTWARE\Clients\StartMenuInternet","",0x00000000,"IEXPLORE.EXE"
 HKLM,"SOFTWARE\Clients\StartMenuInternet\IEXPLORE.EXE","",0x00000000,"Internet Explorer"

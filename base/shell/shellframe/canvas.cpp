@@ -150,21 +150,8 @@ Canvas::MeasureText(LPCWSTR text, HFONT font)
 void
 Canvas::Icon(LPCWSTR name, const RECT &rc, COLORREF color)
 {
-    float viewBox = 0.0f;
-    Gdiplus::GraphicsPath *path = IconPath(name, &viewBox);
-    Gdiplus::SolidBrush brush(ToColor(color));
-    float scale;
-    Gdiplus::GraphicsState state;
-
-    if (!path || viewBox <= 0.0f)
-        return;
-    scale = (float)min(rc.right - rc.left, rc.bottom - rc.top) / viewBox;
-    state = m_Graphics->Save();
-    m_Graphics->TranslateTransform((float)rc.left + ((rc.right - rc.left) - viewBox * scale) / 2.0f,
-                                   (float)rc.top + ((rc.bottom - rc.top) - viewBox * scale) / 2.0f);
-    m_Graphics->ScaleTransform(scale, scale);
-    m_Graphics->FillPath(&brush, path);
-    m_Graphics->Restore(state);
+    FillIcon(*m_Graphics, name, Gdiplus::RectF((float)rc.left, (float)rc.top, (float)(rc.right - rc.left),
+                                                (float)(rc.bottom - rc.top)), color);
 }
 
 }

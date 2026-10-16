@@ -6,6 +6,7 @@
  */
 
 #include "shellframe.h"
+#include <reactos/dwmframe.h>
 
 namespace ShellFrame
 {
@@ -43,6 +44,9 @@ AccentFromPalette(BOOL dark)
 
 Theme::Theme() :
     m_Dark(FALSE),
+    m_Material(FALSE),
+    m_MaterialDark(FALSE),
+    m_MaterialKey(0),
     m_Dpi(96)
 {
     ZeroMemory(&m_Colors, sizeof(m_Colors));
@@ -54,15 +58,55 @@ Theme::~Theme()
     DestroyFonts();
 }
 
+static COLORREF
+AvoidKey(COLORREF color, COLORREF key)
+{
+    if (color != key)
+        return color;
+    return RGB(GetRValue(color) ^ 1, GetGValue(color) ^ 1, GetBValue(color) ^ 1);
+}
+
+BOOL
+Theme::UpdateMaterial(HWND hwnd)
+{
+    BOOL active = hwnd && GetPropW(hwnd, DWM_PROP_CONTENT_BACKDROP) && GetPropW(hwnd, DWM_PROP_BACKDROP_COLOR);
+    COLORREF key = active ? (COLORREF)((ULONG_PTR)GetPropW(hwnd, DWM_PROP_BACKDROP_COLOR) - 1) : 0;
+
+    if (active == m_Material && (!active || key == m_MaterialKey))
+        return FALSE;
+    m_Material = active;
+    m_MaterialKey = key;
+    m_MaterialDark = active && GetRValue(key) * 299 + GetGValue(key) * 587 + GetBValue(key) * 114 < 128000;
+    BuildPalette();
+    return TRUE;
+}
+
 void
 Theme::Update(HWND hwnd)
 {
     DWORD light = 1;
-    COLORREF window, white = RGB(255, 255, 255), black = RGB(0, 0, 0);
 
     ReadDword(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
               L"AppsUseLightTheme", &light);
     m_Dark = !light;
+    BuildPalette();
+
+    if (hwnd)
+    {
+        BOOL dark = m_Dark;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+        SetDpi(GetDpiForWindow(hwnd));
+    }
+    else
+    {
+        SetDpi(m_Dpi);
+    }
+}
+
+void
+Theme::BuildPalette()
+{
+    COLORREF window, white = RGB(255, 255, 255), black = RGB(0, 0, 0);
 
     Palette &c = m_Colors;
     if (m_Dark)
@@ -115,20 +159,33 @@ Theme::Update(HWND hwnd)
         c.ToolbarBand = RGB(248, 248, 248);
         c.Content = white;
     }
-    c.Accent = AccentFromPalette(m_Dark);
-    c.AccentText = m_Dark ? black : white;
+    c.Accent = AccentFromPalette(IsDark());
+    c.AccentText = IsDark() ? black : white;
     c.CloseHover = RGB(0xC4, 0x2B, 0x1C);
     c.CloseText = white;
 
-    if (hwnd)
+    if (m_Material)
     {
-        BOOL dark = m_Dark;
-        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-        SetDpi(GetDpiForWindow(hwnd));
-    }
-    else
-    {
-        SetDpi(m_Dpi);
+        COLORREF k = m_MaterialKey, ink = m_MaterialDark ? white : black;
+
+        c.Window = c.TabStrip = c.ToolbarBand = c.Content = k;
+        c.Text = AvoidKey(m_MaterialDark ? white : Blend(0xE4, black, k), k);
+        c.Glyph = c.Text;
+        c.TextSecondary = AvoidKey(Blend(m_MaterialDark ? 0xC5 : 0x9E, ink, k), k);
+        c.TextTertiary = AvoidKey(Blend(m_MaterialDark ? 0x8B : 0x72, ink, k), k);
+        c.TextDisabled = AvoidKey(Blend(0x5D, ink, k), k);
+        c.SubtleHover = AvoidKey(Blend(0x14, ink, k), k);
+        c.SubtlePressed = AvoidKey(Blend(0x0C, ink, k), k);
+        c.Selected = AvoidKey(Blend(0x14, ink, k), k);
+        c.TabSelected = AvoidKey(Blend(m_MaterialDark ? 0x14 : 0x80, white, k), k);
+        c.Card = AvoidKey(Blend(m_MaterialDark ? 0x0D : 0xB3, white, k), k);
+        c.CardHover = AvoidKey(Blend(m_MaterialDark ? 0x15 : 0xD0, white, k), k);
+        c.CardBorder = AvoidKey(Blend(0x19, ink, k), k);
+        c.Divider = AvoidKey(Blend(0x19, ink, k), k);
+        c.ControlFill = AvoidKey(Blend(m_MaterialDark ? 0x14 : 0xB3, white, k), k);
+        c.ControlFillFocus = AvoidKey(m_MaterialDark ? Blend(0xB3, RGB(0x1E, 0x1E, 0x1E), k) : white, k);
+        c.ControlStroke = AvoidKey(Blend(0x19, ink, k), k);
+        c.ControlStrongStroke = AvoidKey(Blend(0x8B, ink, k), k);
     }
 }
 

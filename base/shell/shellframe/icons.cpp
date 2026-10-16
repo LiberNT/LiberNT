@@ -28,6 +28,9 @@ struct ICON_CACHE
 };
 
 static ICON_CACHE *Cache;
+static SRWLOCK CacheLock = SRWLOCK_INIT;
+static LONG StartupCount;
+static ULONG_PTR GdiplusToken;
 
 static const char *
 SkipSeparators(const char *p)
@@ -193,8 +196,8 @@ BuildPath(const char *svg)
     return path;
 }
 
-Gdiplus::GraphicsPath *
-IconPath(LPCWSTR name, float *viewBox)
+static Gdiplus::GraphicsPath *
+LookupIcon(LPCWSTR name, float *viewBox)
 {
     for (unsigned i = 0; i < IconSourceCount; i++)
     {
@@ -215,51 +218,92 @@ IconPath(LPCWSTR name, float *viewBox)
     return NULL;
 }
 
+Gdiplus::GraphicsPath *
+IconPath(LPCWSTR name, float *viewBox)
+{
+    Gdiplus::GraphicsPath *path;
+
+    AcquireSRWLockExclusive(&CacheLock);
+    path = LookupIcon(name, viewBox);
+    ReleaseSRWLockExclusive(&CacheLock);
+    return path;
+}
+
+void
+FillIcon(Gdiplus::Graphics &graphics, LPCWSTR name, const Gdiplus::RectF &rc, COLORREF color)
+{
+    float viewBox = 0.0f;
+    Gdiplus::GraphicsPath *path;
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+    Gdiplus::GraphicsState state;
+    float scale;
+
+    AcquireSRWLockExclusive(&CacheLock);
+    path = LookupIcon(name, &viewBox);
+    if (path && viewBox > 0.0f)
+    {
+        scale = min(rc.Width, rc.Height) / viewBox;
+        state = graphics.Save();
+        graphics.TranslateTransform(rc.X + (rc.Width - viewBox * scale) / 2.0f,
+                                    rc.Y + (rc.Height - viewBox * scale) / 2.0f);
+        graphics.ScaleTransform(scale, scale);
+        graphics.FillPath(&brush, path);
+        graphics.Restore(state);
+    }
+    ReleaseSRWLockExclusive(&CacheLock);
+}
+
 HICON
 CreateGlyphIcon(LPCWSTR name, int size, COLORREF color)
 {
-    float viewBox = 0.0f;
-    Gdiplus::GraphicsPath *path = IconPath(name, &viewBox);
     Gdiplus::Bitmap bitmap(size, size, PixelFormat32bppARGB);
     HICON icon = NULL;
 
-    if (!path || viewBox <= 0.0f)
-        return NULL;
     {
         Gdiplus::Graphics graphics(&bitmap);
-        Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
         graphics.Clear(Gdiplus::Color(0, 0, 0, 0));
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-        graphics.ScaleTransform((float)size / viewBox, (float)size / viewBox);
-        graphics.FillPath(&brush, path);
+        FillIcon(graphics, name, Gdiplus::RectF(0.0f, 0.0f, (float)size, (float)size), color);
     }
     bitmap.GetHICON(&icon);
     return icon;
 }
 
-static ULONG_PTR GdiplusToken;
-
 BOOL
 Startup()
 {
-    Gdiplus::GdiplusStartupInput input;
-    return Gdiplus::GdiplusStartup(&GdiplusToken, &input, NULL) == Gdiplus::Ok;
+    BOOL started = TRUE;
+
+    AcquireSRWLockExclusive(&CacheLock);
+    if (!StartupCount)
+    {
+        Gdiplus::GdiplusStartupInput input;
+        started = Gdiplus::GdiplusStartup(&GdiplusToken, &input, NULL) == Gdiplus::Ok;
+    }
+    if (started)
+        StartupCount++;
+    ReleaseSRWLockExclusive(&CacheLock);
+    return started;
 }
 
 void
 Shutdown()
 {
-    if (Cache)
+    AcquireSRWLockExclusive(&CacheLock);
+    if (StartupCount && !--StartupCount)
     {
-        for (unsigned i = 0; i < IconSourceCount; i++)
-            delete Cache[i].Path;
-        free(Cache);
-        Cache = NULL;
-    }
-    if (GdiplusToken)
+        if (Cache)
+        {
+            for (unsigned i = 0; i < IconSourceCount; i++)
+                delete Cache[i].Path;
+            free(Cache);
+            Cache = NULL;
+        }
         Gdiplus::GdiplusShutdown(GdiplusToken);
-    GdiplusToken = 0;
+        GdiplusToken = 0;
+    }
+    ReleaseSRWLockExclusive(&CacheLock);
 }
 
 }
