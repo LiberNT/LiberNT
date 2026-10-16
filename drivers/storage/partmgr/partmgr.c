@@ -968,9 +968,46 @@ FdoIoctlDiskGrowPartition(
     UINT64 oldEnd = partExt->StartingOffset + partExt->PartitionLength;
     UINT64 growth = (UINT64)growInfo->BytesToGrow.QuadPart;
 
-    if (growInfo->BytesToGrow.QuadPart <= 0 ||
-        oldEnd > FdoExtension->DiskData.DiskSize ||
-        growth > FdoExtension->DiskData.DiskSize - oldEnd)
+    if (growInfo->BytesToGrow.QuadPart < 0)
+    {
+        UINT64 reduction = (UINT64)0 - growth;
+
+        if (reduction >= partExt->PartitionLength)
+        {
+            PartMgrReleaseLayoutLock(FdoExtension);
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        partEntry->PartitionLength.QuadPart -= (LONGLONG)reduction;
+        partEntry->RewritePartition = TRUE;
+
+        status = IoWritePartitionTableEx(FdoExtension->LowerDevice, layoutEx);
+        if (NT_SUCCESS(status))
+        {
+            partExt->PartitionLength -= reduction;
+        }
+        else
+        {
+            FdoExtension->LayoutValid = FALSE;
+        }
+
+        PartMgrReleaseLayoutLock(FdoExtension);
+
+        Irp->IoStatus.Information = 0;
+        return status;
+    }
+
+    UINT64 limit = FdoExtension->DiskData.DiskSize;
+
+    if (layoutEx->PartitionStyle == PARTITION_STYLE_GPT)
+    {
+        limit = (UINT64)layoutEx->Gpt.StartingUsableOffset.QuadPart +
+                (UINT64)layoutEx->Gpt.UsableLength.QuadPart;
+    }
+
+    if (growInfo->BytesToGrow.QuadPart == 0 ||
+        oldEnd > limit ||
+        growth > limit - oldEnd)
     {
         PartMgrReleaseLayoutLock(FdoExtension);
         return STATUS_INVALID_PARAMETER;
