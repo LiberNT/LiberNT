@@ -9,7 +9,7 @@
 
 class Native12DescriptorHeap;
 
-class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData1, public Native12Allocation
+class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData2, public Native12Allocation
 {
 public:
     LONG references = 1;
@@ -217,6 +217,10 @@ public:
     HRESULT STDMETHODCALLTYPE GetPageFaultAllocationOutput(D3D12_DRED_PAGE_FAULT_OUTPUT *) override;
     HRESULT STDMETHODCALLTYPE GetAutoBreadcrumbsOutput1(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 *) override;
     HRESULT STDMETHODCALLTYPE GetPageFaultAllocationOutput1(D3D12_DRED_PAGE_FAULT_OUTPUT1 *) override;
+    HRESULT STDMETHODCALLTYPE GetPageFaultAllocationOutput2(D3D12_DRED_PAGE_FAULT_OUTPUT2 *) override;
+    D3D12_DRED_DEVICE_STATE STDMETHODCALLTYPE GetDeviceState() override;
+    HRESULT RefreshRemovedReason();
+    HRESULT DredStatus(D3D12_DRED_ENABLEMENT enablement);
 };
 
 Native12Device *Native12QueueDevice(HANDLE queue);

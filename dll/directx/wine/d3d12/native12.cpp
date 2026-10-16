@@ -887,9 +887,10 @@ HRESULT STDMETHODCALLTYPE Native12Device::QueryInterface(REFIID iid, void **out)
         AddRef();
         return S_OK;
     }
-    if (IsEqualGUID(iid, IID_ID3D12DeviceRemovedExtendedData) || IsEqualGUID(iid, IID_ID3D12DeviceRemovedExtendedData1))
+    if (IsEqualGUID(iid, IID_ID3D12DeviceRemovedExtendedData) || IsEqualGUID(iid, IID_ID3D12DeviceRemovedExtendedData1)
+            || IsEqualGUID(iid, IID_ID3D12DeviceRemovedExtendedData2))
     {
-        *out = static_cast<ID3D12DeviceRemovedExtendedData1 *>(this);
+        *out = static_cast<ID3D12DeviceRemovedExtendedData2 *>(this);
         AddRef();
         return S_OK;
     }
@@ -897,24 +898,65 @@ HRESULT STDMETHODCALLTYPE Native12Device::QueryInterface(REFIID iid, void **out)
     return E_NOINTERFACE;
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::GetAutoBreadcrumbsOutput(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT *)
+HRESULT Native12Device::RefreshRemovedReason()
 {
-    return dred_auto_breadcrumbs == D3D12_DRED_ENABLEMENT_FORCED_ON ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : DXGI_ERROR_UNSUPPORTED;
+    if (SUCCEEDED(removed_reason) && km_device)
+    {
+        D3DKMT_GETDEVICESTATE state = {};
+        state.hDevice = km_device;
+        state.StateType = D3DKMT_DEVICESTATE_EXECUTION;
+        state.ExecutionState = D3DKMT_DEVICEEXECUTION_ACTIVE;
+        D3DKMTGetDeviceState(&state);
+        if (state.ExecutionState != D3DKMT_DEVICEEXECUTION_ACTIVE)
+            InterlockedCompareExchange(reinterpret_cast<LONG *>(&removed_reason), DXGI_ERROR_DEVICE_REMOVED, S_OK);
+    }
+    return removed_reason;
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::GetPageFaultAllocationOutput(D3D12_DRED_PAGE_FAULT_OUTPUT *)
+HRESULT Native12Device::DredStatus(D3D12_DRED_ENABLEMENT enablement)
 {
-    return dred_page_fault == D3D12_DRED_ENABLEMENT_FORCED_ON ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : DXGI_ERROR_UNSUPPORTED;
+    if (enablement != D3D12_DRED_ENABLEMENT_FORCED_ON) return DXGI_ERROR_UNSUPPORTED;
+    return SUCCEEDED(RefreshRemovedReason()) ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : S_OK;
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::GetAutoBreadcrumbsOutput1(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 *)
+HRESULT STDMETHODCALLTYPE Native12Device::GetAutoBreadcrumbsOutput(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT *output)
 {
-    return dred_auto_breadcrumbs == D3D12_DRED_ENABLEMENT_FORCED_ON ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : DXGI_ERROR_UNSUPPORTED;
+    HRESULT hr = DredStatus(dred_auto_breadcrumbs);
+    if (SUCCEEDED(hr)) output->pHeadAutoBreadcrumbNode = NULL;
+    return hr;
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::GetPageFaultAllocationOutput1(D3D12_DRED_PAGE_FAULT_OUTPUT1 *)
+HRESULT STDMETHODCALLTYPE Native12Device::GetPageFaultAllocationOutput(D3D12_DRED_PAGE_FAULT_OUTPUT *output)
 {
-    return dred_page_fault == D3D12_DRED_ENABLEMENT_FORCED_ON ? DXGI_ERROR_NOT_CURRENTLY_AVAILABLE : DXGI_ERROR_UNSUPPORTED;
+    HRESULT hr = DredStatus(dred_page_fault);
+    if (SUCCEEDED(hr)) ZeroMemory(output, sizeof(*output));
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::GetAutoBreadcrumbsOutput1(D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 *output)
+{
+    HRESULT hr = DredStatus(dred_auto_breadcrumbs);
+    if (SUCCEEDED(hr)) output->pHeadAutoBreadcrumbNode = NULL;
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::GetPageFaultAllocationOutput1(D3D12_DRED_PAGE_FAULT_OUTPUT1 *output)
+{
+    HRESULT hr = DredStatus(dred_page_fault);
+    if (SUCCEEDED(hr)) ZeroMemory(output, sizeof(*output));
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::GetPageFaultAllocationOutput2(D3D12_DRED_PAGE_FAULT_OUTPUT2 *output)
+{
+    HRESULT hr = DredStatus(dred_page_fault);
+    if (SUCCEEDED(hr)) ZeroMemory(output, sizeof(*output));
+    return hr;
+}
+
+D3D12_DRED_DEVICE_STATE STDMETHODCALLTYPE Native12Device::GetDeviceState()
+{
+    return D3D12_DRED_DEVICE_STATE_UNKNOWN;
 }
 
 ULONG STDMETHODCALLTYPE Native12Device::AddRef() { return InterlockedIncrement(&references); }
@@ -1427,7 +1469,7 @@ LUID *STDMETHODCALLTYPE Native12Device::GetAdapterLuid(LUID *out)
     return out;
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::GetDeviceRemovedReason() { return removed_reason; }
+HRESULT STDMETHODCALLTYPE Native12Device::GetDeviceRemovedReason() { return RefreshRemovedReason(); }
 
 HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, REFIID iid, void **out)
 {
