@@ -174,6 +174,18 @@ END
 /* Select command strings */
 STRINGTABLE
 BEGIN
+    IDS_SHRINK_QUERYMAX "\nThe maximum number of reclaimable bytes is: %4I64u %s\n"
+    IDS_SHRINK_SUCCESS "\nDiskPart successfully shrunk the volume by: %4I64u %s\n"
+    IDS_SHRINK_FS_NOT_SUPPORTED "\nVirtual Disk Service error:\nThe volume cannot be shrunk because the file system does not support it.\n\n"
+    IDS_SHRINK_TOO_BIG "\nVirtual Disk Service error:\nThe specified shrink size is too big and will cause the volume to be \nsmaller than the minimum volume size.\n\n"
+    IDS_SHRINK_TOO_SMALL "\nVirtual Disk Service error:\nThe specified shrink size is less than then minimum shrink size allowed.\n\n"
+    IDS_SHRINK_NO_VOLUME "\nThere is no volume in focus.\nSelect a volume and try again.\n"
+    IDS_EXTEND_SUCCESS "\nDiskPart successfully extended the volume.\n"
+    IDS_EXTEND_FS_SUCCESS "\nDiskPart successfully extended the file system on the volume.\n"
+    IDS_EXTEND_NO_SPACE "\nThere is not enough usable free space on specified disk(s) to extend the\nvolume.\n"
+    IDS_EXTEND_NOT_ENOUGH "\nVirtual Disk Service error:\nThere is not enough usable space for this operation.\n\n"
+    IDS_EXTEND_FS_NOT_SUPPORTED "\nVirtual Disk Service error:\nThe volume cannot be extended because the file system does not support it.\n\n"
+    IDS_RESIZE_INVALID_PARAMETER "\nDiskPart has encountered an error: The parameter is incorrect.\nSee the System Event Log for more information.\n\n"
     IDS_SELECT_NO_DISK "\nNie wybrano dysku.\nWybierz dysk i spróbuj ponownie.\n\n"
     IDS_SELECT_DISK "\nObecnie wybranym dyskiem jest dysk %lu.\n\n"
     IDS_SELECT_DISK_INVALID "\nNieprawidłowy dysk.\n\n"

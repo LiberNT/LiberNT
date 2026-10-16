@@ -134,8 +134,9 @@ ConvertGPT(
 
     CurrentDisk->StartSector.QuadPart = AlignDown(CurrentDisk->LayoutBuffer->Gpt.StartingUsableOffset.QuadPart / CurrentDisk->BytesPerSector,
                                                   CurrentDisk->SectorAlignment) + (ULONGLONG)CurrentDisk->SectorAlignment;
-    CurrentDisk->EndSector.QuadPart = AlignDown(CurrentDisk->StartSector.QuadPart + (CurrentDisk->LayoutBuffer->Gpt.UsableLength.QuadPart / CurrentDisk->BytesPerSector) - 1,
-                                                CurrentDisk->SectorAlignment);
+    CurrentDisk->EndSector.QuadPart = AlignDown((CurrentDisk->LayoutBuffer->Gpt.StartingUsableOffset.QuadPart +
+                                                 CurrentDisk->LayoutBuffer->Gpt.UsableLength.QuadPart) / CurrentDisk->BytesPerSector,
+                                                CurrentDisk->SectorAlignment) - 1;
 
     ScanForUnpartitionedGptDiskSpace(CurrentDisk);
     ConResPuts(StdOut, IDS_CONVERT_GPT_SUCCESS);

@@ -256,6 +256,28 @@ SelectVolume(
         return EXIT_SUCCESS;
     }
 
+    if (iswalpha(argv[2][0]) &&
+        (argv[2][1] == UNICODE_NULL ||
+         (argv[2][1] == L':' && argv[2][2] == UNICODE_NULL)))
+    {
+        CurrentVolume = NULL;
+
+        for (Entry = VolumeListHead.Flink; Entry != &VolumeListHead; Entry = Entry->Flink)
+        {
+            VolumeEntry = CONTAINING_RECORD(Entry, VOLENTRY, ListEntry);
+
+            if (towupper(VolumeEntry->DriveLetter) == towupper(argv[2][0]))
+            {
+                CurrentVolume = VolumeEntry;
+                ConResPrintf(StdOut, IDS_SELECT_VOLUME, CurrentVolume->VolumeNumber);
+                return EXIT_SUCCESS;
+            }
+        }
+
+        ConResPuts(StdErr, IDS_SELECT_VOLUME_INVALID);
+        return EXIT_SUCCESS;
+    }
+
     if (!IsDecString(argv[2]))
     {
         ConResPuts(StdErr, IDS_ERROR_INVALID_ARGS);

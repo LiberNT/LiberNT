@@ -120,6 +120,19 @@
 #define IDS_RESCAN_START               4100
 #define IDS_RESCAN_END                 4101
 
+#define IDS_SHRINK_QUERYMAX            4300
+#define IDS_SHRINK_SUCCESS             4301
+#define IDS_SHRINK_FS_NOT_SUPPORTED    4302
+#define IDS_SHRINK_TOO_BIG             4303
+#define IDS_SHRINK_TOO_SMALL           4304
+#define IDS_SHRINK_NO_VOLUME           4305
+#define IDS_EXTEND_SUCCESS             4306
+#define IDS_EXTEND_FS_SUCCESS          4307
+#define IDS_EXTEND_NO_SPACE            4308
+#define IDS_EXTEND_NOT_ENOUGH          4309
+#define IDS_EXTEND_FS_NOT_SUPPORTED    4310
+#define IDS_RESIZE_INVALID_PARAMETER   4311
+
 #define IDS_SELECT_NO_DISK             4400
 #define IDS_SELECT_DISK                4401
 #define IDS_SELECT_DISK_INVALID        4402

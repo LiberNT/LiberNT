@@ -781,6 +781,15 @@ shrink_main(
     _In_ INT argc,
     _In_ PWSTR *argv);
 
+VOID
+PrintResizeSize(
+    _In_ UINT MessageId,
+    _In_ ULONGLONG ullBytes);
+
+VOID
+RefreshResizedVolume(
+    _In_ ULONG ulVolumeNumber);
+
 /* uniqueid.c */
 EXIT_CODE
 UniqueIdDisk(

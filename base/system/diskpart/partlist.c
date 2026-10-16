@@ -1513,8 +1513,9 @@ AddDiskToList(
         /* Calculate the number of usable sectors */
         DiskEntry->StartSector.QuadPart = AlignDown(DiskEntry->LayoutBuffer->Gpt.StartingUsableOffset.QuadPart / DiskEntry->BytesPerSector,
                                                     DiskEntry->SectorAlignment) + (ULONGLONG)DiskEntry->SectorAlignment;
-        DiskEntry->EndSector.QuadPart = AlignDown(DiskEntry->StartSector.QuadPart + (DiskEntry->LayoutBuffer->Gpt.UsableLength.QuadPart / DiskEntry->BytesPerSector) - 1,
-                                                  DiskEntry->SectorAlignment);
+        DiskEntry->EndSector.QuadPart = AlignDown((DiskEntry->LayoutBuffer->Gpt.StartingUsableOffset.QuadPart +
+                                                   DiskEntry->LayoutBuffer->Gpt.UsableLength.QuadPart) / DiskEntry->BytesPerSector,
+                                                  DiskEntry->SectorAlignment) - 1;
 
         if (DiskEntry->LayoutBuffer->PartitionCount == 0)
         {
