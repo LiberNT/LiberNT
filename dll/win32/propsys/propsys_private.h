@@ -20,6 +20,17 @@
 
 HRESULT PropertyStore_CreateInstance(IUnknown *outer, REFIID riid, void **ppv);
 
+#ifdef __REACTOS__
+HRESULT propschema_get_by_key(const PROPERTYKEY *key, REFIID riid, void **ppv);
+HRESULT propschema_get_by_name(LPCWSTR name, REFIID riid, void **ppv);
+HRESULT propschema_list_from_string(LPCWSTR text, REFIID riid, void **ppv);
+HRESULT propschema_enumerate(PROPDESC_ENUMFILTER filter, REFIID riid, void **ppv);
+HRESULT propschema_format_for_display(const PROPERTYKEY *key, const PROPVARIANT *propvar,
+                                      PROPDESC_FORMAT_FLAGS flags, LPWSTR dest, DWORD destlen);
+HRESULT propschema_format_for_display_alloc(const PROPERTYKEY *key, const PROPVARIANT *propvar,
+                                            PROPDESC_FORMAT_FLAGS flags, LPWSTR *text);
+#endif
+
 static inline const char *debugstr_propkey(const PROPERTYKEY *key)
 {
     if (!key)

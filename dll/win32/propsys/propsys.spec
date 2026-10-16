@@ -71,16 +71,16 @@
 @ stdcall PSCreatePropertyStoreFromObject(ptr long ptr ptr)
 @ stub PSCreatePropertyStoreFromPropertySetStorage
 @ stub PSCreateSimplePropertyChange
-@ stub PSEnumeratePropertyDescriptions
-@ stub PSFormatForDisplay
-@ stub PSFormatForDisplayAlloc
+@ stdcall PSEnumeratePropertyDescriptions(long ptr ptr)
+@ stdcall PSFormatForDisplay(ptr ptr long ptr long)
+@ stdcall PSFormatForDisplayAlloc(ptr ptr long ptr)
 @ stub PSFormatPropertyValue
 @ stub PSGetItemPropertyHandler
 @ stub PSGetItemPropertyHandlerWithCreateObject
 @ stdcall PSGetNameFromPropertyKey(ptr ptr)
 @ stub PSGetNamedPropertyFromPropertyStorage
 @ stdcall PSGetPropertyDescription(ptr ptr ptr)
-@ stub PSGetPropertyDescriptionByName
+@ stdcall PSGetPropertyDescriptionByName(wstr ptr ptr)
 @ stdcall PSGetPropertyDescriptionListFromString(wstr ptr ptr)
 @ stub PSGetPropertyFromPropertyStorage
 @ stdcall PSGetPropertyKeyFromName(wstr ptr)
