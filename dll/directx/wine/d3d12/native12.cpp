@@ -1487,7 +1487,9 @@ LUID *STDMETHODCALLTYPE Native12Device::GetAdapterLuid(LUID *out)
 
 HRESULT STDMETHODCALLTYPE Native12Device::GetDeviceRemovedReason() { return RefreshRemovedReason(); }
 
-HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, REFIID iid, void **out)
+HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL independent,
+        D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault, UINT configuration, REFIID iid,
+        void **out)
 {
     IDXGIAdapter *selected = NULL;
     HRESULT hr;
@@ -1513,9 +1515,13 @@ HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level,
         selected->Release();
         return hr;
     }
-    AcquireSRWLockExclusive(&Native12SingletonLock);
-    Native12Device *device = Native12FindSingleton(adapter_desc.AdapterLuid, minimum_level);
-    ReleaseSRWLockExclusive(&Native12SingletonLock);
+    Native12Device *device = NULL;
+    if (!independent)
+    {
+        AcquireSRWLockExclusive(&Native12SingletonLock);
+        device = Native12FindSingleton(adapter_desc.AdapterLuid, minimum_level);
+        ReleaseSRWLockExclusive(&Native12SingletonLock);
+    }
     if (device) hr = S_OK;
     else
     {
@@ -1526,7 +1532,13 @@ HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level,
             return E_OUTOFMEMORY;
         }
         hr = device->Initialize(selected, minimum_level);
-        if (SUCCEEDED(hr))
+        if (SUCCEEDED(hr) && independent)
+        {
+            device->dred_auto_breadcrumbs = auto_breadcrumbs;
+            device->dred_page_fault = page_fault;
+            device->configuration_flags = configuration;
+        }
+        else if (SUCCEEDED(hr))
         {
             Native12Device *existing;
             AcquireSRWLockExclusive(&Native12SingletonLock);
@@ -1559,8 +1571,10 @@ HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level,
     return hr;
 }
 
-extern "C" HRESULT d3d12_native_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, REFIID iid,
+extern "C" HRESULT d3d12_native_create_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level, BOOL independent,
+        D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRED_ENABLEMENT page_fault, UINT configuration, REFIID iid,
         void **out)
 {
-    return Native12CreateDevice(adapter, minimum_level, iid, out);
+    return Native12CreateDevice(adapter, minimum_level, independent, auto_breadcrumbs, page_fault, configuration, iid,
+            out);
 }
