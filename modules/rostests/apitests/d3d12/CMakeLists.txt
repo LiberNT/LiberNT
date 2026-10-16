@@ -6,6 +6,7 @@ list(APPEND SOURCE
     blend.cpp
     bundle.cpp
     device.cpp
+    dred.cpp
     factory.cpp
     feedback.cpp
     features.cpp

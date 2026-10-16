@@ -14,6 +14,7 @@ extern void func_bgwork(void);
 extern void func_blend(void);
 extern void func_bundle(void);
 extern void func_device(void);
+extern void func_dred(void);
 extern void func_factory(void);
 extern void func_feedback(void);
 extern void func_features(void);
@@ -42,6 +43,7 @@ const struct test winetest_testlist[] =
     { "blend", func_blend },
     { "bundle", func_bundle },
     { "device", func_device },
+    { "dred", func_dred },
     { "factory", func_factory },
     { "feedback", func_feedback },
     { "features", func_features },
