@@ -329,6 +329,7 @@ add_idl_headers(d3d_idl_headers
     d3d12.idl
     d3d12sdklayers.idl
     d3d12shader.idl
+    d3d12video.idl
     dcomp.idl
     dcompanimation.idl
     dcomptypes.idl
