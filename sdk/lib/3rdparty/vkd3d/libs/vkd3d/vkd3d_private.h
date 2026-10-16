@@ -1240,6 +1240,7 @@ struct d3d12_command_allocator
     struct d3d12_device *device;
 
     struct vkd3d_private_store private_store;
+    struct vkd3d_dred_list *dred_records;
 };
 
 HRESULT d3d12_command_allocator_create(struct d3d12_device *device,
@@ -1339,6 +1340,27 @@ struct d3d12_bundle_command
     void *data;
 };
 
+struct vkd3d_dred_list
+{
+    struct vkd3d_dred_list *next, *allocator_next;
+    bool listed, in_use;
+    struct d3d12_command_list *list;
+    ID3D12CommandQueue *queue;
+    D3D12_AUTO_BREADCRUMB_OP *history;
+    unsigned int capacity;
+    uint32_t count;
+    ID3D12Resource *buffer;
+    struct d3d12_resource *resource;
+    volatile uint32_t *counter;
+    unsigned int suppress;
+};
+
+extern const GUID vkd3d_debug_object_name_w;
+HRESULT vkd3d_set_name_private_data(struct vkd3d_private_store *store, const WCHAR *name, size_t wchar_size);
+void d3d12_device_dred_executed(struct d3d12_device *device, struct vkd3d_dred_list *record, ID3D12CommandQueue *queue);
+void d3d12_device_dred_forget(struct d3d12_device *device, struct vkd3d_dred_list *record);
+void d3d12_device_dred_list_destroyed(struct d3d12_device *device, struct d3d12_command_list *list);
+
 struct d3d12_command_list
 {
     ID3D12GraphicsCommandList10 ID3D12GraphicsCommandList10_iface;
@@ -1407,6 +1429,8 @@ struct d3d12_command_list
     bool call_rejected;
 
     struct vkd3d_private_store private_store;
+    struct vkd3d_dred_list *dred;
+    bool dred_enabled;
 };
 
 HRESULT d3d12_command_list_create(struct d3d12_device *device,
@@ -1652,6 +1676,11 @@ struct d3d12_device
     D3D12_DRED_ENABLEMENT dred_auto_breadcrumbs;
     D3D12_DRED_ENABLEMENT dred_page_fault;
     unsigned int refcount;
+    struct vkd3d_mutex dred_mutex;
+    struct vkd3d_dred_list *dred_lists;
+    void *dred_arena;
+    const D3D12_AUTO_BREADCRUMB_NODE1 *dred_crumb_head;
+    bool dred_crumbs_done;
 
     VkDevice vk_device;
     VkPhysicalDevice vk_physical_device;

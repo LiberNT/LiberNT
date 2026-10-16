@@ -1873,6 +1873,17 @@ static ULONG STDMETHODCALLTYPE d3d12_command_allocator_Release(ID3D12CommandAllo
         if (allocator->current_command_list)
             d3d12_command_list_allocator_destroyed(allocator->current_command_list);
 
+        while (allocator->dred_records)
+        {
+            struct vkd3d_dred_list *record = allocator->dred_records;
+
+            allocator->dred_records = record->allocator_next;
+            d3d12_device_dred_forget(device, record);
+            ID3D12Resource_Release(record->buffer);
+            vkd3d_free(record->history);
+            vkd3d_free(record);
+        }
+
         d3d12_command_allocator_free_resources(allocator, false);
         vkd3d_free(allocator->transfer_buffers);
         vkd3d_free(allocator->buffer_views);
@@ -1946,10 +1957,60 @@ static HRESULT STDMETHODCALLTYPE d3d12_command_allocator_GetDevice(ID3D12Command
     return d3d12_device_query_interface(allocator->device, iid, device);
 }
 
+static struct vkd3d_dred_list *d3d12_command_allocator_dred_acquire(struct d3d12_command_allocator *allocator,
+        struct d3d12_command_list *list)
+{
+    D3D12_HEAP_PROPERTIES heap = {0};
+    D3D12_RESOURCE_DESC desc = {0};
+    D3D12_RANGE none = {0, 0};
+    struct vkd3d_dred_list *record;
+    void *data;
+
+    for (record = allocator->dred_records; record && record->in_use; record = record->allocator_next)
+        ;
+    if (!record)
+    {
+        if (!(record = vkd3d_calloc(1, sizeof(*record))))
+            return NULL;
+        heap.Type = D3D12_HEAP_TYPE_READBACK;
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        desc.Width = sizeof(uint32_t);
+        desc.Height = 1;
+        desc.DepthOrArraySize = 1;
+        desc.MipLevels = 1;
+        desc.SampleDesc.Count = 1;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        if (FAILED(ID3D12Device14_CreateCommittedResource(&allocator->device->ID3D12Device14_iface, &heap,
+                D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COPY_DEST, NULL, &IID_ID3D12Resource,
+                (void **)&record->buffer)))
+        {
+            vkd3d_free(record);
+            return NULL;
+        }
+        if (FAILED(ID3D12Resource_Map(record->buffer, 0, &none, &data)))
+        {
+            ID3D12Resource_Release(record->buffer);
+            vkd3d_free(record);
+            return NULL;
+        }
+        record->resource = unsafe_impl_from_ID3D12Resource(record->buffer);
+        record->counter = data;
+        record->allocator_next = allocator->dred_records;
+        allocator->dred_records = record;
+    }
+    record->in_use = true;
+    record->list = list;
+    record->count = 0;
+    record->suppress = 0;
+    *record->counter = 0;
+    return record;
+}
+
 static HRESULT STDMETHODCALLTYPE d3d12_command_allocator_Reset(ID3D12CommandAllocator *iface)
 {
     struct d3d12_command_allocator *allocator = impl_from_ID3D12CommandAllocator(iface);
     const struct vkd3d_vk_device_procs *vk_procs;
+    struct vkd3d_dred_list *record;
     struct d3d12_command_list *list;
     struct d3d12_device *device;
     VkResult vr;
@@ -1976,6 +2037,12 @@ static HRESULT STDMETHODCALLTYPE d3d12_command_allocator_Reset(ID3D12CommandAllo
         VK_CALL(vkFreeCommandBuffers(device->vk_device, allocator->vk_command_pool,
                 allocator->command_buffer_count, allocator->command_buffers));
         allocator->command_buffer_count = 0;
+    }
+    for (record = allocator->dred_records; record; record = record->allocator_next)
+    {
+        d3d12_device_dred_forget(device, record);
+        record->in_use = false;
+        record->list = NULL;
     }
 
     /* The intent here is to recycle memory, so do not use RELEASE_RESOURCES_BIT here. */
@@ -2042,6 +2109,8 @@ static HRESULT d3d12_command_allocator_init(struct d3d12_command_allocator *allo
 
     if (FAILED(hr = vkd3d_private_store_init(&allocator->private_store)))
         return hr;
+
+    allocator->dred_records = NULL;
 
     if (!(queue = d3d12_device_get_vkd3d_queue(device, type)))
         queue = device->direct_queue;
@@ -2683,6 +2752,8 @@ static ULONG STDMETHODCALLTYPE d3d12_command_list_Release(ID3D12GraphicsCommandL
     {
         struct d3d12_device *device = list->device;
 
+        if (list->dred_enabled)
+            d3d12_device_dred_list_destroyed(device, list);
         vkd3d_private_store_destroy(&list->private_store);
 
         /* When command pool is destroyed, all command buffers are implicitly freed. */
@@ -2742,7 +2813,9 @@ static HRESULT STDMETHODCALLTYPE d3d12_command_list_SetName(ID3D12GraphicsComman
 
     TRACE("iface %p, name %s.\n", iface, debugstr_w(name, list->device->wchar_size));
 
-    return name ? S_OK : E_INVALIDARG;
+    if (!name)
+        return E_INVALIDARG;
+    return vkd3d_set_name_private_data(&list->private_store, name, list->device->wchar_size);
 }
 
 static HRESULT STDMETHODCALLTYPE d3d12_command_list_GetDevice(ID3D12GraphicsCommandList10 *iface,
@@ -2764,6 +2837,40 @@ static D3D12_COMMAND_LIST_TYPE STDMETHODCALLTYPE d3d12_command_list_GetType(ID3D
     return list->type;
 }
 
+
+static void d3d12_command_list_fill_dword(struct d3d12_command_list *list, struct d3d12_resource *resource,
+        VkDeviceSize offset, uint32_t value)
+{
+    const struct vkd3d_vk_device_procs *vk_procs = &list->device->vk_procs;
+
+    d3d12_command_list_end_current_render_pass(list);
+    VK_CALL(vkCmdPipelineBarrier(list->vk_command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 0, NULL));
+    VK_CALL(vkCmdFillBuffer(list->vk_command_buffer, resource->u.vk_buffer, offset, sizeof(value), value));
+}
+
+static void d3d12_command_list_breadcrumb(struct d3d12_command_list *list, D3D12_AUTO_BREADCRUMB_OP op)
+{
+    struct vkd3d_dred_list *dred = list->dred;
+    D3D12_AUTO_BREADCRUMB_OP *history;
+    unsigned int slot, capacity;
+
+    if (!dred || !list->is_recording || dred->suppress)
+        return;
+    slot = dred->count % 65536;
+    if (slot >= dred->capacity)
+    {
+        capacity = dred->capacity ? dred->capacity * 2 : 256;
+        if (!(history = vkd3d_realloc(dred->history, capacity * sizeof(*history))))
+            return;
+        dred->history = history;
+        dred->capacity = capacity;
+    }
+    d3d12_command_list_fill_dword(list, dred->resource, 0, dred->count);
+    dred->history[slot] = op;
+    ++dred->count;
+}
+
 static HRESULT STDMETHODCALLTYPE d3d12_command_list_Close(ID3D12GraphicsCommandList10 *iface)
 {
     struct d3d12_command_list *list = impl_from_ID3D12GraphicsCommandList10(iface);
@@ -2781,6 +2888,8 @@ static HRESULT STDMETHODCALLTYPE d3d12_command_list_Close(ID3D12GraphicsCommandL
     vk_procs = &list->device->vk_procs;
 
     d3d12_command_list_end_current_render_pass(list);
+    if (list->dred)
+        d3d12_command_list_fill_dword(list, list->dred->resource, 0, list->dred->count);
     if (list->is_predicated)
         VK_CALL(vkCmdEndConditionalRenderingEXT(list->vk_command_buffer));
 
@@ -3809,6 +3918,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_DrawInstanced(ID3D12GraphicsCom
     struct d3d12_command_list *list = impl_from_ID3D12GraphicsCommandList10(iface);
     const struct vkd3d_vk_device_procs *vk_procs;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_DRAWINSTANCED);
     if (d3d12_bundle_record_args(iface, VKD3D_BUNDLE_DRAW_INSTANCED, vertex_count_per_instance, instance_count,
             start_vertex_location, start_instance_location, 0))
         return;
@@ -3837,6 +3947,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_DrawIndexedInstanced(ID3D12Grap
     struct d3d12_command_list *list = impl_from_ID3D12GraphicsCommandList10(iface);
     const struct vkd3d_vk_device_procs *vk_procs;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_DRAWINDEXEDINSTANCED);
     if (d3d12_bundle_record_args(iface, VKD3D_BUNDLE_DRAW_INDEXED_INSTANCED, index_count_per_instance, instance_count,
             start_vertex_location, (UINT)base_vertex_location, start_instance_location))
         return;
@@ -3866,6 +3977,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_Dispatch(ID3D12GraphicsCommandL
     struct d3d12_command_list *list = impl_from_ID3D12GraphicsCommandList10(iface);
     const struct vkd3d_vk_device_procs *vk_procs;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_DISPATCH);
     if (d3d12_bundle_record_args(iface, VKD3D_BUNDLE_DISPATCH, x, y, z, 0, 0))
         return;
 
@@ -3890,6 +4002,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_CopyBufferRegion(ID3D12Graphics
     const struct vkd3d_vk_device_procs *vk_procs;
     VkBufferCopy buffer_copy;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_COPYBUFFERREGION);
     if (d3d12_command_list_reject_in_bundle(iface))
         return;
 
@@ -4181,6 +4294,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_CopyTextureRegion(ID3D12Graphic
     VkBufferImageCopy buffer_image_copy;
     VkImageCopy image_copy;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_COPYTEXTUREREGION);
     if (d3d12_command_list_reject_in_bundle(iface))
         return;
 
@@ -4311,6 +4425,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_CopyResource(ID3D12GraphicsComm
     unsigned int layer_count;
     unsigned int i;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_COPYRESOURCE);
     if (d3d12_command_list_reject_in_bundle(iface))
         return;
 
@@ -4402,6 +4517,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_ResolveSubresource(ID3D12Graphi
     const struct d3d12_device *device;
     VkImageResolve vk_image_resolve;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_RESOLVESUBRESOURCE);
     if (d3d12_command_list_reject_in_bundle(iface))
         return;
 
@@ -4658,6 +4774,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_ResourceBarrier(ID3D12GraphicsC
     bool *multiplanar_handled = NULL;
     unsigned int i;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_RESOURCEBARRIER);
     if (d3d12_command_list_reject_in_bundle(iface))
         return;
 
@@ -4884,11 +5001,13 @@ static void STDMETHODCALLTYPE d3d12_command_list_ExecuteBundle(ID3D12GraphicsCom
         ID3D12GraphicsCommandList *command_list)
 {
     const struct d3d12_bundle_command *command;
-    struct d3d12_command_list *bundle;
+    struct d3d12_command_list *bundle, *list;
     D3D12_GPU_DESCRIPTOR_HANDLE handle;
     size_t i;
 
     TRACE("iface %p, command_list %p.\n", iface, command_list);
+
+    d3d12_command_list_breadcrumb(impl_from_ID3D12GraphicsCommandList10(iface), D3D12_AUTO_BREADCRUMB_OP_EXECUTEBUNDLE);
 
     if (d3d12_command_list_reject_in_bundle(iface) || !command_list)
         return;
@@ -4899,6 +5018,9 @@ static void STDMETHODCALLTYPE d3d12_command_list_ExecuteBundle(ID3D12GraphicsCom
         return;
     }
 
+    list = impl_from_ID3D12GraphicsCommandList10(iface);
+    if (list->dred)
+        ++list->dred->suppress;
     for (i = 0; i < bundle->bundle_command_count; ++i)
     {
         command = &bundle->bundle_commands[i];
@@ -4993,6 +5115,8 @@ static void STDMETHODCALLTYPE d3d12_command_list_ExecuteBundle(ID3D12GraphicsCom
                 break;
         }
     }
+    if (list->dred)
+        --list->dred->suppress;
 }
 
 static void STDMETHODCALLTYPE d3d12_command_list_SetDescriptorHeaps(ID3D12GraphicsCommandList10 *iface,
@@ -5792,6 +5916,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_ClearDepthStencilView(ID3D12Gra
     struct VkAttachmentDescription attachment_desc;
     struct VkAttachmentReference ds_reference;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_CLEARDEPTHSTENCILVIEW);
     if (d3d12_command_list_reject_in_bundle(iface))
         return;
 
@@ -5849,6 +5974,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_ClearRenderTargetView(ID3D12Gra
     struct VkAttachmentReference color_reference;
     VkClearValue clear_value;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_CLEARRENDERTARGETVIEW);
     if (d3d12_command_list_reject_in_bundle(iface))
         return;
 
@@ -6190,6 +6316,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_ClearUnorderedAccessViewUint(ID
     struct d3d12_resource *resource_impl;
     VkClearColorValue colour;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_CLEARUNORDEREDACCESSVIEW);
     if (d3d12_command_list_reject_in_bundle(iface))
         return;
 
@@ -6226,6 +6353,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_ClearUnorderedAccessViewFloat(I
     struct d3d12_resource *resource_impl;
     VkClearColorValue colour;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_CLEARUNORDEREDACCESSVIEW);
     if (d3d12_command_list_reject_in_bundle(iface))
         return;
 
@@ -6351,6 +6479,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_ResolveQueryData(ID3D12Graphics
     unsigned int i, first, count;
     VkDeviceSize offset, stride;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_RESOLVEQUERYDATA);
     TRACE("iface %p, heap %p, type %#x, start_index %u, query_count %u, "
             "dst_buffer %p, aligned_dst_buffer_offset %#"PRIx64".\n",
             iface, heap, type, start_index, query_count,
@@ -6499,18 +6628,24 @@ static void STDMETHODCALLTYPE d3d12_command_list_SetPredication(ID3D12GraphicsCo
 static void STDMETHODCALLTYPE d3d12_command_list_SetMarker(ID3D12GraphicsCommandList10 *iface,
         UINT metadata, const void *data, UINT size)
 {
-    FIXME("iface %p, metadata %#x, data %p, size %u stub!\n", iface, metadata, data, size);
+    TRACE("iface %p, metadata %#x, data %p, size %u.\n", iface, metadata, data, size);
+
+    d3d12_command_list_breadcrumb(impl_from_ID3D12GraphicsCommandList10(iface), D3D12_AUTO_BREADCRUMB_OP_SETMARKER);
 }
 
 static void STDMETHODCALLTYPE d3d12_command_list_BeginEvent(ID3D12GraphicsCommandList10 *iface,
         UINT metadata, const void *data, UINT size)
 {
-    FIXME("iface %p, metadata %#x, data %p, size %u stub!\n", iface, metadata, data, size);
+    TRACE("iface %p, metadata %#x, data %p, size %u.\n", iface, metadata, data, size);
+
+    d3d12_command_list_breadcrumb(impl_from_ID3D12GraphicsCommandList10(iface), D3D12_AUTO_BREADCRUMB_OP_BEGINEVENT);
 }
 
 static void STDMETHODCALLTYPE d3d12_command_list_EndEvent(ID3D12GraphicsCommandList10 *iface)
 {
-    FIXME("iface %p stub!\n", iface);
+    TRACE("iface %p.\n", iface);
+
+    d3d12_command_list_breadcrumb(impl_from_ID3D12GraphicsCommandList10(iface), D3D12_AUTO_BREADCRUMB_OP_ENDEVENT);
 }
 
 STATIC_ASSERT(sizeof(VkDispatchIndirectCommand) == sizeof(D3D12_DISPATCH_ARGUMENTS));
@@ -6529,6 +6664,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_ExecuteIndirect(ID3D12GraphicsC
     const struct vkd3d_vk_device_procs *vk_procs;
     unsigned int i;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_EXECUTEINDIRECT);
     if (impl_from_ID3D12GraphicsCommandList10(iface)->type == D3D12_COMMAND_LIST_TYPE_BUNDLE)
     {
         struct d3d12_bundle_command *command;
@@ -6733,12 +6869,18 @@ static void STDMETHODCALLTYPE d3d12_command_list_WriteBufferImmediate(ID3D12Grap
     struct d3d12_resource *resource;
     unsigned int i;
 
-    FIXME("iface %p, count %u, parameters %p, modes %p stub!\n", iface, count, parameters, modes);
+    TRACE("iface %p, count %u, parameters %p, modes %p.\n", iface, count, parameters, modes);
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_WRITEBUFFERIMMEDIATE);
     for (i = 0; i < count; ++i)
     {
-        resource = vkd3d_gpu_va_allocator_dereference(&list->device->gpu_va_allocator, parameters[i].Dest);
+        if (!(resource = vkd3d_gpu_va_allocator_dereference(&list->device->gpu_va_allocator, parameters[i].Dest)))
+        {
+            WARN("Invalid destination %#"PRIx64".\n", parameters[i].Dest);
+            continue;
+        }
         d3d12_command_list_track_resource_usage(list, resource);
+        d3d12_command_list_fill_dword(list, resource, parameters[i].Dest - resource->gpu_address, parameters[i].Value);
     }
 }
 
@@ -6973,6 +7115,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_Barrier(ID3D12GraphicsCommandLi
     struct d3d12_command_list *list = impl_from_ID3D12GraphicsCommandList10(iface);
     UINT32 i;
 
+    d3d12_command_list_breadcrumb(list, D3D12_AUTO_BREADCRUMB_OP_BARRIER);
     TRACE("iface %p, group_count %u, groups %p.\n", iface, group_count, groups);
 
     if (d3d12_command_list_reject_in_bundle(iface))
@@ -7181,6 +7324,9 @@ HRESULT d3d12_command_list_create(struct d3d12_device *device, UINT node_mask,
         return hr;
     }
 
+    object->dred_enabled = (type == D3D12_COMMAND_LIST_TYPE_DIRECT || type == D3D12_COMMAND_LIST_TYPE_COMPUTE)
+            && device->dred_auto_breadcrumbs == D3D12_DRED_ENABLEMENT_FORCED_ON;
+
     TRACE("Created command list %p.\n", object);
 
     *list = object;
@@ -7218,6 +7364,7 @@ HRESULT d3d12_command_list_reset(struct d3d12_command_list *list, ID3D12CommandA
         list->allocator = allocator;
         d3d12_bundle_clear(list);
         d3d12_command_list_reset_state(list, initial_pipeline_state);
+        list->dred = list->dred_enabled ? d3d12_command_allocator_dred_acquire(allocator, list) : NULL;
     }
 
     return hr;
@@ -7358,6 +7505,9 @@ static HRESULT STDMETHODCALLTYPE d3d12_command_queue_SetName(ID3D12CommandQueue 
     HRESULT hr;
 
     TRACE("iface %p, name %s.\n", iface, debugstr_w(name, command_queue->device->wchar_size));
+
+    if (name)
+        vkd3d_set_name_private_data(&command_queue->private_store, name, command_queue->device->wchar_size);
 
     if (!(vk_queue = vkd3d_queue_acquire(command_queue->vkd3d_queue)))
     {
@@ -7629,6 +7779,8 @@ static void STDMETHODCALLTYPE d3d12_command_queue_ExecuteCommandLists(ID3D12Comm
         command_list_flush_vk_heap_updates(cmd_list);
 
         buffers[i] = cmd_list->vk_command_buffer;
+        if (cmd_list->dred)
+            d3d12_device_dred_executed(command_queue->device, cmd_list->dred, iface);
     }
 
     vkd3d_mutex_lock(&command_queue->op_mutex);

@@ -3684,6 +3684,8 @@ struct d3d12_device *d3d12_device_store_singleton(struct d3d12_device *device, D
     return existing;
 }
 
+static void d3d12_device_dred_free_arena(struct d3d12_device *device);
+
 static ULONG STDMETHODCALLTYPE d3d12_device_Release(ID3D12Device14 *iface)
 {
     struct d3d12_device *device = impl_from_ID3D12Device14(iface);
@@ -3708,6 +3710,8 @@ static ULONG STDMETHODCALLTYPE d3d12_device_Release(ID3D12Device14 *iface)
         const struct vkd3d_vk_device_procs *vk_procs = &device->vk_procs;
 
         vkd3d_mutex_destroy(&device->blocked_queues_mutex);
+        d3d12_device_dred_free_arena(device);
+        vkd3d_mutex_destroy(&device->dred_mutex);
 
         vkd3d_private_store_destroy(&device->private_store);
 
@@ -3773,6 +3777,8 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_SetName(ID3D12Device14 *iface, con
 
     TRACE("iface %p, name %s.\n", iface, debugstr_w(name, device->wchar_size));
 
+    if (name)
+        vkd3d_set_name_private_data(&device->private_store, name, device->wchar_size);
     return vkd3d_set_vk_object_name(device, (uint64_t)(uintptr_t)device->vk_device,
             VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_EXT, name);
 }
@@ -5957,7 +5963,12 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CreateLifetimeTracker(ID3D12Device
 
 static void STDMETHODCALLTYPE d3d12_device_RemoveDevice(ID3D12Device14 *iface)
 {
-    FIXME("iface %p stub!\n", iface);
+    struct d3d12_device *device = impl_from_ID3D12Device14(iface);
+
+    TRACE("iface %p.\n", iface);
+
+    if (SUCCEEDED(device->removed_reason))
+        d3d12_device_mark_as_removed(device, DXGI_ERROR_DEVICE_REMOVED, "Removed by the application.");
 }
 
 static HRESULT STDMETHODCALLTYPE d3d12_device_EnumerateMetaCommands(ID3D12Device14 *iface,
@@ -6385,6 +6396,182 @@ void vkd3d_set_dred_enablement(D3D12_DRED_ENABLEMENT auto_breadcrumbs, D3D12_DRE
     InterlockedExchange(&vkd3d_dred_page_fault, page_fault);
 }
 
+const GUID vkd3d_debug_object_name_w = {0x4cca5fd8, 0x921f, 0x42c8, {0x85, 0x66, 0x70, 0xca, 0xf2, 0xa9, 0xb7, 0x41}};
+
+HRESULT vkd3d_set_name_private_data(struct vkd3d_private_store *store, const WCHAR *name, size_t wchar_size)
+{
+    const char *bytes = (const char *)name;
+    size_t length = 0;
+
+    while (memcmp(bytes + length * wchar_size, "\0\0\0\0", wchar_size))
+        ++length;
+    return vkd3d_set_private_data(store, &vkd3d_debug_object_name_w, (length + 1) * wchar_size, name);
+}
+
+struct d3d12_device_dred_block
+{
+    struct d3d12_device_dred_block *next;
+    uint64_t align;
+};
+
+static void *d3d12_device_dred_alloc(struct d3d12_device *device, size_t size)
+{
+    struct d3d12_device_dred_block *block;
+
+    if (!(block = vkd3d_calloc(1, sizeof(*block) + size)))
+        return NULL;
+    block->next = device->dred_arena;
+    device->dred_arena = block;
+    return block + 1;
+}
+
+static void d3d12_device_dred_free_arena(struct d3d12_device *device)
+{
+    struct d3d12_device_dred_block *block = device->dred_arena, *next;
+
+    for (; block; block = next)
+    {
+        next = block->next;
+        vkd3d_free(block);
+    }
+    device->dred_arena = NULL;
+}
+
+static const WCHAR *d3d12_device_dred_name_w(struct d3d12_device *device, ID3D12Object *object)
+{
+    unsigned int size = 0;
+    WCHAR *name;
+
+    if (!object || FAILED(ID3D12Object_GetPrivateData(object, &vkd3d_debug_object_name_w, &size, NULL)) || !size)
+        return NULL;
+    if (!(name = d3d12_device_dred_alloc(device, size + device->wchar_size)))
+        return NULL;
+    if (FAILED(ID3D12Object_GetPrivateData(object, &vkd3d_debug_object_name_w, &size, name)))
+        return NULL;
+    return name;
+}
+
+static const char *d3d12_device_dred_name_a(struct d3d12_device *device, const WCHAR *name)
+{
+    const unsigned char *bytes = (const unsigned char *)name;
+    size_t length = 0, i, j;
+    bool wide;
+    char *output;
+
+    if (!name)
+        return NULL;
+    while (memcmp(bytes + length * device->wchar_size, "\0\0\0\0", device->wchar_size))
+        ++length;
+    if (!(output = d3d12_device_dred_alloc(device, length + 1)))
+        return NULL;
+    for (i = 0; i < length; ++i)
+    {
+        for (j = 1, wide = false; j < device->wchar_size; ++j)
+            wide |= bytes[i * device->wchar_size + j] != 0;
+        output[i] = wide ? '?' : (char)bytes[i * device->wchar_size];
+    }
+    return output;
+}
+
+void d3d12_device_dred_executed(struct d3d12_device *device, struct vkd3d_dred_list *record, ID3D12CommandQueue *queue)
+{
+    vkd3d_mutex_lock(&device->dred_mutex);
+    if (record->queue != queue)
+    {
+        ID3D12CommandQueue_AddRef(queue);
+        if (record->queue)
+            ID3D12CommandQueue_Release(record->queue);
+        record->queue = queue;
+    }
+    if (!record->listed)
+    {
+        record->next = device->dred_lists;
+        device->dred_lists = record;
+        record->listed = true;
+    }
+    vkd3d_mutex_unlock(&device->dred_mutex);
+}
+
+void d3d12_device_dred_forget(struct d3d12_device *device, struct vkd3d_dred_list *record)
+{
+    struct vkd3d_dred_list **entry;
+
+    vkd3d_mutex_lock(&device->dred_mutex);
+    for (entry = &device->dred_lists; *entry; entry = &(*entry)->next)
+    {
+        if (*entry != record)
+            continue;
+        *entry = record->next;
+        break;
+    }
+    record->listed = false;
+    vkd3d_mutex_unlock(&device->dred_mutex);
+    if (record->queue)
+        ID3D12CommandQueue_Release(record->queue);
+    record->queue = NULL;
+}
+
+void d3d12_device_dred_list_destroyed(struct d3d12_device *device, struct d3d12_command_list *list)
+{
+    struct vkd3d_dred_list **entry, *record;
+
+    vkd3d_mutex_lock(&device->dred_mutex);
+    for (entry = &device->dred_lists; *entry;)
+    {
+        record = *entry;
+        if (record->list != list)
+        {
+            entry = &record->next;
+            continue;
+        }
+        *entry = record->next;
+        record->listed = false;
+        record->list = NULL;
+        if (record->queue)
+            ID3D12CommandQueue_Release(record->queue);
+        record->queue = NULL;
+    }
+    vkd3d_mutex_unlock(&device->dred_mutex);
+}
+
+static const D3D12_AUTO_BREADCRUMB_NODE1 *d3d12_device_dred_breadcrumbs(struct d3d12_device *device)
+{
+    D3D12_AUTO_BREADCRUMB_NODE1 *head = NULL, *previous = NULL, *node;
+    struct vkd3d_dred_list *record;
+
+    vkd3d_mutex_lock(&device->dred_mutex);
+    if (device->dred_crumbs_done)
+    {
+        head = (D3D12_AUTO_BREADCRUMB_NODE1 *)device->dred_crumb_head;
+        vkd3d_mutex_unlock(&device->dred_mutex);
+        return head;
+    }
+    for (record = device->dred_lists; record; record = record->next)
+    {
+        if (!(node = d3d12_device_dred_alloc(device, sizeof(*node))))
+            break;
+        node->pCommandListDebugNameW = d3d12_device_dred_name_w(device,
+                (ID3D12Object *)&record->list->ID3D12GraphicsCommandList10_iface);
+        node->pCommandListDebugNameA = d3d12_device_dred_name_a(device, node->pCommandListDebugNameW);
+        node->pCommandQueueDebugNameW = d3d12_device_dred_name_w(device, (ID3D12Object *)record->queue);
+        node->pCommandQueueDebugNameA = d3d12_device_dred_name_a(device, node->pCommandQueueDebugNameW);
+        node->pCommandList = (ID3D12GraphicsCommandList *)&record->list->ID3D12GraphicsCommandList10_iface;
+        node->pCommandQueue = record->queue;
+        node->BreadcrumbCount = record->count;
+        node->pLastBreadcrumbValue = (const UINT *)record->counter;
+        node->pCommandHistory = record->history;
+        if (previous)
+            previous->pNext = node;
+        else
+            head = node;
+        previous = node;
+    }
+    device->dred_crumb_head = head;
+    device->dred_crumbs_done = true;
+    vkd3d_mutex_unlock(&device->dred_mutex);
+    return head;
+}
+
 static HRESULT d3d12_device_dred_status(struct d3d12_device *device, D3D12_DRED_ENABLEMENT enablement)
 {
     if (enablement != D3D12_DRED_ENABLEMENT_FORCED_ON)
@@ -6428,7 +6615,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetAutoBreadcrumbsOutput(ID3D
     TRACE("iface %p, output %p.\n", iface, output);
 
     if (SUCCEEDED(hr = d3d12_device_dred_status(device, device->dred_auto_breadcrumbs)))
-        output->pHeadAutoBreadcrumbNode = NULL;
+        output->pHeadAutoBreadcrumbNode = (const D3D12_AUTO_BREADCRUMB_NODE *)d3d12_device_dred_breadcrumbs(device);
     return hr;
 }
 
@@ -6454,7 +6641,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_dred_GetAutoBreadcrumbsOutput1(ID3
     TRACE("iface %p, output %p.\n", iface, output);
 
     if (SUCCEEDED(hr = d3d12_device_dred_status(device, device->dred_auto_breadcrumbs)))
-        output->pHeadAutoBreadcrumbNode = NULL;
+        output->pHeadAutoBreadcrumbNode = d3d12_device_dred_breadcrumbs(device);
     return hr;
 }
 
@@ -6673,6 +6860,11 @@ static HRESULT d3d12_device_init(struct d3d12_device *device,
     device->worker_should_exit = false;
     vkd3d_mutex_init(&device->worker_mutex);
     vkd3d_cond_init(&device->worker_cond);
+    vkd3d_mutex_init(&device->dred_mutex);
+    device->dred_lists = NULL;
+    device->dred_arena = NULL;
+    device->dred_crumb_head = NULL;
+    device->dred_crumbs_done = false;
 
     if (FAILED(hr = vkd3d_create_vk_device(device, create_info)))
         goto out_free_instance;
