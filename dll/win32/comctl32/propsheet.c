@@ -2632,6 +2632,9 @@ static void PROPSHEET_SetWizButtons(HWND hwndDlg, DWORD dwFlags)
   HWND hwndNext   = GetDlgItem(hwndDlg, IDC_NEXT_BUTTON);
   HWND hwndFinish = GetDlgItem(hwndDlg, IDC_FINISH_BUTTON);
   BOOL enable_finish = ((dwFlags & PSWIZB_FINISH) || psInfo->hasFinish) && !(dwFlags & PSWIZB_DISABLEDFINISH);
+#ifdef __REACTOS__
+  HWND hwndFocus = GetFocus();
+#endif
 
   TRACE("%lx\n", dwFlags);
 
@@ -2667,6 +2670,19 @@ static void PROPSHEET_SetWizButtons(HWND hwndDlg, DWORD dwFlags)
       ShowWindow(hwndNext, SW_SHOW);
     }
   }
+#ifdef __REACTOS__
+  {
+    if ((hwndFocus == hwndBack || hwndFocus == hwndNext || hwndFocus == hwndFinish) &&
+        (!IsWindowVisible(hwndFocus) || !IsWindowEnabled(hwndFocus)))
+    {
+      LRESULT defId = SendMessageW(hwndDlg, DM_GETDEFID, 0, 0);
+      HWND hwndDefault = HIWORD(defId) == DC_HASDEFID ? GetDlgItem(hwndDlg, LOWORD(defId)) : NULL;
+
+      if (hwndDefault && IsWindowVisible(hwndDefault) && IsWindowEnabled(hwndDefault))
+        SetFocus(hwndDefault);
+    }
+  }
+#endif
 }
 
 /******************************************************************************
