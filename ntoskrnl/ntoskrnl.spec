@@ -2640,7 +2640,7 @@
 @ stub -arch=win64 KeQueryInterruptPartitionCount
 @ stub -arch=win64 KeQueryInterruptPartitionInformation
 @ stdcall KeQueryLogicalProcessorRelationship(ptr long ptr ptr)
-@ stdcall -arch=win64 KeQueryMaximumGroupCount()
+@ stdcall KeQueryMaximumGroupCount()
 @ stdcall KeQueryNodeActiveAffinity(long ptr ptr)
 @ stdcall KeQueryNodeActiveAffinity2(long ptr ptr)
 @ stdcall -arch=win64 KeQueryNodeActiveProcessorCount(long)
