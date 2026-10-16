@@ -27,6 +27,7 @@ extern void func_raster(void);
 extern void func_relaxed(void);
 extern void func_renderpass(void);
 extern void func_rootsig(void);
+extern void func_rootstate(void);
 extern void func_sampler(void);
 extern void func_topology(void);
 extern void func_uav(void);
@@ -56,6 +57,7 @@ const struct test winetest_testlist[] =
     { "relaxed", func_relaxed },
     { "renderpass", func_renderpass },
     { "rootsig", func_rootsig },
+    { "rootstate", func_rootstate },
     { "sampler", func_sampler },
     { "topology", func_topology },
     { "uav", func_uav },

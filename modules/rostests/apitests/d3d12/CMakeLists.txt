@@ -19,6 +19,7 @@ list(APPEND SOURCE
     relaxed.cpp
     renderpass.cpp
     rootsig.cpp
+    rootstate.cpp
     sampler.cpp
     shaders.cpp
     topology.cpp
