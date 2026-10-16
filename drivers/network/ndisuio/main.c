@@ -29,7 +29,7 @@ DriverEntry(PDRIVER_OBJECT DriverObject,
             PUNICODE_STRING RegistryPath)
 {
     NDIS_STATUS Status;
-    NDIS_PROTOCOL_CHARACTERISTICS Chars;
+    NDIS_PROTOCOL_DRIVER_CHARACTERISTICS Chars;
     UNICODE_STRING NtDeviceName = RTL_CONSTANT_STRING(NDISUIO_DEVICE_NAME_NT);
     UNICODE_STRING DosDeviceName = RTL_CONSTANT_STRING(NDISUIO_DEVICE_NAME_DOS);
 
@@ -59,6 +59,8 @@ DriverEntry(PDRIVER_OBJECT DriverObject,
         return Status;
     }
 
+    GlobalDeviceObject->Flags |= DO_BUFFERED_IO;
+
     /* Create a symbolic link into the DOS devices namespace */
     Status = IoCreateSymbolicLink(&DosDeviceName, &NtDeviceName);
     if (!NT_SUCCESS(Status))
@@ -70,27 +72,25 @@ DriverEntry(PDRIVER_OBJECT DriverObject,
 
     /* Register the protocol with NDIS */
     RtlZeroMemory(&Chars, sizeof(Chars));
+    Chars.Header.Type = NDIS_OBJECT_TYPE_PROTOCOL_DRIVER_CHARACTERISTICS;
+    Chars.Header.Revision = NDIS_PROTOCOL_DRIVER_CHARACTERISTICS_REVISION_1;
+    Chars.Header.Size = NDIS_SIZEOF_PROTOCOL_DRIVER_CHARACTERISTICS_REVISION_1;
     Chars.MajorNdisVersion = NDIS_MAJOR_VERSION;
     Chars.MinorNdisVersion = NDIS_MINOR_VERSION;
-    Chars.OpenAdapterCompleteHandler = NduOpenAdapterComplete;
-    Chars.CloseAdapterCompleteHandler = NduCloseAdapterComplete;
-    Chars.PnPEventHandler = NduNetPnPEvent;
-    Chars.SendCompleteHandler = NduSendComplete;
-    Chars.TransferDataCompleteHandler = NduTransferDataComplete;
-    Chars.ResetCompleteHandler = NduResetComplete;
-    Chars.RequestCompleteHandler = NduRequestComplete;
-    Chars.ReceiveHandler = NduReceive;
-    Chars.ReceiveCompleteHandler = NduReceiveComplete;
-    Chars.StatusHandler = NduStatus;
-    Chars.StatusCompleteHandler = NduStatusComplete;
     Chars.Name = ProtocolName;
-    Chars.BindAdapterHandler = NduBindAdapter;
-    Chars.UnbindAdapterHandler = NduUnbindAdapter;
+    Chars.BindAdapterHandlerEx = NduBindAdapter;
+    Chars.UnbindAdapterHandlerEx = NduUnbindAdapter;
+    Chars.OpenAdapterCompleteHandlerEx = NduOpenAdapterComplete;
+    Chars.CloseAdapterCompleteHandlerEx = NduCloseAdapterComplete;
+    Chars.NetPnPEventHandler = NduNetPnPEvent;
+    Chars.OidRequestCompleteHandler = NduRequestComplete;
+    Chars.StatusHandlerEx = NduStatus;
+    Chars.ReceiveNetBufferListsHandler = NduReceive;
+    Chars.SendNetBufferListsCompleteHandler = NduSendComplete;
 
-    NdisRegisterProtocol(&Status,
-                         &GlobalProtocolHandle,
-                         &Chars,
-                         sizeof(Chars));
+    Status = NdisRegisterProtocolDriver(NULL,
+                                        &Chars,
+                                        &GlobalProtocolHandle);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         DPRINT1("Failed to register protocol with status 0x%x\n", Status);

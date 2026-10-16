@@ -160,45 +160,81 @@ NduDispatchWrite(PDEVICE_OBJECT DeviceObject,
 {
     PIO_STACK_LOCATION IrpSp = IoGetCurrentIrpStackLocation(Irp);
     PNDISUIO_ADAPTER_CONTEXT AdapterContext = IrpSp->FileObject->FsContext;
-    PNDIS_PACKET Packet;
+    PNET_BUFFER_LIST Nbl = NULL;
+    PMDL Mdl;
+    KEVENT SendEvent;
+    KIRQL OldIrql;
     NDIS_STATUS Status;
     ULONG BytesCopied = 0;
 
     ASSERT(DeviceObject == GlobalDeviceObject);
 
-    /* Create a packet and buffer descriptor for this user buffer */
-    Packet = CreatePacketFromPoolBuffer(AdapterContext,
-                                        Irp->AssociatedIrp.SystemBuffer,
-                                        IrpSp->Parameters.Write.Length);
-    if (Packet)
+    KeAcquireSpinLock(&AdapterContext->Spinlock, &OldIrql);
+    if (AdapterContext->Paused)
     {
+        KeReleaseSpinLock(&AdapterContext->Spinlock, OldIrql);
+
+        Irp->IoStatus.Status = NDIS_STATUS_PAUSED;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+        return NDIS_STATUS_PAUSED;
+    }
+    AdapterContext->PendingSends++;
+    KeReleaseSpinLock(&AdapterContext->Spinlock, OldIrql);
+
+    /* Create a packet and buffer descriptor for this user buffer */
+    Mdl = NdisAllocateMdl(AdapterContext->BindingHandle,
+                          Irp->AssociatedIrp.SystemBuffer,
+                          IrpSp->Parameters.Write.Length);
+    if (Mdl)
+    {
+        Nbl = NdisAllocateNetBufferAndNetBufferList(AdapterContext->NblPoolHandle,
+                                                    0,
+                                                    0,
+                                                    Mdl,
+                                                    0,
+                                                    IrpSp->Parameters.Write.Length);
+    }
+    if (Nbl)
+    {
+        KeInitializeEvent(&SendEvent, NotificationEvent, FALSE);
+        Nbl->ProtocolReserved[0] = &SendEvent;
+        Nbl->SourceHandle = AdapterContext->BindingHandle;
+
         /* Send it via NDIS */
-        NdisSend(&Status,
-                 AdapterContext->BindingHandle,
-                 Packet);
+        NdisSendNetBufferLists(AdapterContext->BindingHandle,
+                               Nbl,
+                               NDIS_DEFAULT_PORT_NUMBER,
+                               0);
 
         /* Wait for the send */
-        if (Status == NDIS_STATUS_PENDING)
-        {
-            KeWaitForSingleObject(&AdapterContext->AsyncEvent,
-                                  Executive,
-                                  KernelMode,
-                                  FALSE,
-                                  NULL);
-            Status = AdapterContext->AsyncStatus;
-        }
+        KeWaitForSingleObject(&SendEvent,
+                              Executive,
+                              KernelMode,
+                              FALSE,
+                              NULL);
+        Status = NET_BUFFER_LIST_STATUS(Nbl);
 
         /* Check if it succeeded */
         if (Status == NDIS_STATUS_SUCCESS)
             BytesCopied = IrpSp->Parameters.Write.Length;
 
-        CleanupAndFreePacket(Packet, FALSE);
+        NdisFreeNetBufferList(Nbl);
     }
     else
     {
         /* No memory */
         Status = STATUS_NO_MEMORY;
     }
+
+    if (Mdl)
+        NdisFreeMdl(Mdl);
+
+    KeAcquireSpinLock(&AdapterContext->Spinlock, &OldIrql);
+    if (--AdapterContext->PendingSends == 0 && AdapterContext->Paused)
+        KeSetEvent(&AdapterContext->SendsDoneEvent, IO_NO_INCREMENT, FALSE);
+    KeReleaseSpinLock(&AdapterContext->Spinlock, OldIrql);
 
     /* Complete the IRP */
     Irp->IoStatus.Status = Status;

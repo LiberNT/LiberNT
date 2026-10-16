@@ -12,103 +12,28 @@
 #include <debug.h>
 
 NDIS_STATUS
-AllocateAndChainBuffer(PNDISUIO_ADAPTER_CONTEXT AdapterContext,
-                       PNDIS_PACKET Packet,
-                       PVOID Buffer,
-                       ULONG BufferSize,
-                       BOOLEAN Front)
+NduDoRequest(PNDISUIO_ADAPTER_CONTEXT AdapterContext,
+             PNDISUIO_REQUEST Request)
 {
     NDIS_STATUS Status;
-    PNDIS_BUFFER NdisBuffer;
 
-    /* Allocate the NDIS buffer mapping the pool */
-    NdisAllocateBuffer(&Status,
-                       &NdisBuffer,
-                       AdapterContext->BufferPoolHandle,
-                       Buffer,
-                       BufferSize);
-    if (Status != NDIS_STATUS_SUCCESS)
+    Request->Request.Header.Type = NDIS_OBJECT_TYPE_OID_REQUEST;
+    Request->Request.Header.Revision = NDIS_OID_REQUEST_REVISION_1;
+    Request->Request.Header.Size = NDIS_SIZEOF_OID_REQUEST_REVISION_1;
+    KeInitializeEvent(&Request->Event, NotificationEvent, FALSE);
+
+    Status = NdisOidRequest(AdapterContext->BindingHandle, &Request->Request);
+    if (Status == NDIS_STATUS_PENDING)
     {
-        DPRINT1("No free buffer descriptors\n");
-        return Status;
+        KeWaitForSingleObject(&Request->Event,
+                              Executive,
+                              KernelMode,
+                              FALSE,
+                              NULL);
+        Status = Request->Status;
     }
 
-    if (Front)
-    {
-        /* Chain the buffer to front */
-        NdisChainBufferAtFront(Packet, NdisBuffer);
-    }
-    else
-    {
-        /* Chain the buffer to back */
-        NdisChainBufferAtBack(Packet, NdisBuffer);
-    }
-
-    /* Return success */
-    return NDIS_STATUS_SUCCESS;
-}
-
-PNDIS_PACKET
-CreatePacketFromPoolBuffer(PNDISUIO_ADAPTER_CONTEXT AdapterContext,
-                           PVOID Buffer,
-                           ULONG BufferSize)
-{
-    PNDIS_PACKET Packet;
-    NDIS_STATUS Status;
-
-    /* Allocate a packet descriptor */
-    NdisAllocatePacket(&Status,
-                       &Packet,
-                       AdapterContext->PacketPoolHandle);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        DPRINT1("No free packet descriptors\n");
-        return NULL;
-    }
-
-    /* Use the helper to chain the buffer */
-    Status = AllocateAndChainBuffer(AdapterContext, Packet,
-                                    Buffer, BufferSize, TRUE);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NdisFreePacket(Packet);
-        return NULL;
-    }
-
-    /* Return the packet */
-    return Packet;
-}
-
-VOID
-CleanupAndFreePacket(PNDIS_PACKET Packet, BOOLEAN FreePool)
-{
-    PNDIS_BUFFER Buffer;
-    PVOID Data;
-    ULONG Length;
-
-    /* Free each buffer and its backing pool memory */
-    while (TRUE)
-    {
-        /* Unchain each buffer */
-        NdisUnchainBufferAtFront(Packet, &Buffer);
-        if (!Buffer)
-            break;
-
-        /* Get the backing memory */
-        NdisQueryBuffer(Buffer, &Data, &Length);
-
-        /* Free the buffer */
-        NdisFreeBuffer(Buffer);
-
-        if (FreePool)
-        {
-            /* Free the backing memory */
-            ExFreePool(Data);
-        }
-    }
-
-    /* Free the packet descriptor */
-    NdisFreePacket(Packet);
+    return Status;
 }
 
 PNDISUIO_ADAPTER_CONTEXT

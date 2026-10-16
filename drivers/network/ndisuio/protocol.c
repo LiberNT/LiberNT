@@ -14,8 +14,7 @@
 VOID
 NTAPI
 NduOpenAdapterComplete(NDIS_HANDLE ProtocolBindingContext,
-                       NDIS_STATUS Status,
-                       NDIS_STATUS OpenStatus)
+                       NDIS_STATUS Status)
 {
     PNDISUIO_ADAPTER_CONTEXT AdapterContext = ProtocolBindingContext;
 
@@ -28,29 +27,59 @@ NduOpenAdapterComplete(NDIS_HANDLE ProtocolBindingContext,
 
 VOID
 NTAPI
-NduCloseAdapterComplete(NDIS_HANDLE ProtocolBindingContext,
-                        NDIS_STATUS Status)
+NduCloseAdapterComplete(NDIS_HANDLE ProtocolBindingContext)
 {
     PNDISUIO_ADAPTER_CONTEXT AdapterContext = ProtocolBindingContext;
 
     DPRINT("Asynchronous adapter close completed\n");
 
     /* Store the final status and signal the event */
-    AdapterContext->AsyncStatus = Status;
+    AdapterContext->AsyncStatus = NDIS_STATUS_SUCCESS;
     KeSetEvent(&AdapterContext->AsyncEvent, IO_NO_INCREMENT, FALSE);
 }
 
 NDIS_STATUS
 NTAPI
 NduNetPnPEvent(NDIS_HANDLE ProtocolBindingContext,
-               PNET_PNP_EVENT NetPnPEvent)
+               PNET_PNP_EVENT_NOTIFICATION NetPnPEventNotification)
 {
+    PNDISUIO_ADAPTER_CONTEXT AdapterContext = ProtocolBindingContext;
+    PNET_PNP_EVENT NetPnPEvent = &NetPnPEventNotification->NetPnPEvent;
     PNDIS_DEVICE_POWER_STATE PowerState;
+    BOOLEAN WaitForSends;
+    KIRQL OldIrql;
 
     DPRINT("NetPnPEvent\n");
 
     switch (NetPnPEvent->NetEvent)
     {
+        case NetEventPause:
+            DPRINT("NetPnPEvent: Pause\n");
+
+            KeAcquireSpinLock(&AdapterContext->Spinlock, &OldIrql);
+            AdapterContext->Paused = TRUE;
+            KeClearEvent(&AdapterContext->SendsDoneEvent);
+            WaitForSends = (AdapterContext->PendingSends != 0);
+            KeReleaseSpinLock(&AdapterContext->Spinlock, OldIrql);
+
+            if (WaitForSends)
+            {
+                KeWaitForSingleObject(&AdapterContext->SendsDoneEvent,
+                                      Executive,
+                                      KernelMode,
+                                      FALSE,
+                                      NULL);
+            }
+            return NDIS_STATUS_SUCCESS;
+
+        case NetEventRestart:
+            DPRINT("NetPnPEvent: Restart\n");
+
+            KeAcquireSpinLock(&AdapterContext->Spinlock, &OldIrql);
+            AdapterContext->Paused = FALSE;
+            KeReleaseSpinLock(&AdapterContext->Spinlock, OldIrql);
+            return NDIS_STATUS_SUCCESS;
+
         case NetEventQueryRemoveDevice:
             /* Nothing to do */
             DPRINT1("NetPnPEvent: QueryRemoveDevice\n");
@@ -104,192 +133,108 @@ NduNetPnPEvent(NDIS_HANDLE ProtocolBindingContext,
 VOID
 NTAPI
 NduSendComplete(NDIS_HANDLE ProtocolBindingContext,
-                PNDIS_PACKET Packet,
-                NDIS_STATUS Status)
+                PNET_BUFFER_LIST NetBufferLists,
+                ULONG SendCompleteFlags)
 {
-    PNDISUIO_ADAPTER_CONTEXT AdapterContext = ProtocolBindingContext;
+    PNET_BUFFER_LIST Nbl, NextNbl;
 
     DPRINT("Asynchronous adapter send completed\n");
 
-    /* Store the final status and signal the event */
-    AdapterContext->AsyncStatus = Status;
-    KeSetEvent(&AdapterContext->AsyncEvent, IO_NO_INCREMENT, FALSE);
-}
+    for (Nbl = NetBufferLists; Nbl != NULL; Nbl = NextNbl)
+    {
+        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+        NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
 
-VOID
-NTAPI
-NduTransferDataComplete(NDIS_HANDLE ProtocolBindingContext,
-                        PNDIS_PACKET Packet,
-                        NDIS_STATUS Status,
-                        UINT BytesTransferred)
-{
-    PNDISUIO_ADAPTER_CONTEXT AdapterContext = ProtocolBindingContext;
-
-    DPRINT("Asynchronous adapter transfer completed\n");
-
-    /* Store the final status and signal the event */
-    AdapterContext->AsyncStatus = Status;
-    KeSetEvent(&AdapterContext->AsyncEvent, IO_NO_INCREMENT, FALSE);
-}
-
-VOID
-NTAPI
-NduResetComplete(NDIS_HANDLE ProtocolBindingContext,
-                 NDIS_STATUS Status)
-{
-    PNDISUIO_ADAPTER_CONTEXT AdapterContext = ProtocolBindingContext;
-
-    DPRINT("Asynchronous adapter reset completed\n");
-
-    /* Store the final status and signal the event */
-    AdapterContext->AsyncStatus = Status;
-    KeSetEvent(&AdapterContext->AsyncEvent, IO_NO_INCREMENT, FALSE);
+        KeSetEvent((PKEVENT)Nbl->ProtocolReserved[0], IO_NO_INCREMENT, FALSE);
+    }
 }
 
 VOID
 NTAPI
 NduRequestComplete(NDIS_HANDLE ProtocolBindingContext,
-                   PNDIS_REQUEST NdisRequest,
+                   PNDIS_OID_REQUEST NdisRequest,
                    NDIS_STATUS Status)
 {
-    PNDISUIO_ADAPTER_CONTEXT AdapterContext = ProtocolBindingContext;
+    PNDISUIO_REQUEST Request = CONTAINING_RECORD(NdisRequest, NDISUIO_REQUEST, Request);
 
     DPRINT("Asynchronous adapter request completed\n");
 
     /* Store the final status and signal the event */
-    AdapterContext->AsyncStatus = Status;
-    KeSetEvent(&AdapterContext->AsyncEvent, IO_NO_INCREMENT, FALSE);
-}
-
-NDIS_STATUS
-NTAPI
-NduReceive(NDIS_HANDLE ProtocolBindingContext,
-           NDIS_HANDLE MacReceiveContext,
-           PVOID HeaderBuffer,
-           UINT HeaderBufferSize,
-           PVOID LookAheadBuffer,
-           UINT LookaheadBufferSize,
-           UINT PacketSize)
-{
-    PNDISUIO_ADAPTER_CONTEXT AdapterContext = ProtocolBindingContext;
-    PNDISUIO_PACKET_ENTRY PacketEntry;
-    PVOID PacketBuffer;
-    PNDIS_PACKET Packet;
-    NDIS_STATUS Status;
-    UINT BytesTransferred;
-
-    DPRINT("Received a %d byte packet\n", PacketSize);
-
-    /* Discard if nobody is waiting for it */
-    if (AdapterContext->OpenCount == 0)
-        return NDIS_STATUS_NOT_ACCEPTED;
-
-    /* Allocate a buffer to hold the packet data and header */
-    PacketBuffer = ExAllocatePool(NonPagedPool, PacketSize + HeaderBufferSize);
-    if (!PacketBuffer)
-        return NDIS_STATUS_NOT_ACCEPTED;
-
-    /* Allocate the packet descriptor and buffer */
-    Packet = CreatePacketFromPoolBuffer(AdapterContext,
-                                        (PUCHAR)PacketBuffer + HeaderBufferSize,
-                                        PacketSize);
-    if (!Packet)
-    {
-        ExFreePool(PacketBuffer);
-        return NDIS_STATUS_NOT_ACCEPTED;
-    }
-
-    /* Transfer the packet data into our data buffer */
-    if (LookaheadBufferSize == PacketSize)
-    {
-        NdisCopyLookaheadData((PVOID)((PUCHAR)PacketBuffer + HeaderBufferSize),
-                              LookAheadBuffer,
-                              PacketSize,
-                              AdapterContext->MacOptions);
-        BytesTransferred = PacketSize;
-    }
-    else
-    {
-        NdisTransferData(&Status,
-                         AdapterContext->BindingHandle,
-                         MacReceiveContext,
-                         0,
-                         PacketSize,
-                         Packet,
-                         &BytesTransferred);
-        if (Status == NDIS_STATUS_PENDING)
-        {
-            KeWaitForSingleObject(&AdapterContext->AsyncEvent,
-                                  Executive,
-                                  KernelMode,
-                                  FALSE,
-                                  NULL);
-            Status = AdapterContext->AsyncStatus;
-        }
-        if (Status != NDIS_STATUS_SUCCESS)
-        {
-            DPRINT1("Failed to transfer data with status 0x%x\n", Status);
-            CleanupAndFreePacket(Packet, FALSE);
-            ExFreePool(PacketBuffer);
-            return NDIS_STATUS_NOT_ACCEPTED;
-        }
-    }
-
-    /* Copy the header data */
-    RtlCopyMemory(PacketBuffer, HeaderBuffer, HeaderBufferSize);
-
-    /* Free the packet descriptor and buffers
-       but not the pool because we still need it */
-    CleanupAndFreePacket(Packet, FALSE);
-
-    /* Allocate a packet entry from pool */
-    PacketEntry = ExAllocatePool(NonPagedPool, sizeof(NDISUIO_PACKET_ENTRY) + BytesTransferred + HeaderBufferSize - 1);
-    if (!PacketEntry)
-    {
-        ExFreePool(PacketBuffer);
-        return NDIS_STATUS_RESOURCES;
-    }
-
-    /* Initialize the packet entry and copy in packet data */
-    PacketEntry->PacketLength = BytesTransferred + HeaderBufferSize;
-    RtlCopyMemory(PacketEntry->PacketData, PacketBuffer, PacketEntry->PacketLength);
-
-    /* Free the old buffer */
-    ExFreePool(PacketBuffer);
-
-    /* Insert the packet on the adapter's packet list */
-    ExInterlockedInsertTailList(&AdapterContext->PacketList,
-                                &PacketEntry->ListEntry,
-                                &AdapterContext->Spinlock);
-
-    /* Signal the read event */
-    KeSetEvent(&AdapterContext->PacketReadEvent,
-               IO_NETWORK_INCREMENT,
-               FALSE);
-
-    return NDIS_STATUS_SUCCESS;
+    Request->Status = Status;
+    KeSetEvent(&Request->Event, IO_NO_INCREMENT, FALSE);
 }
 
 VOID
 NTAPI
-NduReceiveComplete(NDIS_HANDLE ProtocolBindingContext)
+NduReceive(NDIS_HANDLE ProtocolBindingContext,
+           PNET_BUFFER_LIST NetBufferLists,
+           NDIS_PORT_NUMBER PortNumber,
+           ULONG NumberOfNetBufferLists,
+           ULONG ReceiveFlags)
 {
-    /* No op */
+    PNDISUIO_ADAPTER_CONTEXT AdapterContext = ProtocolBindingContext;
+    PNDISUIO_PACKET_ENTRY PacketEntry;
+    PNET_BUFFER_LIST Nbl;
+    PNET_BUFFER NetBuffer;
+    ULONG PacketSize;
+    PVOID PacketData;
+    BOOLEAN Queued = FALSE;
+
+    for (Nbl = NetBufferLists; Nbl != NULL; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
+    {
+        for (NetBuffer = NET_BUFFER_LIST_FIRST_NB(Nbl);
+             NetBuffer != NULL;
+             NetBuffer = NET_BUFFER_NEXT_NB(NetBuffer))
+        {
+            PacketSize = NET_BUFFER_DATA_LENGTH(NetBuffer);
+
+            DPRINT("Received a %d byte packet\n", PacketSize);
+
+            if (AdapterContext->OpenCount == 0 || PacketSize == 0)
+                continue;
+
+            PacketEntry = ExAllocatePool(NonPagedPool, sizeof(NDISUIO_PACKET_ENTRY) + PacketSize - 1);
+            if (!PacketEntry)
+                continue;
+
+            PacketData = NdisGetDataBuffer(NetBuffer, PacketSize, PacketEntry->PacketData, 1, 0);
+            if (!PacketData)
+            {
+                ExFreePool(PacketEntry);
+                continue;
+            }
+
+            PacketEntry->PacketLength = PacketSize;
+            if (PacketData != PacketEntry->PacketData)
+                RtlCopyMemory(PacketEntry->PacketData, PacketData, PacketSize);
+
+            ExInterlockedInsertTailList(&AdapterContext->PacketList,
+                                        &PacketEntry->ListEntry,
+                                        &AdapterContext->Spinlock);
+            Queued = TRUE;
+        }
+    }
+
+    if (Queued)
+    {
+        KeSetEvent(&AdapterContext->PacketReadEvent,
+                   IO_NETWORK_INCREMENT,
+                   FALSE);
+    }
+
+    if (NDIS_TEST_RECEIVE_CAN_PEND(ReceiveFlags))
+    {
+        NdisReturnNetBufferLists(AdapterContext->BindingHandle,
+                                 NetBufferLists,
+                                 NDIS_TEST_RECEIVE_AT_DISPATCH_LEVEL(ReceiveFlags) ?
+                                 NDIS_RETURN_FLAGS_DISPATCH_LEVEL : 0);
+    }
 }
 
 VOID
 NTAPI
 NduStatus(NDIS_HANDLE ProtocolBindingContext,
-          NDIS_STATUS GeneralStatus,
-          PVOID StatusBuffer,
-          UINT StatusBufferSize)
-{
-    /* FIXME: Implement status tracking */
-}
-
-VOID
-NTAPI
-NduStatusComplete(NDIS_HANDLE ProtocolBindingContext)
+          PNDIS_STATUS_INDICATION StatusIndication)
 {
     /* FIXME: Implement status tracking */
 }
@@ -358,8 +303,7 @@ UnbindAdapterByContext(PNDISUIO_ADAPTER_CONTEXT AdapterContext)
     }
 
     /* Send the close request */
-    NdisCloseAdapter(&Status,
-                     AdapterContext->BindingHandle);
+    Status = NdisCloseAdapterEx(AdapterContext->BindingHandle);
 
     /* Wait for a pending close */
     if (Status == NDIS_STATUS_PENDING)
@@ -372,6 +316,8 @@ UnbindAdapterByContext(PNDISUIO_ADAPTER_CONTEXT AdapterContext)
         Status = AdapterContext->AsyncStatus;
     }
 
+    NdisFreeNetBufferListPool(AdapterContext->NblPoolHandle);
+
     /* Free the context */
     ExFreePool(AdapterContext);
 
@@ -380,14 +326,15 @@ UnbindAdapterByContext(PNDISUIO_ADAPTER_CONTEXT AdapterContext)
 
 static
 NDIS_STATUS
-BindAdapterByName(PNDIS_STRING DeviceName)
+BindAdapterByName(NDIS_HANDLE BindContext,
+                  PNDIS_STRING DeviceName)
 {
-    NDIS_STATUS OpenErrorStatus;
     PNDISUIO_ADAPTER_CONTEXT AdapterContext;
     NDIS_MEDIUM SupportedMedia[1] = {NdisMedium802_3};
     UINT SelectedMedium;
     NDIS_STATUS Status;
-    NDIS_REQUEST Request;
+    NDIS_OPEN_PARAMETERS OpenParameters;
+    NET_BUFFER_LIST_POOL_PARAMETERS PoolParameters;
 
     /* Allocate the adapter context */
     AdapterContext = ExAllocatePool(NonPagedPool, sizeof(*AdapterContext));
@@ -400,10 +347,12 @@ BindAdapterByName(PNDIS_STRING DeviceName)
     RtlZeroMemory(AdapterContext, sizeof(*AdapterContext));
     KeInitializeEvent(&AdapterContext->AsyncEvent, SynchronizationEvent, FALSE);
     KeInitializeEvent(&AdapterContext->PacketReadEvent, SynchronizationEvent, FALSE);
+    KeInitializeEvent(&AdapterContext->SendsDoneEvent, NotificationEvent, FALSE);
     KeInitializeSpinLock(&AdapterContext->Spinlock);
     InitializeListHead(&AdapterContext->PacketList);
     InitializeListHead(&AdapterContext->OpenEntryList);
     AdapterContext->OpenCount = 0;
+    AdapterContext->Paused = TRUE;
 
     AdapterContext->DeviceName.Length =
     AdapterContext->DeviceName.MaximumLength = DeviceName->Length;
@@ -419,44 +368,39 @@ BindAdapterByName(PNDIS_STRING DeviceName)
 
     DPRINT("Binding adapter %wZ\n", &AdapterContext->DeviceName);
 
-    /* Create the buffer pool */
-    NdisAllocateBufferPool(&Status,
-                           &AdapterContext->BufferPoolHandle,
-                           50);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        DPRINT1("Failed to allocate buffer pool with status 0x%x\n", Status);
-        RtlFreeUnicodeString(&AdapterContext->DeviceName);
-        ExFreePool(AdapterContext);
-        return Status;
-    }
+    RtlZeroMemory(&PoolParameters, sizeof(PoolParameters));
+    PoolParameters.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    PoolParameters.Header.Revision = NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+    PoolParameters.Header.Size = NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+    PoolParameters.ProtocolId = NDIS_PROTOCOL_ID_DEFAULT;
+    PoolParameters.fAllocateNetBuffer = TRUE;
+    PoolParameters.PoolTag = 'oiuN';
 
-    /* Create the packet pool */
-    NdisAllocatePacketPool(&Status,
-                           &AdapterContext->PacketPoolHandle,
-                           25,
-                           PROTOCOL_RESERVED_SIZE_IN_PACKET);
-    if (Status != NDIS_STATUS_SUCCESS)
+    AdapterContext->NblPoolHandle = NdisAllocateNetBufferListPool(GlobalProtocolHandle,
+                                                                  &PoolParameters);
+    if (!AdapterContext->NblPoolHandle)
     {
-        DPRINT1("Failed to allocate packet pool with status 0x%x\n", Status);
-        NdisFreeBufferPool(AdapterContext->BufferPoolHandle);
+        DPRINT1("Failed to allocate NBL pool\n");
         RtlFreeUnicodeString(&AdapterContext->DeviceName);
         ExFreePool(AdapterContext);
-        return Status;
+        return NDIS_STATUS_RESOURCES;
     }
 
     /* Send the open request */
-    NdisOpenAdapter(&Status,
-                    &OpenErrorStatus,
-                    &AdapterContext->BindingHandle,
-                    &SelectedMedium,
-                    SupportedMedia,
-                    1,
-                    GlobalProtocolHandle,
-                    AdapterContext,
-                    DeviceName,
-                    0,
-                    NULL);
+    RtlZeroMemory(&OpenParameters, sizeof(OpenParameters));
+    OpenParameters.Header.Type = NDIS_OBJECT_TYPE_OPEN_PARAMETERS;
+    OpenParameters.Header.Revision = NDIS_OPEN_PARAMETERS_REVISION_1;
+    OpenParameters.Header.Size = NDIS_SIZEOF_OPEN_PARAMETERS_REVISION_1;
+    OpenParameters.AdapterName = DeviceName;
+    OpenParameters.MediumArray = SupportedMedia;
+    OpenParameters.MediumArraySize = 1;
+    OpenParameters.SelectedMediumIndex = &SelectedMedium;
+
+    Status = NdisOpenAdapterEx(GlobalProtocolHandle,
+                               AdapterContext,
+                               &OpenParameters,
+                               BindContext,
+                               &AdapterContext->BindingHandle);
 
     /* Wait for a pending open */
     if (Status == NDIS_STATUS_PENDING)
@@ -473,53 +417,7 @@ BindAdapterByName(PNDIS_STRING DeviceName)
     if (Status != NDIS_STATUS_SUCCESS)
     {
         DPRINT1("Failed to open adapter for bind with status 0x%x\n", Status);
-        NdisFreePacketPool(AdapterContext->PacketPoolHandle);
-        NdisFreeBufferPool(AdapterContext->BufferPoolHandle);
-        RtlFreeUnicodeString(&AdapterContext->DeviceName);
-        ExFreePool(AdapterContext);
-        return Status;
-    }
-
-    /* Get the MAC options */
-    Request.RequestType = NdisRequestQueryInformation;
-    Request.DATA.QUERY_INFORMATION.Oid = OID_GEN_MAC_OPTIONS;
-    Request.DATA.QUERY_INFORMATION.InformationBuffer = &AdapterContext->MacOptions;
-    Request.DATA.QUERY_INFORMATION.InformationBufferLength = sizeof(ULONG);
-    NdisRequest(&Status,
-                AdapterContext->BindingHandle,
-                &Request);
-
-    /* Wait for a pending request */
-    if (Status == NDIS_STATUS_PENDING)
-    {
-        KeWaitForSingleObject(&AdapterContext->AsyncEvent,
-                              Executive,
-                              KernelMode,
-                              FALSE,
-                              NULL);
-        Status = AdapterContext->AsyncStatus;
-    }
-
-    /* Check the final status */
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NDIS_STATUS CloseStatus;
-
-        DPRINT1("Failed to get MAC options with status 0x%x\n", Status);
-
-        NdisCloseAdapter(&CloseStatus,
-                         AdapterContext->BindingHandle);
-        if (CloseStatus == NDIS_STATUS_PENDING)
-        {
-            KeWaitForSingleObject(&AdapterContext->AsyncEvent,
-                                  Executive,
-                                  KernelMode,
-                                  FALSE,
-                                  NULL);
-        }
-
-        NdisFreePacketPool(AdapterContext->PacketPoolHandle);
-        NdisFreeBufferPool(AdapterContext->BufferPoolHandle);
+        NdisFreeNetBufferListPool(AdapterContext->NblPoolHandle);
         RtlFreeUnicodeString(&AdapterContext->DeviceName);
         ExFreePool(AdapterContext);
         return Status;
@@ -533,25 +431,25 @@ BindAdapterByName(PNDIS_STRING DeviceName)
     return STATUS_SUCCESS;
 }
 
-VOID
+NDIS_STATUS
 NTAPI
-NduBindAdapter(PNDIS_STATUS Status,
+NduBindAdapter(NDIS_HANDLE ProtocolDriverContext,
                NDIS_HANDLE BindContext,
-               PNDIS_STRING DeviceName,
-               PVOID SystemSpecific1,
-               PVOID SystemSpecific2)
+               PNDIS_BIND_PARAMETERS BindParameters)
 {
+    if (BindParameters->MediaType != NdisMedium802_3)
+        return NDIS_STATUS_UNSUPPORTED_MEDIA;
+
     /* Use our helper function to create a context for this adapter */
-    *Status = BindAdapterByName(DeviceName);
+    return BindAdapterByName(BindContext, BindParameters->AdapterName);
 }
 
-VOID
+NDIS_STATUS
 NTAPI
-NduUnbindAdapter(PNDIS_STATUS Status,
-                 NDIS_HANDLE ProtocolBindingContext,
-                 NDIS_HANDLE UnbindContext)
+NduUnbindAdapter(NDIS_HANDLE UnbindContext,
+                 NDIS_HANDLE ProtocolBindingContext)
 {
     /* This is forced unbind. UnbindAdapterByContext() will take care of
      * invalidating file handles pointer to this adapter for us */
-    *Status = UnbindAdapterByContext(ProtocolBindingContext);
+    return UnbindAdapterByContext(ProtocolBindingContext);
 }

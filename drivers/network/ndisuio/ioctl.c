@@ -147,7 +147,8 @@ SetAdapterOid(PIRP Irp, PIO_STACK_LOCATION IrpSp)
 {
     PNDISUIO_ADAPTER_CONTEXT AdapterContext = IrpSp->FileObject->FsContext;
     PNDISUIO_SET_OID SetOidRequest;
-    NDIS_REQUEST Request;
+    NDISUIO_REQUEST UioRequest;
+    PNDIS_OID_REQUEST Request = &UioRequest.Request;
     ULONG RequestLength;
     NDIS_STATUS Status;
 
@@ -158,36 +159,24 @@ SetAdapterOid(PIRP Irp, PIO_STACK_LOCATION IrpSp)
     if (SetOidRequest && RequestLength >= sizeof(NDIS_OID))
     {
         /* Setup the NDIS request */
-        Request.RequestType = NdisRequestSetInformation;
-        Request.DATA.SET_INFORMATION.Oid = SetOidRequest->Oid;
-        Request.DATA.SET_INFORMATION.InformationBufferLength = RequestLength - sizeof(NDIS_OID);
-        if (Request.DATA.SET_INFORMATION.InformationBufferLength != 0)
+        RtlZeroMemory(&UioRequest, sizeof(UioRequest));
+        Request->RequestType = NdisRequestSetInformation;
+        Request->DATA.SET_INFORMATION.Oid = SetOidRequest->Oid;
+        Request->DATA.SET_INFORMATION.InformationBufferLength = RequestLength - sizeof(NDIS_OID);
+        if (Request->DATA.SET_INFORMATION.InformationBufferLength != 0)
         {
-            Request.DATA.SET_INFORMATION.InformationBuffer = SetOidRequest->Data;
+            Request->DATA.SET_INFORMATION.InformationBuffer = SetOidRequest->Data;
         }
         else
         {
-            Request.DATA.SET_INFORMATION.InformationBuffer = NULL;
+            Request->DATA.SET_INFORMATION.InformationBuffer = NULL;
         }
-        Request.DATA.SET_INFORMATION.BytesRead = 0;
+        Request->DATA.SET_INFORMATION.BytesRead = 0;
 
         DPRINT("Setting OID 0x%x on adapter %wZ\n", SetOidRequest->Oid, &AdapterContext->DeviceName);
 
         /* Dispatch the request */
-        NdisRequest(&Status,
-                    AdapterContext->BindingHandle,
-                    &Request);
-
-        /* Wait for the request */
-        if (Status == NDIS_STATUS_PENDING)
-        {
-            KeWaitForSingleObject(&AdapterContext->AsyncEvent,
-                                  Executive,
-                                  KernelMode,
-                                  FALSE,
-                                  NULL);
-            Status = AdapterContext->AsyncStatus;
-        }
+        Status = NduDoRequest(AdapterContext, &UioRequest);
 
         /* Return the bytes read */
         if (Status == NDIS_STATUS_INVALID_LENGTH ||
@@ -197,7 +186,7 @@ SetAdapterOid(PIRP Irp, PIO_STACK_LOCATION IrpSp)
         }
         else if (Status == NDIS_STATUS_SUCCESS)
         {
-            Irp->IoStatus.Information = sizeof(NDIS_OID) + Request.DATA.SET_INFORMATION.BytesRead;
+            Irp->IoStatus.Information = sizeof(NDIS_OID) + Request->DATA.SET_INFORMATION.BytesRead;
         }
 
         DPRINT("Final request status: 0x%x (%d)\n", Status, Irp->IoStatus.Information);
@@ -221,7 +210,8 @@ QueryAdapterOid(PIRP Irp, PIO_STACK_LOCATION IrpSp)
 {
     PNDISUIO_ADAPTER_CONTEXT AdapterContext = IrpSp->FileObject->FsContext;
     PNDISUIO_QUERY_OID QueryOidRequest;
-    NDIS_REQUEST Request;
+    NDISUIO_REQUEST UioRequest;
+    PNDIS_OID_REQUEST Request = &UioRequest.Request;
     ULONG RequestLength;
     NDIS_STATUS Status;
 
@@ -232,36 +222,24 @@ QueryAdapterOid(PIRP Irp, PIO_STACK_LOCATION IrpSp)
     if (QueryOidRequest && RequestLength >= sizeof(NDIS_OID))
     {
         /* Setup the NDIS request */
-        Request.RequestType = NdisRequestQueryInformation;
-        Request.DATA.QUERY_INFORMATION.Oid = QueryOidRequest->Oid;
-        Request.DATA.QUERY_INFORMATION.InformationBufferLength = RequestLength - sizeof(NDIS_OID);
-        if (Request.DATA.QUERY_INFORMATION.InformationBufferLength != 0)
+        RtlZeroMemory(&UioRequest, sizeof(UioRequest));
+        Request->RequestType = NdisRequestQueryInformation;
+        Request->DATA.QUERY_INFORMATION.Oid = QueryOidRequest->Oid;
+        Request->DATA.QUERY_INFORMATION.InformationBufferLength = RequestLength - sizeof(NDIS_OID);
+        if (Request->DATA.QUERY_INFORMATION.InformationBufferLength != 0)
         {
-            Request.DATA.QUERY_INFORMATION.InformationBuffer = QueryOidRequest->Data;
+            Request->DATA.QUERY_INFORMATION.InformationBuffer = QueryOidRequest->Data;
         }
         else
         {
-            Request.DATA.QUERY_INFORMATION.InformationBuffer = NULL;
+            Request->DATA.QUERY_INFORMATION.InformationBuffer = NULL;
         }
-        Request.DATA.QUERY_INFORMATION.BytesWritten = 0;
+        Request->DATA.QUERY_INFORMATION.BytesWritten = 0;
 
         DPRINT("Querying OID 0x%x on adapter %wZ\n", QueryOidRequest->Oid, &AdapterContext->DeviceName);
 
         /* Dispatch the request */
-        NdisRequest(&Status,
-                    AdapterContext->BindingHandle,
-                    &Request);
-
-        /* Wait for the request */
-        if (Status == NDIS_STATUS_PENDING)
-        {
-            KeWaitForSingleObject(&AdapterContext->AsyncEvent,
-                                  Executive,
-                                  KernelMode,
-                                  FALSE,
-                                  NULL);
-            Status = AdapterContext->AsyncStatus;
-        }
+        Status = NduDoRequest(AdapterContext, &UioRequest);
 
         /* Return the bytes written */
         if (Status == NDIS_STATUS_INVALID_LENGTH ||
@@ -271,7 +249,7 @@ QueryAdapterOid(PIRP Irp, PIO_STACK_LOCATION IrpSp)
         }
         else if (Status == NDIS_STATUS_SUCCESS)
         {
-            Irp->IoStatus.Information = sizeof(NDIS_OID) + Request.DATA.QUERY_INFORMATION.BytesWritten;
+            Irp->IoStatus.Information = sizeof(NDIS_OID) + Request->DATA.QUERY_INFORMATION.BytesWritten;
         }
 
         DPRINT("Final request status: 0x%x (%d)\n", Status, Irp->IoStatus.Information);

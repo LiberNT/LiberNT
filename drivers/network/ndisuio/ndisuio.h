@@ -30,15 +30,15 @@ typedef struct _NDISUIO_ADAPTER_CONTEXT
     LIST_ENTRY OpenEntryList;
 
     /* NDIS pools */
-    NDIS_HANDLE PacketPoolHandle;
-    NDIS_HANDLE BufferPoolHandle;
+    NDIS_HANDLE NblPoolHandle;
 
     /* Receive packet list */
     LIST_ENTRY PacketList;
     KEVENT PacketReadEvent;
 
-    /* Mac options */
-    ULONG MacOptions;
+    BOOLEAN Paused;
+    LONG PendingSends;
+    KEVENT SendsDoneEvent;
 
     /* Device name */
     UNICODE_STRING DeviceName;
@@ -74,8 +74,15 @@ typedef struct _NDISUIO_PACKET_ENTRY
     UCHAR PacketData[1];
 } NDISUIO_PACKET_ENTRY, *PNDISUIO_PACKET_ENTRY;
 
+typedef struct _NDISUIO_REQUEST
+{
+    NDIS_OID_REQUEST Request;
+    KEVENT Event;
+    NDIS_STATUS Status;
+} NDISUIO_REQUEST, *PNDISUIO_REQUEST;
+
 /* NDIS version info */
-#define NDIS_MAJOR_VERSION 5
+#define NDIS_MAJOR_VERSION 6
 #define NDIS_MINOR_VERSION 0
 
 /* createclose.c */
@@ -97,20 +104,8 @@ NduDispatchDeviceControl(PDEVICE_OBJECT DeviceObject,
 
 /* misc.c */
 NDIS_STATUS
-AllocateAndChainBuffer(PNDISUIO_ADAPTER_CONTEXT AdapterContext,
-                       PNDIS_PACKET Packet,
-                       PVOID Buffer,
-                       ULONG BufferSize,
-                       BOOLEAN Front);
-
-PNDIS_PACKET
-CreatePacketFromPoolBuffer(PNDISUIO_ADAPTER_CONTEXT AdapterContext,
-                           PVOID Buffer,
-                           ULONG BufferSize);
-
-VOID
-CleanupAndFreePacket(PNDIS_PACKET Packet,
-                     BOOLEAN FreePool);
+NduDoRequest(PNDISUIO_ADAPTER_CONTEXT AdapterContext,
+             PNDISUIO_REQUEST Request);
 
 PNDISUIO_ADAPTER_CONTEXT
 FindAdapterContextByName(PNDIS_STRING DeviceName);
@@ -123,84 +118,15 @@ DereferenceAdapterContextWithOpenEntry(PNDISUIO_ADAPTER_CONTEXT AdapterContext,
                                        PNDISUIO_OPEN_ENTRY OpenEntry);
 
 /* protocol.c */
-VOID
-NTAPI
-NduOpenAdapterComplete(NDIS_HANDLE ProtocolBindingContext,
-                       NDIS_STATUS Status,
-                       NDIS_STATUS OpenStatus);
-
-VOID
-NTAPI
-NduCloseAdapterComplete(NDIS_HANDLE ProtocolBindingContext,
-                        NDIS_STATUS Status);
-
-NDIS_STATUS
-NTAPI
-NduNetPnPEvent(NDIS_HANDLE ProtocolBindingContext,
-               PNET_PNP_EVENT NetPnPEvent);
-
-VOID
-NTAPI
-NduSendComplete(NDIS_HANDLE ProtocolBindingContext,
-                PNDIS_PACKET Packet,
-                NDIS_STATUS Status);
-
-VOID
-NTAPI
-NduTransferDataComplete(NDIS_HANDLE ProtocolBindingContext,
-                        PNDIS_PACKET Packet,
-                        NDIS_STATUS Status,
-                        UINT BytesTransferred);
-
-VOID
-NTAPI
-NduResetComplete(NDIS_HANDLE ProtocolBindingContext,
-                 NDIS_STATUS Status);
-
-VOID
-NTAPI
-NduRequestComplete(NDIS_HANDLE ProtocolBindingContext,
-                   PNDIS_REQUEST NdisRequest,
-                   NDIS_STATUS Status);
-
-NDIS_STATUS
-NTAPI
-NduReceive(NDIS_HANDLE ProtocolBindingContext,
-           NDIS_HANDLE MacReceiveContext,
-           PVOID HeaderBuffer,
-           UINT HeaderBufferSize,
-           PVOID LookAheadBuffer,
-           UINT LookaheadBufferSize,
-           UINT PacketSize);
-
-VOID
-NTAPI
-NduReceiveComplete(NDIS_HANDLE ProtocolBindingContext);
-
-VOID
-NTAPI
-NduStatus(NDIS_HANDLE ProtocolBindingContext,
-          NDIS_STATUS GeneralStatus,
-          PVOID StatusBuffer,
-          UINT StatusBufferSize);
-
-VOID
-NTAPI
-NduStatusComplete(NDIS_HANDLE ProtocolBindingContext);
-
-VOID
-NTAPI
-NduBindAdapter(PNDIS_STATUS Status,
-               NDIS_HANDLE BindContext,
-               PNDIS_STRING DeviceName,
-               PVOID SystemSpecific1,
-               PVOID SystemSpecific2);
-
-VOID
-NTAPI
-NduUnbindAdapter(PNDIS_STATUS Status,
-                 NDIS_HANDLE ProtocolBindingContext,
-                 NDIS_HANDLE UnbindContext);
+PROTOCOL_OPEN_ADAPTER_COMPLETE_EX NduOpenAdapterComplete;
+PROTOCOL_CLOSE_ADAPTER_COMPLETE_EX NduCloseAdapterComplete;
+PROTOCOL_NET_PNP_EVENT NduNetPnPEvent;
+PROTOCOL_SEND_NET_BUFFER_LISTS_COMPLETE NduSendComplete;
+PROTOCOL_OID_REQUEST_COMPLETE NduRequestComplete;
+PROTOCOL_RECEIVE_NET_BUFFER_LISTS NduReceive;
+PROTOCOL_STATUS_EX NduStatus;
+PROTOCOL_BIND_ADAPTER_EX NduBindAdapter;
+PROTOCOL_UNBIND_ADAPTER_EX NduUnbindAdapter;
 
 /* readwrite.c */
 NTSTATUS

@@ -1,6 +1,6 @@
 
 add_definitions(
-    -DNDIS50
+    -DNDIS60
     -D_NTDRIVER_)
 
 include_directories(
