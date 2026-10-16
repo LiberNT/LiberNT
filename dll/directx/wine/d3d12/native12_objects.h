@@ -284,6 +284,8 @@ public:
 
 HRESULT Native12CreateDefaultPipelineState(Native12Device *device, bool compute, ID3D12PipelineState **out);
 
+class Native12PipelineLibrary;
+
 class Native12PipelineState final : public Native12Child<ID3D12PipelineState>
 {
 public:
@@ -310,13 +312,60 @@ public:
     UINT view_instance_count = 0;
     D3D12_VIEW_INSTANCE_LOCATION view_instance_locations[D3D12_MAX_VIEW_INSTANCE_COUNT] = {};
     D3D12_VIEW_INSTANCING_FLAGS view_instancing_flags = D3D12_VIEW_INSTANCING_FLAG_NONE;
+    BYTE description_hash[16] = {};
+    BYTE expected_hash[16] = {};
+    bool check_hash = false;
+    bool hash_only = false;
+    Native12PipelineLibrary *library = NULL;
+    UINT library_index = 0;
 
     using Native12Child::Native12Child;
     ~Native12PipelineState();
     HRESULT InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_STATE_DESC *input);
     HRESULT InitializeCompute(const D3D12_COMPUTE_PIPELINE_STATE_DESC *input);
+    HRESULT PrepareDescription(const D3D12_GRAPHICS_PIPELINE_STATE_DESC *graphics,
+            const D3D12_COMPUTE_PIPELINE_STATE_DESC *compute, const D3D12_CACHED_PIPELINE_STATE &cached);
+    D3D12DDI_LIBRARY_REFERENCE_0010 LibraryReference() const;
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
     HRESULT STDMETHODCALLTYPE GetCachedBlob(ID3DBlob **blob) override;
+};
+
+class Native12PipelineLibrary final : public Native12Child<ID3D12PipelineLibrary1>
+{
+public:
+    struct Entry
+    {
+        WCHAR *name;
+        BYTE hash[16];
+        Native12PipelineState *pipeline;
+    };
+    SRWLOCK lock = SRWLOCK_INIT;
+    Entry *entries = NULL;
+    UINT count = 0;
+    UINT capacity = 0;
+    D3D12DDI_HPIPELINELIBRARY driver = {};
+    bool driver_created = false;
+    BYTE *initial_data = NULL;
+
+    using Native12Child::Native12Child;
+    ~Native12PipelineLibrary();
+    HRESULT Initialize(const void *blob, SIZE_T size);
+    bool Find(const WCHAR *name, UINT *index) const;
+    HRESULT Store(const WCHAR *name, Native12PipelineState *pipeline);
+    SIZE_T SerializedSize();
+    HRESULT SerializeInto(BYTE *data, SIZE_T size);
+    template <typename Create> HRESULT Load(const WCHAR *name, REFIID iid, void **out, Create create);
+    ULONG STDMETHODCALLTYPE Release() override;
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+    HRESULT STDMETHODCALLTYPE StorePipeline(LPCWSTR name, ID3D12PipelineState *pipeline) override;
+    HRESULT STDMETHODCALLTYPE LoadGraphicsPipeline(LPCWSTR name, const D3D12_GRAPHICS_PIPELINE_STATE_DESC *desc,
+            REFIID iid, void **out) override;
+    HRESULT STDMETHODCALLTYPE LoadComputePipeline(LPCWSTR name, const D3D12_COMPUTE_PIPELINE_STATE_DESC *desc,
+            REFIID iid, void **out) override;
+    SIZE_T STDMETHODCALLTYPE GetSerializedSize() override;
+    HRESULT STDMETHODCALLTYPE Serialize(void *data, SIZE_T size) override;
+    HRESULT STDMETHODCALLTYPE LoadPipeline(LPCWSTR name, const D3D12_PIPELINE_STATE_STREAM_DESC *desc, REFIID iid,
+            void **out) override;
 };
 
 struct Native12PassResolve

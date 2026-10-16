@@ -11,12 +11,6 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d12);
 
-HRESULT STDMETHODCALLTYPE Native12Device::CreatePipelineLibrary(const void *, SIZE_T, REFIID, void **out)
-{
-    if (out) *out = NULL;
-    return DXGI_ERROR_UNSUPPORTED;
-}
-
 HRESULT STDMETHODCALLTYPE Native12Device::SetEventOnMultipleFenceCompletion(ID3D12Fence *const *fences,
         const UINT64 *values, UINT count, D3D12_MULTIPLE_FENCE_WAIT_FLAGS flags, HANDLE event)
 {
@@ -60,8 +54,8 @@ static bool Native12ViewInstancingValid(const D3D12_VIEW_INSTANCING_DESC &desc, 
     return desc.ViewInstanceCount <= 1 || (supported && desc.ViewInstanceCount <= D3D12_MAX_VIEW_INSTANCE_COUNT);
 }
 
-HRESULT STDMETHODCALLTYPE Native12Device::CreatePipelineState(const D3D12_PIPELINE_STATE_STREAM_DESC *desc,
-        REFIID iid, void **out)
+HRESULT Native12Device::InitializePipelineState(Native12PipelineState *pipeline,
+        const D3D12_PIPELINE_STATE_STREAM_DESC *desc)
 {
     D3D12_GRAPHICS_PIPELINE_STATE_DESC graphics = {};
     D3D12_SHADER_BYTECODE compute_shader = {}, amplification = {}, mesh = {};
@@ -80,8 +74,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreatePipelineState(const D3D12_PIPELI
     UINT node_mask = 0;
     UINT64 seen = 0;
 
-    if (!desc || !out || (desc->SizeInBytes && !desc->pPipelineStateSubobjectStream)) return E_INVALIDARG;
-    *out = NULL;
+    if (!desc || (desc->SizeInBytes && !desc->pPipelineStateSubobjectStream)) return E_INVALIDARG;
 
     graphics.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
     graphics.SampleDesc.Count = 1;
@@ -259,16 +252,10 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreatePipelineState(const D3D12_PIPELI
         return E_INVALIDARG;
     if (targets.NumRenderTargets > D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT) return E_INVALIDARG;
 
-    Native12PipelineState *pipeline = new Native12PipelineState(this);
-    if (!pipeline) return E_OUTOFMEMORY;
     HRESULT hr;
     if (compute_shader.BytecodeLength)
     {
-        if (graphics.VS.BytecodeLength)
-        {
-            pipeline->Release();
-            return E_INVALIDARG;
-        }
+        if (graphics.VS.BytecodeLength) return E_INVALIDARG;
         D3D12_COMPUTE_PIPELINE_STATE_DESC compute = {};
         compute.pRootSignature = graphics.pRootSignature;
         compute.CS = compute_shader;
@@ -299,6 +286,17 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreatePipelineState(const D3D12_PIPELI
         pipeline->view_instancing_flags = view_instancing.Flags;
         hr = pipeline->InitializeGraphics(&graphics);
     }
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::CreatePipelineState(const D3D12_PIPELINE_STATE_STREAM_DESC *desc,
+        REFIID iid, void **out)
+{
+    if (!desc || !out || (desc->SizeInBytes && !desc->pPipelineStateSubobjectStream)) return E_INVALIDARG;
+    *out = NULL;
+    Native12PipelineState *pipeline = new Native12PipelineState(this);
+    if (!pipeline) return E_OUTOFMEMORY;
+    HRESULT hr = InitializePipelineState(pipeline, desc);
     if (SUCCEEDED(hr)) hr = pipeline->QueryInterface(iid, out);
     pipeline->Release();
     return hr;

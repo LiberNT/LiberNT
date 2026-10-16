@@ -579,6 +579,7 @@ static HRESULT Native12CreateShader(Native12PipelineState *pipeline, Native12Sta
     if (pipeline->root_signature) args.hRootSignature = pipeline->root_signature->driver;
     args.pShaderCode = shader.code;
     args.ShaderCodeHash = shader.hash;
+    args.LibraryReference = pipeline->LibraryReference();
     if (tess)
     {
         tessellation.pInputSignature = shader.input.entries;
@@ -728,6 +729,7 @@ static HRESULT Native12CreateStreamOutputShader(Native12PipelineState *pipeline,
     args.CreateShader.pShaderCode = passthrough ? NULL : shader.code;
     if (!passthrough) args.CreateShader.ShaderCodeHash = shader.hash;
     args.CreateShader.IOSignatures.Standard = &signatures;
+    args.CreateShader.LibraryReference = pipeline->LibraryReference();
     args.pOutputStreamDecl = declaration;
     args.NumEntries = expanded;
     args.BufferStridesInBytes = strides;
@@ -818,6 +820,7 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
         for (UINT i = 1; blend_input.IndependentBlendEnable && i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
             if (blend_input.RenderTarget[i].BlendEnable) return E_INVALIDARG;
     }
+    if (FAILED(hr = PrepareDescription(input, NULL, input->CachedPSO)) || hash_only) return hr;
 
     if (input->pRootSignature)
     {
@@ -861,6 +864,7 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     }
 
     D3D12DDI_BLEND_DESC_0010 blend_desc = {};
+    blend_desc.LibraryReference = LibraryReference();
     blend_desc.AlphaToCoverageEnable = input->BlendState.AlphaToCoverageEnable;
     blend_desc.IndependentBlendEnable = input->BlendState.IndependentBlendEnable;
     for (UINT i = 0; i < 8; ++i)
@@ -886,6 +890,7 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     blend_created = true;
 
     D3D12DDI_RASTERIZER_DESC_0102 raster_desc = {};
+    raster_desc.LibraryReference = LibraryReference();
     raster_desc.FillMode = static_cast<D3D12DDI_FILL_MODE>(input->RasterizerState.FillMode);
     raster_desc.CullMode = static_cast<D3D12DDI_CULL_MODE>(input->RasterizerState.CullMode);
     raster_desc.FrontCounterClockwise = input->RasterizerState.FrontCounterClockwise;
@@ -909,6 +914,7 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
 
     const D3D12_DEPTH_STENCIL_DESC &depth_source = input->DepthStencilState;
     D3D12DDI_DEPTH_STENCIL_DESC_0095 depth_desc = {};
+    depth_desc.LibraryReference = LibraryReference();
     depth_desc.DepthEnable = depth_source.DepthEnable;
     depth_desc.DepthWriteMask = static_cast<D3D12DDI_DEPTH_WRITE_MASK>(depth_source.DepthWriteMask);
     depth_desc.DepthFunc = static_cast<D3D12DDI_COMPARISON_FUNC>(
@@ -975,6 +981,7 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
         }
     }
     D3D12DDIARG_CREATEELEMENTLAYOUT_0010 layout_args = {};
+    layout_args.LibraryReference = LibraryReference();
     layout_args.pVertexElements = elements;
     layout_args.NumElements = element_count;
     size = device->functions.pfnCalcPrivateElementLayoutSize(device->driver_device, &layout_args);
@@ -989,6 +996,7 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     if (elements) HeapFree(GetProcessHeap(), 0, elements);
 
     D3D12DDIARG_CREATE_PIPELINE_STATE_0099 args = {};
+    args.LibraryReference = LibraryReference();
     args.hVertexShader = shaders[Native12StageVertex];
     args.hPixelShader = shaders[Native12StagePixel];
     args.hDomainShader = shaders[Native12StageDomain];
@@ -1037,6 +1045,7 @@ HRESULT Native12PipelineState::InitializeCompute(const D3D12_COMPUTE_PIPELINE_ST
     HRESULT hr;
 
     compute = true;
+    if (FAILED(hr = PrepareDescription(NULL, input, input->CachedPSO)) || hash_only) return hr;
     if (input->pRootSignature)
     {
         root_signature = static_cast<Native12RootSignature *>(input->pRootSignature);
@@ -1051,6 +1060,7 @@ HRESULT Native12PipelineState::InitializeCompute(const D3D12_COMPUTE_PIPELINE_ST
     if (FAILED(hr = Native12CreateShader(this, Native12StageCompute, shader))) return hr;
 
     D3D12DDIARG_CREATE_PIPELINE_STATE_0099 args = {};
+    args.LibraryReference = LibraryReference();
     args.hComputeShader = shaders[Native12StageCompute];
     if (root_signature) args.hRootSignature = root_signature->driver;
     args.NodeMask = input->NodeMask ? input->NodeMask : 1;
@@ -1086,6 +1096,7 @@ Native12PipelineState::~Native12PipelineState()
         if (shaders[i].pDrvPrivate) HeapFree(GetProcessHeap(), 0, shaders[i].pDrvPrivate);
     }
     if (root_signature) root_signature->ReleaseInternal();
+    if (library) library->ReleaseInternal();
 }
 
 HRESULT STDMETHODCALLTYPE Native12PipelineState::QueryInterface(REFIID iid, void **out)
@@ -1101,12 +1112,6 @@ HRESULT STDMETHODCALLTYPE Native12PipelineState::QueryInterface(REFIID iid, void
     }
     *out = NULL;
     return E_NOINTERFACE;
-}
-
-HRESULT STDMETHODCALLTYPE Native12PipelineState::GetCachedBlob(ID3DBlob **blob)
-{
-    if (blob) *blob = NULL;
-    return E_NOTIMPL;
 }
 
 HRESULT Native12CreateDefaultPipelineState(Native12Device *device, bool compute, ID3D12PipelineState **out)

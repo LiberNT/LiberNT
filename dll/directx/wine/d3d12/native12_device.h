@@ -8,6 +8,7 @@
 #pragma once
 
 class Native12DescriptorHeap;
+class Native12PipelineState;
 
 class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData2, public Native12Allocation
 {
@@ -149,6 +150,7 @@ public:
     HRESULT STDMETHODCALLTYPE SetResidencyPriority(UINT, ID3D12Pageable *const *,
             const D3D12_RESIDENCY_PRIORITY *) override;
     HRESULT STDMETHODCALLTYPE CreatePipelineState(const D3D12_PIPELINE_STATE_STREAM_DESC *, REFIID, void **) override;
+    HRESULT InitializePipelineState(Native12PipelineState *pipeline, const D3D12_PIPELINE_STATE_STREAM_DESC *desc);
     HRESULT STDMETHODCALLTYPE OpenExistingHeapFromAddress(const void *, REFIID, void **) override;
     HRESULT STDMETHODCALLTYPE OpenExistingHeapFromFileMapping(HANDLE, REFIID, void **) override;
     HRESULT STDMETHODCALLTYPE EnqueueMakeResident(D3D12_RESIDENCY_FLAGS, UINT, ID3D12Pageable *const *,

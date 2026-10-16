@@ -1243,7 +1243,10 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
         {
             D3D12_FEATURE_DATA_SHADER_CACHE *caps;
             if (!Native12FeatureData(data, size, &caps)) return E_INVALIDARG;
-            caps->SupportFlags = D3D12_SHADER_CACHE_SUPPORT_NONE;
+            caps->SupportFlags = D3D12_SHADER_CACHE_SUPPORT_SINGLE_PSO;
+            if (functions.pfnCreatePipelineLibrary && functions.pfnAddPipelineStateToLibrary
+                    && functions.pfnSerializeLibrary)
+                caps->SupportFlags |= D3D12_SHADER_CACHE_SUPPORT_LIBRARY;
             return S_OK;
         }
         case D3D12_FEATURE_COMMAND_QUEUE_PRIORITY:
