@@ -27,6 +27,7 @@ extern void func_sampler(void);
 extern void func_topology(void);
 extern void func_uav(void);
 extern void func_versions(void);
+extern void func_video(void);
 extern void func_viewinst(void);
 extern void func_vrs(void);
 
@@ -51,6 +52,7 @@ const struct test winetest_testlist[] =
     { "topology", func_topology },
     { "uav", func_uav },
     { "versions", func_versions },
+    { "video", func_video },
     { "viewinst", func_viewinst },
     { "vrs", func_vrs },
     { 0, 0 }

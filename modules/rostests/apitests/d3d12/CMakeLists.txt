@@ -21,6 +21,7 @@ list(APPEND SOURCE
     uav.cpp
     util.cpp
     versions.cpp
+    video.cpp
     viewinst.cpp
     vrs.cpp
     testlist.c)
