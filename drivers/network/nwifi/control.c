@@ -508,6 +508,78 @@ NwifiDispatchDeviceControl(
             break;
         }
 
+        case IOCTL_NWIFI_GET_AUTH_CIPHER_PAIRS:
+        {
+            PNWIFI_INTERFACE_REF Ref = (PNWIFI_INTERFACE_REF)Buffer;
+            PNWIFI_AUTH_CIPHER_PAIRS Out = (PNWIFI_AUTH_CIPHER_PAIRS)Buffer;
+            PDOT11_AUTH_CIPHER_PAIR_LIST List;
+            ULONG Capacity, ListSize, Index, Count;
+
+            if (InLen < sizeof(NWIFI_INTERFACE_REF) || Ref->Size < sizeof(*Ref))
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+            if (OutLen < FIELD_OFFSET(NWIFI_AUTH_CIPHER_PAIRS, Pairs))
+            {
+                Status = STATUS_BUFFER_TOO_SMALL;
+                Info = sizeof(NWIFI_AUTH_CIPHER_PAIRS);
+                break;
+            }
+            Index = Ref->InterfaceIndex;
+            Adapter = NwifiFindAdapterByIndex(Index);
+            if (Adapter == NULL)
+            {
+                Status = STATUS_OBJECT_NAME_NOT_FOUND;
+                break;
+            }
+
+            Capacity = (OutLen - FIELD_OFFSET(NWIFI_AUTH_CIPHER_PAIRS, Pairs)) /
+                       sizeof(DOT11_AUTH_CIPHER_PAIR);
+            ListSize = FIELD_OFFSET(DOT11_AUTH_CIPHER_PAIR_LIST, AuthCipherPairs) +
+                       (Capacity ? Capacity : 1) * sizeof(DOT11_AUTH_CIPHER_PAIR);
+            List = (PDOT11_AUTH_CIPHER_PAIR_LIST)NwifiAllocate(ListSize);
+            if (List == NULL)
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                break;
+            }
+            RtlZeroMemory(List, ListSize);
+            List->Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+            List->Header.Revision = DOT11_AUTH_CIPHER_PAIR_LIST_REVISION_1;
+            List->Header.Size = sizeof(DOT11_AUTH_CIPHER_PAIR_LIST);
+
+            NdisStatus = NwifiProtocolDoRequest(Adapter, NdisRequestQueryInformation,
+                                                OID_DOT11_SUPPORTED_UNICAST_ALGORITHM_PAIR,
+                                                List, ListSize, NULL);
+            if (NdisStatus == NDIS_STATUS_BUFFER_OVERFLOW ||
+                NdisStatus == NDIS_STATUS_BUFFER_TOO_SHORT ||
+                NdisStatus == NDIS_STATUS_INVALID_LENGTH)
+            {
+                NwifiFree(List);
+                Status = STATUS_BUFFER_TOO_SMALL;
+                break;
+            }
+            if (NdisStatus != NDIS_STATUS_SUCCESS)
+            {
+                NwifiFree(List);
+                Status = NwifiMapNdisStatus(NdisStatus);
+                break;
+            }
+
+            Count = min(List->uNumOfEntries, Capacity);
+            Out->Size = FIELD_OFFSET(NWIFI_AUTH_CIPHER_PAIRS, Pairs) +
+                        Count * sizeof(DOT11_AUTH_CIPHER_PAIR);
+            Out->InterfaceIndex = Index;
+            Out->NumberOfItems = Count;
+            RtlCopyMemory(Out->Pairs, List->AuthCipherPairs,
+                          Count * sizeof(DOT11_AUTH_CIPHER_PAIR));
+            NwifiFree(List);
+            Info = Out->Size;
+            Status = STATUS_SUCCESS;
+            break;
+        }
+
         case IOCTL_NWIFI_GET_NOTIFICATION:
             if (OutLen < sizeof(NWIFI_NOTIFICATION))
             {

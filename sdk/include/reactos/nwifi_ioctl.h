@@ -61,6 +61,8 @@
  * occurs; the caller re-issues it in a loop.  OUT: NWIFI_NOTIFICATION. */
 #define IOCTL_NWIFI_GET_NOTIFICATION    _NWIFI_CTL(0x07)
 
+#define IOCTL_NWIFI_GET_AUTH_CIPHER_PAIRS _NWIFI_CTL(0x08)
+
 /* ===========================================================================
  *  Payload structures
  * ===========================================================================
@@ -184,5 +186,13 @@ typedef struct _NWIFI_NOTIFICATION
     NWIFI_NOTIFICATION_CODE Code;
     NDIS_STATUS StatusCode;         /* NDIS_STATUS_DOT11_* where applicable */
 } NWIFI_NOTIFICATION, *PNWIFI_NOTIFICATION;
+
+typedef struct _NWIFI_AUTH_CIPHER_PAIRS
+{
+    ULONG Size;
+    ULONG InterfaceIndex;
+    ULONG NumberOfItems;
+    DOT11_AUTH_CIPHER_PAIR Pairs[1];
+} NWIFI_AUTH_CIPHER_PAIRS, *PNWIFI_AUTH_CIPHER_PAIRS;
 
 #endif /* _NWIFI_IOCTL_H_ */

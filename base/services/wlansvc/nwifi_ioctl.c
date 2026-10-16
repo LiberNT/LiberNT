@@ -283,6 +283,49 @@ NwifiSetKey(PNWIFI_SET_KEY pKey)
 }
 
 DWORD
+NwifiGetAuthCipherPairs(ULONG InterfaceIndex, ULONG64 UpperLuid,
+                        PNWIFI_AUTH_CIPHER_PAIRS *ppPairs)
+{
+    NWIFI_INTERFACE_REF ref;
+    PNWIFI_AUTH_CIPHER_PAIRS pPairs;
+    HANDLE hDev = NwifiGetControlHandle();
+    DWORD size = FIELD_OFFSET(NWIFI_AUTH_CIPHER_PAIRS, Pairs) +
+                 32 * sizeof(DOT11_AUTH_CIPHER_PAIR);
+    DWORD ret, err;
+
+    *ppPairs = NULL;
+    if (hDev == INVALID_HANDLE_VALUE)
+        return ERROR_NOT_READY;
+
+    ZeroMemory(&ref, sizeof(ref));
+    ref.Size = sizeof(ref);
+    ref.InterfaceIndex = InterfaceIndex;
+    ref.UpperLuid = UpperLuid;
+
+    for (;;)
+    {
+        pPairs = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
+        if (pPairs == NULL)
+            return ERROR_NOT_ENOUGH_MEMORY;
+
+        err = NwifiIoctl(hDev, IOCTL_NWIFI_GET_AUTH_CIPHER_PAIRS, &ref, sizeof(ref),
+                         pPairs, size, &ret);
+        if (err == ERROR_SUCCESS)
+        {
+            *ppPairs = pPairs;
+            return ERROR_SUCCESS;
+        }
+
+        HeapFree(GetProcessHeap(), 0, pPairs);
+        if (err != ERROR_INSUFFICIENT_BUFFER && err != ERROR_MORE_DATA)
+            return err;
+        size *= 2;
+        if (size > 0x10000)
+            return err;
+    }
+}
+
+DWORD
 NwifiQueryState(ULONG InterfaceIndex, ULONG64 UpperLuid,
                 const DOT11_MAC_ADDRESS *pMac,
                 PNWIFI_LINK_STATE pState)

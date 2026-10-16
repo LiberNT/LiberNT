@@ -313,6 +313,11 @@ typedef struct _WLAN_CONNECTION_ATTRIBUTES {
     WLAN_SECURITY_ATTRIBUTES wlanSecurityAttributes;
 } WLAN_CONNECTION_ATTRIBUTES, *PWLAN_CONNECTION_ATTRIBUTES;
 
+typedef struct _WLAN_AUTH_CIPHER_PAIR_LIST {
+    DWORD dwNumberOfItems;
+    DOT11_AUTH_CIPHER_PAIR pAuthCipherPairList[1];
+} WLAN_AUTH_CIPHER_PAIR_LIST, *PWLAN_AUTH_CIPHER_PAIR_LIST;
+
 typedef struct _WLAN_CONNECTION_PARAMETERS {
     WLAN_CONNECTION_MODE wlanConnectionMode;
 #if defined(__midl) || defined(__WIDL__)

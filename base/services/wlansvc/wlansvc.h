@@ -395,6 +395,8 @@ DWORD NwifiConnect(PNWIFI_CONNECT_REQUEST pReq);
 DWORD NwifiSetKey(PNWIFI_SET_KEY pKey);
 DWORD NwifiDisconnect(ULONG InterfaceIndex, ULONG64 UpperLuid,
                       const DOT11_MAC_ADDRESS *pMac);
+DWORD NwifiGetAuthCipherPairs(ULONG InterfaceIndex, ULONG64 UpperLuid,
+                              PNWIFI_AUTH_CIPHER_PAIRS *ppPairs);
 DWORD NwifiQueryState(ULONG InterfaceIndex, ULONG64 UpperLuid,
                       const DOT11_MAC_ADDRESS *pMac, PNWIFI_LINK_STATE pState);
 VOID  NwifiStartNotifyWorker(VOID);

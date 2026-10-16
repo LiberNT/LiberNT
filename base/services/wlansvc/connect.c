@@ -360,6 +360,35 @@ WlanSvcQueryInterface(PWLANSVC_INTERFACE Iface,
             return WlanSvcReturnBlob(&ca, sizeof(ca), ppData, pdwDataSize);
         }
 
+        case wlan_intf_opcode_supported_infrastructure_auth_cipher_pairs:
+        {
+            PNWIFI_AUTH_CIPHER_PAIRS pPairs;
+            PWLAN_AUTH_CIPHER_PAIR_LIST pList;
+            DWORD size, err;
+
+            err = NwifiGetAuthCipherPairs(Iface->NwifiIndex, Iface->UpperLuid, &pPairs);
+            if (err != ERROR_SUCCESS)
+                return err;
+
+            size = FIELD_OFFSET(WLAN_AUTH_CIPHER_PAIR_LIST, pAuthCipherPairList) +
+                   max(pPairs->NumberOfItems, 1) * sizeof(DOT11_AUTH_CIPHER_PAIR);
+            pList = midl_user_allocate(size);
+            if (pList == NULL)
+            {
+                HeapFree(GetProcessHeap(), 0, pPairs);
+                return ERROR_NOT_ENOUGH_MEMORY;
+            }
+            ZeroMemory(pList, size);
+            pList->dwNumberOfItems = pPairs->NumberOfItems;
+            memcpy(pList->pAuthCipherPairList, pPairs->Pairs,
+                   pPairs->NumberOfItems * sizeof(DOT11_AUTH_CIPHER_PAIR));
+            HeapFree(GetProcessHeap(), 0, pPairs);
+
+            *ppData = (LPBYTE)pList;
+            *pdwDataSize = size;
+            return ERROR_SUCCESS;
+        }
+
         default:
             DPRINT1("WlanSvcQueryInterface: unsupported opcode 0x%lx\n",
                     (DWORD)OpCode);
