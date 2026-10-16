@@ -752,6 +752,7 @@ INTSAFE_NAME(_Name)( \
     return INTSAFE_NAME(_Convert)(Result, pOutput); \
 }
 
+DEFINE_SAFE_MULT_U32(UIntMult, UINT, ULongLongToUInt)
 DEFINE_SAFE_MULT_U32(ULongMult, ULONG, ULongLongToULong)
 #ifndef _WIN64
 DEFINE_SAFE_MULT_U32(SizeTMult, size_t, ULongLongToSizeT)
@@ -824,6 +825,9 @@ DEFINE_SAFE_MULT_U16(UShortMult, USHORT, ULongToUShort)
 #define UInt64Sub ULongLongSub
 #define UInt16Mult UShortMult
 #define WordMult UShortMult
+#define UInt32Mult UIntMult
+#define Int32ToUInt32 IntToUInt
+#define SizeTToInt UIntPtrToInt
 #ifdef _WIN64
 #define IntPtrAdd LongLongAdd
 #define LongPtrAdd LongLongAdd
