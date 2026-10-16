@@ -1,0 +1,82 @@
+; PROJECT:     LiberNT Bluetooth A2DP audio driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Bluetooth A2DP audio driver installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = MEDIA
+ClassGUID = {4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider = %LiberNT%
+DriverVer = 10/16/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%BthA2dp.DeviceDesc% = BthA2dp_Inst,BTHENUM\{0000110b-0000-1000-8000-00805f9b34fb}
+
+[BthA2dp_Inst]
+Include = ks.inf,wdmaudio.inf
+Needs = KS.Registration,WDMAUDIO.Registration
+CopyFiles = BthA2dp_CopyFiles
+AddReg = BthA2dp_AddReg
+
+[BthA2dp_CopyFiles]
+btha2dp.sys
+
+[BthA2dp_AddReg]
+HKR,,AssociatedFilters,,"wdmaud"
+HKR,,Driver,,btha2dp.sys
+HKR,Drivers,SubClasses,,"wave,mixer"
+HKR,Drivers\wave\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\wave\wdmaud.drv,Description,,%BthA2dp.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\mixer\wdmaud.drv,Description,,%BthA2dp.DeviceDesc%
+
+[BthA2dp_Inst.Interfaces]
+AddInterface = %KSCATEGORY_AUDIO%,Wave,BthA2dp_WaveInterface
+AddInterface = %KSCATEGORY_RENDER%,Wave,BthA2dp_WaveInterface
+AddInterface = %KSCATEGORY_REALTIME%,Wave,BthA2dp_WaveInterface
+AddInterface = %KSCATEGORY_AUDIO%,Topology,BthA2dp_TopologyInterface
+AddInterface = %KSCATEGORY_TOPOLOGY%,Topology,BthA2dp_TopologyInterface
+
+[BthA2dp_WaveInterface]
+AddReg = BthA2dp_WaveInterface_AddReg
+
+[BthA2dp_WaveInterface_AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%BthA2dp.WaveName%
+
+[BthA2dp_TopologyInterface]
+AddReg = BthA2dp_TopologyInterface_AddReg
+
+[BthA2dp_TopologyInterface_AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%BthA2dp.TopologyName%
+
+[BthA2dp_Inst.Services]
+AddService = BthA2dp,0x00000002,BthA2dp_Service
+
+[BthA2dp_Service]
+DisplayName = %BthA2dp.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\btha2dp.sys
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+BthA2dp.DeviceDesc = "Bluetooth A2DP Audio"
+BthA2dp.ServiceDesc = "Bluetooth A2DP Audio Driver"
+BthA2dp.WaveName = "Bluetooth Stereo Audio"
+BthA2dp.TopologyName = "Bluetooth Stereo Audio Topology"
+Proxy.CLSID = "{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO = "{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER = "{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_REALTIME = "{EB115FFC-10C8-4964-831D-6DCB02E6F23F}"
+KSCATEGORY_TOPOLOGY = "{DDA54A40-1E4C-11D1-A050-405705C10000}"

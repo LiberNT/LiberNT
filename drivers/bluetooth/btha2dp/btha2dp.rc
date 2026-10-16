@@ -1,0 +1,12 @@
+/*
+ * PROJECT:     LiberNT Bluetooth A2DP audio driver
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Bluetooth A2DP audio driver version resource
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION "Bluetooth A2DP audio driver"
+#define REACTOS_STR_INTERNAL_NAME "btha2dp"
+#define REACTOS_STR_ORIGINAL_FILENAME "btha2dp.sys"
+#include <reactos/version.rc>

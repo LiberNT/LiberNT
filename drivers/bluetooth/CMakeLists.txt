@@ -8,6 +8,7 @@ if(REALTEK_BT_FIRMWARE_DIR)
     endforeach()
 endif()
 
+add_subdirectory(btha2dp)
 add_subdirectory(bthmini)
 add_subdirectory(bthusb)
 add_subdirectory(hidavrcp)
