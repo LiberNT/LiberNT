@@ -61,4 +61,8 @@ BEGIN
     IDS_CAB_REFRESH "Refresh"
     IDS_CAB_MORE "See more"
     IDS_CAB_NEW_TAB "New tab"
+    IDS_CAB_SHOW_PREVIEW "Preview pane"
+    IDS_CAB_PREVIEW_NONE "No preview available."
+    IDS_CAB_PREVIEW_SELECT "Select a file to preview."
+    IDS_CAB_GO "Go"
 END

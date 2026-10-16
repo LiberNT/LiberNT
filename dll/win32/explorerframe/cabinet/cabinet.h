@@ -8,12 +8,13 @@
 #pragma once
 
 #define COBJMACROS
-#include <shellframe.h>
+#include <windows.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <shlwapi.h>
 #include <shellapi.h>
 #include <commctrl.h>
+#include <uxtheme.h>
 #include <strsafe.h>
 #include <propkey.h>
 #include "cabinet_res.h"
@@ -26,7 +27,6 @@
 #define CABINET_MAX_TABS 32
 #define CABINET_MAX_HISTORY 64
 #define CABINET_MAX_CRUMBS 32
-#define CABINET_MAX_DETAILS 16
 
 class CCabinetWindow;
 
@@ -42,26 +42,7 @@ struct CabinetTab
     int HistoryCount;
     int HistoryIndex;
     WCHAR Title[MAX_PATH];
-    HICON Icon;
-    int Width;
-};
-
-struct CabinetDetails
-{
-    WCHAR Name[MAX_PATH];
-    WCHAR Type[128];
-    HICON Icon;
-    int Count;
-    WCHAR Labels[CABINET_MAX_DETAILS][64];
-    WCHAR Values[CABINET_MAX_DETAILS][256];
-};
-
-struct CabinetCrumb
-{
-    PIDLIST_ABSOLUTE Pidl;
-    WCHAR Name[MAX_PATH];
-    RECT Rect;
-    RECT Chevron;
+    int IconIndex;
 };
 
 enum class CabinetCommand
@@ -82,15 +63,16 @@ enum class CabinetCommand
     View,
     More,
     Details,
-    ViewDetails,
-    ViewTiles,
+    Preview,
+    Properties,
     NewTab,
+    Go,
     Count
 };
 
 HRESULT CabinetSite_Create(CCabinetWindow *window, IExplorerBrowser *browser, IUnknown **site);
 
-class CCabinetWindow : public ShellFrame::FrameWindow
+class CCabinetWindow
 {
 public:
     CCabinetWindow();
@@ -107,31 +89,14 @@ public:
     void OnNavigationItem(IShellItem *item, BOOL newTab);
     void OnViewEvent(DISPID dispid);
 
-protected:
-    LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
-    void OnCreate() override;
-    void OnLayout(const RECT &client) override;
-    void OnPaint(ShellFrame::Canvas &canvas, const RECT &client) override;
-    void OnThemeChanged() override;
-    BOOL IsCaptionClient(POINT pt) override;
-    int CaptionHeight() const override;
-    int CaptionButtonHeight() const override;
-
 private:
-    struct Layout
-    {
-        RECT Tabs;
-        RECT NewTab;
-        RECT AddressBand;
-        RECT Address;
-        RECT Search;
-        RECT CommandBand;
-        RECT Navigation;
-        RECT View;
-        RECT Status;
-        RECT Details;
-        RECT Buttons[(int)CabinetCommand::Count];
-    };
+    static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    static LRESULT CALLBACK TabProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR id, DWORD_PTR data);
+    LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam);
+    LRESULT OnNotify(NMHDR *header);
+    void OnCreate();
+    void OnSize();
+    int Scale(int value) const;
 
     CabinetTab *ActiveTab() { return m_ActiveTab >= 0 ? &m_Tabs[m_ActiveTab] : NULL; }
     int AddTab(PCIDLIST_ABSOLUTE pidl, BOOL activate);
@@ -143,12 +108,10 @@ private:
     void NavigateUp();
     void Refresh();
     void UpdateTitle(CabinetTab *tab);
-    void BuildCrumbs();
-    void FreeCrumbs();
-    void BeginAddressEdit();
-    void EndAddressEdit(BOOL navigate);
+    void UpdateAddress();
+    void NavigateToAddress();
     void UpdateStatus();
-    void ComputeLayout(const RECT &client);
+    void UpdateCommands();
     IShellView *CurrentView();
     BOOL CommandEnabled(CabinetCommand command);
     void ExecuteCommand(CabinetCommand command);
@@ -158,75 +121,85 @@ private:
     void ShowSortMenu();
     void ShowViewMenu();
     void ShowMoreMenu();
-    void ShowCrumbMenu(int index);
-    void PaintTabs(ShellFrame::Canvas &canvas);
-    void PaintAddressBand(ShellFrame::Canvas &canvas);
-    void PaintCommandBand(ShellFrame::Canvas &canvas);
-    void PaintStatus(ShellFrame::Canvas &canvas);
-    void PaintButton(ShellFrame::Canvas &canvas, CabinetCommand command, LPCWSTR icon, LPCWSTR label, BOOL dropdown);
-    int HitTab(POINT pt, BOOL *close);
-    CabinetCommand HitCommand(POINT pt);
-    int HitCrumb(POINT pt, BOOL *chevron);
-    void SetHot(int tab, BOOL tabClose, CabinetCommand command, int crumb, BOOL crumbChevron);
-    void LoadText(UINT id, LPWSTR buffer, int length);
+    void ShowChevronMenu(const NMREBARCHEVRON *chevron);
     RECT MenuAnchor(CabinetCommand command);
+    void LoadText(UINT id, LPWSTR buffer, int length);
+    void CreateBands();
     void CreateNavigationPane();
     void SyncNavigationPane();
-    void ApplyChildColors();
-    void Relayout();
     void WatchFolder();
     void UpdateDetails();
-    void FreeDetails();
-    void PaintDetails(ShellFrame::Canvas &canvas);
     void ShowTabMenu(int index, POINT screen);
     void StartSearch();
     void RunPendingSearch(CabinetTab *tab);
     void RefreshAllViews();
-    void ShowCrumbOverflowMenu();
+    void SetPane(BOOL details, BOOL preview);
+    void ClearPreview();
+    void UpdatePreview();
+    void PlacePanes();
+    void ShowPreviewMessage(UINT id);
+    BOOL ShowPreviewHandler(IShellItem *item, PCWSTR path);
+    BOOL ShowPreviewThumbnail(IShellItem *item);
+    BOOL ShowPreviewImage(PCWSTR path);
+    BOOL ShowPreviewText(PCWSTR path);
+    void SetPreviewBitmap(HBITMAP bitmap);
+    void SyncTabs();
+    void MoveTab(int from, int to);
     void FocusView();
     void RestoreFocus();
-    void UpdateTooltips();
     void CycleFocus();
     void SavePlacement();
+    void UpdateMaterial();
 
-    Layout m_Layout;
+    HWND m_hwnd;
     CabinetTab m_Tabs[CABINET_MAX_TABS];
     int m_TabCount;
     int m_ActiveTab;
+    HWND m_Rebar;
+    HWND m_TabControl;
+    HWND m_TabTools;
+    HWND m_NavBar;
+    HWND m_Address;
+    HWND m_AddressEdit;
+    HWND m_GoBar;
+    HWND m_SearchEdit;
+    HWND m_CommandBar;
+    HWND m_Status;
+    HWND m_DetailsIcon;
+    HWND m_DetailsName;
+    HWND m_DetailsList;
+    HWND m_PreviewHost;
+    HWND m_PreviewText;
+    HWND m_PreviewImage;
+    HWND m_PreviewLabel;
+    HIMAGELIST m_ToolbarImages;
+    HIMAGELIST m_ToolbarHotImages;
+    HIMAGELIST m_GoImages;
+    HFONT m_Font;
     INameSpaceTreeControl *m_Navigation;
     HWND m_NavigationWindow;
-    HWND m_AddressEdit;
-    HWND m_SearchEdit;
     HWND m_FocusSave;
-    HWND m_Tooltip;
-    HFONT m_EditFont;
-    CabinetCrumb m_Crumbs[CABINET_MAX_CRUMBS];
-    int m_CrumbCount;
-    int m_CrumbFirst;
-    RECT m_CrumbOverflow;
-    HICON m_LocationIcon;
-    int m_HotTab;
-    BOOL m_HotTabClose;
-    CabinetCommand m_HotCommand;
-    CabinetCommand m_PressedCommand;
-    int m_HotCrumb;
-    BOOL m_HotCrumbChevron;
-    BOOL m_TrackingClient;
+    RECT m_ViewRect;
+    RECT m_PaneRect;
+    int m_DragTab;
     BOOL m_DetailsPane;
-    WCHAR m_StatusText[128];
-    HICON m_SmallIcon;
-    HICON m_BigIcon;
+    BOOL m_PreviewPane;
+    IPreviewHandler *m_PreviewHandler;
+    HBITMAP m_PreviewBitmap;
+    PIDLIST_ABSOLUTE m_PreviewPidl;
+    HICON m_DetailsIconHandle;
     BOOL m_InHistoryNavigation;
     ULONG m_ChangeNotify;
-    CabinetDetails m_Details;
     BOOL m_NavigationVisible;
     IExplorerBrowser *m_SearchBrowser;
     WCHAR m_SearchQuery[MAX_PATH];
     WCHAR m_SearchPaths[26][MAX_PATH];
     int m_SearchPathCount;
     BOOL m_SearchActive;
+    HBRUSH m_ContentBrush;
 };
 
+HIMAGELIST LoadToolbarImages(UINT bitmapId);
 HRESULT CabinetNavigation_Create(CCabinetWindow *window, IUnknown **events);
 HRESULT CabinetViewEvents_Create(CCabinetWindow *window, IUnknown **events);
 HRESULT Cabinet_GetDefaultFolder(PIDLIST_ABSOLUTE *pidl);

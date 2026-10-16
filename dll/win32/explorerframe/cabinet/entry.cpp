@@ -16,15 +16,10 @@ HRESULT
 Cabinet_RunWindow(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd)
 {
     CCabinetWindow *window;
-    DPI_AWARENESS_CONTEXT previous;
     HRESULT hr;
     MSG msg;
-
-    if (!ShellFrame::Startup())
-        return E_FAIL;
     PIDLIST_ABSOLUTE fallback = NULL;
 
-    previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     if (!pidl && SUCCEEDED(Cabinet_GetDefaultFolder(&fallback)))
         pidl = fallback;
     window = new CCabinetWindow();
@@ -43,9 +38,6 @@ Cabinet_RunWindow(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd)
     delete window;
     if (fallback)
         ILFree(fallback);
-    if (previous)
-        SetThreadDpiAwarenessContext(previous);
-    ShellFrame::Shutdown();
     return hr;
 }
 

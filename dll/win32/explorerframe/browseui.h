@@ -35,6 +35,7 @@ HRESULT CInternetToolbar_CreateInstance(REFIID riid, void **ppv);
 HRESULT CMergedFolder_CreateInstance(REFIID riid, void **ppv);
 HRESULT CMenuBand_CreateInstance(REFIID iid, LPVOID *ppv);
 HRESULT Cabinet_RunWindow(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd);
+HIMAGELIST LoadToolbarImages(UINT bitmapId);
 HRESULT CTravelLog_CreateInstance(REFIID riid, void **ppv);
 HRESULT CBaseBar_CreateInstance(REFIID riid, void **ppv, BOOL vertical);
 HRESULT CBaseBarSite_CreateInstance(REFIID riid, void **ppv, BOOL bVertical);
