@@ -593,7 +593,14 @@ TranslateNtStatusError(NTSTATUS Status)
           return WSAEWOULDBLOCK;
 
        case STATUS_TIMEOUT:
+       case STATUS_IO_TIMEOUT:
           return WSAETIMEDOUT;
+
+       case STATUS_HOST_DOWN:
+          return WSAEHOSTDOWN;
+
+       case STATUS_GRACEFUL_DISCONNECT:
+          return WSAEDISCON;
 
        case STATUS_SUCCESS:
           return NO_ERROR;
@@ -3894,8 +3901,20 @@ WSPAddressToString(IN LPSOCKADDR lpsaAddress,
             break;
         }
         default:
-            if (lpErrno) *lpErrno = WSAEINVAL;
-            return SOCKET_ERROR;
+        {
+            PHELPER_DATA HelperData;
+            INT Errno = SockGetHelperForFamily(lpsaAddress->sa_family, &HelperData);
+
+            if (Errno == NO_ERROR)
+            {
+                Errno = HelperData->WSHAddressToString ?
+                        HelperData->WSHAddressToString(lpsaAddress, dwAddressLength, lpProtocolInfo,
+                                                       lpszAddressString, lpdwAddressStringLength) :
+                        WSAEINVAL;
+            }
+            if (lpErrno) *lpErrno = Errno;
+            return Errno == NO_ERROR ? 0 : SOCKET_ERROR;
+        }
     }
 
     size = wcslen(buffer) + 1;
@@ -4048,7 +4067,18 @@ WSPStringToAddress(IN LPWSTR AddressString,
     }
     else
     {
-        if (lpErrno) *lpErrno = WSAEINVAL;
+        PHELPER_DATA HelperData;
+        DWORD Length = *lpAddressLength;
+        INT Errno = SockGetHelperForFamily(AddressFamily, &HelperData);
+
+        if (Errno == NO_ERROR)
+        {
+            Errno = HelperData->WSHStringToAddress ?
+                    HelperData->WSHStringToAddress(AddressString, AddressFamily, lpProtocolInfo, lpAddress, &Length) :
+                    WSAEINVAL;
+            *lpAddressLength = Length;
+        }
+        if (lpErrno) *lpErrno = Errno;
     }
 
     if (lpErrno && !*lpErrno)

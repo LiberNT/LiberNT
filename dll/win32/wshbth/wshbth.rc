@@ -1,0 +1,5 @@
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION  "Windows Sockets Helper DLL for Bluetooth"
+#define REACTOS_STR_INTERNAL_NAME     "wshbth"
+#define REACTOS_STR_ORIGINAL_FILENAME "wshbth.dll"
+#include <reactos/version.rc>

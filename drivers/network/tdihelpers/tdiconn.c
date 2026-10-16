@@ -11,6 +11,7 @@
 
 #include <afd.h>
 #include <reactos/tdiunix.h>
+#include <reactos/tdibth.h>
 
 #ifdef UNIMPLEMENTED
 #undef UNIMPLEMENTED
@@ -25,6 +26,8 @@ UINT TdiAddressSizeFromType( UINT AddressType ) {
     switch( AddressType ) {
     case TDI_ADDRESS_TYPE_UNIX:
         return TDI_ADDRESS_LENGTH_UNIX;
+    case TDI_ADDRESS_TYPE_BTH:
+        return TDI_ADDRESS_LENGTH_BTH;
     case TDI_ADDRESS_TYPE_IP:
         return TDI_ADDRESS_LENGTH_IP;
     case TDI_ADDRESS_TYPE_IP6:

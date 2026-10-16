@@ -56,6 +56,11 @@ BOOL SockIsTripleInMapping(
     INT Protocol
 );
 
+INT
+SockGetHelperForFamily(
+    INT AddressFamily,
+    PHELPER_DATA *HelperDllData);
+
 int SockGetTdiName(
     PINT AddressFamily,
     PINT SocketType,

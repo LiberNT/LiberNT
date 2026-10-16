@@ -486,6 +486,68 @@ SockLoadHelperDll(
     return 0;
 }
 
+static
+BOOL
+SockIsFamilyInMapping(
+    PWINSOCK_MAPPING Mapping,
+    INT AddressFamily)
+{
+    ULONG Row;
+
+    for (Row = 0; Row < Mapping->Rows; Row++)
+    {
+        if ((INT)Mapping->Mapping[Row].AddressFamily == AddressFamily)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+INT
+SockGetHelperForFamily(
+    INT AddressFamily,
+    PHELPER_DATA *HelperDllData)
+{
+    PHELPER_DATA HelperData;
+    PWINSOCK_MAPPING Mapping;
+    PLIST_ENTRY Helpers;
+    PWSTR Transports, Transport;
+    INT Status;
+
+    for (Helpers = SockHelpersListHead.Flink; Helpers != &SockHelpersListHead; Helpers = Helpers->Flink)
+    {
+        HelperData = CONTAINING_RECORD(Helpers, HELPER_DATA, Helpers);
+        if (SockIsFamilyInMapping(HelperData->Mapping, AddressFamily))
+        {
+            *HelperDllData = HelperData;
+            return NO_ERROR;
+        }
+    }
+
+    Status = SockLoadTransportList(&Transports);
+    if (Status)
+        return Status;
+    for (Transport = Transports; *Transport; Transport += wcslen(Transport) + 1)
+    {
+        if (SockLoadTransportMapping(Transport, &Mapping))
+            continue;
+        if (SockIsFamilyInMapping(Mapping, AddressFamily))
+        {
+            Status = SockLoadHelperDll(Transport, Mapping, &HelperData);
+            HeapFree(GlobalHeap, 0, Transports);
+            if (Status)
+            {
+                HeapFree(GlobalHeap, 0, Mapping);
+                return Status;
+            }
+            *HelperDllData = HelperData;
+            return NO_ERROR;
+        }
+        HeapFree(GlobalHeap, 0, Mapping);
+    }
+    HeapFree(GlobalHeap, 0, Transports);
+    return WSAEINVAL;
+}
+
 BOOL
 SockIsTripleInMapping(
     PWINSOCK_MAPPING Mapping,
