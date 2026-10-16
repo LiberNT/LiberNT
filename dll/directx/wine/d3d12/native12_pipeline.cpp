@@ -493,7 +493,7 @@ struct Native12ShaderCode
         if (FAILED(hr)) return hr;
 
         entry = static_cast<Native12ConvertedShader *>(HeapAlloc(GetProcessHeap(), 0,
-                FIELD_OFFSET(Native12ConvertedShader, data[dxbc_size + converted_size])));
+                FIELD_OFFSET(Native12ConvertedShader, data) + dxbc_size + converted_size));
         if (!entry)
         {
             CoTaskMemFree(converted);
