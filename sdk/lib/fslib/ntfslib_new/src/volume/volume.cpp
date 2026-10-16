@@ -446,5 +446,53 @@ Volume::QueryInformation(
         ClusterSize;
     Information->MajorVersion = NtfsMajorVersion;
     Information->MinorVersion = NtfsMinorVersion;
+    Information->TotalReserved = GetStorageReserveClusters();
     return STATUS_SUCCESS;
+}
+
+ULONGLONG
+Volume::GetStorageReserveClusters()
+{
+    WCHAR Name[] = L"$SRAT";
+    PFileRecord File = NULL;
+    PAttribute Attribute;
+    PUCHAR Table;
+    ULONGLONG Reserved = 0;
+    ULONG Length, Count, EntryOffset, EntrySize, UsedCount, UsedOffset, Index;
+
+    if (!MFT || !NT_SUCCESS(MFT->GetFileRecord(_Bitmap, &File)))
+        return 0;
+
+    Attribute = File->GetAttribute(TypeData, Name);
+    if (Attribute && !Attribute->IsNonResident &&
+        Attribute->Resident.DataLength >= NTFS_SRAT_HEADER_SIZE)
+    {
+        Table = (PUCHAR)GetResidentDataPointer(Attribute);
+        Length = Attribute->Resident.DataLength;
+        Count = Table[NTFS_SRAT_COUNT_OFFSET];
+        EntryOffset = *(PUSHORT)(Table + NTFS_SRAT_ENTRY_OFFSET);
+        EntrySize = *(PUSHORT)(Table + NTFS_SRAT_ENTRY_SIZE_OFFSET);
+        UsedCount = *(PULONG)(Table + NTFS_SRAT_USED_COUNT_OFFSET);
+        UsedOffset = EntryOffset + Count * EntrySize;
+
+        if (EntryOffset >= NTFS_SRAT_HEADER_SIZE &&
+            EntrySize >= NTFS_SRAT_ENTRY_MIN_SIZE &&
+            UsedCount <= NTFS_SRAT_MAX_IDS &&
+            (ULONGLONG)UsedOffset + (ULONGLONG)UsedCount * sizeof(ULONG) == Length)
+        {
+            for (Index = 0; Index < Count; Index++)
+            {
+                PUCHAR Entry = Table + EntryOffset + Index * EntrySize;
+                ULONG Id = *(PULONG)Entry;
+                ULONG Guarantee = *(PULONG)(Entry + NTFS_SRAT_GUARANTEE_OFFSET);
+                ULONG Used = Id < UsedCount ? *(PULONG)(Table + UsedOffset + Id * sizeof(ULONG)) : 0;
+
+                if (Guarantee > Used)
+                    Reserved += Guarantee - Used;
+            }
+        }
+    }
+
+    delete File;
+    return Reserved < ClustersInVolume ? Reserved : ClustersInVolume;
 }

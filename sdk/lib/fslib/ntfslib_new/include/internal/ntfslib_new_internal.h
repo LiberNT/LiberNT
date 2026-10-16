@@ -435,6 +435,15 @@ typedef struct _DIRECTORY_KEY_BLOCK
     ? (Attribute1)->NonResident.DataSize \
     : (Attribute1)->Resident.DataLength)
 
+#define NTFS_SRAT_HEADER_SIZE 0x10
+#define NTFS_SRAT_COUNT_OFFSET 0x07
+#define NTFS_SRAT_ENTRY_OFFSET 0x08
+#define NTFS_SRAT_ENTRY_SIZE_OFFSET 0x0A
+#define NTFS_SRAT_USED_COUNT_OFFSET 0x0C
+#define NTFS_SRAT_ENTRY_MIN_SIZE 0x0C
+#define NTFS_SRAT_GUARANTEE_OFFSET 0x08
+#define NTFS_SRAT_MAX_IDS 64
+
 #define NTFS_FILE_NAME_UPDATE_SIZES ((UINT32)0x00000001)
 #define NTFS_FILE_NAME_UPDATE_EA_SIZE ((UINT32)0x00000002)
 #define NTFS_FILE_NAME_UPDATE_ARCHIVE ((UINT32)0x00000004)
@@ -530,6 +539,8 @@ public:
      */
     ULONGLONG FreeClusterHint = 0;
 
+    ULONGLONG AllocationLimit = 0;
+
     /* Parsed $Bitmap record, built once: its layout never changes and its
      * data is served through the block cache, so re-parsing it for every
      * cluster allocate/release only burned CPU. */
@@ -584,6 +595,9 @@ public:
     QueryInformation(
         _Out_ PNtfsVolumeInformation Information);
 
+    ULONGLONG
+    GetStorageReserveClusters();
+
     NTSTATUS
     ReadBitmap(_In_ ULONGLONG StartingLcn,
                _Out_ PULONGLONG ReturnedStartingLcn,
@@ -608,6 +622,22 @@ public:
      */
     NTSTATUS
     ReleaseClusters(_In_ PDataRun Runs);
+
+    NTSTATUS
+    ClaimClusters(_In_ PDataRun Runs);
+
+    NTSTATUS
+    AreClustersFree(_In_ ULONGLONG StartingLcn,
+                    _In_ ULONGLONG EndingLcn,
+                    _Out_ PBOOLEAN Free);
+
+    ULONGLONG
+    AllocationEnd() const
+    {
+        return AllocationLimit != 0 && AllocationLimit < ClustersInVolume
+            ? AllocationLimit
+            : ClustersInVolume;
+    }
 
     /**
      * Converts a null-terminated 16-bit string to uppercase using the
@@ -863,6 +893,13 @@ public:
     NTSTATUS
     SetCompression(_In_opt_ PWSTR StreamName,
                    _In_ BOOLEAN Compress);
+
+    NTSTATUS
+    MoveClusters(_In_ AttributeType AttrType,
+                 _In_opt_ PWSTR StreamName,
+                 _In_ ULONGLONG StartingVcn,
+                 _In_ ULONGLONG StartingLcn,
+                 _In_ ULONG ClusterCount);
     NTSTATUS
     SetSparse(_In_ AttributeType AttrType,
               _In_opt_ PWSTR StreamName,
@@ -1668,6 +1705,8 @@ public:
                                          _Out_ PAttribute* TargetAttribute);
 
 private:
+    friend class FileRecord;
+
     // ./namespace.cpp
     NTSTATUS
     LookupParentAndChild(

@@ -222,7 +222,7 @@ MasterFileTable::QueryVolumeInformation(
     Information->Mft2StartLcn = MFTMirrLCN;
 
     /*
-     * TotalReserved and the MFT-zone bounds deliberately remain zero.
+     * The MFT-zone bounds deliberately remain zero.
      * This allocator does not reserve or enforce an MFT zone, so reporting
      * guessed bounds would promise space that is not actually protected.
      */

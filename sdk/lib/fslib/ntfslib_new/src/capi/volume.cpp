@@ -96,6 +96,30 @@ NtfsVolumeReloadSize(
     return reinterpret_cast<PVolume>(DiskVolume)->ReloadSize();
 }
 
+void
+NtfsVolumeSetAllocationLimit(
+    _In_ PNtfsVolume DiskVolume,
+    _In_ ULONGLONG ClusterLimit)
+{
+    if (DiskVolume)
+        reinterpret_cast<PVolume>(DiskVolume)->AllocationLimit = ClusterLimit;
+}
+
+NTSTATUS
+NtfsVolumeAreClustersFree(
+    _In_ PNtfsVolume DiskVolume,
+    _In_ ULONGLONG StartingLcn,
+    _In_ ULONGLONG EndingLcn,
+    _Out_ PBOOLEAN Free)
+{
+    if (!DiskVolume)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PVolume>(DiskVolume)->AreClustersFree(
+        StartingLcn,
+        EndingLcn,
+        Free);
+}
+
 NTSTATUS
 NtfsVolumeGetFreeClusters(
     _In_ PNtfsVolume DiskVolume,

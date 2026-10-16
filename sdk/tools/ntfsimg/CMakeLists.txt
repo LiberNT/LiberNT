@@ -27,6 +27,7 @@ add_library(ntfslib_host STATIC
     ${NTFSLIB_ROOT}/src/filerecord/write/ea.cpp
     ${NTFSLIB_ROOT}/src/filerecord/write/filedata.cpp
     ${NTFSLIB_ROOT}/src/filerecord/write/filename.cpp
+    ${NTFSLIB_ROOT}/src/filerecord/write/move.cpp
     ${NTFSLIB_ROOT}/src/filerecord/write/reparse.cpp
     ${NTFSLIB_ROOT}/src/filerecord/filerecord.cpp
     ${NTFSLIB_ROOT}/src/filerecord/fixup.cpp
@@ -77,6 +78,10 @@ target_include_directories(ntfslib_format_host
     PRIVATE ${NTFSLIB_ROOT}/src/format)
 
 add_host_tool(ntfsimg
-    ${NTFSLIB_ROOT}/linux/fuse/ntfslib_fuse.cpp)
+    ${NTFSLIB_ROOT}/linux/fuse/ntfslib_fuse.cpp
+    ${REACTOS_SOURCE_DIR}/base/applications/cmdutils/lntexpandstorage/expandcore.c)
 target_compile_definitions(ntfsimg PRIVATE NTFSLIB_HAVE_FUSE=0)
+target_include_directories(ntfsimg PRIVATE ${REACTOS_SOURCE_DIR}/base/applications/cmdutils/lntexpandstorage)
+set_source_files_properties(${REACTOS_SOURCE_DIR}/base/applications/cmdutils/lntexpandstorage/expandcore.c
+    PROPERTIES COMPILE_DEFINITIONS EXPAND_VOLUME_ONLY)
 target_link_libraries(ntfsimg PRIVATE ntfslib_host ntfslib_format_host)

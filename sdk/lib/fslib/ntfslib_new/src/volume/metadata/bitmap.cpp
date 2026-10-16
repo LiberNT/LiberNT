@@ -617,6 +617,7 @@ Volume::AllocateClusters(_In_ ULONGLONG PreferredLCN,
     PDataRun Head = NULL;
     PDataRun Tail = NULL;
     ULONGLONG ContiguousLCN;
+    ULONGLONG End = AllocationEnd();
     ULONG ClustersNeeded;
     ULONG RunCount = 0;
     NTSTATUS Status;
@@ -631,14 +632,14 @@ Volume::AllocateClusters(_In_ ULONGLONG PreferredLCN,
     if (!NT_SUCCESS(Status))
         return Status;
 
-    if (PreferredLCN >= ClustersInVolume)
+    if (PreferredLCN >= End)
         PreferredLCN = 0;
 
     /* Callers with no placement preference start where the last allocation
      * ended; the wrap pass below still covers everything before it. */
     if (PreferredLCN == 0 &&
         FreeClusterHint != 0 &&
-        FreeClusterHint < ClustersInVolume)
+        FreeClusterHint < End)
     {
         PreferredLCN = FreeClusterHint;
     }
@@ -651,7 +652,7 @@ Volume::AllocateClusters(_In_ ULONGLONG PreferredLCN,
                                         BitmapFile,
                                         BitmapData,
                                         PreferredLCN,
-                                        ClustersInVolume,
+                                        End,
                                         ClusterCount,
                                         &ContiguousLCN);
     if (Status == STATUS_NOT_FOUND && PreferredLCN != 0)
@@ -688,7 +689,7 @@ Volume::AllocateClusters(_In_ ULONGLONG PreferredLCN,
                                              BitmapFile,
                                              BitmapData,
                                              PreferredLCN,
-                                             ClustersInVolume,
+                                             End,
                                              &ClustersNeeded,
                                              MaxRuns,
                                              &RunCount,
@@ -724,7 +725,7 @@ Volume::AllocateClusters(_In_ ULONGLONG PreferredLCN,
                                BitmapData,
                                Head,
                                TRUE,
-                               ClustersInVolume);
+                               End);
     if (NT_SUCCESS(Status))
     {
         PDataRun Last = Head;
@@ -781,4 +782,98 @@ Volume::ReleaseClusters(_In_ PDataRun Runs)
     }
     /* Owned by the volume's bitmap-record cache. */
     return Status;
+}
+
+NTSTATUS
+Volume::ClaimClusters(_In_ PDataRun Runs)
+{
+    PFileRecord BitmapFile = NULL;
+    PAttribute BitmapData = NULL;
+    NTSTATUS Status;
+
+    if (!Runs)
+        return STATUS_INVALID_PARAMETER;
+    if (IsReadOnly)
+        return STATUS_ACCESS_DENIED;
+
+    Status = GetVolumeBitmap(this, &BitmapFile, &BitmapData);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    return SetClusterRunBits(this,
+                             BitmapFile,
+                             BitmapData,
+                             Runs,
+                             TRUE,
+                             AllocationEnd());
+}
+
+NTSTATUS
+Volume::AreClustersFree(_In_ ULONGLONG StartingLcn,
+                        _In_ ULONGLONG EndingLcn,
+                        _Out_ PBOOLEAN Free)
+{
+    PFileRecord BitmapFile = NULL;
+    PAttribute BitmapData = NULL;
+    PUCHAR Buffer;
+    ULONGLONG Cluster = StartingLcn;
+    NTSTATUS Status;
+
+    if (!Free || StartingLcn > EndingLcn || EndingLcn > ClustersInVolume)
+        return STATUS_INVALID_PARAMETER;
+    *Free = TRUE;
+
+    Status = GetVolumeBitmap(this, &BitmapFile, &BitmapData);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Buffer = AcquireBitmapWorkBuffer(this);
+    if (!Buffer)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    while (Cluster < EndingLcn)
+    {
+        ULONGLONG ByteOffset = Cluster >> 3;
+        ULONGLONG ChunkByteOffset =
+            ByteOffset -
+            (ByteOffset % BITMAP_CHUNK_SIZE);
+        ULONGLONG ChunkClusterEnd =
+            min(EndingLcn, (ChunkByteOffset + BITMAP_CHUNK_SIZE) << 3);
+        ULONG ByteLength = (ULONG)(
+            ((ChunkClusterEnd + 7) >> 3) -
+            ChunkByteOffset);
+
+        Status = ReadBitmapBytes(BitmapFile,
+                                 BitmapData,
+                                 Buffer,
+                                 ByteLength,
+                                 ChunkByteOffset);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        while (Cluster < ChunkClusterEnd)
+        {
+            ULONG RelativeByte =
+                (ULONG)((Cluster >> 3) - ChunkByteOffset);
+
+            if ((Cluster & 7) == 0 &&
+                Cluster + 8 <= ChunkClusterEnd)
+            {
+                if (Buffer[RelativeByte] != 0)
+                {
+                    *Free = FALSE;
+                    return STATUS_SUCCESS;
+                }
+                Cluster += 8;
+                continue;
+            }
+            if (Buffer[RelativeByte] & (UCHAR)(1u << (Cluster & 7)))
+            {
+                *Free = FALSE;
+                return STATUS_SUCCESS;
+            }
+            Cluster++;
+        }
+    }
+
+    return STATUS_SUCCESS;
 }

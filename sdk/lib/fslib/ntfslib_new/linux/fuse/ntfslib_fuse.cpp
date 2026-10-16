@@ -35,6 +35,9 @@
 #include <ntfslib_new.h>
 #include <ntfsformat.h>
 #include <ntfs_linux.h>
+extern "C" {
+#include <expandcore.h>
+}
 
 typedef std::vector<std::string> NtfsDirectoryListing;
 
@@ -4544,6 +4547,68 @@ MountImage(int Argc, char** Argv, NtfsFuseState* State)
 }
 #endif
 
+struct ShrinkImageIo
+{
+    int Fd;
+};
+
+static int
+ShrinkImageRead(void* Context, uint64_t Offset, uint32_t Length, void* Buffer)
+{
+    ShrinkImageIo* Io = (ShrinkImageIo*)Context;
+
+    return pread(Io->Fd, Buffer, Length, (off_t)Offset) == (ssize_t)Length;
+}
+
+static int
+ShrinkImageWrite(void* Context, uint64_t Offset, uint32_t Length, const void* Buffer)
+{
+    ShrinkImageIo* Io = (ShrinkImageIo*)Context;
+
+    return pwrite(Io->Fd, Buffer, Length, (off_t)Offset) == (ssize_t)Length;
+}
+
+static NTSTATUS
+ShrinkImageVolume(const char* Path, ULONGLONG NewVolumeSectors)
+{
+    std::vector<uint8_t> Workspace(EXPAND_WORKSPACE_BYTES);
+    ShrinkImageIo Io;
+    EXPAND_DEVICE Device;
+    uint8_t Boot[512];
+    struct stat Info;
+    int Result;
+
+    Io.Fd = open(Path, O_RDWR);
+    if (Io.Fd < 0)
+        return STATUS_INVALID_DEVICE_STATE;
+    if (fstat(Io.Fd, &Info) != 0 ||
+        pread(Io.Fd, Boot, sizeof(Boot), 0) != (ssize_t)sizeof(Boot))
+    {
+        close(Io.Fd);
+        return STATUS_INVALID_DEVICE_STATE;
+    }
+    memset(&Device, 0, sizeof(Device));
+    Device.Context = &Io;
+    Device.Read = ShrinkImageRead;
+    Device.Write = ShrinkImageWrite;
+    Device.DiskSize = (uint64_t)Info.st_size;
+    Device.SectorSize = (uint32_t)Boot[11] | ((uint32_t)Boot[12] << 8);
+    Result = ExpandShrinkVolume(&Device, 0, NewVolumeSectors, Workspace.data());
+    fsync(Io.Fd);
+    close(Io.Fd);
+    switch (Result)
+    {
+        case EXPAND_OK:
+            return STATUS_SUCCESS;
+        case EXPAND_BAD_PARAMETER:
+            return STATUS_INVALID_PARAMETER;
+        case EXPAND_NO_ROOM:
+            return STATUS_ALREADY_COMMITTED;
+        default:
+            return STATUS_FILE_CORRUPT_ERROR;
+    }
+}
+
 static void
 PrintUsage(const char* Program)
 {
@@ -4586,10 +4651,14 @@ PrintUsage(const char* Program)
             "  %s --retrieval-pointers IMAGE PATH START_VCN\n"
             "  %s --volume-bitmap IMAGE START_LCN BYTE_COUNT\n"
             "  %s --volume-data IMAGE\n"
+            "  %s --move IMAGE PATH START_VCN START_LCN CLUSTER_COUNT [CLUSTER_LIMIT]\n"
+            "  %s --shrink IMAGE NEW_NUMBER_OF_SECTORS\n"
             "  %s --mft-record IMAGE FILE_REFERENCE\n"
             "  %s [--show-metadata] --streams IMAGE PATH\n"
             "  %s [--show-metadata] [--writable] IMAGE MOUNTPOINT"
             " [FUSE options]\n",
+            Program,
+            Program,
             Program,
             Program,
             Program,
@@ -5637,6 +5706,100 @@ main(int Argc, char** Argv)
             (ULONG)ByteCount);
         CloseImage(&State);
         return Result;
+    }
+
+    if (strcmp(Argv[First], "--move") == 0)
+    {
+        PNtfsFileRecord File = NULL;
+        AttributeType RequestedType = TypeData;
+        PWSTR RequestedStream = NULL;
+        ULONGLONG StartingVcn;
+        ULONGLONG StartingLcn;
+        ULONGLONG ClusterCount;
+        ULONGLONG ClusterLimit = 0;
+
+        if ((First + 6 != Argc && First + 7 != Argc) ||
+            !ParseUnsigned(Argv[First + 3], INT64_MAX, &StartingVcn) ||
+            !ParseUnsigned(Argv[First + 4], INT64_MAX, &StartingLcn) ||
+            !ParseUnsigned(Argv[First + 5], UINT32_MAX, &ClusterCount) ||
+            (First + 7 == Argc &&
+             !ParseUnsigned(Argv[First + 6], INT64_MAX, &ClusterLimit)))
+        {
+            PrintUsage(Argv[0]);
+            return 2;
+        }
+        Status = OpenImageWritable(Argv[First + 1], &State);
+        if (NT_SUCCESS(Status))
+        {
+            NtfsVolumeSetAllocationLimit(State.Volume, ClusterLimit);
+            Status = LookupAttribute(State.Volume,
+                                     Argv[First + 2],
+                                     &File,
+                                     &RequestedType,
+                                     &RequestedStream);
+            if (NT_SUCCESS(Status) &&
+                (NtfsFileRecordGetHeader(File)->Flags & FR_IS_DIRECTORY) &&
+                !RequestedStream)
+            {
+                Status = NtfsFileRecordMoveClusters(File,
+                                                    TypeIndexAllocation,
+                                                    (PWSTR)L"$I30",
+                                                    StartingVcn,
+                                                    StartingLcn,
+                                                    (ULONG)ClusterCount);
+            }
+            else if (NT_SUCCESS(Status))
+            {
+                Status = NtfsFileRecordMoveClusters(File,
+                                                    RequestedType,
+                                                    RequestedStream,
+                                                    StartingVcn,
+                                                    StartingLcn,
+                                                    (ULONG)ClusterCount);
+            }
+            NtfsFileRecordDestroy(File);
+            delete[] RequestedStream;
+            CloseImage(&State);
+        }
+        printf("move status 0x%08" PRIx32 "\n", (uint32_t)Status);
+        return NT_SUCCESS(Status) ? 0 : 1;
+    }
+
+    if (strcmp(Argv[First], "--shrink") == 0)
+    {
+        ULONGLONG NewNumberOfSectors;
+        ULONGLONG Clusters;
+        ULONGLONG NewClusters;
+        ULONG SectorsPerCluster;
+        BOOLEAN Free = FALSE;
+
+        if (First + 3 != Argc ||
+            !ParseUnsigned(Argv[First + 2], INT64_MAX, &NewNumberOfSectors) ||
+            NewNumberOfSectors == 0)
+        {
+            PrintUsage(Argv[0]);
+            return 2;
+        }
+        Status = OpenImageWritable(Argv[First + 1], &State);
+        if (!NT_SUCCESS(Status))
+        {
+            printf("shrink status 0x%08" PRIx32 "\n", (uint32_t)Status);
+            return 1;
+        }
+        SectorsPerCluster = NtfsVolumeGetSectorsPerCluster(State.Volume);
+        Clusters = NtfsVolumeGetClustersInVolume(State.Volume);
+        NewClusters = (NewNumberOfSectors - 1) / SectorsPerCluster;
+        if (NewClusters == 0 || NewClusters >= Clusters)
+            Status = STATUS_INVALID_PARAMETER;
+        else
+            Status = NtfsVolumeAreClustersFree(State.Volume, NewClusters, Clusters, &Free);
+        CloseImage(&State);
+        if (NT_SUCCESS(Status) && !Free)
+            Status = STATUS_ALREADY_COMMITTED;
+        if (NT_SUCCESS(Status))
+            Status = ShrinkImageVolume(Argv[First + 1], NewNumberOfSectors - 1);
+        printf("shrink status 0x%08" PRIx32 "\n", (uint32_t)Status);
+        return NT_SUCCESS(Status) ? 0 : 1;
     }
 
     if (strcmp(Argv[First],

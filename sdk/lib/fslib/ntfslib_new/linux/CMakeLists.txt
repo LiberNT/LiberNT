@@ -41,6 +41,7 @@ add_library(ntfslib_linux STATIC
     "${NTFSLIB_ROOT}/src/filerecord/write/ea.cpp"
     "${NTFSLIB_ROOT}/src/filerecord/write/filedata.cpp"
     "${NTFSLIB_ROOT}/src/filerecord/write/filename.cpp"
+    "${NTFSLIB_ROOT}/src/filerecord/write/move.cpp"
     "${NTFSLIB_ROOT}/src/filerecord/write/reparse.cpp"
     "${NTFSLIB_ROOT}/src/filerecord/filerecord.cpp"
     "${NTFSLIB_ROOT}/src/filerecord/fixup.cpp"

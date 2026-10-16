@@ -612,6 +612,15 @@ NtfsFileRecordGetCompression(
     _In_opt_ PWSTR StreamName,
     _Out_ PBOOLEAN Compressed);
 
+NTSTATUS
+NtfsFileRecordMoveClusters(
+    _In_ NtfsFileRecord *FileRecord,
+    _In_ AttributeType AttrType,
+    _In_opt_ PWSTR StreamName,
+    _In_ ULONGLONG StartingVcn,
+    _In_ ULONGLONG StartingLcn,
+    _In_ ULONG ClusterCount);
+
 /*
  * Implements FSCTL_SET_ZERO_DATA semantics without extending EOF. A sparse
  * stream may release complete NTFS sparse units wholly covered by the range.
@@ -921,6 +930,18 @@ NtfsVolumeGetClustersInVolume(
 NTSTATUS
 NtfsVolumeReloadSize(
     _In_ PNtfsVolume DiskVolume);
+
+void
+NtfsVolumeSetAllocationLimit(
+    _In_ PNtfsVolume DiskVolume,
+    _In_ ULONGLONG ClusterLimit);
+
+NTSTATUS
+NtfsVolumeAreClustersFree(
+    _In_ PNtfsVolume DiskVolume,
+    _In_ ULONGLONG StartingLcn,
+    _In_ ULONGLONG EndingLcn,
+    _Out_ PBOOLEAN Free);
 
 NTSTATUS
 NtfsVolumeGetFreeClusters(

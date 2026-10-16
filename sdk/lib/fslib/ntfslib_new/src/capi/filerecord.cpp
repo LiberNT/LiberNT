@@ -427,6 +427,25 @@ NtfsFileRecordSetCompression(
 }
 
 NTSTATUS
+NtfsFileRecordMoveClusters(
+    _In_ PNtfsFileRecord Fr,
+    _In_ AttributeType AttrType,
+    _In_opt_ PWSTR StreamName,
+    _In_ ULONGLONG StartingVcn,
+    _In_ ULONGLONG StartingLcn,
+    _In_ ULONG ClusterCount)
+{
+    if (!Fr)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PFileRecord>(Fr)->MoveClusters(
+        AttrType,
+        StreamName,
+        StartingVcn,
+        StartingLcn,
+        ClusterCount);
+}
+
+NTSTATUS
 NtfsFileRecordGetCompression(
     _In_ PNtfsFileRecord Fr,
     _In_opt_ PWSTR StreamName,
