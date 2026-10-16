@@ -165,7 +165,7 @@ static void TestDeviceDred(BOOL enabled)
         {
             memset(&page_fault2, 0xcc, sizeof(page_fault2));
             hr = dred2->GetPageFaultAllocationOutput2(&page_fault2);
-            ok(hr == expected && page_fault2.PageFaultFlags == 0xccccccccu,
+            ok(hr == expected && static_cast<UINT>(page_fault2.PageFaultFlags) == 0xccccccccu,
                     "enabled %d: page fault 2 of a live device: %#lx, flags %#x\n", enabled, hr,
                     page_fault2.PageFaultFlags);
             ok(dred2->GetDeviceState() == D3D12_DRED_DEVICE_STATE_UNKNOWN, "enabled %d: device state %u\n", enabled,

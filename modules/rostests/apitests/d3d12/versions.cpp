@@ -68,7 +68,7 @@ static D3D12_RESOURCE_DESC ResourceDesc(const D3D12_RESOURCE_DESC1 &desc1)
 
 static void TestInterfaces(ID3D12Device *device)
 {
-    static const struct { const GUID *iid; const char *name; } devices[] =
+    const struct { const GUID *iid; const char *name; } devices[] =
     {
         { &__uuidof(ID3D12Device1), "ID3D12Device1" }, { &__uuidof(ID3D12Device2), "ID3D12Device2" },
         { &__uuidof(ID3D12Device3), "ID3D12Device3" }, { &__uuidof(ID3D12Device4), "ID3D12Device4" },
@@ -78,7 +78,7 @@ static void TestInterfaces(ID3D12Device *device)
         { &__uuidof(ID3D12Device11), "ID3D12Device11" }, { &__uuidof(ID3D12Device12), "ID3D12Device12" },
         { &__uuidof(ID3D12Device13), "ID3D12Device13" }, { &__uuidof(ID3D12Device14), "ID3D12Device14" },
     };
-    static const struct { const GUID *iid; const char *name; } lists[] =
+    const struct { const GUID *iid; const char *name; } lists[] =
     {
         { &__uuidof(ID3D12GraphicsCommandList1), "ID3D12GraphicsCommandList1" },
         { &__uuidof(ID3D12GraphicsCommandList2), "ID3D12GraphicsCommandList2" },
