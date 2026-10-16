@@ -10,6 +10,7 @@
 
 extern void func_allocator(void);
 extern void func_budget(void);
+extern void func_bgwork(void);
 extern void func_blend(void);
 extern void func_bundle(void);
 extern void func_device(void);
@@ -21,6 +22,7 @@ extern void func_interfaces(void);
 extern void func_pipeline(void);
 extern void func_pipelib(void);
 extern void func_queue(void);
+extern void func_raster(void);
 extern void func_relaxed(void);
 extern void func_renderpass(void);
 extern void func_rootsig(void);
@@ -36,6 +38,7 @@ const struct test winetest_testlist[] =
 {
     { "allocator", func_allocator },
     { "budget", func_budget },
+    { "bgwork", func_bgwork },
     { "blend", func_blend },
     { "bundle", func_bundle },
     { "device", func_device },
@@ -47,6 +50,7 @@ const struct test winetest_testlist[] =
     { "pipeline", func_pipeline },
     { "pipelib", func_pipelib },
     { "queue", func_queue },
+    { "raster", func_raster },
     { "relaxed", func_relaxed },
     { "renderpass", func_renderpass },
     { "rootsig", func_rootsig },

@@ -138,19 +138,23 @@ static void TestFences(ID3D12Device *device)
 
 static void TestBackgroundProcessing(ID3D12Device *device)
 {
+    D3D12_FEATURE_DATA_D3D12_OPTIONS6 options = {};
     ID3D12Device6 *device6 = NULL;
+    BOOL background_supported;
     HANDLE event;
     BOOL further;
     HRESULT hr;
 
     if (FAILED(device->QueryInterface(__uuidof(ID3D12Device6), reinterpret_cast<void **>(&device6)))) return;
+    device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS6, &options, sizeof(options));
+    background_supported = options.BackgroundProcessingSupported;
     event = CreateEventW(NULL, TRUE, FALSE, NULL);
 
     further = 0x55;
     hr = device6->SetBackgroundProcessingMode(D3D12_BACKGROUND_PROCESSING_MODE_ALLOWED,
             D3D12_MEASUREMENTS_ACTION_KEEP_ALL, NULL, &further);
     ok(hr == S_OK, "ALLOWED, KEEP_ALL: %#lx\n", hr);
-    ok(further == 0x55, "KEEP_ALL wrote further measurements %d\n", further);
+    if (!background_supported) ok(further == 0x55, "KEEP_ALL wrote further measurements %d\n", further);
     hr = device6->SetBackgroundProcessingMode(D3D12_BACKGROUND_PROCESSING_MODE_ALLOWED,
             D3D12_MEASUREMENTS_ACTION_KEEP_ALL, event, NULL);
     ok(hr == E_INVALIDARG, "KEEP_ALL with an event: %#lx\n", hr);
@@ -163,7 +167,7 @@ static void TestBackgroundProcessing(ID3D12Device *device)
     hr = device6->SetBackgroundProcessingMode(D3D12_BACKGROUND_PROCESSING_MODE_ALLOW_INTRUSIVE_MEASUREMENTS,
             D3D12_MEASUREMENTS_ACTION_COMMIT_RESULTS, event, &further);
     ok(hr == S_OK, "COMMIT_RESULTS with an event: %#lx\n", hr);
-    ok(further == FALSE, "COMMIT_RESULTS further measurements %d\n", further);
+    if (!background_supported) ok(further == FALSE, "COMMIT_RESULTS further measurements %d\n", further);
     ok(WaitForSingleObject(event, 0) == WAIT_OBJECT_0, "COMMIT_RESULTS did not signal the event\n");
     hr = device6->SetBackgroundProcessingMode(D3D12_BACKGROUND_PROCESSING_MODE_ALLOWED,
             D3D12_MEASUREMENTS_ACTION_COMMIT_RESULTS, NULL, NULL);

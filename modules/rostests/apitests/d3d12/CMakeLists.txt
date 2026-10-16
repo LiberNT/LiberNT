@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     allocator.cpp
     budget.cpp
+    bgwork.cpp
     blend.cpp
     bundle.cpp
     device.cpp
@@ -13,6 +14,7 @@ list(APPEND SOURCE
     pipeline.cpp
     pipelib.cpp
     queue.cpp
+    raster.cpp
     relaxed.cpp
     renderpass.cpp
     rootsig.cpp
