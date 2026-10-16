@@ -1272,8 +1272,13 @@ static NTSTATUS ReadStringFromRegistry( HANDLE RegHandle,
     TI_DbgPrint(MIN_TRACE, ("Information DataLength: 0x%x\n", Information->DataLength));
 
     UnicodeString.Buffer = (PWCHAR)&Information->Data;
-    UnicodeString.Length = Information->DataLength - sizeof(WCHAR);
-    UnicodeString.MaximumLength = Information->DataLength;
+    UnicodeString.Length = 0;
+    while (UnicodeString.Length + sizeof(WCHAR) <= Information->DataLength &&
+           UnicodeString.Buffer[UnicodeString.Length / sizeof(WCHAR)] != UNICODE_NULL)
+    {
+        UnicodeString.Length += sizeof(WCHAR);
+    }
+    UnicodeString.MaximumLength = UnicodeString.Length + sizeof(WCHAR);
 
     String->Buffer =
 	(PWCHAR)ExAllocatePoolWithTag( NonPagedPool,
