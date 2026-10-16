@@ -1014,7 +1014,13 @@ VolResizeShrink(
     _In_opt_ PVOLRESIZE_PROGRESS Progress,
     _In_opt_ PVOID ProgressContext)
 {
-    static const PCWSTR Metadata[] = { L"$Secure:$SDS:$DATA", L"$UpCase", L"$AttrDef" };
+    static const PCWSTR Metadata[] =
+    {
+        L"$Secure:$SDS:$DATA", L"$Secure:$SDH:$INDEX_ALLOCATION", L"$Secure:$SII:$INDEX_ALLOCATION",
+        L"$UpCase", L"$AttrDef", L"$MFT::$BITMAP",
+        L"$Extend\\$ObjId:$O:$INDEX_ALLOCATION", L"$Extend\\$Quota:$O:$INDEX_ALLOCATION",
+        L"$Extend\\$Quota:$Q:$INDEX_ALLOCATION", L"$Extend\\$Reparse:$R:$INDEX_ALLOCATION",
+    };
     SHRINK_VOLUME_INFORMATION Shrink;
     VOLRESIZE_INFO Info;
     VR_CONTEXT Context;
