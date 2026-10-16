@@ -83,15 +83,17 @@ NwifiRegisterMiniport(
     RtlZeroMemory(&Chars, sizeof(Chars));
     Chars.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS;
     Chars.Header.Revision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
-    Chars.Header.Size = sizeof(NDIS_MINIPORT_DRIVER_CHARACTERISTICS);
+    Chars.Header.Size = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
     Chars.MajorNdisVersion = 6;
     Chars.MinorNdisVersion = 20;
     Chars.MajorDriverVersion = 1;
     Chars.MinorDriverVersion = 0;
+    Chars.Flags = NDIS_INTERMEDIATE_DRIVER;
 
     /* Upper-edge virtual 802.3 miniport entry points. */
     Chars.InitializeHandlerEx        = NwifiMiniportInitializeEx;
     Chars.HaltHandlerEx              = NwifiMiniportHaltEx;
+    Chars.UnloadHandler              = NwifiUnload;
     Chars.PauseHandler               = NwifiMiniportPauseEx;
     Chars.RestartHandler             = NwifiMiniportRestartEx;
     Chars.OidRequestHandler          = NwifiMiniportOidRequest;
@@ -233,8 +235,6 @@ DriverEntry(
     {
         DPRINT1("NWIFI: control device creation failed 0x%08X (continuing)\n", Status);
     }
-
-    DriverObject->DriverUnload = NwifiUnload;
 
     DPRINT1("NWIFI: DriverEntry succeeded\n");
     return STATUS_SUCCESS;
