@@ -259,7 +259,8 @@ Title: SpacemiT K1 U-Boot (FSBL/SPL, U-Boot FIT, SD boot header)
 Path: media/boot/spacemit-k1/bootinfo_sd.bin
 Path: media/boot/spacemit-k1/FSBL.bin
 Path: media/boot/spacemit-k1/u-boot.itb
-Used Version: branch k1-bl-v2.2.y, git commit 7f51f4453f9811eeaafbdd839b1bf1b0cc27a413 (k1_defconfig, unmodified)
+Path: media/boot/spacemit-k1/dtb/x1_orangepi-rv2.dtb
+Used Version: branch k1-bl-v2.2.y, git commit 7f51f4453f9811eeaafbdd839b1bf1b0cc27a413 (k1_defconfig, with media/boot/spacemit-k1/patches)
 License: GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later.html), media/boot/spacemit-k1/LICENCE.u-boot
 URL: https://github.com/spacemit-com/uboot-2022.10
 

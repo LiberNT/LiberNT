@@ -805,9 +805,12 @@ if(SPACEMIT_K1_SUPPORT)
     list(APPEND _liberntimg_boot_partition_args -name bootfs)
     list(APPEND _liberntimg_system_partition_args -name ReactOS)
     list(APPEND _preinstall_boot_partition_files
-        -add ${SPACEMIT_K1_UBOOT_ENV} env_k1-x.txt)
+        -add ${SPACEMIT_K1_UBOOT_ENV} env_k1-x.txt
+        -add ${SPACEMIT_K1_BOOT_SCRIPT} boot.scr
+        -mkdir dtb
+        -add ${SPACEMIT_K1_RV2_DTB} dtb/x1_orangepi-rv2.dtb)
     list(APPEND _preinstall_partition_deps
-        ${SPACEMIT_K1_UBOOT_ENV})
+        ${SPACEMIT_K1_UBOOT_ENV} ${SPACEMIT_K1_BOOT_SCRIPT} ${SPACEMIT_K1_RV2_DTB})
     list(APPEND _liberntimg_deps
         ${SPACEMIT_K1_BOOTINFO} ${SPACEMIT_K1_FSBL} ${SPACEMIT_K1_OPENSBI} ${SPACEMIT_K1_UBOOT})
 endif()
