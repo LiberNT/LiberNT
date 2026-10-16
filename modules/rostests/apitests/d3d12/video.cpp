@@ -621,6 +621,368 @@ static void TestMotion(ID3D12VideoDevice *video)
     video1->Release();
 }
 
+static ID3D12Resource *CreateVideoBuffer(ID3D12Device *device, D3D12_HEAP_TYPE type, UINT64 size,
+        D3D12_RESOURCE_STATES state)
+{
+    D3D12_HEAP_PROPERTIES heap = {};
+    D3D12_RESOURCE_DESC desc = {};
+    ID3D12Resource *resource = NULL;
+    HRESULT hr;
+
+    heap.Type = type;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    desc.Width = size;
+    desc.Height = 1;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    hr = device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, state, NULL, __uuidof(ID3D12Resource),
+            reinterpret_cast<void **>(&resource));
+    ok(hr == S_OK, "CreateCommittedResource(buffer %I64u): %#lx\n", size, hr);
+    return resource;
+}
+
+static BOOL ReadBuffer(struct d3d12_test_context *context, ID3D12Resource *buffer, UINT64 size, BYTE *output)
+{
+    ID3D12Resource *readback = CreateVideoBuffer(context->device, D3D12_HEAP_TYPE_READBACK, size,
+            D3D12_RESOURCE_STATE_COPY_DEST);
+    BYTE *data;
+    BOOL done;
+
+    if (!readback) return FALSE;
+    context->allocator->Reset();
+    context->list->Reset(context->allocator, NULL);
+    context->list->CopyBufferRegion(readback, 0, buffer, 0, size);
+    done = d3d12_test_execute(context, context->list, D3D12_TEST_WAIT);
+    ok(done, "buffer readback did not complete\n");
+    if (done && SUCCEEDED(readback->Map(0, NULL, reinterpret_cast<void **>(&data))))
+    {
+        memcpy(output, data, static_cast<size_t>(size));
+        readback->Unmap(0, NULL);
+    }
+    else done = FALSE;
+    readback->Release();
+    return done;
+}
+
+struct encode_setup
+{
+    D3D12_VIDEO_ENCODER_PROFILE_H264 profile;
+    D3D12_VIDEO_ENCODER_LEVELS_H264 level;
+    D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264 configuration;
+    D3D12_VIDEO_ENCODER_SEQUENCE_GOP_STRUCTURE_H264 gop;
+    D3D12_VIDEO_ENCODER_RATE_CONTROL_CQP cqp;
+    D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC resolution;
+    D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOLUTION_SUPPORT_LIMITS limits;
+    D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOURCE_REQUIREMENTS requirements;
+    D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT support;
+};
+
+static void TestEncodeFrame(ID3D12VideoEncoder *encoder, ID3D12VideoEncoderHeap *heap, struct encode_setup *setup)
+{
+    const D3D12_VIDEO_ENCODER_OUTPUT_METADATA *metadata;
+    const D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA *subregion;
+    D3D12_VIDEO_ENCODER_ENCODEFRAME_INPUT_ARGUMENTS input = {};
+    D3D12_VIDEO_ENCODER_ENCODEFRAME_OUTPUT_ARGUMENTS output = {};
+    D3D12_VIDEO_ENCODER_RESOLVE_METADATA_INPUT_ARGUMENTS resolve_input = {};
+    D3D12_VIDEO_ENCODER_RESOLVE_METADATA_OUTPUT_ARGUMENTS resolve_output = {};
+    D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_H264 picture = {};
+    D3D12_COMMAND_QUEUE_DESC queue_desc = {};
+    struct d3d12_test_context context;
+    ID3D12VideoEncodeCommandList2 *list = NULL;
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12CommandQueue *queue = NULL;
+    ID3D12Resource *frame = NULL, *recon = NULL, *bitstream = NULL, *hw_metadata = NULL, *resolved = NULL;
+    UINT64 bitstream_size = 1u << 20, metadata_size = setup->requirements.MaxEncoderOutputMetadataBufferSize;
+    BYTE *bytes = NULL, resolved_bytes[4096] = {};
+    HRESULT hr;
+
+    if (!d3d12_test_init(&context)) return;
+    queue_desc.Type = D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE;
+    hr = context.device->CreateCommandQueue(&queue_desc, __uuidof(ID3D12CommandQueue), reinterpret_cast<void **>(&queue));
+    ok(hr == S_OK, "video encode queue: %#lx\n", hr);
+    hr = context.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE, __uuidof(ID3D12CommandAllocator),
+            reinterpret_cast<void **>(&allocator));
+    ok(hr == S_OK, "video encode allocator: %#lx\n", hr);
+    if (allocator)
+    {
+        hr = context.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE, allocator, NULL,
+                __uuidof(ID3D12VideoEncodeCommandList2), reinterpret_cast<void **>(&list));
+        ok(hr == S_OK, "ID3D12VideoEncodeCommandList2: %#lx\n", hr);
+    }
+    frame = CreateVideoTextureSize(context.device, DXGI_FORMAT_NV12, setup->resolution.Width, setup->resolution.Height,
+            D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_COPY_DEST);
+    recon = CreateVideoTextureSize(context.device, DXGI_FORMAT_NV12, setup->resolution.Width, setup->resolution.Height,
+            D3D12_RESOURCE_FLAG_VIDEO_ENCODE_REFERENCE_ONLY | D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE,
+            D3D12_RESOURCE_STATE_COMMON);
+    bitstream = CreateVideoBuffer(context.device, D3D12_HEAP_TYPE_DEFAULT, bitstream_size, D3D12_RESOURCE_STATE_COMMON);
+    hw_metadata = CreateVideoBuffer(context.device, D3D12_HEAP_TYPE_DEFAULT, metadata_size ? metadata_size : 4096,
+            D3D12_RESOURCE_STATE_COMMON);
+    resolved = CreateVideoBuffer(context.device, D3D12_HEAP_TYPE_DEFAULT, sizeof(resolved_bytes),
+            D3D12_RESOURCE_STATE_COMMON);
+    bytes = static_cast<BYTE *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, static_cast<SIZE_T>(bitstream_size)));
+    if (queue && list && frame && recon && bitstream && hw_metadata && resolved && bytes
+            && UploadNv12(&context, frame, 100, 128))
+    {
+        D3D12_VIDEO_ENCODER_RATE_CONTROL &rate = input.SequenceControlDesc.RateControl;
+
+        EncodeBarrier(list, frame, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ);
+        EncodeBarrier(list, recon, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE);
+        EncodeBarrier(list, bitstream, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE);
+        EncodeBarrier(list, hw_metadata, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE);
+        rate.Mode = D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CQP;
+        rate.ConfigParams.DataSize = sizeof(setup->cqp);
+        rate.ConfigParams.pConfiguration_CQP = &setup->cqp;
+        rate.TargetFrameRate.Numerator = 30;
+        rate.TargetFrameRate.Denominator = 1;
+        input.SequenceControlDesc.PictureTargetResolution = setup->resolution;
+        input.SequenceControlDesc.SelectedLayoutMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME;
+        input.SequenceControlDesc.CodecGopSequence.DataSize = sizeof(setup->gop);
+        input.SequenceControlDesc.CodecGopSequence.pH264GroupOfPictures = &setup->gop;
+        picture.FrameType = D3D12_VIDEO_ENCODER_FRAME_TYPE_H264_IDR_FRAME;
+        input.PictureControlDesc.Flags = D3D12_VIDEO_ENCODER_PICTURE_CONTROL_FLAG_USED_AS_REFERENCE_PICTURE;
+        input.PictureControlDesc.PictureControlCodecData.DataSize = sizeof(picture);
+        input.PictureControlDesc.PictureControlCodecData.pH264PicData = &picture;
+        input.pInputFrame = frame;
+        output.Bitstream.pBuffer = bitstream;
+        output.ReconstructedPicture.pReconstructedPicture = recon;
+        output.EncoderOutputMetadata.pBuffer = hw_metadata;
+        list->EncodeFrame(encoder, heap, &input, &output);
+        EncodeBarrier(list, hw_metadata, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ);
+        EncodeBarrier(list, resolved, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE);
+        resolve_input.EncoderCodec = D3D12_VIDEO_ENCODER_CODEC_H264;
+        resolve_input.EncoderProfile.DataSize = sizeof(setup->profile);
+        resolve_input.EncoderProfile.pH264Profile = &setup->profile;
+        resolve_input.EncoderInputFormat = DXGI_FORMAT_NV12;
+        resolve_input.EncodedPictureEffectiveResolution = setup->resolution;
+        resolve_input.HWLayoutMetadata.pBuffer = hw_metadata;
+        resolve_output.ResolvedLayoutMetadata.pBuffer = resolved;
+        list->ResolveEncoderOutputMetadata(&resolve_input, &resolve_output);
+        EncodeBarrier(list, resolved, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE, D3D12_RESOURCE_STATE_COMMON);
+        EncodeBarrier(list, hw_metadata, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ, D3D12_RESOURCE_STATE_COMMON);
+        EncodeBarrier(list, bitstream, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE, D3D12_RESOURCE_STATE_COMMON);
+        EncodeBarrier(list, recon, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE, D3D12_RESOURCE_STATE_COMMON);
+        EncodeBarrier(list, frame, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ, D3D12_RESOURCE_STATE_COMMON);
+        hr = list->Close();
+        ok(hr == S_OK, "encode list Close: %#lx\n", hr);
+        if (SUCCEEDED(hr))
+        {
+            ID3D12CommandList *lists[] = { list };
+            queue->ExecuteCommandLists(1, lists);
+            ok(d3d12_test_wait_queue(context.device, queue, D3D12_TEST_WAIT), "video encode queue did not complete\n");
+            ok(ReadBuffer(&context, resolved, sizeof(resolved_bytes), resolved_bytes), "metadata readback failed\n");
+            metadata = reinterpret_cast<const D3D12_VIDEO_ENCODER_OUTPUT_METADATA *>(resolved_bytes);
+            subregion = reinterpret_cast<const D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA *>(metadata + 1);
+            trace("encode errors %#I64x, %I64u bytes, %I64u subregions, average QP %I64u, subregion 0 size %I64u "
+                    "offset %I64u header %I64u\n", metadata->EncodeErrorFlags, metadata->EncodedBitstreamWrittenBytesCount,
+                    metadata->WrittenSubregionsCount, metadata->EncodeStats.AverageQP, subregion->bSize,
+                    subregion->bStartOffset, subregion->bHeaderSize);
+            ok(!metadata->EncodeErrorFlags, "encode error flags %#I64x\n", metadata->EncodeErrorFlags);
+            ok(metadata->EncodedBitstreamWrittenBytesCount && metadata->EncodedBitstreamWrittenBytesCount < bitstream_size,
+                    "encoded %I64u bytes\n", metadata->EncodedBitstreamWrittenBytesCount);
+            ok(metadata->WrittenSubregionsCount == 1, "%I64u subregions\n", metadata->WrittenSubregionsCount);
+            if (metadata->EncodedBitstreamWrittenBytesCount >= 5
+                    && metadata->EncodedBitstreamWrittenBytesCount < bitstream_size
+                    && ReadBuffer(&context, bitstream, metadata->EncodedBitstreamWrittenBytesCount, bytes))
+            {
+                UINT start = !bytes[0] && !bytes[1] && bytes[2] == 1 ? 3 : !bytes[0] && !bytes[1] && !bytes[2] && bytes[3] == 1
+                        ? 4 : 0;
+
+                trace("bitstream %02x %02x %02x %02x %02x %02x\n", bytes[0], bytes[1], bytes[2], bytes[3], bytes[4],
+                        bytes[5]);
+                ok(start, "the bitstream does not start with an Annex B start code\n");
+                ok(start && (bytes[start] & 0x1f) == 5, "first NAL unit type %u, expected an IDR slice\n",
+                        start ? bytes[start] & 0x1f : 0);
+            }
+        }
+    }
+    ok(context.device->GetDeviceRemovedReason() == S_OK, "device removed reason %#lx\n",
+            context.device->GetDeviceRemovedReason());
+    if (bytes) HeapFree(GetProcessHeap(), 0, bytes);
+    if (resolved) resolved->Release();
+    if (hw_metadata) hw_metadata->Release();
+    if (bitstream) bitstream->Release();
+    if (recon) recon->Release();
+    if (frame) frame->Release();
+    if (list) list->Release();
+    if (allocator) allocator->Release();
+    if (queue) queue->Release();
+    d3d12_test_destroy(&context);
+}
+
+static void TestEncode(ID3D12VideoDevice *video)
+{
+    D3D12_FEATURE_DATA_VIDEO_ENCODER_CODEC codec = {};
+    D3D12_FEATURE_DATA_VIDEO_ENCODER_PROFILE_LEVEL level = {};
+    D3D12_FEATURE_DATA_VIDEO_ENCODER_INPUT_FORMAT format = {};
+    D3D12_FEATURE_DATA_VIDEO_ENCODER_HEAP_SIZE heap_size = {};
+    D3D12_VIDEO_ENCODER_LEVELS_H264 min_level = D3D12_VIDEO_ENCODER_LEVELS_H264_1, max_level = min_level;
+    D3D12_VIDEO_ENCODER_PROFILE_H264 profile_out = D3D12_VIDEO_ENCODER_PROFILE_H264_HIGH;
+    D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264 configuration_out = {};
+    D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC resolution_out = {};
+    D3D12_VIDEO_ENCODER_PROFILE_DESC profile_desc = {};
+    D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION configuration_desc = {};
+    D3D12_VIDEO_ENCODER_DESC desc = {};
+    D3D12_VIDEO_ENCODER_HEAP_DESC heap_desc = {};
+    struct encode_setup setup = {};
+    ID3D12VideoEncoderHeap *heap = NULL;
+    ID3D12VideoEncoder *encoder = NULL;
+    ID3D12VideoDevice3 *video3 = NULL;
+    HRESULT hr;
+
+    hr = video->QueryInterface(__uuidof(ID3D12VideoDevice3), reinterpret_cast<void **>(&video3));
+    ok(hr == S_OK && video3, "ID3D12VideoDevice3: %#lx\n", hr);
+    if (!video3) return;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_CODEC, &codec, sizeof(codec) - 4);
+    ok(hr == E_INVALIDARG, "encoder codec caps with a short size: %#lx\n", hr);
+    codec.NodeIndex = 1;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_CODEC, &codec, sizeof(codec));
+    ok(hr == E_INVALIDARG, "encoder codec caps on node 1: %#lx\n", hr);
+    codec.NodeIndex = 0;
+    codec.Codec = D3D12_VIDEO_ENCODER_CODEC_HEVC;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_CODEC, &codec, sizeof(codec));
+    ok(hr == S_OK, "HEVC encoder caps: %#lx\n", hr);
+    trace("HEVC encode %d\n", codec.IsSupported);
+    codec.Codec = D3D12_VIDEO_ENCODER_CODEC_H264;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_CODEC, &codec, sizeof(codec));
+    ok(hr == S_OK, "H.264 encoder caps: %#lx\n", hr);
+    trace("H.264 encode %d\n", codec.IsSupported);
+    if (!codec.IsSupported)
+    {
+        skip("no H.264 encoder\n");
+        video3->Release();
+        return;
+    }
+
+    setup.profile = D3D12_VIDEO_ENCODER_PROFILE_H264_MAIN;
+    level.Codec = D3D12_VIDEO_ENCODER_CODEC_H264;
+    level.Profile.DataSize = sizeof(setup.profile);
+    level.Profile.pH264Profile = &setup.profile;
+    level.MinSupportedLevel.DataSize = sizeof(min_level);
+    level.MinSupportedLevel.pH264LevelSetting = &min_level;
+    level.MaxSupportedLevel.DataSize = sizeof(max_level);
+    level.MaxSupportedLevel.pH264LevelSetting = &max_level;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_PROFILE_LEVEL, &level, sizeof(level));
+    ok(hr == S_OK && level.IsSupported, "H.264 main levels: %#lx, supported %d\n", hr, level.IsSupported);
+    trace("H.264 main levels %u..%u\n", min_level, max_level);
+
+    format.Codec = D3D12_VIDEO_ENCODER_CODEC_H264;
+    format.Profile = level.Profile;
+    format.Format = DXGI_FORMAT_NV12;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_INPUT_FORMAT, &format, sizeof(format));
+    ok(hr == S_OK && format.IsSupported, "H.264 NV12 input: %#lx, supported %d\n", hr, format.IsSupported);
+
+    setup.level = max_level < D3D12_VIDEO_ENCODER_LEVELS_H264_41 ? max_level : D3D12_VIDEO_ENCODER_LEVELS_H264_41;
+    setup.configuration.DirectModeConfig = D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_DIRECT_MODES_DISABLED;
+    setup.configuration.DisableDeblockingFilterConfig =
+            D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_0_ALL_LUMA_CHROMA_SLICE_BLOCK_EDGES_ALWAYS_FILTERED;
+    setup.gop.GOPLength = 30;
+    setup.gop.PPicturePeriod = 1;
+    setup.gop.pic_order_cnt_type = 2;
+    setup.gop.log2_max_frame_num_minus4 = 4;
+    setup.gop.log2_max_pic_order_cnt_lsb_minus4 = 4;
+    setup.cqp.ConstantQP_FullIntracodedFrame = 26;
+    setup.cqp.ConstantQP_InterPredictedFrame_PrevRefOnly = 28;
+    setup.cqp.ConstantQP_InterPredictedFrame_BiDirectionalRef = 30;
+    setup.resolution.Width = 320;
+    setup.resolution.Height = 240;
+
+    setup.requirements.Codec = D3D12_VIDEO_ENCODER_CODEC_H264;
+    setup.requirements.Profile = level.Profile;
+    setup.requirements.InputFormat = DXGI_FORMAT_NV12;
+    setup.requirements.PictureTargetResolution = setup.resolution;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_RESOURCE_REQUIREMENTS, &setup.requirements,
+            sizeof(setup.requirements));
+    ok(hr == S_OK && setup.requirements.IsSupported, "H.264 resource requirements: %#lx, supported %d\n", hr,
+            setup.requirements.IsSupported);
+    trace("bitstream alignment %u, metadata alignment %u, metadata size %u\n",
+            setup.requirements.CompressedBitstreamBufferAccessAlignment,
+            setup.requirements.EncoderMetadataBufferAccessAlignment, setup.requirements.MaxEncoderOutputMetadataBufferSize);
+
+    setup.support.Codec = D3D12_VIDEO_ENCODER_CODEC_H264;
+    setup.support.InputFormat = DXGI_FORMAT_NV12;
+    setup.support.CodecConfiguration.DataSize = sizeof(setup.configuration);
+    setup.support.CodecConfiguration.pH264Config = &setup.configuration;
+    setup.support.CodecGopSequence.DataSize = sizeof(setup.gop);
+    setup.support.CodecGopSequence.pH264GroupOfPictures = &setup.gop;
+    setup.support.RateControl.Mode = D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CQP;
+    setup.support.RateControl.ConfigParams.DataSize = sizeof(setup.cqp);
+    setup.support.RateControl.ConfigParams.pConfiguration_CQP = &setup.cqp;
+    setup.support.RateControl.TargetFrameRate.Numerator = 30;
+    setup.support.RateControl.TargetFrameRate.Denominator = 1;
+    setup.support.IntraRefresh = D3D12_VIDEO_ENCODER_INTRA_REFRESH_MODE_NONE;
+    setup.support.SubregionFrameEncoding = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME;
+    setup.support.ResolutionsListCount = 1;
+    setup.support.pResolutionList = &setup.resolution;
+    setup.support.MaxReferenceFramesInDPB = 1;
+    setup.support.SuggestedProfile.DataSize = sizeof(profile_out);
+    setup.support.SuggestedProfile.pH264Profile = &profile_out;
+    setup.support.SuggestedLevel.DataSize = sizeof(min_level);
+    setup.support.SuggestedLevel.pH264LevelSetting = &min_level;
+    setup.support.pResolutionDependentSupport = &setup.limits;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_SUPPORT, &setup.support, sizeof(setup.support));
+    ok(hr == S_OK && (setup.support.SupportFlags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_GENERAL_SUPPORT_OK),
+            "H.264 CQP 320x240 support: %#lx, flags %#x, validation %#x\n", hr, setup.support.SupportFlags,
+            setup.support.ValidationFlags);
+    trace("support flags %#x, suggested profile %u level %u, max subregions %u, subregion block %u\n",
+            setup.support.SupportFlags, profile_out, min_level, setup.limits.MaxSubregionsNumber,
+            setup.limits.SubregionBlockPixelsSize);
+
+    desc.EncodeCodec = D3D12_VIDEO_ENCODER_CODEC_H264;
+    desc.EncodeProfile = level.Profile;
+    desc.InputFormat = DXGI_FORMAT_NV12;
+    desc.CodecConfiguration.DataSize = sizeof(setup.configuration);
+    desc.CodecConfiguration.pH264Config = &setup.configuration;
+    desc.MaxMotionEstimationPrecision = D3D12_VIDEO_ENCODER_MOTION_ESTIMATION_PRECISION_MODE_MAXIMUM;
+    desc.NodeMask = 3;
+    hr = video3->CreateVideoEncoder(&desc, __uuidof(ID3D12VideoEncoder), reinterpret_cast<void **>(&encoder));
+    ok(hr == E_INVALIDARG && !encoder, "encoder on two nodes: %#lx\n", hr);
+    desc.NodeMask = 0;
+    hr = video3->CreateVideoEncoder(&desc, __uuidof(ID3D12VideoEncoder), reinterpret_cast<void **>(&encoder));
+    ok(hr == S_OK && encoder, "H.264 encoder: %#lx\n", hr);
+    if (encoder)
+    {
+        ok(encoder->GetCodec() == D3D12_VIDEO_ENCODER_CODEC_H264, "encoder codec %u\n", encoder->GetCodec());
+        ok(encoder->GetInputFormat() == DXGI_FORMAT_NV12, "encoder format %u\n", encoder->GetInputFormat());
+        profile_desc.DataSize = sizeof(profile_out);
+        profile_desc.pH264Profile = &profile_out;
+        hr = encoder->GetCodecProfile(profile_desc);
+        ok(hr == S_OK && profile_out == D3D12_VIDEO_ENCODER_PROFILE_H264_MAIN, "encoder profile: %#lx, %u\n", hr,
+                profile_out);
+        configuration_desc.DataSize = sizeof(configuration_out);
+        configuration_desc.pH264Config = &configuration_out;
+        hr = encoder->GetCodecConfiguration(configuration_desc);
+        ok(hr == S_OK && !memcmp(&configuration_out, &setup.configuration, sizeof(configuration_out)),
+                "encoder configuration: %#lx\n", hr);
+    }
+
+    heap_desc.EncodeCodec = D3D12_VIDEO_ENCODER_CODEC_H264;
+    heap_desc.EncodeProfile = level.Profile;
+    heap_desc.EncodeLevel.DataSize = sizeof(setup.level);
+    heap_desc.EncodeLevel.pH264LevelSetting = &setup.level;
+    heap_desc.ResolutionsListCount = 1;
+    heap_desc.pResolutionList = &setup.resolution;
+    heap_size.HeapDesc = heap_desc;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_HEAP_SIZE, &heap_size, sizeof(heap_size));
+    ok(hr == S_OK && heap_size.IsSupported, "encoder heap size: %#lx, supported %d\n", hr, heap_size.IsSupported);
+    trace("encoder heap L0 %I64u L1 %I64u\n", heap_size.MemoryPoolL0Size, heap_size.MemoryPoolL1Size);
+    hr = video3->CreateVideoEncoderHeap(&heap_desc, __uuidof(ID3D12VideoEncoderHeap), reinterpret_cast<void **>(&heap));
+    ok(hr == S_OK && heap, "H.264 encoder heap: %#lx\n", hr);
+    if (heap)
+    {
+        ok(heap->GetResolutionListCount() == 1, "heap resolutions %u\n", heap->GetResolutionListCount());
+        hr = heap->GetResolutionList(1, &resolution_out);
+        ok(hr == S_OK && resolution_out.Width == 320 && resolution_out.Height == 240, "heap resolution: %#lx, %ux%u\n",
+                hr, resolution_out.Width, resolution_out.Height);
+    }
+    if (encoder && heap && (setup.support.SupportFlags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_GENERAL_SUPPORT_OK))
+        TestEncodeFrame(encoder, heap, &setup);
+    if (heap) heap->Release();
+    if (encoder) encoder->Release();
+    video3->Release();
+}
+
 static void RunVideo(void *)
 {
     D3D12_FEATURE_DATA_VIDEO_DECODE_PROFILE_COUNT count = {};
@@ -652,6 +1014,7 @@ static void RunVideo(void *)
     }
     TestProcess(video);
     TestMotion(video);
+    TestEncode(video);
 
     hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_DECODE_PROFILE_COUNT, &count, sizeof(count));
     ok(hr == S_OK && count.ProfileCount, "profile count: %#lx, %u\n", hr, count.ProfileCount);
