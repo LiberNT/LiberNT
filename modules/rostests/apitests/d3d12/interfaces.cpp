@@ -72,6 +72,62 @@ static void TestGetInterface(PFN_D3D12_GET_INTERFACE_TEST get_interface)
     if (object) object->Release();
 }
 
+static void TestDeviceConfiguration(ID3D12Device *device, BOOL enabled)
+{
+    const UINT dred_flags = D3D12_DEVICE_FLAG_DRED_AUTO_BREADCRUMBS_ENABLED
+            | D3D12_DEVICE_FLAG_DRED_PAGE_FAULT_REPORTING_ENABLED;
+    D3D12_VERSIONED_ROOT_SIGNATURE_DESC root = {};
+    ID3D12DeviceConfiguration1 *configuration1 = NULL;
+    ID3D12DeviceConfiguration *configuration = NULL;
+    ID3D12VersionedRootSignatureDeserializer *deserializer = NULL;
+    D3D12_DEVICE_CONFIGURATION_DESC desc;
+    ID3DBlob *blob = NULL, *error = NULL;
+    HRESULT hr;
+
+    hr = device->QueryInterface(__uuidof(ID3D12DeviceConfiguration), reinterpret_cast<void **>(&configuration));
+    ok(hr == S_OK && configuration, "device configuration: %#lx\n", hr);
+    if (!configuration) return;
+    desc = configuration->GetDesc();
+    trace("enabled %d: configuration flags %#x, SDK version %u\n", enabled, desc.Flags, desc.SDKVersion);
+    ok((desc.Flags & dred_flags) == (enabled ? dred_flags : 0), "enabled %d: flags %#x\n", enabled, desc.Flags);
+    ok(!(desc.Flags & (D3D12_DEVICE_FLAG_DEBUG_LAYER_ENABLED | D3D12_DEVICE_FLAG_GPU_BASED_VALIDATION_ENABLED)),
+            "debug flags %#x\n", desc.Flags);
+    ok(desc.GpuBasedValidationFlags == D3D12_GPU_BASED_VALIDATION_FLAGS_NONE, "GBV flags %#x\n",
+            desc.GpuBasedValidationFlags);
+    ok(desc.SDKVersion >= 600, "SDK version %u\n", desc.SDKVersion);
+    ok(!desc.NumEnabledExperimentalFeatures, "experimental features %u\n", desc.NumEnabledExperimentalFeatures);
+    hr = configuration->GetEnabledExperimentalFeatures(NULL, 0);
+    ok(hr == S_OK, "GetEnabledExperimentalFeatures: %#lx\n", hr);
+
+    root.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+    root.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+    hr = configuration->SerializeVersionedRootSignature(&root, &blob, &error);
+    ok(hr == S_OK && blob, "SerializeVersionedRootSignature: %#lx\n", hr);
+    if (blob)
+    {
+        hr = configuration->CreateVersionedRootSignatureDeserializer(blob->GetBufferPointer(), blob->GetBufferSize(),
+                __uuidof(ID3D12VersionedRootSignatureDeserializer), reinterpret_cast<void **>(&deserializer));
+        ok(hr == S_OK && deserializer, "CreateVersionedRootSignatureDeserializer: %#lx\n", hr);
+        if (deserializer) deserializer->Release();
+        deserializer = NULL;
+        hr = configuration->QueryInterface(__uuidof(ID3D12DeviceConfiguration1),
+                reinterpret_cast<void **>(&configuration1));
+        ok(hr == S_OK && configuration1, "device configuration 1: %#lx\n", hr);
+        if (configuration1)
+        {
+            hr = configuration1->CreateVersionedRootSignatureDeserializerFromSubobjectInLibrary(
+                    blob->GetBufferPointer(), blob->GetBufferSize(), L"root",
+                    __uuidof(ID3D12VersionedRootSignatureDeserializer), reinterpret_cast<void **>(&deserializer));
+            ok(hr == E_INVALIDARG && !deserializer, "deserializer from a blob that is no library: %#lx\n", hr);
+            if (deserializer) deserializer->Release();
+            configuration1->Release();
+        }
+        blob->Release();
+    }
+    if (error) error->Release();
+    configuration->Release();
+}
+
 static void TestDeviceDred(BOOL enabled)
 {
     ID3D12DeviceRemovedExtendedData *dred = NULL;
@@ -118,6 +174,7 @@ static void TestDeviceDred(BOOL enabled)
         }
         dred->Release();
     }
+    TestDeviceConfiguration(device, enabled);
     ok(device->GetDeviceRemovedReason() == S_OK, "device removed reason %#lx\n", device->GetDeviceRemovedReason());
     device->Release();
 }
