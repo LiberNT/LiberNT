@@ -215,6 +215,13 @@ CheckUnattendedSetup(
 
     INF_FreeData(Value);
 
+    if (SpInfFindFirstLine(UnattendInf, L"Unattend", L"SelfTest", &Context) &&
+        INF_GetData(&Context, NULL, &Value))
+    {
+        pSetupData->SelfTest = (_wcsicmp(Value, L"yes") == 0);
+        INF_FreeData(Value);
+    }
+
     /* Check if Unattend setup is enabled */
     if (!SpInfFindFirstLine(UnattendInf, L"Unattend", L"UnattendSetupEnabled", &Context))
     {

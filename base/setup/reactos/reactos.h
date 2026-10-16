@@ -181,6 +181,10 @@ typedef struct _SETUPDATA
 
 } SETUPDATA, *PSETUPDATA;
 
+ULONG
+RunSetupSelfTest(
+    _In_ PSETUPDATA SetupData);
+
 extern HANDLE ProcessHeap;
 extern SETUPDATA SetupData;
 

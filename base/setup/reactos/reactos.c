@@ -4130,6 +4130,14 @@ _tWinMain(HINSTANCE hInst,
     if (!LoadSetupData(&SetupData))
         goto Quit;
 
+    if (wcsstr(lpszCmdLine, L"--selftest") || SetupData.USetupData.SelfTest)
+    {
+        Error = RunSetupSelfTest(&SetupData);
+        FinishSetup(&SetupData.USetupData);
+        FreeNtToWin32PathMappingList(&SetupData.MappingList);
+        return (int)Error;
+    }
+
     hHotkeyThread = CreateThread(NULL, 0, HotkeyThread, NULL, 0, NULL);
 
     /* Whenever any of the common controls are used in your app,

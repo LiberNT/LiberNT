@@ -6,6 +6,10 @@ Signature = "$ReactOS$"
 ; no - unattend setup disabled
 UnattendSetupEnabled = no
 
+; Set SelfTest to yes to run the Setup disk selftest on blank disks instead of installing.
+; It is the same as running reactos.exe --selftest.
+;SelfTest = yes
+
 ; Install to \Device\Harddisk0\Partition1\Windows
 DestinationDiskNumber = 0
 DestinationPartitionNumber = 1

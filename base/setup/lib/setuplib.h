@@ -133,6 +133,7 @@ typedef struct _USETUP_DATA
     LONG FormatPartition;
     LONG AutoPartition;
     LONG FsType;
+    BOOLEAN SelfTest;
 
 /* Settings lists *****/
     PGENERIC_LIST ComputerList;
