@@ -39,7 +39,6 @@
 typedef struct _QUEUEENTRY
 {
     LIST_ENTRY ListEntry;
-    PWSTR SourceCabinet;    /* May be NULL if the file is not in a cabinet */
     PWSTR SourceRootPath;
     PWSTR SourcePath;
     PWSTR SourceFileName;
@@ -57,106 +56,10 @@ typedef struct _FILEQUEUEHEADER
 
     LIST_ENTRY CopyQueue;   // PQUEUEENTRY entries
     ULONG CopyCount;
-
-    BOOLEAN HasCurrentCabinet;
-    CABINET_CONTEXT CabinetContext;
-    CAB_SEARCH Search;
-    WCHAR CurrentCabinetName[MAX_PATH];
 } FILEQUEUEHEADER, *PFILEQUEUEHEADER;
 
 
 /* SETUP* API COMPATIBILITY FUNCTIONS ****************************************/
-
-static NTSTATUS
-SetupExtractFile(
-    IN OUT PFILEQUEUEHEADER QueueHeader,
-    IN PCWSTR CabinetFileName,
-    IN PCWSTR SourceFileName,
-    IN PCWSTR DestinationPathName)
-{
-    ULONG CabStatus;
-
-    DPRINT("SetupExtractFile(CabinetFileName: '%S', SourceFileName: '%S', DestinationPathName: '%S')\n",
-           CabinetFileName, SourceFileName, DestinationPathName);
-
-    if (QueueHeader->HasCurrentCabinet)
-    {
-        DPRINT("CurrentCabinetName: '%S'\n", QueueHeader->CurrentCabinetName);
-    }
-
-    if (QueueHeader->HasCurrentCabinet &&
-        (wcscmp(CabinetFileName, QueueHeader->CurrentCabinetName) == 0))
-    {
-        DPRINT("Using same cabinet as last time\n");
-
-        /* Use our last location because the files should be sequential */
-        CabStatus = CabinetFindNextFileSequential(&QueueHeader->CabinetContext,
-                                                  SourceFileName,
-                                                  &QueueHeader->Search);
-        if (CabStatus != CAB_STATUS_SUCCESS)
-        {
-            DPRINT("Sequential miss on file: %S\n", SourceFileName);
-
-            /* Looks like we got unlucky */
-            CabStatus = CabinetFindFirst(&QueueHeader->CabinetContext,
-                                         SourceFileName,
-                                         &QueueHeader->Search);
-        }
-    }
-    else
-    {
-        DPRINT("Using new cabinet\n");
-
-        if (QueueHeader->HasCurrentCabinet)
-        {
-            QueueHeader->HasCurrentCabinet = FALSE;
-            CabinetCleanup(&QueueHeader->CabinetContext);
-        }
-
-        RtlStringCchCopyW(QueueHeader->CurrentCabinetName,
-                          ARRAYSIZE(QueueHeader->CurrentCabinetName),
-                          CabinetFileName);
-
-        CabinetInitialize(&QueueHeader->CabinetContext);
-        CabinetSetEventHandlers(&QueueHeader->CabinetContext,
-                                NULL, NULL, NULL, NULL);
-        CabinetSetCabinetName(&QueueHeader->CabinetContext, CabinetFileName);
-
-        CabStatus = CabinetOpen(&QueueHeader->CabinetContext);
-        if (CabStatus == CAB_STATUS_SUCCESS)
-        {
-            DPRINT("Opened cabinet %S\n", CabinetFileName /*CabinetGetCabinetName(&QueueHeader->CabinetContext)*/);
-            QueueHeader->HasCurrentCabinet = TRUE;
-        }
-        else
-        {
-            DPRINT("Cannot open cabinet (%d)\n", CabStatus);
-            return STATUS_UNSUCCESSFUL;
-        }
-
-        /* We have to start at the beginning here */
-        CabStatus = CabinetFindFirst(&QueueHeader->CabinetContext,
-                                     SourceFileName,
-                                     &QueueHeader->Search);
-    }
-
-    if (CabStatus != CAB_STATUS_SUCCESS)
-    {
-        DPRINT1("Unable to find '%S' in cabinet '%S'\n",
-                SourceFileName, CabinetGetCabinetName(&QueueHeader->CabinetContext));
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    CabinetSetDestinationPath(&QueueHeader->CabinetContext, DestinationPathName);
-    CabStatus = CabinetExtractFile(&QueueHeader->CabinetContext, &QueueHeader->Search);
-    if (CabStatus != CAB_STATUS_SUCCESS)
-    {
-        DPRINT("Cannot extract file %S (%d)\n", SourceFileName, CabStatus);
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    return STATUS_SUCCESS;
-}
 
 HSPFILEQ
 WINAPI
@@ -179,8 +82,6 @@ SetupOpenFileQueue(VOID)
     InitializeListHead(&QueueHeader->CopyQueue);
     QueueHeader->CopyCount = 0;
 
-    QueueHeader->HasCurrentCabinet = FALSE;
-
     return (HSPFILEQ)QueueHeader;
 }
 
@@ -192,9 +93,6 @@ SetupDeleteQueueEntry(
         return;
 
     /* Delete all strings */
-    if (Entry->SourceCabinet != NULL)
-        RtlFreeHeap(ProcessHeap, 0, Entry->SourceCabinet);
-
     if (Entry->SourceRootPath != NULL)
         RtlFreeHeap(ProcessHeap, 0, Entry->SourceRootPath);
 
@@ -258,16 +156,14 @@ SetupCloseFileQueue(
     return TRUE;
 }
 
-/* A simplified version of SetupQueueCopyW that wraps Cabinet support around */
 BOOL
 WINAPI
-SetupQueueCopyWithCab(
+SetupQueueCopyW(
     IN HSPFILEQ QueueHandle,
     IN PCWSTR SourceRootPath,
     IN PCWSTR SourcePath OPTIONAL,
     IN PCWSTR SourceFileName,
     IN PCWSTR SourceDescription OPTIONAL,
-    IN PCWSTR SourceCabinet OPTIONAL,
     IN PCWSTR SourceTagFile OPTIONAL,
     IN PCWSTR TargetDirectory,
     IN PCWSTR TargetFileName OPTIONAL,
@@ -287,8 +183,7 @@ SetupQueueCopyWithCab(
 
     QueueHeader = (PFILEQUEUEHEADER)QueueHandle;
 
-    DPRINT("SetupQueueCopy(Cab '%S', SrcRootPath '%S', SrcPath '%S', SrcFN '%S' --> DstPath '%S', DstFN '%S')\n",
-           SourceCabinet ? SourceCabinet : L"n/a",
+    DPRINT("SetupQueueCopy(SrcRootPath '%S', SrcPath '%S', SrcFN '%S' --> DstPath '%S', DstFN '%S')\n",
            SourceRootPath, SourcePath, SourceFileName,
            TargetDirectory, TargetFileName);
 
@@ -299,22 +194,6 @@ SetupQueueCopyWithCab(
 
     RtlZeroMemory(Entry, sizeof(QUEUEENTRY));
 
-    /* Copy source cabinet if available */
-    Entry->SourceCabinet = NULL;
-    if (SourceCabinet != NULL)
-    {
-        Length = wcslen(SourceCabinet);
-        Entry->SourceCabinet = RtlAllocateHeap(ProcessHeap,
-                                               0,
-                                               (Length + 1) * sizeof(WCHAR));
-        if (Entry->SourceCabinet == NULL)
-        {
-            RtlFreeHeap(ProcessHeap, 0, Entry);
-            return FALSE;
-        }
-        RtlStringCchCopyW(Entry->SourceCabinet, Length + 1, SourceCabinet);
-    }
-
     /* Copy source root path */
     Length = wcslen(SourceRootPath);
     Entry->SourceRootPath = RtlAllocateHeap(ProcessHeap,
@@ -322,9 +201,6 @@ SetupQueueCopyWithCab(
                                             (Length + 1) * sizeof(WCHAR));
     if (Entry->SourceRootPath == NULL)
     {
-        if (Entry->SourceCabinet != NULL)
-            RtlFreeHeap(ProcessHeap, 0, Entry->SourceCabinet);
-
         RtlFreeHeap(ProcessHeap, 0, Entry);
         return FALSE;
     }
@@ -342,9 +218,6 @@ SetupQueueCopyWithCab(
                                             (Length + 1) * sizeof(WCHAR));
         if (Entry->SourcePath == NULL)
         {
-            if (Entry->SourceCabinet != NULL)
-                RtlFreeHeap(ProcessHeap, 0, Entry->SourceCabinet);
-
             RtlFreeHeap(ProcessHeap, 0, Entry->SourceRootPath);
             RtlFreeHeap(ProcessHeap, 0, Entry);
             return FALSE;
@@ -363,9 +236,6 @@ SetupQueueCopyWithCab(
             RtlFreeHeap(ProcessHeap, 0, Entry->SourcePath);
 
         RtlFreeHeap(ProcessHeap, 0, Entry->SourceRootPath);
-
-        if (Entry->SourceCabinet != NULL)
-            RtlFreeHeap(ProcessHeap, 0, Entry->SourceCabinet);
 
         RtlFreeHeap(ProcessHeap, 0, Entry);
         return FALSE;
@@ -387,9 +257,6 @@ SetupQueueCopyWithCab(
             RtlFreeHeap(ProcessHeap, 0, Entry->SourcePath);
 
         RtlFreeHeap(ProcessHeap, 0, Entry->SourceRootPath);
-
-        if (Entry->SourceCabinet != NULL)
-            RtlFreeHeap(ProcessHeap, 0, Entry->SourceCabinet);
 
         RtlFreeHeap(ProcessHeap, 0, Entry);
         return FALSE;
@@ -413,9 +280,6 @@ SetupQueueCopyWithCab(
                 RtlFreeHeap(ProcessHeap, 0, Entry->SourcePath);
 
             RtlFreeHeap(ProcessHeap, 0, Entry->SourceRootPath);
-
-            if (Entry->SourceCabinet != NULL)
-                RtlFreeHeap(ProcessHeap, 0, Entry->SourceCabinet);
 
             RtlFreeHeap(ProcessHeap, 0, Entry);
             return FALSE;
@@ -458,7 +322,6 @@ SetupQueueDeleteW(
 
     RtlZeroMemory(Entry, sizeof(QUEUEENTRY));
 
-    Entry->SourceCabinet = NULL;
     Entry->SourceRootPath = NULL;
     Entry->SourcePath = NULL;
     Entry->SourceFileName = NULL;
@@ -532,7 +395,6 @@ SetupQueueRenameW(
 
     RtlZeroMemory(Entry, sizeof(QUEUEENTRY));
 
-    Entry->SourceCabinet  = NULL;
     Entry->SourceRootPath = NULL;
 
     /* Copy source path */
@@ -865,37 +727,16 @@ EndRename:
         //
 
         /* Build the full source path */
-        if (Entry->SourceCabinet == NULL)
-        {
-            CombinePaths(FileSrcPath, ARRAYSIZE(FileSrcPath), 3,
-                         Entry->SourceRootPath, Entry->SourcePath,
-                         Entry->SourceFileName);
-        }
-        else
-        {
-            /*
-             * The cabinet must be in Entry->SourceRootPath only!
-             * (Should we ignore Entry->SourcePath?)
-             */
-            CombinePaths(FileSrcPath, ARRAYSIZE(FileSrcPath), 3,
-                         Entry->SourceRootPath, Entry->SourcePath,
-                         Entry->SourceCabinet);
-        }
+        CombinePaths(FileSrcPath, ARRAYSIZE(FileSrcPath), 3,
+                     Entry->SourceRootPath, Entry->SourcePath,
+                     Entry->SourceFileName);
 
         /* Build the full target path */
         RtlStringCchCopyW(FileDstPath, ARRAYSIZE(FileDstPath), Entry->TargetDirectory);
-        if (Entry->SourceCabinet == NULL)
-        {
-            /* If the file is not in a cabinet, possibly use a different target name */
-            if (Entry->TargetFileName != NULL)
-                ConcatPaths(FileDstPath, ARRAYSIZE(FileDstPath), 1, Entry->TargetFileName);
-            else
-                ConcatPaths(FileDstPath, ARRAYSIZE(FileDstPath), 1, Entry->SourceFileName);
-        }
+        if (Entry->TargetFileName != NULL)
+            ConcatPaths(FileDstPath, ARRAYSIZE(FileDstPath), 1, Entry->TargetFileName);
         else
-        {
             ConcatPaths(FileDstPath, ARRAYSIZE(FileDstPath), 1, Entry->SourceFileName);
-        }
 
         DPRINT(" -----> " "Copy: '%S' ==> '%S'\n", FileSrcPath, FileDstPath);
 
@@ -923,23 +764,8 @@ EndRename:
         // else (Result == FILEOP_DOIT)
 
 RetryCopy:
-        if (Entry->SourceCabinet != NULL)
-        {
-            /*
-             * The file is in a cabinet, use only the destination path
-             * and keep the source name as the target name.
-             */
-            /* Extract the file from the cabinet */
-            Status = SetupExtractFile(QueueHeader,
-                                      FileSrcPath, // Specifies the cabinet path
-                                      Entry->SourceFileName,
-                                      Entry->TargetDirectory);
-        }
-        else
-        {
-            /* Copy the file */
-            Status = SetupCopyFile(FileSrcPath, FileDstPath, FALSE);
-        }
+        /* Copy the file */
+        Status = SetupCopyFile(FileSrcPath, FileDstPath, FALSE);
 
         if (!NT_SUCCESS(Status))
         {
@@ -1001,7 +827,7 @@ SPFILE_EXPORTS SpFileExports =
 {
     SetupOpenFileQueue,
     SetupCloseFileQueue,
-    SetupQueueCopyWithCab,
+    SetupQueueCopyW,
     SetupQueueDeleteW,
     SetupQueueRenameW,
     SetupCommitFileQueueW

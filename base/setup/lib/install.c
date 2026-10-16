@@ -187,7 +187,6 @@ AddTreeToCopyQueue(
                                   FileName,
                                   NULL,
                                   NULL,
-                                  NULL,
                                   TargetDirectory,
                                   NULL,
                                   0))
@@ -247,7 +246,6 @@ AddComputerFilesToCopyQueue(
                              SourceDirectory,
                              NULL,
                              SourceFileName,
-                             NULL,
                              NULL,
                              NULL,
                              TargetDirectory,

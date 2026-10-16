@@ -91,7 +91,6 @@ typedef BOOL
     IN PCWSTR SourcePath OPTIONAL,
     IN PCWSTR SourceFileName,
     IN PCWSTR SourceDescription OPTIONAL,
-    IN PCWSTR SourceCabinet OPTIONAL,
     IN PCWSTR SourceTagFile OPTIONAL,
     IN PCWSTR TargetDirectory,
     IN PCWSTR TargetFileName OPTIONAL,
