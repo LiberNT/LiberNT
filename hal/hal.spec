@@ -219,6 +219,7 @@
 @ stdcall -arch=riscv64 HalpRiscvClaimPlicInterrupt()
 @ stdcall -arch=riscv64 HalpRiscvCompletePlicInterrupt(long)
 @ stdcall -arch=riscv64 HalpRiscvQueryProcessorHartId(long ptr)
+@ stdcall -arch=riscv64 HalpRiscvAbandonProcessor(long)
 @ stdcall -arch=riscv64 HalpRiscvRemoteFence(long ptr long long)
 @ stdcall -arch=ppc HalpPpcClockInterrupt(ptr)
 @ stdcall -arch=ppc HalpPpcParkClock()

@@ -11,6 +11,10 @@
 HalpRiscvApTrampoline:
     csrci sstatus, 2
     csrw sie, zero
+    lla t5, HalpRiscvApPark
+    csrw stvec, t5
+    addi t5, a0, 1
+    sd t5, 64(a1)
     csrw sscratch, zero
     fence rw, rw
     ld t0, 0(a1)                 /* Temporary root with identity trampoline */
@@ -30,6 +34,11 @@ HalpRiscvApTrampoline:
     csrw satp, t0
     sfence.vma zero, zero
     jr t2
+
+    .balign 4
+HalpRiscvApPark:
+    wfi
+    j HalpRiscvApPark
 HalpRiscvApTrampolineEnd:
 
     .balign 4

@@ -471,6 +471,7 @@ extern "C" {
 VOID NTAPI KiRiscvInitializePcr(PKPCR Pcr, PKTHREAD Thread, ULONG_PTR HartId,
                               ULONG Number, PVOID DpcStack, PVOID PanicStack);
 NTHALAPI BOOLEAN NTAPI HalpRiscvQueryProcessorHartId(ULONG Number, PULONG_PTR HartId);
+NTHALAPI VOID NTAPI HalpRiscvAbandonProcessor(ULONG Number);
 NTHALAPI VOID NTAPI HalpRiscvRemoteFence(KAFFINITY Targets, PVOID Address, SIZE_T Size, BOOLEAN Instruction);
 VOID NTAPI KiIpiSendTbFlush(KAFFINITY Targets, PVOID Address, ULONG Pages);
 VOID NTAPI KiIpiProcessRequests(VOID);

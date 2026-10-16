@@ -5,12 +5,20 @@
 #define NDEBUG
 #include <debug.h>
 
+#define KI_RISCV_AP_WAITING      0
+#define KI_RISCV_AP_ONLINE       1
+#define KI_RISCV_AP_ENTERED      2
+#define KI_RISCV_AP_ABANDONED    (-1)
+#define KI_RISCV_AP_ENTRY_TIMEOUT 2
+#define KI_RISCV_AP_START_TIMEOUT 10
+
 typedef struct _KI_RISCV_AP
 {
     KPCR Pcr;
     ETHREAD Thread;
     PVOID Stack;
     volatile LONG Online;
+    volatile LONG Stage;
     DECLSPEC_ALIGN(16) UCHAR PanicStack[KERNEL_STACK_SIZE];
 } KI_RISCV_AP;
 
@@ -23,10 +31,16 @@ KiRiscvStartProcessor(KI_RISCV_AP *Ap)
     PKPROCESS Process = (PKPROCESS)KeLoaderBlock->Process;
 
     __asm__ __volatile__("csrw sscratch, %0\n\tmv gp, %0" :: "r"(Pcr) : "memory");
+    if (InterlockedCompareExchange(&Ap->Online, KI_RISCV_AP_ENTERED, KI_RISCV_AP_WAITING) !=
+        KI_RISCV_AP_WAITING)
+    {
+        for (;;) __asm__ __volatile__("wfi");
+    }
     if (!KiRiscvInitializeTrapVector())
         KeBugCheckEx(HAL_INITIALIZATION_FAILED, Prcb->Number, Pcr->HartId, 0, 0);
     KiRiscvEnableUserCacheBlockOperations();
     KiRiscvEnableUserTimeCounter();
+    Ap->Stage = 1;
     Thread->ApcState.Process = Process;
     PoInitializePrcb(Prcb);
     KiRiscvSaveProcessorClock(Prcb);
@@ -41,9 +55,12 @@ KiRiscvStartProcessor(KI_RISCV_AP *Ap)
     KiThreadAffinityMask(Thread) = Prcb->SetMember;
     Thread->WaitIrql = DISPATCH_LEVEL;
     InterlockedOr64((PLONG64)&Process->ActiveProcessors, Prcb->SetMember);
+    Ap->Stage = 2;
     ExpInitializeExecutive(Prcb->Number, KeLoaderBlock);
+    Ap->Stage = 3;
     KfRaiseIrql(HIGH_LEVEL);
     HalInitializeProcessor(Prcb->Number, KeLoaderBlock);
+    Ap->Stage = 4;
     KiProcessorBlock[Prcb->Number] = Prcb;
     InterlockedOr64((PLONG64)&KiNode0.ProcessorMask, Prcb->SetMember);
     InterlockedOr64((PLONG64)&KiIdleSummary, Prcb->SetMember);
@@ -53,7 +70,7 @@ KiRiscvStartProcessor(KI_RISCV_AP *Ap)
      * cached while it initialized outside that set. */
     KeFlushCurrentTb();
     /* The initiator may recycle the trampoline only after this point. */
-    InterlockedExchange(&Ap->Online, 1);
+    InterlockedExchange(&Ap->Online, KI_RISCV_AP_ONLINE);
     KfLowerIrql(DISPATCH_LEVEL);
     _enable();
     KiIdleLoop();
@@ -64,6 +81,7 @@ CODE_SEG("INIT") VOID NTAPI KeStartAllProcessors(VOID)
     ULONG Number, Maximum = KeMaximumProcessors;
     ULONG_PTR Hart;
     KI_RISCV_AP *Ap;
+    LONG Progress;
     PVOID DpcStack;
     KPROCESSOR_STATE State;
     LARGE_INTEGER Start, Now, Frequency;
@@ -91,17 +109,30 @@ CODE_SEG("INIT") VOID NTAPI KeStartAllProcessors(VOID)
         State.ContextFrame.A0 = (ULONG_PTR)Ap;
         if (!HalStartNextProcessor(KeLoaderBlock, &State)) goto Failed;
         Start = KeQueryPerformanceCounter(&Frequency);
-        while (!InterlockedCompareExchange(&Ap->Online, 0, 0))
+        while ((Progress = InterlockedCompareExchange(&Ap->Online, 0, 0)) != KI_RISCV_AP_ONLINE)
         {
             Now = KeQueryPerformanceCounter(NULL);
-            if (Now.QuadPart - Start.QuadPart > Frequency.QuadPart * 10)
+            if (Progress == KI_RISCV_AP_WAITING &&
+                Now.QuadPart - Start.QuadPart > Frequency.QuadPart * KI_RISCV_AP_ENTRY_TIMEOUT &&
+                InterlockedCompareExchange(&Ap->Online, KI_RISCV_AP_ABANDONED,
+                                           KI_RISCV_AP_WAITING) == KI_RISCV_AP_WAITING)
+            {
+                break;
+            }
+            if (Now.QuadPart - Start.QuadPart > Frequency.QuadPart * KI_RISCV_AP_START_TIMEOUT)
             {
                 /* HSM accepted the start: the AP may still reference all
                  * startup storage. Never free it or continue a partial boot. */
                 KeBugCheckEx(HAL_INITIALIZATION_FAILED, Number, Hart,
-                             (ULONG_PTR)Ap, 0);
+                             (ULONG_PTR)Ap, Ap->Stage);
             }
             YieldProcessor();
+        }
+        if (Progress != KI_RISCV_AP_ONLINE)
+        {
+            HalpRiscvAbandonProcessor(Number);
+            --Number;
+            continue;
         }
         DPRINT1("RISC-V: CPU %lu hart %Iu online\n", Number, Hart);
         continue;

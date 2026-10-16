@@ -26,8 +26,10 @@ typedef struct _HAL_RISCV_AP_DATA
     ULONG64 Pcr;
     ULONG64 Sstatus;
     ULONG64 VirtualEntry;
+    ULONG64 Reached;
 } HAL_RISCV_AP_DATA;
-C_ASSERT(sizeof(HAL_RISCV_AP_DATA) == 64);
+C_ASSERT(sizeof(HAL_RISCV_AP_DATA) == 72);
+C_ASSERT(FIELD_OFFSET(HAL_RISCV_AP_DATA, Reached) == 64);
 
 extern UCHAR HalpRiscvApTrampoline[], HalpRiscvApTrampolineEnd[];
 extern VOID HalpRiscvApVirtualEntry(VOID);
@@ -199,6 +201,31 @@ HalInitializeProcessor(ULONG Number, PLOADER_PARAMETER_BLOCK LoaderBlock)
     HalpRiscvStartClock();
     KiRiscvSetInterruptEnabled(RISCV_HAL_SIE_STIE | RISCV_HAL_SIE_SSIE, TRUE);
     HalpRiscvEnableProfileInterrupt();
+}
+
+VOID
+NTAPI
+HalpRiscvAbandonProcessor(ULONG Number)
+{
+    HAL_RISCV_AP_DATA *Data;
+    RISCV_SBI_RETURN Status;
+    ULONG_PTR Hart;
+    ULONG Index;
+
+    ASSERT(Number == HalpRiscvStartedProcessors - 1 && HalpRiscvStartupPages);
+    Hart = HalpRiscvHartIds[Number];
+    Data = (HAL_RISCV_AP_DATA *)((PUCHAR)HalpRiscvStartupPages + 3 * PAGE_SIZE + PAGE_SIZE / 2);
+    Status = HalpRiscvSbiCall(RISCV_SBI_EXTENSION_HSM, 2, Hart, 0, 0, 0);
+    DbgPrint("RISC-V: hart %Iu did not reach the kernel: trampoline %s, HSM status %Id error %Id; "
+             "continuing without it\n",
+             Hart, *(volatile ULONG64 *)&Data->Reached ? "entered" : "not entered",
+             (LONG_PTR)Status.Value, Status.Error);
+
+    HalpRiscvStartupPages = NULL;
+    for (Index = Number; Index + 1 < HalpRiscvHartCount; ++Index)
+        HalpRiscvHartIds[Index] = HalpRiscvHartIds[Index + 1];
+    --HalpRiscvHartCount;
+    --HalpRiscvStartedProcessors;
 }
 
 BOOLEAN NTAPI HalAllProcessorsStarted(VOID)

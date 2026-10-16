@@ -72,6 +72,7 @@ RISCV_SBI_RETURN HalpRiscvSbiCall(ULONG_PTR Extension, ULONG_PTR Function,
                                 ULONG_PTR Arg3);
 BOOLEAN HalpRiscvDiscoverHarts(struct _LOADER_PARAMETER_BLOCK *LoaderBlock);
 BOOLEAN NTAPI HalpRiscvQueryProcessorHartId(ULONG Number, PULONG_PTR HartId);
+VOID NTAPI HalpRiscvAbandonProcessor(ULONG Number);
 BOOLEAN HalpRiscvSbiExtensionAvailable(ULONG_PTR Extension);
 
 /* Kernel imports (ntoskrnl.exe, listed in CMakeLists.txt IMPORTS). */
