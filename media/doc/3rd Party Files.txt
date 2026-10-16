@@ -20,13 +20,6 @@ Used Version: 1.8.3
 License: GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later.html)
 URL: https://github.com/rdesktop/rdesktop
 
-Title: TreeList
-Path: base/setup/reactos/treelist.c
-Path: base/setup/reactos/treelist.h
-Used Version: ??? (Imported on 2018.11.06: 2fdfb41 (0.4.11-dev-668))
-License: GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later.html)
-URL: https://github.com/sebkirche/treelist
-
 Title: DXTN OpenGL Compression Libs
 Path: dll/3rdparty/dxtn
 Used Version: 1.1

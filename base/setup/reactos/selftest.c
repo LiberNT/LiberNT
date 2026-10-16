@@ -11,6 +11,7 @@
 #include <ndk/cmfuncs.h>
 #include <ndk/obfuncs.h>
 #include <ndk/setypes.h>
+#include <objbase.h>
 
 #define SELFTEST_MEGABYTE       (1024ULL * 1024ULL)
 #define SELFTEST_GIGABYTE       (1024ULL * SELFTEST_MEGABYTE)
@@ -828,6 +829,7 @@ RunSetupSelfTest(
     ULONG Targets[SELFTEST_MAX_DISKS];
     ULONG Count;
     ULONG Index;
+    HRESULT hrCom = E_FAIL;
 
     ZeroMemory(&Context, sizeof(Context));
     Context.SetupData = SetupData;
@@ -844,6 +846,19 @@ RunSetupSelfTest(
     Count = SelfTestFindTargets(&Context, Targets);
     if (!SelfTestCheck(&Context, Count != 0, L"enum", L"%lu blank fixed disks", Count))
         goto Done;
+
+    hrCom = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    DiskInfoRefresh();
+    for (Index = 0; Index < Count; Index++)
+    {
+        WCHAR Description[128];
+        BOOL Found = DiskInfoGetDescription(Targets[Index], Description, ARRAYSIZE(Description));
+
+        SelfTestCheck(&Context,
+                      Found && wcsncmp(Description, L"Wine", 4) != 0 && wcschr(Description, L'\x00B7') != NULL,
+                      L"wmi", L"MSFT_PhysicalDisk %lu: %s", Targets[Index], Found ? Description : L"(none)");
+    }
+    DiskInfoFree();
 
     if (SelfTestLayoutDisk(&Context, Targets[0], TRUE, L"A",
                            InstallDevice, ARRAYSIZE(InstallDevice),
@@ -883,6 +898,8 @@ Done:
     }
     if (Context.LogFile != INVALID_HANDLE_VALUE)
         CloseHandle(Context.LogFile);
+    if (SUCCEEDED(hrCom))
+        CoUninitialize();
 
     return Context.Failures;
 }

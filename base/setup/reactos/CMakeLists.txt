@@ -10,13 +10,17 @@ include_directories(
 list(APPEND SOURCE
     spapisup/fileqsup.c
     spapisup/infsupp.c
-    drivepage.c
+    diskinfo.c
+    diskpage.c
     reactos.c
     selftest.c
-    treelist.c
+    wizard.c
     reactos.h)
 
 file(GLOB reactos_rc_deps res/*.*)
+list(APPEND reactos_rc_deps
+    ${REACTOS_SOURCE_DIR}/base/system/userinit/res/rosbitmap.bmp
+    ${REACTOS_SOURCE_DIR}/base/system/userinit/res/rosbitmap_mask.bmp)
 add_rc_deps(reactos.rc ${reactos_rc_deps})
 add_executable(reactos ${SOURCE} reactos.rc)
 
@@ -25,9 +29,5 @@ set_module_type(reactos win32gui UNICODE)
 target_link_libraries(reactos uuid tzlib volresize)
 target_link_libraries(reactos zlib_solo) ## We use USETUP's cabinet implementation
 add_delay_importlibs(reactos setuplib)
-add_importlibs(reactos advapi32 gdi32 user32 comctl32 dwmapi shlwapi setupapi msvcrt kernel32 ntdll)
+add_importlibs(reactos advapi32 gdi32 user32 comctl32 dwmapi shlwapi setupapi ole32 oleaut32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET reactos DESTINATION reactos NO_CAB FOR bootcd)
-
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    set_property(SOURCE treelist.c APPEND PROPERTY COMPILE_OPTIONS -Wno-unused-but-set-global -Wno-unused-but-set-variable)
-endif()

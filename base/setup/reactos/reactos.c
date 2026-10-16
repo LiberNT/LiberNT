@@ -10,6 +10,7 @@
 #include "reactos.h"
 #include <winnls.h> // For GetUserDefaultLCID()
 #include <tzlib.h>
+#include <objbase.h>
 
 #define NTOS_MODE_USER
 #include <ndk/obfuncs.h>
@@ -41,29 +42,6 @@ HCURSOR hWaitCursor;
 
 
 /* FUNCTIONS ****************************************************************/
-
-static VOID
-CenterWindow(HWND hWnd)
-{
-    HWND hWndParent;
-    RECT rcParent;
-    RECT rcWindow;
-
-    hWndParent = GetParent(hWnd);
-    if (hWndParent == NULL)
-        hWndParent = GetDesktopWindow();
-
-    GetWindowRect(hWndParent, &rcParent);
-    GetWindowRect(hWnd, &rcWindow);
-
-    SetWindowPos(hWnd,
-                 HWND_TOP,
-                 ((rcParent.right - rcParent.left) - (rcWindow.right - rcWindow.left)) / 2,
-                 ((rcParent.bottom - rcParent.top) - (rcWindow.bottom - rcWindow.top)) / 2,
-                 0,
-                 0,
-                 SWP_NOSIZE);
-}
 
 /**
  * @brief
@@ -352,1010 +330,6 @@ SetWindowResPrintfW(
 }
 
 static VOID
-ExtendFrameIntoWatermark(
-    IN HWND hwndDlg,
-    IN PSETUPDATA pSetupData,
-    IN BOOL bExtend)
-{
-    MARGINS Margins = {0, 0, 0, 0};
-    HBITMAP hbmWatermark;
-    BITMAP bm;
-
-    if (bExtend)
-    {
-        hbmWatermark = LoadImageW(pSetupData->hInstance,
-                                  MAKEINTRESOURCEW(IDB_WATERMARK),
-                                  IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
-        if (hbmWatermark)
-        {
-            if (GetObjectW(hbmWatermark, sizeof(bm), &bm))
-                Margins.cxLeftWidth = bm.bmWidth;
-            DeleteObject(hbmWatermark);
-        }
-    }
-
-    DwmExtendFrameIntoClientArea(GetParent(hwndDlg), &Margins);
-}
-
-static INT_PTR CALLBACK
-StartDlgProc(
-    IN HWND hwndDlg,
-    IN UINT uMsg,
-    IN WPARAM wParam,
-    IN LPARAM lParam)
-{
-    PSETUPDATA pSetupData;
-
-    /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtrW(hwndDlg, GWLP_USERDATA);
-
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
-        {
-            /* Save pointer to the global setup data */
-            pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtrW(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
-
-            /* Set title font */
-            SetDlgItemFont(hwndDlg, IDC_STARTTITLE, pSetupData->hTitleFont, TRUE);
-
-            // TEMPTEMP: Set the ReactOS-Alpha information in bold.
-            // TODO: Remove once we reach 0.5/Beta :)
-            SetDlgItemFont(hwndDlg, IDC_WARNTEXT1, pSetupData->hBoldFont, TRUE);
-            SetDlgItemFont(hwndDlg, IDC_WARNTEXT2, pSetupData->hBoldFont, TRUE);
-            SetDlgItemFont(hwndDlg, IDC_WARNTEXT3, pSetupData->hBoldFont, TRUE);
-
-            /* Center the wizard window */
-            CenterWindow(GetParent(hwndDlg));
-            break;
-        }
-
-        case WM_NOTIFY:
-        {
-            LPNMHDR lpnm = (LPNMHDR)lParam;
-
-            switch (lpnm->code)
-            {
-                case PSN_SETACTIVE:
-                {
-                    /* Only "Next" and "Cancel" for the first page and hide "Back" */
-                    PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_NEXT);
-                    // PropSheet_ShowWizButtons(GetParent(hwndDlg), 0, PSWIZB_BACK);
-                    ShowDlgItem(GetParent(hwndDlg), ID_WIZBACK, SW_HIDE);
-                    ExtendFrameIntoWatermark(hwndDlg, pSetupData, TRUE);
-                    break;
-                }
-
-                case PSN_KILLACTIVE:
-                {
-                    /* Show "Back" button */
-                    // PropSheet_ShowWizButtons(GetParent(hwndDlg), PSWIZB_BACK, PSWIZB_BACK);
-                    ShowDlgItem(GetParent(hwndDlg), ID_WIZBACK, SW_SHOW);
-                    ExtendFrameIntoWatermark(hwndDlg, pSetupData, FALSE);
-                    break;
-                }
-
-                default:
-                    break;
-            }
-        }
-        break;
-
-        default:
-            break;
-    }
-
-    return FALSE;
-}
-
-static INT_PTR CALLBACK
-TypeDlgProc(
-    IN HWND hwndDlg,
-    IN UINT uMsg,
-    IN WPARAM wParam,
-    IN LPARAM lParam)
-{
-    PSETUPDATA pSetupData;
-
-    /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtrW(hwndDlg, GWLP_USERDATA);
-
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
-        {
-            /* Save pointer to the global setup data */
-            pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtrW(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
-
-            /* Set the options in bold */
-            SetDlgItemFont(hwndDlg, IDC_INSTALL, pSetupData->hBoldFont, TRUE);
-            SetDlgItemFont(hwndDlg, IDC_UPDATE, pSetupData->hBoldFont, TRUE);
-
-            /* Check the "Install" radio button */
-            CheckDlgButton(hwndDlg, IDC_INSTALL, BST_CHECKED);
-
-            /*
-             * Enable the "Update" radio button and text only if we have
-             * available NT installations, otherwise disable them.
-             */
-            if (pSetupData->NtOsInstallsList &&
-                GetNumberOfListEntries(pSetupData->NtOsInstallsList) != 0)
-            {
-                EnableWindow(GetDlgItem(hwndDlg, IDC_UPDATE), TRUE);
-                EnableWindow(GetDlgItem(hwndDlg, IDC_UPDATETEXT), TRUE);
-            }
-            else
-            {
-                EnableWindow(GetDlgItem(hwndDlg, IDC_UPDATE), FALSE);
-                EnableWindow(GetDlgItem(hwndDlg, IDC_UPDATETEXT), FALSE);
-            }
-
-            break;
-        }
-
-        case WM_NOTIFY:
-        {
-            LPNMHDR lpnm = (LPNMHDR)lParam;
-
-            switch (lpnm->code)
-            {
-                case PSN_SETACTIVE:
-                    PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK | PSWIZB_NEXT);
-                    break;
-
-                case PSN_QUERYINITIALFOCUS:
-                {
-                    /* Focus on "Install ReactOS" */
-                    SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, (LONG_PTR)GetDlgItem(hwndDlg, IDC_INSTALL));
-                    return TRUE;
-                }
-
-                case PSN_QUERYCANCEL:
-                {
-                    if (DisplayMessage(GetParent(hwndDlg),
-                                       MB_YESNO | MB_ICONQUESTION,
-                                       MAKEINTRESOURCEW(IDS_ABORTSETUP2),
-                                       MAKEINTRESOURCEW(IDS_ABORTSETUP)) == IDYES)
-                    {
-                        /* Go to the Abort page */
-                        PropSheet_SetCurSelByID(GetParent(hwndDlg), IDD_ABORTPAGE);
-                    }
-
-                    /* Do not close the wizard too soon */
-                    SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, TRUE);
-                    return TRUE;
-                }
-
-                case PSN_WIZNEXT: /* Set the selected data */
-                {
-                    /*
-                     * Go update only if we have available NT installations
-                     * and we choose to do so.
-                     */
-                    if (pSetupData->NtOsInstallsList &&
-                        GetNumberOfListEntries(pSetupData->NtOsInstallsList) != 0 &&
-                        IsDlgButtonChecked(hwndDlg, IDC_UPDATE) == BST_CHECKED)
-                    {
-                        pSetupData->RepairUpdateFlag = TRUE;
-
-                        /*
-                         * Display the existing NT installations page only
-                         * if we have more than one available NT installations.
-                         */
-                        if (GetNumberOfListEntries(pSetupData->NtOsInstallsList) > 1)
-                        {
-                            /* pSetupData->CurrentInstallation will be set from within IDD_UPDATEREPAIRPAGE */
-
-                            /* Actually the best would be to dynamically insert the page only when needed */
-                            SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, IDD_UPDATEREPAIRPAGE);
-                        }
-                        else
-                        {
-                            /* Retrieve the current installation */
-                            pSetupData->CurrentInstallation =
-                                (PNTOS_INSTALLATION)GetListEntryData(GetCurrentListEntry(pSetupData->NtOsInstallsList));
-                            InstallPartition = pSetupData->CurrentInstallation->Volume->PartEntry;
-                            StringCchCopyW(pSetupData->USetupData.InstallationDirectory,
-                                           _countof(pSetupData->USetupData.InstallationDirectory),
-                                           pSetupData->CurrentInstallation->PathComponent);
-
-                            /* Jump to the Summary page during repair/upgrade */
-                            SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, IDD_SUMMARYPAGE);
-                        }
-                    }
-                    else
-                    {
-                        pSetupData->CurrentInstallation = NULL;
-                        pSetupData->RepairUpdateFlag = FALSE;
-                        SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, IDD_DRIVEPAGE);
-                    }
-
-                    return TRUE;
-                }
-
-                default:
-                    break;
-            }
-        }
-        break;
-
-        default:
-            break;
-    }
-
-    return FALSE;
-}
-
-
-
-BOOL
-CreateListViewColumns(
-    IN HINSTANCE hInstance,
-    IN HWND hWndListView,
-    IN const UINT* pIDs,
-    IN const INT* pColsWidth,
-    IN const INT* pColsAlign,
-    IN UINT nNumOfColumns)
-{
-    UINT i;
-    LVCOLUMN lvC;
-    WCHAR szText[50];
-
-    /* Create the columns */
-    lvC.mask = LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM;
-    lvC.pszText = szText;
-
-    /* Load the column labels from the resource file */
-    for (i = 0; i < nNumOfColumns; i++)
-    {
-        lvC.iSubItem = i;
-        lvC.cx = pColsWidth[i];
-        lvC.fmt = pColsAlign[i];
-
-        LoadStringW(hInstance, pIDs[i], szText, ARRAYSIZE(szText));
-
-        if (ListView_InsertColumn(hWndListView, i, &lvC) == -1)
-            return FALSE;
-    }
-
-    return TRUE;
-}
-
-typedef VOID
-(NTAPI *PGET_ENTRY_DESCRIPTION)(
-    IN PGENERIC_LIST_ENTRY Entry,
-    OUT PWSTR Buffer,
-    IN SIZE_T cchBufferSize);
-
-VOID
-InitGenericComboList(
-    IN HWND hWndList,
-    IN PGENERIC_LIST List,
-    IN PGET_ENTRY_DESCRIPTION GetEntryDescriptionProc)
-{
-    INT Index, CurrentEntryIndex = 0;
-    PGENERIC_LIST_ENTRY ListEntry;
-    PLIST_ENTRY Entry;
-    WCHAR CurrentItemText[256];
-
-    if (!List)
-        return;
-
-    for (Entry = List->ListHead.Flink;
-         Entry != &List->ListHead;
-         Entry = Entry->Flink)
-    {
-        ListEntry = CONTAINING_RECORD(Entry, GENERIC_LIST_ENTRY, Entry);
-
-        if (GetEntryDescriptionProc)
-        {
-            GetEntryDescriptionProc(ListEntry,
-                                    CurrentItemText,
-                                    ARRAYSIZE(CurrentItemText));
-            Index = SendMessageW(hWndList, CB_ADDSTRING, 0, (LPARAM)CurrentItemText);
-        }
-        else
-        {
-            Index = SendMessageW(hWndList, CB_ADDSTRING, 0, (LPARAM)L"n/a");
-        }
-
-        if (ListEntry == List->CurrentEntry)
-            CurrentEntryIndex = Index;
-
-        SendMessageW(hWndList, CB_SETITEMDATA, Index, (LPARAM)ListEntry);
-    }
-
-    SendMessageW(hWndList, CB_SETCURSEL, CurrentEntryIndex, 0);
-}
-
-PVOID
-GetSelectedComboListItem(
-    IN HWND hWndList)
-{
-    INT Index;
-
-    Index = ComboBox_GetCurSel(hWndList);
-    if (Index == CB_ERR)
-        return NULL;
-
-    return (PVOID)ComboBox_GetItemData(hWndList, Index);
-}
-
-typedef VOID
-(NTAPI *PADD_ENTRY_ITEM)(
-    IN HWND hWndList,
-    IN LVITEM* plvItem,
-    IN PGENERIC_LIST_ENTRY Entry,
-    IN OUT PWSTR Buffer,
-    IN SIZE_T cchBufferSize);
-
-VOID
-InitGenericListView(
-    IN HWND hWndList,
-    IN PGENERIC_LIST List,
-    IN PADD_ENTRY_ITEM AddEntryItemProc)
-{
-    INT CurrentEntryIndex = 0;
-    LVITEM lvItem;
-    PGENERIC_LIST_ENTRY ListEntry;
-    PLIST_ENTRY Entry;
-    WCHAR CurrentItemText[256];
-
-    for (Entry = List->ListHead.Flink;
-         Entry != &List->ListHead;
-         Entry = Entry->Flink)
-    {
-        ListEntry = CONTAINING_RECORD(Entry, GENERIC_LIST_ENTRY, Entry);
-
-        if (!AddEntryItemProc)
-            continue;
-
-        AddEntryItemProc(hWndList,
-                         &lvItem,
-                         ListEntry,
-                         CurrentItemText,
-                         ARRAYSIZE(CurrentItemText));
-
-        if (ListEntry == List->CurrentEntry)
-            CurrentEntryIndex = lvItem.iItem;
-    }
-
-    ListView_EnsureVisible(hWndList, CurrentEntryIndex, FALSE);
-    ListView_SetItemState(hWndList, CurrentEntryIndex,
-                          LVIS_FOCUSED | LVIS_SELECTED,
-                          LVIS_FOCUSED | LVIS_SELECTED);
-}
-
-PVOID
-GetSelectedListViewItem(
-    IN HWND hWndList)
-{
-    INT Index;
-    LVITEM item;
-
-    Index = ListView_GetSelectionMark(hWndList);
-    if (Index == LB_ERR)
-        return NULL;
-
-    item.mask = LVIF_PARAM;
-    item.iItem = Index;
-    ListView_GetItem(hWndList, &item);
-
-    return (PVOID)item.lParam;
-}
-
-
-static VOID
-NTAPI
-GetSettingDescription(
-    IN PGENERIC_LIST_ENTRY Entry,
-    OUT PWSTR Buffer,
-    IN SIZE_T cchBufferSize)
-{
-    StringCchCopyW(Buffer, cchBufferSize,
-                   Entry ? ((PGENENTRY)GetListEntryData(Entry))->Value : L"");
-}
-
-static VOID
-NTAPI
-AddNTOSInstallationItem(
-    IN HWND hWndList,
-    IN LVITEM* plvItem,
-    IN PGENERIC_LIST_ENTRY Entry,
-    IN OUT PWSTR Buffer, // SystemRootPath
-    IN SIZE_T cchBufferSize)
-{
-    PNTOS_INSTALLATION NtOsInstall = (PNTOS_INSTALLATION)GetListEntryData(Entry);
-    PVOLINFO VolInfo = (NtOsInstall->Volume ? &NtOsInstall->Volume->Info : NULL);
-
-    if (VolInfo && VolInfo->DriveLetter)
-    {
-        /* We have retrieved a partition that is mounted */
-        StringCchPrintfW(Buffer, cchBufferSize,
-                         L"%c:%s",
-                         VolInfo->DriveLetter,
-                         NtOsInstall->PathComponent);
-    }
-    else
-    {
-        /* We failed somewhere, just show the NT path */
-        StringCchPrintfW(Buffer, cchBufferSize,
-                         L"%wZ",
-                         &NtOsInstall->SystemNtPath);
-    }
-
-    plvItem->mask = LVIF_IMAGE | LVIF_TEXT | LVIF_PARAM;
-    plvItem->iItem = 0;
-    plvItem->iSubItem = 0;
-    plvItem->lParam = (LPARAM)Entry;
-    plvItem->pszText = NtOsInstall->InstallationName;
-
-    /* Associate vendor icon */
-    if (FindSubStrI(NtOsInstall->VendorName, VENDOR_REACTOS))
-    {
-        plvItem->mask |= LVIF_IMAGE;
-        plvItem->iImage = 0;
-    }
-    else if (FindSubStrI(NtOsInstall->VendorName, VENDOR_MICROSOFT))
-    {
-        plvItem->mask |= LVIF_IMAGE;
-        plvItem->iImage = 1;
-    }
-
-    plvItem->iItem = SendMessageW(hWndList, LVM_INSERTITEMW, 0, (LPARAM)plvItem);
-
-    plvItem->iSubItem = 1;
-    plvItem->pszText = Buffer; // SystemRootPath;
-    SendMessageW(hWndList, LVM_SETITEMTEXTW, plvItem->iItem, (LPARAM)plvItem);
-
-    plvItem->iSubItem = 2;
-    plvItem->pszText = NtOsInstall->VendorName;
-    SendMessageW(hWndList, LVM_SETITEMTEXTW, plvItem->iItem, (LPARAM)plvItem);
-}
-
-
-#define IDS_LIST_COLUMN_FIRST IDS_INSTALLATION_NAME
-#define IDS_LIST_COLUMN_LAST  IDS_INSTALLATION_VENDOR
-
-#define MAX_LIST_COLUMNS (IDS_LIST_COLUMN_LAST - IDS_LIST_COLUMN_FIRST + 1)
-static const UINT column_ids[MAX_LIST_COLUMNS] = {IDS_LIST_COLUMN_FIRST, IDS_LIST_COLUMN_FIRST + 1, IDS_LIST_COLUMN_FIRST + 2};
-static const INT  column_widths[MAX_LIST_COLUMNS] = {200, 150, 100};
-static const INT  column_alignment[MAX_LIST_COLUMNS] = {LVCFMT_LEFT, LVCFMT_LEFT, LVCFMT_LEFT};
-
-static INT_PTR CALLBACK
-UpgradeRepairDlgProc(
-    IN HWND hwndDlg,
-    IN UINT uMsg,
-    IN WPARAM wParam,
-    IN LPARAM lParam)
-{
-    PSETUPDATA pSetupData;
-    HWND hList;
-    HIMAGELIST hSmall;
-
-    /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtrW(hwndDlg, GWLP_USERDATA);
-
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
-        {
-            /* Save pointer to the global setup data */
-            pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtrW(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
-
-            /*
-             * Keep the "Next" button disabled. It will be enabled only
-             * when the user selects an installation to upgrade.
-             */
-            PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK);
-
-            hList = GetDlgItem(hwndDlg, IDC_NTOSLIST);
-
-            ListView_SetExtendedListViewStyleEx(hList, LVS_EX_FULLROWSELECT, LVS_EX_FULLROWSELECT);
-
-            CreateListViewColumns(pSetupData->hInstance,
-                                  hList,
-                                  column_ids,
-                                  column_widths,
-                                  column_alignment,
-                                  MAX_LIST_COLUMNS);
-
-            /* Create the ImageList */
-            hSmall = ImageList_Create(GetSystemMetrics(SM_CXSMICON),
-                                      GetSystemMetrics(SM_CYSMICON),
-                                      ILC_COLOR32 | ILC_MASK, // ILC_COLOR24
-                                      1, 1);
-
-            /* Add event type icons to the ImageList */
-            ImageList_AddIcon(hSmall, LoadIconW(pSetupData->hInstance, MAKEINTRESOURCEW(IDI_ROSICON)));
-            ImageList_AddIcon(hSmall, LoadIconW(pSetupData->hInstance, MAKEINTRESOURCEW(IDI_WINICON)));
-
-            /* Assign the ImageList to the List View */
-            ListView_SetImageList(hList, hSmall, LVSIL_SMALL);
-
-            InitGenericListView(hList, pSetupData->NtOsInstallsList, AddNTOSInstallationItem);
-            break;
-        }
-
-        case WM_DESTROY:
-        {
-            hList = GetDlgItem(hwndDlg, IDC_NTOSLIST);
-            hSmall = ListView_GetImageList(hList, LVSIL_SMALL);
-            ListView_SetImageList(hList, NULL, LVSIL_SMALL);
-            ImageList_Destroy(hSmall);
-            return TRUE;
-        }
-
-        case WM_COMMAND:
-            switch (LOWORD(wParam))
-            {
-                case IDC_SKIPUPGRADE:
-                {
-                    /* Skip the upgrade and do the usual new-installation workflow */
-                    pSetupData->CurrentInstallation = NULL;
-                    pSetupData->RepairUpdateFlag = FALSE;
-                    PropSheet_SetCurSelByID(GetParent(hwndDlg), IDD_DRIVEPAGE);
-                    return TRUE;
-                }
-            }
-            break;
-
-        case WM_NOTIFY:
-        {
-            LPNMHDR lpnm = (LPNMHDR)lParam;
-
-            if (lpnm->idFrom == IDC_NTOSLIST && lpnm->code == LVN_ITEMCHANGED)
-            {
-                LPNMLISTVIEW pnmv = (LPNMLISTVIEW)lParam;
-
-                if (pnmv->uChanged & LVIF_STATE) /* The state has changed */
-                {
-                    /* The item has been (de)selected */
-                    if (pnmv->uNewState & (LVIS_FOCUSED | LVIS_SELECTED))
-                    {
-                        PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK | PSWIZB_NEXT);
-                    }
-                    else
-                    {
-                        /*
-                         * Keep the "Next" button disabled. It will be enabled only
-                         * when the user selects an installation to upgrade.
-                         */
-                        PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK);
-                    }
-                }
-
-                break;
-            }
-
-            switch (lpnm->code)
-            {
-#if 0
-                case PSN_SETACTIVE:
-                {
-                    /*
-                     * Keep the "Next" button disabled. It will be enabled only
-                     * when the user selects an installation to upgrade.
-                     */
-                    PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK);
-                    break;
-                }
-#endif
-
-                case PSN_QUERYINITIALFOCUS:
-                {
-                    /* Give the focus on and select the first item */
-                    hList = GetDlgItem(hwndDlg, IDC_NTOSLIST);
-                    ListView_SetItemState(hList, 0, LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED);
-                    SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, (LONG_PTR)hList);
-                    return TRUE;
-                }
-
-                case PSN_QUERYCANCEL:
-                {
-                    if (DisplayMessage(GetParent(hwndDlg),
-                                       MB_YESNO | MB_ICONQUESTION,
-                                       MAKEINTRESOURCEW(IDS_ABORTSETUP2),
-                                       MAKEINTRESOURCEW(IDS_ABORTSETUP)) == IDYES)
-                    {
-                        /* Go to the Abort page */
-                        PropSheet_SetCurSelByID(GetParent(hwndDlg), IDD_ABORTPAGE);
-                    }
-
-                    /* Do not close the wizard too soon */
-                    SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, TRUE);
-                    return TRUE;
-                }
-
-                case PSN_WIZNEXT: /* Set the selected data */
-                {
-                    /*
-                     * Go update only if we have available NT installations
-                     * and we choose to do so.
-                     */
-                    if (!pSetupData->NtOsInstallsList ||
-                        GetNumberOfListEntries(pSetupData->NtOsInstallsList) == 0)
-                    {
-                        pSetupData->CurrentInstallation = NULL;
-                        pSetupData->RepairUpdateFlag = FALSE;
-                        break;
-                    }
-
-                    hList = GetDlgItem(hwndDlg, IDC_NTOSLIST);
-                    SetCurrentListEntry(pSetupData->NtOsInstallsList,
-                                        GetSelectedListViewItem(hList));
-
-                    /* Retrieve the current installation */
-                    pSetupData->CurrentInstallation =
-                        (PNTOS_INSTALLATION)GetListEntryData(GetCurrentListEntry(pSetupData->NtOsInstallsList));
-                    InstallPartition = pSetupData->CurrentInstallation->Volume->PartEntry;
-                    StringCchCopyW(pSetupData->USetupData.InstallationDirectory,
-                                   _countof(pSetupData->USetupData.InstallationDirectory),
-                                   pSetupData->CurrentInstallation->PathComponent);
-
-                    /* We perform an upgrade */
-                    pSetupData->RepairUpdateFlag = TRUE;
-                    /* Jump to the Summary page during repair/upgrade */
-                    SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, IDD_SUMMARYPAGE);
-                    return TRUE;
-                }
-
-                default:
-                    break;
-            }
-        }
-        break;
-
-        default:
-            break;
-    }
-
-    return FALSE;
-}
-
-static INT_PTR CALLBACK
-DeviceDlgProc(
-    IN HWND hwndDlg,
-    IN UINT uMsg,
-    IN WPARAM wParam,
-    IN LPARAM lParam)
-{
-    PSETUPDATA pSetupData;
-    HWND hList;
-
-    /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtrW(hwndDlg, GWLP_USERDATA);
-
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
-        {
-            /* Save pointer to the global setup data */
-            pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtrW(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
-
-            hList = GetDlgItem(hwndDlg, IDC_COMPUTER);
-            InitGenericComboList(hList, pSetupData->USetupData.ComputerList, GetSettingDescription);
-
-            hList = GetDlgItem(hwndDlg, IDC_DISPLAY);
-            InitGenericComboList(hList, pSetupData->USetupData.DisplayList, GetSettingDescription);
-
-            hList = GetDlgItem(hwndDlg, IDC_KEYBOARD);
-            InitGenericComboList(hList, pSetupData->USetupData.KeyboardList, GetSettingDescription);
-
-            // hList = GetDlgItem(hwndDlg, IDC_KEYBOARD_LAYOUT);
-            // InitGenericComboList(hList, pSetupData->USetupData.LayoutList, GetSettingDescription);
-
-            break;
-        }
-
-        case WM_NOTIFY:
-        {
-            LPNMHDR lpnm = (LPNMHDR)lParam;
-
-            switch (lpnm->code)
-            {
-                case PSN_SETACTIVE:
-                    PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK | PSWIZB_NEXT);
-                    break;
-
-                case PSN_QUERYINITIALFOCUS:
-                {
-                    /* Focus on "Computer" list */
-                    SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, (LONG_PTR)GetDlgItem(hwndDlg, IDC_COMPUTER));
-                    return TRUE;
-                }
-
-                case PSN_QUERYCANCEL:
-                {
-                    if (DisplayMessage(GetParent(hwndDlg),
-                                       MB_YESNO | MB_ICONQUESTION,
-                                       MAKEINTRESOURCEW(IDS_ABORTSETUP2),
-                                       MAKEINTRESOURCEW(IDS_ABORTSETUP)) == IDYES)
-                    {
-                        /* Go to the Abort page */
-                        PropSheet_SetCurSelByID(GetParent(hwndDlg), IDD_ABORTPAGE);
-                    }
-
-                    /* Do not close the wizard too soon */
-                    SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, TRUE);
-                    return TRUE;
-                }
-
-                case PSN_WIZNEXT: /* Set the selected data */
-                {
-                    hList = GetDlgItem(hwndDlg, IDC_COMPUTER);
-                    SetCurrentListEntry(pSetupData->USetupData.ComputerList,
-                                        GetSelectedComboListItem(hList));
-
-                    hList = GetDlgItem(hwndDlg, IDC_DISPLAY);
-                    SetCurrentListEntry(pSetupData->USetupData.DisplayList,
-                                        GetSelectedComboListItem(hList));
-
-                    hList = GetDlgItem(hwndDlg, IDC_KEYBOARD);
-                    SetCurrentListEntry(pSetupData->USetupData.KeyboardList,
-                                        GetSelectedComboListItem(hList));
-
-                    // hList = GetDlgItem(hwndDlg, IDC_KEYBOARD_LAYOUT);
-                    // SetCurrentListEntry(pSetupData->USetupData.LayoutList,
-                    //                     GetSelectedComboListItem(hList));
-
-                    return TRUE;
-                }
-
-                case PSN_WIZBACK:
-                {
-                    /* Return to the Install type selection page instead of the Repair/Upgrade page */
-                    SetWindowLongW(hwndDlg, DWLP_MSGRESULT, IDD_TYPEPAGE);
-                    return TRUE;
-                }
-
-                default:
-                    break;
-            }
-        }
-        break;
-
-        default:
-            break;
-    }
-
-    return FALSE;
-}
-
-static INT_PTR CALLBACK
-SummaryDlgProc(
-    IN HWND hwndDlg,
-    IN UINT uMsg,
-    IN WPARAM wParam,
-    IN LPARAM lParam)
-{
-    static WCHAR szOrgWizNextBtnText[260]; // TODO: Make it dynamic
-
-    PSETUPDATA pSetupData;
-
-    /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtrW(hwndDlg, GWLP_USERDATA);
-
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
-        {
-            /* Save pointer to the global setup data */
-            pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtrW(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
-            break;
-        }
-
-        case WM_COMMAND:
-        {
-            if (HIWORD(wParam) == BN_CLICKED && LOWORD(wParam) == IDC_CONFIRM_INSTALL)
-            {
-                // Ideally we could add the PSWIZBF_ELEVATIONREQUIRED style.
-                if (IsDlgButtonChecked(hwndDlg, IDC_CONFIRM_INSTALL) == BST_CHECKED)
-                    PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK | PSWIZB_NEXT);
-                else
-                    PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK);
-            }
-            break;
-        }
-
-        case WM_NOTIFY:
-        {
-            LPNMHDR lpnm = (LPNMHDR)lParam;
-
-            switch (lpnm->code)
-            {
-                case PSN_SETACTIVE:
-                {
-                    WCHAR CurrentItemText[256];
-                    PWSTR Separator;
-
-                    ASSERT(InstallPartition);
-
-                    /* Show the current selected settings */
-
-                    // FIXME! Localize
-                    if (pSetupData->RepairUpdateFlag)
-                    {
-                        StringCchPrintfW(CurrentItemText, ARRAYSIZE(CurrentItemText),
-                                         L"Upgrading/Repairing \"%s\" from \"%s\"",
-                                         pSetupData->CurrentInstallation->InstallationName,
-                                         pSetupData->CurrentInstallation->VendorName);
-                    }
-                    else
-                    {
-                        StringCchCopyW(CurrentItemText, ARRAYSIZE(CurrentItemText),
-                                       L"New LiberNT installation");
-                    }
-                    SetDlgItemTextW(hwndDlg, IDC_INSTALLTYPE, CurrentItemText);
-                    if (!pSetupData->RepairUpdateFlag && pSetupData->bEraseDisk)
-                    {
-                        SetWindowResPrintfW(GetDlgItem(hwndDlg, IDC_INSTALLTYPE),
-                                            pSetupData->hInstance,
-                                            IDS_ERASEDISK_TYPE,
-                                            InstallPartition->DiskEntry->DiskNumber);
-                    }
-
-                    Separator = NULL;
-                    if (GetModuleFileNameW(NULL, CurrentItemText, ARRAYSIZE(CurrentItemText)) != 0)
-                        Separator = wcsrchr(CurrentItemText, L'\\');
-                    if (Separator != NULL)
-                    {
-                        *Separator = UNICODE_NULL;
-                        SetDlgItemTextW(hwndDlg, IDC_INSTALLSOURCE, CurrentItemText);
-                    }
-                    else
-                    {
-                        SetDlgItemTextW(hwndDlg, IDC_INSTALLSOURCE, L"n/a");
-                    }
-
-                    if (GetEnvironmentVariableW(L"PROCESSOR_ARCHITECTURE", CurrentItemText,
-                                                ARRAYSIZE(CurrentItemText)) != 0)
-                    {
-                        SetDlgItemTextW(hwndDlg, IDC_ARCHITECTURE, CurrentItemText);
-                    }
-                    else
-                    {
-                        SetDlgItemTextW(hwndDlg, IDC_ARCHITECTURE, L"n/a");
-                    }
-
-                    GetSettingDescription(GetCurrentListEntry(pSetupData->USetupData.ComputerList),
-                                          CurrentItemText,
-                                          ARRAYSIZE(CurrentItemText));
-                    SetDlgItemTextW(hwndDlg, IDC_COMPUTER, CurrentItemText);
-
-                    GetSettingDescription(GetCurrentListEntry(pSetupData->USetupData.DisplayList),
-                                          CurrentItemText,
-                                          ARRAYSIZE(CurrentItemText));
-                    SetDlgItemTextW(hwndDlg, IDC_DISPLAY, CurrentItemText);
-
-                    GetSettingDescription(GetCurrentListEntry(pSetupData->USetupData.KeyboardList),
-                                          CurrentItemText,
-                                          ARRAYSIZE(CurrentItemText));
-                    SetDlgItemTextW(hwndDlg, IDC_KEYBOARD, CurrentItemText);
-
-                    if (InstallVolume->Info.DriveLetter)
-                    {
-#if 0
-                        StringCchPrintfW(CurrentItemText, ARRAYSIZE(CurrentItemText),
-                                         L"%c: \x2014 %wZ",
-                                         InstallVolume->Info.DriveLetter,
-                                         &pSetupData->USetupData.DestinationRootPath);
-#else
-                        StringCchPrintfW(CurrentItemText, ARRAYSIZE(CurrentItemText),
-                                         L"%c: \x2014 Harddisk %lu, Partition %lu",
-                                         InstallVolume->Info.DriveLetter,
-                                         InstallPartition->DiskEntry->DiskNumber,
-                                         InstallPartition->OnDiskPartitionNumber);
-#endif
-                    }
-                    else
-                    {
-#if 0
-                        StringCchPrintfW(CurrentItemText, ARRAYSIZE(CurrentItemText),
-                                         L"%wZ",
-                                         &pSetupData->USetupData.DestinationRootPath);
-#else
-                        StringCchPrintfW(CurrentItemText, ARRAYSIZE(CurrentItemText),
-                                         L"Harddisk %lu, Partition %lu",
-                                         InstallPartition->DiskEntry->DiskNumber,
-                                         InstallPartition->OnDiskPartitionNumber);
-#endif
-                    }
-                    SetDlgItemTextW(hwndDlg, IDC_DESTDRIVE, CurrentItemText);
-
-                    SetDlgItemTextW(hwndDlg, IDC_PATH,
-                                    pSetupData->USetupData.InstallationDirectory
-                                    /*pSetupData->USetupData.InstallPath.Buffer*/);
-
-
-                    /* Change the "Next" button text to "Install" */
-                    // PropSheet_SetNextText(GetParent(hwndDlg), ...);
-                    GetDlgItemTextW(GetParent(hwndDlg), ID_WIZNEXT,
-                                    szOrgWizNextBtnText, ARRAYSIZE(szOrgWizNextBtnText));
-                    SetWindowResTextW(GetDlgItem(GetParent(hwndDlg), ID_WIZNEXT),
-                                      pSetupData->hInstance,
-                                      IDS_INSTALLBTN);
-
-                    /*
-                     * Keep the "Next" button disabled. It will be enabled only
-                     * when the user clicks on the installation approval checkbox.
-                     */
-                    CheckDlgButton(hwndDlg, IDC_CONFIRM_INSTALL, BST_UNCHECKED);
-                    PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK);
-                    break;
-                }
-
-                case PSN_QUERYINITIALFOCUS:
-                {
-                    /* Focus on the confirmation check-box */
-                    SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, (LONG_PTR)GetDlgItem(hwndDlg, IDC_CONFIRM_INSTALL));
-                    return TRUE;
-                }
-
-                case PSN_KILLACTIVE:
-                {
-                    /* Restore the original "Next" button text */
-                    SetDlgItemTextW(GetParent(hwndDlg), ID_WIZNEXT, szOrgWizNextBtnText);
-                    break;
-                }
-
-                case PSN_QUERYCANCEL:
-                {
-                    if (DisplayMessage(GetParent(hwndDlg),
-                                       MB_YESNO | MB_ICONQUESTION,
-                                       MAKEINTRESOURCEW(IDS_ABORTSETUP2),
-                                       MAKEINTRESOURCEW(IDS_ABORTSETUP)) == IDYES)
-                    {
-                        /* Go to the Abort page */
-                        PropSheet_SetCurSelByID(GetParent(hwndDlg), IDD_ABORTPAGE);
-                    }
-
-                    /* Do not close the wizard too soon */
-                    SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, TRUE);
-                    return TRUE;
-                }
-
-                case PSN_WIZBACK:
-                {
-                    /* When the user performs a regular installation, go back to the previous page */
-                    if (!pSetupData->RepairUpdateFlag)
-                        break;
-
-                    if (GetNumberOfListEntries(pSetupData->NtOsInstallsList) > 1)
-                    {
-                        /* Return to the Upgrade/Repair selection page, when the user is
-                         * upgrading and there are more than one installation available */
-                        SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, IDD_UPDATEREPAIRPAGE);
-                    }
-                    else
-                    {
-                        /* Return to the Install type selection page, when the user is
-                         * upgrading and there is at most one installation available */
-                        SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, IDD_TYPEPAGE);
-                    }
-                    return TRUE;
-                }
-
-                default:
-                    break;
-            }
-            break;
-        }
-
-        default:
-            break;
-    }
-
-    return FALSE;
-}
-
-
-static VOID
 GenerateComputerName(
     _Out_writes_(MAX_COMPUTERNAME_LENGTH + 1) PWSTR Buffer)
 {
@@ -1369,7 +343,7 @@ GenerateComputerName(
     Buffer[MAX_COMPUTERNAME_LENGTH] = UNICODE_NULL;
 }
 
-static BOOL
+BOOL
 IsValidSetupComputerName(
     _In_ PCWSTR Name)
 {
@@ -1394,7 +368,7 @@ IsValidSetupComputerName(
     return !OnlyDigits;
 }
 
-static BOOL
+BOOL
 IsValidSetupUserName(
     _In_ PCWSTR Name)
 {
@@ -1414,319 +388,6 @@ IsValidSetupUserName(
     }
 
     return !OnlyDotsAndSpaces;
-}
-
-static BOOL
-IsExistingAccountName(
-    _In_ PCWSTR Name)
-{
-    BYTE Sid[SECURITY_MAX_SID_SIZE];
-    DWORD cbSid = sizeof(Sid);
-    WCHAR Domain[MAX_PATH];
-    DWORD cchDomain = ARRAYSIZE(Domain);
-    SID_NAME_USE Use;
-
-    return LookupAccountNameW(NULL, Name, Sid, &cbSid, Domain, &cchDomain, &Use);
-}
-
-static BOOL
-QueryCancelSetup(
-    _In_ HWND hwndDlg)
-{
-    if (DisplayMessage(GetParent(hwndDlg),
-                       MB_YESNO | MB_ICONQUESTION,
-                       MAKEINTRESOURCEW(IDS_ABORTSETUP2),
-                       MAKEINTRESOURCEW(IDS_ABORTSETUP)) == IDYES)
-    {
-        PropSheet_SetCurSelByID(GetParent(hwndDlg), IDD_ABORTPAGE);
-    }
-
-    SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, TRUE);
-    return TRUE;
-}
-
-static INT_PTR CALLBACK
-AccountDlgProc(
-    IN HWND hwndDlg,
-    IN UINT uMsg,
-    IN WPARAM wParam,
-    IN LPARAM lParam)
-{
-    PSETUPDATA pSetupData;
-    WCHAR ComputerName[MAX_COMPUTERNAME_LENGTH + 2];
-    WCHAR UserName[UNLEN + 1];
-    WCHAR Password1[128];
-    WCHAR Password2[128];
-    UINT ErrorId, FocusId;
-
-    pSetupData = (PSETUPDATA)GetWindowLongPtrW(hwndDlg, GWLP_USERDATA);
-
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
-        {
-            pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtrW(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
-
-            SendDlgItemMessageW(hwndDlg, IDC_COMPUTERNAME, EM_LIMITTEXT, MAX_COMPUTERNAME_LENGTH, 0);
-            SendDlgItemMessageW(hwndDlg, IDC_USERNAME, EM_LIMITTEXT, 20, 0);
-            SendDlgItemMessageW(hwndDlg, IDC_PASSWORD1, EM_LIMITTEXT, ARRAYSIZE(Password1) - 1, 0);
-            SendDlgItemMessageW(hwndDlg, IDC_PASSWORD2, EM_LIMITTEXT, ARRAYSIZE(Password2) - 1, 0);
-
-            SetDlgItemTextW(hwndDlg, IDC_COMPUTERNAME, pSetupData->ComputerName);
-            SetDlgItemTextW(hwndDlg, IDC_USERNAME, pSetupData->UserName);
-            break;
-        }
-
-        case WM_NOTIFY:
-        {
-            LPNMHDR lpnm = (LPNMHDR)lParam;
-
-            switch (lpnm->code)
-            {
-                case PSN_SETACTIVE:
-                    PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK | PSWIZB_NEXT);
-                    break;
-
-                case PSN_QUERYINITIALFOCUS:
-                    SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, (LONG_PTR)GetDlgItem(hwndDlg, IDC_USERNAME));
-                    return TRUE;
-
-                case PSN_QUERYCANCEL:
-                    return QueryCancelSetup(hwndDlg);
-
-                case PSN_WIZNEXT:
-                {
-                    GetDlgItemTextW(hwndDlg, IDC_COMPUTERNAME, ComputerName, ARRAYSIZE(ComputerName));
-                    GetDlgItemTextW(hwndDlg, IDC_USERNAME, UserName, ARRAYSIZE(UserName));
-                    GetDlgItemTextW(hwndDlg, IDC_PASSWORD1, Password1, ARRAYSIZE(Password1));
-                    GetDlgItemTextW(hwndDlg, IDC_PASSWORD2, Password2, ARRAYSIZE(Password2));
-
-                    ErrorId = 0;
-                    FocusId = 0;
-                    if (!IsValidSetupComputerName(ComputerName))
-                    {
-                        ErrorId = IDS_ERROR_COMPUTERNAME;
-                        FocusId = IDC_COMPUTERNAME;
-                    }
-                    else if (!IsValidSetupUserName(UserName))
-                    {
-                        ErrorId = IDS_ERROR_USERNAME;
-                        FocusId = IDC_USERNAME;
-                    }
-                    else if (_wcsicmp(UserName, ComputerName) == 0 ||
-                             IsExistingAccountName(UserName))
-                    {
-                        ErrorId = IDS_ERROR_USEREXISTS;
-                        FocusId = IDC_USERNAME;
-                    }
-                    else if (wcscmp(Password1, Password2) != 0)
-                    {
-                        ErrorId = IDS_ERROR_PASSWORDMATCH;
-                        FocusId = IDC_PASSWORD1;
-                    }
-
-                    if (ErrorId == 0)
-                    {
-                        CharUpperW(ComputerName);
-                        StringCchCopyW(pSetupData->ComputerName, ARRAYSIZE(pSetupData->ComputerName), ComputerName);
-                        StringCchCopyW(pSetupData->UserName, ARRAYSIZE(pSetupData->UserName), UserName);
-                        StringCchCopyW(pSetupData->Password, ARRAYSIZE(pSetupData->Password), Password1);
-                    }
-
-                    SecureZeroMemory(Password1, sizeof(Password1));
-                    SecureZeroMemory(Password2, sizeof(Password2));
-
-                    if (ErrorId != 0)
-                    {
-                        DisplayError(GetParent(hwndDlg), 0, ErrorId);
-                        SetFocus(GetDlgItem(hwndDlg, FocusId));
-                        SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, -1);
-                        return TRUE;
-                    }
-                    break;
-                }
-
-                default:
-                    break;
-            }
-            break;
-        }
-
-        default:
-            break;
-    }
-
-    return FALSE;
-}
-
-typedef struct _TIMEZONE_ITEM
-{
-    ULONG Index;
-    BOOL HasDaylight;
-    WCHAR Description[128];
-} TIMEZONE_ITEM, *PTIMEZONE_ITEM;
-
-typedef struct _TIMEZONE_LIST
-{
-    PTIMEZONE_ITEM Items;
-    ULONG Count;
-} TIMEZONE_LIST, *PTIMEZONE_LIST;
-
-static LONG
-AddTimeZoneItem(
-    IN HKEY hZoneKey,
-    IN PVOID Context)
-{
-    PTIMEZONE_LIST List = (PTIMEZONE_LIST)Context;
-    PTIMEZONE_ITEM Items;
-    TIMEZONE_ITEM Item;
-    REG_TZI_FORMAT TimeZoneInfo;
-    ULONG DescriptionSize = sizeof(Item.Description);
-    LONG Error;
-
-    ZeroMemory(&Item, sizeof(Item));
-    Error = QueryTimeZoneData(hZoneKey,
-                              &Item.Index,
-                              &TimeZoneInfo,
-                              Item.Description,
-                              &DescriptionSize,
-                              NULL,
-                              NULL,
-                              NULL,
-                              NULL);
-    if (Error != ERROR_SUCCESS)
-        return ERROR_SUCCESS;
-
-    Item.HasDaylight = (TimeZoneInfo.StandardDate.wMonth != 0 &&
-                        TimeZoneInfo.DaylightDate.wMonth != 0);
-
-    if (List->Items)
-        Items = HeapReAlloc(ProcessHeap, 0, List->Items, (List->Count + 1) * sizeof(Item));
-    else
-        Items = HeapAlloc(ProcessHeap, 0, sizeof(Item));
-    if (!Items)
-        return ERROR_NOT_ENOUGH_MEMORY;
-
-    Items[List->Count++] = Item;
-    List->Items = Items;
-    return ERROR_SUCCESS;
-}
-
-static int __cdecl
-CompareTimeZoneItems(
-    const void* Item1,
-    const void* Item2)
-{
-    ULONG Index1 = ((const TIMEZONE_ITEM*)Item1)->Index;
-    ULONG Index2 = ((const TIMEZONE_ITEM*)Item2)->Index;
-
-    return (Index1 < Index2) ? -1 : (Index1 > Index2);
-}
-
-static VOID
-UpdateAutoDaylight(
-    _In_ HWND hwndDlg,
-    _In_ PTIMEZONE_LIST List,
-    _In_ BOOL Check)
-{
-    INT iItem = (INT)SendDlgItemMessageW(hwndDlg, IDC_TIMEZONELIST, CB_GETCURSEL, 0, 0);
-    BOOL HasDaylight = (iItem >= 0 && (ULONG)iItem < List->Count && List->Items[iItem].HasDaylight);
-
-    EnableDlgItem(hwndDlg, IDC_AUTODAYLIGHT, HasDaylight);
-    CheckDlgButton(hwndDlg, IDC_AUTODAYLIGHT, (HasDaylight && Check) ? BST_CHECKED : BST_UNCHECKED);
-}
-
-static INT_PTR CALLBACK
-TimeZoneDlgProc(
-    IN HWND hwndDlg,
-    IN UINT uMsg,
-    IN WPARAM wParam,
-    IN LPARAM lParam)
-{
-    static TIMEZONE_LIST List = { NULL, 0 };
-    PSETUPDATA pSetupData;
-    ULONG i;
-    INT iItem;
-
-    pSetupData = (PSETUPDATA)GetWindowLongPtrW(hwndDlg, GWLP_USERDATA);
-
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
-        {
-            pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtrW(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
-
-            EnumerateTimeZoneList(AddTimeZoneItem, &List);
-            if (List.Count)
-                qsort(List.Items, List.Count, sizeof(*List.Items), CompareTimeZoneItems);
-
-            iItem = 0;
-            for (i = 0; i < List.Count; i++)
-            {
-                SendDlgItemMessageW(hwndDlg, IDC_TIMEZONELIST, CB_ADDSTRING, 0, (LPARAM)List.Items[i].Description);
-                if (List.Items[i].Index == pSetupData->TimeZoneIndex)
-                    iItem = (INT)i;
-            }
-            SendDlgItemMessageW(hwndDlg, IDC_TIMEZONELIST, CB_SETCURSEL, iItem, 0);
-            UpdateAutoDaylight(hwndDlg, &List, pSetupData->AutoDaylight);
-            break;
-        }
-
-        case WM_DESTROY:
-        {
-            if (List.Items)
-                HeapFree(ProcessHeap, 0, List.Items);
-            List.Items = NULL;
-            List.Count = 0;
-            break;
-        }
-
-        case WM_COMMAND:
-        {
-            if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == IDC_TIMEZONELIST)
-                UpdateAutoDaylight(hwndDlg, &List, TRUE);
-            break;
-        }
-
-        case WM_NOTIFY:
-        {
-            LPNMHDR lpnm = (LPNMHDR)lParam;
-
-            switch (lpnm->code)
-            {
-                case PSN_SETACTIVE:
-                    PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK | PSWIZB_NEXT);
-                    break;
-
-                case PSN_QUERYINITIALFOCUS:
-                    SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, (LONG_PTR)GetDlgItem(hwndDlg, IDC_TIMEZONELIST));
-                    return TRUE;
-
-                case PSN_QUERYCANCEL:
-                    return QueryCancelSetup(hwndDlg);
-
-                case PSN_WIZNEXT:
-                {
-                    iItem = (INT)SendDlgItemMessageW(hwndDlg, IDC_TIMEZONELIST, CB_GETCURSEL, 0, 0);
-                    if (iItem >= 0 && (ULONG)iItem < List.Count)
-                        pSetupData->TimeZoneIndex = List.Items[iItem].Index;
-                    pSetupData->AutoDaylight = (IsDlgButtonChecked(hwndDlg, IDC_AUTODAYLIGHT) == BST_CHECKED);
-                    break;
-                }
-
-                default:
-                    break;
-            }
-            break;
-        }
-
-        default:
-            break;
-    }
-
-    return FALSE;
 }
 
 typedef struct _FSVOL_CONTEXT
@@ -1811,8 +472,6 @@ FsVolCallback(
     _In_ ULONG_PTR Param1,
     _In_ ULONG_PTR Param2)
 {
-    PFSVOL_CONTEXT FsVolContext = (PFSVOL_CONTEXT)Context;
-
     switch (FormatStatus)
     {
     // FIXME: Deprecate!
@@ -1874,14 +533,6 @@ FsVolCallback(
     {
         if ((FSVOL_OP)Param1 == FSVOL_FORMAT)
         {
-            /*
-             * In case we just repair an existing installation, or make
-             * an unattended setup without formatting, just go to the
-             * filesystem check step.
-             */
-            if (FsVolContext->pSetupData->RepairUpdateFlag)
-                return FSVOL_SKIP; /** HACK!! **/
-
             /* Set status text */
             SetDlgItemTextW(UiContext.hwndDlg, IDC_ITEM, L"");
         }
@@ -2036,10 +687,7 @@ FsVolCallback(
 
         ASSERT((FSVOL_OP)Param2 == FSVOL_FORMAT);
 
-        /* Find the volume info in the partition TreeList UI.
-         * If none, don't format it. */
-        VolCreate = FindVolCreateInTreeByVolume(UiContext.hPartList,
-                                                FmtInfo->Volume);
+        VolCreate = FindVolumeFormatPlan(FmtInfo->Volume);
         if (!VolCreate)
             return FSVOL_SKIP;
         ASSERT(VolCreate->Volume == FmtInfo->Volume);
@@ -2108,10 +756,7 @@ FsVolCallback(
 
         ASSERT((FSVOL_OP)Param2 == FSVOL_CHECK);
 
-        /* Find the volume info in the partition TreeList UI.
-         * If none, don't check it. */
-        VolCreate = FindVolCreateInTreeByVolume(UiContext.hPartList,
-                                                ChkInfo->Volume);
+        VolCreate = FindVolumeFormatPlan(ChkInfo->Volume);
         if (!VolCreate)
             return FSVOL_SKIP;
         ASSERT(VolCreate->Volume == ChkInfo->Volume);
@@ -2319,24 +964,6 @@ RegistryStatus(IN REGISTRY_STATUS RegStatus, ...)
     SendMessageW(UiContext.hWndProgress, PBM_STEPIT, 0, 0);
 }
 
-/**
- * @brief
- * Enable or disable the Cancel and the Close title-bar property-sheet buttons.
- *
- * The buttons are however kept visible in case they are disabled
- * (this informs the user they are disabled only temporarily).
- **/
-VOID
-PropSheet_SetCloseCancel(
-    _In_ HWND hWndWiz,
-    _In_ BOOL Enable)
-{
-    EnableDlgItem(hWndWiz, IDCANCEL, Enable);
-    EnableMenuItem(GetSystemMenu(hWndWiz, FALSE),
-                   SC_CLOSE,
-                   MF_BYCOMMAND | (Enable ? MF_ENABLED : MF_GRAYED));
-}
-
 static VOID
 ShowConfigureProgress(
     _In_ PSETUPDATA pSetupData,
@@ -2527,9 +1154,6 @@ ConfigureInstalledSystem(
     return Error;
 }
 
-#define PM_INSTALL_START    (WM_APP + 1)
-#define PM_INSTALL_DONE     (WM_APP + 2)
-
 static DWORD
 WINAPI
 PrepareAndDoCopyThread(
@@ -2562,8 +1186,7 @@ PrepareAndDoCopyThread(
     /* Disable the Close/Cancel buttons during all partition operations */
     // TODO: Consider, alternatively, to just show an info-box saying
     // that the installation process cannot be canceled at this stage?
-    // PropSheet_SetWizButtons(GetParent(hwndDlg), 0);
-    PropSheet_SetCloseCancel(GetParent(hwndDlg), FALSE);
+    EnableSetupCancel(GetParent(hwndDlg), FALSE);
 
 
     /*
@@ -2596,7 +1219,7 @@ PrepareAndDoCopyThread(
         MessageBoxW(GetParent(hwndDlg), L"Failed to find or set the system partition!", L"Error", MB_ICONERROR);
 
         /* Re-enable the Close/Cancel buttons */
-        PropSheet_SetCloseCancel(GetParent(hwndDlg), TRUE);
+        EnableSetupCancel(GetParent(hwndDlg), TRUE);
         goto Quit;
     }
 
@@ -2619,13 +1242,13 @@ PrepareAndDoCopyThread(
         MessageBoxW(GetParent(hwndDlg), L"Failed to prepare the partitions!", L"Error", MB_ICONERROR);
 
         /* Re-enable the Close/Cancel buttons */
-        PropSheet_SetCloseCancel(GetParent(hwndDlg), TRUE);
+        EnableSetupCancel(GetParent(hwndDlg), TRUE);
         goto Quit;
     }
 
 
     /* Re-enable the Close/Cancel buttons */
-    PropSheet_SetCloseCancel(GetParent(hwndDlg), TRUE);
+    EnableSetupCancel(GetParent(hwndDlg), TRUE);
 
 
 
@@ -2700,7 +1323,7 @@ PrepareAndDoCopyThread(
     }
 
     /* The remaining steps cannot be cancelled */
-    PropSheet_SetCloseCancel(GetParent(hwndDlg), FALSE);
+    EnableSetupCancel(GetParent(hwndDlg), FALSE);
 
     // /* Set status text */
     // SetWindowResTextW(GetDlgItem(hwndDlg, IDC_ACTIVITY),
@@ -2716,8 +1339,7 @@ PrepareAndDoCopyThread(
     /* Set status text */
     SetWindowResTextW(GetDlgItem(hwndDlg, IDC_ACTIVITY),
                       pSetupData->hInstance,
-                      pSetupData->RepairUpdateFlag ? IDS_UPDATE_REGISTRY
-                                                   : IDS_CREATE_REGISTRY);
+                      IDS_CREATE_REGISTRY);
     SetDlgItemTextW(hwndDlg, IDC_ITEM, L"");
 
     /* Set up the progress bar */
@@ -2730,7 +1352,7 @@ PrepareAndDoCopyThread(
                  PBM_SETPOS, 0, 0);
 
     ErrorNumber = UpdateRegistry(&pSetupData->USetupData,
-                                 pSetupData->RepairUpdateFlag,
+                                 FALSE,
                                  pSetupData->PartitionList,
                                  InstallVolume->Info.DriveLetter,
                                  pSetupData->SelectedLanguageId,
@@ -2744,7 +1366,6 @@ PrepareAndDoCopyThread(
     }
     SendMessageW(UiContext.hWndProgress, PBM_SETPOS, 100, 0);
 
-    if (!pSetupData->RepairUpdateFlag)
     {
         DWORD Error;
 
@@ -2909,12 +1530,13 @@ Quit:
 }
 
 
-static INT_PTR CALLBACK
-ProcessDlgProc(
-    IN HWND hwndDlg,
-    IN UINT uMsg,
-    IN WPARAM wParam,
-    IN LPARAM lParam)
+INT_PTR
+CALLBACK
+InstallPageProc(
+    _In_ HWND hwndDlg,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam)
 {
     PSETUPDATA pSetupData;
 
@@ -2926,7 +1548,7 @@ ProcessDlgProc(
         case WM_INITDIALOG:
         {
             /* Save pointer to the global setup data */
-            pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
+            pSetupData = (PSETUPDATA)lParam;
             SetWindowLongPtrW(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
 
             /* Reset status text */
@@ -2944,120 +1566,101 @@ ProcessDlgProc(
             return TRUE;
         }
 
-        case WM_NOTIFY:
+        case SPN_SETACTIVE:
         {
-            LPNMHDR lpnm = (LPNMHDR)lParam;
+            SetupFrameShowButtons(hwndDlg, FALSE, FALSE, TRUE);
+            PostMessageW(hwndDlg, PM_INSTALL_START, 0, 0);
+            return TRUE;
+        }
 
-            switch (lpnm->code)
+        case SPN_KILLACTIVE:
+        {
+            DWORD dwStatus;
+
+            if (InterlockedFlagsTestAndSet8(&pSetupData->bStopInstall,
+                                            SETUP_PAGE_SWITCHING))
             {
-                case PSN_SETACTIVE:
+                return TRUE;
+            }
+
+            if (!pSetupData->hInstallThread)
+                return TRUE;
+
+            dwStatus = WaitForSingleObject(pSetupData->hInstallThread, 0);
+            if (dwStatus == WAIT_TIMEOUT)
+            {
+                HCURSOR hOldCursor;
+
+                hWaitCursor = LoadCursor(NULL, IDC_WAIT);
+                hOldCursor = SetCursor(hWaitCursor);
+                ShowCursor(TRUE);
+
+                for (;;)
                 {
-                    HWND hWndParent = GetParent(hwndDlg);
+                    MSG msg;
 
-                    SendMessageW(hWndParent, PSM_SETWIZBUTTONS, 0, 0);
-                    ShowDlgItem(hWndParent, ID_WIZBACK, SW_HIDE);
-                    ShowDlgItem(hWndParent, ID_WIZNEXT, SW_HIDE);
-
-                    PostMessageW(hwndDlg, PM_INSTALL_START, 0, 0);
-                    break;
-                }
-
-                case PSN_KILLACTIVE:
-                {
-                    DWORD dwStatus;
-
-                    if (InterlockedFlagsTestAndSet8(&pSetupData->bStopInstall,
-                                                    SETUP_PAGE_SWITCHING))
-                    {
-                        SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, TRUE);
-                        return TRUE;
-                    }
-
-                    if (!pSetupData->hInstallThread)
+                    dwStatus = MsgWaitForMultipleObjects(1, &pSetupData->hInstallThread,
+                                                         FALSE, INFINITE,
+                                                         QS_ALLINPUT | QS_ALLPOSTMESSAGE);
+                    if (dwStatus != (WAIT_OBJECT_0 + 1))
                         break;
 
-                    dwStatus = WaitForSingleObject(pSetupData->hInstallThread, 0);
-                    if (dwStatus == WAIT_TIMEOUT)
+                    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
                     {
-                        HCURSOR hOldCursor;
-
-                        hWaitCursor = LoadCursor(NULL, IDC_WAIT);
-                        hOldCursor = SetCursor(hWaitCursor);
-                        ShowCursor(TRUE);
-
-                        for (;;)
-                        {
-                            MSG msg;
-
-                            dwStatus = MsgWaitForMultipleObjects(1, &pSetupData->hInstallThread,
-                                                                 FALSE, INFINITE,
-                                                                 QS_ALLINPUT | QS_ALLPOSTMESSAGE);
-                            if (dwStatus != (WAIT_OBJECT_0 + 1))
-                                break;
-
-                            while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
-                            {
-                                TranslateMessage(&msg);
-                                DispatchMessageW(&msg);
-                            }
-                        }
-
-                        ShowCursor(FALSE);
-                        SetCursor(hOldCursor);
-                        hWaitCursor = NULL;
+                        TranslateMessage(&msg);
+                        DispatchMessageW(&msg);
                     }
-
-                    CloseHandle(pSetupData->hInstallThread);
-                    pSetupData->hInstallThread = NULL;
-                    CloseHandle(pSetupData->hHaltInstallEvent);
-                    pSetupData->hHaltInstallEvent = NULL;
-                    break;
                 }
 
-                case PSN_QUERYCANCEL:
-                {
-                    INT nRet;
-
-                    if (pSetupData->bStopInstall)
-                    {
-                        nRet = IDYES;
-                    }
-                    else
-                    {
-                        /* Halt the on-going file copy */
-                        ResetEvent(pSetupData->hHaltInstallEvent);
-
-                        nRet = DisplayMessage(GetParent(hwndDlg),
-                                              MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2,
-                                              MAKEINTRESOURCEW(IDS_ABORTSETUP2),
-                                              MAKEINTRESOURCEW(IDS_ABORTSETUP));
-                        if (nRet == IDYES)
-                            InterlockedOr8((PCHAR)&pSetupData->bStopInstall, SETUP_ABORT_INSTALL);
-                        SetEvent(pSetupData->hHaltInstallEvent);
-                    }
-
-                    if ((nRet == IDYES) && !pSetupData->bPageSwitching &&
-                        !InterlockedFlagsTestAndSet8(&pSetupData->bStopInstall,
-                                                     SETUP_IS_CANCELLING))
-                    {
-                        PostMessageW(hwndDlg, PM_INSTALL_DONE, FALSE, 0);
-                    }
-
-                    /* Do not close the wizard too soon */
-                    SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, TRUE);
-                    return TRUE;
-                }
-
-                case PSN_WIZBACK:
-                case PSN_WIZNEXT:
-                    SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, -1);
-                    return TRUE;
-
-                default:
-                    break;
+                ShowCursor(FALSE);
+                SetCursor(hOldCursor);
+                hWaitCursor = NULL;
             }
-            break;
+
+            CloseHandle(pSetupData->hInstallThread);
+            pSetupData->hInstallThread = NULL;
+            CloseHandle(pSetupData->hHaltInstallEvent);
+            pSetupData->hHaltInstallEvent = NULL;
+            return TRUE;
         }
+
+        case SPN_QUERYCANCEL:
+        {
+            INT nRet;
+
+            if (pSetupData->bStopInstall)
+            {
+                nRet = IDYES;
+            }
+            else
+            {
+                /* Halt the on-going file copy */
+                ResetEvent(pSetupData->hHaltInstallEvent);
+
+                nRet = DisplayMessage(GetParent(hwndDlg),
+                                      MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2,
+                                      MAKEINTRESOURCEW(IDS_ABORTSETUP2),
+                                      MAKEINTRESOURCEW(IDS_ABORTSETUP));
+                if (nRet == IDYES)
+                    InterlockedOr8((PCHAR)&pSetupData->bStopInstall, SETUP_ABORT_INSTALL);
+                SetEvent(pSetupData->hHaltInstallEvent);
+            }
+
+            if ((nRet == IDYES) && !pSetupData->bPageSwitching &&
+                !InterlockedFlagsTestAndSet8(&pSetupData->bStopInstall,
+                                             SETUP_IS_CANCELLING))
+            {
+                PostMessageW(hwndDlg, PM_INSTALL_DONE, FALSE, 0);
+            }
+
+            SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, TRUE);
+            return TRUE;
+        }
+
+        case SPN_WIZBACK:
+        case SPN_WIZNEXT:
+            SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, -1);
+            return TRUE;
 
         case PM_INSTALL_START:
         {
@@ -3079,6 +1682,7 @@ ProcessDlgProc(
 
             /* Start the installation thread */
             pSetupData->bStopInstall = FALSE;
+            pSetupData->bInstalled = FALSE;
             pSetupData->hInstallThread = CreateThread(NULL, 0,
                                                       PrepareAndDoCopyThread,
                                                       (PVOID)hwndDlg,
@@ -3105,12 +1709,12 @@ ProcessDlgProc(
              * so that the user sees the current state and goes to the Abort page. */
             if (!Success && !pSetupData->bStopInstall)
             {
-                PropSheet_SetCloseCancel(hWndParent, TRUE);
+                EnableSetupCancel(hWndParent, TRUE);
                 InterlockedOr8((PCHAR)&pSetupData->bStopInstall, SETUP_ABORT_INSTALL);
                 break;
             }
 
-            PropSheet_SetCloseCancel(hWndParent, FALSE);
+            EnableSetupCancel(hWndParent, FALSE);
 
             if (!Success)
                 InterlockedOr8((PCHAR)&pSetupData->bStopInstall, SETUP_ABORT_INSTALL);
@@ -3119,7 +1723,8 @@ ProcessDlgProc(
 
             if (!Success)
                 InterlockedOr8((PCHAR)&pSetupData->bStopInstall, SETUP_IS_CANCELLING);
-            PropSheet_SetCurSelByID(hWndParent, Success ? IDD_FINISHPAGE : IDD_ABORTPAGE);
+            pSetupData->bInstalled = Success;
+            SetupFrameGoTo(hwndDlg, SETUP_PAGE_DONE);
             break;
         }
 
@@ -3134,7 +1739,7 @@ ProcessDlgProc(
 /**
  * @brief   Detects whether a Windows shell is active.
  **/
-static BOOL
+BOOL
 IsShellActive(VOID)
 {
 /* See reactos/undocuser.h */
@@ -3192,7 +1797,7 @@ FindUserClosableWindowProc(
 /**
  * @brief   Detects whether there exist interactive closable windows opened.
  **/
-static BOOL
+BOOL
 AreThereInteractiveWindows(
     _In_opt_ HWND hWndExclude)
 {
@@ -3208,208 +1813,6 @@ AreThereInteractiveWindows(
         EnumWindows(FindUserClosableWindowProc, (LPARAM)&Info);
         return Info.Found;
     }
-}
-
-static INT_PTR CALLBACK
-FinishDlgProc(
-    IN HWND hwndDlg,
-    IN UINT uMsg,
-    IN WPARAM wParam,
-    IN LPARAM lParam)
-{
-    PSETUPDATA pSetupData;
-
-    /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtrW(hwndDlg, GWLP_USERDATA);
-
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
-        {
-            LPPROPSHEETPAGEW ppsp = (LPPROPSHEETPAGEW)lParam;
-
-            /* Save pointer to the global setup data */
-            pSetupData = (PSETUPDATA)ppsp->lParam;
-            SetWindowLongPtrW(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
-
-            /* Set the stop-install flag if the user is aborting
-             * the installation: TRUE if Abort, FALSE if Finish. */
-            pSetupData->bStopInstall = (ppsp->pszTemplate == MAKEINTRESOURCEW(IDD_ABORTPAGE));
-
-            /* Set title font */
-            SetDlgItemFont(hwndDlg, IDC_FINISHTITLE, pSetupData->hTitleFont, TRUE);
-
-            /* We need to reboot at the end of the installation if this is an
-             * unattended setup, or if there is no shell active. If there are
-             * other user-interactive windows opened, we pause in WM_ACTIVATE
-             * the inevitable reboot countdown when the wizard is deactivated,
-             * and restart it when the wizard is reactivated. */
-            pSetupData->bMustReboot = SetupData.bUnattend;
-            pSetupData->bMustReboot |= !IsShellActive();
-
-            /* If we must reboot, display the countdown gauge. In any
-             * case, let the user restart now or postpone it to later. */
-            if (pSetupData->bMustReboot)
-            {
-                /* "Setup will now restart your computer..." is shown */
-                EnableDlgItem(hwndDlg, IDC_RESTART_PROGRESS, TRUE);
-                ShowDlgItem(hwndDlg, IDC_RESTART_PROGRESS, SW_SHOW);
-            }
-            else
-            {
-                /* We should not reboot automatically, change the finish
-                 * text to "Setup needs to restart your computer..." */
-                UINT uMsgID = (!pSetupData->bStopInstall ? IDS_FINISH_NO_REBOOT
-                                                         : IDS_ABORT_NO_REBOOT);
-                SetWindowResTextW(GetDlgItem(hwndDlg, IDC_FINISHTEXT),
-                                  pSetupData->hInstance,
-                                  uMsgID);
-
-                /* Hide and disable the countdown gauge */
-                EnableDlgItem(hwndDlg, IDC_RESTART_PROGRESS, FALSE);
-                ShowDlgItem(hwndDlg, IDC_RESTART_PROGRESS, SW_HIDE);
-            }
-
-            /* If the installation is aborted, change the "Cancel" button text to "Close" */
-            if (pSetupData->bStopInstall)
-            {
-                SetWindowResTextW(GetDlgItem(GetParent(hwndDlg), IDCANCEL),
-                                  GetModuleHandleW(L"comctl32.dll"),
-                                  IDS_CLOSE);
-            }
-
-            /* Ensure that the installer wizard window is made visible and focused */
-            ShowWindow(GetParent(hwndDlg), SW_SHOW);
-            SwitchToThisWindow(GetParent(hwndDlg), TRUE);
-            break;
-        }
-
-        case WM_DESTROY:
-            return TRUE;
-
-        case WM_ACTIVATE:
-        {
-            /* Only care about (de)activation only if we must reboot */
-            if (!pSetupData->bMustReboot)
-                break;
-
-            if (LOWORD(wParam) == WA_INACTIVE)
-            {
-                /* Wizard window is deactivated, check whether there are
-                 * interactive windows. If so, pause the countdown. */
-                if (AreThereInteractiveWindows(GetParent(hwndDlg)))
-                    KillTimer(hwndDlg, 1);
-            }
-            else
-            {
-                /* Wizard window is reactivated, re-enable the countdown */
-                SetTimer(hwndDlg, 1, 50, NULL);
-            }
-            break;
-        }
-
-        case WM_TIMER:
-        {
-            HWND hWndProgress;
-            INT Position;
-
-            hWndProgress = GetDlgItem(hwndDlg, IDC_RESTART_PROGRESS);
-            Position = SendMessageW(hWndProgress, PBM_GETPOS, 0, 0);
-            if (Position == 300)
-            {
-                KillTimer(hwndDlg, 1);
-                PropSheet_PressButton(GetParent(hwndDlg), PSBTN_FINISH);
-            }
-            else
-            {
-                SendMessageW(hWndProgress, PBM_SETPOS, Position + 1, 0);
-            }
-            return TRUE;
-        }
-
-        case WM_NOTIFY:
-        {
-            LPNMHDR lpnm = (LPNMHDR)lParam;
-
-            switch (lpnm->code)
-            {
-                case PSN_SETACTIVE:
-                {
-                    HWND hWndParent = GetParent(hwndDlg);
-
-                    /* Only "Finish" for closing the wizard, and hide "Back" and "Next" */
-                    PropSheet_SetWizButtons(hWndParent, PSWIZB_FINISH);
-                    // PropSheet_ShowWizButtons(hWndParent, 0, PSWIZB_BACK | PSWIZB_NEXT | PSWIZB_CANCEL);
-                    ShowDlgItem(hWndParent, ID_WIZBACK, SW_HIDE);
-                    ShowDlgItem(hWndParent, ID_WIZNEXT, SW_HIDE);
-                    ExtendFrameIntoWatermark(hwndDlg, pSetupData, TRUE);
-
-                    /* Change the "Finish" button text to "Restart" */
-                    SetWindowResTextW(GetDlgItem(hWndParent, ID_WIZFINISH),
-                                      pSetupData->hInstance,
-                                      IDS_RESTARTBTN);
-
-                    if (!pSetupData->bMustReboot)
-                        PropSheet_SetCloseCancel(hWndParent, TRUE);
-
-                    if (pSetupData->bMustReboot)
-                    {
-                        RECT rcBtn1, rcBtn2;
-
-                        /* Move the "Finish"/"Restart" button to where the "Close"/"Cancel" button is */
-                        GetWindowRect(GetDlgItem(hWndParent, ID_WIZFINISH), &rcBtn1);
-                        MapWindowPoints(HWND_DESKTOP /*NULL*/, hWndParent, (LPPOINT)&rcBtn1, sizeof(RECT)/sizeof(POINT));
-                        GetWindowRect(GetDlgItem(hWndParent, IDCANCEL), &rcBtn2);
-                        MapWindowPoints(HWND_DESKTOP /*NULL*/, hWndParent, (LPPOINT)&rcBtn2, sizeof(RECT)/sizeof(POINT));
-                        SetWindowPos(GetDlgItem(hWndParent, ID_WIZFINISH),
-                                     HWND_TOP,
-                                     rcBtn1.left + (rcBtn2.right - rcBtn1.right),
-                                     rcBtn1.top,
-                                     0, 0,
-                                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-
-                        /* Hide and disable also the "Close"/"Cancel" buttons since we can only finish now */
-                        ShowDlgItem(hWndParent, IDCANCEL, SW_HIDE);
-                        PropSheet_SetCloseCancel(hWndParent, FALSE);
-
-                        /* Set up the reboot progress bar and countdown timer.
-                         * 300 steps at 50 ms each: 15 seconds */
-                        SendDlgItemMessage(hwndDlg, IDC_RESTART_PROGRESS, PBM_SETRANGE, 0, MAKELPARAM(0, 300));
-                        SendDlgItemMessage(hwndDlg, IDC_RESTART_PROGRESS, PBM_SETPOS, 0, 0);
-                        SetTimer(hwndDlg, 1, 50, NULL);
-                    }
-                    else if (!pSetupData->bStopInstall)
-                    {
-                        /* Keep the "Cancel" button shown and change its text to "Postpone" */
-                        // PropSheet_ShowWizButtons(hWndParent, 0, PSWIZB_BACK | PSWIZB_NEXT);
-                        SetWindowResTextW(GetDlgItem(hWndParent, IDCANCEL),
-                                          pSetupData->hInstance,
-                                          IDS_POSTPONEBTN);
-                    }
-
-                    break;
-                }
-
-                case PSN_WIZNEXT:
-                case PSN_WIZFINISH:
-                {
-                    /* Press on "Finish"/"Restart" button */
-                    pSetupData->bMustReboot = TRUE;
-                    __fallthrough;
-                }
-                case PSN_QUERYCANCEL:
-                    /* Press on "Cancel"/"Postpone" button */
-                default:
-                    break;
-            }
-            break;
-        }
-
-        default:
-            break;
-    }
-
-    return FALSE;
 }
 
 static VOID
@@ -3455,10 +1858,6 @@ BOOL LoadSetupData(
         DPRINT1("Could not enumerate available disks; failing installation\n");
         return FALSE;
     }
-
-    pSetupData->NtOsInstallsList = CreateNTOSInstallationsList(pSetupData->PartitionList);
-    if (!pSetupData->NtOsInstallsList)
-        DPRINT1("Failed to get a list of NTOS installations; continue installation...\n");
 
     /* Load the hardware, language and keyboard layout lists */
 
@@ -4087,10 +2486,7 @@ _tWinMain(HINSTANCE hInst,
     ULONG Error;
     HANDLE hHotkeyThread;
     INITCOMMONCONTROLSEX iccx;
-    PROPSHEETHEADER psh;
-    HPROPSHEETPAGE ahpsp[11];
-    PROPSHEETPAGE psp = {0};
-    UINT nPages = 0;
+    HRESULT hrCom;
 
     if (IsSetupAlreadyRunning(hInst))
         return 0;
@@ -4144,167 +2540,24 @@ _tWinMain(HINSTANCE hInst,
      * you must call InitCommonControlsEx() to register the classes
      * for those controls. */
     iccx.dwSize = sizeof(iccx);
-    iccx.dwICC = ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES | ICC_PROGRESS_CLASS;
+    iccx.dwICC = ICC_LISTVIEW_CLASSES | ICC_PROGRESS_CLASS | ICC_UPDOWN_CLASS;
     InitCommonControlsEx(&iccx);
 
-    /* Register the TreeList control */
-    // RegisterTreeListClass(hInst);
-    TreeListRegister(hInst);
+    hrCom = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
     /* Create the title and bold fonts */
     SetupData.hTitleFont = CreateTitleFont(NULL);
     SetupData.hBoldFont  = CreateBoldFont(NULL, 0);
 
-    if (!SetupData.bUnattend)
-    {
-        /* Create the Start page */
-        psp.dwSize = sizeof(psp);
-        psp.dwFlags = PSP_DEFAULT | PSP_HIDEHEADER;
-        psp.hInstance = hInst;
-        psp.lParam = (LPARAM)&SetupData;
-        psp.pfnDlgProc = StartDlgProc;
-        psp.pszTemplate = MAKEINTRESOURCEW(IDD_STARTPAGE);
-        ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-
-        /* Create the Install type selection page */
-        psp.dwSize = sizeof(psp);
-        psp.dwFlags = PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
-        psp.pszHeaderTitle = MAKEINTRESOURCEW(IDS_TYPETITLE);
-        psp.pszHeaderSubTitle = MAKEINTRESOURCEW(IDS_TYPESUBTITLE);
-        psp.hInstance = hInst;
-        psp.lParam = (LPARAM)&SetupData;
-        psp.pfnDlgProc = TypeDlgProc;
-        psp.pszTemplate = MAKEINTRESOURCEW(IDD_TYPEPAGE);
-        ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-
-        /* Create the Upgrade/Repair selection page */
-        psp.dwSize = sizeof(psp);
-        psp.dwFlags = PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
-        psp.pszHeaderTitle = MAKEINTRESOURCEW(IDS_UPDATETITLE);
-        psp.pszHeaderSubTitle = MAKEINTRESOURCEW(IDS_UPDATESUBTITLE);
-        psp.hInstance = hInst;
-        psp.lParam = (LPARAM)&SetupData;
-        psp.pfnDlgProc = UpgradeRepairDlgProc;
-        psp.pszTemplate = MAKEINTRESOURCEW(IDD_UPDATEREPAIRPAGE);
-        ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-
-        /* Create the Device Settings page */
-        psp.dwSize = sizeof(psp);
-        psp.dwFlags = PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
-        psp.pszHeaderTitle = MAKEINTRESOURCEW(IDS_DEVICETITLE);
-        psp.pszHeaderSubTitle = MAKEINTRESOURCEW(IDS_DEVICESUBTITLE);
-        psp.hInstance = hInst;
-        psp.lParam = (LPARAM)&SetupData;
-        psp.pfnDlgProc = DeviceDlgProc;
-        psp.pszTemplate = MAKEINTRESOURCEW(IDD_DEVICEPAGE);
-        ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-
-        /* Create the Install device settings page / boot method / install directory */
-        psp.dwSize = sizeof(psp);
-        psp.dwFlags = PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
-        psp.pszHeaderTitle = MAKEINTRESOURCEW(IDS_DRIVETITLE);
-        psp.pszHeaderSubTitle = MAKEINTRESOURCEW(IDS_DRIVESUBTITLE);
-        psp.hInstance = hInst;
-        psp.lParam = (LPARAM)&SetupData;
-        psp.pfnDlgProc = DriveDlgProc;
-        psp.pszTemplate = MAKEINTRESOURCEW(IDD_DRIVEPAGE);
-        ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-
-        psp.dwSize = sizeof(psp);
-        psp.dwFlags = PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
-        psp.pszHeaderTitle = MAKEINTRESOURCEW(IDS_ACCOUNTTITLE);
-        psp.pszHeaderSubTitle = MAKEINTRESOURCEW(IDS_ACCOUNTSUBTITLE);
-        psp.hInstance = hInst;
-        psp.lParam = (LPARAM)&SetupData;
-        psp.pfnDlgProc = AccountDlgProc;
-        psp.pszTemplate = MAKEINTRESOURCEW(IDD_ACCOUNTPAGE);
-        ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-
-        psp.dwSize = sizeof(psp);
-        psp.dwFlags = PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
-        psp.pszHeaderTitle = MAKEINTRESOURCEW(IDS_TIMEZONETITLE);
-        psp.pszHeaderSubTitle = MAKEINTRESOURCEW(IDS_TIMEZONESUBTITLE);
-        psp.hInstance = hInst;
-        psp.lParam = (LPARAM)&SetupData;
-        psp.pfnDlgProc = TimeZoneDlgProc;
-        psp.pszTemplate = MAKEINTRESOURCEW(IDD_TIMEZONEPAGE);
-        ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-
-        /* Create the Summary page */
-        psp.dwSize = sizeof(psp);
-        psp.dwFlags = PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
-        psp.pszHeaderTitle = MAKEINTRESOURCEW(IDS_SUMMARYTITLE);
-        psp.pszHeaderSubTitle = MAKEINTRESOURCEW(IDS_SUMMARYSUBTITLE);
-        psp.hInstance = hInst;
-        psp.lParam = (LPARAM)&SetupData;
-        psp.pfnDlgProc = SummaryDlgProc;
-        psp.pszTemplate = MAKEINTRESOURCEW(IDD_SUMMARYPAGE);
-        ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-    }
-    else
-    {
-        psp.dwSize = sizeof(psp);
-        psp.dwFlags = PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
-        psp.pszHeaderTitle = MAKEINTRESOURCEW(IDS_DRIVETITLE);
-        psp.pszHeaderSubTitle = MAKEINTRESOURCEW(IDS_DRIVESUBTITLE);
-        psp.hInstance = hInst;
-        psp.lParam = (LPARAM)&SetupData;
-        psp.pfnDlgProc = DriveDlgProc;
-        psp.pszTemplate = MAKEINTRESOURCEW(IDD_DRIVEPAGE);
-        ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-    }
-
-    /* Create the Installation Progress page */
-    psp.dwSize = sizeof(psp);
-    psp.dwFlags = PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
-    psp.pszHeaderTitle = MAKEINTRESOURCEW(IDS_PROCESSTITLE);
-    psp.pszHeaderSubTitle = MAKEINTRESOURCEW(IDS_PROCESSSUBTITLE);
-    psp.hInstance = hInst;
-    psp.lParam = (LPARAM)&SetupData;
-    psp.pfnDlgProc = ProcessDlgProc;
-    psp.pszTemplate = MAKEINTRESOURCEW(IDD_PROCESSPAGE);
-    ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-
-    /* Create the Finish page */
-    psp.dwSize = sizeof(psp);
-    psp.dwFlags = PSP_DEFAULT | PSP_HIDEHEADER;
-    psp.hInstance = hInst;
-    psp.lParam = (LPARAM)&SetupData;
-    psp.pfnDlgProc = FinishDlgProc;
-    psp.pszTemplate = MAKEINTRESOURCEW(IDD_FINISHPAGE);
-    ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-
-    /* Create the Abort page */
-    psp.dwSize = sizeof(psp);
-    psp.dwFlags = PSP_DEFAULT | PSP_HIDEHEADER;
-    psp.hInstance = hInst;
-    psp.lParam = (LPARAM)&SetupData;
-    psp.pfnDlgProc = FinishDlgProc; // Same dialog procedure as the Finish page.
-    psp.pszTemplate = MAKEINTRESOURCEW(IDD_ABORTPAGE);
-    ahpsp[nPages++] = CreatePropertySheetPage(&psp);
-
-    /* Create the property sheet */
-    psh.dwSize = sizeof(psh);
-    psh.dwFlags = PSH_WIZARD97 | PSH_WATERMARK | PSH_HEADER;
-    psh.hInstance = hInst;
-    psh.hwndParent = NULL;
-    psh.nPages = nPages;
-    psh.nStartPage = 0;
-    psh.phpage = ahpsp;
-    psh.pszbmWatermark = MAKEINTRESOURCEW(IDB_WATERMARK);
-    psh.pszbmHeader = MAKEINTRESOURCEW(IDB_HEADER);
-
-    /* Display the wizard */
-    PropertySheet(&psh);
+    RunSetupWizard(&SetupData);
 
     if (SetupData.hBoldFont)
         DeleteFont(SetupData.hBoldFont);
     if (SetupData.hTitleFont)
         DeleteFont(SetupData.hTitleFont);
 
-    /* Unregister the TreeList control */
-    // UnregisterTreeListClass(hInst);
-    TreeListUnregister(hInst);
+    if (SUCCEEDED(hrCom))
+        CoUninitialize();
 
     if (hHotkeyThread)
     {

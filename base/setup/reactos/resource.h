@@ -11,98 +11,62 @@
 
 /* Bitmaps */
 #define IDB_WATERMARK       100
-#define IDB_HEADER          101
+#define IDB_LOGO            102
+#define IDB_LOGOMASK        103
 
 /* Icons */
 #define IDI_MAIN            3000
-#define IDI_ROSICON         3001
-#define IDI_WINICON         3002
-#define IDI_DISKDRIVE       3003
-#define IDI_PARTITION       3004
 
 
 #define IDC_STATIC          -1
 
 /* Dialogs */
-#define IDD_STARTPAGE        2000
-#define IDC_STARTTITLE       2001
-#define IDC_WARNTEXT1        2002   // TEMPTEMP: TODO: Remove once we reach 0.5/Beta :)
-#define IDC_WARNTEXT2        2003   // TEMPTEMP: TODO: Remove once we reach 0.5/Beta :)
-#define IDC_WARNTEXT3        2004   // TEMPTEMP: TODO: Remove once we reach 0.5/Beta :)
-
-#define IDD_TYPEPAGE         2010
-#define IDC_INSTALL          2011
-#define IDC_INSTALLTEXT      2012
-#define IDC_UPDATE           2013
-#define IDC_UPDATETEXT       2014
-
-#define IDD_UPDATEREPAIRPAGE    2020
-#define IDC_NTOSLIST            2021
-#define IDC_SKIPUPGRADE         2022
-
-#define IDD_DEVICEPAGE       2030
-#define IDC_COMPUTER         2031
-#define IDC_DISPLAY          2032
-#define IDC_KEYBOARD         2033
-#define IDC_KEYLAYOUT        2034
-
-#define IDD_DRIVEPAGE        2040
-#define IDC_PARTITION        2041
-#define IDC_INITDISK         2042
-#define IDC_PARTCREATE       2043
-#define IDC_PARTFORMAT       2044
-#define IDC_PARTDELETE       2045
-#define IDC_DEVICEDRIVER     2046
-#define IDC_PARTMOREOPTS     2047
-#define IDC_PARTSHRINK       2048
-#define IDC_PARTEXTEND       2049
-
-#define IDD_SUMMARYPAGE      2050
-#define IDC_INSTALLTYPE      2051
-#define IDC_INSTALLSOURCE    2052
-#define IDC_ARCHITECTURE     2053
-// #define IDC_COMPUTER         2031
-// #define IDC_DISPLAY          2032
-// #define IDC_KEYBOARD         2033
-#define IDC_DESTDRIVE        2054
-// #define IDC_PATH             2071
-#define IDC_CONFIRM_INSTALL  2055
-
 #define IDD_PROCESSPAGE      2060
 #define IDC_ACTIVITY         2061
 #define IDC_ITEM             2062
 #define IDC_PROCESSPROGRESS  2063
 
 #define IDD_FINISHPAGE       2070
-#define IDC_FINISHTITLE      2071
 #define IDC_FINISHTEXT       2072
 #define IDC_RESTART_PROGRESS 2073
-#define IDD_ABORTPAGE        2075 // Page derived from IDD_FINISHPAGE
-
-#define IDD_ADVINSTOPTS      2080
-#define IDC_PATH             2081
-#define IDC_INSTFREELDR      2082
-
-#define IDD_PARTITION        2090
-#define IDC_EDIT_PARTSIZE    2091
-#define IDC_UPDOWN_PARTSIZE  2092
-#define IDC_UNIT             2093
-#define IDC_CHECK_MBREXTPART 2094
-#define IDC_FS_STATIC        2095
-#define IDC_FSTYPE           2096
-#define IDC_CHECK_QUICKFMT   2097
-
-#define IDD_FORMAT 2100
+#define IDC_FINISHLOGO       2074
 
 #define IDD_ACCOUNTPAGE      2110
 #define IDC_COMPUTERNAME     2111
 #define IDC_USERNAME         2112
 #define IDC_PASSWORD1        2113
 #define IDC_PASSWORD2        2114
-
-#define IDD_TIMEZONEPAGE     2120
 #define IDC_TIMEZONELIST     2121
 #define IDC_AUTODAYLIGHT     2122
+
+#define IDD_SETUPFRAME       2200
+#define IDC_FRAME_TITLE      2201
+#define IDC_FRAME_SUBTITLE   2202
+#define IDC_FRAME_PAGE       2203
+#define IDC_FRAME_BACK       2204
+#define IDC_FRAME_NEXT       2205
+
+#define IDD_DISKPAGE         2210
+#define IDC_DISKLIST         2211
+#define IDC_DISKINFO         2212
+#define IDC_DISKNEW          2213
+#define IDC_DISKDELETE       2214
+#define IDC_DISKFORMAT       2215
+#define IDC_DISKEXTEND       2216
+#define IDC_DISKSHRINK       2217
+#define IDC_DISKERASE        2218
+#define IDC_DISKREFRESH      2219
+#define IDC_DISKNOTE         2220
+
+#define IDD_NEWPARTITION     2230
+#define IDC_NEWSIZE          2231
+#define IDC_NEWSIZE_SPIN     2232
+#define IDC_NEWSIZE_RANGE    2233
+
+#define IDD_READYPAGE        2240
+#define IDC_READY_SUMMARY    2241
+#define IDC_READY_WARNING    2242
+#define IDC_CONFIRM_INSTALL  2243
 
 #define IDD_RESIZE                  2140
 #define IDC_RESIZE_LABEL_TOTAL      2141
@@ -117,9 +81,6 @@
 #define IDC_RESIZE_ICON             2150
 #define IDC_RESIZE_NOTE             2151
 
-#define IDC_ERASEDISK        2130
-#define IDC_CUSTOMPART       2131
-#define IDC_ERASECONFIRM     2132
 
 
 /* Strings */
@@ -139,23 +100,10 @@
 #define IDS_RESIZE_FAILED     5413
 
 #define IDS_CAPTION          5000
-#define IDS_TYPETITLE        5001
-#define IDS_TYPESUBTITLE     5002
-#define IDS_UPDATETITLE      5003
-#define IDS_UPDATESUBTITLE   5004
-#define IDS_DEVICETITLE      5005
-#define IDS_DEVICESUBTITLE   5006
 #define IDS_DRIVETITLE       5007
-#define IDS_DRIVESUBTITLE    5008
-#define IDS_SUMMARYTITLE     5009
-#define IDS_SUMMARYSUBTITLE  5010
 #define IDS_PROCESSTITLE     5011
 #define IDS_PROCESSSUBTITLE  5012
 #define IDS_ACCOUNTTITLE     5013
-#define IDS_ACCOUNTSUBTITLE  5014
-#define IDS_TIMEZONETITLE    5015
-#define IDS_TIMEZONESUBTITLE 5016
-#define IDS_ERASEDISK_TYPE   5017
 #define IDS_ABORTSETUP       5020
 #define IDS_ABORTSETUP2      5021
 #define IDS_NO_TXTSETUP_SIF  5022
@@ -164,23 +112,6 @@
 #define IDS_INSTALLBTN       5030
 #define IDS_RESTARTBTN       5031
 #define IDS_POSTPONEBTN      5032
-#define IDS_VOLUME_NOFORMAT  5040
-
-#define IDS_INSTALLATION_NAME   5100
-#define IDS_INSTALLATION_PATH   5101
-#define IDS_INSTALLATION_VENDOR 5102
-
-#define IDS_PARTITION_NAME   5110
-#define IDS_PARTITION_TYPE   5111
-#define IDS_PARTITION_SIZE   5112
-#define IDS_PARTITION_STATUS 5113
-
-// WARNING: These IDs *MUST* stay in increasing order!
-#define IDS_BOOTLOADER_NOINST       5120
-#define IDS_BOOTLOADER_REMOVABLE    5121
-#define IDS_BOOTLOADER_SYSTEM       5122    // For non-MBR disks
-#define IDS_BOOTLOADER_MBRVBR       5123    // For MBR disks only
-#define IDS_BOOTLOADER_VBRONLY      5124    // ""
 
 
 /* Progress Strings */
@@ -197,7 +128,6 @@
 #define IDS_PREPARE_FILES           5212
 #define IDS_COPYING_FILES           5213
 #define IDS_CREATE_REGISTRY         5214
-#define IDS_UPDATE_REGISTRY         5215
 // #define IDS_INSTALL_FINALIZE        5216
 #define IDS_INSTALL_BOOTLOADER      5217
 #define IDS_CONFIGURE_SYSTEM        5218
@@ -226,12 +156,6 @@
 
 
 /* Error Strings */
-#define IDS_ERROR_INVALID_INSTALLDIR_CHAR_TITLE 5300
-#define IDS_ERROR_INVALID_INSTALLDIR_CHAR       5301
-
-// ERROR_DIRECTORY_NAME
-#define IDS_ERROR_DIRECTORY_NAME_TITLE          5302
-#define IDS_ERROR_DIRECTORY_NAME                5303
 
 // ERROR_CREATE_PARTITION // TODO?
 #define IDS_ERROR_CREATE_PARTITION_TITLE        5304
@@ -278,3 +202,55 @@
 #define IDS_ERROR_USEREXISTS        5323
 #define IDS_ERROR_PASSWORDMATCH     5324
 #define IDS_ERROR_CONFIGURE         5325
+
+#define IDS_DISKSUBTITLE            5500
+#define IDS_ACCOUNTZONESUBTITLE     5501
+#define IDS_READYTITLE              5502
+#define IDS_READYSUBTITLE           5503
+#define IDS_DONETITLE               5504
+#define IDS_ABORTTITLE              5505
+#define IDS_DONE_REBOOT             5506
+#define IDS_ABORT_REBOOT            5507
+#define IDS_BACKBTN                 5508
+#define IDS_NEXTBTN                 5509
+#define IDS_CANCELBTN               5510
+#define IDS_CLOSEBTN                5511
+
+#define IDS_DISK_COL_NAME           5520
+#define IDS_DISK_COL_TOTAL          5521
+#define IDS_DISK_COL_FREE           5522
+#define IDS_DISK_COL_TYPE           5523
+#define IDS_DISK_UNALLOCATED        5524
+#define IDS_DISK_PARTITION          5525
+#define IDS_DISK_PARTITION_LABEL    5526
+#define IDS_DISK_SUFFIX_NEW         5527
+#define IDS_DISK_SUFFIX_FORMAT      5528
+#define IDS_DISKINFO                5529
+#define IDS_TYPE_SYSTEM             5530
+#define IDS_TYPE_MSR                5531
+#define IDS_TYPE_PRIMARY            5532
+#define IDS_TYPE_RECOVERY           5533
+#define IDS_TYPE_OEM                5534
+#define IDS_TYPE_LOGICAL            5535
+#define IDS_TYPE_EXTENDED           5536
+
+#define IDS_DISK_SELECT             5540
+#define IDS_DISK_NO_REGION          5541
+#define IDS_DISK_NOT_BASIC          5542
+#define IDS_DISK_NOT_FIRMWARE       5543
+#define IDS_DISK_NEW_SYSTEM         5544
+#define IDS_DISK_FORMAT_WARN        5545
+#define IDS_DISK_FORMAT_NTFS        5546
+#define IDS_DISK_FORMAT_EXISTING    5547
+#define IDS_DISK_ERASE_WARN         5548
+#define IDS_NEWPART_RANGE           5549
+
+#define IDS_READY_TARGET            5560
+#define IDS_READY_ERASE             5561
+#define IDS_READY_DELETE            5562
+#define IDS_READY_CREATE            5563
+#define IDS_READY_FORMAT            5564
+#define IDS_READY_NOCHANGES         5565
+#define IDS_READY_COMPUTER          5566
+#define IDS_READY_ACCOUNT           5567
+#define IDS_READY_TIMEZONE          5568

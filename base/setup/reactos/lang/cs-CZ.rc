@@ -8,100 +8,6 @@ LANGUAGE LANG_CZECH, SUBLANG_DEFAULT
 
 /* Dialogs */
 
-IDD_STARTPAGE DIALOGEX 0, 0, 317, 193
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Instalace systému LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT "Vítejte v průvodci instalace systému LiberNT", IDC_STARTTITLE, 115, 8, 195, 24
-    LTEXT "This wizard will install or upgrade LiberNT on your computer, \
-and prepare the second part of the setup.", IDC_STATIC, 115, 40, 195, 27
-////
-    GROUPBOX " IMPORTANT INFORMATION ", IDC_WARNTEXT1, 115, 70, 195, 90, BS_CENTER
-    LTEXT "LiberNT is in Alpha stage: it is not feature- complete and is \
-under heavy development. It is recommended to use it only for \
-evaluation and testing and not as your daily-usage OS.\n\
-It may corrupt your data or damage your hardware.", IDC_WARNTEXT2, 120, 80, 185, 50, SS_CENTER
-    LTEXT "Backup your data or test on a secondary computer \
-if you attempt to run LiberNT on real hardware.", IDC_WARNTEXT3, 120, 130, 185, 27, SS_CENTER
-////
-    LTEXT "Kliknutím na Další pokračujte v instalaci.", IDC_STATIC, 115, 169, 195, 17
-END
-
-IDD_TYPEPAGE DIALOGEX 0, 0, 317, 143
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Instalace systému LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    AUTORADIOBUTTON "&Nainstalovat systém LiberNT", IDC_INSTALL, 7, 20, 277, 10, WS_GROUP | WS_TABSTOP
-    LTEXT "Instalovat novou kopii systému LiberNT. Tato možnost odstraní Vaše soubory, nastavení a programy. Můžete provést úpravu disků a oddílů.", IDC_INSTALLTEXT, 19, 36, 279, 27, NOT WS_GROUP
-    AUTORADIOBUTTON "&Opravit nebo aktualizovat LiberNT", IDC_UPDATE, 7, 80, 277, 10
-    LTEXT "Aktualizovat nebo opravit kopii systémy LiberNT. Tato možnost zachová Vaše soubory, nastavení a programy. Tato možnost je dostupná pouze pokud je již na Vašem počítači systém LiberNT nainstalován.", IDC_UPDATETEXT, 19, 96, 279, 27, NOT WS_GROUP
-END
-
-IDD_UPDATEREPAIRPAGE DIALOGEX 0, 0, 317, 143
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "LiberNT Setup"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT       "The Setup program can upgrade one of the available LiberNT installations listed below, or, if a LiberNT installation is damaged, the Setup program can attempt to repair it.", IDC_STATIC, 6, 6, 303, 18
-    CONTROL     "", IDC_NTOSLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_ALIGNLEFT | WS_BORDER | WS_TABSTOP, 6, 30, 303, 90
-    PUSHBUTTON  "&Do not upgrade", IDC_SKIPUPGRADE, 230, 128, 80, 14
-    LTEXT       "Click Next to upgrade the selected OS installation, or on 'Do not upgrade' to perform a new installation.", IDC_STATIC, 7, 124, 222, 16
-END
-
-IDD_DEVICEPAGE DIALOGEX 0, 0, 317, 143
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Instalace systému LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT "Počítač:", IDC_STATIC, 20, 15, 80, 10
-    COMBOBOX IDC_COMPUTER, 100, 15, 180, 80, WS_VSCROLL | WS_TABSTOP | CBS_DROPDOWNLIST
-    LTEXT "Obrazovka:", IDC_STATIC, 20, 35, 80, 10
-    COMBOBOX IDC_DISPLAY, 100, 35, 180, 80, WS_VSCROLL | WS_TABSTOP | CBS_DROPDOWNLIST
-    LTEXT "Klávesnice:", IDC_STATIC, 20, 55, 80, 10
-    COMBOBOX IDC_KEYBOARD, 100, 55, 180, 80, WS_VSCROLL | WS_TABSTOP | CBS_DROPDOWNLIST
-    LTEXT "Po klepnutí na Další bude možné nastavit instalační zařízení.", IDC_STATIC, 7, 128, 297, 8
-END
-
-IDD_DRIVEPAGE DIALOGEX 0, 0, 317, 143
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Instalace systému LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    AUTORADIOBUTTON "&Erase a disk and install LiberNT on it", IDC_ERASEDISK, 7, 3, 303, 10, WS_GROUP | WS_TABSTOP
-    AUTORADIOBUTTON "Install LiberNT on a &partition you choose", IDC_CUSTOMPART, 7, 15, 303, 10
-    CONTROL "", IDC_PARTITION, "SysTreeList32", WS_BORDER | WS_VISIBLE | WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL, 7, 28, 303, 78
-    AUTOCHECKBOX "I &understand that all files, programs and partitions on the selected disk will be erased.", IDC_ERASECONFIRM, 7, 109, 303, 10, WS_TABSTOP
-    PUSHBUTTON "&Initialize", IDC_INITDISK, 7, 122, 50, 14 // NOTE: At same position as IDC_PARTCREATE
-    PUSHBUTTON "&Vytvořit", IDC_PARTCREATE, 7, 122, 50, 14
-    PUSHBUTTON "&Format", IDC_PARTFORMAT, 7, 122, 50, 14 // NOTE: At same position as IDC_PARTCREATE
-    PUSHBUTTON "&Smazat", IDC_PARTDELETE, 63, 122, 50, 14
-    PUSHBUTTON "&Ovladač", IDC_DEVICEDRIVER, 174, 122, 50, 14, WS_DISABLED
-    PUSHBUTTON "S&hrink...", IDC_PARTSHRINK, 119, 122, 50, 14, NOT WS_VISIBLE
-    PUSHBUTTON "E&xtend...", IDC_PARTEXTEND, 174, 122, 50, 14, NOT WS_VISIBLE
-    PUSHBUTTON "&Pokročilé volby...", IDC_PARTMOREOPTS, 230, 122, 80, 14
-    // LTEXT "Po klepnutí na Další bude možné zkontrolovat všechna nastavení.", IDC_STATIC, 7, 128, 277, 8
-END
-
-IDD_PARTITION DIALOGEX 0, 0, 200, 120
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Vytvořit a naformátovat oddíl"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT "&Velikost:", IDC_STATIC, 7, 9, 70, 9
-    EDITTEXT IDC_EDIT_PARTSIZE, 82, 7, 47, 13, ES_RIGHT | ES_NUMBER | WS_GROUP
-    CONTROL "", IDC_UPDOWN_PARTSIZE, UPDOWN_CLASS, UDS_SETBUDDYINT | UDS_ALIGNRIGHT |
-            UDS_AUTOBUDDY | UDS_ARROWKEYS | WS_GROUP, 120, 22, 9, 13
-    LTEXT "MB", IDC_UNIT, 134, 9, 14, 9
-    AUTOCHECKBOX "&Extended partition", IDC_CHECK_MBREXTPART, 7, 22, 180, 14
-    LTEXT "Sou&borový systém:", IDC_FS_STATIC, 7, 46, 70, 9
-    COMBOBOX IDC_FSTYPE, 82, 44, 100, 50, CBS_DROPDOWNLIST | WS_TABSTOP
-    AUTOCHECKBOX "&Quick format", IDC_CHECK_QUICKFMT, 7, 59, 180, 14
-    PUSHBUTTON "OK", IDOK, 88, 98, 50, 14
-    PUSHBUTTON "Storno", IDCANCEL, 143, 98, 50, 14
-END
-
 IDD_RESIZE DIALOGEX 0, 0, 300, 170
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Shrink"
@@ -120,120 +26,6 @@ BEGIN
     LTEXT "You cannot shrink a volume beyond the point where any unmovable files are located.", IDC_RESIZE_NOTE, 25, 86, 268, 26
     DEFPUSHBUTTON "", IDOK, 180, 149, 54, 14
     PUSHBUTTON "Cancel", IDCANCEL, 239, 149, 54, 14
-END
-
-IDD_FORMAT DIALOGEX 0, 0, 200, 83
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Naformátovat oddíl"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT "Sou&borový systém:", IDC_FS_STATIC, 7, 9, 70, 9
-    COMBOBOX IDC_FSTYPE, 82, 7, 100, 50, CBS_DROPDOWNLIST | WS_TABSTOP
-    AUTOCHECKBOX "&Quick format", IDC_CHECK_QUICKFMT, 7, 22, 180, 14
-    PUSHBUTTON "OK", IDOK, 88, 61, 50, 14
-    PUSHBUTTON "Storno", IDCANCEL, 143, 61, 50, 14
-END
-
-IDD_ADVINSTOPTS DIALOGEX 0, 0, 305, 135
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Advanced Installation Options"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT "Choose the &directory where you want to install LiberNT:", IDC_STATIC, 7, 9, 291, 10
-    EDITTEXT IDC_PATH, 7, 23, 291, 13
-    GROUPBOX "Bootloader", IDC_STATIC, 7, 45, 291, 60
-    LTEXT "Select the location where the FreeLoader\nbootloader should be installed.\n\nBy default, it is installed on the system partition of the boot disk (and either in the Master or the Volume Boot Record for BIOS-based computers).", IDC_STATIC, 13, 57, 279, 44
-    COMBOBOX IDC_INSTFREELDR, 150, 58, 142, 45, WS_VSCROLL | WS_TABSTOP | CBS_DROPDOWNLIST
-    DEFPUSHBUTTON "OK", IDOK, 193, 113, 50, 14
-    PUSHBUTTON "Storno", IDCANCEL, 248, 113, 50, 14
-END
-
-IDD_ACCOUNTPAGE DIALOGEX 0, 0, 317, 143
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "LiberNT Setup"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT "&Computer name:", IDC_STATIC, 20, 12, 90, 10
-    EDITTEXT IDC_COMPUTERNAME, 115, 10, 180, 13, ES_UPPERCASE | ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "&User name:", IDC_STATIC, 20, 40, 90, 10
-    EDITTEXT IDC_USERNAME, 115, 38, 180, 13, ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "&Password:", IDC_STATIC, 20, 60, 90, 10
-    EDITTEXT IDC_PASSWORD1, 115, 58, 180, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "C&onfirm password:", IDC_STATIC, 20, 80, 90, 10
-    EDITTEXT IDC_PASSWORD2, 115, 78, 180, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "This account is a member of the Administrators group. If you leave the password empty, LiberNT signs in to it automatically.", IDC_STATIC, 20, 102, 275, 26
-END
-
-IDD_TIMEZONEPAGE DIALOGEX 0, 0, 317, 143
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "LiberNT Setup"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT "&Time zone:", IDC_STATIC, 20, 15, 277, 10
-    COMBOBOX IDC_TIMEZONELIST, 20, 27, 277, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    AUTOCHECKBOX "&Adjust the clock for daylight saving time automatically", IDC_AUTODAYLIGHT, 20, 48, 277, 10, WS_TABSTOP
-END
-
-IDD_SUMMARYPAGE DIALOGEX 0, 0, 317, 143
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Instalace systému LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT "Installation type:", IDC_STATIC, 18, 5, 74, 11
-    EDITTEXT IDC_INSTALLTYPE, 95, 4, 210, 13, ES_READONLY | ES_AUTOHSCROLL | WS_VISIBLE | NOT WS_BORDER | NOT WS_TABSTOP
-    LTEXT "Installation source:", IDC_STATIC, 18, 17, 74, 11
-    EDITTEXT IDC_INSTALLSOURCE, 95, 16, 210, 13, ES_READONLY | ES_AUTOHSCROLL | WS_VISIBLE | NOT WS_BORDER | NOT WS_TABSTOP
-    LTEXT "Architecture:", IDC_STATIC, 18, 29, 74, 11
-    EDITTEXT IDC_ARCHITECTURE, 95, 28, 210, 13, ES_READONLY | ES_AUTOHSCROLL | WS_VISIBLE | NOT WS_BORDER | NOT WS_TABSTOP
-    LTEXT "Computer:", IDC_STATIC, 18, 41, 74, 11
-    EDITTEXT IDC_COMPUTER, 95, 40, 210, 13, ES_READONLY | ES_AUTOHSCROLL | WS_VISIBLE | NOT WS_BORDER | NOT WS_TABSTOP
-    LTEXT "Display:", IDC_STATIC, 18, 53, 74, 11
-    EDITTEXT IDC_DISPLAY, 95, 52, 210, 13, ES_READONLY | ES_AUTOHSCROLL | WS_VISIBLE | NOT WS_BORDER | NOT WS_TABSTOP
-    LTEXT "Keyboard:", IDC_STATIC, 18, 65, 74, 11
-    EDITTEXT IDC_KEYBOARD, 95, 64, 210, 13, ES_READONLY | ES_AUTOHSCROLL | WS_VISIBLE | NOT WS_BORDER | NOT WS_TABSTOP
-    LTEXT "Destination volume:", IDC_STATIC, 18, 77, 74, 11
-    EDITTEXT IDC_DESTDRIVE, 95, 76, 210, 13, ES_READONLY | ES_AUTOHSCROLL | WS_VISIBLE | NOT WS_BORDER | NOT WS_TABSTOP
-    LTEXT "Destination directory:", IDC_STATIC, 18, 89, 74, 11
-    EDITTEXT IDC_PATH, 95, 88, 210, 13, ES_READONLY | ES_AUTOHSCROLL | WS_VISIBLE | NOT WS_BORDER | NOT WS_TABSTOP
-    AUTOCHECKBOX "I confirm that all the installation settings are correct. I also acknowledge that\nLiberNT is alpha-quality software and may break on my computer or corrupt my data.",
-        IDC_CONFIRM_INSTALL, 7, 104, 303, 18, BS_MULTILINE | WS_TABSTOP
-    LTEXT "Please confirm that all the installation settings are correct,\nthen click on Install to start the installation process.", IDC_STATIC, 7, 124, 303, 18
-END
-
-IDD_PROCESSPAGE DIALOGEX 0, 0, 317, 143
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Instalace systému LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT "Instalace souborů...", IDC_ACTIVITY, 20, 50, 277, 10
-    LTEXT "test.txt", IDC_ITEM, 30, 80, 257, 10
-    CONTROL "", IDC_PROCESSPROGRESS, "msctls_progress32", PBS_SMOOTH | WS_CHILD | WS_VISIBLE | WS_BORDER, 20, 120, 277, 8
-END
-
-IDD_FINISHPAGE DIALOGEX 0, 0, 317, 193
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Instalace systému LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT "Restarting your Computer", IDC_FINISHTITLE, 115, 8, 195, 24
-    LTEXT "První část instalace systému LiberNT byla úspěšně dokončena.", IDC_STATIC, 115, 40, 195, 24
-    // The following text can be replaced by IDS_FINISH_NO_REBOOT at runtime;
-    // please ensure it can hold in the text control!
-    LTEXT "Setup will now restart your computer to continue with the second installation step.\n\nYour computer will automatically restart in 15 seconds or when you click on Restart.", IDC_FINISHTEXT, 115, 78, 195, 56
-    CONTROL "", IDC_RESTART_PROGRESS, "msctls_progress32", PBS_SMOOTH | WS_CHILD | WS_VISIBLE | WS_BORDER, 115, 135, 188, 12
-END
-
-IDD_ABORTPAGE DIALOGEX 0, 0, 317, 193
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "LiberNT Setup"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    LTEXT "The LiberNT Setup Wizard ended prematurely", IDC_FINISHTITLE, 115, 8, 195, 24
-    LTEXT "The first LiberNT installation step prematurely ended because of an error or because you have canceled it.\n\nYou will be able to run the Setup Wizard at a later time to install or upgrade LiberNT.", IDC_STATIC, 115, 40, 195, 48
-    // The following text can be replaced by IDS_ABORT_NO_REBOOT at runtime;
-    // please ensure it can hold in the text control!
-    LTEXT "Your computer will automatically restart in 15 seconds or when you click on Restart.", IDC_FINISHTEXT, 115, 110, 195, 24
-    CONTROL "", IDC_RESTART_PROGRESS, "msctls_progress32", PBS_SMOOTH | WS_CHILD | WS_VISIBLE | WS_BORDER, 115, 135, 188, 12
 END
 
 /* Strings */
@@ -255,16 +47,7 @@ BEGIN
     IDS_RESIZE_PENDING "Partition changes are waiting to be applied. Shrink and extend take effect immediately, so do them before creating, deleting or formatting partitions."
     IDS_RESIZE_FAILED "The partition could not be resized."
     IDS_CAPTION "Instalace systému LiberNT"
-    IDS_TYPETITLE "Installation Type"
-    IDS_TYPESUBTITLE "You can setup a new LiberNT installation, or update/repair an existing installation."
-    IDS_UPDATETITLE "Update or Repair LiberNT"
-    IDS_UPDATESUBTITLE "Choose which existing LiberNT installation you want to update or repair."
-    IDS_DEVICETITLE "Nastavení základních zařízení"
-    IDS_DEVICESUBTITLE "Volba nastavení obrazovky a klávesnice."
     IDS_DRIVETITLE "Nastavení instalačního oddílu a systémové složky"
-    IDS_DRIVESUBTITLE "Příprava instalačního oddílu, systémové složky a zavaděče."
-    IDS_SUMMARYTITLE "Shrnutí instalace"
-    IDS_SUMMARYSUBTITLE "Výpis voleb instalace k ověření před tím, než začne instalace."
     IDS_PROCESSTITLE "Příprava oddílu, kopírování souborů a nastavení systému"
     IDS_PROCESSSUBTITLE "Vytvoření a naformátování oddílu, kopírování souborů, instalace a nastavení zavaděče."
     IDS_ABORTSETUP "Systém LiberNT není na tomto počítači kompletně nainstalovaný. Pokud nyní ukončíte instalaci, bude ji pro nainstalování systému LiberNT nutné provést znova. Opravdu ukončit?"
@@ -275,31 +58,6 @@ BEGIN
     IDS_INSTALLBTN "&Install"
     IDS_RESTARTBTN "&Restart"
     IDS_POSTPONEBTN "&Postpone"
-    IDS_VOLUME_NOFORMAT "Not formatted"
-END
-
-STRINGTABLE
-BEGIN
-    IDS_INSTALLATION_NAME "Name"
-    IDS_INSTALLATION_PATH "Installation Path"
-    IDS_INSTALLATION_VENDOR "Vendor Name"
-END
-
-STRINGTABLE
-BEGIN
-    IDS_PARTITION_NAME "Name"
-    IDS_PARTITION_TYPE "Type"
-    IDS_PARTITION_SIZE "Size"
-    IDS_PARTITION_STATUS "Status"
-END
-
-STRINGTABLE
-BEGIN
-    IDS_BOOTLOADER_NOINST "No installation"
-    IDS_BOOTLOADER_REMOVABLE "Removable media"
-    IDS_BOOTLOADER_SYSTEM "System partition (Default)"
-    IDS_BOOTLOADER_MBRVBR "MBR a VBR (Default)"
-    IDS_BOOTLOADER_VBRONLY "Jen VBR"
 END
 
 /* Progress Strings */
@@ -323,7 +81,6 @@ BEGIN
     IDS_COPYING_FILES "Copying the files..."
 
     IDS_CREATE_REGISTRY "Creating the registry..."
-    IDS_UPDATE_REGISTRY "Updating the registry..."
 
     // IDS_INSTALL_FINALIZE "Finalizing the installation..."
     IDS_INSTALL_BOOTLOADER "Installing the bootloader..."
@@ -346,10 +103,6 @@ END
 STRINGTABLE
 BEGIN
     IDS_ACCOUNTTITLE "Name your computer and create your account"
-    IDS_ACCOUNTSUBTITLE "You sign in to LiberNT with this account."
-    IDS_TIMEZONETITLE "Select your time zone"
-    IDS_TIMEZONESUBTITLE "LiberNT shows the time of this zone."
-    IDS_ERASEDISK_TYPE "New LiberNT installation on Harddisk %lu, which will be erased"
     IDS_CONFIGURE_SYSTEM "Configuring LiberNT..."
     IDS_CONFIG_FOLDERS "Creating the system and profile folders"
     IDS_CONFIG_DEVICES "Installing the device classes"
@@ -371,14 +124,6 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_ERROR_INVALID_INSTALLDIR_CHAR_TITLE "Invalid character"
-    IDS_ERROR_INVALID_INSTALLDIR_CHAR "The only valid characters are:\n\
-alphanumericals (a-z, A-Z, 0-9), and\n . \\ - _\n\
-Spaces are not allowed."
-
-    IDS_ERROR_DIRECTORY_NAME_TITLE "Invalid installation path"
-    IDS_ERROR_DIRECTORY_NAME "The LiberNT installation path must follow the DOS 8.3 naming scheme, \
-and only contain letters, digits, dashes and periods. Spaces are not allowed."
 
     IDS_ERROR_CREATE_PARTITION_TITLE "Create partition"
     IDS_ERROR_CREATE_PARTITION "Failed to create a new partition."

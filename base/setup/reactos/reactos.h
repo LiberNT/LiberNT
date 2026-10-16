@@ -39,19 +39,6 @@
 #define SetDlgItemFont(hDlg, nID, hFont, bRedraw)   \
     SetWindowFont(GetDlgItem((hDlg), (nID)), (hFont), (bRedraw))
 
-// Property Sheet string IDs
-#define IDS_CLOSE   4160 // 0x1040
-/* These are public names and values determined from MFC, and compatible with Windows */
-// Property Sheet control IDs (determined with Spy++)
-#define IDC_TAB_CONTROL                 0x3020
-#define ID_APPLY_NOW                    0x3021
-#define ID_WIZBACK                      0x3023
-#define ID_WIZNEXT                      0x3024
-#define ID_WIZFINISH                    0x3025
-
-
-#include "treelist.h"
-
 /**/#include <setupapi.h>/**/
 #include <devguid.h>
 
@@ -69,7 +56,6 @@
 /* UI elements */
 typedef struct _UI_CONTEXT
 {
-    HWND hPartList; // Disks & partitions list
     HWND hwndDlg;   // Install progress page
     HWND hWndItem;  // Progress action
     HWND hWndProgress;  // Progress gauge
@@ -155,15 +141,8 @@ typedef struct _SETUPDATA
 
     USETUP_DATA USetupData;
 
-    BOOLEAN RepairUpdateFlag; // flag for update/repair an installed reactos
-
     PPARTLIST PartitionList;
-    PNTOS_INSTALLATION CurrentInstallation;
-    PGENERIC_LIST NtOsInstallsList;
-
-
-    /* Settings */
-    LONG DestPartSize; // if partition doesn't exist, size of partition
+    BOOL bInstalled;
 
     /* txtsetup.sif data */
     // LONG DefaultLang;     // default language (table index)
@@ -172,7 +151,6 @@ typedef struct _SETUPDATA
     WCHAR DefaultLanguage[20];   // Copy of string inside LanguageList
     WCHAR DefaultKBLayout[20];   // Copy of string inside KeyboardList
 
-    BOOL bEraseDisk;
     WCHAR ComputerName[MAX_COMPUTERNAME_LENGTH + 1];
     WCHAR UserName[UNLEN + 1];
     WCHAR Password[PWLEN + 1];
@@ -210,11 +188,108 @@ typedef struct _VOL_CREATE_INFO
     ULONG ClusterSize;
 } VOL_CREATE_INFO, *PVOL_CREATE_INFO;
 
-/* See drivepage.c */
+typedef enum _SETUP_PAGE
+{
+    SETUP_PAGE_DISK,
+    SETUP_PAGE_ACCOUNT,
+    SETUP_PAGE_READY,
+    SETUP_PAGE_INSTALL,
+    SETUP_PAGE_DONE,
+    SETUP_PAGE_COUNT
+} SETUP_PAGE;
+
+#define PM_INSTALL_START    (WM_APP + 1)
+#define PM_INSTALL_DONE     (WM_APP + 2)
+
+#define SPN_SETACTIVE       (WM_APP + 0x100)
+#define SPN_KILLACTIVE      (WM_APP + 0x101)
+#define SPN_WIZNEXT         (WM_APP + 0x102)
+#define SPN_WIZBACK         (WM_APP + 0x103)
+#define SPN_QUERYCANCEL     (WM_APP + 0x104)
+
 PVOL_CREATE_INFO
-FindVolCreateInTreeByVolume(
-    _In_ HWND hTreeList,
+FindVolumeFormatPlan(
     _In_ PVOLENTRY Volume);
+
+VOID
+FormatDiskSize(
+    _In_ ULONGLONG Bytes,
+    _Out_writes_(cchText) PWSTR Text,
+    _In_ SIZE_T cchText);
+
+VOID
+DescribeDiskRegion(
+    _In_ PPARTENTRY PartEntry,
+    _Out_writes_(cchText) PWSTR Text,
+    _In_ SIZE_T cchText);
+
+VOID
+DescribeDiskChanges(
+    _Out_writes_(cchText) PWSTR Text,
+    _In_ SIZE_T cchText);
+
+INT_PTR
+CALLBACK
+DiskPageProc(
+    _In_ HWND hwndDlg,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam);
+
+VOID
+DiskInfoRefresh(VOID);
+
+VOID
+DiskInfoFree(VOID);
+
+BOOL
+DiskInfoGetDescription(
+    _In_ ULONG DiskNumber,
+    _Out_writes_(cchText) PWSTR Text,
+    _In_ SIZE_T cchText);
+
+INT_PTR
+RunSetupWizard(
+    _In_ PSETUPDATA pSetupData);
+
+VOID
+EnableSetupCancel(
+    _In_ HWND hFrame,
+    _In_ BOOL Enable);
+
+VOID
+SetupFrameSetButtons(
+    _In_ HWND hPage,
+    _In_ BOOL Back,
+    _In_ BOOL Next);
+
+VOID
+SetupFrameShowButtons(
+    _In_ HWND hPage,
+    _In_ BOOL Back,
+    _In_ BOOL Next,
+    _In_ BOOL Cancel);
+
+VOID
+SetupFrameSetButtonText(
+    _In_ HWND hPage,
+    _In_ INT ButtonId,
+    _In_ UINT uID);
+
+VOID
+SetupFrameSetTitle(
+    _In_ HWND hPage,
+    _In_ UINT Title,
+    _In_ UINT Subtitle);
+
+VOID
+SetupFramePressNext(
+    _In_ HWND hPage);
+
+VOID
+SetupFrameGoTo(
+    _In_ HWND hPage,
+    _In_ SETUP_PAGE Page);
 
 
 /*
@@ -229,27 +304,30 @@ ConvertNtPathToWin32Path(
     IN PCWSTR pwszNTPath);
 
 
-/* drivepage.c */
+/* reactos.c */
 
 INT_PTR
 CALLBACK
-DriveDlgProc(
+InstallPageProc(
     _In_ HWND hwndDlg,
     _In_ UINT uMsg,
     _In_ WPARAM wParam,
     _In_ LPARAM lParam);
 
-
-/* reactos.c */
+BOOL
+IsValidSetupComputerName(
+    _In_ PCWSTR Name);
 
 BOOL
-CreateListViewColumns(
-    IN HINSTANCE hInstance,
-    IN HWND hWndListView,
-    IN const UINT* pIDs,
-    IN const INT* pColsWidth,
-    IN const INT* pColsAlign,
-    IN UINT nNumOfColumns);
+IsValidSetupUserName(
+    _In_ PCWSTR Name);
+
+BOOL
+IsShellActive(VOID);
+
+BOOL
+AreThereInteractiveWindows(
+    _In_opt_ HWND hWndExclude);
 
 size_t
 LoadAllocStringW(
