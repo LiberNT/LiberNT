@@ -640,6 +640,9 @@ InitGenericComboList(
     PLIST_ENTRY Entry;
     WCHAR CurrentItemText[256];
 
+    if (!List)
+        return;
+
     for (Entry = List->ListHead.Flink;
          Entry != &List->ListHead;
          Entry = Entry->Flink)
@@ -752,7 +755,7 @@ GetSettingDescription(
     IN SIZE_T cchBufferSize)
 {
     StringCchCopyW(Buffer, cchBufferSize,
-                   ((PGENENTRY)GetListEntryData(Entry))->Value);
+                   Entry ? ((PGENENTRY)GetListEntryData(Entry))->Value : L"");
 }
 
 static VOID

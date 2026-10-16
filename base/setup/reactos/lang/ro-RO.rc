@@ -81,6 +81,8 @@ BEGIN
     PUSHBUTTON "&Formatare", IDC_PARTFORMAT, 7, 122, 50, 14 // NOTE: At same position as IDC_PARTCREATE
     PUSHBUTTON "Șt&ergere", IDC_PARTDELETE, 63, 122, 50, 14
     PUSHBUTTON "&Driver", IDC_DEVICEDRIVER, 174, 122, 50, 14, WS_DISABLED
+    PUSHBUTTON "S&hrink...", IDC_PARTSHRINK, 119, 122, 50, 14, NOT WS_VISIBLE
+    PUSHBUTTON "E&xtend...", IDC_PARTEXTEND, 174, 122, 50, 14, NOT WS_VISIBLE
     PUSHBUTTON "&Opțiuni complexe…", IDC_PARTMOREOPTS, 230, 122, 80, 14
     // LTEXT "Apăsați pe Înainte pentru a verifica sumarul.", IDC_STATIC, 7, 128, 277, 8
 END
@@ -101,6 +103,26 @@ BEGIN
     AUTOCHECKBOX "&Formatare rapidă", IDC_CHECK_QUICKFMT, 7, 59, 180, 14
     PUSHBUTTON "OK", IDOK, 88, 98, 50, 14
     PUSHBUTTON "Revocare", IDCANCEL, 143, 98, 50, 14
+END
+
+IDD_RESIZE DIALOGEX 0, 0, 300, 170
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Shrink"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_RESIZE_LABEL_TOTAL, 7, 13, 190, 8
+    EDITTEXT IDC_RESIZE_TOTAL, 203, 10, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
+    LTEXT "", IDC_RESIZE_LABEL_AVAILABLE, 7, 32, 190, 8
+    EDITTEXT IDC_RESIZE_AVAILABLE, 203, 29, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
+    LTEXT "", IDC_RESIZE_LABEL_AMOUNT, 7, 51, 190, 8
+    EDITTEXT IDC_RESIZE_AMOUNT, 203, 48, 80, 13, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
+    CONTROL "", IDC_RESIZE_SPIN, UPDOWN_CLASS, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 283, 48, 10, 13
+    LTEXT "", IDC_RESIZE_LABEL_AFTER, 7, 70, 190, 8
+    EDITTEXT IDC_RESIZE_AFTER, 203, 67, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
+    ICON "", IDC_RESIZE_ICON, 8, 85, 10, 10, SS_ICON | SS_REALSIZEIMAGE
+    LTEXT "You cannot shrink a volume beyond the point where any unmovable files are located.", IDC_RESIZE_NOTE, 25, 86, 268, 26
+    DEFPUSHBUTTON "", IDOK, 180, 149, 54, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 239, 149, 54, 14
 END
 
 IDD_FORMAT DIALOGEX 0, 0, 200, 83
@@ -221,6 +243,20 @@ END
 
 STRINGTABLE
 BEGIN
+    IDS_SHRINK_CAPTION "Shrink %s"
+    IDS_EXTEND_CAPTION "Extend %s"
+    IDS_SHRINK_TOTAL "Total size before shrink in MB:"
+    IDS_SHRINK_AVAILABLE "Size of available shrink space in MB:"
+    IDS_SHRINK_AMOUNT "&Enter the amount of space to shrink in MB:"
+    IDS_SHRINK_AFTER "Total size after shrink in MB:"
+    IDS_SHRINK_BUTTON "&Shrink"
+    IDS_EXTEND_TOTAL "Total size before extend in MB:"
+    IDS_EXTEND_AVAILABLE "Size of available space in MB:"
+    IDS_EXTEND_AMOUNT "&Enter the amount of space to add in MB:"
+    IDS_EXTEND_AFTER "Total size after extend in MB:"
+    IDS_EXTEND_BUTTON "E&xtend"
+    IDS_RESIZE_PENDING "Partition changes are waiting to be applied. Shrink and extend take effect immediately, so do them before creating, deleting or formatting partitions."
+    IDS_RESIZE_FAILED "The partition could not be resized."
     IDS_CAPTION "Expertul de instalare LiberNT"
     IDS_TYPETITLE "Tipul de instalare"
     IDS_TYPESUBTITLE "Puteți configura o nouă instalare LiberNT sau puteți actualiza/repara o instalare existentă."

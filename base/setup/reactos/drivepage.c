@@ -15,6 +15,9 @@
 // #include <ntdddisk.h>
 #include <ntddstor.h>
 #include <ntddscsi.h>
+#include <fslib/volresize.h>
+#include <initguid.h>
+#include <diskguid.h>
 
 #include "resource.h"
 
@@ -416,8 +419,10 @@ FormatDlgProcWorker(
 
             if (SetupData.bUnattend && SetupData.USetupData.FsType == 1)
                 DefaultFs = L"BTRFS";
-            else
+            else if (SetupData.bUnattend)
                 DefaultFs = L"FAT";
+            else
+                DefaultFs = L"NTFS";
 
             /* Retrieve the selected volume and create information */
             ASSERT(PartCreateCtx->PartItem->Volume == PartCreateCtx->PartItem->PartEntry->Volume);
@@ -1553,7 +1558,7 @@ DoCreatePartition(
         PPARTITEM EfiItem;
         PVOL_CREATE_INFO VolCreate = PartItem->VolCreate;
         PVOL_CREATE_INFO EfiCreate;
-        HTLITEM hEfiItem, hReservedItem;
+        HTLITEM hLastItem;
 
         hParentItem = TreeList_GetParent(hList, *phItem);
         hInsertAfter = TreeList_GetPrevSibling(hList, *phItem);
@@ -1566,26 +1571,32 @@ DoCreatePartition(
         PartItem->VolCreate = NULL;
         TreeList_DeleteItem(hList, *phItem);
 
-        hEfiItem = PrintPartitionData(hList, hParentItem, hInsertAfter, EfiPart);
-        hReservedItem = PrintPartitionData(hList, hParentItem, hEfiItem, ReservedPart);
-        EfiItem = GetItemPartition(hList, hEfiItem);
-        EfiCreate = LocalAlloc(LPTR, sizeof(*EfiCreate));
-        if (EfiItem && EfiCreate)
+        hLastItem = hInsertAfter;
+        if (EfiPart)
         {
-            StringCchCopyW(EfiCreate->FileSystemName, _countof(EfiCreate->FileSystemName), L"FAT32");
-            EfiCreate->MediaFlag = FMIFS_HARDDISK;
-            EfiCreate->Label = L"System";
-            EfiCreate->QuickFormat = TRUE;
-            EfiCreate->ClusterSize = 0;
-            EfiCreate->Volume = EfiItem->Volume;
-            EfiItem->VolCreate = EfiCreate;
-        }
-        else if (EfiCreate)
-        {
-            LocalFree(EfiCreate);
+            hLastItem = PrintPartitionData(hList, hParentItem, hLastItem, EfiPart);
+            EfiItem = GetItemPartition(hList, hLastItem);
+            EfiCreate = LocalAlloc(LPTR, sizeof(*EfiCreate));
+            if (EfiItem && EfiCreate)
+            {
+                StringCchCopyW(EfiCreate->FileSystemName, _countof(EfiCreate->FileSystemName), L"FAT32");
+                EfiCreate->MediaFlag = FMIFS_HARDDISK;
+                EfiCreate->Label = L"System";
+                EfiCreate->QuickFormat = TRUE;
+                EfiCreate->ClusterSize = 0;
+                EfiCreate->Volume = EfiItem->Volume;
+                EfiItem->VolCreate = EfiCreate;
+            }
+            else if (EfiCreate)
+            {
+                LocalFree(EfiCreate);
+            }
         }
 
-        *phItem = PrintPartitionData(hList, hParentItem, hReservedItem, PartEntry);
+        if (ReservedPart)
+            hLastItem = PrintPartitionData(hList, hParentItem, hLastItem, ReservedPart);
+
+        *phItem = PrintPartitionData(hList, hParentItem, hLastItem, PartEntry);
         PartItem = GetItemPartition(hList, *phItem);
         PartItem->VolCreate = VolCreate;
         if (pPartItem)
@@ -1763,6 +1774,56 @@ DoDeletePartition(
 }
 
 
+#define RESIZE_MEGABYTE (1024ULL * 1024ULL)
+
+typedef struct _RESIZE_CTX
+{
+    BOOLEAN Extend;
+    WCHAR Caption[96];
+    ULONGLONG TotalMb;
+    ULONGLONG AvailableMb;
+    ULONGLONG AmountMb;
+} RESIZE_CTX, *PRESIZE_CTX;
+
+static BOOLEAN
+IsResizableVolume(
+    _In_ PPARTENTRY PartEntry)
+{
+    PVOLENTRY Volume = PartEntry->Volume;
+
+    if (!PartEntry->IsPartitioned || PartEntry->New || !Volume || Volume->New)
+        return FALSE;
+    if (PartEntry->DiskEntry->DiskStyle == PARTITION_STYLE_GPT &&
+        IsEqualGUID(&PartEntry->PartitionTypeGuid, &PARTITION_SYSTEM_GUID))
+    {
+        return FALSE;
+    }
+    return _wcsicmp(Volume->Info.FileSystem, L"NTFS") == 0 || IsUnformatted(&Volume->Info);
+}
+
+static ULONGLONG
+GetFollowingFreeBytes(
+    _In_ PPARTENTRY PartEntry)
+{
+    PDISKENTRY DiskEntry = PartEntry->DiskEntry;
+    PLIST_ENTRY Head = PartEntry->LogicalPartition ? &DiskEntry->LogicalPartListHead
+                                                   : &DiskEntry->PrimaryPartListHead;
+    ULONGLONG Next = PartEntry->StartSector.QuadPart + PartEntry->SectorCount.QuadPart;
+    ULONGLONG Bytes = 0;
+    PLIST_ENTRY Entry;
+
+    for (Entry = PartEntry->ListEntry.Flink; Entry != Head; Entry = Entry->Flink)
+    {
+        PPARTENTRY Free = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
+
+        if (Free->IsPartitioned || Free->StartSector.QuadPart != Next)
+            break;
+        Bytes += Free->SectorCount.QuadPart * DiskEntry->BytesPerSector;
+        Next = Free->StartSector.QuadPart + Free->SectorCount.QuadPart;
+    }
+    return Bytes;
+}
+
 static
 VOID
 UpdatePartitionButtons(
@@ -1785,6 +1846,11 @@ UpdatePartitionButtons(
     EnableDlgItem(hwndDlg, IDC_PARTFORMAT, FALSE);
     ShowDlgItem(hwndDlg, IDC_PARTDELETE, SW_HIDE);
     EnableDlgItem(hwndDlg, IDC_PARTDELETE, FALSE);
+    ShowDlgItem(hwndDlg, IDC_PARTSHRINK, SW_HIDE);
+    EnableDlgItem(hwndDlg, IDC_PARTSHRINK, FALSE);
+    ShowDlgItem(hwndDlg, IDC_PARTEXTEND, SW_HIDE);
+    EnableDlgItem(hwndDlg, IDC_PARTEXTEND, FALSE);
+    ShowDlgItem(hwndDlg, IDC_DEVICEDRIVER, SW_SHOW);
 
     if (!EraseDisk && hItem)
     {
@@ -1808,6 +1874,17 @@ UpdatePartitionButtons(
             {
                 ShowDlgItem(hwndDlg, IDC_PARTFORMAT, SW_SHOW);
                 EnableDlgItem(hwndDlg, IDC_PARTFORMAT, !!PartEntry->Volume);
+                if (IsResizableVolume(PartEntry))
+                {
+                    ShowDlgItem(hwndDlg, IDC_PARTSHRINK, SW_SHOW);
+                    EnableDlgItem(hwndDlg, IDC_PARTSHRINK, TRUE);
+                    if (GetFollowingFreeBytes(PartEntry) >= RESIZE_MEGABYTE)
+                    {
+                        ShowDlgItem(hwndDlg, IDC_DEVICEDRIVER, SW_HIDE);
+                        ShowDlgItem(hwndDlg, IDC_PARTEXTEND, SW_SHOW);
+                        EnableDlgItem(hwndDlg, IDC_PARTEXTEND, TRUE);
+                    }
+                }
             }
 
             ShowDlgItem(hwndDlg, IDC_PARTDELETE, SW_SHOW);
@@ -1816,6 +1893,284 @@ UpdatePartitionButtons(
     }
 
     UpdateWizardButtons(hwndDlg, hTreeList, hItem);
+}
+
+static BOOLEAN
+HasPendingPartitionChanges(
+    _In_ HWND hList,
+    _In_ PPARTLIST List)
+{
+    PLIST_ENTRY Entry;
+    HTLITEM hDisk, hItem;
+
+    for (Entry = List->DiskListHead.Flink; Entry != &List->DiskListHead; Entry = Entry->Flink)
+    {
+        if (CONTAINING_RECORD(Entry, DISKENTRY, ListEntry)->Dirty)
+            return TRUE;
+    }
+    for (hDisk = TreeList_GetRoot(hList); hDisk; hDisk = TreeList_GetNextSibling(hList, hDisk))
+    {
+        for (hItem = TreeList_GetChild(hList, hDisk); hItem; hItem = TreeList_GetNextSibling(hList, hItem))
+        {
+            PPARTITEM PartItem = GetItemPartition(hList, hItem);
+
+            if (PartItem && PartItem->VolCreate)
+                return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static VOID
+ResizeSetNumber(
+    _In_ HWND hwndDlg,
+    _In_ INT ControlId,
+    _In_ ULONGLONG Value)
+{
+    WCHAR Buffer[32];
+
+    StringCchPrintfW(Buffer, ARRAYSIZE(Buffer), L"%I64u", Value);
+    SetDlgItemTextW(hwndDlg, ControlId, Buffer);
+}
+
+static VOID
+ResizeUpdateAfter(
+    _In_ HWND hwndDlg,
+    _In_ PRESIZE_CTX Ctx)
+{
+    WCHAR Buffer[32];
+    ULONGLONG Amount = 0;
+
+    if (GetDlgItemTextW(hwndDlg, IDC_RESIZE_AMOUNT, Buffer, ARRAYSIZE(Buffer)) != 0)
+        Amount = _wcstoui64(Buffer, NULL, 10);
+    if (Amount > Ctx->AvailableMb)
+        Amount = Ctx->AvailableMb;
+    Ctx->AmountMb = Amount;
+    ResizeSetNumber(hwndDlg, IDC_RESIZE_AFTER, Ctx->Extend ? Ctx->TotalMb + Amount : Ctx->TotalMb - Amount);
+    EnableWindow(GetDlgItem(hwndDlg, IDOK), Amount != 0);
+}
+
+static INT_PTR CALLBACK
+ResizeDlgProc(
+    _In_ HWND hwndDlg,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam)
+{
+    PRESIZE_CTX Ctx = (PRESIZE_CTX)GetWindowLongPtrW(hwndDlg, DWLP_USER);
+
+    switch (uMsg)
+    {
+        case WM_INITDIALOG:
+        {
+            static const UINT ShrinkLabels[] = { IDS_SHRINK_TOTAL, IDS_SHRINK_AVAILABLE, IDS_SHRINK_AMOUNT, IDS_SHRINK_AFTER, IDS_SHRINK_BUTTON };
+            static const UINT ExtendLabels[] = { IDS_EXTEND_TOTAL, IDS_EXTEND_AVAILABLE, IDS_EXTEND_AMOUNT, IDS_EXTEND_AFTER, IDS_EXTEND_BUTTON };
+            static const INT Controls[] = { IDC_RESIZE_LABEL_TOTAL, IDC_RESIZE_LABEL_AVAILABLE, IDC_RESIZE_LABEL_AMOUNT, IDC_RESIZE_LABEL_AFTER, IDOK };
+            WCHAR Text[160];
+            HICON Icon = NULL;
+            ULONG Index;
+
+            Ctx = (PRESIZE_CTX)lParam;
+            SetWindowLongPtrW(hwndDlg, DWLP_USER, (LONG_PTR)Ctx);
+            SetWindowTextW(hwndDlg, Ctx->Caption);
+            for (Index = 0; Index < ARRAYSIZE(Controls); Index++)
+            {
+                LoadStringW(GetModuleHandleW(NULL),
+                            Ctx->Extend ? ExtendLabels[Index] : ShrinkLabels[Index],
+                            Text,
+                            ARRAYSIZE(Text));
+                SetDlgItemTextW(hwndDlg, Controls[Index], Text);
+            }
+            ShowWindow(GetDlgItem(hwndDlg, IDC_RESIZE_NOTE), Ctx->Extend ? SW_HIDE : SW_SHOW);
+            ShowWindow(GetDlgItem(hwndDlg, IDC_RESIZE_ICON), Ctx->Extend ? SW_HIDE : SW_SHOW);
+            ResizeSetNumber(hwndDlg, IDC_RESIZE_TOTAL, Ctx->TotalMb);
+            ResizeSetNumber(hwndDlg, IDC_RESIZE_AVAILABLE, Ctx->AvailableMb);
+            SendDlgItemMessageW(hwndDlg, IDC_RESIZE_SPIN, UDM_SETRANGE32, 0,
+                                (LPARAM)min(Ctx->AvailableMb, (ULONGLONG)MAXLONG));
+            ResizeSetNumber(hwndDlg, IDC_RESIZE_AMOUNT, Ctx->AvailableMb);
+            ResizeUpdateAfter(hwndDlg, Ctx);
+            if (!Ctx->Extend &&
+                SUCCEEDED(LoadIconWithScaleDown(NULL, IDI_INFORMATION,
+                                                GetSystemMetrics(SM_CXSMICON),
+                                                GetSystemMetrics(SM_CYSMICON),
+                                                &Icon)))
+            {
+                SendDlgItemMessageW(hwndDlg, IDC_RESIZE_ICON, STM_SETICON, (WPARAM)Icon, 0);
+            }
+            SetFocus(GetDlgItem(hwndDlg, IDC_RESIZE_AMOUNT));
+            SendDlgItemMessageW(hwndDlg, IDC_RESIZE_AMOUNT, EM_SETSEL, 0, -1);
+            return FALSE;
+        }
+
+        case WM_COMMAND:
+            switch (LOWORD(wParam))
+            {
+                case IDC_RESIZE_AMOUNT:
+                    if (HIWORD(wParam) == EN_CHANGE && Ctx)
+                        ResizeUpdateAfter(hwndDlg, Ctx);
+                    return TRUE;
+
+                case IDOK:
+                    if (Ctx)
+                        ResizeUpdateAfter(hwndDlg, Ctx);
+                    if (Ctx && Ctx->AmountMb != 0)
+                        EndDialog(hwndDlg, IDOK);
+                    return TRUE;
+
+                case IDCANCEL:
+                    EndDialog(hwndDlg, IDCANCEL);
+                    return TRUE;
+            }
+            break;
+
+        case WM_DESTROY:
+        {
+            HICON Icon = (HICON)SendDlgItemMessageW(hwndDlg, IDC_RESIZE_ICON, STM_GETICON, 0, 0);
+
+            if (Icon)
+                DestroyIcon(Icon);
+            break;
+        }
+    }
+    return FALSE;
+}
+
+static VOID
+RefreshPartitionList(
+    _In_ HWND hList,
+    _Inout_ PSETUPDATA pSetupData)
+{
+    TreeList_DeleteAllItems(hList);
+    if (pSetupData->NtOsInstallsList)
+        DestroyGenericList(pSetupData->NtOsInstallsList, TRUE);
+    pSetupData->NtOsInstallsList = NULL;
+    pSetupData->CurrentInstallation = NULL;
+    InstallPartition = NULL;
+    SystemPartition = NULL;
+
+    DestroyPartitionList(pSetupData->PartitionList);
+    pSetupData->PartitionList = CreatePartitionList();
+    if (pSetupData->PartitionList)
+    {
+        pSetupData->NtOsInstallsList = CreateNTOSInstallationsList(pSetupData->PartitionList);
+        DrawPartitionList(hList, pSetupData->PartitionList);
+    }
+}
+
+static VOID
+DoResizePartition(
+    _In_ HWND hwndDlg,
+    _Inout_ PSETUPDATA pSetupData,
+    _In_ BOOLEAN Extend)
+{
+    HWND hList = GetDlgItem(hwndDlg, IDC_PARTITION);
+    PPARTITEM PartItem;
+    PPARTENTRY PartEntry;
+    UNICODE_STRING VolumePath;
+    VOLRESIZE_INFO Info;
+    RESIZE_CTX Ctx;
+    WCHAR Format[64];
+    WCHAR Text[256];
+    WCHAR Name[16];
+    ULONGLONG FreeBytes = 0;
+    HCURSOR OldCursor;
+    NTSTATUS Status;
+
+    PartItem = GetSelectedPartition(hList, NULL);
+    if (!PartItem || !IsResizableVolume(PartItem->PartEntry))
+        return;
+    PartEntry = PartItem->PartEntry;
+
+    if (HasPendingPartitionChanges(hList, pSetupData->PartitionList))
+    {
+        LoadStringW(pSetupData->hInstance, IDS_RESIZE_PENDING, Text, ARRAYSIZE(Text));
+        MessageBoxW(hwndDlg, Text, NULL, MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    RtlInitUnicodeString(&VolumePath, PartEntry->Volume->Info.DeviceName);
+    ZeroMemory(&Ctx, sizeof(Ctx));
+    Ctx.Extend = Extend;
+    if (Extend)
+    {
+        FreeBytes = GetFollowingFreeBytes(PartEntry);
+        Ctx.TotalMb = (PartEntry->SectorCount.QuadPart * PartEntry->DiskEntry->BytesPerSector) / RESIZE_MEGABYTE;
+        Ctx.AvailableMb = FreeBytes / RESIZE_MEGABYTE;
+    }
+    else
+    {
+        Status = VolResizeQuery(&VolumePath, &Info);
+        if (!NT_SUCCESS(Status))
+        {
+            LoadStringW(pSetupData->hInstance, IDS_RESIZE_FAILED, Text, ARRAYSIZE(Text));
+            MessageBoxW(hwndDlg, Text, NULL, MB_OK | MB_ICONERROR);
+            return;
+        }
+        Ctx.TotalMb = Info.PartitionBytes / RESIZE_MEGABYTE;
+        Ctx.AvailableMb = Info.MaxReclaimableBytes / RESIZE_MEGABYTE;
+    }
+
+    if (PartEntry->Volume->Info.DriveLetter)
+        StringCchPrintfW(Name, ARRAYSIZE(Name), L"%c:", PartEntry->Volume->Info.DriveLetter);
+    else
+        StringCchPrintfW(Name, ARRAYSIZE(Name), L"%lu", PartEntry->PartitionNumber);
+    LoadStringW(pSetupData->hInstance, Extend ? IDS_EXTEND_CAPTION : IDS_SHRINK_CAPTION, Format, ARRAYSIZE(Format));
+    StringCchPrintfW(Ctx.Caption, ARRAYSIZE(Ctx.Caption), Format, Name);
+
+    if (DialogBoxParamW(pSetupData->hInstance,
+                        MAKEINTRESOURCEW(IDD_RESIZE),
+                        hwndDlg,
+                        ResizeDlgProc,
+                        (LPARAM)&Ctx) != IDOK ||
+        Ctx.AmountMb == 0)
+    {
+        return;
+    }
+
+    OldCursor = SetCursor(LoadCursorW(NULL, IDC_WAIT));
+    if (Extend)
+    {
+        Status = VolResizeExtend(&VolumePath,
+                                 Ctx.AmountMb * RESIZE_MEGABYTE,
+                                 !IsUnformatted(&PartEntry->Volume->Info));
+    }
+    else
+    {
+        Status = VolResizeShrink(&VolumePath,
+                                 min(Ctx.AmountMb * RESIZE_MEGABYTE, Info.MaxReclaimableBytes),
+                                 NULL,
+                                 NULL);
+    }
+    SetCursor(OldCursor);
+
+    if (!NT_SUCCESS(Status))
+    {
+        LoadStringW(pSetupData->hInstance, IDS_RESIZE_FAILED, Text, ARRAYSIZE(Text));
+        MessageBoxW(hwndDlg, Text, NULL, MB_OK | MB_ICONERROR);
+    }
+    RefreshPartitionList(hList, pSetupData);
+    UpdatePartitionButtons(hwndDlg, hList, TreeList_GetSelection(hList));
+}
+
+static BOOLEAN
+SetDefaultVolumeFormat(
+    _In_ PPARTITEM PartItem)
+{
+    PVOL_CREATE_INFO VolCreate = PartItem->VolCreate;
+
+    if (!VolCreate)
+        VolCreate = LocalAlloc(LPTR, sizeof(*VolCreate));
+    if (!VolCreate)
+        return FALSE;
+
+    StringCchCopyW(VolCreate->FileSystemName, _countof(VolCreate->FileSystemName), L"NTFS");
+    VolCreate->MediaFlag = FMIFS_HARDDISK;
+    VolCreate->Label = NULL;
+    VolCreate->QuickFormat = TRUE;
+    VolCreate->ClusterSize = 0;
+    VolCreate->Volume = PartItem->Volume;
+    PartItem->VolCreate = VolCreate;
+    return TRUE;
 }
 
 static BOOLEAN
@@ -1828,7 +2183,6 @@ DoEraseDisk(
     PDISKENTRY DiskEntry = (PDISKENTRY)TreeListGetItemData(hList, hDiskItem);
     PPARTENTRY FreeRegion = NULL;
     PPARTITEM PartItem;
-    PVOL_CREATE_INFO VolCreate;
     PLIST_ENTRY Entry;
     PPARTENTRY PartEntry;
     HTLITEM hChild, hItem = NULL, hRegion;
@@ -1857,24 +2211,11 @@ DoEraseDisk(
 
     PartItem = GetItemPartition(hList, hItem);
     if (!PartItem ||
-        !DoCreatePartition(hList, List, &hItem, &PartItem, 0ULL, 0))
+        !DoCreatePartition(hList, List, &hItem, &PartItem, 0ULL, 0) ||
+        !SetDefaultVolumeFormat(PartItem))
     {
         return FALSE;
     }
-
-    VolCreate = PartItem->VolCreate;
-    if (!VolCreate)
-        VolCreate = LocalAlloc(LPTR, sizeof(*VolCreate));
-    if (!VolCreate)
-        return FALSE;
-
-    StringCchCopyW(VolCreate->FileSystemName, _countof(VolCreate->FileSystemName), L"NTFS");
-    VolCreate->MediaFlag = FMIFS_HARDDISK;
-    VolCreate->Label = NULL;
-    VolCreate->QuickFormat = TRUE;
-    VolCreate->ClusterSize = 0;
-    VolCreate->Volume = PartItem->Volume;
-    PartItem->VolCreate = VolCreate;
 
     TreeList_SelectItem(hList, hItem);
 
@@ -2097,6 +2438,11 @@ DriveDlgProc(
                     DBG_UNREFERENCED_PARAMETER(ret);
                     break;
                 }
+
+                case IDC_PARTSHRINK:
+                case IDC_PARTEXTEND:
+                    DoResizePartition(hwndDlg, pSetupData, LOWORD(wParam) == IDC_PARTEXTEND);
+                    break;
 
                 case IDC_PARTDELETE:
                 {
@@ -2372,7 +2718,8 @@ DriveDlgProc(
                         if (!DoCreatePartition(hList, pSetupData->PartitionList,
                                                &hItem, &PartItem,
                                                0ULL,
-                                               0))
+                                               0) ||
+                            (!pSetupData->bUnattend && !SetDefaultVolumeFormat(PartItem)))
                         {
                             DisplayError(GetParent(hwndDlg),
                                          IDS_ERROR_CREATE_PARTITION_TITLE,

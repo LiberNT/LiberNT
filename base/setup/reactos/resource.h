@@ -54,6 +54,8 @@
 #define IDC_PARTDELETE       2045
 #define IDC_DEVICEDRIVER     2046
 #define IDC_PARTMOREOPTS     2047
+#define IDC_PARTSHRINK       2048
+#define IDC_PARTEXTEND       2049
 
 #define IDD_SUMMARYPAGE      2050
 #define IDC_INSTALLTYPE      2051
@@ -102,12 +104,40 @@
 #define IDC_TIMEZONELIST     2121
 #define IDC_AUTODAYLIGHT     2122
 
+#define IDD_RESIZE                  2140
+#define IDC_RESIZE_LABEL_TOTAL      2141
+#define IDC_RESIZE_TOTAL            2142
+#define IDC_RESIZE_LABEL_AVAILABLE  2143
+#define IDC_RESIZE_AVAILABLE        2144
+#define IDC_RESIZE_LABEL_AMOUNT     2145
+#define IDC_RESIZE_AMOUNT           2146
+#define IDC_RESIZE_SPIN             2147
+#define IDC_RESIZE_LABEL_AFTER      2148
+#define IDC_RESIZE_AFTER            2149
+#define IDC_RESIZE_ICON             2150
+#define IDC_RESIZE_NOTE             2151
+
 #define IDC_ERASEDISK        2130
 #define IDC_CUSTOMPART       2131
 #define IDC_ERASECONFIRM     2132
 
 
 /* Strings */
+#define IDS_SHRINK_CAPTION    5400
+#define IDS_EXTEND_CAPTION    5401
+#define IDS_SHRINK_TOTAL      5402
+#define IDS_SHRINK_AVAILABLE  5403
+#define IDS_SHRINK_AMOUNT     5404
+#define IDS_SHRINK_AFTER      5405
+#define IDS_SHRINK_BUTTON     5406
+#define IDS_EXTEND_TOTAL      5407
+#define IDS_EXTEND_AVAILABLE  5408
+#define IDS_EXTEND_AMOUNT     5409
+#define IDS_EXTEND_AFTER      5410
+#define IDS_EXTEND_BUTTON     5411
+#define IDS_RESIZE_PENDING    5412
+#define IDS_RESIZE_FAILED     5413
+
 #define IDS_CAPTION          5000
 #define IDS_TYPETITLE        5001
 #define IDS_TYPESUBTITLE     5002
