@@ -1,0 +1,45 @@
+; PROJECT:     LiberNT Bluetooth HID miniport
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Bluetooth HID miniport installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = HIDClass
+ClassGUID = {745a17a0-74d3-11d0-b6fe-00a0c90f57da}
+Provider = %LiberNT%
+DriverVer = 10/16/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%HidBth.DeviceDesc% = HidBth_Inst,BTHENUM\{00001124-0000-1000-8000-00805f9b34fb}
+
+[HidBth_Inst.NT]
+CopyFiles = HidBth_CopyFiles
+
+[HidBth_CopyFiles]
+hidbth.sys
+hidclass.sys
+hidparse.sys
+
+[HidBth_Inst.NT.Services]
+AddService = HidBth,0x00000002,HidBth_Service
+
+[HidBth_Service]
+DisplayName = %HidBth.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 0
+ServiceBinary = %12%\hidbth.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+HidBth.DeviceDesc = "Bluetooth HID Device"
+HidBth.ServiceDesc = "Bluetooth HID Miniport"

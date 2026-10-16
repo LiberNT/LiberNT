@@ -1,0 +1,58 @@
+; PROJECT:     LiberNT Bluetooth LE HID miniport
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Bluetooth LE HID miniport installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = HIDClass
+ClassGUID = {745a17a0-74d3-11d0-b6fe-00a0c90f57da}
+Provider = %LiberNT%
+DriverVer = 10/16/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%HidBthLE.DeviceDesc% = HidBthLE_Inst,BTHLEDevice\{00001812-0000-1000-8000-00805f9b34fb}
+
+[HidBthLE_Inst.NT]
+CopyFiles = HidBthLE_CopyFiles
+
+[HidBthLE_CopyFiles]
+hidbthle.sys
+hidclass.sys
+hidparse.sys
+
+[HidBthLE_Inst.NT.HW]
+AddReg = HidBthLE_AddReg
+
+[HidBthLE_AddReg]
+HKR,,"HighDutyCycleScanWindow",0x00010001,0x12
+HKR,,"HighDutyCycleScanInterval",0x00010001,0x24
+HKR,,"LowDutyCycleScanWindow",0x00010001,0x12
+HKR,,"LowDutyCycleScanInterval",0x00010001,0x400
+HKR,,"LinkSupervisionTimeout",0x00010001,0xC8
+HKR,,"ConnectionLatency",0x00010001,0x00
+HKR,,"ConnectionIntervalMin",0x00010001,0x06
+HKR,,"ConnectionIntervalMax",0x00010001,0x0c
+
+[HidBthLE_Inst.NT.Services]
+AddService = HidBthLE,0x00000002,HidBthLE_Service
+
+[HidBthLE_Service]
+DisplayName = %HidBthLE.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\hidbthle.sys
+LoadOrderGroup = Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+HidBthLE.DeviceDesc = "Bluetooth Low Energy HID Device"
+HidBthLE.ServiceDesc = "Bluetooth Low Energy HID Miniport"
