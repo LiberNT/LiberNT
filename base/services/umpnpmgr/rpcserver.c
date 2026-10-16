@@ -89,6 +89,15 @@ RpcServerThread(LPVOID lpParameter)
         return 0;
     }
 
+    Status = RpcServerUseProtseqEpW(L"ncacn_np",
+                                    20,
+                                    L"\\pipe\\wine_plugplay",
+                                    NULL);
+    if (Status == RPC_S_OK)
+        Status = RpcServerRegisterIf(plugplay_v0_0_s_ifspec, NULL, NULL);
+    if (Status != RPC_S_OK)
+        DPRINT1("Device event listener endpoint not registered (Status %lx)\n", Status);
+
     Status = RpcServerListen(1,
                              20,
                              FALSE);

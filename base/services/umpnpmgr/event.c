@@ -35,6 +35,16 @@
 
 #define DEVICE_EVENT_TIMEOUT 2000
 
+typedef struct _TARGET_DEVICE_CUSTOM_NOTIFICATION
+{
+    USHORT Version;
+    USHORT Size;
+    GUID Event;
+    PVOID FileObject;
+    LONG NameBufferOffset;
+    UCHAR CustomDataBuffer[1];
+} TARGET_DEVICE_CUSTOM_NOTIFICATION, *PTARGET_DEVICE_CUSTOM_NOTIFICATION;
+
 typedef enum _DEVICE_EVENT_RECIPIENT_TYPE
 {
     DeviceEventRecipientWindow,
@@ -353,6 +363,71 @@ ProcessDeviceClassChangeEvent(
     }
 
     RtlReleaseResource(&NotificationListLock);
+
+    if (UuidEqual(&PnpEvent->EventGuid, (UUID*)&GUID_DEVICE_INTERFACE_ARRIVAL, &RpcStatus))
+        dwEventType = DBT_DEVICEARRIVAL;
+    else if (UuidEqual(&PnpEvent->EventGuid, (UUID*)&GUID_DEVICE_INTERFACE_REMOVAL, &RpcStatus))
+        dwEventType = DBT_DEVICEREMOVECOMPLETE;
+    else
+        return;
+
+    dwSize = sizeof(DEV_BROADCAST_DEVICEINTERFACE_W) + wcslen(PnpEvent->DeviceClass.SymbolicLinkName) * sizeof(WCHAR);
+    pEventData = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dwSize);
+    if (pEventData == NULL)
+        return;
+    pEventData->dbcc_size = dwSize;
+    pEventData->dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+    CopyMemory(&pEventData->dbcc_classguid, &PnpEvent->DeviceClass.ClassGuid, sizeof(GUID));
+    wcscpy(pEventData->dbcc_name, PnpEvent->DeviceClass.SymbolicLinkName);
+    BroadcastListenerEvent(dwEventType, PnpEvent->DeviceClass.SymbolicLinkName, (PBYTE)pEventData, dwSize);
+    HeapFree(GetProcessHeap(), 0, pEventData);
+}
+
+
+static
+VOID
+ProcessCustomDeviceEvent(
+    _In_ PPLUGPLAY_EVENT_BLOCK PnpEvent)
+{
+    PTARGET_DEVICE_CUSTOM_NOTIFICATION Notification = PnpEvent->CustomNotification.NotificationStructure;
+    PUCHAR EventEnd = (PUCHAR)PnpEvent + PnpEvent->TotalSize;
+    PLUGPLAY_CONTROL_PROPERTY_DATA PlugPlayData;
+    WCHAR PdoName[MAX_PATH] = {0};
+    PDEV_BROADCAST_HANDLE pEventData;
+    ULONG DataSize, dwSize;
+    LONG NameOffset;
+
+    if ((PUCHAR)Notification < (PUCHAR)PnpEvent->CustomNotification.DeviceIds ||
+        (PUCHAR)Notification + FIELD_OFFSET(TARGET_DEVICE_CUSTOM_NOTIFICATION, CustomDataBuffer) > EventEnd ||
+        Notification->Size < FIELD_OFFSET(TARGET_DEVICE_CUSTOM_NOTIFICATION, CustomDataBuffer) ||
+        Notification->Size > (ULONG)(EventEnd - (PUCHAR)Notification))
+    {
+        DPRINT1("Malformed custom device event\n");
+        return;
+    }
+    DataSize = Notification->Size - FIELD_OFFSET(TARGET_DEVICE_CUSTOM_NOTIFICATION, CustomDataBuffer);
+    NameOffset = Notification->NameBufferOffset;
+    if (NameOffset < 0 || (ULONG)NameOffset >= DataSize)
+        NameOffset = -1;
+
+    RtlInitUnicodeString(&PlugPlayData.DeviceInstance, PnpEvent->CustomNotification.DeviceIds);
+    PlugPlayData.Property = PNP_PROPERTY_PHYSICAL_DEVICE_OBJECT_NAME;
+    PlugPlayData.Buffer = PdoName;
+    PlugPlayData.BufferSize = sizeof(PdoName) - sizeof(WCHAR);
+    if (!NT_SUCCESS(NtPlugPlayControl(PlugPlayControlProperty, &PlugPlayData, sizeof(PlugPlayData))))
+        return;
+
+    dwSize = FIELD_OFFSET(DEV_BROADCAST_HANDLE, dbch_data) + DataSize + 2 * sizeof(WCHAR);
+    pEventData = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dwSize);
+    if (pEventData == NULL)
+        return;
+    pEventData->dbch_size = dwSize;
+    pEventData->dbch_devicetype = DBT_DEVTYP_HANDLE;
+    pEventData->dbch_eventguid = Notification->Event;
+    pEventData->dbch_nameoffset = NameOffset;
+    CopyMemory(pEventData->dbch_data, Notification->CustomDataBuffer, DataSize);
+    BroadcastListenerEvent(DBT_CUSTOMEVENT, PdoName, (PBYTE)pEventData, dwSize);
+    HeapFree(GetProcessHeap(), 0, pEventData);
 }
 
 
@@ -454,7 +529,9 @@ PnpEventThread(
                 ProcessDeviceClassChangeEvent(PnpEvent);
                 break;
 
-//            case CustomDeviceEvent:
+            case CustomDeviceEvent:
+                ProcessCustomDeviceEvent(PnpEvent);
+                break;
 
             case DeviceInstallEvent:
                 ProcessDeviceInstallEvent(PnpEvent);

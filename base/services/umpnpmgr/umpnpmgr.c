@@ -336,6 +336,7 @@ InitializePnPManager(VOID)
     /* PnpEventThread can consume notifications before RpcServerThread runs. */
     InitializeListHead(&NotificationListHead);
     RtlInitializeResource(&NotificationListLock);
+    InitializeListeners();
 
     /* Query the SuppressUI registry value and cache it for our whole lifetime */
     GetBooleanRegValue(HKEY_LOCAL_MACHINE,

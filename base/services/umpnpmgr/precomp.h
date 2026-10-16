@@ -33,6 +33,7 @@
 #include <shlwapi.h>
 #include <winsvc_undoc.h>
 #include <pnp_s.h>
+#include <plugplay_s.h>
 #include <dll/newdevp.h>
 
 
@@ -67,6 +68,19 @@ DWORD
 WINAPI
 PnpEventThread(
     LPVOID lpParameter);
+
+
+/* listener.c */
+
+VOID
+InitializeListeners(VOID);
+
+VOID
+BroadcastListenerEvent(
+    _In_ DWORD Code,
+    _In_ PCWSTR Path,
+    _In_reads_bytes_(Size) const BYTE *Data,
+    _In_ UINT Size);
 
 
 /* install.c */
