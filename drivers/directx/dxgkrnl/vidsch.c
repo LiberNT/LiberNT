@@ -1901,7 +1901,8 @@ Recover:
     {
         NTSTATUS ResetStatus =
             VidSchResetEngine(Engine->Adapter,
-                              Engine->SchedulerOrdinal);
+                              Engine->SchedulerOrdinal,
+                              FALSE);
 
         DXGKRNL_ERR("VidSch: engine %lu reset after page fault -> 0x%08lX\n",
                     Engine->SchedulerOrdinal, ResetStatus);
@@ -4881,7 +4882,8 @@ VidSchKickEngines(
 NTSTATUS
 VidSchResetEngine(
     _In_ PDXGKRNL_ADAPTER Adapter,
-    _In_ ULONG            EngineOrdinal)
+    _In_ ULONG            EngineOrdinal,
+    _In_ BOOLEAN          EndTdrDdiDeadline)
 {
     PVIDSCH_CONTEXT Ctx;
     PVIDSCH_ENGINE Engine;
@@ -4956,6 +4958,8 @@ VidSchResetEngine(
     DxgkBeginKmdExclusive(Adapter);
     KmdExclusive = TRUE;
     KeFlushQueuedDpcs();
+    if (EndTdrDdiDeadline)
+        DxgkpDisarmTdrDdiDeadline(Adapter);
 
     RtlZeroMemory(&EngineStatus, sizeof(EngineStatus));
     EngineStatus.Size = DXGMMS2_SCHEDULER_ENGINE_STATUS_V1_SIZE;

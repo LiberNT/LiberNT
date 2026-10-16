@@ -866,6 +866,31 @@ static VOID
 DxgkpRequestAdapterTimeoutRecovery(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+static PDXGKRNL_DEVICE
+DxgkpReferenceTimedOutDevice(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG NodeOrdinal,
+    _In_ ULONG FenceId)
+{
+    PDXGKRNL_DEVICE Device = NULL;
+    PLIST_ENTRY Link;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Adapter->SubmitDmaLock, &OldIrql);
+    for (Link = Adapter->SubmitDmaListHead.Flink; Link != &Adapter->SubmitDmaListHead; Link = Link->Flink)
+    {
+        PDXGKRNL_SUBMIT_DMA_BUFFER Entry = CONTAINING_RECORD(Link, DXGKRNL_SUBMIT_DMA_BUFFER, ListEntry);
+
+        if (Entry->NodeOrdinal != NodeOrdinal || Entry->SubmissionFenceId != FenceId || Entry->Device == NULL)
+            continue;
+        if (DxgkReferenceDevice(Entry->Device))
+            Device = Entry->Device;
+        break;
+    }
+    KeReleaseSpinLock(&Adapter->SubmitDmaLock, OldIrql);
+    return Device;
+}
+
 static VOID
 NTAPI
 DxgkpTdrWorker(
@@ -885,6 +910,7 @@ DxgkpTdrWorker(
     BOOLEAN PresentResetStarted = FALSE;
     BOOLEAN SchedulerPrepared = FALSE;
     BOOLEAN ForcedReset;
+    PDXGKRNL_DEVICE TimedOutDevice = NULL;
     NTSTATUS Status;
 
     if (Adapter == NULL)
@@ -1011,6 +1037,24 @@ DxgkpTdrWorker(
             }
         }
 
+        TimedOutDevice = DxgkpReferenceTimedOutDevice(Adapter, WorkNode, WorkFence);
+        if (Adapter->SupportPerEngineTdr)
+        {
+            Status = VidSchResetEngine(Adapter, WorkNode, TRUE);
+            DdiDeadlineArmed = FALSE;
+            if (NT_SUCCESS(Status))
+            {
+                DXGKRNL_ERR("DxgkpTdrWorker: engine reset recovered node %lu on adapter %p\n", WorkNode, Adapter);
+                if (TimedOutDevice != NULL)
+                    DxgkDeviceSetExecutionState(TimedOutDevice, D3DKMT_DEVICEEXECUTION_HUNG);
+                Adapter->TdrStuckTicks = 0;
+                DxgkpRecordTdrRecovery(Adapter, KeQueryInterruptTime());
+                goto Exit;
+            }
+            DXGKRNL_ERR("DxgkpTdrWorker: engine reset of node %lu failed 0x%08lX, promoting to an adapter reset\n", WorkNode, Status);
+            DxgkpArmTdrDdiDeadline(Adapter);
+            DdiDeadlineArmed = TRUE;
+        }
     }
     DXGKRNL_ERR("DxgkpTdrWorker: preemption did not recover — resetting "
                 "adapter %p\n", Adapter);
@@ -1054,6 +1098,8 @@ DxgkpTdrWorker(
         DxgkEndKmdExclusive(Adapter, FALSE);
         goto Exit;
     }
+    DxgkpDisarmTdrDdiDeadline(Adapter);
+    DdiDeadlineArmed = FALSE;
 
     if (DXGK_CB(Adapter, DxgkDdiCollectDbgInfo) != NULL)
     {
@@ -1098,6 +1144,8 @@ DxgkpTdrWorker(
     DxgkDrainVidSchCallbacks(Adapter);
     AdapterStartedAfterReset = Adapter->State == DxgkAdapterStateStarted;
     DxgkTdrResetAdapterSynchronizationObjects(Adapter);
+    if (TimedOutDevice != NULL)
+        DxgkDeviceSetExecutionState(TimedOutDevice, D3DKMT_DEVICEEXECUTION_HUNG);
     /* Successful ResetFromTimeout guarantees no further GPU memory access. */
     DxgkPresentRetireScanout(Adapter);
     Status = DxgkVidMmRecoverFromTimeout(Adapter);
@@ -1192,6 +1240,8 @@ Exit:
         DxgkPresentCompleteReset(Adapter);
     if (DdiDeadlineArmed)
         DxgkpDisarmTdrDdiDeadline(Adapter);
+    if (TimedOutDevice != NULL)
+        DxgkDereferenceDevice(TimedOutDevice);
     ExReleaseRundownProtection(&Adapter->RundownRef);
     InterlockedExchange(&Adapter->TdrWorkQueued, 0);
     if (Level3Transition)
@@ -1200,6 +1250,34 @@ Exit:
     /* A request that arrived while this pass ran gets a pass of its own. */
     if (InterlockedCompareExchange(&Adapter->TdrResetRequested, 0, 0) != 0)
         DxgkpRequestAdapterTimeoutRecovery(Adapter);
+}
+
+NTSTATUS
+DxgkTdrDebugControl(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ UINT Control)
+{
+    PAGED_CODE();
+
+    if (!DxgkTdrIsTestMode())
+        return STATUS_NOT_SUPPORTED;
+    switch (Control)
+    {
+        case D3DKMT_TDRDBGCTRLTYPE_FORCETDR:
+            DxgkpRequestAdapterTimeoutRecovery(Adapter);
+            return STATUS_SUCCESS;
+        case D3DKMT_TDRDBGCTRLTYPE_DISABLEBREAK:
+            g_TdrConfig.TdrDebugMode = Adapter->TdrConfig.TdrDebugMode = DXGKP_TDR_DEBUG_RECOVER_NO_PROMPT;
+            return STATUS_SUCCESS;
+        case D3DKMT_TDRDBGCTRLTYPE_ENABLEBREAK:
+            g_TdrConfig.TdrDebugMode = Adapter->TdrConfig.TdrDebugMode = DXGKP_TDR_DEBUG_BREAK;
+            return STATUS_SUCCESS;
+        case D3DKMT_TDRDBGCTRLTYPE_UNCONDITIONAL:
+            g_TdrConfig.TdrDebugMode = Adapter->TdrConfig.TdrDebugMode = DXGKP_TDR_DEBUG_RECOVER_UNCONDITIONAL;
+            return STATUS_SUCCESS;
+        default:
+            return STATUS_NOT_SUPPORTED;
+    }
 }
 
 /*
@@ -13616,6 +13694,11 @@ DxgkAdapterStart(
                 Adapter->ApertureSegmentCommitLimit = Caps->ApertureSegmentCommitLimit;
                 if (DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
                     Adapter->SupportSurpriseRemoval = Caps->SupportSurpriseRemoval;
+                Adapter->SupportPerEngineTdr =
+                    DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_1_2) &&
+                    Caps->SupportPerEngineTDR &&
+                    DXGK_CB_FULL(Adapter, DxgkDdiResetEngine) != NULL &&
+                    DXGK_CB_FULL(Adapter, DxgkDdiQueryEngineStatus) != NULL;
                 Adapter->HybridDiscrete = Caps->HybridDiscrete;
                 Adapter->HybridIntegrated = Caps->HybridIntegrated;
                 /* Ranges are usable only with both swizzling-range DDIs. */

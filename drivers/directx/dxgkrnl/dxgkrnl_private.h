@@ -905,6 +905,7 @@ struct _DXGKRNL_ADAPTER
     /* Cached while hardware is present.  A running-device surprise-removal
      * IRP must not query capabilities after the adapter has disappeared. */
     BOOLEAN                     SupportSurpriseRemoval;
+    BOOLEAN                     SupportPerEngineTdr;
     BOOLEAN                     HybridDiscrete;
     BOOLEAN                     HybridIntegrated;
     BOOLEAN                     SurpriseRemovalHandled;
@@ -3465,6 +3466,22 @@ VOID
 NTAPI
 DxgkTdrResetAdapterSynchronizationObjects(
     _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkpArmTdrDdiDeadline(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkpDisarmTdrDdiDeadline(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+BOOLEAN
+DxgkTdrIsTestMode(VOID);
+
+NTSTATUS
+DxgkTdrDebugControl(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ UINT Control);
 
 VOID
 NTAPI

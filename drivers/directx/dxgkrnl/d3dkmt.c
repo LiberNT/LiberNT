@@ -5316,6 +5316,23 @@ DxgkpEscapeCaptured(
         return STATUS_INVALID_PARAMETER;
     }
 
+    if (pEscape->Type == D3DKMT_ESCAPE_TDRDBGCTRL)
+    {
+        UINT Control = D3DKMT_TDRDBGCTRLTYPE_FORCETDR;
+
+        if (pEscape->pPrivateDriverData != NULL)
+        {
+            if (pEscape->PrivateDriverDataSize < sizeof(UINT))
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                goto Cleanup;
+            }
+            Control = *(CONST UINT *)pEscape->pPrivateDriverData;
+        }
+        Status = DxgkTdrDebugControl(Adapter, Control);
+        goto Cleanup;
+    }
+
     if (pEscape->pPrivateDriverData == NULL ||
         pEscape->PrivateDriverDataSize == 0)
     {

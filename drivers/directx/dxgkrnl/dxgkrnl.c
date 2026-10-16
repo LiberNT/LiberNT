@@ -394,6 +394,25 @@ DxgkpReadTdrDword(
     return STATUS_SUCCESS;
 }
 
+BOOLEAN
+DxgkTdrIsTestMode(VOID)
+{
+    static CONST WCHAR GraphicsDriversPath[] = L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\GraphicsDrivers";
+    UNICODE_STRING KeyName;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE KeyHandle;
+    ULONG TestMode = 0;
+
+    PAGED_CODE();
+    RtlInitUnicodeString(&KeyName, GraphicsDriversPath);
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (!NT_SUCCESS(ZwOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes)))
+        return FALSE;
+    (VOID)DxgkpReadTdrDword(KeyHandle, L"TdrTestMode", &TestMode);
+    ZwClose(KeyHandle);
+    return TestMode != 0;
+}
+
 static VOID
 DxgkpLoadTdrConfig(VOID)
 {
@@ -992,6 +1011,8 @@ TdrResetFromTimeout(
         Status = STATUS_DEVICE_REMOVED;
         goto Cleanup;
     }
+    DxgkpDisarmTdrDdiDeadline(Adapter);
+    DdiDeadlineArmed = FALSE;
     _SEH2_TRY
     {
         Status = DXGK_CB_FULL(Adapter, DxgkDdiResetFromTimeout)(Adapter->MiniportDeviceContext);
