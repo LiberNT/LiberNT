@@ -124,7 +124,7 @@ struct Constants
     FLOAT Rectangle[4], TargetSize[4], SourceSize[4], ClientRect[4], CaptureRect[4];
     FLOAT Brush[4], Colorization[4], ColorKey[4], Flags[4], Extra[4], Shadow[4], Filter[4];
     FLOAT SampleExtent[4], SampleOrigin[4];
-    FLOAT FrameKey[4], FrameClient[4], FrameButtons[4];
+    FLOAT FrameKey[4], FrameClient[4], FrameButtons[4], SourceOrigin[4];
     FLOAT Taps[33][4];
 };
 
@@ -936,18 +936,20 @@ BOOL SurfaceCurrent(const Surface *Slot, const DWM_WIN *Window)
 {
     return Slot->Image.Resource != NULL && Slot->Share == 0 &&
            Slot->Generation == Window->Generation &&
-           Slot->Image.Width == Window->cx && Slot->Image.Height == Window->cy;
+           Slot->Image.Width == (LONG)Window->BaseWidth && Slot->Image.Height == (LONG)Window->BaseHeight;
 }
 
 Texture *UploadGdi(const DWM_WIN *Window, const BYTE *Pixels)
 {
     if (Window->Generation == 0 || Window->BaseUpdateId == 0 ||
-        Window->cx <= 0 || Window->cy <= 0 ||
-        Window->BaseWidth != (ULONG)Window->cx || Window->BaseHeight != (ULONG)Window->cy ||
+        Window->cx <= 0 || Window->cy <= 0 || Window->SourceX < 0 || Window->SourceY < 0 ||
+        Window->BaseWidth > MAXLONG || Window->BaseHeight > MAXLONG ||
+        (LONGLONG)Window->BaseWidth < (LONGLONG)Window->SourceX + Window->cx ||
+        (LONGLONG)Window->BaseHeight < (LONGLONG)Window->SourceY + Window->cy ||
         Window->BaseFormat != DWM_DX_FORMAT_B8G8R8A8_UNORM ||
         Window->Stride != Window->BasePitch || Window->Stride > MAXLONG ||
-        (ULONGLONG)Window->cx * sizeof(ULONG) > Window->Stride ||
-        (ULONGLONG)Window->Stride * Window->cy > MAXULONG_PTR)
+        (ULONGLONG)Window->BaseWidth * sizeof(ULONG) > Window->Stride ||
+        (ULONGLONG)Window->Stride * Window->BaseHeight > MAXULONG_PTR)
         return NULL;
 
     Surface *Slot = FindSurface(Window, FALSE);
@@ -960,12 +962,12 @@ Texture *UploadGdi(const DWM_WIN *Window, const BYTE *Pixels)
     if (Pixels == NULL)
         return NULL;
 
-    RECT Dirty = {0, 0, Window->cx, Window->cy};
+    RECT Dirty = {0, 0, (LONG)Window->BaseWidth, (LONG)Window->BaseHeight};
     if (Current && Slot->UpdateId == Window->BasePreviousUpdateId)
     {
         const RECTL *Bounds = &Window->BaseDirtyRect;
-        if (Bounds->left < 0 || Bounds->top < 0 || Bounds->right > Window->cx ||
-            Bounds->bottom > Window->cy || Bounds->left >= Bounds->right || Bounds->top >= Bounds->bottom)
+        if (Bounds->left < 0 || Bounds->top < 0 || Bounds->right > (LONG)Window->BaseWidth ||
+            Bounds->bottom > (LONG)Window->BaseHeight || Bounds->left >= Bounds->right || Bounds->top >= Bounds->bottom)
             return NULL;
         SetRect(&Dirty, Bounds->left, Bounds->top, Bounds->right, Bounds->bottom);
     }
@@ -973,7 +975,8 @@ Texture *UploadGdi(const DWM_WIN *Window, const BYTE *Pixels)
     BOOL Success;
     if (!Current)
     {
-        Success = CreateTexture(Slot->Image, Window->cx, Window->cy, FALSE, Pixels, Window->Stride);
+        Success = CreateTexture(Slot->Image, (LONG)Window->BaseWidth, (LONG)Window->BaseHeight, FALSE, Pixels,
+                                Window->Stride);
     }
     else
     {
@@ -1153,7 +1156,8 @@ Texture *Import(const DWM_WIN *Window, BOOL Client)
         Width > MAXLONG || Height > MAXLONG ||
         (Format != DWM_DX_FORMAT_B8G8R8A8_UNORM && (!Client || Format != DWM_DX_FORMAT_R8G8B8A8_UNORM)))
         return NULL;
-    if (!Client && (Width != (ULONG)Window->cx || Height != (ULONG)Window->cy))
+    if (!Client && ((LONGLONG)Width < (LONGLONG)Window->SourceX + Window->cx ||
+                    (LONGLONG)Height < (LONGLONG)Window->SourceY + Window->cy))
         return NULL;
     if (Client && ForeignAdapter(Window))
         return ImportForeign(Window, (DXGI_FORMAT)Format);
@@ -1436,6 +1440,13 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
     Data.SourceSize[1] = Client ? Window->DxHeight : Window->cy;
     Data.SourceSize[2] = Alpha;
     Data.SourceSize[3] = Client ? 0 : min(Window->CornerRadius, (ULONG)min(Window->cx / 2, Window->cy / 2));
+    if (!Client)
+    {
+        Data.SourceOrigin[0] = (FLOAT)Window->SourceX;
+        Data.SourceOrigin[1] = (FLOAT)Window->SourceY;
+        Data.SourceOrigin[2] = (FLOAT)Window->BaseWidth;
+        Data.SourceOrigin[3] = (FLOAT)Window->BaseHeight;
+    }
     RECTL Interior;
     DwmFrameInterior(Window, &Interior);
     Data.ClientRect[0] = (FLOAT)Interior.left;

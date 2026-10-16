@@ -390,6 +390,11 @@ typedef struct _DWM_WIN
     ULONG CaptionState;
     ULONG DxDrawWidth;
     ULONG DxDrawHeight;
+    LONG  ResizeBorderLeft;
+    LONG  ResizeBorderRight;
+    LONG  ResizeBorderBottom;
+    LONG  SourceX;
+    LONG  SourceY;
 } DWM_WIN, *PDWM_WIN;
 
 typedef struct _DWM_FRAME_HEADER

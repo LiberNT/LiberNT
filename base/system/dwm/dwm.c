@@ -112,6 +112,52 @@ DwmGetSurfaceView(const DWM_WIN *w)
 }
 
 static void
+DwmApplyResizeBorders(PDWM_WIN Window, PRECTL BlurRects, ULONG BlurRectTotal)
+{
+    LONG Left = Window->ResizeBorderLeft, Right = Window->ResizeBorderRight;
+    LONG Bottom = Window->ResizeBorderBottom;
+    ULONG Button;
+
+    Window->ResizeBorderLeft = Window->ResizeBorderRight = Window->ResizeBorderBottom = 0;
+    Window->SourceX = Window->SourceY = 0;
+    if (Left < 0 || Right < 0 || Bottom < 0 || (Left == 0 && Right == 0 && Bottom == 0) ||
+        Window->cx <= Left + Right || Window->cy <= Bottom)
+        return;
+    if (Window->AnimFlags != 0)
+    {
+        LONG AnimLeft = (LONG)((LONGLONG)Left * Window->AnimCx / Window->cx);
+        LONG AnimRight = (LONG)((LONGLONG)Right * Window->AnimCx / Window->cx);
+
+        Window->AnimX += AnimLeft;
+        Window->AnimCx -= AnimLeft + AnimRight;
+        Window->AnimCy -= (LONG)((LONGLONG)Bottom * Window->AnimCy / Window->cy);
+    }
+    Window->x += Left;
+    Window->cx -= Left + Right;
+    Window->cy -= Bottom;
+    Window->SourceX = Left;
+    Window->ClientX -= Left;
+    Window->DxClientX -= Left;
+    Window->DxClip.left -= Left;
+    Window->DxClip.right -= Left;
+    for (Button = 0; Button < DWM_CAPTION_BUTTONS; ++Button)
+    {
+        Window->CaptionButtons[Button].left -= Left;
+        Window->CaptionButtons[Button].right -= Left;
+    }
+    if (Window->BlurRectBase <= BlurRectTotal && Window->BlurRectCount <= BlurRectTotal - Window->BlurRectBase)
+    {
+        ULONG Index;
+
+        for (Index = 0; Index < Window->BlurRectCount; ++Index)
+        {
+            BlurRects[Window->BlurRectBase + Index].left -= Left;
+            BlurRects[Window->BlurRectBase + Index].right -= Left;
+        }
+    }
+}
+
+static void
 DwmSweepViews(void)
 {
     ULONG i;
@@ -4149,6 +4195,8 @@ DwmComposeLoop(HANDLE hStopEvent)
         wins = (PDWM_WIN)(g_buf + hdr->WinArrayBase);
         DwmDxHoldFrames(wins, hdr->Count);
         DwmDxSweepSurfaces(wins, hdr->Count);
+        for (i = 0; i < hdr->Count; ++i)
+            DwmApplyResizeBorders(&wins[i], (PRECTL)(g_buf + hdr->BlurRectArrayBase), hdr->BlurRectCount);
 
         if ((LONG)hdr->ScreenW != primW || (LONG)hdr->ScreenH != primH)
         {
@@ -4499,6 +4547,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                         completeFrame = FALSE;
                         break;
                     }
+                    pix += (SIZE_T)wins[i].SourceY * wins[i].Stride + (SIZE_T)wins[i].SourceX * sizeof(ULONG);
                     if (wins[i].BlurRectBase > hdr->BlurRectCount ||
                         wins[i].BlurRectCount >
                             hdr->BlurRectCount - wins[i].BlurRectBase)

@@ -312,6 +312,19 @@ HRESULT WINAPI DwmEnableComposition(UINT uCompositionAction)
 }
 
 #ifdef __REACTOS__
+static void dwm_inset_resize_borders(HWND hwnd, RECT *rect)
+{
+    WINDOWINFO info;
+
+    info.cbSize = sizeof(info);
+    if (!GetWindowInfo(hwnd, &info) || (info.dwStyle & (WS_CHILD | WS_MINIMIZE)) ||
+        (!(info.dwStyle & WS_THICKFRAME) && (info.dwStyle & WS_CAPTION) != WS_CAPTION))
+        return;
+    rect->left += max(0, min((LONG)info.cxWindowBorders, info.rcClient.left - info.rcWindow.left));
+    rect->right -= max(0, min((LONG)info.cxWindowBorders, info.rcWindow.right - info.rcClient.right));
+    rect->bottom -= max(0, min((LONG)info.cyWindowBorders, info.rcWindow.bottom - info.rcClient.bottom));
+}
+
 static BOOL dwm_get_caption_button_bounds(HWND hwnd, RECT *rect)
 {
     static const WCHAR *const buttons[] =
@@ -694,6 +707,10 @@ HRESULT WINAPI DwmGetWindowAttribute(HWND hwnd, DWORD attribute, PVOID pv_attrib
             hr = S_OK;
         else
             hr = HRESULT_FROM_WIN32(GetLastError());
+#ifdef __REACTOS__
+        if (hr == S_OK)
+            dwm_inset_resize_borders(hwnd, rect);
+#endif
 
         SetThreadDpiAwarenessContext(context);
         break;
