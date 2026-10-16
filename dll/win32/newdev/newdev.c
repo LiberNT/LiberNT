@@ -1325,6 +1325,57 @@ InstallCurrentDriver(
     return InstallSelectedDriver(DevInstData);
 }
 
+static VOID
+RunDeviceRunOnceEntries(VOID)
+{
+    HKEY hKey;
+    DWORD Index = 0;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+                      0,
+                      KEY_QUERY_VALUE | KEY_SET_VALUE,
+                      &hKey) != ERROR_SUCCESS)
+    {
+        return;
+    }
+
+    for (;;)
+    {
+        WCHAR Name[256], Command[1024], Expanded[1024];
+        DWORD NameLength = _countof(Name), DataSize = sizeof(Command) - sizeof(WCHAR), Type;
+        STARTUPINFOW StartupInfo = { sizeof(StartupInfo) };
+        PROCESS_INFORMATION ProcessInfo;
+        LONG rc;
+
+        rc = RegEnumValueW(hKey, Index, Name, &NameLength, NULL, &Type, (LPBYTE)Command, &DataSize);
+        if (rc == ERROR_MORE_DATA)
+        {
+            Index++;
+            continue;
+        }
+        if (rc != ERROR_SUCCESS)
+            break;
+        Command[DataSize / sizeof(WCHAR)] = UNICODE_NULL;
+        if ((Type != REG_SZ && Type != REG_EXPAND_SZ) || _wcsnicmp(Command, L"rundll32", 8) != 0)
+        {
+            Index++;
+            continue;
+        }
+        RegDeleteValueW(hKey, Name);
+        if (!ExpandEnvironmentStringsW(Command, Expanded, _countof(Expanded)))
+            continue;
+        TRACE("Running %s\n", debugstr_w(Expanded));
+        if (CreateProcessW(NULL, Expanded, NULL, NULL, FALSE, 0, NULL, NULL, &StartupInfo, &ProcessInfo))
+        {
+            WaitForSingleObject(ProcessInfo.hProcess, 60000);
+            CloseHandle(ProcessInfo.hThread);
+            CloseHandle(ProcessInfo.hProcess);
+        }
+    }
+    RegCloseKey(hKey);
+}
+
 static BOOL
 InstallSelectedDriver(
     IN PDEVINSTDATA DevInstData)
@@ -1422,6 +1473,7 @@ InstallSelectedDriver(
     }
 
     NewDevSetFailedInstall(DevInstData->hDevInfo, &DevInstData->devInfoData, FALSE);
+    RunDeviceRunOnceEntries();
 
     return TRUE;
 }
