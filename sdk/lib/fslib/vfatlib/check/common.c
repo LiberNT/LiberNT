@@ -39,7 +39,7 @@ DECLSPEC_NORETURN // __attribute((noreturn))
 void exit(int exitcode)
 {
     // DbgBreakPoint();
-    NtTerminateProcess(NtCurrentProcess(), exitcode);
+    RtlRaiseStatus(STATUS_DISK_CORRUPT_ERROR);
 
     /* Should never get here */
     while(1);

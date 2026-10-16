@@ -186,18 +186,12 @@ NTSTATUS fs_open(PUNICODE_STRING DriveRoot, int read_write)
                         FILE_GENERIC_READ | (read_write ? FILE_GENERIC_WRITE : 0),
                         &ObjectAttributes,
                         &Iosb,
-                        read_write ? FILE_SHARE_READ : (FILE_SHARE_READ | FILE_SHARE_WRITE),
+                        FILE_SHARE_READ | FILE_SHARE_WRITE,
                         FILE_SYNCHRONOUS_IO_ALERT);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtOpenFile() failed with status 0x%.08x\n", Status);
         return Status;
-    }
-
-    // If read_write is specified, then the volume should be exclusively locked
-    if (read_write)
-    {
-        Status = fs_lock(TRUE);
     }
 
     // Query geometry and partition info, to have bytes per sector, etc
@@ -475,6 +469,21 @@ int fs_close(int write)
 	pdie("closing filesystem");
     return changed || did_change;
 }
+
+#ifdef __REACTOS__
+void fs_abort(void)
+{
+    CHANGE *next;
+
+    while (changes) {
+	next = changes->next;
+	free(changes->data);
+	free(changes);
+	changes = next;
+    }
+    NtClose(fd);
+}
+#endif
 
 int fs_changed(void)
 {

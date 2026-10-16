@@ -73,6 +73,8 @@ int fs_changed(void);
 /* Determines whether the filesystem has changed. See fs_close. */
 
 #ifdef __REACTOS__
+void fs_abort(void);
+
 NTSTATUS fs_lock(BOOLEAN LockVolume);
 
 /* Lock or unlocks the volume */
