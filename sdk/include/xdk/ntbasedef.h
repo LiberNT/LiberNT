@@ -100,7 +100,7 @@
 /* Returns the base address of a structure from a structure member */
 #ifndef CONTAINING_RECORD
  #define CONTAINING_RECORD(address, type, field) \
-   ((type *)(((ULONG_PTR)address) - (ULONG_PTR)(&(((type *)0)->field))))
+   ((type *)(((ULONG_PTR)(address)) - (ULONG_PTR)(&(((type *)0)->field))))
 #endif
 
 /* Returns the byte offset of the specified structure's member */
