@@ -135,6 +135,16 @@ HRESULT WINAPI CShellItem::BindToHandler(IBindCtx *pbc, REFGUID rbhid, REFIID ri
 
         return psf->CreateViewObject(NULL, riid, ppvOut);
     }
+    else if (IsEqualGUID(rbhid, BHID_PropertyStore))
+    {
+        CComPtr<IShellFolder> psf_parent;
+        if (_ILIsDesktop(m_pidl))
+            return MK_E_NOOBJECT;
+        ret = get_parent_shellfolder(&psf_parent);
+        if (FAILED(ret))
+            return ret;
+        return psf_parent->BindToObject(ILFindLastID(m_pidl), pbc, riid, ppvOut);
+    }
 
     FIXME("Unsupported BHID %s.\n", debugstr_guid(&rbhid));
 
@@ -320,10 +330,18 @@ HRESULT CShellItem::GetDefaultPropertyStore(IPropertyStore **ppStore)
 
 HRESULT WINAPI CShellItem::GetPropertyStore(GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv)
 {
+    return GetPropertyStoreWithCreateObject(flags, NULL, riid, ppv);
+}
+
+HRESULT WINAPI CShellItem::GetPropertyStoreWithCreateObject(GETPROPERTYSTOREFLAGS flags, IUnknown *punkCreateObject, REFIID riid, void **ppv)
+{
+    CComPtr<IPropertyStoreFactory> pFactory;
     CComPtr<IPropertyStore> pStore;
     HRESULT hr;
 
     *ppv = NULL;
+    if (SUCCEEDED(BindToHandler(NULL, BHID_PropertyStore, IID_PPV_ARG(IPropertyStoreFactory, &pFactory))))
+        return pFactory->GetPropertyStore(flags, punkCreateObject, riid, ppv);
     if (flags & GPS_READWRITE)
         return STG_E_ACCESSDENIED;
 
@@ -333,13 +351,15 @@ HRESULT WINAPI CShellItem::GetPropertyStore(GETPROPERTYSTOREFLAGS flags, REFIID 
     return pStore->QueryInterface(riid, ppv);
 }
 
-HRESULT WINAPI CShellItem::GetPropertyStoreWithCreateObject(GETPROPERTYSTOREFLAGS flags, IUnknown *punkCreateObject, REFIID riid, void **ppv)
-{
-    return GetPropertyStore(flags, riid, ppv);
-}
-
 HRESULT WINAPI CShellItem::GetPropertyStoreForKeys(const PROPERTYKEY *rgKeys, UINT cKeys, GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv)
 {
+    CComPtr<IPropertyStoreFactory> pFactory;
+
+    if (SUCCEEDED(BindToHandler(NULL, BHID_PropertyStore, IID_PPV_ARG(IPropertyStoreFactory, &pFactory))))
+    {
+        *ppv = NULL;
+        return pFactory->GetPropertyStoreForKeys(rgKeys, cKeys, flags, riid, ppv);
+    }
     return GetPropertyStore(flags, riid, ppv);
 }
 
@@ -360,6 +380,38 @@ HRESULT WINAPI CShellItem::GetPropertyDescriptionList(REFPROPERTYKEY keyType, RE
         return hr;
     pszValue = wcsrchr(pszName, L'.');
     pszValue = pszValue ? pszValue + 1 : (PCWSTR)pszName;
+
+    PCUITEMID_CHILD pidlLast = ILFindLastID(m_pidl);
+    if (_ILIsValue(pidlLast) || _ILIsFolder(pidlLast))
+    {
+        HKEY hKeys[16];
+        UINT cKeys = 0;
+        HRESULT hrList = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+
+        if (_ILIsValue(pidlLast))
+        {
+            AddFSClassKeysToArray(1, &pidlLast, hKeys, &cKeys);
+        }
+        else
+        {
+            AddClassKeyToArray(L"Directory", hKeys, &cKeys);
+            AddClassKeyToArray(L"Folder", hKeys, &cKeys);
+            AddClassKeyToArray(L"AllFilesystemObjects", hKeys, &cKeys);
+        }
+        for (UINT i = 0; i < cKeys; ++i)
+        {
+            WCHAR szList[2048];
+            DWORD cbList = sizeof(szList);
+
+            if (RegGetValueW(hKeys[i], NULL, pszValue, RRF_RT_REG_SZ, NULL, szList, &cbList) == ERROR_SUCCESS)
+            {
+                hrList = PSGetPropertyDescriptionListFromString(szList, riid, ppv);
+                break;
+            }
+        }
+        CloseRegKeyArray(hKeys, cKeys);
+        return hrList;
+    }
 
     hr = BindToHandler(NULL, BHID_SFUIObject, IID_PPV_ARG(IQueryAssociations, &pqa));
     if (FAILED(hr))
@@ -407,16 +459,24 @@ HRESULT WINAPI CShellItem::GetProperty(REFPROPERTYKEY key, PROPVARIANT *ppropvar
     HRESULT hr;
 
     PropVariantInit(ppropvar);
-    hr = GetDefaultPropertyStore(&pStore);
+    hr = GetPropertyStore(GPS_DEFAULT, IID_PPV_ARG(IPropertyStore, &pStore));
     if (FAILED(hr))
         return hr;
     return pStore->GetValue(key, ppropvar);
 }
 
+HRESULT CShellItem::GetPresentProperty(REFPROPERTYKEY key, PROPVARIANT *ppropvar)
+{
+    HRESULT hr = GetProperty(key, ppropvar);
+    if (SUCCEEDED(hr) && ppropvar->vt == VT_EMPTY)
+        hr = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+    return hr;
+}
+
 HRESULT WINAPI CShellItem::GetCLSID(REFPROPERTYKEY key, CLSID *pclsid)
 {
     PROPVARIANT var;
-    HRESULT hr = GetProperty(key, &var);
+    HRESULT hr = GetPresentProperty(key, &var);
     if (SUCCEEDED(hr))
     {
         hr = PropVariantToGUID(var, pclsid);
@@ -428,7 +488,7 @@ HRESULT WINAPI CShellItem::GetCLSID(REFPROPERTYKEY key, CLSID *pclsid)
 HRESULT WINAPI CShellItem::GetFileTime(REFPROPERTYKEY key, FILETIME *pft)
 {
     PROPVARIANT var;
-    HRESULT hr = GetProperty(key, &var);
+    HRESULT hr = GetPresentProperty(key, &var);
     if (SUCCEEDED(hr))
     {
         hr = PropVariantToFileTime(var, PSTF_UTC, pft);
@@ -440,7 +500,7 @@ HRESULT WINAPI CShellItem::GetFileTime(REFPROPERTYKEY key, FILETIME *pft)
 HRESULT WINAPI CShellItem::GetInt32(REFPROPERTYKEY key, int *pi)
 {
     PROPVARIANT var;
-    HRESULT hr = GetProperty(key, &var);
+    HRESULT hr = GetPresentProperty(key, &var);
     if (SUCCEEDED(hr))
     {
         LONG value = 0;
@@ -457,7 +517,7 @@ HRESULT WINAPI CShellItem::GetString(REFPROPERTYKEY key, LPWSTR *ppsz)
     HRESULT hr;
 
     *ppsz = NULL;
-    hr = GetProperty(key, &var);
+    hr = GetPresentProperty(key, &var);
     if (SUCCEEDED(hr))
     {
         hr = PropVariantToStringAlloc(var, ppsz);
@@ -469,7 +529,7 @@ HRESULT WINAPI CShellItem::GetString(REFPROPERTYKEY key, LPWSTR *ppsz)
 HRESULT WINAPI CShellItem::GetUInt32(REFPROPERTYKEY key, ULONG *pui)
 {
     PROPVARIANT var;
-    HRESULT hr = GetProperty(key, &var);
+    HRESULT hr = GetPresentProperty(key, &var);
     if (SUCCEEDED(hr))
     {
         hr = PropVariantToUInt32(var, pui);
@@ -481,7 +541,7 @@ HRESULT WINAPI CShellItem::GetUInt32(REFPROPERTYKEY key, ULONG *pui)
 HRESULT WINAPI CShellItem::GetUInt64(REFPROPERTYKEY key, ULONGLONG *pull)
 {
     PROPVARIANT var;
-    HRESULT hr = GetProperty(key, &var);
+    HRESULT hr = GetPresentProperty(key, &var);
     if (SUCCEEDED(hr))
     {
         hr = PropVariantToUInt64(var, pull);
@@ -493,7 +553,7 @@ HRESULT WINAPI CShellItem::GetUInt64(REFPROPERTYKEY key, ULONGLONG *pull)
 HRESULT WINAPI CShellItem::GetBool(REFPROPERTYKEY key, BOOL *pf)
 {
     PROPVARIANT var;
-    HRESULT hr = GetProperty(key, &var);
+    HRESULT hr = GetPresentProperty(key, &var);
     if (SUCCEEDED(hr))
     {
         hr = PropVariantToBoolean(var, pf);

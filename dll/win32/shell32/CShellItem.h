@@ -36,6 +36,7 @@ private:
     LPITEMIDLIST        m_pidl;
 
     HRESULT GetDefaultPropertyStore(IPropertyStore **ppStore);
+    HRESULT GetPresentProperty(REFPROPERTYKEY key, PROPVARIANT *ppropvar);
 
 public:
     CShellItem();

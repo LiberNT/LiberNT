@@ -50,6 +50,7 @@ list(APPEND SHELL_SOURCE
     folders/CDesktopFolder.cpp
     folders/CDrivesFolder.cpp
     folders/CFSFolder.cpp
+    folders/CFSPropertyStore.cpp
     folders/CRegFolder.cpp
     shellmodule.cpp)
 

@@ -1,0 +1,18 @@
+/*
+ * PROJECT:     LiberNT Photo Metadata Handler
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Registered classes
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep register
+
+[
+    helpstring("IPropertyStore Handler for Images"),
+    uuid(a38b883c-1682-497e-97b0-0a3a9e801682),
+    threading(both)
+]
+coclass ImagePropertyHandler
+{
+    interface IPropertyStore;
+}

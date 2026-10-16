@@ -13,6 +13,8 @@
 WINE_DEFAULT_DEBUG_CHANNEL (shell);
 
 static HRESULT SHELL32_GetCLSIDForDirectory(LPCWSTR pwszDir, LPCWSTR KeyName, CLSID* pclsidFolder);
+EXTERN_C HRESULT CFSPropertyStoreFactory_CreateInstance(PCIDLIST_ABSOLUTE pidlFolder, IShellFolder2 *psf,
+                                                        PCUITEMID_CHILD pidl, PCWSTR pszPath, REFIID riid, void **ppv);
 
 static BOOL ItemIsFolder(PCUITEMID_CHILD pidl)
 {
@@ -1231,6 +1233,9 @@ HRESULT WINAPI CFSFolder::BindToObject(
     pfti.dwAttributes = -1;
     pfti.csidl = -1;
     PathCombineW(pfti.szTargetParsingName, m_sPathTarget, pszName);
+
+    if (_ILIsPidlSimple(pidl) && (IsEqualIID(riid, IID_IPropertyStoreFactory) || IsEqualIID(riid, IID_IPropertyStore)))
+        return CFSPropertyStoreFactory_CreateInstance(m_pidlRoot, this, pidl, pfti.szTargetParsingName, riid, ppvOut);
 
     /* Get the CLSID to bind to */
     CLSID clsidFolder;

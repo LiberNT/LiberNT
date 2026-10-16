@@ -133,6 +133,7 @@ AddReg=Classes
 11,,prnfldr.dll,1
 11,,directmanipulation.dll,1
 11,,propsys.dll,1
+11,,photometadatahandler.dll,1
 11,,pstorec.dll,1
 11,,qcap.dll,1
 11,,qedit.dll,1
