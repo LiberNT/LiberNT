@@ -18,6 +18,13 @@ BOOL UXTHEME_UsesDefaultSysColors(void)
     return (BOOL)NtUserCallNoParam(NOPARAM_ROUTINE_ROS_ISDEFAULTSYSCOLORS);
 }
 
+BOOL UXTHEME_LoadThemeHooks(void)
+{
+    if (!g_bThemeHooksActive && !RtlIsThreadWithinLoaderCallout())
+        NtUserCallNoParam(NOPARAM_ROUTINE_LOADUSERAPIHOOK);
+    return g_bThemeHooksActive;
+}
+
 static BOOL CALLBACK send_theme_changed(HWND hwnd, LPARAM enable)
 {
     SendMessageW(hwnd, WM_THEMECHANGED, enable, 0);

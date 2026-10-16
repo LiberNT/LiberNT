@@ -588,7 +588,7 @@ BOOL WINAPI IsAppThemed(void)
 #ifdef __REACTOS__
     TRACE("\n");
     SetLastError(ERROR_SUCCESS);
-    return UXTHEME_IsAppThemed();
+    return bThemeActive && UXTHEME_LoadThemeHooks();
 #else
     return IsThemeActive();
 #endif
@@ -826,7 +826,7 @@ static HTHEME open_theme_data(HWND hwnd, LPCWSTR pszClassList, DWORD flags, UINT
     }
 
 #ifdef __REACTOS__
-    if (!g_bThemeHooksActive)
+    if (!g_bThemeHooksActive && (!bThemeActive || !UXTHEME_LoadThemeHooks()))
     {
         SetLastError(E_PROP_ID_UNSUPPORTED);
         return NULL;

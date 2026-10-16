@@ -121,6 +121,7 @@ extern DWORD gdwErrorInfoTlsIndex;
 extern BOOL g_bThemeHooksActive;
 BOOL CALLBACK UXTHEME_broadcast_theme_changed(HWND hwnd, LPARAM enable);
 BOOL UXTHEME_UsesDefaultSysColors(void);
+BOOL UXTHEME_LoadThemeHooks(void);
 void UXTHEME_DeleteParseErrorInfo(void);
 HRESULT UXTHEME_MakeParseError(UINT nID, LPCWSTR pszParam1, LPCWSTR pszParam2,
                                LPCWSTR pszFile, LPCWSTR pszLine, INT nLineNo);
