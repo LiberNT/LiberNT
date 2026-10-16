@@ -74,6 +74,7 @@ public:
 class Native12CommandQueue final : public Native12Child<ID3D12CommandQueue>, public IWineDXGISwapChainFactory
 {
 public:
+    void ExecuteVideoLists(UINT count, ID3D12CommandList *const *lists);
     ULONG STDMETHODCALLTYPE AddRef() override { return Native12Child::AddRef(); }
     ULONG STDMETHODCALLTYPE Release() override { return Native12Child::Release(); }
     HRESULT STDMETHODCALLTYPE create_swapchain(IDXGIFactory *factory, HWND window,
@@ -267,6 +268,79 @@ public:
     ~Native12QueryHeap();
     HRESULT Initialize(const D3D12_QUERY_HEAP_DESC *input);
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+};
+
+class Native12VideoDecoder final : public Native12Child<ID3D12VideoDecoder>
+{
+public:
+    D3D12_VIDEO_DECODER_DESC desc = {};
+    D3D12DDI_HVIDEODECODER_0020 driver = {};
+    bool driver_created = false;
+
+    using Native12Child::Native12Child;
+    ~Native12VideoDecoder();
+    HRESULT Initialize(const D3D12_VIDEO_DECODER_DESC *input);
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+    D3D12_VIDEO_DECODER_DESC *STDMETHODCALLTYPE GetDesc(D3D12_VIDEO_DECODER_DESC *out) override;
+};
+
+class Native12VideoDecoderHeap final : public Native12Child<ID3D12VideoDecoderHeap>
+{
+public:
+    D3D12_VIDEO_DECODER_HEAP_DESC desc = {};
+    D3D12DDI_HVIDEODECODERHEAP_0032 driver = {};
+    bool driver_created = false;
+
+    using Native12Child::Native12Child;
+    ~Native12VideoDecoderHeap();
+    HRESULT Initialize(const D3D12_VIDEO_DECODER_HEAP_DESC *input);
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+    D3D12_VIDEO_DECODER_HEAP_DESC *STDMETHODCALLTYPE GetDesc(D3D12_VIDEO_DECODER_HEAP_DESC *out) override;
+};
+
+class Native12VideoDecodeCommandList final : public Native12Child<ID3D12VideoDecodeCommandList1>
+{
+public:
+    D3D12DDI_HCOMMANDLIST driver = {};
+    D3D12DDI_HCOMMANDRECORDER_0040 recorder = {};
+    bool driver_created = false;
+    bool recorder_created = false;
+    bool recording = false;
+    Native12CommandAllocator *allocator = NULL;
+    UINT64 id = 0;
+    HRESULT error = S_OK;
+
+    using Native12Child::Native12Child;
+    ~Native12VideoDecodeCommandList();
+    HRESULT Initialize(Native12CommandAllocator *pool);
+    void Decode(ID3D12VideoDecoder *decoder, ID3D12Resource *output, UINT output_subresource,
+            const D3D12DDI_VIDEO_DECODE_CONVERSION_ARGUMENTS_0041 &conversion,
+            const D3D12_VIDEO_DECODE_OUTPUT_HISTOGRAM *histograms,
+            const D3D12_VIDEO_DECODE_INPUT_STREAM_ARGUMENTS *input);
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+    D3D12_COMMAND_LIST_TYPE STDMETHODCALLTYPE GetType() override;
+    HRESULT STDMETHODCALLTYPE Close() override;
+    HRESULT STDMETHODCALLTYPE Reset(ID3D12CommandAllocator *pool) override;
+    void STDMETHODCALLTYPE ClearState() override;
+    void STDMETHODCALLTYPE ResourceBarrier(UINT count, const D3D12_RESOURCE_BARRIER *barriers) override;
+    void STDMETHODCALLTYPE DiscardResource(ID3D12Resource *resource, const D3D12_DISCARD_REGION *region) override;
+    void STDMETHODCALLTYPE BeginQuery(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type, UINT index) override;
+    void STDMETHODCALLTYPE EndQuery(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type, UINT index) override;
+    void STDMETHODCALLTYPE ResolveQueryData(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type, UINT start, UINT count,
+            ID3D12Resource *buffer, UINT64 offset) override;
+    void STDMETHODCALLTYPE SetPredication(ID3D12Resource *buffer, UINT64 offset,
+            D3D12_PREDICATION_OP operation) override;
+    void STDMETHODCALLTYPE SetMarker(UINT metadata, const void *data, UINT size) override;
+    void STDMETHODCALLTYPE BeginEvent(UINT metadata, const void *data, UINT size) override;
+    void STDMETHODCALLTYPE EndEvent() override;
+    void STDMETHODCALLTYPE DecodeFrame(ID3D12VideoDecoder *decoder,
+            const D3D12_VIDEO_DECODE_OUTPUT_STREAM_ARGUMENTS *output,
+            const D3D12_VIDEO_DECODE_INPUT_STREAM_ARGUMENTS *input) override;
+    void STDMETHODCALLTYPE WriteBufferImmediate(UINT count, const D3D12_WRITEBUFFERIMMEDIATE_PARAMETER *parameters,
+            const D3D12_WRITEBUFFERIMMEDIATE_MODE *modes) override;
+    void STDMETHODCALLTYPE DecodeFrame1(ID3D12VideoDecoder *decoder,
+            const D3D12_VIDEO_DECODE_OUTPUT_STREAM_ARGUMENTS1 *output,
+            const D3D12_VIDEO_DECODE_INPUT_STREAM_ARGUMENTS *input) override;
 };
 
 class Native12CommandSignature final : public Native12Child<ID3D12CommandSignature>
@@ -564,7 +638,11 @@ struct Native12FormatInfo
     UINT block_height;
     UINT block_bytes;
     UINT planes;
+    UINT luma_bytes;
 };
+
+void Native12PlaneLayout(const Native12FormatInfo &format, UINT plane, UINT64 *width, UINT *height,
+        UINT *block_bytes, DXGI_FORMAT *plane_format);
 
 bool Native12GetFormatInfo(DXGI_FORMAT format, Native12FormatInfo *info);
 HRESULT Native12ValidateResourceDesc(const D3D12_RESOURCE_DESC *desc);
@@ -573,6 +651,9 @@ HRESULT Native12ValidateResource(D3D12_HEAP_TYPE heap_type, const D3D12_RESOURCE
 void Native12FormatSupport(DXGI_FORMAT format, UINT ddi_support, D3D12_FORMAT_SUPPORT1 *support1,
         D3D12_FORMAT_SUPPORT2 *support2);
 D3D12DDI_COMMAND_QUEUE_FLAGS Native12QueueFlags(D3D12_COMMAND_LIST_TYPE type);
+bool Native12VideoListError(HANDLE handle, HRESULT hr);
+UINT Native12ConvertResourceBarriers(UINT count, const D3D12_RESOURCE_BARRIER *barriers,
+        D3D12DDIARG_RESOURCE_BARRIER_0022 *converted);
 
 static inline Native12Resource *Native12UnwrapResource(ID3D12Resource *resource)
 {

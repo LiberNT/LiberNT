@@ -18,6 +18,14 @@ bool Native12GetFormatInfo(DXGI_FORMAT format, Native12FormatInfo *info)
     info->block_width = 1;
     info->block_height = 1;
     info->planes = 1;
+    info->luma_bytes = 0;
+    if (format == DXGI_FORMAT_NV12 || format == DXGI_FORMAT_P010 || format == DXGI_FORMAT_P016)
+    {
+        info->luma_bytes = format == DXGI_FORMAT_NV12 ? 1 : 2;
+        info->block_bytes = info->luma_bytes;
+        info->planes = 2;
+        return true;
+    }
     if (value >= DXGI_FORMAT_R32G32B32A32_TYPELESS && value <= DXGI_FORMAT_R32G32B32A32_SINT) info->block_bytes = 16;
     else if (value >= DXGI_FORMAT_R32G32B32_TYPELESS && value <= DXGI_FORMAT_R32G32B32_SINT) info->block_bytes = 12;
     else if (value >= DXGI_FORMAT_R16G16B16A16_TYPELESS && value <= DXGI_FORMAT_R32G32_SINT) info->block_bytes = 8;
@@ -64,6 +72,28 @@ bool Native12GetFormatInfo(DXGI_FORMAT format, Native12FormatInfo *info)
         return false;
     }
     return true;
+}
+
+void Native12PlaneLayout(const Native12FormatInfo &format, UINT plane, UINT64 *width, UINT *height,
+        UINT *block_bytes, DXGI_FORMAT *plane_format)
+{
+    if (format.luma_bytes)
+    {
+        if (plane)
+        {
+            *width = (*width + 1) / 2;
+            *height = (*height + 1) / 2;
+        }
+        *block_bytes = format.luma_bytes * (plane ? 2 : 1);
+        if (format.luma_bytes == 1) *plane_format = plane ? DXGI_FORMAT_R8G8_TYPELESS : DXGI_FORMAT_R8_TYPELESS;
+        else *plane_format = plane ? DXGI_FORMAT_R16G16_TYPELESS : DXGI_FORMAT_R16_TYPELESS;
+        return;
+    }
+    if (format.planes == 2)
+    {
+        *block_bytes = plane ? 1 : 4;
+        *plane_format = plane ? DXGI_FORMAT_R8_TYPELESS : DXGI_FORMAT_R32_TYPELESS;
+    }
 }
 
 static bool Native12IntegerFormat(DXGI_FORMAT format)
@@ -841,9 +871,12 @@ static HRESULT Native12SubresourceBox(const Native12Resource *resource, UINT sub
         if (!Native12GetFormatInfo(desc.Format, format)) return E_INVALIDARG;
         UINT layers = desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? 1 : desc.DepthOrArraySize;
         UINT mip = sub_resource % desc.MipLevels;
-        if (format->planes == 2) format->block_bytes = sub_resource / (desc.MipLevels * layers) ? 1 : 4;
+        UINT plane = sub_resource / (desc.MipLevels * layers);
+        DXGI_FORMAT plane_format = desc.Format;
         width = desc.Width >> mip;
         height = desc.Height >> mip;
+        if (format->planes == 2)
+            Native12PlaneLayout(*format, plane, &width, &height, &format->block_bytes, &plane_format);
         depth = desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? desc.DepthOrArraySize >> mip : 1;
         if (!width) width = 1;
         if (!height) height = 1;
@@ -1339,7 +1372,7 @@ void STDMETHODCALLTYPE Native12Device::GetCopyableFootprints(const D3D12_RESOURC
     UINT mips = Native12MipLevels(desc);
     UINT layers = desc->Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? 1 : desc->DepthOrArraySize;
     UINT planes = format.planes ? format.planes : 1;
-    UINT pitch_alignment = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT * planes;
+    UINT pitch_alignment = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT * (format.luma_bytes ? 1 : planes);
     UINT64 total_bytes = 0;
     if (first >= mips * layers * planes || count > mips * layers * planes - first)
     {
@@ -1360,11 +1393,7 @@ void STDMETHODCALLTYPE Native12Device::GetCopyableFootprints(const D3D12_RESOURC
         if (!width) width = 1;
         if (!height) height = 1;
         if (!depth) depth = 1;
-        if (planes == 2)
-        {
-            block_bytes = plane ? 1 : 4;
-            plane_format = plane ? DXGI_FORMAT_R8_TYPELESS : DXGI_FORMAT_R32_TYPELESS;
-        }
+        if (planes == 2) Native12PlaneLayout(format, plane, &width, &height, &block_bytes, &plane_format);
         width = (width + format.block_width - 1) / format.block_width * format.block_width;
         height = (height + format.block_height - 1) / format.block_height * format.block_height;
         UINT blocks_high = height / format.block_height;
