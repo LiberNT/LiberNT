@@ -340,6 +340,21 @@ NdisSetTimer(
   KeSetTimer (&Timer->Timer, Timeout, &Timer->Dpc);
 }
 
+VOID
+EXPORT
+NdisSetPeriodicTimer(
+    IN  PNDIS_TIMER Timer,
+    IN  UINT        MillisecondsPeriod)
+{
+  LARGE_INTEGER Timeout;
+
+  ASSERT_IRQL(DISPATCH_LEVEL);
+  ASSERT(Timer);
+
+  Timeout.QuadPart = Int32x32To64(MillisecondsPeriod, -10000);
+  KeSetTimerEx(&Timer->Timer, Timeout, (LONG)MillisecondsPeriod, &Timer->Dpc);
+}
+
 /*
  * @implemented
  */

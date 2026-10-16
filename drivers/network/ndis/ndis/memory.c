@@ -77,6 +77,15 @@ NdisFreeMemoryWithTagPriority(
   ExFreePoolWithTag(VirtualAddress, Tag);
 }
 
+VOID
+EXPORT
+NdisFreeMemoryWithTag(
+    IN PVOID VirtualAddress,
+    IN ULONG Tag)
+{
+  ExFreePoolWithTag(VirtualAddress, Tag);
+}
+
 /*
  * @implemented
  */

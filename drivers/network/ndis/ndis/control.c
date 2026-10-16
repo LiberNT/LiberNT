@@ -126,6 +126,48 @@ NdisReleaseReadWriteLock(
   }
 }
 
+VOID
+EXPORT
+NdisDprAcquireReadWriteLock(
+    IN  PNDIS_RW_LOCK   Lock,
+    IN  BOOLEAN         fWrite,
+    IN  PLOCK_STATE     LockState)
+{
+  ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+  NdisAcquireReadWriteLock(Lock, fWrite, LockState);
+}
+
+VOID
+EXPORT
+NdisDprReleaseReadWriteLock(
+    IN  PNDIS_RW_LOCK   Lock,
+    IN  PLOCK_STATE     LockState)
+{
+  ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+  NdisReleaseReadWriteLock(Lock, LockState);
+}
+
+#undef NdisInterlockedPushEntryList
+PSINGLE_LIST_ENTRY
+EXPORT
+NdisInterlockedPushEntryList(
+    IN  PSINGLE_LIST_ENTRY  ListHead,
+    IN  PSINGLE_LIST_ENTRY  ListEntry,
+    IN  PNDIS_SPIN_LOCK     Lock)
+{
+  return ExInterlockedPushEntryList(ListHead, ListEntry, &Lock->SpinLock);
+}
+
+#undef NdisInterlockedPopEntryList
+PSINGLE_LIST_ENTRY
+EXPORT
+NdisInterlockedPopEntryList(
+    IN  PSINGLE_LIST_ENTRY  ListHead,
+    IN  PNDIS_SPIN_LOCK     Lock)
+{
+  return ExInterlockedPopEntryList(ListHead, &Lock->SpinLock);
+}
+
 /*
  * @implemented
  */

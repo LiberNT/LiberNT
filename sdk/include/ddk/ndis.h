@@ -8193,6 +8193,15 @@ NdisMSynchronizeWithInterruptEx(
   _In_ MINIPORT_SYNCHRONIZE_INTERRUPT_HANDLER SynchronizeFunction,
   _In_opt_ PVOID SynchronizeContext);
 
+_IRQL_requires_max_(DISPATCH_LEVEL)
+ULONG
+NDISAPI
+NdisMQueueDpc(
+  _In_ NDIS_HANDLE NdisInterruptHandle,
+  _In_ ULONG MessageId,
+  _In_ ULONG TargetProcessors,
+  _In_opt_ PVOID MiniportDpcContext);
+
 #if (NDIS_SUPPORT_NDIS620)
 KAFFINITY
 NDISAPI

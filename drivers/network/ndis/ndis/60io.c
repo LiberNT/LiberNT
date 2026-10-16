@@ -1194,6 +1194,21 @@ NdisMQueueDpcEx(
     return ScheduledProcessors;
 }
 
+ULONG
+NTAPI
+NdisMQueueDpc(
+    _In_ NDIS_HANDLE NdisInterruptHandle,
+    _In_ ULONG MessageId,
+    _In_ ULONG TargetProcessors,
+    _In_opt_ PVOID MiniportDpcContext)
+{
+    GROUP_AFFINITY Affinity;
+
+    RtlZeroMemory(&Affinity, sizeof(Affinity));
+    Affinity.Mask = TargetProcessors;
+    return (ULONG)NdisMQueueDpcEx(NdisInterruptHandle, MessageId, &Affinity, MiniportDpcContext);
+}
+
 #define NDIS6_SHARED_MEMORY_SIGNATURE 'mSdN'
 
 typedef struct _NDIS6_SHARED_MEMORY
