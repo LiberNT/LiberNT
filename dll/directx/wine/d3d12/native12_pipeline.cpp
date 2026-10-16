@@ -8,6 +8,7 @@
 #include "native12.h"
 #include "native12_device.h"
 #include "native12_objects.h"
+#include "native12_viewid.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d12);
 
@@ -453,6 +454,8 @@ struct Native12ShaderCode
     Native12Signature input, output, patch;
     bool dxil = false;
     UINT psv_runtime_info_size = 0;
+    const BYTE *psv = NULL;
+    UINT psv_size = 0;
 
     HRESULT ConvertToDxil(UINT highest_shader_model, const D3D12_SHADER_BYTECODE &bytecode)
     {
@@ -550,7 +553,11 @@ struct Native12ShaderCode
                 hr = output.Read(chunk, chunk_size, tag);
             else if (tag == 0x47534350 || tag == 0x31475350) hr = patch.Read(chunk, chunk_size, tag);
             else if (tag == 0x30565350 && chunk_size >= 4 && Native12ReadDword(chunk) <= chunk_size - 4)
+            {
                 psv_runtime_info_size = Native12ReadDword(chunk);
+                psv = chunk;
+                psv_size = chunk_size;
+            }
             if (FAILED(hr)) return hr;
         }
         return code ? S_OK : E_INVALIDARG;
@@ -849,6 +856,32 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
             WARN("Stage %u has no view ID metadata for %u views.\n", i, view_instance_count);
             return E_INVALIDARG;
         }
+    }
+    if (view_instance_count > 1)
+    {
+        static const UINT order[] = { 0, 3, 4, 2, 1 };
+        Native12ViewIdStage view_stages[ARRAYSIZE(order)];
+        UINT count = 0, failed = 0, result = 0;
+
+        for (UINT i = 0; i < ARRAYSIZE(order); ++i)
+        {
+            if (!parsed[order[i]].code) continue;
+            view_stages[count].psv = parsed[order[i]].psv;
+            view_stages[count++].psv_size = parsed[order[i]].psv_size;
+        }
+        if (FAILED(hr = Native12ValidateViewIds(view_instance_count,
+                stream_output ? input->StreamOutput.RasterizedStream : 0, view_stages, count, &failed, &result)))
+        {
+            WARN("View ID validation failed at stage %u of %u, result %u.\n", failed, count, result);
+            return hr;
+        }
+    }
+    for (UINT i = 0; i < ARRAYSIZE(stages); ++i)
+    {
+        const D3D12_SHADER_BYTECODE &bytecode = *reinterpret_cast<const D3D12_SHADER_BYTECODE *>(
+                reinterpret_cast<const BYTE *>(input) + stages[i].offset);
+        if (!bytecode.pShaderBytecode || !bytecode.BytecodeLength) continue;
+        Native12ShaderCode &shader = parsed[i];
         if (FAILED(hr = shader.ConvertToDxil(device->highest_shader_model, bytecode))) return hr;
         if (stream_output && stages[i].stage == Native12StageGeometry)
             hr = Native12CreateStreamOutputShader(this, shader, false, input->StreamOutput);
