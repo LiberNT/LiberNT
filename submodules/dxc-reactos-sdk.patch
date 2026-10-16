@@ -1,0 +1,753 @@
+diff --git a/include/dxc/Support/Global.h b/include/dxc/Support/Global.h
+index 3a6c0aaa..bcec4c2f 100644
+--- a/include/dxc/Support/Global.h
++++ b/include/dxc/Support/Global.h
+@@ -12,6 +12,7 @@
+ #pragma once
+ 
+ #ifdef _WIN32
++#include <stdlib.h>
+ // Redeclare some macros to not depend on winerror.h
+ #define DXC_FAILED(hr) (((HRESULT)(hr)) < 0)
+ #ifndef _HRESULT_DEFINED
+@@ -229,7 +230,7 @@ template <typename T> T *VerifyNullAndThrow(T *p) {
+ }
+ #define VNT(__p) VerifyNullAndThrow(__p)
+ 
+-#ifdef _MSC_VER
++#if defined(_MSC_VER) || defined(__MINGW32__)
+ 
+ extern "C" __declspec(dllimport) void __stdcall OutputDebugStringA(
+     const char *msg);
+@@ -270,7 +271,11 @@ inline void OutputDebugFormatA(const char *pszFormat, ...) {
+ 
+   va_list argList;
+   va_start(argList, pszFormat);
++#ifdef __MINGW32__
++  int count = vsnprintf(buffer, bufferSize, pszFormat, argList);
++#else
+   int count = vsnprintf_s(buffer, bufferSize, pszFormat, argList);
++#endif
+   va_end(argList);
+ 
+   OutputDebugStringA(buffer);
+diff --git a/include/dxc/Support/MinGWAtl.h b/include/dxc/Support/MinGWAtl.h
+new file mode 100644
+index 00000000..aadfb75f
+--- /dev/null
++++ b/include/dxc/Support/MinGWAtl.h
+@@ -0,0 +1,376 @@
++//===- MinGWAtl.h - ATL subset for MinGW builds ----------------*- C++ -*-===//
++// This file is distributed under the University of Illinois Open Source
++// License. See LICENSE.TXT for details.
++//
++// The ATL classes DXC uses, for Windows toolchains that ship no atlbase.h
++// (MinGW). Taken from dxc/WinAdapter.h, using the real Windows APIs.
++//===----------------------------------------------------------------------===//
++
++#pragma once
++
++#include <assert.h>
++
++#include "dxc/Support/MinGWSal.h"
++
++#ifdef __cplusplus
++#include <cassert>
++#include <cstdlib>
++#include <cstring>
++#include <cwchar>
++#include <stdexcept>
++#include <vector>
++
++class CAllocator {
++public:
++  static void *Reallocate(void *p, size_t nBytes) throw() { return realloc(p, nBytes); }
++  static void *Allocate(size_t nBytes) throw() { return malloc(nBytes); }
++  static void Free(void *p) throw() { free(p); }
++};
++
++class CComAllocator {
++public:
++  static void *Reallocate(void *p, size_t nBytes) throw() { return CoTaskMemRealloc(p, nBytes); }
++  static void *Allocate(size_t nBytes) throw() { return CoTaskMemAlloc(nBytes); }
++  static void Free(void *p) throw() { CoTaskMemFree(p); }
++};
++
++template <class T> class CComPtrBase {
++protected:
++  CComPtrBase() throw() { p = nullptr; }
++  CComPtrBase(T *lp) throw() {
++    p = lp;
++    if (p != nullptr)
++      p->AddRef();
++  }
++  void Swap(CComPtrBase &other) {
++    T *pTemp = p;
++    p = other.p;
++    other.p = pTemp;
++  }
++
++public:
++  ~CComPtrBase() throw() {
++    if (p) {
++      p->Release();
++      p = nullptr;
++    }
++  }
++  operator T *() const throw() { return p; }
++  T &operator*() const { return *p; }
++  T *operator->() const { return p; }
++  T **operator&() throw() {
++    assert(p == nullptr);
++    return &p;
++  }
++  bool operator!() const throw() { return (p == nullptr); }
++  bool operator<(T *pT) const throw() { return p < pT; }
++  bool operator!=(T *pT) const { return !operator==(pT); }
++  bool operator==(T *pT) const throw() { return p == pT; }
++
++  // Release the interface and set to nullptr
++  void Release() throw() {
++    T *pTemp = p;
++    if (pTemp) {
++      p = nullptr;
++      pTemp->Release();
++    }
++  }
++
++  // Attach to an existing interface (does not AddRef)
++  void Attach(T *p2) throw() {
++    if (p) {
++      ULONG ref = p->Release();
++      (void)(ref);
++      // Attaching to the same object only works if duplicate references are
++      // being coalesced.  Otherwise re-attaching will cause the pointer to be
++      // released and may cause a crash on a subsequent dereference.
++      assert(ref != 0 || p2 != p);
++    }
++    p = p2;
++  }
++
++  // Detach the interface (does not Release)
++  T *Detach() throw() {
++    T *pt = p;
++    p = nullptr;
++    return pt;
++  }
++
++  HRESULT CopyTo(T **ppT) throw() {
++    assert(ppT != nullptr);
++    if (ppT == nullptr)
++      return E_POINTER;
++    *ppT = p;
++    if (p)
++      p->AddRef();
++    return S_OK;
++  }
++
++  template <class Q> HRESULT QueryInterface(Q **pp) const throw() {
++    assert(pp != nullptr);
++    return p->QueryInterface(__uuidof(Q), (void **)pp);
++  }
++
++  T *p;
++};
++
++template <class T> class CComPtr : public CComPtrBase<T> {
++public:
++  CComPtr() throw() {}
++  CComPtr(T *lp) throw() : CComPtrBase<T>(lp) {}
++  CComPtr(const CComPtr<T> &lp) throw() : CComPtrBase<T>(lp.p) {}
++  T *operator=(T *lp) throw() {
++    if (*this != lp) {
++      CComPtr(lp).Swap(*this);
++    }
++    return *this;
++  }
++
++  inline bool IsEqualObject(IUnknown *pOther) throw() {
++    if (this->p == nullptr && pOther == nullptr)
++      return true; // They are both NULL objects
++
++    if (this->p == nullptr || pOther == nullptr)
++      return false; // One is NULL the other is not
++
++    CComPtr<IUnknown> punk1;
++    CComPtr<IUnknown> punk2;
++    this->p->QueryInterface(__uuidof(IUnknown), (void **)&punk1);
++    pOther->QueryInterface(__uuidof(IUnknown), (void **)&punk2);
++    return punk1 == punk2;
++  }
++
++  void ComPtrAssign(IUnknown **pp, IUnknown *lp, REFIID riid) {
++    IUnknown *pTemp = *pp; // takes ownership
++    if (lp == nullptr || FAILED(lp->QueryInterface(riid, (void **)pp)))
++      *pp = nullptr;
++    if (pTemp)
++      pTemp->Release();
++  }
++
++  template <typename Q> T *operator=(const CComPtr<Q> &lp) throw() {
++    if (!this->IsEqualObject(lp)) {
++      ComPtrAssign((IUnknown **)&this->p, lp, __uuidof(T));
++    }
++    return *this;
++  }
++
++  // NOTE: This conversion constructor is not part of the official CComPtr spec;
++  // however, it is needed to convert CComPtr<Q> to CComPtr<T> where T derives
++  // from Q on Clang. MSVC compiles this conversion as first a call to
++  // CComPtr<Q>::operator T*, followed by CComPtr<T>(T*), but Clang fails to
++  // compile with error: no viable conversion from 'CComPtr<Q>' to 'CComPtr<T>'.
++  template <typename Q>
++  CComPtr(const CComPtr<Q> &lp) throw() : CComPtrBase<T>(lp.p) {}
++
++  T *operator=(const CComPtr<T> &lp) throw() {
++    if (*this != lp) {
++      CComPtr(lp).Swap(*this);
++    }
++    return *this;
++  }
++
++  CComPtr(CComPtr<T> &&lp) throw() : CComPtrBase<T>() { lp.Swap(*this); }
++
++  T *operator=(CComPtr<T> &&lp) throw() {
++    if (*this != lp) {
++      CComPtr(static_cast<CComPtr &&>(lp)).Swap(*this);
++    }
++    return *this;
++  }
++};
++
++template <class T> class CSimpleArray : public std::vector<T> {
++public:
++  bool Add(const T &t) {
++    this->push_back(t);
++    return true;
++  }
++  int GetSize() { return this->size(); }
++  T *GetData() { return this->data(); }
++  void RemoveAll() { this->clear(); }
++};
++
++template <class T, class Allocator = CAllocator> class CHeapPtrBase {
++protected:
++  CHeapPtrBase() throw() : m_pData(NULL) {}
++  CHeapPtrBase(CHeapPtrBase<T, Allocator> &p) throw() {
++    m_pData = p.Detach(); // Transfer ownership
++  }
++  explicit CHeapPtrBase(T *pData) throw() : m_pData(pData) {}
++
++public:
++  ~CHeapPtrBase() throw() { Free(); }
++
++protected:
++  CHeapPtrBase<T, Allocator> &operator=(CHeapPtrBase<T, Allocator> &p) throw() {
++    if (m_pData != p.m_pData)
++      Attach(p.Detach()); // Transfer ownership
++    return *this;
++  }
++
++public:
++  operator T *() const throw() { return m_pData; }
++  T *operator->() const throw() {
++    assert(m_pData != NULL);
++    return m_pData;
++  }
++
++  T **operator&() throw() {
++    assert(m_pData == NULL);
++    return &m_pData;
++  }
++
++  // Allocate a buffer with the given number of bytes
++  bool AllocateBytes(size_t nBytes) throw() {
++    assert(m_pData == NULL);
++    m_pData = static_cast<T *>(Allocator::Allocate(nBytes * sizeof(char)));
++    if (m_pData == NULL)
++      return false;
++
++    return true;
++  }
++
++  // Attach to an existing pointer (takes ownership)
++  void Attach(T *pData) throw() {
++    Allocator::Free(m_pData);
++    m_pData = pData;
++  }
++
++  // Detach the pointer (releases ownership)
++  T *Detach() throw() {
++    T *pTemp = m_pData;
++    m_pData = NULL;
++    return pTemp;
++  }
++
++  // Free the memory pointed to, and set the pointer to NULL
++  void Free() throw() {
++    Allocator::Free(m_pData);
++    m_pData = NULL;
++  }
++
++  // Reallocate the buffer to hold a given number of bytes
++  bool ReallocateBytes(size_t nBytes) throw() {
++    T *pNew;
++    pNew =
++        static_cast<T *>(Allocator::Reallocate(m_pData, nBytes * sizeof(char)));
++    if (pNew == NULL)
++      return false;
++    m_pData = pNew;
++
++    return true;
++  }
++
++public:
++  T *m_pData;
++};
++
++template <typename T, class Allocator = CAllocator>
++class CHeapPtr : public CHeapPtrBase<T, Allocator> {
++public:
++  CHeapPtr() throw() {}
++  CHeapPtr(CHeapPtr<T, Allocator> &p) throw() : CHeapPtrBase<T, Allocator>(p) {}
++  explicit CHeapPtr(T *p) throw() : CHeapPtrBase<T, Allocator>(p) {}
++  CHeapPtr<T> &operator=(CHeapPtr<T, Allocator> &p) throw() {
++    CHeapPtrBase<T, Allocator>::operator=(p);
++    return *this;
++  }
++
++  // Allocate a buffer with the given number of elements
++  bool Allocate(size_t nElements = 1) throw() {
++    size_t nBytes = nElements * sizeof(T);
++    return this->AllocateBytes(nBytes);
++  }
++
++  // Reallocate the buffer to hold a given number of elements
++  bool Reallocate(size_t nElements) throw() {
++    size_t nBytes = nElements * sizeof(T);
++    return this->ReallocateBytes(nBytes);
++  }
++};
++
++
++
++template <typename T> class CComHeapPtr : public CHeapPtr<T, CComAllocator> {
++public:
++  CComHeapPtr() throw() {}
++  explicit CComHeapPtr(T *pData) throw() : CHeapPtr<T, CComAllocator>(pData) {}
++};
++
++template <int t_nBufferLength = 128> class CW2AEX {
++public:
++  CW2AEX(LPCWSTR psz, UINT nCodePage = CP_UTF8) {
++    if (!psz) {
++      m_psz = NULL;
++      return;
++    }
++    int len = WideCharToMultiByte(nCodePage, 0, psz, -1, NULL, 0, NULL, NULL);
++    m_psz = new char[len > 0 ? len : 1];
++    m_psz[0] = 0;
++    if (len > 0)
++      WideCharToMultiByte(nCodePage, 0, psz, -1, m_psz, len, NULL, NULL);
++  }
++  ~CW2AEX() { delete[] m_psz; }
++  operator LPSTR() const { return m_psz; }
++  char *m_psz;
++};
++typedef CW2AEX<> CW2A;
++
++template <int t_nBufferLength = 128> class CA2WEX {
++public:
++  CA2WEX(LPCSTR psz, UINT nCodePage = CP_UTF8) {
++    if (!psz) {
++      m_psz = NULL;
++      return;
++    }
++    int len = MultiByteToWideChar(nCodePage, 0, psz, -1, NULL, 0);
++    m_psz = new wchar_t[len > 0 ? len : 1];
++    m_psz[0] = 0;
++    if (len > 0)
++      MultiByteToWideChar(nCodePage, 0, psz, -1, m_psz, len);
++  }
++  ~CA2WEX() { delete[] m_psz; }
++  operator LPWSTR() const { return m_psz; }
++  wchar_t *m_psz;
++};
++typedef CA2WEX<> CA2W;
++
++class CHandle {
++public:
++  CHandle(HANDLE h) : m_h(h) {}
++  ~CHandle() { CloseHandle(m_h); }
++  operator HANDLE() const throw() { return m_h; }
++
++private:
++  HANDLE m_h;
++};
++
++class CComBSTR {
++public:
++  BSTR m_str;
++  CComBSTR() : m_str(nullptr) {}
++  CComBSTR(int nSize, LPCWSTR sz) {
++    if (nSize < 0)
++      throw std::invalid_argument("CComBSTR must have size >= 0");
++    m_str = nSize ? SysAllocStringLen(sz, nSize) : NULL;
++  }
++  ~CComBSTR() throw() { SysFreeString(m_str); }
++  unsigned int Length() const throw() { return SysStringLen(m_str); }
++  operator BSTR() const throw() { return m_str; }
++  bool operator==(const CComBSTR &bstrSrc) const throw() {
++    return wcscmp(m_str, bstrSrc.m_str) == 0;
++  }
++  BSTR *operator&() throw() { return &m_str; }
++  BSTR Detach() throw() {
++    BSTR s = m_str;
++    m_str = NULL;
++    return s;
++  }
++  void Empty() throw() {
++    SysFreeString(m_str);
++    m_str = NULL;
++  }
++};
++
++#endif // __cplusplus
+diff --git a/include/dxc/Support/MinGWSal.h b/include/dxc/Support/MinGWSal.h
+new file mode 100644
+index 00000000..5c4f595b
+--- /dev/null
++++ b/include/dxc/Support/MinGWSal.h
+@@ -0,0 +1,28 @@
++//===- MinGWSal.h - SAL annotations missing from MinGW headers -*- C++ -*-===//
++// This file is distributed under the University of Illinois Open Source
++// License. See LICENSE.TXT for details.
++//===----------------------------------------------------------------------===//
++
++#pragma once
++
++#include <assert.h>
++
++#ifndef ATLASSERT
++#define ATLASSERT(expr) assert(expr)
++#endif
++#ifndef __in_range
++#define __in_range(lb, ub)
++#endif
++#ifndef __field_ecount_part
++#define __field_ecount_part(size, init)
++#endif
++#ifndef __in_ecount
++#define __in_ecount(size)
++#endif
++#ifndef __out_ecount
++#define __out_ecount(size)
++#endif
++
++#ifndef __override
++#define __override
++#endif
+diff --git a/include/dxc/Support/WinIncludes.h b/include/dxc/Support/WinIncludes.h
+index b1c25ec3..4166dffb 100644
+--- a/include/dxc/Support/WinIncludes.h
++++ b/include/dxc/Support/WinIncludes.h
+@@ -10,7 +10,7 @@
+ 
+ #pragma once
+ 
+-#ifdef _MSC_VER
++#if defined(_MSC_VER) || defined(__MINGW32__)
+ 
+ // mingw-w64 tends to define it as 0x0502 in its headers.
+ #undef _WIN32_WINNT
+@@ -38,10 +38,22 @@
+ #define NOMCX 1
+ #define WIN32_LEAN_AND_MEAN 1
+ #define VC_EXTRALEAN 1
++#ifndef __MINGW32__
+ #define NONAMELESSSTRUCT 1
++#endif
+ 
+-#include <ObjIdl.h>
++#ifdef __MINGW32__
++#include <windows.h>
++#include <rpc.h>
++#include <rpcndr.h>
++#include <unknwn.h>
++#include <objidl.h>
++#include <oleauto.h>
++#include "dxc/Support/MinGWAtl.h"
++#else
++#include <objidl.h>
+ #include <atlbase.h> // atlbase.h needs to come before strsafe.h
++#endif
+ #include <intsafe.h>
+ #include <strsafe.h>
+ #include <unknwn.h>
+diff --git a/include/dxc/Tracing/CMakeLists.txt b/include/dxc/Tracing/CMakeLists.txt
+index 6e601c45..dc33163b 100644
+--- a/include/dxc/Tracing/CMakeLists.txt
++++ b/include/dxc/Tracing/CMakeLists.txt
+@@ -2,6 +2,24 @@
+ # This file is distributed under the University of Illinois Open Source License. See LICENSE.TXT for details.
+ # Generate ETW instrumentation.
+ 
++if (MINGW)
++  # MinGW has no message compiler: the ETW events become no-ops.
++  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/dxcetw.h "#pragma once
++#define DxcEtw_DXCompilerCreateInstance_Start()
++#define DxcEtw_DXCompilerCreateInstance_Stop(hr)
++#define DxcEtw_DXCompilerCompile_Start()
++#define DxcEtw_DXCompilerCompile_Stop(hr)
++#define DxcEtw_DXCompilerDisassemble_Start()
++#define DxcEtw_DXCompilerDisassemble_Stop(hr)
++#define DxcEtw_DXCompilerPreprocess_Start()
++#define DxcEtw_DXCompilerPreprocess_Stop(hr)
++#define DxcEtw_DxcValidation_Start()
++#define DxcEtw_DxcValidation_Stop(hr)
++#define EventRegisterMicrosoft_Windows_DXCompiler_API()
++#define EventUnregisterMicrosoft_Windows_DXCompiler_API()
++")
++  add_custom_target(DxcEtw)
++else()
+ # Create the header in a temporary file and only update when necessary,
+ # to avoid invalidating targets that depend on it.
+ add_custom_command(
+@@ -40,3 +58,4 @@ add_custom_target(DxcEtw
+ 
+ # Not quite tablegen, but close enough.
+ set_target_properties(DxcEtw PROPERTIES FOLDER "Tablegenning")
++endif()
+diff --git a/include/dxc/dxcapi.h b/include/dxc/dxcapi.h
+index d4cdc69c..02cd58b5 100644
+--- a/include/dxc/dxcapi.h
++++ b/include/dxc/dxcapi.h
+@@ -26,10 +26,55 @@
+ #ifdef _WIN32
+ 
+ #ifndef CROSS_PLATFORM_UUIDOF
++#ifdef __MINGW32__
++constexpr unsigned char dxc_mingw_hex(char c) {
++  return c >= '0' && c <= '9'   ? c - '0'
++         : c >= 'a' && c <= 'f' ? c - 'a' + 10
++         : c >= 'A' && c <= 'F' ? c - 'A' + 10
++                                : 0;
++}
++constexpr unsigned char dxc_mingw_byte(const char *s) {
++  return static_cast<unsigned char>(dxc_mingw_hex(s[0]) << 4 | dxc_mingw_hex(s[1]));
++}
++constexpr GUID dxc_mingw_guid(const char *s) {
++  return GUID{static_cast<unsigned long>(dxc_mingw_byte(s)) << 24 |
++                  static_cast<unsigned long>(dxc_mingw_byte(s + 2)) << 16 |
++                  static_cast<unsigned long>(dxc_mingw_byte(s + 4)) << 8 |
++                  dxc_mingw_byte(s + 6),
++              static_cast<unsigned short>(dxc_mingw_byte(s + 9) << 8 | dxc_mingw_byte(s + 11)),
++              static_cast<unsigned short>(dxc_mingw_byte(s + 14) << 8 | dxc_mingw_byte(s + 16)),
++              {dxc_mingw_byte(s + 19), dxc_mingw_byte(s + 21), dxc_mingw_byte(s + 24),
++               dxc_mingw_byte(s + 26), dxc_mingw_byte(s + 28), dxc_mingw_byte(s + 30),
++               dxc_mingw_byte(s + 32), dxc_mingw_byte(s + 34)}};
++}
++#ifdef __REACTOS__
++#define CROSS_PLATFORM_UUIDOF(interface, spec)                                 \
++  struct __declspec(uuid(spec)) interface;                                     \
++  extern "C++" {                                                               \
++  template <> struct __reactos_uuidof_s<interface> {                           \
++    static constexpr GUID value = dxc_mingw_guid(spec);                        \
++    static constexpr const GUID &get() { return value; }                       \
++  };                                                                           \
++  }
++#else
++#define CROSS_PLATFORM_UUIDOF(interface, spec)                                 \
++  struct __declspec(uuid(spec)) interface;                                     \
++  extern "C++" {                                                               \
++  template <> inline const GUID &__mingw_uuidof<interface>() {                 \
++    static const GUID guid = dxc_mingw_guid(spec);                             \
++    return guid;                                                               \
++  }                                                                            \
++  template <> inline const GUID &__mingw_uuidof<interface *>() {               \
++    return __mingw_uuidof<interface>();                                        \
++  }                                                                            \
++  }
++#endif
++#else
+ // Warning: This macro exists in WinAdapter.h as well
+ #define CROSS_PLATFORM_UUIDOF(interface, spec)                                 \
+   struct __declspec(uuid(spec)) interface;
+ #endif
++#endif
+ 
+ #else
+ 
+diff --git a/include/llvm/DebugInfo/PDB/DIA/DIASupport.h b/include/llvm/DebugInfo/PDB/DIA/DIASupport.h
+index 407a3455..dc367aaa 100644
+--- a/include/llvm/DebugInfo/PDB/DIA/DIASupport.h
++++ b/include/llvm/DebugInfo/PDB/DIA/DIASupport.h
+@@ -23,7 +23,11 @@
+ #endif
+ 
+ // atlbase.h has to come before windows.h
++#ifdef __MINGW32__
++#include "dxc/Support/WinIncludes.h"
++#else
+ #include <atlbase.h>
++#endif
+ #include <windows.h>
+ 
+ // DIA headers must come after windows headers.
+diff --git a/include/llvm/Support/DataTypes.h.cmake b/include/llvm/Support/DataTypes.h.cmake
+index 815010d5..349503dd 100644
+--- a/include/llvm/Support/DataTypes.h.cmake
++++ b/include/llvm/Support/DataTypes.h.cmake
+@@ -62,6 +62,15 @@
+ /* Note that <inttypes.h> includes <stdint.h>, if this is a C99 system. */
+ #include <sys/types.h>
+ 
++#if defined(__REACTOS__) && !defined(_SSIZE_T_DEFINED)
++#define _SSIZE_T_DEFINED
++#if defined(_WIN64)
++typedef signed __int64 ssize_t;
++#else
++typedef signed int ssize_t;
++#endif
++#endif
++
+ #ifdef _AIX
+ #include "llvm/Support/AIXDataTypesFix.h"
+ #endif
+diff --git a/lib/Support/raw_ostream.cpp b/lib/Support/raw_ostream.cpp
+index 595468a6..26cd64ca 100644
+--- a/lib/Support/raw_ostream.cpp
++++ b/lib/Support/raw_ostream.cpp
+@@ -46,7 +46,7 @@
+ #include <io.h>
+ #endif
+ 
+-#if defined(_MSC_VER)
++#if defined(_MSC_VER) || defined(__REACTOS__)
+ #include <io.h>
+ #ifndef STDIN_FILENO
+ # define STDIN_FILENO 0
+diff --git a/projects/dxilconv/include/DxbcConverter.h b/projects/dxilconv/include/DxbcConverter.h
+index 968beaeb..471f58c8 100644
+--- a/projects/dxilconv/include/DxbcConverter.h
++++ b/projects/dxilconv/include/DxbcConverter.h
+@@ -50,6 +50,10 @@ struct __declspec(uuid("5F956ED5-78D1-4B15-8247-F7187614A041")) IDxbcConverter
+       _In_opt_z_ LPCWSTR pExtraOptions, _Out_ IDxcBlob **ppDxilModule,
+       _Outptr_result_maybenull_z_ LPWSTR *ppDiag) = 0;
+ };
++#ifdef __MINGW32__
++__CRT_UUID_DECL(IDxbcConverter, 0x5f956ed5, 0x78d1, 0x4b15, 0x82, 0x47, 0xf7, 0x18,
++                0x76, 0x14, 0xa0, 0x41)
++#endif
+ 
+ __declspec(selectany) extern const CLSID
+     CLSID_DxbcConverter = {/* 4900391E-B752-4EDD-A885-6FB76E25ADDB */
+diff --git a/projects/dxilconv/include/ShaderBinary/ShaderBinary.h b/projects/dxilconv/include/ShaderBinary/ShaderBinary.h
+index bf23adbc..563d9566 100644
+--- a/projects/dxilconv/include/ShaderBinary/ShaderBinary.h
++++ b/projects/dxilconv/include/ShaderBinary/ShaderBinary.h
+@@ -11,6 +11,10 @@
+ 
+ #pragma once
+ 
++#ifdef __MINGW32__
++#include "dxc/Support/MinGWSal.h"
++#endif
++
+ // has dependencies on D3D10TokenizedProgramFormat.hpp! make sure to include
+ // that too!
+ 
+diff --git a/projects/dxilconv/include/Support/DXIncludes.h b/projects/dxilconv/include/Support/DXIncludes.h
+index 4ff1ea73..7c589fb2 100644
+--- a/projects/dxilconv/include/Support/DXIncludes.h
++++ b/projects/dxilconv/include/Support/DXIncludes.h
+@@ -27,6 +27,9 @@
+ #include <d3dcommon.h>
+ #include <d3d11.h>
+ #include <d3d12.h>
++#if defined(__REACTOS__) && !defined(D3DX12_NO_STATE_OBJECT_HELPERS)
++#define D3DX12_NO_STATE_OBJECT_HELPERS
++#endif
+ #include "dxc/Support/d3dx12.h"
+ #include "DxbcSignatures.h"
+ #include <d3dcompiler.h>
+diff --git a/projects/dxilconv/lib/DxbcConverter/DxbcConverterImpl.h b/projects/dxilconv/lib/DxbcConverter/DxbcConverterImpl.h
+index 7f19b875..9404ee52 100644
+--- a/projects/dxilconv/lib/DxbcConverter/DxbcConverterImpl.h
++++ b/projects/dxilconv/lib/DxbcConverter/DxbcConverterImpl.h
+@@ -45,7 +45,11 @@
+ 
+ #include "Support/DXIncludes.h"
+ #include "dxc/Support/microcom.h"
++#ifdef __MINGW32__
++#include "dxc/Support/WinIncludes.h"
++#else
+ #include <atlbase.h>
++#endif
+ 
+ #include "dxc/Support/FileIOHelper.h"
+ #include "dxc/dxcapi.h"
+diff --git a/projects/dxilconv/lib/ShaderBinary/ShaderBinaryIncludes.h b/projects/dxilconv/lib/ShaderBinary/ShaderBinaryIncludes.h
+index 360230b8..9a32a967 100644
+--- a/projects/dxilconv/lib/ShaderBinary/ShaderBinaryIncludes.h
++++ b/projects/dxilconv/lib/ShaderBinary/ShaderBinaryIncludes.h
+@@ -11,6 +11,12 @@
+ // clang-format off
+ // Includes on Windows are highly order dependent.
+ #include "windows.h"
++#ifdef __MINGW32__
++#include "dxc/Support/MinGWSal.h"
++#include <algorithm>
++using std::max;
++using std::min;
++#endif
+ 
+ #include <assert.h>
+ #include <float.h>
+diff --git a/projects/dxilconv/tools/dxbc2dxil/dxbc2dxil.cpp b/projects/dxilconv/tools/dxbc2dxil/dxbc2dxil.cpp
+index c485709c..9f11794b 100644
+--- a/projects/dxilconv/tools/dxbc2dxil/dxbc2dxil.cpp
++++ b/projects/dxilconv/tools/dxbc2dxil/dxbc2dxil.cpp
+@@ -25,7 +25,11 @@
+ 
+ #include "Support/DXIncludes.h"
+ #include "dxc/Support/microcom.h"
++#ifdef __MINGW32__
++#include "dxc/Support/WinIncludes.h"
++#else
+ #include <atlbase.h>
++#endif
+ 
+ #include "dxc/Support/FileIOHelper.h"
+ 
+diff --git a/projects/include/Tracing/CMakeLists.txt b/projects/include/Tracing/CMakeLists.txt
+index f234c10d..ecda1bf7 100644
+--- a/projects/include/Tracing/CMakeLists.txt
++++ b/projects/include/Tracing/CMakeLists.txt
+@@ -2,6 +2,21 @@
+ # This file is distributed under the University of Illinois Open Source License. See LICENSE.TXT for details.
+ # Generate ETW instrumentation.
+ 
++if (MINGW)
++  # MinGW has no message compiler: the ETW events become no-ops.
++  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/DxcRuntimeEtw.h "#pragma once
++#define DxcRuntimeEtw_DxcRuntimeInitialization_Start()
++#define DxcRuntimeEtw_DxcRuntimeInitialization_Stop(hr)
++#define DxcRuntimeEtw_DxcRuntimeShutdown_Start()
++#define DxcRuntimeEtw_DxcRuntimeShutdown_Stop(hr)
++#define DxcRuntimeEtw_DxcTranslate_Start()
++#define DxcRuntimeEtw_DxcTranslate_Stop(hr)
++#define DxcRuntimeEtw_DxcTranslate_TranslateStats(...)
++#define EventRegisterMicrosoft_Windows_DxcRuntime_API()
++#define EventUnregisterMicrosoft_Windows_DxcRuntime_API()
++")
++  add_custom_target(DxcRuntimeEtw)
++else()
+ # Create the header in a temporary file and only update when necessary,
+ # to avoid invalidating targets that depend on it.
+ add_custom_command(
+@@ -40,3 +55,4 @@ add_custom_target(DxcRuntimeEtw
+ 
+ # Not quite library, but close enough.
+ set_target_properties(DxcRuntimeEtw PROPERTIES FOLDER "Dxilconv libraries")
++endif()

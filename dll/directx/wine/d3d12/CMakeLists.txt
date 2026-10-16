@@ -46,3 +46,5 @@ endif()
 add_importlibs(d3d12 dxgi d3dwine gdi32 user32 ole32 advapi32 msvcrt kernel32 ntdll)
 add_dependencies(d3d12 d3d_idl_headers wineheaders)
 add_cd_file(TARGET d3d12 DESTINATION reactos/system32 FOR all)
+
+include(${REACTOS_SOURCE_DIR}/submodules/dxilconv.cmake)
