@@ -2968,6 +2968,7 @@ static void d3d12_command_list_reset_state(struct d3d12_command_list *list,
     list->xfb_enabled = false;
     list->has_depth_bounds = false;
     list->is_predicated = false;
+    list->root_constant_sequence = 0;
 
     list->current_framebuffer = VK_NULL_HANDLE;
     list->current_pipeline = VK_NULL_HANDLE;
@@ -4063,12 +4064,42 @@ static void d3d12_command_list_repush_root_descriptors(struct d3d12_command_list
     }
 }
 
+static void d3d12_command_list_repush_root_constant(struct d3d12_command_list *list,
+        const struct vkd3d_pipeline_bindings *bindings, unsigned int slot)
+{
+    const struct vkd3d_vk_device_procs *vk_procs = &list->device->vk_procs;
+
+    if (!bindings->root_signature || !bindings->root_constant_stages[slot])
+        return;
+    VK_CALL(vkCmdPushConstants(list->vk_command_buffer, bindings->root_signature->vk_pipeline_layout,
+            bindings->root_constant_stages[slot], slot * sizeof(uint32_t), sizeof(uint32_t),
+            &bindings->root_constants[slot]));
+}
+
 static void d3d12_command_list_restore_compute_state(struct d3d12_command_list *list)
 {
+    const struct vkd3d_pipeline_bindings *graphics = &list->pipeline_bindings[VKD3D_PIPELINE_BIND_POINT_GRAPHICS];
+    const struct vkd3d_pipeline_bindings *compute = &list->pipeline_bindings[VKD3D_PIPELINE_BIND_POINT_COMPUTE];
+    unsigned int i;
+
     d3d12_command_list_invalidate_current_pipeline(list);
     d3d12_command_list_invalidate_bindings(list, list->state);
     d3d12_command_list_invalidate_root_parameters(list, VKD3D_PIPELINE_BIND_POINT_COMPUTE);
     d3d12_command_list_repush_root_descriptors(list, VKD3D_PIPELINE_BIND_POINT_COMPUTE);
+
+    for (i = 0; i < ARRAY_SIZE(compute->root_constants); ++i)
+    {
+        if (graphics->root_constant_sequence[i] < compute->root_constant_sequence[i])
+        {
+            d3d12_command_list_repush_root_constant(list, graphics, i);
+            d3d12_command_list_repush_root_constant(list, compute, i);
+        }
+        else
+        {
+            d3d12_command_list_repush_root_constant(list, compute, i);
+            d3d12_command_list_repush_root_constant(list, graphics, i);
+        }
+    }
 }
 
 static bool d3d12_command_list_bind_meta_buffer(struct d3d12_command_list *list, VkBuffer vk_buffer,
@@ -5564,6 +5595,7 @@ static void d3d12_command_list_set_root_signature(struct d3d12_command_list *lis
 
     bindings->root_signature = root_signature;
     bindings->push_descriptor_pushed_mask = 0;
+    memset(bindings->root_constant_stages, 0, sizeof(bindings->root_constant_stages));
 
     d3d12_command_list_invalidate_root_parameters(list, bind_point);
 }
@@ -5663,13 +5695,26 @@ static void d3d12_command_list_set_root_constants(struct d3d12_command_list *lis
         enum vkd3d_pipeline_bind_point bind_point, unsigned int index, unsigned int offset,
         unsigned int count, const void *data)
 {
-    const struct d3d12_root_signature *root_signature = list->pipeline_bindings[bind_point].root_signature;
+    struct vkd3d_pipeline_bindings *bindings = &list->pipeline_bindings[bind_point];
+    const struct d3d12_root_signature *root_signature = bindings->root_signature;
     const struct vkd3d_vk_device_procs *vk_procs = &list->device->vk_procs;
     const struct d3d12_root_constant *c;
+    unsigned int i, slot;
 
     c = root_signature_get_32bit_constants(root_signature, index);
     VK_CALL(vkCmdPushConstants(list->vk_command_buffer, root_signature->vk_pipeline_layout,
             c->stage_flags, c->offset + offset * sizeof(uint32_t), count * sizeof(uint32_t), data));
+
+    ++list->root_constant_sequence;
+    for (i = 0; i < count; ++i)
+    {
+        slot = c->offset / sizeof(uint32_t) + offset + i;
+        if (slot >= ARRAY_SIZE(bindings->root_constants))
+            break;
+        bindings->root_constants[slot] = ((const uint32_t *)data)[i];
+        bindings->root_constant_stages[slot] = c->stage_flags;
+        bindings->root_constant_sequence[slot] = list->root_constant_sequence;
+    }
 }
 
 static void STDMETHODCALLTYPE d3d12_command_list_SetComputeRoot32BitConstant(ID3D12GraphicsCommandList10 *iface,
@@ -6682,6 +6727,8 @@ static void d3d12_command_list_clear_uav(struct d3d12_command_list *list,
         }
         while (curr_rect.right > curr_rect.left);
     }
+
+    d3d12_command_list_restore_compute_state(list);
 }
 
 static const struct vkd3d_format *vkd3d_fixup_clear_uav_uint_colour(struct d3d12_device *device,

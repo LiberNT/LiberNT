@@ -1296,6 +1296,10 @@ struct vkd3d_pipeline_bindings
     uint32_t push_descriptor_dirty_mask;
     uint32_t push_descriptor_active_mask;
     uint32_t push_descriptor_pushed_mask;
+
+    uint32_t root_constants[D3D12_MAX_ROOT_COST];
+    VkShaderStageFlags root_constant_stages[D3D12_MAX_ROOT_COST];
+    uint64_t root_constant_sequence[D3D12_MAX_ROOT_COST];
 };
 
 enum vkd3d_pipeline_bind_point
@@ -1409,6 +1413,7 @@ struct d3d12_command_list
     bool is_predicated;
     VkBuffer predicate_vk_buffer;
     VkConditionalRenderingFlagsEXT predicate_flags;
+    uint64_t root_constant_sequence;
 
     VkFramebuffer current_framebuffer;
     VkPipeline current_pipeline;
