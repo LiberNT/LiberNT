@@ -13,6 +13,22 @@ WINE_DEFAULT_DEBUG_CHANNEL(d3d12);
 
 static SRWLOCK Native12DeviceListLock = SRWLOCK_INIT;
 static Native12Device *Native12DeviceList;
+static SRWLOCK Native12SingletonLock = SRWLOCK_INIT;
+static Native12Device *Native12Singletons[16];
+
+static Native12Device *Native12FindSingleton(const LUID &luid, D3D_FEATURE_LEVEL minimum_level)
+{
+    for (Native12Device *device : Native12Singletons)
+    {
+        if (device && device->luid.LowPart == luid.LowPart && device->luid.HighPart == luid.HighPart
+                && device->feature_level >= minimum_level)
+        {
+            device->AddRef();
+            return device;
+        }
+    }
+    return NULL;
+}
 
 Native12PrivateData::~Native12PrivateData()
 {
@@ -905,7 +921,14 @@ ULONG STDMETHODCALLTYPE Native12Device::AddRef() { return InterlockedIncrement(&
 
 ULONG STDMETHODCALLTYPE Native12Device::Release()
 {
+    AcquireSRWLockExclusive(&Native12SingletonLock);
     ULONG count = InterlockedDecrement(&references);
+    if (!count)
+    {
+        for (Native12Device *&entry : Native12Singletons)
+            if (entry == this) entry = NULL;
+    }
+    ReleaseSRWLockExclusive(&Native12SingletonLock);
     if (!count) delete this;
     return count;
 }
@@ -1426,13 +1449,48 @@ HRESULT Native12CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_level,
         if (FAILED(hr)) return hr;
     }
 
-    Native12Device *device = new Native12Device();
-    if (!device)
+    DXGI_ADAPTER_DESC adapter_desc;
+    if (FAILED(hr = selected->GetDesc(&adapter_desc)))
     {
         selected->Release();
-        return E_OUTOFMEMORY;
+        return hr;
     }
-    hr = device->Initialize(selected, minimum_level);
+    AcquireSRWLockExclusive(&Native12SingletonLock);
+    Native12Device *device = Native12FindSingleton(adapter_desc.AdapterLuid, minimum_level);
+    ReleaseSRWLockExclusive(&Native12SingletonLock);
+    if (device) hr = S_OK;
+    else
+    {
+        device = new Native12Device();
+        if (!device)
+        {
+            selected->Release();
+            return E_OUTOFMEMORY;
+        }
+        hr = device->Initialize(selected, minimum_level);
+        if (SUCCEEDED(hr))
+        {
+            Native12Device *existing;
+            AcquireSRWLockExclusive(&Native12SingletonLock);
+            if (!(existing = Native12FindSingleton(adapter_desc.AdapterLuid, minimum_level)))
+            {
+                for (Native12Device *&entry : Native12Singletons)
+                {
+                    if (!entry)
+                    {
+                        entry = device;
+                        break;
+                    }
+                }
+            }
+            ReleaseSRWLockExclusive(&Native12SingletonLock);
+            if (existing)
+            {
+                device->Release();
+                device = existing;
+            }
+        }
+    }
     selected->Release();
     if (SUCCEEDED(hr))
     {
