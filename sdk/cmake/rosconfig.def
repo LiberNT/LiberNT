@@ -240,12 +240,13 @@ config FREELDR_HTTP_BOOT
 config BOOTLOADER_KERNEL_DEBUG
     prompt "Kernel debug output by default"
     type bool
-    default y
+    default n
     help
       Starts the default boot entry with kernel debug output on the first
       serial port (115200 baud), on the screen and in the debug log file,
       and lists each driver on screen while it loads, so a failing boot
       can be read from the serial console, the display or the log.
+      Debug builds keep the serial port debug output even when this is off.
 
 config BOOTLOADER_HTTP_BOOT_URL
     prompt "Boot manager HTTP boot URL"
