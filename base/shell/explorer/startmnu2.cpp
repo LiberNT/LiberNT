@@ -1231,6 +1231,10 @@ public:
     VOID AddRecentExecutables()
     {
         HKEY hKey;
+        WCHAR szWindows[MAX_PATH];
+        UINT cchWindows = GetWindowsDirectoryW(szWindows, _countof(szWindows));
+        if (!cchWindows || cchWindows >= _countof(szWindows))
+            szWindows[0] = UNICODE_NULL;
         if (RegOpenKeyExW(HKEY_CURRENT_USER, SM2_RECENT_EXE_KEY, 0, KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS)
             return;
         for (DWORD i = 0;; ++i)
@@ -1244,6 +1248,8 @@ public:
             if (error != ERROR_SUCCESS)
                 break;
             if (type != REG_QWORD || cbTime != sizeof(Time) || !Time || lstrcmpiW(PathFindExtensionW(szPath), L".exe"))
+                continue;
+            if (szWindows[0] && PathIsPrefixW(szWindows, szPath))
                 continue;
             DWORD attributes = GetFileAttributesW(szPath);
             if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY))
