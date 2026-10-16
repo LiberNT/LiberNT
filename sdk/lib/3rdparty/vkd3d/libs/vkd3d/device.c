@@ -4336,11 +4336,7 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CheckFeatureSupport(ID3D12Device14
                 return E_INVALIDARG;
             }
 
-            /* FIXME: The d3d12 documentation states that
-             * D3D12_SHADER_CACHE_SUPPORT_SINGLE_PSO is always supported, but
-             * the CachedPSO field of D3D12_GRAPHICS_PIPELINE_STATE_DESC is
-             * ignored and GetCachedBlob() is a stub. */
-            data->SupportFlags = D3D12_SHADER_CACHE_SUPPORT_NONE;
+            data->SupportFlags = D3D12_SHADER_CACHE_SUPPORT_SINGLE_PSO | D3D12_SHADER_CACHE_SUPPORT_LIBRARY;
 
             TRACE("Shader cache support %#x.\n", data->SupportFlags);
             return S_OK;
@@ -5644,10 +5640,12 @@ static LUID * STDMETHODCALLTYPE d3d12_device_GetAdapterLuid(ID3D12Device14 *ifac
 static HRESULT STDMETHODCALLTYPE d3d12_device_CreatePipelineLibrary(ID3D12Device14 *iface,
         const void *blob, SIZE_T blob_size, REFIID iid, void **lib)
 {
-    FIXME("iface %p, blob %p, blob_size %"PRIuPTR", iid %s, lib %p stub!\n",
+    struct d3d12_device *device = impl_from_ID3D12Device14(iface);
+
+    TRACE("iface %p, blob %p, blob_size %"PRIuPTR", iid %s, lib %p.\n",
             iface, blob, (uintptr_t)blob_size, debugstr_guid(iid), lib);
 
-    return DXGI_ERROR_UNSUPPORTED;
+    return d3d12_pipeline_library_create(device, blob, blob_size, iid, lib);
 }
 
 struct waiting_event_semaphore

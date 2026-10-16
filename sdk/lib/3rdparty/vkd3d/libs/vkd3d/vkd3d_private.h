@@ -981,6 +981,7 @@ struct d3d12_root_signature
 {
     ID3D12RootSignature ID3D12RootSignature_iface;
     unsigned int refcount;
+    uint8_t hash[16];
 
     VkPipelineLayout vk_pipeline_layout;
     struct d3d12_descriptor_set_layout descriptor_set_layouts[VKD3D_MAX_DESCRIPTOR_SETS];
@@ -1102,6 +1103,7 @@ struct d3d12_pipeline_state
 
     ID3D12RootSignature *implicit_root_signature;
     struct d3d12_device *device;
+    uint8_t hash[16];
 
     struct vkd3d_private_store private_store;
 };
@@ -1168,6 +1170,8 @@ HRESULT d3d12_pipeline_state_create_graphics(struct d3d12_device *device,
         const D3D12_GRAPHICS_PIPELINE_STATE_DESC *desc, struct d3d12_pipeline_state **state);
 HRESULT d3d12_pipeline_state_create(struct d3d12_device *device,
         const D3D12_PIPELINE_STATE_STREAM_DESC *desc, struct d3d12_pipeline_state **state);
+HRESULT d3d12_pipeline_library_create(struct d3d12_device *device, const void *blob, SIZE_T blob_size,
+        REFIID iid, void **library);
 VkPipeline d3d12_pipeline_state_get_or_create_pipeline(struct d3d12_pipeline_state *state,
         D3D12_PRIMITIVE_TOPOLOGY topology, const uint32_t *strides, VkFormat dsv_format, VkRenderPass *vk_render_pass);
 struct d3d12_pipeline_state *unsafe_impl_from_ID3D12PipelineState(ID3D12PipelineState *iface);

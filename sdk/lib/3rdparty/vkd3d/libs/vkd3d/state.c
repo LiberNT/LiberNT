@@ -21,6 +21,7 @@
 #include "vkd3d_private.h"
 #include "vkd3d_shaders.h"
 #include "vkd3d_shader_utils.h"
+#include "vkd3d_blob.h"
 
 /* ID3D12RootSignature */
 static inline struct d3d12_root_signature *impl_from_ID3D12RootSignature(ID3D12RootSignature *iface)
@@ -1734,6 +1735,274 @@ fail:
     return hr;
 }
 
+struct vkd3d_hash128
+{
+    uint64_t high;
+    uint64_t low;
+};
+
+static void vkd3d_hash128_init(struct vkd3d_hash128 *hash)
+{
+    hash->high = 0x6c62272e07bb0142ull;
+    hash->low = 0x62b821756295c58dull;
+}
+
+static void vkd3d_hash128_update(struct vkd3d_hash128 *hash, const void *data, size_t size)
+{
+    const uint8_t *bytes = data;
+    uint64_t part_low, part_high, result_low, carry;
+    size_t i;
+
+    for (i = 0; i < size; ++i)
+    {
+        hash->low ^= bytes[i];
+        part_low = (hash->low & 0xffffffffu) * 0x13b;
+        part_high = (hash->low >> 32) * 0x13b;
+        result_low = part_low + (part_high << 32);
+        carry = (part_high >> 32) + (result_low < part_low ? 1 : 0);
+        hash->high = hash->high * 0x13b + carry + (hash->low << 24);
+        hash->low = result_low;
+    }
+}
+
+#define VKD3D_HASH_VALUE(hash, value) vkd3d_hash128_update(hash, &(value), sizeof(value))
+
+static void vkd3d_hash128_uint(struct vkd3d_hash128 *hash, uint64_t value)
+{
+    vkd3d_hash128_update(hash, &value, sizeof(value));
+}
+
+static void vkd3d_hash128_string(struct vkd3d_hash128 *hash, const char *text)
+{
+    uint64_t length = text ? strlen(text) + 1 : 0;
+
+    vkd3d_hash128_uint(hash, length);
+    if (text)
+        vkd3d_hash128_update(hash, text, length);
+}
+
+static void vkd3d_hash128_bytecode(struct vkd3d_hash128 *hash, const D3D12_SHADER_BYTECODE *code)
+{
+    uint64_t length = code->pShaderBytecode ? code->BytecodeLength : 0;
+
+    vkd3d_hash128_uint(hash, length);
+    if (length)
+        vkd3d_hash128_update(hash, code->pShaderBytecode, length);
+}
+
+static void vkd3d_hash128_final(const struct vkd3d_hash128 *hash, uint8_t out[16])
+{
+    memcpy(out, &hash->low, sizeof(hash->low));
+    memcpy(out + 8, &hash->high, sizeof(hash->high));
+}
+
+static const GUID d3d12_pipeline_library_format =
+        {0x9b2f6c40, 0x1d7e, 0x4a3b, {0x8e, 0x55, 0x27, 0xc1, 0x0a, 0x93, 0x6f, 0x18}};
+
+struct d3d12_pipeline_library_header
+{
+    GUID format;
+    uint32_t vendor_id;
+    uint32_t device_id;
+    uint32_t driver_version;
+    uint32_t entry_count;
+    uint32_t names_size;
+    uint32_t reserved;
+    uint8_t hash[16];
+};
+
+struct d3d12_pipeline_library_record
+{
+    uint32_t name_offset;
+    uint32_t name_length;
+    uint8_t hash[16];
+};
+
+struct d3d12_pipeline_library_entry
+{
+    WCHAR *name;
+    uint8_t hash[16];
+    struct d3d12_pipeline_state *state;
+};
+
+static size_t d3d12_pipeline_library_name_length(const WCHAR *name)
+{
+    size_t length = 0;
+
+    while (name[length])
+        ++length;
+    return length;
+}
+
+static bool d3d12_pipeline_library_name_equal(const WCHAR *a, const WCHAR *b)
+{
+    while (*a && *a == *b)
+    {
+        ++a;
+        ++b;
+    }
+    return *a == *b;
+}
+
+static void d3d12_pipeline_library_identity(struct d3d12_device *device,
+        struct d3d12_pipeline_library_header *header)
+{
+    const struct vkd3d_vk_instance_procs *vk_procs = &device->vkd3d_instance->vk_procs;
+    VkPhysicalDeviceProperties properties;
+
+    VK_CALL(vkGetPhysicalDeviceProperties(device->vk_physical_device, &properties));
+    header->vendor_id = properties.vendorID;
+    header->device_id = properties.deviceID;
+    header->driver_version = properties.driverVersion;
+}
+
+static size_t d3d12_pipeline_library_size(const struct d3d12_pipeline_library_entry *entries, size_t count)
+{
+    size_t size = sizeof(struct d3d12_pipeline_library_header) + count * sizeof(struct d3d12_pipeline_library_record);
+    size_t i;
+
+    for (i = 0; i < count; ++i)
+        size += (d3d12_pipeline_library_name_length(entries[i].name) + 1) * sizeof(WCHAR);
+    return size;
+}
+
+static HRESULT d3d12_pipeline_library_write(struct d3d12_device *device,
+        const struct d3d12_pipeline_library_entry *entries, size_t count, uint8_t *data, size_t size)
+{
+    struct d3d12_pipeline_library_header header;
+    size_t total = d3d12_pipeline_library_size(entries, count);
+    size_t names = sizeof(header) + count * sizeof(struct d3d12_pipeline_library_record);
+    struct vkd3d_hash128 hash;
+    size_t i, offset = 0;
+
+    if (!data || size < total)
+        return E_INVALIDARG;
+
+    memset(&header, 0, sizeof(header));
+    header.format = d3d12_pipeline_library_format;
+    d3d12_pipeline_library_identity(device, &header);
+    header.entry_count = count;
+    header.names_size = total - names;
+    for (i = 0; i < count; ++i)
+    {
+        struct d3d12_pipeline_library_record record;
+        size_t length = d3d12_pipeline_library_name_length(entries[i].name);
+
+        memset(&record, 0, sizeof(record));
+        record.name_offset = offset;
+        record.name_length = length;
+        memcpy(record.hash, entries[i].hash, sizeof(record.hash));
+        memcpy(data + sizeof(header) + i * sizeof(record), &record, sizeof(record));
+        memcpy(data + names + offset, entries[i].name, (length + 1) * sizeof(WCHAR));
+        offset += (length + 1) * sizeof(WCHAR);
+    }
+    vkd3d_hash128_init(&hash);
+    vkd3d_hash128_update(&hash, data + sizeof(header), total - sizeof(header));
+    vkd3d_hash128_final(&hash, header.hash);
+    memcpy(data, &header, sizeof(header));
+    return S_OK;
+}
+
+static void d3d12_pipeline_library_free_entries(struct d3d12_pipeline_library_entry *entries, size_t count)
+{
+    size_t i;
+
+    for (i = 0; i < count; ++i)
+    {
+        if (entries[i].state)
+            ID3D12PipelineState_Release(&entries[i].state->ID3D12PipelineState_iface);
+        vkd3d_free(entries[i].name);
+    }
+    vkd3d_free(entries);
+}
+
+static HRESULT d3d12_pipeline_library_read(struct d3d12_device *device, const void *blob, size_t size,
+        struct d3d12_pipeline_library_entry **entries, size_t *count, size_t *capacity)
+{
+    struct d3d12_pipeline_library_header header, local;
+    const uint8_t *bytes = blob, *names;
+    struct vkd3d_hash128 hash;
+    uint64_t records, total;
+    uint8_t digest[16];
+    uint32_t i;
+
+    *entries = NULL;
+    *count = *capacity = 0;
+    if (!blob || !size)
+        return S_OK;
+    if (size < sizeof(header))
+        return E_INVALIDARG;
+    memcpy(&header, bytes, sizeof(header));
+    if (memcmp(&header.format, &d3d12_pipeline_library_format, sizeof(header.format)))
+        return E_INVALIDARG;
+    records = (uint64_t)header.entry_count * sizeof(struct d3d12_pipeline_library_record);
+    total = sizeof(header) + records + header.names_size;
+    if (records > size || total > size)
+        return E_INVALIDARG;
+    memset(&local, 0, sizeof(local));
+    d3d12_pipeline_library_identity(device, &local);
+    if (local.vendor_id != header.vendor_id || local.device_id != header.device_id)
+        return D3D12_ERROR_ADAPTER_NOT_FOUND;
+    if (local.driver_version != header.driver_version)
+        return D3D12_ERROR_DRIVER_VERSION_MISMATCH;
+    vkd3d_hash128_init(&hash);
+    vkd3d_hash128_update(&hash, bytes + sizeof(header), total - sizeof(header));
+    vkd3d_hash128_final(&hash, digest);
+    if (memcmp(digest, header.hash, sizeof(digest)))
+        return E_INVALIDARG;
+
+    if (header.entry_count && !(*entries = vkd3d_calloc(header.entry_count, sizeof(**entries))))
+        return E_OUTOFMEMORY;
+    *capacity = header.entry_count;
+    names = bytes + sizeof(header) + records;
+    for (i = 0; i < header.entry_count; ++i)
+    {
+        struct d3d12_pipeline_library_record record;
+        struct d3d12_pipeline_library_entry *entry = &(*entries)[i];
+
+        memcpy(&record, bytes + sizeof(header) + i * sizeof(record), sizeof(record));
+        if ((uint64_t)record.name_offset + ((uint64_t)record.name_length + 1) * sizeof(WCHAR) > header.names_size)
+            goto invalid;
+        if (!(entry->name = vkd3d_calloc(record.name_length + 1, sizeof(WCHAR))))
+            goto invalid;
+        memcpy(entry->name, names + record.name_offset, record.name_length * sizeof(WCHAR));
+        memcpy(entry->hash, record.hash, sizeof(entry->hash));
+        *count = i + 1;
+    }
+    return S_OK;
+
+invalid:
+    d3d12_pipeline_library_free_entries(*entries, *count);
+    *entries = NULL;
+    *count = *capacity = 0;
+    return E_INVALIDARG;
+}
+
+static HRESULT d3d12_pipeline_library_check_cached(struct d3d12_device *device,
+        const D3D12_CACHED_PIPELINE_STATE *cached, const uint8_t *hash)
+{
+    static const WCHAR empty[] = {0};
+    struct d3d12_pipeline_library_entry *entries;
+    size_t count, capacity, i;
+    HRESULT hr;
+
+    if (FAILED(hr = d3d12_pipeline_library_read(device, cached->pCachedBlob, cached->CachedBlobSizeInBytes,
+            &entries, &count, &capacity)))
+        return hr;
+    hr = E_INVALIDARG;
+    for (i = 0; i < count; ++i)
+    {
+        if (d3d12_pipeline_library_name_equal(entries[i].name, empty))
+        {
+            if (!memcmp(entries[i].hash, hash, sizeof(entries[i].hash)))
+                hr = S_OK;
+            break;
+        }
+    }
+    d3d12_pipeline_library_free_entries(entries, count);
+    return hr;
+}
+
 HRESULT d3d12_root_signature_create(struct d3d12_device *device,
         const void *bytecode, size_t bytecode_length, struct d3d12_root_signature **root_signature)
 {
@@ -1745,6 +2014,7 @@ HRESULT d3d12_root_signature_create(struct d3d12_device *device,
     } root_signature_desc, original_desc;
     D3D12_SAMPLER_FLAGS *sampler_flags = NULL;
     struct d3d12_root_signature *object;
+    struct vkd3d_hash128 hash;
     unsigned int i;
     HRESULT hr;
     int ret;
@@ -1798,6 +2068,10 @@ HRESULT d3d12_root_signature_create(struct d3d12_device *device,
         vkd3d_free(object);
         return hr;
     }
+
+    vkd3d_hash128_init(&hash);
+    vkd3d_hash128_update(&hash, bytecode, bytecode_length);
+    vkd3d_hash128_final(&hash, object->hash);
 
     TRACE("Created root signature %p.\n", object);
 
@@ -2465,9 +2739,28 @@ static HRESULT STDMETHODCALLTYPE d3d12_pipeline_state_GetDevice(ID3D12PipelineSt
 static HRESULT STDMETHODCALLTYPE d3d12_pipeline_state_GetCachedBlob(ID3D12PipelineState *iface,
         ID3DBlob **blob)
 {
-    FIXME("iface %p, blob %p stub!\n", iface, blob);
+    struct d3d12_pipeline_state *state = impl_from_ID3D12PipelineState(iface);
+    static const WCHAR empty[] = {0};
+    struct d3d12_pipeline_library_entry entry;
+    size_t size;
+    void *data;
+    HRESULT hr;
 
-    return E_NOTIMPL;
+    TRACE("iface %p, blob %p.\n", iface, blob);
+
+    if (!blob)
+        return E_POINTER;
+    *blob = NULL;
+    entry.name = (WCHAR *)empty;
+    memcpy(entry.hash, state->hash, sizeof(entry.hash));
+    entry.state = NULL;
+    size = d3d12_pipeline_library_size(&entry, 1);
+    if (!(data = vkd3d_malloc(size)))
+        return E_OUTOFMEMORY;
+    if (FAILED(hr = d3d12_pipeline_library_write(state->device, &entry, 1, data, size))
+            || FAILED(hr = vkd3d_blob_create(data, size, blob)))
+        vkd3d_free(data);
+    return hr;
 }
 
 static const struct ID3D12PipelineStateVtbl d3d12_pipeline_state_vtbl =
@@ -2883,27 +3176,23 @@ static HRESULT d3d12_pipeline_state_init_compute(struct d3d12_pipeline_state *st
     return S_OK;
 }
 
+static HRESULT d3d12_pipeline_state_create_checked(struct d3d12_device *device,
+        const struct d3d12_pipeline_state_desc *desc, VkPipelineBindPoint bind_point,
+        const uint8_t *expected_hash, struct d3d12_pipeline_state **state);
+
 HRESULT d3d12_pipeline_state_create_compute(struct d3d12_device *device,
         const D3D12_COMPUTE_PIPELINE_STATE_DESC *desc, struct d3d12_pipeline_state **state)
 {
     struct d3d12_pipeline_state_desc pipeline_desc;
-    struct d3d12_pipeline_state *object;
     HRESULT hr;
 
     pipeline_state_desc_from_d3d12_compute_desc(&pipeline_desc, desc);
 
-    if (!(object = vkd3d_malloc(sizeof(*object))))
-        return E_OUTOFMEMORY;
-
-    if (FAILED(hr = d3d12_pipeline_state_init_compute(object, device, &pipeline_desc)))
-    {
-        vkd3d_free(object);
+    if (FAILED(hr = d3d12_pipeline_state_create_checked(device, &pipeline_desc, VK_PIPELINE_BIND_POINT_COMPUTE,
+            NULL, state)))
         return hr;
-    }
 
-    TRACE("Created compute pipeline state %p.\n", object);
-
-    *state = object;
+    TRACE("Created compute pipeline state %p.\n", *state);
 
     return S_OK;
 }
@@ -3911,27 +4200,178 @@ fail:
     return hr;
 }
 
-HRESULT d3d12_pipeline_state_create_graphics(struct d3d12_device *device,
-        const D3D12_GRAPHICS_PIPELINE_STATE_DESC *desc, struct d3d12_pipeline_state **state)
+static void d3d12_pipeline_state_hash_stencil_op(struct vkd3d_hash128 *hash, const D3D12_DEPTH_STENCILOP_DESC1 *op)
 {
-    struct d3d12_pipeline_state_desc pipeline_desc;
+    VKD3D_HASH_VALUE(hash, op->StencilFailOp);
+    VKD3D_HASH_VALUE(hash, op->StencilDepthFailOp);
+    VKD3D_HASH_VALUE(hash, op->StencilPassOp);
+    VKD3D_HASH_VALUE(hash, op->StencilFunc);
+    VKD3D_HASH_VALUE(hash, op->StencilReadMask);
+    VKD3D_HASH_VALUE(hash, op->StencilWriteMask);
+}
+
+static void d3d12_pipeline_state_desc_hash(const struct d3d12_pipeline_state_desc *desc, bool compute,
+        uint8_t out[16])
+{
+    struct d3d12_root_signature *root_signature = unsafe_impl_from_ID3D12RootSignature(desc->root_signature);
+    struct vkd3d_hash128 hash;
+    unsigned int i;
+
+    vkd3d_hash128_init(&hash);
+    vkd3d_hash128_uint(&hash, compute);
+    if (root_signature)
+        vkd3d_hash128_update(&hash, root_signature->hash, sizeof(root_signature->hash));
+    else
+        vkd3d_hash128_uint(&hash, 0);
+    vkd3d_hash128_uint(&hash, desc->node_mask ? desc->node_mask : 1);
+    VKD3D_HASH_VALUE(&hash, desc->flags);
+    if (compute)
+    {
+        vkd3d_hash128_bytecode(&hash, &desc->cs);
+        vkd3d_hash128_final(&hash, out);
+        return;
+    }
+
+    vkd3d_hash128_bytecode(&hash, &desc->vs);
+    vkd3d_hash128_bytecode(&hash, &desc->ps);
+    vkd3d_hash128_bytecode(&hash, &desc->ds);
+    vkd3d_hash128_bytecode(&hash, &desc->hs);
+    vkd3d_hash128_bytecode(&hash, &desc->gs);
+    VKD3D_HASH_VALUE(&hash, desc->stream_output.NumEntries);
+    for (i = 0; desc->stream_output.pSODeclaration && i < desc->stream_output.NumEntries; ++i)
+    {
+        const D3D12_SO_DECLARATION_ENTRY *entry = &desc->stream_output.pSODeclaration[i];
+
+        VKD3D_HASH_VALUE(&hash, entry->Stream);
+        vkd3d_hash128_string(&hash, entry->SemanticName);
+        VKD3D_HASH_VALUE(&hash, entry->SemanticIndex);
+        VKD3D_HASH_VALUE(&hash, entry->StartComponent);
+        VKD3D_HASH_VALUE(&hash, entry->ComponentCount);
+        VKD3D_HASH_VALUE(&hash, entry->OutputSlot);
+    }
+    VKD3D_HASH_VALUE(&hash, desc->stream_output.NumStrides);
+    for (i = 0; desc->stream_output.pBufferStrides && i < desc->stream_output.NumStrides; ++i)
+        VKD3D_HASH_VALUE(&hash, desc->stream_output.pBufferStrides[i]);
+    VKD3D_HASH_VALUE(&hash, desc->stream_output.RasterizedStream);
+    VKD3D_HASH_VALUE(&hash, desc->blend_state.AlphaToCoverageEnable);
+    VKD3D_HASH_VALUE(&hash, desc->blend_state.IndependentBlendEnable);
+    for (i = 0; i < ARRAY_SIZE(desc->blend_state.RenderTarget); ++i)
+    {
+        const D3D12_RENDER_TARGET_BLEND_DESC *target = &desc->blend_state.RenderTarget[i];
+
+        VKD3D_HASH_VALUE(&hash, target->BlendEnable);
+        VKD3D_HASH_VALUE(&hash, target->LogicOpEnable);
+        VKD3D_HASH_VALUE(&hash, target->SrcBlend);
+        VKD3D_HASH_VALUE(&hash, target->DestBlend);
+        VKD3D_HASH_VALUE(&hash, target->BlendOp);
+        VKD3D_HASH_VALUE(&hash, target->SrcBlendAlpha);
+        VKD3D_HASH_VALUE(&hash, target->DestBlendAlpha);
+        VKD3D_HASH_VALUE(&hash, target->BlendOpAlpha);
+        VKD3D_HASH_VALUE(&hash, target->LogicOp);
+        VKD3D_HASH_VALUE(&hash, target->RenderTargetWriteMask);
+    }
+    VKD3D_HASH_VALUE(&hash, desc->sample_mask);
+    VKD3D_HASH_VALUE(&hash, desc->rasterizer_state);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state.DepthEnable);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state.DepthWriteMask);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state.DepthFunc);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state.StencilEnable);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state.StencilReadMask);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state.StencilWriteMask);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state.FrontFace);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state.BackFace);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state.DepthBoundsTestEnable);
+    VKD3D_HASH_VALUE(&hash, desc->input_layout.NumElements);
+    for (i = 0; desc->input_layout.pInputElementDescs && i < desc->input_layout.NumElements; ++i)
+    {
+        const D3D12_INPUT_ELEMENT_DESC *element = &desc->input_layout.pInputElementDescs[i];
+
+        vkd3d_hash128_string(&hash, element->SemanticName);
+        VKD3D_HASH_VALUE(&hash, element->SemanticIndex);
+        VKD3D_HASH_VALUE(&hash, element->Format);
+        VKD3D_HASH_VALUE(&hash, element->InputSlot);
+        VKD3D_HASH_VALUE(&hash, element->AlignedByteOffset);
+        VKD3D_HASH_VALUE(&hash, element->InputSlotClass);
+        VKD3D_HASH_VALUE(&hash, element->InstanceDataStepRate);
+    }
+    VKD3D_HASH_VALUE(&hash, desc->strip_cut_value);
+    VKD3D_HASH_VALUE(&hash, desc->primitive_topology_type);
+    VKD3D_HASH_VALUE(&hash, desc->rtv_formats);
+    VKD3D_HASH_VALUE(&hash, desc->dsv_format);
+    VKD3D_HASH_VALUE(&hash, desc->sample_desc);
+    VKD3D_HASH_VALUE(&hash, desc->view_instancing_desc.ViewInstanceCount);
+    for (i = 0; desc->view_instancing_desc.pViewInstanceLocations
+            && i < desc->view_instancing_desc.ViewInstanceCount; ++i)
+        VKD3D_HASH_VALUE(&hash, desc->view_instancing_desc.pViewInstanceLocations[i]);
+    VKD3D_HASH_VALUE(&hash, desc->view_instancing_desc.Flags);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state2.DepthEnable);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state2.DepthWriteMask);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state2.DepthFunc);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state2.StencilEnable);
+    d3d12_pipeline_state_hash_stencil_op(&hash, &desc->depth_stencil_state2.FrontFace);
+    d3d12_pipeline_state_hash_stencil_op(&hash, &desc->depth_stencil_state2.BackFace);
+    VKD3D_HASH_VALUE(&hash, desc->depth_stencil_state2.DepthBoundsTestEnable);
+    VKD3D_HASH_VALUE(&hash, desc->rasterizer_state1);
+    VKD3D_HASH_VALUE(&hash, desc->rasterizer_state2);
+    vkd3d_hash128_uint(&hash, desc->face_stencil_masks);
+    VKD3D_HASH_VALUE(&hash, desc->back_stencil_read_mask);
+    VKD3D_HASH_VALUE(&hash, desc->back_stencil_write_mask);
+    vkd3d_hash128_uint(&hash, desc->float_depth_bias);
+    VKD3D_HASH_VALUE(&hash, desc->depth_bias);
+    vkd3d_hash128_final(&hash, out);
+}
+
+static HRESULT d3d12_pipeline_state_create_checked(struct d3d12_device *device,
+        const struct d3d12_pipeline_state_desc *desc, VkPipelineBindPoint bind_point,
+        const uint8_t *expected_hash, struct d3d12_pipeline_state **state)
+{
     struct d3d12_pipeline_state *object;
+    uint8_t hash[16];
     HRESULT hr;
 
-    pipeline_state_desc_from_d3d12_graphics_desc(&pipeline_desc, desc);
+    d3d12_pipeline_state_desc_hash(desc, bind_point == VK_PIPELINE_BIND_POINT_COMPUTE, hash);
+    if (expected_hash)
+    {
+        if (memcmp(hash, expected_hash, sizeof(hash)))
+            return E_INVALIDARG;
+    }
+    else if (desc->cached_pso.pCachedBlob && desc->cached_pso.CachedBlobSizeInBytes
+            && FAILED(hr = d3d12_pipeline_library_check_cached(device, &desc->cached_pso, hash)))
+    {
+        return hr;
+    }
+    if (!state)
+        return S_OK;
 
-    if (!(object = vkd3d_malloc(sizeof(*object))))
+    if (!(object = vkd3d_calloc(1, sizeof(*object))))
         return E_OUTOFMEMORY;
-
-    if (FAILED(hr = d3d12_pipeline_state_init_graphics(object, device, &pipeline_desc)))
+    if (bind_point == VK_PIPELINE_BIND_POINT_COMPUTE)
+        hr = d3d12_pipeline_state_init_compute(object, device, desc);
+    else
+        hr = d3d12_pipeline_state_init_graphics(object, device, desc);
+    if (FAILED(hr))
     {
         vkd3d_free(object);
         return hr;
     }
-
-    TRACE("Created graphics pipeline state %p.\n", object);
-
+    memcpy(object->hash, hash, sizeof(hash));
     *state = object;
+    return S_OK;
+}
+
+HRESULT d3d12_pipeline_state_create_graphics(struct d3d12_device *device,
+        const D3D12_GRAPHICS_PIPELINE_STATE_DESC *desc, struct d3d12_pipeline_state **state)
+{
+    struct d3d12_pipeline_state_desc pipeline_desc;
+    HRESULT hr;
+
+    pipeline_state_desc_from_d3d12_graphics_desc(&pipeline_desc, desc);
+
+    if (FAILED(hr = d3d12_pipeline_state_create_checked(device, &pipeline_desc, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            NULL, state)))
+        return hr;
+
+    TRACE("Created graphics pipeline state %p.\n", *state);
 
     return S_OK;
 }
@@ -3940,39 +4380,17 @@ HRESULT d3d12_pipeline_state_create(struct d3d12_device *device,
         const D3D12_PIPELINE_STATE_STREAM_DESC *desc, struct d3d12_pipeline_state **state)
 {
     struct d3d12_pipeline_state_desc pipeline_desc;
-    struct d3d12_pipeline_state *object;
     VkPipelineBindPoint bind_point;
     HRESULT hr;
 
     if (FAILED(hr = pipeline_state_desc_from_d3d12_stream_desc(&pipeline_desc, desc, &bind_point)))
         return hr;
 
-    if (!(object = vkd3d_calloc(1, sizeof(*object))))
-        return E_OUTOFMEMORY;
-
-    switch (bind_point)
-    {
-        case VK_PIPELINE_BIND_POINT_COMPUTE:
-            hr = d3d12_pipeline_state_init_compute(object, device, &pipeline_desc);
-            break;
-
-        case VK_PIPELINE_BIND_POINT_GRAPHICS:
-            hr = d3d12_pipeline_state_init_graphics(object, device, &pipeline_desc);
-            break;
-
-        default:
-            vkd3d_unreachable();
-    }
-
-    if (FAILED(hr))
-    {
-        vkd3d_free(object);
+    if (FAILED(hr = d3d12_pipeline_state_create_checked(device, &pipeline_desc, bind_point, NULL, state)))
         return hr;
-    }
 
-    TRACE("Created pipeline state %p.\n", object);
+    TRACE("Created pipeline state %p.\n", *state);
 
-    *state = object;
     return S_OK;
 }
 
@@ -4496,5 +4914,359 @@ HRESULT vkd3d_uav_clear_state_init(struct vkd3d_uav_clear_state *state, struct d
 
 fail:
     vkd3d_uav_clear_state_cleanup(state, device);
+    return hr;
+}
+
+struct d3d12_pipeline_library
+{
+    ID3D12PipelineLibrary1 ID3D12PipelineLibrary1_iface;
+    unsigned int refcount;
+
+    struct vkd3d_mutex mutex;
+    struct d3d12_pipeline_library_entry *entries;
+    size_t count;
+    size_t capacity;
+
+    struct d3d12_device *device;
+    struct vkd3d_private_store private_store;
+};
+
+static inline struct d3d12_pipeline_library *impl_from_ID3D12PipelineLibrary1(ID3D12PipelineLibrary1 *iface)
+{
+    return CONTAINING_RECORD(iface, struct d3d12_pipeline_library, ID3D12PipelineLibrary1_iface);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_pipeline_library_QueryInterface(ID3D12PipelineLibrary1 *iface,
+        REFIID riid, void **object)
+{
+    TRACE("iface %p, riid %s, object %p.\n", iface, debugstr_guid(riid), object);
+
+    if (IsEqualGUID(riid, &IID_ID3D12PipelineLibrary1)
+            || IsEqualGUID(riid, &IID_ID3D12PipelineLibrary)
+            || IsEqualGUID(riid, &IID_ID3D12DeviceChild)
+            || IsEqualGUID(riid, &IID_ID3D12Object)
+            || IsEqualGUID(riid, &IID_IUnknown))
+    {
+        ID3D12PipelineLibrary1_AddRef(iface);
+        *object = iface;
+        return S_OK;
+    }
+
+    WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(riid));
+
+    *object = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE d3d12_pipeline_library_AddRef(ID3D12PipelineLibrary1 *iface)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+    unsigned int refcount = vkd3d_atomic_increment_u32(&library->refcount);
+
+    TRACE("%p increasing refcount to %u.\n", library, refcount);
+
+    return refcount;
+}
+
+static ULONG STDMETHODCALLTYPE d3d12_pipeline_library_Release(ID3D12PipelineLibrary1 *iface)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+    unsigned int refcount = vkd3d_atomic_decrement_u32(&library->refcount);
+
+    TRACE("%p decreasing refcount to %u.\n", library, refcount);
+
+    if (!refcount)
+    {
+        struct d3d12_device *device = library->device;
+
+        d3d12_pipeline_library_free_entries(library->entries, library->count);
+        vkd3d_private_store_destroy(&library->private_store);
+        vkd3d_mutex_destroy(&library->mutex);
+        vkd3d_free(library);
+        d3d12_device_release(device);
+    }
+
+    return refcount;
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_pipeline_library_GetPrivateData(ID3D12PipelineLibrary1 *iface,
+        REFGUID guid, UINT *data_size, void *data)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+
+    TRACE("iface %p, guid %s, data_size %p, data %p.\n", iface, debugstr_guid(guid), data_size, data);
+
+    return vkd3d_get_private_data(&library->private_store, guid, data_size, data);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_pipeline_library_SetPrivateData(ID3D12PipelineLibrary1 *iface,
+        REFGUID guid, UINT data_size, const void *data)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+
+    TRACE("iface %p, guid %s, data_size %u, data %p.\n", iface, debugstr_guid(guid), data_size, data);
+
+    return vkd3d_set_private_data(&library->private_store, guid, data_size, data);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_pipeline_library_SetPrivateDataInterface(ID3D12PipelineLibrary1 *iface,
+        REFGUID guid, const IUnknown *data)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+
+    TRACE("iface %p, guid %s, data %p.\n", iface, debugstr_guid(guid), data);
+
+    return vkd3d_set_private_data_interface(&library->private_store, guid, data);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_pipeline_library_SetName(ID3D12PipelineLibrary1 *iface, const WCHAR *name)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+
+    TRACE("iface %p, name %s.\n", iface, debugstr_w(name, library->device->wchar_size));
+
+    return name ? S_OK : E_INVALIDARG;
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_pipeline_library_GetDevice(ID3D12PipelineLibrary1 *iface,
+        REFIID iid, void **device)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+
+    TRACE("iface %p, iid %s, device %p.\n", iface, debugstr_guid(iid), device);
+
+    return d3d12_device_query_interface(library->device, iid, device);
+}
+
+static bool d3d12_pipeline_library_find(const struct d3d12_pipeline_library *library, const WCHAR *name,
+        size_t *index)
+{
+    size_t i;
+
+    for (i = 0; i < library->count; ++i)
+    {
+        if (d3d12_pipeline_library_name_equal(library->entries[i].name, name))
+        {
+            *index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_pipeline_library_StorePipeline(ID3D12PipelineLibrary1 *iface,
+        const WCHAR *name, ID3D12PipelineState *pipeline)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+    struct d3d12_pipeline_state *state = unsafe_impl_from_ID3D12PipelineState(pipeline);
+    struct d3d12_pipeline_library_entry *entry;
+    size_t index, length;
+
+    TRACE("iface %p, name %s, pipeline %p.\n", iface, debugstr_w(name, library->device->wchar_size), pipeline);
+
+    if (!name || !state)
+        return E_INVALIDARG;
+
+    vkd3d_mutex_lock(&library->mutex);
+    if (d3d12_pipeline_library_find(library, name, &index))
+    {
+        vkd3d_mutex_unlock(&library->mutex);
+        return E_INVALIDARG;
+    }
+    length = d3d12_pipeline_library_name_length(name);
+    if (!vkd3d_array_reserve((void **)&library->entries, &library->capacity, library->count + 1,
+            sizeof(*library->entries)))
+    {
+        vkd3d_mutex_unlock(&library->mutex);
+        return E_OUTOFMEMORY;
+    }
+    entry = &library->entries[library->count];
+    if (!(entry->name = vkd3d_calloc(length + 1, sizeof(WCHAR))))
+    {
+        vkd3d_mutex_unlock(&library->mutex);
+        return E_OUTOFMEMORY;
+    }
+    memcpy(entry->name, name, length * sizeof(WCHAR));
+    memcpy(entry->hash, state->hash, sizeof(entry->hash));
+    entry->state = state;
+    ID3D12PipelineState_AddRef(pipeline);
+    ++library->count;
+    vkd3d_mutex_unlock(&library->mutex);
+
+    return S_OK;
+}
+
+static HRESULT d3d12_pipeline_library_load(struct d3d12_pipeline_library *library, const WCHAR *name,
+        const struct d3d12_pipeline_state_desc *desc, VkPipelineBindPoint bind_point, REFIID iid, void **out)
+{
+    struct d3d12_pipeline_library_entry *entry;
+    struct d3d12_pipeline_state *state;
+    size_t index;
+    HRESULT hr;
+
+    if (!out)
+        return E_POINTER;
+    *out = NULL;
+    if (!name)
+        return E_INVALIDARG;
+
+    vkd3d_mutex_lock(&library->mutex);
+    if (!d3d12_pipeline_library_find(library, name, &index))
+    {
+        vkd3d_mutex_unlock(&library->mutex);
+        return E_INVALIDARG;
+    }
+    entry = &library->entries[index];
+    if (entry->state)
+        hr = d3d12_pipeline_state_create_checked(library->device, desc, bind_point, entry->hash, NULL);
+    else if (SUCCEEDED(hr = d3d12_pipeline_state_create_checked(library->device, desc, bind_point,
+            entry->hash, &state)))
+        entry->state = state;
+    if (SUCCEEDED(hr))
+        hr = ID3D12PipelineState_QueryInterface(&entry->state->ID3D12PipelineState_iface, iid, out);
+    vkd3d_mutex_unlock(&library->mutex);
+
+    return hr;
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_pipeline_library_LoadGraphicsPipeline(ID3D12PipelineLibrary1 *iface,
+        const WCHAR *name, const D3D12_GRAPHICS_PIPELINE_STATE_DESC *desc, REFIID iid, void **pipeline)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+    struct d3d12_pipeline_state_desc pipeline_desc;
+
+    TRACE("iface %p, name %s, desc %p, iid %s, pipeline %p.\n", iface,
+            debugstr_w(name, library->device->wchar_size), desc, debugstr_guid(iid), pipeline);
+
+    if (!desc)
+        return E_INVALIDARG;
+    pipeline_state_desc_from_d3d12_graphics_desc(&pipeline_desc, desc);
+    return d3d12_pipeline_library_load(library, name, &pipeline_desc, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            iid, pipeline);
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_pipeline_library_LoadComputePipeline(ID3D12PipelineLibrary1 *iface,
+        const WCHAR *name, const D3D12_COMPUTE_PIPELINE_STATE_DESC *desc, REFIID iid, void **pipeline)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+    struct d3d12_pipeline_state_desc pipeline_desc;
+
+    TRACE("iface %p, name %s, desc %p, iid %s, pipeline %p.\n", iface,
+            debugstr_w(name, library->device->wchar_size), desc, debugstr_guid(iid), pipeline);
+
+    if (!desc)
+        return E_INVALIDARG;
+    pipeline_state_desc_from_d3d12_compute_desc(&pipeline_desc, desc);
+    return d3d12_pipeline_library_load(library, name, &pipeline_desc, VK_PIPELINE_BIND_POINT_COMPUTE,
+            iid, pipeline);
+}
+
+static SIZE_T STDMETHODCALLTYPE d3d12_pipeline_library_GetSerializedSize(ID3D12PipelineLibrary1 *iface)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+    size_t size;
+
+    TRACE("iface %p.\n", iface);
+
+    vkd3d_mutex_lock(&library->mutex);
+    size = d3d12_pipeline_library_size(library->entries, library->count);
+    vkd3d_mutex_unlock(&library->mutex);
+
+    return size;
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_pipeline_library_Serialize(ID3D12PipelineLibrary1 *iface,
+        void *data, SIZE_T data_size)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+    HRESULT hr;
+
+    TRACE("iface %p, data %p, data_size %lu.\n", iface, data, (unsigned long)data_size);
+
+    vkd3d_mutex_lock(&library->mutex);
+    hr = d3d12_pipeline_library_write(library->device, library->entries, library->count, data, data_size);
+    vkd3d_mutex_unlock(&library->mutex);
+
+    return hr;
+}
+
+static HRESULT STDMETHODCALLTYPE d3d12_pipeline_library_LoadPipeline(ID3D12PipelineLibrary1 *iface,
+        const WCHAR *name, const D3D12_PIPELINE_STATE_STREAM_DESC *desc, REFIID iid, void **pipeline)
+{
+    struct d3d12_pipeline_library *library = impl_from_ID3D12PipelineLibrary1(iface);
+    struct d3d12_pipeline_state_desc pipeline_desc;
+    VkPipelineBindPoint bind_point;
+    HRESULT hr;
+
+    TRACE("iface %p, name %s, desc %p, iid %s, pipeline %p.\n", iface,
+            debugstr_w(name, library->device->wchar_size), desc, debugstr_guid(iid), pipeline);
+
+    if (!desc)
+        return E_INVALIDARG;
+    if (FAILED(hr = pipeline_state_desc_from_d3d12_stream_desc(&pipeline_desc, desc, &bind_point)))
+        return hr;
+    return d3d12_pipeline_library_load(library, name, &pipeline_desc, bind_point, iid, pipeline);
+}
+
+static const struct ID3D12PipelineLibrary1Vtbl d3d12_pipeline_library_vtbl =
+{
+    /* IUnknown methods */
+    d3d12_pipeline_library_QueryInterface,
+    d3d12_pipeline_library_AddRef,
+    d3d12_pipeline_library_Release,
+    /* ID3D12Object methods */
+    d3d12_pipeline_library_GetPrivateData,
+    d3d12_pipeline_library_SetPrivateData,
+    d3d12_pipeline_library_SetPrivateDataInterface,
+    d3d12_pipeline_library_SetName,
+    /* ID3D12DeviceChild methods */
+    d3d12_pipeline_library_GetDevice,
+    /* ID3D12PipelineLibrary methods */
+    d3d12_pipeline_library_StorePipeline,
+    d3d12_pipeline_library_LoadGraphicsPipeline,
+    d3d12_pipeline_library_LoadComputePipeline,
+    d3d12_pipeline_library_GetSerializedSize,
+    d3d12_pipeline_library_Serialize,
+    /* ID3D12PipelineLibrary1 methods */
+    d3d12_pipeline_library_LoadPipeline,
+};
+
+HRESULT d3d12_pipeline_library_create(struct d3d12_device *device, const void *blob, SIZE_T blob_size,
+        REFIID iid, void **out)
+{
+    struct d3d12_pipeline_library *library;
+    HRESULT hr;
+
+    if (out)
+        *out = NULL;
+    if (blob_size && !blob)
+        return E_INVALIDARG;
+    if (!(library = vkd3d_calloc(1, sizeof(*library))))
+        return E_OUTOFMEMORY;
+    if (FAILED(hr = d3d12_pipeline_library_read(device, blob, blob_size, &library->entries, &library->count,
+            &library->capacity)))
+    {
+        vkd3d_free(library);
+        return hr;
+    }
+    if (FAILED(hr = vkd3d_private_store_init(&library->private_store)))
+    {
+        d3d12_pipeline_library_free_entries(library->entries, library->count);
+        vkd3d_free(library);
+        return hr;
+    }
+    library->ID3D12PipelineLibrary1_iface.lpVtbl = &d3d12_pipeline_library_vtbl;
+    library->refcount = 1;
+    vkd3d_mutex_init(&library->mutex);
+    library->device = device;
+    d3d12_device_add_ref(device);
+
+    if (!out)
+    {
+        ID3D12PipelineLibrary1_Release(&library->ID3D12PipelineLibrary1_iface);
+        return S_FALSE;
+    }
+    hr = ID3D12PipelineLibrary1_QueryInterface(&library->ID3D12PipelineLibrary1_iface, iid, out);
+    ID3D12PipelineLibrary1_Release(&library->ID3D12PipelineLibrary1_iface);
     return hr;
 }
