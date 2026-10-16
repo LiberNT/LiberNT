@@ -3409,6 +3409,17 @@ static HRESULT d3d12_pipeline_state_init_graphics(struct d3d12_pipeline_state *s
         }
     }
 
+    if (desc->view_instancing_desc.Flags)
+    {
+        WARN("Invalid view instancing flags %#x.\n", desc->view_instancing_desc.Flags);
+        return E_INVALIDARG;
+    }
+    if (desc->view_instancing_desc.ViewInstanceCount)
+    {
+        FIXME("View instancing is not supported yet.\n");
+        return E_INVALIDARG;
+    }
+
     state->implicit_root_signature = NULL;
     if (!(root_signature = unsafe_impl_from_ID3D12RootSignature(desc->root_signature)))
     {
@@ -3863,13 +3874,6 @@ static HRESULT d3d12_pipeline_state_init_graphics(struct d3d12_pipeline_state *s
     }
     graphics->ms_desc.alphaToCoverageEnable = desc->blend_state.AlphaToCoverageEnable;
     graphics->ms_desc.alphaToOneEnable = VK_FALSE;
-
-    if (desc->view_instancing_desc.ViewInstanceCount)
-    {
-        FIXME("View instancing is not supported yet.\n");
-        hr = E_INVALIDARG;
-        goto fail;
-    }
 
     /* We defer creating the render pass for pipelines with DSVFormat equal to
      * DXGI_FORMAT_UNKNOWN. We take the actual DSV format from the bound DSV. */
