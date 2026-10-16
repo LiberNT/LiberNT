@@ -155,20 +155,27 @@ FormatChooseSectorsPerCluster(_In_ ULONGLONG VolumeSize,
 }
 
 static ULONGLONG
-FormatChooseLogFileSize(_In_ ULONGLONG VolumeSize)
+FormatChooseLogFileSize(_In_ ULONGLONG PartitionSize,
+                        _In_ ULONGLONG VolumeSize)
 {
+    ULONGLONG Proportional;
+    ULONGLONG Linear;
     ULONGLONG Size;
 
-    if (VolumeSize <= 8ULL * 1024 * 1024)
-        Size = 256 * 1024;
-    else if (VolumeSize <= 512ULL * 1024 * 1024)
-        Size = 1024 * 1024;
-    else if (VolumeSize <= 1024ULL * 1024 * 1024)
-        Size = 2 * 1024ULL * 1024;
-    else if (VolumeSize <= 2048ULL * 1024 * 1024)
-        Size = 4 * 1024ULL * 1024;
-    else
-        Size = 64 * 1024ULL * 1024;
+    Proportional = ALIGN_UP_BY((PartitionSize + NTFS_LOG_PROPORTION_DIVISOR - 1) /
+                                   NTFS_LOG_PROPORTION_DIVISOR,
+                               NTFS_LOG_PAGE_SIZE);
+    Linear = ALIGN_UP_BY(NTFS_LOG_LINEAR_BASE +
+                             (PartitionSize * NTFS_LOG_LINEAR_NUMERATOR +
+                              NTFS_LOG_LINEAR_DENOMINATOR - 1) /
+                                 NTFS_LOG_LINEAR_DENOMINATOR,
+                         NTFS_LOG_PAGE_SIZE);
+
+    Size = Proportional < Linear ? Proportional : Linear;
+    if (Size < NTFS_LOG_MINIMUM_SIZE)
+        Size = NTFS_LOG_MINIMUM_SIZE;
+    if (Size > NTFS_LOG_MAXIMUM_SIZE)
+        Size = NTFS_LOG_MAXIMUM_SIZE;
 
     /* Never let the journal dominate a small volume. */
     if (Size > VolumeSize / 16)
@@ -178,6 +185,16 @@ FormatChooseLogFileSize(_In_ ULONGLONG VolumeSize)
         Size = 256 * 1024;
 
     return ALIGN_UP_BY(Size, NTFS_LOG_PAGE_SIZE);
+}
+
+static ULONGLONG
+FormatChooseMftOffset(_In_ ULONGLONG PartitionSize)
+{
+    if (PartitionSize / 2 >= NTFS_MFT_FAR_OFFSET)
+        return NTFS_MFT_FAR_OFFSET;
+    if (PartitionSize / 2 >= NTFS_MFT_NEAR_OFFSET)
+        return NTFS_MFT_NEAR_OFFSET;
+    return PartitionSize / 3;
 }
 
 static ULONGLONG
@@ -204,8 +221,11 @@ static NTSTATUS
 FormatComputeLayout(_In_ PFormatContext Ctx)
 {
     const NtfsFormatParameters* Params = Ctx->Params;
+    ULONGLONG PartitionSize;
     ULONGLONG VolumeSize;
     ULONGLONG NextLcn;
+    ULONGLONG MftLcn;
+    ULONGLONG BlockClusters;
 
     Ctx->BytesPerSector = Params->BytesPerSector;
     if (Ctx->BytesPerSector < 512 ||
@@ -263,7 +283,11 @@ FormatComputeLayout(_In_ PFormatContext Ctx)
         return STATUS_INVALID_PARAMETER;
     }
 
-    Ctx->MftRecordCount = NTFS_FORMAT_INITIAL_RECORDS;
+    Ctx->MftRecordCount = (ULONG)((Ctx->ClusterSize > NTFS_MFT_INITIAL_SIZE_MAX_CLUSTER
+                                       ? Ctx->ClusterSize
+                                       : NTFS_MFT_INITIAL_SIZE) / Ctx->MftRecordSize);
+    if (Ctx->MftRecordCount < NTFS_FORMAT_INITIAL_RECORDS)
+        Ctx->MftRecordCount = NTFS_FORMAT_INITIAL_RECORDS;
     Ctx->MftDataSize = (ULONGLONG)Ctx->MftRecordCount * Ctx->MftRecordSize;
 
     /* One bit per MFT record, rounded to the 8 byte granularity NTFS uses
@@ -273,7 +297,8 @@ FormatComputeLayout(_In_ PFormatContext Ctx)
     /* One bit per cluster, likewise rounded to 8 bytes. */
     Ctx->BitmapDataSize = ALIGN_UP_BY((Ctx->TotalClusters + 7) / 8, 8);
 
-    Ctx->LogFileSize = FormatChooseLogFileSize(VolumeSize);
+    PartitionSize = Params->TotalSectors * Ctx->BytesPerSector;
+    Ctx->LogFileSize = FormatChooseLogFileSize(PartitionSize, VolumeSize);
     Ctx->SecureSdsDataSize = FormatSecureStreamSize();
 
     Ctx->CurrentTime = Params->CurrentTime;
@@ -296,18 +321,9 @@ FormatComputeLayout(_In_ PFormatContext Ctx)
     Ctx->BootLcn = FormatAllocate(&NextLcn,
                                   FormatClustersFor(Ctx, NTFS_BOOT_AREA_SIZE),
                                   &Ctx->BootClusters);
-    Ctx->MftLcn = FormatAllocate(&NextLcn,
-                                 FormatClustersFor(Ctx, Ctx->MftDataSize),
-                                 &Ctx->MftClusters);
-    Ctx->MftBitmapLcn = FormatAllocate(&NextLcn,
-                                       FormatClustersFor(Ctx, Ctx->MftBitmapDataSize),
-                                       &Ctx->MftBitmapClusters);
-    Ctx->LogFileLcn = FormatAllocate(&NextLcn,
-                                     FormatClustersFor(Ctx, Ctx->LogFileSize),
-                                     &Ctx->LogFileClusters);
-    Ctx->BitmapLcn = FormatAllocate(&NextLcn,
-                                    FormatClustersFor(Ctx, Ctx->BitmapDataSize),
-                                    &Ctx->BitmapClusters);
+    Ctx->MftMirrLcn = FormatAllocate(&NextLcn,
+                                     FormatClustersFor(Ctx, 4ULL * Ctx->MftRecordSize),
+                                     &Ctx->MftMirrClusters);
     Ctx->UpCaseLcn = FormatAllocate(&NextLcn,
                                     FormatClustersFor(Ctx, NTFS_UPCASE_SIZE),
                                     &Ctx->UpCaseClusters);
@@ -323,17 +339,22 @@ FormatComputeLayout(_In_ PFormatContext Ctx)
                                        &Ctx->SecureSdsClusters);
     Ctx->HeadEndLcn = NextLcn;
 
-    /*
-     * Put the mirror near the middle of the volume so that it survives damage
-     * to the head. On a volume too small for that it just follows the head.
-     */
-    Ctx->MftMirrClusters =
-        FormatClustersFor(Ctx, 4ULL * Ctx->MftRecordSize);
-    Ctx->MftMirrLcn = Ctx->TotalClusters / 2;
-    if (Ctx->MftMirrLcn < Ctx->HeadEndLcn)
-        Ctx->MftMirrLcn = Ctx->HeadEndLcn;
+    Ctx->LogFileClusters = FormatClustersFor(Ctx, Ctx->LogFileSize);
+    Ctx->BitmapClusters = FormatClustersFor(Ctx, Ctx->BitmapDataSize);
+    Ctx->MftBitmapClusters = FormatClustersFor(Ctx, Ctx->MftBitmapDataSize);
+    Ctx->MftClusters = FormatClustersFor(Ctx, Ctx->MftDataSize);
+    BlockClusters = Ctx->LogFileClusters + Ctx->BitmapClusters + Ctx->MftBitmapClusters;
 
-    if (Ctx->MftMirrLcn + Ctx->MftMirrClusters > Ctx->TotalClusters)
+    MftLcn = FormatChooseMftOffset(PartitionSize) / Ctx->ClusterSize;
+    if (MftLcn < Ctx->HeadEndLcn + BlockClusters)
+        MftLcn = Ctx->HeadEndLcn + BlockClusters;
+
+    Ctx->MftLcn = MftLcn;
+    Ctx->MftBitmapLcn = MftLcn - Ctx->MftBitmapClusters;
+    Ctx->BitmapLcn = Ctx->MftBitmapLcn - Ctx->BitmapClusters;
+    Ctx->LogFileLcn = Ctx->BitmapLcn - Ctx->LogFileClusters;
+
+    if (Ctx->MftLcn + Ctx->MftClusters > Ctx->TotalClusters)
         return STATUS_INVALID_PARAMETER;
 
     return STATUS_SUCCESS;
@@ -356,23 +377,56 @@ FormatReportProgress(_In_ PFormatContext Ctx,
 static NTSTATUS
 FormatZeroFreeSpace(_In_ PFormatContext Ctx)
 {
-    ULONGLONG Lcn = Ctx->HeadEndLcn;
+    struct
+    {
+        ULONGLONG Lcn;
+        ULONGLONG Count;
+    } Used[10];
+    ULONG UsedCount = 0;
+    ULONG Index;
+    ULONGLONG Lcn = 0;
     NTSTATUS Status;
+
+    Used[UsedCount].Lcn = Ctx->BootLcn;
+    Used[UsedCount++].Count = Ctx->BootClusters;
+    Used[UsedCount].Lcn = Ctx->MftMirrLcn;
+    Used[UsedCount++].Count = Ctx->MftMirrClusters;
+    Used[UsedCount].Lcn = Ctx->UpCaseLcn;
+    Used[UsedCount++].Count = Ctx->UpCaseClusters;
+    Used[UsedCount].Lcn = Ctx->AttrDefLcn;
+    Used[UsedCount++].Count = Ctx->AttrDefClusters;
+    Used[UsedCount].Lcn = Ctx->RootIndexLcn;
+    Used[UsedCount++].Count = Ctx->RootIndexClusters;
+    Used[UsedCount].Lcn = Ctx->SecureSdsLcn;
+    Used[UsedCount++].Count = Ctx->SecureSdsClusters;
+    Used[UsedCount].Lcn = Ctx->LogFileLcn;
+    Used[UsedCount++].Count = Ctx->LogFileClusters;
+    Used[UsedCount].Lcn = Ctx->BitmapLcn;
+    Used[UsedCount++].Count = Ctx->BitmapClusters;
+    Used[UsedCount].Lcn = Ctx->MftBitmapLcn;
+    Used[UsedCount++].Count = Ctx->MftBitmapClusters;
+    Used[UsedCount].Lcn = Ctx->MftLcn;
+    Used[UsedCount++].Count = Ctx->MftClusters;
 
     while (Lcn < Ctx->TotalClusters)
     {
         ULONGLONG RunEnd = Ctx->TotalClusters;
         ULONGLONG Percent;
+        BOOLEAN InUse = FALSE;
 
-        if (Lcn >= Ctx->MftMirrLcn &&
-            Lcn < Ctx->MftMirrLcn + Ctx->MftMirrClusters)
+        for (Index = 0; Index < UsedCount; Index++)
         {
-            Lcn = Ctx->MftMirrLcn + Ctx->MftMirrClusters;
-            continue;
+            if (Lcn >= Used[Index].Lcn && Lcn < Used[Index].Lcn + Used[Index].Count)
+            {
+                Lcn = Used[Index].Lcn + Used[Index].Count;
+                InUse = TRUE;
+                break;
+            }
+            if (Used[Index].Lcn > Lcn && Used[Index].Lcn < RunEnd)
+                RunEnd = Used[Index].Lcn;
         }
-
-        if (Ctx->MftMirrLcn > Lcn && Ctx->MftMirrLcn < RunEnd)
-            RunEnd = Ctx->MftMirrLcn;
+        if (InUse)
+            continue;
 
         Status = FormatFillClusters(Ctx, Lcn, RunEnd - Lcn, 0);
         if (!NT_SUCCESS(Status))
