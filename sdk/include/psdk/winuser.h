@@ -1933,6 +1933,14 @@ typedef enum tagHANDEDNESS
 #define WTS_SESSION_TERMINATE 0xB
 #define WM_WTSSESSION_CHANGE 0x02B1
 #endif
+#if (WINVER >= 0x0601)
+#define WM_DPICHANGED          0x02e0
+#endif
+#if (WINVER >= 0x0605)
+#define WM_DPICHANGED_BEFOREPARENT 0x02e2
+#define WM_DPICHANGED_AFTERPARENT  0x02e3
+#define WM_GETDPISCALEDSIZE    0x02e4
+#endif
 
 #define WM_CUT 768
 #define WM_COPY 769

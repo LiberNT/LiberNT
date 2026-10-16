@@ -455,7 +455,7 @@ class LinearGradientBrush : public Brush
     }
 };
 
-class SolidBrush : Brush
+class SolidBrush : public Brush
 {
   public:
     friend class Pen;
@@ -500,7 +500,7 @@ class SolidBrush : Brush
     }
 };
 
-class TextureBrush : Brush
+class TextureBrush : public Brush
 {
   public:
     TextureBrush(Image *image, WrapMode wrapMode, const RectF &dstRect)
