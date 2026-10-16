@@ -73,8 +73,8 @@ static void TestDecodeList(ID3D12Device *device)
     queue->Release();
 }
 
-static ID3D12Resource *CreateVideoTexture(ID3D12Device *device, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags,
-        D3D12_RESOURCE_STATES state)
+static ID3D12Resource *CreateVideoTextureSize(ID3D12Device *device, DXGI_FORMAT format, UINT width, UINT height,
+        D3D12_RESOURCE_FLAGS flags, D3D12_RESOURCE_STATES state)
 {
     D3D12_HEAP_PROPERTIES heap = {};
     D3D12_RESOURCE_DESC desc = {};
@@ -83,8 +83,8 @@ static ID3D12Resource *CreateVideoTexture(ID3D12Device *device, DXGI_FORMAT form
 
     heap.Type = D3D12_HEAP_TYPE_DEFAULT;
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    desc.Width = D3D12_TEST_SIZE;
-    desc.Height = D3D12_TEST_SIZE;
+    desc.Width = width;
+    desc.Height = height;
     desc.DepthOrArraySize = 1;
     desc.MipLevels = 1;
     desc.Format = format;
@@ -94,6 +94,12 @@ static ID3D12Resource *CreateVideoTexture(ID3D12Device *device, DXGI_FORMAT form
             reinterpret_cast<void **>(&resource));
     ok(hr == S_OK, "CreateCommittedResource(format %u): %#lx\n", format, hr);
     return resource;
+}
+
+static ID3D12Resource *CreateVideoTexture(ID3D12Device *device, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags,
+        D3D12_RESOURCE_STATES state)
+{
+    return CreateVideoTextureSize(device, format, D3D12_TEST_SIZE, D3D12_TEST_SIZE, flags, state);
 }
 
 static BOOL UploadNv12(struct d3d12_test_context *context, ID3D12Resource *texture, BYTE luma, BYTE chroma)
@@ -333,6 +339,288 @@ static void TestProcess(ID3D12VideoDevice *video)
     processor->Release();
 }
 
+static void EncodeBarrier(ID3D12VideoEncodeCommandList *list, ID3D12Resource *resource, D3D12_RESOURCE_STATES before,
+        D3D12_RESOURCE_STATES after)
+{
+    D3D12_RESOURCE_BARRIER barrier = {};
+
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = resource;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = before;
+    barrier.Transition.StateAfter = after;
+    list->ResourceBarrier(1, &barrier);
+}
+
+static BOOL ReadMotionVectors(struct d3d12_test_context *context, ID3D12Resource *texture, UINT width, UINT height,
+        UINT *nonzero)
+{
+    D3D12_HEAP_PROPERTIES heap = {};
+    D3D12_RESOURCE_DESC desc = {};
+    D3D12_TEXTURE_COPY_LOCATION dst = {}, src = {};
+    ID3D12Resource *readback = NULL;
+    const BYTE *data;
+    BOOL done;
+    HRESULT hr;
+
+    heap.Type = D3D12_HEAP_TYPE_READBACK;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    desc.Width = static_cast<UINT64>(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) * height;
+    desc.Height = 1;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    hr = context->device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COPY_DEST,
+            NULL, __uuidof(ID3D12Resource), reinterpret_cast<void **>(&readback));
+    ok(hr == S_OK, "CreateCommittedResource(readback): %#lx\n", hr);
+    if (FAILED(hr)) return FALSE;
+    context->allocator->Reset();
+    context->list->Reset(context->allocator, NULL);
+    d3d12_test_transition(context->list, texture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    dst.pResource = readback;
+    dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R16G16_SINT;
+    dst.PlacedFootprint.Footprint.Width = width;
+    dst.PlacedFootprint.Footprint.Height = height;
+    dst.PlacedFootprint.Footprint.Depth = 1;
+    dst.PlacedFootprint.Footprint.RowPitch = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+    src.pResource = texture;
+    src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    context->list->CopyTextureRegion(&dst, 0, 0, 0, &src, NULL);
+    d3d12_test_transition(context->list, texture, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+    done = d3d12_test_execute(context, context->list, D3D12_TEST_WAIT);
+    ok(done, "motion vector readback did not complete\n");
+    *nonzero = 0;
+    if (done && SUCCEEDED(readback->Map(0, NULL, reinterpret_cast<void **>(const_cast<BYTE **>(&data)))))
+    {
+        for (UINT y = 0; y < height; ++y)
+            for (UINT x = 0; x < width; ++x)
+                if (*reinterpret_cast<const DWORD *>(data + y * D3D12_TEXTURE_DATA_PITCH_ALIGNMENT + x * 4)) ++*nonzero;
+        readback->Unmap(0, NULL);
+    }
+    else done = FALSE;
+    readback->Release();
+    return done;
+}
+
+static BOOL FillTexture32(struct d3d12_test_context *context, ID3D12Resource *texture, UINT width, UINT height,
+        DWORD value)
+{
+    D3D12_HEAP_PROPERTIES heap = {};
+    D3D12_RESOURCE_DESC desc = {};
+    D3D12_TEXTURE_COPY_LOCATION dst = {}, src = {};
+    ID3D12Resource *upload = NULL;
+    DWORD *data;
+    BOOL done = FALSE;
+    HRESULT hr;
+
+    heap.Type = D3D12_HEAP_TYPE_UPLOAD;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    desc.Width = static_cast<UINT64>(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT) * height;
+    desc.Height = 1;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    hr = context->device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ,
+            NULL, __uuidof(ID3D12Resource), reinterpret_cast<void **>(&upload));
+    ok(hr == S_OK, "CreateCommittedResource(upload): %#lx\n", hr);
+    if (FAILED(hr)) return FALSE;
+    if (SUCCEEDED(hr = upload->Map(0, NULL, reinterpret_cast<void **>(&data))))
+    {
+        for (UINT i = 0; i < desc.Width / 4; ++i) data[i] = value;
+        upload->Unmap(0, NULL);
+        context->allocator->Reset();
+        context->list->Reset(context->allocator, NULL);
+        dst.pResource = texture;
+        dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        src.pResource = upload;
+        src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        src.PlacedFootprint.Footprint.Format = texture->GetDesc().Format;
+        src.PlacedFootprint.Footprint.Width = width;
+        src.PlacedFootprint.Footprint.Height = height;
+        src.PlacedFootprint.Footprint.Depth = 1;
+        src.PlacedFootprint.Footprint.RowPitch = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+        context->list->CopyTextureRegion(&dst, 0, 0, 0, &src, NULL);
+        d3d12_test_transition(context->list, texture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+        done = d3d12_test_execute(context, context->list, D3D12_TEST_WAIT);
+        ok(done, "texture fill did not complete\n");
+    }
+    upload->Release();
+    return done;
+}
+
+static void TestMotionFrame(ID3D12VideoMotionEstimator *estimator, ID3D12VideoMotionVectorHeap *heap, UINT size,
+        UINT block)
+{
+    D3D12_VIDEO_MOTION_ESTIMATOR_OUTPUT output = {};
+    D3D12_VIDEO_MOTION_ESTIMATOR_INPUT input = {};
+    D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_OUTPUT resolve_output = {};
+    D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_INPUT resolve_input = {};
+    D3D12_COMMAND_QUEUE_DESC queue_desc = {};
+    struct d3d12_test_context context;
+    ID3D12VideoEncodeCommandList *list = NULL;
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12CommandQueue *queue = NULL;
+    ID3D12Resource *current = NULL, *reference = NULL, *vectors = NULL;
+    UINT nonzero = 0, blocks = size / block;
+    HRESULT hr;
+
+    if (!d3d12_test_init(&context)) return;
+    queue_desc.Type = D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE;
+    hr = context.device->CreateCommandQueue(&queue_desc, __uuidof(ID3D12CommandQueue), reinterpret_cast<void **>(&queue));
+    ok(hr == S_OK, "video encode queue: %#lx\n", hr);
+    hr = context.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE, __uuidof(ID3D12CommandAllocator),
+            reinterpret_cast<void **>(&allocator));
+    ok(hr == S_OK, "video encode allocator: %#lx\n", hr);
+    if (allocator)
+    {
+        hr = context.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE, allocator, NULL,
+                __uuidof(ID3D12VideoEncodeCommandList), reinterpret_cast<void **>(&list));
+        ok(hr == S_OK, "video encode list: %#lx\n", hr);
+    }
+    current = CreateVideoTextureSize(context.device, DXGI_FORMAT_NV12, size, size, D3D12_RESOURCE_FLAG_NONE,
+            D3D12_RESOURCE_STATE_COPY_DEST);
+    reference = CreateVideoTextureSize(context.device, DXGI_FORMAT_NV12, size, size, D3D12_RESOURCE_FLAG_NONE,
+            D3D12_RESOURCE_STATE_COPY_DEST);
+    vectors = CreateVideoTextureSize(context.device, DXGI_FORMAT_R16G16_SINT, blocks, blocks,
+            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
+    if (queue && list && current && reference && vectors && UploadNv12(&context, current, 120, 128)
+            && UploadNv12(&context, reference, 120, 128) && FillTexture32(&context, vectors, blocks, blocks, 0x7fff7fff))
+    {
+        ok(list->GetType() == D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE, "list type %u\n", list->GetType());
+        EncodeBarrier(list, current, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ);
+        EncodeBarrier(list, reference, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ);
+        output.pMotionVectorHeap = heap;
+        input.pInputTexture2D = current;
+        input.pReferenceTexture2D = reference;
+        list->EstimateMotion(estimator, &output, &input);
+        EncodeBarrier(list, vectors, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE);
+        resolve_output.pMotionVectorTexture2D = vectors;
+        resolve_input.pMotionVectorHeap = heap;
+        resolve_input.PixelWidth = size;
+        resolve_input.PixelHeight = size;
+        list->ResolveMotionVectorHeap(&resolve_output, &resolve_input);
+        EncodeBarrier(list, vectors, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE, D3D12_RESOURCE_STATE_COMMON);
+        EncodeBarrier(list, current, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ, D3D12_RESOURCE_STATE_COMMON);
+        EncodeBarrier(list, reference, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ, D3D12_RESOURCE_STATE_COMMON);
+        hr = list->Close();
+        ok(hr == S_OK, "Close: %#lx\n", hr);
+        if (SUCCEEDED(hr))
+        {
+            ID3D12CommandList *lists[] = { list };
+            queue->ExecuteCommandLists(1, lists);
+            ok(d3d12_test_wait_queue(context.device, queue, D3D12_TEST_WAIT), "video encode queue did not complete\n");
+            ok(ReadMotionVectors(&context, vectors, blocks, blocks, &nonzero), "motion vector readback failed\n");
+            ok(!nonzero, "%u of %u motion vectors are not zero for identical frames\n", nonzero, blocks * blocks);
+        }
+    }
+    ok(context.device->GetDeviceRemovedReason() == S_OK, "device removed reason %#lx\n",
+            context.device->GetDeviceRemovedReason());
+    if (vectors) vectors->Release();
+    if (reference) reference->Release();
+    if (current) current->Release();
+    if (list) list->Release();
+    if (allocator) allocator->Release();
+    if (queue) queue->Release();
+    d3d12_test_destroy(&context);
+}
+
+static void TestMotion(ID3D12VideoDevice *video)
+{
+    D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR caps = {};
+    D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR_SIZE size = {};
+    D3D12_VIDEO_MOTION_ESTIMATOR_DESC desc = {}, got;
+    D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC heap_desc = {};
+    ID3D12VideoMotionEstimator *estimator = NULL;
+    ID3D12VideoMotionVectorHeap *heap = NULL;
+    ID3D12VideoDevice1 *video1 = NULL;
+    void *session = &caps;
+    UINT dimension;
+    HRESULT hr;
+
+    hr = video->QueryInterface(__uuidof(ID3D12VideoDevice1), reinterpret_cast<void **>(&video1));
+    ok(hr == S_OK && video1, "ID3D12VideoDevice1: %#lx\n", hr);
+    if (!video1) return;
+    caps.InputFormat = DXGI_FORMAT_NV12;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR, &caps, sizeof(caps) - 4);
+    ok(hr == E_INVALIDARG, "motion estimator caps with a short size: %#lx\n", hr);
+    caps.NodeIndex = 1;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR, &caps, sizeof(caps));
+    ok(hr == E_INVALIDARG, "motion estimator caps on node 1: %#lx\n", hr);
+    caps.NodeIndex = 0;
+    caps.InputFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    caps.BlockSizeFlags = D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_FLAG_16X16;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR, &caps, sizeof(caps));
+    ok(hr == S_OK && !caps.BlockSizeFlags && !caps.SizeRange.MaxWidth, "RGBA motion estimation: %#lx, flags %#x\n", hr,
+            caps.BlockSizeFlags);
+    caps.InputFormat = DXGI_FORMAT_NV12;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR, &caps, sizeof(caps));
+    ok(hr == S_OK, "NV12 motion estimation: %#lx\n", hr);
+    trace("motion estimation blocks %#x precision %#x size %ux%u..%ux%u\n", caps.BlockSizeFlags, caps.PrecisionFlags,
+            caps.SizeRange.MinWidth, caps.SizeRange.MinHeight, caps.SizeRange.MaxWidth, caps.SizeRange.MaxHeight);
+    if (!caps.BlockSizeFlags)
+    {
+        skip("no motion estimation\n");
+        video1->Release();
+        return;
+    }
+    dimension = max(64u, max(caps.SizeRange.MinWidth, caps.SizeRange.MinHeight));
+    desc.InputFormat = DXGI_FORMAT_NV12;
+    desc.BlockSize = (caps.BlockSizeFlags & D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_FLAG_16X16)
+            ? D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_16X16 : D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_8X8;
+    desc.Precision = D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL;
+    desc.SizeRange.MaxWidth = desc.SizeRange.MinWidth = dimension;
+    desc.SizeRange.MaxHeight = desc.SizeRange.MinHeight = dimension;
+
+    size.InputFormat = DXGI_FORMAT_NV12;
+    size.BlockSize = desc.BlockSize;
+    size.Precision = desc.Precision;
+    size.SizeRange = desc.SizeRange;
+    hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR_SIZE, &size, sizeof(size));
+    if (hr == E_FAIL)
+        skip("the driver does not report motion estimator sizes\n");
+    else
+        ok(hr == S_OK && (size.MotionVectorHeapMemoryPoolL0Size || size.MotionVectorHeapMemoryPoolL1Size),
+                "motion estimator size: %#lx\n", hr);
+    trace("motion vector heap L0 %I64u L1 %I64u, estimator L0 %I64u L1 %I64u\n", size.MotionVectorHeapMemoryPoolL0Size,
+            size.MotionVectorHeapMemoryPoolL1Size, size.MotionEstimatorMemoryPoolL0Size,
+            size.MotionEstimatorMemoryPoolL1Size);
+
+    desc.NodeMask = 3;
+    hr = video1->CreateVideoMotionEstimator(&desc, NULL, __uuidof(ID3D12VideoMotionEstimator),
+            reinterpret_cast<void **>(&estimator));
+    ok(hr == E_INVALIDARG && !estimator, "estimator on two nodes: %#lx\n", hr);
+    desc.NodeMask = 0;
+    desc.SizeRange.MinWidth = 0;
+    hr = video1->CreateVideoMotionEstimator(&desc, NULL, __uuidof(ID3D12VideoMotionEstimator),
+            reinterpret_cast<void **>(&estimator));
+    ok(hr == E_INVALIDARG && !estimator, "estimator with a zero minimum width: %#lx\n", hr);
+    desc.SizeRange.MinWidth = dimension;
+    hr = video1->CreateVideoMotionEstimator(&desc, NULL, __uuidof(ID3D12VideoMotionEstimator),
+            reinterpret_cast<void **>(&estimator));
+    ok(hr == S_OK && estimator, "estimator: %#lx\n", hr);
+    memcpy(&heap_desc, &desc, sizeof(heap_desc));
+    hr = video1->CreateVideoMotionVectorHeap(&heap_desc, NULL, __uuidof(ID3D12VideoMotionVectorHeap),
+            reinterpret_cast<void **>(&heap));
+    ok(hr == S_OK && heap, "motion vector heap: %#lx\n", hr);
+    if (estimator)
+    {
+        got = estimator->GetDesc();
+        ok(got.BlockSize == desc.BlockSize && got.SizeRange.MaxWidth == dimension, "estimator desc block %u\n",
+                got.BlockSize);
+        hr = estimator->GetProtectedResourceSession(__uuidof(IUnknown), &session);
+        ok(hr == DXGI_ERROR_NOT_FOUND && !session, "estimator protected session: %#lx\n", hr);
+    }
+    if (estimator && heap)
+        TestMotionFrame(estimator, heap, dimension,
+                desc.BlockSize == D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_16X16 ? 16 : 8);
+    if (heap) heap->Release();
+    if (estimator) estimator->Release();
+    video1->Release();
+}
+
 static void RunVideo(void *)
 {
     D3D12_FEATURE_DATA_VIDEO_DECODE_PROFILE_COUNT count = {};
@@ -363,6 +651,7 @@ static void RunVideo(void *)
         return;
     }
     TestProcess(video);
+    TestMotion(video);
 
     hr = video->CheckFeatureSupport(D3D12_FEATURE_VIDEO_DECODE_PROFILE_COUNT, &count, sizeof(count));
     ok(hr == S_OK && count.ProfileCount, "profile count: %#lx, %u\n", hr, count.ProfileCount);
