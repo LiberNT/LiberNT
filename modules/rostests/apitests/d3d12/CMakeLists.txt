@@ -9,6 +9,7 @@ list(APPEND SOURCE
     heaps.cpp
     interfaces.cpp
     pipeline.cpp
+    pipelib.cpp
     queue.cpp
     relaxed.cpp
     renderpass.cpp
