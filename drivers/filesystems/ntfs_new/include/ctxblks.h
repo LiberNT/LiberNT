@@ -36,6 +36,8 @@ typedef struct _VolumeContextBlock
     LONG OpenHandleCount;
     LONG VolumeHandleCount;
     PFILE_OBJECT VolumeLockOwner;
+    PFILE_OBJECT ShrinkOwner;
+    ULONGLONG ShrinkVolumeSectors;
     BOOLEAN Dismounting;
     BOOLEAN Dismounted;
     FAST_MUTEX StreamListMutex;
@@ -485,6 +487,10 @@ NtfsRemoveOpenLink(_In_ PVolumeContextBlock VolCB,
 NTSTATUS
 NtfsCheckDirectoryOpenChildren(_In_ PVolumeContextBlock VolCB,
                                _In_ ULONGLONG DirectoryReference);
+
+VOID
+NtfsCancelShrink(_In_ PVolumeContextBlock VolCB,
+                 _In_ PFILE_OBJECT FileObject);
 
 NTSTATUS
 NtfsRefreshDirectoryRecord(_In_ PVolumeContextBlock VolCB,

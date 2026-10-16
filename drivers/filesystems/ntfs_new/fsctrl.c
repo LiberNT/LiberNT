@@ -1655,6 +1655,321 @@ NtfsExtendVolume(
     return Status;
 }
 
+static
+NTSTATUS
+NtfsShrinkVolume(
+    _In_ PDEVICE_OBJECT VolumeDeviceObject,
+    _Inout_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IrpSp)
+{
+    PFileContextBlock FileCB = NtfsGetFileContext(IrpSp->FileObject);
+    PVolumeContextBlock VolCB =
+        (PVolumeContextBlock)VolumeDeviceObject->DeviceExtension;
+    SHRINK_VOLUME_INFORMATION Request;
+    GET_LENGTH_INFORMATION PartitionLength;
+    NTFS_EXTEND_IO Io;
+    EXPAND_DEVICE Device;
+    ULONGLONG Clusters;
+    ULONGLONG NewClusters;
+    ULONG SectorsPerCluster;
+    BOOLEAN Free;
+    PVOID Workspace;
+    ULONG Size;
+    NTSTATUS Status;
+
+    if (!FileCB || !FileCB->IsVolumeOpen || !VolCB || !VolCB->DiskVolume)
+        return STATUS_INVALID_PARAMETER;
+    if (IrpSp->Parameters.FileSystemControl.InputBufferLength < sizeof(Request) ||
+        !Irp->AssociatedIrp.SystemBuffer)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    RtlCopyMemory(&Request, Irp->AssociatedIrp.SystemBuffer, sizeof(Request));
+    if (Request.Flags != 0)
+        return STATUS_INVALID_PARAMETER;
+    if (VolCB->Dismounted)
+        return STATUS_VOLUME_DISMOUNTED;
+    if (NtfsVolumeIsReadOnly(VolCB->DiskVolume))
+        return STATUS_MEDIA_WRITE_PROTECTED;
+
+    SectorsPerCluster = NtfsVolumeGetSectorsPerCluster(VolCB->DiskVolume);
+    if (SectorsPerCluster == 0)
+        return STATUS_FILE_CORRUPT_ERROR;
+
+    KeEnterCriticalRegion();
+    NtfsAcquireMetadata(VolCB);
+    Clusters = NtfsVolumeGetClustersInVolume(VolCB->DiskVolume);
+    switch (Request.ShrinkRequestType)
+    {
+        case ShrinkPrepare:
+            if (VolCB->ShrinkOwner && VolCB->ShrinkOwner != IrpSp->FileObject)
+            {
+                Status = STATUS_DEVICE_BUSY;
+                break;
+            }
+            if (Request.NewNumberOfSectors <= 0)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+            NewClusters = ((ULONGLONG)Request.NewNumberOfSectors - 1) / SectorsPerCluster;
+            if (NewClusters == 0 || NewClusters >= Clusters)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+            VolCB->ShrinkOwner = IrpSp->FileObject;
+            VolCB->ShrinkVolumeSectors = (ULONGLONG)Request.NewNumberOfSectors - 1;
+            NtfsVolumeSetAllocationLimit(VolCB->DiskVolume, NewClusters);
+            Status = STATUS_SUCCESS;
+            break;
+
+        case ShrinkCommit:
+            if (!VolCB->ShrinkOwner || VolCB->ShrinkOwner != IrpSp->FileObject)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+            NewClusters = VolCB->ShrinkVolumeSectors / SectorsPerCluster;
+            Status = NtfsVolumeAreClustersFree(VolCB->DiskVolume,
+                                               NewClusters,
+                                               Clusters,
+                                               &Free);
+            if (!NT_SUCCESS(Status))
+                break;
+            if (!Free)
+            {
+                Status = STATUS_ALREADY_COMMITTED;
+                break;
+            }
+
+            Size = sizeof(PartitionLength);
+            Status = DeviceIoControl(VolCB->StorageDevice,
+                                     IOCTL_DISK_GET_LENGTH_INFO,
+                                     NULL,
+                                     0,
+                                     &PartitionLength,
+                                     &Size,
+                                     TRUE);
+            if (!NT_SUCCESS(Status))
+                break;
+
+            Workspace = ExAllocatePoolWithTag(NonPagedPool, EXPAND_WORKSPACE_BYTES, TAG_NTFS);
+            if (!Workspace)
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                break;
+            }
+
+            Io.StorageDevice = VolCB->StorageDevice;
+            Io.SectorBytes = NtfsVolumeGetBytesPerSector(VolCB->DiskVolume);
+            Io.Status = STATUS_SUCCESS;
+            Device.Context = &Io;
+            Device.Read = NtfsExtendRead;
+            Device.Write = NtfsExtendWrite;
+            Device.Log = NULL;
+            Device.DiskSize = (uint64_t)PartitionLength.Length.QuadPart;
+            Device.SectorSize = Io.SectorBytes;
+
+            switch (ExpandShrinkVolume(&Device, 0, VolCB->ShrinkVolumeSectors, Workspace))
+            {
+                case EXPAND_OK:
+                    Status = NtfsVolumeReloadSize(VolCB->DiskVolume);
+                    break;
+
+                case EXPAND_IO_ERROR:
+                    Status = Io.Status;
+                    break;
+
+                case EXPAND_BAD_PARAMETER:
+                    Status = STATUS_INVALID_PARAMETER;
+                    break;
+
+                case EXPAND_NO_ROOM:
+                    Status = STATUS_ALREADY_COMMITTED;
+                    break;
+
+                default:
+                    Status = STATUS_FILE_CORRUPT_ERROR;
+                    break;
+            }
+            ExFreePoolWithTag(Workspace, TAG_NTFS);
+            if (NT_SUCCESS(Status))
+            {
+                VolCB->ShrinkOwner = NULL;
+                VolCB->ShrinkVolumeSectors = 0;
+                NtfsVolumeSetAllocationLimit(VolCB->DiskVolume, 0);
+            }
+            break;
+
+        case ShrinkAbort:
+            if (!VolCB->ShrinkOwner || VolCB->ShrinkOwner != IrpSp->FileObject)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+            VolCB->ShrinkOwner = NULL;
+            VolCB->ShrinkVolumeSectors = 0;
+            NtfsVolumeSetAllocationLimit(VolCB->DiskVolume, 0);
+            Status = STATUS_SUCCESS;
+            break;
+
+        default:
+            Status = STATUS_INVALID_PARAMETER;
+            break;
+    }
+    NtfsReleaseMetadata(VolCB);
+    KeLeaveCriticalRegion();
+
+    if (NT_SUCCESS(Status) && Request.ShrinkRequestType == ShrinkCommit)
+        Status = NtfsDiskFlushVolumeKm(VolCB->StorageDevice);
+    return Status;
+}
+
+VOID
+NtfsCancelShrink(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PFILE_OBJECT FileObject)
+{
+    if (!VolCB || VolCB->ShrinkOwner != FileObject)
+        return;
+
+    KeEnterCriticalRegion();
+    NtfsAcquireMetadata(VolCB);
+    if (VolCB->ShrinkOwner == FileObject)
+    {
+        VolCB->ShrinkOwner = NULL;
+        VolCB->ShrinkVolumeSectors = 0;
+        if (VolCB->DiskVolume)
+            NtfsVolumeSetAllocationLimit(VolCB->DiskVolume, 0);
+    }
+    NtfsReleaseMetadata(VolCB);
+    KeLeaveCriticalRegion();
+}
+
+static
+BOOLEAN
+NtfsIs32bitCaller(
+    _In_ PIRP Irp)
+{
+#if defined(_WIN64)
+    return IoIs32bitProcess(Irp);
+#else
+    UNREFERENCED_PARAMETER(Irp);
+    return FALSE;
+#endif
+}
+
+static
+NTSTATUS
+NtfsMoveFile(
+    _In_ PDEVICE_OBJECT VolumeDeviceObject,
+    _Inout_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IrpSp)
+{
+    PFileContextBlock VolumeCB = NtfsGetFileContext(IrpSp->FileObject);
+    PVolumeContextBlock VolCB =
+        (PVolumeContextBlock)VolumeDeviceObject->DeviceExtension;
+    PFILE_OBJECT TargetObject = NULL;
+    PFileContextBlock FileCB;
+    AttributeType RequestedType;
+    PWSTR RequestedStream;
+    MOVE_FILE_DATA Input;
+    HANDLE FileHandle;
+    LARGE_INTEGER StartingVcn;
+    LARGE_INTEGER StartingLcn;
+    ULONG ClusterCount;
+    ULONG InputLength;
+    BOOLEAN IsDirectory;
+    NTSTATUS Status;
+
+    if (!VolumeCB || !VolCB || !VolCB->DiskVolume || !Irp->AssociatedIrp.SystemBuffer)
+        return STATUS_INVALID_PARAMETER;
+    if (!VolumeCB->IsVolumeOpen)
+        return STATUS_ACCESS_DENIED;
+
+    InputLength = IrpSp->Parameters.FileSystemControl.InputBufferLength;
+    if (InputLength < sizeof(Input))
+        return STATUS_BUFFER_TOO_SMALL;
+
+    RtlCopyMemory(&Input, Irp->AssociatedIrp.SystemBuffer, sizeof(Input));
+    FileHandle = Input.FileHandle;
+    if (NtfsIs32bitCaller(Irp))
+        FileHandle = (HANDLE)(LONG_PTR)(LONG)(ULONG_PTR)FileHandle;
+    StartingVcn = Input.StartingVcn;
+    StartingLcn = Input.StartingLcn;
+    ClusterCount = Input.ClusterCount;
+
+    if (VolCB->Dismounted)
+        return STATUS_VOLUME_DISMOUNTED;
+    if (NtfsVolumeIsReadOnly(VolCB->DiskVolume))
+        return STATUS_MEDIA_WRITE_PROTECTED;
+    if (StartingVcn.QuadPart < 0 ||
+        StartingLcn.QuadPart < 0 ||
+        (ULONGLONG)StartingLcn.QuadPart >=
+            NtfsVolumeGetClustersInVolume(VolCB->DiskVolume))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Status = ObReferenceObjectByHandle(FileHandle,
+                                       0,
+                                       *IoFileObjectType,
+                                       Irp->RequestorMode,
+                                       (PVOID*)&TargetObject,
+                                       NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    FileCB = NtfsGetFileContext(TargetObject);
+    if (!VolumeDeviceObject->Vpb ||
+        (TargetObject->Vpb
+             ? TargetObject->Vpb
+             : (TargetObject->DeviceObject
+                    ? TargetObject->DeviceObject->Vpb
+                    : NULL)) != VolumeDeviceObject->Vpb ||
+        !FileCB || FileCB->IsVolumeOpen || !FileCB->FileRec)
+    {
+        ObDereferenceObject(TargetObject);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    IsDirectory = !!(NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY);
+    RequestedType = FileCB->RequestedType;
+    RequestedStream = FileCB->RequestedStream;
+    if (IsDirectory && !RequestedStream)
+    {
+        RequestedType = TypeIndexAllocation;
+        RequestedStream = L"$I30";
+    }
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
+    ExAcquireResourceExclusiveLite(NtfsGetPagingIoResource(FileCB), TRUE);
+    NtfsAcquireMetadata(VolCB);
+    Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
+    if (NT_SUCCESS(Status))
+    {
+        Status = NtfsFileRecordMoveClusters(FileCB->FileRec,
+                                            RequestedType,
+                                            RequestedStream,
+                                            (ULONGLONG)StartingVcn.QuadPart,
+                                            (ULONGLONG)StartingLcn.QuadPart,
+                                            ClusterCount);
+    }
+    if (NT_SUCCESS(Status) && IsDirectory)
+        InterlockedIncrement(&VolCB->DirGeneration);
+    NtfsReleaseMetadata(VolCB);
+    ExReleaseResourceLite(NtfsGetPagingIoResource(FileCB));
+    ExReleaseResourceLite(NtfsGetMainResource(FileCB));
+    KeLeaveCriticalRegion();
+
+    ObDereferenceObject(TargetObject);
+    if (NT_SUCCESS(Status))
+        Status = NtfsDiskFlushVolumeKm(VolCB->StorageDevice);
+    return Status;
+}
+
 /* INCOMPLETE */
 _Function_class_(IRP_MJ_FILE_SYSTEM_CONTROL)
 _Function_class_(DRIVER_DISPATCH)
@@ -1828,6 +2143,22 @@ NtfsFsdFileSystemControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                     case FSCTL_EXTEND_VOLUME:
                         Irp->IoStatus.Status =
                             NtfsExtendVolume(
+                                VolumeDeviceObject,
+                                Irp,
+                                IrpSp);
+                        break;
+
+                    case FSCTL_SHRINK_VOLUME:
+                        Irp->IoStatus.Status =
+                            NtfsShrinkVolume(
+                                VolumeDeviceObject,
+                                Irp,
+                                IrpSp);
+                        break;
+
+                    case FSCTL_MOVE_FILE:
+                        Irp->IoStatus.Status =
+                            NtfsMoveFile(
                                 VolumeDeviceObject,
                                 Irp,
                                 IrpSp);

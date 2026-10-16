@@ -726,6 +726,9 @@ NtfsFsdCleanup(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         FirstCleanup = TRUE;
         ExReleaseFastMutex(&VolCB->VolumeStateMutex);
 
+        if (FileCB->IsVolumeOpen)
+            NtfsCancelShrink(VolCB, IrpSp->FileObject);
+
         if (NotifyUnlock)
         {
             FsRtlNotifyVolumeEvent(IrpSp->FileObject,
