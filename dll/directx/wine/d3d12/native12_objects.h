@@ -321,6 +321,36 @@ public:
             D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *out) override;
 };
 
+class Native12VideoMotionEstimator final : public Native12Child<ID3D12VideoMotionEstimator>
+{
+public:
+    D3D12_VIDEO_MOTION_ESTIMATOR_DESC desc = {};
+    D3D12DDI_HVIDEOMOTIONESTIMATOR_0053 driver = {};
+    bool driver_created = false;
+
+    using Native12Child::Native12Child;
+    ~Native12VideoMotionEstimator();
+    HRESULT Initialize(const D3D12_VIDEO_MOTION_ESTIMATOR_DESC *input);
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+    D3D12_VIDEO_MOTION_ESTIMATOR_DESC *STDMETHODCALLTYPE GetDesc(D3D12_VIDEO_MOTION_ESTIMATOR_DESC *out) override;
+    HRESULT STDMETHODCALLTYPE GetProtectedResourceSession(REFIID iid, void **out) override;
+};
+
+class Native12VideoMotionVectorHeap final : public Native12Child<ID3D12VideoMotionVectorHeap>
+{
+public:
+    D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC desc = {};
+    D3D12DDI_HVIDEOMOTIONVECTORHEAP_0053 driver = {};
+    bool driver_created = false;
+
+    using Native12Child::Native12Child;
+    ~Native12VideoMotionVectorHeap();
+    HRESULT Initialize(const D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC *input);
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+    D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC *STDMETHODCALLTYPE GetDesc(D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC *out) override;
+    HRESULT STDMETHODCALLTYPE GetProtectedResourceSession(REFIID iid, void **out) override;
+};
+
 struct Native12VideoListFunctions
 {
     PFND3D12DDI_CLOSECOMMANDLIST close;
@@ -342,6 +372,7 @@ public:
     Native12VideoListFunctions table = {};
     D3D12DDI_HCOMMANDLIST driver = {};
     D3D12DDI_HCOMMANDRECORDER_0040 recorder = {};
+    void *recorder_pool = NULL;
     bool driver_created = false;
     bool recorder_created = false;
     bool recording = false;
@@ -400,6 +431,39 @@ public:
     void STDMETHODCALLTYPE ProcessFrames1(ID3D12VideoProcessor *processor,
             const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_ARGUMENTS *output, UINT count,
             const D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS1 *inputs) override;
+};
+
+class Native12VideoEncodeCommandList final : public Native12Child<ID3D12VideoEncodeCommandList>,
+        public Native12VideoListCore
+{
+public:
+    explicit Native12VideoEncodeCommandList(Native12Device *owner)
+            : Native12Child(owner), Native12VideoListCore(owner, D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE) {}
+    ~Native12VideoEncodeCommandList();
+    HRESULT Initialize(Native12CommandAllocator *pool);
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+    D3D12_COMMAND_LIST_TYPE STDMETHODCALLTYPE GetType() override;
+    HRESULT STDMETHODCALLTYPE Close() override;
+    HRESULT STDMETHODCALLTYPE Reset(ID3D12CommandAllocator *pool) override;
+    void STDMETHODCALLTYPE ClearState() override;
+    void STDMETHODCALLTYPE ResourceBarrier(UINT count, const D3D12_RESOURCE_BARRIER *barriers) override;
+    void STDMETHODCALLTYPE DiscardResource(ID3D12Resource *resource, const D3D12_DISCARD_REGION *region) override;
+    void STDMETHODCALLTYPE BeginQuery(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type, UINT index) override;
+    void STDMETHODCALLTYPE EndQuery(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type, UINT index) override;
+    void STDMETHODCALLTYPE ResolveQueryData(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type, UINT start, UINT count,
+            ID3D12Resource *buffer, UINT64 offset) override;
+    void STDMETHODCALLTYPE SetPredication(ID3D12Resource *buffer, UINT64 offset,
+            D3D12_PREDICATION_OP operation) override;
+    void STDMETHODCALLTYPE SetMarker(UINT metadata, const void *data, UINT size) override;
+    void STDMETHODCALLTYPE BeginEvent(UINT metadata, const void *data, UINT size) override;
+    void STDMETHODCALLTYPE EndEvent() override;
+    void STDMETHODCALLTYPE EstimateMotion(ID3D12VideoMotionEstimator *estimator,
+            const D3D12_VIDEO_MOTION_ESTIMATOR_OUTPUT *output, const D3D12_VIDEO_MOTION_ESTIMATOR_INPUT *input) override;
+    void STDMETHODCALLTYPE ResolveMotionVectorHeap(const D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_OUTPUT *output,
+            const D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_INPUT *input) override;
+    void STDMETHODCALLTYPE WriteBufferImmediate(UINT count, const D3D12_WRITEBUFFERIMMEDIATE_PARAMETER *parameters,
+            const D3D12_WRITEBUFFERIMMEDIATE_MODE *modes) override;
+    void STDMETHODCALLTYPE SetProtectedResourceSession(ID3D12ProtectedResourceSession *session) override;
 };
 
 class Native12VideoDecodeCommandList final : public Native12Child<ID3D12VideoDecodeCommandList1>,

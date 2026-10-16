@@ -24,6 +24,8 @@ D3D12DDI_COMMAND_QUEUE_FLAGS Native12QueueFlags(D3D12_COMMAND_LIST_TYPE type)
             return D3D12DDI_COMMAND_QUEUE_FLAG_0022_VIDEO_DECODE;
         case D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS:
             return D3D12DDI_COMMAND_QUEUE_FLAG_0022_VIDEO_PROCESS;
+        case D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE:
+            return D3D12DDI_COMMAND_QUEUE_FLAG_0053_VIDEO_ENCODE;
         default:
             return static_cast<D3D12DDI_COMMAND_QUEUE_FLAGS>(D3D12DDI_COMMAND_QUEUE_FLAG_3D
                     | D3D12DDI_COMMAND_QUEUE_FLAG_COMPUTE | D3D12DDI_COMMAND_QUEUE_FLAG_COPY);
@@ -138,9 +140,11 @@ HRESULT Native12CommandQueue::Initialize(const D3D12_COMMAND_QUEUE_DESC *input)
         return E_INVALIDARG;
     if (desc.Type == D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS && !device->EnsureVideoProcess())
         return E_INVALIDARG;
+    if (desc.Type == D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE && !device->EnsureVideoEncode())
+        return E_INVALIDARG;
     if (desc.Type != D3D12_COMMAND_LIST_TYPE_DIRECT && desc.Type != D3D12_COMMAND_LIST_TYPE_COMPUTE
             && desc.Type != D3D12_COMMAND_LIST_TYPE_COPY && desc.Type != D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE
-            && desc.Type != D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS)
+            && desc.Type != D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS && desc.Type != D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE)
         return E_INVALIDARG;
     D3D12DDIARG_CREATECOMMANDQUEUE_0050 args = {};
     args.QueueFlags = Native12QueueFlags(desc.Type);
@@ -408,6 +412,7 @@ const D3D12DDI_COMMAND_QUEUE_FUNCS_VIDEO_0020 *Native12CommandQueue::VideoFuncti
 {
     if (desc.Type == D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE) return &device->video_queue_functions;
     if (desc.Type == D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS) return &device->process_queue_functions;
+    if (desc.Type == D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE) return &device->encode_queue_functions;
     return NULL;
 }
 
@@ -583,9 +588,11 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommandAllocator(D3D12_COMMAND_L
     *out = NULL;
     if (type == D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE && !EnsureVideo()) return E_INVALIDARG;
     if (type == D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS && !EnsureVideoProcess()) return E_INVALIDARG;
+    if (type == D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE && !EnsureVideoEncode()) return E_INVALIDARG;
     if (type != D3D12_COMMAND_LIST_TYPE_DIRECT && type != D3D12_COMMAND_LIST_TYPE_BUNDLE
             && type != D3D12_COMMAND_LIST_TYPE_COMPUTE && type != D3D12_COMMAND_LIST_TYPE_COPY
-            && type != D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE && type != D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS)
+            && type != D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE && type != D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS
+            && type != D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE)
         return E_INVALIDARG;
     Native12CommandAllocator *allocator = new Native12CommandAllocator(this);
     if (!allocator) return E_OUTOFMEMORY;

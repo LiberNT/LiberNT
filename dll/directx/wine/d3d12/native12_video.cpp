@@ -25,6 +25,11 @@ static_assert(sizeof(D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC) == 0x70, "processor 
 static_assert(sizeof(D3D12DDI_VIDEO_PROCESS_OUTPUT_STREAM_DESC_0032) == 0x2c, "processor output layout");
 static_assert(sizeof(D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_PROCESS_0063) == 14 * sizeof(void *), "process list table");
 static_assert(sizeof(D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_PROCESS_0094) == 15 * sizeof(void *), "process list table");
+static_assert(sizeof(D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_ENCODE_0082_0) == 17 * sizeof(void *), "encode list table");
+static_assert(sizeof(D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_ENCODE_0094) == 18 * sizeof(void *), "encode list table");
+static_assert(sizeof(D3D12DDI_VIDEO_MOTION_ESTIMATOR_DATA_0060) == 0x20, "motion estimator caps layout");
+static_assert(sizeof(D3D12DDI_VIDEO_MOTION_ESTIMATOR_SIZE_DATA_0060) == 0x48, "motion estimator size layout");
+static_assert(sizeof(D3D12DDI_RESOURCE_COORDINATE_0053) == sizeof(D3D12_RESOURCE_COORDINATE), "coordinate layout");
 
 static const GUID Native12EncryptionNone = {0x1b81bed0, 0xa0c7, 0x11d3, {0xb9, 0x84, 0x00, 0xc0, 0x4f, 0x2e, 0x73, 0xc5}};
 static const GUID Native12EncryptionCenc = {0x89d6ac4f, 0x09f2, 0x4229, {0xb2, 0xcd, 0x37, 0x74, 0x0a, 0x6d, 0xfd, 0x81}};
@@ -135,6 +140,23 @@ bool Native12Device::EnsureVideo()
                         D3D12DDI_TABLE_TYPE_0022_COMMAND_LIST_VIDEO_PROCESS, &process_list_functions, process_size, 0,
                         table)))
                     memset(&process_list_functions, 0, sizeof(process_list_functions));
+                SIZE_T encode_size = version >= D3D12DDI_FEATURE_VERSION_VIDEO_0094_0
+                        ? sizeof(D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_ENCODE_0094)
+                        : sizeof(D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_ENCODE_0082_0);
+
+                table.handle = &encode_queue_functions;
+                if (FAILED(adapter_functions.pfnFillDDITable(driver_adapter,
+                        D3D12DDI_TABLE_TYPE_0053_COMMAND_QUEUE_VIDEO_ENCODE, &encode_queue_functions,
+                        sizeof(encode_queue_functions), 0, table)))
+                    memset(&encode_queue_functions, 0, sizeof(encode_queue_functions));
+                table.handle = &encode_list_functions;
+                if (FAILED(adapter_functions.pfnFillDDITable(driver_adapter,
+                        D3D12DDI_TABLE_TYPE_0053_COMMAND_LIST_VIDEO_ENCODE, &encode_list_functions, encode_size, 0,
+                        table)))
+                    memset(&encode_list_functions, 0, sizeof(encode_list_functions));
+                if (FAILED(QueryVideoCaps(D3D12DDICAPS_TYPE_VIDEO_0053_FEATURE_AREA_SUPPORT, &video_areas,
+                        sizeof(video_areas))))
+                    memset(&video_areas, 0, sizeof(video_areas));
             }
         }
         for (UINT node = 0; video_version && node < 64 && !video_decode_engine; ++node)
@@ -161,6 +183,73 @@ bool Native12Device::EnsureVideoProcess()
 {
     return EnsureVideo() && video_functions.pfnCreateVideoProcessor && process_queue_functions.pfnExecuteCommandLists
             && process_list_functions.pfnProcessFrame;
+}
+
+static bool Native12ValidSizeRange(const D3D12_VIDEO_SIZE_RANGE &range)
+{
+    return range.MinWidth && range.MinHeight && range.MinWidth <= range.MaxWidth && range.MinHeight <= range.MaxHeight
+            && range.MaxWidth <= 16384 && range.MaxHeight <= 16384;
+}
+
+bool Native12Device::EnsureVideoEncode()
+{
+    return EnsureVideo() && video_areas.VideoEncodeSupport && encode_queue_functions.pfnExecuteCommandLists
+            && encode_list_functions.pfnEstimateMotion;
+}
+
+HRESULT Native12Device::CheckMotionEstimator(D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR *caps)
+{
+    D3D12DDI_VIDEO_MOTION_ESTIMATOR_DATA_0060 query = {};
+    const D3D12DDI_VIDEO_SIZE_RANGE_0032 &range = query.SizeRange;
+    bool none, any;
+    HRESULT hr;
+
+    if (caps->NodeIndex >= GetNodeCount()) return E_INVALIDARG;
+    caps->BlockSizeFlags = D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_FLAG_NONE;
+    caps->PrecisionFlags = D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_FLAG_NONE;
+    memset(&caps->SizeRange, 0, sizeof(caps->SizeRange));
+    if (!video_areas.VideoEncodeSupport || caps->InputFormat != DXGI_FORMAT_NV12) return S_OK;
+    query.NodeIndex = caps->NodeIndex;
+    query.InputFormat = caps->InputFormat;
+    if (FAILED(hr = QueryVideoCaps(D3D12DDICAPS_TYPE_VIDEO_0053_MOTION_ESTIMATOR, &query, sizeof(query)))) return hr;
+    none = !range.MaxWidth || !range.MaxHeight || !query.BlockSizeFlags || !query.PrecisionFlags;
+    any = range.MaxWidth || range.MaxHeight || query.BlockSizeFlags || query.PrecisionFlags;
+    if ((query.BlockSizeFlags & ~3u) || (query.PrecisionFlags & ~1u) || range.MaxWidth > 16384 || range.MaxHeight > 16384
+            || range.MaxWidth < range.MinWidth || range.MaxHeight < range.MinHeight || (none && any))
+        return DXGI_ERROR_DRIVER_INTERNAL_ERROR;
+    caps->BlockSizeFlags = static_cast<D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_FLAGS>(query.BlockSizeFlags & 3);
+    caps->PrecisionFlags = static_cast<D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_FLAGS>(query.PrecisionFlags & 1);
+    memcpy(&caps->SizeRange, &query.SizeRange, sizeof(caps->SizeRange));
+    return S_OK;
+}
+
+HRESULT Native12Device::ValidateMotionEstimator(const D3D12_VIDEO_MOTION_ESTIMATOR_DESC *desc, BOOL protected_session)
+{
+    D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR caps = {};
+    UINT mask, index = 0;
+    HRESULT hr;
+
+    if (!desc || (desc->NodeMask & (desc->NodeMask - 1))) return E_INVALIDARG;
+    mask = desc->NodeMask ? desc->NodeMask : 1;
+    while (!(mask & (1u << index))) ++index;
+    if (index >= GetNodeCount() || !Native12ValidSizeRange(desc->SizeRange)) return E_INVALIDARG;
+    caps.NodeIndex = index;
+    caps.InputFormat = desc->InputFormat;
+    if (FAILED(hr = CheckMotionEstimator(&caps))) return hr;
+    if (!caps.BlockSizeFlags || !(caps.BlockSizeFlags & (1u << (desc->BlockSize & 0x1f)))
+            || !(caps.PrecisionFlags & (1u << (desc->Precision & 0x1f)))
+            || desc->SizeRange.MaxWidth > caps.SizeRange.MaxWidth || desc->SizeRange.MaxHeight > caps.SizeRange.MaxHeight
+            || desc->SizeRange.MinWidth < caps.SizeRange.MinWidth || desc->SizeRange.MinHeight < caps.SizeRange.MinHeight)
+        return E_INVALIDARG;
+    if (protected_session)
+    {
+        struct { UINT NodeIndex; UINT SupportFlags; } protection = { index, 0 };
+
+        if (FAILED(QueryVideoCaps(D3D12DDICAPS_TYPE_VIDEO_0072_MOTION_ESTIMATOR_PROTECTED_RESOURCES, &protection,
+                sizeof(protection))) || !(protection.SupportFlags & 1))
+            return E_INVALIDARG;
+    }
+    return S_OK;
 }
 
 static D3D12DDI_VIDEO_FRAME_STEREO_FORMAT_0020 Native12StereoFormat(D3D12_VIDEO_FRAME_STEREO_FORMAT format)
@@ -218,12 +307,6 @@ static D3D12DDI_VIDEO_PROCESSOR_INPUT_STREAM_DESC_0043 Native12ProcessInputDesc(
     output.NumFutureFrames = input.NumFutureFrames;
     output.EnableAutoProcessing = input.EnableAutoProcessing;
     return output;
-}
-
-static bool Native12ValidSizeRange(const D3D12_VIDEO_SIZE_RANGE &range)
-{
-    return range.MinWidth && range.MinHeight && range.MinWidth <= range.MaxWidth && range.MinHeight <= range.MaxHeight
-            && range.MaxWidth <= 16384 && range.MaxHeight <= 16384;
 }
 
 static bool Native12ScaleValid(const D3D12DDI_VIDEO_SCALE_SUPPORT_0032 &scale, UINT width, UINT height)
@@ -595,6 +678,36 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE_VIDE
             }
             return S_OK;
         }
+        case D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR:
+            if (size != sizeof(D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR)) return E_INVALIDARG;
+            return CheckMotionEstimator(static_cast<D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR *>(data));
+        case D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR_SIZE:
+        {
+            D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR_SIZE *caps =
+                    static_cast<D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR_SIZE *>(data);
+            D3D12DDI_VIDEO_MOTION_ESTIMATOR_SIZE_DATA_0060 query = {};
+
+            if (size != sizeof(*caps) || caps->NodeIndex >= GetNodeCount()) return E_INVALIDARG;
+            caps->MotionVectorHeapMemoryPoolL0Size = caps->MotionVectorHeapMemoryPoolL1Size = 0;
+            caps->MotionEstimatorMemoryPoolL0Size = caps->MotionEstimatorMemoryPoolL1Size = 0;
+            if (!video_areas.VideoEncodeSupport || caps->InputFormat != DXGI_FORMAT_NV12) return S_OK;
+            query.NodeMask = caps->NodeIndex;
+            query.InputFormat = caps->InputFormat;
+            query.BlockSize = caps->BlockSize ? D3D12DDI_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_0053_16X16
+                    : D3D12DDI_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_0053_8X8;
+            query.Precision = D3D12DDI_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_0053_QUARTER_PEL;
+            memcpy(&query.SizeRange, &caps->SizeRange, sizeof(query.SizeRange));
+            query.Protected = caps->Protected;
+            if (FAILED(hr = QueryVideoCaps(D3D12DDICAPS_TYPE_VIDEO_0053_MOTION_ESTIMATOR_SIZE, &query, sizeof(query))))
+                return hr;
+            if (!query.MotionVectorHeapMemoryPoolL0Size && !query.MotionVectorHeapMemoryPoolL1Size)
+                return DXGI_ERROR_DRIVER_INTERNAL_ERROR;
+            caps->MotionVectorHeapMemoryPoolL0Size = query.MotionVectorHeapMemoryPoolL0Size;
+            caps->MotionVectorHeapMemoryPoolL1Size = query.MotionVectorHeapMemoryPoolL1Size;
+            caps->MotionEstimatorMemoryPoolL0Size = query.MotionEstimatorMemoryPoolL0Size;
+            caps->MotionEstimatorMemoryPoolL1Size = query.MotionEstimatorMemoryPoolL1Size;
+            return S_OK;
+        }
         default:
             FIXME("Video feature %u is not implemented.\n", feature);
             return E_INVALIDARG;
@@ -646,6 +759,155 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateVideoProcessor(UINT node_mask,
     if (SUCCEEDED(hr)) hr = out ? processor->QueryInterface(iid, out) : S_FALSE;
     processor->Release();
     return hr;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::CreateVideoMotionEstimator(const D3D12_VIDEO_MOTION_ESTIMATOR_DESC *desc,
+        ID3D12ProtectedResourceSession *session, REFIID iid, void **out)
+{
+    Native12VideoMotionEstimator *estimator;
+    HRESULT hr;
+
+    if (out) *out = NULL;
+    if (!EnsureVideo()) return E_INVALIDARG;
+    if (FAILED(hr = ValidateMotionEstimator(desc, session != NULL))) return hr;
+    if (!(estimator = new Native12VideoMotionEstimator(this))) return E_OUTOFMEMORY;
+    hr = estimator->Initialize(desc);
+    if (SUCCEEDED(hr)) hr = out ? estimator->QueryInterface(iid, out) : S_FALSE;
+    estimator->Release();
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::CreateVideoMotionVectorHeap(const D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC *desc,
+        ID3D12ProtectedResourceSession *session, REFIID iid, void **out)
+{
+    Native12VideoMotionVectorHeap *heap;
+    HRESULT hr;
+
+    if (out) *out = NULL;
+    if (!EnsureVideo()) return E_INVALIDARG;
+    if (FAILED(hr = ValidateMotionEstimator(reinterpret_cast<const D3D12_VIDEO_MOTION_ESTIMATOR_DESC *>(desc),
+            session != NULL)))
+        return hr;
+    if (!(heap = new Native12VideoMotionVectorHeap(this))) return E_OUTOFMEMORY;
+    hr = heap->Initialize(desc);
+    if (SUCCEEDED(hr)) hr = out ? heap->QueryInterface(iid, out) : S_FALSE;
+    heap->Release();
+    return hr;
+}
+
+template <class Args, class Desc> static void Native12MotionArgs(const Desc &desc, Args *args)
+{
+    args->NodeMask = desc.NodeMask ? desc.NodeMask : 1;
+    args->InputFormat = desc.InputFormat;
+    args->BlockSize = static_cast<D3D12DDI_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_0053>(desc.BlockSize);
+    args->Precision = static_cast<D3D12DDI_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_0053>(desc.Precision);
+    memcpy(&args->SizeRange, &desc.SizeRange, sizeof(args->SizeRange));
+}
+
+HRESULT Native12VideoMotionEstimator::Initialize(const D3D12_VIDEO_MOTION_ESTIMATOR_DESC *input)
+{
+    D3D12DDIARG_CREATE_VIDEO_MOTION_ESTIMATOR_0060 args = {};
+    SIZE_T size;
+    HRESULT hr;
+
+    desc = *input;
+    Native12MotionArgs(desc, &args);
+    size = device->video_functions.pfnCalcPrivateVideoMotionEstimatorSize(device->driver_device, &args);
+    if (!(driver.pDrvPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size ? size : 1))) return E_OUTOFMEMORY;
+    if (FAILED(hr = device->video_functions.pfnCreateVideoMotionEstimator(device->driver_device, &args, driver)))
+    {
+        WARN("The driver failed to create a motion estimator, hr %#lx.\n", hr);
+        return hr;
+    }
+    driver_created = true;
+    return S_OK;
+}
+
+Native12VideoMotionEstimator::~Native12VideoMotionEstimator()
+{
+    if (driver_created) device->video_functions.pfnDestroyVideoMotionEstimator(device->driver_device, driver);
+    if (driver.pDrvPrivate) HeapFree(GetProcessHeap(), 0, driver.pDrvPrivate);
+}
+
+HRESULT STDMETHODCALLTYPE Native12VideoMotionEstimator::QueryInterface(REFIID iid, void **out)
+{
+    if (!out) return E_POINTER;
+    if (IsEqualGUID(iid, __uuidof(ID3D12VideoMotionEstimator)) || IsEqualGUID(iid, __uuidof(ID3D12Pageable))
+            || IsEqualGUID(iid, __uuidof(ID3D12DeviceChild)) || IsEqualGUID(iid, __uuidof(ID3D12Object))
+            || IsEqualGUID(iid, __uuidof(IUnknown)))
+    {
+        AddRef();
+        *out = static_cast<ID3D12VideoMotionEstimator *>(this);
+        return S_OK;
+    }
+    *out = NULL;
+    return E_NOINTERFACE;
+}
+
+D3D12_VIDEO_MOTION_ESTIMATOR_DESC *STDMETHODCALLTYPE Native12VideoMotionEstimator::GetDesc(
+        D3D12_VIDEO_MOTION_ESTIMATOR_DESC *out)
+{
+    *out = desc;
+    return out;
+}
+
+HRESULT STDMETHODCALLTYPE Native12VideoMotionEstimator::GetProtectedResourceSession(REFIID, void **out)
+{
+    *out = NULL;
+    return DXGI_ERROR_NOT_FOUND;
+}
+
+HRESULT Native12VideoMotionVectorHeap::Initialize(const D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC *input)
+{
+    D3D12DDIARG_CREATE_VIDEO_MOTION_VECTOR_HEAP_0060 args = {};
+    SIZE_T size;
+    HRESULT hr;
+
+    desc = *input;
+    Native12MotionArgs(desc, &args);
+    size = device->video_functions.pfnCalcPrivateVideoMotionVectorHeapSize(device->driver_device, &args);
+    if (!(driver.pDrvPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size ? size : 1))) return E_OUTOFMEMORY;
+    if (FAILED(hr = device->video_functions.pfnCreateVideoMotionVectorHeap(device->driver_device, &args, driver)))
+    {
+        WARN("The driver failed to create a motion vector heap, hr %#lx.\n", hr);
+        return hr;
+    }
+    driver_created = true;
+    return S_OK;
+}
+
+Native12VideoMotionVectorHeap::~Native12VideoMotionVectorHeap()
+{
+    if (driver_created) device->video_functions.pfnDestroyVideoMotionVectorHeap(device->driver_device, driver);
+    if (driver.pDrvPrivate) HeapFree(GetProcessHeap(), 0, driver.pDrvPrivate);
+}
+
+HRESULT STDMETHODCALLTYPE Native12VideoMotionVectorHeap::QueryInterface(REFIID iid, void **out)
+{
+    if (!out) return E_POINTER;
+    if (IsEqualGUID(iid, __uuidof(ID3D12VideoMotionVectorHeap)) || IsEqualGUID(iid, __uuidof(ID3D12Pageable))
+            || IsEqualGUID(iid, __uuidof(ID3D12DeviceChild)) || IsEqualGUID(iid, __uuidof(ID3D12Object))
+            || IsEqualGUID(iid, __uuidof(IUnknown)))
+    {
+        AddRef();
+        *out = static_cast<ID3D12VideoMotionVectorHeap *>(this);
+        return S_OK;
+    }
+    *out = NULL;
+    return E_NOINTERFACE;
+}
+
+D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC *STDMETHODCALLTYPE Native12VideoMotionVectorHeap::GetDesc(
+        D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC *out)
+{
+    *out = desc;
+    return out;
+}
+
+HRESULT STDMETHODCALLTYPE Native12VideoMotionVectorHeap::GetProtectedResourceSession(REFIID, void **out)
+{
+    *out = NULL;
+    return DXGI_ERROR_NOT_FOUND;
 }
 
 HRESULT Native12VideoProcessor::Initialize(UINT mask, const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *output_desc,
@@ -842,6 +1104,8 @@ Native12VideoListCore *Native12VideoListFromInterface(ID3D12CommandList *list)
             return static_cast<Native12VideoDecodeCommandList *>(static_cast<ID3D12VideoDecodeCommandList1 *>(list));
         case D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS:
             return static_cast<Native12VideoProcessCommandList *>(static_cast<ID3D12VideoProcessCommandList1 *>(list));
+        case D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE:
+            return static_cast<Native12VideoEncodeCommandList *>(static_cast<ID3D12VideoEncodeCommandList *>(list));
         default:
             return NULL;
     }
@@ -852,6 +1116,8 @@ Native12VideoListCore::Native12VideoListCore(Native12Device *device, D3D12_COMMA
 {
     if (type == D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS)
         Native12FillVideoListFunctions(&table, device->process_list_functions);
+    else if (type == D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE)
+        Native12FillVideoListFunctions(&table, device->encode_list_functions);
     else
         Native12FillVideoListFunctions(&table, device->decode_list_functions);
 }
@@ -943,7 +1209,11 @@ HRESULT Native12VideoListCore::CoreReset(ID3D12CommandAllocator *pool)
     allocator = target;
     allocator->AddInternal();
     error = S_OK;
-    owner->functions.pfnCommandRecorderSetCommandPoolAsTarget(owner->driver_device, recorder, target->driver);
+    if (recorder_pool != target->driver.pDrvPrivate)
+    {
+        owner->functions.pfnCommandRecorderSetCommandPoolAsTarget(owner->driver_device, recorder, target->driver);
+        recorder_pool = target->driver.pDrvPrivate;
+    }
     args.hDrvCommandRecorder = recorder;
     args.ID = id;
     table.reset(driver, &args);
@@ -1431,4 +1701,152 @@ void STDMETHODCALLTYPE Native12VideoProcessCommandList::ProcessFrames1(ID3D12Vid
         const D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS1 *inputs)
 {
     Process(processor, output, count, inputs);
+}
+
+HRESULT Native12VideoEncodeCommandList::Initialize(Native12CommandAllocator *pool)
+{
+    HRESULT hr = InitializeCore();
+    if (FAILED(hr)) return hr;
+    return pool ? Reset(pool) : S_OK;
+}
+
+Native12VideoEncodeCommandList::~Native12VideoEncodeCommandList()
+{
+    DestroyCore();
+}
+
+HRESULT STDMETHODCALLTYPE Native12VideoEncodeCommandList::QueryInterface(REFIID iid, void **out)
+{
+    if (!out) return E_POINTER;
+    if (IsEqualGUID(iid, __uuidof(ID3D12VideoEncodeCommandList)) || IsEqualGUID(iid, __uuidof(ID3D12CommandList))
+            || IsEqualGUID(iid, __uuidof(ID3D12DeviceChild)) || IsEqualGUID(iid, __uuidof(ID3D12Object))
+            || IsEqualGUID(iid, __uuidof(IUnknown)))
+    {
+        AddRef();
+        *out = static_cast<ID3D12VideoEncodeCommandList *>(this);
+        return S_OK;
+    }
+    *out = NULL;
+    return E_NOINTERFACE;
+}
+
+D3D12_COMMAND_LIST_TYPE STDMETHODCALLTYPE Native12VideoEncodeCommandList::GetType()
+{
+    return D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE;
+}
+
+HRESULT STDMETHODCALLTYPE Native12VideoEncodeCommandList::Close()
+{
+    return CoreClose();
+}
+
+HRESULT STDMETHODCALLTYPE Native12VideoEncodeCommandList::Reset(ID3D12CommandAllocator *pool)
+{
+    return CoreReset(pool);
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::ClearState()
+{
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::ResourceBarrier(UINT count, const D3D12_RESOURCE_BARRIER *barriers)
+{
+    CoreResourceBarrier(count, barriers);
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::DiscardResource(ID3D12Resource *resource,
+        const D3D12_DISCARD_REGION *region)
+{
+    CoreDiscardResource(resource, region);
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::BeginQuery(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type,
+        UINT index)
+{
+    CoreQuery(true, heap, type, index);
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::EndQuery(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type,
+        UINT index)
+{
+    CoreQuery(false, heap, type, index);
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::ResolveQueryData(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type,
+        UINT start, UINT count, ID3D12Resource *buffer, UINT64 offset)
+{
+    CoreResolveQueryData(heap, type, start, count, buffer, offset);
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::SetPredication(ID3D12Resource *buffer, UINT64 offset,
+        D3D12_PREDICATION_OP operation)
+{
+    CoreSetPredication(buffer, offset, operation);
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::SetMarker(UINT, const void *, UINT)
+{
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::BeginEvent(UINT, const void *, UINT)
+{
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::EndEvent()
+{
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::WriteBufferImmediate(UINT count,
+        const D3D12_WRITEBUFFERIMMEDIATE_PARAMETER *parameters, const D3D12_WRITEBUFFERIMMEDIATE_MODE *modes)
+{
+    CoreWriteBufferImmediate(count, parameters, modes);
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::SetProtectedResourceSession(ID3D12ProtectedResourceSession *session)
+{
+    if (session && SUCCEEDED(error)) error = E_INVALIDARG;
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::EstimateMotion(ID3D12VideoMotionEstimator *estimator,
+        const D3D12_VIDEO_MOTION_ESTIMATOR_OUTPUT *output, const D3D12_VIDEO_MOTION_ESTIMATOR_INPUT *input)
+{
+    D3D12DDI_VIDEO_MOTION_ESTIMATOR_OUTPUT_0053 out_args = {};
+    D3D12DDI_VIDEO_MOTION_ESTIMATOR_INPUT_0053 in_args = {};
+
+    if (!estimator || !output || !input || !output->pMotionVectorHeap || !input->pInputTexture2D
+            || !input->pReferenceTexture2D)
+    {
+        if (SUCCEEDED(error)) error = E_INVALIDARG;
+        return;
+    }
+    out_args.hDrvMotionVectorHeap = static_cast<Native12VideoMotionVectorHeap *>(output->pMotionVectorHeap)->driver;
+    in_args.hDrvInputTexture2D = Native12VideoResource(input->pInputTexture2D);
+    in_args.InputSubresourceIndex = input->InputSubresourceIndex;
+    in_args.hDrvReferenceTexture2D = Native12VideoResource(input->pReferenceTexture2D);
+    in_args.ReferenceSubresourceIndex = input->ReferenceSubresourceIndex;
+    if (input->pHintMotionVectorHeap)
+        in_args.hDrvPreviousMotionVectorHeap =
+                static_cast<Native12VideoMotionVectorHeap *>(input->pHintMotionVectorHeap)->driver;
+    device->encode_list_functions.pfnEstimateMotion(driver, static_cast<Native12VideoMotionEstimator *>(estimator)->driver,
+            &out_args, &in_args);
+}
+
+void STDMETHODCALLTYPE Native12VideoEncodeCommandList::ResolveMotionVectorHeap(
+        const D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_OUTPUT *output, const D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_INPUT *input)
+{
+    D3D12DDI_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_OUTPUT_0060 out_args = {};
+    D3D12DDI_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_INPUT_0053 in_args = {};
+
+    if (!output || !input || !output->pMotionVectorTexture2D || !input->pMotionVectorHeap
+            || !device->encode_list_functions.pfnResolveVideoMotionVectorHeap)
+    {
+        if (SUCCEEDED(error)) error = E_INVALIDARG;
+        return;
+    }
+    out_args.hDrvMotionVectorTexture2D = Native12VideoResource(output->pMotionVectorTexture2D);
+    memcpy(&out_args.MotionVectorCoordinate, &output->MotionVectorCoordinate, sizeof(out_args.MotionVectorCoordinate));
+    in_args.hDrvMotionVectorHeap = static_cast<Native12VideoMotionVectorHeap *>(input->pMotionVectorHeap)->driver;
+    in_args.PixelWidth = input->PixelWidth;
+    in_args.PixelHeight = input->PixelHeight;
+    device->encode_list_functions.pfnResolveVideoMotionVectorHeap(driver, &out_args, &in_args);
 }

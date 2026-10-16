@@ -11,7 +11,7 @@ class Native12DescriptorHeap;
 class Native12PipelineState;
 
 class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData2,
-        public ID3D12DeviceConfiguration1, public ID3D12VideoDevice, public Native12Allocation
+        public ID3D12DeviceConfiguration1, public ID3D12VideoDevice1, public Native12Allocation
 {
 public:
     LONG references = 1;
@@ -73,8 +73,14 @@ public:
     D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_DECODE_0094 decode_list_functions = {};
     D3D12DDI_COMMAND_QUEUE_FUNCS_VIDEO_0020 process_queue_functions = {};
     D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_PROCESS_0094 process_list_functions = {};
+    D3D12DDI_COMMAND_QUEUE_FUNCS_VIDEO_0020 encode_queue_functions = {};
+    D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_ENCODE_0094 encode_list_functions = {};
+    D3D12DDI_VIDEO_FEATURE_AREA_SUPPORT_DATA_0053 video_areas = {};
     bool EnsureVideo();
     bool EnsureVideoProcess();
+    bool EnsureVideoEncode();
+    HRESULT CheckMotionEstimator(D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR *caps);
+    HRESULT ValidateMotionEstimator(const D3D12_VIDEO_MOTION_ESTIMATOR_DESC *desc, BOOL protected_session);
     HRESULT CheckVideoProcessSupport(D3D12_FEATURE_DATA_VIDEO_PROCESS_SUPPORT *caps);
     HRESULT ValidateVideoProcessor(UINT node_mask, const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *output,
             UINT count, const D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC *inputs, BOOL protected_session);
@@ -174,6 +180,10 @@ public:
             void **out) override;
     HRESULT STDMETHODCALLTYPE CreateVideoProcessor(UINT node_mask, const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *output,
             UINT input_count, const D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC *inputs, REFIID iid, void **out) override;
+    HRESULT STDMETHODCALLTYPE CreateVideoMotionEstimator(const D3D12_VIDEO_MOTION_ESTIMATOR_DESC *desc,
+            ID3D12ProtectedResourceSession *session, REFIID iid, void **out) override;
+    HRESULT STDMETHODCALLTYPE CreateVideoMotionVectorHeap(const D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC *desc,
+            ID3D12ProtectedResourceSession *session, REFIID iid, void **out) override;
     HRESULT STDMETHODCALLTYPE OpenExistingHeapFromAddress(const void *, REFIID, void **) override;
     HRESULT STDMETHODCALLTYPE OpenExistingHeapFromFileMapping(HANDLE, REFIID, void **) override;
     HRESULT STDMETHODCALLTYPE EnqueueMakeResident(D3D12_RESIDENCY_FLAGS, UINT, ID3D12Pageable *const *,
