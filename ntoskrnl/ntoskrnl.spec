@@ -2454,7 +2454,7 @@
 @ stdcall IoGetActivityIdIrp(ptr ptr)
 @ stdcall IoGetActivityIdThread()
 @ stub -arch=win64 IoGetAdapterCryptoEngineExtension
-@ stub -arch=win64 IoGetAffinityInterrupt
+@ stdcall -arch=win64 IoGetAffinityInterrupt(ptr ptr)
 @ stub -arch=win64 IoGetBootDiskInformationLite
 @ stub -arch=win64 IoGetContainerInformation
 @ stub -arch=win64 IoGetCopyInformationExtension

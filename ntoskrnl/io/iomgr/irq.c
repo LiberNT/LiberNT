@@ -651,4 +651,37 @@ IoReportInterruptInactive(
     UNREFERENCED_PARAMETER(Parameters);
 }
 
+NTSTATUS
+NTAPI
+IoGetAffinityInterrupt(
+    _In_ PKINTERRUPT Interrupt,
+    _Out_ PGROUP_AFFINITY GroupAffinity)
+{
+    PIO_INTERRUPT IoInterrupt;
+    PROCESSOR_NUMBER ProcessorNumber;
+    KAFFINITY Mask;
+    ULONG i;
+
+    if (Interrupt == NULL ||
+        GroupAffinity == NULL ||
+        Interrupt->Type != InterruptObject ||
+        KeGetProcessorNumberFromIndex(Interrupt->Number, &ProcessorNumber) != STATUS_SUCCESS)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    IoInterrupt = CONTAINING_RECORD(Interrupt, IO_INTERRUPT, FirstInterrupt);
+    Mask = AFFINITY_MASK(ProcessorNumber.Number);
+    for (i = 0; i < RTL_NUMBER_OF(IoInterrupt->Interrupt); i++)
+    {
+        if (IoInterrupt->Interrupt[i] != NULL)
+            Mask |= AFFINITY_MASK(i);
+    }
+
+    RtlZeroMemory(GroupAffinity, sizeof(*GroupAffinity));
+    GroupAffinity->Group = ProcessorNumber.Group;
+    GroupAffinity->Mask = Mask;
+    return STATUS_SUCCESS;
+}
+
 /* EOF */
