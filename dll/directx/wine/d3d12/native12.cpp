@@ -901,6 +901,12 @@ HRESULT STDMETHODCALLTYPE Native12Device::QueryInterface(REFIID iid, void **out)
         AddRef();
         return S_OK;
     }
+    if (IsEqualGUID(iid, __uuidof(ID3D12VideoDevice)) && EnsureVideo())
+    {
+        *out = static_cast<ID3D12VideoDevice *>(this);
+        AddRef();
+        return S_OK;
+    }
     *out = NULL;
     return E_NOINTERFACE;
 }

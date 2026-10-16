@@ -11,7 +11,7 @@ class Native12DescriptorHeap;
 class Native12PipelineState;
 
 class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData2,
-        public ID3D12DeviceConfiguration1, public Native12Allocation
+        public ID3D12DeviceConfiguration1, public ID3D12VideoDevice, public Native12Allocation
 {
 public:
     LONG references = 1;
@@ -64,6 +64,15 @@ public:
     D3D12DDI_ARCHITECTURE_INFO_DATA architecture = {};
     D3D12DDI_MEMORY_ARCHITECTURE_CAPS_0041 memory = {};
     D3D12DDI_OPTIONS_DATA_0098 gpu_upload = {};
+    SRWLOCK video_lock = SRWLOCK_INIT;
+    bool video_checked = false;
+    UINT video_version = 0;
+    bool video_decode_engine = false;
+    D3D12DDI_DEVICE_FUNCS_VIDEO_0082_0 video_functions = {};
+    D3D12DDI_COMMAND_QUEUE_FUNCS_VIDEO_0020 video_queue_functions = {};
+    D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_DECODE_0094 decode_list_functions = {};
+    bool EnsureVideo();
+    HRESULT QueryVideoCaps(D3D12DDICAPS_TYPE_VIDEO_0020 type, void *data, UINT size);
     HRESULT ValidateHeapProperties(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags);
     D3D12DDI_GPUVA_CAPS_0004 gpuva = {};
     UINT highest_shader_model = D3D_SHADER_MODEL_5_1;
@@ -153,6 +162,12 @@ public:
             const D3D12_RESIDENCY_PRIORITY *) override;
     HRESULT STDMETHODCALLTYPE CreatePipelineState(const D3D12_PIPELINE_STATE_STREAM_DESC *, REFIID, void **) override;
     HRESULT InitializePipelineState(Native12PipelineState *pipeline, const D3D12_PIPELINE_STATE_STREAM_DESC *desc);
+    HRESULT STDMETHODCALLTYPE CheckFeatureSupport(D3D12_FEATURE_VIDEO feature, void *data, UINT size) override;
+    HRESULT STDMETHODCALLTYPE CreateVideoDecoder(const D3D12_VIDEO_DECODER_DESC *desc, REFIID iid, void **out) override;
+    HRESULT STDMETHODCALLTYPE CreateVideoDecoderHeap(const D3D12_VIDEO_DECODER_HEAP_DESC *desc, REFIID iid,
+            void **out) override;
+    HRESULT STDMETHODCALLTYPE CreateVideoProcessor(UINT node_mask, const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *output,
+            UINT input_count, const D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC *inputs, REFIID iid, void **out) override;
     HRESULT STDMETHODCALLTYPE OpenExistingHeapFromAddress(const void *, REFIID, void **) override;
     HRESULT STDMETHODCALLTYPE OpenExistingHeapFromFileMapping(HANDLE, REFIID, void **) override;
     HRESULT STDMETHODCALLTYPE EnqueueMakeResident(D3D12_RESIDENCY_FLAGS, UINT, ID3D12Pageable *const *,

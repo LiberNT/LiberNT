@@ -329,6 +329,16 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommandList1(UINT, D3D12_COMMAND
     if (!out) return E_INVALIDARG;
     *out = NULL;
     if (flags != D3D12_COMMAND_LIST_FLAG_NONE) return E_INVALIDARG;
+    if (type == D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE)
+    {
+        if (!EnsureVideo()) return E_INVALIDARG;
+        Native12VideoDecodeCommandList *video = new Native12VideoDecodeCommandList(this);
+        if (!video) return E_OUTOFMEMORY;
+        HRESULT hr = video->Initialize(NULL);
+        if (SUCCEEDED(hr)) hr = video->QueryInterface(iid, out);
+        video->Release();
+        return hr;
+    }
     Native12CommandList *list = new Native12CommandList(this);
     if (!list) return E_OUTOFMEMORY;
     HRESULT hr = list->Initialize(type, NULL, NULL);

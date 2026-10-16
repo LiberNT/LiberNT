@@ -22,7 +22,8 @@ if(REACTOS_USE_WDDM)
         native12_pipeline.cpp
         native12_queue.cpp
         native12_resource.cpp
-        native12_swapchain.cpp)
+        native12_swapchain.cpp
+        native12_video.cpp)
     set_source_files_properties(${NATIVE_SOURCE} PROPERTIES
         COMPILE_DEFINITIONS "WIDL_EXPLICIT_AGGREGATE_RETURNS"
         INCLUDE_DIRECTORIES "${REACTOS_SOURCE_DIR}/sdk/include/ddk;${REACTOS_SOURCE_DIR}/sdk/include/psdk")

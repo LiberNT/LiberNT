@@ -22,7 +22,7 @@ static_assert(sizeof(D3D12_BOX) == sizeof(D3D12DDI_BOX), "box layout");
 void Native12SetCommandListErrorObject(HANDLE handle, HRESULT hr)
 {
     Native12CommandList *list = static_cast<Native12CommandList *>(handle);
-    if (!list) return;
+    if (!list || Native12VideoListError(handle, hr)) return;
     WARN("Driver reported error %#lx on command list %p.\n", hr, list);
     if (SUCCEEDED(list->error)) list->error = hr;
 }
@@ -32,7 +32,7 @@ void Native12SetCommandListTableObject(HANDLE handle, HANDLE table)
     Native12CommandList *list = static_cast<Native12CommandList *>(handle);
     const NATIVE12_LIST_FUNCS *functions;
 
-    if (!list) return;
+    if (!list || Native12VideoListError(handle, S_OK)) return;
     if (!(functions = list->device->FindListTable(table)))
     {
         WARN("Ignoring unknown command list table %p.\n", table);
@@ -365,20 +365,11 @@ void STDMETHODCALLTYPE Native12CommandList::SetPipelineState(ID3D12PipelineState
     table->pfnSetPipelineState(driver, pipeline->driver);
 }
 
-void STDMETHODCALLTYPE Native12CommandList::ResourceBarrier(UINT count, const D3D12_RESOURCE_BARRIER *barriers)
+UINT Native12ConvertResourceBarriers(UINT count, const D3D12_RESOURCE_BARRIER *barriers,
+        D3D12DDIARG_RESOURCE_BARRIER_0022 *converted)
 {
-    if (RejectInBundle()) return;
-    D3D12DDIARG_RESOURCE_BARRIER_0022 local[16];
-    D3D12DDIARG_RESOURCE_BARRIER_0022 *converted = local;
     UINT used = 0;
 
-    if (!count || !barriers) return;
-    if (count > ARRAYSIZE(local))
-    {
-        converted = static_cast<D3D12DDIARG_RESOURCE_BARRIER_0022 *>(
-                HeapAlloc(GetProcessHeap(), 0, count * sizeof(*converted)));
-        if (!converted) return;
-    }
     for (UINT i = 0; i < count; ++i)
     {
         D3D12DDIARG_RESOURCE_BARRIER_0022 &target = converted[used];
@@ -407,6 +398,24 @@ void STDMETHODCALLTYPE Native12CommandList::ResourceBarrier(UINT count, const D3
         }
         ++used;
     }
+    return used;
+}
+
+void STDMETHODCALLTYPE Native12CommandList::ResourceBarrier(UINT count, const D3D12_RESOURCE_BARRIER *barriers)
+{
+    if (RejectInBundle()) return;
+    D3D12DDIARG_RESOURCE_BARRIER_0022 local[16];
+    D3D12DDIARG_RESOURCE_BARRIER_0022 *converted = local;
+    UINT used;
+
+    if (!count || !barriers) return;
+    if (count > ARRAYSIZE(local))
+    {
+        converted = static_cast<D3D12DDIARG_RESOURCE_BARRIER_0022 *>(
+                HeapAlloc(GetProcessHeap(), 0, count * sizeof(*converted)));
+        if (!converted) return;
+    }
+    used = Native12ConvertResourceBarriers(count, barriers, converted);
     if (used) table->pfnResourceBarrier(driver, used, converted);
     if (converted != local) HeapFree(GetProcessHeap(), 0, converted);
 }
@@ -1043,6 +1052,15 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommandList(UINT, D3D12_COMMAND_
     if (!allocator || !out) return E_INVALIDARG;
     *out = NULL;
     if (static_cast<Native12CommandAllocator *>(allocator)->type != type) return E_INVALIDARG;
+    if (type == D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE)
+    {
+        Native12VideoDecodeCommandList *video = new Native12VideoDecodeCommandList(this);
+        if (!video) return E_OUTOFMEMORY;
+        HRESULT hr = video->Initialize(static_cast<Native12CommandAllocator *>(allocator));
+        if (SUCCEEDED(hr)) hr = video->QueryInterface(iid, out);
+        video->Release();
+        return hr;
+    }
     Native12CommandList *list = new Native12CommandList(this);
     if (!list) return E_OUTOFMEMORY;
     HRESULT hr = list->Initialize(type, static_cast<Native12CommandAllocator *>(allocator), initial_state);

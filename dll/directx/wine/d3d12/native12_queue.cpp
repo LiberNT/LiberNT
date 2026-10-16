@@ -20,6 +20,8 @@ D3D12DDI_COMMAND_QUEUE_FLAGS Native12QueueFlags(D3D12_COMMAND_LIST_TYPE type)
                     D3D12DDI_COMMAND_QUEUE_FLAG_COMPUTE | D3D12DDI_COMMAND_QUEUE_FLAG_COPY);
         case D3D12_COMMAND_LIST_TYPE_COPY:
             return D3D12DDI_COMMAND_QUEUE_FLAG_COPY;
+        case D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE:
+            return D3D12DDI_COMMAND_QUEUE_FLAG_0022_VIDEO_DECODE;
         default:
             return static_cast<D3D12DDI_COMMAND_QUEUE_FLAGS>(D3D12DDI_COMMAND_QUEUE_FLAG_3D
                     | D3D12DDI_COMMAND_QUEUE_FLAG_COMPUTE | D3D12DDI_COMMAND_QUEUE_FLAG_COPY);
@@ -130,6 +132,11 @@ HRESULT Native12CommandQueue::Initialize(const D3D12_COMMAND_QUEUE_DESC *input)
 {
     desc = *input;
     if (!desc.NodeMask) desc.NodeMask = 1;
+    if (desc.Type == D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE && (!device->EnsureVideo() || !device->video_decode_engine))
+        return E_INVALIDARG;
+    if (desc.Type != D3D12_COMMAND_LIST_TYPE_DIRECT && desc.Type != D3D12_COMMAND_LIST_TYPE_COMPUTE
+            && desc.Type != D3D12_COMMAND_LIST_TYPE_COPY && desc.Type != D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE)
+        return E_INVALIDARG;
     D3D12DDIARG_CREATECOMMANDQUEUE_0050 args = {};
     args.QueueFlags = Native12QueueFlags(desc.Type);
     args.NodeMask = desc.NodeMask ? desc.NodeMask : 1;
@@ -298,7 +305,8 @@ void STDMETHODCALLTYPE Native12CommandQueue::UpdateTileMappings(ID3D12Resource *
     D3D12DDI_HHEAP driver_heap = {};
     if (heap) driver_heap = static_cast<Native12Heap *>(heap)->driver;
     AcquireSRWLockExclusive(&submit_lock);
-    device->queue_functions.pfnUpdateTileMappings(driver, Native12UnwrapResource(resource)->driver, region_count,
+    (desc.Type == D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE ? device->video_queue_functions.pfnUpdateTileMappings
+            : device->queue_functions.pfnUpdateTileMappings)(driver, Native12UnwrapResource(resource)->driver, region_count,
             reinterpret_cast<const D3D12DDI_TILED_RESOURCE_COORDINATE *>(coordinates),
             reinterpret_cast<const D3D12DDI_TILE_REGION_SIZE *>(sizes), driver_heap, range_count,
             reinterpret_cast<const D3D12DDI_TILE_RANGE_FLAGS *>(range_flags), heap_range_offsets,
@@ -313,7 +321,8 @@ void STDMETHODCALLTYPE Native12CommandQueue::CopyTileMappings(ID3D12Resource *ds
 {
     if (!dst || !src || !dst_start || !src_start || !size) return;
     AcquireSRWLockExclusive(&submit_lock);
-    device->queue_functions.pfnCopyTileMappings(driver, Native12UnwrapResource(dst)->driver,
+    (desc.Type == D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE ? device->video_queue_functions.pfnCopyTileMappings
+            : device->queue_functions.pfnCopyTileMappings)(driver, Native12UnwrapResource(dst)->driver,
             reinterpret_cast<const D3D12DDI_TILED_RESOURCE_COORDINATE *>(dst_start),
             Native12UnwrapResource(src)->driver,
             reinterpret_cast<const D3D12DDI_TILED_RESOURCE_COORDINATE *>(src_start),
@@ -328,6 +337,11 @@ void STDMETHODCALLTYPE Native12CommandQueue::ExecuteCommandLists(UINT count, ID3
     D3D12DDI_HCOMMANDLIST *handles = local;
 
     if (!count || !lists) return;
+    if (desc.Type == D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE)
+    {
+        ExecuteVideoLists(count, lists);
+        return;
+    }
     for (UINT i = 0; i < count; ++i)
     {
         if (static_cast<Native12CommandList *>(static_cast<ID3D12GraphicsCommandList *>(lists[i]))->recording)
@@ -356,6 +370,36 @@ void STDMETHODCALLTYPE Native12CommandQueue::ExecuteCommandLists(UINT count, ID3
     if (handles != local) HeapFree(GetProcessHeap(), 0, handles);
 }
 
+void Native12CommandQueue::ExecuteVideoLists(UINT count, ID3D12CommandList *const *lists)
+{
+    D3D12DDI_HCOMMANDLIST local[16];
+    D3D12DDI_HCOMMANDLIST *handles = local;
+
+    for (UINT i = 0; i < count; ++i)
+    {
+        if (lists[i]->GetType() != D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE
+                || static_cast<Native12VideoDecodeCommandList *>(
+                static_cast<ID3D12VideoDecodeCommandList1 *>(lists[i]))->recording)
+        {
+            InterlockedCompareExchange(reinterpret_cast<LONG *>(&device->removed_reason), DXGI_ERROR_INVALID_CALL,
+                    S_OK);
+            return;
+        }
+    }
+    if (count > ARRAYSIZE(local))
+    {
+        handles = static_cast<D3D12DDI_HCOMMANDLIST *>(HeapAlloc(GetProcessHeap(), 0, count * sizeof(*handles)));
+        if (!handles) return;
+    }
+    for (UINT i = 0; i < count; ++i)
+        handles[i] = static_cast<Native12VideoDecodeCommandList *>(
+                static_cast<ID3D12VideoDecodeCommandList1 *>(lists[i]))->driver;
+    AcquireSRWLockExclusive(&submit_lock);
+    device->video_queue_functions.pfnExecuteCommandLists(driver, count, handles);
+    ReleaseSRWLockExclusive(&submit_lock);
+    if (handles != local) HeapFree(GetProcessHeap(), 0, handles);
+}
+
 void STDMETHODCALLTYPE Native12CommandQueue::SetMarker(UINT, const void *, UINT) {}
 void STDMETHODCALLTYPE Native12CommandQueue::BeginEvent(UINT, const void *, UINT) {}
 void STDMETHODCALLTYPE Native12CommandQueue::EndEvent() {}
@@ -370,7 +414,10 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Signal(ID3D12Fence *fence, UINT6
     operation.Value = value;
     operation.PhysicalAdapterMask = 1;
     AcquireSRWLockExclusive(&submit_lock);
-    device->queue_functions.pfnSignalFence(driver, &operation);
+    if (desc.Type == D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE)
+        device->video_queue_functions.pfnSignalFence(driver, &operation);
+    else
+        device->queue_functions.pfnSignalFence(driver, &operation);
     if (FAILED(device->removed_reason))
     {
         ReleaseSRWLockExclusive(&submit_lock);
@@ -407,7 +454,10 @@ HRESULT STDMETHODCALLTYPE Native12CommandQueue::Wait(ID3D12Fence *fence, UINT64 
     operation.Value = value;
     operation.PhysicalAdapterMask = 1;
     AcquireSRWLockExclusive(&submit_lock);
-    device->queue_functions.pfnWaitForFence(driver, &operation);
+    if (desc.Type == D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE)
+        device->video_queue_functions.pfnWaitForFence(driver, &operation);
+    else
+        device->queue_functions.pfnWaitForFence(driver, &operation);
     if (FAILED(device->removed_reason))
     {
         ReleaseSRWLockExclusive(&submit_lock);
@@ -520,8 +570,10 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommandAllocator(D3D12_COMMAND_L
 {
     if (!out) return E_INVALIDARG;
     *out = NULL;
+    if (type == D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE && !EnsureVideo()) return E_INVALIDARG;
     if (type != D3D12_COMMAND_LIST_TYPE_DIRECT && type != D3D12_COMMAND_LIST_TYPE_BUNDLE
-            && type != D3D12_COMMAND_LIST_TYPE_COMPUTE && type != D3D12_COMMAND_LIST_TYPE_COPY)
+            && type != D3D12_COMMAND_LIST_TYPE_COMPUTE && type != D3D12_COMMAND_LIST_TYPE_COPY
+            && type != D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE)
         return E_INVALIDARG;
     Native12CommandAllocator *allocator = new Native12CommandAllocator(this);
     if (!allocator) return E_OUTOFMEMORY;
