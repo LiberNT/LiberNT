@@ -5465,6 +5465,22 @@ interface ID3D12DeviceConfiguration : IUnknown
         [out] void **deserializer);
 }
 
+[
+    uuid(ed342442-6343-4e16-bb82-a3a577874e56),
+    object,
+    local,
+    pointer_default(unique)
+]
+interface ID3D12DeviceConfiguration1 : ID3D12DeviceConfiguration
+{
+    HRESULT CreateVersionedRootSignatureDeserializerFromSubobjectInLibrary(
+        [in] const void *library_blob,
+        [in] SIZE_T size,
+        [in] LPCWSTR root_signature_subobject_name,
+        [in] REFIID riid,
+        [out] void **deserializer);
+}
+
 typedef enum D3D12_AXIS_SHADING_RATE
 {
     D3D12_AXIS_SHADING_RATE_1X = 0x0,
