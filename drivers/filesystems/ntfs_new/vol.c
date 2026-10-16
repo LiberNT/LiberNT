@@ -115,6 +115,7 @@ NtfsGetSizeInfo(PDEVICE_OBJECT DeviceObject,
 {
     PVolumeContextBlock VolCB = (PVolumeContextBlock)DeviceObject->DeviceExtension;
     PNtfsVolume DiskVolume;
+    ULONGLONG Reserved;
 
     if (*Length < sizeof(FILE_FS_SIZE_INFORMATION))
         return STATUS_BUFFER_OVERFLOW;
@@ -128,7 +129,12 @@ NtfsGetSizeInfo(PDEVICE_OBJECT DeviceObject,
     NtfsAcquireMetadata(VolCB);
     NtfsVolumeGetFreeClusters(DiskVolume, &Buffer->AvailableAllocationUnits);
     Buffer->TotalAllocationUnits.QuadPart = NtfsVolumeGetClustersInVolume(DiskVolume);
+    Reserved = NtfsVolumeGetReservedClusters(DiskVolume);
     NtfsReleaseMetadata(VolCB);
+    Buffer->AvailableAllocationUnits.QuadPart =
+        (ULONGLONG)Buffer->AvailableAllocationUnits.QuadPart > Reserved
+        ? (LONGLONG)((ULONGLONG)Buffer->AvailableAllocationUnits.QuadPart - Reserved)
+        : 0;
     KeLeaveCriticalRegion();
     Buffer->SectorsPerAllocationUnit = NtfsVolumeGetSectorsPerCluster(DiskVolume);
     Buffer->BytesPerSector = NtfsVolumeGetBytesPerSector(DiskVolume);
