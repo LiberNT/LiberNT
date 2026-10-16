@@ -35,6 +35,9 @@ DefaultDestDir = 12
 
 [rt.ndi]
 Characteristics = 0x84
+*IfType = 71
+*MediaType = 16
+*PhysicalMediaType = 9
 BusType         = 15
 AddReg          = rt.reg
 CopyFiles       = rt.CopyFiles

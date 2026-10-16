@@ -30,6 +30,9 @@ DefaultDestDir = 12
 
 [vwifi.ndi]
 Characteristics = 0x21   ; NCF_VIRTUAL | NCF_HAS_UI
+*IfType = 71
+*MediaType = 16
+*PhysicalMediaType = 9
 AddReg          = vwifi.reg
 CopyFiles       = vwifi.CopyFiles
 

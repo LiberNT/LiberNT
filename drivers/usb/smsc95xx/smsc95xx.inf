@@ -75,6 +75,9 @@ DefaultDestDir = 12
 
 [LAN95xx.Install]
 Characteristics = 0x84
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType         = 15
 AddReg          = LAN95xx.Reg
 CopyFiles       = LAN95xx.CopyFiles

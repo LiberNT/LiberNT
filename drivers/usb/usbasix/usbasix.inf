@@ -21,6 +21,9 @@ DefaultDestDir = 12
 
 [AX88772B.Install]
 Characteristics = 0x84
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType         = 15
 AddReg          = AX88772B.Reg
 CopyFiles       = AX88772B.CopyFiles

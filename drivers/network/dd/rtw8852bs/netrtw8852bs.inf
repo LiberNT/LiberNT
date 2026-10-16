@@ -31,6 +31,9 @@ DefaultDestDir = 12
 
 [rtw.ndi]
 Characteristics = 0x84
+*IfType = 71
+*MediaType = 16
+*PhysicalMediaType = 9
 BusType         = 15
 AddReg          = rtw.reg
 CopyFiles       = rtw.CopyFiles

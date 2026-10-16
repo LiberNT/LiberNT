@@ -44,6 +44,9 @@ DefaultDestDir = 12
 
 [RNDIS.Install]
 Characteristics = 0x84   ; NCF_HAS_UI | NCF_PHYSICAL
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType         = 15     ; PNPBus
 AddReg          = RNDIS.Reg
 CopyFiles       = RNDIS.CopyFiles
