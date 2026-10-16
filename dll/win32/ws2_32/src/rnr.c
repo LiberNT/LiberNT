@@ -645,8 +645,61 @@ WSARemoveServiceClass(IN LPGUID lpServiceClassId)
     return SOCKET_ERROR;
 }
 
+typedef struct _WS_SET_SERVICE_CONTEXT
+{
+    PNSCATALOG Catalog;
+    LPWSAQUERYSETW RegInfo;
+    WSAESETSERVICEOP Operation;
+    DWORD ControlFlags;
+    BOOLEAN Succeeded;
+    INT ErrorCode;
+} WS_SET_SERVICE_CONTEXT, *PWS_SET_SERVICE_CONTEXT;
+
+static
+VOID
+WsSetServiceOnEntry(IN PWS_SET_SERVICE_CONTEXT Context,
+                    IN PNSCATALOG_ENTRY Entry)
+{
+    PNS_PROVIDER Provider;
+
+    if (!Entry->Provider && WsNcLoadProvider(Context->Catalog, Entry) != ERROR_SUCCESS)
+        return;
+    Provider = Entry->Provider;
+    if (!Provider || !Provider->Service.NSPSetService)
+        return;
+    if (Provider->Service.NSPSetService(&Provider->ProviderId,
+                                        NULL,
+                                        Context->RegInfo,
+                                        Context->Operation,
+                                        Context->ControlFlags) == ERROR_SUCCESS)
+    {
+        Context->Succeeded = TRUE;
+    }
+    else
+    {
+        Context->ErrorCode = GetLastError();
+    }
+}
+
+static
+BOOL
+WSAAPI
+WsSetServiceEnumerationProc(IN PVOID Context,
+                            IN PNSCATALOG_ENTRY Entry)
+{
+    PWS_SET_SERVICE_CONTEXT SetContext = Context;
+
+    if (Entry->Enabled &&
+        (SetContext->RegInfo->dwNameSpace == NS_ALL ||
+         SetContext->RegInfo->dwNameSpace == Entry->NamespaceId))
+    {
+        WsSetServiceOnEntry(SetContext, Entry);
+    }
+    return TRUE;
+}
+
 /*
- * @unimplemented
+ * @implemented
  */
 INT
 WSAAPI
@@ -654,13 +707,47 @@ WSASetServiceA(IN LPWSAQUERYSETA lpqsRegInfo,
                IN WSAESETSERVICEOP essOperation,
                IN DWORD dwControlFlags)
 {
-    DPRINT("WSASetServiceA: %lx\n", lpqsRegInfo);
-    SetLastError(WSAEINVAL);
+    LPWSAQUERYSETW UnicodeQuerySet = NULL;
+    SIZE_T UnicodeQuerySetSize = 0;
+    INT ErrorCode;
+
+    DPRINT("WSASetServiceA: %p\n", lpqsRegInfo);
+
+    if (IsBadReadPtr(lpqsRegInfo, sizeof(*lpqsRegInfo)))
+    {
+        SetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+
+    ErrorCode = MapAnsiQuerySetToUnicode(lpqsRegInfo, &UnicodeQuerySetSize, UnicodeQuerySet);
+    if (ErrorCode == WSAEFAULT)
+    {
+        UnicodeQuerySet = HeapAlloc(WsSockHeap, 0, UnicodeQuerySetSize);
+        if (!UnicodeQuerySet)
+        {
+            SetLastError(WSA_NOT_ENOUGH_MEMORY);
+            return SOCKET_ERROR;
+        }
+        ErrorCode = MapAnsiQuerySetToUnicode(lpqsRegInfo, &UnicodeQuerySetSize, UnicodeQuerySet);
+        if (ErrorCode == ERROR_SUCCESS)
+        {
+            ErrorCode = WSASetServiceW(UnicodeQuerySet, essOperation, dwControlFlags);
+        }
+        else
+        {
+            SetLastError(ErrorCode);
+            ErrorCode = SOCKET_ERROR;
+        }
+        HeapFree(WsSockHeap, 0, UnicodeQuerySet);
+        return ErrorCode;
+    }
+
+    SetLastError(ErrorCode);
     return SOCKET_ERROR;
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 INT
 WSAAPI
@@ -668,8 +755,60 @@ WSASetServiceW(IN LPWSAQUERYSETW lpqsRegInfo,
                IN WSAESETSERVICEOP essOperation,
                IN DWORD dwControlFlags)
 {
-    DPRINT("WSASetServiceW: %lx\n", lpqsRegInfo);
-    SetLastError(WSAEINVAL);
+    WS_SET_SERVICE_CONTEXT Context;
+    PNSCATALOG_ENTRY CatalogEntry;
+    PWSPROCESS Process;
+    PWSTHREAD Thread;
+    INT ErrorCode;
+
+    DPRINT("WSASetServiceW: %p\n", lpqsRegInfo);
+
+    if ((ErrorCode = WsApiProlog(&Process, &Thread)) != ERROR_SUCCESS)
+    {
+        SetLastError(ErrorCode);
+        return SOCKET_ERROR;
+    }
+
+    if (IsBadReadPtr(lpqsRegInfo, sizeof(*lpqsRegInfo)))
+    {
+        SetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+
+    if (lpqsRegInfo->dwSize < sizeof(*lpqsRegInfo))
+    {
+        SetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
+
+    RtlZeroMemory(&Context, sizeof(Context));
+    Context.Catalog = WsProcGetNsCatalog(Process);
+    Context.RegInfo = lpqsRegInfo;
+    Context.Operation = essOperation;
+    Context.ControlFlags = dwControlFlags;
+    Context.ErrorCode = WSASERVICE_NOT_FOUND;
+
+    if (lpqsRegInfo->lpNSProviderId)
+    {
+        if (WsNcGetCatalogFromProviderId(Context.Catalog,
+                                         lpqsRegInfo->lpNSProviderId,
+                                         &CatalogEntry) != ERROR_SUCCESS)
+        {
+            SetLastError(WSAEINVAL);
+            return SOCKET_ERROR;
+        }
+        WsSetServiceOnEntry(&Context, CatalogEntry);
+        WsNcEntryDereference(CatalogEntry);
+    }
+    else
+    {
+        WsNcEnumerateCatalogItems(Context.Catalog, WsSetServiceEnumerationProc, &Context);
+    }
+
+    if (Context.Succeeded)
+        return ERROR_SUCCESS;
+
+    SetLastError(Context.ErrorCode);
     return SOCKET_ERROR;
 }
 
