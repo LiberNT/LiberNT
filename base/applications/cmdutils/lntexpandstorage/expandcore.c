@@ -180,6 +180,7 @@ typedef struct _NTFS_RUN
 typedef struct _NTFS_WORKSPACE
 {
     uint8_t Record[MAX_RECORD_SIZE];
+    uint8_t Staged[MAX_RECORD_SIZE];
     uint8_t Chunk[BITMAP_CHUNK];
     uint8_t Encoded[MAX_MAPPING_PAIRS];
     uint8_t Boot[MAX_SECTOR_SIZE];
@@ -447,13 +448,10 @@ FindAttribute(uint8_t* Record,
               uint32_t RecordSize,
               uint32_t Type,
               const uint16_t* Name,
-              uint32_t NameLength,
-              int* IsLast)
+              uint32_t NameLength)
 {
     NTFS_FILE_RECORD_HEADER* Header = (NTFS_FILE_RECORD_HEADER*)Record;
     uint32_t Offset = Header->AttributeOffset;
-
-    *IsLast = 0;
 
     if (Offset < sizeof(NTFS_FILE_RECORD_HEADER))
         return NULL;
@@ -481,11 +479,6 @@ FindAttribute(uint8_t* Record,
              ((uint32_t)Attribute->NameOffset + NameLength * 2 <= Attribute->Length &&
               memcmp(Record + Offset + Attribute->NameOffset, Name, NameLength * 2) == 0)))
         {
-            if (Next + 4 <= RecordSize &&
-                *(uint32_t*)(Record + Next) == ATTR_TYPE_END)
-            {
-                *IsLast = 1;
-            }
             return Attribute;
         }
 
@@ -545,32 +538,43 @@ ReplaceRuns(NTFS_CONTEXT* Context,
     NTFS_FILE_RECORD_HEADER* Header = (NTFS_FILE_RECORD_HEADER*)Record;
     uint32_t AttributeOffset = (uint32_t)((uint8_t*)Attribute - Record);
     uint32_t RunsOffset = Attribute->DataRunsOffset;
+    uint32_t OldLength = Attribute->Length;
+    uint32_t Limit = Header->AllocatedSize < Context->RecordSize ? Header->AllocatedSize : Context->RecordSize;
     uint32_t EncodedLength;
     uint32_t NewLength;
+    uint32_t Tail;
 
-    if (RunsOffset < ATTR_NONRESIDENT_HEADER_SIZE || RunsOffset >= Context->RecordSize)
+    if (RunsOffset < ATTR_NONRESIDENT_HEADER_SIZE || RunsOffset >= OldLength ||
+        Header->ActualSize > Limit ||
+        Header->ActualSize < AttributeOffset + OldLength + 4)
+    {
         return EXPAND_CORRUPT;
+    }
+    Tail = Header->ActualSize - (AttributeOffset + OldLength);
 
     EncodedLength = EncodeRuns(Runs, RunCount, Encoded, MAX_MAPPING_PAIRS);
     if (EncodedLength == 0)
         return EXPAND_CORRUPT;
 
     NewLength = (uint32_t)ALIGN_UP8((uint64_t)RunsOffset + EncodedLength);
-    if (AttributeOffset + NewLength + 8 > Context->RecordSize)
+    if (AttributeOffset + NewLength + Tail > Limit)
         return EXPAND_NO_ROOM;
+
+    if (NewLength > OldLength)
+        memmove(Record + AttributeOffset + NewLength, Record + AttributeOffset + OldLength, Tail);
 
     memset((uint8_t*)Attribute + RunsOffset, 0, NewLength - RunsOffset);
     memcpy((uint8_t*)Attribute + RunsOffset, Encoded, EncodedLength);
+
+    if (NewLength < OldLength)
+        memmove(Record + AttributeOffset + NewLength, Record + AttributeOffset + OldLength, Tail);
 
     Attribute->Length = NewLength;
     Attribute->LastVcn = LastVcn;
     Attribute->AllocatedSize = AllocatedSize;
     Attribute->DataSize = DataSize;
     Attribute->InitializedSize = InitializedSize;
-
-    *(uint32_t*)(Record + AttributeOffset + NewLength) = ATTR_TYPE_END;
-    *(uint32_t*)(Record + AttributeOffset + NewLength + 4) = 0;
-    Header->ActualSize = AttributeOffset + NewLength + 8;
+    Header->ActualSize = AttributeOffset + NewLength + Tail;
 
     return EXPAND_OK;
 }
@@ -1280,6 +1284,60 @@ ExpandFinishPlan(EXPAND_DEVICE* Device, EXPAND_PLAN* Plan, uint64_t MinimumGain)
 #endif
 
 static int
+FindLowFreeRun(NTFS_CONTEXT* Context,
+               const NTFS_RUN* Runs,
+               uint32_t RunCount,
+               uint64_t Count,
+               uint64_t* Lcn)
+{
+    uint8_t* Chunk = Context->Work->Chunk;
+    uint64_t Bytes = (Context->OldClusters + 7) / 8;
+    uint64_t Position;
+    uint64_t Start = 0;
+    uint64_t Length = 0;
+    int Status;
+
+    for (Position = 0; Position < Bytes; )
+    {
+        uint64_t Remaining = Bytes - Position;
+        uint32_t ChunkLength = (uint32_t)(Remaining < BITMAP_CHUNK ? Remaining : BITMAP_CHUNK);
+        uint32_t Byte;
+
+        Status = RunsTransfer(Context, Runs, RunCount, Position, ChunkLength, Chunk, 0);
+        if (Status != EXPAND_OK)
+            return Status;
+
+        for (Byte = 0; Byte < ChunkLength; Byte++)
+        {
+            uint32_t Bit;
+
+            for (Bit = 0; Bit < 8; Bit++)
+            {
+                uint64_t Cluster = (Position + Byte) * 8 + Bit;
+
+                if (Cluster >= Context->OldClusters)
+                    return EXPAND_NO_ROOM;
+                if (Chunk[Byte] & (1u << Bit))
+                {
+                    Length = 0;
+                    continue;
+                }
+                if (Length == 0)
+                    Start = Cluster;
+                if (++Length == Count)
+                {
+                    *Lcn = Start;
+                    return EXPAND_OK;
+                }
+            }
+        }
+        Position += ChunkLength;
+    }
+
+    return EXPAND_NO_ROOM;
+}
+
+static int
 GrowBitmap(NTFS_CONTEXT* Context, uint32_t* ExtraClusters)
 {
     uint8_t* Record = Context->Work->Record;
@@ -1297,15 +1355,14 @@ GrowBitmap(NTFS_CONTEXT* Context, uint32_t* ExtraClusters)
     uint64_t EndByte;
     uint64_t Position;
     uint8_t Preserved = 0;
-    int IsLast;
     int Status;
 
     Status = ReadRecord(Context, NTFS_RECORD_BITMAP, Record);
     if (Status != EXPAND_OK)
         return Status;
 
-    Attribute = FindAttribute(Record, Context->RecordSize, ATTR_TYPE_DATA, NULL, 0, &IsLast);
-    if (!Attribute || !Attribute->IsNonResident || !IsLast)
+    Attribute = FindAttribute(Record, Context->RecordSize, ATTR_TYPE_DATA, NULL, 0);
+    if (!Attribute || !Attribute->IsNonResident)
         return EXPAND_CORRUPT;
 
     if (Attribute->FirstVcn != 0 ||
@@ -1336,6 +1393,10 @@ GrowBitmap(NTFS_CONTEXT* Context, uint32_t* ExtraClusters)
 
     if (Extra != 0)
     {
+        uint64_t LowLcn;
+
+        if (FindLowFreeRun(Context, Runs, RunCount, Extra, &LowLcn) == EXPAND_OK)
+            NewLcn = LowLcn;
         if (NewLcn + Extra > Context->NewClusters)
             return EXPAND_NO_ROOM;
 
@@ -1404,6 +1465,23 @@ GrowBitmap(NTFS_CONTEXT* Context, uint32_t* ExtraClusters)
         Position += Length;
     }
 
+    for (Position = NewLcn; Extra != 0 && Position < NewLcn + Extra && Position < Context->OldClusters; )
+    {
+        uint8_t Value;
+
+        Status = RunsTransfer(Context, Runs, RunCount, Position / 8, 1, &Value, 0);
+        if (Status != EXPAND_OK)
+            return Status;
+        do
+        {
+            Value |= (uint8_t)(1u << (Position & 7));
+            Position++;
+        } while ((Position & 7) != 0 && Position < NewLcn + Extra && Position < Context->OldClusters);
+        Status = RunsTransfer(Context, Runs, RunCount, (Position - 1) / 8, 1, &Value, 1);
+        if (Status != EXPAND_OK)
+            return Status;
+    }
+
     Status = ReplaceRuns(Context,
                          Record,
                          Attribute,
@@ -1436,15 +1514,14 @@ GrowBadClusters(NTFS_CONTEXT* Context)
     uint64_t Missing;
     uint64_t Initialized;
     uint32_t Index;
-    int IsLast;
     int Status;
 
     Status = ReadRecord(Context, NTFS_RECORD_BADCLUS, Record);
     if (Status != EXPAND_OK)
         return Status;
 
-    Attribute = FindAttribute(Record, Context->RecordSize, ATTR_TYPE_DATA, BadName, 4, &IsLast);
-    if (!Attribute || !Attribute->IsNonResident || !IsLast)
+    Attribute = FindAttribute(Record, Context->RecordSize, ATTR_TYPE_DATA, BadName, 4);
+    if (!Attribute || !Attribute->IsNonResident)
         return EXPAND_CORRUPT;
 
     if (!DecodeRuns((uint8_t*)Attribute + Attribute->DataRunsOffset,
@@ -1602,6 +1679,226 @@ ExpandGrowVolume(EXPAND_DEVICE* Device,
         return Status;
 
     return WriteBootSectors(&Context, NewVolumeSectors);
+}
+
+static int
+PrepareShrinkBitmap(NTFS_CONTEXT* Context, uint8_t* Record, uint32_t* RunCount)
+{
+    NTFS_RUN* Runs = Context->Work->Runs;
+    NTFS_ATTRIBUTE* Attribute;
+    uint32_t ClusterSize = Context->ClusterSize;
+    uint64_t NewBitmapDataSize;
+    int Status;
+
+    *RunCount = 0;
+
+    Status = ReadRecord(Context, NTFS_RECORD_BITMAP, Record);
+    if (Status != EXPAND_OK)
+        return Status;
+
+    Attribute = FindAttribute(Record, Context->RecordSize, ATTR_TYPE_DATA, NULL, 0);
+    if (!Attribute || !Attribute->IsNonResident)
+        return EXPAND_CORRUPT;
+
+    if (Attribute->FirstVcn != 0 ||
+        (Attribute->Flags & (ATTR_COMPRESSION_MASK | ATTR_ENCRYPTED | ATTR_SPARSE)) != 0)
+    {
+        return EXPAND_CORRUPT;
+    }
+
+    if (!DecodeRuns((uint8_t*)Attribute + Attribute->DataRunsOffset,
+                    (uint8_t*)Attribute + Attribute->Length,
+                    Runs,
+                    MAX_RUNS,
+                    RunCount) ||
+        *RunCount == 0)
+    {
+        return EXPAND_CORRUPT;
+    }
+
+    NewBitmapDataSize = ALIGN_UP8((Context->NewClusters + 7) / 8);
+    if (Attribute->AllocatedSize % ClusterSize != 0 ||
+        Attribute->LastVcn + 1 != Attribute->AllocatedSize / ClusterSize ||
+        NewBitmapDataSize > Attribute->AllocatedSize)
+    {
+        return EXPAND_CORRUPT;
+    }
+
+    Attribute->DataSize = NewBitmapDataSize;
+    if (Attribute->InitializedSize > NewBitmapDataSize)
+        Attribute->InitializedSize = NewBitmapDataSize;
+    return EXPAND_OK;
+}
+
+static int
+WriteBitmapPadding(NTFS_CONTEXT* Context, uint32_t RunCount)
+{
+    uint8_t* Chunk = Context->Work->Chunk;
+    NTFS_RUN* Runs = Context->Work->Runs;
+    uint64_t NewBitmapDataSize = ALIGN_UP8((Context->NewClusters + 7) / 8);
+    uint64_t FirstByte = Context->NewClusters / 8;
+    uint64_t Position;
+    int Status;
+
+    if ((Context->NewClusters & 7) != 0)
+    {
+        uint8_t Edge = 0;
+
+        Status = RunsTransfer(Context, Runs, RunCount, FirstByte, 1, &Edge, 0);
+        if (Status != EXPAND_OK)
+            return Status;
+        Edge |= (uint8_t)(0xFF << (Context->NewClusters & 7));
+        Status = RunsTransfer(Context, Runs, RunCount, FirstByte, 1, &Edge, 1);
+        if (Status != EXPAND_OK)
+            return Status;
+        FirstByte++;
+    }
+
+    for (Position = FirstByte; Position < NewBitmapDataSize; )
+    {
+        uint64_t Remaining = NewBitmapDataSize - Position;
+        uint32_t Length = (uint32_t)(Remaining < BITMAP_CHUNK ? Remaining : BITMAP_CHUNK);
+
+        memset(Chunk, 0xFF, Length);
+        Status = RunsTransfer(Context, Runs, RunCount, Position, Length, Chunk, 1);
+        if (Status != EXPAND_OK)
+            return Status;
+        Position += Length;
+    }
+
+    return EXPAND_OK;
+}
+
+static int
+PrepareShrinkBadClusters(NTFS_CONTEXT* Context, uint8_t* Record)
+{
+    static const uint16_t BadName[4] = { '$', 'B', 'a', 'd' };
+    NTFS_RUN* Runs = Context->Work->Runs;
+    NTFS_ATTRIBUTE* Attribute;
+    uint32_t RunCount = 0;
+    uint32_t Kept = 0;
+    uint32_t Index;
+    uint64_t Mapped = 0;
+    uint64_t NewSize;
+    int Status;
+
+    Status = ReadRecord(Context, NTFS_RECORD_BADCLUS, Record);
+    if (Status != EXPAND_OK)
+        return Status;
+
+    Attribute = FindAttribute(Record, Context->RecordSize, ATTR_TYPE_DATA, BadName, 4);
+    if (!Attribute || !Attribute->IsNonResident)
+        return EXPAND_CORRUPT;
+
+    if (!DecodeRuns((uint8_t*)Attribute + Attribute->DataRunsOffset,
+                    (uint8_t*)Attribute + Attribute->Length,
+                    Runs,
+                    MAX_RUNS,
+                    &RunCount) ||
+        RunCount == 0)
+    {
+        return EXPAND_CORRUPT;
+    }
+
+    for (Index = 0; Index < RunCount; Index++)
+    {
+        uint64_t Room = Context->NewClusters - Mapped;
+
+        if (Room == 0 || Runs[Index].Length > Room)
+        {
+            if (!Runs[Index].Sparse)
+                return EXPAND_NO_ROOM;
+            if (Room == 0)
+                continue;
+            Runs[Index].Length = Room;
+        }
+        Mapped += Runs[Index].Length;
+        Kept = Index + 1;
+    }
+    if (Mapped != Context->NewClusters)
+        return EXPAND_CORRUPT;
+    RunCount = Kept;
+
+    NewSize = Context->NewClusters * Context->ClusterSize;
+    return ReplaceRuns(Context,
+                       Record,
+                       Attribute,
+                       Runs,
+                       RunCount,
+                       Context->NewClusters - 1,
+                       NewSize,
+                       NewSize,
+                       Attribute->InitializedSize < NewSize ? Attribute->InitializedSize : NewSize);
+}
+
+int
+ExpandShrinkVolume(EXPAND_DEVICE* Device,
+                   uint64_t VolumeStart,
+                   uint64_t NewVolumeSectors,
+                   void* Workspace)
+{
+    NTFS_CONTEXT Context;
+    NTFS_BOOT_SECTOR* BootSector;
+    uint32_t RunCount = 0;
+    int Status;
+
+    if (!Workspace || Device->SectorSize < 512 || Device->SectorSize > MAX_SECTOR_SIZE)
+        return EXPAND_BAD_PARAMETER;
+
+    memset(&Context, 0, sizeof(Context));
+    Context.Device = Device;
+    Context.Work = (NTFS_WORKSPACE*)Workspace;
+    Context.PartitionStart = VolumeStart;
+
+    if (!Device->Read(Device->Context, VolumeStart, Device->SectorSize, Context.Work->Boot))
+        return EXPAND_IO_ERROR;
+
+    BootSector = (NTFS_BOOT_SECTOR*)Context.Work->Boot;
+
+    if (memcmp(BootSector->OemId, "NTFS    ", 8) != 0)
+        return EXPAND_NOT_NTFS;
+
+    if (BootSector->BytesPerSector != Device->SectorSize ||
+        !IsPowerOfTwo(BootSector->SectorsPerCluster) ||
+        BootSector->SectorsPerCluster > 128 ||
+        BootSector->SectorsInVolume == 0)
+    {
+        return EXPAND_CORRUPT;
+    }
+
+    Context.BytesPerSector = BootSector->BytesPerSector;
+    Context.ClusterSize = (uint32_t)BootSector->BytesPerSector * BootSector->SectorsPerCluster;
+    Context.OldClusters = BootSector->SectorsInVolume / BootSector->SectorsPerCluster;
+    Context.NewClusters = NewVolumeSectors / BootSector->SectorsPerCluster;
+
+    if (Context.NewClusters == 0 || Context.NewClusters >= Context.OldClusters)
+        return EXPAND_BAD_PARAMETER;
+
+    Status = LocateRecords(&Context, BootSector);
+    if (Status != EXPAND_OK)
+        return Status;
+
+    Status = PrepareShrinkBadClusters(&Context, Context.Work->Staged);
+    if (Status != EXPAND_OK)
+        return Status;
+
+    Status = PrepareShrinkBitmap(&Context, Context.Work->Record, &RunCount);
+    if (Status != EXPAND_OK)
+        return Status;
+
+    Status = WriteBootSectors(&Context, NewVolumeSectors);
+    if (Status != EXPAND_OK)
+        return Status;
+
+    Status = WriteBitmapPadding(&Context, RunCount);
+    if (Status != EXPAND_OK)
+        return Status;
+
+    Status = WriteRecord(&Context, NTFS_RECORD_BADCLUS, Context.Work->Staged);
+    if (Status != EXPAND_OK)
+        return Status;
+
+    return WriteRecord(&Context, NTFS_RECORD_BITMAP, Context.Work->Record);
 }
 
 #ifndef EXPAND_VOLUME_ONLY

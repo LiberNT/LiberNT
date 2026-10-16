@@ -75,6 +75,11 @@ int ExpandGrowVolume(EXPAND_DEVICE* Device,
                      uint64_t NewVolumeSectors,
                      void* Workspace);
 
+int ExpandShrinkVolume(EXPAND_DEVICE* Device,
+                       uint64_t VolumeStart,
+                       uint64_t NewVolumeSectors,
+                       void* Workspace);
+
 const char* ExpandStatusText(int Status);
 
 #endif /* _LNTEXPANDSTORAGE_CORE_H_ */
