@@ -25,6 +25,7 @@ list(APPEND SOURCE
     eventcancel.c
     d3dkmt_adapter.c
     d3dkmt_device.c
+    d3dkmt_tdr.c
     d3dkmt_alloc.c
     d3dkmt_sync.c
     d3dkmt_display.c

@@ -3,6 +3,7 @@
 
 extern void func_D3dkmtAdapter(void);
 extern void func_D3dkmtDevice(void);
+extern void func_D3dkmtTdr(void);
 extern void func_D3dkmtAlloc(void);
 extern void func_D3dkmtSync(void);
 extern void func_D3dkmtDisplay(void);
@@ -88,6 +89,7 @@ const struct test winetest_testlist[] =
 {
     { "D3dkmtAdapter", func_D3dkmtAdapter },
     { "D3dkmtDevice",  func_D3dkmtDevice },
+    { "D3dkmtTdr",     func_D3dkmtTdr },
     { "D3dkmtAlloc",   func_D3dkmtAlloc },
     { "D3dkmtSync",    func_D3dkmtSync },
     { "D3dkmtDisplay", func_D3dkmtDisplay },
