@@ -1061,6 +1061,15 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateCommandList(UINT, D3D12_COMMAND_
         video->Release();
         return hr;
     }
+    if (type == D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS)
+    {
+        Native12VideoProcessCommandList *video = new Native12VideoProcessCommandList(this);
+        if (!video) return E_OUTOFMEMORY;
+        HRESULT hr = video->Initialize(static_cast<Native12CommandAllocator *>(allocator));
+        if (SUCCEEDED(hr)) hr = video->QueryInterface(iid, out);
+        video->Release();
+        return hr;
+    }
     Native12CommandList *list = new Native12CommandList(this);
     if (!list) return E_OUTOFMEMORY;
     HRESULT hr = list->Initialize(type, static_cast<Native12CommandAllocator *>(allocator), initial_state);

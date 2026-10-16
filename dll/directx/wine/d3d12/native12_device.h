@@ -71,7 +71,13 @@ public:
     D3D12DDI_DEVICE_FUNCS_VIDEO_0082_0 video_functions = {};
     D3D12DDI_COMMAND_QUEUE_FUNCS_VIDEO_0020 video_queue_functions = {};
     D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_DECODE_0094 decode_list_functions = {};
+    D3D12DDI_COMMAND_QUEUE_FUNCS_VIDEO_0020 process_queue_functions = {};
+    D3D12DDI_COMMAND_LIST_FUNCS_VIDEO_PROCESS_0094 process_list_functions = {};
     bool EnsureVideo();
+    bool EnsureVideoProcess();
+    HRESULT CheckVideoProcessSupport(D3D12_FEATURE_DATA_VIDEO_PROCESS_SUPPORT *caps);
+    HRESULT ValidateVideoProcessor(UINT node_mask, const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *output,
+            UINT count, const D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC *inputs, BOOL protected_session);
     HRESULT QueryVideoCaps(D3D12DDICAPS_TYPE_VIDEO_0020 type, void *data, UINT size);
     HRESULT ValidateHeapProperties(const D3D12_HEAP_PROPERTIES *properties, D3D12_HEAP_FLAGS flags);
     D3D12DDI_GPUVA_CAPS_0004 gpuva = {};

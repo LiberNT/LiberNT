@@ -75,6 +75,7 @@ class Native12CommandQueue final : public Native12Child<ID3D12CommandQueue>, pub
 {
 public:
     void ExecuteVideoLists(UINT count, ID3D12CommandList *const *lists);
+    const D3D12DDI_COMMAND_QUEUE_FUNCS_VIDEO_0020 *VideoFunctions();
     ULONG STDMETHODCALLTYPE AddRef() override { return Native12Child::AddRef(); }
     ULONG STDMETHODCALLTYPE Release() override { return Native12Child::Release(); }
     HRESULT STDMETHODCALLTYPE create_swapchain(IDXGIFactory *factory, HWND window,
@@ -298,9 +299,47 @@ public:
     D3D12_VIDEO_DECODER_HEAP_DESC *STDMETHODCALLTYPE GetDesc(D3D12_VIDEO_DECODER_HEAP_DESC *out) override;
 };
 
-class Native12VideoDecodeCommandList final : public Native12Child<ID3D12VideoDecodeCommandList1>
+class Native12VideoProcessor final : public Native12Child<ID3D12VideoProcessor>
 {
 public:
+    UINT node_mask = 0;
+    D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC output = {};
+    D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC *inputs = NULL;
+    UINT input_count = 0;
+    D3D12DDI_HVIDEOPROCESSOR_0020 driver = {};
+    bool driver_created = false;
+
+    using Native12Child::Native12Child;
+    ~Native12VideoProcessor();
+    HRESULT Initialize(UINT mask, const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *output_desc, UINT count,
+            const D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC *input_descs);
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+    UINT STDMETHODCALLTYPE GetNodeMask() override;
+    UINT STDMETHODCALLTYPE GetNumInputStreamDescs() override;
+    HRESULT STDMETHODCALLTYPE GetInputStreamDescs(UINT count, D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC *descs) override;
+    D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *STDMETHODCALLTYPE GetOutputStreamDesc(
+            D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *out) override;
+};
+
+struct Native12VideoListFunctions
+{
+    PFND3D12DDI_CLOSECOMMANDLIST close;
+    PFND3D12DDI_RESETCOMMANDLIST_0040 reset;
+    PFND3D12DDI_DISCARD_RESOURCE_0003 discard;
+    PFND3D12DDI_SET_PREDICATION set_predication;
+    PFND3D12DDI_BEGIN_END_QUERY_0003 begin_query;
+    PFND3D12DDI_BEGIN_END_QUERY_0003 end_query;
+    PFND3D12DDI_RESOLVE_QUERY_DATA resolve_query;
+    PFND3D12DDI_RESOURCEBARRIER_0022 barrier;
+    PFND3D12DDI_WRITEBUFFERIMMEDIATE_0032 write_buffer_immediate;
+};
+
+class Native12VideoListCore
+{
+public:
+    Native12Device *owner;
+    D3D12_COMMAND_LIST_TYPE list_type;
+    Native12VideoListFunctions table = {};
     D3D12DDI_HCOMMANDLIST driver = {};
     D3D12DDI_HCOMMANDRECORDER_0040 recorder = {};
     bool driver_created = false;
@@ -310,7 +349,65 @@ public:
     UINT64 id = 0;
     HRESULT error = S_OK;
 
-    using Native12Child::Native12Child;
+    Native12VideoListCore(Native12Device *device, D3D12_COMMAND_LIST_TYPE type);
+    void DestroyCore();
+    HRESULT InitializeCore();
+    HRESULT CoreClose();
+    HRESULT CoreReset(ID3D12CommandAllocator *pool);
+    void CoreResourceBarrier(UINT count, const D3D12_RESOURCE_BARRIER *barriers);
+    void CoreDiscardResource(ID3D12Resource *resource, const D3D12_DISCARD_REGION *region);
+    void CoreQuery(bool begin, ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type, UINT index);
+    void CoreResolveQueryData(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type, UINT start, UINT count,
+            ID3D12Resource *buffer, UINT64 offset);
+    void CoreSetPredication(ID3D12Resource *buffer, UINT64 offset, D3D12_PREDICATION_OP operation);
+    void CoreWriteBufferImmediate(UINT count, const D3D12_WRITEBUFFERIMMEDIATE_PARAMETER *parameters,
+            const D3D12_WRITEBUFFERIMMEDIATE_MODE *modes);
+};
+
+Native12VideoListCore *Native12VideoListFromInterface(ID3D12CommandList *list);
+
+class Native12VideoProcessCommandList final : public Native12Child<ID3D12VideoProcessCommandList1>,
+        public Native12VideoListCore
+{
+public:
+    explicit Native12VideoProcessCommandList(Native12Device *owner)
+            : Native12Child(owner), Native12VideoListCore(owner, D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS) {}
+    ~Native12VideoProcessCommandList();
+    HRESULT Initialize(Native12CommandAllocator *pool);
+    void Process(ID3D12VideoProcessor *processor, const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_ARGUMENTS *output,
+            UINT count, const D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS1 *inputs);
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+    D3D12_COMMAND_LIST_TYPE STDMETHODCALLTYPE GetType() override;
+    HRESULT STDMETHODCALLTYPE Close() override;
+    HRESULT STDMETHODCALLTYPE Reset(ID3D12CommandAllocator *pool) override;
+    void STDMETHODCALLTYPE ClearState() override;
+    void STDMETHODCALLTYPE ResourceBarrier(UINT count, const D3D12_RESOURCE_BARRIER *barriers) override;
+    void STDMETHODCALLTYPE DiscardResource(ID3D12Resource *resource, const D3D12_DISCARD_REGION *region) override;
+    void STDMETHODCALLTYPE BeginQuery(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type, UINT index) override;
+    void STDMETHODCALLTYPE EndQuery(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type, UINT index) override;
+    void STDMETHODCALLTYPE ResolveQueryData(ID3D12QueryHeap *heap, D3D12_QUERY_TYPE type, UINT start, UINT count,
+            ID3D12Resource *buffer, UINT64 offset) override;
+    void STDMETHODCALLTYPE SetPredication(ID3D12Resource *buffer, UINT64 offset,
+            D3D12_PREDICATION_OP operation) override;
+    void STDMETHODCALLTYPE SetMarker(UINT metadata, const void *data, UINT size) override;
+    void STDMETHODCALLTYPE BeginEvent(UINT metadata, const void *data, UINT size) override;
+    void STDMETHODCALLTYPE EndEvent() override;
+    void STDMETHODCALLTYPE ProcessFrames(ID3D12VideoProcessor *processor,
+            const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_ARGUMENTS *output, UINT count,
+            const D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS *inputs) override;
+    void STDMETHODCALLTYPE WriteBufferImmediate(UINT count, const D3D12_WRITEBUFFERIMMEDIATE_PARAMETER *parameters,
+            const D3D12_WRITEBUFFERIMMEDIATE_MODE *modes) override;
+    void STDMETHODCALLTYPE ProcessFrames1(ID3D12VideoProcessor *processor,
+            const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_ARGUMENTS *output, UINT count,
+            const D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS1 *inputs) override;
+};
+
+class Native12VideoDecodeCommandList final : public Native12Child<ID3D12VideoDecodeCommandList1>,
+        public Native12VideoListCore
+{
+public:
+    explicit Native12VideoDecodeCommandList(Native12Device *owner)
+            : Native12Child(owner), Native12VideoListCore(owner, D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE) {}
     ~Native12VideoDecodeCommandList();
     HRESULT Initialize(Native12CommandAllocator *pool);
     void Decode(ID3D12VideoDecoder *decoder, ID3D12Resource *output, UINT output_subresource,
